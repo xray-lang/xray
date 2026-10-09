@@ -1,0 +1,1145 @@
+{
+  "schema": 1,
+  "family": "original_record_resource_types",
+  "legacy_base_commit": "01e6d38401b0f5c8684b64c35a99ac651024c0c1",
+  "status": "OPEN",
+  "retired": 0,
+  "replacement_gates": [],
+  "result": "STATIC_ORIGINAL_RECORD_RESOURCE_TYPES_MAP_ONLY",
+  "product_execution": "NOT_RUN_BY_THIS_MAP",
+  "producer": "25f4016d6f089169757a90ae11ba537002374711",
+  "identity": "Checked25/semantic67/Value22/Call28/Program29",
+  "producer_scope": "Fixed authorized25f4; no private Root producer or heavy window adopted.",
+  "legacy": [
+    {
+      "name": "test_record_type_roundtrip",
+      "legacy_path": "tests/unit/program/xr_program_record_type_checks.inc.c",
+      "legacy_line": 40,
+      "body_lf_sha256": "58b747953e1640f5e6ff279e832dfa58d8f0e23774e17033c64db4e9627b6d53",
+      "assertion_sites": 17,
+      "loop_sites": 1,
+      "status": "OPEN",
+      "replacement_gates": [],
+      "note": "Function census preserves its whole body; sites do not count executed loop iterations."
+    },
+    {
+      "name": "test_record_type_invalid_and_hostile",
+      "legacy_path": "tests/unit/program/xr_program_record_type_checks.inc.c",
+      "legacy_line": 89,
+      "body_lf_sha256": "5936240bd1a4aa29974ea8c3222d6fc33bba01951c734f049c1a672e4b252b44",
+      "assertion_sites": 10,
+      "loop_sites": 2,
+      "status": "OPEN",
+      "replacement_gates": [],
+      "note": "Function census preserves its whole body; sites do not count executed loop iterations."
+    },
+    {
+      "name": "test_record_type_allocation_failures",
+      "legacy_path": "tests/unit/program/xr_program_record_type_checks.inc.c",
+      "legacy_line": 145,
+      "body_lf_sha256": "2474ca95d5ebe482286a2d6e5c6d648bfe2502243777e645710bbf143d578c44",
+      "assertion_sites": 8,
+      "loop_sites": 2,
+      "status": "OPEN",
+      "replacement_gates": [],
+      "note": "Function census preserves its whole body; sites do not count executed loop iterations."
+    },
+    {
+      "name": "test_resource_type_admission",
+      "legacy_path": "tests/unit/program/xr_program_resource_type_checks.inc.c",
+      "legacy_line": 47,
+      "body_lf_sha256": "e2f34af99cd4559d936728d89b759af59610bf746e4ba2346a65040244b15240",
+      "assertion_sites": 23,
+      "loop_sites": 5,
+      "status": "OPEN",
+      "replacement_gates": [],
+      "note": "Function census preserves its whole body; sites do not count executed loop iterations."
+    },
+    {
+      "name": "test_resource_type_allocation_failures",
+      "legacy_path": "tests/unit/program/xr_program_resource_type_checks.inc.c",
+      "legacy_line": 131,
+      "body_lf_sha256": "4369591ca585087fe7a19d63232a6e8896a14c0810a641954f3cc4cc12aa4c2d",
+      "assertion_sites": 8,
+      "loop_sites": 2,
+      "status": "OPEN",
+      "replacement_gates": [],
+      "note": "Function census preserves its whole body; sites do not count executed loop iterations."
+    }
+  ],
+  "responsibility_mapping": [
+    {
+      "legacy_name": "test_record_type_roundtrip",
+      "legacy_path": "tests/unit/program/xr_program_record_type_checks.inc.c",
+      "status": "OPEN",
+      "original_lines": [
+        40,
+        87
+      ],
+      "CHECK_sites": [
+        {
+          "line": 44,
+          "expression": "write_record_types(types, &artifact) == XR_PROGRAM_BUILD_OK",
+          "status": "OPEN",
+          "target_consumer": "ROOT_CURRENT_REPRESENTATION_AND_QUALIFIED_PRODUCER_PENDING"
+        },
+        {
+          "line": 48,
+          "expression": "write_record_types(types, &reordered) == XR_PROGRAM_BUILD_OK",
+          "status": "OPEN",
+          "target_consumer": "ROOT_CURRENT_REPRESENTATION_AND_QUALIFIED_PRODUCER_PENDING"
+        },
+        {
+          "line": 49,
+          "expression": "artifact.bytes && reordered.bytes && artifact.size == reordered.size",
+          "status": "OPEN",
+          "target_consumer": "ROOT_CURRENT_REPRESENTATION_AND_QUALIFIED_PRODUCER_PENDING"
+        },
+        {
+          "line": 51,
+          "expression": "memcmp(artifact.bytes, reordered.bytes, artifact.size) == 0",
+          "status": "OPEN",
+          "target_consumer": "ROOT_CURRENT_REPRESENTATION_AND_QUALIFIED_PRODUCER_PENDING"
+        },
+        {
+          "line": 53,
+          "expression": "xr_program_validate(artifact.bytes, artifact.size, NULL, &validated, NULL) ==\n          XR_PROGRAM_VERIFY_OK",
+          "status": "OPEN",
+          "target_consumer": "ROOT_CURRENT_REPRESENTATION_AND_QUALIFIED_PRODUCER_PENDING"
+        },
+        {
+          "line": 56,
+          "expression": "validated->type_count == 3u",
+          "status": "OPEN",
+          "target_consumer": "ROOT_CURRENT_REPRESENTATION_AND_QUALIFIED_PRODUCER_PENDING"
+        },
+        {
+          "line": 58,
+          "expression": "validated->types[i].kind == XR_CORE_IR_TYPE_RECORD_REFERENCE",
+          "status": "OPEN",
+          "target_consumer": "ROOT_CURRENT_REPRESENTATION_AND_QUALIFIED_PRODUCER_PENDING"
+        },
+        {
+          "line": 59,
+          "expression": "validated->types[i].nominal_kind == XR_CORE_IR_NOMINAL_NONE",
+          "status": "OPEN",
+          "target_consumer": "ROOT_CURRENT_REPRESENTATION_AND_QUALIFIED_PRODUCER_PENDING"
+        },
+        {
+          "line": 60,
+          "expression": "validated->types[i].ownership == XR_CORE_IR_TYPE_OWNERSHIP_AFFINE",
+          "status": "OPEN",
+          "target_consumer": "ROOT_CURRENT_REPRESENTATION_AND_QUALIFIED_PRODUCER_PENDING"
+        },
+        {
+          "line": 62,
+          "expression": "validated->types[0].copy_contract == XR_CORE_IR_COPY_FORBIDDEN",
+          "status": "OPEN",
+          "target_consumer": "ROOT_CURRENT_REPRESENTATION_AND_QUALIFIED_PRODUCER_PENDING"
+        },
+        {
+          "line": 63,
+          "expression": "validated->types[1].copy_contract == XR_CORE_IR_COPY_EXPLICIT",
+          "status": "OPEN",
+          "target_consumer": "ROOT_CURRENT_REPRESENTATION_AND_QUALIFIED_PRODUCER_PENDING"
+        },
+        {
+          "line": 64,
+          "expression": "validated->types[2].field_count == 2u",
+          "status": "OPEN",
+          "target_consumer": "ROOT_CURRENT_REPRESENTATION_AND_QUALIFIED_PRODUCER_PENDING"
+        },
+        {
+          "line": 65,
+          "expression": "validated->types[2].field_types[1] == 33u",
+          "status": "OPEN",
+          "target_consumer": "ROOT_CURRENT_REPRESENTATION_AND_QUALIFIED_PRODUCER_PENDING"
+        },
+        {
+          "line": 77,
+          "expression": "write_record_types(types, &artifact) == XR_PROGRAM_BUILD_OK",
+          "status": "OPEN",
+          "target_consumer": "ROOT_CURRENT_REPRESENTATION_AND_QUALIFIED_PRODUCER_PENDING"
+        },
+        {
+          "line": 79,
+          "expression": "xr_program_validate(artifact.bytes, artifact.size, NULL, &validated, NULL) ==\n          XR_PROGRAM_VERIFY_OK",
+          "status": "OPEN",
+          "target_consumer": "ROOT_CURRENT_REPRESENTATION_AND_QUALIFIED_PRODUCER_PENDING"
+        },
+        {
+          "line": 82,
+          "expression": "validated->types[2].field_types[0] == 34u",
+          "status": "OPEN",
+          "target_consumer": "ROOT_CURRENT_REPRESENTATION_AND_QUALIFIED_PRODUCER_PENDING"
+        },
+        {
+          "line": 83,
+          "expression": "validated->types[1].field_count == 0u",
+          "status": "OPEN",
+          "target_consumer": "ROOT_CURRENT_REPRESENTATION_AND_QUALIFIED_PRODUCER_PENDING"
+        }
+      ],
+      "responsibility": "Complete byte identity under input reordering; all3 canonical types retain reference kind, nominal NONE and affine ownership; PanicInfo forbids copy, String permits explicit copy, nested local91 remaps to canonical33. Self local90 reference remaps to34; local91 empty shape remains legal."
+    },
+    {
+      "legacy_name": "test_record_type_invalid_and_hostile",
+      "legacy_path": "tests/unit/program/xr_program_record_type_checks.inc.c",
+      "status": "OPEN",
+      "original_lines": [
+        89,
+        143
+      ],
+      "CHECK_sites": [
+        {
+          "line": 101,
+          "expression": "write_record_types(types, &artifact) == XR_PROGRAM_BUILD_INVALID_INPUT",
+          "status": "OPEN",
+          "target_consumer": "ROOT_CURRENT_REPRESENTATION_AND_QUALIFIED_PRODUCER_PENDING"
+        },
+        {
+          "line": 102,
+          "expression": "artifact.bytes == NULL",
+          "status": "OPEN",
+          "target_consumer": "ROOT_CURRENT_REPRESENTATION_AND_QUALIFIED_PRODUCER_PENDING"
+        },
+        {
+          "line": 107,
+          "expression": "write_record_types(types, &artifact) == XR_PROGRAM_BUILD_OK",
+          "status": "OPEN",
+          "target_consumer": "ROOT_CURRENT_REPRESENTATION_AND_QUALIFIED_PRODUCER_PENDING"
+        },
+        {
+          "line": 110,
+          "expression": "xr_program_decode_structure(artifact.bytes, artifact.size, NULL, &view, NULL, 0u) ==\n          XR_PROGRAM_DECODE_OK",
+          "status": "OPEN",
+          "target_consumer": "ROOT_CURRENT_REPRESENTATION_AND_QUALIFIED_PRODUCER_PENDING"
+        },
+        {
+          "line": 115,
+          "expression": "row + sizeof(first) <= artifact.size",
+          "status": "OPEN",
+          "target_consumer": "ROOT_CURRENT_REPRESENTATION_AND_QUALIFIED_PRODUCER_PENDING"
+        },
+        {
+          "line": 120,
+          "expression": "memcmp(artifact.bytes + row, first, sizeof(first)) == 0",
+          "status": "OPEN",
+          "target_consumer": "ROOT_CURRENT_REPRESENTATION_AND_QUALIFIED_PRODUCER_PENDING"
+        },
+        {
+          "line": 122,
+          "expression": "mutated != NULL",
+          "status": "OPEN",
+          "target_consumer": "ROOT_CURRENT_REPRESENTATION_AND_QUALIFIED_PRODUCER_PENDING"
+        },
+        {
+          "line": 133,
+          "expression": "xr_program_decode_structure(mutated, artifact.size, NULL, &view, NULL, 0u) ==\n              (mutation == 4u ? XR_PROGRAM_DECODE_OK : XR_PROGRAM_DECODE_NONCANONICAL)",
+          "status": "OPEN",
+          "target_consumer": "ROOT_CURRENT_REPRESENTATION_AND_QUALIFIED_PRODUCER_PENDING"
+        },
+        {
+          "line": 136,
+          "expression": "xr_program_validate(mutated, artifact.size, NULL, &validated, NULL) !=\n              XR_PROGRAM_VERIFY_OK",
+          "status": "OPEN",
+          "target_consumer": "ROOT_CURRENT_REPRESENTATION_AND_QUALIFIED_PRODUCER_PENDING"
+        },
+        {
+          "line": 138,
+          "expression": "validated == NULL",
+          "status": "OPEN",
+          "target_consumer": "ROOT_CURRENT_REPRESENTATION_AND_QUALIFIED_PRODUCER_PENDING"
+        }
+      ],
+      "responsibility": "All5 constructor-invalid and5 hostile encoded mutations, full independent39-byte row; fifth wire mutation passes structure but fails semantics. Preserve exact decoder-status distinctions and NULL validated outputs."
+    },
+    {
+      "legacy_name": "test_record_type_allocation_failures",
+      "legacy_path": "tests/unit/program/xr_program_record_type_checks.inc.c",
+      "status": "OPEN",
+      "original_lines": [
+        145,
+        187
+      ],
+      "CHECK_sites": [
+        {
+          "line": 154,
+          "expression": "status == XR_PROGRAM_BUILD_OUT_OF_MEMORY && artifact.bytes == NULL",
+          "status": "OPEN",
+          "target_consumer": "ROOT_CURRENT_REPRESENTATION_AND_QUALIFIED_PRODUCER_PENDING"
+        },
+        {
+          "line": 159,
+          "expression": "allocations + 1u == failure",
+          "status": "OPEN",
+          "target_consumer": "ROOT_CURRENT_REPRESENTATION_AND_QUALIFIED_PRODUCER_PENDING"
+        },
+        {
+          "line": 163,
+          "expression": "allocations != 0u && allocations < 255u",
+          "status": "OPEN",
+          "target_consumer": "ROOT_CURRENT_REPRESENTATION_AND_QUALIFIED_PRODUCER_PENDING"
+        },
+        {
+          "line": 166,
+          "expression": "write_record_types(types, &artifact) == XR_PROGRAM_BUILD_OK",
+          "status": "OPEN",
+          "target_consumer": "ROOT_CURRENT_REPRESENTATION_AND_QUALIFIED_PRODUCER_PENDING"
+        },
+        {
+          "line": 173,
+          "expression": "status == XR_PROGRAM_VERIFY_OUT_OF_MEMORY",
+          "status": "OPEN",
+          "target_consumer": "ROOT_CURRENT_REPRESENTATION_AND_QUALIFIED_PRODUCER_PENDING"
+        },
+        {
+          "line": 174,
+          "expression": "validated == NULL",
+          "status": "OPEN",
+          "target_consumer": "ROOT_CURRENT_REPRESENTATION_AND_QUALIFIED_PRODUCER_PENDING"
+        },
+        {
+          "line": 180,
+          "expression": "allocations + 1u == failure",
+          "status": "OPEN",
+          "target_consumer": "ROOT_CURRENT_REPRESENTATION_AND_QUALIFIED_PRODUCER_PENDING"
+        },
+        {
+          "line": 184,
+          "expression": "allocations != 0u && allocations < 255u",
+          "status": "OPEN",
+          "target_consumer": "ROOT_CURRENT_REPRESENTATION_AND_QUALIFIED_PRODUCER_PENDING"
+        }
+      ],
+      "responsibility": "Record constructor+writer and full verifier each cover every actual failed prefix, exact OOM and NULL output, physical balance, first uninjectable success boundary and nonzero complete census."
+    },
+    {
+      "legacy_name": "test_resource_type_admission",
+      "legacy_path": "tests/unit/program/xr_program_resource_type_checks.inc.c",
+      "status": "OPEN",
+      "original_lines": [
+        47,
+        129
+      ],
+      "CHECK_sites": [
+        {
+          "line": 51,
+          "expression": "write_resource_types(types, &artifact) == XR_PROGRAM_BUILD_OK",
+          "status": "OPEN",
+          "target_consumer": "ROOT_CURRENT_REPRESENTATION_AND_QUALIFIED_PRODUCER_PENDING"
+        },
+        {
+          "line": 54,
+          "expression": "write_resource_types(types, &reordered) == XR_PROGRAM_BUILD_OK",
+          "status": "OPEN",
+          "target_consumer": "ROOT_CURRENT_REPRESENTATION_AND_QUALIFIED_PRODUCER_PENDING"
+        },
+        {
+          "line": 55,
+          "expression": "reordered.bytes && reordered.size == artifact.size",
+          "status": "OPEN",
+          "target_consumer": "ROOT_CURRENT_REPRESENTATION_AND_QUALIFIED_PRODUCER_PENDING"
+        },
+        {
+          "line": 57,
+          "expression": "memcmp(artifact.bytes, reordered.bytes, artifact.size) == 0",
+          "status": "OPEN",
+          "target_consumer": "ROOT_CURRENT_REPRESENTATION_AND_QUALIFIED_PRODUCER_PENDING"
+        },
+        {
+          "line": 60,
+          "expression": "xr_program_validate(artifact.bytes, artifact.size, NULL, &validated, NULL) == XR_PROGRAM_VERIFY_OK",
+          "status": "OPEN",
+          "target_consumer": "ROOT_CURRENT_REPRESENTATION_AND_QUALIFIED_PRODUCER_PENDING"
+        },
+        {
+          "line": 62,
+          "expression": "validated->types[0].kind == XR_CORE_IR_TYPE_PROVIDER_RESOURCE",
+          "status": "OPEN",
+          "target_consumer": "ROOT_CURRENT_REPRESENTATION_AND_QUALIFIED_PRODUCER_PENDING"
+        },
+        {
+          "line": 63,
+          "expression": "validated->types[0].nominal_kind == XR_CORE_IR_NOMINAL_NONE",
+          "status": "OPEN",
+          "target_consumer": "ROOT_CURRENT_REPRESENTATION_AND_QUALIFIED_PRODUCER_PENDING"
+        },
+        {
+          "line": 65,
+          "expression": "validated->types[0].resource_id.bytes[i] == i + 1u",
+          "status": "OPEN",
+          "target_consumer": "ROOT_CURRENT_REPRESENTATION_AND_QUALIFIED_PRODUCER_PENDING"
+        },
+        {
+          "line": 67,
+          "expression": "validated->types[i].ownership == XR_CORE_IR_TYPE_OWNERSHIP_AFFINE",
+          "status": "OPEN",
+          "target_consumer": "ROOT_CURRENT_REPRESENTATION_AND_QUALIFIED_PRODUCER_PENDING"
+        },
+        {
+          "line": 68,
+          "expression": "validated->types[i].copy_contract == XR_CORE_IR_COPY_FORBIDDEN",
+          "status": "OPEN",
+          "target_consumer": "ROOT_CURRENT_REPRESENTATION_AND_QUALIFIED_PRODUCER_PENDING"
+        },
+        {
+          "line": 70,
+          "expression": "validated->types[1].variants[1].payload_types[0] == 32u",
+          "status": "OPEN",
+          "target_consumer": "ROOT_CURRENT_REPRESENTATION_AND_QUALIFIED_PRODUCER_PENDING"
+        },
+        {
+          "line": 71,
+          "expression": "validated->types[2].field_types[0] == 32u",
+          "status": "OPEN",
+          "target_consumer": "ROOT_CURRENT_REPRESENTATION_AND_QUALIFIED_PRODUCER_PENDING"
+        },
+        {
+          "line": 75,
+          "expression": "xr_program_decode_structure(artifact.bytes, artifact.size, NULL, &view, NULL, 0u) == XR_PROGRAM_DECODE_OK",
+          "status": "OPEN",
+          "target_consumer": "ROOT_CURRENT_REPRESENTATION_AND_QUALIFIED_PRODUCER_PENDING"
+        },
+        {
+          "line": 81,
+          "expression": "row + sizeof(expected) <= artifact.size",
+          "status": "OPEN",
+          "target_consumer": "ROOT_CURRENT_REPRESENTATION_AND_QUALIFIED_PRODUCER_PENDING"
+        },
+        {
+          "line": 83,
+          "expression": "memcmp(artifact.bytes + row, expected, sizeof(expected)) == 0",
+          "status": "OPEN",
+          "target_consumer": "ROOT_CURRENT_REPRESENTATION_AND_QUALIFIED_PRODUCER_PENDING"
+        },
+        {
+          "line": 85,
+          "expression": "mutated != NULL",
+          "status": "OPEN",
+          "target_consumer": "ROOT_CURRENT_REPRESENTATION_AND_QUALIFIED_PRODUCER_PENDING"
+        },
+        {
+          "line": 97,
+          "expression": "xr_program_decode_structure(mutated, artifact.size, NULL, &view, NULL, 0u) != XR_PROGRAM_DECODE_OK",
+          "status": "OPEN",
+          "target_consumer": "ROOT_CURRENT_REPRESENTATION_AND_QUALIFIED_PRODUCER_PENDING"
+        },
+        {
+          "line": 99,
+          "expression": "xr_program_validate(mutated, artifact.size, NULL, &validated, NULL) != XR_PROGRAM_VERIFY_OK",
+          "status": "OPEN",
+          "target_consumer": "ROOT_CURRENT_REPRESENTATION_AND_QUALIFIED_PRODUCER_PENDING"
+        },
+        {
+          "line": 100,
+          "expression": "validated == NULL",
+          "status": "OPEN",
+          "target_consumer": "ROOT_CURRENT_REPRESENTATION_AND_QUALIFIED_PRODUCER_PENDING"
+        },
+        {
+          "line": 107,
+          "expression": "xr_program_validate(artifact.bytes, size, NULL, &validated, NULL) != XR_PROGRAM_VERIFY_OK",
+          "status": "OPEN",
+          "target_consumer": "ROOT_CURRENT_REPRESENTATION_AND_QUALIFIED_PRODUCER_PENDING"
+        },
+        {
+          "line": 108,
+          "expression": "validated == NULL",
+          "status": "OPEN",
+          "target_consumer": "ROOT_CURRENT_REPRESENTATION_AND_QUALIFIED_PRODUCER_PENDING"
+        },
+        {
+          "line": 125,
+          "expression": "write_resource_types(types, &artifact) == XR_PROGRAM_BUILD_INVALID_INPUT",
+          "status": "OPEN",
+          "target_consumer": "ROOT_CURRENT_REPRESENTATION_AND_QUALIFIED_PRODUCER_PENDING"
+        },
+        {
+          "line": 126,
+          "expression": "artifact.bytes == NULL",
+          "status": "OPEN",
+          "target_consumer": "ROOT_CURRENT_REPRESENTATION_AND_QUALIFIED_PRODUCER_PENDING"
+        }
+      ],
+      "responsibility": "Complete provider-resource identity01..10 survives canonical reorder, resource/containing variant/record stay affine and forbidden-copy, all references remap to canonical32. Independent54-byte row, all6 hostile wire mutations, every truncation prefix and9 constructor-invalid cases remain required."
+    },
+    {
+      "legacy_name": "test_resource_type_allocation_failures",
+      "legacy_path": "tests/unit/program/xr_program_resource_type_checks.inc.c",
+      "status": "OPEN",
+      "original_lines": [
+        131,
+        173
+      ],
+      "CHECK_sites": [
+        {
+          "line": 140,
+          "expression": "status == XR_PROGRAM_BUILD_OUT_OF_MEMORY && artifact.bytes == NULL",
+          "status": "OPEN",
+          "target_consumer": "ROOT_CURRENT_REPRESENTATION_AND_QUALIFIED_PRODUCER_PENDING"
+        },
+        {
+          "line": 145,
+          "expression": "allocations + 1u == failure",
+          "status": "OPEN",
+          "target_consumer": "ROOT_CURRENT_REPRESENTATION_AND_QUALIFIED_PRODUCER_PENDING"
+        },
+        {
+          "line": 149,
+          "expression": "allocations != 0u && allocations < 255u",
+          "status": "OPEN",
+          "target_consumer": "ROOT_CURRENT_REPRESENTATION_AND_QUALIFIED_PRODUCER_PENDING"
+        },
+        {
+          "line": 152,
+          "expression": "write_resource_types(types, &artifact) == XR_PROGRAM_BUILD_OK",
+          "status": "OPEN",
+          "target_consumer": "ROOT_CURRENT_REPRESENTATION_AND_QUALIFIED_PRODUCER_PENDING"
+        },
+        {
+          "line": 159,
+          "expression": "status == XR_PROGRAM_VERIFY_OUT_OF_MEMORY",
+          "status": "OPEN",
+          "target_consumer": "ROOT_CURRENT_REPRESENTATION_AND_QUALIFIED_PRODUCER_PENDING"
+        },
+        {
+          "line": 160,
+          "expression": "validated == NULL",
+          "status": "OPEN",
+          "target_consumer": "ROOT_CURRENT_REPRESENTATION_AND_QUALIFIED_PRODUCER_PENDING"
+        },
+        {
+          "line": 166,
+          "expression": "allocations + 1u == failure",
+          "status": "OPEN",
+          "target_consumer": "ROOT_CURRENT_REPRESENTATION_AND_QUALIFIED_PRODUCER_PENDING"
+        },
+        {
+          "line": 170,
+          "expression": "allocations != 0u && allocations < 255u",
+          "status": "OPEN",
+          "target_consumer": "ROOT_CURRENT_REPRESENTATION_AND_QUALIFIED_PRODUCER_PENDING"
+        }
+      ],
+      "responsibility": "Resource constructor+writer and full verifier each cover every actual failed prefix, exact OOM and NULL output, physical balance, first uninjectable success boundary and nonzero complete census."
+    }
+  ],
+  "outer_CHECK_sites": 66,
+  "original_private_helpers": [
+    {
+      "path": "tests/unit/program/xr_program_record_type_checks.inc.c",
+      "function": "record_types_init",
+      "line": 10,
+      "end_line": 24,
+      "body_lf_sha256": "0dce1578f06a96561e554d656b6b5eff106eb70edbd3c70158cc93b0112e6c3e",
+      "CHECK_sites": 0,
+      "status": "OPEN",
+      "classification": "Specified actual full dependency helper; not an extra census function or deletion closure.",
+      "CHECK_bindings": []
+    },
+    {
+      "path": "tests/unit/program/xr_program_record_type_checks.inc.c",
+      "function": "write_record_types",
+      "line": 26,
+      "end_line": 38,
+      "body_lf_sha256": "51120ba279a80a78b9c6ee4f05cef303cfc0610fd9930e2dbea6324fdd4ae7db",
+      "CHECK_sites": 0,
+      "status": "OPEN",
+      "classification": "Specified actual full dependency helper; not an extra census function or deletion closure.",
+      "CHECK_bindings": []
+    },
+    {
+      "path": "tests/unit/program/xr_program_resource_type_checks.inc.c",
+      "function": "resource_types_init",
+      "line": 10,
+      "end_line": 31,
+      "body_lf_sha256": "f202cb182b42fdb7368de4fe1255c5d59ac514f6bd109e4a880319a84d7d1a8f",
+      "CHECK_sites": 0,
+      "status": "OPEN",
+      "classification": "Specified actual full dependency helper; not an extra census function or deletion closure.",
+      "CHECK_bindings": []
+    },
+    {
+      "path": "tests/unit/program/xr_program_resource_type_checks.inc.c",
+      "function": "write_resource_types",
+      "line": 33,
+      "end_line": 45,
+      "body_lf_sha256": "c56371328e805f3cff1ca6ffbd9a984330c6a7b4879c669e338a698fea2466df",
+      "CHECK_sites": 0,
+      "status": "OPEN",
+      "classification": "Specified actual full dependency helper; not an extra census function or deletion closure.",
+      "CHECK_bindings": []
+    },
+    {
+      "path": "tests/unit/program/xr_program_module_fixture.h",
+      "function": "xr_program_module_fixture_init",
+      "line": 33,
+      "end_line": 70,
+      "body_lf_sha256": "915b0162cae236eb17682feee9fdab215ad820ec56798cdf4a94d727b2b270f0",
+      "CHECK_sites": 0,
+      "status": "OPEN",
+      "classification": "Specified actual full dependency helper; not an extra census function or deletion closure.",
+      "CHECK_bindings": []
+    },
+    {
+      "path": "tests/unit/program/test_xr_program.c",
+      "function": "allocation_probe_begin",
+      "line": 113,
+      "end_line": 117,
+      "body_lf_sha256": "0a4171c96ec946eb0df2086d56112236be218d1dadf1a6c61b1a72994872c047",
+      "CHECK_sites": 0,
+      "status": "OPEN",
+      "classification": "Specified actual full dependency helper; not an extra census function or deletion closure.",
+      "CHECK_bindings": []
+    },
+    {
+      "path": "tests/unit/program/test_xr_program.c",
+      "function": "allocation_probe_end",
+      "line": 119,
+      "end_line": 125,
+      "body_lf_sha256": "d32068a3ea12edcf70239586619dad87befe5704a9dadc26c0737e32e13da544",
+      "CHECK_sites": 1,
+      "status": "OPEN",
+      "classification": "Specified actual full dependency helper; not an extra census function or deletion closure.",
+      "CHECK_bindings": [
+        {
+          "line": 123,
+          "expression": "allocation_probe.allocated == allocation_probe.released",
+          "status": "OPEN"
+        }
+      ]
+    },
+    {
+      "path": "tests/unit/program/test_xr_program.c",
+      "function": "allocation_probe_reject",
+      "line": 38,
+      "end_line": 40,
+      "body_lf_sha256": "54f700f7d03a4aa37233ed4457c41a42ff53a1f583baf909d8a9fca238bcf17b",
+      "CHECK_sites": 0,
+      "status": "OPEN",
+      "classification": "Specified actual full dependency helper; not an extra census function or deletion closure.",
+      "CHECK_bindings": []
+    },
+    {
+      "path": "tests/unit/program/test_xr_program.c",
+      "function": "allocation_probe_record",
+      "line": 42,
+      "end_line": 54,
+      "body_lf_sha256": "cb5a65e4a224270480b5ab9609579688c4ad448582f4f6d9df7bbb9abacd5522",
+      "CHECK_sites": 0,
+      "status": "OPEN",
+      "classification": "Specified actual full dependency helper; not an extra census function or deletion closure.",
+      "CHECK_bindings": []
+    },
+    {
+      "path": "tests/unit/program/test_xr_program.c",
+      "function": "allocation_probe_slot",
+      "line": 67,
+      "end_line": 74,
+      "body_lf_sha256": "f904b6e403d2ae1fbe1cfa5826a04bc7085e26c888d0ecf8b5196f0eb809475b",
+      "CHECK_sites": 0,
+      "status": "OPEN",
+      "classification": "Specified actual full dependency helper; not an extra census function or deletion closure.",
+      "CHECK_bindings": []
+    },
+    {
+      "path": "tests/unit/program/test_xr_program.c",
+      "function": "xr_program_test_malloc",
+      "line": 56,
+      "end_line": 59,
+      "body_lf_sha256": "de3596b76966f6c7e97f2f1ec0dc4db27cd82ae4f87eea38a9ba0dd5d90801d9",
+      "CHECK_sites": 0,
+      "status": "OPEN",
+      "classification": "Specified actual full dependency helper; not an extra census function or deletion closure.",
+      "CHECK_bindings": []
+    },
+    {
+      "path": "tests/unit/program/test_xr_program.c",
+      "function": "xr_program_test_calloc",
+      "line": 61,
+      "end_line": 65,
+      "body_lf_sha256": "86c395af430110ce659df112509e39b2f069df4d8b886507f95d07a9a80e328c",
+      "CHECK_sites": 0,
+      "status": "OPEN",
+      "classification": "Specified actual full dependency helper; not an extra census function or deletion closure.",
+      "CHECK_bindings": []
+    },
+    {
+      "path": "tests/unit/program/test_xr_program.c",
+      "function": "xr_program_test_realloc",
+      "line": 76,
+      "end_line": 95,
+      "body_lf_sha256": "de206d13a4f51a9702fa8fc4289e34b2420c3a77fdefe86c968c0f15f37d7520",
+      "CHECK_sites": 0,
+      "status": "OPEN",
+      "classification": "Specified actual full dependency helper; not an extra census function or deletion closure.",
+      "CHECK_bindings": []
+    },
+    {
+      "path": "tests/unit/program/test_xr_program.c",
+      "function": "xr_program_test_free",
+      "line": 97,
+      "end_line": 103,
+      "body_lf_sha256": "b5670383dbd38e60328f8143bae3effbb93e770d78504137a6f3b9ed36d34b8f",
+      "CHECK_sites": 0,
+      "status": "OPEN",
+      "classification": "Specified actual full dependency helper; not an extra census function or deletion closure.",
+      "CHECK_bindings": []
+    },
+    {
+      "path": "tests/unit/program/xr_program_allocation_probe.h",
+      "function": "xr_program_test_system_malloc",
+      "line": 21,
+      "end_line": 23,
+      "body_lf_sha256": "1ef50f5796f8bac2e837eca7748df4876a9faa91d373bd32068e8ec6df53c708",
+      "CHECK_sites": 0,
+      "status": "OPEN",
+      "classification": "Specified actual full dependency helper; not an extra census function or deletion closure.",
+      "CHECK_bindings": []
+    },
+    {
+      "path": "tests/unit/program/xr_program_allocation_probe.h",
+      "function": "xr_program_test_system_calloc",
+      "line": 25,
+      "end_line": 27,
+      "body_lf_sha256": "7b47b4d67cc6a4049020202d3d8121e591d4a22d898ea28ab38fb8beb0842c6d",
+      "CHECK_sites": 0,
+      "status": "OPEN",
+      "classification": "Specified actual full dependency helper; not an extra census function or deletion closure.",
+      "CHECK_bindings": []
+    },
+    {
+      "path": "tests/unit/program/xr_program_allocation_probe.h",
+      "function": "xr_program_test_system_realloc",
+      "line": 29,
+      "end_line": 31,
+      "body_lf_sha256": "5e1ab1ba1cebcf3b82f650ea4b7fa77a0fdeb3e4f57bfd7cb1aab7b445df775d",
+      "CHECK_sites": 0,
+      "status": "OPEN",
+      "classification": "Specified actual full dependency helper; not an extra census function or deletion closure.",
+      "CHECK_bindings": []
+    },
+    {
+      "path": "tests/unit/program/xr_program_allocation_probe.h",
+      "function": "xr_program_test_system_free",
+      "line": 33,
+      "end_line": 35,
+      "body_lf_sha256": "a619ad7337aeb93acc59f652ca3689a77fd762dff024b1e60c71a00889279674",
+      "CHECK_sites": 0,
+      "status": "OPEN",
+      "classification": "Specified actual full dependency helper; not an extra census function or deletion closure.",
+      "CHECK_bindings": []
+    }
+  ],
+  "specified_helper_CHECK_sites": 1,
+  "original_input_files": [
+    {
+      "path": "tests/unit/program/xr_program_record_type_checks.inc.c",
+      "whole_file_lf_sha256": "c5bef9ae435af4870c87834b6b146236dd3bc92cb245232bbae1888dda8dbd47",
+      "physical_raw_sha256": "a2225b2ce02e97af130f39388f3cada229e91391e9a70c482bab5fee578792c2",
+      "git_base_equal": true,
+      "role": "Whole original direct input/helper container; not an exhaustive external dependency closure."
+    },
+    {
+      "path": "tests/unit/program/xr_program_resource_type_checks.inc.c",
+      "whole_file_lf_sha256": "ca18b6ec67d2964205e80329990c35cc0a496dcef75c620a70a906cbe9fad6de",
+      "physical_raw_sha256": "b2ca5e7b3aa12a3266d57466b6e9ff36e05ead3b2594cf20175e0030009ccf96",
+      "git_base_equal": true,
+      "role": "Whole original direct input/helper container; not an exhaustive external dependency closure."
+    },
+    {
+      "path": "tests/unit/program/xr_program_module_fixture.h",
+      "whole_file_lf_sha256": "65db69b47101e348f8eaea39185ea91f12f795fbf451364f2c8f75c1035920b2",
+      "physical_raw_sha256": "68d57ccdc6cb4f92f1571b3215cf437b7f0cdcd3ce7b5d3f4007f01978aedac0",
+      "git_base_equal": true,
+      "role": "Whole original direct input/helper container; not an exhaustive external dependency closure."
+    },
+    {
+      "path": "tests/unit/program/test_xr_program.c",
+      "whole_file_lf_sha256": "2743be628db188c386a72e59529286df64720051710599d83f9b6510aa529aff",
+      "physical_raw_sha256": "5986f0f7160296f52787ca8b9443329a9a05eeff083daac530a776642971655a",
+      "git_base_equal": true,
+      "role": "Whole original direct input/helper container; not an exhaustive external dependency closure."
+    },
+    {
+      "path": "tests/unit/program/xr_program_allocation_probe.h",
+      "whole_file_lf_sha256": "a05c3ea4a5ed33200db0af13cd1ead2b5004d8c355214cef2b549f88dcd88809",
+      "physical_raw_sha256": "67edbc823a3705e6827e8e260de00ad1e28eb481dbabe056b272185be84fb024",
+      "git_base_equal": true,
+      "role": "Whole original direct input/helper container; not an exhaustive external dependency closure."
+    }
+  ],
+  "input_policy": "Complete5 original bodies,18 specified helpers and5 whole direct containers equal original01e6 Git. All actual field/key/variant/module/profile and probe inputs preserved; not an exhaustive external dependency closure.",
+  "input_graph": {
+    "module_graph": "Four complete dependency-ordered modules base, left, right, main; four initializer functions; entry belongs to main; profile module-initialization-profile and CORE_BASE required feature.",
+    "rank_by_key": [
+      {
+        "local_id": 92,
+        "key_first_byte": 1,
+        "old_canonical_id": 32
+      },
+      {
+        "local_id": 91,
+        "key_first_byte": 2,
+        "old_canonical_id": 33
+      },
+      {
+        "local_id": 90,
+        "key_first_byte": 3,
+        "old_canonical_id": 34
+      }
+    ],
+    "record": [
+      {
+        "local_id": 90,
+        "kind": "RECORD_REFERENCE",
+        "ownership": "AFFINE",
+        "copy": "EXPLICIT",
+        "fields": [
+          "I64",
+          91
+        ]
+      },
+      {
+        "local_id": 91,
+        "kind": "RECORD_REFERENCE",
+        "ownership": "AFFINE",
+        "copy": "EXPLICIT",
+        "fields": [
+          "STRING"
+        ]
+      },
+      {
+        "local_id": 92,
+        "kind": "RECORD_REFERENCE",
+        "ownership": "AFFINE",
+        "copy": "FORBIDDEN",
+        "fields": [
+          "PANIC_INFO"
+        ]
+      }
+    ],
+    "record_recursive_variant": "local90 field is local90 itself, local91 has NULL fields/count0; canonical34 self-reference and canonical33 empty shape are admitted.",
+    "resource": [
+      {
+        "local_id": 90,
+        "kind": "RECORD_REFERENCE",
+        "ownership": "AFFINE",
+        "copy": "FORBIDDEN",
+        "fields": [
+          92
+        ]
+      },
+      {
+        "local_id": 91,
+        "kind": "VARIANT",
+        "ownership": "AFFINE",
+        "copy": "FORBIDDEN",
+        "variants": [
+          [],
+          [
+            92
+          ]
+        ]
+      },
+      {
+        "local_id": 92,
+        "kind": "PROVIDER_RESOURCE",
+        "ownership": "AFFINE",
+        "copy": "FORBIDDEN",
+        "resource_id_hex": "0102030405060708090a0b0c0d0e0f10"
+      }
+    ],
+    "reordering": "Swap whole types[0] and types[2]; preserve local identity and complete input graph; expect complete encoded bytes identical, not a digest alone."
+  },
+  "wire_goldens": [
+    {
+      "family": "record",
+      "literal": "first",
+      "size": 39,
+      "bytes_hex": "202801020100000000000000000000000000000000000000000000000000000000000000010500",
+      "offset": "TYPES section offset + 1 + 20 * 4",
+      "meaning": "Old canonical32, wire kind40, affine1, forbidden-copy2, key01 + 31 zeros, one PanicInfo field5, absent name0."
+    },
+    {
+      "family": "resource",
+      "literal": "expected",
+      "size": 54,
+      "bytes_hex": "202901020100000000000000000000000000000000000000000000000000000000000000100102030405060708090a0b0c0d0e0f1000",
+      "offset": "TYPES section offset + 1 + 20 * 4",
+      "meaning": "Old canonical32, wire kind41, affine1, forbidden-copy2, key01 + 31 zeros, identity length16, identity01..10, absent name0."
+    }
+  ],
+  "record_constructor_mutations": [
+    {
+      "ordinal": 0,
+      "change": "types[0].nominal_kind = CLASS",
+      "original_statement": "types[0].nominal_kind = XR_CORE_IR_NOMINAL_CLASS;",
+      "original_line": 94,
+      "status": "OPEN"
+    },
+    {
+      "ordinal": 1,
+      "change": "types[0].ownership = TRIVIAL",
+      "original_statement": "types[0].ownership = XR_CORE_IR_TYPE_OWNERSHIP_TRIVIAL;",
+      "original_line": 95,
+      "status": "OPEN"
+    },
+    {
+      "ordinal": 2,
+      "change": "types[0].copy_contract = TRIVIAL",
+      "original_statement": "types[0].copy_contract = XR_CORE_IR_COPY_TRIVIAL;",
+      "original_line": 96,
+      "status": "OPEN"
+    },
+    {
+      "ordinal": 3,
+      "change": "types[2].copy_contract = EXPLICIT; PanicInfo cannot be copied",
+      "original_statement": "types[2].copy_contract = XR_CORE_IR_COPY_EXPLICIT;",
+      "original_line": 97,
+      "status": "OPEN"
+    },
+    {
+      "ordinal": 4,
+      "change": "types[0].view_element_type = I64",
+      "original_statement": "types[0].view_element_type = XR_CORE_TYPE_I64;",
+      "original_line": 98,
+      "status": "OPEN"
+    }
+  ],
+  "record_wire_mutations": [
+    {
+      "ordinal": 0,
+      "change": "row+1 = 41",
+      "decode": "NONCANONICAL",
+      "original_statement": "mutated[row + 1u] = 41u;",
+      "original_line": 127,
+      "status": "OPEN"
+    },
+    {
+      "ordinal": 1,
+      "change": "row+2 and row+3 = 0",
+      "decode": "NONCANONICAL",
+      "original_statement": "mutated[row + 2u] = 0u; mutated[row + 3u] = 0u;",
+      "original_line": 128,
+      "status": "OPEN"
+    },
+    {
+      "ordinal": 2,
+      "change": "row+37 = 0",
+      "decode": "NONCANONICAL",
+      "original_statement": "mutated[row + 37u] = 0u;",
+      "original_line": 129,
+      "status": "OPEN"
+    },
+    {
+      "ordinal": 3,
+      "change": "row+37 = 11",
+      "decode": "NONCANONICAL",
+      "original_statement": "mutated[row + 37u] = 11u;",
+      "original_line": 130,
+      "status": "OPEN"
+    },
+    {
+      "ordinal": 4,
+      "change": "row+3 = 1 (explicit copy of PanicInfo)",
+      "decode": "OK; full semantic verifier still refuses",
+      "original_statement": "mutated[row + 3u] = 1u;",
+      "original_line": 131,
+      "status": "OPEN"
+    }
+  ],
+  "resource_wire_mutations": [
+    {
+      "ordinal": 0,
+      "change": "row+1 = 42",
+      "original_statement": "mutated[row + 1u] = 42u;",
+      "original_line": 90,
+      "status": "OPEN"
+    },
+    {
+      "ordinal": 1,
+      "change": "row+2 and row+3 = 0",
+      "original_statement": "mutated[row + 2u] = 0u; mutated[row + 3u] = 0u;",
+      "original_line": 91,
+      "status": "OPEN"
+    },
+    {
+      "ordinal": 2,
+      "change": "row+3 = 1",
+      "original_statement": "mutated[row + 3u] = 1u;",
+      "original_line": 92,
+      "status": "OPEN"
+    },
+    {
+      "ordinal": 3,
+      "change": "row+36 = 15",
+      "original_statement": "mutated[row + 36u] = 15u;",
+      "original_line": 93,
+      "status": "OPEN"
+    },
+    {
+      "ordinal": 4,
+      "change": "row+36 = 17",
+      "original_statement": "mutated[row + 36u] = 17u;",
+      "original_line": 94,
+      "status": "OPEN"
+    },
+    {
+      "ordinal": 5,
+      "change": "zero all16 identity bytes at row+37",
+      "original_statement": "memset(mutated + row + 37u, 0, 16u);",
+      "original_line": 95,
+      "status": "OPEN"
+    }
+  ],
+  "resource_constructor_mutations": [
+    {
+      "ordinal": 0,
+      "change": "resource identity all zero",
+      "original_statement": "memset(types[2].resource_id.bytes, 0, 16u);",
+      "original_line": 115,
+      "status": "OPEN"
+    },
+    {
+      "ordinal": 1,
+      "change": "resource copy EXPLICIT",
+      "original_statement": "types[2].copy_contract = XR_CORE_IR_COPY_EXPLICIT;",
+      "original_line": 116,
+      "status": "OPEN"
+    },
+    {
+      "ordinal": 2,
+      "change": "resource ownership TRIVIAL",
+      "original_statement": "types[2].ownership = XR_CORE_IR_TYPE_OWNERSHIP_TRIVIAL;",
+      "original_line": 117,
+      "status": "OPEN"
+    },
+    {
+      "ordinal": 3,
+      "change": "resource nominal kind CLASS",
+      "original_statement": "types[2].nominal_kind = XR_CORE_IR_NOMINAL_CLASS;",
+      "original_line": 118,
+      "status": "OPEN"
+    },
+    {
+      "ordinal": 4,
+      "change": "resource non-NULL field_types",
+      "original_statement": "types[2].field_types = types[0].field_types;",
+      "original_line": 119,
+      "status": "OPEN"
+    },
+    {
+      "ordinal": 5,
+      "change": "resource array_element_type I64",
+      "original_statement": "types[2].array_element_type = XR_CORE_TYPE_I64;",
+      "original_line": 120,
+      "status": "OPEN"
+    },
+    {
+      "ordinal": 6,
+      "change": "containing record copy EXPLICIT",
+      "original_statement": "types[0].copy_contract = XR_CORE_IR_COPY_EXPLICIT;",
+      "original_line": 121,
+      "status": "OPEN"
+    },
+    {
+      "ordinal": 7,
+      "change": "containing variant copy EXPLICIT",
+      "original_statement": "types[1].copy_contract = XR_CORE_IR_COPY_EXPLICIT;",
+      "original_line": 122,
+      "status": "OPEN"
+    },
+    {
+      "ordinal": 8,
+      "change": "record claims resource_id byte0=1",
+      "original_statement": "types[0].resource_id.bytes[0] = 1u;",
+      "original_line": 123,
+      "status": "OPEN"
+    }
+  ],
+  "failure_oracles": {
+    "constructors": "All5 record and9 resource invalid mutations require exact BUILD_INVALID_INPUT and artifact.bytes NULL; free every output.",
+    "record_wire": "First4 mutations require exact DECODE_NONCANONICAL; fifth requires exact DECODE_OK but full verifier != VERIFY_OK and validated NULL for all5.",
+    "resource_wire": "All6 require decoder != DECODE_OK, full verifier != VERIFY_OK, validated NULL; retain original status strength rather than invent an exact error.",
+    "resource_truncations": "Every length0..artifact.size-1 requires full verifier != VERIFY_OK and validated NULL, with free at each prefix."
+  },
+  "FI": {
+    "families": [
+      "record",
+      "resource"
+    ],
+    "stages": [
+      "constructor+writer",
+      "full verifier"
+    ],
+    "scan_first": 1,
+    "original_scan_exclusive_bound": 256,
+    "first_uninjected_success": "allocations + 1 == failure; final nonzero allocations <255",
+    "builder_failure": "Exact BUILD_OUT_OF_MEMORY and artifact.bytes NULL; artifact_free before probe_end.",
+    "verifier_failure": "Exact VERIFY_OUT_OF_MEMORY and validated NULL; validated_free before probe_end.",
+    "physical_balance": "Actual allocation_probe allocated == released at every prefix; failed realloc keeps original owned pointer, unknown free or probe capacity overflow aborts.",
+    "historical_bound_policy": "The1..255 original scan bound is not the new producer census, sampling limit, resource-budget change or permission to alter TIMEOUT.",
+    "lifecycle_boundary": "Allocation balance and pointer slots are physical evidence only, not stable per-object construct/finalize/reclaim proof.",
+    "scan_last_possible_fail_at": 255
+  },
+  "registration": "All5 original functions remain in complete main registration previously bound by constructor/array/registration map; no duplicate execution qualification.",
+  "target_contract_or_representation_review": {
+    "status": "OPEN; current normative representation and public admission/projection require Root decision and fresh qualification.",
+    "public_headers": [
+      {
+        "producer_relative_path": "src/xir/xxir.h",
+        "raw_sha256": "ab9425ba498b3a5a499ffe3b957df14dd9bb95c3bc9bbe60431a1e6427a86b28"
+      },
+      {
+        "producer_relative_path": "src/xir/xxir_nominal.h",
+        "raw_sha256": "3df4de518660c5769f87f33e02c04d365e04362a0379266fa8396409703060d9"
+      },
+      {
+        "producer_relative_path": "src/xir/xxir_declarations.h",
+        "raw_sha256": "3d76312d07fc66774fb2caf11c31ca5e61c8ae9d9a7f92e8836388c4aed24a0d"
+      }
+    ],
+    "observed": "25f4 TypeKind is CALLABLE/ARRAY/CELL/NOMINAL/NULLABLE/TUPLE/ATOMIC/TASK. Nominal metadata owns module/name/fields/variants/native_id32+fingerprint32. No old structural RECORD_REFERENCE/PROVIDER_RESOURCE TypeKind or old resource_id16 field is exposed in these headers.",
+    "boundary": "Do not equate structural reference with a nominal class, forbidden PanicInfo copy with ordinary class alias sharing, or old16-byte resource identity with native_id. SourceProduct metadata/retained-root projection APIs are not frozen; no proposed alias or fallback is authorized.",
+    "required": "Preserve all original positive and negative obligations in the current type/common verifier; exact new canonical bytes and diagnostics come from independent normative goldens. Roundtrip and reordered equivalence alone do not prove correct admission.",
+    "Cell": "Any replacement involving module mutable state uses frozen single Cell<T> owner/logicalT, real cross-frame exclusive identity and noescape; this format family itself has no mutable slots or runtime execution."
+  },
+  "target_owner_proof": "Current SourceProduct/Built/Checked, two owned codec reads and complete specialization verification, Lowered and Program retain the actual type/field/variant/native identity graph after each producer dies. Reordered deterministic output requires independent normative canonical goldens; each positive input remains legal and each negative preserves its structural or semantic boundary. Failed prefixes publish no partial owner; all allocations and stable object identities release exactly once. Applicable runtime/VM/native/mixed/typed Library, detached owners, two Instances, escaped results and final object construct/finalize/reclaim remain independent requirements, not established by this format map.",
+  "shared_dependencies": {
+    "paths": [
+      "tests/unit/program/xr_program_record_type_checks.inc.c",
+      "tests/unit/program/xr_program_resource_type_checks.inc.c",
+      "tests/unit/program/xr_program_module_fixture.h",
+      "tests/unit/program/test_xr_program.c",
+      "tests/unit/program/xr_program_allocation_probe.h"
+    ],
+    "status": "PRESERVE_ALL_SHARED_INPUT_AND_OWNER_CONTAINERS",
+    "policy": "Each shared fixture/probe/module owner has other active consumers. Shared emission owners7 unchanged; this batch does not emit native C and grants no deletion."
+  },
+  "representation_boundaries": [
+    "Old row kinds40/41, canonical TypeIds32..34, core PanicInfo5 and16-byte resource identity are historical inputs/goldens; no old wire or ABI aliases.",
+    "Structural finite-reference recursion is not an inline aggregate cycle. Current nominal/class identity, alias sharing and transitive copy restrictions require explicit normative mapping, not automatic equivalence.",
+    "Record fifth wire mutation is DECODE_OK then semantic refusal; resource wire negative requires !=OK, not an invented exact code.",
+    "Original record/resource tests perform format/admission/FI, not runtime execution, stable-object events, native emission or producer-death tests.",
+    "Original256 scan bound is not a replacement census or permission to sample FI, raise budget or timeout.",
+    "Format input graph has no mutable slots; any future state replacement follows single frozen Cell owner/actual exclusive identity/noescape."
+  ],
+  "handoff": {
+    "report": "build-consumer-evidence/consumer-session-20261009-r1/record-resource-types-interface-request.json",
+    "raw_sha256": "32ce5fd2eab478090c0fd92470b4f51726efc5757486954f2a48dd21536d1069",
+    "Root_thread": "01a11f74-a297-7b11-8441-835bde6a3d5f",
+    "formal_acceptance": "PENDING"
+  },
+  "full_FI": "NOT_RUN",
+  "axes": "NOT_RUN",
+  "full_safety": "NOT_RUN",
+  "SourceDelete": "NOT_RUN",
+  "Main": "NOT_RUN",
+  "boundaries": [
+    "All66 outer and1 helper CHECK sites remain OPEN; retired0.",
+    "No actual product/compiler/runtime allocation/native/lifecycle observation in this static map.",
+    "Fresh Root stable producer, current representation, complete FI/axes/safety, lifecycle, formal acceptance and last consumer audit remain required."
+  ]
+}
