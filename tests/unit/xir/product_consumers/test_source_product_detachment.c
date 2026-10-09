@@ -14,11 +14,13 @@
 #include "os/os_fs.h"
 #include "program/xr_xir_source_product.h"
 #include "toolchain/xcompiler_session.h"
+#include "xir/xxir_types.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #define CHECK(c) do { if (!(c)) { fprintf(stderr, "%d: %s\n", __LINE__, #c); exit(1); } } while (0)
 #include "../xir_instance_compile_observer.h"
+_Static_assert(XR_XIR_CHECKED_SCHEMA == 25u && XR_XIR_CHECKED_CONTRACT == 67u, "Actual Checked identity");
 
 #define DETACH_TRY(expression) do { status = (expression); if (status != XR_XIR_OK) goto done; } while (0)
 
@@ -120,6 +122,41 @@ static void facts_equal(const XrXirSourceProductFacts *a, const XrXirSourceProdu
     CHECK(!memcmp(a->lowered_layout_digest, b->lowered_layout_digest, 32));
 }
 
+static void single_module_functions(const XrXirModule *module) {
+    CHECK(module->function_count == 5);
+    const char *names[] = {"answer", "choose", "consumerAnswer"};
+    uint32_t ids[3] = {UINT32_MAX, UINT32_MAX, UINT32_MAX};
+    for (uint32_t f = 0; f < module->function_count; ++f) {
+        const XrXirFunction *fn = &module->functions[f];
+        for (unsigned n = 0; n < 3; ++n) {
+            if (fn->name_length != strlen(names[n]) || memcmp(fn->name, names[n], fn->name_length)) continue;
+            CHECK(ids[n] == UINT32_MAX && fn->result == XR_XIR_I64);
+            CHECK(fn->parameter_count == (n == 1 ? 1u : 0u));
+            if (n == 1) CHECK(fn->parameters[0] == XR_XIR_BOOL);
+            CHECK(module->declarations->functions[f].exported == (n == 2 ? 1u : 0u));
+            CHECK(module->declarations->functions[f].module == module->declarations->root_module);
+            ids[n] = f;
+        }
+    }
+    for (unsigned n = 0; n < 3; ++n) {
+        CHECK(ids[n] != UINT32_MAX); const XrXirFunction *fn = &module->functions[ids[n]];
+        unsigned calls = 0, branches = 0, returns = 0, constants = 0;
+        uint32_t value = UINT32_MAX, zero = UINT32_MAX;
+        for (uint32_t i = 0; i < fn->instruction_count; ++i) {
+            const XrXirInstruction *op = &fn->instructions[i];
+            if (op->op == XR_XIR_CONST_INT) {
+                ++constants; CHECK(op->type == XR_XIR_I64 && op->immediate == (n ? 0 : 42));
+                if (n) zero = fn->parameter_count + i; else value = fn->parameter_count + i;
+            }
+            if (op->op == XR_XIR_CALL) { ++calls; CHECK(n && op->immediate == ids[0] && op->type == XR_XIR_I64 && !op->args[1]); value = fn->parameter_count + i; }
+            if (op->op == XR_XIR_BRANCH) { ++branches; CHECK(n == 1 && xr_xir_operand_type(fn, op->args[0]) == XR_XIR_BOOL); }
+            if (op->op == XR_XIR_RETURN) { ++returns; CHECK(op->args[0] == value || (n == 1 && op->args[0] == zero)); }
+        }
+        CHECK(calls == (n ? 1u : 0u) && branches == (n == 1 ? 1u : 0u));
+        CHECK(constants == (n == 2 ? 0u : 1u) && returns == (n == 1 ? 2u : 1u));
+    }
+}
+
 static void modules(const XrXirArtifact *artifact, bool paired) {
     const XrXirModule *module = xr_xir_compile_artifact_module(artifact);
     const XrXirDeclarations *declarations = module->declarations;
@@ -129,6 +166,7 @@ static void modules(const XrXirArtifact *artifact, bool paired) {
     CHECK(root->dependency_count == (paired ? 1u : 0u));
     CHECK(root->initializer != declarations->entry_function && root->initializer < module->function_count);
     CHECK(declarations->slot_count == (paired ? 1u : 0u));
+    if (!paired) single_module_functions(module);
     if (paired) {
         uint32_t library = root->dependencies[0];
         CHECK(library < declarations->module_count && library != declarations->root_module);

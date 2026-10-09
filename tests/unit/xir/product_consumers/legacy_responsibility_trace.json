@@ -15,11 +15,11 @@
     "shared_emission_owner_consumers": 7
   },
   "reference_counts": {
-    "source_with_digest_reference": 55,
-    "source_without_digest_reference": 53,
+    "source_with_digest_reference": 56,
+    "source_without_digest_reference": 52,
     "other_with_digest_reference": 40,
     "other_without_digest_reference": 120,
-    "digest_reference_values": 123,
+    "digest_reference_values": 124,
     "source_inventory_projections": 42
   },
   "mapping_inputs": [
@@ -450,6 +450,10 @@
     {
       "path": "tests/unit/xir/product_consumers/source_sequence_length_obligations.json",
       "lf_sha256": "7f4ad6d38ca9dfaa2c4a26d5148693807fb61f0bd813403e8c82383ba236be52"
+    },
+    {
+      "path": "tests/unit/xir/product_consumers/source_single_module_source_obligations.json",
+      "lf_sha256": "9a4aef8bc566dced90011a7ddebf18ed715790987537147803d9be4ebd488a2d"
     },
     {
       "path": "tests/unit/xir/product_consumers/source_source_file_deletion_native_obligations.json",
@@ -1671,7 +1675,13 @@
         "expected_i64": 42,
         "scope": "Exact original source prefix and fixed result through an explicitly exported adapter; additional legacy assertions stay OPEN until mapped."
       },
-      "mapping_references": []
+      "mapping_references": [
+        {
+          "mapping": "tests/unit/xir/product_consumers/source_single_module_source_obligations.json",
+          "pointer": "/legacy/body_lf_sha256",
+          "binding": "exact_path_name_body"
+        }
+      ]
     },
     {
       "legacy_path": "tests/unit/program/test_xr_program_source_build.c",
