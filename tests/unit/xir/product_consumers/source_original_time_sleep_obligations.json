@@ -5,7 +5,7 @@
   "status": "OPEN",
   "retired": 0,
   "replacement_gates": [],
-  "result": "PASS_OWNED_CHECKED_LOWERED_METADATA_ONLY",
+  "result": "PASS_OWNED_METADATA_AND_SEPARATE_NORMAL_TIMER239_EXECUTION",
   "full_FI": "NOT_RUN",
   "axes": "NOT_RUN",
   "cancel": "NOT_RUN",
@@ -243,8 +243,8 @@
     },
     {
       "responsibility": "Actual VM/native/Mixed result 239, cancellation, release and timer readiness",
-      "status": "OPEN_NOT_RUN",
-      "reason": "Existing consumer driver code is available, but no new products have run. Parent/Main controls native, Mixed and cancellation windows and fresh builds."
+      "status": "PASS_NORMAL_TIMER239_AND_HOST_READINESS_CANCEL_OPEN",
+      "reason": "Eight current67 normal VM/native/Mixed products actually passed in MSVC and Clang ASan/UBSan using the complete byte-identical original fixture and real stdlib. Each owns an independent Program proof, two Instances and four fixed239 calls with exactly one timer10 host resume each and full10ms monotonic readiness. Compiler/runtime release assertions passed. Active cancellation, complete FI/axes and full safety remain OPEN; no previous owned metadata proof is spliced into this execution."
     },
     {
       "responsibility": "Old private BackendIR emission substrings and standalone exit 239",
@@ -539,6 +539,247 @@
     ],
     "controls": "Two separate sequence_length VM controls PASS; they do not execute original time.sleep behavior.",
     "caption_binding": "Product execution captured candidate map/trace; runtime-preimage-<filename> preserves exact old bytes. This later actual evidence annotation is not a rerun.",
+    "retired": 0,
+    "completion": "OPEN"
+  },
+  "normal_execution_20261009_facet": {
+    "status": "PASS_NORMAL_TIMER239_VM_NATIVE_MIXED_ONLY",
+    "producer": "25f4016d6f089169757a90ae11ba537002374711",
+    "identity": "Checked25/semantic67/Value22/Call28/Program29",
+    "directory": "build-consumer-evidence/current67-original-time-sleep-execution-r1",
+    "phase": "NORMAL_EXECUTION_NOT_METADATA_OR_FI",
+    "runtime_fixture": {
+      "path": "tests/unit/xir/product_consumers/fixtures/time_sleep/root.xr",
+      "bytes": 116,
+      "sha256": "3091ad3db264c762b322b5961cb33023f112e713a667820d91ec26a06523ec0e",
+      "exact_equal_to_original_time_sleep_root": true,
+      "prefix_bytes": 62,
+      "adapter_bytes": 54,
+      "real_stdlib_import": "import time",
+      "real_stdlib_identity": "stdlib-module-v1:module=4:time:path=12:time/time.xr"
+    },
+    "configurations": [
+      "MSVC Release",
+      "Clang ASan/UBSan"
+    ],
+    "normal_registered_gates": 8,
+    "separate_VM_controls": 2,
+    "TIMEOUT": 120,
+    "PROCESSORS": "DEFAULT_1",
+    "WILL_FAIL": false,
+    "Program_Instance": {
+      "program_proofs": "Separate normal products; not the earlier original_time_sleep metadata proof.",
+      "instances": 16,
+      "fixed239_calls": 32,
+      "actual_host_resumes": 32,
+      "full10ms_ready_events": 32,
+      "producer_and_session": "Destroyed before actual execution; caller Program ownership dropped after two Instances retain it.",
+      "private_answer_authority": "Denied before initialization without runtime allocations in every Instance.",
+      "result_ownership": "Returned i64 239 checked independently and dropped on every call.",
+      "compiler_physical_release": "ACTUAL_ASSERTED_0/0_AND_OBSERVER_TABLE0",
+      "runtime_physical_release": "ACTUAL_ASSERTED_0/0_AFTER_ALL_INSTANCES"
+    },
+    "typed_shape": {
+      "real_modules": 2,
+      "stdlib_sleep_calls_in_original_answer": 1,
+      "sleep_argument_i64": 10,
+      "public_TIMER_AFTER_MS_instructions": 1,
+      "timer_operand_i64": true,
+      "return_i64": 239,
+      "wait_kind": "XR_XIR_WAIT_TIMER_MS",
+      "after_ms": 10,
+      "reserved_subject_generation_ticket": 0,
+      "actual_epoch_wake": "Nonzero and exact; stale epoch/wake and wait queries rejected without allocations or sentinel mutation.",
+      "old_effect_capability_masks_safepoint_state_successor_schema": "OPEN_TARGET_REPRESENTATION_REVIEW"
+    },
+    "generated_native": {
+      "actual_fresh_generated_C_TUs": 2,
+      "actual_executable_links": 4,
+      "reused_driver_wrapper_TUs": 6,
+      "producer_archives_unchanged": 22,
+      "generated_payloads_byte_equal_across_configurations": true,
+      "per_configuration_payload_sha256": {
+        "msvc": "ed81d006ef5e23d0c2f40d3ac97370b5b3279141b404bcf95b5d2a592c910eaa",
+        "asan": "ed81d006ef5e23d0c2f40d3ac97370b5b3279141b404bcf95b5d2a592c910eaa"
+      },
+      "current_public_double_emission": "Exact size and byte equality checked in every normal build; native C SHA256 is checked against fresh source emission.",
+      "compiler_flags": "C11/UTF8/W4/WX; generated Clang native TU has actual ASan/UBSan flags.",
+      "normal_generation": "No runtime/FI during the build-driven emit command; preserved explicit dedicated FI gates.",
+      "old_private_AOT_and_standalone_exit239": "OPEN_NOT_EXECUTED_BY_THIS_INTERNAL_TEST_HARNESS"
+    },
+    "receipts": [
+      {
+        "configuration": "msvc",
+        "gate": "test_source_product_time_sleep_vm",
+        "mode": 0,
+        "receipt": "msvc-test_source_product_time_sleep_vm.json",
+        "pid": 46236,
+        "returncode": 0,
+        "stdout_sha256": "e3c9bdd8c02ab9cb9f3e549dbf511280619af32523037a192eb1746fa6931828",
+        "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "inputs_before": "msvc-test_source_product_time_sleep_vm-inputs-before.json",
+        "inputs_after": "msvc-test_source_product_time_sleep_vm-inputs-after.json",
+        "binary_pre_entry_archive": "msvc-test_source_product_time_sleep_vm-binary-preimage.exe",
+        "input_items": 2815,
+        "actual_elapsed_ns": [
+          14345000,
+          15590400,
+          15656400,
+          15809800
+        ]
+      },
+      {
+        "configuration": "msvc",
+        "gate": "test_source_product_time_sleep_native",
+        "mode": 1,
+        "receipt": "msvc-test_source_product_time_sleep_native.json",
+        "pid": 46032,
+        "returncode": 0,
+        "stdout_sha256": "c039cd0dc831d19cb04036267d9cfd3863517aa862344559679f26f0d63d425c",
+        "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "inputs_before": "msvc-test_source_product_time_sleep_native-inputs-before.json",
+        "inputs_after": "msvc-test_source_product_time_sleep_native-inputs-after.json",
+        "binary_pre_entry_archive": "msvc-test_source_product_time_sleep_native-binary-preimage.exe",
+        "input_items": 2815,
+        "actual_elapsed_ns": [
+          21246600,
+          15660600,
+          16498400,
+          15323800
+        ]
+      },
+      {
+        "configuration": "msvc",
+        "gate": "test_source_product_time_sleep_mixed_even",
+        "mode": 2,
+        "receipt": "msvc-test_source_product_time_sleep_mixed_even.json",
+        "pid": 35800,
+        "returncode": 0,
+        "stdout_sha256": "0c924fe7459183f9330f7495af8ea6745f3f75ee2ee798d625082d2440d6e18c",
+        "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "inputs_before": "msvc-test_source_product_time_sleep_mixed_even-inputs-before.json",
+        "inputs_after": "msvc-test_source_product_time_sleep_mixed_even-inputs-after.json",
+        "binary_pre_entry_archive": "msvc-test_source_product_time_sleep_mixed_even-binary-preimage.exe",
+        "input_items": 2815,
+        "actual_elapsed_ns": [
+          10776600,
+          14999000,
+          16231300,
+          15971000
+        ]
+      },
+      {
+        "configuration": "msvc",
+        "gate": "test_source_product_time_sleep_mixed_odd",
+        "mode": 3,
+        "receipt": "msvc-test_source_product_time_sleep_mixed_odd.json",
+        "pid": 45880,
+        "returncode": 0,
+        "stdout_sha256": "a314256342522c1496dd50537dbad76098a1c7f6b94b6de4764c7c97e7972ab2",
+        "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "inputs_before": "msvc-test_source_product_time_sleep_mixed_odd-inputs-before.json",
+        "inputs_after": "msvc-test_source_product_time_sleep_mixed_odd-inputs-after.json",
+        "binary_pre_entry_archive": "msvc-test_source_product_time_sleep_mixed_odd-binary-preimage.exe",
+        "input_items": 2815,
+        "actual_elapsed_ns": [
+          19421100,
+          15122200,
+          15478000,
+          15473200
+        ]
+      },
+      {
+        "configuration": "asan",
+        "gate": "test_source_product_time_sleep_vm",
+        "mode": 0,
+        "receipt": "asan-test_source_product_time_sleep_vm.json",
+        "pid": 32892,
+        "returncode": 0,
+        "stdout_sha256": "2cc0141f9c0762dc35501d58dda230393a62a9d044431032ccb7f2461be06cb5",
+        "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "inputs_before": "asan-test_source_product_time_sleep_vm-inputs-before.json",
+        "inputs_after": "asan-test_source_product_time_sleep_vm-inputs-after.json",
+        "binary_pre_entry_archive": "asan-test_source_product_time_sleep_vm-binary-preimage.exe",
+        "input_items": 2815,
+        "actual_elapsed_ns": [
+          23844400,
+          15036400,
+          15549000,
+          15617500
+        ]
+      },
+      {
+        "configuration": "asan",
+        "gate": "test_source_product_time_sleep_native",
+        "mode": 1,
+        "receipt": "asan-test_source_product_time_sleep_native.json",
+        "pid": 54024,
+        "returncode": 0,
+        "stdout_sha256": "47760f8306628e7a89b98ddb211e64d2fd98d4cd62edc0ccbd706d1dfe8155a3",
+        "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "inputs_before": "asan-test_source_product_time_sleep_native-inputs-before.json",
+        "inputs_after": "asan-test_source_product_time_sleep_native-inputs-after.json",
+        "binary_pre_entry_archive": "asan-test_source_product_time_sleep_native-binary-preimage.exe",
+        "input_items": 2815,
+        "actual_elapsed_ns": [
+          13598000,
+          14566000,
+          15786200,
+          15217700
+        ]
+      },
+      {
+        "configuration": "asan",
+        "gate": "test_source_product_time_sleep_mixed_even",
+        "mode": 2,
+        "receipt": "asan-test_source_product_time_sleep_mixed_even.json",
+        "pid": 28340,
+        "returncode": 0,
+        "stdout_sha256": "ad7a36bc6fcae88526e642c40efd9e663a495e5b14f868523ad24e289b9da8d2",
+        "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "inputs_before": "asan-test_source_product_time_sleep_mixed_even-inputs-before.json",
+        "inputs_after": "asan-test_source_product_time_sleep_mixed_even-inputs-after.json",
+        "binary_pre_entry_archive": "asan-test_source_product_time_sleep_mixed_even-binary-preimage.exe",
+        "input_items": 2815,
+        "actual_elapsed_ns": [
+          13744500,
+          15503800,
+          14812100,
+          15339800
+        ]
+      },
+      {
+        "configuration": "asan",
+        "gate": "test_source_product_time_sleep_mixed_odd",
+        "mode": 3,
+        "receipt": "asan-test_source_product_time_sleep_mixed_odd.json",
+        "pid": 22300,
+        "returncode": 0,
+        "stdout_sha256": "c8f03e5d9b40c1efeaaf5fad12472c8722e2ba12d2df5aeb73016d149f17e15f",
+        "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "inputs_before": "asan-test_source_product_time_sleep_mixed_odd-inputs-before.json",
+        "inputs_after": "asan-test_source_product_time_sleep_mixed_odd-inputs-after.json",
+        "binary_pre_entry_archive": "asan-test_source_product_time_sleep_mixed_odd-binary-preimage.exe",
+        "input_items": 2815,
+        "actual_elapsed_ns": [
+          20268000,
+          15696900,
+          15193400,
+          14562500
+        ]
+      }
+    ],
+    "independent_review": "independent-review.json",
+    "build_first_audit_failure": "Preserved exact VM executable output classification error; successful terminal MSVC build re-audited without rerunning, all other material unchanged.",
+    "historical_evidence": "Earlier candidate_pipeline/actual_execution/evidence_plan remain the metadata-only phase. Their NOT_RUN values are not rewritten as contemporaneous runtime observations.",
+    "full_FI": "NOT_RUN_NO_NEW_ROOT_WINDOW",
+    "axes": "NOT_RUN",
+    "cancel": "NOT_RUN",
+    "SourceDelete": "NOT_RUN",
+    "full_safety": "NOT_RUN",
+    "Windows_TSan": "UNSUPPORTED",
+    "macOS": "NOT_RUN",
+    "Main": "NOT_RUN",
     "retired": 0,
     "completion": "OPEN"
   }

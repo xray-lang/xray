@@ -505,7 +505,7 @@
     },
     {
       "path": "tests/unit/xir/product_consumers/source_original_time_sleep_obligations.json",
-      "lf_sha256": "647dc55d1f09fb7573b510f2f7b33b76d9c8ab5269c2e45a4f5c9c17d61dbbbf"
+      "lf_sha256": "4df3b8117ff5da14a708e305cd12fd86091820cbd2238da7755e0a9c19f08280"
     },
     {
       "path": "tests/unit/xir/product_consumers/source_original_witness_call_panic_obligations.json",
