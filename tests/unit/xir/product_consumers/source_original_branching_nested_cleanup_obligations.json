@@ -1,0 +1,833 @@
+{
+  "schema": 1,
+  "family": "original_branching_nested_cleanup",
+  "legacy_base_commit": "01e6d38401b0f5c8684b64c35a99ac651024c0c1",
+  "status": "OPEN",
+  "retired": 0,
+  "replacement_gates": [],
+  "result": "STATIC_ORIGINAL_BRANCHING_NESTED_CLEANUP_MAP_ONLY",
+  "product_execution": "NOT_RUN_BY_THIS_MAP",
+  "producer": "25f4016d6f089169757a90ae11ba537002374711",
+  "identity": "Checked25/semantic67/Value22/Call28/Program29",
+  "producer_scope": "Existing authorised25f4 identity only; no new producer, private Root tree or heavy window adopted.",
+  "legacy": [
+    {
+      "name": "source_owner_shared_branching_cleanup_projects_private_cancel_graph",
+      "legacy_path": "tests/unit/program/test_xr_program_source_build.c",
+      "legacy_line": 6178,
+      "body_lf_sha256": "889f455ca4eb721e4a6abcbeaf6e3ecf2958f8404246c1167090898a0fdfcb78",
+      "assertion_sites": 19,
+      "loop_sites": 0,
+      "status": "OPEN",
+      "replacement_gates": [],
+      "note": "Function census preserves its whole body; sites do not count executed loop iterations.",
+      "original_fixture": {
+        "id": "branching_cleanup",
+        "expected_exit": 233,
+        "labels": [
+          "provider",
+          "pipe",
+          "coroutine",
+          "cancel",
+          "refusal",
+          "cleanup",
+          "branch"
+        ],
+        "backends": {
+          "vm": "execute",
+          "aot": "execute"
+        }
+      },
+      "static_input_literals": {
+        "branching_cleanup": {
+          "bytes": 365,
+          "sha256": "6fcd402b40aa80ec8f2697ca3366cb8da38269e006641ac27c3fcdcebcb204ad"
+        }
+      }
+    },
+    {
+      "name": "source_owner_nested_cleanup_projects_reason_chain",
+      "legacy_path": "tests/unit/program/test_xr_program_source_build.c",
+      "legacy_line": 6274,
+      "body_lf_sha256": "58289992acc8e896c3de1bcd4123839e886b4b94f1516f9a62e732ae51643371",
+      "assertion_sites": 19,
+      "loop_sites": 0,
+      "status": "OPEN",
+      "replacement_gates": [],
+      "note": "Function census preserves its whole body; sites do not count executed loop iterations.",
+      "original_fixture": {
+        "id": "nested_cleanup",
+        "expected_exit": 234,
+        "labels": [
+          "provider",
+          "pipe",
+          "coroutine",
+          "cancel",
+          "refusal",
+          "cleanup",
+          "nested"
+        ],
+        "backends": {
+          "vm": "execute",
+          "aot": "execute"
+        }
+      },
+      "static_input_literals": {
+        "nested_cleanup": {
+          "bytes": 509,
+          "sha256": "07b91a5442acc6bf6a4ebd5bf382d950681da2b9ff009267304e54b1664b8566"
+        }
+      }
+    }
+  ],
+  "original_sources": {
+    "branching_cleanup": {
+      "bytes": 365,
+      "sha256": "6fcd402b40aa80ec8f2697ca3366cb8da38269e006641ac27c3fcdcebcb204ad",
+      "text": "import sys\nfn branch(flag: bool) -> i64 {\n  var pipe = sys.Pipe(2147483642, 2147483643)\n  defer {\n    if (flag) { pipe.closeRead() } else { pipe.closeWrite() }\n    pipe.closeRead()\n    pipe.closeWrite()\n  }\n  var primed = pipe.closeRead()\n  if (primed) {\n    Coro.yield()\n    return 43\n  }\n  return 42\n}\nfn answer() -> i64 {\n  return branch(true) + branch(false)\n}\n",
+      "origin_function": "source_owner_shared_branching_cleanup_projects_private_cancel_graph",
+      "origin_variable": "branching_cleanup"
+    },
+    "nested_cleanup": {
+      "bytes": 509,
+      "sha256": "07b91a5442acc6bf6a4ebd5bf382d950681da2b9ff009267304e54b1664b8566",
+      "text": "import sys\nfn nested(flag: bool) -> i64 {\n  var outer = sys.Pipe(2147483642, 2147483643)\n  var inner = sys.Pipe(2147483638, 2147483639)\n  defer {\n    var choose = flag\n    defer {\n      if (choose) { inner.closeRead() } else { inner.closeWrite() }\n      inner.closeRead()\n      inner.closeWrite()\n    }\n    outer.closeRead()\n    outer.closeWrite()\n  }\n  var primed = outer.closeRead()\n  if (primed) {\n    Coro.yield()\n    return 42\n  }\n  return 41\n}\nfn answer() -> i64 { return nested(true) + nested(false) }\n",
+      "origin_function": "source_owner_nested_cleanup_projects_reason_chain",
+      "origin_variable": "nested_cleanup"
+    }
+  },
+  "source_construction": "Both complete365B/509B original C literals independently decoded, including captured choose and all true/false/nested defer branches. No adapter or source mutation.",
+  "responsibility_mapping": [
+    {
+      "legacy_name": "source_owner_shared_branching_cleanup_projects_private_cancel_graph",
+      "assertion_sites": 19,
+      "groups": [
+        {
+          "responsibility": "Admit complete original source with every branch and nested defer owner.",
+          "status": "OPEN",
+          "target_consumer": "ROOT_CONTRACT_AND_QUALIFIED_PRODUCER_PENDING",
+          "original": {
+            "path": "tests/unit/program/test_xr_program_source_build.c",
+            "lines": [
+              6203,
+              6214
+            ]
+          },
+          "original_assertion_sites": 4,
+          "gap": "Keep the365B/509B sources exact, physical authority/session/actual hosted profile, all branch flags and captured choose. Source must succeed; any unrelated refusal remains FAIL."
+        },
+        {
+          "responsibility": "Retain complete original coroutine/static ownership graph.",
+          "status": "OPEN",
+          "target_consumer": "ROOT_CONTRACT_AND_QUALIFIED_PRODUCER_PENDING",
+          "original": {
+            "path": "tests/unit/program/test_xr_program_source_build.c",
+            "lines": [
+              6215,
+              6218
+            ]
+          },
+          "original_assertion_sites": 3,
+          "gap": "One yield operation, two sealed coroutine calls and one provider requirement, not just a runtime result. Reason-private cancellation and full nested cleanup branch/owner tuples need common full reverification."
+        },
+        {
+          "responsibility": "Bind exact IO close contract/operation and actual host callback context.",
+          "status": "OPEN",
+          "target_consumer": "ROOT_CONTRACT_AND_QUALIFIED_PRODUCER_PENDING",
+          "original": {
+            "path": "tests/unit/program/test_xr_program_source_build.c",
+            "lines": [
+              6219,
+              6246
+            ]
+          },
+          "original_assertion_sites": 8,
+          "gap": "Stable contract and operation equality, requirement one operation, actual profile/fingerprint and bool-i64 unary callback. Provider array ordinal alone cannot grant authority."
+        },
+        {
+          "responsibility": "Execute the entire original VM scenario matrix twice in one Instance.",
+          "status": "OPEN",
+          "target_consumer": "ROOT_CONTRACT_AND_QUALIFIED_PRODUCER_PENDING",
+          "original": {
+            "path": "tests/unit/program/test_xr_program_source_build.c",
+            "lines": [
+              6247,
+              6261
+            ]
+          },
+          "original_assertion_sites": 1,
+          "gap": "Branch5/nested8 rows include normal86/84, both active cancel prefixes and exact refused calls, counts and endpoint traces. VM point equals each suspension ordinal. Same Instance reused twice is not target two-Instance qualification."
+        },
+        {
+          "responsibility": "Actual deterministic native matrix plus original verification safety duties.",
+          "status": "OPEN",
+          "target_consumer": "ROOT_CONTRACT_AND_QUALIFIED_PRODUCER_PENDING",
+          "original": {
+            "path": "tests/unit/program/test_xr_program_source_build.c",
+            "lines": [
+              6262,
+              6264
+            ]
+          },
+          "original_assertion_sites": 0,
+          "gap": "Full native guard protocol requires all5/8 rows, independent86/84, host trap7, exact traces and standalone233/234. Branching helper additionally inspects full live/cancel tuples, rejects one duplicate live operand, restores and re-verifies; Root maps this to current common verification."
+        },
+        {
+          "responsibility": "Drain/free all original execution and production owners.",
+          "status": "OPEN",
+          "target_consumer": "ROOT_CONTRACT_AND_QUALIFIED_PRODUCER_PENDING",
+          "original": {
+            "path": "tests/unit/program/test_xr_program_source_build.c",
+            "lines": [
+              6265,
+              6272
+            ]
+          },
+          "original_assertion_sites": 3,
+          "gap": "Explicit drain/retire/free statuses, Program/profile/source destruction stay mandatory. No allocator or actual per-object lifetime event is observed by this static map."
+        }
+      ]
+    },
+    {
+      "legacy_name": "source_owner_nested_cleanup_projects_reason_chain",
+      "assertion_sites": 19,
+      "groups": [
+        {
+          "responsibility": "Admit complete original source with every branch and nested defer owner.",
+          "status": "OPEN",
+          "target_consumer": "ROOT_CONTRACT_AND_QUALIFIED_PRODUCER_PENDING",
+          "original": {
+            "path": "tests/unit/program/test_xr_program_source_build.c",
+            "lines": [
+              6298,
+              6309
+            ]
+          },
+          "original_assertion_sites": 4,
+          "gap": "Keep the365B/509B sources exact, physical authority/session/actual hosted profile, all branch flags and captured choose. Source must succeed; any unrelated refusal remains FAIL."
+        },
+        {
+          "responsibility": "Retain complete original coroutine/static ownership graph.",
+          "status": "OPEN",
+          "target_consumer": "ROOT_CONTRACT_AND_QUALIFIED_PRODUCER_PENDING",
+          "original": {
+            "path": "tests/unit/program/test_xr_program_source_build.c",
+            "lines": [
+              6310,
+              6313
+            ]
+          },
+          "original_assertion_sites": 3,
+          "gap": "One yield operation, two sealed coroutine calls and one provider requirement, not just a runtime result. Reason-private cancellation and full nested cleanup branch/owner tuples need common full reverification."
+        },
+        {
+          "responsibility": "Bind exact IO close contract/operation and actual host callback context.",
+          "status": "OPEN",
+          "target_consumer": "ROOT_CONTRACT_AND_QUALIFIED_PRODUCER_PENDING",
+          "original": {
+            "path": "tests/unit/program/test_xr_program_source_build.c",
+            "lines": [
+              6314,
+              6341
+            ]
+          },
+          "original_assertion_sites": 8,
+          "gap": "Stable contract and operation equality, requirement one operation, actual profile/fingerprint and bool-i64 unary callback. Provider array ordinal alone cannot grant authority."
+        },
+        {
+          "responsibility": "Execute the entire original VM scenario matrix twice in one Instance.",
+          "status": "OPEN",
+          "target_consumer": "ROOT_CONTRACT_AND_QUALIFIED_PRODUCER_PENDING",
+          "original": {
+            "path": "tests/unit/program/test_xr_program_source_build.c",
+            "lines": [
+              6342,
+              6356
+            ]
+          },
+          "original_assertion_sites": 1,
+          "gap": "Branch5/nested8 rows include normal86/84, both active cancel prefixes and exact refused calls, counts and endpoint traces. VM point equals each suspension ordinal. Same Instance reused twice is not target two-Instance qualification."
+        },
+        {
+          "responsibility": "Actual deterministic native matrix plus original verification safety duties.",
+          "status": "OPEN",
+          "target_consumer": "ROOT_CONTRACT_AND_QUALIFIED_PRODUCER_PENDING",
+          "original": {
+            "path": "tests/unit/program/test_xr_program_source_build.c",
+            "lines": [
+              6357,
+              6359
+            ]
+          },
+          "original_assertion_sites": 0,
+          "gap": "Full native guard protocol requires all5/8 rows, independent86/84, host trap7, exact traces and standalone233/234. Branching helper additionally inspects full live/cancel tuples, rejects one duplicate live operand, restores and re-verifies; Root maps this to current common verification."
+        },
+        {
+          "responsibility": "Drain/free all original execution and production owners.",
+          "status": "OPEN",
+          "target_consumer": "ROOT_CONTRACT_AND_QUALIFIED_PRODUCER_PENDING",
+          "original": {
+            "path": "tests/unit/program/test_xr_program_source_build.c",
+            "lines": [
+              6360,
+              6367
+            ]
+          },
+          "original_assertion_sites": 3,
+          "gap": "Explicit drain/retire/free statuses, Program/profile/source destruction stay mandatory. No allocator or actual per-object lifetime event is observed by this static map."
+        }
+      ]
+    }
+  ],
+  "original_private_helpers": [
+    {
+      "path": "tests/unit/program/test_xr_program_source_build.c",
+      "function": "source_build_fixture_init",
+      "line": 894,
+      "end_line": 968,
+      "body_lf_sha256": "964c190cb52940aa039b9459e6a5aa0416430eadac032979ed210358216892eb",
+      "assertion_sites": 0,
+      "classification": "Actual direct or specified transitive NON_TEST helper, not extra census TEST or exhaustive shared dependency closure.",
+      "responsibility": "Whole physical source/authority/session/resolver/profile preparation, complete exact source bytes; all boolean failure branches release partial owners.",
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/program/test_xr_program_source_build.c",
+      "function": "source_build_fixture_free",
+      "line": 873,
+      "end_line": 892,
+      "body_lf_sha256": "54f2ca59ddb46fda789abf0411160790bcb950903858a308b984b50e6f8c1889",
+      "assertion_sites": 0,
+      "classification": "Actual direct or specified transitive NON_TEST helper, not extra census TEST or exhaustive shared dependency closure.",
+      "responsibility": "Restore attached session, delete session/isolate/resolver, release identity/path, unlink graph/remove temporary directory and zero fixture.",
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/program/test_xr_program_source_build.c",
+      "function": "write_source_file",
+      "line": 857,
+      "end_line": 864,
+      "body_lf_sha256": "cc03580465f59354407c5e6e4e063c40ab9759cf1f45ceb3f099884b0e28014d",
+      "assertion_sites": 0,
+      "classification": "Actual direct or specified transitive NON_TEST helper, not extra census TEST or exhaustive shared dependency closure.",
+      "responsibility": "Require all original bytes written and fclose success; no missing-file or truncated-source substitute.",
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/program/test_xr_program_source_build.c",
+      "function": "semantic_fingerprint",
+      "line": 866,
+      "end_line": 871,
+      "body_lf_sha256": "08fbbce02bdf996e8c8fb5b4a0b090f8e0dad413c84d6de2ab2530ec56aa3c0a",
+      "assertion_sites": 0,
+      "classification": "Actual direct or specified transitive NON_TEST helper, not extra census TEST or exhaustive shared dependency closure.",
+      "responsibility": "Copy exact semantic profile fingerprint, kept separate from actual target semantics identity.",
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/program/test_xr_program_source_build.c",
+      "function": "assert_source_build_ok",
+      "line": 996,
+      "end_line": 1010,
+      "body_lf_sha256": "a5d0aee0a406f887ea79355380455511ee0762cfa39915fb657cfe8a4088fd94",
+      "assertion_sites": 1,
+      "classification": "Actual direct or specified transitive NON_TEST helper, not extra census TEST or exhaustive shared dependency closure.",
+      "responsibility": "Exact Source OK required; preserve full actual diagnostic on refusal instead of making a missing positive Program pass.",
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/program/test_xr_program_source_build.c",
+      "function": "source_fixture_output_path",
+      "line": 63,
+      "end_line": 65,
+      "body_lf_sha256": "2c5d63f47f4b0e77e5abec0b6831c67cec2056ad89196c34fbd8e0cbd6ec1d9d",
+      "assertion_sites": 0,
+      "classification": "Actual direct or specified transitive NON_TEST helper, not extra census TEST or exhaustive shared dependency closure.",
+      "responsibility": "Only selected original branching_cleanup/nested_cleanup native fixture writes output.",
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/program/test_xr_program_source_build.c",
+      "function": "stable_id_equal",
+      "line": 357,
+      "end_line": 359,
+      "body_lf_sha256": "b7944eaf320e1112ae477f8c2d4d3513ce35bce7c8c98f0fb4a2b4b227d7f621",
+      "assertion_sites": 0,
+      "classification": "Actual direct or specified transitive NON_TEST helper, not extra census TEST or exhaustive shared dependency closure.",
+      "responsibility": "Compare all bytes of complete stable contract/operation identity; display name/ordinal is not authority.",
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/program/test_xr_program_source_build.c",
+      "function": "find_profile_provider",
+      "line": 749,
+      "end_line": 757,
+      "body_lf_sha256": "e406782a95e05ce78f909f815229bd5d4ad14c2e96001c17f2e17aad178ee048",
+      "assertion_sites": 0,
+      "classification": "Actual direct or specified transitive NON_TEST helper, not extra census TEST or exhaustive shared dependency closure.",
+      "responsibility": "Find real profile provider by full contract stable ID or return NULL on absence.",
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/program/test_xr_program_source_build.c",
+      "function": "program_operation_count",
+      "line": 361,
+      "end_line": 375,
+      "body_lf_sha256": "2d6a79abce8b727c9711e86a5520d525ddefa2b890f5db5e510d4a89d9d5f68d",
+      "assertion_sites": 0,
+      "classification": "Actual direct or specified transitive NON_TEST helper, not extra census TEST or exhaustive shared dependency closure.",
+      "responsibility": "Count the complete operation inventory across all original functions/blocks/instructions, including full structural graph.",
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/program/test_xr_program_source_build.c",
+      "function": "branching_cleanup_close_probe",
+      "line": 239,
+      "end_line": 249,
+      "body_lf_sha256": "4efaff524504dd698de54be015dc363cb59740d30644487aeb46c5614673848b",
+      "assertion_sites": 0,
+      "classification": "Actual direct or specified transitive NON_TEST helper, not extra census TEST or exhaustive shared dependency closure.",
+      "responsibility": "Actual bounded16 event log records handle before selected one-based refusal; no output write on FAILED, true output on OK. No successful-false callback case exists in these originals.",
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/program/test_xr_program_source_build.c",
+      "function": "branching_cleanup_assert_trace",
+      "line": 251,
+      "end_line": 266,
+      "body_lf_sha256": "f799df3c139d7d7150706072b3140bcfaab2e510c08c70fdbc7c7b05837ee6cf",
+      "assertion_sites": 2,
+      "classification": "Actual direct or specified transitive NON_TEST helper, not extra census TEST or exhaustive shared dependency closure.",
+      "responsibility": "Two sites and exact ordinary/first-refusal arrays require complete callback count and every ordered handle, including retry of2147483642 and last write retry.",
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/program/test_xr_program_source_build.c",
+      "function": "nested_cleanup_assert_trace",
+      "line": 268,
+      "end_line": 310,
+      "body_lf_sha256": "1570c6215af3f59c948ad3c2e699337387b65f8ba30b5e362f0953a9be8edb43",
+      "assertion_sites": 3,
+      "classification": "Actual direct or specified transitive NON_TEST helper, not extra census TEST or exhaustive shared dependency closure.",
+      "responsibility": "Three sites retain all four independent4/8/5/9-event trace arrays, bounds and exact order, true-prelude and false-source-branch write retries.",
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/program/xr_program_source_cleanup_checks.inc.c",
+      "function": "branching_cleanup_check_vm",
+      "line": 15,
+      "end_line": 51,
+      "body_lf_sha256": "a11c79a1ae48bd6fb6f4799d4af75a30bd6447ce57dff2a801ad167ad821a8de",
+      "assertion_sites": 9,
+      "classification": "Actual direct or specified transitive NON_TEST helper, not extra census TEST or exhaustive shared dependency closure.",
+      "responsibility": "Nine sites enumerate all5 scenarios; reset probe, create real execution, step/selected cancel at each suspension ordinal, free execution, check independent86 or exact host trap/cancel and full trace. Outer TEST calls twice in the same Instance.",
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/program/xr_program_source_cleanup_checks.inc.c",
+      "function": "nested_cleanup_check_vm",
+      "line": 53,
+      "end_line": 89,
+      "body_lf_sha256": "e1ef986f0eddb972acf92912fbc94c63a281a450551406d144ec5457907f6e5a",
+      "assertion_sites": 9,
+      "classification": "Actual direct or specified transitive NON_TEST helper, not extra census TEST or exhaustive shared dependency closure.",
+      "responsibility": "Nine sites enumerate all8 scenarios with both suspension cancellations and five refused call indexes, independent84 or host trap/cancel and full exact nested trace. Outer TEST repeats in one Instance.",
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/program/xr_program_source_cleanup_checks.inc.c",
+      "function": "assert_aot_branching_cleanup",
+      "line": 703,
+      "end_line": 841,
+      "body_lf_sha256": "9b070144a2b202f6c94fa6bd7b7db5d8674677570f9f881e9a10a6b9b2079e10",
+      "assertion_sites": 23,
+      "classification": "Actual direct or specified transitive NON_TEST helper, not extra census TEST or exhaustive shared dependency closure.",
+      "responsibility": "Twenty-three sites plus full emitted guards retain verified backend, whole live/cancel tuple safety and invalid duplicate-live rejection/restore, deterministic C, complete5-row actual native86/trap7/cancel trace protocol and standalone233.",
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/program/xr_program_source_cleanup_checks.inc.c",
+      "function": "assert_aot_nested_cleanup",
+      "line": 843,
+      "end_line": 937,
+      "body_lf_sha256": "77240485cddced74072551afde84d463bc44b2a7741508a133342b2d9074e269",
+      "assertion_sites": 10,
+      "classification": "Actual direct or specified transitive NON_TEST helper, not extra census TEST or exhaustive shared dependency closure.",
+      "responsibility": "Ten sites plus full emitted guards retain verified backend, deterministic C, complete8-row native arrays/trace counts/actual84/trap7/cancel and standalone234.",
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/program/xr_program_source_cleanup_checks.inc.c",
+      "function": "write_probe_typed_host",
+      "line": 414,
+      "end_line": 438,
+      "body_lf_sha256": "1de3cc218ff7c7c7c306c72863611bc68f882ad978187b0c5d99722c398dfc97",
+      "assertion_sites": 1,
+      "classification": "Actual direct or specified transitive NON_TEST helper, not extra census TEST or exhaustive shared dependency closure.",
+      "responsibility": "One site and complete emitted typed host/dispose guards retain exact signed handle/bool results and no result on host failure; Root-owned canonical ABI review cannot restore old token aliases.",
+      "status": "OPEN"
+    }
+  ],
+  "specified_helper_assertion_sites": 58,
+  "helper_policy": "Seventeen actual specified direct/transitive NON_TEST helpers,58 distinct assertion sites and all boolean/emitted-C guards. Shared helpers counted once, not runtime iterations or exhaustive dependency/deletion closure.",
+  "independent_goldens": {
+    "required_Source_status": "OK",
+    "branching_language_result": 86,
+    "branching_derivation": "branch(true)43 + branch(false)43 =86",
+    "nested_language_result": 84,
+    "nested_derivation": "nested(true)42 + nested(false)42 =84",
+    "original_VM_Instances_per_family": 1,
+    "original_VM_matrix_calls_same_Instance": 2,
+    "original_native_standalone_exits": [
+      233,
+      234
+    ],
+    "original_VM_suspend_points": "Each yielded outcome point equals zero-based suspension ordinal before selected resume/cancel.",
+    "original_native_trap": 7
+  },
+  "scenario_declarations": {
+    "branching": {
+      "path": "tests/unit/program/test_xr_program_source_build.c",
+      "name": "branching_cleanup_scenarios",
+      "text": "static const BranchingCleanupScenario branching_cleanup_scenarios[] = {\n    {UINT32_MAX, 0u, XR_BACKEND_EXECUTION_RETURN, 4u},\n    {0u, 0u, XR_BACKEND_EXECUTION_CANCELLED, 2u},\n    {1u, 0u, XR_BACKEND_EXECUTION_CANCELLED, 4u},\n    {UINT32_MAX, 1u, XR_BACKEND_EXECUTION_TRAP, 3u},\n    {UINT32_MAX, 4u, XR_BACKEND_EXECUTION_TRAP, 5u},\n};",
+      "lf_sha256": "cde90f6138166e7cbaaf83d37a55d7404039bcb7b7be3a70c32b693683d3d367"
+    },
+    "nested": {
+      "path": "tests/unit/program/test_xr_program_source_build.c",
+      "name": "nested_cleanup_scenarios",
+      "text": "static const NestedCleanupScenario nested_cleanup_scenarios[] = {\n    {UINT32_MAX, 0u, XR_BACKEND_EXECUTION_RETURN, NESTED_CLEANUP_TRACE_BOTH},\n    {0u, 0u, XR_BACKEND_EXECUTION_CANCELLED, NESTED_CLEANUP_TRACE_TRUE},\n    {1u, 0u, XR_BACKEND_EXECUTION_CANCELLED, NESTED_CLEANUP_TRACE_BOTH},\n    {UINT32_MAX, 1u, XR_BACKEND_EXECUTION_TRAP, NESTED_CLEANUP_TRACE_TRUE_PRELUDE_RETRY},\n    {UINT32_MAX, 2u, XR_BACKEND_EXECUTION_TRAP, NESTED_CLEANUP_TRACE_TRUE},\n    {UINT32_MAX, 4u, XR_BACKEND_EXECUTION_TRAP, NESTED_CLEANUP_TRACE_TRUE},\n    {UINT32_MAX, 7u, XR_BACKEND_EXECUTION_TRAP, NESTED_CLEANUP_TRACE_BOTH_FALSE_WRITE_RETRY},\n    {UINT32_MAX, 8u, XR_BACKEND_EXECUTION_TRAP, NESTED_CLEANUP_TRACE_BOTH},\n};",
+      "lf_sha256": "b457fce58dcf93c4e7a7ac99b3d4d6f39906d4251f3c3278f2998419d2d0abf6"
+    }
+  },
+  "scenarios": {
+    "branching": [
+      {
+        "ordinal": 0,
+        "cancel_suspension": null,
+        "refuse_call": 0,
+        "old_expected_kind": "XR_BACKEND_EXECUTION_RETURN",
+        "provider_trace": [
+          2147483642,
+          2147483643,
+          2147483642,
+          2147483643
+        ],
+        "expected_calls": 4,
+        "source_trace_key": "branch_ordinary",
+        "status": "OPEN"
+      },
+      {
+        "ordinal": 1,
+        "cancel_suspension": 0,
+        "refuse_call": 0,
+        "old_expected_kind": "XR_BACKEND_EXECUTION_CANCELLED",
+        "provider_trace": [
+          2147483642,
+          2147483643
+        ],
+        "expected_calls": 2,
+        "source_trace_key": "branch_ordinary",
+        "status": "OPEN"
+      },
+      {
+        "ordinal": 2,
+        "cancel_suspension": 1,
+        "refuse_call": 0,
+        "old_expected_kind": "XR_BACKEND_EXECUTION_CANCELLED",
+        "provider_trace": [
+          2147483642,
+          2147483643,
+          2147483642,
+          2147483643
+        ],
+        "expected_calls": 4,
+        "source_trace_key": "branch_ordinary",
+        "status": "OPEN"
+      },
+      {
+        "ordinal": 3,
+        "cancel_suspension": null,
+        "refuse_call": 1,
+        "old_expected_kind": "XR_BACKEND_EXECUTION_TRAP",
+        "provider_trace": [
+          2147483642,
+          2147483642,
+          2147483643
+        ],
+        "expected_calls": 3,
+        "source_trace_key": "branch_first_refusal",
+        "status": "OPEN"
+      },
+      {
+        "ordinal": 4,
+        "cancel_suspension": null,
+        "refuse_call": 4,
+        "old_expected_kind": "XR_BACKEND_EXECUTION_TRAP",
+        "provider_trace": [
+          2147483642,
+          2147483643,
+          2147483642,
+          2147483643,
+          2147483643
+        ],
+        "expected_calls": 5,
+        "source_trace_key": "branch_ordinary",
+        "status": "OPEN"
+      }
+    ],
+    "nested": [
+      {
+        "ordinal": 0,
+        "cancel_suspension": null,
+        "refuse_call": 0,
+        "old_expected_kind": "XR_BACKEND_EXECUTION_RETURN",
+        "provider_trace": [
+          2147483642,
+          2147483643,
+          2147483638,
+          2147483639,
+          2147483642,
+          2147483643,
+          2147483639,
+          2147483638
+        ],
+        "expected_calls": 8,
+        "source_trace_key": "NESTED_CLEANUP_TRACE_BOTH",
+        "status": "OPEN"
+      },
+      {
+        "ordinal": 1,
+        "cancel_suspension": 0,
+        "refuse_call": 0,
+        "old_expected_kind": "XR_BACKEND_EXECUTION_CANCELLED",
+        "provider_trace": [
+          2147483642,
+          2147483643,
+          2147483638,
+          2147483639
+        ],
+        "expected_calls": 4,
+        "source_trace_key": "NESTED_CLEANUP_TRACE_TRUE",
+        "status": "OPEN"
+      },
+      {
+        "ordinal": 2,
+        "cancel_suspension": 1,
+        "refuse_call": 0,
+        "old_expected_kind": "XR_BACKEND_EXECUTION_CANCELLED",
+        "provider_trace": [
+          2147483642,
+          2147483643,
+          2147483638,
+          2147483639,
+          2147483642,
+          2147483643,
+          2147483639,
+          2147483638
+        ],
+        "expected_calls": 8,
+        "source_trace_key": "NESTED_CLEANUP_TRACE_BOTH",
+        "status": "OPEN"
+      },
+      {
+        "ordinal": 3,
+        "cancel_suspension": null,
+        "refuse_call": 1,
+        "old_expected_kind": "XR_BACKEND_EXECUTION_TRAP",
+        "provider_trace": [
+          2147483642,
+          2147483642,
+          2147483643,
+          2147483638,
+          2147483639
+        ],
+        "expected_calls": 5,
+        "source_trace_key": "NESTED_CLEANUP_TRACE_TRUE_PRELUDE_RETRY",
+        "status": "OPEN"
+      },
+      {
+        "ordinal": 4,
+        "cancel_suspension": null,
+        "refuse_call": 2,
+        "old_expected_kind": "XR_BACKEND_EXECUTION_TRAP",
+        "provider_trace": [
+          2147483642,
+          2147483643,
+          2147483638,
+          2147483639
+        ],
+        "expected_calls": 4,
+        "source_trace_key": "NESTED_CLEANUP_TRACE_TRUE",
+        "status": "OPEN"
+      },
+      {
+        "ordinal": 5,
+        "cancel_suspension": null,
+        "refuse_call": 4,
+        "old_expected_kind": "XR_BACKEND_EXECUTION_TRAP",
+        "provider_trace": [
+          2147483642,
+          2147483643,
+          2147483638,
+          2147483639
+        ],
+        "expected_calls": 4,
+        "source_trace_key": "NESTED_CLEANUP_TRACE_TRUE",
+        "status": "OPEN"
+      },
+      {
+        "ordinal": 6,
+        "cancel_suspension": null,
+        "refuse_call": 7,
+        "old_expected_kind": "XR_BACKEND_EXECUTION_TRAP",
+        "provider_trace": [
+          2147483642,
+          2147483643,
+          2147483638,
+          2147483639,
+          2147483642,
+          2147483643,
+          2147483639,
+          2147483638,
+          2147483639
+        ],
+        "expected_calls": 9,
+        "source_trace_key": "NESTED_CLEANUP_TRACE_BOTH_FALSE_WRITE_RETRY",
+        "status": "OPEN"
+      },
+      {
+        "ordinal": 7,
+        "cancel_suspension": null,
+        "refuse_call": 8,
+        "old_expected_kind": "XR_BACKEND_EXECUTION_TRAP",
+        "provider_trace": [
+          2147483642,
+          2147483643,
+          2147483638,
+          2147483639,
+          2147483642,
+          2147483643,
+          2147483639,
+          2147483638
+        ],
+        "expected_calls": 8,
+        "source_trace_key": "NESTED_CLEANUP_TRACE_BOTH",
+        "status": "OPEN"
+      }
+    ]
+  },
+  "trace_arrays": {
+    "branch_ordinary": [
+      2147483642,
+      2147483643,
+      2147483642,
+      2147483643,
+      2147483643
+    ],
+    "branch_first_refusal": [
+      2147483642,
+      2147483642,
+      2147483643
+    ],
+    "NESTED_CLEANUP_TRACE_TRUE": [
+      2147483642,
+      2147483643,
+      2147483638,
+      2147483639
+    ],
+    "NESTED_CLEANUP_TRACE_BOTH": [
+      2147483642,
+      2147483643,
+      2147483638,
+      2147483639,
+      2147483642,
+      2147483643,
+      2147483639,
+      2147483638
+    ],
+    "NESTED_CLEANUP_TRACE_TRUE_PRELUDE_RETRY": [
+      2147483642,
+      2147483642,
+      2147483643,
+      2147483638,
+      2147483639
+    ],
+    "NESTED_CLEANUP_TRACE_BOTH_FALSE_WRITE_RETRY": [
+      2147483642,
+      2147483643,
+      2147483638,
+      2147483639,
+      2147483642,
+      2147483643,
+      2147483639,
+      2147483638,
+      2147483639
+    ]
+  },
+  "branching_original_corruption": {
+    "path": "tests/unit/program/xr_program_source_cleanup_checks.inc.c",
+    "helper": "assert_aot_branching_cleanup",
+    "preconditions": [
+      "Full BackendIR binding verify succeeds",
+      "Inspect every function/block/instruction",
+      "Yield or sealed coroutine-call has in-range safepoint/callee and complete live/cancel operand tuple",
+      "At least one NON_OWNER cancellation argument exists",
+      "At least one point has two distinct live operands"
+    ],
+    "mutation": "Replace the second distinct live tuple operand with the first.",
+    "expected": "Verify=false and XR_BACKEND_INVARIANT_REJECTED; restore saved operand and verify=true before emission.",
+    "target": "OPEN_ROOT_COMMON_FULL_REVERIFICATION_MAPPING; preserve the original invalid-state tuple rejection without restoring private BackendIR or declaring all valid source aliases illegal."
+  },
+  "target_contract_or_representation_review": [
+    "Admit entire365B/509B original sources with all branch/defer owners, nested captured choose and two sequential calls; no source pruning or arbitrary rejection.",
+    "Reason-private cancellation graph and nested defer chain must preserve full branches and every later cleanup item, not just a copied entry block.",
+    "Retain original5+8 exact refusal/cancel/normal rows, including same-handle retry after selected host refusal and false branch reversed inner close order.",
+    "Actual canonical IO close stable contract/operation, bool-i64 ABI and provider-context lifetime; host-error is independent of source language panic/catch.",
+    "Map all old graph/tuple/ownership/safepoint/native trap representations through current full common verification without old ID/ABI aliases.",
+    "Actual native size/byte deterministic emission and complete guard protocols233/234 are distinct from scalar86/84 and current successful harness0.",
+    "Target adds detached two Instances, producer-death, source-free packet/typed Library and applicable mixed.",
+    "Observe actual stable Pipe owner identities and finalizer/reclaimer ordering across branch/inner/outer instances, including refusal/cancel; endpoint integers/allocator counters alone are not proof.",
+    "Full compiler/runtime FI census, all resource axes/safety, Root formal acceptance and last-consumer review remain required."
+  ],
+  "target_lifecycle_proof": "Record actual stable Pipe object identities for both calls and nested inner/outer owners. Endpoint pairs are reused across successive calls, so endpoint values/allocator addresses/aggregate counters cannot distinguish lifetimes or detect ABA. Bind construct/finalize/reclaim to actual owners on normal/refusal/cancel paths, with observer lifetime extending to final release.",
+  "additional_target_requirements": [
+    "Public SourceProduct\u2192Built\u2192Checked\u2192specialization/full reverification\u2192Lowered\u2192Program ownership",
+    "Source-free packet/typed Library provenance and explicit public host authority",
+    "Actual independent VM/real native/applicable mixed fixed86/84 and all13 exact scenario traces",
+    "Two detached Instances per applicable backend, Source/session/Checked/Lowered/caller Program death",
+    "Every actual active prefix cancel and stale-token rejection, complete branch/nested cleanup owner/place protocol",
+    "Original invalid live-tuple rejection mapped to current full common verification without private BackendIR restoration",
+    "Actual stable per-object lifecycle and physical/partial-owner release",
+    "Fresh complete compiler/runtime FI census, all resource axes and generated-C/applicable full safety",
+    "Original native233/234 distinct from scalar86/84 and current successful harness0",
+    "Root formal integration/acceptance and last-consumer deletion review"
+  ],
+  "shared_dependency": {
+    "path": "tests/unit/aot/xr_backend_emission_owner.h",
+    "consumer_count": 7,
+    "status": "PRESERVE_SHARED_OWNER",
+    "reason": "Both actual AOT helpers use shared backend_emission_resources; other active consumers remain."
+  },
+  "handoff": {
+    "report": "build-consumer-evidence/consumer-session-20261009-r1/branching-nested-cleanup-interface-request.json",
+    "raw_sha256": "8d37a2aefa9d733f4b3c7a9ce370d244cc4dcd422fc1fa71fe2927bdc10e44b0",
+    "related_observer_request": "build-consumer-evidence/consumer-session-20261009-r1/class-lifecycle-interface-request.json",
+    "Root_thread": "01a11f74-a297-7b11-8441-835bde6a3d5f",
+    "formal_acceptance": "PENDING"
+  },
+  "full_FI": "NOT_RUN",
+  "axes": "NOT_RUN",
+  "full_safety": "NOT_RUN",
+  "SourceDelete": "NOT_RUN",
+  "Main": "NOT_RUN",
+  "boundaries": [
+    "Original19+19 outer and58 specified-helper sites remain OPEN; all5+8 rows are preserved requirements, not current product passes.",
+    "Normal86/84, native233/234 and current harness0 are independent protocols; generation or VM/native equality alone is insufficient.",
+    "Two original VM matrix calls reuse one Instance; current detached two-Instance qualification is missing.",
+    "FALSE_WRITE_RETRY names a source false branch, not a successful-false provider result; the actual callback writes true on success.",
+    "Old NON_OWNER tuples/opcodes/safepoints/trap7/native bridge need explicit Root representation/common-verification review without numeric or ABI aliases.",
+    "Original duplicate-live tuple mutation is not a universal source-alias ban; preserve its actual mismatched-state rejection and restored valid case.",
+    "Repeated endpoint integers do not prove stable object identity, and no actual product/native/provider/lifecycle/physical event is observed here.",
+    "No current qualification, retirement, production release or shared deletion permission is claimed."
+  ]
+}
