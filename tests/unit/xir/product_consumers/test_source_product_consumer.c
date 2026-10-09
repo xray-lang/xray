@@ -31,6 +31,7 @@
 #include "struct_string_source_shape.h"
 #include "bool_conditions_source_shape.h"
 #include "class_identity_source_shape.h"
+#include "static_methods_source_shape.h"
 _Static_assert(XR_XIR_CHECKED_SCHEMA == 25u && XR_XIR_CHECKED_CONTRACT == 67u, "Actual Checked identity");
 
 static const SourceProductConsumerFixture *consumer_fixture;
@@ -270,6 +271,8 @@ static Consumer build(unsigned mode, const char *output, size_t failure, XrCompi
         bool_conditions_source_shape(module);
     if (!strcmp(XR_CONSUMER_NAME, "class_identity"))
         class_identity_source_shape(module);
+    if (!strcmp(XR_CONSUMER_NAME, "static_methods"))
+        static_methods_source_shape(module);
     run.parameterized_answer = !strcmp(XR_CONSUMER_NAME, "array_default_source") ?
         array_default_source_shape(module) : !strcmp(XR_CONSUMER_NAME, "array_default_escape") ?
         array_default_escape_shape(module) : !strcmp(XR_CONSUMER_NAME, "array_managed_escape") ?

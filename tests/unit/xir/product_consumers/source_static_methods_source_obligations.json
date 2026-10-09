@@ -1,0 +1,66 @@
+{
+  "schema": 1,
+  "producer": "25f4016d6f089169757a90ae11ba537002374711",
+  "identity": "Checked25/semantic67/Value22/Call28/Program29",
+  "legacy": {
+    "legacy_path": "tests/unit/program/test_xr_program_source_build.c",
+    "name": "source_owner_static_method_declarations",
+    "body_lf_sha256": "9c7b0b96ff91abe8827af09d69e163eb203cba35559acfc1c6b24cc25900dce2",
+    "status": "OPEN",
+    "inventory_projection": {
+      "fixture": "tests/unit/xir/product_consumers/fixtures/static_methods/root.xr",
+      "sha256": "f7192f6c9d1a6a6403fe142383c9302520840abaa2ccdaf3e6556959796c5fcd",
+      "original_prefix_sha256": "77396ef78a3b53c970c1940b9417801391ade4b4ca12dd5c6ae2688eea982cf5",
+      "entry_adapter": "export fn consumerAnswer() -> i64 { return answer() }\n",
+      "entry": "consumerAnswer",
+      "expected_i64": 42,
+      "scope": "Exact original source prefix and fixed result through an explicitly exported adapter; additional legacy assertions stay OPEN until mapped."
+    },
+    "mapping_references": []
+  },
+  "status": "OPEN",
+  "retired": 0,
+  "replacement_gates": [],
+  "original_source": {
+    "path": "tests/unit/xir/product_consumers/fixtures/static_methods/root.xr",
+    "bytes": 220,
+    "prefix_bytes": 166,
+    "sha256": "f7192f6c9d1a6a6403fe142383c9302520840abaa2ccdaf3e6556959796c5fcd",
+    "prefix_sha256": "77396ef78a3b53c970c1940b9417801391ade4b4ca12dd5c6ae2688eea982cf5",
+    "adapter": "export fn consumerAnswer() -> i64 { return answer() }\n"
+  },
+  "independent_i64": 42,
+  "required_shape": "Two empty nominal classes First and Second each declare public static value()->I64 without receiver parameters. First.value returns19 and Second.value returns23. Private answer CALLs the two distinct actual method identities in source order and returns their I64 ADD, independently fixed42.",
+  "result": "NOT_RUN",
+  "pipeline": "Original Source prefix and exported adapter; SourceProduct/Closed Checked/reader and Source owner death/Lowered/Program/two Instances;VM/native/two mixed partitions.",
+  "boundaries": [
+    "Original BackendIR STATIC_METHOD_DECLARATIONS representation assertion remains OPEN until mapped.",
+    "Full FI, resource axes, cancellation, safety, Main integration and retirement remain OPEN."
+  ],
+  "full_FI": "NOT_RUN",
+  "axes": "NOT_RUN",
+  "cancel": "NOT_RUN",
+  "full_safety": "NOT_RUN",
+  "Main": "NOT_RUN",
+  "distinct_static_method_owners_20261009_facet": {
+    "status": "PASS_ORIGINAL_SOURCE_DISTINCT_STATIC_METHOD_OWNERS_WHOLE_LEGACY_OPEN",
+    "evidence": "build-consumer-evidence/current67-static-methods-source-r1",
+    "original": "Original166-byte Source literal prefix plus54-byte exported adapter unchanged. First.value returns19 and Second.value returns23; answer CALLs both and adds the I64 results. Independent expected42 unchanged.",
+    "shape": "Two empty nominal classes named First and Second. Two actual STATIC_METHOD identities named value with distinct nominal_owner1/2, public access, no receiver/other parameters, I64 result and exact CONST19/23 returned by SSA. Private answer CALLs actual method indices in original order, then ADD_INT and RETURN use the actual call/result SSA ids.",
+    "actual": "12 registered argv runtime processes all first PASS: eight VM/native/mixed family executions, two detached owned tests, two sequence VM controls. Family32 independent scalar42 checks across16 Instances. Caller Program reference drops before public calls; private answer rejects BAD_ARGUMENT without allocating. Source/session/readers die before Program use; final compiler/runtime physical release zero.",
+    "owned": "Session/product/request/authority/path destroyed before Checked reverification and byte-exact full writer packet comparison. Checked destroyed before Lowered reverification and release. Final compiler allocation table and physical usage zero.",
+    "inputs": "Original VM2712, owner/control2711, native2713 guarded inputs per PID including three explicit observer headers, actual generated C and configured wrappers. SHA/bytes/mtime equal before/after. Every runtime PID binary archived before execution and bound to captured identity, including controls. Runtime pre-annotation map and trace retained. Only map/trace updated after runtime.",
+    "build": "Initial MSVC has two failed test C compilation attempts because the oracle used nonexistent XR_XIR_ADD. Public enum is XR_XIR_ADD_INT; only that spelling was repaired before any runtime PID. Failed log/header retained; Source/fixed42 unchanged. Final six successful fresh C compilation events/six distinct translation units across MSVC Release and Clang ASan/UBSan: shared driver, new owner and actual generated C each. Strict C11/W4/WX. Existing wrapper objects reused and template-bound. Two build-time emitters recorded separately from registered runtime.",
+    "generated_payload_sha256": {
+      "msvc": "2828c9ee4c0e403521aa576164d3ac13d44cb5f653dcc5762acc757e6abf297a",
+      "asan": "2828c9ee4c0e403521aa576164d3ac13d44cb5f653dcc5762acc757e6abf297a"
+    },
+    "remaining": "Original BackendIR STATIC_METHOD_DECLARATIONS representation assertion, full FI/resource axes/cancellation/safety/Main integration/retirement remain OPEN.",
+    "full_FI": "NOT_RUN",
+    "axes": "NOT_RUN",
+    "cancel": "NOT_RUN",
+    "full_safety": "NOT_RUN",
+    "Main": "NOT_RUN",
+    "retired": 0
+  }
+}
