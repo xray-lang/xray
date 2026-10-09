@@ -55,7 +55,7 @@ static XrXirStatus roles_once(const char *root,XrCompileResourceLimits limits,Xr
     if(status==XR_XIR_OK)status=xlsp_source_hover(snapshot,uri,strlen(uri),(XrLspPosition){3,9},&hover);
     if(status==XR_XIR_OK)CHECK(!strcmp(hover.text,"static fn S.pick() -> i64"));
     xlsp_source_hover_free(&hover);
-    if(status==XR_XIR_OK)status=xlsp_source_hover(snapshot,uri,strlen(uri),(XrLspPosition){5,30},&hover);
+    if(status==XR_XIR_OK)status=xlsp_source_hover(snapshot,uri,strlen(uri),(XrLspPosition){5,29},&hover);
     if(status==XR_XIR_OK)CHECK(!strcmp(hover.text,"parameter y: i64"));
     xlsp_source_hover_free(&hover);
     XlspSourceLocation definition={0};XlspSourceLocations references={0};
@@ -73,6 +73,12 @@ static XrXirStatus roles_once(const char *root,XrCompileResourceLimits limits,Xr
         XrXirStatus probe=xlsp_source_definition(snapshot,uri,strlen(uri),(XrLspPosition){2,32},&definition);
         if(probe!=XR_XIR_UNRESOLVED){CHECK(probe==XR_XIR_BUDGET||probe==XR_XIR_OUT_OF_MEMORY);status=probe;}
         CHECK(definition.uri==prior.uri&&definition.range.start.line==prior.range.start.line&&definition.range.start.character==prior.range.start.character&&definition.range.end.character==prior.range.end.character);
+        if(status==XR_XIR_OK) {
+            /* The literal puts y at UTF-16 column 29 and its colon at 30. */
+            probe=xlsp_source_hover(snapshot,uri,strlen(uri),(XrLspPosition){5,30},&hover);
+            if(probe!=XR_XIR_UNRESOLVED){CHECK(probe==XR_XIR_BUDGET||probe==XR_XIR_OUT_OF_MEMORY);status=probe;}
+            CHECK(!hover.text&&!hover.length);
+        }
         if(status==XR_XIR_OK) {
             probe=xlsp_source_hover(snapshot,uri,strlen(uri),(XrLspPosition){5,26},&hover);
             if(probe!=XR_XIR_UNRESOLVED){CHECK(probe==XR_XIR_BUDGET||probe==XR_XIR_OUT_OF_MEMORY);status=probe;}

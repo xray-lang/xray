@@ -1569,8 +1569,15 @@ AstNode *xr_parse_this_expression(Parser *parser) {
 
     // 'this' keyword already consumed
 
-    // Create this expression node
-    return xr_ast_this_expr(parser->compiler_session, line);
+    // Preserve the exact consumed token before the parser owner disappears.
+    AstNode *node = xr_ast_this_expr(parser->compiler_session, line);
+    if (!xr_parser_healthy(parser) || !node) return NULL;
+    if (!ast_work(parser->compiler_session,
+            sizeof(node->column) + sizeof(node->end_line) + sizeof(node->end_column))) return NULL;
+    node->column = parser->previous.column;
+    node->end_line = line;
+    node->end_column = parser->previous.column + parser->previous.length;
+    return node;
 }
 
 /* ========== Super Expression Parsing ========== */

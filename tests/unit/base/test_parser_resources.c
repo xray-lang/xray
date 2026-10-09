@@ -551,8 +551,87 @@ static void recovered_positions(void) {
     }
 }
 
+/* Independent byte-column oracles from the literal, including both mutation
+ * and value access. The parser must own these facts after every producer dies. */
+static const char this_position_source[] =
+    "struct S {\n"
+    " value:i64\n"
+    " ref bump()->i64 {\n"
+    "  this.value += 1\n"
+    "  return this.value\n"
+    " }\n"
+    "}\n";
+static void this_position_facts(const AstNode *program) {
+    CHECK(program && program->type==AST_PROGRAM && program->as.program.count==1);
+    const AstNode *owner=program->as.program.statements[0];
+    CHECK(owner && owner->type==AST_STRUCT_DECL && owner->as.struct_decl.method_count==1);
+    const AstNode *method=owner->as.struct_decl.methods[0];
+    CHECK(method && method->type==AST_METHOD_DECL && !strcmp(method->as.method_decl.name,"bump") &&
+        method->as.method_decl.receiver_mode==XR_PARAM_REF);
+    const AstNode *body=method->as.method_decl.body;
+    CHECK(body && body->type==AST_BLOCK && body->as.block.count==2);
+    const AstNode *statement=body->as.block.statements[0],*returned=body->as.block.statements[1];
+    CHECK(statement && statement->type==AST_EXPR_STMT && statement->as.expr_stmt);
+    const AstNode *update=statement->as.expr_stmt;
+    CHECK(update->type==AST_COMPOUND_ASSIGNMENT && update->as.compound_assignment.object);
+    CHECK(returned && returned->type==AST_RETURN_STMT && returned->as.return_stmt.value_count==1);
+    const AstNode *member=returned->as.return_stmt.values[0];
+    CHECK(member && member->type==AST_MEMBER_ACCESS && member->as.member_access.object);
+    const AstNode *receivers[]={update->as.compound_assignment.object,member->as.member_access.object};
+    const int lines[]={4,5},columns[]={3,10},ends[]={7,14};
+    for(unsigned i=0;i<2;++i) {
+        const AstNode *receiver=receivers[i];
+        CHECK(receiver && receiver->type==AST_THIS_EXPR && receiver->line==lines[i]);
+        CHECK(receiver->column==columns[i] && receiver->end_line==lines[i] && receiver->end_column==ends[i]);
+    }
+}
+static XrParseStatus this_position_pipeline(const XrCompileResourceLimits *limits,XrCompileResourceStats *stats) {
+    XrCompileResources *resources=NULL;XrCompilerSession *session=NULL;AstNode *program=NULL;
+    char input[sizeof(this_position_source)];memcpy(input,this_position_source,sizeof(input));
+    XrCompileResourceStatus made=xr_compile_resources_new(limits,&resources);
+    if(made!=XR_COMPILE_RESOURCE_OK)
+        return made==XR_COMPILE_RESOURCE_BUDGET?XR_PARSE_BUDGET:XR_PARSE_OUT_OF_MEMORY;
+    XrCompilerSessionStatus opened=xr_compile_session_new(resources,&session);
+    XrParseStatus status=opened==XR_COMPILER_SESSION_BUDGET?XR_PARSE_BUDGET:XR_PARSE_OUT_OF_MEMORY;
+    if(opened==XR_COMPILER_SESSION_OK) {
+        status=xr_compile_parse(session,input,&program);
+        if(status==XR_PARSE_OK) {
+            CHECK(program && program->as.program.owns_arena);this_position_facts(program);
+        } else {
+            CHECK((status==XR_PARSE_BUDGET||status==XR_PARSE_OUT_OF_MEMORY)&&!program);
+            size_t attempts=attempt_count;
+            CHECK(xr_compile_parse(session,(const char *)(uintptr_t)1,&program)==status);
+            CHECK(attempt_count==attempts&&!program);
+        }
+    }
+    OK(xr_compile_resources_stats(resources,stats));
+    CHECK(stats->allocated_bytes==physical_total&&stats->peak_bytes==physical_peak&&stats->live_bytes==physical_live);
+    memset(input,'?',sizeof(input));xr_compile_session_free(session);xr_compile_resources_release(resources);
+    if(program){this_position_facts(program);xr_program_destroy(program);}
+    CHECK(!physical_live&&!allocation_count);return status;
+}
+static void this_positions(void) {
+    const XrCompileResourceLimits finite={UINT64_C(1048576),UINT64_C(1048576),UINT64_C(1048576)};
+    reset();XrCompileResourceStats exact={0},stats={0};
+    CHECK(this_position_pipeline(&finite,&exact)==XR_PARSE_OK);
+    size_t sites=attempt_count;CHECK(sites&&exact.allocated_bytes&&exact.peak_bytes&&exact.work);
+    for(size_t point=0;point<sites;++point) {
+        reset();fail_at=point;
+        CHECK(this_position_pipeline(&finite,&stats)==XR_PARSE_OUT_OF_MEMORY);
+        CHECK(attempt_count==point+1);
+    }
+    for(unsigned axis=0;axis<3;++axis)for(int delta=-1;delta<=1;++delta) {
+        XrCompileResourceLimits limits={exact.allocated_bytes,exact.peak_bytes,exact.work};
+        uint64_t *bound=axis==0?&limits.allocated_bytes:axis==1?&limits.live_bytes:&limits.work;
+        CHECK(*bound&&*bound<UINT64_MAX);*bound=(uint64_t)((int64_t)*bound+delta);
+        reset();CHECK(this_position_pipeline(&limits,&stats)==(delta<0?XR_PARSE_BUDGET:XR_PARSE_OK));
+    }
+    printf("parser this spans: allocations=%zu full FI/three axes/producer death/physical zero passed\n",sites);
+}
+
 int main(void) {
     recovered_positions();
+    this_positions();
     owning_trivia_diagnostics();
     faults();
     recoverable_and_rollback();
