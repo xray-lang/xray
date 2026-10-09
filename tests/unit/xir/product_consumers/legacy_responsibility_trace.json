@@ -15,11 +15,11 @@
     "shared_emission_owner_consumers": 7
   },
   "reference_counts": {
-    "source_with_digest_reference": 89,
-    "source_without_digest_reference": 19,
+    "source_with_digest_reference": 90,
+    "source_without_digest_reference": 18,
     "other_with_digest_reference": 40,
     "other_without_digest_reference": 120,
-    "digest_reference_values": 159,
+    "digest_reference_values": 160,
     "source_inventory_projections": 42
   },
   "mapping_inputs": [
@@ -482,6 +482,10 @@
     {
       "path": "tests/unit/xir/product_consumers/source_original_cross_module_instance_method_obligations.json",
       "lf_sha256": "34d71d71adb59738203cdb68ba9813f59e3d5cdec031ee7973d4498a61bbff70"
+    },
+    {
+      "path": "tests/unit/xir/product_consumers/source_original_entry_identity_obligations.json",
+      "lf_sha256": "86192e9821ad11db1225ffce89ed952d1b41d1764f87d0396d53c859c23b6705"
     },
     {
       "path": "tests/unit/xir/product_consumers/source_original_prelude_enum_catch_obligations.json",
@@ -2719,7 +2723,13 @@
       "body_lf_sha256": "ebfd779aa0ebd6282b70499fa1b8a8bf3e56f50fe6d81042bc926d7a815227e4",
       "status": "OPEN",
       "inventory_projection": null,
-      "mapping_references": []
+      "mapping_references": [
+        {
+          "mapping": "tests/unit/xir/product_consumers/source_original_entry_identity_obligations.json",
+          "pointer": "/legacy/body_lf_sha256",
+          "binding": "exact_path_name_body"
+        }
+      ]
     },
     {
       "legacy_path": "tests/unit/program/test_xr_program_source_build.c",

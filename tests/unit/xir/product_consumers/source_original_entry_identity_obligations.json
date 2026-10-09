@@ -1,0 +1,258 @@
+{
+  "schema": 1,
+  "family": "original_canonical_entry_identity",
+  "legacy_base_commit": "01e6d38401b0f5c8684b64c35a99ac651024c0c1",
+  "status": "OPEN",
+  "retired": 0,
+  "replacement_gates": [],
+  "result": "STATIC_ORIGINAL_ENTRY_AUTHORITY_MAP_ONLY",
+  "product_execution": "NOT_RUN_BY_THIS_MAP",
+  "producer": "25f4016d6f089169757a90ae11ba537002374711",
+  "identity": "Checked25/semantic67/Value22/Call28/Program29",
+  "producer_scope": "The existing authorized identity is recorded. Formal bd221 header inspection and Root design direction do not adopt another producer.",
+  "legacy": {
+    "name": "source_owner_rejects_non_authoritative_entry_identity",
+    "legacy_path": "tests/unit/program/test_xr_program_source_build.c",
+    "legacy_line": 8667,
+    "body_lf_sha256": "ebfd779aa0ebd6282b70499fa1b8a8bf3e56f50fe6d81042bc926d7a815227e4",
+    "assertion_sites": 17,
+    "loop_sites": 0,
+    "status": "OPEN",
+    "replacement_gates": [],
+    "note": "Function census preserves its whole body; sites do not count executed loop iterations.",
+    "original_fixture": null,
+    "static_input_literals": {
+      "source": {
+        "bytes": 33,
+        "sha256": "c34596e88735a795f07cba19f673f18fd8ccc237481f8c707fc363500c9f9705"
+      }
+    }
+  },
+  "original_source": {
+    "bytes": 33,
+    "sha256": "c34596e88735a795f07cba19f673f18fd8ccc237481f8c707fc363500c9f9705",
+    "text": "fn answer() -> i64 { return 42 }\n",
+    "adapter_bytes": 0,
+    "construction": "Whole original source[]; independent ast and inventory decoders agree."
+  },
+  "original_private_helpers": [
+    {
+      "path": "tests/unit/program/test_xr_program_source_build.c",
+      "function": "source_build_fixture_init",
+      "line": 894,
+      "end_line": 968,
+      "body_lf_sha256": "964c190cb52940aa039b9459e6a5aa0416430eadac032979ed210358216892eb",
+      "classification": "Actually called NON_TEST helper; not an additional TEST/fixture or qualification."
+    },
+    {
+      "path": "tests/unit/program/test_xr_program_source_build.c",
+      "function": "source_build_fixture_free",
+      "line": 873,
+      "end_line": 892,
+      "body_lf_sha256": "54f2ca59ddb46fda789abf0411160790bcb950903858a308b984b50e6f8c1889",
+      "classification": "Actually called NON_TEST helper; not an additional TEST/fixture or qualification."
+    }
+  ],
+  "responsibility_mapping": [
+    {
+      "responsibility": "Prepare the full valid Source and obtain an actual wrong module identity from the same authority.",
+      "status": "OPEN",
+      "target_consumer": "ROOT_CONTRACT_PENDING",
+      "original": {
+        "path": "tests/unit/program/test_xr_program_source_build.c",
+        "lines": [
+          8669,
+          8672
+        ]
+      },
+      "original_assertion_sites": 2,
+      "gap": "The valid original program returns42. Target admission is a prerequisite, not an assumed PASS; authority parsing failure is not the intended selection refusal."
+    },
+    {
+      "responsibility": "An authoritative but different module identity is rejected at entry selection with identity diagnosis and no partial product.",
+      "status": "OPEN",
+      "target_consumer": "ROOT_CONTRACT_PENDING",
+      "original": {
+        "path": "tests/unit/program/test_xr_program_source_build.c",
+        "lines": [
+          8673,
+          8682
+        ]
+      },
+      "original_assertion_sites": 5,
+      "gap": "Root must freeze how the unique SourceProduct/Checked declaration owner validates canonical module identity; runtime private-function denial is a different phase."
+    },
+    {
+      "responsibility": "A source-content fingerprint differing by the original high-bit mutation is rejected at entry selection with fingerprint diagnosis and no partial product.",
+      "status": "OPEN",
+      "target_consumer": "ROOT_CONTRACT_PENDING",
+      "original": {
+        "path": "tests/unit/program/test_xr_program_source_build.c",
+        "lines": [
+          8685,
+          8691
+        ]
+      },
+      "original_assertion_sites": 5,
+      "gap": "Source identity cannot be replaced by a consumer-chosen digest or an unrelated admission error. If caller-supplied fields retire, Root must review the current anti-spoof invariant."
+    },
+    {
+      "responsibility": "A missing requested function is rejected at entry selection with source-declarations diagnosis and no partial product.",
+      "status": "OPEN",
+      "target_consumer": "ROOT_CONTRACT_PENDING",
+      "original": {
+        "path": "tests/unit/program/test_xr_program_source_build.c",
+        "lines": [
+          8694,
+          8700
+        ]
+      },
+      "original_assertion_sites": 5,
+      "gap": "The target canonical function-selection authority and exact error category/stage/diagnostic mapping remain unfrozen."
+    },
+    {
+      "responsibility": "Release the actual wrong identity and fixture/session after all three failures.",
+      "status": "OPEN",
+      "target_consumer": "ROOT_CONTRACT_PENDING",
+      "original": {
+        "path": "tests/unit/program/test_xr_program_source_build.c",
+        "lines": [
+          8702,
+          8703
+        ]
+      },
+      "original_assertion_sites": 0,
+      "gap": "Current physical resource release, FI and safety require future fresh observations. No product or allocation path is executed by this static map."
+    }
+  ],
+  "independent_goldens": {
+    "valid_source_returned_i64": 42,
+    "valid_source_admission": "REQUIRED_NOT_RUN",
+    "negative_variants": [
+      {
+        "case": "wrong_module_identity",
+        "actual_original_mutation": "input.entry.module_identity = wrong_identity;",
+        "wrong_logical_module": "other.xr",
+        "old_status": "XR_PROGRAM_SOURCE_BUILD_ENTRY_REJECTED",
+        "old_stage": "XR_PROGRAM_SOURCE_STAGE_ENTRY_SELECTION",
+        "diagnostic_contains": "identity",
+        "status": "OPEN"
+      },
+      {
+        "case": "wrong_source_fingerprint",
+        "actual_original_mutation": "input.entry.source_content_fingerprint.bytes[0] ^= UINT8_C(0x80);",
+        "old_status": "XR_PROGRAM_SOURCE_BUILD_ENTRY_REJECTED",
+        "old_stage": "XR_PROGRAM_SOURCE_STAGE_ENTRY_SELECTION",
+        "diagnostic_contains": "fingerprint",
+        "status": "OPEN"
+      },
+      {
+        "case": "missing_function",
+        "actual_original_mutation": "input.entry.function_name = \"missing\";",
+        "old_status": "XR_PROGRAM_SOURCE_BUILD_ENTRY_REJECTED",
+        "old_stage": "XR_PROGRAM_SOURCE_STAGE_ENTRY_SELECTION",
+        "diagnostic_contains": "source declarations",
+        "status": "OPEN"
+      }
+    ],
+    "failure_publication_each": [
+      "product.artifact.bytes=NULL",
+      "product.program=NULL"
+    ],
+    "original_negative_calls": 3,
+    "original_assertion_sites": 17,
+    "original_runtime": "NONE_THIS_TEST_IS_COMPILE_TIME_SELECTION_AUTHORITY"
+  },
+  "formal_interface_inspection": {
+    "headers": [
+      {
+        "commit": "25f4016d6f089169757a90ae11ba537002374711",
+        "path": "src/xir/xxir_source.h",
+        "lf_sha256": "6eb7a0b68cf06de10fb5520c67f1e856f8f87ee3a3732ccb142915761e8dd38e"
+      },
+      {
+        "commit": "25f4016d6f089169757a90ae11ba537002374711",
+        "path": "src/program/xr_xir_source_product.h",
+        "lf_sha256": "b6b4f933e36095095d5258cb2e55ba5d06e44c676a969f9c6b7d7c81f31d4d5b"
+      },
+      {
+        "commit": "25f4016d6f089169757a90ae11ba537002374711",
+        "path": "src/toolchain/xcompiler_session.h",
+        "lf_sha256": "a5dfb79c978a7ab9c525484c3a855519926b75cf9b3a7fdd624fbed2a53d9ea8"
+      },
+      {
+        "commit": "bd221177673f41375e74336f27889159b57863ed",
+        "path": "src/xir/xxir_source.h",
+        "lf_sha256": "6eb7a0b68cf06de10fb5520c67f1e856f8f87ee3a3732ccb142915761e8dd38e"
+      },
+      {
+        "commit": "bd221177673f41375e74336f27889159b57863ed",
+        "path": "src/program/xr_xir_source_product.h",
+        "lf_sha256": "b6b4f933e36095095d5258cb2e55ba5d06e44c676a969f9c6b7d7c81f31d4d5b"
+      },
+      {
+        "commit": "bd221177673f41375e74336f27889159b57863ed",
+        "path": "src/toolchain/xcompiler_session.h",
+        "lf_sha256": "a5dfb79c978a7ab9c525484c3a855519926b75cf9b3a7fdd624fbed2a53d9ea8"
+      }
+    ],
+    "observation": "The inspected SourceRequest has entry_path and module authority; SourceProductRequest wraps it and target. It does not expose old caller-supplied entry module/name/fingerprint fields. This observation is limited to these formal headers.",
+    "private_Root_sources_used": false,
+    "product_execution": "NOT_RUN"
+  },
+  "existing_consumer_anchors": [
+    {
+      "path": "tests/unit/xir/product_consumers/test_source_product_consumer.c",
+      "line": 216,
+      "token": "const XrXirSourceProductRequest request ="
+    },
+    {
+      "path": "tests/unit/xir/product_consumers/test_source_product_consumer.c",
+      "line": 219,
+      "token": "xr_xir_compile_source_product_build(&request, &product, &diagnostic)"
+    },
+    {
+      "path": "tests/unit/xir/product_consumers/test_source_product_consumer.c",
+      "line": 426,
+      "token": "xr_xir_instance_start(instances[i], run->private_answer, NULL, 0)"
+    }
+  ],
+  "existing_consumer_scope": "The existing normal consumer supplies path/authority, checks no product on admission failure, then separately denies private answer at runtime. It does not implement these three compile-time selection negatives; no existing PASS is inherited.",
+  "Root_design_direction_20261009": {
+    "owner": "Unique SourceProduct/Checked declaration owner with common reverification, provenance and atomic output.",
+    "status": "DESIGN_DIRECTION_ONLY_NOT_FROZEN_API_OR_IMPLEMENTED_CAPABILITY",
+    "formal_producer": "bd221177673f41375e74336f27889159b57863ed",
+    "consumer_producer_authorization": "UNCHANGED_25F4",
+    "new_heavy_or_FI_window": "NOT_GRANTED",
+    "native_ABI_and_selected_root_contract": "PENDING_ROOT_REVIEW"
+  },
+  "target_contract_required": "Current canonical module/source-content/function selection authority and exact rejection stage/category/diagnostic mapping. If old caller-supplied fields retire, preserve anti-spoof and no-partial-publication semantics under the reviewed owner contract.",
+  "related_original_mapping": "tests/unit/xir/product_consumers/source_original_retained_roots_obligations.json",
+  "handoff": {
+    "report": "build-consumer-evidence/consumer-session-20261009-r1/canonical-entry-identity-interface-request.json",
+    "raw_sha256": "ebee95cc0a2e81d6adc41f6a6d33c31fdc127b2076ac84e22f7a6b0e35f62ca1",
+    "Root_thread": "01a11f74-a297-7b11-8441-835bde6a3d5f",
+    "formal_acceptance": "PENDING"
+  },
+  "pending": [
+    "Root canonical-selection contract and representation mapping",
+    "Qualified formal producer adoption",
+    "Exact valid Source acceptance",
+    "Three exact current authority negatives with atomic output and diagnosis",
+    "Source-free/typed Library provenance consistency",
+    "Actual compiler physical release and complete FI/resource/safety",
+    "Last-consumer review and Root formal integration/acceptance"
+  ],
+  "full_FI": "NOT_RUN",
+  "axes": "NOT_RUN",
+  "full_safety": "NOT_RUN",
+  "SourceDelete": "NOT_RUN",
+  "Main": "NOT_RUN",
+  "boundaries": [
+    "This is one original non-fixture responsibility; no new fixture or runtime census denominator is introduced.",
+    "Every original input/assertion responsibility remains OPEN; static coverage and references are not completion or retirement.",
+    "The target may remove old caller representation only after reviewed anti-spoof equivalence; no compatibility fields or aliases are added.",
+    "Wrong phase, arbitrary error codes, or rejection of the valid original Source cannot qualify these negatives.",
+    "No product build, runtime call, allocation event or physical release is claimed by this map."
+  ]
+}
