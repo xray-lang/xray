@@ -17,9 +17,9 @@
   "reference_counts": {
     "source_with_digest_reference": 108,
     "source_without_digest_reference": 0,
-    "other_with_digest_reference": 77,
-    "other_without_digest_reference": 83,
-    "digest_reference_values": 234,
+    "other_with_digest_reference": 80,
+    "other_without_digest_reference": 80,
+    "digest_reference_values": 242,
     "source_inventory_projections": 42
   },
   "mapping_inputs": [
@@ -582,6 +582,10 @@
     {
       "path": "tests/unit/xir/product_consumers/source_original_string_slice_defer_obligations.json",
       "lf_sha256": "2d421ca700a2d1304a7db071a29e6b3644104566690089d9797bda3c79298340"
+    },
+    {
+      "path": "tests/unit/xir/product_consumers/source_original_terminal_budget_obligations.json",
+      "lf_sha256": "2a35f05df66247d461acbc95801972a8bc4469a0fcceeb06675a17a406902397"
     },
     {
       "path": "tests/unit/xir/product_consumers/source_original_test_discovery_obligations.json",
@@ -3549,6 +3553,16 @@
           "mapping": "tests/unit/xir/product_consumers/source_original_scalar_control_call_obligations.json",
           "pointer": "/responsibility_mapping/0/body_lf_sha256",
           "binding": "exact_body_digest_value_only"
+        },
+        {
+          "mapping": "tests/unit/xir/product_consumers/source_original_terminal_budget_obligations.json",
+          "pointer": "/original_private_helpers/7/body_lf_sha256",
+          "binding": "exact_body_digest_value_only"
+        },
+        {
+          "mapping": "tests/unit/xir/product_consumers/source_original_terminal_budget_obligations.json",
+          "pointer": "/nested_scalar_invocation/body_lf_sha256",
+          "binding": "exact_body_digest_value_only"
         }
       ]
     },
@@ -3650,7 +3664,18 @@
       "body_lf_sha256": "4fba70d07578be4ac181fdedd58e0d71bc611f56dac2fb251f2f06295d0c03fa",
       "status": "OPEN",
       "inventory_projection": null,
-      "mapping_references": []
+      "mapping_references": [
+        {
+          "mapping": "tests/unit/xir/product_consumers/source_original_terminal_budget_obligations.json",
+          "pointer": "/legacy/0/body_lf_sha256",
+          "binding": "exact_path_name_body"
+        },
+        {
+          "mapping": "tests/unit/xir/product_consumers/source_original_terminal_budget_obligations.json",
+          "pointer": "/responsibility_mapping/0/body_lf_sha256",
+          "binding": "exact_body_digest_value_only"
+        }
+      ]
     },
     {
       "legacy_path": "tests/unit/program/test_xr_program_verify.c",
@@ -3674,7 +3699,18 @@
       "body_lf_sha256": "368836fe5077a3ca06c20ca676283c18004834472fc1f35127050bc5cdb760c4",
       "status": "OPEN",
       "inventory_projection": null,
-      "mapping_references": []
+      "mapping_references": [
+        {
+          "mapping": "tests/unit/xir/product_consumers/source_original_terminal_budget_obligations.json",
+          "pointer": "/legacy/1/body_lf_sha256",
+          "binding": "exact_path_name_body"
+        },
+        {
+          "mapping": "tests/unit/xir/product_consumers/source_original_terminal_budget_obligations.json",
+          "pointer": "/responsibility_mapping/1/body_lf_sha256",
+          "binding": "exact_body_digest_value_only"
+        }
+      ]
     },
     {
       "legacy_path": "tests/unit/program/test_xr_program_verify.c",
@@ -3682,7 +3718,18 @@
       "body_lf_sha256": "6a25fea0b1ec373eb61390248fe24a6210e693ed0f046b4584a6b4a5fda4c150",
       "status": "OPEN",
       "inventory_projection": null,
-      "mapping_references": []
+      "mapping_references": [
+        {
+          "mapping": "tests/unit/xir/product_consumers/source_original_terminal_budget_obligations.json",
+          "pointer": "/legacy/2/body_lf_sha256",
+          "binding": "exact_path_name_body"
+        },
+        {
+          "mapping": "tests/unit/xir/product_consumers/source_original_terminal_budget_obligations.json",
+          "pointer": "/responsibility_mapping/2/body_lf_sha256",
+          "binding": "exact_body_digest_value_only"
+        }
+      ]
     },
     {
       "legacy_path": "tests/unit/program/test_xr_program_verify.c",

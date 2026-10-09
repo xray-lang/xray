@@ -1,0 +1,471 @@
+{
+  "schema": 1,
+  "family": "original_terminal_budget",
+  "legacy_base_commit": "01e6d38401b0f5c8684b64c35a99ac651024c0c1",
+  "status": "OPEN",
+  "retired": 0,
+  "replacement_gates": [],
+  "result": "STATIC_ORIGINAL_TERMINAL_DIAGNOSTIC_IDENTITY_BUDGET_MAP_ONLY",
+  "product_execution": "NOT_RUN_BY_THIS_MAP",
+  "producer": "25f4016d6f089169757a90ae11ba537002374711",
+  "identity": "Checked25/semantic67/Value22/Call28/Program29",
+  "legacy": [
+    {
+      "name": "test_terminal_operations",
+      "legacy_path": "tests/unit/program/test_xr_program_verify.c",
+      "legacy_line": 4202,
+      "body_lf_sha256": "4fba70d07578be4ac181fdedd58e0d71bc611f56dac2fb251f2f06295d0c03fa",
+      "assertion_sites": 7,
+      "loop_sites": 0,
+      "status": "OPEN",
+      "replacement_gates": [],
+      "note": "Function census preserves its whole body; sites do not count executed loop iterations."
+    },
+    {
+      "name": "test_negative_diagnostics_and_budget",
+      "legacy_path": "tests/unit/program/test_xr_program_verify.c",
+      "legacy_line": 4463,
+      "body_lf_sha256": "368836fe5077a3ca06c20ca676283c18004834472fc1f35127050bc5cdb760c4",
+      "assertion_sites": 8,
+      "loop_sites": 0,
+      "status": "OPEN",
+      "replacement_gates": [],
+      "note": "Function census preserves its whole body; sites do not count executed loop iterations."
+    },
+    {
+      "name": "test_evaluator_traps_and_budget",
+      "legacy_path": "tests/unit/program/test_xr_program_verify.c",
+      "legacy_line": 4521,
+      "body_lf_sha256": "6a25fea0b1ec373eb61390248fe24a6210e693ed0f046b4584a6b4a5fda4c150",
+      "assertion_sites": 4,
+      "loop_sites": 0,
+      "status": "OPEN",
+      "replacement_gates": [],
+      "note": "Function census preserves its whole body; sites do not count executed loop iterations."
+    }
+  ],
+  "responsibility_mapping": [
+    {
+      "path": "tests/unit/program/test_xr_program_verify.c",
+      "function": "test_terminal_operations",
+      "line": 4202,
+      "end_line": 4279,
+      "body_lf_sha256": "4fba70d07578be4ac181fdedd58e0d71bc611f56dac2fb251f2f06295d0c03fa",
+      "CHECK_sites": 7,
+      "CHECK_bindings": [
+        {
+          "line": 4222,
+          "expression": "write_one_function(NULL, 0, &trap_function, &artifact) == XR_PROGRAM_BUILD_OK",
+          "status": "OPEN"
+        },
+        {
+          "line": 4226,
+          "expression": "result.kind == XR_REFERENCE_OUTCOME_TRAP",
+          "status": "OPEN"
+        },
+        {
+          "line": 4227,
+          "expression": "result.trap == XR_REFERENCE_TRAP_EXPLICIT",
+          "status": "OPEN"
+        },
+        {
+          "line": 4268,
+          "expression": "write_one_function(NULL, 0, &error_function, &artifact) == XR_PROGRAM_BUILD_OK",
+          "status": "OPEN"
+        },
+        {
+          "line": 4273,
+          "expression": "result.kind == XR_REFERENCE_OUTCOME_ERROR",
+          "status": "OPEN"
+        },
+        {
+          "line": 4274,
+          "expression": "result.error_value.kind == XR_REFERENCE_VALUE_ERROR",
+          "status": "OPEN"
+        },
+        {
+          "line": 4275,
+          "expression": "result.error_value.as.error == 73u",
+          "status": "OPEN"
+        }
+      ],
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/program/test_xr_program_verify.c",
+      "function": "test_negative_diagnostics_and_budget",
+      "line": 4463,
+      "end_line": 4519,
+      "body_lf_sha256": "368836fe5077a3ca06c20ca676283c18004834472fc1f35127050bc5cdb760c4",
+      "CHECK_sites": 8,
+      "CHECK_bindings": [
+        {
+          "line": 4496,
+          "expression": "write_one_function(NULL, 0, &function, &artifact) == XR_PROGRAM_BUILD_OK",
+          "status": "OPEN"
+        },
+        {
+          "line": 4501,
+          "expression": "xr_program_validate(artifact.bytes, artifact.size, &budget, &program, &diagnostic) ==\n          XR_PROGRAM_VERIFY_RESOURCE_LIMIT",
+          "status": "OPEN"
+        },
+        {
+          "line": 4503,
+          "expression": "program == NULL",
+          "status": "OPEN"
+        },
+        {
+          "line": 4504,
+          "expression": "diagnostic.kind == XR_PROGRAM_DIAGNOSTIC_RESOURCE_LIMIT",
+          "status": "OPEN"
+        },
+        {
+          "line": 4507,
+          "expression": "mutated != NULL",
+          "status": "OPEN"
+        },
+        {
+          "line": 4512,
+          "expression": "xr_program_validate(mutated, artifact.size, NULL, &program, &diagnostic) ==\n              XR_PROGRAM_VERIFY_SEMANTIC_REJECTED",
+          "status": "OPEN"
+        },
+        {
+          "line": 4514,
+          "expression": "diagnostic.kind == XR_PROGRAM_DIAGNOSTIC_CORE_SPEC_IDENTITY",
+          "status": "OPEN"
+        },
+        {
+          "line": 4515,
+          "expression": "program == NULL",
+          "status": "OPEN"
+        }
+      ],
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/program/test_xr_program_verify.c",
+      "function": "test_evaluator_traps_and_budget",
+      "line": 4521,
+      "end_line": 4594,
+      "body_lf_sha256": "6a25fea0b1ec373eb61390248fe24a6210e693ed0f046b4584a6b4a5fda4c150",
+      "CHECK_sites": 4,
+      "CHECK_bindings": [
+        {
+          "line": 4577,
+          "expression": "write_one_function(constants, sizeof(constants) / sizeof(constants[0]), &function,\n                             &artifact) == XR_PROGRAM_BUILD_OK",
+          "status": "OPEN"
+        },
+        {
+          "line": 4582,
+          "expression": "result.kind == XR_REFERENCE_OUTCOME_TRAP",
+          "status": "OPEN"
+        },
+        {
+          "line": 4583,
+          "expression": "result.trap == XR_REFERENCE_TRAP_INTEGER_OVERFLOW",
+          "status": "OPEN"
+        },
+        {
+          "line": 4590,
+          "expression": "result.kind == XR_REFERENCE_OUTCOME_RESOURCE_LIMIT",
+          "status": "OPEN"
+        }
+      ],
+      "status": "OPEN"
+    }
+  ],
+  "outer_CHECK_sites": 19,
+  "original_private_helpers": [
+    {
+      "path": "tests/unit/program/test_xr_program_verify.c",
+      "function": "key",
+      "line": 109,
+      "end_line": 111,
+      "body_lf_sha256": "027a211b78e0cfbd6b296804e37236848a76cc1980981a0d6a49a6f42d3f2e13",
+      "CHECK_sites": 0,
+      "CHECK_bindings": [],
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/program/test_xr_program_verify.c",
+      "function": "write_one_function",
+      "line": 145,
+      "end_line": 157,
+      "body_lf_sha256": "efb68b99402d38d2b891e3ac3c832ebaae2feb4e1496a197240b17ebacb4d8ce",
+      "CHECK_sites": 0,
+      "CHECK_bindings": [],
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/program/test_xr_program_verify.c",
+      "function": "write_modules",
+      "line": 140,
+      "end_line": 143,
+      "body_lf_sha256": "c0c6556c255f9d53386b17acda69b57380cb09e82386e392f4f66c725697b6da",
+      "CHECK_sites": 0,
+      "CHECK_bindings": [],
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/program/test_xr_program_verify.c",
+      "function": "write_typed_modules",
+      "line": 113,
+      "end_line": 138,
+      "body_lf_sha256": "c568d48005100fc2633344ba569a2bc8de9b62e3aac794b35057c8d838b8db65",
+      "CHECK_sites": 0,
+      "CHECK_bindings": [],
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/program/test_xr_program_verify.c",
+      "function": "validate_ok",
+      "line": 159,
+      "end_line": 174,
+      "body_lf_sha256": "94fe0ef4e0242acb810c12621ae1fe73a9887ef668f15ddc6c67ed645494f62b",
+      "CHECK_sites": 2,
+      "CHECK_bindings": [
+        {
+          "line": 171,
+          "expression": "status == XR_PROGRAM_VERIFY_OK",
+          "status": "OPEN"
+        },
+        {
+          "line": 172,
+          "expression": "program != NULL",
+          "status": "OPEN"
+        }
+      ],
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/program/test_xr_program_verify.c",
+      "function": "expect_semantic_reject_at",
+      "line": 176,
+      "end_line": 198,
+      "body_lf_sha256": "44cf0fb15bea156743a1c0e35b0be8ee844aa1af55c8653ed9361cf781c045b8",
+      "CHECK_sites": 6,
+      "CHECK_bindings": [
+        {
+          "line": 190,
+          "expression": "first_status == XR_PROGRAM_VERIFY_SEMANTIC_REJECTED",
+          "status": "OPEN"
+        },
+        {
+          "line": 191,
+          "expression": "program == NULL",
+          "status": "OPEN"
+        },
+        {
+          "line": 192,
+          "expression": "first.kind == expected",
+          "status": "OPEN"
+        },
+        {
+          "line": 195,
+          "expression": "second_status == first_status",
+          "status": "OPEN"
+        },
+        {
+          "line": 196,
+          "expression": "memcmp(&first, &second, sizeof(first)) == 0",
+          "status": "OPEN"
+        },
+        {
+          "line": 197,
+          "expression": "program == NULL",
+          "status": "OPEN"
+        }
+      ],
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/program/test_xr_program_verify.c",
+      "function": "build_invalid_fixture",
+      "line": 4402,
+      "end_line": 4461,
+      "body_lf_sha256": "942abbef201fb449eebfa208d916a637980789bb80043d536827160f32fefc84",
+      "CHECK_sites": 1,
+      "CHECK_bindings": [
+        {
+          "line": 4458,
+          "expression": "write_one_function(constants, sizeof(constants) / sizeof(constants[0]), &function,\n                             &artifact) == XR_PROGRAM_BUILD_OK",
+          "status": "OPEN"
+        }
+      ],
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/program/test_xr_program_verify.c",
+      "function": "test_scalar_operations",
+      "line": 2661,
+      "end_line": 2815,
+      "body_lf_sha256": "0992391bd4113e2500308b9787f43c51dfa1b26c9562169a4ee48470606dc85f",
+      "CHECK_sites": 5,
+      "CHECK_bindings": [
+        {
+          "line": 2795,
+          "expression": "write_one_function(constants, sizeof(constants) / sizeof(constants[0]), &function,\n                             &artifact) == XR_PROGRAM_BUILD_OK",
+          "status": "OPEN"
+        },
+        {
+          "line": 2802,
+          "expression": "result.kind == XR_REFERENCE_OUTCOME_RETURN",
+          "status": "OPEN"
+        },
+        {
+          "line": 2803,
+          "expression": "result.value.kind == XR_REFERENCE_VALUE_BOOL",
+          "status": "OPEN"
+        },
+        {
+          "line": 2804,
+          "expression": "result.value.as.boolean",
+          "status": "OPEN"
+        },
+        {
+          "line": 2811,
+          "expression": "write_one_function(constants, sizeof(constants) / sizeof(constants[0]), &function,\n                             &invalid_logical) == XR_PROGRAM_BUILD_OK",
+          "status": "OPEN"
+        }
+      ],
+      "status": "OPEN"
+    }
+  ],
+  "specified_helper_CHECK_sites": 14,
+  "input_file": {
+    "path": "tests/unit/program/test_xr_program_verify.c",
+    "whole_file_lf_sha256": "ec4b93f13bfab2aa3d4b8f8773dd5c1118a0c682ed6f8304fead515f90402802",
+    "physical_raw_sha256": "a39922500c0943c034fafcda3a82b67e511ea658f453f6c0c3204f7719de1817",
+    "git_base_equal": true
+  },
+  "input_policy": "Complete three original bodies and eight specified actual helper bodies equal01e6; preserve distinct Programs, actual signatures, typed terminal results, exact malformed graphs, real fingerprint bit mutation and both verification/runtime budgets. The nested scalar test is an already inventoried responsibility, not a new census function.",
+  "terminal_programs": [
+    {
+      "key": "trap:function",
+      "signature": "ZeroargVOID ENTRY/effect1, oneblock, no constants.",
+      "operations": [
+        "TRAP"
+      ],
+      "immediate": "XR_REFERENCE_TRAP_EXPLICIT",
+      "normal": "BUILD_OK/VERIFY_OK/non-NULL then actual reference TRAP/EXPLICIT, NULL profile/budget. Explicit trap is a valid admitted graph and required runtime outcome, not a verifier negative."
+    },
+    {
+      "key": "error:function",
+      "signature": "One original ERROR parameter and ERROR blockargument, resultVOID/error_typeERROR/effectERROR, ENTRY; parameter_modes omitted in original input, no invented explicit host mode.",
+      "operations": [
+        "BLOCK_ARGUMENT",
+        "ERROR_PUBLISH"
+      ],
+      "argument": {
+        "kind": "ERROR",
+        "value": 73
+      },
+      "normal": "BUILD_OK/VERIFY_OK/non-NULL; reference evaluator receives actual typed ERROR(73), count1 and returns ERROR with error_value.kindERROR/error_value.as.error73, NULL profile/budget.",
+      "boundary": "Actual typed error payload is asserted; neither I64(73) success nor an arbitrary error/exit status satisfies it. No handler/invoke or normal return is present."
+    }
+  ],
+  "invalid_semantic_graphs": {
+    "builder": "build_invalid_fixture",
+    "constants": [
+      1,
+      2
+    ],
+    "operations": [
+      "CONSTANT_I64",
+      "CONSTANT_I64",
+      "ADD_I64",
+      "RETURN"
+    ],
+    "base": "Real checked ADD(1,2), two actual operands, immediate0; actual return of sum, zeroargENTRY/oneblock. Each variant is separately built with BUILD_OK in original helper.",
+    "variants": [
+      {
+        "name": "INVALID_EFFECT",
+        "mutation": "Actual trap-capable checkedADD still present but function.effect_mask0 rather than1.",
+        "expected": "SEMANTIC_REJECTED/EFFECT/NULL twice/full diagnostic equality."
+      },
+      {
+        "name": "INVALID_RESULT_TYPE",
+        "mutation": "Actual ADD result_typeBOOL and function result_typeBOOL, operands remain actualI64(1,2).",
+        "expected": "SEMANTIC_REJECTED/OPERATION_TYPE/NULL twice/full diagnostic equality."
+      },
+      {
+        "name": "INVALID_MISSING_TERMINATOR",
+        "mutation": "Set instruction_count3 rather than4, leaving two constants and ADD with actual terminator omitted.",
+        "expected": "SEMANTIC_REJECTED/CONTROL_FLOW/NULL twice/full diagnostic equality."
+      }
+    ]
+  },
+  "nested_scalar_invocation": {
+    "function": "test_scalar_operations",
+    "body_lf_sha256": "0992391bd4113e2500308b9787f43c51dfa1b26c9562169a4ee48470606dc85f",
+    "existing_mapping": "tests/unit/xir/product_consumers/source_original_scalar_control_call_obligations.json",
+    "meaning": "Original diagnostic test actually invokes full scalar/logic positive and NOT(I64) negative before budget/identity graph; preserve its whole body and sequence, do not add another census row or treat invocation as new product coverage."
+  },
+  "verify_budget_identity": {
+    "key": "budget:function",
+    "signature": "ZeroargVOID ENTRY/effect1, original explicitTRAP oneblock/no constants.",
+    "writer": "BUILD_OK; original comment calls graph known-valid, but this body does not independently validate it with default budget or execute it.",
+    "verify_budget": "Take original verify_default_budget then set onlymax_work1; single validate ->VERIFY_RESOURCE_LIMIT, NULL Program, diagnosticRESOURCE_LIMIT. No repeated diagnostics, runtime step limit or fresh successful verify assertion here.",
+    "identity_mutation": "malloc fullartifact copy; fingerprint_offset=XR_PROGRAM_MAGIC_SIZE+4u+1u, flip actual byte^=1. Single default-budget validate ->SEMANTIC_REJECTED/CORE_SPEC_IDENTITY/NULL. This is actual governed fingerprint mismatch in complete artifact, not a renamed function, provider selector or structural failure.",
+    "boundary": "Current semantic/producer/target/program identity rejection must map this governed mismatch at corresponding trust boundary. Numeric legacy packet offsets/format are input evidence, no request to read old identity or preserve reader fallback."
+  },
+  "overflow_runtime_budget": {
+    "constants": [
+      "INT64_MAX",
+      1
+    ],
+    "signature": "ZeroargI64 ENTRY/effect1/oneblock.",
+    "operations": [
+      "CONSTANT_I64",
+      "CONSTANT_I64",
+      "ADD_I64",
+      "RETURN"
+    ],
+    "immediate": "Actual checked ADD immediate0; returns real sum if reachable.",
+    "normal": "BUILD_OK/VERIFY_OK/non-NULL; actual reference first evaluation with NULL profile/budget ->TRAP/INTEGER_OVERFLOW. Real INT64_MAX+1 arithmetic executed, not explicitTRAP substitution.",
+    "limited": "Second actual evaluation of same validated Program with max_steps2/max_value_cells8/max_call_depth8 ->RESOURCE_LIMIT. Original assertion checks onlykindRESOURCE_LIMIT; no typed return, trap reason, numeric consumed counter or ownership-null assertion.",
+    "boundary": "Original reference context/budget per evaluation does not prove current same-owner cumulative ledger/no refunds/retry. Current step/work/runtime-depth/value axes, exact census, FI and shared resource persistence remain independentOPEN obligations."
+  },
+  "distinct_semantic_graph_negative_count": 3,
+  "verify_budget_rejections": 1,
+  "identity_mutations": 1,
+  "admitted_terminal_programs": 2,
+  "runtime_overflow_traps": 1,
+  "runtime_step_budget_rejections": 1,
+  "specified_helper_boundaries": {
+    "CHECKs": "19 outer sites;14 specified helper sites including already-inventoried scalar5 and invalidbuilder1, not expanded dynamic iteration or new160 denominator.",
+    "diagnostics": "Three semantic graph variants use repeated helper exactkind/status/NULL and whole diagnostic memcmp. Budget and fingerprint use original single direct verify, not repeated diagnostic claims.",
+    "ownership": "Original validatedPrograms/artifacts/fullmutatedcopy freed. No lifecycle observer/twoInstance/cancel/detached owned result/physicalcounter or FI assertion appears in these three bodies."
+  },
+  "shared_dependencies": [
+    {
+      "path": "src/program/xr_reference_evaluator.h",
+      "physical_raw_sha256": "d43732ceca814f67f7f04e1b51d8512aab2e199092a546d1c47d30e0f28439bf",
+      "whole_file_lf_sha256": "0b2149e8397748e84b1cbc14904cde97d5bee4c3e69474486169e4656ff89054",
+      "git_base_equal": true,
+      "status": "PRESERVE_SHARED_READONLY"
+    }
+  ],
+  "Root_contract_or_representation_review": {
+    "status": "OPEN",
+    "terminals": "Keep admittedVOID explicittrap and typedERROR73 actual parameter/result roles. Current checked-owner/Call selection and exact outcome must carry these independent goldens; neither Source refusal nor generic nonOK qualifies original admitted runtime behavior.",
+    "semantic": "Current verifier must still reject actual missing effect, wrongtypedADD and absentterminator through corresponding exact trust boundary; preserve full graph and independently derived cause rather than malformed arbitrary packet.",
+    "identity": "Preserve governed semantic identity refusal with actual full current artifact/provider IDs; old bytes are not a compatibility input. Forged identity cannot be cleared by digest alone.",
+    "budgets": "Original verify-work1 and evaluator-step2 failures are different stages/ledger owners. Runtime INT64_MAX+1 is a real overflow, distinct from nooverflow potentialtrap admission in earlier class hostile map. Current fullresources/FI/safety remainOPEN.",
+    "qualification": "Public Built/Checked/packet/reverify/Lowered/Program with allfulloriginal graphs/exact negatives, VM/native/mixed, actualtwoInstances/detachedowners, fullFI/axes/lifecycle/safety require formalproducer/window and remainOPEN."
+  },
+  "full_FI": "NOT_RUN",
+  "axes": "NOT_RUN",
+  "full_safety": "NOT_RUN",
+  "SourceDelete": "NOT_RUN",
+  "Main": "NOT_RUN",
+  "handoff": {
+    "Root_thread": "01a11f74-a297-7b11-8441-835bde6a3d5f",
+    "formal_acceptance": "PENDING"
+  },
+  "boundaries": [
+    "All19 outer/14 helperCHECKs OPEN; retired0.",
+    "Only original terminal/semantic/identity/verification-work/runtime-step responsibility and static scope evidence; no currentproduct gate.",
+    "Shared helpers/evaluator remain used; product/header/CMake/stdlib/spec/SDK/docs untouched. No Main/deletion permit."
+  ]
+}
