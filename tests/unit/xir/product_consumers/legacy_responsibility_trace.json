@@ -17,9 +17,9 @@
   "reference_counts": {
     "source_with_digest_reference": 108,
     "source_without_digest_reference": 0,
-    "other_with_digest_reference": 99,
-    "other_without_digest_reference": 61,
-    "digest_reference_values": 280,
+    "other_with_digest_reference": 101,
+    "other_without_digest_reference": 59,
+    "digest_reference_values": 284,
     "source_inventory_projections": 42
   },
   "mapping_inputs": [
@@ -518,6 +518,10 @@
     {
       "path": "tests/unit/xir/product_consumers/source_original_coroutine_liveness_owner_obligations.json",
       "lf_sha256": "38ca4c9e1cb839ffafa54df99293bb4bdea01e3f503c42672b09f3818c2dd805"
+    },
+    {
+      "path": "tests/unit/xir/product_consumers/source_original_coroutine_outcome_indirect_obligations.json",
+      "lf_sha256": "544edad4ab98483afe1b22f19b2a179dc8b5f73b3e028f1e7635eb2d428f2a53"
     },
     {
       "path": "tests/unit/xir/product_consumers/source_original_cross_frame_borrow_obligations.json",
@@ -4056,7 +4060,18 @@
       "body_lf_sha256": "b86bcad551ccfa7a46016bc1c4f575f2ce4b1e4a11f93193e6df99fd89f6c22d",
       "status": "OPEN",
       "inventory_projection": null,
-      "mapping_references": []
+      "mapping_references": [
+        {
+          "mapping": "tests/unit/xir/product_consumers/source_original_coroutine_outcome_indirect_obligations.json",
+          "pointer": "/legacy/0/body_lf_sha256",
+          "binding": "exact_path_name_body"
+        },
+        {
+          "mapping": "tests/unit/xir/product_consumers/source_original_coroutine_outcome_indirect_obligations.json",
+          "pointer": "/responsibility_mapping/0/body_lf_sha256",
+          "binding": "exact_body_digest_value_only"
+        }
+      ]
     },
     {
       "legacy_path": "tests/unit/program/test_xr_program_verify.c",
@@ -4064,7 +4079,18 @@
       "body_lf_sha256": "4c8cccc000cbd898164860ef641fe2172b6d57d203e62eed4615f47d945e1318",
       "status": "OPEN",
       "inventory_projection": null,
-      "mapping_references": []
+      "mapping_references": [
+        {
+          "mapping": "tests/unit/xir/product_consumers/source_original_coroutine_outcome_indirect_obligations.json",
+          "pointer": "/legacy/1/body_lf_sha256",
+          "binding": "exact_path_name_body"
+        },
+        {
+          "mapping": "tests/unit/xir/product_consumers/source_original_coroutine_outcome_indirect_obligations.json",
+          "pointer": "/responsibility_mapping/1/body_lf_sha256",
+          "binding": "exact_body_digest_value_only"
+        }
+      ]
     },
     {
       "legacy_path": "tests/unit/program/test_xr_program_verify.c",
