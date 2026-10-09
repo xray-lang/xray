@@ -1,0 +1,322 @@
+{
+  "schema": 1,
+  "family": "original_string_slice_admission_actual_owned_source_result_and_panic_cleanup",
+  "legacy_base_commit": "01e6d38401b0f5c8684b64c35a99ac651024c0c1",
+  "status": "OPEN",
+  "retired": 0,
+  "replacement_gates": [],
+  "result": "STATIC_FULL_ORIGINAL_STRING_SLICE_ADMISSION_MAP_ONLY",
+  "product_execution": "NOT_RUN_BY_THIS_MAP",
+  "producer": "25f4016d6f089169757a90ae11ba537002374711",
+  "identity": "Checked25/contract67/Value22/Call28/Program29",
+  "identity_namespace_note": "Approved legacy order called contract67 semantic67. Actual semantic-plan schema is a separate namespace; current Root Checked27/contract72 is not an adopted consumer baseline.",
+  "legacy": [
+    {
+      "name": "test_string_slice_admission",
+      "legacy_path": "tests/unit/program/test_xr_program_verify.c",
+      "legacy_line": 6962,
+      "body_lf_sha256": "9ee5c46b013b078ca77d301dbb175068ffcb798fbbc1fa51f116f1c6bfc28416",
+      "assertion_sites": 6,
+      "loop_sites": 1,
+      "status": "OPEN",
+      "replacement_gates": [],
+      "note": "Function census preserves its whole body; sites do not count executed loop iterations."
+    }
+  ],
+  "responsibility_mapping": [
+    {
+      "path": "tests/unit/program/test_xr_program_verify.c",
+      "function": "test_string_slice_admission",
+      "line": 6962,
+      "end_line": 6979,
+      "body_lf_sha256": "9ee5c46b013b078ca77d301dbb175068ffcb798fbbc1fa51f116f1c6bfc28416",
+      "CHECK_sites": 6,
+      "CHECK_bindings": [
+        {
+          "line": 6964,
+          "expression": "xr_program_string_slice_fixture_write(0u, &artifact) == XR_PROGRAM_BUILD_OK",
+          "status": "OPEN"
+        },
+        {
+          "line": 6966,
+          "expression": "program != NULL",
+          "status": "OPEN"
+        },
+        {
+          "line": 6967,
+          "expression": "find_operation_offset(&artifact, XR_CORE_OP_CORE_STRING_SLICE) != SIZE_MAX",
+          "status": "OPEN"
+        },
+        {
+          "line": 6971,
+          "expression": "xr_program_string_slice_fixture_write(mutation, &artifact) == XR_PROGRAM_BUILD_OK",
+          "status": "OPEN"
+        },
+        {
+          "line": 6974,
+          "expression": "xr_program_validate(artifact.bytes, artifact.size, NULL, &program, &diagnostic) ==\n              XR_PROGRAM_VERIFY_SEMANTIC_REJECTED",
+          "status": "OPEN"
+        },
+        {
+          "line": 6976,
+          "expression": "program == NULL",
+          "status": "OPEN"
+        }
+      ],
+      "status": "OPEN"
+    }
+  ],
+  "outer_CHECK_sites": 6,
+  "original_private_helpers": [
+    {
+      "path": "tests/unit/program/test_xr_program_verify.c",
+      "function": "validate_ok",
+      "line": 159,
+      "end_line": 174,
+      "body_lf_sha256": "94fe0ef4e0242acb810c12621ae1fe73a9887ef668f15ddc6c67ed645494f62b",
+      "CHECK_sites": 2,
+      "CHECK_bindings": [
+        {
+          "line": 171,
+          "expression": "status == XR_PROGRAM_VERIFY_OK",
+          "status": "OPEN"
+        },
+        {
+          "line": 172,
+          "expression": "program != NULL",
+          "status": "OPEN"
+        }
+      ],
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/program/test_xr_program_verify.c",
+      "function": "test_take_uvar",
+      "line": 203,
+      "end_line": 215,
+      "body_lf_sha256": "835eb97aa0c77560506ba0e421652602ae095f5e6686cce9ef331fc80a34ef4d",
+      "CHECK_sites": 1,
+      "CHECK_bindings": [
+        {
+          "line": 213,
+          "expression": "false",
+          "status": "OPEN"
+        }
+      ],
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/program/test_xr_program_verify.c",
+      "function": "test_skip_instruction",
+      "line": 227,
+      "end_line": 248,
+      "body_lf_sha256": "05b17f1d03881763226d19ecf80ef28db2eaf2b4b15df6fb41940fcb9ed6e2f0",
+      "CHECK_sites": 0,
+      "CHECK_bindings": [],
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/program/test_xr_program_verify.c",
+      "function": "find_operation_offset",
+      "line": 250,
+      "end_line": 278,
+      "body_lf_sha256": "eb6911a28310314dc3cf7ad26f9177d3c0fc96c02fbe2a0b72c9b5206bf75591",
+      "CHECK_sites": 0,
+      "CHECK_bindings": [],
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/program/xr_program_string_slice_fixture.h",
+      "function": "xr_program_string_slice_fixture_write",
+      "line": 9,
+      "end_line": 75,
+      "body_lf_sha256": "075d2dbe82b14f6cd5fb2abf33ea2c7384c3eccddb3a07a375990b90cb97dc85",
+      "CHECK_sites": 0,
+      "CHECK_bindings": [],
+      "status": "OPEN"
+    }
+  ],
+  "specified_helper_CHECK_sites": 3,
+  "input_files": [
+    {
+      "path": "tests/unit/program/test_xr_program_verify.c",
+      "physical_raw_sha256": "a39922500c0943c034fafcda3a82b67e511ea658f453f6c0c3204f7719de1817",
+      "whole_file_lf_sha256": "ec4b93f13bfab2aa3d4b8f8773dd5c1118a0c682ed6f8304fead515f90402802",
+      "git_base_equal": true,
+      "status": "PRESERVE_ORIGINAL_READONLY"
+    },
+    {
+      "path": "tests/unit/program/xr_program_string_slice_fixture.h",
+      "physical_raw_sha256": "e68bb7730bcd11b911bafb948194a5457568958aaf094b565008eb4559afb88b",
+      "whole_file_lf_sha256": "235077a5def6ea30325d290e2258a30855d617bb318bfd05822e50ec648be871",
+      "git_base_equal": true,
+      "status": "PRESERVE_ORIGINAL_READONLY"
+    },
+    {
+      "path": "tests/unit/aot/test_xr_program_aot.c",
+      "physical_raw_sha256": "6fea38acff96d94b2bfb414e04aa308386f6284ed12ccf05613a790a23caa700",
+      "whole_file_lf_sha256": "e7ab9301b308c7db6bf48e348257e5288f38f22c1b38c827fb040719dbf2de0e",
+      "git_base_equal": true,
+      "status": "PRESERVE_ORIGINAL_READONLY"
+    },
+    {
+      "path": "tests/unit/vm/test_xr_program_vm.c",
+      "physical_raw_sha256": "3a19b58076867cc70ef6c77e975286009df65e61ac1ed9edb2b5ab7813543502",
+      "whole_file_lf_sha256": "17904ef2bab8bb7eea72245fedba9878d74b6b8e93776e4314418e2db06dce8a",
+      "git_base_equal": true,
+      "status": "PRESERVE_ORIGINAL_READONLY"
+    },
+    {
+      "path": "tests/unit/vm/test_xr_program_vm_allocations.c",
+      "physical_raw_sha256": "65404153b883af360f80af2006ccb99a1742815f707bf605b7f27e11e16aa4a7",
+      "whole_file_lf_sha256": "b2e8af3a0b31c277224ec7eb93c861f43d5ab09ebf2876869fc5a87f65effdc2",
+      "git_base_equal": true,
+      "status": "PRESERVE_ORIGINAL_READONLY"
+    }
+  ],
+  "constant": {
+    "exact_bytes": [
+      65,
+      195,
+      169,
+      228,
+      184,
+      173,
+      240,
+      159,
+      153,
+      130
+    ],
+    "utf8": "A\u00e9\u4e2d\ud83d\ude42",
+    "bytes": 10,
+    "Unicode_scalars": 4,
+    "sha256": "7dc4afaea2c0e95085920212a1b819c63d0f7a0f74b4019e2e8ca67c38c6a361"
+  },
+  "graph": {
+    "parameters": "Two actual start/end parameters I64; original parameter_modes pointer is omitted, no concrete bounds supplied or run by this census.",
+    "entry": [
+      "BLOCK_ARGUMENT [actual start,end]",
+      "CONSTANT_STRING exact10bytes -> OWN source",
+      "STRING_SLICE operands[borrow source,start,end,same actual source OWNER cleanup suffix] -> OWN result String, sole handler successor",
+      "OWNER_DROP actual source on success",
+      "RETURN actual owning slice result"
+    ],
+    "landing": [
+      "BLOCK_ARGUMENT implicit OWN PANIC_INFO + actual OWN transferred source String",
+      "OWNER_DROP actual source String",
+      "PANIC_PUBLISH actual payload"
+    ],
+    "shape_counts": {
+      "functions": 1,
+      "blocks": 2,
+      "instructions": 8,
+      "constants": 1,
+      "types": 0,
+      "requirements": 0
+    },
+    "signature": "ENTRY, String/OWNER result, PANIC_INFO panic, PANIC effect, no error; one module/constant/CORE_BASE and literal slice:semantics fingerprint.",
+    "value_origin": "Slice result is produced from same actual original source before source DROP, then returned owning; no empty replacement, precomputed substring or legacy scalar String fallback."
+  },
+  "original_positive": {
+    "expected_build": "XR_PROGRAM_BUILD_OK",
+    "expected_verify": "XR_PROGRAM_VERIFY_OK",
+    "explicit_nonNULL_product": true,
+    "structural_probe": "find_operation_offset actual STRING_SLICE in original CODE section !=SIZE_MAX",
+    "probe_boundary": "Decode/walk actual original artifact instructions, no assumed fixed byte offset and no current packet offset reused.",
+    "original_runtime": "NOT_RUN"
+  },
+  "semantic_mutations": [
+    {
+      "mutation": 1,
+      "expected_build": "XR_PROGRAM_BUILD_OK",
+      "expected_verify": "XR_PROGRAM_VERIFY_SEMANTIC_REJECTED",
+      "expected_product": "NULL",
+      "original_diagnostic_kind": "NOT_ASSERTED",
+      "original_verify_calls": 1,
+      "repeated_Diag_memcmp": "NOT_ASSERTED",
+      "complete_graph_change": "Only end parameter and matching entry argument I64 -> BOOL; start I64, actual String source/result and full panic cleanup remain.",
+      "status": "OPEN"
+    },
+    {
+      "mutation": 2,
+      "expected_build": "XR_PROGRAM_BUILD_OK",
+      "expected_verify": "XR_PROGRAM_VERIFY_SEMANTIC_REJECTED",
+      "expected_product": "NULL",
+      "original_diagnostic_kind": "NOT_ASSERTED",
+      "original_verify_calls": 1,
+      "repeated_Diag_memcmp": "NOT_ASSERTED",
+      "complete_graph_change": "Only actual STRING_SLICE result ownership OWNER -> NON_OWNER while result String and owning function return stay.",
+      "status": "OPEN"
+    },
+    {
+      "mutation": 3,
+      "expected_build": "XR_PROGRAM_BUILD_OK",
+      "expected_verify": "XR_PROGRAM_VERIFY_SEMANTIC_REJECTED",
+      "expected_product": "NULL",
+      "original_diagnostic_kind": "NOT_ASSERTED",
+      "original_verify_calls": 1,
+      "repeated_Diag_memcmp": "NOT_ASSERTED",
+      "complete_graph_change": "STRING_SLICE operand_count4 -> 3 omits actual source owner cleanup suffix; borrowed source/start/end prefix retained and landing still declares OWN PANIC_INFO plus OWN source String.",
+      "status": "OPEN"
+    },
+    {
+      "mutation": 4,
+      "expected_build": "XR_PROGRAM_BUILD_OK",
+      "expected_verify": "XR_PROGRAM_VERIFY_SEMANTIC_REJECTED",
+      "expected_product": "NULL",
+      "original_diagnostic_kind": "NOT_ASSERTED",
+      "original_verify_calls": 1,
+      "repeated_Diag_memcmp": "NOT_ASSERTED",
+      "complete_graph_change": "Cleanup DROP actual source -> PANIC_PUBLISH actual payload, select only first2 instructions (BLOCK_ARGUMENT/PANIC_PUBLISH). Transferred actual source owner remains live, never dropped.",
+      "status": "OPEN"
+    }
+  ],
+  "assertion_counts": {
+    "census_functions": 1,
+    "outer_sites": 6,
+    "specified_helpers": 5,
+    "specified_helper_sites": 3,
+    "fresh_builder_inputs": 5,
+    "positive_admitted_programs": 1,
+    "semantic_negative_inputs": 4,
+    "semantic_negative_verify_calls": 4,
+    "exact_diagnostic_negative_inputs": 0,
+    "original_runtime_evaluations": 0,
+    "wire_mutations": 0
+  },
+  "expectation_policy": "Preserve four original BUILD_OK then SEMANTIC_REJECTED/NULL inline checks, each single validate with diagnostic output but no diagnostic.kind assertion and no repeated full Diag memcmp. Do not invent precise original failure kinds or convert these into producer negatives; current strong diagnostics must be independently specified through Root contract.",
+  "original_runtime_boundary": "This original census evaluates no bounds, substring bytes, owning result escape/disposal or failed-path cleanup. One admitted artifact and present opcode do not prove Unicode scalar slicing or typed owning PanicInfo materialization/lifecycle; those remain actual independent qualification obligations.",
+  "shared_fixture_owners": {
+    "path": "tests/unit/program/xr_program_string_slice_fixture.h",
+    "actual_include_users": [
+      "tests/unit/program/test_xr_program_verify.c",
+      "tests/unit/aot/test_xr_program_aot.c",
+      "tests/unit/vm/test_xr_program_vm.c",
+      "tests/unit/vm/test_xr_program_vm_allocations.c"
+    ],
+    "status": "PRESERVE_SHARED_READONLY",
+    "deletion": "Complete shared builder remains included by verifier/AOT/VM/VM allocation consumers; no deletion candidate."
+  },
+  "Root_contract_or_representation_review": {
+    "status": "OPEN",
+    "slices": "Keep complete original UTF8 sequence and actual start/end/root parameters. Validate current specification before adding real bound/result oracles; do not truncate UTF8, use byte offsets as scalar indices, or rewrite full input to evade Source rejection.",
+    "owner": "Current owning result must retain correct actual source-derived content after original source owner is dropped and after producer/Instance/Program teardown as applicable; exact release and stable logical identities need Root observer.",
+    "panic": "Missing actual source suffix and leaked source on typed panic landing remain prohibited. Use current opaque owning PANIC_INFO rather than historical scalar carrier; no duplicate root/temporary Cell compatibility path.",
+    "baseline": "Root explicit79ba receipt says new Checked27/contract72 is development state, not authorization to replace sole25f4 producer. Formal Source roles/observer/old-to-new preservation/build owner/window still pending.",
+    "qualification": "Actual current Source/packet/Library/VM/native/mixed/two-instance/owning escape/active cancel/full FI/axes/safety/deletion remain OPEN."
+  },
+  "full_FI": "NOT_RUN",
+  "axes": "NOT_RUN",
+  "full_safety": "NOT_RUN",
+  "SourceDelete": "NOT_RUN",
+  "Main": "NOT_RUN",
+  "handoff": {
+    "Root_thread": "01a11f74-a297-7b11-8441-835bde6a3d5f",
+    "formal_acceptance": "PENDING"
+  },
+  "boundaries": [
+    "Static full original admission and weak rejection responsibilities only, retired0/all OPEN.",
+    "No current product build or runtime; original substring/range goldens are not invented.",
+    "Only new map and responsibility trace may change; fixture/product/docs readonly."
+  ]
+}
