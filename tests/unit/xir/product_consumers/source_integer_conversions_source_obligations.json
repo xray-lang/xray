@@ -1,0 +1,66 @@
+{
+  "schema": 1,
+  "producer": "25f4016d6f089169757a90ae11ba537002374711",
+  "identity": "Checked25/semantic67/Value22/Call28/Program29",
+  "legacy": {
+    "legacy_path": "tests/unit/program/test_xr_program_source_build.c",
+    "name": "source_owner_exact_integer_constants_and_conversions",
+    "body_lf_sha256": "0e32ea27cf5301134572d622d92ef017206fdb70fdfa3480484191de4dfaec07",
+    "status": "OPEN",
+    "inventory_projection": {
+      "fixture": "tests/unit/xir/product_consumers/fixtures/integer_conversions/root.xr",
+      "sha256": "7f9bf4a5d20b3cb7cee5b096ebad9e20181084cb041fc96372d54d1cba9c7f36",
+      "original_prefix_sha256": "0a84cfabba66654078cc533176d0bf995a5a15a771f01a66e30cb33615834065",
+      "entry_adapter": "export fn consumerAnswer() -> i64 { return answer() }\n",
+      "entry": "consumerAnswer",
+      "expected_i64": 255,
+      "scope": "Exact original source prefix and fixed result through an explicitly exported adapter; additional legacy assertions stay OPEN until mapped."
+    },
+    "mapping_references": []
+  },
+  "status": "OPEN",
+  "retired": 0,
+  "replacement_gates": [],
+  "original_source": {
+    "path": "tests/unit/xir/product_consumers/fixtures/integer_conversions/root.xr",
+    "bytes": 264,
+    "prefix_bytes": 210,
+    "sha256": "7f9bf4a5d20b3cb7cee5b096ebad9e20181084cb041fc96372d54d1cba9c7f36",
+    "prefix_sha256": "0a84cfabba66654078cc533176d0bf995a5a15a771f01a66e30cb33615834065",
+    "adapter": "export fn consumerAnswer() -> i64 { return answer() }\n"
+  },
+  "independent_i64": 255,
+  "required_shape": "Mutable root U8 and U64 module slots are initialized with actual typed U8 CONST255 and I64 CONST-1 converted to U64. Private widen(U8) and bits(U64) return actual I64 CONVERT_NUMBER results. Answer reads the exact two initialized slots, CALLs the two helper identities, ADD_INTs their results and then actualI64CONST1, and RETURNs the final SSA.",
+  "result": "NOT_RUN",
+  "pipeline": "Original Source prefix and exported adapter;SourceProduct/Closed Checked/reader and Source owner death/Lowered/Program/two Instances;VM/native/two mixed partitions.",
+  "boundaries": [
+    "Original Core requires at least four CORE_INTEGER_CONVERT operations and an INTEGER_CONVERSIONS BackendIR assertion. Current typed U8 constant and explicit three conversions prove a distinct Source semantic facet; the original representation count remains OPEN.",
+    "Full FI, resource axes, cancellation, safety, Main integration and retirement remain OPEN."
+  ],
+  "full_FI": "NOT_RUN",
+  "axes": "NOT_RUN",
+  "cancel": "NOT_RUN",
+  "full_safety": "NOT_RUN",
+  "Main": "NOT_RUN",
+  "typed_integer_constant_execution_20261009_facet": {
+    "status": "PASS_ORIGINAL_SOURCE_TYPED_MODULE_INTEGER_CONSTANTS_WHOLE_LEGACY_OPEN",
+    "evidence": "build-consumer-evidence/current67-integer-constants-source-r1",
+    "original": "Original210-byte Source prefix plus54-byte exported adapter unchanged. U8value255 widens toI64; U64high from(-1) asU64 converts back toI64minus1. Original sum255+(-1)+1 independently255 retained.",
+    "shape": "Actual mutable root U8/U64 slots eachinitialized once. TypedU8 CONST255;I64 CONSTminus1 CONVERT_NUMBER toU64 and SLOT_INIT use actualSSA. Privatewiden(U8)/bits(U64) eachconvertparameter0toI64andreturnexactSSA. Answer LOADs initializedslottypes, CALLs actualtwohelperindices, ADD_INTfirstactualcallresults thenactualI64CONST1 andRETURNfinalSSA;answerdoesnotmutateslots.",
+    "actual": "12registeredruntimeargv processes allfirstPASS:8VM/native/twoMixed family,2detachedowner,2sequenceVMcontrol.32independent255/16Instances;Source/session/readers dead beforeProgram use,callerProgramrefdroppedbeforepubliccalls;privateanswerBADARGwithoutallocation;finalcompiler/runtimephysical0.",
+    "owned": "Session/product/request/authority/path dead beforewholeChecked writer bytecomparison/reverification;CheckeddeadbeforeLoweredverify/release;finaltableandphysical0.",
+    "inputs": "OriginalVM2722/ownerandcontrol2721/native2723inputs perPID including3observerheaders andactualgeneratedC/configuredwrapperwhereused. SHA/bytes/mtimebefore-after exact;every12actualruntimePID EXEarchivedbeforeentry andhashbound. Runtimepreannotationmap/trace retained;onlymap/trace annotationupdatedafterruntime.",
+    "build": "6successfulfreshCcompileevents/6distinctfinalTUs(driver/owner/actualgeneratedC eachconfiguration),C11/W4/WX,ClangASan+UBSanincludesactualC.ExistingwrapperOBJreusedandtemplatebound;2build-timeemitters separatelyrecorded.",
+    "generated_payload_sha256": {
+      "msvc": "fc7a7526d0b38fa4e423dc29315ef8d77d41141b701eefb57ff4e3be3aabfc24",
+      "asan": "fc7a7526d0b38fa4e423dc29315ef8d77d41141b701eefb57ff4e3be3aabfc24"
+    },
+    "remaining": "Originalat-least4CoreintegerconversioncountandBackendIRINTEGER_CONVERSIONSrepresentationOPEN.CurrenttypedU8literaland3actualCONVERT_NUMBERoperationsproveonlythisSourcefacet.FullFI/axes/cancel/safety/Main/retirementOPEN.",
+    "full_FI": "NOT_RUN",
+    "axes": "NOT_RUN",
+    "cancel": "NOT_RUN",
+    "full_safety": "NOT_RUN",
+    "Main": "NOT_RUN",
+    "retired": 0
+  }
+}
