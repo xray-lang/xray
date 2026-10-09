@@ -401,3 +401,5 @@ include("${CMAKE_CURRENT_LIST_DIR}/../xir/product_consumers/source_product_integ
 include("${CMAKE_CURRENT_LIST_DIR}/../xir/product_consumers/source_product_integer_conversions_owned.cmake")
 
 include("${CMAKE_CURRENT_LIST_DIR}/../xir/product_consumers/source_product_original_arrays_owned.cmake")
+
+include("${CMAKE_CURRENT_LIST_DIR}/../xir/product_consumers/source_product_class_alias_original_owned.cmake")

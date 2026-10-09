@@ -1,0 +1,70 @@
+{
+  "schema": 1,
+  "producer": "25f4016d6f089169757a90ae11ba537002374711",
+  "identity": "Checked25/semantic67/Value22/Call28/Program29",
+  "legacy": {
+    "legacy_path": "tests/unit/program/test_xr_program_source_build.c",
+    "name": "source_owner_class_alias_final_transfer_coalesces_to_move",
+    "body_lf_sha256": "6c98c8beaf8d474c36d43203b99563e02b802518943bf49f63187b82c285fb3e",
+    "status": "OPEN",
+    "inventory_projection": {
+      "fixture": "tests/unit/xir/product_consumers/fixtures/class_alias_transfer/root.xr",
+      "sha256": "a115d26f0d793c37d1e141b9a9c719de8238a346905143e39e9b6c4c052de39b",
+      "original_prefix_sha256": "634ec4336a122a983205e392a59ae07704d82da9990d0de1b019c5c665e55186",
+      "entry_adapter": "export fn consumerAnswer() -> i64 { return answer() }\n",
+      "entry": "consumerAnswer",
+      "expected_i64": 42,
+      "scope": "Exact original source prefix and fixed result through an explicitly exported adapter; additional legacy assertions stay OPEN until mapped."
+    },
+    "mapping_references": []
+  },
+  "status": "OPEN",
+  "retired": 0,
+  "replacement_gates": [],
+  "family": "class_alias_transfer",
+  "original_source": {
+    "path": "tests/unit/xir/product_consumers/fixtures/class_alias_transfer/root.xr",
+    "bytes": 333,
+    "sha256": "a115d26f0d793c37d1e141b9a9c719de8238a346905143e39e9b6c4c052de39b",
+    "prefix_bytes": 279,
+    "prefix_sha256": "634ec4336a122a983205e392a59ae07704d82da9990d0de1b019c5c665e55186",
+    "adapter": "export fn consumerAnswer() -> i64 { return answer() }\n"
+  },
+  "independent_i64": 42,
+  "result": "NOT_RUN",
+  "required_shape": "Original Cell(value:I64) and optional Holder(child:Cell) nominal identities/constructor types. Actual local CELL_NEW/CELL_READ SSA aliases resolve to their originating constructor CALL. Escape retains Cell1, same-cell scalar write17, Holder binding and distinct replacement Cell42. Self-assignment CLASS_SET consumes CLASS_GET of the same actual Holder. Borrow mutation42 and final field read share the same original Cell1. Final transfer passes the original Cell42 into Holder and reads its child/value. Original returned field SSA retained.",
+  "pipeline": "Unchanged original Source prefix plus existing exported adapter; SourceProduct/Checked and original shape/full writer encoding after session/product/path/request/authority death; Lowered verification after Checked death. Independent42 through VM/real native C/both mixed partitions with two Instances.",
+  "boundaries": [
+    "Original Core owner alias/copy counts, share-before-exchange ordering, lifetime/coalescing/drop and BackendIR class alias representations remain OPEN; public normal semantics do not replace old representation counts.",
+    "Complete FI/resource axes, initializer failure/sticky state, cancellation, full safety, Main integration and retirement remain OPEN."
+  ],
+  "full_FI": "NOT_RUN",
+  "axes": "NOT_RUN",
+  "cancel": "NOT_RUN",
+  "full_safety": "NOT_RUN",
+  "Main": "NOT_RUN",
+  "original_class_alias_source_execution_20261009_facet": {
+    "status": "PASS_ORIGINAL_CLASS_ALIAS_SOURCE_AND_DETACHED_OWNERS_WHOLE_LEGACY_OPEN",
+    "evidence": "build-consumer-evidence/current67-class-alias-original-source-r1",
+    "original": "Original279-byte Source prefix plus existing54-byte exported adapter unchanged. Independent42 unchanged; no substituted fixture or representation-count claim.",
+    "shape": "Original Cell(value:I64) and optional Holder(child:Cell) nominal identities/constructor types. Actual local CELL_NEW/CELL_READ SSA aliases resolve to their originating constructor CALL. Escape retains Cell1, same-cell scalar write17, Holder binding and distinct replacement Cell42. Self-assignment CLASS_SET consumes CLASS_GET of the same actual Holder. Borrow mutation42 and final field read share the same original Cell1. Final transfer passes the original Cell42 into Holder and reads its child/value. Original returned field SSA retained.",
+    "owned": "Actual nominal Cell/optional Holder field identities and constructor signatures; bounded CELL_READ/CELL_NEW origin walk checks actual same constructor SSA across aliases. Checked shape and complete writer encoding survive session/product/request/authority/path death; Checked dies before Lowered verification/release; final compile allocation table and physical usage0.",
+    "actual": "Whole batch42registeredargv runtime firstPASS:32backend(4families VM/native/two mixed across2configs),8owned,2sequenceVMcontrol. This family32 independent42 checks across16Instances. Caller Program reference dies before public calls; private answer rejects BAD_ARGUMENT without allocation; Source/session/readers die before Program use; final compiler/runtime physical release0.",
+    "inputs": "VM2735/owned-control2734/native2736 inputs perPID including3observerheaders, actual configuredwrapper and generatedC; SHA/bytes/mtime before-after exact. All42runtime PID product EXEs archived before entry/hashbound. Only maps/trace annotated after runtime; runtime preimages retained.",
+    "build": "10successful freshCcompileevents/10distinctfinalTUs:dedicated owner and4actualgeneratedC perconfig. Shared driver and all16VM/native wrapper OBJ reused/exact-bound; strict C11/W4WX and actual ClangASan+UBSan. Eight buildtime emitters separatelylogged; not registered runtime qualification.",
+    "generated_payload_sha256": {
+      "msvc": "7d2f105458ef7012e1b54bee7122452444a8abdd520ce37c75ff848017e8bc48",
+      "asan": "7d2f105458ef7012e1b54bee7122452444a8abdd520ce37c75ff848017e8bc48"
+    },
+    "remaining": [
+      "Original Core owner alias/copy counts, share-before-exchange ordering, lifetime/coalescing/drop and BackendIR class alias representations remain OPEN; public normal semantics do not replace old representation counts.",
+      "Complete FI/resource axes, initializer failure/sticky state, cancellation, full safety, Main integration and retirement remain OPEN."
+    ],
+    "full_FI": "NOT_RUN",
+    "axes": "NOT_RUN",
+    "cancel": "NOT_RUN",
+    "full_safety": "NOT_RUN",
+    "Main": "NOT_RUN",
+    "retired": 0
+  }
+}
