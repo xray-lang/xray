@@ -1,0 +1,1566 @@
+{
+  "schema": 1,
+  "family": "original_verifier_main_dispatch_and_direct_byte_compare_f64_admission",
+  "legacy_base_commit": "01e6d38401b0f5c8684b64c35a99ac651024c0c1",
+  "status": "OPEN",
+  "retired": 0,
+  "replacement_gates": [],
+  "result": "STATIC_FULL_ORIGINAL_VERIFY_DISPATCH_SCALAR_ADMISSION_MAP_ONLY",
+  "product_execution": "NOT_RUN_BY_THIS_MAP",
+  "producer": "25f4016d6f089169757a90ae11ba537002374711",
+  "identity": "Checked25/contract67/Value22/Call28/Program29",
+  "identity_namespace_note": "Old contract67 and semantic-plan schema52 are distinct. Root Checked27/contract72 development is not an adopted producer.",
+  "legacy": [
+    {
+      "name": "main",
+      "legacy_path": "tests/unit/program/test_xr_program_verify.c",
+      "legacy_line": 7320,
+      "body_lf_sha256": "127958e30bd8b0c4a81a9b29e5bb3263b956256513f4861654c34c7bb64684d8",
+      "assertion_sites": 11,
+      "loop_sites": 4,
+      "status": "OPEN",
+      "replacement_gates": [],
+      "note": "Function census preserves its whole body; sites do not count executed loop iterations."
+    }
+  ],
+  "responsibility_mapping": [
+    {
+      "path": "tests/unit/program/test_xr_program_verify.c",
+      "function": "main",
+      "line": 7320,
+      "end_line": 7431,
+      "body_lf_sha256": "127958e30bd8b0c4a81a9b29e5bb3263b956256513f4861654c34c7bb64684d8",
+      "CHECK_sites": 11,
+      "CHECK_bindings": [
+        {
+          "line": 7323,
+          "expression": "xr_program_byte_compare_fixture_write(scenario, 0u, &artifact) == XR_PROGRAM_BUILD_OK",
+          "status": "OPEN"
+        },
+        {
+          "line": 7324,
+          "expression": "xr_program_validate(artifact.bytes, artifact.size, NULL, &program, NULL) == XR_PROGRAM_VERIFY_OK",
+          "status": "OPEN"
+        },
+        {
+          "line": 7330,
+          "expression": "built == XR_PROGRAM_BUILD_INVALID_INPUT",
+          "status": "OPEN"
+        },
+        {
+          "line": 7331,
+          "expression": "built == XR_PROGRAM_BUILD_OK",
+          "status": "OPEN"
+        },
+        {
+          "line": 7333,
+          "expression": "status == (mutation ? XR_PROGRAM_VERIFY_SEMANTIC_REJECTED : XR_PROGRAM_VERIFY_OK)",
+          "status": "OPEN"
+        },
+        {
+          "line": 7342,
+          "expression": "xr_program_f64_fixture_write(mutation, &artifact) == XR_PROGRAM_BUILD_OK",
+          "status": "OPEN"
+        },
+        {
+          "line": 7344,
+          "expression": "mutation ? status != XR_PROGRAM_VERIFY_OK : status == XR_PROGRAM_VERIFY_OK",
+          "status": "OPEN"
+        },
+        {
+          "line": 7345,
+          "expression": "mutation ? program == NULL : program != NULL",
+          "status": "OPEN"
+        },
+        {
+          "line": 7347,
+          "expression": "program->functions[program->entry_function].blocks[0].instructions[0].operation_id == XR_CORE_OP_CORE_CONSTANT_F64",
+          "status": "OPEN"
+        },
+        {
+          "line": 7348,
+          "expression": "program->functions[program->entry_function].blocks[0].instructions[8].operation_id == XR_CORE_OP_CORE_COMPARE_F64",
+          "status": "OPEN"
+        },
+        {
+          "line": 7352,
+          "expression": "bitcast_seen",
+          "status": "OPEN"
+        }
+      ],
+      "status": "OPEN"
+    }
+  ],
+  "outer_CHECK_sites": 11,
+  "original_private_helpers": [
+    {
+      "path": "tests/unit/program/xr_program_byte_compare_fixture.h",
+      "function": "xr_program_byte_compare_fixture_write",
+      "line": 7,
+      "end_line": 74,
+      "body_lf_sha256": "977afdfc323775580901eef786c229d97f5a2cc7e720fa57d72ff8fd738b4b65",
+      "CHECK_sites": 0,
+      "CHECK_bindings": [],
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/program/xr_program_f64_fixture.h",
+      "function": "xr_program_f64_fixture_write",
+      "line": 13,
+      "end_line": 216,
+      "body_lf_sha256": "b44e28e6a10cb832269ebde4d47aed52627063d2af978ee5cb3c3508f7daca61",
+      "CHECK_sites": 0,
+      "CHECK_bindings": [],
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/program/xr_program_module_fixture.h",
+      "function": "xr_program_module_fixture_init",
+      "line": 33,
+      "end_line": 70,
+      "body_lf_sha256": "915b0162cae236eb17682feee9fdab215ad820ec56798cdf4a94d727b2b270f0",
+      "CHECK_sites": 0,
+      "CHECK_bindings": [],
+      "status": "OPEN"
+    }
+  ],
+  "specified_helper_CHECK_sites": 0,
+  "input_files": [
+    {
+      "path": "tests/unit/program/test_xr_program_verify.c",
+      "physical_raw_sha256": "a39922500c0943c034fafcda3a82b67e511ea658f453f6c0c3204f7719de1817",
+      "whole_file_lf_sha256": "ec4b93f13bfab2aa3d4b8f8773dd5c1118a0c682ed6f8304fead515f90402802",
+      "git_base_equal": true,
+      "status": "PRESERVE_ORIGINAL_READONLY"
+    },
+    {
+      "path": "tests/unit/program/xr_program_byte_compare_fixture.h",
+      "physical_raw_sha256": "5854fdeafc7f63745ab08923acba1cb343d0b2fbdb534d73eaa661fde0e15add",
+      "whole_file_lf_sha256": "186f1cfaca66af8843e7c32bbe93c08ed2ad78704599ff40bbd82ebafc50b930",
+      "git_base_equal": true,
+      "status": "PRESERVE_ORIGINAL_READONLY"
+    },
+    {
+      "path": "tests/unit/program/xr_program_f64_fixture.h",
+      "physical_raw_sha256": "0399e904e78d3540fd5609522745fab304daa556350288d77992825ad5da1690",
+      "whole_file_lf_sha256": "afb2e42dd0de6ae6766b49b7fb329748c2073290554e0ff7f5fcf5ee26506b71",
+      "git_base_equal": true,
+      "status": "PRESERVE_ORIGINAL_READONLY"
+    },
+    {
+      "path": "tests/unit/program/xr_program_module_fixture.h",
+      "physical_raw_sha256": "68d57ccdc6cb4f92f1571b3215cf437b7f0cdcd3ce7b5d3f4007f01978aedac0",
+      "whole_file_lf_sha256": "65db69b47101e348f8eaea39185ea91f12f795fbf451364f2c8f75c1035920b2",
+      "git_base_equal": true,
+      "status": "PRESERVE_ORIGINAL_READONLY"
+    },
+    {
+      "path": "tests/unit/aot/test_xr_program_aot.c",
+      "physical_raw_sha256": "6fea38acff96d94b2bfb414e04aa308386f6284ed12ccf05613a790a23caa700",
+      "whole_file_lf_sha256": "e7ab9301b308c7db6bf48e348257e5288f38f22c1b38c827fb040719dbf2de0e",
+      "git_base_equal": true,
+      "status": "PRESERVE_ORIGINAL_READONLY"
+    },
+    {
+      "path": "tests/unit/vm/test_xr_program_vm.c",
+      "physical_raw_sha256": "3a19b58076867cc70ef6c77e975286009df65e61ac1ed9edb2b5ab7813543502",
+      "whole_file_lf_sha256": "17904ef2bab8bb7eea72245fedba9878d74b6b8e93776e4314418e2db06dce8a",
+      "git_base_equal": true,
+      "status": "PRESERVE_ORIGINAL_READONLY"
+    },
+    {
+      "path": "tests/unit/program/xr_program_module_operation_checks.inc.c",
+      "physical_raw_sha256": "d38746d5124bb16d36dd21c436a6f3dbca416bc43ed4c9498a2d0fd03e244bca",
+      "whole_file_lf_sha256": "2e44190bafd86cc66cd28f630737dc90e61726d58ecd6df02b9d000159c7124c",
+      "git_base_equal": true,
+      "status": "PRESERVE_ORIGINAL_READONLY"
+    }
+  ],
+  "shared_fixture_owners": [
+    {
+      "path": "tests/unit/program/xr_program_byte_compare_fixture.h",
+      "actual_direct_include_users": [
+        "tests/unit/aot/test_xr_program_aot.c",
+        "tests/unit/program/test_xr_program_verify.c",
+        "tests/unit/vm/test_xr_program_vm.c"
+      ],
+      "status": "PRESERVE_SHARED_READONLY",
+      "deletion": "NOT_A_DELETION_CANDIDATE",
+      "note": "Module fixture direct header users plus transitive F64 users remain; no retirement from this static map."
+    },
+    {
+      "path": "tests/unit/program/xr_program_f64_fixture.h",
+      "actual_direct_include_users": [
+        "tests/unit/aot/test_xr_program_aot.c",
+        "tests/unit/program/test_xr_program_verify.c",
+        "tests/unit/vm/test_xr_program_vm.c"
+      ],
+      "status": "PRESERVE_SHARED_READONLY",
+      "deletion": "NOT_A_DELETION_CANDIDATE",
+      "note": "Module fixture direct header users plus transitive F64 users remain; no retirement from this static map."
+    },
+    {
+      "path": "tests/unit/program/xr_program_module_fixture.h",
+      "actual_direct_include_users": [
+        "tests/unit/aot/test_backend_emission_resources.c",
+        "tests/unit/aot/test_xr_program_aot.c",
+        "tests/unit/aot/test_xr_program_aot_module_instance.c",
+        "tests/unit/aot/test_xr_program_aot_module_state.c",
+        "tests/unit/execution/test_xr_execution.c",
+        "tests/unit/execution/test_xr_execution_allocations.c",
+        "tests/unit/program/test_xr_program.c",
+        "tests/unit/program/test_xr_program_verify.c",
+        "tests/unit/program/xr_program_f64_fixture.h",
+        "tests/unit/vm/test_xr_program_vm.c",
+        "tests/unit/vm/test_xr_program_vm_allocations.c"
+      ],
+      "status": "PRESERVE_SHARED_READONLY",
+      "deletion": "NOT_A_DELETION_CANDIDATE",
+      "note": "Module fixture direct header users plus transitive F64 users remain; no retirement from this static map."
+    }
+  ],
+  "dispatch": {
+    "original_order": [
+      {
+        "order": 0,
+        "function": "test_string_builder_contracts",
+        "path": "tests/unit/program/test_xr_program_verify.c",
+        "existing_responsibility_maps": [
+          "tests/unit/xir/product_consumers/source_original_atomic_channel_builder_admission_obligations.json"
+        ],
+        "qualification": "OPEN_NOT_IMPLIED_BY_DISPATCH_MAP"
+      },
+      {
+        "order": 1,
+        "function": "test_channel_operation_admission",
+        "path": "tests/unit/program/test_xr_program_verify.c",
+        "existing_responsibility_maps": [
+          "tests/unit/xir/product_consumers/source_original_atomic_channel_builder_admission_obligations.json"
+        ],
+        "qualification": "OPEN_NOT_IMPLIED_BY_DISPATCH_MAP"
+      },
+      {
+        "order": 2,
+        "function": "test_assert_message_contract",
+        "path": "tests/unit/program/test_xr_program_verify.c",
+        "existing_responsibility_maps": [
+          "tests/unit/xir/product_consumers/source_original_assert_panic_message_obligations.json"
+        ],
+        "qualification": "OPEN_NOT_IMPLIED_BY_DISPATCH_MAP"
+      },
+      {
+        "order": 3,
+        "function": "test_atomic_operation_admission",
+        "path": "tests/unit/program/test_xr_program_verify.c",
+        "existing_responsibility_maps": [
+          "tests/unit/xir/product_consumers/source_original_atomic_channel_builder_admission_obligations.json"
+        ],
+        "qualification": "OPEN_NOT_IMPLIED_BY_DISPATCH_MAP"
+      },
+      {
+        "order": 4,
+        "function": "test_array_element_place_admission",
+        "path": "tests/unit/program/test_xr_program_verify.c",
+        "existing_responsibility_maps": [
+          "tests/unit/xir/product_consumers/source_array_element_place_obligations.json"
+        ],
+        "qualification": "OPEN_NOT_IMPLIED_BY_DISPATCH_MAP"
+      },
+      {
+        "order": 5,
+        "function": "test_panic_point_continuation_admission",
+        "path": "tests/unit/program/test_xr_program_verify.c",
+        "existing_responsibility_maps": [
+          "tests/unit/xir/product_consumers/source_original_assert_panic_message_obligations.json"
+        ],
+        "qualification": "OPEN_NOT_IMPLIED_BY_DISPATCH_MAP"
+      },
+      {
+        "order": 6,
+        "function": "test_exact_integer_divmod_admission",
+        "path": "tests/unit/program/test_xr_program_verify.c",
+        "existing_responsibility_maps": [
+          "tests/unit/xir/product_consumers/source_integer_divmod_obligations.json"
+        ],
+        "qualification": "OPEN_NOT_IMPLIED_BY_DISPATCH_MAP"
+      },
+      {
+        "order": 7,
+        "function": "test_exact_integer_bitwise_admission",
+        "path": "tests/unit/program/test_xr_program_verify.c",
+        "existing_responsibility_maps": [
+          "tests/unit/xir/product_consumers/source_integer_bitwise_obligations.json"
+        ],
+        "qualification": "OPEN_NOT_IMPLIED_BY_DISPATCH_MAP"
+      },
+      {
+        "order": 8,
+        "function": "test_string_slice_admission",
+        "path": "tests/unit/program/test_xr_program_verify.c",
+        "existing_responsibility_maps": [
+          "tests/unit/xir/product_consumers/source_original_string_slice_admission_obligations.json"
+        ],
+        "qualification": "OPEN_NOT_IMPLIED_BY_DISPATCH_MAP"
+      },
+      {
+        "order": 9,
+        "function": "test_array_append_admission",
+        "path": "tests/unit/program/test_xr_program_verify.c",
+        "existing_responsibility_maps": [
+          "tests/unit/xir/product_consumers/source_array_append_execution_obligations.json",
+          "tests/unit/xir/product_consumers/source_array_append_managed_obligations.json",
+          "tests/unit/xir/product_consumers/source_array_append_obligations.json"
+        ],
+        "qualification": "OPEN_NOT_IMPLIED_BY_DISPATCH_MAP"
+      },
+      {
+        "order": 10,
+        "function": "test_array_default_admission",
+        "path": "tests/unit/program/test_xr_program_verify.c",
+        "existing_responsibility_maps": [
+          "tests/unit/xir/product_consumers/source_array_default_obligations.json"
+        ],
+        "qualification": "OPEN_NOT_IMPLIED_BY_DISPATCH_MAP"
+      },
+      {
+        "order": 11,
+        "function": "test_sequence_length",
+        "path": "tests/unit/program/test_xr_program_verify.c",
+        "existing_responsibility_maps": [
+          "tests/unit/xir/product_consumers/source_sequence_length_obligations.json"
+        ],
+        "qualification": "OPEN_NOT_IMPLIED_BY_DISPATCH_MAP"
+      },
+      {
+        "order": 12,
+        "function": "test_array_values",
+        "path": "tests/unit/program/test_xr_program_verify.c",
+        "existing_responsibility_maps": [
+          "tests/unit/xir/product_consumers/source_original_array_value_alias_obligations.json"
+        ],
+        "qualification": "OPEN_NOT_IMPLIED_BY_DISPATCH_MAP"
+      },
+      {
+        "order": 13,
+        "function": "test_exact_integer_conversion_admission",
+        "path": "tests/unit/program/test_xr_program_verify.c",
+        "existing_responsibility_maps": [
+          "tests/unit/xir/product_consumers/source_integer_conversion_obligations.json"
+        ],
+        "qualification": "OPEN_NOT_IMPLIED_BY_DISPATCH_MAP"
+      },
+      {
+        "order": 14,
+        "function": "test_module_borrow_after_exchange",
+        "path": "tests/unit/program/xr_program_module_operation_checks.inc.c",
+        "existing_responsibility_maps": [
+          "tests/unit/xir/product_consumers/source_original_exchanged_borrows_obligations.json"
+        ],
+        "qualification": "OPEN_NOT_IMPLIED_BY_DISPATCH_MAP"
+      },
+      {
+        "order": 15,
+        "function": "test_cross_block_module_array_borrow",
+        "path": "tests/unit/program/xr_program_module_operation_checks.inc.c",
+        "existing_responsibility_maps": [
+          "tests/unit/xir/product_consumers/source_original_exchanged_borrows_obligations.json"
+        ],
+        "qualification": "OPEN_NOT_IMPLIED_BY_DISPATCH_MAP"
+      },
+      {
+        "order": 16,
+        "function": "test_projected_borrow_after_parent_exchange",
+        "path": "tests/unit/program/xr_program_module_operation_checks.inc.c",
+        "existing_responsibility_maps": [
+          "tests/unit/xir/product_consumers/source_original_exchanged_borrows_obligations.json"
+        ],
+        "qualification": "OPEN_NOT_IMPLIED_BY_DISPATCH_MAP"
+      },
+      {
+        "order": 17,
+        "function": "test_module_operation_admission",
+        "path": "tests/unit/program/xr_program_module_operation_checks.inc.c",
+        "existing_responsibility_maps": [
+          "tests/unit/xir/product_consumers/source_module_operation_obligations.json"
+        ],
+        "qualification": "OPEN_NOT_IMPLIED_BY_DISPATCH_MAP"
+      },
+      {
+        "order": 18,
+        "function": "test_module_const_place_survives_branch",
+        "path": "tests/unit/program/xr_program_module_operation_checks.inc.c",
+        "existing_responsibility_maps": [
+          "tests/unit/xir/product_consumers/source_module_place_obligations.json"
+        ],
+        "qualification": "OPEN_NOT_IMPLIED_BY_DISPATCH_MAP"
+      },
+      {
+        "order": 19,
+        "function": "test_module_place_ref_call_admission",
+        "path": "tests/unit/program/xr_program_module_operation_checks.inc.c",
+        "existing_responsibility_maps": [
+          "tests/unit/xir/product_consumers/source_module_place_obligations.json",
+          "tests/unit/xir/product_consumers/source_module_ref_source_obligations.json"
+        ],
+        "qualification": "OPEN_NOT_IMPLIED_BY_DISPATCH_MAP"
+      },
+      {
+        "order": 20,
+        "function": "test_module_place_ref_interface_admission",
+        "path": "tests/unit/program/xr_program_module_operation_checks.inc.c",
+        "existing_responsibility_maps": [
+          "tests/unit/xir/product_consumers/source_module_place_obligations.json",
+          "tests/unit/xir/product_consumers/source_module_ref_source_obligations.json"
+        ],
+        "qualification": "OPEN_NOT_IMPLIED_BY_DISPATCH_MAP"
+      },
+      {
+        "order": 21,
+        "function": "test_aggregate_construct_owner_transfers",
+        "path": "tests/unit/program/test_xr_program_verify.c",
+        "existing_responsibility_maps": [
+          "tests/unit/xir/product_consumers/source_original_aggregate_owner_transfer_obligations.json"
+        ],
+        "qualification": "OPEN_NOT_IMPLIED_BY_DISPATCH_MAP"
+      },
+      {
+        "order": 22,
+        "function": "test_aggregate_variant_operations",
+        "path": "tests/unit/program/test_xr_program_verify.c",
+        "existing_responsibility_maps": [
+          "tests/unit/xir/product_consumers/source_original_aggregate_variant_struct_obligations.json"
+        ],
+        "qualification": "OPEN_NOT_IMPLIED_BY_DISPATCH_MAP"
+      },
+      {
+        "order": 23,
+        "function": "test_value_struct_immutable_string_fields",
+        "path": "tests/unit/program/test_xr_program_verify.c",
+        "existing_responsibility_maps": [
+          "tests/unit/xir/product_consumers/source_original_aggregate_variant_struct_obligations.json"
+        ],
+        "qualification": "OPEN_NOT_IMPLIED_BY_DISPATCH_MAP"
+      },
+      {
+        "order": 24,
+        "function": "test_dynamic_type_graph_rejection",
+        "path": "tests/unit/program/test_xr_program_verify.c",
+        "existing_responsibility_maps": [
+          "tests/unit/xir/product_consumers/source_original_dynamic_type_graph_obligations.json"
+        ],
+        "qualification": "OPEN_NOT_IMPLIED_BY_DISPATCH_MAP"
+      },
+      {
+        "order": 25,
+        "function": "test_class_alias_mutation_and_lifecycle",
+        "path": "tests/unit/program/test_xr_program_verify.c",
+        "existing_responsibility_maps": [
+          "tests/unit/xir/product_consumers/source_original_class_alias_snapshot_obligations.json"
+        ],
+        "qualification": "OPEN_NOT_IMPLIED_BY_DISPATCH_MAP"
+      },
+      {
+        "order": 26,
+        "function": "test_class_trivial_field_load_is_snapshot",
+        "path": "tests/unit/program/test_xr_program_verify.c",
+        "existing_responsibility_maps": [
+          "tests/unit/xir/product_consumers/source_original_class_alias_snapshot_obligations.json"
+        ],
+        "qualification": "OPEN_NOT_IMPLIED_BY_DISPATCH_MAP"
+      },
+      {
+        "order": 27,
+        "function": "test_detached_aggregate_shared_carrier_dispose",
+        "path": "tests/unit/program/test_xr_program_verify.c",
+        "existing_responsibility_maps": [
+          "tests/unit/xir/product_consumers/source_original_class_clone_exchange_obligations.json"
+        ],
+        "qualification": "OPEN_NOT_IMPLIED_BY_DISPATCH_MAP"
+      },
+      {
+        "order": 28,
+        "function": "test_class_clone_transaction_and_teardown_origin",
+        "path": "tests/unit/program/test_xr_program_verify.c",
+        "existing_responsibility_maps": [
+          "tests/unit/xir/product_consumers/source_original_class_clone_exchange_obligations.json"
+        ],
+        "qualification": "OPEN_NOT_IMPLIED_BY_DISPATCH_MAP"
+      },
+      {
+        "order": 29,
+        "function": "test_copy_forbidden_class_can_share_but_not_clone",
+        "path": "tests/unit/program/test_xr_program_verify.c",
+        "existing_responsibility_maps": [
+          "tests/unit/xir/product_consumers/source_original_class_clone_exchange_obligations.json"
+        ],
+        "qualification": "OPEN_NOT_IMPLIED_BY_DISPATCH_MAP"
+      },
+      {
+        "order": 30,
+        "function": "test_affine_class_exchange_commit_interval",
+        "path": "tests/unit/program/test_xr_program_verify.c",
+        "existing_responsibility_maps": [
+          "tests/unit/xir/product_consumers/source_original_class_clone_exchange_obligations.json"
+        ],
+        "qualification": "OPEN_NOT_IMPLIED_BY_DISPATCH_MAP"
+      },
+      {
+        "order": 31,
+        "function": "test_scalar_operations",
+        "path": "tests/unit/program/test_xr_program_verify.c",
+        "existing_responsibility_maps": [
+          "tests/unit/xir/product_consumers/source_original_scalar_control_call_obligations.json",
+          "tests/unit/xir/product_consumers/source_original_terminal_budget_obligations.json"
+        ],
+        "qualification": "OPEN_NOT_IMPLIED_BY_DISPATCH_MAP"
+      },
+      {
+        "order": 32,
+        "function": "test_control_and_profile",
+        "path": "tests/unit/program/test_xr_program_verify.c",
+        "existing_responsibility_maps": [
+          "tests/unit/xir/product_consumers/source_original_scalar_control_call_obligations.json"
+        ],
+        "qualification": "OPEN_NOT_IMPLIED_BY_DISPATCH_MAP"
+      },
+      {
+        "order": 33,
+        "function": "test_direct_call",
+        "path": "tests/unit/program/test_xr_program_verify.c",
+        "existing_responsibility_maps": [
+          "tests/unit/xir/product_consumers/source_original_scalar_control_call_obligations.json"
+        ],
+        "qualification": "OPEN_NOT_IMPLIED_BY_DISPATCH_MAP"
+      },
+      {
+        "order": 34,
+        "function": "test_owner_and_local_place_operations",
+        "path": "tests/unit/program/test_xr_program_verify.c",
+        "existing_responsibility_maps": [
+          "tests/unit/xir/product_consumers/source_original_local_storage_projection_obligations.json"
+        ],
+        "qualification": "OPEN_NOT_IMPLIED_BY_DISPATCH_MAP"
+      },
+      {
+        "order": 35,
+        "function": "test_aggregate_place_projection",
+        "path": "tests/unit/program/test_xr_program_verify.c",
+        "existing_responsibility_maps": [
+          "tests/unit/xir/product_consumers/source_original_local_storage_projection_obligations.json"
+        ],
+        "qualification": "OPEN_NOT_IMPLIED_BY_DISPATCH_MAP"
+      },
+      {
+        "order": 36,
+        "function": "test_affine_owner_domain",
+        "path": "tests/unit/program/test_xr_program_verify.c",
+        "existing_responsibility_maps": [
+          "tests/unit/xir/product_consumers/source_original_affine_optional_owner_obligations.json"
+        ],
+        "qualification": "OPEN_NOT_IMPLIED_BY_DISPATCH_MAP"
+      },
+      {
+        "order": 37,
+        "function": "test_optional_owner_contract",
+        "path": "tests/unit/program/test_xr_program_verify.c",
+        "existing_responsibility_maps": [
+          "tests/unit/xir/product_consumers/source_original_affine_optional_owner_obligations.json"
+        ],
+        "qualification": "OPEN_NOT_IMPLIED_BY_DISPATCH_MAP"
+      },
+      {
+        "order": 38,
+        "function": "test_parameter_modes_and_value_categories",
+        "path": "tests/unit/program/test_xr_program_verify.c",
+        "existing_responsibility_maps": [
+          "tests/unit/xir/product_consumers/source_original_mode_profile_query_obligations.json"
+        ],
+        "qualification": "OPEN_NOT_IMPLIED_BY_DISPATCH_MAP"
+      },
+      {
+        "order": 39,
+        "function": "test_target_profile_queries_are_exact_logical_scalars",
+        "path": "tests/unit/program/test_xr_program_verify.c",
+        "existing_responsibility_maps": [
+          "tests/unit/xir/product_consumers/source_original_mode_profile_query_obligations.json"
+        ],
+        "qualification": "OPEN_NOT_IMPLIED_BY_DISPATCH_MAP"
+      },
+      {
+        "order": 40,
+        "function": "test_terminal_operations",
+        "path": "tests/unit/program/test_xr_program_verify.c",
+        "existing_responsibility_maps": [
+          "tests/unit/xir/product_consumers/source_original_terminal_budget_obligations.json"
+        ],
+        "qualification": "OPEN_NOT_IMPLIED_BY_DISPATCH_MAP"
+      },
+      {
+        "order": 41,
+        "function": "test_sealed_invoke_and_cleanup_cfg",
+        "path": "tests/unit/program/test_xr_program_verify.c",
+        "existing_responsibility_maps": [
+          "tests/unit/xir/product_consumers/source_original_invoke_panic_cleanup_obligations.json"
+        ],
+        "qualification": "OPEN_NOT_IMPLIED_BY_DISPATCH_MAP"
+      },
+      {
+        "order": 42,
+        "function": "test_typed_panic_invoke_and_cleanup_cfg",
+        "path": "tests/unit/program/test_xr_program_verify.c",
+        "existing_responsibility_maps": [
+          "tests/unit/xir/product_consumers/source_original_invoke_panic_cleanup_obligations.json"
+        ],
+        "qualification": "OPEN_NOT_IMPLIED_BY_DISPATCH_MAP"
+      },
+      {
+        "order": 43,
+        "function": "test_condition_assert_panic_cleanup_cfg",
+        "path": "tests/unit/program/test_xr_program_verify.c",
+        "existing_responsibility_maps": [
+          "tests/unit/xir/product_consumers/source_original_assert_panic_message_obligations.json"
+        ],
+        "qualification": "OPEN_NOT_IMPLIED_BY_DISPATCH_MAP"
+      },
+      {
+        "order": 44,
+        "function": "test_negative_diagnostics_and_budget",
+        "path": "tests/unit/program/test_xr_program_verify.c",
+        "existing_responsibility_maps": [
+          "tests/unit/xir/product_consumers/source_original_terminal_budget_obligations.json"
+        ],
+        "qualification": "OPEN_NOT_IMPLIED_BY_DISPATCH_MAP"
+      },
+      {
+        "order": 45,
+        "function": "test_evaluator_traps_and_budget",
+        "path": "tests/unit/program/test_xr_program_verify.c",
+        "existing_responsibility_maps": [
+          "tests/unit/xir/product_consumers/source_original_terminal_budget_obligations.json"
+        ],
+        "qualification": "OPEN_NOT_IMPLIED_BY_DISPATCH_MAP"
+      },
+      {
+        "order": 46,
+        "function": "test_typed_random_and_linear_work",
+        "path": "tests/unit/program/test_xr_program_verify.c",
+        "existing_responsibility_maps": [
+          "tests/unit/xir/product_consumers/source_original_typed_chain_oracles_obligations.json"
+        ],
+        "qualification": "OPEN_NOT_IMPLIED_BY_DISPATCH_MAP"
+      },
+      {
+        "order": 47,
+        "function": "test_immutable_view_root_tables",
+        "path": "tests/unit/program/test_xr_program_verify.c",
+        "existing_responsibility_maps": [
+          "tests/unit/xir/product_consumers/source_original_view_conformance_tables_obligations.json"
+        ],
+        "qualification": "OPEN_NOT_IMPLIED_BY_DISPATCH_MAP"
+      },
+      {
+        "order": 48,
+        "function": "test_callable_interface_conformance_tables",
+        "path": "tests/unit/program/test_xr_program_verify.c",
+        "existing_responsibility_maps": [
+          "tests/unit/xir/product_consumers/source_original_view_conformance_tables_obligations.json"
+        ],
+        "qualification": "OPEN_NOT_IMPLIED_BY_DISPATCH_MAP"
+      },
+      {
+        "order": 49,
+        "function": "test_class_reference_interface_conformance",
+        "path": "tests/unit/program/test_xr_program_verify.c",
+        "existing_responsibility_maps": [
+          "tests/unit/xir/product_consumers/source_original_class_conformance_share_roots_obligations.json"
+        ],
+        "qualification": "OPEN_NOT_IMPLIED_BY_DISPATCH_MAP"
+      },
+      {
+        "order": 50,
+        "function": "test_existential_clone_safe_subset",
+        "path": "tests/unit/program/test_xr_program_verify.c",
+        "existing_responsibility_maps": [
+          "tests/unit/xir/product_consumers/source_original_existential_clone_witness_obligations.json"
+        ],
+        "qualification": "OPEN_NOT_IMPLIED_BY_DISPATCH_MAP"
+      },
+      {
+        "order": 51,
+        "function": "test_witness_receiver_capability_and_interface_identity",
+        "path": "tests/unit/program/test_xr_program_verify.c",
+        "existing_responsibility_maps": [
+          "tests/unit/xir/product_consumers/source_original_existential_clone_witness_obligations.json"
+        ],
+        "qualification": "OPEN_NOT_IMPLIED_BY_DISPATCH_MAP"
+      },
+      {
+        "order": 52,
+        "function": "test_existential_pack_test_project",
+        "path": "tests/unit/program/test_xr_program_verify.c",
+        "existing_responsibility_maps": [
+          "tests/unit/xir/product_consumers/source_original_existential_escape_continuation_obligations.json"
+        ],
+        "qualification": "OPEN_NOT_IMPLIED_BY_DISPATCH_MAP"
+      },
+      {
+        "order": 53,
+        "function": "test_projected_class_share_roots",
+        "path": "tests/unit/program/test_xr_program_verify.c",
+        "existing_responsibility_maps": [
+          "tests/unit/xir/product_consumers/source_original_class_conformance_share_roots_obligations.json"
+        ],
+        "qualification": "OPEN_NOT_IMPLIED_BY_DISPATCH_MAP"
+      },
+      {
+        "order": 54,
+        "function": "test_existential_owned_read_reborrow",
+        "path": "tests/unit/program/test_xr_program_verify.c",
+        "existing_responsibility_maps": [
+          "tests/unit/xir/product_consumers/source_original_existential_reborrow_obligations.json"
+        ],
+        "qualification": "OPEN_NOT_IMPLIED_BY_DISPATCH_MAP"
+      },
+      {
+        "order": 55,
+        "function": "test_callable_pack_and_indirect_calls",
+        "path": "tests/unit/program/test_xr_program_verify.c",
+        "existing_responsibility_maps": [
+          "tests/unit/xir/product_consumers/source_original_callable_owner_continuation_obligations.json"
+        ],
+        "qualification": "OPEN_NOT_IMPLIED_BY_DISPATCH_MAP"
+      },
+      {
+        "order": 56,
+        "function": "test_coroutine_state_and_exact_liveness",
+        "path": "tests/unit/program/test_xr_program_verify.c",
+        "existing_responsibility_maps": [
+          "tests/unit/xir/product_consumers/source_original_coroutine_liveness_owner_obligations.json"
+        ],
+        "qualification": "OPEN_NOT_IMPLIED_BY_DISPATCH_MAP"
+      },
+      {
+        "order": 57,
+        "function": "test_indirect_coroutine_call_contract",
+        "path": "tests/unit/program/test_xr_program_verify.c",
+        "existing_responsibility_maps": [
+          "tests/unit/xir/product_consumers/source_original_coroutine_outcome_indirect_obligations.json"
+        ],
+        "qualification": "OPEN_NOT_IMPLIED_BY_DISPATCH_MAP"
+      },
+      {
+        "order": 58,
+        "function": "test_coroutine_typed_outcome_contract",
+        "path": "tests/unit/program/test_xr_program_verify.c",
+        "existing_responsibility_maps": [
+          "tests/unit/xir/product_consumers/source_original_coroutine_outcome_indirect_obligations.json"
+        ],
+        "qualification": "OPEN_NOT_IMPLIED_BY_DISPATCH_MAP"
+      },
+      {
+        "order": 59,
+        "function": "test_coroutine_cancel_cleanup_requires_exact_owner_transfer",
+        "path": "tests/unit/program/test_xr_program_verify.c",
+        "existing_responsibility_maps": [
+          "tests/unit/xir/product_consumers/source_original_coroutine_liveness_owner_obligations.json"
+        ],
+        "qualification": "OPEN_NOT_IMPLIED_BY_DISPATCH_MAP"
+      },
+      {
+        "order": 60,
+        "function": "test_coroutine_related_field_refs_require_one_live_storage_root",
+        "path": "tests/unit/program/test_xr_program_verify.c",
+        "existing_responsibility_maps": [
+          "tests/unit/xir/product_consumers/source_original_coroutine_ref_trap_obligations.json"
+        ],
+        "qualification": "OPEN_NOT_IMPLIED_BY_DISPATCH_MAP"
+      },
+      {
+        "order": 61,
+        "function": "test_coroutine_child_trap_requires_recoverable_cleanup_inputs",
+        "path": "tests/unit/program/test_xr_program_verify.c",
+        "existing_responsibility_maps": [
+          "tests/unit/xir/product_consumers/source_original_coroutine_ref_trap_obligations.json"
+        ],
+        "qualification": "OPEN_NOT_IMPLIED_BY_DISPATCH_MAP"
+      },
+      {
+        "order": 62,
+        "function": "test_cleanup_reason_graph_checks_all_exits_and_keeps_body_cycles",
+        "path": "tests/unit/program/test_xr_program_verify.c",
+        "existing_responsibility_maps": [
+          "tests/unit/xir/product_consumers/source_original_cleanup_reason_graph_obligations.json"
+        ],
+        "qualification": "OPEN_NOT_IMPLIED_BY_DISPATCH_MAP"
+      },
+      {
+        "order": 63,
+        "function": "test_cleanup_reason_graph_rejects_foreign_and_unknown_targets_before_walk",
+        "path": "tests/unit/program/test_xr_program_verify.c",
+        "existing_responsibility_maps": [
+          "tests/unit/xir/product_consumers/source_original_cleanup_reason_graph_obligations.json"
+        ],
+        "qualification": "OPEN_NOT_IMPLIED_BY_DISPATCH_MAP"
+      },
+      {
+        "order": 64,
+        "function": "test_cleanup_reason_graph_cannot_suspend",
+        "path": "tests/unit/program/test_xr_program_verify.c",
+        "existing_responsibility_maps": [
+          "tests/unit/xir/product_consumers/source_original_cleanup_reason_graph_obligations.json"
+        ],
+        "qualification": "OPEN_NOT_IMPLIED_BY_DISPATCH_MAP"
+      },
+      {
+        "order": 65,
+        "function": "test_provider_output_semantics",
+        "path": "tests/unit/program/test_xr_program_verify.c",
+        "existing_responsibility_maps": [
+          "tests/unit/xir/product_consumers/source_original_provider_output_trap_obligations.json"
+        ],
+        "qualification": "OPEN_NOT_IMPLIED_BY_DISPATCH_MAP"
+      },
+      {
+        "order": 66,
+        "function": "test_text_semantics",
+        "path": "tests/unit/program/test_xr_program_verify.c",
+        "existing_responsibility_maps": [
+          "tests/unit/xir/product_consumers/source_original_typed_text_obligations.json"
+        ],
+        "qualification": "OPEN_NOT_IMPLIED_BY_DISPATCH_MAP"
+      },
+      {
+        "order": 67,
+        "function": "test_output_trap_ownership",
+        "path": "tests/unit/program/test_xr_program_verify.c",
+        "existing_responsibility_maps": [
+          "tests/unit/xir/product_consumers/source_original_provider_output_trap_obligations.json"
+        ],
+        "qualification": "OPEN_NOT_IMPLIED_BY_DISPATCH_MAP"
+      },
+      {
+        "order": 68,
+        "function": "test_provider_trap_continuation_semantics",
+        "path": "tests/unit/program/test_xr_program_verify.c",
+        "existing_responsibility_maps": [
+          "tests/unit/xir/product_consumers/source_original_provider_output_trap_obligations.json"
+        ],
+        "qualification": "OPEN_NOT_IMPLIED_BY_DISPATCH_MAP"
+      },
+      {
+        "order": 69,
+        "function": "test_inactive_operation_fails_closed_before_semantics",
+        "path": "tests/unit/program/test_xr_program_verify.c",
+        "existing_responsibility_maps": [
+          "tests/unit/xir/product_consumers/source_original_provider_output_trap_obligations.json"
+        ],
+        "qualification": "OPEN_NOT_IMPLIED_BY_DISPATCH_MAP"
+      }
+    ],
+    "named_call_count": 70,
+    "loop_and_call_order": [
+      "9 byte scenario admission inputs",
+      "7 byte mutation admission/producer inputs",
+      "First3 named calls StringBuilder,Channel,AssertMessage",
+      "6 F64 mutation admission inputs plus positive instruction scan",
+      "Remaining named calls in preserved order",
+      "if failures!=0 diagnostic and return1, otherwise original puts and return0"
+    ],
+    "boundary": "Full main body/dispatch preserved; delegated named functions have their own complete OPEN responsibility maps. Their original runtime calls and builder matrices are not duplicated into this direct-main census or requalified.",
+    "exit": "Original shared failures count, stderr diagnostic/return1 or success text/return0; success text is not evidence of any current run."
+  },
+  "byte_compare": {
+    "scenario_inputs": [
+      {
+        "scenario": 0,
+        "mutation": 0,
+        "constants_i64": [
+          0,
+          128,
+          255,
+          0,
+          128,
+          255
+        ],
+        "converted_element_type": "U8",
+        "left_operand_keys": [],
+        "right_operand_keys": [],
+        "compared_roots": [
+          12,
+          13
+        ],
+        "expected_build": "XR_PROGRAM_BUILD_OK",
+        "expected_verify": "XR_PROGRAM_VERIFY_OK",
+        "expected_product": "NOT_ASSERTED",
+        "original_verify_calls": 1,
+        "runtime": "NOT_RUN",
+        "status": "OPEN"
+      },
+      {
+        "scenario": 1,
+        "mutation": 0,
+        "constants_i64": [
+          0,
+          128,
+          255,
+          0,
+          128,
+          255
+        ],
+        "converted_element_type": "U8",
+        "left_operand_keys": [
+          6,
+          7,
+          8
+        ],
+        "right_operand_keys": [
+          9,
+          10,
+          11
+        ],
+        "compared_roots": [
+          12,
+          13
+        ],
+        "expected_build": "XR_PROGRAM_BUILD_OK",
+        "expected_verify": "XR_PROGRAM_VERIFY_OK",
+        "expected_product": "NOT_ASSERTED",
+        "original_verify_calls": 1,
+        "runtime": "NOT_RUN",
+        "status": "OPEN"
+      },
+      {
+        "scenario": 2,
+        "mutation": 0,
+        "constants_i64": [
+          0,
+          128,
+          255,
+          1,
+          128,
+          255
+        ],
+        "converted_element_type": "U8",
+        "left_operand_keys": [
+          6,
+          7,
+          8
+        ],
+        "right_operand_keys": [
+          9,
+          10,
+          11
+        ],
+        "compared_roots": [
+          12,
+          13
+        ],
+        "expected_build": "XR_PROGRAM_BUILD_OK",
+        "expected_verify": "XR_PROGRAM_VERIFY_OK",
+        "expected_product": "NOT_ASSERTED",
+        "original_verify_calls": 1,
+        "runtime": "NOT_RUN",
+        "status": "OPEN"
+      },
+      {
+        "scenario": 3,
+        "mutation": 0,
+        "constants_i64": [
+          0,
+          128,
+          255,
+          0,
+          129,
+          255
+        ],
+        "converted_element_type": "U8",
+        "left_operand_keys": [
+          6,
+          7,
+          8
+        ],
+        "right_operand_keys": [
+          9,
+          10,
+          11
+        ],
+        "compared_roots": [
+          12,
+          13
+        ],
+        "expected_build": "XR_PROGRAM_BUILD_OK",
+        "expected_verify": "XR_PROGRAM_VERIFY_OK",
+        "expected_product": "NOT_ASSERTED",
+        "original_verify_calls": 1,
+        "runtime": "NOT_RUN",
+        "status": "OPEN"
+      },
+      {
+        "scenario": 4,
+        "mutation": 0,
+        "constants_i64": [
+          0,
+          128,
+          255,
+          0,
+          128,
+          254
+        ],
+        "converted_element_type": "U8",
+        "left_operand_keys": [
+          6,
+          7,
+          8
+        ],
+        "right_operand_keys": [
+          9,
+          10,
+          11
+        ],
+        "compared_roots": [
+          12,
+          13
+        ],
+        "expected_build": "XR_PROGRAM_BUILD_OK",
+        "expected_verify": "XR_PROGRAM_VERIFY_OK",
+        "expected_product": "NOT_ASSERTED",
+        "original_verify_calls": 1,
+        "runtime": "NOT_RUN",
+        "status": "OPEN"
+      },
+      {
+        "scenario": 5,
+        "mutation": 0,
+        "constants_i64": [
+          0,
+          128,
+          255,
+          0,
+          128,
+          255
+        ],
+        "converted_element_type": "U8",
+        "left_operand_keys": [
+          6,
+          7,
+          8
+        ],
+        "right_operand_keys": [
+          9,
+          10
+        ],
+        "compared_roots": [
+          12,
+          13
+        ],
+        "expected_build": "XR_PROGRAM_BUILD_OK",
+        "expected_verify": "XR_PROGRAM_VERIFY_OK",
+        "expected_product": "NOT_ASSERTED",
+        "original_verify_calls": 1,
+        "runtime": "NOT_RUN",
+        "status": "OPEN"
+      },
+      {
+        "scenario": 6,
+        "mutation": 0,
+        "constants_i64": [
+          0,
+          128,
+          255,
+          0,
+          128,
+          255
+        ],
+        "converted_element_type": "U8",
+        "left_operand_keys": [
+          6,
+          7,
+          8
+        ],
+        "right_operand_keys": [
+          9,
+          10,
+          11
+        ],
+        "compared_roots": [
+          12,
+          12
+        ],
+        "expected_build": "XR_PROGRAM_BUILD_OK",
+        "expected_verify": "XR_PROGRAM_VERIFY_OK",
+        "expected_product": "NOT_ASSERTED",
+        "original_verify_calls": 1,
+        "runtime": "NOT_RUN",
+        "status": "OPEN"
+      },
+      {
+        "scenario": 7,
+        "mutation": 0,
+        "constants_i64": [
+          0,
+          128,
+          255,
+          0,
+          128,
+          255
+        ],
+        "converted_element_type": "U8",
+        "left_operand_keys": [],
+        "right_operand_keys": [
+          9,
+          10,
+          11
+        ],
+        "compared_roots": [
+          12,
+          13
+        ],
+        "expected_build": "XR_PROGRAM_BUILD_OK",
+        "expected_verify": "XR_PROGRAM_VERIFY_OK",
+        "expected_product": "NOT_ASSERTED",
+        "original_verify_calls": 1,
+        "runtime": "NOT_RUN",
+        "status": "OPEN"
+      },
+      {
+        "scenario": 8,
+        "mutation": 0,
+        "constants_i64": [
+          0,
+          128,
+          255,
+          0,
+          128,
+          255
+        ],
+        "converted_element_type": "U8",
+        "left_operand_keys": [
+          6,
+          7,
+          8
+        ],
+        "right_operand_keys": [],
+        "compared_roots": [
+          12,
+          13
+        ],
+        "expected_build": "XR_PROGRAM_BUILD_OK",
+        "expected_verify": "XR_PROGRAM_VERIFY_OK",
+        "expected_product": "NOT_ASSERTED",
+        "original_verify_calls": 1,
+        "runtime": "NOT_RUN",
+        "status": "OPEN"
+      }
+    ],
+    "mutation_inputs": [
+      {
+        "scenario": 1,
+        "mutation": 0,
+        "complete_graph_change": "Complete scenario1 positive repeated as a fresh input; identical to scenario1/m0 in first loop, do not count unique qualification twice.",
+        "expected_build": "XR_PROGRAM_BUILD_OK",
+        "expected_verify": "XR_PROGRAM_VERIFY_OK",
+        "expected_product": "NOT_ASSERTED",
+        "expected_artifact_bytes": "NOT_ASSERTED",
+        "diagnostic_output": "NULL",
+        "diagnostic_kind": "NOT_ASSERTED",
+        "original_verify_calls": 1,
+        "repeated_Diag_memcmp": "NOT_ASSERTED",
+        "runtime": "NOT_RUN",
+        "status": "OPEN"
+      },
+      {
+        "scenario": 1,
+        "mutation": 1,
+        "complete_graph_change": "Array element and converted scalar result types U8->I8; complete actual0/128/255 inputs preserved.",
+        "expected_build": "XR_PROGRAM_BUILD_OK",
+        "expected_verify": "XR_PROGRAM_VERIFY_SEMANTIC_REJECTED",
+        "expected_product": "NOT_ASSERTED",
+        "expected_artifact_bytes": "NOT_ASSERTED",
+        "diagnostic_output": "NULL",
+        "diagnostic_kind": "NOT_ASSERTED",
+        "original_verify_calls": 1,
+        "repeated_Diag_memcmp": "NOT_ASSERTED",
+        "runtime": "NOT_RUN",
+        "status": "OPEN"
+      },
+      {
+        "scenario": 1,
+        "mutation": 2,
+        "complete_graph_change": "Second compare operand actual right Array root13 -> actual I64 constant key0.",
+        "expected_build": "XR_PROGRAM_BUILD_OK",
+        "expected_verify": "XR_PROGRAM_VERIFY_SEMANTIC_REJECTED",
+        "expected_product": "NOT_ASSERTED",
+        "expected_artifact_bytes": "NOT_ASSERTED",
+        "diagnostic_output": "NULL",
+        "diagnostic_kind": "NOT_ASSERTED",
+        "original_verify_calls": 1,
+        "repeated_Diag_memcmp": "NOT_ASSERTED",
+        "runtime": "NOT_RUN",
+        "status": "OPEN"
+      },
+      {
+        "scenario": 1,
+        "mutation": 3,
+        "complete_graph_change": "BOOL compare result ownership NON_OWNER->OWNER, original producer rejects; artifact bytes/size not asserted.",
+        "expected_build": "XR_PROGRAM_BUILD_INVALID_INPUT",
+        "expected_verify": "NOT_CALLED",
+        "expected_product": "NOT_ASSERTED",
+        "expected_artifact_bytes": "NOT_ASSERTED",
+        "diagnostic_output": "NULL",
+        "diagnostic_kind": "NOT_ASSERTED",
+        "original_verify_calls": 0,
+        "repeated_Diag_memcmp": "NOT_ASSERTED",
+        "runtime": "NOT_RUN",
+        "status": "OPEN"
+      },
+      {
+        "scenario": 1,
+        "mutation": 4,
+        "complete_graph_change": "Compare operand count2->1, original second storage operand remains outside selected prefix.",
+        "expected_build": "XR_PROGRAM_BUILD_OK",
+        "expected_verify": "XR_PROGRAM_VERIFY_SEMANTIC_REJECTED",
+        "expected_product": "NOT_ASSERTED",
+        "expected_artifact_bytes": "NOT_ASSERTED",
+        "diagnostic_output": "NULL",
+        "diagnostic_kind": "NOT_ASSERTED",
+        "original_verify_calls": 1,
+        "repeated_Diag_memcmp": "NOT_ASSERTED",
+        "runtime": "NOT_RUN",
+        "status": "OPEN"
+      },
+      {
+        "scenario": 1,
+        "mutation": 5,
+        "complete_graph_change": "Compare immediate kind NONE->U32.",
+        "expected_build": "XR_PROGRAM_BUILD_OK",
+        "expected_verify": "XR_PROGRAM_VERIFY_SEMANTIC_REJECTED",
+        "expected_product": "NOT_ASSERTED",
+        "expected_artifact_bytes": "NOT_ASSERTED",
+        "diagnostic_output": "NULL",
+        "diagnostic_kind": "NOT_ASSERTED",
+        "original_verify_calls": 1,
+        "repeated_Diag_memcmp": "NOT_ASSERTED",
+        "runtime": "NOT_RUN",
+        "status": "OPEN"
+      },
+      {
+        "scenario": 1,
+        "mutation": 6,
+        "complete_graph_change": "Swap actual compare14 with DROP actual right Array15, so second compared root is stale.",
+        "expected_build": "XR_PROGRAM_BUILD_OK",
+        "expected_verify": "XR_PROGRAM_VERIFY_SEMANTIC_REJECTED",
+        "expected_product": "NOT_ASSERTED",
+        "expected_artifact_bytes": "NOT_ASSERTED",
+        "diagnostic_output": "NULL",
+        "diagnostic_kind": "NOT_ASSERTED",
+        "original_verify_calls": 1,
+        "repeated_Diag_memcmp": "NOT_ASSERTED",
+        "runtime": "NOT_RUN",
+        "status": "OPEN"
+      }
+    ],
+    "shape_counts": {
+      "functions": 1,
+      "blocks": 1,
+      "instructions": 18,
+      "constants": 6,
+      "types": 1,
+      "requirements": 0
+    },
+    "graph": "6 actual I64 constants with0/128/255 and specified rhs perturbation ->6 INTEGER_CONVERT U8 values -> actual left/right OWN Array32 AFFINE/EXPLICIT -> BYTES_TIMING_SAFE_EQUAL borrowed actual roots -> DROP actual right then left -> RETURN actual BOOL comparison; scenario6 compares actual left twice while still constructs and drops right.",
+    "key_material": "20 keys from exact2-byte input [0xb2,index]; original fingerprint key18 and module17/function16/block15/type19 retained.",
+    "original_checks": "First9 inputs assert buildOK and verifyOK only. Mutation loop asserts exact semantic rejected status for5 negatives but no ProgramNULL/kind; producer m3 asserts only BUILD_INVALID_INPUT and immediately continues.",
+    "original_cleanup_boundary": "Historical producer-m3 branch continues before artifact_free with no artifact byte assertion. Preserve this original shape, do not infer leak freedom or reuse skip behavior for current unexpected failures.",
+    "original_runtime": "NOT_RUN_NO_CONTENT_OR_TIMING_ORACLE",
+    "additional_content_oracle": {
+      "expected_boolean_by_scenario": [
+        true,
+        true,
+        false,
+        false,
+        false,
+        false,
+        true,
+        false,
+        false
+      ],
+      "status": "OPEN_DERIVED_FROM_PRESERVED_INPUT_NOT_ORIGINAL_RUNTIME_ASSERTION",
+      "timing": "No timing or side-channel behavior proved by logical equality."
+    }
+  },
+  "f64": {
+    "bits_hex": [
+      "0x0000000000000000",
+      "0x8000000000000000",
+      "0x3ff0000000000000",
+      "0x4000000000000000",
+      "0xfff0000000000000",
+      "0x7ff0000000000000",
+      "0x7ff8000000000001",
+      "0x7ff0000000000001"
+    ],
+    "compare_pairs": [
+      [
+        0,
+        1
+      ],
+      [
+        2,
+        3
+      ],
+      [
+        4,
+        5
+      ],
+      [
+        6,
+        2
+      ],
+      [
+        2,
+        6
+      ],
+      [
+        7,
+        7
+      ]
+    ],
+    "embedded_expected_matrix": [
+      [
+        true,
+        false,
+        false,
+        true,
+        false,
+        true
+      ],
+      [
+        false,
+        true,
+        true,
+        true,
+        false,
+        false
+      ],
+      [
+        false,
+        true,
+        true,
+        true,
+        false,
+        false
+      ],
+      [
+        false,
+        true,
+        false,
+        false,
+        false,
+        false
+      ],
+      [
+        false,
+        true,
+        false,
+        false,
+        false,
+        false
+      ],
+      [
+        false,
+        true,
+        false,
+        false,
+        false,
+        false
+      ]
+    ],
+    "predicates": "Original numeric controls0..5, no unverified current predicate enum names.",
+    "roundtrip_targets": [
+      "I64",
+      "U64",
+      "F64",
+      "I64"
+    ],
+    "roundtrip": "8 actual F64 values each transformed4 times and compared against I64 bits copied by memcpy from exact original uint64 pattern; NOT numeric conversion or precomputed true.",
+    "atomic_cas_rows": [
+      [
+        6,
+        6,
+        2
+      ],
+      [
+        6,
+        7,
+        6
+      ],
+      [
+        7,
+        7,
+        2
+      ],
+      [
+        1,
+        0,
+        1
+      ],
+      [
+        0,
+        1,
+        0
+      ],
+      [
+        1,
+        1,
+        2
+      ]
+    ],
+    "cas_columns": [
+      "initial_bit_index",
+      "expected_compare_bit_index",
+      "expected_loaded_bit_index"
+    ],
+    "cas_graph": "6 actual OWN Atomic<F64>90; each CAS actualhandle,actualexpected,actualreplacement1.0 -> previous, then LOAD actualsamehandle; bitcast both to I64, compare previous with originalinitial bits and loaded with embedded expected row, AND into actual accumulator; DROP actual handle.",
+    "graph_counts": {
+      "functions": 1,
+      "blocks": 1,
+      "instructions": 220,
+      "constants": 16,
+      "types": 1,
+      "requirements": 0,
+      "compare_f64": 36,
+      "logical_not": 24,
+      "logical_and": 55,
+      "scalar_bitcast64": 44,
+      "compare_i64": 20,
+      "atomic_construct": 6,
+      "atomic_compare_exchange": 6,
+      "atomic_load": 6,
+      "owner_drop": 6
+    },
+    "first_bitcast_instruction_index": 104,
+    "entry": "Module helper initializes4 modules/entry index3, F64 selects only module3 with initializerNULL/dependenciesNULL/count0, one entry function resultBOOL,220 actual instructions. Base/left/right modules initialized in host builder but unselected from input.",
+    "original_fresh_inputs": [
+      {
+        "mutation": 0,
+        "complete_graph_change": "Complete eight-bit-pattern/36-predicate/8-roundtrip/6-CAS aggregate Boolean graph unchanged.",
+        "expected_build": "XR_PROGRAM_BUILD_OK",
+        "expected_verify": "XR_PROGRAM_VERIFY_OK",
+        "expected_product": "NON_NULL",
+        "diagnostic_output": "NULL",
+        "diagnostic_kind": "NOT_ASSERTED",
+        "original_verify_calls": 1,
+        "repeated_Diag_memcmp": "NOT_ASSERTED",
+        "runtime": "NOT_RUN",
+        "status": "OPEN"
+      },
+      {
+        "mutation": 1,
+        "complete_graph_change": "First COMPARE_F64 at8 predicate control0->6.",
+        "expected_build": "XR_PROGRAM_BUILD_OK",
+        "expected_verify": "NOT_OK_CATEGORY_NOT_ASSERTED",
+        "expected_product": "NULL",
+        "diagnostic_output": "NULL",
+        "diagnostic_kind": "NOT_ASSERTED",
+        "original_verify_calls": 1,
+        "repeated_Diag_memcmp": "NOT_ASSERTED",
+        "runtime": "NOT_RUN",
+        "status": "OPEN"
+      },
+      {
+        "mutation": 2,
+        "complete_graph_change": "First COMPARE_F64 result BOOL->F64 while actual accumulated Boolean consumers remain.",
+        "expected_build": "XR_PROGRAM_BUILD_OK",
+        "expected_verify": "NOT_OK_CATEGORY_NOT_ASSERTED",
+        "expected_product": "NULL",
+        "diagnostic_output": "NULL",
+        "diagnostic_kind": "NOT_ASSERTED",
+        "original_verify_calls": 1,
+        "repeated_Diag_memcmp": "NOT_ASSERTED",
+        "runtime": "NOT_RUN",
+        "status": "OPEN"
+      },
+      {
+        "mutation": 3,
+        "complete_graph_change": "First CONSTANT_F64 opcode->CONSTANT_I64 while actual F64 constant/result types remain.",
+        "expected_build": "XR_PROGRAM_BUILD_OK",
+        "expected_verify": "NOT_OK_CATEGORY_NOT_ASSERTED",
+        "expected_product": "NULL",
+        "diagnostic_output": "NULL",
+        "diagnostic_kind": "NOT_ASSERTED",
+        "original_verify_calls": 1,
+        "repeated_Diag_memcmp": "NOT_ASSERTED",
+        "runtime": "NOT_RUN",
+        "status": "OPEN"
+      },
+      {
+        "mutation": 4,
+        "complete_graph_change": "First SCALAR_BITCAST64 result I64->I32, later chain consumes actual changed result.",
+        "expected_build": "XR_PROGRAM_BUILD_OK",
+        "expected_verify": "NOT_OK_CATEGORY_NOT_ASSERTED",
+        "expected_product": "NULL",
+        "diagnostic_output": "NULL",
+        "diagnostic_kind": "NOT_ASSERTED",
+        "original_verify_calls": 1,
+        "repeated_Diag_memcmp": "NOT_ASSERTED",
+        "runtime": "NOT_RUN",
+        "status": "OPEN"
+      },
+      {
+        "mutation": 5,
+        "complete_graph_change": "First SCALAR_BITCAST64 immediate kind NONE->U32.",
+        "expected_build": "XR_PROGRAM_BUILD_OK",
+        "expected_verify": "NOT_OK_CATEGORY_NOT_ASSERTED",
+        "expected_product": "NULL",
+        "diagnostic_output": "NULL",
+        "diagnostic_kind": "NOT_ASSERTED",
+        "original_verify_calls": 1,
+        "repeated_Diag_memcmp": "NOT_ASSERTED",
+        "runtime": "NOT_RUN",
+        "status": "OPEN"
+      }
+    ],
+    "original_positive_checks": [
+      "verifyOK/nonNULL",
+      "actual ops0 CONSTANT_F64",
+      "actual ops8 COMPARE_F64",
+      "scan actual full instruction_count for any SCALAR_BITCAST64"
+    ],
+    "embedded_oracle_boundary": "Fixed bits,36 comparison expectations,8 bitcast identity and6 bitwise CAS rows are actual original graph inputs and aggregate return computation. Main never evaluates returned BOOL, so these are pending independent runtime obligations, not passing runtime evidence."
+  },
+  "assertion_counts": {
+    "census_functions": 1,
+    "outer_sites": 11,
+    "specified_helpers": 3,
+    "specified_helper_sites": 0,
+    "fresh_builder_inputs": 22,
+    "distinct_parameter_inputs": 21,
+    "positive_admission_inputs": 11,
+    "byte_producer_invalid_inputs": 1,
+    "byte_single_semantic_category_no_kind_or_NULL_inputs": 5,
+    "f64_weak_nonOK_NULL_inputs": 5,
+    "original_direct_runtime_evaluations": 0,
+    "delegated_runtime_evaluations": "NOT_COUNTED_BY_THIS_MAIN_MAP"
+  },
+  "Root_contract_or_representation_review": {
+    "status": "OPEN",
+    "byte": "Keep unsigned128/255, empty/length/perturbed/self-alias cases and actual owned roots. Current equality/content/lifecycle and timing constraints require new approved independent qualification; no reinterpretation as signed bytes or stronger original assertions.",
+    "f64": "Preserve both signed zeros, infinities and two exact NaN patterns, fixed comparison/bitcast/CAS expectation graph. Current identity and bitwise CAS behavior need spec-backed independent oracles and actual current executions.",
+    "baseline": "Root79ba receipt permits light review only; sole25f4 producer, no Checked27/contract72 adoption or heavy gate. Exact Root receiving commit/interfaces/build owner/window pending.",
+    "qualification": "Source/packet/Library/VM/native/mixed/two-instance/owning escape/active cancel/full FI/axes/safety/deletion OPEN."
+  },
+  "full_FI": "NOT_RUN",
+  "axes": "NOT_RUN",
+  "full_safety": "NOT_RUN",
+  "SourceDelete": "NOT_RUN",
+  "Main": "NOT_RUN",
+  "handoff": {
+    "Root_thread": "01a11f74-a297-7b11-8441-835bde6a3d5f",
+    "formal_acceptance": "PENDING"
+  },
+  "boundaries": [
+    "Static one complete main census and actual direct-input matrix only, retired0/all OPEN.",
+    "No actual current verifier main or embedded Boolean program executed.",
+    "Only new map and trace may change; shared fixtures, product and docs readonly."
+  ]
+}

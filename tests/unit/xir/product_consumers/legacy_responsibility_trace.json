@@ -17,9 +17,9 @@
   "reference_counts": {
     "source_with_digest_reference": 108,
     "source_without_digest_reference": 0,
-    "other_with_digest_reference": 121,
-    "other_without_digest_reference": 39,
-    "digest_reference_values": 326,
+    "other_with_digest_reference": 122,
+    "other_without_digest_reference": 38,
+    "digest_reference_values": 328,
     "source_inventory_projections": 42
   },
   "mapping_inputs": [
@@ -682,6 +682,10 @@
     {
       "path": "tests/unit/xir/product_consumers/source_original_typed_text_obligations.json",
       "lf_sha256": "140edbe525840b6f00a706a219636de7628ff92cc27a667b3cedb60bc1352fa1"
+    },
+    {
+      "path": "tests/unit/xir/product_consumers/source_original_verify_dispatch_scalar_admission_obligations.json",
+      "lf_sha256": "87c7b648e28b96f2135cc30ba62aced7d18f199c78dd7001b0985ae0b2feef89"
     },
     {
       "path": "tests/unit/xir/product_consumers/source_original_view_conformance_tables_obligations.json",
@@ -4655,7 +4659,18 @@
       "body_lf_sha256": "127958e30bd8b0c4a81a9b29e5bb3263b956256513f4861654c34c7bb64684d8",
       "status": "OPEN",
       "inventory_projection": null,
-      "mapping_references": []
+      "mapping_references": [
+        {
+          "mapping": "tests/unit/xir/product_consumers/source_original_verify_dispatch_scalar_admission_obligations.json",
+          "pointer": "/legacy/0/body_lf_sha256",
+          "binding": "exact_path_name_body"
+        },
+        {
+          "mapping": "tests/unit/xir/product_consumers/source_original_verify_dispatch_scalar_admission_obligations.json",
+          "pointer": "/responsibility_mapping/0/body_lf_sha256",
+          "binding": "exact_body_digest_value_only"
+        }
+      ]
     },
     {
       "legacy_path": "tests/unit/program/xr_program_array_type_checks.inc.c",
