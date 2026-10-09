@@ -1,0 +1,667 @@
+{
+  "schema": 1,
+  "family": "original_invoke_panic_cleanup",
+  "legacy_base_commit": "01e6d38401b0f5c8684b64c35a99ac651024c0c1",
+  "status": "OPEN",
+  "retired": 0,
+  "replacement_gates": [],
+  "result": "STATIC_ORIGINAL_SEALED_INVOKE_TYPED_PANIC_CLEANUP_MAP_ONLY",
+  "product_execution": "NOT_RUN_BY_THIS_MAP",
+  "producer": "25f4016d6f089169757a90ae11ba537002374711",
+  "identity": "Checked25/semantic67/Value22/Call28/Program29",
+  "legacy": [
+    {
+      "name": "test_sealed_invoke_and_cleanup_cfg",
+      "legacy_path": "tests/unit/program/test_xr_program_verify.c",
+      "legacy_line": 4281,
+      "body_lf_sha256": "84ae7636956f3062b8b593fe47d7b459191e1bab3f99da73fcd789dfc175fb81",
+      "assertion_sites": 11,
+      "loop_sites": 1,
+      "status": "OPEN",
+      "replacement_gates": [],
+      "note": "Function census preserves its whole body; sites do not count executed loop iterations."
+    },
+    {
+      "name": "test_typed_panic_invoke_and_cleanup_cfg",
+      "legacy_path": "tests/unit/program/test_xr_program_verify.c",
+      "legacy_line": 4347,
+      "body_lf_sha256": "56d44a8746b47d95f846e217c604a3b08e83148df1491283f7e25372abf56b73",
+      "assertion_sites": 8,
+      "loop_sites": 1,
+      "status": "OPEN",
+      "replacement_gates": [],
+      "note": "Function census preserves its whole body; sites do not count executed loop iterations."
+    }
+  ],
+  "responsibility_mapping": [
+    {
+      "path": "tests/unit/program/test_xr_program_verify.c",
+      "function": "test_sealed_invoke_and_cleanup_cfg",
+      "line": 4281,
+      "end_line": 4345,
+      "body_lf_sha256": "84ae7636956f3062b8b593fe47d7b459191e1bab3f99da73fcd789dfc175fb81",
+      "CHECK_sites": 11,
+      "CHECK_bindings": [
+        {
+          "line": 4288,
+          "expression": "build_status == XR_PROGRAM_BUILD_OK",
+          "status": "OPEN"
+        },
+        {
+          "line": 4299,
+          "expression": "normal.kind == XR_REFERENCE_OUTCOME_RETURN",
+          "status": "OPEN"
+        },
+        {
+          "line": 4300,
+          "expression": "normal.value.kind == XR_REFERENCE_VALUE_I64",
+          "status": "OPEN"
+        },
+        {
+          "line": 4301,
+          "expression": "normal.value.as.i64 == 42",
+          "status": "OPEN"
+        },
+        {
+          "line": 4304,
+          "expression": "error.kind == XR_REFERENCE_OUTCOME_ERROR",
+          "status": "OPEN"
+        },
+        {
+          "line": 4305,
+          "expression": "error.error_value.kind == XR_REFERENCE_VALUE_ERROR",
+          "status": "OPEN"
+        },
+        {
+          "line": 4306,
+          "expression": "error.error_value.as.error == 73u",
+          "status": "OPEN"
+        },
+        {
+          "line": 4311,
+          "expression": "xr_program_invoke_fixture_write_mutated(XR_INVOKE_FIXTURE_TRAP_CONTINUATION, &artifact,\n                                                  diagnostic,\n                                                  sizeof(diagnostic)) == XR_PROGRAM_BUILD_OK",
+          "status": "OPEN"
+        },
+        {
+          "line": 4315,
+          "expression": "program != NULL",
+          "status": "OPEN"
+        },
+        {
+          "line": 4319,
+          "expression": "xr_program_invoke_fixture_write_mutated(XR_INVOKE_FIXTURE_TRAP_BAD_TARGET, &artifact,\n                                                  diagnostic,\n                                                  sizeof(diagnostic)) == XR_PROGRAM_BUILD_OK",
+          "status": "OPEN"
+        },
+        {
+          "line": 4339,
+          "expression": "xr_program_invoke_fixture_write_mutated(invalid[index].mutation, &artifact,\n                                                      diagnostic,\n                                                      sizeof(diagnostic)) == XR_PROGRAM_BUILD_OK",
+          "status": "OPEN"
+        }
+      ],
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/program/test_xr_program_verify.c",
+      "function": "test_typed_panic_invoke_and_cleanup_cfg",
+      "line": 4347,
+      "end_line": 4394,
+      "body_lf_sha256": "56d44a8746b47d95f846e217c604a3b08e83148df1491283f7e25372abf56b73",
+      "CHECK_sites": 8,
+      "CHECK_bindings": [
+        {
+          "line": 4350,
+          "expression": "xr_program_panic_fixture_write(&artifact, diagnostic, sizeof(diagnostic)) ==\n          XR_PROGRAM_BUILD_OK",
+          "status": "OPEN"
+        },
+        {
+          "line": 4362,
+          "expression": "normal.kind == XR_REFERENCE_OUTCOME_RETURN",
+          "status": "OPEN"
+        },
+        {
+          "line": 4363,
+          "expression": "normal.value.kind == XR_REFERENCE_VALUE_I64",
+          "status": "OPEN"
+        },
+        {
+          "line": 4364,
+          "expression": "normal.value.as.i64 == 42",
+          "status": "OPEN"
+        },
+        {
+          "line": 4367,
+          "expression": "panic.kind == XR_REFERENCE_OUTCOME_PANIC",
+          "status": "OPEN"
+        },
+        {
+          "line": 4368,
+          "expression": "panic.panic_value.kind == XR_REFERENCE_VALUE_PANIC_INFO",
+          "status": "OPEN"
+        },
+        {
+          "line": 4369,
+          "expression": "panic.panic_value.as.panic_info == 91u",
+          "status": "OPEN"
+        },
+        {
+          "line": 4389,
+          "expression": "xr_program_panic_fixture_write_mutated(invalid[index].mutation, &artifact, diagnostic,\n                                                     sizeof(diagnostic)) == XR_PROGRAM_BUILD_OK",
+          "status": "OPEN"
+        }
+      ],
+      "status": "OPEN"
+    }
+  ],
+  "outer_CHECK_sites": 19,
+  "original_private_helpers": [
+    {
+      "path": "tests/unit/program/test_xr_program_verify.c",
+      "function": "validate_ok",
+      "line": 159,
+      "end_line": 174,
+      "body_lf_sha256": "94fe0ef4e0242acb810c12621ae1fe73a9887ef668f15ddc6c67ed645494f62b",
+      "CHECK_sites": 2,
+      "CHECK_bindings": [
+        {
+          "line": 171,
+          "expression": "status == XR_PROGRAM_VERIFY_OK",
+          "status": "OPEN"
+        },
+        {
+          "line": 172,
+          "expression": "program != NULL",
+          "status": "OPEN"
+        }
+      ],
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/program/test_xr_program_verify.c",
+      "function": "expect_semantic_reject_at",
+      "line": 176,
+      "end_line": 198,
+      "body_lf_sha256": "44cf0fb15bea156743a1c0e35b0be8ee844aa1af55c8653ed9361cf781c045b8",
+      "CHECK_sites": 6,
+      "CHECK_bindings": [
+        {
+          "line": 190,
+          "expression": "first_status == XR_PROGRAM_VERIFY_SEMANTIC_REJECTED",
+          "status": "OPEN"
+        },
+        {
+          "line": 191,
+          "expression": "program == NULL",
+          "status": "OPEN"
+        },
+        {
+          "line": 192,
+          "expression": "first.kind == expected",
+          "status": "OPEN"
+        },
+        {
+          "line": 195,
+          "expression": "second_status == first_status",
+          "status": "OPEN"
+        },
+        {
+          "line": 196,
+          "expression": "memcmp(&first, &second, sizeof(first)) == 0",
+          "status": "OPEN"
+        },
+        {
+          "line": 197,
+          "expression": "program == NULL",
+          "status": "OPEN"
+        }
+      ],
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/program/xr_program_invoke_fixture.h",
+      "function": "xr_invoke_fixture_key",
+      "line": 24,
+      "end_line": 26,
+      "body_lf_sha256": "4bb77b703c8a54826e1daf4f71b38de983671cfaffb971d5305665011b798d29",
+      "CHECK_sites": 0,
+      "CHECK_bindings": [],
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/program/xr_program_invoke_fixture.h",
+      "function": "xr_program_invoke_fixture_write_mutated",
+      "line": 30,
+      "end_line": 415,
+      "body_lf_sha256": "a9be9b4767b1e368764b6242a4012b9e01e153b90affb21a077b0f7eb8703ca0",
+      "CHECK_sites": 0,
+      "CHECK_bindings": [],
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/program/xr_program_invoke_fixture.h",
+      "function": "xr_program_invoke_fixture_write",
+      "line": 417,
+      "end_line": 422,
+      "body_lf_sha256": "f6a29a44dfc83d97fba3c9567df2ec3965c99a82f95562174cca2e862e9dabcd",
+      "CHECK_sites": 0,
+      "CHECK_bindings": [],
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/program/xr_program_panic_fixture.h",
+      "function": "xr_panic_fixture_key",
+      "line": 23,
+      "end_line": 25,
+      "body_lf_sha256": "6a170f23b3a3dee7db885bd161e639fcbbdf91eaef734f58e625c4dbf02e98a0",
+      "CHECK_sites": 0,
+      "CHECK_bindings": [],
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/program/xr_program_panic_fixture.h",
+      "function": "xr_program_panic_fixture_write_mutated",
+      "line": 30,
+      "end_line": 418,
+      "body_lf_sha256": "4f50b89985a2b1569cfe4cd13a176cfbdcca54bd26ba4626305b4d400698a194",
+      "CHECK_sites": 0,
+      "CHECK_bindings": [],
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/program/xr_program_panic_fixture.h",
+      "function": "xr_program_panic_fixture_write",
+      "line": 420,
+      "end_line": 425,
+      "body_lf_sha256": "85fd35ec57f8a6542be5326510a235e90707811d638f45c7e684141b8d334f96",
+      "CHECK_sites": 0,
+      "CHECK_bindings": [],
+      "status": "OPEN"
+    }
+  ],
+  "specified_helper_CHECK_sites": 8,
+  "input_file": {
+    "path": "tests/unit/program/test_xr_program_verify.c",
+    "whole_file_lf_sha256": "ec4b93f13bfab2aa3d4b8f8773dd5c1118a0c682ed6f8304fead515f90402802",
+    "physical_raw_sha256": "a39922500c0943c034fafcda3a82b67e511ea658f453f6c0c3204f7719de1817",
+    "git_base_equal": true
+  },
+  "input_policy": "Complete two outer tests/eight specified helper bodies and whole original fixtureheaders equal01e6; all actual typed channels, parameter ownership/modes, callee bodies, caller affine seed9, continuation blockarguments/transferredowners/cleanup/terminal order and16 precise semanticnegative mutations retained.",
+  "common_fixture_owner": {
+    "macro": "Each fixture defines its own AFFINE_TYPE as XR_CORE_PROGRAM_TYPE_DYNAMIC_BASE; no requested target numeric alias.",
+    "kind": "Actual anonymous AGGREGATE AFFINE/EXPLICIT with one I64 field.",
+    "caller_input_seed": 9,
+    "meaning": "Caller constructs actual owningaggregate from third argument seed9 before real invoke, transfers sameowner once to each mutuallyexclusive selectedcontinuation and DROPs receivedowner before terminal result. Full affine seedgraph cannot be removed because normalreturn42 is independent of seed."
+  },
+  "error_fixture": {
+    "builder": "xr_program_invoke_fixture_write_mutated",
+    "functions": [
+      {
+        "key": "invoke:callee",
+        "signature": "BOOL/ERROR two parameters, modesomitted, resultI64/errorERROR/effectERROR, unflagged, threeblocks.",
+        "blocks": [
+          {
+            "name": "entry",
+            "ops": [
+              "BLOCK_ARGUMENT",
+              "CONDITIONAL_BRANCH"
+            ]
+          },
+          {
+            "name": "normal",
+            "ops": [
+              "CONSTANT_I64",
+              "RETURN"
+            ]
+          },
+          {
+            "name": "error",
+            "ops": [
+              "BLOCK_ARGUMENT",
+              "ERROR_PUBLISH"
+            ]
+          }
+        ],
+        "meaning": "Conditiontrue returns originalconstant42; false carries originaltypedERROR into error successor and publishes it."
+      },
+      {
+        "key": "invoke:entry",
+        "signature": "BOOL/ERROR/I64 threeparameters, modesomitted, resultI64/errorERROR/effectERROR|CALL, ENTRY.",
+        "blocks": [
+          {
+            "name": "entry",
+            "ops": [
+              "BLOCK_ARGUMENT",
+              "AGGREGATE_CONSTRUCT",
+              "CALL_SEALED_INVOKE"
+            ]
+          },
+          {
+            "name": "normal",
+            "ops": [
+              "BLOCK_ARGUMENT",
+              "OWNER_DROP",
+              "RETURN"
+            ]
+          },
+          {
+            "name": "error",
+            "ops": [
+              "BLOCK_ARGUMENT",
+              "OWNER_DROP",
+              "ERROR_PUBLISH"
+            ]
+          }
+        ],
+        "meaning": "Invoke actualcalleekey with firsttwo arguments and localownertransfer per eachnormal/error edge. Normal continuation gets implicitI64+actualowner; error gets implicitERROR+actualowner, each exactowningblockarg thenDROP."
+      }
+    ],
+    "runtime_goldens": [
+      {
+        "arguments": [
+          {
+            "type": "BOOL",
+            "value": true
+          },
+          {
+            "type": "ERROR",
+            "value": 73
+          },
+          {
+            "type": "I64",
+            "value": 9
+          }
+        ],
+        "expected": "RETURN/value.kindI64/value.i6442"
+      },
+      {
+        "arguments": [
+          {
+            "type": "BOOL",
+            "value": false
+          },
+          {
+            "type": "ERROR",
+            "value": 73
+          },
+          {
+            "type": "I64",
+            "value": 9
+          }
+        ],
+        "expected": "ERROR/error_value.kindERROR/error_value.error73"
+      }
+    ],
+    "normal_evidence": "BUILD_OK/VERIFY_OK/non-NULL; both realreference evaluations of samevalidatedProgram with actualcanonicalentry and three typed arguments, NULL profile/budget. No arbitrary exitcode or normalI64(73) substitute.",
+    "admitted_trap_continuation": {
+      "mutation": "XR_INVOKE_FIXTURE_TRAP_CONTINUATION",
+      "meaning": "Actual thirdinvoke successor/trap block and one additionalownertransfer; blockargsowner ->OWNER_DROP ->TRAP immediate7. Callerblock_count4, successor_count3, effectTRAP added. BUILD_OK/VERIFY_OK/non-NULL only; original test does not run thisvariant or provoke callee trap.",
+      "ops": [
+        "BLOCK_ARGUMENT",
+        "OWNER_DROP",
+        "TRAP"
+      ],
+      "trap_immediate": 7
+    },
+    "trap_negative": {
+      "mutation": "XR_INVOKE_FIXTURE_TRAP_BAD_TARGET",
+      "actual_change": "Same threecontinuation graph, but terminal TRAP immediate4 rather than7; same actualtrapblockkey/ownertransfer. Name BAD_TARGET does not mean a foreignsuccessor keymutation.",
+      "expected": "BUILD_OK thenSEMANTIC_REJECTED/CONTROL_FLOW/NULL twice/full diagnostic equality."
+    },
+    "negative_matrix": [
+      {
+        "mutation": "XR_INVOKE_FIXTURE_INVOKE_INFALLIBLE",
+        "diagnostic": "OPERATION_TYPE",
+        "status": "OPEN"
+      },
+      {
+        "mutation": "XR_INVOKE_FIXTURE_WRONG_NORMAL_RESULT_TYPE",
+        "diagnostic": "OPERATION_TYPE",
+        "status": "OPEN"
+      },
+      {
+        "mutation": "XR_INVOKE_FIXTURE_WRONG_ERROR_TYPE",
+        "diagnostic": "OPERATION_TYPE",
+        "status": "OPEN"
+      },
+      {
+        "mutation": "XR_INVOKE_FIXTURE_MISSING_NORMAL_OWNER",
+        "diagnostic": "OPERATION_ARITY",
+        "status": "OPEN"
+      },
+      {
+        "mutation": "XR_INVOKE_FIXTURE_DUPLICATE_NORMAL_OWNER",
+        "diagnostic": "VALUE_USE",
+        "status": "OPEN"
+      },
+      {
+        "mutation": "XR_INVOKE_FIXTURE_MISSING_ERROR_OWNER",
+        "diagnostic": "OPERATION_ARITY",
+        "status": "OPEN"
+      },
+      {
+        "mutation": "XR_INVOKE_FIXTURE_DUPLICATE_ERROR_OWNER",
+        "diagnostic": "VALUE_USE",
+        "status": "OPEN"
+      }
+    ],
+    "negative_graph_details": {
+      "INVOKE_INFALLIBLE": "Actual callee error_typeVOID/effect0 and errorbody BLOCK_ARGUMENT/CONSTANT42/RETURN instead ofERROR_PUBLISH; caller stillINVOKE with normal/error continuation. RejectOPERATION_TYPE, not an actualcallee throw.",
+      "WRONG_NORMAL_RESULT_TYPE": "Normal firstblockargBOOL while actualcallee resultI64. Actual continuation insertsfallbackCONST42 and returnsfallbackI64 so entiremalformedblock preserved; rejectOPERATION_TYPE.",
+      "WRONG_ERROR_TYPE": "Error firstblockargBOOL while callee errorERROR; insertfallbackCONST42 and RETURN fallback rather thanERROR_PUBLISH. RejectOPERATION_TYPE, not simply wrongterminalopcode.",
+      "MISSING_OWNER": "Corresponding continuation still requires oneactualowner blockarg/DROP but invoke transfers0 on thatedge ->OPERATION_ARITY.",
+      "DUPLICATE_OWNER": "Corresponding continuation has two distinctowningblockargs, each fed same singleowner, bothDROPped ->VALUE_USE. Duplicating singleowner per chosenedge differs from oneowner on alternativeedges."
+    }
+  },
+  "panic_fixture": {
+    "builder": "xr_program_panic_fixture_write_mutated",
+    "functions": [
+      {
+        "key": "panic:callee",
+        "signature": "BOOL READ/PANIC_INFO MOVE two parameters, resultI64/errorERROR/panicPANIC_INFO/effectERROR|PANIC, threeblocks.",
+        "blocks": [
+          {
+            "name": "entry",
+            "ops": [
+              "BLOCK_ARGUMENT",
+              "CONDITIONAL_BRANCH"
+            ]
+          },
+          {
+            "name": "normal",
+            "ops": [
+              "BLOCK_ARGUMENT",
+              "OWNER_DROP",
+              "CONSTANT_I64",
+              "RETURN"
+            ]
+          },
+          {
+            "name": "panic",
+            "ops": [
+              "BLOCK_ARGUMENT",
+              "PANIC_PUBLISH"
+            ]
+          }
+        ],
+        "meaning": "PanicInfo actualOWNER passes once to either alternativeedge. Normalcallee DROPs its incomingpanicowner before returning42; paniccallee transfers that sameowner into PANIC_PUBLISH. Callee advertises distinctERROR channel even though originalbody has noERROR_PUBLISH."
+      },
+      {
+        "key": "panic:entry",
+        "signature": "BOOL READ/PANIC_INFO MOVE/I64 READ, resultI64/errorERROR/panicPANIC_INFO/effectCALL|ERROR|PANIC, ENTRY/fourblocks.",
+        "blocks": [
+          {
+            "name": "entry",
+            "ops": [
+              "BLOCK_ARGUMENT",
+              "AGGREGATE_CONSTRUCT",
+              "CALL_SEALED_INVOKE"
+            ]
+          },
+          {
+            "name": "normal",
+            "ops": [
+              "BLOCK_ARGUMENT",
+              "OWNER_DROP",
+              "RETURN"
+            ]
+          },
+          {
+            "name": "error",
+            "ops": [
+              "BLOCK_ARGUMENT",
+              "OWNER_DROP",
+              "ERROR_PUBLISH"
+            ]
+          },
+          {
+            "name": "panic",
+            "ops": [
+              "BLOCK_ARGUMENT",
+              "OWNER_DROP",
+              "PANIC_PUBLISH"
+            ]
+          }
+        ],
+        "meaning": "Localownaggregate fromseed9 getsone transfer to each of threedistinctchannels. Panic continuation receives implicitOWNERPANIC_INFO plus localowner, DROPs localowner then republishesmovedpanic. Error continuation remainsactualERROR and localowner cleanup; no actualERROR runtime branch tested here."
+      }
+    ],
+    "runtime_goldens": [
+      {
+        "arguments": [
+          {
+            "type": "BOOL",
+            "value": true
+          },
+          {
+            "type": "PANIC_INFO",
+            "legacy_value": 91
+          },
+          {
+            "type": "I64",
+            "value": 9
+          }
+        ],
+        "expected": "RETURN/value.kindI64/value.i6442"
+      },
+      {
+        "arguments": [
+          {
+            "type": "BOOL",
+            "value": false
+          },
+          {
+            "type": "PANIC_INFO",
+            "legacy_value": 91
+          },
+          {
+            "type": "I64",
+            "value": 9
+          }
+        ],
+        "expected": "PANIC/panic_value.kindPANIC_INFO/panic_value.panic_info91"
+      }
+    ],
+    "normal_evidence": "BUILD_OK/VERIFY_OK/non-NULL; actualreference canonicalentry execution of both true/false controls on sameProgram. Legacy reference payload91 is typedPanicInfo testdata, not a requested currentuntypedI64/nativepointer/enumauthority representation.",
+    "negative_matrix": [
+      {
+        "mutation": "XR_PANIC_FIXTURE_DIRECT_PANICFUL",
+        "diagnostic": "OPERATION_TYPE",
+        "status": "OPEN"
+      },
+      {
+        "mutation": "XR_PANIC_FIXTURE_COPY_PANIC",
+        "diagnostic": "OPERATION_TYPE",
+        "status": "OPEN"
+      },
+      {
+        "mutation": "XR_PANIC_FIXTURE_PANIC_AS_ERROR",
+        "diagnostic": "FUNCTION",
+        "status": "OPEN"
+      },
+      {
+        "mutation": "XR_PANIC_FIXTURE_WRONG_CHANNEL_TYPE",
+        "diagnostic": "OPERATION_TYPE",
+        "status": "OPEN"
+      },
+      {
+        "mutation": "XR_PANIC_FIXTURE_MISSING_NORMAL_OWNER",
+        "diagnostic": "OPERATION_ARITY",
+        "status": "OPEN"
+      },
+      {
+        "mutation": "XR_PANIC_FIXTURE_DUPLICATE_NORMAL_OWNER",
+        "diagnostic": "VALUE_USE",
+        "status": "OPEN"
+      },
+      {
+        "mutation": "XR_PANIC_FIXTURE_MISSING_PANIC_OWNER",
+        "diagnostic": "OPERATION_ARITY",
+        "status": "OPEN"
+      },
+      {
+        "mutation": "XR_PANIC_FIXTURE_DUPLICATE_PANIC_OWNER",
+        "diagnostic": "VALUE_USE",
+        "status": "OPEN"
+      }
+    ],
+    "negative_graph_details": {
+      "DIRECT_PANICFUL": "Actual ordinarysealedDIRECT replacesINVOKE, zero successors, I64 directresult, operand_count2, append RETURN; entire declaredcontinuationblocks/callerowner remaininput. RejectOPERATION_TYPE: ordinarycall cannotcall thispanicful/fallible signature, even when conditiontrue wouldreturn42.",
+      "COPY_PANIC": "Insertactual OWNERCOPY of originalPANIC_INFO OWNER beforeinvoke; keepactualoriginalinvoke and allchannels; copiedresultOWNER notdiscarded by test rewrite. RejectOPERATION_TYPE for noncopyablepanicowner.",
+      "PANIC_AS_ERROR": "Actualcallee error_typePANIC_INFO while panic_typePANIC_INFO/effectERROR|PANIC remain; caller stillbusinessERROR/panicPANIC_INFO. RejectFUNCTION, no mergingchannels.",
+      "WRONG_CHANNEL_TYPE": "Actualpanic firstblockarg typeERROR/NON_OWNER instead ofPANIC_INFO/OWNER; samePANIC_PUBLISH and localownercleanup; rejectOPERATION_TYPE.",
+      "MISSING_OWNER": "Normal/panic continuation requiresowner but corresponding actualinvoketransfer_count0 ->OPERATION_ARITY.",
+      "DUPLICATE_OWNER": "Normal/panic continuation hastwo distinctowningblockargs, sameactualowner transferred twice into chosensuccessor and bothDROPped ->VALUE_USE."
+    }
+  },
+  "semantic_negative_variants": 16,
+  "actual_runtime_evaluations": 4,
+  "admission_only_additional_graphs": 1,
+  "specified_helper_boundaries": {
+    "diagnostics": "All16 semanticvariants require exactoriginaldiagnostic/status/NULL twice with complete diagnosticmemcmp; CHECK loops are oneouter site each, not inflatedsites or additionalcensusfunctions.",
+    "build": "Bothfixturehelpers actualCoreIr build ->ifBUILD_OK writeartifact ->freeCoreIr producer. Onecorebasefeature, oneactualaffinetype, modulewithtwoactualfunctions andoriginalconstant42. Commonsharedheaders remain used by AOT and otherconsumers.",
+    "lifecycle": "Original tests freevalidatedProgram/artifact only and do notassert perobjectidentity/events, detachedoutcome, panicdispose, FI/axes/cancel/physicalzero. Symbolicownercleanupgraph and scalar/typedpayload results do not prove currentdynamiclifecycle completion."
+  },
+  "shared_dependencies": [
+    {
+      "path": "tests/unit/program/xr_program_invoke_fixture.h",
+      "physical_raw_sha256": "fe7de12b7d0104352b9995b9c3b3bfdd74f343fe4e59c3a54c2e63af9e561459",
+      "whole_file_lf_sha256": "771298da0ce2b6e79b554a851637a8ad024447fd31e29934332cdebc1e136ff5",
+      "git_base_equal": true,
+      "status": "PRESERVE_SHARED_READONLY"
+    },
+    {
+      "path": "tests/unit/program/xr_program_panic_fixture.h",
+      "physical_raw_sha256": "9285383d10c67c417275895459b8ee52b201eb5f46620e357e698cc511adbb69",
+      "whole_file_lf_sha256": "1bd5845b79e833dc261b763c7ed84a279f93274e0bafbb8122f51d88d8a98da2",
+      "git_base_equal": true,
+      "status": "PRESERVE_SHARED_READONLY"
+    },
+    {
+      "path": "src/program/xr_reference_evaluator.h",
+      "physical_raw_sha256": "d43732ceca814f67f7f04e1b51d8512aab2e199092a546d1c47d30e0f28439bf",
+      "whole_file_lf_sha256": "0b2149e8397748e84b1cbc14904cde97d5bee4c3e69474486169e4656ff89054",
+      "git_base_equal": true,
+      "status": "PRESERVE_SHARED_READONLY"
+    }
+  ],
+  "Root_contract_or_representation_review": {
+    "status": "OPEN",
+    "outcomes": "Exactnormal42/businessERROR73/PANIC_INFO91 belong to separate typedchannels with actualcallee behavior and same canonicalentry. KeepownedPanicInfo consumption/drop/publish roles using currentlegitimate typedpayload owners, no legacyu32 or anynonOK authority.",
+    "cleanup": "Preserve calleractualaffineseed9 and required per-channel transferredowner, selectededgeDROP beforeterminal. KeepERRORadvertised but runtimeuntested channel in panicfixture. Complete currenttrap/OOM/LIMIT/panic/cancel/stop/close/noescape and stableidentity duties require actualexecution/FI independently.",
+    "admission": "Preserve exactinfallible-INVOKE/directpanicful/forbiddencopy/functionchannel/argumenttypes/edgearity/duplicateowner refusals. Unchosenpath reaching42 does not permit malformed signature/owner edges. Trapcontinuation7vs4 originaladmission duty is not an originalruntimeprovidertrapgolden.",
+    "qualification": "Public Built/Checked/packet/reverify/Lowered/Program allcompletepositives/negatives/independentgoldens, realVM/native/mixed/twoInstances/ownersurvival/lifecycle/fullFI/axes/safety require formalproducer/window and remainOPEN."
+  },
+  "full_FI": "NOT_RUN",
+  "axes": "NOT_RUN",
+  "full_safety": "NOT_RUN",
+  "SourceDelete": "NOT_RUN",
+  "Main": "NOT_RUN",
+  "handoff": {
+    "Root_thread": "01a11f74-a297-7b11-8441-835bde6a3d5f",
+    "formal_acceptance": "PENDING"
+  },
+  "boundaries": [
+    "All19outer/8helperCHECKs OPEN; retired0.",
+    "Onlyoriginalinvoke/panic/cleanupfullgraphs andstatic evidence; fouroriginalruntimegoldens notcurrentproductPASS.",
+    "Sharedfixtureheaders/evaluator/product/CMake/stdlib/spec/SDK/docs unchanged, noheavywindow orMain/deletepermit."
+  ]
+}

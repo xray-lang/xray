@@ -17,9 +17,9 @@
   "reference_counts": {
     "source_with_digest_reference": 108,
     "source_without_digest_reference": 0,
-    "other_with_digest_reference": 84,
-    "other_without_digest_reference": 76,
-    "digest_reference_values": 250,
+    "other_with_digest_reference": 86,
+    "other_without_digest_reference": 74,
+    "digest_reference_values": 254,
     "source_inventory_projections": 42
   },
   "mapping_inputs": [
@@ -530,6 +530,10 @@
     {
       "path": "tests/unit/xir/product_consumers/source_original_exchanged_borrows_obligations.json",
       "lf_sha256": "083396462eeaf2a82b396d8c1cde3e8bd38f9fea9219e621f54f29a7695cadd0"
+    },
+    {
+      "path": "tests/unit/xir/product_consumers/source_original_invoke_panic_cleanup_obligations.json",
+      "lf_sha256": "84b48921867594d5bbb961f4ea5f29d0bc463108ababf0b0b3cd3cefc393f7d3"
     },
     {
       "path": "tests/unit/xir/product_consumers/source_original_local_storage_projection_obligations.json",
@@ -3735,7 +3739,18 @@
       "body_lf_sha256": "84ae7636956f3062b8b593fe47d7b459191e1bab3f99da73fcd789dfc175fb81",
       "status": "OPEN",
       "inventory_projection": null,
-      "mapping_references": []
+      "mapping_references": [
+        {
+          "mapping": "tests/unit/xir/product_consumers/source_original_invoke_panic_cleanup_obligations.json",
+          "pointer": "/legacy/0/body_lf_sha256",
+          "binding": "exact_path_name_body"
+        },
+        {
+          "mapping": "tests/unit/xir/product_consumers/source_original_invoke_panic_cleanup_obligations.json",
+          "pointer": "/responsibility_mapping/0/body_lf_sha256",
+          "binding": "exact_body_digest_value_only"
+        }
+      ]
     },
     {
       "legacy_path": "tests/unit/program/test_xr_program_verify.c",
@@ -3743,7 +3758,18 @@
       "body_lf_sha256": "56d44a8746b47d95f846e217c604a3b08e83148df1491283f7e25372abf56b73",
       "status": "OPEN",
       "inventory_projection": null,
-      "mapping_references": []
+      "mapping_references": [
+        {
+          "mapping": "tests/unit/xir/product_consumers/source_original_invoke_panic_cleanup_obligations.json",
+          "pointer": "/legacy/1/body_lf_sha256",
+          "binding": "exact_path_name_body"
+        },
+        {
+          "mapping": "tests/unit/xir/product_consumers/source_original_invoke_panic_cleanup_obligations.json",
+          "pointer": "/responsibility_mapping/1/body_lf_sha256",
+          "binding": "exact_body_digest_value_only"
+        }
+      ]
     },
     {
       "legacy_path": "tests/unit/program/test_xr_program_verify.c",
