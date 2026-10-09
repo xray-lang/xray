@@ -1,0 +1,663 @@
+{
+  "schema": 1,
+  "family": "original_existential_clone_safe_subset_and_witness_identity",
+  "legacy_base_commit": "01e6d38401b0f5c8684b64c35a99ac651024c0c1",
+  "status": "OPEN",
+  "retired": 0,
+  "replacement_gates": [],
+  "result": "STATIC_FULL_ORIGINAL_EXISTENTIAL_CLONE_LIFECYCLE_AND_WITNESS_MAP_ONLY",
+  "product_execution": "NOT_RUN_BY_THIS_MAP",
+  "producer": "25f4016d6f089169757a90ae11ba537002374711",
+  "identity": "Checked25/semantic67/Value22/Call28/Program29",
+  "legacy": [
+    {
+      "name": "test_existential_clone_safe_subset",
+      "legacy_path": "tests/unit/program/test_xr_program_verify.c",
+      "legacy_line": 5509,
+      "body_lf_sha256": "475bdd59b487922242eaa345662cf91d6d52e8dfdbe166893dbff0ce26d52ed2",
+      "assertion_sites": 12,
+      "loop_sites": 1,
+      "status": "OPEN",
+      "replacement_gates": [],
+      "note": "Function census preserves its whole body; sites do not count executed loop iterations."
+    },
+    {
+      "name": "test_witness_receiver_capability_and_interface_identity",
+      "legacy_path": "tests/unit/program/test_xr_program_verify.c",
+      "legacy_line": 5609,
+      "body_lf_sha256": "3071645f02a874543194e9abd78a606b8d16d2a45928bb47309a79fa1cb64226",
+      "assertion_sites": 9,
+      "loop_sites": 0,
+      "status": "OPEN",
+      "replacement_gates": [],
+      "note": "Function census preserves its whole body; sites do not count executed loop iterations."
+    }
+  ],
+  "responsibility_mapping": [
+    {
+      "path": "tests/unit/program/test_xr_program_verify.c",
+      "function": "test_existential_clone_safe_subset",
+      "line": 5509,
+      "end_line": 5551,
+      "body_lf_sha256": "475bdd59b487922242eaa345662cf91d6d52e8dfdbe166893dbff0ce26d52ed2",
+      "CHECK_sites": 12,
+      "CHECK_bindings": [
+        {
+          "line": 5512,
+          "expression": "xr_program_existential_fixture_write(&artifact, diagnostic, sizeof(diagnostic)) ==\n          XR_PROGRAM_BUILD_OK",
+          "status": "OPEN"
+        },
+        {
+          "line": 5519,
+          "expression": "result.kind == XR_REFERENCE_OUTCOME_RETURN",
+          "status": "OPEN"
+        },
+        {
+          "line": 5520,
+          "expression": "result.value.kind == XR_REFERENCE_VALUE_I64",
+          "status": "OPEN"
+        },
+        {
+          "line": 5521,
+          "expression": "result.value.as.i64 == 42",
+          "status": "OPEN"
+        },
+        {
+          "line": 5528,
+          "expression": "build_class_read_existential_copy_artifact(&artifact) == XR_PROGRAM_BUILD_OK",
+          "status": "OPEN"
+        },
+        {
+          "line": 5539,
+          "expression": "result.kind == XR_REFERENCE_OUTCOME_INVALID_INVOCATION",
+          "status": "OPEN"
+        },
+        {
+          "line": 5540,
+          "expression": "result.value.kind == XR_REFERENCE_VALUE_VOID",
+          "status": "OPEN"
+        },
+        {
+          "line": 5541,
+          "expression": "log.count == 2u",
+          "status": "OPEN"
+        },
+        {
+          "line": 5542,
+          "expression": "log.kinds[0] == XR_REFERENCE_EVENT_CLASS_CONSTRUCT",
+          "status": "OPEN"
+        },
+        {
+          "line": 5543,
+          "expression": "log.kinds[1] == XR_REFERENCE_EVENT_CLASS_RECLAIM",
+          "status": "OPEN"
+        },
+        {
+          "line": 5544,
+          "expression": "log.origins[1] == XR_REFERENCE_EVENT_ORIGIN_DOMAIN_TEARDOWN",
+          "status": "OPEN"
+        },
+        {
+          "line": 5546,
+          "expression": "log.kinds[index] != XR_REFERENCE_EVENT_CLASS_COPY",
+          "status": "OPEN"
+        }
+      ],
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/program/test_xr_program_verify.c",
+      "function": "test_witness_receiver_capability_and_interface_identity",
+      "line": 5609,
+      "end_line": 5651,
+      "body_lf_sha256": "3071645f02a874543194e9abd78a606b8d16d2a45928bb47309a79fa1cb64226",
+      "CHECK_sites": 9,
+      "CHECK_bindings": [
+        {
+          "line": 5612,
+          "expression": "xr_program_existential_fixture_write(&artifact, diagnostic, sizeof(diagnostic)) ==\n          XR_PROGRAM_BUILD_OK",
+          "status": "OPEN"
+        },
+        {
+          "line": 5616,
+          "expression": "found",
+          "status": "OPEN"
+        },
+        {
+          "line": 5618,
+          "expression": "artifact.bytes[offsets.read_slot] == 0u",
+          "status": "OPEN"
+        },
+        {
+          "line": 5619,
+          "expression": "artifact.bytes[offsets.ref_slot] == 2u",
+          "status": "OPEN"
+        },
+        {
+          "line": 5633,
+          "expression": "build_program_table_artifact(false, false, false, &interface_artifact) ==\n          XR_PROGRAM_BUILD_OK",
+          "status": "OPEN"
+        },
+        {
+          "line": 5639,
+          "expression": "find_interface_slot(&interface_artifact, key(\"program-table:interface:a\"),\n                              &interface_a_slot, &interface_a_signature)",
+          "status": "OPEN"
+        },
+        {
+          "line": 5641,
+          "expression": "find_interface_slot(&interface_artifact, key(\"program-table:interface:b\"),\n                              &interface_b_slot, &interface_b_signature)",
+          "status": "OPEN"
+        },
+        {
+          "line": 5643,
+          "expression": "interface_a_signature != interface_b_signature",
+          "status": "OPEN"
+        },
+        {
+          "line": 5644,
+          "expression": "interface_b_signature < UINT8_C(0x80)",
+          "status": "OPEN"
+        }
+      ],
+      "status": "OPEN"
+    }
+  ],
+  "outer_CHECK_sites": 21,
+  "original_private_helpers": [
+    {
+      "path": "tests/unit/program/test_xr_program_verify.c",
+      "function": "key",
+      "line": 109,
+      "end_line": 111,
+      "body_lf_sha256": "027a211b78e0cfbd6b296804e37236848a76cc1980981a0d6a49a6f42d3f2e13",
+      "CHECK_sites": 0,
+      "CHECK_bindings": [],
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/program/test_xr_program_verify.c",
+      "function": "validate_ok",
+      "line": 159,
+      "end_line": 174,
+      "body_lf_sha256": "94fe0ef4e0242acb810c12621ae1fe73a9887ef668f15ddc6c67ed645494f62b",
+      "CHECK_sites": 2,
+      "CHECK_bindings": [
+        {
+          "line": 171,
+          "expression": "status == XR_PROGRAM_VERIFY_OK",
+          "status": "OPEN"
+        },
+        {
+          "line": 172,
+          "expression": "program != NULL",
+          "status": "OPEN"
+        }
+      ],
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/program/test_xr_program_verify.c",
+      "function": "test_take_uvar",
+      "line": 203,
+      "end_line": 215,
+      "body_lf_sha256": "835eb97aa0c77560506ba0e421652602ae095f5e6686cce9ef331fc80a34ef4d",
+      "CHECK_sites": 1,
+      "CHECK_bindings": [
+        {
+          "line": 213,
+          "expression": "false",
+          "status": "OPEN"
+        }
+      ],
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/program/test_xr_program_verify.c",
+      "function": "expect_mutated_verify",
+      "line": 436,
+      "end_line": 463,
+      "body_lf_sha256": "5ba80d137a1a9db91a8f8c115129af92e60a8d7644d056577722003739931044",
+      "CHECK_sites": 4,
+      "CHECK_bindings": [
+        {
+          "line": 440,
+          "expression": "bytes != NULL",
+          "status": "OPEN"
+        },
+        {
+          "line": 459,
+          "expression": "status == expected_status",
+          "status": "OPEN"
+        },
+        {
+          "line": 460,
+          "expression": "diagnostic.kind == expected_diagnostic",
+          "status": "OPEN"
+        },
+        {
+          "line": 461,
+          "expression": "program == NULL",
+          "status": "OPEN"
+        }
+      ],
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/program/test_xr_program_verify.c",
+      "function": "build_class_read_existential_copy_artifact",
+      "line": 5118,
+      "end_line": 5284,
+      "body_lf_sha256": "e31f901026c8ee30f83505e92cac282fdaabdd2b0084a71ae5107b061ab6d291",
+      "CHECK_sites": 0,
+      "CHECK_bindings": [],
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/program/test_xr_program_verify.c",
+      "function": "record_class_lifecycle",
+      "line": 1275,
+      "end_line": 1286,
+      "body_lf_sha256": "5e54de2612750209b66ec1d959a0fb513b9b52b41a01194738cdbcdc06b3237b",
+      "CHECK_sites": 0,
+      "CHECK_bindings": [],
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/program/test_xr_program_verify.c",
+      "function": "build_program_table_artifact",
+      "line": 4939,
+      "end_line": 5116,
+      "body_lf_sha256": "fb7e788673403ab92907e152aed224be0dafc0420a8d96922398a7de4d962346",
+      "CHECK_sites": 0,
+      "CHECK_bindings": [],
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/program/test_xr_program_verify.c",
+      "function": "find_witness_direct_slot_offsets",
+      "line": 5558,
+      "end_line": 5607,
+      "body_lf_sha256": "854a0a9ca3cc08f773291a31759983cb839c5ddc7caa5d0709ae0d44dfa113a8",
+      "CHECK_sites": 0,
+      "CHECK_bindings": [],
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/program/test_xr_program_verify.c",
+      "function": "find_interface_slot",
+      "line": 5312,
+      "end_line": 5339,
+      "body_lf_sha256": "a66b3ab2e2b899cc4441e76932f06a8e5ab62e404b2aa2e87ad048506d8c7985",
+      "CHECK_sites": 0,
+      "CHECK_bindings": [],
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/program/xr_program_existential_fixture.h",
+      "function": "xr_existential_fixture_key",
+      "line": 34,
+      "end_line": 36,
+      "body_lf_sha256": "314f6c219e6391043def23e0357db0d34a96ad46a9b5a941065f4c8d1cc4b03b",
+      "CHECK_sites": 0,
+      "CHECK_bindings": [],
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/program/xr_program_existential_fixture.h",
+      "function": "xr_program_existential_fixture_write_mutated",
+      "line": 38,
+      "end_line": 934,
+      "body_lf_sha256": "bce5394e72a6ca3cec8cc09bdd97a3c4165edb070ee79b5fd8aa70b2ea8fdb6d",
+      "CHECK_sites": 0,
+      "CHECK_bindings": [],
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/program/xr_program_existential_fixture.h",
+      "function": "xr_program_existential_fixture_write",
+      "line": 936,
+      "end_line": 941,
+      "body_lf_sha256": "28b0630e1371fa2a05c9f22b11097e5a26d462b9636a78817e6441ed4d8d4bf1",
+      "CHECK_sites": 0,
+      "CHECK_bindings": [],
+      "status": "OPEN"
+    }
+  ],
+  "specified_helper_CHECK_sites": 7,
+  "input_files": [
+    {
+      "path": "tests/unit/program/test_xr_program_verify.c",
+      "physical_raw_sha256": "a39922500c0943c034fafcda3a82b67e511ea658f453f6c0c3204f7719de1817",
+      "whole_file_lf_sha256": "ec4b93f13bfab2aa3d4b8f8773dd5c1118a0c682ed6f8304fead515f90402802",
+      "git_base_equal": true,
+      "status": "PRESERVE_ORIGINAL_READONLY"
+    },
+    {
+      "path": "tests/unit/program/xr_program_existential_fixture.h",
+      "physical_raw_sha256": "120cdbba4e12a66069aa1fdd15a76190d67d9c22e69e5d0b7e8200e9891b9544",
+      "whole_file_lf_sha256": "162f193bc1155dca7ac1b4e2e0649f8bf487ed176086aef5b8140deba2b37185",
+      "git_base_equal": true,
+      "status": "PRESERVE_ORIGINAL_READONLY"
+    },
+    {
+      "path": "src/program/xr_reference_clone.inc.c",
+      "physical_raw_sha256": "67f082235108254cf621a7c5291f35b8899affe739bcb7397c693c1fc820ee0b",
+      "whole_file_lf_sha256": "66fb2f023a7929e1a4a19fcf578ca84dca99bcd0228f238cbc1235eb76a933e8",
+      "git_base_equal": true,
+      "status": "PRESERVE_ORIGINAL_READONLY"
+    },
+    {
+      "path": "src/program/xr_reference_evaluator.c",
+      "physical_raw_sha256": "57b947317f1543e12827d5e100719554598eb6388bd3d6e5a5110193daadcf02",
+      "whole_file_lf_sha256": "31e754ab38df3b93c7256853c2aae948cba14413e75465368d239d10c719548d",
+      "git_base_equal": true,
+      "status": "PRESERVE_ORIGINAL_READONLY"
+    },
+    {
+      "path": "src/program/xr_reference_evaluator.h",
+      "physical_raw_sha256": "d43732ceca814f67f7f04e1b51d8512aab2e199092a546d1c47d30e0f28439bf",
+      "whole_file_lf_sha256": "0b2149e8397748e84b1cbc14904cde97d5bee4c3e69474486169e4656ff89054",
+      "git_base_equal": true,
+      "status": "PRESERVE_ORIGINAL_READONLY"
+    },
+    {
+      "path": "tests/unit/aot/test_xr_program_aot.c",
+      "physical_raw_sha256": "6fea38acff96d94b2bfb414e04aa308386f6284ed12ccf05613a790a23caa700",
+      "whole_file_lf_sha256": "e7ab9301b308c7db6bf48e348257e5288f38f22c1b38c827fb040719dbf2de0e",
+      "git_base_equal": true,
+      "status": "PRESERVE_ORIGINAL_READONLY"
+    },
+    {
+      "path": "tests/unit/vm/test_xr_program_vm.c",
+      "physical_raw_sha256": "3a19b58076867cc70ef6c77e975286009df65e61ac1ed9edb2b5ab7813543502",
+      "whole_file_lf_sha256": "17904ef2bab8bb7eea72245fedba9878d74b6b8e93776e4314418e2db06dce8a",
+      "git_base_equal": true,
+      "status": "PRESERVE_ORIGINAL_READONLY"
+    }
+  ],
+  "input_policy": "Two complete census bodies and twelve specified helpers including complete mutated shared writer are bound to originals equal01e6. Whole shared fixture includes all mutations, but these two census bodies call only VALID. Other mutation responsibilities remain separate. Four fresh graph inputs and three byte-mutated variants retain exact original shape and assertions. Product-source context is read-only static explanation, never current execution evidence.",
+  "valid_fixture_graph": {
+    "builder": "xr_program_existential_fixture_write -> write_mutated(VALID)",
+    "types": [
+      "RECT100: STRUCT aggregate, TRIVIAL/COPY_TRIVIAL, oneI64 field.",
+      "SHAPE_READ101: interfaceShape READ existential, TRIVIAL/COPY_TRIVIAL.",
+      "SHAPE_REF102: interfaceShape REF existential, AFFINE/COPY_FORBIDDEN."
+    ],
+    "constants": [
+      "I64(42)",
+      "I64(0)",
+      "BOOL(true)"
+    ],
+    "interface": "Shape has three slots: slot0 READ Shape101 -> I64, no typederror; slot1 READ Shape101 -> I64 with ERROR/effectERROR; slot2 REF Shape102 -> I64, no typederror. Conformance STRUCT Rect100 binds respective actual READ, fallibleREAD, REF implementations.",
+    "functions": [
+      {
+        "role": "read_implementation",
+        "instructions": [
+          "BLOCK_ARGUMENT READ Rect100 receiver",
+          "AGGREGATE_PROJECT field0 -> I64",
+          "RETURN projectedI64"
+        ]
+      },
+      {
+        "role": "fallible_read_implementation",
+        "instructions": [
+          "BLOCK_ARGUMENT READ Rect100 receiver",
+          "AGGREGATE_PROJECT field0 -> I64",
+          "RETURN projectedI64"
+        ],
+        "signature_note": "Advertises typedERROR/effectERROR, but original body has no ERROR_PUBLISH/error branch."
+      },
+      {
+        "role": "ref_implementation",
+        "instructions": [
+          "BLOCK_ARGUMENT REF Rect100 PLACE receiver",
+          "PLACE_LOAD borrowed Rect100",
+          "AGGREGATE_PROJECT field0 -> I64",
+          "RETURN projectedI64"
+        ],
+        "boundary": "Original performs an actual REF receiver read/load, no writeback mutation."
+      },
+      {
+        "role": "factory",
+        "instructions": [
+          "BLOCK_ARGUMENT zero operands",
+          "CONSTANT_I64(42)",
+          "AGGREGATE_CONSTRUCT Rect100[42] NON_OWNER",
+          "EXISTENTIAL_PACK Shape_READ101 NON_OWNER",
+          "RETURN actualREADexistential"
+        ]
+      },
+      {
+        "role": "entry",
+        "blocks": [
+          {
+            "name": "entry",
+            "instructions": [
+              "BLOCK_ARGUMENT zero operands",
+              "CONSTANT_I64(42)",
+              "CONSTANT_I64(0)",
+              "CONSTANT_BOOL(true)",
+              "AGGREGATE_CONSTRUCT Rect100[42] NON_OWNER",
+              "PLACE_LOCAL actualRect100 NON_OWNER",
+              "EXISTENTIAL_PACK Shape_REF102 OWNER from actualPLACE",
+              "CALL_WITNESS_DIRECT slot2 actualREFcarrier -> I64 (value unused)",
+              "OWNER_DROP actualREFcarrier",
+              "CALL_SEALED_DIRECT actualfactory -> Shape_READ101 NON_OWNER",
+              "OWNER_COPY actualREADexistential -> copiedREADexistential NON_OWNER",
+              "EXISTENTIAL_TEST original erased value for Rect100 -> BOOL",
+              "CONDITIONAL_BRANCH actualtest; true(copied,42)/false(copied,0)"
+            ]
+          },
+          {
+            "name": "true",
+            "instructions": [
+              "BLOCK_ARGUMENT copiedREADexistential and I64 fallback42",
+              "EXISTENTIAL_PROJECT trueREADvalue -> Rect100",
+              "AGGREGATE_PROJECT field0 -> I64 (value unused)",
+              "CALL_WITNESS_DIRECT slot0 -> directI64(42)",
+              "CALL_WITNESS_INVOKE slot1 actualREADvalue + directI64fallback; normal/error successors"
+            ]
+          },
+          {
+            "name": "false",
+            "instructions": [
+              "BLOCK_ARGUMENT copiedREADexistential and fallback0",
+              "RETURN falsefallbackI64(0)"
+            ]
+          },
+          {
+            "name": "witness_normal",
+            "instructions": [
+              "BLOCK_ARGUMENT implicitI64result",
+              "RETURN actualimplicitI64result"
+            ]
+          },
+          {
+            "name": "witness_error",
+            "instructions": [
+              "BLOCK_ARGUMENT typedERROR and passed directI64fallback",
+              "RETURN actualfallbackI64"
+            ]
+          }
+        ]
+      }
+    ],
+    "shape_counts": {
+      "functions": 5,
+      "blocks": 9,
+      "instructions": 39,
+      "types": 3,
+      "interfaces": 1,
+      "interface_slots": 3,
+      "conformances": 1,
+      "conformance_slots": 3,
+      "constants": 3
+    },
+    "module": "One wave4:module containing allfive functions/three constants. Semantic profilewave4:semantic-profile/CORE_BASE. VALID excludes sixth trap block and module initializer/slot mutation branch; retain false/error blocks even though actual valid run takes true/normal.",
+    "runtime_call": "Actual entry, NULLargs/count0, explicit profile.pointer_width64, default budget. Original clone census evaluates once -> RETURN/I64(42), then dispose outcome/free Program/artifact. Fixed42 follows actual factory/struct/existential copy/test/projection/witness calls; returning42 directly is not equivalent."
+  },
+  "class_copy_graph": {
+    "types": [
+      "CLASS70 actual CLASS_REFERENCE/NOMINAL_CLASS, AFFINE/COPY_EXPLICIT, oneI64 field.",
+      "READ EXISTENTIAL71 tied to original interface, ownership/copy fields omitted in original input and inferred by producer."
+    ],
+    "interface": "One READ existential71 receiver slot ->VOID; conformance NOMINAL_CLASS70 binds actual method READ CLASS70 receiver.",
+    "method_instructions": [
+      "BLOCK_ARGUMENT CLASS70 READ receiver",
+      "RETURN_VOID"
+    ],
+    "entry_instructions": [
+      "CONSTANT_I64(1)",
+      "CLASS_CONSTRUCT CLASS70 OWNER with field1",
+      "EXISTENTIAL_PACK READ71 NON_OWNER borrowing actualobject",
+      "OWNER_COPY READ71 NON_OWNER -> copied (unused result)",
+      "RETURN original CLASS70 OWNER"
+    ],
+    "signature": "Actual ENTRY, zeroargs, CLASS70 OWNER result, original effect_mask omittedzero; oneblock/fiveops. One class method plus entry, two types, oneconstant1, oneinterface/slot/conformance, original profile/CORE_BASE. No missing-argument spoof.",
+    "runtime_call": "Original bound evaluator uses actualentry, NULLargs/count0, NULLprofile/defaultbudget, only lifecycle_context/event binding. Original requires exact INVALID_INVOCATION and valueVOID, then disposes outcome/free Program/artifact. It does not successfully return the declared owning class."
+  },
+  "original_lifecycle": {
+    "log_struct_body": "typedef struct ClassLifecycleLog {\n    XrReferenceLifecycleEventKind kinds[64];\n    XrReferenceLifecycleEventOrigin origins[64];\n    uint16_t type_ids[64];\n    uint64_t identities[64];\n    uint64_t related_identities[64];\n    uint32_t fields[64];\n    uint32_t count;\n} ClassLifecycleLog;",
+    "log_struct_lf_sha256": "9fc8510ff5c507e82606cd994e5c4e571fefae4d052f867d4c9e76f408477876",
+    "capacity": 64,
+    "fields": [
+      "kind",
+      "origin",
+      "type_id",
+      "identity",
+      "related_identity",
+      "field_ordinal"
+    ],
+    "callback_boundary": "Copies allfields to fixed64-row log; NULL/eventNULL/capacity limit silently drops events. Original selected test asserts two kinds/order/reclaimorigin and absenceCLASS_COPY but does not compare stableidentity/typeid/relatedidentity/field values or explicit overflow flag.",
+    "asserted_before_outcome_disposal": true,
+    "count": 2,
+    "ordered_events": [
+      "CLASS_CONSTRUCT",
+      "CLASS_RECLAIM"
+    ],
+    "reclaim_origin": "DOMAIN_TEARDOWN",
+    "all_logged_events_not": "CLASS_COPY",
+    "finalize_assertion": "NONE in original selected body",
+    "physical_allocator_assertion": "NONE in original selected body"
+  },
+  "readonly_old_failure_context": [
+    {
+      "path": "src/program/xr_reference_clone.inc.c",
+      "first_line": 196,
+      "last_line": 214,
+      "excerpt": "    if (type->kind == XR_CORE_IR_TYPE_EXISTENTIAL) {\n        if (source.kind != XR_REFERENCE_VALUE_EXISTENTIAL || !source.as.existential)\n            return CLONE_STATUS_INVALID_VALUE;\n        const XrReferenceExistentialValue *source_existential = source.as.existential;\n        /* Trivial read existentials are cycle-free value envelopes. Affine or\n         * place-backed existentials need graph-aware carrier memoization and\n         * remain fail-closed until that contract is implemented. */\n        if (source_existential->existential_type_id != type_id ||\n            type->ownership != XR_CORE_IR_TYPE_OWNERSHIP_TRIVIAL ||\n            type->copy_contract != XR_CORE_IR_COPY_TRIVIAL ||\n            source_existential->payload.category != XR_CORE_IR_VALUE)\n            return CLONE_STATUS_UNSUPPORTED;\n        if (!clone_type_is_pure_trivial_value_graph(\n                context->program, source_existential->concrete_type_id, 0u))\n            return CLONE_STATUS_UNSUPPORTED;\n        XrReferenceExistentialValue *copy = allocate_existential(context);\n        if (!copy)\n            return CLONE_STATUS_RESOURCE_LIMIT;\n        copy->existential_type_id = source_existential->existential_type_id;\n",
+      "excerpt_lf_sha256": "fec6ee14508ee25395a1d0a0dc393a8715d45fc4dbcbc956bfe2fe38928a0b13",
+      "status": "SOURCE_CONTEXT_ONLY_NOT_EXECUTION"
+    },
+    {
+      "path": "src/program/xr_reference_clone.inc.c",
+      "first_line": 337,
+      "last_line": 340,
+      "excerpt": "static XrReferenceOutcomeKind clone_failure_outcome_kind(CloneStatus status) {\n    return status == CLONE_STATUS_RESOURCE_LIMIT ? XR_REFERENCE_OUTCOME_RESOURCE_LIMIT\n                                                 : XR_REFERENCE_OUTCOME_INVALID_INVOCATION;\n}\n",
+      "excerpt_lf_sha256": "fdd01fd9f863de7395eb42d2b21d7a59af0b0c7ee58e404d3ea17a23cf26fe7a",
+      "status": "SOURCE_CONTEXT_ONLY_NOT_EXECUTION"
+    },
+    {
+      "path": "src/program/xr_reference_evaluator.c",
+      "first_line": 1619,
+      "last_line": 1629,
+      "excerpt": "                case XR_CORE_OP_CORE_OWNER_COPY: {\n                    CloneStatus clone_status = clone_reference_value(\n                        context, values[instruction->operands[0]].as.value,\n                        instruction->result_type_id, &produced.as.value);\n                    if (clone_status != CLONE_STATUS_OK) {\n                        result = outcome(clone_failure_outcome_kind(clone_status), context);\n                        goto done;\n                    }\n                    break;\n                }\n                case XR_CORE_OP_CORE_OWNER_MOVE:\n",
+      "excerpt_lf_sha256": "02a1a36e062027eb6e1477f71dc6ff6312c460434530af229c4b6ee0566df2a2",
+      "status": "SOURCE_CONTEXT_ONLY_NOT_EXECUTION"
+    },
+    {
+      "path": "src/program/xr_reference_evaluator.c",
+      "first_line": 703,
+      "last_line": 715,
+      "excerpt": "static void free_eval_arena(EvalContext *context) {\n    for (uint32_t index = 0; index < context->class_count; ++index) {\n        XrReferenceClassValue *value = context->classes[index];\n        if (!value || value->detached)\n            continue;\n        if (value->alive)\n            emit_lifecycle(context, XR_REFERENCE_EVENT_CLASS_RECLAIM,\n                           XR_REFERENCE_EVENT_ORIGIN_DOMAIN_TEARDOWN, value, UINT64_MAX,\n                           UINT32_MAX);\n        xr_free(value->fields);\n        xr_free(value);\n    }\n    for (uint32_t index = 0; index < context->aggregate_count; ++index) {\n",
+      "excerpt_lf_sha256": "2c655f10abce3516721c4f3f917eee75fb528914094de0a58c04f66b6dac1efc",
+      "status": "SOURCE_CONTEXT_ONLY_NOT_EXECUTION"
+    }
+  ],
+  "old_failure_interpretation": "Static original clone code admits only pure trivial value-graph payload for an existential; class payload fails that safe subset and nonresource clone failures map INVALID_INVOCATION. Eval teardown emits reclaim for remaining nondetached class. This supports why original body records construct/reclaim with noCLASS_COPY; no product run or current architectural decision is inferred.",
+  "witness_variants": [
+    {
+      "name": "REF_carrier_calls_READ_slot",
+      "baseline": "completeVALIDfixture",
+      "locator": "find_witness_direct_slot_offsets structural CODE walk",
+      "original_byte": 2,
+      "mutated_byte": 0,
+      "expected_status": "XR_PROGRAM_VERIFY_OK",
+      "mode_direction": "Weaken actualREF existential receiver to READ slot; producer graph and ownerDROP unchanged.",
+      "mutation_policy": "In-place savedbyte then validate_ok/Programfree then restorebyte.",
+      "runtime": "NOT_RUN_IN_ORIGINAL_BODY",
+      "status": "OPEN"
+    },
+    {
+      "name": "READ_carrier_calls_REF_slot",
+      "baseline": "completeVALIDfixture",
+      "locator": "same actualCODE walk locates originalREAD slot0",
+      "original_byte": 0,
+      "mutated_byte": 2,
+      "expected_status": "XR_PROGRAM_VERIFY_SEMANTIC_REJECTED",
+      "expected_diagnostic": "XR_PROGRAM_DIAGNOSTIC_OPERATION_IMMEDIATE",
+      "mutation_policy": "expect_mutated_verify mallocs/fullcopies artifact, mutates only locatedbyte, singleverify with exactstatus/diag/NULLoutput, freescopy.",
+      "runtime": "NOT_RUN_IN_ORIGINAL_BODY",
+      "status": "OPEN"
+    },
+    {
+      "name": "foreign_interface_receiver_signature",
+      "baseline": "completebuild_program_table_artifact(false,false,false)",
+      "locator": "find_interface_slot locates actualinterfacea/b by completekey in semanticmetadata",
+      "preconditions": "Bothslots found; signatureA!=signatureB; actualsignatureB<128 and valid interfaceB signature.",
+      "mutation": "Replace actualinterfaceA slot signature byte with actualinterfaceB signature ID, preserving two actualREAD receiver types/existential71vs72 and conformance bindings. It is in-range cross-interface confusion, not an unknown signature ID.",
+      "expected_status": "XR_PROGRAM_VERIFY_SEMANTIC_REJECTED",
+      "expected_diagnostic": "XR_PROGRAM_DIAGNOSTIC_FUNCTION",
+      "mutation_policy": "Full-copy singleverify with exactstatus/diag/NULLoutput then freecopy.",
+      "runtime": "NOT_RUN_IN_ORIGINAL_BODY",
+      "status": "OPEN"
+    }
+  ],
+  "witness_locator_boundary": "Walk actualdecodedCODE functions/blocks/blockargs/instructions with test_take_uvar; parse immediate kinds and save slot0/2 CALL_WITNESS_DIRECT U32 operand locations. Interface locator checks actual stablekey and returns firstslot offset+signatureID. These original offsets/IDs do not define current packet encoding; Root must map equivalent actual current mutation.",
+  "original_negative_strength": "Witness negatives use single expect_mutated_verify validation, not the double/full-diagnostic helper from other families. Clone runtime negative has exact typedoutcome/value/events, not semantic reject or any-error test. Keep boundaries separate.",
+  "assertion_counts": {
+    "census_functions": 2,
+    "outer_sites": 21,
+    "specified_helpers": 12,
+    "specified_helper_sites": 7,
+    "fresh_builder_inputs": 4,
+    "distinct_full_graph_shapes": 3,
+    "byte_mutated_variants": 3,
+    "positive_admitted_programs": 3,
+    "single_semantic_negative_calls": 2,
+    "runtime_evaluations": 2,
+    "runtime_positive_goldens": 1,
+    "runtime_exact_negative_with_events": 1
+  },
+  "shared_fixture_owners": {
+    "path": "tests/unit/program/xr_program_existential_fixture.h",
+    "actual_include_users": [
+      "tests/unit/program/test_xr_program_verify.c",
+      "tests/unit/aot/test_xr_program_aot.c",
+      "tests/unit/vm/test_xr_program_vm.c"
+    ],
+    "status": "PRESERVE_SHARED_READONLY",
+    "deletion": "No fixture deletion candidate: actual Program verifier, AOT and VM users remain."
+  },
+  "Root_contract_or_representation_review": {
+    "status": "OPEN",
+    "clone_boundary": "Preserve complete legal struct existential copy graph and independent42 actual execution. Class READ existential original admitted/runtimeINVALID boundary needs explicit frozen-contract adjudication: if current architecture supports this complete copy, retain original failure evidence and prove current legitimate owned/borrowed behavior and cleanup independently; do not adopt oldunsupported forever, restore compatibility carriers or silently change golden.",
+    "events": "Current common lifecycle observer must provide stableobject identity and realconstruct/finalize/reclaim evidence beyond original two-eventprojection/count. Preserve original orderedconstruct/reclaim and no-copy obligation at its reviewed failure boundary; if current semantic behavior changes, explicitly map event obligations. Physical0/addresses/release callbacks/globalcounts cannot substitute for required object identity. Fixedcapacity silentdrop cannot establish no lost events.",
+    "witness": "Preserve actual READ/REF capability direction and interface-specific receiver signature identity. Do not convert both mutations to out-of-range IDs, discard unused actualREF operation or replace witness bodies by fixed42. Current frozen Cell/exclusive/ref contract applies; no temporary/writeback representation restored.",
+    "qualification": "Formal public Built/Checked/fullspecialization reverify/Lowered/currentverifiedowner/packet/Library/Program, VM/native/mixed/twoInstances/ownedescape/actualcleanup/FI/axes/fullsafety await formalproducer/window. Original class failure cannot be used as all-positive product qualification."
+  },
+  "full_FI": "NOT_RUN",
+  "axes": "NOT_RUN",
+  "full_safety": "NOT_RUN",
+  "SourceDelete": "NOT_RUN",
+  "Main": "NOT_RUN",
+  "handoff": {
+    "Root_thread": "01a11f74-a297-7b11-8441-835bde6a3d5f",
+    "formal_acceptance": "PENDING"
+  },
+  "boundaries": [
+    "Two originalcensus/all21outer/7specifiedhelperCHECKsites, fourfullbuilderinputs and threebytevariants OPEN; retired0.",
+    "Staticoriginalinput/runtimegolden/failure/events/witness evidence only; no currentproductrun or neweventproof.",
+    "Originalsharedfixture/productcontext preserved; productABI/CMake/stdlib/spec/SDK/docs untouched, noheavygate or globalvalidator/ledger."
+  ]
+}
