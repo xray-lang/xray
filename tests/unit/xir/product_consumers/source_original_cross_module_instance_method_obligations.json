@@ -1,0 +1,353 @@
+{
+  "schema": 1,
+  "producer": "25f4016d6f089169757a90ae11ba537002374711",
+  "identity": "Checked25/semantic67/Value22/Call28/Program29",
+  "status": "OPEN",
+  "retired": 0,
+  "replacement_gates": [],
+  "result": "PASS_OWNED_CHECKED_LOWERED_METADATA_ONLY",
+  "full_FI": "NOT_RUN",
+  "axes": "NOT_RUN",
+  "cancel": "NOT_RUN",
+  "SourceDelete": "NOT_RUN",
+  "full_safety": "NOT_RUN",
+  "Main": "NOT_RUN",
+  "family": "original_cross_module_instance_method",
+  "legacy": {
+    "name": "source_owner_cross_module_instance_method_preserves_receiver_across_suspend",
+    "legacy_path": "tests/unit/program/test_xr_program_source_build.c",
+    "legacy_line": 1907,
+    "body_lf_sha256": "cb3b350ac67ee9aa7964cf9b758b37b5b040613b16ea52c3ff469a1b272fba3d",
+    "assertion_sites": 23,
+    "loop_sites": 4,
+    "status": "OPEN",
+    "replacement_gates": [],
+    "note": "Function census preserves its whole body; sites do not count executed loop iterations.",
+    "original_fixture": {
+      "id": "cross_module_instance_method_coroutine",
+      "expected_exit": 42,
+      "labels": [
+        "module-graph",
+        "method",
+        "coroutine",
+        "ownership",
+        "cancel"
+      ],
+      "backends": {
+        "vm": "execute",
+        "aot": "execute"
+      }
+    },
+    "static_input_literals": {
+      "library_source": {
+        "bytes": 185,
+        "sha256": "bb41f3d3d610b67ce6445475deb031967b10a0b069ef00b1c923599b3d6a6c87"
+      },
+      "entry_source": {
+        "bytes": 109,
+        "sha256": "5765d2986533f38100664640b32772722b00c0f32db226ec3f8267d19c687b43"
+      }
+    }
+  },
+  "original_private_helpers": [
+    {
+      "path": "tests/unit/program/test_xr_program_source_build.c",
+      "function": "source_build_fixture_init",
+      "line": 894,
+      "end_line": 968,
+      "body_lf_sha256": "964c190cb52940aa039b9459e6a5aa0416430eadac032979ed210358216892eb",
+      "classification": "Original directly-used private NON_TEST helper authority metadata, not a TEST/census row or retirement."
+    },
+    {
+      "path": "tests/unit/program/test_xr_program_source_build.c",
+      "function": "assert_source_build_ok",
+      "line": 996,
+      "end_line": 1010,
+      "body_lf_sha256": "a5d0aee0a406f887ea79355380455511ee0762cfa39915fb657cfe8a4088fd94",
+      "classification": "Original directly-used private NON_TEST helper authority metadata, not a TEST/census row or retirement."
+    },
+    {
+      "path": "tests/unit/program/test_xr_program_source_build.c",
+      "function": "assert_aot_fixture_backend_contract",
+      "line": 566,
+      "end_line": 610,
+      "body_lf_sha256": "583f92b771718b8e1d4293debcb72cf92e266292abc3ffa17db8103db6b066be",
+      "classification": "Original directly-used private NON_TEST helper authority metadata, not a TEST/census row or retirement."
+    },
+    {
+      "path": "tests/unit/program/test_xr_program_source_build.c",
+      "function": "record_source_class_lifecycle",
+      "line": 383,
+      "end_line": 392,
+      "body_lf_sha256": "73c7e2986c3d6fe46d074f4ce8a8657ca02af719d7fac220fa6a676c76e05a13",
+      "classification": "Original directly-used private NON_TEST helper authority metadata, not a TEST/census row or retirement."
+    },
+    {
+      "path": "tests/unit/program/test_xr_program_source_build.c",
+      "function": "source_class_lifecycle_count",
+      "line": 394,
+      "end_line": 400,
+      "body_lf_sha256": "3c954edab471ac5272d011b6778ac9eb543dd49c5afeb984648da1f0d0c30531",
+      "classification": "Original directly-used private NON_TEST helper authority metadata, not a TEST/census row or retirement."
+    },
+    {
+      "path": "tests/unit/program/test_xr_program_source_build.c",
+      "function": "program_operation_count",
+      "line": 361,
+      "end_line": 375,
+      "body_lf_sha256": "2d6a79abce8b727c9711e86a5520d525ddefa2b890f5db5e510d4a89d9d5f68d",
+      "classification": "Original directly-used private NON_TEST helper authority metadata, not a TEST/census row or retirement."
+    },
+    {
+      "path": "tests/unit/program/test_xr_program_source_build.c",
+      "function": "source_build_fixture_free",
+      "line": 873,
+      "end_line": 892,
+      "body_lf_sha256": "54f2ca59ddb46fda789abf0411160790bcb950903858a308b984b50e6f8c1889",
+      "classification": "Original directly-used private NON_TEST helper authority metadata, not a TEST/census row or retirement."
+    }
+  ],
+  "original_source": {
+    "path": "tests/unit/xir/product_consumers/original_cross_module_instance_method/root.xr",
+    "prefix_bytes": 109,
+    "prefix_sha256": "5765d2986533f38100664640b32772722b00c0f32db226ec3f8267d19c687b43",
+    "adapter": "export fn consumerAnswer() -> i64 { return answer() }\n",
+    "adapter_bytes": 54,
+    "adapter_sha256": "62788122d5e32c2bf5db10a60a2939f92a226f7606d09c490da4212a1341f2fa",
+    "bytes": 163,
+    "sha256": "3bb17ffe354b537a024dbf6e4c371df1c80051d72a3db21f20d48fdbeeb5f8bc",
+    "construction": "Independent ast.literal_eval decoding of actual wrapper entry_source[] C literals, crosschecked with inventory decoder and existing original projection; append only54B consumerAnswer adapter."
+  },
+  "original_library": {
+    "path": "tests/unit/xir/product_consumers/original_cross_module_instance_method/library.xr",
+    "bytes": 185,
+    "sha256": "bb41f3d3d610b67ce6445475deb031967b10a0b069ef00b1c923599b3d6a6c87",
+    "adapter_bytes": 0,
+    "construction": "Complete actual library_source[] decoded bytes, no rewriting; matches existing original projection library."
+  },
+  "original_module_graph": {
+    "physical_root": "tests/unit/xir/product_consumers/original_cross_module_instance_method",
+    "root": "tests/unit/xir/product_consumers/original_cross_module_instance_method/root.xr",
+    "library": "tests/unit/xir/product_consumers/original_cross_module_instance_method/library.xr",
+    "relative_import": "./library",
+    "import": "import { Worker } from \"./library\"",
+    "modules_separate": true,
+    "receiver": "Original final Worker with i64 value initialized40; instance method child takesadd2 and uses this.value after two original Coro.yield sites. No flattening, receiver replacement or nominal shadow."
+  },
+  "independent_i64": 42,
+  "independent_goldens": {
+    "required_Source_status": 0,
+    "receiver_constructor_argument": 40,
+    "child_argument": 2,
+    "returned_i64": 42,
+    "yield_source_sites": 2,
+    "static_program_class_construct_operation_count": 1,
+    "static_program_coroutine_call_sealed_operation_count": 1,
+    "cancel_after": [
+      0,
+      1,
+      2
+    ],
+    "step_counts_before_terminal": [
+      2,
+      1,
+      2
+    ],
+    "normal_terminal": "RETURN/I64/42 after two SUSPENDED steps",
+    "cancel_terminals": "CANCELLED after one or two SUSPENDED steps",
+    "during_each_suspension_no_finalize": true,
+    "during_each_suspension_no_reclaim": true,
+    "runtime_class_constructs_per_execution": 1,
+    "finalize_per_constructed_identity": 1,
+    "reclaim_per_constructed_identity": 1,
+    "lifecycle_log_overflow": false,
+    "same_code_instance_executions": 3,
+    "original_standalone_exit": 42,
+    "original_stdout_hex": "",
+    "original_stderr_hex": "",
+    "scope": "Fixed original source/static/runtime assertions, no current execution. cancel_after0 is normal completion. No guessed concrete identity; lifecycle checks use observed construct event identity."
+  },
+  "proposed_consumer": {
+    "source": "tests/unit/xir/product_consumers/test_original_cross_module_instance_method_source.c",
+    "cmake": "tests/unit/xir/product_consumers/source_product_original_cross_module_instance_method_source.cmake",
+    "status": "REGISTERED_BUILT_EXECUTED_METADATA_ONLY_PASS",
+    "proposed_normal_tests": [
+      {
+        "name": "test_original_cross_module_instance_method_source",
+        "required_source_status": "XR_XIR_OK",
+        "configurations": [
+          "MSVC Release",
+          "Clang ASan/UBSan"
+        ],
+        "result": "PASS_OWNED_CHECKED_LOWERED_METADATA_ONLY"
+      }
+    ],
+    "TIMEOUT": 120,
+    "PROCESSORS": 1,
+    "WILL_FAIL": false,
+    "planned_processes_per_configuration": 1,
+    "planned_processes_both_configurations": 2,
+    "registration_status": "ACTUAL_REGISTERED_BOTH_CONFIGURATIONS",
+    "qualification": "Positive original graph Source admission and actual owned Checked/Lowered metadata success branch or retained diagnostic. No receiver-across-suspend/return42/cancellation/lifecycle/backend execution."
+  },
+  "candidate_pipeline": {
+    "status": "EXECUTED_SOURCE_CHECKED_LOWERED_METADATA_ONLY_PASS",
+    "input": "Exact nested root109+54adapter and185B library, unchanged import/Worker40/child2/twoCoro.yield; fixed public SourceProduct with finite compile owner. DualFILE/hash probes close beforeSourceSession.",
+    "positive_requirement": "Required Source0, no WILL_FAIL/expected failure/skip/source replacement. Own-family actual status/stage/line/column/path/message null until real registered receipts.",
+    "success_path": "Actual original Source success verified product, owned full Closed Checked packet/writer equality across Session/Product/borrowed input/path/request/authority destruction, reverified and rewrote owned Checked, lowered publicly, dropped Checked/packet before verifying actual Lowered. This metadata evidence does not execute Program/Instance, receiver suspension or original42.",
+    "failure_path": "Preserve first actual owned diagnostic status/stage/location/path/message after Session/Product/input/root/path/request/authority death, then free diagnostic and compiler owners to actual compiler physical0/table0. Required-positive gate remains FAIL for nonzero status; safe retained diagnostic does not imply Source0 or original42 success.",
+    "excluded_execution": "No Program/Instance/backend/native/mixed/gencode/AOT or real suspension/cancellation/lifecycle. No return42 or privateoperation counts/fullshape from metadata."
+  },
+  "receiver_identity_future_plan": {
+    "status": "FUTURE_ONLY_NOT_RUN",
+    "proof": "Future Source/ownedChecked graph must bind constructor and method receiver to actual imported Worker declaration, valuefield and resumable owner; use actual IDs and links, not name/opcode presence. Additional metadata never replaces two active suspension prefixes and exact runtime identity lifecycle.",
+    "boundary": "Original old wrapper does not assert numeric declaration IDs. Receiver survives actual suspended executions and identity-matched finalization/reclaim is the behavioral witness."
+  },
+  "original_obligations": [
+    {
+      "obligation": "Original hosted Source graph uses real root/library, explicit imported final Worker, target semantic fingerprint and one common validated Program. Positive admission remains required.",
+      "status": "OPEN"
+    },
+    {
+      "obligation": "Original Program has exactly1 CLASS_CONSTRUCT and1 COROUTINE_CALL_SEALED operation. Metadata source-site counting or Lowered-stage check cannot replace operation cardinality.",
+      "status": "OPEN"
+    },
+    {
+      "obligation": "Original imported Worker(40).child(2) crosses two real Coro.yield suspension points; receiver this.value remains40 and normal thirdstep RETURN/I64/42. Actual owned normal outcome is disposed.",
+      "status": "OPEN"
+    },
+    {
+      "obligation": "One real VMCode and one bound Instance run3 fresh VMExecutions: cancel_after0 normal takes2 SUSPENDED steps then RETURN42; cancel_after1 and2 take1/2 SUSPENDED steps then CANCELLED. No finalize/reclaim event occurs during any checked suspension prefix.",
+      "status": "OPEN"
+    },
+    {
+      "obligation": "Each normal/cancel execution resets bounded128-event lifecyclelog; nooverflow; exactly1 CLASS_CONSTRUCT event; for that observed identity exactly1 FINALIZE and1 RECLAIM at terminal before executionfree. Event counts need original identity, not aggregate physicalzero alone.",
+      "status": "OPEN"
+    },
+    {
+      "obligation": "All3 executions and shared code are freed; actual Instance begin_drain/retire/free succeeds. Original Sourcefixture/session/isolate/resolver/authority/physicalfiles and Program remain live during these VM executions, and are freed after AOT; do not claim this old wrapper exercises producerdeath beforeVM.",
+      "status": "OPEN"
+    },
+    {
+      "obligation": "Original AOT execute fixture builds BackendIR and verifies binding, emits generatedC twice with equal size and exactbytes, requires int main(void), writes fixtureoutput whenselected, frees2 emission owners thenIR. Real native fixture normalexit42 and default empty streams remain independent OPEN; old AOT helper does not assert cancellation/lifecycle native tracing.",
+      "status": "OPEN"
+    },
+    {
+      "obligation": "Future public SourceProduct/Checked/Lowered/Program/Instance ownership and VM/native/Mixed equivalence remain separate responsibilities. This source-only candidate does not execute active receiver suspension/cancel, lifecycle identity, Program operation counts or native binding.",
+      "status": "OPEN"
+    },
+    {
+      "obligation": "All allocation FI/axes/stickyfailure/cancel/actualSourceDelete/determinism/full safety/Main and retirement remain OPEN; no partial metadata facet retires old wrapper.",
+      "status": "OPEN"
+    }
+  ],
+  "static_admission_lead": {
+    "status": "HISTORICAL_SOURCE_RECONSTRUCTION_BEFORE_OWN_FAMILY_EXECUTION",
+    "actual_diagnostic": null,
+    "actual_receipt": null,
+    "lead": "Historical wrapper/helper reconstruction preceded this execution and assigned no diagnosis. Own-family actual receipts below record successful Source0/FINAL stage6 and actual owned Checked/Lowered verification. Historical null diagnostic fields do not describe current execution.",
+    "preservation": "No flattening/importshim/localnominal replacement, no inherited Prelude4/StringSlice3 diagnostic. Original receiver40/add2/twoyields and Source0 remain unchanged."
+  },
+  "boundaries": [
+    "Applied and registered original two-module fixture; both configurations freshly compiled and actually executed original Source0 and detached owned Checked/Lowered verification.",
+    "Current own-family success is Source0/stage6/0:0/pathnone/messageempty, independently recorded below. No borrowed prior-family diagnosis.",
+    "Owned Checked/Lowered metadata actually passed. Runtime42, active cancellation/lifecycle, receiver identity, VM/native/Mixed/AOT remain independent OPEN responsibilities.",
+    "Seven actualdirect private helper bodies are NON_TEST metadata; threecore helpers init/build/AOT plus lifecycle recorder/counter, operationcounter and fixturefree. No forged helperTEST/census/digestreference family.",
+    "Original producerdeath afterVM is preserved; futurepublic detachedmetadata is additional scope.",
+    "Original1Instance/3Execution choreography cannot be reported as dualInstance evidence; dualInstance belongs future fullqualification."
+  ],
+  "evidence_plan": {
+    "directory": "build-consumer-evidence/current67-original-cross-module-instance-method-source-r1",
+    "actual_product_receipts": [
+      "msvc-test_original_cross_module_instance_method_source.json",
+      "asan-test_original_cross_module_instance_method_source.json"
+    ],
+    "raw_stdout_stderr": "ACTUAL_SAVED_RAW_WITH_RECEIPT_SHA256",
+    "input_before_after": "ACTUAL_SAME_SHA256_BYTES_MTIME",
+    "registered_argv_and_executable_archive": "ACTUAL_REGISTERED_ARGV_AND_PRE_ENTRY_EXE_COPY",
+    "owned_failure_diagnostic": "NOT_RUN_SOURCE_SUCCEEDED",
+    "successful_Checked_Lowered": "ACTUAL_PASS_FULL_OWNED_PACKET_EQUALITY_AND_AFTER_CHECKED_DEATH_VERIFY",
+    "Source_query_receiver_identity": "NOT_RUN",
+    "Checked_relational_receiver_identity": "NOT_RUN",
+    "runtime42_two_suspend": "NOT_RUN",
+    "active_cancel_prefixes1_2": "NOT_RUN",
+    "per_identity_finalize_reclaim": "NOT_RUN",
+    "original_AOT_fixture_contract": "NOT_RUN",
+    "native_mixed_gencode": "NOT_RUN"
+  },
+  "candidate_authoring": "Historical ignored-only authoring followed by parent application, fresh build and own-family actual metadata execution.",
+  "actual_execution": {
+    "directory": "build-consumer-evidence/current67-original-cross-module-instance-method-source-r1",
+    "phase": "source",
+    "configurations": [
+      "MSVC Release",
+      "Clang ASan/UBSan"
+    ],
+    "normal_gate": "test_original_cross_module_instance_method_source",
+    "TIMEOUT": 120,
+    "PROCESSORS": 1,
+    "WILL_FAIL": false,
+    "required_source_status": 0,
+    "actual_source_status": 0,
+    "actual_source_status_name": "XR_XIR_OK",
+    "stage": 6,
+    "source_line": 0,
+    "source_column": 0,
+    "message": "",
+    "source_path": null,
+    "result": "PASS_OWNED_CHECKED_LOWERED_METADATA_ONLY",
+    "processes": 2,
+    "exit_codes": [
+      0,
+      0
+    ],
+    "instances": 0,
+    "runtime": "NOT_RUN",
+    "native": "NOT_RUN",
+    "mixed": "NOT_RUN",
+    "generated_C": "NOT_RUN",
+    "full_original_prefix_preserved": true,
+    "original_library_preserved": true,
+    "modules_separate": true,
+    "input_items_per_process": 2808,
+    "retained_owned_failure_diagnostic_after_producer_and_input_death": "NOT_RUN_SOURCE_SUCCEEDED",
+    "compiler_physical_after_release": "0/0",
+    "compiler_observer_table_after_release": 0,
+    "compiler_owner_pre_release_final_live": 80,
+    "compiler_owner_pre_release_live_note": "80 is the original compile context baseline; physical0/0 and observer table0 are verified after all artifacts and compiler owner destruction. No runtime-domain allocation release was executed.",
+    "Checked_full_writer_and_Lowered_after_Checked_death": "ACTUAL_PASS",
+    "Lowered_stage": 4,
+    "Lowered_function_count": 7,
+    "independent_runtime42_two_suspend": "NOT_RUN",
+    "active_cancel_prefixes1_2": "NOT_RUN",
+    "receiver_relational_identity": "NOT_RUN",
+    "per_identity_finalize_reclaim": "NOT_RUN",
+    "original_standalone_exit_and_empty_streams": "NOT_RUN",
+    "receipts": [
+      {
+        "configuration": "msvc",
+        "receipt": "msvc-test_original_cross_module_instance_method_source.json",
+        "pid": 27904,
+        "stdout_sha256": "2036c1962062ba45127892ee78d0714f1c02bd29038aef7edae513c2ee123020",
+        "stderr_sha256": "03d73acbdcbec2e940f38b1156b81706818b98d2e86335da2c18ffca9c63a9e5",
+        "inputs_before": "msvc-test_original_cross_module_instance_method_source-inputs-before.json",
+        "inputs_after": "msvc-test_original_cross_module_instance_method_source-inputs-after.json",
+        "binary_pre_entry_archive": "msvc-test_original_cross_module_instance_method_source-binary-preimage.exe"
+      },
+      {
+        "configuration": "asan",
+        "receipt": "asan-test_original_cross_module_instance_method_source.json",
+        "pid": 24080,
+        "stdout_sha256": "2036c1962062ba45127892ee78d0714f1c02bd29038aef7edae513c2ee123020",
+        "stderr_sha256": "03d73acbdcbec2e940f38b1156b81706818b98d2e86335da2c18ffca9c63a9e5",
+        "inputs_before": "asan-test_original_cross_module_instance_method_source-inputs-before.json",
+        "inputs_after": "asan-test_original_cross_module_instance_method_source-inputs-after.json",
+        "binary_pre_entry_archive": "asan-test_original_cross_module_instance_method_source-binary-preimage.exe"
+      }
+    ],
+    "controls": "Two separate sequence_length VM controls PASS; these do not execute the original instance method runtime.",
+    "caption_binding": "Product execution captured candidate map/trace; runtime-preimage-<filename> preserves exact old bytes. This later actual evidence annotation is not a rerun.",
+    "retired": 0,
+    "completion": "OPEN"
+  }
+}
