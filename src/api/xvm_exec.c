@@ -11,6 +11,7 @@
 #include "../runtime/xisolate_internal.h"
 #include "../runtime/xisolate_api.h"
 #include "../base/xchecks.h"
+#include "../base/xhashmap.h"
 #include "../base/xglobal_indices.h"
 #include "../base/xlog.h"
 #include "../base/xmalloc.h"
@@ -273,11 +274,14 @@ int xr_execution_engine_init(XrVMRuntime *isolate) {
     isolate->vm.pending_error = xr_null();
 
     // Initialize string intern table
-    isolate->vm.strings_map = xr_hashmap_new();
-    if (isolate->vm.strings_map == NULL) {
+    /* The unpublished map owns a copy of the process-lifetime policy. */
+    XrOsIoPolicy policy = xr_os_io_system_policy();
+    XrHashMap *strings = NULL;
+    if (xr_hashmap_owned_new(&policy, &strings) != XR_OS_IO_OK) {
         xr_log_warning("vm", "failed to create string intern table");
         return -1;
     }
+    isolate->vm.strings_map = strings;
     isolate->vm.trace_execution = isolate->params.trace_execution;
 
     init_globals(isolate);
@@ -299,7 +303,7 @@ void xr_execution_engine_cleanup(XrVMRuntime *isolate) {
         XR_CHECK(module_unbound, "module execution error channel unbinding failed");
     }
     if (isolate->vm.strings_map != NULL) {
-        xr_hashmap_free(isolate->vm.strings_map);
+        xr_hashmap_owned_free(isolate->vm.strings_map);
         isolate->vm.strings_map = NULL;
     }
 

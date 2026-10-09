@@ -11,6 +11,7 @@
  */
 #ifndef XIR_FLOAT_ADMISSION_CASES_H
 #define XIR_FLOAT_ADMISSION_CASES_H
+#include "xir_construction_fixture.h"
 #include "xir/xxir_type_arena.h"
 static void floating_ir_rejections(void) {
     for (unsigned test = 0; test < 17; ++test) {
@@ -44,7 +45,7 @@ static void floating_ir_rejections(void) {
         }
         function.result = ops[0].type;
         XrXirArtifact *artifact = NULL;
-        CHECK(xr_xir_compile_check(&scalar_owner.context, &module, &artifact, NULL) == XR_XIR_BAD_TYPE && !artifact);
+        CHECK(xir_fixture_check(&scalar_owner.context, &module, &artifact, NULL) == XR_XIR_BAD_TYPE && !artifact);
     }
 }
 static void floating_value_admission(void) {

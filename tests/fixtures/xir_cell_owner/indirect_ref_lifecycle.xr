@@ -1,0 +1,45 @@
+enum Problem { Failed }
+var counter: i64 = 0
+fn leaf(value: ref i64) -> i64 { value += 1; return value; }
+fn middle(value: ref i64) -> i64 { const action = leaf; action(ref value); value += 1; return value; }
+export fn run() -> i64 { const action = middle; return action(ref counter); }
+export fn cellCounter() -> i64 { return counter; }
+
+fn throwing(value: ref i64) {
+    defer { value += 10; print(value); }
+    value += 1;
+    throw Problem.Failed;
+}
+export fn caughtThrow() -> i64 {
+    try { const action = throwing; action(ref counter); } catch(e: Problem) { }
+    counter += 1;
+    return counter;
+}
+export fn uncaughtThrow() -> i64 { const action = throwing; action(ref counter); return 0; }
+fn panicking(value: ref i64) -> i64 {
+    defer { value += 10; print(value); }
+    value += 1;
+    return 10 / 0;
+}
+export fn caughtPanic() -> i64 {
+    try { const action = panicking; action(ref counter); } catch panic { }
+    counter += 1;
+    return counter;
+}
+
+fn paused(value: ref i64) -> i64 {
+    defer { value += 10; print(value); }
+    value += 1;
+    print(value);
+    Coro.yield();
+    value += 2;
+    return value;
+}
+fn bridge(value: ref i64) -> i64 {
+    defer { value += 100; print(value); }
+    const action = paused; const result = action(ref value);
+    value += 4;
+    return result;
+}
+export fn suspended() -> i64 { const action = bridge; return action(ref counter); }
+fn main() -> i64 { return run(); }

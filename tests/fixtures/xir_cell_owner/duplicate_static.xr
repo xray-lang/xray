@@ -1,0 +1,6 @@
+var counter: i64 = 0
+fn inner(left: ref i64, right: ref i64) { left += 1; right += 1; }
+fn outer(value: ref i64) { inner(ref value, ref value); }
+export fn run() -> i64 { outer(ref counter); return counter; }
+fn main() -> i64 { return run(); }
+export fn cellCounter() -> i64 { return counter; }

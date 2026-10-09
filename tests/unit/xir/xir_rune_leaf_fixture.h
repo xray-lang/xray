@@ -1,3 +1,4 @@
+#include "xir_construction_fixture.h"
 /*
  * xray - Lightweight typed scripting with native concurrency
  * https://www.xray-lang.org
@@ -32,7 +33,7 @@ static XrXirStatus rune_leaf_build(const XrXirCompileContext *ctx,XrXirArtifact 
         {"literal",7,NULL,0,XR_XIR_RUNE,&blocks[3],1,literal,2,NULL,0}};
     XrXirModule module={XR_XIR_BUILT,functions,4,NULL,NULL,NULL,NULL,XR_XIR_PROGRAM,NULL};
     XrXirArtifact *checked=NULL;
-    XrXirStatus status=xr_xir_compile_check(ctx,&module,&checked,NULL);
+    XrXirStatus status=xir_fixture_check(ctx, &module, &checked, NULL);
     XrXirTarget target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};
     if(status==XR_XIR_OK)status=xr_xir_compile_lower(checked,&target,output,NULL);
     xr_xir_compile_artifact_free(checked);return status;

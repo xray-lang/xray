@@ -1,0 +1,4 @@
+import "./state" as state
+fn prepare()->i64 { return await go state.pure(state.current()) }
+export fn run()->i64 { return await go prepare() }
+fn main()->i64 { return 0 }

@@ -12,6 +12,7 @@
  */
 #ifndef XIR_ARRAY_PROGRAM_FIXTURE_H
 #define XIR_ARRAY_PROGRAM_FIXTURE_H
+#include "xir_construction_fixture.h"
 #include "xir/xxir_types.h"
 #include "xir/xxir_generic.h"
 #include "xir_nominal_fixture.h"
@@ -118,7 +119,7 @@ static XrXirArtifact *array_program_fixture(const XrXirCompileContext *context, 
     XrXirModule built = {XR_XIR_BUILT,functions,8,&declarations,NULL,&types, NULL, XR_XIR_PROGRAM, NULL};
     XrXirArtifact *checked = NULL, *lowered = NULL;
     XrXirDiagnostic diagnostic = {0};
-    XrXirStatus status = xr_xir_compile_check(context, &built, &checked, &diagnostic);
+    XrXirStatus status = xir_fixture_check(context, &built, &checked, &diagnostic);
     if (status != XR_XIR_OK) fprintf(stderr,"Array check %u function %u instruction %u\n",
         (unsigned) status, diagnostic.function, diagnostic.instruction);
     CHECK(status == XR_XIR_OK);

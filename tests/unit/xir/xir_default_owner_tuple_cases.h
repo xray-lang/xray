@@ -11,6 +11,7 @@
  */
 #ifndef XIR_DEFAULT_OWNER_TUPLE_CASES_H
 #define XIR_DEFAULT_OWNER_TUPLE_CASES_H
+#include "xir_construction_fixture.h"
 #include "xir/xxir_internal.h"
 #include "xir/xxir_declarations.h"
 #include "xir/xxir_generic.h"
@@ -78,7 +79,7 @@ static void default_tuple_case(bool constructor,unsigned mode) {
     case 7:{XrXirConstraint old=helper[1];helper[1]=helper[2];helper[2]=old;break;}
     }
     XrXirArtifact *checked=NULL;XrXirDiagnostic d={0};
-    XrXirStatus status=xr_xir_compile_check(suite_context, &module, &checked, &d);
+    XrXirStatus status=xir_fixture_check(suite_context, &module, &checked, &d);
     if(status!=expected)fprintf(stderr,"tuple ctor%u mode%u status%u expected%u f%u i%u\n",constructor,mode,status,expected,d.function,d.instruction);
     CHECK(status==expected);CHECK((checked!=NULL)==(expected==XR_XIR_OK));
     if(!checked)return;
@@ -90,11 +91,40 @@ static void default_tuple_case(bool constructor,unsigned mode) {
     CHECK(target!=UINT32_MAX && p->origins[target].argument_count==4);
     XrXirType *tuple=(XrXirType *)p->origins[target].arguments;
     XrXirCheckedPacket packet={0};CHECK(xr_xir_compile_checked_write(derived, &packet, NULL)==XR_XIR_OK);
-    /* Wire specification: origin records are the final module tail. Each has
-       function:u32,count:u32,then count u32 types; no searching writer bytes. */
-    size_t tail=0,before=0;
-    for(uint32_t f=0;f<p->count;++f){size_t n=8+4*(size_t)p->origins[f].argument_count;tail+=n;if(f<target)before+=n;}
-    CHECK(tail<packet.length);size_t tuple_offset=packet.length-tail+before+8;
+    /* Schema26: each origin has function/count/type arguments followed by an
+       effect-argument count and (parameter,type) pairs. Binding proofs follow
+       the origin vector as count plus six u32 words per proof. */
+    CHECK(packet.length>=4);
+    size_t tail=4,before=0;
+    CHECK((size_t)p->binding_count<=(packet.length-tail)/24);
+    tail+=24*(size_t)p->binding_count;
+    size_t proof_offset=packet.length-tail;
+    CHECK(packet32(&packet,proof_offset)==p->binding_count);
+    for(uint32_t f=0;f<p->count;++f){
+        const XrXirOrigin *origin=&p->origins[f];size_t n=12;
+        CHECK(n<=packet.length && (size_t)origin->argument_count<=(packet.length-n)/4);
+        n+=4*(size_t)origin->argument_count;
+        CHECK((size_t)origin->effect_argument_count<=(packet.length-n)/8);
+        n+=8*(size_t)origin->effect_argument_count;
+        CHECK(n<=packet.length-tail);tail+=n;if(f<target)before+=n;
+    }
+    CHECK(tail<=packet.length && packet.length-tail>=4);
+    size_t origins_offset=packet.length-tail;
+    CHECK(packet32(&packet,origins_offset-4)==p->count);
+    size_t tuple_offset=origins_offset+before+8,at=origins_offset;
+    for(uint32_t f=0;f<p->count;++f){
+        const XrXirOrigin *origin=&p->origins[f];
+        CHECK(packet32(&packet,at)==origin->function && packet32(&packet,at+4)==origin->argument_count);at+=8;
+        for(uint32_t a=0;a<origin->argument_count;++a,at+=4)
+            CHECK(packet32(&packet,at)==(uint32_t)origin->arguments[a]);
+        CHECK(packet32(&packet,at)==origin->effect_argument_count);at+=4;
+        for(uint32_t a=0;a<origin->effect_argument_count;++a,at+=8){
+            CHECK(packet32(&packet,at)==origin->effect_arguments[a].parameter);
+            CHECK(packet32(&packet,at+4)==(uint32_t)origin->effect_arguments[a].type);
+        }
+    }
+    CHECK(at==proof_offset);
+    for(unsigned a=0;a<4;++a)CHECK(packet32(&packet,tuple_offset+4*a)==(uint32_t)tuple[a]);
     for(unsigned a=0;a<4;++a){
         XrXirType old=tuple[a];tuple[a]=actual[(a+1)%4];
         CHECK(xr_xir_compile_artifact_verify(derived, NULL)==XR_XIR_BAD_TYPE);tuple[a]=old;
@@ -102,9 +132,16 @@ static void default_tuple_case(bool constructor,unsigned mode) {
         XrSHA256Context sha;xr_sha256_init(&sha);xr_sha256_update(&sha,packet.bytes,32);
         xr_sha256_update(&sha,packet.bytes+64,packet.length-64);xr_sha256_final(&sha,packet.bytes+32);
         XrXirArtifact *denied=NULL;
-        CHECK(xr_xir_compile_checked_read(suite_context, packet.bytes, packet.length, &denied, NULL)==XR_XIR_BAD_TYPE && !denied);
+        XrXirDiagnostic wire_diagnostic={0};
+        XrXirStatus wire_status=xr_xir_compile_checked_read(suite_context,packet.bytes,packet.length,&denied,&wire_diagnostic);
+        if(wire_status!=XR_XIR_BAD_TYPE || denied)
+            fprintf(stderr,"default_owner_tuple wire ctor=%u mode=%u argument=%u status=%u expected=%u diagnostic=%u f=%u i=%u packet=%zu tupleOffset=%zu origins=%u target=%u effectArgs=%u proofs=%u\n",
+                (unsigned)constructor,mode,a,(unsigned)wire_status,(unsigned)XR_XIR_BAD_TYPE,(unsigned)wire_diagnostic.status,
+                wire_diagnostic.function,wire_diagnostic.instruction,packet.length,tuple_offset,p->count,target,
+                p->origins[target].effect_argument_count,p->binding_count);
+        CHECK(wire_status==XR_XIR_BAD_TYPE && !denied);
         denied=(XrXirArtifact *)(uintptr_t)1;
-        CHECK(xr_xir_compile_checked_read(suite_context,packet.bytes,packet.length,&denied,NULL)==XR_XIR_BAD_TYPE && denied==(XrXirArtifact *)(uintptr_t)1);
+        CHECK(xr_xir_compile_checked_read(suite_context,packet.bytes,packet.length,&denied,NULL)==XR_XIR_BAD_STRUCTURE && denied==(XrXirArtifact *)(uintptr_t)1);
         default_tuple_u32(packet.bytes+tuple_offset+4*a,(uint32_t)old);
     }
     XrXirType swap=tuple[0];tuple[0]=tuple[2];tuple[2]=swap;

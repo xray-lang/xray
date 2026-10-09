@@ -6,6 +6,7 @@
  *
  * test_compile_owner.c - Observe real allocation across compiler owner transitions
  */
+#include "../xir_construction_fixture.h"
 #include "xir/xxir.h"
 #include "xir/xxir_checked.h"
 #include "xir/xxir_generic.h"
@@ -75,7 +76,7 @@ static XrXirStatus pipeline(XrCompileResources *owner, bool release_caller, unsi
     XrXirArtifact *checked = NULL, *specialized = NULL, *decoded = NULL, *lowered = NULL;
     XrXirCheckedPacket packet = {0};
     XrXirEffects *effects = NULL;
-    XrXirStatus status = kind == 4 ? generic_error_built(&context,&checked) : kind == 3 ? implementation_built(&context,&checked) : kind == 2 ? nominal_built(&context,&checked) : kind == 1 ? generic_built(&context,&checked) : xr_xir_compile_check(&context,&module,&checked,NULL);
+    XrXirStatus status = kind == 4 ? generic_error_built(&context,&checked) : kind == 3 ? implementation_built(&context,&checked) : kind == 2 ? nominal_built(&context,&checked) : kind == 1 ? generic_built(&context,&checked) : xir_fixture_check(&context, &module, &checked, NULL);
     if (status == XR_XIR_OK && kind == 4) {
         status = xr_xir_compile_effects_analyze(checked,&effects);
         if (status == XR_XIR_OK) CHECK(xr_xir_effects_error(effects,1,(XrXirType)257,1));
@@ -169,10 +170,12 @@ static void pipeline_failures(unsigned kind) {
         (unsigned long long)measured.work);
 }
 #include "resource_cases.h"
+#include "../root_construction72_cases.h"
 #include "reader_lower_cases.h"
 #include "checked_sizing_cases.h"
 
 int main(void) {
+    root_construction72_wire_cases();
     checked_sizing_cases();
     mandatory_context();
     reader_lower_cases();

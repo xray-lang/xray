@@ -309,6 +309,7 @@ add_executable(test_xir_allocations xir/test_xir_allocations.c
     ${CMAKE_SOURCE_DIR}/src/aot/xi_cgen_verify_output.c
     ${CMAKE_SOURCE_DIR}/src/shared/xnative_declaration.c)
 target_include_directories(test_xir_allocations PRIVATE ${CMAKE_SOURCE_DIR}/src)
+target_link_libraries(test_xir_allocations PRIVATE xray_xir_native_cache)
 if(MSVC)
     target_compile_options(test_xir_allocations PRIVATE /W4 /WX)
 else()
@@ -371,6 +372,12 @@ target_link_libraries(test_xir_native PRIVATE xray_xir_scalar)
 # Complete panic outcomes keep message ownership independent of result values.
 add_executable(test_xir_panic_carrier xir/test_xir_panic_carrier.c xir/xir_legacy_call_provider.c)
 target_link_libraries(test_xir_panic_carrier PRIVATE xray_xir)
+# These implementations are included under the runtime allocation macros,
+# never compiled as additional uncounted translation units.
+set_property(SOURCE xir/test_xir_panic_carrier.c APPEND PROPERTY OBJECT_DEPENDS
+    "${CMAKE_SOURCE_DIR}/src/xir/xxir_task_budget.c"
+    "${CMAKE_SOURCE_DIR}/src/xir/xxir_task.c"
+    "${CMAKE_SOURCE_DIR}/src/xir/xxir_task_outcome.inc.c")
 if(MSVC)
     target_compile_options(test_xir_panic_carrier PRIVATE /W4 /WX)
 else()
@@ -385,6 +392,10 @@ add_test(NAME test_xir_panic_carrier_wire_vector COMMAND ${XRAY_PYTHON}
 set_tests_properties(test_xir_panic_carrier test_xir_panic_carrier_fatal test_xir_panic_carrier_wire_vector
     PROPERTIES LABELS "unit;xir;ownership;abi")
 
+add_executable(test_xir_cell_owner_values xir/test_xir_cell_owner_values.c)
+target_link_libraries(test_xir_cell_owner_values PRIVATE xray_xir_scalar)
+add_test(NAME test_xir_cell_owner_values COMMAND test_xir_cell_owner_values)
+set_tests_properties(test_xir_cell_owner_values PROPERTIES LABELS "unit;xir;ownership")
 add_executable(test_xir_values xir/test_xir_values.c)
 target_link_libraries(test_xir_values PRIVATE xray_xir_scalar)
 add_executable(test_xir_instances xir/test_xir_instances.c)
@@ -418,6 +429,15 @@ set_tests_properties(test_xir_array_grow_budget PROPERTIES TIMEOUT 120 LABELS "u
 add_executable(test_xir_value_allocations xir/test_xir_value_allocations.c)
 target_include_directories(test_xir_value_allocations PRIVATE ${CMAKE_SOURCE_DIR}/src)
 target_link_libraries(test_xir_value_allocations PRIVATE xray_xir_scalar)
+# Owned close/copy tests use the production thread wrapper and join every handle.
+target_include_directories(test_xir_value_allocations PRIVATE ${CMAKE_SOURCE_DIR}/src/base)
+if(WIN32)
+    target_sources(test_xir_value_allocations PRIVATE ${CMAKE_SOURCE_DIR}/src/os/win/thread_win.c)
+else()
+    target_sources(test_xir_value_allocations PRIVATE ${CMAKE_SOURCE_DIR}/src/os/unix/thread_unix.c)
+    find_package(Threads REQUIRED)
+    target_link_libraries(test_xir_value_allocations PRIVATE Threads::Threads)
+endif()
 add_executable(test_xir_emit_strings xir/test_xir_emit_strings.c)
 target_link_libraries(test_xir_emit_strings PRIVATE xray_xir_cgen)
 set(XIR_STRING_GENERATED ${CMAKE_CURRENT_BINARY_DIR}/generated/xir_string_fixture.c)
@@ -549,6 +569,56 @@ set_tests_properties(test_xir_package_native PROPERTIES LABELS "unit;xir;executi
 
 
 target_link_libraries(test_xir_source_query PRIVATE xray_xir_source xray_xir_vm)
+add_test(NAME test_xir_source_core_syntax COMMAND test_xir_source_query --core-syntax)
+set_tests_properties(test_xir_source_core_syntax PROPERTIES TIMEOUT 60 RUN_SERIAL TRUE
+    LABELS "unit;xir;ownership;metadata")
+add_test(NAME test_xir_source_interface_name_spans COMMAND test_xir_source_query --interface-name-spans)
+set_tests_properties(test_xir_source_interface_name_spans PROPERTIES TIMEOUT 60 RUN_SERIAL TRUE
+    LABELS "unit;xir;ownership;metadata")
+
+add_executable(test_lsp_source_query xir/test_lsp_source_query.c)
+target_link_libraries(test_lsp_source_query PRIVATE xray_lsp_source_query xray_lsp_source_syntax xray_lsp_document_open)
+if(MSVC)
+    target_compile_options(test_lsp_source_query PRIVATE /W4 /WX)
+else()
+    target_compile_options(test_lsp_source_query PRIVATE -Wall -Wextra -Werror)
+endif()
+add_test(NAME test_lsp_source_query COMMAND test_lsp_source_query)
+set_tests_properties(test_lsp_source_query PROPERTIES LABELS "unit;xir;lsp;ownership;metadata" TIMEOUT 60)
+
+add_executable(test_xir_source_overlay xir/test_xir_source_overlay.c)
+target_link_libraries(test_xir_source_overlay PRIVATE xray_xir_source)
+if(MSVC)
+    target_compile_options(test_xir_source_overlay PRIVATE /W4 /WX)
+else()
+    target_compile_options(test_xir_source_overlay PRIVATE -Wall -Wextra -Werror)
+endif()
+add_test(NAME test_xir_source_overlay COMMAND test_xir_source_overlay)
+set_tests_properties(test_xir_source_overlay PROPERTIES LABELS "unit;xir;ownership;metadata" TIMEOUT 60)
+
+
+add_executable(test_xir_module_overlay xir/test_xir_module_overlay.c)
+target_link_libraries(test_xir_module_overlay PRIVATE xray_xir_source)
+if(MSVC)
+    target_compile_options(test_xir_module_overlay PRIVATE /W4 /WX)
+else()
+    target_compile_options(test_xir_module_overlay PRIVATE -Wall -Wextra -Werror)
+endif()
+add_test(NAME test_xir_module_overlay COMMAND test_xir_module_overlay)
+set_tests_properties(test_xir_module_overlay PROPERTIES LABELS "unit;xir;ownership;metadata" TIMEOUT 60)
+
+
+# Count the actual compiler-resource allocator used by the linked Source owner.
+add_executable(test_xir_source_text xir/test_xir_source_text.c)
+target_link_libraries(test_xir_source_text PRIVATE xray_xir_source)
+if(MSVC)
+    target_compile_options(test_xir_source_text PRIVATE /W4 /WX)
+else()
+    target_compile_options(test_xir_source_text PRIVATE -Wall -Wextra -Werror)
+endif()
+add_test(NAME test_xir_source_text COMMAND test_xir_source_text)
+set_tests_properties(test_xir_source_text PROPERTIES LABELS "unit;xir;ownership;metadata" TIMEOUT 60)
+
 target_link_libraries(test_xir_source_generics PRIVATE xray_xir_source xray_frontend_format)
 target_link_libraries(test_xir_source_admission PRIVATE xray_xir_source)
 add_executable(test_xir_source_allocations xir/test_xir_source_allocations.c)
@@ -559,7 +629,7 @@ set(XIR_SOURCE_GENERATED ${CMAKE_CURRENT_BINARY_DIR}/generated/xir_source_fixtur
 set(XIR_CHECKED_GENERATED ${CMAKE_CURRENT_BINARY_DIR}/generated/xir_source_fixture.xrc)
 add_custom_command(OUTPUT ${XIR_CHECKED_GENERATED}
     COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_CURRENT_BINARY_DIR}/generated
-    COMMAND $<TARGET_FILE:test_xir_source> ${XIR_CHECKED_GENERATED}
+    COMMAND $<TARGET_FILE:test_xir_source> --write-checked ${XIR_CHECKED_GENERATED}
     DEPENDS test_xir_source
         ${CMAKE_SOURCE_DIR}/tests/fixtures/xir_source/root.xr
         ${CMAKE_SOURCE_DIR}/tests/fixtures/xir_source/alpha.xr
@@ -598,6 +668,9 @@ include(${CMAKE_CURRENT_SOURCE_DIR}/xir/class_identity.cmake)
 include(${CMAKE_CURRENT_SOURCE_DIR}/xir/class_inline.cmake)
 include(${CMAKE_CURRENT_SOURCE_DIR}/xir/library.cmake)
 include(${CMAKE_CURRENT_SOURCE_DIR}/xir/library_strings.cmake)
+include(${CMAKE_CURRENT_SOURCE_DIR}/xir/library_state.cmake)
+include(${CMAKE_CURRENT_SOURCE_DIR}/xir/library_state_unit_bool.cmake)
+include(${CMAKE_CURRENT_SOURCE_DIR}/xir/library_state_typed_values.cmake)
 include(${CMAKE_CURRENT_SOURCE_DIR}/xir/assert_condition.cmake)
 include(${CMAKE_CURRENT_SOURCE_DIR}/xir/assert_panics.cmake)
 include(${CMAKE_CURRENT_SOURCE_DIR}/xir/assert_equal.cmake)
@@ -1352,6 +1425,9 @@ function(xr_enable_pure_aot_symbol_map target_name)
             "LINKER:/MAP:${CMAKE_CURRENT_BINARY_DIR}/${target_name}.map")
     endif()
 endfunction()
+
+include("${CMAKE_CURRENT_SOURCE_DIR}/xir/library_views_native.cmake")
+include("${CMAKE_CURRENT_SOURCE_DIR}/xir/library_typed_native.cmake")
 
 set(XR_PROGRAM_SOURCE_AOT_FIXTURE_DIR
     ${CMAKE_CURRENT_BINARY_DIR}/generated/task-293-source-aot)
@@ -3709,12 +3785,19 @@ if(XR_BUILD_LSP)
     add_test(NAME test_lsp_stdlib COMMAND test_lsp_stdlib)
 
     file(GLOB LSP_SOURCES CONFIGURE_DEPENDS ${CMAKE_SOURCE_DIR}/src/app/lsp/*.c)
-    list(REMOVE_ITEM LSP_SOURCES ${CMAKE_SOURCE_DIR}/src/app/lsp/xlsp_main.c)
+    list(REMOVE_ITEM LSP_SOURCES
+        ${CMAKE_SOURCE_DIR}/src/app/lsp/xlsp_main.c
+        ${CMAKE_SOURCE_DIR}/src/app/lsp/xlsp_source_query.c
+        ${CMAKE_SOURCE_DIR}/src/app/lsp/xlsp_source_navigation.c
+        ${CMAKE_SOURCE_DIR}/src/app/lsp/xlsp_source_workspace.c
+        ${CMAKE_SOURCE_DIR}/src/app/lsp/xlsp_source_syntax.c
+        ${CMAKE_SOURCE_DIR}/src/app/lsp/xlsp_source_buffer.c
+        ${CMAKE_SOURCE_DIR}/src/app/lsp/xlsp_source_open.c
+        ${CMAKE_SOURCE_DIR}/src/app/lsp/xlsp_document_store.c)
     # Module-graph authority is shared with CLI source commands and is not part
     # of xray_core. Production xray already links these sources; full-source
     # LSP unit binaries must name them as well.
     list(APPEND LSP_SOURCES
-        ${CMAKE_SOURCE_DIR}/src/app/cli/xcli_graph_authority.c
         ${CMAKE_SOURCE_DIR}/src/app/cli/xcli_fs.c
         ${CMAKE_SOURCE_DIR}/src/app/cli/xcli_output.c)
 
@@ -3730,7 +3813,7 @@ if(XR_BUILD_LSP)
         ${CMAKE_SOURCE_DIR}/src/app/cli
         ${CMAKE_SOURCE_DIR}/src/frontend/format
     )
-    target_link_libraries(test_lsp_document PRIVATE xray_core)
+    target_link_libraries(test_lsp_document PRIVATE xray_core xray_lsp_document_open)
     add_test(NAME test_lsp_document COMMAND test_lsp_document)
     add_test(NAME test_lsp_protocol_transcript
         COMMAND ${XRAY_PYTHON}
@@ -3749,7 +3832,7 @@ if(XR_BUILD_LSP)
         ${CMAKE_SOURCE_DIR}/src/app/cli
         ${CMAKE_SOURCE_DIR}/src/frontend/format
     )
-    target_link_libraries(test_lsp_config PRIVATE xray_core)
+    target_link_libraries(test_lsp_config PRIVATE xray_core xray_lsp_document_open)
     add_test(NAME test_lsp_config COMMAND test_lsp_config)
 
     add_executable(test_lsp_navigation
@@ -3762,7 +3845,7 @@ if(XR_BUILD_LSP)
         ${CMAKE_SOURCE_DIR}/src/app/cli
         ${CMAKE_SOURCE_DIR}/src/frontend/format
     )
-    target_link_libraries(test_lsp_navigation PRIVATE xray_core)
+    target_link_libraries(test_lsp_navigation PRIVATE xray_core xray_lsp_document_open)
     add_test(NAME test_lsp_navigation COMMAND test_lsp_navigation)
 
     add_executable(test_lsp_diagnostics
@@ -3775,7 +3858,7 @@ if(XR_BUILD_LSP)
         ${CMAKE_SOURCE_DIR}/src/app/cli
         ${CMAKE_SOURCE_DIR}/src/frontend/format
     )
-    target_link_libraries(test_lsp_diagnostics PRIVATE xray_core)
+    target_link_libraries(test_lsp_diagnostics PRIVATE xray_core xray_lsp_document_open)
     add_test(NAME test_lsp_diagnostics COMMAND test_lsp_diagnostics)
 endif()
 
@@ -4327,7 +4410,7 @@ include("${CMAKE_CURRENT_LIST_DIR}/xir/array_capacity.cmake")
 include("${CMAKE_CURRENT_LIST_DIR}/xir/array_capacity_budget.cmake")
 include("${CMAKE_CURRENT_LIST_DIR}/xir/array_capacity_native_contract.cmake")
 
-include("${CMAKE_CURRENT_LIST_DIR}/xir/native_projection69.cmake")
+include("${CMAKE_CURRENT_LIST_DIR}/xir/native_projection70.cmake")
 
 include("${CMAKE_CURRENT_LIST_DIR}/xir/source_layout22.cmake")
 
@@ -4342,4 +4425,92 @@ include("${CMAKE_CURRENT_LIST_DIR}/xir/root_identity_vm.cmake")
 include("${CMAKE_CURRENT_LIST_DIR}/xir/root_identity_vm_resources.cmake")
 
 include("${CMAKE_CURRENT_LIST_DIR}/xir/root_execution_native.cmake")
+
+include(xir/callable_root_bounds.cmake)
+
+include(xir/callable_root_source.cmake)
+
+include(xir/program_root_permissions.cmake)
+
+include(xir/callable70_checked_vectors.cmake)
+
 include(xir/root_identity_vm_compiler_resources.cmake)
+
+include(xir/owned_string_source_resources.cmake)
+
+include("${CMAKE_CURRENT_LIST_DIR}/xir/child_callable_permissions.cmake")
+
+include("${CMAKE_CURRENT_LIST_DIR}/xir/error_cell_index.cmake")
+
+include("${CMAKE_CURRENT_LIST_DIR}/xir/error_edge_snapshot.cmake")
+include(${CMAKE_CURRENT_SOURCE_DIR}/xir/program_call_permissions.cmake)
+include(${CMAKE_CURRENT_SOURCE_DIR}/xir/child_callable_native.cmake)
+include(${CMAKE_CURRENT_SOURCE_DIR}/xir/child_callable_mixed.cmake)
+include(xir/error_dependency_worklist.cmake)
+include("${CMAKE_CURRENT_SOURCE_DIR}/xir/error_cfg_pending.cmake")
+include(${CMAKE_CURRENT_SOURCE_DIR}/xir/root_parameters.cmake)
+include(${CMAKE_CURRENT_SOURCE_DIR}/xir/root_parameter_vm.cmake)
+include(${CMAKE_CURRENT_SOURCE_DIR}/xir/root_parameter_native.cmake)
+
+include(${CMAKE_CURRENT_SOURCE_DIR}/mem/sysheap_allocations.cmake)
+include(${CMAKE_CURRENT_SOURCE_DIR}/object/registry_allocations.cmake)
+include(${CMAKE_CURRENT_SOURCE_DIR}/symbol/symbol_allocations.cmake)
+include(${CMAKE_CURRENT_SOURCE_DIR}/api/vm_metadata_allocations.cmake)
+
+include(${CMAKE_CURRENT_SOURCE_DIR}/api/runtime_map_allocations.cmake)
+
+if(WIN32)
+    add_executable(test_lsp_source_workspace xir/test_lsp_source_workspace.c)
+    target_link_libraries(test_lsp_source_workspace PRIVATE xray_lsp_document_open bcrypt)
+    target_compile_options(test_lsp_source_workspace PRIVATE /W4 /WX /utf-8)
+    add_test(NAME test_lsp_source_workspace COMMAND ${XRAY_PYTHON} -X utf8
+        ${CMAKE_CURRENT_SOURCE_DIR}/xir/test_lsp_source_workspace.py
+        $<TARGET_FILE:test_lsp_source_workspace> ${PROJECT_SOURCE_DIR}/stdlib)
+    set_tests_properties(test_lsp_source_workspace PROPERTIES TIMEOUT 300 COST 40
+        RUN_SERIAL TRUE LABELS "unit;lsp;xir;ownership;budget")
+endif()
+
+add_executable(test_lsp_document_store xir/test_lsp_document_store.c)
+target_link_libraries(test_lsp_document_store PRIVATE xray_lsp_document_open)
+if(MSVC)
+    target_compile_options(test_lsp_document_store PRIVATE /W4 /WX)
+else()
+    target_compile_options(test_lsp_document_store PRIVATE -Wall -Wextra -Werror)
+endif()
+add_test(NAME test_lsp_document_store COMMAND test_lsp_document_store)
+set_tests_properties(test_lsp_document_store PROPERTIES TIMEOUT 60 LABELS "unit;lsp;ownership;allocation")
+if(WIN32)
+    add_executable(test_lsp_source_open xir/test_lsp_source_open.c)
+    target_link_libraries(test_lsp_source_open PRIVATE xray_lsp_document_open bcrypt)
+    target_compile_options(test_lsp_source_open PRIVATE /W4 /WX /utf-8)
+    add_test(NAME test_lsp_source_open COMMAND ${XRAY_PYTHON} -X utf8
+        ${CMAKE_CURRENT_SOURCE_DIR}/xir/test_lsp_source_open.py $<TARGET_FILE:test_lsp_source_open> ${PROJECT_SOURCE_DIR}/stdlib)
+    set_tests_properties(test_lsp_source_open PROPERTIES TIMEOUT 300 COST 40 RUN_SERIAL TRUE LABELS "unit;lsp;ownership;metadata;allocation")
+endif()
+
+include("${CMAKE_CURRENT_SOURCE_DIR}/xir/source_dependencies.cmake")
+
+include("${CMAKE_CURRENT_LIST_DIR}/xir/ctfe_leaf.cmake")
+
+include(${CMAKE_CURRENT_SOURCE_DIR}/xir/ordinary_live_limit.cmake)
+add_test(NAME test_xir_ctfe_leaf_resources COMMAND test_xir_ctfe_leaf --resources)
+set_tests_properties(test_xir_ctfe_leaf_resources PROPERTIES TIMEOUT 600 RUN_SERIAL TRUE COST 120
+    LABELS "unit;xir;compiler;ctfe;resources;ownership;budget")
+
+include(xir/library_state_atomic_i64.cmake)
+
+include(xir/library_state_task_i64.cmake)
+
+include(xir/prelude_source.cmake)
+
+add_executable(test_xir_cell_provenance xir/test_xir_cell_provenance.c)
+target_include_directories(test_xir_cell_provenance PRIVATE "${CMAKE_SOURCE_DIR}/src")
+target_link_libraries(test_xir_cell_provenance PRIVATE xray_xir)
+add_test(NAME test_xir_cell_provenance COMMAND test_xir_cell_provenance)
+set_tests_properties(test_xir_cell_provenance PROPERTIES LABELS "xir;ownership" TIMEOUT 120)
+
+include("${CMAKE_CURRENT_LIST_DIR}/xir/root_conditional.cmake")
+
+include(xir/cell_owner_source.cmake)
+
+include(xir/cell_loan_lifecycle.cmake)

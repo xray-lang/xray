@@ -13,6 +13,39 @@
 #define XXIR_TYPES_H
 #include "xxir.h"
 #include "xxir_nominal.h"
+#include "../shared/xr_param_mode.h"
+/* Closed bounds and control promises are independent; omitted root bits never
+ * become a no-effect proof, even for otherwise well-shaped old descriptors. */
+static inline bool xr_xir_callable_flags_valid(uint32_t flags) {
+    uint32_t root = flags & XR_XIR_CALLABLE_ROOT_MASK;
+    return !(flags & ~(XR_XIR_CALLABLE_ROOT_MASK | XR_XIR_CALLABLE_NO_SUSPEND)) &&
+        (root == XR_XIR_CALLABLE_ROOT_NONE || root == XR_XIR_CALLABLE_ROOT_REQUIRED ||
+         root == XR_XIR_CALLABLE_ROOT_UNRESOLVED ||
+         root == (XR_XIR_CALLABLE_ROOT_REQUIRED | XR_XIR_CALLABLE_ROOT_UNRESOLVED));
+}
+/* UNKNOWN accepts lost precision, but neither a pure nor known-only receiver
+ * can acquire the missing proof through a conversion. Nested types stay exact. */
+static inline bool xr_xir_callable_flags_compatible(uint32_t source, uint32_t target) {
+    if (!xr_xir_callable_flags_valid(source) || !xr_xir_callable_flags_valid(target) ||
+        ((target & XR_XIR_CALLABLE_NO_SUSPEND) && !(source & XR_XIR_CALLABLE_NO_SUSPEND))) return false;
+    return (target & XR_XIR_CALLABLE_ROOT_UNRESOLVED) ||
+        (!(source & XR_XIR_CALLABLE_ROOT_UNRESOLVED) &&
+         (!(source & XR_XIR_CALLABLE_ROOT_REQUIRED) || (target & XR_XIR_CALLABLE_ROOT_REQUIRED)));
+}
+static inline bool xr_xir_callable_root_accepts(bool requires_root, bool unresolved, uint32_t flags) {
+    uint32_t source = (requires_root ? XR_XIR_CALLABLE_ROOT_REQUIRED : 0) |
+        (unresolved ? XR_XIR_CALLABLE_ROOT_UNRESOLVED : 0);
+    if (!source) source = XR_XIR_CALLABLE_ROOT_NONE;
+    return xr_xir_callable_flags_valid(flags) &&
+        xr_xir_callable_flags_compatible(source, flags & ~XR_XIR_CALLABLE_NO_SUSPEND);
+}
+/* NONE is neutral, rather than an extra fact to bitwise-OR into a join. */
+static inline bool xr_xir_callable_flags_join(uint32_t left, uint32_t right, uint32_t *output) {
+    if (!output || !xr_xir_callable_flags_valid(left) || !xr_xir_callable_flags_valid(right)) return false;
+    uint32_t root = (left | right) & (XR_XIR_CALLABLE_ROOT_REQUIRED | XR_XIR_CALLABLE_ROOT_UNRESOLVED);
+    *output = (root ? root : XR_XIR_CALLABLE_ROOT_NONE) | (left & right & XR_XIR_CALLABLE_NO_SUSPEND);
+    return true;
+}
 XR_FUNC const XrXirTypeNode *xr_xir_type_node(const XrXirTypes *types, XrXirType type);
 XR_FUNC const XrXirTypeNode *xr_xir_callable_signature(const XrXirTypes *types, XrXirType type);
 /* Ordered tuple fields use mode-zero parameter storage; arity zero is Unit. */
@@ -34,6 +67,14 @@ XR_FUNC XrXirType xr_xir_nullable_element(const XrXirTypes *types, XrXirType typ
 /* Bounded closed class storage capability; grants no access or generic proof. */
 XR_FUNC XrXirStatus xr_xir_compile_class_field_verify(const XrXirCompileContext *compile_context, const XrXirTypes *types, XrXirType type);
 XR_FUNC bool xr_xir_type_is_cell(const XrXirTypes *types, XrXirType type);
+/* Parameter mode describes physical storage, never ownership or call authority. */
+static inline bool xr_xir_callable_parameter_storage_valid(const XrXirTypes *types,
+    const XrXirCallableParameter *parameter) {
+    if (!parameter) return false;
+    bool cell = xr_xir_type_is_cell(types, parameter->type);
+    return parameter->mode == XR_PARAM_READ ? !cell :
+        parameter->mode == XR_PARAM_REF && cell;
+}
 XR_FUNC bool xr_xir_type_is_nominal(const XrXirTypes *types, XrXirType type);
 /* Classification grants neither descriptor validity nor operation authority. */
 XR_FUNC bool xr_xir_type_is_struct(const XrXirTypes *types, XrXirType type);

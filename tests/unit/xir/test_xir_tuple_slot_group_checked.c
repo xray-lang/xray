@@ -78,10 +78,10 @@ static void group_rejected(const uint8_t *bytes,size_t length,XrXirStatus expect
     XrCompileResourceLimits caps={UINT64_C(64)*1024*1024,UINT64_C(8)*1024*1024,128000000};
     CHECK(xr_compile_resources_new(&caps,&context.resources)==XR_COMPILE_RESOURCE_OK);
     XrCompileResourceStats before={0},after={0};CHECK(xr_compile_resources_stats(context.resources,&before)==XR_COMPILE_RESOURCE_OK);
-    XrXirArtifact *output=(XrXirArtifact *)(uintptr_t)1;
+    XrXirArtifact *output=NULL;
     XrXirStatus status=xr_xir_compile_checked_read(&context,bytes,length,&output,NULL);
     if(status!=expected)fprintf(stderr,"group rejected got=%u expected=%u\n",status,expected);
-    CHECK(status==expected && output==(XrXirArtifact *)(uintptr_t)1);
+    CHECK(status==expected && !output);
     CHECK(xr_compile_resources_stats(context.resources,&after)==XR_COMPILE_RESOURCE_OK);
     CHECK(after.live_bytes==before.live_bytes);
     if(early)CHECK(after.allocated_bytes==before.allocated_bytes);

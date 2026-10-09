@@ -1,0 +1,14 @@
+var counter: i64 = 0
+struct Box {
+    value: i64
+    ref collide(other: ref Box) -> i64 {
+        counter += 1;
+        this.value += 1;
+        other.value += 1;
+        return this.value;
+    }
+}
+var storage: Box = Box{value: 0}
+export fn run() -> i64 { return storage.collide(ref storage); }
+fn main() -> i64 { return run(); }
+export fn cellCounter() -> i64 { return counter; }

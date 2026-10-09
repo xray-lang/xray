@@ -132,7 +132,25 @@ static XrXirArtifact *source_fixture_lower(const XrXirCompileContext *context,co
     xr_xir_compile_checked_packet_free(&packet);
     XrXirArtifact *specialized=NULL,*lowered=NULL;
     source_fixture_compile_phase="Checked specialize";
-    CHECK(xr_xir_compile_specialize(checked,&specialized,NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(checked);
+    XrXirDiagnostic specialize_diagnostic={0};
+    status=xr_xir_compile_specialize(checked,&specialized,&specialize_diagnostic);
+    if(status!=XR_XIR_OK){XrCompileResourceStats stats={0};
+        CHECK(xr_compile_resources_stats(context->resources,&stats)==XR_COMPILE_RESOURCE_OK);
+        fprintf(stderr,"Source specialize status=%u function=%u block=%u instruction=%u allocated=%llu peak=%llu work=%llu live=%llu\n",
+            (unsigned)status,specialize_diagnostic.function,specialize_diagnostic.block,specialize_diagnostic.instruction,
+            (unsigned long long)stats.allocated_bytes,(unsigned long long)stats.peak_bytes,
+            (unsigned long long)stats.work,(unsigned long long)stats.live_bytes);
+        const XrXirModule *failed=xr_xir_compile_artifact_module(checked);
+        if(specialize_diagnostic.function<failed->function_count){
+            const XrXirFunction *fn=&failed->functions[specialize_diagnostic.function];
+            fprintf(stderr,"Source before specialize parameters=%u instructions=%u operands=%u\n",
+                fn->parameter_count,fn->instruction_count,fn->operand_count);
+            if(specialize_diagnostic.instruction<fn->instruction_count){
+                const XrXirInstruction *op=&fn->instructions[specialize_diagnostic.instruction];
+                fprintf(stderr,"Source before opcode=%u type=%u args=%u/%u target=%u/%u immediate=%lld types=%u/%u\n",
+                    (unsigned)op->op,(unsigned)op->type,op->args[0],op->args[1],op->targets[0],op->targets[1],
+                    (long long)op->immediate,op->type_arguments[0],op->type_arguments[1]);}}}
+    CHECK(status==XR_XIR_OK && specialized);xr_xir_compile_artifact_free(checked);
     const XrXirTarget target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};
     XrXirDiagnostic lower_diagnostic={0};source_fixture_compile_phase="Lower";status=xr_xir_compile_lower(specialized,&target,&lowered,&lower_diagnostic);
     if(status!=XR_XIR_OK)fprintf(stderr,"lower status %u function %u block %u instruction %u\n",(unsigned)status,lower_diagnostic.function,lower_diagnostic.block,lower_diagnostic.instruction);

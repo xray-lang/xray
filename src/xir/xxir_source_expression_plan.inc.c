@@ -60,13 +60,13 @@ static bool source_plan_binary_prepare(SourceContext *ctx,SourceExpressionPlan *
         return true;
     bool shift=plan->syntax->type==AST_BINARY_LSHIFT || plan->syntax->type==AST_BINARY_RSHIFT;
     SourceExpectedType left_hint=hint,right_hint=hint;
-    if (left->type_ready) right_hint=(SourceExpectedType){!shift,left->ground_type, false};
-    if (right->type_ready && !shift) left_hint=(SourceExpectedType){true,right->ground_type, false};
+    if (left->type_ready) right_hint=(SourceExpectedType){!shift,left->ground_type, false, false};
+    if (right->type_ready && !shift) left_hint=(SourceExpectedType){true,right->ground_type, false, false};
     if (!hint.present && !left->type_ready && !right->type_ready && (left->decimal.node || right->decimal.node))
-        left_hint=right_hint=(SourceExpectedType){defaults,XR_XIR_F64, false};
+        left_hint=right_hint=(SourceExpectedType){defaults,XR_XIR_F64, false, false};
     if (!source_plan_binary_prepare(ctx,left,left_hint,defaults) ||
         !source_plan_numeric_prepare(ctx,left,left_hint,defaults)) return false;
-    if (left->type_ready && !shift) right_hint=(SourceExpectedType){true,left->ground_type, false};
+    if (left->type_ready && !shift) right_hint=(SourceExpectedType){true,left->ground_type, false, false};
     if (!source_plan_binary_prepare(ctx,right,right_hint,defaults) ||
         !source_plan_numeric_prepare(ctx,right,right_hint,defaults)) return false;
     if (!left->type_ready || !right->type_ready) return true;
@@ -128,7 +128,7 @@ static SourceExpressionPlan *source_plan_collect(SourceContext *ctx, AstNode *no
     switch(node->type) {
     case AST_ASSIGNMENT: {
         SourceName *binding=visible_name(ctx,node->as.assignment.name);plan->binding=binding;
-        SourceExpectedType hint={binding!=NULL,binding?binding->type:XR_XIR_UNIT,false};
+        SourceExpectedType hint={binding!=NULL,binding?binding->type:XR_XIR_UNIT,false, binding && binding->inferred};
         ctx->active_expression=plan;
         plan->left=source_plan_collect(ctx,node->as.assignment.value,hint);
         ctx->active_expression=parent;
@@ -175,7 +175,7 @@ static SourceExpressionPlan *source_plan_collect(SourceContext *ctx, AstNode *no
     case AST_MATCH_EXPR:
         if (ctx->depth>=128) {source_fail(ctx,node,XR_XIR_BUDGET,"expression collection depth exhausted");return NULL;}
         ctx->active_expression=plan;++ctx->depth;
-        plan->left=source_plan_collect(ctx,node->as.match_expr.expr,(SourceExpectedType){false,XR_XIR_UNIT, false});
+        plan->left=source_plan_collect(ctx,node->as.match_expr.expr,(SourceExpectedType){false,XR_XIR_UNIT, false, false});
         bool match_ok=plan->left && source_match_prepare(ctx,plan);
         --ctx->depth;ctx->active_expression=parent;
         if (!match_ok) return NULL;
@@ -183,19 +183,19 @@ static SourceExpressionPlan *source_plan_collect(SourceContext *ctx, AstNode *no
     case AST_TERNARY:
         if (ctx->depth>=128) {source_fail(ctx,node,XR_XIR_BUDGET,"expression collection depth exhausted");return NULL;}
         ctx->active_expression=plan;++ctx->depth;
-        plan->condition=source_plan_collect(ctx,node->as.ternary.condition,(SourceExpectedType){false,XR_XIR_UNIT, false});
+        plan->condition=source_plan_collect(ctx,node->as.ternary.condition,(SourceExpectedType){false,XR_XIR_UNIT, false, false});
         {
             /* Each arm is typed under the facts of its own direction (N-7). */
             SourceFact *entry_facts=ctx->facts;SourceEpoch *entry_epochs=ctx->epochs;
             if (plan->condition && source_condition_enter(ctx,plan->condition,true))
-                plan->left=source_plan_collect(ctx,node->as.ternary.true_expr,(SourceExpectedType){false,XR_XIR_UNIT, false});
+                plan->left=source_plan_collect(ctx,node->as.ternary.true_expr,(SourceExpectedType){false,XR_XIR_UNIT, false, false});
             ctx->facts=entry_facts;ctx->epochs=entry_epochs;
             if (plan->left && source_condition_enter(ctx,plan->condition,false))
-                plan->right=source_plan_collect(ctx,node->as.ternary.false_expr,(SourceExpectedType){false,XR_XIR_UNIT, false});
+                plan->right=source_plan_collect(ctx,node->as.ternary.false_expr,(SourceExpectedType){false,XR_XIR_UNIT, false, false});
             ctx->facts=entry_facts;ctx->epochs=entry_epochs;
         }
         --ctx->depth;ctx->active_expression=parent;
-        if (!plan->condition || !plan->left || !plan->right || !source_plan_binary_prepare(ctx,plan,(SourceExpectedType){false,XR_XIR_UNIT, false},false)) return NULL;
+        if (!plan->condition || !plan->left || !plan->right || !source_plan_binary_prepare(ctx,plan,(SourceExpectedType){false,XR_XIR_UNIT, false, false},false)) return NULL;
         break;
     case AST_GROUPING:
         if (plan->integer.present || plan->decimal.node) break;
@@ -206,15 +206,15 @@ static SourceExpressionPlan *source_plan_collect(SourceContext *ctx, AstNode *no
     case AST_BINARY_EQ:case AST_BINARY_NE:case AST_BINARY_LT:case AST_BINARY_LE:case AST_BINARY_GT:case AST_BINARY_GE:
         if (ctx->depth>=128) {source_fail(ctx,node,XR_XIR_BUDGET,"expression collection depth exhausted");return NULL;}
         ctx->active_expression=plan;++ctx->depth;
-        plan->left=source_plan_collect(ctx,node->type==AST_GROUPING ? node->as.grouping : node->as.binary.left,(SourceExpectedType){false,XR_XIR_UNIT, false});
+        plan->left=source_plan_collect(ctx,node->type==AST_GROUPING ? node->as.grouping : node->as.binary.left,(SourceExpectedType){false,XR_XIR_UNIT, false, false});
         if (plan->left && node->type!=AST_GROUPING) {
             SourceFact *facts=ctx->facts;SourceEpoch *epochs=ctx->epochs;
             if (source_planned_effects(ctx,plan->left,0))
-                plan->right=source_plan_collect(ctx,node->as.binary.right,(SourceExpectedType){false,XR_XIR_UNIT,false});
+                plan->right=source_plan_collect(ctx,node->as.binary.right,(SourceExpectedType){false,XR_XIR_UNIT,false, false});
             ctx->facts=facts;ctx->epochs=epochs;
         }
         --ctx->depth;ctx->active_expression=parent;
-        if (!plan->left || (node->type!=AST_GROUPING && !plan->right) || !source_plan_binary_prepare(ctx,plan,(SourceExpectedType){false,XR_XIR_UNIT, false},false)) return NULL;
+        if (!plan->left || (node->type!=AST_GROUPING && !plan->right) || !source_plan_binary_prepare(ctx,plan,(SourceExpectedType){false,XR_XIR_UNIT, false, false},false)) return NULL;
         if (node->type==AST_GROUPING) source_read_forward(plan,plan->left);
         if (node->type>=AST_BINARY_EQ && node->type<=AST_BINARY_GE) {plan->type_ready=true;plan->ground_type=XR_XIR_BOOL;}
         break;
@@ -262,6 +262,8 @@ static bool source_plan_complete(SourceContext *ctx, SourceExpressionPlan *plan,
         plan->read_binding=NULL;plan->read_declared=XR_XIR_UNIT;plan->read_prefix=0;plan->read_claims=0;
     }
     result=result && source_conversion_emit(ctx,&checked_conversion,&plan->value) && source_query_expression(ctx,node,plan->value.type);
+    if (result && source_root_type(ctx,plan->value.type,0))
+        result = source_root_query_record(ctx,plan->value.id,ctx->query.expression_count - 1,true,false);
     if (result && node->type==AST_GROUPING && plan->left)
         plan->condition_flow=plan->left->condition_flow;
     if (result && plan->value.type==XR_XIR_BOOL && !plan->condition_flow)

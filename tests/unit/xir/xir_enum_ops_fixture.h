@@ -8,6 +8,7 @@
  */
 #ifndef XIR_ENUM_OPS_FIXTURE_H
 #define XIR_ENUM_OPS_FIXTURE_H
+#include "xir_construction_fixture.h"
 #include "xir/xxir_checked.h"
 #include "xir/xxir_generic.h"
 #include "xir/xxir_nominal.h"
@@ -59,7 +60,7 @@ static XrXirArtifact *enum_ops_checked(const XrXirCompileContext *context, unsig
     if (invalid == 11) entry[5].immediate = 0;
     if (invalid == 12) entry[3].args[0] = 0;
     if (invalid == 13) entry[2].op = XR_XIR_STRUCT_NEW;
-    XrXirArtifact *checked = NULL; XrXirStatus status = xr_xir_compile_check(context, &built, &checked, NULL);
+    XrXirArtifact *checked = NULL; XrXirStatus status = xir_fixture_check(context, &built, &checked, NULL);
     if (invalid) CHECK(status != XR_XIR_OK && !checked);
     else CHECK(status == XR_XIR_OK && checked);
     return checked;

@@ -17,27 +17,59 @@
 #include "xxir.h"
 #include "xxir_checked.h"
 #include "xxir_effects.h"
-
-typedef struct XrXirOrigin {
-    uint32_t function;
-    const XrXirType *arguments;
-    uint32_t argument_count;
-} XrXirOrigin;
-
-/* Owned evidence storage alone grants no type or declaration authority. */
-typedef struct XrXirProvenance {
-    XrXirArtifact *source;
-    XrXirOrigin *origins;
-    uint32_t count;
-} XrXirProvenance;
+#include "xxir_effect_contract_internal.h"
+#include "xxir_construction_internal.h"
 
 /* Requires verified source and type pools; proves function correspondence and instance closure. */
-XR_FUNC XrXirStatus xr_xir_compile_provenance_functions_match(const XrXirCompileContext *compile_context, const XrXirModule *source, const XrXirModule *destination, const XrXirOrigin *origins, XrXirDiagnostic *diagnostic);
+XR_FUNC XrXirStatus xr_xir_compile_provenance_functions_match(const XrXirCompileContext *compile_context, const XrXirModule *source, const XrXirModule *destination, const XrXirProvenance *instance, XrXirDiagnostic *diagnostic);
 XR_FUNC void xr_xir_compile_provenance_free(XrXirProvenance *provenance);
-XR_FUNC XrXirStatus xr_xir_compile_provenance_copy(const XrXirCompileContext *compile_context, const XrXirModule *source, const XrXirOrigin *origins, uint32_t count, XrXirProvenance **output);
+XR_FUNC XrXirStatus xr_xir_compile_provenance_copy(const XrXirCompileContext *compile_context,
+    const XrXirProvenance *source, XrXirProvenance **output);
+/* Metadata shape cannot authorize substitutions; the common owner derives facts. */
+XR_FUNC XrXirStatus xir_effect_contract_shape_verify(const XrXirCompileContext *context,
+    const XrXirModule *module);
+/* Called only after an ordinary scalar direct/capture argument match BAD_TYPE.
+ * This bounded candidate is not proof; the same-owner final gate derives it. */
+XR_FUNC XrXirStatus xir_effect_call_binding_candidate(const XrXirCompileContext *context,
+    const XrXirModule *module, uint32_t caller, uint32_t instruction, uint32_t parameter);
+typedef struct XirEffectCallableBound {
+    const XrXirTypes *source, *destination;
+    const XrXirType *arguments;
+    uint32_t argument_count;
+    XrXirType declared, actual;
+} XirEffectCallableBound;
+/* Outer callable bounds alone may weaken; all nested substitutions are exact.
+ * This structural relation is not an effect-instance or permission proof. */
+XR_FUNC XrXirStatus xir_effect_callable_bound_matches(const XrXirCompileContext *context,
+    const XirEffectCallableBound *request);
+/* These values borrow only the current verified effects owner. */
+XR_FUNC const XrXirFunctionEffectContract *xir_effects_contract(
+    const XrXirEffects *effects, uint32_t function);
+/* A ledger identity guard grants no source, type or execution proof. */
+XR_FUNC bool xir_effects_context_matches(const XrXirCompileContext *context,
+    const XrXirEffects *effects, uint32_t functions);
+XR_FUNC XrXirStatus xir_effects_parameters_match(const XrXirCompileContext *context,
+    const XrXirModule *module, const XrXirEffects *effects);
+
+/* Requires verified source and pools plus that source's freshly derived owner.
+ * The actual origins and capture operands are correspondence, never authority. */
+typedef struct XirEffectCaptureRequest {
+    const XrXirModule *source;
+    const XrXirTypes *types;
+    const XrXirFunction *actual;
+    const XrXirEffects *effects;
+    const XrXirOrigin *caller, *target;
+    uint32_t instruction;
+    const XrXirOrigin *owners;
+    uint32_t owner_count;
+} XirEffectCaptureRequest;
+typedef struct XirEffectCaptureBound { uint32_t flags; bool refined; } XirEffectCaptureBound;
+XR_FUNC XrXirStatus xir_effect_capture_bound(const XrXirCompileContext *context,
+    const XirEffectCaptureRequest *request, XirEffectCaptureBound *output);
 
 struct XrXirArtifact {
     XrXirModule module;
+    XrXirConstruction *construction;
     XrXirCompileContext context;
     XrXirTarget target;
     XrXirFunctionLayout *layouts;
@@ -47,6 +79,20 @@ struct XrXirArtifact {
 
 /* Requires completed structural and type verification; never re-enters verification. */
 XR_FUNC XrXirStatus xr_xir_compile_effects_infer_verified(const XrXirCompileContext *compile_context, const XrXirModule *module, XrXirEffects **output);
+/* Private construction preparation grants no artifact or execution authority. */
+typedef struct XrXirRootRefiner {
+    void *context;
+    XrXirStatus (*update)(void *, const XrXirEffects *, bool *);
+} XrXirRootRefiner;
+XR_FUNC XrXirStatus xr_xir_compile_structure_verify_v2(const XrXirCompileContext *context,
+    const XrXirModule *module, const XrXirConstruction *construction, XrXirDiagnostic *diagnostic);
+XR_FUNC XrXirStatus xr_xir_compile_verify_effects_v2(const XrXirCompileContext *context,
+    const XrXirModule *module, const XrXirConstruction *construction, const XrXirEffects *effects, XrXirDiagnostic *diagnostic);
+XR_FUNC XrXirStatus xr_xir_compile_effects_refine_verified(const XrXirCompileContext *context,
+    const XrXirModule *module, const XrXirRootRefiner *refiner, XrXirEffects **output);
+XR_FUNC XrXirStatus xr_xir_compile_check_refined_v2(const XrXirCompileContext *context,
+    const XrXirModule *built, const XrXirConstruction *construction, const XrXirRootRefiner *refiner,
+    XrXirArtifact **output, XrXirDiagnostic *diagnostic);
 /* A derived complete-outcome fact grants no call or source permissions.
  * Checked import and specialization rebuild it from authentic declarations. */
 XR_FUNC XrXirStatus xr_xir_effects_task_errors(const XrXirEffects *effects, uint32_t function);
@@ -55,7 +101,7 @@ XR_FUNC XrXirStatus xr_xir_effects_go_safe(const XrXirEffects *effects, uint32_t
 XR_FUNC XrXirEffect xr_xir_effects_task_creation(const XrXirEffects *effects, uint32_t function);
 
 XR_FUNC XrXirStatus xr_xir_compile_layout_build(XrXirArtifact *artifact);
-XR_FUNC XrXirStatus xr_xir_compile_recheck(const XrXirCompileContext *compile_context, const XrXirModule *checked, XrXirArtifact **output, XrXirDiagnostic *diagnostic);
+XR_FUNC XrXirStatus xr_xir_compile_recheck_v2(const XrXirCompileContext *compile_context, const XrXirModule *checked, const XrXirConstruction *construction, XrXirArtifact **output, XrXirDiagnostic *diagnostic);
 XR_FUNC XrXirStatus xr_xir_compile_layout_verify(const XrXirArtifact *artifact);
 
 /* Couples fresh owned decoding and its full verification to immediate lowering.

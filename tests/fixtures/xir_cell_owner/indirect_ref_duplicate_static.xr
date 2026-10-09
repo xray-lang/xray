@@ -1,0 +1,3 @@
+fn pair(left: ref i64, right: ref i64) -> i64 { left += 1; right += 1; return left; }
+export fn run() -> i64 { var value: i64 = 40; const action = pair; return action(ref value,ref value); }
+fn main() -> i64 { return 0; }

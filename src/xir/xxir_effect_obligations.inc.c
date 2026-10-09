@@ -10,10 +10,21 @@
  *   Known escaping errors and uncertain suspension are separate obligations.
  */
 #include "xxir_constraints.h"
+#include "xxir_callable_root_obligations.inc.c"
 static XrXirStatus declaration_effects_verify(const XrXirModule *module,
-    XrXirCompileContext *remaining, XrXirDiagnostic *diagnostic) {
-    if (!module->declarations) return XR_XIR_OK;
-    bool present = false;
+    XrXirCompileContext *remaining, XrXirDiagnostic *diagnostic, const XrXirEffects *prepared) {
+    bool templated = module->provenance && module->provenance->kind == XR_XIR_EVIDENCE_TEMPLATE;
+    if (!module->declarations) {
+        if (!templated) return XR_XIR_OK;
+        XrXirEffects *owned = NULL;
+        XrXirStatus status = prepared ? XR_XIR_OK :
+            xr_xir_compile_effects_infer_verified(remaining, module, &owned);
+        if (status == XR_XIR_OK) status = xir_effects_parameters_match(remaining,
+            module, prepared ? prepared : owned);
+        xr_xir_compile_effects_free(owned);
+        return status;
+    }
+    bool present = templated || module->declarations->implementations != NULL;
     for (uint32_t f = 0; f < module->function_count; ++f) {
         if (!xir_compile_work(remaining, 1)) return XR_XIR_BUDGET;
         uint32_t owner = module->declarations->functions[f].cleanup_owner;
@@ -21,7 +32,7 @@ static XrXirStatus declaration_effects_verify(const XrXirModule *module,
         for (uint32_t i = 0; i < module->functions[f].instruction_count; ++i) {
             if (!xir_compile_work(remaining, 1)) return XR_XIR_BUDGET;
             XrXirOp op = module->functions[f].instructions[i].op;
-            if (op == XR_XIR_GO || op == XR_XIR_TASK_AWAIT) present = true;
+            if (op == XR_XIR_GO || op == XR_XIR_TASK_AWAIT || op == XR_XIR_FUNCTION_REF) present = true;
         }
         if (!owner) continue;
         present = true;
@@ -39,22 +50,25 @@ static XrXirStatus declaration_effects_verify(const XrXirModule *module,
     }
     if (!present) return XR_XIR_OK;
     XrXirEffects *effects = NULL;
-    XrXirStatus status = xr_xir_compile_effects_infer_verified(remaining, module, &effects);
+    XrXirStatus status = prepared ? XR_XIR_OK : xr_xir_compile_effects_infer_verified(remaining, module, &effects);
+    const XrXirEffects *facts = prepared ? prepared : effects;
+    if (status == XR_XIR_OK) status = xir_effects_parameters_match(remaining, module, facts);
+    if (status == XR_XIR_OK) status = declaration_callable_root_verify(module, facts, remaining, diagnostic);
     for (uint32_t f = 0; status == XR_XIR_OK && f < module->function_count; ++f) {
         const XrXirFunction *function = &module->functions[f];
         for (uint32_t i = 0; status == XR_XIR_OK && i < function->instruction_count; ++i) {
             if (!xir_compile_work(remaining, 1)) { status = XR_XIR_BUDGET; break; }
             const XrXirInstruction *op = &function->instructions[i];
             if (op->op != XR_XIR_GO) continue;
-            status = xr_xir_effects_go_safe(effects, (uint32_t)op->immediate);
+            status = xr_xir_effects_go_safe(facts, (uint32_t)op->immediate);
             XrXirDiagnosticReason reason = XR_XIR_DIAGNOSTIC_NONE;
             if (status == XR_XIR_BAD_TYPE) {
-                const XrXirRootEffects *root = xr_xir_effects_root(effects, (uint32_t)op->immediate);
+                const XrXirRootEffects *root = xr_xir_effects_root(facts, (uint32_t)op->immediate);
                 if (!root) status = XR_XIR_BAD_STRUCTURE;
                 else if (root->requires_root) reason = XR_XIR_DIAGNOSTIC_GO_ROOT_REQUIRED;
                 else if (root->unresolved) reason = XR_XIR_DIAGNOSTIC_GO_ROOT_UNRESOLVED;
             }
-            if (status == XR_XIR_OK) status = xr_xir_effects_task_errors(effects, (uint32_t)op->immediate);
+            if (status == XR_XIR_OK) status = xr_xir_effects_task_errors(facts, (uint32_t)op->immediate);
             if (status != XR_XIR_OK) *diagnostic = (XrXirDiagnostic){status, f, UINT32_MAX, i, reason};
         }
     }
@@ -62,18 +76,18 @@ static XrXirStatus declaration_effects_verify(const XrXirModule *module,
         if (!xir_compile_work(remaining, 1)) { status = XR_XIR_BUDGET; break; }
         bool cleanup = module->declarations->functions[f].cleanup_owner != 0;
         if (!cleanup && !module->declarations->functions[f].promises) continue;
-        if (cleanup && xr_xir_effects_task_creation(effects, f) != XR_XIR_EFFECT_NONE) {
+        if (cleanup && xr_xir_effects_task_creation(facts, f) != XR_XIR_EFFECT_NONE) {
             *diagnostic = (XrXirDiagnostic){XR_XIR_BAD_TYPE, f, UINT32_MAX, UINT32_MAX, XR_XIR_DIAGNOSTIC_NONE};
             status = XR_XIR_BAD_TYPE; break;
         }
-        const XrXirFunctionEffects *fact = xr_xir_effects_function(effects, f);
+        const XrXirFunctionEffects *fact = xr_xir_effects_function(facts, f);
         if ((cleanup && fact->throws == XR_XIR_EFFECT_MAY) || fact->suspend != XR_XIR_EFFECT_NONE) {
             *diagnostic = (XrXirDiagnostic){XR_XIR_BAD_TYPE, f, UINT32_MAX, UINT32_MAX, XR_XIR_DIAGNOSTIC_NONE};
             diagnostic->reason = !cleanup ? XR_XIR_DIAGNOSTIC_NO_SUSPEND :
                 fact->throws == XR_XIR_EFFECT_MAY ? XR_XIR_DIAGNOSTIC_CLEANUP_THROW : XR_XIR_DIAGNOSTIC_CLEANUP_SUSPEND;
             status = XR_XIR_BAD_TYPE;
             if (diagnostic->reason != XR_XIR_DIAGNOSTIC_CLEANUP_THROW) {
-                const XrXirEffectWitness *witness = xr_xir_effects_suspend_witness(effects, f);
+                const XrXirEffectWitness *witness = xr_xir_effects_suspend_witness(facts, f);
                 if (!witness) { status = XR_XIR_BAD_STRUCTURE; break; }
                 diagnostic->instruction = witness->instruction;
                 const XrXirFunction *function = &module->functions[f];

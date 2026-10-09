@@ -25,10 +25,11 @@ static XrXirValueStatus struct_copy_fields(XrXirType type, const XrXirValue *fie
             constructed_discard(&record->object, (size_t) bytes); return status;
         }
     }
+    xr_xir_value_object_publish(&record->object);
     *output = (XrXirValue) {(uint32_t) type, 0, 0};
     memcpy(&output->payload, &record, sizeof(record)); return XR_XIR_VALUE_OK;
 }
-XR_FUNC XrXirValueStatus xr_xir_struct_new(XrXirType type, const XrXirValue *fields,
+static XrXirValueStatus xr_xir_struct_new_graph_operation(XrXirType type, const XrXirValue *fields,
     uint32_t count, XrXirValueAdmission *admission, XrXirValue *output) {
     if (!admission || !admission->domain || !admission->arena || !unit_value(output) ||
         (count != 0) != (fields != NULL)) return XR_XIR_VALUE_BAD_ARGUMENT;
@@ -44,7 +45,14 @@ XR_FUNC XrXirValueStatus xr_xir_struct_new(XrXirType type, const XrXirValue *fie
     }
     return struct_copy_fields(type, fields, count, admission, output);
 }
-XR_FUNC XrXirValueStatus xr_xir_struct_get(const XrXirValue *value, uint32_t field,
+XR_FUNC XrXirValueStatus xr_xir_struct_new(XrXirType type, const XrXirValue *fields,
+    uint32_t count, XrXirValueAdmission *admission, XrXirValue *output) {
+    xr_xir_value_graph_begin();
+    XrXirValueStatus graph_outcome = xr_xir_struct_new_graph_operation(type, fields, count, admission, output);
+    xr_xir_value_graph_end();
+    return graph_outcome;
+}
+static XrXirValueStatus xr_xir_struct_get_graph_operation(const XrXirValue *value, uint32_t field,
     XrXirValueAdmission *admission, XrXirValue *output) {
     if (!value || !unit_value(output) || !admission) return XR_XIR_VALUE_BAD_ARGUMENT;
     const XrXirTypeNode *node = xr_xir_type_node(xr_xir_compile_type_arena_types(admission->arena), (XrXirType) value->type);
@@ -54,7 +62,14 @@ XR_FUNC XrXirValueStatus xr_xir_struct_get(const XrXirValue *value, uint32_t fie
     if (status != XR_XIR_VALUE_OK) return status;
     return xr_xir_value_copy(&((XirNominalValue *) object_pointer(value))->fields[field], output);
 }
-XR_FUNC XrXirValueStatus xr_xir_struct_set(const XrXirValuePlace *place, uint32_t field,
+XR_FUNC XrXirValueStatus xr_xir_struct_get(const XrXirValue *value, uint32_t field,
+    XrXirValueAdmission *admission, XrXirValue *output) {
+    xr_xir_value_graph_begin();
+    XrXirValueStatus graph_outcome = xr_xir_struct_get_graph_operation(value, field, admission, output);
+    xr_xir_value_graph_end();
+    return graph_outcome;
+}
+static XrXirValueStatus xr_xir_struct_set_graph_operation(const XrXirValuePlace *place, uint32_t field,
     const XrXirValue *value, XrXirValueAdmission *admission) {
     if (!place || !place->payload || !admission) return XR_XIR_VALUE_BAD_ARGUMENT;
     XrXirValue destination = {(uint32_t) place->type, 0, 0};
@@ -65,13 +80,16 @@ XR_FUNC XrXirValueStatus xr_xir_struct_set(const XrXirValuePlace *place, uint32_
         !(types->nominals->identities[node->nominal.declaration].fields[field].flags & XR_XIR_FIELD_MUTABLE))
         return XR_XIR_VALUE_BAD_ARGUMENT;
     XrXirValueStatus status = xr_xir_value_admit(&destination, (XrXirType) destination.type, admission);
-    if (status == XR_XIR_VALUE_OK) status = xr_xir_value_admit(value, node->nominal.fields[field], admission);
+    bool domain_sensitive = false;
+    if (status == XR_XIR_VALUE_OK)
+        status = value_admit_summary(value, node->nominal.fields[field], admission, &domain_sensitive);
     if (status != XR_XIR_VALUE_OK) return status;
     XrXirValue owned = {0}; status = xr_xir_value_copy(value, &owned);
     if (status != XR_XIR_VALUE_OK) return status;
     XirNominalValue *record = (XirNominalValue *) object_pointer(&destination);
     XrXirValue replacement = {0};
-    if (atomic_load_explicit(&record->object.references, memory_order_acquire) != 1) {
+    if (atomic_load_explicit(&record->object.references, memory_order_acquire) != 1 ||
+        (record->object.domain != admission->domain && domain_sensitive)) {
         status = xr_xir_struct_new(record->object.type, record->fields, record->count, admission, &replacement);
         if (status != XR_XIR_VALUE_OK) { xr_xir_value_drop(&owned); return status; }
         record = (XirNominalValue *) object_pointer(&replacement);
@@ -82,4 +100,11 @@ XR_FUNC XrXirValueStatus xr_xir_struct_set(const XrXirValuePlace *place, uint32_
         xr_xir_value_drop(&destination);
     }
     xr_xir_value_drop(&previous); return XR_XIR_VALUE_OK;
+}
+XR_FUNC XrXirValueStatus xr_xir_struct_set(const XrXirValuePlace *place, uint32_t field,
+    const XrXirValue *value, XrXirValueAdmission *admission) {
+    xr_xir_value_graph_begin();
+    XrXirValueStatus graph_outcome = xr_xir_struct_set_graph_operation(place, field, value, admission);
+    xr_xir_value_graph_end();
+    return graph_outcome;
 }

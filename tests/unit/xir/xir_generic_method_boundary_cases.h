@@ -12,6 +12,7 @@
  */
 #ifndef XIR_GENERIC_METHOD_BOUNDARY_CASES_H
 #define XIR_GENERIC_METHOD_BOUNDARY_CASES_H
+#include "xir_construction_fixture.h"
 #include "xir_generic_method_owned_fixture.h"
 static void generic_method_total_boundary(void) {
     GenericMethodOwnedFixture f; generic_method_owned_fixture(&f);
@@ -25,7 +26,7 @@ static void generic_method_total_boundary(void) {
     CHECK(xr_xir_compile_interfaces_clone(&copy_budget, &f.table, &f.types, &copy) == XR_XIR_BUDGET);
     CHECK(!copy);
     XrXirArtifact *checked = NULL;
-    CHECK(xr_xir_compile_check(&limit, &f.module, &checked, NULL) == XR_XIR_BUDGET);
+    CHECK(xir_fixture_check(&limit, &f.module, &checked, NULL) == XR_XIR_BUDGET);
     CHECK(!checked);
 }
 static void generic_method_nested_prepare(GenericMethodOwnedFixture *f, XrXirTypeNode nodes[2]) {
@@ -52,7 +53,7 @@ static void generic_method_nested_boundaries(void) {
     CHECK(xr_xir_compile_interfaces_clone(&budget, &f.table, &f.types, &copy) == XR_XIR_OK && copy);
     xr_xir_compile_interfaces_free(copy);
     XrXirArtifact *checked = NULL;
-    CHECK(xr_xir_compile_check(suite_context, &f.module, &checked, NULL) == XR_XIR_OK && checked);
+    CHECK(xir_fixture_check(suite_context, &f.module, &checked, NULL) == XR_XIR_OK && checked);
     XrXirCheckedPacket packet = {0};
     CHECK(xr_xir_compile_checked_write(checked, &packet, NULL) == XR_XIR_OK);
     xr_xir_compile_artifact_free(checked);checked=NULL;
@@ -68,7 +69,7 @@ static void generic_method_nested_boundaries(void) {
         budget = consumer_context_default(); copy = NULL;
         CHECK(xr_xir_compile_interfaces_clone(&budget, &f.table, &f.types, &copy) == XR_XIR_BAD_TYPE && !copy);
         checked = NULL;
-        CHECK(xr_xir_compile_check(suite_context, &f.module, &checked, NULL) == XR_XIR_BAD_TYPE && !checked);
+        CHECK(xir_fixture_check(suite_context, &f.module, &checked, NULL) == XR_XIR_BAD_TYPE && !checked);
         put32(packet.bytes+array+4,nodes[1].parameter_span);
         put32(packet.bytes+array+8,(uint32_t)nodes[1].element); digest_packet(&packet);
         CHECK(xr_xir_compile_checked_read(suite_context, packet.bytes, packet.length, &checked, NULL) == XR_XIR_BAD_TYPE && !checked);

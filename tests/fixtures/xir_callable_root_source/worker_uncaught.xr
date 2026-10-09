@@ -1,0 +1,3 @@
+fn plain()->i64{return 7}
+fn worker()->i64{const f=plain;return f()}
+fn main()->i64{return await go worker()}

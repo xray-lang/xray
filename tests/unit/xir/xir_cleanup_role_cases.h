@@ -8,6 +8,7 @@
  */
 #ifndef XIR_CLEANUP_ROLE_CASES_H
 #define XIR_CLEANUP_ROLE_CASES_H
+#include "xir_construction_fixture.h"
 #include "xir_cleanup_role_fixture.h"
 static void cleanup_role_rejections(XrXirArtifact *checked) {
     XrXirModule *module = &checked->module;
@@ -15,27 +16,28 @@ static void cleanup_role_rejections(XrXirArtifact *checked) {
     const uint32_t owners[] = {0, 4, 5, UINT32_MAX};
     for (uint32_t i = 1; i < 4; ++i) {
         ids[3].cleanup_owner = owners[i];
-        CHECK(xr_xir_compile_verify(suite_context, module, NULL) == XR_XIR_BAD_STRUCTURE);
+        CHECK(xir_fixture_verify(suite_context, module, NULL) == XR_XIR_BAD_STRUCTURE);
     }
     ids[3].cleanup_owner = 3;
-    ids[3].exported = 1; CHECK(xr_xir_compile_verify(suite_context, module, NULL) == XR_XIR_BAD_STRUCTURE); ids[3].exported = 0;
+    ids[3].exported = 1; CHECK(xir_fixture_verify(suite_context, module, NULL) == XR_XIR_BAD_STRUCTURE); ids[3].exported = 0;
     XrXirInstruction *call = (XrXirInstruction *)module->functions[1].instructions;
-    call[0].immediate = 3; CHECK(xr_xir_compile_verify(suite_context, module, NULL) == XR_XIR_BAD_STRUCTURE); call[0].immediate = 2;
+    call[0].immediate = 3; CHECK(xir_fixture_verify(suite_context, module, NULL) == XR_XIR_BAD_STRUCTURE); call[0].immediate = 2;
     XrXirInstruction saved_call = call[0];
     XrXirTypeNode signature = {0}; signature.kind = XR_XIR_TYPE_CALLABLE; signature.result = XR_XIR_UNIT;
+    signature.flags = XR_XIR_CALLABLE_ROOT_UNRESOLVED;
     XrXirTypes types = {&signature, 1, NULL, NULL}; module->types = &types;
     call[0].op = XR_XIR_FUNCTION_REF; call[0].type = (XrXirType)256;
-    CHECK(xr_xir_compile_verify(suite_context, module, NULL) == XR_XIR_OK);
-    call[0].immediate = 3; CHECK(xr_xir_compile_verify(suite_context, module, NULL) == XR_XIR_BAD_STRUCTURE);
+    CHECK(xir_fixture_verify(suite_context, module, NULL) == XR_XIR_OK);
+    call[0].immediate = 3; CHECK(xir_fixture_verify(suite_context, module, NULL) == XR_XIR_BAD_STRUCTURE);
     module->types = NULL; call[0] = saved_call;
     XrXirGeneric *generics = (XrXirGeneric *)module->generics;
     XrXirType *argument = (XrXirType *)generics[2].arguments;
     *argument = XR_XIR_I64;
-    CHECK(xr_xir_compile_verify(suite_context, module, NULL) == XR_XIR_BAD_TYPE);
+    CHECK(xir_fixture_verify(suite_context, module, NULL) == XR_XIR_BAD_TYPE);
     *argument = (XrXirType)XR_XIR_TYPE_PARAMETER_BASE;
     XrXirConstraint *constraint = (XrXirConstraint *)generics[3].constraints;
     constraint->markers = XR_XIR_CONSTRAINT_SENDABLE;
-    CHECK(xr_xir_compile_verify(suite_context, module, NULL) == XR_XIR_BAD_TYPE); constraint->markers = 0;
+    CHECK(xir_fixture_verify(suite_context, module, NULL) == XR_XIR_BAD_TYPE); constraint->markers = 0;
     XrXirFunction *body = (XrXirFunction *)&module->functions[3], saved = *body;
     XrXirInstruction suspend[] = {{XR_XIR_SUSPEND, XR_XIR_UNIT, {0}, {0}, 0, {0}},
         {XR_XIR_RETURN, XR_XIR_UNIT, {0}, {0}, 0, {0}}};
@@ -43,7 +45,7 @@ static void cleanup_role_rejections(XrXirArtifact *checked) {
     body->instructions = suspend; body->instruction_count = 2;
     XrXirGeneric saved_generic = generics[3]; generics[3].arguments = NULL; generics[3].argument_count = 0;
     XrXirDiagnostic diagnostic = {0};
-    CHECK(xr_xir_compile_verify(suite_context, module, &diagnostic) == XR_XIR_BAD_TYPE && diagnostic.function == 3);
+    CHECK(xir_fixture_verify(suite_context, module, &diagnostic) == XR_XIR_BAD_TYPE && diagnostic.function == 3);
     CHECK(diagnostic.reason == XR_XIR_DIAGNOSTIC_CLEANUP_SUSPEND);
     CHECK(diagnostic.block == 0 && diagnostic.instruction == 0);
     XrXirType error = XR_XIR_ERROR;
@@ -53,12 +55,12 @@ static void cleanup_role_rejections(XrXirArtifact *checked) {
     XrXirGeneric saved_owner_generic = generics[2];
     owner->blocks = &block; owner->block_count = 1; owner->instructions = &suspend[1]; owner->instruction_count = 1;
     generics[2].arguments = NULL; generics[2].argument_count = 0;
-    CHECK(xr_xir_compile_verify(suite_context, module, &diagnostic) == XR_XIR_BAD_TYPE && diagnostic.function == 3);
+    CHECK(xir_fixture_verify(suite_context, module, &diagnostic) == XR_XIR_BAD_TYPE && diagnostic.function == 3);
     CHECK(diagnostic.reason == XR_XIR_DIAGNOSTIC_CLEANUP_THROW);
     *owner = saved_owner; generics[2] = saved_owner_generic;
     *body = saved;
     generics[3] = saved_generic;
-    CHECK(xr_xir_compile_verify(suite_context, module, NULL) == XR_XIR_OK);
+    CHECK(xir_fixture_verify(suite_context, module, NULL) == XR_XIR_OK);
 }
 static void cleanup_role_cases(void) {
     XrXirArtifact *checked = cleanup_role_fixture(suite_context), *decoded = NULL, *closed = NULL, *lowered = NULL;
@@ -109,19 +111,19 @@ static void cleanup_role_cases(void) {
     XrXirFunctionIdentity *ids = (XrXirFunctionIdentity *)closed->module.declarations->functions;
     CHECK(ids[2].promises == XR_XIR_FUNCTION_NO_SUSPEND && ids[3].promises == XR_XIR_FUNCTION_NO_SUSPEND);
     ids[2].promises = 0;
-    CHECK(xr_xir_compile_verify(suite_context, &closed->module, NULL) == XR_XIR_BAD_STRUCTURE);
+    CHECK(xr_xir_compile_verify_v2(suite_context, &closed->module, xr_xir_compile_artifact_construction(closed), NULL) == XR_XIR_BAD_STRUCTURE);
     ids[2].promises = XR_XIR_FUNCTION_NO_SUSPEND;
     ids[4].promises = XR_XIR_FUNCTION_NO_SUSPEND;
-    CHECK(xr_xir_compile_verify(suite_context, &closed->module, NULL) == XR_XIR_BAD_STRUCTURE);
+    CHECK(xr_xir_compile_verify_v2(suite_context, &closed->module, xr_xir_compile_artifact_construction(closed), NULL) == XR_XIR_BAD_STRUCTURE);
     ids[4].promises = 0;
     ids[4].cleanup_owner = 0;
-    CHECK(xr_xir_compile_verify(suite_context, &closed->module, NULL) == XR_XIR_BAD_STRUCTURE);
+    CHECK(xr_xir_compile_verify_v2(suite_context, &closed->module, xr_xir_compile_artifact_construction(closed), NULL) == XR_XIR_BAD_STRUCTURE);
     ids[4].cleanup_owner = 4;
-    CHECK(xr_xir_compile_verify(suite_context, &closed->module, NULL) == XR_XIR_BAD_STRUCTURE);
+    CHECK(xr_xir_compile_verify_v2(suite_context, &closed->module, xr_xir_compile_artifact_construction(closed), NULL) == XR_XIR_BAD_STRUCTURE);
     ids[4].cleanup_owner = 3;
     XrXirProvenance *proof = (XrXirProvenance *)closed->module.provenance;
     --closed->module.function_count; --proof->count;
-    CHECK(xr_xir_compile_verify(suite_context, &closed->module, NULL) == XR_XIR_BAD_STRUCTURE);
+    CHECK(xr_xir_compile_verify_v2(suite_context, &closed->module, xr_xir_compile_artifact_construction(closed), NULL) == XR_XIR_BAD_STRUCTURE);
     ++closed->module.function_count; ++proof->count;
     XrXirTarget target = {XR_XIR_ARCH_X86_64, XR_XIR_VALUE_ABI_VERSION};
     CHECK(xr_xir_compile_lower(closed, &target, &lowered, NULL) == XR_XIR_OK);

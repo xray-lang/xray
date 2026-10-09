@@ -11,6 +11,7 @@
  */
 #ifndef XIR_NATIVE_METADATA_FIXTURE_H
 #define XIR_NATIVE_METADATA_FIXTURE_H
+#include "xir_construction_fixture.h"
 #include "xir/xxir_generic.h"
 #include "xir_native_fixture_owner.h"
 static XrXirStatus native_metadata_fixture(const XrXirCompileContext *context,
@@ -32,7 +33,7 @@ static XrXirStatus native_metadata_fixture(const XrXirCompileContext *context,
     }
     XrXirModule module = {XR_XIR_BUILT, functions, spec->entry_count, spec->declarations, NULL, spec->types, NULL, XR_XIR_PROGRAM, NULL};
     XrXirArtifact *checked = NULL;
-    XrXirStatus status = xr_xir_compile_check(context, &module, &checked, NULL);
+    XrXirStatus status = xir_fixture_check(context, &module, &checked, NULL);
     XrXirArtifact *closed=NULL;
     if (status == XR_XIR_OK) status=xr_xir_compile_specialize(checked,&closed,NULL);
     if (status == XR_XIR_OK) status = xr_xir_compile_artifact_verify(closed, NULL);

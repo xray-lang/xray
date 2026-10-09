@@ -11,6 +11,7 @@
  */
 #ifndef XIR_CLASS_OWNED_ALLOCATIONS_H
 #define XIR_CLASS_OWNED_ALLOCATIONS_H
+#include "xir_construction_fixture.h"
 #include "xir_class_owned_fixture.h"
 typedef struct ClassOwnedStages {
     ClassOwnedFixture fixture;
@@ -35,7 +36,7 @@ static void class_owned_stages_drop(ClassOwnedStages *s) {
 }
 static XrXirStatus class_owned_stages_init(const XrXirCompileContext *context,ClassOwnedStages *s) {
     memset(s,0,sizeof(*s));class_owned_fixture(&s->fixture);
-    XrXirStatus status=xr_xir_compile_check(context,&s->fixture.module,&s->checked,NULL);
+    XrXirStatus status=xir_fixture_check(context, &s->fixture.module, &s->checked, NULL);
     if(status==XR_XIR_OK)status=xr_xir_compile_checked_write(s->checked,&s->packet,NULL);
     if(status==XR_XIR_OK)status=xr_xir_compile_specialize(s->checked,&s->specialized,NULL);
     if(status==XR_XIR_OK)status=xr_xir_compile_lower(s->specialized,&fixture_target,&s->lowered,NULL);
@@ -57,7 +58,7 @@ static XrXirStatus class_owned_phase(const XrXirCompileContext *context,ClassOwn
     case 0:return xr_xir_compile_nominal_clone(context,&s->fixture.nominals,&s->fixture.types,&o->nominals);
     case 1:return xr_xir_compile_nominal_project(context,&s->fixture.nominals,&o->nominals);
     case 2:return xr_xir_compile_types_clone(context,&s->fixture.types,&o->types);
-    case 3:return xr_xir_compile_check(context,&s->fixture.module,&o->artifact,NULL);
+    case 3:return xir_fixture_check(context, &s->fixture.module, &o->artifact, NULL);
     case 4:return xr_xir_compile_checked_write(s->checked,&o->packet,NULL);
     case 5:return xr_xir_compile_checked_read(context,s->packet.bytes,s->packet.length,&o->artifact,NULL);
     case 6:return xr_xir_compile_specialize(s->checked,&o->artifact,NULL);
@@ -71,7 +72,7 @@ static XrXirStatus class_owned_phase(const XrXirCompileContext *context,ClassOwn
             status==XR_XIR_VALUE_LIMIT?XR_XIR_BUDGET:XR_XIR_BAD_TYPE;
     }
     case 10:return xr_xir_compile_program_seal(context,&s->spec,&o->program);
-    default:return xr_xir_compile_verify(context,&s->fixture.module,NULL);
+    default:return xir_fixture_verify(context, &s->fixture.module, NULL);
     }
 }
 static XrXirStatus class_owned_operation(const XrXirCompileContext *context,void *opaque) {
@@ -110,8 +111,8 @@ static void class_owned_poisoning(void) {
     XrXirNominalDeclaration *origin=(XrXirNominalDeclaration *)s.specialized->module.provenance->source->module.types->nominals->declarations;
     origin[0].flags=0;XrXirArtifact *output=NULL;
     CHECK(xr_xir_compile_lower(s.specialized,&fixture_target,&output,NULL)==XR_XIR_BAD_TYPE && !output);
-    output=(XrXirArtifact *)(uintptr_t)1;
-    CHECK(xr_xir_compile_lower(s.specialized,&fixture_target,&output,NULL)==XR_XIR_BAD_TYPE && output==(XrXirArtifact *)(uintptr_t)1);
+    output=s.specialized;
+    CHECK(xr_xir_compile_lower(s.specialized,&fixture_target,&output,NULL)==XR_XIR_BAD_STRUCTURE && output==s.specialized);
     origin[0].flags=XR_XIR_NOMINAL_FINAL;
     CHECK(xr_xir_compile_artifact_verify(s.specialized,NULL)==XR_XIR_OK);
     class_owned_stages_drop(&s);allocation_compile_owner_drop(&owner);

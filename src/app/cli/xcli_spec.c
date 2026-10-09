@@ -122,6 +122,13 @@ static const XrCliOptionSpec build_options[] = {
     {"verbose", 'v', XR_CLI_VALUE_NONE, false, false, NULL, "Verbose output"},
     XR_CLI_OPT_END};
 
+static const XrCliOptionSpec deps_options[] = {
+    {"output", 'o', XR_CLI_VALUE_STRING, false, false, "FILE", "Output file path"},
+    {"shell", 's', XR_CLI_VALUE_NONE, false, false, NULL, "Shell script format (default)"},
+    {"json", 'j', XR_CLI_VALUE_NONE, false, false, NULL, "JSON format"},
+    {"list", 'l', XR_CLI_VALUE_NONE, false, false, NULL, "Simple list format"},
+    XR_CLI_OPT_END};
+
 static const XrCliOptionSpec empty_options[] = {XR_CLI_OPT_END};
 
 static const XrCliOptionSpec info_options[] = {
@@ -158,6 +165,7 @@ static XrCliCommandSpec cli_commands[] = {
     {"build", "Compile to a native binary", NULL, build_options, 1, 1, false, false, NULL, NULL, 0},
 
     /* Utility commands */
+    {"deps", "Analyze source dependencies", NULL, deps_options, 1, 1, false, false, NULL, NULL, 0},
     {"info", "Environment and installation info", NULL, info_options, 0, 0, false, false, NULL,
      NULL, 0},
     {"doctor", "Diagnose Xray installation state", NULL, info_options, 0, 1, false, false, NULL,

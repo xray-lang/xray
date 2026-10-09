@@ -11,6 +11,7 @@
  *   Every type-use query authenticates its current scope and initializes tasks
  *   anew. Module-owned storage is released on every final status.
  */
+#include "xir_construction_fixture.h"
 #include "xir/xxir_constraint_proof_internal.h"
 #include "xir/xxir_declarations.h"
 #include "xir/xxir_implementation_verify.h"
@@ -127,7 +128,7 @@ static void owner_free(XrXirCompileContext *c,uint64_t baseline){
     CHECK(stats(c).live_bytes==baseline);xr_compile_resources_release(c->resources);*c=(XrXirCompileContext){0};CHECK(!live && !live_bytes);
 }
 static XrXirStatus whole(const XrXirCompileContext *c){
-    DeclarationFixture f;fixture(&f);XrXirStatus status=xr_xir_compile_verify(c,&f.module,NULL);
+    DeclarationFixture f;fixture(&f);XrXirStatus status=xir_fixture_verify(c, &f.module, NULL);
     if(status==XR_XIR_OK)status=xr_xir_compile_declaration_constraints_verify(c,&f.module);
     if(status==XR_XIR_OK)status=xr_xir_compile_module_constraints_verify(c,&f.module);
     return status;
@@ -153,7 +154,7 @@ static void limits(void){
 }
 static void scopes(void){
     DeclarationFixture f;fixture(&f);XrXirCompileContext c=owner_new(caps());uint64_t baseline=stats(&c).live_bytes;
-    CHECK(xr_xir_compile_verify(&c,&f.module,NULL)==XR_XIR_OK);
+    CHECK(xir_fixture_verify(&c, &f.module, NULL)==XR_XIR_OK);
     XirConstraintScratch scratch={c.resources,NULL};
     CHECK(proof_function_declaration(&f.module,1,&c,&scratch)==XR_XIR_OK);
     uint64_t small=stats(&c).allocation_count;
@@ -173,7 +174,7 @@ static void scopes(void){
     CHECK(proof_function_declaration(&f.module,2,&c,&scratch)==XR_XIR_OK);
     CHECK(stats(&c).allocation_count==large);
     xr_xir_constraint_scratch_free(&scratch);CHECK(!scratch.memory && !scratch.resources);
-    CHECK(xr_xir_compile_verify(&c,&f.module,NULL)==XR_XIR_OK);
+    CHECK(xir_fixture_verify(&c, &f.module, NULL)==XR_XIR_OK);
     owner_free(&c,baseline);
 }
 static void requirements(void){
@@ -185,7 +186,7 @@ static void requirements(void){
     XrXirType subject=constructed(18);f.functions[1].parameters=&subject;
     f.bound.markers=XR_XIR_CONSTRAINT_SENDABLE;
     XrXirCompileContext c=owner_new(caps());uint64_t baseline=stats(&c).live_bytes;
-    CHECK(xr_xir_compile_verify(&c,&f.module,NULL)==XR_XIR_OK);
+    CHECK(xir_fixture_verify(&c, &f.module, NULL)==XR_XIR_OK);
     XirConstraintScratch scratch={c.resources,NULL};
     CHECK(proof_function_declaration(&f.module,1,&c,&scratch)==XR_XIR_OK);
     uint64_t allocations=stats(&c).allocation_count;

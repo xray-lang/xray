@@ -171,6 +171,13 @@ XR_FUNC XrModuleStatus xr_compile_module_graph_include_logical_source(XrModuleGr
     const XrModuleIdentityAuthority *authority, const char *logical_path,
     const char *source_path, const char *source, char **out_err);
 
+/* Select the exact canonical logical view from the actual owned Catalog.
+ * A matching malformed/foreign binding fails without Source fallback. No match
+ * publishes -1. Selection owns graph metadata but borrows the Catalog artifact.
+ * Existing Source/Checked representation collisions fail; discard failed graphs. */
+XR_FUNC XrModuleStatus xr_compile_module_graph_include_catalog_logical(XrModuleGraph *g,
+    const XrModuleIdentityAuthority *authority, const char *logical_path, int *output);
+
 /* Add an ordinary dependency edge between admitted graph indices. Duplicate
  * edges are idempotent; a fresh edge invalidates the prior topological order.
  * Cycles remain subject to the existing topological-sort rejection. */

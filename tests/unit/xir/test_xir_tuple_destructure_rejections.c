@@ -19,7 +19,7 @@ int main(void) {
         {"duplicate_group",XR_XIR_BAD_STRUCTURE,false},{"duplicate_scope",XR_XIR_BAD_STRUCTURE,false},
         {"singleton_comma",XR_XIR_BAD_STRUCTURE,true},{"const_write",XR_XIR_BAD_TYPE,false},
         {"unused_generic",XR_XIR_BAD_TYPE,false},{"nested_pending",XR_XIR_BAD_STRUCTURE,true},
-        {"rest_pending",XR_XIR_BAD_STRUCTURE,true},{"library_mutable",XR_XIR_BAD_STRUCTURE,false}};
+        {"rest_pending",XR_XIR_BAD_STRUCTURE,true},{"library_mutable",XR_XIR_OK,false}};
     for(size_t i=0;i<sizeof(cases)/sizeof(cases[0]);++i) {
         const XrXirCompileContext *context=source_program_owner(UINT64_C(64)*1024*1024,128000000);
         XrCompilerSession *session=NULL;CHECK(xr_compile_session_new(context->resources,&session)==XR_COMPILER_SESSION_OK);
@@ -32,6 +32,20 @@ int main(void) {
         XrXirStatus status=xr_xir_compile_source_product_build(&request,&product,&diagnostic);
         if(status!=cases[i].expected)fprintf(stderr,"%s got=%u expected=%u stage=%u line=%d: %s\n",
             cases[i].name,status,cases[i].expected,diagnostic.stage,diagnostic.source.line,diagnostic.source.message);
+        if (cases[i].expected==XR_XIR_OK) {
+            CHECK(status==XR_XIR_OK && product);
+            CHECK(xr_xir_compile_source_product_verify(product,1048576,NULL)==XR_XIR_OK);
+            XrXirSourceProductPacketView packet={0};XrXirArtifact *checked=NULL;
+            CHECK(xr_xir_compile_source_product_packet(product,XR_XIR_SOURCE_PRODUCT_SOURCE,&packet)==XR_XIR_OK);
+            CHECK(xr_xir_compile_checked_read(context,packet.bytes,packet.length,&checked,NULL)==XR_XIR_OK);
+            const XrXirDeclarations *d=xr_xir_compile_artifact_module(checked)->declarations;
+            CHECK(d && d->slot_count==2 && d->slots[0].module!=d->root_module &&
+                d->slots[1].module==d->slots[0].module && d->slots[0].mutable && d->slots[1].mutable);
+            xr_xir_compile_artifact_free(checked);xr_xir_compile_source_product_free(product);
+            xr_xir_compile_source_product_diagnostic_free(&diagnostic);xr_compile_session_free(session);
+            source_program_owners_free();puts("Private library Tuple state admitted through complete SourceProduct checking");
+            continue;
+        }
         CHECK(status==cases[i].expected && !product && diagnostic.stage==XR_XIR_SOURCE_PRODUCT_CHECK);
         /* Parser failures precede a typed Source diagnostic; their exact
          * lexer spans are printed by the existing frontend diagnostic owner. */
@@ -40,5 +54,5 @@ int main(void) {
         printf("Tuple declaration %s rejected at definition status=%u, output empty\n",cases[i].name,status);
         source_program_owners_free();
     }
-    puts("11 complete source declaration/unused-definition cases, including legal pending nested/rest, physical0 PASS");return 0;
+    puts("10 rejected declarations and one admitted private library Tuple state, physical0 PASS");return 0;
 }

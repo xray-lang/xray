@@ -1,725 +1,131 @@
-/*
- * xray - Lightweight typed scripting with native concurrency
- * https://www.xray-lang.org
- *
- * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
- * Licensed under the MIT License
- *
- * xlsp_navigation.c - Semantic navigation features
- *   definition, references, document highlight
- */
-
+/* Copyright (c) 2026 Xinglei Xu. MIT License. */
 #include "xlsp_navigation.h"
 #include "xlsp_server.h"
-#include "../../base/xjson.h"
-#include "xlsp_analysis.h"
-#include "xlsp_imports.h"
-#include "xlsp_enum_fields.h"
-#include "xlsp_utils.h"
-#include "xlsp_symbol_index.h"
-#include "../../frontend/analyzer/xanalyzer.h"
-#include "../../frontend/parser/xast_nodes.h"
-#include "../../frontend/parser/xast_api.h"
-#include "../../base/xmalloc.h"
-#include "../../base/xchecks.h"
+#include "xlsp_source_workspace.h"
+#include "../cli/xcli_canonical_source.h"
 #include <string.h>
+#include <stdio.h>
 
-// ============================================================================
-// Go to Definition
-// ============================================================================
-
-XrJsonValue *xlsp_analyze_definition(XrLspServer *server, XrLspDocument *doc, XrLspPosition pos) {
-    if (!doc || !doc->content)
-        return NULL;
-    XaAnalyzer *analyzer = server ? server->workspace_analyzer : NULL;
-
-    uint32_t start, end;
-    char *word = xlsp_word_at_position(doc, pos, &start, &end);
-    if (!word)
-        return NULL;
-
-    const char *content = doc->content;
-    XrJsonValue *result = NULL;
-
-    XlspEnumFieldOccurrence field;
-    XlspEnumFieldOccurrence definition;
-    if (analyzer && doc->ast && xlsp_enum_field_at(analyzer, doc->ast, doc->uri, pos, &field) &&
-        xlsp_enum_field_definition(analyzer, field.identity, &definition)) {
-        result = xjson_make_location(definition.location.file, (int) definition.location.line - 1,
-                                     (int) definition.location.column - 1,
-                                     (int) definition.location.end_line - 1,
-                                     (int) definition.location.end_column - 1);
-        xr_free(word);
-        return result;
+static XrXirStatus navigation_length(XrCompileResources *r,const char *text,size_t *out) {
+    if(!text)return XR_XIR_BAD_STRUCTURE;
+    size_t n=0;
+    for(;;) {
+        if(xr_compile_resources_work(r,1)!=XR_COMPILE_RESOURCE_OK)return XR_XIR_BUDGET;
+        if(!text[n]){*out=n;return XR_XIR_OK;}
+        if(n==SIZE_MAX-1)return XR_XIR_BUDGET;
+        ++n;
     }
-
-    // First try XaAnalyzer for accurate definition lookup (position-aware)
-    if (analyzer) {
-        // lookup_at resolves the correct symbol even with shadowing
-        XaSymbol *sym = xa_analyzer_lookup_at(analyzer, doc->uri, pos.line + 1, pos.character + 1);
-        if (!sym)
-            sym = xa_analyzer_lookup(analyzer, word);
-
-        if (sym && sym->location.line > 0) {
-            const char *target_uri =
-                (sym->location.file && sym->location.file[0]) ? sym->location.file : doc->uri;
-            result = xjson_new_object();
-            xjson_object_set(result, "uri", xjson_new_string(target_uri));
-
-            int col = sym->location.column > 0 ? sym->location.column - 1 : 0;
-            xjson_object_set(result, "range",
-                             xjson_make_range(sym->location.line - 1, col, sym->location.line - 1,
-                                              col + (int) strlen(sym->name)));
+}
+/* A request is synchronous with document notifications on the dispatch thread.
+ * Always construct the current inputs; the previous committed owner is never
+ * a fallback cache. Its lifetime ends only after complete new JSON publication. */
+static XrJsonValue *navigation_request(XrLspServer *server,XrLspDocument *doc,
+    XrLspPosition position,unsigned mode,bool include_declaration,const XrJsonValue *previous_id,const XrLspRange *range) {
+    if(!server)return NULL;
+    server->source_failure.stage=1;server->source_failure.status=XR_XIR_BAD_STRUCTURE;
+    if(!doc||doc->server!=server||!server->doc_table||server->doc_table->doc_count<=0)return NULL;
+    XrCompileResourceLimits limits=xr_cli_compile_default_resource_limits();
+    XrCompileResources *resources=NULL;XlspSourceDocument *documents=NULL;
+    XlspSourceWorkspace *fresh=NULL;XrJsonValue *result=NULL;XlspSourceTokens *tokens=NULL;
+    XrCompileResourceStatus created=xr_compile_resources_new(&limits,&resources);
+    XrXirStatus status=created==XR_COMPILE_RESOURCE_OK?XR_XIR_OK:
+        created==XR_COMPILE_RESOURCE_BUDGET?XR_XIR_BUDGET:XR_XIR_OUT_OF_MEMORY;
+    if(status!=XR_XIR_OK)goto done;
+    size_t count=(size_t)server->doc_table->doc_count,used=0,selected_length=0;bool selected=false;
+    if(count>SIZE_MAX/sizeof(*documents)){status=XR_XIR_BUDGET;goto done;}
+    created=xr_compile_resources_calloc(resources,count,sizeof(*documents),(void **)&documents);
+    if(created!=XR_COMPILE_RESOURCE_OK){status=created==XR_COMPILE_RESOURCE_BUDGET?XR_XIR_BUDGET:XR_XIR_OUT_OF_MEMORY;goto done;}
+    for(int i=0;i<server->doc_table->bucket_count;++i) {
+        if(xr_compile_resources_work(resources,1)!=XR_COMPILE_RESOURCE_OK){status=XR_XIR_BUDGET;goto done;}
+        for(XrLspDocBucket *bucket=server->doc_table->buckets[i];bucket;bucket=bucket->next) {
+            XrLspDocument *item=bucket->doc;
+            if(!item||!item->content||used==count){status=XR_XIR_BAD_STRUCTURE;goto done;}
+            size_t length=0;status=navigation_length(resources,item->uri,&length);
+            if(status!=XR_XIR_OK)goto done;
+            if(xr_compile_resources_work(resources,sizeof(*documents))!=XR_COMPILE_RESOURCE_OK){status=XR_XIR_BUDGET;goto done;}
+            documents[used++]=(XlspSourceDocument){item->uri,item->content,length,item->length,item->version};
+            if(item==doc){selected=true;selected_length=length;}
         }
     }
-
-    // Fall back to lexer-based symbol table
-    if (!result) {
-        SymbolTable table;
-        xlsp_symbol_table_init(&table);
-        xlsp_extract_symbols(doc, &table);
-
-        for (int i = 0; i < table.count; i++) {
-            if (strcmp(table.entries[i].name, word) == 0) {
-                SymbolEntry *entry = &table.entries[i];
-
-                result = xjson_new_object();
-                xjson_object_set(result, "uri", xjson_new_string(doc->uri));
-
-                xjson_object_set(result, "range",
-                                 xjson_make_range(entry->line, entry->start_char, entry->end_line,
-                                                  entry->end_char));
-
-                break;
-            }
+    if(!selected||used!=count){status=XR_XIR_BAD_STRUCTURE;goto done;}
+    XrXirCompileContext context={resources,xr_xir_compile_default_limits()};
+    status=xlsp_source_workspace_build(&context,documents,count,&fresh,&server->source_failure.stage,NULL);
+    if(status!=XR_XIR_OK)goto done;
+    server->source_failure.stage=7;
+    if(mode>=4) {
+        status=xlsp_source_workspace_tokens(fresh,doc->uri,selected_length,range,&tokens);
+        if(status!=XR_XIR_OK)goto done;
+        if(!range&&doc->sem_token_result_id==UINT32_MAX){status=XR_XIR_BUDGET;goto done;}
+        bool matches=false;
+        if(mode==5&&previous_id&&doc->source_tokens) {
+            char id[16];int n=snprintf(id,sizeof(id),"%u",doc->sem_token_result_id);
+            if(n<=0||(size_t)n>=sizeof(id)){status=XR_XIR_BAD_STRUCTURE;goto done;}
+            if(xr_compile_resources_work(resources,(size_t)n)!=XR_COMPILE_RESOURCE_OK){status=XR_XIR_BUDGET;goto done;}
+            matches=previous_id->string_len==(size_t)n&&!memcmp(previous_id->as.string,id,(size_t)n);
         }
-        xlsp_symbol_table_free(&table);
-    }
-
-    // If not found locally, check if it's a module.member pattern
-    if (!result && start > 1 && content[start - 1] == '.') {
-        uint32_t mod_end = start - 1;
-        uint32_t mod_start = mod_end;
-        while (mod_start > 0 &&
-               (content[mod_start - 1] == '_' ||
-                (content[mod_start - 1] >= 'a' && content[mod_start - 1] <= 'z') ||
-                (content[mod_start - 1] >= 'A' && content[mod_start - 1] <= 'Z') ||
-                (content[mod_start - 1] >= '0' && content[mod_start - 1] <= '9'))) {
-            mod_start--;
+        status=xlsp_source_tokens_json(resources,tokens,matches?doc->source_tokens:NULL,
+            range?0:doc->sem_token_result_id+1,mode==5,range,&result);
+        if(status==XR_XIR_OK&&!range) {
+            XlspSourceTokens *old=doc->source_tokens;doc->source_tokens=tokens;tokens=NULL;
+            ++doc->sem_token_result_id;xlsp_source_tokens_free(old);
         }
-
-        if (mod_start < mod_end) {
-            size_t mod_len = mod_end - mod_start;
-            char *mod_name = xr_malloc(mod_len + 1);
-            if (mod_name) {
-                memcpy(mod_name, content + mod_start, mod_len);
-                mod_name[mod_len] = '\0';
-
-                // Try to get definition from import
-                result = xlsp_get_import_definition(doc, mod_name, word);
-
-                xr_free(mod_name);
-            }
-        }
+    } else status=xlsp_source_workspace_navigation(fresh,doc->uri,selected_length,position,mode,include_declaration,&result);
+    if(status==XR_XIR_OK) {
+        XlspSourceWorkspace *old=server->source_workspace;server->source_workspace=fresh;fresh=NULL;
+        xlsp_source_workspace_free(old);server->source_failure.stage=0;
     }
-
-    // Check if word is an imported module name (for "import xxx" goto definition)
-    if (!result) {
-        result = xlsp_get_module_file_location(doc, word);
-    }
-
-    // Shallow workspace-index fallback: resolves declarations in files that are
-    // indexed but not loaded into the analyzer (Approach A keeps closed,
-    // non-imported files shallow-only). The analyzer, local, and import paths
-    // above always take precedence.
-    if (!result && server && server->symbol_index) {
-        const XlspIndexEntry *entry = xlsp_symbol_index_find(server->symbol_index, word);
-        if (entry && entry->uri) {
-            result = xjson_new_object();
-            xjson_object_set(result, "uri", xjson_new_string(entry->uri));
-            xjson_object_set(result, "range",
-                             xjson_make_range(entry->line, entry->column, entry->line,
-                                              entry->column + (int) strlen(word)));
-        }
-    }
-
-    xr_free(word);
+done:
+    server->source_failure.status=(unsigned)status;
+    xlsp_source_tokens_free(tokens);xlsp_source_workspace_free(fresh);xr_compile_resources_free(documents);xr_compile_resources_release(resources);
     return result;
 }
-
-// ============================================================================
-// Find References (cross-file, scope-aware)
-// ============================================================================
-
-// Helper: create a reference location JSON object
-static XrJsonValue *make_ref_location(const char *uri, int line, int start_col, int end_col) {
-    return xjson_make_location(uri, line, start_col, line, end_col);
+XrJsonValue *xlsp_analyze_definition(XrLspServer *server,XrLspDocument *doc,XrLspPosition pos) {
+    return navigation_request(server,doc,pos,0,false,NULL,NULL);
+}
+XrJsonValue *xlsp_analyze_references(XrLspServer *server,XrLspDocument *doc,XrLspPosition pos,bool include_declaration) {
+    return navigation_request(server,doc,pos,1,include_declaration,NULL,NULL);
+}
+XrJsonValue *xlsp_analyze_document_highlight(XrLspServer *server,XrLspDocument *doc,XrLspPosition pos) {
+    return navigation_request(server,doc,pos,2,true,NULL,NULL);
+}
+/* Strict protocol UInteger/URI admission is shared by navigation and typed hover handlers. */
+XrJsonValue *xlsp_navigation_handle(XrLspServer *server,XrJsonValue *params,unsigned mode) {
+    if(!server)return NULL;
+    server->source_failure.stage=8;server->source_failure.status=XR_XIR_BAD_STRUCTURE;
+    XrJsonValue *document=xjson_get_object(params,"textDocument"),*position=xjson_get_object(params,"position");
+    XrJsonValue *uri=xjson_get(document,"uri"),*line=xjson_get(position,"line"),*character=xjson_get(position,"character");
+    if(!uri||uri->type!=XR_JSON_STRING||!uri->as.string||memchr(uri->as.string,0,uri->string_len)||
+        !line||line->type!=XR_JSON_NUMBER||!line->is_integer||line->as.integer<0||line->as.integer>INT32_MAX||
+        !character||character->type!=XR_JSON_NUMBER||!character->is_integer||character->as.integer<0||character->as.integer>INT32_MAX)return NULL;
+    bool include_declaration=false;
+    if(mode==1) {
+        XrJsonValue *context=xjson_get_object(params,"context"),*include=xjson_get(context,"includeDeclaration");
+        if(!include||include->type!=XR_JSON_BOOL)return NULL;
+        include_declaration=include->as.boolean;
+    }
+    XrLspDocument *doc=xlsp_document_get(server,uri->as.string);
+    return navigation_request(server,doc,(XrLspPosition){(uint32_t)line->as.integer,(uint32_t)character->as.integer},mode,include_declaration,NULL,NULL);
 }
 
-typedef struct EnumFieldRefContext {
-    XrJsonValue *refs;
-} EnumFieldRefContext;
-
-static void add_enum_field_reference(const XlspEnumFieldOccurrence *occurrence, void *raw_ctx) {
-    EnumFieldRefContext *ctx = raw_ctx;
-    XrLocation loc = occurrence->location;
-    xjson_array_push(ctx->refs, make_ref_location(loc.file, (int) loc.line - 1,
-                                                  (int) loc.column - 1, (int) loc.end_column - 1));
+static bool semantic_protocol_position(XrJsonValue *object,XrLspPosition *out) {
+    XrJsonValue *line=xjson_get(object,"line"),*column=xjson_get(object,"character");
+    if(!line||line->type!=XR_JSON_NUMBER||!line->is_integer||line->as.integer<0||line->as.integer>INT32_MAX||
+        !column||column->type!=XR_JSON_NUMBER||!column->is_integer||column->as.integer<0||column->as.integer>INT32_MAX)return false;
+    *out=(XrLspPosition){(uint32_t)line->as.integer,(uint32_t)column->as.integer};return true;
 }
-
-// Reference context for AST traversal
-typedef struct {
-    const char *target_name;  // Name to search for
-    XaScope *def_scope;       // Scope where symbol is defined (for scoping)
-    XaScope *current_scope;   // Current scope during traversal
-    XaScope *global_scope;    // Global scope
-    XrJsonValue *refs;        // Collected references (JSON array)
-    const char *uri;          // Document URI
-} RefFindContext;
-
-// Forward declarations
-static void collect_refs_from_ast(AstNode *node, RefFindContext *ctx);
-static XaScope *find_child_scope_for_refs(XaScope *parent, void *ast_node);
-
-// Check if the current scope can see the definition scope (handles shadowing)
-static bool can_see_definition(RefFindContext *ctx) {
-    if (!ctx->def_scope || !ctx->current_scope)
-        return false;
-
-    // Check if current scope is the definition scope or a descendant
-    if (!xa_scope_is_descendant(ctx->current_scope, ctx->def_scope)) {
-        return false;
+XrJsonValue *xlsp_semantic_handle(XrLspServer *server,XrJsonValue *params,unsigned mode) {
+    if(!server)return NULL;server->source_failure.stage=11;server->source_failure.status=XR_XIR_BAD_STRUCTURE;
+    if(mode>2)return NULL;
+    XrJsonValue *document=xjson_get_object(params,"textDocument"),*uri=xjson_get(document,"uri"),*previous=NULL;
+    if(!uri||uri->type!=XR_JSON_STRING||!uri->as.string||memchr(uri->as.string,0,uri->string_len))return NULL;
+    XrLspRange range={0};
+    if(mode==1) {
+        previous=xjson_get(params,"previousResultId");
+        if(!previous||previous->type!=XR_JSON_STRING||!previous->as.string||memchr(previous->as.string,0,previous->string_len))return NULL;
+    } else if(mode==2) {
+        XrJsonValue *r=xjson_get_object(params,"range");
+        if(!r||!semantic_protocol_position(xjson_get_object(r,"start"),&range.start)||!semantic_protocol_position(xjson_get_object(r,"end"),&range.end))return NULL;
     }
-
-    // Check for shadowing: if current scope has a local definition with same name,
-    // and it's not our target definition's scope, then it shadows our target
-    if (ctx->current_scope != ctx->def_scope) {
-        XaSymbol *local = xa_scope_lookup_local(ctx->current_scope, ctx->target_name);
-        if (local) {
-            // There's a local definition in current scope - it shadows our target
-            return false;
-        }
-    }
-
-    return true;
+    XrLspDocument *doc=xlsp_document_get(server,uri->as.string);
+    return navigation_request(server,doc,(XrLspPosition){0},mode+4,false,previous,mode==2?&range:NULL);
 }
-
-// Helper: find child scope by AST node (same as rename)
-static XaScope *find_child_scope_for_refs(XaScope *parent, void *ast_node) {
-    if (!parent)
-        return NULL;
-    for (int i = 0; i < parent->child_count; i++) {
-        if (parent->children[i]->ast_node == ast_node) {
-            return parent->children[i];
-        }
-    }
-    return NULL;
-}
-
-// Add a reference if we're in the right scope
-static void add_ref_if_visible(RefFindContext *ctx, int line, int col, int name_len) {
-    if (can_see_definition(ctx)) {
-        XrJsonValue *loc = make_ref_location(ctx->uri, line - 1, col - 1, col - 1 + name_len);
-        xjson_array_push(ctx->refs, loc);
-    }
-}
-
-// Collect references from AST with scope tracking
-static void collect_refs_from_ast(AstNode *node, RefFindContext *ctx) {
-    if (!node)
-        return;
-
-    switch (node->type) {
-        case AST_PROGRAM:
-            ctx->current_scope = ctx->global_scope;
-            for (int i = 0; i < node->as.program.count; i++) {
-                collect_refs_from_ast(node->as.program.statements[i], ctx);
-            }
-            break;
-
-        case AST_FUNCTION_DECL: {
-            FunctionDeclNode *fn = &node->as.function_decl;
-            // Check function name (defined in parent scope)
-            if (fn->name && strcmp(fn->name, ctx->target_name) == 0) {
-                add_ref_if_visible(ctx, node->line, node->column > 0 ? node->column : 1,
-                                   (int) strlen(fn->name));
-            }
-
-            // Enter function scope
-            XaScope *saved_scope = ctx->current_scope;
-            XaScope *fn_scope = find_child_scope_for_refs(ctx->current_scope, node);
-            if (fn_scope)
-                ctx->current_scope = fn_scope;
-
-            // Check parameters
-            for (int i = 0; i < fn->param_count; i++) {
-                XrParamNode *param = fn->params[i];
-                if (param && param->name && strcmp(param->name, ctx->target_name) == 0) {
-                    add_ref_if_visible(ctx, param->line, param->column > 0 ? param->column : 1,
-                                       (int) strlen(param->name));
-                }
-            }
-
-            collect_refs_from_ast(fn->body, ctx);
-            ctx->current_scope = saved_scope;
-            break;
-        }
-
-        case AST_VAR_DECL:
-        case AST_CONST_DECL: {
-            VarDeclNode *var = &node->as.var_decl;
-            if (var->name && strcmp(var->name, ctx->target_name) == 0) {
-                add_ref_if_visible(ctx, node->line, node->column > 0 ? node->column : 1,
-                                   (int) strlen(var->name));
-            }
-            collect_refs_from_ast(var->initializer, ctx);
-            break;
-        }
-
-        case AST_VARIABLE: {
-            if (node->as.variable.name && strcmp(node->as.variable.name, ctx->target_name) == 0) {
-                add_ref_if_visible(ctx, node->line, node->column > 0 ? node->column : 1,
-                                   (int) strlen(node->as.variable.name));
-            }
-            break;
-        }
-
-        case AST_ASSIGNMENT: {
-            if (node->as.assignment.name &&
-                strcmp(node->as.assignment.name, ctx->target_name) == 0) {
-                add_ref_if_visible(ctx, node->line, node->column > 0 ? node->column : 1,
-                                   (int) strlen(node->as.assignment.name));
-            }
-            collect_refs_from_ast(node->as.assignment.value, ctx);
-            break;
-        }
-
-        case AST_BLOCK: {
-            XaScope *saved_scope = ctx->current_scope;
-            XaScope *block_scope = find_child_scope_for_refs(ctx->current_scope, node);
-            if (block_scope)
-                ctx->current_scope = block_scope;
-
-            for (int i = 0; i < node->as.block.count; i++) {
-                collect_refs_from_ast(node->as.block.statements[i], ctx);
-            }
-            ctx->current_scope = saved_scope;
-            break;
-        }
-
-        case AST_IF_STMT:
-            collect_refs_from_ast(node->as.if_stmt.condition, ctx);
-            collect_refs_from_ast(node->as.if_stmt.then_branch, ctx);
-            collect_refs_from_ast(node->as.if_stmt.else_branch, ctx);
-            break;
-
-        case AST_WHILE_STMT:
-            collect_refs_from_ast(node->as.while_stmt.condition, ctx);
-            collect_refs_from_ast(node->as.while_stmt.body, ctx);
-            break;
-
-        case AST_FOR_STMT: {
-            XaScope *saved_scope = ctx->current_scope;
-            XaScope *for_scope = find_child_scope_for_refs(ctx->current_scope, node);
-            if (for_scope)
-                ctx->current_scope = for_scope;
-
-            collect_refs_from_ast(node->as.for_stmt.initializer, ctx);
-            collect_refs_from_ast(node->as.for_stmt.condition, ctx);
-            collect_refs_from_ast(node->as.for_stmt.increment, ctx);
-            collect_refs_from_ast(node->as.for_stmt.body, ctx);
-            ctx->current_scope = saved_scope;
-            break;
-        }
-
-        case AST_FOR_IN_STMT: {
-            ForInStmtNode *fi = &node->as.for_in_stmt;
-            collect_refs_from_ast(fi->collection, ctx);
-
-            XaScope *saved_scope = ctx->current_scope;
-            XaScope *for_scope = find_child_scope_for_refs(ctx->current_scope, node);
-            if (for_scope)
-                ctx->current_scope = for_scope;
-
-            // Check loop variable
-            if (fi->item_name && strcmp(fi->item_name, ctx->target_name) == 0) {
-                add_ref_if_visible(ctx, node->line, node->column > 0 ? node->column : 1,
-                                   (int) strlen(fi->item_name));
-            }
-
-            collect_refs_from_ast(fi->body, ctx);
-            ctx->current_scope = saved_scope;
-            break;
-        }
-
-        case AST_FUNCTION_EXPR: {
-            FunctionDeclNode *fn_expr = &node->as.function_expr;
-
-            XaScope *saved_scope = ctx->current_scope;
-            XaScope *fn_scope = find_child_scope_for_refs(ctx->current_scope, node);
-            if (fn_scope)
-                ctx->current_scope = fn_scope;
-
-            // Check parameters
-            for (int i = 0; i < fn_expr->param_count; i++) {
-                XrParamNode *param = fn_expr->params[i];
-                if (param && param->name && strcmp(param->name, ctx->target_name) == 0) {
-                    add_ref_if_visible(ctx, param->line, param->column > 0 ? param->column : 1,
-                                       (int) strlen(param->name));
-                }
-            }
-
-            collect_refs_from_ast(fn_expr->body, ctx);
-            ctx->current_scope = saved_scope;
-            break;
-        }
-
-        case AST_EXPR_STMT:
-            collect_refs_from_ast(node->as.expr_stmt, ctx);
-            break;
-
-        case AST_CALL_EXPR:
-            collect_refs_from_ast(node->as.call_expr.callee, ctx);
-            for (int i = 0; i < node->as.call_expr.arg_count; i++) {
-                collect_refs_from_ast(node->as.call_expr.arguments[i], ctx);
-            }
-            break;
-
-        case AST_BINARY_ADD:
-        case AST_BINARY_SUB:
-        case AST_BINARY_MUL:
-        case AST_BINARY_DIV:
-        case AST_BINARY_EQ:
-        case AST_BINARY_NE:
-        case AST_BINARY_LT:
-        case AST_BINARY_LE:
-        case AST_BINARY_GT:
-        case AST_BINARY_GE:
-        case AST_BINARY_AND:
-        case AST_BINARY_OR:
-            collect_refs_from_ast(node->as.binary.left, ctx);
-            collect_refs_from_ast(node->as.binary.right, ctx);
-            break;
-
-        case AST_UNARY_NEG:
-        case AST_UNARY_NOT:
-            collect_refs_from_ast(node->as.unary.operand, ctx);
-            break;
-
-        case AST_INDEX_GET:
-            collect_refs_from_ast(node->as.index_get.array, ctx);
-            collect_refs_from_ast(node->as.index_get.index, ctx);
-            break;
-
-        case AST_MEMBER_ACCESS:
-            collect_refs_from_ast(node->as.member_access.object, ctx);
-            // Don't check member name - it's a different symbol
-            break;
-
-        case AST_RETURN_STMT:
-            for (int i = 0; i < node->as.return_stmt.value_count; i++) {
-                collect_refs_from_ast(node->as.return_stmt.values[i], ctx);
-            }
-            break;
-
-        case AST_CLASS_DECL:
-        case AST_STRUCT_DECL:
-        case AST_UNION_DECL: {
-            // Check class/struct name
-            if (node->as.class_decl.name &&
-                strcmp(node->as.class_decl.name, ctx->target_name) == 0) {
-                add_ref_if_visible(ctx, node->line, node->column > 0 ? node->column : 1,
-                                   (int) strlen(node->as.class_decl.name));
-            }
-
-            // Process methods
-            for (int i = 0; i < node->as.class_decl.method_count; i++) {
-                collect_refs_from_ast(node->as.class_decl.methods[i], ctx);
-            }
-            break;
-        }
-
-        default:
-            break;
-    }
-}
-
-// Helper: lexer-based fallback scan for references (when AST/analyzer unavailable)
-// Uses line_offsets for O(1) column calculation instead of O(N) linear scan.
-static void scan_doc_for_refs_lexer(XrLspDocument *doc, const char *search_word, size_t word_len,
-                                    XrJsonValue *refs) {
-    if (!doc || !doc->content || !search_word)
-        return;
-
-    Scanner scanner;
-    xr_scanner_init(&scanner, doc->content);
-
-    Token token;
-    while (1) {
-        token = xr_scanner_scan(&scanner);
-        if (token.type == TK_EOF)
-            break;
-        if (token.type == TK_ERROR)
-            continue;
-
-        if (token.type == TK_NAME && (size_t) token.length == word_len &&
-            strncmp(token.start, search_word, word_len) == 0) {
-            // O(1) column calculation using line_offsets
-            int line_idx = token.line - 1;
-            int char_pos = 0;
-            if (doc->line_offsets && line_idx >= 0 && line_idx < doc->line_count) {
-                uint32_t token_offset = (uint32_t) (token.start - doc->content);
-                char_pos = (int) (token_offset - doc->line_offsets[line_idx]);
-            } else {
-                // Fallback: linear scan (only if line_offsets unavailable)
-                const char *line_start = doc->content;
-                const char *p = doc->content;
-                while (p < token.start) {
-                    if (*p == '\n')
-                        line_start = p + 1;
-                    p++;
-                }
-                char_pos = (int) (token.start - line_start);
-            }
-
-            XrJsonValue *loc =
-                make_ref_location(doc->uri, line_idx, char_pos, char_pos + token.length);
-            xjson_array_push(refs, loc);
-        }
-    }
-}
-
-XrJsonValue *xlsp_analyze_references(XrLspServer *server, XrLspDocument *doc, XrLspPosition pos) {
-    XrJsonValue *refs = xjson_new_array();
-
-    if (!doc || !doc->content)
-        return refs;
-
-    XaAnalyzer *analyzer = server ? server->workspace_analyzer : NULL;
-
-    uint32_t start, end;
-    char *search_word = xlsp_word_at_position(doc, pos, &start, &end);
-    if (!search_word)
-        return refs;
-
-    size_t word_len = end - start;
-
-    XlspEnumFieldOccurrence field;
-    if (analyzer && doc->ast && xlsp_enum_field_at(analyzer, doc->ast, doc->uri, pos, &field)) {
-        EnumFieldRefContext ctx = {.refs = refs};
-        if (server && server->doc_table) {
-            for (int i = 0; i < server->doc_table->bucket_count; i++) {
-                for (XrLspDocBucket *bucket = server->doc_table->buckets[i]; bucket;
-                     bucket = bucket->next) {
-                    XrLspDocument *open_doc = bucket->doc;
-                    if (open_doc && open_doc->ast && open_doc->uri)
-                        xlsp_visit_enum_field_occurrences(analyzer, open_doc->ast, open_doc->uri,
-                                                          field.identity, add_enum_field_reference,
-                                                          &ctx);
-                }
-            }
-        } else {
-            xlsp_visit_enum_field_occurrences(analyzer, doc->ast, doc->uri, field.identity,
-                                              add_enum_field_reference, &ctx);
-        }
-        xr_free(search_word);
-        return refs;
-    }
-
-    // =========================================================================
-    // Scope-aware reference finding using AST and XaAnalyzer
-    // =========================================================================
-
-    bool used_semantic_search = false;
-
-    if (doc->ast && analyzer && analyzer->global_scope) {
-        // Find the scope where the symbol at cursor is defined
-        XaScope *def_scope = NULL;
-
-        // First try to find by position (more accurate)
-        XaSymbol *sym = xa_analyzer_lookup_at(analyzer, doc->uri, pos.line + 1, pos.character + 1);
-
-        // If not found by position, try by name
-        if (!sym) {
-            sym = xa_analyzer_lookup(analyzer, search_word);
-        }
-
-        if (sym) {
-            // Find the scope where this symbol is defined
-            def_scope = xa_scope_find_definition(analyzer->global_scope, sym->name);
-            if (!def_scope) {
-                def_scope = analyzer->global_scope;
-            }
-
-            // Use scope-aware AST traversal
-            RefFindContext ctx = {.target_name = search_word,
-                                  .def_scope = def_scope,
-                                  .current_scope = analyzer->global_scope,
-                                  .global_scope = analyzer->global_scope,
-                                  .refs = refs,
-                                  .uri = doc->uri};
-
-            collect_refs_from_ast(doc->ast, &ctx);
-            used_semantic_search = true;
-
-            lsp_log("References (semantic): found %d refs for '%s' in %s", xjson_array_len(refs),
-                    search_word, doc->uri);
-        }
-    }
-
-    // Fallback to lexer-based search if semantic search not available
-    if (!used_semantic_search) {
-        scan_doc_for_refs_lexer(doc, search_word, word_len, refs);
-        lsp_log("References (lexer fallback): found %d refs for '%s' in %s", xjson_array_len(refs),
-                search_word, doc->uri);
-    }
-
-    // =========================================================================
-    // Cross-file reference search via analyzer dependency graph.
-    // xa_analyzer_find_references_at covers all indexed files (not just
-    // open documents), giving uniform behaviour for opened/unopened files.
-    // =========================================================================
-
-    if (analyzer) {
-        int ref_count = 0;
-        XaSymbolRef *arefs = xa_analyzer_find_references_at(analyzer, doc->uri, pos.line + 1,
-                                                            pos.character + 1, &ref_count);
-
-        for (XaSymbolRef *r = arefs; r; r = r->next) {
-            // Skip refs already covered by the in-document search above
-            if (r->file && strcmp(r->file, doc->uri) == 0)
-                continue;
-
-            const char *ref_uri = r->file ? r->file : doc->uri;
-            int line = r->line > 0 ? (int) r->line - 1 : 0;
-            int col = r->column > 0 ? (int) r->column - 1 : 0;
-            int end_col = col + (int) strlen(search_word);
-
-            XrJsonValue *loc = xjson_new_object();
-            xjson_object_set(loc, "uri", xjson_new_string(ref_uri));
-            xjson_object_set(loc, "range", xjson_make_range(line, col, line, end_col));
-            xjson_array_push(refs, loc);
-        }
-
-        if (ref_count > 0) {
-            lsp_log("References (cross-file analyzer): %d refs for '%s'", ref_count, search_word);
-        }
-
-        xa_analyzer_free_references(arefs);
-    }
-
-    xr_free(search_word);
-    return refs;
-}
-
-// ============================================================================
-// Document Highlight (scope-aware, single-file)
-// ============================================================================
-
-XrJsonValue *xlsp_analyze_document_highlight(XrLspServer *server, XrLspDocument *doc,
-                                             XrLspPosition pos) {
-    XrJsonValue *highlights = xjson_new_array();
-    if (!doc || !doc->content)
-        return highlights;
-
-    XaAnalyzer *analyzer = server ? server->workspace_analyzer : NULL;
-
-    uint32_t start, end;
-    char *word = xlsp_word_at_position(doc, pos, &start, &end);
-    if (!word)
-        return highlights;
-
-    size_t word_len = end - start;
-    bool used_semantic = false;
-
-    // Scope-aware highlight using analyzer
-    if (doc->ast && analyzer && analyzer->global_scope) {
-        XaSymbol *sym = xa_analyzer_lookup_at(analyzer, doc->uri, pos.line + 1, pos.character + 1);
-        if (!sym)
-            sym = xa_analyzer_lookup(analyzer, word);
-
-        if (sym) {
-            XaScope *def_scope = xa_scope_find_definition(analyzer->global_scope, sym->name);
-            if (!def_scope)
-                def_scope = analyzer->global_scope;
-
-            // Collect references in this document only
-            XrJsonValue *refs = xjson_new_array();
-            RefFindContext ctx = {.target_name = word,
-                                  .def_scope = def_scope,
-                                  .current_scope = analyzer->global_scope,
-                                  .global_scope = analyzer->global_scope,
-                                  .refs = refs,
-                                  .uri = doc->uri};
-            collect_refs_from_ast(doc->ast, &ctx);
-
-            // Convert Location objects to DocumentHighlight objects
-            for (int i = 0; i < xjson_array_len(refs); i++) {
-                XrJsonValue *loc = xjson_array_get(refs, i);
-                XrJsonValue *range = xjson_get_object(loc, "range");
-                if (range) {
-                    XrJsonValue *hl = xjson_new_object();
-                    // Deep copy range since we'll free refs
-                    XrJsonValue *r_start = xjson_get_object(range, "start");
-                    XrJsonValue *r_end = xjson_get_object(range, "end");
-                    xjson_object_set(hl, "range",
-                                     xjson_make_range(xjson_get_int(r_start, "line"),
-                                                      xjson_get_int(r_start, "character"),
-                                                      xjson_get_int(r_end, "line"),
-                                                      xjson_get_int(r_end, "character")));
-
-                    // Classify: definition vs read
-                    int kind = LSP_HIGHLIGHT_READ;
-                    if (sym->location.line > 0 && sym->location.column > 0) {
-                        int def_line = sym->location.line - 1;
-                        int def_col = sym->location.column - 1;
-                        if (xjson_get_int(r_start, "line") == def_line &&
-                            xjson_get_int(r_start, "character") == def_col) {
-                            kind = LSP_HIGHLIGHT_WRITE;
-                        }
-                    }
-                    xjson_object_set(hl, "kind", xjson_new_number(kind));
-                    xjson_array_push(highlights, hl);
-                }
-            }
-            xjson_free(refs);
-            used_semantic = true;
-        }
-    }
-
-    // Fallback: lexer-based word scan
-    if (!used_semantic) {
-        Scanner scanner;
-        xr_scanner_init(&scanner, doc->content);
-        Token token;
-        while (1) {
-            token = xr_scanner_scan(&scanner);
-            if (token.type == TK_EOF)
-                break;
-            if (token.type == TK_ERROR)
-                continue;
-            if (token.type == TK_NAME && (size_t) token.length == word_len &&
-                strncmp(token.start, word, word_len) == 0) {
-                const char *line_start = doc->content;
-                const char *p = doc->content;
-                while (p < token.start) {
-                    if (*p == '\n')
-                        line_start = p + 1;
-                    p++;
-                }
-                int col = (int) (token.start - line_start);
-                XrJsonValue *hl = xjson_new_object();
-                xjson_object_set(
-                    hl, "range",
-                    xjson_make_range(token.line - 1, col, token.line - 1, col + token.length));
-                xjson_object_set(hl, "kind", xjson_new_number(LSP_HIGHLIGHT_TEXT));
-                xjson_array_push(highlights, hl);
-            }
-        }
-    }
-
-    xr_free(word);
-    return highlights;
-}
-
-// Rename moved to xlsp_rename.c

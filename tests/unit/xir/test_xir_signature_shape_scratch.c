@@ -9,6 +9,7 @@
  * KEY CONCEPT:
  *   Reused bytes grant no facts; every scope and edge is checked again.
  */
+#include "xir_construction_fixture.h"
 #include "xir/xxir_type_scratch_internal.h"
 #include "base/xmalloc.h"
 #include <stdio.h>
@@ -169,13 +170,13 @@ static void public_and_output(void) {
     CHECK(xr_xir_compile_type_expression_shape(&context,&f.types,constructed(32),0)==XR_XIR_OK);
     CHECK(stats(&context).live_bytes==baseline && live==1);
     XrXirArtifact *held=NULL;XrXirDiagnostic diagnostic={0};
-    CHECK(xr_xir_compile_check(&context,&f.module,&held,&diagnostic)==XR_XIR_OK && held);
+    CHECK(xir_fixture_check(&context, &f.module, &held, &diagnostic)==XR_XIR_OK && held);
     const XrXirModule *snapshot=xr_xir_compile_artifact_module(held);
     CHECK(snapshot && snapshot->types && snapshot->types->nodes[0].element==XR_XIR_I64);
     uint64_t pinned=stats(&context).live_bytes;
-    f.nodes[0].element=constructed(0);XrXirArtifact *output=held;
-    CHECK(xr_xir_compile_check(&context,&f.module,&output,&diagnostic)==XR_XIR_BAD_TYPE);
-    CHECK(output==held && diagnostic.status==XR_XIR_BAD_TYPE && stats(&context).live_bytes==pinned);
+    f.nodes[0].element=constructed(0);XrXirArtifact *output=NULL;
+    CHECK(xir_fixture_check(&context, &f.module, &output, &diagnostic)==XR_XIR_BAD_TYPE);
+    CHECK(!output && diagnostic.status==XR_XIR_BAD_TYPE && stats(&context).live_bytes==pinned);
     CHECK(snapshot->types->nodes[0].element==XR_XIR_I64);
     xr_xir_compile_artifact_free(held);owner_free(&context,baseline);
 }
@@ -235,7 +236,7 @@ static void signature_fixture(SignatureProofFixture *f) {
 static void signature_expect(XrXirCompileContext *context,SignatureProofFixture *f,
     XrXirStatus expected,uint32_t function) {
     uint64_t baseline=stats(context).live_bytes;XrXirDiagnostic diagnostic={0};
-    CHECK(xr_xir_compile_verify(context,&f->module,&diagnostic)==expected);
+    CHECK(xir_fixture_verify(context, &f->module, &diagnostic)==expected);
     CHECK(diagnostic.status==expected);
     if(expected!=XR_XIR_OK)CHECK(diagnostic.function==function);
     CHECK(stats(context).live_bytes==baseline && live==1);
@@ -276,7 +277,7 @@ static void signature_instruction_proof(void) {
     f.functions[1].instructions=f.body;f.functions[1].instruction_count=2;
     XrXirCompileContext context=owner_new(caps());uint64_t baseline=stats(&context).live_bytes;
     f.bound.markers=0;XrXirDiagnostic diagnostic={0};
-    CHECK(xr_xir_compile_verify(&context,&f.module,&diagnostic)==XR_XIR_BAD_TYPE);
+    CHECK(xir_fixture_verify(&context, &f.module, &diagnostic)==XR_XIR_BAD_TYPE);
     CHECK(diagnostic.function==1 && diagnostic.block==0 && diagnostic.instruction==0);
     CHECK(stats(&context).live_bytes==baseline && live==1);
     f.bound.markers=XR_XIR_CONSTRAINT_SENDABLE;signature_expect(&context,&f,XR_XIR_OK,3);
@@ -290,7 +291,7 @@ static void signature_scalar_proof(void) {
         .parameter_count=1,.blocks=&block,.block_count=1,.instructions=&returned,.instruction_count=1};
     const XrXirModule module={.stage=XR_XIR_BUILT,.functions=&function,.function_count=1,.linkage_kind=XR_XIR_PROGRAM};
     XrXirCompileContext context=owner_new(caps());uint64_t baseline=stats(&context).live_bytes;
-    CHECK(xr_xir_compile_verify(&context,&module,NULL)==XR_XIR_OK);
+    CHECK(xir_fixture_verify(&context, &module, NULL)==XR_XIR_OK);
     VerifyContext state={.remaining=context,.module=&module,.scratch={context.resources,NULL},.pending={context.resources,NULL,0}};
     uint64_t before=stats(&context).work;
     CHECK(signature_type_use_context(&state,0,XR_XIR_I64,false)==XR_XIR_OK);
@@ -307,12 +308,12 @@ static void signature_scalar_proof(void) {
 static void signature_owned_output(void) {
     SignatureProofFixture f;signature_fixture(&f);XrXirCompileContext context=owner_new(caps());
     XrXirArtifact *held=NULL;XrXirDiagnostic diagnostic={0};
-    CHECK(xr_xir_compile_check(&context,&f.module,&held,&diagnostic)==XR_XIR_OK && held);
+    CHECK(xir_fixture_check(&context, &f.module, &held, &diagnostic)==XR_XIR_OK && held);
     const XrXirModule *snapshot=xr_xir_compile_artifact_module(held);
     CHECK(snapshot && snapshot->generics && snapshot->generics[1].constraints[0].markers==XR_XIR_CONSTRAINT_SENDABLE);
-    uint64_t pinned=stats(&context).live_bytes;f.bound.markers=0;XrXirArtifact *output=held;
-    CHECK(xr_xir_compile_check(&context,&f.module,&output,&diagnostic)==XR_XIR_BAD_TYPE);
-    CHECK(output==held && diagnostic.function==UINT32_MAX && stats(&context).live_bytes==pinned);
+    uint64_t pinned=stats(&context).live_bytes;f.bound.markers=0;XrXirArtifact *output=NULL;
+    CHECK(xir_fixture_check(&context, &f.module, &output, &diagnostic)==XR_XIR_BAD_TYPE);
+    CHECK(!output && diagnostic.function==UINT32_MAX && stats(&context).live_bytes==pinned);
     CHECK(snapshot->generics[1].constraints[0].markers==XR_XIR_CONSTRAINT_SENDABLE);
     CHECK(xr_xir_compile_artifact_verify(held,&diagnostic)==XR_XIR_OK);
     /* Owned metadata keeps its ledger alive after the caller releases its reference. */
@@ -325,7 +326,7 @@ static void signature_owned_output(void) {
 static XrCompileResourceStats signature_run(XrCompileResourceLimits limits,XrXirStatus expected) {
     SignatureProofFixture f;signature_fixture(&f);XrXirCompileContext context=owner_new(limits);
     uint64_t baseline=stats(&context).live_bytes;
-    CHECK(xr_xir_compile_verify(&context,&f.module,NULL)==expected);
+    CHECK(xir_fixture_verify(&context, &f.module, NULL)==expected);
     XrCompileResourceStats result=stats(&context);owner_free(&context,baseline);return result;
 }
 static void signature_resources(void) {
@@ -341,7 +342,7 @@ static void signature_resources(void) {
         SignatureProofFixture f;signature_fixture(&f);XrXirCompileContext context=owner_new(caps());
         uint64_t baseline=stats(&context).live_bytes;
         attempts=0;injected=false;fail_at=pass?pass-1:SIZE_MAX;
-        XrXirStatus status=xr_xir_compile_verify(&context,&f.module,NULL);size_t actual=attempts;fail_at=SIZE_MAX;
+        XrXirStatus status=xir_fixture_verify(&context, &f.module, NULL);size_t actual=attempts;fail_at=SIZE_MAX;
         if(!pass){CHECK(status==XR_XIR_OK);sites=actual;CHECK(sites>0 && sites<20000);}
         else CHECK(injected && actual==pass && status==XR_XIR_OUT_OF_MEMORY);
         owner_free(&context,baseline);

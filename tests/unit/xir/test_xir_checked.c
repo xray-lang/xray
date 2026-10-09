@@ -9,6 +9,7 @@
  * KEY CONCEPT:
  *   A valid digest does not confer declaration or execution authority.
  */
+#include "xir_construction_fixture.h"
 #include "xir/xxir_checked.h"
 #include "xir/xxir_internal.h"
 #include "base/xsha256.h"
@@ -24,6 +25,9 @@
 #include "xir_checked_scalar60_golden.h"
 #include "xir_checked_scalar64_golden.h"
 #include "xir_checked_scalar65_golden.h"
+#include "xir_checked_scalar70_golden.h"
+#include "xir_checked_scalar71_golden.h"
+#include "xir_checked_scalar72_golden.h"
 #include "xir_types_fixture.h"
 #include "xir_struct_ops_fixture.h"
 #include "xir_struct_set_fixture.h"
@@ -47,6 +51,38 @@ static void rejected(const void *bytes, size_t length) {
     artifact=(XrXirArtifact *)(uintptr_t)1;
     CHECK(xr_xir_compile_checked_read(&probe, bytes, length, &artifact, NULL)!=XR_XIR_OK);
     CHECK(artifact==(XrXirArtifact *)(uintptr_t)1);
+    consumer_context_ephemeral_free(&probe,baseline);
+}
+static void checked_previous_identity_rejected(const void *bytes, size_t length) {
+    XrXirCompileContext probe=consumer_context_ephemeral((XrCompileResourceLimits){67108864,8388608,128000000});
+    const XrCompileResourceStats baseline=consumer_context_stats(&probe);
+    XrXirArtifact *artifact=NULL;
+    XrXirDiagnostic diagnostic={0};
+    CHECK(xr_xir_compile_checked_read(&probe,bytes,length,&artifact,&diagnostic)==XR_XIR_BAD_STRUCTURE);
+    CHECK(!artifact && diagnostic.status==XR_XIR_BAD_STRUCTURE);
+    XrCompileResourceStats after=consumer_context_stats(&probe);
+    CHECK(after.allocation_count==baseline.allocation_count && after.allocated_bytes==baseline.allocated_bytes);
+    CHECK(after.live_bytes==baseline.live_bytes);
+    artifact=(XrXirArtifact *)(uintptr_t)1;
+    CHECK(xr_xir_compile_checked_read(&probe,bytes,length,&artifact,NULL)==XR_XIR_BAD_STRUCTURE);
+    CHECK(artifact==(XrXirArtifact *)(uintptr_t)1);
+    after=consumer_context_stats(&probe);
+    CHECK(after.allocation_count==baseline.allocation_count && after.allocated_bytes==baseline.allocated_bytes);
+    CHECK(after.live_bytes==baseline.live_bytes);
+    consumer_context_ephemeral_free(&probe,baseline);
+}
+static void checked_current_callable_rejected(const void *bytes, size_t length) {
+    XrXirCompileContext probe=consumer_context_ephemeral((XrCompileResourceLimits){67108864,8388608,128000000});
+    const XrCompileResourceStats baseline=consumer_context_stats(&probe);
+    XrXirArtifact *artifact=NULL;
+    XrXirDiagnostic diagnostic={0};
+    CHECK(xr_xir_compile_checked_read(&probe,bytes,length,&artifact,&diagnostic)==XR_XIR_BAD_TYPE);
+    CHECK(!artifact && diagnostic.status==XR_XIR_BAD_TYPE);
+    CHECK(consumer_context_stats(&probe).live_bytes==baseline.live_bytes);
+    artifact=(XrXirArtifact *)(uintptr_t)1;
+    CHECK(xr_xir_compile_checked_read(&probe,bytes,length,&artifact,NULL)==XR_XIR_BAD_STRUCTURE);
+    CHECK(artifact==(XrXirArtifact *)(uintptr_t)1);
+    CHECK(consumer_context_stats(&probe).live_bytes==baseline.live_bytes);
     consumer_context_ephemeral_free(&probe,baseline);
 }
 static void boundaries(XrXirCheckedPacket *packet) {
@@ -148,7 +184,7 @@ static void byte_order(void) {
         XR_XIR_OWNED_RETAIN, XR_XIR_CONCAT_STRING, XR_XIR_OUTPUT, XR_XIR_WRITE_STREAM,
         XR_XIR_PRINT, XR_XIR_ADD_INT, XR_XIR_EQ_INT, XR_XIR_LT_INT, XR_XIR_CALL,
         XR_XIR_SUSPEND, XR_XIR_THROW, XR_XIR_JUMP, XR_XIR_BRANCH, XR_XIR_RETURN};
-    _Static_assert(XR_XIR_CHECKED_SCHEMA == 25 && XR_XIR_CHECKED_CONTRACT == 65 && XR_XIR_OP_COUNT == 146, "packet revision");
+    _Static_assert(XR_XIR_CHECKED_SCHEMA == 27 && XR_XIR_CHECKED_CONTRACT == 72 && XR_XIR_OP_COUNT == 152, "packet revision");
     _Static_assert(XR_XIR_NULLABLE_NONE == 126 && XR_XIR_NULLABLE_SOME == 127, "typed nullable operations");
     _Static_assert(XR_XIR_EQUAL == 125, "typed value equality operation");
     _Static_assert(XR_XIR_INVOKE_DISCARD == 124, "typed normal result discard operation");
@@ -178,26 +214,28 @@ static void byte_order(void) {
     XrXirFunction function = {"n", 1, NULL, 0, XR_XIR_I64, &block, 1, ops, 2, NULL, 0};
     XrXirModule built = {XR_XIR_BUILT, &function, 1, NULL, NULL, NULL, NULL, XR_XIR_PROGRAM, NULL};
     XrXirArtifact *checked = NULL, *decoded = NULL;
-    CHECK(xr_xir_compile_check(suite_context, &built, &checked, NULL) == XR_XIR_OK);
+    CHECK(xir_fixture_check(suite_context, &built, &checked, NULL) == XR_XIR_OK);
     XrXirCheckedPacket packet;
     CHECK(xr_xir_compile_checked_write(checked, &packet, NULL) == XR_XIR_OK);
-    CHECK(packet.length == 221 && packet.bytes[24] == 157);
+    CHECK(!xr_xir_compile_artifact_module(checked)->provenance);
+    CHECK(packet.length == 225 && packet.bytes[24] == 161);
     CHECK(packet.bytes[101] == 0 && packet.bytes[105] == 0 && packet.bytes[109] == 2 && packet.bytes[113] == XR_XIR_CONST_INT);
     for (unsigned i = 0; i < 7; ++i) CHECK(packet.bytes[137 + i] == 0);
     CHECK(packet.bytes[144] == 128);
     /* Independent fixed little-endian fixture, including the signed minimum
      * and the block's zero panic handler and cleanup frontier. */
-    const uint8_t expected_digest[32] = {
-        0xb5,0xa4,0xea,0x85,0xe4,0x3b,0x46,0x48,0xf8,0x52,0xda,0x00,0x4a,0x16,0x73,0xa7,0x40,0xe3,0xc1,0xc2,0xf7,0x36,0xc3,0x47,0x4f,0xc3,0x85,0x9a,0xc7,0xcf,0xcd,0xaf
-    };
-    CHECK(!memcmp(packet.bytes + 32, expected_digest, 32));
-    CHECK(packet.length==sizeof(checked_scalar65_golden) && !memcmp(packet.bytes,checked_scalar65_golden,packet.length));
-    rejected(checked_scalar64_golden,sizeof(checked_scalar64_golden));
-    rejected(checked_scalar57_golden,sizeof(checked_scalar57_golden));
-    rejected(checked_scalar58_golden,sizeof(checked_scalar58_golden));
-    rejected(checked_scalar59_golden,sizeof(checked_scalar59_golden));
-    rejected(checked_scalar60_golden,sizeof(checked_scalar60_golden));
-    uint8_t original[221]; memcpy(original, packet.bytes, sizeof(original));
+    CHECK(!memcmp(packet.bytes + 32, checked_scalar72_digest, 32));
+    CHECK(packet.length==sizeof(checked_scalar72_golden) && !memcmp(packet.bytes,checked_scalar72_golden,packet.length));
+    checked_previous_identity_rejected(checked_scalar71_golden,sizeof(checked_scalar71_golden));
+    checked_previous_identity_rejected(checked_scalar70_golden,sizeof(checked_scalar70_golden));
+    checked_previous_identity_rejected(checked_scalar65_golden,sizeof(checked_scalar65_golden));
+    checked_previous_identity_rejected(checked_scalar_previous69_constructed,sizeof(checked_scalar_previous69_constructed));
+    checked_previous_identity_rejected(checked_scalar64_golden,sizeof(checked_scalar64_golden));
+    checked_previous_identity_rejected(checked_scalar57_golden,sizeof(checked_scalar57_golden));
+    checked_previous_identity_rejected(checked_scalar58_golden,sizeof(checked_scalar58_golden));
+    checked_previous_identity_rejected(checked_scalar59_golden,sizeof(checked_scalar59_golden));
+    checked_previous_identity_rejected(checked_scalar60_golden,sizeof(checked_scalar60_golden));
+    uint8_t original[225]; memcpy(original, packet.bytes, sizeof(original));
     for (unsigned offset = 145; offset <= 149; offset += 4) {
         put32(packet.bytes + offset, 1); digest_packet(&packet);
         rejected(packet.bytes, packet.length);
@@ -232,13 +270,13 @@ static void callable_contracts(void) {
     XrXirCheckedPacket packet = {0};
     CHECK(xr_xir_compile_checked_write(checked, &packet, NULL) == XR_XIR_OK);
     const uint32_t signature_wire[] = {3, 0, 0,
-        1, 0, 1, 2, 0, 3, 0,
-        1, 0, 1, 256, 0, 256, 0,
-        1, 0, 0, 0, 0};
-    CHECK(packet.length >= sizeof(signature_wire) + 8);
+        1, 0, 1, 2, 0, 3, 8,
+        1, 0, 1, 256, 0, 256, 8,
+        1, 0, 0, 0, 8};
+    CHECK(packet.length >= sizeof(signature_wire) + 12);
     for (size_t i = 0; i < sizeof(signature_wire) / sizeof(signature_wire[0]); ++i)
         for (unsigned byte = 0; byte < 4; ++byte)
-            CHECK(packet.bytes[packet.length - 8 - sizeof(signature_wire) + i * 4 + byte] ==
+            CHECK(packet.bytes[packet.length - 12 - sizeof(signature_wire) + i * 4 + byte] ==
                 (uint8_t) (signature_wire[i] >> (byte * 8)));
     CHECK(xr_xir_compile_checked_read(suite_context, packet.bytes, packet.length, &decoded, NULL) == XR_XIR_OK);
     xr_xir_compile_artifact_free(checked);checked=NULL; memset(packet.bytes, 0xCC, packet.length); xr_xir_compile_checked_packet_free(&packet);
@@ -247,7 +285,7 @@ static void callable_contracts(void) {
     XrXirModule module = *xr_xir_compile_artifact_module(closed);
     CHECK(!module.generics && module.types->count == 3);
     const XrXirTypeNode *nested = xr_xir_callable_signature(module.types, (XrXirType) 257);
-    CHECK(nested && nested->parameter_count == 1 && nested->parameters[0].type == 256 && nested->result == 256);
+    CHECK(nested && nested->parameter_count == 1 && nested->parameters[0].type == 256 && nested->result == 256 && nested->flags == 8u);
     CHECK(module.functions[1].result == XR_XIR_CONSTRUCTED_TYPE_BASE + 1);
     XrXirCompileContext sendable_budget = consumer_context_default();
     CHECK(xr_xir_compile_type_satisfies(&sendable_budget, &module, 0, (XrXirType) XR_XIR_CONSTRUCTED_TYPE_BASE, (XrXirConstraint){.markers = XR_XIR_CONSTRAINT_SENDABLE}) == XR_XIR_BAD_TYPE);
@@ -270,15 +308,15 @@ static void callable_contracts(void) {
         if (attack == 7) signatures[2] = signatures[0];
         if (attack == 8) types.count = 0;
         if (attack == 9) signatures[2].parameters = &parameter;
-        CHECK(xr_xir_compile_verify(suite_context, &module, NULL) != XR_XIR_OK);
+        CHECK(xir_fixture_verify(suite_context, &module, NULL) != XR_XIR_OK);
         parameter = (XrXirCallableParameter) {XR_XIR_I64, 0};
-        signatures[0].flags = 0; signatures[2] = saved; types.count = 3;
+        signatures[0].flags = XR_XIR_CALLABLE_ROOT_UNRESOLVED; signatures[2] = saved; types.count = 3;
     }
-    CHECK(xr_xir_compile_verify(suite_context, &module, NULL) == XR_XIR_OK);
+    CHECK(xir_fixture_verify(suite_context, &module, NULL) == XR_XIR_OK);
     XrXirCompileContext budget = consumer_context_limits((XrCompileResourceLimits){67108864,8388608,4});
-    CHECK(xr_xir_compile_verify(&budget, &module, NULL) == XR_XIR_BUDGET);
+    CHECK(xir_fixture_verify(&budget, &module, NULL) == XR_XIR_BUDGET);
     budget = consumer_context_default(); budget.limits.parameters = 1;
-    CHECK(xr_xir_compile_verify(&budget, &module, NULL) == XR_XIR_BUDGET);
+    CHECK(xir_fixture_verify(&budget, &module, NULL) == XR_XIR_BUDGET);
     xr_xir_compile_artifact_free(closed);closed=NULL;
 }
 static void function_ir_rejections(void) {
@@ -301,10 +339,10 @@ static void function_ir_rejections(void) {
         if (attack == 8) ops[2].type = XR_XIR_BOOL;
         if (attack == 9) ops[0].targets[1] = 2;
         if (attack == 10) ops[2].immediate = -1;
-        CHECK(xr_xir_compile_verify(suite_context, &module, NULL) != XR_XIR_OK);
+        CHECK(xir_fixture_verify(suite_context, &module, NULL) != XR_XIR_OK);
         memcpy(ops, saved, sizeof(ops)); argument = 1;
     }
-    CHECK(xr_xir_compile_verify(suite_context, &module, NULL) == XR_XIR_OK);
+    CHECK(xir_fixture_verify(suite_context, &module, NULL) == XR_XIR_OK);
     XrXirArtifact *closed = NULL, *lowered = NULL;
     CHECK(xr_xir_compile_specialize(checked, &closed, NULL) == XR_XIR_OK);
     const XrXirModule *specialized = xr_xir_compile_artifact_module(closed);
@@ -323,6 +361,7 @@ static void generic_callable_depth(void) {
     for (uint32_t i = 0; i < 129; ++i) {
         signatures[i].kind = XR_XIR_TYPE_CALLABLE;
         signatures[129+i].kind = XR_XIR_TYPE_CALLABLE;
+        signatures[i].flags = signatures[129+i].flags = XR_XIR_CALLABLE_ROOT_UNRESOLVED;
         signatures[i].result = (XrXirType) (i ? XR_XIR_CONSTRUCTED_TYPE_BASE+i-1 : XR_XIR_TYPE_PARAMETER_BASE);
         signatures[i].parameter_span = 1;
         signatures[129+i].result = i ? (XrXirType)(XR_XIR_CONSTRUCTED_TYPE_BASE+129+i-1) : XR_XIR_STRING;
@@ -362,23 +401,23 @@ static void generic_callable_contracts(void) {
     CHECK(xr_xir_compile_checked_write(checked, &packet, NULL) == XR_XIR_OK);
     xr_xir_compile_artifact_free(checked);checked=NULL;
     /* Two one-parameter signatures; the first span is independently forged. */
-    CHECK(packet.length > 60 && wire32(packet.bytes + packet.length - 60) == 1);
-    put32(packet.bytes + packet.length - 60,0); digest_packet(&packet);
+    CHECK(packet.length > 64 && wire32(packet.bytes + packet.length - 64) == 1);
+    put32(packet.bytes + packet.length - 64,0); digest_packet(&packet);
     rejected(packet.bytes,packet.length);
-    put32(packet.bytes + packet.length - 60,1); digest_packet(&packet);
+    put32(packet.bytes + packet.length - 64,1); digest_packet(&packet);
     CHECK(xr_xir_compile_checked_read(suite_context, packet.bytes, packet.length, &decoded, NULL) == XR_XIR_OK);
     xr_xir_compile_checked_packet_free(&packet);
     XrXirModule module = *xr_xir_compile_artifact_module(decoded);
     XrXirFunction functions[2]; memcpy(functions,module.functions,sizeof(functions)); module.functions = functions;
     XrXirType wrong[] = {(XrXirType)256,XR_XIR_STRING};
     const XrXirType *saved = functions[0].parameters; functions[0].parameters = wrong;
-    CHECK(xr_xir_compile_verify(suite_context, &module, NULL) == XR_XIR_BAD_TYPE);
+    CHECK(xir_fixture_verify(suite_context, &module, NULL) == XR_XIR_BAD_TYPE);
     functions[0].parameters = saved;
     XrXirTypeNode signatures[2]; memcpy(signatures,module.types->nodes,sizeof(signatures));
     XrXirTypes table = {signatures,2, NULL, NULL}; module.types = &table;
     XrXirCallableParameter bad = {(XrXirType)(XR_XIR_TYPE_PARAMETER_BASE+1),0};
     signatures[0].parameters = &bad; signatures[0].parameter_span = 2;
-    CHECK(xr_xir_compile_verify(suite_context, &module, NULL) == XR_XIR_BAD_TYPE);
+    CHECK(xir_fixture_verify(suite_context, &module, NULL) == XR_XIR_BAD_TYPE);
     XrXirCompileContext budget = consumer_context_limits((XrCompileResourceLimits){67108864,8388608,1});
     CHECK(xr_xir_compile_call_type_matches(&budget, xr_xir_compile_artifact_module(decoded), 0, &functions[0].instructions[0], (XrXirType)256, (XrXirType)257) == XR_XIR_BUDGET);
     CHECK(xr_xir_compile_specialize(decoded, &closed, NULL) == XR_XIR_OK);
@@ -452,11 +491,11 @@ static void constructed_contracts(void) {
     CHECK(packet.length == second.length && !memcmp(packet.bytes,second.bytes,packet.length));
     xr_xir_compile_checked_packet_free(&second);
     /* The final CELL node has a fixed kind/span/element wire payload. */
-    CHECK(wire32(packet.bytes+packet.length-20) == XR_XIR_TYPE_CELL);
-    put32(packet.bytes+packet.length-20,4); digest_packet(&packet);
+    CHECK(wire32(packet.bytes+packet.length-24) == XR_XIR_TYPE_CELL);
+    put32(packet.bytes+packet.length-24,4); digest_packet(&packet);
     rejected(packet.bytes,packet.length);
-    put32(packet.bytes+packet.length-20,XR_XIR_TYPE_CELL);
-    put32(packet.bytes+packet.length-12,267); digest_packet(&packet);
+    put32(packet.bytes+packet.length-24,XR_XIR_TYPE_CELL);
+    put32(packet.bytes+packet.length-16,267); digest_packet(&packet);
     rejected(packet.bytes,packet.length);
     xr_xir_compile_checked_packet_free(&packet);
     CHECK(xr_xir_compile_specialize(decoded, &closed, NULL) == XR_XIR_OK);
@@ -564,11 +603,11 @@ static void nominal_packet_cases(void) {
         CHECK(module_offset != 0);
         packet.bytes[module_offset] = 'z'; digest_packet(&packet); rejected(packet.bytes, packet.length);
         packet.bytes[module_offset] = 'a';
-        put32(packet.bytes + packet.length - 16, 8); digest_packet(&packet); rejected(packet.bytes, packet.length);
-        put32(packet.bytes + packet.length - 16, XR_XIR_FIELD_PRIVATE);
-        put32(packet.bytes + packet.length - 20, XR_XIR_TYPE_PARAMETER_BASE + 1);
+        put32(packet.bytes + packet.length - 52, 8); digest_packet(&packet); rejected(packet.bytes, packet.length);
+        put32(packet.bytes + packet.length - 52, XR_XIR_FIELD_PRIVATE);
+        put32(packet.bytes + packet.length - 56, XR_XIR_TYPE_PARAMETER_BASE + 1);
         digest_packet(&packet); rejected(packet.bytes, packet.length);
-        put32(packet.bytes + packet.length - 20, XR_XIR_STRING);
+        put32(packet.bytes + packet.length - 56, XR_XIR_STRING);
         digest_packet(&packet);
         boundaries(&packet);
         xr_xir_compile_artifact_free(source);source=NULL;
@@ -603,7 +642,7 @@ static void deep_nominal_fields(void) {
     XrXirTypes types = {nodes, DEPTH + 3, &table, NULL}; built.types = &types;
     CheckedAtomicPool atomic_pool;checked_atomic_pool(&built,&atomic_pool);
     XrXirCompileContext deep=consumer_context_default();
-    CHECK(xr_xir_compile_check(&deep, &built, &checked, NULL) == XR_XIR_OK);
+    CHECK(xir_fixture_check(&deep, &built, &checked, NULL) == XR_XIR_OK);
     xr_xir_compile_artifact_free(base);base=NULL; memset(nodes, 0xCC, sizeof(nodes)); memset(fields, 0xCC, sizeof(fields));
     CHECK(xr_xir_compile_artifact_verify(checked,NULL)==XR_XIR_OK);
     CHECK(xr_xir_compile_specialize(checked,&closed,NULL)==XR_XIR_OK);
@@ -612,7 +651,7 @@ static void deep_nominal_fields(void) {
     XrXirCompileContext tight=consumer_context_limits((XrCompileResourceLimits){67108864,8388608,complete.work-1});
     XrXirModule replay=*xr_xir_compile_artifact_module(checked);replay.stage=XR_XIR_BUILT;
     XrXirArtifact *bounded=NULL,*failed=NULL;
-    CHECK(xr_xir_compile_check(&tight,&replay,&bounded,NULL)==XR_XIR_OK);
+    CHECK(xir_fixture_check(&tight, &replay, &bounded, NULL)==XR_XIR_OK);
     CHECK(xr_xir_compile_artifact_verify(bounded,NULL)==XR_XIR_OK);
     CHECK(xr_xir_compile_specialize(bounded,&failed,NULL)==XR_XIR_BUDGET && !failed);
     CHECK(consumer_context_stats(&tight).work<=complete.work-1);
@@ -727,7 +766,7 @@ static void nominal_projection_cases(void) {
         }
         for (uint32_t i = 0; i < types->count; ++i) CHECK(!types->nodes[i].parameter_span);
         XrXirModule forged = *module; forged.stage = XR_XIR_CHECKED;
-        CHECK(xr_xir_compile_recheck(suite_context, &forged, &rejected_artifact, NULL) == XR_XIR_BAD_STAGE && !rejected_artifact);
+        CHECK(xir_fixture_recheck(suite_context, &forged, &rejected_artifact, NULL) == XR_XIR_BAD_STAGE && !rejected_artifact);
         XrXirTypes *copy = NULL;
         CHECK(xr_xir_compile_types_clone(suite_context, types, &copy) == XR_XIR_OK);
         xr_xir_compile_artifact_free(lowered);lowered=NULL;
@@ -803,13 +842,13 @@ static void uninitialized_packet(void) {
     const XrXirModule built = {XR_XIR_BUILT, &function, 1, NULL, NULL, NULL, NULL, XR_XIR_PROGRAM, NULL};
     XrXirArtifact *checked = NULL, *decoded = NULL;
     XrXirCheckedPacket packet = {0};
-    CHECK(xr_xir_compile_check(suite_context, &built, &checked, NULL) == XR_XIR_OK);
+    CHECK(xir_fixture_check(suite_context, &built, &checked, NULL) == XR_XIR_OK);
     CHECK(xr_xir_compile_checked_write(checked, &packet, NULL) == XR_XIR_OK);
     xr_xir_compile_artifact_free(checked);checked=NULL;
-    CHECK(packet.length == 305 && packet.bytes[117] == XR_XIR_LOCAL_UNINIT && packet.bytes[157] == XR_XIR_LOCAL_WRITE);
+    CHECK(packet.length == 309 && packet.bytes[117] == XR_XIR_LOCAL_UNINIT && packet.bytes[157] == XR_XIR_LOCAL_WRITE);
     CHECK(xr_xir_compile_checked_read(suite_context, packet.bytes, packet.length, &decoded, NULL) == XR_XIR_OK);
     xr_xir_compile_artifact_free(decoded);decoded=NULL;
-    uint8_t original[301]; memcpy(original, packet.bytes, sizeof(original));
+    uint8_t original[309]; memcpy(original, packet.bytes, sizeof(original));
     /* A second write is valid for mutable storage, but not initialize-once. */
     put32(packet.bytes + 197, XR_XIR_LOCAL_WRITE); put32(packet.bytes + 201, XR_XIR_UNIT);
     put32(packet.bytes + 209, 0); put32(packet.bytes + 245, 0); digest_packet(&packet);
@@ -837,15 +876,15 @@ static void nominal_callable_components(void) {
     XrXirModule built = *xr_xir_compile_artifact_module(base); built.stage = XR_XIR_BUILT;
     XrXirCallableParameter parameter = {(XrXirType)256, 0};
     XrXirTypeNode nodes[2] = {built.types->nodes[0],
-        {XR_XIR_TYPE_CALLABLE, XR_XIR_UNIT, &parameter, 1, (XrXirType)256, 0, 0, {0}}};
+        {XR_XIR_TYPE_CALLABLE, XR_XIR_UNIT, &parameter, 1, (XrXirType)256, XR_XIR_CALLABLE_ROOT_UNRESOLVED, 0, {0}}};
     XrXirTypes types = {nodes, 2, built.types->nominals, NULL}; built.types = &types;
     CheckedAtomicPool atomic_pool;checked_atomic_pool(&built,&atomic_pool);
-    CHECK(xr_xir_compile_check(suite_context, &built, &checked, NULL) == XR_XIR_OK);
+    CHECK(xir_fixture_check(suite_context, &built, &checked, NULL) == XR_XIR_OK);
     XrXirCheckedPacket packet = {0};
     CHECK(xr_xir_compile_checked_write(checked, &packet, NULL) == XR_XIR_OK);
     CHECK(xr_xir_compile_checked_read(suite_context, packet.bytes, packet.length, &decoded, NULL) == XR_XIR_OK);
     xr_xir_compile_artifact_free(decoded);decoded=NULL; xr_xir_compile_artifact_free(checked); checked = NULL;
-    uint8_t pattern[28]; const uint32_t words[] = {1, 0, 1, 256, 0, 256, 0};
+    uint8_t pattern[28]; const uint32_t words[] = {1, 0, 1, 256, 0, 256, 8};
     for (unsigned i = 0; i < 7; ++i) put32(pattern + i * 4, words[i]);
     size_t offset = 0; unsigned matches = 0;
     for (size_t i = 64; i + sizeof(pattern) <= packet.length; ++i)
@@ -854,13 +893,13 @@ static void nominal_callable_components(void) {
     put32(packet.bytes + offset + 20, 257); digest_packet(&packet); rejected(packet.bytes, packet.length);
     xr_xir_compile_checked_packet_free(&packet);
     atomic_pool.nodes[1].result = (XrXirType)257;
-    CHECK(xr_xir_compile_check(suite_context, &built, &checked, NULL) == XR_XIR_BAD_TYPE && !checked);
+    CHECK(xir_fixture_check(suite_context, &built, &checked, NULL) == XR_XIR_BAD_TYPE && !checked);
     atomic_pool.nodes[1].result = (XrXirType)256; atomic_pool.nodes[1].parameter_span = 1;
-    CHECK(xr_xir_compile_check(suite_context, &built, &checked, NULL) == XR_XIR_BAD_TYPE && !checked);
+    CHECK(xir_fixture_check(suite_context, &built, &checked, NULL) == XR_XIR_BAD_TYPE && !checked);
     atomic_pool.nodes[1].parameter_span = 0; parameter.type = XR_XIR_UNIT;
-    CHECK(xr_xir_compile_check(suite_context, &built, &checked, NULL) == XR_XIR_BAD_TYPE && !checked);
+    CHECK(xir_fixture_check(suite_context, &built, &checked, NULL) == XR_XIR_BAD_TYPE && !checked);
     parameter.type = (XrXirType)257;
-    CHECK(xr_xir_compile_check(suite_context, &built, &checked, NULL) == XR_XIR_BAD_TYPE && !checked);
+    CHECK(xir_fixture_check(suite_context, &built, &checked, NULL) == XR_XIR_BAD_TYPE && !checked);
     xr_xir_compile_artifact_free(base);base=NULL;
 }
 static void string_query_contracts(void) {
@@ -877,7 +916,7 @@ static void string_query_contracts(void) {
     XrXirFunction function = {"queries",7,parameters,2,XR_XIR_BOOL,&block,1,ops,7,NULL,0};
     XrXirModule built = {XR_XIR_BUILT,&function,1,NULL,NULL,NULL,NULL, XR_XIR_PROGRAM, NULL};
     XrXirArtifact *checked = NULL, *decoded = NULL;
-    CHECK(xr_xir_compile_check(suite_context, &built, &checked, NULL) == XR_XIR_OK);
+    CHECK(xir_fixture_check(suite_context, &built, &checked, NULL) == XR_XIR_OK);
     XrXirCheckedPacket packet = {0};
     CHECK(xr_xir_compile_checked_write(checked, &packet, NULL) == XR_XIR_OK);
     for (unsigned i = 0; i < 6; ++i) {
@@ -903,7 +942,7 @@ static void string_query_contracts(void) {
     xr_xir_compile_artifact_free(decoded);decoded=NULL;
     for (unsigned i = 0; i < 2; ++i) {
         parameters[i] = XR_XIR_I64;
-        CHECK(xr_xir_compile_check(suite_context, &built, &checked, NULL) == XR_XIR_BAD_TYPE && !checked);
+        CHECK(xir_fixture_check(suite_context, &built, &checked, NULL) == XR_XIR_BAD_TYPE && !checked);
         parameters[i] = XR_XIR_STRING;
     }
 }
@@ -918,7 +957,7 @@ static void string_search_packets(void) {
     XrXirFunction function = {"search",6,parameters,3,XR_XIR_I64,&block,1,ops,3,operands,3};
     XrXirModule built = {XR_XIR_BUILT,&function,1,NULL,NULL,NULL,NULL, XR_XIR_PROGRAM, NULL};
     XrXirArtifact *checked = NULL, *decoded = NULL;
-    CHECK(xr_xir_compile_check(suite_context, &built, &checked, NULL) == XR_XIR_OK);
+    CHECK(xir_fixture_check(suite_context, &built, &checked, NULL) == XR_XIR_OK);
     XrXirCheckedPacket packet = {0};
     CHECK(xr_xir_compile_checked_write(checked, &packet, NULL) == XR_XIR_OK);
     for (unsigned i = 0; i < 2; ++i) {
@@ -943,12 +982,12 @@ static void string_search_packets(void) {
     CHECK(xr_xir_compile_artifact_verify(decoded, NULL) == XR_XIR_OK); xr_xir_compile_artifact_free(decoded);decoded=NULL;
     for (unsigned i = 0; i < 3; ++i) {
         XrXirType saved = parameters[i]; parameters[i] = i==2 ? XR_XIR_STRING : XR_XIR_I64;
-        CHECK(xr_xir_compile_check(suite_context, &built, &checked, NULL) == XR_XIR_BAD_TYPE && !checked);
+        CHECK(xir_fixture_check(suite_context, &built, &checked, NULL) == XR_XIR_BAD_TYPE && !checked);
         parameters[i] = saved;
     }
     for (unsigned i = 0; i < 3; ++i) {
         uint32_t saved = operands[i]; operands[i] = i==2 ? 4 : 3;
-        CHECK(xr_xir_compile_check(suite_context, &built, &checked, NULL) != XR_XIR_OK && !checked); operands[i]=saved;
+        CHECK(xir_fixture_check(suite_context, &built, &checked, NULL) != XR_XIR_OK && !checked); operands[i]=saved;
     }
 }
 #include "xir_enum_checked_fixture.h"
@@ -993,7 +1032,7 @@ static void match_fault_shape(void) {
         default: break;
         }
         XrXirArtifact *checked=NULL;
-        XrXirStatus status=xr_xir_compile_check(suite_context, &module, &checked, NULL);
+        XrXirStatus status=xir_fixture_check(suite_context, &module, &checked, NULL);
         if (variant) { CHECK(status!=XR_XIR_OK && !checked); continue; }
         CHECK(status==XR_XIR_OK && checked);
         XrXirCheckedPacket packet={0}; XrXirArtifact *decoded=NULL;

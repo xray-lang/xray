@@ -29,6 +29,19 @@ typedef struct XrCliSourcePathsDiagnostic {
     XrOsIoStatus io_status;
 } XrCliSourcePathsDiagnostic;
 
+typedef struct XrCliStdlibPath {
+    char *path;
+    XrCliStdlibOrigin origin;
+} XrCliStdlibPath;
+/* Select the real standard-library path independently of entry storage. This
+ * uses exactly the file entry's environment/executable/cwd precedence. It
+ * grants no source or Catalog authority; callers still load the actual
+ * descriptor/Catalog and admit their file or owned text entry. No dummy file
+ * path is accepted or probed. Failure preserves an initially empty output. */
+XR_FUNC XrCliCompileSourceStatus xr_cli_compile_stdlib_path(XrCompileResources *resources,
+    XrCliStdlibPath *output, XrCliSourcePathsDiagnostic *diagnostic);
+XR_FUNC void xr_cli_compile_stdlib_path_free(XrCliStdlibPath *path);
+
 /* Output must be zero-initialized and changes only on success. Relative input
  * follows the process working directory. A nonempty XRAY_STDLIB_PATH is
  * mandatory when present; otherwise only absent candidates permit trying the

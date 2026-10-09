@@ -1,0 +1,5 @@
+enum Ordering { SeqCst }
+export fn consumerAnswer() -> i64 {
+ var counter = Atomic<i64>(42)
+ return counter.load(Ordering.SeqCst)
+}

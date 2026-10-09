@@ -26,6 +26,7 @@ add_library(compile_owner_core STATIC
     "${XR_ROOT}/src/xir/xxir_implementation_verify.c"
     "${XR_ROOT}/src/xir/xxir_type_layout.c"
     "${XR_ROOT}/src/xir/xxir_type_inference.c"
+    "${XR_ROOT}/src/shared/xnative_declaration.c"
     "${XR_ROOT}/src/base/xsha256.c"
 )
 target_compile_definitions(compile_owner_core PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX _CRT_SECURE_NO_WARNINGS)
@@ -46,6 +47,12 @@ if(MSVC)
 endif()
 add_test(NAME test_compile_owner COMMAND test_compile_owner)
 set_tests_properties(test_compile_owner PROPERTIES LABELS "unit;xir;compiler;ownership;budget" TIMEOUT 120)
+find_package(Python3 COMPONENTS Interpreter REQUIRED)
+add_test(NAME test_root_construction72_vectors
+    COMMAND "${Python3_EXECUTABLE}" "${XR_ROOT}/tests/unit/xir/derive_root_construction72_vectors.py"
+        --source-root "${XR_ROOT}" --output-root "${XR_ROOT}")
+set_tests_properties(test_root_construction72_vectors PROPERTIES
+    LABELS "unit;xir;compiler;wire;independent" TIMEOUT 120)
 include("${CMAKE_CURRENT_LIST_DIR}/../compile_runtime_owner.cmake")
 include("${CMAKE_CURRENT_LIST_DIR}/../../aot/cgen_compile_resources.cmake")
 if(COMMAND xray_stage_windows_asan_runtime)

@@ -50,7 +50,7 @@ int main(int argc, char **argv) {
     size_t sites = effects_compile_attempts-attempts;
     XrCompileResourceStats measured = catalog_stats(&context);
     size_t count = 0;
-    const XrModuleResourceBinding *bindings = xr_xir_compile_library_catalog_resources(catalog,&count);
+    const XrModuleResourceBinding *bindings = xr_xir_compile_library_catalog_resources_v2(catalog,&count);
     static const char identity[] = "stdlib-module-v1:module=2:io:path=12:io/output.xr";
     CHECK(count == 1 && bindings && !strcmp(bindings[0].canonical,identity));
     CHECK(!strcmp(bindings[0].logical_path,"io/output.xr") && !strcmp(bindings[0].authority.namespace_id,"io"));

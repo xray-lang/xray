@@ -169,10 +169,11 @@ static void arena_budget_and_output(void) {
     }
 }
 #include "xir_compile_program_owner_cases.h"
+#include "xir_construction_owner_cases.h"
 int main(void) {
     arena_lifetime_and_authenticity(); arena_allocation_failures(); arena_budget_and_output();
     program_lifetime(); program_take_failures(); program_abi_and_owner();
-    program_method_kind_match();
+    program_method_kind_match(); construction_cross_owner();
     puts("Canonical metadata: producer/domain release, nested forged handles rejected, physical zero");
     return 0;
 }

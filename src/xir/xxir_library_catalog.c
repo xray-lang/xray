@@ -11,6 +11,7 @@
  */
 #include "xxir_library_catalog.h"
 #include "xxir_compile_memory.h"
+#include "xxir_effect_contract_internal.h"
 #include "../base/xsha256.h"
 #include "../base/xio_policy.h"
 #include "../os/os_fs.h"
@@ -18,24 +19,26 @@ struct XrXirLibraryCatalog {
     XrXirCompileContext context;
     XrModuleResourceBinding *resources;
     XrXirArtifact **artifacts;
-    size_t count;
+    size_t count, artifact_count;
 };
 XR_FUNC void xr_xir_compile_library_catalog_free(XrXirLibraryCatalog *catalog) {
     if (!catalog) return;
     for (size_t i = 0; i < catalog->count; ++i) {
         XrModuleResourceBinding *resource = &catalog->resources[i];
-        xr_xir_compile_artifact_free(catalog->artifacts[i]);
+        xr_compile_resources_free((void *)resource->dependencies);
         xr_compile_resources_free((void *)resource->canonical);
         xr_compile_resources_free((void *)resource->logical_path);
         xr_compile_resources_free((void *)resource->source_locator);
         xr_compile_resources_free((void *)resource->authority.namespace_id);
         xr_compile_resources_free((void *)resource->authority.physical_root);
     }
+    for (size_t i = 0; i < catalog->artifact_count; ++i)
+        xr_xir_compile_artifact_free(catalog->artifacts[i]);
     xr_compile_resources_free(catalog->resources);
     xr_compile_resources_free(catalog->artifacts);
     xr_compile_resources_free(catalog);
 }
-XR_FUNC const XrModuleResourceBinding *xr_xir_compile_library_catalog_resources(
+XR_FUNC const XrModuleResourceBinding *xr_xir_compile_library_catalog_resources_v2(
     const XrXirLibraryCatalog *catalog, size_t *count) {
     if (!count) return NULL;
     *count = catalog ? catalog->count : 0;
@@ -68,73 +71,23 @@ static char *catalog_text(const XrXirCompileContext *context, const char *text, 
     if (length == SIZE_MAX) { *status = XR_XIR_BUDGET; return NULL; }
     return xir_compile_copy(context,text,length+1,status);
 }
-static bool library_catalog_type(const XrXirGeneric *generic, XrXirType type) {
-    if (type == XR_XIR_I64 || type == XR_XIR_STRING || type == XR_XIR_BOOL) return true;
-    uint32_t ordinal = (uint32_t)type - XR_XIR_TYPE_PARAMETER_BASE;
-    return generic && (uint32_t)type >= XR_XIR_TYPE_PARAMETER_BASE &&
-        (uint32_t)type < XR_XIR_TYPE_PARAMETER_LIMIT && ordinal < generic->parameter_count;
-}
-static XrXirStatus library_catalog_generic(const XrXirGeneric *generic,
-    const XrXirCompileContext *context) {
-    if (!generic) return XR_XIR_OK;
-    for (uint32_t p = 0; p < generic->parameter_count; ++p) {
-        if (!xir_compile_work(context,1)) return XR_XIR_BUDGET;
-        const XrXirConstraint *constraint = &generic->constraints[p];
-        if (xr_xir_binder_kind(generic,p) != XR_XIR_BINDER_TYPE ||
-            constraint->interface_count || constraint->interfaces ||
-            (constraint->markers & ~XR_XIR_CONSTRAINT_MASK)) return XR_XIR_BAD_STAGE;
-    }
-    for (uint32_t a = 0; a < generic->argument_count; ++a) {
-        if (!xir_compile_work(context,1)) return XR_XIR_BUDGET;
-        if (!library_catalog_type(generic,generic->arguments[a])) return XR_XIR_BAD_STAGE;
-    }
-    return XR_XIR_OK;
-}
-static XrXirStatus library_catalog_shape(const XrXirModule *m, const char *identity, size_t identity_length, const XrXirCompileContext *context) {
-    const XrXirDeclarations *d=m->declarations;
-    if(m->linkage_kind!=XR_XIR_LIBRARY || m->stage!=XR_XIR_CHECKED) return XR_XIR_BAD_STAGE;
-    if(!d || d->module_count!=1 || !d->modules || m->types || m->provenance ||
-        d->slots || d->slot_count || d->implementations ||
-        d->modules[0].dependency_count) return XR_XIR_BAD_STAGE;
-    if (!xir_compile_work(context, identity_length)) return XR_XIR_BUDGET;
-    if(d->modules[0].name_length!=identity_length||memcmp(d->modules[0].name,identity,identity_length))
-        return XR_XIR_BAD_STRUCTURE;
-    for(uint32_t f=0;f<m->function_count;++f){
-        if (!xir_compile_work(context,1)) return XR_XIR_BUDGET;
-        const XrXirFunction *fn=&m->functions[f];
-        const XrXirGeneric *generic = m->generics ? &m->generics[f] : NULL;
-        XrXirStatus status = library_catalog_generic(generic,context);
-        if (status != XR_XIR_OK) return status;
-        if((fn->result!=XR_XIR_UNIT&&!library_catalog_type(generic,fn->result)) ||
-            d->functions[f].nominal_owner ||
-            d->functions[f].cleanup_owner || d->functions[f].method_kind!=XR_XIR_NON_MEMBER)
-            return XR_XIR_BAD_STAGE;
-        for (uint32_t p = 0; p < fn->parameter_count; ++p) {
-            if (!xir_compile_work(context,1)) return XR_XIR_BUDGET;
-            if (!library_catalog_type(generic,fn->parameters[p]))
-                return XR_XIR_BAD_STAGE;
-        }
-        for(uint32_t i=0;i<fn->instruction_count;++i){
-            if (!xir_compile_work(context,1)) return XR_XIR_BUDGET;
-            const XrXirInstruction *op=&fn->instructions[i];
-            if(op->op!=XR_XIR_CALL&&op->op!=XR_XIR_CALL_DEFAULT&&op->op!=XR_XIR_RETURN&&op->op!=XR_XIR_CONST_INT&&op->op!=XR_XIR_ADD_INT&&
-                op->op!=XR_XIR_CONST_STRING&&op->op!=XR_XIR_CONCAT_STRING&&
-                op->op!=XR_XIR_CONST_BOOL&&op->op!=XR_XIR_WRITE_STREAM)
-                return XR_XIR_BAD_STAGE;
-        }
-    }
-    return XR_XIR_OK;
-}
+#include "xxir_library_import_shape.inc.c"
+#include "xxir_library_prelude.inc.c"
 static XrXirStatus catalog_path(const XrXirCompileContext *context,
-    const XrXirLibraryInput *input, size_t length, size_t prefix) {
+    const XrXirLibraryModuleInput *input, size_t length, size_t prefix,bool governed) {
     const char *path = input->logical_path;
     if (!length || length >= XR_PATH_MAX) return XR_XIR_BAD_STRUCTURE;
-    if (input->authority.kind == XR_MODULE_IDENTITY_SCRIPT) {
-        for (size_t i = 0; i < length; ++i) {
-            if (!xir_compile_work(context,1)) return XR_XIR_BUDGET;
-            if (path[i] == '/') return XR_XIR_BAD_STRUCTURE;
-        }
-        return XR_XIR_OK;
+    /* The canonical identity constructor already checked every script path
+     * component, including empty, dot and parent segments and root escape. */
+    if (input->authority.kind == XR_MODULE_IDENTITY_SCRIPT) return XR_XIR_OK;
+    /* Only the already verified native owner admits this non-source path.
+     * Other stdlib modules retain ordinary identifier and .xr validation. */
+    if (governed) {
+        static const char logical[]="prelude/builtin_symbols.def";
+        if (!xir_compile_work(context,sizeof(logical)+7)) return XR_XIR_BUDGET;
+        return prefix==7 && length==sizeof(logical)-1 &&
+            !memcmp(input->authority.namespace_id,"prelude",7) &&
+            !memcmp(path,logical,sizeof(logical)-1) ? XR_XIR_OK : XR_XIR_BAD_STRUCTURE;
     }
     if (prefix > length || length-prefix < 5) return XR_XIR_BAD_STRUCTURE;
     if (!xir_compile_work(context,prefix+4)) return XR_XIR_BUDGET;
@@ -161,11 +114,10 @@ static XrXirStatus catalog_io_status(XrOsIoStatus status) {
     default: return XR_XIR_IO;
     }
 }
-static XrXirStatus catalog_item(XrXirLibraryCatalog *catalog, size_t index,
-    const XrXirLibraryInput *input) {
+static XrXirStatus catalog_module(XrXirLibraryCatalog *catalog, size_t index,
+    const XrXirLibraryModuleInput *input, XrXirArtifact *artifact, uint32_t ordinal) {
     const XrXirCompileContext *context = &catalog->context;
-    if (!input->packet || !input->logical_path || !input->authority.physical_root)
-        return XR_XIR_BAD_STRUCTURE;
+    if (!input->logical_path || !input->authority.physical_root) return XR_XIR_BAD_STRUCTURE;
     if (input->authority.kind != XR_MODULE_IDENTITY_SCRIPT &&
         input->authority.kind != XR_MODULE_IDENTITY_STDLIB) return XR_XIR_BAD_STAGE;
     XrModuleResourceBinding *resource = &catalog->resources[index];
@@ -181,13 +133,14 @@ static XrXirStatus catalog_item(XrXirLibraryCatalog *catalog, size_t index,
         (input->authority.namespace_id && !catalog_length(context,input->authority.namespace_id,&name)))
         return XR_XIR_BUDGET;
     if (!root || root >= XR_PATH_MAX) return XR_XIR_BAD_STRUCTURE;
-    status = catalog_path(context,input,logical,name);
+    const XrXirModule *checked=xr_xir_compile_artifact_module(artifact);bool governed=false;
+    status=library_prelude_module(context,checked,ordinal,&governed);
+    if (status!=XR_XIR_OK) return status;
+    status = catalog_path(context,input,logical,name,governed);
     if (status != XR_XIR_OK) return status;
-    if (!xir_compile_work(context,input->length)) return XR_XIR_BUDGET;
-    XrSHA256Context sha; uint8_t digest[32]; xr_sha256_init(&sha);
-    xr_sha256_update(&sha,input->packet,input->length); xr_sha256_final(&sha,digest);
-    if (!xir_compile_work(context,sizeof(digest))) return XR_XIR_BUDGET;
-    if (memcmp(digest,input->sha256,sizeof(digest))) return XR_XIR_BAD_STRUCTURE;
+    const XrXirSourceModule *module = &checked->declarations->modules[ordinal];
+    if (!xir_compile_work(context,canonical)) return XR_XIR_BUDGET;
+    if (module->name_length != canonical || memcmp(module->name,identity,canonical)) return XR_XIR_BAD_STRUCTURE;
     resource->logical_path = catalog_text(context,input->logical_path,logical,&status);
     resource->authority.kind = input->authority.kind;
     resource->authority.physical_root = catalog_text(context,input->authority.physical_root,root,&status);
@@ -199,13 +152,48 @@ static XrXirStatus catalog_item(XrXirLibraryCatalog *catalog, size_t index,
     status = catalog_io_status(xr_path_join_owned(&policy,input->authority.physical_root,input->logical_path,&locator));
     if (status != XR_XIR_OK) return status;
     resource->source_locator = locator;
-    status = xr_xir_compile_checked_read(context,input->packet,input->length,&catalog->artifacts[index],NULL);
+    resource->checked = artifact; resource->checked_module = ordinal;
+    return XR_XIR_OK;
+}
+static XrXirStatus catalog_artifact(XrXirLibraryCatalog *catalog, size_t index,
+    const XrXirLibraryInput *input) {
+    const XrXirCompileContext *context = &catalog->context;
+    if (!input->packet || !input->modules || !input->module_count) return XR_XIR_BAD_STRUCTURE;
+    if (input->module_count > UINT32_MAX) return XR_XIR_BUDGET;
+    if (!xir_compile_work(context,input->length)) return XR_XIR_BUDGET;
+    XrSHA256Context sha; uint8_t digest[32]; xr_sha256_init(&sha);
+    xr_sha256_update(&sha,input->packet,input->length); xr_sha256_final(&sha,digest);
+    if (!xir_compile_work(context,sizeof(digest))) return XR_XIR_BUDGET;
+    if (memcmp(digest,input->sha256,sizeof(digest))) return XR_XIR_BAD_STRUCTURE;
+    XrXirStatus status = xr_xir_compile_checked_read(context,input->packet,input->length,&catalog->artifacts[index],NULL);
     if (status != XR_XIR_OK) return status;
     if (xr_xir_compile_artifact_context(catalog->artifacts[index])->resources != context->resources)
         return XR_XIR_BAD_STRUCTURE;
-    status = library_catalog_shape(xr_xir_compile_artifact_module(catalog->artifacts[index]),identity,canonical,context);
-    if (status == XR_XIR_OK) resource->checked = catalog->artifacts[index];
+    const XrXirModule *module = xr_xir_compile_artifact_module(catalog->artifacts[index]);
+    status = library_catalog_shape(module,xr_xir_compile_artifact_construction(catalog->artifacts[index]),context);
+    if (status == XR_XIR_OK && module->declarations->module_count != input->module_count) return XR_XIR_BAD_STRUCTURE;
     return status;
+}
+/* Every edge addresses the same immutable artifact's ordinal table. The
+ * Checked reader has already rejected dependency cycles and invalid IDs. */
+static XrXirStatus catalog_dependencies(XrXirLibraryCatalog *catalog, size_t begin, size_t count) {
+    const XrXirCompileContext *context = &catalog->context;
+    for (size_t m = 0; m < count; ++m) {
+        if (!xir_compile_work(context,1)) return XR_XIR_BUDGET;
+        XrModuleResourceBinding *resource = &catalog->resources[begin+m];
+        const XrXirSourceModule *module = &xr_xir_compile_artifact_module(resource->checked)->declarations->modules[m];
+        if (!module->dependency_count) continue;
+        XrXirStatus status = XR_XIR_OK;
+        const XrModuleResourceBinding **edges = xir_compile_calloc(context,module->dependency_count,sizeof(*edges),&status);
+        if (!edges) return status;
+        resource->dependencies = edges; resource->dependency_count = module->dependency_count;
+        for (uint32_t e = 0; e < module->dependency_count; ++e) {
+            if (!xir_compile_work(context,1)) return XR_XIR_BUDGET;
+            if (module->dependencies[e] >= count) return XR_XIR_BAD_STRUCTURE;
+            edges[e] = &catalog->resources[begin+module->dependencies[e]];
+        }
+    }
+    return XR_XIR_OK;
 }
 static XrXirStatus catalog_unique(const XrXirLibraryCatalog *catalog, size_t index) {
     const char *identity = catalog->resources[index].canonical;
@@ -220,25 +208,45 @@ static XrXirStatus catalog_unique(const XrXirLibraryCatalog *catalog, size_t ind
     }
     return XR_XIR_OK;
 }
-XR_FUNC XrXirStatus xr_xir_compile_library_catalog_new(const XrXirCompileContext *context,
+XR_FUNC XrXirStatus xr_xir_compile_library_catalog_new_v2(const XrXirCompileContext *context,
     const XrXirLibraryInput *inputs, size_t count, XrXirLibraryCatalog **output) {
-    if (!xir_compile_context_valid(context) || !output || !inputs || !count) return XR_XIR_BAD_STRUCTURE;
+    if (!xir_compile_context_valid(context) || !output || *output || !inputs || !count) return XR_XIR_BAD_STRUCTURE;
     if (count > SIZE_MAX/sizeof(XrModuleResourceBinding) || count > SIZE_MAX/sizeof(XrXirArtifact *))
         return XR_XIR_BUDGET;
     XrXirStatus status = XR_XIR_OK;
     XrXirLibraryCatalog *catalog = xir_compile_calloc(context,1,sizeof(*catalog),&status);
     if (!catalog) return status;
     catalog->context = *context;
-    catalog->resources = xir_compile_calloc(context,count,sizeof(*catalog->resources),&status);
-    catalog->artifacts = xir_compile_calloc(context,count,sizeof(*catalog->artifacts),&status);
-    if (status != XR_XIR_OK) goto failed;
+    size_t modules = 0;
     for (size_t i = 0; i < count; ++i) {
         if (!xir_compile_work(context,1)) { status = XR_XIR_BUDGET; goto failed; }
-        catalog->count = i+1;
-        status = catalog_item(catalog,i,&inputs[i]);
+        if (!inputs[i].modules || !inputs[i].module_count) { status = XR_XIR_BAD_STRUCTURE; goto failed; }
+        if (inputs[i].module_count > UINT32_MAX || inputs[i].module_count > SIZE_MAX - modules) {
+            status = XR_XIR_BUDGET; goto failed;
+        }
+        modules += inputs[i].module_count;
+    }
+    if (modules > SIZE_MAX/sizeof(*catalog->resources)) { status = XR_XIR_BUDGET; goto failed; }
+    catalog->resources = xir_compile_calloc(context,modules,sizeof(*catalog->resources),&status);
+    catalog->artifacts = xir_compile_calloc(context,count,sizeof(*catalog->artifacts),&status);
+    if (status != XR_XIR_OK) goto failed;
+    catalog->artifact_count = count;
+    size_t begin = 0;
+    for (size_t i = 0; i < count; ++i) {
+        if (!xir_compile_work(context,1)) { status = XR_XIR_BUDGET; goto failed; }
+        status = catalog_artifact(catalog,i,&inputs[i]);
         if (status != XR_XIR_OK) goto failed;
-        status = catalog_unique(catalog,i);
+        for (size_t m = 0; m < inputs[i].module_count; ++m) {
+            if (!xir_compile_work(context,1)) { status = XR_XIR_BUDGET; goto failed; }
+            catalog->count = begin+m+1;
+            status = catalog_module(catalog,begin+m,&inputs[i].modules[m],catalog->artifacts[i],(uint32_t)m);
+            if (status != XR_XIR_OK) goto failed;
+            status = catalog_unique(catalog,begin+m);
+            if (status != XR_XIR_OK) goto failed;
+        }
+        status = catalog_dependencies(catalog,begin,inputs[i].module_count);
         if (status != XR_XIR_OK) goto failed;
+        begin += inputs[i].module_count;
     }
     *output = catalog;
     return XR_XIR_OK;

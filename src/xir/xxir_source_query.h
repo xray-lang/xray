@@ -81,11 +81,43 @@ typedef struct XrXirSourceView {
     const XrXirImplementationTable *implementations;
 } XrXirSourceView;
 typedef struct XrXirSourceSnapshot XrXirSourceSnapshot;
+/* Snapshot-owned display facts. These carry no execution or construction authority. */
+typedef enum XrXirSourceSyntaxRole {
+    XR_XIR_SOURCE_SYNTAX_NONE, XR_XIR_SOURCE_SYNTAX_NAME,
+    XR_XIR_SOURCE_SYNTAX_METHOD, XR_XIR_SOURCE_SYNTAX_CLOSURE,
+    XR_XIR_SOURCE_SYNTAX_RECEIVER, XR_XIR_SOURCE_SYNTAX_UNRESOLVED
+} XrXirSourceSyntaxRole;
+#define XR_XIR_SOURCE_SYNTAX_STATIC 1u
+typedef struct XrXirSourceDeclarationSyntax {
+    XrXirSourceRange name;
+    XrXirSourceSyntaxRole role;
+    uint32_t flags;
+} XrXirSourceDeclarationSyntax;
+typedef enum XrXirSourceMarkerRole {
+    XR_XIR_SOURCE_MARKER_REF = 1, XR_XIR_SOURCE_MARKER_MOVE, XR_XIR_SOURCE_MARKER_REF_ARGUMENT
+} XrXirSourceMarkerRole;
+typedef struct XrXirSourceMarker {
+    XrXirSourceRange range;
+    uint32_t declaration;
+    XrXirSourceMarkerRole role;
+} XrXirSourceMarker;
+typedef struct XrXirSourceSyntaxView {
+    const XrXirSourceDeclarationSyntax *declarations;
+    uint32_t declaration_count;
+    const XrXirSourceRange *references;
+    uint32_t reference_count;
+    const XrXirSourceMarker *markers;
+    uint32_t marker_count;
+} XrXirSourceSyntaxView;
+XR_FUNC const XrXirSourceSyntaxView *xr_xir_compile_source_snapshot_syntax(const XrXirSourceSnapshot *snapshot);
+
 typedef struct XrXirSourceResult {
     XrXirArtifact *checked;
     XrXirSourceSnapshot *snapshot;
 } XrXirSourceResult;
 XR_FUNC const XrXirSourceView *xr_xir_compile_source_snapshot_view(const XrXirSourceSnapshot *snapshot);
+/* These immutable observations carry no construction or invocation authority. */
+XR_FUNC const XrXirConstruction *xr_xir_compile_source_snapshot_construction(const XrXirSourceSnapshot *snapshot);
 XR_FUNC void xr_xir_compile_source_snapshot_free(XrXirSourceSnapshot *snapshot);
 XR_FUNC void xr_xir_compile_source_result_free(XrXirSourceResult *result);
 #endif // XXIR_SOURCE_QUERY_H

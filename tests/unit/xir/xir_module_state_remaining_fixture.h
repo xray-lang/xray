@@ -12,6 +12,7 @@
 
 #ifndef XIR_MODULE_STATE_REMAINING_FIXTURE_H
 #define XIR_MODULE_STATE_REMAINING_FIXTURE_H
+#include "xir_construction_fixture.h"
 #include "xir/xxir_checked.h"
 #include "xir/xxir_generic.h"
 #include "xir/xxir_nominal.h"
@@ -106,7 +107,7 @@ static void remaining_fixture(RemainingFixture *f,uint32_t scenario,uint32_t rej
 static XrXirStatus remaining_build(const XrXirCompileContext *context,uint32_t scenario,XrXirArtifact **output) {
     RemainingFixture fixture;remaining_fixture(&fixture,scenario,0);XrXirArtifact *checked=NULL,*closed=NULL,*read=NULL,*lowered=NULL;
     XrXirCheckedPacket packet={0};XrXirDiagnostic diagnostic={0};
-    XrXirStatus status=xr_xir_compile_check(context,&fixture.module,&checked,&diagnostic);
+    XrXirStatus status=xir_fixture_check(context, &fixture.module, &checked, &diagnostic);
     if(status!=XR_XIR_OK && status!=XR_XIR_OUT_OF_MEMORY && status!=XR_XIR_BUDGET)
         fprintf(stderr,"remaining %u Check=%u f=%u b=%u op=%u\n",scenario,status,diagnostic.function,diagnostic.block,diagnostic.instruction);
     CHECK(status==XR_XIR_OK || !checked);

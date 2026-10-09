@@ -410,9 +410,11 @@ static void proof_byte_bounds(void) {
     }
 }
 #include "xir_compile_c_buffer_growth.h"
+#include "xir_compile_c_buffer_shapes.h"
 
 int main(void) {
     compile_c_buffer_growth_cases();
+    compile_c_buffer_shape_cases();
     formatting(); exact_work(); measured_work(); charged_before_reads(); growth_failures();
     numeric_sizing_vectors(); numeric_sizing_work_prefixes(); numeric_sizing_limits_and_labels();
     proof_byte_literals(); proof_byte_work_prefixes(); proof_byte_bounds();

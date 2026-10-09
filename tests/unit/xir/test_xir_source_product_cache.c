@@ -29,10 +29,9 @@ static XrXirSourceProduct *product_cache_build(const XrXirCompileContext *contex
     const char *root, const char *entry, const char *stdlib, bool library, uint32_t ids[3]) {
     XrXirLibraryCatalog *catalog = NULL;
     if (library) {
-        XrXirLibraryInput input = {{XR_MODULE_IDENTITY_STDLIB,"io",root},"io/output.xr",
-            xir_native_cache_registry.checked.bytes,xir_native_cache_registry.checked.length,{0}};
+        XrXirLibraryInput input = {xir_native_cache_registry.checked.bytes,xir_native_cache_registry.checked.length,{0}, (XrXirLibraryModuleInput[]){{{XR_MODULE_IDENTITY_STDLIB,"io",root},"io/output.xr"}},1};
         memcpy(input.sha256,xir_native_cache_registry.checked.digest,32);
-        CHECK(xr_xir_compile_library_catalog_new(context,&input,1,&catalog) == XR_XIR_OK);
+        CHECK(xr_xir_compile_library_catalog_new_v2(context,&input,1,&catalog) == XR_XIR_OK);
     }
     XrCompilerSession *session = NULL;
     CHECK(xr_compile_session_new(context->resources,&session) == XR_COMPILER_SESSION_OK);

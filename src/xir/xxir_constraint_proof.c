@@ -15,6 +15,7 @@
 #include "xxir_compile_memory.h"
 #include "xxir_interface_members.h"
 #include "xxir_types.h"
+#include "xxir_effect_contract_internal.h"
 #include "xxir_implementation.h"
 #include "xxir_generic.h"
 #include "../base/xmalloc.h"
@@ -709,7 +710,7 @@ static XrXirStatus proof_interface_declaration(const XrXirModule *module, uint32
 static XrXirStatus proof_static_owner(const XrXirProofContext *context, XrXirCompileContext *budget) {
     XrXirStatus allocation_status = XR_XIR_OK;
     const XrXirModule *module = context->module;
-    if (!module->declarations || module->provenance) return XR_XIR_OK;
+    if (!module->declarations || xir_effect_evidence_is_instance(module)) return XR_XIR_OK;
     const XrXirFunctionIdentity *identity = &module->declarations->functions[context->owner.declaration];
     if (identity->method_kind != XR_XIR_STATIC_METHOD) return XR_XIR_OK;
     if (!module->types->nominals->declarations) return XR_XIR_OK;
@@ -797,7 +798,9 @@ XrXirStatus xr_xir_compile_module_constraints_verify(const XrXirCompileContext *
     for (uint32_t s = 0; status == XR_XIR_OK && declarations && s < declarations->slot_count; ++s) {
         const XrXirSlot *slot = &declarations->slots[s];
         status = xr_xir_compile_type_use_verify_scratch(budget, &closed, slot->type,&scratch);
-        if (status == XR_XIR_OK && slot->module != declarations->root_module)
+        /* Private mutable state belongs to the instance root execution.
+         * Immutable library values retain their cross-execution requirement. */
+        if (status == XR_XIR_OK && !slot->mutable && slot->module != declarations->root_module)
             status = xr_xir_compile_type_markers_prove(budget, &closed, slot->type, XR_XIR_CONSTRAINT_SENDABLE);
     }
     xr_xir_constraint_scratch_free(&scratch); return status;

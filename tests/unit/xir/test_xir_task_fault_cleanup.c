@@ -6,6 +6,7 @@
  *
  * test_xir_task_fault_cleanup.c - Host failure executes registered language cleanup
  */
+#include "xir_construction_fixture.h"
 #include "xir/xxir_checked.h"
 #include "xir/xxir_vm.h"
 #include <stdio.h>
@@ -32,7 +33,7 @@ static XrXirProgram *fault_cleanup_program(unsigned mode) {
     TaskFaultFixture fixture; task_fault_fixture(&fixture, mode);
     XrXirArtifact *checked = NULL, *decoded = NULL, *closed = NULL, *lowered = NULL;
     XrXirCheckedPacket packet = {0}; XrXirDiagnostic diagnostic = {0};
-    XrXirStatus status = xr_xir_compile_check(context, &fixture.module, &checked, &diagnostic);
+    XrXirStatus status = xir_fixture_check(context, &fixture.module, &checked, &diagnostic);
     if (status != XR_XIR_OK) fprintf(stderr, "mode=%u check=%u function=%u op=%u\n", mode, status, diagnostic.function, diagnostic.instruction);
     CHECK(status == XR_XIR_OK);
     CHECK(xr_xir_compile_checked_write(checked, &packet, &diagnostic) == XR_XIR_OK);

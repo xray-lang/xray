@@ -1,0 +1,5 @@
+var counter:i64 = 0
+fn bump(x:ref i64)->i64 { x += 1; return x }
+fn forward(x:ref i64)->i64 { return bump(ref x) }
+export fn run()->i64 { return forward(ref counter) }
+fn main()->i64 { return run() }

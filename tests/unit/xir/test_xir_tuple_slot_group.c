@@ -6,6 +6,7 @@
  *
  * test_xir_tuple_slot_group.c - Actual publication, admission and cancellation boundaries
  */
+#include "xir_construction_fixture.h"
 #include "xir/xxir_vm.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -145,7 +146,7 @@ static XrXirArtifact *group_lower(const XrXirCompileContext *context,bool unit) 
     XrXirDeclarations declarations={&source_module,1,identities,slots,3,NULL,0,0,1,NULL};
     XrXirModule module={XR_XIR_BUILT,functions,2,&declarations,NULL,&types,NULL,XR_XIR_PROGRAM,NULL};
     XrXirArtifact *checked=NULL,*read=NULL,*closed=NULL,*lowered=NULL;XrXirCheckedPacket packet={0};
-    CHECK(xr_xir_compile_check(context,&module,&checked,NULL)==XR_XIR_OK);
+    CHECK(xir_fixture_check(context, &module, &checked, NULL)==XR_XIR_OK);
     CHECK(xr_xir_compile_checked_write(checked,&packet,NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(checked);
     CHECK(xr_xir_compile_checked_read(context,packet.bytes,packet.length,&read,NULL)==XR_XIR_OK);
     xr_xir_compile_checked_packet_free(&packet);CHECK(xr_xir_compile_specialize(read,&closed,NULL)==XR_XIR_OK);

@@ -85,8 +85,8 @@ static bool source_binary_plan(SourceContext *ctx,AstNode *node,AstNodeType oper
         recipe.result=operation>=AST_BINARY_EQ && operation<=AST_BINARY_GE ? XR_XIR_BOOL : target;
     }
     bool shift=operation==AST_BINARY_LSHIFT || operation==AST_BINARY_RSHIFT;
-    if (!source_conversion_plan(ctx,node,left,(SourceExpectedType){true,target, false},&recipe.left) ||
-        !source_conversion_plan(ctx,node,right,(SourceExpectedType){true,shift ? right : target, false},&recipe.right)) return false;
+    if (!source_conversion_plan(ctx,node,left,(SourceExpectedType){true,target, false, false},&recipe.left) ||
+        !source_conversion_plan(ctx,node,right,(SourceExpectedType){true,shift ? right : target, false, false},&recipe.right)) return false;
     *output=recipe;return true;
 }
 static bool source_binary_emit(SourceContext *ctx,const SourceBinaryRecipe *recipe,

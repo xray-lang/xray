@@ -9,6 +9,7 @@
  * KEY CONCEPT:
  *   Published library bytes survive deletion of their original module source.
  */
+#include "xir_construction_fixture.h"
 #include "base/xmalloc.h"
 #include "xir_stdlib_output_module_probe.h"
 #include "xir/xxir_source.h"
@@ -62,7 +63,7 @@ static void publication_scope_end(PublicationScope *scope){
  CHECK(effects_compile_live==scope->blocks&&effects_compile_bytes==scope->bytes);
 }
 static XrXirStatus publication_scope_source(PublicationScope *scope,const XrXirSourceRequest *original,XrXirSourceRequest *copy){
- XrXirStatus status=xr_xir_compile_library_catalog_new(&scope->context,&publication_input,1,&scope->catalog);if(status!=XR_XIR_OK)return status;
+ XrXirStatus status=xr_xir_compile_library_catalog_new_v2(&scope->context,&publication_input,1,&scope->catalog);if(status!=XR_XIR_OK)return status;
  XrCompilerSessionStatus created=xr_compile_session_new(scope->context.resources,&scope->session);
  if(created!=XR_COMPILER_SESSION_OK)return created==XR_COMPILER_SESSION_OUT_OF_MEMORY?XR_XIR_OUT_OF_MEMORY:XR_XIR_BUDGET;
  *copy=*original;copy->session=scope->session;copy->context=&scope->context;copy->libraries=scope->catalog;return XR_XIR_OK;
@@ -92,7 +93,7 @@ static XrXirStatus publication_source_probe(const XrXirSourceRequest *request,Xr
 static XrXirStatus publication_catalog_probe(const XrXirLibraryInput *input,XrCompileResourceLimits caps,size_t failure,size_t *sites){
  PublicationScope scope;XrXirStatus status=publication_scope_begin(&scope,caps);
  if(status==XR_XIR_OK){source_attempts=0;source_fail_at=failure;effects_compile_injected=false;
-  status=xr_xir_compile_library_catalog_new(&scope.context,input,1,&scope.catalog);if(sites)*sites=source_attempts;
+  status=xr_xir_compile_library_catalog_new_v2(&scope.context,input,1,&scope.catalog);if(sites)*sites=source_attempts;
   source_fail_at=SIZE_MAX;if(failure!=SIZE_MAX)CHECK(effects_compile_injected);
  }
  CHECK(status==XR_XIR_OK?scope.catalog!=NULL:scope.catalog==NULL);publication_scope_end(&scope);return status;
@@ -145,18 +146,19 @@ static XrXirCheckedPacket publication_packet(const char *root, const char *path)
 static void publication_reject(const XrXirLibraryInput *input, size_t count) {
     size_t live=source_live,bytes=source_bytes;
     XrXirLibraryCatalog *catalog = NULL;
-    CHECK(xr_xir_compile_library_catalog_new(publication_context,input,count,&catalog) != XR_XIR_OK && !catalog);
+    CHECK(xr_xir_compile_library_catalog_new_v2(publication_context,input,count,&catalog) != XR_XIR_OK && !catalog);
     CHECK(source_live==live&&source_bytes==bytes);
 }
 static void publication_catalog_cases(const XrXirLibraryInput *input) {
-    XrXirLibraryInput bad = *input;
+    XrXirLibraryModuleInput bad_binding = *input->modules;
+    XrXirLibraryInput bad = *input; bad.modules = &bad_binding;
     bad.sha256[0] ^= 1; publication_reject(&bad,1);
-    bad = *input; bad.authority.namespace_id = "fs"; publication_reject(&bad,1);
-    bad = *input; bad.logical_path = "io/../output.xr"; publication_reject(&bad,1);
-    bad = *input; bad.logical_path = "io/output/../output.xr"; publication_reject(&bad,1);
-    bad = *input; bad.authority.physical_root = "relative"; publication_reject(&bad,1);
-    bad = *input; bad.authority.kind = XR_MODULE_IDENTITY_SCRIPT;
-    bad.authority.namespace_id = NULL; bad.logical_path = "output.xr"; publication_reject(&bad,1);
+    bad = *input; bad_binding = *input->modules; bad.modules = &bad_binding; bad.modules[0].authority.namespace_id = "fs"; publication_reject(&bad,1);
+    bad = *input; bad_binding = *input->modules; bad.modules = &bad_binding; bad.modules[0].logical_path = "io/../output.xr"; publication_reject(&bad,1);
+    bad = *input; bad_binding = *input->modules; bad.modules = &bad_binding; bad.modules[0].logical_path = "io/output/../output.xr"; publication_reject(&bad,1);
+    bad = *input; bad_binding = *input->modules; bad.modules = &bad_binding; bad.modules[0].authority.physical_root = "relative"; publication_reject(&bad,1);
+    bad = *input; bad_binding = *input->modules; bad.modules = &bad_binding; bad.modules[0].authority.kind = XR_MODULE_IDENTITY_SCRIPT;
+    bad.modules[0].authority.namespace_id = NULL; bad.modules[0].logical_path = "output.xr"; publication_reject(&bad,1);
     XrXirLibraryInput duplicate[] = {*input,*input}; publication_reject(duplicate,2);
     unsigned char *altered = xr_malloc(input->length); CHECK(altered);
     memcpy(altered,input->packet,input->length);
@@ -169,7 +171,7 @@ static void publication_catalog_cases(const XrXirLibraryInput *input) {
     CHECK(changed == 1);
     XrSHA256Context hash; xr_sha256_init(&hash); xr_sha256_update(&hash,altered,32);
     xr_sha256_update(&hash,altered+64,input->length-64); xr_sha256_final(&hash,altered+32);
-    bad = *input; bad.packet = altered; xr_sha256(altered,input->length,bad.sha256);
+    bad = *input; bad_binding = *input->modules; bad.modules = &bad_binding; bad.packet = altered; xr_sha256(altered,input->length,bad.sha256);
     XrXirArtifact *retagged = NULL;
     CHECK(xr_xir_compile_checked_read(publication_context,altered,input->length,&retagged,NULL) == XR_XIR_OK);
     xr_xir_compile_artifact_free(retagged); publication_reject(&bad,1); xr_free(altered);
@@ -183,7 +185,7 @@ static void publication_catalog_cases(const XrXirLibraryInput *input) {
     CHECK(changed == 2);
     xr_sha256_init(&hash); xr_sha256_update(&hash,altered,32);
     xr_sha256_update(&hash,altered+64,input->length-64); xr_sha256_final(&hash,altered+32);
-    bad = *input; bad.packet = altered; xr_sha256(altered,input->length,bad.sha256);
+    bad = *input; bad_binding = *input->modules; bad.modules = &bad_binding; bad.packet = altered; xr_sha256(altered,input->length,bad.sha256);
     publication_reject(&bad,1); xr_free(altered);
     size_t sites=0;CHECK(publication_catalog_probe(input,publication_caps,SIZE_MAX,&sites)==XR_XIR_OK);CHECK(sites);
     for(size_t failure=0;failure<sites;++failure)CHECK(publication_catalog_probe(input,publication_caps,failure,NULL)==XR_XIR_OUT_OF_MEMORY);
@@ -198,7 +200,7 @@ static void publication_private_case(const XrXirLibraryInput *input, const char 
     memcpy(functions,declarations.functions,sizeof(functions));
     for (unsigned f = 0; f < 3; ++f) functions[f].exported = 0;
     declarations.functions = functions; built.declarations = &declarations;
-    CHECK(xr_xir_compile_check(publication_context,&built,&checked,NULL) == XR_XIR_OK);
+    CHECK(xr_xir_compile_check_v2(publication_context,&built,xr_xir_compile_artifact_construction(original),&checked,NULL) == XR_XIR_OK);
     XrXirCheckedPacket packet = {0};
     CHECK(xr_xir_compile_checked_write(checked,&packet,NULL) == XR_XIR_OK);
     xr_xir_compile_artifact_free(checked); xr_xir_compile_artifact_free(original);
@@ -206,7 +208,7 @@ static void publication_private_case(const XrXirLibraryInput *input, const char 
     private_input.packet = packet.bytes; private_input.length = packet.length;
     xr_sha256(packet.bytes,packet.length,private_input.sha256);
     XrXirLibraryCatalog *catalog = NULL;
-    CHECK(xr_xir_compile_library_catalog_new(publication_context,&private_input,1,&catalog) == XR_XIR_OK);
+    CHECK(xr_xir_compile_library_catalog_new_v2(publication_context,&private_input,1,&catalog) == XR_XIR_OK);
     xr_xir_compile_checked_packet_free(&packet);
     XrCompilerSession *session=NULL;CHECK(xr_compile_session_new(publication_context->resources,&session)==XR_COMPILER_SESSION_OK);
     XrModuleIdentityAuthority authority = {XR_MODULE_IDENTITY_SCRIPT,NULL,root};
@@ -219,7 +221,7 @@ static void publication_private_case(const XrXirLibraryInput *input, const char 
     /* Live compiler metadata belongs to the explicit parent ledger. */
 }
 static void publication_resolver_cases(XrXirLibraryCatalog *catalog,const char *root,const char *entry){
- size_t count=0;const XrModuleResourceBinding *resources=xr_xir_compile_library_catalog_resources(catalog,&count);CHECK(count==1&&resources);
+ size_t count=0;const XrModuleResourceBinding *resources=xr_xir_compile_library_catalog_resources_v2(catalog,&count);CHECK(count==1&&resources);
  XrModuleIdentityAuthority script={XR_MODULE_IDENTITY_SCRIPT,NULL,root};
  for(unsigned attack=0;attack<10;++attack){XrModuleResourceBinding binding=resources[0];
   if(attack==1)binding.authority.kind=XR_MODULE_IDENTITY_SCRIPT;if(attack==2)binding.authority.namespace_id="fs";
@@ -255,9 +257,9 @@ static void publication_source_resolver_faults(const char *root){
 static void publication_module_faults(const XrXirSourceRequest *request){
  for(unsigned cached=0;cached<2;++cached){size_t sites=0;
   for(size_t pass=0;pass<=sites;++pass){PublicationScope scope;CHECK(publication_scope_begin(&scope,publication_caps)==XR_XIR_OK);
-   CHECK(xr_xir_compile_library_catalog_new(&scope.context,&publication_input,1,&scope.catalog)==XR_XIR_OK);
+   CHECK(xr_xir_compile_library_catalog_new_v2(&scope.context,&publication_input,1,&scope.catalog)==XR_XIR_OK);
    XrModuleResolverConfig config={request->stdlib_path,NULL,scope.catalog};XrModuleResolver *resolver=publication_resolver(&config);
-   size_t count=0;const XrModuleResourceBinding *resources=xr_xir_compile_library_catalog_resources(scope.catalog,&count);CHECK(count==1);
+   size_t count=0;const XrModuleResourceBinding *resources=xr_xir_compile_library_catalog_resources_v2(scope.catalog,&count);CHECK(count==1);
    XrModuleId id={0};char *error=NULL;
    if(cached){CHECK(xr_compile_module_resolver_resolve(resolver,"std/io/output",request->entry_path,request->authority,&id,&error)==XR_MODULE_OK);xr_compile_module_id_cleanup(&id);CHECK(!error);}
    module_attempts=0;module_fail_at=pass?pass-1:SIZE_MAX;module_injected=false;module_injecting=true;
@@ -312,8 +314,8 @@ static void publication_module_statuses(const XrXirSourceRequest *request) {
     size_t attempts=0;
     for(unsigned pass=0;pass<2;++pass){
      PublicationScope scope;CHECK(publication_scope_begin(&scope,publication_caps)==XR_XIR_OK);
-     CHECK(xr_xir_compile_library_catalog_new(&scope.context,&publication_input,1,&scope.catalog)==XR_XIR_OK);
-     size_t count=0;const XrModuleResourceBinding *resources=xr_xir_compile_library_catalog_resources(scope.catalog,&count);CHECK(count==1);
+     CHECK(xr_xir_compile_library_catalog_new_v2(&scope.context,&publication_input,1,&scope.catalog)==XR_XIR_OK);
+     size_t count=0;const XrModuleResourceBinding *resources=xr_xir_compile_library_catalog_resources_v2(scope.catalog,&count);CHECK(count==1);
      XrModuleResourceBinding binding=resources[0];binding.checked=NULL;XrXirLibraryCatalog hostile=*scope.catalog;hostile.resources=&binding;
      XrModuleResolverConfig config={request->stdlib_path,NULL,&hostile};XrModuleResolver *resolver=publication_resolver(&config);
      module_injecting=true;module_attempts=0;module_fail_at=pass?attempts-1:SIZE_MAX;module_injected=false;
@@ -339,12 +341,12 @@ int main(int argc, char **argv) {
     CHECK(!runtime_live && !runtime_bytes);
     void *bytes = xr_malloc(length); CHECK(bytes); file = fopen(path,"rb"); CHECK(file);
     CHECK(fread(bytes,1,length,file) == length && !fclose(file));
-    XrXirLibraryInput input = {{XR_MODULE_IDENTITY_STDLIB,"io",root},"io/output.xr",bytes,length,{0}};
+    XrXirLibraryInput input = {bytes,length,{0}, (XrXirLibraryModuleInput[]){{{XR_MODULE_IDENTITY_STDLIB,"io",root},"io/output.xr"}},1};
     xr_sha256(bytes,length,input.sha256);publication_input=input;void *frozen=malloc(length);CHECK(frozen);memcpy(frozen,bytes,length);publication_input.packet=frozen;
     publication_catalog_cases(&input);
     publication_private_case(&input,root,entry);
     XrXirLibraryCatalog *catalog = NULL;
-    CHECK(xr_xir_compile_library_catalog_new(publication_context,&input,1,&catalog) == XR_XIR_OK);
+    CHECK(xr_xir_compile_library_catalog_new_v2(publication_context,&input,1,&catalog) == XR_XIR_OK);
     memset(bytes,0,length); xr_free(bytes);
     publication_resolver_cases(catalog,root,entry);
     publication_source_resolver_faults(root);

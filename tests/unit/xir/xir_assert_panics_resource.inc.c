@@ -9,7 +9,7 @@
 static void panics_snapshot_owned(XrXirSourceResult *source) {
     XrXirSourceSnapshot *copy=NULL;
     const XrXirSourceView *view=xr_xir_compile_source_snapshot_view(source->snapshot);
-    CHECK(xr_xir_compile_source_snapshot_copy(assert_compile_context,view,&copy)==XR_XIR_OK);
+    CHECK(xr_xir_compile_source_snapshot_copy_v2(assert_compile_context,view,xr_xir_compile_source_snapshot_construction(source->snapshot),&copy)==XR_XIR_OK);
     XrXirArtifact *artifact=source->checked;source->checked=NULL;xr_xir_compile_source_result_free(source);
     view=xr_xir_compile_source_snapshot_view(copy);uint32_t result_roles=0;
     for (uint32_t d=0;d<view->declaration_count;++d) {

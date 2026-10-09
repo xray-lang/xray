@@ -19,6 +19,7 @@ if(TARGET xray_cli_source)
 else()
 target_sources(test_project_owner PRIVATE
  "${XR_ROOT}/src/app/cli/xcli_graph_authority.c"
+ "${XR_ROOT}/src/module/xmodule_overlay.c"
  "${XR_ROOT}/src/module/xmodule_identity.c" "${XR_ROOT}/src/xir/xxir_library_catalog.c"
  "${XR_ROOT}/src/module/xproject.c" "${XR_ROOT}/src/module/xnative_package.c"
  "${XR_ROOT}/src/module/xmodule_identity_view.c" "${XR_ROOT}/src/module/xsemver.c"

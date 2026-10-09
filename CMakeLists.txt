@@ -529,6 +529,7 @@ add_custom_command(
 
 add_custom_command(
     OUTPUT ${CMAKE_SOURCE_DIR}/src/shared/xnative_declarations.inc.c
+           ${CMAKE_SOURCE_DIR}/src/shared/xprelude_source.inc.c
            ${CMAKE_SOURCE_DIR}/src/frontend/analyzer/xnative_array_index_methods.def
            ${CMAKE_SOURCE_DIR}/src/frontend/analyzer/xnative_array_push_method.def
     COMMAND ${XRAY_PYTHON} ${CMAKE_SOURCE_DIR}/scripts/gen_native_declarations.py
@@ -617,6 +618,7 @@ add_custom_target(gen-stdlib-metadata DEPENDS
 add_custom_target(gen-native-type-defs DEPENDS
     ${CMAKE_SOURCE_DIR}/src/frontend/analyzer/xnative_type_defs.inc.c
     ${CMAKE_SOURCE_DIR}/src/shared/xnative_declarations.inc.c
+    ${CMAKE_SOURCE_DIR}/src/shared/xprelude_source.inc.c
     ${CMAKE_SOURCE_DIR}/src/frontend/analyzer/xnative_array_index_methods.def
     ${CMAKE_SOURCE_DIR}/src/frontend/analyzer/xnative_array_push_method.def
 )
@@ -2517,6 +2519,7 @@ set(XRAY_CLI_SOURCES
     ${XRAY_CLI_ROOT}/xcli_installation.c
     ${XRAY_CLI_ROOT}/xcmd_run.c
     ${XRAY_CLI_ROOT}/xcmd_build.c
+    ${XRAY_CLI_ROOT}/xcmd_deps.c
     ${XRAY_CLI_ROOT}/xcmd_check.c
     ${XRAY_CLI_ROOT}/xcmd_fmt.c
     ${XRAY_CLI_ROOT}/xcmd_test.c
@@ -5734,6 +5737,18 @@ if(BUILD_TESTS)
         PROCESSORS 4
         COST 30
         TIMEOUT 600
+    )
+
+    add_test(
+        NAME test_cli_source_deps_registration
+        COMMAND ${XRAY_PYTHON}
+                ${CMAKE_CURRENT_SOURCE_DIR}/tests/cli/run_source_deps_registration.py
+                $<TARGET_FILE:xray>
+    )
+    set_tests_properties(test_cli_source_deps_registration PROPERTIES
+        LABELS "cli;source;dependencies"
+        PROCESSORS 1
+        TIMEOUT 120
     )
 
     # Root tests and tests/unit are distinct CMake directory scopes; each scope

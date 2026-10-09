@@ -108,6 +108,7 @@ static void class_cross_arena_cases(void) {
  const char *bytes=NULL;size_t size=0;CHECK(xr_xir_string_view(&out,&bytes,&size)&&size==3&&!memcmp(bytes,"old",3));
  xr_xir_value_drop(&out);CHECK(!runtime_live&&!runtime_bytes);
 }
+#include "xir_construction_fixture.h"
 #include "xir_class_owned_fixture.h"
 static XrXirProgram *class_exit_program(unsigned mode,uint32_t *entry) {
  ClassPipelineOwner owner={0};CHECK(class_pipeline_new(&owner,&class_pipeline_limits)==XR_XIR_OK);ClassOwnedFixture f;class_owned_fixture(&f);XrXirType type=(XrXirType)256;
@@ -122,7 +123,7 @@ static XrXirProgram *class_exit_program(unsigned mode,uint32_t *entry) {
  f.entry[5]=(XrXirInstruction){XR_XIR_RETURN,XR_XIR_UNIT,{2},{0},0,{0}};
  f.functions[3].instruction_count=6;f.blocks[3].count=6;
  XrXirArtifact *checked=NULL,*special=NULL,*lowered=NULL;
- XrXirDiagnostic diagnostic={0};XrXirStatus verify=xr_xir_compile_check(&owner.context,&f.module,&checked,&diagnostic);
+ XrXirDiagnostic diagnostic={0};XrXirStatus verify=xir_fixture_check(&owner.context, &f.module, &checked, &diagnostic);
  if(verify!=XR_XIR_OK)fprintf(stderr,"mode%u check %u function%u instruction%u reason%u\n",mode,verify,diagnostic.function,diagnostic.instruction,diagnostic.reason);CHECK(verify==XR_XIR_OK);
  CHECK(xr_xir_compile_specialize(checked,&special,NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(checked);
  XrXirTarget target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};CHECK(xr_xir_compile_lower(special,&target,&lowered,NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(special);

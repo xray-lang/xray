@@ -1,3 +1,4 @@
+#include "xir_construction_fixture.h"
 /*
  * xray - Lightweight typed scripting with native concurrency
  * https://www.xray-lang.org
@@ -41,7 +42,7 @@ static void initialization_region_allocations(void) {
     outer.next=&inner;
     InitializationAllocationFixture f={&module,&outer};
     AllocationCompileOwner owner={0};allocation_compile_owner_new(&owner,&allocation_compile_limits);
-    CHECK(xr_xir_compile_verify(&owner.context,&module,NULL)==XR_XIR_OK);
+    CHECK(xir_fixture_verify(&owner.context, &module, NULL)==XR_XIR_OK);
     allocation_compile_owner_drop(&owner);
     for(unsigned mode=0;mode<3;++mode) {
         outer.checkpoint=mode==1?1:2;

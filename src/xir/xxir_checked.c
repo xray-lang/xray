@@ -26,7 +26,7 @@ void xr_xir_compile_checked_packet_free(XrXirCheckedPacket *packet) {
 }
 XrXirStatus xr_xir_compile_checked_write(const XrXirArtifact *artifact, XrXirCheckedPacket *output, XrXirDiagnostic *diagnostic) {
     if (!artifact) return XR_XIR_BAD_STRUCTURE;
-    if (!output) return checked_error(XR_XIR_BAD_STRUCTURE, diagnostic);
+    if (!output || output->bytes || output->length) return checked_error(XR_XIR_BAD_STRUCTURE, diagnostic);
 
     if (!artifact || artifact->module.stage != XR_XIR_CHECKED)
         return checked_error(XR_XIR_BAD_STAGE, diagnostic);
@@ -39,7 +39,7 @@ XR_FUNC XrXirStatus xr_xir_compile_checked_read(const XrXirCompileContext *compi
     if (!xir_compile_context_valid(compile_context)) return XR_XIR_BAD_STRUCTURE;
     XrXirCompileContext compile_state = *compile_context;
     XrXirCompileContext *budget = &compile_state;
-    if (!output) return checked_error(XR_XIR_BAD_STRUCTURE, diagnostic);
+    if (!output || *output) return checked_error(XR_XIR_BAD_STRUCTURE, diagnostic);
 
     XrXirCompileContext limits = *budget;
     if (!bytes || length < 64) return checked_error(XR_XIR_BAD_STRUCTURE, diagnostic);
@@ -64,12 +64,12 @@ XR_FUNC XrXirStatus xr_xir_compile_checked_read(const XrXirCompileContext *compi
     if (!artifact) { c.status=allocation_status; goto decode_failure; }
     artifact->module.stage=XR_XIR_CHECKED; artifact->context=limits;
     c.position=64;
-    checked_module(&c,&artifact->module,true);
+    checked_module(&c,&artifact->module,&artifact->construction,XR_XIR_EVIDENCE_INSTANCE);
     if (c.status==XR_XIR_OK && c.position!=length) c.status=XR_XIR_BAD_STRUCTURE;
     if (c.status!=XR_XIR_OK) goto decode_failure;
     /* Decoding and semantic verification share the allocation owner. */
 
-    c.status=xr_xir_compile_verify(&limits, &artifact->module, diagnostic);
+    c.status=xr_xir_compile_verify_v2(&limits, &artifact->module, artifact->construction, diagnostic);
 
     if (c.status!=XR_XIR_OK) { xr_xir_compile_artifact_free(artifact); return c.status; }
     *output=artifact;

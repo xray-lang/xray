@@ -9,6 +9,7 @@ from derive_semantic61_migration import semantic61_packet
 from derive_tuple62_migration import tuple62_packet
 from derive_tuple63_migration import tuple63_packet
 from derive_role_nullable65_packets import arrays,nullable_header
+from derive_role_construction72 import packet as construction_packet
 
 
 def sum_vector(some):
@@ -73,6 +74,10 @@ def main():
     target=directory/'xir_nullable65_golden.h'
     if args.write:target.write_text(current,encoding='utf-8',newline='\n')
     else:assert target.read_text(encoding='utf-8')==current
+    current_arrays=arrays(directory/'xir_nullable72_golden.h')
+    for name in ('none','some'):
+        for wire,semantic in ((26,71),(27,72)):
+            assert current_arrays[f'nullable_{name}{semantic}_golden']==construction_packet(f'nullable_{name}_golden',wire,semantic)
     print(json.dumps({'ordinary_vectors_reframed_with_role_zero':len(records),
         'historical59_nullable_none_sha256':hashlib.sha256(sum_vector(False)).hexdigest(),
         'current63_nullable_none_sha256':hashlib.sha256(tuple63_packet(tuple62_packet(semantic61_packet(sum_vector(False))))).hexdigest(),

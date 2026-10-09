@@ -6,6 +6,7 @@
  *
  * test_xir_vm_pending_exit.c - Legal execution faults must execute registered cleanup
  */
+#include "../xir_construction_fixture.h"
 #include "xir/xxir_checked.h"
 #include "xir/xxir_generic.h"
 #include "xir/xxir_vm.h"
@@ -113,7 +114,7 @@ static XrXirProgram *cleanup_program(const XrXirCompileContext *context,uint32_t
     XrXirModule built={.stage=XR_XIR_BUILT,.functions=functions,.function_count=mode==PENDING_WRITE_STREAM?6u:5u,.declarations=&declarations,.linkage_kind=XR_XIR_PROGRAM};
     if(mode==PENDING_AWAIT)built.types=&types;
     XrXirArtifact *checked=NULL,*read=NULL,*special=NULL,*lowered=NULL;XrXirCheckedPacket packet={0};XrXirProgram *program=NULL;
-    XrXirDiagnostic diagnostic={0};XrXirStatus status=xr_xir_compile_check(context,&built,&checked,&diagnostic);
+    XrXirDiagnostic diagnostic={0};XrXirStatus status=xir_fixture_check(context, &built, &checked, &diagnostic);
     if(status!=XR_XIR_OK)fprintf(stderr,"cleanup mode%u check%u f%u b%u i%u reason%u\n",mode,status,diagnostic.function,diagnostic.block,diagnostic.instruction,diagnostic.reason);
     CHECK(status==XR_XIR_OK);
     memset(ops,0xa5,sizeof(ops));memset(blocks,0xa5,sizeof(blocks));memset(helper,0xa5,sizeof(helper));memset(worker,0xa5,sizeof(worker));

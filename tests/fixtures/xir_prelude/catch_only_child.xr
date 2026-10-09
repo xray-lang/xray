@@ -1,0 +1,5 @@
+export fn caught() -> i64 {
+ var result = 41
+ try { result = result + 1 } catch (e: CryptoError) { result = 99 }
+ return result
+}

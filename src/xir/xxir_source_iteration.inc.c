@@ -15,7 +15,7 @@ static bool source_iteration_binding(SourceContext *ctx, AstNode *node,
     SourceName *symbol = source_alloc(ctx,1,sizeof(*symbol));
     if (!symbol) return false;
     *symbol = (SourceName){ctx->locals,name,NULL,node,SOURCE_LOCAL,value.id,ctx->module,
-        value.type,false,false,0};
+        value.type,false,false,0, false, false};
     ctx->locals = symbol;
     if (!source_query_declare(ctx,symbol,XR_XIR_SOURCE_BINDING,
         ctx->bodies[ctx->function].declaration,source_query_range(ctx,node,name))) return false;
@@ -99,7 +99,7 @@ static bool source_counter_break(SourceContext *ctx) {
 static bool source_range_bounds(SourceContext *ctx, AstNode *node, SourceValue *start, SourceValue *end) {
     RangeNode *range = &node->as.for_in_stmt.collection->as.range;
     if (!range->start || !range->end) return source_fail(ctx,node,XR_XIR_BAD_STRUCTURE,"range requires both endpoints");
-    SourceExpectedType expected = {true,XR_XIR_I64, false};
+    SourceExpectedType expected = {true,XR_XIR_I64, false, false};
     if (!source_plan_expression(ctx,range->start,expected,start) || !source_plan_expression(ctx,range->end,expected,end)) return false;
     if (start->type != XR_XIR_I64 || end->type != XR_XIR_I64)
         return source_fail(ctx,node,XR_XIR_BAD_TYPE,"range endpoints must be i64");

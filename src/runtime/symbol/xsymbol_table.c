@@ -18,6 +18,7 @@
 #include "../../base/xmalloc.h"
 #include "../../base/xchecks.h"
 #include <string.h>
+#include <limits.h>
 #include "../xisolate_api.h"
 
 /*
@@ -315,6 +316,9 @@ static const char *xr_builtin_symbol_names[] = {
 static bool expand_capacity(XrSymbolTable *table) {
     XR_DCHECK(table != NULL, "expand_capacity: NULL table");
     XR_DCHECK(table->capacity > 0, "expand_capacity: zero capacity");
+    if (table->capacity <= 0 || table->capacity > INT_MAX / 2 ||
+        (size_t) table->capacity > SIZE_MAX / sizeof(const char *) / 2)
+        return false;
     int new_capacity = table->capacity * 2;
     size_t new_size = sizeof(const char *) * (size_t) new_capacity;
 
@@ -336,8 +340,10 @@ XrSymbolTable *xr_symbol_table_create(void) {
     if (!table)
         return NULL;
 
-    table->name_to_id = xr_hashmap_new();
-    if (!table->name_to_id) {
+    table->name_to_id = NULL;
+    // The copied policy refers to the process-lifetime system context.
+    XrOsIoPolicy policy = xr_os_io_system_policy();
+    if (xr_hashmap_owned_new(&policy, &table->name_to_id) != XR_OS_IO_OK) {
         xr_free(table);
         return NULL;
     }
@@ -348,7 +354,7 @@ XrSymbolTable *xr_symbol_table_create(void) {
 
     table->id_to_name = (const char **) xr_malloc(sizeof(const char *) * (size_t) table->capacity);
     if (!table->id_to_name) {
-        xr_hashmap_free(table->name_to_id);
+        xr_hashmap_owned_free(table->name_to_id);
         xr_free(table);
         return NULL;
     }
@@ -363,6 +369,7 @@ void xr_symbol_table_destroy(XrSymbolTable *table) {
         return;
 
     // Teardown runs after all workers joined — no lock needed for the walk.
+    xr_hashmap_owned_free(table->name_to_id);
     // Builtin names are NOT freed (they point to string literals).
     // Only free user-registered symbol names.
     for (int i = table->builtin_count; i < table->count; i++) {
@@ -370,7 +377,6 @@ void xr_symbol_table_destroy(XrSymbolTable *table) {
             xr_free((void *) table->id_to_name[i]);
     }
     xr_free(table->id_to_name);
-    xr_hashmap_free(table->name_to_id);
     xr_rwlock_destroy(&table->lock);
     xr_free(table);
 }
@@ -383,29 +389,49 @@ bool xr_symbol_table_init_builtins(XrSymbolTable *table) {
              "symbol table: builtin name count mismatch");
 
     xr_rwlock_wrlock(&table->lock);
-    for (int i = 0; i < BUILTIN_NAME_COUNT; i++) {
-        const char *name = xr_builtin_symbol_names[i];
-        SymbolId expected_id = i + 1;
+    if (table->builtin_count == BUILTIN_NAME_COUNT) {
+        xr_rwlock_wrunlock(&table->lock);
+        return true;
+    }
+    if (table->count || table->builtin_count || table->capacity < BUILTIN_NAME_COUNT) {
+        xr_rwlock_wrunlock(&table->lock);
+        return false;
+    }
 
-        // Store directly — no strdup needed for string literals
-        if (!xr_hashmap_set(table->name_to_id, name, (void *) (intptr_t) expected_id)) {
+    // Stage the complete index so failed insertion never publishes literal owners.
+    XrHashMap *prepared = NULL;
+    XrOsIoPolicy policy = xr_os_io_system_policy();
+    if (xr_hashmap_owned_new(&policy, &prepared) != XR_OS_IO_OK) {
+        xr_rwlock_wrunlock(&table->lock);
+        return false;
+    }
+    for (int i = 0; i < BUILTIN_NAME_COUNT; i++) {
+        SymbolId expected_id = i + 1;
+        if (xr_hashmap_owned_set(prepared, xr_builtin_symbol_names[i],
+                                 (void *) (intptr_t) expected_id) != XR_OS_IO_OK) {
+            xr_hashmap_owned_free(prepared);
             xr_rwlock_wrunlock(&table->lock);
             return false;
         }
-        table->id_to_name[table->count] = name;
-        table->count++;
-
-        XR_DCHECK(table->count == (int) expected_id, "symbol table: builtin id ordering mismatch");
     }
 
-    table->builtin_count = table->count;
+    XrHashMap *previous = table->name_to_id;
+    table->name_to_id = prepared;
+    for (int i = 0; i < BUILTIN_NAME_COUNT; i++)
+        table->id_to_name[i] = xr_builtin_symbol_names[i];
+    table->count = BUILTIN_NAME_COUNT;
+    table->builtin_count = BUILTIN_NAME_COUNT;
+    xr_hashmap_owned_free(previous);
     xr_rwlock_wrunlock(&table->lock);
     return true;
 }
 
-static SymbolId symbol_lookup_unlocked(XrSymbolTable *table, const char *name) {
-    void *value = xr_hashmap_get(table->name_to_id, name);
-    return value ? (SymbolId) (intptr_t) value : SYMBOL_INVALID;
+static bool symbol_lookup_unlocked(XrSymbolTable *table, const char *name, SymbolId *id) {
+    void *value = NULL;
+    if (xr_hashmap_owned_get(table->name_to_id, name, &value) != XR_OS_IO_OK)
+        return false;
+    *id = value ? (SymbolId) (intptr_t) value : SYMBOL_INVALID;
+    return true;
 }
 
 /* Registration is isolate-shared and reachable from parallel worker threads
@@ -417,18 +443,28 @@ SymbolId xr_symbol_register_in_table(XrSymbolTable *table, const char *name) {
         return SYMBOL_INVALID;
 
     xr_rwlock_rdlock(&table->lock);
-    SymbolId existing = symbol_lookup_unlocked(table, name);
+    SymbolId existing = SYMBOL_INVALID;
+    bool found = symbol_lookup_unlocked(table, name, &existing);
     xr_rwlock_rdunlock(&table->lock);
+    if (!found)
+        return SYMBOL_INVALID;
     if (existing != SYMBOL_INVALID)
         return existing;
 
     xr_rwlock_wrlock(&table->lock);
-    existing = symbol_lookup_unlocked(table, name);
+    if (!symbol_lookup_unlocked(table, name, &existing)) {
+        xr_rwlock_wrunlock(&table->lock);
+        return SYMBOL_INVALID;
+    }
     if (existing != SYMBOL_INVALID) {
         xr_rwlock_wrunlock(&table->lock);
         return existing;
     }
 
+    if (table->count >= INT32_MAX) {
+        xr_rwlock_wrunlock(&table->lock);
+        return SYMBOL_INVALID;
+    }
     if (table->count >= table->capacity) {
         if (!expand_capacity(table)) {
             xr_rwlock_wrunlock(&table->lock);
@@ -447,7 +483,8 @@ SymbolId xr_symbol_register_in_table(XrSymbolTable *table, const char *name) {
     }
     memcpy(name_copy, name, name_len + 1);
 
-    if (!xr_hashmap_set(table->name_to_id, name_copy, (void *) (intptr_t) new_id)) {
+    if (xr_hashmap_owned_set(table->name_to_id, name_copy,
+                             (void *) (intptr_t) new_id) != XR_OS_IO_OK) {
         // Failing to index the name would let a later register() hand out a
         // second id for the same string, breaking symbol identity.
         xr_free(name_copy);
@@ -467,13 +504,14 @@ SymbolId xr_symbol_lookup_in_table(XrSymbolTable *table, const char *name) {
         return SYMBOL_INVALID;
 
     xr_rwlock_rdlock(&table->lock);
-    SymbolId id = symbol_lookup_unlocked(table, name);
+    SymbolId id = SYMBOL_INVALID;
+    (void) symbol_lookup_unlocked(table, name, &id);
     xr_rwlock_rdunlock(&table->lock);
     return id;
 }
 
 const char *xr_symbol_get_name_in_table(XrSymbolTable *table, SymbolId id) {
-    if (!table)
+    if (!table || id <= SYMBOL_INVALID)
         return NULL;
     int index = id - 1;
     xr_rwlock_rdlock(&table->lock);

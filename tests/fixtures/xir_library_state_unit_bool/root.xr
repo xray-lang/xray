@@ -1,0 +1,16 @@
+import "./state" as state
+var own:bool = false
+export fn run()->bool {
+    const n = state.flip()
+    own = n
+    print(n)
+    return n
+}
+export fn ownValue()->bool { return own }
+export fn held() { return state.unitValue() }
+export fn pureWorker()->i64 { return await go state.pure(40) }
+export fn snapshot()->i64 {
+    const value = state.current() ? 1 : 0
+    return await go state.pure(value)
+}
+fn main()->i64 { return 0 }

@@ -8,6 +8,7 @@
  */
 #ifndef XIR_ENUM_GENERIC_FIXTURE_H
 #define XIR_ENUM_GENERIC_FIXTURE_H
+#include "xir_construction_fixture.h"
 #include "xir/xxir_nominal.h"
 #include "xir/xxir_generic.h"
 static XrXirArtifact *enum_generic_checked(const XrXirCompileContext *context, unsigned mode) {
@@ -53,7 +54,7 @@ static XrXirArtifact *enum_generic_checked(const XrXirCompileContext *context, u
         generics[1].arguments = NULL; generics[1].argument_count = 0;
     }
     XrXirArtifact *checked = NULL; XrXirDiagnostic diagnostic = {0};
-    XrXirStatus status = xr_xir_compile_check(context, &built, &checked, &diagnostic);
+    XrXirStatus status = xir_fixture_check(context, &built, &checked, &diagnostic);
     if (mode) CHECK(status != XR_XIR_OK && !checked);
     else { if (status != XR_XIR_OK) fprintf(stderr,"enum generic status %u function %u instruction %u\n",status,diagnostic.function,diagnostic.instruction); CHECK(status == XR_XIR_OK && checked); }
     return checked;

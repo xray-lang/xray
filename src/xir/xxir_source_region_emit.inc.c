@@ -161,6 +161,8 @@ static bool source_region_emit(SourceContext *ctx,XrXirFunction *output,bool sea
         }
         block.first=emitted;emitted+=block.count;emitted_blocks[b]=block;
     }
+    SourceRootValue *root_values = seal && body->count ? source_alloc(ctx,body->count,sizeof(*root_values)) : NULL;
+    if (seal && body->count && !root_values) goto done;
     uint32_t operand_end=0;emitted=0;
     for (uint32_t b=0;b<body->block_count;++b) {
         if (!source_work(ctx,NULL)) goto done;
@@ -186,6 +188,16 @@ static bool source_region_emit(SourceContext *ctx,XrXirFunction *output,bool sea
             uint32_t count=op.op==XR_XIR_RETURN ? output->result!=XR_XIR_UNIT : role.values;
             if (op.op==XR_XIR_SLOT_INIT || op.op==XR_XIR_SLOT_STORE)
                 count=xr_xir_slot_payload_operands(ctx->slots,ctx->slot_count,&op);
+            if (op.op==XR_XIR_CELL_NEW || op.op==XR_XIR_CELL_WRITE || op.op==XR_XIR_CELL_LOCAL_WRITE) {
+                XrXirType cell=op.type;
+                if (op.op!=XR_XIR_CELL_NEW) {
+                    uint32_t id=op.args[0];
+                    if (id>=value_count) goto invalid;
+                    cell=id<parameters ? ctx->functions[ctx->function].parameters[id] :
+                        body->recipes[id-parameters].instruction.type;
+                }
+                count=xr_xir_cell_payload_operands(&ctx->types,cell,op.op);
+            }
             for (uint32_t a=0;a<count;++a) {
                 if (!source_work(ctx,NULL)) goto done;
                 if (!source_region_value(map,value_count,op.args[a],&op.args[a],seal)) goto invalid;
@@ -204,6 +216,11 @@ static bool source_region_emit(SourceContext *ctx,XrXirFunction *output,bool sea
             if (index>=body->count || !source_region_id(map,value_count,body->recipes[index].value,&value)) goto invalid;
             op.immediate=value-parameters+(frontier ? 1u : 0u);
         }
+        if (root_values) {
+            root_values[emitted] = body->recipes[i].root;
+            if (root_values[emitted].peer != UINT32_MAX &&
+                !source_region_id(map,value_count,root_values[emitted].peer,&root_values[emitted].peer)) goto invalid;
+        }
         instructions[emitted++]=op;
       }
     }
@@ -212,7 +229,11 @@ static bool source_region_emit(SourceContext *ctx,XrXirFunction *output,bool sea
     output->blocks=emitted_blocks;output->block_count=body->block_count;
     output->operands=operands;output->operand_count=body->operand_count;
     if (seal) {
-        body->region_sealed=true;
+        for (SourceRootQuery *query = ctx->root_queries; query; query = query->next) {
+            if (!source_work(ctx,NULL)) goto done;
+            if (query->function == ctx->function && !source_region_id(map,value_count,query->value,&query->value)) goto invalid;
+        }
+        body->region_sealed=true; body->root_values=root_values;
         while (body->recipe_storage) {
             SourceRecipeStorage *storage=body->recipe_storage;body->recipe_storage=storage->next;
             source_release_private(storage);

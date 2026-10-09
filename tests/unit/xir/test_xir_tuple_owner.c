@@ -6,6 +6,7 @@
  *
  * test_xir_tuple_owner.c - Owned ordered type metadata and Checked admission
  */
+#include "xir_construction_fixture.h"
 #include "xir/xxir.h"
 #include "xir/xxir_checked.h"
 #include "xir/xxir_types.h"
@@ -22,6 +23,7 @@
 #include "tuple_24_62.inc.c"
 #include "tuple_24_63.inc.c"
 #include "tuple_25_65.inc.c"
+#include "xir_tuple72_golden.h"
 #include "xir/xxir_effect_terms.inc.c"
 static XrXirType constructed(uint32_t n) {return (XrXirType)(XR_XIR_CONSTRUCTED_TYPE_BASE+n);}
 static XrXirType parameter(uint32_t n) {return (XrXirType)(XR_XIR_TYPE_PARAMETER_BASE+n);}
@@ -54,9 +56,9 @@ static void fixture(TupleFixture *f) {
 static XrXirStatus pipeline(const XrXirCompileContext *c) {
     TupleFixture f;fixture(&f);XrXirArtifact *checked=NULL,*decoded=NULL,*lowered=NULL;
     XrXirCheckedPacket packet={0};XrXirTypes *clone=NULL;
-    XrXirStatus status=xr_xir_compile_check(c,&f.module,&checked,NULL);
+    XrXirStatus status=xir_fixture_check(c, &f.module, &checked, NULL);
     if(status==XR_XIR_OK)status=xr_xir_compile_checked_write(checked,&packet,NULL);
-    if(status==XR_XIR_OK)CHECK(packet.length==sizeof(tuple_25_65) && !memcmp(packet.bytes,tuple_25_65,packet.length));
+    if(status==XR_XIR_OK)CHECK(packet.length==sizeof(tuple72_golden) && !memcmp(packet.bytes,tuple72_golden,packet.length));
     if(status==XR_XIR_OK)status=xr_xir_compile_checked_read(c,packet.bytes,packet.length,&decoded,NULL);
     if(status==XR_XIR_OK)status=xr_xir_compile_types_clone(c,xr_xir_compile_artifact_module(decoded)->types,&clone);
     if(status==XR_XIR_OK) {
@@ -81,7 +83,7 @@ static XrXirStatus pipeline(const XrXirCompileContext *c) {
 }
 static void rejection_matrix(void) {
     XrXirCompileContext c=owner_new(caps());uint64_t baseline=stats(&c).live_bytes;TupleFixture f;
-    fixture(&f);CHECK(xr_xir_compile_verify(&c,&f.module,NULL)==XR_XIR_OK);
+    fixture(&f);CHECK(xir_fixture_verify(&c, &f.module, NULL)==XR_XIR_OK);
     for(unsigned i=0;i<18;++i) {
         fixture(&f);
         switch(i) {
@@ -104,7 +106,7 @@ static void rejection_matrix(void) {
         case 16:f.node.kind=XR_XIR_TYPE_CALLABLE;break;
         case 17:f.node.parameter_count=65537;break;
         }
-        CHECK(xr_xir_compile_verify(&c,&f.module,NULL)!=XR_XIR_OK);CHECK(stats(&c).live_bytes==baseline);
+        CHECK(xir_fixture_verify(&c, &f.module, NULL)!=XR_XIR_OK);CHECK(stats(&c).live_bytes==baseline);
     }
     for(unsigned i=0;i<15;++i) {
         fixture(&f);
@@ -125,13 +127,13 @@ static void rejection_matrix(void) {
         case 13:f.ops[1].type=XR_XIR_STRING;break;
         case 14:f.module.stage=(XrXirStage)99;break;
         }
-        CHECK(xr_xir_compile_verify(&c,&f.module,NULL)!=XR_XIR_OK);CHECK(stats(&c).live_bytes==baseline);
+        CHECK(xir_fixture_verify(&c, &f.module, NULL)!=XR_XIR_OK);CHECK(stats(&c).live_bytes==baseline);
     }
     fixture(&f);f.node.parameter_count=1;f.ops[1].args[1]=0;
     f.ops[1].args[0]=0;f.ops[2]=(XrXirInstruction){.op=XR_XIR_TUPLE_FIELD,.type=XR_XIR_UNIT,.args={2}};
     f.ops[3]=(XrXirInstruction){.op=XR_XIR_RETURN};f.block.count=f.function.instruction_count=4;
     f.function.result=XR_XIR_UNIT;f.function.operand_count=0;f.function.operands=NULL;
-    CHECK(xr_xir_compile_verify(&c,&f.module,NULL)==XR_XIR_OK);
+    CHECK(xir_fixture_verify(&c, &f.module, NULL)==XR_XIR_OK);
     fixture(&f);f.fields[1].type=parameter(0);f.node.parameter_span=1;
     CHECK(xr_xir_compile_types_structure_verify(&c,&f.types)==XR_XIR_OK);
     CHECK(xr_xir_compile_type_expression_shape(&c,&f.types,constructed(0),0)==XR_XIR_BAD_TYPE);
@@ -162,8 +164,11 @@ static void old_rejection(void) {
     CHECK(xr_xir_compile_checked_read(&c,tuple_24_62,sizeof(tuple_24_62),&artifact,NULL)==XR_XIR_BAD_STRUCTURE && !artifact);
     CHECK(xr_xir_compile_checked_read(&c,tuple_24_63,sizeof(tuple_24_63),&artifact,NULL)==XR_XIR_BAD_STRUCTURE && !artifact);
     CHECK(xr_xir_compile_checked_read(&c,tuple_25_64,sizeof(tuple_25_64),&artifact,NULL)==XR_XIR_BAD_STRUCTURE && !artifact);
+    CHECK(xr_xir_compile_checked_read(&c,tuple_25_65,sizeof(tuple_25_65),&artifact,NULL)==XR_XIR_BAD_STRUCTURE && !artifact);
+    artifact=(XrXirArtifact *)(uintptr_t)1;
+    CHECK(xr_xir_compile_checked_read(&c,tuple_25_65,sizeof(tuple_25_65),&artifact,NULL)==XR_XIR_BAD_STRUCTURE && artifact==(XrXirArtifact *)(uintptr_t)1);
     CHECK(stats(&c).allocation_count==allocations);owner_free(&c,baseline);
-    puts("complete 23/61, Tuple24/62,24/63 and25/64 packets rejected before allocation PASS");
+    puts("complete 23/61, Tuple24/62,24/63 and25/64,25/65 packets rejected before allocation PASS");
 }
 static void markers(void) {
     TupleFixture f;fixture(&f);XrXirCompileContext c=owner_new(caps());uint64_t baseline=stats(&c).live_bytes;
@@ -184,29 +189,29 @@ static void markers(void) {
 }
 static void wire_rejection(void) {
     XrXirCompileContext c=owner_new(caps());uint64_t baseline=stats(&c).live_bytes;
-    uint8_t bytes[sizeof(tuple_25_65)+4];
+    uint8_t bytes[sizeof(tuple72_golden)+4];
     for(unsigned mode=0;mode<9;++mode) {
-        memcpy(bytes,tuple_25_65,sizeof(tuple_25_65));size_t length=sizeof(tuple_25_65);
-        size_t at=length-24;uint32_t value=0;
+        memcpy(bytes,tuple72_golden,sizeof(tuple72_golden));size_t length=sizeof(tuple72_golden);
+        size_t at=length-28;uint32_t value=0;
         switch(mode) {
-        case 0:at=length-32;value=7;break;
-        case 1:at=length-28;value=1;break;
+        case 0:at=length-36;value=7;break;
+        case 1:at=length-32;value=1;break;
         case 2:value=0;break;
         case 3:value=65537;break;
-        case 4:at=length-16;value=256;break;
-        case 5:at=length-16;value=257;break;
-        case 6:at=length-16;value=255;break;
-        case 7:at=length-16;value=3;break;
-        case 8:at=length-24;value=4;break;
+        case 4:at=length-20;value=256;break;
+        case 5:at=length-20;value=257;break;
+        case 6:at=length-20;value=255;break;
+        case 7:at=length-20;value=3;break;
+        case 8:at=length-28;value=4;break;
         }
         for(unsigned b=0;b<4;++b)bytes[at+b]=(uint8_t)(value>>(8*b));
-        uint8_t image[sizeof(tuple_25_65)];memcpy(image,bytes,32);memcpy(image+32,bytes+64,length-64);
+        uint8_t image[sizeof(tuple72_golden)];memcpy(image,bytes,32);memcpy(image+32,bytes+64,length-64);
         xr_sha256(image,length-32,bytes+32);XrXirArtifact *out=NULL;
         CHECK(xr_xir_compile_checked_read(&c,bytes,length,&out,NULL)!=XR_XIR_OK && !out);
         CHECK(stats(&c).live_bytes==baseline);
     }
-    for(size_t length=64;length<sizeof(tuple_25_65);++length) {
-        XrXirArtifact *out=NULL;CHECK(xr_xir_compile_checked_read(&c,tuple_25_65,length,&out,NULL)==XR_XIR_BAD_STRUCTURE && !out);
+    for(size_t length=64;length<sizeof(tuple72_golden);++length) {
+        XrXirArtifact *out=NULL;CHECK(xr_xir_compile_checked_read(&c,tuple72_golden,length,&out,NULL)==XR_XIR_BAD_STRUCTURE && !out);
     }
     owner_free(&c,baseline);puts("Tuple 9 correctly hashed hostile payloads and every packet truncation rejected PASS");
 }
@@ -219,7 +224,7 @@ static void hidden_tuple_ownership(void) {
         f.ops[1]=(XrXirInstruction){.op=XR_XIR_RETURN,.args={signature}};
         f.block.count=f.function.instruction_count=2;f.function.operand_count=0;f.function.operands=NULL;
         XrXirArtifact *checked=NULL,*lowered=NULL;
-        CHECK(xr_xir_compile_check(&c,&f.module,&checked,NULL)==XR_XIR_OK);
+        CHECK(xir_fixture_check(&c, &f.module, &checked, NULL)==XR_XIR_OK);
         CHECK(xr_xir_compile_lower(checked,&target,&lowered,NULL)==XR_XIR_OK && lowered);
         CHECK(xr_xir_compile_artifact_verify(lowered,NULL)==XR_XIR_OK);
         XrXirTypeArena *arena=NULL;
@@ -232,9 +237,9 @@ static void hidden_tuple_ownership(void) {
         CHECK(owned->nodes[0].parameters[2].type==XR_XIR_STRING);
         xr_xir_compile_type_arena_drop(arena);fixture(&f);
         f.module.stage=XR_XIR_LOWERED;
-        CHECK(xr_xir_compile_verify(&c,&f.module,NULL)==XR_XIR_OK);
+        CHECK(xir_fixture_verify(&c, &f.module, NULL)==XR_XIR_OK);
         checked=NULL;
-        CHECK(xr_xir_compile_check(&c,&f.module,&checked,NULL)==XR_XIR_BAD_STAGE && !checked);
+        CHECK(xir_fixture_check(&c, &f.module, &checked, NULL)==XR_XIR_BAD_STAGE && !checked);
     }
     TupleFixture f;fixture(&f);
     CHECK(xr_xir_compile_class_field_verify(&c,&f.types,constructed(0))==XR_XIR_OK);
@@ -309,7 +314,7 @@ static XrXirStatus all_kinds(const XrXirCompileContext *c) {
     XrXirModule module={.stage=XR_XIR_BUILT,.functions=&function,.function_count=1,.declarations=&declarations,
         .types=&types,.linkage_kind=XR_XIR_LIBRARY};
     XrXirArtifact *checked=NULL,*decoded=NULL;XrXirCheckedPacket packet={0};
-    XrXirStatus status=xr_xir_compile_check(c,&module,&checked,NULL);
+    XrXirStatus status=xir_fixture_check(c, &module, &checked, NULL);
     if(status==XR_XIR_OK)status=xr_xir_compile_checked_write(checked,&packet,NULL);
     if(status==XR_XIR_OK)status=xr_xir_compile_checked_read(c,packet.bytes,packet.length,&decoded,NULL);
     if(status==XR_XIR_OK) {
@@ -350,7 +355,7 @@ static XrXirStatus specialization(const XrXirCompileContext *c) {
     functions[0].instructions=root_ops;functions[0].instruction_count=3;functions[0].operands=root_operands;functions[0].operand_count=4;
     blocks[0].count=3;generics[0].arguments=arguments;generics[0].argument_count=2;
     XrXirModule module={.stage=XR_XIR_BUILT,.functions=functions,.function_count=2,.generics=generics,.types=&types};
-    XrXirArtifact *checked=NULL,*closed=NULL;XrXirStatus status=xr_xir_compile_check(c,&module,&checked,NULL);
+    XrXirArtifact *checked=NULL,*closed=NULL;XrXirStatus status=xir_fixture_check(c, &module, &checked, NULL);
     if(status==XR_XIR_OK)status=xr_xir_compile_specialize(checked,&closed,NULL);
     if(status==XR_XIR_OK) {
         const XrXirModule *m=xr_xir_compile_artifact_module(closed);

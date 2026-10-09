@@ -1,3 +1,4 @@
+#include "xir_construction_fixture.h"
 /*
  * xray - Lightweight typed scripting with native concurrency
  * https://www.xray-lang.org
@@ -13,6 +14,7 @@ static XrXirArtifact *interface_allocation_fixture(const XrXirCompileContext *co
     XrXirType parameter = (XrXirType)XR_XIR_TYPE_PARAMETER_BASE, argument = XR_XIR_I64;
     XrXirTypeNode signature = {0};
     signature.kind = XR_XIR_TYPE_CALLABLE; signature.result = parameter; signature.parameter_span = 1;
+    signature.flags = XR_XIR_CALLABLE_ROOT_UNRESOLVED;
     XrXirInterfaceMethod method = {{"measure",7},(XrXirType)XR_XIR_CONSTRUCTED_TYPE_BASE,0,0,NULL};
     XrXirInterfaceApplication parents[] = {{0,&parameter,1},{0,&argument,1}};
     XrXirInterfaceDeclaration declarations[] = {
@@ -37,7 +39,7 @@ static XrXirArtifact *interface_allocation_fixture(const XrXirCompileContext *co
     XrXirDeclarations program = {modules,2,identities,NULL,0,NULL,0,0,0, NULL};
     XrXirModule module = {XR_XIR_BUILT,functions,3,&program,NULL,&types,NULL, XR_XIR_PROGRAM, NULL};
     XrXirArtifact *checked = NULL;
-    CHECK(xr_xir_compile_check(context,&module,&checked,NULL) == XR_XIR_OK);
+    CHECK(xir_fixture_check(context, &module, &checked, NULL) == XR_XIR_OK);
     return checked;
 }
 static void interface_packet_allocation_failures(void) {
@@ -82,6 +84,7 @@ static void interface_packet_allocation_failures(void) {
     CHECK(xr_xir_compile_artifact_verify(decoded,NULL) == XR_XIR_OK);
     const XrXirInterfaceTable *table = xr_xir_compile_artifact_module(decoded)->types->interfaces;
     CHECK(table && table->count == 3);
+    CHECK(xr_xir_compile_artifact_module(decoded)->types->nodes[0].flags == XR_XIR_CALLABLE_ROOT_UNRESOLVED);
     CHECK(table->declarations[2].parents[0].arguments[0] == XR_XIR_I64);
     CHECK(!memcmp(table->declarations[0].methods[0].name.bytes,"measure",7));
     xr_xir_compile_artifact_free(decoded); decoded=NULL; allocation_compile_owner_drop(&owner); CHECK(!live);

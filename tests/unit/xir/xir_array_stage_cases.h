@@ -11,19 +11,20 @@
  */
 #ifndef XIR_ARRAY_STAGE_CASES_H
 #define XIR_ARRAY_STAGE_CASES_H
+#include "xir_construction_fixture.h"
 #include "xir_array_metadata_fixture.h"
 #include "xir/xxir_operand_roles.h"
 
 static void array_stage_layout(void) {
     XirArrayMetadataFixture f; xir_array_metadata_init(&f);
-    CHECK(xr_xir_compile_verify(&stage_context, &f.module, NULL) == XR_XIR_OK);
+    CHECK(xir_fixture_verify(&stage_context, &f.module, NULL) == XR_XIR_OK);
     CHECK(xr_xir_place_kind(&f.functions[1], 3) == XR_XIR_PLACE_LOCAL);
     CHECK(xr_xir_place_kind(&f.functions[1], 5) == XR_XIR_PLACE_CELL);
     CHECK(xr_xir_place_kind(&f.functions[1], 6) == XR_XIR_PLACE_SLOT);
     CHECK(xr_xir_place_kind(&f.functions[1], UINT32_MAX) == XR_XIR_PLACE_NONE);
     CHECK(xr_xir_place_kind(&f.functions[2], 0) == XR_XIR_PLACE_NONE);
     XrXirArtifact *checked = NULL, *lowered = NULL;
-    CHECK(xr_xir_compile_check(&stage_context, &f.module, &checked, NULL) == XR_XIR_OK);
+    CHECK(xir_fixture_check(&stage_context, &f.module, &checked, NULL) == XR_XIR_OK);
     memset(&f, 0xCC, sizeof(f));
     CHECK(xr_xir_compile_lower(checked, &fixture_target, &lowered, NULL) == XR_XIR_OK);
     const XrXirFunctionLayout *layout = xr_xir_compile_artifact_layout(lowered, 1);
@@ -47,7 +48,7 @@ static void array_stage_layout(void) {
     for (uint64_t frame = 103; frame <= 104; ++frame) {
         xir_array_metadata_init(&f);
         XrXirCompileContext context = stage_context_default(); context.limits.frame_bytes = frame;
-        CHECK(xr_xir_compile_check(&context, &f.module, &checked, NULL) == XR_XIR_OK);
+        CHECK(xir_fixture_check(&context, &f.module, &checked, NULL) == XR_XIR_OK);
         CHECK(xr_xir_compile_artifact_context(checked)->limits.frame_bytes == frame);
         CHECK(xr_xir_compile_lower(checked, &fixture_target, &lowered, NULL) ==
             (frame == 103 ? XR_XIR_BUDGET : XR_XIR_OK));
@@ -94,19 +95,19 @@ static void array_stage_attacks(void) {
         if (attack == 27) f.ops[8].args[1] = UINT32_MAX;
         if (attack == 28) f.ops[2].immediate = 1;
         if (attack == 29) f.init[0].args[0] = 1;
-        XrXirStatus status = xr_xir_compile_verify(&stage_context, &f.module, NULL);
+        XrXirStatus status = xir_fixture_verify(&stage_context, &f.module, NULL);
         if (status == XR_XIR_OK) fprintf(stderr, "array metadata attack accepted: %u\n", attack);
         CHECK(status != XR_XIR_OK);
         XrXirArtifact *artifact = NULL;
-        CHECK(xr_xir_compile_check(&stage_context, &f.module, &artifact, NULL) != XR_XIR_OK && !artifact);
+        CHECK(xir_fixture_check(&stage_context, &f.module, &artifact, NULL) != XR_XIR_OK && !artifact);
     }
     XirArrayMetadataFixture f; xir_array_metadata_init(&f);
     f.operands[2] = 6; /* A mutable slot is independently a writable receiver. */
-    CHECK(xr_xir_compile_verify(&stage_context, &f.module, NULL) == XR_XIR_OK);
+    CHECK(xir_fixture_verify(&stage_context, &f.module, NULL) == XR_XIR_OK);
     f.ops[8].args[0] = 2; /* Ordinary values remain readable snapshots. */
-    CHECK(xr_xir_compile_verify(&stage_context, &f.module, NULL) == XR_XIR_OK);
+    CHECK(xir_fixture_verify(&stage_context, &f.module, NULL) == XR_XIR_OK);
     f.slot.mutable = 0; f.operands[2] = 3;
-    CHECK(xr_xir_compile_verify(&stage_context, &f.module, NULL) == XR_XIR_OK);
+    CHECK(xir_fixture_verify(&stage_context, &f.module, NULL) == XR_XIR_OK);
 }
 
 static void array_phi_place_rejection(void) {
@@ -125,9 +126,9 @@ static void array_phi_place_rejection(void) {
     f.functions[1].blocks = blocks; f.functions[1].block_count = 4;
     f.functions[1].instruction_count = 10; f.functions[1].operand_count = 4;
     f.operands[0] = 1; f.operands[1] = 1; f.operands[2] = 2; f.operands[3] = 1;
-    CHECK(xr_xir_compile_verify(&stage_context, &f.module, NULL) == XR_XIR_OK);
+    CHECK(xir_fixture_verify(&stage_context, &f.module, NULL) == XR_XIR_OK);
     f.operands[1] = 3;
-    CHECK(xr_xir_compile_verify(&stage_context, &f.module, NULL) == XR_XIR_BAD_VALUE);
+    CHECK(xir_fixture_verify(&stage_context, &f.module, NULL) == XR_XIR_BAD_VALUE);
 }
 
 static void array_compact_layout(void) {

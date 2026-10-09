@@ -125,7 +125,7 @@ static bool source_requirement_value(SourceContext *ctx, AstNode *node,
     if (expected && expected->flags & XR_XIR_CALLABLE_NO_SUSPEND) {
         if (!(callable.flags & XR_XIR_CALLABLE_NO_SUSPEND))
             return source_fail(ctx,node,XR_XIR_BAD_TYPE,"qualified reference requires an explicit requirement promise");
-    } else callable.flags = 0;
+    } else callable.flags &= ~XR_XIR_CALLABLE_NO_SUSPEND;
     XrXirType type;
     if (!source_intern_type(ctx,callable,&type)) return false;
     uint32_t function;
@@ -139,7 +139,7 @@ static bool source_requirement_value(SourceContext *ctx, AstNode *node,
     }
     XrXirInstruction op = {XR_XIR_FUNCTION_REF,type,{0},{0},function,{0}};
     return source_type_arguments(ctx,node,arguments,ambient,&op) &&
-        source_query_target_reference(ctx,source_query_range(ctx,node,NULL),
+        source_query_target_token_reference(ctx,node,
             ctx->interface_member_declarations[application.declaration][helper.selected.member],XR_XIR_SOURCE_FUNCTION_VALUE) &&
         source_recipe_group(ctx,op,&request->receiver,1,value);
 }

@@ -38,7 +38,7 @@ static bool source_enum_text(SourceContext *ctx, AstNode *node, SourceValue rece
     uint32_t count = declaration->variant_count;
     if (!count) return source_fail(ctx, node, XR_XIR_BAD_TYPE, "enum identity requires a nonempty enum");
     uint32_t member = ctx->nominal_variants[owner][count + (qualified ? 2 : 1)];
-    if (!source_query_target_reference(ctx, source_query_range(ctx, node, NULL), member,
+    if (!source_query_target_token_reference(ctx,node, member,
         qualified ? XR_XIR_SOURCE_CALL : XR_XIR_SOURCE_READ)) return false;
     SourceValue tag;
     if (!source_recipe_record(ctx, (XrXirInstruction){XR_XIR_ENUM_TAG, XR_XIR_I64, {receiver.id,0}, {0}, 0, {0}}, &tag) ||

@@ -1,0 +1,5 @@
+fn empty() {}
+var stamp:() = empty()
+fn touch(value:ref ()) { value = empty() }
+export fn run()->i64 { touch(ref stamp); return 7 }
+fn main()->i64 { return run() }

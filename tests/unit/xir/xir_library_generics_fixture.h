@@ -1,3 +1,4 @@
+#include "xir_construction_fixture.h"
 /*
  * xray - Lightweight typed scripting with native concurrency
  * https://www.xray-lang.org
@@ -35,7 +36,7 @@ static XrXirStatus generic_library_fixture(const XrXirCompileContext *context,
         .root_module=UINT32_MAX,.entry_function=UINT32_MAX};
     XrXirModule built={.stage=XR_XIR_BUILT,.functions=functions,.function_count=3,
         .declarations=&declarations,.generics=generics,.linkage_kind=XR_XIR_LIBRARY};
-    return xr_xir_compile_check(context,&built,output,NULL);
+    return xir_fixture_check(context, &built, output, NULL);
 }
 
 /* Genuine unsupported families are checked before Catalog admission. */
@@ -62,7 +63,7 @@ static XrXirStatus generic_library_admission_fixture(const XrXirCompileContext *
     XrXirModule built={.stage=XR_XIR_BUILT,.functions=functions,.function_count=2,
         .types=family==2?NULL:&types,.declarations=&declarations,.generics=family==0?NULL:generics,.linkage_kind=XR_XIR_LIBRARY};
     XrXirDiagnostic diagnostic={0};
-    XrXirStatus status=xr_xir_compile_check(context,&built,output,&diagnostic);
+    XrXirStatus status=xir_fixture_check(context, &built, output, &diagnostic);
     fprintf(stderr,"admission family%u status%u function%u block%u instruction%u\n",family,status,diagnostic.function,diagnostic.block,diagnostic.instruction);
     return status;
 }

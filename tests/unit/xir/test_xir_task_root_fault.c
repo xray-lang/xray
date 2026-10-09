@@ -6,6 +6,7 @@
  *
  * test_xir_task_root_fault.c - Completed roots preserve child shutdown faults
  */
+#include "xir_construction_fixture.h"
 #include "xir/xxir_checked.h"
 #include "xir/xxir_vm.h"
 #include <stdio.h>
@@ -38,7 +39,7 @@ static XrXirProgram *root_fault_program(bool panic) {
     }
     XrXirArtifact *checked = NULL, *decoded = NULL, *closed = NULL, *lowered = NULL;
     XrXirCheckedPacket packet = {0}; XrXirDiagnostic diagnostic = {0};
-    CHECK(xr_xir_compile_check(context, &fixture.module, &checked, &diagnostic) == XR_XIR_OK);
+    CHECK(xir_fixture_check(context, &fixture.module, &checked, &diagnostic) == XR_XIR_OK);
     CHECK(xr_xir_compile_checked_write(checked, &packet, &diagnostic) == XR_XIR_OK);
     xr_xir_compile_artifact_free(checked); memset(&fixture, 0xa5, sizeof(fixture));
     CHECK(xr_xir_compile_checked_read(context, packet.bytes, packet.length, &decoded, &diagnostic) == XR_XIR_OK);

@@ -8,6 +8,7 @@
  */
 #ifndef XIR_CLEANUP_INSTANCE_CASES_H
 #define XIR_CLEANUP_INSTANCE_CASES_H
+#include "xir_construction_fixture.h"
 #include "xir/xxir_program.h"
 #include "xir/xxir_instance_value.h"
 typedef struct DrainState { uint32_t pc; XrXirValue values[2]; int64_t panic; } DrainState;
@@ -115,14 +116,14 @@ static XrXirStatus drain_proof(const XrXirCompileContext *context, const XrXirDe
         {"callee",6,parameters,1,XR_XIR_I64,&value_block,1,callee_value,2,NULL,0}};
     XrXirModule built = {XR_XIR_BUILT,functions,4,declarations,NULL,types,NULL, XR_XIR_PROGRAM, NULL};
     XrXirArtifact *checked = NULL;
-    XrXirStatus status = xr_xir_compile_check(context,&built,&checked,NULL);
+    XrXirStatus status = xir_fixture_check(context, &built, &checked, NULL);
     XrXirTarget target = {XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};
     if (status == XR_XIR_OK) status = xr_xir_compile_lower(checked,&target,output,NULL);
     xr_xir_compile_artifact_free(checked); return status;
 }
 static void cleanup_instance_case(bool late_gate, bool malformed) {
     DrainWitness w = {0}; w.late_gate = late_gate; w.malformed = malformed;
-    XrXirTypeNode nodes[2] = {0}; nodes[0].kind = XR_XIR_TYPE_CALLABLE; nodes[0].result = XR_XIR_I64;
+    XrXirTypeNode nodes[2] = {0}; nodes[0].kind = XR_XIR_TYPE_CALLABLE; nodes[0].result = XR_XIR_I64; nodes[0].flags = XR_XIR_CALLABLE_ROOT_UNRESOLVED;
     nodes[1].kind = XR_XIR_TYPE_CELL; nodes[1].element = XR_XIR_I64;
     XrXirTypes types = {nodes,2,NULL, NULL};
     XrXirType parameters[] = {(XrXirType)257,(XrXirType)256};
@@ -180,7 +181,7 @@ typedef struct CleanupCompilerFixture {
 } CleanupCompilerFixture;
 static void cleanup_compiler_fixture(CleanupCompilerFixture *f, bool late) {
     memset(f,0,sizeof(*f)); f->witness.late_gate=late;
-    f->nodes[0].kind=XR_XIR_TYPE_CALLABLE; f->nodes[0].result=XR_XIR_I64;
+    f->nodes[0].kind=XR_XIR_TYPE_CALLABLE; f->nodes[0].result=XR_XIR_I64; f->nodes[0].flags=XR_XIR_CALLABLE_ROOT_UNRESOLVED;
     f->nodes[1].kind=XR_XIR_TYPE_CELL; f->nodes[1].element=XR_XIR_I64;
     f->types=(XrXirTypes){f->nodes,2,NULL,NULL};
     f->parameters[0]=(XrXirType)257; f->parameters[1]=(XrXirType)256;

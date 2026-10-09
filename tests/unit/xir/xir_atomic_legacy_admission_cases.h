@@ -1,3 +1,4 @@
+#include "xir_construction_fixture.h"
 /*
  * xray - Lightweight typed scripting with native concurrency
  * https://www.xray-lang.org
@@ -17,7 +18,7 @@ static void legacy_admission_cases(void) {
             LibraryCompileOwner owner={0};CHECK(library_compile_owner_new(&owner,&library_compile_limits)==XR_XIR_OK);
             char *name=NULL;CHECK(ordering_factory(&owner.context,&name)==XR_XIR_OK);AtomicLegacyFixture fixture;
             AtomicLegacyCase c={mode,mutation,scalars[scalar]};legacy_fixture(&fixture,name,c);
-            XrXirArtifact *out=NULL;XrXirDiagnostic diagnostic={0};XrXirStatus status=xr_xir_compile_check(&owner.context,&fixture.base.module,&out,&diagnostic);
+            XrXirArtifact *out=NULL;XrXirDiagnostic diagnostic={0};XrXirStatus status=xir_fixture_check(&owner.context, &fixture.base.module, &out, &diagnostic);
             XrXirStatus expected=mutation==0?XR_XIR_OK:mutation==2||mutation==5||(mutation==7&&mode==7)?XR_XIR_BAD_STRUCTURE:mutation==4?XR_XIR_BAD_DOMINANCE:XR_XIR_BAD_TYPE;
             if(status!=expected)fprintf(stderr,"legacy m%u scalar%u v%u status%u expected%u f%u b%u i%u\n",mode,scalar,mutation,status,expected,diagnostic.function,diagnostic.block,diagnostic.instruction);
             CHECK(status==expected);if(mutation)CHECK(!out);else CHECK(out);

@@ -1,0 +1,4 @@
+fn bump(value: ref i64) -> i64 { value += 1; return value; }
+fn worker() -> i64 { const callback: fn(ref i64) -> i64 = bump; return 42; }
+export fn run() -> i64 { const task = go worker(); return await task; }
+fn main() -> i64 { return 0; }

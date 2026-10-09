@@ -9,6 +9,7 @@
  * KEY CONCEPT:
  *   READ paths never turn into owned reserve inputs, and decoded shapes reverify.
  */
+#include "xir_construction_fixture.h"
 #include "xir/xxir_checked.h"
 #include "xir/xxir_generic.h"
 #include "xir/xxir_operand_roles.h"
@@ -20,8 +21,8 @@
 #include "xir_array_metadata_fixture.h"
 _Static_assert(XR_XIR_ARRAY_CAPACITY == 149 && XR_XIR_ARRAY_WITH_CAPACITY == 150 &&
     XR_XIR_ARRAY_RESERVE == 151, "Capacity operation ordinals are fixed");
-_Static_assert(XR_XIR_OP_COUNT == 152 && XR_XIR_CHECKED_SCHEMA == 25 &&
-    XR_XIR_CHECKED_CONTRACT == 69, "Capacity operation framing is fixed");
+_Static_assert(XR_XIR_OP_COUNT == 152 && XR_XIR_CHECKED_SCHEMA == 27 &&
+    XR_XIR_CHECKED_CONTRACT == 72, "Capacity operation framing is fixed");
 
 static void capacity_checked_fixture(XirArrayMetadataFixture *f) {
     xir_array_metadata_init(f); XrXirType array = (XrXirType)256, cell = (XrXirType)257;
@@ -57,9 +58,9 @@ static void capacity_checked_attacks(const XrXirCompileContext *context) {
         if (attack == 12) f.ops[6].immediate = -1;
         if (attack == 13) f.ops[0].type = XR_XIR_I32;
         if (attack == 14) f.ops[7].args[1] = 3;
-        CHECK(xr_xir_compile_verify(context, &f.module, NULL) != XR_XIR_OK);
+        CHECK(xir_fixture_verify(context, &f.module, NULL) != XR_XIR_OK);
         XrXirArtifact *out = NULL;
-        CHECK(xr_xir_compile_check(context, &f.module, &out, NULL) != XR_XIR_OK && !out);
+        CHECK(xir_fixture_check(context, &f.module, &out, NULL) != XR_XIR_OK && !out);
     }
 }
 int main(void) {
@@ -69,10 +70,10 @@ int main(void) {
     CHECK(xr_xir_operand_role(XR_XIR_ARRAY_RESERVE, 0) == XR_XIR_OPERAND_VALUE);
     CHECK(xr_xir_operand_role(XR_XIR_ARRAY_RESERVE, 1) == XR_XIR_OPERAND_VALUE);
     XirArrayMetadataFixture f; capacity_checked_fixture(&f);
-    CHECK(xr_xir_compile_verify(&owner.context, &f.module, NULL) == XR_XIR_OK);
+    CHECK(xir_fixture_verify(&owner.context, &f.module, NULL) == XR_XIR_OK);
     XrXirArtifact *checked = NULL, *read = NULL, *specialized = NULL, *lowered = NULL;
     XrXirCheckedPacket packet = {0};
-    CHECK(xr_xir_compile_check(&owner.context, &f.module, &checked, NULL) == XR_XIR_OK);
+    CHECK(xir_fixture_check(&owner.context, &f.module, &checked, NULL) == XR_XIR_OK);
     memset(&f, 0xCC, sizeof(f));
     CHECK(xr_xir_compile_checked_write(checked, &packet, NULL) == XR_XIR_OK);
     xr_xir_compile_artifact_free(checked);

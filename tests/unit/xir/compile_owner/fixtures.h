@@ -6,6 +6,7 @@
  *
  * fixtures.h - Borrowed programs with independent nominal and interface authority
  */
+#include "../xir_construction_fixture.h"
 #include "xir/xxir_nominal.h"
 static XrXirStatus generic_built(const XrXirCompileContext *context, XrXirArtifact **output) {
     const XrXirType t = (XrXirType) XR_XIR_TYPE_PARAMETER_BASE;
@@ -28,7 +29,7 @@ static XrXirStatus generic_built(const XrXirCompileContext *context, XrXirArtifa
     };
     const XrXirGeneric generics[] = {{NULL, 0, types, 3, NULL}, {&sendable, 1, NULL, 0, NULL}};
     const XrXirModule built = {XR_XIR_BUILT, functions, 2, NULL, generics, NULL, NULL, XR_XIR_PROGRAM, NULL};
-    return xr_xir_compile_check(context, &built, output, NULL);
+    return xir_fixture_check(context, &built, output, NULL);
 }
 static XrXirStatus nominal_built(const XrXirCompileContext *context, XrXirArtifact **output) {
     XrXirType t = (XrXirType) XR_XIR_TYPE_PARAMETER_BASE;
@@ -77,7 +78,7 @@ static XrXirStatus nominal_built(const XrXirCompileContext *context, XrXirArtifa
     XrXirLiteral literal = {"generic",7};
     XrXirDeclarations declarations = {&source, 1, identities, NULL, 0, &literal, 1, 0, 0, NULL};
     XrXirModule built = {XR_XIR_BUILT, functions, 4, &declarations, generics, &types, NULL, XR_XIR_PROGRAM, NULL};
-    return xr_xir_compile_check(context, &built, output, NULL);
+    return xir_fixture_check(context, &built, output, NULL);
 }
 
 #include "xir/xxir_implementation.h"
@@ -86,6 +87,7 @@ static XrXirStatus implementation_built(const XrXirCompileContext *context, XrXi
     XrXirTypeNode nodes[2] = {0};
     nodes[0].kind = XR_XIR_TYPE_NOMINAL;
     nodes[1].kind = XR_XIR_TYPE_CALLABLE;
+    nodes[1].flags = XR_XIR_CALLABLE_ROOT_UNRESOLVED;
     nodes[1].result = (XrXirType)XR_XIR_TYPE_PARAMETER_BASE; nodes[1].parameter_span = 1;
     XrXirNominalDeclaration nominal = {{"alpha",5},{"Meter",5},1,NULL,0,NULL,0,XR_XIR_NOMINAL_STRUCT,NULL,0, 0,{0}};
     XrXirNominalTable nominals = {&nominal,1,NULL};
@@ -111,7 +113,7 @@ static XrXirStatus implementation_built(const XrXirCompileContext *context, XrXi
     XrXirImplementationTable table = {&implementation,1};
     XrXirDeclarations declarations = {&source_module,1,identities,NULL,0,NULL,0,0,0,&table};
     XrXirModule built = {XR_XIR_BUILT,functions,3,&declarations,NULL,&types,NULL, XR_XIR_PROGRAM, NULL};
-    return xr_xir_compile_check(context,&built,output,NULL);
+    return xir_fixture_check(context, &built, output, NULL);
 }
 
 static XrXirStatus generic_error_built(const XrXirCompileContext *context, XrXirArtifact **output) {
@@ -147,5 +149,5 @@ static XrXirStatus generic_error_built(const XrXirCompileContext *context, XrXir
     XrXirGeneric generics[] = {{0},{NULL,0,&concrete,1, NULL},{&function_constraint,1,NULL,0, NULL},{0}};
     XrXirModule built = {XR_XIR_BUILT,functions,4,&declarations,generics,&types,NULL, XR_XIR_PROGRAM, NULL};
     make[1] = (XrXirInstruction){XR_XIR_THROW,XR_XIR_UNIT,{1},{0},0,{0}};
-    return xr_xir_compile_check(context,&built,output,NULL);
+    return xir_fixture_check(context, &built, output, NULL);
 }

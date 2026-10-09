@@ -34,6 +34,7 @@ typedef struct XrParamNode {
     int line;                       // Line number (1-indexed)
     int column;                     // Column number (1-indexed, for LSP)
     XrParamMode passing_mode;       // read / ref / move parameter contract
+    XrNameSpan mode_span;           // Exact explicit mode token; zero for READ
     XrTypeRef *type;                // Type annotation (can be NULL)
     AstNode *default_value;         // Default value expression (can be NULL)
     XrDestructurePattern *pattern;  // Destructure pattern (can be NULL)
@@ -113,6 +114,7 @@ typedef struct InterfaceMethodNode {
     int attr_count;
     XrGenericParam **type_params;  // Method-local generic type parameters (with constraints)
     int type_param_count;
+    XrNameSpan receiver_mode_span;
     XrParamMode receiver_mode;  // read / ref / move receiver contract
 } InterfaceMethodNode;
 
@@ -175,6 +177,7 @@ typedef struct MethodDeclNode {
     bool is_setter;
     bool is_static_constructor;
     bool is_variadic;
+    XrNameSpan receiver_mode_span;
     XrParamMode receiver_mode;
     XrAttribute **attributes;
     int attr_count;

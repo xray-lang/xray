@@ -107,6 +107,7 @@ static void constructed_facts(const XrXirCompileContext *context, const XrXirSou
     CHECK(view->types && view->types->nodes);
     CHECK(xr_xir_compile_types_structure_verify(context, view->types) == XR_XIR_OK);
     unsigned generic_cells = 0, scalar_cells = 0, callable_cells = 0;
+    unsigned unresolved_cells = 0, inference_cells = 0;
     for (uint32_t i = 0; i < view->types->count; ++i) {
         const XrXirTypeNode *node = &view->types->nodes[i];
         XrXirType type = (XrXirType) (XR_XIR_CONSTRUCTED_TYPE_BASE + i);
@@ -127,9 +128,19 @@ static void constructed_facts(const XrXirCompileContext *context, const XrXirSou
         } else {
             CHECK(xr_xir_type_is_callable(view->types, node->element));
             CHECK((uint32_t) node->element < (uint32_t) type); ++callable_cells;
+            const XrXirTypeNode *element = xr_xir_callable_signature(view->types, node->element);
+            CHECK(element->result == XR_XIR_I64 && element->parameter_count == 1 &&
+                element->parameters[0].type == XR_XIR_I64 && !element->parameters[0].mode);
+            if (element->flags == XR_XIR_CALLABLE_ROOT_UNRESOLVED) ++unresolved_cells;
+            else { CHECK(element->flags == XR_XIR_CALLABLE_ROOT_NONE); ++inference_cells; }
         }
     }
-    CHECK(generic_cells == 1 && scalar_cells == 1 && callable_cells == 1);
+    CHECK(generic_cells == 1 && scalar_cells == 1 && callable_cells == 2);
+    CHECK(unresolved_cells == 1 && inference_cells == 1);
+    const XrXirSourceDeclaration *fixed = declaration(view, "callableCell", 0); CHECK(fixed);
+    CHECK(fixed->parameter_count == 1 && fixed->parameters[0].known);
+    const XrXirTypeNode *parameter = xr_xir_callable_signature(view->types, fixed->parameters[0].type);
+    CHECK(parameter && parameter->flags == XR_XIR_CALLABLE_ROOT_UNRESOLVED);
     const char *owners[] = {"mutableCapture", "mutableOther"};
     for (unsigned i = 0; i < 2; ++i) {
         const XrXirSourceDeclaration *owner = declaration(view, owners[i], 0); CHECK(owner);
@@ -235,13 +246,13 @@ static void publication_copy_facts(const XrXirSourceView *view, const char *name
         callable->parameters && callable->parameters[0].type == XR_XIR_I64 && callable->result == XR_XIR_I64);
     CHECK(references(view, local->id, local->id) == 1 && references(view, identity->id, identity->id) == 1);
 }
-static XrCompileResourceStats publication_copy_probe(const XrXirSourceView *view, const char *name,
+static XrCompileResourceStats publication_copy_probe(const XrXirSourceView *view, const XrXirConstruction *construction, const char *name,
     unsigned mode, uint64_t allowance, XrXirStatus expected) {
     size_t physical_count = stage_physical_count, physical_bytes = stage_physical_bytes;
     XrXirCompileContext context = publication_copy_context(mode, allowance);
     XrCompileResourceStats baseline = stage_stats(&context);
     XrXirSourceSnapshot *copy = NULL;
-    XrXirStatus status = xr_xir_compile_source_snapshot_copy(&context, view, &copy);
+    XrXirStatus status = xr_xir_compile_source_snapshot_copy_v2(&context, view, construction, &copy);
     CHECK(status == expected);
     XrCompileResourceStats used = stage_stats(&context);
     CHECK(used.allocated_bytes >= baseline.allocated_bytes && used.work >= baseline.work &&
@@ -280,17 +291,17 @@ static void publication_copy_budgets(const XrXirSourceRequest *request, const ch
     xr_compile_resources_release(producer.context.resources); producer = (SourceFixtureOwner){0};
     const XrXirSourceView *view = xr_xir_compile_source_snapshot_view(result.snapshot);
     publication_copy_facts(view, name);
-    XrCompileResourceStats measured = publication_copy_probe(view, name, 0,
+    XrCompileResourceStats measured = publication_copy_probe(view, xr_xir_compile_source_snapshot_construction(result.snapshot), name, 0,
         STAGE_ALLOCATED_BYTES - stage_owner_baseline.allocated_bytes, XR_XIR_OK);
     uint64_t allocated = measured.allocated_bytes - stage_owner_baseline.allocated_bytes;
     uint64_t work = measured.work - stage_owner_baseline.work;
     CHECK(allocated && work);
     for (unsigned mode = 0; mode < 2; ++mode) {
         uint64_t required = mode ? work : allocated;
-        XrCompileResourceStats exact = publication_copy_probe(view, name, mode, required, XR_XIR_OK);
+        XrCompileResourceStats exact = publication_copy_probe(view, xr_xir_compile_source_snapshot_construction(result.snapshot), name, mode, required, XR_XIR_OK);
         CHECK((mode ? exact.work - stage_owner_baseline.work :
             exact.allocated_bytes - stage_owner_baseline.allocated_bytes) == required);
-        publication_copy_probe(view, name, mode, required - 1, XR_XIR_BUDGET);
+        publication_copy_probe(view, xr_xir_compile_source_snapshot_construction(result.snapshot), name, mode, required - 1, XR_XIR_BUDGET);
         fprintf(stderr, "snapshot-copy boundary mode=%u name=%zu fail=%llu pass=%llu\n", mode, strlen(name),
             (unsigned long long)(required - 1), (unsigned long long)required);
     }
@@ -298,7 +309,7 @@ static void publication_copy_budgets(const XrXirSourceRequest *request, const ch
     XrXirCompileContext escaped_context = publication_copy_context(0,
         STAGE_ALLOCATED_BYTES - stage_owner_baseline.allocated_bytes);
     XrXirSourceSnapshot *escaped = NULL;
-    CHECK(xr_xir_compile_source_snapshot_copy(&escaped_context, view, &escaped) == XR_XIR_OK && escaped);
+    CHECK(xr_xir_compile_source_snapshot_copy_v2(&escaped_context, view, xr_xir_compile_source_snapshot_construction(result.snapshot), &escaped) == XR_XIR_OK && escaped);
     xr_compile_resources_release(escaped_context.resources); escaped_context.resources = NULL;
     xr_xir_compile_source_result_free(&result);
     publication_copy_facts(xr_xir_compile_source_snapshot_view(escaped), name);
@@ -551,10 +562,10 @@ static void nominal_query_boundary(const XrXirCompileContext *context) {
     XrXirSourceView view = {0}; view.types = &types;
     XrXirCompileContext original = *context; XrCompileResourceStats before = stage_stats(context);
     XrXirSourceSnapshot *snapshot = (XrXirSourceSnapshot *) (uintptr_t) 1;
-    CHECK(xr_xir_compile_source_snapshot_copy(context, &view, &snapshot) == XR_XIR_BAD_STRUCTURE &&
+    CHECK(xr_xir_compile_source_snapshot_copy_v2(context, &view, NULL, &snapshot) == XR_XIR_BAD_STRUCTURE &&
         snapshot == (XrXirSourceSnapshot *)(uintptr_t)1);
     snapshot = NULL;
-    CHECK(xr_xir_compile_source_snapshot_copy(context, &view, &snapshot) == XR_XIR_BAD_STAGE && !snapshot);
+    CHECK(xr_xir_compile_source_snapshot_copy_v2(context, &view, NULL, &snapshot) == XR_XIR_BAD_STAGE && !snapshot);
     XrCompileResourceStats after = stage_stats(context);
     CHECK(after.work == before.work + 1 && after.allocated_bytes == before.allocated_bytes && after.live_bytes == before.live_bytes);
     CHECK(!memcmp(context, &original, sizeof(original)));
@@ -921,6 +932,7 @@ static void unreachable_pattern_facts(XrXirSourceRequest *request) {
     CHECK(facts==1); xr_xir_compile_source_result_free(&result);
 }
 #include "xir_source_interface_cases.h"
+#include "xir_source_core_syntax_cases.h"
 #include "xir_source_witness_cases.h"
 #include "xir_source_witness_inheritance_cases.h"
 #include "xir_source_enum_witness_cases.h"
@@ -951,7 +963,8 @@ static void query_next_scope(XrXirSourceRequest *request, XrCompilerSession **se
     CHECK(xr_compile_session_new(stage_context.resources, session) == XR_COMPILER_SESSION_OK);
     request->session = *session;
 }
-int main(void) {
+int main(int argc, char **argv) {
+    CHECK(argc == 1 || (argc == 2 && (!strcmp(argv[1], "--interface-name-spans") || !strcmp(argv[1], "--core-syntax"))));
     stage_context = stage_context_default(); generic_storage_cases();
     nominal_query_boundary(&stage_context);
     char directory[XR_TEST_PATH_MAX] = "xir-source-query-XXXXXX", absolute[XR_TEST_PATH_MAX];
@@ -964,6 +977,15 @@ int main(void) {
     CHECK(xr_compile_session_new(stage_context.resources, &session) == XR_COMPILER_SESSION_OK);
     XrModuleIdentityAuthority authority = {XR_MODULE_IDENTITY_SCRIPT, NULL, absolute};
     XrXirSourceRequest request = {session, root, &authority, &stage_context, NULL, NULL, XR_XIR_PROGRAM, NULL};
+    if (argc == 2) {
+        if (!strcmp(argv[1], "--core-syntax")) source_core_syntax_facts(&request);
+        else source_interface_name_spans(&request);
+        xr_compile_session_free(session);
+        CHECK(xr_test_unlink(root) == 0 && xr_test_unlink(library) == 0 && xr_test_rmdir(directory) == 0);
+        stage_contexts_free();
+        puts("Owned syntax facts survive producer destruction with complete module and declaration identities");
+        return 0;
+    }
     query_next_scope(&request, &session);
     source_parameter_default_cases(&request);
     query_next_scope(&request, &session);

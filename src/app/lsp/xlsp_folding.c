@@ -1,112 +1,34 @@
-/*
- * xray - Lightweight typed scripting with native concurrency
- * https://www.xray-lang.org
- *
- * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
- * Licensed under the MIT License
- *
- * xlsp_folding.c - Folding range support
- */
-
+/* Copyright (c) 2026 Xinglei Xu. MIT License. */
 #include "xlsp_folding.h"
-#include "../../frontend/parser/xast_nodes.h"
-
-// Emit a folding range using the node's own span (set by the parser).
-// Nodes with an unset end (end_line == 0) are silently skipped — parsers
-// guarantee spans for every folding-capable construct, so an unset end
-// signals an incomplete parse where folding is not meaningful anyway.
-#define ADD_NODE_FOLD(ranges, start_line, node, kind)                                              \
-    do {                                                                                           \
-        AstNode *_n = (node);                                                                      \
-        if (_n && _n->end_line > 0 && _n->end_line - 1 > (start_line)) {                           \
-            XrJsonValue *_range = xjson_new_object();                                              \
-            xjson_object_set(_range, "startLine", xjson_new_number(start_line));                   \
-            xjson_object_set(_range, "endLine", xjson_new_number(_n->end_line - 1));               \
-            xjson_object_set(_range, "kind", xjson_new_string(kind));                              \
-            xjson_array_push((ranges), _range);                                                    \
-        }                                                                                          \
-    } while (0)
-
-static void collect_folding_ranges(AstNode *node, XrJsonValue *ranges) {
-    if (!node)
-        return;
-
-    switch (node->type) {
-        case AST_PROGRAM:
-            for (int i = 0; i < node->as.program.count; i++) {
-                collect_folding_ranges(node->as.program.statements[i], ranges);
-            }
-            break;
-        case AST_FUNCTION_DECL:
-            if (node->as.function_decl.body) {
-                ADD_NODE_FOLD(ranges, node->line - 1, node, "region");
-                collect_folding_ranges(node->as.function_decl.body, ranges);
-            }
-            break;
-        case AST_CLASS_DECL:
-        case AST_STRUCT_DECL:
-        case AST_UNION_DECL:
-            ADD_NODE_FOLD(ranges, node->line - 1, node, "region");
-            for (int i = 0; i < node->as.class_decl.method_count; i++) {
-                collect_folding_ranges(node->as.class_decl.methods[i], ranges);
-            }
-            break;
-        case AST_BLOCK:
-            for (int i = 0; i < node->as.block.count; i++) {
-                collect_folding_ranges(node->as.block.statements[i], ranges);
-            }
-            break;
-        case AST_IF_STMT:
-            ADD_NODE_FOLD(ranges, node->line - 1, node, "region");
-            collect_folding_ranges(node->as.if_stmt.then_branch, ranges);
-            collect_folding_ranges(node->as.if_stmt.else_branch, ranges);
-            break;
-        case AST_WHILE_STMT:
-            ADD_NODE_FOLD(ranges, node->line - 1, node, "region");
-            collect_folding_ranges(node->as.while_stmt.body, ranges);
-            break;
-        case AST_FOR_STMT:
-            ADD_NODE_FOLD(ranges, node->line - 1, node, "region");
-            collect_folding_ranges(node->as.for_stmt.body, ranges);
-            break;
-        case AST_TRY_CATCH:
-            ADD_NODE_FOLD(ranges, node->line - 1, node, "region");
-            collect_folding_ranges(node->as.try_catch.try_body, ranges);
-            for (int ci = 0; ci < node->as.try_catch.catch_count; ci++) {
-                XrCatchClause *cc = node->as.try_catch.catch_clauses[ci];
-                if (cc)
-                    collect_folding_ranges(cc->body, ranges);
-            }
-            break;
-        case AST_MATCH_EXPR:
-            ADD_NODE_FOLD(ranges, node->line - 1, node, "region");
-            for (int i = 0; i < node->as.match_expr.arm_count; i++) {
-                collect_folding_ranges(node->as.match_expr.arms[i], ranges);
-            }
-            break;
-        default:
-            break;
+#include "xlsp_source_syntax.h"
+#include "../cli/xcli_canonical_source.h"
+#include <string.h>
+XrJsonValue *xlsp_handle_folding_range(XrLspServer *server,XrJsonValue *params) {
+    if(!server)return NULL;
+    server->source_failure.stage=9;server->source_failure.status=XR_XIR_BAD_STRUCTURE;
+    XrJsonValue *document=xjson_get_object(params,"textDocument"),*uri=xjson_get(document,"uri");
+    if(!uri||uri->type!=XR_JSON_STRING||!uri->as.string||memchr(uri->as.string,0,uri->string_len))return NULL;
+    XrLspDocument *doc=xlsp_document_get(server,uri->as.string);
+    if(!doc||doc->server!=server||!doc->content)return NULL;
+    XrCompileResourceLimits limits=xr_cli_compile_default_resource_limits();
+    XrCompileResources *resources=NULL;XrCompilerSession *session=NULL;XlspSyntaxSnapshot *fresh=NULL;
+    XrJsonValue *result=NULL;XrXirStatus status=XR_XIR_OK;
+    XrCompileResourceStatus created=xr_compile_resources_new(&limits,&resources);
+    if(created!=XR_COMPILE_RESOURCE_OK) {status=created==XR_COMPILE_RESOURCE_BUDGET?XR_XIR_BUDGET:XR_XIR_OUT_OF_MEMORY;goto done;}
+    XrCompilerSessionStatus opened=xr_compile_session_new(resources,&session);
+    if(opened!=XR_COMPILER_SESSION_OK) {status=opened==XR_COMPILER_SESSION_BUDGET?XR_XIR_BUDGET:XR_XIR_OUT_OF_MEMORY;goto done;}
+    XlspSourceDocument input={uri->as.string,doc->content,uri->string_len,doc->length,doc->version};
+    XrParseStatus parsed=xlsp_source_syntax_build(session,&input,&fresh);
+    if(parsed!=XR_PARSE_OK&&parsed!=XR_PARSE_RECOVERED) {
+        status=parsed==XR_PARSE_BUDGET?XR_XIR_BUDGET:parsed==XR_PARSE_OUT_OF_MEMORY?XR_XIR_OUT_OF_MEMORY:XR_XIR_BAD_STRUCTURE;goto done;
     }
-}
-
-#undef ADD_NODE_FOLD
-
-XrJsonValue *xlsp_handle_folding_range(XrLspServer *server, XrJsonValue *params) {
-    XrJsonValue *textDocument = xjson_get_object(params, "textDocument");
-    if (!textDocument)
-        return xjson_new_array();
-
-    const char *uri = xjson_get_string(textDocument, "uri");
-    XrLspDocument *doc = xlsp_document_get(server, uri);
-    if (!doc)
-        return xjson_new_array();
-
-    XrJsonValue *ranges = xjson_new_array();
-
-    if (!doc->ast)
-        return ranges;
-
-    collect_folding_ranges(doc->ast, ranges);
-
-    return ranges;
+    status=xlsp_source_syntax_folding_json(fresh,&result);
+    if(status==XR_XIR_OK) {
+        XlspSyntaxSnapshot *old=doc->syntax_snapshot;doc->syntax_snapshot=fresh;fresh=NULL;
+        xlsp_source_syntax_free(old);server->source_failure.stage=0;
+    }
+done:
+    server->source_failure.status=(unsigned)status;
+    xlsp_source_syntax_free(fresh);xr_compile_session_free(session);xr_compile_resources_release(resources);
+    return result;
 }

@@ -14,11 +14,17 @@
 #include "xxir_interface.h"
 #include "xxir_implementation.h"
 #include "xxir_compile_memory.h"
+#include "xxir_internal.h"
 #include <string.h>
 typedef struct SourceQueryMemory { struct SourceQueryMemory *next; } SourceQueryMemory;
 struct XrXirSourceSnapshot {
     XrXirCompileContext context;
     XrXirSourceView view;
+    XrXirConstruction *construction;
+    XrXirSourceSyntaxView syntax;
+    bool syntax_ready;
+    XrXirSourceDependencies dependencies;
+    bool dependencies_ready;
     SourceQueryMemory *memory;
 };
 typedef struct SourceQueryCopy {
@@ -270,15 +276,16 @@ static void query_types(SourceQueryCopy *copy, const XrXirTypes *source) {
             nodes[i].nominal.field_count, sizeof(*nodes[i].nominal.fields));
     }
 }
-XR_FUNC XrXirStatus xr_xir_compile_source_snapshot_copy(const XrXirCompileContext *context,
-    const XrXirSourceView *view, XrXirSourceSnapshot **output) {
+XR_FUNC XrXirStatus xr_xir_compile_source_snapshot_copy_v2(const XrXirCompileContext *context,
+    const XrXirSourceView *view, const XrXirConstruction *construction, XrXirSourceSnapshot **output) {
     if (!view || !xir_compile_context_valid(context) || !output || *output) return XR_XIR_BAD_STRUCTURE;
     if (!xir_compile_work(context, 1)) return XR_XIR_BUDGET;
     if ((view->module_count && !view->modules) || (view->declaration_count && !view->declarations) ||
         (view->reference_count && !view->references) || (view->expression_count && !view->expressions) ||
         (view->types && view->types->count && !view->types->nodes)) return XR_XIR_BAD_STRUCTURE;
     if (view->types && view->types->nominals && view->types->nominals->identities) return XR_XIR_BAD_STAGE;
-    XrXirStatus status = XR_XIR_OK;
+    XrXirStatus status = xir_construction_shape(context, view->types, construction);
+    if (status != XR_XIR_OK) return status;
     XrXirSourceSnapshot *snapshot = xir_compile_calloc(context, 1, sizeof(*snapshot), &status);
     if (!snapshot) return status;
     snapshot->context = *context;
@@ -288,14 +295,20 @@ XR_FUNC XrXirStatus xr_xir_compile_source_snapshot_copy(const XrXirCompileContex
     query_implementations(&copy, view->implementations);
     snapshot->view.references = query_copy(&copy, view->references, view->reference_count, sizeof(*view->references));
     snapshot->view.expressions = query_copy(&copy, view->expressions, view->expression_count, sizeof(*view->expressions));
+    if (copy.status == XR_XIR_OK) copy.status = xir_construction_clone(context,
+        snapshot->view.types, construction, &snapshot->construction);
     if (copy.status != XR_XIR_OK) { xr_xir_compile_source_snapshot_free(snapshot); return copy.status; }
     *output = snapshot; return XR_XIR_OK;
 }
 XR_FUNC const XrXirSourceView *xr_xir_compile_source_snapshot_view(const XrXirSourceSnapshot *snapshot) {
     return snapshot ? &snapshot->view : NULL;
 }
+XR_FUNC const XrXirConstruction *xr_xir_compile_source_snapshot_construction(const XrXirSourceSnapshot *snapshot) {
+    return snapshot ? snapshot->construction : NULL;
+}
 XR_FUNC void xr_xir_compile_source_snapshot_free(XrXirSourceSnapshot *snapshot) {
     if (!snapshot) return;
+    xr_xir_compile_construction_free(snapshot->construction);
     while (snapshot->memory) {
         SourceQueryMemory *next = snapshot->memory->next;
         xr_compile_resources_free(snapshot->memory); snapshot->memory = next;
@@ -307,3 +320,7 @@ XR_FUNC void xr_xir_compile_source_result_free(XrXirSourceResult *result) {
     xr_xir_compile_artifact_free(result->checked); xr_xir_compile_source_snapshot_free(result->snapshot);
     memset(result, 0, sizeof(*result));
 }
+
+#include "xxir_source_syntax_owner.inc.c"
+
+#include "xxir_source_dependencies_owner.inc.c"

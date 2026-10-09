@@ -25,8 +25,7 @@ static XrXirStatus preparation_pipeline(const XrXirCompileContext *context,
     const char *root, const char *entry, XrXirArtifact **output, unsigned *stage) {
     size_t first_attempt = effects_compile_attempts;
     memset(preparation_stage_offsets,0,sizeof(preparation_stage_offsets));
-    XrXirLibraryInput input = {{XR_MODULE_IDENTITY_STDLIB,"io",root},"io/output.xr",
-        xir_native_cache_registry.checked.bytes,xir_native_cache_registry.checked.length,{0}};
+    XrXirLibraryInput input = {xir_native_cache_registry.checked.bytes,xir_native_cache_registry.checked.length,{0}, (XrXirLibraryModuleInput[]){{{XR_MODULE_IDENTITY_STDLIB,"io",root},"io/output.xr"}},1};
     memcpy(input.sha256,xir_native_cache_registry.checked.digest,32);
     XrXirLibraryCatalog *catalog = NULL;
     XrCompilerSession *session = NULL;
@@ -34,7 +33,7 @@ static XrXirStatus preparation_pipeline(const XrXirCompileContext *context,
     XrXirCheckedPacket packet = {0}; XrXirArtifact *decoded = NULL, *closed = NULL;
     preparation_stage_offsets[1] = effects_compile_attempts-first_attempt;
     *stage = 1;
-    XrXirStatus status = xr_xir_compile_library_catalog_new(context,&input,1,&catalog);
+    XrXirStatus status = xr_xir_compile_library_catalog_new_v2(context,&input,1,&catalog);
     if (status != XR_XIR_OK) goto finish;
     preparation_stage_offsets[2] = effects_compile_attempts-first_attempt;
     *stage = 2;

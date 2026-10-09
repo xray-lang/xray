@@ -25,6 +25,7 @@
 #include "../base/xdefs.h"
 #include "../base/xhashmap.h"
 #include "xmodule_identity.h"
+#include "xmodule_overlay.h"
 
 /* Forward declarations */
 struct XrXirLibraryCatalog;
@@ -37,6 +38,9 @@ typedef struct XrModuleResourceBinding {
     const char *canonical, *logical_path, *source_locator;
     XrModuleIdentityAuthority authority;
     const void *checked; /* Borrowed from the immutable compiler-owned catalog. */
+    uint32_t checked_module;
+    const struct XrModuleResourceBinding *const *dependencies;
+    uint32_t dependency_count;
 } XrModuleResourceBinding;
 
 /* ========== Module ID ========== */
@@ -93,6 +97,8 @@ typedef struct XrModuleResolver {
     XrCompileResources *resources;
     XrModuleResolverConfig config;
     XrHashMap *cache; /* specifier+importer → XrModuleId (owned) */
+    XrModuleOverlay *overlay; /* Owned immutable text selection shared with graph. */
+    bool resolution_started;
 } XrModuleResolver;
 
 /* ========== Lifecycle ========== */
@@ -101,6 +107,10 @@ typedef struct XrModuleResolver {
 XR_FUNC XrModuleStatus xr_compile_module_resolver_new(XrCompileResources *resources,
     const XrModuleResolverConfig *cfg, XrModuleResolver **output);
 XR_FUNC void xr_compile_module_resolver_free(XrModuleResolver *r);
+/* Install exactly once before any resolution. Copies inputs on the same ledger;
+ * a failure leaves the resolver unchanged. Checked catalog collisions reject. */
+XR_FUNC XrModuleStatus xr_compile_module_resolver_set_overlay(XrModuleResolver *r,
+    const XrModuleOverlayInput *inputs, size_t count);
 
 XR_FUNC XrModuleStatus xr_compile_module_resolver_set_lockfile(XrModuleResolver *r, struct XrLockfile *lockfile);
 

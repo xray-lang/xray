@@ -10,6 +10,7 @@
  *   Finite complete Programs preserve real ownership and physical cleanup.
  */
 
+#include "xir_construction_fixture.h"
 #include "xir/xxir_emit_c.h"
 #include "xir/xxir_vm.h"
 #include <stdio.h>
@@ -78,7 +79,7 @@ static void state_class_rejections(uint32_t scenario) {
     const XrXirCompileContext *context=source_program_owner(UINT64_C(64)*1024*1024,128000000);
     for(uint32_t variant=1;variant<=2;++variant) {
         StateClassFixture f;state_class_fixture(&f,scenario,variant);XrXirArtifact *out=NULL;
-        CHECK(xr_xir_compile_check(context,&f.module,&out,NULL)==(variant==1?XR_XIR_BAD_STRUCTURE:XR_XIR_BAD_TYPE) && !out);
+        CHECK(xir_fixture_check(context, &f.module, &out, NULL)==(variant==1?XR_XIR_BAD_STRUCTURE:XR_XIR_BAD_TYPE) && !out);
     }
     source_program_owners_free();
 }

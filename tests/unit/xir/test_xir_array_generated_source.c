@@ -9,6 +9,7 @@
  * KEY CONCEPT:
  *   Source owns the finite Checked and Lowered graph used by both execution backends.
  */
+#include "xir_construction_fixture.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -103,7 +104,7 @@ static void array_lowered_attack(ArrayAttack attack) {
     else if(attack.kind==14)op->args[1]=65537;
     else if(attack.kind==13)((XrXirType *)(uintptr_t)fn->parameters)[0]=XR_XIR_BOOL;
     else CHECK(false);
-    XrXirDiagnostic diagnostic={0};XrXirStatus status=xr_xir_compile_verify(&owner.context,module,&diagnostic);
+    XrXirDiagnostic diagnostic={0};XrXirStatus status=xr_xir_compile_verify_v2(&owner.context,module,xr_xir_compile_artifact_construction(lowered),&diagnostic);
     if(status!=attack.expected)fprintf(stderr,"Array attack %s actual=%u expected=%u fn=%u block=%u instruction=%u\n",attack.reason,status,attack.expected,diagnostic.function,diagnostic.block,diagnostic.instruction);
     CHECK(status==attack.expected && diagnostic.status==status);
     *op=saved;if(fn->parameter_count)((XrXirType *)(uintptr_t)fn->parameters)[0]=saved_parameter;

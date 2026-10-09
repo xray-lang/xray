@@ -32,11 +32,10 @@ static XrXirOutputStatus cache_write(void *context, XrXirOutputStream stream,
 }
 static XrXirArtifact *cache_program(const XrXirCompileContext *context,
     const char *root, const char *entry, uint32_t ids[6]) {
-    XrXirLibraryInput input = {{XR_MODULE_IDENTITY_STDLIB,"io",root},"io/output.xr",
-        xir_native_cache_registry.checked.bytes,xir_native_cache_registry.checked.length,{0}};
+    XrXirLibraryInput input = {xir_native_cache_registry.checked.bytes,xir_native_cache_registry.checked.length,{0}, (XrXirLibraryModuleInput[]){{{XR_MODULE_IDENTITY_STDLIB,"io",root},"io/output.xr"}},1};
     memcpy(input.sha256,xir_native_cache_registry.checked.digest,32);
     XrXirLibraryCatalog *catalog = NULL;
-    CHECK(xr_xir_compile_library_catalog_new(context,&input,1,&catalog) == XR_XIR_OK);
+    CHECK(xr_xir_compile_library_catalog_new_v2(context,&input,1,&catalog) == XR_XIR_OK);
     XrCompilerSession *session = NULL; CHECK(xr_compile_session_new(context->resources,&session) == XR_COMPILER_SESSION_OK);
     XrModuleIdentityAuthority authority = {XR_MODULE_IDENTITY_SCRIPT,NULL,root};
     XrXirSourceRequest request = {session,entry,&authority,context,root,NULL,XR_XIR_PROGRAM,catalog};

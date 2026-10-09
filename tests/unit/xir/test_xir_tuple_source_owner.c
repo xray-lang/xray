@@ -6,6 +6,7 @@
  *
  * test_xir_tuple_source_owner.c - Real requirement reification and substitution
  */
+#include "xir_construction_fixture.h"
 #include "xir/xxir.h"
 #include "tuple_owner_observer.h"
 #include "xir/xxir_source.c"
@@ -28,7 +29,7 @@ static XrXirStatus reification(const XrXirCompileContext *c) {
             tuple->parameters[2].type==XR_XIR_I64 && xr_xir_array_element(&ctx.types,tuple->parameters[0].type)==XR_XIR_STRING);
         CHECK(tuple->parameters!=fields);
         XrXirSourceView view={.complete=true,.types=&ctx.types};
-        status=xr_xir_compile_source_snapshot_copy(c,&view,&snapshot);
+        status=xir_fixture_snapshot_copy(c,&view,&snapshot);
     }
     memset(fields,0xcc,sizeof(fields));
     while(ctx.memory){SourceMemory *next=ctx.memory->next;xr_compile_resources_free(ctx.memory);ctx.memory=next;}
@@ -56,7 +57,7 @@ static void syntax_owned(void) {
     CHECK(ctx.types.nodes[0].parameter_count==2 && ctx.types.nodes[0].parameters[0].type==XR_XIR_UNIT &&
         ctx.types.nodes[0].parameters[1].type==XR_XIR_STRING);
     XrXirSourceView view={.complete=true,.types=&ctx.types};XrXirSourceSnapshot *snapshot=NULL;
-    CHECK(xr_xir_compile_source_snapshot_copy(&c,&view,&snapshot)==XR_XIR_OK);
+    CHECK(xir_fixture_snapshot_copy(&c,&view,&snapshot)==XR_XIR_OK);
     const XrXirSourceView *owned=xr_xir_compile_source_snapshot_view(snapshot);
     CHECK(owned->types->nodes!=ctx.types.nodes && owned->types->nodes[0].parameters!=ctx.types.nodes[0].parameters);
     XrTypeRef empty={.kind=XR_TREF_TUPLE};XrXirType ignored=XR_XIR_UNIT;

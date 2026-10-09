@@ -12,6 +12,7 @@
  */
 #ifndef XIR_CLASS_CORE_CASES_H
 #define XIR_CLASS_CORE_CASES_H
+#include "xir_construction_fixture.h"
 #include "xir/xxir.h"
 #include "xir/xxir_types.h"
 #include "xir/xxir_nominal.h"
@@ -38,27 +39,27 @@ static void class_core_cases(void){
  XrXirFunction functions[]={ {"init",4,NULL,0,XR_XIR_UNIT,&blocks[0],1,init,1,NULL,0}, {"new",3,cp,2,ct,&blocks[1],1,ctor,2,operands,2}, {"add",3,ap,2,XR_XIR_I64,&blocks[2],1,add,4,NULL,0}, {"entry",5,NULL,0,XR_XIR_I64,&entryblock,1,entry,6,entryops,4}};
  XrXirFunctionIdentity ids[]={{0},{.nominal_owner=1,.method_kind=XR_XIR_CONSTRUCTOR},{.nominal_owner=1,.method_kind=XR_XIR_READ_METHOD},{0}};
  XrXirLiteral text={"counter",7};XrXirSourceModule sm={"root",4,NULL,0,0};XrXirDeclarations ds={.modules=&sm,.module_count=1,.functions=ids,.entry_function=3,.literals=&text,.literal_count=1};
- XrXirModule m={XR_XIR_BUILT,functions,4,&ds,NULL,&types,NULL, XR_XIR_PROGRAM, NULL};XrXirDiagnostic d;XrXirStatus s=xr_xir_compile_verify(&stage_context, &m, &d);
+ XrXirModule m={XR_XIR_BUILT,functions,4,&ds,NULL,&types,NULL, XR_XIR_PROGRAM, NULL};XrXirDiagnostic d;XrXirStatus s=xir_fixture_verify(&stage_context, &m, &d);
  CLASS_CHECK(s==XR_XIR_OK);
- XrXirArtifact *checked=NULL,*read=NULL,*special=NULL,*lowered=NULL;CLASS_CHECK(xr_xir_compile_check(&stage_context, &m, &checked, &d)==XR_XIR_OK);
+ XrXirArtifact *checked=NULL,*read=NULL,*special=NULL,*lowered=NULL;CLASS_CHECK(xir_fixture_check(&stage_context, &m, &checked, &d)==XR_XIR_OK);
  XrXirCheckedPacket packet={0};CLASS_CHECK(xr_xir_compile_checked_write(checked, &packet, &d)==XR_XIR_OK);CLASS_CHECK(xr_xir_compile_checked_read(&stage_context, packet.bytes, packet.length, &read, &d)==XR_XIR_OK);
  CLASS_CHECK(xr_xir_compile_artifact_module(read)->types->nominals->declarations[0].flags==XR_XIR_NOMINAL_FINAL);
  CLASS_CHECK(xr_xir_compile_specialize(read, &special, &d)==XR_XIR_OK);XrXirTarget target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};
  CLASS_CHECK(xr_xir_compile_lower(special, &target, &lowered, &d)==XR_XIR_OK);CLASS_CHECK(xr_xir_compile_artifact_module(lowered)->types->nominals->identities[0].flags==XR_XIR_NOMINAL_FINAL);
  uint32_t offsets[2]={0};XrXirStorageLayout layout={.field_offsets=offsets,.field_count=2};XrXirCompileContext budget=stage_context;CLASS_CHECK(xr_xir_compile_storage_layouts(&budget, xr_xir_compile_artifact_module(lowered)->types, &target, &layout, 1)==XR_XIR_OK);CLASS_CHECK(layout.value.size==8 && layout.value.alignment==8 && layout.body.size==16 && offsets[0]==0 && offsets[1]==8);
- decl.flags=0;CLASS_CHECK(xr_xir_compile_verify(&stage_context, &m, &d)==XR_XIR_OK);
- decl.flags=XR_XIR_NOMINAL_FINAL<<1;CLASS_CHECK(xr_xir_compile_verify(&stage_context, &m, &d)==XR_XIR_BAD_STRUCTURE);decl.flags=XR_XIR_NOMINAL_FINAL;
- fields[0].flags=XR_XIR_FIELD_PRIVATE;CLASS_CHECK(xr_xir_compile_verify(&stage_context, &m, &d)==XR_XIR_BAD_TYPE);fields[0].flags|=XR_XIR_FIELD_MUTABLE;
- ids[2].nominal_owner=0;ids[2].method_kind=XR_XIR_NON_MEMBER;CLASS_CHECK(xr_xir_compile_verify(&stage_context, &m, &d)==XR_XIR_BAD_TYPE);ids[2].nominal_owner=1;ids[2].method_kind=XR_XIR_READ_METHOD;
- add[0].immediate=2;CLASS_CHECK(xr_xir_compile_verify(&stage_context, &m, &d)==XR_XIR_BAD_STRUCTURE);add[0].immediate=0;
- ctor[0].op=XR_XIR_STRUCT_NEW;CLASS_CHECK(xr_xir_compile_verify(&stage_context, &m, &d)==XR_XIR_BAD_TYPE);ctor[0].op=XR_XIR_CLASS_NEW;
- fields[0].type=XR_XIR_UNIT;CLASS_CHECK(xr_xir_compile_verify(&stage_context, &m, &d)==XR_XIR_BAD_TYPE);fields[0].type=XR_XIR_I64;
- ctor[0].args[1]=1;CLASS_CHECK(xr_xir_compile_verify(&stage_context, &m, &d)==XR_XIR_BAD_STRUCTURE);ctor[0].args[1]=2;
+ decl.flags=0;CLASS_CHECK(xir_fixture_verify(&stage_context, &m, &d)==XR_XIR_OK);
+ decl.flags=XR_XIR_NOMINAL_FINAL<<1;CLASS_CHECK(xir_fixture_verify(&stage_context, &m, &d)==XR_XIR_BAD_STRUCTURE);decl.flags=XR_XIR_NOMINAL_FINAL;
+ fields[0].flags=XR_XIR_FIELD_PRIVATE;CLASS_CHECK(xir_fixture_verify(&stage_context, &m, &d)==XR_XIR_BAD_TYPE);fields[0].flags|=XR_XIR_FIELD_MUTABLE;
+ ids[2].nominal_owner=0;ids[2].method_kind=XR_XIR_NON_MEMBER;CLASS_CHECK(xir_fixture_verify(&stage_context, &m, &d)==XR_XIR_BAD_TYPE);ids[2].nominal_owner=1;ids[2].method_kind=XR_XIR_READ_METHOD;
+ add[0].immediate=2;CLASS_CHECK(xir_fixture_verify(&stage_context, &m, &d)==XR_XIR_BAD_STRUCTURE);add[0].immediate=0;
+ ctor[0].op=XR_XIR_STRUCT_NEW;CLASS_CHECK(xir_fixture_verify(&stage_context, &m, &d)==XR_XIR_BAD_TYPE);ctor[0].op=XR_XIR_CLASS_NEW;
+ fields[0].type=XR_XIR_UNIT;CLASS_CHECK(xir_fixture_verify(&stage_context, &m, &d)==XR_XIR_BAD_TYPE);fields[0].type=XR_XIR_I64;
+ ctor[0].args[1]=1;CLASS_CHECK(xir_fixture_verify(&stage_context, &m, &d)==XR_XIR_BAD_STRUCTURE);ctor[0].args[1]=2;
  XrXirNominalIdentity *identity=(XrXirNominalIdentity *)xr_xir_compile_artifact_module(lowered)->types->nominals->identities;
- identity[0].flags=0;CLASS_CHECK(xr_xir_compile_verify(&stage_context, xr_xir_compile_artifact_module(lowered), &d)==XR_XIR_OK);
- identity[0].flags=XR_XIR_NOMINAL_FINAL<<1;CLASS_CHECK(xr_xir_compile_verify(&stage_context, xr_xir_compile_artifact_module(lowered), &d)==XR_XIR_BAD_STRUCTURE);identity[0].flags=XR_XIR_NOMINAL_FINAL;
+ identity[0].flags=0;CLASS_CHECK(xr_xir_compile_verify_v2(&stage_context, xr_xir_compile_artifact_module(lowered), xr_xir_compile_artifact_construction(lowered), &d)==XR_XIR_OK);
+ identity[0].flags=XR_XIR_NOMINAL_FINAL<<1;CLASS_CHECK(xr_xir_compile_verify_v2(&stage_context, xr_xir_compile_artifact_module(lowered), xr_xir_compile_artifact_construction(lowered), &d)==XR_XIR_BAD_STRUCTURE);identity[0].flags=XR_XIR_NOMINAL_FINAL;
  XrXirCompileContext denied = stage_context_limited(STAGE_ALLOCATED_BYTES, (0), STAGE_WORK);XrXirArtifact *rejected=NULL;
- CLASS_CHECK(xr_xir_compile_check(&denied, &m, &rejected, &d)==XR_XIR_BUDGET && rejected==NULL);
+ CLASS_CHECK(xir_fixture_check(&denied, &m, &rejected, &d)==XR_XIR_BUDGET && rejected==NULL);
  xr_xir_compile_artifact_free(lowered);xr_xir_compile_artifact_free(special);xr_xir_compile_artifact_free(read);xr_xir_compile_checked_packet_free(&packet);xr_xir_compile_artifact_free(checked);
 }
 

@@ -1,0 +1,3 @@
+import "./state" as state
+export fn run()->i64 { return await go state.current() }
+fn main()->i64 { return 0 }

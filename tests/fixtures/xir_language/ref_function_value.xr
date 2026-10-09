@@ -1,5 +1,7 @@
 fn f(x: ref i64) { x = 1 }
 fn main() {
     const g = f
+    var value: i64 = 0
+    g(value)
 }
 main()

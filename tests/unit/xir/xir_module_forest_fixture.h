@@ -8,6 +8,7 @@
  */
 #ifndef XIR_MODULE_FOREST_FIXTURE_H
 #define XIR_MODULE_FOREST_FIXTURE_H
+#include "xir_construction_fixture.h"
 #include "xir/xxir_generic.h"
 static XrXirArtifact *module_forest_fixture(const XrXirCompileContext *context, bool invalid) {
     XrXirInstruction extra[] = {
@@ -29,7 +30,7 @@ static XrXirArtifact *module_forest_fixture(const XrXirCompileContext *context, 
     };
     const XrXirBlock blocks[] = {{0, 4, 0, 0}, {0, 3, 0, 0}, {0, 2, 0, 0}};
     const XrXirType callable = (XrXirType)256;
-    const XrXirTypeNode signature = {XR_XIR_TYPE_CALLABLE, XR_XIR_UNIT, NULL, 0, XR_XIR_I64, 0, 0, {0}};
+    const XrXirTypeNode signature = {XR_XIR_TYPE_CALLABLE, XR_XIR_UNIT, NULL, 0, XR_XIR_I64, XR_XIR_CALLABLE_ROOT_UNRESOLVED, 0, {0}};
     const XrXirTypes types = {&signature, 1, NULL, NULL};
     const XrXirInstruction bind[] = {
         {XR_XIR_FUNCTION_REF, (XrXirType)256, {0}, {0}, 5, {0}},
@@ -63,7 +64,7 @@ static XrXirArtifact *module_forest_fixture(const XrXirCompileContext *context, 
     const XrXirModule built = {XR_XIR_BUILT, functions, 8, &declarations, NULL, &types, NULL, XR_XIR_PROGRAM, NULL};
     XrXirArtifact *checked = NULL, *closed = NULL, *lowered = NULL;
     XrXirDiagnostic diagnostic = {0};
-    XrXirStatus status = xr_xir_compile_check(context, &built, &checked, &diagnostic);
+    XrXirStatus status = xir_fixture_check(context, &built, &checked, &diagnostic);
     if (invalid) { CHECK(status != XR_XIR_OK && !checked); return NULL; }
     if (status != XR_XIR_OK) fprintf(stderr, "forest: status=%u function=%u block=%u instruction=%u reason=%u\n",
         status, diagnostic.function, diagnostic.block, diagnostic.instruction, diagnostic.reason);

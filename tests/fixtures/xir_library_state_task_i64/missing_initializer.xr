@@ -1,0 +1,2 @@
+var direct:Task<i64>
+export fn pure(value:i64)->i64 {return value+1}

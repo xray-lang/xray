@@ -1,0 +1,3 @@
+import "./chain00" as chain
+export fn run()->i64 { return chain.answer() }
+export fn recovery()->i64 { return 41 }

@@ -1,0 +1,3 @@
+import "./state" as state
+fn delayed()->i64 {return state.readParam(state.read())}
+fn main()->i64 {return await go delayed()}

@@ -11,6 +11,7 @@
  */
 #ifndef XIR_CHECKED_FIXTURE_H
 #define XIR_CHECKED_FIXTURE_H
+#include "xir_construction_fixture.h"
 #include "xir_program_fixture.h"
 typedef struct CheckedAtomicPool {
     XrXirTypeNode nodes[512];
@@ -46,8 +47,10 @@ static void checked_atomic_pool(XrXirModule *built,CheckedAtomicPool *pool) {
     built->functions=pool->functions;built->declarations=&pool->declarations;built->types=&pool->types;
 }
 static XrXirArtifact *checked_fixture(const XrXirCompileContext *context) {
-    XrXirArtifact *lowered = program_fixture(context, 0), *checked = NULL;
-    XrXirModule built = *xr_xir_compile_artifact_module(lowered);
+    (void)&program_fixture;
+    XrXirArtifact *definition = program_fixture_checked(context, 0), *checked = NULL;
+    XrXirModule built = *xr_xir_compile_artifact_module(definition);
+    CHECK(built.stage == XR_XIR_CHECKED && !built.provenance);
     built.stage = XR_XIR_BUILT;
     XrXirFunction functions[9];
     memcpy(functions, built.functions, 8 * sizeof(*functions));
@@ -66,8 +69,8 @@ static XrXirArtifact *checked_fixture(const XrXirCompileContext *context) {
     XrXirDeclarations declarations = *built.declarations;
     declarations.functions = identities;
     built.functions = functions; built.function_count = 9; built.declarations = &declarations;
-    CHECK(xr_xir_compile_check(context, &built, &checked, NULL) == XR_XIR_OK);
-    xr_xir_compile_artifact_free(lowered);lowered=NULL;
+    CHECK(xir_fixture_check(context, &built, &checked, NULL) == XR_XIR_OK);
+    xr_xir_compile_artifact_free(definition);definition=NULL;
     return checked;
 }
 #endif

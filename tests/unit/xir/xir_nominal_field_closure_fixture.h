@@ -8,6 +8,7 @@
  */
 #ifndef XIR_NOMINAL_FIELD_CLOSURE_FIXTURE_H
 #define XIR_NOMINAL_FIELD_CLOSURE_FIXTURE_H
+#include "xir_construction_fixture.h"
 #include "xir_checked_fixture.h"
 static XrXirArtifact *nominal_field_closure_fixture(const XrXirCompileContext *context, unsigned mode) {
     CHECK(mode < 3);
@@ -38,7 +39,7 @@ static XrXirArtifact *nominal_field_closure_fixture(const XrXirCompileContext *c
     XrXirTypes types = {nodes,mode+2,&table, NULL}; built.types = &types;
     CheckedAtomicPool atomic_pool;checked_atomic_pool(&built,&atomic_pool);
     CHECK(!built.generics);
-    CHECK(xr_xir_compile_check(context, &built, &checked, NULL) == XR_XIR_OK);
+    CHECK(xir_fixture_check(context, &built, &checked, NULL) == XR_XIR_OK);
     xr_xir_compile_artifact_free(base);base=NULL; return checked;
 }
 #endif // XIR_NOMINAL_FIELD_CLOSURE_FIXTURE_H

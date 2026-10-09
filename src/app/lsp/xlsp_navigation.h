@@ -24,10 +24,14 @@ XR_FUNC XrJsonValue *xlsp_analyze_definition(XrLspServer *server, XrLspDocument 
 
 // Find references (cross-file, scope-aware)
 XR_FUNC XrJsonValue *xlsp_analyze_references(XrLspServer *server, XrLspDocument *doc,
-                                             XrLspPosition pos);
+                                             XrLspPosition pos, bool include_declaration);
 
 // Document highlight (scope-aware, single-file)
 XR_FUNC XrJsonValue *xlsp_analyze_document_highlight(XrLspServer *server, XrLspDocument *doc,
                                                      XrLspPosition pos);
+
+XR_FUNC XrJsonValue *xlsp_navigation_handle(XrLspServer *, XrJsonValue *, unsigned mode);
+
+XR_FUNC XrJsonValue *xlsp_semantic_handle(XrLspServer *,XrJsonValue *,unsigned mode);
 
 #endif  // XLSP_NAVIGATION_H

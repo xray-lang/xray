@@ -24,6 +24,7 @@ static bool source_struct_defaultability(SourceContext *ctx) {
         changed = false;
         for (uint32_t d = 0; d < ctx->nominals.count; ++d) {
             SourceName *symbol = ctx->nominal_sources[d];
+            if (symbol->checked_library) continue;
             if (!source_work(ctx, symbol->node)) return false;
             XrXirNominalKind kind = (XrXirNominalKind) ctx->nominals.declarations[d].kind;
             if ((kind != XR_XIR_NOMINAL_STRUCT && kind != XR_XIR_NOMINAL_CLASS) || ctx->nominal_defaultable[d]) continue;
@@ -55,6 +56,7 @@ static bool source_struct_defaultability(SourceContext *ctx) {
 static bool source_struct_constructors(SourceContext *ctx, uint32_t *next) {
     for (uint32_t d = 0; d < ctx->nominals.count; ++d) {
         SourceName *symbol = ctx->nominal_sources[d];
+        if (symbol->checked_library) continue;
         if (!source_work(ctx, symbol->node)) return false;
         if (!ctx->nominal_defaultable[d]) continue;
         if (*next >= ctx->first_closure)

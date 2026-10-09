@@ -1,0 +1,3 @@
+enum Ordering {Acquire}
+var counter=Atomic<i64>(0)
+export fn read()->i64 {return counter.load(Ordering.Acquire)}

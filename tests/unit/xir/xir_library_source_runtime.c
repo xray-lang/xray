@@ -25,10 +25,10 @@
 XR_FUNC size_t *xr_test_library_runtime_counter(unsigned index) {
  CHECK(index<4);size_t *values[]={&runtime_attempts,&runtime_fail_at,&runtime_live,&runtime_bytes};return values[index];
 }
-static bool pair(XrXirProgram *program){
+static bool pair(XrXirProgram *program,uint32_t entry){
  for(unsigned i=0;i<2;++i){XrXirInstanceConfig config; CHECK(xr_xir_instance_config_init(&config, sizeof(config)) == XR_XIR_CALL_READY);XrXirInstance *instance=NULL;
   XrXirCallStatus status=xr_xir_instance_new(program,&config,&instance);
-  if(status==XR_XIR_CALL_READY)status=xr_xir_instance_start(instance,2,NULL,0);
+  if(status==XR_XIR_CALL_READY)status=xr_xir_instance_start(instance,entry,NULL,0);
   if(status==XR_XIR_CALL_READY)status=xr_xir_instance_poll_bounded(instance, UINT64_MAX).outcome.status;
   if(status==XR_XIR_CALL_RETURNED){XrXirValue result={0};CHECK(xr_xir_instance_take_result(instance,&result)==XR_XIR_CALL_RETURNED);
    CHECK(result.type==XR_XIR_I64&&result.payload==41);xr_xir_value_drop(&result);
@@ -50,9 +50,13 @@ XR_FUNC void xr_test_library_source_run(XrXirArtifact *owned) {
 
  XrXirTarget target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};
  CHECK(xr_xir_compile_lower(specialized,&target,&lowered,NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(specialized);
+ const XrXirModule *executable=xr_xir_compile_artifact_module(lowered);uint32_t entry=UINT32_MAX;
+ for(uint32_t f=0;f<executable->function_count;++f)if(executable->declarations->functions[f].module==executable->declarations->root_module &&
+     executable->functions[f].name_length==6&&!memcmp(executable->functions[f].name,"result",6)) {CHECK(entry==UINT32_MAX);entry=f;}
+ CHECK(entry!=UINT32_MAX);
  XrXirProgram *program=NULL;CHECK(xr_xir_compile_vm_program_take(&lowered,&program)==XR_XIR_OK);
- runtime_attempts=0;CHECK(pair(program));size_t sites=runtime_attempts,live=runtime_live,bytes=runtime_bytes;
- for(size_t f=0;f<sites;++f){runtime_attempts=0;runtime_fail_at=f;CHECK(!pair(program));CHECK(runtime_live==live&&runtime_bytes==bytes);}
+ runtime_attempts=0;CHECK(pair(program,entry));size_t sites=runtime_attempts,live=runtime_live,bytes=runtime_bytes;
+ for(size_t f=0;f<sites;++f){runtime_attempts=0;runtime_fail_at=f;CHECK(!pair(program,entry));CHECK(runtime_live==live&&runtime_bytes==bytes);}
  runtime_fail_at=SIZE_MAX;xr_xir_compile_program_drop(program);CHECK(!runtime_live&&!runtime_bytes);
  printf("direct Source Checked VM41 two instances runtime OOM %zu physical zero\n",sites);
 }

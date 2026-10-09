@@ -8,6 +8,7 @@
  */
 #include "xmodule_graph.h"
 #include "xmodule_compile_internal.h"
+#include "../xir/xxir_library_catalog.h"
 #include "xstdlib_embedded.h"
 #include "xsemver.h"
 #include "../frontend/parser/xast.h"
@@ -166,6 +167,32 @@ static void graph_resolve_dependency(ModuleWork *work, XrModuleGraph *graph, int
     /* Adding a spec may move the entire array. Resolve the source again by index. */
     if (work->status == XR_MODULE_OK) spec_add_dep(work,&graph->specs[from],target);
 }
+static void graph_checked_imports(ModuleWork *work, XrModuleGraph *graph, int from) {
+    const XrModuleResourceBinding *owner = graph->specs[from].resource;
+    if (!owner || !owner->checked || (owner->dependency_count && !owner->dependencies)) {
+        module_status(work,XR_MODULE_INVALID); return;
+    }
+    for (uint32_t e = 0; e < owner->dependency_count && module_work(work,1); ++e) {
+        const XrModuleResourceBinding *edge = owner->dependencies[e];
+        if (!edge || !edge->checked || edge->checked != owner->checked || !edge->canonical ||
+            !edge->logical_path || !edge->source_locator) { module_status(work,XR_MODULE_INVALID); break; }
+        int target = -1;
+        module_status(work,xr_compile_module_graph_find(graph,edge->canonical,&target));
+        if (work->status != XR_MODULE_OK) break;
+        bool fresh = target < 0;
+        XrModuleKind kind = edge->authority.kind == XR_MODULE_IDENTITY_STDLIB ? XR_MOD_STDLIB : XR_MOD_FILE;
+        if (fresh) target = graph_add_spec(work,graph,edge->canonical,edge->logical_path,edge->source_locator,kind,&edge->authority);
+        if (work->status != XR_MODULE_OK) break;
+        XrModuleSpec *spec = &graph->specs[target];
+        if (!fresh && (spec->representation != XR_MODULE_CHECKED_LIBRARY || spec->resource != edge)) {
+            module_status(work,XR_MODULE_INVALID); break;
+        }
+        spec->representation = XR_MODULE_CHECKED_LIBRARY; spec->resource = edge;
+        /* graph_add_spec may have moved graph->specs. */
+        spec_add_dep(work,&graph->specs[from],target);
+    }
+    if (work->status == XR_MODULE_OK) graph->specs[from].status = XR_MODSPEC_RESOLVED;
+}
 static void graph_imports(ModuleWork *work, XrModuleGraph *graph, int index, AstNode *ast) {
     if (ast->type != AST_PROGRAM) { module_status(work,XR_MODULE_INVALID); return; }
     for (int i = 0; i < ast->as.program.count && module_work(work,1); ++i) {
@@ -233,11 +260,25 @@ static void graph_expand(ModuleWork *work, XrModuleGraph *graph, const GraphSour
         XrModuleSpec *spec = &graph->specs[index];
         if (spec->representation == XR_MODULE_CHECKED_LIBRARY) {
             if (!spec->resource || !spec->resource->checked) { module_status(work,XR_MODULE_INVALID); break; }
-            spec->status = XR_MODSPEC_RESOLVED; continue;
+            if (spec->status < XR_MODSPEC_RESOLVED) graph_checked_imports(work,graph,index);
+            continue;
         }
         bool supplied = index == entry && root->source;
-        if ((!spec->source_path && !supplied) || spec->status >= XR_MODSPEC_RESOLVED) continue;
         const char *text = root->source; XrFileBytes bytes = {0};
+        if (graph->resolver->overlay) {
+            const XrModuleOverlayEntry *overlay = NULL;
+            if(spec->authority.kind==XR_MODULE_IDENTITY_MEMORY)
+                module_status(work,xr_compile_module_overlay_lookup(graph->resolver->overlay,spec->canonical,&spec->authority,&overlay));
+            else if(spec->source_path)
+                module_status(work,xr_compile_module_overlay_bind(graph->resolver->overlay,&spec->authority,spec->source_path,&overlay));
+            if (overlay && work->status == XR_MODULE_OK) {
+                if (supplied && text != overlay->source.text && !module_equal(work,text,overlay->source.text))
+                    module_status(work,XR_MODULE_INVALID);
+                text = overlay->source.text; supplied = true;
+            }
+            if (work->status != XR_MODULE_OK) break;
+        }
+        if ((!spec->source_path && !supplied) || spec->status >= XR_MODSPEC_RESOLVED) continue;
         if (!supplied && spec->embedded_source) {
             module_io(work,xr_get_embedded_stdlib_work(work,module_io_charge,spec->authority.namespace_id,&text));
             if (!text) module_status(work,XR_MODULE_INVALID);
@@ -327,6 +368,62 @@ XR_FUNC XrModuleStatus xr_compile_module_graph_include_logical_source(XrModuleGr
     if (!graph || !graph->resources || graph->entry_index < 0) return XR_MODULE_INVALID;
     return graph_include_logical_source(graph,authority,logical,path,source,error);
 }
+XR_FUNC XrModuleStatus xr_compile_module_graph_include_catalog_logical(XrModuleGraph *graph,
+    const XrModuleIdentityAuthority *authority, const char *logical, int *output) {
+    if (!graph || !graph->resources || !graph->resolver || !authority || !logical || !output ||
+        graph->entry_index < 0 || authority->kind != XR_MODULE_IDENTITY_STDLIB || authority->physical_root)
+        return XR_MODULE_INVALID;
+    ModuleWork work={graph->resources,graph->resolution_status};
+    const XrXirLibraryCatalog *catalog=graph->resolver->config.catalog;
+    const XrXirCompileContext *owner=xr_xir_compile_library_catalog_context(catalog);
+    if (catalog && (!owner || owner->resources != graph->resources)) return graph_failure(graph,XR_MODULE_INVALID);
+    char *canonical=NULL;
+    module_status(&work,xr_compile_module_identity_from_logical(graph->resources,authority,logical,&canonical));
+    size_t count=0;
+    const XrModuleResourceBinding *bindings=xr_xir_compile_library_catalog_resources_v2(catalog,&count), *selected=NULL;
+    for (size_t i=0;i<count && module_work(&work,1);++i) {
+        if (bindings[i].canonical && module_equal(&work,bindings[i].canonical,canonical)) {
+            if (selected) { module_status(&work,XR_MODULE_INVALID); break; }
+            selected=&bindings[i];
+        }
+    }
+    int index=-1;
+    if (selected && work.status==XR_MODULE_OK) {
+        if (!selected->checked || selected->authority.kind!=authority->kind ||
+            !selected->authority.physical_root || !selected->source_locator ||
+            !module_equal(&work,selected->authority.namespace_id,authority->namespace_id) ||
+            !module_equal(&work,selected->logical_path,logical)) module_status(&work,XR_MODULE_INVALID);
+        /* The physical root remains I/O authority, separate from canonical identity. */
+        if (work.status==XR_MODULE_OK && graph->resolver->config.stdlib_path) {
+            XrOsIoPolicy policy=xr_compile_io_policy(graph->resources); char *physical=NULL;
+            module_io(&work,xr_realpath_owned(&policy,graph->resolver->config.stdlib_path,&physical));
+            if (work.status==XR_MODULE_OK && !module_equal(&work,physical,selected->authority.physical_root))
+                module_status(&work,XR_MODULE_INVALID);
+            xr_compile_resources_free(physical);
+        }
+        if (work.status==XR_MODULE_OK) module_status(&work,xr_compile_module_graph_find(graph,canonical,&index));
+        bool fresh=index<0;
+        if (fresh && work.status==XR_MODULE_OK)
+            index=graph_add_spec(&work,graph,canonical,logical,selected->source_locator,XR_MOD_STDLIB,&selected->authority);
+        if (work.status==XR_MODULE_OK) {
+            XrModuleSpec *spec=&graph->specs[index];
+            if (!fresh && (spec->representation!=XR_MODULE_CHECKED_LIBRARY || spec->resource!=selected))
+                module_status(&work,XR_MODULE_INVALID);
+            else { spec->representation=XR_MODULE_CHECKED_LIBRARY; spec->resource=selected; }
+        }
+        /* Expand the real artifact's dependency views by ordinary graph ownership. */
+        for (int m=0;m<graph->spec_count && module_work(&work,1);++m)
+            if (graph->specs[m].representation==XR_MODULE_CHECKED_LIBRARY && graph->specs[m].status!=XR_MODSPEC_RESOLVED)
+                graph_checked_imports(&work,graph,m);
+        if (work.status==XR_MODULE_OK && fresh) {
+            xr_compile_resources_free(graph->topo_order); graph->topo_order=NULL; graph->topo_count=0;
+        }
+    }
+    xr_compile_resources_free(canonical);
+    if (work.status!=XR_MODULE_OK) return graph_failure(graph,work.status);
+    *output=index; return XR_MODULE_OK;
+}
+
 XR_FUNC XrModuleStatus xr_compile_module_graph_add_dependency(XrModuleGraph *graph, int from, int to) {
     if (!graph || !graph->resources || from < 0 || to < 0 || from >= graph->spec_count ||
         to >= graph->spec_count || graph->entry_index < 0) return XR_MODULE_INVALID;

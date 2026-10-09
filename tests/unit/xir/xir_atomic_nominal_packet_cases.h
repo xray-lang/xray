@@ -1,3 +1,4 @@
+#include "xir_construction_fixture.h"
 /*
  * xray - Lightweight typed scripting with native concurrency
  * https://www.xray-lang.org
@@ -21,14 +22,19 @@ static void ordering_packet_cases(void) {
     previous=(XrXirArtifact *)(uintptr_t)1;
     CHECK(xr_xir_compile_checked_read(&owner.context,ordering25_golden,sizeof(ordering25_golden),&previous,NULL)==XR_XIR_BAD_STRUCTURE && previous==(XrXirArtifact *)(uintptr_t)1);
     CHECK(source_program_compile_attempts==previous_attempts && source_program_compile_live==previous_live && source_program_compile_bytes==previous_bytes);
-    XrXirArtifact *sentinel=NULL;CHECK(xr_xir_compile_checked_read(&owner.context,ordering65_golden,
-        sizeof(ordering65_golden),&sentinel,NULL)==XR_XIR_OK && sentinel);
+    previous=NULL;
+    CHECK(xr_xir_compile_checked_read(&owner.context,ordering65_golden,sizeof(ordering65_golden),&previous,NULL)==XR_XIR_BAD_STRUCTURE && !previous);
+    previous=(XrXirArtifact *)(uintptr_t)1;
+    CHECK(xr_xir_compile_checked_read(&owner.context,ordering65_golden,sizeof(ordering65_golden),&previous,NULL)==XR_XIR_BAD_STRUCTURE && previous==(XrXirArtifact *)(uintptr_t)1);
+    CHECK(source_program_compile_attempts==previous_attempts && source_program_compile_live==previous_live && source_program_compile_bytes==previous_bytes);
+    XrXirArtifact *sentinel=NULL;CHECK(xr_xir_compile_checked_read(&owner.context,ordering72_golden,
+        sizeof(ordering72_golden),&sentinel,NULL)==XR_XIR_OK && sentinel);
     XrCompileResourceStats baseline=library_compile_stats(&owner.context);
     XrXirArtifact *empty=NULL;
     CHECK(xr_xir_compile_checked_read(&owner.context,generic_method_golden,
         sizeof(generic_method_golden),&empty,NULL)==XR_XIR_BAD_STRUCTURE && !empty);
     for(unsigned mutation=0;mutation<7;++mutation){
-        uint8_t bytes[sizeof(ordering65_golden)];memcpy(bytes,ordering65_golden,sizeof(bytes));
+        uint8_t bytes[sizeof(ordering72_golden)];memcpy(bytes,ordering72_golden,sizeof(bytes));
         switch(mutation){case 0:bytes[8]=24;bytes[12]=63;break;
         case 1:bytes[ORDERING25_RECORD_OFFSET]=0;break;
         case 2:bytes[ORDERING25_RECORD_OFFSET]=3;break;
@@ -56,7 +62,7 @@ static void ordering_float_constant_cases(void) {
         int64_t payload;memcpy(&payload,&payloads[i],sizeof(payload));ops[0].immediate=payload;
         CHECK(xr_xir_float_payload_valid(XR_XIR_F64,payload));
         bool valid=i==0||i==4;CHECK(xr_xir_float_constant_payload_valid(XR_XIR_F64,payload)==valid);
-        XrXirArtifact *checked=NULL;XrXirStatus status=xr_xir_compile_check(&owner.context,&module,&checked,NULL);
+        XrXirArtifact *checked=NULL;XrXirStatus status=xir_fixture_check(&owner.context, &module, &checked, NULL);
         if(status!=(valid?XR_XIR_OK:XR_XIR_BAD_TYPE))fprintf(stderr,"float literal %u status%u valid%u\n",i,status,valid);
         CHECK(status==(valid?XR_XIR_OK:XR_XIR_BAD_TYPE));
         if(valid)CHECK(checked);else CHECK(!checked);
@@ -67,7 +73,7 @@ static void ordering_float_constant_cases(void) {
             memcpy(bytes,packet.bytes,packet.length);bytes[149]=1;
             ordering_packet_digest(bytes,packet.length);XrXirArtifact *empty=NULL,*occupied=checked;
             CHECK(xr_xir_compile_checked_read(&owner.context,bytes,packet.length,&empty,NULL)==XR_XIR_BAD_TYPE && !empty);
-            CHECK(xr_xir_compile_checked_read(&owner.context,bytes,packet.length,&occupied,NULL)==XR_XIR_BAD_TYPE && occupied==checked);
+            CHECK(xr_xir_compile_checked_read(&owner.context,bytes,packet.length,&occupied,NULL)==XR_XIR_BAD_STRUCTURE && occupied==checked);
             xr_xir_compile_checked_packet_free(&packet);
         }
         xr_xir_compile_artifact_free(checked);

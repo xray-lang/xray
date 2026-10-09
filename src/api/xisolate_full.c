@@ -139,10 +139,13 @@ static int isolate_init_full(XrVMRuntime *isolate) {
     isolate->core_rt->symbol_table = xr_symbol_table_create();
     if (!isolate->core_rt->symbol_table)
         return -1;
-    xr_symbol_table_init_builtins((XrSymbolTable *) isolate->core_rt->symbol_table);
+    if (!xr_symbol_table_init_builtins((XrSymbolTable *) isolate->core_rt->symbol_table))
+        return -1;
 
     // Type registry (must be before core_init, which registers classes)
     xr_registry_init(isolate);
+    if (!xr_isolate_get_type_registry(isolate))
+        return -1;
     xr_runtime_core_enable_full_destroy_ops(isolate->core_rt);
 
     // Route Map/Set instance key hash/equality through user hash()/operator ==.

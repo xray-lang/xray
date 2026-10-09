@@ -1,0 +1,3 @@
+final class Holder {n:i64=0}
+var bad:Task<Holder>?
+export fn pure(value:i64)->i64 {return value+1}

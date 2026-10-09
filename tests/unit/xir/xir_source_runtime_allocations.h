@@ -101,6 +101,10 @@ static void runtime_source_failures(XrXirProgram *program, RuntimeSourceEntries 
         runtime_attempts = 0; runtime_fail_at = attempt ? attempt - 1 : SIZE_MAX;
         runtime_source_attempt(program,entries);
         if (!attempt) sites = runtime_attempts;
+        if(runtime_live != baseline || runtime_bytes != bytes) {
+            fprintf(stderr,"Source runtime FI residual attempt=%zu sites=%zu attempts=%zu baseline=%zu/%zu actual=%zu/%zu\n",attempt,sites,runtime_attempts,baseline,bytes,runtime_live,runtime_bytes);
+            runtime_report_residuals(stderr);
+        }
         CHECK(runtime_live == baseline && runtime_bytes == bytes);
     }
     runtime_fail_at = SIZE_MAX;

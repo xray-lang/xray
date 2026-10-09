@@ -1,0 +1,2 @@
+var counter=Atomic<i64>(0)
+export fn write() {counter.store(99,Ordering.Acquire)}

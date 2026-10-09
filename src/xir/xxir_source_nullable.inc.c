@@ -111,7 +111,7 @@ static bool source_coalesce(SourceContext *ctx,AstNode *node,SourceExpectedType 
         }
         if (source_null_syntax(ctx,node->as.binary.right) && !xr_xir_type_is_nullable(&ctx->types,element) &&
             !source_nullable_type(ctx,element,&element)) return false;
-        if (!source_nullable_dead_default(ctx,plan,(SourceExpectedType){true,element,false})) return false;
+        if (!source_nullable_dead_default(ctx,plan,(SourceExpectedType){true,element,false, false})) return false;
         *value=subject;return true;
     }
     XrXirType element=xr_xir_nullable_element(&ctx->types,subject.type),result=element;
@@ -128,7 +128,7 @@ static bool source_coalesce(SourceContext *ctx,AstNode *node,SourceExpectedType 
     if (!source_recipe_record(ctx,(XrXirInstruction){XR_XIR_JUMP,XR_XIR_UNIT,{0},{0},0,{0}},NULL)) return false;
     uint32_t no_block=body->block_count;
     if (!begin_block(ctx)) return false;
-    plan->right=source_plan_collect(ctx,node->as.binary.right,(SourceExpectedType){true,result,false});
+    plan->right=source_plan_collect(ctx,node->as.binary.right,(SourceExpectedType){true,result,false, false});
     if (!plan->right || !source_plan_complete(ctx,plan->right,&no)) return false;
     SourceFact *no_facts=ctx->facts,*joined=NULL;
     if (!source_facts_join(ctx,entry_facts,entry_epochs,no_facts,ctx->epochs,&joined)) return false;

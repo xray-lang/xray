@@ -9,6 +9,7 @@
  * KEY CONCEPT:
  *   Reused bytes never retain naming permission or a different pool's proof.
  */
+#include "xir_construction_fixture.h"
 #include "xir/xxir_type_scratch_internal.h"
 #include "xir/xxir_declarations.h"
 #include "base/xmalloc.h"
@@ -93,8 +94,8 @@ static void owner_free(XrXirCompileContext *context,uint64_t baseline) {
     *context=(XrXirCompileContext){0};CHECK(!live && !live_bytes);
 }
 static XrXirStatus sequence(const XrXirCompileContext *context,AccessFixture *small,AccessFixture *large) {
-    XrXirStatus status=xr_xir_compile_verify(context,&small->module,NULL);
-    if (status==XR_XIR_OK) status=xr_xir_compile_verify(context,&large->module,NULL);
+    XrXirStatus status=xir_fixture_verify(context, &small->module, NULL);
+    if (status==XR_XIR_OK) status=xir_fixture_verify(context, &large->module, NULL);
     XirTypeScratch scratch={context->resources,NULL,0};
     if (status==XR_XIR_OK) status=xr_xir_compile_type_access_scratch(context,&small->module,0,small->root,&scratch);
     if (status==XR_XIR_OK) status=xr_xir_compile_type_access_scratch(context,&large->module,0,large->root,&scratch);
@@ -131,7 +132,7 @@ static void limits(void) {
 }
 static void authority(void) {
     AccessFixture f;fixture(&f,33);XrXirCompileContext context=owner_new(caps());uint64_t baseline=stats(&context).live_bytes;
-    CHECK(xr_xir_compile_verify(&context,&f.module,NULL)==XR_XIR_OK);
+    CHECK(xir_fixture_verify(&context, &f.module, NULL)==XR_XIR_OK);
     XirTypeScratch scratch={context.resources,NULL,0};
     CHECK(xr_xir_compile_type_access_scratch(&context,&f.module,0,f.root,&scratch)==XR_XIR_OK);
     uint64_t allocations=stats(&context).allocation_count;

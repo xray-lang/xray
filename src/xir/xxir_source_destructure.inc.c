@@ -82,15 +82,16 @@ static bool source_destructure_binding(SourceContext *ctx, AstNode *node, bool t
                 return source_fail(ctx,node,XR_XIR_BAD_STRUCTURE,"module Tuple binding slot inventory mismatch");
             if(!bindings)first_slot=symbols[i]->index;
             ++bindings;
-            symbols[i]->type=fields[i].type;ctx->slots[symbols[i]->index].type=fields[i].type;
-            if(fields[i].type==XR_XIR_UNIT)symbols[i]->kind=SOURCE_UNIT_SLOT;
-            else compact[payloads++]=values[i];
-            source_query_binding_type(ctx,symbols[i]);
+            symbols[i]->inferred=true;
+            if (!source_root_join_record(ctx,&values[i])) return false;
+            if (!source_binding_prepare(ctx, symbols[i], &values[i])) return false;
+            if (values[i].type != XR_XIR_UNIT) compact[payloads++]=values[i];
             continue;
         }
         symbols[i] = source_alloc(ctx,1,sizeof(*symbols[i]));
         if (!symbols[i]) return false;
         if (!node->as.destructure_decl.is_const && fields[i].type != XR_XIR_UNIT) {
+            if (!source_root_join_record(ctx,&values[i])) return false;
             XrXirType cell;
             if (!source_cell_type(ctx,fields[i].type,&cell) ||
                 !source_recipe_record(ctx,(XrXirInstruction){XR_XIR_CELL_NEW,cell,
@@ -99,7 +100,7 @@ static bool source_destructure_binding(SourceContext *ctx, AstNode *node, bool t
         *symbols[i] = (SourceName){NULL,field->as.identifier.name,NULL,node,
             fields[i].type == XR_XIR_UNIT ? SOURCE_UNIT_LOCAL : SOURCE_LOCAL,
             fields[i].type == XR_XIR_UNIT ? UINT32_MAX : values[i].id,
-            ctx->module,fields[i].type,!node->as.destructure_decl.is_const,false,0};
+            ctx->module,fields[i].type,!node->as.destructure_decl.is_const,false,0, true, false};
     }
     if(top) {
         if(!bindings)return true;

@@ -85,18 +85,36 @@ static void formula(bool c90, const char *source, size_t length) {
     const uint64_t scratch = 2 * sizeof(void *) + 4 * sizeof(size_t) + 64 * sizeof(long) + 4 * diagnostic + 160;
     CHECK(diagnostic == sizeof(XiCgenVerifyResult));
     uint64_t allocated = sizeof(OracleLedger) + sizeof(OracleHeader) + (c90 ? diagnostic : scratch);
-    const uint64_t mask_bytes = (length + 7) / 8;
-    if (!c90) allocated += 2 * sizeof(OracleHeader) + mask_bytes + 1;
-    /* Quoted C90: one allocation, n loop steps, 2n-1 byte reads, publication.
-     * Newline-only W1-W4: scratch and mask zero, three allocations,
-     * 2n lexical operations, n line steps, n copies and n delimiter reads.
-     * Empty physical lines need no mask reads and one scratch byte. */
-    uint64_t work = 1 + (c90 ? 3 * length + diagnostic : scratch + diagnostic + mask_bytes + 5 * length + 3);
+    uint64_t peak = allocated, allocations_count = 2;
+    /* Quoted C90: one allocation, n loop steps, 2n-1 byte reads, publication. */
+    uint64_t work = 1 + 3 * length + diagnostic;
+    if (!c90) {
+        CHECK(length == 1 || length == 7 || length == 4096);
+        for (size_t i = 0; i < length; ++i) CHECK(source[i] == '\n');
+        const uint64_t mask_bytes = (length + 7) / 8;
+        /* One endpoint block holds 128 uint32 records. The 4096-line case
+         * allocates 512+1024+2048+4096+8192+16384 payload bytes, copies
+         * 512+1024+2048+4096+8192, and overlaps 8192+16384 at its peak.
+         * Line scratch is allocated only after endpoint growth finishes. */
+        const uint64_t blocks = length == 4096 ? 6 : 1;
+        const uint64_t endpoints = length == 4096 ? 32256 : 512;
+        const uint64_t copied = length == 4096 ? 15872 : 0;
+        const uint64_t lexical = sizeof(OracleLedger) + 2 * sizeof(OracleHeader) + scratch + mask_bytes;
+        allocated = lexical + (blocks+1) * sizeof(OracleHeader) + endpoints + 1;
+        peak = length == 4096 ? lexical + 2 * sizeof(OracleHeader) + 24576 : allocated;
+        allocations_count = blocks+4;
+        /* Each empty line pays lexical loop/read2, record6, structural
+         * loop1, endpoint read4 and newline read1. Unmasked lines borrow
+         * source bytes, so there is no payload copy or mask application.
+         * Add scratch/mask clearing, all allocations, resize copies and
+         * complete diagnostic publication; ledger creation costs one. */
+        work = 1 + scratch + mask_bytes + diagnostic + 14 * length + blocks+3 + copied;
+    }
     VerifyPrototype verify = c90 ? xr_compile_cgen_verify_c90_output : xr_compile_cgen_verify_output;
     for (unsigned dimension = 0; dimension < 3; ++dimension) for (unsigned minus = 0; minus < 2; ++minus) {
         XrCompileResourceLimits limits = unlimited;
         if (dimension == 0) limits.allocated_bytes = allocated - minus;
-        if (dimension == 1) limits.live_bytes = allocated - minus;
+        if (dimension == 1) limits.live_bytes = peak - minus;
         if (dimension == 2) limits.work = work - minus;
         XrCompileResources *resources = ledger(limits);
         physical_peak = physical;
@@ -106,9 +124,9 @@ static void formula(bool c90, const char *source, size_t length) {
         if (minus) CHECK(!memcmp(&result, &saved, sizeof(result)));
         else {
             CHECK(result.category == XI_CGEN_VERIFY_OK);
-            CHECK(stats.allocated_bytes == allocated && stats.peak_bytes == allocated);
-            CHECK(physical_peak == allocated);
-            CHECK(stats.work == work && stats.allocation_count == (c90 ? 2u : 4u));
+            CHECK(stats.allocated_bytes == allocated && stats.peak_bytes == peak);
+            CHECK(physical_peak == peak);
+            CHECK(stats.work == work && stats.allocation_count == allocations_count);
         }
         CHECK(stats.live_bytes == sizeof(OracleLedger)); release(resources);
     }
@@ -211,7 +229,7 @@ static void allocation_failures(void) {
     const char source[] = "void f(void) {\n int v0=1;\n int v2048=2;\n int v4096=3;\n return;\n}\n";
     XrCompileResources *resources = ledger(unlimited); size_t before = calls; XiCgenVerifyResult result;
     CHECK(xr_compile_cgen_verify_output(resources, source, sizeof(source) - 1, &result) == XI_CGEN_VERIFY_PASSED);
-    size_t points = calls - before; CHECK(points == 6); release(resources);
+    size_t points = calls - before; CHECK(points == 7); release(resources);
     for (size_t point = 0; point < points; ++point) for (unsigned wrapper = 0; wrapper < 2; ++wrapper) {
         resources = ledger(unlimited); result = poisoned(); XiCgenVerifyResult saved = result;
         fail_at = calls + point;
@@ -223,7 +241,7 @@ static void allocation_failures(void) {
     resources = ledger(unlimited); result = poisoned(); XiCgenVerifyResult saved = result;
     fail_at = calls; CHECK(xr_compile_cgen_verify_c90_output(resources, "\"x\"", 3, &result) == XI_CGEN_VERIFY_OUT_OF_MEMORY);
     CHECK(!memcmp(&result, &saved, sizeof(result))); fail_at = SIZE_MAX; release(resources);
-    puts("verifier allocator failures: six real W1-W4 points and one C90 point, physical zero");
+    puts("verifier allocator failures: seven real W1-W4 points and one C90 point, physical zero");
 }
 
 static void growth_formula(void) {
@@ -232,7 +250,8 @@ static void growth_formula(void) {
     const uint64_t scratch = 2 * sizeof(void *) + 4 * sizeof(size_t) + 64 * sizeof(long) + 4 * diagnostic + 160;
     const uint64_t longest_line = sizeof("void f(void) {\n") - 1; CHECK(longest_line == 15);
     const uint64_t mask_bytes = (sizeof(source) - 1 + 7) / 8;
-    const uint64_t fixed = sizeof(OracleLedger) + 3 * sizeof(OracleHeader) + scratch + mask_bytes + longest_line;
+    /* Six physical lines fit in one owned 128-entry endpoint block. */
+    const uint64_t fixed = sizeof(OracleLedger) + 4 * sizeof(OracleHeader) + scratch + mask_bytes + longest_line + 512;
     /* Definitions grow the seen bytes from 1024 to 4096 to 8192. All three
      * allocations are cumulative; the two largest coexist during resize. */
     const uint64_t cumulative = fixed + 3 * sizeof(OracleHeader) + 1024 + 4096 + 8192;
@@ -247,7 +266,7 @@ static void growth_formula(void) {
         if (minus) CHECK(!memcmp(&result, &saved, sizeof(result)));
         else {
             XrCompileResourceStats stats; CHECK(xr_compile_resources_stats(resources, &stats) == XR_COMPILE_RESOURCE_OK);
-            CHECK(stats.allocated_bytes == cumulative && stats.peak_bytes == peak && stats.allocation_count == 7);
+            CHECK(stats.allocated_bytes == cumulative && stats.peak_bytes == peak && stats.allocation_count == 8);
             CHECK(stats.live_bytes == sizeof(OracleLedger));
         }
         release(resources);
@@ -358,7 +377,8 @@ static void uses_growth_formula(void) {
     const uint64_t scratch = 2 * sizeof(void *) + 4 * sizeof(size_t) + 64 * sizeof(long) + 4 * diagnostic + 160;
     const uint64_t longest_line = sizeof(" return v0 + v0 + v0 + v0 + v0 + v0 + v0 + v0 + v0 + v0 + v0 + v0 + v0 + v0 + v0 + v0 + v0 + v0 + v0 + v0 + v0 + v0 + v0 + v0 + v0 + v0 + v0 + v0 + v0 + v0 + v0 + v0 + v0 + v0 + v0 + v0 + v0 + v0 + v0 + v0 + v0 + v0 + v0 + v0 + v0 + v0 + v0 + v0 + v0 + v0 + v0 + v0 + v0 + v0 + v0 + v0 + v0 + v0 + v0 + v0 + v0 + v0 + v0 + v0 + v0 + v0 + v0 + v0 + v0 + v0;\n") - 1;
     const uint64_t mask_bytes = (sizeof(source) - 1 + 7) / 8;
-    const uint64_t fixed = sizeof(OracleLedger) + 3 * sizeof(OracleHeader) + scratch + mask_bytes + longest_line;
+    /* Four physical lines fit in one owned 128-entry endpoint block. */
+    const uint64_t fixed = sizeof(OracleLedger) + 4 * sizeof(OracleHeader) + scratch + mask_bytes + longest_line + 512;
     /* One seen block stays live while the uses vector grows 16, 32, 64, 128.
      * Only the last two vector blocks coexist; every allocation is cumulative. */
     const uint64_t cumulative = fixed + 5 * sizeof(OracleHeader) + 1024 + (16 + 32 + 64 + 128) * sizeof(long);
@@ -374,7 +394,7 @@ static void uses_growth_formula(void) {
         if (minus) CHECK(!memcmp(&result, &saved, sizeof(result)));
         else {
             XrCompileResourceStats stats; CHECK(xr_compile_resources_stats(resources, &stats) == XR_COMPILE_RESOURCE_OK);
-            CHECK(stats.allocated_bytes == cumulative && stats.peak_bytes == peak && stats.allocation_count == 9);
+            CHECK(stats.allocated_bytes == cumulative && stats.peak_bytes == peak && stats.allocation_count == 10);
             CHECK(physical_peak == peak && stats.live_bytes == sizeof(OracleLedger));
         }
         release(resources);

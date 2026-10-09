@@ -14,6 +14,7 @@
 #include "xxir_declarations.h"
 #include "xxir_constraints.h"
 #include "xxir_types.h"
+#include "xxir_nominal.h"
 #include "xxir_generic.h"
 #include "xxir_internal.h"
 #include "xxir_implementation.h"
@@ -44,7 +45,7 @@ XR_FUNC XrXirStatus xr_xir_compile_default_helper(const XrXirCompileContext *com
     XrXirCompileContext compile_state = *compile_context;
     XrXirCompileContext *b = &compile_state;
     if (!out || !m || !b || function>=m->function_count) return XR_XIR_BAD_STRUCTURE;
-    if (m->provenance) {
+    if (xir_effect_evidence_is_instance(m)) {
         const XrXirProvenance *p=m->provenance;
         if (!p->source || !p->origins || function>=p->count) return XR_XIR_BAD_STRUCTURE;
         function=p->origins[function].function; m=&p->source->module;
@@ -94,7 +95,7 @@ XR_FUNC XrXirStatus xr_xir_compile_defaults_verify(const XrXirCompileContext *co
     XrXirCompileContext *b = &compile_state;
     if (!m || !b) return XR_XIR_BAD_STRUCTURE;
     if (!m->defaults) return XR_XIR_OK;
-    if (m->stage==XR_XIR_LOWERED || m->provenance) return XR_XIR_BAD_STAGE;
+    if (m->stage==XR_XIR_LOWERED || xir_effect_evidence_is_instance(m)) return XR_XIR_BAD_STAGE;
     const XrXirDefaultTable *t=m->defaults;
     const XrXirDeclarations *d=m->declarations;
     if (!t->count || !t->records || !d || !d->functions || !m->functions || !d->modules || !d->module_count) return XR_XIR_BAD_STRUCTURE;
@@ -164,3 +165,6 @@ XR_FUNC XrXirStatus xr_xir_compile_default_call_verify(const XrXirCompileContext
     if (s==XR_XIR_OK) s=xr_xir_compile_call_type_matches(b, m, caller, &call, m->functions[a->owner].parameters[a->ordinal], op->type);
     return s;
 }
+
+#include "xxir_construction_internal.h"
+#include "xxir_nominal_initializers.inc.c"

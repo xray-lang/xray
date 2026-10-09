@@ -6,6 +6,7 @@
  *
  * test_catalog_owner.c - Observe catalog and identity physical ownership
  */
+#include "../xir_construction_fixture.h"
 #include "xir/xxir.h"
 #include "xir/xxir_checked.h"
 #include "xir/xxir_library_catalog.h"
@@ -65,6 +66,7 @@ static const char *canonical[] = {
 };
 static unsigned char packets[2][4096];
 static XrXirLibraryInput inputs[2];
+static XrXirLibraryModuleInput bindings[2];
 static char canary_byte;
 static void make_packet(unsigned kind) {
     reset(SIZE_MAX);
@@ -86,13 +88,12 @@ static void make_packet(unsigned kind) {
     XrXirDeclarations declarations = {&source,1,names,NULL,0,NULL,0,UINT32_MAX,UINT32_MAX,NULL};
     XrXirModule module = {XR_XIR_BUILT,functions,2,&declarations,NULL,NULL,NULL,XR_XIR_LIBRARY,NULL};
     XrXirArtifact *artifact = NULL; XrXirCheckedPacket packet = {0};
-    CHECK(xr_xir_compile_check(&context,&module,&artifact,NULL) == XR_XIR_OK);
+    CHECK(xir_fixture_check(&context, &module, &artifact, NULL) == XR_XIR_OK);
     CHECK(xr_xir_compile_checked_write(artifact,&packet,NULL) == XR_XIR_OK);
     CHECK(packet.length <= sizeof(packets[kind]));
     memcpy(packets[kind],packet.bytes,packet.length);
-    inputs[kind] = (XrXirLibraryInput){
-        {kind ? XR_MODULE_IDENTITY_STDLIB : XR_MODULE_IDENTITY_SCRIPT,kind ? "io" : NULL,"C:/catalog-owner"},
-        kind ? "io/output.xr" : "lib.xr",packets[kind],packet.length,{0}};
+    bindings[kind] = (XrXirLibraryModuleInput){{kind ? XR_MODULE_IDENTITY_STDLIB : XR_MODULE_IDENTITY_SCRIPT,kind ? "io" : NULL,"C:/catalog-owner"},kind ? "io/output.xr" : "lib.xr"};
+    inputs[kind] = (XrXirLibraryInput){packets[kind],packet.length,{0}, &bindings[kind],1};
     xr_sha256(packets[kind],packet.length,inputs[kind].sha256);
     xr_xir_compile_artifact_free(artifact); xr_xir_compile_checked_packet_free(&packet);
     xr_compile_resources_release(owner); CHECK(!live && !live_count);
@@ -100,10 +101,10 @@ static void make_packet(unsigned kind) {
 static XrXirStatus catalog_run(XrCompileResources *owner, unsigned kind) {
     XrXirCompileContext context = {owner,xr_xir_compile_default_limits()};
     XrXirLibraryCatalog *output = (void *)&canary_byte;
-    XrXirStatus status = xr_xir_compile_library_catalog_new(&context,&inputs[kind],1,&output);
+    XrXirStatus status = xr_xir_compile_library_catalog_new_v2(&context,&inputs[kind],1,&output);
     if (status != XR_XIR_OK) { CHECK(output == (void *)&canary_byte); return status; }
     size_t count = 0;
-    const XrModuleResourceBinding *binding = xr_xir_compile_library_catalog_resources(output,&count);
+    const XrModuleResourceBinding *binding = xr_xir_compile_library_catalog_resources_v2(output,&count);
     CHECK(count == 1 && binding && !strcmp(binding->canonical,canonical[kind]));
     CHECK(xr_xir_compile_library_catalog_context(output)->resources == owner);
     CHECK(xr_xir_compile_artifact_context(binding->checked)->resources == owner);
@@ -121,8 +122,8 @@ static XrXirStatus module_status(XrModuleStatus status) {
 static XrXirStatus identity_run(XrCompileResources *owner, unsigned kind) {
     char *identity = &canary_byte, *logical = &canary_byte;
     XrModuleStatus status;
-    if (kind == 0) status = xr_compile_module_identity_from_logical(owner,&inputs[1].authority,inputs[1].logical_path,&identity);
-    else if (kind == 1) status = xr_compile_module_identity_from_source(owner,&inputs[1].authority,
+    if (kind == 0) status = xr_compile_module_identity_from_logical(owner,&inputs[1].modules[0].authority,inputs[1].modules[0].logical_path,&identity);
+    else if (kind == 1) status = xr_compile_module_identity_from_source(owner,&inputs[1].modules[0].authority,
         "C:/catalog-owner/io/output.xr",&identity,&logical);
     else {
         XrModuleIdentityAuthority authority = {XR_MODULE_IDENTITY_MEMORY,&canary_byte,&canary_byte};
@@ -138,7 +139,7 @@ static XrXirStatus identity_run(XrCompileResources *owner, unsigned kind) {
     }
     if (status != XR_MODULE_OK) { CHECK(identity == &canary_byte && logical == &canary_byte); return module_status(status); }
     CHECK(!strcmp(identity,canonical[1]) && xr_module_identity_valid(identity,NULL));
-    if (kind == 1) { CHECK(!strcmp(logical,inputs[1].logical_path)); xr_compile_resources_free(logical); }
+    if (kind == 1) { CHECK(!strcmp(logical,inputs[1].modules[0].logical_path)); xr_compile_resources_free(logical); }
     xr_compile_resources_free(identity); return XR_XIR_OK;
 }
 typedef XrXirStatus (*Run)(XrCompileResources *, unsigned);
@@ -203,25 +204,26 @@ static void negative_and_lifetime(void) {
     size_t bootstrap = live;
     XrXirCompileContext context = {owner,xr_xir_compile_default_limits()};
     XrXirLibraryCatalog *catalog = (void *)&canary_byte;
-    CHECK(xr_xir_compile_library_catalog_new(NULL,inputs,1,&catalog) == XR_XIR_BAD_STRUCTURE);
+    CHECK(xr_xir_compile_library_catalog_new_v2(NULL,inputs,1,&catalog) == XR_XIR_BAD_STRUCTURE);
     CHECK(catalog == (void *)&canary_byte);
-    CHECK(xr_xir_compile_library_catalog_new(&context,inputs,SIZE_MAX,&catalog) == XR_XIR_BUDGET);
+    CHECK(xr_xir_compile_library_catalog_new_v2(&context,inputs,SIZE_MAX,&catalog) == XR_XIR_BUDGET);
     CHECK(catalog == (void *)&canary_byte && live == bootstrap);
     for (unsigned kind = 0; kind < 5; ++kind) {
-        XrXirLibraryInput wrong = inputs[1];
+        XrXirLibraryModuleInput wrong_binding = *inputs[1].modules;
+        XrXirLibraryInput wrong = inputs[1]; wrong.modules = &wrong_binding;
         if (!kind) wrong.sha256[0] ^= 1;
-        else if (kind == 1) wrong.logical_path = "io/other.xr";
-        else if (kind == 2) wrong.logical_path = "io/output.xr/";
-        else if (kind == 3) wrong.authority.namespace_id = "other";
-        else wrong.authority.kind = XR_MODULE_IDENTITY_PROJECT;
-        CHECK(xr_xir_compile_library_catalog_new(&context,&wrong,1,&catalog) == (kind == 4 ? XR_XIR_BAD_STAGE : XR_XIR_BAD_STRUCTURE));
+        else if (kind == 1) wrong.modules[0].logical_path = "io/other.xr";
+        else if (kind == 2) wrong.modules[0].logical_path = "io/output.xr/";
+        else if (kind == 3) wrong.modules[0].authority.namespace_id = "other";
+        else wrong.modules[0].authority.kind = XR_MODULE_IDENTITY_PROJECT;
+        CHECK(xr_xir_compile_library_catalog_new_v2(&context,&wrong,1,&catalog) == (kind == 4 ? XR_XIR_BAD_STAGE : XR_XIR_BAD_STRUCTURE));
         CHECK(catalog == (void *)&canary_byte && live == bootstrap);
     }
     XrXirLibraryInput duplicate[2] = {inputs[1],inputs[1]};
-    CHECK(xr_xir_compile_library_catalog_new(&context,duplicate,2,&catalog) == XR_XIR_BAD_STRUCTURE);
+    CHECK(xr_xir_compile_library_catalog_new_v2(&context,duplicate,2,&catalog) == XR_XIR_BAD_STRUCTURE);
     CHECK(catalog == (void *)&canary_byte && live == bootstrap);
-    CHECK(xr_xir_compile_library_catalog_new(&context,inputs,2,&catalog) == XR_XIR_OK);
-    size_t count; const XrModuleResourceBinding *binding = xr_xir_compile_library_catalog_resources(catalog,&count);
+    CHECK(xr_xir_compile_library_catalog_new_v2(&context,inputs,2,&catalog) == XR_XIR_OK);
+    size_t count; const XrModuleResourceBinding *binding = xr_xir_compile_library_catalog_resources_v2(catalog,&count);
     CHECK(count == 2);
     xr_compile_resources_release(owner);
     memset(packets,0,sizeof(packets));
@@ -291,7 +293,7 @@ static void identity_lifetime_and_views(void) {
     reset(SIZE_MAX); XrCompileResources *owner = NULL;
     CHECK(xr_compile_resources_new(&unlimited,&owner) == XR_COMPILE_RESOURCE_OK);
     char *identity = NULL, *logical = NULL;
-    CHECK(xr_compile_module_identity_from_source(owner,&inputs[1].authority,
+    CHECK(xr_compile_module_identity_from_source(owner,&inputs[1].modules[0].authority,
         "C:/catalog-owner/io/output.xr",&identity,&logical) == XR_MODULE_OK);
     xr_compile_resources_release(owner);
     CHECK(!strcmp(identity,canonical[1]) && !strcmp(logical,"io/output.xr"));

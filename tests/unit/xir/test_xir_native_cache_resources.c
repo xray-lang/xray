@@ -23,14 +23,13 @@ typedef struct CacheResourceRun {
 
 static XrXirStatus resource_prepare(const XrXirCompileContext *context,
     const char *root, const char *entry, XrXirArtifact **output) {
-    XrXirLibraryInput input = {{XR_MODULE_IDENTITY_STDLIB,"io",root},"io/output.xr",
-        xir_native_cache_registry.checked.bytes,xir_native_cache_registry.checked.length,{0}};
+    XrXirLibraryInput input = {xir_native_cache_registry.checked.bytes,xir_native_cache_registry.checked.length,{0}, (XrXirLibraryModuleInput[]){{{XR_MODULE_IDENTITY_STDLIB,"io",root},"io/output.xr"}},1};
     memcpy(input.sha256,xir_native_cache_registry.checked.digest,32);
     XrXirLibraryCatalog *catalog = NULL;
     XrCompilerSession *session = NULL;
     XrXirSourceResult result = {0}; XrXirSourceDiagnostic diagnostic = {0};
     XrXirCheckedPacket packet = {0}; XrXirArtifact *decoded = NULL, *closed = NULL;
-    XrXirStatus status = xr_xir_compile_library_catalog_new(context,&input,1,&catalog);
+    XrXirStatus status = xr_xir_compile_library_catalog_new_v2(context,&input,1,&catalog);
     if (status != XR_XIR_OK) goto finish;
     XrCompilerSessionStatus session_status = xr_compile_session_new(context->resources,&session);
     if (session_status != XR_COMPILER_SESSION_OK) {

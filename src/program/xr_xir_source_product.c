@@ -252,6 +252,9 @@ XR_FUNC XrXirStatus xr_xir_compile_source_product_packet(const XrXirSourceProduc
 XR_FUNC const XrXirSourceView *xr_xir_compile_source_product_view(const XrXirSourceProduct *product) {
     return product ? xr_xir_compile_source_snapshot_view(product->snapshot) : NULL;
 }
+XR_FUNC const XrXirConstruction *xr_xir_compile_source_product_construction(const XrXirSourceProduct *product) {
+    return product ? xr_xir_compile_source_snapshot_construction(product->snapshot) : NULL;
+}
 XR_FUNC XrXirStatus xr_xir_compile_source_product_layout(const XrXirSourceProduct *product,
     uint32_t function,XrXirSourceProductLayoutView *output) {
     if (!product || !output) return XR_XIR_BAD_STRUCTURE;
@@ -342,4 +345,9 @@ XR_FUNC XrXirStatus xr_xir_compile_source_product_emit(const XrXirSourceProduct 
         return XR_XIR_BAD_STRUCTURE;
     if (!product->lowered) return XR_XIR_BAD_STAGE;
     return xr_xir_compile_emit_c(product->lowered,prefix,byte_limit,output);
+}
+
+XR_FUNC const XrXirSourceDependencies *xr_xir_compile_source_product_dependencies(
+    const XrXirSourceProduct *product) {
+    return product ? xr_xir_compile_source_snapshot_dependencies(product->snapshot) : NULL;
 }

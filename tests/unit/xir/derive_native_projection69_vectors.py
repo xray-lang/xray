@@ -1,4 +1,4 @@
-"""Encode complete current C11 policies from fixed named facts independently.
+"""Encode complete preceding C11 policies from fixed named facts independently.
 
 No projection owner, executable, generated source, or writer output is read.
 All eight prior preimages and the original semantic65 literals are preserved.
@@ -57,16 +57,8 @@ def main():
     history_path = old_directory / 'native_projection_identity_history.json'
     history = json.loads(history_path.read_text(encoding='utf-8'))
     assert len(history['records']) == 8
-    for key, header_name, macro in (
-        ('checked_schema', 'xxir_checked.h', 'XR_XIR_CHECKED_SCHEMA'),
-        ('checked_contract', 'xxir_checked.h', 'XR_XIR_CHECKED_CONTRACT'),
-        ('value_abi', 'xxir_value.h', 'XR_XIR_VALUE_ABI_VERSION'),
-        ('call_abi', 'xxir_call.h', 'XR_XIR_CALL_ABI_VERSION'),
-        ('program_abi', 'xxir_program.h', 'XR_XIR_PROGRAM_ABI_VERSION'),
-    ):
-        text = (root / 'src/xir' / header_name).read_text(encoding='utf-8')
-        matches = re.findall(r'^#define\s+' + macro + r'\s+(\d+)u?\s*$', text, re.M)
-        assert matches == [str(CURRENT[key])], (key, matches)
+    # Fixed prior identities remain independently checked below.
+    # The current72 oracle owns current macro and full-frame checks.
     records = []
     for role in ('linked', 'original'):
         for identity, versions in HISTORY.items():

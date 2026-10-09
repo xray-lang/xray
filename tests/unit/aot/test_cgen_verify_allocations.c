@@ -135,6 +135,106 @@ static void emission_scan(const XrXirArtifact *artifact,bool resumable) {
     }
     printf("actual %s emitter verifier points=%zu scratch-physical=0\n",resumable ? "resumable" : "leaf",total);fail_at=SIZE_MAX;
 }
+static void indexed_lines_fixture(char *source) {
+    const char tail[] = "void f(void) {\n const char *s = \"{ )\";\n int v0 = 1;\n (void) v0;\n}\n";
+    memset(source, '\n', 260);
+    memcpy(source + 260, tail, sizeof(tail));
+}
+static void indexed_lines_census(void) {
+    CHECK(!live && !bytes_live);
+    XrCompileResources *resources = NULL;
+    XrCompileResourceLimits limits = {1048576, 524288, 1000000};
+    CHECK(xr_compile_resources_new(&limits, &resources) == XR_COMPILE_RESOURCE_OK);
+    XrCompileResourceStats baseline, normal;
+    CHECK(xr_compile_resources_stats(resources, &baseline) == XR_COMPILE_RESOURCE_OK);
+    char source[512]; indexed_lines_fixture(source);
+    XiCgenVerifyResult result = {0}; calls = 0;
+    CHECK(xr_compile_cgen_verify_output(resources, source, strlen(source), &result) == XI_CGEN_VERIFY_PASSED);
+    CHECK(result.category == XI_CGEN_VERIFY_OK);
+    CHECK(xr_compile_resources_stats(resources, &normal) == XR_COMPILE_RESOURCE_OK);
+    physical_baseline(resources, 1, baseline.live_bytes, baseline.live_bytes);
+    printf("owned line spans census: sites=%zu allocated=%llu peak=%llu work=%llu live=%llu baseline=%llu\n",
+        calls, (unsigned long long)normal.allocated_bytes, (unsigned long long)normal.peak_bytes,
+        (unsigned long long)normal.work, (unsigned long long)normal.live_bytes,
+        (unsigned long long)baseline.live_bytes);
+    xr_compile_resources_release(resources);
+    CHECK(!live && !bytes_live);
+}
+static XrCompileResourceLimits indexed_axis_limits(size_t axis, bool minus_one) {
+    XrCompileResourceLimits limits = {1048576, 524288, 1000000};
+    CHECK(axis < 3);
+    if (axis == 0) limits.allocated_bytes = minus_one ? 6464 : 6465;
+    else if (axis == 1) limits.live_bytes = minus_one ? 4896 : 4897;
+    else limits.work = minus_one ? 8479 : 8480;
+    return limits;
+}
+static void indexed_fees_retained(const XrCompileResourceStats *before,
+    const XrCompileResourceStats *after, const XrCompileResourceLimits *limits) {
+    CHECK(after->allocation_count >= before->allocation_count);
+    CHECK(after->allocated_bytes >= before->allocated_bytes);
+    CHECK(after->work >= before->work && after->peak_bytes >= before->peak_bytes);
+    CHECK(after->allocated_bytes <= limits->allocated_bytes);
+    CHECK(after->peak_bytes <= limits->live_bytes && after->work <= limits->work);
+}
+static void indexed_axis_case(size_t axis, bool minus_one) {
+    static const char *names[] = {"allocated", "live", "work"};
+    CHECK(!live && !bytes_live && !verifier_allocation);
+    fail_at = SIZE_MAX;
+    XrCompileResources *resources = NULL;
+    XrCompileResourceLimits limits = indexed_axis_limits(axis, minus_one);
+    CHECK(xr_compile_resources_new(&limits, &resources) == XR_COMPILE_RESOURCE_OK);
+    XrCompileResources *identity = resources;
+    XrCompileResourceStats baseline, previous;
+    CHECK(xr_compile_resources_stats(resources, &baseline) == XR_COMPILE_RESOURCE_OK);
+    CHECK(baseline.live_bytes == 80 && baseline.allocated_bytes == 80);
+    physical_baseline(resources, 1, 80, 80);
+    previous = baseline;
+    char source[512]; indexed_lines_fixture(source);
+    CHECK(strlen(source) == 326);
+    /* The fixed quota rejects an incomplete verification without publishing
+     * diagnostics. Retrying retains the same ledger and its successful fees. */
+    size_t attempts = minus_one ? 3 : 1;
+    for (size_t attempt = 0; attempt < attempts; ++attempt) {
+        XiCgenVerifyResult result, saved, zero;
+        memset(&result, 0xa5, sizeof(result)); saved = result;
+        memset(&zero, 0, sizeof(zero)); calls = 0;
+        XiCgenVerifyStatus status = xr_compile_cgen_verify_output(
+            resources, source, strlen(source), &result);
+        CHECK(resources == identity);
+        if (minus_one) {
+            CHECK(status == XI_CGEN_VERIFY_BUDGET);
+            CHECK(!memcmp(&result, &saved, sizeof(result)));
+        } else {
+            CHECK(status == XI_CGEN_VERIFY_PASSED);
+            CHECK(!memcmp(&result, &zero, sizeof(result)) && calls == 8);
+        }
+        XrCompileResourceStats current;
+        CHECK(xr_compile_resources_stats(resources, &current) == XR_COMPILE_RESOURCE_OK);
+        indexed_fees_retained(&previous, &current, &limits);
+        CHECK(current.allocated_bytes > baseline.allocated_bytes && current.work > baseline.work);
+        if (!minus_one) {
+            CHECK(current.allocated_bytes == 6465 && current.peak_bytes == 4897);
+            CHECK(current.work == 8480);
+        }
+        physical_baseline(resources, 1, 80, 80);
+        printf("owned line axis=%s minus1=%u attempt=%zu status=%d sites=%zu "
+            "allocated=%llu peak=%llu work=%llu live=%llu physical=1/80\n",
+            names[axis], (unsigned) minus_one, attempt, (int) status, calls,
+            (unsigned long long) current.allocated_bytes,
+            (unsigned long long) current.peak_bytes,
+            (unsigned long long) current.work, (unsigned long long) current.live_bytes);
+        previous = current;
+    }
+    xr_compile_resources_release(resources);
+    CHECK(!live && !bytes_live && !verifier_allocation);
+    printf("owned line axis=%s minus1=%u final physical=0/0\n", names[axis], (unsigned) minus_one);
+}
+static void indexed_lines_budget_axes(void) {
+    for (size_t axis = 0; axis < 3; ++axis) {
+        indexed_axis_case(axis, false);
+        indexed_axis_case(axis, true);
+    }
+}
 int main(int argc,char **argv) {
     scalar_compile_begin();
     XrCompileResources *resources = scalar_owner.context.resources;
@@ -151,6 +251,7 @@ int main(int argc,char **argv) {
     const char body[]="void f(void) {\n int v0=1;\n int v2048=2;\n int v4096=3;\n return;\n}\n";
     const char macros[]="#define v0 0\n#define v2048 2\n#define v4096 3\nvoid f(void) {\n}\n";
     allocation_scan(resources,body);allocation_scan(resources,macros);
+    char indexed[512]; indexed_lines_fixture(indexed); allocation_scan(resources,indexed);
     XiCgenVerifyResult result;memset(&result,0xcc,sizeof(result));XiCgenVerifyResult saved=result;
     size_t physical_before = physical_calls;
     calls=0;CHECK(xr_compile_cgen_verify_output(resources, NULL,1,&result)==XI_CGEN_VERIFY_BAD_ARGUMENT);
@@ -164,6 +265,8 @@ int main(int argc,char **argv) {
     artifact=uninitialized_leaf_fixture(&scalar_owner.context);emission_scan(artifact,false);xr_xir_compile_artifact_free(artifact);
     artifact=call_fixture(&scalar_owner.context,0);emission_scan(artifact,true);xr_xir_compile_artifact_free(artifact);
     scalar_compile_owner_free(&scalar_owner);
+    indexed_lines_census();
+    indexed_lines_budget_axes();
     CHECK(!live && !bytes_live && !verifier_allocation);
     puts("typed verifier OOM, unchanged outputs and physical release PASS");return 0;
 }

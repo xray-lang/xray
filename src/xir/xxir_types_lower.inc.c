@@ -38,15 +38,26 @@ static XrXirStatus lower_provenance(XrXirModule *module, const uint32_t *map,
     XrXirStatus allocation_status = XR_XIR_OK;
     XrXirProvenance *proof = (XrXirProvenance *)module->provenance;
     if (!proof) return XR_XIR_OK;
+    if (proof->kind != XR_XIR_EVIDENCE_INSTANCE) return XR_XIR_BAD_STAGE;
     for (uint32_t f = 0; f < proof->count; ++f) {
         XrXirOrigin *origin = &proof->origins[f];
         if (!lower_type_work(budget, (uint64_t)origin->argument_count + 1)) return XR_XIR_BUDGET;
         XrXirType *arguments = (XrXirType *)origin->arguments;
         for (uint32_t a = 0; a < origin->argument_count; ++a)
             if (!lower_type_id(&arguments[a], map, count)) return XR_XIR_BAD_TYPE;
-        if (!origin->argument_count) continue;
+        if (!lower_type_work(budget, origin->effect_argument_count)) return XR_XIR_BUDGET;
+        XrXirEffectArgument *effects = (XrXirEffectArgument *)origin->effect_arguments;
+        for (uint32_t a = 0; a < origin->effect_argument_count; ++a)
+            if (!lower_type_id(&effects[a].type, map, count)) return XR_XIR_BAD_TYPE;
         const XrXirFunction *source = &proof->source->module.functions[origin->function];
-        uint64_t capacity = (uint64_t)source->name_length + 32 + (uint64_t)origin->argument_count * 12;
+        XrXirFunction *function = (XrXirFunction *)&module->functions[f];
+        /* Complete checking proved the default advertisement before remapping.
+         * Its spelling stays unchanged; variant suffixes use the new type IDs.
+         * The final provenance checker independently rebuilds both identities. */
+        if (!lower_type_work(budget, 2)) return XR_XIR_BUDGET;
+        if (!origin->argument_count && function->name_length == source->name_length) continue;
+        uint64_t capacity = (uint64_t)source->name_length + 32 +
+            (uint64_t)origin->argument_count * 12 + (uint64_t)origin->effect_argument_count * 26;
         if (capacity > UINT32_MAX || capacity > SIZE_MAX ||
             !lower_type_work(budget, capacity)) return XR_XIR_BUDGET;
 
@@ -60,7 +71,12 @@ static XrXirStatus lower_provenance(XrXirModule *module, const uint32_t *map,
             if (n < 0 || (size_t)n >= capacity - at) { xr_compile_resources_free(name); return XR_XIR_BAD_STRUCTURE; }
             at += (size_t)n;
         }
-        XrXirFunction *function = (XrXirFunction *)&module->functions[f];
+        for (uint32_t a = 0; a < origin->effect_argument_count; ++a) {
+            int n = snprintf(name + at, (size_t)capacity - at, "@%u:%u",
+                effects[a].parameter, (unsigned)effects[a].type);
+            if (n < 0 || (size_t)n >= capacity - at) { xr_compile_resources_free(name); return XR_XIR_BAD_STRUCTURE; }
+            at += (size_t)n;
+        }
         xr_compile_resources_free((void *)function->name); function->name = name; function->name_length = (uint32_t)at;
     }
     return XR_XIR_OK;

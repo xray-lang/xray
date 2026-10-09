@@ -1,3 +1,4 @@
+#include "xir_construction_fixture.h"
 /* Complete enum properties are independent of the escaping variant set. */
 typedef struct TaskErrorTypes {
     XrXirNominalDeclaration declarations[6]; XrXirNominalTable table;
@@ -144,7 +145,7 @@ static XrXirStatus task_error_effects(const XrXirCompileContext *c) {
         .types = &f.types, .generics = generics, .declarations = &declarations, .linkage_kind = XR_XIR_LIBRARY};
     XrXirArtifact *checked = NULL; XrXirEffects *effects = NULL;
     XrXirDiagnostic diagnostic = {0};
-    XrXirStatus status = xr_xir_compile_check(c, &f.module, &checked, &diagnostic);
+    XrXirStatus status = xir_fixture_check(c, &f.module, &checked, &diagnostic);
     if (status != XR_XIR_OK && fail_at == SIZE_MAX)
         fprintf(stderr, "error module status=%u function=%u instruction=%u\n", status, diagnostic.function, diagnostic.instruction);
     if (status == XR_XIR_OK) status = xr_xir_compile_effects_analyze(checked, &effects);

@@ -31,6 +31,7 @@ static void free_cached_entry(const char *key, void *value, void *unused) {
 XR_FUNC void xr_compile_module_resolver_free(XrModuleResolver *resolver) {
     if (!resolver) return;
     xr_hashmap_owned_dispose(resolver->cache,free_cached_entry,NULL);
+    xr_compile_module_overlay_free(resolver->overlay);
     xr_compile_resources_free((char *)resolver->config.stdlib_path);
     xr_compile_resources_free(resolver);
 }
@@ -73,6 +74,7 @@ static bool copy_module_id(ModuleWork *work, const XrModuleId *source, XrModuleI
     if (work->status != XR_MODULE_OK) { xr_compile_module_id_cleanup(&copy); return false; }
     *output = copy; return true;
 }
+#include "xmodule_overlay_resolve.inc.c"
 static char *make_cache_key(ModuleWork *work, const char *specifier, const char *importer,
     const XrModuleIdentityAuthority *authority) {
     bool relative = relative_specifier(work,specifier);
@@ -86,11 +88,17 @@ static bool realpath_into(ModuleWork *work, const char *path, char **output) {
     XrOsIoPolicy policy = xr_compile_io_policy(work->resources);
     return work->status == XR_MODULE_OK && module_io(work,xr_realpath_owned(&policy,path,output));
 }
-static bool probe_file_import(ModuleWork *work, const char *base, const char *relative, char **output) {
+static bool probe_file_import(ModuleWork *work, XrModuleResolver *resolver, const char *base,
+    const char *relative, const XrModuleIdentityAuthority *authority, const char *importer_logical, char **output) {
     XrOsIoPolicy policy = xr_compile_io_policy(work->resources);
     const char *suffixes[] = {".xr","/index.xr"}; char path[XR_PATH_MAX];
     for (unsigned i = 0; i < 2 && module_work(work,1); ++i) {
         if (!module_format_buffer(work,path,sizeof(path),"%s/%s%s",base,relative,suffixes[i])) return false;
+        if (resolver->overlay) {
+            const XrModuleOverlayEntry *entry = NULL;
+            if (!overlay_relative_select(work,resolver,authority,importer_logical,relative,suffixes[i],&entry)) return false;
+            if (entry) { *output = module_dup(work,entry->source.source_path); return work->status == XR_MODULE_OK; }
+        }
         XrOsIoStatus probe = xr_file_probe_owned(&policy,path,true);
         if (probe == XR_OS_IO_OK) return realpath_into(work,path,output);
         if (probe != XR_OS_IO_NOT_FOUND) return module_io(work,probe);
@@ -120,39 +128,50 @@ static bool stdlib_submodule_path(ModuleWork *work, const char *path, char *name
 }
 static void resolve_stdlib(ModuleWork *work, XrModuleResolver *resolver, const char *name, XrModuleId *out) {
     if (!descriptor(work,name)) { module_status(work,XR_MODULE_NOT_FOUND); return; }
-    char logical[XR_PATH_MAX], path[XR_PATH_MAX];
-    if (!module_format_buffer(work,logical,sizeof(logical),"%s/%s.xr",name,name)) return;
-    out->kind = XR_MOD_STDLIB; out->authority.kind = XR_MODULE_IDENTITY_STDLIB;
-    out->authority.namespace_id = module_dup(work,name);
-    if (resolver->config.stdlib_path && module_format_buffer(work,path,sizeof(path),"%s/%s",resolver->config.stdlib_path,logical)) {
-        XrOsIoPolicy policy = xr_compile_io_policy(work->resources);
-        XrOsIoStatus probe = xr_file_probe_owned(&policy,path,true);
-        if (probe == XR_OS_IO_OK) {
-            realpath_into(work,path,&out->source_path);
-            realpath_into(work,resolver->config.stdlib_path,(char **)&out->authority.physical_root);
-        } else if (probe != XR_OS_IO_NOT_FOUND) module_io(work,probe);
+    char logical[XR_PATH_MAX],path[XR_PATH_MAX];
+    if(!module_format_buffer(work,logical,sizeof(logical),"%s/%s.xr",name,name))return;
+    char *root=NULL;
+    if(resolver->config.stdlib_path) {
+        if(!realpath_into(work,resolver->config.stdlib_path,&root))return;
+        XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_STDLIB,name,root};
+        if(!module_format_buffer(work,path,sizeof(path),"%s/%s",root,logical)){xr_compile_resources_free(root);return;}
+        if(overlay_named_select(work,resolver,&authority,path,out)||work->status!=XR_MODULE_OK) {
+            xr_compile_resources_free(root);return;
+        }
+        XrOsIoPolicy policy=xr_compile_io_policy(work->resources);
+        XrOsIoStatus probe=xr_file_probe_owned(&policy,path,true);
+        if(probe==XR_OS_IO_OK)realpath_into(work,path,&out->source_path);
+        else if(probe!=XR_OS_IO_NOT_FOUND)module_io(work,probe);
     }
-    if (work->status == XR_MODULE_OK) module_status(work,xr_compile_module_identity_from_logical(
+    out->kind=XR_MOD_STDLIB;out->authority.kind=XR_MODULE_IDENTITY_STDLIB;
+    out->authority.namespace_id=module_dup(work,name);
+    if(out->source_path)out->authority.physical_root=root;
+    else xr_compile_resources_free(root);
+    if(work->status==XR_MODULE_OK)module_status(work,xr_compile_module_identity_from_logical(
         work->resources,&out->authority,logical,&out->canonical));
-    out->logical_path = module_dup(work,logical);
+    out->logical_path=module_dup(work,logical);
 }
 static void resolve_stdlib_submodule(ModuleWork *work, XrModuleResolver *resolver, const char *specifier, XrModuleId *out) {
-    char name[256], logical[XR_PATH_MAX], path[XR_PATH_MAX];
-    if (!stdlib_submodule_path(work,specifier+4,name,sizeof(name))) { module_status(work,XR_MODULE_INVALID); return; }
-    if (!resolver->config.stdlib_path) { module_status(work,XR_MODULE_NOT_FOUND); return; }
-    if (!module_format_buffer(work,logical,sizeof(logical),"%s.xr",specifier+4) ||
-        !module_format_buffer(work,path,sizeof(path),"%s/%s",resolver->config.stdlib_path,logical)) return;
-    XrOsIoPolicy policy = xr_compile_io_policy(work->resources);
-    if (!module_io(work,xr_file_probe_owned(&policy,path,true))) return;
-    out->kind = XR_MOD_STDLIB; out->authority.kind = XR_MODULE_IDENTITY_STDLIB;
-    out->authority.namespace_id = module_dup(work,name);
+    char name[256],logical[XR_PATH_MAX],path[XR_PATH_MAX];
+    if(!stdlib_submodule_path(work,specifier+4,name,sizeof(name))){module_status(work,XR_MODULE_INVALID);return;}
+    if(!resolver->config.stdlib_path){module_status(work,XR_MODULE_NOT_FOUND);return;}
+    char *root=NULL;
+    if(!realpath_into(work,resolver->config.stdlib_path,&root))return;
+    XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_STDLIB,name,root};
+    if(!module_format_buffer(work,logical,sizeof(logical),"%s.xr",specifier+4)||
+        !module_format_buffer(work,path,sizeof(path),"%s/%s",root,logical))goto done;
+    if(overlay_named_select(work,resolver,&authority,path,out)||work->status!=XR_MODULE_OK)goto done;
+    XrOsIoPolicy policy=xr_compile_io_policy(work->resources);
+    if(!module_io(work,xr_file_probe_owned(&policy,path,true)))goto done;
+    out->kind=XR_MOD_STDLIB;copy_authority(work,&authority,&out->authority);
     realpath_into(work,path,&out->source_path);
-    realpath_into(work,resolver->config.stdlib_path,(char **)&out->authority.physical_root);
-    if (work->status == XR_MODULE_OK) module_status(work,xr_compile_module_identity_from_source(
-        work->resources,&out->authority,out->source_path,&out->canonical,&out->logical_path));
-    if (work->status == XR_MODULE_OK && !module_equal(work,out->logical_path,logical)) module_status(work,XR_MODULE_INVALID);
+    if(work->status==XR_MODULE_OK)module_status(work,xr_compile_module_identity_from_source(
+        work->resources,&authority,out->source_path,&out->canonical,&out->logical_path));
+    if(work->status==XR_MODULE_OK&&!module_equal(work,out->logical_path,logical))module_status(work,XR_MODULE_INVALID);
+done:
+    xr_compile_resources_free(root);
 }
-static void resolve_relative(ModuleWork *work, const char *specifier, const char *importer,
+static void resolve_relative(ModuleWork *work, XrModuleResolver *resolver, const char *specifier, const char *importer,
     const XrModuleIdentityAuthority *authority, XrModuleId *out) {
     if (!module_authority(work,authority)) return;
     if (authority->kind != XR_MODULE_IDENTITY_PROJECT && authority->kind != XR_MODULE_IDENTITY_SCRIPT &&
@@ -160,7 +179,11 @@ static void resolve_relative(ModuleWork *work, const char *specifier, const char
     XrOsIoPolicy policy = xr_compile_io_policy(work->resources); char *base = NULL;
     if (importer) module_io(work,xr_path_dirname_owned(&policy,importer,&base));
     else { char cwd[XR_PATH_MAX]; if (module_io(work,xr_os_io_getcwd(&policy,cwd,sizeof(cwd)))) base = module_dup(work,cwd); }
-    if (work->status == XR_MODULE_OK) probe_file_import(work,base,specifier,&out->source_path);
+    char *importer_identity = NULL, *importer_logical = NULL;
+    if (resolver->overlay && work->status == XR_MODULE_OK) module_status(work,
+        xr_compile_module_identity_from_source(work->resources,authority,importer,&importer_identity,&importer_logical));
+    if (work->status == XR_MODULE_OK) probe_file_import(work,resolver,base,specifier,authority,importer_logical,&out->source_path);
+    xr_compile_resources_free(importer_identity); xr_compile_resources_free(importer_logical);
     xr_compile_resources_free(base);
     if (work->status != XR_MODULE_OK) return;
     out->kind = authority->kind == XR_MODULE_IDENTITY_PACKAGE ? XR_MOD_PACKAGE : XR_MOD_FILE;
@@ -216,6 +239,8 @@ static void resolve_package(ModuleWork *work, XrModuleResolver *resolver, const 
         for (unsigned i = 0; i < 3 && module_work(work,1); ++i) {
             if (!(i == 2 ? module_format_buffer(work,path,sizeof(path),"%s/%s.xr",root,name) :
                 module_format_buffer(work,path,sizeof(path),"%s/%s",root,entries[i]))) break;
+            if(overlay_named_select(work,resolver,&authority,path,out)) {found=true;break;}
+            if(work->status!=XR_MODULE_OK)break;
             XrOsIoStatus probe = xr_file_probe_owned(&policy,path,true);
             if (probe == XR_OS_IO_OK) { resolve_package_source(work,&authority,path,out); found = true; break; }
             if (probe != XR_OS_IO_NOT_FOUND) { module_io(work,probe); break; }
@@ -228,6 +253,7 @@ static void resolve_package(ModuleWork *work, XrModuleResolver *resolver, const 
 XR_FUNC XrModuleStatus xr_compile_module_resolver_resolve(XrModuleResolver *resolver, const char *specifier,
     const char *importer, const XrModuleIdentityAuthority *authority, XrModuleId *output, char **error) {
     if (!resolver || !resolver->resources || !specifier || !output) return XR_MODULE_INVALID;
+    resolver->resolution_started = true;
     ModuleWork work = {resolver->resources,XR_MODULE_OK}; XrModuleId result = {0}; bool matched = false;
     resolve_checked_resource(&work,resolver,specifier,importer,authority,&result,&matched);
     char *key = NULL; bool transferred = false;
@@ -244,7 +270,7 @@ XR_FUNC XrModuleStatus xr_compile_module_resolver_resolve(XrModuleResolver *reso
             if (work.status == XR_MODULE_OK) copy_module_id(&work,found,&result);
         }
         else if (work.status == XR_MODULE_OK) {
-            if (relative_specifier(&work,specifier)) resolve_relative(&work,specifier,importer,authority,&result);
+            if (relative_specifier(&work,specifier)) resolve_relative(&work,resolver,specifier,importer,authority,&result);
             else if (module_prefix(&work,specifier,"std/")) resolve_stdlib_submodule(&work,resolver,specifier,&result);
             else if (module_find_char(&work,specifier,'/')) resolve_package(&work,resolver,specifier,&result);
             else if (work.status == XR_MODULE_OK) resolve_stdlib(&work,resolver,specifier,&result);

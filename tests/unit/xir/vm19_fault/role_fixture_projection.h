@@ -9,6 +9,7 @@
 /* The immutable test fixture's canonical bodies and observation wrappers are
  * reused verbatim. Its original nine-graph main is compiled but never called. */
 #define main immutable_pending_exit_main
+#include "../xir_construction_fixture.h"
 #include "pending_fixture_projection.h"
 #undef main
 
@@ -133,7 +134,7 @@ static XrXirProgram *role_wait_program(const XrXirCompileContext *context) {
     XrXirDeclarations declarations={.modules=&source,.module_count=1,.functions=identities,.root_module=0,.entry_function=1};
     XrXirModule built={.stage=XR_XIR_BUILT,.functions=functions,.function_count=3,.declarations=&declarations,.linkage_kind=XR_XIR_PROGRAM};
     XrXirArtifact *checked=NULL,*read=NULL,*special=NULL,*lowered=NULL;XrXirCheckedPacket packet={0};XrXirProgram *program=NULL;
-    XrXirDiagnostic diagnostic={0};XrXirStatus status=xr_xir_compile_check(context,&built,&checked,&diagnostic);
+    XrXirDiagnostic diagnostic={0};XrXirStatus status=xir_fixture_check(context, &built, &checked, &diagnostic);
     if(status!=XR_XIR_OK)fprintf(stderr,"wait fixture check%u f%u b%u i%u reason%u\n",status,diagnostic.function,diagnostic.block,diagnostic.instruction,diagnostic.reason);
     CHECK(status==XR_XIR_OK);
     memset(ops,0xa5,sizeof(ops));memset(helper,0xa5,sizeof(helper));memset(blocks,0xa5,sizeof(blocks));

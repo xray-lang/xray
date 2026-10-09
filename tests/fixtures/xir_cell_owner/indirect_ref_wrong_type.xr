@@ -1,0 +1,3 @@
+fn bump(value: ref i64) -> i64 { value += 1; return value; }
+export fn run() -> i64 { var value: bool = false; const action = bump; return action(ref value); }
+fn main() -> i64 { return 0; }

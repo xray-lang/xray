@@ -1,3 +1,4 @@
+#include "xir_construction_fixture.h"
 /*
  * xray - Lightweight typed scripting with native concurrency
  * https://www.xray-lang.org
@@ -61,7 +62,7 @@ static void cell_local_checked_cases(void) {
         if (mode == 5) ops[0].immediate = 1;
         if (mode == 6) ops[0] = (XrXirInstruction){XR_XIR_CELL_NEW,(XrXirType)256,{1},{0},0,{0}};
         CheckedAtomicPool atomic_pool; checked_atomic_pool(&built, &atomic_pool);
-        XrXirStatus status = xr_xir_compile_check(suite_context, &built, &checked, NULL);
+        XrXirStatus status = xir_fixture_check(suite_context, &built, &checked, NULL);
         xr_xir_compile_artifact_free(base);base=NULL;
         if (mode) { CHECK(status != XR_XIR_OK && !checked); continue; }
         CHECK(status == XR_XIR_OK && checked);
@@ -112,7 +113,7 @@ static void cell_checked_cases(void) {
         if (mode == 7) { parameters[0] = (XrXirType)257; identities[8].exported = 1; }
         if (mode == 8) nodes[0].element = XR_XIR_UNIT;
         CheckedAtomicPool atomic_pool; checked_atomic_pool(&built, &atomic_pool);
-        XrXirStatus status = xr_xir_compile_check(suite_context, &built, &checked, NULL);
+        XrXirStatus status = xir_fixture_check(suite_context, &built, &checked, NULL);
         xr_xir_compile_artifact_free(base);base=NULL;
         if (mode) {
             CHECK(!checked && status == (mode == 4 ? XR_XIR_BAD_DOMINANCE : XR_XIR_BAD_TYPE));

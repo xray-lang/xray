@@ -11,6 +11,7 @@
  *   Native insertion sort retains its state while a real Lowered comparator
  *   returns to the host, resumes, throws, or is cancelled.
  */
+#include "xir_construction_fixture.h"
 #include "xir/xxir_call.h"
 #include "xir/xxir_vm.h"
 #include <stdio.h>
@@ -134,7 +135,7 @@ static XrXirArtifact *comparator_artifact(const XrXirCompileContext *context) {
     XrXirModule module = {XR_XIR_BUILT, &function, 1, NULL, NULL, NULL, NULL, XR_XIR_PROGRAM, NULL};
     XrXirTarget target = {XR_XIR_ARCH_X86_64, XR_XIR_VALUE_ABI_VERSION};
     XrXirArtifact *checked = NULL, *lowered = NULL;
-    CHECK(xr_xir_compile_check(context, &module, &checked, NULL) == XR_XIR_OK);
+    CHECK(xir_fixture_check(context, &module, &checked, NULL) == XR_XIR_OK);
     CHECK(xr_xir_compile_lower(checked, &target, &lowered, NULL) == XR_XIR_OK);
     xr_xir_compile_artifact_free(checked);
     return lowered;

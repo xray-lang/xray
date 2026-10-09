@@ -1,0 +1,8 @@
+fn worker(value: ref i64) { value += 1; }
+fn launch(value: ref i64) { go worker(ref value); }
+export fn run() -> i64 {
+    var counter: i64 = 7;
+    launch(ref counter);
+    return counter;
+}
+fn main() -> i64 { return run(); }

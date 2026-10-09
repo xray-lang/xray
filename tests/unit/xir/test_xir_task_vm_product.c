@@ -6,6 +6,7 @@
  *
  * test_xir_task_vm_product.c - Closed Program Task execution and owned escape
  */
+#include "xir_construction_fixture.h"
 #include "xir/xxir_checked.h"
 #include "xir/xxir_vm.h"
 #include <stdio.h>
@@ -52,7 +53,7 @@ static XrXirProgram *task_product_program(uint32_t mode) {
     fixture.declarations.functions = identities; fixture.declarations.entry_function = 3;
     XrXirArtifact *checked = NULL, *decoded = NULL, *closed = NULL, *lowered = NULL;
     XrXirCheckedPacket packet = {0}; XrXirDiagnostic diagnostic = {0};
-    CHECK(xr_xir_compile_check(context, &fixture.module, &checked, &diagnostic) == XR_XIR_OK);
+    CHECK(xir_fixture_check(context, &fixture.module, &checked, &diagnostic) == XR_XIR_OK);
     CHECK(xr_xir_compile_checked_write(checked, &packet, &diagnostic) == XR_XIR_OK);
     xr_xir_compile_artifact_free(checked);
     memset(&fixture, 0xa5, sizeof(fixture));

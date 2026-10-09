@@ -36,8 +36,10 @@ if(WIN32)
         --owner $<TARGET_FILE:test_xir_runtime_sdk>)
     add_test(NAME test_xir_runtime_sdk_wire_vector COMMAND ${XRAY_PYTHON}
         ${CMAKE_CURRENT_SOURCE_DIR}/xir/derive_sdk_identity.py)
+    add_test(NAME test_xir_runtime_sdk_current_wire_vector COMMAND ${XRAY_PYTHON}
+        ${CMAKE_CURRENT_SOURCE_DIR}/xir/derive_sdk_current_identity.py)
     set_tests_properties(test_xir_runtime_sdk_owner test_xir_runtime_sdk_manifest test_xir_runtime_sdk_install
-        test_xir_runtime_sdk_wire_vector
+        test_xir_runtime_sdk_wire_vector test_xir_runtime_sdk_current_wire_vector
         PROPERTIES LABELS "unit;xir;execution;ownership;sdk;abi" RUN_SERIAL TRUE TIMEOUT 300 COST 30)
     # The exhaustive instrumented fault matrix takes substantially longer than its Release lane.
     if(ENABLE_ASAN OR ENABLE_SANITIZERS)

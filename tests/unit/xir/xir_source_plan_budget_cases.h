@@ -43,52 +43,52 @@ static void source_plan_context_cases(void) {
     source_region_snapshot_identity_cases();
     SourceContext ctx = {0}; CHECK(allocation_private_context(&ctx,allocation_limits()));
     SourceConversionRecipe recipe = {0};
-    CHECK(source_conversion_plan(&ctx,NULL,XR_XIR_I8,(SourceExpectedType){false,XR_XIR_UNIT,false},&recipe));
+    CHECK(source_conversion_plan(&ctx,NULL,XR_XIR_I8,(SourceExpectedType){false,XR_XIR_UNIT,false,false},&recipe));
     CHECK(!recipe.needed && recipe.source == XR_XIR_I8 && recipe.target == XR_XIR_I8);
-    CHECK(source_conversion_plan(&ctx,NULL,XR_XIR_UNIT,(SourceExpectedType){true,XR_XIR_UNIT,false},&recipe));
+    CHECK(source_conversion_plan(&ctx,NULL,XR_XIR_UNIT,(SourceExpectedType){true,XR_XIR_UNIT,false,false},&recipe));
     CHECK(!recipe.needed && recipe.target == XR_XIR_UNIT);
     SourceConversionRecipe before = recipe;
-    CHECK(!source_conversion_plan(&ctx,NULL,XR_XIR_I8,(SourceExpectedType){true,XR_XIR_UNIT,false},&recipe));
+    CHECK(!source_conversion_plan(&ctx,NULL,XR_XIR_I8,(SourceExpectedType){true,XR_XIR_UNIT,false,false},&recipe));
     CHECK(ctx.diagnostic.status == XR_XIR_BAD_TYPE && recipe.target == before.target && recipe.needed == before.needed);
     ctx.diagnostic.status = XR_XIR_OK;
-    CHECK(source_conversion_plan(&ctx,NULL,XR_XIR_I8,(SourceExpectedType){true,XR_XIR_I64,false},&recipe));
+    CHECK(source_conversion_plan(&ctx,NULL,XR_XIR_I8,(SourceExpectedType){true,XR_XIR_I64,false,false},&recipe));
     CHECK(recipe.needed && recipe.operation == XR_XIR_CONVERT_NUMBER && recipe.target == XR_XIR_I64);
     before = recipe;
-    CHECK(!source_conversion_plan(&ctx,NULL,XR_XIR_I64,(SourceExpectedType){true,XR_XIR_I8,false},&recipe));
+    CHECK(!source_conversion_plan(&ctx,NULL,XR_XIR_I64,(SourceExpectedType){true,XR_XIR_I8,false,false},&recipe));
     CHECK(recipe.source == before.source && recipe.target == before.target);
     CHECK(!ctx.memory && !ctx.query.expression_count);
     SourceInteger literal = {true,false,41};
-    SourceNumericRequest request = {&literal,NULL,{false,XR_XIR_UNIT,false},false};
+    SourceNumericRequest request = {&literal,NULL,{false,XR_XIR_UNIT,false,false},false};
     SourceNumericRecipe numeric = {0}; ctx.diagnostic.status = XR_XIR_OK;
     CHECK(source_numeric_plan(&ctx,NULL,&request,&numeric) && !numeric.ready);
-    request.expected = (SourceExpectedType){true,XR_XIR_I8,false};
+    request.expected = (SourceExpectedType){true,XR_XIR_I8,false,false};
     CHECK(source_numeric_plan(&ctx,NULL,&request,&numeric) && numeric.ready && numeric.type == XR_XIR_I8 && numeric.payload == 41);
-    request.expected=(SourceExpectedType){false,(XrXirType)UINT32_MAX,false};
+    request.expected=(SourceExpectedType){false,(XrXirType)UINT32_MAX,false,false};
     request.permit_default=true;
     CHECK(source_numeric_plan(&ctx,NULL,&request,&numeric) && numeric.ready && numeric.type==XR_XIR_I64);
-    request.expected=(SourceExpectedType){false,XR_XIR_F32,false};
+    request.expected=(SourceExpectedType){false,XR_XIR_F32,false,false};
     CHECK(source_numeric_plan(&ctx,NULL,&request,&numeric) && numeric.type==XR_XIR_I64);
     SourceConditionalRecipe conditional={0};
     CHECK(source_conditional_plan(&ctx,NULL,XR_XIR_I8,XR_XIR_I64,
-        (SourceExpectedType){false,XR_XIR_UNIT,false},&conditional) && conditional.result==XR_XIR_I64);
+        (SourceExpectedType){false,XR_XIR_UNIT,false,false},&conditional) && conditional.result==XR_XIR_I64);
     CHECK(source_conditional_plan(&ctx,NULL,XR_XIR_I8,XR_XIR_I64,
-        (SourceExpectedType){false,(XrXirType)UINT32_MAX,false},&conditional) && conditional.result==XR_XIR_I64);
+        (SourceExpectedType){false,(XrXirType)UINT32_MAX,false,false},&conditional) && conditional.result==XR_XIR_I64);
     CHECK(source_conditional_plan(&ctx,NULL,XR_XIR_UNIT,XR_XIR_UNIT,
-        (SourceExpectedType){true,XR_XIR_UNIT,false},&conditional) && conditional.result==XR_XIR_UNIT);
+        (SourceExpectedType){true,XR_XIR_UNIT,false,false},&conditional) && conditional.result==XR_XIR_UNIT);
     CHECK(!source_conditional_plan(&ctx,NULL,XR_XIR_I64,XR_XIR_I64,
-        (SourceExpectedType){true,XR_XIR_UNIT,false},&conditional));
+        (SourceExpectedType){true,XR_XIR_UNIT,false,false},&conditional));
     ctx.diagnostic.status=XR_XIR_OK;
     XrXirTypeNode promises[2]={
-        {XR_XIR_TYPE_CALLABLE,XR_XIR_UNIT,NULL,0,XR_XIR_UNIT,0,0,{0}},
-        {XR_XIR_TYPE_CALLABLE,XR_XIR_UNIT,NULL,0,XR_XIR_UNIT,XR_XIR_CALLABLE_NO_SUSPEND,0,{0}}};
+        {XR_XIR_TYPE_CALLABLE,XR_XIR_UNIT,NULL,0,XR_XIR_UNIT,XR_XIR_CALLABLE_ROOT_UNRESOLVED,0,{0}},
+        {XR_XIR_TYPE_CALLABLE,XR_XIR_UNIT,NULL,0,XR_XIR_UNIT,XR_XIR_CALLABLE_NO_SUSPEND|XR_XIR_CALLABLE_ROOT_UNRESOLVED,0,{0}}};
     XrXirFunctionIdentity identity={0}; ctx.identities=&identity;
     ctx.types=(XrXirTypes){promises,2,NULL,NULL};
     XrXirType target=(XrXirType)XR_XIR_CONSTRUCTED_TYPE_BASE;
     CHECK(source_reference_promise(&ctx,NULL,0,
-        (SourceExpectedType){false,(XrXirType)(XR_XIR_CONSTRUCTED_TYPE_BASE+1),false},&target));
+        (SourceExpectedType){false,(XrXirType)(XR_XIR_CONSTRUCTED_TYPE_BASE+1),false,false},&target));
     CHECK(target==(XrXirType)XR_XIR_CONSTRUCTED_TYPE_BASE && !ctx.memory);
     ctx.types=(XrXirTypes){0};
-    request.expected=(SourceExpectedType){true,XR_XIR_I8,false};
+    request.expected=(SourceExpectedType){true,XR_XIR_I8,false,false};
     CHECK(source_numeric_plan(&ctx,NULL,&request,&numeric));
     SourceNumericRecipe saved = numeric; literal.magnitude = 128;
     CHECK(!source_numeric_plan(&ctx,NULL,&request,&numeric));

@@ -1,0 +1,10 @@
+fn replace<T>(value: ref T, replacement: T) -> T { value = replacement; return value; }
+fn forward<T>(action: fn(ref T,T) -> T, value: ref T, replacement: T) -> T {
+    return action(ref value,replacement);
+}
+export fn run() -> i64 {
+    var value: i64 = 40;
+    const action: fn(ref i64,i64) -> i64 = replace<i64>;
+    return forward<i64>(action,ref value,41);
+}
+fn main() -> i64 { return 0; }

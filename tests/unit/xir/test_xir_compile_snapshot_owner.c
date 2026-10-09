@@ -6,6 +6,7 @@
  *
  * test_xir_compile_snapshot_owner.c - Snapshot copies retain the shared resource owner
  */
+#include "xir_construction_fixture.h"
 #include "base/xmalloc.h"
 #include "xir/xxir_compile_memory.h"
 #include "xir/xxir_type_arena.h"
@@ -81,7 +82,7 @@ static XrXirStatus snapshot_fixture(const XrXirCompileContext *context, XrXirSou
     XrXirSourceReference reference={0}; reference.declaration=17;
     XrXirSourceExpression expression={0}; expression.node=31; expression.type=parameter;
     XrXirCallableParameter parameter_type={XR_XIR_I64,0};
-    XrXirTypeNode node={0}; node.kind=XR_XIR_TYPE_CALLABLE;
+    XrXirTypeNode node={0}; node.kind=XR_XIR_TYPE_CALLABLE; node.flags=XR_XIR_CALLABLE_ROOT_UNRESOLVED;
     node.parameters=&parameter_type; node.parameter_count=1; node.result=XR_XIR_STRING;
     XrXirType argument=XR_XIR_I64;
     XrXirInterfaceApplication application={0,&argument,1};
@@ -113,7 +114,7 @@ static XrXirStatus snapshot_fixture(const XrXirCompileContext *context, XrXirSou
     view.references=&reference; view.reference_count=1;
     view.expressions=&expression; view.expression_count=1; view.types=&types;
     view.implementations=&implementations;
-    return xr_xir_compile_source_snapshot_copy(context,&view,out);
+    return xir_fixture_snapshot_copy(context,&view,out);
 }
 static void snapshot_lifetime_and_failures(void) {
     size_t count=0; uint64_t needed=0;
@@ -133,6 +134,7 @@ static void snapshot_lifetime_and_failures(void) {
             CHECK(!strcmp(view->declarations[0].signature,"compute(i64) -> string"));
             CHECK(view->declarations[0].parameters[0].type==XR_XIR_I64);
             CHECK(view->types->nodes[0].parameters[0].type==XR_XIR_I64 && view->types->nodes[0].result==XR_XIR_STRING);
+            CHECK(view->types->nodes[0].flags==8u);
             CHECK(view->references[0].declaration==17 && view->expressions[0].node==31);
             CHECK(view->declarations[0].generic_constraints[0].interfaces[0].arguments[0]==XR_XIR_I64);
             CHECK(view->declarations[0].type_parameter_kinds[0]==XR_XIR_BINDER_TYPE);
@@ -168,7 +170,7 @@ static void snapshot_output(void) {
     CHECK(untouched==(XrXirSourceSnapshot *)(uintptr_t)1 && attempts==1);
     XrXirSourceView bad={0};bad.module_count=1;
     XrXirSourceSnapshot *snapshot=NULL;
-    CHECK(xr_xir_compile_source_snapshot_copy(&context,&bad,&snapshot)==XR_XIR_BAD_STRUCTURE && !snapshot);
+    CHECK(xir_fixture_snapshot_copy(&context,&bad,&snapshot)==XR_XIR_BAD_STRUCTURE && !snapshot);
     xr_compile_resources_release(context.resources);CHECK(!physical && !live);
 }
 static void snapshot_missing_nested_storage(void) {
@@ -193,23 +195,69 @@ static void snapshot_missing_nested_storage(void) {
         case 7: types.interfaces=&interfaces;interfaces.declarations=NULL;break;
         case 8: types.interfaces=&interfaces;interface.method_count=1;break;
         }
-        CHECK(xr_xir_compile_source_snapshot_copy(&context,&view,&snapshot)==XR_XIR_BAD_STRUCTURE);
+        CHECK(xir_fixture_snapshot_copy(&context,&view,&snapshot)==XR_XIR_BAD_STRUCTURE);
         CHECK(!snapshot && stats(&context).allocation_count>=1);
         xr_compile_resources_release(context.resources);CHECK(!physical && !live);
     }
 }
 static void snapshot_fixed_work(void) {
     _Static_assert(sizeof(XrXirSourceView)==296,"Independent source fact layout");
-    /* Ledger allocation, shape admission, snapshot allocation, zero 336 bytes,
-     * and copy the 296-byte public view. Empty arrays perform no traversal. */
-    for (uint64_t work=634;work<=635;++work) {
+    /* x64: ledger 1 + input facts calloc 57 + view admission 1 + facts shape 1
+     * + snapshot calloc 345 + public view copy 296 + clone shape 1
+     * + receiving new shape 1 + receiving facts calloc 57 = 760. */
+    _Static_assert(sizeof(XrXirConstruction)==56,"Independent private facts layout");
+    for (uint64_t work=759;work<=760;++work) {
         reset_observer(); XrXirCompileContext context=context_new(work);
         XrXirSourceView view={0}; XrXirSourceSnapshot *snapshot=NULL;
-        CHECK(xr_xir_compile_source_snapshot_copy(&context,&view,&snapshot)==
-            (work==635?XR_XIR_OK:XR_XIR_BUDGET));
-        if (snapshot) CHECK(stats(&context).work==635 && attempts==2);
+        CHECK(xir_fixture_snapshot_copy(&context,&view,&snapshot)==
+            (work==760?XR_XIR_OK:XR_XIR_BUDGET));
+        if (snapshot) CHECK(stats(&context).work==760 && attempts==4);
         xr_xir_compile_source_snapshot_free(snapshot);xr_compile_resources_release(context.resources);
         CHECK(!physical && !live);
     }
 }
-int main(void) { snapshot_lifetime_and_failures(); snapshot_output(); snapshot_missing_nested_storage(); snapshot_fixed_work(); return 0; }
+/* Observation snapshots copy their own facts after the original producer has
+ * died. No query result is fed into an executable admission as authority. */
+static void snapshot_recipient_lifetime(void) {
+    size_t sites=0;
+    for(size_t pass=0;pass<=sites;++pass) {
+        reset_observer();
+        XrXirCompileContext producer=context_new(UINT64_MAX);
+        XrXirSourceSnapshot *source=NULL,*receiver=NULL;
+        CHECK(snapshot_fixture(&producer,&source)==XR_XIR_OK && source);
+        xr_compile_resources_release(producer.resources);producer.resources=NULL;
+        const XrXirSourceView *view=xr_xir_compile_source_snapshot_view(source);
+        const XrXirConstruction *facts=xr_xir_compile_source_snapshot_construction(source);
+        CHECK(facts && xr_xir_compile_construction_count(facts)==1);
+        const XrXirConstructionRow *row=xr_xir_compile_construction_row(facts,0);
+        CHECK(row && row->field_count==1 && !row->default_initializer && !row->field_initializers[0]);
+        XrXirCompileContext context=context_new(UINT64_MAX);
+        XrXirSourceSnapshot *occupied=source;size_t start=attempts;
+        CHECK(xr_xir_compile_source_snapshot_copy_v2(&context,view,facts,&occupied)==XR_XIR_BAD_STRUCTURE && occupied==source && attempts==start);
+        size_t before_live=live,before_bytes=physical;
+        fail_at=pass ? start+pass-1 : SIZE_MAX;
+        XrXirStatus status=xr_xir_compile_source_snapshot_copy_v2(&context,view,facts,&receiver);
+        if(!pass) {
+            CHECK(status==XR_XIR_OK && receiver);sites=attempts-start;CHECK(sites);
+            const XrXirConstruction *copied=xr_xir_compile_source_snapshot_construction(receiver);
+            CHECK(copied && copied!=facts && xr_xir_compile_construction_count(copied)==1);
+            CHECK(xr_xir_compile_construction_row(copied,0)!=row);
+            CHECK(xr_xir_compile_construction_row(copied,0)->field_initializers!=row->field_initializers);
+            xr_xir_compile_source_snapshot_free(source);source=NULL;
+            xr_compile_resources_release(context.resources);context.resources=NULL;
+            const XrXirSourceView *retained=xr_xir_compile_source_snapshot_view(receiver);
+            CHECK(retained && !strcmp(retained->modules[0].identity,"root.identity") && !strcmp(retained->declarations[0].name,"compute"));
+            row=xr_xir_compile_construction_row(copied,0);
+            CHECK(row && row->field_count==1 && !row->field_initializers[0]);
+        } else {
+            CHECK(status==XR_XIR_OUT_OF_MEMORY && !receiver && attempts==start+pass);
+            CHECK(live==before_live && physical==before_bytes);
+            CHECK(xr_xir_compile_source_snapshot_construction(source)==facts && !row->field_initializers[0]);
+            xr_compile_resources_release(context.resources);context.resources=NULL;
+        }
+        fail_at=SIZE_MAX;xr_xir_compile_source_snapshot_free(source);xr_xir_compile_source_snapshot_free(receiver);
+        CHECK(!live && !physical);
+    }
+    printf("Snapshot recipient after producer death: actual copy OOM sites=%zu physical zero\n",sites);
+}
+int main(void) { snapshot_lifetime_and_failures(); snapshot_output(); snapshot_missing_nested_storage(); snapshot_fixed_work(); snapshot_recipient_lifetime(); return 0; }

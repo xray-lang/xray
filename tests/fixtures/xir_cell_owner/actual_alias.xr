@@ -1,0 +1,6 @@
+var counter:i64 = 0
+fn inner(x:ref i64,y:ref i64)->i64 { x += 1; y += 1; return x }
+fn outer(parameter:ref i64)->i64 { return inner(ref parameter,ref counter) }
+export fn run()->i64 { return outer(ref counter) }
+fn main()->i64 { return run() }
+export fn cellCounter()->i64 { return counter }

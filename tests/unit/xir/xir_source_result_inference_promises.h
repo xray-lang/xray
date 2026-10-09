@@ -40,7 +40,7 @@ static void source_result_inference_promises(const XrXirSourceRequest *request) 
         "fn consume(f:fn(i64)->i64)->i64{return f(41)}\n"
         "export fn answer()->i64{return consume(maker())}\n");
     source_manifest_write(&local,"witness_promises.xr",consume,1);
-    CHECK(!witness_promise_check(&local,false,"ordinary result cannot gain promise","result context cannot strengthen a callable promise"));
+    CHECK(!witness_promise_check(&local,false,"ordinary result cannot gain promise","result context cannot strengthen a callable execution bound"));
     witness_promise_file(&local,"witness_promises.xr",
         "fn wrap<T>(value:T)->Array<T>{return [value]}\n"
         "fn forward(f:fn()->i64)->i64{const a:Array<fn()->i64>=wrap(f);return 41}\n"

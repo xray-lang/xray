@@ -43,7 +43,7 @@ static int tests_failed = 0;
 
 // Helper: open a document and parse it
 static XrLspDocument *open_and_parse(XrLspServer *server, const char *uri, const char *code) {
-    XrLspDocument *doc = xlsp_document_open(server, uri, code, 1);
+    XrLspDocument *doc = xlsp_document_open(server, &(XlspSourceDocument){uri, code, strlen(uri), strlen(code), 1});
     if (doc) {
         xlsp_parse_document(doc, server);
     }

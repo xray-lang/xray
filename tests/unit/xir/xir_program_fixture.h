@@ -11,6 +11,7 @@
  */
 #ifndef XIR_PROGRAM_FIXTURE_H
 #define XIR_PROGRAM_FIXTURE_H
+#include "xir_construction_fixture.h"
 #include "xir/xxir.h"
 #include "xir/xxir_generic.h"
 #include "xir_error_fixture.h"
@@ -103,7 +104,7 @@ static XrXirArtifact *program_fixture_checked(const XrXirCompileContext *context
     const XrXirModule built = {XR_XIR_BUILT, functions, 8, &declarations, NULL, &types, NULL, XR_XIR_PROGRAM, NULL};
     const XrXirTarget target = {XR_XIR_ARCH_X86_64, XR_XIR_VALUE_ABI_VERSION};
     XrXirArtifact *checked=NULL;
-    CHECK(xr_xir_compile_check(context,&built,&checked,NULL)==XR_XIR_OK);
+    CHECK(xir_fixture_check(context, &built, &checked, NULL)==XR_XIR_OK);
     (void)target;return checked;
 }
 static XrXirArtifact *program_fixture(const XrXirCompileContext *context,uint32_t mode) {

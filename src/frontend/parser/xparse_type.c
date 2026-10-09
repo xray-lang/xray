@@ -494,8 +494,12 @@ static void xr_parse_reject_postfix_param_mode(Parser *parser) {
     }
 }
 
-XR_FUNC bool xr_parse_optional_param_type_annotation(Parser *parser, bool allow_mode,
-                                                     XrParamMode *out_mode, XrTypeRef **out_type) {
+static bool parse_param_type_annotation_span(Parser *parser, bool allow_mode,
+    XrParamMode *out_mode, XrTypeRef **out_type, XrNameSpan *out_span) {
+    if (out_span) {
+        if (!ast_work(parser->compiler_session, sizeof(*out_span))) return false;
+        *out_span = (XrNameSpan){0};
+    }
     if (!xr_parser_healthy(parser)) return false;
     XR_DCHECK(parser != NULL, "xr_parse_optional_param_type_annotation: NULL parser");
     if (out_mode)
@@ -506,6 +510,7 @@ XR_FUNC bool xr_parse_optional_param_type_annotation(Parser *parser, bool allow_
         return false;
 
     XrParamMode mode = XR_PARAM_READ;
+    Token mode_token = parser->current;
     if (allow_mode) {
         do {
             xr_parse_optional_param_mode(parser, true, &mode);
@@ -538,9 +543,18 @@ XR_FUNC bool xr_parse_optional_param_type_annotation(Parser *parser, bool allow_
     } while (0);
     if (out_mode)
         *out_mode = mode;
+    if (out_span && mode != XR_PARAM_READ) {
+        if (!ast_work(parser->compiler_session, sizeof(*out_span))) return false;
+        *out_span = (XrNameSpan){mode_token.line, mode_token.column};
+    }
     if (out_type)
         *out_type = type;
     return true;
+}
+
+XR_FUNC bool xr_parse_optional_param_type_annotation(Parser *parser, bool allow_mode,
+    XrParamMode *out_mode, XrTypeRef **out_type) {
+    return parse_param_type_annotation_span(parser, allow_mode, out_mode, out_type, NULL);
 }
 
 static bool xr_parse_current_is_param_mode_prefix(Parser *parser, const char **out_mode) {
@@ -668,8 +682,8 @@ XR_FUNC XrParamNode *xr_parse_parameter_at(Parser *parser, uint32_t flags, int p
     param->is_rest = is_rest;
 
     bool allow_mode = (flags & XR_PARSE_PARAMETER_ALLOW_MODE) && !is_rest;
-    bool has_type = xr_parse_optional_param_type_annotation(parser, allow_mode,
-                                                            &param->passing_mode, &param->type);
+    bool has_type = parse_param_type_annotation_span(parser, allow_mode,
+        &param->passing_mode, &param->type, &param->mode_span);
     if (!xr_parser_healthy(parser)) return NULL;
     if ((flags & XR_PARSE_PARAMETER_REQUIRE_TYPE) && !has_type)
         do {

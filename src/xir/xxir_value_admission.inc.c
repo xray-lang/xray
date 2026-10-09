@@ -101,8 +101,11 @@ static XrXirValueStatus admission_inline(ValueAdmissionStack *stack,
     return count ? admission_push(stack, (ValueAdmissionFrame){.storage = span, .count = count,
         .begin = begin, .inline_storage = true}, admission) : XR_XIR_VALUE_OK;
 }
-XR_FUNC XrXirValueStatus xr_xir_value_admit(const XrXirValue *value, XrXirType type,
-    XrXirValueAdmission *admission) {
+/* Ownership summary shares the authority walk and its existing work/scratch
+ * charges. Empty or pure scalar/String aggregates need no foreign detachment. */
+static XrXirValueStatus value_admit_summary(const XrXirValue *value, XrXirType type,
+    XrXirValueAdmission *admission, bool *domain_sensitive) {
+    if (domain_sensitive) *domain_sensitive = false;
     if (!admission || !value) return XR_XIR_VALUE_BAD_ARGUMENT;
     ValueAdmissionStack stack = {0}; XrXirValue current = *value;
     StorageSpan span = {0}; bool inlined = false, tuple_field=false;
@@ -128,6 +131,9 @@ XR_FUNC XrXirValueStatus xr_xir_value_admit(const XrXirValue *value, XrXirType t
             }
             if (owned_carrier_type(type)) {
                 XirObject *object = object_pointer(&current);
+                if (domain_sensitive && (object->kind == XIR_OBJECT_CLASS || object->kind == XR_XIR_TYPE_CELL ||
+                    object->kind == XR_XIR_TYPE_CALLABLE || object->kind == XR_XIR_TYPE_TASK))
+                    *domain_sensitive = true;
                 size_t count = 0;
                 if (object->kind == XIR_OBJECT_CLASS) {
                     const XrXirStorageLayout *body=class_body_layout(object);
@@ -161,6 +167,7 @@ XR_FUNC XrXirValueStatus xr_xir_value_admit(const XrXirValue *value, XrXirType t
                         /* Atomic cells have scalar payloads and no graph children. */
                     } else if (object->kind == XR_XIR_TYPE_CELL) {
                         type = xr_xir_cell_element(xr_xir_compile_type_arena_types(object->arena), type);
+                        tuple_field = type == XR_XIR_UNIT;
                         current = ((XirCell *) object)->value; inlined = false; continue;
                     } else { status = XR_XIR_VALUE_BAD_ARGUMENT; break; }
                 }
@@ -181,4 +188,11 @@ XR_FUNC XrXirValueStatus xr_xir_value_admit(const XrXirValue *value, XrXirType t
         admission->scratch_bytes += stack.bytes;
     }
     return status;
+}
+XR_FUNC XrXirValueStatus xr_xir_value_admit(const XrXirValue *value, XrXirType type,
+    XrXirValueAdmission *admission) {
+    xr_xir_value_graph_begin();
+    XrXirValueStatus graph_outcome = value_admit_summary(value, type, admission, NULL);
+    xr_xir_value_graph_end();
+    return graph_outcome;
 }

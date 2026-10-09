@@ -8,8 +8,15 @@
  */
 static bool source_implementation_applications(SourceContext *ctx) {
     uint32_t count = 0;
+    for (SourceLibraryUnit *unit=ctx->library_units; unit; unit=unit->next) {
+        if (!source_work(ctx,NULL)) return false;
+        if (unit->implementations.count>UINT32_MAX-count)
+            return source_fail(ctx,NULL,XR_XIR_BUDGET,"imported implementation count exhausted");
+        count+=unit->implementations.count;
+    }
     for (uint32_t d = 0; d < ctx->nominals.count; ++d) {
         SourceName *owner = ctx->nominal_sources[d];
+        if (owner->checked_library) continue;
         if (!source_work(ctx,owner->node)) return false;
         SourceNominalDeclaration declaration;
         if (!source_nominal_declaration(ctx,owner->node,&declaration)) return false;
@@ -23,11 +30,18 @@ static bool source_implementation_applications(SourceContext *ctx) {
     if (count && !records) return false;
     ctx->implementations.records = records; ctx->implementations.count = count;
     uint32_t next = 0;
+    for (SourceLibraryUnit *unit=ctx->library_units; unit; unit=unit->next) {
+        for (uint32_t i=0; i<unit->implementations.count; ++i) {
+            if (!source_work_units(ctx,NULL,sizeof(*records))) return false;
+            records[next++]=unit->implementations.records[i];
+        }
+    }
     SourceTypeScope saved = ctx->type_scope;
     uint32_t module = ctx->module;
     bool ok = true;
     for (uint32_t d = 0; d < ctx->nominals.count && ok; ++d) {
         SourceName *owner = ctx->nominal_sources[d];
+        if (owner->checked_library) continue;
         SourceNominalDeclaration declaration;
         if (!source_nominal_declaration(ctx,owner->node,&declaration)) { ok = false; break; }
         ctx->module = owner->module;
@@ -81,6 +95,10 @@ static bool source_implementation_signature(SourceContext *ctx, AstNode *node,
 }
 static bool source_implementation_bindings(SourceContext *ctx, XrXirImplementation *implementation) {
     SourceName *owner = ctx->nominal_sources[implementation->nominal_declaration];
+    /* Imported witness identities were fully mapped with their function unit.
+     * Do not regenerate them by lexical name or strengthen their promises here.
+     * The common verifier below proves all mapped requirements and signatures. */
+    if (owner->checked_library) return true;
     ctx->module = owner->module;
     XrXirTypes input = ctx->types;
     uint32_t nominal_count = ctx->nominals.declarations[owner->index].parameter_count;

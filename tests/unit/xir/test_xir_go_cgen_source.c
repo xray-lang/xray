@@ -1,4 +1,5 @@
 /* Public compiler pipeline only; the current Lowered Task guard must not be bypassed. */
+#include "xir_construction_fixture.h"
 #include "xir/xxir_emit_c.h"
 #include "xir/xxir_checked.h"
 #include "xir/xxir_generic.h"
@@ -17,7 +18,7 @@ int main(int argc, char **argv) {
     GoCGenFixture fixture; go_cgen_fixture(&fixture);
     XrXirArtifact *checked = NULL, *decoded = NULL, *closed = NULL, *lowered = NULL;
     XrXirCheckedPacket packet = {0}; XrXirCSource output = {0}; XrXirDiagnostic diagnostic = {0};
-    XrXirStatus status = xr_xir_compile_check(&context, &fixture.module, &checked, &diagnostic);
+    XrXirStatus status = xir_fixture_check(&context, &fixture.module, &checked, &diagnostic);
     if (status == XR_XIR_OK) status = xr_xir_compile_checked_write(checked, &packet, &diagnostic);
     if (status == XR_XIR_OK) status = xr_xir_compile_checked_read(&context, packet.bytes, packet.length, &decoded, &diagnostic);
     if (status == XR_XIR_OK) status = xr_xir_compile_specialize(decoded, &closed, &diagnostic);

@@ -6,6 +6,7 @@
  *
  * test_cgen_bytes_owner.c - Actual C byte emission, work and physical failures
  */
+#include "../xir_construction_fixture.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -13,6 +14,11 @@
 #include "../xir_runtime_allocations.h"
 #include "base/xcompile_resources.c"
 #include "xir/xxir_emit_c.c"
+#include "xir_cgen_sparse_proof_cases.h"
+#include "xir_cgen_literal_span_cases.h"
+#include "xir_cgen_decimal_shape_cases.h"
+#include "xir_cgen_compact_code_cases.h"
+#include "xir_cgen_growth_cases.h"
 
 static void bytes_case(uint32_t count) {
     char *input=malloc(count ? count : 1);CHECK(input);
@@ -29,10 +35,10 @@ static void bytes_case(uint32_t count) {
     emit_bytes(&buffer,input,count);
     CHECK(emit_finalize(&buffer));
     xr_compile_resources_stats(resources,&after);
-    /* Each plain byte has one format read and one output write. Format NUL
-     * reads remain; each hex digit keeps its conversion and stack read. The
-     * complete byte expression receives one actual final NUL write. */
-    uint64_t expected=2*38+1+2*7+1+11*((count+15)/16)+1;
+    /* Sized literals read and write their actual bytes without a NUL read.
+     * Each hex digit keeps its conversion and stack read; dynamic formats
+     * retain their NUL reads. Finalization writes one actual terminator. */
+    uint64_t expected=2*38+2*7+10*((count+15)/16)+1;
     for(uint32_t i=0;i<count;++i)expected+=((unsigned char)input[i]<16 ? 16 : 18);
     CHECK(buffer.status==XR_XIR_OK && after.work-before.work==expected);
     CHECK(buffer.length==45+5*(size_t)count+5*((count+15)/16) && buffer.text[buffer.length]=='\0');
@@ -82,7 +88,7 @@ static void public_output(void) {
     XrCompileResources *resources=NULL;CHECK(xr_compile_resources_new(&limits,&resources)==XR_COMPILE_RESOURCE_OK);
     XrXirCompileContext context={resources,xr_xir_compile_default_limits()};
     XrXirArtifact *checked=NULL,*closed=NULL,*lowered=NULL;
-    CHECK(xr_xir_compile_check(&context,&built,&checked,NULL)==XR_XIR_OK);
+    CHECK(xir_fixture_check(&context, &built, &checked, NULL)==XR_XIR_OK);
     CHECK(xr_xir_compile_specialize(checked,&closed,NULL)==XR_XIR_OK);
     XrXirTarget target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};
     CHECK(xr_xir_compile_lower(closed,&target,&lowered,NULL)==XR_XIR_OK);
@@ -134,6 +140,11 @@ int main(void) {
     bytes_case(0);bytes_case(1);bytes_case(256);bytes_case(4095);bytes_case(4096);bytes_case(5014);
     allocation_failures();
     public_output();
+    cgen_sparse_proof_cases();
+    cgen_literal_span_cases();
+    cgen_growth_cases();
+    cgen_decimal_shape_cases();
+    cgen_compact_code_cases();
     puts("C byte emission: fixed work formula, exact/minus-one, empty/NUL/all byte values PASS");
     return 0;
 }

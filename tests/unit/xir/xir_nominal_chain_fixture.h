@@ -8,6 +8,7 @@
  */
 #ifndef XIR_NOMINAL_CHAIN_FIXTURE_H
 #define XIR_NOMINAL_CHAIN_FIXTURE_H
+#include "xir_construction_fixture.h"
 #include "xir_checked_fixture.h"
 #include "xir/xxir_nominal.h"
 #include "xir/xxir_generic.h"
@@ -33,7 +34,7 @@ static XrXirArtifact *nominal_chain_fixture(const XrXirCompileContext *context, 
     XrXirNominalTable table = {declarations, depth, NULL};
     XrXirTypes types = {nodes, depth, &table, NULL}; built.types = &types;
     CheckedAtomicPool atomic_pool;checked_atomic_pool(&built,&atomic_pool);
-    CHECK(xr_xir_compile_check(context, &built, &checked, NULL) == XR_XIR_OK);
+    CHECK(xir_fixture_check(context, &built, &checked, NULL) == XR_XIR_OK);
     xr_xir_compile_artifact_free(base);base=NULL;
     memset(names, 0xCC, sizeof(names)); memset(fields, 0xCC, sizeof(fields));
     return checked;

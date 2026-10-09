@@ -70,12 +70,15 @@ static const uint8_t sizing_empty_golden[220] = {
     0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
     0x00,0x00,0x00,0x00,
 };
+#include "../xir_construction_fixture.h"
 #include "checked_sizing64_golden.h"
 #include "checked_sizing65_golden.h"
+#include "checked_sizing71_golden.h"
+#include "checked_sizing72_golden.h"
 static void sizing_historical_rejections(void) {
-    const uint8_t *const vectors[] = {sizing_golden,sizing_embedded_golden,sizing_empty_golden,sizing64_golden,sizing64_embedded_golden,sizing64_empty_golden};
-    const size_t lengths[] = {sizeof(sizing_golden),sizeof(sizing_embedded_golden),sizeof(sizing_empty_golden),sizeof(sizing64_golden),sizeof(sizing64_embedded_golden),sizeof(sizing64_empty_golden)};
-    for (unsigned i = 0; i < 6; ++i) for (unsigned occupied = 0; occupied < 2; ++occupied) {
+    const uint8_t *const vectors[] = {sizing_golden,sizing_embedded_golden,sizing_empty_golden,sizing64_golden,sizing64_embedded_golden,sizing64_empty_golden,sizing65_golden,sizing65_embedded_golden,sizing65_empty_golden,sizing71_golden,sizing71_embedded_golden,sizing71_empty_golden};
+    const size_t lengths[] = {sizeof(sizing_golden),sizeof(sizing_embedded_golden),sizeof(sizing_empty_golden),sizeof(sizing64_golden),sizeof(sizing64_embedded_golden),sizeof(sizing64_empty_golden),sizeof(sizing65_golden),sizeof(sizing65_embedded_golden),sizeof(sizing65_empty_golden),sizeof(sizing71_golden),sizeof(sizing71_embedded_golden),sizeof(sizing71_empty_golden)};
+    for (unsigned i = 0; i < sizeof(vectors)/sizeof(vectors[0]); ++i) for (unsigned occupied = 0; occupied < 2; ++occupied) {
         reset(SIZE_MAX); XrCompileResources *owner = NULL;
         CHECK(xr_compile_resources_new(&sizing_caps,&owner) == XR_COMPILE_RESOURCE_OK);
         XrXirCompileContext context = {owner,xr_xir_compile_default_limits()};
@@ -84,7 +87,7 @@ static void sizing_historical_rejections(void) {
         const size_t initial_attempts = attempts;
         CHECK(xr_xir_compile_checked_read(&context,vectors[i],lengths[i],&output,NULL) == XR_XIR_BAD_STRUCTURE);
         CHECK(output == sentinel && attempts == initial_attempts && live_count == 1);
-        CHECK(stats(owner).work == 33);
+        CHECK(stats(owner).work == (occupied ? 1u : 33u));
         xr_compile_resources_release(owner); CHECK(!live && !live_count);
     }
 }
@@ -139,7 +142,8 @@ static void sizing_room_and_sticky(void) {
     CHECK(!checked_integer(&c,0,4) && c.status == XR_XIR_BAD_STRUCTURE && c.position == SIZE_MAX-3);
     CHECK(stats(owner).work == 3 && live_count == 1);
     c = sizing_cursor(owner,0,4); uint32_t remaining = 2;
-    CHECK(!checked_count(&c,3,&remaining) && c.status == XR_XIR_BUDGET && remaining == 2);
+    /* A u32 record needs four wire bytes; sizing still tests only the count cap. */
+    CHECK(!checked_count(&c,3,&remaining,4) && c.status == XR_XIR_BUDGET && remaining == 2);
     CHECK(c.position == 4 && stats(owner).work == 4);
     CHECK(xr_compile_resources_work(owner,sizing_caps.work-4) == XR_COMPILE_RESOURCE_OK);
     c = sizing_cursor(owner,0,8); c.reading = true; c.input = (const uint8_t *)(uintptr_t)1;
@@ -182,15 +186,17 @@ static XrXirStatus sizing_packet(XrCompileResources *owner, unsigned variant) {
     artifact.module.functions = &f;
     artifact.context = (XrXirCompileContext){owner,xr_xir_compile_default_limits()};
     uint8_t sentinel = 0x5a; XrXirCheckedPacket packet = {&sentinel,17};
-    XrXirStatus status = checked_encode(&artifact,&packet,NULL);
+    XrXirStatus status = xir_construction_empty(&artifact.context,artifact.module.types,&artifact.construction);
+    if (status==XR_XIR_OK) status=checked_encode(&artifact,&packet,NULL);
     if (status != XR_XIR_OK) CHECK(packet.bytes == &sentinel && packet.length == 17 && sentinel == 0x5a);
     else {
-        CHECK(packet.bytes != &sentinel && packet.length == (variant == 2 ? 220 : 224));
-        if (!variant) CHECK(!memcmp(packet.bytes,sizing65_golden,sizeof(sizing65_golden)));
-        else if (variant == 1) CHECK(!memcmp(packet.bytes,sizing65_embedded_golden,sizeof(sizing65_embedded_golden)));
-        else CHECK(!memcmp(packet.bytes,sizing65_empty_golden,sizeof(sizing65_empty_golden)));
+        CHECK(packet.bytes != &sentinel && packet.length == (variant == 2 ? 224 : 228));
+        if (!variant) CHECK(!memcmp(packet.bytes,sizing72_golden,sizeof(sizing72_golden)));
+        else if (variant == 1) CHECK(!memcmp(packet.bytes,sizing72_embedded_golden,sizeof(sizing72_embedded_golden)));
+        else CHECK(!memcmp(packet.bytes,sizing72_empty_golden,sizeof(sizing72_empty_golden)));
         xr_xir_compile_checked_packet_free(&packet);
     }
+    xr_xir_compile_construction_free(artifact.construction);
     CHECK(live_count == 1); return status;
 }
 static bool sizing_oracle_charge(uint64_t limit, uint64_t charge, uint64_t *spent) {
@@ -200,29 +206,31 @@ static bool sizing_oracle_charge(uint64_t limit, uint64_t charge, uint64_t *spen
 static uint64_t sizing_prefix_work(uint64_t limit, uint64_t size) {
     /* Header fields, body fields, calloc and digest are atomic real operations. */
     static const uint64_t header[] = {8,4,4,4,4,8};
-    static const uint64_t body[] = {4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,8,4,4,4,4,4,4,4,4,8,4,4,4,4,4,4,4,4,4};
+    static const uint64_t body[] = {4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,8,4,4,4,4,4,4,4,4,8,4,4,4,4,4,4,4,4,4,4};
     uint64_t spent = 1;
-    for (unsigned i = 0; i < 38; ++i) if (!sizing_oracle_charge(limit,1,&spent)) return spent;
+    if (!sizing_oracle_charge(limit,1+sizeof(XrXirConstruction),&spent)) return spent;
+    for (unsigned i = 0; i < 39; ++i) if (!sizing_oracle_charge(limit,1,&spent)) return spent;
     if (!sizing_oracle_charge(limit,size+1,&spent)) return spent;
     for (size_t i = 0; i < sizeof(header)/sizeof(header[0]); ++i)
         if (!sizing_oracle_charge(limit,header[i],&spent)) return spent;
     for (size_t i = 0; i < sizeof(body)/sizeof(body[0]); ++i)
-        if (!sizing_oracle_charge(limit,i == 4 ? size-220 : body[i],&spent)) return spent;
+        if (!sizing_oracle_charge(limit,i == 4 ? size-224 : body[i],&spent)) return spent;
     (void)sizing_oracle_charge(limit,size-32,&spent);
     return spent;
 }
 static void sizing_packet_boundaries(unsigned variant) {
-    /* Thirty-seven integer fields plus a blob advance. Wire body is 156+name bytes. */
-    const uint64_t size = variant == 2 ? 220 : 224;
-    const uint64_t work = 1 + 38 + (size+1) + (size-32) + (size-32);
-    const uint64_t storage = sizeof(XrCompileResources) + sizeof(CompileAllocation) + size;
+    /* Mandatory empty facts calloc, thirty-eight integer fields plus blob advance.
+     * Wire body is 160+name bytes. Facts stay live through packet allocation. */
+    const uint64_t size = variant == 2 ? 224 : 228;
+    const uint64_t work = 1 + (1+sizeof(XrXirConstruction)) + 39 + (size+1) + (size-32) + (size-32);
+    const uint64_t storage = sizeof(XrCompileResources) + 2*sizeof(CompileAllocation) + sizeof(XrXirConstruction) + size;
     for (uint64_t cut = 1; cut <= work; ++cut) {
         reset(SIZE_MAX); XrCompileResources *owner = NULL;
         XrCompileResourceLimits limits = sizing_caps; limits.work = cut;
         CHECK(xr_compile_resources_new(&limits,&owner) == XR_COMPILE_RESOURCE_OK);
         CHECK(sizing_packet(owner,variant) == (cut < work ? XR_XIR_BUDGET : XR_XIR_OK));
         CHECK(stats(owner).work == sizing_prefix_work(cut,size));
-        if (cut == work) CHECK(stats(owner).work == work && stats(owner).allocated_bytes == storage && attempts == 2);
+        if (cut == work) CHECK(stats(owner).work == work && stats(owner).allocated_bytes == storage && attempts == 3);
         xr_compile_resources_release(owner); CHECK(!live && !live_count);
     }
     for (unsigned axis = 0; axis < 2; ++axis) for (unsigned below = 0; below < 2; ++below) {
@@ -233,14 +241,14 @@ static void sizing_packet_boundaries(unsigned variant) {
         CHECK(stats(owner).peak_bytes <= limits.live_bytes);
         xr_compile_resources_release(owner); CHECK(!live && !live_count);
     }
-    for (size_t failure = 0; failure <= 1; ++failure) {
+    for (size_t failure = 0; failure <= 2; ++failure) {
         reset(failure); XrCompileResources *owner = NULL;
         XrCompileResourceStatus status = xr_compile_resources_new(&sizing_caps,&owner);
         if (!failure) CHECK(status == XR_COMPILE_RESOURCE_OUT_OF_MEMORY && !owner);
         else {
             CHECK(status == XR_COMPILE_RESOURCE_OK);
-            CHECK(sizing_packet(owner,variant) == XR_XIR_OUT_OF_MEMORY && attempts == 2);
-            CHECK(stats(owner).work == 40); xr_compile_resources_release(owner);
+            CHECK(sizing_packet(owner,variant) == XR_XIR_OUT_OF_MEMORY && attempts == failure+1);
+            CHECK(stats(owner).work == (failure==1 ? 2 : 42+sizeof(XrXirConstruction))); xr_compile_resources_release(owner);
         }
         CHECK(!live && !live_count);
     }
@@ -250,10 +258,10 @@ static void sizing_public_golden(void) {
     CHECK(xr_compile_resources_new(&sizing_caps,&owner) == XR_COMPILE_RESOURCE_OK);
     XrXirCompileContext context = {owner,xr_xir_compile_default_limits()};
     XrXirArtifact *checked = NULL, *decoded = NULL; XrXirCheckedPacket packet = {0};
-    CHECK(xr_xir_compile_check(&context,&module,&checked,NULL) == XR_XIR_OK);
+    CHECK(xir_fixture_check(&context, &module, &checked, NULL) == XR_XIR_OK);
     CHECK(xr_xir_compile_checked_write(checked,&packet,NULL) == XR_XIR_OK);
-    CHECK(packet.length == sizeof(sizing65_golden) && !memcmp(packet.bytes,sizing65_golden,sizeof(sizing65_golden)));
-    CHECK(xr_xir_compile_checked_read(&context,sizing65_golden,sizeof(sizing65_golden),&decoded,NULL) == XR_XIR_OK);
+    CHECK(packet.length == sizeof(sizing72_golden) && !memcmp(packet.bytes,sizing72_golden,sizeof(sizing72_golden)));
+    CHECK(xr_xir_compile_checked_read(&context,sizing72_golden,sizeof(sizing72_golden),&decoded,NULL) == XR_XIR_OK);
     CHECK(decoded->module.functions[0].instructions[0].immediate == 42);
     xr_xir_compile_artifact_free(checked); xr_xir_compile_artifact_free(decoded);
     xr_xir_compile_checked_packet_free(&packet); CHECK(live_count == 1);

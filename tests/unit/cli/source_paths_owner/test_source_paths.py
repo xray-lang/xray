@@ -42,7 +42,12 @@ with tempfile.TemporaryDirectory(prefix="xray-source-paths-") as temporary:
             env["XRAY_TEST_VALUE"] = env_value
         env["测试 key"] = "fixed 中文"
         env["XRAY_TEST_FORMULA"] = "abc"
-        command = [str(executable), mode, source, str(expected or ""), str(origin), str(status), env_value or "", str(executable)]
+        # Fixed independent expectation: source-file rejection cannot block the
+        # entry-independent real stdlib selector. The last two cases have a
+        # valid explicit stdlib override and deliberately invalid source files.
+        selected_expected = override if source in ("missing.xr", ".") else expected
+        selected_status = 0 if source in ("missing.xr", ".") else status
+        command = [str(executable), mode, source, str(expected or ""), str(origin), str(status), env_value or "", str(executable), str(selected_expected or ""), str(selected_status)]
         result = subprocess.run(command, cwd=cwd, env=env, capture_output=True, timeout=100)
         print(f"case={count} layout={layout} mode={mode} status={status}")
         print(result.stdout.decode("utf-8", errors="strict"), end="")

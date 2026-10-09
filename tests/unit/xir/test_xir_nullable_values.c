@@ -20,6 +20,7 @@ static const XrXirCompileContext *nullable_context;
 #include "xir_runtime_allocations.h"
 #include "xir_nullable_golden.h"
 #include "xir_nullable65_golden.h"
+#include "xir_nullable72_golden.h"
 
 static void nullable_word(uint8_t *bytes,uint32_t word) {
     for (uint32_t i=0;i<4;++i) bytes[i]=(uint8_t)(word>>(8*i));
@@ -41,15 +42,15 @@ static XrXirStatus nullable_packet_operation(const XrXirCompileContext *context,
 }
 static void nullable_packets(void) {
     for (uint32_t some=0;some<2;++some) {
-        const uint8_t *golden=some ? nullable_some65_golden : nullable_none65_golden;
-        size_t length=some ? sizeof(nullable_some65_golden) : sizeof(nullable_none65_golden);
+        const uint8_t *golden=some ? nullable_some72_golden : nullable_none72_golden;
+        size_t length=some ? sizeof(nullable_some72_golden) : sizeof(nullable_none72_golden);
         XrXirArtifact *checked=NULL;XrXirCheckedPacket packet={0};
         CHECK(xr_xir_compile_checked_read(nullable_context,golden,length,&checked,NULL)==XR_XIR_OK);
         CHECK(xr_xir_compile_checked_write(checked,&packet,NULL)==XR_XIR_OK);
         CHECK(packet.length==length && !memcmp(packet.bytes,golden,length));xr_xir_compile_artifact_free(checked);
         size_t live=runtime_live,bytes=runtime_bytes;size_t op=some ? 153 : 113;
         const struct {size_t offset;uint32_t value;} attacks[]={
-            {length-20,6},{length-16,1},{length-12,XR_XIR_UNIT},{length-12,256},{length-12,257},
+            {length-24,6},{length-20,1},{length-16,XR_XIR_UNIT},{length-16,256},{length-16,257},
             {op+4,XR_XIR_I64},{op+8,1},{op+12,1},{op+16,1},{op+20,1},{op+24,1},{op+28,1},
             {op+32,1},{op+36,1}
         };
@@ -60,19 +61,26 @@ static void nullable_packets(void) {
             if (status==XR_XIR_OK) fprintf(stderr,"Nullable packet some=%u attack=%u accepted\n",some,i);
             CHECK(status!=XR_XIR_OK && !checked && runtime_live==live && runtime_bytes==bytes);
             checked=(XrXirArtifact *)(uintptr_t)1;
-            CHECK(xr_xir_compile_checked_read(nullable_context,packet.bytes,length,&checked,NULL)==status&&checked==(XrXirArtifact *)(uintptr_t)1);checked=NULL;
+            CHECK(xr_xir_compile_checked_read(nullable_context,packet.bytes,length,&checked,NULL)==XR_XIR_BAD_STRUCTURE&&checked==(XrXirArtifact *)(uintptr_t)1);checked=NULL;
         }
         memcpy(packet.bytes,golden,length);nullable_word(packet.bytes+12,57);nullable_packet_hash(&packet);
         source_program_compile_attempts=0;checked=NULL;
         CHECK(xr_xir_compile_checked_read(nullable_context,packet.bytes,length,&checked,NULL)==XR_XIR_BAD_STRUCTURE);
         CHECK(!checked && !source_program_compile_attempts && runtime_live==live && runtime_bytes==bytes);
         const uint8_t *historical[]={some?nullable_some_golden:nullable_none_golden,
-            some?nullable_some64_golden:nullable_none64_golden};
-        for(unsigned old=0;old<2;++old){
+            some?nullable_some64_golden:nullable_none64_golden,
+            some?nullable_some65_golden:nullable_none65_golden,
+            some?nullable_some71_golden:nullable_none71_golden};
+        const size_t historical_lengths[]={
+            some?sizeof(nullable_some_golden):sizeof(nullable_none_golden),
+            some?sizeof(nullable_some64_golden):sizeof(nullable_none64_golden),
+            some?sizeof(nullable_some65_golden):sizeof(nullable_none65_golden),
+            some?sizeof(nullable_some71_golden):sizeof(nullable_none71_golden)};
+        for(size_t old=0;old<sizeof(historical)/sizeof(*historical);++old){
             XrCompileResourceStats before=library_compile_stats(nullable_context);
             for(unsigned occupied=0;occupied<2;++occupied){
                 checked=occupied?(XrXirArtifact *)(uintptr_t)1:NULL;XrXirArtifact *saved=checked;
-                CHECK(xr_xir_compile_checked_read(nullable_context,historical[old],length,&checked,NULL)==XR_XIR_BAD_STRUCTURE&&checked==saved);
+                CHECK(xr_xir_compile_checked_read(nullable_context,historical[old],historical_lengths[old],&checked,NULL)==XR_XIR_BAD_STRUCTURE&&checked==saved);
             }
             XrCompileResourceStats after=library_compile_stats(nullable_context);
             CHECK(after.allocation_count==before.allocation_count&&after.allocated_bytes==before.allocated_bytes&&after.live_bytes==before.live_bytes&&after.peak_bytes==before.peak_bytes);

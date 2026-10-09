@@ -11,6 +11,7 @@
  *   Hand-authored graphs exercise admission independently of any IR producer.
  */
 
+#include "xir_construction_fixture.h"
 #include "xir/xxir.h"
 #include "xir/xxir_types.h"
 #include "xir/xxir_generic.h"
@@ -63,7 +64,7 @@ static void fixture_init(Fixture *fixture) {
 
 static void expect(Fixture *fixture, XrXirStatus status) {
     XrXirDiagnostic diagnostic;
-    CHECK(xr_xir_compile_verify(&stage_context, &fixture->module, &diagnostic) == status);
+    CHECK(xir_fixture_verify(&stage_context, &fixture->module, &diagnostic) == status);
     CHECK(diagnostic.status == status);
 }
 
@@ -72,7 +73,7 @@ static void cumulative_verification_budget(void) {
     XrXirCompileContext probe = stage_context_default(), initial = probe;
     XrCompileResourceStats before = stage_stats(&probe);
     XrXirDiagnostic diagnostic;
-    CHECK(xr_xir_compile_verify(&probe, &fixture.module, &diagnostic) == XR_XIR_OK);
+    CHECK(xir_fixture_verify(&probe, &fixture.module, &diagnostic) == XR_XIR_OK);
     CHECK(!memcmp(&probe, &initial, sizeof(probe)));
     XrCompileResourceStats after = stage_stats(&probe);
     uint64_t bytes = after.allocated_bytes - before.allocated_bytes;
@@ -83,10 +84,10 @@ static void cumulative_verification_budget(void) {
             STAGE_LIVE_BYTES, work * 2 - (mode == 3));
         context.limits.functions = mode == 1 ? 0 : 1;
         XrXirCompileContext unchanged = context;
-        XrXirStatus first = xr_xir_compile_verify(&context, &fixture.module, NULL);
+        XrXirStatus first = xir_fixture_verify(&context, &fixture.module, NULL);
         CHECK(first == (mode == 1 ? XR_XIR_BUDGET : XR_XIR_OK));
         if (mode != 1) {
-            CHECK(xr_xir_compile_verify(&context, &fixture.module, &diagnostic) ==
+            CHECK(xir_fixture_verify(&context, &fixture.module, &diagnostic) ==
                 (mode ? XR_XIR_BUDGET : XR_XIR_OK));
             CHECK(diagnostic.status == (mode ? XR_XIR_BUDGET : XR_XIR_OK));
         }
@@ -96,21 +97,72 @@ static void cumulative_verification_budget(void) {
         if (!mode) {
             CHECK(final.allocated_bytes == stage_owner_baseline.allocated_bytes + bytes * 2);
             CHECK(final.work == stage_owner_baseline.work + work * 2);
-            CHECK(xr_xir_compile_verify(&context, &fixture.module, NULL) == XR_XIR_BUDGET);
+            CHECK(xir_fixture_verify(&context, &fixture.module, NULL) == XR_XIR_BUDGET);
             XrCompileResourceStats rejected = stage_stats(&context);
             CHECK(rejected.allocated_bytes >= final.allocated_bytes && rejected.work >= final.work);
         }
     }
     XrXirDiagnostic unchanged_diagnostic = diagnostic;
-    CHECK(xr_xir_compile_verify(NULL, &fixture.module, &diagnostic) == XR_XIR_BAD_STRUCTURE);
+    CHECK(xir_fixture_verify(NULL, &fixture.module, &diagnostic) == XR_XIR_BAD_STRUCTURE);
     CHECK(!memcmp(&diagnostic, &unchanged_diagnostic, sizeof(diagnostic)));
+}
+
+static void graph_scratch_function_boundaries(void) {
+    Fixture fixtures[4];
+    XrXirFunction functions[4];
+    for (uint32_t f = 0; f < 4; ++f) {
+        fixture_init(&fixtures[f]);
+        fixtures[f].name[4] = (char)('0' + f);
+        functions[f] = fixtures[f].function;
+    }
+    /* Grow beyond one dominator word, then reuse smaller and equal shapes. */
+    XrXirBlock large_blocks[65];
+    XrXirInstruction large_ops[65];
+    for (uint32_t b = 0; b < 65; ++b) {
+        large_blocks[b] = (XrXirBlock){.first=b,.count=1};
+        large_ops[b] = b < 64 ?
+            (XrXirInstruction){.op=XR_XIR_JUMP,.type=XR_XIR_UNIT,.targets={b+1,0}} :
+            (XrXirInstruction){.op=XR_XIR_RETURN,.type=XR_XIR_UNIT,.args={1,0}};
+    }
+    functions[1].blocks = large_blocks; functions[1].block_count = 65;
+    functions[1].instructions = large_ops; functions[1].instruction_count = 65;
+    /* In function 2, block 2 dominates block 1 despite reverse storage order.
+     * The following function has sibling blocks: that fact must not survive. */
+    fixtures[2].instructions[1] = (XrXirInstruction){.op=XR_XIR_JUMP,.type=XR_XIR_UNIT,.targets={2,0}};
+    fixtures[2].instructions[5] = (XrXirInstruction){.op=XR_XIR_JUMP,.type=XR_XIR_UNIT,.targets={1,0}};
+    fixtures[2].instructions[2].args[0] = 6;
+    XrXirModule module = fixtures[0].module;
+    module.functions = functions; module.function_count = 4;
+    XrXirCompileContext context = stage_context_default();
+    uint64_t baseline = stage_stats(&context).live_bytes;
+    size_t physical_count = stage_physical_count, physical_bytes = stage_physical_bytes;
+    XrXirDiagnostic diagnostic = {0};
+    CHECK(xir_fixture_verify(&context, &module, &diagnostic) == XR_XIR_OK);
+    CHECK(stage_stats(&context).live_bytes == baseline);
+    CHECK(stage_physical_count == physical_count && stage_physical_bytes == physical_bytes);
+    fixtures[3].instructions[2].args[0] = 6;
+    CHECK(xir_fixture_verify(&context, &module, &diagnostic) == XR_XIR_BAD_DOMINANCE);
+    CHECK(diagnostic.status == XR_XIR_BAD_DOMINANCE && diagnostic.function == 3 &&
+        diagnostic.block == 1 && diagnostic.instruction == 2);
+    CHECK(stage_stats(&context).live_bytes == baseline);
+    CHECK(stage_physical_count == physical_count && stage_physical_bytes == physical_bytes);
+    XrXirArtifact *rejected = NULL;
+    CHECK(xir_fixture_check(&context, &module, &rejected, &diagnostic) == XR_XIR_BAD_DOMINANCE && !rejected);
+    CHECK(diagnostic.status == XR_XIR_BAD_DOMINANCE && diagnostic.function == 3 &&
+        diagnostic.block == 1 && diagnostic.instruction == 2);
+    CHECK(stage_stats(&context).live_bytes == baseline);
+    CHECK(stage_physical_count == physical_count && stage_physical_bytes == physical_bytes);
+    fixtures[3].instructions[2].args[0] = 2;
+    CHECK(xir_fixture_verify(&context, &module, &diagnostic) == XR_XIR_OK);
+    CHECK(stage_stats(&context).live_bytes == baseline);
+    CHECK(stage_physical_count == physical_count && stage_physical_bytes == physical_bytes);
 }
 
 static void transitions_and_lifetime(void) {
     Fixture fixture;
     fixture_init(&fixture);
     XrXirArtifact *checked = NULL, *lowered = NULL;
-    CHECK(xr_xir_compile_check(&stage_context, &fixture.module, &checked, NULL) == XR_XIR_OK);
+    CHECK(xir_fixture_check(&stage_context, &fixture.module, &checked, NULL) == XR_XIR_OK);
     CHECK(checked != NULL);
     const XrXirModule *module = xr_xir_compile_artifact_module(checked);
     CHECK(module->stage == XR_XIR_CHECKED);
@@ -120,7 +172,7 @@ static void transitions_and_lifetime(void) {
     CHECK(module->functions[0].blocks != fixture.blocks);
     CHECK(module->functions[0].instructions != fixture.instructions);
     memset(&fixture, 0xa5, sizeof(fixture));
-    CHECK(xr_xir_compile_verify(&stage_context, module, NULL) == XR_XIR_OK);
+    CHECK(xir_fixture_verify(&stage_context, module, NULL) == XR_XIR_OK);
     CHECK(memcmp(module->functions[0].name, "entry", 5) == 0);
     CHECK(xr_xir_compile_lower(checked, &fixture_target, &lowered, NULL) == XR_XIR_OK);
     CHECK(module->functions[0].instructions[0].op == XR_XIR_COPY);
@@ -129,14 +181,14 @@ static void transitions_and_lifetime(void) {
     CHECK(module->stage == XR_XIR_LOWERED);
     CHECK(module->functions[0].instructions[0].op == XR_XIR_SCALAR_COPY);
     CHECK(module->functions[0].instructions[4].immediate == 9);
-    CHECK(xr_xir_compile_verify(&stage_context, module, NULL) == XR_XIR_OK);
+    CHECK(xir_fixture_verify(&stage_context, module, NULL) == XR_XIR_OK);
     XrXirArtifact *occupied = lowered;
-    CHECK(xr_xir_compile_lower(lowered, &fixture_target, &occupied, NULL) == XR_XIR_BAD_STAGE);
+    CHECK(xr_xir_compile_lower(lowered, &fixture_target, &occupied, NULL) == XR_XIR_BAD_STRUCTURE);
     CHECK(occupied == lowered);
     XrXirArtifact *rejected = NULL;
     CHECK(xr_xir_compile_lower(lowered, &fixture_target, &rejected, NULL) == XR_XIR_BAD_STAGE);
     CHECK(rejected == NULL);
-    CHECK(xr_xir_compile_check(&stage_context, module, &rejected, NULL) == XR_XIR_BAD_STAGE);
+    CHECK(xir_fixture_check(&stage_context, module, &rejected, NULL) == XR_XIR_BAD_STAGE);
     CHECK(rejected == NULL);
     xr_xir_compile_artifact_free(lowered);
     xr_xir_compile_artifact_free(NULL);
@@ -213,47 +265,47 @@ static void malformed_inputs(void) {
     fixture_init(&f);
     XrXirDiagnostic diagnostic;
     f.instructions[5].args[0] = 4;
-    CHECK(xr_xir_compile_verify(&stage_context, &f.module, &diagnostic) == XR_XIR_BAD_DOMINANCE);
+    CHECK(xir_fixture_verify(&stage_context, &f.module, &diagnostic) == XR_XIR_BAD_DOMINANCE);
     CHECK(diagnostic.function == 0 && diagnostic.block == 2 && diagnostic.instruction == 5);
-    XrXirArtifact *output = (XrXirArtifact *) &f;
-    CHECK(xr_xir_compile_check(&stage_context, &f.module, &output, NULL) == XR_XIR_BAD_DOMINANCE);
-    CHECK(output == (XrXirArtifact *) &f);
-    CHECK(xr_xir_compile_verify(&stage_context, NULL, NULL) == XR_XIR_BAD_STRUCTURE);
-    CHECK(xr_xir_compile_check(&stage_context, NULL, &output, NULL) == XR_XIR_BAD_STAGE);
-    CHECK(xr_xir_compile_check(&stage_context, &f.module, NULL, NULL) == XR_XIR_BAD_STRUCTURE);
+    XrXirArtifact *output = NULL;
+    CHECK(xir_fixture_check(&stage_context, &f.module, &output, NULL) == XR_XIR_BAD_DOMINANCE);
+    CHECK(!output);
+    CHECK(xir_fixture_verify(&stage_context, NULL, NULL) == XR_XIR_BAD_STRUCTURE);
+    CHECK(xir_fixture_check(&stage_context, NULL, &output, NULL) == XR_XIR_BAD_STAGE);
+    CHECK(xir_fixture_check(&stage_context, &f.module, NULL, NULL) == XR_XIR_BAD_STRUCTURE);
 }
 
 static void budgets(void) {
     Fixture f;
     fixture_init(&f);
     XrXirCompileContext limits = stage_context_limited(STAGE_ALLOCATED_BYTES, STAGE_LIVE_BYTES, (1));
-    CHECK(xr_xir_compile_verify(&limits, &f.module, NULL) == XR_XIR_BUDGET);
+    CHECK(xir_fixture_verify(&limits, &f.module, NULL) == XR_XIR_BUDGET);
     limits = stage_context_limited(STAGE_ALLOCATED_BYTES, (1), STAGE_WORK);
-    CHECK(xr_xir_compile_verify(&limits, &f.module, NULL) == XR_XIR_BUDGET);
+    CHECK(xir_fixture_verify(&limits, &f.module, NULL) == XR_XIR_BUDGET);
     limits = stage_context_limited((1), STAGE_LIVE_BYTES, STAGE_WORK);
-    CHECK(xr_xir_compile_verify(&limits, &f.module, NULL) == XR_XIR_BUDGET);
+    CHECK(xir_fixture_verify(&limits, &f.module, NULL) == XR_XIR_BUDGET);
     limits = stage_context_default();
     limits.limits.functions = 0;
-    CHECK(xr_xir_compile_verify(&limits, &f.module, NULL) == XR_XIR_BUDGET);
+    CHECK(xir_fixture_verify(&limits, &f.module, NULL) == XR_XIR_BUDGET);
     limits = stage_context_default();
     limits.limits.parameters = 1;
-    CHECK(xr_xir_compile_verify(&limits, &f.module, NULL) == XR_XIR_BUDGET);
+    CHECK(xir_fixture_verify(&limits, &f.module, NULL) == XR_XIR_BUDGET);
     limits = stage_context_default();
     limits.limits.blocks = 2;
-    CHECK(xr_xir_compile_verify(&limits, &f.module, NULL) == XR_XIR_BUDGET);
+    CHECK(xir_fixture_verify(&limits, &f.module, NULL) == XR_XIR_BUDGET);
     limits = stage_context_default();
     limits.limits.instructions = 5;
-    CHECK(xr_xir_compile_verify(&limits, &f.module, NULL) == XR_XIR_BUDGET);
+    CHECK(xir_fixture_verify(&limits, &f.module, NULL) == XR_XIR_BUDGET);
     XrXirFunction functions[2] = {f.function, f.function};
     f.module.functions = functions;
     f.module.function_count = 2;
     limits.limits.instructions = 6;
-    CHECK(xr_xir_compile_verify(&limits, &f.module, NULL) == XR_XIR_BUDGET);
+    CHECK(xir_fixture_verify(&limits, &f.module, NULL) == XR_XIR_BUDGET);
     f.module.function_count = UINT32_MAX;
-    CHECK(xr_xir_compile_verify(&stage_context, &f.module, NULL) == XR_XIR_BUDGET);
+    CHECK(xir_fixture_verify(&stage_context, &f.module, NULL) == XR_XIR_BUDGET);
     fixture_init(&f);
     f.function.instruction_count = UINT32_MAX;
-    CHECK(xr_xir_compile_verify(&stage_context, &f.module, NULL) == XR_XIR_BUDGET);
+    CHECK(xir_fixture_verify(&stage_context, &f.module, NULL) == XR_XIR_BUDGET);
 }
 
 static void loops_and_storage_order(void) {
@@ -267,16 +319,16 @@ static void loops_and_storage_order(void) {
     XrXirBlock blocks[] = {{0, 2, 0, 0}, {2, 1, 0, 0}, {3, 1, 0, 0}, {4, 1, 0, 0}};
     XrXirFunction function = {"loop", 4, NULL, 0, XR_XIR_UNIT, blocks, 4, ops, 5, NULL, 0};
     XrXirModule module = {XR_XIR_BUILT, &function, 1, NULL, NULL, NULL, NULL, XR_XIR_PROGRAM, NULL};
-    CHECK(xr_xir_compile_verify(&stage_context, &module, NULL) == XR_XIR_OK);
+    CHECK(xir_fixture_verify(&stage_context, &module, NULL) == XR_XIR_OK);
     ops[0].immediate = 2;
-    CHECK(xr_xir_compile_verify(&stage_context, &module, NULL) == XR_XIR_BAD_TYPE);
+    CHECK(xir_fixture_verify(&stage_context, &module, NULL) == XR_XIR_BAD_TYPE);
     ops[0].immediate = 1;
     ops[3].args[0] = 3;
-    CHECK(xr_xir_compile_verify(&stage_context, &module, NULL) == XR_XIR_BAD_VALUE);
+    CHECK(xir_fixture_verify(&stage_context, &module, NULL) == XR_XIR_BAD_VALUE);
     XrXirCompileContext limits = stage_context_default();
     ops[3].args[0] = 0;
     limits = stage_context_limited(STAGE_ALLOCATED_BYTES, STAGE_LIVE_BYTES, 32);
-    CHECK(xr_xir_compile_verify(&limits, &module, NULL) == XR_XIR_BUDGET);
+    CHECK(xir_fixture_verify(&limits, &module, NULL) == XR_XIR_BUDGET);
 }
 
 static void dominance_word_boundary(void) {
@@ -296,13 +348,13 @@ static void dominance_word_boundary(void) {
     }
     XrXirFunction function = {"wide", 4, NULL, 0, XR_XIR_I64, blocks, 70, ops, 71, NULL, 0};
     XrXirModule module = {XR_XIR_BUILT, &function, 1, NULL, NULL, NULL, NULL, XR_XIR_PROGRAM, NULL};
-    CHECK(xr_xir_compile_verify(&stage_context, &module, NULL) == XR_XIR_OK);
+    CHECK(xir_fixture_verify(&stage_context, &module, NULL) == XR_XIR_OK);
     ops[64] = (XrXirInstruction) {XR_XIR_BRANCH, XR_XIR_UNIT, {0, 0}, {65, 69}, 0, {0}};
     XrXirType boolean = XR_XIR_BOOL;
     function.parameters = &boolean;
     function.parameter_count = 1;
     ops[70].args[0] = definition + 1;
-    CHECK(xr_xir_compile_verify(&stage_context, &module, NULL) == XR_XIR_BAD_DOMINANCE);
+    CHECK(xir_fixture_verify(&stage_context, &module, NULL) == XR_XIR_BAD_DOMINANCE);
 }
 
 static void reverse_storage_and_boolean_values(void) {
@@ -318,13 +370,13 @@ static void reverse_storage_and_boolean_values(void) {
     XrXirFunction function = {"reverse", 7, NULL, 0, XR_XIR_BOOL, blocks, 3, ops, 6, NULL, 0};
     XrXirModule module = {XR_XIR_BUILT, &function, 1, NULL, NULL, NULL, NULL, XR_XIR_PROGRAM, NULL};
     XrXirArtifact *checked = NULL, *lowered = NULL;
-    CHECK(xr_xir_compile_check(&stage_context, &module, &checked, NULL) == XR_XIR_OK);
+    CHECK(xir_fixture_check(&stage_context, &module, &checked, NULL) == XR_XIR_OK);
     CHECK(xr_xir_compile_lower(checked, &fixture_target, &lowered, NULL) == XR_XIR_OK);
     CHECK(xr_xir_compile_artifact_module(lowered)->functions[0].instructions[4].op == XR_XIR_SCALAR_COPY);
     xr_xir_compile_artifact_free(checked);
     xr_xir_compile_artifact_free(lowered);
     ops[3].args[1] = 4;
-    CHECK(xr_xir_compile_verify(&stage_context, &module, NULL) == XR_XIR_BAD_TYPE);
+    CHECK(xir_fixture_verify(&stage_context, &module, NULL) == XR_XIR_BAD_TYPE);
 }
 
 static void numeric_admission(void) {
@@ -335,15 +387,15 @@ static void numeric_admission(void) {
         const XrXirBlock block = {0, 2, 0, 0};
         XrXirFunction function = {"number", 6, parameters, 2, result, &block, 1, ops, 2, NULL, 0};
         XrXirModule module = {XR_XIR_BUILT, &function, 1, NULL, NULL, NULL, NULL, XR_XIR_PROGRAM, NULL};
-        CHECK(xr_xir_compile_verify(&stage_context, &module, NULL) == XR_XIR_OK);
+        CHECK(xir_fixture_verify(&stage_context, &module, NULL) == XR_XIR_OK);
         parameters[1] = XR_XIR_BOOL;
-        CHECK(xr_xir_compile_verify(&stage_context, &module, NULL) == XR_XIR_BAD_TYPE);
+        CHECK(xir_fixture_verify(&stage_context, &module, NULL) == XR_XIR_BAD_TYPE);
         parameters[1] = XR_XIR_I64; ops[0].type = XR_XIR_STRING;
-        CHECK(xr_xir_compile_verify(&stage_context, &module, NULL) == XR_XIR_BAD_TYPE);
+        CHECK(xir_fixture_verify(&stage_context, &module, NULL) == XR_XIR_BAD_TYPE);
         ops[0].type = result; ops[0].immediate = 1;
-        CHECK(xr_xir_compile_verify(&stage_context, &module, NULL) == XR_XIR_BAD_STRUCTURE);
+        CHECK(xir_fixture_verify(&stage_context, &module, NULL) == XR_XIR_BAD_STRUCTURE);
         ops[0].immediate = 0; ops[0].args[1] = 2;
-        CHECK(xr_xir_compile_verify(&stage_context, &module, NULL) != XR_XIR_OK);
+        CHECK(xir_fixture_verify(&stage_context, &module, NULL) != XR_XIR_OK);
     }
 }
 
@@ -352,7 +404,7 @@ static void constructed_metadata(void) {
     XrXirTypeNode nodes[] = {
         {XR_XIR_TYPE_ARRAY,XR_XIR_STRING,NULL,0,XR_XIR_UNIT,0,0, {0}},
         {XR_XIR_TYPE_CELL,(XrXirType)256,NULL,0,XR_XIR_UNIT,0,0, {0}},
-        {XR_XIR_TYPE_CALLABLE,XR_XIR_UNIT,&input,1,(XrXirType)256,0,0, {0}},
+        {XR_XIR_TYPE_CALLABLE,XR_XIR_UNIT,&input,1,(XrXirType)256,XR_XIR_CALLABLE_ROOT_UNRESOLVED,0, {0}},
         {XR_XIR_TYPE_ARRAY,(XrXirType)258,NULL,0,XR_XIR_UNIT,0,0, {0}},
         {XR_XIR_TYPE_ARRAY,(XrXirType)(XR_XIR_TYPE_PARAMETER_LIMIT-1),NULL,0,XR_XIR_UNIT,0,65536, {0}}
     };
@@ -428,6 +480,7 @@ static void constructed_metadata(void) {
     CHECK(copy->nodes[2].parameters != &input);
     memset(nodes,0xCC,sizeof(nodes)); memset(&input,0xCC,sizeof(input));
     CHECK(xr_xir_compile_types_structure_verify(&stage_context, copy) == XR_XIR_OK);
+    CHECK(copy->nodes[2].flags == 8u);
     xr_xir_compile_types_free(copy);
 }
 
@@ -524,7 +577,7 @@ static XrXirStatus nominal_catalog_semantics(const XrXirTypes *types, XrXirCompi
     XrXirFunctionIdentity identities[] = {{0},{.module=1},{0}};
     XrXirDeclarations declarations = {modules,2,identities,NULL,0,NULL,0,0,2,NULL};
     XrXirModule module = {XR_XIR_BUILT,functions,3,&declarations,NULL,types,NULL, XR_XIR_PROGRAM, NULL};
-    return xr_xir_compile_verify(budget, &module, NULL);
+    return xir_fixture_verify(budget, &module, NULL);
 }
 static void nominal_pool_ownership(void) {
     NominalFixture f; nominal_fixture(&f);
@@ -540,7 +593,7 @@ static void nominal_pool_ownership(void) {
     CHECK(memcmp(copy->nominals->declarations[0].name.bytes, "Pair", 4) == 0);
     Fixture source; fixture_init(&source); source.module.types = copy;
     XrXirArtifact *artifact = NULL;
-    CHECK(xr_xir_compile_check(&stage_context, &source.module, &artifact, NULL) == XR_XIR_BAD_STRUCTURE && !artifact);
+    CHECK(xir_fixture_check(&stage_context, &source.module, &artifact, NULL) == XR_XIR_BAD_STRUCTURE && !artifact);
     xr_xir_compile_types_free(copy);
     types.nominals = NULL;
     budget = stage_context_default();
@@ -569,7 +622,10 @@ static void nominal_instance_metadata(void) {
         if (mode == 7) argument = (XrXirType) XR_XIR_TYPE_PARAMETER_BASE;
         if (mode == 8) argument = (XrXirType) (XR_XIR_CONSTRUCTED_TYPE_BASE + 2);
         if (mode == 9) nodes[0].kind = XR_XIR_TYPE_CELL;
-        if (mode == 10) { nodes[0].kind = XR_XIR_TYPE_CALLABLE; nodes[0].element = XR_XIR_UNIT; nodes[0].result = XR_XIR_STRING; }
+        if (mode == 10) {
+            nodes[0].kind = XR_XIR_TYPE_CALLABLE; nodes[0].element = XR_XIR_UNIT;
+            nodes[0].result = XR_XIR_STRING; nodes[0].flags = XR_XIR_CALLABLE_ROOT_UNRESOLVED;
+        }
         budget = stage_context_default();
         CHECK(nominal_catalog_semantics(&types, &budget) != XR_XIR_OK);
         nodes[2] = saved; argument = saved_argument;
@@ -799,7 +855,7 @@ static void error_filter_guards(void) {
         if (mode == 8) f.declaration.exported = false;
         functions[3] = function;
         XrXirArtifact *checked = NULL, *lowered = NULL;
-        XrXirStatus status = xr_xir_compile_check(&stage_context, &module, &checked, NULL);
+        XrXirStatus status = xir_fixture_check(&stage_context, &module, &checked, NULL);
         if (mode ? status == XR_XIR_OK : status != XR_XIR_OK) fprintf(stderr, "error filter mode %u status %u\n", mode, (unsigned) status);
         CHECK(mode ? status != XR_XIR_OK && !checked : status == XR_XIR_OK);
         if (!mode) {
@@ -862,7 +918,7 @@ static void panic_handler_structure(void) {
         if (mode == 7) blocks[1].panic = 0;
         if (mode == 8) ops[6].args[0] = 2;
         XrXirArtifact *checked = NULL, *lowered = NULL;
-        XrXirStatus status = xr_xir_compile_check(&stage_context, &module, &checked, NULL);
+        XrXirStatus status = xir_fixture_check(&stage_context, &module, &checked, NULL);
         CHECK(mode ? status != XR_XIR_OK && !checked : status == XR_XIR_OK);
         if (!mode) {
             CHECK(xr_xir_compile_lower(checked, &fixture_target, &lowered, NULL) == XR_XIR_OK);
@@ -888,6 +944,7 @@ int main(void) {
     nominal_kind_boundaries();
     enum_metadata_cases();
     cumulative_verification_budget();
+    graph_scratch_function_boundaries();
     nominal_context_proofs();
     nominal_argument_identity();
     nominal_instance_metadata();

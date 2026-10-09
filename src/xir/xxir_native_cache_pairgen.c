@@ -42,9 +42,9 @@ int main(int argc, char **argv) {
     XrXirCheckedPacket library = {0}; CHECK(xr_xir_compile_checked_write(result.checked,&library,NULL) == XR_XIR_OK);
     write_bytes(argv[4],library.bytes,library.length);
     xr_xir_compile_source_result_free(&result); xr_compile_session_free(session); session = NULL;
-    XrXirLibraryInput input = {authority,"io/output.xr",library.bytes,library.length,{0}};
+    XrXirLibraryInput input = {library.bytes,library.length,{0}, (XrXirLibraryModuleInput[]){{authority,"io/output.xr"}},1};
     XrSHA256Context hash; xr_sha256_init(&hash); xr_sha256_update(&hash,library.bytes,library.length); xr_sha256_final(&hash,input.sha256);
-    XrXirLibraryCatalog *catalog = NULL; CHECK(xr_xir_compile_library_catalog_new(&context,&input,1,&catalog) == XR_XIR_OK);
+    XrXirLibraryCatalog *catalog = NULL; CHECK(xr_xir_compile_library_catalog_new_v2(&context,&input,1,&catalog) == XR_XIR_OK);
     CHECK(!remove(argv[2]));
     CHECK(xr_compile_session_new(context.resources,&session) == XR_COMPILER_SESSION_OK);
     authority = (XrModuleIdentityAuthority){XR_MODULE_IDENTITY_SCRIPT,NULL,argv[1]};
@@ -55,7 +55,13 @@ int main(int argc, char **argv) {
     XrXirCheckedPacket program = {0}; XrXirArtifact *decoded = NULL, *closed = NULL, *lowered = NULL;
     CHECK(xr_xir_compile_checked_write(result.checked,&program,NULL) == XR_XIR_OK);
     CHECK(xr_xir_compile_checked_read(&context,program.bytes,program.length,&decoded,NULL) == XR_XIR_OK);
-    CHECK(xr_xir_compile_specialize(decoded,&closed,NULL) == XR_XIR_OK);
+    XrXirDiagnostic specialize_diagnostic = {0};
+    status = xr_xir_compile_specialize(decoded,&closed,&specialize_diagnostic);
+    if (status != XR_XIR_OK)
+        fprintf(stderr,"cache specialize status=%u function=%u block=%u instruction=%u reason=%u\n",
+            status,specialize_diagnostic.function,specialize_diagnostic.block,
+            specialize_diagnostic.instruction,specialize_diagnostic.reason);
+    CHECK(status == XR_XIR_OK);
     CHECK(xr_xir_compile_artifact_verify(closed,NULL) == XR_XIR_OK);
     XrXirTarget target = {XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};
     CHECK(xr_xir_compile_lower(closed,&target,&lowered,NULL) == XR_XIR_OK);

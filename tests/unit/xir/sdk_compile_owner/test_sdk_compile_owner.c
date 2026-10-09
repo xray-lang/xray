@@ -8,6 +8,8 @@
  */
 #include "execution/xr_xir_host_execution.h"
 #include "toolchain/xr_xir_runtime_sdk.h"
+#include "xir/xxir_construction.h"
+#include <stddef.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -20,6 +22,27 @@ extern const XrXirProgramSpec compile_owner_program;
 extern const XrXirProgramSpec *old_program_data(void);
 extern unsigned old_callback_count(void);
 extern unsigned old_release_count(void);
+/* Compiler construction input is new; its public row is outside the preserved
+ * runtime measurement recipe. These independent x64 facts cover its C boundary. */
+_Static_assert(sizeof(void *) == 8, "Windows x64 SDK pointer width");
+_Static_assert(sizeof(XrXirConstructionRow) == 24, "Construction row size");
+_Static_assert(_Alignof(XrXirConstructionRow) == 8, "Construction row alignment");
+_Static_assert(offsetof(XrXirConstructionRow, default_initializer) == 0, "Constructor binding offset");
+_Static_assert(offsetof(XrXirConstructionRow, field_initializers) == 8, "Field bindings offset");
+_Static_assert(offsetof(XrXirConstructionRow, field_count) == 16, "Field denominator offset");
+typedef XrXirStatus (*ConstructionPrototype)(const XrXirCompileContext *,
+    const XrXirTypes *, const XrXirConstructionRow *, uint32_t, XrXirConstruction **);
+typedef XrXirStatus (*CheckPrototype)(const XrXirCompileContext *, const XrXirModule *,
+    const XrXirConstruction *, XrXirArtifact **, XrXirDiagnostic *);
+typedef XrXirStatus (*VerifyPrototype)(const XrXirCompileContext *, const XrXirModule *,
+    const XrXirConstruction *, XrXirDiagnostic *);
+_Static_assert(_Generic(&xr_xir_compile_construction_new, ConstructionPrototype:1, default:0),
+    "Explicit immutable construction owner");
+_Static_assert(_Generic(&xr_xir_compile_check_v2, CheckPrototype:1, default:0),
+    "Mandatory construction check input");
+_Static_assert(_Generic(&xr_xir_compile_verify_v2, VerifyPrototype:1, default:0),
+    "Mandatory construction verification input");
+
 typedef XrXirStatus (*SealPrototype)(const XrXirCompileContext *,const XrXirProgramSpec *,XrXirProgram **);
 typedef void (*DropPrototype)(XrXirProgram *);
 typedef XrXirCompileLimits (*LimitsPrototype)(void);

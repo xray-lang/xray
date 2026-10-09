@@ -12,6 +12,7 @@
  */
 #ifndef XR_XIR_SOURCE_PRODUCT_H
 #define XR_XIR_SOURCE_PRODUCT_H
+#include "../xir/xxir_source_dependencies.h"
 #include "../xir/xxir_source.h"
 #include "../xir/xxir_checked.h"
 #include "../xir/xxir_emit_c.h"
@@ -78,6 +79,7 @@ XR_FUNC const XrXirSourceTests *xr_xir_compile_source_product_tests(const XrXirS
 XR_FUNC XrXirStatus xr_xir_compile_source_product_packet(const XrXirSourceProduct *product,
     XrXirSourceProductPacketKind kind,XrXirSourceProductPacketView *output);
 XR_FUNC const XrXirSourceView *xr_xir_compile_source_product_view(const XrXirSourceProduct *product);
+XR_FUNC const XrXirConstruction *xr_xir_compile_source_product_construction(const XrXirSourceProduct *product);
 /* Layout borrows end when the Lowered artifact transfers to a VM program. */
 XR_FUNC XrXirStatus xr_xir_compile_source_product_layout(const XrXirSourceProduct *product,
     uint32_t function,XrXirSourceProductLayoutView *output);
@@ -89,4 +91,7 @@ XR_FUNC XrXirStatus xr_xir_compile_source_product_vm_take(XrXirSourceProduct *pr
     XrXirProgram **output);
 XR_FUNC XrXirStatus xr_xir_compile_source_product_emit(const XrXirSourceProduct *product,
     const char *prefix,size_t byte_limit,XrXirCSource *output);
+/* Same-source dependency observation remains owned after executable transfer. */
+XR_FUNC const XrXirSourceDependencies *xr_xir_compile_source_product_dependencies(
+    const XrXirSourceProduct *product);
 #endif // XR_XIR_SOURCE_PRODUCT_H

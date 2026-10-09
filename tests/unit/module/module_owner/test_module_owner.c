@@ -4,6 +4,7 @@
  * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
  * Licensed under the MIT License
  */
+#include "../../xir/xir_construction_fixture.h"
 #include "module/xmodule_graph.h"
 #include "module/xlockfile.h"
 #include <windows.h>
@@ -67,6 +68,7 @@ static const XrCompileResourceLimits unlimited = {UINT64_MAX,UINT64_MAX,UINT64_M
 static XrCompileResourceStats measured;
 static unsigned char packet_bytes[4096], canary;
 static XrXirLibraryInput library_input;
+static XrXirLibraryModuleInput library_binding;
 static char main_path[4096], cycle_path[4096], missing_path[4096];
 static const char *root_path;
 static void reset(size_t failure) {
@@ -90,10 +92,11 @@ static void make_packet(void) {
     XrXirDeclarations declarations = {&source,1,names,NULL,0,NULL,0,UINT32_MAX,UINT32_MAX,NULL};
     XrXirModule module = {XR_XIR_BUILT,functions,2,&declarations,NULL,NULL,NULL,XR_XIR_LIBRARY,NULL};
     XrXirArtifact *artifact = NULL; XrXirCheckedPacket packet = {0};
-    CHECK(xr_xir_compile_check(&context,&module,&artifact,NULL) == XR_XIR_OK);
+    CHECK(xir_fixture_check(&context, &module, &artifact, NULL) == XR_XIR_OK);
     CHECK(xr_xir_compile_checked_write(artifact,&packet,NULL) == XR_XIR_OK && packet.length < sizeof(packet_bytes));
     memcpy(packet_bytes,packet.bytes,packet.length);
-    library_input = (XrXirLibraryInput){{XR_MODULE_IDENTITY_STDLIB,"io",root_path},"io/output.xr",packet_bytes,packet.length,{0}};
+    library_binding = (XrXirLibraryModuleInput){{XR_MODULE_IDENTITY_STDLIB,"io",root_path},"io/output.xr"};
+    library_input = (XrXirLibraryInput){packet_bytes,packet.length,{0}, &library_binding,1};
     xr_sha256(packet_bytes,packet.length,library_input.sha256);
     xr_xir_compile_artifact_free(artifact); xr_xir_compile_checked_packet_free(&packet); xr_compile_resources_release(owner);
     CHECK(!physical_live && !block_count);
@@ -113,7 +116,7 @@ static XrModuleStatus pipeline(XrCompileResources *owner, unsigned kind, bool va
     XrModuleResolverConfig config = {0};
     if (kind == 2) {
         XrXirCompileContext context = {owner,xr_xir_compile_default_limits()};
-        status = from_xir(xr_xir_compile_library_catalog_new(&context,&library_input,1,&catalog));
+        status = from_xir(xr_xir_compile_library_catalog_new_v2(&context,&library_input,1,&catalog));
         config.stdlib_path = root_path; config.catalog = catalog;
     }
     if (status == XR_MODULE_OK) {
@@ -202,7 +205,7 @@ static void rejection_and_lifetime(void) {
     XrModuleGraph *graph = (void *)&canary; before = attempts;
     CHECK(xr_compile_module_graph_new(first,session,resolver,&graph) == XR_MODULE_INVALID && graph == (void *)&canary && before == attempts);
     XrXirCompileContext context = {first,xr_xir_compile_default_limits()}; XrXirLibraryCatalog *catalog = NULL;
-    CHECK(xr_xir_compile_library_catalog_new(&context,&library_input,1,&catalog) == XR_XIR_OK);
+    CHECK(xr_xir_compile_library_catalog_new_v2(&context,&library_input,1,&catalog) == XR_XIR_OK);
     XrModuleResolver *other = (void *)&canary; config.catalog = catalog; before = attempts;
     CHECK(xr_compile_module_resolver_new(second,&config,&other) == XR_MODULE_INVALID && other == (void *)&canary && before == attempts);
     xr_compile_module_resolver_free(resolver); xr_compile_session_free(session); xr_xir_compile_library_catalog_free(catalog);

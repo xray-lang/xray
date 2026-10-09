@@ -11,6 +11,7 @@
  *   A fresh ledger rejects the second work charge after queue allocation.
  *   The interior seen view never becomes a separately releasable owner.
  */
+#include "xir_construction_fixture.h"
 #include "xir/xxir_declarations.h"
 #include "xir/xxir_internal.h"
 #include "base/xmalloc.h"
@@ -80,7 +81,7 @@ static void owner_free(XrXirCompileContext *c,size_t physical,uint64_t bytes) {
 }
 static void ample_control(ProvenanceFixture *f) {
     XrXirCompileContext c=owner_new(100000);size_t physical=live;uint64_t bytes=live_bytes;
-    CHECK(xr_xir_compile_verify(&c,&f->module,NULL)==XR_XIR_OK);
+    CHECK(xir_fixture_verify(&c, &f->module, NULL)==XR_XIR_OK);
     ProvenanceMatch match={.source=&f->module,.destination=&f->module,.origins=&f->origin,.count=1,.remaining=&c};
     attempts=0;CHECK(provenance_reachable(&match)==XR_XIR_OK && attempts==1);
     owner_free(&c,physical,bytes);
@@ -105,17 +106,26 @@ static void public_work_cuts(ProvenanceFixture *f) {
     declarations.root_module=0;declarations.entry_function=1;
     XrXirModule module=f->module;module.functions=functions;module.function_count=2;
     module.declarations=&declarations;module.linkage_kind=XR_XIR_PROGRAM;
-    const XrXirOrigin origins[2]={{.function=0},{.function=1}};
+    XrXirOrigin origins[2]={{.function=0},{.function=1}};
+    /* This borrowed metadata wrapper owns no storage; the ordinary graph is
+     * independently verified below before its complete correspondence proof. */
+    XrXirArtifact source={.module=module};
+    XrXirProvenance instance={.kind=XR_XIR_EVIDENCE_INSTANCE,
+        .source=&source,.origins=origins,.count=2};
     XrXirCompileContext c=owner_new(100000);size_t physical=live;uint64_t bytes=live_bytes;
-    CHECK(xr_xir_compile_verify(&c,&module,NULL)==XR_XIR_OK);owner_free(&c,physical,bytes);
-    c=owner_new(100000);physical=live;bytes=live_bytes;
-    CHECK(xr_xir_compile_provenance_functions_match(&c,&module,&module,origins,NULL)==XR_XIR_OK);
-    uint64_t exact=stats(&c).work;CHECK(exact>4);owner_free(&c,physical,bytes);
+    CHECK(xir_fixture_verify(&c, &module, NULL)==XR_XIR_OK);owner_free(&c,physical,bytes);
+    c=owner_new(100000);physical=live;bytes=live_bytes;source.context=c;
+    CHECK(xr_xir_compile_provenance_functions_match(&c,&module,&module,&instance,NULL)==XR_XIR_OK);
+    XrCompileResourceStats required=stats(&c);
+    uint64_t exact=required.work;CHECK(exact>4);owner_free(&c,physical,bytes);
     for(uint64_t work=1;work<=exact;++work) {
-        c=owner_new(work);physical=live;bytes=live_bytes;
-        XrXirStatus status=xr_xir_compile_provenance_functions_match(&c,&module,&module,origins,NULL);
+        c=owner_new(work);physical=live;bytes=live_bytes;source.context=c;
+        XrXirStatus status=xr_xir_compile_provenance_functions_match(&c,&module,&module,&instance,NULL);
         CHECK(status==(work==exact?XR_XIR_OK:XR_XIR_BUDGET));owner_free(&c,physical,bytes);
     }
+    printf("public provenance census: allocated=%llu peak=%llu work=%llu\n",
+        (unsigned long long)required.allocated_bytes,(unsigned long long)required.peak_bytes,
+        (unsigned long long)required.work);
     printf("public provenance complete work cuts=%llu each physical=0/0\n",(unsigned long long)exact);
 }
 int main(void) {

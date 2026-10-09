@@ -12,6 +12,7 @@
 #ifndef XXIR_CALL_INTERNAL_H
 #define XXIR_CALL_INTERNAL_H
 #include "xxir_call.h"
+#include "xxir_cell_owner_internal.h"
 typedef struct XrXirCallBudget {
     uint64_t byte_limit, requested_limit, requested_bytes, live_bytes, peak_bytes, allocations, frees;
     uint64_t resume_limit, resumes;
@@ -19,11 +20,27 @@ typedef struct XrXirCallBudget {
     XrXirDomain *work_domain;
     bool exhausted;
 } XrXirCallBudget;
+typedef enum XrXirCellParameterRole {
+    XR_XIR_CELL_ROLE_UNKNOWN, XR_XIR_CELL_ROLE_OWNED_CAPTURE,
+    XR_XIR_CELL_ROLE_SCOPED_REF, XR_XIR_CELL_ROLE_LEXICAL_CLEANUP
+} XrXirCellParameterRole;
+/* The resolver consumes complete checked provenance, never parameter shape alone. */
+typedef XrXirCellParameterRole (*XrXirCellRoleResolver)(void *context,
+    uint32_t entry, uint32_t parameter);
 typedef struct XrXirCallRequest {
     uint32_t entry;
     const XrXirValue *arguments;
     uint32_t count;
+    XrXirCellRoleResolver cell_role;
+    void *cell_context;
 } XrXirCallRequest;
+/* Module access still requires the instance's root execution admission. */
+XR_FUNC XrXirValueStatus xr_xir_call_cell_read(const XrXirCallView *view,
+    const XrXirValue *cell, XrXirValue *output);
+XR_FUNC XrXirValueStatus xr_xir_call_cell_write(const XrXirCallView *view,
+    const XrXirValue *cell, const XrXirValue *value);
+XR_FUNC XrXirValueStatus xr_xir_call_cell_place(const XrXirCallView *view,
+    const XrXirValue *cell, XrXirValuePlace *output);
 XR_FUNC void *xr_xir_call_budget_allocate(XrXirCallBudget *budget, uint64_t bytes, XrXirCallStatus *status);
 XR_FUNC void xr_xir_call_budget_deallocate(XrXirCallBudget *budget, void *memory, uint64_t bytes);
 XR_FUNC XrXirCallStatus xr_xir_call_new_budgeted(const XrXirCallConfig *config,

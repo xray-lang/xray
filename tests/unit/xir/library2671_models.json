@@ -1,0 +1,2064 @@
+{
+  "library_string71_alpha": {
+    "linkage": 1,
+    "functions": [
+      {
+        "name": "$default",
+        "parameters": [],
+        "result": 3,
+        "blocks": [
+          [
+            0,
+            2,
+            0,
+            0
+          ]
+        ],
+        "instructions": [
+          [
+            3,
+            3,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          [
+            33,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ]
+        ],
+        "operands": []
+      },
+      {
+        "name": "$init",
+        "parameters": [],
+        "result": 0,
+        "blocks": [
+          [
+            0,
+            1,
+            0,
+            0
+          ]
+        ],
+        "instructions": [
+          [
+            33,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ]
+        ],
+        "operands": []
+      },
+      {
+        "name": "alpha",
+        "parameters": [
+          3
+        ],
+        "result": 3,
+        "blocks": [
+          [
+            0,
+            3,
+            0,
+            0
+          ]
+        ],
+        "instructions": [
+          [
+            3,
+            3,
+            0,
+            0,
+            0,
+            0,
+            1,
+            0,
+            0
+          ],
+          [
+            21,
+            3,
+            0,
+            1,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          [
+            33,
+            0,
+            2,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ]
+        ],
+        "operands": []
+      }
+    ],
+    "declarations": {
+      "modules": [
+        [
+          "module-id-v1:kind=6:script:namespace=0::path=8:alpha.xr",
+          [],
+          1
+        ]
+      ],
+      "identities": [
+        [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          1,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ]
+      ],
+      "slots": [],
+      "literals": [
+        "甲-owned",
+        "!"
+      ],
+      "root": 4294967295,
+      "entry": 4294967295
+    },
+    "generics": null,
+    "nodes": [],
+    "nominals": [],
+    "interfaces": [],
+    "defaults": [
+      [
+        0,
+        2,
+        0,
+        0
+      ]
+    ]
+  },
+  "library_string71_beta": {
+    "linkage": 1,
+    "functions": [
+      {
+        "name": "$default",
+        "parameters": [],
+        "result": 3,
+        "blocks": [
+          [
+            0,
+            2,
+            0,
+            0
+          ]
+        ],
+        "instructions": [
+          [
+            3,
+            3,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          [
+            33,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ]
+        ],
+        "operands": []
+      },
+      {
+        "name": "$init",
+        "parameters": [],
+        "result": 0,
+        "blocks": [
+          [
+            0,
+            1,
+            0,
+            0
+          ]
+        ],
+        "instructions": [
+          [
+            33,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ]
+        ],
+        "operands": []
+      },
+      {
+        "name": "beta",
+        "parameters": [
+          3
+        ],
+        "result": 3,
+        "blocks": [
+          [
+            0,
+            3,
+            0,
+            0
+          ]
+        ],
+        "instructions": [
+          [
+            3,
+            3,
+            0,
+            0,
+            0,
+            0,
+            1,
+            0,
+            0
+          ],
+          [
+            21,
+            3,
+            0,
+            1,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          [
+            33,
+            0,
+            2,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ]
+        ],
+        "operands": []
+      }
+    ],
+    "declarations": {
+      "modules": [
+        [
+          "module-id-v1:kind=6:script:namespace=0::path=7:beta.xr",
+          [],
+          1
+        ]
+      ],
+      "identities": [
+        [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          1,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ]
+      ],
+      "slots": [],
+      "literals": [
+        "乙-owned",
+        "?"
+      ],
+      "root": 4294967295,
+      "entry": 4294967295
+    },
+    "generics": null,
+    "nodes": [],
+    "nominals": [],
+    "interfaces": [],
+    "defaults": [
+      [
+        0,
+        2,
+        0,
+        0
+      ]
+    ]
+  },
+  "library_string71_nul": {
+    "linkage": 1,
+    "functions": [
+      {
+        "name": "$default",
+        "parameters": [],
+        "result": 3,
+        "blocks": [
+          [
+            0,
+            2,
+            0,
+            0
+          ]
+        ],
+        "instructions": [
+          [
+            3,
+            3,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          [
+            33,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ]
+        ],
+        "operands": []
+      },
+      {
+        "name": "$init",
+        "parameters": [],
+        "result": 0,
+        "blocks": [
+          [
+            0,
+            1,
+            0,
+            0
+          ]
+        ],
+        "instructions": [
+          [
+            33,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ]
+        ],
+        "operands": []
+      },
+      {
+        "name": "embedded",
+        "parameters": [
+          3
+        ],
+        "result": 3,
+        "blocks": [
+          [
+            0,
+            3,
+            0,
+            0
+          ]
+        ],
+        "instructions": [
+          [
+            3,
+            3,
+            0,
+            0,
+            0,
+            0,
+            1,
+            0,
+            0
+          ],
+          [
+            21,
+            3,
+            0,
+            1,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          [
+            33,
+            0,
+            2,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ]
+        ],
+        "operands": []
+      }
+    ],
+    "declarations": {
+      "modules": [
+        [
+          "module-id-v1:kind=6:script:namespace=0::path=6:nul.xr",
+          [],
+          1
+        ]
+      ],
+      "identities": [
+        [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          1,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ]
+      ],
+      "slots": [],
+      "literals": [
+        "a\u0000b",
+        ""
+      ],
+      "root": 4294967295,
+      "entry": 4294967295
+    },
+    "generics": null,
+    "nodes": [],
+    "nominals": [],
+    "interfaces": [],
+    "defaults": [
+      [
+        0,
+        2,
+        0,
+        0
+      ]
+    ]
+  },
+  "library_string71_empty": {
+    "linkage": 1,
+    "functions": [
+      {
+        "name": "$default",
+        "parameters": [],
+        "result": 3,
+        "blocks": [
+          [
+            0,
+            2,
+            0,
+            0
+          ]
+        ],
+        "instructions": [
+          [
+            3,
+            3,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          [
+            33,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ]
+        ],
+        "operands": []
+      },
+      {
+        "name": "$init",
+        "parameters": [],
+        "result": 0,
+        "blocks": [
+          [
+            0,
+            1,
+            0,
+            0
+          ]
+        ],
+        "instructions": [
+          [
+            33,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ]
+        ],
+        "operands": []
+      },
+      {
+        "name": "empty",
+        "parameters": [
+          3
+        ],
+        "result": 3,
+        "blocks": [
+          [
+            0,
+            3,
+            0,
+            0
+          ]
+        ],
+        "instructions": [
+          [
+            3,
+            3,
+            0,
+            0,
+            0,
+            0,
+            1,
+            0,
+            0
+          ],
+          [
+            21,
+            3,
+            0,
+            1,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          [
+            33,
+            0,
+            2,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ]
+        ],
+        "operands": []
+      }
+    ],
+    "declarations": {
+      "modules": [
+        [
+          "module-id-v1:kind=6:script:namespace=0::path=8:empty.xr",
+          [],
+          1
+        ]
+      ],
+      "identities": [
+        [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          1,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ]
+      ],
+      "slots": [],
+      "literals": [
+        "",
+        ""
+      ],
+      "root": 4294967295,
+      "entry": 4294967295
+    },
+    "generics": null,
+    "nodes": [],
+    "nominals": [],
+    "interfaces": [],
+    "defaults": [
+      [
+        0,
+        2,
+        0,
+        0
+      ]
+    ]
+  },
+  "library_string71_long": {
+    "linkage": 1,
+    "functions": [
+      {
+        "name": "$default",
+        "parameters": [],
+        "result": 3,
+        "blocks": [
+          [
+            0,
+            2,
+            0,
+            0
+          ]
+        ],
+        "instructions": [
+          [
+            3,
+            3,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          [
+            33,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ]
+        ],
+        "operands": []
+      },
+      {
+        "name": "$init",
+        "parameters": [],
+        "result": 0,
+        "blocks": [
+          [
+            0,
+            1,
+            0,
+            0
+          ]
+        ],
+        "instructions": [
+          [
+            33,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ]
+        ],
+        "operands": []
+      },
+      {
+        "name": "longText",
+        "parameters": [
+          3
+        ],
+        "result": 3,
+        "blocks": [
+          [
+            0,
+            3,
+            0,
+            0
+          ]
+        ],
+        "instructions": [
+          [
+            3,
+            3,
+            0,
+            0,
+            0,
+            0,
+            1,
+            0,
+            0
+          ],
+          [
+            21,
+            3,
+            0,
+            1,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          [
+            33,
+            0,
+            2,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ]
+        ],
+        "operands": []
+      }
+    ],
+    "declarations": {
+      "modules": [
+        [
+          "module-id-v1:kind=6:script:namespace=0::path=7:long.xr",
+          [],
+          1
+        ]
+      ],
+      "identities": [
+        [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          1,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ]
+      ],
+      "slots": [],
+      "literals": [
+        "汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉tail",
+        ""
+      ],
+      "root": 4294967295,
+      "entry": 4294967295
+    },
+    "generics": null,
+    "nodes": [],
+    "nominals": [],
+    "interfaces": [],
+    "defaults": [
+      [
+        0,
+        2,
+        0,
+        0
+      ]
+    ]
+  },
+  "library_string71_equal": {
+    "linkage": 1,
+    "functions": [
+      {
+        "name": "$default",
+        "parameters": [],
+        "result": 3,
+        "blocks": [
+          [
+            0,
+            2,
+            0,
+            0
+          ]
+        ],
+        "instructions": [
+          [
+            3,
+            3,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          [
+            33,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ]
+        ],
+        "operands": []
+      },
+      {
+        "name": "$init",
+        "parameters": [],
+        "result": 0,
+        "blocks": [
+          [
+            0,
+            1,
+            0,
+            0
+          ]
+        ],
+        "instructions": [
+          [
+            33,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ]
+        ],
+        "operands": []
+      },
+      {
+        "name": "equalBytes",
+        "parameters": [
+          3
+        ],
+        "result": 3,
+        "blocks": [
+          [
+            0,
+            3,
+            0,
+            0
+          ]
+        ],
+        "instructions": [
+          [
+            3,
+            3,
+            0,
+            0,
+            0,
+            0,
+            1,
+            0,
+            0
+          ],
+          [
+            21,
+            3,
+            0,
+            1,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          [
+            33,
+            0,
+            2,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ]
+        ],
+        "operands": []
+      }
+    ],
+    "declarations": {
+      "modules": [
+        [
+          "module-id-v1:kind=6:script:namespace=0::path=8:equal.xr",
+          [],
+          1
+        ]
+      ],
+      "identities": [
+        [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          1,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ]
+      ],
+      "slots": [],
+      "literals": [
+        "=",
+        "="
+      ],
+      "root": 4294967295,
+      "entry": 4294967295
+    },
+    "generics": null,
+    "nodes": [],
+    "nominals": [],
+    "interfaces": [],
+    "defaults": [
+      [
+        0,
+        2,
+        0,
+        0
+      ]
+    ]
+  },
+  "library_string71_unused": {
+    "linkage": 1,
+    "functions": [
+      {
+        "name": "$default",
+        "parameters": [],
+        "result": 3,
+        "blocks": [
+          [
+            0,
+            2,
+            0,
+            0
+          ]
+        ],
+        "instructions": [
+          [
+            3,
+            3,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          [
+            33,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ]
+        ],
+        "operands": []
+      },
+      {
+        "name": "$init",
+        "parameters": [],
+        "result": 0,
+        "blocks": [
+          [
+            0,
+            1,
+            0,
+            0
+          ]
+        ],
+        "instructions": [
+          [
+            33,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ]
+        ],
+        "operands": []
+      },
+      {
+        "name": "unused",
+        "parameters": [
+          3
+        ],
+        "result": 3,
+        "blocks": [
+          [
+            0,
+            3,
+            0,
+            0
+          ]
+        ],
+        "instructions": [
+          [
+            3,
+            3,
+            0,
+            0,
+            0,
+            0,
+            1,
+            0,
+            0
+          ],
+          [
+            21,
+            3,
+            0,
+            1,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          [
+            33,
+            0,
+            2,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ]
+        ],
+        "operands": []
+      }
+    ],
+    "declarations": {
+      "modules": [
+        [
+          "module-id-v1:kind=6:script:namespace=0::path=9:unused.xr",
+          [],
+          1
+        ]
+      ],
+      "identities": [
+        [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          1,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ]
+      ],
+      "slots": [],
+      "literals": [
+        "valid",
+        "!",
+        "x"
+      ],
+      "root": 4294967295,
+      "entry": 4294967295
+    },
+    "generics": null,
+    "nodes": [],
+    "nominals": [],
+    "interfaces": [],
+    "defaults": [
+      [
+        0,
+        2,
+        0,
+        0
+      ]
+    ]
+  },
+  "defaults71_golden_7": {
+    "linkage": 1,
+    "functions": [
+      {
+        "name": "$default",
+        "parameters": [],
+        "result": 2,
+        "blocks": [
+          [
+            0,
+            2,
+            0,
+            0
+          ]
+        ],
+        "instructions": [
+          [
+            2,
+            2,
+            0,
+            0,
+            0,
+            0,
+            41,
+            0,
+            0
+          ],
+          [
+            33,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ]
+        ],
+        "operands": []
+      },
+      {
+        "name": "$init",
+        "parameters": [],
+        "result": 0,
+        "blocks": [
+          [
+            0,
+            1,
+            0,
+            0
+          ]
+        ],
+        "instructions": [
+          [
+            33,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ]
+        ],
+        "operands": []
+      },
+      {
+        "name": "answer",
+        "parameters": [
+          2
+        ],
+        "result": 2,
+        "blocks": [
+          [
+            0,
+            1,
+            0,
+            0
+          ]
+        ],
+        "instructions": [
+          [
+            33,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ]
+        ],
+        "operands": []
+      }
+    ],
+    "declarations": {
+      "modules": [
+        [
+          "lib",
+          [],
+          1
+        ]
+      ],
+      "identities": [
+        [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          1,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ]
+      ],
+      "slots": [],
+      "literals": [],
+      "root": 4294967295,
+      "entry": 4294967295
+    },
+    "generics": null,
+    "nodes": [],
+    "nominals": [],
+    "interfaces": [],
+    "defaults": [
+      [
+        0,
+        2,
+        0,
+        0
+      ]
+    ]
+  },
+  "defaults71_golden_8": {
+    "linkage": 0,
+    "functions": [
+      {
+        "name": "n",
+        "parameters": [],
+        "result": 2,
+        "blocks": [
+          [
+            0,
+            2,
+            0,
+            0
+          ]
+        ],
+        "instructions": [
+          [
+            2,
+            2,
+            0,
+            0,
+            0,
+            0,
+            -9223372036854775808,
+            0,
+            0
+          ],
+          [
+            33,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ]
+        ],
+        "operands": []
+      }
+    ],
+    "declarations": null,
+    "generics": null,
+    "nodes": [],
+    "nominals": [],
+    "interfaces": [],
+    "defaults": []
+  },
+  "defaults71_golden_9": {
+    "linkage": 0,
+    "functions": [
+      {
+        "name": "main",
+        "parameters": [],
+        "result": 2,
+        "blocks": [
+          [
+            0,
+            2,
+            0,
+            0
+          ]
+        ],
+        "instructions": [
+          [
+            2,
+            2,
+            0,
+            0,
+            0,
+            0,
+            41,
+            0,
+            0
+          ],
+          [
+            33,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ]
+        ],
+        "operands": []
+      },
+      {
+        "name": "init",
+        "parameters": [],
+        "result": 0,
+        "blocks": [
+          [
+            0,
+            1,
+            0,
+            0
+          ]
+        ],
+        "instructions": [
+          [
+            33,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ]
+        ],
+        "operands": []
+      }
+    ],
+    "declarations": {
+      "modules": [
+        [
+          "alpha",
+          [],
+          1
+        ]
+      ],
+      "identities": [
+        [
+          0,
+          1,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ]
+      ],
+      "slots": [],
+      "literals": [],
+      "root": 0,
+      "entry": 0
+    },
+    "generics": null,
+    "nodes": [
+      [
+        1,
+        2,
+        [
+          [
+            65537,
+            0
+          ]
+        ],
+        65537,
+        0
+      ]
+    ],
+    "nominals": [],
+    "interfaces": [
+      [
+        "alpha",
+        "Evidence",
+        1,
+        [
+          [
+            0,
+            []
+          ]
+        ],
+        [],
+        []
+      ],
+      [
+        "alpha",
+        "Parent",
+        1,
+        [
+          [
+            0,
+            []
+          ]
+        ],
+        [],
+        [
+          [
+            "map",
+            256,
+            0,
+            [
+              [
+                1,
+                [
+                  [
+                    0,
+                    [
+                      65536
+                    ]
+                  ]
+                ]
+              ]
+            ]
+          ],
+          [
+            "copy",
+            256,
+            0,
+            [
+              [
+                0,
+                [
+                  [
+                    0,
+                    [
+                      65536
+                    ]
+                  ]
+                ]
+              ]
+            ]
+          ]
+        ]
+      ]
+    ],
+    "defaults": []
+  },
+  "defaults71_golden_10": {
+    "linkage": 1,
+    "functions": [
+      {
+        "name": "init",
+        "parameters": [],
+        "result": 0,
+        "blocks": [
+          [
+            0,
+            1,
+            0,
+            0
+          ]
+        ],
+        "instructions": [
+          [
+            33,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ]
+        ],
+        "operands": []
+      },
+      {
+        "name": "answer",
+        "parameters": [],
+        "result": 2,
+        "blocks": [
+          [
+            0,
+            2,
+            0,
+            0
+          ]
+        ],
+        "instructions": [
+          [
+            2,
+            2,
+            0,
+            0,
+            0,
+            0,
+            41,
+            0,
+            0
+          ],
+          [
+            33,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ]
+        ],
+        "operands": []
+      }
+    ],
+    "declarations": {
+      "modules": [
+        [
+          "lib",
+          [],
+          0
+        ]
+      ],
+      "identities": [
+        [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          1,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ]
+      ],
+      "slots": [],
+      "literals": [],
+      "root": 4294967295,
+      "entry": 4294967295
+    },
+    "generics": null,
+    "nodes": [],
+    "nominals": [],
+    "interfaces": [],
+    "defaults": []
+  },
+  "defaults71_invoke_golden": {
+    "linkage": 0,
+    "functions": [
+      {
+        "name": "$default",
+        "parameters": [],
+        "result": 2,
+        "blocks": [
+          [
+            0,
+            2,
+            0,
+            0
+          ]
+        ],
+        "instructions": [
+          [
+            2,
+            2,
+            0,
+            0,
+            0,
+            0,
+            41,
+            0,
+            0
+          ],
+          [
+            33,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ]
+        ],
+        "operands": []
+      },
+      {
+        "name": "$init",
+        "parameters": [],
+        "result": 0,
+        "blocks": [
+          [
+            0,
+            1,
+            0,
+            0
+          ]
+        ],
+        "instructions": [
+          [
+            33,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ]
+        ],
+        "operands": []
+      },
+      {
+        "name": "answer",
+        "parameters": [
+          2
+        ],
+        "result": 2,
+        "blocks": [
+          [
+            0,
+            1,
+            0,
+            0
+          ]
+        ],
+        "instructions": [
+          [
+            33,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ]
+        ],
+        "operands": []
+      },
+      {
+        "name": "caller",
+        "parameters": [],
+        "result": 2,
+        "blocks": [
+          [
+            0,
+            1,
+            0,
+            0
+          ],
+          [
+            1,
+            2,
+            0,
+            0
+          ],
+          [
+            3,
+            3,
+            0,
+            0
+          ]
+        ],
+        "instructions": [
+          [
+            122,
+            2,
+            2,
+            0,
+            1,
+            2,
+            0,
+            0,
+            0
+          ],
+          [
+            101,
+            2,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          [
+            33,
+            0,
+            1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          [
+            102,
+            14,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          [
+            2,
+            2,
+            0,
+            0,
+            0,
+            0,
+            -1,
+            0,
+            0
+          ],
+          [
+            33,
+            0,
+            4,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ]
+        ],
+        "operands": []
+      }
+    ],
+    "declarations": {
+      "modules": [
+        [
+          "root",
+          [],
+          1
+        ]
+      ],
+      "identities": [
+        [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ]
+      ],
+      "slots": [],
+      "literals": [],
+      "root": 0,
+      "entry": 3
+    },
+    "generics": null,
+    "nodes": [],
+    "nominals": [],
+    "interfaces": [],
+    "defaults": [
+      [
+        0,
+        2,
+        0,
+        0
+      ]
+    ]
+  }
+}

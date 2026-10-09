@@ -1,0 +1,19 @@
+import "./state" as state
+var own:i64=100
+export fn run()->i64 {
+    const n=state.next()
+    own=own+1
+    print(n)
+    print(state.label())
+    return n
+}
+export fn ownValue()->i64 {return own}
+export fn held()->string {return state.label()}
+export fn pureWorker()->i64 {return await go state.pure(40)}
+export fn snapshot()->i64 {return await go state.pure(state.current())}
+export fn atomicHeld()->Atomic<i64> {return state.read()}
+export fn rebind()->i64 {state.rebind();return state.current()}
+export fn constWorker()->i64 {return await go state.fixedNext()}
+export fn rootHandleWorker()->i64 {return await go state.readParam(state.read())}
+export fn badOrder()->i64 {state.dynamicStore(state.read(),Ordering.Acquire);return 0}
+fn main()->i64 {return 0}

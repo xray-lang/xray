@@ -41,9 +41,130 @@ static XrModuleStatus source_fault_resolve(XrModuleResolver *resolver, const cha
     return status;
 }
 #include "xir/xxir_source_query.c"
+#include "xir/xxir_internal.h"
+static bool allocation_transition_observed;
+static XrXirStatus allocation_transition_refine(const XrXirCompileContext *context,
+    const XrXirModule *module, const XrXirRootRefiner *refiner, XrXirEffects **output) {
+    XrCompileResourceStats before, after;
+    CHECK(xr_compile_resources_stats(context->resources, &before) == XR_COMPILE_RESOURCE_OK);
+    XrXirStatus status = xr_xir_compile_effects_refine_verified(context, module, refiner, output);
+    CHECK(xr_compile_resources_stats(context->resources, &after) == XR_COMPILE_RESOURCE_OK);
+    if (allocation_transition_observed)
+        fprintf(stderr, "Source transition refine_return status=%u before=%llu after=%llu\n",
+            (unsigned)status, (unsigned long long)before.work, (unsigned long long)after.work);
+    return status;
+}
+static XrXirStatus allocation_transition_verify(const XrXirCompileContext *context,
+    const XrXirModule *module, const XrXirConstruction *construction, const XrXirEffects *effects, XrXirDiagnostic *diagnostic) {
+    XrCompileResourceStats before, after;
+    CHECK(xr_compile_resources_stats(context->resources, &before) == XR_COMPILE_RESOURCE_OK);
+    XrXirStatus status = xr_xir_compile_verify_effects_v2(context, module, construction, effects, diagnostic);
+    CHECK(xr_compile_resources_stats(context->resources, &after) == XR_COMPILE_RESOURCE_OK);
+    if (allocation_transition_observed)
+        fprintf(stderr, "Source transition verify stage=%u status=%u before=%llu after=%llu\n",
+            (unsigned)module->stage, (unsigned)status,
+            (unsigned long long)before.work, (unsigned long long)after.work);
+    return status;
+}
+/* Compiling the real transition here intercepts its calls, not a substitute
+ * pipeline. Resource operations and the complete checker remain unchanged. */
+#define xr_xir_compile_effects_refine_verified allocation_transition_refine
+#define xr_xir_compile_verify_effects_v2 allocation_transition_verify
+#include "xir/xxir.c"
+#undef xr_xir_compile_verify_effects_v2
+#undef xr_xir_compile_effects_refine_verified
+typedef struct AllocationEffectWork {
+    const char *function;
+    uint64_t work, calls, rejected;
+} AllocationEffectWork;
+static AllocationEffectWork allocation_effect_work_items[96];
+static size_t allocation_effect_work_count;
+static bool allocation_effect_work(const XrXirCompileContext *context,
+                                   uint64_t fee, const char *function) {
+    bool accepted = xir_compile_work(context, fee);
+    if (!allocation_transition_observed) return accepted;
+    size_t index = 0;
+    while (index < allocation_effect_work_count &&
+           strcmp(allocation_effect_work_items[index].function, function)) ++index;
+    CHECK(index < sizeof(allocation_effect_work_items) / sizeof(allocation_effect_work_items[0]));
+    if (index == allocation_effect_work_count) {
+        allocation_effect_work_items[index].function = function;
+        ++allocation_effect_work_count;
+    }
+    AllocationEffectWork *item = &allocation_effect_work_items[index];
+    ++item->calls;
+    if (accepted) {
+        CHECK(fee <= UINT64_MAX - item->work);
+        item->work += fee;
+    } else {
+        CHECK(fee <= UINT64_MAX - item->rejected);
+        item->rejected += fee;
+    }
+    return accepted;
+}
+static void allocation_effect_work_report(void) {
+    for (size_t i = 0; i < allocation_effect_work_count; ++i) {
+        const AllocationEffectWork *item = &allocation_effect_work_items[i];
+        fprintf(stderr, "Source effects work function=%s calls=%llu admitted=%llu rejected=%llu\n",
+            item->function, (unsigned long long)item->calls,
+            (unsigned long long)item->work, (unsigned long long)item->rejected);
+    }
+}
+/* Compile the canonical effects implementation and forward every real debit.
+ * The bounded observations allocate no ledger bytes and alter no work charge. */
+#define xir_compile_work(context, fee) allocation_effect_work((context), (fee), __func__)
+#include "xir/xxir_effects.c"
+#undef xir_compile_work
+typedef struct AllocationRefinementProbe {
+    const XrXirCompileContext *context;
+    const XrXirRootRefiner *original;
+    unsigned calls;
+    uint64_t first_before, last_before, last_after;
+} AllocationRefinementProbe;
+static XrXirStatus allocation_refinement_update(void *opaque,
+    const XrXirEffects *effects, bool *changed) {
+    AllocationRefinementProbe *probe = opaque;
+    XrCompileResourceStats before, after;
+    CHECK(xr_compile_resources_stats(probe->context->resources, &before) == XR_COMPILE_RESOURCE_OK);
+    if (!probe->calls) probe->first_before = before.work;
+    ++probe->calls;
+    probe->last_before = before.work;
+    XrXirStatus status = probe->original->update(probe->original->context, effects, changed);
+    CHECK(xr_compile_resources_stats(probe->context->resources, &after) == XR_COMPILE_RESOURCE_OK);
+    probe->last_after = after.work;
+    return status;
+}
+static XrXirStatus allocation_refinement_check(const XrXirCompileContext *context,
+    const XrXirModule *built, const XrXirConstruction *construction, const XrXirRootRefiner *refiner,
+    XrXirArtifact **output, XrXirDiagnostic *diagnostic) {
+    XrCompileResourceStats before, after;
+    CHECK(xr_compile_resources_stats(context->resources, &before) == XR_COMPILE_RESOURCE_OK);
+    AllocationRefinementProbe probe = {.context = context, .original = refiner};
+    XrXirRootRefiner observed = {&probe, allocation_refinement_update};
+    bool prior = allocation_transition_observed;
+    allocation_transition_observed = built->function_count > 300 && source_fixture_compile_fail_at == SIZE_MAX;
+    if (allocation_transition_observed) {
+        memset(allocation_effect_work_items, 0, sizeof(allocation_effect_work_items));
+        allocation_effect_work_count = 0;
+    }
+    XrXirStatus status = xr_xir_compile_check_refined_v2(context, built, construction, &observed, output, diagnostic);
+    if (allocation_transition_observed) allocation_effect_work_report();
+    allocation_transition_observed = prior;
+    CHECK(xr_compile_resources_stats(context->resources, &after) == XR_COMPILE_RESOURCE_OK);
+    if (status == XR_XIR_BUDGET && source_fixture_compile_fail_at == SIZE_MAX)
+        fprintf(stderr, "Source check phases functions=%u types=%u before=%llu after=%llu refinements=%u first=%llu last_before=%llu last_after=%llu function=%u block=%u instruction=%u reason=%u\n",
+            built->function_count, built->types ? built->types->count : 0,
+            (unsigned long long)before.work, (unsigned long long)after.work, probe.calls,
+            (unsigned long long)probe.first_before, (unsigned long long)probe.last_before,
+            (unsigned long long)probe.last_after, diagnostic->function, diagnostic->block,
+            diagnostic->instruction, diagnostic->reason);
+    return status;
+}
 #define xr_compile_module_resolver_resolve source_fault_resolve
+#define xr_xir_compile_check_refined_v2 allocation_refinement_check
 #include "xir/xxir_type_inference.c"
 #include "xir/xxir_source.c"
+#undef xr_xir_compile_check_refined_v2
 #undef xr_compile_module_resolver_resolve
 #include "xir_source_allocation_context.h"
 #include "xir_source_allocation_shards.h"
@@ -101,6 +222,7 @@ static void snapshot_interface_allocations(void) {
         XrXirConstraint constraint = {0};
         XrXirType argument = XR_XIR_I64;
         XrXirTypeNode node = {0}; node.kind = XR_XIR_TYPE_CALLABLE;
+        node.flags = XR_XIR_CALLABLE_ROOT_UNRESOLVED;
         node.result = (XrXirType)XR_XIR_TYPE_PARAMETER_BASE; node.parameter_span = 1;
         XrXirInterfaceMethod method = {{member,3},(XrXirType)XR_XIR_CONSTRUCTED_TYPE_BASE,0,0,NULL};
         XrXirInterfaceApplication parent = {0,&argument,1};
@@ -129,6 +251,7 @@ static void snapshot_interface_allocations(void) {
             CHECK(!memcmp(decls[0].module.bytes,"alpha",5));
             CHECK(!memcmp(decls[0].methods[0].name.bytes,"get",3));
             CHECK(!decls[0].constraints[0].markers && decls[1].parents[0].arguments[0] == XR_XIR_I64);
+            CHECK(copy->nodes[0].flags == 8u);
             CHECK(xr_xir_compile_types_structure_verify(&snapshot->context,copy) == XR_XIR_OK);
         } else CHECK(status == XR_XIR_OUT_OF_MEMORY && !snapshot);
         xr_xir_compile_source_snapshot_free(snapshot); CHECK(!source_fixture_compile_live);
@@ -181,7 +304,7 @@ static void snapshot_enum_allocations(void) {
 static void snapshot_type_allocations(void) {
     const XrXirCallableParameter parameter = {XR_XIR_I64, 0};
     const XrXirTypeNode nodes[] = {
-        {XR_XIR_TYPE_CALLABLE, XR_XIR_UNIT, &parameter, 1, XR_XIR_STRING, 0, 0, {0}},
+        {XR_XIR_TYPE_CALLABLE, XR_XIR_UNIT, &parameter, 1, XR_XIR_STRING, XR_XIR_CALLABLE_ROOT_UNRESOLVED, 0, {0}},
         {XR_XIR_TYPE_ARRAY, XR_XIR_STRING, NULL, 0, XR_XIR_UNIT, 0, 0, {0}},
         {XR_XIR_TYPE_CELL, (XrXirType) XR_XIR_CONSTRUCTED_TYPE_BASE, NULL, 0, XR_XIR_UNIT, 0, 0, {0}}
     };
@@ -204,6 +327,7 @@ static void snapshot_type_allocations(void) {
             CHECK(copy->types && copy->types != &types && copy->types->nodes != nodes);
             CHECK(copy->types->count == 3 && copy->types->nodes[0].parameters != &parameter);
             CHECK(copy->types->nodes[0].parameters[0].type == XR_XIR_I64);
+            CHECK(copy->types->nodes[0].flags == 8u);
             CHECK(copy->types->nodes[1].kind == XR_XIR_TYPE_ARRAY && copy->types->nodes[1].element == XR_XIR_STRING);
             CHECK(copy->types->nodes[2].kind == XR_XIR_TYPE_CELL && copy->types->nodes[2].element == XR_XIR_CONSTRUCTED_TYPE_BASE);
         } else CHECK(status == XR_XIR_OUT_OF_MEMORY && !snapshot);
@@ -373,7 +497,13 @@ static void source_root_allocations(void) {
     if(allocation_mode!=2){
     source_fixture_compile_attempts=0;
     XrXirSourceResult query_result_1 = {0};
-    XrXirStatus query_status_1 = allocation_source_check(&request, &query_result_1, NULL);
+    XrXirSourceDiagnostic diagnostic_1 = {0};
+    XrXirStatus query_status_1 = allocation_source_check(&request, &query_result_1, &diagnostic_1);
+    if (query_status_1 != XR_XIR_OK) fprintf(stderr,"Root Source baseline status=%u module=%u line=%d column=%d message=%s\n",
+        (unsigned)query_status_1, (unsigned)diagnostic_1.module, diagnostic_1.line, diagnostic_1.column, diagnostic_1.message);
+    if (query_status_1 != XR_XIR_OK) fprintf(stderr,"Root Source fees allocated=%llu peak=%llu work=%llu live=%llu\n",
+        (unsigned long long)allocation_last_stats.allocated_bytes, (unsigned long long)allocation_last_stats.peak_bytes,
+        (unsigned long long)allocation_last_stats.work, (unsigned long long)allocation_last_stats.live_bytes);
     CHECK(query_result_1.checked && query_result_1.snapshot && source_fixture_compile_live);
     artifact = query_result_1.checked; query_result_1.checked = NULL;
     xr_xir_compile_source_result_free(&query_result_1);

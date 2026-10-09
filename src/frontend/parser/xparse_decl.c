@@ -1187,6 +1187,7 @@ AstNode *xr_parse_call_argument_with_access(Parser *parser, XrCallArgAccess *out
     int line = parser->current.line;
     XrCallArgAccess marker_access = XR_CALL_ARG_PLAIN;
     if (xr_parse_call_argument_access_marker_starts(parser, &marker_access)) {
+        XrNameSpan marker_span = {parser->current.line, parser->current.column};
         do {
             xr_parser_advance(parser);
             if (!xr_parser_healthy(parser)) return NULL;
@@ -1197,6 +1198,10 @@ AstNode *xr_parse_call_argument_with_access(Parser *parser, XrCallArgAccess *out
         if (!xr_parser_healthy(parser)) return NULL;
         if (!place)
             return NULL;
+        if (place->type == AST_VARIABLE) {
+            if (!ast_work(parser->compiler_session, sizeof(XrNameSpan))) return NULL;
+            place->as.variable.access_marker_span = marker_span;
+        }
         return place;
     }
     if (xr_parser_match(parser, TK_DOT_DOT_DOT)) {
@@ -1977,6 +1982,10 @@ AstNode *xr_parse_member_access(Parser *parser, AstNode *object) {
         } while (0);
     }
     node->column = parser->previous.column;
+    if (node->type == AST_MEMBER_ACCESS) {
+        if (!ast_work(parser->compiler_session, sizeof(XrNameSpan))) return NULL;
+        node->as.member_access.name_span = (XrNameSpan){parser->previous.line, parser->previous.column};
+    }
 
     if (!parser->parsing_pattern && xr_parser_match(parser, TK_LBRACE)) {
         char **field_names = NULL;

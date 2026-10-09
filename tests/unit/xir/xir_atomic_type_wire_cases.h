@@ -30,7 +30,9 @@ static const uint8_t legacy_atomic_types_golden[]={
     0x00,0x00,0x00,0x00,0x00,0x0d,0x00,0x00,0x00,0x00,0x00,0x00,
     0x00,0x00,0x00,0x00,0x00,
 };
+#include "xir_construction_fixture.h"
 #include "xir_atomic_types65_golden.h"
+#include "xir_atomic_types72_golden.h"
 typedef struct LegacyTypesFixture {
     XrXirTypeNode nodes[3];XrXirTypes types;XrXirType parameters[3];
     XrXirInstruction instruction;XrXirBlock block;XrXirFunction function;XrXirModule module;
@@ -45,9 +47,9 @@ static void legacy_types_fixture(LegacyTypesFixture *f){
 }
 static XrXirStatus legacy_types_pipeline(const XrXirCompileContext *context,void *unused){
     (void)unused;LegacyTypesFixture fixture;legacy_types_fixture(&fixture);XrXirArtifact *checked=NULL,*read=NULL,*specialized=NULL,*lowered=NULL;XrXirCheckedPacket packet={0};
-    XrXirStatus status=xr_xir_compile_check(context,&fixture.module,&checked,NULL);if(status!=XR_XIR_OK)CHECK(!checked);
+    XrXirStatus status=xir_fixture_check(context, &fixture.module, &checked, NULL);if(status!=XR_XIR_OK)CHECK(!checked);
     if(status==XR_XIR_OK){status=xr_xir_compile_checked_write(checked,&packet,NULL);if(status!=XR_XIR_OK)CHECK(!packet.bytes&&!packet.length);
-        else CHECK(packet.length==sizeof(atomic_types65_golden)&&!memcmp(packet.bytes,atomic_types65_golden,packet.length));}
+        else CHECK(packet.length==sizeof(atomic_types72_golden)&&!memcmp(packet.bytes,atomic_types72_golden,packet.length));}
     xr_xir_compile_artifact_free(checked);
     if(status==XR_XIR_OK){status=xr_xir_compile_checked_read(context,packet.bytes,packet.length,&read,NULL);if(status!=XR_XIR_OK)CHECK(!read);}
     if(status==XR_XIR_OK){status=xr_xir_compile_specialize(read,&specialized,NULL);if(status!=XR_XIR_OK)CHECK(!specialized);}
@@ -64,6 +66,11 @@ static void legacy_types_cases(void){
     previous=(XrXirArtifact *)(uintptr_t)1;
     CHECK(xr_xir_compile_checked_read(&owner.context,legacy_atomic_types_golden,sizeof(legacy_atomic_types_golden),&previous,NULL)==XR_XIR_BAD_STRUCTURE && previous==(XrXirArtifact *)(uintptr_t)1);
     CHECK(source_program_compile_attempts==previous_attempts);
+    previous=NULL;
+    CHECK(xr_xir_compile_checked_read(&owner.context,atomic_types65_golden,sizeof(atomic_types65_golden),&previous,NULL)==XR_XIR_BAD_STRUCTURE && !previous);
+    previous=(XrXirArtifact *)(uintptr_t)1;
+    CHECK(xr_xir_compile_checked_read(&owner.context,atomic_types65_golden,sizeof(atomic_types65_golden),&previous,NULL)==XR_XIR_BAD_STRUCTURE && previous==(XrXirArtifact *)(uintptr_t)1);
+    CHECK(source_program_compile_attempts==previous_attempts);
     for(unsigned mutation=0;mutation<12;++mutation){
         LegacyTypesFixture f;legacy_types_fixture(&f);XrXirCallableParameter field={XR_XIR_I64,0};
         switch(mutation){case 0:f.nodes[0].element=XR_XIR_UNIT;break;case 1:f.nodes[0].element=XR_XIR_STRING;break;
@@ -74,17 +81,17 @@ static void legacy_types_cases(void){
         case 9:f.nodes[0].nominal.field_count=1;f.nodes[0].nominal.fields=&field.type;break;
         case 10:f.nodes[0].element=(XrXirType)UINT16_MAX;break;default:f.nodes[0].kind=XR_XIR_TYPE_CALLABLE;break;}
         XrXirArtifact *out=NULL;XrCompileResourceStats baseline=library_compile_stats(&owner.context);
-        XrXirStatus status=xr_xir_compile_check(&owner.context,&f.module,&out,NULL);
+        XrXirStatus status=xir_fixture_check(&owner.context, &f.module, &out, NULL);
         XrXirStatus expected=mutation<=2||mutation==6||mutation>=10?XR_XIR_BAD_TYPE:XR_XIR_BAD_STRUCTURE;
         if(status!=expected)fprintf(stderr,"typeconstructor%u status%u expected%u\n",mutation,status,expected);
         CHECK(status==expected && !out);
         CHECK(library_compile_stats(&owner.context).live_bytes==baseline.live_bytes);
     }
     LegacyTypesFixture f;legacy_types_fixture(&f);XrXirArtifact *checked=NULL;
-    CHECK(xr_xir_compile_check(&owner.context,&f.module,&checked,NULL)==XR_XIR_OK);
-    uint8_t bytes[sizeof(atomic_types65_golden)];
+    CHECK(xir_fixture_check(&owner.context, &f.module, &checked, NULL)==XR_XIR_OK);
+    uint8_t bytes[sizeof(atomic_types72_golden)];
     /* Explicit body fields: four-byte kind/span/element nodes start at 189. */
-    for(unsigned mutation=0;mutation<7;++mutation){memcpy(bytes,atomic_types65_golden,sizeof(bytes));
+    for(unsigned mutation=0;mutation<7;++mutation){memcpy(bytes,atomic_types72_golden,sizeof(bytes));
         size_t offset=mutation==2?193:mutation==3?189:mutation==4?189:mutation==5?201:197;
         uint32_t value=mutation==0?0:mutation==1?3:mutation==2?1:mutation==3?8:mutation==4?0:mutation==5?8:258;
         for(unsigned b=0;b<4;++b)bytes[offset+b]=(uint8_t)(value>>(8*b));ordering_packet_digest(bytes,sizeof(bytes));
@@ -92,7 +99,7 @@ static void legacy_types_cases(void){
         XrXirStatus status=xr_xir_compile_checked_read(&owner.context,bytes,sizeof(bytes),&out,NULL);
         if(status!=XR_XIR_BAD_TYPE&&status!=XR_XIR_BAD_STRUCTURE)fprintf(stderr,"typewire%u status%u\n",mutation,status);
         CHECK(status==XR_XIR_BAD_TYPE&&!out);
-        CHECK(xr_xir_compile_checked_read(&owner.context,bytes,sizeof(bytes),&occupied,NULL)==status&&occupied==checked);
+        CHECK(xr_xir_compile_checked_read(&owner.context,bytes,sizeof(bytes),&occupied,NULL)==XR_XIR_BAD_STRUCTURE&&occupied==checked);
         CHECK(library_compile_stats(&owner.context).live_bytes==baseline.live_bytes);
     }
     xr_xir_compile_artifact_free(checked);library_compile_owner_drop(&owner);

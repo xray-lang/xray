@@ -42,10 +42,10 @@ static bool source_match_prepare(SourceContext *ctx, SourceExpressionPlan *plan)
             *bound=*symbol;bound->next=ctx->locals;ctx->locals=bound;
         }
         MatchArmNode *arm=&match->arms[i]->as.match_arm;
-        if (arm->guard && !(prepared->guards[i]=source_plan_collect(ctx,arm->guard,(SourceExpectedType){false,XR_XIR_UNIT, false}))) return false;
+        if (arm->guard && !(prepared->guards[i]=source_plan_collect(ctx,arm->guard,(SourceExpectedType){false,XR_XIR_UNIT, false, false}))) return false;
         /* A block introduces declarations in sequence; collect it at that lexical event. */
         if (arm->body->type!=AST_BLOCK) {
-            prepared->values[i]=source_plan_collect(ctx,arm->body,(SourceExpectedType){false,XR_XIR_UNIT, false});
+            prepared->values[i]=source_plan_collect(ctx,arm->body,(SourceExpectedType){false,XR_XIR_UNIT, false, false});
             if (!prepared->values[i]) return false;
             if (!prepared->values[i]->type_ready) ready=false;
             else if (!i) result=prepared->values[i]->ground_type;

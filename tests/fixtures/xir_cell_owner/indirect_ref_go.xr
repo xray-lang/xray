@@ -1,0 +1,4 @@
+fn bump(value: ref i64) -> i64 { value += 1; return value; }
+fn worker(value: ref i64) -> i64 { const action = bump; return action(ref value); }
+export fn run() -> i64 { var value: i64 = 40; const task = go worker(ref value); return task.await(); }
+fn main() -> i64 { return 0; }

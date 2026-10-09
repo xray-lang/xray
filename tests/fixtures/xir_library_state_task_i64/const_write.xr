@@ -1,0 +1,3 @@
+fn identity(value:i64)->i64 {return value}
+const fixed:Task<i64> = go identity(40)
+export fn write() {fixed=go identity(99)}

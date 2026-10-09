@@ -1,0 +1,2 @@
+const fixed=Atomic<i64>(40)
+export fn write() {fixed=Atomic<i64>(99)}

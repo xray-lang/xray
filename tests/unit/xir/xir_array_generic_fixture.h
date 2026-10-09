@@ -1,3 +1,4 @@
+#include "xir_construction_fixture.h"
 /*
  * xray - Lightweight typed scripting with native concurrency
  * https://www.xray-lang.org
@@ -39,7 +40,7 @@ static XrXirArtifact *array_generic_fixture(const XrXirCompileContext *context) 
     XrXirGeneric generics[] = {{NULL, 0, arguments, 2, NULL}, {&constraints[0], 1, NULL, 0, NULL}, {&constraints[1], 1, NULL, 0, NULL}};
     XrXirModule module = {XR_XIR_BUILT, functions, 3, NULL, generics, &types, NULL, XR_XIR_PROGRAM, NULL};
     XrXirArtifact *checked = NULL;
-    CHECK(xr_xir_compile_check(context, &module, &checked, NULL) == XR_XIR_OK);
+    CHECK(xir_fixture_check(context, &module, &checked, NULL) == XR_XIR_OK);
     return checked;
 }
 #endif // XIR_ARRAY_GENERIC_FIXTURE_H

@@ -10,18 +10,22 @@
  *   Arena owners and imported verification consume the same remaining quota.
  */
 static XrXirStatus library_shared_metadata_operation(const XrXirCompileContext *context,void *opaque) {
-    const XrXirLibraryInput *input=opaque;XrXirLibraryCatalog *catalog=NULL;XrXirStatus status=xr_xir_compile_library_catalog_new(context,input,1,&catalog);
+    const XrXirLibraryInput *input=opaque;XrXirLibraryCatalog *catalog=NULL;XrXirStatus status=xr_xir_compile_library_catalog_new_v2(context,input,1,&catalog);
     if(status!=XR_XIR_OK){CHECK(!catalog);return status;}
-    size_t count=0;const XrModuleResourceBinding *resource=xr_xir_compile_library_catalog_resources(catalog,&count);CHECK(resource&&count==1);
-    XrModuleSpec spec={0};spec.resource=resource;XrModuleGraph graph={0};graph.specs=&spec;graph.spec_count=1;
+    size_t count=0;const XrModuleResourceBinding *resource=xr_xir_compile_library_catalog_resources_v2(catalog,&count);CHECK(resource&&count==1);
+    XrModuleSpec spec={0};spec.resource=resource;
+    spec.representation=XR_MODULE_CHECKED_LIBRARY;XrModuleGraph graph={0};graph.specs=&spec;graph.spec_count=1;
     SourceContext ctx={0};ctx.graph=&graph;ctx.compile=*context;
+    size_t canonical_length=source_text_size(&ctx,resource->canonical);
+    spec.canonical=source_alloc(&ctx,canonical_length+1,1);
+    if(spec.canonical)(void)source_copy_bytes(&ctx,NULL,spec.canonical,resource->canonical,canonical_length+1);
     void *owned=source_alloc(&ctx,1,1);if(owned){const XrXirModule *module=source_library_module(&ctx,0);if(module)CHECK(module->linkage_kind==XR_XIR_LIBRARY);}
     status=ctx.diagnostic.status;while(ctx.memory)source_release_private(ctx.memory+1);xr_xir_compile_library_catalog_free(catalog);return status;
 }
 static void library_source_metadata_cases(const XrXirLibraryCatalog *catalog) {
-    size_t count=0;const XrModuleResourceBinding *resources=xr_xir_compile_library_catalog_resources(catalog,&count);CHECK(resources&&count==1);
+    size_t count=0;const XrModuleResourceBinding *resources=xr_xir_compile_library_catalog_resources_v2(catalog,&count);CHECK(resources&&count==1);
     XrXirCheckedPacket packet={0};CHECK(xr_xir_compile_checked_write(resources[0].checked,&packet,NULL)==XR_XIR_OK);
-    XrXirLibraryInput input={resources[0].authority,resources[0].logical_path,packet.bytes,packet.length,{0}};xr_sha256(packet.bytes,packet.length,input.sha256);
+    XrXirLibraryInput input={packet.bytes,packet.length,{0}, (XrXirLibraryModuleInput[]){{resources[0].authority,resources[0].logical_path}},1};xr_sha256(packet.bytes,packet.length,input.sha256);
     library_compile_operation_cases("Source same-ledger allocation/library verify",library_shared_metadata_operation,&input);xr_xir_compile_checked_packet_free(&packet);
     LibraryCompileOwner owner={0};CHECK(library_compile_owner_new(&owner,&library_compile_limits)==XR_XIR_OK);SourceContext ctx={0};ctx.compile=owner.context;
     XrCompileResourceStats before=library_compile_stats(&owner.context);void *owned=source_alloc(&ctx,7,1);CHECK(owned);XrCompileResourceStats required=library_compile_stats(&owner.context);source_release_private(owned);

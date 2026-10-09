@@ -32,23 +32,23 @@ static void go_check_failures(void) {
     effect_owner_free(&context,baseline);effect_mark_check(mark);
     printf("GO check %zu real allocation failures, retry/no-refund, exact-minus1 and occupied-output physical0\n",sites);
 }
-static void go_authority_oracles(const XrXirModule *module,const XrXirStatus *authority) {
+static void go_authority_oracles(const XrXirModule *module,const XrXirProgramPermissions *authority) {
     const char *safe[]={"pure","worker","constRead","constAtomicRead","atomicParameter","local","localCell","localBox"};
     const char *bad[]={"mutableRead","mutableAtomicContainerRead","constBoxRead","rootA","rootB",
         "defaultUse","cleanupOwner","indirect","indirectInvoke","mixed","mixedRelay","goParent"};
-    for(size_t i=0;i<sizeof(safe)/sizeof(safe[0]);++i)CHECK(authority[root_find(module,safe[i])]==XR_XIR_OK);
-    for(size_t i=0;i<sizeof(bad)/sizeof(bad[0]);++i)CHECK(authority[root_find(module,bad[i])]==XR_XIR_BAD_TYPE);
+    for(size_t i=0;i<sizeof(safe)/sizeof(safe[0]);++i)CHECK(authority->entries[root_find(module,safe[i])].worker==XR_XIR_OK);
+    for(size_t i=0;i<sizeof(bad)/sizeof(bad[0]);++i)CHECK(authority->entries[root_find(module,bad[i])].worker==XR_XIR_BAD_TYPE);
     for(uint32_t f=0;f<module->function_count;++f){
         const XrXirFunctionIdentity *identity=&module->declarations->functions[f];
         if(identity->cleanup_owner||identity->test_role||module->declarations->modules[identity->module].initializer==f)
-            CHECK(authority[f]==XR_XIR_BAD_TYPE);
+            CHECK(authority->entries[f].worker==XR_XIR_BAD_TYPE);
     }
     for(uint32_t s=0;s<module->declarations->slot_count;++s)
-        if(module->declarations->slots[s].mutable)CHECK(authority[(uint64_t)module->function_count+s]==XR_XIR_BAD_TYPE);
+        if(module->declarations->slots[s].mutable)CHECK(authority->entries[(uint64_t)module->function_count+s].worker==XR_XIR_BAD_TYPE);
 }
 static void go_authority_failures(const XrXirProgramSpec *spec) {
     EffectMark mark=effect_mark();XrXirCompileContext context=effect_owner_new(effect_caps());
-    uint64_t baseline=effect_stats(&context).live_bytes;XrXirStatus *authority=NULL;
+    uint64_t baseline=effect_stats(&context).live_bytes;XrXirProgramPermissions *authority=NULL;
     attempts=0;CHECK(xr_xir_compile_program_proof_verify(&context,spec,&spec->proof,&authority)==XR_XIR_OK&&authority);
     size_t sites=attempts;CHECK(sites);xr_compile_resources_free(authority);authority=NULL;
     XrCompileResourceStats measured=effect_stats(&context);effect_owner_free(&context,baseline);effect_mark_check(mark);
@@ -72,10 +72,10 @@ static void go_authority_failures(const XrXirProgramSpec *spec) {
         effect_owner_free(&context,baseline);effect_mark_check(mark);
     }
     context=effect_owner_new(effect_caps());baseline=effect_stats(&context).live_bytes;
-    authority=(XrXirStatus *)(uintptr_t)1;attempts=0;XrCompileResourceStats occupied=effect_stats(&context);
+    authority=(XrXirProgramPermissions *)(uintptr_t)1;attempts=0;XrCompileResourceStats occupied=effect_stats(&context);
     CHECK(xr_xir_compile_program_proof_verify(&context,spec,&spec->proof,&authority)==XR_XIR_BAD_STRUCTURE);
     XrCompileResourceStats after=effect_stats(&context);
-    CHECK(authority==(XrXirStatus *)(uintptr_t)1&&!attempts&&occupied.work==after.work&&occupied.allocated_bytes==after.allocated_bytes);
+    CHECK(authority==(XrXirProgramPermissions *)(uintptr_t)1&&!attempts&&occupied.work==after.work&&occupied.allocated_bytes==after.allocated_bytes);
     effect_owner_free(&context,baseline);effect_mark_check(mark);
     printf("native GO authority %zu real allocation failures, retry/no-refund, axes and early occupied-output physical0\n",sites);
 }

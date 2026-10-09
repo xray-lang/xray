@@ -13,56 +13,15 @@
 
 #include "xcli.h"
 #include "xcli_spec.h"
-#include "../../api/xisolate_profile.h"
-#include "xray.h"
-#include "xray_vm.h"
-#include "../../module/xbundle.h"
-#include "../../module/xmodule_identity.h"
+#include "xcli_canonical_source.h"
+#include "xcli_source_paths.h"
 #include "../../base/xmalloc.h"
 #include "../../base/xchecks.h"
 #include <stdio.h>
 #include <string.h>
 #include <stdbool.h>
 
-// Write a JSON-escaped string to file (handles \, ", and control chars)
-static void fprint_json_string(FILE *f, const char *s) {
-    fputc('"', f);
-    for (; *s; s++) {
-        switch (*s) {
-            case '"':
-                fputs("\\\"", f);
-                break;
-            case '\\':
-                fputs("\\\\", f);
-                break;
-            case '\n':
-                fputs("\\n", f);
-                break;
-            case '\t':
-                fputs("\\t", f);
-                break;
-            default:
-                fputc(*s, f);
-                break;
-        }
-    }
-    fputc('"', f);
-}
-
-typedef enum {
-    OUTPUT_SHELL,
-    OUTPUT_JSON,
-    OUTPUT_LIST
-} OutputFormat;
-
-static int bundle_count_kind(const XrBundle *bundle, XrModuleKind kind, bool exclude_entry) {
-    int count = 0;
-    for (int i = 0; i < bundle->count; i++) {
-        if (bundle->entries[i].kind == kind && (!exclude_entry || i != bundle->entry_index))
-            count++;
-    }
-    return count;
-}
+#include "xcli_dependency_output.h"
 
 XR_FUNC int cmd_deps(const XrCliInvocation *inv) {
     XR_DCHECK(inv != NULL, "inv is NULL");
@@ -79,24 +38,37 @@ XR_FUNC int cmd_deps(const XrCliInvocation *inv) {
     else if (xr_cli_opt_present(&inv->options, "shell"))
         format = OUTPUT_SHELL;
 
-    /* Create isolate and analyze dependencies */
-    XrVMRuntime *X = xr_isolate_profile_new(XR_ISOLATE_PROFILE_RUN);
-    if (!X) {
-        xr_cli_error("deps", "failed to create isolate");
+    XrCompileResourceLimits limits = xr_cli_compile_default_resource_limits();
+    XrCompileResources *resources = NULL;
+    if (xr_compile_resources_new(&limits, &resources) != XR_COMPILE_RESOURCE_OK) {
+        xr_cli_error("deps", "cannot initialize compiler resources");
         return XR_CLI_EXIT_INTERNAL;
     }
-
-    XrModuleIdentityAuthority authority = {0};
-    char *authority_root = NULL;
-    XrBundle *bundle =
-        (xr_module_identity_script_authority_from_source(input_file, &authority, &authority_root) == XR_MODULE_OK)
-            ? xr_bundle_create_ex(X, input_file, &authority, XR_BUNDLE_DEFAULT)
-            : NULL;
-    xr_free(authority_root);
-    xray_vm_delete(X);
-
-    if (!bundle) {
+    XrXirCompileContext context = {resources, xr_xir_compile_default_limits()};
+    XrCliSourcePaths paths = {0}; XrCliSourcePathsDiagnostic path_diagnostic = {0};
+    XrCliCompileSourceDiagnostic diagnostic = {0}; XrXirSourceProduct *product = NULL;
+    XrCliCompileSourceStatus status = xr_cli_compile_source_paths(resources, input_file,
+        &paths, &path_diagnostic);
+    if (status == XR_CLI_COMPILE_SOURCE_OK) {
+        XrCliCompileSourceRequest request = {&context, paths.entry, paths.stdlib, NULL,
+            xr_cli_compile_default_manifest_limits(), {XR_XIR_ARCH_X86_64, XR_XIR_VALUE_ABI_VERSION}};
+        status = xr_cli_compile_source_build(&request, &product, &diagnostic);
+    }
+    if (status != XR_CLI_COMPILE_SOURCE_OK) {
+        char text[1024] = {0};
+        if (diagnostic.status != XR_CLI_COMPILE_SOURCE_OK) {
+            (void)xr_cli_compile_source_diagnostic_format(&diagnostic, text, sizeof(text));
+            xr_cli_error("deps", "%s", text);
+        } else xr_cli_error("deps", "source path lookup failed: %s",
+            xr_cli_compile_source_status_name(status));
+    }
+    xr_cli_compile_source_paths_free(&paths);
+    xr_cli_compile_source_diagnostic_free(&diagnostic);
+    xr_compile_resources_release(resources);
+    const XrXirSourceDependencies *bundle = xr_xir_compile_source_product_dependencies(product);
+    if (status != XR_CLI_COMPILE_SOURCE_OK || !bundle) {
         xr_cli_error("deps", "dependency analysis failed for '%s'", input_file);
+        xr_xir_compile_source_product_free(product);
         return XR_CLI_EXIT_FAIL;
     }
 
@@ -106,114 +78,29 @@ XR_FUNC int cmd_deps(const XrCliInvocation *inv) {
         out = fopen(output_file, "w");
         if (!out) {
             xr_cli_error("deps", "cannot create '%s'", output_file);
-            xr_bundle_free(bundle);
+            xr_xir_compile_source_product_free(product);
             return XR_CLI_EXIT_FAIL;
         }
     }
 
-    /* Write output */
-    switch (format) {
-        case OUTPUT_LIST:
-            if (bundle_count_kind(bundle, XR_MOD_STDLIB, false) > 0) {
-                fprintf(out, "# Stdlib\n");
-                for (int i = 0; i < bundle->count; i++)
-                    if (bundle->entries[i].kind == XR_MOD_STDLIB)
-                        fprintf(out, "%s\n", bundle->entries[i].path);
-            }
-            if (bundle_count_kind(bundle, XR_MOD_PACKAGE, false) > 0) {
-                fprintf(out, "# Third-party packages\n");
-                for (int i = 0; i < bundle->count; i++)
-                    if (bundle->entries[i].kind == XR_MOD_PACKAGE)
-                        fprintf(out, "%s\n", bundle->entries[i].path);
-            }
-            if (bundle_count_kind(bundle, XR_MOD_FILE, true) > 0) {
-                fprintf(out, "# Local modules\n");
-                for (int i = 0; i < bundle->count; i++)
-                    if (i != bundle->entry_index && bundle->entries[i].kind == XR_MOD_FILE)
-                        fprintf(out, "%s\n", bundle->entries[i].path);
-            }
-            break;
-
-        case OUTPUT_JSON:
-            fprintf(out, "{\n");
-            fprintf(out, "  \"entry\": ");
-            fprint_json_string(out, bundle->entry_path);
-            fprintf(out, ",\n");
-
-            fprintf(out, "  \"stdlib\": [");
-            int written = 0;
-            for (int i = 0; i < bundle->count; i++) {
-                if (bundle->entries[i].kind != XR_MOD_STDLIB)
-                    continue;
-                if (written++ > 0)
-                    fprintf(out, ", ");
-                fprint_json_string(out, bundle->entries[i].path);
-            }
-            fprintf(out, "],\n");
-
-            fprintf(out, "  \"packages\": [");
-            written = 0;
-            for (int i = 0; i < bundle->count; i++) {
-                if (bundle->entries[i].kind != XR_MOD_PACKAGE)
-                    continue;
-                if (written++ > 0)
-                    fprintf(out, ", ");
-                fprint_json_string(out, bundle->entries[i].path);
-            }
-            fprintf(out, "],\n");
-
-            fprintf(out, "  \"local_modules\": [");
-            written = 0;
-            for (int i = 0; i < bundle->count; i++) {
-                if (i == bundle->entry_index || bundle->entries[i].kind != XR_MOD_FILE)
-                    continue;
-                if (written++ > 0)
-                    fprintf(out, ", ");
-                fprint_json_string(out, bundle->entries[i].path);
-            }
-            fprintf(out, "]\n");
-            fprintf(out, "}\n");
-            break;
-
-        case OUTPUT_SHELL:
-        default:
-            fprintf(out, "#!/bin/bash\n");
-            fprintf(out, "# Dependency install script\n");
-            fprintf(out, "# Auto-generated by xray deps\n");
-            fprintf(out, "# Entry: %s\n", bundle->entry_path);
-            fprintf(out, "\n");
-            fprintf(out, "set -e\n");
-            fprintf(out, "\n");
-
-            if (bundle_count_kind(bundle, XR_MOD_PACKAGE, false) > 0) {
-                fprintf(out, "echo \"Installing third-party package dependencies...\"\n");
-                for (int i = 0; i < bundle->count; i++)
-                    if (bundle->entries[i].kind == XR_MOD_PACKAGE)
-                        fprintf(out, "xray pkg add %s\n", bundle->entries[i].path);
-                fprintf(out, "\n");
-                fprintf(out, "echo \"All dependencies installed\"\n");
-            } else {
-                fprintf(out, "echo \"No third-party package dependencies\"\n");
-            }
-
-            if (bundle_count_kind(bundle, XR_MOD_STDLIB, false) > 0) {
-                fprintf(out, "\n");
-                fprintf(out, "# Stdlib dependencies (built-in, no install needed):\n");
-                for (int i = 0; i < bundle->count; i++)
-                    if (bundle->entries[i].kind == XR_MOD_STDLIB)
-                        fprintf(out, "#   - %s\n", bundle->entries[i].path);
-            }
-            break;
-    }
-
+    bool output_failed = !deps_emit(out, bundle, format);
     if (output_file) {
-        fclose(out);
+        if (fclose(out) != 0) output_failed = true;
+        if (output_failed) {
+            xr_cli_error("deps", "cannot write '%s'", output_file);
+            xr_xir_compile_source_product_free(product);
+            return XR_CLI_EXIT_FAIL;
+        }
         printf("Dependency script generated: %s\n", output_file);
         if (format == OUTPUT_SHELL) {
             printf("Run with: bash %s\n", output_file);
         }
     }
 
-    xr_bundle_free(bundle);
-    return 0;
+    xr_xir_compile_source_product_free(product);
+    if (output_failed) {
+        xr_cli_error("deps", "cannot write dependency output");
+        return XR_CLI_EXIT_FAIL;
+    }
+    return XR_CLI_EXIT_OK;
 }

@@ -14,6 +14,7 @@ typedef struct ValuePathSlot {
 typedef struct ValuePathWrite {
     XrXirValue candidate;
     unsigned char *publish;
+    bool domain_sensitive;
 } ValuePathWrite;
 
 static XrXirValue path_handle(ValuePathSlot slot) {
@@ -41,7 +42,7 @@ static XrXirValueStatus path_array_clone(const XrXirValue *value,
     if (status != XR_XIR_VALUE_OK) { xr_xir_value_drop(&owned); return status; }
     *output = owned; return XR_XIR_VALUE_OK;
 }
-/* Only the first shared owner remains unpublished. Further replacements are
+/* Only the first replaced owner remains unpublished. Further replacements are
  * inside that private subtree, whose retained children preserve original data. */
 static XrXirValueStatus path_unique(ValuePathSlot *slot,
     ValuePathWrite *write, XrXirValueAdmission *admission) {
@@ -50,7 +51,8 @@ static XrXirValueStatus path_unique(ValuePathSlot *slot,
     if (!array && slot->inline_storage) return XR_XIR_VALUE_OK;
     XrXirValue current = path_handle(*slot);
     XirObject *object = object_pointer(&current);
-    if (atomic_load_explicit(&object->references, memory_order_acquire) == 1) return XR_XIR_VALUE_OK;
+    if (atomic_load_explicit(&object->references, memory_order_acquire) == 1 &&
+        (!write->domain_sensitive || object->domain == admission->domain)) return XR_XIR_VALUE_OK;
     XrXirValue copy = {0}; XrXirValueStatus status;
     if (array) status = path_array_clone(&current, admission, &copy);
     else {
@@ -142,8 +144,10 @@ static XrXirValueStatus path_begin(const XrXirValuePlace *root,
 }
 static XrXirValueStatus path_store(ValuePathSlot slot,
     const XrXirValue *value, XrXirValueAdmission *admission) {
-    XrXirValueStatus status = xr_xir_value_admit(value, slot.type, admission);
-    if (status != XR_XIR_VALUE_OK) return status;
+    /* The incoming tree was admitted once before any ancestor replacement.
+     * The final place still requires its exact type and arena. */
+    if (!xr_xir_value_argument(value, admission->arena, slot.type)) return XR_XIR_VALUE_BAD_ARGUMENT;
+    XrXirValueStatus status = XR_XIR_VALUE_OK;
     if (!slot.inline_storage) {
         XrXirValue owned = {0}, previous = path_handle(slot);
         status = xr_xir_value_copy(value, &owned);
@@ -165,7 +169,7 @@ static XrXirValueStatus path_store(ValuePathSlot slot,
     prepared.owns = false; release_pending(pending); storage_prepared_end(&prepared);
     return XR_XIR_VALUE_OK;
 }
-XR_FUNC XrXirValueStatus xr_xir_value_path_read(const XrXirValuePlace *root,
+static XrXirValueStatus xr_xir_value_path_read_graph_operation(const XrXirValuePlace *root,
     const XrXirValuePath *path, XrXirValueAdmission *admission,
     XrXirValue *output, XrXirFaultDetail *fault) {
     if (!unit_value(output)) return XR_XIR_VALUE_BAD_ARGUMENT;
@@ -179,12 +183,23 @@ XR_FUNC XrXirValueStatus xr_xir_value_path_read(const XrXirValuePlace *root,
     if (slot.inline_storage) return storage_unpack((StorageSpan){slot.type, slot.bytes}, admission, output);
     XrXirValue value = path_handle(slot); return xr_xir_value_copy(&value, output);
 }
+XR_FUNC XrXirValueStatus xr_xir_value_path_read(const XrXirValuePlace *root,
+    const XrXirValuePath *path, XrXirValueAdmission *admission,
+    XrXirValue *output, XrXirFaultDetail *fault) {
+    xr_xir_value_graph_begin();
+    XrXirValueStatus graph_outcome = xr_xir_value_path_read_graph_operation(root, path, admission, output, fault);
+    xr_xir_value_graph_end();
+    return graph_outcome;
+}
 static XrXirValueStatus path_mutate(const XrXirValuePlace *root,
     const XrXirValuePath *path, const XrXirValue *value,
     XrXirValueAdmission *admission, XrXirFaultDetail *fault, bool append) {
     if (!admission || !admission->domain || !value) return XR_XIR_VALUE_BAD_ARGUMENT;
-    ValuePathSlot slot = {0}; ValuePathWrite write = {0};
+    ValuePathSlot slot = {0};
+    ValuePathWrite write = {0};
     XrXirValueStatus status = path_begin(root, path, admission, &slot, fault);
+    if (status != XR_XIR_VALUE_OK) return status;
+    status = value_admit_summary(value, (XrXirType)value->type, admission, &write.domain_sensitive);
     if (status != XR_XIR_VALUE_OK) return status;
     for (uint32_t i = 0; i < path->count; ++i) {
         status = path_step(&slot, &path->steps[i], admission, &write, fault);
@@ -192,7 +207,8 @@ static XrXirValueStatus path_mutate(const XrXirValuePlace *root,
     }
     if (status == XR_XIR_VALUE_OK) {
         XrXirValuePlace leaf = {slot.type, slot.bytes};
-        status = append ? xr_xir_array_push(&leaf, value, admission) : path_store(slot, value, admission);
+        status = append ? array_mutate(&leaf, 0, value, true, admission, NULL,
+            true, write.domain_sensitive) : path_store(slot, value, admission);
     }
     if (status == XR_XIR_VALUE_OK && write.publish) {
         XrXirValue previous = {(uint32_t)write.candidate.type, 0, 0};
@@ -202,13 +218,29 @@ static XrXirValueStatus path_mutate(const XrXirValuePlace *root,
     }
     xr_xir_value_drop(&write.candidate); return status;
 }
-XR_FUNC XrXirValueStatus xr_xir_value_path_write(const XrXirValuePlace *root,
+static XrXirValueStatus xr_xir_value_path_write_graph_operation(const XrXirValuePlace *root,
     const XrXirValuePath *path, const XrXirValue *value,
     XrXirValueAdmission *admission, XrXirFaultDetail *fault) {
     return path_mutate(root, path, value, admission, fault, false);
 }
-XR_FUNC XrXirValueStatus xr_xir_value_path_push(const XrXirValuePlace *root,
+XR_FUNC XrXirValueStatus xr_xir_value_path_write(const XrXirValuePlace *root,
+    const XrXirValuePath *path, const XrXirValue *value,
+    XrXirValueAdmission *admission, XrXirFaultDetail *fault) {
+    xr_xir_value_graph_begin();
+    XrXirValueStatus graph_outcome = xr_xir_value_path_write_graph_operation(root, path, value, admission, fault);
+    xr_xir_value_graph_end();
+    return graph_outcome;
+}
+static XrXirValueStatus xr_xir_value_path_push_graph_operation(const XrXirValuePlace *root,
     const XrXirValuePath *path, const XrXirValue *value,
     XrXirValueAdmission *admission, XrXirFaultDetail *fault) {
     return path_mutate(root, path, value, admission, fault, true);
+}
+XR_FUNC XrXirValueStatus xr_xir_value_path_push(const XrXirValuePlace *root,
+    const XrXirValuePath *path, const XrXirValue *value,
+    XrXirValueAdmission *admission, XrXirFaultDetail *fault) {
+    xr_xir_value_graph_begin();
+    XrXirValueStatus graph_outcome = xr_xir_value_path_push_graph_operation(root, path, value, admission, fault);
+    xr_xir_value_graph_end();
+    return graph_outcome;
 }

@@ -50,3 +50,20 @@ endforeach()
 add_test(NAME test_xir_library_atomic64_vectors COMMAND ${XRAY_PYTHON}
     ${CMAKE_CURRENT_SOURCE_DIR}/xir/derive_library_atomic64_vectors.py)
 set_tests_properties(test_xir_library_atomic64_vectors PROPERTIES LABELS "unit;xir;abi")
+
+# Compiler input and returned-view layouts have their own link boundary.
+add_executable(test_xir_library_c_abi xir/test_xir_library_c_abi.c)
+target_link_libraries(test_xir_library_c_abi PRIVATE xray_xir_source)
+if(MSVC)
+    target_compile_options(test_xir_library_c_abi PRIVATE /W4 /WX /utf-8)
+else()
+    target_compile_options(test_xir_library_c_abi PRIVATE -Wall -Wextra -Werror -pedantic)
+endif()
+add_test(NAME test_xir_library_c_abi COMMAND test_xir_library_c_abi)
+set_tests_properties(test_xir_library_c_abi PROPERTIES
+    LABELS "unit;xir;compiler;abi;ownership" TIMEOUT 60 RUN_SERIAL TRUE)
+
+# Separate module-view qualification leaves the complete legacy-vector gate intact.
+add_test(NAME test_xir_library_views_source COMMAND test_xir_library_source --views)
+set_tests_properties(test_xir_library_views_source PROPERTIES
+    LABELS "unit;xir;compiler;ownership;budget" TIMEOUT 120 RUN_SERIAL TRUE)

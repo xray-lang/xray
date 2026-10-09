@@ -1,0 +1,2 @@
+import { caught } from "./catch_only_child"
+export fn consumerAnswer() -> i64 { return caught() }

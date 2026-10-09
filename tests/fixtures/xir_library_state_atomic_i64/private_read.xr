@@ -1,0 +1,2 @@
+import "./state" as state
+fn main()->i64 {return state.counter.load()}

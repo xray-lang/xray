@@ -8,6 +8,7 @@
  */
 #ifndef XIR_NATIVE_INBOX_FIXTURE_H
 #define XIR_NATIVE_INBOX_FIXTURE_H
+#include "xir_construction_fixture.h"
 #include "xir_call_fixture.h"
 static XrXirArtifact *native_inbox_fixture(const XrXirCompileContext *context, uint32_t mode) {
     CHECK(mode < 6);
@@ -105,7 +106,7 @@ static XrXirArtifact *native_inbox_fixture(const XrXirCompileContext *context, u
     const XrXirTarget target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};
     XrXirArtifact *checked=NULL,*closed=NULL,*lowered=NULL;
     XrXirDiagnostic diagnostic={0};
-    XrXirStatus status=xr_xir_compile_check(context,&built,&checked,&diagnostic);
+    XrXirStatus status=xir_fixture_check(context, &built, &checked, &diagnostic);
     if (status!=XR_XIR_OK) fprintf(stderr,"inbox graph mode=%u status=%u function=%u block=%u instruction=%u\n",
         mode,status,diagnostic.function,diagnostic.block,diagnostic.instruction);
     CHECK(status==XR_XIR_OK);

@@ -9,6 +9,7 @@
  * KEY CONCEPT:
  *   Fail every allocation in the actual reader, writer and semantic verifier.
  */
+#include "xir_construction_fixture.h"
 #include "base/xmalloc.h"
 #include "xir/xxir_checked.h"
 #include <stdio.h>
@@ -84,7 +85,7 @@ static void packet_free(void *p) {
 static XrXirArtifact *array_packet_fixture(const XrXirCompileContext *context) {
     XirArrayMetadataFixture f; xir_array_metadata_init(&f);
     XrXirArtifact *checked = NULL;
-    CHECK(xr_xir_compile_check(context, &f.module, &checked, NULL) == XR_XIR_OK);
+    CHECK(xir_fixture_check(context, &f.module, &checked, NULL) == XR_XIR_OK);
     return checked;
 }
 static void packet_failures(unsigned kind) {
@@ -145,10 +146,10 @@ static void specialization_failures(unsigned callable) {
             XrXirCompileContext probe=consumer_context_ephemeral((XrCompileResourceLimits){67108864,8388608,128000000});
             XrCompileResourceStats owner_baseline=consumer_context_stats(&probe);
             XrXirArtifact *producer=NULL;
-            if(mode)CHECK(xr_xir_compile_check(&probe,&built,&producer,NULL)==XR_XIR_OK);
+            if(mode)CHECK(xir_fixture_check(&probe, &built, &producer, NULL)==XR_XIR_OK);
             size_t stage_baseline=live,stage_bytes=live_bytes;
             calls=0;fail_at=attempt?attempt-1:SIZE_MAX;
-            XrXirStatus status=mode?xr_xir_compile_specialize(producer,&output,NULL):xr_xir_compile_check(&probe,&built,&output,NULL);
+            XrXirStatus status=mode?xr_xir_compile_specialize(producer,&output,NULL):xir_fixture_check(&probe, &built, &output, NULL);
             if(!attempt){CHECK(status==XR_XIR_OK && output);sites[mode]=calls;}
             else CHECK(status==XR_XIR_OUT_OF_MEMORY && !output);
             xr_xir_compile_artifact_free(output);output=NULL;
@@ -236,20 +237,27 @@ static void provenance_ownership(void) {
     XrXirArtifact *closed = NULL;
     CHECK(xr_xir_compile_specialize(source, &closed, NULL) == XR_XIR_OK);
     XrXirType integer = XR_XIR_I64, string = XR_XIR_STRING;
-    XrXirOrigin origins[] = {{0,NULL,0}, {1,&integer,1}, {1,&string,1}};
+    XrXirOrigin origins[] = {{.function=0},
+        {.function=1,.arguments=&integer,.argument_count=1},
+        {.function=1,.arguments=&string,.argument_count=1}};
+    CHECK(!source->module.provenance);
+    XrXirProvenance instance = {.kind=XR_XIR_EVIDENCE_INSTANCE,
+        .source=source,.origins=origins,.count=3};
     XrXirCompileContext initial = consumer_context_default(), remaining = initial;
     XrXirProvenance *copy = NULL;
     size_t baseline = live; calls = 0;
-    CHECK(xr_xir_compile_provenance_copy(&remaining, &source->module, origins, 3, &copy) == XR_XIR_OK);
+    CHECK(xr_xir_compile_provenance_copy(&remaining, &instance, &copy) == XR_XIR_OK);
     size_t sites = calls;
     XrCompileResourceStats required=consumer_context_stats(&remaining);
-    CHECK(copy && copy->count == 3 && copy->source != source);
+    CHECK(copy && copy->kind == XR_XIR_EVIDENCE_INSTANCE && copy->count == 3 && copy->source != source);
+    CHECK(!copy->contracts && !copy->contract_count && !copy->bindings && !copy->binding_count);
+    CHECK(!copy->origins[1].effect_arguments && !copy->origins[1].effect_argument_count);
     CHECK(copy->origins != origins && copy->origins[1].arguments != &integer);
     CHECK(copy->source->module.functions != source->module.functions);
     xr_xir_compile_provenance_free(copy);copy=NULL; CHECK(live == baseline);
     for (size_t i = 0; i < sites; ++i) {
         calls = 0; fail_at = i; remaining = initial; copy = NULL;
-        CHECK(xr_xir_compile_provenance_copy(&remaining, &source->module, origins, 3, &copy) == XR_XIR_OUT_OF_MEMORY);
+        CHECK(xr_xir_compile_provenance_copy(&remaining, &instance, &copy) == XR_XIR_OUT_OF_MEMORY);
         CHECK(!copy && live == baseline);
     }
     fail_at = SIZE_MAX;
@@ -258,7 +266,7 @@ static void provenance_ownership(void) {
         if(mode==2)--limits.allocated_bytes;if(mode==3)--limits.work;
         remaining=consumer_context_ephemeral(limits);remaining.limits.functions=mode==1?1:2;
         XrCompileResourceStats before=consumer_context_stats(&remaining);copy=NULL;
-        CHECK(xr_xir_compile_provenance_copy(&remaining,&source->module,origins,3,&copy)==(mode?XR_XIR_BUDGET:XR_XIR_OK));
+        CHECK(xr_xir_compile_provenance_copy(&remaining,&instance,&copy)==(mode?XR_XIR_BUDGET:XR_XIR_OK));
         if(mode)CHECK(!copy);
         xr_xir_compile_provenance_free(copy);copy=NULL;
         consumer_context_ephemeral_free(&remaining,before);CHECK(live==baseline);
@@ -268,23 +276,26 @@ static void provenance_ownership(void) {
         if (mode == 0) origins[1].function = 2;
         if (mode == 1) origins[1].argument_count = 0;
         if (mode == 2) origins[1].arguments = NULL;
-        CHECK(xr_xir_compile_provenance_copy(&remaining, &source->module, origins, 3, &copy) == XR_XIR_BAD_STRUCTURE);
+        CHECK(xr_xir_compile_provenance_copy(&remaining, &instance, &copy) == XR_XIR_BAD_STRUCTURE);
         CHECK(!copy && live == baseline); origins[1] = saved;
     }
     remaining = initial;
-    CHECK(xr_xir_compile_provenance_copy(&remaining, &source->module, origins, 3, &copy) == XR_XIR_OK);
+    CHECK(xr_xir_compile_provenance_copy(&remaining, &instance, &copy) == XR_XIR_OK);
     integer = XR_XIR_BOOL; string = XR_XIR_I64;
     memset(origins, 0xa5, sizeof(origins)); xr_xir_compile_artifact_free(source);source=NULL;
     CHECK(copy->origins[1].arguments[0] == XR_XIR_I64 && copy->origins[2].arguments[0] == XR_XIR_STRING);
     CHECK(xr_xir_compile_artifact_verify(copy->source, NULL) == XR_XIR_OK);
     remaining = initial;
-    CHECK(xr_xir_compile_provenance_functions_match(&remaining, &copy->source->module, &closed->module, copy->origins, NULL) == XR_XIR_OK);
+    CHECK(xr_xir_compile_provenance_functions_match(&remaining, &copy->source->module, &closed->module, copy, NULL) == XR_XIR_OK);
     const XrXirType *saved_arguments = copy->origins[1].arguments;
     copy->origins[1].arguments = NULL; remaining = initial;
-    CHECK(xr_xir_compile_provenance_functions_match(&remaining, &copy->source->module, &closed->module, copy->origins, NULL) == XR_XIR_BAD_STRUCTURE);
+    CHECK(xr_xir_compile_provenance_functions_match(&remaining, &copy->source->module, &closed->module, copy, NULL) == XR_XIR_BAD_STRUCTURE);
     copy->origins[1].arguments = saved_arguments;
     xr_xir_compile_artifact_free(closed);closed=NULL;
     xr_xir_compile_provenance_free(copy); CHECK(live==consumer_context_owner_count && live_bytes==consumer_context_ledger_bytes());
+    printf("provenance copy census: sites=%zu allocated=%llu peak=%llu work=%llu\n",sites,
+        (unsigned long long)required.allocated_bytes,(unsigned long long)required.peak_bytes,
+        (unsigned long long)required.work);
     printf("provenance ownership: %zu allocation failures released\n", sites);
 }
 
@@ -305,7 +316,8 @@ static void provenance_packet_roundtrip(XrXirArtifact *closed) {
     calls = 0;
     CHECK(xr_xir_compile_checked_read(suite_context, packet.bytes, packet.length, &decoded, NULL) == XR_XIR_OK);
     size_t reads = calls;
-    CHECK(decoded->module.provenance && decoded->module.provenance->count == 3);
+    CHECK(decoded->module.provenance && decoded->module.provenance->kind == XR_XIR_EVIDENCE_INSTANCE &&
+        decoded->module.provenance->count == 3);
     xr_xir_compile_artifact_free(decoded);decoded=NULL;
     for (size_t i = 0; i < reads; ++i) {
         calls = 0; fail_at = i;
@@ -317,13 +329,26 @@ static void provenance_packet_roundtrip(XrXirArtifact *closed) {
     XrXirCheckedPacket plain_packet = {0}, source_packet = {0};
     CHECK(xr_xir_compile_checked_write(&plain, &plain_packet, NULL) == XR_XIR_OK);
     CHECK(xr_xir_compile_checked_write(closed->module.provenance->source, &source_packet, NULL) == XR_XIR_OK);
-    size_t nested_presence = plain_packet.length + source_packet.length - 64 - 4;
+    /* The outer evidence kind replaces the plain ABSENT field. Its embedded
+     * source payload includes an ABSENT kind, but cannot contain INSTANCE. */
+    CHECK(!closed->module.provenance->source->module.provenance);
+    CHECK(plain_packet.length >= 68 && source_packet.length >= 68);
+    size_t source_offset = plain_packet.length;
+    size_t source_bytes = source_packet.length - 64;
+    CHECK(source_offset <= packet.length && source_bytes < packet.length - source_offset);
+    CHECK(!memcmp(packet.bytes + 64, plain_packet.bytes + 64, plain_packet.length - 68));
+    CHECK(packet.bytes[source_offset - 4] == XR_XIR_EVIDENCE_INSTANCE &&
+        !packet.bytes[source_offset - 3] && !packet.bytes[source_offset - 2] && !packet.bytes[source_offset - 1]);
+    CHECK(!memcmp(packet.bytes + source_offset, source_packet.bytes + 64, source_bytes));
+    size_t nested_kind = source_offset + source_bytes - 4;
     xr_xir_compile_checked_packet_free(&plain_packet); xr_xir_compile_checked_packet_free(&source_packet);
-    CHECK(nested_presence + 4 < packet.length && packet.bytes[nested_presence] == 0);
-    packet.bytes[nested_presence] = 1; checked_digest(packet.bytes, packet.length, packet.bytes + 32);
+    CHECK(nested_kind + 4 < packet.length && !packet.bytes[nested_kind] &&
+        !packet.bytes[nested_kind + 1] && !packet.bytes[nested_kind + 2] && !packet.bytes[nested_kind + 3]);
+    packet.bytes[nested_kind] = XR_XIR_EVIDENCE_INSTANCE;
+    checked_digest(packet.bytes, packet.length, packet.bytes + 32);
     CHECK(xr_xir_compile_checked_read(suite_context, packet.bytes, packet.length, &decoded, NULL) == XR_XIR_BAD_STRUCTURE);
     CHECK(!decoded && live == baseline + 1);
-    packet.bytes[nested_presence] = 0;
+    packet.bytes[nested_kind] = XR_XIR_EVIDENCE_ABSENT;
     for (size_t i = 64; i < packet.length; ++i) {
         packet.bytes[i] ^= 0xff; checked_digest(packet.bytes, packet.length, packet.bytes + 32);
         XrXirStatus status = xr_xir_compile_checked_read(suite_context, packet.bytes, packet.length, &decoded, NULL);
@@ -351,12 +376,15 @@ static void native_packet_proof(void) {
     XrXirProgramProof proof=xr_xir_compile_program_proof(artifact);
     size_t baseline=live,baseline_bytes=live_bytes,sites=0;
     XrCompileResourceStats required={0};
+    XrXirProgramPermissions *permissions=NULL;
     for(size_t attempt=0;attempt<=sites;++attempt){
         XrXirCompileContext probe=consumer_context_ephemeral((XrCompileResourceLimits){67108864,8388608,16000001});
         XrCompileResourceStats before=consumer_context_stats(&probe);
         calls=0;fail_at=attempt?attempt-1:SIZE_MAX;
-        CHECK(xr_xir_compile_program_proof_verify(&probe,&spec,&proof)==(attempt?XR_XIR_OUT_OF_MEMORY:XR_XIR_OK));
+        CHECK(xr_xir_compile_program_proof_verify(&probe,&spec,&proof,&permissions)==(attempt?XR_XIR_OUT_OF_MEMORY:XR_XIR_OK));
+        CHECK((permissions!=NULL)==!attempt);
         if(!attempt){sites=calls;required=consumer_context_stats(&probe);}
+        xr_compile_resources_free(permissions);permissions=NULL;
         fail_at=SIZE_MAX;consumer_context_ephemeral_free(&probe,before);
         CHECK(live==baseline && live_bytes==baseline_bytes);
     }
@@ -369,7 +397,8 @@ static void native_packet_proof(void) {
         if(!attack)artifact->checked_packet.bytes[0]^=1;
         if(attack==1)artifact->checked_identity[0]^=1;
         if(attack==4)entries[0].result=XR_XIR_BOOL;
-        CHECK(xr_xir_compile_program_proof_verify(&probe,&spec,&proof)==((attack==2||attack==3)?XR_XIR_BUDGET:XR_XIR_BAD_STRUCTURE));
+        CHECK(xr_xir_compile_program_proof_verify(&probe,&spec,&proof,&permissions)==((attack==2||attack==3)?XR_XIR_BUDGET:XR_XIR_BAD_STRUCTURE));
+        CHECK(!permissions);
         if(!attack)artifact->checked_packet.bytes[0]^=1;
         if(attack==1)artifact->checked_identity[0]^=1;
         entries[0].result=module->functions[0].result;
@@ -379,10 +408,12 @@ static void native_packet_proof(void) {
         for(unsigned minus=0;minus<2;++minus){
             XrXirCompileContext probe=consumer_context_ephemeral((XrCompileResourceLimits){cap*7-minus,cap*7-minus,16000001});
             XrCompileResourceStats before=consumer_context_stats(&probe);
-            XrXirStatus status=xr_xir_compile_program_proof_verify(&probe,&spec,&proof);
+            XrXirStatus status=xr_xir_compile_program_proof_verify(&probe,&spec,&proof,&permissions);
             CHECK(status==XR_XIR_OK || status==XR_XIR_BUDGET);
+            CHECK((permissions!=NULL)==(status==XR_XIR_OK));
             XrCompileResourceStats actual=consumer_context_stats(&probe);
             CHECK(actual.peak_bytes<=cap*7-minus && actual.allocated_bytes<=cap*7-minus);
+            xr_compile_resources_free(permissions);permissions=NULL;
             consumer_context_ephemeral_free(&probe,before);CHECK(live==baseline && live_bytes==baseline_bytes);
             printf("native proof whole cap %llu minus%u status%u peak%llu\n",(unsigned long long)cap,minus,status,(unsigned long long)actual.peak_bytes);
         }
@@ -393,18 +424,22 @@ static void native_packet_proof(void) {
         if(axis==1)limits.live_bytes=required.peak_bytes-minus;
         if(axis==2)limits.work=required.work-minus;
         XrXirCompileContext probe=consumer_context_ephemeral(limits);XrCompileResourceStats before=consumer_context_stats(&probe);
-        CHECK(xr_xir_compile_program_proof_verify(&probe,&spec,&proof)==(minus?XR_XIR_BUDGET:XR_XIR_OK));
+        CHECK(xr_xir_compile_program_proof_verify(&probe,&spec,&proof,&permissions)==(minus?XR_XIR_BUDGET:XR_XIR_OK));
+        CHECK((permissions!=NULL)==!minus);xr_compile_resources_free(permissions);permissions=NULL;
         consumer_context_ephemeral_free(&probe,before);CHECK(live==baseline && live_bytes==baseline_bytes);
     }
     XrXirCompileContext probe=consumer_context_ephemeral((XrCompileResourceLimits){67108864,8388608,16000001});
     XrCompileResourceStats before=consumer_context_stats(&probe);XrXirProgramProof overflowing=proof;overflowing.length=SIZE_MAX;
-    calls=0;CHECK(xr_xir_compile_program_proof_verify(&probe,&spec,&overflowing)==XR_XIR_BUDGET && !calls);
+    calls=0;CHECK(xr_xir_compile_program_proof_verify(&probe,&spec,&overflowing,&permissions)==XR_XIR_BUDGET && !calls && !permissions);
     consumer_context_ephemeral_free(&probe,before);
     probe=consumer_context_ephemeral((XrCompileResourceLimits){67108864,8388608,proof.length});before=consumer_context_stats(&probe);
-    CHECK(xr_xir_compile_program_proof_verify(&probe,&spec,&proof)==XR_XIR_BUDGET);
+    CHECK(xr_xir_compile_program_proof_verify(&probe,&spec,&proof,&permissions)==XR_XIR_BUDGET && !permissions);
     consumer_context_ephemeral_free(&probe,before);CHECK(live==baseline && live_bytes==baseline_bytes);
     xr_xir_compile_artifact_free(artifact);artifact=NULL;
     CHECK(live==consumer_context_owner_count && live_bytes==consumer_context_ledger_bytes());
+    printf("native packet proof census: sites=%zu allocated=%llu peak=%llu work=%llu\n",sites,
+        (unsigned long long)required.allocated_bytes,(unsigned long long)required.peak_bytes,
+        (unsigned long long)required.work);
     printf("native packet proof: %zu allocation failures released, 3 axes exact/minus\n",sites);
 }
 
@@ -428,10 +463,10 @@ static void provenance_lowering(XrXirArtifact *closed) {
     lowered->checked_identity[0] ^= 1;
     XrXirCompileContext tight=consumer_context_ephemeral((XrCompileResourceLimits){lowered->checked_packet.length+consumer_context_owners[0].baseline.live_bytes,8388608,128000000});
     XrCompileResourceStats tight_baseline=consumer_context_stats(&tight);
-    CHECK(xr_xir_compile_verify(&tight,&lowered->module,NULL)==XR_XIR_BUDGET);
+    CHECK(xr_xir_compile_verify_v2(&tight, &lowered->module, xr_xir_compile_artifact_construction(lowered), NULL)==XR_XIR_BUDGET);
     consumer_context_ephemeral_free(&tight,tight_baseline);
     tight=consumer_context_ephemeral((XrCompileResourceLimits){67108864,8388608,1});tight_baseline=consumer_context_stats(&tight);
-    CHECK(xr_xir_compile_verify(&tight,&lowered->module,NULL)==XR_XIR_BUDGET);
+    CHECK(xr_xir_compile_verify_v2(&tight, &lowered->module, xr_xir_compile_artifact_construction(lowered), NULL)==XR_XIR_BUDGET);
     consumer_context_ephemeral_free(&tight,tight_baseline);
     CHECK(lowered->module.provenance && lowered->module.provenance != closed->module.provenance);
     CHECK(lowered->module.provenance->source->module.stage == XR_XIR_CHECKED);
@@ -459,29 +494,34 @@ static void provenance_artifact_ownership(void) {
     XrXirArtifact *source = generic_fixture(suite_context), *closed = NULL, *copy = NULL;
     CHECK(xr_xir_compile_specialize(source, &closed, NULL) == XR_XIR_OK);
     XrXirType integer = XR_XIR_I64, string = XR_XIR_STRING;
-    XrXirOrigin origins[] = {{0,NULL,0}, {1,&integer,1}, {1,&string,1}};
+    XrXirOrigin origins[] = {{.function=0},
+        {.function=1,.arguments=&integer,.argument_count=1},
+        {.function=1,.arguments=&string,.argument_count=1}};
+    CHECK(!source->module.provenance);
+    XrXirProvenance instance = {.kind=XR_XIR_EVIDENCE_INSTANCE,
+        .source=source,.origins=origins,.count=3};
     XrXirCompileContext remaining = consumer_context_default();
     XrXirProvenance *proof = NULL;
-    CHECK(xr_xir_compile_provenance_copy(&remaining, &source->module, origins, 3, &proof) == XR_XIR_OK);
+    CHECK(xr_xir_compile_provenance_copy(&remaining, &instance, &proof) == XR_XIR_OK);
     xr_xir_compile_provenance_free((XrXirProvenance *)closed->module.provenance);
     closed->module.provenance = proof;
     xr_xir_compile_artifact_free(source);source=NULL;
     CHECK(xr_xir_compile_artifact_verify(closed, NULL) == XR_XIR_OK);
     size_t baseline = live; calls = 0;
-    CHECK(xr_xir_compile_recheck(suite_context, &closed->module, &copy, NULL) == XR_XIR_OK);
+    CHECK(xr_xir_compile_recheck_v2(suite_context, &closed->module, xr_xir_compile_artifact_construction(closed), &copy, NULL) == XR_XIR_OK);
     size_t sites = calls;
     CHECK(copy->module.provenance != proof && copy->module.provenance->source != proof->source);
     xr_xir_compile_artifact_free(copy);copy=NULL; CHECK(live == baseline);
     for (size_t i = 0; i < sites; ++i) {
         calls = 0; fail_at = i; copy = NULL;
-        CHECK(xr_xir_compile_recheck(suite_context, &closed->module, &copy, NULL) == XR_XIR_OUT_OF_MEMORY);
+        CHECK(xr_xir_compile_recheck_v2(suite_context, &closed->module, xr_xir_compile_artifact_construction(closed), &copy, NULL) == XR_XIR_OUT_OF_MEMORY);
         CHECK(!copy && live == baseline);
     }
     fail_at = SIZE_MAX;
     remaining = consumer_context_default(); remaining.limits.functions = 4;
-    CHECK(xr_xir_compile_verify(&remaining,&closed->module,NULL)==XR_XIR_BUDGET);
+    CHECK(xr_xir_compile_verify_v2(&remaining, &closed->module, xr_xir_compile_artifact_construction(closed), NULL)==XR_XIR_BUDGET);
     remaining.limits.functions = 5;
-    CHECK(xr_xir_compile_verify(&remaining,&closed->module,NULL)==XR_XIR_OK);
+    CHECK(xr_xir_compile_verify_v2(&remaining, &closed->module, xr_xir_compile_artifact_construction(closed), NULL)==XR_XIR_OK);
     proof->source->module.provenance = proof;
     CHECK(xr_xir_compile_artifact_verify(closed, NULL) == XR_XIR_BAD_STRUCTURE);
     proof->source->module.provenance = NULL;
@@ -502,8 +542,13 @@ static void provenance_nominal_attacks(void) {
     CHECK(xr_xir_compile_specialize(source, &closed, NULL) == XR_XIR_OK);
     CHECK(closed->module.function_count == 6);
     XrXirType arguments[] = {XR_XIR_I64, XR_XIR_U8, XR_XIR_STRING};
-    XrXirOrigin origins[] = {{0,NULL,0}, {2,NULL,0}, {3,NULL,0},
-        {1,arguments,1}, {1,arguments+1,1}, {1,arguments+2,1}};
+    XrXirOrigin origins[] = {{.function=0}, {.function=2}, {.function=3},
+        {.function=1,.arguments=arguments,.argument_count=1},
+        {.function=1,.arguments=arguments+1,.argument_count=1},
+        {.function=1,.arguments=arguments+2,.argument_count=1}};
+    CHECK(!source->module.provenance);
+    XrXirProvenance instance = {.kind=XR_XIR_EVIDENCE_INSTANCE,
+        .source=source,.origins=origins,.count=6};
     XrXirNominalTable *table = (XrXirNominalTable *)closed->module.types->nominals;
     XrXirNominalDeclaration *d = (XrXirNominalDeclaration *)&table->declarations[0];
     XrXirNominalField *field = (XrXirNominalField *)&d->fields[0];
@@ -528,7 +573,7 @@ static void provenance_nominal_attacks(void) {
         if (attack == 9) *function_name ^= 1;
         XrXirCompileContext remaining=consumer_context_ephemeral((XrCompileResourceLimits){67108864,8388608,128000000});
         XrCompileResourceStats probe_baseline=consumer_context_stats(&remaining);
-        CHECK(xr_xir_compile_provenance_functions_match(&remaining, &source->module, &closed->module, origins, NULL) ==
+        CHECK(xr_xir_compile_provenance_functions_match(&remaining, &source->module, &closed->module, &instance, NULL) ==
             (!attack ? XR_XIR_OK : attack == 7 ? XR_XIR_BAD_TYPE : XR_XIR_BAD_STRUCTURE));
         consumer_context_ephemeral_free(&remaining,probe_baseline);CHECK(live == baseline);
         *module = old_module; *name = old_name; *field_name = old_field; *function_name = old_function;
@@ -536,7 +581,7 @@ static void provenance_nominal_attacks(void) {
     }
     XrXirCompileContext remaining = consumer_context_default();
     XrXirProvenance *proof = NULL;
-    CHECK(xr_xir_compile_provenance_copy(&remaining, &source->module, origins, 6, &proof) == XR_XIR_OK);
+    CHECK(xr_xir_compile_provenance_copy(&remaining, &instance, &proof) == XR_XIR_OK);
     xr_xir_compile_provenance_free((XrXirProvenance *)closed->module.provenance);
     closed->module.provenance = proof;
     provenance_lowering(closed);
@@ -548,7 +593,10 @@ static void provenance_declaration_attacks(void) {
     CHECK(xr_xir_compile_specialize(source, &closed, NULL) == XR_XIR_OK);
     CHECK(closed->module.function_count == 9);
     XrXirOrigin origins[9];
-    for (uint32_t i = 0; i < 9; ++i) origins[i] = (XrXirOrigin) {i,NULL,0};
+    for (uint32_t i = 0; i < 9; ++i) origins[i] = (XrXirOrigin) {.function=i};
+    CHECK(!source->module.provenance);
+    XrXirProvenance instance = {.kind=XR_XIR_EVIDENCE_INSTANCE,
+        .source=source,.origins=origins,.count=9};
     XrXirDeclarations *d = (XrXirDeclarations *)closed->module.declarations;
     CHECK(d->module_count > 1 && d->slot_count && d->literal_count);
     uint32_t dependency_module = 0;
@@ -577,7 +625,7 @@ static void provenance_declaration_attacks(void) {
         if (attack == 9) d->root_module = (d->root_module + 1) % d->module_count;
         XrXirCompileContext remaining=consumer_context_ephemeral((XrCompileResourceLimits){67108864,8388608,128000000});
         XrCompileResourceStats probe_baseline=consumer_context_stats(&remaining);
-        CHECK(xr_xir_compile_provenance_functions_match(&remaining, &source->module, &closed->module, origins, NULL) ==
+        CHECK(xr_xir_compile_provenance_functions_match(&remaining, &source->module, &closed->module, &instance, NULL) ==
             (!attack ? XR_XIR_OK : attack == 8 ? XR_XIR_BAD_TYPE : XR_XIR_BAD_STRUCTURE));
         consumer_context_ephemeral_free(&remaining,probe_baseline);CHECK(live == baseline);
         name[0] = saved_name; bytes[0] = saved_byte; *dependency = saved_dependency;
@@ -592,7 +640,13 @@ static void provenance_closure_attacks(void) {
     XrXirType integer = XR_XIR_I64, string = XR_XIR_STRING, boolean = XR_XIR_BOOL;
     XrXirFunction functions[4];
     memcpy(functions, closed->module.functions, 3 * sizeof(*functions));
-    XrXirOrigin origins[] = {{0,NULL,0}, {1,&integer,1}, {1,&string,1}, {1,&boolean,1}};
+    XrXirOrigin origins[] = {{.function=0},
+        {.function=1,.arguments=&integer,.argument_count=1},
+        {.function=1,.arguments=&string,.argument_count=1},
+        {.function=1,.arguments=&boolean,.argument_count=1}};
+    CHECK(!source->module.provenance);
+    XrXirProvenance instance = {.kind=XR_XIR_EVIDENCE_INSTANCE,
+        .source=source,.origins=origins,.count=3};
     XrXirModule destination = closed->module; destination.functions = functions;
     XrXirInstruction orphan[2];
     char orphan_name[32];
@@ -611,7 +665,9 @@ static void provenance_closure_attacks(void) {
         if (attack == 4) { destination.functions = functions + 1; destination.function_count = 1; }
         XrXirCompileContext remaining=consumer_context_ephemeral((XrCompileResourceLimits){67108864,8388608,128000000});
         XrCompileResourceStats probe_baseline=consumer_context_stats(&remaining);
-        CHECK(xr_xir_compile_provenance_functions_match(&remaining, &source->module, &destination, attack == 4 ? origins + 1 : origins, NULL) == (attack ? XR_XIR_BAD_STRUCTURE : XR_XIR_OK));
+        instance.origins = attack == 4 ? origins + 1 : origins;
+        instance.count = destination.function_count;
+        CHECK(xr_xir_compile_provenance_functions_match(&remaining, &source->module, &destination, &instance, NULL) == (attack ? XR_XIR_BAD_STRUCTURE : XR_XIR_OK));
         consumer_context_ephemeral_free(&remaining,probe_baseline);CHECK(live == baseline);
     }
     xr_xir_compile_artifact_free(closed);closed=NULL; xr_xir_compile_artifact_free(source);source=NULL; CHECK(live==consumer_context_owner_count && live_bytes==consumer_context_ledger_bytes());
@@ -623,7 +679,12 @@ static void specialization_correspondence_attacks(void) {
     const XrXirModule *module = xr_xir_compile_artifact_module(closed);
     CHECK(module->function_count == 3);
     XrXirType integer = XR_XIR_I64, string = XR_XIR_STRING;
-    XrXirOrigin origins[] = {{0,NULL,0}, {1,&integer,1}, {1,&string,1}};
+    XrXirOrigin origins[] = {{.function=0},
+        {.function=1,.arguments=&integer,.argument_count=1},
+        {.function=1,.arguments=&string,.argument_count=1}};
+    CHECK(!source->module.provenance);
+    XrXirProvenance instance = {.kind=XR_XIR_EVIDENCE_INSTANCE,
+        .source=source,.origins=origins,.count=3};
     XrXirFunction *functions = (XrXirFunction *)module->functions;
     for (unsigned attack = 0; attack < 7; ++attack) {
         XrXirInstruction *op = (XrXirInstruction *)functions[0].instructions;
@@ -637,7 +698,7 @@ static void specialization_correspondence_attacks(void) {
         if (attack == 5) op->targets[1] = 1;
         if (attack == 6) origins[1].function = 0;
         XrXirCompileContext remaining = consumer_context_default();
-        XrXirStatus status = xr_xir_compile_provenance_functions_match(&remaining, &source->module, module, origins, NULL);
+        XrXirStatus status = xr_xir_compile_provenance_functions_match(&remaining, &source->module, module, &instance, NULL);
         CHECK(status == (!attack ? XR_XIR_OK : attack == 2 ? XR_XIR_BAD_TYPE : XR_XIR_BAD_STRUCTURE));
         *op = saved; *operand = old_operand; *block = old_block; origins[1].function = 1;
     }

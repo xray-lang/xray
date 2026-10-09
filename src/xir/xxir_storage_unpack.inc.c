@@ -62,6 +62,7 @@ static XrXirValueStatus storage_unpack_enter(StorageUnpack *unpack,
     record->variant = variant; record->count = count;
     record->fields = node->kind == XR_XIR_TYPE_NULLABLE && !count ? NULL : (XrXirValue *)(record + 1);
     if (node->kind == XR_XIR_TYPE_NULLABLE && !count) {
+        xr_xir_value_object_publish(&record->object);
         *ready = (XrXirValue){(uint32_t)span.type, 0, 0};
         memcpy(&ready->payload, &record, sizeof(record)); return XR_XIR_VALUE_OK;
     }
@@ -79,6 +80,7 @@ static XrXirValueStatus storage_unpack_walk(StorageUnpack *unpack,
         else {
             StorageUnpackFrame *frame = &unpack->frames[unpack->depth - 1];
             if (frame->next == frame->record->count) {
+                xr_xir_value_object_publish(&frame->record->object);
                 ready = (XrXirValue){(uint32_t)frame->record->object.type, 0, 0};
                 memcpy(&ready.payload, &frame->record, sizeof(frame->record)); --unpack->depth;
             } else {
@@ -111,7 +113,7 @@ static void storage_unpack_discard(StorageUnpack *unpack) {
 }
 /* Input belongs to a previously admitted owner and remains borrowed for this
  * synchronous operation. Materialization confers no new construction authority. */
-static XrXirValueStatus storage_unpack(StorageSpan span,
+static XrXirValueStatus storage_unpack_operation(StorageSpan span,
     XrXirValueAdmission *admission, XrXirValue *output) {
     if (!admission || !unit_value(output)) return XR_XIR_VALUE_BAD_ARGUMENT;
     if (!inline_nominal_type(xr_xir_compile_type_arena_types(admission->arena), span.type))
@@ -129,5 +131,13 @@ static XrXirValueStatus storage_unpack(StorageSpan span,
     if (status != XR_XIR_VALUE_OK) storage_unpack_discard(&unpack);
     xr_xir_domain_deallocate(admission->domain, unpack.frames, (size_t)scratch);
     admission->scratch_bytes += scratch;
+    return status;
+}
+
+static XrXirValueStatus storage_unpack(StorageSpan span,
+    XrXirValueAdmission *admission, XrXirValue *output) {
+    xr_xir_value_graph_begin();
+    XrXirValueStatus status = storage_unpack_operation(span, admission, output);
+    xr_xir_value_graph_end();
     return status;
 }

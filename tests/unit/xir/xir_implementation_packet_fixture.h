@@ -1,13 +1,14 @@
 /* xray - Copyright (c) 2026 Xinglei Xu. Licensed under the MIT License. */
 #ifndef XIR_IMPLEMENTATION_PACKET_FIXTURE_H
 #define XIR_IMPLEMENTATION_PACKET_FIXTURE_H
+#include "xir_construction_fixture.h"
 #include "xir/xxir_implementation.h"
 #include "xir/xxir_nominal.h"
 static XrXirStatus implementation_packet_fixture(const XrXirCompileContext *context,XrXirArtifact **output) {
     XrXirType receiver = (XrXirType)XR_XIR_CONSTRUCTED_TYPE_BASE, argument = XR_XIR_I64;
     XrXirTypeNode nodes[2] = {0};
     nodes[0].kind = XR_XIR_TYPE_NOMINAL;
-    nodes[1].kind = XR_XIR_TYPE_CALLABLE;
+    nodes[1].kind = XR_XIR_TYPE_CALLABLE; nodes[1].flags = XR_XIR_CALLABLE_ROOT_UNRESOLVED;
     nodes[1].result = (XrXirType)XR_XIR_TYPE_PARAMETER_BASE; nodes[1].parameter_span = 1;
     XrXirNominalDeclaration nominal = {{"alpha",5},{"Meter",5},1,NULL,0,NULL,0,XR_XIR_NOMINAL_STRUCT,NULL,0, 0, {0}};
     XrXirNominalTable nominals = {&nominal,1,NULL};
@@ -34,7 +35,7 @@ static XrXirStatus implementation_packet_fixture(const XrXirCompileContext *cont
     XrXirDeclarations declarations = {&module,1,identities,NULL,0,NULL,0,0,0,&table};
     XrXirModule built = {XR_XIR_BUILT,functions,3,&declarations,NULL,&types,NULL, XR_XIR_PROGRAM, NULL};
     XrXirArtifact *checked = NULL;
-    XrXirStatus status=xr_xir_compile_check(context,&built,&checked,NULL);
+    XrXirStatus status=xir_fixture_check(context, &built, &checked, NULL);
     if(status!=XR_XIR_OK){CHECK(!checked);return status;}
     argument = XR_XIR_BOOL; binding.function = UINT32_MAX;
     memset(&implementation,0xcc,sizeof(implementation));
@@ -51,5 +52,6 @@ static void implementation_packet_owned(const XrXirArtifact *artifact) {
     CHECK(table->records[0].bindings[0].requirement.arguments[0] == XR_XIR_I64);
     CHECK(module->declarations->functions[2].method_kind == XR_XIR_READ_METHOD);
     CHECK(module->functions[0].instructions[0].immediate == 41);
+    CHECK(module->types->nodes[1].flags == 8u);
 }
 #endif // XIR_IMPLEMENTATION_PACKET_FIXTURE_H

@@ -1,0 +1,22 @@
+import "./state" as state
+var own:i64=100
+export fn run()->i64 {
+    const n=state.next()
+    own=own+1
+    print(n)
+    print(state.label())
+    return n
+}
+export fn ownValue()->i64 {return own}
+export fn held()->string {return state.label()}
+export fn pureWorker()->i64 {return await go state.pure(40)}
+export fn snapshot()->i64 {return await go state.pure(state.current())}
+export fn taskHeld()->Task<i64> {return state.read()}
+export fn constAwait()->i64 {return state.constAwait()}
+export fn constReader()->i64 {return await go state.constReader()}
+export fn rootHandleWorker()->i64 {return await go state.prepared(state.read())}
+export fn errorHeld()->Task<i64> {return state.errorStart()}
+export fn awaitError()->i64 {return state.awaitCurrent()}
+export fn cancelWait()->i64 {return await state.slowStart()}
+export fn defaultEmpty()->i64 {return state.defaultEmpty()}
+fn main()->i64 {return 0}

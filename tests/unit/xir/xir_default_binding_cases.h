@@ -11,6 +11,7 @@
  */
 #ifndef XIR_DEFAULT_BINDING_CASES_H
 #define XIR_DEFAULT_BINDING_CASES_H
+#include "xir_construction_fixture.h"
 #include "xir/xxir_internal.h"
 #include "xir/xxir_declarations.h"
 #include "xir/xxir_generic.h"
@@ -42,7 +43,7 @@ static void default_binding_case(unsigned mode,bool generic) {
  if(generic){generics[1].arguments=args;generics[1].argument_count=4;
   generics[2].parameter_count=generics[3].parameter_count=2;generics[2].constraints=fc;generics[3].constraints=hc;
   entry[0].type_arguments[1]=2;entry[1].type_arguments[0]=2;entry[1].type_arguments[1]=2;}
- XrXirTypeNode callable={.kind=XR_XIR_TYPE_CALLABLE,.result=XR_XIR_I64};
+ XrXirTypeNode callable={.kind=XR_XIR_TYPE_CALLABLE,.result=XR_XIR_I64,.flags=XR_XIR_CALLABLE_ROOT_UNRESOLVED};
  XrXirTypes types={&callable,1,NULL,NULL};
  XrXirModule module={XR_XIR_BUILT,functions,4,&declarations,generic?generics:NULL,NULL,NULL,XR_XIR_PROGRAM,&table};
  XrXirStatus expected=XR_XIR_BAD_STRUCTURE;
@@ -106,7 +107,7 @@ static void default_binding_case(unsigned mode,bool generic) {
  }
 
  XrXirArtifact *checked=NULL;XrXirDiagnostic diagnostic={0};
- XrXirStatus status=xr_xir_compile_check(suite_context, &module, &checked, &diagnostic);
+ XrXirStatus status=xir_fixture_check(suite_context, &module, &checked, &diagnostic);
  if(status!=expected) fprintf(stderr,"mode%u generic%u status%u expected%u f%u i%u\n",mode,generic,status,expected,diagnostic.function,diagnostic.instruction);
  CHECK(status==expected);CHECK((checked!=NULL)==(expected==XR_XIR_OK));
  if(!checked)return;

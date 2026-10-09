@@ -1,3 +1,4 @@
+#include "xir_construction_fixture.h"
 /*
  * xray - Lightweight typed scripting with native concurrency
  * https://www.xray-lang.org
@@ -26,7 +27,7 @@ static XrXirStatus allocation_snapshot_copy(const XrXirSourceView *view,
     XrXirCompileContext context={0};context.limits=xr_xir_compile_default_limits();
     XrCompileResourceStatus created=xr_compile_resources_new(limits,&context.resources);
     if(created!=XR_COMPILE_RESOURCE_OK)return xir_compile_resource_status(created);
-    XrXirStatus status=xr_xir_compile_source_snapshot_copy(&context,view,output);
+    XrXirStatus status=xir_fixture_snapshot_copy(&context,view,output);
     CHECK(xr_compile_resources_stats(context.resources,&allocation_last_stats)==XR_COMPILE_RESOURCE_OK);
     allocation_context_close(&context);return status;
 }

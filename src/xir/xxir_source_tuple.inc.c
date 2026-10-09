@@ -42,7 +42,7 @@ static bool source_tuple_literal(SourceContext *ctx,AstNode *node,SourceExpected
         AstNode *child=literal->elements[i];SourceValue element={0};
         if (!child || child->type==AST_SPREAD_EXPR)
             return source_fail(ctx,node,XR_XIR_BAD_TYPE,"Tuple spread requires its complete expansion contract");
-        SourceExpectedType hint={expected.present,fields[i].type,false};
+        SourceExpectedType hint={expected.present,fields[i].type,false, expected.inferred};
         if (!source_plan_expression(ctx,child,hint,&element)) return false;
         if (expected.present && element.type!=fields[i].type)
             return source_fail(ctx,node,XR_XIR_BAD_TYPE,"Tuple field does not satisfy its ordered context");

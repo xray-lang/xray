@@ -19,6 +19,7 @@
 #include "../symbol/xsymbol_table.h"
 #include "../../base/xhashmap.h"
 #include <stdlib.h>
+#include <limits.h>
 #include <string.h>
 #include <stdio.h>
 #include "../xglobals_table.h"
@@ -52,6 +53,8 @@ static inline XrTypeMetadata *xr_metadata_create_type_zerocopy(XrVMRuntime *X, X
 
 void xr_registry_init(XrVMRuntime *X) {
     XR_DCHECK(X != NULL, "registry_init: NULL isolate");
+    if (xr_isolate_get_type_registry(X))
+        return;
     XrTypeRegistry *registry = (XrTypeRegistry *) xr_malloc(sizeof(XrTypeRegistry));
     if (!registry) {
         xr_log_warning("type-registry", "Failed to allocate XrTypeRegistry");
@@ -60,11 +63,20 @@ void xr_registry_init(XrVMRuntime *X) {
 
     registry->capacity = REGISTRY_INITIAL_CAPACITY;
     registry->types = (XrTypeMetadata **) xr_malloc(registry->capacity * sizeof(XrTypeMetadata *));
-    if (registry->types) {
-        memset(registry->types, 0, registry->capacity * sizeof(XrTypeMetadata *));
+    if (!registry->types) {
+        xr_free(registry);
+        return;
     }
+    memset(registry->types, 0, registry->capacity * sizeof(XrTypeMetadata *));
     registry->type_count = 0;
-    registry->type_map = xr_hashmap_new();
+    registry->type_map = NULL;
+    // The map copies this policy; its system context has process lifetime.
+    XrOsIoPolicy policy = xr_os_io_system_policy();
+    if (xr_hashmap_owned_new(&policy, &registry->type_map) != XR_OS_IO_OK) {
+        xr_free(registry->types);
+        xr_free(registry);
+        return;
+    }
 
     registry->int_type = NULL;
     registry->float_type = NULL;
@@ -84,19 +96,13 @@ void xr_registry_free(XrVMRuntime *X) {
     if (!registry)
         return;
 
-    // Clear hashmap first to avoid dangling pointers
-    if (registry->type_map) {
-        xr_hashmap_clear(registry->type_map);
-    }
+    // Release the borrowed-key/value table before its metadata, without admission.
+    xr_hashmap_owned_free(registry->type_map);
 
     for (int i = 0; i < registry->type_count; i++) {
         if (registry->types[i]) {
             xr_free(registry->types[i]);
         }
-    }
-
-    if (registry->type_map) {
-        xr_hashmap_free(registry->type_map);
     }
 
     xr_free(registry->types);
@@ -107,6 +113,9 @@ void xr_registry_free(XrVMRuntime *X) {
 /* ========== Internal Helpers ========== */
 
 static void registry_grow(XrTypeRegistry *registry) {
+    if (registry->capacity <= 0 || registry->capacity > INT_MAX / 2 ||
+        (size_t) registry->capacity > SIZE_MAX / sizeof(XrTypeMetadata *) / 2)
+        return;
     int new_capacity = registry->capacity * 2;
     XrTypeMetadata **new_types =
         (XrTypeMetadata **) xr_realloc(registry->types, sizeof(XrTypeMetadata *) * new_capacity);
@@ -122,26 +131,22 @@ static void registry_grow(XrTypeRegistry *registry) {
     registry->capacity = new_capacity;
 }
 
-static int registry_find_index(XrTypeRegistry *registry, const char *name) {
-    if (registry->type_map) {
-        XrTypeMetadata *meta = (XrTypeMetadata *) xr_hashmap_get(registry->type_map, name);
-        if (meta) {
-            for (int i = 0; i < registry->type_count; i++) {
-                if (registry->types[i] == meta) {
-                    return i;
-                }
-            }
-        }
-        return -1;
+static bool registry_find_index(XrTypeRegistry *registry, const char *name, int *index) {
+    void *value = NULL;
+    if (xr_hashmap_owned_get(registry->type_map, name, &value) != XR_OS_IO_OK)
+        return false;
+    if (!value) {
+        *index = -1;
+        return true;
     }
-
-    // Fallback: linear search
     for (int i = 0; i < registry->type_count; i++) {
-        if (registry->types[i] && strcmp(registry->types[i]->klass->name, name) == 0) {
-            return i;
+        if (registry->types[i] == value) {
+            *index = i;
+            return true;
         }
     }
-    return -1;
+    // A live map entry must have a matching registry slot.
+    return false;
 }
 
 /* ========== Registration ========== */
@@ -157,7 +162,10 @@ bool xr_registry_register_type(XrVMRuntime *X, XrTypeMetadata *meta) {
     if (!type_name)
         return false;
 
-    if (registry_find_index(registry, type_name) >= 0) {
+    int existing;
+    if (!registry_find_index(registry, type_name, &existing))
+        return false;
+    if (existing >= 0) {
         xr_log_warning("type-registry", "type '%s' already registered", type_name);
         return false;
     }
@@ -170,17 +178,13 @@ bool xr_registry_register_type(XrVMRuntime *X, XrTypeMetadata *meta) {
         }
     }
 
+    if (xr_hashmap_owned_set(registry->type_map, type_name, meta) != XR_OS_IO_OK)
+        return false;
+
+    // No fallible operation remains after publishing the map entry.
     int index = registry->type_count++;
     XR_DCHECK(registry->type_count <= registry->capacity, "registry_register: count > capacity");
     registry->types[index] = meta;
-
-    if (registry->type_map && !xr_hashmap_set(registry->type_map, type_name, meta)) {
-        // An entry missing from a live map is invisible to find/dup-check,
-        // so roll the slot back and report failure.
-        registry->types[index] = NULL;
-        registry->type_count--;
-        return false;
-    }
 
     // Cache builtin types
     if (meta->klass) {
@@ -234,15 +238,25 @@ bool xr_registry_unregister_type(XrVMRuntime *X, const char *name) {
     if (!registry || !name)
         return false;
 
-    int index = registry_find_index(registry, name);
-    if (index < 0)
+    int index;
+    if (!registry_find_index(registry, name, &index) || index < 0)
         return false;
 
-    if (registry->type_map) {
-        xr_hashmap_delete(registry->type_map, name);
-    }
+    bool removed = false;
+    if (xr_hashmap_owned_delete(registry->type_map, name, &removed) != XR_OS_IO_OK || !removed)
+        return false;
 
-    xr_free(registry->types[index]);
+    XrTypeMetadata *meta = registry->types[index];
+    XrTypeMetadata **caches[] = {
+        &registry->int_type, &registry->float_type, &registry->bool_type,
+        &registry->string_type, &registry->array_type, &registry->map_type,
+        &registry->object_type, &registry->null_type
+    };
+    for (size_t i = 0; i < sizeof(caches) / sizeof(caches[0]); i++) {
+        if (*caches[i] == meta)
+            *caches[i] = NULL;
+    }
+    xr_free(meta);
 
     // Swap with last element
     int last = registry->type_count - 1;
@@ -266,11 +280,11 @@ XrTypeMetadata *xr_registry_find_type(XrVMRuntime *X, const char *name) {
     if (!registry || !name)
         return NULL;
 
-    if (registry->type_map) {
-        XrTypeMetadata *cached = (XrTypeMetadata *) xr_hashmap_get(registry->type_map, name);
-        if (cached)
-            return cached;
-    }
+    void *cached = NULL;
+    if (xr_hashmap_owned_get(registry->type_map, name, &cached) != XR_OS_IO_OK)
+        return NULL;
+    if (cached)
+        return (XrTypeMetadata *) cached;
 
     return resolve_type_by_name(X, name);
 }
@@ -328,15 +342,20 @@ XrTypeMetadata **xr_registry_get_all_types(XrVMRuntime *X, int *count) {
     if (!registry || !count)
         return NULL;
 
-    *count = registry->type_count;
-    if (registry->type_count == 0)
+    if (registry->type_count == 0) {
+        *count = 0;
         return NULL;
+    }
 
     XrTypeMetadata **result =
         (XrTypeMetadata **) xr_malloc(sizeof(XrTypeMetadata *) * registry->type_count);
+    if (!result)
+        return NULL;
     for (int i = 0; i < registry->type_count; i++) {
         result[i] = registry->types[i];
     }
+    // Publish the count only with a complete snapshot; OOM preserves it.
+    *count = registry->type_count;
     return result;
 }
 

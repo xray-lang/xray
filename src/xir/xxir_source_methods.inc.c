@@ -27,9 +27,12 @@ static bool source_static_select(SourceContext *ctx, AstNode *node, SourceStatic
     if (!source_nominal_path(ctx, path, &arguments, &binding, &owner)) return false;
     if (!owner || owner->kind != SOURCE_NOMINAL) return true;
     SourceName *method = find_name(ctx, ctx->nominal_methods[owner->index], member->name);
-    if (!method || !method->node->as.method_decl.is_static)
+    if (!method)
         return source_fail(ctx, node, XR_XIR_BAD_TYPE, "type-qualified access requires a static method");
-    const XrXirFunctionIdentity *identity = &ctx->identities[method->index];
+    const XrXirFunctionIdentity *identity = source_method_identity(ctx,node,method);
+    if (!identity) return false;
+    if (identity->method_kind != XR_XIR_STATIC_METHOD)
+        return source_fail(ctx, node, XR_XIR_BAD_TYPE, "type-qualified access requires a static method");
     if (identity->member_access && ctx->identities[ctx->function].nominal_owner != identity->nominal_owner)
         return source_fail(ctx, node, XR_XIR_BAD_TYPE, "static method requires its declaration owner");
     if (!source_instantiation(ctx, node, (XrXirDeclarationContext){XR_XIR_CONTEXT_NOMINAL,owner->index,0}, &arguments) ||
@@ -56,15 +59,16 @@ static bool source_static_value(SourceContext *ctx, AstNode *node, SourceStaticM
         source_signature(ctx, parameters, count, result, &op.type) &&
         source_reference_promise(ctx, node, selected->method->index, expected, &op.type) &&
         source_type_arguments(ctx, node, selected->substitution.types, selected->substitution.count, &op) &&
-        source_query_target_reference(ctx, source_query_range(ctx, node, NULL),
+        source_query_target_token_reference(ctx,node,
             selected->method->declaration, XR_XIR_SOURCE_FUNCTION_VALUE) && source_recipe_record(ctx, op, value);
 }
 static bool source_method_call(SourceContext *ctx, AstNode *node, SourceValue receiver,
     SourceName *method, SourceExpectedType result_context, SourceValue *value) {
-    if (method->node->as.method_decl.is_static)
+    const XrXirFunctionIdentity *identity = source_method_identity(ctx,node,method);
+    if (!identity) return false;
+    if (identity->method_kind == XR_XIR_STATIC_METHOD)
         return source_fail(ctx, node, XR_XIR_BAD_TYPE, "static method requires type-qualified access");
     CallExprNode *call = &node->as.call_expr;
-    const XrXirFunctionIdentity *identity = &ctx->identities[method->index];
     if (identity->member_access && ctx->identities[ctx->function].nominal_owner != identity->nominal_owner)
         return source_fail(ctx, node, XR_XIR_BAD_TYPE, "method requires its declaration owner");
     XrXirType receiver_type = xr_xir_type_is_cell(&ctx->types,receiver.type) ?
@@ -76,7 +80,7 @@ static bool source_method_call(SourceContext *ctx, AstNode *node, SourceValue re
     if (!source_direct_arguments(ctx,node,&direct,&prepared)) return false;
     XrXirInstruction op = {XR_XIR_CALL,prepared.result,{0},{0},method->index,{0}};
     return source_type_arguments(ctx,node,prepared.substitution.types,prepared.substitution.count,&op) &&
-        source_query_target_reference(ctx,source_query_range(ctx,call->callee,NULL),
+        source_query_target_token_reference(ctx,call->callee,
             method->declaration,XR_XIR_SOURCE_CALL) &&
         source_recipe_group(ctx,op,prepared.values,prepared.count,value);
 }
@@ -88,14 +92,11 @@ static bool source_ref_method_call(SourceContext *ctx, AstNode *node, AstNode *o
         return source_fail(ctx, object, XR_XIR_BAD_TYPE, "ref receiver place is not implemented in XIR");
     SourceName *symbol = visible_name(ctx, object->type == AST_THIS_EXPR ? "this" : object->as.variable.name);
     if (!symbol) return source_fail(ctx, object, XR_XIR_BAD_TYPE, "ref receiver does not name a binding");
-    if (symbol->kind == SOURCE_SLOT || symbol->kind == SOURCE_UNIT_SLOT)
-        return source_fail(ctx, object, XR_XIR_BAD_TYPE, "ref receiver of module state is not implemented in XIR");
-    if (symbol->kind != SOURCE_LOCAL || !symbol->mutable || symbol->construction)
-        return source_fail(ctx, object, XR_XIR_BAD_TYPE, "ref receiver requires a mutable local binding");
+    if (!symbol->mutable || symbol->construction)
+        return source_fail(ctx, object, XR_XIR_BAD_TYPE, "ref receiver requires a stored mutable binding");
     SourceValue receiver;
-    if (!source_cell_type(ctx, symbol->type, &receiver.type) ||
-        !source_query_reference(ctx, object, symbol, symbol, XR_XIR_SOURCE_READ_WRITE)) return false;
-    receiver.id = symbol->index;
+    if (!source_query_reference(ctx, object, symbol, symbol, XR_XIR_SOURCE_READ_WRITE) ||
+        !source_binding_cell(ctx, symbol, &receiver)) return false;
     return source_method_call(ctx, node, receiver, method, result_context, value);
 }
 static bool source_member_value(SourceContext *ctx, AstNode *node, SourceTypeArguments *type_arguments,
@@ -153,7 +154,7 @@ static bool source_member_value(SourceContext *ctx, AstNode *node, SourceTypeArg
         if (type_arguments->count) return source_fail(ctx, node, XR_XIR_BAD_TYPE, "enum ordinal is not generic");
         uint32_t declaration = xr_xir_type_node(&ctx->types, receiver.type)->nominal.declaration;
         uint32_t member = ctx->nominal_variants[declaration][ctx->nominals.declarations[declaration].variant_count];
-        return source_query_target_reference(ctx, source_query_range(ctx, node, NULL), member, XR_XIR_SOURCE_READ) &&
+        return source_query_target_token_reference(ctx,node, member, XR_XIR_SOURCE_READ) &&
             source_recipe_record(ctx, (XrXirInstruction) {XR_XIR_ENUM_TAG, XR_XIR_I64, {receiver.id,0}, {0}, 0, {0}}, value);
     }
     SourceName *method = source_method_find(ctx, receiver.type, node->as.member_access.name);
@@ -161,9 +162,10 @@ static bool source_member_value(SourceContext *ctx, AstNode *node, SourceTypeArg
         if (type_arguments->count) return source_fail(ctx, node, XR_XIR_BAD_TYPE, "field value has no method type parameters");
         return source_struct_get_value(ctx, node, receiver, value);
     }
-    if (method->node->as.method_decl.is_static)
+    const XrXirFunctionIdentity *identity = source_method_identity(ctx,node,method);
+    if (!identity) return false;
+    if (identity->method_kind == XR_XIR_STATIC_METHOD)
         return source_fail(ctx, node, XR_XIR_BAD_TYPE, "static method value requires type-qualified access");
-    const XrXirFunctionIdentity *identity = &ctx->identities[method->index];
     if (identity->member_access && ctx->identities[ctx->function].nominal_owner != identity->nominal_owner)
         return source_fail(ctx, node, XR_XIR_BAD_TYPE, "method value requires its declaration owner");
     const XrXirFunction *function = &ctx->functions[method->index];
@@ -182,7 +184,7 @@ static bool source_member_value(SourceContext *ctx, AstNode *node, SourceTypeArg
         source_signature(ctx, parameters, count, result, &op.type) &&
         source_reference_promise(ctx, node, method->index, expected, &op.type) &&
         source_type_arguments(ctx, node, substitution.types, substitution.count, &op) &&
-        source_query_target_reference(ctx, source_query_range(ctx, node, NULL),
+        source_query_target_token_reference(ctx,node,
             method->declaration, XR_XIR_SOURCE_FUNCTION_VALUE) &&
         source_recipe_group(ctx, op, &receiver, 1, value);
 }
@@ -208,6 +210,7 @@ static bool source_enum_method_name(SourceContext *ctx, SourceName *owner, AstNo
 static bool source_nominal_methods(SourceContext *ctx, uint32_t *next) {
     for (uint32_t d = 0; d < ctx->nominals.count; ++d) {
         SourceName *owner = ctx->nominal_sources[d];
+        if (owner->checked_library) continue;
         bool enumeration = owner->node->type == AST_ENUM_DECL;
         SourceNominalDeclaration declaration;
         if (!source_nominal_declaration(ctx,owner->node,&declaration)) return false;
@@ -252,6 +255,9 @@ static bool source_nominal_methods(SourceContext *ctx, uint32_t *next) {
             if (!source_query_declare(ctx, symbol, XR_XIR_SOURCE_FUNCTION, owner->declaration,
                 source_query_range(ctx, node, method->name))) return false;
             body->declaration = symbol->declaration;
+            if (!source_query_syntax_role(ctx, symbol->declaration, XR_XIR_SOURCE_SYNTAX_METHOD,
+                method->is_static ? XR_XIR_SOURCE_SYNTAX_STATIC : 0) ||
+                !source_query_mode(ctx, symbol->declaration, method->receiver_mode, method->receiver_mode_span)) return false;
             if (!source_method_scope(ctx, owner, index)) return false;
             uint32_t offset = method->is_static ? 0 : 1;
             uint32_t count = (uint32_t)method->param_count + offset;
@@ -271,7 +277,8 @@ static bool source_nominal_methods(SourceContext *ctx, uint32_t *next) {
                 if (!param->type || (param->passing_mode != XR_PARAM_READ && !parameter_reference) ||
                     (parameter_reference && param->default_value) ||
                     param->pattern || param->is_rest || source_text_same(ctx, NULL, param->name, "this") ||
-                    !source_type(ctx, param->type, &body->parameters[i + offset]) || body->parameters[i + offset] == XR_XIR_UNIT)
+                    !source_type(ctx, param->type, &body->parameters[i + offset]) ||
+                    (body->parameters[i + offset] == XR_XIR_UNIT && !parameter_reference))
                     return source_fail(ctx, node, XR_XIR_BAD_TYPE, "method parameter contract is not admitted");
                 if (parameter_reference && !source_cell_type(ctx, body->parameters[i + offset], &body->parameters[i + offset]))
                     return false;
@@ -311,6 +318,12 @@ static bool source_method_body(SourceContext *ctx) {
                 range.end_column = parameter->column + (int)source_text_size(ctx, name);
         }
         if (!source_query_declare(ctx, symbol, XR_XIR_SOURCE_PARAMETER, body->declaration, range)) return false;
+        if (i < offset) {
+            if (!source_query_syntax_role(ctx, symbol->declaration, XR_XIR_SOURCE_SYNTAX_RECEIVER, 0)) return false;
+        } else {
+            const XrParamNode *parameter = method->params[i-offset];
+            if (!source_query_mode(ctx, symbol->declaration, parameter->passing_mode, parameter->mode_span)) return false;
+        }
         source_query_binding_type(ctx, symbol);
     }
     return statement(ctx, method->body, false);

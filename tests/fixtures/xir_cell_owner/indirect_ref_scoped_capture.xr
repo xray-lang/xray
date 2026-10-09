@@ -1,0 +1,3 @@
+fn escape(value: ref i64) -> fn() -> i64 { return fn() -> i64 { value += 1; return value; }; }
+export fn run() -> i64 { var value: i64 = 40; const action = escape; const escaped = action(ref value); return escaped(); }
+fn main() -> i64 { return 0; }

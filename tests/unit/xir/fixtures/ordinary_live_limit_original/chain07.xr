@@ -1,0 +1,2 @@
+import "./chain08" as part
+export fn answer()->i64 { return part.answer() }

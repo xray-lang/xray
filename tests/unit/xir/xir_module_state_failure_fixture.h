@@ -12,6 +12,7 @@
 
 #ifndef XIR_MODULE_STATE_FAILURE_FIXTURE_H
 #define XIR_MODULE_STATE_FAILURE_FIXTURE_H
+#include "xir_construction_fixture.h"
 #include "xir/xxir_checked.h"
 #include "xir/xxir_generic.h"
 static XrXirArtifact *state_failure_fixture(const XrXirCompileContext *context,uint32_t scenario) {
@@ -63,7 +64,7 @@ static XrXirArtifact *state_failure_fixture(const XrXirCompileContext *context,u
     const XrXirModule module={XR_XIR_BUILT,functions,5,&declarations,NULL,NULL,NULL,XR_XIR_PROGRAM,NULL};
     XrXirArtifact *checked=NULL,*closed=NULL,*lowered=NULL;
     XrXirDiagnostic diagnostic={0};
-    XrXirStatus status=xr_xir_compile_check(context,&module,&checked,&diagnostic);
+    XrXirStatus status=xir_fixture_check(context, &module, &checked, &diagnostic);
     if(status!=XR_XIR_OK)fprintf(stderr,"state=%u check=%u function=%u block=%u instruction=%u\n",
         scenario,status,diagnostic.function,diagnostic.block,diagnostic.instruction);
     CHECK(status==XR_XIR_OK);

@@ -1,3 +1,4 @@
+#include "xir_construction_fixture.h"
 /*
  * xray - Lightweight typed scripting with native concurrency
  * https://www.xray-lang.org
@@ -177,7 +178,7 @@ static XrXirStatus rb_pipeline(const RbOwner *owner, RiFixture *f, RbTrace *trac
         RbStamp before = rb_stamp(owner);
         XrXirDiagnostic diagnostic = {XR_XIR_OK, UINT32_MAX, UINT32_MAX, UINT32_MAX, XR_XIR_DIAGNOSTIC_NONE};
         switch (phase) {
-            case RB_CHECK: status = xr_xir_compile_check(context, &graph.module, &checked, &diagnostic); break;
+            case RB_CHECK: status = xir_fixture_check(context, &graph.module, &checked, &diagnostic); break;
             case RB_WRITE: status = xr_xir_compile_checked_write(checked, &packet, &diagnostic); break;
             case RB_READ: status = xr_xir_compile_checked_read(context, packet.bytes, packet.length, &decoded, &diagnostic); break;
             case RB_SPECIALIZE: status = xr_xir_compile_specialize(decoded, &closed, &diagnostic); break;

@@ -9,6 +9,7 @@
  * KEY CONCEPT:
  *   Hand-built declarations and an independent packet agree before specialization.
  */
+#include "xir_construction_fixture.h"
 #include "xir/xxir_checked.h"
 #include "xir/xxir_vm.h"
 #include "xir/xxir_emit_c.h"
@@ -23,16 +24,17 @@
 #include "xir_nested_nullable_golden.h"
 #include "xir_nested_nullable64_golden.h"
 #include "xir_nested_nullable65_golden.h"
+#include "xir_nested_nullable72_golden.h"
 #include "xir_nested_nullable_cases.h"
 #include "xir_nested_nullable_value_cases.h"
 static XrXirStatus nested_compile_pipeline(const XrXirCompileContext *context) {
     XrXirArtifact *checked=NULL,*read=NULL,*special=NULL,*lowered=NULL;
     XrXirCheckedPacket packet={0};XrXirCSource source={0};XrXirProgram *program=NULL;
     XrXirTarget target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};
-    XrXirStatus status=xr_xir_compile_check(context,&nested_built,&checked,NULL);
+    XrXirStatus status=xir_fixture_check(context, &nested_built, &checked, NULL);
     if(status==XR_XIR_OK)status=xr_xir_compile_checked_write(checked,&packet,NULL);
-    if(status==XR_XIR_OK){CHECK(packet.length==sizeof(nested_nullable65_golden) &&
-        !memcmp(packet.bytes,nested_nullable65_golden,packet.length));
+    if(status==XR_XIR_OK){CHECK(packet.length==sizeof(nested_nullable72_golden) &&
+        !memcmp(packet.bytes,nested_nullable72_golden,packet.length));
         status=xr_xir_compile_checked_read(context,packet.bytes,packet.length,&read,NULL);}
     if(status==XR_XIR_OK)status=xr_xir_compile_specialize(read,&special,NULL);
     if(status==XR_XIR_OK)status=xr_xir_compile_artifact_verify(special,NULL);
@@ -88,12 +90,17 @@ int main(int argc,char **argv) {
     prior=(XrXirArtifact *)(uintptr_t)1;
     CHECK(xr_xir_compile_checked_read(&owner.context,nested_nullable64_golden,sizeof(nested_nullable64_golden),&prior,NULL)==XR_XIR_BAD_STRUCTURE && prior==(XrXirArtifact *)(uintptr_t)1);
     CHECK(nested_nullable_compile_attempts==prior_attempts && nested_nullable_compile_live==prior_live && nested_nullable_compile_bytes==prior_bytes && runtime_live==prior_runtime_live && runtime_bytes==prior_runtime_bytes);
+    prior=NULL;
+    CHECK(xr_xir_compile_checked_read(&owner.context,nested_nullable65_golden,sizeof(nested_nullable65_golden),&prior,NULL)==XR_XIR_BAD_STRUCTURE && !prior);
+    prior=(XrXirArtifact *)(uintptr_t)1;
+    CHECK(xr_xir_compile_checked_read(&owner.context,nested_nullable65_golden,sizeof(nested_nullable65_golden),&prior,NULL)==XR_XIR_BAD_STRUCTURE && prior==(XrXirArtifact *)(uintptr_t)1);
+    CHECK(nested_nullable_compile_attempts==prior_attempts && nested_nullable_compile_live==prior_live && nested_nullable_compile_bytes==prior_bytes);
     nested_type_rejections(&owner.context);nested_storage_vectors(&owner.context);nested_deep_admission(&owner.context,32);nested_deep_admission(&owner.context,256);
     XrXirArtifact *checked=NULL,*read=NULL,*special=NULL,*lowered=NULL;
-    CHECK(xr_xir_compile_check(&owner.context,&nested_built,&checked,NULL)==XR_XIR_OK);
+    CHECK(xir_fixture_check(&owner.context, &nested_built, &checked, NULL)==XR_XIR_OK);
     XrXirCheckedPacket packet={0};CHECK(xr_xir_compile_checked_write(checked,&packet,NULL)==XR_XIR_OK);
-    CHECK(packet.length==sizeof(nested_nullable65_golden) && !memcmp(packet.bytes,nested_nullable65_golden,packet.length));
-    CHECK(xr_xir_compile_checked_read(&owner.context,nested_nullable65_golden,sizeof(nested_nullable65_golden),&read,NULL)==XR_XIR_OK);
+    CHECK(packet.length==sizeof(nested_nullable72_golden) && !memcmp(packet.bytes,nested_nullable72_golden,packet.length));
+    CHECK(xr_xir_compile_checked_read(&owner.context,nested_nullable72_golden,sizeof(nested_nullable72_golden),&read,NULL)==XR_XIR_OK);
     xr_xir_compile_artifact_free(checked);xr_xir_compile_checked_packet_free(&packet);
     CHECK(xr_xir_compile_specialize(read,&special,NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(read);
     CHECK(xr_xir_compile_artifact_verify(special,NULL)==XR_XIR_OK);

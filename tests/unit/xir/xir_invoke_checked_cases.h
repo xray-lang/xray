@@ -1,3 +1,4 @@
+#include "xir_construction_fixture.h"
 /*
  * xray - Lightweight typed scripting with native concurrency
  * https://www.xray-lang.org
@@ -29,7 +30,7 @@ static void invoke_generic_cases(void) {
             {&callee_constraint,1,NULL,0, NULL}};
         XrXirModule module = {XR_XIR_BUILT,functions,2,NULL,generics,NULL,NULL, XR_XIR_PROGRAM, NULL};
         XrXirArtifact *checked = NULL, *decoded = NULL, *closed = NULL, *lowered = NULL;
-        XrXirStatus status = xr_xir_compile_check(suite_context, &module, &checked, NULL);
+        XrXirStatus status = xir_fixture_check(suite_context, &module, &checked, NULL);
         /* An unused caller must prove the callee's bound at its definition. */
         if (mode == 1) { CHECK(status != XR_XIR_OK && !checked); continue; }
         CHECK(status == XR_XIR_OK);
@@ -88,7 +89,7 @@ static void invoke_checked_cases(void) {
             ops[0].type = XR_XIR_UNIT; ops[1].type = XR_XIR_UNIT;
         }
         XrXirArtifact *checked = NULL, *decoded = NULL;
-        XrXirStatus status = xr_xir_compile_check(suite_context, &module, &checked, NULL);
+        XrXirStatus status = xir_fixture_check(suite_context, &module, &checked, NULL);
         if (attack) { CHECK(status != XR_XIR_OK && !checked); continue; }
         CHECK(status == XR_XIR_OK);
         XrXirArtifact *lowered = NULL;

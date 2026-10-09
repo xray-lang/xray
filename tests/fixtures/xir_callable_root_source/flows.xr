@@ -1,0 +1,30 @@
+import "./helpers" as helpers
+var state:i64=23
+const moduleCallback=plain
+fn plain()->i64{return 7}
+fn other()->i64{return 11}
+fn rootLeaf()->i64{return state}
+export fn direct()->i64{const f=plain;return f()}
+export fn imported()->i64{const f=helpers.importedPure;return f()}
+export fn copied()->i64{const original=plain;const alias=original;return alias()}
+export fn closure()->i64{const f=fn()->i64{return 13};return f()}
+export fn capture()->i64{const f=plain;const call=fn()->i64{return f()};return call()}
+export fn fixed()->i64{const f:fn()->i64=plain;return f()}
+export fn parameter(f:fn()->i64)->i64{return f()}
+export fn local()->i64{var f=plain;f=other;return f()}
+export fn localRoot()->i64{var f=plain;f=rootLeaf;return f()}
+export fn phi(flag:bool)->i64{const f=flag ? plain : other;return f()}
+export fn phiRoot(flag:bool)->i64{const f=flag ? plain : rootLeaf;return f()}
+export fn tuple()->i64{const pair=(plain,other);return pair.0()+pair.1()}
+export fn tupleFixed()->i64{const pair:(fn()->i64,i64)=(plain,1);return pair.0()}
+export fn array()->i64{const callbacks=[plain,other];return callbacks[0]()}
+export fn arrayRoot()->i64{const callbacks=[plain,rootLeaf];return callbacks[0]()}
+export fn arrayFixed()->i64{const callbacks:Array<fn()->i64>=[plain];return callbacks[0]()}
+export fn arrayMutation()->i64{var callbacks=[plain];callbacks.push(other);return callbacks[0]()}
+export fn nullableFixed()->i64{const maybe:(fn()->i64)?=plain;return maybe!()}
+export fn nullablePrecise()->i64{const f=plain;const box:(fn()->i64)?=f;return f()}
+export fn moduleRead()->i64{return moduleCallback()}
+export fn pureCycle()->i64{const f=pureCycle;try{return f()}catch(e){return 0}}
+export fn rootCycle()->i64{const f=rootCycle;try{return state+f()}catch(e){return state}}
+export fn mixed(f:fn()->i64)->i64{const callback=rootLeaf;return f()+callback()}
+fn main()->i64{return 0}

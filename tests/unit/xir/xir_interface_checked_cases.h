@@ -8,6 +8,7 @@
  */
 #ifndef XIR_INTERFACE_CHECKED_CASES_H
 #define XIR_INTERFACE_CHECKED_CASES_H
+#include "xir_construction_fixture.h"
 #include "xir/xxir_interface.h"
 
 static XrXirArtifact *interface_checked_fixture(const XrXirCompileContext *context) {
@@ -15,6 +16,7 @@ static XrXirArtifact *interface_checked_fixture(const XrXirCompileContext *conte
     XrXirType parameter = (XrXirType) XR_XIR_TYPE_PARAMETER_BASE, concrete = XR_XIR_I64;
     XrXirTypeNode signature = {0};
     signature.kind = XR_XIR_TYPE_CALLABLE; signature.result = parameter; signature.parameter_span = 1;
+    signature.flags = XR_XIR_CALLABLE_ROOT_UNRESOLVED;
     XrXirInterfaceMethod method = {{"measure",7}, (XrXirType) XR_XIR_CONSTRUCTED_TYPE_BASE, 0,0,NULL};
     XrXirInterfaceApplication parents[] = {{0,&parameter,1}, {0,&concrete,1}};
     XrXirInterfaceDeclaration declarations[] = {
@@ -39,7 +41,7 @@ static XrXirArtifact *interface_checked_fixture(const XrXirCompileContext *conte
     XrXirDeclarations program = {modules,2,identities,NULL,0,NULL,0,0,0, NULL};
     XrXirModule module = {XR_XIR_BUILT,functions,3,&program,NULL,&types,NULL, XR_XIR_PROGRAM, NULL};
     XrXirArtifact *artifact = NULL;
-    CHECK(xr_xir_compile_check(context, &module, &artifact, NULL) == XR_XIR_OK);
+    CHECK(xir_fixture_check(context, &module, &artifact, NULL) == XR_XIR_OK);
     return artifact;
 }
 static size_t interface_packet_name_end(const XrXirCheckedPacket *packet,
@@ -97,6 +99,9 @@ static void interface_checked_cases(void) {
     CHECK(xr_xir_compile_artifact_verify(decoded, NULL) == XR_XIR_OK);
     const XrXirInterfaceTable *table = xr_xir_compile_artifact_module(decoded)->types->interfaces;
     CHECK(table && table->count == 3);
+    const XrXirTypeNode *signature = xr_xir_callable_signature(
+        xr_xir_compile_artifact_module(decoded)->types, table->declarations[0].methods[0].signature);
+    CHECK(signature && signature->flags == 8u);
     CHECK(table->declarations[0].name.length == 7 && !memcmp(table->declarations[0].name.bytes,"Measure",7));
     CHECK(table->declarations[0].methods[0].name.length == 7);
     CHECK(!memcmp(table->declarations[0].methods[0].name.bytes,"measure",7));

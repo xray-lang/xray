@@ -29,11 +29,21 @@
 /* Lowering frees abstract type payloads allocated by the counted type clone. */
 #include "xir_source_cases.h"
 #include "xir_source_default_runtime_gaps.h"
-int main(int argc, char **argv) {
-    source_default_runtime_gaps();
-    CHECK(argc==1 || argc==2);
+static int source_checked_fixture_generate(const char *path) {
     const XrXirCompileContext context=*source_fixture_source_owner(UINT64_C(64)*1024*1024,UINT64_C(128000000));
-    XrXirArtifact *lowered=source_fixture_lower(&context,argc==2 ? argv[1] : NULL);
+    XrXirArtifact *lowered=source_fixture_lower(&context,path);
+    CHECK(xr_xir_compile_artifact_verify(lowered,NULL)==XR_XIR_OK);
+    xr_xir_compile_artifact_free(lowered);
+    CHECK(!runtime_live && !runtime_bytes);
+    source_fixture_source_owners_free();
+    return 0;
+}
+int main(int argc, char **argv) {
+    if(argc==3 && !strcmp(argv[1],"--write-checked")) return source_checked_fixture_generate(argv[2]);
+    CHECK(argc==1);
+    source_default_runtime_gaps();
+    const XrXirCompileContext context=*source_fixture_source_owner(UINT64_C(64)*1024*1024,UINT64_C(128000000));
+    XrXirArtifact *lowered=source_fixture_lower(&context,NULL);
     const XrXirModule *module = xr_xir_compile_artifact_module(lowered);
     SourceMethodValueEntries method_value_entries = source_method_value_select(module);
     SourceLateResultEntries late_result_entries = source_late_result_select(module);
@@ -77,7 +87,14 @@ int main(int argc, char **argv) {
     xr_xir_compile_artifact_free(negative_lowered);source_fixture_source_owner_close(&negative);
     CHECK(source_fixture_compile_live==negative_physical_blocks && source_fixture_compile_bytes==negative_physical_bytes);
     XrXirStatus seal_status=xr_xir_compile_vm_program_take(&lowered,&program);
-    if(seal_status!=XR_XIR_OK)fprintf(stderr,"source seal status: %u\n",(unsigned)seal_status);
+    if(seal_status!=XR_XIR_OK) {
+        XrCompileResourceStats failed={0};
+        CHECK(xr_compile_resources_stats(context.resources,&failed)==XR_COMPILE_RESOURCE_OK);
+        fprintf(stderr,"source seal status: %u allocated=%llu peak=%llu work=%llu live=%llu\n",
+            (unsigned)seal_status,(unsigned long long)failed.allocated_bytes,
+            (unsigned long long)failed.peak_bytes,(unsigned long long)failed.work,
+            (unsigned long long)failed.live_bytes);
+    }
     CHECK(seal_status==XR_XIR_OK && !lowered);
     XrXirValue results[2] = {{0}, {0}};
     source_pair(program, entry, (SourceFunctions) {result, advance, update, calculate, resume_text, stack_depth, numeric_pause, bound_result, witness_result, enum_witness_result, enum_generic_witness_result, generic_method_number, generic_method_text, generic_method_array}, results);

@@ -58,19 +58,19 @@ static void query_coalloc_boundaries(void) {
     declaration.parameters=parameters;declaration.parameter_count=1;
     XrXirSourceView view={0};view.declarations=&declaration;view.declaration_count=1;
     uint64_t table=sizeof(declaration)+sizeof(parameters)+sizeof(name)+sizeof(signature);
-    uint64_t bytes=sizeof(XrCompileResources)+2*sizeof(CompileAllocation)+sizeof(XrXirSourceSnapshot)+sizeof(SourceQueryMemory)+table;
-    uint64_t work=6+sizeof(XrXirSourceSnapshot)+sizeof(view)+sizeof(SourceQueryMemory)+table+sizeof(declaration)+sizeof(parameters)+3*(sizeof(name)+sizeof(signature));
+    uint64_t bytes=sizeof(XrCompileResources)+4*sizeof(CompileAllocation)+2*sizeof(XrXirConstruction)+sizeof(XrXirSourceSnapshot)+sizeof(SourceQueryMemory)+table;
+    uint64_t work=11+2*sizeof(XrXirConstruction)+sizeof(XrXirSourceSnapshot)+sizeof(view)+sizeof(SourceQueryMemory)+table+sizeof(declaration)+sizeof(parameters)+3*(sizeof(name)+sizeof(signature));
     XrCompileResourceLimits caps={bytes,bytes,work};XrXirSourceSnapshot *snapshot=NULL;
     size_t start=source_fixture_compile_attempts;
     CHECK(allocation_snapshot_copy(&view,&caps,&snapshot)==XR_XIR_OK);
-    size_t sites=source_fixture_compile_attempts-start;CHECK(sites==3);
+    size_t sites=source_fixture_compile_attempts-start;CHECK(sites==5);
     CHECK(allocation_last_stats.allocated_bytes==bytes && allocation_last_stats.peak_bytes==bytes && allocation_last_stats.work==work);
     memset(name,'x',sizeof(name)-1);memset(signature,'x',sizeof(signature)-1);parameters[0].generic_owner=99;
     const XrXirSourceDeclaration *copy=xr_xir_compile_source_snapshot_view(snapshot)->declarations;
     CHECK(!strcmp(copy->name,"map") && !strcmp(copy->signature,"(i64)->i64"));
     CHECK(copy->parameters[0].generic_owner==73 && copy->parameters!=parameters);
     xr_xir_compile_source_snapshot_free(snapshot);snapshot=NULL;CHECK(!source_fixture_compile_live);
-    allocation_snapshot_boundaries(&view,(XrCompileResourceStats){3,bytes,0,bytes,work});
+    allocation_snapshot_boundaries(&view,(XrCompileResourceStats){5,bytes,0,bytes,work});
     for(size_t i=0;i<sites;++i){
         source_fixture_compile_fail_at=source_fixture_compile_attempts+i;
         source_fixture_compile_injected=false;
@@ -88,10 +88,10 @@ static void query_coalloc_boundaries(void) {
     xr_xir_compile_source_snapshot_free(snapshot);snapshot=NULL;CHECK(!source_fixture_compile_live);
     declaration.parameter_count=0;declaration.parameters=parameters;start=source_fixture_compile_attempts;
     CHECK(allocation_snapshot_copy(&view,&caps,&snapshot)==XR_XIR_OK);
-    CHECK(source_fixture_compile_attempts-start==3 && !xr_xir_compile_source_snapshot_view(snapshot)->declarations[0].parameters);
+    CHECK(source_fixture_compile_attempts-start==5 && !xr_xir_compile_source_snapshot_view(snapshot)->declarations[0].parameters);
     xr_xir_compile_source_snapshot_free(snapshot);snapshot=NULL;CHECK(!source_fixture_compile_live);
     ctx=allocation_context(allocation_limits());snapshot=(XrXirSourceSnapshot *)(uintptr_t)1;start=source_fixture_compile_attempts;
-    CHECK(xr_xir_compile_source_snapshot_copy(&ctx,&view,&snapshot)==XR_XIR_BAD_STRUCTURE && snapshot==(XrXirSourceSnapshot *)(uintptr_t)1 && source_fixture_compile_attempts==start);
+    CHECK(xr_xir_compile_source_snapshot_copy_v2(&ctx,&view,NULL,&snapshot)==XR_XIR_BAD_STRUCTURE && snapshot==(XrXirSourceSnapshot *)(uintptr_t)1 && source_fixture_compile_attempts==start);
     snapshot=NULL;allocation_context_close(&ctx);CHECK(!source_fixture_compile_live);
     XrXirConstraint constraint={0};XrXirSourceDeclaration rows[2]={0};
     rows[0].name="x";rows[0].signature="odd!";rows[0].generic_constraints=&constraint;rows[0].generic_parameter_count=1;
@@ -103,7 +103,7 @@ static void query_coalloc_boundaries(void) {
         XrXirStatus status=allocation_snapshot_copy(&view,&caps,&snapshot);
         CHECK(status==(i?XR_XIR_OUT_OF_MEMORY:XR_XIR_OK));
         if(!i){
-            sites=source_fixture_compile_attempts-start;CHECK(sites==4);
+            sites=source_fixture_compile_attempts-start;CHECK(sites==6);
             copy=xr_xir_compile_source_snapshot_view(snapshot)->declarations;
             CHECK((uintptr_t)copy[1].parameters%_Alignof(XrXirSourceType)==0);
             CHECK(copy[0].generic_constraints!=&constraint && copy[1].parameters!=parameters && copy[1].parameters[0].generic_owner==99);
@@ -136,8 +136,8 @@ static void query_coalloc_early_boundaries(void) {
     XrXirSourceDeclaration rows[2]={0};rows[0].name="x";rows[0].signature="odd!";rows[1].name="y";
     XrXirSourceView view={0};view.declarations=rows;view.declaration_count=2;
     uint64_t table=2*sizeof(XrXirSourceDeclaration),payload=sizeof(SourceQueryMemory)+table+9;
-    uint64_t bytes=sizeof(XrCompileResources)+2*sizeof(CompileAllocation)+sizeof(XrXirSourceSnapshot)+payload;
-    uint64_t work=8+sizeof(XrXirSourceSnapshot)+sizeof(view)+payload+table+27;
+    uint64_t bytes=sizeof(XrCompileResources)+4*sizeof(CompileAllocation)+2*sizeof(XrXirConstruction)+sizeof(XrXirSourceSnapshot)+payload;
+    uint64_t work=13+2*sizeof(XrXirConstruction)+sizeof(XrXirSourceSnapshot)+sizeof(view)+payload+table+27;
     XrCompileResourceLimits caps={bytes,bytes,work};XrXirSourceSnapshot *snapshot=NULL;
     CHECK(allocation_snapshot_copy(&view,&caps,&snapshot)==XR_XIR_OK);
     CHECK(allocation_last_stats.allocated_bytes==bytes && allocation_last_stats.work==work);

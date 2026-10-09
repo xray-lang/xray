@@ -12,6 +12,7 @@
 
 #ifndef XIR_MODULE_STATE_CLASS_FIXTURE_H
 #define XIR_MODULE_STATE_CLASS_FIXTURE_H
+#include "xir_construction_fixture.h"
 #include "xir/xxir_checked.h"
 #include "xir/xxir_generic.h"
 #include "xir/xxir_nominal.h"
@@ -92,7 +93,7 @@ static XrXirStatus state_class_build(const XrXirCompileContext *context,uint32_t
     StateClassFixture fixture;state_class_fixture(&fixture,scenario,0);
     XrXirArtifact *checked=NULL,*closed=NULL,*read=NULL,*lowered=NULL;XrXirCheckedPacket packet={0};
     XrXirDiagnostic diagnostic={0};
-    XrXirStatus status=xr_xir_compile_check(context,&fixture.module,&checked,&diagnostic);
+    XrXirStatus status=xir_fixture_check(context, &fixture.module, &checked, &diagnostic);
     CHECK(status==XR_XIR_OK || !checked);
     if(status==XR_XIR_OK) {
         status=xr_xir_compile_checked_write(checked,&packet,NULL);

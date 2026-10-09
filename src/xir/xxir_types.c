@@ -28,7 +28,9 @@ XrXirStatus xr_xir_callable_weakening_admit(const XrXirTypes *types,
     if (!charge(work_owner, 1)) return XR_XIR_BUDGET;
     const XrXirTypeNode *from = xr_xir_callable_signature(types, source);
     const XrXirTypeNode *to = xr_xir_callable_signature(types, target);
-    if (!from || !to || from->flags != XR_XIR_CALLABLE_NO_SUSPEND || to->flags ||
+    if (!from || !to || !xr_xir_callable_flags_compatible(from->flags, to->flags) ||
+        !!from->parameter_count != !!from->parameters ||
+        !!to->parameter_count != !!to->parameters ||
         from->parameter_count != to->parameter_count || from->result != to->result) return XR_XIR_BAD_TYPE;
     for (uint32_t p = 0; p < from->parameter_count; ++p) {
         if (!charge(work_owner, 1)) return XR_XIR_BUDGET;
@@ -77,7 +79,12 @@ XR_FUNC XrXirType xr_xir_task_element(const XrXirTypes *types, XrXirType type) {
 XR_FUNC bool xr_xir_task_parameter_supported(const XrXirTypes *types, XrXirType type) {
     if (type == XR_XIR_BOOL || type == XR_XIR_I64 || type == XR_XIR_STRING) return true;
     const XrXirTypeNode *node = xr_xir_type_node(types, type);
-    return node && node->kind == XR_XIR_TYPE_NULLABLE && node->element == XR_XIR_I64;
+    /* Closed I64 Atomic and Task handles retain their identity when copied
+     * to this Instance's child. The common GO checker still proves Sendable,
+     * closed root effects and full argument admission before publication. */
+    return node && (node->kind == XR_XIR_TYPE_NULLABLE || node->kind == XR_XIR_TYPE_ATOMIC ||
+                    node->kind == XR_XIR_TYPE_TASK) &&
+        node->element == XR_XIR_I64;
 }
 XR_FUNC const XrXirNominalNativeRecord *xr_xir_nominal_native_record(const XrXirTypes *types, XrXirType type) {
     const XrXirTypeNode *node = xr_xir_type_node(types, type);
@@ -193,7 +200,7 @@ static XrXirStatus type_payload(const XrXirTypes *types, uint32_t index, XrXirCo
         (node->nominal.declaration || node->nominal.arguments || node->nominal.argument_count ||
          node->nominal.fields || node->nominal.field_count)) return XR_XIR_BAD_STRUCTURE;
     if (node->kind == XR_XIR_TYPE_CALLABLE) {
-        if (node->element != XR_XIR_UNIT || (node->flags & ~XR_XIR_CALLABLE_NO_SUSPEND) ||
+        if (node->element != XR_XIR_UNIT || !xr_xir_callable_flags_valid(node->flags) ||
             (node->result != XR_XIR_UNIT && !callable_component(types, node->result, index))) return XR_XIR_BAD_TYPE;
         if (node->parameter_count > 65536 || node->parameter_count > remaining->limits.parameters) return XR_XIR_BUDGET;
         uint64_t bytes = (uint64_t) node->parameter_count * sizeof(*node->parameters);
@@ -204,7 +211,12 @@ static XrXirStatus type_payload(const XrXirTypes *types, uint32_t index, XrXirCo
         if ((node->parameter_count != 0) != (node->parameters != NULL)) return XR_XIR_BAD_STRUCTURE;
         span = xr_xir_type_span(types, node->result);
         for (uint32_t p = 0; p < node->parameter_count; ++p) {
-            if (node->parameters[p].mode || !callable_component(types, node->parameters[p].type, index)) return XR_XIR_BAD_TYPE;
+            const XrXirCallableParameter *parameter = &node->parameters[p];
+            if (!xr_xir_callable_parameter_storage_valid(types, parameter)) return XR_XIR_BAD_TYPE;
+            if (parameter->mode == XR_PARAM_REF) {
+                if ((uint32_t)parameter->type - XR_XIR_CONSTRUCTED_TYPE_BASE >= index)
+                    return XR_XIR_BAD_TYPE;
+            } else if (!callable_component(types, parameter->type, index)) return XR_XIR_BAD_TYPE;
             uint32_t component = xr_xir_type_span(types, node->parameters[p].type);
             if (component > span) span = component;
         }
@@ -230,7 +242,7 @@ static XrXirStatus type_payload(const XrXirTypes *types, uint32_t index, XrXirCo
         bool nominal_element = element &&
             element->kind == XR_XIR_TYPE_NOMINAL &&
             (uint32_t) node->element - XR_XIR_CONSTRUCTED_TYPE_BASE < index;
-        if (!(node->kind == XR_XIR_TYPE_TASK && node->element == XR_XIR_UNIT) &&
+        if (!((node->kind == XR_XIR_TYPE_TASK || node->kind == XR_XIR_TYPE_CELL) && node->element == XR_XIR_UNIT) &&
             !nominal_element && !type_component(types, node->element, index)) return XR_XIR_BAD_TYPE;
         if (node->kind == XR_XIR_TYPE_ATOMIC) {
             uint32_t element_id=(uint32_t)node->element;

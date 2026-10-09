@@ -13,6 +13,7 @@
  */
 #ifndef XIR_ROOT_IDENTITY_FIXTURE_H
 #define XIR_ROOT_IDENTITY_FIXTURE_H
+#include "xir_construction_fixture.h"
 #include "xir/xxir_declarations.h"
 #include "xir/xxir_instance_value.h"
 
@@ -71,7 +72,7 @@ static void ri_graph(RiGraph *g, bool fail_initialization) {
     *g = (RiGraph){0};
     g->parameter = XR_XIR_I64;
     g->nodes[0] = (XrXirTypeNode){.kind = XR_XIR_TYPE_TASK, .element = XR_XIR_I64};
-    g->nodes[1] = (XrXirTypeNode){.kind = XR_XIR_TYPE_CALLABLE, .result = XR_XIR_I64};
+    g->nodes[1] = (XrXirTypeNode){.kind = XR_XIR_TYPE_CALLABLE, .flags = XR_XIR_CALLABLE_ROOT_UNRESOLVED, .result = XR_XIR_I64};
     g->nodes[2] = (XrXirTypeNode){.kind = XR_XIR_TYPE_CELL, .element = XR_XIR_I64};
     g->types = (XrXirTypes){g->nodes, 3, NULL, NULL};
     g->root[0] = (XrXirInstruction){.op = XR_XIR_CLEANUP_REGISTER, .targets = {1}, .immediate = RI_ROOT_EXIT};
@@ -169,7 +170,7 @@ static void ri_fixture(RiFixture *f, bool fail_initialization) {
     RiGraph graph; ri_graph(&graph, fail_initialization);
     XrXirArtifact *checked = NULL, *decoded = NULL, *closed = NULL;
     XrXirCheckedPacket packet = {0}; XrXirDiagnostic diagnostic = {0};
-    XrXirStatus status = xr_xir_compile_check(context, &graph.module, &checked, &diagnostic);
+    XrXirStatus status = xir_fixture_check(context, &graph.module, &checked, &diagnostic);
     if (status != XR_XIR_OK) fprintf(stderr, "identity check status=%u function=%u op=%u reason=%u\n",
         status, diagnostic.function, diagnostic.instruction, diagnostic.reason);
     CHECK(status == XR_XIR_OK);

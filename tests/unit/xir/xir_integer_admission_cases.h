@@ -11,6 +11,7 @@
  */
 #ifndef XIR_INTEGER_ADMISSION_CASES_H
 #define XIR_INTEGER_ADMISSION_CASES_H
+#include "xir_construction_fixture.h"
 #include "xir/xxir_generic.h"
 static void integer_ir_rejections(void) {
     for (unsigned test = 0; test < 12; ++test) {
@@ -38,7 +39,7 @@ static void integer_ir_rejections(void) {
         }
         function.result = ops[0].type;
         XrXirArtifact *checked = NULL;
-        CHECK(xr_xir_compile_check(&scalar_owner.context, &module, &checked, NULL) == XR_XIR_BAD_TYPE);
+        CHECK(xir_fixture_check(&scalar_owner.context, &module, &checked, NULL) == XR_XIR_BAD_TYPE);
         CHECK(!checked);
     }
     const XrXirTarget target = {XR_XIR_ARCH_X86_64, XR_XIR_VALUE_ABI_VERSION};

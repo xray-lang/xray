@@ -170,7 +170,7 @@ static void array_nested_gate_scratch(void) {
     fail_at = SIZE_MAX; XrXirDomain *domain = NULL;
     CHECK(xr_xir_domain_new(65536, &domain) == XR_XIR_VALUE_OK);
     const XrXirTypeNode nodes[] = {
-        {.kind = XR_XIR_TYPE_CALLABLE, .result = XR_XIR_I64},
+        {.kind = XR_XIR_TYPE_CALLABLE, .result = XR_XIR_I64, .flags = XR_XIR_CALLABLE_ROOT_UNRESOLVED},
         {.kind = XR_XIR_TYPE_ARRAY, .element = (XrXirType) 256},
         {.kind = XR_XIR_TYPE_ARRAY, .element = (XrXirType) 257},
     };

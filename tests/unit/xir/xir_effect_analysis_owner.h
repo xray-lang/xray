@@ -9,6 +9,7 @@
  */
 #ifndef XIR_EFFECT_ANALYSIS_OWNER_H
 #define XIR_EFFECT_ANALYSIS_OWNER_H
+#include "xir_construction_fixture.h"
 #include "xir/xxir_internal.h"
 #include "base/xmalloc.h"
 
@@ -108,7 +109,7 @@ static bool effect_balanced(void) {
  * Lowered instances are reconstructed from their sealed Checked packet. */
 static XrXirStatus effect_reproduce(const XrXirArtifact *source, const XrXirCompileContext *c, XrXirArtifact **out) {
     const XrXirModule *m = xr_xir_compile_artifact_module(source);
-    if (m->stage == XR_XIR_CHECKED) return xr_xir_compile_recheck(c, m, out, NULL);
+    if (m->stage == XR_XIR_CHECKED) return xr_xir_compile_recheck_v2(c,m,xr_xir_compile_artifact_construction(source), out, NULL);
     CHECK(m->stage == XR_XIR_LOWERED);
     XrXirArtifact *checked = NULL;
     XrXirStatus status = xr_xir_compile_checked_read(c, source->checked_packet.bytes, source->checked_packet.length, &checked, NULL);
@@ -149,7 +150,7 @@ static void effect_analysis_work_cut(const XrXirArtifact *source, uint64_t units
     CHECK(effect_reproduce(source,&c,&copy) == XR_XIR_OK);
     uint64_t setup_work = effect_stats(&c).work, verify_work = 0;
     if (verify_fits) {
-        CHECK(xr_xir_compile_verify(&c,xr_xir_compile_artifact_module(copy),NULL) == XR_XIR_OK);
+        CHECK(xr_xir_compile_verify_v2(&c, xr_xir_compile_artifact_module(copy), xr_xir_compile_artifact_construction(copy), NULL) == XR_XIR_OK);
         verify_work = effect_stats(&c).work - setup_work;
     }
     xr_xir_compile_artifact_free(copy); effect_owner_free(&c,baseline); effect_mark_check(mark);

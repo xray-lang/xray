@@ -1,0 +1,2 @@
+fn identity(value:i64)->i64 {return value}
+export var direct:Task<i64> = go identity(0)

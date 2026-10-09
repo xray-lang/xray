@@ -45,7 +45,7 @@ static void source_requirement_value_promises(const XrXirSourceRequest *request,
     SourceTestDeclaration missing_callback[] = {nested[0],nested[2]};
     source_manifest_write(&local,"witness_promises.xr",missing_callback,2);
     CHECK(!witness_promise_check(&local,false,"bound callback lacks original nested promise",
-        "callable conversion may only discard its top-level promise"));
+        "callable conversion may only weaken its outer execution contract"));
     nested[1].parameter = "f"; nested[1].no_suspend = true;
     source_manifest_write(&local,"witness_promises.xr",nested,3);
     CHECK(!witness_promise_check(&local,false,"callback promise does not qualify ordinary bound callee",

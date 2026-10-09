@@ -406,17 +406,22 @@ AstNode *xr_parse_enum_declaration(Parser *parser) {
 
         bool is_static = false;
         XrParamMode receiver_mode = XR_PARAM_READ;
+        XrNameSpan receiver_mode_span = {0};
         if (xr_parser_match(parser, TK_STATIC)) {
             is_static = true;
         } else if (xr_parser_match(parser, TK_REF) || xr_parser_match_name(parser, "ref")) {
             receiver_mode = XR_PARAM_REF;
+            receiver_mode_span = (XrNameSpan){parser->previous.line, parser->previous.column};
         } else if (xr_parser_match(parser, TK_MOVE) || xr_parser_match_name(parser, "move")) {
             receiver_mode = XR_PARAM_MOVE;
+            receiver_mode_span = (XrNameSpan){parser->previous.line, parser->previous.column};
         }
 
         AstNode *method = parse_enum_method(parser, is_static, receiver_mode);
         if (!xr_parser_healthy(parser)) return NULL;
         if (method) {
+            if (!ast_work(parser->compiler_session, sizeof(XrNameSpan))) return NULL;
+            method->as.method_decl.receiver_mode_span = receiver_mode_span;
             method->as.method_decl.attributes = attributes;
             method->as.method_decl.attr_count = attr_count;
             do {

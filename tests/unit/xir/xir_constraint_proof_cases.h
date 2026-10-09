@@ -8,6 +8,7 @@
  */
 #ifndef XIR_CONSTRAINT_PROOF_CASES_H
 #define XIR_CONSTRAINT_PROOF_CASES_H
+#include "xir_construction_fixture.h"
 #include "xir/xxir_constraint_proof.h"
 #include "xir/xxir_generic.h"
 #include "xir_interface_member_cases.h"
@@ -290,7 +291,7 @@ static void constraint_proof_scalar_signatures(void) {
         }
         XrXirModule module = {XR_XIR_BUILT,&function,1,NULL,NULL,NULL,NULL, XR_XIR_PROGRAM, NULL};
         XrXirArtifact *checked = NULL;
-        CHECK(xr_xir_compile_check(interface_context_pointer_default(), &module, &checked, NULL)==(i ? XR_XIR_BAD_TYPE : XR_XIR_OK));
+        CHECK(xir_fixture_check(interface_context_pointer_default(), &module, &checked, NULL)==(i ? XR_XIR_BAD_TYPE : XR_XIR_OK));
         CHECK((checked!=NULL)==!i);
         xr_xir_compile_artifact_free(checked); CHECK(interface_live == stage_owner_count);
     }
@@ -312,7 +313,7 @@ static void constraint_proof_scalar_generic_forwarding(void) {
     for (uint32_t valid = 0; valid < 2; ++valid) {
         caller.markers = valid ? XR_XIR_CONSTRAINT_SENDABLE : 0;
         XrXirArtifact *checked = NULL;
-        CHECK(xr_xir_compile_check(interface_context_pointer_default(), &module, &checked, NULL)==(valid ? XR_XIR_OK : XR_XIR_BAD_TYPE));
+        CHECK(xir_fixture_check(interface_context_pointer_default(), &module, &checked, NULL)==(valid ? XR_XIR_OK : XR_XIR_BAD_TYPE));
         CHECK((checked!=NULL)==!!valid);
         xr_xir_compile_artifact_free(checked); CHECK(interface_live == stage_owner_count);
     }

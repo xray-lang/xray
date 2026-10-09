@@ -8,6 +8,7 @@
  */
 #ifndef XIR_STRUCT_OPS_FIXTURE_H
 #define XIR_STRUCT_OPS_FIXTURE_H
+#include "xir_construction_fixture.h"
 #include "xir_nominal_fixture.h"
 #include "xir/xxir_checked.h"
 #include "xir/xxir_generic.h"
@@ -61,7 +62,7 @@ static XrXirArtifact *struct_ops_checked(const XrXirCompileContext *context, uns
     if (invalid == 10) make[0].immediate = 1;
     if (invalid == 11) make[1].immediate = 2;
     XrXirArtifact *checked = NULL;
-    XrXirStatus status = xr_xir_compile_check(context, &built, &checked, NULL);
+    XrXirStatus status = xir_fixture_check(context, &built, &checked, NULL);
     if (invalid) CHECK(status != XR_XIR_OK && !checked);
     else CHECK(status == XR_XIR_OK && checked);
     return checked;

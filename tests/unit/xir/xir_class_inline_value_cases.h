@@ -80,7 +80,7 @@ static void class_inline_capabilities(void) {
             (i==2 ? XR_XIR_OK : XR_XIR_BAD_TYPE));}
     /* A structurally valid array may still lack class-field capability. */
     const XrXirTypeNode excluded_nodes[]={
-        {.kind=XR_XIR_TYPE_CALLABLE,.result=XR_XIR_I64},
+        {.kind=XR_XIR_TYPE_CALLABLE,.result=XR_XIR_I64,.flags=XR_XIR_CALLABLE_ROOT_UNRESOLVED},
         {.kind=XR_XIR_TYPE_ARRAY,.element=XR_XIR_CONSTRUCTED_TYPE_BASE}};
     const XrXirTypes excluded_types={excluded_nodes,2,NULL,NULL};
     CHECK(xr_xir_compile_types_structure_verify(&owner.context,&excluded_types)==XR_XIR_OK);

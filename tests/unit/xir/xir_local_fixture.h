@@ -1,3 +1,4 @@
+#include "xir_construction_fixture.h"
 /*
  * xray - Lightweight typed scripting with native concurrency
  * https://www.xray-lang.org
@@ -95,7 +96,7 @@ static XrXirArtifact *local_fixture(const XrXirCompileContext *context) {
         {"reset", 5, fault_parameters, 3, XR_XIR_STRING, reset_blocks, 4, reset_ops, 17, reset_inputs, 12}};
     const XrXirModule built = {XR_XIR_BUILT, functions, 5, NULL, NULL, NULL, NULL, XR_XIR_PROGRAM, NULL};
     XrXirArtifact *checked = NULL;
-    CHECK(xr_xir_compile_check(context, &built, &checked, NULL) == XR_XIR_OK);
+    CHECK(xir_fixture_check(context, &built, &checked, NULL) == XR_XIR_OK);
     return checked;
 }
 #endif

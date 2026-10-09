@@ -1,3 +1,4 @@
+#include "xir_construction_fixture.h"
 /*
  * xray - Lightweight typed scripting with native concurrency
  * https://www.xray-lang.org
@@ -42,7 +43,7 @@ static XrXirArtifact *cleanup_role_fixture(const XrXirCompileContext *context) {
     generics[3].arguments = &argument; generics[3].argument_count = 1;
     XrXirModule module = {XR_XIR_BUILT, functions, 5, &declarations, generics, NULL, NULL, XR_XIR_PROGRAM, NULL};
     XrXirArtifact *checked = NULL;
-    CHECK(xr_xir_compile_check(context, &module, &checked, NULL) == XR_XIR_OK);
+    CHECK(xir_fixture_check(context, &module, &checked, NULL) == XR_XIR_OK);
     memset(identities, 0xCC, sizeof(identities));
     return checked;
 }

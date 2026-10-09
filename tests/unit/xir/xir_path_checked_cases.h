@@ -8,6 +8,7 @@
  */
 #ifndef XIR_PATH_CHECKED_CASES_H
 #define XIR_PATH_CHECKED_CASES_H
+#include "xir_construction_fixture.h"
 #include "xir/xxir_value_place.h"
 static void path_array_packet_attacks(XrXirCheckedPacket *packet) {
     CHECK(packet32(packet,64) == 0 && packet32(packet,68) == 1);
@@ -78,7 +79,7 @@ static void path_array_checked_cases(void) {
             ops[1] = original[5]; ops[5] = original[1]; ops[6].args[1] = 2;
         }
         XrXirArtifact *checked = NULL; XrXirDiagnostic diagnostic = {0};
-        XrXirStatus status = xr_xir_compile_check(suite_context, &module, &checked, &diagnostic);
+        XrXirStatus status = xir_fixture_check(suite_context, &module, &checked, &diagnostic);
         if (mode && mode != 7) {
             CHECK(status != XR_XIR_OK && !checked);
             if (mode == 1) CHECK(diagnostic.reason == XR_XIR_DIAGNOSTIC_READONLY_WRITE && diagnostic.instruction == 6);
@@ -161,7 +162,7 @@ static void path_ancestor_checked_cases(void) {
         identities[2].nominal_owner = mode == 3 ? 1 : 0;
         identities[2].method_kind = mode == 3 ? XR_XIR_MEMBER_HELPER : XR_XIR_NON_MEMBER;
         XrXirArtifact *checked = NULL; XrXirDiagnostic diagnostic = {0};
-        XrXirStatus status = xr_xir_compile_check(suite_context, &built, &checked, &diagnostic);
+        XrXirStatus status = xir_fixture_check(suite_context, &built, &checked, &diagnostic);
         if (mode == 1 || mode == 2) {
             CHECK(status != XR_XIR_OK && !checked && diagnostic.function == 2);
             CHECK(diagnostic.instruction == (mode == 1 ? 5u : 1u));

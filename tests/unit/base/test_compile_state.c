@@ -476,6 +476,8 @@ static void source_cache_owner(void) {
     reset();
     XrCompileResourceStats exact, observed;
     OK(source_cache_pipeline(&unlimited, &exact));
+    /* Ledger, state, cache, path, content, line index, and initial file table. */
+    CHECK(calls == 7);
     size_t points = calls;
     for (size_t i = 0; i < points; ++i) {
         reset(); fail_at = i;

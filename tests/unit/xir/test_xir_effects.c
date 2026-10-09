@@ -6,6 +6,7 @@
  *
  * test_xir_effects.c - Recursive effects, dynamic calls and bounded ownership
  */
+#include "xir_construction_fixture.h"
 #include "base/xmalloc.h"
 #include "xir/xxir_effects.h"
 #include "xir/xxir_checked.h"
@@ -19,9 +20,12 @@ static const XrXirCompileContext *suite_context = &effect_context;
 #include "xir_enum_ops_fixture.h"
 #include "xir_enum_generic_fixture.h"
 #include "xir_effect_witness_cases.h"
+_Static_assert(XR_XIR_CALLABLE_NO_SUSPEND == 1u && XR_XIR_CALLABLE_ROOT_NONE == 2u &&
+    XR_XIR_CALLABLE_ROOT_UNRESOLVED == 8u && XR_XIR_CALLABLE_ROOT_MASK == 14u, "independent callable bits");
 static XrXirArtifact *effect_fixture(bool suspends) {
     XrXirType parameter = (XrXirType) XR_XIR_CONSTRUCTED_TYPE_BASE;
     XrXirTypeNode node = {0}; node.kind = XR_XIR_TYPE_CALLABLE; node.result = XR_XIR_UNIT;
+    node.flags = XR_XIR_CALLABLE_ROOT_UNRESOLVED;
     XrXirTypes types = {&node, 1, NULL, NULL};
     XrXirInstruction a[] = {{XR_XIR_CALL, XR_XIR_UNIT, {0}, {0}, 1, {0}},
         {XR_XIR_RETURN, XR_XIR_UNIT, {0}, {0}, 0, {0}}};
@@ -59,10 +63,12 @@ static XrXirArtifact *effect_fixture(bool suspends) {
     XrXirDeclarations declarations = {&source, 1, identities, NULL, 0, NULL, 0, 0, 7, NULL};
     XrXirModule module = {XR_XIR_BUILT, functions, 8, &declarations, NULL, &types, NULL, XR_XIR_PROGRAM, NULL};
     XrXirArtifact *artifact = NULL; XrXirDiagnostic diagnostic = {0};
-    XrXirStatus status = xr_xir_compile_check(&effect_context, &module, &artifact, &diagnostic);
+    XrXirStatus status = xir_fixture_check(&effect_context, &module, &artifact, &diagnostic);
     if (status != XR_XIR_OK) fprintf(stderr, "effect fixture %u: f=%u b=%u i=%u\n", status,
         diagnostic.function, diagnostic.block, diagnostic.instruction);
-    CHECK(status == XR_XIR_OK); return artifact;
+    CHECK(status == XR_XIR_OK);
+    CHECK(xr_xir_compile_artifact_module(artifact)->types->nodes[0].flags == 8u);
+    return artifact;
 }
 static void effect_expect(const XrXirEffects *effects, uint32_t f, XrXirEffect suspend, XrXirEffect throws) {
     const XrXirFunctionEffects *fact = xr_xir_effects_function(effects, f);
@@ -137,7 +143,7 @@ static void effect_long_cycle(void) {
     ops[COUNT - 1][1] = (XrXirInstruction) {XR_XIR_SUSPEND, XR_XIR_UNIT, {0}, {0}, 0, {0}};
     XrXirModule module = {XR_XIR_BUILT, functions, COUNT, NULL, NULL, NULL, NULL, XR_XIR_PROGRAM, NULL};
     XrXirArtifact *artifact = NULL;
-    CHECK(xr_xir_compile_check(&effect_context, &module, &artifact, NULL) == XR_XIR_OK);
+    CHECK(xir_fixture_check(&effect_context, &module, &artifact, NULL) == XR_XIR_OK);
     XrXirEffects *effects = NULL;
     CHECK(effect_analyze(artifact, &effects) == XR_XIR_OK);
     for (uint32_t f = 0; f < COUNT; ++f) effect_expect(effects, f, XR_XIR_EFFECT_MAY, XR_XIR_EFFECT_NONE);
@@ -156,7 +162,7 @@ static void effect_enum_ownership(void) {
     XrXirInstruction ops[11]; memcpy(ops,functions[2].instructions,sizeof(ops));
     ops[10]=(XrXirInstruction){XR_XIR_THROW,XR_XIR_UNIT,{2},{0},0,{0}};
     functions[2].instructions=ops; built.functions=functions;
-    CHECK(xr_xir_compile_check(&effect_context, &built,&artifact,NULL)==XR_XIR_OK); effect_artifact_free(original);
+    CHECK(xir_fixture_check(&effect_context, &built, &artifact, NULL)==XR_XIR_OK); effect_artifact_free(original);
     size_t sites=effect_failures(artifact); XrXirEffects *effects=NULL;
     CHECK(effect_analyze(artifact,&effects)==XR_XIR_OK);
     effect_artifact_free(artifact);
@@ -187,7 +193,7 @@ static void effect_generic_errors(void) {
     XrXirInstruction ops[2]; memcpy(ops,functions[2].instructions,sizeof(ops));
     ops[1]=(XrXirInstruction){XR_XIR_THROW,XR_XIR_UNIT,{1},{0},0,{0}};
     functions[2].instructions=ops; built.functions=functions;
-    CHECK(xr_xir_compile_check(&effect_context, &built,&artifact,NULL)==XR_XIR_OK); effect_artifact_free(source);
+    CHECK(xir_fixture_check(&effect_context, &built, &artifact, NULL)==XR_XIR_OK); effect_artifact_free(source);
     size_t allocations=effect_failures(artifact);
     XrXirEffects *effects=NULL;
     CHECK(effect_analyze(artifact,&effects)==XR_XIR_OK);
@@ -232,7 +238,7 @@ static XrXirArtifact *effect_missing_fixture(bool wide) {
         declaration.variants = variants; declaration.variant_count = 61;
         table.declarations = &declaration; types.nominals = &table;
     }
-    CHECK(xr_xir_compile_check(&effect_context, &built, &artifact, NULL) == XR_XIR_OK);
+    CHECK(xir_fixture_check(&effect_context, &built, &artifact, NULL) == XR_XIR_OK);
     effect_artifact_free(source); return artifact;
 }
 static void effect_missing_errors(bool wide) {
@@ -270,14 +276,14 @@ static void effect_growing_cycle(void) {
     XrXirType argument = (XrXirType)257;
     generics[2].arguments = &argument; generics[2].argument_count = 1; built.generics = generics;
     XrXirDiagnostic diagnostic={0};
-    XrXirStatus status=xr_xir_compile_check(&effect_context, &built,&artifact,&diagnostic);
+    XrXirStatus status=xir_fixture_check(&effect_context, &built, &artifact, &diagnostic);
     if (status!=XR_XIR_OK) fprintf(stderr,"growing fixture: status=%u function=%u instruction=%u\n",status,diagnostic.function,diagnostic.instruction);
     CHECK(status==XR_XIR_OK); effect_artifact_free(source);
     EffectMark mark=effect_mark(); XrXirCompileContext probe=effect_owner_new(effect_caps());
     uint64_t baseline=effect_stats(&probe).live_bytes; XrXirArtifact *copy=NULL;
     CHECK(effect_reproduce(artifact,&probe,&copy)==XR_XIR_OK);
     uint64_t setup=effect_stats(&probe).work;
-    CHECK(xr_xir_compile_verify(&probe,xr_xir_compile_artifact_module(copy),NULL)==XR_XIR_OK);
+    CHECK(xr_xir_compile_verify_v2(&probe, xr_xir_compile_artifact_module(copy), xr_xir_compile_artifact_construction(copy), NULL)==XR_XIR_OK);
     CHECK(effect_stats(&probe).work-setup<=200000);
     xr_xir_compile_artifact_free(copy); effect_owner_free(&probe,baseline); effect_mark_check(mark);
     XrCompileResourceLimits caps=effect_caps(); CHECK(setup<=caps.work-200000); caps.work=setup+200000;
@@ -297,9 +303,9 @@ static void effect_term_shapes(void) {
     XrXirTypeNode nodes[] = {
         {XR_XIR_TYPE_ARRAY, t, NULL, 0, XR_XIR_UNIT, 0, 1, {0}},
         {XR_XIR_TYPE_CELL, (XrXirType)256, NULL, 0, XR_XIR_UNIT, 0, 1, {0}},
-        {XR_XIR_TYPE_CALLABLE, XR_XIR_UNIT, parameters, 1, (XrXirType)256, 0, 1, {0}},
+        {XR_XIR_TYPE_CALLABLE, XR_XIR_UNIT, parameters, 1, (XrXirType)256, XR_XIR_CALLABLE_ROOT_UNRESOLVED, 1, {0}},
         {XR_XIR_TYPE_NOMINAL, XR_XIR_UNIT, NULL, 0, XR_XIR_UNIT, 0, 1, {0, &nominal_argument, 1, NULL, 0}},
-        {XR_XIR_TYPE_CALLABLE, XR_XIR_UNIT, parameters + 1, 1, (XrXirType)256, 0, 1, {0}}};
+        {XR_XIR_TYPE_CALLABLE, XR_XIR_UNIT, parameters + 1, 1, (XrXirType)256, XR_XIR_CALLABLE_ROOT_UNRESOLVED, 1, {0}}};
     XrXirGeneric arguments = {0}; arguments.argument_count = 1; arguments.arguments = &argument;
     XrXirCompileContext budget = effect_context; EffectMark mark = effect_mark();
     XrXirCompileLimits structural = budget.limits;
@@ -312,6 +318,7 @@ static void effect_term_shapes(void) {
     XrXirType callable_id = nominal->nominal.arguments[0];
     XrXirTypeNode callable = *xr_xir_type_node(&pool.types, callable_id);
     CHECK(callable.kind == XR_XIR_TYPE_CALLABLE && callable.parameter_count == 1 && !callable.parameters[0].mode);
+    CHECK(callable.flags == 8u);
     const XrXirTypeNode *cell = xr_xir_type_node(&pool.types, callable.parameters[0].type);
     CHECK(cell && cell->kind == XR_XIR_TYPE_CELL && cell->element == callable.result);
     const XrXirTypeNode *array = xr_xir_type_node(&pool.types, cell->element);
@@ -355,7 +362,7 @@ static void effect_witness_competition(void) {
     XrXirBlock block = {0, 5, 0, 0};
     functions[2].instructions = ops; functions[2].instruction_count = 5;
     functions[2].blocks = &block; built.functions = functions;
-    CHECK(xr_xir_compile_check(&effect_context, &built, &artifact, NULL) == XR_XIR_OK);
+    CHECK(xir_fixture_check(&effect_context, &built, &artifact, NULL) == XR_XIR_OK);
     effect_artifact_free(base);
     XrXirEffects *effects = NULL;
     CHECK(effect_analyze(artifact, &effects) == XR_XIR_OK);
@@ -379,7 +386,7 @@ static void effect_declared_promises(void) {
             ids[f].promises = XR_XIR_FUNCTION_NO_SUSPEND;
             XrXirArtifact *checked = NULL;
             XrXirDiagnostic diagnostic = {0};
-            XrXirStatus status = xr_xir_compile_check(&effect_context, &built, &checked, &diagnostic);
+            XrXirStatus status = xir_fixture_check(&effect_context, &built, &checked, &diagnostic);
             bool invalid = (f < 2 && suspends) || (f >= 2 && f <= 4);
             if (invalid) {
                 CHECK(status == XR_XIR_BAD_TYPE && !checked);
@@ -400,7 +407,7 @@ static void effect_declared_promises(void) {
                 effect_artifact_free(decoded); effect_artifact_free(lowered);
             }
             ids[f].promises = 2;
-            CHECK(xr_xir_compile_verify(&effect_context, &built, NULL) == XR_XIR_BAD_STRUCTURE);
+            CHECK(xir_fixture_verify(&effect_context, &built, NULL) == XR_XIR_BAD_STRUCTURE);
             ids[f].promises = 0;
         }
         effect_artifact_free(base); CHECK(effect_balanced());
@@ -409,12 +416,12 @@ static void effect_declared_promises(void) {
 static void effect_qualified_callable(void) {
     XrXirArtifact *base = effect_fixture(false), *checked = NULL;
     XrXirModule built = *xr_xir_compile_artifact_module(base); built.stage = XR_XIR_BUILT;
-    XrXirTypeNode node = built.types->nodes[0]; node.flags = XR_XIR_CALLABLE_NO_SUSPEND;
+    XrXirTypeNode node = built.types->nodes[0]; node.flags = XR_XIR_CALLABLE_ROOT_UNRESOLVED | XR_XIR_CALLABLE_NO_SUSPEND;
     XrXirTypes types = {&node, 1, NULL, NULL}; built.types = &types;
     XrXirFunctionIdentity ids[8]; memcpy(ids, built.declarations->functions, sizeof(ids));
     ids[0].promises = ids[2].promises = XR_XIR_FUNCTION_NO_SUSPEND;
     XrXirDeclarations declarations = *built.declarations; declarations.functions = ids; built.declarations = &declarations;
-    CHECK(xr_xir_compile_check(&effect_context, &built, &checked, NULL) == XR_XIR_OK);
+    CHECK(xir_fixture_check(&effect_context, &built, &checked, NULL) == XR_XIR_OK);
     XrXirEffects *effects = NULL;
     CHECK(effect_analyze(checked, &effects) == XR_XIR_OK);
     effect_expect(effects, 2, XR_XIR_EFFECT_NONE, XR_XIR_EFFECT_UNKNOWN);
@@ -425,20 +432,33 @@ static void effect_qualified_callable(void) {
     CHECK(effect_failures(checked) > 0);
     effect_artifact_free(checked); checked = NULL;
     ids[0].promises = 0;
-    CHECK(xr_xir_compile_check(&effect_context, &built, &checked, NULL) == XR_XIR_BAD_TYPE && !checked);
-    ids[0].promises = XR_XIR_FUNCTION_NO_SUSPEND; node.flags = 0;
+    CHECK(xir_fixture_check(&effect_context, &built, &checked, NULL) == XR_XIR_BAD_TYPE && !checked);
+    ids[0].promises = XR_XIR_FUNCTION_NO_SUSPEND; node.flags = XR_XIR_CALLABLE_ROOT_UNRESOLVED;
     XrXirDiagnostic diagnostic = {0};
-    CHECK(xr_xir_compile_check(&effect_context, &built, &checked, &diagnostic) == XR_XIR_BAD_TYPE && !checked);
+    CHECK(xir_fixture_check(&effect_context, &built, &checked, &diagnostic) == XR_XIR_BAD_TYPE && !checked);
     CHECK(diagnostic.reason == XR_XIR_DIAGNOSTIC_NO_SUSPEND && diagnostic.function == 2);
-    node.flags = 2;
-    CHECK(xr_xir_compile_check(&effect_context, &built, &checked, NULL) == XR_XIR_BAD_TYPE && !checked);
+    /* A closed root upper does not supply an independent NoSuspend promise. */
+    node.flags = 2; diagnostic = (XrXirDiagnostic){0};
+    CHECK(xir_fixture_check(&effect_context, &built, &checked, &diagnostic) == XR_XIR_BAD_TYPE && !checked);
+    CHECK(diagnostic.reason == XR_XIR_DIAGNOSTIC_NO_SUSPEND && diagnostic.function == 2);
+    /* Bit16 is still outside both current root and suspension contracts. */
+    node.flags = XR_XIR_CALLABLE_ROOT_UNRESOLVED | 16u; diagnostic = (XrXirDiagnostic){0};
+    CHECK(xir_fixture_check(&effect_context, &built, &checked, &diagnostic) == XR_XIR_BAD_TYPE && !checked);
+    CHECK(diagnostic.status == XR_XIR_BAD_TYPE);
+    /* Legacy 0 and 1 each lack the mandatory independent root upper. */
+    const uint32_t legacy_flags[] = {0u, 1u};
+    for (uint32_t i = 0; i < 2; ++i) {
+        node.flags = legacy_flags[i]; diagnostic = (XrXirDiagnostic){0};
+        CHECK(xir_fixture_check(&effect_context, &built, &checked, &diagnostic) == XR_XIR_BAD_TYPE && !checked);
+        CHECK(diagnostic.status == XR_XIR_BAD_TYPE);
+    }
     effect_artifact_free(base);
 }
 static void effect_mixed_callable_witness(void) {
     XrXirArtifact *base = effect_fixture(false), *checked = NULL;
     XrXirModule built = *xr_xir_compile_artifact_module(base); built.stage = XR_XIR_BUILT;
     XrXirTypeNode nodes[2] = {built.types->nodes[0], built.types->nodes[0]};
-    nodes[1].flags = XR_XIR_CALLABLE_NO_SUSPEND;
+    nodes[1].flags = XR_XIR_CALLABLE_ROOT_UNRESOLVED | XR_XIR_CALLABLE_NO_SUSPEND;
     XrXirTypes types = {nodes, 2, NULL, NULL}; built.types = &types;
     XrXirFunction functions[8]; memcpy(functions, built.functions, sizeof(functions)); built.functions = functions;
     XrXirType parameters[] = {(XrXirType)257, (XrXirType)256};
@@ -448,7 +468,7 @@ static void effect_mixed_callable_witness(void) {
     XrXirBlock block = {0, 3, 0, 0};
     functions[2].parameters = parameters; functions[2].parameter_count = 2;
     functions[2].instructions = ops; functions[2].instruction_count = 3; functions[2].blocks = &block;
-    CHECK(xr_xir_compile_check(&effect_context, &built, &checked, NULL) == XR_XIR_OK);
+    CHECK(xir_fixture_check(&effect_context, &built, &checked, NULL) == XR_XIR_OK);
     XrXirEffects *effects = NULL;
     CHECK(effect_analyze(checked, &effects) == XR_XIR_OK);
     effect_expect(effects, 2, XR_XIR_EFFECT_UNKNOWN, XR_XIR_EFFECT_UNKNOWN);
@@ -460,8 +480,8 @@ static void effect_mixed_callable_witness(void) {
 static void effect_callable_weakening(void) {
     XrXirCallableParameter parameters[2] = {{XR_XIR_I64, 0}, {XR_XIR_I64, 0}};
     XrXirTypeNode nodes[2] = {
-        {XR_XIR_TYPE_CALLABLE, XR_XIR_UNIT, &parameters[0], 1, XR_XIR_I64, 0, 0, {0}},
-        {XR_XIR_TYPE_CALLABLE, XR_XIR_UNIT, &parameters[1], 1, XR_XIR_I64, XR_XIR_CALLABLE_NO_SUSPEND, 0, {0}}};
+        {XR_XIR_TYPE_CALLABLE, XR_XIR_UNIT, &parameters[0], 1, XR_XIR_I64, XR_XIR_CALLABLE_ROOT_UNRESOLVED, 0, {0}},
+        {XR_XIR_TYPE_CALLABLE, XR_XIR_UNIT, &parameters[1], 1, XR_XIR_I64, XR_XIR_CALLABLE_ROOT_UNRESOLVED | XR_XIR_CALLABLE_NO_SUSPEND, 0, {0}}};
     XrXirTypes types = {nodes, 2, NULL, NULL};
     XrXirType source = (XrXirType)257;
     XrXirInstruction ops[] = {
@@ -471,7 +491,7 @@ static void effect_callable_weakening(void) {
     XrXirFunction function = {"weaken", 6, &source, 1, (XrXirType)256, &block, 1, ops, 2, NULL, 0};
     XrXirModule module = {XR_XIR_BUILT, &function, 1, NULL, NULL, &types, NULL, XR_XIR_PROGRAM, NULL};
     XrXirArtifact *checked = NULL;
-    CHECK(xr_xir_compile_check(&effect_context, &module, &checked, NULL) == XR_XIR_OK);
+    CHECK(xir_fixture_check(&effect_context, &module, &checked, NULL) == XR_XIR_OK);
     effect_artifact_free(checked); checked = NULL;
     EffectMark mark=effect_mark();
     for (uint64_t units=1; units<=2; ++units) {
@@ -483,12 +503,12 @@ static void effect_callable_weakening(void) {
     }
     for (unsigned bad = 0; bad < 6; ++bad) {
         source = bad == 0 ? (XrXirType)256 : (XrXirType)257;
-        nodes[0].flags = bad == 1 || bad == 5 ? XR_XIR_CALLABLE_NO_SUSPEND : 0;
-        nodes[1].flags = bad == 5 ? 0 : XR_XIR_CALLABLE_NO_SUSPEND;
+        nodes[0].flags = XR_XIR_CALLABLE_ROOT_UNRESOLVED | (bad == 1 || bad == 5 ? XR_XIR_CALLABLE_NO_SUSPEND : 0);
+        nodes[1].flags = XR_XIR_CALLABLE_ROOT_UNRESOLVED | (bad == 5 ? 0 : XR_XIR_CALLABLE_NO_SUSPEND);
         nodes[0].result = bad == 2 ? XR_XIR_BOOL : XR_XIR_I64;
         parameters[0].type = bad == 3 ? XR_XIR_BOOL : XR_XIR_I64;
         nodes[0].parameter_count = bad == 4 ? 0 : 1;
-        CHECK(xr_xir_compile_check(&effect_context, &module, &checked, NULL) != XR_XIR_OK && !checked);
+        CHECK(xir_fixture_check(&effect_context, &module, &checked, NULL) != XR_XIR_OK && !checked);
     }
 }
 static void effect_failure_outputs(void) {

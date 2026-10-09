@@ -8,6 +8,7 @@
  */
 #ifndef XIR_COMPILE_PROGRAM_OWNER_CASES_H
 #define XIR_COMPILE_PROGRAM_OWNER_CASES_H
+#include "xir_construction_fixture.h"
 #include "xir_compile_program_fixture.h"
 #include "xir_class_owned_fixture.h"
 static void program_lifetime(void) {
@@ -122,7 +123,7 @@ static XrXirArtifact *program_method_lowered(const XrXirCompileContext *context,
     fixture.identities[2].method_kind = method_kind;
     const XrXirTarget target = {XR_XIR_ARCH_X86_64, XR_XIR_VALUE_ABI_VERSION};
     XrXirArtifact *checked = NULL, *closed = NULL, *lowered = NULL;
-    CHECK(xr_xir_compile_check(context, &fixture.module, &checked, NULL) == XR_XIR_OK);
+    CHECK(xir_fixture_check(context, &fixture.module, &checked, NULL) == XR_XIR_OK);
     CHECK(xr_xir_compile_specialize(checked, &closed, NULL) == XR_XIR_OK);
     CHECK(xr_xir_compile_lower(closed, &target, &lowered, NULL) == XR_XIR_OK);
     xr_xir_compile_artifact_free(checked);
@@ -188,8 +189,10 @@ static void program_method_kind_match(void) {
         XrCompileResourceStats before = stats(&context);
         XrXirStatus matched = xr_xir_compile_program_match(&context, &altered,
             altered.proof.layouts, lowered[side]);
+        XrXirProgramPermissions *permissions = NULL;
         XrXirStatus proof = xr_xir_compile_program_proof_verify(&context, &altered,
-            &altered.proof);
+            &altered.proof, &permissions);
+        CHECK(!permissions);
         program = NULL;
         XrXirStatus sealed = xr_xir_compile_program_seal(&context, &altered, &program);
         bool empty = !program;

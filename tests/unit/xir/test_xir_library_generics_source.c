@@ -67,13 +67,14 @@ int main(int argc,char **argv) {
     for(unsigned mode=0;mode<4;++mode){
         LibraryCompileOwner owner={0};CHECK(library_compile_owner_new(&owner,&library_compile_limits)==XR_XIR_OK);
         XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_SCRIPT,NULL,XR_GENERIC_LIBRARY_WORK};
-        const char *names[]={"alpha.xr","beta.xr"};XrXirCheckedPacket packets[2]={{0}};XrXirLibraryInput inputs[2]={{0}};
+        const char *names[]={"alpha.xr","beta.xr"};XrXirCheckedPacket packets[2]={{0}};XrXirLibraryInput inputs[2]={{0}};XrXirLibraryModuleInput bindings[2]={{0}};
         for(unsigned i=0;i<2;++i){
             char *id=NULL;CHECK(xr_compile_module_identity_from_logical(owner.context.resources,&authority,names[i],&id)==XR_MODULE_OK);
             XrXirArtifact *checked=NULL;CHECK(generic_library_fixture(&owner.context,id,i==0,false,&checked)==XR_XIR_OK);
             CHECK(xr_xir_compile_checked_write(checked,&packets[i],NULL)==XR_XIR_OK);
             xr_xir_compile_artifact_free(checked);
-            inputs[i]=(XrXirLibraryInput){authority,names[i],packets[i].bytes,packets[i].length,{0}};
+            bindings[i]=(XrXirLibraryModuleInput){authority,names[i]};
+            inputs[i]=(XrXirLibraryInput){packets[i].bytes,packets[i].length,{0}, &bindings[i],1};
             xr_sha256(packets[i].bytes,packets[i].length,inputs[i].sha256);
             if(!i){XrXirArtifact *bad=NULL;CHECK(generic_library_fixture(&owner.context,id,true,true,&bad)==XR_XIR_BAD_TYPE&&!bad);}
             if(mode==0&&!i)for(unsigned family=0;family<3;++family){
@@ -83,17 +84,26 @@ int main(int argc,char **argv) {
                 CHECK(status==XR_XIR_OK&&unsupported);
                 XrXirCheckedPacket packet={0};CHECK(xr_xir_compile_checked_write(unsupported,&packet,NULL)==XR_XIR_OK);
                 xr_xir_compile_artifact_free(unsupported);
-                XrXirLibraryInput rejected_input={authority,names[i],packet.bytes,packet.length,{0}};
+                XrXirLibraryInput rejected_input={packet.bytes,packet.length,{0}, (XrXirLibraryModuleInput[]){{authority,names[i]}},1};
                 xr_sha256(packet.bytes,packet.length,rejected_input.sha256);
-                XrXirLibraryCatalog *rejected_catalog=NULL;
-                CHECK(xr_xir_compile_library_catalog_new(&owner.context,&rejected_input,1,&rejected_catalog)==XR_XIR_BAD_STAGE&&!rejected_catalog);
+                XrXirLibraryCatalog *typed_catalog=NULL;
+                CHECK(xr_xir_compile_library_catalog_new_v2(&owner.context,&rejected_input,1,&typed_catalog)==XR_XIR_OK&&typed_catalog);
                 xr_xir_compile_checked_packet_free(&packet);
-                printf("genuine Checked Library family%u Catalog BAD_STAGE empty-out PASS\n",family);
+                size_t typed_count=0;
+                const XrModuleResourceBinding *typed=xr_xir_compile_library_catalog_resources_v2(typed_catalog,&typed_count);
+                CHECK(typed&&typed_count==1&&typed->checked);
+                const XrXirTypes *owned_types=xr_xir_compile_artifact_module(typed->checked)->types;
+                CHECK(owned_types&&xr_xir_compile_artifact_construction(typed->checked));
+                if(!family)CHECK(owned_types->count==1&&owned_types->nodes[0].kind==XR_XIR_TYPE_ARRAY&&owned_types->nodes[0].element==XR_XIR_I64);
+                else CHECK(owned_types->interfaces&&owned_types->interfaces->count==1&&owned_types->interfaces->declarations[0].name.length==8&&
+                    !memcmp(owned_types->interfaces->declarations[0].name.bytes,"Boundary",8));
+                xr_xir_compile_library_catalog_free(typed_catalog);
+                printf("genuine Checked Library family%u owned typed Catalog producer-death PASS\n",family);
             }
             xr_compile_resources_free(id);
         }
         if(mode&1){XrXirLibraryInput swap=inputs[0];inputs[0]=inputs[1];inputs[1]=swap;}
-        XrXirLibraryCatalog *catalog=NULL;CHECK(xr_xir_compile_library_catalog_new(&owner.context,inputs,2,&catalog)==XR_XIR_OK);
+        XrXirLibraryCatalog *catalog=NULL;CHECK(xr_xir_compile_library_catalog_new_v2(&owner.context,inputs,2,&catalog)==XR_XIR_OK);
         for(unsigned i=0;i<2;++i){memset(packets[i].bytes,0,packets[i].length);xr_xir_compile_checked_packet_free(&packets[i]);}
         char program[4096];CHECK(snprintf(program,sizeof(program),"%s%s%s",
             mode&2?"fn prefix()->i64{return 99;}\n":"",imports[mode&1],body)>0);

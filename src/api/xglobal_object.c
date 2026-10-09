@@ -35,17 +35,19 @@ XrGlobalObject *xr_global_object_create(XrVMRuntime *isolate) {
     global->isolate = isolate;
     global->registered_class_count = 0;
 
-    global->properties = xr_hashmap_new();
-    if (global->properties == NULL) {
+    /* The map copies this policy; its context has process lifetime. */
+    XrOsIoPolicy policy = xr_os_io_system_policy();
+    global->properties = NULL;
+    global->functions = NULL;
+    if (xr_hashmap_owned_new(&policy, &global->properties) != XR_OS_IO_OK) {
         xr_log_warning("global", "global_object_create: failed to create properties map");
         xr_free(global);
         return NULL;
     }
 
-    global->functions = xr_hashmap_new();
-    if (global->functions == NULL) {
+    if (xr_hashmap_owned_new(&policy, &global->functions) != XR_OS_IO_OK) {
         xr_log_warning("global", "global_object_create: failed to create functions map");
-        xr_hashmap_free(global->properties);
+        xr_hashmap_owned_free(global->properties);
         xr_free(global);
         return NULL;
     }
@@ -57,15 +59,15 @@ void xr_global_object_destroy(XrGlobalObject *global) {
     if (global == NULL)
         return;
 
-    /* xr_hashmap_free only frees the entries array and map struct.
+    /* xr_hashmap_owned_free only frees the entries array and map struct.
     ** Keys are borrowed const strings (TYPE_NAME_* macros), not owned.
     ** Values are class/function pointers owned by isolate core. */
     if (global->properties) {
-        xr_hashmap_free(global->properties);
+        xr_hashmap_owned_free(global->properties);
         global->properties = NULL;
     }
     if (global->functions) {
-        xr_hashmap_free(global->functions);
+        xr_hashmap_owned_free(global->functions);
         global->functions = NULL;
     }
     xr_free(global);
@@ -78,7 +80,7 @@ bool xr_global_register_class(XrGlobalObject *global, const char *name, XrClass 
         return false;
     }
 
-    if (!xr_hashmap_set(global->properties, name, (void *) klass)) {
+    if (xr_hashmap_owned_set(global->properties, name, (void *) klass) != XR_OS_IO_OK) {
         return false;
     }
 

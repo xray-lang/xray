@@ -1,0 +1,2 @@
+import "./private" as hidden
+fn main()->i64{const f=hidden.hidden;return f()}

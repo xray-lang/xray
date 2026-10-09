@@ -1,3 +1,4 @@
+#include "xir_construction_fixture.h"
 /*
  * xray - Lightweight typed scripting with native concurrency
  * https://www.xray-lang.org
@@ -10,7 +11,7 @@
 #define XIR_ATOMIC_INSTRUCTION_REJECT_CASES_H
 static void atomic_instruction_expected(LibraryCompileOwner *owner,AtomicInstructionFixture *f,XrXirStatus expected) {
     XrCompileResourceStats before=library_compile_stats(&owner->context);XrXirArtifact *out=NULL;
-    XrXirDiagnostic diagnostic={0};XrXirStatus status=xr_xir_compile_check(&owner->context,&f->module,&out,&diagnostic);
+    XrXirDiagnostic diagnostic={0};XrXirStatus status=xir_fixture_check(&owner->context, &f->module, &out, &diagnostic);
     if(status!=expected)fprintf(stderr,"atomic graph expected%u actual%u f%u b%u i%u\n",expected,status,
         diagnostic.function,diagnostic.block,diagnostic.instruction);
     CHECK(status==expected);if(expected!=XR_XIR_OK)CHECK(!out);else CHECK(out);
@@ -46,7 +47,7 @@ static void atomic_ordering_rejections(LibraryCompileOwner *owner,char *name) {
         atomic_instruction_expected(owner,&f,XR_XIR_OK);
     }
     atomic_instruction_fixture(&f,name,XR_XIR_ATOMIC_LOAD,XR_XIR_I64,0,4);
-    XrXirArtifact *checked=NULL;CHECK(xr_xir_compile_check(&owner->context,&f.module,&checked,NULL)==XR_XIR_OK);
+    XrXirArtifact *checked=NULL;CHECK(xir_fixture_check(&owner->context, &f.module, &checked, NULL)==XR_XIR_OK);
     XrXirCheckedPacket packet={0};CHECK(xr_xir_compile_checked_write(checked,&packet,NULL)==XR_XIR_OK);
     uint8_t bytes[4096];CHECK(packet.length<=sizeof(bytes));size_t offset=atomic_method_instruction_start(packet.bytes,packet.length);
     CHECK(atomic_test_u32(packet.bytes,packet.length,offset)==XR_XIR_ENUM_NEW);
@@ -54,7 +55,7 @@ static void atomic_ordering_rejections(LibraryCompileOwner *owner,char *name) {
         ordering_packet_digest(bytes,packet.length);XrXirArtifact *out=NULL,*occupied=checked;
         XrCompileResourceStats before=library_compile_stats(&owner->context);
         CHECK(xr_xir_compile_checked_read(&owner->context,bytes,packet.length,&out,NULL)==XR_XIR_BAD_TYPE&&!out);
-        CHECK(xr_xir_compile_checked_read(&owner->context,bytes,packet.length,&occupied,NULL)==XR_XIR_BAD_TYPE&&occupied==checked);
+        CHECK(xr_xir_compile_checked_read(&owner->context,bytes,packet.length,&occupied,NULL)==XR_XIR_BAD_STRUCTURE&&occupied==checked);
         CHECK(library_compile_stats(&owner->context).live_bytes==before.live_bytes);
     }
     xr_xir_compile_checked_packet_free(&packet);xr_xir_compile_artifact_free(checked);

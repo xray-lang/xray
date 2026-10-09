@@ -29,7 +29,7 @@ static bool source_atomic_construct(SourceContext *ctx,AstNode *node,AstNode *in
     if (!source_atomic_prove(ctx,node,initial.type,XR_XIR_CONSTRAINT_ATOMIC_VALUE) ||
         !source_intern_type(ctx,(XrXirTypeNode){.kind=XR_XIR_TYPE_ATOMIC,.element=initial.type},&type)) return false;
     return source_recipe_record(ctx,(XrXirInstruction){.op=XR_XIR_ATOMIC_NEW,.type=type,.args={initial.id,0}},value) &&
-        source_query_target_reference(ctx,source_query_range(ctx,node,NULL),ctx->atomic_declaration,XR_XIR_SOURCE_CALL);
+        source_query_target_token_reference(ctx,node,ctx->atomic_declaration,XR_XIR_SOURCE_CALL);
 }
 static bool source_atomic_inferred_construct(SourceContext *ctx,AstNode *node,
     SourceExpectedType context,SourceValue *value) {
@@ -37,12 +37,12 @@ static bool source_atomic_inferred_construct(SourceContext *ctx,AstNode *node,
     if (call->type_arg_count<0 || call->type_arg_count>1 || call->default_arg_count || call->arg_count!=1 || !call->arguments ||
         (call->arg_accesses && call->arg_accesses[0]!=XR_CALL_ARG_PLAIN))
         return source_fail(ctx,node,XR_XIR_BAD_TYPE,"Atomic construction requires one ordinary initial value");
-    SourceExpectedType expected={false,XR_XIR_UNIT,false};
+    SourceExpectedType expected={false,XR_XIR_UNIT,false, false};
     if (call->type_arg_count) {
         if (!call->type_args || !source_type(ctx,call->type_args[0],&expected.type)) return false;
         expected.present=true;
     } else if (context.present && xr_xir_type_is_atomic(&ctx->types,context.type))
-        expected=(SourceExpectedType){true,xr_xir_atomic_element(&ctx->types,context.type),false};
+        expected=(SourceExpectedType){true,xr_xir_atomic_element(&ctx->types,context.type),false, false};
     return source_atomic_construct(ctx,node,call->arguments[0],expected,value);
 }
 static bool source_atomic_explicit_construct(SourceContext *ctx,AstNode *node,SourceValue *value) {
@@ -52,7 +52,7 @@ static bool source_atomic_explicit_construct(SourceContext *ctx,AstNode *node,So
         return source_fail(ctx,node,XR_XIR_BAD_TYPE,"Atomic<T> construction requires one element type and initial value");
     XrXirType element=XR_XIR_UNIT;
     return source_type(ctx,call->type_args[0],&element) &&
-        source_atomic_construct(ctx,node,call->arguments[0],(SourceExpectedType){true,element,false},value);
+        source_atomic_construct(ctx,node,call->arguments[0],(SourceExpectedType){true,element,false, false},value);
 }
 static XrXirOp source_atomic_operation(XrNativeOperation operation) {
     switch (operation) {
@@ -118,7 +118,7 @@ static bool source_atomic_member_reference(SourceContext *ctx,AstNode *node,
         if (!record->type.known) return source_fail(ctx,node,XR_XIR_BAD_TYPE,"Atomic result schema is not admitted");
         record->generic_parent=ctx->atomic_declaration;record->generic_parent_count=1;
     }
-    return source_query_target_reference(ctx,source_query_range(ctx,node,NULL),ctx->atomic_members[index],XR_XIR_SOURCE_CALL);
+    return source_query_target_token_reference(ctx,node,ctx->atomic_members[index],XR_XIR_SOURCE_CALL);
 }
 static bool source_atomic_call(SourceContext *ctx,AstNode *node,SourceValue receiver,SourceValue *value) {
     CallExprNode *call=&node->as.call_expr;
@@ -142,12 +142,12 @@ static bool source_atomic_call(SourceContext *ctx,AstNode *node,SourceValue rece
         if (call->arg_accesses && call->arg_accesses[p]!=XR_CALL_ARG_PLAIN)
             return source_fail(ctx,node,XR_XIR_BAD_TYPE,"Atomic method operands are ordinary values");
         if (p<required) {
-            if (!source_plan_expression(ctx,call->arguments[p],(SourceExpectedType){true,element,false},&operands[p+1])) return false;
+            if (!source_plan_expression(ctx,call->arguments[p],(SourceExpectedType){true,element,false, false},&operands[p+1])) return false;
             if (operands[p+1].type!=element) return source_fail(ctx,node,XR_XIR_BAD_TYPE,"Atomic method operand must have the exact element type");
         } else {
             XrXirType expected=XR_XIR_UNIT;
             if (!source_ordering_type(ctx,&expected) || !source_nullable_type(ctx,expected,&expected) ||
-                !source_plan_expression(ctx,call->arguments[p],(SourceExpectedType){true,expected,false},&operands[p+1])) return false;
+                !source_plan_expression(ctx,call->arguments[p],(SourceExpectedType){true,expected,false, false},&operands[p+1])) return false;
             XrXirType ordering=operands[p+1].type;
             if (!xr_xir_type_is_nullable(&ctx->types,ordering) ||
                 !xr_xir_nominal_native_ordering(&ctx->types,xr_xir_nullable_element(&ctx->types,ordering)))

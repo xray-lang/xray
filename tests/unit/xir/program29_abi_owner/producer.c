@@ -1,4 +1,5 @@
 /* Real Built -> Checked -> specialization -> Lowered -> generated C producer. */
+#include "../xir_construction_fixture.h"
 #include "xir/xxir_emit_c.h"
 #include "xir/xxir_generic.h"
 #include "xir/xxir_nominal.h"
@@ -29,7 +30,7 @@ int main(int argc,char **argv) {
     const XrXirModule module={.stage=XR_XIR_BUILT,.functions=functions,.function_count=2,
         .declarations=&declarations,.types=&types,.linkage_kind=XR_XIR_PROGRAM};
     XrXirArtifact *checked=NULL,*closed=NULL,*lowered=NULL;
-    CHECK(xr_xir_compile_check(&context,&module,&checked,NULL)==XR_XIR_OK);
+    CHECK(xir_fixture_check(&context, &module, &checked, NULL)==XR_XIR_OK);
     CHECK(xr_xir_compile_specialize(checked,&closed,NULL)==XR_XIR_OK);
     const XrXirTarget target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};
     CHECK(xr_xir_compile_lower(closed,&target,&lowered,NULL)==XR_XIR_OK);

@@ -622,10 +622,10 @@ void xr_runtime_error(XrVMRuntime *isolate, const char *format, ...) {
             if (line > 0 && proto->source_file) {
                 // Try to get source code line
                 const char *src_line =
-                    xr_source_cache_get_line(source_cache, proto->source_file, line);
+                    xr_runtime_source_cache_get_line(source_cache, proto->source_file, line);
                 if (src_line) {
                     int line_len =
-                        xr_source_cache_get_line_length(source_cache, proto->source_file, line);
+                        xr_runtime_source_cache_get_line_length(source_cache, proto->source_file, line);
                     fprintf(stderr, "   |\n");
                     fprintf(stderr, " \033[1;34m%d\033[0m | %.*s\n", line, line_len, src_line);
                     fprintf(stderr, "   |\n");

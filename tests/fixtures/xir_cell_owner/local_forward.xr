@@ -1,0 +1,4 @@
+fn bump(value:ref i64)->i64 { value += 1; return value }
+fn forward(value:ref i64)->i64 { return bump(ref value) }
+export fn run()->i64 { var local:i64 = 40; forward(ref local); return forward(ref local) }
+fn main()->i64 { return run() }

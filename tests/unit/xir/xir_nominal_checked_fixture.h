@@ -8,6 +8,7 @@
  */
 #ifndef XIR_NOMINAL_CHECKED_FIXTURE_H
 #define XIR_NOMINAL_CHECKED_FIXTURE_H
+#include "xir_construction_fixture.h"
 #include "xir_checked_fixture.h"
 #include "xir/xxir_generic.h"
 #include "xir_nominal_fixture.h"
@@ -32,7 +33,7 @@ static XrXirArtifact *nominal_checked_fixture(const XrXirCompileContext *context
     if (mode == 3) { identities[4].nominal_owner = 1; identities[4].method_kind = XR_XIR_MEMBER_HELPER; }
     XrXirDeclarations declarations = *built.declarations;
     declarations.functions = identities; built.declarations = &declarations;
-    CHECK(xr_xir_compile_check(context, &built, &checked, NULL) == XR_XIR_OK && checked);
+    CHECK(xir_fixture_check(context, &built, &checked, NULL) == XR_XIR_OK && checked);
     memset(&f, 0xCC, sizeof(f)); memset(nodes, 0xCC, sizeof(nodes)); memset(arguments, 0xCC, sizeof(arguments));
     xr_xir_compile_artifact_free(base);base=NULL;
     CHECK(xr_xir_compile_artifact_verify(checked, NULL) == XR_XIR_OK);

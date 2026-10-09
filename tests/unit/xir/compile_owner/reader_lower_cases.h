@@ -6,13 +6,14 @@
  *
  * reader_lower_cases.h - Immediate owned reader transition and fresh public checks
  */
+#include "../xir_construction_fixture.h"
 #include "base/xsha256.h"
 
 static const XrCompileResourceLimits reader_lower_caps = {67108864,8388608,128000000};
 static XrXirStatus reader_lower_packet(const XrXirCompileContext *context, unsigned kind,
     XrXirCheckedPacket *packet) {
     XrXirArtifact *checked = NULL, *closed = NULL;
-    XrXirStatus status = kind ? generic_built(context,&checked) : xr_xir_compile_check(context,&module,&checked,NULL);
+    XrXirStatus status = kind ? generic_built(context,&checked) : xir_fixture_check(context, &module, &checked, NULL);
     if (status == XR_XIR_OK && kind) status = xr_xir_compile_specialize(checked,&closed,NULL);
     if (status == XR_XIR_OK) status = xr_xir_compile_checked_write(kind ? closed : checked,packet,NULL);
     xr_xir_compile_artifact_free(closed); xr_xir_compile_artifact_free(checked);
@@ -21,21 +22,23 @@ static XrXirStatus reader_lower_packet(const XrXirCompileContext *context, unsig
 static XrXirStatus reader_lower_pipeline(XrCompileResources *owner, unsigned kind) {
     XrXirCompileContext context = {owner,xr_xir_compile_default_limits()};
     XrXirCheckedPacket packet = {0};
-    XrXirArtifact *sentinel = (XrXirArtifact *)&context, *lowered = sentinel;
+    XrXirArtifact *lowered = NULL;
     XrXirStatus status = reader_lower_packet(&context,kind,&packet);
     if (status == XR_XIR_OK)
         status = xr_xir_compile_checked_read_lower(&context,packet.bytes,packet.length,&target,&lowered,NULL);
-    if (status != XR_XIR_OK) CHECK(lowered == sentinel);
+    if (status != XR_XIR_OK) CHECK(!lowered);
     else {
-        CHECK(lowered && lowered != sentinel && lowered->context.resources == owner);
+        CHECK(lowered && lowered->context.resources == owner);
         CHECK(lowered->module.stage == XR_XIR_LOWERED);
         CHECK(lowered->checked_packet.length == packet.length);
         CHECK(!memcmp(lowered->checked_packet.bytes,packet.bytes,packet.length));
+        /* The decoded owner must survive the original packet producer. */
+        xr_xir_compile_checked_packet_free(&packet);
         if (!kind) CHECK(lowered->module.functions[0].instructions[0].immediate == 42);
         else CHECK(lowered->module.provenance && lowered->module.provenance->source->module.function_count == 2);
         status = xr_xir_compile_artifact_verify(lowered,NULL);
     }
-    if (lowered != sentinel) xr_xir_compile_artifact_free(lowered);
+    xr_xir_compile_artifact_free(lowered);
     xr_xir_compile_checked_packet_free(&packet);
     CHECK(live_count == 1); (void)stats(owner);
     return status;
@@ -92,6 +95,45 @@ static void reader_lower_equal(const XrXirArtifact *a, const XrXirArtifact *b) {
         if (u->owned_count) CHECK(!memcmp(u->owned_offsets,v->owned_offsets,(size_t)u->owned_count * sizeof(*u->owned_offsets)));
     }
 }
+/* Every occupied slot holds a live Artifact, not an invalid pointer sentinel.
+ * Rejection precedes allocation, work charging, and any change to that owner. */
+static void reader_lower_occupied(const XrXirCompileContext *context,
+    const XrXirCheckedPacket *packet, XrXirArtifact *checked) {
+    const XrXirConstruction *facts=xr_xir_compile_artifact_construction(checked);
+    const XrXirModule *view=xr_xir_compile_artifact_module(checked);
+    CHECK(facts && !xr_xir_compile_construction_count(facts));
+    for (unsigned operation=0;operation<7;++operation) {
+        XrXirArtifact *output=checked;
+        XrCompileResourceStats before=stats(context->resources);
+        size_t calls=attempts,blocks=live_count,bytes=live;
+        XrXirDiagnostic diagnostic={0};XrXirStatus status;
+        if (!operation) status=xr_xir_compile_check_v2(context,&module,facts,&output,&diagnostic);
+        else if (operation==1) status=xr_xir_compile_recheck_v2(context,view,facts,&output,&diagnostic);
+        else if (operation==2) status=xr_xir_compile_lower(checked,&target,&output,&diagnostic);
+        else if (operation==3) status=xr_xir_compile_checked_read_lower(context,packet->bytes,packet->length,&target,&output,&diagnostic);
+        else if (operation==4) {
+            status=xr_xir_compile_checked_read(context,packet->bytes,packet->length,&output,&diagnostic);
+            CHECK(status==XR_XIR_BAD_STRUCTURE && output==checked);
+            status=xr_xir_compile_checked_read(context,(const void *)(uintptr_t)1,SIZE_MAX,&output,&diagnostic);
+        }
+        else if (operation==5) status=xr_xir_compile_specialize(checked,&output,&diagnostic);
+        else {
+            status=XR_XIR_BAD_STRUCTURE;
+            for (unsigned fields=0;fields<3;++fields) {
+                XrXirCheckedPacket occupied={fields==1?NULL:packet->bytes,fields==2?0:packet->length};
+                XrXirCheckedPacket saved=occupied;
+                status=xr_xir_compile_checked_write(checked,&occupied,&diagnostic);
+                CHECK(status==XR_XIR_BAD_STRUCTURE && occupied.bytes==saved.bytes && occupied.length==saved.length);
+            }
+        }
+        XrCompileResourceStats after=stats(context->resources);
+        CHECK(status==XR_XIR_BAD_STRUCTURE && diagnostic.status==XR_XIR_BAD_STRUCTURE && output==checked);
+        CHECK(attempts==calls && live_count==blocks && live==bytes);
+        CHECK(after.allocated_bytes==before.allocated_bytes && after.live_bytes==before.live_bytes &&
+            after.peak_bytes==before.peak_bytes && after.work==before.work);
+    }
+    CHECK(xr_xir_compile_artifact_verify(checked,NULL)==XR_XIR_OK);
+}
 static void reader_lower_canonical(void) {
     for (unsigned kind = 0; kind < 2; ++kind) {
         reset(SIZE_MAX); XrCompileResources *owner = NULL;
@@ -101,28 +143,29 @@ static void reader_lower_canonical(void) {
         CHECK(reader_lower_packet(&c,kind,&packet) == XR_XIR_OK);
         CHECK(xr_xir_compile_checked_read_lower(&c,packet.bytes,packet.length,&target,&a,NULL) == XR_XIR_OK);
         CHECK(xr_xir_compile_checked_read(&c,packet.bytes,packet.length,&decoded,NULL) == XR_XIR_OK);
+        reader_lower_occupied(&c,&packet,decoded);
         CHECK(xr_xir_compile_lower(decoded,&target,&b,NULL) == XR_XIR_OK); reader_lower_equal(a,b);
         CHECK(a->checked_packet.length == packet.length && !memcmp(a->checked_packet.bytes,packet.bytes,packet.length));
         XrXirInstruction *instruction = (XrXirInstruction *)decoded->module.functions[0].instructions;
         XrXirOp saved = instruction->op; instruction->op = XR_XIR_INVALID;
-        XrXirArtifact *out = decoded; uint64_t before = stats(owner).live_bytes;
-        CHECK(xr_xir_compile_lower(decoded,&target,&out,NULL) == XR_XIR_BAD_STRUCTURE && out == decoded);
-        XrXirCheckedPacket refused = {packet.bytes,packet.length};
+        XrXirArtifact *out = NULL; uint64_t before = stats(owner).live_bytes;
+        CHECK(xr_xir_compile_lower(decoded,&target,&out,NULL) == XR_XIR_BAD_STRUCTURE && !out);
+        XrXirCheckedPacket refused = {0};
         CHECK(xr_xir_compile_checked_write(decoded,&refused,NULL) == XR_XIR_BAD_STRUCTURE);
-        CHECK(refused.bytes == packet.bytes && refused.length == packet.length);
+        CHECK(!refused.bytes && !refused.length);
         CHECK(stats(owner).live_bytes == before); instruction->op = saved;
         if (kind) {
             XrXirArtifact *source = decoded->module.provenance->source;
             instruction = (XrXirInstruction *)source->module.functions[0].instructions;
             saved = instruction->op; instruction->op = XR_XIR_INVALID;
-            CHECK(xr_xir_compile_lower(decoded,&target,&out,NULL) == XR_XIR_BAD_STRUCTURE && out == decoded);
+            CHECK(xr_xir_compile_lower(decoded,&target,&out,NULL) == XR_XIR_BAD_STRUCTURE && !out);
             CHECK(xr_xir_compile_checked_write(decoded,&refused,NULL) == XR_XIR_BAD_STRUCTURE);
-            CHECK(refused.bytes == packet.bytes && refused.length == packet.length);
+            CHECK(!refused.bytes && !refused.length);
             CHECK(stats(owner).live_bytes == before); instruction->op = saved;
         }
         decoded->target.architecture = target.architecture;
         CHECK(xr_xir_compile_checked_write(decoded,&refused,NULL) == XR_XIR_BAD_LAYOUT);
-        CHECK(refused.bytes == packet.bytes && refused.length == packet.length);
+        CHECK(!refused.bytes && !refused.length);
         CHECK(stats(owner).live_bytes == before); decoded->target.architecture = 0;
         out = NULL; CHECK(xr_xir_compile_lower(decoded,&target,&out,NULL) == XR_XIR_OK);
         reader_lower_equal(a,out); xr_xir_compile_artifact_free(out);
@@ -146,28 +189,28 @@ static XrXirStatus reader_lower_library(const XrXirCompileContext *context, XrXi
     const XrXirFunctionIdentity identities[] = {{0},{.exported=1}};
     const XrXirDeclarations declarations = {&source,1,identities,NULL,0,NULL,0,UINT32_MAX,UINT32_MAX,NULL};
     const XrXirModule library = {XR_XIR_BUILT,functions,2,&declarations,NULL,NULL,NULL,XR_XIR_LIBRARY,NULL};
-    return xr_xir_compile_check(context,&library,output,NULL);
+    return xir_fixture_check(context, &library, output, NULL);
 }
 static void reader_lower_rejections(void) {
     reset(SIZE_MAX); XrCompileResources *owner = NULL;
     CHECK(xr_compile_resources_new(&reader_lower_caps,&owner) == XR_COMPILE_RESOURCE_OK);
     XrXirCompileContext c = {owner,xr_xir_compile_default_limits()};
-    XrXirArtifact *sentinel = (XrXirArtifact *)&c, *out = sentinel;
+    XrXirArtifact *out = NULL;
     XrXirCheckedPacket packet = {0}; CHECK(reader_lower_packet(&c,0,&packet) == XR_XIR_OK);
     uint64_t baseline = stats(owner).live_bytes; XrXirTarget invalid = {0};
     XrXirDiagnostic diagnostic = {0};
-    CHECK(xr_xir_compile_checked_read_lower(NULL,packet.bytes,packet.length,&target,&out,NULL) == XR_XIR_BAD_STRUCTURE && out == sentinel);
+    CHECK(xr_xir_compile_checked_read_lower(NULL,packet.bytes,packet.length,&target,&out,NULL) == XR_XIR_BAD_STRUCTURE && !out);
     CHECK(xr_xir_compile_checked_read_lower(&c,packet.bytes,packet.length,&target,NULL,NULL) == XR_XIR_BAD_STRUCTURE);
     packet.bytes[0] ^= 1;
-    CHECK(xr_xir_compile_checked_read_lower(&c,packet.bytes,packet.length,&invalid,&out,NULL) == XR_XIR_BAD_STRUCTURE && out == sentinel);
+    CHECK(xr_xir_compile_checked_read_lower(&c,packet.bytes,packet.length,&invalid,&out,NULL) == XR_XIR_BAD_STRUCTURE && !out);
     packet.bytes[0] ^= 1;
-    CHECK(xr_xir_compile_checked_read_lower(&c,packet.bytes,packet.length,&invalid,&out,NULL) == XR_XIR_BAD_LAYOUT && out == sentinel);
-    CHECK(xr_xir_compile_checked_read_lower(&c,packet.bytes,packet.length,NULL,&out,NULL) == XR_XIR_BAD_LAYOUT && out == sentinel);
+    CHECK(xr_xir_compile_checked_read_lower(&c,packet.bytes,packet.length,&invalid,&out,NULL) == XR_XIR_BAD_LAYOUT && !out);
+    CHECK(xr_xir_compile_checked_read_lower(&c,packet.bytes,packet.length,NULL,&out,NULL) == XR_XIR_BAD_LAYOUT && !out);
     /* Scalar schema: 12 module bytes, 8 name bytes, 3 counts, 16 block bytes and instruction count. */
     const size_t opcode = 64 + 12 + 8 + 12 + 16 + 4;
     CHECK(packet.length > opcode + 40 && packet.bytes[opcode] == XR_XIR_CONST_INT);
     uint8_t saved[4]; memcpy(saved,packet.bytes+opcode,4); memset(packet.bytes+opcode,0,4); reader_lower_digest(&packet);
-    CHECK(xr_xir_compile_checked_read_lower(&c,packet.bytes,packet.length,&invalid,&out,&diagnostic) == XR_XIR_BAD_STRUCTURE && out == sentinel);
+    CHECK(xr_xir_compile_checked_read_lower(&c,packet.bytes,packet.length,&invalid,&out,&diagnostic) == XR_XIR_BAD_STRUCTURE && !out);
     CHECK(diagnostic.function == 0 && diagnostic.instruction == 0);
     memcpy(packet.bytes+opcode,saved,4); reader_lower_digest(&packet);
     CHECK(stats(owner).live_bytes == baseline); xr_xir_compile_checked_packet_free(&packet);
@@ -177,7 +220,7 @@ static void reader_lower_rejections(void) {
         CHECK(xr_xir_compile_checked_write(checked,&packet,NULL) == XR_XIR_OK);
         CHECK(xr_xir_compile_checked_read(&c,packet.bytes,packet.length,&decoded,NULL) == XR_XIR_OK);
         baseline = stats(owner).live_bytes;
-        CHECK(xr_xir_compile_checked_read_lower(&c,packet.bytes,packet.length,&target,&out,NULL) == XR_XIR_BAD_STAGE && out == sentinel);
+        CHECK(xr_xir_compile_checked_read_lower(&c,packet.bytes,packet.length,&target,&out,NULL) == XR_XIR_BAD_STAGE && !out);
         CHECK(stats(owner).live_bytes == baseline);
         xr_xir_compile_artifact_free(decoded); xr_xir_compile_artifact_free(checked); xr_xir_compile_checked_packet_free(&packet);
     }

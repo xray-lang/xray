@@ -1,0 +1,16 @@
+var counter=Atomic<i64>(0)
+const fixed=Atomic<i64>(40)
+var text="seed"
+export fn next()->i64 {
+    const n=counter.fetchAdd(1,Ordering.SeqCst)+1
+    text=text+"!"
+    return n
+}
+export fn current()->i64 {return counter.load(Ordering.Acquire)}
+export fn label()->string {return text}
+export fn pure(value:i64)->i64 {return value+1}
+export fn read()->Atomic<i64> {return counter}
+export fn readParam(value:Atomic<i64>)->i64 {return value.load(Ordering.Acquire)}
+export fn fixedNext()->i64 {return fixed.fetchAdd(1,Ordering.SeqCst)+1}
+export fn rebind() {counter=Atomic<i64>(30)}
+export fn dynamicStore(value:Atomic<i64>,ordering:Ordering?) {value.store(99,ordering)}

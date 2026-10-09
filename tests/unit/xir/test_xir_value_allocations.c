@@ -19,9 +19,10 @@
 #define CHECK(c) do { if (!(c)) { fprintf(stderr, "%d: %s\n", __LINE__, #c); exit(1); } } while (0)
 #include "xir_value_compile_owner.h"
 static size_t calls, live, fail_at = SIZE_MAX;
+static bool closed_fail_all;
 
 static void *counted_malloc(size_t size) {
-    if (calls++ == fail_at)
+    if (calls++ == fail_at || closed_fail_all)
         return NULL;
     void *pointer = xr_malloc(size);
     if (pointer)
@@ -30,7 +31,7 @@ static void *counted_malloc(size_t size) {
 }
 
 static void *counted_calloc(size_t count, size_t size) {
-    if (calls++ == fail_at)
+    if (calls++ == fail_at || closed_fail_all)
         return NULL;
     void *pointer = xr_calloc(count, size);
     if (pointer)
@@ -47,7 +48,7 @@ static void counted_free(void *pointer) {
 }
 
 static void *counted_realloc(void *pointer, size_t size) {
-    if (calls++ == fail_at)
+    if (calls++ == fail_at || closed_fail_all)
         return NULL;
     bool was_null = pointer == NULL;
     void *replacement = xr_realloc(pointer, size);
@@ -225,7 +226,7 @@ static XrXirValueStatus capture_admit(void *context, const XrXirFunctionBinding 
 static XrXirTypeArena *allocation_arena(XrXirDomain *domain) {
     (void)domain;
     const XrXirTypeNode nodes[] = {
-        {.kind = XR_XIR_TYPE_CALLABLE, .result = XR_XIR_I64},
+        {.kind = XR_XIR_TYPE_CALLABLE, .result = XR_XIR_I64, .flags = XR_XIR_CALLABLE_ROOT_UNRESOLVED},
         {.kind = XR_XIR_TYPE_CELL, .element = XR_XIR_STRING},
         {.kind = XR_XIR_TYPE_CELL, .element = (XrXirType) 256},
         {.kind = XR_XIR_TYPE_CELL, .element = XR_XIR_I64},
@@ -304,7 +305,7 @@ static void arena_allocation_cases(void) {
     uint64_t bytes = xr_xir_domain_stats(domain).live_bytes;
     XrXirCallableParameter parameter = {XR_XIR_STRING, 0};
     XrXirTypeNode node = {.kind = XR_XIR_TYPE_CALLABLE, .parameters = &parameter,
-        .parameter_count = 1, .result = XR_XIR_I64};
+        .parameter_count = 1, .result = XR_XIR_I64, .flags = XR_XIR_CALLABLE_ROOT_UNRESOLVED};
     XrXirTypes types = {&node, 1, NULL, NULL};
     const XrCompileResourceLimits limits=value_compile_limits(65536,1048576,100);
     const ValueCompileProbe probe={&types,NULL,XR_XIR_UNIT,0,10};
@@ -369,6 +370,7 @@ static void deep_arena_release(void) {
     CHECK(!live && calls == allocations); fail_at = SIZE_MAX;
 }
 #include "xir_cell_allocation_cases.h"
+#include "xir_closed_domain_cases.h"
 #include "xir_array_allocation_cases.h"
 #include "xir_nominal_fixture.h"
 static void nominal_arena_allocation(void) {
@@ -662,7 +664,28 @@ static void deep_value_admission_failures(void) {
 #include "xir_storage_cursor_cases.h"
 #include "xir_storage_pack_cases.h"
 #include "xir_value_path_cases.h"
-int main(void) {
+#include "xir_closed_aggregate_cases.h"
+#include "xir_closed_thread_cases.h"
+#include "xir_cross_domain_ring_cases.h"
+#include "xir_cross_domain_extra_cases.h"
+#include "xir_foreign_write_fi_cases.h"
+#include "xir_foreign_array_fi_cases.h"
+#include "xir_array_set_callback_case.h"
+int main(int argc, char **argv) {
+    if (argc != 1) {
+        if (argc == 2 && !strcmp(argv[1], "--foreign-write-fi")) { foreign_write_fi_cases(); return 0; }
+        if (argc == 2 && !strcmp(argv[1], "--foreign-array-fi")) { foreign_array_fi_cases(); return 0; }
+        if (argc == 2 && !strcmp(argv[1], "--array-set-callback")) { array_set_callback_case(); return 0; }
+        if (argc != 4 || strcmp(argv[1], "--cross-domain-ring")) return 2;
+        unsigned mode = !strcmp(argv[2], "grow") ? 0u : !strcmp(argv[2], "alias") ? 1u :
+            !strcmp(argv[2], "spare") ? 2u : 3u;
+        unsigned order = !strcmp(argv[3], "A-B") ? 0u : !strcmp(argv[3], "B-A") ? 1u : 2u;
+        if (order >= 2) return 2;
+        if (!strcmp(argv[2], "nested")) { cross_domain_nested_case(order); return 0; }
+        if (!strcmp(argv[2], "set")) { cross_domain_set_case(order); return 0; }
+        if (mode >= 3) return 2;
+        cross_domain_ring_case(mode, order); return 0;
+    }
     value_path_cases();
     storage_pack_cases();
     storage_cursor_cases();
@@ -682,8 +705,13 @@ int main(void) {
     size_t count = calls;
     for (size_t i = 0; i < count; ++i) { fail_at = i; calls = 0; fail_sequence(); }
     fail_at = SIZE_MAX; saturation(); output_allocation(); float_output_allocation(); capture_ownership(); deep_capture_release();
-    cell_allocation_cases(); cell_cycles_and_domains(); deep_cell_release();
+    cell_allocation_cases(); cell_cycles_and_domains(); deep_cell_release(); closed_domain_cases(); closed_aggregate_cases(); closed_thread_cases();
     arena_allocation_cases(); deep_arena_release(); array_allocation_cases();
+    cross_domain_ring_cases();
+    cross_domain_extra_cases();
+    foreign_write_fi_cases();
+    foreign_array_fi_cases();
+    array_set_callback_case();
     printf("Managed allocation failures: %zu; every domain, string and activation physically released\n", count);
     CHECK(!value_compile_live && !value_compile_bytes);
     return 0;

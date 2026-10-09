@@ -1,0 +1,2 @@
+const callback:fn()->i64 = fn()->i64 { return 1 }
+export fn pure(value:i64)->i64 { return value + 1 }

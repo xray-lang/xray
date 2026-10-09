@@ -15,7 +15,7 @@ static bool source_rune_call(SourceContext *ctx,AstNode *node,bool construct,Sou
     if (call->arg_count!=1 || call->type_arg_count || !call->arguments ||
         (call->arg_accesses && call->arg_accesses[0]!=XR_CALL_ARG_PLAIN))
         return source_fail(ctx,node,XR_XIR_BAD_TYPE,"Rune conversion takes one plain value");
-    if (!source_plan_expression(ctx,call->arguments[0],(SourceExpectedType){false,XR_XIR_UNIT,false},&input)) return false;
+    if (!source_plan_expression(ctx,call->arguments[0],(SourceExpectedType){false,XR_XIR_UNIT,false, false},&input)) return false;
     if (input.type!=(construct?XR_XIR_I64:XR_XIR_RUNE))
         return source_fail(ctx,node,XR_XIR_BAD_TYPE,construct?"rune construction requires i64":"code point conversion requires rune");
     return source_recipe_record(ctx,(XrXirInstruction){construct?XR_XIR_INTEGER_TO_RUNE:XR_XIR_RUNE_TO_INTEGER,

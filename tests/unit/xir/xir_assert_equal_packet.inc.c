@@ -10,6 +10,7 @@
 #include "xir_assert_equal_golden.h"
 #include "xir_assert_equal64_golden.h"
 #include "xir_assert_equal65_golden.h"
+#include "xir_assert_panics72_golden.h"
 #include "xir_assert_atomic64_packet_rejection.h"
 static void panics_word(uint8_t *bytes,uint32_t value) {
     for (uint32_t i=0;i<4;++i) bytes[i]=(uint8_t)(value>>(i*8));
@@ -57,44 +58,45 @@ static void panics_packet_oom(const XrXirArtifact *checked) {
 static void equal_packet_gates(void) {
     XrXirArtifact *checked=panics_core_checked();XrXirCheckedPacket packet={0};
     CHECK(xr_xir_compile_checked_write(checked,&packet,NULL)==XR_XIR_OK);
-    if (packet.length!=sizeof(assert_equal65_golden) || memcmp(packet.bytes,assert_equal65_golden,packet.length)) {
+    if (packet.length!=sizeof(assert_panics72_golden) || memcmp(packet.bytes,assert_panics72_golden,packet.length)) {
         size_t at=0;
-        while (at<packet.length && at<sizeof(assert_equal65_golden) && packet.bytes[at]==assert_equal65_golden[at]) ++at;
-        fprintf(stderr,"independent Equal Core KAT length=%zu expected=%zu first=%zu\n",packet.length,sizeof(assert_equal65_golden),at);
+        while (at<packet.length && at<sizeof(assert_panics72_golden) && packet.bytes[at]==assert_panics72_golden[at]) ++at;
+        fprintf(stderr,"independent Equal Core KAT length=%zu expected=%zu first=%zu\n",packet.length,sizeof(assert_panics72_golden),at);
     }
-    CHECK(packet.length==sizeof(assert_equal65_golden) && !memcmp(packet.bytes,assert_equal65_golden,packet.length));
+    CHECK(packet.length==sizeof(assert_panics72_golden) && !memcmp(packet.bytes,assert_panics72_golden,packet.length));
     assert_previous_packet_rejected(assert_equal_golden, sizeof(assert_equal_golden));
     assert_previous_packet_rejected(assert_equal64_golden,sizeof(assert_equal64_golden));
+    assert_previous_packet_rejected(assert_equal65_golden,sizeof(assert_equal65_golden));
     panics_packet_oom(checked);
     size_t op=panics_instruction_offset(&packet,3),live=runtime_live,bytes=runtime_bytes;
-    CHECK(op==XR_EQUAL_VECTOR_OP3);
+    CHECK(op==XR_PANICS72_VECTOR_OP3);
     const struct {size_t offset;uint32_t value;XrXirStatus expected;} attacks[]={
-        {XR_EQUAL_VECTOR_GENERIC3+8,8,XR_XIR_BAD_TYPE},
-        {XR_EQUAL_VECTOR_GENERIC3+8,0,XR_XIR_BAD_TYPE},
-        {XR_EQUAL_VECTOR_GENERIC3+8,XR_XIR_CONSTRAINT_SENDABLE,XR_XIR_BAD_TYPE},
-        {XR_EQUAL_VECTOR_GENERIC6+8,0,XR_XIR_BAD_TYPE},
+        {XR_PANICS72_VECTOR_GENERIC3+8,8,XR_XIR_BAD_TYPE},
+        {XR_PANICS72_VECTOR_GENERIC3+8,0,XR_XIR_BAD_TYPE},
+        {XR_PANICS72_VECTOR_GENERIC3+8,XR_XIR_CONSTRAINT_SENDABLE,XR_XIR_BAD_TYPE},
+        {XR_PANICS72_VECTOR_GENERIC6+8,0,XR_XIR_BAD_TYPE},
         {op+24,2,XR_XIR_BAD_TYPE},
         {op+4,XR_XIR_I64,XR_XIR_BAD_TYPE},
         {op+12,2,XR_XIR_BAD_TYPE},
         {op+16,1,XR_XIR_BAD_STRUCTURE},
-        {XR_EQUAL_VECTOR_DEFAULTS+40,2,XR_XIR_BAD_STRUCTURE},
-        {XR_EQUAL_VECTOR_DEFAULTS+48,5,XR_XIR_BAD_STRUCTURE},
-        {XR_EQUAL_VECTOR_IDENTITY6+4,1,XR_XIR_BAD_STRUCTURE}
+        {XR_PANICS72_VECTOR_DEFAULTS+40,2,XR_XIR_BAD_STRUCTURE},
+        {XR_PANICS72_VECTOR_DEFAULTS+48,5,XR_XIR_BAD_STRUCTURE},
+        {XR_PANICS72_VECTOR_IDENTITY6+4,1,XR_XIR_BAD_STRUCTURE}
     };
     for (uint32_t i=0;i<sizeof(attacks)/sizeof(*attacks);++i) {
-        memcpy(packet.bytes,assert_equal65_golden,packet.length);
+        memcpy(packet.bytes,assert_panics72_golden,packet.length);
         panics_word(packet.bytes+attacks[i].offset,attacks[i].value);panics_hash(&packet);
         XrXirArtifact *read=NULL;XrXirStatus status=xr_xir_compile_checked_read(assert_compile_context,packet.bytes,packet.length,&read,NULL);
         if (status!=attacks[i].expected) fprintf(stderr,"Equal attack %u status=%u expected=%u\n",i,status,attacks[i].expected);
         CHECK(status==attacks[i].expected && !read && runtime_live==live && runtime_bytes==bytes);
     }
     for (uint32_t group=0;group<3;++group) {
-        memcpy(packet.bytes,assert_equal65_golden,packet.length);
+        memcpy(packet.bytes,assert_panics72_golden,packet.length);
         panics_word(packet.bytes+(group ? 12 : 8),group ? 55+group : 21);panics_hash(&packet);
         size_t early_attempts=source_program_compile_attempts;XrXirArtifact *read=NULL;
         CHECK(xr_xir_compile_checked_read(assert_compile_context,packet.bytes,packet.length,&read,NULL)==XR_XIR_BAD_STRUCTURE && !read && source_program_compile_attempts==early_attempts);
     }
     xr_xir_compile_checked_packet_free(&packet);xr_xir_compile_artifact_free(checked);
     CHECK(!assert_compile_extra_blocks() && !assert_compile_extra_bytes() && !runtime_live && !runtime_bytes);
-    puts("Independent Core1975 KAT, valid-rehash Equal/proof/default attacks and old56/57 early refusal PASS");
+    puts("Independent Core2187 KAT, valid-rehash Equal/proof/default attacks and old56/57 early refusal PASS");
 }

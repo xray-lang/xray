@@ -136,7 +136,7 @@ static void witness_promise_callback(const XrXirSourceRequest *request, const ch
     records[2].parameter = NULL;
     source_manifest_write(request,"witness_promises.xr",records,4);
     CHECK(!witness_promise_check(request,false,"unqualified forwarding parameter",
-        "callable conversion may only discard its top-level promise"));
+        "callable conversion may only weaken its outer execution contract"));
     records[2].parameter = "f"; records[0].parameter = NULL;
     source_manifest_write(request,"witness_promises.xr",records,4);
     CHECK(!witness_promise_check(request,false,"implementation strengthens callback contract",

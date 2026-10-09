@@ -248,6 +248,48 @@ TEST(category_names_are_stable) {
     ASSERT_STR_EQ(xi_cgen_verify_category_name(XI_CGEN_VERIFY_C90_RESTRICTED), "C90_RESTRICTED");
 }
 
+TEST(indexed_masks_preserve_multiline_crlf) {
+    const char *src = "/* masked { )\r\n"
+                      "pkg/../hidden v9\r\n"
+                      "*/\r\n"
+                      "void f(void) {\r\n"
+                      "    int v0 = 7;\r\n"
+                      "    const char *s = \"} ( v99 pkg/../hidden\";\r\n"
+                      "    (void) v0;\r\n"
+                      "}\r\n";
+    XiCgenVerifyResult r = verify(src);
+    ASSERT_EQ_INT(r.category, XI_CGEN_VERIFY_OK);
+}
+TEST(indexed_escaped_newline_preserves_temp_position) {
+    const char *src = "\nvoid f(void) {\n"
+                      "    const char *s = \"(\\\n"
+                      ")\";\n"
+                      "    // } ) v5\n"
+                      "    int a = v5;\n"
+                      "    int v5 = 7;\n"
+                      "}\n";
+    XiCgenVerifyResult r = verify(src);
+    ASSERT_EQ_INT(r.category, XI_CGEN_VERIFY_W4_FORWARD_REF);
+    ASSERT_EQ_INT(r.line, 6);
+}
+TEST(indexed_eof_and_late_lexical_priority) {
+    XiCgenVerifyResult eof = verify("void f(void) {\n int a = v12;\n}");
+    ASSERT_EQ_INT(eof.category, XI_CGEN_VERIFY_W4_FORWARD_REF);
+    ASSERT_EQ_INT(eof.line, 2);
+    const char *src = "return 0;\nvoid f(void) {\n int a = v7;\n const char *s = \"unfinished";
+    XiCgenVerifyResult late = verify(src);
+    ASSERT_EQ_INT(late.category, XI_CGEN_VERIFY_W1_BALANCE);
+    ASSERT_EQ_INT(late.line, 4);
+}
+TEST(indexed_growth_preserves_scope_position) {
+    char source[512];
+    memset(source, '\n', 260);
+    memcpy(source + 260, "return 0;", sizeof("return 0;"));
+    XiCgenVerifyResult r = verify(source);
+    ASSERT_EQ_INT(r.category, XI_CGEN_VERIFY_W3_SCOPE);
+    ASSERT_EQ_INT(r.line, 261);
+}
+
 TEST_MAIN_BEGIN()
 verifier_owner_new();
 RUN_TEST_SUITE("CGen output verifier — W1 balance");
@@ -271,5 +313,10 @@ RUN_TEST(c90_accepts_governed_kernel_shape);
 RUN_TEST(c90_rejects_compound_literal_and_runtime_residue);
 RUN_TEST(c90_rejects_line_comments_but_ignores_literal_text);
 RUN_TEST(category_names_are_stable);
+RUN_TEST_SUITE("CGen output verifier — owned lexical line spans");
+RUN_TEST(indexed_masks_preserve_multiline_crlf);
+RUN_TEST(indexed_escaped_newline_preserves_temp_position);
+RUN_TEST(indexed_eof_and_late_lexical_priority);
+RUN_TEST(indexed_growth_preserves_scope_position);
 verifier_owner_free();
 TEST_MAIN_END()

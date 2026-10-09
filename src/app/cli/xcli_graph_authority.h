@@ -17,6 +17,7 @@
 #define XCLI_GRAPH_AUTHORITY_H
 
 #include "../../module/xlockfile.h"
+#include "../../module/xmodule_overlay.h"
 #include "../../module/xproject.h"
 #include "../../xir/xxir.h"
 struct XrXirLibraryCatalog;
@@ -27,6 +28,28 @@ XR_FUNC XrManifestStatus xr_cli_compile_graph_authority_open(
     const XrXirCompileContext *context, const char *absolute_entry_path,
     const struct XrXirLibraryCatalog *libraries, const XrTomlParseLimits *limits,
     XrCliGraphAuthority **output, XrManifestDiagnostic *diagnostic);
+typedef enum XrCliGraphEntryKind {
+    XR_CLI_GRAPH_ENTRY_FILE, XR_CLI_GRAPH_ENTRY_TEXT
+} XrCliGraphEntryKind;
+typedef struct XrCliGraphEntryInput {
+    XrCliGraphEntryKind kind;
+    const char *absolute_path;
+    const char *text; /* TEXT only: length bytes, no terminator required. */
+    size_t length;
+} XrCliGraphEntryInput;
+/* Same authority discovery as the file entry. TEXT may be absent on disk;
+ * its nearest existing parent is canonicalized and missing path components
+ * are validated, never normalized into a different authority. The owner
+ * retains the canonical entry path and a real immutable overlay entry.
+ * Invalid nearer projects/lockfiles are errors; no SCRIPT fallback on errors.
+ * Catalog remains borrowed under the original authority lifetime contract. */
+XR_FUNC XrManifestStatus xr_cli_compile_graph_authority_open_input(
+    const XrXirCompileContext *context, const XrCliGraphEntryInput *input,
+    const struct XrXirLibraryCatalog *libraries, const XrTomlParseLimits *limits,
+    XrCliGraphAuthority **output, XrManifestDiagnostic *diagnostic);
+XR_FUNC const char *xr_cli_compile_graph_authority_source_path(const XrCliGraphAuthority *);
+/* NULL for FILE input; an immutable owner-backed entry for TEXT input. */
+XR_FUNC const XrModuleOverlayInput *xr_cli_compile_graph_authority_overlay(const XrCliGraphAuthority *);
 XR_FUNC void xr_cli_compile_graph_authority_close(XrCliGraphAuthority *authority);
 XR_FUNC const XrModuleIdentityAuthority *xr_cli_compile_graph_authority_entry(const XrCliGraphAuthority *);
 XR_FUNC const XrProject *xr_cli_compile_graph_authority_project(const XrCliGraphAuthority *);

@@ -57,7 +57,7 @@ static XrXirStatus pipeline(XrCompileResourceLimits caps,XrCompileResourceStats 
     xr_xir_compile_source_product_diagnostic_free(&diagnostic);xr_compile_session_free(session);
     memset(&request,0xcc,sizeof(request));memset(&authority,0xcc,sizeof(authority));
     if(status==XR_XIR_OK){query_bindings(xr_xir_compile_source_product_view(product));
-        status=xr_xir_compile_source_snapshot_copy(&context,xr_xir_compile_source_product_view(product),&snapshot);}
+        status=xr_xir_compile_source_snapshot_copy_v2(&context,xr_xir_compile_source_product_view(product),xr_xir_compile_source_product_construction(product),&snapshot);}
     if(status==XR_XIR_OK) {
         XrXirSourceProductPacketView packet={0};
         status=xr_xir_compile_source_product_packet(product,XR_XIR_SOURCE_PRODUCT_CLOSED,&packet);

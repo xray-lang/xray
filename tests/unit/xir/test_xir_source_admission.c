@@ -12,6 +12,7 @@
 #include "xir/xxir_source.h"
 #include "xir/xxir_generic.h"
 #include "xir/xxir_types.h"
+#include "xir/xxir_effects.h"
 #include "toolchain/xcompiler_session.h"
 #include "module/xmodule_resolver.h"
 #include "base/xmalloc.h"
@@ -53,6 +54,28 @@ static void admission_case_continue(const XrXirSourceRequest *request,AdmissionC
 #include "xir_source_panic_cases.h"
 #include "xir_source_cleanup_admission.h"
 #include "xir_source_conditional_cases.h"
+static void admission_private_module_state(const XrXirArtifact *artifact) {
+    CHECK(xr_xir_compile_artifact_verify(artifact,NULL)==XR_XIR_OK);
+    const XrXirModule *module=xr_xir_compile_artifact_module(artifact);
+    const XrXirDeclarations *declarations=module->declarations;
+    CHECK(declarations && declarations->slot_count==1);
+    CHECK(declarations->slots[0].mutable==1 &&
+        xr_xir_type_is_cell(module->types,declarations->slots[0].type) &&
+        xr_xir_cell_element(module->types,declarations->slots[0].type)==XR_XIR_I64);
+    CHECK(declarations->slots[0].module!=declarations->root_module);
+    XrXirEffects *effects=NULL;
+    CHECK(xr_xir_compile_effects_analyze(artifact,&effects)==XR_XIR_OK && effects);
+    uint32_t visible=UINT32_MAX;
+    for (uint32_t f=0; f<module->function_count; ++f) {
+        if (module->functions[f].name_length==7 && !memcmp(module->functions[f].name,"visible",7))
+            visible=f;
+    }
+    CHECK(visible<module->function_count && declarations->functions[visible].exported);
+    CHECK(declarations->functions[visible].module==declarations->slots[0].module);
+    const XrXirRootEffects *facts=xr_xir_effects_root(effects,visible);
+    CHECK(facts && facts->requires_root && !facts->unresolved);
+    xr_xir_compile_effects_free(effects);
+}
 static void stdlib_resolution(const XrXirCompileContext *context) {
     XrModuleResolverConfig config = {.stdlib_path=XR_SOURCE_STDLIB};
     XrModuleResolver *resolver = NULL; CHECK(xr_compile_module_resolver_new(context->resources,&config,&resolver)==XR_MODULE_OK && resolver);
@@ -342,7 +365,7 @@ static const char *const rejected[] = {
     "fn unused(f:fn(i64)->i64)->i64 { return f() }\n",
     "fn unused(f:fn(i64)->i64)->i64 { return f<i64>(1) }\n",
     "fn unused(f:fn(i64)->i64)->string { return f(1) }\n",
-    "fn unused(f:fn(ref i64)->i64) {}\n",
+    "fn unused(f:fn(ref i64)->i64,x:i64)->i64 { return f(x) }\n",
     "fn unused(f:fn(move string)->string) {}\n",
     "fn unused<T>(f:fn(T)->T) { f(1) }\n",
     "fn unused<T>(f:fn(T)->T,x:T)->T { return f(x)+x }\n",
@@ -708,22 +731,54 @@ static void unit_slot_admission(const XrXirSourceRequest *request, const char *r
         const XrXirModule *module=xr_xir_compile_artifact_module(result.checked);
         const XrXirDeclarations *declarations=module->declarations;
         CHECK(declarations && declarations->slot_count==1 &&
-            declarations->slots[0].type==XR_XIR_UNIT && declarations->slots[0].mutable==(run==2 ? 1u : 0u));
+            declarations->slots[0].mutable==(run==2 ? 1u : 0u));
+        XrXirType storage=declarations->slots[0].type;
+        CHECK(run==2 ? (xr_xir_type_is_cell(module->types,storage) &&
+            xr_xir_cell_element(module->types,storage)==XR_XIR_UNIT) : storage==XR_XIR_UNIT);
         uint32_t initializer=declarations->modules[declarations->root_module].initializer;
         CHECK(initializer<module->function_count);
         const XrXirFunction *function=&module->functions[initializer];
-        uint32_t suspends=0,publishes=0;
+        uint32_t suspends=0,publishes=0,cells=0;
         for (uint32_t i=0;i<function->instruction_count;++i) {
             const XrXirInstruction *op=&function->instructions[i];
             if (op->op==XR_XIR_SUSPEND) { CHECK(!publishes); ++suspends; }
+            if (op->op==XR_XIR_CELL_NEW) {
+                CHECK(run==2 && !publishes && op->type==storage &&
+                    !op->args[0] && !op->args[1] && !op->immediate); ++cells;
+            }
             if (op->op==XR_XIR_SLOT_INIT) {
-                CHECK(op->immediate==0 && !op->args[0] && !op->args[1]); ++publishes;
+                CHECK(op->immediate==0 && !op->args[1]);
+                if (run==2) {
+                    CHECK(cells==1 && op->args[0]==function->parameter_count &&
+                        function->instructions[0].op==XR_XIR_CELL_NEW &&
+                        xr_xir_operand_type(function,op->args[0])==storage);
+                } else CHECK(!op->args[0]);
+                ++publishes;
             }
         }
-        CHECK(publishes==1 && suspends==(run<2 ? 1u : 0u));
+        CHECK(publishes==1 && cells==(run==2 ? 1u : 0u) && suspends==(run<2 ? 1u : 0u));
         xr_xir_compile_source_result_free(&result);
     }
     admission_case_end(&case_owner);
+}
+static void admission_array_capacity(const XrXirArtifact *artifact) {
+    const XrXirModule *module=xr_xir_compile_artifact_module(artifact);
+    CHECK(module && module->types && module->declarations);
+    uint32_t observed=0;
+    for(uint32_t f=0;f<module->function_count;++f){
+        const XrXirFunction *function=&module->functions[f];
+        for(uint32_t i=0;i<function->instruction_count;++i){
+            const XrXirInstruction *op=&function->instructions[i];
+            if(op->op!=XR_XIR_ARRAY_CAPACITY)continue;
+            CHECK(f==module->declarations->modules[module->declarations->root_module].initializer);
+            CHECK(op->type==XR_XIR_I64 && !op->args[1] && !op->immediate);
+            XrXirType input=xr_xir_operand_type(function,op->args[0]);
+            CHECK(xr_xir_type_is_array(module->types,input) &&
+                xr_xir_array_element(module->types,input)==XR_XIR_I64);
+            ++observed;
+        }
+    }
+    CHECK(observed==1);
 }
 static void admission_atomic_bool(const XrXirArtifact *artifact) {
     const XrXirModule *module=xr_xir_compile_artifact_module(artifact);
@@ -772,17 +827,19 @@ static void rejected_source_cases(const XrXirSourceRequest *request,const char *
         CHECK(query_status_9 == XR_XIR_OK || (!query_result_9.checked && !query_result_9.snapshot));
         xr_xir_compile_source_result_free(&query_result_9);
         XrXirStatus status = query_status_9;
-        bool newly_admitted=i==146 || i==263 || i==289 || i==318 || i==331;
+        bool newly_admitted=i==146 || i==149 || i==263 || i==289 || i==318 || i==331;
         if(!newly_admitted){
             if(status==XR_XIR_OK)fprintf(stderr,"incorrectly admitted source case %zu\n",i);
             if(!(status!=XR_XIR_OK && !artifact && diagnostic.status==status && diagnostic.message[0]))++admission_failures;
         }else{
             CHECK(status==XR_XIR_OK && artifact);
+            if(i==149)admission_array_capacity(artifact);
             if(i==263)admission_atomic_bool(artifact);
             XrXirArtifact *closed=NULL,*lowered=NULL;
             CHECK(xr_xir_compile_specialize(artifact,&closed,NULL)==XR_XIR_OK);
             XrXirTarget target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};
             CHECK(xr_xir_compile_lower(closed,&target,&lowered,NULL)==XR_XIR_OK);
+            if(i==149)admission_array_capacity(lowered);
             if(i==263){
                 admission_atomic_bool(lowered);
                 puts("Source admission case263 Atomic<bool>: unique NEW(true)/root publication Checked and Lowered PASS");
@@ -892,7 +949,9 @@ int main(void) {
     artifact = query_result_12.checked; query_result_12.checked = NULL;
     CHECK(query_status_12 == XR_XIR_OK || (!query_result_12.checked && !query_result_12.snapshot));
     xr_xir_compile_source_result_free(&query_result_12);
-    CHECK(query_status_12 != XR_XIR_OK && !artifact);
+    CHECK(query_status_12 == XR_XIR_OK && artifact);
+    admission_private_module_state(artifact);
+    xr_xir_compile_artifact_free(artifact); artifact=NULL;
     write_source(library, "import \"./root\" as root\nexport fn visible() -> i64 { return 1 }\n");
     XrXirSourceResult query_result_13 = {0};
         admission_case_begin(&request,&case_owner);

@@ -6848,6 +6848,7 @@ Typed array 元素布局是容器元数据的一部分。`Array<rune>` 使用 `X
 - 默认由编译器插入的 **per-coroutine reference counting** 回收普通局部对象；最后一个强引用释放时立即进入 RC 销毁路径。共享对象使用 atomic RC，模块/运行时对象按各自 owner 的生命周期管理。
 - **循环引用不由运行时回收**：回收只有一条规则 —— 对象在最后一个强引用释放的那一刻死亡。环由三层处理：编译期类型图证明大多数程序根本不产生环（L0）；`weak` 字段是唯一的显式断环机制（L1）；执行局部回收域批量释放为剩余的环设定泄漏上界（L2）。开发期检测器只报告、不回收。
 - **执行局部回收域边界（L2）**：每个物理协程拥有独立回收域。VM 用 per-coroutine Region heap 实现；hosted AOT 用 execution arena 登记仍然存活的普通 ARC 分配。无环对象仍在最后强引用处立即回收；协程结束时，回收域整体处置剩余对象图。因此**未被引用计数回收的对象（引用环），其泄漏范围不超过所属协程的生命周期**。跨执行发布必须先把共享或转移根的完整所有图从源域脱离；仅 MODULE_STATIC / CONST_SHARED / SYNC_SHARED 三个所有权域，以及主执行流的根回收域，可以存活到进程结束。
+- **宿主拥有式结果的关闭边界**：执行 owner 在所有 Call/Task 排空并撤去内部根后，处置没有外部 owned 根可达的执行残余图，并把其余完整图逻辑移交同一个宿主残余 owner。逻辑脱离不要求搬动物理地址或更换分配器与累计账本；它也不授予跨执行共享权限。宿主保留的值仍可按原类型和权限读、复制与修改。只要该宿主残余 owner 还有任意外部强根，后来形成或失去外根的环都留到 owner 结束；不得在每次释放时部分收环。最后一个外部根释放后，整体处置剩余图。普通 RC 归零仍立即析构，OPEN 执行域不扫描或收环。
 - **这条性质在纯 RC 语言里并不常见**：Rust 的 Rc/RefCell 环与 Swift 的强引用环都会泄漏到进程结束，因为两者的引用计数对象都分配在进程级堆上，没有一个比进程更小的、可以整体丢弃的边界。Xray 的执行局部回收域提供了这个边界，于是「忘了标 `weak`」的代价从**永久泄漏**降为**有界泄漏**。这不是环回收，是生命周期封顶。
 - Xray 没有并发 tracing GC，也没有环收集器；函数调用与后向跳转处不保留任何 GC hook。
 - **用户可见 introspection**：`runtime.liveBytes()` / `runtime.liveObjects()` / `runtime.info()` 报告当前执行局部回收域（VM coroutine heap 或 AOT execution arena；无当前 coroutine 时回退到 main/root 域）的 live-memory 视图（`import runtime`；`mem` 模块只承载裸内存能力）。
@@ -7405,6 +7406,8 @@ NaN 的 EQ 为 false、NE 为 true，其余关系均为 false；正负零相等�
 
 Array复制保留独立逻辑值，无需显式`copy`或`move`。共享backing在写入前取得独立存储，独占且容量充足时可原地修改；紧凑元素存储使用唯一类型布局与copy/drop规则。const与READ参数不能成为可写接收者；把其可复制值保存到普通局部var后，可修改该副本。backing是否独占不授予写权限。已有多模块可见性与库模块可变状态限制继续生效。
 
+跨分配域写入不能把当前执行域的敏感身份植入外域可复制容器。既有有预算的准入遍历在同一次访问中汇总实值的 Cell、Function、Class 与 Task 身份，不增加未计费类型遍历或第二次实值遍历；Error 按实际 enum backing 的活动载荷检查。写入含这些身份时，Array SET/PUSH、独立 struct SET 和字段/索引路径上的全部外域可复制祖先先取得当前准入域拥有的新存储，包括独占且容量充足的 backing。Cell/Class 保持身份语义和原域权限，不以复制放宽准入。纯标量/String 聚合保留原可用的原地路径，纯 String 外域独占余量写入仍零分配。准备、复制、峰值和累计费用使用原账本；失败保持旧值与别名。独占 SET 重定位实际转移新槽所有权，先发表完整新值，再执行旧槽释放回调；清理不临时分配。本规则保护已覆盖的敏感写边，不证明 Task 跨域完整闭环、任意 Source 图可达性或所有循环已被处理。
+
 已准入的可复制 struct/enum 可作为 Array 元素，元素及嵌套值字段按封存的唯一布局 inline 保存；只有 enum 活动载荷持有所有权，不以逐元素 boxed 指针替代聚合步幅。共享存储分离直接复制字段并保留叶子所有权；独占重定位转移已有所有权。读取在既有值边界物化独立拥有的结果，需要接收分配域时按该域计费；失败释放已完成字段和未发布父对象。零大小聚合仍有类型化 backing 与 i64 范围内的逻辑长度/容量，数据区零分配。最终释放使用预留遍历空间和迭代释放工作链，不依赖临时分配。此准入不授予额外可见性、构造、回调或写权限，也不表示嵌套字段/索引地点写回已准入。
 
 GET及索引读返回独立拥有的元素，并保留索引求值前选定的接收者值。SET、索引写及PUSH先确定支持的根绑定，再按序求值实参，最后读取该绑定当前的Array；RHS重绑根后，写入针对新值。`a.push(a[0])`有效。越界严格要求`0 <= index < len`，否则产生E0430并保留有符号index与实际length；初始化期间的失败保持原有粘滞语义。set/push返回unit，索引赋值表达式返回已转换RHS的独立逻辑值，其可能失败的结果retain在提交前完成。失败不提交本次修改，但不撤销此前实参求值的副作用。len只借用接收者，以有界常数工作量读取长度，不分配或遍历元素；GET对嵌套函数元素的传递准入可能分配有界scratch。
@@ -7544,13 +7547,23 @@ Checked22/57、Value16和Program26保持各自实际合同；输出接口迁移�
 
 在已完整验证的Checked/Lowered上，同一owned XrXirEffects推导每函数独立的requires_root与unresolved。两项可同时为真；缺字段、推导失败或空初始化不是NONE证明。mutable模块槽读写/PLACE及真实module initializer产生根要求；const读/PLACE在真实定义上下文证明Sendable，不满足产生根要求，OOM/预算失败原样拒绝。初始化group的first slot按既有high32编码读取。库var和库非Sendable const当前禁令保留。
 
-复用唯一反向执行图传播CALL/INVOKE、真实default helper及已注册cleanup，cleanup只传播根事实而不改变既有控制效果规则。间接/requirement调用保持unresolved，即使NO_SUSPEND也不证明无根依赖。FUNCTION_REF不执行目标body；局部var/cell不因可变自动产生根要求。GO child不是父方普通调用边，父方实参准备的真实普通执行仍计入父方。未分类执行op拒绝；普通运行期路径取保守并集，不依赖优化删除。
+复用唯一反向执行图传播CALL/INVOKE、真实default helper及已注册cleanup，cleanup只传播根事实而不改变既有控制效果规则。间接/requirement调用读取真实callable闭合上界，NO_SUSPEND与根权限完全独立。FUNCTION_REF不执行目标body；局部var/cell不因可变自动产生根要求。GO child不是父方普通调用边，父方实参准备的真实普通执行仍计入父方。未分类执行op拒绝；普通运行期路径取保守并集，不依赖优化删除。
 
 查询返回同summary拥有的事实和两条独立最短numeric原因链；生产artifact死亡后仍有效，直到summary释放。局部原因distance0，CALL/cleanup步的callee distance严格下降；等距按真实instruction/callee/cause/slot身份排序，不靠邻接顺序。全部求解/原因/类型证明共享累计资源账本，失败不发布半摘要，occupied输出不覆盖。无参数化布尔图为O(I+F+C)，类型证明和高阶变量成本另外计费。本查询合同不改变wire/opcode/ABI，不代表GO消费者、函数值参数上界、执行身份或库var保护已完成。
 
 GO消费者从同一summary的已闭合root事实取得权限，不再逐槽或按indirect种类重复推导；known root或unresolved均拒绝，二者并存时诊断优先known root且不丢两条原因。当前SLOT_PLACE借用形状限制独立传播，Sendable const的root NONE不解除该尚未资格的限制；其失败不得伪报root/unknown。角色、参数/结果及捕获Sendable、Task错误和所有类型/所有权/可见性规则保持独立，GO父实参准备仍在父方执行。Source区分需要当前实例根执行流与缺少worker效果证明；本片只保留既有函数层定位，完整用户函数/变量原因载荷与精确GO表达式位置继续未完成。
 
 拥有式原因链复制接口从同一效果owner复制known与unresolved两条有限numeric链；facts与steps只借用独立trace自身，效果summary、Checked/Lowered产物及原生产者释放后仍可读取。有效NONE可得到拥有式空链。copy要求相同实际资源owner和空输出，先拒非法参数，累计预算预准入后原子发布；OOM/预算失败清理临时owner且保留已收费。free不再分配或格式化，最后实际资源引用与物理计数归零。该接口不增加wire或runtime ABI，不是完整Source名称、来源与GO位置诊断。
+
+闭合callable沿现有u32 flags保存根效果上界：NO_SUSPEND=1、ROOT_NONE=2、ROOT_REQUIRED=4、ROOT_UNRESOLVED=8；根mask仅2/4/8/12合法，12保留requires_root与unresolved两事实。旧0/1、NONE与其它根位组合、未知位拒绝。普通显式fn默认UNKNOWN，不把NO_SUSPEND当NONE。身份包括完整flags及全部嵌套签名；仅最外层允许弱化，参数类型/模式、result与嵌套身份不变。NONE可进入NONE/ROOT/UNKNOWN/mixed，ROOT可进入ROOT/UNKNOWN/mixed，UNKNOWN或mixed仅可进入UNKNOWN/mixed。NO_SUSPEND只能保留或丢弃。失精度后不根据目标地址恢复权限。join独立并集两根事实、NONE中性，只有两边都有NO_SUSPEND才保留该位。
+
+FUNCTION_REF构造不执行body，但其广告上界必须覆盖目标的同owner真实body事实；未使用的ref同样验真。每个真实interface implementation body也必须满足原requirement上界，不能靠接收上下文授予承诺。共同Checker在完整结构/类型/约束/访问验证后使用同一execution图验root上界及GO义务。ordinary refs的精准producer后继使用不可发布的owned prepared owner，精确绑定已验证Module及拥有式INFERRED/FIXED value-flow；固定显式fn边界不能被猜目标精化，未知依赖保守UNKNOWN。有限worklist闭合并重新普通复验前，prepared状态不构成Checked或NONE证明；没有skip_go、unchecked公共入口或第二产品管线。Source recipe/AST死亡后不能借用其指针。
+
+这一flags语义采用唯一Checked semantic70，schema25的既有u32字段形状不变；公开Value22/Call28/Program29字段和布局不变。旧semantic69及旧0/1callable拒绝，不双读。SDK source fingerprint、同源stdlib Checked/native cache和消费者向量必须按真实资格更新。这里只冻结closed上界基础；Source精准refs、sealed Program真实entry上界准入、实际child indirect执行、有限参数公式、完整library types映射、用户完整原因链与library状态保护分别仍须实现验证。
+
+普通引用准备与闭合：Source 在 region recipes 释放前拥有式记录 INFERRED/FIXED 值流身份。普通 direct ref 与 closure 在既有 Effects owner 上按真实目标闭合；显式 callable 参数、注解、结果及转换上下文保持固定上界。暂态 UNKNOWN 相等不能消除边界：私有 COPY 保留身份，闭合后有差异时转为唯一 FUNCTION_WEAKEN。私有结构/SSA/约束/可见性准备不产生 Checked，闭合后共同完整 Checker 对源与独立拥有式副本执行全部效果及权限义务，只发布该副本。
+
+COPY/PHI/local Cell、闭合 capture、Nullable 包装、只读 Tuple/Array 构造和投影同步身份。PHI 和同元素 Array 的外层 callable 输入按唯一弱化规则归一化，根两事实分别求闭合。固定复合的嵌套身份不能协变；无法表达嵌套弱化的共享、元素变更或 Nullable 分支合流保守保留上界或拒绝，有限高阶依赖及容器别名流后继仍未完成。NO_SUSPEND、GO 借用形状、错误和 Sendable 义务独立保留。准备、闭合及查询复制共用原有限资源账本，不增加 wire 字段、schema、semantic 或公开 ABI。这一实现候选仍须鲜编和两配置资源、安全资格；runtime 许可与 VM/native 执行资格未由此取得。
 
 ---
 

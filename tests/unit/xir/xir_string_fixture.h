@@ -13,6 +13,7 @@
 
 #ifndef XIR_STRING_FIXTURE_H
 #define XIR_STRING_FIXTURE_H
+#include "xir_construction_fixture.h"
 #include "xir/xxir.h"
 #include "xir/xxir_generic.h"
 #include "xir_error_fixture.h"
@@ -62,7 +63,7 @@ static XrXirArtifact *string_fixture(const XrXirCompileContext *context, uint32_
     const XrXirModule built = {XR_XIR_BUILT, functions, 5, &declarations, NULL, mode ? &error.types : NULL, NULL, XR_XIR_PROGRAM, NULL};
     const XrXirTarget target = {XR_XIR_ARCH_X86_64, XR_XIR_VALUE_ABI_VERSION};
     XrXirArtifact *checked = NULL, *lowered = NULL;
-    CHECK(xr_xir_compile_check(context, &built, &checked, NULL) == XR_XIR_OK);
+    CHECK(xir_fixture_check(context, &built, &checked, NULL) == XR_XIR_OK);
     XrXirArtifact *closed=NULL; CHECK(xr_xir_compile_specialize(checked,&closed,NULL)==XR_XIR_OK);
     CHECK(xr_xir_compile_lower(closed, &target, &lowered, NULL) == XR_XIR_OK);
     xr_xir_compile_artifact_free(closed);

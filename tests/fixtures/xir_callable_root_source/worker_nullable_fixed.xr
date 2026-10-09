@@ -1,0 +1,3 @@
+fn plain()->i64{return 7}
+fn worker()->i64{const maybe:(fn()->i64)?=plain;try{return maybe!()}catch(e){return 0}}
+fn main()->i64{return await go worker()}

@@ -12,6 +12,7 @@
  */
 #ifndef XIR_GENERIC_METHOD_ALLOCATIONS_H
 #define XIR_GENERIC_METHOD_ALLOCATIONS_H
+#include "xir_construction_fixture.h"
 #include "xir_generic_method_owned_fixture.h"
 static void generic_method_clone_allocations(void) {
     CHECK(!live); size_t sites = 0;
@@ -50,7 +51,7 @@ static void generic_method_packet_allocations(void) {
     AllocationCompileOwner owner={0};allocation_compile_owner_new(&owner,&allocation_compile_limits);
     GenericMethodOwnedFixture fixture; generic_method_owned_fixture(&fixture);
     XrXirArtifact *source = NULL, *decoded = NULL;
-    CHECK(xr_xir_compile_check(&owner.context,&fixture.module,&source,NULL) == XR_XIR_OK);
+    CHECK(xir_fixture_check(&owner.context, &fixture.module, &source, NULL) == XR_XIR_OK);
     memset(&fixture,0xCC,sizeof(fixture));
     XrXirCheckedPacket packet = {0}; size_t baseline = live; calls = 0;
     CHECK(xr_xir_compile_checked_write(source,&packet,NULL) == XR_XIR_OK);

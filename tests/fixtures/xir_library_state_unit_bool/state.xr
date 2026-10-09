@@ -1,0 +1,11 @@
+fn empty() {}
+var stamp:() = empty()
+var flag:bool = false
+export fn flip()->bool {
+    stamp = empty()
+    if(flag){flag=false}else{flag=true};
+    return flag
+}
+export fn current()->bool { return flag }
+export fn unitValue() { return stamp }
+export fn pure(value:i64)->i64 { return value + 1 }

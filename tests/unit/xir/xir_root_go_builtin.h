@@ -1,3 +1,4 @@
+#include "xir_construction_fixture.h"
 /* Independent const-value versus const-place worker qualification. */
 #ifndef XIR_ROOT_GO_BUILTIN_H
 #define XIR_ROOT_GO_BUILTIN_H
@@ -5,7 +6,7 @@ static XrXirStatus go_shape_check(const XrXirCompileContext *context, unsigned m
     bool spawn, XrXirArtifact **output, XrXirDiagnostic *diagnostic) {
     XrXirTypeNode nodes[]={{.kind=XR_XIR_TYPE_TASK,.element=XR_XIR_I64},
         {.kind=XR_XIR_TYPE_ARRAY,.element=XR_XIR_I64},
-        {.kind=XR_XIR_TYPE_CALLABLE,.result=XR_XIR_I64,.flags=XR_XIR_CALLABLE_NO_SUSPEND}};
+        {.kind=XR_XIR_TYPE_CALLABLE,.result=XR_XIR_I64,.flags=XR_XIR_CALLABLE_NO_SUSPEND|XR_XIR_CALLABLE_ROOT_UNRESOLVED}};
     XrXirTypes types={nodes,3,NULL,NULL};
     XrXirInstruction init[]={{XR_XIR_CONST_INT,XR_XIR_I64,{0},{0},7,{0}},
         {XR_XIR_ARRAY_NEW,(XrXirType)257,{0,1},{0},0,{0}},
@@ -39,6 +40,6 @@ static XrXirStatus go_shape_check(const XrXirCompileContext *context, unsigned m
     XrXirDeclarations declarations={.modules=&source,.module_count=1,.functions=identities,
         .slots=&slot,.slot_count=1,.entry_function=1};
     XrXirModule built={XR_XIR_BUILT,functions,4,&declarations,NULL,&types,NULL,XR_XIR_PROGRAM,NULL};
-    return xr_xir_compile_check(context,&built,output,diagnostic);
+    return xir_fixture_check(context, &built, output, diagnostic);
 }
 #endif

@@ -71,11 +71,8 @@ static bool source_value_place(SourceContext *ctx, AstNode *node, SourceValue *p
     if (count) base = base->type == AST_MEMBER_ACCESS ? base->as.member_access.object : base->as.index_get.array;
     if (!source_query_reference(ctx,base,root,root,object_root ? XR_XIR_SOURCE_READ : XR_XIR_SOURCE_READ_WRITE)) return false;
     if (object_root) {
-        SourceValue handle = {saved.index,saved.type};
-        if (saved.kind == SOURCE_SLOT &&
-            !source_recipe_record(ctx,(XrXirInstruction){XR_XIR_SLOT_LOAD,saved.type,{0,0},{0,0},saved.index,{0}},&handle)) return false;
-        if (saved.kind == SOURCE_LOCAL && saved.mutable &&
-            !source_recipe_record(ctx,(XrXirInstruction){XR_XIR_CELL_READ,saved.type,{saved.index,0},{0},0,{0}},&handle)) return false;
+        SourceValue handle;
+        if (!source_binding_read(ctx, &saved, &handle)) return false;
         /* A binding narrowed to hold a value roots the path at that value. */
         if (narrowed) {
             uint32_t prefix=source_fact_depth(ctx,root);
@@ -83,9 +80,12 @@ static bool source_value_place(SourceContext *ctx, AstNode *node, SourceValue *p
                 if (!source_work(ctx,node) || !source_unwrap_value(ctx,node,handle,&handle)) return false;
         }
         if (!source_recipe_record(ctx,(XrXirInstruction){XR_XIR_OBJECT_PLACE,root_type,{handle.id,0},{0},0,{0}},place)) return false;
-    } else if (!source_recipe_record(ctx,(XrXirInstruction){saved.kind == SOURCE_SLOT ? XR_XIR_SLOT_PLACE : XR_XIR_CELL_PLACE,
-            saved.type,{saved.kind == SOURCE_SLOT ? 0 : saved.index,0},{0},
-            saved.kind == SOURCE_SLOT ? saved.index : 0,{0}},place)) return false;
+    } else {
+        SourceValue cell = {0};
+        if (!source_binding_cell(ctx, &saved, &cell) ||
+            !source_recipe_record(ctx,(XrXirInstruction){XR_XIR_CELL_PLACE,
+                saved.type,{cell.id,0},{0},0,{0}},place)) return false;
+    }
     while (count) {
         AstNode *step = steps[--count];
         if (step->type == AST_MEMBER_ACCESS) {
@@ -96,7 +96,7 @@ static bool source_value_place(SourceContext *ctx, AstNode *node, SourceValue *p
             if (!xr_xir_type_is_array(&ctx->types,place->type))
                 return source_fail(ctx,step,XR_XIR_BAD_TYPE,"indexed place is not an Array");
             XrXirType element = xr_xir_array_element(&ctx->types,place->type); SourceValue index;
-            if (!source_plan_expression(ctx, step->as.index_get.index, (SourceExpectedType){XR_XIR_I64 != XR_XIR_UNIT,XR_XIR_I64, false}, &index) ||
+            if (!source_plan_expression(ctx, step->as.index_get.index, (SourceExpectedType){XR_XIR_I64 != XR_XIR_UNIT,XR_XIR_I64, false, false}, &index) ||
                 !source_recipe_record(ctx,(XrXirInstruction){XR_XIR_INDEX_PLACE,element,{place->id,index.id},{0},0,{0}},place)) return false;
         }
         if (!source_query_expression(ctx,step,place->type)) return false;

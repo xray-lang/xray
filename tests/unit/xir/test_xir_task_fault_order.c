@@ -6,6 +6,7 @@
  *
  * test_xir_task_fault_order.c - Accepted root failure precedes child termination
  */
+#include "xir_construction_fixture.h"
 #include "xir/xxir_checked.h"
 #include "xir/xxir_vm.h"
 #include <stdio.h>
@@ -84,7 +85,7 @@ static XrXirProgram *order_program(const XrXirCompileContext *context) {
         .declarations = &declarations, .types = &types, .linkage_kind = XR_XIR_PROGRAM};
     XrXirArtifact *checked = NULL, *read = NULL, *closed = NULL, *lowered = NULL;
     XrXirCheckedPacket packet = {0}; XrXirProgram *program = NULL; XrXirDiagnostic diagnostic = {0};
-    XrXirStatus status = xr_xir_compile_check(context, &built, &checked, &diagnostic);
+    XrXirStatus status = xir_fixture_check(context, &built, &checked, &diagnostic);
     if (status != XR_XIR_OK) fprintf(stderr, "check=%u function=%u block=%u instruction=%u reason=%u\n",
         status, diagnostic.function, diagnostic.block, diagnostic.instruction, diagnostic.reason);
     CHECK(status == XR_XIR_OK);

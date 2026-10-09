@@ -1,0 +1,6 @@
+enum CryptoError { Local }
+export fn consumerAnswer() -> i64 {
+ var result = 0
+ try { throw CryptoError.Local } catch (e: CryptoError) { result = 42 }
+ return result
+}

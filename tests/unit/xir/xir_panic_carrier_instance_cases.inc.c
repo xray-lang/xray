@@ -1,3 +1,4 @@
+#include "xir_construction_fixture.h"
 /*
  * xray - Lightweight typed scripting with native concurrency
  * https://www.xray-lang.org
@@ -66,7 +67,7 @@ static void program_fixture(PanicProgramFixture *f) {
     const XrCompileResourceLimits limits = {UINT64_MAX, UINT64_MAX, UINT64_MAX};
     CHECK(xr_compile_resources_new(&limits, &resources) == XR_COMPILE_RESOURCE_OK);
     const XrXirCompileContext context = {resources, xr_xir_compile_default_limits()};
-    CHECK(xr_xir_compile_check(&context, &built, &checked, NULL) == XR_XIR_OK);
+    CHECK(xir_fixture_check(&context, &built, &checked, NULL) == XR_XIR_OK);
     CHECK(xr_xir_compile_specialize(checked, &closed, NULL) == XR_XIR_OK);
     const XrXirTarget target = {XR_XIR_ARCH_X86_64, XR_XIR_VALUE_ABI_VERSION};
     CHECK(xr_xir_compile_lower(closed, &target, &f->lowered, NULL) == XR_XIR_OK);

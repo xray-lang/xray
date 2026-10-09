@@ -28,7 +28,8 @@ static bool result_panic_recipe(const XrXirModule *m, uint32_t f) {
         function->block_count != 5 || !function->blocks || function->instruction_count != 10 || !function->instructions)
         return false;
     const XrXirTypeNode *action = xr_xir_callable_signature(m->types,function->parameters[0]);
-    if (!action || action->parameter_count || action->parameters || action->flags ||
+    if (!action || action->parameter_count || action->parameters ||
+        action->flags != XR_XIR_CALLABLE_ROOT_UNRESOLVED ||
         action->parameter_span != 1 || action->result != XR_XIR_TYPE_PARAMETER_BASE) return false;
     const XrXirBlock blocks[] = {{0,1,0,0},{1,1,4,0},{2,4,0,0},{6,2,0,0},{8,2,0,0}};
     for (uint32_t b = 0; b < 5; ++b) {

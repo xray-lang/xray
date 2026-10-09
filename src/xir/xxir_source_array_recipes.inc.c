@@ -78,7 +78,7 @@ static bool source_array_callback(SourceContext *ctx, AstNode *node, AstNode *ar
         for (uint32_t i = 0; i < count; ++i) parameters[i] = (XrXirCallableParameter) {shape->parameters[i], XR_PARAM_READ};
         XrXirType expected;
         if (!source_signature(ctx, parameters, count, result.present ? result.type : XR_XIR_UNIT, &expected)) return false;
-        if (!source_closure(ctx, literal, (SourceExpectedType) {true, expected, !result.present}, callback)) return false;
+        if (!source_closure(ctx, literal, (SourceExpectedType) {true, expected, !result.present, false}, callback)) return false;
         output->arity = count;
     } else {
         if (!expression(ctx, argument, callback)) return false;
@@ -142,13 +142,13 @@ static bool source_array_query_call(SourceContext *ctx, AstNode *node, SourceArr
     SourceValue argument = {0}, separator = {0};
     if (recipe == SOURCE_ARRAY_JOIN) {
         if (call->arg_count) {
-            if (!source_plan_expression(ctx, call->arguments[0], (SourceExpectedType) {true, XR_XIR_STRING, false}, &separator)) return false;
+            if (!source_plan_expression(ctx, call->arguments[0], (SourceExpectedType) {true, XR_XIR_STRING, false, false}, &separator)) return false;
             if (separator.type != XR_XIR_STRING) return source_fail(ctx, node, XR_XIR_BAD_TYPE, "join separator must be a string");
         } else if (!source_string_literal(ctx, node, "", 0, &separator)) return false;
         if (element_type != XR_XIR_STRING && element_type != XR_XIR_BOOL && element_type != XR_XIR_RUNE && !xr_xir_type_is_number(element_type))
             return source_fail(ctx, node, XR_XIR_BAD_TYPE, "join requires string, number, bool or rune elements");
     } else {
-        if (!source_plan_expression(ctx, call->arguments[0], (SourceExpectedType) {true, element_type, false}, &argument)) return false;
+        if (!source_plan_expression(ctx, call->arguments[0], (SourceExpectedType) {true, element_type, false, false}, &argument)) return false;
         if (argument.type != element_type)
             return source_fail(ctx, node, XR_XIR_BAD_TYPE, "searched value must have the element type");
         if (!source_equal_admitted(ctx, node, element_type)) return false;
@@ -216,7 +216,7 @@ static bool source_array_reorder_call(SourceContext *ctx, AstNode *node, SourceA
     XrXirType element_type = xr_xir_array_element(&ctx->types, root.type), cell_type;
     /* The input may rebind the root or suspend; only afterwards read its current value. */
     if (arity) {
-        if (!source_plan_expression(ctx, call->arguments[0], (SourceExpectedType) {true, element_type, false}, &input))
+        if (!source_plan_expression(ctx, call->arguments[0], (SourceExpectedType) {true, element_type, false, false}, &input))
             return false;
         if (input.type != element_type)
             return source_fail(ctx, node, XR_XIR_BAD_TYPE, "Array unshift input must have the element type");
@@ -325,8 +325,8 @@ static bool source_array_resize_call(SourceContext *ctx, AstNode *node, SourceVa
     if (!xr_xir_type_is_array(&ctx->types, root.type))
         return source_fail(ctx, node, XR_XIR_BAD_TYPE, "Array resize receiver is not an Array place");
     XrXirType element_type = xr_xir_array_element(&ctx->types, root.type), array_cell, count_cell;
-    if (!source_plan_expression(ctx, call->arguments[0], (SourceExpectedType) {true, XR_XIR_I64, false}, &length) ||
-        !source_plan_expression(ctx, call->arguments[1], (SourceExpectedType) {true, element_type, false}, &fill)) return false;
+    if (!source_plan_expression(ctx, call->arguments[0], (SourceExpectedType) {true, XR_XIR_I64, false, false}, &length) ||
+        !source_plan_expression(ctx, call->arguments[1], (SourceExpectedType) {true, element_type, false, false}, &fill)) return false;
     if (length.type != XR_XIR_I64 || fill.type != element_type)
         return source_fail(ctx, node, XR_XIR_BAD_TYPE, "Array resize arguments differ from length and element types");
     if (!source_recipe_record(ctx, (XrXirInstruction) {XR_XIR_PLACE_READ, root.type, {root.id}, {0}, 0, {0}}, &array) ||
@@ -373,14 +373,14 @@ static bool source_array_fill_call(SourceContext *ctx, AstNode *node, SourceValu
     if (!xr_xir_type_is_array(&ctx->types, root.type))
         return source_fail(ctx, node, XR_XIR_BAD_TYPE, "Array fill receiver is not an Array place");
     XrXirType element = xr_xir_array_element(&ctx->types, root.type), cell;
-    if (!source_plan_expression(ctx, call->arguments[0], (SourceExpectedType) {true, element, false}, &fill)) return false;
+    if (!source_plan_expression(ctx, call->arguments[0], (SourceExpectedType) {true, element, false, false}, &fill)) return false;
     if (fill.type != element) return source_fail(ctx, node, XR_XIR_BAD_TYPE, "Array fill value differs from its element type");
     if (call->arg_count > 1) {
-        if (!source_plan_expression(ctx, call->arguments[1], (SourceExpectedType) {true, XR_XIR_I64, false}, &start)) return false;
+        if (!source_plan_expression(ctx, call->arguments[1], (SourceExpectedType) {true, XR_XIR_I64, false, false}, &start)) return false;
         if (start.type != XR_XIR_I64) return source_fail(ctx, node, XR_XIR_BAD_TYPE, "Array fill start must be i64");
     }
     if (call->arg_count > 2) {
-        if (!source_plan_expression(ctx, call->arguments[2], (SourceExpectedType) {true, XR_XIR_I64, false}, &end)) return false;
+        if (!source_plan_expression(ctx, call->arguments[2], (SourceExpectedType) {true, XR_XIR_I64, false, false}, &end)) return false;
         if (end.type != XR_XIR_I64) return source_fail(ctx, node, XR_XIR_BAD_TYPE, "Array fill end must be i64");
     }
     if (!source_recipe_record(ctx, (XrXirInstruction) {XR_XIR_PLACE_READ, root.type, {root.id}, {0}, 0, {0}}, &array) ||
@@ -468,7 +468,7 @@ static bool source_array_concat_call(SourceContext *ctx, AstNode *node,
     arrays[0] = receiver;
     for (uint32_t i = 1; i < count; ++i) {
         if (!source_plan_expression(ctx, call->arguments[i - 1],
-                (SourceExpectedType){true, receiver.type, false}, &arrays[i])) return false;
+                (SourceExpectedType){true, receiver.type, false, false}, &arrays[i])) return false;
         if (arrays[i].type != receiver.type)
             return source_fail(ctx, node, XR_XIR_BAD_TYPE, "Array concat argument type differs from its receiver");
     }
@@ -526,13 +526,13 @@ static bool source_array_recipe_call(SourceContext *ctx, AstNode *node, SourceAr
     if (recipe == SOURCE_ARRAY_REDUCE) {
         /* Collecting the initial value's type does not evaluate it. The callback
          * must be completed first so effects retain ordinary argument order. */
-        SourceExpressionPlan *initial_plan = source_plan_collect(ctx, call->arguments[1], (SourceExpectedType) {false, XR_XIR_UNIT, false});
+        SourceExpressionPlan *initial_plan = source_plan_collect(ctx, call->arguments[1], (SourceExpectedType) {false, XR_XIR_UNIT, false, false});
         if (!initial_plan || !source_plan_binary_prepare(ctx, initial_plan, initial_plan->expected, true) ||
             !source_plan_numeric_prepare(ctx, initial_plan, initial_plan->expected, true)) return false;
         if (!initial_plan->type_ready)
             return source_fail(ctx, node, XR_XIR_BAD_TYPE, "reduce initial type is not admitted without a known context");
         accumulator = initial_plan->ground_type;
-        SourceArrayCallbackShape shape = {{accumulator, element_type}, 2, 2, {true, accumulator, false}};
+        SourceArrayCallbackShape shape = {{accumulator, element_type}, 2, 2, {true, accumulator, false, false}};
         if (accumulator == XR_XIR_UNIT) return source_fail(ctx, node, XR_XIR_BAD_TYPE, "reduce initial value cannot be unit");
         if (!source_array_callback(ctx, node, call->arguments[0], &shape, &callback) ||
             !source_plan_complete(ctx, initial_plan, &initial))
@@ -541,8 +541,8 @@ static bool source_array_recipe_call(SourceContext *ctx, AstNode *node, SourceAr
             return source_fail(ctx, node, XR_XIR_BAD_TYPE, "reduce initial type differs from its callback accumulator");
     } else {
         bool indexed = recipe == SOURCE_ARRAY_MAP || recipe == SOURCE_ARRAY_FILTER || recipe == SOURCE_ARRAY_FOR_EACH;
-        SourceExpectedType result = recipe == SOURCE_ARRAY_MAP ? (SourceExpectedType) {false, XR_XIR_UNIT, false} :
-            recipe == SOURCE_ARRAY_FOR_EACH ? (SourceExpectedType) {true, XR_XIR_UNIT, false} : (SourceExpectedType) {true, XR_XIR_BOOL, false};
+        SourceExpectedType result = recipe == SOURCE_ARRAY_MAP ? (SourceExpectedType) {false, XR_XIR_UNIT, false, false} :
+            recipe == SOURCE_ARRAY_FOR_EACH ? (SourceExpectedType) {true, XR_XIR_UNIT, false, false} : (SourceExpectedType) {true, XR_XIR_BOOL, false, false};
         SourceArrayCallbackShape shape = {{element_type, XR_XIR_I64}, 1, indexed ? 2 : 1, result};
         if (!source_array_callback(ctx, node, call->arguments[0], &shape, &callback)) return false;
     }

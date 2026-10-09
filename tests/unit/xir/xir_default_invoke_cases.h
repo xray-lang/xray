@@ -11,6 +11,7 @@
  */
 #ifndef XIR_DEFAULT_INVOKE_CASES_H
 #define XIR_DEFAULT_INVOKE_CASES_H
+#include "xir_construction_fixture.h"
 #include "xir/xxir_internal.h"
 #include "xir/xxir_declarations.h"
 #include "xir/xxir_generic.h"
@@ -70,7 +71,7 @@ static void default_invoke_case(unsigned mode,bool generic) {
     case 15:entry[5]=(XrXirInstruction){XR_XIR_THROW,XR_XIR_UNIT,{3},{0},0,{0}};expected=XR_XIR_OK;break;
     }
     XrXirArtifact *checked=NULL;XrXirDiagnostic d={0};
-    XrXirStatus status=xr_xir_compile_check(suite_context, &module, &checked, &d);
+    XrXirStatus status=xir_fixture_check(suite_context, &module, &checked, &d);
     if(status!=expected)fprintf(stderr,"invoke mode%u generic%u status%u expected%u f%u i%u\n",mode,generic,status,expected,d.function,d.instruction);
     CHECK(status==expected && ((checked!=NULL)==(expected==XR_XIR_OK)));
     if(!checked)return;

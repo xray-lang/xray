@@ -17,7 +17,10 @@
 #include "../base/xchecks.h"
 
 static bool program_value_type(const XrXirProgramSpec *spec, XrXirType type) {
-    if (xr_xir_type_is_cell(spec->types, type)) type = xr_xir_cell_element(spec->types, type);
+    if (xr_xir_type_is_cell(spec->types, type)) {
+        type = xr_xir_cell_element(spec->types, type);
+        if (type == XR_XIR_UNIT) return true;
+    }
     return type == XR_XIR_BOOL || type == XR_XIR_RUNE || xr_xir_type_is_number(type) || xr_xir_type_is_owned(spec->types, type);
 }
 static XrXirStatus program_shape(const XrXirCompileContext *context, const XrXirProgramSpec *spec) {
@@ -44,9 +47,9 @@ static XrXirStatus program_shape(const XrXirCompileContext *context, const XrXir
     for (uint32_t s = 0; s < spec->declarations->slot_count; ++s) {
         if (!xir_compile_work(context, 1)) return XR_XIR_BUDGET;
         const XrXirSlot *slot = &spec->declarations->slots[s];
-        if (xr_xir_type_is_cell(spec->types, slot->type) ||
+        if (xr_xir_type_is_cell(spec->types, slot->type) != !!slot->mutable ||
             (slot->type != XR_XIR_UNIT && !program_value_type(spec, slot->type)) ||
-            (xr_xir_type_is_callable(spec->types, slot->type) &&
+            (!slot->mutable && xr_xir_type_is_callable(spec->types, slot->type) &&
              slot->module != spec->declarations->root_module)) return XR_XIR_BAD_TYPE;
     }
     for (uint32_t i = 0; i < spec->entry_count; ++i) {
@@ -88,7 +91,7 @@ static void program_dispose(XrXirProgram *program) {
     xr_compile_resources_free(program->order);
     xr_compile_resources_free(program->active_modules);
     xr_compile_resources_free(program->module_slots);
-    xr_compile_resources_free(program->go_authority);
+    xr_compile_resources_free(program->permissions);
     xr_compile_resources_free(program);
 }
 static XrXirStatus program_execution_order(XrXirProgram *program) {
@@ -133,17 +136,17 @@ XR_FUNC XrXirStatus xr_xir_compile_program_seal(const XrXirCompileContext *conte
     if (!output || *output || !xir_compile_context_valid(context)) return XR_XIR_BAD_STRUCTURE;
     XrXirStatus status = program_shape(context, spec);
     if (status != XR_XIR_OK) return status;
-    XrXirStatus *go_authority = NULL;
-    status = xr_xir_compile_program_proof_verify(context, spec, &spec->proof, &go_authority);
+    XrXirProgramPermissions *permissions = NULL;
+    status = xr_xir_compile_program_proof_verify(context, spec, &spec->proof, &permissions);
     if (status != XR_XIR_OK) return status;
     if (spec->types) for (uint32_t i = 0; i < spec->types->count; ++i) {
-        if (!xir_compile_work(context, 1)) { xr_compile_resources_free(go_authority); return XR_XIR_BUDGET; }
+        if (!xir_compile_work(context, 1)) { xr_compile_resources_free(permissions); return XR_XIR_BUDGET; }
         if (spec->types->nodes[i].kind == XR_XIR_TYPE_ATOMIC && !xr_xir_atomic_capability())
-            { xr_compile_resources_free(go_authority); return XR_XIR_UNSUPPORTED; }
+            { xr_compile_resources_free(permissions); return XR_XIR_UNSUPPORTED; }
     }
     XrXirProgram *program = xir_compile_calloc(context, 1, sizeof(*program), &status);
-    if (!program) { xr_compile_resources_free(go_authority); return status; }
-    program->go_authority = go_authority;
+    if (!program) { xr_compile_resources_free(permissions); return status; }
+    program->permissions = permissions;
     atomic_init(&program->references, 1);
     program->context = *context;
     program->entry_count = spec->entry_count;

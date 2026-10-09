@@ -9,6 +9,7 @@
  * KEY CONCEPT:
  *   Real generated C is compiled before native results are accepted.
  */
+#include "xir_construction_fixture.h"
 #include "xir/xxir_emit_c.h"
 #include "base/xmalloc.h"
 #include <stdio.h>
@@ -68,13 +69,13 @@ static void wide_boundary(const XrXirCompileContext *context) {
     XrXirFunction function = {"wide", 4, &type, 1, XR_XIR_UNIT, &block, 1, ops, 2, operands, 65536};
     XrXirModule module = {XR_XIR_BUILT, &function, 1, NULL, NULL, NULL, NULL, XR_XIR_PROGRAM, NULL};
     XrXirArtifact *checked = NULL, *lowered = NULL;
-    CHECK(xr_xir_compile_check(context, &module, &checked, NULL) == XR_XIR_OK);
+    CHECK(xir_fixture_check(context, &module, &checked, NULL) == XR_XIR_OK);
     operands[65535] = 99;
-    CHECK(xr_xir_compile_check(context, &module, &lowered, NULL) == XR_XIR_BAD_VALUE && !lowered);
+    CHECK(xir_fixture_check(context, &module, &lowered, NULL) == XR_XIR_BAD_VALUE && !lowered);
     CHECK(xr_xir_compile_artifact_verify(checked, NULL) == XR_XIR_OK);
     operands[65535] = 0;
     ++ops[0].args[1]; ++function.operand_count;
-    CHECK(xr_xir_compile_check(context, &module, &lowered, NULL) == XR_XIR_BAD_STRUCTURE && !lowered);
+    CHECK(xir_fixture_check(context, &module, &lowered, NULL) == XR_XIR_BAD_STRUCTURE && !lowered);
     --ops[0].args[1]; --function.operand_count;
     XrXirTarget target = {XR_XIR_ARCH_X86_64, XR_XIR_VALUE_ABI_VERSION};
     xr_xir_compile_artifact_free(checked); checked = NULL;
@@ -82,11 +83,11 @@ static void wide_boundary(const XrXirCompileContext *context) {
      * fresh Checked artifact, while all stages retain the same finite ledger. */
     XrXirCompileContext boundary = *context;
     boundary.limits.frame_bytes = 8 + 65536 * sizeof(XrXirValue) - 1;
-    CHECK(xr_xir_compile_check(&boundary, &module, &checked, NULL) == XR_XIR_OK);
+    CHECK(xir_fixture_check(&boundary, &module, &checked, NULL) == XR_XIR_OK);
     CHECK(xr_xir_compile_lower(checked, &target, &lowered, NULL) == XR_XIR_BUDGET && !lowered);
     xr_xir_compile_artifact_free(checked); checked = NULL;
     ++boundary.limits.frame_bytes;
-    CHECK(xr_xir_compile_check(&boundary, &module, &checked, NULL) == XR_XIR_OK);
+    CHECK(xir_fixture_check(&boundary, &module, &checked, NULL) == XR_XIR_OK);
     CHECK(xr_xir_compile_lower(checked, &target, &lowered, NULL) == XR_XIR_OK);
     CHECK(xr_xir_compile_artifact_layout(lowered, 0)->outgoing_count == 65536);
     xr_xir_compile_artifact_free(lowered); xr_xir_compile_artifact_free(checked); xr_free(operands);

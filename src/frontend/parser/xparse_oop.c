@@ -871,6 +871,7 @@ AstNode *xr_parse_field_declaration(Parser *parser, bool *is_method_out) {
     bool is_weak = false;
     bool is_override = false;
     XrParamMode receiver_mode = XR_PARAM_READ;
+    XrNameSpan receiver_mode_span = {0};
 
     if (current_is_removed_public_modifier(parser)) {
         return reject_removed_member_modifier(
@@ -908,8 +909,10 @@ AstNode *xr_parse_field_declaration(Parser *parser, bool *is_method_out) {
 
     if (xr_parser_match(parser, TK_REF) || xr_parser_match_name(parser, "ref")) {
         receiver_mode = XR_PARAM_REF;
+        receiver_mode_span = (XrNameSpan){parser->previous.line, parser->previous.column};
     } else if (xr_parser_match(parser, TK_MOVE) || xr_parser_match_name(parser, "move")) {
         receiver_mode = XR_PARAM_MOVE;
+        receiver_mode_span = (XrNameSpan){parser->previous.line, parser->previous.column};
     }
 
     if (xr_parser_match(parser, TK_STATIC)) {
@@ -977,6 +980,8 @@ AstNode *xr_parse_field_declaration(Parser *parser, bool *is_method_out) {
         if (!xr_parser_healthy(parser)) return NULL;
         if (method) {
             method->as.method_decl.receiver_mode = receiver_mode;
+            if (!ast_work(parser->compiler_session, sizeof(XrNameSpan))) return NULL;
+            method->as.method_decl.receiver_mode_span = receiver_mode_span;
             method->as.method_decl.is_override = is_override;
             method->as.method_decl.is_protected = is_protected;
             method->as.method_decl.attributes = attributes;
@@ -1059,6 +1064,8 @@ AstNode *xr_parse_field_declaration(Parser *parser, bool *is_method_out) {
                     if (!xr_parser_healthy(parser)) return NULL;
                 } while (0);
             method->as.method_decl.receiver_mode = receiver_mode;
+            if (!ast_work(parser->compiler_session, sizeof(XrNameSpan))) return NULL;
+            method->as.method_decl.receiver_mode_span = receiver_mode_span;
             method->as.method_decl.is_override = is_override;
             method->as.method_decl.is_protected = is_protected;
             if (method->as.method_decl.is_constructor && attr_count > 0) {
@@ -2473,10 +2480,13 @@ AstNode *xr_parse_interface_member(Parser *parser) {
         return NULL;
 
     XrParamMode receiver_mode = XR_PARAM_READ;
+    XrNameSpan receiver_mode_span = {0};
     if (xr_parser_match(parser, TK_REF) || xr_parser_match_name(parser, "ref")) {
         receiver_mode = XR_PARAM_REF;
+        receiver_mode_span = (XrNameSpan){parser->previous.line, parser->previous.column};
     } else if (xr_parser_match(parser, TK_MOVE) || xr_parser_match_name(parser, "move")) {
         receiver_mode = XR_PARAM_MOVE;
+        receiver_mode_span = (XrNameSpan){parser->previous.line, parser->previous.column};
     }
 
     if (xr_parser_match(parser, TK_OPERATOR)) {
@@ -2492,6 +2502,7 @@ AstNode *xr_parse_interface_member(Parser *parser) {
             } while (0);
             return NULL;
         }
+        XrNameSpan name_span = {parser->previous.line, parser->previous.column};
         do {
             xr_parser_consume(parser, TK_LPAREN, "expected '(' after 'operator len'");
             if (!xr_parser_healthy(parser)) return NULL;
@@ -2522,9 +2533,16 @@ AstNode *xr_parse_interface_member(Parser *parser) {
             parser->compiler_session, ast_strdup(parser->compiler_session, "__operator_len"), NULL,
             0, return_type, member_line);
         if (!xr_parser_healthy(parser)) return NULL;
+        if (!ast_work(parser->compiler_session, 4 * sizeof(int))) return NULL;
+        method->line = name_span.line;
+        method->column = name_span.column;
+        method->end_line = name_span.line;
+        method->end_column = name_span.column + 3;
         method->as.interface_method.attributes = attributes;
         method->as.interface_method.attr_count = attr_count;
         method->as.interface_method.receiver_mode = receiver_mode;
+        if (!ast_work(parser->compiler_session, sizeof(XrNameSpan))) return NULL;
+        method->as.interface_method.receiver_mode_span = receiver_mode_span;
         method->as.interface_method.borrow_origin_syntax = borrow_origin_syntax;
         method->as.interface_method.borrow_origins = borrow_origins;
         method->as.interface_method.borrow_origin_count = borrow_origin_count;
@@ -2543,6 +2561,7 @@ AstNode *xr_parse_interface_member(Parser *parser) {
     char *member_name = xr_parser_token_string(parser, &parser->previous);
     if (!xr_parser_healthy(parser)) return NULL;
     int member_line = parser->previous.line;
+    int member_column = parser->previous.column;
 
     // Property signature: `name: type`
     if (xr_parser_check(parser, TK_COLON)) {
@@ -2679,11 +2698,17 @@ AstNode *xr_parse_interface_member(Parser *parser) {
     AstNode *method = xr_ast_interface_method(parser->compiler_session, member_name, params,
                                               param_count, return_type, member_line);
     if (!xr_parser_healthy(parser)) return NULL;
+    if (!ast_work(parser->compiler_session, 3 * sizeof(int))) return NULL;
+    method->column = member_column;
+    method->end_line = member_line;
+    method->end_column = member_column + (int)xr_parser_string_length(parser, member_name);
     method->as.interface_method.attributes = attributes;
     method->as.interface_method.attr_count = attr_count;
     method->as.interface_method.type_params = type_params;
     method->as.interface_method.type_param_count = type_param_count;
     method->as.interface_method.receiver_mode = receiver_mode;
+        if (!ast_work(parser->compiler_session, sizeof(XrNameSpan))) return NULL;
+        method->as.interface_method.receiver_mode_span = receiver_mode_span;
     method->as.interface_method.borrow_origin_syntax = borrow_origin_syntax;
     method->as.interface_method.borrow_origins = borrow_origins;
     method->as.interface_method.borrow_origin_count = borrow_origin_count;

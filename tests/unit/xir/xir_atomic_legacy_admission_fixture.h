@@ -1,3 +1,4 @@
+#include "xir_construction_fixture.h"
 /*
  * xray - Lightweight typed scripting with native concurrency
  * https://www.xray-lang.org
@@ -79,7 +80,7 @@ static XrXirStatus legacy_pipeline(const XrXirCompileContext *context,void *data
     AtomicLegacyCase c=*(AtomicLegacyCase *)data;AtomicLegacyFixture fixture;char *name=NULL;
     XrXirArtifact *checked=NULL,*read=NULL,*specialized=NULL,*lowered=NULL;XrXirCheckedPacket packet={0};
     XrXirStatus status=ordering_factory(context,&name);
-    if(status==XR_XIR_OK){legacy_fixture(&fixture,name,c);status=xr_xir_compile_check(context,&fixture.base.module,&checked,NULL);if(status!=XR_XIR_OK)CHECK(!checked);}
+    if(status==XR_XIR_OK){legacy_fixture(&fixture,name,c);status=xir_fixture_check(context, &fixture.base.module, &checked, NULL);if(status!=XR_XIR_OK)CHECK(!checked);}
     xr_compile_resources_free(name);
     if(status==XR_XIR_OK){status=xr_xir_compile_checked_write(checked,&packet,NULL);if(status!=XR_XIR_OK)CHECK(!packet.bytes&&!packet.length);}
     xr_xir_compile_artifact_free(checked);

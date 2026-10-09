@@ -100,7 +100,7 @@ static bool source_constructor_field(SourceContext *ctx, AstNode *node, const ch
     unsigned access = incoming ? (source_constructor_active(ctx) ? 2u : 1u) : 0u;
     if (!source_struct_field(ctx, node, visible_name(ctx, "this")->type, name, access, &field, &type)) return false;
     if (!incoming) return source_constructor_read(ctx, node, field, value);
-    if (!source_plan_expression(ctx, incoming, (SourceExpectedType){type != XR_XIR_UNIT,type, false}, value)) return false;
+    if (!source_plan_expression(ctx, incoming, (SourceExpectedType){type != XR_XIR_UNIT,type, false, false}, value)) return false;
     if (value->type != type) return source_fail(ctx, node, XR_XIR_BAD_TYPE, "constructor field type mismatch");
     return source_constructor_store(ctx, node, field, *value);
 }
@@ -119,6 +119,7 @@ static bool source_constructor_declare(SourceContext *ctx, SourceName *owner, As
     if (!source_query_declare(ctx, &symbol, XR_XIR_SOURCE_FUNCTION, owner->declaration,
         source_query_range(ctx, node, "constructor"))) return false;
     body->declaration = symbol.declaration;
+    if (!source_query_syntax_role(ctx, symbol.declaration, XR_XIR_SOURCE_SYNTAX_METHOD, 0)) return false;
     uint32_t count = (uint32_t)method->param_count;
     body->parameters = count ? source_alloc(ctx, count, sizeof(*body->parameters)) : NULL;
     if (count && !body->parameters) return false;
@@ -167,7 +168,9 @@ static bool source_constructor_invoke(SourceContext *ctx, AstNode *node,
         (ctx->identities[index].member_access && ctx->identities[ctx->function].nominal_owner != ctx->identities[index].nominal_owner))
         return source_fail(ctx, node, XR_XIR_BAD_TYPE, "constructor arity or authority mismatch");
     SourceName called = *target;
-    if (ctx->bodies[index].node->type == AST_METHOD_DECL) called.declaration = ctx->bodies[index].declaration;
+    if (ctx->bodies[index].checked_library ||
+        (ctx->bodies[index].node && ctx->bodies[index].node->type == AST_METHOD_DECL))
+        called.declaration = ctx->bodies[index].declaration;
     if (!source_query_reference(ctx, call->reference, binding, &called, XR_XIR_SOURCE_CALL)) return false;
     SourceSubstitution substitution = {nominal->nominal.arguments, nominal->nominal.argument_count};
     SourceValue *arguments = function->parameter_count ? source_alloc(ctx, function->parameter_count, sizeof(*arguments)) : NULL;
@@ -177,7 +180,7 @@ static bool source_constructor_invoke(SourceContext *ctx, AstNode *node,
         if (call->accesses && call->accesses[p] != XR_CALL_ARG_PLAIN)
             return source_fail(ctx, node, XR_XIR_BAD_TYPE, "constructor argument requires a value");
         if (!source_substitute(ctx, &substitution, function->parameters[p], 0, &expected) ||
-            !source_plan_expression(ctx, call->arguments[p], (SourceExpectedType){expected != XR_XIR_UNIT,expected, false}, &arguments[p])) return false;
+            !source_plan_expression(ctx, call->arguments[p], (SourceExpectedType){expected != XR_XIR_UNIT,expected, false, false}, &arguments[p])) return false;
         if (arguments[p].type != expected) return source_fail(ctx, node, XR_XIR_BAD_TYPE, "constructor argument type mismatch");
     }
     for (uint32_t p = call->count; p < function->parameter_count; ++p)
@@ -241,7 +244,8 @@ static bool source_constructor_body(SourceContext *ctx) {
     SourceName *self = add_name(ctx, &ctx->locals, "this", body->node);
     if (!self) return false;
     self->kind = SOURCE_LOCAL; self->type = ctx->functions[ctx->function].result; self->construction = true;
-    if (!source_query_declare(ctx, self, XR_XIR_SOURCE_BINDING, body->declaration, source_query_range(ctx, body->node, NULL))) return false;
+    if (!source_query_declare(ctx, self, XR_XIR_SOURCE_BINDING, body->declaration, source_query_range(ctx, body->node, NULL)) ||
+        !source_query_syntax_role(ctx, self->declaration, XR_XIR_SOURCE_SYNTAX_RECEIVER, 0)) return false;
     source_query_binding_type(ctx, self);
     for (uint32_t f = 0; f < decl->field_count; ++f) {
         SourceValue place; XrXirType storage;

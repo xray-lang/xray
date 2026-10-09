@@ -9,18 +9,24 @@
 static bool atomic_cell_capable(XirAtomic *cell) {
     return atomic_is_lock_free(&cell->object.references) && atomic_is_lock_free(&cell->bits);
 }
-XR_FUNC bool xr_xir_atomic_capability(void) {
+static bool xr_xir_atomic_capability_graph_operation(void) {
     XirAtomic cell = {0};
     atomic_init(&cell.object.references, 1);
     atomic_init(&cell.bits, 0);
     return atomic_cell_capable(&cell);
+}
+XR_FUNC bool xr_xir_atomic_capability(void) {
+    xr_xir_value_graph_begin();
+    bool graph_outcome = xr_xir_atomic_capability_graph_operation();
+    xr_xir_value_graph_end();
+    return graph_outcome;
 }
 static bool atomic_work(XrXirValueAdmission *admission, uint64_t units) {
     if (!admission || units > admission->work) return false;
     admission->work -= units;
     return true;
 }
-XR_FUNC XrXirValueStatus xr_xir_atomic_new(XrXirType type, const XrXirValue *initial,
+static XrXirValueStatus xr_xir_atomic_new_graph_operation(XrXirType type, const XrXirValue *initial,
     XrXirValueAdmission *admission, XrXirValue *output) {
     if (!admission || !admission->domain || !admission->arena || !unit_value(output))
         return XR_XIR_VALUE_BAD_ARGUMENT;
@@ -41,9 +47,17 @@ XR_FUNC XrXirValueStatus xr_xir_atomic_new(XrXirType type, const XrXirValue *ini
     }
     atomic_init(&cell->bits, (uint64_t)initial->payload);
     XrXirValue result = {(uint32_t)type, 0, 0};
+    xr_xir_value_object_publish(&cell->object);
     memcpy(&result.payload, &cell, sizeof(cell));
     *output = result;
     return XR_XIR_VALUE_OK;
+}
+XR_FUNC XrXirValueStatus xr_xir_atomic_new(XrXirType type, const XrXirValue *initial,
+    XrXirValueAdmission *admission, XrXirValue *output) {
+    xr_xir_value_graph_begin();
+    XrXirValueStatus graph_outcome = xr_xir_atomic_new_graph_operation(type, initial, admission, output);
+    xr_xir_value_graph_end();
+    return graph_outcome;
 }
 static XrXirRunStatus atomic_value_status(XrXirValueStatus status) {
     switch (status) {
@@ -217,7 +231,7 @@ static XrXirAtomicOutcome atomic_attempt(XrXirAtomicProgress *progress,
     }
     return result;
 }
-XR_FUNC XrXirAtomicOutcome xr_xir_atomic_resume(XrXirAtomicProgress *progress,
+static XrXirAtomicOutcome xr_xir_atomic_resume_graph_operation(XrXirAtomicProgress *progress,
     XrXirValueAdmission *admission, const XrXirCallView *view, XrXirValue *output) {
     if (!progress || progress->phase != 1 || !admission || !unit_value(output) ||
         !xr_xir_value_argument(&progress->receiver, admission->arena, (XrXirType)progress->receiver.type))
@@ -237,7 +251,14 @@ XR_FUNC XrXirAtomicOutcome xr_xir_atomic_resume(XrXirAtomicProgress *progress,
             xr_xir_compile_type_arena_types(admission->arena))) return atomic_outcome(XR_XIR_RUN_BAD_ARGUMENT);
     return atomic_attempt(progress, admission, view, output);
 }
-XR_FUNC XrXirAtomicOutcome xr_xir_atomic_start(const XrXirAtomicRequest *request,
+XR_FUNC XrXirAtomicOutcome xr_xir_atomic_resume(XrXirAtomicProgress *progress,
+    XrXirValueAdmission *admission, const XrXirCallView *view, XrXirValue *output) {
+    xr_xir_value_graph_begin();
+    XrXirAtomicOutcome graph_outcome = xr_xir_atomic_resume_graph_operation(progress, admission, view, output);
+    xr_xir_value_graph_end();
+    return graph_outcome;
+}
+static XrXirAtomicOutcome xr_xir_atomic_start_graph_operation(const XrXirAtomicRequest *request,
     XrXirValueAdmission *admission, const XrXirCallView *view,
     XrXirAtomicProgress *progress, XrXirValue *output) {
     if (!request) return atomic_outcome(XR_XIR_RUN_BAD_ARGUMENT);
@@ -276,8 +297,21 @@ XR_FUNC XrXirAtomicOutcome xr_xir_atomic_start(const XrXirAtomicRequest *request
     prepared.phase = 1; *progress = prepared;
     return xr_xir_atomic_resume(progress, admission, view, output);
 }
-XR_FUNC void xr_xir_atomic_progress_clear(XrXirAtomicProgress *progress) {
+XR_FUNC XrXirAtomicOutcome xr_xir_atomic_start(const XrXirAtomicRequest *request,
+    XrXirValueAdmission *admission, const XrXirCallView *view,
+    XrXirAtomicProgress *progress, XrXirValue *output) {
+    xr_xir_value_graph_begin();
+    XrXirAtomicOutcome graph_outcome = xr_xir_atomic_start_graph_operation(request, admission, view, progress, output);
+    xr_xir_value_graph_end();
+    return graph_outcome;
+}
+static void xr_xir_atomic_progress_clear_graph_operation(XrXirAtomicProgress *progress) {
     if (!progress) return;
     xr_xir_value_drop(&progress->receiver);
     memset(progress, 0, sizeof(*progress));
+}
+XR_FUNC void xr_xir_atomic_progress_clear(XrXirAtomicProgress *progress) {
+    xr_xir_value_graph_begin();
+    xr_xir_atomic_progress_clear_graph_operation(progress);
+    xr_xir_value_graph_end();
 }

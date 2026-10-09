@@ -19,7 +19,7 @@ add_library(xray_xir_cgen STATIC xxir_emit_c.c ../aot/xi_cgen_verify_output.c)
 target_link_libraries(xray_xir_cgen PUBLIC xray_xir)
 add_library(xray_xir_source STATIC xxir_source.c xxir_source_query.c xxir_type_inference.c xxir_library_catalog.c)
 target_sources(xray_xir_source PRIVATE
-    ../module/xmodule_graph.c ../module/xmodule_resolver.c ../module/xmodule_identity.c
+    ../module/xmodule_graph.c ../module/xmodule_resolver.c ../module/xmodule_identity.c ../module/xmodule_overlay.c
     ../module/xmodule_identity_view.c ../module/xmodule_fingerprint.c
     ../module/xdeclaration_manifest.c ../module/xdeclaration_load.c
     ../module/xlockfile.c ../module/xsemver.c ../module/stdlib_embedded.c
@@ -43,6 +43,15 @@ add_dependencies(xray_xir_source gen-xir-core-source)
 target_include_directories(xray_xir_source PUBLIC ${CMAKE_CURRENT_BINARY_DIR}/generated)
 target_include_directories(xray_xir_source PRIVATE ${XRAY_COMMON_INCLUDES})
 target_link_libraries(xray_xir_source PUBLIC xray_xir xray_xir_scalar xray_compiler_parser)
+# The LSP query owner consumes the same Source pipeline without legacy VM/analyzer.
+add_library(xray_lsp_source_query STATIC ../app/lsp/xlsp_source_query.c
+    ../app/lsp/xlsp_source_navigation.c ../base/xjson.c)
+target_link_libraries(xray_lsp_source_query PUBLIC xray_xir_source)
+if(MSVC)
+    target_compile_options(xray_lsp_source_query PRIVATE /W4 /WX)
+else()
+    target_compile_options(xray_lsp_source_query PRIVATE -Wall -Wextra -Werror)
+endif()
 add_library(xray_xir_source_product STATIC ../program/xr_xir_source_product.c)
 target_link_libraries(xray_xir_source_product PUBLIC xray_xir_source xray_xir_vm xray_xir_cgen)
 foreach(target xray_xir xray_xir_admission xray_xir_declarations xray_xir_scalar xray_xir_vm xray_xir_cgen xray_xir_source xray_xir_source_product)
@@ -54,3 +63,32 @@ foreach(target xray_xir xray_xir_admission xray_xir_declarations xray_xir_scalar
 endforeach()
 
 include("${CMAKE_CURRENT_LIST_DIR}/native_cache_pair.cmake")
+
+# Server query owner uses the actual CLI stdlib/Catalog/authority kernel.
+add_library(xray_lsp_source_workspace STATIC ../app/lsp/xlsp_source_workspace.c)
+target_link_libraries(xray_lsp_source_workspace PUBLIC xray_lsp_source_query xray_cli_source)
+target_compile_features(xray_lsp_source_workspace PUBLIC c_std_11)
+if(MSVC)
+    target_compile_options(xray_lsp_source_workspace PRIVATE /W4 /WX /utf-8)
+else()
+    target_compile_options(xray_lsp_source_workspace PRIVATE -Wall -Wextra -Werror -pedantic)
+endif()
+
+# Immutable syntax owner uses the same modern parser/ledger as Source.
+add_library(xray_lsp_source_syntax STATIC ../app/lsp/xlsp_source_syntax.c ../app/lsp/xlsp_source_buffer.c)
+target_link_libraries(xray_lsp_source_syntax PUBLIC xray_lsp_source_query)
+target_compile_features(xray_lsp_source_syntax PUBLIC c_std_11)
+if(MSVC)
+    target_compile_options(xray_lsp_source_syntax PRIVATE /W4 /WX)
+else()
+    target_compile_options(xray_lsp_source_syntax PRIVATE -Wall -Wextra -Werror)
+endif()
+
+add_library(xray_lsp_document_open STATIC ../app/lsp/xlsp_source_open.c ../app/lsp/xlsp_document_store.c)
+target_link_libraries(xray_lsp_document_open PUBLIC xray_lsp_source_workspace xray_lsp_source_syntax)
+target_compile_features(xray_lsp_document_open PUBLIC c_std_11)
+if(MSVC)
+    target_compile_options(xray_lsp_document_open PRIVATE /W4 /WX)
+else()
+    target_compile_options(xray_lsp_document_open PRIVATE -Wall -Wextra -Werror)
+endif()

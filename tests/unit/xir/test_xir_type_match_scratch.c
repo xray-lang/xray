@@ -9,6 +9,7 @@
  * KEY CONCEPT:
  *   Independent pool and child oracles exercise the real compiler allocator.
  */
+#include "xir_construction_fixture.h"
 #include "xir/xxir_type_match_internal.h"
 #include "xir/xxir_generic.h"
 #include "xir/xxir_interface_members.h"
@@ -81,11 +82,11 @@ static void fixture(MatchFixture *f) {
     memcpy(f->target_parameters,f->source_parameters,sizeof(f->target_parameters));
     f->nested_source[0]=(XrXirTypeNode){.kind=XR_XIR_TYPE_ARRAY,.element=parameter(),.parameter_span=1};
     f->nested_source[1]=(XrXirTypeNode){.kind=XR_XIR_TYPE_CALLABLE,.parameters=f->source_parameters,
-        .parameter_count=2,.result=parameter(),.parameter_span=1};
+        .parameter_count=2,.result=parameter(),.parameter_span=1,.flags=XR_XIR_CALLABLE_ROOT_UNRESOLVED};
     f->nested_target[0]=(XrXirTypeNode){.kind=XR_XIR_TYPE_ARRAY,.element=XR_XIR_STRING};
     f->nested_target[1]=(XrXirTypeNode){.kind=XR_XIR_TYPE_ARRAY,.element=XR_XIR_I64};
     f->nested_target[2]=(XrXirTypeNode){.kind=XR_XIR_TYPE_CALLABLE,.parameters=f->target_parameters,
-        .parameter_count=2,.result=constructed(1)};
+        .parameter_count=2,.result=constructed(1),.flags=XR_XIR_CALLABLE_ROOT_UNRESOLVED};
     f->nested_from=(XrXirTypes){f->nested_source,2,NULL,NULL};f->nested_to=(XrXirTypes){f->nested_target,3,NULL,NULL};
 }
 static XrXirStatus nested(const XrXirCompileContext *c,MatchFixture *f,XrXirTypeMatchScratch *scratch) {
@@ -167,9 +168,9 @@ static void nested_freshness(void) {
     f.target_parameters[1].mode=1;
     CHECK(nested(&c,&f,&scratch)==XR_XIR_BAD_TYPE);
     f.target_parameters[1].mode=0;
-    f.nested_target[2].flags=XR_XIR_CALLABLE_NO_SUSPEND;
+    f.nested_target[2].flags=XR_XIR_CALLABLE_ROOT_UNRESOLVED | XR_XIR_CALLABLE_NO_SUSPEND;
     CHECK(nested(&c,&f,&scratch)==XR_XIR_BAD_TYPE);
-    f.nested_target[2].flags=0;
+    f.nested_target[2].flags=XR_XIR_CALLABLE_ROOT_UNRESOLVED;
     CHECK(nested(&c,&f,&scratch)==XR_XIR_OK && stats(&c).allocation_count==before);
     xr_xir_type_match_scratch_free(&scratch);owner_free(&c,baseline);
 }
@@ -184,14 +185,16 @@ static void growth_reuse(void) {
     CHECK(xr_xir_compile_type_substitution_matches_between_scratch(&c,&f.small_from,&f.small_to,&argument,1,constructed(6),constructed(6),&scratch)==XR_XIR_OK);
     CHECK(stats(&c).allocation_count==before+1);
     CHECK(xr_xir_compile_type_substitution_matches_between_scratch(&c,&f.large_from,&f.large_to,&argument,1,constructed(159),constructed(159),&scratch)==XR_XIR_OK);
-    CHECK(stats(&c).allocation_count==before+2);
+    /* One capacity-seven block, then 8,16,32,64,128,160 for actual depth160.
+     * These are source-derived growth frontiers, not observed test counts. */
+    CHECK(stats(&c).allocation_count==before+7);
     CHECK(xr_xir_compile_type_substitution_matches_between_scratch(&c,&f.small_from,&f.small_to,&argument,1,constructed(6),constructed(6),&scratch)==XR_XIR_OK);
-    CHECK(stats(&c).allocation_count==before+2);
+    CHECK(stats(&c).allocation_count==before+7);
     f.large_target[0].element=XR_XIR_I64;
     CHECK(xr_xir_compile_type_substitution_matches_between_scratch(&c,&f.large_from,&f.large_to,&argument,1,constructed(159),constructed(159),&scratch)==XR_XIR_BAD_TYPE);
     f.large_target[0].element=XR_XIR_STRING;
     CHECK(xr_xir_compile_type_substitution_matches_between_scratch(&c,&f.large_from,&f.large_to,&argument,1,constructed(159),constructed(159),&scratch)==XR_XIR_OK);
-    CHECK(stats(&c).allocation_count==before+2);
+    CHECK(stats(&c).allocation_count==before+7);
     xr_xir_type_match_scratch_free(&scratch);CHECK(stats(&c).live_bytes==baseline);
     before=stats(&c).allocation_count;
     for (uint32_t i=0;i<2;++i) {
@@ -199,6 +202,96 @@ static void growth_reuse(void) {
         CHECK(stats(&c).live_bytes==baseline && stats(&c).allocation_count==before+i+1);
     }
     owner_free(&c,baseline);
+}
+/* Both live invocations exceed the initial eight frames. The canonical case
+ * compares Array^17<String> with Array^17<I64> in the destination pool and is
+ * independently BAD_TYPE. Outer depth18 reserves 8,16,18; the inner traversal
+ * reuses the unclaimed16 and grows to32, excluding the active outer18. */
+typedef struct NestedGrowthFixture {
+    XrXirTypeNode source[18], target[52];
+    XrXirCallableParameter source_parameters[2], target_parameters[2];
+    XrXirTypes from,to;
+} NestedGrowthFixture;
+static void nested_growth_fixture(NestedGrowthFixture *f,unsigned mode) {
+    CHECK(mode<3);memset(f,0,sizeof(*f));
+    chain(f->source,17,parameter());chain(f->target,17,XR_XIR_STRING);
+    for(uint32_t i=17;i<51;++i)f->target[i]=(XrXirTypeNode){.kind=XR_XIR_TYPE_ARRAY,
+        .element=i==17?XR_XIR_I64:constructed(i-1)};
+    f->source_parameters[0]=(XrXirCallableParameter){XR_XIR_I64,0};
+    f->source_parameters[1]=(XrXirCallableParameter){XR_XIR_STRING,0};
+    memcpy(f->target_parameters,f->source_parameters,sizeof(f->target_parameters));
+    f->source[17]=(XrXirTypeNode){.kind=XR_XIR_TYPE_CALLABLE,.parameters=f->source_parameters,
+        .parameter_count=2,.result=constructed(16),.parameter_span=1,.flags=XR_XIR_CALLABLE_ROOT_UNRESOLVED};
+    f->target[51]=(XrXirTypeNode){.kind=XR_XIR_TYPE_CALLABLE,.parameters=f->target_parameters,
+        .parameter_count=2,.result=constructed(50),.flags=XR_XIR_CALLABLE_ROOT_UNRESOLVED};
+    f->from=(XrXirTypes){f->source,18,NULL,NULL};f->to=(XrXirTypes){f->target,52,NULL,NULL};
+    /* Modes1/2 are bare-walker alias stress, intentionally duplicate nodes:
+     * they are never admitted as Checked pools. Success of the deep inner
+     * comparison must preserve the outer callable's following children. */
+    if(mode)f->target[17].element=XR_XIR_STRING;
+    if(mode==2)f->target_parameters[1].type=XR_XIR_BOOL;
+}
+static XrXirStatus nested_growth_match(const XrXirCompileContext *c,
+    NestedGrowthFixture *f,XrXirTypeMatchScratch *scratch) {
+    XrXirType argument=constructed(16);
+    return xr_xir_compile_type_substitution_matches_between_scratch(c,&f->from,&f->to,
+        &argument,1,constructed(17),constructed(51),scratch);
+}
+static void nested_growth_faults(void) {
+    for(unsigned mode=0;mode<3;++mode)for(size_t pass=0;pass<=4;++pass) {
+        NestedGrowthFixture f;nested_growth_fixture(&f,mode);
+        XrXirCompileContext c=owner_new(caps());uint64_t baseline=stats(&c).live_bytes;
+        CHECK(xr_xir_compile_types_structure_verify(&c,&f.from)==XR_XIR_OK);
+        CHECK(xr_xir_compile_types_structure_verify(&c,&f.to)==(mode?XR_XIR_BAD_STRUCTURE:XR_XIR_OK));
+        XrXirTypeMatchScratch scratch={c.resources,NULL};uint64_t allocations=stats(&c).allocation_count;
+        XrXirStatus expected=mode==1?XR_XIR_OK:XR_XIR_BAD_TYPE;
+        attempts=0;injected=false;fail_at=pass?pass-1:SIZE_MAX;
+        XrXirStatus status=nested_growth_match(&c,&f,&scratch);size_t actual=attempts;fail_at=SIZE_MAX;
+        if(!pass)CHECK(status==expected && actual==4 && stats(&c).allocation_count==allocations+4);
+        else CHECK(status==XR_XIR_OUT_OF_MEMORY && injected && actual==pass);
+        XrCompileResourceStats failed=stats(&c);
+        /* Retain the same owner and scratch; no quota reset or replenishment. */
+        CHECK(nested_growth_match(&c,&f,&scratch)==expected);
+        XrCompileResourceStats retried=stats(&c);
+        CHECK(retried.work>failed.work && retried.allocated_bytes>=failed.allocated_bytes);
+        CHECK(nested_growth_match(&c,&f,&scratch)==expected);
+        CHECK(stats(&c).allocation_count==retried.allocation_count);
+        xr_xir_type_match_scratch_free(&scratch);owner_free(&c,baseline);
+    }
+    puts("nested outer18/inner17: four actual allocation points per mode, same-owner retries, physical=0/0");
+}
+static void copy_work_rejection(void) {
+    XrXirTypeNode source[9],target[9];chain(source,9,parameter());chain(target,9,XR_XIR_STRING);
+    XrXirTypes from={source,9,NULL,NULL},to={target,9,NULL,NULL};XrXirType argument=XR_XIR_STRING;
+    XrCompileResourceLimits limit=caps();limit.work=32;
+    XrXirCompileContext c=owner_new(limit);uint64_t baseline=stats(&c).live_bytes;
+    XrXirTypeMatchScratch scratch={c.resources,NULL};uint64_t allocations=stats(&c).allocation_count;
+    /* Before copying eight frames: owner1, nine pair checks, two allocations
+     * and one claimed-block scan consume13 work. Remaining19 cannot pay eight
+     * nonempty frames. Both reservations must become reusable on this BUDGET. */
+    attempts=0;
+    CHECK(xr_xir_compile_type_substitution_matches_between_scratch(&c,&from,&to,&argument,1,constructed(8),constructed(8),&scratch)==XR_XIR_BUDGET);
+    CHECK(attempts==2 && stats(&c).allocation_count==allocations+2 && stats(&c).work==13);
+    /* Reusing the larger reservation needs ten pair checks plus one scan,11.
+     * It succeeds within the ORIGINAL32 cap; no copy, refund or reset occurs. */
+    CHECK(xr_xir_compile_type_substitution_matches_between_scratch(&c,&from,&to,&argument,1,constructed(8),constructed(8),&scratch)==XR_XIR_OK);
+    CHECK(attempts==2 && stats(&c).allocation_count==allocations+2 && stats(&c).work==24);
+    /* The outer borrows the large block; its nested comparison must also be
+     * able to reclaim the original eight-frame block. This costs seven work. */
+    MatchFixture f;fixture(&f);CHECK(nested(&c,&f,&scratch)==XR_XIR_BAD_TYPE);
+    CHECK(attempts==2 && stats(&c).allocation_count==allocations+2 && stats(&c).work==31);
+    xr_xir_type_match_scratch_free(&scratch);owner_free(&c,baseline);
+}
+static uint64_t shallow_pool_bytes(uint32_t count) {
+    CHECK(count==8 || count==160);XrXirTypeNode source[160],target[160];
+    chain(source,count,parameter());chain(target,count,XR_XIR_STRING);
+    XrXirTypes from={source,count,NULL,NULL},to={target,count,NULL,NULL};XrXirType argument=XR_XIR_STRING;
+    XrXirCompileContext c=owner_new(caps());uint64_t baseline=stats(&c).live_bytes;
+    XrXirTypeMatchScratch scratch={c.resources,NULL};XrCompileResourceStats before=stats(&c);
+    CHECK(xr_xir_compile_type_substitution_matches_between_scratch(&c,&from,&to,&argument,1,constructed(0),constructed(0),&scratch)==XR_XIR_OK);
+    XrCompileResourceStats after=stats(&c);CHECK(after.allocation_count==before.allocation_count+1);
+    uint64_t bytes=after.allocated_bytes-before.allocated_bytes;
+    xr_xir_type_match_scratch_free(&scratch);owner_free(&c,baseline);return bytes;
 }
 static XrCompileResourceStats measured(XrCompileResourceLimits limits,XrXirStatus expected) {
     MatchFixture f;fixture(&f);XrXirCompileContext c=owner_new(limits);uint64_t baseline=stats(&c).live_bytes;
@@ -249,7 +342,7 @@ static void deep_body(void) {
     XrCompileResourceLimits limits={UINT64_C(64)*1024*1024,UINT64_C(8)*1024*1024,UINT64_C(128)*1024*1024};
     XrXirCompileContext c=owner_new(limits);uint64_t baseline=stats(&c).live_bytes;
     XrXirArtifact *checked=NULL,*closed=NULL,*lowered=NULL;
-    CHECK(xr_xir_compile_check(&c,&built,&checked,NULL)==XR_XIR_OK);
+    CHECK(xir_fixture_check(&c, &built, &checked, NULL)==XR_XIR_OK);
     memset(nodes,0xcc,sizeof(nodes));
     CHECK(xr_xir_compile_artifact_verify(checked,NULL)==XR_XIR_OK);
     CHECK(xr_xir_compile_specialize(checked,&closed,NULL)==XR_XIR_OK);
@@ -292,7 +385,8 @@ static void closure_fixture(ClosureFixture *f) {
     f->nodes[1]=(XrXirTypeNode){.kind=XR_XIR_TYPE_NULLABLE,.element=constructed(0),.parameter_span=1};
     f->parameters[0]=(XrXirCallableParameter){constructed(1),0};
     f->nodes[2]=(XrXirTypeNode){.kind=XR_XIR_TYPE_CALLABLE,.parameters=f->parameters,
-        .parameter_count=1,.result=parameter(),.parameter_span=1,.flags=XR_XIR_CALLABLE_NO_SUSPEND};
+        .parameter_count=1,.result=parameter(),.parameter_span=1,
+        .flags=XR_XIR_CALLABLE_ROOT_UNRESOLVED | XR_XIR_CALLABLE_NO_SUSPEND};
     f->nominal=(XrXirNominalDeclaration){.module={"m",1},.name={"Box",3},.exported=1,
         .constraints=&f->empty,.parameter_count=1,.kind=XR_XIR_NOMINAL_STRUCT};
     f->nominals=(XrXirNominalTable){&f->nominal,1,NULL};
@@ -300,8 +394,9 @@ static void closure_fixture(ClosureFixture *f) {
         .nominal={.declaration=0,.arguments=f->arguments,.argument_count=1}};
     f->parameters[1]=(XrXirCallableParameter){constructed(3),0};
     f->nodes[4]=(XrXirTypeNode){.kind=XR_XIR_TYPE_CALLABLE,.parameters=f->parameters+1,
-        .parameter_count=1,.result=constructed(1),.parameter_span=1};
-    f->nodes[5]=(XrXirTypeNode){.kind=XR_XIR_TYPE_CALLABLE,.result=f->arguments[1],.parameter_span=2};
+        .parameter_count=1,.result=constructed(1),.parameter_span=1,.flags=XR_XIR_CALLABLE_ROOT_UNRESOLVED};
+    f->nodes[5]=(XrXirTypeNode){.kind=XR_XIR_TYPE_CALLABLE,.result=f->arguments[1],
+        .parameter_span=2,.flags=XR_XIR_CALLABLE_ROOT_UNRESOLVED};
     for(uint32_t i=6;i<65;++i)f->nodes[i]=(XrXirTypeNode){.kind=XR_XIR_TYPE_ARRAY,
         .element=constructed(i-1),.parameter_span=2};
     f->methods[0]=(XrXirInterfaceMethod){.name={"array",5},.signature=constructed(2)};
@@ -322,9 +417,10 @@ static void closure_expect(const XrXirInterfaceClosure *closure,bool unchanged,
         const XrXirInterfaceRequirement *r=xr_xir_interface_closure_requirement(closure,i);
         const XrXirTypeNode *signature=xr_xir_type_node(types,r->signature);
         CHECK(signature && signature->kind==XR_XIR_TYPE_CALLABLE);
+        CHECK(signature->flags==(i==0 ? 9u : 8u));
         if(unchanged)CHECK(r->signature==constructed(i==0?2:i==1?4:5));
         if(i==0) {
-            CHECK(signature->flags==XR_XIR_CALLABLE_NO_SUSPEND && signature->parameter_count==1);
+            CHECK(signature->flags==(XR_XIR_CALLABLE_ROOT_UNRESOLVED | XR_XIR_CALLABLE_NO_SUSPEND) && signature->parameter_count==1);
             CHECK(signature->parameters[0].mode==0 && signature->result==argument);
             const XrXirTypeNode *nullable=xr_xir_type_node(types,signature->parameters[0].type);
             CHECK(nullable && nullable->kind==XR_XIR_TYPE_NULLABLE);
@@ -429,17 +525,18 @@ static void closure_layout_expect(const XrXirInterfaceClosure *closure,
             !memcmp(r->name.bytes,f->base.methods[i].name.bytes,r->name.length));
         const XrXirTypeNode *signature=xr_xir_type_node(types,r->signature);
         CHECK(signature && signature->kind==XR_XIR_TYPE_CALLABLE);
+        CHECK(signature->flags==(i==0 ? 9u : 8u));
         uint32_t original=i==0?2:i==1?4:5;
         bool same=i==2?!different_pool && mode!=2:mode==0 || mode==2;
         CHECK((r->signature==constructed(original))==same);
         if(i==0) {
-            CHECK(!r->own_parameter_count && signature->flags==XR_XIR_CALLABLE_NO_SUSPEND);
+            CHECK(!r->own_parameter_count && signature->flags==(XR_XIR_CALLABLE_ROOT_UNRESOLVED | XR_XIR_CALLABLE_NO_SUSPEND));
             CHECK(signature->parameter_count==1 && signature->parameters[0].mode==0);
             CHECK(signature->result==(mode==7?XR_XIR_I64:argument));
             if(mode==8)CHECK(signature->parameters[0].type==XR_XIR_I64);
             else closure_layout_nullable(types,signature->parameters[0].type,argument);
         } else if(i==1) {
-            CHECK(!r->own_parameter_count && !signature->flags && signature->parameter_count==1);
+            CHECK(!r->own_parameter_count && signature->flags==XR_XIR_CALLABLE_ROOT_UNRESOLVED && signature->parameter_count==1);
             CHECK(signature->parameters[0].mode==0);
             const XrXirTypeNode *nominal=xr_xir_type_node(types,signature->parameters[0].type);
             CHECK(nominal && nominal->kind==XR_XIR_TYPE_NOMINAL && !nominal->nominal.declaration);
@@ -451,7 +548,7 @@ static void closure_layout_expect(const XrXirInterfaceClosure *closure,
             } else CHECK(!nominal->nominal.field_count && !nominal->nominal.fields);
             closure_layout_nullable(types,signature->result,argument);
         } else {
-            CHECK(!signature->flags && !signature->parameter_count && r->own_parameter_count==1);
+            CHECK(signature->flags==XR_XIR_CALLABLE_ROOT_UNRESOLVED && !signature->parameter_count && r->own_parameter_count==1);
             CHECK(signature->result==(XrXirType)(XR_XIR_TYPE_PARAMETER_BASE+(mode==2?3:1)));
         }
     }
@@ -532,6 +629,7 @@ static void closure_layout_rejection(void) {
 }
 
 int main(void) { closure_boundaries();closure_layout_boundaries();closure_layout_rejection();
-    cross_pool();nested_freshness();growth_reuse();faults();limits();deep_body();
+    cross_pool();nested_freshness();growth_reuse();nested_growth_faults();copy_work_rejection();
+    CHECK(shallow_pool_bytes(8)==shallow_pool_bytes(160));faults();limits();deep_body();
     puts("fresh type substitution, claimed stacks, owned deep body, finite axes and physical release PASS");return 0;
 }

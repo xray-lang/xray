@@ -1705,6 +1705,8 @@ AstNode *xr_parse_assignment(Parser *parser, AstNode *left) {
         if (!xr_parser_healthy(parser)) return NULL;
         AstNode *node = xr_ast_member_set(parser->compiler_session, object, member, value, line);
         if (!xr_parser_healthy(parser)) return NULL;
+        if (!ast_work(parser->compiler_session, sizeof(XrNameSpan))) return NULL;
+        node->as.member_set.name_span = left->as.member_access.name_span;
 
         // Arena bulk-frees left/member; no individual free needed.
         return node;
@@ -1781,6 +1783,8 @@ AstNode *xr_parse_compound_assignment(Parser *parser, AstNode *left) {
         AstNode *compound_assignment =
             xr_ast_compound_assignment(parser->compiler_session, var_name, op_token, right, line);
         if (!xr_parser_healthy(parser)) return NULL;
+        if (!ast_work(parser->compiler_session, sizeof(XrNameSpan))) return NULL;
+        compound_assignment->as.compound_assignment.name_span = (XrNameSpan){left->line,left->column};
         return compound_assignment;
     } else if (left->type == AST_MEMBER_ACCESS) {
         // Member compound assignment: this.field += 10
@@ -1793,6 +1797,8 @@ AstNode *xr_parse_compound_assignment(Parser *parser, AstNode *left) {
         AstNode *compound_assignment = xr_ast_member_compound_assignment(
             parser->compiler_session, object, member_name, op_token, right, line);
         if (!xr_parser_healthy(parser)) return NULL;
+        if (!ast_work(parser->compiler_session, sizeof(XrNameSpan))) return NULL;
+        compound_assignment->as.compound_assignment.name_span = left->as.member_access.name_span;
         return compound_assignment;
     } else {
         do {

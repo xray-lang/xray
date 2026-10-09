@@ -36,7 +36,8 @@ static bool source_core_contract(SourceContext *ctx) {
     const XrXirTypeNode *action = xr_xir_callable_signature(&ctx->types,owner->parameters[0]);
     if (!node || node->type != AST_FUNCTION_DECL || !node->is_exported ||
         owner->parameter_count != 2 || owner->parameters[1] != XR_XIR_STRING || owner->result != XR_XIR_UNIT ||
-        strcmp(owner->name,"assertPanics") || !action || action->parameter_count || action->flags ||
+        strcmp(owner->name,"assertPanics") || !action || action->parameter_count ||
+        action->flags != XR_XIR_CALLABLE_ROOT_UNRESOLVED ||
         action->result != XR_XIR_TYPE_PARAMETER_BASE ||
         ctx->generics[2].parameter_count != 1 || xr_xir_binder_kind(&ctx->generics[2],0) != XR_XIR_BINDER_RESULT_VARIABLE ||
         binding->owner_kind != XR_XIR_DEFAULT_PARAMETER || binding->owner != 2 || binding->ordinal != 1 || binding->function != 5 ||
@@ -65,9 +66,12 @@ static bool source_core_contract(SourceContext *ctx) {
     return true;
 }
 
+#include "xxir_source_root_refine.inc.c"
 #include "xxir_source_construct.inc.c"
 
 static void source_core_dispose(SourceContext *ctx) {
+    xr_xir_compile_construction_free(ctx->construction);
+    ctx->construction=NULL;
     for (SourceManifest *manifest=ctx->manifests;manifest;manifest=manifest->next)
         xr_compile_declaration_manifest_free(manifest->declarations);
     while (ctx->memory) {
@@ -96,8 +100,41 @@ static XrXirSourceType source_core_query_type(XrXirSourceType type, uint32_t dec
     if (type.generic_owner) type.generic_owner += declaration;
     return type;
 }
+/* Semantic and observational identities move together. Core facts keep their
+ * generated-source ranges, while their receiving module and declaration IDs
+ * are remapped before the producer is destroyed. */
+static bool source_core_query_references(SourceContext *ctx, const SourceContext *core,
+    uint32_t module, uint32_t first) {
+    for (uint32_t i=0;i<core->query.reference_count;++i) {
+        XrXirSourceReference original=core->query.references[i];
+        XrXirSourceRange selection=core->syntax.references[i];
+        original.range.module=selection.module=module;
+        if (original.declaration) original.declaration+=first;
+        if (original.target) original.target+=first;
+        if (!source_query_target_selected_reference(ctx,original.range,selection,
+            original.target,original.access)) return false;
+        XrXirSourceReference *record=(XrXirSourceReference *)&ctx->query.references[ctx->query.reference_count-1];
+        if (!source_copy_bytes(ctx,NULL,record,&original,sizeof(original))) return false;
+    }
+    for (uint32_t i=0;i<core->syntax.marker_count;++i) {
+        XrXirSourceMarker marker=core->syntax.markers[i];
+        marker.range.module=module;
+        if (marker.declaration) marker.declaration+=first;
+        XrXirSourceMarker *records=source_query_append(ctx,ctx->syntax.markers,
+            &ctx->syntax.marker_count,&ctx->syntax_marker_capacity,sizeof(*records));
+        if (!records) return false;
+        ctx->syntax.markers=records;
+        if (!source_copy_bytes(ctx,NULL,&records[ctx->syntax.marker_count-1],&marker,sizeof(marker))) return false;
+    }
+    return true;
+}
 static bool source_core_query(SourceContext *ctx, const SourceContext *core, uint32_t owners[3], XrXirType action) {
     uint32_t module=ctx->query.module_count, first=ctx->query.declaration_count;
+    if (core->query.declaration_count!=core->syntax.declaration_count ||
+        core->query.reference_count!=core->syntax.reference_count ||
+        ctx->query.declaration_count!=ctx->syntax.declaration_count ||
+        ctx->query.reference_count!=ctx->syntax.reference_count)
+        return source_fail(ctx,NULL,XR_XIR_BAD_STRUCTURE,"core source syntax inventory is incomplete");
     XrXirSourceQueryModule *modules=source_query_append(ctx,ctx->query.modules,
         &ctx->query.module_count,&ctx->query_module_capacity,sizeof(*modules));
     if (!modules) return false;
@@ -136,6 +173,11 @@ static bool source_core_query(SourceContext *ctx, const SourceContext *core, uin
             parameters[p]=source_core_query_type(parameters[p],first,action);
         }
         records[ctx->query.declaration_count-1]=original;
+        XrXirSourceDeclarationSyntax fact=core->syntax.declarations[d];
+        fact.name.module=module;
+        if (!source_query_syntax_declaration(ctx,fact.name)) return false;
+        XrXirSourceDeclarationSyntax *syntax=(XrXirSourceDeclarationSyntax *)&ctx->syntax.declarations[ctx->syntax.declaration_count-1];
+        if (!source_copy_bytes(ctx,NULL,syntax,&fact,sizeof(fact))) return false;
     }
     for (uint32_t e=0;e<core->query.expression_count;++e) {
         XrXirSourceExpression *records=source_query_append(ctx,ctx->query.expressions,
@@ -146,6 +188,7 @@ static bool source_core_query(SourceContext *ctx, const SourceContext *core, uin
         records[ctx->query.expression_count-1].range.module=module;
         records[ctx->query.expression_count-1].type=source_core_query_type(records[ctx->query.expression_count-1].type,first,action);
     }
+    if (!source_core_query_references(ctx,core,module,first)) return false;
     owners[0]=core->bodies[1].declaration+first; owners[1]=core->bodies[2].declaration+first; owners[2]=core->bodies[3].declaration+first;
     return true;
 }

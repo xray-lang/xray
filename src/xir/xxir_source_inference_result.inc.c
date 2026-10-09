@@ -25,9 +25,9 @@ static bool source_inference_result(SourceContext *ctx, AstNode *site,
     const XrXirTypeNode *from = xr_xir_callable_signature(&ctx->types,formal);
     const XrXirTypeNode *to = xr_xir_callable_signature(&ctx->types,expected);
     if (from && to && from->flags != to->flags) {
-        if (from->flags != XR_XIR_CALLABLE_NO_SUSPEND || to->flags)
-            return source_fail(ctx,site,XR_XIR_BAD_TYPE,"result context cannot strengthen a callable promise");
-        XrXirTypeNode ordinary = *from; ordinary.flags = 0;
+        if (!xr_xir_callable_flags_compatible(from->flags, to->flags))
+            return source_fail(ctx,site,XR_XIR_BAD_TYPE,"result context cannot strengthen a callable execution bound");
+        XrXirTypeNode ordinary = *from; ordinary.flags = to->flags;
         if (!source_intern_type(ctx,ordinary,&evidence)) return false;
     }
     status = xr_xir_compile_inference_observe(state, &ctx->types, (XrXirInferencePair){evidence,expected});

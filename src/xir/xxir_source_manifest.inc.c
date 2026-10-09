@@ -130,6 +130,8 @@ static bool source_manifest_parameters(SourceContext *ctx, uint32_t function, co
 static bool source_manifest_requirement(SourceContext *ctx, SourceDeclarationTarget target,
     const XrDeclarationRecord *record) {
     SourceName *owner = ctx->interface_sources[target.interface];
+    if (owner->checked_library)
+        return source_fail(ctx,NULL,XR_XIR_BAD_STAGE,"Checked interface promises cannot be replaced by source syntax");
     AstNode *node = owner->node->as.interface_decl.methods[target.member];
     InterfaceMethodNode *method = &node->as.interface_method;
     XrXirInterfaceMethod *requirement = (XrXirInterfaceMethod *)&ctx->interfaces.declarations[target.interface].methods[target.member];
@@ -150,9 +152,9 @@ static bool source_manifest_requirement(SourceContext *ctx, SourceDeclarationTar
         if (selected == UINT32_MAX)
             return source_fail(ctx,node,XR_XIR_BAD_TYPE,"interface declaration parameter name is missing");
         const XrXirTypeNode *found = xr_xir_callable_signature(&ctx->types,parameters[selected].type);
-        if (!found || found->flags)
+        if (!found || (found->flags & XR_XIR_CALLABLE_NO_SUSPEND))
             return source_fail(ctx,node,XR_XIR_BAD_TYPE,"interface callable promise target is invalid or duplicated");
-        XrXirTypeNode qualified = *found; qualified.flags = XR_XIR_CALLABLE_NO_SUSPEND;
+        XrXirTypeNode qualified = *found; qualified.flags |= XR_XIR_CALLABLE_NO_SUSPEND;
         if (!source_intern_type(ctx,qualified,&parameters[selected].type)) return false;
     }
     if (!source_intern_type(ctx,signature,&requirement->signature)) return false;

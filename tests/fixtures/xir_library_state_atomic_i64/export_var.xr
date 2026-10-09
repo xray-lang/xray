@@ -1,0 +1,2 @@
+export var counter=Atomic<i64>(0)
+export fn pure(value:i64)->i64 {return value+1}

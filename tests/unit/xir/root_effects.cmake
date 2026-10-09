@@ -11,3 +11,6 @@ endif()
 add_test(NAME test_xir_root_effects COMMAND test_xir_root_effects)
 set_tests_properties(test_xir_root_effects PROPERTIES TIMEOUT 180 RUN_SERIAL TRUE PROCESSORS 1
     LABELS "unit;xir;root-effects;metadata;ownership;budget")
+add_test(NAME test_xir_root_var_atomic_binding COMMAND test_xir_root_effects --var-atomic)
+set_tests_properties(test_xir_root_var_atomic_binding PROPERTIES TIMEOUT 180 RUN_SERIAL TRUE PROCESSORS 1
+    LABELS "unit;xir;root-effects;metadata;ownership;budget")

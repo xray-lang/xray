@@ -1,3 +1,4 @@
+#include "xlsp_navigation.h"
 /*
  * xray - Lightweight typed scripting with native concurrency
  * https://www.xray-lang.org
@@ -58,20 +59,7 @@ static void xlsp_workspace_symbol_collect(const XlspIndexEntry *entry, void *ctx
 // ============================================================================
 
 XrJsonValue *xlsp_handle_document_highlight(XrLspServer *server, XrJsonValue *params) {
-    XrJsonValue *textDocument = xjson_get_object(params, "textDocument");
-    XrJsonValue *position = xjson_get_object(params, "position");
-    if (!textDocument || !position)
-        return xjson_new_array();
-
-    const char *uri = xjson_get_string(textDocument, "uri");
-    XrLspDocument *doc = xlsp_document_get(server, uri);
-    if (!doc || !doc->content)
-        return xjson_new_array();
-
-    XrLspPosition pos = {.line = (uint32_t) xjson_get_int(position, "line"),
-                         .character = (uint32_t) xjson_get_int(position, "character")};
-
-    return xlsp_analyze_document_highlight(server, doc, pos);
+    return xlsp_navigation_handle(server, params, 2);
 }
 
 // ============================================================================

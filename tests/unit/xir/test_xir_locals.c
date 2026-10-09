@@ -9,6 +9,7 @@
  * KEY CONCEPT:
  *   Canonical packets must preserve place roles and dominance.
  */
+#include "xir_construction_fixture.h"
 #include "xir/xxir_vm.h"
 #include "xir/xxir_checked.h"
 #include "xir/xxir_emit_c.h"
@@ -70,7 +71,7 @@ static void rejected_places(const XrXirArtifact *artifact) {
         if (mode == 6) ops[0].type = XR_XIR_UNIT;
         if (mode == 7) { ops[3] = (XrXirInstruction) {XR_XIR_LOCAL_NEW, XR_XIR_STRING, {1}, {0}, 0, {0}}; ops[8].args[0] = 6; }
         if (mode == 8) { ops[8].op = XR_XIR_OWNED_LOCAL_READ; }
-        CHECK(xr_xir_compile_verify(context, &module, NULL) != XR_XIR_OK);
+        CHECK(xir_fixture_verify(context, &module, NULL) != XR_XIR_OK);
     }
 }
 static void rejected_phis(const XrXirArtifact *artifact) {
@@ -97,7 +98,7 @@ static void rejected_phis(const XrXirArtifact *artifact) {
         if (mode == 11) { ops[3].op = XR_XIR_COPY; ops[3].args[0] = 0; ops[3].args[1] = 0; }
         if (mode == 12) { ops[0].op = XR_XIR_LOCAL_NEW; ops[0].type = XR_XIR_STRING; inputs[1] = 3; }
         if (mode == 13) ops[3].targets[0] = 1;
-        CHECK(xr_xir_compile_verify(context, &module, NULL) != XR_XIR_OK);
+        CHECK(xir_fixture_verify(context, &module, NULL) != XR_XIR_OK);
     }
 }
 static void phi_layout_attacks(XrXirArtifact *artifact) {
@@ -122,12 +123,12 @@ static void rejected_initialization(const XrXirArtifact *artifact) {
     XrXirFunction function = module.functions[3];
     XrXirInstruction ops[10]; memcpy(ops, function.instructions, sizeof(ops));
     module.functions = &function; module.function_count = 1; function.instructions = ops;
-    CHECK(xr_xir_compile_verify(context, &module, NULL) == XR_XIR_OK);
+    CHECK(xir_fixture_verify(context, &module, NULL) == XR_XIR_OK);
     ops[4] = (XrXirInstruction) {XR_XIR_SUSPEND, XR_XIR_UNIT, {0}, {0}, 0, {0}};
-    CHECK(xr_xir_compile_verify(context, &module, NULL) == XR_XIR_BAD_VALUE);
+    CHECK(xir_fixture_verify(context, &module, NULL) == XR_XIR_BAD_VALUE);
     ops[4] = xr_xir_compile_artifact_module(artifact)->functions[3].instructions[4];
     ops[2] = (XrXirInstruction) {XR_XIR_LOCAL_READ, XR_XIR_STRING, {3}, {0}, 0, {0}};
-    CHECK(xr_xir_compile_verify(context, &module, NULL) == XR_XIR_BAD_VALUE);
+    CHECK(xir_fixture_verify(context, &module, NULL) == XR_XIR_BAD_VALUE);
 }
 static void initialize_once(const XrXirArtifact *artifact) {
     const XrXirCompileContext *context = xr_xir_compile_artifact_context(artifact);
@@ -136,16 +137,16 @@ static void initialize_once(const XrXirArtifact *artifact) {
     XrXirInstruction ops[10]; memcpy(ops, function.instructions, sizeof(ops));
     module.functions = &function; module.function_count = 1; function.instructions = ops;
     ops[0].immediate = 1;
-    CHECK(xr_xir_compile_verify(context, &module, NULL) == XR_XIR_OK);
+    CHECK(xir_fixture_verify(context, &module, NULL) == XR_XIR_OK);
     /* Exclusive first writes are legal, but a join cannot write again. */
     ops[6] = (XrXirInstruction) {XR_XIR_LOCAL_WRITE, XR_XIR_UNIT, {3, 0}, {0}, 0, {0}};
-    CHECK(xr_xir_compile_verify(context, &module, NULL) == XR_XIR_BAD_VALUE);
+    CHECK(xir_fixture_verify(context, &module, NULL) == XR_XIR_BAD_VALUE);
     ops[4] = (XrXirInstruction) {XR_XIR_SUSPEND, XR_XIR_UNIT, {0}, {0}, 0, {0}};
-    CHECK(xr_xir_compile_verify(context, &module, NULL) == XR_XIR_BAD_VALUE);
+    CHECK(xir_fixture_verify(context, &module, NULL) == XR_XIR_BAD_VALUE);
     ops[2] = ops[4];
-    CHECK(xr_xir_compile_verify(context, &module, NULL) == XR_XIR_OK);
+    CHECK(xir_fixture_verify(context, &module, NULL) == XR_XIR_OK);
     ops[0].immediate = 2;
-    CHECK(xr_xir_compile_verify(context, &module, NULL) != XR_XIR_OK);
+    CHECK(xir_fixture_verify(context, &module, NULL) != XR_XIR_OK);
 }
 /* A write on a backedge cannot justify the first visit to its header. */
 static void initialization_loops(const XrXirCompileContext *context) {
@@ -163,20 +164,20 @@ static void initialization_loops(const XrXirCompileContext *context) {
     XrXirBlock blocks[] = {{0, 3, 0, 0}, {3, 2, 0, 0}, {5, 2, 0, 0}, {7, 1, 0, 0}};
     XrXirFunction function = {"loop", 4, parameters, 2, XR_XIR_I64, blocks, 4, ops, 8, NULL, 0};
     XrXirModule module = {XR_XIR_BUILT, &function, 1, NULL, NULL, NULL, NULL, XR_XIR_PROGRAM, NULL};
-    CHECK(xr_xir_compile_verify(context, &module, NULL) == XR_XIR_OK);
+    CHECK(xir_fixture_verify(context, &module, NULL) == XR_XIR_OK);
     ops[0].immediate = 1;
-    CHECK(xr_xir_compile_verify(context, &module, NULL) == XR_XIR_BAD_VALUE);
+    CHECK(xir_fixture_verify(context, &module, NULL) == XR_XIR_BAD_VALUE);
     ops[0].immediate = 0;
     ops[1] = (XrXirInstruction) {XR_XIR_SUSPEND, XR_XIR_UNIT, {0}, {0}, 0, {0}};
-    CHECK(xr_xir_compile_verify(context, &module, NULL) == XR_XIR_BAD_VALUE);
+    CHECK(xir_fixture_verify(context, &module, NULL) == XR_XIR_BAD_VALUE);
     /* Store the body before its header, retaining exactly the same CFG. */
     XrXirInstruction read = ops[3], branch = ops[4];
     ops[3] = ops[5]; ops[4] = ops[6]; ops[5] = read; ops[6] = branch;
     ops[2].targets[0] = 2; ops[4].targets[0] = 2; ops[6].targets[0] = 1;
     ops[7].args[0] = 7;
-    CHECK(xr_xir_compile_verify(context, &module, NULL) == XR_XIR_BAD_VALUE);
+    CHECK(xir_fixture_verify(context, &module, NULL) == XR_XIR_BAD_VALUE);
     ops[1] = (XrXirInstruction) {XR_XIR_LOCAL_WRITE, XR_XIR_UNIT, {2, 0}, {0}, 0, {0}};
-    CHECK(xr_xir_compile_verify(context, &module, NULL) == XR_XIR_OK);
+    CHECK(xir_fixture_verify(context, &module, NULL) == XR_XIR_OK);
     /* Redeclaration kills the initialized state from the previous iteration. */
     XrXirInstruction reset_ops[] = {
         {XR_XIR_JUMP, XR_XIR_UNIT, {0}, {1}, 0, {0}},
@@ -189,12 +190,12 @@ static void initialization_loops(const XrXirCompileContext *context) {
     const XrXirBlock reset_blocks[] = {{0, 1, 0, 0}, {1, 4, 0, 0}, {5, 1, 0, 0}};
     function.instructions = reset_ops; function.instruction_count = 6;
     function.blocks = reset_blocks; function.block_count = 3;
-    CHECK(xr_xir_compile_verify(context, &module, NULL) == XR_XIR_OK);
+    CHECK(xir_fixture_verify(context, &module, NULL) == XR_XIR_OK);
     reset_ops[1].immediate = 1;
-    CHECK(xr_xir_compile_verify(context, &module, NULL) == XR_XIR_OK);
+    CHECK(xir_fixture_verify(context, &module, NULL) == XR_XIR_OK);
     XrXirInstruction write = reset_ops[2]; reset_ops[2] = reset_ops[3]; reset_ops[3] = write;
     reset_ops[5].args[0] = 4;
-    CHECK(xr_xir_compile_verify(context, &module, NULL) == XR_XIR_BAD_VALUE);
+    CHECK(xir_fixture_verify(context, &module, NULL) == XR_XIR_BAD_VALUE);
 }
 /* Each structural frame limit belongs to a fresh producer context. */
 static void frame_boundary(const XrXirArtifact *decoded, uint32_t bytes) {
@@ -206,7 +207,7 @@ static void frame_boundary(const XrXirArtifact *decoded, uint32_t bytes) {
         SourceFixtureOwner owner = {0}; source_fixture_owner_new(&owner);
         owner.context.limits.frame_bytes = bytes - mode;
         XrXirArtifact *checked = NULL, *closed = NULL, *lowered = NULL;
-        CHECK(xr_xir_compile_check(&owner.context, &module, &checked, NULL) == XR_XIR_OK);
+        CHECK(xir_fixture_check(&owner.context, &module, &checked, NULL) == XR_XIR_OK);
         CHECK(xr_xir_compile_specialize(checked, &closed, NULL) == XR_XIR_OK);
         xr_xir_compile_artifact_free(checked);
         XrXirStatus status = xr_xir_compile_lower(closed, &target, &lowered, NULL);
@@ -256,9 +257,9 @@ int main(int argc, char **argv) {
     XrXirInstruction changed_ops[11]; memcpy(changed_ops, function->instructions, sizeof(changed_ops));
     changed_function.instructions = changed_ops; changed.functions = &changed_function; changed.function_count = 1;
     changed_ops[3].op = XR_XIR_SCALAR_LOCAL_WRITE;
-    CHECK(xr_xir_compile_verify(&owner.context, &changed, NULL) == XR_XIR_BAD_TYPE);
+    CHECK(xir_fixture_verify(&owner.context, &changed, NULL) == XR_XIR_BAD_TYPE);
     changed_ops[3] = function->instructions[3]; changed_ops[0].op = XR_XIR_SCALAR_LOCAL_NEW;
-    CHECK(xr_xir_compile_verify(&owner.context, &changed, NULL) == XR_XIR_BAD_TYPE);
+    CHECK(xir_fixture_verify(&owner.context, &changed, NULL) == XR_XIR_BAD_TYPE);
     if (argc == 2) {
         XrXirCSource source = {0};
         CHECK(xr_xir_compile_emit_c(lowered, "fixture_local", 65536, &source) == XR_XIR_OK);

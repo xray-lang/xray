@@ -6,6 +6,7 @@
  *
  * test_xir_task_types.c - Authentic Task obligations and an independent Checked packet
  */
+#include "xir_construction_fixture.h"
 #include "xir/xxir.h"
 #include "xir/xxir_checked.h"
 #include "xir/xxir_types.h"
@@ -22,15 +23,21 @@
 #include "xir_task_go67_golden.h"
 #include "xir_task_unit67_golden.h"
 #include "xir_task_types69_golden.h"
+#include "xir_task_types70_golden.h"
+#include "xir_task_types72_golden.h"
 #include "xir_task_go68_golden.h"
 #include "xir_task_unit68_golden.h"
 #include "xir_task_types68_golden.h"
 #include "xir_task_go69_golden.h"
+#include "xir_task_go70_golden.h"
+#include "xir_task_go72_golden.h"
 #include "xir_task_unit69_golden.h"
+#include "xir_task_unit70_golden.h"
+#include "xir_task_unit72_golden.h"
 #include "xir_atomic_types65_golden.h"
 #include "xir/xxir_effect_terms.inc.c"
 #include "task_outcome_sendable_cases.h"
-#include "task_go_checked_cases.h"
+#include "task_go_checked70_cases.h"
 typedef struct TaskTypesFixture {
     XrXirTypeNode nodes[2]; XrXirTypes types; XrXirType parameters[2];
     XrXirInstruction instruction; XrXirBlock block; XrXirFunction function; XrXirModule module;
@@ -52,17 +59,17 @@ static XrXirStatus task_types_pipeline(const XrXirCompileContext *c) {
     TaskTypesFixture f; task_types_fixture(&f);
     XrXirArtifact *checked = NULL, *decoded = NULL, *lowered = NULL;
     XrXirCheckedPacket packet = {0}; XrXirTypes *clone = NULL;
-    XrXirStatus status = xr_xir_compile_check(c, &f.module, &checked, NULL);
+    XrXirStatus status = xir_fixture_check(c, &f.module, &checked, NULL);
     if (status == XR_XIR_OK) status = xr_xir_compile_checked_write(checked, &packet, NULL);
     if (status == XR_XIR_OK) {
-        if (packet.length != sizeof(task_types69_golden)) fprintf(stderr, "packet length actual%zu expected%zu\n", packet.length, sizeof(task_types69_golden));
-        for (size_t i = 64; i < packet.length && i < sizeof(task_types69_golden); ++i)
-            if (packet.bytes[i] != task_types69_golden[i]) {
-                fprintf(stderr, "packet first body mismatch offset%zu actual%u expected%u\n", i, packet.bytes[i], task_types69_golden[i]); break;
+        if (packet.length != sizeof(task_types72_golden)) fprintf(stderr, "packet length actual%zu expected%zu\n", packet.length, sizeof(task_types72_golden));
+        for (size_t i = 64; i < packet.length && i < sizeof(task_types72_golden); ++i)
+            if (packet.bytes[i] != task_types72_golden[i]) {
+                fprintf(stderr, "packet first body mismatch offset%zu actual%u expected%u\n", i, packet.bytes[i], task_types72_golden[i]); break;
             }
-        CHECK(packet.length == sizeof(task_types69_golden) && !memcmp(packet.bytes, task_types69_golden, packet.length));
+        CHECK(packet.length == sizeof(task_types72_golden) && !memcmp(packet.bytes, task_types72_golden, packet.length));
     }
-    if (status == XR_XIR_OK) status = xr_xir_compile_checked_read(c, task_types69_golden, sizeof(task_types69_golden), &decoded, NULL);
+    if (status == XR_XIR_OK) status = xr_xir_compile_checked_read(c, task_types72_golden, sizeof(task_types72_golden), &decoded, NULL);
     if (status == XR_XIR_OK) status = xr_xir_compile_types_clone(c, xr_xir_compile_artifact_module(decoded)->types, &clone);
     if (status == XR_XIR_OK) {
         CHECK(clone->nodes != f.nodes && clone->nodes[0].kind == XR_XIR_TYPE_TASK &&
@@ -119,12 +126,12 @@ static void task_types_reject(void) {
         out = NULL;
         if (!mutation) {
             XrXirCheckedPacket packet = {0};
-            CHECK(xr_xir_compile_check(&c, &f.module, &out, NULL) == XR_XIR_OK && out);
+            CHECK(xir_fixture_check(&c, &f.module, &out, NULL) == XR_XIR_OK && out);
             CHECK(xr_xir_compile_checked_write(out, &packet, NULL) == XR_XIR_OK);
-            CHECK(packet.length == sizeof(task_unit69_golden) &&
-                !memcmp(packet.bytes, task_unit69_golden, packet.length));
+            CHECK(packet.length == sizeof(task_unit72_golden) &&
+                !memcmp(packet.bytes, task_unit72_golden, packet.length));
             xr_xir_compile_checked_packet_free(&packet); xr_xir_compile_artifact_free(out);
-        } else CHECK(xr_xir_compile_check(&c, &f.module, &out, NULL) ==
+        } else CHECK(xir_fixture_check(&c, &f.module, &out, NULL) ==
             (mutation >= 5 && mutation <= 10 ? XR_XIR_BAD_STRUCTURE : XR_XIR_BAD_TYPE) && !out);
         CHECK(stats(&c).live_bytes == baseline);
     }
@@ -149,7 +156,7 @@ static void task_definition(void) {
         .parameter_count = 1, .result = formal, .blocks = blocks + 1, .block_count = 1, .instructions = &body, .instruction_count = 1}};
     XrXirModule module = {.stage = XR_XIR_BUILT, .functions = functions, .function_count = 2, .types = &types, .generics = generics};
     XrXirArtifact *checked = NULL, *closed = NULL;
-    CHECK(xr_xir_compile_check(&c, &module, &checked, NULL) == XR_XIR_OK);
+    CHECK(xir_fixture_check(&c, &module, &checked, NULL) == XR_XIR_OK);
     CHECK(xr_xir_compile_specialize(checked, &closed, NULL) == XR_XIR_OK);
     const XrXirModule *m = xr_xir_compile_artifact_module(closed);
     CHECK(!m->generics && m->stage == XR_XIR_CHECKED && m->types->count == 1 &&
@@ -160,7 +167,7 @@ static void task_definition(void) {
     CHECK(xr_xir_compile_type_substitution_matches(&c, &types, &argument, 1, formal, actual) == XR_XIR_BAD_TYPE);
     argument = XR_XIR_I64; constraint.markers = 0;
     XrXirArtifact *missing = NULL;
-    CHECK(xr_xir_compile_check(&c, &module, &missing, NULL) == XR_XIR_BAD_TYPE && !missing);
+    CHECK(xir_fixture_check(&c, &module, &missing, NULL) == XR_XIR_BAD_TYPE && !missing);
     xr_xir_compile_artifact_free(closed); xr_xir_compile_artifact_free(checked); owner_free(&c, baseline);
 }
 static void task_dag_constraints(void) {
@@ -208,7 +215,7 @@ static XrXirStatus task_substitution_paths(const XrXirCompileContext *c) {
 static XrXirStatus task_interface_paths(const XrXirCompileContext *c) {
     XrXirCallableParameter parameter = {(XrXirType)256, 0};
     XrXirTypeNode nodes[2] = {{.kind = XR_XIR_TYPE_TASK, .element = (XrXirType)XR_XIR_TYPE_PARAMETER_BASE, .parameter_span = 1},
-        {.kind = XR_XIR_TYPE_CALLABLE, .parameters = &parameter, .parameter_count = 1, .result = (XrXirType)256, .parameter_span = 1}};
+        {.kind = XR_XIR_TYPE_CALLABLE, .parameters = &parameter, .parameter_count = 1, .result = (XrXirType)256, .flags = XR_XIR_CALLABLE_ROOT_UNRESOLVED, .parameter_span = 1}};
     XrXirConstraint bound = {.markers = XR_XIR_CONSTRAINT_SENDABLE};
     XrXirInterfaceMethod method = {.name = {"inspect", 7}, .signature = (XrXirType)257};
     XrXirInterfaceDeclaration declaration = {.module = {"m", 1}, .name = {"Inspect", 7}, .parameter_count = 1,
@@ -225,7 +232,8 @@ static XrXirStatus task_interface_paths(const XrXirCompileContext *c) {
         const XrXirInterfaceRequirement *requirement = xr_xir_interface_closure_requirement(closure, 0);
         const XrXirTypes *view = xr_xir_interface_closure_types(closure);
         const XrXirTypeNode *signature = xr_xir_callable_signature(view, requirement->signature);
-        CHECK(signature && xr_xir_task_element(view, signature->result) == XR_XIR_I64);
+        CHECK(signature && signature->flags == XR_XIR_CALLABLE_ROOT_UNRESOLVED &&
+            xr_xir_task_element(view, signature->result) == XR_XIR_I64);
         result = signature->result;
         status = xr_xir_compile_type_substitution_matches_between(c, &types, view, &actual, 1, (XrXirType)256, result);
         if (status == XR_XIR_OK) status = xr_xir_compile_types_clone(c, view, &owned);
@@ -261,7 +269,7 @@ static void task_types_faults(void) {
         CHECK(!live && !live_bytes);
     }
     fail_at = SIZE_MAX;
-    printf("Task Checked69 independent current KAT, old65/66/67/68 zeroalloc reject, original Unit0 mutation now positive and other11 rejected, actual compiler OOM ordinals=%zu physical0\n", sites);
+    printf("Task Checked70 independent current KAT, old65/66/67/68/69 zeroalloc reject, original Unit0 mutation now positive and other11 rejected, actual compiler OOM ordinals=%zu physical0\n", sites);
 }
 int main(void) {
     task_types_reject(); task_definition(); task_dag_constraints(); task_error_reject();

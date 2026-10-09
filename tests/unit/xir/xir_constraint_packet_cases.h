@@ -16,6 +16,7 @@ static void constraint_record_equality_cases(void) {
     XrXirInterfaceTable from_table = {&declaration,1}, to_table = {&other_declaration,1};
     XrXirTypeNode from_node = {0}, to_nodes[2] = {0};
     from_node.kind = XR_XIR_TYPE_CALLABLE; from_node.parameter_span = 1;
+    from_node.flags = XR_XIR_CALLABLE_ROOT_UNRESOLVED;
     from_node.result = (XrXirType)XR_XIR_TYPE_PARAMETER_BASE;
     to_nodes[0].kind = XR_XIR_TYPE_ARRAY; to_nodes[0].element = XR_XIR_I64;
     to_nodes[1] = from_node;

@@ -12,8 +12,10 @@ parser.add_argument('--output', type=Path, required=True)
 args = parser.parse_args()
 args.output.mkdir(parents=True, exist_ok=True)
 cases = {
-    'check_without_context': ('xr_xir_compile_check', 'XrXirStatus',
+    'check_without_context': ('xr_xir_compile_check_v2', 'XrXirStatus',
         'const XrXirModule *, XrXirArtifact **, XrXirDiagnostic *'),
+    'check_without_construction': ('xr_xir_compile_check_v2', 'XrXirStatus',
+        'const XrXirCompileContext *, const XrXirModule *, XrXirArtifact **, XrXirDiagnostic *'),
     'seal_with_value_budget': ('xr_xir_compile_program_seal', 'XrXirStatus',
         'const XrXirProgramSpec *, OldBudget, XrXirProgram **'),
     'take_with_fresh_context': ('xr_xir_compile_vm_program_take', 'XrXirStatus',
@@ -43,4 +45,4 @@ for name, (symbol, result, parameters) in cases.items():
     if not passed:
         raise SystemExit(f'Incorrect signature did not fail its explicit assertion: {name}')
 (args.output / 'record.json').write_text(json.dumps(records, indent=2), encoding='utf-8')
-print('Four independent incorrect prototypes rejected by C11 static assertions')
+print('Five independent incorrect prototypes rejected by C11 static assertions')

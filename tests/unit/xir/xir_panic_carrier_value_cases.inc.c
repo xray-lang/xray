@@ -6,6 +6,22 @@
  *
  * xir_panic_carrier_value_cases.inc.c - Byte-exact messages and atomic factory failures
  */
+#include <stddef.h>
+/* Independent x86-64 layout oracle, not a measured successful allocation:
+ * refs4 + pad4 + domain8 + arena8 + type4 + kind4 + release8 +
+ * graph links24 + trial4 + flags3 + tail pad1 = header72.
+ * Public detail24 + owned Value16 = payload40; header72 + payload40 = 112.
+ */
+enum { CARRIER_OBJECT_BYTES = 72, CARRIER_PANIC_BYTES = 40,
+    CARRIER_INFO_BYTES = CARRIER_OBJECT_BYTES + CARRIER_PANIC_BYTES };
+_Static_assert(sizeof(XirObject) == CARRIER_OBJECT_BYTES && _Alignof(XirObject) == 8,
+    "internal graph object layout");
+_Static_assert(offsetof(XirObject, domain) == 8 && offsetof(XirObject, release_next) == 32 &&
+    offsetof(XirObject, graph_previous) == 40 && offsetof(XirObject, graph_trial) == 64 &&
+    offsetof(XirObject, graph_registered) == 68 && offsetof(XirObject, graph_dead) == 70,
+    "internal graph object field offsets");
+_Static_assert(offsetof(XirPanicInfo, panic) == CARRIER_OBJECT_BYTES &&
+    sizeof(XirPanicInfo) == CARRIER_INFO_BYTES, "internal PanicInfo owner layout");
 static void value_lifetime(const char *bytes, size_t length) {
     XrXirDomain *source = NULL, *destination = NULL;
     CHECK(xr_xir_domain_new(1048576, &source) == XR_XIR_VALUE_OK);
@@ -19,7 +35,7 @@ static void value_lifetime(const char *bytes, size_t length) {
     CHECK(runtime_attempts == no_allocations);
     uint64_t before = xr_xir_domain_stats(destination).live_bytes;
     CHECK(xr_xir_panic_info_new(destination, &borrowed, &info) == XR_XIR_VALUE_OK);
-    CHECK(xr_xir_domain_stats(destination).live_bytes == before + 80);
+    CHECK(xr_xir_domain_stats(destination).live_bytes == before + CARRIER_INFO_BYTES);
     CHECK(xr_xir_value_copy(&info, &alias) == XR_XIR_VALUE_OK && alias.payload == info.payload);
     CHECK(xr_xir_string_new(source, "!", 1, &suffix) == XR_XIR_VALUE_OK);
     CHECK(xr_xir_string_append(&message, &suffix) == XR_XIR_VALUE_OK);
@@ -62,7 +78,7 @@ static void value_failures(void) {
         runtime_fail_at = SIZE_MAX;
     }
     uint64_t old_limit = domain->limit;
-    domain->limit = xr_xir_domain_stats(domain).live_bytes + 79;
+    domain->limit = xr_xir_domain_stats(domain).live_bytes + CARRIER_INFO_BYTES - 1;
     CHECK(xr_xir_panic_info_new(domain, &borrowed, &info) == XR_XIR_VALUE_LIMIT && unit_value(&info));
     CHECK(runtime_live == baseline_count && runtime_bytes == baseline_bytes);
     domain->limit++;
@@ -91,7 +107,7 @@ static void value_cases(void) {
     long_bytes[1] = 0; long_bytes[65535] = 0;
     value_lifetime(NULL, 0); value_lifetime(expected_bytes, sizeof(expected_bytes));
     value_lifetime(long_bytes, sizeof(long_bytes)); value_failures();
-    _Static_assert(sizeof(XrXirFaultDetail) == 24 && sizeof(XrXirPanicPayload) == 40 && sizeof(XirPanicInfo) == 80, "panic ABI");
+    _Static_assert(sizeof(XrXirFaultDetail) == 24 && sizeof(XrXirPanicPayload) == 40, "panic ABI");
     _Static_assert(sizeof(XrXirAction) == 88 && sizeof(XrXirCallResult) == 72 && sizeof(XrXirCallView) == 216, "call ABI");
     _Static_assert(sizeof(XrXirInstanceResult) == 80 && XR_XIR_CALL_ASSERTION == 19, "instance ABI");
 }

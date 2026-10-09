@@ -1,3 +1,4 @@
+#include "xir_construction_fixture.h"
 /*
  * xray - Lightweight typed scripting with native concurrency
  * https://www.xray-lang.org
@@ -82,7 +83,7 @@ static XrXirStatus atomic_instruction_pipeline(const XrXirCompileContext *contex
     AtomicInstructionFixture fixture;XrXirArtifact *checked=NULL,*read=NULL,*specialized=NULL,*lowered=NULL;
     XrXirCheckedPacket packet={0};
     if(status==XR_XIR_OK){atomic_instruction_fixture(&fixture,name,run->operation,run->element,0,run->optional?run->known:-3);
-        status=xr_xir_compile_check(context,&fixture.module,&checked,NULL);if(status!=XR_XIR_OK)CHECK(!checked);}
+        status=xir_fixture_check(context, &fixture.module, &checked, NULL);if(status!=XR_XIR_OK)CHECK(!checked);}
     xr_compile_resources_free(name);name=NULL;
     if(status==XR_XIR_OK){status=xr_xir_compile_checked_write(checked,&packet,NULL);if(status!=XR_XIR_OK)CHECK(!packet.bytes&&!packet.length);}
     xr_xir_compile_artifact_free(checked);checked=NULL;

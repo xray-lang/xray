@@ -55,6 +55,7 @@ static bool source_interface_constraints(SourceContext *ctx) {
     bool ok = true;
     for (uint32_t d = 0; d < ctx->interfaces.count && ok; ++d) {
         SourceName *owner = ctx->interface_sources[d];
+        if (owner->checked_library) continue;
         source_interface_scope(ctx, owner);
         XrXirConstraint *constraints = (XrXirConstraint *)ctx->interfaces.declarations[d].constraints;
         for (uint32_t p = 0; p < ctx->type_scope.count && ok; ++p)
@@ -138,7 +139,8 @@ static bool source_interface_method(SourceContext *ctx, SourceName *owner,
     if (!symbol) return false;
     symbol->kind = SOURCE_INTERFACE; symbol->index = member; symbol->module = owner->module;
     if (!source_query_declare(ctx, symbol, XR_XIR_SOURCE_MEMBER, owner->declaration,
-        source_query_range(ctx, node, method->name))) return false;
+        source_query_range(ctx, node, NULL))) return false;
+    if (!source_query_syntax_role(ctx, symbol->declaration, XR_XIR_SOURCE_SYNTAX_METHOD, 0)) return false;
     ctx->interface_member_declarations[owner->index][member] = symbol->declaration;
     if (!source_interface_method_scope(ctx,owner,member)) return false;
     uint32_t own = (uint32_t)method->type_param_count;
@@ -194,6 +196,7 @@ static bool source_interface_signatures(SourceContext *ctx) {
     bool ok = true;
     for (uint32_t d = 0; d < ctx->interfaces.count && ok; ++d) {
         SourceName *owner = ctx->interface_sources[d];
+        if (owner->checked_library) continue;
         source_interface_scope(ctx, owner);
         ok = source_interface_signature(ctx, owner);
     }

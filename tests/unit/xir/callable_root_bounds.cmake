@@ -1,0 +1,11 @@
+add_executable(test_xir_callable_root_bounds ${CMAKE_CURRENT_LIST_DIR}/test_xir_callable_root_bounds.c)
+target_include_directories(test_xir_callable_root_bounds PRIVATE ${XRAY_COMMON_INCLUDES})
+target_link_libraries(test_xir_callable_root_bounds PRIVATE xray_xir)
+if(MSVC)
+    target_compile_options(test_xir_callable_root_bounds PRIVATE /W4 /WX /utf-8)
+else()
+    target_compile_options(test_xir_callable_root_bounds PRIVATE -Wall -Wextra -Werror)
+endif()
+add_test(NAME test_xir_callable_root_bounds COMMAND test_xir_callable_root_bounds)
+set_tests_properties(test_xir_callable_root_bounds PROPERTIES TIMEOUT 180 RUN_SERIAL TRUE PROCESSORS 1
+    LABELS "unit;xir;callable;root-effects;metadata;ownership;budget;memory")

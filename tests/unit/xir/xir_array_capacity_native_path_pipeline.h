@@ -12,6 +12,7 @@
  */
 #ifndef XIR_ARRAY_CAPACITY_NATIVE_PATH_PIPELINE_H
 #define XIR_ARRAY_CAPACITY_NATIVE_PATH_PIPELINE_H
+#include "xir_construction_fixture.h"
 #include "xir_array_metadata_fixture.h"
 typedef struct CapacityNativePathFixture {
     XirArrayMetadataFixture metadata;
@@ -59,7 +60,7 @@ static void capacity_native_emit_path(const XrXirCompileContext *context,const c
     XrXirArtifact *checked=NULL,*replay=NULL,*specialized=NULL,*lowered=NULL;
     XrXirDiagnostic diagnostic={0};
     const XrXirModule *module=&fixture.metadata.module;
-    XrXirStatus status=xr_xir_compile_check(context,module,&checked,&diagnostic);
+    XrXirStatus status=xir_fixture_check(context, module, &checked, &diagnostic);
     if(status!=XR_XIR_OK){
         fprintf(stderr,"NATIVE_CAPACITY_PATH_CHECK status=%u diagnosticStatus=%u function=%u block=%u instruction=%u reason=%u entry=%u entryResult=%u\n",
             (unsigned)status,(unsigned)diagnostic.status,diagnostic.function,diagnostic.block,

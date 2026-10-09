@@ -434,7 +434,11 @@ static void task_runtime_faults(void) {
 #include "task_terminal_thread_cases.h"
 #include "task_wait_cases.h"
 #include "task_root_activation_cases.h"
-int main(void) {
+#include "task_closed_result_cases.h"
+#include "task_cross_domain_cases.h"
+int main(int argc, char **argv) {
+    if (argc == 2 && !strcmp(argv[1], "--cross-domain")) { task_cross_domain_cases(); return 0; }
+    if (argc != 1) return 2;
     setvbuf(stdout, NULL, _IONBF, 0);
     task_normal(); task_cancel_and_limit(); task_sticky_failure();
     task_escaped_budget(); task_failed_executor_epoch(); task_borrowed_epoch(); task_cleanup_limit(); task_runtime_faults();
@@ -445,6 +449,8 @@ int main(void) {
     task_wait_closed_cycle();
     task_wait_string();
     task_root_normal(); task_wait_panic_protocol();
+    task_closed_results(); task_closed_string(); task_closed_incomplete();
+    task_cross_domain_cases();
     native_fixture_owner_report();
     CHECK(!runtime_live && !runtime_bytes); return 0;
 }

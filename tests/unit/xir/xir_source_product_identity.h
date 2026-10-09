@@ -1,3 +1,4 @@
+#include "xir_construction_fixture.h"
 /*
  * xray - Lightweight typed scripting with native concurrency
  * https://www.xray-lang.org
@@ -33,7 +34,7 @@ static void product_layout_vector(void) {
         XrXirCompileContext context={0};context.limits=xr_xir_compile_default_limits();
         CHECK(xr_compile_resources_new(&limits,&context.resources)==XR_COMPILE_RESOURCE_OK);
         XrXirArtifact *checked=NULL,*lowered=NULL;
-        CHECK(xr_xir_compile_check(&context,&module,&checked,NULL)==XR_XIR_OK);
+        CHECK(xir_fixture_check(&context, &module, &checked, NULL)==XR_XIR_OK);
         CHECK(xr_xir_compile_lower(checked,&target,&lowered,NULL)==XR_XIR_OK);
         xr_xir_compile_artifact_free(checked);
         XrXirSourceProductFacts facts={0};facts.target=target;facts.entry=2;facts.function_count=3;facts.module_count=1;

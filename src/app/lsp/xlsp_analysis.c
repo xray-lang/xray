@@ -9,6 +9,7 @@
  */
 
 #include "xlsp_analysis.h"
+#include "xlsp_source_open.h"
 #include "xlsp_ast_utils.h"
 #include "xlsp_cache.h"
 #include "../../base/xfileio.h"
@@ -720,6 +721,12 @@ void xlsp_parse_document(XrLspDocument *doc, XrLspServer *server) {
 }
 
 XrJsonValue *xlsp_analyze_diagnostics(XrLspDocument *doc) {
+    if(doc&&doc->source_open) {
+        XrJsonValue *result=NULL;
+        XrXirStatus status=xlsp_source_open_diagnostics_json(doc->source_open,doc->source_buffer,doc->syntax_snapshot,&result);
+        if(status!=XR_XIR_OK)lsp_log("Modern diagnostics unavailable: status %u",(unsigned)status);
+        return result;
+    }
     if (!doc || !doc->content) {
         return xjson_new_array();
     }

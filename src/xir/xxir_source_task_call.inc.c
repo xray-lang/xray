@@ -55,7 +55,7 @@ static bool source_go_call(SourceContext *ctx, AstNode *node, SourceExpectedType
     }
     const XrXirTypeNode *task_context = context.present ? xr_xir_type_node(&ctx->types, expected) : NULL;
     if (task_context && task_context->kind == XR_XIR_TYPE_TASK)
-        child = (SourceExpectedType) {true, task_context->element, context.infer_result};
+        child = (SourceExpectedType) {true, task_context->element, context.infer_result, false};
     SourceDirectRequest direct = {target->index, {0}, NULL, child};
     SourceDirectArguments prepared = {0};
     if (!source_direct_arguments(ctx, call, &direct, &prepared)) return false;

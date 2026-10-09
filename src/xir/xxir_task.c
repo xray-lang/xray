@@ -211,10 +211,13 @@ static XrXirValueStatus task_core_task_prepare(XrXirTaskExecutor *executor, XrXi
     atomic_init(&task->state, XIR_TASK_PREPARING);
     task->object.domain = domain; task->object.arena = arena; task->object.type = type;
     task->object.kind = XR_XIR_TYPE_TASK;
+    xr_xir_value_graph_begin();
+    xr_xir_value_object_publish(&task->object);
     *output = task;
+    xr_xir_value_graph_end();
     return XR_XIR_VALUE_OK;
 }
-static XrXirCallStatus task_core_spawn(XrXirTaskExecutor *executor, XrXirCallView *view, XrXirType type,
+static XrXirCallStatus task_core_spawn_inner(XrXirTaskExecutor *executor, XrXirCallView *view, XrXirType type,
     const XrXirCallRequest *request, XrXirValue *output) {
     if (!executor || !request || !task_core_empty_value(output)) return XR_XIR_CALL_BAD_ARGUMENT;
     if (executor->driving) {
@@ -276,6 +279,15 @@ static XrXirCallStatus task_core_spawn(XrXirTaskExecutor *executor, XrXirCallVie
     *output = task_core_task_value(task);
     return XR_XIR_CALL_READY;
 }
+/* A preparing task can temporarily own an unpublished call. Keep the entire
+ * transaction out of residual graph inspection, including rollback. */
+static XrXirCallStatus task_core_spawn(XrXirTaskExecutor *executor, XrXirCallView *view, XrXirType type,
+    const XrXirCallRequest *request, XrXirValue *output) {
+    xr_xir_value_graph_begin();
+    XrXirCallStatus status = task_core_spawn_inner(executor, view, type, request, output);
+    xr_xir_value_graph_end();
+    return status;
+}
 XR_FUNC XrXirCallStatus xr_xir_task_executor_spawn(XrXirTaskExecutor *executor, XrXirType type,
     const XrXirCallRequest *request, XrXirValue *output) {
     return task_core_spawn(executor, NULL, type, request, output);
@@ -318,6 +330,7 @@ static void task_core_register_wait(XrXirTaskExecutor *executor, XrXirCall *call
     }
 }
 static void task_core_finish_task(XrXirTaskExecutor *executor, XirTask *task) {
+    xr_xir_value_graph_begin();
     XrXirCallResult prepared = {0};
     XrXirCallStatus status = xr_xir_call_take_outcome(task->call, &prepared);
     XR_CHECK(status != XR_XIR_CALL_READY && status != XR_XIR_CALL_SUSPENDED,
@@ -356,6 +369,7 @@ static void task_core_finish_task(XrXirTaskExecutor *executor, XirTask *task) {
     atomic_store_explicit(&task->state, XIR_TASK_TERMINAL, memory_order_release);
     while (task->waiter_head) task_core_complete_wait(executor, task->waiter_head);
     XrXirValue running_lease = task_core_task_value(task); xr_xir_value_drop(&running_lease);
+    xr_xir_value_graph_end();
 }
 static void task_core_reject_closed_wait(XrXirTaskExecutor *executor) {
     if (executor->ready_head) return;

@@ -229,7 +229,7 @@ TEST(document_open) {
     ASSERT(server != NULL);
 
     const char *content = "var x = 1\nvar y = 2\n";
-    XrLspDocument *doc = xlsp_document_open(server, "file:///test.xr", content, 1);
+    XrLspDocument *doc = xlsp_document_open(server, &(XlspSourceDocument){"file:///test.xr", content, strlen("file:///test.xr"), strlen(content), 1});
 
     ASSERT(doc != NULL);
     ASSERT_STR_EQ(doc->uri, "file:///test.xr");
@@ -244,8 +244,8 @@ TEST(document_get) {
     XrLspServer *server = xlsp_server_new();
     ASSERT(server != NULL);
 
-    xlsp_document_open(server, "file:///test1.xr", "content1", 1);
-    xlsp_document_open(server, "file:///test2.xr", "content2", 1);
+    xlsp_document_open(server, &(XlspSourceDocument){"file:///test1.xr", "content1", strlen("file:///test1.xr"), strlen("content1"), 1});
+    xlsp_document_open(server, &(XlspSourceDocument){"file:///test2.xr", "content2", strlen("file:///test2.xr"), strlen("content2"), 1});
 
     XrLspDocument *doc1 = xlsp_document_get(server, "file:///test1.xr");
     ASSERT(doc1 != NULL);
@@ -265,7 +265,7 @@ TEST(document_close) {
     XrLspServer *server = xlsp_server_new();
     ASSERT(server != NULL);
 
-    xlsp_document_open(server, "file:///test.xr", "content", 1);
+    xlsp_document_open(server, &(XlspSourceDocument){"file:///test.xr", "content", strlen("file:///test.xr"), strlen("content"), 1});
     ASSERT(xlsp_document_get(server, "file:///test.xr") != NULL);
 
     xlsp_document_close(server, "file:///test.xr");
@@ -278,9 +278,9 @@ TEST(document_multiple) {
     XrLspServer *server = xlsp_server_new();
     ASSERT(server != NULL);
 
-    xlsp_document_open(server, "file:///a.xr", "a", 1);
-    xlsp_document_open(server, "file:///b.xr", "b", 1);
-    xlsp_document_open(server, "file:///c.xr", "c", 1);
+    xlsp_document_open(server, &(XlspSourceDocument){"file:///a.xr", "a", strlen("file:///a.xr"), strlen("a"), 1});
+    xlsp_document_open(server, &(XlspSourceDocument){"file:///b.xr", "b", strlen("file:///b.xr"), strlen("b"), 1});
+    xlsp_document_open(server, &(XlspSourceDocument){"file:///c.xr", "c", strlen("file:///c.xr"), strlen("c"), 1});
 
     ASSERT(xlsp_document_get(server, "file:///a.xr") != NULL);
     ASSERT(xlsp_document_get(server, "file:///b.xr") != NULL);
@@ -304,7 +304,7 @@ TEST(document_line_count) {
     ASSERT(server != NULL);
 
     const char *content = "line1\nline2\nline3\n";
-    XrLspDocument *doc = xlsp_document_open(server, "file:///test.xr", content, 1);
+    XrLspDocument *doc = xlsp_document_open(server, &(XlspSourceDocument){"file:///test.xr", content, strlen("file:///test.xr"), strlen(content), 1});
 
     ASSERT(doc != NULL);
     ASSERT(doc->line_count >= 3);
@@ -320,7 +320,7 @@ TEST(position_to_offset) {
     // Line 0: "var x = 1\n" (10 chars)
     // Line 1: "var y = 2\n" (10 chars)
     const char *content = "var x = 1\nvar y = 2\n";
-    XrLspDocument *doc = xlsp_document_open(server, "file:///test.xr", content, 1);
+    XrLspDocument *doc = xlsp_document_open(server, &(XlspSourceDocument){"file:///test.xr", content, strlen("file:///test.xr"), strlen(content), 1});
     ASSERT(doc != NULL);
 
     XrLspPosition pos0 = {0, 0};  // Start of line 0
@@ -347,7 +347,7 @@ TEST(offset_to_position) {
     ASSERT(server != NULL);
 
     const char *content = "var x = 1\nvar y = 2\n";
-    XrLspDocument *doc = xlsp_document_open(server, "file:///test.xr", content, 1);
+    XrLspDocument *doc = xlsp_document_open(server, &(XlspSourceDocument){"file:///test.xr", content, strlen("file:///test.xr"), strlen(content), 1});
     ASSERT(doc != NULL);
 
     XrLspPosition pos0 = xlsp_offset_to_position(doc, 0);
@@ -374,7 +374,7 @@ TEST(position_roundtrip) {
     ASSERT(server != NULL);
 
     const char *content = "fn main() {\n    var x = 1\n    print(x)\n}\n";
-    XrLspDocument *doc = xlsp_document_open(server, "file:///test.xr", content, 1);
+    XrLspDocument *doc = xlsp_document_open(server, &(XlspSourceDocument){"file:///test.xr", content, strlen("file:///test.xr"), strlen(content), 1});
     ASSERT(doc != NULL);
 
     // Test roundtrip for valid positions only (within line bounds)
@@ -405,12 +405,12 @@ TEST(document_version) {
     XrLspServer *server = xlsp_server_new();
     ASSERT(server != NULL);
 
-    XrLspDocument *doc = xlsp_document_open(server, "file:///test.xr", "content", 1);
+    XrLspDocument *doc = xlsp_document_open(server, &(XlspSourceDocument){"file:///test.xr", "content", strlen("file:///test.xr"), strlen("content"), 1});
     ASSERT_EQ(doc->version, 1);
 
     // Close and reopen with new version
     xlsp_document_close(server, "file:///test.xr");
-    doc = xlsp_document_open(server, "file:///test.xr", "new content", 5);
+    doc = xlsp_document_open(server, &(XlspSourceDocument){"file:///test.xr", "new content", strlen("file:///test.xr"), strlen("new content"), 5});
     ASSERT_EQ(doc->version, 5);
 
     xlsp_server_free(server);
@@ -426,7 +426,7 @@ TEST(completion_shared_channel_member) {
 
     const char *content = "const ch = Channel<i64>(1)\n"
                           "ch.\n";
-    XrLspDocument *doc = xlsp_document_open(server, "file:///completion.xr", content, 1);
+    XrLspDocument *doc = xlsp_document_open(server, &(XlspSourceDocument){"file:///completion.xr", content, strlen("file:///completion.xr"), strlen(content), 1});
     ASSERT(doc != NULL);
     xlsp_parse_document(doc, server);
 
@@ -449,7 +449,7 @@ TEST(completion_inferred_int_members) {
                           "    a.\n"
                           "}\n";
     XrLspDocument *doc =
-        xlsp_document_open(server, "file:///completion_inferred_int.xr", content, 1);
+        xlsp_document_open(server, &(XlspSourceDocument){"file:///completion_inferred_int.xr", content, strlen("file:///completion_inferred_int.xr"), strlen(content), 1});
     ASSERT(doc != NULL);
     xlsp_parse_document(doc, server);
 
@@ -472,7 +472,7 @@ TEST(contextual_u32_literal_preserves_completion_and_hover_type) {
                           "    a.\n"
                           "}\n";
     XrLspDocument *doc =
-        xlsp_document_open(server, "file:///completion_explicit_u32.xr", content, 1);
+        xlsp_document_open(server, &(XlspSourceDocument){"file:///completion_explicit_u32.xr", content, strlen("file:///completion_explicit_u32.xr"), strlen(content), 1});
     ASSERT(doc != NULL);
     xlsp_parse_document(doc, server);
 
@@ -489,7 +489,7 @@ TEST(contextual_u32_literal_preserves_completion_and_hover_type) {
                                 "    return a.rotateLeft(1)\n"
                                 "}\n";
     XrLspDocument *hover_doc =
-        xlsp_document_open(server, "file:///hover_contextual_u32.xr", hover_content, 1);
+        xlsp_document_open(server, &(XlspSourceDocument){"file:///hover_contextual_u32.xr", hover_content, strlen("file:///hover_contextual_u32.xr"), strlen(hover_content), 1});
     ASSERT(hover_doc != NULL);
     xlsp_parse_document(hover_doc, server);
     XrJsonValue *hover = xlsp_analyze_hover(server, hover_doc, (XrLspPosition) {2, 15});
@@ -508,7 +508,7 @@ TEST(completion_enum_static_variants_descriptor) {
 
     const char *content = "enum Color { Red, Green }\n"
                           "Color.\n";
-    XrLspDocument *doc = xlsp_document_open(server, "file:///enum_static.xr", content, 1);
+    XrLspDocument *doc = xlsp_document_open(server, &(XlspSourceDocument){"file:///enum_static.xr", content, strlen("file:///enum_static.xr"), strlen(content), 1});
     ASSERT(doc != NULL);
     xlsp_parse_document(doc, server);
 
@@ -533,19 +533,24 @@ TEST(dirty_open_import_refresh_preserves_enum_identity) {
 
     const char *import_uri = "file:///identity/dirty_dependency";
     const char *import_content = "enum ImportedState { Ready, Busy }\n";
-    XrLspDocument *import_doc = xlsp_document_open(server, import_uri, import_content, 1);
+    XrLspDocument *import_doc = xlsp_document_open(server, &(XlspSourceDocument){import_uri, import_content, strlen(import_uri), strlen(import_content), 1});
     ASSERT(import_doc != NULL);
     xlsp_parse_document(import_doc, server);
     ASSERT(analyzer_file_enum_has_layout(server, import_uri, "ImportedState"));
 
     /* didChange leaves the previous AST installed until the next parse.  Parsing
      * an importer refreshes that dirty open AST through the on-demand path. */
-    xlsp_document_change(import_doc, NULL, "enum ImportedState { Ready, Busy }\n\n");
+    XrJsonValue *edits=xjson_new_array(),*edit=xjson_new_object();
+    ASSERT(edits&&edit);
+    xjson_object_set_new(edit,"text",xjson_new_string("enum ImportedState { Ready, Busy }\n\n"));
+    xjson_array_push(edits,edit);
+    ASSERT_EQ(xlsp_document_apply_changes(import_doc,edits,import_doc->version+1),XR_XIR_OK);
+    xjson_free(edits);
     ASSERT(import_doc->dirty);
 
     const char *owner_uri = "file:///identity/main.xr";
     XrLspDocument *owner_doc =
-        xlsp_document_open(server, owner_uri, "import \"./dirty_dependency\" as dep\n", 1);
+        xlsp_document_open(server, &(XlspSourceDocument){owner_uri, "import \"./dirty_dependency\" as dep\n", strlen(owner_uri), strlen("import \"./dirty_dependency\" as dep\n"), 1});
     ASSERT(owner_doc != NULL);
     xlsp_parse_document(owner_doc, server);
 
@@ -595,7 +600,7 @@ TEST(relative_import_from_disk_provides_precise_hover) {
 
     XrLspServer *server = xlsp_server_new();
     ASSERT(server != NULL);
-    XrLspDocument *doc = xlsp_document_open(server, entry_uri, entry, 1);
+    XrLspDocument *doc = xlsp_document_open(server, &(XlspSourceDocument){entry_uri, entry, strlen(entry_uri), strlen(entry), 1});
     ASSERT(doc != NULL);
     xlsp_parse_document(doc, server);
 
@@ -633,7 +638,7 @@ TEST(completion_enum_descriptor_properties) {
                           "        field.\n"
                           "    }\n"
                           "}\n";
-    XrLspDocument *doc = xlsp_document_open(server, "file:///enum_payload_loop.xr", content, 1);
+    XrLspDocument *doc = xlsp_document_open(server, &(XlspSourceDocument){"file:///enum_payload_loop.xr", content, strlen("file:///enum_payload_loop.xr"), strlen(content), 1});
     ASSERT(doc != NULL);
     xlsp_parse_document(doc, server);
 
@@ -657,7 +662,7 @@ TEST(hover_enum_descriptor_keeps_precise_type) {
                           "for (variant in Color.variants) {\n"
                           "    print(variant.ordinal)\n"
                           "}\n";
-    XrLspDocument *doc = xlsp_document_open(server, "file:///enum_hover.xr", content, 1);
+    XrLspDocument *doc = xlsp_document_open(server, &(XlspSourceDocument){"file:///enum_hover.xr", content, strlen("file:///enum_hover.xr"), strlen(content), 1});
     ASSERT(doc != NULL);
     xlsp_parse_document(doc, server);
 
@@ -681,7 +686,7 @@ TEST(completion_enum_iteration_variable_is_descriptor) {
                           "for (variant in Color.variants) {\n"
                           "    variant.\n"
                           "}\n";
-    XrLspDocument *doc = xlsp_document_open(server, "file:///enum_loop.xr", content, 1);
+    XrLspDocument *doc = xlsp_document_open(server, &(XlspSourceDocument){"file:///enum_loop.xr", content, strlen("file:///enum_loop.xr"), strlen(content), 1});
     ASSERT(doc != NULL);
     xlsp_parse_document(doc, server);
 
@@ -702,7 +707,7 @@ TEST(completion_u8_array_registry_methods) {
 
     const char *content = "var bytes = Array<u8>(0)\n"
                           "bytes.\n";
-    XrLspDocument *doc = xlsp_document_open(server, "file:///u8_array.xr", content, 1);
+    XrLspDocument *doc = xlsp_document_open(server, &(XlspSourceDocument){"file:///u8_array.xr", content, strlen("file:///u8_array.xr"), strlen(content), 1});
     ASSERT(doc != NULL);
     xlsp_parse_document(doc, server);
 
@@ -730,7 +735,7 @@ TEST(completion_uint8_array_uses_canonical_byte_docs) {
 
     const char *content = "var bytes = Array<u8>(0)\n"
                           "bytes.\n";
-    XrLspDocument *doc = xlsp_document_open(server, "file:///uint8_array.xr", content, 1);
+    XrLspDocument *doc = xlsp_document_open(server, &(XlspSourceDocument){"file:///uint8_array.xr", content, strlen("file:///uint8_array.xr"), strlen(content), 1});
     ASSERT(doc != NULL);
     xlsp_parse_document(doc, server);
 
@@ -755,7 +760,7 @@ TEST(completion_int_array_excludes_u8_registry_methods) {
 
     const char *content = "var ints = Array<i64>(0)\n"
                           "ints.\n";
-    XrLspDocument *doc = xlsp_document_open(server, "file:///int_array.xr", content, 1);
+    XrLspDocument *doc = xlsp_document_open(server, &(XlspSourceDocument){"file:///int_array.xr", content, strlen("file:///int_array.xr"), strlen(content), 1});
     ASSERT(doc != NULL);
     xlsp_parse_document(doc, server);
 
@@ -777,7 +782,7 @@ TEST(completion_u8_slice_registry_methods) {
     const char *content = "var bytes = Array<u8>(4)\n"
                           "var view: Slice<u8> = bytes[:]\n"
                           "view.\n";
-    XrLspDocument *doc = xlsp_document_open(server, "file:///u8_slice.xr", content, 1);
+    XrLspDocument *doc = xlsp_document_open(server, &(XlspSourceDocument){"file:///u8_slice.xr", content, strlen("file:///u8_slice.xr"), strlen(content), 1});
     ASSERT(doc != NULL);
     xlsp_parse_document(doc, server);
 
@@ -799,7 +804,7 @@ TEST(hover_u8_array_registry_method) {
 
     const char *content = "var bytes = Array<u8>(0)\n"
                           "bytes.appendFrom(bytes[:])\n";
-    XrLspDocument *doc = xlsp_document_open(server, "file:///hover_u8_array.xr", content, 1);
+    XrLspDocument *doc = xlsp_document_open(server, &(XlspSourceDocument){"file:///hover_u8_array.xr", content, strlen("file:///hover_u8_array.xr"), strlen(content), 1});
     ASSERT(doc != NULL);
     xlsp_parse_document(doc, server);
 
@@ -824,7 +829,7 @@ TEST(hover_deprecated_message_roundtrip) {
 
     const char *content = "@deprecated(\"use modern\")\n"
                           "export fn legacy(x: i64) -> i64 { return x + 1 }\n";
-    XrLspDocument *doc = xlsp_document_open(server, "file:///hover_deprecated.xr", content, 1);
+    XrLspDocument *doc = xlsp_document_open(server, &(XlspSourceDocument){"file:///hover_deprecated.xr", content, strlen("file:///hover_deprecated.xr"), strlen(content), 1});
     ASSERT(doc != NULL);
     xlsp_parse_document(doc, server);
 
@@ -849,7 +854,7 @@ TEST(signature_help_u8_array_registry_method) {
 
     const char *content = "var bytes = Array<u8>(0)\n"
                           "bytes.appendFrom(bytes[:])\n";
-    XrLspDocument *doc = xlsp_document_open(server, "file:///sig_u8_array.xr", content, 1);
+    XrLspDocument *doc = xlsp_document_open(server, &(XlspSourceDocument){"file:///sig_u8_array.xr", content, strlen("file:///sig_u8_array.xr"), strlen(content), 1});
     ASSERT(doc != NULL);
     xlsp_parse_document(doc, server);
 
@@ -874,7 +879,7 @@ TEST(builtin_generic_array_uses_error_placeholder) {
     ASSERT(server != NULL);
 
     XrLspDocument *doc =
-        xlsp_document_open(server, "file:///generic_array_completion.xr", "Array.\n", 1);
+        xlsp_document_open(server, &(XlspSourceDocument){"file:///generic_array_completion.xr", "Array.\n", strlen("file:///generic_array_completion.xr"), strlen("Array.\n"), 1});
     ASSERT(doc != NULL);
     xlsp_parse_document(doc, server);
 
@@ -898,7 +903,7 @@ TEST(global_type_query_builtins_use_canonical_names) {
 
     const char *content = "typeOf(1)\n"
                           "typeName(1)\n";
-    XrLspDocument *doc = xlsp_document_open(server, "file:///type_query.xr", content, 1);
+    XrLspDocument *doc = xlsp_document_open(server, &(XlspSourceDocument){"file:///type_query.xr", content, strlen("file:///type_query.xr"), strlen(content), 1});
     ASSERT(doc != NULL);
 
     XrLspPosition completion_pos = {0, 0};
@@ -962,7 +967,7 @@ TEST(global_type_query_builtins_use_canonical_names) {
 TEST(completion_public_attributes_use_registry) {
     XrLspServer *server = xlsp_server_new();
     ASSERT(server != NULL);
-    XrLspDocument *doc = xlsp_document_open(server, "file:///attributes.xr", "\n", 1);
+    XrLspDocument *doc = xlsp_document_open(server, &(XlspSourceDocument){"file:///attributes.xr", "\n", strlen("file:///attributes.xr"), strlen("\n"), 1});
     ASSERT(doc != NULL);
 
     XrJsonValue *items = xlsp_analyze_completion(server, doc, (XrLspPosition) {0, 0});
@@ -1033,7 +1038,7 @@ TEST(param_mode_user_function_lsp_display) {
                           "}\n";
     const char *expected = "fn adjust(view: i64, slot: ref i64, payload: move Array<i64>): i64";
 
-    XrLspDocument *doc = xlsp_document_open(server, "file:///param_mode_lsp.xr", content, 1);
+    XrLspDocument *doc = xlsp_document_open(server, &(XlspSourceDocument){"file:///param_mode_lsp.xr", content, strlen("file:///param_mode_lsp.xr"), strlen(content), 1});
     ASSERT(doc != NULL);
     xlsp_parse_document(doc, server);
 
@@ -1094,7 +1099,7 @@ TEST(param_mode_semantic_tokens_mark_modes_and_call_access) {
                           "    adjust(value, ref slot, move payload)\n"
                           "}\n";
 
-    XrLspDocument *doc = xlsp_document_open(server, "file:///param_mode_tokens.xr", content, 1);
+    XrLspDocument *doc = xlsp_document_open(server, &(XlspSourceDocument){"file:///param_mode_tokens.xr", content, strlen("file:///param_mode_tokens.xr"), strlen(content), 1});
     ASSERT(doc != NULL);
     xlsp_parse_document(doc, server);
 
@@ -1127,7 +1132,7 @@ TEST(block_quoted_literals_preserve_lsp_positions_and_semantic_boundaries) {
                           "\"\"\"\"\n"
                           "var after = 7\n";
     XrLspDocument *doc =
-        xlsp_document_open(server, "file:///quoted_literal_positions.xr", content, 1);
+        xlsp_document_open(server, &(XlspSourceDocument){"file:///quoted_literal_positions.xr", content, strlen("file:///quoted_literal_positions.xr"), strlen(content), 1});
     ASSERT(doc != NULL);
     xlsp_parse_document(doc, server);
     ASSERT(doc->ast != NULL);
@@ -1169,7 +1174,7 @@ TEST(param_mode_inlay_hints_describe_modes) {
                           "    adjust(value, ref target, move payload)\n"
                           "}\n";
 
-    XrLspDocument *doc = xlsp_document_open(server, "file:///param_mode_inlay.xr", content, 1);
+    XrLspDocument *doc = xlsp_document_open(server, &(XlspSourceDocument){"file:///param_mode_inlay.xr", content, strlen("file:///param_mode_inlay.xr"), strlen(content), 1});
     ASSERT(doc != NULL);
     xlsp_parse_document(doc, server);
 
@@ -1190,7 +1195,7 @@ TEST(throw_effect_inlay_hints_show_inferred_result) {
     const char *content = "enum HintError { Boom }\n"
                           "fn pure(value: i64) -> i64 { return value + 1 }\n"
                           "fn fallible() { throw HintError.Boom }\n";
-    XrLspDocument *doc = xlsp_document_open(server, "file:///throw_effect_inlay.xr", content, 1);
+    XrLspDocument *doc = xlsp_document_open(server, &(XlspSourceDocument){"file:///throw_effect_inlay.xr", content, strlen("file:///throw_effect_inlay.xr"), strlen(content), 1});
     ASSERT(doc != NULL);
     xlsp_parse_document(doc, server);
 
@@ -1217,7 +1222,7 @@ TEST(enum_record_fields_share_one_semantic_identity) {
                           "    Result.Ok { value, code: _ } -> value\n"
                           "    Result.Err { value: message } -> 0\n"
                           "}\n";
-    XrLspDocument *doc = xlsp_document_open(server, uri, content, 1);
+    XrLspDocument *doc = xlsp_document_open(server, &(XlspSourceDocument){uri, content, strlen(uri), strlen(content), 1});
     ASSERT(doc != NULL);
     xlsp_parse_document(doc, server);
     ASSERT(doc->ast != NULL);
@@ -1243,7 +1248,7 @@ TEST(enum_record_fields_share_one_semantic_identity) {
     ASSERT_EQ(xjson_get_int(definition_start, "character"), declaration_col);
     xjson_free(definition);
 
-    XrJsonValue *references = xlsp_analyze_references(server, doc, construct_pos);
+    XrJsonValue *references = xlsp_analyze_references(server, doc, construct_pos, true);
     ASSERT(references != NULL);
     ASSERT_EQ(xjson_array_len(references), 3);
     xjson_free(references);
@@ -1297,7 +1302,7 @@ TEST(enum_payload_completion_distinguishes_constructor_and_pattern) {
     const char *expression_uri = "file:///enum_constructor_completion.xr";
     const char *expression = "enum Result { Ok { value: i64, code: string } }\n"
                              "var made = Result.";
-    XrLspDocument *expression_doc = xlsp_document_open(server, expression_uri, expression, 1);
+    XrLspDocument *expression_doc = xlsp_document_open(server, &(XlspSourceDocument){expression_uri, expression, strlen(expression_uri), strlen(expression), 1});
     ASSERT(expression_doc != NULL);
     xlsp_parse_document(expression_doc, server);
     XrJsonValue *expression_items = xlsp_analyze_completion(
@@ -1314,7 +1319,7 @@ TEST(enum_payload_completion_distinguishes_constructor_and_pattern) {
                           "var selected = match (made) {\n"
                           "    Result.\n"
                           "}\n";
-    XrLspDocument *pattern_doc = xlsp_document_open(server, pattern_uri, pattern, 1);
+    XrLspDocument *pattern_doc = xlsp_document_open(server, &(XlspSourceDocument){pattern_uri, pattern, strlen(pattern_uri), strlen(pattern), 1});
     ASSERT(pattern_doc != NULL);
     xlsp_parse_document(pattern_doc, server);
     XrJsonValue *pattern_items = xlsp_analyze_completion(
@@ -1396,7 +1401,7 @@ TEST(code_action_payload_enum_iteration_to_variants) {
                           "for (value in Result) {\n"
                           "    print(value)\n"
                           "}\n";
-    XrLspDocument *doc = xlsp_document_open(server, uri, content, 1);
+    XrLspDocument *doc = xlsp_document_open(server, &(XlspSourceDocument){uri, content, strlen(uri), strlen(content), 1});
     ASSERT(doc != NULL);
 
     XrJsonValue *params = make_code_action_params(
@@ -1440,7 +1445,7 @@ TEST(code_action_fills_only_missing_constructor_fields_in_declaration_order) {
                           "    Result.Ok { value } -> value\n"
                           "    Result.Err { message } -> 0\n"
                           "}\n";
-    XrLspDocument *doc = xlsp_document_open(server, uri, content, 1);
+    XrLspDocument *doc = xlsp_document_open(server, &(XlspSourceDocument){uri, content, strlen(uri), strlen(content), 1});
     ASSERT(doc != NULL);
     xlsp_parse_document(doc, server);
     ASSERT(doc->ast != NULL);
@@ -1487,7 +1492,7 @@ TEST(code_action_go_capture_has_no_keyword_rewrite) {
                           "    var counter = 0\n"
                           "    go fn() { print(counter) }()\n"
                           "}\n";
-    XrLspDocument *doc = xlsp_document_open(server, "file:///t.xr", content, 1);
+    XrLspDocument *doc = xlsp_document_open(server, &(XlspSourceDocument){"file:///t.xr", content, strlen("file:///t.xr"), strlen(content), 1});
     ASSERT(doc != NULL);
 
     XrJsonValue *params = make_code_action_params(
@@ -1565,7 +1570,7 @@ TEST(cycle_report_diagnoses_every_candidate_field) {
                           "    owner: Node?\n"
                           "    tag: i64\n"
                           "}\n";
-    XrLspDocument *doc = xlsp_document_open(server, uri, content, 1);
+    XrLspDocument *doc = xlsp_document_open(server, &(XlspSourceDocument){uri, content, strlen(uri), strlen(content), 1});
     ASSERT(doc != NULL);
 
     // The publish path parses before it diagnoses; do the same here so the
@@ -1616,7 +1621,7 @@ TEST(cycle_report_skips_already_weak_field) {
                           "    weak peer: Node?\n"
                           "    owner: Node?\n"
                           "}\n";
-    XrLspDocument *doc = xlsp_document_open(server, uri, content, 1);
+    XrLspDocument *doc = xlsp_document_open(server, &(XlspSourceDocument){uri, content, strlen(uri), strlen(content), 1});
     ASSERT(doc != NULL);
 
     // The publish path parses before it diagnoses; do the same here so the
@@ -1644,7 +1649,7 @@ TEST(code_action_cycle_offers_weak_without_default_or_batch) {
     const char *content = "class Node {\n"
                           "    peer: Node?\n"
                           "}\n";
-    XrLspDocument *doc = xlsp_document_open(server, uri, content, 1);
+    XrLspDocument *doc = xlsp_document_open(server, &(XlspSourceDocument){uri, content, strlen(uri), strlen(content), 1});
     ASSERT(doc != NULL);
 
     XrJsonValue *params = make_code_action_params(
@@ -1698,7 +1703,7 @@ TEST(code_action_closure_cycle_offers_defer) {
     const char *content = "fn wire(b: Button) {\n"
                           "    b.onClick = fn() { print(b.label) }\n"
                           "}\n";
-    XrLspDocument *doc = xlsp_document_open(server, uri, content, 1);
+    XrLspDocument *doc = xlsp_document_open(server, &(XlspSourceDocument){uri, content, strlen(uri), strlen(content), 1});
     ASSERT(doc != NULL);
 
     XrJsonValue *params = make_code_action_params(
@@ -1782,7 +1787,7 @@ TEST(contract_cycle_diagnoses_candidates_only_under_contract) {
                           "class Unguarded {\n"
                           "    next: Unguarded?\n"
                           "}\n";
-    XrLspDocument *doc = xlsp_document_open(server, uri, content, 1);
+    XrLspDocument *doc = xlsp_document_open(server, &(XlspSourceDocument){uri, content, strlen(uri), strlen(content), 1});
     ASSERT(doc != NULL);
     xlsp_parse_document(doc, server);
 
@@ -1838,7 +1843,7 @@ TEST(cycle_report_offers_weak_only_where_it_compiles) {
                           "    pinned: Mixed\n"
                           "    ok: Mixed?\n"
                           "}\n";
-    XrLspDocument *doc = xlsp_document_open(server, uri, content, 1);
+    XrLspDocument *doc = xlsp_document_open(server, &(XlspSourceDocument){uri, content, strlen(uri), strlen(content), 1});
     ASSERT(doc != NULL);
     xlsp_parse_document(doc, server);
 

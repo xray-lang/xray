@@ -1,0 +1,3 @@
+import "./state" as state
+export fn run() { return await go state.unitValue() }
+fn main()->i64 { return 0 }

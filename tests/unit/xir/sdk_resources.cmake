@@ -39,7 +39,9 @@ find_package(Python3 COMPONENTS Interpreter REQUIRED)
 add_test(NAME test_xir_sdk_resources_manifest COMMAND "${Python3_EXECUTABLE}"
     "${CMAKE_CURRENT_LIST_DIR}/sdk_manifest_vectors.py" --executable $<TARGET_FILE:test_xir_sdk_resources>
     --bundle "${XIR_SDK_BUNDLE_DIR}")
-set_tests_properties(test_xir_sdk_resources test_xir_sdk_resources_manifest PROPERTIES
+add_test(NAME test_xir_sdk_resources_current_wire_vector COMMAND "${Python3_EXECUTABLE}"
+    "${CMAKE_CURRENT_LIST_DIR}/derive_sdk_current_identity.py")
+set_tests_properties(test_xir_sdk_resources test_xir_sdk_resources_manifest test_xir_sdk_resources_current_wire_vector PROPERTIES
     LABELS "unit;xir;ownership;sdk;resources" RUN_SERIAL TRUE TIMEOUT 300)
 if(ENABLE_ASAN OR ENABLE_SANITIZERS)
     set_tests_properties(test_xir_sdk_resources PROPERTIES COST 210)

@@ -23,7 +23,17 @@ typedef struct XirObject {
     XrXirType type;
     uint32_t kind;
     struct XirObject *release_next;
+    struct XirObject *graph_previous, *graph_next, *graph_work;
+    uint32_t graph_trial;
+    bool graph_registered, graph_live, graph_dead;
 } XirObject;
+/* Operations exclude retirement snapshots without holding the graph lock.
+ * Publication requires a complete object and an active operation lease. */
+XR_FUNC void xr_xir_value_graph_begin(void);
+XR_FUNC void xr_xir_value_graph_end(void);
+XR_FUNC void xr_xir_value_object_publish(XirObject *object);
+/* The caller retains its ordinary domain lease for the duration of close. */
+XR_FUNC void xr_xir_domain_close(XrXirDomain *domain);
 /* Empty enum descriptors belong to the arena; their backpointers are weak.
  * Each external value holds an arena lease instead of a descriptor reference. */
 typedef struct XirNominalValue {

@@ -9,6 +9,7 @@ from derive_semantic61_migration import semantic61_packet
 from derive_tuple62_migration import tuple62_packet
 from derive_tuple63_migration import tuple63_packet
 from derive_role_nullable65_packets import current_packet
+from derive_role_construction72 import packet as construction_packet
 
 DIRECTORY = Path(__file__).parent
 ARRAY = re.compile(r'(?:static\s+)?const\s+uint8_t\s+(\w+)\s*\[[^\]]*\]\s*=\s*\{(.*?)\};', re.S)
@@ -106,13 +107,20 @@ def main():
         args.output.mkdir(parents=True, exist_ok=True)
     for index, row in enumerate(rows):
         previous = historical_vector(row['path'], row['name'])
+        historical63=tuple63_packet(tuple62_packet(semantic61_packet(upgrade(previous))))
+        retired65=current_packet(historical63)
+        assert retired65==construction_packet(row['name'],25,65)
+        current=construction_packet(row['name'])
+        retired71=construction_packet(row['name'],26,71)
         if args.output:
             (args.output/f'{index:02d}-old.chk').write_bytes(previous)
             historical63=tuple63_packet(tuple62_packet(semantic61_packet(upgrade(previous))))
             (args.output/f'{index:02d}-old63.chk').write_bytes(historical63)
             (args.output/f'{index:02d}-old64.chk').write_bytes(current_packet(historical63,64))
-            (args.output/f'{index:02d}-current.chk').write_bytes(current_packet(historical63))
-    print(f'{len(rows)} independent role-zero packets: complete old22/58 and historical23/59 preserved; historical24/63 verified; current25/65 explicit opcode roles verified')
+            (args.output/f'{index:02d}-old65.chk').write_bytes(retired65)
+            (args.output/f'{index:02d}-old71.chk').write_bytes(retired71)
+            (args.output/f'{index:02d}-current.chk').write_bytes(current)
+    print(f'{len(rows)} independent role-zero packets: complete old22/58 and historical23/59 preserved; historical24/63 verified; current27/72 complete fields verified; full25/65 and26/71 retained for refusal')
 
 
 if __name__ == '__main__':

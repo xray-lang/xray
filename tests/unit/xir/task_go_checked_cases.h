@@ -1,3 +1,4 @@
+#include "xir_construction_fixture.h"
 /* Fixed direct GO/await roles; executable Task lowering is still refused. */
 typedef struct TaskGoFixture {
     XrXirTypeNode nodes[2]; XrXirTypes types;
@@ -72,7 +73,7 @@ static XrXirStatus task_go_pipeline(const XrXirCompileContext *c) {
     TaskGoFixture f; task_go_fixture(&f);
     XrXirArtifact *checked = NULL, *decoded = NULL, *specialized = NULL; XrXirEffects *effects = NULL;
     XrXirCheckedPacket packet = {0}; XrXirDiagnostic diagnostic = {0};
-    XrXirStatus status = xr_xir_compile_check(c, &f.module, &checked, &diagnostic);
+    XrXirStatus status = xir_fixture_check(c, &f.module, &checked, &diagnostic);
     if (status != XR_XIR_OK && fail_at == SIZE_MAX)
         fprintf(stderr, "GO check status=%u fn=%u op=%u\n", status, diagnostic.function, diagnostic.instruction);
     if (status == XR_XIR_OK) status = xr_xir_compile_effects_analyze(checked, &effects);
@@ -132,7 +133,7 @@ static void task_go_reject(void) {
         case 12: f.root[8].immediate = 1; break;
         default: f.root[5].args[0] = 3; break;
         }
-        XrXirArtifact *out = NULL; XrXirStatus status = xr_xir_compile_check(&c, &f.module, &out, NULL);
+        XrXirArtifact *out = NULL; XrXirStatus status = xir_fixture_check(&c, &f.module, &out, NULL);
         CHECK((status == XR_XIR_BAD_STRUCTURE || status == XR_XIR_BAD_TYPE || status == XR_XIR_BAD_VALUE) && !out);
         CHECK(stats(&c).live_bytes == baseline);
     }
@@ -155,7 +156,7 @@ static void task_go_slots(void) {
                 f.functions[3].operands = NULL; f.functions[3].operand_count = 0;
             }
             XrXirArtifact *out = NULL;
-            XrXirDiagnostic d = {0}; XrXirStatus status = xr_xir_compile_check(&c, &f.module, &out, &d);
+            XrXirDiagnostic d = {0}; XrXirStatus status = xir_fixture_check(&c, &f.module, &out, &d);
             if (status != (mutable ? XR_XIR_BAD_TYPE : XR_XIR_OK))
                 fprintf(stderr, "GO slot transitive%u mutable%u status%u fn%u op%u\n",
                     transitive, mutable, status, d.function, d.instruction);
@@ -178,7 +179,7 @@ static void task_go_definition(void) {
         f.generics[1] = f.generics[2] = (XrXirGeneric){.arguments = &f.generic_argument, .argument_count = 1};
         f.module.generics = f.generics; f.root[1].type_arguments[1] = f.maker[0].type_arguments[1] = 1;
         XrXirArtifact *checked = NULL, *specialized = NULL;
-        CHECK(xr_xir_compile_check(&c, &f.module, &checked, NULL) == (missing ? XR_XIR_BAD_TYPE : XR_XIR_OK));
+        CHECK(xir_fixture_check(&c, &f.module, &checked, NULL) == (missing ? XR_XIR_BAD_TYPE : XR_XIR_OK));
         if (!missing) {
             XrXirDiagnostic d = {0};
             XrXirStatus status = xr_xir_compile_specialize(checked, &specialized, &d);
@@ -206,7 +207,7 @@ static void task_go_nominals(TaskGoFixture *f, TaskErrorTypes *auth) {
 static void task_go_expected(const XrXirCompileContext *c, TaskGoFixture *f,
     XrXirStatus expected, XrXirArtifact **out) {
     XrXirDiagnostic diagnostic = {0};
-    XrXirStatus status = xr_xir_compile_check(c, &f->module, out, &diagnostic);
+    XrXirStatus status = xir_fixture_check(c, &f->module, out, &diagnostic);
     if (status != expected) fprintf(stderr, "GO role expected%u actual%u fn%u op%u\n",
         expected, status, diagnostic.function, diagnostic.instruction);
     CHECK(status == expected && (expected == XR_XIR_OK || !*out));
@@ -455,7 +456,7 @@ static XrXirStatus task_go_cleanup_pipeline(const XrXirCompileContext *c) {
     TaskGoFixture f; task_go_cleanup_fixture(&f, 1, 0);
     XrXirArtifact *checked = NULL, *decoded = NULL, *closed = NULL; XrXirEffects *effects = NULL;
     XrXirCheckedPacket packet = {0};
-    XrXirStatus status = xr_xir_compile_check(c, &f.module, &checked, NULL);
+    XrXirStatus status = xir_fixture_check(c, &f.module, &checked, NULL);
     if (status == XR_XIR_OK) status = xr_xir_compile_effects_analyze(checked, &effects);
     if (status == XR_XIR_OK) {
         CHECK(xr_xir_effects_go_safe(effects, 0) == XR_XIR_OK && xr_xir_effects_go_safe(effects, 3) == XR_XIR_OK);

@@ -13,6 +13,7 @@
 #define XXIR_OPERAND_ROLES_H
 #include "xxir.h"
 #include "xxir_declarations.h"
+#include "xxir_types.h"
 
 /* Classification is not permission or publication evidence. */
 static inline bool xr_xir_slot_is_unit(const XrXirSlot *slots, uint32_t count,
@@ -23,6 +24,17 @@ static inline bool xr_xir_slot_is_unit(const XrXirSlot *slots, uint32_t count,
 static inline uint32_t xr_xir_slot_payload_operands(const XrXirSlot *slots, uint32_t count,
                                                   const XrXirInstruction *op) {
     return xr_xir_slot_is_unit(slots,count,op) ? 0u : 1u;
+}
+
+/* Cell<Unit> stores initialization and ownership without an SSA payload. */
+static inline bool xr_xir_cell_is_unit(const XrXirTypes *types, XrXirType cell) {
+    return xr_xir_type_is_cell(types, cell) && xr_xir_cell_element(types, cell) == XR_XIR_UNIT;
+}
+static inline uint32_t xr_xir_cell_payload_operands(const XrXirTypes *types,
+    XrXirType cell, XrXirOp op) {
+    bool unit = xr_xir_cell_is_unit(types, cell);
+    return op == XR_XIR_CELL_NEW ? !unit :
+        op == XR_XIR_CELL_READ ? 1u : 1u + !unit;
 }
 
 typedef enum XrXirPlaceKind {

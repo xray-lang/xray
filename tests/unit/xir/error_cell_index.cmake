@@ -1,0 +1,10 @@
+# One canonical effects owner, exact typed facts and finite resource responsibility.
+add_executable(test_xir_error_cell_index xir/test_xir_error_cell_index.c)
+target_link_libraries(test_xir_error_cell_index PRIVATE xray_xir)
+if(MSVC)
+    target_compile_options(test_xir_error_cell_index PRIVATE /W4 /WX /utf-8)
+else()
+    target_compile_options(test_xir_error_cell_index PRIVATE -Wall -Wextra -Werror)
+endif()
+add_test(NAME test_xir_error_cell_index COMMAND test_xir_error_cell_index)
+set_tests_properties(test_xir_error_cell_index PROPERTIES LABELS "unit;xir;metadata;ownership;budget" TIMEOUT 300 RUN_SERIAL TRUE PROCESSORS 1)

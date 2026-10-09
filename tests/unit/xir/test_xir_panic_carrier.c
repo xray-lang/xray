@@ -15,6 +15,9 @@
 #include <string.h>
 #define CHECK(c) do { if (!(c)) { fprintf(stderr, "%d: %s\n", __LINE__, #c); exit(1); } } while (0)
 #include "xir_runtime_allocations.h"
+/* Keep Task allocation and rollback inside the same injected runtime owner. */
+#include "xir/xxir_task_budget.c"
+#include "xir/xxir_task.c"
 #include "base/xcompile_resources.c"
 
 static const char expected_bytes[] = "a\0\xe4\xb8\xad" "z";
@@ -68,6 +71,14 @@ static XrXirAction carrier_cleanup(XrXirCallView *view) {
 static XrXirAction carrier_parent(XrXirCallView *view) {
     CarrierWitness *w = view->instance; CarrierFrame *frame = view->state;
     if (view->phase == XR_XIR_CALL_EXIT) {
+        /* Injected execution failures unwind through an entered language EXIT.
+         * They keep their original status and never become a caught assertion. */
+        if (view->exit.status == XR_XIR_CALL_OOM || view->exit.status == XR_XIR_CALL_LIMIT) {
+            CHECK(w->mode == 2 && runtime_fail_at != SIZE_MAX);
+            CHECK(xr_xir_call_result_valid(&view->exit) && !view->exit.value.type &&
+                xr_xir_panic_empty(&view->exit.panic));
+            return control(XR_XIR_ACTION_EXIT_DONE);
+        }
         if (view->exit.status == XR_XIR_CALL_RETURNED || view->exit.status == XR_XIR_CALL_CANCELLED) {
             CHECK(xr_xir_panic_empty(&view->exit.panic));
             return control(XR_XIR_ACTION_EXIT_DONE);

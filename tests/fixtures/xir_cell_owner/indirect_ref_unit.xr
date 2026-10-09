@@ -1,0 +1,10 @@
+fn empty() {}
+var stamp: () = empty()
+fn touch(value: ref ()) { value = empty(); }
+fn forward(action: fn(ref ()), value: ref ()) { action(ref value); }
+export fn run() -> i64 {
+    const action: fn(ref ()) = touch;
+    forward(action, ref stamp);
+    return 7;
+}
+fn main() -> i64 { return 0; }

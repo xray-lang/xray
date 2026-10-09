@@ -44,7 +44,7 @@ static int tests_failed = 0;
 
 // Helper: open a document and parse it
 static XrLspDocument *open_and_parse(XrLspServer *server, const char *uri, const char *code) {
-    XrLspDocument *doc = xlsp_document_open(server, uri, code, 1);
+    XrLspDocument *doc = xlsp_document_open(server, &(XlspSourceDocument){uri, code, strlen(uri), strlen(code), 1});
     if (doc) {
         xlsp_parse_document(doc, server);
     }
@@ -200,7 +200,7 @@ TEST(references_local_variable) {
 
     // Find references of "x" at its declaration (line 0, col 4)
     XrLspPosition pos = {0, 4};
-    XrJsonValue *result = xlsp_analyze_references(server, doc, pos);
+    XrJsonValue *result = xlsp_analyze_references(server, doc, pos, true);
     ASSERT(result != NULL);
 
     // Should find at least the declaration itself + usages
@@ -225,7 +225,7 @@ TEST(references_function_name) {
 
     // Find references of "add" at its declaration (line 0, col 3)
     XrLspPosition pos = {0, 3};
-    XrJsonValue *result = xlsp_analyze_references(server, doc, pos);
+    XrJsonValue *result = xlsp_analyze_references(server, doc, pos, true);
     ASSERT(result != NULL);
 
     // Should find: declaration + 2 call sites = 3
@@ -241,7 +241,7 @@ TEST(references_null_safety) {
     ASSERT(server != NULL);
 
     XrLspPosition pos = {0, 0};
-    XrJsonValue *result = xlsp_analyze_references(server, NULL, pos);
+    XrJsonValue *result = xlsp_analyze_references(server, NULL, pos, true);
     // May return NULL or empty array depending on implementation
     if (result) {
         xjson_free(result);

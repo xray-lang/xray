@@ -50,7 +50,7 @@ static SourceName *source_nominal_name(SourceContext *ctx, const char *name) {
         else return NULL;
     } else {
         symbol = visible_name(ctx, name);
-        if (!symbol) symbol = source_ordering_lookup(ctx, name);
+        if (!symbol) symbol = source_prelude_lookup(ctx, name);
         if (symbol && symbol->kind == SOURCE_IMPORT) symbol = imported_declaration(ctx, symbol, symbol->imported);
     }
     return symbol && symbol->kind == SOURCE_NOMINAL ? symbol : NULL;
@@ -97,7 +97,7 @@ static bool source_nominal_declare(SourceContext *ctx, AstNode *node, const char
     const char *module = ctx->graph->specs[ctx->module].canonical;
     *record = (XrXirNominalDeclaration) {{module, (uint32_t) source_text_size(ctx, module)},
         {name, (uint32_t) source_text_size(ctx, name)}, node->is_exported, NULL, 0, NULL, 0, kind, NULL, 0, 0, {0}};
-    if (!source_ordering_bind(ctx, symbol, record)) return false;
+    if (!source_prelude_bind(ctx, symbol, record)) return false;
     XrXirTypeNode type = {0}; type.kind = XR_XIR_TYPE_NOMINAL; type.nominal.declaration = symbol->index;
     XrXirConstraint *constraints = count ? source_alloc(ctx, count, sizeof(*constraints)) : NULL;
     XrXirType *arguments = count ? source_alloc(ctx, count, sizeof(*arguments)) : NULL;
@@ -132,6 +132,7 @@ static bool source_nominal_constraints(SourceContext *ctx) {
     bool ok = true;
     for (uint32_t d = 0; d < ctx->nominals.count && ok; ++d) {
         SourceName *owner = ctx->nominal_sources[d];
+        if (owner->checked_library) continue;
         SourceNominalDeclaration syntax;
         if (!source_nominal_declaration(ctx,owner->node,&syntax)) { ok=false; break; }
         XrGenericParam **parameters = syntax.parameters;
@@ -175,7 +176,7 @@ static bool source_struct_fields(SourceContext *ctx) {
     for (uint32_t m = 0; m < (uint32_t) ctx->graph->spec_count; ++m) {
         ctx->module = m; ctx->function = m;
         for (SourceName *symbol = ctx->names[m]; symbol; symbol = symbol->next) {
-            if (symbol->kind != SOURCE_NOMINAL || (symbol->node->type != AST_STRUCT_DECL && symbol->node->type != AST_CLASS_DECL)) continue;
+            if (symbol->kind != SOURCE_NOMINAL || symbol->checked_library || (symbol->node->type != AST_STRUCT_DECL && symbol->node->type != AST_CLASS_DECL)) continue;
             ClassDeclNode *decl = symbol->node->type == AST_CLASS_DECL ? &symbol->node->as.class_decl : &symbol->node->as.struct_decl;
             ctx->type_scope = (SourceTypeScope){true,symbol->node,decl->type_params,
                 (uint32_t)decl->type_param_count,decl->type_param_count ? symbol->declaration : 0,0};
@@ -232,7 +233,7 @@ static bool source_struct_default_functions(SourceContext *ctx, uint32_t *next) 
     for (uint32_t m = 0; m < (uint32_t) ctx->graph->spec_count; ++m) {
         for (SourceName *symbol = ctx->names[m]; symbol; symbol = symbol->next) {
             if (!source_work(ctx, symbol->node)) return false;
-            if (symbol->kind != SOURCE_NOMINAL || (symbol->node->type != AST_STRUCT_DECL && symbol->node->type != AST_CLASS_DECL)) continue;
+            if (symbol->kind != SOURCE_NOMINAL || symbol->checked_library || (symbol->node->type != AST_STRUCT_DECL && symbol->node->type != AST_CLASS_DECL)) continue;
             ClassDeclNode *decl = symbol->node->type == AST_CLASS_DECL ? &symbol->node->as.class_decl : &symbol->node->as.struct_decl;
             const XrXirNominalDeclaration *nominal = &ctx->nominals.declarations[symbol->index];
             for (uint32_t f = 0; f < nominal->field_count; ++f) {
@@ -274,7 +275,7 @@ static bool source_struct_field(SourceContext *ctx, AstNode *node, XrXirType typ
         SourceSubstitution substitution = {found->nominal.arguments, found->nominal.argument_count};
         if (!source_substitute(ctx, &substitution, field->type, 0, field_type)) return false;
         *index = f;
-        return source_query_target_reference(ctx, source_query_range(ctx, node, NULL),
+        return source_query_target_token_reference(ctx,node,
             ctx->nominal_members[declaration][f], write == 3 ? XR_XIR_SOURCE_READ_WRITE : write ? XR_XIR_SOURCE_WRITE : XR_XIR_SOURCE_READ);
     }
     return source_fail(ctx, node, XR_XIR_BAD_TYPE, "unknown struct field");
@@ -289,7 +290,9 @@ static bool source_struct_construct(SourceContext *ctx, AstNode *node, AstNode *
         binding = visible_name(ctx, path->as.member_access.object->as.variable.name);
         if (binding && binding->kind == SOURCE_MODULE) symbol = imported_declaration(ctx, binding, path->as.member_access.name);
     }
-    if (!symbol || symbol->kind != SOURCE_NOMINAL || symbol->node->type != AST_STRUCT_DECL || type_arg_count < 0 || field_count < 0)
+    if (!symbol || symbol->kind != SOURCE_NOMINAL || symbol->index >= ctx->nominals.count ||
+        !ctx->nominals.declarations || ctx->nominals.declarations[symbol->index].kind != XR_XIR_NOMINAL_STRUCT ||
+        type_arg_count < 0 || field_count < 0)
         return source_fail(ctx, node, XR_XIR_BAD_TYPE, "struct literal requires an admitted nominal declaration");
     XrXirType instance_type;
     if (!source_nominal_apply(ctx, symbol, type_args, (uint32_t)type_arg_count, &instance_type)) return false;
@@ -305,7 +308,7 @@ static bool source_struct_construct(SourceContext *ctx, AstNode *node, AstNode *
         if (!source_struct_field(ctx, node, instance_type, names[f], false, &index, &type)) return false;
         if (seen[index]) return source_fail(ctx, node, XR_XIR_BAD_TYPE, "duplicate struct literal field");
         seen[index] = true;
-        if (!source_plan_expression(ctx, values[f], (SourceExpectedType){type != XR_XIR_UNIT,type, false}, &fields[index])) return false;
+        if (!source_plan_expression(ctx, values[f], (SourceExpectedType){type != XR_XIR_UNIT,type, false, false}, &fields[index])) return false;
         if (fields[index].type != type) return source_fail(ctx, node, XR_XIR_BAD_TYPE, "struct field type mismatch");
     }
     for (uint32_t f = 0; f < count; ++f) {
@@ -322,8 +325,8 @@ static bool source_struct_construct(SourceContext *ctx, AstNode *node, AstNode *
         XrXirInstruction op = {XR_XIR_CALL, field_type, {0}, {0}, function, {0}};
         if (!source_type_arguments(ctx, node, substitution.types, substitution.count, &op) ||
             !source_recipe_record(ctx, op, &fields[f])) return false;
-        if (!source_query_target_reference(ctx, source_query_range(ctx, node, NULL),
-            ctx->nominal_members[symbol->index][f], XR_XIR_SOURCE_READ)) return false;
+        if (!source_query_target_selected_reference(ctx, source_query_range(ctx,node,NULL),
+            (XrXirSourceRange){ctx->module,0,0,0,0},ctx->nominal_members[symbol->index][f], XR_XIR_SOURCE_READ)) return false;
     }
     return source_query_reference(ctx, path, binding, symbol, XR_XIR_SOURCE_TYPE_USE) &&
         source_recipe_group(ctx, (XrXirInstruction) {XR_XIR_STRUCT_NEW, instance_type, {0}, {0}, 0, {0}}, fields, count, value);

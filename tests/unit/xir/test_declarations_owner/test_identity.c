@@ -6,6 +6,7 @@
  *
  * test_identity.c - Roles are verified semantics and proof-bound identity
  */
+#include "../xir_construction_fixture.h"
 #include "xir/xxir_vm.h"
 #include "xir/xxir_generic.h"
 #include "xir/xxir_program_internal.h"
@@ -33,7 +34,7 @@ static XrXirArtifact *make(const XrXirCompileContext *context,uint32_t role,uint
     const XrXirDeclarations declarations={&source,1,identities,NULL,0,NULL,0,0,1,NULL};
     XrXirModule module={XR_XIR_BUILT,functions,4,&declarations,generics,NULL,NULL,XR_XIR_PROGRAM,NULL};
     XrXirArtifact *checked=NULL,*closed=NULL,*lowered=NULL;
-    CHECK(xr_xir_compile_check(context,&module,&checked,NULL)==XR_XIR_OK);
+    CHECK(xir_fixture_check(context, &module, &checked, NULL)==XR_XIR_OK);
     XrXirCheckedPacket packet={0};CHECK(xr_xir_compile_checked_write(checked,&packet,NULL)==XR_XIR_OK);
     if(packet_directory) {
         char path[1024];CHECK(snprintf(path,sizeof(path),"%s/%u-%u.chk",packet_directory,role,timeout)>0);
@@ -44,7 +45,8 @@ static XrXirArtifact *make(const XrXirCompileContext *context,uint32_t role,uint
     CHECK(xr_xir_compile_artifact_module(roundtrip)->declarations->functions[2].test_role==role);
     CHECK(xr_xir_compile_artifact_module(roundtrip)->declarations->functions[2].test_timeout_seconds==timeout);
     uint8_t current_digest[32];memcpy(current_digest,packet.bytes+32,32);
-    CHECK(packet.bytes[8]==25 && packet.bytes[12]==65);packet.bytes[12]=62;
+    /* Rehashed header rejection is separate from the full historical models. */
+    CHECK(packet.bytes[8]==27 && packet.bytes[12]==72);packet.bytes[12]=62;
     XrSHA256Context hash;xr_sha256_init(&hash);xr_sha256_update(&hash,packet.bytes,32);
     xr_sha256_update(&hash,packet.bytes+64,packet.length-64);xr_sha256_final(&hash,packet.bytes+32);
     XrCompileResourceStats old_before={0},old_after={0};
@@ -58,16 +60,16 @@ static XrXirArtifact *make(const XrXirCompileContext *context,uint32_t role,uint
     CHECK(xr_compile_resources_stats(context->resources,&old_after)==XR_COMPILE_RESOURCE_OK);
     CHECK(old_after.allocation_count==old_before.allocation_count && old_after.allocated_bytes==old_before.allocated_bytes &&
         old_after.live_bytes==old_before.live_bytes && old_after.peak_bytes==old_before.peak_bytes);
-    packet.bytes[12]=65;memcpy(packet.bytes+32,current_digest,32);
+    packet.bytes[12]=72;memcpy(packet.bytes+32,current_digest,32);
     for(uint32_t field=0;field<2;++field) {
         size_t offset=field?12:8;uint8_t saved=packet.bytes[offset];packet.bytes[offset]=(uint8_t)(saved-1);
-        XrXirArtifact *sentinel=(XrXirArtifact *)(uintptr_t)1;
+        XrXirArtifact *sentinel=NULL;
         CHECK(xr_xir_compile_checked_read(context,packet.bytes,packet.length,&sentinel,NULL)==XR_XIR_BAD_STRUCTURE);
-        CHECK(sentinel==(XrXirArtifact *)(uintptr_t)1);packet.bytes[offset]=saved;
+        CHECK(!sentinel);packet.bytes[offset]=saved;
     }
     if(packet_directory){
-        const char *history[]={"old24-62","old24-63","old25-64"};
-        for(unsigned h=0;h<3;++h){
+        const char *history[]={"old24-62","old24-63","old25-64","old25-65","old25-70","old26-71"};
+        for(size_t h=0;h<sizeof(history)/sizeof(*history);++h){
             char path[1024];CHECK(snprintf(path,sizeof(path),"%s/%u-%u-%s.chk",packet_directory,role,timeout,history[h])>0);
             FILE *file=fopen(path,"rb");CHECK(file&&!fseek(file,0,SEEK_END));long length=ftell(file);CHECK(length>64&&length<16384&&!fseek(file,0,SEEK_SET));
             uint8_t bytes[16384];CHECK(fread(bytes,1,(size_t)length,file)==(size_t)length&&!fclose(file));
@@ -107,7 +109,8 @@ static void match(const XrXirCompileContext *context,uint32_t role_a,uint32_t ti
     xr_xir_compile_program_drop(program);program=NULL;
     spec.proof=xr_xir_compile_program_proof(a);
     CHECK(xr_xir_compile_program_match(context,&spec,spec.proof.layouts,a)==XR_XIR_BAD_STRUCTURE);
-    CHECK(xr_xir_compile_program_proof_verify(context,&spec,&spec.proof)==XR_XIR_BAD_STRUCTURE);
+    XrXirProgramPermissions *permissions=NULL;
+    CHECK(xr_xir_compile_program_proof_verify(context,&spec,&spec.proof,&permissions)==XR_XIR_BAD_STRUCTURE && !permissions);
     CHECK(xr_xir_compile_program_seal(context,&spec,&program)==XR_XIR_BAD_STRUCTURE && !program);
     xr_xir_compile_artifact_free(a);xr_xir_compile_artifact_free(b);
 }
@@ -131,9 +134,9 @@ static void invalid(const XrXirCompileContext *context) {
         {.test_role=XR_XIR_TEST_ROLE_TEST,.nominal_owner=1,.method_kind=XR_XIR_STATIC_METHOD},
         {.test_role=XR_XIR_TEST_ROLE_TEST,.cleanup_owner=1}};
     for(size_t i=0;i<sizeof(malformed)/sizeof(*malformed);++i) {
-        identities[2]=malformed[i];XrXirArtifact *out=(XrXirArtifact *)(uintptr_t)1;
-        CHECK(xr_xir_compile_check(context,&module,&out,NULL)==XR_XIR_BAD_STRUCTURE);
-        CHECK(out==(XrXirArtifact *)(uintptr_t)1);
+        identities[2]=malformed[i];XrXirArtifact *out=NULL;
+        CHECK(xir_fixture_check(context, &module, &out, NULL)==XR_XIR_BAD_STRUCTURE);
+        CHECK(!out);
     }
     identities[2]=(XrXirFunctionIdentity){.test_role=XR_XIR_TEST_ROLE_TEST};
     const XrXirType parameter=XR_XIR_I64;
@@ -144,14 +147,14 @@ static void invalid(const XrXirCompileContext *context) {
         if(i==0) {functions[2].parameters=&parameter;functions[2].parameter_count=1;}
         if(i==1) functions[2].result=XR_XIR_I64;
         if(i==2) module.generics=generics;
-        XrXirArtifact *out=(XrXirArtifact *)(uintptr_t)1;
-        CHECK(xr_xir_compile_check(context,&module,&out,NULL)==XR_XIR_BAD_TYPE);
-        CHECK(out==(XrXirArtifact *)(uintptr_t)1);functions[2]=saved;module.generics=NULL;
+        XrXirArtifact *out=NULL;
+        CHECK(xir_fixture_check(context, &module, &out, NULL)==XR_XIR_BAD_TYPE);
+        CHECK(!out);functions[2]=saved;module.generics=NULL;
     }
     identities[2]=(XrXirFunctionIdentity){0};
     for(uint32_t f=0;f<2;++f) {
         identities[f].test_role=XR_XIR_TEST_ROLE_TEST;XrXirArtifact *out=NULL;
-        CHECK(xr_xir_compile_check(context,&module,&out,NULL)==XR_XIR_BAD_STRUCTURE && !out);
+        CHECK(xir_fixture_check(context, &module, &out, NULL)==XR_XIR_BAD_STRUCTURE && !out);
         identities[f].test_role=XR_XIR_TEST_ROLE_NONE;
     }
 }

@@ -1,0 +1,11 @@
+fn owned()->fn()->i64 {
+    var local:i64 = 0
+    return fn()->i64 { local += 1; return local }
+}
+export fn run()->i64 {
+    const value = owned()
+    const first = value()
+    return first * 10 + value()
+}
+fn main()->i64 { return run() }
+export fn cellFactory()->fn()->i64 { return owned() }

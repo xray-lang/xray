@@ -53,8 +53,8 @@ static void weaken_authority_cases(void) {
     XrXirLiteral literal = {"captured authority", 18};
     XrXirDeclarations declarations = {modules, 2, ids, NULL, 0, &literal, 1, 0, 1, NULL};
     XrXirTypeNode nodes[] = {
-        {XR_XIR_TYPE_CALLABLE, XR_XIR_UNIT, NULL, 0, XR_XIR_STRING, 0, 0, {0}},
-        {XR_XIR_TYPE_CALLABLE, XR_XIR_UNIT, NULL, 0, XR_XIR_STRING, XR_XIR_CALLABLE_NO_SUSPEND, 0, {0}}};
+        {XR_XIR_TYPE_CALLABLE, XR_XIR_UNIT, NULL, 0, XR_XIR_STRING, XR_XIR_CALLABLE_ROOT_UNRESOLVED, 0, {0}},
+        {XR_XIR_TYPE_CALLABLE, XR_XIR_UNIT, NULL, 0, XR_XIR_STRING, XR_XIR_CALLABLE_ROOT_UNRESOLVED | XR_XIR_CALLABLE_NO_SUSPEND, 0, {0}}};
     XrXirTypes types = {nodes, 2, NULL, NULL};
     XrXirType capture = XR_XIR_STRING, strong_type = (XrXirType)257;
     XrXirCallEntry entries[7];

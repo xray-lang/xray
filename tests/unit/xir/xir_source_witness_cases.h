@@ -78,7 +78,12 @@ static void source_witness_empty_helper_signatures(XrXirSourceRequest *request) 
         "fn noCapture()->i64 { defer { const ignored=1; }; const call=fn()->i64{return 41}; return call() }\n"
         "const instance=Secret()\n");
     XrXirSourceResult result = {0};
-    CHECK(xr_xir_compile_source_check(request, &result, NULL, NULL) == XR_XIR_OK && result.checked);
+    XrXirSourceDiagnostic diagnostic = {0};
+    XrXirStatus status = xr_xir_compile_source_check(request, &result, &diagnostic, NULL);
+    if (status != XR_XIR_OK)
+        fprintf(stderr, "empty helper source: %u at %d:%d %s\n",
+            status, diagnostic.line, diagnostic.column, diagnostic.message);
+    CHECK(status == XR_XIR_OK && result.checked);
     const XrXirModule *module = xr_xir_compile_artifact_module(result.checked);
     uint32_t helpers = 0;
     for (uint32_t f = 0; f < module->function_count; ++f) {

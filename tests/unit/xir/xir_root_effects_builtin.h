@@ -1,3 +1,4 @@
+#include "xir_construction_fixture.h"
 /*
  * xray - Lightweight typed scripting with native concurrency
  * https://www.xray-lang.org
@@ -36,7 +37,7 @@ static XrXirArtifact *root_builtin(unsigned mode) {
     XrXirSourceModule source={"root",4,NULL,0,0};XrXirSlot slot={0,XR_XIR_I64,1};
     XrXirDeclarations declarations={.modules=&source,.module_count=1,.functions=identities,
         .slots=&slot,.slot_count=1,.entry_function=1};
-    XrXirTypeNode node={.kind=XR_XIR_TYPE_CALLABLE,.result=XR_XIR_I64,.flags=XR_XIR_CALLABLE_NO_SUSPEND};
+    XrXirTypeNode node={.kind=XR_XIR_TYPE_CALLABLE,.result=XR_XIR_I64,.flags=XR_XIR_CALLABLE_NO_SUSPEND|XR_XIR_CALLABLE_ROOT_UNRESOLVED};
     XrXirTypes types={&node,1,NULL,NULL};
     XrXirDefaultBinding binding={XR_XIR_DEFAULT_PARAMETER,4,0,mode==1?3u:2u};
     XrXirDefaultTable defaults={&binding,1};
@@ -44,7 +45,7 @@ static XrXirArtifact *root_builtin(unsigned mode) {
     if(mode==2)dynamic[0].op=XR_XIR_OP_COUNT;
     if(mode==3)caller[0].immediate=7;
     XrXirArtifact *checked=NULL;XrXirDiagnostic diagnostic={0};
-    XrXirStatus status=xr_xir_compile_check(&effect_context,&built,&checked,&diagnostic);
+    XrXirStatus status=xir_fixture_check(&effect_context, &built, &checked, &diagnostic);
     if(mode>=2){CHECK(status==XR_XIR_BAD_STRUCTURE&&!checked);return NULL;}
     if(status!=XR_XIR_OK)fprintf(stderr,"builtin root fixture mode%u status%u f%u b%u i%u\n",
         mode,status,diagnostic.function,diagnostic.block,diagnostic.instruction);
@@ -70,7 +71,7 @@ static XrXirArtifact *root_group(void) {
     XrXirDeclarations d={.modules=modules,.module_count=2,.functions=ids,.slots=slots,.slot_count=3,.entry_function=1};
     XrXirModule built={XR_XIR_BUILT,functions,3,&d,NULL,NULL,NULL,XR_XIR_PROGRAM,NULL};
     XrXirArtifact *checked=NULL;XrXirDiagnostic diagnostic={0};
-    XrXirStatus status=xr_xir_compile_check(&effect_context,&built,&checked,&diagnostic);
+    XrXirStatus status=xir_fixture_check(&effect_context, &built, &checked, &diagnostic);
     if(status!=XR_XIR_OK)fprintf(stderr,"group root fixture status%u f%u b%u i%u\n",
         status,diagnostic.function,diagnostic.block,diagnostic.instruction);
     CHECK(status==XR_XIR_OK);return checked;

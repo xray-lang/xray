@@ -135,7 +135,7 @@ static void equal_child(ValueEqualFrame *frame,
     *a_span = (StorageSpan){frame->left->element,frame->left->data + index * frame->left->stride};
     *b_span = (StorageSpan){frame->right->element,frame->right->data + index * frame->right->stride};
 }
-XR_FUNC XrXirValueStatus xr_xir_value_equal(const XrXirValue *left, const XrXirValue *right,
+static XrXirValueStatus xr_xir_value_equal_graph_operation(const XrXirValue *left, const XrXirValue *right,
     XrXirType type, XrXirValueAdmission *admission, bool *output) {
     if (!left || !right || !admission || !admission->domain || !output ||
         left->type != (uint32_t)type || right->type != (uint32_t)type) return XR_XIR_VALUE_BAD_ARGUMENT;
@@ -160,4 +160,11 @@ XR_FUNC XrXirValueStatus xr_xir_value_equal(const XrXirValue *left, const XrXirV
     }
     if (status == XR_XIR_VALUE_OK) *output = equal;
     return status;
+}
+XR_FUNC XrXirValueStatus xr_xir_value_equal(const XrXirValue *left, const XrXirValue *right,
+    XrXirType type, XrXirValueAdmission *admission, bool *output) {
+    xr_xir_value_graph_begin();
+    XrXirValueStatus graph_outcome = xr_xir_value_equal_graph_operation(left, right, type, admission, output);
+    xr_xir_value_graph_end();
+    return graph_outcome;
 }

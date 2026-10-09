@@ -1,0 +1,4 @@
+import "./chain00" as chain
+import "./empty" as empty
+export fn run()->i64 { return chain.answer(0) }
+export fn recovery()->i64 { return 41 }

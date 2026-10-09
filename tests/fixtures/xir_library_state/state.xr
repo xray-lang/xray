@@ -1,0 +1,10 @@
+var (counter,text) = (0,"seed")
+const seed:i64 = 7
+export fn next()->i64 {
+    counter = counter + 1
+    text = text + "!"
+    return counter
+}
+export fn current()->i64 { return counter }
+export fn label()->string { return text }
+export fn pure(value:i64)->i64 { return value + 1 }

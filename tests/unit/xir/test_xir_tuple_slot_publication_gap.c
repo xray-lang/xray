@@ -6,6 +6,7 @@
  *
  * test_xir_tuple_slot_publication_gap.c - Expose sequential publication before a real second admit failure
  */
+#include "xir_construction_fixture.h"
 #include "xir/xxir_vm.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -55,7 +56,7 @@ static XrXirArtifact *gap_lower(const XrXirCompileContext *context) {
     XrXirModule module={XR_XIR_BUILT,functions,2,&declarations,NULL,&types,NULL,XR_XIR_PROGRAM,NULL};
     XrXirArtifact *checked=NULL,*read=NULL,*closed=NULL,*lowered=NULL;
     XrXirDiagnostic diagnostic={0};XrXirCheckedPacket packet={0};
-    XrXirStatus status=xr_xir_compile_check(context,&module,&checked,&diagnostic);
+    XrXirStatus status=xir_fixture_check(context, &module, &checked, &diagnostic);
     if(status!=XR_XIR_OK)fprintf(stderr,"gap Check=%u f=%u b=%u i=%u\n",status,diagnostic.function,diagnostic.block,diagnostic.instruction);
     CHECK(status==XR_XIR_OK);
     CHECK(xr_xir_compile_checked_write(checked,&packet,NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(checked);

@@ -17,6 +17,9 @@
 #include "xlsp_transport.h"
 #include "../../base/xjson.h"
 #include "xlsp_types.h"
+#include "xlsp_source_buffer.h"
+#include "xlsp_source_open.h"
+#include "xlsp_document_store.h"
 #include "xlsp_async.h"
 #include "xray_vm.h"
 #include "../../base/xarena.h"
@@ -37,6 +40,9 @@ struct XrLspDocument {
     char *content;  // Separately managed (needs incremental update)
     size_t length;
     int version;
+    XlspSourceOpen *source_open;
+    XlspSourceBuffer *source_buffer; /* Owns content and line_offsets after an edit. */
+    struct XlspSyntaxSnapshot *syntax_snapshot; /* Owns exact parsed version, never a fallback. */
 
     // Back-pointer to owning server (for accessing per-server state)
     struct XrLspServer *server;
@@ -70,8 +76,7 @@ struct XrLspDocument {
     int last_change_offset;  // Offset where last change occurred
 
     // Semantic tokens cache (for delta encoding)
-    uint32_t *prev_sem_tokens;     // Previous encoded token data
-    int prev_sem_token_count;      // Number of uint32_t values
+    XlspSourceTokens *source_tokens; // Deep-owned last successful semantic result
     uint32_t sem_token_result_id;  // Monotonically increasing result ID
 
     // Import cache (invalidated on content change)
@@ -81,19 +86,6 @@ struct XrLspDocument {
 
     struct XrLspDocument *next;
 };
-
-// Document hash table bucket
-typedef struct XrLspDocBucket {
-    XrLspDocument *doc;
-    struct XrLspDocBucket *next;
-} XrLspDocBucket;
-
-// Document hash table for O(1) lookup
-typedef struct XrLspDocTable {
-    XrLspDocBucket **buckets;
-    int bucket_count;
-    int doc_count;
-} XrLspDocTable;
 
 // Forward declaration for method hash table
 typedef struct MethodHashEntry MethodHashEntry;
@@ -213,6 +205,10 @@ struct XrLspServer {
 
     // Documents (hash table for O(1) lookup by URI)
     XrLspDocTable *doc_table;
+    /* Last successfully published modern query transaction. It owns every
+     * producer and immutable version; requests never consult an old AST. */
+    struct XlspSourceWorkspace *source_workspace;
+    struct { unsigned stage, status; } source_failure;
 
     // Workspace-level static analyzer (unified index for all cross-file features)
     XaAnalyzer *workspace_analyzer;
@@ -322,9 +318,8 @@ XR_FUNC void xlsp_server_free(XrLspServer *server);
 XR_FUNC int xlsp_server_run(XrLspServer *server);
 
 // Document management
-XR_FUNC XrLspDocument *xlsp_document_open(XrLspServer *server, const char *uri, const char *text,
-                                          int version);
-XR_FUNC void xlsp_document_change(XrLspDocument *doc, XrLspRange *range, const char *text);
+XR_FUNC XrLspDocument *xlsp_document_open(XrLspServer *server, const XlspSourceDocument *input);
+XR_FUNC XrXirStatus xlsp_document_apply_changes(XrLspDocument *doc, const XrJsonValue *changes, int version);
 XR_FUNC void xlsp_document_close(XrLspServer *server, const char *uri);
 XR_FUNC XrLspDocument *xlsp_document_get(XrLspServer *server, const char *uri);
 

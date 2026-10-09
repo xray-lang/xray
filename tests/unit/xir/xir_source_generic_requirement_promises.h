@@ -32,7 +32,7 @@ static void source_generic_requirement_promises(const XrXirSourceRequest *reques
     records[1].parameter = NULL;
     source_manifest_write(request,"witness_promises.xr",records,3);
     CHECK(!witness_promise_check(request,false,"generic unqualified callback",
-        "callable conversion may only discard its top-level promise"));
+        "callable conversion may only weaken its outer execution contract"));
     records[1].parameter = "f"; records[0].no_suspend = false;
     source_manifest_write(request,"witness_promises.xr",records,3);
     CHECK(!witness_promise_check(request,false,"generic unknown abstract effect","declared no_suspend"));

@@ -63,7 +63,7 @@ static bool member_work(MemberContext *c, uint64_t work) {
     if (!xir_compile_work(&c->remaining, work)) { c->status = XR_XIR_BUDGET; return false; }
      return true;
 }
-static void *member_alloc(MemberContext *c, uint64_t count, size_t size) {
+static void *member_reserve(MemberContext *c, uint64_t count, size_t size, bool clear) {
     XrXirStatus allocation_status = XR_XIR_OK;
     if (!count || c->status != XR_XIR_OK) return NULL;
     if (count > (SIZE_MAX - sizeof(MemberMemory)) / size ||
@@ -71,10 +71,14 @@ static void *member_alloc(MemberContext *c, uint64_t count, size_t size) {
         c->status = XR_XIR_BUDGET; return NULL;
     }
     size_t bytes = sizeof(MemberMemory) + (size_t)count * size;
-    MemberMemory *memory = xir_compile_calloc(&c->remaining, 1, bytes, &allocation_status);
+    MemberMemory *memory = clear ? xir_compile_calloc(&c->remaining, 1, bytes, &allocation_status) :
+        xir_compile_alloc(&c->remaining, bytes, &allocation_status);
     if (!memory) { c->status = allocation_status; return NULL; }
 
     memory->next = c->memory; c->memory = memory; return memory + 1;
+}
+static void *member_alloc(MemberContext *c, uint64_t count, size_t size) {
+    return member_reserve(c, count, size, true);
 }
 static void member_dispose(MemberContext *c) {
     while (c->memory) { MemberMemory *next = c->memory->next; xr_compile_resources_free(c->memory); c->memory = next; }
@@ -133,11 +137,14 @@ static XrXirType member_node(MemberContext *c, XrXirTypeNode node) {
             uint32_t tail = limit - c->capacity < 8 ? limit - c->capacity : 8;
             capacity = c->capacity + tail;
         }
-        XrXirTypeNode *nodes = member_alloc(c, capacity, sizeof(*nodes));
+        /* The visible prefix is copied below and each new descriptor is
+         * assigned in full before count advances. Spare capacity is unread. */
+        XrXirTypeNode *nodes = member_reserve(c, capacity, sizeof(*nodes), false);
         if (!nodes || !member_work(c, (uint64_t)c->types.count * sizeof(*nodes))) return XR_XIR_UNIT;
         if (c->types.count) memcpy(nodes, c->types.nodes, c->types.count * sizeof(*nodes));
         c->types.nodes = nodes; c->capacity = capacity; c->nodes_owned = true;
     }
+    if (!member_work(c, sizeof(node))) return XR_XIR_UNIT;
     ((XrXirTypeNode *)c->types.nodes)[c->types.count] = node;
     return (XrXirType)(XR_XIR_CONSTRUCTED_TYPE_BASE + c->types.count++);
 }

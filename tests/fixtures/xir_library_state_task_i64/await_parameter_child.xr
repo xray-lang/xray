@@ -1,0 +1,3 @@
+import "./state" as state
+fn consume(value:Task<i64>)->i64 {return await value}
+fn main()->i64 {return await go consume(state.read())}

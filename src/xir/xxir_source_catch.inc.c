@@ -72,7 +72,7 @@ static bool source_catch_body(SourceContext *ctx, XrCatchClause *clause, SourceM
         SourceName *binding = source_alloc(ctx,1,sizeof(*binding));
         if (!binding) return false;
         *binding = (SourceName){locals,clause->var_name,NULL,clause->body,SOURCE_LOCAL,
-            error.id,ctx->module,error.type,false,false,0};
+            error.id,ctx->module,error.type,false,false,0, false, false};
         ctx->locals = binding;
         XrXirSourceRange range = {ctx->module,clause->var_line,clause->var_column,
             clause->var_line,clause->var_column+(uint32_t)source_text_size(ctx, clause->var_name)};

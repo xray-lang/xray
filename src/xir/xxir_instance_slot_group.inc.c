@@ -47,9 +47,29 @@ XR_FUNC XrXirCallStatus xr_xir_instance_slot_group_init(XrXirCallView *view,uint
         if(status!=XR_XIR_CALL_READY)break;
         ++payload;
     }
+    for(uint32_t i=0;status==XR_XIR_CALL_READY && i<count;++i) {
+        if(!d->slots[first+i].mutable)continue;
+        if(!instance_cell_work(view,1)){status=XR_XIR_CALL_LIMIT;break;}
+        XrXirCellPublication publication={instance,instance->domain,first+i};
+        if(xr_xir_cell_publication_prepare(&owned[i],&publication)!=XR_XIR_VALUE_OK) {
+            status=XR_XIR_CALL_BAD_STATE;break;
+        }
+        for(uint32_t prior=0;prior<i;++prior) {
+            if(!instance_cell_work(view,1)){status=XR_XIR_CALL_LIMIT;break;}
+            if(d->slots[first+prior].mutable && xr_xir_cell_same_owner(&owned[prior],&owned[i])) {
+                status=XR_XIR_CALL_BAD_STATE;break;
+            }
+        }
+    }
     if(status==XR_XIR_CALL_READY)status=xr_xir_call_execution_status(view);
     if(status==XR_XIR_CALL_READY) {
-        for(uint32_t i=0;i<count;++i){instance->slots[first+i]=owned[i];owned[i]=(XrXirValue){0};}
+        for(uint32_t i=0;i<count;++i) {
+            if(d->slots[first+i].mutable) {
+                XrXirCellPublication publication={instance,instance->domain,first+i};
+                xr_xir_cell_publication_commit(&owned[i],&publication);
+            }
+            instance->slots[first+i]=owned[i];owned[i]=(XrXirValue){0};
+        }
         for(uint32_t i=0;i<count;++i) {
             instance->published[first+i]=1;
             instance->publication_order[instance->publication_count++]=first+i;

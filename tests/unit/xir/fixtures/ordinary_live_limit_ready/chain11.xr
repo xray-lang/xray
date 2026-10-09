@@ -1,0 +1,21 @@
+import "./chain12" as part
+export fn answer(carry:i64)->i64 {
+    const keep00:i64=carry+1
+    const keep01:i64=carry+2
+    const keep02:i64=carry+3
+    const keep03:i64=carry+4
+    const keep04:i64=carry+5
+    const keep05:i64=carry+6
+    const keep06:i64=carry+7
+    const keep07:i64=carry+8
+    const keep08:i64=carry+9
+    const keep09:i64=carry+10
+    const keep10:i64=carry+11
+    const keep11:i64=carry+12
+    const keep12:i64=carry+13
+    const keep13:i64=carry+14
+    const keep14:i64=carry+15
+    const keep15:i64=carry+16
+    const found:i64=part.answer(carry+1)
+    return found+(keep00-keep00)+(keep01-keep01)+(keep02-keep02)+(keep03-keep03)+(keep04-keep04)+(keep05-keep05)+(keep06-keep06)+(keep07-keep07)+(keep08-keep08)+(keep09-keep09)+(keep10-keep10)+(keep11-keep11)+(keep12-keep12)+(keep13-keep13)+(keep14-keep14)+(keep15-keep15)
+}

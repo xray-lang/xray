@@ -18,6 +18,7 @@ static bool source_enum_declare(SourceContext *ctx, AstNode *node) {
 static bool source_enum_fields(SourceContext *ctx) {
     for (uint32_t d = 0; d < ctx->nominals.count; ++d) {
         SourceName *owner = ctx->nominal_sources[d];
+        if (owner->checked_library) continue;
         if (owner->node->type != AST_ENUM_DECL) continue;
         EnumDeclNode *source = &owner->node->as.enum_decl;
         ctx->module = owner->module; ctx->function = owner->module;
@@ -101,12 +102,12 @@ static bool source_nominal_path(SourceContext *ctx, AstNode *path, SourceTypeArg
         if (space->module_name || space->arg_count || space->type_arg_count < 0 || !space->class_name)
             return source_fail(ctx, node, XR_XIR_BAD_TYPE, "invalid static type namespace");
         binding = owner = visible_name(ctx, space->class_name);
-        if (!owner) binding = owner = source_ordering_lookup(ctx, space->class_name);
+        if (!owner) binding = owner = source_prelude_lookup(ctx, space->class_name);
         if (owner && owner->kind == SOURCE_IMPORT) owner = imported_declaration(ctx, owner, owner->imported);
         arguments->refs = space->type_args; arguments->count = (uint32_t)space->type_arg_count;
     } else if (path->type == AST_VARIABLE) {
         binding = owner = visible_name(ctx, path->as.variable.name);
-        if (!owner) binding = owner = source_ordering_lookup(ctx, path->as.variable.name);
+        if (!owner) binding = owner = source_prelude_lookup(ctx, path->as.variable.name);
         if (owner && owner->kind == SOURCE_IMPORT) owner = imported_declaration(ctx, owner, owner->imported);
     } else if (path->type == AST_MEMBER_ACCESS && path->as.member_access.object->type == AST_VARIABLE) {
         binding = visible_name(ctx, path->as.member_access.object->as.variable.name);
@@ -133,7 +134,11 @@ static bool source_enum_select(SourceContext *ctx, AstNode *node, SourceEnumSele
         selected->owner = owner; selected->binding = binding; selected->path = path; selected->variant = v; return true;
     }
     SourceName *method = find_name(ctx,ctx->nominal_methods[owner->index],node->as.member_access.name);
-    if (method && method->node->as.method_decl.is_static) return true;
+    if (method) {
+        const XrXirFunctionIdentity *identity = source_method_identity(ctx,node,method);
+        if (!identity) return false;
+        if (identity->method_kind == XR_XIR_STATIC_METHOD) return true;
+    }
     return source_fail(ctx,node,XR_XIR_BAD_TYPE,"unknown enum variant or static method");
 }
 static bool source_enum_construct(SourceContext *ctx, AstNode *node, SourceEnumSelection *selected,
@@ -158,7 +163,7 @@ static bool source_enum_construct(SourceContext *ctx, AstNode *node, SourceEnumS
         if (at == variant.field_count || seen[at]) return source_fail(ctx,node,XR_XIR_BAD_TYPE,"unknown or duplicate enum payload field");
         seen[at] = true; XrXirType type;
         if (!source_substitute(ctx,&substitution,d->fields[variant.field_begin+at].type,0,&type) ||
-            !source_plan_expression(ctx, provided->values[i], (SourceExpectedType){type != XR_XIR_UNIT,type, false}, &fields[at])) return false;
+            !source_plan_expression(ctx, provided->values[i], (SourceExpectedType){type != XR_XIR_UNIT,type, false, false}, &fields[at])) return false;
         if (fields[at].type != type) return source_fail(ctx,node,XR_XIR_BAD_TYPE,"enum payload type mismatch");
         XrXirSourceRange range = source_query_range(ctx,node,NULL);
         if (provided->spans) {
@@ -169,7 +174,7 @@ static bool source_enum_construct(SourceContext *ctx, AstNode *node, SourceEnumS
         if (!source_query_target_reference(ctx,range,ctx->nominal_members[selected->owner->index][variant.field_begin+at],XR_XIR_SOURCE_READ)) return false;
     }
     return source_query_reference(ctx,selected->path,selected->binding,selected->owner,XR_XIR_SOURCE_TYPE_USE) &&
-        source_query_target_reference(ctx,source_query_range(ctx,node,NULL),ctx->nominal_variants[selected->owner->index][selected->variant],XR_XIR_SOURCE_READ) &&
+        source_query_target_token_reference(ctx,node,ctx->nominal_variants[selected->owner->index][selected->variant],XR_XIR_SOURCE_READ) &&
         source_recipe_group(ctx,(XrXirInstruction){XR_XIR_ENUM_NEW,selected->type,{0},{0},selected->variant, {0}},fields,(uint32_t)count,value);
 }
 static bool source_enum_literal(SourceContext *ctx, AstNode *node, SourceValue *value) {

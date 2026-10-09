@@ -155,7 +155,7 @@ static bool source_requirement_call(SourceContext *ctx, AstNode *node,
     XrXirInstruction op = {XR_XIR_CALL_REQUIREMENT,callable.result,{0},
         {application.declaration,selected.member},0,{0}};
     ok = source_type_arguments(ctx,node,substitution.types,substitution.count,&op) &&
-        source_query_target_reference(ctx,source_query_range(ctx,call->callee,NULL),
+        source_query_target_token_reference(ctx,call->callee,
             ctx->interface_member_declarations[application.declaration][selected.member],XR_XIR_SOURCE_CALL) &&
         source_recipe_group(ctx,op,arguments,callable.parameter_count + 1,value);
 done:

@@ -11,13 +11,14 @@
  */
 #ifndef XIR_ARRAY_CHECKED_CASES_H
 #define XIR_ARRAY_CHECKED_CASES_H
+#include "xir_construction_fixture.h"
 #include "xir_array_metadata_fixture.h"
 
 static void array_checked_cases(void) {
     XirArrayMetadataFixture f; xir_array_metadata_init(&f);
     XrXirArtifact *checked = NULL, *decoded = NULL, *closed = NULL, *lowered = NULL;
     XrXirCheckedPacket packet = {0};
-    CHECK(xr_xir_compile_check(suite_context, &f.module, &checked, NULL) == XR_XIR_OK);
+    CHECK(xir_fixture_check(suite_context, &f.module, &checked, NULL) == XR_XIR_OK);
     CHECK(xr_xir_compile_checked_write(checked, &packet, NULL) == XR_XIR_OK);
     xr_xir_compile_artifact_free(checked);checked=NULL; memset(&f, 0xCC, sizeof(f));
     /* Independent schema23 layout: module76 + function records164/625/128;

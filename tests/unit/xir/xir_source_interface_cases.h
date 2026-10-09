@@ -10,6 +10,67 @@
 #define XIR_SOURCE_INTERFACE_CASES_H
 #include "xir/xxir_interface.h"
 
+static void source_closure_initializer_scopes(XrXirSourceRequest *request) {
+    write_source(request->entry_path,
+        "struct Holder{const callback:fn()->i64=fn()->i64{return 41;}}\n"
+        "const top=fn()->i64{return 7;}\n");
+    XrCompilerSession *session = NULL;
+    CHECK(xr_compile_session_new(request->context->resources, &session) == XR_COMPILER_SESSION_OK);
+    XrXirSourceRequest local = *request; local.session = session;
+    XrXirSourceResult result = {0};
+    CHECK(xr_xir_compile_source_check(&local, &result, NULL, NULL) == XR_XIR_OK);
+    xr_xir_compile_artifact_free(result.checked); result.checked = NULL;
+    xr_compile_session_free(session);
+    write_source(request->entry_path, "const replaced=0\n");
+    const XrXirSourceView *view = xr_xir_compile_source_snapshot_view(result.snapshot);
+    const XrXirSourceSyntaxView *syntax = xr_xir_compile_source_snapshot_syntax(result.snapshot);
+    const XrXirSourceDeclaration *owner = declaration(view, "Holder", 0);
+    CHECK(owner && syntax && syntax->declaration_count == view->declaration_count);
+    const XrXirSourceDeclaration *field = declaration(view, "callback", owner->id);
+    CHECK(owner && field && field->kind == XR_XIR_SOURCE_MEMBER);
+    unsigned field_closures = 0, module_closures = 0;
+    for (uint32_t i = 0; i < view->declaration_count; ++i) {
+        if (syntax->declarations[i].role != XR_XIR_SOURCE_SYNTAX_CLOSURE) continue;
+        CHECK(!syntax->declarations[i].name.line && !syntax->declarations[i].name.column);
+        CHECK(view->declarations[i].kind == XR_XIR_SOURCE_FUNCTION);
+        if (view->declarations[i].parent == field->id) ++field_closures;
+        else { CHECK(!view->declarations[i].parent); ++module_closures; }
+    }
+    CHECK(field_closures == 1 && module_closures == 1);
+    xr_xir_compile_source_result_free(&result);
+}
+
+static void source_interface_name_spans(XrXirSourceRequest *request) {
+    source_closure_initializer_scopes(request);
+    write_source(request->entry_path,
+        "interface Reader {\n  measure()->i64\n  operator len()->i64\n}\n");
+    XrCompilerSession *session = NULL;
+    CHECK(xr_compile_session_new(request->context->resources, &session) == XR_COMPILER_SESSION_OK);
+    XrXirSourceRequest local = *request; local.session = session;
+    XrXirSourceResult result = {0}; XrXirSourceDiagnostic diagnostic = {0};
+    CHECK(xr_xir_compile_source_check(&local, &result, &diagnostic, NULL) == XR_XIR_OK);
+    CHECK(result.checked && result.snapshot);
+    xr_xir_compile_artifact_free(result.checked); result.checked = NULL;
+    xr_compile_session_free(session);
+    write_source(request->entry_path, "const replaced=0\n");
+    const XrXirSourceView *view = xr_xir_compile_source_snapshot_view(result.snapshot);
+    const XrXirSourceSyntaxView *syntax = xr_xir_compile_source_snapshot_syntax(result.snapshot);
+    const XrXirSourceDeclaration *owner = declaration(view, "Reader", 0);
+    CHECK(owner && syntax && syntax->declaration_count == view->declaration_count);
+    const XrXirSourceDeclaration *method = declaration(view, "measure", owner->id);
+    const XrXirSourceDeclaration *length = declaration(view, "__operator_len", owner->id);
+    CHECK(method && length && method->id && length->id);
+    const XrXirSourceDeclarationSyntax *a = &syntax->declarations[method->id - 1];
+    const XrXirSourceDeclarationSyntax *b = &syntax->declarations[length->id - 1];
+    CHECK(a->role == XR_XIR_SOURCE_SYNTAX_METHOD && !a->flags);
+    CHECK(a->name.line == 2 && a->name.column == 3 && a->name.end_line == 2 && a->name.end_column == 10);
+    CHECK(b->role == XR_XIR_SOURCE_SYNTAX_METHOD && !b->flags);
+    CHECK(b->name.line == 3 && b->name.column == 12 && b->name.end_line == 3 && b->name.end_column == 15);
+    CHECK(method->range.line == 2 && method->range.column == 3 && method->range.end_column == 10);
+    CHECK(length->range.line == 3 && length->range.column == 12 && length->range.end_column == 15);
+    xr_xir_compile_source_result_free(&result);
+}
+
 static void source_interface_context_cases(XrXirSourceRequest *request) {
     const char *sources[] = {
         "interface I<T> { values()->Array<T> }\nstruct Box<T> { values:Array<T> }\n",
@@ -44,7 +105,12 @@ static void source_interface_context_cases(XrXirSourceRequest *request) {
         "fn take<T:Alias<U>,U>(x:T,y:U)->U{return y}\n"
         "fn forward<U,T:lib.I<U>>(x:T,y:U)->U{return take<T,U>(x,y)}\n");
     XrXirSourceResult result = {0};
-    CHECK(xr_xir_compile_source_check(request, &result, NULL, NULL) == XR_XIR_OK && result.checked);
+    XrXirSourceDiagnostic imported = {0};
+    XrXirStatus imported_status = xr_xir_compile_source_check(request, &result, &imported, NULL);
+    if (imported_status != XR_XIR_OK)
+        fprintf(stderr, "interface alias source: %u at %d:%d %s\n",
+            imported_status, imported.line, imported.column, imported.message);
+    CHECK(imported_status == XR_XIR_OK && result.checked);
     xr_xir_compile_source_result_free(&result);
     write_source(library,"interface I<T> { value()->T }\n");
     CHECK(xr_xir_compile_source_check(request, &result, NULL, NULL) != XR_XIR_OK && !result.checked && !result.snapshot);
@@ -56,6 +122,7 @@ static void source_interface_context_cases(XrXirSourceRequest *request) {
     xr_xir_compile_source_result_free(&result);
 }
 static void source_interface_facts(XrXirSourceRequest *request) {
+    source_interface_name_spans(request);
     const char *source =
         "interface Forward<T:I<U>,U> {}\n"
         "interface I<V> { get()->V }\n"

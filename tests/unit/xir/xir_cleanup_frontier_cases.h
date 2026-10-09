@@ -1,3 +1,4 @@
+#include "xir_construction_fixture.h"
 /*
  * xray - Lightweight typed scripting with native concurrency
  * https://www.xray-lang.org
@@ -46,7 +47,7 @@ static XrXirArtifact *cleanup_frontier_fixture(const XrXirCompileContext *contex
     if (attack == 14) ops[2].targets[0] = 1;
     if (attack == 15) ops[1].targets[0] = 3;
     XrXirArtifact *checked = NULL;
-    XrXirStatus status = xr_xir_compile_check(context, &module, &checked, NULL);
+    XrXirStatus status = xir_fixture_check(context, &module, &checked, NULL);
     CHECK(attack ? status != XR_XIR_OK && !checked : status == XR_XIR_OK);
     return checked;
 }
@@ -103,10 +104,10 @@ static void cleanup_error_frontier(void) {
     XrXirDeclarations declarations = *base->module.declarations; declarations.functions = ids;
     XrXirModule module = base->module; module.stage = XR_XIR_BUILT; module.declarations = &declarations;
     module.functions = functions; module.function_count = 4;
-    CHECK(xr_xir_compile_check(suite_context, &module, &checked, NULL) == XR_XIR_OK);
+    CHECK(xir_fixture_check(suite_context, &module, &checked, NULL) == XR_XIR_OK);
     xr_xir_compile_artifact_free(checked);checked=NULL;
     error = XR_XIR_I64;
-    CHECK(xr_xir_compile_check(suite_context, &module, &checked, NULL) == XR_XIR_BAD_TYPE && !checked);
+    CHECK(xir_fixture_check(suite_context, &module, &checked, NULL) == XR_XIR_BAD_TYPE && !checked);
     xr_xir_compile_artifact_free(base);base=NULL;
 }
 #endif // XIR_CLEANUP_FRONTIER_CASES_H

@@ -1,0 +1,10 @@
+add_executable(test_xir_child_callable_permissions xir/test_xir_child_callable_permissions.c)
+target_link_libraries(test_xir_child_callable_permissions PRIVATE xray_xir_vm xray_xir_scalar)
+if(MSVC)
+    target_compile_options(test_xir_child_callable_permissions PRIVATE /W4 /WX /utf-8)
+else()
+    target_compile_options(test_xir_child_callable_permissions PRIVATE -Wall -Wextra -Werror)
+endif()
+add_test(NAME test_xir_child_callable_permissions COMMAND test_xir_child_callable_permissions)
+set_tests_properties(test_xir_child_callable_permissions PROPERTIES
+    LABELS "unit;xir;vm;task;root-effects;ownership" TIMEOUT 60 RUN_SERIAL TRUE)

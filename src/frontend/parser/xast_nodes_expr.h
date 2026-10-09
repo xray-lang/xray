@@ -23,6 +23,7 @@
 // Variable reference node
 typedef struct VariableNode {
     char *name;
+    XrNameSpan access_marker_span;
     uint32_t symbol_id; /* unique ID from analyzer scope resolution; 0 = unresolved */
 } VariableNode;
 
@@ -36,6 +37,7 @@ typedef struct AssignmentNode {
 // Compound assignment node
 typedef struct CompoundAssignmentNode {
     char *name;
+    XrNameSpan name_span;
     XrTokenType op;
     AstNode *value;
     AstNode *object;
@@ -149,11 +151,13 @@ typedef struct SliceExprNode {
 typedef struct MemberAccessNode {
     AstNode *object;
     char *name;
+    XrNameSpan name_span;
 } MemberAccessNode;
 
 typedef struct MemberSetNode {
     AstNode *object;
     char *member;
+    XrNameSpan name_span;
     AstNode *value;
 } MemberSetNode;
 

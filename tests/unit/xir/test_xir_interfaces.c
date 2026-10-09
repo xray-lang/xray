@@ -6,6 +6,7 @@
  *
  * test_xir_interfaces.c - Abstract declaration structure and owned failure paths
  */
+#include "xir_construction_fixture.h"
 #include "xir/xxir_interface.h"
 #include "base/xmalloc.h"
 #include <stdio.h>
@@ -156,7 +157,7 @@ static XrXirStatus check_interface_module(const XrXirCompileContext *context, co
     XrXirFunctionIdentity identities[] = {{0},{0},{1,0,0,0,0,0, XR_XIR_NON_MEMBER, 0, 0}};
     XrXirDeclarations declarations = {modules,2,identities,NULL,0,NULL,0,0,0, NULL};
     XrXirModule module = {XR_XIR_BUILT,functions,3,&declarations,NULL,types,NULL, XR_XIR_PROGRAM, NULL};
-    return xr_xir_compile_check(context, &module, checked, diagnostic);
+    return xir_fixture_check(context, &module, checked, diagnostic);
 }
 static void checked_owner_lifetime(void) {
     size_t sites = 0;
@@ -206,7 +207,7 @@ static XrXirStatus inherited_module_verify(Fixture *f, XrXirCompileContext *budg
     XrXirDeclarations declarations = {modules,2,identities,NULL,0,NULL,0,0,2,NULL};
     XrXirTypes types = f->types; types.interfaces = &f->table;
     XrXirModule module = {XR_XIR_BUILT,functions,3,&declarations,NULL,&types,NULL, XR_XIR_PROGRAM, NULL};
-    return xr_xir_compile_verify(budget, &module, NULL);
+    return xir_fixture_verify(budget, &module, NULL);
 }
 static void inherited_contexts(void) {
     Fixture f; fixture(&f);

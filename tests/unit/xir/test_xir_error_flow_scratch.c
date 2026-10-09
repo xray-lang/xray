@@ -11,6 +11,7 @@
  *   Reused storage does not transfer reachable roots or escaping facts to the
  *   next function. Every actual allocation failure releases compiler owners.
  */
+#include "xir_construction_fixture.h"
 #include "xir/xxir_effects.h"
 #include "xir/xxir_declarations.h"
 #include "base/xmalloc.h"
@@ -99,7 +100,7 @@ static void golden(const XrXirEffects *e){
         CHECK(!xr_xir_effects_error_unknown(e,f));CHECK(xr_xir_effects_error_unidentified(e,f)==(f==1 || f==4));}
 }
 static XrXirStatus whole(const XrXirCompileContext *context){
-    ErrorFixture f;fixture(&f);XrXirStatus status=xr_xir_compile_verify(context,&f.module,NULL);XrXirEffects *effects=NULL;
+    ErrorFixture f;fixture(&f);XrXirStatus status=xir_fixture_verify(context, &f.module, NULL);XrXirEffects *effects=NULL;
     if(status==XR_XIR_OK)status=xr_xir_compile_effects_infer_verified(context,&f.module,&effects);
     if(status==XR_XIR_OK){CHECK(effects);golden(effects);}else CHECK(!effects);
     xr_xir_compile_effects_free(effects);return status;
@@ -125,7 +126,7 @@ static void limits(void){
 }
 static void storage_freshness(void){
     ErrorFixture f;fixture(&f);XrXirCompileContext c=owner_new(caps());uint64_t baseline=stats(&c).live_bytes;
-    CHECK(xr_xir_compile_verify(&c,&f.module,NULL)==XR_XIR_OK);
+    CHECK(xir_fixture_verify(&c, &f.module, NULL)==XR_XIR_OK);
     XrXirFunctionEffects functions[5]={{0}};uint64_t errors[5]={0};XrXirEffects effects={0};
     effects.count=5;effects.words=1;effects.functions=functions;effects.errors=errors;
     EffectTerms terms={0};terms.remaining=&c;ErrorFlow flow={0};flow.module=&f.module;flow.effects=&effects;flow.remaining=&c;flow.terms=&terms;
@@ -141,9 +142,9 @@ static void storage_freshness(void){
 }
 static void negative_body(void){
     ErrorFixture f;fixture(&f);XrXirCompileContext c=owner_new(caps());uint64_t baseline=stats(&c).live_bytes;
-    CHECK(xr_xir_compile_verify(&c,&f.module,NULL)==XR_XIR_OK);
-    f.throw_op.op=(XrXirOp)UINT32_MAX;CHECK(xr_xir_compile_verify(&c,&f.module,NULL)==XR_XIR_BAD_STRUCTURE);
-    f.throw_op.op=XR_XIR_THROW;CHECK(xr_xir_compile_verify(&c,&f.module,NULL)==XR_XIR_OK);
+    CHECK(xir_fixture_verify(&c, &f.module, NULL)==XR_XIR_OK);
+    f.throw_op.op=(XrXirOp)UINT32_MAX;CHECK(xir_fixture_verify(&c, &f.module, NULL)==XR_XIR_BAD_STRUCTURE);
+    f.throw_op.op=XR_XIR_THROW;CHECK(xir_fixture_verify(&c, &f.module, NULL)==XR_XIR_OK);
     owner_free(&c,baseline);
 }
 int main(void){storage_freshness();negative_body();faults();limits();puts("error flow fresh facts, owned scratch, actual OOM and three finite axes PASS");return 0;}

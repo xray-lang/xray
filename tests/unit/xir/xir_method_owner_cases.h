@@ -11,6 +11,7 @@
  */
 #ifndef XIR_METHOD_OWNER_CASES_H
 #define XIR_METHOD_OWNER_CASES_H
+#include "xir_construction_fixture.h"
 #include "xir/xxir_nominal.h"
 static void method_owner_cases(void) {
     XrXirConstraint constraints[2] = {{0},{0}};
@@ -44,7 +45,7 @@ static void method_owner_cases(void) {
         nominal[0].variants = kind == XR_XIR_NOMINAL_ENUM ? &variant : NULL;
         nominal[0].variant_count = kind == XR_XIR_NOMINAL_ENUM ? 1 : 0;
         XrXirArtifact *checked = NULL;
-        CHECK(xr_xir_compile_check(&stage_context, &module, &checked, NULL) == XR_XIR_OK && checked);
+        CHECK(xir_fixture_check(&stage_context, &module, &checked, NULL) == XR_XIR_OK && checked);
         xr_xir_compile_artifact_free(checked); checked = NULL;
     }
     nominal[0].kind = XR_XIR_NOMINAL_STRUCT; nominal[0].flags = 0;
@@ -63,7 +64,7 @@ static void method_owner_cases(void) {
         functions[0]=(XrXirFunction){"main",4,NULL,0,XR_XIR_I64,&entry_block,1,entry_ops,3,operands,1};
         generic[0]=(XrXirGeneric){NULL,0,call_args,2, NULL};types.nodes=pair;types.count=2;
         XrXirArtifact *original=NULL,*special=NULL;
-        CHECK(xr_xir_compile_check(&stage_context, &module, &original, NULL)==XR_XIR_OK);
+        CHECK(xir_fixture_check(&stage_context, &module, &original, NULL)==XR_XIR_OK);
         CHECK(xr_xir_compile_specialize(original, &special, NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(original);
         XrXirModule *closed=&special->module;uint32_t method=UINT32_MAX;
         for(uint32_t i=0;i<closed->function_count;++i)
@@ -92,7 +93,7 @@ static void method_owner_cases(void) {
         if (mode == 2) receiver = XR_XIR_I64;
         if (mode == 3) identities[2].method_kind = XR_XIR_NON_MEMBER;
         XrXirStatus expected = mode == 3 ? XR_XIR_BAD_STRUCTURE : XR_XIR_BAD_TYPE;
-        CHECK(xr_xir_compile_check(&stage_context, &module, &checked, NULL) == expected && !checked);
+        CHECK(xir_fixture_check(&stage_context, &module, &checked, NULL) == expected && !checked);
         identities[2].nominal_owner = 1; identities[2].method_kind = XR_XIR_READ_METHOD;
         argument = (XrXirType)XR_XIR_TYPE_PARAMETER_BASE; node.parameter_span = 1;
         receiver = (XrXirType)XR_XIR_CONSTRUCTED_TYPE_BASE;
@@ -106,7 +107,7 @@ static void method_owner_cases(void) {
         XrXirArtifact *checked = NULL;
         if (mode == 1) identities[2].nominal_owner = 2;
         if (mode == 2) { argument = (XrXirType)(XR_XIR_TYPE_PARAMETER_BASE+1); node.parameter_span = 2; }
-        CHECK(xr_xir_compile_check(&stage_context, &module, &checked, NULL) == (mode ? XR_XIR_BAD_TYPE : XR_XIR_OK));
+        CHECK(xir_fixture_check(&stage_context, &module, &checked, NULL) == (mode ? XR_XIR_BAD_TYPE : XR_XIR_OK));
         CHECK(mode ? !checked : !!checked); xr_xir_compile_artifact_free(checked); checked = NULL;
         identities[2].nominal_owner = 1;
         argument = (XrXirType)XR_XIR_TYPE_PARAMETER_BASE; node.parameter_span = 1;
@@ -114,12 +115,12 @@ static void method_owner_cases(void) {
     functions[2].result = XR_XIR_I64; member_code[0] = code[0];
     identities[2].method_kind = XR_XIR_STATIC_METHOD;
     XrXirArtifact *checked = NULL;
-    CHECK(xr_xir_compile_check(&stage_context, &module, &checked, NULL) == XR_XIR_OK && checked); xr_xir_compile_artifact_free(checked); checked = NULL;
+    CHECK(xir_fixture_check(&stage_context, &module, &checked, NULL) == XR_XIR_OK && checked); xr_xir_compile_artifact_free(checked); checked = NULL;
     XrXirConstraint parent_condition = {XR_XIR_CONSTRAINT_SENDABLE,NULL,0};
     nominal[0].constraints = &parent_condition;
-    CHECK(xr_xir_compile_check(&stage_context, &module, &checked, NULL) == XR_XIR_BAD_TYPE && !checked);
+    CHECK(xir_fixture_check(&stage_context, &module, &checked, NULL) == XR_XIR_BAD_TYPE && !checked);
     constraints[0].markers = XR_XIR_CONSTRAINT_SENDABLE;
-    CHECK(xr_xir_compile_check(&stage_context, &module, &checked, NULL) == XR_XIR_OK && checked); xr_xir_compile_artifact_free(checked); checked = NULL;
+    CHECK(xir_fixture_check(&stage_context, &module, &checked, NULL) == XR_XIR_OK && checked); xr_xir_compile_artifact_free(checked); checked = NULL;
     nominal[0].constraints = constraints; constraints[0].markers = 0;
     generic[2].parameter_count = 0; generic[2].constraints = NULL;
     XrXirCompileContext role_budget = stage_context_default();

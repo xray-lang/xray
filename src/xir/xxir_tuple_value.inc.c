@@ -6,7 +6,7 @@
  *
  * xxir_tuple_value.inc.c - Failure-atomic immutable ordered field publication
  */
-XR_FUNC XrXirValueStatus xr_xir_tuple_new(XrXirType type, const XrXirValue *fields,
+static XrXirValueStatus xr_xir_tuple_new_graph_operation(XrXirType type, const XrXirValue *fields,
     uint32_t count, XrXirValueAdmission *admission, XrXirValue *output) {
     if (!admission || !admission->domain || !admission->arena || !unit_value(output) ||
         !count || !fields) return XR_XIR_VALUE_BAD_ARGUMENT;
@@ -40,10 +40,18 @@ XR_FUNC XrXirValueStatus xr_xir_tuple_new(XrXirType type, const XrXirValue *fiel
         }
     }
     XrXirValue result={(uint32_t)type,0,0};
+    xr_xir_value_object_publish(&tuple->object);
     memcpy(&result.payload,&tuple,sizeof(tuple));*output=result;
     return XR_XIR_VALUE_OK;
 }
-XR_FUNC XrXirValueStatus xr_xir_tuple_get(const XrXirValue *value,uint32_t field,
+XR_FUNC XrXirValueStatus xr_xir_tuple_new(XrXirType type, const XrXirValue *fields,
+    uint32_t count, XrXirValueAdmission *admission, XrXirValue *output) {
+    xr_xir_value_graph_begin();
+    XrXirValueStatus graph_outcome = xr_xir_tuple_new_graph_operation(type, fields, count, admission, output);
+    xr_xir_value_graph_end();
+    return graph_outcome;
+}
+static XrXirValueStatus xr_xir_tuple_get_graph_operation(const XrXirValue *value,uint32_t field,
     XrXirValue *output) {
     if (!unit_value(output) || !xr_xir_value_valid(value)) return XR_XIR_VALUE_BAD_ARGUMENT;
     const XrXirTypeNode *node=xr_xir_tuple_signature(
@@ -51,4 +59,11 @@ XR_FUNC XrXirValueStatus xr_xir_tuple_get(const XrXirValue *value,uint32_t field
     if (!node || field>=node->parameter_count) return XR_XIR_VALUE_BAD_ARGUMENT;
     const XirTuple *tuple=(const XirTuple *)object_pointer(value);
     return xr_xir_value_copy(&tuple->fields[field],output);
+}
+XR_FUNC XrXirValueStatus xr_xir_tuple_get(const XrXirValue *value,uint32_t field,
+    XrXirValue *output) {
+    xr_xir_value_graph_begin();
+    XrXirValueStatus graph_outcome = xr_xir_tuple_get_graph_operation(value, field, output);
+    xr_xir_value_graph_end();
+    return graph_outcome;
 }

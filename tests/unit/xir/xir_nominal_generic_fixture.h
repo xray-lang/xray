@@ -11,6 +11,7 @@
  */
 #ifndef XIR_NOMINAL_GENERIC_FIXTURE_H
 #define XIR_NOMINAL_GENERIC_FIXTURE_H
+#include "xir_construction_fixture.h"
 #include "xir_array_generic_fixture.h"
 #include "xir_nominal_fixture.h"
 static XrXirArtifact *nominal_generic_fixture(const XrXirCompileContext *context, bool expressions) {
@@ -34,7 +35,7 @@ static XrXirArtifact *nominal_generic_fixture(const XrXirCompileContext *context
     XrXirTypes types = {nodes, expressions ? 3 : 1, &f.table, NULL};
     built.functions = functions; built.function_count = 4; built.generics = generics;
     built.declarations = &declarations; built.types = &types;
-    CHECK(xr_xir_compile_check(context, &built, &checked, NULL) == XR_XIR_OK);
+    CHECK(xir_fixture_check(context, &built, &checked, NULL) == XR_XIR_OK);
     xr_xir_compile_artifact_free(base);base=NULL;
     memset(&f, 0xCC, sizeof(f)); memset(nodes, 0xCC, sizeof(nodes));
     return checked;

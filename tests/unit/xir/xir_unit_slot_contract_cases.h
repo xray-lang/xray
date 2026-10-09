@@ -11,6 +11,7 @@
  */
 #ifndef XIR_UNIT_SLOT_CONTRACT_CASES_H
 #define XIR_UNIT_SLOT_CONTRACT_CASES_H
+#include "xir_construction_fixture.h"
 #include "xir/xxir_constraint_proof.h"
 static void unit_slot_contracts(const XrXirArtifact *artifact) {
  const XrXirModule *original=xr_xir_compile_artifact_module(artifact);XrXirModule module=*original;
@@ -24,22 +25,22 @@ static void unit_slot_contracts(const XrXirArtifact *artifact) {
    if(saved.op!=XR_XIR_SLOT_INIT&&saved.op!=XR_XIR_SLOT_STORE&&saved.op!=XR_XIR_SLOT_LOAD)continue;
    const XrXirSlot *slot=&module.declarations->slots[saved.immediate];if(slot->type!=XR_XIR_UNIT)continue;
    CHECK(!saved.args[0]&&!saved.args[1]);
-   if(saved.op==XR_XIR_SLOT_LOAD){++unit_load;ops[i].type=XR_XIR_I64;CHECK(xr_xir_compile_verify(xr_xir_compile_artifact_context(artifact),&module,NULL)==XR_XIR_BAD_TYPE);}
+   if(saved.op==XR_XIR_SLOT_LOAD){++unit_load;ops[i].type=XR_XIR_I64;CHECK(xir_fixture_verify(xr_xir_compile_artifact_context(artifact), &module, NULL)==XR_XIR_BAD_TYPE);}
    else{if(saved.op==XR_XIR_SLOT_INIT)++unit_init;else ++unit_store;
-    ops[i].args[0]=1;CHECK(xr_xir_compile_verify(xr_xir_compile_artifact_context(artifact),&module,NULL)==XR_XIR_BAD_STRUCTURE);
-    ops[i]=saved;ops[i].args[1]=1;CHECK(xr_xir_compile_verify(xr_xir_compile_artifact_context(artifact),&module,NULL)==XR_XIR_BAD_STRUCTURE);
-    if(!slot->mutable){ops[i]=saved;ops[i].op=XR_XIR_SLOT_STORE;CHECK(xr_xir_compile_verify(xr_xir_compile_artifact_context(artifact),&module,NULL)==XR_XIR_BAD_STRUCTURE);}
+    ops[i].args[0]=1;CHECK(xir_fixture_verify(xr_xir_compile_artifact_context(artifact), &module, NULL)==XR_XIR_BAD_STRUCTURE);
+    ops[i]=saved;ops[i].args[1]=1;CHECK(xir_fixture_verify(xr_xir_compile_artifact_context(artifact), &module, NULL)==XR_XIR_BAD_STRUCTURE);
+    if(!slot->mutable){ops[i]=saved;ops[i].op=XR_XIR_SLOT_STORE;CHECK(xir_fixture_verify(xr_xir_compile_artifact_context(artifact), &module, NULL)==XR_XIR_BAD_STRUCTURE);}
    }
-   ops[i]=saved;ops[i].immediate=module.declarations->slot_count;CHECK(xr_xir_compile_verify(xr_xir_compile_artifact_context(artifact),&module,NULL)==XR_XIR_BAD_STRUCTURE);
+   ops[i]=saved;ops[i].immediate=module.declarations->slot_count;CHECK(xir_fixture_verify(xr_xir_compile_artifact_context(artifact), &module, NULL)==XR_XIR_BAD_STRUCTURE);
    ops[i]=saved;
    for(uint32_t other=0;other<module.declarations->slot_count;++other)
     if(module.declarations->slots[other].type==XR_XIR_UNIT&&module.declarations->slots[other].module!=module.declarations->functions[f].module){
-     ops[i].immediate=other;CHECK(xr_xir_compile_verify(xr_xir_compile_artifact_context(artifact),&module,NULL)==XR_XIR_BAD_STRUCTURE);ops[i]=saved;break;
+     ops[i].immediate=other;CHECK(xir_fixture_verify(xr_xir_compile_artifact_context(artifact), &module, NULL)==XR_XIR_BAD_STRUCTURE);ops[i]=saved;break;
     }
   }
   fn->instructions=original->functions[f].instructions;free(ops);
  }
- CHECK(unit_init>=2&&unit_store&&unit_load);CHECK(xr_xir_compile_verify(xr_xir_compile_artifact_context(artifact),&module,NULL)==XR_XIR_OK);free(functions);
+ CHECK(unit_init>=2&&unit_store&&unit_load);CHECK(xir_fixture_verify(xr_xir_compile_artifact_context(artifact), &module, NULL)==XR_XIR_OK);free(functions);
  XrXirValue unit={0},copy={0};CHECK(xr_xir_value_valid(&unit));CHECK(xr_xir_value_copy(&unit,&copy)==XR_XIR_VALUE_OK);
  CHECK(!xr_xir_value_argument(&unit,NULL,XR_XIR_UNIT));xr_xir_value_drop(&copy);
  XrXirProofContext closed={original,{XR_XIR_CONTEXT_CLOSED,0,0}};const XrXirCompileContext *compile=xr_xir_compile_artifact_context(artifact);

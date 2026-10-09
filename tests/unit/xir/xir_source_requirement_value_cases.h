@@ -66,7 +66,7 @@ static void source_requirement_value_negative(XrXirSourceRequest *request) {
             "interface method value requires its complete explicit type arguments"},
         {("interface I{map<U>(value:U)->U}\n"
           "fn unused<T:I>(receiver:T)->fn(string)->string{return receiver.map<i64>}\n"),
-            "callable conversion may only discard its top-level promise"}
+            "callable conversion may only weaken its outer execution contract"}
     };
     for (uint32_t i=0;i<sizeof(rejected)/sizeof(*rejected);++i) {
         write_source(request->entry_path,rejected[i].source);

@@ -4,6 +4,7 @@
  * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
  * Licensed under the MIT License
  */
+#include "../../xir/xir_construction_fixture.h"
 #include "module/xproject.h"
 #include "app/cli/xcli_graph_authority.h"
 #include "app/cli/xcli_fs.h"
@@ -199,11 +200,11 @@ static XrXirLibraryCatalog *real_catalog(const XrXirCompileContext *context) {
     XrXirDeclarations declarations={&source,1,&name,NULL,0,NULL,0,UINT32_MAX,UINT32_MAX,NULL};
     XrXirModule module={XR_XIR_BUILT,&function,1,&declarations,NULL,NULL,NULL,XR_XIR_LIBRARY,NULL};
     XrXirArtifact *artifact=NULL;XrXirCheckedPacket packet={0};
-    CHECK(xr_xir_compile_check(context,&module,&artifact,NULL)==XR_XIR_OK);
+    CHECK(xir_fixture_check(context, &module, &artifact, NULL)==XR_XIR_OK);
     CHECK(xr_xir_compile_checked_write(artifact,&packet,NULL)==XR_XIR_OK);
-    XrXirLibraryInput input={{XR_MODULE_IDENTITY_SCRIPT,NULL,root_path},"lib.xr",packet.bytes,packet.length,{0}};
+    XrXirLibraryInput input={packet.bytes,packet.length,{0}, (XrXirLibraryModuleInput[]){{{XR_MODULE_IDENTITY_SCRIPT,NULL,root_path},"lib.xr"}},1};
     xr_sha256(packet.bytes,packet.length,input.sha256);XrXirLibraryCatalog *catalog=NULL;
-    CHECK(xr_xir_compile_library_catalog_new(context,&input,1,&catalog)==XR_XIR_OK);
+    CHECK(xr_xir_compile_library_catalog_new_v2(context,&input,1,&catalog)==XR_XIR_OK);
     xr_xir_compile_artifact_free(artifact);xr_xir_compile_checked_packet_free(&packet);return catalog;
 }
 static void ownership_rejections(void) {
@@ -450,11 +451,13 @@ static void path_and_schema_gates(const char *script_path) {
     xr_project_free_owned(project);unc_gates(&policy,&context);xr_compile_resources_release(owner);CHECK(!physical_live&&!block_count);
     puts("absolute input, script/project authority, invalid nearer manifest, exact package version, limits and FILE IO PASS");
 }
+#include "entry_text_cases.h"
 int main(int argc, char **argv) {
     CHECK(argc>=3&&strlen(argv[1])<sizeof(root_path));strcpy(root_path,argv[1]);
     CHECK(snprintf(entry_path,sizeof(entry_path),"%s\\sub\\inner.xr",root_path)>0);
     DWORD handles_before=0,handles_after=0;CHECK(GetProcessHandleCount(GetCurrentProcess(),&handles_before));
     if(argc==3){qualify();mutation_gates();}
+    entry_text_failure_matrix();entry_text_boundaries(argv[2]);
     ownership_rejections();reject_gates();contract_overflow_rejections();contract_gates();typed_failures();path_and_schema_gates(argv[2]);
     CHECK(GetProcessHandleCount(GetCurrentProcess(),&handles_after)&&handles_before==handles_after);
     puts("all fixture Windows handle delta zero PASS");return 0;

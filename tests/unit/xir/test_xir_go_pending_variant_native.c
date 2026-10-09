@@ -6,6 +6,7 @@
  *
  * test_pending_exit_variants_native.c - First fault, cancellation and stream bool
  */
+#include "xir_construction_fixture.h"
 #include "xir/xxir_program.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -85,7 +86,7 @@ static XrXirProgram *variant_vm(const XrXirCompileContext *context, unsigned mod
     PendingExitVariantFixture fixture; pending_exit_variant_fixture(&fixture, mode);
     XrXirArtifact *checked = NULL, *decoded = NULL, *closed = NULL, *lowered = NULL;
     XrXirCheckedPacket packet = {0}; XrXirProgram *program = NULL;
-    CHECK(xr_xir_compile_check(context, &fixture.module, &checked, NULL) == XR_XIR_OK);
+    CHECK(xir_fixture_check(context, &fixture.module, &checked, NULL) == XR_XIR_OK);
     CHECK(xr_xir_compile_checked_write(checked, &packet, NULL) == XR_XIR_OK);
     xr_xir_compile_artifact_free(checked); memset(&fixture, 0xa5, sizeof(fixture));
     CHECK(xr_xir_compile_checked_read(context, packet.bytes, packet.length, &decoded, NULL) == XR_XIR_OK);

@@ -82,22 +82,22 @@ static void string_source_case(unsigned reverse,const char *output_path) {
     XrModuleIdentityAuthority owned_authority={XR_MODULE_IDENTITY_SCRIPT,NULL,catalog_root};
     const unsigned char *manual[3]={library_string65_nul,library_string65_empty,library_string65_long};
     size_t lengths[3]={sizeof(library_string65_nul),sizeof(library_string65_empty),sizeof(library_string65_long)};
-    void *buffers[3]={0};XrXirLibraryInput inputs[5]={0};
-    for(unsigned i=0;i<5;++i){inputs[i].authority=owned_authority;inputs[i].logical_path=names[i];
+    void *buffers[3]={0};XrXirLibraryInput inputs[5]={0};XrXirLibraryModuleInput bindings[5]={0};
+    for(unsigned i=0;i<5;++i){inputs[i].modules=&bindings[i];inputs[i].module_count=1;bindings[i].authority=owned_authority;bindings[i].logical_path=names[i];
         if(i<2){inputs[i].packet=packets[i].bytes;inputs[i].length=packets[i].length;}
         else {buffers[i-2]=xr_malloc(lengths[i-2]);CHECK(buffers[i-2]);memcpy(buffers[i-2],manual[i-2],lengths[i-2]);
             inputs[i].packet=buffers[i-2];inputs[i].length=lengths[i-2];}
         xr_sha256(inputs[i].packet,inputs[i].length,inputs[i].sha256);}
     if(reverse)for(unsigned i=0;i<2;++i){XrXirLibraryInput swap=inputs[i];inputs[i]=inputs[4-i];inputs[4-i]=swap;}
     /* Fault replays borrow independent bounded copies, never the Catalog's owned storage. */
-    XrXirLibraryInput replay_inputs[5];void *replay_bytes[5]={0};const char *replay_names[5]={"alpha.xr","beta.xr","nul.xr","empty.xr","long.xr"};
-    for(unsigned i=0;i<5;++i){replay_inputs[i]=inputs[i];replay_inputs[i].authority=authority;
-        unsigned n=reverse?4-i:i;replay_inputs[i].logical_path=replay_names[n];
+    XrXirLibraryInput replay_inputs[5];XrXirLibraryModuleInput replay_bindings[5];void *replay_bytes[5]={0};const char *replay_names[5]={"alpha.xr","beta.xr","nul.xr","empty.xr","long.xr"};
+    for(unsigned i=0;i<5;++i){replay_inputs[i]=inputs[i];replay_bindings[i]=*inputs[i].modules;replay_inputs[i].modules=&replay_bindings[i];replay_bindings[i].authority=authority;
+        unsigned n=reverse?4-i:i;replay_bindings[i].logical_path=replay_names[n];
         replay_bytes[i]=malloc(inputs[i].length);CHECK(replay_bytes[i]);memcpy(replay_bytes[i],inputs[i].packet,inputs[i].length);replay_inputs[i].packet=replay_bytes[i];}
     LibrarySourceFixture replay={replay_inputs,5,XR_SOURCE_FIXTURES "/root.xr",authority,XR_XIR_PROGRAM};
     library_compile_operation_cases(reverse?"String Source reverse catalog":"String Source forward catalog",library_catalog_operation,&replay);
     library_compile_operation_cases(reverse?"String Source reverse whole":"String Source forward whole",library_source_operation,&replay);
-    XrXirLibraryCatalog *catalog=NULL;CHECK(xr_xir_compile_library_catalog_new(&compiler.context,inputs,5,&catalog)==XR_XIR_OK);
+    XrXirLibraryCatalog *catalog=NULL;CHECK(xr_xir_compile_library_catalog_new_v2(&compiler.context,inputs,5,&catalog)==XR_XIR_OK);
     xr_xir_compile_checked_packet_free(&packets[0]);xr_xir_compile_checked_packet_free(&packets[1]);
     for(unsigned i=0;i<3;++i){memset(buffers[i],0,lengths[i]);xr_free(buffers[i]);}
     memset(inputs,0,sizeof(inputs));memset(names,0,sizeof(names));memset(catalog_root,0,sizeof(catalog_root));

@@ -49,6 +49,23 @@ static XrXirStatus type_match_stack_claim(const XrXirCompileContext *context,
     *output = memory;
     return XR_XIR_OK;
 }
+/* Reserve only the depth actually traversed. Nested substitutions claim
+ * separate blocks; no live frame may alias a reused scratch reservation. */
+static XrXirStatus type_match_stack_grow(const XrXirCompileContext *context,
+    XrXirTypeMatchScratch *scratch, TypeMatchMemory **current, uint32_t capacity,
+    uint32_t used) {
+    TypeMatchMemory *next = NULL;
+    XrXirStatus status = type_match_stack_claim(context, scratch, capacity, &next);
+    if (status != XR_XIR_OK) return status;
+    uint64_t bytes = (uint64_t)used * sizeof(*next->frames);
+    if (!xir_compile_work(context, bytes)) {
+        next->claimed = false; return XR_XIR_BUDGET;
+    }
+    memcpy(next->frames, (*current)->frames, (size_t)bytes);
+    (*current)->claimed = false; *current = next;
+    return XR_XIR_OK;
+}
+
 typedef struct TypeMatchContext {
     const XrXirTypes *source_types;
     const XrXirTypes *types;
@@ -98,7 +115,8 @@ XR_FUNC XrXirStatus xr_xir_compile_type_substitution_matches_between_scratch(con
     XrXirStatus status = type_match_pair(&c, expected, actual, &root);
     if (status != XR_XIR_OK || !root.from) return status;
     TypeMatchMemory *claimed = NULL;
-    status = type_match_stack_claim(remaining, scratch, source_types->count, &claimed);
+    uint32_t initial = source_types->count < 8 ? source_types->count : 8;
+    status = type_match_stack_claim(remaining, scratch, initial, &claimed);
     if (status != XR_XIR_OK) return status;
     TypeMatchFrame *stack = claimed->frames;
     uint32_t depth = 1; stack[0] = root;
@@ -128,6 +146,13 @@ XR_FUNC XrXirStatus xr_xir_compile_type_substitution_matches_between_scratch(con
         TypeMatchFrame child = {0}; status = type_match_pair(&c, left, right, &child);
         if (status != XR_XIR_OK || !child.from) continue;
         if (child.from >= from || depth >= source_types->count) { status = XR_XIR_BAD_TYPE; break; }
+        if (depth == claimed->capacity) {
+            uint32_t capacity = claimed->capacity > source_types->count / 2 ?
+                source_types->count : claimed->capacity * 2;
+            status = type_match_stack_grow(remaining, scratch, &claimed, capacity, depth);
+            if (status != XR_XIR_OK) break;
+            stack = claimed->frames;
+        }
         stack[depth++] = child;
     }
     claimed->claimed = false; return status;

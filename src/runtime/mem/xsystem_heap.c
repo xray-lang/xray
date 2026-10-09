@@ -178,8 +178,15 @@ bool xr_sysheap_init(XrSystemHeap *heap, const XrSysHeapConfig *config) {
         return false;
     }
 
-    // Initialize class arena
-    xr_arena_init(&heap->class_arena, class_arena_size);
+    // Class metadata uses the explicit runtime storage domain.
+    XrArenaBacking backing = xr_arena_system_backing();
+    if (xr_arena_open(&heap->class_arena, class_arena_size, &backing) != XR_ARENA_OK) {
+        xr_arena_destroy(&heap->class_arena);
+        xr_coro_pool_destroy(heap->coro_pool);
+        xr_free(heap->coro_pool);
+        heap->coro_pool = NULL;
+        return false;
+    }
 
     // Initialize XrCoroHeap L2 pool
     xr_mutex_init(&heap->coro_heap_pool_mu);

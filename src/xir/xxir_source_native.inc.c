@@ -15,14 +15,24 @@ static const char *source_owned_text(SourceContext *ctx, const char *text) {
     char *copy = source_alloc(ctx, length + 1, 1);
     return copy && source_copy_bytes(ctx,NULL,copy,text,length+1) ? copy : NULL;
 }
-static bool source_query_target_reference(SourceContext *ctx, XrXirSourceRange range,
+static bool source_query_target_selected_reference(SourceContext *ctx, XrXirSourceRange range, XrXirSourceRange selection,
     uint32_t declaration, XrXirSourceAccess access) {
     XrXirSourceReference *records = source_query_append(ctx, ctx->query.references,
         &ctx->query.reference_count, &ctx->reference_capacity, sizeof(*records));
     if (!records) return false;
     ctx->query.references = records;
     records[ctx->query.reference_count - 1] = (XrXirSourceReference) {range, declaration, declaration, access};
-    return true;
+    return source_query_syntax_reference(ctx, selection);
+}
+static bool source_query_target_reference(SourceContext *ctx, XrXirSourceRange range,
+    uint32_t declaration, XrXirSourceAccess access) {
+    return source_query_target_selected_reference(ctx,range,range,declaration,access);
+}
+static bool source_query_target_token_reference(SourceContext *ctx, AstNode *node,
+    uint32_t declaration, XrXirSourceAccess access) {
+    XrXirSourceRange selection=source_query_token_range(ctx,node);
+    return ctx->diagnostic.status==XR_XIR_OK&&source_query_target_selected_reference(ctx,
+        source_query_range(ctx,node,NULL),selection,declaration,access);
 }
 static bool source_native_array_declaration(SourceContext *ctx) {
     if (ctx->array_declaration) return true;

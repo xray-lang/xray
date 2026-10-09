@@ -63,9 +63,10 @@ static void verify_write(VerifyContext *ctx, char *target, size_t at, char value
 /* Each mask bit is owned by this verification. The first lexical scan
  * records exactly the bytes it neutralizes, so line storage never repeats
  * lexical classification or retains a second translation-unit copy. */
-static void verify_mask_byte(VerifyContext *ctx, char *mask, size_t at) {
+static void verify_mask_byte(VerifyContext *ctx, char *mask, size_t at, bool *line_masked) {
     unsigned char flags = verify_read(ctx, mask, at / 8);
     verify_write(ctx, mask, at / 8, (char)(flags | (1u << (at % 8))));
+    if (ctx->status == XI_CGEN_VERIFY_PASSED && !*line_masked && verify_work(ctx, 1)) *line_masked = true;
 }
 
 static bool verify_apply_mask(VerifyContext *ctx, char *code, const char *mask,
@@ -540,11 +541,36 @@ typedef struct VerifyLexState {
     VerifyLexMode state;
     int line, open_line;
     size_t offset, line_start, max_line;
+    uint32_t *line_ends;
+    size_t line_count, line_capacity;
+    bool line_masked;
 } VerifyLexState;
-static void verify_lex_newline(VerifyLexState *lex, size_t at) {
+/* The input bound leaves the top bit available for this line's actual mask
+ * fact. Endpoints are owned scratch, never caller-supplied lexical claims. */
+#define VERIFY_LINE_MASKED UINT32_C(0x80000000)
+static bool verify_line_record(VerifyContext *ctx, VerifyLexState *lex, size_t end) {
+    if (end > (size_t)INT_MAX - 1) { ctx->status = XI_CGEN_VERIFY_BUDGET; return false; }
+    if (lex->line_count == lex->line_capacity) {
+        if (lex->line_capacity > SIZE_MAX / (2 * sizeof(*lex->line_ends))) {
+            ctx->status = XI_CGEN_VERIFY_BUDGET; return false;
+        }
+        size_t capacity = lex->line_capacity ? lex->line_capacity * 2 : 128;
+        void *memory = lex->line_ends;
+        if (!verify_resize(ctx, &memory, capacity * sizeof(*lex->line_ends))) return false;
+        lex->line_ends = memory;
+        lex->line_capacity = capacity;
+    }
+    if (!verify_work(ctx, sizeof(*lex->line_ends) + 2)) return false;
+    lex->line_ends[lex->line_count++] = (uint32_t)end | (lex->line_masked ? VERIFY_LINE_MASKED : 0);
+    lex->line_masked = false;
+    return true;
+}
+static bool verify_lex_newline(VerifyContext *ctx, VerifyLexState *lex, size_t at) {
+    if (!verify_line_record(ctx, lex, at + 1)) return false;
     size_t bytes = at + 1 - lex->line_start;
     if (bytes > lex->max_line) lex->max_line = bytes;
     lex->line_start = at + 1;
+    return true;
 }
 
 static bool verify_neutralize(VerifyContext *ctx, const char *source, char *mask,
@@ -556,7 +582,7 @@ static bool verify_neutralize(VerifyContext *ctx, const char *source, char *mask
     for (size_t i = 0; ctx->status == XI_CGEN_VERIFY_PASSED && (i < len) && verify_work(ctx, 1); i++) {
         char c = verify_read(ctx, source, i);
         if (ctx->status != XI_CGEN_VERIFY_PASSED) return false;
-        if (c == '\n') verify_lex_newline(lex, lex->offset + i);
+        if (c == '\n' && !verify_lex_newline(ctx, lex, lex->offset + i)) return false;
         char next = '\0';
         bool lookahead = (state == VERIFY_LEX_NORMAL && c == '/') || (state == VERIFY_LEX_BLOCK_COMMENT && c == '*') ||
             ((state == VERIFY_LEX_STRING || state == VERIFY_LEX_CHAR) && c == '\\');
@@ -565,23 +591,23 @@ static bool verify_neutralize(VerifyContext *ctx, const char *source, char *mask
         switch (state) {
             case VERIFY_LEX_NORMAL:
                 if (c == '/' && next == '/') {
-                    if (mask) verify_mask_byte(ctx, mask, i);
-                    if (mask) verify_mask_byte(ctx, mask, i + 1);
+                    if (mask) verify_mask_byte(ctx, mask, i, &lex->line_masked);
+                    if (mask) verify_mask_byte(ctx, mask, i + 1, &lex->line_masked);
                     i++;
                     state = VERIFY_LEX_LINE_COMMENT;
                     open_line = line;
                 } else if (c == '/' && next == '*') {
-                    if (mask) verify_mask_byte(ctx, mask, i);
-                    if (mask) verify_mask_byte(ctx, mask, i + 1);
+                    if (mask) verify_mask_byte(ctx, mask, i, &lex->line_masked);
+                    if (mask) verify_mask_byte(ctx, mask, i + 1, &lex->line_masked);
                     i++;
                     state = VERIFY_LEX_BLOCK_COMMENT;
                     open_line = line;
                 } else if (c == '"') {
-                    if (mask) verify_mask_byte(ctx, mask, i);
+                    if (mask) verify_mask_byte(ctx, mask, i, &lex->line_masked);
                     state = VERIFY_LEX_STRING;
                     open_line = line;
                 } else if (c == '\'') {
-                    if (mask) verify_mask_byte(ctx, mask, i);
+                    if (mask) verify_mask_byte(ctx, mask, i, &lex->line_masked);
                     state = VERIFY_LEX_CHAR;
                     open_line = line;
                 } else if (c == '\n') {
@@ -593,42 +619,42 @@ static bool verify_neutralize(VerifyContext *ctx, const char *source, char *mask
                     state = VERIFY_LEX_NORMAL;
                     line++;
                 } else {
-                    if (mask) verify_mask_byte(ctx, mask, i);
+                    if (mask) verify_mask_byte(ctx, mask, i, &lex->line_masked);
                 }
                 break;
             case VERIFY_LEX_BLOCK_COMMENT:
                 if (c == '*' && next == '/') {
-                    if (mask) verify_mask_byte(ctx, mask, i);
-                    if (mask) verify_mask_byte(ctx, mask, i + 1);
+                    if (mask) verify_mask_byte(ctx, mask, i, &lex->line_masked);
+                    if (mask) verify_mask_byte(ctx, mask, i + 1, &lex->line_masked);
                     i++;
                     state = VERIFY_LEX_NORMAL;
                 } else if (c == '\n') {
                     line++;
                 } else {
-                    if (mask) verify_mask_byte(ctx, mask, i);
+                    if (mask) verify_mask_byte(ctx, mask, i, &lex->line_masked);
                 }
                 break;
             case VERIFY_LEX_STRING:
             case VERIFY_LEX_CHAR: {
                 char quote = (state == VERIFY_LEX_STRING) ? '"' : '\'';
                 if (c == '\\') {
-                    if (mask) verify_mask_byte(ctx, mask, i);
+                    if (mask) verify_mask_byte(ctx, mask, i, &lex->line_masked);
                     if (i + 1 < len) {
                         if (next == '\n') {
-                            verify_lex_newline(lex, lex->offset + i + 1);
+                            if (!verify_lex_newline(ctx, lex, lex->offset + i + 1)) return false;
                             line++;
                         } else if (mask)
-                            verify_mask_byte(ctx, mask, i + 1);
+                            verify_mask_byte(ctx, mask, i + 1, &lex->line_masked);
                         i++;
                     }
                 } else if (c == quote) {
-                    if (mask) verify_mask_byte(ctx, mask, i);
+                    if (mask) verify_mask_byte(ctx, mask, i, &lex->line_masked);
                     state = VERIFY_LEX_NORMAL;
                 } else if (c == '\n') {
                     /* raw newline inside a literal: keep counting, stay lenient */
                     line++;
                 } else {
-                    if (mask) verify_mask_byte(ctx, mask, i);
+                    if (mask) verify_mask_byte(ctx, mask, i, &lex->line_masked);
                 }
                 break;
             }
@@ -637,6 +663,7 @@ static bool verify_neutralize(VerifyContext *ctx, const char *source, char *mask
 
     lex->state = state; lex->line = line; lex->open_line = open_line;
     lex->offset += len;
+    if (lex->offset > lex->line_start && !verify_line_record(ctx, lex, lex->offset)) return false;
     if (lex->offset - lex->line_start > lex->max_line)
         lex->max_line = lex->offset - lex->line_start;
     return ctx->status == XI_CGEN_VERIFY_PASSED;
@@ -783,7 +810,7 @@ XR_FUNC XiCgenVerifyStatus xr_compile_cgen_verify_output(XrCompileResources *res
     const XiCgenVerifyResult *selected = NULL;
     char *code = NULL;
     char *mask = verify_allocate(ctx, (len + 7) / 8, true);
-    VerifyLexState first = {VERIFY_LEX_NORMAL, 1, 1, 0, 0, 0};
+    VerifyLexState first = {.state = VERIFY_LEX_NORMAL, .line = 1, .open_line = 1};
     /* Lexical W1 precedes every structural diagnostic, including late EOF
      * failures. This real readonly traversal charges all reads and iterations. */
     if (!mask || !verify_neutralize(ctx, c_src, mask, len, &first) ||
@@ -792,25 +819,24 @@ XR_FUNC XiCgenVerifyStatus xr_compile_cgen_verify_output(XrCompileResources *res
         code = verify_allocate(ctx, first.max_line, false);
         VerifyStructureState flow = {0}; flow.lineno = 1;
         size_t pos = 0;
-        while (code && ctx->status == XI_CGEN_VERIFY_PASSED && pos < len && verify_work(ctx, 1)) {
-            size_t ls = pos;
-            while (pos < len) {
-                size_t length = len - pos;
-                if (length > 64) length = 64;
-                size_t advanced = 0; bool found = false;
-                if (!verify_resource(ctx, xr_compile_resources_scan_delimiter(
-                        ctx->resources, c_src + pos, length, '\n', &advanced, &found))) break;
-                pos += advanced;
-                if (found) break;
+        for (size_t line = 0; code && ctx->status == XI_CGEN_VERIFY_PASSED &&
+             line < first.line_count && verify_work(ctx, 1); ++line) {
+            if (!verify_work(ctx, sizeof(*first.line_ends))) break;
+            uint32_t recorded = first.line_ends[line];
+            size_t end = recorded & ~VERIFY_LINE_MASKED;
+            if (end <= pos || end > len || end - pos > first.max_line) {
+                ctx->status = XI_CGEN_VERIFY_BUDGET; break;
             }
-            if (ctx->status != XI_CGEN_VERIFY_PASSED) break;
-            size_t ln = pos - ls;
-            if (pos < len) pos++;
-            size_t bytes = pos - ls;
-            if (bytes > first.max_line) { ctx->status = XI_CGEN_VERIFY_BUDGET; break; }
-            verify_copy(ctx, code, c_src + ls, bytes);
-            if (!verify_apply_mask(ctx, code, mask, ls, ln)) break;
-            if (!verify_structure_line(ctx, code, ln, scratch, &flow)) break;
+            size_t bytes = end - pos, ln = bytes;
+            if (verify_read(ctx, c_src, end - 1) == '\n') --ln;
+            const char *line_text = c_src + pos;
+            if (recorded & VERIFY_LINE_MASKED) {
+                verify_copy(ctx, code, line_text, bytes);
+                if (!verify_apply_mask(ctx, code, mask, pos, ln)) break;
+                line_text = code;
+            }
+            pos = end;
+            if (!verify_structure_line(ctx, line_text, ln, scratch, &flow)) break;
         }
         if (ctx->status == XI_CGEN_VERIFY_PASSED)
             selected = verify_structure_finish(ctx, scratch, &flow);
@@ -820,6 +846,7 @@ XR_FUNC XiCgenVerifyStatus xr_compile_cgen_verify_output(XrCompileResources *res
     xr_compile_resources_free(scratch->w4.uses);
     xr_compile_resources_free(scratch->w4.seen);
     xr_compile_resources_free(code);
+    xr_compile_resources_free(first.line_ends);
     xr_compile_resources_free(mask);
     xr_compile_resources_free(scratch);
     return status;

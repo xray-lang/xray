@@ -36,8 +36,8 @@ static void source_contextual_lambda_cases(XrXirSourceRequest *request) {
     const char *expected_messages[]={
         "closure parameter requires an annotation or complete callable context", /* no callable context or annotation */
         "closure arity differs from its callable context", /* wrong arity before closure creation */
-        "callable conversion may only discard its top-level promise", /* explicit parameter signature mismatch */
-        "callable conversion may only discard its top-level promise", /* explicit return signature mismatch */
+        "callable conversion may only weaken its outer execution contract", /* explicit parameter signature mismatch */
+        "callable conversion may only weaken its outer execution contract", /* explicit return signature mismatch */
         "expression cannot satisfy its declared type", /* body return fails contextual i64 */
         "closure parameter requires an annotation or complete callable context", /* lambda own type has no argument or result evidence */
     };

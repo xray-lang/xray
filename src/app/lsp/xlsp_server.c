@@ -9,6 +9,10 @@
  */
 
 #include "xlsp_server.h"
+#include "xlsp_source_workspace.h"
+#include "xlsp_source_syntax.h"
+#include <limits.h>
+#include "../cli/xcli_canonical_source.h"
 #include "xlsp_cycle_report.h"
 #include "xlsp_analysis.h"
 #include "xlsp_ast_utils.h"
@@ -152,31 +156,6 @@ void lsp_log(const char *fmt, ...) {
 // Document Hash Table Operations (O(1) lookup by URI)
 // ============================================================================
 
-#define DOC_TABLE_INITIAL_SIZE 32
-#define DOC_TABLE_LOAD_FACTOR_NUM 3   // Numerator of load factor (75% = 3/4)
-#define DOC_TABLE_LOAD_FACTOR_DEN 4   // Denominator of load factor
-#define DOC_TABLE_MAX_SIZE (1 << 16)  // Max 65536 buckets
-
-static uint32_t hash_uri(const char *uri) {
-    return xr_hash_bytes(uri, strlen(uri));
-}
-
-// Forward declaration for resize
-static void doc_table_resize(XrLspDocTable *table, int new_size);
-
-static XrLspDocTable *doc_table_new(void) {
-    XrLspDocTable *table = xr_calloc(1, sizeof(XrLspDocTable));
-    if (!table)
-        return NULL;
-    table->bucket_count = DOC_TABLE_INITIAL_SIZE;
-    table->buckets = xr_calloc(table->bucket_count, sizeof(XrLspDocBucket *));
-    if (!table->buckets) {
-        xr_free(table);
-        return NULL;
-    }
-    return table;
-}
-
 // Release every heap resource owned by a document, then the document itself.
 // This is the single destruction point shared by doc_table_free,
 // doc_table_remove and xlsp_document_free_temp so no owned field is ever
@@ -184,132 +163,16 @@ static XrLspDocTable *doc_table_new(void) {
 static void xlsp_document_destroy(XrLspDocument *doc) {
     if (!doc)
         return;
+    xlsp_source_syntax_free(doc->syntax_snapshot);
+    doc->syntax_snapshot = NULL;
     xlsp_invalidate_import_cache(doc);
     xlsp_free_document_cache(doc);
     xr_arena_destroy(&doc->arena);
-    xr_free(doc->uri);
-    xr_free(doc->content);
-    xr_free(doc->line_offsets);
-    xr_free(doc->prev_sem_tokens);
+    if(doc->source_open)xlsp_source_open_free(doc->source_open);else xr_free(doc->uri);
+    if (doc->source_buffer) xlsp_source_buffer_free(doc->source_buffer);
+    else { xr_free(doc->content); xr_free(doc->line_offsets); }
+    xlsp_source_tokens_free(doc->source_tokens);
     xr_free(doc);
-}
-
-static void doc_table_free(XrLspDocTable *table) {
-    if (!table)
-        return;
-    for (int i = 0; i < table->bucket_count; i++) {
-        XrLspDocBucket *bucket = table->buckets[i];
-        while (bucket) {
-            XrLspDocBucket *next = bucket->next;
-            xlsp_document_destroy(bucket->doc);
-            xr_free(bucket);
-            bucket = next;
-        }
-    }
-    xr_free(table->buckets);
-    xr_free(table);
-}
-
-static XrLspDocument *doc_table_get(XrLspDocTable *table, const char *uri) {
-    if (!table || !uri)
-        return NULL;
-    uint32_t hash = hash_uri(uri) % table->bucket_count;
-    XrLspDocBucket *bucket = table->buckets[hash];
-    while (bucket) {
-        if (bucket->doc && strcmp(bucket->doc->uri, uri) == 0) {
-            return bucket->doc;
-        }
-        bucket = bucket->next;
-    }
-    return NULL;
-}
-
-// Resize hash table to new_size buckets (internal, called when load factor exceeded)
-static void doc_table_resize(XrLspDocTable *table, int new_size) {
-    if (!table || new_size <= table->bucket_count)
-        return;
-    if (new_size > DOC_TABLE_MAX_SIZE)
-        new_size = DOC_TABLE_MAX_SIZE;
-
-    // Allocate new bucket array
-    XrLspDocBucket **new_buckets = xr_calloc(new_size, sizeof(XrLspDocBucket *));
-    if (!new_buckets) {
-        // Allocation failed, continue with current size (graceful degradation)
-        lsp_log("Warning: Failed to resize doc table to %d buckets", new_size);
-        return;
-    }
-
-    // Rehash all existing entries
-    int rehashed = 0;
-    for (int i = 0; i < table->bucket_count; i++) {
-        XrLspDocBucket *bucket = table->buckets[i];
-        while (bucket) {
-            XrLspDocBucket *next = bucket->next;
-
-            // Compute new hash with new bucket count
-            uint32_t new_hash = hash_uri(bucket->doc->uri) % new_size;
-
-            // Insert into new bucket array (prepend to chain)
-            bucket->next = new_buckets[new_hash];
-            new_buckets[new_hash] = bucket;
-            rehashed++;
-
-            bucket = next;
-        }
-    }
-
-    // Replace old buckets with new ones
-    xr_free(table->buckets);
-    table->buckets = new_buckets;
-    table->bucket_count = new_size;
-
-    lsp_log("Doc table resized: %d buckets, %d documents", new_size, rehashed);
-}
-
-// Check if table needs resize (load factor > 75%)
-static inline bool doc_table_needs_resize(XrLspDocTable *table) {
-    // Using integer math: doc_count * 4 > bucket_count * 3
-    return table->doc_count * DOC_TABLE_LOAD_FACTOR_DEN >
-           table->bucket_count * DOC_TABLE_LOAD_FACTOR_NUM;
-}
-
-static void doc_table_put(XrLspDocTable *table, XrLspDocument *doc) {
-    if (!table || !doc || !doc->uri)
-        return;
-
-    // Check if resize is needed before insertion
-    if (doc_table_needs_resize(table) && table->bucket_count < DOC_TABLE_MAX_SIZE) {
-        doc_table_resize(table, table->bucket_count * 2);
-    }
-
-    uint32_t hash = hash_uri(doc->uri) % table->bucket_count;
-    XrLspDocBucket *bucket = xr_malloc(sizeof(XrLspDocBucket));
-    if (!bucket) {
-        lsp_log("Error: Failed to allocate doc bucket for %s", doc->uri);
-        return;
-    }
-    bucket->doc = doc;
-    bucket->next = table->buckets[hash];
-    table->buckets[hash] = bucket;
-    table->doc_count++;
-}
-
-static void doc_table_remove(XrLspDocTable *table, const char *uri) {
-    if (!table || !uri)
-        return;
-    uint32_t hash = hash_uri(uri) % table->bucket_count;
-    XrLspDocBucket **pp = &table->buckets[hash];
-    while (*pp) {
-        if ((*pp)->doc && strcmp((*pp)->doc->uri, uri) == 0) {
-            XrLspDocBucket *to_free = *pp;
-            *pp = to_free->next;
-            xlsp_document_destroy(to_free->doc);
-            xr_free(to_free);
-            table->doc_count--;
-            return;
-        }
-        pp = &(*pp)->next;
-    }
 }
 
 XrLspServer *xlsp_server_new(void) {
@@ -340,7 +203,7 @@ XrLspServer *xlsp_server_new(void) {
     server->capabilities.rename = true;
 
     // Create document hash table
-    server->doc_table = doc_table_new();
+    server->doc_table = xlsp_document_store_new(xlsp_document_destroy);
     if (!server->doc_table) {
         xlsp_transport_free(server->transport);
         if (server->isolate)
@@ -405,6 +268,9 @@ void xlsp_server_free(XrLspServer *server) {
     if (!server)
         return;
 
+    xlsp_source_workspace_free(server->source_workspace);
+    server->source_workspace = NULL;
+
     /* Analyzer symbols borrow document URI storage, while graph dependency
      * scopes borrow graph AST storage. Tear the graph/analyzer relationship
      * down before either owner is released. */
@@ -412,7 +278,7 @@ void xlsp_server_free(XrLspServer *server) {
 
     // Free document hash table (frees all documents)
     if (server->doc_table) {
-        doc_table_free(server->doc_table);
+        xlsp_document_store_free(server->doc_table);
     }
 
     // Free workspace folders
@@ -515,104 +381,108 @@ static bool build_line_index(XrLspDocument *doc) {
     return true;
 }
 
-XrLspDocument *xlsp_document_open(XrLspServer *server, const char *uri, const char *text,
-                                  int version) {
-    XrLspDocument *doc = xr_calloc(1, sizeof(XrLspDocument));
-    if (!doc)
-        return NULL;
-
-    doc->uri = xr_strdup(uri);
-    if (!doc->uri) {
-        xr_free(doc);
-        return NULL;
+/* Collect one exact proposed editor state. Existing input owners remain alive
+ * until both the Source transaction and the document-table commit finish. */
+static XrXirStatus document_prepare(XrLspServer *server,const XlspSourceDocument *input,
+    XrLspDocument *replaced,XrCompileResources *resources,XlspSourceOpen **out) {
+    if(!server||!server->doc_table||!input||!input->uri||!input->text||!out||*out)return XR_XIR_BAD_STRUCTURE;
+    XrLspDocTable *table=server->doc_table;
+    if(table->doc_count<0||(!replaced&&table->doc_count==INT_MAX))return XR_XIR_BAD_STRUCTURE;
+    size_t count=(size_t)table->doc_count+(replaced?0u:1u),used=0,entry=SIZE_MAX;
+    if(!count||count>SIZE_MAX/sizeof(XlspSourceDocument))return XR_XIR_BUDGET;
+    XlspSourceDocument *documents=NULL;
+    XrCompileResourceStatus allocated=xr_compile_resources_calloc(resources,count,sizeof(*documents),(void **)&documents);
+    if(allocated!=XR_COMPILE_RESOURCE_OK)return allocated==XR_COMPILE_RESOURCE_BUDGET?XR_XIR_BUDGET:XR_XIR_OUT_OF_MEMORY;
+    XrXirStatus status=XR_XIR_OK;
+    if(table->bucket_count<=0||!table->buckets){status=XR_XIR_BAD_STRUCTURE;goto done;}
+    if(xr_compile_resources_work(resources,(uint64_t)table->bucket_count)!=XR_COMPILE_RESOURCE_OK){status=XR_XIR_BUDGET;goto done;}
+    for(int i=0;i<table->bucket_count;++i)for(XrLspDocBucket *bucket=table->buckets[i];bucket;bucket=bucket->next) {
+        XrLspDocument *doc=bucket->doc;
+        if(used==count||!doc||!doc->content||!doc->uri){status=XR_XIR_BAD_STRUCTURE;goto done;}
+        size_t length=0;
+        do {
+            if(xr_compile_resources_work(resources,1)!=XR_COMPILE_RESOURCE_OK){status=XR_XIR_BUDGET;goto done;}
+            if(!doc->uri[length])break;
+            if(length==SIZE_MAX-1){status=XR_XIR_BUDGET;goto done;}++length;
+        } while(true);
+        if(xr_compile_resources_work(resources,sizeof(*documents))!=XR_COMPILE_RESOURCE_OK){status=XR_XIR_BUDGET;goto done;}
+        if(doc==replaced){entry=used;documents[used++]=*input;}
+        else documents[used++]=(XlspSourceDocument){doc->uri,doc->content,length,doc->length,doc->version};
     }
-
-    doc->content = xr_strdup(text);
-    if (!doc->content) {
-        xr_free(doc->uri);
-        xr_free(doc);
-        return NULL;
-    }
-
-    doc->length = strlen(text);
-    doc->version = version;
-    doc->server = server;
-    doc->dirty = true;
-    doc->content_hash = XLSP_CONTENT_HASH_UNINITIALIZED;
-
-    // Initialize document arena (64KB initial size)
-    xr_arena_init(&doc->arena, 64 * 1024);
-
-    if (!build_line_index(doc)) {
-        xr_arena_destroy(&doc->arena);
-        xr_free(doc->content);
-        xr_free(doc->uri);
-        xr_free(doc);
-        return NULL;
-    }
-
-    // Add to document hash table (O(1) lookup)
-    doc_table_put(server->doc_table, doc);
-
-    lsp_log("Opened document: %s (%zu bytes)", uri, doc->length);
-
-    return doc;
+    if(!replaced){entry=used;documents[used++]=*input;}
+    if(used!=count||entry==SIZE_MAX){status=XR_XIR_BAD_STRUCTURE;goto done;}
+    XrXirCompileContext context={resources,xr_xir_compile_default_limits()};
+    status=xlsp_source_open_prepare(&context,documents,count,entry,out);
+done:
+    xr_compile_resources_free(documents);return status;
 }
-
-void xlsp_document_change(XrLspDocument *doc, XrLspRange *range, const char *text) {
-    if (!doc || !text)
-        return;
-
-    if (!range) {
-        // Full document sync
-        char *new_content = xr_strdup(text);
-        if (!new_content)
-            return;  // Keep old content on failure
-
-        xr_free(doc->content);
-        doc->content = new_content;
-        doc->length = strlen(text);
-    } else {
-        // Incremental sync
-        uint32_t start = xlsp_position_to_offset(doc, range->start);
-        uint32_t end = xlsp_position_to_offset(doc, range->end);
-        size_t text_len = strlen(text);
-        size_t new_len = doc->length - (end - start) + text_len;
-
-        char *new_content = xr_malloc(new_len + 1);
-        if (!new_content)
-            return;  // Keep old content on failure
-
-        memcpy(new_content, doc->content, start);
-        memcpy(new_content + start, text, text_len);
-        memcpy(new_content + start + text_len, doc->content + end, doc->length - end);
-        new_content[new_len] = '\0';
-
-        xr_free(doc->content);
-        doc->content = new_content;
-        doc->length = new_len;
-    }
-
-    // Hash-based change detection: rapid keystrokes often produce a
-    // didChange that arrives with identical bytes (e.g. edit + undo
-    // within the debounce window). Skipping the reparse on a hash
-    // match keeps the analyzer idle and lets the main loop stay
-    // responsive.
-    uint64_t new_hash = xlsp_content_hash(doc->content, doc->length);
-    if (new_hash != doc->content_hash) {
-        doc->content_hash = new_hash;
-        doc->dirty = true;
-    }
-    build_line_index(doc);  // Ignore failure - line_offsets may be NULL
+static void document_commit_owner(XrLspDocument *doc,XlspSourceOpen *fresh) {
+    XlspSourceOpen *old_open=doc->source_open;XlspSourceBuffer *old_buffer=doc->source_buffer;
+    XlspSyntaxSnapshot *old_syntax=doc->syntax_snapshot;char *old_uri=doc->uri,*old_text=doc->content;
+    uint32_t *old_lines=doc->line_offsets;
+    doc->source_open=fresh;doc->uri=(char *)xlsp_source_open_uri(fresh);
+    doc->source_buffer=xlsp_source_open_take_buffer(fresh);doc->syntax_snapshot=xlsp_source_open_take_syntax(fresh);
+    doc->content=(char *)xlsp_source_buffer_text(doc->source_buffer);doc->length=xlsp_source_buffer_length(doc->source_buffer);
+    doc->version=xlsp_source_buffer_version(doc->source_buffer);
+    doc->line_offsets=(uint32_t *)xlsp_source_buffer_lines(doc->source_buffer,&doc->line_count);
+    doc->parse_error=xlsp_source_syntax_status(doc->syntax_snapshot)==XR_PARSE_RECOVERED||xlsp_source_open_query_status(fresh)!=XR_XIR_OK;
+    doc->dirty=true;doc->content_hash=XLSP_CONTENT_HASH_UNINITIALIZED;
+    XlspSourceWorkspace *old_workspace=doc->server->source_workspace;
+    doc->server->source_workspace=xlsp_source_open_take_workspace(fresh);
+    xlsp_invalidate_import_cache(doc);xlsp_free_document_cache(doc);
+    xlsp_source_syntax_free(old_syntax);
+    if(old_buffer)xlsp_source_buffer_free(old_buffer);else {xr_free(old_text);xr_free(old_lines);}
+    if(old_open)xlsp_source_open_free(old_open);else xr_free(old_uri);
+    xlsp_source_workspace_free(old_workspace);
+}
+XrLspDocument *xlsp_document_open(XrLspServer *server,const XlspSourceDocument *input) {
+    if(!server||!server->doc_table||!input||!input->uri||!input->text||
+        input->uri_length==SIZE_MAX)return NULL;
+    XrCompileResourceLimits limits=xr_cli_compile_default_resource_limits();
+    XrCompileResources *resources=NULL;XlspSourceOpen *fresh=NULL;XrLspDocument *doc=NULL;
+    XlspDocumentInsertion insertion={0};
+    XrCompileResourceStatus created=xr_compile_resources_new(&limits,&resources);
+    if(created!=XR_COMPILE_RESOURCE_OK)return NULL;
+    XrXirStatus status=document_prepare(server,input,NULL,resources,&fresh);
+    if(status!=XR_XIR_OK)goto done;
+    doc=xr_calloc(1,sizeof(*doc));if(!doc)goto done;
+    doc->server=server;
+    if(!xlsp_document_store_prepare(server->doc_table,xlsp_source_open_uri(fresh),doc,&insertion))goto done;
+    /* The event loop is synchronous: after prepare there is no reentrant
+     * operation, allocation or fallible computation before this commit. */
+    if(!xlsp_document_store_commit(&insertion))goto done;
+    document_commit_owner(doc,fresh);fresh=NULL;
+    xr_compile_resources_release(resources);return doc;
+done:
+    xlsp_document_store_abort(&insertion);xlsp_source_open_free(fresh);xr_free(doc);
+    xr_compile_resources_release(resources);return NULL;
+}
+XrXirStatus xlsp_document_apply_changes(XrLspDocument *doc,const XrJsonValue *changes,int version) {
+    if(!doc||!doc->server||!doc->content||!doc->uri)return XR_XIR_BAD_STRUCTURE;
+    XrCompileResourceLimits limits=xr_cli_compile_default_resource_limits();
+    XrCompileResources *resources=NULL;XlspSourceBuffer *buffer=NULL;XlspSourceOpen *fresh=NULL;
+    XrCompileResourceStatus created=xr_compile_resources_new(&limits,&resources);
+    if(created!=XR_COMPILE_RESOURCE_OK)return created==XR_COMPILE_RESOURCE_BUDGET?XR_XIR_BUDGET:XR_XIR_OUT_OF_MEMORY;
+    XrXirStatus status=xlsp_source_buffer_edit_json(resources,doc->content,doc->length,doc->version,changes,version,&buffer);
+    if(status!=XR_XIR_OK)goto done;
+    size_t length=0;
+    do {if(xr_compile_resources_work(resources,1)!=XR_COMPILE_RESOURCE_OK){status=XR_XIR_BUDGET;goto done;}
+        if(!doc->uri[length])break;if(length==SIZE_MAX-1){status=XR_XIR_BUDGET;goto done;}++length;} while(true);
+    XlspSourceDocument input={doc->uri,xlsp_source_buffer_text(buffer),length,xlsp_source_buffer_length(buffer),version};
+    status=document_prepare(doc->server,&input,doc,resources,&fresh);
+    if(status==XR_XIR_OK){document_commit_owner(doc,fresh);fresh=NULL;}
+done:
+    xlsp_source_open_free(fresh);xlsp_source_buffer_free(buffer);xr_compile_resources_release(resources);return status;
 }
 
 void xlsp_document_close(XrLspServer *server, const char *uri) {
     lsp_log("Closed document: %s", uri);
-    doc_table_remove(server->doc_table, uri);
+    xlsp_document_store_remove(server->doc_table, uri);
+    xlsp_source_workspace_free(server->source_workspace);server->source_workspace=NULL;
 }
 
 XrLspDocument *xlsp_document_get(XrLspServer *server, const char *uri) {
-    return doc_table_get(server->doc_table, uri);
+    return xlsp_document_store_get(server->doc_table, uri);
 }
 
 // Upper bound on files we are willing to pull into memory for
@@ -626,7 +496,7 @@ XrLspDocument *xlsp_document_get(XrLspServer *server, const char *uri) {
 // Get or load document on-demand (for unopened files like Go to Definition targets)
 XrLspDocument *xlsp_document_get_or_load(XrLspServer *server, const char *uri) {
     // First check if already open
-    XrLspDocument *doc = doc_table_get(server->doc_table, uri);
+    XrLspDocument *doc = xlsp_document_store_get(server->doc_table, uri);
     if (doc)
         return doc;
 
@@ -1047,6 +917,7 @@ static void handle_cancel_request(XrLspServer *server, XrJsonValue *params) {
 // Publish diagnostics for a document
 void xlsp_publish_diagnostics(XrLspServer *server, XrLspDocument *doc) {
     XrJsonValue *diagnostics = xlsp_analyze_diagnostics(doc);
+    if(!diagnostics){lsp_log("Diagnostic rendering failed; no empty success published");return;}
 
     /* Findings from a run of the program, not from this parse: the detector
      * writes them out, the editor reads them back. */
@@ -1426,6 +1297,7 @@ static void handle_message(XrLspServer *server, XrJsonValue *msg) {
     if (entry) {
         if (entry->request_handler) {
             server->formatting_failure.stage = server->formatting_failure.status = 0;
+            server->source_failure.stage = server->source_failure.status = 0;
             // Check if already cancelled before executing
             if (pending_request_is_cancelled(server, &id)) {
                 lsp_log("Request %s was cancelled before execution", xlsp_request_id_debug(&id));
@@ -1439,6 +1311,12 @@ static void handle_message(XrLspServer *server, XrJsonValue *msg) {
                     send_error(server, &id, LSP_ERROR_REQUEST_CANCELLED, "Request cancelled");
                     if (result)
                         xjson_free(result);
+                } else if (server->source_failure.stage) {
+                    char message[128];
+                    snprintf(message, sizeof(message), "Source query failed (stage=%u status=%u)",
+                        server->source_failure.stage, server->source_failure.status);
+                    send_error(server, &id, -32603, message);
+                    xjson_free(result);
                 } else if (entry->request_handler == xlsp_handle_td_formatting &&
                            server->formatting_failure.stage) {
                     char message[128];

@@ -1,0 +1,11 @@
+add_executable(test_xir_program_root_permissions ${CMAKE_CURRENT_LIST_DIR}/test_xir_program_root_permissions.c)
+target_include_directories(test_xir_program_root_permissions PRIVATE ${XRAY_COMMON_INCLUDES})
+target_link_libraries(test_xir_program_root_permissions PRIVATE xray_xir_vm)
+if(MSVC)
+    target_compile_options(test_xir_program_root_permissions PRIVATE /W4 /WX /utf-8)
+else()
+    target_compile_options(test_xir_program_root_permissions PRIVATE -Wall -Wextra -Werror)
+endif()
+add_test(NAME test_xir_program_root_permissions COMMAND test_xir_program_root_permissions)
+set_tests_properties(test_xir_program_root_permissions PROPERTIES TIMEOUT 180 RUN_SERIAL TRUE PROCESSORS 1
+    LABELS "unit;xir;root-effects;callable;metadata;ownership;memory")

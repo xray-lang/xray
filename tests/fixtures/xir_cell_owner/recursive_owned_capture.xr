@@ -1,0 +1,12 @@
+fn make() -> fn() -> i64 {
+    fn recursive(value: i64) -> i64 {
+        if (value == 0) { return 7; }
+        return recursive(value - 1);
+    }
+    return fn() -> i64 { return recursive(2); };
+}
+export fn run() -> i64 {
+    const action = make();
+    return action();
+}
+fn main() -> i64 { return run(); }

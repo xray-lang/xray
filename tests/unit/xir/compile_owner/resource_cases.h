@@ -6,6 +6,7 @@
  *
  * resource_cases.h - Independent work arithmetic and metadata owner failure gates
  */
+#include "../xir_construction_fixture.h"
 #include "xir/xxir_implementation.h"
 #include "xir/xxir_implementation_verify.h"
 #include "xir/xxir_internal.h"
@@ -64,7 +65,8 @@ static const XrXirConstraint empty_constraints[2] = {{0},{0}};
 static const XrXirConstraint copied_constraints[2] = {{0,&copy_application,1},{0}};
 static const XrXirCallableParameter copied_parameter = {XR_XIR_I64,0};
 static const XrXirTypeNode copied_signature = {
-    .kind=XR_XIR_TYPE_CALLABLE,.parameters=&copied_parameter,.parameter_count=1,.result=XR_XIR_I64
+    .kind=XR_XIR_TYPE_CALLABLE,.parameters=&copied_parameter,.parameter_count=1,.result=XR_XIR_I64,
+    .flags=XR_XIR_CALLABLE_ROOT_UNRESOLVED
 };
 static const XrXirInterfaceMethod copied_method = {{"run",3},(XrXirType)XR_XIR_CONSTRUCTED_TYPE_BASE,0,1,&copy_constraint};
 static const XrXirInterfaceDeclaration copied_declarations[] = {
@@ -148,7 +150,7 @@ static void metadata_failures(unsigned kind) {
 static void mandatory_context(void) {
     XrXirCompileContext missing = {0};
     XrXirArtifact *artifact = (XrXirArtifact *)&missing;
-    CHECK(xr_xir_compile_check(&missing,&module,&artifact,NULL) == XR_XIR_BAD_STRUCTURE);
+    CHECK(xir_fixture_check(&missing, &module, &artifact, NULL) == XR_XIR_BAD_STRUCTURE);
     CHECK(artifact == (XrXirArtifact *)&missing);
     CHECK(xr_xir_compile_checked_read(NULL,NULL,0,&artifact,NULL) == XR_XIR_BAD_STRUCTURE);
     CHECK(artifact == (XrXirArtifact *)&missing);
@@ -177,7 +179,7 @@ static void exhausted_owner(void) {
     CHECK(xr_compile_resources_new(&unlimited,&owner) == XR_COMPILE_RESOURCE_OK);
     XrXirCompileContext context = {owner,xr_xir_compile_default_limits()};
     XrXirArtifact *checked = NULL;
-    CHECK(xr_xir_compile_check(&context,&module,&checked,NULL) == XR_XIR_OK);
+    CHECK(xir_fixture_check(&context, &module, &checked, NULL) == XR_XIR_OK);
     XrCompileResourceStats before = stats(owner);
     CHECK(xr_compile_resources_work(owner,UINT64_MAX - before.work) == XR_COMPILE_RESOURCE_OK);
     XrXirDefaultBinding binding = {0};
@@ -187,15 +189,15 @@ static void exhausted_owner(void) {
     bool helper = true;
     CHECK(xr_xir_compile_default_lookup(&context,&with_defaults,0,0,&lookup) == XR_XIR_BUDGET && lookup == &binding);
     CHECK(xr_xir_compile_default_helper(&context,&with_defaults,0,&helper) == XR_XIR_BUDGET && helper);
-    XrXirArtifact *out = checked;
-    CHECK(xr_xir_compile_lower(checked,&target,&out,NULL) == XR_XIR_BUDGET && out == checked);
-    CHECK(xr_xir_compile_specialize(checked,&out,NULL) == XR_XIR_BUDGET && out == checked);
-    CHECK(xr_xir_compile_check(&context,&module,&out,NULL) == XR_XIR_BUDGET && out == checked);
-    CHECK(xr_xir_compile_recheck(&context,xr_xir_compile_artifact_module(checked),&out,NULL) == XR_XIR_BUDGET && out == checked);
+    XrXirArtifact *out = NULL;
+    CHECK(xr_xir_compile_lower(checked,&target,&out,NULL) == XR_XIR_BUDGET && !out);
+    CHECK(xr_xir_compile_specialize(checked,&out,NULL) == XR_XIR_BUDGET && !out);
+    CHECK(xir_fixture_check(&context, &module, &out, NULL) == XR_XIR_BUDGET && !out);
+    CHECK(xr_xir_compile_recheck_v2(&context, xr_xir_compile_artifact_module(checked), xr_xir_compile_artifact_construction(checked), &out, NULL) == XR_XIR_BUDGET && !out);
     CHECK(xr_xir_compile_artifact_verify(checked,NULL) == XR_XIR_BUDGET);
-    XrXirCheckedPacket packet = {(uint8_t *)&before,17};
+    XrXirCheckedPacket packet = {0};
     CHECK(xr_xir_compile_checked_write(checked,&packet,NULL) == XR_XIR_BUDGET);
-    CHECK(packet.bytes == (uint8_t *)&before && packet.length == 17);
+    CHECK(!packet.bytes && !packet.length);
     CHECK(stats(owner).live_bytes == before.live_bytes);
     xr_compile_resources_release(owner);
     xr_xir_compile_artifact_free(checked);

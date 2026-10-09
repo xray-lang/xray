@@ -6,6 +6,7 @@
  *
  * test_xir_task_cancel_prefix.c - Measured cancellation of authentic activations
  */
+#include "xir_construction_fixture.h"
 #include "xir/xxir_checked.h"
 #include "xir/xxir_vm.h"
 #include <stdio.h>
@@ -73,7 +74,7 @@ static XrXirProgram *prefix_program(unsigned mode) {
     f.module.functions = functions; f.module.function_count = 6;
     XrXirArtifact *checked = NULL, *decoded = NULL, *closed = NULL, *lowered = NULL;
     XrXirCheckedPacket packet = {0}; XrXirDiagnostic diagnostic = {0};
-    XrXirStatus status = xr_xir_compile_check(context, &f.module, &checked, &diagnostic);
+    XrXirStatus status = xir_fixture_check(context, &f.module, &checked, &diagnostic);
     if (status != XR_XIR_OK) fprintf(stderr, "mode=%u check=%u function=%u op=%u\n", mode, status, diagnostic.function, diagnostic.instruction);
     CHECK(status == XR_XIR_OK);
     CHECK(xr_xir_compile_checked_write(checked, &packet, &diagnostic) == XR_XIR_OK);

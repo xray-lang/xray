@@ -134,13 +134,40 @@ static void root_builtin_cases(void) {
     effect_summary_free(effects);effect_artifact_free(group);root_permutation();
     puts("root authentic defaults/noSuspend indirect/reference/group first-slot/edge permutation PASS");
 }
+static void root_var_atomic_case(void) {
+    XrXirArtifact *checked=root_replay(root_source("rejected/mutable_atomic_binding.xr",XR_XIR_OK));
+    CHECK(xr_xir_compile_artifact_verify(checked,NULL)==XR_XIR_OK);
+    XrXirArtifact *specialized=NULL,*lowered=NULL;
+    CHECK(xr_xir_compile_specialize(checked,&specialized,NULL)==XR_XIR_OK);
+    CHECK(xr_xir_compile_artifact_verify(specialized,NULL)==XR_XIR_OK);
+    XrXirTarget target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};
+    CHECK(xr_xir_compile_lower(specialized,&target,&lowered,NULL)==XR_XIR_OK);
+    CHECK(xr_xir_compile_artifact_verify(lowered,NULL)==XR_XIR_OK);
+    XrXirArtifact *stages[3]={checked,specialized,lowered};
+    for (uint32_t stage=0;stage<3;++stage) {
+        const XrXirModule *module=xr_xir_compile_artifact_module(stages[stage]);
+        uint32_t read=root_find(module,"read");CHECK(read<module->function_count);
+        XrXirEffects *effects=NULL;CHECK(effect_analyze(stages[stage],&effects)==XR_XIR_OK);
+        root_fact(effects,read,true,false);
+        const XrXirRootEffectWitness *witness=xr_xir_effects_root_witness(effects,read);
+        CHECK(witness && witness->cause==XR_XIR_ROOT_CAUSE_MUTABLE_SLOT && witness->distance==0);
+        CHECK(witness->slot<module->declarations->slot_count);
+        const XrXirSlot *slot=&module->declarations->slots[witness->slot];
+        CHECK(slot->mutable && xr_xir_type_is_atomic(module->types,slot->type));
+        effect_summary_free(effects);
+    }
+    effect_artifact_free(lowered);effect_artifact_free(specialized);effect_artifact_free(checked);
+    puts("direct var Atomic binding Source/Checked/specialization/full recheck/Lowered exact mutable-slot ROOT PASS");
+}
 static void root_go_rejections(void) {
     CHECK(!root_source("rejected/root_child.xr",XR_XIR_BAD_TYPE));
     CHECK(!root_source("rejected/root_parent.xr",XR_XIR_BAD_TYPE));
-    CHECK(!root_source("rejected/mutable_atomic_binding.xr",XR_XIR_BAD_STRUCTURE));
-    puts("root GO child/parent BAD_TYPE and existing direct var Atomic BAD_STRUCTURE remain fail closed PASS");
+    puts("root GO child/parent BAD_TYPE remain fail closed PASS");
 }
-int main(void) {
+int main(int argc,char **argv) {
+    CHECK(argc==1 || (argc==2 && !strcmp(argv[1],"--var-atomic")));
+    effect_case_begin();root_var_atomic_case();effect_case_end();
+    if (argc==2) return 0;
     effect_case_begin();root_source_cases();effect_case_end();
     effect_case_begin();root_builtin_cases();effect_case_end();
     effect_case_begin();root_go_rejections();effect_case_end();

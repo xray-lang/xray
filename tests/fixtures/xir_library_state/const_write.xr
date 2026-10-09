@@ -1,0 +1,2 @@
+const counter:i64 = 0
+export fn next()->i64 { counter = counter + 1; return counter }

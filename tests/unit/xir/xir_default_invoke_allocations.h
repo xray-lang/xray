@@ -1,3 +1,4 @@
+#include "xir_construction_fixture.h"
 /*
  * xray - Lightweight typed scripting with native concurrency
  * https://www.xray-lang.org
@@ -49,7 +50,7 @@ static XrXirStatus default_invoke_allocation_case(const XrXirCompileContext *con
 
     XrXirArtifact *checked=NULL,*special=NULL,*read=NULL,*lowered=NULL;
     XrXirEffects *effects=NULL;XrXirCheckedPacket packet={0};
-    XrXirStatus status=xr_xir_compile_check(context,&module,&checked,NULL);
+    XrXirStatus status=xir_fixture_check(context, &module, &checked, NULL);
     if(status!=XR_XIR_OK)CHECK(!checked);
     if(status==XR_XIR_OK){status=xr_xir_compile_effects_analyze(checked,&effects);if(status!=XR_XIR_OK)CHECK(!effects);}
     if(status==XR_XIR_OK){CHECK(!xr_xir_effects_error(effects,1,XR_XIR_CONSTRUCTED_TYPE_BASE,0));

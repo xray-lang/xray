@@ -6,7 +6,7 @@
  *
  * xxir_nullable_value.inc.c - Failure-atomic active payload construction
  */
-XR_FUNC XrXirValueStatus xr_xir_nullable_new(XrXirType type,
+static XrXirValueStatus xr_xir_nullable_new_graph_operation(XrXirType type,
     const XrXirValue *payload, XrXirValueAdmission *admission, XrXirValue *output) {
     if (!admission || !admission->domain || !admission->arena || !unit_value(output))
         return XR_XIR_VALUE_BAD_ARGUMENT;
@@ -29,10 +29,18 @@ XR_FUNC XrXirValueStatus xr_xir_nullable_new(XrXirType type,
         if (status != XR_XIR_VALUE_OK) { constructed_discard(&record->object, bytes); return status; }
     }
     XrXirValue result = {(uint32_t)type, 0, 0};
+    xr_xir_value_object_publish(&record->object);
     memcpy(&result.payload, &record, sizeof(record)); *output = result;
     return XR_XIR_VALUE_OK;
 }
-XR_FUNC bool xr_xir_nullable_view(const XrXirValue *value, bool *some,
+XR_FUNC XrXirValueStatus xr_xir_nullable_new(XrXirType type,
+    const XrXirValue *payload, XrXirValueAdmission *admission, XrXirValue *output) {
+    xr_xir_value_graph_begin();
+    XrXirValueStatus graph_outcome = xr_xir_nullable_new_graph_operation(type, payload, admission, output);
+    xr_xir_value_graph_end();
+    return graph_outcome;
+}
+static bool xr_xir_nullable_view_graph_operation(const XrXirValue *value, bool *some,
     const XrXirValue **payload) {
     if (!some || !payload || !xr_xir_value_valid(value) ||
         !xr_xir_type_is_nullable(xr_xir_compile_type_arena_types(xr_xir_value_arena(value)), (XrXirType)value->type))
@@ -40,4 +48,11 @@ XR_FUNC bool xr_xir_nullable_view(const XrXirValue *value, bool *some,
     const XirNominalValue *record = (const XirNominalValue *)object_pointer(value);
     *some = record->variant != 0; *payload = record->count ? record->fields : NULL;
     return true;
+}
+XR_FUNC bool xr_xir_nullable_view(const XrXirValue *value, bool *some,
+    const XrXirValue **payload) {
+    xr_xir_value_graph_begin();
+    bool graph_outcome = xr_xir_nullable_view_graph_operation(value, some, payload);
+    xr_xir_value_graph_end();
+    return graph_outcome;
 }

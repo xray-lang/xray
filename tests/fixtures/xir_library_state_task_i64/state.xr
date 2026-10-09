@@ -1,0 +1,27 @@
+enum Problem {Failed{value:string}}
+var counter:i64=0
+var text="seed"
+fn identity(value:i64)->i64 {return value}
+fn fail()->i64 {throw Problem.Failed{value:"owned"}}
+fn spin()->i64 {while true {};return 0}
+const fixed:Task<i64> = go identity(40)
+var currentTask:Task<i64>?
+var direct:Task<i64> = go identity(0)
+export fn next()->i64 {
+    counter=counter+1
+    direct=go identity(counter)
+    currentTask=direct
+    text=text+"!"
+    return await direct
+}
+export fn current()->i64 {return counter}
+export fn label()->string {return text}
+export fn pure(value:i64)->i64 {return value+1}
+export fn read()->Task<i64> {return direct}
+export fn constAwait()->i64 {return await fixed}
+export fn constReader()->i64 {const alias=fixed;return 41}
+export fn prepared(value:Task<i64>)->i64 {const alias=value;return 41}
+export fn errorStart()->Task<i64> {direct=go fail();currentTask=direct;return direct}
+export fn slowStart()->Task<i64> {direct=go spin();currentTask=direct;return direct}
+export fn awaitCurrent()->i64 {return await direct}
+export fn defaultEmpty()->i64 {return currentTask==null ? 1 : 0}

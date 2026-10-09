@@ -17,11 +17,14 @@ static XrXirStatus library_source_operation(const XrXirCompileContext *context,v
     const LibrarySourceFixture *fixture=opaque;XrXirLibraryCatalog *catalog=NULL;
     XrCompilerSession *session=NULL;XrXirSourceResult result={0};XrXirCheckedPacket packet={0};
     XrXirStatus status=XR_XIR_OK;
-    if(fixture->count){status=xr_xir_compile_library_catalog_new(context,fixture->inputs,fixture->count,&catalog);if(status!=XR_XIR_OK){CHECK(!catalog);goto done;}}
+    if(fixture->count){status=xr_xir_compile_library_catalog_new_v2(context,fixture->inputs,fixture->count,&catalog);if(status!=XR_XIR_OK){CHECK(!catalog);goto done;}}
     XrCompilerSessionStatus created=xr_compile_session_new(context->resources,&session);
     if(created!=XR_COMPILER_SESSION_OK){CHECK(!session);status=created==XR_COMPILER_SESSION_BUDGET?XR_XIR_BUDGET:XR_XIR_OUT_OF_MEMORY;goto done;}
     XrXirSourceRequest request={session,fixture->entry,&fixture->authority,context,NULL,NULL,fixture->kind,catalog};
-    status=xr_xir_compile_source_check(&request,&result,NULL,NULL);
+    XrXirSourceDiagnostic diagnostic={0};
+    status=xr_xir_compile_source_check(&request,&result,&diagnostic,NULL);
+    if(status!=XR_XIR_OK && status!=XR_XIR_BUDGET && status!=XR_XIR_OUT_OF_MEMORY)
+        fprintf(stderr,"original Source %s status%u at %d:%d: %s\n",fixture->entry,status,diagnostic.line,diagnostic.column,diagnostic.message);
     if(status!=XR_XIR_OK){CHECK(!result.checked&&!result.snapshot);goto done;}
     CHECK(result.checked&&result.snapshot&&xr_xir_compile_source_snapshot_view(result.snapshot)->complete);
     status=xr_xir_compile_checked_write(result.checked,&packet,NULL);
@@ -32,13 +35,13 @@ static XrXirStatus library_source_operation(const XrXirCompileContext *context,v
 }
 static XrXirStatus library_catalog_operation(const XrXirCompileContext *context,void *opaque) {
     const LibrarySourceFixture *fixture=opaque;XrXirLibraryCatalog *catalog=NULL;
-    XrXirStatus status=xr_xir_compile_library_catalog_new(context,fixture->inputs,fixture->count,&catalog);
+    XrXirStatus status=xr_xir_compile_library_catalog_new_v2(context,fixture->inputs,fixture->count,&catalog);
     CHECK(status==XR_XIR_OK?catalog!=NULL:catalog==NULL);xr_xir_compile_library_catalog_free(catalog);return status;
 }
-typedef struct LibraryPacketFixture {const void *bytes;size_t length;const XrXirModule *module;} LibraryPacketFixture;
+typedef struct LibraryPacketFixture {const void *bytes;size_t length;const XrXirArtifact *source;} LibraryPacketFixture;
 static inline XrXirStatus library_packet_operation(const XrXirCompileContext *context,void *opaque) {
     const LibraryPacketFixture *fixture=opaque;XrXirArtifact *artifact=NULL;XrXirCheckedPacket packet={0};
-    XrXirStatus status=fixture->module?xr_xir_compile_recheck(context,fixture->module,&artifact,NULL):xr_xir_compile_checked_read(context,fixture->bytes,fixture->length,&artifact,NULL);
+    XrXirStatus status=fixture->source?xr_xir_compile_recheck_v2(context,xr_xir_compile_artifact_module(fixture->source),xr_xir_compile_artifact_construction(fixture->source),&artifact,NULL):xr_xir_compile_checked_read(context,fixture->bytes,fixture->length,&artifact,NULL);
     if(status!=XR_XIR_OK){CHECK(!artifact);return status;}
     if(fixture->bytes){status=xr_xir_compile_checked_write(artifact,&packet,NULL);if(status==XR_XIR_OK)CHECK(packet.length==fixture->length&&!memcmp(packet.bytes,fixture->bytes,packet.length));else CHECK(!packet.bytes&&!packet.length);}
     xr_xir_compile_checked_packet_free(&packet);xr_xir_compile_artifact_free(artifact);return status;

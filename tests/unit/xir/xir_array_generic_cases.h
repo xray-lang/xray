@@ -11,6 +11,7 @@
  */
 #ifndef XIR_ARRAY_GENERIC_CASES_H
 #define XIR_ARRAY_GENERIC_CASES_H
+#include "xir_construction_fixture.h"
 #include "xir_array_generic_fixture.h"
 
 static void array_generic_cases(void) {
@@ -24,11 +25,11 @@ static void array_generic_cases(void) {
     views[3].instructions = body;
     XrXirModule built = *module; built.stage = XR_XIR_BUILT;
     built.functions = views; built.function_count = 4; built.generics = generics;
-    CHECK(xr_xir_compile_verify(suite_context, &built, NULL) == XR_XIR_OK);
+    CHECK(xir_fixture_verify(suite_context, &built, NULL) == XR_XIR_OK);
     body[4].args[1] = 0; /* T can be i64 in an instance; it is not i64 in the definition. */
-    CHECK(xr_xir_compile_verify(suite_context, &built, NULL) == XR_XIR_BAD_TYPE);
+    CHECK(xir_fixture_verify(suite_context, &built, NULL) == XR_XIR_BAD_TYPE);
     XrXirArtifact *rejected = NULL;
-    CHECK(xr_xir_compile_check(suite_context, &built, &rejected, NULL) == XR_XIR_BAD_TYPE && !rejected);
+    CHECK(xir_fixture_check(suite_context, &built, &rejected, NULL) == XR_XIR_BAD_TYPE && !rejected);
     XrXirCheckedPacket packet = {0};
     CHECK(xr_xir_compile_checked_write(checked, &packet, NULL) == XR_XIR_OK);
     xr_xir_compile_artifact_free(checked); checked=NULL;

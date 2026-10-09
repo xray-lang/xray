@@ -467,7 +467,8 @@ static void source_updates(XrXirInstance *instance, uint32_t update) {
         CHECK(args[0].payload == start);
     }
 }
-static void source_numeric(XrXirInstance *instance, uint32_t calculate) {
+static void source_numeric_range(XrXirInstance *instance, uint32_t calculate, unsigned begin, unsigned end) {
+    CHECK(begin < end && end <= 174);
     struct Numeric { int64_t kind, left, right, expected; bool fault; };
     const struct Numeric cases[] = {
         {0, INT64_MAX, 1, INT64_MIN, false}, {0, INT64_MIN, -1, INT64_MAX, false},
@@ -481,7 +482,9 @@ static void source_numeric(XrXirInstance *instance, uint32_t calculate) {
         {4, -7, -3, -1, false}, {4, INT64_MIN, -1, 0, false}, {4, 1, 0, 0, true},
         {4, 7, 3, 1, false}, {5, INT64_MIN, 0, INT64_MIN, false}, {5, INT64_MAX, 0, -INT64_MAX, false}
     };
+    _Static_assert(sizeof(cases) / sizeof(cases[0]) == 24, "The numeric table contains 24 arithmetic vectors");
     for (unsigned i = 0; i < sizeof(cases) / sizeof(cases[0]); ++i) {
+        if (i < begin || i >= end) continue;
         XrXirValue args[] = {{XR_XIR_I64, 0, cases[i].kind}, {XR_XIR_I64, 0, cases[i].left},
             {XR_XIR_I64, 0, cases[i].right}};
         CHECK(xr_xir_instance_start(instance, calculate, args, 3) == XR_XIR_CALL_READY);
@@ -493,6 +496,8 @@ static void source_numeric(XrXirInstance *instance, uint32_t calculate) {
     }
     const int64_t values[] = {INT64_MIN, -1, 0, 1, INT64_MAX};
     for (unsigned kind = 6; kind < 12; ++kind) for (unsigned i = 0; i < 5; ++i) for (unsigned j = 0; j < 5; ++j) {
+        unsigned row = 24 + (kind - 6) * 25 + i * 5 + j;
+        if (row < begin || row >= end) continue;
         XrXirValue args[] = {{XR_XIR_I64, 0, kind}, {XR_XIR_I64, 0, values[i]}, {XR_XIR_I64, 0, values[j]}};
         bool expected = kind == 6 ? i == j : kind == 7 ? i != j : kind == 8 ? i < j :
             kind == 9 ? i <= j : kind == 10 ? i > j : i >= j;
@@ -501,8 +506,11 @@ static void source_numeric(XrXirInstance *instance, uint32_t calculate) {
         CHECK(result.status == XR_XIR_CALL_RETURNED && result.value.type == XR_XIR_I64 && result.value.payload == expected);
     }
 }
-static void source_bitwise(XrXirInstance *instance, uint32_t calculate) {
+static void source_bitwise_range(XrXirInstance *instance, uint32_t calculate, unsigned begin, unsigned end) {
+    const unsigned rows = (unsigned)(sizeof(bitwise_cases) / sizeof(bitwise_cases[0]));
+    CHECK(begin < end && end <= rows + 6);
     for (unsigned i = 0; i < sizeof(bitwise_cases) / sizeof(bitwise_cases[0]); ++i) {
+        if (i < begin || i >= end) continue;
         const XirBitwiseCase *row = &bitwise_cases[i];
         XrXirValue args[] = {{XR_XIR_I64, 0, 12 + row->operation},
             {XR_XIR_I64, 0, row->left}, {XR_XIR_I64, 0, row->right}};
@@ -514,6 +522,7 @@ static void source_bitwise(XrXirInstance *instance, uint32_t calculate) {
     const int64_t inputs[] = {INT64_MIN, INT64_MAX, -1, 0, 1, 85};
     const int64_t expected[] = {INT64_MAX, INT64_MIN, 0, -1, -2, -86};
     for (unsigned i = 0; i < 6; ++i) {
+        if (rows + i < begin || rows + i >= end) continue;
         XrXirValue args[] = {{XR_XIR_I64, 0, 17}, {XR_XIR_I64, 0, inputs[i]}, {XR_XIR_I64, 0, 0}};
         CHECK(xr_xir_instance_start(instance, calculate, args, 3) == XR_XIR_CALL_READY);
         XrXirCallResult result = xr_xir_instance_poll_bounded(instance, UINT64_MAX).outcome;
@@ -689,104 +698,7 @@ static void source_generic_result_drop(XrXirValue *value, uint32_t kind) {
     }
     xr_xir_value_drop(value);
 }
-static void source_pair(XrXirProgram *program, uint32_t entry, SourceFunctions functions, XrXirValue *results) {
-    SourceOutput outputs[2] = {{0, false}, {0, true}};
-    XrXirOutputSink sinks[2] = {{XR_XIR_CALL_ABI_VERSION, 0, source_bytes, &outputs[0], 65536}, {XR_XIR_CALL_ABI_VERSION, 0, source_bytes, &outputs[1], 65536}};
-    XrXirInstanceConfig config; CHECK(xr_xir_instance_config_init(&config, sizeof(config)) == XR_XIR_CALL_READY);
-    config.metadata_limit = 65536; config.value_limit = 65536; config.call_limit = 65536;
-    config.poll_limit = 8000; config.depth_limit = 96;
-    XrXirInstance *instances[2] = {NULL, NULL};
-    for (uint32_t i = 0; i < 2; ++i) {
-        config.output = (XrXirOutputProvider) {XR_XIR_CALL_ABI_VERSION, 0, source_output, &sinks[i]};
-        CHECK(xr_xir_instance_new(program, &config, &instances[i]) == XR_XIR_CALL_READY);
-        CHECK(xr_xir_instance_start(instances[i], entry, NULL, 0) == XR_XIR_CALL_READY);
-    }
-    for (unsigned step = 0; step < 14; ++step) for (unsigned i = 0; i < 2; ++i) {
-        XrXirInstanceResult result = xr_xir_instance_poll_bounded(instances[i], UINT64_MAX);
-        if (step < 13) {
-            CHECK(xr_xir_instance_state(instances[i]) == XR_XIR_INSTANCE_INITIALIZING && outputs[i].calls == (step >= 12 ? 53u : step >= 11 ? 50u : step >= 10 ? 49u : step >= 9 ? 48u : step >= 8 ? 47u : step >= 4 ? 40u : step >= 2 ? 25u + step : 0u));
-            source_resume_once(instances[i], result);
-        } else {
-            if (result.outcome.status != XR_XIR_CALL_RETURNED)
-                fprintf(stderr, "Source initialization status=%u outputs=%u\n", result.outcome.status, outputs[i].calls);
-            CHECK(result.outcome.status == XR_XIR_CALL_RETURNED && result.outcome.value.type == XR_XIR_I64 && !result.outcome.value.payload);
-            CHECK(outputs[i].calls == 59 && xr_xir_instance_state(instances[i]) == XR_XIR_INSTANCE_READY);
-        }
-    }
-    XrXirValue errors[2]={{0},{0}};
-    for (unsigned i=0;i<2;++i) errors[i]=source_error(instances[i],functions.calculate);
-    for (unsigned i = 0; i < 2; ++i) source_match_faults(instances[i],functions.calculate);
-    for (unsigned i = 0; i < 2; ++i) source_search_bounds(instances[i], functions.calculate);
-    for (unsigned i = 0; i < 2; ++i) source_pattern_calls(instances[i], functions.calculate);
-    source_cancel_cases(program, entry, functions.resume_text);
-    source_numeric_pair(instances, functions.numeric_pause);
-    XrXirValue resumed[2] = {{0}, {0}};
-    source_resume_pair(instances, functions.resume_text, resumed);
-    XrXirValue deep[2] = {{0}, {0}};
-    source_deep_pair(instances, functions.stack_depth, deep);
-    source_failed_init(program, entry, config);
-    for (unsigned i = 0; i < 2; ++i) source_default_fault(instances[i], functions.calculate);
-    for (unsigned i = 0; i < 2; ++i) source_constructor_fault(instances[i], functions.calculate);
-    for (unsigned i = 0; i < 2; ++i) source_compound_fault(instances[i], functions.calculate);
-    for (unsigned i = 0; i < 2; ++i) source_bitwise(instances[i], functions.calculate);
-    for (unsigned i = 0; i < 2; ++i) source_numeric(instances[i], functions.calculate);
-    for (unsigned i = 0; i < 2; ++i) source_float_fault(instances[i], functions.calculate);
-    for (unsigned i = 0; i < 2; ++i) source_updates(instances[i], functions.update);
-    for (int64_t expected = 15; expected < 17; ++expected) for (uint32_t i = 0; i < 2; ++i) {
-        CHECK(xr_xir_instance_start(instances[i], functions.advance, NULL, 0) == XR_XIR_CALL_READY);
-        XrXirCallResult result = xr_xir_instance_poll_bounded(instances[i], UINT64_MAX).outcome;
-        CHECK(result.status == XR_XIR_CALL_RETURNED && result.value.payload == expected && outputs[i].calls == 59);
-    }
-    for (uint32_t i = 0; i < 2; ++i) {
-        CHECK(xr_xir_instance_start(instances[i], functions.witness_result, NULL, 0) == XR_XIR_CALL_READY);
-        XrXirCallResult witness = xr_xir_instance_poll_bounded(instances[i], UINT64_MAX).outcome;
-        CHECK(witness.status == XR_XIR_CALL_RETURNED && witness.value.payload == 41);
-    }
-    uint32_t enum_entries[] = {functions.enum_witness_result,functions.enum_generic_witness_result};
-    for (uint32_t f = 0; f < 2; ++f) for (uint32_t i = 0; i < 2; ++i) {
-        CHECK(xr_xir_instance_start(instances[i],enum_entries[f],NULL,0) == XR_XIR_CALL_READY);
-        XrXirCallResult result = xr_xir_instance_poll_bounded(instances[i], UINT64_MAX).outcome;
-        CHECK(result.status == XR_XIR_CALL_RETURNED && result.value.type == XR_XIR_I64 && result.value.payload == 41);
-    }
-    XrXirValue generic_results[2][3] = {{{0}}};
-    uint32_t generic_entries[] = {functions.generic_method_number,functions.generic_method_text,functions.generic_method_array};
-    for (uint32_t f = 0; f < 3; ++f) for (uint32_t i = 0; i < 2; ++i) {
-        CHECK(xr_xir_instance_start(instances[i],generic_entries[f],NULL,0) == XR_XIR_CALL_READY);
-        CHECK(xr_xir_instance_poll_bounded(instances[i], UINT64_MAX).outcome.status == XR_XIR_CALL_RETURNED);
-        CHECK(xr_xir_instance_take_result(instances[i],&generic_results[i][f]) == XR_XIR_CALL_RETURNED);
-    }
-    XrXirValue bound[2] = {{0}, {0}}, bound_text[2] = {{0}, {0}};
-    for (uint32_t i = 0; i < 2; ++i) {
-        CHECK(xr_xir_instance_start(instances[i], functions.bound_result, NULL, 0) == XR_XIR_CALL_READY);
-        CHECK(xr_xir_instance_poll_bounded(instances[i], UINT64_MAX).outcome.status == XR_XIR_CALL_RETURNED);
-        CHECK(xr_xir_instance_take_result(instances[i], &bound[i]) == XR_XIR_CALL_RETURNED);
-        CHECK(xr_xir_instance_start_function(instances[1 - i], &bound[i], NULL, 0) == XR_XIR_CALL_BAD_ARGUMENT);
-        CHECK(xr_xir_instance_start_function(instances[i], &bound[i], NULL, 0) == XR_XIR_CALL_READY);
-        CHECK(xr_xir_instance_poll_bounded(instances[i], UINT64_MAX).outcome.status == XR_XIR_CALL_RETURNED);
-        CHECK(xr_xir_instance_take_result(instances[i], &bound_text[i]) == XR_XIR_CALL_RETURNED);
-    }
-    for (uint32_t i = 0; i < 2; ++i) {
-        CHECK(xr_xir_instance_start(instances[i], functions.result, NULL, 0) == XR_XIR_CALL_READY);
-        CHECK(xr_xir_instance_poll_bounded(instances[i], UINT64_MAX).outcome.status == XR_XIR_CALL_RETURNED);
-        CHECK(xr_xir_instance_take_result(instances[i], &results[i]) == XR_XIR_CALL_RETURNED);
-        CHECK(xr_xir_instance_stop(instances[i]) == XR_XIR_CALL_READY);
-        CHECK(xr_xir_instance_start_function(instances[i], &bound[i], NULL, 0) == XR_XIR_CALL_BAD_STATE);
-        CHECK(xr_xir_instance_free(instances[i]) == XR_XIR_CALL_READY);
-        for (uint32_t f = 0; f < 3; ++f) source_generic_result_drop(&generic_results[i][f],f);
-        source_error_drop(&errors[i]);
-        XrXirValue copy = {0};
-        CHECK(xr_xir_value_copy(&bound[i], &copy) == XR_XIR_VALUE_OK);
-        xr_xir_value_drop(&bound[i]); xr_xir_value_drop(&copy);
-        const char *bytes = NULL; size_t length = 0;
-        CHECK(xr_xir_string_view(&bound_text[i], &bytes, &length) && length == 5 && !memcmp(bytes, "bound", 5));
-        xr_xir_value_drop(&bound_text[i]);
-        CHECK(xr_xir_string_view(&resumed[i], &bytes, &length) && length == 3 && !memcmp(bytes, i ? "ry!" : "rn!", 3));
-        xr_xir_value_drop(&resumed[i]);
-        CHECK(xr_xir_string_view(&deep[i], &bytes, &length) && length == 130 + i * 2);
-        for (size_t at = 0; at < length; ++at) CHECK(bytes[at] == (at % 2 ? 'r' : 'f'));
-        xr_xir_value_drop(&deep[i]);
-    }
-}
+#include "xir_source_scenario_cases.h"
 static void source_result_drop(XrXirValue *value) {
     const char *bytes = NULL; size_t length = 0;
     CHECK(xr_xir_string_view(value, &bytes, &length) && length == 2 && !memcmp(bytes, "a!", 2));

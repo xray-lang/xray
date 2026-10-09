@@ -1,0 +1,37 @@
+struct Record<T>{const n:T;const text:string="seed";}
+enum Packet<T>{Empty,Count{n:T,text:string}}
+final class Holder{n:i64=0;text:string="seed";}
+export fn pure(value:i64)->i64 { return value + 1 }
+var record = Record<i64>{n:0}
+var values:Array<i64> = [0]
+var pair:(i64,string) = (0,"seed")
+var optional:i64? = null
+var callback:fn(i64)->i64 = pure
+var packet = Packet<i64>.Count{n:0,text:"seed"}
+var object = Holder()
+export fn next()->i64 {
+    const n = record.n + 1
+    record = Record<i64>{n:n,text:record.text+"!"}
+    values[0] = n
+    pair = (n,record.text)
+    optional = n
+    callback = pure
+    packet = Packet<i64>.Count{n:n,text:record.text}
+    object.n = n
+    object.text = record.text
+    return current()
+}
+export fn current()->i64 {
+    const n = record.n
+    if(values[0]!=n){return 99;};
+    if(pair.0!=n){return 99;};
+    if(pair.1!=record.text){return 99;};
+    if(n==0){if(optional!=null){return 99;};}else{if((optional ?? -1)!=n){return 99;};};
+    if(callback(40)!=41){return 99;};
+    if(object.n!=n){return 99;};
+    if(object.text!=record.text){return 99;};
+    const count = match(packet){Packet.Count{n,text}->{if(text!=record.text){return 99;};n},Packet.Empty->99}
+    if(count!=n){return 99;};
+    return n
+}
+export fn label()->string { return record.text }

@@ -1,0 +1,9 @@
+fn bump(value: ref i64) -> i64 { value += 1; return value; }
+fn forward(action: fn(ref i64) -> i64, value: ref i64) -> i64 { return action(ref value); }
+export fn run() -> i64 {
+    var value: i64 = 40;
+    const action: fn(ref i64) -> i64 = bump;
+    action(ref value);
+    return forward(action, ref value);
+}
+fn main() -> i64 { return 0; }

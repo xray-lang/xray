@@ -1,0 +1,5 @@
+var counter:i64 = 0
+fn alias(parameter:ref i64)->i64 { counter += 1; return parameter }
+export fn run()->i64 { return alias(ref counter) }
+fn main()->i64 { return run() }
+export fn cellCounter()->i64 { return counter }

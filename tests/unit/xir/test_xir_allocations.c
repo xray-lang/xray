@@ -12,6 +12,7 @@
  *   fail each allocation in turn, including post-transition verification.
  */
 
+#include "xir_construction_fixture.h"
 #include "base/xmalloc.h"
 #include "xir/xxir.h"
 #include <stdlib.h>
@@ -116,10 +117,13 @@ static void *counted_realloc(void *pointer, size_t size) {
 #include "xir/xxir_vm.c"
 #include "xir/xxir_emit_c.c"
 #include "xir/xxir_call.c"
+#include "xir/xxir_task_budget.c"
+#include "xir/xxir_task.c"
 #include "xir/xxir_program_match.c"
 #include "xir/xxir_program.c"
 #include "xir/xxir_instance.c"
 #include "xir/xxir_output.c"
+#include "xir/xxir_native_cache.c"
 
 #include "xir_allocation_compile_owner.h"
 #include "xir_string_fixture.h"
@@ -451,7 +455,7 @@ static size_t declaration_allocation_failures(void) {
             calls=0;fail_at=attempt?attempt-1:SIZE_MAX;
             XrXirArtifact *output=NULL;XrXirCSource source={0};
             XrXirModule module=*xr_xir_compile_artifact_module(checked);module.stage=XR_XIR_BUILT;
-            XrXirStatus status=phase==0?xr_xir_compile_check(&owner.context,&module,&output,NULL):
+            XrXirStatus status=phase==0?xir_fixture_check(&owner.context, &module, &output, NULL):
                 phase==1?xr_xir_compile_lower(closed,&fixture_target,&output,NULL):
                 xr_xir_compile_emit_c(fixture,"owned_program",200000,&source);
             CHECK(status==(attempt?XR_XIR_OUT_OF_MEMORY:XR_XIR_OK));
@@ -500,7 +504,7 @@ static void nominal_pool_allocation_failures(void) {
 }
 static XrXirStatus allocation_check_operation(const XrXirCompileContext *context,void *opaque) {
     XrXirArtifact *artifact=NULL;
-    XrXirStatus status=xr_xir_compile_check(context,opaque,&artifact,NULL);
+    XrXirStatus status=xir_fixture_check(context, opaque, &artifact, NULL);
     if(status!=XR_XIR_OK)CHECK(!artifact);
     xr_xir_compile_artifact_free(artifact);return status;
 }
@@ -540,7 +544,7 @@ int main(void) {
     AllocationCompileOwner compiler={0};allocation_compile_owner_new(&compiler,&allocation_compile_limits);
     size_t compiler_live=live;
     calls = 0;
-    CHECK(xr_xir_compile_check(&compiler.context,&module, &checked, NULL) == XR_XIR_OK);
+    CHECK(xir_fixture_check(&compiler.context, &module, &checked, NULL) == XR_XIR_OK);
     size_t check_calls = calls;
     CHECK(live > 0);
     xr_xir_compile_artifact_free(checked);
@@ -549,12 +553,12 @@ int main(void) {
         calls = 0;
         fail_at = i;
         checked = NULL;
-        CHECK(xr_xir_compile_check(&compiler.context,&module, &checked, NULL) == XR_XIR_OUT_OF_MEMORY);
+        CHECK(xir_fixture_check(&compiler.context, &module, &checked, NULL) == XR_XIR_OUT_OF_MEMORY);
         CHECK(checked == NULL);
         CHECK(live == compiler_live);
     }
     fail_at = SIZE_MAX;
-    CHECK(xr_xir_compile_check(&compiler.context,&module, &checked, NULL) == XR_XIR_OK);
+    CHECK(xir_fixture_check(&compiler.context, &module, &checked, NULL) == XR_XIR_OK);
     size_t checked_live = live;
     calls = 0;
     CHECK(xr_xir_compile_lower(checked, &fixture_target, &lowered, NULL) == XR_XIR_OK);
@@ -570,7 +574,7 @@ int main(void) {
         CHECK(live == checked_live);
     }
     fail_at = SIZE_MAX;
-    CHECK(xr_xir_compile_verify(&compiler.context,xr_xir_compile_artifact_module(checked),NULL) == XR_XIR_OK);
+    CHECK(xr_xir_compile_verify_v2(&compiler.context, xr_xir_compile_artifact_module(checked), xr_xir_compile_artifact_construction(checked), NULL) == XR_XIR_OK);
     CHECK(xr_xir_compile_lower(checked, &fixture_target, &lowered, NULL) == XR_XIR_OK);
     xr_xir_compile_artifact_free(checked);
     size_t lowered_live = live;

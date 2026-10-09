@@ -15,6 +15,8 @@
 #include "xxir_compile_memory.h"
 #include "xxir_operand_roles.h"
 #include "xxir_constraint_proof.h"
+#include "xxir_cell_provenance_internal.h"
+#include "xxir_effect_contract_internal.h"
 #include "../base/xsha256.h"
 
 #define MATCH(a, b) do { \
@@ -174,25 +176,97 @@ XR_FUNC XrXirStatus xr_xir_compile_program_match(const XrXirCompileContext *cont
 #undef MATCH
 #undef TRY
 
-static XrXirStatus program_go_authority(const XrXirCompileContext *context,
-    const XrXirArtifact *lowered, XrXirStatus **output) {
+/* A private cross-module reference is usable only from a body containing the
+ * exact reference edge already accepted by full provenance verification. */
+static bool program_private_reference(const XrXirModule *module, uint32_t caller,
+    const XrXirInstruction *op) {
+    if (op->op != XR_XIR_FUNCTION_REF) return false;
+    const XrXirDeclarations *d = module->declarations;
+    return !d->functions[op->immediate].exported &&
+        d->functions[caller].module != d->functions[op->immediate].module;
+}
+
+static XrXirStatus program_permissions(const XrXirCompileContext *context,
+    const XrXirArtifact *lowered, XrXirProgramPermissions **output) {
     const XrXirModule *module = xr_xir_compile_artifact_module(lowered);
     XrXirEffects *effects = NULL;
     XrXirStatus status = xr_xir_compile_effects_infer_verified(context, module, &effects);
-    XrXirStatus *authority = NULL;
-    if (status == XR_XIR_OK) authority = xir_compile_calloc(context, (uint64_t)module->function_count + module->declarations->slot_count, sizeof(*authority), &status);
+    XrXirProgramPermissions *permissions = NULL;
+    uint64_t count = (uint64_t)module->function_count + module->declarations->slot_count;
+    uint64_t references = 0, parameters = 0, root_parameters = 0;
+    for (uint32_t f = 0; f < module->function_count && status == XR_XIR_OK; ++f) {
+        const XrXirFunction *function = &module->functions[f];
+        parameters += function->parameter_count;
+        XirEffectEntryRootView root = {0};
+        status = xir_effects_entry_root(context, effects, f, &root);
+        if (status != XR_XIR_OK) break;
+        root_parameters += root.parameter_count;
+        if (!xir_compile_work(context, function->instruction_count)) { status = XR_XIR_BUDGET; break; }
+        for (uint32_t i = 0; i < function->instruction_count; ++i)
+            if (program_private_reference(module, f, &function->instructions[i])) ++references;
+    }
+    if (references > UINT32_MAX || parameters > UINT32_MAX || root_parameters > UINT32_MAX)
+        status = XR_XIR_BUDGET;
+    uint64_t bytes = sizeof(*permissions) + count * sizeof(*permissions->entries) +
+        references * sizeof(*permissions->references) +
+        ((uint64_t)module->function_count + 1 + root_parameters) * sizeof(uint32_t) + parameters;
+    if (status == XR_XIR_OK && bytes > SIZE_MAX) status = XR_XIR_BUDGET;
+    if (status == XR_XIR_OK) permissions = xir_compile_calloc(context, 1, (size_t)bytes, &status);
+    if (status == XR_XIR_OK) {
+        permissions->entries = (XrXirProgramPermission *)(permissions + 1);
+        permissions->references = (XrXirProgramFunctionRef *)(permissions->entries + count);
+        permissions->parameter_offsets = (uint32_t *)(permissions->references + references);
+        permissions->root_parameters = permissions->parameter_offsets + module->function_count + 1;
+        permissions->cell_roles = (uint8_t *)(permissions->root_parameters + root_parameters);
+        permissions->root_parameter_count = (uint32_t)root_parameters;
+        permissions->function_count = module->function_count;
+        permissions->slot_count = module->declarations->slot_count;
+    }
+    if (status == XR_XIR_OK)
+        status = xr_xir_compile_cell_roles_verified(context, module,
+            permissions->parameter_offsets, permissions->cell_roles, NULL);
+    uint32_t reference_at = 0, root_parameter_at = 0;
     for (uint32_t f = 0; f < module->function_count && status == XR_XIR_OK; ++f) {
         if (!xir_compile_work(context, 1)) { status = XR_XIR_BUDGET; break; }
+        const XrXirRootEffects *root = xr_xir_effects_root(effects, f);
+        if (!root) { status = XR_XIR_BAD_STRUCTURE; break; }
+        permissions->entries[f].requires_root = root->requires_root;
+        permissions->entries[f].unresolved = root->unresolved;
+        XirEffectEntryRootView conditional = {0};
+        status = xir_effects_entry_root(context, effects, f, &conditional);
+        if (status != XR_XIR_OK) break;
+        if (conditional.parameter_count > root_parameters - root_parameter_at ||
+            (conditional.parameter_count && !conditional.parameters) ||
+            (conditional.intrinsic_mask & ~(XR_XIR_CALLABLE_ROOT_REQUIRED | XR_XIR_CALLABLE_ROOT_UNRESOLVED))) {
+            status = XR_XIR_BAD_STRUCTURE; break;
+        }
+        if (!xir_compile_work(context, (uint64_t)conditional.parameter_count * 2 + 3)) {
+            status = XR_XIR_BUDGET; break;
+        }
+        permissions->entries[f].root_parameter_begin = root_parameter_at;
+        permissions->entries[f].root_parameter_count = conditional.parameter_count;
+        permissions->entries[f].intrinsic_root = conditional.intrinsic_mask;
+        for (uint32_t p = 0; p < conditional.parameter_count; ++p)
+            permissions->root_parameters[root_parameter_at++] = conditional.parameters[p];
         XrXirStatus permission = xr_xir_function_has_go_role(module, f) ? xr_xir_effects_go_safe(effects, f) : XR_XIR_BAD_TYPE;
         if (permission == XR_XIR_OK) permission = xr_xir_effects_task_errors(effects, f);
         XrXirProofContext proof = {module, {XR_XIR_CONTEXT_FUNCTION, f, 0}};
         const XrXirFunction *function = &module->functions[f];
+        permissions->entries[f].reference_begin = reference_at;
+        if (!xir_compile_work(context, function->instruction_count)) { status = XR_XIR_BUDGET; break; }
+        for (uint32_t i = 0; i < function->instruction_count; ++i) {
+            const XrXirInstruction *op = &function->instructions[i];
+            if (!program_private_reference(module, f, op)) continue;
+            permissions->references[reference_at++] = (XrXirProgramFunctionRef){
+                (uint32_t)op->immediate, op->args[1], op->type};
+            ++permissions->entries[f].reference_count;
+        }
         if (permission == XR_XIR_OK)
             permission = xr_xir_compile_type_markers_prove(context, &proof, function->result, XR_XIR_CONSTRAINT_SENDABLE);
         for (uint32_t p = 0; p < function->parameter_count && permission == XR_XIR_OK; ++p)
             permission = xr_xir_compile_type_markers_prove(context, &proof, function->parameters[p], XR_XIR_CONSTRAINT_SENDABLE);
         if (permission == XR_XIR_BUDGET || permission == XR_XIR_OUT_OF_MEMORY) status = permission;
-        else authority[f] = permission;
+        else permissions->entries[f].worker = permission;
     }
     for (uint32_t slot = 0; slot < module->declarations->slot_count && status == XR_XIR_OK; ++slot) {
         if (!xir_compile_work(context, 1)) { status = XR_XIR_BUDGET; break; }
@@ -201,17 +275,18 @@ static XrXirStatus program_go_authority(const XrXirCompileContext *context,
         XrXirStatus permission = entry->mutable ? XR_XIR_BAD_TYPE :
             xr_xir_compile_type_markers_prove(context, &proof, entry->type, XR_XIR_CONSTRAINT_SENDABLE);
         if (permission == XR_XIR_BUDGET || permission == XR_XIR_OUT_OF_MEMORY) status = permission;
-        else authority[(uint64_t)module->function_count + slot] = permission;
+        else permissions->entries[(uint64_t)module->function_count + slot].worker = permission;
     }
     xr_xir_compile_effects_free(effects);
-    if (status != XR_XIR_OK) { xr_compile_resources_free(authority); return status; }
-    *output = authority;
+    if (status == XR_XIR_OK && root_parameter_at != root_parameters) status = XR_XIR_BAD_STRUCTURE;
+    if (status != XR_XIR_OK) { xr_compile_resources_free(permissions); return status; }
+    *output = permissions;
     return XR_XIR_OK;
 }
 XR_FUNC XrXirStatus xr_xir_compile_program_proof_verify(const XrXirCompileContext *context,
-    const XrXirProgramSpec *spec, const XrXirProgramProof *proof, XrXirStatus **go_authority) {
+    const XrXirProgramSpec *spec, const XrXirProgramProof *proof, XrXirProgramPermissions **permissions) {
     if (!xir_compile_context_valid(context) || !spec || !proof || !proof->bytes ||
-        proof->length < 64 || !proof->identity || !proof->layouts || !go_authority || *go_authority)
+        proof->length < 64 || !proof->identity || !proof->layouts || !permissions || *permissions)
         return XR_XIR_BAD_STRUCTURE;
     if (!xir_compile_work(context, proof->length)) return XR_XIR_BUDGET;
     uint8_t digest[32];
@@ -223,7 +298,7 @@ XR_FUNC XrXirStatus xr_xir_compile_program_proof_verify(const XrXirCompileContex
         &spec->target, &lowered, NULL);
     if (status == XR_XIR_OK)
         status = xr_xir_compile_program_match(context, spec, proof->layouts, lowered);
-    if (status == XR_XIR_OK) status = program_go_authority(context, lowered, go_authority);
+    if (status == XR_XIR_OK) status = program_permissions(context, lowered, permissions);
     xr_xir_compile_artifact_free(lowered);
     return status;
 }

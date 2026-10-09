@@ -65,8 +65,17 @@ static uint64_t checked_integer(CheckedCursor *c, uint64_t value, unsigned width
 static uint32_t checked_u32(CheckedCursor *c, uint32_t value) {
     return (uint32_t) checked_integer(c, value, 4);
 }
-static uint32_t checked_count(CheckedCursor *c, uint32_t value, uint32_t *remaining) {
+static uint32_t checked_count(CheckedCursor *c, uint32_t value, uint32_t *remaining,
+    size_t wire_minimum) {
+    if (c->status == XR_XIR_OK && c->reading && c->position > c->capacity) {
+        c->status = XR_XIR_BAD_STRUCTURE; return 0;
+    }
     uint32_t count = checked_u32(c, value);
+    /* A finite count cannot describe records absent from the packet. Prove
+     * their physical lower bound before considering structural resource caps. */
+    if (c->status == XR_XIR_OK && c->reading &&
+        (!wire_minimum || count > (c->capacity - c->position) / wire_minimum))
+        c->status = XR_XIR_BAD_STRUCTURE;
     if (c->status == XR_XIR_OK && count > *remaining) c->status = XR_XIR_BUDGET;
     if (c->status != XR_XIR_OK) return 0;
     *remaining -= count;
@@ -107,7 +116,7 @@ static const char *checked_blob(CheckedCursor *c, const char *bytes, uint32_t *l
 }
 static void checked_function(CheckedCursor *c, XrXirFunction *f) {
     f->name = checked_blob(c, f->name, &f->name_length);
-    f->parameter_count = checked_count(c, f->parameter_count, &c->structural.parameters);
+    f->parameter_count = checked_count(c, f->parameter_count, &c->structural.parameters, 4);
     XrXirType *parameters = checked_array(c, f->parameters, f->parameter_count, sizeof(*parameters), 4);
     f->parameters = parameters;
     for (uint32_t i = 0; i < f->parameter_count && c->status == XR_XIR_OK; ++i) {
@@ -115,7 +124,7 @@ static void checked_function(CheckedCursor *c, XrXirFunction *f) {
         if (c->reading) parameters[i] = (XrXirType) type;
     }
     f->result = (XrXirType) checked_u32(c, (uint32_t) f->result);
-    f->block_count = checked_count(c, f->block_count, &c->structural.blocks);
+    f->block_count = checked_count(c, f->block_count, &c->structural.blocks, 16);
     XrXirBlock *blocks = checked_array(c, f->blocks, f->block_count, sizeof(*blocks), 16);
     f->blocks = blocks;
     for (uint32_t i = 0; i < f->block_count && c->status == XR_XIR_OK; ++i) {
@@ -125,7 +134,7 @@ static void checked_function(CheckedCursor *c, XrXirFunction *f) {
         b.frontier = checked_u32(c, b.frontier);
         if (c->reading) blocks[i] = b;
     }
-    f->instruction_count = checked_count(c, f->instruction_count, &c->structural.instructions);
+    f->instruction_count = checked_count(c, f->instruction_count, &c->structural.instructions, 40);
     XrXirInstruction *instructions = checked_array(c, f->instructions, f->instruction_count, sizeof(*instructions), 40);
     f->instructions = instructions;
     for (uint32_t i = 0; i < f->instruction_count && c->status == XR_XIR_OK; ++i) {
@@ -267,7 +276,7 @@ static void checked_generics(CheckedCursor *c, XrXirModule *m) {
     m->generics = generics;
     for (uint32_t f = 0; f < m->function_count && c->status == XR_XIR_OK; ++f) {
         XrXirGeneric g = generics[f];
-        g.parameter_count = checked_count(c, g.parameter_count, &c->structural.parameters);
+        g.parameter_count = checked_count(c, g.parameter_count, &c->structural.parameters, 8);
         uint32_t kinds_present = checked_u32(c, g.parameter_kinds ? 1u : 0u);
         if (kinds_present > 1 || (kinds_present && !g.parameter_count)) {
             c->status = XR_XIR_BAD_STRUCTURE; break;
@@ -325,11 +334,11 @@ static void checked_nominals(CheckedCursor *c, XrXirTypes *types, uint32_t count
         d.native.native_id = checked_u32(c, d.native.native_id);
         for (unsigned n = 0; n < sizeof(d.native.source_fingerprint); ++n)
             d.native.source_fingerprint[n] = (uint8_t)checked_integer(c, d.native.source_fingerprint[n], 1);
-        uint32_t parameters = checked_count(c, d.parameter_count, &c->structural.parameters);
+        uint32_t parameters = checked_count(c, d.parameter_count, &c->structural.parameters, 8);
         XrXirConstraint *constraints = checked_constraints(c, d.constraints, parameters);
         d.constraints = constraints; d.parameter_count = constraints ? parameters : 0;
         uint32_t fields = checked_u32(c, d.field_count);
-        XrXirNominalField *members = checked_array(c, d.fields, fields, sizeof(*members), 12);
+        XrXirNominalField *members = checked_array(c, d.fields, fields, sizeof(*members), 16);
         d.fields = members; d.field_count = members ? fields : 0;
         for (uint32_t j = 0; j < d.field_count && c->status == XR_XIR_OK; ++j) {
             XrXirNominalField field = members[j];
@@ -367,7 +376,7 @@ static void checked_interfaces(CheckedCursor *c, XrXirTypes *types, uint32_t cou
         d.module = checked_nominal_name(c, d.module);
         d.name = checked_nominal_name(c, d.name);
         d.exported = checked_u32(c, d.exported);
-        uint32_t parameters = checked_count(c, d.parameter_count, &c->structural.parameters);
+        uint32_t parameters = checked_count(c, d.parameter_count, &c->structural.parameters, 8);
         XrXirConstraint *constraints = checked_constraints(c, d.constraints, parameters);
         d.constraints = constraints; d.parameter_count = constraints ? parameters : 0;
         checked_interface_parents(c, &d);
@@ -379,7 +388,7 @@ static void checked_interfaces(CheckedCursor *c, XrXirTypes *types, uint32_t cou
             method.name = checked_nominal_name(c, method.name);
             method.signature = (XrXirType) checked_u32(c, (uint32_t) method.signature);
             method.receiver = checked_u32(c, method.receiver);
-            uint32_t own = checked_count(c,method.own_parameter_count,&c->structural.parameters);
+            uint32_t own = checked_count(c,method.own_parameter_count,&c->structural.parameters, 8);
             XrXirConstraint *own_constraints = checked_constraints(c,method.constraints,own);
             method.constraints = own_constraints;
             method.own_parameter_count = own_constraints ? own : 0;
@@ -405,7 +414,7 @@ static void checked_types(CheckedCursor *c, XrXirModule *m) {
         s.kind = checked_u32(c, s.kind);
         s.parameter_span = checked_u32(c, s.parameter_span);
         if (s.kind == XR_XIR_TYPE_CALLABLE) {
-            s.parameter_count = checked_count(c, s.parameter_count, &c->structural.parameters);
+            s.parameter_count = checked_count(c, s.parameter_count, &c->structural.parameters, 8);
             XrXirCallableParameter *parameters = checked_array(c, s.parameters, s.parameter_count, sizeof(*parameters), 8);
             s.parameters = parameters;
             for (uint32_t p = 0; p < s.parameter_count && c->status == XR_XIR_OK; ++p) {
@@ -417,7 +426,7 @@ static void checked_types(CheckedCursor *c, XrXirModule *m) {
             s.result = (XrXirType) checked_u32(c, (uint32_t) s.result);
             s.flags = checked_u32(c, s.flags);
         } else if (s.kind == XR_XIR_TYPE_TUPLE) {
-            s.parameter_count = checked_count(c, s.parameter_count, &c->structural.parameters);
+            s.parameter_count = checked_count(c, s.parameter_count, &c->structural.parameters, 4);
             XrXirCallableParameter *fields = checked_array(c, s.parameters, s.parameter_count, sizeof(*fields), 4);
             s.parameters = fields;
             for (uint32_t p = 0; p < s.parameter_count && c->status == XR_XIR_OK; ++p) {
@@ -429,14 +438,14 @@ static void checked_types(CheckedCursor *c, XrXirModule *m) {
             s.element = (XrXirType) checked_u32(c, (uint32_t) s.element);
         } else if (s.kind == XR_XIR_TYPE_NOMINAL) {
             s.nominal.declaration = checked_u32(c, s.nominal.declaration);
-            s.nominal.argument_count = checked_count(c, s.nominal.argument_count, &c->structural.parameters);
+            s.nominal.argument_count = checked_count(c, s.nominal.argument_count, &c->structural.parameters, 4);
             XrXirType *arguments = checked_array(c, s.nominal.arguments, s.nominal.argument_count, sizeof(*arguments), 4);
             s.nominal.arguments = arguments;
             for (uint32_t a = 0; a < s.nominal.argument_count && c->status == XR_XIR_OK; ++a) {
                 XrXirType argument = (XrXirType) checked_u32(c, (uint32_t) arguments[a]);
                 if (c->reading) arguments[a] = argument;
             }
-            s.nominal.field_count = checked_count(c, s.nominal.field_count, &c->structural.parameters);
+            s.nominal.field_count = checked_count(c, s.nominal.field_count, &c->structural.parameters, 4);
             XrXirType *fields = checked_array(c, s.nominal.fields, s.nominal.field_count, sizeof(*fields), 4);
             s.nominal.fields = fields;
             for (uint32_t f = 0; f < s.nominal.field_count && c->status == XR_XIR_OK; ++f) {
@@ -470,15 +479,176 @@ static void checked_defaults(CheckedCursor *c, XrXirModule *module) {
         if (c->reading) records[i] = record;
     }
 }
-static void checked_module(CheckedCursor *c, XrXirModule *m, bool allow_provenance);
-static void checked_provenance(CheckedCursor *c, XrXirModule *m, bool allowed) {
-    uint32_t present = checked_u32(c, m->provenance ? 1u : 0u);
+/* The exact dense denominators are wire facts, even when every helper is zero. */
+static void checked_construction(CheckedCursor *c, XrXirModule *module,
+    XrXirConstruction **construction) {
     if (c->status != XR_XIR_OK) return;
-    if (present > 1 || (present && !allowed)) { c->status = XR_XIR_BAD_STRUCTURE; return; }
-    if (!present) return;
-    XrXirProvenance *p = checked_array(c, m->provenance, 1, sizeof(*p), 8);
-    if (c->reading) m->provenance = p;
+    if (!c->reading && !*construction) { c->status = XR_XIR_BAD_STRUCTURE; return; }
+    const XrXirNominalTable *table = module->types ? module->types->nominals : NULL;
+    uint32_t expected = table && table->declarations ? table->count : 0;
+    uint32_t count = checked_u32(c, c->reading ? 0 : (*construction)->count);
+    if (c->status != XR_XIR_OK) return;
+    if (count != expected) { c->status = XR_XIR_BAD_STRUCTURE; return; }
+    if (c->reading) {
+        XrXirStatus status = XR_XIR_OK;
+        XrXirConstruction *owner = xir_compile_calloc(&c->remaining, 1, sizeof(*owner), &status);
+        if (!owner) { c->status = status; return; }
+        owner->context = c->remaining;
+        *construction = owner;
+        owner->rows = checked_array(c, NULL, count, sizeof(*owner->rows), 8);
+        owner->count = owner->rows ? count : 0;
+        owner->kinds = checked_array(c, NULL, count, sizeof(*owner->kinds), 8);
+    }
+    XrXirConstruction *owner = *construction;
+    for (uint32_t n = 0; n < count && c->status == XR_XIR_OK; ++n) {
+        XrXirConstructionRow row = owner->rows[n];
+        if (c->reading) owner->kinds[n] = table->declarations[n].kind;
+        row.default_initializer = checked_u32(c, row.default_initializer);
+        uint32_t fields = checked_u32(c, row.field_count);
+        if (c->status != XR_XIR_OK) return;
+        if (fields != table->declarations[n].field_count) { c->status = XR_XIR_BAD_STRUCTURE; return; }
+        uint32_t *values = checked_array(c, row.field_initializers, fields, sizeof(*values), 4);
+        if (c->reading) {
+            row.field_initializers = values; row.field_count = values ? fields : 0;
+            owner->rows[n] = row;
+        }
+        for (uint32_t f = 0; f < fields && c->status == XR_XIR_OK; ++f) {
+            uint32_t value = checked_u32(c, values[f]);
+            if (c->reading) values[f] = value;
+        }
+    }
+}
+
+static void checked_module(CheckedCursor *c, XrXirModule *m, XrXirConstruction **construction, uint32_t evidence_limit);
+static void checked_effect_parameters(CheckedCursor *c, XrXirFunctionEffectContract *contract) {
+    XrXirEffectParameter *parameters = checked_array(c, contract->parameters,
+        contract->parameter_count, sizeof(*parameters), 8);
+    if (c->reading) contract->parameters = parameters;
+    for (uint32_t p = 0; p < contract->parameter_count && c->status == XR_XIR_OK; ++p) {
+        XrXirEffectParameter value = parameters[p];
+        value.kind = checked_u32(c, value.kind);
+        value.uses = checked_u32(c, value.uses);
+        if (c->reading) parameters[p] = value;
+    }
+}
+static void checked_root_formula(CheckedCursor *c, XrXirRootFormula *formula) {
+    formula->constant_mask = checked_u32(c, formula->constant_mask);
+    formula->term_count = checked_u32(c, formula->term_count);
+    XrXirRootTerm *terms = checked_array(c, formula->terms, formula->term_count, sizeof(*terms), 8);
+    if (c->reading) formula->terms = terms;
+    for (uint32_t t = 0; t < formula->term_count && c->status == XR_XIR_OK; ++t) {
+        XrXirRootTerm term = terms[t];
+        term.kind = checked_u32(c, term.kind);
+        term.index = checked_u32(c, term.index);
+        if (c->reading) terms[t] = term;
+    }
+}
+static void checked_effect_values(CheckedCursor *c, XrXirFunctionEffectContract *contract) {
+    contract->value_count = checked_u32(c, contract->value_count);
+    XrXirRootValueIdentity *values = checked_array(c, contract->values,
+        contract->value_count, sizeof(*values), 12);
+    if (c->reading) contract->values = values;
+    for (uint32_t v = 0; v < contract->value_count && c->status == XR_XIR_OK; ++v) {
+        XrXirRootValueIdentity value = values[v];
+        value.instruction = checked_u32(c, value.instruction);
+        value.mode = checked_u32(c, value.mode);
+        value.declared_type = (XrXirType)checked_u32(c, (uint32_t)value.declared_type);
+        if (c->reading) values[v] = value;
+    }
+}
+static void checked_effect_bindings(CheckedCursor *c, XrXirFunctionEffectContract *contract) {
+    contract->binding_count = checked_u32(c, contract->binding_count);
+    XrXirEffectCallBinding *bindings = checked_array(c, contract->bindings,
+        contract->binding_count, sizeof(*bindings), 16);
+    if (c->reading) contract->bindings = bindings;
+    for (uint32_t b = 0; b < contract->binding_count && c->status == XR_XIR_OK; ++b) {
+        XrXirEffectCallBinding value = bindings[b];
+        value.family = checked_u32(c, value.family);
+        value.instruction = checked_u32(c, value.instruction);
+        value.parameter = checked_u32(c, value.parameter);
+        value.value = checked_u32(c, value.value);
+        if (c->reading) bindings[b] = value;
+    }
+}
+static void checked_effect_contracts(CheckedCursor *c, XrXirModule *module, XrXirProvenance *p) {
+    uint32_t count = checked_u32(c, p->contract_count);
+    if (c->status == XR_XIR_OK && count != module->function_count) c->status = XR_XIR_BAD_STRUCTURE;
+    XrXirFunctionEffectContract *contracts = checked_array(c, p->contracts, count,
+        sizeof(*contracts), 20);
+    if (c->reading) { p->contracts = contracts; p->contract_count = contracts ? count : 0; }
+    for (uint32_t f = 0; f < count && c->status == XR_XIR_OK; ++f) {
+        XrXirFunctionEffectContract contract = contracts[f];
+        contract.parameter_count = checked_u32(c, contract.parameter_count);
+        if (c->status == XR_XIR_OK && contract.parameter_count != module->functions[f].parameter_count)
+            c->status = XR_XIR_BAD_STRUCTURE;
+        checked_effect_parameters(c, &contract);
+        checked_root_formula(c, &contract.formula);
+        checked_effect_values(c, &contract);
+        checked_effect_bindings(c, &contract);
+        if (c->reading) contracts[f] = contract;
+    }
+}
+static void checked_effect_arguments(CheckedCursor *c, XrXirOrigin *origin) {
+    origin->effect_argument_count = checked_u32(c, origin->effect_argument_count);
+    XrXirEffectArgument *arguments = checked_array(c, origin->effect_arguments,
+        origin->effect_argument_count, sizeof(*arguments), 8);
+    if (c->reading) origin->effect_arguments = arguments;
+    for (uint32_t a = 0; a < origin->effect_argument_count && c->status == XR_XIR_OK; ++a) {
+        XrXirEffectArgument argument = arguments[a];
+        argument.parameter = checked_u32(c, argument.parameter);
+        argument.type = (XrXirType)checked_u32(c, (uint32_t)argument.type);
+        if (c->reading) arguments[a] = argument;
+    }
+}
+static void checked_effect_origins(CheckedCursor *c, XrXirModule *module, XrXirProvenance *p) {
+    uint32_t count = checked_u32(c, p->count);
+    if (c->status == XR_XIR_OK && count != module->function_count) c->status = XR_XIR_BAD_STRUCTURE;
+    XrXirOrigin *origins = checked_array(c, p->origins, count, sizeof(*origins), 12);
+    if (c->reading) { p->origins = origins; p->count = origins ? count : 0; }
+    for (uint32_t f = 0; f < count && c->status == XR_XIR_OK; ++f) {
+        XrXirOrigin origin = origins[f];
+        origin.function = checked_u32(c, origin.function);
+        origin.argument_count = checked_u32(c, origin.argument_count);
+        XrXirType *arguments = checked_array(c, origin.arguments,
+            origin.argument_count, sizeof(*arguments), 4);
+        origin.arguments = arguments;
+        for (uint32_t a = 0; a < origin.argument_count && c->status == XR_XIR_OK; ++a) {
+            XrXirType type = (XrXirType)checked_u32(c, (uint32_t)arguments[a]);
+            if (c->reading) arguments[a] = type;
+        }
+        checked_effect_arguments(c, &origin);
+        if (c->reading) origins[f] = origin;
+    }
+}
+static void checked_effect_proofs(CheckedCursor *c, XrXirProvenance *p) {
+    uint32_t count = checked_u32(c, p->binding_count);
+    XrXirEffectBindingProof *bindings = checked_array(c, p->bindings, count,
+        sizeof(*bindings), 24);
+    if (c->reading) { p->bindings = bindings; p->binding_count = bindings ? count : 0; }
+    for (uint32_t b = 0; b < count && c->status == XR_XIR_OK; ++b) {
+        XrXirEffectBindingProof proof = bindings[b];
+        proof.family = checked_u32(c, proof.family);
+        proof.caller = checked_u32(c, proof.caller);
+        proof.instruction = checked_u32(c, proof.instruction);
+        proof.callee = checked_u32(c, proof.callee);
+        proof.parameter = checked_u32(c, proof.parameter);
+        proof.actual_value = checked_u32(c, proof.actual_value);
+        if (c->reading) bindings[b] = proof;
+    }
+}
+static void checked_provenance(CheckedCursor *c, XrXirModule *m, uint32_t evidence_limit) {
+    uint32_t kind = checked_u32(c, m->provenance ? m->provenance->kind : XR_XIR_EVIDENCE_ABSENT);
+    if (c->status != XR_XIR_OK) return;
+    if (kind > evidence_limit || kind > XR_XIR_EVIDENCE_INSTANCE) {
+        c->status = XR_XIR_BAD_STRUCTURE; return;
+    }
+    if (kind == XR_XIR_EVIDENCE_ABSENT) return;
+    XrXirProvenance *p = checked_array(c, m->provenance, 1, sizeof(*p), 4);
+    if (c->reading) { m->provenance = p; if (p) p->kind = kind; }
     if (!p) return;
+    if (kind == XR_XIR_EVIDENCE_TEMPLATE) {
+        checked_effect_contracts(c, m, p); return;
+    }
     XrXirArtifact *source = checked_array(c, p->source, 1, sizeof(*source), 8);
     if (c->reading) {
         p->source = source;
@@ -486,30 +656,18 @@ static void checked_provenance(CheckedCursor *c, XrXirModule *m, bool allowed) {
     }
     if (!source) return;
     XrXirModule original = source->module;
-    checked_module(c, &original, false);
+    checked_module(c, &original, &source->construction, XR_XIR_EVIDENCE_TEMPLATE);
     if (c->reading) source->module = original;
     if (c->status != XR_XIR_OK) return;
-    XrXirOrigin *origins = checked_array(c, p->origins, m->function_count, sizeof(*origins), 8);
-    if (c->reading) { p->origins = origins; p->count = origins ? m->function_count : 0; }
-    for (uint32_t i = 0; i < m->function_count && c->status == XR_XIR_OK; ++i) {
-        XrXirOrigin origin = origins[i];
-        origin.function = checked_u32(c, origin.function);
-        origin.argument_count = checked_u32(c, origin.argument_count);
-        XrXirType *arguments = checked_array(c, origin.arguments, origin.argument_count, sizeof(*arguments), 4);
-        origin.arguments = arguments;
-        for (uint32_t a = 0; a < origin.argument_count && c->status == XR_XIR_OK; ++a) {
-            XrXirType type = (XrXirType)checked_u32(c, (uint32_t)arguments[a]);
-            if (c->reading) arguments[a] = type;
-        }
-        if (c->reading) origins[i] = origin;
-    }
+    checked_effect_origins(c, m, p);
+    checked_effect_proofs(c, p);
 }
-static void checked_module(CheckedCursor *c, XrXirModule *m, bool allow_provenance) {
+static void checked_module(CheckedCursor *c, XrXirModule *m, XrXirConstruction **construction, uint32_t evidence_limit) {
     uint32_t kind = checked_u32(c, (uint32_t)m->linkage_kind);
     if (c->status == XR_XIR_OK && kind > XR_XIR_LIBRARY) c->status = XR_XIR_BAD_STRUCTURE;
     if (c->reading && c->status == XR_XIR_OK) m->linkage_kind = (XrXirLinkageKind)kind;
     if (c->status != XR_XIR_OK) return;
-    uint32_t count = checked_count(c, m->function_count, &c->structural.functions);
+    uint32_t count = checked_count(c, m->function_count, &c->structural.functions, 24);
     uint32_t declarations = checked_u32(c, m->declarations ? 1u : 0u);
     if (c->status == XR_XIR_OK && declarations > 1) c->status = XR_XIR_BAD_STRUCTURE;
     XrXirFunction *functions = checked_array(c, m->functions, count, sizeof(*functions), 24);
@@ -530,8 +688,9 @@ static void checked_module(CheckedCursor *c, XrXirModule *m, bool allow_provenan
     }
     checked_generics(c, m);
     checked_types(c, m);
+    if (c->status == XR_XIR_OK) checked_construction(c, m, construction);
     if (c->status == XR_XIR_OK) checked_defaults(c, m);
-    if (c->status == XR_XIR_OK) checked_provenance(c, m, allow_provenance);
+    if (c->status == XR_XIR_OK) checked_provenance(c, m, evidence_limit);
 }
 static void checked_digest(const uint8_t *bytes, size_t size, uint8_t digest[32]) {
     XrSHA256Context sha;
@@ -557,7 +716,8 @@ static XrXirStatus checked_encode(const XrXirArtifact *artifact, XrXirCheckedPac
     size_t capacity = SIZE_MAX;
     CheckedCursor c = {NULL, NULL, 64, capacity, limits.limits, limits, XR_XIR_OK, false};
     XrXirModule module = artifact->module;
-    checked_module(&c, &module, true);
+    XrXirConstruction *construction = artifact->construction;
+    checked_module(&c, &module, &construction, XR_XIR_EVIDENCE_INSTANCE);
     if (c.status != XR_XIR_OK) return checked_error(c.status, diagnostic);
     size_t size = c.position;
     uint8_t *bytes = xir_compile_calloc(&artifact->context, size, 1, &allocation_status);
@@ -571,7 +731,7 @@ static XrXirStatus checked_encode(const XrXirArtifact *artifact, XrXirCheckedPac
     checked_u32(&c, XR_XIR_CHECKED); checked_u32(&c, 0);
     checked_integer(&c, size - 64, 8);
     c.position = 64; module = artifact->module;
-    checked_module(&c, &module, true);
+    checked_module(&c, &module, &construction, XR_XIR_EVIDENCE_INSTANCE);
     if (c.status != XR_XIR_OK || c.position != size) {
         xr_compile_resources_free(bytes); return checked_error(c.status != XR_XIR_OK ? c.status : XR_XIR_BAD_STRUCTURE, diagnostic);
     }

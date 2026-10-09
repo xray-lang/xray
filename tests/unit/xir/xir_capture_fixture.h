@@ -11,13 +11,15 @@
  */
 #ifndef XIR_CAPTURE_FIXTURE_H
 #define XIR_CAPTURE_FIXTURE_H
+#include "xir_construction_fixture.h"
 #include "xir/xxir_checked.h"
 #include "xir/xxir_generic.h"
+#include "xir/xxir_types.h"
 #include "xir_error_fixture.h"
 static XrXirArtifact *capture_checked(const XrXirCompileContext *context, bool throwing) {
     XrXirType fn = (XrXirType) 256, t = (XrXirType) XR_XIR_TYPE_PARAMETER_BASE;
     XrXirCallableParameter input = {XR_XIR_STRING,0};
-    XrXirTypeNode signature = {XR_XIR_TYPE_CALLABLE, XR_XIR_UNIT, &input,1,XR_XIR_STRING,0,0, {0}};
+    XrXirTypeNode signature = {XR_XIR_TYPE_CALLABLE, XR_XIR_UNIT, &input,1,XR_XIR_STRING,XR_XIR_CALLABLE_ROOT_UNRESOLVED,0, {0}};
     ErrorFixture error; error_fixture_init(&error,false);
     error.declaration.module = (XrXirLiteral){"root",4};
     XrXirTypeNode nodes[] = {signature,error.node};
@@ -70,7 +72,7 @@ static XrXirArtifact *capture_checked(const XrXirCompileContext *context, bool t
     XrXirDeclarations declarations = {&source,1,identities,NULL,0,&literal,1,0,1, NULL};
     XrXirModule built = {XR_XIR_BUILT,functions,6,&declarations,generics,&types, NULL, XR_XIR_PROGRAM, NULL};
     XrXirArtifact *checked = NULL;
-    CHECK(xr_xir_compile_check(context, &built, &checked, NULL) == XR_XIR_OK && checked);
+    CHECK(xir_fixture_check(context, &built, &checked, NULL) == XR_XIR_OK && checked);
     memset(make,0xcc,sizeof(make)); memset(captures,0xcc,sizeof(captures));
     return checked;
 }
@@ -86,6 +88,8 @@ static XrXirArtifact *capture_fixture(const XrXirCompileContext *context, bool t
     const XrXirModule *m = xr_xir_compile_artifact_module(closed);
     CHECK(m->function_count == 6 && m->functions[2].instructions[1].immediate == 5);
     CHECK(m->functions[5].parameters[0] == XR_XIR_STRING && !m->generics);
+    const XrXirTypeNode *signature = xr_xir_callable_signature(m->types, m->functions[2].result);
+    CHECK(signature && signature->flags == 8u);
     XrXirTarget target = {XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};
     CHECK(xr_xir_compile_lower(closed, &target, &lowered, NULL) == XR_XIR_OK);
     xr_xir_compile_artifact_free(closed);closed=NULL; return lowered;

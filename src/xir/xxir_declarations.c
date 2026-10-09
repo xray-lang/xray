@@ -12,6 +12,7 @@
  */
 
 #include "xxir_types.h"
+#include "xxir_effect_contract_internal.h"
 #include "xxir_compile_memory.h"
 #include "xxir_type_scratch_internal.h"
 #include "xxir_implementation.h"
@@ -43,7 +44,7 @@ XrXirStatus xr_xir_compile_method_signature_verify(const XrXirCompileContext *co
         return XR_XIR_BAD_STRUCTURE;
     if (identity->method_kind == XR_XIR_MEMBER_HELPER) return XR_XIR_OK;
     uint32_t count = table->declarations ? table->declarations[owner].parameter_count : table->identities[owner].arity;
-    if (!module->provenance && count > (module->generics ? module->generics[index].parameter_count : 0))
+    if (!xir_effect_evidence_is_instance(module) && count > (module->generics ? module->generics[index].parameter_count : 0))
         return XR_XIR_BAD_TYPE;
     const XrXirFunction *function = &module->functions[index];
     XrXirType subject;
@@ -59,7 +60,7 @@ XrXirStatus xr_xir_compile_method_signature_verify(const XrXirCompileContext *co
     if (!receiver || receiver->kind != XR_XIR_TYPE_NOMINAL ||
         receiver->nominal.declaration != owner || receiver->nominal.argument_count != count ||
         (count && !receiver->nominal.arguments)) return XR_XIR_BAD_TYPE;
-    if (!module->provenance) {
+    if (!xir_effect_evidence_is_instance(module)) {
         if (!xir_compile_work(budget,count)) return XR_XIR_BUDGET;
         for (uint32_t a = 0; a < count; ++a)
             if (receiver->nominal.arguments[a] != (XrXirType)(XR_XIR_TYPE_PARAMETER_BASE+a))
@@ -211,15 +212,16 @@ XrXirStatus xr_xir_compile_declarations_verify(const XrXirCompileContext *compil
     }
     for (uint32_t i = 0; i < d->slot_count; ++i) {
         const XrXirSlot *slot = &d->slots[i];
-        if (slot->module >= d->module_count || slot->mutable > 1 ||
-            (slot->mutable && slot->module != d->root_module)) return XR_XIR_BAD_STRUCTURE;
-        if (xr_xir_type_is_cell(types, slot->type) || (slot->type != XR_XIR_UNIT && slot->type != XR_XIR_BOOL && slot->type != XR_XIR_RUNE && !xr_xir_type_is_number((XrXirType) slot->type) && !xr_xir_type_is_owned(types, slot->type)))
-            return XR_XIR_BAD_TYPE;
+        if (slot->module >= d->module_count || slot->mutable > 1) return XR_XIR_BAD_STRUCTURE;
+        bool cell = xr_xir_type_is_cell(types, slot->type);
+        XrXirType logical = cell ? xr_xir_cell_element(types, slot->type) : slot->type;
+        if (cell != !!slot->mutable || (logical != XR_XIR_UNIT && logical != XR_XIR_BOOL &&
+            logical != XR_XIR_RUNE && !xr_xir_type_is_number(logical) &&
+            !xr_xir_type_is_owned(types, logical))) return XR_XIR_BAD_TYPE;
         if (xr_xir_type_span(types, slot->type)) return XR_XIR_BAD_TYPE;
         XrXirModule scope = {XR_XIR_BUILT, NULL, functions, d, NULL, types, NULL, kind, NULL};
         status = xr_xir_compile_type_access(budget, &scope, d->modules[slot->module].initializer, slot->type);
         if (status != XR_XIR_OK) return status;
-        if (slot->mutable && xr_xir_type_is_atomic(types, slot->type)) return XR_XIR_BAD_STRUCTURE;
     }
     for (uint32_t i = 0; i < d->literal_count; ++i) {
         const XrXirLiteral *literal = &d->literals[i];

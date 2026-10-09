@@ -8,6 +8,7 @@
  */
 #ifndef XIR_NOMINAL_EXPRESSION_FIXTURE_H
 #define XIR_NOMINAL_EXPRESSION_FIXTURE_H
+#include "xir_construction_fixture.h"
 #include "xir/xxir_internal.h"
 #include "xir/xxir_checked.h"
 static XrXirArtifact *nominal_expression_fixture(const XrXirCompileContext *context) {
@@ -58,7 +59,7 @@ static XrXirArtifact *nominal_expression_fixture(const XrXirCompileContext *cont
     XrXirDeclarations declarations = {&source, 1, identities, NULL, 0, &literal, 1, 0, 0, NULL};
     XrXirModule built = {XR_XIR_BUILT, functions, 4, &declarations, generics, &types, NULL, XR_XIR_PROGRAM, NULL};
     XrXirArtifact *checked = NULL;
-    CHECK(xr_xir_compile_check(context, &built, &checked, NULL) == XR_XIR_OK);
+    CHECK(xir_fixture_check(context, &built, &checked, NULL) == XR_XIR_OK);
     return checked;
 }
 static inline XrXirArtifact *nominal_forwarding_checked(const XrXirCompileContext *context) {
@@ -85,7 +86,7 @@ static inline XrXirArtifact *nominal_forwarding_checked(const XrXirCompileContex
     functions[4] = (XrXirFunction) {"identity",8,&t,1,t,&identity_block,1,identity,2,NULL,0};
     generics[4] = (XrXirGeneric) {&constraint,1,NULL,0, NULL};
     built.functions = functions; built.function_count = 5; built.generics = generics; built.declarations = &declarations;
-    CHECK(xr_xir_compile_check(context, &built, &checked, NULL) == XR_XIR_OK);
+    CHECK(xir_fixture_check(context, &built, &checked, NULL) == XR_XIR_OK);
     xr_xir_compile_artifact_free(base);base=NULL;
     CHECK(xr_xir_compile_specialize(checked, &closed, NULL) == XR_XIR_OK);
     CHECK(closed->module.function_count == 9 && closed->module.types->count == 8);

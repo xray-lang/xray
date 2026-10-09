@@ -1,0 +1,4 @@
+var state:i64=7
+fn leaf()->i64{return state}
+fn worker()->i64{const f=leaf;try{return f()}catch(e){return 0}}
+fn main()->i64{return await go worker()}

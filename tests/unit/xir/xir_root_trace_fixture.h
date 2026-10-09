@@ -1,3 +1,4 @@
+#include "xir_construction_fixture.h"
 /*
  * xray - Lightweight typed scripting with native concurrency
  * https://www.xray-lang.org
@@ -65,13 +66,13 @@ static XrXirArtifact *trace_fixture(const XrXirCompileContext *context) {
     XrXirSlot slots[]={{0,XR_XIR_I64,1},{0,XR_XIR_I64,0}};
     XrXirDeclarations declarations={.modules=&source,.module_count=1,.functions=identities,
         .slots=slots,.slot_count=2,.entry_function=1};
-    XrXirTypeNode node={.kind=XR_XIR_TYPE_CALLABLE,.result=XR_XIR_I64};
+    XrXirTypeNode node={.kind=XR_XIR_TYPE_CALLABLE,.result=XR_XIR_I64,.flags=XR_XIR_CALLABLE_ROOT_UNRESOLVED};
     XrXirTypes types={&node,1,NULL,NULL};
     XrXirDefaultBinding binding={XR_XIR_DEFAULT_PARAMETER,4,0,2};
     XrXirDefaultTable defaults={&binding,1};
     XrXirModule built={XR_XIR_BUILT,functions,16,&declarations,NULL,&types,NULL,XR_XIR_PROGRAM,&defaults};
     XrXirArtifact *checked=NULL; XrXirDiagnostic diagnostic={0};
-    XrXirStatus status=xr_xir_compile_check(context,&built,&checked,&diagnostic);
+    XrXirStatus status=xir_fixture_check(context, &built, &checked, &diagnostic);
     if(status!=XR_XIR_OK)fprintf(stderr,"trace fixture status%u f%u b%u i%u\n",
         status,diagnostic.function,diagnostic.block,diagnostic.instruction);
     CHECK(status==XR_XIR_OK && checked); return checked;

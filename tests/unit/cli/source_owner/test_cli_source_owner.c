@@ -87,10 +87,10 @@ static XrXirLibraryCatalog *catalog(const XrCliCompileSourceRequest *request) {
     XrXirSourceResult checked={0};XrXirSourceDiagnostic diagnostic={0};
     CHECK(xr_xir_compile_source_check(&source,&checked,&diagnostic,NULL)==XR_XIR_OK);
     XrXirCheckedPacket packet={0};CHECK(xr_xir_compile_checked_write(checked.checked,&packet,NULL)==XR_XIR_OK);
-    XrXirLibraryInput input={authority,"library.xr",packet.bytes,packet.length,{0}};
+    XrXirLibraryInput input={packet.bytes,packet.length,{0}, (XrXirLibraryModuleInput[]){{authority,"library.xr"}},1};
     xr_sha256(packet.bytes,packet.length,input.sha256);
     XrXirLibraryCatalog *result=NULL;
-    CHECK(xr_xir_compile_library_catalog_new(request->context,&input,1,&result)==XR_XIR_OK);
+    CHECK(xr_xir_compile_library_catalog_new_v2(request->context,&input,1,&result)==XR_XIR_OK);
     xr_xir_compile_checked_packet_free(&packet);xr_xir_compile_source_result_free(&checked);xr_compile_session_free(session);
     CHECK(DeleteFileA(path));
     xr_compile_resources_free(script_root);xr_compile_resources_free(path);xr_compile_resources_free(root);

@@ -8,6 +8,7 @@
  */
 #ifndef XIR_NOMINAL_TRANSPORT_FIXTURE_H
 #define XIR_NOMINAL_TRANSPORT_FIXTURE_H
+#include "xir_construction_fixture.h"
 #include "xir_nominal_fixture.h"
 #include "xir/xxir_checked.h"
 #include "xir/xxir_generic.h"
@@ -48,7 +49,7 @@ static XrXirArtifact *nominal_transport_fixture(const XrXirCompileContext *conte
     XrXirDeclarations declarations = {&source,1,identities,NULL,0,NULL,0,0,1, NULL};
     XrXirModule built = {XR_XIR_BUILT,functions,4,&declarations,NULL,&types, NULL, XR_XIR_PROGRAM, NULL};
     XrXirArtifact *checked = NULL, *decoded = NULL, *closed = NULL, *lowered = NULL;
-    CHECK(xr_xir_compile_check(context, &built, &checked, NULL) == XR_XIR_OK);
+    CHECK(xir_fixture_check(context, &built, &checked, NULL) == XR_XIR_OK);
     XrXirCheckedPacket packet = {0};
     CHECK(xr_xir_compile_checked_write(checked, &packet, NULL) == XR_XIR_OK);
     xr_xir_compile_artifact_free(checked);checked=NULL;

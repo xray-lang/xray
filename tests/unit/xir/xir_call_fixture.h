@@ -13,6 +13,7 @@
  */
 #ifndef XIR_CALL_FIXTURE_H
 #define XIR_CALL_FIXTURE_H
+#include "xir_construction_fixture.h"
 #include "xir/xxir.h"
 #include "xir/xxir_generic.h"
 #include "xir/xxir_checked.h"
@@ -108,7 +109,7 @@ static XrXirArtifact *call_fixture(const XrXirCompileContext *context, uint32_t 
     const XrXirTarget target = {XR_XIR_ARCH_X86_64, XR_XIR_VALUE_ABI_VERSION};
     XrXirArtifact *checked = NULL, *lowered = NULL;
     XrXirDiagnostic diagnostic={0};
-    XrXirStatus status=xr_xir_compile_check(context,&module,&checked,&diagnostic);
+    XrXirStatus status=xir_fixture_check(context, &module, &checked, &diagnostic);
     if (status!=XR_XIR_OK) fprintf(stderr,"call fixture mode=%u status=%u function=%u block=%u instruction=%u\n",
         mode,status,diagnostic.function,diagnostic.block,diagnostic.instruction);
     CHECK(status==XR_XIR_OK);

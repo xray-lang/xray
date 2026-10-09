@@ -15,6 +15,8 @@
  */
 
 #include "xxir_vm.h"
+#include "xxir_ctfe.h"
+#include "xxir_internal.h"
 #include "xxir_vm_internal.h"
 #include "xxir_native_cache_internal.h"
 #include "xxir_tuple.h"
@@ -40,7 +42,13 @@ typedef struct ScalarRun {
     const XrXirFunctionLayout *layout;
     void *frame;
     XrXirCallView *view;
+    XrCompileResources *compile_resources;
 } ScalarRun;
+
+static bool scalar_compile_work(ScalarRun *run, uint64_t units) {
+    return !run->compile_resources ||
+        xr_compile_resources_work(run->compile_resources, units) == XR_COMPILE_RESOURCE_OK;
+}
 
 typedef struct VmState {
     uint32_t instruction, destination, invoke, panic;
@@ -85,8 +93,10 @@ static XrXirRunStatus instance_step(ScalarRun *run, VmState *state, const XrXirI
         uint32_t offset = run->layout->offsets[op->args[0]];
         XrXirType type = xr_xir_operand_type(run->function, op->args[0]);
         XrXirValue cell = {(uint32_t)type, 0, xr_xir_scalar_load(run->frame, offset)};
-        XrXirValue incoming = {(uint32_t)xr_xir_operand_type(run->function, op->args[1]), 0,
-            xr_xir_scalar_load(run->frame, run->layout->offsets[op->args[1]])};
+        XrXirValue incoming = {0};
+        if (xr_xir_cell_payload_operands(run->module->types, type, op->op) == 2)
+            incoming = (XrXirValue){(uint32_t)xr_xir_operand_type(run->function, op->args[1]), 0,
+                xr_xir_scalar_load(run->frame, run->layout->offsets[op->args[1]])};
         if (cell.payload) status = xr_xir_instance_cell_write(run->view, &cell, &incoming);
         else {
             status = xr_xir_instance_cell(run->view, type, &incoming, &value);
@@ -95,12 +105,16 @@ static XrXirRunStatus instance_step(ScalarRun *run, VmState *state, const XrXirI
         break;
     }
     case XR_XIR_CELL_NEW: case XR_XIR_CELL_READ: case XR_XIR_CELL_WRITE: {
-        XrXirValue left = {(uint32_t) xr_xir_operand_type(run->function, op->args[0]), 0,
+        XrXirType cell = op->op == XR_XIR_CELL_NEW ? op->type : xr_xir_operand_type(run->function, op->args[0]);
+        uint32_t count = xr_xir_cell_payload_operands(run->module->types, cell, op->op);
+        XrXirValue left = {0};
+        if (count) left = (XrXirValue){(uint32_t)xr_xir_operand_type(run->function, op->args[0]), 0,
             xr_xir_scalar_load(run->frame, run->layout->offsets[op->args[0]])};
         if (op->op == XR_XIR_CELL_NEW) status = xr_xir_instance_cell(run->view, op->type, &left, &value);
         else if (op->op == XR_XIR_CELL_READ) status = xr_xir_instance_cell_read(run->view, &left, &value);
         else {
-            XrXirValue right = {(uint32_t) xr_xir_operand_type(run->function, op->args[1]), 0,
+            XrXirValue right = {0};
+            if (count == 2) right = (XrXirValue){(uint32_t)xr_xir_operand_type(run->function, op->args[1]), 0,
                 xr_xir_scalar_load(run->frame, run->layout->offsets[op->args[1]])};
             status = xr_xir_instance_cell_write(run->view, &left, &right);
         }
@@ -343,16 +357,26 @@ static XrXirAction vm_panic_land(ScalarRun *run, VmState *state, uint32_t handle
 }
 static XrXirRunStatus scalar_edge(ScalarRun *run, uint32_t instruction, uint32_t target) {
     const XrXirFunction *function = run->function;
-    uint32_t low = vm_block(function, instruction);
+    uint32_t low = 0, high = function->block_count;
+    while (low + 1 < high) {
+        if (!scalar_compile_work(run, 1)) return XR_XIR_RUN_STEP_LIMIT;
+        uint32_t middle = low + (high - low) / 2;
+        if (function->blocks[middle].first <= instruction) low = middle;
+        else high = middle;
+    }
     uint32_t first = function->blocks[target].first, end = first;
     while (end < function->instruction_count && function->instructions[end].op == XR_XIR_PHI) {
         const XrXirInstruction *phi = &function->instructions[end];
         uint32_t source = UINT32_MAX;
-        for (uint32_t a = 0; a < phi->args[1]; a += 2)
+        for (uint32_t a = 0; a < phi->args[1]; a += 2) {
+            if (!scalar_compile_work(run, 1)) return XR_XIR_RUN_STEP_LIMIT;
             if (function->operands[phi->args[0] + a] == low) {
+                if (!scalar_compile_work(run, 1)) return XR_XIR_RUN_STEP_LIMIT;
                 source = function->operands[phi->args[0] + a + 1]; break;
             }
+        }
         if (source == UINT32_MAX) return XR_XIR_RUN_BAD_ARTIFACT;
+        if (!scalar_compile_work(run, 2)) return XR_XIR_RUN_STEP_LIMIT;
         uint32_t scratch = run->layout->offsets[function->parameter_count + end] + 8;
         int64_t value = xr_xir_scalar_load(run->frame, run->layout->offsets[source]);
         if (xr_xir_type_is_owned(run->module->types, phi->type)) {
@@ -363,6 +387,7 @@ static XrXirRunStatus scalar_edge(ScalarRun *run, uint32_t instruction, uint32_t
         ++end;
     }
     for (uint32_t i = first; i < end; ++i) {
+        if (!scalar_compile_work(run, 3)) return XR_XIR_RUN_STEP_LIMIT;
         const XrXirInstruction *phi = &function->instructions[i];
         uint32_t destination = run->layout->offsets[function->parameter_count + i];
         XrXirValue value = {(uint32_t) phi->type, 0, xr_xir_scalar_load(run->frame, destination + 8)};
@@ -847,7 +872,7 @@ static XrXirAction vm_resume(XrXirCallView *view) {
     const XrXirFunction *function = &module->functions[binding->function];
     const XrXirFunctionLayout *layout = xr_xir_compile_artifact_layout(binding->artifact, binding->function);
     VmState *state = view->state;
-    ScalarRun run = {module, function, layout, state + 1, view};
+    ScalarRun run = {module, function, layout, state + 1, view, NULL};
     state->arguments = (XrXirValue *) ((unsigned char *) run.frame + layout->frame_bytes);
     state->path_steps = (XrXirValuePathStep *)(state->arguments + layout->outgoing_count);
     if (view->phase == XR_XIR_CALL_EXIT) return vm_cleanup_exit(&run, state);
@@ -1080,7 +1105,7 @@ XR_FUNC XrXirRunStatus xr_xir_compile_vm_run(const XrXirArtifact *artifact, uint
         return status;
     for (uint32_t i = 0; i < argument_count; ++i)
         xr_xir_scalar_store(frame, layout->offsets[i], arguments[i].payload);
-    ScalarRun run = {module, body, layout, frame, NULL};
+    ScalarRun run = {module, body, layout, frame, NULL, NULL};
     VmState state = {0};
     for (;;) {
         if (!xr_xir_scalar_step(context)) { status = XR_XIR_RUN_STEP_LIMIT; break; }
@@ -1094,3 +1119,5 @@ XR_FUNC XrXirRunStatus xr_xir_compile_vm_run(const XrXirArtifact *artifact, uint
         *result = (XrXirValue) {0, 0, 0};
     return status;
 }
+
+#include "xxir_ctfe.inc.c"

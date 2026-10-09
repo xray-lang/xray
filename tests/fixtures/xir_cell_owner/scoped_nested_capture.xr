@@ -1,0 +1,9 @@
+fn escape(value: ref i64) -> fn() -> i64 {
+    return fn() -> i64 { return value; };
+}
+export fn run() -> i64 {
+    var counter: i64 = 7;
+    const action = escape(ref counter);
+    return action();
+}
+fn main() -> i64 { return run(); }

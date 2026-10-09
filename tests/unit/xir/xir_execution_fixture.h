@@ -13,6 +13,7 @@
 
 #ifndef XIR_EXECUTION_FIXTURE_H
 #define XIR_EXECUTION_FIXTURE_H
+#include "xir_construction_fixture.h"
 #include "xir/xxir.h"
 #include "xir/xxir_checked.h"
 #include <stdio.h>
@@ -34,7 +35,7 @@ static XrXirArtifact *uninitialized_leaf_fixture(const XrXirCompileContext *cont
     const XrXirModule built = {XR_XIR_BUILT, &function, 1, NULL, NULL, NULL, NULL, XR_XIR_PROGRAM, NULL};
     XrXirArtifact *checked = NULL, *lowered = NULL;
     const XrXirTarget target = {XR_XIR_ARCH_X86_64, XR_XIR_VALUE_ABI_VERSION};
-    CHECK(xr_xir_compile_check(context, &built, &checked, NULL) == XR_XIR_OK);
+    CHECK(xir_fixture_check(context, &built, &checked, NULL) == XR_XIR_OK);
     CHECK(xr_xir_compile_lower(checked, &target, &lowered, NULL) == XR_XIR_OK);
     xr_xir_compile_artifact_free(checked);
     return lowered;
@@ -208,7 +209,7 @@ static XrXirArtifact *fixture_checked(const XrXirCompileContext *context) {
     };
     const XrXirModule module = {XR_XIR_BUILT, functions, sizeof(functions) / sizeof(functions[0]), NULL, NULL, NULL, NULL, XR_XIR_PROGRAM, NULL};
     XrXirArtifact *artifact = NULL;
-    CHECK(xr_xir_compile_check(context, &module, &artifact, NULL) == XR_XIR_OK);
+    CHECK(xir_fixture_check(context, &module, &artifact, NULL) == XR_XIR_OK);
     return artifact;
 }
 

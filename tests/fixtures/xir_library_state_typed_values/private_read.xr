@@ -1,0 +1,3 @@
+import "./state" as state
+export fn run()->i64 { return state.record.n }
+fn main()->i64 { return 0 }

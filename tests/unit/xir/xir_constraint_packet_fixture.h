@@ -8,6 +8,7 @@
  */
 #ifndef XIR_CONSTRAINT_PACKET_FIXTURE_H
 #define XIR_CONSTRAINT_PACKET_FIXTURE_H
+#include "xir_construction_fixture.h"
 #include "xir/xxir_constraints.h"
 #include "xir/xxir_nominal.h"
 
@@ -38,7 +39,7 @@ static XrXirStatus constraint_packet_fixture(const XrXirCompileContext *context,
     XrXirDeclarations declarations = {&source,1,identities,NULL,0,NULL,0,0,0, NULL};
     XrXirModule module = {XR_XIR_BUILT,functions,3,&declarations,generics,&types,NULL, XR_XIR_PROGRAM, NULL};
     XrXirArtifact *artifact = NULL;
-    XrXirStatus status=xr_xir_compile_check(context,&module,&artifact,NULL);
+    XrXirStatus status=xir_fixture_check(context, &module, &artifact, NULL);
     if(status!=XR_XIR_OK){CHECK(!artifact);return status;}
     parameter = XR_XIR_UNIT; requirement.declaration = UINT32_MAX; constraint.markers = UINT32_MAX;
     status=xr_xir_compile_artifact_verify(artifact,NULL);

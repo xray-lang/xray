@@ -130,7 +130,7 @@ static bool source_match_pattern(SourceContext *ctx, AstNode *node, XrXirType ty
         return source_fail(ctx,node,XR_XIR_BAD_TYPE,"pattern variant or payload syntax mismatch");
     out->selection=(SourceEnumSelection){owner,binding,path->as.member_access.object,type,v};
     if (!source_query_reference(ctx,out->selection.path,binding,owner,XR_XIR_SOURCE_TYPE_USE) ||
-        !source_query_target_reference(ctx,source_query_range(ctx,path,NULL),ctx->nominal_variants[declaration][v],XR_XIR_SOURCE_READ)) return false;
+        !source_query_target_token_reference(ctx,path,ctx->nominal_variants[declaration][v],XR_XIR_SOURCE_READ)) return false;
     if (!payload) return true;
     if (payload->count<0) return source_fail(ctx,node,XR_XIR_BAD_STRUCTURE,"invalid pattern field count");
     XrXirType *types=NULL;

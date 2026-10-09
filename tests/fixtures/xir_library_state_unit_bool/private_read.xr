@@ -1,0 +1,3 @@
+import "./state" as state
+export fn run()->bool { return state.flag }
+fn main()->i64 { return 0 }

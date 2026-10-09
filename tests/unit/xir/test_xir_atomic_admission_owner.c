@@ -6,6 +6,7 @@
  *
  * test_xir_atomic_admission_owner.c - Closed definition proofs before execution
  */
+#include "xir_construction_fixture.h"
 #include "xir/xxir_source.h"
 #include "xir/xxir_checked.h"
 #include "xir/xxir_generic.h"
@@ -98,10 +99,10 @@ static void marker_and_shape_cases(void) {
     }
     fact.markers=XR_XIR_CONSTRAINT_ATOMIC_VALUE;
     XrXirArtifact *checked=NULL;
-    CHECK(xr_xir_compile_check(&owner.context,&module,&checked,NULL)==XR_XIR_OK && checked);
-    XrXirArtifact *occupied=checked;
+    CHECK(xir_fixture_check(&owner.context, &module, &checked, NULL)==XR_XIR_OK && checked);
+    XrXirArtifact *rejected=NULL;
     fact.markers=0;
-    CHECK(xr_xir_compile_check(&owner.context,&module,&occupied,NULL)==XR_XIR_BAD_TYPE && occupied==checked);
+    CHECK(xir_fixture_check(&owner.context, &module, &rejected, NULL)==XR_XIR_BAD_TYPE && !rejected);
     xr_xir_compile_artifact_free(checked);
     fact.markers=XR_XIR_CONSTRAINT_SENDABLE;CHECK(xr_xir_compile_type_use_verify(&owner.context,&context,parameter)==XR_XIR_BAD_TYPE);
     fact.markers=0;CHECK(xr_xir_compile_type_use_verify(&owner.context,&context,parameter)==XR_XIR_BAD_TYPE);

@@ -150,6 +150,10 @@ static inline uint32_t xr_xir_binder_kind(const XrXirGeneric *record, uint32_t p
 typedef struct XrXirCallableParameter { XrXirType type; uint32_t mode; } XrXirCallableParameter;
 
 #define XR_XIR_CALLABLE_NO_SUSPEND 1u
+#define XR_XIR_CALLABLE_ROOT_NONE 2u
+#define XR_XIR_CALLABLE_ROOT_REQUIRED 4u
+#define XR_XIR_CALLABLE_ROOT_UNRESOLVED 8u
+#define XR_XIR_CALLABLE_ROOT_MASK 14u
 typedef enum XrXirTypeKind {
     XR_XIR_TYPE_CALLABLE = 1,
     XR_XIR_TYPE_ARRAY = 2,
@@ -237,13 +241,14 @@ typedef struct XrXirDiagnostic {
 } XrXirDiagnostic;
 
 typedef struct XrXirArtifact XrXirArtifact;
+typedef struct XrXirConstruction XrXirConstruction;
 
 
 XR_FUNC const char *xr_xir_op_name(XrXirOp op);
 XR_FUNC XrXirStatus xr_xir_compile_defaults_verify(const XrXirCompileContext *compile_context, const XrXirModule *module);
 XR_FUNC XrXirStatus xr_xir_compile_default_lookup(const XrXirCompileContext *compile_context, const XrXirModule *module, uint32_t owner, uint32_t ordinal, const XrXirDefaultBinding **binding);
-XR_FUNC XrXirStatus xr_xir_compile_verify(const XrXirCompileContext *compile_context, const XrXirModule *module, XrXirDiagnostic *diagnostic);
-XR_FUNC XrXirStatus xr_xir_compile_check(const XrXirCompileContext *compile_context, const XrXirModule *built, XrXirArtifact **output, XrXirDiagnostic *diagnostic);
+XR_FUNC XrXirStatus xr_xir_compile_verify_v2(const XrXirCompileContext *compile_context, const XrXirModule *module, const XrXirConstruction *construction, XrXirDiagnostic *diagnostic);
+XR_FUNC XrXirStatus xr_xir_compile_check_v2(const XrXirCompileContext *compile_context, const XrXirModule *built, const XrXirConstruction *construction, XrXirArtifact **output, XrXirDiagnostic *diagnostic);
 XR_FUNC XrXirStatus xr_xir_compile_lower(const XrXirArtifact *checked, const XrXirTarget *target, XrXirArtifact **output, XrXirDiagnostic *diagnostic);
 XR_FUNC const XrXirCompileContext *xr_xir_compile_artifact_context(const XrXirArtifact *artifact);
 XR_FUNC const XrXirModule *xr_xir_compile_artifact_module(const XrXirArtifact *artifact);

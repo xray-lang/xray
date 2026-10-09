@@ -12,6 +12,7 @@
  */
 #ifndef XIR_ARRAY_CAPACITY_VM_PATHS_H
 #define XIR_ARRAY_CAPACITY_VM_PATHS_H
+#include "xir_construction_fixture.h"
 #include "xir_array_metadata_fixture.h"
 typedef struct CapacityVmPathFixture {
     XirArrayMetadataFixture metadata;
@@ -58,7 +59,7 @@ static void capacity_vm_paths(CapacityCompile *run) {
     const uint64_t baseline=capacity_stats(&run->context).live_bytes;
     CapacityVmPathFixture fixture;capacity_vm_path_fixture(&fixture);
     XrXirArtifact *checked=NULL,*replay=NULL,*specialized=NULL,*lowered=NULL;
-    CHECK(xr_xir_compile_check(&run->context,&fixture.metadata.module,&checked,NULL)==XR_XIR_OK);
+    CHECK(xir_fixture_check(&run->context, &fixture.metadata.module, &checked, NULL)==XR_XIR_OK);
     memset(&fixture,0xcc,sizeof(fixture));
     XrXirCheckedPacket packet={0};
     CHECK(xr_xir_compile_checked_write(checked,&packet,NULL)==XR_XIR_OK);
