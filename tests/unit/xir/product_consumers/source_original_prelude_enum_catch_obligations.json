@@ -1,0 +1,300 @@
+{
+  "schema": 1,
+  "producer": "25f4016d6f089169757a90ae11ba537002374711",
+  "identity": "Checked25/semantic67/Value22/Call28/Program29",
+  "status": "OPEN",
+  "retired": 0,
+  "replacement_gates": [],
+  "result": "FAIL",
+  "full_FI": "NOT_RUN",
+  "axes": "NOT_RUN",
+  "cancel": "NOT_RUN",
+  "SourceDelete": "NOT_RUN",
+  "full_safety": "NOT_RUN",
+  "Main": "NOT_RUN",
+  "family": "original_prelude_enum_catch",
+  "legacy": {
+    "name": "source_owner_prelude_enum_catch_preserves_declaration_identity",
+    "legacy_path": "tests/unit/program/test_xr_program_source_build.c",
+    "legacy_line": 8944,
+    "body_lf_sha256": "a6be103ee8a9bebd9e069a794d96c59399c717dd660f791dff02fcae19e9ed0b",
+    "assertion_sites": 3,
+    "loop_sites": 0,
+    "status": "OPEN",
+    "replacement_gates": [],
+    "note": "Function census preserves its whole body; sites do not count executed loop iterations.",
+    "original_fixture": {
+      "id": "prelude_enum_catch",
+      "expected_exit": 42,
+      "labels": [
+        "enum",
+        "module-graph",
+        "error"
+      ],
+      "backends": {
+        "vm": "execute",
+        "aot": "execute"
+      }
+    },
+    "static_input_literals": {
+      "library_source": {
+        "bytes": 60,
+        "sha256": "ab221356e64f7ef6b646ded064c82825afb9fdf15dd02d136be643a94380bce7"
+      },
+      "source": {
+        "bytes": 309,
+        "sha256": "9ce635befc1ba9ae4ef062e5d5795bb8fa24efe3b550568d7cc7b49af4ea80f7"
+      }
+    }
+  },
+  "original_private_helpers": [
+    {
+      "path": "tests/unit/program/test_xr_program_source_build.c",
+      "function": "assert_vm_i64_result",
+      "line": 447,
+      "end_line": 466,
+      "body_lf_sha256": "645c87c0a5106abb9b370608962881fea16597f3f3124ea359d718ee0c21b9b5",
+      "classification": "Original private non-TEST helper; metadata only, no fabricated TEST/census row or retired family."
+    },
+    {
+      "path": "tests/unit/program/test_xr_program_source_build.c",
+      "function": "assert_detached_program_i64_result",
+      "line": 481,
+      "end_line": 495,
+      "body_lf_sha256": "a57c72030e2b70c7facff0491f2b36b9ba205d625c4a7ec879d6564bd58c815b",
+      "classification": "Original private non-TEST helper; metadata only, no fabricated TEST/census row or retired family."
+    },
+    {
+      "path": "tests/unit/program/test_xr_program_source_build.c",
+      "function": "assert_aot_fixture_backend_contract",
+      "line": 566,
+      "end_line": 610,
+      "body_lf_sha256": "583f92b771718b8e1d4293debcb72cf92e266292abc3ffa17db8103db6b066be",
+      "classification": "Original private non-TEST helper; metadata only, no fabricated TEST/census row or retired family."
+    }
+  ],
+  "original_source": {
+    "path": "tests/unit/xir/product_consumers/original_prelude_enum_catch/root.xr",
+    "prefix_bytes": 309,
+    "prefix_sha256": "9ce635befc1ba9ae4ef062e5d5795bb8fa24efe3b550568d7cc7b49af4ea80f7",
+    "adapter": "export fn consumerAnswer() -> i64 { return answer() }\n",
+    "adapter_bytes": 54,
+    "adapter_sha256": "62788122d5e32c2bf5db10a60a2939f92a226f7606d09c490da4212a1341f2fa",
+    "bytes": 363,
+    "sha256": "fed0049cd51e4db05b13810fc294ba386ef6d74e05696bab4589bcf927044ee9",
+    "construction": "Independent ast.literal_eval decoding of actual original wrapper source[] and library_source[] C literal groups. Same nested physical root, ./library import unchanged, only54B export adapter appended. Byte-for-byte equality with authorityagent independently reconstructed nested root/library."
+  },
+  "original_library": {
+    "path": "tests/unit/xir/product_consumers/original_prelude_enum_catch/library.xr",
+    "bytes": 60,
+    "sha256": "ab221356e64f7ef6b646ded064c82825afb9fdf15dd02d136be643a94380bce7",
+    "adapter_bytes": 0,
+    "construction": "Complete original library_source[] bytes unchanged; separate module in the same physical root."
+  },
+  "original_module_graph": {
+    "physical_root": "tests/unit/xir/product_consumers/original_prelude_enum_catch",
+    "root": "tests/unit/xir/product_consumers/original_prelude_enum_catch/root.xr",
+    "library": "tests/unit/xir/product_consumers/original_prelude_enum_catch/library.xr",
+    "relative_import": "./library",
+    "modules_separate": true,
+    "original_implicit_CryptoError": "Both modules use implicit CryptoError.InvalidLength, with no local enum or explicit CryptoError import.",
+    "identity_boundary": "Original wrapper does not assert numeric declaration ids or a same-name-shadow negative. Original imported and local typed catches producing20+22=42 are its runtime identity witness; do not invent ids or substitute metadata/name strings for execution."
+  },
+  "independent_i64": 42,
+  "independent_goldens": {
+    "required_Source_status": 0,
+    "imported_typed_catch_assignment": 20,
+    "local_typed_catch_addition": 22,
+    "asserted_and_returned_i64": 42,
+    "throw_variant": "CryptoError.InvalidLength",
+    "catch_type": "CryptoError",
+    "typed_catch_source_sites": 2,
+    "throw_source_sites_across_modules": 2,
+    "original_standalone_exit": 42,
+    "original_stdout_hex": "",
+    "original_stderr_hex": "",
+    "scope": "All are fixed original source/runtime oracles, no current execution. Empty streams are original fixture defaults; source-site counts are static, not observed runtime counts."
+  },
+  "proposed_consumer": {
+    "source": "tests/unit/xir/product_consumers/test_original_prelude_enum_catch_source.c",
+    "cmake": "tests/unit/xir/product_consumers/source_product_original_prelude_enum_catch_source.cmake",
+    "status": "REGISTERED_BUILT_EXECUTED_REQUIRED_POSITIVE_FAIL",
+    "proposed_normal_tests": [
+      {
+        "name": "test_original_prelude_enum_catch_source",
+        "required_source_status": "XR_XIR_OK",
+        "configurations": [
+          "MSVC Release",
+          "Clang ASan/UBSan"
+        ],
+        "result": "FAIL"
+      }
+    ],
+    "TIMEOUT": 120,
+    "PROCESSORS": 1,
+    "WILL_FAIL": false,
+    "planned_processes_per_configuration": 1,
+    "planned_processes_both_configurations": 2,
+    "registration_status": "ACTUAL_REGISTERED_BOTH_CONFIGURATIONS",
+    "qualification": "Only positive Source admission and actual successful owned Checked/Lowered metadata branch, or owned failure diagnostic. No declaration identity/runtime42, Program/Instance/VM/native/mixed/gencode/legacy AOT execution."
+  },
+  "candidate_pipeline": {
+    "status": "COMPILED_SUCCESS_BRANCH_NOT_RUN_SOURCE_ADMISSION_FAILED",
+    "input": "External nested physical script root containing exact root prefix+54B adapter and original60B library; unchanged ./library import and actual stdlib path. Fixed public SourceProduct and finite caller compiler owner.",
+    "positive_requirement": "Require Source success0 with no expected-rejection inversion, WILL_FAIL, skip/fallback or nominal/StringBuilder/source substitution. First actual status/stage/line/column/path/message require this family own real receipt.",
+    "success_path": "Future original Source success can verify product, own complete Closed Checked packet/writer metadata across Session/Product/borrowed input/path/request/authority death, detach Checked verify/rewrite equality, lower publicly, drop Checked/packet before Lowered verify. No success branch evidence exists yet.",
+    "failure_path": "Preserve first actual owned diagnostic status/stage/location/path/message after Session/Product/input/root/path/request/authority death, then free diagnostic and compiler owners to actual compiler physical0/table0. Required-positive gate remains FAIL for nonzero status; safe retained diagnostic does not imply Source0 or original42 success.",
+    "excluded_execution": "No Program seal or Instance execution, native/mixed/gencode or legacy AOT. No runtime20/22/42, relational declaration identity proof, full shape, all-ordinal FI/axes/cancel/SourceDelete/safety/Main qualification."
+  },
+  "declaration_identity_future_plan": {
+    "status": "FUTURE_ONLY_NOT_RUN",
+    "query": "If exact source is admitted, inspect actual root/library SourceProduct query modules and declaration/reference records, imported fail target and both CryptoError nominal/variant targets using returned IDs; no guessed numeric ID.",
+    "relational_proof": "Future owned Checked graph must bind both throw constructions and typed catch enum-owner/variant/error-test/narrow links to the same real canonical declaration. Matching names/opcode presence is insufficient.",
+    "boundary": "Query/Checked identity metadata is additional evidence and cannot replace original typed-catch runtime42 or independent legacy/native/mixed backend execution."
+  },
+  "original_obligations": [
+    {
+      "obligation": "Original hosted Source build uses real source fixture root/library, target semantic fingerprint and hosted profile; neither module declares or imports CryptoError. Implicit original prelude enum admission remains required.",
+      "status": "OPEN"
+    },
+    {
+      "obligation": "Root import { fail } from ./library remains byte-exact and resolves the distinct exported library module; no flattening, module substitution, explicit prelude shim or local enum shadow.",
+      "status": "OPEN"
+    },
+    {
+      "obligation": "Imported fail throws CryptoError.InvalidLength; first typed catch(e:CryptoError) must catch the same implicit prelude declaration and assign20. Root localFail throws the same variant; second typed catch adds22; original assert and result return42.",
+      "status": "OPEN"
+    },
+    {
+      "obligation": "Original declaration-identity witness is two-module typed catch runtime42. No direct numeric declaration-id assertion exists in the original wrapper. Future Source query/declaration targets and Checked graph owner/variant relations are supplementary evidence, never guessed IDs or identity PASS by name string.",
+      "status": "OPEN"
+    },
+    {
+      "obligation": "Original source fixture/compiler session, isolate, resolver, disk source files and read authority die before assert_detached_program_i64_result. Detached old Program must still support runtime42.",
+      "status": "OPEN"
+    },
+    {
+      "obligation": "Original VM backend builds real code, executes canonical entry, requires RETURN/I64/independent42, disposes actual owned outcome, frees code, then drains/retires/frees actual Instance. Metadata roundtrip alone does not prove these runtime and owner responsibilities.",
+      "status": "OPEN"
+    },
+    {
+      "obligation": "Original execute AOT fixture builds/binding-verifies BackendIR, emits generated C twice with exactly equal size/bytes and standalone int main(void), saves fixture output and releases both emission owners/IR. Independent real native fixture exits42 with default empty stdout/stderr.",
+      "status": "OPEN"
+    },
+    {
+      "obligation": "Original full source/import/prelude declaration identity/enum representation/throw-catch SSA/private owner/VM/AOT/runtime/native/mixed and full shape responsibilities remain OPEN. Positive admission or detached Checked/Lowered metadata cannot retire them.",
+      "status": "OPEN"
+    },
+    {
+      "obligation": "All compiler/runtime allocation-ordinal FI, occupied output/refusal strong guarantees, resource exact/minus1 axes, sticky failure, real active cancellation prefixes, actual disk Source deletion, determinism/full safety/Main integration remain outstanding.",
+      "status": "OPEN"
+    }
+  ],
+  "static_admission_lead": {
+    "status": "HISTORICAL_SOURCE_INSPECTION_NOT_THIS_FAMILY_EXECUTION",
+    "review": "build-consumer-evidence/current67-next-original-family-review-r1/prelude-enum-catch.json",
+    "review_sha256": "092d805b1f932c63fc7ca86b3577f42ab12a14e2bc0edfe1659dfb636a0b7cc9",
+    "lead": "Historical inspection preceded this candidate execution and suggested an implicit CryptoError binding gap. This lead is not the actual first failure. Own-family real receipts below establish BAD_VALUE4/CHECK1/root2:31, name is not an initialized value.",
+    "actual_diagnostic": null,
+    "actual_receipt": null,
+    "preservation": "No local enum, explicit shim, flattened import, guessed declaration IDs or inherited array-error status4. Strict original Source0 and typedcatch20+22=42 remain unchanged."
+  },
+  "boundaries": [
+    "Applied and registered narrow two-module fixture; both configurations freshly compiled and actually executed. Required original Source0 gate remains FAIL.",
+    "Successful Checked/Lowered/query metadata is future-only until real Source admission; no runtime42 or identity PASS follows from compiled success branch or names.",
+    "Original typedcatch imported20/local+22=42, detached VM producer/input death, old AOT and real native exit42 remain independent OPEN runtime responsibilities.",
+    "Own-family receipts below independently record actual BAD_VALUE4/CHECK1/root2:31. No inherited array-error, builder or slice diagnosis.",
+    "Original private helper digests are NON_TEST authority metadata. Never create helper TEST/trace rows, change denominators or retire any original responsibility.",
+    "FI/axes/cancel/SourceDelete/determinism/full safety/Main and native/mixed/gencode remain NOT_RUN."
+  ],
+  "evidence_plan": {
+    "directory": "build-consumer-evidence/current67-original-prelude-enum-catch-source-r1",
+    "actual_product_receipts": [
+      "msvc-test_original_prelude_enum_catch_source.json",
+      "asan-test_original_prelude_enum_catch_source.json"
+    ],
+    "raw_stdout_stderr": "ACTUAL_SAVED_RAW_WITH_RECEIPT_SHA256",
+    "input_before_after": "ACTUAL_SAME_SHA256_BYTES_MTIME",
+    "registered_argv_and_executable_archive": "ACTUAL_REGISTERED_ARGV_AND_PRE_ENTRY_EXE_COPY",
+    "owned_failure_diagnostic": "PASS_AFTER_SESSION_PRODUCT_REQUEST_AUTHORITY_PATH_DEATH",
+    "successful_Checked_Lowered": "SUCCESS_BRANCH_COMPILED_NOT_RUN_SOURCE_FAILED",
+    "Source_query_identity": "NOT_RUN",
+    "Checked_relational_identity": "NOT_RUN",
+    "runtime20_22_42": "NOT_RUN",
+    "original_VM_producer_death_and_owned_result": "NOT_RUN",
+    "original_AOT_fixture_contract": "NOT_RUN",
+    "native_mixed_gencode": "NOT_RUN"
+  },
+  "candidate_authoring": "Historical candidate authoring was ignored-only; parent later applied, rebuilt, registered and executed this exact original family. Actual evidence is recorded separately.",
+  "actual_execution": {
+    "directory": "build-consumer-evidence/current67-original-prelude-enum-catch-source-r1",
+    "phase": "source",
+    "configurations": [
+      "MSVC Release",
+      "Clang ASan/UBSan"
+    ],
+    "normal_gate": "test_original_prelude_enum_catch_source",
+    "TIMEOUT": 120,
+    "PROCESSORS": 1,
+    "WILL_FAIL": false,
+    "required_source_status": 0,
+    "actual_source_status": 4,
+    "actual_source_status_name": "XR_XIR_BAD_VALUE",
+    "stage": 1,
+    "source_line": 2,
+    "source_column": 31,
+    "message": "name is not an initialized value",
+    "result": "FAIL",
+    "processes": 2,
+    "exit_codes": [
+      1,
+      1
+    ],
+    "instances": 0,
+    "runtime": "NOT_RUN",
+    "native": "NOT_RUN",
+    "mixed": "NOT_RUN",
+    "generated_C": "NOT_RUN",
+    "full_original_prefix_preserved": true,
+    "original_library_preserved": true,
+    "modules_separate": true,
+    "input_items_per_process": 2803,
+    "retained_owned_diagnostic_after_producer_and_input_death": "PASS",
+    "compiler_physical_after_release": "0/0",
+    "compiler_observer_table_after_release": 0,
+    "compiler_owner_pre_release_final_live": 80,
+    "compiler_owner_pre_release_live_note": "80 is the original compile context baseline; actual physical0/0 and observer table0 are verified after diagnostic and compile owner destruction. No runtime-domain allocation release was executed.",
+    "Checked_full_writer_and_Lowered_after_Checked_death": "SUCCESS_BRANCH_COMPILED_NOT_RUN",
+    "independent_runtime20_22_42": "NOT_RUN",
+    "Source_query_identity": "NOT_RUN",
+    "Checked_relational_identity": "NOT_RUN",
+    "original_standalone_exit_and_empty_streams": "NOT_RUN",
+    "receipts": [
+      {
+        "configuration": "msvc",
+        "receipt": "msvc-test_original_prelude_enum_catch_source.json",
+        "pid": 19452,
+        "stdout_sha256": "f627413bbdaf41db2a2ecbc67987a5611d62309d17499b061394e040c17e1f9c",
+        "stderr_sha256": "bee1544158c52dfb6ad95cb999b83ee4ec4d91cf2ad35e25e996312f08485c0e",
+        "inputs_before": "msvc-test_original_prelude_enum_catch_source-inputs-before.json",
+        "inputs_after": "msvc-test_original_prelude_enum_catch_source-inputs-after.json",
+        "binary_pre_entry_archive": "msvc-test_original_prelude_enum_catch_source-binary-preimage.exe"
+      },
+      {
+        "configuration": "asan",
+        "receipt": "asan-test_original_prelude_enum_catch_source.json",
+        "pid": 32492,
+        "stdout_sha256": "f627413bbdaf41db2a2ecbc67987a5611d62309d17499b061394e040c17e1f9c",
+        "stderr_sha256": "bee1544158c52dfb6ad95cb999b83ee4ec4d91cf2ad35e25e996312f08485c0e",
+        "inputs_before": "asan-test_original_prelude_enum_catch_source-inputs-before.json",
+        "inputs_after": "asan-test_original_prelude_enum_catch_source-inputs-after.json",
+        "binary_pre_entry_archive": "asan-test_original_prelude_enum_catch_source-binary-preimage.exe"
+      }
+    ],
+    "producer_gap": "At root2:31 the original CryptoError receiver is refused by the AST_VARIABLE source_name_ready guard (fixed producer xxir_source.c:1533). This source inspection identifies the corresponding predicate; it is not debugger branch capture. Original ./library import, both implicit CryptoError throws and typed catches remain unchanged.",
+    "controls": "Two separate sequence_length VM controls PASS; they do not change the original positive failure.",
+    "caption_binding": "Product execution captured candidate map/trace; runtime-preimage-<filename> preserves exact old bytes. This later actual evidence annotation is not a rerun.",
+    "retired": 0,
+    "completion": "OPEN"
+  }
+}

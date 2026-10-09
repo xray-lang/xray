@@ -1,0 +1,10 @@
+import { fail } from "./library"
+fn localFail() -> i64 { throw CryptoError.InvalidLength }
+fn answer() -> i64 {
+ var result = 0
+ try { result = fail() } catch (e: CryptoError) { result = 20 }
+ try { result = localFail() } catch (e: CryptoError) { result = result + 22 }
+ assert(result == 42)
+ return result
+}
+export fn consumerAnswer() -> i64 { return answer() }
