@@ -1,0 +1,64 @@
+{
+  "schema": 1,
+  "producer": "25f4016d6f089169757a90ae11ba537002374711",
+  "identity": "Checked25/semantic67/Value22/Call28/Program29",
+  "legacy": {
+    "legacy_path": "tests/unit/program/test_xr_program_source_build.c",
+    "name": "source_owner_array_index_reads_and_replaces_elements",
+    "body_lf_sha256": "8d453681ad890ad67b4b57ac6fa3b2c93ae2ab137d2e14eaa7c8409f71a67ae7",
+    "status": "OPEN",
+    "inventory_projection": {
+      "fixture": "tests/unit/xir/product_consumers/fixtures/array_places/root.xr",
+      "sha256": "9f0f1e7373d56953b7b81727c9e418c5ff10b21bca8713edf389f75c18456666",
+      "original_prefix_sha256": "8e39317c2bf2607e71c7ed6f15b40073e8ff8956cfeb3e99ad852619f33ef673",
+      "entry_adapter": "export fn consumerAnswer() -> i64 { return answer() }\n",
+      "entry": "consumerAnswer",
+      "expected_i64": 42,
+      "scope": "Exact original source prefix and fixed result through an explicitly exported adapter; additional legacy assertions stay OPEN until mapped."
+    },
+    "mapping_references": []
+  },
+  "status": "OPEN",
+  "retired": 0,
+  "replacement_gates": [],
+  "original_source": {
+    "path": "tests/unit/xir/product_consumers/fixtures/array_places/root.xr",
+    "bytes": 153,
+    "sha256": "9f0f1e7373d56953b7b81727c9e418c5ff10b21bca8713edf389f75c18456666",
+    "prefix_sha256": "8e39317c2bf2607e71c7ed6f15b40073e8ff8956cfeb3e99ad852619f33ef673",
+    "adapter": "export fn consumerAnswer() -> i64 { return answer() }\n"
+  },
+  "independent_i64": 42,
+  "required_shape": "Private answer constructs Array<i64>[10,20,30], stores42 at1 through actualCELL_PLACE, reads index1 fromsameCellroot andreturnsactualARRAY_GET SSA.",
+  "pipeline": "OriginalSource prefix andexplicitexport adapter;SourceProduct/ClosedChecked/reader death/Lowered/Program/2Instances;VM/realnative/twoMixed.",
+  "result": "NOT_RUN",
+  "boundaries": [
+    "OriginalCore/BackendIR ownership and representation assertions are not replaced by current public operation identities.",
+    "Full compiler/runtime FI, resource axes, cancel, safety, Main integration and whole retirement remain OPEN."
+  ],
+  "full_FI": "NOT_RUN",
+  "axes": "NOT_RUN",
+  "cancel": "NOT_RUN",
+  "full_safety": "NOT_RUN",
+  "Main": "NOT_RUN",
+  "original_source_execution_20261009_facet": {
+    "status": "PASS_EXACT_ORIGINAL_SOURCE_ORACLE_WHOLE_LEGACY_OPEN",
+    "evidence": "build-consumer-evidence/current67-array-places-source-r1",
+    "original": "Original99-byte source literal prefix is unchanged, plus exact consumerAnswer export adapter. Fixed result42 and [10,20,30]/index1/store42 metadata asserted in both shared driver and detached owner test.",
+    "actual": "12 actual registered argv commands:8 original VM/native/mixed family,2 owned,2 sequence VM controls,allPASS. Family execution uses2Instances/config/backend,2fixed42 calls each:32 fixed results/16Instances. Private answer BAD_ARGUMENT rejects without allocation before init. CallerProgram reference drops before entry,source Session/product/packet die before Program use. Final compiler/runtime physical zero.",
+    "owned": "Whole packet equals writer after Session/product/request/authority/path death,detached Checked metadata verified;Checked dies before Lowered verify and release.",
+    "build": "8 successful C compile events across2cfg:initial driver+newowner,then driver identity static assertion,then actual generated C.6 distinct final freshly compiled units;original VM/native main wrappers reused byteexact,EXEs relinked. Initial capture guard failed before PID because shareddriver lacked explicit25/67 literal;record and firstscript retained, added real compiled identity static_assert and rebuilt.2 buildtimeSource emitter calls separate from registeredPID count.",
+    "inputs": "OriginalVM2696,owned/control2695,native2697 inputs/PID includingexplicit actualnativeC andactualwrapperC plus3observerheaders;allSHA/bytes/mtime exact. Runtime used saved pre-annotation map/trace.",
+    "generated_payload_sha256": {
+      "msvc": "8f88054f753e641b9f970c553b468b7c0b4941629308c763a254968dffede9b3",
+      "asan": "8f88054f753e641b9f970c553b468b7c0b4941629308c763a254968dffede9b3"
+    },
+    "remaining": "OldBackendIR/CoreIR representation assertions,fullFI/axes/cancel/safety/Main andretirement OPEN.",
+    "full_FI": "NOT_RUN",
+    "axes": "NOT_RUN",
+    "cancel": "NOT_RUN",
+    "full_safety": "NOT_RUN",
+    "Main": "NOT_RUN",
+    "retired": 0
+  }
+}

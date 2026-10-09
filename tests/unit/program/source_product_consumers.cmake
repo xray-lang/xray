@@ -385,3 +385,5 @@ include("${CMAKE_CURRENT_LIST_DIR}/../xir/product_consumers/source_product_empty
 include("${CMAKE_CURRENT_LIST_DIR}/../xir/product_consumers/source_product_sequence_length.cmake")
 
 include("${CMAKE_CURRENT_LIST_DIR}/../xir/product_consumers/source_product_sequence_admission.cmake")
+
+include("${CMAKE_CURRENT_LIST_DIR}/../xir/product_consumers/source_product_array_places_owned.cmake")
