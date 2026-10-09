@@ -1,0 +1,31 @@
+enum DivisionFailure { Negative }
+fn quotient(divisor: i64) -> i64 {
+if (divisor < 0) { throw DivisionFailure.Negative }
+const label = "own"
+var values = Array<u8>(divisor - 1)
+return len(values) + len(label) + 38
+}
+var cleanupCount: i64 = 0
+fn readCleanupCount() -> i64 { return cleanupCount }
+class Cell {
+value: i64
+constructor(value: i64) { this.value = value }
+}
+fn checked(ok: bool) -> i64 {
+var first = Cell(20)
+var second = Cell(22)
+defer { if (ok) { cleanupCount = 11 } else { cleanupCount = 22 } }
+var divisor: i64 = 0
+if (ok) { divisor = 2 }
+var result = 0
+try { result = quotient(divisor) }
+catch (error: DivisionFailure) { result = 7 }
+var caughtResult = 0
+try { caughtResult = quotient(-1) }
+catch (error: DivisionFailure) { caughtResult = 7 }
+assert(caughtResult == 7)
+return first.value + second.value + result - 42
+}
+fn answer() -> i64 { return checked(false) + readCleanupCount() }
+export fn consumerChecked(ok: bool) -> i64 { return checked(ok) }
+export fn consumerCleanup() -> i64 { return readCleanupCount() }

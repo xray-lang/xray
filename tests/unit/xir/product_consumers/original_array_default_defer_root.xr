@@ -1,0 +1,19 @@
+var cleanupCount: i64 = 0
+fn readCleanupCount() -> i64 { return cleanupCount }
+class Cell {
+value: i64
+constructor(value: i64) { this.value = value }
+}
+fn checked(ok: bool) -> i64 {
+var first = Cell(20)
+var second = Cell(22)
+defer { if (ok) { cleanupCount = 11 } else { cleanupCount = 22 } }
+var size: i64 = -1
+if (ok) { size = 2 }
+var values = Array<u8>(size)
+assert(len(values) == 2 && values[1] == 0)
+return first.value + second.value
+}
+fn answer() -> i64 { return checked(false) + readCleanupCount() }
+export fn consumerChecked(ok: bool) -> i64 { return checked(ok) }
+export fn consumerCleanup() -> i64 { return readCleanupCount() }

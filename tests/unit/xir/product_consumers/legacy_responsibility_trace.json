@@ -15,11 +15,11 @@
     "shared_emission_owner_consumers": 7
   },
   "reference_counts": {
-    "source_with_digest_reference": 71,
-    "source_without_digest_reference": 37,
+    "source_with_digest_reference": 73,
+    "source_without_digest_reference": 35,
     "other_with_digest_reference": 40,
     "other_without_digest_reference": 120,
-    "digest_reference_values": 139,
+    "digest_reference_values": 141,
     "source_inventory_projections": 42
   },
   "mapping_inputs": [
@@ -468,6 +468,14 @@
       "lf_sha256": "5943aca57ba92031059923ace6198dd33cbaed4ecf4dfb53a194dd469d749f17"
     },
     {
+      "path": "tests/unit/xir/product_consumers/source_original_array_default_defer_obligations.json",
+      "lf_sha256": "c4dd3845f2469eca5a59d4d76c4d9daf55e210e9bceddec7622d515a7b80dea7"
+    },
+    {
+      "path": "tests/unit/xir/product_consumers/source_original_array_invoke_defer_obligations.json",
+      "lf_sha256": "d4613c0a2df91bd5e2c28171e9c9293e213d8098d45850e20b5c9769dd17c77d"
+    },
+    {
       "path": "tests/unit/xir/product_consumers/source_panic_only_defer_group2_native_obligations.json",
       "lf_sha256": "8080854878ca1dbd8a609473b838001caea4976e69f06d525f86fd3a4abd69c6"
     },
@@ -633,7 +641,13 @@
       "body_lf_sha256": "6229206681c56a91a962f9ee21dde09587371d8e475a471d3663cd9d3d330784",
       "status": "OPEN",
       "inventory_projection": null,
-      "mapping_references": []
+      "mapping_references": [
+        {
+          "mapping": "tests/unit/xir/product_consumers/source_original_array_invoke_defer_obligations.json",
+          "pointer": "/legacy/body_lf_sha256",
+          "binding": "exact_path_name_body"
+        }
+      ]
     },
     {
       "legacy_path": "tests/unit/program/test_xr_program_source_build.c",
@@ -1242,7 +1256,13 @@
       "body_lf_sha256": "5c444afd5507d2ccd30727e865f008fcecb2a91c158536fce93bcd15180557bd",
       "status": "OPEN",
       "inventory_projection": null,
-      "mapping_references": []
+      "mapping_references": [
+        {
+          "mapping": "tests/unit/xir/product_consumers/source_original_array_default_defer_obligations.json",
+          "pointer": "/legacy/body_lf_sha256",
+          "binding": "exact_path_name_body"
+        }
+      ]
     },
     {
       "legacy_path": "tests/unit/program/test_xr_program_source_build.c",

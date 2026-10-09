@@ -1,0 +1,399 @@
+{
+  "schema": 1,
+  "family": "original_array_default_defer",
+  "producer": "25f4016d6f089169757a90ae11ba537002374711",
+  "identity": "Checked25/semantic67/Value22/Call28/Program29",
+  "status": "OPEN",
+  "retired": 0,
+  "replacement_gates": [],
+  "result": "FAIL",
+  "full_FI": "NOT_RUN",
+  "axes": "NOT_RUN",
+  "cancel": "NOT_RUN",
+  "full_safety": "NOT_RUN",
+  "Main": "NOT_RUN",
+  "legacy": {
+    "legacy_path": "tests/unit/program/test_xr_program_source_build.c",
+    "name": "source_owner_array_default_runs_conditional_defer",
+    "body_lf_sha256": "5c444afd5507d2ccd30727e865f008fcecb2a91c158536fce93bcd15180557bd",
+    "legacy_line": 7168,
+    "status": "OPEN",
+    "replacement_gates": [],
+    "original_fixture": {
+      "id": "array_default_defer",
+      "expected_exit": 1,
+      "labels": [
+        "array",
+        "panic",
+        "ownership",
+        "cleanup"
+      ],
+      "backends": {
+        "vm": "execute",
+        "aot": "execute"
+      },
+      "expected_stderr_hex": "5b556e6361756768742050616e69635d2045303435323a20756e6361756768742070616e69630a"
+    },
+    "shared_helper": {
+      "path": "tests/unit/program/test_xr_program_source_build.c",
+      "function": "assert_builtin_panic_cleans_live_owners",
+      "body_lf_sha256": "df351143f1b981056a6bbca7f820374133e9ae1bcc11f739ccac795b745a490a",
+      "line": 6861,
+      "arguments": {
+        "panic_code": 452,
+        "fixture_id": "XR_SOURCE_FIXTURE_ARRAY_DEFAULT_DEFER",
+        "deferred": true,
+        "dispatch": 0,
+        "suspends": false
+      }
+    },
+    "native_writer": {
+      "path": "tests/unit/program/xr_program_source_cleanup_checks.inc.c",
+      "function": "write_builtin_panic_cleanup_aot",
+      "body_lf_sha256": "36f4fb66dff985ac75d45c213b7beb96dd376daa18d14ca00a9b58f0ac691a12",
+      "line": 286
+    },
+    "inventory_projection": {
+      "fixture": "tests/unit/xir/product_consumers/original_array_default_defer_root.xr",
+      "sha256": "c89ac6f77080ee003f5d2984da70a96c2938d6cb60766b63ef6d1bbb0393dba5",
+      "original_prefix_sha256": "23ce98a8b829911a5e9b22792cdaeb3024feb8f111b651754f9438ade67fca02",
+      "entry_adapter": "export fn consumerChecked(ok: bool) -> i64 { return checked(ok) }\nexport fn consumerCleanup() -> i64 { return readCleanupCount() }\n",
+      "entry": "consumerChecked(Bool) and consumerCleanup(); canonical entry returns0",
+      "expected_protocol": {
+        "canonical_i64": 0,
+        "checked_true_i64": 42,
+        "checked_false_panic_code": 452,
+        "cleanup_fresh_i64": 0,
+        "cleanup_after_false_i64": 22,
+        "cleanup_after_true_i64": 11
+      },
+      "scope": "Exact original helper-generated Source prefix and two added exported adapters. Original source answer() calls checked(false); canonical entry0 and adapter protocols are separate from original standalone entry exit1/stderr. Actual normal commands executed with original452 mismatch; full qualification remains OPEN.",
+      "mapping_references": []
+    }
+  },
+  "original_source": {
+    "path": "tests/unit/xir/product_consumers/original_array_default_defer_root.xr",
+    "prefix_bytes": 506,
+    "prefix_sha256": "23ce98a8b829911a5e9b22792cdaeb3024feb8f111b651754f9438ade67fca02",
+    "adapter": "export fn consumerChecked(ok: bool) -> i64 { return checked(ok) }\nexport fn consumerCleanup() -> i64 { return readCleanupCount() }\n",
+    "adapter_bytes": 131,
+    "adapter_sha256": "2e66322b9bedcc77e63b36a84521502de4837210ba88703f626b76522a377dfb",
+    "bytes": 637,
+    "sha256": "c89ac6f77080ee003f5d2984da70a96c2938d6cb60766b63ef6d1bbb0393dba5",
+    "constructor_verification": "Original shared helper selection and saved prefix bytes/hashes statically reviewed; no separately compiled original source-constructor execution claimed."
+  },
+  "proposed_consumer": {
+    "source": "tests/unit/xir/product_consumers/test_original_array_cleanup_consumer.c",
+    "native_include": "tests/unit/xir/product_consumers/original_array_cleanup_native.inc.c",
+    "status": "IMPLEMENTED_EXECUTED_LEGACY_FAIL",
+    "CLI": [
+      "binary",
+      "array_default_defer",
+      "mode0..3",
+      "independent-script-root",
+      "tests/unit/xir/product_consumers/original_array_default_defer_root.xr",
+      "stdlib"
+    ],
+    "proposed_normal_tests": [
+      {
+        "name": "test_original_array_default_defer_vm",
+        "mode": 0,
+        "result": "FAIL",
+        "configurations": [
+          {
+            "configuration": "msvc",
+            "returncode": 1,
+            "receipt": "msvc-test_original_array_default_defer_vm.json",
+            "status": "FAIL"
+          },
+          {
+            "configuration": "asan",
+            "returncode": 1,
+            "receipt": "asan-test_original_array_default_defer_vm.json",
+            "status": "FAIL"
+          }
+        ]
+      },
+      {
+        "name": "test_original_array_default_defer_native",
+        "mode": 1,
+        "result": "FAIL",
+        "configurations": [
+          {
+            "configuration": "msvc",
+            "returncode": 1,
+            "receipt": "msvc-test_original_array_default_defer_native.json",
+            "status": "FAIL"
+          },
+          {
+            "configuration": "asan",
+            "returncode": 1,
+            "receipt": "asan-test_original_array_default_defer_native.json",
+            "status": "FAIL"
+          }
+        ]
+      },
+      {
+        "name": "test_original_array_default_defer_mixed_even",
+        "mode": 2,
+        "result": "FAIL",
+        "configurations": [
+          {
+            "configuration": "msvc",
+            "returncode": 1,
+            "receipt": "msvc-test_original_array_default_defer_mixed_even.json",
+            "status": "FAIL"
+          },
+          {
+            "configuration": "asan",
+            "returncode": 1,
+            "receipt": "asan-test_original_array_default_defer_mixed_even.json",
+            "status": "FAIL"
+          }
+        ]
+      },
+      {
+        "name": "test_original_array_default_defer_mixed_odd",
+        "mode": 3,
+        "result": "FAIL",
+        "configurations": [
+          {
+            "configuration": "msvc",
+            "returncode": 1,
+            "receipt": "msvc-test_original_array_default_defer_mixed_odd.json",
+            "status": "FAIL"
+          },
+          {
+            "configuration": "asan",
+            "returncode": 1,
+            "receipt": "asan-test_original_array_default_defer_mixed_odd.json",
+            "status": "FAIL"
+          }
+        ]
+      }
+    ],
+    "configurations": [
+      "MSVC Release",
+      "Clang ASan/UBSan"
+    ],
+    "TIMEOUT": 120,
+    "PROCESSORS": 1,
+    "WILL_FAIL": false,
+    "registered_processes_per_configuration": 4,
+    "registered_processes_both_configurations": 8,
+    "registration_status": "REGISTERED_AND_EXECUTED"
+  },
+  "candidate_pipeline": {
+    "status": "EXECUTED_PUBLIC_RECOVERY_AND_RELEASE_LEGACY_PANIC_MISMATCH",
+    "source_ownership": "External exact prefix+adapter hash; finite caller compiler ledger; SourceProduct verify/Closed read/fullwriter; session/product/diagnostic and input bytes destroyed; path/request/authority buffers poisoned; detached Checked verify/rewrite equality.",
+    "lowering": "Checked/retained packet destroyed before Lowered verify and exact role-id correspondence.",
+    "native_mixed": "Actual Lowered dual C emission and SHA footer; separate actual generated C compilation; native mode1 generated ProgramSpec seal; modes2/3 alternate real generated callbacks/public VM bindings with proof/layout/type/declaration/cleanup permission correspondence. Only successful mixed seal takes Lowered lease. The execution facet records actual registered commands and the strict452 mismatch; complete old equivalence remains OPEN.",
+    "instances": "Two retained Instances after caller Program drop. Per Instance canonical0/fresh cleanup0, then twice negative requiredpanic452/copyownedfault, reader22, positive42, reader11.",
+    "fault_lifetime": "Snapshot actual public panic fields and intrinsic Unit facts/canonical text, compare same actual copied facts after Instance/Program/compiler ownership death in fresh scratch; drop copies and require actual compiler/runtime/table physicalzero.",
+    "failure_policy": "Any non452 actual code sets cumulative legacyFAIL while allowing independently safe diagnostic recovery. Wrong terminal status or unsafe owner state stops dependent diagnostics and runs release. Zero comparisons means legacyNOT_RUN; no WILL_FAIL/skip/fallback."
+  },
+  "original_obligations": [
+    {
+      "obligation": "Original SourceProduct must build with hosted profile and exact source constructor. ARRAY_ALLOCATE_DEFAULT has one panic successor.",
+      "status": "OPEN"
+    },
+    {
+      "obligation": "Original VM calls checked(false) require PanicInfo code452; checked(true) require I64 value42. Any different actual panic code remains FAIL.",
+      "status": "OPEN"
+    },
+    {
+      "obligation": "Original VM log does not overflow; exactly two Cell constructions and two finalizations. Panic finalization follows reverse construction order; each object finalizes and reclaims exactly once.",
+      "status": "OPEN"
+    },
+    {
+      "obligation": "Original VM cleanup reader returns22 after negative and11 after positive; instance drain/retire/free adds no lifecycle event.",
+      "status": "OPEN"
+    },
+    {
+      "obligation": "Original AOT verifies BackendIR binding; two exact generated C emissions and standalone int main(void) text.",
+      "status": "OPEN"
+    },
+    {
+      "obligation": "Original native harness uses two contexts and four alternating false/true iterations each; scalar42/panic452/cleanup11-or22 independent goldens.",
+      "status": "OPEN"
+    },
+    {
+      "obligation": "Original native per-iteration lifecycle requires two identities and one finalize/reclaim per object, reverse panic order, no overflow, context.allocations=0 before destruction and no destruction-added event.",
+      "status": "OPEN"
+    },
+    {
+      "obligation": "Original native harness finally calls original entry main; manifest requires exit1 and exact uncaught E0452 stderr bytes.",
+      "status": "OPEN"
+    }
+  ],
+  "boundaries": [
+    "Detailed actual Cell/Array construction, parameter/root SSA, typed catch selectors and cleanup SSA binding are OPEN. Candidate checks public role/type metadata and proof correspondence only; do not claim full shape.",
+    "Global post-owner physicalzero and cleanupCount11/22 do not prove exact per-Cell finalize/reclaim identity, order, event counts or absence of drain-added events.",
+    "Original per-return native context allocation equality remains distinct from final public Instance/result-owner/compiler physicalzero.",
+    "Current ProgramSpec native callback execution is not the old standalone int main or manifest exit1/exact E0452 stderr qualification.",
+    "No externalFI runner, full compiler/runtime ordinal scan, resource axes, cancellation, actual disk Source deletion, independent SourceProduct determinism, full safety, Main integration or retirement is claimed.",
+    "The prior distinct default construction facet observed422 instead of452. This execution facet separately ran both original full Source families in all four public backend modes and also observed422; required452 stays unchanged and every new original-family command remains FAIL."
+  ],
+  "original_array_cleanup_execution_20261009_facet": {
+    "evidence": "build-consumer-evidence/current67-original-array-cleanup-source-r1",
+    "result": "FAIL",
+    "producer": "25f4016d6f089169757a90ae11ba537002374711",
+    "original_expected_code": 452,
+    "actual_code": 422,
+    "expectation_changed": false,
+    "normal_commands": 8,
+    "instances": 16,
+    "scalar_returns": 128,
+    "copied_panic_facts": 32,
+    "emission": "Actual dual Lowered C translation; two build-driven emitter subprocesses for this family, no independent PID receipt or Instance execution claimed.",
+    "build": "Both configurations compiled actual dedicated consumer and family generated C in C11/W4/WX; Clang ASan/UBSan instrumented.",
+    "compiler_header_environment": "Two initial Clang compile failures used ambient VS2013 stdio; actual preprocessed header origin saved. After vcvars2022, actual compile succeeded. First MSVC compile and stdio ordering edit before runtime retained. Producer/source input unchanged.",
+    "input_timing": "Execution captured maps before this facet. Saved runtime-preimage map and trace preserve prior SHA/bytes; this annotation is not runtime reexecution.",
+    "commands": [
+      {
+        "configuration": "msvc",
+        "name": "test_original_array_default_defer_vm",
+        "mode": "0",
+        "pid": 32500,
+        "receipt": "msvc-test_original_array_default_defer_vm.json",
+        "status": "FAIL",
+        "returncode": 1,
+        "input_count": 2923,
+        "scalar_returns": 16,
+        "negative_terminal": 14,
+        "actual_panic_code": 422,
+        "required_panic_code": 452,
+        "retained_fault_facts": 4,
+        "same_snapshot_after_owners_dead": 4,
+        "physical_release": "PASS"
+      },
+      {
+        "configuration": "asan",
+        "name": "test_original_array_default_defer_vm",
+        "mode": "0",
+        "pid": 48488,
+        "receipt": "asan-test_original_array_default_defer_vm.json",
+        "status": "FAIL",
+        "returncode": 1,
+        "input_count": 2923,
+        "scalar_returns": 16,
+        "negative_terminal": 14,
+        "actual_panic_code": 422,
+        "required_panic_code": 452,
+        "retained_fault_facts": 4,
+        "same_snapshot_after_owners_dead": 4,
+        "physical_release": "PASS"
+      },
+      {
+        "configuration": "msvc",
+        "name": "test_original_array_default_defer_native",
+        "mode": "1",
+        "pid": 46280,
+        "receipt": "msvc-test_original_array_default_defer_native.json",
+        "status": "FAIL",
+        "returncode": 1,
+        "input_count": 2924,
+        "scalar_returns": 16,
+        "negative_terminal": 14,
+        "actual_panic_code": 422,
+        "required_panic_code": 452,
+        "retained_fault_facts": 4,
+        "same_snapshot_after_owners_dead": 4,
+        "physical_release": "PASS"
+      },
+      {
+        "configuration": "msvc",
+        "name": "test_original_array_default_defer_mixed_even",
+        "mode": "2",
+        "pid": 20312,
+        "receipt": "msvc-test_original_array_default_defer_mixed_even.json",
+        "status": "FAIL",
+        "returncode": 1,
+        "input_count": 2924,
+        "scalar_returns": 16,
+        "negative_terminal": 14,
+        "actual_panic_code": 422,
+        "required_panic_code": 452,
+        "retained_fault_facts": 4,
+        "same_snapshot_after_owners_dead": 4,
+        "physical_release": "PASS"
+      },
+      {
+        "configuration": "msvc",
+        "name": "test_original_array_default_defer_mixed_odd",
+        "mode": "3",
+        "pid": 46072,
+        "receipt": "msvc-test_original_array_default_defer_mixed_odd.json",
+        "status": "FAIL",
+        "returncode": 1,
+        "input_count": 2924,
+        "scalar_returns": 16,
+        "negative_terminal": 14,
+        "actual_panic_code": 422,
+        "required_panic_code": 452,
+        "retained_fault_facts": 4,
+        "same_snapshot_after_owners_dead": 4,
+        "physical_release": "PASS"
+      },
+      {
+        "configuration": "asan",
+        "name": "test_original_array_default_defer_native",
+        "mode": "1",
+        "pid": 34464,
+        "receipt": "asan-test_original_array_default_defer_native.json",
+        "status": "FAIL",
+        "returncode": 1,
+        "input_count": 2924,
+        "scalar_returns": 16,
+        "negative_terminal": 14,
+        "actual_panic_code": 422,
+        "required_panic_code": 452,
+        "retained_fault_facts": 4,
+        "same_snapshot_after_owners_dead": 4,
+        "physical_release": "PASS"
+      },
+      {
+        "configuration": "asan",
+        "name": "test_original_array_default_defer_mixed_even",
+        "mode": "2",
+        "pid": 21624,
+        "receipt": "asan-test_original_array_default_defer_mixed_even.json",
+        "status": "FAIL",
+        "returncode": 1,
+        "input_count": 2924,
+        "scalar_returns": 16,
+        "negative_terminal": 14,
+        "actual_panic_code": 422,
+        "required_panic_code": 452,
+        "retained_fault_facts": 4,
+        "same_snapshot_after_owners_dead": 4,
+        "physical_release": "PASS"
+      },
+      {
+        "configuration": "asan",
+        "name": "test_original_array_default_defer_mixed_odd",
+        "mode": "3",
+        "pid": 33840,
+        "receipt": "asan-test_original_array_default_defer_mixed_odd.json",
+        "status": "FAIL",
+        "returncode": 1,
+        "input_count": 2924,
+        "scalar_returns": 16,
+        "negative_terminal": 14,
+        "actual_panic_code": 422,
+        "required_panic_code": 452,
+        "retained_fault_facts": 4,
+        "same_snapshot_after_owners_dead": 4,
+        "physical_release": "PASS"
+      }
+    ],
+    "boundary": "Cleanup0/22/11, positive42, owned intrinsic panic facts and final physicalzero are verified diagnostics. Old452 and full old lifecycle/shape/standalone stderr qualification remain OPEN; all normal commands remain FAIL. No WILL_FAIL/skip/source rewrite.",
+    "full_FI": "NOT_RUN",
+    "axes": "NOT_RUN",
+    "cancel": "NOT_RUN",
+    "SourceDelete": "NOT_RUN",
+    "full_safety": "NOT_RUN",
+    "Main": "NOT_RUN",
+    "retired": 0
+  }
+}
