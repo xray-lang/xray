@@ -1,0 +1,294 @@
+{
+  "schema": 1,
+  "family": "original_string_builder_snapshot",
+  "producer": "25f4016d6f089169757a90ae11ba537002374711",
+  "identity": "Checked25/semantic67/Value22/Call28/Program29",
+  "status": "OPEN",
+  "retired": 0,
+  "replacement_gates": [],
+  "result": "FAIL",
+  "full_FI": "NOT_RUN",
+  "axes": "NOT_RUN",
+  "cancel": "NOT_RUN",
+  "SourceDelete": "NOT_RUN",
+  "full_safety": "NOT_RUN",
+  "Main": "NOT_RUN",
+  "legacy": {
+    "name": "source_owner_string_builder_snapshot",
+    "legacy_path": "tests/unit/program/test_xr_program_source_build.c",
+    "legacy_line": 4219,
+    "body_lf_sha256": "e85d22a465f78167aa46f98b0de5e805cb35893ac2347c6cf727e411c052d795",
+    "assertion_sites": 3,
+    "loop_sites": 1,
+    "status": "OPEN",
+    "replacement_gates": [],
+    "note": "Function census preserves its whole body; sites do not count executed loop iterations.",
+    "original_fixture": {
+      "id": "string_builder",
+      "expected_exit": 42,
+      "labels": [
+        "string",
+        "ownership"
+      ],
+      "backends": {
+        "vm": "execute",
+        "aot": "execute"
+      }
+    },
+    "static_input_literals": {
+      "source": {
+        "bytes": 557,
+        "sha256": "b00bf926577b5282c46087b37ffbeac4ff43ad5e02fc102883420e5abc6a2973"
+      }
+    }
+  },
+  "original_private_helpers": [
+    {
+      "path": "tests/unit/program/test_xr_program_source_build.c",
+      "function": "assert_detached_program_i64_result",
+      "line": 481,
+      "end_line": 495,
+      "body_lf_sha256": "a57c72030e2b70c7facff0491f2b36b9ba205d625c4a7ec879d6564bd58c815b",
+      "classification": "NON_TEST original private helper metadata only; not an invented TEST/source census row or retired family.",
+      "arguments": {
+        "expected_i64": 42
+      }
+    },
+    {
+      "path": "tests/unit/program/test_xr_program_source_build.c",
+      "function": "assert_aot_fixture_backend_contract",
+      "line": 566,
+      "end_line": 610,
+      "body_lf_sha256": "583f92b771718b8e1d4293debcb72cf92e266292abc3ffa17db8103db6b066be",
+      "classification": "NON_TEST original private helper metadata only; not an invented TEST/source census row or retired family.",
+      "arguments": {
+        "fixture_id": "XR_SOURCE_FIXTURE_STRING_BUILDER"
+      }
+    }
+  ],
+  "original_source": {
+    "path": "tests/unit/xir/product_consumers/original_string_builder_snapshot_root.xr",
+    "prefix_bytes": 557,
+    "prefix_sha256": "b00bf926577b5282c46087b37ffbeac4ff43ad5e02fc102883420e5abc6a2973",
+    "adapter": "export fn consumerAnswer() -> i64 { return answer() }\n",
+    "adapter_bytes": 54,
+    "adapter_sha256": "62788122d5e32c2bf5db10a60a2939f92a226f7606d09c490da4212a1341f2fa",
+    "bytes": 611,
+    "sha256": "50601008fc99e83bf2c106ed03be941798a094cbd6b60819fbbbddf5f7e7b632",
+    "construction": "Independently decode complete literal source from actual original TEST body line4219 and match original census/lead557bytes. Only exported consumerAnswer adapter added; full answer/make, every assertion, chained append, snapshot, clear, loop and two make source calls remain."
+  },
+  "independent_i64": 42,
+  "independent_goldens": {
+    "required_Source_status": 0,
+    "original_entry_i64": 42,
+    "initial_builder_string": "",
+    "initial_snapshot": "A42true1.5",
+    "after_clear_and_append": "new",
+    "saved_snapshot_after_mutation": "A42true1.5",
+    "range0_to3_string": "xxx",
+    "make_string": "owned",
+    "make_source_call_sites": 2,
+    "source_assert_sites": 7,
+    "scope": "These remain independent original runtime/string goldens; none is verified by this Source-only batch or by metadata admission."
+  },
+  "proposed_consumer": {
+    "source": "tests/unit/xir/product_consumers/test_original_string_builder_snapshot_source.c",
+    "cmake": "tests/unit/xir/product_consumers/source_product_original_string_builder_snapshot_source.cmake",
+    "status": "ACTUAL_REGISTERED_BUILT_AND_EXECUTED_REQUIRED_SOURCE_FAILED",
+    "proposed_normal_tests": [
+      {
+        "name": "test_original_string_builder_snapshot_source",
+        "required_source_status": "XR_XIR_OK",
+        "configurations": [
+          "MSVC Release",
+          "Clang ASan/UBSan"
+        ],
+        "result": "FAIL_BOTH_CONFIGURATIONS"
+      }
+    ],
+    "TIMEOUT": 120,
+    "PROCESSORS": 1,
+    "WILL_FAIL": false,
+    "planned_processes_per_configuration": 1,
+    "planned_processes_both_configurations": 2,
+    "registration_status": "ACTUAL_NORMAL_GATE_NO_WILL_FAIL",
+    "qualification": "Only unchanged original Source positive admission and owned failure diagnostics or future success Checked/Lowered metadata. No Program/Instance/answer42 execution, string snapshot/owned runtime, native/mixed or generatedC in this batch."
+  },
+  "candidate_pipeline": {
+    "status": "ACTUAL_SOURCE_FAILED_SUCCESS_BRANCH_COMPILED_NOT_RUN",
+    "input": "Read external exact full611 source under independent script root/actual stdlib using assigned public SourceProduct and finite caller compiler owner. Verify full/prefix bytes and digests.",
+    "positive_requirement": "Require Source success0 with no expected-rejection inversion, WILL_FAIL, skip/fallback or nominal/StringBuilder/source substitution. First actual status/stage/line/column/path/message require this family own real receipt.",
+    "success_path": "Future original Source success can verify product, own complete Closed Checked packet/writer metadata across Session/Product/borrowed input/path/request/authority death, detach Checked verify/rewrite equality, lower publicly, drop Checked/packet before Lowered verify. No success branch evidence exists yet.",
+    "failure_path": "Preserve first actual owned diagnostic status/stage/location/path/message after Session/Product/input/root/path/request/authority death, then free diagnostic and compiler owners to actual compiler physical0/table0. Required-positive gate remains FAIL for nonzero status; safe retained diagnostic does not imply Source0 or original42 success.",
+    "excluded_execution": "No Program seal, Instance, actual answer42 or builder/snapshot/make string execution; no VM/native/mixed/generatedC/per-object/fullshape/fullFI/axes/cancel/SourceDelete/full safety/Main."
+  },
+  "original_obligations": [
+    {
+      "obligation": "Original complete answer()+make() Source builds via original SourceBuildFixture/session hosted target profile with target semantic fingerprint, retaining original builtin StringBuilder provider identity and private owner binding.",
+      "status": "OPEN"
+    },
+    {
+      "obligation": "New builtin StringBuilder construction and initial toString equal the exact empty string. Do not replace it with local nominal class, literal result or concatenation.",
+      "status": "OPEN"
+    },
+    {
+      "obligation": "Actual chained append(string A), append(i64 42), append(bool true), append(F64 1.5) yields exact A42true1.5, preserving overload/formatting/order/returned-builder-chain semantics.",
+      "status": "OPEN"
+    },
+    {
+      "obligation": "const saved owns original immutable toString snapshot A42true1.5. After text.clear().append(new), current text is new and saved still equals A42true1.5; old buffer mutation/reuse cannot invalidate it.",
+      "status": "OPEN"
+    },
+    {
+      "obligation": "text.clear then actual range0..3 appends x three times and current toString equals exact xxx; range/control-flow/body/builder mutation SSA remain.",
+      "status": "OPEN"
+    },
+    {
+      "obligation": "Original make constructs local builtin builder, appends owned and returns an owned toString result after builder local scope ends. The two distinct make() source invocations both compare exact owned; lifetime and repeated owned result release are required.",
+      "status": "OPEN"
+    },
+    {
+      "obligation": "Original answer executes all seven Source assert sites, loop and both make calls, then actual private VM entry returns fixed I64 42 through assert_detached_program_i64_result with Instance create/drain/retire/free ownership.",
+      "status": "OPEN"
+    },
+    {
+      "obligation": "Original AOT helper evaluates fixture supported/unsupported contract; active BackendIR must build with diagnosticOK and binding verify, two C emissions exact equal bytes, standalone int main(void), correct output bytes and standalone fixture exit42. No public Source metadata facet substitutes old private backend/owner contract.",
+      "status": "OPEN"
+    },
+    {
+      "obligation": "Exact private/new public builder constructor, append/clear/toString/source SSA/actual string ownership and immutable snapshot graph all remain OPEN; scalar string/F64 conversion or existing concatenation support alone is not equivalence.",
+      "status": "OPEN"
+    },
+    {
+      "obligation": "Future VM/native/mixed two-Instance repeated execution, owned strings after execution/compiler/Program owners death, allocator/caller/resource release and old owned value representation equivalence remain outstanding; this Source-only batch does not execute them.",
+      "status": "OPEN"
+    },
+    {
+      "obligation": "Full compiler/runtime ordinal FI, occupied/refusal strong guarantees, exact/minus1 resource axes, sticky failure, all real active cancellation prefixes, actual disk Source deletion, deterministic Source/generatedC results, full safety and Main remain outstanding.",
+      "status": "OPEN"
+    }
+  ],
+  "static_admission_lead": {
+    "status": "HISTORICAL_SOURCE_INFERENCE_WITH_ACTUAL_RESULT_RECORDED_BELOW",
+    "lead_path": "build-consumer-evidence/current67-original-witness-nondefer-source-r1/prepare-cmake-candidate/string-builder-snapshot-source-lead.json",
+    "lead_sha256": "0b61583ae83d088917f38f03cf30c10c2651e8f25c1c29b2fd0bfc9bea764432",
+    "lead": "Historical read-only inference before this family execution: the builtin registry and stdlib class do not imply fixed public Source native-constructor support. The actual executions below now establish BAD_STRUCTURE at2:0 through source_array_construct, which admits only Array; actual status/stage/location are assigned in actual_diagnostic and actual_execution. Scalar string/F64 helpers and other short probes do not execute this complete557-byte snapshot family.",
+    "actual_diagnostic": {
+      "status": 1,
+      "status_name": "XR_XIR_BAD_STRUCTURE",
+      "stage": 1,
+      "stage_name": "SOURCE_PRODUCT_CHECK",
+      "line": 2,
+      "column": 0,
+      "message": "built-in construction is not implemented in XIR"
+    },
+    "actual_receipt": [
+      "msvc-test_original_string_builder_snapshot_source.json",
+      "asan-test_original_string_builder_snapshot_source.json"
+    ],
+    "preservation": "Keep original builtin StringBuilder symbol and all Source. Do not insert local StringBuilder class, import/shim, change assertions, return literal42, concatenate strings in lieu of builder or convert positive expectation into negative PASS.",
+    "actual_producer_rejection": {
+      "path": "src/xir/xxir_source_array.inc.c",
+      "sha256": "c186ce0068c6ad3ba561ee10861be41756f6d35b0465735ad0a4d3abb495e1ab",
+      "lf_sha256": "19b55e9e7bb4666bbe4faf137fa755cf22f31a4b5cc5de566b6e8a7c6f2b64fd",
+      "first_line": 123,
+      "last_line": 127,
+      "function": "source_array_construct",
+      "excerpt": "StringBuilder NEW reaches the builtin construction path, which admits only unshadowed Array. Its class_name != Array check returns XR_XIR_BAD_STRUCTURE with the captured message. This actual failure is more precise than the prior native-nominal lookup inference; it is not an unresolved value diagnostic.",
+      "source_identity": "LF_EXACT_25f4016d6f089169757a90ae11ba537002374711"
+    }
+  },
+  "boundaries": [
+    "Parent applied and registered the complete original Source, freshly compiled both configurations, and executed the strict positive gate. Both rejected the original StringBuilder construction; no expected-failure inversion or fabricated local builder.",
+    "Own Source gate requires0 independently of fixed42/string expectations. Safe failure diagnostics and aggregate compiler0 cannot invert a failed positive admission.",
+    "Source success Checked/Lowered metadata path is future compiled design only; no Instance/native/mixed/generatedC/runtime/private legacy qualification.",
+    "Seven original Source assert sites, chained formats, immutable saved snapshot, new/xxx/current states and two owned make results all remain OPEN; wrapper census assertion_sites3 is preserved and is not a runtime count.",
+    "Original private helpers are NON_TEST metadata; original family denominators unchanged, all old responsibility OPEN/retired0/replacement_gates empty.",
+    "Full FI/axes/cancel/SourceDelete/determinism/safety/Main NOT_RUN. No production/release claim."
+  ],
+  "evidence_plan": {
+    "directory": "build-consumer-evidence/current67-original-string-builder-snapshot-source-r1",
+    "actual_product_receipts": [
+      "msvc-test_original_string_builder_snapshot_source.json",
+      "asan-test_original_string_builder_snapshot_source.json"
+    ],
+    "registered_argv_executable_and_inputs": "ACTUAL_REGISTERED_ARGV_AND_PRE_ENTRY_EXE_COPY",
+    "owned_failure_diagnostic": "PASS_AFTER_SESSION_PRODUCT_REQUEST_AUTHORITY_PATH_DEATH",
+    "successful_Checked_Lowered": "COMPILED_NOT_RUN_SOURCE_FAILED",
+    "runtime42": "NOT_RUN",
+    "empty_and_snapshot_mutation": "NOT_RUN",
+    "two_owned_make_results": "NOT_RUN",
+    "native_mixed_generatedC": "NOT_RUN",
+    "raw_stdout_stderr": "ACTUAL_SAVED_RAW_WITH_RECEIPT_SHA256",
+    "input_before_after": "ACTUAL_SAME_SHA256_BYTES_MTIME"
+  },
+  "candidate_authoring": "Ignored map/root/plan only; no tracked/trace/build/product/index/Main action by this agent.",
+  "actual_execution": {
+    "directory": "build-consumer-evidence/current67-original-string-builder-snapshot-source-r1",
+    "phase": "source",
+    "configurations": [
+      "MSVC Release",
+      "Clang ASan/UBSan"
+    ],
+    "normal_gate": "test_original_string_builder_snapshot_source",
+    "TIMEOUT": 120,
+    "PROCESSORS": 1,
+    "WILL_FAIL": false,
+    "required_source_status": 0,
+    "actual_source_status": 1,
+    "actual_source_status_name": "XR_XIR_BAD_STRUCTURE",
+    "stage": 1,
+    "source_line": 2,
+    "source_column": 0,
+    "message": "built-in construction is not implemented in XIR",
+    "result": "FAIL",
+    "processes": 2,
+    "exit_codes": [
+      1,
+      1
+    ],
+    "instances": 0,
+    "runtime": "NOT_RUN",
+    "native": "NOT_RUN",
+    "mixed": "NOT_RUN",
+    "generated_C": "NOT_RUN",
+    "full_original_prefix_preserved": true,
+    "input_items_per_process": 2949,
+    "retained_owned_diagnostic_after_producer_and_input_death": "PASS",
+    "compiler_physical_after_release": "0/0",
+    "compiler_observer_table_after_release": 0,
+    "compiler_owner_pre_release_final_live": 80,
+    "compiler_owner_pre_release_live_note": "80 is the original compile context baseline; actual physical0/0 and observer table0 are verified after diagnostic and compile owner destruction. No runtime-domain allocation release was executed.",
+    "Checked_full_writer_and_Lowered_after_Checked_death": "SUCCESS_BRANCH_COMPILED_NOT_RUN",
+    "independent_runtime42_and_builder_snapshot_semantics": "NOT_RUN",
+    "original_empty_saved_new_xxx_two_owned_make_strings": "NOT_RUN",
+    "private_AOT_shape_and_fixture_backend_contract": "NOT_RUN",
+    "receipts": [
+      {
+        "configuration": "msvc",
+        "receipt": "msvc-test_original_string_builder_snapshot_source.json",
+        "pid": 15380,
+        "stdout_sha256": "aaa7ed82f3f587219e56909d24e23d23a062509d2144694998612c87bec668a0",
+        "stderr_sha256": "e826fdf5c61b46fed85c8f2e94a4342c22fd97aecadc2fce414f5ba4063b6199",
+        "inputs_before": "msvc-test_original_string_builder_snapshot_source-inputs-before.json",
+        "inputs_after": "msvc-test_original_string_builder_snapshot_source-inputs-after.json",
+        "binary_pre_entry_archive": "msvc-test_original_string_builder_snapshot_source-binary-preimage.exe"
+      },
+      {
+        "configuration": "asan",
+        "receipt": "asan-test_original_string_builder_snapshot_source.json",
+        "pid": 51492,
+        "stdout_sha256": "aaa7ed82f3f587219e56909d24e23d23a062509d2144694998612c87bec668a0",
+        "stderr_sha256": "e826fdf5c61b46fed85c8f2e94a4342c22fd97aecadc2fce414f5ba4063b6199",
+        "inputs_before": "asan-test_original_string_builder_snapshot_source-inputs-before.json",
+        "inputs_after": "asan-test_original_string_builder_snapshot_source-inputs-after.json",
+        "binary_pre_entry_archive": "asan-test_original_string_builder_snapshot_source-binary-preimage.exe"
+      }
+    ],
+    "producer_gap": "Builtin construction path source_array_construct admits only Array; the original StringBuilder constructor rejects. Keep builtin name and complete source intact; no local nominal shadow, shim, concatenation or literal42 replacement.",
+    "controls": "Two separate sequence_length VM controls PASS; they do not change the original positive failure.",
+    "caption_binding": "Product execution captured candidate map/trace; runtime-preimage-<filename> preserves exact old bytes. This later actual evidence annotation is not a rerun.",
+    "retired": 0,
+    "completion": "OPEN"
+  }
+}

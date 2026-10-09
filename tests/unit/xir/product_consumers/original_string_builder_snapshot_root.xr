@@ -1,0 +1,22 @@
+fn answer() -> i64 {
+  var text = StringBuilder()
+  assert(text.toString() == "")
+  text.append("A").append(42).append(true).append(1.5)
+  const saved = text.toString()
+  assert(saved == "A42true1.5")
+  text.clear().append("new")
+  assert(text.toString() == "new")
+  assert(saved == "A42true1.5")
+  text.clear()
+  for (i in 0..3) { text.append("x") }
+  assert(text.toString() == "xxx")
+  assert(make() == "owned")
+  assert(make() == "owned")
+  return 42
+}
+fn make() -> string {
+  var text = StringBuilder()
+  text.append("owned")
+  return text.toString()
+}
+export fn consumerAnswer() -> i64 { return answer() }
