@@ -1,0 +1,67 @@
+{
+  "schema": 1,
+  "producer": "25f4016d6f089169757a90ae11ba537002374711",
+  "identity": "Checked25/semantic67/Value22/Call28/Program29",
+  "legacy": {
+    "legacy_path": "tests/unit/program/test_xr_program_source_build.c",
+    "name": "source_owner_explicit_bool_conditions_execute",
+    "body_lf_sha256": "17c1df6d33dc29e408cf1db3fdb33f76aa44609c33a14c4902103be4b3aa6308",
+    "status": "OPEN",
+    "inventory_projection": {
+      "fixture": "tests/unit/xir/product_consumers/fixtures/bool_conditions/root.xr",
+      "sha256": "bdc9cb53993fc822e72661dc04beb3c0d274294328e157f8b3d6e6b91755a265",
+      "original_prefix_sha256": "506c7ded5d09cb0597eef032f8f2d0dfe401c8c015d61e85145d368ceda2cee4",
+      "entry_adapter": "export fn consumerAnswer() -> i64 { return answer() }\n",
+      "entry": "consumerAnswer",
+      "expected_i64": 42,
+      "scope": "Exact original source prefix and fixed result through an explicitly exported adapter; additional legacy assertions stay OPEN until mapped."
+    },
+    "mapping_references": []
+  },
+  "status": "OPEN",
+  "retired": 0,
+  "replacement_gates": [],
+  "original_source": {
+    "path": "tests/unit/xir/product_consumers/fixtures/bool_conditions/root.xr",
+    "bytes": 666,
+    "prefix_bytes": 612,
+    "sha256": "bdc9cb53993fc822e72661dc04beb3c0d274294328e157f8b3d6e6b91755a265",
+    "prefix_sha256": "506c7ded5d09cb0597eef032f8f2d0dfe401c8c015d61e85145d368ceda2cee4",
+    "adapter": "export fn consumerAnswer() -> i64 { return answer() }\n"
+  },
+  "independent_i64": 42,
+  "required_shape": "Private amount(Bool)->Nullable<i64> produces SOME(0) andNONE;privateanswer CALLs amount with actualfalse/thentrue. Bool NULLABLE_IS_SOME andactualtypedBool branch predicates remain; originalmatch29 literal retained. ExactoriginalSource short-circuit,ternary,for/while/break andmatch semantics retain independently fixed42.",
+  "result": "NOT_RUN",
+  "pipeline": "OriginalSource prefix andexplicitexportadapter;SourceProduct/ClosedChecked/reader andSource owner death/Lowered/Program/2Instances;VM/native/twoMixed.",
+  "boundaries": [
+    "OriginalCore/BackendIR representations andcompletequalification not replaced by current instruction identities.",
+    "Bare nullable rejection is a separate existing legacy responsibility, not proved by this positive fixture.",
+    "Full FI,axes,cancel,safety,Main andretirement OPEN."
+  ],
+  "full_FI": "NOT_RUN",
+  "axes": "NOT_RUN",
+  "cancel": "NOT_RUN",
+  "full_safety": "NOT_RUN",
+  "Main": "NOT_RUN",
+  "explicit_nullable_boolean_execution_20261009_facet": {
+    "status": "PASS_ORIGINAL_SOURCE_PRESENT_ZERO_ABSENT_BOOL_CONTROL_WHOLE_LEGACY_OPEN",
+    "evidence": "build-consumer-evidence/current67-bool-conditions-source-r1",
+    "original": "Original612-byte Source literal prefix plus54-byte originalexportadapter unchanged. Independent result42 comes from score13,selectedpresentzero0,andmatch29;originalshort-circuit,ternary,for/while/break andmatch bodies unchanged.",
+    "shape": "Privateamount(Bool)->Nullable<i64> containsSOME ofrealI64CONST0 andNONE;answer hasexact2CALLamount withactualBool false/thentrue. TypedBool presence andbranch instructions retained,originalmatch29 literal remains.",
+    "actual": "12 registeredargv processes allfirstPASS:8backend family,2owned,2sequenceVMcontrols. Family32 independentfixed42/16Instances;callerProgram reference drops beforeactualpubliccalls,privateanswer rejectsBAD_ARGUMENTwithoutallocation;source/session/packetreaders die beforeProgram use;finalcompiler/runtimephysical0.",
+    "owned": "DestroySession/product/request/authority/path then reverify exactCheckedshape/fullwriterpacket;killChecked beforeLoweredverify/release;final table/physical0.",
+    "inputs": "OriginalVM2704,owner/control2703,native2705 inputs/PID including3explicitobserverheaders,realC/configuredwrapper whereused;SHA/size/mtimebeforeafter exact. EveryactualruntimePID binarypreimage archived andhashbound beforeexecution,includingcontrols/allnativepartitions. Runtimepre-annotationmap/trace identities preserved.",
+    "build": "6successfulfreshCcompileevents/6distinctfinalTUs across2cfg:driver,newowner,actualgeneratedC percfg. StrictC11/W4/WX;ClangactualASan+UBSan includesgeneratedC. ExistingVM/nativewrapperobjects reused;realwrapper template-bound andruntimeinputs guarded.2buildtimeSourceemitter calls separatelyretained,notregisteredPIDqualification.",
+    "generated_payload_sha256": {
+      "msvc": "a37d4394b0dc10e54e5ccdf801de427748ad2a1d9e0b6a15491daa338546d10e",
+      "asan": "a37d4394b0dc10e54e5ccdf801de427748ad2a1d9e0b6a15491daa338546d10e"
+    },
+    "remaining": "OriginalCore/BackendIRrepresentationassertions,fullFI/axes/cancel/safety/Main/retirement OPEN. Separatebare-nullable Source rejection notclaimed bythispositivefixture.",
+    "full_FI": "NOT_RUN",
+    "axes": "NOT_RUN",
+    "cancel": "NOT_RUN",
+    "full_safety": "NOT_RUN",
+    "Main": "NOT_RUN",
+    "retired": 0
+  }
+}

@@ -389,3 +389,5 @@ include("${CMAKE_CURRENT_LIST_DIR}/../xir/product_consumers/source_product_seque
 include("${CMAKE_CURRENT_LIST_DIR}/../xir/product_consumers/source_product_array_places_owned.cmake")
 
 include("${CMAKE_CURRENT_LIST_DIR}/../xir/product_consumers/source_product_struct_string_owned.cmake")
+
+include("${CMAKE_CURRENT_LIST_DIR}/../xir/product_consumers/source_product_bool_conditions_owned.cmake")
