@@ -1,0 +1,578 @@
+{
+  "schema": 1,
+  "family": "original_process_clock_provider",
+  "legacy_base_commit": "01e6d38401b0f5c8684b64c35a99ac651024c0c1",
+  "status": "OPEN",
+  "retired": 0,
+  "replacement_gates": [],
+  "result": "STATIC_ORIGINAL_PROVIDER_MAP_ONLY",
+  "product_execution": "NOT_RUN_BY_THIS_MAP",
+  "producer": "25f4016d6f089169757a90ae11ba537002374711",
+  "identity": "Checked25/semantic67/Value22/Call28/Program29",
+  "producer_scope": "Existing authorised25f4 identity only; no new producer, Root private tree or heavy window is adopted.",
+  "legacy": [
+    {
+      "name": "source_owner_process_provider_uses_generated_bindings_across_private_executors",
+      "legacy_path": "tests/unit/program/test_xr_program_source_build.c",
+      "legacy_line": 5135,
+      "body_lf_sha256": "91e0ab705c6e53dd55738c49fe20d72271a963070257a3620a91e391552f2cfd",
+      "assertion_sites": 0,
+      "loop_sites": 0,
+      "status": "OPEN",
+      "replacement_gates": [],
+      "note": "Function census preserves its whole body; sites do not count executed loop iterations.",
+      "original_fixture": {
+        "id": "process_provider",
+        "expected_exit": 1,
+        "labels": [
+          "provider",
+          "process"
+        ],
+        "backends": {
+          "vm": "execute",
+          "aot": "execute"
+        }
+      },
+      "static_input_literals": {}
+    },
+    {
+      "name": "source_owner_clock_provider_is_exact_across_private_executors",
+      "legacy_path": "tests/unit/program/test_xr_program_source_build.c",
+      "legacy_line": 5661,
+      "body_lf_sha256": "8687ead238e63eb2385abc74ba5905b0d5bb069c4f1d140756d58a5f2a3aac00",
+      "assertion_sites": 42,
+      "loop_sites": 4,
+      "status": "OPEN",
+      "replacement_gates": [],
+      "note": "Function census preserves its whole body; sites do not count executed loop iterations.",
+      "original_fixture": {
+        "id": "clock_provider",
+        "expected_exit": 1,
+        "labels": [
+          "provider",
+          "clock"
+        ],
+        "backends": {
+          "vm": "execute",
+          "aot": "execute"
+        }
+      },
+      "static_input_literals": {
+        "source": {
+          "bytes": 337,
+          "sha256": "e5f000f2cef3ea92c4dae16b19b578e3260019fdd8832f462337542bf35b162e"
+        }
+      }
+    }
+  ],
+  "original_sources": {
+    "process_provider": {
+      "bytes": 151,
+      "sha256": "6925943166dbe786f19214a7f599e573d84f7f898007a35ea498d065d3262793",
+      "text": "import os\nfn answer() -> i64 {\n  const first = os.getpid()\n  const second = os.getpid()\n  if (first <= 0 || first != second) { return 0 }\n  return 1\n}\n",
+      "origin_function": "assert_process_provider_source"
+    },
+    "process_same_name_root": {
+      "bytes": 78,
+      "sha256": "ba96991f5493d60331fc3cac93d01299de056cc9236878efc724b8b825f1346e",
+      "text": "import { __getpid } from \"./library\"\nfn answer() -> i64 { return __getpid() }\n",
+      "origin_function": "assert_process_provider_name_is_not_authority"
+    },
+    "process_same_name_library": {
+      "bytes": 42,
+      "sha256": "0e7c921530c112b67932eef8ffeca206bfe76683007ec66c46f910a618e2c1c0",
+      "text": "export fn __getpid() -> i64 { return 37 }\n",
+      "origin_function": "assert_process_provider_name_is_not_authority"
+    },
+    "clock_provider": {
+      "bytes": 337,
+      "sha256": "e5f000f2cef3ea92c4dae16b19b578e3260019fdd8832f462337542bf35b162e",
+      "text": "import time\nfn answer() -> i64 {\n  const wall = time.now()\n  const monotonic = time.monotonic()\n  const cpu = time.clock()\n  const offset = time.localOffsetAt(0)\n  if (wall <= 0) { return 0 }\n  if (monotonic <= 0) { return 0 }\n  if (cpu < 0) { return 0 }\n  if (offset < -1440) { return 0 }\n  if (offset > 1440) { return 0 }\n  return 1\n}\n",
+      "origin_function": "source_owner_clock_provider_is_exact_across_private_executors"
+    },
+    "process_rejected_0": {
+      "bytes": 53,
+      "sha256": "86d24ec663ee273cf6959b683e698ecefd4eef00c91ec541ac8de3bdbd449e8c",
+      "text": "import os\nfn answer() -> i64 { return os.getpid(1) }\n",
+      "origin_function": "assert_process_provider_source_rejections"
+    },
+    "process_rejected_1": {
+      "bytes": 60,
+      "sha256": "bc9987ca07195d13cf4a0db68f4d3999ea11e4e247c88156a43f6a9ec772fa5e",
+      "text": "import os\nfn answer() -> i64 { return os.__not_a_native() }\n",
+      "origin_function": "assert_process_provider_source_rejections"
+    }
+  },
+  "source_construction": "Six whole original C literals independently decoded; included helper owns process151B and its negative/name-authority inputs. Outer process TEST has no static literal; no adapter or mutation is introduced.",
+  "process_wrapper_calls": [
+    {
+      "function": "assert_process_provider_source",
+      "status": "OPEN",
+      "original_assertion_sites_in_wrapper": 0
+    },
+    {
+      "function": "assert_process_provider_source_rejections",
+      "status": "OPEN",
+      "original_assertion_sites_in_wrapper": 0
+    },
+    {
+      "function": "assert_process_provider_name_is_not_authority",
+      "status": "OPEN",
+      "original_assertion_sites_in_wrapper": 0
+    }
+  ],
+  "clock_responsibility_mapping": [
+    {
+      "responsibility": "Admit the complete original clock source with the actual native hosted profile.",
+      "status": "OPEN",
+      "target_consumer": "ROOT_CONTRACT_AND_QUALIFIED_PRODUCER_PENDING",
+      "original": {
+        "path": "tests/unit/program/test_xr_program_source_build.c",
+        "lines": [
+          5675,
+          5684
+        ]
+      },
+      "original_assertion_sites": 4,
+      "gap": "The337B source retains all four time operations and range predicates. Positive Source refusal remains FAIL."
+    },
+    {
+      "responsibility": "Build twice and preserve complete deterministic product identity.",
+      "status": "OPEN",
+      "target_consumer": "ROOT_CONTRACT_AND_QUALIFIED_PRODUCER_PENDING",
+      "original": {
+        "path": "tests/unit/program/test_xr_program_source_build.c",
+        "lines": [
+          5685,
+          5697
+        ]
+      },
+      "original_assertion_sites": 0,
+      "gap": "assert_products_equal adds8 sites for nonnull artifacts/programs, artifact size/bytes, Program identity and selected entry. No metadata-only completion."
+    },
+    {
+      "responsibility": "Execute generated stdlib clock bindings and preserve complete original module/function graph.",
+      "status": "OPEN",
+      "target_consumer": "ROOT_CONTRACT_AND_QUALIFIED_PRODUCER_PENDING",
+      "original": {
+        "path": "tests/unit/program/test_xr_program_source_build.c",
+        "lines": [
+          5698,
+          5703
+        ]
+      },
+      "original_assertion_sites": 3,
+      "gap": "The generated-binding helper runs in its own Instance and expects1; module2 and function7 include both initializers. Current graph/initializer representation needs explicit Root review."
+    },
+    {
+      "responsibility": "Match the exact four clock operations and contract by stable identity.",
+      "status": "OPEN",
+      "target_consumer": "ROOT_CONTRACT_AND_QUALIFIED_PRODUCER_PENDING",
+      "original": {
+        "path": "tests/unit/program/test_xr_program_source_build.c",
+        "lines": [
+          5704,
+          5721
+        ]
+      },
+      "original_assertion_sites": 5,
+      "gap": "Resolve all four operation keys, compare the actual contract ID, and do not assume requirement order equals source or descriptor order."
+    },
+    {
+      "responsibility": "Bind exact signed-integer call ABI and operation-specific host contexts.",
+      "status": "OPEN",
+      "target_consumer": "ROOT_CONTRACT_AND_QUALIFIED_PRODUCER_PENDING",
+      "original": {
+        "path": "tests/unit/program/test_xr_program_source_build.c",
+        "lines": [
+          5722,
+          5767
+        ]
+      },
+      "original_assertion_sites": 7,
+      "gap": "Three nullary operations and unary UTC offset at argument0; independent values73000000/11000000/5000000/7. Actual fingerprint and ALL behavior flags do not replace per-operation ABI verification."
+    },
+    {
+      "responsibility": "Create a separate injected-binding Instance with the actual Program/profile.",
+      "status": "OPEN",
+      "target_consumer": "ROOT_CONTRACT_AND_QUALIFIED_PRODUCER_PENDING",
+      "original": {
+        "path": "tests/unit/program/test_xr_program_source_build.c",
+        "lines": [
+          5768,
+          5782
+        ]
+      },
+      "original_assertion_sites": 2,
+      "gap": "Original generated and injected executions are two different bindings/Instances. Target also requires two independent Instances per applicable backend after production-owner death."
+    },
+    {
+      "responsibility": "Execute independently expected1 and exactly one callback for each operation.",
+      "status": "OPEN",
+      "target_consumer": "ROOT_CONTRACT_AND_QUALIFIED_PRODUCER_PENDING",
+      "original": {
+        "path": "tests/unit/program/test_xr_program_source_build.c",
+        "lines": [
+          5783,
+          5794
+        ]
+      },
+      "original_assertion_sites": 5,
+      "gap": "The original VM run must return I64=1; each distinct probe calls1. Callback refusal branches are guards only and were not exercised by this original TEST."
+    },
+    {
+      "responsibility": "Verify backend bindings, emit deterministic C and preserve actual native fixture output.",
+      "status": "OPEN",
+      "target_consumer": "ROOT_CONTRACT_AND_QUALIFIED_PRODUCER_PENDING",
+      "original": {
+        "path": "tests/unit/program/test_xr_program_source_build.c",
+        "lines": [
+          5795,
+          5827
+        ]
+      },
+      "original_assertion_sites": 13,
+      "gap": "All original size/byte equality, required typed host/realtime spellings, absent old bridge/TargetPlan markers and checked output writes remain OPEN. Canonical native representation is Root-owned and must not restore old ABI aliases."
+    },
+    {
+      "responsibility": "Release both products and every VM/backend/Instance/source/profile owner.",
+      "status": "OPEN",
+      "target_consumer": "ROOT_CONTRACT_AND_QUALIFIED_PRODUCER_PENDING",
+      "original": {
+        "path": "tests/unit/program/test_xr_program_source_build.c",
+        "lines": [
+          5828,
+          5840
+        ]
+      },
+      "original_assertion_sites": 3,
+      "gap": "Drain/retire/free statuses are checked; original source fixture dies last. New target requires explicit detached owners, provider-context lifetime, physical release and full FI/resource/safety evidence."
+    }
+  ],
+  "original_private_helpers": [
+    {
+      "path": "tests/unit/program/test_xr_program_process_provider.inc.c",
+      "function": "assert_generated_provider_execution",
+      "line": 11,
+      "end_line": 84,
+      "body_lf_sha256": "cace5aeb1e31a8bf8729aa5e2a2e0bad019071c28d85dad52d45c7c2e5636bd3",
+      "assertion_sites": 17,
+      "classification": "Actual direct or specified transitive NON_TEST helper; not an additional census TEST or exhaustive shared closure.",
+      "responsibility": "Seventeen sites require nonzero bounded requirement count, checked provider/operation allocations, exact flattening bounds/uint16 counts, generated descriptor binding, behavior intersection, matching profile/fingerprint, actual VM I64=1, and drain/retire/free. Two allocation arrays remain live until Instance death; failure frees both and asserts.",
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/program/test_xr_program_process_provider.inc.c",
+      "function": "assert_process_provider_source_rejections",
+      "line": 86,
+      "end_line": 104,
+      "body_lf_sha256": "21810769f267866b25ebaa54d9fc172803773a7cd665cbe379a902e652280c47",
+      "assertion_sites": 5,
+      "classification": "Actual direct or specified transitive NON_TEST helper; not an additional census TEST or exhaustive shared closure.",
+      "responsibility": "Five sites in a two-input loop require successful fixture preparation, exact ANALYSIS_REJECTED at ANALYSIS, no Program and no artifact bytes, followed by product/fixture cleanup. No any-error negative oracle.",
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/program/test_xr_program_process_provider.inc.c",
+      "function": "assert_process_provider_name_is_not_authority",
+      "line": 106,
+      "end_line": 123,
+      "body_lf_sha256": "5d81e142a55f7e85db9e9a9d131997743308cf1fddc4ae765dc1311cb576ed7d",
+      "assertion_sites": 3,
+      "classification": "Actual direct or specified transitive NON_TEST helper; not an additional census TEST or exhaustive shared closure.",
+      "responsibility": "Three sites plus Source-success and detached-VM helpers require ordinary root/library __getpid call to return37 with zero provider requirements. Spelling alone cannot manufacture generated-provider authority.",
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/program/test_xr_program_process_provider.inc.c",
+      "function": "assert_process_provider_source",
+      "line": 125,
+      "end_line": 196,
+      "body_lf_sha256": "1ac7bef16c8d20624ab0e524d7b234d72c9ee0f67f6d1568c956ce572a770c2b",
+      "assertion_sites": 22,
+      "classification": "Actual direct or specified transitive NON_TEST helper; not an additional census TEST or exhaustive shared closure.",
+      "responsibility": "Twenty-two sites and called helpers retain151B full source, real native hosted profile/session identity, one requirement/one operation, actual os.__getpid descriptor, nullary I64 trampoline, generated-binding VM1, backend build, two identical C emissions, required/absent bridge markers and exact native output write.",
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/program/test_xr_program_source_build.c",
+      "function": "source_build_fixture_init",
+      "line": 894,
+      "end_line": 968,
+      "body_lf_sha256": "964c190cb52940aa039b9459e6a5aa0416430eadac032979ed210358216892eb",
+      "assertion_sites": 0,
+      "classification": "Actual direct or specified transitive NON_TEST helper; not an additional census TEST or exhaustive shared closure.",
+      "responsibility": "Whole real physical root/library graph, session attachment, resolver, canonical script authority, answer declaration/content identity and native release profile. All boolean failures cleanup; no flattened graph or shim.",
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/program/test_xr_program_source_build.c",
+      "function": "source_build_fixture_free",
+      "line": 873,
+      "end_line": 892,
+      "body_lf_sha256": "54f2ca59ddb46fda789abf0411160790bcb950903858a308b984b50e6f8c1889",
+      "assertion_sites": 0,
+      "classification": "Actual direct or specified transitive NON_TEST helper; not an additional census TEST or exhaustive shared closure.",
+      "responsibility": "Restore isolate session, delete session/VM/resolver, free identity/path strings, unlink graph files/remove temp directory, zero fixture.",
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/program/test_xr_program_source_build.c",
+      "function": "write_source_file",
+      "line": 857,
+      "end_line": 864,
+      "body_lf_sha256": "cc03580465f59354407c5e6e4e063c40ab9759cf1f45ceb3f099884b0e28014d",
+      "assertion_sites": 0,
+      "classification": "Actual direct or specified transitive NON_TEST helper; not an additional census TEST or exhaustive shared closure.",
+      "responsibility": "Write all original bytes; reject fopen/write/close failure without a success substitute.",
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/program/test_xr_program_source_build.c",
+      "function": "semantic_fingerprint",
+      "line": 866,
+      "end_line": 871,
+      "body_lf_sha256": "08fbbce02bdf996e8c8fb5b4a0b090f8e0dad413c84d6de2ab2530ec56aa3c0a",
+      "assertion_sites": 0,
+      "classification": "Actual direct or specified transitive NON_TEST helper; not an additional census TEST or exhaustive shared closure.",
+      "responsibility": "Copy the complete source semantic profile fingerprint from its exact key; do not mix target/provider identities.",
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/program/test_xr_program_source_build.c",
+      "function": "assert_source_build_ok",
+      "line": 996,
+      "end_line": 1010,
+      "body_lf_sha256": "a5d0aee0a406f887ea79355380455511ee0762cfa39915fb657cfe8a4088fd94",
+      "assertion_sites": 1,
+      "classification": "Actual direct or specified transitive NON_TEST helper; not an additional census TEST or exhaustive shared closure.",
+      "responsibility": "Exact Source OK required; preserve full actual diagnostic on refusal. Both legal positive guards remain failures if missing product.",
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/program/test_xr_program_source_build.c",
+      "function": "assert_products_equal",
+      "line": 982,
+      "end_line": 994,
+      "body_lf_sha256": "ec9ae13d2d71259635fe95f5bed3da7bddec1aaa43b10a247a9930a5c6cd925b",
+      "assertion_sites": 8,
+      "classification": "Actual direct or specified transitive NON_TEST helper; not an additional census TEST or exhaustive shared closure.",
+      "responsibility": "Eight sites require both owned products/artifacts, exact artifact size/bytes, Program identity and entry identity across repeated builds.",
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/program/test_xr_program_source_build.c",
+      "function": "source_fixture_output_path",
+      "line": 63,
+      "end_line": 65,
+      "body_lf_sha256": "2c5d63f47f4b0e77e5abec0b6831c67cec2056ad89196c34fbd8e0cbd6ec1d9d",
+      "assertion_sites": 0,
+      "classification": "Actual direct or specified transitive NON_TEST helper; not an additional census TEST or exhaustive shared closure.",
+      "responsibility": "Only the selected original process_provider or clock_provider native fixture writes its output.",
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/program/test_xr_program_source_build.c",
+      "function": "assert_detached_program_i64_result",
+      "line": 481,
+      "end_line": 495,
+      "body_lf_sha256": "a57c72030e2b70c7facff0491f2b36b9ba205d625c4a7ec879d6564bd58c815b",
+      "assertion_sites": 4,
+      "classification": "Actual direct or specified transitive NON_TEST helper; not an additional census TEST or exhaustive shared closure.",
+      "responsibility": "Four sites create/drain/retire/free one Instance; actual VM helper receives the fixed same-name oracle37.",
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/program/test_xr_program_source_build.c",
+      "function": "assert_vm_i64_result",
+      "line": 447,
+      "end_line": 466,
+      "body_lf_sha256": "645c87c0a5106abb9b370608962881fea16597f3f3124ea359d718ee0c21b9b5",
+      "assertion_sites": 6,
+      "classification": "Actual direct or specified transitive NON_TEST helper; not an additional census TEST or exhaustive shared closure.",
+      "responsibility": "Six sites require actual code and OK diagnostic, return/I64/fixed37, then outcome disposal and caller code free.",
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/program/test_xr_program_source_build.c",
+      "function": "stable_id_equal",
+      "line": 357,
+      "end_line": 359,
+      "body_lf_sha256": "b7944eaf320e1112ae477f8c2d4d3513ce35bce7c8c98f0fb4a2b4b227d7f621",
+      "assertion_sites": 0,
+      "classification": "Actual direct or specified transitive NON_TEST helper; not an additional census TEST or exhaustive shared closure.",
+      "responsibility": "Compare all bytes of the complete stable identity; display names/operation array order do not authorize a binding.",
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/program/test_xr_program_source_build.c",
+      "function": "find_profile_provider",
+      "line": 749,
+      "end_line": 757,
+      "body_lf_sha256": "e406782a95e05ce78f909f815229bd5d4ad14c2e96001c17f2e17aad178ee048",
+      "assertion_sites": 0,
+      "classification": "Actual direct or specified transitive NON_TEST helper; not an additional census TEST or exhaustive shared closure.",
+      "responsibility": "Find actual target profile provider by complete stable contract ID; return NULL on absent/mismatched contract.",
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/program/test_xr_program_source_build.c",
+      "function": "find_profile_provider_operation",
+      "line": 759,
+      "end_line": 766,
+      "body_lf_sha256": "8782d19230c9bc9e0f1a877805fc9f38e5192cf9672ccb5b202121d8b7248937",
+      "assertion_sites": 0,
+      "classification": "Actual direct or specified transitive NON_TEST helper; not an additional census TEST or exhaustive shared closure.",
+      "responsibility": "Find exact stable operation ID in actual contract, independent of profile/requirement enumeration order.",
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/program/test_xr_program_source_build.c",
+      "function": "clock_provider_probe",
+      "line": 768,
+      "end_line": 777,
+      "body_lf_sha256": "703b58019d25c809aa2d8ff43d66b5f0328cad4266da837ea9d5e31231182d03",
+      "assertion_sites": 0,
+      "classification": "Actual direct or specified transitive NON_TEST helper; not an additional census TEST or exhaustive shared closure.",
+      "responsibility": "Reject null context/output before count; increment once for valid call, reject flag returns FAILED without writing output, otherwise write exact nanos and return OK. Original TEST uses reject=false.",
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/program/test_xr_program_source_build.c",
+      "function": "clock_provider_unary_probe",
+      "line": 833,
+      "end_line": 843,
+      "body_lf_sha256": "569750c1b747d83f8b70b2070e2c1bbc5672c93504ee22283d57611a9589eb3b",
+      "assertion_sites": 0,
+      "classification": "Actual direct or specified transitive NON_TEST helper; not an additional census TEST or exhaustive shared closure.",
+      "responsibility": "Reject null context/output or wrong argument before count; otherwise increment once, apply reject flag and write exact signed result only on OK. Original exact UTC-offset argument is0 and reject=false.",
+      "status": "OPEN"
+    }
+  ],
+  "specified_helper_assertion_sites": 66,
+  "helper_policy": "Eighteen specified actual NON_TEST helpers preserve complete body identity, assertion sites and boolean cleanup/refusal conditions. The generated-provider helper has17 sites shared by both originals and is counted once; no exhaustive closure or deletion claim.",
+  "independent_goldens": {
+    "required_positive_Source_status": "OK",
+    "process_language_result": 1,
+    "process_dynamic_predicate": "Both governed os.getpid calls return the same strictly positive actual process ID; otherwise original source returns0.",
+    "process_same_name_result": 37,
+    "process_same_name_provider_requirements": 0,
+    "process_negative_status": "XR_PROGRAM_SOURCE_BUILD_ANALYSIS_REJECTED",
+    "process_negative_stage": "XR_PROGRAM_SOURCE_STAGE_ANALYSIS",
+    "process_negative_output": "programNULL and artifact.bytesNULL for each of the two exact sources",
+    "clock_language_result": 1,
+    "clock_injected_values": [
+      73000000,
+      11000000,
+      5000000,
+      7
+    ],
+    "clock_offset_argument": 0,
+    "clock_calls_per_operation": [
+      1,
+      1,
+      1,
+      1
+    ],
+    "clock_original_modules": 2,
+    "clock_original_functions_including_initializers": 7,
+    "original_standalone_process_exit": 1,
+    "original_standalone_clock_exit": 1
+  },
+  "clock_typed_contract": {
+    "contract_key": "XR_PROVIDER_CLOCK_CONTRACT_KEY",
+    "operation_keys": [
+      "XR_PROVIDER_CLOCK_REALTIME_NANOS_OPERATION_KEY",
+      "XR_PROVIDER_CLOCK_MONOTONIC_NANOS_OPERATION_KEY",
+      "XR_PROVIDER_CLOCK_PROCESS_CPU_NANOS_OPERATION_KEY",
+      "XR_PROVIDER_CLOCK_UTC_OFFSET_MINUTES_AT_OPERATION_KEY"
+    ],
+    "stable_identity": "Each required operation matched to its expected stable ID independently of requirement order.",
+    "result": "XR_TARGET_PROVIDER_CALL_VALUE_SIGNED_INTEGER",
+    "parameters": [
+      0,
+      0,
+      0,
+      1
+    ],
+    "trampolines": [
+      "XR_PROVIDER_TRAMPOLINE_I64_NULLARY",
+      "XR_PROVIDER_TRAMPOLINE_I64_NULLARY",
+      "XR_PROVIDER_TRAMPOLINE_I64_NULLARY",
+      "XR_PROVIDER_TRAMPOLINE_I64_UNARY"
+    ]
+  },
+  "probe_definition": {
+    "path": "tests/unit/program/test_xr_program_source_build.c",
+    "type": "ClockProviderProbe",
+    "text": "typedef struct ClockProviderProbe {\n    uint32_t calls;\n    int64_t nanos;\n    int64_t expected_argument;\n    bool reject;\n} ClockProviderProbe;",
+    "lf_sha256": "361a5759fdb4c79bed8d4e5a44d5ea2f949efcc19cd5c0faa25cf0acc0e17d88"
+  },
+  "old_native_representation_requirements": {
+    "process_contains": [
+      "xr_os_core_getpid()",
+      "xr_aot_host_typed"
+    ],
+    "process_absent": [
+      "xrt_os_getpid"
+    ],
+    "clock_contains": [
+      "xr_aot_host_typed",
+      "xr_time_realtime_ns()"
+    ],
+    "clock_absent": [
+      "xr_aot_host_realtime_nanos",
+      "TargetPlan"
+    ],
+    "determinism": "Emit twice from the same verified backend product; both size and all bytes equal.",
+    "status": "OPEN_REPRESENTATION_REVIEW",
+    "target": "Governed declaration/provider identity and canonical typed native Program authority; Root reviews old spellings without adding old symbol/ABI aliases."
+  },
+  "execution_scope": "Process uses generated bindings once in VM plus exact emitted native fixture. Clock uses generated bindings in a separate helper Instance and injected four-operation bindings once in another VM Instance, plus emitted native fixture. No current or legacy run is made here.",
+  "negative_scope": "Only the two malformed process sources are expected admission failures. Same-name user library is a successful ordinary call returning37. Clock callback refusal branches are guards, not an executed clock-refusal scenario in this original TEST.",
+  "target_contract_or_representation_review": [
+    "Positive originals and same-name library must succeed; unrelated refusal remains actualFAIL.",
+    "SourceProduct/Checked declaration provenance, common full reverification and explicit public host authority replace old private executor entry access.",
+    "Root reviews original clock module2/function7 representation including both initializers; no silent retirement.",
+    "Bind actual stdlib generated process and all clock operations with exact current canonical provider ABI; names alone grant no authority.",
+    "Retain independent1/process37/clock1 results, actual native execution and exact current callback events; metadata or generation success is insufficient.",
+    "Add two independently owned target Instances, production-owner death, source-free packet and typed Library proof.",
+    "Audit all actual allocations, provider-context lifetime and partial-construction cleanup with full FI/axes/safety; no fake lifetime/event ledger."
+  ],
+  "additional_target_requirements": [
+    "Public SourceProduct→Built→Checked→specialization/full reverification→Lowered→Program ownership",
+    "Source-free packet and typed Library declaration provenance/host authority",
+    "Actual VM/native/applicable mixed independently expected results",
+    "Two detached Instances per applicable binding/backend, Source/session/Checked/Lowered/caller Program death",
+    "Complete actual generated provider descriptor/call ABI, host context lifetime and non-escaping scalar outcomes",
+    "Exact provider and partial-construction cleanup, real physical release, fresh full compiler/runtime FI census",
+    "All resource axes, generated-C portability and applicable full safety",
+    "Original native fixture exit1 and same-name language37 kept distinct from current successful harness exit0",
+    "Root formal integration/acceptance and last-consumer deletion review"
+  ],
+  "shared_dependency": {
+    "path": "tests/unit/aot/xr_backend_emission_owner.h",
+    "consumer_count": 7,
+    "status": "PRESERVE_SHARED_OWNER",
+    "reason": "Original process/clock emit through shared backend_emission_resources; other active consumers remain."
+  },
+  "handoff": {
+    "report": "build-consumer-evidence/consumer-session-20261009-r1/process-clock-provider-interface-request.json",
+    "raw_sha256": "06142c70ca3f4631c80f28f800fde0d9a0d472a3ad4636d2a58bed7fda9a91ff",
+    "Root_thread": "01a11f74-a297-7b11-8441-835bde6a3d5f",
+    "formal_acceptance": "PENDING"
+  },
+  "full_FI": "NOT_RUN",
+  "axes": "NOT_RUN",
+  "full_safety": "NOT_RUN",
+  "SourceDelete": "NOT_RUN",
+  "Main": "NOT_RUN",
+  "boundaries": [
+    "Zero assertions/literals in outer process wrapper do not erase included-helper responsibilities.",
+    "Clock42 outer sites and66 distinct specified-helper sites retain all actual conditions; they are not runtime iterations.",
+    "No actual provider callback, native process, allocator/event/lifecycle or physical release is observed by this map.",
+    "Clock refusal guards are retained without claiming an original executed refusal case; dedicated cleanup tests remain separate.",
+    "Original module/function counts and emitted bridge markers require Root review, not obsolete public APIs/ABI shims.",
+    "References/assertion coverage do not establish current qualification, retirement, release or deletion permission."
+  ]
+}

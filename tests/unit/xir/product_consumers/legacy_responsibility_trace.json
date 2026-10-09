@@ -15,11 +15,11 @@
     "shared_emission_owner_consumers": 7
   },
   "reference_counts": {
-    "source_with_digest_reference": 93,
-    "source_without_digest_reference": 15,
+    "source_with_digest_reference": 95,
+    "source_without_digest_reference": 13,
     "other_with_digest_reference": 40,
     "other_without_digest_reference": 120,
-    "digest_reference_values": 163,
+    "digest_reference_values": 165,
     "source_inventory_projections": 42
   },
   "mapping_inputs": [
@@ -498,6 +498,10 @@
     {
       "path": "tests/unit/xir/product_consumers/source_original_prelude_enum_catch_obligations.json",
       "lf_sha256": "20dd37d7f4b51bdbb7500773b1ccdf90ebbf984272bc40c0d46020d371bc9885"
+    },
+    {
+      "path": "tests/unit/xir/product_consumers/source_original_process_clock_provider_obligations.json",
+      "lf_sha256": "0a26b2adb9ffde41ddf5f9c1b82b453cc5493c2a952954fdbb428c762ac85827"
     },
     {
       "path": "tests/unit/xir/product_consumers/source_original_retained_roots_obligations.json",
@@ -2489,7 +2493,13 @@
       "body_lf_sha256": "91e0ab705c6e53dd55738c49fe20d72271a963070257a3620a91e391552f2cfd",
       "status": "OPEN",
       "inventory_projection": null,
-      "mapping_references": []
+      "mapping_references": [
+        {
+          "mapping": "tests/unit/xir/product_consumers/source_original_process_clock_provider_obligations.json",
+          "pointer": "/legacy/0/body_lf_sha256",
+          "binding": "exact_path_name_body"
+        }
+      ]
     },
     {
       "legacy_path": "tests/unit/program/test_xr_program_source_build.c",
@@ -2525,7 +2535,13 @@
       "body_lf_sha256": "8687ead238e63eb2385abc74ba5905b0d5bb069c4f1d140756d58a5f2a3aac00",
       "status": "OPEN",
       "inventory_projection": null,
-      "mapping_references": []
+      "mapping_references": [
+        {
+          "mapping": "tests/unit/xir/product_consumers/source_original_process_clock_provider_obligations.json",
+          "pointer": "/legacy/1/body_lf_sha256",
+          "binding": "exact_path_name_body"
+        }
+      ]
     },
     {
       "legacy_path": "tests/unit/program/test_xr_program_source_build.c",
