@@ -1,0 +1,534 @@
+{
+  "schema": 1,
+  "family": "original_array_values_empty_repeated_nested_alias_copy_and_owned_escape",
+  "legacy_base_commit": "01e6d38401b0f5c8684b64c35a99ac651024c0c1",
+  "status": "OPEN",
+  "retired": 0,
+  "replacement_gates": [],
+  "result": "STATIC_FULL_ORIGINAL_ARRAY_VALUE_ALIAS_MAP_ONLY",
+  "product_execution": "NOT_RUN_BY_THIS_MAP",
+  "producer": "25f4016d6f089169757a90ae11ba537002374711",
+  "identity": "Checked25/semantic67/Value22/Call28/Program29",
+  "legacy": [
+    {
+      "name": "test_array_values",
+      "legacy_path": "tests/unit/program/test_xr_program_verify.c",
+      "legacy_line": 7132,
+      "body_lf_sha256": "cc85af38685530a1ff2e25f4582c9a2a9b8fcc9b3c4eff14afe7053e8001ccf9",
+      "assertion_sites": 4,
+      "loop_sites": 3,
+      "status": "OPEN",
+      "replacement_gates": [],
+      "note": "Function census preserves its whole body; sites do not count executed loop iterations."
+    }
+  ],
+  "responsibility_mapping": [
+    {
+      "path": "tests/unit/program/test_xr_program_verify.c",
+      "function": "test_array_values",
+      "line": 7132,
+      "end_line": 7164,
+      "body_lf_sha256": "cc85af38685530a1ff2e25f4582c9a2a9b8fcc9b3c4eff14afe7053e8001ccf9",
+      "CHECK_sites": 4,
+      "CHECK_bindings": [
+        {
+          "line": 7135,
+          "expression": "xr_program_array_fixture_write(scenario, 0u, &artifact) == XR_PROGRAM_BUILD_OK",
+          "status": "OPEN"
+        },
+        {
+          "line": 7138,
+          "expression": "program->functions[0].blocks[0].instructions[scenario == 1u ? 0u : 2u].operation_id ==\n              XR_CORE_OP_CORE_ARRAY_CONSTRUCT",
+          "status": "OPEN"
+        },
+        {
+          "line": 7150,
+          "expression": "xr_program_array_fixture_write(0u, mutation, &artifact) == XR_PROGRAM_BUILD_OK",
+          "status": "OPEN"
+        },
+        {
+          "line": 7159,
+          "expression": "xr_program_array_fixture_write(4u, mutation, &artifact) == XR_PROGRAM_BUILD_OK",
+          "status": "OPEN"
+        }
+      ],
+      "status": "OPEN"
+    }
+  ],
+  "outer_CHECK_sites": 4,
+  "original_private_helpers": [
+    {
+      "path": "tests/unit/program/test_xr_program_verify.c",
+      "function": "validate_ok",
+      "line": 159,
+      "end_line": 174,
+      "body_lf_sha256": "94fe0ef4e0242acb810c12621ae1fe73a9887ef668f15ddc6c67ed645494f62b",
+      "CHECK_sites": 2,
+      "CHECK_bindings": [
+        {
+          "line": 171,
+          "expression": "status == XR_PROGRAM_VERIFY_OK",
+          "status": "OPEN"
+        },
+        {
+          "line": 172,
+          "expression": "program != NULL",
+          "status": "OPEN"
+        }
+      ],
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/program/test_xr_program_verify.c",
+      "function": "expect_semantic_reject_at",
+      "line": 176,
+      "end_line": 198,
+      "body_lf_sha256": "44cf0fb15bea156743a1c0e35b0be8ee844aa1af55c8653ed9361cf781c045b8",
+      "CHECK_sites": 6,
+      "CHECK_bindings": [
+        {
+          "line": 190,
+          "expression": "first_status == XR_PROGRAM_VERIFY_SEMANTIC_REJECTED",
+          "status": "OPEN"
+        },
+        {
+          "line": 191,
+          "expression": "program == NULL",
+          "status": "OPEN"
+        },
+        {
+          "line": 192,
+          "expression": "first.kind == expected",
+          "status": "OPEN"
+        },
+        {
+          "line": 195,
+          "expression": "second_status == first_status",
+          "status": "OPEN"
+        },
+        {
+          "line": 196,
+          "expression": "memcmp(&first, &second, sizeof(first)) == 0",
+          "status": "OPEN"
+        },
+        {
+          "line": 197,
+          "expression": "program == NULL",
+          "status": "OPEN"
+        }
+      ],
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/program/xr_program_array_fixture.h",
+      "function": "xr_program_array_fixture_write",
+      "line": 11,
+      "end_line": 143,
+      "body_lf_sha256": "7b0efc968034f1eafd09871caaf31fdcd9216ff9051eaf702f1fd594316a7491",
+      "CHECK_sites": 0,
+      "CHECK_bindings": [],
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/program/xr_program_array_fixture.h",
+      "function": "xr_program_array_place_fixture_write",
+      "line": 147,
+      "end_line": 263,
+      "body_lf_sha256": "733547291ddab0fd88660675af805e3072266f22086e5df570dfaa13ae0b3252",
+      "CHECK_sites": 0,
+      "CHECK_bindings": [],
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/program/xr_program_array_fixture.h",
+      "function": "xr_program_array_loan_fixture_write",
+      "line": 266,
+      "end_line": 463,
+      "body_lf_sha256": "82b9781e23412e5a4f6c2f26e071fd356d8a52798b5e36dfa643529f8891d83d",
+      "CHECK_sites": 0,
+      "CHECK_bindings": [],
+      "status": "OPEN"
+    }
+  ],
+  "specified_helper_CHECK_sites": 8,
+  "input_files": [
+    {
+      "path": "tests/unit/program/test_xr_program_verify.c",
+      "physical_raw_sha256": "a39922500c0943c034fafcda3a82b67e511ea658f453f6c0c3204f7719de1817",
+      "whole_file_lf_sha256": "ec4b93f13bfab2aa3d4b8f8773dd5c1118a0c682ed6f8304fead515f90402802",
+      "git_base_equal": true,
+      "status": "PRESERVE_ORIGINAL_READONLY"
+    },
+    {
+      "path": "tests/unit/program/xr_program_array_fixture.h",
+      "physical_raw_sha256": "8933a21bd12911f2cef2c5d0b6fc75067c02cb6c132f74121e727c497a3530c3",
+      "whole_file_lf_sha256": "911432d1a22b44d1dbd87c89f7af74175867d84907fcdc49c029bc7d6c50d3e5",
+      "git_base_equal": true,
+      "status": "PRESERVE_ORIGINAL_READONLY"
+    },
+    {
+      "path": "tests/unit/program/test_xr_program.c",
+      "physical_raw_sha256": "5986f0f7160296f52787ca8b9443329a9a05eeff083daac530a776642971655a",
+      "whole_file_lf_sha256": "2743be628db188c386a72e59529286df64720051710599d83f9b6510aa529aff",
+      "git_base_equal": true,
+      "status": "PRESERVE_ORIGINAL_READONLY"
+    },
+    {
+      "path": "tests/unit/aot/test_xr_program_aot.c",
+      "physical_raw_sha256": "6fea38acff96d94b2bfb414e04aa308386f6284ed12ccf05613a790a23caa700",
+      "whole_file_lf_sha256": "e7ab9301b308c7db6bf48e348257e5288f38f22c1b38c827fb040719dbf2de0e",
+      "git_base_equal": true,
+      "status": "PRESERVE_ORIGINAL_READONLY"
+    },
+    {
+      "path": "tests/unit/vm/test_xr_program_vm.c",
+      "physical_raw_sha256": "3a19b58076867cc70ef6c77e975286009df65e61ac1ed9edb2b5ab7813543502",
+      "whole_file_lf_sha256": "17904ef2bab8bb7eea72245fedba9878d74b6b8e93776e4314418e2db06dce8a",
+      "git_base_equal": true,
+      "status": "PRESERVE_ORIGINAL_READONLY"
+    },
+    {
+      "path": "tests/unit/vm/test_xr_program_vm_allocations.c",
+      "physical_raw_sha256": "65404153b883af360f80af2006ccb99a1742815f707bf605b7f27e11e16aa4a7",
+      "whole_file_lf_sha256": "b2e8af3a0b31c277224ec7eb93c861f43d5ab09ebf2876869fc5a87f65effdc2",
+      "git_base_equal": true,
+      "status": "PRESERVE_ORIGINAL_READONLY"
+    },
+    {
+      "path": "src/program/xr_program.h",
+      "physical_raw_sha256": "d1e735c841697b884f5f7719b0391b5fa0c7ac0a9fcb68fb44435a5fce4da63d",
+      "whole_file_lf_sha256": "10a5934658ab7487696cc912bfcc4b2e993e513d3daa2def92bf13869c05b82e",
+      "git_base_equal": true,
+      "status": "PRESERVE_ORIGINAL_READONLY"
+    },
+    {
+      "path": "src/core/xr_core_spec_gen.h",
+      "physical_raw_sha256": "c29e3958da2724dcb5857e0ab3286757d97dfbc8cbd4ca5b638741d8ab1ae484",
+      "whole_file_lf_sha256": "e393724757512051de476d4250d1a9983c27713c2aeec9a0681cad5d1a0633bd",
+      "git_base_equal": true,
+      "status": "PRESERVE_ORIGINAL_READONLY"
+    }
+  ],
+  "catalog": "Dynamic base32 Array<actual selected element> and nested33 Array<Array32>, both AFFINE/COPY_EXPLICIT. Type33 selected for scenarios3/4 only. Ten actual two-byte keys [0xa7,index0..9], actual entry/block/module/semantic fingerprint use key5. Required CORE_BASE, one ENTRY function, no provider requirement.",
+  "string_bytes": [
+    97,
+    228,
+    184,
+    150
+  ],
+  "positive_layouts": [
+    {
+      "scenario": 0,
+      "element": "String",
+      "values": "Two distinct OWN String producers keys0/1, both exact bytes a+UTF8\u4e16 (4bytes,2scalars); array32 consumes both actual handles.",
+      "entry": [
+        "CONSTANT_STRING key0",
+        "CONSTANT_STRING key1",
+        "ARRAY_CONSTRUCT32 [key0,key1] -> OWN original key2",
+        "OWNER_COPY actual original -> OWN copy key3",
+        "OWNER_DROP actual original",
+        "SEQUENCE_LENGTH actual surviving copy -> key4",
+        "OWNER_DROP actual copy",
+        "RETURN actual length"
+      ],
+      "proposed_additional_value_oracle": 2,
+      "shape_counts": {
+        "functions": 1,
+        "blocks": 1,
+        "requirements": 0,
+        "instructions": 8,
+        "constants": 2,
+        "types": 1
+      },
+      "expected_build": "XR_PROGRAM_BUILD_OK",
+      "expected_verify": "XR_PROGRAM_VERIFY_OK",
+      "original_array_construct_instruction_index": 2,
+      "original_runtime": "NOT_RUN",
+      "status": "OPEN"
+    },
+    {
+      "scenario": 1,
+      "element": "String",
+      "values": "Empty affine array32, no constants, NULL operands/count0.",
+      "entry": [
+        "ARRAY_CONSTRUCT32 [] -> OWN original",
+        "OWNER_COPY actual original -> OWN copy",
+        "OWNER_DROP actual original",
+        "SEQUENCE_LENGTH actual copy",
+        "OWNER_DROP actual copy",
+        "RETURN actual length"
+      ],
+      "proposed_additional_value_oracle": 0,
+      "shape_counts": {
+        "functions": 1,
+        "blocks": 1,
+        "requirements": 0,
+        "instructions": 6,
+        "constants": 0,
+        "types": 1
+      },
+      "expected_build": "XR_PROGRAM_BUILD_OK",
+      "expected_verify": "XR_PROGRAM_VERIFY_OK",
+      "original_array_construct_instruction_index": 0,
+      "original_runtime": "NOT_RUN",
+      "status": "OPEN"
+    },
+    {
+      "scenario": 2,
+      "element": "I64",
+      "values": "Two actual I64 constants42 are constructed, but ARRAY operands[key0,key0] deliberately repeat same actual trivial SSA; key1 constant is unused and retained.",
+      "entry": [
+        "CONSTANT_I64 key0=42",
+        "CONSTANT_I64 key1=42 (unused)",
+        "ARRAY_CONSTRUCT32 [key0,key0] -> OWN original",
+        "OWNER_COPY actual original -> OWN copy",
+        "OWNER_DROP actual original",
+        "SEQUENCE_LENGTH actual copy",
+        "OWNER_DROP actual copy",
+        "RETURN actual length"
+      ],
+      "proposed_additional_value_oracle": 2,
+      "shape_counts": {
+        "functions": 1,
+        "blocks": 1,
+        "requirements": 0,
+        "instructions": 8,
+        "constants": 2,
+        "types": 1
+      },
+      "expected_build": "XR_PROGRAM_BUILD_OK",
+      "expected_verify": "XR_PROGRAM_VERIFY_OK",
+      "original_array_construct_instruction_index": 2,
+      "original_runtime": "NOT_RUN",
+      "status": "OPEN"
+    },
+    {
+      "scenario": 3,
+      "element": "String with nested Array<Array<String>>",
+      "values": "Actual two owned String handles consumed by inner array32; outer array33 consumes inner once. Copy actual outer outlives dropped outer.",
+      "entry": [
+        "CONSTANT_STRING key0",
+        "CONSTANT_STRING key1",
+        "ARRAY_CONSTRUCT32 [key0,key1] -> OWN inner",
+        "ARRAY_CONSTRUCT33 [actual inner] -> OWN outer key6",
+        "OWNER_COPY actual outer -> OWN outer copy",
+        "OWNER_DROP actual outer",
+        "SEQUENCE_LENGTH actual outer copy",
+        "OWNER_DROP actual outer copy",
+        "RETURN actual outer length"
+      ],
+      "proposed_additional_value_oracle": 1,
+      "shape_counts": {
+        "functions": 1,
+        "blocks": 1,
+        "requirements": 0,
+        "instructions": 9,
+        "constants": 2,
+        "types": 2
+      },
+      "expected_build": "XR_PROGRAM_BUILD_OK",
+      "expected_verify": "XR_PROGRAM_VERIFY_OK",
+      "original_array_construct_instruction_index": 2,
+      "original_runtime": "NOT_RUN",
+      "status": "OPEN"
+    },
+    {
+      "scenario": 4,
+      "element": "I64 with nested Array<Array<I64>> owning escape",
+      "values": "Two I64 constants42 retained, array32 [key0,key1], OWNER_ALIAS key9 and OWNER_COPY key3 both originate from same actual array key2. Outer33 consumes all three actual owned handles and escapes.",
+      "entry": [
+        "CONSTANT_I64 key0=42",
+        "CONSTANT_I64 key1=42",
+        "ARRAY_CONSTRUCT32 [key0,key1] -> OWN original key2",
+        "OWNER_ALIAS actual original -> OWN alias key9",
+        "OWNER_COPY actual original -> OWN copy key3",
+        "ARRAY_CONSTRUCT33 [actual original,alias,copy] -> OWN outer key6",
+        "RETURN actual OWN outer"
+      ],
+      "proposed_additional_value_oracle": "Owned outer length3, each inner length2/I64[42,42]; current identity/alias/copy independence must be observed separately, not inferred from SSA names.",
+      "shape_counts": {
+        "functions": 1,
+        "blocks": 1,
+        "requirements": 0,
+        "instructions": 7,
+        "constants": 2,
+        "types": 2
+      },
+      "expected_build": "XR_PROGRAM_BUILD_OK",
+      "expected_verify": "XR_PROGRAM_VERIFY_OK",
+      "original_array_construct_instruction_index": 2,
+      "original_runtime": "NOT_RUN",
+      "status": "OPEN"
+    }
+  ],
+  "semantic_mutations": [
+    {
+      "scenario": 0,
+      "mutation": 1,
+      "complete_graph_change": "After complete String graph built, only array32 element type String -> I64; actual OWN String constants/operands stay.",
+      "expected_build": "XR_PROGRAM_BUILD_OK",
+      "expected_verify": "XR_PROGRAM_VERIFY_SEMANTIC_REJECTED",
+      "expected_diagnostic": "XR_PROGRAM_DIAGNOSTIC_OPERATION_TYPE",
+      "original_evidence_boundary": "Real array catalog/actual operand mismatch, not prechanged I64 constants.",
+      "status": "OPEN"
+    },
+    {
+      "scenario": 0,
+      "mutation": 2,
+      "complete_graph_change": "ARRAY_CONSTRUCT operands[key0,key1] -> [key0,key0], both actual String producers still present.",
+      "expected_build": "XR_PROGRAM_BUILD_OK",
+      "expected_verify": "XR_PROGRAM_VERIFY_SEMANTIC_REJECTED",
+      "expected_diagnostic": "XR_PROGRAM_DIAGNOSTIC_VALUE_USE",
+      "original_evidence_boundary": "First String owner duplicated and second String owner omitted; original diagnostic is combined graph evidence.",
+      "status": "OPEN"
+    },
+    {
+      "scenario": 0,
+      "mutation": 3,
+      "complete_graph_change": "Only ARRAY_CONSTRUCT result ownership OWNER -> NON_OWNER while affine array32 type stays; copy/drop/read remain.",
+      "expected_build": "XR_PROGRAM_BUILD_OK",
+      "expected_verify": "XR_PROGRAM_VERIFY_SEMANTIC_REJECTED",
+      "expected_diagnostic": "XR_PROGRAM_DIAGNOSTIC_ROOT",
+      "original_evidence_boundary": "Original BUILD_OK then ROOT semantic rejection, not producer invalid-input.",
+      "status": "OPEN"
+    },
+    {
+      "scenario": 0,
+      "mutation": 4,
+      "complete_graph_change": "Only SEQUENCE_LENGTH source surviving copy -> key0 String already consumed into original array, after original DROP.",
+      "expected_build": "XR_PROGRAM_BUILD_OK",
+      "expected_verify": "XR_PROGRAM_VERIFY_SEMANTIC_REJECTED",
+      "expected_diagnostic": "XR_PROGRAM_DIAGNOSTIC_VALUE_USE",
+      "original_evidence_boundary": "Actual consumed String root is read; copy remains separately live and dropped.",
+      "status": "OPEN"
+    },
+    {
+      "scenario": 0,
+      "mutation": 5,
+      "complete_graph_change": "Only SEQUENCE_LENGTH source surviving copy -> already-dropped actual original array.",
+      "expected_build": "XR_PROGRAM_BUILD_OK",
+      "expected_verify": "XR_PROGRAM_VERIFY_SEMANTIC_REJECTED",
+      "expected_diagnostic": "XR_PROGRAM_DIAGNOSTIC_VALUE_USE",
+      "original_evidence_boundary": "Preserve copy/root distinction; no substitute alias rescues dead original.",
+      "status": "OPEN"
+    },
+    {
+      "scenario": 0,
+      "mutation": 6,
+      "complete_graph_change": "Swap actual OWNER_COPY and OWNER_DROP original operations at recorded copy/drop indices, so original dies before COPY.",
+      "expected_build": "XR_PROGRAM_BUILD_OK",
+      "expected_verify": "XR_PROGRAM_VERIFY_SEMANTIC_REJECTED",
+      "expected_diagnostic": "XR_PROGRAM_DIAGNOSTIC_VALUE_USE",
+      "original_evidence_boundary": "Actual subsequent copy/read/drop paths remain, no graph truncation.",
+      "status": "OPEN"
+    },
+    {
+      "scenario": 0,
+      "mutation": 7,
+      "complete_graph_change": "Only ARRAY_CONSTRUCT immediate_kind NONE -> U32 (zero union); full graph retained.",
+      "expected_build": "XR_PROGRAM_BUILD_OK",
+      "expected_verify": "XR_PROGRAM_VERIFY_SEMANTIC_REJECTED",
+      "expected_diagnostic": "XR_PROGRAM_DIAGNOSTIC_OPERATION_TYPE",
+      "original_evidence_boundary": "Preserve original OPERATION_TYPE first diagnostic even though control-field mutation name might suggest IMMEDIATE.",
+      "status": "OPEN"
+    },
+    {
+      "scenario": 4,
+      "mutation": 8,
+      "complete_graph_change": "Only actual OWNER_ALIAS instruction3 result ownership OWNER -> NON_OWNER; alias result still actual outer operand.",
+      "expected_build": "XR_PROGRAM_BUILD_OK",
+      "expected_verify": "XR_PROGRAM_VERIFY_SEMANTIC_REJECTED",
+      "expected_diagnostic": "XR_PROGRAM_DIAGNOSTIC_ROOT",
+      "original_evidence_boundary": "Complete owning return graph retained; actual affine alias result needs root contract.",
+      "status": "OPEN"
+    },
+    {
+      "scenario": 4,
+      "mutation": 9,
+      "complete_graph_change": "Only actual OWNER_ALIAS instruction3 immediate_kind NONE -> U32.",
+      "expected_build": "XR_PROGRAM_BUILD_OK",
+      "expected_verify": "XR_PROGRAM_VERIFY_SEMANTIC_REJECTED",
+      "expected_diagnostic": "XR_PROGRAM_DIAGNOSTIC_OPERATION_IMMEDIATE",
+      "original_evidence_boundary": "Original exact OPERATION_IMMEDIATE, not generic non-OK.",
+      "status": "OPEN"
+    },
+    {
+      "scenario": 4,
+      "mutation": 10,
+      "complete_graph_change": "Only OWNER_ALIAS operand actual array key2 -> actual trivial I64 key0; result array type and outer/copy stay.",
+      "expected_build": "XR_PROGRAM_BUILD_OK",
+      "expected_verify": "XR_PROGRAM_VERIFY_SEMANTIC_REJECTED",
+      "expected_diagnostic": "XR_PROGRAM_DIAGNOSTIC_OPERATION_TYPE",
+      "original_evidence_boundary": "Real operand mismatch; not mismatched signature or unrelated owner.",
+      "status": "OPEN"
+    },
+    {
+      "scenario": 4,
+      "mutation": 11,
+      "complete_graph_change": "Insert OWNER_DROP actual array key2 before OWNER_ALIAS, memmove all actual alias/copy/outer/RETURN forward, increment count7->8.",
+      "expected_build": "XR_PROGRAM_BUILD_OK",
+      "expected_verify": "XR_PROGRAM_VERIFY_SEMANTIC_REJECTED",
+      "expected_diagnostic": "XR_PROGRAM_DIAGNOSTIC_VALUE_USE",
+      "original_evidence_boundary": "Same dead original is subsequently used by alias, copy and outer; combined stale-root obligations retained.",
+      "status": "OPEN"
+    }
+  ],
+  "original_admission": "Five scenario0..4 mutation0 graphs build/admit; original only asserts ARRAY_CONSTRUCT at operation index0 for empty or2 otherwise, then frees Program/artifact. validate_ok carries two CHECKs; early if(!program)return is historical failure behavior, never permission to skip current failing matrix.",
+  "assertion_counts": {
+    "census_functions": 1,
+    "outer_sites": 4,
+    "specified_helpers": 5,
+    "specified_helper_sites": 8,
+    "fresh_builder_inputs": 16,
+    "positive_admitted_programs": 5,
+    "semantic_negative_inputs": 11,
+    "semantic_negative_verify_calls": 22,
+    "original_runtime_evaluations": 0,
+    "wire_mutations": 0
+  },
+  "expectation_policy": "Keep all five actual layouts, scenario0 mutations1..7 exact OPERATION_TYPE/VALUE_USE/ROOT/VALUE_USE/VALUE_USE/VALUE_USE/OPERATION_TYPE and scenario4 alias mutations8..11 ROOT/OPERATION_IMMEDIATE/OPERATION_TYPE/VALUE_USE. Eleven semantic negatives call original helper twice with exact semantic status/kind, NULL product and full Diag memcmp. Proposed length/owned-content oracles are derived additional qualification obligations, not original executed assertions.",
+  "original_runtime_boundary": "This census has zero runtime evaluations and zero returned-owning-value disposal. Original array copy survives original DROP in graph; actual copy length/content, identity, alias semantics and physical/per-object lifecycle have not been executed/asserted here.",
+  "unselected_shared_builders": {
+    "functions": [
+      "xr_program_array_place_fixture_write",
+      "xr_program_array_loan_fixture_write"
+    ],
+    "full_body_preserved": true,
+    "selected_by_this_census": false,
+    "separate_existing_mapping": "tests/unit/xir/product_consumers/source_array_element_place_obligations.json",
+    "boundary": "Complete place/loan builders include actual typed PANIC_INFO cleanup, borrowed parameter restrictions, nested crossing and exchange scenarios. Those are separate OPEN responsibilities; no selected place/loan input or runtime is counted in this sixteen-input value matrix."
+  },
+  "shared_fixture_owners": {
+    "path": "tests/unit/program/xr_program_array_fixture.h",
+    "actual_include_users": [
+      "tests/unit/program/test_xr_program_verify.c",
+      "tests/unit/program/test_xr_program.c",
+      "tests/unit/aot/test_xr_program_aot.c",
+      "tests/unit/vm/test_xr_program_vm.c",
+      "tests/unit/vm/test_xr_program_vm_allocations.c"
+    ],
+    "status": "PRESERVE_SHARED_READONLY",
+    "deletion": "Program/verifier/AOT/VM/VM allocations still include all three complete shared builders. No deletion candidate."
+  },
+  "Root_contract_or_representation_review": {
+    "status": "OPEN",
+    "values": "Preserve original four String bytes, actual two producer handles, deliberate same-SSA trivial reuse, nested actual owner consumption, surviving-copy read and actual owned outer escape.",
+    "identity": "OWNER_ALIAS and OWNER_COPY have distinct result handles with same actual source. Correct current logical sharing/copy isolation and stable identities cannot be inferred from SSA names, allocator addresses or aggregate domain counts; require actual observer/events through Root.",
+    "lifetime": "Escaped outer owning value must outlive Program/Instance teardown according to current contract and be explicitly disposed with all actual array/element owners released. Array place/loan old representation must separately map to frozen Cell/loan rules, no compatibility carrier.",
+    "qualification": "Formal producer/owned Source roles/observer/window still required. Actual current Source/packet/Library/VM/native/mixed/two-instance/owning escape/active cancel/full FI/axes/safety/deletion all OPEN."
+  },
+  "full_FI": "NOT_RUN",
+  "axes": "NOT_RUN",
+  "full_safety": "NOT_RUN",
+  "SourceDelete": "NOT_RUN",
+  "Main": "NOT_RUN",
+  "handoff": {
+    "Root_thread": "01a11f74-a297-7b11-8441-835bde6a3d5f",
+    "formal_acceptance": "PENDING"
+  },
+  "boundaries": [
+    "Static full original array value matrix only, retired0/all OPEN.",
+    "Three full shared builder bodies preserved, two unselected by this census.",
+    "Only new map and responsibility trace may change."
+  ]
+}
