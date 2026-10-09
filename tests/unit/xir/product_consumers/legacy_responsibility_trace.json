@@ -481,7 +481,7 @@
     },
     {
       "path": "tests/unit/xir/product_consumers/source_original_cross_module_instance_method_obligations.json",
-      "lf_sha256": "0340f78dafbf266318d9836bb5ea839693287ae90161765e04650ae36f09fa85"
+      "lf_sha256": "34d71d71adb59738203cdb68ba9813f59e3d5cdec031ee7973d4498a61bbff70"
     },
     {
       "path": "tests/unit/xir/product_consumers/source_original_prelude_enum_catch_obligations.json",
