@@ -1,0 +1,591 @@
+{
+  "schema": 1,
+  "family": "original_aggregate_nested_owner_transfer_copy_trivial_reuse_and_move_only_variant",
+  "legacy_base_commit": "01e6d38401b0f5c8684b64c35a99ac651024c0c1",
+  "status": "OPEN",
+  "retired": 0,
+  "replacement_gates": [],
+  "result": "STATIC_FULL_ORIGINAL_AGGREGATE_OWNER_TRANSFER_MAP_ONLY",
+  "product_execution": "NOT_RUN_BY_THIS_MAP",
+  "producer": "25f4016d6f089169757a90ae11ba537002374711",
+  "identity": "Checked25/semantic67/Value22/Call28/Program29",
+  "legacy": [
+    {
+      "name": "test_aggregate_construct_owner_transfers",
+      "legacy_path": "tests/unit/program/test_xr_program_verify.c",
+      "legacy_line": 6846,
+      "body_lf_sha256": "813d05d6b3f9ad4bf1caf36893e8b9c58fd9e93419d828e31450ba93b941ca6c",
+      "assertion_sites": 7,
+      "loop_sites": 1,
+      "status": "OPEN",
+      "replacement_gates": [],
+      "note": "Function census preserves its whole body; sites do not count executed loop iterations."
+    }
+  ],
+  "responsibility_mapping": [
+    {
+      "path": "tests/unit/program/test_xr_program_verify.c",
+      "function": "test_aggregate_construct_owner_transfers",
+      "line": 6846,
+      "end_line": 6883,
+      "body_lf_sha256": "813d05d6b3f9ad4bf1caf36893e8b9c58fd9e93419d828e31450ba93b941ca6c",
+      "status": "OPEN",
+      "CHECK_sites": 7,
+      "CHECK_bindings": [
+        {
+          "line": 6851,
+          "expression": "test->kind == (XrProgramConstructCaseKind) index",
+          "status": "OPEN"
+        },
+        {
+          "line": 6858,
+          "expression": "status == XR_PROGRAM_BUILD_OK",
+          "status": "OPEN"
+        },
+        {
+          "line": 6871,
+          "expression": "result.kind == XR_REFERENCE_OUTCOME_RETURN",
+          "status": "OPEN"
+        },
+        {
+          "line": 6872,
+          "expression": "result.value.kind == XR_REFERENCE_VALUE_I64",
+          "status": "OPEN"
+        },
+        {
+          "line": 6873,
+          "expression": "result.value.as.i64 == 42",
+          "status": "OPEN"
+        },
+        {
+          "line": 6881,
+          "expression": "accepted > 0u && rejected > 0u",
+          "status": "OPEN"
+        },
+        {
+          "line": 6882,
+          "expression": "accepted + rejected == XR_PROGRAM_CONSTRUCT_CASE_COUNT",
+          "status": "OPEN"
+        }
+      ],
+      "XR_CHECK_sites": 0,
+      "XR_CHECK_bindings": []
+    }
+  ],
+  "outer_CHECK_sites": 7,
+  "original_private_helpers": [
+    {
+      "path": "tests/unit/program/test_xr_program_verify.c",
+      "function": "validate_ok",
+      "line": 159,
+      "end_line": 174,
+      "body_lf_sha256": "94fe0ef4e0242acb810c12621ae1fe73a9887ef668f15ddc6c67ed645494f62b",
+      "status": "OPEN",
+      "CHECK_sites": 2,
+      "CHECK_bindings": [
+        {
+          "line": 171,
+          "expression": "status == XR_PROGRAM_VERIFY_OK",
+          "status": "OPEN"
+        },
+        {
+          "line": 172,
+          "expression": "program != NULL",
+          "status": "OPEN"
+        }
+      ],
+      "XR_CHECK_sites": 0,
+      "XR_CHECK_bindings": []
+    },
+    {
+      "path": "tests/unit/program/test_xr_program_verify.c",
+      "function": "expect_semantic_reject_at",
+      "line": 176,
+      "end_line": 198,
+      "body_lf_sha256": "44cf0fb15bea156743a1c0e35b0be8ee844aa1af55c8653ed9361cf781c045b8",
+      "status": "OPEN",
+      "CHECK_sites": 6,
+      "CHECK_bindings": [
+        {
+          "line": 190,
+          "expression": "first_status == XR_PROGRAM_VERIFY_SEMANTIC_REJECTED",
+          "status": "OPEN"
+        },
+        {
+          "line": 191,
+          "expression": "program == NULL",
+          "status": "OPEN"
+        },
+        {
+          "line": 192,
+          "expression": "first.kind == expected",
+          "status": "OPEN"
+        },
+        {
+          "line": 195,
+          "expression": "second_status == first_status",
+          "status": "OPEN"
+        },
+        {
+          "line": 196,
+          "expression": "memcmp(&first, &second, sizeof(first)) == 0",
+          "status": "OPEN"
+        },
+        {
+          "line": 197,
+          "expression": "program == NULL",
+          "status": "OPEN"
+        }
+      ],
+      "XR_CHECK_sites": 0,
+      "XR_CHECK_bindings": []
+    },
+    {
+      "path": "tests/unit/program/xr_program_construct_fixture.h",
+      "function": "xr_construct_key",
+      "line": 105,
+      "end_line": 107,
+      "body_lf_sha256": "3139c54fb60fb08df4e37ccd57467e019748045240b9d5c41177762939933364",
+      "status": "OPEN",
+      "CHECK_sites": 0,
+      "CHECK_bindings": [],
+      "XR_CHECK_sites": 0,
+      "XR_CHECK_bindings": []
+    },
+    {
+      "path": "tests/unit/program/xr_program_construct_fixture.h",
+      "function": "xr_construct_has_forbidden_type",
+      "line": 109,
+      "end_line": 112,
+      "body_lf_sha256": "bace72e8086f404ddeaf671c7c072678aab80701445d7cd98b59fca6705ba83b",
+      "status": "OPEN",
+      "CHECK_sites": 0,
+      "CHECK_bindings": [],
+      "XR_CHECK_sites": 0,
+      "XR_CHECK_bindings": []
+    },
+    {
+      "path": "tests/unit/program/xr_program_construct_fixture.h",
+      "function": "xr_construct_has_two_leaf_fields",
+      "line": 114,
+      "end_line": 118,
+      "body_lf_sha256": "e32ea7f83a547546ceaed609ba6e9d8596942f6a4900a7cefd5a31ee0427a912",
+      "status": "OPEN",
+      "CHECK_sites": 0,
+      "CHECK_bindings": [],
+      "XR_CHECK_sites": 0,
+      "XR_CHECK_bindings": []
+    },
+    {
+      "path": "tests/unit/program/xr_program_construct_fixture.h",
+      "function": "xr_construct_init_types",
+      "line": 120,
+      "end_line": 185,
+      "body_lf_sha256": "afa85b361aeb18240c6eecc1d31977dd710cd8151060017d45924e7312cfc013",
+      "status": "OPEN",
+      "CHECK_sites": 0,
+      "CHECK_bindings": [],
+      "XR_CHECK_sites": 0,
+      "XR_CHECK_bindings": []
+    },
+    {
+      "path": "tests/unit/program/xr_program_construct_fixture.h",
+      "function": "xr_construct_op",
+      "line": 187,
+      "end_line": 206,
+      "body_lf_sha256": "fc2b6b22a9fc49dae6887edb1d4eb6fc94d2a849d90d6f41037015200437e933",
+      "status": "OPEN",
+      "CHECK_sites": 0,
+      "CHECK_bindings": [],
+      "XR_CHECK_sites": 2,
+      "XR_CHECK_bindings": [
+        {
+          "line": 190,
+          "expression": "fixture->instruction_count < XR_CONSTRUCT_INSTRUCTION_LIMIT,\n             \"construct fixture instruction capacity exhausted\"",
+          "status": "OPEN"
+        },
+        {
+          "line": 192,
+          "expression": "result < XR_CONSTRUCT_VALUE_COUNT, \"construct fixture result is invalid\"",
+          "status": "OPEN"
+        }
+      ]
+    },
+    {
+      "path": "tests/unit/program/xr_program_construct_fixture.h",
+      "function": "xr_construct_project",
+      "line": 208,
+      "end_line": 214,
+      "body_lf_sha256": "67e9f069ae299ce2ca465c74d325e951d5e9ee03294ee3bc3b4f250794a8542d",
+      "status": "OPEN",
+      "CHECK_sites": 0,
+      "CHECK_bindings": [],
+      "XR_CHECK_sites": 0,
+      "XR_CHECK_bindings": []
+    },
+    {
+      "path": "tests/unit/program/xr_program_construct_fixture.h",
+      "function": "xr_construct_finish",
+      "line": 216,
+      "end_line": 259,
+      "body_lf_sha256": "eedd0c2790868c99cfd99ae1b5480abe371021355259327df70132e4369ba044",
+      "status": "OPEN",
+      "CHECK_sites": 0,
+      "CHECK_bindings": [],
+      "XR_CHECK_sites": 0,
+      "XR_CHECK_bindings": []
+    },
+    {
+      "path": "tests/unit/program/xr_program_construct_fixture.h",
+      "function": "xr_construct_init_instructions",
+      "line": 261,
+      "end_line": 318,
+      "body_lf_sha256": "3a1960c82c852879dd7f5c07bfa322e8d0ee44e55d07dc09ff3e343ba16c57c4",
+      "status": "OPEN",
+      "CHECK_sites": 0,
+      "CHECK_bindings": [],
+      "XR_CHECK_sites": 0,
+      "XR_CHECK_bindings": []
+    },
+    {
+      "path": "tests/unit/program/xr_program_construct_fixture.h",
+      "function": "xr_program_construct_fixture_write",
+      "line": 320,
+      "end_line": 373,
+      "body_lf_sha256": "c8149f06ef7ea00e7c57b76eb16bfd42a9f5300b17cebe45ac341daab14b4cd6",
+      "status": "OPEN",
+      "CHECK_sites": 0,
+      "CHECK_bindings": [],
+      "XR_CHECK_sites": 0,
+      "XR_CHECK_bindings": []
+    }
+  ],
+  "specified_helper_CHECK_sites": 8,
+  "specified_helper_XR_CHECK_sites": 2,
+  "input_files": [
+    {
+      "path": "tests/unit/program/test_xr_program_verify.c",
+      "physical_raw_sha256": "a39922500c0943c034fafcda3a82b67e511ea658f453f6c0c3204f7719de1817",
+      "whole_file_lf_sha256": "ec4b93f13bfab2aa3d4b8f8773dd5c1118a0c682ed6f8304fead515f90402802",
+      "git_base_equal": true,
+      "status": "PRESERVE_ORIGINAL_READONLY"
+    },
+    {
+      "path": "tests/unit/program/xr_program_construct_fixture.h",
+      "physical_raw_sha256": "8784b087576032649e15eaf7ce55207b27c8b0d1ee2e7f8096ce97fca136ccd8",
+      "whole_file_lf_sha256": "282629c6320114c37a21c7f036d6678a986703da677f779cb84d046e9213cb5f",
+      "git_base_equal": true,
+      "status": "PRESERVE_ORIGINAL_READONLY"
+    },
+    {
+      "path": "tests/unit/program/test_xr_program.c",
+      "physical_raw_sha256": "5986f0f7160296f52787ca8b9443329a9a05eeff083daac530a776642971655a",
+      "whole_file_lf_sha256": "2743be628db188c386a72e59529286df64720051710599d83f9b6510aa529aff",
+      "git_base_equal": true,
+      "status": "PRESERVE_ORIGINAL_READONLY"
+    },
+    {
+      "path": "tests/unit/vm/test_xr_program_vm.c",
+      "physical_raw_sha256": "3a19b58076867cc70ef6c77e975286009df65e61ac1ed9edb2b5ab7813543502",
+      "whole_file_lf_sha256": "17904ef2bab8bb7eea72245fedba9878d74b6b8e93776e4314418e2db06dce8a",
+      "git_base_equal": true,
+      "status": "PRESERVE_ORIGINAL_READONLY"
+    }
+  ],
+  "registered_matrix": [
+    {
+      "ordinal": 0,
+      "mutation": "NESTED_TRANSFER",
+      "original_label": "nested owner transfer",
+      "expected_build": "XR_PROGRAM_BUILD_OK",
+      "expected_verify": "XR_PROGRAM_VERIFY_OK",
+      "expected_diagnostic": null,
+      "status": "OPEN",
+      "complete_graph_change": "Real OWN leaf100[21] -> OWN middle101[leaf,21] -> OWN outer102[middle,21,21]. Project middle field0, leaf field0=21 and middle field1=21, ADD actual projections ->42; DROP actual outer once.",
+      "shape_counts": {
+        "functions": 1,
+        "blocks": 1,
+        "instructions": 12,
+        "constants": 1,
+        "types": 6,
+        "interfaces": 1,
+        "conformances": 0
+      },
+      "original_runtime": "RETURN/I64(42), outcome explicitly disposed"
+    },
+    {
+      "ordinal": 1,
+      "mutation": "EXPLICIT_COPY_PAIR",
+      "original_label": "explicit copy into distinct fields",
+      "expected_build": "XR_PROGRAM_BUILD_OK",
+      "expected_verify": "XR_PROGRAM_VERIFY_OK",
+      "expected_diagnostic": null,
+      "status": "OPEN",
+      "complete_graph_change": "OWNER_COPY actual OWN leaf100 -> distinct actual OWN copy; middle101 fields become [leaf100,leaf100] with operands[original leaf,actual copy]. Outer owns middle, project both distinct nested leaves and their I64 fields21+21 ->42; DROP actual outer.",
+      "shape_counts": {
+        "functions": 1,
+        "blocks": 1,
+        "instructions": 14,
+        "constants": 1,
+        "types": 6,
+        "interfaces": 1,
+        "conformances": 0
+      },
+      "original_runtime": "RETURN/I64(42), outcome explicitly disposed"
+    },
+    {
+      "ordinal": 2,
+      "mutation": "TRIVIAL_REUSE",
+      "original_label": "trivial field reuse",
+      "expected_build": "XR_PROGRAM_BUILD_OK",
+      "expected_verify": "XR_PROGRAM_VERIFY_OK",
+      "expected_diagnostic": null,
+      "status": "OPEN",
+      "complete_graph_change": "Leaf/middle/outer all TRIVIAL/COPY_TRIVIAL and NON_OWNER; leaf100 is nominal STRUCT. Middle has two leaf fields both referencing the same trivial actual leaf SSA. Project both21 values ->42; no OWNER_COPY or OWNER_DROP.",
+      "shape_counts": {
+        "functions": 1,
+        "blocks": 1,
+        "instructions": 12,
+        "constants": 1,
+        "types": 6,
+        "interfaces": 1,
+        "conformances": 0
+      },
+      "original_runtime": "RETURN/I64(42), outcome explicitly disposed"
+    },
+    {
+      "ordinal": 3,
+      "mutation": "FORBIDDEN_MOVE",
+      "original_label": "copy-forbidden owner transfer",
+      "expected_build": "XR_PROGRAM_BUILD_OK",
+      "expected_verify": "XR_PROGRAM_VERIFY_OK",
+      "expected_diagnostic": null,
+      "status": "OPEN",
+      "complete_graph_change": "Actual variant choice105 ordinal0 payloadI64(21), but unselected ordinal1 OWN_TOKEN103 makes entire choice AFFINE/COPY_FORBIDDEN. Move choice into copy-forbidden middle101[choice,21], then outer102; project choice ordinal0/field0 and middle scalar ->42; DROP outer.",
+      "shape_counts": {
+        "functions": 1,
+        "blocks": 1,
+        "instructions": 12,
+        "constants": 1,
+        "types": 6,
+        "interfaces": 1,
+        "conformances": 0
+      },
+      "original_runtime": "RETURN/I64(42), outcome explicitly disposed"
+    },
+    {
+      "ordinal": 4,
+      "mutation": "DUPLICATE_OWNER",
+      "original_label": "duplicate owner fields",
+      "expected_build": "XR_PROGRAM_BUILD_OK",
+      "expected_verify": "XR_PROGRAM_VERIFY_SEMANTIC_REJECTED",
+      "expected_diagnostic": "XR_PROGRAM_DIAGNOSTIC_VALUE_USE",
+      "status": "OPEN",
+      "complete_graph_change": "Same actual affine OWN leaf100 appears in both middle leaf fields, no OWNER_COPY. Full outer construction, both nested projections/add/drop remain; duplicate consumption must reject VALUE_USE.",
+      "shape_counts": {
+        "functions": 1,
+        "blocks": 1,
+        "instructions": 13,
+        "constants": 1,
+        "types": 6,
+        "interfaces": 1,
+        "conformances": 0
+      },
+      "original_runtime": "NOT_RUN"
+    },
+    {
+      "ordinal": 5,
+      "mutation": "USE_AFTER_CONSTRUCT",
+      "original_label": "use after owner transfer",
+      "expected_build": "XR_PROGRAM_BUILD_OK",
+      "expected_verify": "XR_PROGRAM_VERIFY_SEMANTIC_REJECTED",
+      "expected_diagnostic": "XR_PROGRAM_DIAGNOSTIC_VALUE_USE",
+      "status": "OPEN",
+      "complete_graph_change": "After actual middle consumes OWN leaf100, insert AGGREGATE_PROJECT stale leaf field0 into invalid-use before full outer finish. Keep move, projection and complete owners unchanged.",
+      "shape_counts": {
+        "functions": 1,
+        "blocks": 1,
+        "instructions": 13,
+        "constants": 1,
+        "types": 6,
+        "interfaces": 1,
+        "conformances": 0
+      },
+      "original_runtime": "NOT_RUN"
+    },
+    {
+      "ordinal": 6,
+      "mutation": "DROP_AFTER_CONSTRUCT",
+      "original_label": "drop after owner transfer",
+      "expected_build": "XR_PROGRAM_BUILD_OK",
+      "expected_verify": "XR_PROGRAM_VERIFY_SEMANTIC_REJECTED",
+      "expected_diagnostic": "XR_PROGRAM_DIAGNOSTIC_VALUE_USE",
+      "status": "OPEN",
+      "complete_graph_change": "After actual middle consumes OWN leaf100, insert OWNER_DROP stale leaf before full outer finish. The later DROP outer remains; preserve stale leaf drop and complete owner graph.",
+      "shape_counts": {
+        "functions": 1,
+        "blocks": 1,
+        "instructions": 13,
+        "constants": 1,
+        "types": 6,
+        "interfaces": 1,
+        "conformances": 0
+      },
+      "original_runtime": "NOT_RUN"
+    },
+    {
+      "ordinal": 7,
+      "mutation": "BORROWED_FIELD",
+      "original_label": "borrowed affine field",
+      "expected_build": "XR_PROGRAM_BUILD_OK",
+      "expected_verify": "XR_PROGRAM_VERIFY_SEMANTIC_REJECTED",
+      "expected_diagnostic": "XR_PROGRAM_DIAGNOSTIC_OPERATION_TYPE",
+      "status": "OPEN",
+      "complete_graph_change": "From actual OWN leaf100 create PLACE_LOCAL actual place, PLACE_LOAD nonown leaf borrow. Attempt to store that actual borrow in affine middle leaf field, retaining full outer/projections/add/drop. Reject borrowed affine field, not an unrelated type substitute.",
+      "shape_counts": {
+        "functions": 1,
+        "blocks": 1,
+        "instructions": 14,
+        "constants": 1,
+        "types": 6,
+        "interfaces": 1,
+        "conformances": 0
+      },
+      "original_runtime": "NOT_RUN"
+    },
+    {
+      "ordinal": 8,
+      "mutation": "FORBIDDEN_COPY",
+      "original_label": "copy-forbidden explicit copy",
+      "expected_build": "XR_PROGRAM_BUILD_OK",
+      "expected_verify": "XR_PROGRAM_VERIFY_SEMANTIC_REJECTED",
+      "expected_diagnostic": "XR_PROGRAM_DIAGNOSTIC_OPERATION_TYPE",
+      "status": "OPEN",
+      "complete_graph_change": "Use same real move-only variant choice105 and emit OWNER_COPY choice before middle. Middle still consumes original choice plus scalar21; copied result remains unconsumed. Keep complete graph; first OPERATION_TYPE rejects forbidden copy, not isolated result leak.",
+      "shape_counts": {
+        "functions": 1,
+        "blocks": 1,
+        "instructions": 13,
+        "constants": 1,
+        "types": 6,
+        "interfaces": 1,
+        "conformances": 0
+      },
+      "original_runtime": "NOT_RUN"
+    }
+  ],
+  "registration_contract": "Exactly nine X-macro entries in original declaration order. Enum/table generated from same complete macro, static sizeof registration assertion remains. Original checks kind==index, accepted>0/rejected>0, accepted+rejected==CASE_COUNT; source graph descriptor count is not runtime qualification.",
+  "type_catalog": [
+    {
+      "local_id": 100,
+      "name": "LEAF",
+      "shape": "AGGREGATE[I64]",
+      "normal": "AFFINE/COPY_EXPLICIT, nominal NONE",
+      "trivial_reuse": "TRIVIAL/COPY_TRIVIAL, nominal STRUCT"
+    },
+    {
+      "local_id": 101,
+      "name": "MIDDLE",
+      "shape": "AGGREGATE[LEAF100,I64] normally, [LEAF100,LEAF100] for explicit-copy/duplicate/trivial, [CHOICE105,I64] for forbidden-move/copy",
+      "normal": "AFFINE/COPY_EXPLICIT",
+      "trivial_reuse": "TRIVIAL/COPY_TRIVIAL",
+      "forbidden": "AFFINE/COPY_FORBIDDEN"
+    },
+    {
+      "local_id": 102,
+      "name": "OUTER",
+      "shape": "AGGREGATE[MIDDLE101,I64,I64]",
+      "normal": "AFFINE/COPY_EXPLICIT",
+      "trivial_reuse": "TRIVIAL/COPY_TRIVIAL",
+      "forbidden": "AFFINE/COPY_FORBIDDEN"
+    },
+    {
+      "local_id": 103,
+      "name": "TOKEN",
+      "shape": "EXISTENTIAL/interface OWNED_STORAGE",
+      "ownership": "AFFINE/COPY_FORBIDDEN",
+      "value_origin": "Never actually materialized by these nine graphs; it is an unselected variant payload type, not a live resource owner."
+    },
+    {
+      "local_id": 104,
+      "name": "READ",
+      "shape": "EXISTENTIAL/same interface READ",
+      "ownership": "TRIVIAL/COPY_TRIVIAL",
+      "value_origin": "One interface READ receiver parameter; no actual existential packing/witness invocation/conformance in these graphs."
+    },
+    {
+      "local_id": 105,
+      "name": "CHOICE",
+      "shape": "VARIANT alternatives[I64], [OWN TOKEN103]",
+      "ownership": "AFFINE/COPY_FORBIDDEN",
+      "value_origin": "Only forbidden-move/copy graphs actually create inhabited ordinal0/I64 payload21; ordinal1 remains unselected."
+    }
+  ],
+  "common_graph": {
+    "entry_prefix": [
+      "BLOCK_ARGUMENT empty",
+      "CONSTANT_I64 actual21",
+      "Construct actual leaf100[21] OWN/nonown or choice105 variant0[21] OWN",
+      "Conditional real owner copy or place/borrow operations by complete case",
+      "AGGREGATE_CONSTRUCT actual middle from real leaf/copy/borrow/choice plus scalar or second actual leaf"
+    ],
+    "finish": [
+      "AGGREGATE_CONSTRUCT actual outer[middle,scalar21,scalar21]",
+      "AGGREGATE_PROJECT outer field0 -> actual middle borrow",
+      "AGGREGATE_PROJECT middle field0 -> actual leaf or move-only choice borrow",
+      "Actual leaf field0 or VARIANT_PROJECT ordinal0/field0 -> firstI64(21)",
+      "Actual middle field1 scalar or second leaf field0 -> secondI64(21)",
+      "ADD_I64 [actual first,second] immediate1 -> result42",
+      "OWNER_DROP actual outer unless TRIVIAL_REUSE",
+      "RETURN actual sum"
+    ],
+    "independent_result": "Four admitted originals evaluate actual nested projections21+21, not substituted CONST42. Outer extra scalar fields21/21 remain present but are not value-observed.",
+    "module": "One ENTRY function, one block, one I64 constant21, CORE_BASE, actual construct:semantic-profile, TRAP effect; all six types and one READ-receiver interface always present.",
+    "helper_limits": "XR_CHECK instruction_count<24 and result<value-count(14); actual instructions counted by complete selected source paths, never an executed current builder."
+  },
+  "assertion_counts": {
+    "census_functions": 1,
+    "outer_sites": 7,
+    "specified_helpers": 11,
+    "specified_helper_sites": 8,
+    "specified_helper_XR_CHECK_sites": 2,
+    "fresh_builder_inputs": 9,
+    "positive_admitted_programs": 4,
+    "semantic_negative_inputs": 5,
+    "semantic_negative_verify_calls": 10,
+    "original_runtime_evaluations": 4,
+    "wire_mutations": 0
+  },
+  "expectation_policy": "Keep all nine complete input graphs in order. Four positives must return I64 exactly42; five negatives keep original VALUE_USE\u00d73/OPERATION_TYPE\u00d72 with two verifies/NULL product/full Diag memcmp. Existing producer-failure CHECK and continue are historical source behavior, not permission to skip a currently failing case. Source accepted/rejected counts must cover all nine.",
+  "original_runtime_boundary": "Four original positive evaluator calls explicitly dispose result before Program free. This differs from adjacent families but still has no per-object construct/finalize/reclaim or physical release checks. Tokens/witness/resource-backed storage are not executed by these aggregates; no lifecycle or native/mixed qualification inferred.",
+  "shared_fixture_owners": {
+    "path": "tests/unit/program/xr_program_construct_fixture.h",
+    "actual_include_users": [
+      "tests/unit/program/test_xr_program_verify.c",
+      "tests/unit/program/test_xr_program.c",
+      "tests/unit/vm/test_xr_program_vm.c"
+    ],
+    "status": "PRESERVE_SHARED_READONLY",
+    "deletion": "Original Program/verifier/VM consumers still include complete registry and helper graph. No deletion candidate."
+  },
+  "Root_contract_or_representation_review": {
+    "status": "OPEN",
+    "ownership": "Preserve actual consume/copy/distinct fields and borrow prohibition through frozen current Cell/loan/affine contract, not new temp roots or compat aliases.",
+    "type_provenance": "Copy-forbidden behavior comes from original unselected owned-storage alternative, even though actual variant0 payload is scalar21. Do not replace it with a plain copyable I64 or claim actual resource-owner destruction.",
+    "qualification": "New formal producer/owned roles/observer/window required for actual Source/packet/Library/current owner/VM/native/mixed/two-instance/escape/cancel/FI/axes/safety qualification. Additional lifecycle probes must use real stable identities and owning resource-backed inputs."
+  },
+  "full_FI": "NOT_RUN",
+  "axes": "NOT_RUN",
+  "full_safety": "NOT_RUN",
+  "SourceDelete": "NOT_RUN",
+  "Main": "NOT_RUN",
+  "handoff": {
+    "Root_thread": "01a11f74-a297-7b11-8441-835bde6a3d5f",
+    "formal_acceptance": "PENDING"
+  },
+  "boundaries": [
+    "Static full original nine-case responsibility only, retired0/all OPEN.",
+    "Shared fixture and product source/docs readonly; map/trace only.",
+    "No new current product build or execution is claimed."
+  ]
+}
