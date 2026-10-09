@@ -15,11 +15,11 @@
     "shared_emission_owner_consumers": 7
   },
   "reference_counts": {
-    "source_with_digest_reference": 82,
-    "source_without_digest_reference": 26,
+    "source_with_digest_reference": 83,
+    "source_without_digest_reference": 25,
     "other_with_digest_reference": 40,
     "other_without_digest_reference": 120,
-    "digest_reference_values": 150,
+    "digest_reference_values": 152,
     "source_inventory_projections": 42
   },
   "mapping_inputs": [
@@ -494,6 +494,10 @@
     {
       "path": "tests/unit/xir/product_consumers/source_original_string_slice_defer_obligations.json",
       "lf_sha256": "2d421ca700a2d1304a7db071a29e6b3644104566690089d9797bda3c79298340"
+    },
+    {
+      "path": "tests/unit/xir/product_consumers/source_original_time_sleep_obligations.json",
+      "lf_sha256": "647dc55d1f09fb7573b510f2f7b33b76d9c8ab5269c2e45a4f5c9c17d61dbbbf"
     },
     {
       "path": "tests/unit/xir/product_consumers/source_original_witness_call_panic_obligations.json",
@@ -2615,7 +2619,18 @@
           "scope": "Actual producer-owned stdlib directory, file source path and owning query identity; no synthetic module or embedded fallback proof."
         }
       },
-      "mapping_references": []
+      "mapping_references": [
+        {
+          "mapping": "tests/unit/xir/product_consumers/source_original_time_sleep_obligations.json",
+          "pointer": "/legacy/body_lf_sha256",
+          "binding": "exact_path_name_body"
+        },
+        {
+          "mapping": "tests/unit/xir/product_consumers/source_original_time_sleep_obligations.json",
+          "pointer": "/original_inline_VM_AOT/wrapper_body_lf_sha256",
+          "binding": "exact_body_digest_value_only"
+        }
+      ]
     },
     {
       "legacy_path": "tests/unit/program/test_xr_program_source_build.c",

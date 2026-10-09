@@ -1,0 +1,545 @@
+{
+  "schema": 1,
+  "producer": "25f4016d6f089169757a90ae11ba537002374711",
+  "identity": "Checked25/semantic67/Value22/Call28/Program29",
+  "status": "OPEN",
+  "retired": 0,
+  "replacement_gates": [],
+  "result": "PASS_OWNED_CHECKED_LOWERED_METADATA_ONLY",
+  "full_FI": "NOT_RUN",
+  "axes": "NOT_RUN",
+  "cancel": "NOT_RUN",
+  "SourceDelete": "NOT_RUN",
+  "full_safety": "NOT_RUN",
+  "Main": "NOT_RUN",
+  "family": "original_time_sleep",
+  "legacy": {
+    "name": "source_owner_time_sleep_has_typed_suspension_request",
+    "legacy_path": "tests/unit/program/test_xr_program_source_build.c",
+    "legacy_line": 8529,
+    "body_lf_sha256": "15fa93fc7c29d0e3e4761e1bfec410c7ebc13e5d4ea0d32b3822e036ab89ea49",
+    "assertion_sites": 46,
+    "loop_sites": 3,
+    "status": "OPEN",
+    "replacement_gates": [],
+    "note": "Function census preserves its whole body; sites do not count executed loop iterations.",
+    "original_fixture": {
+      "id": "time_sleep",
+      "expected_exit": 239,
+      "labels": [
+        "coroutine",
+        "timer",
+        "suspension"
+      ],
+      "backends": {
+        "vm": "execute",
+        "aot": "execute"
+      }
+    },
+    "static_input_literals": {
+      "source": {
+        "bytes": 62,
+        "sha256": "639055c196ca2c31d6759655da59d155c48e5607a20157a338a75b4ac0c4e63b"
+      }
+    }
+  },
+  "original_private_helpers": [
+    {
+      "path": "tests/unit/program/test_xr_program_source_build.c",
+      "function": "source_build_fixture_init",
+      "line": 894,
+      "end_line": 968,
+      "body_lf_sha256": "964c190cb52940aa039b9459e6a5aa0416430eadac032979ed210358216892eb",
+      "classification": "Original actual directly used private NON_TEST helper metadata; no TEST/census row."
+    },
+    {
+      "path": "tests/unit/program/test_xr_program_source_build.c",
+      "function": "source_build_fixture_free",
+      "line": 873,
+      "end_line": 892,
+      "body_lf_sha256": "54f2ca59ddb46fda789abf0411160790bcb950903858a308b984b50e6f8c1889",
+      "classification": "Original actual directly used private NON_TEST helper metadata; no TEST/census row."
+    },
+    {
+      "path": "tests/unit/program/test_xr_program_source_build.c",
+      "function": "source_fixture_output_path",
+      "line": 63,
+      "end_line": 65,
+      "body_lf_sha256": "2c5d63f47f4b0e77e5abec0b6831c67cec2056ad89196c34fbd8e0cbd6ec1d9d",
+      "classification": "Original actual directly used private NON_TEST helper metadata; no TEST/census row."
+    }
+  ],
+  "original_inline_VM_AOT": {
+    "classification": "VM/backend/AOT assertions reside in complete original TEST body; no assert_vm_i64_result/assert_aot_fixture_backend_contract helper is called here. Do not attach unrelated helper digests or create NON_TEST-as-TEST rows.",
+    "wrapper_lines": [
+      8529,
+      8665
+    ],
+    "wrapper_body_lf_sha256": "15fa93fc7c29d0e3e4761e1bfec410c7ebc13e5d4ea0d32b3822e036ab89ea49",
+    "inline_VM_lines": [
+      8596,
+      8620
+    ],
+    "inline_AOT_lines": [
+      8622,
+      8655
+    ]
+  },
+  "original_source": {
+    "path": "tests/unit/xir/product_consumers/original_time_sleep/root.xr",
+    "prefix_bytes": 62,
+    "prefix_sha256": "639055c196ca2c31d6759655da59d155c48e5607a20157a338a75b4ac0c4e63b",
+    "adapter": "export fn consumerAnswer() -> i64 { return answer() }\n",
+    "adapter_bytes": 54,
+    "adapter_sha256": "62788122d5e32c2bf5db10a60a2939f92a226f7606d09c490da4212a1341f2fa",
+    "bytes": 116,
+    "sha256": "3091ad3db264c762b322b5961cb33023f112e713a667820d91ec26a06523ec0e",
+    "construction": "The actual source[] C literals were decoded independently with ast.literal_eval and the inventory decoder. The prefix equals fixtures/time_sleep/original.xr, and the complete source equals the existing root.xr. Only the 54-byte export adapter was appended."
+  },
+  "original_module_graph": {
+    "physical_root": "tests/unit/xir/product_consumers/original_time_sleep",
+    "root": "tests/unit/xir/product_consumers/original_time_sleep/root.xr",
+    "user_library": "NONE_ORIGINAL_FIXTURE_INIT_DEPENDENCY_NULL",
+    "stdlib_import": "import time",
+    "stdlib_module_path": "stdlib/time/time.xr",
+    "stdlib_module_identity": "stdlib-module-v1:module=4:time:path=12:time/time.xr",
+    "no_flattening_or_shim": true,
+    "boundary": "The original source imports the real standard time module. No user library or copied stdlib was fabricated. Module count and authority identity must be checked through Source queries on the actual admitted graph."
+  },
+  "independent_i64": 239,
+  "independent_goldens": {
+    "required_Source_status": 0,
+    "duration_ms": 10,
+    "returned_i64": 239,
+    "typedtimer_suspend_count_original_Program": 1,
+    "old_entry_effect_mask": "XR_CORE_EFFECT_CALL | XR_CORE_EFFECT_SUSPEND | XR_CORE_EFFECT_CANCEL",
+    "old_entry_capability_mask": "XR_CORE_CAPABILITY_RUNTIME_COROUTINE_SUSPENSION | XR_CORE_CAPABILITY_RUNTIME_TIMER_SUSPENSION",
+    "old_immediate_kind": "XR_CORE_IR_IMMEDIATE_COROUTINE_SUSPEND",
+    "old_request_kind": "XR_SUSPENSION_REQUEST_TIMER_AFTER_MS",
+    "old_request_operand_count": 1,
+    "old_successor_count": 2,
+    "old_VM_safepoint_id": 0,
+    "old_VM_state_id": 1,
+    "old_VM_suspension_operand_count": 1,
+    "normal_first_step": "SUSPENDED_TIMER_AFTER_MS_10",
+    "normal_next_step": "RETURN_I64_239",
+    "cancel_new_execution_after_first_suspend": "CANCELLED",
+    "old_generated_C_substrings": [
+      "UINT32_C(2), UINT32_C(1)",
+      "suspension_timer_after_ms",
+      "xr_aot_host_wait_timer"
+    ],
+    "old_repeated_generated_C": "exactsize+byteequality",
+    "original_standalone_exit": 239,
+    "original_stdout_hex": "",
+    "original_stderr_hex": "",
+    "scope": "These are independent original static and runtime oracles, with no current execution. The legacy VM resumed through its next step and did not independently measure elapsed wall time. A current HostWait check for the full 10 ms is additional target evidence."
+  },
+  "proposed_consumer": {
+    "source": "tests/unit/xir/product_consumers/test_original_time_sleep_source.c",
+    "cmake": "tests/unit/xir/product_consumers/source_product_original_time_sleep_source.cmake",
+    "status": "REGISTERED_BUILT_EXECUTED_METADATA_ONLY_PASS",
+    "proposed_normal_tests": [
+      {
+        "name": "test_original_time_sleep_source",
+        "required_source_status": "XR_XIR_OK",
+        "configurations": [
+          "MSVC Release",
+          "Clang ASan/UBSan"
+        ],
+        "result": "PASS_OWNED_CHECKED_LOWERED_METADATA_ONLY"
+      }
+    ],
+    "CLI": "root, file, stdlib; argc 4",
+    "TIMEOUT": 120,
+    "PROCESSORS": 1,
+    "WILL_FAIL": false,
+    "qualification": "The initial dedicated gate requires Source status 0 and verifies the owned Checked/Lowered metadata branch if admitted. It retains the raw diagnostic if admission fails. Runtime result 239, timer fields, effects, native, Mixed and cancellation require independent gates.",
+    "registration_status": "ACTUAL_REGISTERED_BOTH_CONFIGURATIONS"
+  },
+  "candidate_pipeline": {
+    "status": "EXECUTED_SOURCE_CHECKED_LOWERED_METADATA_ONLY_PASS",
+    "input": "The exact 62-byte prefix plus the 54-byte adapter forms a 116-byte root. Use the real stdlib path and preserve import time. The source probe uses a 117-byte guard buffer and closes FILE before SourceSession creation. No library probe is needed because the original dependency is NULL.",
+    "positive_requirement": "Original Source0 was strictly required and actually passed in both configurations. Own-family receipts below record success fields and owned metadata; no prior-family diagnosis is inherited.",
+    "success_path": "Actual original Source success verified product and full Closed Checked packet/writer equality. Independent Checked survived Session/Product/borrowed input/path/request/authority destruction, then reverified and rewrote exactly. Actual Lowered verified after Checked and packet owners were released. This metadata evidence does not execute Program/Instance, typed timer fields or original239.",
+    "failure_path": "Preserve the first actual owned diagnostic, including status, stage, location, path and message, after Session, Product, input, root/path, request and authority destruction. Then free the diagnostic and compiler owners and verify compiler physical 0/0 and observer table 0. The required positive gate remains FAIL for a nonzero status; diagnostic survival does not imply Source status 0 or the original result 239.",
+    "excluded_execution": "The initial candidate does not execute Program/Instance, native/Mixed, a timer host wait, elapsed-time measurement, suspension, result 239 or cancellation. Metadata success does not prove the old typed request, effect/capability masks, state/safepoint IDs or standalone AOT behavior."
+  },
+  "original_obligations": [
+    {
+      "obligation": "The original native hosted profile, built by xr_runtime_target_profile_build_native_hosted, is attached to the real Source fixture. Preserve import time, sleep(10), return 239 and the semantic fingerprint; require artifact bytes and a validated Program.",
+      "status": "OPEN"
+    },
+    {
+      "obligation": "The canonical old entry function is in range. Its exact effect mask is CALL|SUSPEND|CANCEL and its capability mask is COROUTINE_SUSPENSION|TIMER_SUSPENSION. A current suspend MAY witness is supplementary evidence and does not directly prove these bitmask assertions.",
+      "status": "OPEN"
+    },
+    {
+      "obligation": "Across all old Program functions and blocks, exactly one CORE_COROUTINE_SUSPEND occurs. Its typed COROUTINE_SUSPEND immediate has kind TIMER_AFTER_MS, one request operand and two successors. Preserve cardinality and kind; source text alone is insufficient.",
+      "status": "OPEN"
+    },
+    {
+      "obligation": "On one real bound Instance and VMCode, the first execution step is SUSPENDED with safepoint 0, state 1 and a TIMER_AFTER_MS request containing one operand and duration 10. The next step returns I64 value 239. Free the execution.",
+      "status": "OPEN"
+    },
+    {
+      "obligation": "A second fresh VMExecution on the same code and Instance suspends, then cancellation returns CANCELLED. Free the execution and code. The wrapper contains no elapsed-wall-time or class-lifecycle assertions.",
+      "status": "OPEN"
+    },
+    {
+      "obligation": "Build the old BackendIR and verify its binding. Emit generated C twice and require identical size and bytes. Require the original substrings UINT32_C(2), UINT32_C(1), suspension_timer_after_ms and xr_aot_host_wait_timer. Save the output when selected, then free both emission owners and the IR.",
+      "status": "OPEN"
+    },
+    {
+      "obligation": "Old Instance begin_drain, retire and free all succeed. Then free the Program product, profile and Source fixture, including session, isolate, resolver and physical files. Source owners remain alive during VM/AOT execution.",
+      "status": "OPEN"
+    },
+    {
+      "obligation": "The original registry requires VM and AOT execution with exit value 239 and default empty streams. Current native/Mixed equivalence is an additional migration responsibility; the old wrapper does not execute Mixed or assert numeric ProgramProof IDs.",
+      "status": "OPEN"
+    },
+    {
+      "obligation": "Future public TIMER_MS duration 10, exact epoch/wake handling, stale-wake rejection, HostWait readiness after the full monotonic 10 ms, cancellation cleanup, reuse and physical release require independent evidence. Public metadata alone cannot close the full old representation contract.",
+      "status": "OPEN"
+    },
+    {
+      "obligation": "All allocation FI, resource axes, cancellation, SourceDelete, determinism, full safety, Main qualification and retirement remain OPEN.",
+      "status": "OPEN"
+    }
+  ],
+  "implemented_source_supported_not_executed": [
+    {
+      "area": "Real stdlib/source admission mechanism",
+      "evidence": "Historical fixed-source inspection established the real stdlib time authority and timer primitive before this execution. Own-family Source0 and metadata receipts below now supplement that inspection; no timer runtime result is implied."
+    },
+    {
+      "area": "VM/native timer mechanism",
+      "evidence": "Both VM and native code produce ACTION_TIMER under the common typed wait-duration contract. Fresh native compilation, binding and actual result 239 remain NOT_RUN."
+    },
+    {
+      "area": "Host clock/provider/readiness",
+      "evidence": "Public clock/UTC provider state and HostWait monotonic start, polling and full-duration readiness are available. Timer resumption is a host decision; the call engine does not itself wait for wall time."
+    },
+    {
+      "area": "Public effects",
+      "evidence": "The owned effects analyzer exposes suspend MAY, throws and a causal instruction/callee witness. Timer suspension is recognized as a SUSPEND cause. Exact old bitmask fields are not exposed."
+    }
+  ],
+  "unverified_gaps": [
+    {
+      "responsibility": "Admission of the exact import time graph and its actual diagnostic",
+      "status": "SOURCE_ADMISSION_AND_OWNED_METADATA_PASS_RUNTIME_OPEN",
+      "reason": "Own-family actual receipts now prove exact import time Source0 and detached owned Checked/Lowered metadata. Typed timer shape, return239 and runtime remain independent open responsibilities."
+    },
+    {
+      "responsibility": "Old safepoint 0, state 1 and operand count 1 in the runtime outcome",
+      "status": "OPEN_REPRESENTATION_NOT_PUBLIC",
+      "reason": "Current InstanceResult contains outcome and epoch. The timer wait request exposes duration, reserved, subject, generation and ticket, but no old safepoint_id, state_id or operand_count fields. Main must decide the target contract mapping. Epoch and wake are not substitutes for old state IDs."
+    },
+    {
+      "responsibility": "Old effect/capability masks and the two-successor immediate",
+      "status": "OPEN_REPRESENTATION_NOT_EQUIVALENT",
+      "reason": "Current effects expose suspend/throws and a causal witness. TIMER_AFTER_MS uses a different instruction representation from the old CORE_COROUTINE_SUSPEND immediate. Typed public IR can support independent functional checks, but cannot fabricate old masks or numeric fields."
+    },
+    {
+      "responsibility": "Actual VM/native/Mixed result 239, cancellation, release and timer readiness",
+      "status": "OPEN_NOT_RUN",
+      "reason": "Existing consumer driver code is available, but no new products have run. Parent/Main controls native, Mixed and cancellation windows and fresh builds."
+    },
+    {
+      "responsibility": "Old private BackendIR emission substrings and standalone exit 239",
+      "status": "OPEN_NOT_RUN",
+      "reason": "The new XIR C ABI uses ACTION_TIMER rather than the old xr_aot_host_wait_timer spelling. Functional native qualification and retirement of old representation responsibilities require an explicit Main decision."
+    }
+  ],
+  "source_backed_support": {
+    "status": "STATIC_FIXED_PRODUCER_INSPECTION_NOT_PRODUCT_RESULT",
+    "anchors": [
+      {
+        "path": "stdlib/time/time.xr",
+        "raw_sha256": "e5d34ab0f89ea9a55e8976b02d8fa395d2695d5ca35bf976e878603bc09550fa",
+        "producer_LF_sha256": "d2ab56ef604ba773bf9625efd67450d343e2da2b0a9ec2f179d01ab07cc2bc72",
+        "fixed_producer_LF_exact": true,
+        "ranges": [
+          [
+            54,
+            61
+          ]
+        ],
+        "meaning": "Real time.sleep returns for ms <= 0, clamps the duration to 86400000, and calls __sleep. Preserve original duration 10 without a local stdlib copy or shim.",
+        "snippets": {
+          "54-61": "// Suspend the current coroutine for at least the requested number of\n// milliseconds. Validation and the public contract live here; the runtime\n// leaf only owns timer-wheel integration and resumption.\nexport fn sleep(ms: i64) {\n    if (ms <= 0) { return }\n    const bounded = ms > 86400000 ? 86400000 : ms\n    __sleep(bounded)\n}"
+        }
+      },
+      {
+        "path": "src/xir/xxir_source.c",
+        "raw_sha256": "52258010440971dbc1d3d1ef495bb55e82ea639dc36f674c1c163f29abc8ecc7",
+        "producer_LF_sha256": "0be07fcfe02af770882ea8b19c4a8f771150e401601f5d24d7f7f4e5c6dba86b",
+        "fixed_producer_LF_exact": true,
+        "ranges": [
+          [
+            830,
+            844
+          ],
+          [
+            1175,
+            1185
+          ]
+        ],
+        "meaning": "The host-time leaf requires exact STDLIB/time/time.xr authority. __sleep accepts typed I64 and emits TIMER_AFTER_MS with a Unit result.",
+        "snippets": {
+          "830-844": "/* The five host time leaves are private to the standard time module, selected by\n * its exact stdlib authority and logical path, never by a user spelling. Codes 1-3\n * are the clock kinds; 4 is the UTC offset query; 5 is the suspending timer. */\nstatic uint32_t host_time_primitive(SourceContext *ctx, const char *name) {\n    const XrModuleSpec *spec = &ctx->graph->specs[ctx->module];\n    if (spec->authority.kind != XR_MODULE_IDENTITY_STDLIB || !spec->authority.namespace_id ||\n        !source_text_same(ctx, NULL, spec->authority.namespace_id, \"time\") || !spec->logical_path ||\n        !source_text_same(ctx, NULL, spec->logical_path, \"time/time.xr\")) return 0;\n    if (source_text_same(ctx, NULL, name, \"__realtimeNanos\")) return XR_XIR_CLOCK_REALTIME;\n    if (source_text_same(ctx, NULL, name, \"__cpuNanos\")) return XR_XIR_CLOCK_CPU;\n    if (source_text_same(ctx, NULL, name, \"__monotonicNanos\")) return XR_XIR_CLOCK_MONOTONIC;\n    if (source_text_same(ctx, NULL, name, \"__utcOffsetAt\")) return 4;\n    if (source_text_same(ctx, NULL, name, \"__sleep\")) return 5;\n    return 0;\n}",
+          "1175-1185": "        op = (XrXirInstruction) {XR_XIR_WRITE_STREAM, XR_XIR_BOOL, {args[0].id, 0}, {0, 0}, stream, {0}};\n    } else if (host_time) {\n        bool clock = host_time <= (uint32_t) XR_XIR_CLOCK_MONOTONIC;\n        if (call->arg_count != (clock ? 0 : 1) || (!clock && args[0].type != XR_XIR_I64))\n            return source_fail(ctx, node, XR_XIR_BAD_TYPE, \"host time primitive argument mismatch\");\n        op = clock ? (XrXirInstruction) {XR_XIR_CLOCK_NANOS, XR_XIR_I64, {0, 0}, {0, 0}, host_time, {0}} :\n            host_time == 4 ? (XrXirInstruction) {XR_XIR_UTC_OFFSET_AT, XR_XIR_I64, {args[0].id, 0}, {0, 0}, 0, {0}} :\n            (XrXirInstruction) {XR_XIR_TIMER_AFTER_MS, XR_XIR_UNIT, {args[0].id, 0}, {0, 0}, 0, {0}};\n    } else if (print) {\n        for (int i = 0; i < call->arg_count; ++i)\n            if (args[i].type != XR_XIR_BOOL && args[i].type != XR_XIR_RUNE && !xr_xir_type_is_number(args[i].type) && args[i].type != XR_XIR_STRING)"
+        }
+      },
+      {
+        "path": "src/xir/xxir_vm.c",
+        "raw_sha256": "3971526e7176b54decc3d74407b45674b757fa810aae4460767553e8e0cc8b6f",
+        "producer_LF_sha256": "f36a9be00e2fc1b9f756e1c12902bd1dfe2e32a5f97695fad183238ed8776203",
+        "fixed_producer_LF_exact": true,
+        "ranges": [
+          [
+            694,
+            700
+          ]
+        ],
+        "meaning": "The timer instruction emits ACTION_TIMER carrying an I64 duration. No actual VM execution has occurred.",
+        "snippets": {
+          "694-700": "    case XR_XIR_SUSPEND:\n        action->kind = XR_XIR_ACTION_SUSPEND;\n        break;\n    case XR_XIR_TIMER_AFTER_MS:\n        *action = (XrXirAction) {XR_XIR_ACTION_TIMER, 0, NULL, 0, {XR_XIR_I64, 0,\n            xr_xir_scalar_load(run->frame, run->layout->offsets[op->args[0]])}, {0}, 0};\n        break;"
+        }
+      },
+      {
+        "path": "src/xir/xxir_emit_c.c",
+        "raw_sha256": "1613c043586d6fec8d421831221f12a132cb7647c73256595cb9a0b61c966f1a",
+        "producer_LF_sha256": "22e1f0b21d7025ad527cf7ea1f8ebb961442a96c92f888e4fb6ab3a59639364b",
+        "fixed_producer_LF_exact": true,
+        "ranges": [
+          [
+            944,
+            952
+          ]
+        ],
+        "meaning": "Native emission produces ACTION_TIMER with the duration loaded from the target-bound frame. Generation and native compilation remain NOT_RUN.",
+        "snippets": {
+          "944-952": "        break;\n    case XR_XIR_SUSPEND:\n        append(buffer, \"        return (XrXirAction) {XR_XIR_ACTION_SUSPEND, 0, NULL, 0, {0, 0, 0}, {0}, 0};\\n\");\n        return;\n    case XR_XIR_TIMER_AFTER_MS:\n        append(buffer, \"        return (XrXirAction) {XR_XIR_ACTION_TIMER, 0, NULL, 0, \"\n            \"{XR_XIR_I64, 0, xr_xir_scalar_load(state->frame, %uu)}, {0}, 0};\\n\", layout->offsets[op->args[0]]);\n        return;\n    case XR_XIR_CLOCK_NANOS: case XR_XIR_UTC_OFFSET_AT:"
+        }
+      },
+      {
+        "path": "src/xir/xxir_call.h",
+        "raw_sha256": "d29f7500c6d48227334569a4a902d9858ddabe5e359544ea42822755996c6ec1",
+        "producer_LF_sha256": "e7b129f9f7ea67241b0a26adb43d200d343598d61044d169a74e0ebe7b69bb6e",
+        "fixed_producer_LF_exact": true,
+        "ranges": [
+          [
+            148,
+            177
+          ],
+          [
+            203,
+            215
+          ]
+        ],
+        "meaning": "The clock/UTC provider is separate from the typed TIMER_MS wait request. The request contains duration but no old operand count, state or safepoint fields. The host decides readiness and polling drains cancellation.",
+        "snippets": {
+          "148-177": " * never suspend. An absent provider is all zero and every service then fails\n * as a host error. The provider context stays host-owned. */\ntypedef enum XrXirTimeStatus {\n    XR_XIR_TIME_OK, XR_XIR_TIME_RANGE, XR_XIR_TIME_FAILED\n} XrXirTimeStatus;\ntypedef XrXirTimeStatus (*XrXirClockEntry)(void *context, XrXirClockKind clock, int64_t *nanoseconds);\ntypedef XrXirTimeStatus (*XrXirUtcOffsetEntry)(void *context, int64_t seconds, int64_t *minutes);\ntypedef struct XrXirTimeProvider {\n    uint32_t abi_version, reserved;\n    XrXirClockEntry clock;\n    XrXirUtcOffsetEntry utc_offset;\n    void *context;\n} XrXirTimeProvider;\nstatic inline bool xr_xir_time_provider_valid(const XrXirTimeProvider *provider) {\n    if (!provider) return false;\n    if (!provider->abi_version)\n        return !provider->reserved && !provider->clock && !provider->utc_offset && !provider->context;\n    return provider->abi_version == XR_XIR_CALL_ABI_VERSION && !provider->reserved &&\n        provider->clock && provider->utc_offset;\n}\n/* A suspension asks its host for nothing (YIELD) or for a duration (TIMER). The\n * request is published only for the exact pending wake token. */\ntypedef enum XrXirWaitKind { XR_XIR_WAIT_NONE, XR_XIR_WAIT_YIELD, XR_XIR_WAIT_TIMER_MS, XR_XIR_WAIT_TASK } XrXirWaitKind;\n#define XR_XIR_TIMER_MAX_MS UINT64_C(86400000)\ntypedef struct XrXirWaitRequest {\n    uint32_t kind, reserved;\n    uint64_t after_ms;\n    const void *subject;\n    uint64_t generation, ticket;\n} XrXirWaitRequest;",
+          "203-215": " * READY means more work remains; cumulative resume limits never reset. */\nXR_FUNC XrXirCallResult xr_xir_call_poll_bounded(XrXirCall *activation, uint64_t quantum);\nXR_FUNC XrXirCallStatus xr_xir_call_take_result(XrXirCall *activation, XrXirValue *output);\nXR_FUNC XrXirCallStatus xr_xir_call_resume(XrXirCall *activation, uint64_t wake);\n/* Fills the request of the pending suspension. Failure leaves output unchanged;\n * no clock is read and nothing is resumed. Resuming a timer is the host's decision\n * that the duration has elapsed; the driver never interprets wall time. */\nXR_FUNC XrXirCallStatus xr_xir_call_wait_request(const XrXirCall *activation, uint64_t wake,\n    XrXirWaitRequest *output);\n/* Queues cancellation without callbacks or reclamation; poll drains cleanup. */\nXR_FUNC XrXirCallStatus xr_xir_call_request_cancel(XrXirCall *activation);\n/* Consumes the activation except on BUSY; reports a failed language cleanup. */\nXR_FUNC XrXirCallStatus xr_xir_call_free(XrXirCall *activation);"
+        }
+      },
+      {
+        "path": "src/xir/xxir_program.h",
+        "raw_sha256": "b86e54bc23554a4e62f131aa31c5dd7f18834763fd558e9ad978eefadc991b10",
+        "producer_LF_sha256": "29b1cca997814d0e6242a2406e6c4082be78aa1151b981020a648cc1e676fe92",
+        "fixed_producer_LF_exact": true,
+        "ranges": [
+          [
+            51,
+            63
+          ],
+          [
+            76,
+            100
+          ]
+        ],
+        "meaning": "Public Instance APIs expose typed waits at exact epoch/wake, polling, resumption, cancellation, result transfer and free. They do not expose the old effect/capability masks or safepoint_id/state_id fields.",
+        "snippets": {
+          "51-63": "typedef struct XrXirInstanceConfig {\n    uint32_t abi_version, struct_size;\n    uint64_t metadata_limit, value_limit, call_limit, poll_limit;\n    uint32_t depth_limit;\n    XrXirOutputProvider output;\n    XrXirLifecycleEntry trace;\n    void *trace_context;\n    XrXirTimeProvider time;\n    uint64_t requested_value_limit, requested_call_limit, work_limit;\n} XrXirInstanceConfig;\ntypedef struct XrXirInstanceResult {\n    XrXirCallResult outcome;\n    uint64_t epoch;",
+          "76-100": "XR_FUNC XrXirCallStatus xr_xir_instance_start(XrXirInstance *instance, uint32_t entry,\n    const XrXirValue *arguments, uint32_t count);\n/* Starts an admitted root-module test or hook, including private declarations.\n * Skipped tests and ordinary functions receive no additional authority. The\n * same initialization and call lifecycle apply as for ordinary entry starts. */\nXR_FUNC XrXirCallStatus xr_xir_instance_start_test(XrXirInstance *instance, uint32_t entry);\nXR_FUNC XrXirInstanceResult xr_xir_instance_poll_bounded(XrXirInstance *instance, uint64_t quantum);\n/* Cancels only the current activation; initialized module state remains usable. */\nXR_FUNC XrXirCallStatus xr_xir_instance_cancel_current(XrXirInstance *instance);\nXR_FUNC XrXirCallStatus xr_xir_instance_resume(XrXirInstance *instance, uint64_t epoch, uint64_t wake);\n/* Publishes the host request of the current suspension for its exact epoch and\n * wake token. Failure leaves output unchanged; nothing is read or resumed. */\nXR_FUNC XrXirCallStatus xr_xir_instance_wait_request(const XrXirInstance *instance, uint64_t epoch,\n    uint64_t wake, XrXirWaitRequest *output);\n/* Transfers ordinary entry outcomes. Initialization failure stays instance-owned:\n * take_result returns BAD_STATE without changing output; use copy_failure. */\nXR_FUNC XrXirCallStatus xr_xir_instance_take_result(XrXirInstance *instance, XrXirValue *output);\nXR_FUNC XrXirCallStatus xr_xir_instance_copy_failure(XrXirInstance *instance, XrXirCallResult *output);\nXR_FUNC XrXirCallStatus xr_xir_instance_stop(XrXirInstance *instance);\n/* Consumes the instance except on BUSY; reports a failed language cleanup. */\nXR_FUNC XrXirCallStatus xr_xir_instance_free(XrXirInstance *instance);\nXR_FUNC XrXirCallStatus xr_xir_instance_start_function(XrXirInstance *instance, const XrXirValue *function,\n    const XrXirValue *arguments, uint32_t count);\nXR_FUNC XrXirCallStatus xr_xir_instance_function(XrXirCallView *view, XrXirType type, uint32_t entry,\n    const XrXirValue *captures, uint32_t count, XrXirValue *output);"
+        }
+      },
+      {
+        "path": "src/execution/xr_xir_host_time.h",
+        "raw_sha256": "c758658c96f793850886a43ae8b9555269987badf693a4c6e320c25adcee7386",
+        "producer_LF_sha256": "e68cfd01a44a562d3f8633aad92a224a720d7931a7cc3e2a04f532b1536ee870",
+        "fixed_producer_LF_exact": true,
+        "ranges": [
+          [
+            19,
+            39
+          ]
+        ],
+        "meaning": "HostWait exposes duration and a monotonic start time. The provider factory and bounded readiness polling are public.",
+        "snippets": {
+          "19-39": " * and the local UTC offset. A zero realtime or monotonic reading, or a value\n * beyond the signed range, is a failed read; an offset the platform cannot\n * represent is a range rejection. The provider has no context and no state. */\nXR_FUNC void xr_xir_host_time_provider(XrXirTimeProvider *provider);\n\ntypedef enum XrXirHostWaitStatus {\n    XR_XIR_HOST_WAIT_DUE, XR_XIR_HOST_WAIT_PENDING, XR_XIR_HOST_WAIT_FAILED,\n    XR_XIR_HOST_WAIT_BAD_ARGUMENT\n} XrXirHostWaitStatus;\n/* One wait per suspension. The start is read once by begin; repeated polls never\n * restart it. A yield request is due immediately. */\ntypedef struct XrXirHostWait {\n    uint64_t start_ns, duration_ns;\n    bool active;\n} XrXirHostWait;\nXR_FUNC XrXirHostWaitStatus xr_xir_host_wait_begin(XrXirHostWait *wait, const XrXirWaitRequest *request);\n/* Reads the monotonic clock and reports DUE once at least the full duration has\n * elapsed. While pending it first sleeps for at most max_sleep_ns (0 does not\n * sleep) and then compares again. A failed or backward clock is FAILED, never DUE. */\nXR_FUNC XrXirHostWaitStatus xr_xir_host_wait_poll(XrXirHostWait *wait, uint64_t max_sleep_ns);\n#endif // XR_XIR_HOST_TIME_H"
+        }
+      },
+      {
+        "path": "src/execution/xr_xir_host_time.c",
+        "raw_sha256": "d2e4e4eafd32a88ef08ff6365e2943825dd9c3504cefb55cb1c00248f8791422",
+        "producer_LF_sha256": "5d70508ed9b73f1d23bbd4ada4cd034125137b4db8176e8e770b57a01342933f",
+        "fixed_producer_LF_exact": true,
+        "ranges": [
+          [
+            38,
+            67
+          ]
+        ],
+        "meaning": "HostWait converts 10 ms into 10000000 ns. Failed or backward clocks are rejected. Only the full elapsed duration grants DUE.",
+        "snippets": {
+          "38-67": "}\n\nXR_FUNC XrXirHostWaitStatus xr_xir_host_wait_begin(XrXirHostWait *wait, const XrXirWaitRequest *request) {\n    if (!wait || !request || request->reserved) return XR_XIR_HOST_WAIT_BAD_ARGUMENT;\n    XrXirHostWait next = {0};\n    if (request->kind == XR_XIR_WAIT_TIMER_MS) {\n        if (request->after_ms < 1 || request->after_ms > XR_XIR_TIMER_MAX_MS) return XR_XIR_HOST_WAIT_BAD_ARGUMENT;\n        next.duration_ns = request->after_ms * UINT64_C(1000000);\n        next.start_ns = xr_time_monotonic_ns();\n        if (!next.start_ns) return XR_XIR_HOST_WAIT_FAILED;\n    } else if (request->kind != XR_XIR_WAIT_YIELD || request->after_ms) return XR_XIR_HOST_WAIT_BAD_ARGUMENT;\n    next.active = true;\n    *wait = next;\n    return XR_XIR_HOST_WAIT_PENDING;\n}\nXR_FUNC XrXirHostWaitStatus xr_xir_host_wait_poll(XrXirHostWait *wait, uint64_t max_sleep_ns) {\n    if (!wait || !wait->active) return XR_XIR_HOST_WAIT_BAD_ARGUMENT;\n    if (!wait->duration_ns) return XR_XIR_HOST_WAIT_DUE;\n    for (int attempt = 0; attempt < 2; ++attempt) {\n        uint64_t now = xr_time_monotonic_ns();\n        if (!now || now < wait->start_ns) return XR_XIR_HOST_WAIT_FAILED;\n        uint64_t elapsed = now - wait->start_ns;\n        if (elapsed >= wait->duration_ns) return XR_XIR_HOST_WAIT_DUE;\n        if (attempt || !max_sleep_ns) return XR_XIR_HOST_WAIT_PENDING;\n        uint64_t remaining = wait->duration_ns - elapsed;\n        xr_time_sleep_ns(remaining < max_sleep_ns ? remaining : max_sleep_ns);\n    }\n    return XR_XIR_HOST_WAIT_PENDING;\n}"
+        }
+      },
+      {
+        "path": "src/xir/xxir_effects.h",
+        "raw_sha256": "7348823e5758feeec07c611a466f5cb1f9201e1744c2e90cea43018f104dd15f",
+        "producer_LF_sha256": "402b2968060be7dab9b6bbd254dfdc5d3c0d864110d50dd4f0da5aa6ed430c8a",
+        "fixed_producer_LF_exact": true,
+        "ranges": [
+          [
+            13,
+            31
+          ]
+        ],
+        "meaning": "Public suspend/throws facts and owned numeric witnesses are available. There is no old CALL/SUSPEND/CANCEL effect mask or capability mask.",
+        "snippets": {
+          "13-31": "typedef struct XrXirFunctionEffects { XrXirEffect suspend, throws; } XrXirFunctionEffects;\n\ntypedef enum XrXirEffectCause {\n    XR_XIR_EFFECT_CAUSE_NONE, XR_XIR_EFFECT_CAUSE_SUSPEND,\n    XR_XIR_EFFECT_CAUSE_INDIRECT, XR_XIR_EFFECT_CAUSE_CALL\n} XrXirEffectCause;\ntypedef struct XrXirEffectWitness {\n    XrXirEffectCause cause;\n    uint32_t instruction, callee, distance;\n} XrXirEffectWitness;\ntypedef struct XrXirEffects XrXirEffects;\n#define XR_XIR_ERROR_SYMBOLIC_VARIANT UINT32_MAX\n/* Reverification and inference consume one cumulative work allowance. */\nXR_FUNC XrXirStatus xr_xir_compile_effects_analyze(const XrXirArtifact *artifact, XrXirEffects **output);\n/* The borrowed fact remains valid until its owning summary is freed. */\nXR_FUNC const XrXirFunctionEffects *xr_xir_effects_function(const XrXirEffects *effects, uint32_t function);\n/* NULL for NONE/invalid queries; call steps strictly decrease distance.\n * The summary owns numeric identities, not source locations or input storage. */\nXR_FUNC const XrXirEffectWitness *xr_xir_effects_suspend_witness(const XrXirEffects *effects, uint32_t function);"
+        }
+      },
+      {
+        "path": "src/xir/xxir_effects.c",
+        "raw_sha256": "fe6ae5bc84b10e97cc2687ae85341d0ecc04397f0a6fdf20e5cc5eefa4d37180",
+        "producer_LF_sha256": "76589ea583d428a445ecfe70c79276f3b3e732d392b39f17d4e5043b2edc4b97",
+        "fixed_producer_LF_exact": true,
+        "ranges": [
+          [
+            70,
+            79
+          ],
+          [
+            244,
+            252
+          ]
+        ],
+        "meaning": "TIMER_AFTER_MS contributes a MAY suspension fact and a SUSPEND witness through the call graph. This is source inspection, not an actual execution result.",
+        "snippets": {
+          "70-79": "static bool effect_seed(const XrXirModule *module, const XrXirFunction *function,\n    const XrXirInstruction *instruction, XrXirFunctionEffects *effect) {\n    XrXirOp op = instruction->op;\n    switch (op) {\n    case XR_XIR_SUSPEND: case XR_XIR_TIMER_AFTER_MS: case XR_XIR_TASK_AWAIT:\n        effect->suspend = XR_XIR_EFFECT_MAY; return true;\n    case XR_XIR_GO: return true;\n    case XR_XIR_THROW: case XR_XIR_CLEANUP_REGISTER:\n    case XR_XIR_CLEANUP_LEAVE: case XR_XIR_CLEANUP_ERROR: return true;\n    case XR_XIR_CALL_REQUIREMENT: {",
+          "244-252": "            XrXirOp op = function->instructions[i].op;\n            XrXirFunctionEffects local = {0};\n            if (!effect_seed(module, function, &function->instructions[i], &local)) return XR_XIR_BAD_STRUCTURE;\n            XrXirEffectCause cause = XR_XIR_EFFECT_CAUSE_NONE;\n            if (fact == XR_XIR_EFFECT_MAY && (op == XR_XIR_SUSPEND || op == XR_XIR_TIMER_AFTER_MS ||\n                op == XR_XIR_TASK_AWAIT)) cause = XR_XIR_EFFECT_CAUSE_SUSPEND;\n            else if (fact == XR_XIR_EFFECT_UNKNOWN && local.suspend == XR_XIR_EFFECT_UNKNOWN)\n                cause = XR_XIR_EFFECT_CAUSE_INDIRECT;\n            if (!cause) continue;"
+        }
+      }
+    ],
+    "current_actual_diagnostic": null,
+    "historical_inspection_note": "These anchors describe fixed-source support inspected before own-family execution. Historical null diagnostic is not a current NOT_RUN claim. Actual Source0 success fields are recorded separately below."
+  },
+  "boundaries": [
+    "Applied and registered original root and real stdlib input; both configurations freshly compiled and actually executed Source0 and detached owned Checked/Lowered verification.",
+    "Preserve the original import time, sleep(10) and return 239 prefix. Do not add a local __sleep, copy the stdlib, introduce fixed stand-ins or fabricate a library.",
+    "VM/AOT responsibilities are defined by the original inline TEST body. Only helpers actually called by that body are included as NON_TEST metadata.",
+    "Fixed-source HostWait/provider/effects support inspection is supplemented by actual original Source admission and owned metadata. Typed timer fields, runtime239, native/Mixed and cancellation remain unexecuted.",
+    "Current runtime epoch/wake values are not old safepoint/state IDs. Current typed IR is not the old mask/immediate schema.",
+    "Original source owners are freed after VM/AOT execution. Future detached metadata verification is an additional ownership facet."
+  ],
+  "evidence_plan": {
+    "directory": "build-consumer-evidence/current67-original-time-sleep-source-r1",
+    "actual_product_receipts": [
+      "msvc-test_original_time_sleep_source.json",
+      "asan-test_original_time_sleep_source.json"
+    ],
+    "actual_diagnostic": "NEUTRAL_SUCCESS_STATUS0_FINAL6_LOCATION0_0_PATHNONE_MESSAGEEMPTY",
+    "Source_original_import_time": "ACTUAL_SOURCE0_PASS_BOTH_CONFIGURATIONS",
+    "owned_Checked_Lowered": "ACTUAL_FULL_PACKET_EQUALITY_AND_AFTER_CHECKED_DEATH_VERIFY_PASS",
+    "typed_Timer_request10": "NOT_RUN",
+    "return239": "NOT_RUN",
+    "HostWait_full10ms": "NOT_RUN",
+    "normal_VM_native_Mixed": "NOT_RUN",
+    "active_cancel": "NOT_RUN",
+    "old_AOT": "NOT_RUN",
+    "owned_failure_diagnostic": "NOT_RUN_SOURCE_SUCCEEDED",
+    "raw_stdout_stderr": "ACTUAL_SAVED_RAW_WITH_RECEIPT_SHA256",
+    "input_before_after": "ACTUAL_SAME_SHA256_BYTES_MTIME",
+    "registered_argv_and_executable_archive": "ACTUAL_REGISTERED_ARGV_AND_PRE_ENTRY_EXE_COPY"
+  },
+  "candidate_authoring": "Historical ignored-only preparation followed by parent application, fresh compilation and own-family metadata execution. Initial candidate prose correction preserved separately before application.",
+  "actual_execution": {
+    "directory": "build-consumer-evidence/current67-original-time-sleep-source-r1",
+    "phase": "source",
+    "configurations": [
+      "MSVC Release",
+      "Clang ASan/UBSan"
+    ],
+    "normal_gate": "test_original_time_sleep_source",
+    "TIMEOUT": 120,
+    "PROCESSORS": 1,
+    "WILL_FAIL": false,
+    "required_source_status": 0,
+    "actual_source_status": 0,
+    "actual_source_status_name": "XR_XIR_OK",
+    "stage": 6,
+    "source_line": 0,
+    "source_column": 0,
+    "message": "",
+    "source_path": null,
+    "result": "PASS_OWNED_CHECKED_LOWERED_METADATA_ONLY",
+    "processes": 2,
+    "exit_codes": [
+      0,
+      0
+    ],
+    "instances": 0,
+    "runtime": "NOT_RUN",
+    "native": "NOT_RUN",
+    "mixed": "NOT_RUN",
+    "generated_C": "NOT_RUN",
+    "full_original_prefix_preserved": true,
+    "real_time_stdlib_import_preserved": true,
+    "input_items_per_process": 2811,
+    "retained_owned_failure_diagnostic_after_producer_and_input_death": "NOT_RUN_SOURCE_SUCCEEDED",
+    "compiler_physical_after_release": "0/0",
+    "compiler_observer_table_after_release": 0,
+    "compiler_owner_pre_release_final_live": 80,
+    "compiler_owner_pre_release_live_note": "80 is the original compile context baseline; physical0/0 and observer table0 are verified after all artifacts and compiler owner destruction. No runtime-domain allocation release was executed.",
+    "Checked_full_writer_and_Lowered_after_Checked_death": "ACTUAL_PASS",
+    "Lowered_stage": 4,
+    "Lowered_function_count": 13,
+    "independent_runtime239_timer10": "NOT_RUN",
+    "typed_timer_request_and_effects": "NOT_RUN",
+    "HostWait_full10ms": "NOT_RUN",
+    "active_cancel": "NOT_RUN",
+    "old_effect_masks_and_safepoint_state": "NOT_RUN",
+    "original_standalone_exit_and_empty_streams": "NOT_RUN",
+    "receipts": [
+      {
+        "configuration": "msvc",
+        "receipt": "msvc-test_original_time_sleep_source.json",
+        "pid": 40236,
+        "stdout_sha256": "05df1b0cd56600ce8c99895d4a5ecccba3ac5ae4274e174fa77b896490bd837f",
+        "stderr_sha256": "8032f236e557dd26fd1e64c51bd317878de53852b9ce9866115e77f575c8b15e",
+        "inputs_before": "msvc-test_original_time_sleep_source-inputs-before.json",
+        "inputs_after": "msvc-test_original_time_sleep_source-inputs-after.json",
+        "binary_pre_entry_archive": "msvc-test_original_time_sleep_source-binary-preimage.exe"
+      },
+      {
+        "configuration": "asan",
+        "receipt": "asan-test_original_time_sleep_source.json",
+        "pid": 48212,
+        "stdout_sha256": "05df1b0cd56600ce8c99895d4a5ecccba3ac5ae4274e174fa77b896490bd837f",
+        "stderr_sha256": "8032f236e557dd26fd1e64c51bd317878de53852b9ce9866115e77f575c8b15e",
+        "inputs_before": "asan-test_original_time_sleep_source-inputs-before.json",
+        "inputs_after": "asan-test_original_time_sleep_source-inputs-after.json",
+        "binary_pre_entry_archive": "asan-test_original_time_sleep_source-binary-preimage.exe"
+      }
+    ],
+    "controls": "Two separate sequence_length VM controls PASS; they do not execute original time.sleep behavior.",
+    "caption_binding": "Product execution captured candidate map/trace; runtime-preimage-<filename> preserves exact old bytes. This later actual evidence annotation is not a rerun.",
+    "retired": 0,
+    "completion": "OPEN"
+  }
+}
