@@ -17,9 +17,9 @@
   "reference_counts": {
     "source_with_digest_reference": 108,
     "source_without_digest_reference": 0,
-    "other_with_digest_reference": 103,
-    "other_without_digest_reference": 57,
-    "digest_reference_values": 288,
+    "other_with_digest_reference": 106,
+    "other_without_digest_reference": 54,
+    "digest_reference_values": 294,
     "source_inventory_projections": 42
   },
   "mapping_inputs": [
@@ -510,6 +510,10 @@
     {
       "path": "tests/unit/xir/product_consumers/source_original_class_conformance_share_roots_obligations.json",
       "lf_sha256": "dca63d0c02c155d0120fec32aed3f47c063a07aec178b4f4919bb1b2a651287c"
+    },
+    {
+      "path": "tests/unit/xir/product_consumers/source_original_cleanup_reason_graph_obligations.json",
+      "lf_sha256": "c766855280d94f30c3e3cc525e0295a6ffcbc0996b53a87c21a6989b2055c959"
     },
     {
       "path": "tests/unit/xir/product_consumers/source_original_constructor_array_registration_obligations.json",
@@ -4159,7 +4163,18 @@
       "body_lf_sha256": "283687f272754e40705c5298d001644d11a2ebf4df716be5109ede4a50a715bc",
       "status": "OPEN",
       "inventory_projection": null,
-      "mapping_references": []
+      "mapping_references": [
+        {
+          "mapping": "tests/unit/xir/product_consumers/source_original_cleanup_reason_graph_obligations.json",
+          "pointer": "/legacy/0/body_lf_sha256",
+          "binding": "exact_path_name_body"
+        },
+        {
+          "mapping": "tests/unit/xir/product_consumers/source_original_cleanup_reason_graph_obligations.json",
+          "pointer": "/responsibility_mapping/0/body_lf_sha256",
+          "binding": "exact_body_digest_value_only"
+        }
+      ]
     },
     {
       "legacy_path": "tests/unit/program/test_xr_program_verify.c",
@@ -4167,7 +4182,18 @@
       "body_lf_sha256": "c611c3785498fa212e4449ae7438ce1d719553afb09eafec205257966c1b2b85",
       "status": "OPEN",
       "inventory_projection": null,
-      "mapping_references": []
+      "mapping_references": [
+        {
+          "mapping": "tests/unit/xir/product_consumers/source_original_cleanup_reason_graph_obligations.json",
+          "pointer": "/legacy/1/body_lf_sha256",
+          "binding": "exact_path_name_body"
+        },
+        {
+          "mapping": "tests/unit/xir/product_consumers/source_original_cleanup_reason_graph_obligations.json",
+          "pointer": "/responsibility_mapping/1/body_lf_sha256",
+          "binding": "exact_body_digest_value_only"
+        }
+      ]
     },
     {
       "legacy_path": "tests/unit/program/test_xr_program_verify.c",
@@ -4175,7 +4201,18 @@
       "body_lf_sha256": "e66bed2c456a2e20129dab44e0006fa1a5b04204117348eb58fbf09274bb9d2c",
       "status": "OPEN",
       "inventory_projection": null,
-      "mapping_references": []
+      "mapping_references": [
+        {
+          "mapping": "tests/unit/xir/product_consumers/source_original_cleanup_reason_graph_obligations.json",
+          "pointer": "/legacy/2/body_lf_sha256",
+          "binding": "exact_path_name_body"
+        },
+        {
+          "mapping": "tests/unit/xir/product_consumers/source_original_cleanup_reason_graph_obligations.json",
+          "pointer": "/responsibility_mapping/2/body_lf_sha256",
+          "binding": "exact_body_digest_value_only"
+        }
+      ]
     },
     {
       "legacy_path": "tests/unit/program/test_xr_program_verify.c",
