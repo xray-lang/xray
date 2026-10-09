@@ -1,0 +1,442 @@
+{
+  "schema": 1,
+  "family": "original_owned_existential_read_reborrow_across_blocks_and_backedge",
+  "legacy_base_commit": "01e6d38401b0f5c8684b64c35a99ac651024c0c1",
+  "status": "OPEN",
+  "retired": 0,
+  "replacement_gates": [],
+  "result": "STATIC_FULL_ORIGINAL_EXISTENTIAL_REBORROW_MAP_ONLY",
+  "product_execution": "NOT_RUN_BY_THIS_MAP",
+  "producer": "25f4016d6f089169757a90ae11ba537002374711",
+  "identity": "Checked25/semantic67/Value22/Call28/Program29",
+  "legacy": [
+    {
+      "name": "test_existential_owned_read_reborrow",
+      "legacy_path": "tests/unit/program/test_xr_program_verify.c",
+      "legacy_line": 6546,
+      "body_lf_sha256": "6f362922fce5494cda6473cd12da11d67ffd0bedfaa331aa76058c4ced1e65d4",
+      "assertion_sites": 9,
+      "loop_sites": 2,
+      "status": "OPEN",
+      "replacement_gates": [],
+      "note": "Function census preserves its whole body; sites do not count executed loop iterations."
+    }
+  ],
+  "responsibility_mapping": [
+    {
+      "path": "tests/unit/program/test_xr_program_verify.c",
+      "function": "test_existential_owned_read_reborrow",
+      "line": 6546,
+      "end_line": 6608,
+      "body_lf_sha256": "6f362922fce5494cda6473cd12da11d67ffd0bedfaa331aa76058c4ced1e65d4",
+      "CHECK_sites": 9,
+      "CHECK_bindings": [
+        {
+          "line": 6553,
+          "expression": "reborrow_status == XR_PROGRAM_BUILD_OK",
+          "status": "OPEN"
+        },
+        {
+          "line": 6558,
+          "expression": "result.kind == XR_REFERENCE_OUTCOME_RETURN",
+          "status": "OPEN"
+        },
+        {
+          "line": 6559,
+          "expression": "result.value.kind == XR_REFERENCE_VALUE_I64",
+          "status": "OPEN"
+        },
+        {
+          "line": 6560,
+          "expression": "result.value.as.i64 == 42",
+          "status": "OPEN"
+        },
+        {
+          "line": 6566,
+          "expression": "xr_program_reborrow_fixture_write_mutated(XR_REBORROW_FIXTURE_VALID_LOOP, &artifact,\n                                                    diagnostic,\n                                                    sizeof(diagnostic)) == XR_PROGRAM_BUILD_OK",
+          "status": "OPEN"
+        },
+        {
+          "line": 6570,
+          "expression": "program != NULL",
+          "status": "OPEN"
+        },
+        {
+          "line": 6581,
+          "expression": "xr_program_reborrow_fixture_write_mutated(operation_rejections[index], &artifact,\n                                                        diagnostic,\n                                                        sizeof(diagnostic)) == XR_PROGRAM_BUILD_OK",
+          "status": "OPEN"
+        },
+        {
+          "line": 6588,
+          "expression": "xr_program_reborrow_fixture_write_mutated(XR_REBORROW_FIXTURE_RESULT_OWNER, &artifact,\n                                                    diagnostic, sizeof(diagnostic)) ==\n          XR_PROGRAM_BUILD_INVALID_INPUT",
+          "status": "OPEN"
+        },
+        {
+          "line": 6601,
+          "expression": "xr_program_reborrow_fixture_write_mutated(lifetime_rejections[index], &artifact,\n                                                        diagnostic,\n                                                        sizeof(diagnostic)) == XR_PROGRAM_BUILD_OK",
+          "status": "OPEN"
+        }
+      ],
+      "status": "OPEN"
+    }
+  ],
+  "outer_CHECK_sites": 9,
+  "original_private_helpers": [
+    {
+      "path": "tests/unit/program/test_xr_program_verify.c",
+      "function": "validate_ok",
+      "line": 159,
+      "end_line": 174,
+      "body_lf_sha256": "94fe0ef4e0242acb810c12621ae1fe73a9887ef668f15ddc6c67ed645494f62b",
+      "CHECK_sites": 2,
+      "CHECK_bindings": [
+        {
+          "line": 171,
+          "expression": "status == XR_PROGRAM_VERIFY_OK",
+          "status": "OPEN"
+        },
+        {
+          "line": 172,
+          "expression": "program != NULL",
+          "status": "OPEN"
+        }
+      ],
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/program/test_xr_program_verify.c",
+      "function": "expect_semantic_reject_at",
+      "line": 176,
+      "end_line": 198,
+      "body_lf_sha256": "44cf0fb15bea156743a1c0e35b0be8ee844aa1af55c8653ed9361cf781c045b8",
+      "CHECK_sites": 6,
+      "CHECK_bindings": [
+        {
+          "line": 190,
+          "expression": "first_status == XR_PROGRAM_VERIFY_SEMANTIC_REJECTED",
+          "status": "OPEN"
+        },
+        {
+          "line": 191,
+          "expression": "program == NULL",
+          "status": "OPEN"
+        },
+        {
+          "line": 192,
+          "expression": "first.kind == expected",
+          "status": "OPEN"
+        },
+        {
+          "line": 195,
+          "expression": "second_status == first_status",
+          "status": "OPEN"
+        },
+        {
+          "line": 196,
+          "expression": "memcmp(&first, &second, sizeof(first)) == 0",
+          "status": "OPEN"
+        },
+        {
+          "line": 197,
+          "expression": "program == NULL",
+          "status": "OPEN"
+        }
+      ],
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/program/xr_program_reborrow_fixture.h",
+      "function": "xr_reborrow_fixture_key",
+      "line": 28,
+      "end_line": 30,
+      "body_lf_sha256": "2020d2baeac11b6be713a2e772c427053cc76110ef81218d60c0d21ce6dd6323",
+      "CHECK_sites": 0,
+      "CHECK_bindings": [],
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/program/xr_program_reborrow_fixture.h",
+      "function": "xr_program_reborrow_fixture_write_mutated",
+      "line": 32,
+      "end_line": 569,
+      "body_lf_sha256": "e444299dfb92a6f60d7e49006148185d4c51461df21492147273f5c935034146",
+      "CHECK_sites": 0,
+      "CHECK_bindings": [],
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/program/xr_program_reborrow_fixture.h",
+      "function": "xr_program_reborrow_fixture_write",
+      "line": 571,
+      "end_line": 576,
+      "body_lf_sha256": "a70b638f79cf6f543a53867bb5cda35a190ff3a2c9e0e7d97a6118088d2689d9",
+      "CHECK_sites": 0,
+      "CHECK_bindings": [],
+      "status": "OPEN"
+    }
+  ],
+  "specified_helper_CHECK_sites": 8,
+  "input_files": [
+    {
+      "path": "tests/unit/program/test_xr_program_verify.c",
+      "physical_raw_sha256": "a39922500c0943c034fafcda3a82b67e511ea658f453f6c0c3204f7719de1817",
+      "whole_file_lf_sha256": "ec4b93f13bfab2aa3d4b8f8773dd5c1118a0c682ed6f8304fead515f90402802",
+      "git_base_equal": true,
+      "status": "PRESERVE_ORIGINAL_READONLY"
+    },
+    {
+      "path": "tests/unit/program/xr_program_reborrow_fixture.h",
+      "physical_raw_sha256": "721ebf654da6334c4fc1f9af8307b0a80ce0213a7cf39c7b167f9f8bde6dd768",
+      "whole_file_lf_sha256": "eaaae05d4303f2399cdc6913f238711cab60827f5209a741ca7e973ad8a2e4d6",
+      "git_base_equal": true,
+      "status": "PRESERVE_ORIGINAL_READONLY"
+    },
+    {
+      "path": "tests/unit/aot/test_xr_program_aot.c",
+      "physical_raw_sha256": "6fea38acff96d94b2bfb414e04aa308386f6284ed12ccf05613a790a23caa700",
+      "whole_file_lf_sha256": "e7ab9301b308c7db6bf48e348257e5288f38f22c1b38c827fb040719dbf2de0e",
+      "git_base_equal": true,
+      "status": "PRESERVE_ORIGINAL_READONLY"
+    },
+    {
+      "path": "tests/unit/vm/test_xr_program_vm.c",
+      "physical_raw_sha256": "3a19b58076867cc70ef6c77e975286009df65e61ac1ed9edb2b5ab7813543502",
+      "whole_file_lf_sha256": "17904ef2bab8bb7eea72245fedba9878d74b6b8e93776e4314418e2db06dce8a",
+      "git_base_equal": true,
+      "status": "PRESERVE_ORIGINAL_READONLY"
+    },
+    {
+      "path": "tests/unit/vm/test_xr_program_vm_allocations.c",
+      "physical_raw_sha256": "65404153b883af360f80af2006ccb99a1742815f707bf605b7f27e11e16aa4a7",
+      "whole_file_lf_sha256": "b2e8af3a0b31c277224ec7eb93c861f43d5ab09ebf2876869fc5a87f65effdc2",
+      "git_base_equal": true,
+      "status": "PRESERVE_ORIGINAL_READONLY"
+    }
+  ],
+  "catalog": {
+    "types": [
+      {
+        "local_id": 100,
+        "kind": "AGGREGATE/NOMINAL_STRUCT",
+        "ownership": "TRIVIAL/COPY_TRIVIAL",
+        "fields": [],
+        "actual_value": "Construct actual zero-field trivial box as NON_OWNER."
+      },
+      {
+        "local_id": 101,
+        "kind": "EXISTENTIAL(reader)/OWNED_STORAGE",
+        "ownership": "AFFINE/COPY_FORBIDDEN",
+        "actual_value": "Own existential packed from actual box; never replace with unrelated temporary root."
+      },
+      {
+        "local_id": 102,
+        "kind": "EXISTENTIAL(reader)/READ",
+        "ownership": "TRIVIAL/COPY_TRIVIAL",
+        "actual_value": "NON_OWNER reborrow of actual owned101."
+      },
+      {
+        "local_id": 103,
+        "kind": "EXISTENTIAL(other)/READ",
+        "ownership": "TRIVIAL/COPY_TRIVIAL",
+        "actual_value": "Only selected INTERFACE_MISMATCH uses this as borrowed/helper argument type."
+      }
+    ],
+    "interfaces": "Two actual interfaces, each one slot: READ receiver, corresponding READ existential parameter, I64/NON_OWNER result, no error/panic.",
+    "conformance": "One box100 nominal STRUCT -> reader interface; slot0 is actual method function.",
+    "constants": [
+      "I64 42",
+      "BOOL false"
+    ],
+    "feature": "CORE_BASE with actual reborrow:semantic-profile key fingerprint"
+  },
+  "graph": {
+    "method": [
+      "BLOCK_ARGUMENT actual READ box100 receiver/NON_OWNER",
+      "CONSTANT_I64 42",
+      "RETURN actual method constant"
+    ],
+    "helper": [
+      "BLOCK_ARGUMENT READ102/NON_OWNER parameter",
+      "CONSTANT_I64 42",
+      "RETURN actual helper constant"
+    ],
+    "entry": [
+      "BLOCK_ARGUMENT empty",
+      "AGGREGATE_CONSTRUCT actual box100 NON_OWNER, zero operands/fields",
+      "EXISTENTIAL_PACK actual box -> owned101 OWNER",
+      "EXISTENTIAL_REBORROW_READ from same actual owned101 -> READ102 NON_OWNER",
+      "BRANCH actual [owner,borrow] -> call block"
+    ],
+    "call": [
+      "BLOCK_ARGUMENT [actual forwarded OWN101, forwarded READ102 NON_OWNER]",
+      "CALL_SEALED_DIRECT actual helper(forwarded borrow) -> I64",
+      "OWNER_DROP actual forwarded OWN101",
+      "RETURN actual helper result"
+    ],
+    "shape_counts": {
+      "functions": 3,
+      "blocks": 4,
+      "instructions": 15,
+      "types": 4,
+      "interfaces": 2,
+      "conformances": 1,
+      "constants": 2
+    },
+    "valid_loop": {
+      "entry_successor": "Loop block instead of call block; owner and borrow both transferred.",
+      "loop": [
+        "BLOCK_ARGUMENT actual forwarded owner and its borrow",
+        "CONSTANT_BOOL false",
+        "CONDITIONAL_BRANCH [false,owner,borrow,owner,borrow] -> self-loop/call"
+      ],
+      "shape_counts": {
+        "functions": 3,
+        "blocks": 5,
+        "instructions": 18,
+        "types": 4,
+        "interfaces": 2,
+        "conformances": 1,
+        "constants": 2
+      },
+      "obligation": "Preserve real backedge and same actual owner root with its read borrow on each alternate edge; mutually exclusive edge transfers are not duplicate consumption.",
+      "runtime": "NOT_RUN_IN_ORIGINAL_BODY"
+    }
+  },
+  "positive_inputs": [
+    {
+      "mutation": "VALID",
+      "expected_build": "XR_PROGRAM_BUILD_OK",
+      "expected_verify": "XR_PROGRAM_VERIFY_OK",
+      "original_runtime": "RETURN/I64(42)",
+      "status": "OPEN"
+    },
+    {
+      "mutation": "VALID_LOOP",
+      "expected_build": "XR_PROGRAM_BUILD_OK",
+      "expected_verify": "XR_PROGRAM_VERIFY_OK",
+      "original_nonNULL": "EXPLICIT_CHECK_PROGRAM_NOT_NULL",
+      "original_runtime": "NOT_RUN",
+      "status": "OPEN"
+    }
+  ],
+  "semantic_mutations": [
+    {
+      "mutation": "SOURCE_READ",
+      "complete_graph_change": "PACK result owned101/OWNER -> READ102/NON_OWNER, REBORROW_READ still consumes this actual packed result; inserts DROP of actual trivial box before the original two-argument branch. Other downstream owning101 call-block signature remains.",
+      "expected_build": "XR_PROGRAM_BUILD_OK",
+      "expected_verify": "XR_PROGRAM_VERIFY_SEMANTIC_REJECTED",
+      "expected_diagnostic": "XR_PROGRAM_DIAGNOSTIC_OPERATION_TYPE",
+      "original_evidence_boundary": "Original first rejection covers READ source; downstream type/ownership mismatch and trivial box DROP remain in full input, so not isolated lifetime proof.",
+      "status": "OPEN"
+    },
+    {
+      "mutation": "INTERFACE_MISMATCH",
+      "complete_graph_change": "REBORROW_READ result and helper formal parameter both READ102(reader) -> OTHER_READ103(other interface), source still OWNED101(reader). Full conformance/catalog and owner transfer stay.",
+      "expected_build": "XR_PROGRAM_BUILD_OK",
+      "expected_verify": "XR_PROGRAM_VERIFY_SEMANTIC_REJECTED",
+      "expected_diagnostic": "XR_PROGRAM_DIAGNOSTIC_OPERATION_TYPE",
+      "original_evidence_boundary": "Helper parameter follows changed borrowed type, avoiding a trivial call signature mismatch; source/result interface mismatch must remain rejected.",
+      "status": "OPEN"
+    },
+    {
+      "mutation": "LOST_OWNER",
+      "complete_graph_change": "DROP actual owned101 before branch; branch forwards only borrow, call block accepts only borrow and its BLOCK_ARGUMENT has one operand. Remove call-block owner DROP by replacing it with RETURN; CALL still uses actual forwarded borrow.",
+      "expected_build": "XR_PROGRAM_BUILD_OK",
+      "expected_verify": "XR_PROGRAM_VERIFY_SEMANTIC_REJECTED",
+      "expected_diagnostic": "XR_PROGRAM_DIAGNOSTIC_VALUE_USE",
+      "original_evidence_boundary": "Borrow is forwarded and used after its actual owner is destroyed; retain complete graph, not a substitute owner/root.",
+      "status": "OPEN"
+    },
+    {
+      "mutation": "RETURN_ESCAPE",
+      "complete_graph_change": "Entry returns actual borrowed102, result type READ/nonowner and effect_mask0, selects only entry block. Owned101 remains live with no DROP; method/helper catalog remains.",
+      "expected_build": "XR_PROGRAM_BUILD_OK",
+      "expected_verify": "XR_PROGRAM_VERIFY_SEMANTIC_REJECTED",
+      "expected_diagnostic": "XR_PROGRAM_DIAGNOSTIC_ROOT",
+      "original_evidence_boundary": "Original first ROOT diagnostic is not isolated escape proof: same full graph also leaves actual existential owner live; retain both obligations.",
+      "status": "OPEN"
+    },
+    {
+      "mutation": "USE_AFTER_OWNER_DROP",
+      "complete_graph_change": "DROP actual owned101 before unchanged two-argument branch[owner,borrow]. Call block still accepts actual owner/borrow, calls helper then drops forwarded owner.",
+      "expected_build": "XR_PROGRAM_BUILD_OK",
+      "expected_verify": "XR_PROGRAM_VERIFY_SEMANTIC_REJECTED",
+      "expected_diagnostic": "XR_PROGRAM_DIAGNOSTIC_VALUE_USE",
+      "original_evidence_boundary": "Both actual owner and its borrow are stale at branch; original VALUE_USE is not evidence isolating only a borrow read.",
+      "status": "OPEN"
+    }
+  ],
+  "producer_negative": {
+    "mutation": "RESULT_OWNER",
+    "complete_graph_change": "Only REBORROW_READ result ownership NON_OWNER -> OWNER while READ102 type remains TRIVIAL/COPY_TRIVIAL; all original catalog/graph remain.",
+    "expected_build": "XR_PROGRAM_BUILD_INVALID_INPUT",
+    "original_artifact_NULL_or_zero": "NOT_ASSERTED",
+    "original_semantic_verify": "NOT_RUN",
+    "status": "OPEN"
+  },
+  "original_runtime": {
+    "evaluations": 1,
+    "invocation": "Default profile/budget, entry function, NULL arguments/count0.",
+    "outcome": "RETURN, I64, exactly42",
+    "value_origin": "Actual helper constant42 via sealed direct call. Catalog conformance method is not called and original valid helper does not perform witness dispatch, payload access or projected field reads.",
+    "result_disposal": "NOT_PRESENT_IN_ORIGINAL_BODY",
+    "physical_release": "NOT_ASSERTED",
+    "stable_identity_lifecycle": "NOT_ASSERTED"
+  },
+  "unselected_shared_builder_branch": {
+    "mutation": "RETURN_OWNER",
+    "selected_by_this_census": false,
+    "scope": "PRESERVE_COMPLETE_SHARED_BUILDER_NOT_QUALIFIED_BY_THIS_FAMILY",
+    "payload_bytes": 42,
+    "payload_text": "012345678901234567890123456789012345678901",
+    "changes": "Box100 becomes affine explicit-copy [String]; actual String constant42bytes -> OWN box -> OWN existential101 returned. Method becomes actual AGGREGATE_PROJECT String + SEQUENCE_LENGTH; helper OWNED101 parameter becomes CALL_WITNESS_DIRECT slot0. Entry selects one block5ops and returns OWNED101 OWNER with effect0; constant_count3. This shared owning-return branch is not among eight selected reborrow inputs.",
+    "boundary": "Original AOT/VM/allocation owning-return consumers remain separate OPEN responsibilities; do not count their payload/witness/lifetime behavior as reborrow VALID proof."
+  },
+  "assertion_counts": {
+    "census_functions": 1,
+    "outer_sites": 9,
+    "specified_helpers": 5,
+    "specified_helper_sites": 8,
+    "fresh_builder_inputs": 8,
+    "successful_artifact_builds": 7,
+    "positive_admitted_programs": 2,
+    "semantic_negative_inputs": 5,
+    "semantic_negative_verify_calls": 10,
+    "producer_negative_inputs": 1,
+    "original_runtime_evaluations": 1,
+    "wire_mutations": 0
+  },
+  "expectation_policy": "Preserve seven original BUILD_OK inputs, RESULT_OWNER BUILD_INVALID_INPUT, SOURCE_READ/INTERFACE_MISMATCH OPERATION_TYPE, lifetime VALUE_USE/ROOT/VALUE_USE. Exact semantic negatives call shared helper twice with NULL product, exact semantic status/kind and full Diag memcmp; do not upgrade producer negative to semantic or claim an isolated rejection that full graph does not prove.",
+  "shared_fixture_owners": {
+    "path": "tests/unit/program/xr_program_reborrow_fixture.h",
+    "actual_include_users": [
+      "tests/unit/program/test_xr_program_verify.c",
+      "tests/unit/aot/test_xr_program_aot.c",
+      "tests/unit/vm/test_xr_program_vm.c",
+      "tests/unit/vm/test_xr_program_vm_allocations.c"
+    ],
+    "status": "PRESERVE_SHARED_READONLY",
+    "deletion": "Complete shared builder, including unselected RETURN_OWNER, remains included by verifier/AOT/VM/VM allocations. No shared deletion candidate."
+  },
+  "Root_contract_or_representation_review": {
+    "status": "OPEN",
+    "loan_root": "Map actual packed owned101 and its READ102 reborrow to frozen current Cell/loan contract, including paired forward through real blocks/backedge and source owner death. Never introduce fresh temp Cell, writeback, alias, shim or compatibility fallback.",
+    "correctness": "Keep original fixed42 and recognize helper constant origin. Current stronger witness/payload/resource-backed escape probes are additional independent qualification, not historical tests that have already run.",
+    "errors": "Current first-stage/status/kind replacements require Root contract review while complete historical input/first rejection stays preserved; do not reduce RETURN_ESCAPE or USE_AFTER_OWNER_DROP to a smaller graph or silently change goldens.",
+    "qualification": "Formal public Source/current owned Checked/Lowered/VM/native/mixed/two-instance/owning escape/cancellation/per-object stable identity/full FI/axes/safety remain OPEN pending producer, roles, observer and scheduling publication."
+  },
+  "full_FI": "NOT_RUN",
+  "axes": "NOT_RUN",
+  "full_safety": "NOT_RUN",
+  "SourceDelete": "NOT_RUN",
+  "Main": "NOT_RUN",
+  "handoff": {
+    "Root_thread": "01a11f74-a297-7b11-8441-835bde6a3d5f",
+    "formal_acceptance": "PENDING"
+  },
+  "boundaries": [
+    "Static full original responsibilities only; all OPEN/retired0.",
+    "One original runtime call is a source obligation, not a current execution.",
+    "No product source, shared fixture, ABI or docs mutation."
+  ]
+}
