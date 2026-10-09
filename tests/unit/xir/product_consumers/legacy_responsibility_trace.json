@@ -17,9 +17,9 @@
   "reference_counts": {
     "source_with_digest_reference": 108,
     "source_without_digest_reference": 0,
-    "other_with_digest_reference": 127,
-    "other_without_digest_reference": 33,
-    "digest_reference_values": 338,
+    "other_with_digest_reference": 128,
+    "other_without_digest_reference": 32,
+    "digest_reference_values": 340,
     "source_inventory_projections": 42
   },
   "mapping_inputs": [
@@ -482,6 +482,10 @@
     {
       "path": "tests/unit/xir/product_consumers/source_original_aggregate_variant_struct_obligations.json",
       "lf_sha256": "da773fcc6359e4deafd58243fa03ed43a3039928547051f9c58c335d31d8d091"
+    },
+    {
+      "path": "tests/unit/xir/product_consumers/source_original_aot_affine_copy_lowering_obligations.json",
+      "lf_sha256": "fbc1bbdd65a839f662fb4cfde4d45e044bd014f913d1346a5c7aaf222b0ef288"
     },
     {
       "path": "tests/unit/xir/product_consumers/source_original_aot_coroutine_state_edge_cancel_lowering_obligations.json",
@@ -5276,7 +5280,18 @@
       "body_lf_sha256": "63ac4bce10b7a2a760649547110bc10fb107aa59db27355f4faf50632cd06237",
       "status": "OPEN",
       "inventory_projection": null,
-      "mapping_references": []
+      "mapping_references": [
+        {
+          "mapping": "tests/unit/xir/product_consumers/source_original_aot_affine_copy_lowering_obligations.json",
+          "pointer": "/legacy/0/body_lf_sha256",
+          "binding": "exact_path_name_body"
+        },
+        {
+          "mapping": "tests/unit/xir/product_consumers/source_original_aot_affine_copy_lowering_obligations.json",
+          "pointer": "/responsibility_mapping/0/body_lf_sha256",
+          "binding": "exact_body_digest_value_only"
+        }
+      ]
     },
     {
       "legacy_path": "tests/unit/aot/test_xr_program_aot.c",
