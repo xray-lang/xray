@@ -1,0 +1,66 @@
+{
+  "schema": 1,
+  "producer": "25f4016d6f089169757a90ae11ba537002374711",
+  "identity": "Checked25/semantic67/Value22/Call28/Program29",
+  "legacy": {
+    "legacy_path": "tests/unit/program/test_xr_program_source_build.c",
+    "name": "source_owner_array_append_preserves_class_identity",
+    "body_lf_sha256": "df13fef04310a02d4f6d1e25fc2da6513d7aa3abda65e5002afa4ac83e76cc35",
+    "status": "OPEN",
+    "inventory_projection": {
+      "fixture": "tests/unit/xir/product_consumers/fixtures/class_identity/root.xr",
+      "sha256": "cfd8d10d0016f8c0cb44f7a8f3dfcff74979cb0e9dda1ca04f5112fec281aace",
+      "original_prefix_sha256": "b94624ef455386b578870e986c84bedd687c24f4fc455d64fb8f6ade05d2a832",
+      "entry_adapter": "export fn consumerAnswer() -> i64 { return answer() }\n",
+      "entry": "consumerAnswer",
+      "expected_i64": 42,
+      "scope": "Exact original source prefix and fixed result through an explicitly exported adapter; additional legacy assertions stay OPEN until mapped."
+    },
+    "mapping_references": []
+  },
+  "status": "OPEN",
+  "retired": 0,
+  "replacement_gates": [],
+  "original_source": {
+    "path": "tests/unit/xir/product_consumers/fixtures/class_identity/root.xr",
+    "bytes": 275,
+    "prefix_bytes": 221,
+    "sha256": "cfd8d10d0016f8c0cb44f7a8f3dfcff74979cb0e9dda1ca04f5112fec281aace",
+    "prefix_sha256": "b94624ef455386b578870e986c84bedd687c24f4fc455d64fb8f6ade05d2a832",
+    "adapter": "export fn consumerAnswer() -> i64 { return answer() }\n"
+  },
+  "independent_i64": 42,
+  "required_shape": "Holder class with one I64 value field; constructor takes I64 and returns Holder. Original answer appends Holder(19) to Array<Holder>, mutates the same local reference to42, then reads array index0 field0. Array append must retain class reference identity.",
+  "result": "NOT_RUN",
+  "pipeline": "Original Source prefix and exported adapter; SourceProduct/Closed Checked/reader and Source owner death/Lowered/Program/two Instances;VM/native/two mixed partitions.",
+  "boundaries": [
+    "Original BackendIR ARRAY_APPEND_CLASS_IDENTITY representation remains OPEN until mapped; public Checked instructions alone do not replace the old representation assertion.",
+    "Full FI, resource axes, cancellation, safety, Main integration and retirement remain OPEN."
+  ],
+  "full_FI": "NOT_RUN",
+  "axes": "NOT_RUN",
+  "cancel": "NOT_RUN",
+  "full_safety": "NOT_RUN",
+  "Main": "NOT_RUN",
+  "class_array_reference_identity_20261009_facet": {
+    "status": "PASS_ORIGINAL_SOURCE_CLASS_ARRAY_REFERENCE_IDENTITY_WHOLE_LEGACY_OPEN",
+    "evidence": "build-consumer-evidence/current67-class-array-identity-r1",
+    "original": "Original 221-byte Source literal prefix plus 54-byte exported adapter unchanged. Holder(19) is pushed into an empty Array<Holder>; mutation through original.value to42 must be visible through rows[0].value. Independent expected42 unchanged.",
+    "shape": "Actual Holder nominal class, one named I64 field, constructor with I64 parameter and Holder result. Answer CALLs constructor with19; ARRAY_PUSH reads original cell, subsequent CLASS_SET reads the same cell and stores42. ARRAY_GET0 reads the same array root; CLASS_GET0 and RETURN follow actual SSA identities.",
+    "actual": "12 registered argv processes all first PASS: eight VM/native/mixed family executions, two detached owned tests, two sequence VM controls. Family has32 independent scalar42 checks across16 Instances. Caller Program reference drops before public calls; private answer rejects BAD_ARGUMENT without allocating. Source/session/readers die before Program use; final compiler/runtime physical release zero.",
+    "owned": "Session/product/request/authority/path destroyed before Checked reverification and byte-exact full writer packet comparison. Checked destroyed before Lowered reverification and release. Final compiler allocation table and physical usage zero.",
+    "inputs": "Original VM2708, owner/control2707, native2709 guarded inputs per PID including three explicit observer headers, real generated C and configured wrappers where used. SHA/bytes/mtime equal before/after. Every runtime PID binary archived before execution and bound to captured identity, including controls. Runtime pre-annotation map and trace retained.",
+    "build": "Six fresh C compilation events/six distinct final translation units across MSVC Release and Clang ASan/UBSan: shared driver, new owner and actual generated C per configuration. Strict C11 and W4/WX. Existing wrapper objects reused; wrapper templates and runtime inputs bound. Two build-time Source emitter calls recorded separately from registered runtime qualification.",
+    "generated_payload_sha256": {
+      "msvc": "0f1e88b589e4eafd7e7184c4423223fe0bfb195f03264493fb6955ad390e5fad",
+      "asan": "0f1e88b589e4eafd7e7184c4423223fe0bfb195f03264493fb6955ad390e5fad"
+    },
+    "remaining": "Original BackendIR ARRAY_APPEND_CLASS_IDENTITY representation assertion, full FI/resource axes/cancellation/safety/Main integration/retirement remain OPEN.",
+    "full_FI": "NOT_RUN",
+    "axes": "NOT_RUN",
+    "cancel": "NOT_RUN",
+    "full_safety": "NOT_RUN",
+    "Main": "NOT_RUN",
+    "retired": 0
+  }
+}
