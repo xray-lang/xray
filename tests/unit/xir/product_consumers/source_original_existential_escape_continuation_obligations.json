@@ -1,0 +1,496 @@
+{
+  "schema": 1,
+  "family": "original_existential_ref_escape_dominance_and_witness_continuations",
+  "legacy_base_commit": "01e6d38401b0f5c8684b64c35a99ac651024c0c1",
+  "status": "OPEN",
+  "retired": 0,
+  "replacement_gates": [],
+  "result": "STATIC_FULL_ORIGINAL_EXISTENTIAL_ESCAPE_DOMINANCE_AND_TRAP_INPUT_MAP_ONLY",
+  "product_execution": "NOT_RUN_BY_THIS_MAP",
+  "producer": "25f4016d6f089169757a90ae11ba537002374711",
+  "identity": "Checked25/semantic67/Value22/Call28/Program29",
+  "legacy": [
+    {
+      "name": "test_existential_ref_non_escape_admission",
+      "legacy_path": "tests/unit/program/test_xr_program_verify.c",
+      "legacy_line": 5725,
+      "body_lf_sha256": "ef714fe50b62f1e80ca3b02a362e8ed1b685108518b31ca129972a4779fff602",
+      "assertion_sites": 3,
+      "loop_sites": 0,
+      "status": "OPEN",
+      "replacement_gates": [],
+      "note": "Function census preserves its whole body; sites do not count executed loop iterations."
+    },
+    {
+      "name": "test_existential_pack_test_project",
+      "legacy_path": "tests/unit/program/test_xr_program_verify.c",
+      "legacy_line": 5754,
+      "body_lf_sha256": "be19a0813ffe70659d53f980c252674e6e29a4a5c7232bc336f6b933ff3317cf",
+      "assertion_sites": 13,
+      "loop_sites": 2,
+      "status": "OPEN",
+      "replacement_gates": [],
+      "note": "Function census preserves its whole body; sites do not count executed loop iterations."
+    }
+  ],
+  "responsibility_mapping": [
+    {
+      "path": "tests/unit/program/test_xr_program_verify.c",
+      "function": "test_existential_ref_non_escape_admission",
+      "line": 5725,
+      "end_line": 5752,
+      "body_lf_sha256": "ef714fe50b62f1e80ca3b02a362e8ed1b685108518b31ca129972a4779fff602",
+      "CHECK_sites": 3,
+      "CHECK_bindings": [
+        {
+          "line": 5728,
+          "expression": "found",
+          "status": "OPEN"
+        },
+        {
+          "line": 5732,
+          "expression": "bytes != NULL",
+          "status": "OPEN"
+        },
+        {
+          "line": 5743,
+          "expression": "offsets.ref_type_id < UINT8_C(0x80)",
+          "status": "OPEN"
+        }
+      ],
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/program/test_xr_program_verify.c",
+      "function": "test_existential_pack_test_project",
+      "line": 5754,
+      "end_line": 5832,
+      "body_lf_sha256": "be19a0813ffe70659d53f980c252674e6e29a4a5c7232bc336f6b933ff3317cf",
+      "CHECK_sites": 13,
+      "CHECK_bindings": [
+        {
+          "line": 5757,
+          "expression": "xr_program_existential_fixture_write(&artifact, diagnostic, sizeof(diagnostic)) ==\n          XR_PROGRAM_BUILD_OK",
+          "status": "OPEN"
+        },
+        {
+          "line": 5763,
+          "expression": "result.kind == XR_REFERENCE_OUTCOME_RETURN",
+          "status": "OPEN"
+        },
+        {
+          "line": 5764,
+          "expression": "result.value.kind == XR_REFERENCE_VALUE_I64",
+          "status": "OPEN"
+        },
+        {
+          "line": 5765,
+          "expression": "result.value.as.i64 == 42",
+          "status": "OPEN"
+        },
+        {
+          "line": 5770,
+          "expression": "xr_program_existential_fixture_write_mutated(XR_EXISTENTIAL_FIXTURE_WITNESS_DIRECT_TRAP,\n                                                       &artifact, diagnostic,\n                                                       sizeof(diagnostic)) == XR_PROGRAM_BUILD_OK",
+          "status": "OPEN"
+        },
+        {
+          "line": 5774,
+          "expression": "program != NULL",
+          "status": "OPEN"
+        },
+        {
+          "line": 5778,
+          "expression": "xr_program_existential_fixture_write_mutated(\n              XR_EXISTENTIAL_FIXTURE_WITNESS_DIRECT_TRAP_LOST_OWNER, &artifact, diagnostic,\n              sizeof(diagnostic)) == XR_PROGRAM_BUILD_OK",
+          "status": "OPEN"
+        },
+        {
+          "line": 5784,
+          "expression": "xr_program_existential_fixture_write_mutated(XR_EXISTENTIAL_FIXTURE_WITNESS_INVOKE_TRAP,\n                                                       &artifact, diagnostic,\n                                                       sizeof(diagnostic)) == XR_PROGRAM_BUILD_OK",
+          "status": "OPEN"
+        },
+        {
+          "line": 5788,
+          "expression": "program != NULL",
+          "status": "OPEN"
+        },
+        {
+          "line": 5792,
+          "expression": "xr_program_existential_fixture_write_mutated(\n              XR_EXISTENTIAL_FIXTURE_WITNESS_INVOKE_TRAP_BAD_TARGET, &artifact, diagnostic,\n              sizeof(diagnostic)) == XR_PROGRAM_BUILD_OK",
+          "status": "OPEN"
+        },
+        {
+          "line": 5807,
+          "expression": "xr_program_existential_fixture_write_mutated(rejected[index], &artifact, diagnostic,\n                                                           sizeof(diagnostic)) ==\n              XR_PROGRAM_BUILD_OK",
+          "status": "OPEN"
+        },
+        {
+          "line": 5815,
+          "expression": "xr_program_existential_fixture_write_mutated(\n              XR_EXISTENTIAL_FIXTURE_WITNESS_SLOT_OUT_OF_RANGE, &artifact, diagnostic,\n              sizeof(diagnostic)) == XR_PROGRAM_BUILD_OK",
+          "status": "OPEN"
+        },
+        {
+          "line": 5827,
+          "expression": "xr_program_existential_fixture_write_mutated(escaped_refs[index], &artifact,\n                                                           diagnostic, sizeof(diagnostic)) ==\n              XR_PROGRAM_BUILD_INVALID_INPUT",
+          "status": "OPEN"
+        }
+      ],
+      "status": "OPEN"
+    }
+  ],
+  "outer_CHECK_sites": 16,
+  "original_private_helpers": [
+    {
+      "path": "tests/unit/program/test_xr_program_verify.c",
+      "function": "validate_ok",
+      "line": 159,
+      "end_line": 174,
+      "body_lf_sha256": "94fe0ef4e0242acb810c12621ae1fe73a9887ef668f15ddc6c67ed645494f62b",
+      "CHECK_sites": 2,
+      "CHECK_bindings": [
+        {
+          "line": 171,
+          "expression": "status == XR_PROGRAM_VERIFY_OK",
+          "status": "OPEN"
+        },
+        {
+          "line": 172,
+          "expression": "program != NULL",
+          "status": "OPEN"
+        }
+      ],
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/program/test_xr_program_verify.c",
+      "function": "expect_semantic_reject_at",
+      "line": 176,
+      "end_line": 198,
+      "body_lf_sha256": "44cf0fb15bea156743a1c0e35b0be8ee844aa1af55c8653ed9361cf781c045b8",
+      "CHECK_sites": 6,
+      "CHECK_bindings": [
+        {
+          "line": 190,
+          "expression": "first_status == XR_PROGRAM_VERIFY_SEMANTIC_REJECTED",
+          "status": "OPEN"
+        },
+        {
+          "line": 191,
+          "expression": "program == NULL",
+          "status": "OPEN"
+        },
+        {
+          "line": 192,
+          "expression": "first.kind == expected",
+          "status": "OPEN"
+        },
+        {
+          "line": 195,
+          "expression": "second_status == first_status",
+          "status": "OPEN"
+        },
+        {
+          "line": 196,
+          "expression": "memcmp(&first, &second, sizeof(first)) == 0",
+          "status": "OPEN"
+        },
+        {
+          "line": 197,
+          "expression": "program == NULL",
+          "status": "OPEN"
+        }
+      ],
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/program/test_xr_program_verify.c",
+      "function": "test_take_uvar",
+      "line": 203,
+      "end_line": 215,
+      "body_lf_sha256": "835eb97aa0c77560506ba0e421652602ae095f5e6686cce9ef331fc80a34ef4d",
+      "CHECK_sites": 1,
+      "CHECK_bindings": [
+        {
+          "line": 213,
+          "expression": "false",
+          "status": "OPEN"
+        }
+      ],
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/program/test_xr_program_verify.c",
+      "function": "test_skip_display_names",
+      "line": 217,
+      "end_line": 225,
+      "body_lf_sha256": "ed11446fffd51a746fc7ceb50a8263ce377a97d80fef245e1239ec3d691307d8",
+      "CHECK_sites": 0,
+      "CHECK_bindings": [],
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/program/test_xr_program_verify.c",
+      "function": "find_existential_type_offsets",
+      "line": 5661,
+      "end_line": 5723,
+      "body_lf_sha256": "0164352274958c6099c43b6446023661ab29e837eb24aeb722b4ffc21ac6dc91",
+      "CHECK_sites": 0,
+      "CHECK_bindings": [],
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/program/xr_program_existential_fixture.h",
+      "function": "xr_existential_fixture_key",
+      "line": 34,
+      "end_line": 36,
+      "body_lf_sha256": "314f6c219e6391043def23e0357db0d34a96ad46a9b5a941065f4c8d1cc4b03b",
+      "CHECK_sites": 0,
+      "CHECK_bindings": [],
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/program/xr_program_existential_fixture.h",
+      "function": "xr_program_existential_fixture_write_mutated",
+      "line": 38,
+      "end_line": 934,
+      "body_lf_sha256": "bce5394e72a6ca3cec8cc09bdd97a3c4165edb070ee79b5fd8aa70b2ea8fdb6d",
+      "CHECK_sites": 0,
+      "CHECK_bindings": [],
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/program/xr_program_existential_fixture.h",
+      "function": "xr_program_existential_fixture_write",
+      "line": 936,
+      "end_line": 941,
+      "body_lf_sha256": "28b0630e1371fa2a05c9f22b11097e5a26d462b9636a78817e6441ed4d8d4bf1",
+      "CHECK_sites": 0,
+      "CHECK_bindings": [],
+      "status": "OPEN"
+    }
+  ],
+  "specified_helper_CHECK_sites": 9,
+  "input_files": [
+    {
+      "path": "tests/unit/program/test_xr_program_verify.c",
+      "physical_raw_sha256": "a39922500c0943c034fafcda3a82b67e511ea658f453f6c0c3204f7719de1817",
+      "whole_file_lf_sha256": "ec4b93f13bfab2aa3d4b8f8773dd5c1118a0c682ed6f8304fead515f90402802",
+      "git_base_equal": true,
+      "status": "PRESERVE_ORIGINAL_READONLY"
+    },
+    {
+      "path": "tests/unit/program/xr_program_existential_fixture.h",
+      "physical_raw_sha256": "120cdbba4e12a66069aa1fdd15a76190d67d9c22e69e5d0b7e8200e9891b9544",
+      "whole_file_lf_sha256": "162f193bc1155dca7ac1b4e2e0649f8bf487ed176086aef5b8140deba2b37185",
+      "git_base_equal": true,
+      "status": "PRESERVE_ORIGINAL_READONLY"
+    }
+  ],
+  "complete_valid_graph_reference": {
+    "path": "tests/unit/xir/product_consumers/source_original_existential_clone_witness_obligations.json",
+    "commit": "057fa84dcfad6d7e8f0bce3e804a265a10c72383",
+    "committed_LF_sha256": "56b66f9eea240d39f25030d967a37f97a329b43738534673ed7e921f4d4c30a8",
+    "physical_raw_sha256": "5a85d5c2c831c17f305a1110a2b05382ad0f9700498cc759bf8825de6870b331",
+    "section": "valid_fixture_graph",
+    "source_helper_body_equal": true,
+    "boundary": "Static fullgraph description reused only because actualsharedwriter body is byte-identical; no old/new metadata/runtime evidence is spliced into qualification."
+  },
+  "input_policy": "Both complete originalcensus bodies and eight actualhelpers equal01e6. Preserve all13 fresh builder inputs and both independent full-copy type mutations. Whole sharedwriter body includes other module mutations, but this census does not call them. No program/interface/type/owner/controlflow reduction or unconditional42 replacement.",
+  "builder_cases": [
+    {
+      "mutation": "VALID",
+      "expected_build": "XR_PROGRAM_BUILD_OK",
+      "expected_verify": "XR_PROGRAM_VERIFY_OK",
+      "expected_diagnostic": null,
+      "original_scope": "actual_runtime_positive",
+      "complete_graph_change": "Complete original5-function/9-block/39-op valid graph, including realREF place/witness/drop, factoryREAD existential copy/test, both conditional edges, READdirect/fallibleinvoke and typederror fallback.",
+      "original_runtime_expected": "RETURN/I64(42)",
+      "status": "OPEN"
+    },
+    {
+      "mutation": "WITNESS_DIRECT_TRAP",
+      "expected_build": "XR_PROGRAM_BUILD_OK",
+      "expected_verify": "XR_PROGRAM_VERIFY_OK",
+      "expected_diagnostic": null,
+      "original_scope": "admission_only_positive",
+      "complete_graph_change": "Actual entryREF witnessslot2 has operands{entry_ref_erased,entry_ref_erased}: original receiver plus actualowner cleanup transfer; entry direct call has one trap successor. Include sixth entry-function trap block with oneOWN REFexistential argument, BLOCK_ARGUMENT/DROP/TRAP7. Normal call path retains original OWNER_DROP; entry effect addsTRAP.",
+      "original_runtime_expected": "NOT_RUN",
+      "status": "OPEN"
+    },
+    {
+      "mutation": "WITNESS_DIRECT_TRAP_LOST_OWNER",
+      "expected_build": "XR_PROGRAM_BUILD_OK",
+      "expected_verify": "XR_PROGRAM_VERIFY_SEMANTIC_REJECTED",
+      "expected_diagnostic": "XR_PROGRAM_DIAGNOSTIC_VALUE_USE",
+      "original_scope": "semantic_negative",
+      "complete_graph_change": "Actual entryREF direct call still has trapedge but operand_count1 omits owner cleanup transfer. Trapblock has noarguments/BLOCK_ARGUMENT zero/TRAP7 and noDROP; originalREF owner remains on interrupted path. Full other graph unchanged.",
+      "original_runtime_expected": "NOT_RUN",
+      "status": "OPEN"
+    },
+    {
+      "mutation": "WITNESS_INVOKE_TRAP",
+      "expected_build": "XR_PROGRAM_BUILD_OK",
+      "expected_verify": "XR_PROGRAM_VERIFY_OK",
+      "expected_diagnostic": null,
+      "original_scope": "admission_only_positive",
+      "complete_graph_change": "Actual trueblock fallibleREAD witnessINVOKEslot1 has three normal/error/trap successors rather than two. Sixth trapblock has noownerargument and BLOCK_ARGUMENTzero/TRAP7; actualentryREF carrier already dropped on earlier path. Actualcallee body still projectsI64 and returns, no original runtime trap execution.",
+      "original_runtime_expected": "NOT_RUN",
+      "status": "OPEN"
+    },
+    {
+      "mutation": "WITNESS_INVOKE_TRAP_BAD_TARGET",
+      "expected_build": "XR_PROGRAM_BUILD_OK",
+      "expected_verify": "XR_PROGRAM_VERIFY_SEMANTIC_REJECTED",
+      "expected_diagnostic": "XR_PROGRAM_DIAGNOSTIC_CONTROL_FLOW",
+      "original_scope": "semantic_negative",
+      "complete_graph_change": "Same invoke-trap graph/edges/blockkey; only trap terminator immediate changes7->4 in actualtrapblock. Not a changed successor or out-of-range block.",
+      "original_runtime_expected": "NOT_RUN",
+      "status": "OPEN"
+    },
+    {
+      "mutation": "UNDOMINATED_PROJECT",
+      "expected_build": "XR_PROGRAM_BUILD_OK",
+      "expected_verify": "XR_PROGRAM_VERIFY_SEMANTIC_REJECTED",
+      "expected_diagnostic": "XR_PROGRAM_DIAGNOSTIC_OPERATION_TYPE",
+      "original_scope": "semantic_negative",
+      "complete_graph_change": "Only actualconditional branch condition changesEXISTENTIAL_TEST result->existing CONSTBOOLtrue. Original test operation remains but does not dominate type-refinement edge; complete true EXISTENTIAL_PROJECT still requires proof.",
+      "original_runtime_expected": "NOT_RUN",
+      "status": "OPEN"
+    },
+    {
+      "mutation": "FALSE_EDGE_PROJECT",
+      "expected_build": "XR_PROGRAM_BUILD_OK",
+      "expected_verify": "XR_PROGRAM_VERIFY_SEMANTIC_REJECTED",
+      "expected_diagnostic": "XR_PROGRAM_DIAGNOSTIC_OPERATION_TYPE",
+      "original_scope": "semantic_negative",
+      "complete_graph_change": "True block becomesBLOCK_ARGUMENT/RETURN fallback42 (count2); false block becomesBLOCK_ARGUMENT/EXISTENTIAL_PROJECT Rect100/AGGREGATE_PROJECT/RETURN field (count4), on falseedge of actualEXISTENTIAL_TEST. Entry blocks reduced to firstthree; five originalfunction definitions retained.",
+      "original_runtime_expected": "NOT_RUN",
+      "status": "OPEN"
+    },
+    {
+      "mutation": "NO_CONFORMANCE",
+      "expected_build": "XR_PROGRAM_BUILD_OK",
+      "expected_verify": "XR_PROGRAM_VERIFY_SEMANTIC_REJECTED",
+      "expected_diagnostic": "XR_PROGRAM_DIAGNOSTIC_OPERATION_TYPE",
+      "original_scope": "semantic_negative",
+      "complete_graph_change": "Program conformance pointerNULL/count0 only; original three types/interface/threeslots and every actualfactorypack/copy/REF/read/witness instruction retained.",
+      "original_runtime_expected": "NOT_RUN",
+      "status": "OPEN"
+    },
+    {
+      "mutation": "WITNESS_DIRECT_FALLIBLE",
+      "expected_build": "XR_PROGRAM_BUILD_OK",
+      "expected_verify": "XR_PROGRAM_VERIFY_SEMANTIC_REJECTED",
+      "expected_diagnostic": "XR_PROGRAM_DIAGNOSTIC_OPERATION_TYPE",
+      "original_scope": "semantic_negative",
+      "complete_graph_change": "True actualCALL_WITNESS_DIRECT slot0->1 (valid fallibleREAD slotERROR). ActualCALLDIRECT and complete typednormal/error invocation graph remain unchanged.",
+      "original_runtime_expected": "NOT_RUN",
+      "status": "OPEN"
+    },
+    {
+      "mutation": "WITNESS_INVOKE_INFALLIBLE",
+      "expected_build": "XR_PROGRAM_BUILD_OK",
+      "expected_verify": "XR_PROGRAM_VERIFY_SEMANTIC_REJECTED",
+      "expected_diagnostic": "XR_PROGRAM_DIAGNOSTIC_OPERATION_TYPE",
+      "original_scope": "semantic_negative",
+      "complete_graph_change": "True actualCALL_WITNESS_INVOKE slot1->0 (valid infallibleREAD slot), while both originalnormal/error successors and typederrorfallback retained.",
+      "original_runtime_expected": "NOT_RUN",
+      "status": "OPEN"
+    },
+    {
+      "mutation": "WITNESS_SLOT_OUT_OF_RANGE",
+      "expected_build": "XR_PROGRAM_BUILD_OK",
+      "expected_verify": "XR_PROGRAM_VERIFY_SEMANTIC_REJECTED",
+      "expected_diagnostic": "XR_PROGRAM_DIAGNOSTIC_OPERATION_IMMEDIATE",
+      "original_scope": "semantic_negative",
+      "complete_graph_change": "Despite old enum name, actualtrue READ directcall slot0->2; slot2 exists amongthree slots but requiresREF receiver. Preserve this in-range capability conflict; do not substitute slot3 orUINTMAX.",
+      "original_runtime_expected": "NOT_RUN",
+      "status": "OPEN"
+    },
+    {
+      "mutation": "REF_RESULT_ESCAPE",
+      "expected_build": "XR_PROGRAM_BUILD_INVALID_INPUT",
+      "expected_verify": "NOT_RUN_IN_ORIGINAL_BODY",
+      "expected_diagnostic": null,
+      "original_scope": "producer_negative",
+      "complete_graph_change": "Only factory declaredresult SHAPE_READ101/NON_OWNER changesSHAPE_REF102/OWNER. Originalfactory instructions still constructRect42 and PACKREAD101/RETURN originalerasedvalue. Keep full originalinconsistent result input; original producer assertsINVALID_INPUT, no exactdiagnostic.",
+      "original_runtime_expected": "NOT_RUN",
+      "status": "OPEN"
+    },
+    {
+      "mutation": "REF_FIELD_ESCAPE",
+      "expected_build": "XR_PROGRAM_BUILD_INVALID_INPUT",
+      "expected_verify": "NOT_RUN_IN_ORIGINAL_BODY",
+      "expected_diagnostic": null,
+      "original_scope": "producer_negative",
+      "complete_graph_change": "Only Rect100 fieldtypeI64 changesactualSHAPE_REF102; originalRECTconstruction operands stillI64(42), TRIVIAL/COPY_TRIVIAL and all othertypes/operations retained. Original producer assertsINVALID_INPUT, no isolated failurecause or exactdiagnostic proved.",
+      "original_runtime_expected": "NOT_RUN",
+      "status": "OPEN"
+    }
+  ],
+  "fresh_builder_input_count": 13,
+  "wire_ref_nonescape_cases": [
+    {
+      "name": "READ_existential_changes_to_REF_with_original_results",
+      "baseline": "Original completeVALIDartifact passed from test_existential_pack_test_project while positiveProgram still live",
+      "mutations": [
+        "actualREAD existential ownership byte -> AFFINE",
+        "sameREAD type copy-contract byte -> FORBIDDEN",
+        "sameREAD type use-kind byte -> REF"
+      ],
+      "other_material": "Keep actualtypes/interface/result signatures/factoryreturn/pack/COPY and allinstructions unchanged; XrProgramArtifact mutated wrapper onlybytes/size fields populated.",
+      "expected_status": "XR_PROGRAM_VERIFY_SEMANTIC_REJECTED",
+      "expected_diagnostic": "XR_PROGRAM_DIAGNOSTIC_FUNCTION",
+      "status": "OPEN"
+    },
+    {
+      "name": "REF_existential_embedded_in_aggregate_field",
+      "baseline": "Reset buffer from same full originalVALIDartifact, no flags from prior mutation retained",
+      "mutation": "Firstactualaggregate field byteI64->actualcanonical REFtypeID from decodedartifact, guarded<128 forsinglebyteuvar. No hardcoded localID102 or newtypes.",
+      "expected_status": "XR_PROGRAM_VERIFY_SEMANTIC_REJECTED",
+      "expected_diagnostic": "XR_PROGRAM_DIAGNOSTIC_TYPE",
+      "status": "OPEN"
+    }
+  ],
+  "type_locator": "Actual structural decode TYPES section; read totalcount and skip fouruvar fields perbuiltin; fordynamic rows readactualtypeID/kind/ownership/copy/fullkey/nominal, walkaggregatefields/variantpayloads/viewelement/existentialusekind and everylength-delimited displayname. Locate actualREAD ownership/copy/usekind and firstaggregatefield; obtain actualREF typeID (uint16range), not constantlocalID. Allpositions andREF ID required. Original helper mallocs onefull artifactcopy and testsboth independent variants, thenfree.",
+  "negative_expectation_policy": "Eight builder semantic negatives plus twowire negatives use expect_semantic_reject_at twice: exactSEMANTIC_REJECTED/expecteddiag/NULL, equalstatus and entire diagnostic memcmp includinglocations. Two fresh producer negatives are exactBUILD_INVALID_INPUT only; preservefull inconsistentinputs without claiming isolated REF escape cause. No runtime evaluation of negativegraphs or trap admissiongraphs.",
+  "runtime_and_cleanup": "Only VALID is evaluated once with actualentry/NULLargs/count0/profilepointer64/defaultbudget and independentRETURN/I6442. Original packbody does not call xr_reference_outcome_dispose; scalaroutcome has no asserted owningpayload. Positive Program freed after wirehelper and artifactfree; allother artifacts/positiveadmittedPrograms freed. Current owningoutcome/physicalcleanup/lifecycle duties remainseparate.",
+  "assertion_counts": {
+    "census_functions": 2,
+    "outer_sites": 16,
+    "specified_helpers": 8,
+    "specified_helper_sites": 9,
+    "fresh_builder_inputs": 13,
+    "successful_artifact_builds": 11,
+    "producer_negative_inputs": 2,
+    "wire_mutated_variants": 2,
+    "builder_semantic_negative_inputs": 8,
+    "all_semantic_negative_inputs": 10,
+    "all_semantic_negative_verify_calls": 20,
+    "positive_admitted_programs": 3,
+    "runtime_evaluations": 1,
+    "trap_admission_only_positives": 2
+  },
+  "Root_contract_or_representation_review": {
+    "status": "OPEN",
+    "REF": "Preserve logicalREF nonescape and signature/aggregatefield rejection with full actualinput; current frozen trueCell/exclusive loan representation applies. Existing malformed builder cases do not independently prove every possible escape path; add current welltyped probes where needed without dropping these originalnegativeinputs.",
+    "dominance": "Retain actualtest-conditioned refinement, true/false edge direction and all originalpack/copy/witness operations. CONSTtrue does not substitute semantictypeproof, and falseedge projection is different from out-of-range tag rejection.",
+    "cleanup": "Preserve real ownercleanup transfer on REF witnessdirect trapedge and distinct typedinvoke normal/error/trap paths. Root must map legal current operations/implicittraps/ownerroles; original admission-only graphs are not actualraisedtrap/cleanup/lifecycle qualification.",
+    "negative_stage": "Keep producer versus semantic failure boundaries, exact typeddiagnostic/controlflow and repeateddeterminism. Changing format/identity or slotnamespace cannot convert required semanticnegative to anyerror/structuralfail success. Historical SLOT_OUT_OF_RANGE name is not the actual graphinput.",
+    "qualification": "Fresh public Built/Checked/fullspecialization reverify/Lowered/currentverifiedowner/packet/Library/Program, full original13graphs/2wirevariants, actualVM/native/mixed/twoInstances and physical/stablelifecycle/FI/axes/safety awaitformalproducer/window and remainOPEN."
+  },
+  "shared_fixture": "PRESERVE_READONLY: actual Program verifier/AOT/VM consumers stillinclude this sharedheader. No deletioncandidate.",
+  "full_FI": "NOT_RUN",
+  "axes": "NOT_RUN",
+  "full_safety": "NOT_RUN",
+  "SourceDelete": "NOT_RUN",
+  "Main": "NOT_RUN",
+  "handoff": {
+    "Root_thread": "01a11f74-a297-7b11-8441-835bde6a3d5f",
+    "formal_acceptance": "PENDING"
+  },
+  "boundaries": [
+    "Twooriginalcensus/all16outer/9specifiedhelperCHECKsites,13freshinputs+2wirevariantsOPEN; retired0.",
+    "Static fullgraph/refescape/dominance/typedcleanup/fixed42responsibility only, no currentproductortrapexecution.",
+    "Originalsharedsourcepreserved; productABI/CMake/stdlib/spec/SDK/docs untouched, noheavygate or globalvalidator/ledger."
+  ]
+}
