@@ -1,0 +1,71 @@
+{
+  "schema": 1,
+  "producer": "25f4016d6f089169757a90ae11ba537002374711",
+  "identity": "Checked25/semantic67/Value22/Call28/Program29",
+  "status": "OPEN",
+  "retired": 0,
+  "replacement_gates": [],
+  "full_FI": "NOT_RUN",
+  "axes": "NOT_RUN",
+  "cancel": "NOT_RUN",
+  "full_safety": "NOT_RUN",
+  "Main": "NOT_RUN",
+  "legacy": {
+    "legacy_path": "tests/unit/program/test_xr_program_source_build.c",
+    "name": "source_owner_folds_constructor_literal_and_reordered_stores",
+    "body_lf_sha256": "94ac28da956a960ff8b7a09eb6eb9f6802df8405c8b9a7c31a2d6f010ed5c4e7",
+    "status": "OPEN",
+    "inventory_projection": {
+      "fixture": "tests/unit/xir/product_consumers/fixtures/constructor_folding/root.xr",
+      "sha256": "bd0860a1bed34d55530c87913ff78e25bc5c78fb6fefcc4a3cf6926d8ede4a62",
+      "original_prefix_sha256": "ef188be7c2d6fcc341f180cf5a880985718a82fa2d6eb08080c886df5c1be59f",
+      "entry_adapter": "export fn consumerAnswer() -> i64 { return answer() }\n",
+      "entry": "consumerAnswer",
+      "expected_i64": 1006,
+      "scope": "Exact original structural constructor input plus an exported execution adapter. The added independent runtime oracle is 0+5+10*100+1=1006; the original test contains only structural assertions."
+    },
+    "mapping_references": []
+  },
+  "family": "constructor_folding",
+  "original_source": {
+    "path": "tests/unit/xir/product_consumers/fixtures/constructor_folding/root.xr",
+    "bytes": 453,
+    "sha256": "bd0860a1bed34d55530c87913ff78e25bc5c78fb6fefcc4a3cf6926d8ede4a62",
+    "prefix_bytes": 399,
+    "prefix_sha256": "ef188be7c2d6fcc341f180cf5a880985718a82fa2d6eb08080c886df5c1be59f",
+    "adapter": "export fn consumerAnswer() -> i64 { return answer() }\n"
+  },
+  "independent_i64": 1006,
+  "result": "NOT_RUN",
+  "required_shape": "Actual Counter/Pair/Swap class declarations and exactnamedtypedfieldorder;actualdistinct constructor identities with0/1/2I64parameters. EachCLASS_NEW returnsitsactualSSA. Counter actualfieldoperand CONST0;Pair actualfields[parameter0,CONST_BOOLtrue] despitebodybfirst;Swap actualfields[parameter1,parameter0]. Originalanswer actual3constructorCALLs Counter()/Pair(5)/Swap(1,10);boundedCELL_READ/CELL_NEW edges bind4CLASS_GET toactualobjectorigins andfieldindices. ActualADD(c.value,p.a),MUL(s.first,CONST100),ADDprevious/multiply,ADDprevious/s.second,RETURNsumSSA. Independent0+5+10*100+1=1006.",
+  "pipeline": "Exactoriginal structuralSource prefix plusexistingexportedruntime adapter;SourceProduct/ClosedChecked fullwriter aftersession/product/path/request/authority death;Lowered verify afterCheckeddeath;Program/twoInstances VM/realnativeC/twoMixed withindependent1006. Existingsharedconstructororacle leftintact;newdedicatedowned bindsactualfieldoperands,not merelyunrelatedconstants.",
+  "boundaries": [
+    "Originalstructuraltest onlyasserts3CORE_CLASS_CONSTRUCT operations/typedfieldorder/literalproducerkind/distinctSwappositions;oldValidatedProgram producer arrays/privateBackendIR representation remainOPEN. Newruntime1006 is an explicit independent added oracle,not an originalruntimeclaim.",
+    "Genericconstructor default/reuse/cleanup/partialpublication,constructor failures,managednestedfields,fullFI/resourceaxes/initfail/cancel/twoindependentproducts/actualSource deletion/full safety/Mainintegration/retirement remainOPEN."
+  ],
+  "original_constructor_folding_execution_20261009_facet": {
+    "status": "PASS_ORIGINAL_CONSTRUCTOR_FIELD_OPERANDS_AND_DETACHED_OWNERS_WHOLE_LEGACY_OPEN",
+    "evidence": "build-consumer-evidence/current67-original-constructor-folding-source-r1",
+    "original": "The unchanged 399-byte original structural source prefix and existing 54-byte exported adapter execute with the added independent oracle 0+5+10*100+1=1006. The old test did not execute a value oracle.",
+    "shape": "Actual Counter, Pair and Swap declarations retain exact named and typed field order. Constructor LOCAL_UNINIT places are distinct; actual LOCAL_WRITE targets follow original body order. Each CLASS_NEW field LOCAL_READ resolves the latest preceding write to the same typed place: Counter.value=CONST0; Pair fields=[parameter0,CONST_BOOL true]; Swap fields=[parameter1,parameter0]. Each constructor returns its actual CLASS_NEW SSA. Original answer calls the three actual constructors with (), (5), (1,10), reads the four actual fields through bounded CELL_READ/CELL_NEW origins, and returns the actual add/multiply expression with CONST100.",
+    "actual": "Initial 12 registered runtime commands: eight VM/native/twoMixed and two sequence controls PASS, two new owned checks FAIL. Two diagnostic owned commands preserve the same assertion failure and print actual Checked instructions. After correcting only the new oracle to follow LOCAL_READ/LOCAL_WRITE edges, two freshly rebuilt owned commands PASS. Sixteen runtime attempts total, twelve PASS/four retained FAIL. Backend calls yield 32 independent results of 1006 over 16 Instances. No coroutine resumption or actual source deletion was run.",
+    "first_failure": "The first oracle required a CLASS_NEW field operand to be a direct CONST_INT. Actual operand is LOCAL_READ from a typed LOCAL_UNINIT place, whose preceding LOCAL_WRITE contains the exact literal or parameter. Original source, producer, shared oracle and runtime expected value were unchanged. First failures and diagnostic failures exited at the assertion; their cleanup is UNPROVEN. Original and diagnostic EXEs, source preimages, raw streams, PID/reaping records and before/after inputs are retained.",
+    "owned": "Full Checked packet bytes remain exact after session/product/path/request/authority destruction. Checked is destroyed before Lowered verify and release. Final dedicated owned checks report compiler physical blocks/bytes=0/0 and table=0.",
+    "inputs": "VM2763/native2764/owned2763/control2762 inputs per entered PID include three observer headers and actual generated C/configured wrappers. All before/after SHA, sizes and mtimes are exact. Sixteen product EXEs were archived before entry. First and diagnostic header/owner preimages bind changes honestly; post-runtime map/trace annotation preimages are retained.",
+    "build": "Eight successful C compilation events across four distinct TUs: initial owner and generated C in each configuration, diagnostic owner rebuilds and final owner rebuilds. C11/W4WX; actual Clang ASan and UBSan. Shared driver and four VM/native wrapper objects reused exactly; detachment object protected and not executed. Two initial build-time emitters are separate from registered runtime commands.",
+    "generated_payload_sha256": {
+      "msvc": "41642d303184a3c6e2573399133deba42bf02cc4f6208cfc928a208e21cd600e",
+      "asan": "41642d303184a3c6e2573399133deba42bf02cc4f6208cfc928a208e21cd600e"
+    },
+    "remaining": [
+      "Originalstructuraltest onlyasserts3CORE_CLASS_CONSTRUCT operations/typedfieldorder/literalproducerkind/distinctSwappositions;oldValidatedProgram producer arrays/privateBackendIR representation remainOPEN. Newruntime1006 is an explicit independent added oracle,not an originalruntimeclaim.",
+      "Genericconstructor default/reuse/cleanup/partialpublication,constructor failures,managednestedfields,fullFI/resourceaxes/initfail/cancel/twoindependentproducts/actualSource deletion/full safety/Mainintegration/retirement remainOPEN."
+    ],
+    "full_FI": "NOT_RUN",
+    "axes": "NOT_RUN",
+    "cancel": "NOT_RUN",
+    "full_safety": "NOT_RUN",
+    "Main": "NOT_RUN",
+    "retired": 0
+  }
+}

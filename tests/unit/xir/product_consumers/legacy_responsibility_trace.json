@@ -15,11 +15,11 @@
     "shared_emission_owner_consumers": 7
   },
   "reference_counts": {
-    "source_with_digest_reference": 69,
-    "source_without_digest_reference": 39,
+    "source_with_digest_reference": 70,
+    "source_without_digest_reference": 38,
     "other_with_digest_reference": 40,
     "other_without_digest_reference": 120,
-    "digest_reference_values": 137,
+    "digest_reference_values": 138,
     "source_inventory_projections": 42
   },
   "mapping_inputs": [
@@ -262,6 +262,10 @@
     {
       "path": "tests/unit/xir/product_consumers/source_class_identity_source_obligations.json",
       "lf_sha256": "5f7e1145fbd7a88e1ab25fb5522c62151190b390e523788140f4db2a2214a4e1"
+    },
+    {
+      "path": "tests/unit/xir/product_consumers/source_constructor_folding_source_obligations.json",
+      "lf_sha256": "4e0e71e978c4115051b588c6967fa5f347a803de0149463ee58efee5fc0e2c63"
     },
     {
       "path": "tests/unit/xir/product_consumers/source_coroutine_invoke_group2_native_obligations.json",
@@ -2000,7 +2004,13 @@
         "expected_i64": 1006,
         "scope": "Exact original structural constructor input plus an exported execution adapter. The added independent runtime oracle is 0+5+10*100+1=1006; the original test contains only structural assertions."
       },
-      "mapping_references": []
+      "mapping_references": [
+        {
+          "mapping": "tests/unit/xir/product_consumers/source_constructor_folding_source_obligations.json",
+          "pointer": "/legacy/body_lf_sha256",
+          "binding": "exact_path_name_body"
+        }
+      ]
     },
     {
       "legacy_path": "tests/unit/program/test_xr_program_source_build.c",
