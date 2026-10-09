@@ -13,11 +13,14 @@
 struct EffectContextOwner {
     EffectOrdinaryContexts *ordinary, *dense;
     EffectContextForest *forest;
+    EffectInvocationDeclaredBounds *declared;
+    const EffectRefinementBounds *refinement;
 };
 
 static void effect_context_owner_free(EffectContextOwner *owner) {
     if (!owner) return;
     effect_context_forest_free(owner->forest);
+    effect_invocation_bounds_free(owner->declared);
     effect_ordinary_free(owner->dense);effect_ordinary_free(owner->ordinary);
     xr_compile_resources_free(owner);
 }
@@ -30,6 +33,42 @@ static void effect_context_summary_clear(EffectOrdinaryContexts *contexts) {
     xr_compile_resources_free(contexts->uses.root_witnesses);
     xr_compile_resources_free(contexts->uses.unresolved_witnesses);
     contexts->uses=(XrXirEffects){.resources=contexts->terms.remaining->resources,.count=contexts->count};
+}
+
+
+/* Refinement matched the immutable source type prefix and copied declaration
+ * domain before the dense pool was seeded. These original IDs therefore name
+ * that verified prefix. Actual ordinary binders still undergo full substitution. */
+static XrXirStatus effect_context_dense_declarations(EffectContextOwner *owner,
+    uint32_t index,const XrXirType **output) {
+    if (!owner || !owner->dense || !output || *output || index>=owner->dense->count)
+        return XR_XIR_BAD_STRUCTURE;
+    if (!owner->refinement) return XR_XIR_OK;
+    EffectOrdinaryContexts *dense=owner->dense;
+    const EffectRefinementBounds *bounds=owner->refinement;
+    EffectOrdinaryNode node=dense->nodes[index];
+    const XrXirFunction *function=&dense->functions[index];
+    if (bounds->resources!=dense->terms.remaining->resources ||
+        node.declaration>=bounds->count || bounds->source_type_count>dense->source_type_count ||
+        dense->source_type_count>dense->terms.types.count ||
+        !!node.arguments!=!!node.argument_count) return XR_XIR_BAD_STRUCTURE;
+    const EffectRefinementFunction *original=&bounds->functions[node.declaration];
+    if (original->instruction_count!=function->instruction_count ||
+        original->parameter_count!=function->parameter_count ||
+        (original->instruction_count && !original->instructions)) return XR_XIR_BAD_STRUCTURE;
+    XrXirType *types=original->instruction_count ?
+        effect_terms_alloc(&dense->terms,original->instruction_count,sizeof(*types)) : NULL;
+    if (original->instruction_count && !types) return dense->terms.status;
+    XrXirGeneric environment={.arguments=node.arguments,.argument_count=node.argument_count};
+    for (uint32_t i=0;i<original->instruction_count;++i) {
+        if (!xir_compile_work(dense->terms.remaining,sizeof(*types)+1)) return XR_XIR_BUDGET;
+        types[i]=original->instructions[i];
+        if (index>=dense->base_count) {
+            XrXirStatus status=effect_terms_substitute(&dense->terms,types[i],&environment,&types[i]);
+            if (status!=XR_XIR_OK) return status;
+        }
+    }
+    *output=types;return XR_XIR_OK;
 }
 
 static XrXirStatus effect_context_dense_function(EffectContextOwner *owner,
@@ -45,6 +84,11 @@ static XrXirStatus effect_context_dense_function(EffectContextOwner *owner,
         if (!xir_compile_work(dense->terms.remaining,1)) return XR_XIR_BUDGET;
         parameters[p]=physical[p];
     }
+    const XrXirType *declared_instructions=NULL;
+    status=effect_context_dense_declarations(owner,index,&declared_instructions);
+    if (status==XR_XIR_OK) status=effect_invocation_bounds_capture(dense->terms.remaining,owner->declared,
+        &dense->terms.types,&dense->functions[index],index,declared_instructions);
+    if (status!=XR_XIR_OK) return status;
     /* Authentic latent equations start at their private lattice bottom. An
      * advertised UNKNOWN must not seed its own recursive capture equation.
      * No caller can consume this state until the owner is fully solved. */
@@ -230,7 +274,9 @@ static XrXirStatus effect_context_owner_build(const XrXirCompileContext *context
     XrXirStatus status=XR_XIR_OK;
     EffectContextOwner *owner=xir_compile_calloc(context,1,sizeof(*owner),&status);
     if (!owner) return status;
-    status=effect_ordinary_build(context,source,&owner->ordinary);
+    owner->refinement=bounds;
+    status=effect_invocation_bounds_new(context,&owner->declared);
+    if (status==XR_XIR_OK) status=effect_ordinary_build(context,source,&owner->ordinary);
     if (status==XR_XIR_OK && bounds) {
         owner->ordinary->terms.remaining=context;
         status=effect_refinement_apply(owner->ordinary,source,bounds);
@@ -276,5 +322,6 @@ static XrXirStatus effect_context_owner_build(const XrXirCompileContext *context
     }
     if (status==XR_XIR_OK) status=effect_context_forest_seal(context,source,dense,&owner->forest);
     if (status!=XR_XIR_OK) { effect_context_owner_free(owner);return status; }
+    owner->refinement=NULL;
     dense->terms.remaining=NULL;*output=owner;return XR_XIR_OK;
 }

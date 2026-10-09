@@ -1077,6 +1077,165 @@ static void conditional_zero_flow_gate(const XrXirCompileContext *context) {
     rp_owner_free(&limited,baseline);rp_balanced(physical);
 }
 
+
+/* This private storage probe does not create a module permission. A complete
+ * execution owner below exercises the real capture hook and final proof. */
+static XrXirStatus conditional_invocation_bounds(const XrXirCompileContext *context, bool oracle) {
+    XrXirTypeNode nodes[3]={
+        {.kind=XR_XIR_TYPE_CALLABLE,.result=XR_XIR_UNIT,.flags=XR_XIR_CALLABLE_ROOT_UNRESOLVED},
+        {.kind=XR_XIR_TYPE_CALLABLE,.result=XR_XIR_UNIT,.flags=XR_XIR_CALLABLE_ROOT_REQUIRED},
+        {.kind=XR_XIR_TYPE_CALLABLE,.result=XR_XIR_UNIT,.flags=XR_XIR_CALLABLE_ROOT_NONE}};
+    XrXirTypes types={nodes,3,NULL,NULL};
+    XrXirType parameters[3]={(XrXirType)256,(XrXirType)257,(XrXirType)258};
+    XrXirInstruction ops[2]={{.op=XR_XIR_FUNCTION_REF,.type=(XrXirType)256},
+        {.op=XR_XIR_FUNCTION_WEAKEN,.type=(XrXirType)256,.args={3,0}}};
+    XrXirFunction function={.parameters=parameters,.parameter_count=3,
+        .instructions=ops,.instruction_count=2};
+    EffectInvocationDeclaredBounds *bounds=NULL;
+    XrXirStatus status=effect_invocation_bounds_new(context,&bounds);
+    if (status==XR_XIR_OK) status=effect_invocation_bounds_capture(context,bounds,&types,&function,0,NULL);
+    if (status==XR_XIR_OK && oracle) {
+        CHECK(bounds && bounds->count==1 && bounds->functions[0].values==5);
+        CHECK(effect_invocation_bounds_new(context,&bounds)==XR_XIR_BAD_STRUCTURE);
+        uint32_t count=bounds->count;
+        CHECK(effect_invocation_bounds_capture(context,bounds,&types,&function,0,NULL)==XR_XIR_BAD_STRUCTURE &&
+            bounds->count==count);
+        /* A real private reference bottom and later producer mutations cannot
+         * alter the receiving owner's original physical advertisement. */
+        ops[0].type=(XrXirType)258;
+        for (uint32_t p=0;p<3;++p) parameters[p]=(XrXirType)258;
+        memset(nodes,0,sizeof(nodes));
+        uint32_t expected[5]={XR_XIR_CALLABLE_ROOT_UNRESOLVED,XR_XIR_CALLABLE_ROOT_REQUIRED,
+            0,XR_XIR_CALLABLE_ROOT_UNRESOLVED,XR_XIR_CALLABLE_ROOT_UNRESOLVED};
+        for (uint32_t v=0;v<5;++v) {
+            uint32_t mask=UINT32_MAX;
+            CHECK(effect_invocation_bounds_mask(context,bounds,0,v,&mask)==XR_XIR_OK && mask==expected[v]);
+        }
+        uint32_t unchanged=UINT32_C(0x12345678);
+        CHECK(effect_invocation_bounds_mask(context,bounds,1,0,&unchanged)==XR_XIR_BAD_STRUCTURE &&
+            unchanged==UINT32_C(0x12345678));
+        CHECK(effect_invocation_bounds_mask(context,bounds,0,5,&unchanged)==XR_XIR_BAD_STRUCTURE &&
+            unchanged==UINT32_C(0x12345678));
+        RootParameterMark physical=rp_mark();XrXirCompileContext foreign=rp_owner(rp_caps());
+        uint64_t baseline=rp_stats(&foreign).live_bytes;
+        CHECK(effect_invocation_bounds_mask(&foreign,bounds,0,0,&unchanged)==XR_XIR_BAD_STRUCTURE &&
+            unchanged==UINT32_C(0x12345678));
+        rp_owner_free(&foreign,baseline);rp_balanced(physical);
+    }
+    effect_invocation_bounds_free(bounds);
+    if (status!=XR_XIR_OK) return status;
+    ConditionalRawFixture fixture;conditional_raw_fixture(&fixture,2);
+    EffectContextOwner *execution=NULL;
+    status=effect_context_owner_build(context,&fixture.module,NULL,&execution);
+    if (status==XR_XIR_OK && oracle) {
+        CHECK(execution && execution->declared && execution->declared->count==execution->dense->count);
+        uint32_t mask=UINT32_MAX;
+        CHECK(effect_invocation_bounds_mask(context,execution->declared,0,2,&mask)==XR_XIR_OK &&
+            mask==XR_XIR_CALLABLE_ROOT_UNRESOLVED);
+        CHECK(execution->declared->functions[0].values==
+            execution->dense->functions[0].parameter_count+execution->dense->functions[0].instruction_count);
+    }
+    effect_context_owner_free(execution);return status;
+}
+
+
+static XrXirStatus conditional_invocation_refinement(const XrXirCompileContext *context, bool oracle) {
+    ConditionalRawFixture fixture;conditional_raw_fixture(&fixture,2);
+    XrXirEffects effects={.resources=context->resources,.count=4};
+    XrXirStatus status=xir_effects_refinement_capture(context,&fixture.module,&effects);
+    if (status==XR_XIR_OK) {
+        fixture.method_parameters[1]=(XrXirType)259;
+        fixture.method_ops[0].type=(XrXirType)259;
+    }
+    EffectContextOwner *execution=NULL;
+    if (status==XR_XIR_OK) status=effect_context_owner_build(context,&fixture.module,effects.refinement,&execution);
+    effect_refinement_free(effects.refinement);effects.refinement=NULL;
+    memset(&fixture,0,sizeof(fixture));
+    if (status==XR_XIR_OK && oracle) {
+        uint32_t mask=UINT32_MAX;
+        CHECK(execution && !execution->refinement);
+        CHECK(effect_invocation_bounds_mask(context,execution->declared,0,1,&mask)==XR_XIR_OK &&
+            mask==XR_XIR_CALLABLE_ROOT_UNRESOLVED);
+        CHECK(effect_invocation_bounds_mask(context,execution->declared,0,2,&mask)==XR_XIR_OK &&
+            mask==XR_XIR_CALLABLE_ROOT_UNRESOLVED);
+    }
+    effect_context_owner_free(execution);return status;
+}
+
+static XrXirStatus conditional_invocation_generic_bounds(const XrXirCompileContext *context, bool oracle) {
+    XrXirCallableParameter parameters[3]={{XR_XIR_TYPE_PARAMETER_BASE,XR_PARAM_READ},
+        {XR_XIR_TYPE_PARAMETER_BASE,XR_PARAM_READ},{XR_XIR_I64,XR_PARAM_READ}};
+    XrXirTypeNode nodes[3]={
+        {.kind=XR_XIR_TYPE_CALLABLE,.result=XR_XIR_TYPE_PARAMETER_BASE,.parameters=&parameters[0],
+         .parameter_count=1,.parameter_span=1,.flags=XR_XIR_CALLABLE_ROOT_UNRESOLVED},
+        {.kind=XR_XIR_TYPE_CALLABLE,.result=XR_XIR_TYPE_PARAMETER_BASE,.parameters=&parameters[1],
+         .parameter_count=1,.parameter_span=1,.flags=XR_XIR_CALLABLE_ROOT_NONE},
+        {.kind=XR_XIR_TYPE_CALLABLE,.result=XR_XIR_I64,.parameters=&parameters[2],
+         .parameter_count=1,.flags=XR_XIR_CALLABLE_ROOT_UNRESOLVED}};
+    XrXirTypes types={nodes,3,NULL,NULL};
+    XrXirType parameter=XR_XIR_TYPE_PARAMETER_BASE,arguments[2]={XR_XIR_TYPE_PARAMETER_BASE,XR_XIR_I64};
+    uint32_t operand=1;
+    XrXirInstruction target={.op=XR_XIR_RETURN,.args={0,0}};
+    XrXirInstruction maker[2]={{.op=XR_XIR_FUNCTION_REF,.type=(XrXirType)256,.immediate=0,.type_arguments={0,1}},
+        {.op=XR_XIR_RETURN,.args={0,0}}};
+    XrXirInstruction entry[4]={{.op=XR_XIR_CALL,.type=(XrXirType)258,.immediate=1,.type_arguments={0,1}},
+        {.op=XR_XIR_CONST_INT,.type=XR_XIR_I64,.immediate=7},
+        {.op=XR_XIR_CALL_INDIRECT,.type=XR_XIR_I64,.immediate=0,.args={0,1}},
+        {.op=XR_XIR_RETURN,.args={2,0}}};
+    XrXirInstruction initializer={.op=XR_XIR_RETURN};
+    XrXirBlock blocks[4]={{.first=0,.count=1},{.first=0,.count=2},
+        {.first=0,.count=4},{.first=0,.count=1}};
+    XrXirFunction functions[4]={
+        {.name="target",.name_length=6,.parameters=&parameter,.parameter_count=1,
+         .result=XR_XIR_TYPE_PARAMETER_BASE,.instructions=&target,.instruction_count=1,.blocks=&blocks[0],.block_count=1},
+        {.name="maker",.name_length=5,.result=(XrXirType)256,.instructions=maker,.instruction_count=2,
+         .blocks=&blocks[1],.block_count=1},
+        {.name="entry",.name_length=5,.result=XR_XIR_I64,.instructions=entry,.instruction_count=4,
+         .operands=&operand,.operand_count=1,.blocks=&blocks[2],.block_count=1},
+        {.name="init",.name_length=4,.result=XR_XIR_UNIT,.instructions=&initializer,.instruction_count=1,
+         .blocks=&blocks[3],.block_count=1}};
+    XrXirConstraint constraints[2]={0};
+    XrXirGeneric generics[4]={{.constraints=&constraints[0],.parameter_count=1},
+        {.constraints=&constraints[1],.parameter_count=1,.arguments=&arguments[0],.argument_count=1},
+        {.arguments=&arguments[1],.argument_count=1},{0}};
+    XrXirFunctionIdentity identities[4]={0};
+    XrXirSourceModule source={.name="bounds",.name_length=6,.initializer=3};
+    XrXirDeclarations declarations={.modules=&source,.module_count=1,.functions=identities,.entry_function=2};
+    XrXirModule module={.stage=XR_XIR_BUILT,.functions=functions,.function_count=4,
+        .declarations=&declarations,.generics=generics,.types=&types,.linkage_kind=XR_XIR_PROGRAM};
+    XrXirArtifact *checked=NULL;XrXirDiagnostic diagnostic={0};
+    XrXirStatus status=xir_fixture_check(context,&module,&checked,&diagnostic);
+    if (status==XR_XIR_OK) status=xr_xir_compile_artifact_verify(checked,&diagnostic);
+    XrXirEffects effects={.resources=context->resources,.count=4};
+    if (status==XR_XIR_OK) status=xir_effects_refinement_capture(context,&module,&effects);
+    if (status==XR_XIR_OK) maker[0].type=(XrXirType)257;
+    EffectContextOwner *execution=NULL;
+    if (status==XR_XIR_OK) status=effect_context_owner_build(context,&module,effects.refinement,&execution);
+    xr_xir_compile_artifact_free(checked);
+    effect_refinement_free(effects.refinement);effects.refinement=NULL;
+    memset(nodes,0,sizeof(nodes));memset(functions,0,sizeof(functions));
+    if (status==XR_XIR_OK && oracle) {
+        uint32_t selected=UINT32_MAX,mask=UINT32_MAX;
+        CHECK(execution && !execution->refinement);
+        CHECK(effect_invocation_bounds_mask(context,execution->declared,1,0,&mask)==XR_XIR_OK &&
+            mask==XR_XIR_CALLABLE_ROOT_UNRESOLVED);
+        for (uint32_t n=0;n<execution->dense->count;++n) {
+            const EffectOrdinaryNode *node=&execution->dense->nodes[n];
+            if (node->declaration!=1 || node->argument_count!=1 || node->arguments[0]!=XR_XIR_I64) continue;
+            CHECK(selected==UINT32_MAX);selected=n;
+            const XrXirTypeNode *signature=xr_xir_callable_signature(&execution->dense->terms.types,
+                execution->dense->functions[n].instructions[0].type);
+            CHECK(signature && !signature->parameter_span && signature->result==XR_XIR_I64 &&
+                signature->parameter_count==1 && signature->parameters[0].mode==XR_PARAM_READ &&
+                signature->parameters[0].type==XR_XIR_I64);
+            CHECK(effect_invocation_bounds_mask(context,execution->declared,n,0,&mask)==XR_XIR_OK &&
+                mask==XR_XIR_CALLABLE_ROOT_UNRESOLVED);
+        }
+        CHECK(selected!=UINT32_MAX);
+    }
+    effect_context_owner_free(execution);return status;
+}
+
 static void conditional_literals(void) {
     RootParameterMark physical=rp_mark();XrXirCompileContext context=rp_owner(rp_caps());
     uint64_t baseline=rp_stats(&context).live_bytes;
@@ -1087,6 +1246,9 @@ static void conditional_literals(void) {
     CHECK(conditional_zero_arity(&context,true)==XR_XIR_OK);
     CHECK(conditional_zero_arity_cleanup(&context,true)==XR_XIR_OK);
     CHECK(conditional_base_cleanup_reference(&context,true)==XR_XIR_OK);
+    CHECK(conditional_invocation_bounds(&context,true)==XR_XIR_OK);
+    CHECK(conditional_invocation_refinement(&context,true)==XR_XIR_OK);
+    CHECK(conditional_invocation_generic_bounds(&context,true)==XR_XIR_OK);
     for (uint32_t mode=0;mode<4;++mode) CHECK(conditional_classify(&context,mode,true)==XR_XIR_OK);
     CHECK(conditional_scalar(&context,true)==XR_XIR_OK);
     CHECK(conditional_forest(&context,true)==XR_XIR_OK);
@@ -1108,11 +1270,14 @@ static XrXirStatus conditional_resource_case(const XrXirCompileContext *context,
         which<18 ? conditional_zero_carrier(context,which-15,false) :
         which==18 ? conditional_zero_module_fn(context,false) : which==19 ? conditional_zero_arity(context,false) :
         which==20 ? conditional_zero_arity_cleanup(context,false) :
-        conditional_base_cleanup_reference(context,false);
+        which==21 ? conditional_base_cleanup_reference(context,false) :
+        which==22 ? conditional_invocation_bounds(context,false) :
+        which==23 ? conditional_invocation_refinement(context,false) :
+        conditional_invocation_generic_bounds(context,false);
 }
 
 static void conditional_oom(void) {
-    for (uint32_t which=0;which<22;++which) {
+    for (uint32_t which=0;which<25;++which) {
         size_t sites=0;
         for (size_t pass=0;pass<=sites;++pass) {
             RootParameterMark physical=rp_mark();rp_fail_at=SIZE_MAX;rp_attempts=0;rp_injected=false;
@@ -1127,7 +1292,7 @@ static void conditional_oom(void) {
 }
 
 static void conditional_axes(void) {
-    for (uint32_t which=0;which<22;++which) {
+    for (uint32_t which=0;which<25;++which) {
         RootParameterMark physical=rp_mark();XrXirCompileContext context=rp_owner(rp_caps());
         uint64_t baseline=rp_stats(&context).live_bytes;
         CHECK(conditional_resource_case(&context,which)==XR_XIR_OK);

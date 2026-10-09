@@ -351,6 +351,7 @@ static XrXirStatus effect_propagate(XrXirEffects *effects, EffectGraph *graph, c
 #include "xxir_effect_context_scalar.inc.c"
 #include "xxir_effect_context_dense.inc.c"
 #include "xxir_effect_refinement_bounds.inc.c"
+#include "xxir_effect_invocation_bounds.inc.c"
 #include "xxir_effect_context_owner.inc.c"
 #include "xxir_effect_context_query.inc.c"
 
