@@ -1,0 +1,669 @@
+{
+  "schema": 1,
+  "family": "original_typed_text_concat_scalar_rune_copy_output_and_bool_display",
+  "legacy_base_commit": "01e6d38401b0f5c8684b64c35a99ac651024c0c1",
+  "status": "OPEN",
+  "retired": 0,
+  "replacement_gates": [],
+  "result": "STATIC_FULL_ORIGINAL_TYPED_TEXT_MAP_ONLY",
+  "product_execution": "NOT_RUN_BY_THIS_MAP",
+  "producer": "25f4016d6f089169757a90ae11ba537002374711",
+  "identity": "Checked25/semantic67/Value22/Call28/Program29",
+  "legacy": [
+    {
+      "name": "test_text_semantics",
+      "legacy_path": "tests/unit/program/test_xr_program_verify.c",
+      "legacy_line": 6699,
+      "body_lf_sha256": "248f07d49667e71657c70705a19d53c9d37da37de3a806d98aeb94b0430215d3",
+      "assertion_sites": 15,
+      "loop_sites": 1,
+      "status": "OPEN",
+      "replacement_gates": [],
+      "note": "Function census preserves its whole body; sites do not count executed loop iterations."
+    }
+  ],
+  "responsibility_mapping": [
+    {
+      "path": "tests/unit/program/test_xr_program_verify.c",
+      "function": "test_text_semantics",
+      "line": 6699,
+      "end_line": 6770,
+      "body_lf_sha256": "248f07d49667e71657c70705a19d53c9d37da37de3a806d98aeb94b0430215d3",
+      "CHECK_sites": 15,
+      "CHECK_bindings": [
+        {
+          "line": 6702,
+          "expression": "xr_program_text_fixture_write(&artifact, diagnostic, sizeof(diagnostic)) ==\n          XR_PROGRAM_BUILD_OK",
+          "status": "OPEN"
+        },
+        {
+          "line": 6713,
+          "expression": "result.kind == XR_REFERENCE_OUTCOME_RETURN",
+          "status": "OPEN"
+        },
+        {
+          "line": 6714,
+          "expression": "result.value.kind == XR_REFERENCE_VALUE_I64",
+          "status": "OPEN"
+        },
+        {
+          "line": 6715,
+          "expression": "result.value.as.i64 == 0",
+          "status": "OPEN"
+        },
+        {
+          "line": 6716,
+          "expression": "capture.calls == 3u",
+          "status": "OPEN"
+        },
+        {
+          "line": 6717,
+          "expression": "capture.size == sizeof(XR_PROGRAM_TEXT_FIXTURE_STDOUT) - 1u",
+          "status": "OPEN"
+        },
+        {
+          "line": 6718,
+          "expression": "memcmp(capture.bytes, XR_PROGRAM_TEXT_FIXTURE_STDOUT, capture.size) == 0",
+          "status": "OPEN"
+        },
+        {
+          "line": 6723,
+          "expression": "result.kind == XR_REFERENCE_OUTCOME_TRAP",
+          "status": "OPEN"
+        },
+        {
+          "line": 6724,
+          "expression": "result.trap == XR_REFERENCE_TRAP_PROVIDER_CALL_FAILED",
+          "status": "OPEN"
+        },
+        {
+          "line": 6725,
+          "expression": "capture.calls == 1u",
+          "status": "OPEN"
+        },
+        {
+          "line": 6743,
+          "expression": "xr_program_text_fixture_write_mutated(rejections[index].mutation, &artifact,\n                                                    diagnostic,\n                                                    sizeof(diagnostic)) == XR_PROGRAM_BUILD_OK",
+          "status": "OPEN"
+        },
+        {
+          "line": 6752,
+          "expression": "xr_program_output_fixture_write_mutated(1, XR_PROGRAM_OUTPUT_FIXTURE_BOOL_OPERAND,\n                                                  &artifact, diagnostic,\n                                                  sizeof(diagnostic)) == XR_PROGRAM_BUILD_OK",
+          "status": "OPEN"
+        },
+        {
+          "line": 6764,
+          "expression": "result.kind == XR_REFERENCE_OUTCOME_RETURN",
+          "status": "OPEN"
+        },
+        {
+          "line": 6765,
+          "expression": "capture.size == 5u",
+          "status": "OPEN"
+        },
+        {
+          "line": 6766,
+          "expression": "memcmp(capture.bytes, \"true\\n\", 5u) == 0",
+          "status": "OPEN"
+        }
+      ],
+      "status": "OPEN"
+    }
+  ],
+  "outer_CHECK_sites": 15,
+  "original_private_helpers": [
+    {
+      "path": "tests/unit/program/test_xr_program_verify.c",
+      "function": "validate_ok",
+      "line": 159,
+      "end_line": 174,
+      "body_lf_sha256": "94fe0ef4e0242acb810c12621ae1fe73a9887ef668f15ddc6c67ed645494f62b",
+      "CHECK_sites": 2,
+      "CHECK_bindings": [
+        {
+          "line": 171,
+          "expression": "status == XR_PROGRAM_VERIFY_OK",
+          "status": "OPEN"
+        },
+        {
+          "line": 172,
+          "expression": "program != NULL",
+          "status": "OPEN"
+        }
+      ],
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/program/test_xr_program_verify.c",
+      "function": "expect_semantic_reject_at",
+      "line": 176,
+      "end_line": 198,
+      "body_lf_sha256": "44cf0fb15bea156743a1c0e35b0be8ee844aa1af55c8653ed9361cf781c045b8",
+      "CHECK_sites": 6,
+      "CHECK_bindings": [
+        {
+          "line": 190,
+          "expression": "first_status == XR_PROGRAM_VERIFY_SEMANTIC_REJECTED",
+          "status": "OPEN"
+        },
+        {
+          "line": 191,
+          "expression": "program == NULL",
+          "status": "OPEN"
+        },
+        {
+          "line": 192,
+          "expression": "first.kind == expected",
+          "status": "OPEN"
+        },
+        {
+          "line": 195,
+          "expression": "second_status == first_status",
+          "status": "OPEN"
+        },
+        {
+          "line": 196,
+          "expression": "memcmp(&first, &second, sizeof(first)) == 0",
+          "status": "OPEN"
+        },
+        {
+          "line": 197,
+          "expression": "program == NULL",
+          "status": "OPEN"
+        }
+      ],
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/program/test_xr_program_verify.c",
+      "function": "capture_reference_output",
+      "line": 6617,
+      "end_line": 6629,
+      "body_lf_sha256": "c3c528a62bf007740bd77a31740cdf96d627021bf4b3c6551748087aea7c92c1",
+      "CHECK_sites": 0,
+      "CHECK_bindings": [],
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/program/xr_program_text_fixture.h",
+      "function": "xr_program_text_fixture_key",
+      "line": 33,
+      "end_line": 35,
+      "body_lf_sha256": "17a0f72a7a7bed01c5be3d111619565ec7c3adbf9fe82c9753b0754d89a942ae",
+      "CHECK_sites": 0,
+      "CHECK_bindings": [],
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/program/xr_program_text_fixture.h",
+      "function": "xr_program_text_fixture_write_mutated",
+      "line": 37,
+      "end_line": 338,
+      "body_lf_sha256": "6be1c893157e2497b52940a23b27593994b13c555084f69eaaf68540404bb984",
+      "CHECK_sites": 0,
+      "CHECK_bindings": [],
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/program/xr_program_text_fixture.h",
+      "function": "xr_program_text_fixture_write",
+      "line": 340,
+      "end_line": 345,
+      "body_lf_sha256": "25b5946bcf1d835993bd11c8cebab0d856fff0c7afd3064956cc349f57f1b6b3",
+      "CHECK_sites": 0,
+      "CHECK_bindings": [],
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/program/xr_program_output_fixture.h",
+      "function": "xr_program_output_fixture_key",
+      "line": 17,
+      "end_line": 19,
+      "body_lf_sha256": "da1ce5c3b7ba4e6bf868ea4e8e2f2860881049905d4c038c13da6c6c5da245f1",
+      "CHECK_sites": 0,
+      "CHECK_bindings": [],
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/program/xr_program_output_fixture.h",
+      "function": "xr_program_output_fixture_write_mutated",
+      "line": 21,
+      "end_line": 127,
+      "body_lf_sha256": "f5f3ae3a918a381136700d6d92cf84bf0bd0ea34d8b0ea39a84d11685e5e7177",
+      "CHECK_sites": 0,
+      "CHECK_bindings": [],
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/program/xr_program_output_fixture.h",
+      "function": "xr_program_output_fixture_write",
+      "line": 129,
+      "end_line": 133,
+      "body_lf_sha256": "57ee80f5bff4633a282f39b88136bf2a8b58a7d441a0cfad3b8515a1ec44c546",
+      "CHECK_sites": 0,
+      "CHECK_bindings": [],
+      "status": "OPEN"
+    },
+    {
+      "path": "src/runtime/abi/xr_builtin_provider_contract.h",
+      "function": "xr_builtin_provider_byte_sink_logical_contract",
+      "line": 28,
+      "end_line": 47,
+      "body_lf_sha256": "a343f14c38348a02d3bf46461e17e3e8724c86f12f30331f0167337779d11ff0",
+      "CHECK_sites": 0,
+      "CHECK_bindings": [],
+      "status": "OPEN"
+    }
+  ],
+  "specified_helper_CHECK_sites": 8,
+  "input_files": [
+    {
+      "path": "tests/unit/program/test_xr_program_verify.c",
+      "physical_raw_sha256": "a39922500c0943c034fafcda3a82b67e511ea658f453f6c0c3204f7719de1817",
+      "whole_file_lf_sha256": "ec4b93f13bfab2aa3d4b8f8773dd5c1118a0c682ed6f8304fead515f90402802",
+      "git_base_equal": true,
+      "status": "PRESERVE_ORIGINAL_READONLY"
+    },
+    {
+      "path": "tests/unit/program/xr_program_text_fixture.h",
+      "physical_raw_sha256": "486d589a3e1c6baea3fe6d4b3c8e2b67215ddb91302fc2cb7dc39a1df9f116c3",
+      "whole_file_lf_sha256": "dff5bfe6e111875b82de3b887c509e36f5f50a12d7f8aa14ad4008c661e68cfe",
+      "git_base_equal": true,
+      "status": "PRESERVE_ORIGINAL_READONLY"
+    },
+    {
+      "path": "tests/unit/program/xr_program_output_fixture.h",
+      "physical_raw_sha256": "c284d7e712003e05819f9735298759e0792e6a21e6870623e4b8bc99a8b19676",
+      "whole_file_lf_sha256": "7aa6ac193a8ab4c286f8f22b706c2d7c3e99507841289a10ec46e5577aa4bb4d",
+      "git_base_equal": true,
+      "status": "PRESERVE_ORIGINAL_READONLY"
+    },
+    {
+      "path": "src/runtime/abi/xr_builtin_provider_contract.h",
+      "physical_raw_sha256": "0f89f9db26dd6fc1eb79647f0a6fc0b1e3989a30af68f6adf8175fb1387f479b",
+      "whole_file_lf_sha256": "8a7b671d219e0cb481ca2bf347b8b682b1a9b2882849edd4dd342a01563e89ec",
+      "git_base_equal": true,
+      "status": "PRESERVE_ORIGINAL_READONLY"
+    },
+    {
+      "path": "tests/unit/program/test_xr_program.c",
+      "physical_raw_sha256": "5986f0f7160296f52787ca8b9443329a9a05eeff083daac530a776642971655a",
+      "whole_file_lf_sha256": "2743be628db188c386a72e59529286df64720051710599d83f9b6510aa529aff",
+      "git_base_equal": true,
+      "status": "PRESERVE_ORIGINAL_READONLY"
+    },
+    {
+      "path": "tests/unit/aot/test_xr_program_aot.c",
+      "physical_raw_sha256": "6fea38acff96d94b2bfb414e04aa308386f6284ed12ccf05613a790a23caa700",
+      "whole_file_lf_sha256": "e7ab9301b308c7db6bf48e348257e5288f38f22c1b38c827fb040719dbf2de0e",
+      "git_base_equal": true,
+      "status": "PRESERVE_ORIGINAL_READONLY"
+    },
+    {
+      "path": "tests/unit/vm/test_xr_program_vm.c",
+      "physical_raw_sha256": "3a19b58076867cc70ef6c77e975286009df65e61ac1ed9edb2b5ab7813543502",
+      "whole_file_lf_sha256": "17904ef2bab8bb7eea72245fedba9878d74b6b8e93776e4314418e2db06dce8a",
+      "git_base_equal": true,
+      "status": "PRESERVE_ORIGINAL_READONLY"
+    },
+    {
+      "path": "tests/unit/program/xr_program_output_trap_fixture.h",
+      "physical_raw_sha256": "531263a2eb2d9866b12284635e1dca2a02c29826a046042bc0f1ac02b1570813",
+      "whole_file_lf_sha256": "c6fb5e46f4505165f40708daee6682e8891c71eac9eeb57a835e94f7712a17e0",
+      "git_base_equal": true,
+      "status": "PRESERVE_ORIGINAL_READONLY"
+    },
+    {
+      "path": "tests/unit/vm/test_xr_program_vm_allocations.c",
+      "physical_raw_sha256": "65404153b883af360f80af2006ccb99a1742815f707bf605b7f27e11e16aa4a7",
+      "whole_file_lf_sha256": "b2e8af3a0b31c277224ec7eb93c861f43d5ab09ebf2876869fc5a87f65effdc2",
+      "git_base_equal": true,
+      "status": "PRESERVE_ORIGINAL_READONLY"
+    },
+    {
+      "path": "src/runtime/abi/xr_stdlib_provider_keys_gen.h",
+      "physical_raw_sha256": "e969dc5ccd6691e77b45eb22c84554f827e4f252cbb1bc5dab23b341b0481b5e",
+      "whole_file_lf_sha256": "ef42abadb6fdef8ec3ded6bd39f906aec93236f372f8ece92cf646b5b18e9f7b",
+      "git_base_equal": true,
+      "status": "PRESERVE_ORIGINAL_READONLY"
+    }
+  ],
+  "constants": [
+    {
+      "ordinal": 0,
+      "type": "String",
+      "bytes": [
+        97,
+        98
+      ]
+    },
+    {
+      "ordinal": 1,
+      "type": "String",
+      "bytes": [
+        99,
+        100
+      ]
+    },
+    {
+      "ordinal": 2,
+      "type": "String",
+      "bytes": [
+        97,
+        98,
+        99,
+        100
+      ]
+    },
+    {
+      "ordinal": 3,
+      "type": "String",
+      "bytes": [],
+      "source_span": "NULL pointer with size0"
+    },
+    {
+      "ordinal": 4,
+      "type": "I64",
+      "value": -5
+    },
+    {
+      "ordinal": 5,
+      "type": "I64",
+      "value": 0
+    },
+    {
+      "ordinal": 6,
+      "type": "Rune",
+      "value": 65
+    },
+    {
+      "ordinal": 7,
+      "type": "Rune",
+      "value": 128512
+    }
+  ],
+  "graph": {
+    "entry": [
+      "CONSTANT_STRING ab -> OWN ab",
+      "CONSTANT_STRING cd -> OWN cd",
+      "CONSTANT_I64 -5 -> minus_five",
+      "STRING_CONCAT actual ab,cd -> OWN joined abcd",
+      "OWNER_DROP actual ab",
+      "OWNER_DROP actual cd",
+      "STRING_FROM_SCALAR actual minus_five -> OWN rendered -5",
+      "CONSTANT_STRING abcd -> separate OWN abcd",
+      "COMPARE_STRING [joined,abcd] predicate0 -> BOOL equal",
+      "COMPARE_STRING [rendered,abcd] predicate2 -> BOOL less (not in output/return)",
+      "CONSTANT_RUNE U+0041 -> rune_a",
+      "CONSTANT_RUNE U+1F600 -> rune_smile",
+      "COMPARE_RUNE [rune_a,rune_smile] predicate2 -> BOOL rune_less",
+      "OUTPUT_GROUP [rendered,equal,joined,rune_smile,rune_less,abcd] -> first exact line",
+      "OWNER_COPY actual joined -> separate OWN copy",
+      "OUTPUT_GROUP [copy] -> abcd newline",
+      "OWNER_DROP actual joined",
+      "OWNER_DROP actual abcd",
+      "OWNER_DROP actual rendered",
+      "OWNER_DROP actual copy",
+      "CONSTANT_STRING empty(NULL,0) -> OWN empty",
+      "OUTPUT_GROUP [empty] -> one newline",
+      "OWNER_DROP actual empty",
+      "CONSTANT_I64 0 -> zero",
+      "RETURN actual zero"
+    ],
+    "shape_counts": {
+      "functions": 1,
+      "blocks": 1,
+      "instructions": 25,
+      "constants": 8,
+      "types": 0,
+      "requirements": 1,
+      "provider_operations": 1
+    },
+    "effect": "TRAP|CALL|PROVIDER_CALL, PROVIDER_BINDING capability",
+    "live_owners": "Seven separate owning String results: ab/cd/joined/rendered/abcd/copy/empty. Full normal path drops all seven actual handles; original refusal path has no explicit cleanup successor.",
+    "unobserved_comparison": "String ordered comparison less is actual operation9 and consumes rendered/abcd, but its BOOL is unused by output/return. Fixed stdout proves equal and Rune less display, not the computed less value.",
+    "provider": "Actual stable io/output-write identities, canonical borrowed BYTES -> UNIT/UNIT sink logical contract; output groups borrow actual values with no replacement formatting callback."
+  },
+  "original_stdout": {
+    "c_macro_literal": "\"-5 true abcd \\xF0\\x9F\\x98\\x80 true abcd\\nabcd\\n\\n\"",
+    "exact_bytes": [
+      45,
+      53,
+      32,
+      116,
+      114,
+      117,
+      101,
+      32,
+      97,
+      98,
+      99,
+      100,
+      32,
+      240,
+      159,
+      152,
+      128,
+      32,
+      116,
+      114,
+      117,
+      101,
+      32,
+      97,
+      98,
+      99,
+      100,
+      10,
+      97,
+      98,
+      99,
+      100,
+      10,
+      10
+    ],
+    "bytes": 34,
+    "sha256": "c01a004ed9b594c1c3b0395aacc10afc7ef9b7042e6ff04cb9af92c8ef2a6c2c",
+    "utf8": "-5 true abcd \ud83d\ude00 true abcd\nabcd\n\n",
+    "output_calls": 3,
+    "groups": [
+      [
+        45,
+        53,
+        32,
+        116,
+        114,
+        117,
+        101,
+        32,
+        97,
+        98,
+        99,
+        100,
+        32,
+        240,
+        159,
+        152,
+        128,
+        32,
+        116,
+        114,
+        117,
+        101,
+        32,
+        97,
+        98,
+        99,
+        100,
+        10
+      ],
+      [
+        97,
+        98,
+        99,
+        100,
+        10
+      ],
+      [
+        10
+      ]
+    ],
+    "outcome": "RETURN/I64(0)"
+  },
+  "original_refusal": {
+    "capture_reset": true,
+    "fail": true,
+    "outcome": "TRAP/PROVIDER_CALL_FAILED",
+    "calls": 1,
+    "capture_size_assertion": "NOT_PRESENT",
+    "drop_lifecycle_assertion": "NOT_PRESENT"
+  },
+  "semantic_mutations": [
+    {
+      "mutation": "CONCAT_I64_OPERAND",
+      "complete_graph_change": "STRING_CONCAT right operand actual cd -> actual minus_five I64; all constants, owners and subsequent text uses remain.",
+      "expected_build": "XR_PROGRAM_BUILD_OK",
+      "expected_verify": "XR_PROGRAM_VERIFY_SEMANTIC_REJECTED",
+      "expected_diagnostic": "XR_PROGRAM_DIAGNOSTIC_OPERATION_TYPE",
+      "original_evidence_boundary": "Actual right operand has incompatible type, not a substituted empty string.",
+      "status": "OPEN"
+    },
+    {
+      "mutation": "CONSTANT_KIND_MISMATCH",
+      "complete_graph_change": "Second CONSTANT_STRING cd references I64 CONSTANT_MINUS_FIVE row instead of String CONSTANT_CD; result stays String OWNER.",
+      "expected_build": "XR_PROGRAM_BUILD_OK",
+      "expected_verify": "XR_PROGRAM_VERIFY_SEMANTIC_REJECTED",
+      "expected_diagnostic": "XR_PROGRAM_DIAGNOSTIC_OPERATION_IMMEDIATE",
+      "original_evidence_boundary": "Original constant catalog retained; mismatch is the referenced row kind.",
+      "status": "OPEN"
+    },
+    {
+      "mutation": "RUNE_COMPARE_STRING_OPERAND",
+      "complete_graph_change": "COMPARE_RUNE left actual Rune A -> actual String abcd, right actual Rune smile stays.",
+      "expected_build": "XR_PROGRAM_BUILD_OK",
+      "expected_verify": "XR_PROGRAM_VERIFY_SEMANTIC_REJECTED",
+      "expected_diagnostic": "XR_PROGRAM_DIAGNOSTIC_OPERATION_TYPE",
+      "original_evidence_boundary": "No change to Rune codepoints, compare predicate2 or output ordering.",
+      "status": "OPEN"
+    },
+    {
+      "mutation": "DOUBLE_DROP",
+      "complete_graph_change": "Final DROP intended for actual empty String -> already-dropped actual joined String. Other seven-drop sequence retained.",
+      "expected_build": "XR_PROGRAM_BUILD_OK",
+      "expected_verify": "XR_PROGRAM_VERIFY_SEMANTIC_REJECTED",
+      "expected_diagnostic": "XR_PROGRAM_DIAGNOSTIC_VALUE_USE",
+      "original_evidence_boundary": "Same graph also leaves empty owner undropped; original first VALUE_USE does not isolate only a double-drop, so preserve both responsibilities.",
+      "status": "OPEN"
+    },
+    {
+      "mutation": "CONCAT_NON_OWNER",
+      "complete_graph_change": "Only STRING_CONCAT result joined ownership OWNER -> NON_OWNER while String type affine and all joined uses/copy/drop remain.",
+      "expected_build": "XR_PROGRAM_BUILD_OK",
+      "expected_verify": "XR_PROGRAM_VERIFY_SEMANTIC_REJECTED",
+      "expected_diagnostic": "XR_PROGRAM_DIAGNOSTIC_ROOT",
+      "original_evidence_boundary": "Original first ROOT rejection is not producer failure or lifecycle event proof.",
+      "status": "OPEN"
+    },
+    {
+      "mutation": "SCALAR_STRING_OPERAND",
+      "complete_graph_change": "STRING_FROM_SCALAR operand actual I64 minus_five -> actual String joined; result stays OWN String rendered.",
+      "expected_build": "XR_PROGRAM_BUILD_OK",
+      "expected_verify": "XR_PROGRAM_VERIFY_SEMANTIC_REJECTED",
+      "expected_diagnostic": "XR_PROGRAM_DIAGNOSTIC_OPERATION_TYPE",
+      "original_evidence_boundary": "Keep whole graph rather than replacing unsupported scalar rendering with fake output.",
+      "status": "OPEN"
+    }
+  ],
+  "bool_positive": {
+    "original_builder": "xr_program_output_fixture_write_mutated(1, BOOL_OPERAND)",
+    "changes": "Full output graph changes first constant/result/op I64 -> BOOL, constant.boolean = value !=0 = true; zero I64 return and actual byte-sink provider stay.",
+    "shape_counts": {
+      "functions": 1,
+      "blocks": 1,
+      "instructions": 4,
+      "constants": 2,
+      "types": 0,
+      "requirements": 1,
+      "provider_operations": 1
+    },
+    "expected_build": "XR_PROGRAM_BUILD_OK",
+    "expected_verify": "XR_PROGRAM_VERIFY_OK",
+    "original_runtime_checks": {
+      "kind": "RETURN",
+      "exact_bytes": [
+        116,
+        114,
+        117,
+        101,
+        10
+      ],
+      "size": 5,
+      "result_value_kind": "NOT_ASSERTED",
+      "result_value_i64": "NOT_ASSERTED",
+      "provider_calls": "NOT_ASSERTED"
+    },
+    "current_status": "OPEN"
+  },
+  "assertion_counts": {
+    "census_functions": 1,
+    "outer_sites": 15,
+    "specified_helpers": 10,
+    "specified_helper_sites": 8,
+    "fresh_builder_inputs": 8,
+    "positive_admitted_programs": 2,
+    "semantic_negative_inputs": 6,
+    "semantic_negative_verify_calls": 12,
+    "original_runtime_evaluations": 3,
+    "wire_mutations": 0
+  },
+  "expectation_policy": "Keep original exact34bytes including four-byte UTF8 smile, spaces and trailing double newline, return I640, calls3; refusal TRAP/provider failure/calls1; BOOL is legal positive and exact true newline, not old I64-only negative. Six semantic negatives retain exact status/kind/NULL twice and full Diag memcmp. Bool original does not assert value0/kindI64/calls1, and less is not value-observed; stronger current checks remain additional explicit qualification.",
+  "original_runtime_boundary": "Three original bound evaluator calls are responsibilities, not current executions. No outcome disposal, physical release or per-object events asserted. Current ownership/cleanup on refused output, native/mixed/VM, provider authority and stable identity require independent actual runs.",
+  "shared_fixture_owners": [
+    {
+      "path": "tests/unit/program/xr_program_text_fixture.h",
+      "actual_direct_include_users": [
+        "tests/unit/program/test_xr_program_verify.c",
+        "tests/unit/program/test_xr_program.c",
+        "tests/unit/aot/test_xr_program_aot.c",
+        "tests/unit/vm/test_xr_program_vm.c"
+      ],
+      "actual_transitive_header": "tests/unit/program/xr_program_output_trap_fixture.h",
+      "actual_transitive_users": [
+        "tests/unit/program/test_xr_program_verify.c",
+        "tests/unit/program/test_xr_program.c",
+        "tests/unit/vm/test_xr_program_vm_allocations.c"
+      ],
+      "status": "PRESERVE_SHARED_READONLY"
+    },
+    {
+      "path": "tests/unit/program/xr_program_output_fixture.h",
+      "actual_direct_include_users": [
+        "tests/unit/program/test_xr_program_verify.c",
+        "tests/unit/aot/test_xr_program_aot.c",
+        "tests/unit/vm/test_xr_program_vm.c"
+      ],
+      "status": "PRESERVE_SHARED_READONLY"
+    }
+  ],
+  "Root_contract_or_representation_review": {
+    "status": "OPEN",
+    "strings": "Preserve original real concat/scalar render/compare/Rune/copy/empty operations and actual handle drops. Do not shorten graph to precomputed stdout or use fake provider rendering.",
+    "lifecycle": "Current refusal must not silently lose live String owners despite no explicit original landing; preserve actual TRAP behavior and add correct physical/stable lifecycle checks with Root observer. No allocator address or aggregate domain stat substitutes for per-object events.",
+    "representation": "Checked/Lowered current type/loan/provider representations require explicit mapping; aliases, old String scalar representation or compatibility paths are forbidden.",
+    "qualification": "New formal producer/owned roles/observer/window still required; actual current Source/packet/Library/native/mixed/two-instance/cancel/FI/axes/safety/deletion remain OPEN."
+  },
+  "full_FI": "NOT_RUN",
+  "axes": "NOT_RUN",
+  "full_safety": "NOT_RUN",
+  "SourceDelete": "NOT_RUN",
+  "Main": "NOT_RUN",
+  "handoff": {
+    "Root_thread": "01a11f74-a297-7b11-8441-835bde6a3d5f",
+    "formal_acceptance": "PENDING"
+  },
+  "boundaries": [
+    "Static full original responsibilities only, retired0/all OPEN.",
+    "Shared text/output headers still have direct/transitive consumers and are not deletion candidates.",
+    "Only map and responsibility trace may change."
+  ]
+}
