@@ -1,0 +1,358 @@
+{
+  "schema": 1,
+  "family": "original_local_storage_projection",
+  "legacy_base_commit": "01e6d38401b0f5c8684b64c35a99ac651024c0c1",
+  "status": "OPEN",
+  "retired": 0,
+  "replacement_gates": [],
+  "result": "STATIC_ORIGINAL_LOCAL_STORAGE_PROJECTION_MAP_ONLY",
+  "product_execution": "NOT_RUN_BY_THIS_MAP",
+  "producer": "25f4016d6f089169757a90ae11ba537002374711",
+  "identity": "Checked25/semantic67/Value22/Call28/Program29",
+  "legacy": [
+    {
+      "name": "test_owner_and_local_place_operations",
+      "legacy_path": "tests/unit/program/test_xr_program_verify.c",
+      "legacy_line": 3108,
+      "body_lf_sha256": "b38610eb319428747d4a79292bf17d12f181770b19c48548f8805ede260cbbf0",
+      "assertion_sites": 5,
+      "loop_sites": 0,
+      "status": "OPEN",
+      "replacement_gates": [],
+      "note": "Function census preserves its whole body; sites do not count executed loop iterations."
+    },
+    {
+      "name": "test_aggregate_place_projection",
+      "legacy_path": "tests/unit/program/test_xr_program_verify.c",
+      "legacy_line": 3298,
+      "body_lf_sha256": "e43f86b4594f29c03e4e8ec6beb9c3e363a2215a0fe52463132ba38653ba0a6a",
+      "assertion_sites": 6,
+      "loop_sites": 0,
+      "status": "OPEN",
+      "replacement_gates": [],
+      "note": "Function census preserves its whole body; sites do not count executed loop iterations."
+    }
+  ],
+  "responsibility_mapping": [
+    {
+      "path": "tests/unit/program/test_xr_program_verify.c",
+      "function": "test_owner_and_local_place_operations",
+      "line": 3108,
+      "end_line": 3296,
+      "body_lf_sha256": "b38610eb319428747d4a79292bf17d12f181770b19c48548f8805ede260cbbf0",
+      "CHECK_sites": 5,
+      "CHECK_bindings": [
+        {
+          "line": 3248,
+          "expression": "write_modules(&module, 1u, &artifact) == XR_PROGRAM_BUILD_OK",
+          "status": "OPEN"
+        },
+        {
+          "line": 3253,
+          "expression": "result.kind == XR_REFERENCE_OUTCOME_RETURN",
+          "status": "OPEN"
+        },
+        {
+          "line": 3254,
+          "expression": "result.value.kind == XR_REFERENCE_VALUE_I64",
+          "status": "OPEN"
+        },
+        {
+          "line": 3255,
+          "expression": "result.value.as.i64 == 42",
+          "status": "OPEN"
+        },
+        {
+          "line": 3293,
+          "expression": "write_one_function(constants, 1u, &bad_function, &artifact) == XR_PROGRAM_BUILD_OK",
+          "status": "OPEN"
+        }
+      ],
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/program/test_xr_program_verify.c",
+      "function": "test_aggregate_place_projection",
+      "line": 3298,
+      "end_line": 3453,
+      "body_lf_sha256": "e43f86b4594f29c03e4e8ec6beb9c3e363a2215a0fe52463132ba38653ba0a6a",
+      "CHECK_sites": 6,
+      "CHECK_bindings": [
+        {
+          "line": 3429,
+          "expression": "write_typed_modules(&type, 1u, &module, 1u, &artifact) == XR_PROGRAM_BUILD_OK",
+          "status": "OPEN"
+        },
+        {
+          "line": 3434,
+          "expression": "result.kind == XR_REFERENCE_OUTCOME_RETURN",
+          "status": "OPEN"
+        },
+        {
+          "line": 3435,
+          "expression": "result.value.kind == XR_REFERENCE_VALUE_I64",
+          "status": "OPEN"
+        },
+        {
+          "line": 3436,
+          "expression": "result.value.as.i64 == 42",
+          "status": "OPEN"
+        },
+        {
+          "line": 3442,
+          "expression": "write_typed_modules(&type, 1u, &module, 1u, &artifact) == XR_PROGRAM_BUILD_OK",
+          "status": "OPEN"
+        },
+        {
+          "line": 3450,
+          "expression": "write_typed_modules(&type, 1u, &module, 1u, &artifact) == XR_PROGRAM_BUILD_OK",
+          "status": "OPEN"
+        }
+      ],
+      "status": "OPEN"
+    }
+  ],
+  "outer_CHECK_sites": 11,
+  "original_private_helpers": [
+    {
+      "path": "tests/unit/program/test_xr_program_verify.c",
+      "function": "key",
+      "line": 109,
+      "end_line": 111,
+      "body_lf_sha256": "027a211b78e0cfbd6b296804e37236848a76cc1980981a0d6a49a6f42d3f2e13",
+      "CHECK_sites": 0,
+      "CHECK_bindings": [],
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/program/test_xr_program_verify.c",
+      "function": "write_one_function",
+      "line": 145,
+      "end_line": 157,
+      "body_lf_sha256": "efb68b99402d38d2b891e3ac3c832ebaae2feb4e1496a197240b17ebacb4d8ce",
+      "CHECK_sites": 0,
+      "CHECK_bindings": [],
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/program/test_xr_program_verify.c",
+      "function": "write_modules",
+      "line": 140,
+      "end_line": 143,
+      "body_lf_sha256": "c0c6556c255f9d53386b17acda69b57380cb09e82386e392f4f66c725697b6da",
+      "CHECK_sites": 0,
+      "CHECK_bindings": [],
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/program/test_xr_program_verify.c",
+      "function": "write_typed_modules",
+      "line": 113,
+      "end_line": 138,
+      "body_lf_sha256": "c568d48005100fc2633344ba569a2bc8de9b62e3aac794b35057c8d838b8db65",
+      "CHECK_sites": 0,
+      "CHECK_bindings": [],
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/program/test_xr_program_verify.c",
+      "function": "validate_ok",
+      "line": 159,
+      "end_line": 174,
+      "body_lf_sha256": "94fe0ef4e0242acb810c12621ae1fe73a9887ef668f15ddc6c67ed645494f62b",
+      "CHECK_sites": 2,
+      "CHECK_bindings": [
+        {
+          "line": 171,
+          "expression": "status == XR_PROGRAM_VERIFY_OK",
+          "status": "OPEN"
+        },
+        {
+          "line": 172,
+          "expression": "program != NULL",
+          "status": "OPEN"
+        }
+      ],
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/program/test_xr_program_verify.c",
+      "function": "expect_semantic_reject_at",
+      "line": 176,
+      "end_line": 198,
+      "body_lf_sha256": "44cf0fb15bea156743a1c0e35b0be8ee844aa1af55c8653ed9361cf781c045b8",
+      "CHECK_sites": 6,
+      "CHECK_bindings": [
+        {
+          "line": 190,
+          "expression": "first_status == XR_PROGRAM_VERIFY_SEMANTIC_REJECTED",
+          "status": "OPEN"
+        },
+        {
+          "line": 191,
+          "expression": "program == NULL",
+          "status": "OPEN"
+        },
+        {
+          "line": 192,
+          "expression": "first.kind == expected",
+          "status": "OPEN"
+        },
+        {
+          "line": 195,
+          "expression": "second_status == first_status",
+          "status": "OPEN"
+        },
+        {
+          "line": 196,
+          "expression": "memcmp(&first, &second, sizeof(first)) == 0",
+          "status": "OPEN"
+        },
+        {
+          "line": 197,
+          "expression": "program == NULL",
+          "status": "OPEN"
+        }
+      ],
+      "status": "OPEN"
+    }
+  ],
+  "specified_helper_CHECK_sites": 8,
+  "input_file": {
+    "path": "tests/unit/program/test_xr_program_verify.c",
+    "whole_file_lf_sha256": "ec4b93f13bfab2aa3d4b8f8773dd5c1118a0c682ed6f8304fead515f90402802",
+    "physical_raw_sha256": "a39922500c0943c034fafcda3a82b67e511ea658f453f6c0c3204f7719de1817",
+    "git_base_equal": true
+  },
+  "input_policy": "Complete two original bodies and six specified actual helper bodies, all scalar/aggregate/ref/owner graphs, constants, types, mode/category, operand order, helper/main binding and mutations equal01e6. Old numeric/type/place representation is input evidence, not a requested target compatibility surface.",
+  "local_ref": {
+    "constants": [
+      40,
+      42,
+      7
+    ],
+    "functions": [
+      {
+        "key": "place:function:helper",
+        "signature": "One I64 parameter with actual XR_PARAM_REF and PLACE blockargument, resultVOID, unflagged, original effect_mask0.",
+        "operations": [
+          "BLOCK_ARGUMENT",
+          "CONSTANT_I64",
+          "PLACE_STORE",
+          "RETURN"
+        ]
+      },
+      {
+        "key": "place:function:main",
+        "signature": "ZeroargI64 ENTRY, original effect_mask4.",
+        "operations": [
+          "CONSTANT_I64",
+          "OWNER_MOVE",
+          "PLACE_LOCAL",
+          "CALL_SEALED_DIRECT",
+          "PLACE_LOAD",
+          "CONSTANT_I64",
+          "OWNER_DROP",
+          "RETURN"
+        ]
+      }
+    ],
+    "full_graph": "Main constant40 -> OWNER_MOVE -> actual local storage, pass that same storage as ref to genuine sealed helper; helper writes original constant42 through its PLACE I64 blockargument. Main then reads same storage, independently creates and drops original scalar7, returns loadedI64(42). Two distinct functions/blocks in same full module; constant42 helper result must be observable in caller, not temporary copy/success-only writeback.",
+    "normal": "BUILD_OK/VERIFY_OK/non-NULL; actual canonical verified entry reference RETURN/I64(42), NULL profile/budget. No native/mixed/twoInstance or allocation/lifecycle observer assertion in original body.",
+    "moved_source_negative": {
+      "input": "A separate original badfunction takes only first constant40; its four-op graph reuses exact main instructions0(CONST40) and1(OWNER_MOVE), then checkedADD(original consumedv40,movedvalue) and RETURN badresult. ZeroargI64 ENTRY/effect1; does not contain helper/ref/local graph.",
+      "operations": [
+        "CONSTANT_I64",
+        "OWNER_MOVE",
+        "ADD_I64",
+        "RETURN"
+      ],
+      "writer": "Original write_one_function(constants,1u,...), BUILD_OK.",
+      "admission": "SEMANTIC_REJECTED/VALUE_USE/NULL twice and whole diagnostic memcmp. ScalarI64 being trivial does not grant reuse of an explicitly consumed SSA owner source."
+    },
+    "boundary": "Original ref positive proves actual synchronous cross-frame write visibility; it does not assert dynamic repeated-alias admission, noescape, suspend, failure cleanup or current Cell protocol."
+  },
+  "aggregate_projection": {
+    "type": {
+      "legacy_local_id": 62,
+      "kind": "AGGREGATE",
+      "ownership": "AFFINE",
+      "copy_contract": "EXPLICIT",
+      "fields": [
+        "I64"
+      ],
+      "field_count": 1
+    },
+    "constants": [
+      40,
+      42
+    ],
+    "signature": "ZeroargI64 ENTRY, oneblock, original effect_mask0.",
+    "operations": [
+      "CONSTANT_I64",
+      "AGGREGATE_CONSTRUCT",
+      "PLACE_LOCAL",
+      "PLACE_LOAD",
+      "PLACE_PROJECT",
+      "CONSTANT_I64",
+      "PLACE_STORE",
+      "AGGREGATE_PROJECT",
+      "PLACE_TAKE",
+      "OWNER_DROP",
+      "RETURN"
+    ],
+    "full_graph": "Construct owning aggregate[40], consume into local storage; load a NON_OWNER aggregate view; project field0 PLACE from original aggregate storage; store42 through that field; project field0 value from the previously loaded NON_OWNER aggregate; then TAKE owner from same storage, DROP taken owner and RETURN already-projected scalarI64(42). The old loaded view observes actual storage mutation; replacing it with a detached aggregate copy would return40 and change original meaning.",
+    "normal": "BUILD_OK/VERIFY_OK/non-NULL; actual canonical verified entry reference RETURN/I64(42), NULL profile/budget. Scalar field value is materialized before TAKE and remains valid for return after original owner DROP; this does not permit the aggregate borrow to outlive its owner.",
+    "field_negative": "Mutate original instructions[4] PLACE_PROJECT fieldordinal0 ->1 for actual onefield aggregate. Full graph otherwise intact, BUILD_OK thenSEMANTIC_REJECTED/OPERATION_TYPE/NULL twice/full diagnostic equality; restoreordinal0.",
+    "lifetime_negative": "Swap exact instructions[7] AGGREGATE_PROJECT with[8] PLACE_TAKE. Field STORE still precedes TAKE; now projecting previously borrowed aggregate occurs after owning storage is taken but before OWNER_DROP. BUILD_OK thenSEMANTIC_REJECTED/VALUE_USE/NULL twice/full diagnostic equality. Failure concerns invalidated borrow after ownership transfer, not a runtime use-after-free demonstration.",
+    "negative_operation_order": [
+      "CONSTANT_I64",
+      "AGGREGATE_CONSTRUCT",
+      "PLACE_LOCAL",
+      "PLACE_LOAD",
+      "PLACE_PROJECT",
+      "CONSTANT_I64",
+      "PLACE_STORE",
+      "PLACE_TAKE",
+      "AGGREGATE_PROJECT",
+      "OWNER_DROP",
+      "RETURN"
+    ]
+  },
+  "original_negative_count": 3,
+  "specified_helper_boundaries": {
+    "diagnostics": "Both semantic verifications must reject with exact original diagnostic and NULL Program; complete diagnostic bytes equal, not anynonOK.",
+    "ownership": "Original returned validatedPrograms/artifacts freed. Full current FI/resource/lifecycle and producer-death obligations remain independent; original scalar results have no dynamic event observer or detached owning aggregate outcome."
+  },
+  "shared_dependencies": [
+    {
+      "path": "src/program/xr_reference_evaluator.h",
+      "physical_raw_sha256": "d43732ceca814f67f7f04e1b51d8512aab2e199092a546d1c47d30e0f28439bf",
+      "whole_file_lf_sha256": "0b2149e8397748e84b1cbc14904cde97d5bee4c3e69474486169e4656ff89054",
+      "git_base_equal": true,
+      "status": "PRESERVE_SHARED_READONLY"
+    }
+  ],
+  "Root_contract_or_representation_review": {
+    "status": "OPEN",
+    "local_and_module": "This original positive uses local storage and explicit REF; it has no Source module var, root/worker permission or initializer. Do not claim it independently qualifies module Cell. Current local ref and projected storage must use actual owner/loan with logicalI64; separately frozen modulevar always shares one real Cell<T> across ordinary access/ref, without temporary owner/writeback or dual representation.",
+    "projection": "Root must preserve original field mutation observed through actual borrowed storage and old transfer invalidation using current ownership rules. A copied record producing40, constant42, or dropping load/store/take/order cannot satisfy the original positive/negative graphs.",
+    "ref": "Actual helper-call parameter must bind to same caller storage and release the precise borrowed owner. New dynamic exclusivity, cross-frame alias, forwarding/receiver, hostreentry, suspend, throw/panic/OOM/LIMIT/cancel/stop/close, GO/noescape rules need independent current tests, not authority from legacy PLACE tags or names.",
+    "move": "Explicit consumption of original source cannot be bypassed because I64 is trivially copyable. Current verified-value/owner invalidation must carry VALUE_USE responsibility without old numeric enums or PLACE-mode aliases.",
+    "qualification": "Exact full positives/negatives via public Built/Checked/packet/reverify/Lowered/Program, independentgoldens, actualVM/native/mixed/twoInstances, detachedowners, allactualFI/axes/lifecycle/safety require formal producer/window and remainOPEN."
+  },
+  "full_FI": "NOT_RUN",
+  "axes": "NOT_RUN",
+  "full_safety": "NOT_RUN",
+  "SourceDelete": "NOT_RUN",
+  "Main": "NOT_RUN",
+  "handoff": {
+    "Root_thread": "01a11f74-a297-7b11-8441-835bde6a3d5f",
+    "formal_acceptance": "PENDING"
+  },
+  "boundaries": [
+    "All11 outer/8 helperCHECKs OPEN; retired0.",
+    "Original cross-frame storage write and borrowed projection/transfer order only; current Cell/alias/noescape/GO/suspend not qualified.",
+    "Shared helpers/evaluator serve other consumers, preserve dependencies. No product/header/CMake/stdlib/spec/SDK/docs edits, heavy gate or Main/deletion permit."
+  ]
+}
