@@ -409,3 +409,5 @@ include("${CMAKE_CURRENT_LIST_DIR}/../xir/product_consumers/source_product_gener
 include("${CMAKE_CURRENT_LIST_DIR}/../xir/product_consumers/source_product_callables_owned.cmake")
 
 include("${CMAKE_CURRENT_LIST_DIR}/../xir/product_consumers/source_product_cross_module_coroutines_owned.cmake")
+
+include("${CMAKE_CURRENT_LIST_DIR}/../xir/product_consumers/source_product_multi_safepoint_owned.cmake")

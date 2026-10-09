@@ -15,11 +15,11 @@
     "shared_emission_owner_consumers": 7
   },
   "reference_counts": {
-    "source_with_digest_reference": 64,
-    "source_without_digest_reference": 44,
+    "source_with_digest_reference": 65,
+    "source_without_digest_reference": 43,
     "other_with_digest_reference": 40,
     "other_without_digest_reference": 120,
-    "digest_reference_values": 132,
+    "digest_reference_values": 133,
     "source_inventory_projections": 42
   },
   "mapping_inputs": [
@@ -438,6 +438,10 @@
     {
       "path": "tests/unit/xir/product_consumers/source_module_suspension_obligations.json",
       "lf_sha256": "32d80caf8a338c8ba2d69f7ee1aa57ab2102c02f090468de829094dbb21413a3"
+    },
+    {
+      "path": "tests/unit/xir/product_consumers/source_multi_safepoint_source_obligations.json",
+      "lf_sha256": "10bebebc38e32475565df1632af71a7dd1d56a371f8d3ab97024e507227bf8fe"
     },
     {
       "path": "tests/unit/xir/product_consumers/source_narrow_array_source_obligations.json",
@@ -2391,7 +2395,13 @@
         "scope": "Exact original source and independent VM/native assertion value 42 through the exported adapter. Original native harness success exit 227 is retained separately and is not a language return value.",
         "legacy_native_harness_exit": 227
       },
-      "mapping_references": []
+      "mapping_references": [
+        {
+          "mapping": "tests/unit/xir/product_consumers/source_multi_safepoint_source_obligations.json",
+          "pointer": "/legacy/body_lf_sha256",
+          "binding": "exact_path_name_body"
+        }
+      ]
     },
     {
       "legacy_path": "tests/unit/program/test_xr_program_source_build.c",
