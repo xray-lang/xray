@@ -81,7 +81,7 @@ static void emit_byte(CBuffer *buffer, char byte) {
             if (!emit_work(buffer, 1)) return;
             capacity *= 2;
         }
-        if (capacity < required || capacity > buffer->limit) capacity = required;
+        if (capacity < required || capacity > buffer->limit) capacity = buffer->limit;
         void *memory = buffer->text;
         buffer->status = xir_compile_resource_status(
             xr_compile_resources_resize(buffer->context->resources, &memory, capacity));
