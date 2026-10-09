@@ -1,0 +1,859 @@
+{
+  "schema": 1,
+  "family": "original_retained_roots_and_manifest_authority",
+  "status": "OPEN",
+  "retired": 0,
+  "replacement_gates": [],
+  "result": "STATIC_ORIGINAL_AUTHORITY_MAP_ONLY",
+  "product_execution": "NOT_RUN_BY_THIS_MAP",
+  "producer": "25f4016d6f089169757a90ae11ba537002374711",
+  "identity": "Checked25/semantic67/Value22/Call28/Program29",
+  "producer_scope": "Only the existing authorized identity is recorded. The formal bd221 header comparison does not adopt that producer or qualify either source.",
+  "original_TESTs": [
+    {
+      "legacy": {
+        "name": "source_owner_rejects_invalid_manifest_roots_without_partial_product",
+        "legacy_path": "tests/unit/program/test_xr_program_source_build.c",
+        "legacy_line": 1205,
+        "body_lf_sha256": "376d019f21611a0654cdab6bf5c8b253039856aa223ba3ddc4b0e81fe950aac3",
+        "assertion_sites": 11,
+        "loop_sites": 1,
+        "status": "OPEN",
+        "replacement_gates": [],
+        "note": "Function census preserves its whole body; sites do not count executed loop iterations.",
+        "original_fixture": null,
+        "static_input_literals": {
+          "source": {
+            "bytes": 79,
+            "sha256": "9ba94ce79f2c0a2de484839afdcfd24abf4b4635b4a46f45bf7fb7b39a208786"
+          },
+          "manifest": {
+            "bytes": 47,
+            "sha256": "c9e48b054c57770e76580cddb2322078c628336c08f5c36011ffd7c1514554eb"
+          }
+        }
+      },
+      "original_inputs": {
+        "source": {
+          "bytes": 79,
+          "sha256": "9ba94ce79f2c0a2de484839afdcfd24abf4b4635b4a46f45bf7fb7b39a208786",
+          "text": "fn answer() -> i64 { return 42 }\nfn generic<T>(value: T) -> T { return value }\n",
+          "origin": "Whole original C literal; independently decoded; no adapter or mutation."
+        },
+        "manifest": {
+          "bytes": 47,
+          "sha256": "c9e48b054c57770e76580cddb2322078c628336c08f5c36011ffd7c1514554eb",
+          "text": "[[export.c]]\nxray = \"answer\"\nsymbol = \"answer\"\n",
+          "origin": "Whole original C literal; independently decoded; no adapter or mutation."
+        }
+      },
+      "responsibility_mapping": [
+        {
+          "responsibility": "Prepare the exact Source and TOML plan and preserve its original names for cleanup.",
+          "status": "OPEN",
+          "original": {
+            "path": "tests/unit/program/test_xr_program_source_build.c",
+            "lines": [
+              1212,
+              1219
+            ]
+          },
+          "original_assertion_sites": 4,
+          "target_consumer": "NOT_IMPLEMENTED_PENDING_ROOT_CONTRACT",
+          "gap": "Root must freeze the target selected-root/manifest owner and authority contract. This static map executes no Source or runtime path."
+        },
+        {
+          "responsibility": "Reject each of the six specific authority/plan mutations with its exact original status.",
+          "status": "OPEN",
+          "original": {
+            "path": "tests/unit/program/test_xr_program_source_build.c",
+            "lines": [
+              1224,
+              1242
+            ]
+          },
+          "original_assertion_sites": 2,
+          "target_consumer": "NOT_IMPLEMENTED_PENDING_ROOT_CONTRACT",
+          "gap": "Target rejection category and nonempty diagnostic require Root contract mapping. Unrelated admission refusal or any-error acceptance cannot qualify these negatives."
+        },
+        {
+          "responsibility": "Publish no Program, artifact bytes, export metadata or export ID owner and reset the count on every rejection.",
+          "status": "OPEN",
+          "original": {
+            "path": "tests/unit/program/test_xr_program_source_build.c",
+            "lines": [
+              1243,
+              1252
+            ]
+          },
+          "original_assertion_sites": 5,
+          "target_consumer": "NOT_IMPLEMENTED_PENDING_ROOT_CONTRACT",
+          "gap": "Current physical zero, complete compiler/runtime FI, resource axes and applicable safety must be observed on the future qualified producer; old destructor field resets require opaque-owner representation review."
+        }
+      ]
+    },
+    {
+      "legacy": {
+        "name": "source_owner_manifest_exports_retain_exact_detached_roots",
+        "legacy_path": "tests/unit/program/test_xr_program_source_build.c",
+        "legacy_line": 1105,
+        "body_lf_sha256": "0d25a3152c788152c0b7e69305596a90f47911832a152a9423fe5758a010f0d0",
+        "assertion_sites": 34,
+        "loop_sites": 4,
+        "status": "OPEN",
+        "replacement_gates": [],
+        "note": "Function census preserves its whole body; sites do not count executed loop iterations.",
+        "original_fixture": {
+          "id": "manifest_exports",
+          "expected_exit": 0,
+          "labels": [
+            "module-graph",
+            "retained-roots",
+            "instance",
+            "export"
+          ],
+          "backends": {
+            "vm": "execute",
+            "aot": "execute"
+          }
+        },
+        "static_input_literals": {
+          "source": {
+            "bytes": 230,
+            "sha256": "64717fd49c5019f10f0769c822109206bab9b29a09ee1714edcd6ee547548257"
+          },
+          "library": {
+            "bytes": 131,
+            "sha256": "038ed5e43ec108aaddba41f2bbda7d43611d37196f63d65e00a4c8737b0fe7a8"
+          },
+          "manifest": {
+            "bytes": 221,
+            "sha256": "4623cdd88f906ebd09949a4dc2ca4e438cb22bd58db46285f669d62182810e3d"
+          }
+        }
+      },
+      "original_inputs": {
+        "source": {
+          "bytes": 230,
+          "sha256": "64717fd49c5019f10f0769c822109206bab9b29a09ee1714edcd6ee547548257",
+          "text": "import \"./library\"\nfn answer() -> i64 { return 0 }\nfn bump() -> i64 { return library.bump() }\nfn read() -> i64 { return library.read() }\nfn unselected() -> i64 { return 999 }\n@test\nfn checkState() { assert(library.read() == 40) }\n",
+          "origin": "Whole original C literal; independently decoded; no adapter or mutation."
+        },
+        "library": {
+          "bytes": 131,
+          "sha256": "038ed5e43ec108aaddba41f2bbda7d43611d37196f63d65e00a4c8737b0fe7a8",
+          "text": "var counter: i64 = 40\nexport fn bump() -> i64 { counter = counter + 1; return counter }\nexport fn read() -> i64 { return counter }\n",
+          "origin": "Whole original C literal; independently decoded; no adapter or mutation."
+        },
+        "manifest": {
+          "bytes": 221,
+          "sha256": "4623cdd88f906ebd09949a4dc2ca4e438cb22bd58db46285f669d62182810e3d",
+          "text": "[[export.c]]\nxray = \"read\"\nsymbol = \"read_counter\"\nheader = true\n[[export.c]]\nxray = \"bump\"\nsymbol = \"bump_counter\"\nvisibility = \"hidden\"\nabi = \"hosted-vm-v1\"\n[[export.c]]\nxray = \"answer\"\nsymbol = \"answer\"\nabi = \"native\"\n",
+          "origin": "Whole original C literal; independently decoded; no adapter or mutation."
+        }
+      },
+      "responsibility_mapping": [
+        {
+          "responsibility": "Prepare separate exact root/library sources, parse the complete manifest, release TOML and bind the valid plan/profile.",
+          "status": "OPEN",
+          "original": {
+            "path": "tests/unit/program/test_xr_program_source_build.c",
+            "lines": [
+              1122,
+              1133
+            ]
+          },
+          "original_assertion_sites": 5,
+          "target_consumer": "NOT_IMPLEMENTED_PENDING_ROOT_CONTRACT",
+          "gap": "Root must freeze the target selected-root/manifest owner and authority contract. This static map executes no Source or runtime path."
+        },
+        {
+          "responsibility": "Discover three exports and one root test, no explicit retained roots; keep count8 and canonical answer/export identity.",
+          "status": "OPEN",
+          "original": {
+            "path": "tests/unit/program/test_xr_program_source_build.c",
+            "lines": [
+              1139,
+              1146
+            ]
+          },
+          "original_assertion_sites": 6,
+          "target_consumer": "NOT_IMPLEMENTED_PENDING_ROOT_CONTRACT",
+          "gap": "Root must map obsolete fields/IDs/counts to the current typed representation while preserving the authority and ownership invariant; no compatibility alias or invented empty field proves equivalence."
+        },
+        {
+          "responsibility": "Adding explicit bump retention preserves artifact bytes/Program ID/entry and all export IDs; retained bump equals the bump export.",
+          "status": "OPEN",
+          "original": {
+            "path": "tests/unit/program/test_xr_program_source_build.c",
+            "lines": [
+              1147,
+              1156
+            ]
+          },
+          "original_assertion_sites": 2,
+          "target_consumer": "NOT_IMPLEMENTED_PENDING_ROOT_CONTRACT",
+          "gap": "Root must freeze the target selected-root/manifest owner and authority contract. This static map executes no Source or runtime path."
+        },
+        {
+          "responsibility": "After fixture/session/TOML plan die, all selected external names, header flags, visibility and ABI metadata remain owned.",
+          "status": "OPEN",
+          "original": {
+            "path": "tests/unit/program/test_xr_program_source_build.c",
+            "lines": [
+              1157,
+              1167
+            ]
+          },
+          "original_assertion_sites": 9,
+          "target_consumer": "NOT_IMPLEMENTED_PENDING_ROOT_CONTRACT",
+          "gap": "Root owns canonical ABI replacement for hosted-vm-v1 and native. Preserve symbol/header/visibility semantics without retaining obsolete ABI aliases."
+        },
+        {
+          "responsibility": "Build real VM code from the detached product.",
+          "status": "OPEN",
+          "original": {
+            "path": "tests/unit/program/test_xr_program_source_build.c",
+            "lines": [
+              1168,
+              1169
+            ]
+          },
+          "original_assertion_sites": 1,
+          "target_consumer": "NOT_IMPLEMENTED_PENDING_ROOT_CONTRACT",
+          "gap": "Root must freeze the target selected-root/manifest owner and authority contract. This static map executes no Source or runtime path."
+        },
+        {
+          "responsibility": "Create two independent Instances; each root checkState test observes the original counter40 before any bump.",
+          "status": "OPEN",
+          "original": {
+            "path": "tests/unit/program/test_xr_program_source_build.c",
+            "lines": [
+              1172,
+              1181
+            ]
+          },
+          "original_assertion_sites": 2,
+          "target_consumer": "NOT_IMPLEMENTED_PENDING_ROOT_CONTRACT",
+          "gap": "The original private var library source must be admitted. A const Atomic or fake adapter is a different program and cannot qualify this input."
+        },
+        {
+          "responsibility": "In each Instance, real bump then read both return fixed i6441,42,43, and every owned result is dropped.",
+          "status": "OPEN",
+          "original": {
+            "path": "tests/unit/program/test_xr_program_source_build.c",
+            "lines": [
+              1182,
+              1188
+            ]
+          },
+          "original_assertion_sites": 3,
+          "target_consumer": "NOT_IMPLEMENTED_PENDING_ROOT_CONTRACT",
+          "gap": "VM and generated native C each need independent fixed results; matching each other alone is insufficient."
+        },
+        {
+          "responsibility": "Drain, retire and free each Instance; free code and execute the actual original native wrapper before freeing the product.",
+          "status": "OPEN",
+          "original": {
+            "path": "tests/unit/program/test_xr_program_source_build.c",
+            "lines": [
+              1191,
+              1197
+            ]
+          },
+          "original_assertion_sites": 3,
+          "target_consumer": "NOT_IMPLEMENTED_PENDING_ROOT_CONTRACT",
+          "gap": "Current physical zero, complete compiler/runtime FI, resource axes and applicable safety must be observed on the future qualified producer; old destructor field resets require opaque-owner representation review."
+        },
+        {
+          "responsibility": "Product destruction clears export metadata/ID owners and count, then releases the profile.",
+          "status": "OPEN",
+          "original": {
+            "path": "tests/unit/program/test_xr_program_source_build.c",
+            "lines": [
+              1198,
+              1202
+            ]
+          },
+          "original_assertion_sites": 3,
+          "target_consumer": "NOT_IMPLEMENTED_PENDING_ROOT_CONTRACT",
+          "gap": "Root must map obsolete fields/IDs/counts to the current typed representation while preserving the authority and ownership invariant; no compatibility alias or invented empty field proves equivalence."
+        }
+      ]
+    },
+    {
+      "legacy": {
+        "name": "source_owner_retained_roots_share_one_detached_program_and_instance",
+        "legacy_path": "tests/unit/program/test_xr_program_source_build.c",
+        "legacy_line": 1329,
+        "body_lf_sha256": "3d2da25fb36e9dd4244797195f8212170d7ab1551793767275e2adc2586a26e4",
+        "assertion_sites": 21,
+        "loop_sites": 3,
+        "status": "OPEN",
+        "replacement_gates": [],
+        "note": "Function census preserves its whole body; sites do not count executed loop iterations.",
+        "original_fixture": {
+          "id": "retained_roots",
+          "expected_exit": 0,
+          "labels": [
+            "module-graph",
+            "retained-roots",
+            "instance"
+          ],
+          "backends": {
+            "vm": "execute",
+            "aot": "execute"
+          }
+        },
+        "static_input_literals": {
+          "library": {
+            "bytes": 131,
+            "sha256": "038ed5e43ec108aaddba41f2bbda7d43611d37196f63d65e00a4c8737b0fe7a8"
+          },
+          "source": {
+            "bytes": 136,
+            "sha256": "0611f841fce7c1d61e064847993a33f23232c711e89f42847f490c7879a15c33"
+          }
+        }
+      },
+      "original_inputs": {
+        "library": {
+          "bytes": 131,
+          "sha256": "038ed5e43ec108aaddba41f2bbda7d43611d37196f63d65e00a4c8737b0fe7a8",
+          "text": "var counter: i64 = 40\nexport fn bump() -> i64 { counter = counter + 1; return counter }\nexport fn read() -> i64 { return counter }\n",
+          "origin": "Whole original C literal; independently decoded; no adapter or mutation."
+        },
+        "source": {
+          "bytes": 136,
+          "sha256": "0611f841fce7c1d61e064847993a33f23232c711e89f42847f490c7879a15c33",
+          "text": "import \"./library\"\nfn answer() -> i64 { return 0 }\nfn testCase() -> i64 { return library.bump() }\nfn unselected() -> i64 { return 999 }\n",
+          "origin": "Whole original C literal; independently decoded; no adapter or mutation."
+        }
+      },
+      "responsibility_mapping": [
+        {
+          "responsibility": "Prepare exact root/library sources and an actual authority-derived library module identity.",
+          "status": "OPEN",
+          "original": {
+            "path": "tests/unit/program/test_xr_program_source_build.c",
+            "lines": [
+              1338,
+              1347
+            ]
+          },
+          "original_assertion_sites": 3,
+          "target_consumer": "NOT_IMPLEMENTED_PENDING_ROOT_CONTRACT",
+          "gap": "Root must freeze the target selected-root/manifest owner and authority contract. This static map executes no Source or runtime path."
+        },
+        {
+          "responsibility": "Select testCase and library.read by module/name/source fingerprint; retain two distinct IDs apart from the canonical answer and preserve count6.",
+          "status": "OPEN",
+          "original": {
+            "path": "tests/unit/program/test_xr_program_source_build.c",
+            "lines": [
+              1348,
+              1363
+            ]
+          },
+          "original_assertion_sites": 6,
+          "target_consumer": "NOT_IMPLEMENTED_PENDING_ROOT_CONTRACT",
+          "gap": "Root must map obsolete fields/IDs/counts to the current typed representation while preserving the authority and ownership invariant; no compatibility alias or invented empty field proves equivalence."
+        },
+        {
+          "responsibility": "Reversing caller root order preserves artifact bytes/Program ID/canonical entry and only reverses the returned root-ID correspondence.",
+          "status": "OPEN",
+          "original": {
+            "path": "tests/unit/program/test_xr_program_source_build.c",
+            "lines": [
+              1364,
+              1370
+            ]
+          },
+          "original_assertion_sites": 2,
+          "target_consumer": "NOT_IMPLEMENTED_PENDING_ROOT_CONTRACT",
+          "gap": "Root must freeze the target selected-root/manifest owner and authority contract. This static map executes no Source or runtime path."
+        },
+        {
+          "responsibility": "Destroy fixture/session, module identity/path and caller root array before detached VM/native use.",
+          "status": "OPEN",
+          "original": {
+            "path": "tests/unit/program/test_xr_program_source_build.c",
+            "lines": [
+              1371,
+              1374
+            ]
+          },
+          "original_assertion_sites": 0,
+          "target_consumer": "NOT_IMPLEMENTED_PENDING_ROOT_CONTRACT",
+          "gap": "Current physical zero, complete compiler/runtime FI, resource axes and applicable safety must be observed on the future qualified producer; old destructor field resets require opaque-owner representation review."
+        },
+        {
+          "responsibility": "Build real VM code from the detached immutable Program.",
+          "status": "OPEN",
+          "original": {
+            "path": "tests/unit/program/test_xr_program_source_build.c",
+            "lines": [
+              1376,
+              1379
+            ]
+          },
+          "original_assertion_sites": 1,
+          "target_consumer": "NOT_IMPLEMENTED_PENDING_ROOT_CONTRACT",
+          "gap": "Root must freeze the target selected-root/manifest owner and authority contract. This static map executes no Source or runtime path."
+        },
+        {
+          "responsibility": "Create two independent Instances sharing immutable Program code.",
+          "status": "OPEN",
+          "original": {
+            "path": "tests/unit/program/test_xr_program_source_build.c",
+            "lines": [
+              1381,
+              1388
+            ]
+          },
+          "original_assertion_sites": 1,
+          "target_consumer": "NOT_IMPLEMENTED_PENDING_ROOT_CONTRACT",
+          "gap": "Root must freeze the target selected-root/manifest owner and authority contract. This static map executes no Source or runtime path."
+        },
+        {
+          "responsibility": "In each Instance, testCase bumps and read observes exactly i6441,42,43; dispose all owned results.",
+          "status": "OPEN",
+          "original": {
+            "path": "tests/unit/program/test_xr_program_source_build.c",
+            "lines": [
+              1389,
+              1396
+            ]
+          },
+          "original_assertion_sites": 3,
+          "target_consumer": "NOT_IMPLEMENTED_PENDING_ROOT_CONTRACT",
+          "gap": "Original counter state is isolated per Instance and survives between the selected root calls."
+        },
+        {
+          "responsibility": "Drain/retire/free each Instance, free code, and run the actual original native wrapper against the same selected root pair.",
+          "status": "OPEN",
+          "original": {
+            "path": "tests/unit/program/test_xr_program_source_build.c",
+            "lines": [
+              1399,
+              1406
+            ]
+          },
+          "original_assertion_sites": 3,
+          "target_consumer": "NOT_IMPLEMENTED_PENDING_ROOT_CONTRACT",
+          "gap": "Current physical zero, complete compiler/runtime FI, resource axes and applicable safety must be observed on the future qualified producer; old destructor field resets require opaque-owner representation review."
+        },
+        {
+          "responsibility": "Release both products and profile, clearing retained ID owner/count.",
+          "status": "OPEN",
+          "original": {
+            "path": "tests/unit/program/test_xr_program_source_build.c",
+            "lines": [
+              1407,
+              1411
+            ]
+          },
+          "original_assertion_sites": 2,
+          "target_consumer": "NOT_IMPLEMENTED_PENDING_ROOT_CONTRACT",
+          "gap": "Root must map obsolete fields/IDs/counts to the current typed representation while preserving the authority and ownership invariant; no compatibility alias or invented empty field proves equivalence."
+        }
+      ]
+    },
+    {
+      "legacy": {
+        "name": "source_owner_rejects_invalid_retained_root_identity_without_partial_product",
+        "legacy_path": "tests/unit/program/test_xr_program_source_build.c",
+        "legacy_line": 1414,
+        "body_lf_sha256": "42c1a1a28806b0032f03ba23b0cba593140395c947276faae649f80fd1f8efce",
+        "assertion_sites": 7,
+        "loop_sites": 1,
+        "status": "OPEN",
+        "replacement_gates": [],
+        "note": "Function census preserves its whole body; sites do not count executed loop iterations.",
+        "original_fixture": null,
+        "static_input_literals": {
+          "source": {
+            "bytes": 62,
+            "sha256": "8c42ed32e6b024c89decc1f16ddbae11a6d84a5151f5fc946808629b45dd44e7"
+          }
+        }
+      },
+      "original_inputs": {
+        "source": {
+          "bytes": 62,
+          "sha256": "8c42ed32e6b024c89decc1f16ddbae11a6d84a5151f5fc946808629b45dd44e7",
+          "text": "fn answer() -> i64 { return 0 }\nfn kept() -> i64 { return 1 }\n",
+          "origin": "Whole original C literal; independently decoded; no adapter or mutation."
+        }
+      },
+      "responsibility_mapping": [
+        {
+          "responsibility": "Prepare exact Source, duplicate-capable retained root array and single selected kept root.",
+          "status": "OPEN",
+          "original": {
+            "path": "tests/unit/program/test_xr_program_source_build.c",
+            "lines": [
+              1418,
+              1425
+            ]
+          },
+          "original_assertion_sites": 1,
+          "target_consumer": "NOT_IMPLEMENTED_PENDING_ROOT_CONTRACT",
+          "gap": "Root must freeze the target selected-root/manifest owner and authority contract. This static map executes no Source or runtime path."
+        },
+        {
+          "responsibility": "Reject all nine exact fingerprint/name/duplicate/canonical/reserved/list/count/schema/module mutations.",
+          "status": "OPEN",
+          "original": {
+            "path": "tests/unit/program/test_xr_program_source_build.c",
+            "lines": [
+              1427,
+              1464
+            ]
+          },
+          "original_assertion_sites": 2,
+          "target_consumer": "NOT_IMPLEMENTED_PENDING_ROOT_CONTRACT",
+          "gap": "Root owns target rejection mapping. This old retained-root test does not assert a nonempty diagnostic; preserve its exact scope separately from the manifest negative."
+        },
+        {
+          "responsibility": "Publish no Program/artifact/retained ID owner and count0; free temporary wrong identity and fixture each time.",
+          "status": "OPEN",
+          "original": {
+            "path": "tests/unit/program/test_xr_program_source_build.c",
+            "lines": [
+              1465,
+              1470
+            ]
+          },
+          "original_assertion_sites": 4,
+          "target_consumer": "NOT_IMPLEMENTED_PENDING_ROOT_CONTRACT",
+          "gap": "Current physical zero, complete compiler/runtime FI, resource axes and applicable safety must be observed on the future qualified producer; old destructor field resets require opaque-owner representation review."
+        }
+      ]
+    }
+  ],
+  "original_assertion_sites": 73,
+  "original_private_helpers": [
+    {
+      "path": "tests/unit/program/test_xr_program_source_build.c",
+      "function": "source_build_fixture_init",
+      "line": 894,
+      "end_line": 968,
+      "body_lf_sha256": "964c190cb52940aa039b9459e6a5aa0416430eadac032979ed210358216892eb",
+      "assertion_sites": 0,
+      "classification": "Actually called NON_TEST helper; not an additional TEST/census denominator or qualification."
+    },
+    {
+      "path": "tests/unit/program/test_xr_program_source_build.c",
+      "function": "source_build_fixture_free",
+      "line": 873,
+      "end_line": 892,
+      "body_lf_sha256": "54f2ca59ddb46fda789abf0411160790bcb950903858a308b984b50e6f8c1889",
+      "assertion_sites": 0,
+      "classification": "Actually called NON_TEST helper; not an additional TEST/census denominator or qualification."
+    },
+    {
+      "path": "tests/unit/program/test_xr_program_source_build.c",
+      "function": "assert_source_build_ok",
+      "line": 996,
+      "end_line": 1010,
+      "body_lf_sha256": "a5d0aee0a406f887ea79355380455511ee0762cfa39915fb657cfe8a4088fd94",
+      "assertion_sites": 1,
+      "classification": "Actually called NON_TEST helper; not an additional TEST/census denominator or qualification."
+    },
+    {
+      "path": "tests/unit/program/test_xr_program_source_build.c",
+      "function": "assert_products_equal",
+      "line": 982,
+      "end_line": 994,
+      "body_lf_sha256": "ec9ae13d2d71259635fe95f5bed3da7bddec1aaa43b10a247a9930a5c6cd925b",
+      "assertion_sites": 8,
+      "classification": "Actually called NON_TEST helper; not an additional TEST/census denominator or qualification."
+    },
+    {
+      "path": "tests/unit/program/test_xr_program_source_build.c",
+      "function": "assert_retained_root_native",
+      "line": 1012,
+      "end_line": 1058,
+      "body_lf_sha256": "ea190611d147a317ba6e65b3c49982db783f9f10f51c9e2727d1e57f88096ba6",
+      "assertion_sites": 7,
+      "classification": "Actually called NON_TEST helper; not an additional TEST/census denominator or qualification."
+    },
+    {
+      "path": "tests/unit/program/test_xr_program_source_build.c",
+      "function": "source_fixture_output_path",
+      "line": 63,
+      "end_line": 65,
+      "body_lf_sha256": "2c5d63f47f4b0e77e5abec0b6831c67cec2056ad89196c34fbd8e0cbd6ec1d9d",
+      "assertion_sites": 0,
+      "classification": "Actually called NON_TEST helper; not an additional TEST/census denominator or qualification."
+    },
+    {
+      "path": "tests/unit/plan/target_profile_test_fixture.c",
+      "function": "xr_test_target_profile_build",
+      "line": 163,
+      "end_line": 175,
+      "body_lf_sha256": "ff7f447b998483c18b76ebf7ef61f348751a9ea93fa1c0a0604c152711a5a318",
+      "assertion_sites": 0,
+      "classification": "Actually called NON_TEST helper; not an additional TEST/census denominator or qualification."
+    }
+  ],
+  "independent_goldens": {
+    "required_positive_Source_status": 0,
+    "manifest_exports": [
+      {
+        "xray": "read",
+        "symbol": "read_counter",
+        "header": true,
+        "visibility": null,
+        "old_abi": null
+      },
+      {
+        "xray": "bump",
+        "symbol": "bump_counter",
+        "header": false,
+        "visibility": "hidden",
+        "old_abi": "hosted-vm-v1"
+      },
+      {
+        "xray": "answer",
+        "symbol": "answer",
+        "header": false,
+        "visibility": null,
+        "old_abi": "native"
+      }
+    ],
+    "manifest_export_count": 3,
+    "manifest_root_test_count": 1,
+    "manifest_explicit_retained_count_initial": 0,
+    "manifest_explicit_retained_ids_initial": "NULL",
+    "manifest_function_count_original": 8,
+    "manifest_test": "checkState observes counter40 before bump",
+    "retained_requested_order": [
+      "root.testCase",
+      "library.read"
+    ],
+    "retained_function_count": 2,
+    "retained_program_function_count_original": 6,
+    "retained_ids_distinct": true,
+    "canonical_answer_is_not_retained_root": true,
+    "unselected_source_result": 999,
+    "request_permutation": "Artifact bytes, Program ID and canonical entry unchanged; retained result correspondence reverses.",
+    "instances_each_original_positive": 2,
+    "private_library_counter_initial": 40,
+    "fixed_bump_then_read_per_Instance": [
+      41,
+      42,
+      43
+    ],
+    "original_retained_tests_stdout_golden": "NONE_IN_ORIGINAL_TEST",
+    "original_native_success_exit": 0
+  },
+  "manifest_invalid_variants": [
+    {
+      "original_case": 0,
+      "original_mutation_C": "plan->exports[0].xray_name = \"absent\"; break;",
+      "old_expected": "XR_PROGRAM_SOURCE_BUILD_ENTRY_REJECTED",
+      "target_expected": "ROOT_CONTRACT_PENDING",
+      "status": "OPEN"
+    },
+    {
+      "original_case": 1,
+      "original_mutation_C": "plan->exports[0].xray_name = \"generic\"; break;",
+      "old_expected": "XR_PROGRAM_SOURCE_BUILD_ENTRY_REJECTED",
+      "target_expected": "ROOT_CONTRACT_PENDING",
+      "status": "OPEN"
+    },
+    {
+      "original_case": 2,
+      "original_mutation_C": "plan->valid = false; break;",
+      "old_expected": "XR_PROGRAM_SOURCE_BUILD_ENTRY_REJECTED",
+      "target_expected": "ROOT_CONTRACT_PENDING",
+      "status": "OPEN"
+    },
+    {
+      "original_case": 3,
+      "original_mutation_C": "plan->exports[0].symbol = NULL; break;",
+      "old_expected": "XR_PROGRAM_SOURCE_BUILD_ENTRY_REJECTED",
+      "target_expected": "ROOT_CONTRACT_PENDING",
+      "status": "OPEN"
+    },
+    {
+      "original_case": 4,
+      "original_mutation_C": "fixture.input.discover_exports = 2u;\n                expected = XR_PROGRAM_SOURCE_BUILD_INVALID_INPUT;\n                break;",
+      "old_expected": "XR_PROGRAM_SOURCE_BUILD_INVALID_INPUT",
+      "target_expected": "ROOT_CONTRACT_PENDING",
+      "status": "OPEN"
+    },
+    {
+      "original_case": 5,
+      "original_mutation_C": "plan->export_count = XR_PROGRAM_LIMIT_FUNCTIONS + 1u;\n                expected = XR_PROGRAM_SOURCE_BUILD_RESOURCE_LIMIT;\n                break;",
+      "old_expected": "XR_PROGRAM_SOURCE_BUILD_RESOURCE_LIMIT",
+      "target_expected": "ROOT_CONTRACT_PENDING",
+      "status": "OPEN"
+    }
+  ],
+  "retained_identity_invalid_variants": [
+    {
+      "original_case": 0,
+      "original_mutation_C": "roots[0].source_content_fingerprint.bytes[0] ^= 1u;\n                break;",
+      "old_expected": "XR_PROGRAM_SOURCE_BUILD_ENTRY_REJECTED",
+      "target_expected": "ROOT_CONTRACT_PENDING",
+      "status": "OPEN"
+    },
+    {
+      "original_case": 1,
+      "original_mutation_C": "roots[0].function_name = \"absent\";\n                break;",
+      "old_expected": "XR_PROGRAM_SOURCE_BUILD_ENTRY_REJECTED",
+      "target_expected": "ROOT_CONTRACT_PENDING",
+      "status": "OPEN"
+    },
+    {
+      "original_case": 2,
+      "original_mutation_C": "fixture.input.retained_entry_count = 2u;\n                break;",
+      "old_expected": "XR_PROGRAM_SOURCE_BUILD_ENTRY_REJECTED",
+      "target_expected": "ROOT_CONTRACT_PENDING",
+      "status": "OPEN"
+    },
+    {
+      "original_case": 3,
+      "original_mutation_C": "roots[0].function_name = \"answer\";\n                break;",
+      "old_expected": "XR_PROGRAM_SOURCE_BUILD_ENTRY_REJECTED",
+      "target_expected": "ROOT_CONTRACT_PENDING",
+      "status": "OPEN"
+    },
+    {
+      "original_case": 4,
+      "original_mutation_C": "roots[0].reserved8[0] = 1u;\n                expected = XR_PROGRAM_SOURCE_BUILD_INVALID_INPUT;\n                break;",
+      "old_expected": "XR_PROGRAM_SOURCE_BUILD_INVALID_INPUT",
+      "target_expected": "ROOT_CONTRACT_PENDING",
+      "status": "OPEN"
+    },
+    {
+      "original_case": 5,
+      "original_mutation_C": "fixture.input.retained_entries = NULL;\n                expected = XR_PROGRAM_SOURCE_BUILD_INVALID_INPUT;\n                break;",
+      "old_expected": "XR_PROGRAM_SOURCE_BUILD_INVALID_INPUT",
+      "target_expected": "ROOT_CONTRACT_PENDING",
+      "status": "OPEN"
+    },
+    {
+      "original_case": 6,
+      "original_mutation_C": "fixture.input.retained_entry_count = XR_PROGRAM_LIMIT_FUNCTIONS;\n                expected = XR_PROGRAM_SOURCE_BUILD_INVALID_INPUT;\n                break;",
+      "old_expected": "XR_PROGRAM_SOURCE_BUILD_INVALID_INPUT",
+      "target_expected": "ROOT_CONTRACT_PENDING",
+      "status": "OPEN"
+    },
+    {
+      "original_case": 7,
+      "original_mutation_C": "--fixture.input.schema_version;\n                expected = XR_PROGRAM_SOURCE_BUILD_INVALID_INPUT;\n                break;",
+      "old_expected": "XR_PROGRAM_SOURCE_BUILD_INVALID_INPUT",
+      "target_expected": "ROOT_CONTRACT_PENDING",
+      "status": "OPEN"
+    },
+    {
+      "original_case": 8,
+      "original_mutation_C": "ASSERT_TRUE((xr_module_identity_from_logical(&fixture.authority, \"absent.xr\",\n                                                            &wrong_identity) == XR_MODULE_OK));\n                roots[0].module_identity = wrong_identity;\n                break;",
+      "old_expected": "XR_PROGRAM_SOURCE_BUILD_ENTRY_REJECTED",
+      "target_expected": "ROOT_CONTRACT_PENDING",
+      "status": "OPEN"
+    }
+  ],
+  "native_wrapper_responsibilities": {
+    "helper": "assert_retained_root_native",
+    "helper_assertion_sites": 7,
+    "old_path": "Verified BackendIR then old emit C; output wrapper renames old main and calls actual emitted functions.",
+    "module_contexts": 2,
+    "independent_fixed_sequence_each_context": [
+      41,
+      42,
+      43
+    ],
+    "initializer": "Call actual module initialization before every bump/read pair; repeated initialization must preserve state.",
+    "failure": "exit1 on initialization failure, exit2 on wrong outcome/value; actual success exit0",
+    "cleanup": "Clear contexts1 then0; free actual generated C and BackendIR owners.",
+    "status": "OPEN_NEW_NATIVE_AND_OLD_PRIVATE_EMISSION_REVIEW"
+  },
+  "formal_interface_inspection": {
+    "headers": [
+      {
+        "commit": "25f4016d6f089169757a90ae11ba537002374711",
+        "path": "src/xir/xxir_source.h",
+        "lf_sha256": "6eb7a0b68cf06de10fb5520c67f1e856f8f87ee3a3732ccb142915761e8dd38e"
+      },
+      {
+        "commit": "25f4016d6f089169757a90ae11ba537002374711",
+        "path": "src/program/xr_xir_source_product.h",
+        "lf_sha256": "b6b4f933e36095095d5258cb2e55ba5d06e44c676a969f9c6b7d7c81f31d4d5b"
+      },
+      {
+        "commit": "25f4016d6f089169757a90ae11ba537002374711",
+        "path": "src/toolchain/xcompiler_session.h",
+        "lf_sha256": "a5dfb79c978a7ab9c525484c3a855519926b75cf9b3a7fdd624fbed2a53d9ea8"
+      },
+      {
+        "commit": "bd221177673f41375e74336f27889159b57863ed",
+        "path": "src/xir/xxir_source.h",
+        "lf_sha256": "6eb7a0b68cf06de10fb5520c67f1e856f8f87ee3a3732ccb142915761e8dd38e"
+      },
+      {
+        "commit": "bd221177673f41375e74336f27889159b57863ed",
+        "path": "src/program/xr_xir_source_product.h",
+        "lf_sha256": "b6b4f933e36095095d5258cb2e55ba5d06e44c676a969f9c6b7d7c81f31d4d5b"
+      },
+      {
+        "commit": "bd221177673f41375e74336f27889159b57863ed",
+        "path": "src/toolchain/xcompiler_session.h",
+        "lf_sha256": "a5dfb79c978a7ab9c525484c3a855519926b75cf9b3a7fdd624fbed2a53d9ea8"
+      }
+    ],
+    "observation": "Both inspected SourceRequest layouts have session/path/authority/context/stdlib/lockfile/linkage/libraries only; SourceProductRequest wraps that request and target. They expose no explicit retained-entry or native-manifest selector, and the public session header has no old native-plan setter. This does not prove every other product/SDK interface lacks export capability.",
+    "private_Root_sources_used": false,
+    "product_execution": "NOT_RUN",
+    "scope_limit": "The inspected request/session headers alone do not prove absence across all product/SDK interfaces."
+  },
+  "Root_contract_required": [
+    "Target API/artifact owner for explicit selected roots and external native export metadata, including source-free/typed Library projection.",
+    "Whether obsolete old schema/plan flags/count fields are replaced by a current rejection or explicitly retired as representations while preserving fail-closed authority/resource invariants.",
+    "New canonical native ABI names and metadata; no old compatibility aliases or fake export adapters as a substitute for manifest selection."
+  ],
+  "negative_boundary": "Preserve all15 original mutations and no partial publication. Manifest negatives explicitly assert nonempty diagnostics; retained identity negatives do not. Exact current categories and representation retirements remain Root decisions. Unrelated Source refusals and arbitrary error codes do not qualify authority.",
+  "shared_dependency": {
+    "path": "tests/unit/aot/xr_backend_emission_owner.h",
+    "consumer_count": 7,
+    "status": "PRESERVE_SHARED_OWNER",
+    "reason": "The native helper actually uses backend_emission_resources and other actual consumers remain; this map authorizes no deletion."
+  },
+  "existing_related_gap": "source_allocation_scenario0_native_obligations.json records the separate external native manifest boundary. This map adds original authority TEST responsibility, not a second product validator.",
+  "handoff": {
+    "report": "build-consumer-evidence/consumer-session-20261009-r1/retained-root-interface-request.json",
+    "raw_sha256": "4e7cf346a18feadcce2d82b33989c79544f79c46ff7010cb5608cedacef1fe94",
+    "Root_thread": "01a11f74-a297-7b11-8441-835bde6a3d5f",
+    "target_design_owner": "Root",
+    "formal_acceptance": "PENDING"
+  },
+  "pending": [
+    "Target selected-root/export owner contract",
+    "Root qualified formal producer adoption",
+    "Exact original positive Source admission",
+    "Original authority negatives under current categories",
+    "Source-free packet and typed Library authority projection",
+    "Actual VM/native and applicable mixed execution",
+    "Detached owner lifetime and state isolation",
+    "Complete compiler/runtime FI and resource axes",
+    "Cancellation/cleanup and applicable full safety",
+    "Last-consumer and shared-dependency deletion review",
+    "Root formal integration/acceptance"
+  ],
+  "full_FI": "NOT_RUN",
+  "axes": "NOT_RUN",
+  "full_safety": "NOT_RUN",
+  "SourceDelete": "NOT_RUN",
+  "Main": "NOT_RUN",
+  "boundaries": [
+    "All four responsibility rows and every mapped group remain OPEN; reference counts are not completed counts.",
+    "All original source/library/TOML literals are preserved; no adapter, shim, fake builtin, or old ABI alias is introduced.",
+    "No product invocation, runtime/physical release observation or source acceptance/rejection is claimed by this static map.",
+    "Original function counts6/8 and post-free public-field reset checks require explicit current representation review.",
+    "A fresh product qualification must follow the Root contract and producer; this map cannot retire or delete a consumer."
+  ]
+}
