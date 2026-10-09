@@ -1,0 +1,241 @@
+{
+  "schema": 1,
+  "family": "original_test_discovery",
+  "status": "OPEN",
+  "retired": 0,
+  "replacement_gates": [],
+  "producer": "25f4016d6f089169757a90ae11ba537002374711",
+  "identity": "Checked25/semantic67/Value22/Call28/Program29",
+  "result": "FAIL_REQUIRED_POSITIVE_SOURCE_REJECTED",
+  "original_test_VM_execution": "NOT_REACHED_SOURCE_REFUSED",
+  "legacy": {
+    "name": "source_owner_test_discovery_detaches_metadata_and_exact_ids",
+    "legacy_path": "tests/unit/program/test_xr_program_source_build.c",
+    "legacy_line": 1256,
+    "body_lf_sha256": "52b6c0b271121d46ff5271a5363e1ab4017624a08cd84fea568958d9bd9ad487",
+    "assertion_sites": 19,
+    "loop_sites": 3,
+    "status": "OPEN",
+    "replacement_gates": [],
+    "note": "Function census preserves its whole body; sites do not count executed loop iterations.",
+    "static_input_literals": {
+      "source": {
+        "bytes": 312,
+        "sha256": "bc2100c5cc39873b741f71c4e98d46595ced0b9f1add0df75f3dacddd5b3a889"
+      },
+      "library": {
+        "bytes": 175,
+        "sha256": "a6363e582a3a16660d0355c6657c7adb3724d6f2aeaea22fdafd968fea4562d8"
+      }
+    }
+  },
+  "original_body_copy": {
+    "path": "tests/unit/xir/product_consumers/entry_roles/original-bodies/source_owner_test_discovery_detaches_metadata_and_exact_ids.txt",
+    "body_lf_sha256": "52b6c0b271121d46ff5271a5363e1ab4017624a08cd84fea568958d9bd9ad487"
+  },
+  "original_private_helpers": [
+    {
+      "path": "tests/unit/program/test_xr_program_source_build.c",
+      "function": "source_build_fixture_init",
+      "line": 894,
+      "end_line": 968,
+      "body_lf_sha256": "964c190cb52940aa039b9459e6a5aa0416430eadac032979ed210358216892eb",
+      "classification": "Actually called NON_TEST helper; shared profile helper remains outside edit scope. Not a census TEST or qualification."
+    },
+    {
+      "path": "tests/unit/program/test_xr_program_source_build.c",
+      "function": "assert_source_build_ok",
+      "line": 996,
+      "end_line": 1010,
+      "body_lf_sha256": "a5d0aee0a406f887ea79355380455511ee0762cfa39915fb657cfe8a4088fd94",
+      "classification": "Actually called NON_TEST helper; shared profile helper remains outside edit scope. Not a census TEST or qualification."
+    },
+    {
+      "path": "tests/unit/program/test_xr_program_source_build.c",
+      "function": "source_build_fixture_free",
+      "line": 873,
+      "end_line": 892,
+      "body_lf_sha256": "54f2ca59ddb46fda789abf0411160790bcb950903858a308b984b50e6f8c1889",
+      "classification": "Actually called NON_TEST helper; shared profile helper remains outside edit scope. Not a census TEST or qualification."
+    },
+    {
+      "path": "tests/unit/plan/target_profile_test_fixture.c",
+      "function": "xr_test_target_profile_build",
+      "line": 163,
+      "end_line": 175,
+      "body_lf_sha256": "ff7f447b998483c18b76ebf7ef61f348751a9ea93fa1c0a0604c152711a5a318",
+      "classification": "Actually called NON_TEST helper; shared profile helper remains outside edit scope. Not a census TEST or qualification."
+    }
+  ],
+  "original_source_files": {
+    "root.xr": {
+      "path": "tests/unit/xir/product_consumers/entry_roles/fixtures/original_test_discovery/root.xr",
+      "bytes": 312,
+      "sha256": "bc2100c5cc39873b741f71c4e98d46595ced0b9f1add0df75f3dacddd5b3a889",
+      "original_literal": "source",
+      "adapter_bytes": 0
+    },
+    "library.xr": {
+      "path": "tests/unit/xir/product_consumers/entry_roles/fixtures/original_test_discovery/library.xr",
+      "bytes": 175,
+      "sha256": "a6363e582a3a16660d0355c6657c7adb3724d6f2aeaea22fdafd968fea4562d8",
+      "original_literal": "library",
+      "adapter_bytes": 0
+    }
+  },
+  "original_module_graph": {
+    "modules_separate": true,
+    "relative_import": "./library",
+    "private_library_counter_initial": 40,
+    "exported_state": false,
+    "library_test": "dependencyTest assert(false) must not enter root discovered set"
+  },
+  "independent_goldens": {
+    "required_Source_status": 0,
+    "root_test_names": [
+      "first",
+      "second",
+      "skipped",
+      "beforeEach",
+      "afterEach",
+      "beforeAll",
+      "afterAll"
+    ],
+    "root_test_roles_public": [
+      1,
+      1,
+      2,
+      5,
+      6,
+      3,
+      4
+    ],
+    "root_test_timeouts_seconds": [
+      2,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
+    "root_test_count": 7,
+    "distinct_function_ids": 7,
+    "retained_function_count_original": 0,
+    "retained_function_ids_original": "NULL",
+    "original_executed_test_indexes": [
+      0,
+      1
+    ],
+    "original_instances": 1,
+    "original_test_result": "VOID",
+    "current_test_result": "UNIT_OWNED_VALUE",
+    "library_counter_initial": 40,
+    "first_bump": 41,
+    "second_read": 41,
+    "target_additional_instances": 2,
+    "target_additional_hook_test_sequence": [
+      5,
+      3,
+      0,
+      4,
+      3,
+      1,
+      4,
+      6
+    ],
+    "target_authority_denial": [
+      "dependency test",
+      "skip",
+      "initializer via start_test",
+      "plain function via start_test",
+      "test roles via general start"
+    ],
+    "original_post_product_free_tests": "NULL",
+    "original_post_product_free_test_count": 0
+  },
+  "obligations": [
+    {
+      "responsibility": "Full exact Source root/library succeeds and fixture/session can die before querying discovered metadata.",
+      "status": "FAIL_CURRENT_SOURCE_STAGE1",
+      "current_consumer": "source_product_entry_roles_probe.c builds full original graph, frees session before inspecting owned Checked/tests.",
+      "gap": "The fixed producer rejects library var counter40 before product publication. Source should succeed; no WILL_FAIL or historical-diagnostic acceptance may make the gate pass."
+    },
+    {
+      "responsibility": "No explicit retained roots, seven root-only exact roles, names, timeout2 and distinct in-range IDs after source owner death.",
+      "status": "OPEN_NOT_REACHED",
+      "current_consumer": "inspect_roles verifies all seven role/name/timeout identities, root ownership, Unit results and excluded imported dependency test.",
+      "gap": "Current public Source metadata exposes entry/tests but no old retained_function_ids list. Root owns the representation mapping for original retained_count0/NULL; do not invent an empty list as proof."
+    },
+    {
+      "responsibility": "Execute first then second with the actual private library counter persisting at41; return owned Unit and release it.",
+      "status": "OPEN_NOT_REACHED",
+      "current_consumer": "test_entries executes both original tests inside each of two actual Instances, plus declared hooks and authority checks.",
+      "gap": "Root must admit the frozen Cell/requires_root library-state semantics. The existing const Atomic(40) library control is a changed source and cannot replace the original var counter40 qualification."
+    },
+    {
+      "responsibility": "VM code, Instance, SourceProduct, test-name storage and profile release physically, and old product fields reset after destruction.",
+      "status": "OPEN_PARTIAL_COMPILER_RELEASE_ONLY",
+      "current_consumer": "release verifies compiler physical0/0 and observer table0 after Source refusal. Successful runtime path drops caller Program before two Instances execute and checks runtime physical0/0.",
+      "gap": "Opaque current SourceProduct cannot be queried after free; old public tests=NULL/count0 reset fields need explicit Root representation review. No original runtime allocation, lifecycle, complete FI or safety is reached by the failure."
+    }
+  ],
+  "registered_required_positive_gate": "test_source_product_entry_roles_original_test_discovery",
+  "actual_first_red": {
+    "stage": 1,
+    "source_status": 1,
+    "module": 1,
+    "line": 1,
+    "column": 5,
+    "message": "library mutable or exported state is not admitted",
+    "partial_product": "NONE",
+    "compiler_physical_after_release": "0/0",
+    "runtime_instances": 0,
+    "runtime_attempts": 0,
+    "receipts": [
+      {
+        "configuration": "msvc",
+        "receipt": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-original-test-discovery-execution-r1\\msvc-original_test_discovery.json",
+        "pid": 27228,
+        "returncode": 1,
+        "entered": true,
+        "termination_observed": true,
+        "raw_stdout_sha256": "d387770b7e76e5571349abc88b4582b96af536f3ab90c3dcb8a2cecba0c7bf09",
+        "raw_stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "input_count": 2809,
+        "registered_wrapper_returncode": 1
+      },
+      {
+        "configuration": "asan",
+        "receipt": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-original-test-discovery-execution-r1\\asan-original_test_discovery.json",
+        "pid": 53428,
+        "returncode": 1,
+        "entered": true,
+        "termination_observed": true,
+        "raw_stdout_sha256": "d387770b7e76e5571349abc88b4582b96af536f3ab90c3dcb8a2cecba0c7bf09",
+        "raw_stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "input_count": 2809,
+        "registered_wrapper_returncode": 1
+      }
+    ],
+    "evidence_directory": "build-consumer-evidence/current67-original-test-discovery-execution-r1",
+    "results_raw_sha256": "e026d5062a0311fc8515e1446aa3e7b908eb8e3fb6423f3157e1d75141dd121a"
+  },
+  "evidence_boundary": "This mapping was annotated after fresh probe execution. The immutable receipt/input snapshots bind the actual three-file consumer candidate and unchanged fixtures; the new map was not a product input or executed during those receipts.",
+  "pending": [
+    "Root stable producer adoption",
+    "original Source and test VM success",
+    "native and mixed execution",
+    "complete compiler/runtime FI census",
+    "resource axes",
+    "cancel/cleanup",
+    "full lifecycle and applicable safety",
+    "last-consumer deletion review",
+    "Root formal acceptance"
+  ],
+  "full_FI": "NOT_RUN",
+  "axes": "NOT_RUN",
+  "full_safety": "NOT_RUN",
+  "SourceDelete": "NOT_RUN",
+  "Main": "NOT_RUN"
+}
