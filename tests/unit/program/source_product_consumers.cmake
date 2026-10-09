@@ -415,3 +415,5 @@ include("${CMAKE_CURRENT_LIST_DIR}/../xir/product_consumers/source_product_multi
 include("${CMAKE_CURRENT_LIST_DIR}/../xir/product_consumers/source_product_parameter_coroutine_owned.cmake")
 
 include("${CMAKE_CURRENT_LIST_DIR}/../xir/product_consumers/source_product_constructor_folding_owned.cmake")
+
+include("${CMAKE_CURRENT_LIST_DIR}/../xir/product_consumers/source_product_canonical_initializer_owned.cmake")

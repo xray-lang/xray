@@ -1,0 +1,83 @@
+{
+  "schema": 1,
+  "producer": "25f4016d6f089169757a90ae11ba537002374711",
+  "identity": "Checked25/semantic67/Value22/Call28/Program29",
+  "status": "OPEN",
+  "retired": 0,
+  "replacement_gates": [],
+  "full_FI": "NOT_RUN",
+  "axes": "NOT_RUN",
+  "cancel": "NOT_RUN",
+  "full_safety": "NOT_RUN",
+  "Main": "NOT_RUN",
+  "legacy": {
+    "legacy_path": "tests/unit/program/test_xr_program_source_build.c",
+    "name": "source_owner_module_initializer_is_a_canonical_entry",
+    "body_lf_sha256": "ee182be4c3f19f8f10711d989755a6ece783da73a9d47db35990f3eda2dae432",
+    "status": "OPEN",
+    "inventory_projection": {
+      "fixture": "tests/unit/xir/product_consumers/fixtures/canonical_initializer/root.xr",
+      "sha256": "d6b664f92f5dc7325fe6b8e8fea21b65914c78f5d6878c5d735e77f903e005ac",
+      "original_prefix_sha256": "d6b664f92f5dc7325fe6b8e8fea21b65914c78f5d6878c5d735e77f903e005ac",
+      "entry_adapter": null,
+      "entry": "canonical root entry",
+      "expected_i64": 0,
+      "scope": "Exact original structural-only module initializer source, without an adapter. Added independent execution proof is one typed i64 output 42/newline per Instance, including repeated canonical entry calls; the entry protocol returns zero.",
+      "output_golden": {
+        "bytes": 3,
+        "sha256": "084c799cd551dd1d8d5c5f9a5d593b2e931f5e36122ee5c793c1d08a19839cc0",
+        "hex": "34320a",
+        "groups_per_instance": 1
+      }
+    },
+    "mapping_references": []
+  },
+  "family": "canonical_initializer",
+  "original_source": {
+    "path": "tests/unit/xir/product_consumers/fixtures/canonical_initializer/root.xr",
+    "bytes": 64,
+    "sha256": "d6b664f92f5dc7325fe6b8e8fea21b65914c78f5d6878c5d735e77f903e005ac",
+    "adapter": null
+  },
+  "independent_entry_i64": 0,
+  "independent_output": {
+    "typed_i64": 42,
+    "groups_per_instance": 1,
+    "hex": "34320a",
+    "bytes": 3,
+    "sha256": "084c799cd551dd1d8d5c5f9a5d593b2e931f5e36122ee5c793c1d08a19839cc0"
+  },
+  "result": "NOT_RUN",
+  "required_shape": "One root module with no imports or slots; two distinct initializer and canonical entry functions, no host exports or test roles. The initializer constructs actual Box<I64> from CONST41, reads field0 from the actual struct SSA, adds actual CONST1 to that field SSA, and passes that exact sum to PRINT. Generic Box<T>.value uses parameter0, while actual nominal argument and field are I64. Initializer returns Unit; canonical entry returns actual CONST I64 zero.",
+  "pipeline": "Unchanged original structural Source without an execution adapter. SourceProduct/Closed Checked writer bytes remain exact after session/product/path/request/authority destruction; Lowered verify occurs after Checked destruction. Existing VM, generated native C and both mixed partitions exercise two Instances and repeated canonical entry calls, typed output42 and exact bytes42/newline. Six actual output refusal statuses require failed initialization stickiness, owned failure after Instance destruction and a fresh isolated Instance.",
+  "boundaries": [
+    "The original test asserts one old validated entry, one aggregate construct/project, one provider requirement and generated int main(void) text. Current public module lifecycle and ProgramSpec native execution do not prove equivalence of those old private representation counts or standalone main text; these remain OPEN.",
+    "Full compiler/runtime FI, resource axes, every cancellation prefix, arbitrary provider or generic-definition failures, two independent SourceProducts/determinism, actual source-file deletion, full safety, Main integration and retirement remain OPEN."
+  ],
+  "original_canonical_initializer_execution_20261009_facet": {
+    "status": "PASS_ORIGINAL_TYPED_INITIALIZER_OUTPUT_AND_DETACHED_OWNERS_WHOLE_LEGACY_OPEN",
+    "evidence": "build-consumer-evidence/current67-original-canonical-initializer-source-r1",
+    "original": "Exact original 64-byte source, SHA d6b664f92f5dc7325fe6b8e8fea21b65914c78f5d6878c5d735e77f903e005ac, remains unchanged without an adapter. The old test was structural only. Added independent output oracle is typed I64 42, one line group and exact bytes34320a per Instance; canonical entry protocol returns0.",
+    "shape": "One root module with no imports or slots; two distinct initializer and canonical entry functions, no host exports or test roles. The initializer constructs actual Box<I64> from CONST41, reads field0 from the actual struct SSA, adds actual CONST1 to that field SSA, and passes that exact sum to PRINT. Generic Box<T>.value uses parameter0, while actual nominal argument and field are I64. Initializer returns Unit; canonical entry returns actual CONST I64 zero.",
+    "actual": "Twenty registered runtime commands all return0: eight normal VM/native/twoMixed, eight existing output-status gates, two dedicated owned and two sequence controls. Normal family uses16 Instances, each initialization emits one typed42/newline and repeated canonical entry calls keep groups1/bytes3. Six output statuses per mode/configuration give48 rejection cases; FAILED is sticky without new runtime allocation/output, no result is published, copied owned failure status remains valid after Instance free, and48 fresh Instances initialize independently and do not reprint on repeated entry. Final compiler/runtime physical0/0; no coroutine resume or actual source deletion.",
+    "first_compile": "MSVC first build contains one new oracle C compile failure: nonexistent XrXirSourceModule.import_count. Its actual field is dependency_count. Preserved initial header and full raw compile log; fixed only that field reference before any registered runtime entry. ASAN first compile is after this correction. The same first MSVC build successfully compiled real generated C; final MSVC build compiled the owner and linked native. No Source/producer/API/expected result edits.",
+    "first_parse": "All eight output-status product processes returned0 with correct six statuses, sticky/isolated/physical0 summaries and empty stderr. The local runner incorrectly demanded absent compiler report text and initially marked them FAIL. Saved first-parser-run.py, first-parser-results-runtime.json and untouched receipts/streams/EXEs/input snapshots. Verified release(run) calls instance_compile_zero plus runtime physical assertions before the summary, then reclassified only the same raw evidence with exact status oracle13/6/5/7/8/7. No product rerun or additional PID.",
+    "owned": "Full Checked writer packet bytes compare exactly after session/product/root/file/request/authority destruction; actual initializer shape is checked before and after owner death. Checked is destroyed before Lowered verify/release. Dedicated owner stdout table0/compilerphysical0/0 and actual stderr compiler physical0/0.",
+    "inputs": "VM/owned2767, native2768, sequence control2766 and static9069 inputs per actual PID; before/after SHA/size/mtime exact. Three observer headers and actual wrappers/generated C explicitly guarded. Twenty product EXEs archived before entry. Only map/trace annotations follow runtime, with exact preimages retained.",
+    "build": "Four successful fresh C compilation events across four distinct final TUs: new owner and actual generated C in each configuration. One additional failed new owner compilation retained. C11/W4WX and actual Clang ASan/UBSan. Shared driver and four existing VM/native wrapper objects reused exactly; detachment object protected but not executed. Two build-time emitters are separate from registered runtime proof. All22 libraries and six producer TU archive bindings exact.",
+    "generated_payload_sha256": {
+      "msvc": "16d51e2190f2faa09689c666c9c22271d06539374def3e3fc0a30022c82f36d4",
+      "asan": "16d51e2190f2faa09689c666c9c22271d06539374def3e3fc0a30022c82f36d4"
+    },
+    "remaining": [
+      "The original test asserts one old validated entry, one aggregate construct/project, one provider requirement and generated int main(void) text. Current public module lifecycle and ProgramSpec native execution do not prove equivalence of those old private representation counts or standalone main text; these remain OPEN.",
+      "Full compiler/runtime FI, resource axes, every cancellation prefix, arbitrary provider or generic-definition failures, two independent SourceProducts/determinism, actual source-file deletion, full safety, Main integration and retirement remain OPEN."
+    ],
+    "full_FI": "NOT_RUN",
+    "axes": "NOT_RUN",
+    "cancel": "NOT_RUN",
+    "full_safety": "NOT_RUN",
+    "Main": "NOT_RUN",
+    "retired": 0
+  }
+}
