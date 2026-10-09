@@ -1,0 +1,457 @@
+{
+  "schema": 1,
+  "family": "original_text_program",
+  "status": "OPEN",
+  "retired": 0,
+  "replacement_gates": [],
+  "result": "STATIC_ORIGINAL_OBLIGATION_MAP_ONLY",
+  "product_execution": "NOT_RUN_BY_THIS_MAP",
+  "producer": "25f4016d6f089169757a90ae11ba537002374711",
+  "identity": "Checked25/semantic67/Value22/Call28/Program29",
+  "producer_scope": "Existing authorized producer only; this static audit does not revalidate it or adopt any Root private/new baseline.",
+  "legacy": {
+    "name": "source_owner_text_program_is_exact_across_private_executors",
+    "legacy_path": "tests/unit/program/test_xr_program_source_build.c",
+    "legacy_line": 5477,
+    "body_lf_sha256": "a51d513bd14fa0da7128d03055c8cd413236dae17844f4718ae0e1cddc7ec898",
+    "assertion_sites": 49,
+    "loop_sites": 2,
+    "status": "OPEN",
+    "replacement_gates": [],
+    "note": "Function census preserves its whole body; sites do not count executed loop iterations.",
+    "original_fixture": {
+      "id": "text_program",
+      "expected_exit": 7,
+      "labels": [
+        "string",
+        "rune",
+        "typed-output",
+        "provider",
+        "ownership"
+      ],
+      "backends": {
+        "vm": "execute",
+        "aot": "execute"
+      },
+      "expected_stdout_hex": "68656c6c6f2c20776f726c640a616e737765723d3432207472756520780a636f646520332078787820796573206e6f0a"
+    },
+    "static_input_literals": {
+      "source": {
+        "bytes": 821,
+        "sha256": "1ae3daa6c0b67ad1082faa37c276eb731e1025158a1a216bab6dbf60dc4bf713"
+      },
+      "expected_stdout": {
+        "bytes": 48,
+        "sha256": "68ffccaa7e0c8e9f5640afa524275c1770a04dbcbe9a211a4511a9128546ffa0"
+      }
+    }
+  },
+  "original_private_helpers": [
+    {
+      "path": "tests/unit/program/test_xr_program_source_build.c",
+      "function": "source_build_fixture_init",
+      "line": 894,
+      "end_line": 968,
+      "body_lf_sha256": "964c190cb52940aa039b9459e6a5aa0416430eadac032979ed210358216892eb",
+      "classification": "Actually referenced private NON_TEST helper; not a TEST/census row or qualification."
+    },
+    {
+      "path": "tests/unit/program/test_xr_program_source_build.c",
+      "function": "assert_source_build_ok",
+      "line": 996,
+      "end_line": 1010,
+      "body_lf_sha256": "a5d0aee0a406f887ea79355380455511ee0762cfa39915fb657cfe8a4088fd94",
+      "classification": "Actually referenced private NON_TEST helper; not a TEST/census row or qualification."
+    },
+    {
+      "path": "tests/unit/program/test_xr_program_source_build.c",
+      "function": "assert_products_equal",
+      "line": 982,
+      "end_line": 994,
+      "body_lf_sha256": "ec9ae13d2d71259635fe95f5bed3da7bddec1aaa43b10a247a9930a5c6cd925b",
+      "classification": "Actually referenced private NON_TEST helper; not a TEST/census row or qualification."
+    },
+    {
+      "path": "tests/unit/program/test_xr_program_source_build.c",
+      "function": "program_operation_count",
+      "line": 361,
+      "end_line": 375,
+      "body_lf_sha256": "2d6a79abce8b727c9711e86a5520d525ddefa2b890f5db5e510d4a89d9d5f68d",
+      "classification": "Actually referenced private NON_TEST helper; not a TEST/census row or qualification."
+    },
+    {
+      "path": "tests/unit/program/test_xr_program_source_build.c",
+      "function": "find_profile_provider",
+      "line": 749,
+      "end_line": 757,
+      "body_lf_sha256": "e406782a95e05ce78f909f815229bd5d4ad14c2e96001c17f2e17aad178ee048",
+      "classification": "Actually referenced private NON_TEST helper; not a TEST/census row or qualification."
+    },
+    {
+      "path": "tests/unit/program/test_xr_program_source_build.c",
+      "function": "text_output_capture_write",
+      "line": 5148,
+      "end_line": 5159,
+      "body_lf_sha256": "74dc64d282954c6864464e54bd811e22424e6909b1f5fb28313c0f8078775c1d",
+      "classification": "Actually referenced private NON_TEST helper; not a TEST/census row or qualification."
+    },
+    {
+      "path": "tests/unit/program/test_xr_program_source_build.c",
+      "function": "source_fixture_output_path",
+      "line": 63,
+      "end_line": 65,
+      "body_lf_sha256": "2c5d63f47f4b0e77e5abec0b6831c67cec2056ad89196c34fbd8e0cbd6ec1d9d",
+      "classification": "Actually referenced private NON_TEST helper; not a TEST/census row or qualification."
+    },
+    {
+      "path": "tests/unit/program/test_xr_program_source_build.c",
+      "function": "source_build_fixture_free",
+      "line": 873,
+      "end_line": 892,
+      "body_lf_sha256": "54f2ca59ddb46fda789abf0411160790bcb950903858a308b984b50e6f8c1889",
+      "classification": "Actually referenced private NON_TEST helper; not a TEST/census row or qualification."
+    },
+    {
+      "path": "tests/unit/plan/target_profile_test_fixture.c",
+      "function": "xr_test_target_profile_build_with_output",
+      "line": 278,
+      "end_line": 338,
+      "body_lf_sha256": "17a719cec65ed69e47767e1d41ccbb23a0538e22a43733446a206fba954c74f2",
+      "classification": "Actually called shared target-profile helper, outside consumer edit scope; preserve its other owners."
+    }
+  ],
+  "original_source": {
+    "path": "tests/unit/xir/product_consumers/fixtures/text_program/root.xr",
+    "prefix_bytes": 821,
+    "prefix_sha256": "1ae3daa6c0b67ad1082faa37c276eb731e1025158a1a216bab6dbf60dc4bf713",
+    "adapter": "export fn consumerAnswer() -> i64 { return answer() }\n",
+    "adapter_bytes": 54,
+    "adapter_sha256": "62788122d5e32c2bf5db10a60a2939f92a226f7606d09c490da4212a1341f2fa",
+    "bytes": 875,
+    "sha256": "b3615737744acf066c4ef57068dc08dd57df337012ca2871701acb77c28360d7",
+    "construction": "Independent ast.literal_eval and inventory C-literal decoders agree with the full original source[] and preserved inventory digest; only the existing 54-byte export adapter follows the full prefix."
+  },
+  "original_module_graph": {
+    "root": "tests/unit/xir/product_consumers/fixtures/text_program/root.xr",
+    "user_library": "NONE_ORIGINAL_FIXTURE_INIT_DEPENDENCY_NULL",
+    "flattening_or_shim": false
+  },
+  "independent_goldens": {
+    "required_Source_status": 0,
+    "returned_i64": 7,
+    "stdout_bytes": 48,
+    "stdout_sha256": "68ffccaa7e0c8e9f5640afa524275c1770a04dbcbe9a211a4511a9128546ffa0",
+    "stdout_hex": "68656c6c6f2c20776f726c640a616e737765723d3432207472756520780a636f646520332078787820796573206e6f0a",
+    "stderr_hex": "",
+    "original_instances": 2,
+    "original_total_provider_calls": 6,
+    "original_total_output_bytes": 96,
+    "original_VM_step_requirement": "two actual executions have equal step counts, no fixed numeric step count",
+    "provider_requirements": 1,
+    "provider_operation_count": 1,
+    "original_output_groups_per_call": 3,
+    "old_owner_copy_lower_bound": 4,
+    "original_standalone_exit": 7,
+    "typed_groups": [
+      {
+        "types": [
+          "string"
+        ],
+        "values": [
+          "hello, world"
+        ]
+      },
+      {
+        "types": [
+          "string",
+          "bool",
+          "rune"
+        ],
+        "values": [
+          "answer=42",
+          true,
+          "x"
+        ]
+      },
+      {
+        "types": [
+          "string",
+          "i64",
+          "string",
+          "string",
+          "string"
+        ],
+        "values": [
+          "code",
+          3,
+          "xxx",
+          "yes",
+          "no"
+        ]
+      }
+    ],
+    "old_emission_required": [
+      "XR_TEXT_KERNEL_H",
+      "xr_aot_string_concat",
+      "xr_text_group_render",
+      "xr_aot_free(xr_ctx, v"
+    ],
+    "old_emission_forbidden": [
+      "TargetPlan"
+    ]
+  },
+  "responsibility_mapping": [
+    {
+      "responsibility": "The entire original module input is accepted with a hosted target-profile output contract.",
+      "original": {
+        "path": "tests/unit/program/test_xr_program_source_build.c",
+        "lines": [
+          5517,
+          5527
+        ]
+      },
+      "status": "OPEN_NOT_REVALIDATED",
+      "existing_consumer": {
+        "path": "tests/unit/xir/product_consumers/test_source_product_consumer.c",
+        "line": 216,
+        "token": "const XrXirSourceProductRequest request ="
+      },
+      "gap": "The new module authority and typed output provider replace the old explicit semantic-profile fingerprint plumbing. Full input acceptance remains required; this static map performs no Source admission."
+    },
+    {
+      "responsibility": "Two independently built Source products have equal artifact bytes, Program IDs and entry identity.",
+      "original": {
+        "path": "tests/unit/program/test_xr_program_source_build.c",
+        "lines": [
+          5528,
+          5537
+        ]
+      },
+      "status": "OPEN_NOT_REVALIDATED_EXISTING_DETACHMENT_COMPARISON",
+      "existing_consumer": [
+        {
+          "path": "tests/unit/xir/product_consumers/test_source_product_detachment.c",
+          "line": 116,
+          "token": "static void facts_equal("
+        },
+        {
+          "path": "tests/unit/xir/product_consumers/test_source_product_detachment.c",
+          "line": 331,
+          "token": "CHECK(products[0] != products[1]);"
+        }
+      ],
+      "normal_gate": "test_source_product_detachment_text_program",
+      "gap": "The existing detachment driver builds two products through independent sessions, compares exact SOURCE/CLOSED bytes, entry and layout digests, and emits identical C. The Program-ID representation differs from the old opaque ID. This map does not execute that gate or establish Root qualification."
+    },
+    {
+      "responsibility": "The original string concat, scalar rendering, comparison, rune, output, explicit owner-drop and READ-return ownership semantics survive the new representation.",
+      "original": {
+        "path": "tests/unit/program/test_xr_program_source_build.c",
+        "lines": [
+          5539,
+          5547
+        ]
+      },
+      "status": "OPEN_REPRESENTATION_AND_TYPED_SHAPE_REVIEW",
+      "existing_consumer": {
+        "path": "tests/unit/xir/product_consumers/test_source_product_consumer.c",
+        "line": 97,
+        "token": "static void closed_shape("
+      },
+      "gap": "closed_shape has no text-specific shape check. Old numeric op IDs and OWNER_COPY >=4 do not automatically map to SHARE counts, especially across the Root Cell/permission cutover. Root owns the representation decision; preserve all original ownership semantics."
+    },
+    {
+      "responsibility": "One output provider contract with one operation, exact fingerprint and authority is admitted.",
+      "original": {
+        "path": "tests/unit/program/test_xr_program_source_build.c",
+        "lines": [
+          5538,
+          5578
+        ]
+      },
+      "status": "OPEN_NEW_PROVIDER_CONTRACT_REVIEW",
+      "existing_consumer": {
+        "path": "tests/unit/xir/product_consumers/source_product_consumer_output.inc.c",
+        "line": 99,
+        "token": "config.output ="
+      },
+      "gap": "The public typed OutputProvider/output sink is an existing target mechanism. It does not prove the old target-profile provider fingerprint fields or operation counts equivalent."
+    },
+    {
+      "responsibility": "Two separate Instances each return i64 7 with identical original VM step counts and exact output; aggregate capture has six calls and two 48-byte copies.",
+      "original_setup": {
+        "path": "tests/unit/program/test_xr_program_source_build.c",
+        "lines": [
+          5579,
+          5591
+        ]
+      },
+      "original": {
+        "path": "tests/unit/program/test_xr_program_source_build.c",
+        "lines": [
+          5591,
+          5608
+        ]
+      },
+      "status": "OPEN_NOT_REVALIDATED_AND_STEP_COMPARISON_MISSING",
+      "existing_consumer": [
+        {
+          "path": "tests/unit/xir/product_consumers/test_source_product_consumer.c",
+          "line": 417,
+          "token": "XrXirInstance *instances[2]"
+        },
+        {
+          "path": "tests/unit/xir/product_consumers/source_product_consumer_output.inc.c",
+          "line": 104,
+          "token": "static void consumer_output_complete("
+        }
+      ],
+      "normal_gates": [
+        "test_source_product_text_program_vm",
+        "test_source_product_text_program_native",
+        "test_source_product_text_program_mixed_even",
+        "test_source_product_text_program_mixed_odd"
+      ],
+      "gap": "Existing normal code checks two Instances with two repeats each, per-call fixed return and output after producer and caller Program ownership death. It has no original two-Instance step equality or six-call aggregate check. No gate is executed by this static map."
+    },
+    {
+      "responsibility": "Typed output is three stdout line groups with exact values; independent rendered bytes are identical to the original literal.",
+      "original": {
+        "path": "tests/unit/program/test_xr_program_source_build.c",
+        "lines": [
+          5515,
+          5516
+        ]
+      },
+      "status": "OPEN_NOT_REVALIDATED_EXISTING_GOLDEN_BYTE_EQUAL",
+      "existing_consumer": [
+        {
+          "path": "tests/unit/xir/product_consumers/source_product_consumer_output.inc.c",
+          "line": 65,
+          "token": "static XrXirOutputStatus consumer_output_group("
+        },
+        {
+          "path": "tests/unit/xir/product_consumers/source_product_consumer_output.inc.c",
+          "line": 48,
+          "token": "static XrXirOutputStatus consumer_output_bytes("
+        }
+      ],
+      "gap": "Static golden equality is verified here. Actual VM/native/mixed observations remain separate current-producer qualification."
+    },
+    {
+      "responsibility": "One verified BackendIR emits twice with equal size/bytes, text kernel/concat/render/free markers present and TargetPlan absent.",
+      "original": {
+        "path": "tests/unit/program/test_xr_program_source_build.c",
+        "lines": [
+          5608,
+          5634
+        ]
+      },
+      "status": "OPEN_NEW_EMISSION_AND_OLD_PRIVATE_REPRESENTATION",
+      "existing_consumer": {
+        "path": "tests/unit/xir/product_consumers/test_source_product_consumer.c",
+        "line": 303,
+        "token": "XrXirCSource repeated ="
+      },
+      "gap": "Existing driver checks two public C emissions byte for byte, rejects TargetPlan, and binds generated C SHA256 to actual native output. Old private BackendIR and xr_aot_* symbol checks remain preserved for explicit Root retirement/equivalence review."
+    },
+    {
+      "responsibility": "Generated standalone original text program exits 7 with exact stdout and empty stderr.",
+      "original_fixture": {
+        "id": "text_program",
+        "expected_exit": 7,
+        "labels": [
+          "string",
+          "rune",
+          "typed-output",
+          "provider",
+          "ownership"
+        ],
+        "backends": {
+          "vm": "execute",
+          "aot": "execute"
+        },
+        "expected_stdout_hex": "68656c6c6f2c20776f726c640a616e737765723d3432207472756520780a636f646520332078787820796573206e6f0a"
+      },
+      "original": {
+        "path": "tests/unit/program/test_xr_program_source_build.c",
+        "lines": [
+          5634,
+          5642
+        ]
+      },
+      "status": "OPEN_STANDALONE_NOT_REVALIDATED",
+      "existing_consumer": {
+        "path": "tests/unit/program/source_product_consumers.cmake",
+        "line": 49,
+        "token": "add_executable(${native}"
+      },
+      "gap": "The registered new native test executable exits zero after internal fixed-i647 assertions. That harness exit is not the original standalone process exit7. Both obligations remain distinguishable."
+    },
+    {
+      "responsibility": "Both outcomes, Instances, VM code, emissions, BackendIR, products, profile and fixture release in the original order without leaking owners.",
+      "original": {
+        "path": "tests/unit/program/test_xr_program_source_build.c",
+        "lines": [
+          5642,
+          5658
+        ]
+      },
+      "status": "OPEN_FULL_RESOURCE_AND_SAFETY_QUALIFICATION",
+      "existing_consumer": {
+        "path": "tests/unit/xir/product_consumers/test_source_product_consumer.c",
+        "line": 341,
+        "token": "static void release(Consumer *run)"
+      },
+      "gap": "Compiler/runtime physical zero is a current target requirement. No full FI, axes, cancellation or applicable sanitizer gate is executed by this static map; physical zero does not replace per-owner/lifecycle semantics."
+    }
+  ],
+  "additional_target_gates": {
+    "normal": "Existing VM/native/mixed normal gates; no inherited PASS.",
+    "detachment": [
+      "test_source_product_detachment_text_program"
+    ],
+    "output_refusal": [
+      "test_source_product_text_program_output_status_0",
+      "test_source_product_text_program_output_status_1",
+      "test_source_product_text_program_output_status_2",
+      "test_source_product_text_program_output_status_3"
+    ],
+    "full_FI": [
+      "test_source_product_text_program_compiler_0",
+      "test_source_product_text_program_runtime_0",
+      "test_source_product_text_program_compiler_1",
+      "test_source_product_text_program_runtime_1",
+      "test_source_product_text_program_compiler_2",
+      "test_source_product_text_program_runtime_2",
+      "test_source_product_text_program_compiler_3",
+      "test_source_product_text_program_runtime_3"
+    ],
+    "axes": [
+      "test_source_product_text_program_axes_0",
+      "test_source_product_text_program_axes_1",
+      "test_source_product_text_program_axes_2",
+      "test_source_product_text_program_axes_3"
+    ],
+    "cancel": [
+      "test_source_product_text_program_cancel_0",
+      "test_source_product_text_program_cancel_1",
+      "test_source_product_text_program_cancel_2",
+      "test_source_product_text_program_cancel_3"
+    ],
+    "heavy_window": "NOT_GRANTED_NEW_ROOT_WINDOW_REQUIRED"
+  },
+  "shared_dependency": {
+    "path": "tests/unit/aot/xr_backend_emission_owner.h",
+    "consumer_count": 7,
+    "status": "PRESERVE_SHARED_OWNER",
+    "reason": "Original wrapper directly uses backend_emission_resources; other actual consumers remain. This map gives no deletion authority."
+  },
+  "boundaries": [
+    "All responsibility rows remain OPEN. Mapping counts are not completed counts.",
+    "Source success is required; rejection must be a real FAIL, never WILL_FAIL or accepted historical diagnostics.",
+    "No source was shortened, no builtin/provider stand-in was introduced, and no current execution claim is made.",
+    "Representation decisions and product ABI changes belong to Root; this consumer only preserves original evidence and identifies gaps.",
+    "No native, mixed, FI, resource, cancellation, full sanitizer, SourceDelete or Main qualification is claimed."
+  ]
+}
