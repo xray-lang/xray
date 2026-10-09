@@ -40,7 +40,7 @@
       "kind": "EXACT_ORIGINAL",
       "expectation": "OPEN_REQUIRED_MODULE_STATE",
       "retirement": null,
-      "responsibility_note": "OPEN original module-state responsibility: private library counter40 is retained by BASELINE_CHANGE_ORDER_20261006_25F4-cn.txt and is not retired into a negative test. The fixed25f admission subset has not implemented this original graph. The unchanged oracle records the historical 01e6 input diagnostic under fixed25f (returncode1, library mutable or exported state is not admitted); it does not discharge the original positive module-state/test-discovery responsibility. Original fixture bytes, consumer assertions and first-red evidence remain unchanged.",
+      "responsibility_note": "The complete original private library counter40 and seven root test roles remain required positives. The oracle object below preserves the historical admission refusal and its exact diagnostic; it is observation evidence, not a successful replacement expectation. The runner must fail when the actual product rejects this source. Successful Source admission qualifies owned metadata only until the original test-role and independent runtime responsibilities are migrated and executed.",
       "files": {
         "root.xr": {
           "path": "tests/unit/xir/product_consumers/entry_roles/fixtures/original_test_discovery/root.xr",
@@ -76,7 +76,9 @@
         "checking_coordinates_from_source_message": null,
         "runtime_attempts": 0
       },
-      "full_candidate_input_changed": false
+      "full_candidate_input_changed": false,
+      "required_source_status": 0,
+      "qualification_scope": "Required-positive Source admission and owned Checked/Lowered/C metadata only. Original root test roles, two-instance counter state, native/mixed execution, FI, resource axes and lifetime obligations remain OPEN."
     },
     {
       "case": "original_atomic_ordering_Relaxed",

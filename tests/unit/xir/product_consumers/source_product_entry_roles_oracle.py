@@ -21,12 +21,29 @@ def exact(lines, prefix, expected):
 def validate_output(case, returncode, stdout, stderr, generated_exists):
     name, oracle = case["case"], case["oracle"]
     lines = stdout.splitlines()
-    require(returncode == oracle["returncode"], f"unexpected exit {returncode}")
+    required_positive = case.get("required_source_status") == 0 and "diagnostic" in oracle
+    expected_exit = 0 if required_positive else oracle["returncode"]
+    require(returncode == expected_exit,
+            f"required Source success rejected with exit {returncode}" if required_positive else
+            f"unexpected exit {returncode}")
     require(not stderr, f"unexpected stderr: {stderr}")
     compiler = [line for line in lines if line.startswith("compiler physical ")]
     require(len(compiler) == 1 and re.fullmatch(r"compiler physical blocks/bytes=0/0; peak=\d+", compiler[0]),
             "compiler physical release missing")
     exact(lines, "final runtime ", [f"final runtime physical blocks/bytes=0/0; attempts={oracle['runtime_attempts']}"])
+    if required_positive:
+        require(generated_exists, "required positive did not emit C")
+        admission = [line for line in lines if line.startswith("source-admission ")]
+        require(len(admission) == 1, "required positive admission missing")
+        match = re.fullmatch(r"source-admission case=" + re.escape(name) +
+                             r" status=0 functions=(\d+) modules=(\d+) entry=(\d+)", admission[0])
+        require(match is not None, "required positive source status is not success")
+        functions, modules, entry = map(int, match.groups())
+        require(modules == len(case["files"]) and entry < functions, "original module graph changed")
+        exact(lines, "projection ", [f"projection case={name} detached-Checked-Lowered=PASS C-identical=PASS"])
+        for prefix in ["source-path ", "source-test ", "test-execution ", "test-isolation ", "atomic-execution "]:
+            exact(lines, prefix, [])
+        return "SOURCE_METADATA_ONLY_ORIGINAL_EXECUTION_OPEN"
     if "diagnostic" in oracle:
         diagnostic = oracle["diagnostic"]
         fields = " ".join(f"{key}={diagnostic[key]}" for key in
@@ -103,8 +120,11 @@ def main():
     (scratch / "stdout.log").write_bytes(result.stdout)
     (scratch / "stderr.log").write_bytes(result.stderr)
     (scratch / "process.json").write_text(json.dumps({"command": command, "returncode": result.returncode}, indent=2) + "\n")
-    validate_output(case, result.returncode, stdout, stderr, generated.exists() and generated.stat().st_size > 0)
-    print(f"entry-role-consumer case={args.case} fixed-oracle=PASS native=NOT_RUN full-FI=NOT_RUN")
+    qualification = validate_output(case, result.returncode, stdout, stderr,
+                                    generated.exists() and generated.stat().st_size > 0)
+    scope = qualification or "FIXED_ORACLE_ONLY"
+    print(f"entry-role-consumer case={args.case} fixed-oracle=PASS qualification={scope} "
+          "native=NOT_RUN full-FI=NOT_RUN")
 
 
 if __name__ == "__main__":
