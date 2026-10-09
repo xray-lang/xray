@@ -485,7 +485,7 @@
     },
     {
       "path": "tests/unit/xir/product_consumers/source_original_aot_coroutine_state_edge_cancel_lowering_obligations.json",
-      "lf_sha256": "32d3eb51a3f9d1defe9497103c64abc64fb7b9c8c9d5af7ff9629f72249c58f4"
+      "lf_sha256": "09fd0d2724b628c62c2fb32d0add1c9a80932412d62951cea3ac5c28de3bcfb4"
     },
     {
       "path": "tests/unit/xir/product_consumers/source_original_aot_resource_type_admission_obligations.json",

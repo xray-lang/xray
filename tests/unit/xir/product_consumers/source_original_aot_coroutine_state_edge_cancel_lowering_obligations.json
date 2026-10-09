@@ -1280,8 +1280,7 @@
         "tests/unit/aot/test_xr_program_aot.c",
         "tests/unit/aot/test_xr_program_aot_coroutine_native_step.c",
         "tests/unit/program/test_xr_program_verify.c",
-        "tests/unit/vm/test_xr_program_vm.c",
-        "tests/unit/xir/product_consumers/source_original_coroutine_liveness_owner_obligations.json"
+        "tests/unit/vm/test_xr_program_vm.c"
       ],
       "status": "PRESERVE_SHARED_READONLY_NOT_DELETABLE",
       "note": "Direct includes only; complete transitive/deletion qualification remains OPEN."
@@ -1305,19 +1304,7 @@
         "tests/unit/aot/xr_typed_provider_native_writer.c",
         "tests/unit/ir/test_xi_pipeline.c",
         "tests/unit/ir/test_xr_program_imported_callable.c",
-        "tests/unit/program/test_xr_program_source_build.c",
-        "tests/unit/xir/product_consumers/source_original_affine_coroutine_result_obligations.json",
-        "tests/unit/xir/product_consumers/source_original_aot_retained_text_emission_obligations.json",
-        "tests/unit/xir/product_consumers/source_original_branching_nested_cleanup_obligations.json",
-        "tests/unit/xir/product_consumers/source_original_cross_frame_borrow_obligations.json",
-        "tests/unit/xir/product_consumers/source_original_defer_panic_place_obligations.json",
-        "tests/unit/xir/product_consumers/source_original_module_output_report_obligations.json",
-        "tests/unit/xir/product_consumers/source_original_native_export_binding_obligations.json",
-        "tests/unit/xir/product_consumers/source_original_pipe_provider_cleanup_obligations.json",
-        "tests/unit/xir/product_consumers/source_original_process_clock_provider_obligations.json",
-        "tests/unit/xir/product_consumers/source_original_provider_failure_cleanup_obligations.json",
-        "tests/unit/xir/product_consumers/source_original_retained_roots_obligations.json",
-        "tests/unit/xir/product_consumers/source_original_text_program_obligations.json"
+        "tests/unit/program/test_xr_program_source_build.c"
       ],
       "status": "PRESERVE_SHARED_READONLY_NOT_DELETABLE",
       "note": "Direct includes only; complete transitive/deletion qualification remains OPEN."
