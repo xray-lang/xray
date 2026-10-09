@@ -1,0 +1,367 @@
+{
+  "schema": 1,
+  "family": "original_aggregate_variant_struct",
+  "legacy_base_commit": "01e6d38401b0f5c8684b64c35a99ac651024c0c1",
+  "status": "OPEN",
+  "retired": 0,
+  "replacement_gates": [],
+  "result": "STATIC_ORIGINAL_AGGREGATE_VARIANT_AND_STRING_STRUCT_MAP_ONLY",
+  "product_execution": "NOT_RUN_BY_THIS_MAP",
+  "producer": "25f4016d6f089169757a90ae11ba537002374711",
+  "identity": "Checked25/semantic67/Value22/Call28/Program29",
+  "legacy": [
+    {
+      "name": "test_aggregate_variant_operations",
+      "legacy_path": "tests/unit/program/test_xr_program_verify.c",
+      "legacy_line": 1062,
+      "body_lf_sha256": "d732cbcb25fc38f006aa77b08b963043b8094f3919f829b06c1d607585d9743f",
+      "assertion_sites": 9,
+      "loop_sites": 0,
+      "status": "OPEN",
+      "replacement_gates": [],
+      "note": "Function census preserves its whole body; sites do not count executed loop iterations."
+    },
+    {
+      "name": "test_value_struct_immutable_string_fields",
+      "legacy_path": "tests/unit/program/test_xr_program_verify.c",
+      "legacy_line": 2345,
+      "body_lf_sha256": "4557197e2b120dbeea6ab474c9ebd812b09aa247bbaed17cb3745283dad63a5f",
+      "assertion_sites": 3,
+      "loop_sites": 1,
+      "status": "OPEN",
+      "replacement_gates": [],
+      "note": "Function census preserves its whole body; sites do not count executed loop iterations."
+    }
+  ],
+  "responsibility_mapping": [
+    {
+      "path": "tests/unit/program/test_xr_program_verify.c",
+      "function": "test_aggregate_variant_operations",
+      "line": 1062,
+      "end_line": 1095,
+      "body_lf_sha256": "d732cbcb25fc38f006aa77b08b963043b8094f3919f829b06c1d607585d9743f",
+      "CHECK_sites": 9,
+      "CHECK_bindings": [
+        {
+          "line": 1065,
+          "expression": "artifact.size == reordered.size",
+          "status": "OPEN"
+        },
+        {
+          "line": 1066,
+          "expression": "artifact.size != 0u && memcmp(artifact.bytes, reordered.bytes, artifact.size) == 0",
+          "status": "OPEN"
+        },
+        {
+          "line": 1067,
+          "expression": "xr_program_id_equal(artifact.id, reordered.id)",
+          "status": "OPEN"
+        },
+        {
+          "line": 1073,
+          "expression": "result.kind == XR_REFERENCE_OUTCOME_RETURN",
+          "status": "OPEN"
+        },
+        {
+          "line": 1074,
+          "expression": "result.value.kind == XR_REFERENCE_VALUE_I64",
+          "status": "OPEN"
+        },
+        {
+          "line": 1075,
+          "expression": "result.value.as.i64 == 2",
+          "status": "OPEN"
+        },
+        {
+          "line": 1080,
+          "expression": "result.kind == XR_REFERENCE_OUTCOME_RESOURCE_LIMIT",
+          "status": "OPEN"
+        },
+        {
+          "line": 1090,
+          "expression": "result.kind == XR_REFERENCE_OUTCOME_TRAP",
+          "status": "OPEN"
+        },
+        {
+          "line": 1091,
+          "expression": "result.trap == XR_REFERENCE_TRAP_VARIANT_TAG_MISMATCH",
+          "status": "OPEN"
+        }
+      ],
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/program/test_xr_program_verify.c",
+      "function": "test_value_struct_immutable_string_fields",
+      "line": 2345,
+      "end_line": 2383,
+      "body_lf_sha256": "4557197e2b120dbeea6ab474c9ebd812b09aa247bbaed17cb3745283dad63a5f",
+      "CHECK_sites": 3,
+      "CHECK_bindings": [
+        {
+          "line": 2361,
+          "expression": "build_with_type_graph(types, 2u, &artifact) == XR_PROGRAM_BUILD_OK",
+          "status": "OPEN"
+        },
+        {
+          "line": 2372,
+          "expression": "build_with_type_graph(types, 2u, &artifact) == XR_PROGRAM_BUILD_OK",
+          "status": "OPEN"
+        },
+        {
+          "line": 2375,
+          "expression": "dynamic_aggregate_nominal_offset(&artifact, types[index].key, &nominal)",
+          "status": "OPEN"
+        }
+      ],
+      "status": "OPEN"
+    }
+  ],
+  "outer_CHECK_sites": 12,
+  "original_private_helpers": [
+    {
+      "path": "tests/unit/program/test_xr_program_verify.c",
+      "function": "build_aggregate_variant_artifact",
+      "line": 913,
+      "end_line": 1060,
+      "body_lf_sha256": "76499ca9f028223ef6682014414e2d720e5de06ad0a3073323424ff54d12ca8d",
+      "CHECK_sites": 1,
+      "CHECK_bindings": [
+        {
+          "line": 1057,
+          "expression": "write_typed_modules(ordered_types, sizeof(ordered_types) / sizeof(ordered_types[0]),\n                              &module, 1u, &artifact) == XR_PROGRAM_BUILD_OK",
+          "status": "OPEN"
+        }
+      ],
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/program/test_xr_program_verify.c",
+      "function": "build_with_type_graph",
+      "line": 1097,
+      "end_line": 1145,
+      "body_lf_sha256": "39a4e68cdeb1c6730849a185c34e1d9c8ab71f5e9efb567e3a897cc969b85626",
+      "CHECK_sites": 0,
+      "CHECK_bindings": [],
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/program/test_xr_program_verify.c",
+      "function": "dynamic_aggregate_nominal_offset",
+      "line": 648,
+      "end_line": 702,
+      "body_lf_sha256": "df65b0afe0989dc89202e4e6881fe88f8571d98e114b4dda9709aa60f48b6a33",
+      "CHECK_sites": 0,
+      "CHECK_bindings": [],
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/program/test_xr_program_verify.c",
+      "function": "test_take_uvar",
+      "line": 203,
+      "end_line": 215,
+      "body_lf_sha256": "835eb97aa0c77560506ba0e421652602ae095f5e6686cce9ef331fc80a34ef4d",
+      "CHECK_sites": 1,
+      "CHECK_bindings": [
+        {
+          "line": 213,
+          "expression": "false",
+          "status": "OPEN"
+        }
+      ],
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/program/test_xr_program_verify.c",
+      "function": "test_skip_display_names",
+      "line": 217,
+      "end_line": 225,
+      "body_lf_sha256": "ed11446fffd51a746fc7ceb50a8263ce377a97d80fef245e1239ec3d691307d8",
+      "CHECK_sites": 0,
+      "CHECK_bindings": [],
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/program/test_xr_program_verify.c",
+      "function": "key",
+      "line": 109,
+      "end_line": 111,
+      "body_lf_sha256": "027a211b78e0cfbd6b296804e37236848a76cc1980981a0d6a49a6f42d3f2e13",
+      "CHECK_sites": 0,
+      "CHECK_bindings": [],
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/program/test_xr_program_verify.c",
+      "function": "write_typed_modules",
+      "line": 113,
+      "end_line": 138,
+      "body_lf_sha256": "c568d48005100fc2633344ba569a2bc8de9b62e3aac794b35057c8d838b8db65",
+      "CHECK_sites": 0,
+      "CHECK_bindings": [],
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/program/test_xr_program_verify.c",
+      "function": "validate_ok",
+      "line": 159,
+      "end_line": 174,
+      "body_lf_sha256": "94fe0ef4e0242acb810c12621ae1fe73a9887ef668f15ddc6c67ed645494f62b",
+      "CHECK_sites": 2,
+      "CHECK_bindings": [
+        {
+          "line": 171,
+          "expression": "status == XR_PROGRAM_VERIFY_OK",
+          "status": "OPEN"
+        },
+        {
+          "line": 172,
+          "expression": "program != NULL",
+          "status": "OPEN"
+        }
+      ],
+      "status": "OPEN"
+    }
+  ],
+  "specified_helper_CHECK_sites": 4,
+  "input_file": {
+    "path": "tests/unit/program/test_xr_program_verify.c",
+    "whole_file_lf_sha256": "ec4b93f13bfab2aa3d4b8f8773dd5c1118a0c682ed6f8304fead515f90402802",
+    "physical_raw_sha256": "a39922500c0943c034fafcda3a82b67e511ea658f453f6c0c3204f7719de1817",
+    "git_base_equal": true
+  },
+  "input_policy": "Complete two old test bodies/eight specified helper bodies and whole original input container equal01e6; all keys/types/constants/operand ordering/variant tags/fields/signatures/effects/return graphs retained, no Source adapter or reduced aggregate.",
+  "aggregate_variant": {
+    "types": [
+      {
+        "local_id": 101,
+        "key": "aggregate:type:record",
+        "kind": "AGGREGATE",
+        "fields": [
+          "I64"
+        ]
+      },
+      {
+        "local_id": 77,
+        "key": "aggregate:type:variant",
+        "kind": "VARIANT",
+        "variants": [
+          [],
+          [
+            101
+          ]
+        ]
+      }
+    ],
+    "constants": [
+      40,
+      2
+    ],
+    "operation_order": [
+      "CONSTANT_I64",
+      "CONSTANT_I64",
+      "AGGREGATE_CONSTRUCT",
+      "AGGREGATE_PROJECT",
+      "AGGREGATE_UPDATE",
+      "VARIANT_CONSTRUCT",
+      "VARIANT_TEST",
+      "VARIANT_PROJECT",
+      "AGGREGATE_PROJECT",
+      "RETURN"
+    ],
+    "function_signature": "Zero parameters ->I64, flagged ENTRY, one block, original effect_mask1.",
+    "whole_graph": "Build actual aggregate field40, project40 (not used by return), aggregate update field0 with2 into updated value, wrap updated aggregate in variant1, VARIANT_TEST1 produces actual BOOL (not used by CFG), VARIANT_PROJECT1/field0 -> aggregate, aggregate PROJECT0 ->I64, RETURN2. Empty variant0 remains a real member of the full type.",
+    "type_order_determinism": "Build correct graph with original and reversed type input order; exact equal artifact size, nonzero bytes/memcmp whole artifact, equal actual ProgramID. Full builder local arrays die before test verifies returned artifacts.",
+    "normal": "Exact VERIFY_OK/non-NULL then actual reference RETURN/I64(2); original test does not assert runtime intermediate projected40, VARIANT_TEST result or old aggregate identity.",
+    "resource_failure": {
+      "budget": "Original default reference budget with max_value_cells=1",
+      "expected": "RESOURCE_LIMIT",
+      "boundary": "Old body asserts terminal kind only; no VOID/owned-output/trap/code assertion invented. This semantic budget is not current physical OOM/FI or allocated/live/work axis evidence."
+    },
+    "wrong_variant": {
+      "construction": "Keep entire graph/types/operations. VARIANT_CONSTRUCT selects actual empty variant0/no operands, while VARIANT_TEST1 and VARIANT_PROJECT1/field0 remain unchanged.",
+      "admission": "Actual VERIFY_OK/non-NULL via shared helper, not a legal Source/semantic rejection.",
+      "runtime": "Exact TRAP/VARIANT_TAG_MISMATCH from projecting variant1 on actual tag0; do not substitute PANIC, hosterror, any nonOK, or synthetic producer failure."
+    },
+    "disposal_boundary": "Old body frees all artifacts and verifiedPrograms. Outcomes here are scalar/trap/resource; body does not call outcome_dispose or prove per-object physical lifetime; current goal has independent complete resource/lifetime duties."
+  },
+  "immutable_string_struct": {
+    "full_types": [
+      {
+        "local_id": 91,
+        "key": "value-struct:inner",
+        "kind": "AGGREGATE",
+        "nominal_kind": "STRUCT",
+        "ownership": "AFFINE",
+        "copy_contract": "EXPLICIT",
+        "fields": [
+          "STRING"
+        ]
+      },
+      {
+        "local_id": 92,
+        "key": "value-struct:outer",
+        "kind": "AGGREGATE",
+        "nominal_kind": "STRUCT",
+        "ownership": "AFFINE",
+        "copy_contract": "EXPLICIT",
+        "fields": [
+          91
+        ]
+      }
+    ],
+    "full_program": "The real build_with_type_graph emits one zeroarg VOID ENTRY, one block with actual explicitTRAP instruction/effect_mask1, no fake I64 return; original semantic type-graph profile and CoreBase feature retained. These tests validate admission and do not execute the TRAP.",
+    "direct_nominal": "Build full two types initially STRUCT ->BUILD_OK and VERIFY_OK/non-NULL; free owner and artifact.",
+    "anonymous_baseline": "Set both nominal_kind NONE on the same complete AFFINE/EXPLICIT two-type graph; BUILD_OK. No standalone semantic validation of wholly anonymous graph claimed.",
+    "actual_wire_positive_sequence": [
+      {
+        "step": 0,
+        "modification": "Locate inner by all actual type-key bytes, directly change actual wire nominal toSTRUCT.",
+        "result": "Inner STRUCT/outer NONE, exact VERIFY_OK/non-NULL."
+      },
+      {
+        "step": 1,
+        "modification": "Keep first wire change, locate outer by its complete actual key and directly change wire nominal toSTRUCT.",
+        "result": "Both STRUCT, exact VERIFY_OK/non-NULL."
+      }
+    ],
+    "responsibility": "Direct wire positive nominal introductions prevent producer behavior hiding verifier acceptance gaps. Do not invert these valid immutable string-field structs into expected rejection, flatten nested inner, or reset the first mutation before step1.",
+    "original_negative_variants": 0,
+    "execution": "Admission only; no constructed string instances, copy, mutation, result or lifecycle loop in original test."
+  },
+  "wire_helper": {
+    "function": "dynamic_aggregate_nominal_offset",
+    "body": "Actual full structural decode and type section; consume all builtins, full key bytes, field/payload/display-name records. Return matching aggregate shape offset only after key match and bounds. Full helper can also traverse class/variant/view/existential rows; this selected test only supplies the actual two aggregates.",
+    "shared": "Used by other old typegraph tests; no last-consumer/deletion permit."
+  },
+  "shared_dependencies": [
+    {
+      "path": "src/program/xr_reference_evaluator.h",
+      "physical_raw_sha256": "d43732ceca814f67f7f04e1b51d8512aab2e199092a546d1c47d30e0f28439bf",
+      "whole_file_lf_sha256": "0b2149e8397748e84b1cbc14904cde97d5bee4c3e69474486169e4656ff89054",
+      "git_base_equal": true,
+      "status": "PRESERVE_SHARED_READONLY"
+    }
+  ],
+  "Root_contract_or_representation_review": {
+    "status": "OPEN",
+    "aggregate_variant": "Target immutable aggregate UPDATE must retain old original-value versus updated-value graph, exact full variant shape/tag/payload and real runtime projection trap. New typed logical enum/aggregate identities and producer-freed original operands require explicit target mapping; no old numeric IDs/operation alias restoration.",
+    "struct": "Keep original legal string-bearing immutable value structs and nested affine field ownership/copy contracts. Current Cell/ref semantics apply if mutable storage is involved, not by silently replacing this immutable typegraph with mutable class or dropping its string field.",
+    "entry": "Raw aggregate runtime graph is zeroargI64; raw immutable type-admission graph is zeroargVOID/explicitTRAP. Root owns exact verified-root/Library projection; new SourceProgramI64 requirement cannot be satisfied by rewriting original payload toanswer42 or an export adapter.",
+    "qualification": "Qualified formal current producer and public Built/Checked/packet/reverify/Lowered/Program, exact original positives/tag-mismatch/resources, twoInstances detached producers, every actualFI/axes/VM-native-mixed/lifetime/safety duty stillOPEN."
+  },
+  "full_FI": "NOT_RUN",
+  "axes": "NOT_RUN",
+  "full_safety": "NOT_RUN",
+  "SourceDelete": "NOT_RUN",
+  "Main": "NOT_RUN",
+  "handoff": {
+    "Root_thread": "01a11f74-a297-7b11-8441-835bde6a3d5f",
+    "formal_acceptance": "PENDING"
+  },
+  "boundaries": [
+    "All12 outer/4 specified helper CHECKs OPEN; retired0.",
+    "Only static full original graph/oracle/positive wire sequence/helper/scope audit; no new product run, interface or producer adoption.",
+    "Shared typegraph writers/mutators/evaluator header have other consumers; no product/header/CMake/stdlib/spec/SDK/docs edits or deletion."
+  ]
+}
