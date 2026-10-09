@@ -1,0 +1,603 @@
+{
+  "schema": 1,
+  "family": "original_dynamic_type_graph",
+  "legacy_base_commit": "01e6d38401b0f5c8684b64c35a99ac651024c0c1",
+  "status": "OPEN",
+  "retired": 0,
+  "replacement_gates": [],
+  "result": "STATIC_ORIGINAL_DYNAMIC_TYPE_GRAPH_MAP_ONLY",
+  "product_execution": "NOT_RUN_BY_THIS_MAP",
+  "producer": "25f4016d6f089169757a90ae11ba537002374711",
+  "identity": "Checked25/semantic67/Value22/Call28/Program29",
+  "legacy": {
+    "name": "test_dynamic_type_graph_rejection",
+    "legacy_path": "tests/unit/program/test_xr_program_verify.c",
+    "legacy_line": 2385,
+    "body_lf_sha256": "3ea2a77f0d7e191ffc8807a2114144e7ceb58b99d430f4442c18509fa1e1bb79",
+    "assertion_sites": 24,
+    "loop_sites": 1,
+    "status": "OPEN",
+    "replacement_gates": [],
+    "note": "Function census preserves its whole body; sites do not count executed loop iterations."
+  },
+  "responsibility_mapping": [
+    {
+      "path": "tests/unit/program/test_xr_program_verify.c",
+      "function": "test_dynamic_type_graph_rejection",
+      "line": 2385,
+      "end_line": 2659,
+      "body_lf_sha256": "3ea2a77f0d7e191ffc8807a2114144e7ceb58b99d430f4442c18509fa1e1bb79",
+      "CHECK_sites": 24,
+      "CHECK_bindings": [
+        {
+          "line": 2398,
+          "expression": "build_with_type_graph(&recursive, 1u, NULL) == XR_PROGRAM_BUILD_INVALID_INPUT",
+          "status": "OPEN"
+        },
+        {
+          "line": 2408,
+          "expression": "build_with_type_graph(&unresolved, 1u, NULL) == XR_PROGRAM_BUILD_UNRESOLVED_REFERENCE",
+          "status": "OPEN"
+        },
+        {
+          "line": 2415,
+          "expression": "build_with_type_graph(&legacy_class, 1u, NULL) == XR_PROGRAM_BUILD_INVALID_INPUT",
+          "status": "OPEN"
+        },
+        {
+          "line": 2450,
+          "expression": "build_with_type_graph(managed_struct_types, 3u, NULL) ==\n          XR_PROGRAM_BUILD_INVALID_INPUT",
+          "status": "OPEN"
+        },
+        {
+          "line": 2454,
+          "expression": "build_with_type_graph(managed_struct_types, 3u, &managed_wire_artifact) ==\n          XR_PROGRAM_BUILD_OK",
+          "status": "OPEN"
+        },
+        {
+          "line": 2457,
+          "expression": "dynamic_aggregate_nominal_offset(&managed_wire_artifact,\n                                           managed_struct_types[2].key,\n                                           &managed_nominal_offset)",
+          "status": "OPEN"
+        },
+        {
+          "line": 2471,
+          "expression": "build_with_type_graph(managed_struct_types, 3u, NULL) ==\n          XR_PROGRAM_BUILD_INVALID_INPUT",
+          "status": "OPEN"
+        },
+        {
+          "line": 2474,
+          "expression": "build_with_type_graph(managed_struct_types, 3u, &managed_wire_artifact) ==\n          XR_PROGRAM_BUILD_OK",
+          "status": "OPEN"
+        },
+        {
+          "line": 2477,
+          "expression": "dynamic_aggregate_nominal_offset(&managed_wire_artifact,\n                                           managed_struct_types[2].key,\n                                           &managed_nominal_offset)",
+          "status": "OPEN"
+        },
+        {
+          "line": 2497,
+          "expression": "build_with_type_graph(&legacy_wire_source, 1u, &legacy_wire_artifact) ==\n          XR_PROGRAM_BUILD_OK",
+          "status": "OPEN"
+        },
+        {
+          "line": 2500,
+          "expression": "single_dynamic_aggregate_wire_offsets(&legacy_wire_artifact, &legacy_wire_offsets)",
+          "status": "OPEN"
+        },
+        {
+          "line": 2507,
+          "expression": "build_with_type_graph(&recursive_class, 1u, &class_artifact) == XR_PROGRAM_BUILD_OK",
+          "status": "OPEN"
+        },
+        {
+          "line": 2509,
+          "expression": "xr_program_decode_structure(class_artifact.bytes, class_artifact.size, NULL, &class_view,\n                                      NULL, 0u) == XR_PROGRAM_DECODE_OK",
+          "status": "OPEN"
+        },
+        {
+          "line": 2515,
+          "expression": "single_dynamic_class_wire_offsets(&class_artifact, &class_offsets)",
+          "status": "OPEN"
+        },
+        {
+          "line": 2564,
+          "expression": "build_with_type_graph(recursive_optional_types, 2u, &class_artifact) ==\n          XR_PROGRAM_BUILD_OK",
+          "status": "OPEN"
+        },
+        {
+          "line": 2574,
+          "expression": "build_with_type_graph(self_justified_forbidden_types, 2u, NULL) ==\n          XR_PROGRAM_BUILD_INVALID_INPUT",
+          "status": "OPEN"
+        },
+        {
+          "line": 2579,
+          "expression": "collect_dynamic_copy_contract_offsets(&class_artifact, copy_contract_offsets,\n                                                sizeof(copy_contract_offsets) /\n                                                    sizeof(copy_contract_offsets[0]),\n                                                &copy_contract_count)",
+          "status": "OPEN"
+        },
+        {
+          "line": 2583,
+          "expression": "copy_contract_count == 2u",
+          "status": "OPEN"
+        },
+        {
+          "line": 2585,
+          "expression": "forged_bytes != NULL",
+          "status": "OPEN"
+        },
+        {
+          "line": 2589,
+          "expression": "forged_bytes[copy_contract_offsets[index]] == XR_CORE_IR_COPY_EXPLICIT",
+          "status": "OPEN"
+        },
+        {
+          "line": 2616,
+          "expression": "build_with_type_graph(overwritten_contract_types, 2u, NULL) ==\n          XR_PROGRAM_BUILD_INVALID_INPUT",
+          "status": "OPEN"
+        },
+        {
+          "line": 2644,
+          "expression": "build_with_type_graph(recursive_forbidden_types, 2u, &class_artifact) ==\n          XR_PROGRAM_BUILD_OK",
+          "status": "OPEN"
+        },
+        {
+          "line": 2651,
+          "expression": "build_class_execution_hostile(true, &hostile) == XR_PROGRAM_BUILD_OK",
+          "status": "OPEN"
+        },
+        {
+          "line": 2656,
+          "expression": "build_class_execution_hostile(false, &hostile) == XR_PROGRAM_BUILD_OK",
+          "status": "OPEN"
+        }
+      ],
+      "status": "OPEN"
+    }
+  ],
+  "outer_CHECK_sites": 24,
+  "original_private_helpers": [
+    {
+      "path": "tests/unit/program/test_xr_program_verify.c",
+      "function": "build_with_type_graph",
+      "line": 1097,
+      "end_line": 1145,
+      "body_lf_sha256": "39a4e68cdeb1c6730849a185c34e1d9c8ab71f5e9efb567e3a897cc969b85626",
+      "CHECK_sites": 0,
+      "CHECK_bindings": [],
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/program/test_xr_program_verify.c",
+      "function": "build_class_execution_hostile",
+      "line": 1147,
+      "end_line": 1263,
+      "body_lf_sha256": "83852c7a83b0a9b0e1fc88a814e61668977944bbe2e35e03d557cfaf541ea7f4",
+      "CHECK_sites": 0,
+      "CHECK_bindings": [],
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/program/test_xr_program_verify.c",
+      "function": "dynamic_aggregate_nominal_offset",
+      "line": 648,
+      "end_line": 702,
+      "body_lf_sha256": "df65b0afe0989dc89202e4e6881fe88f8571d98e114b4dda9709aa60f48b6a33",
+      "CHECK_sites": 0,
+      "CHECK_bindings": [],
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/program/test_xr_program_verify.c",
+      "function": "single_dynamic_aggregate_wire_offsets",
+      "line": 611,
+      "end_line": 646,
+      "body_lf_sha256": "26f145e972e6d707b3b558fc0870f995d09117500e1e4a06b4c6948a371f09d3",
+      "CHECK_sites": 0,
+      "CHECK_bindings": [],
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/program/test_xr_program_verify.c",
+      "function": "expect_legacy_aggregate_class_wire_rejected",
+      "line": 704,
+      "end_line": 725,
+      "body_lf_sha256": "a4c89845d5e29b88e33d7eb6975242e7c709738ff015e277ee09cae33b25ec10",
+      "CHECK_sites": 5,
+      "CHECK_bindings": [
+        {
+          "line": 707,
+          "expression": "bytes != NULL",
+          "status": "OPEN"
+        },
+        {
+          "line": 716,
+          "expression": "xr_program_decode_structure(bytes, artifact->size, NULL, &view, NULL, 0u) ==\n          XR_PROGRAM_DECODE_NONCANONICAL",
+          "status": "OPEN"
+        },
+        {
+          "line": 720,
+          "expression": "xr_program_validate(bytes, artifact->size, NULL, &program, &diagnostic) ==\n          XR_PROGRAM_VERIFY_STRUCTURAL_REJECTED",
+          "status": "OPEN"
+        },
+        {
+          "line": 722,
+          "expression": "diagnostic.kind == XR_PROGRAM_DIAGNOSTIC_STRUCTURAL",
+          "status": "OPEN"
+        },
+        {
+          "line": 723,
+          "expression": "program == NULL",
+          "status": "OPEN"
+        }
+      ],
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/program/test_xr_program_verify.c",
+      "function": "single_dynamic_class_wire_offsets",
+      "line": 571,
+      "end_line": 609,
+      "body_lf_sha256": "a63f7a3c520096f50a9d68eb038bcbcf486a69b39076530b9bf641cc7cf2ea3d",
+      "CHECK_sites": 0,
+      "CHECK_bindings": [],
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/program/test_xr_program_verify.c",
+      "function": "collect_dynamic_copy_contract_offsets",
+      "line": 493,
+      "end_line": 555,
+      "body_lf_sha256": "d0bef7170139679b542afd0e2702c6991a65919d1a03f8100967f2ad3bdd3edb",
+      "CHECK_sites": 0,
+      "CHECK_bindings": [],
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/program/test_xr_program_verify.c",
+      "function": "test_take_uvar",
+      "line": 203,
+      "end_line": 215,
+      "body_lf_sha256": "835eb97aa0c77560506ba0e421652602ae095f5e6686cce9ef331fc80a34ef4d",
+      "CHECK_sites": 1,
+      "CHECK_bindings": [
+        {
+          "line": 213,
+          "expression": "false",
+          "status": "OPEN"
+        }
+      ],
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/program/test_xr_program_verify.c",
+      "function": "test_skip_display_names",
+      "line": 217,
+      "end_line": 225,
+      "body_lf_sha256": "ed11446fffd51a746fc7ceb50a8263ce377a97d80fef245e1239ec3d691307d8",
+      "CHECK_sites": 0,
+      "CHECK_bindings": [],
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/program/test_xr_program_verify.c",
+      "function": "expect_mutated_verify",
+      "line": 436,
+      "end_line": 463,
+      "body_lf_sha256": "5ba80d137a1a9db91a8f8c115129af92e60a8d7644d056577722003739931044",
+      "CHECK_sites": 4,
+      "CHECK_bindings": [
+        {
+          "line": 440,
+          "expression": "bytes != NULL",
+          "status": "OPEN"
+        },
+        {
+          "line": 459,
+          "expression": "status == expected_status",
+          "status": "OPEN"
+        },
+        {
+          "line": 460,
+          "expression": "diagnostic.kind == expected_diagnostic",
+          "status": "OPEN"
+        },
+        {
+          "line": 461,
+          "expression": "program == NULL",
+          "status": "OPEN"
+        }
+      ],
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/program/test_xr_program_verify.c",
+      "function": "expect_semantic_reject_at",
+      "line": 176,
+      "end_line": 198,
+      "body_lf_sha256": "44cf0fb15bea156743a1c0e35b0be8ee844aa1af55c8653ed9361cf781c045b8",
+      "CHECK_sites": 6,
+      "CHECK_bindings": [
+        {
+          "line": 190,
+          "expression": "first_status == XR_PROGRAM_VERIFY_SEMANTIC_REJECTED",
+          "status": "OPEN"
+        },
+        {
+          "line": 191,
+          "expression": "program == NULL",
+          "status": "OPEN"
+        },
+        {
+          "line": 192,
+          "expression": "first.kind == expected",
+          "status": "OPEN"
+        },
+        {
+          "line": 195,
+          "expression": "second_status == first_status",
+          "status": "OPEN"
+        },
+        {
+          "line": 196,
+          "expression": "memcmp(&first, &second, sizeof(first)) == 0",
+          "status": "OPEN"
+        },
+        {
+          "line": 197,
+          "expression": "program == NULL",
+          "status": "OPEN"
+        }
+      ],
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/program/test_xr_program_verify.c",
+      "function": "validate_ok",
+      "line": 159,
+      "end_line": 174,
+      "body_lf_sha256": "94fe0ef4e0242acb810c12621ae1fe73a9887ef668f15ddc6c67ed645494f62b",
+      "CHECK_sites": 2,
+      "CHECK_bindings": [
+        {
+          "line": 171,
+          "expression": "status == XR_PROGRAM_VERIFY_OK",
+          "status": "OPEN"
+        },
+        {
+          "line": 172,
+          "expression": "program != NULL",
+          "status": "OPEN"
+        }
+      ],
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/program/test_xr_program_verify.c",
+      "function": "key",
+      "line": 109,
+      "end_line": 111,
+      "body_lf_sha256": "027a211b78e0cfbd6b296804e37236848a76cc1980981a0d6a49a6f42d3f2e13",
+      "CHECK_sites": 0,
+      "CHECK_bindings": [],
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/program/test_xr_program_verify.c",
+      "function": "write_typed_modules",
+      "line": 113,
+      "end_line": 138,
+      "body_lf_sha256": "c568d48005100fc2633344ba569a2bc8de9b62e3aac794b35057c8d838b8db65",
+      "CHECK_sites": 0,
+      "CHECK_bindings": [],
+      "status": "OPEN"
+    }
+  ],
+  "specified_helper_CHECK_sites": 18,
+  "input_file": {
+    "path": "tests/unit/program/test_xr_program_verify.c",
+    "whole_file_lf_sha256": "ec4b93f13bfab2aa3d4b8f8773dd5c1118a0c682ed6f8304fead515f90402802",
+    "physical_raw_sha256": "a39922500c0943c034fafcda3a82b67e511ea658f453f6c0c3204f7719de1817",
+    "git_base_equal": true
+  },
+  "input_policy": "Full original test, fourteen actually used helper bodies and complete original container equal01e6. Every type key/localID/kind/nominal/ownership/copy/field/payload/cycle and actual code graph retained; not a full external dependency closure.",
+  "type_admission_program": "build_with_type_graph uses exact caller typegraph, CoreBase, profile type-graph:profile, one zeroargVOID ENTRY with actual explicitTRAP, effect_mask1; no fake I64 Source entry. Original test does not execute these traps.",
+  "producer_negative_variants": [
+    {
+      "id": "recursive_value",
+      "graph": "AGGREGATE41 field41 direct by-value self-cycle",
+      "expected": "INVALID_INPUT"
+    },
+    {
+      "id": "missing_field",
+      "graph": "AGGREGATE41 field99 missing type",
+      "expected": "UNRESOLVED_REFERENCE"
+    },
+    {
+      "id": "legacy_value_class",
+      "graph": "Same self-cycle still AGGREGATE; nominalCLASS/AFFINE/EXPLICIT",
+      "expected": "INVALID_INPUT"
+    },
+    {
+      "id": "managed_class_struct",
+      "graph": "CLASS_REFERENCE41[I64] ->optional42[empty,41] ->nominalSTRUCT43[42]; allAFFINE/EXPLICIT",
+      "expected": "INVALID_INPUT"
+    },
+    {
+      "id": "managed_array_struct",
+      "graph": "Replace actual41 with ARRAY[STRING], keepoptional42 andnominalSTRUCT43; allAFFINE/EXPLICIT",
+      "expected": "INVALID_INPUT"
+    },
+    {
+      "id": "self_justified_forbidden_cycle",
+      "graph": "Legal recursive class41[optional42] /optional42[empty,41], overwrite bothEXPLICIT toFORBIDDEN without a forbidden leaf",
+      "expected": "INVALID_INPUT"
+    },
+    {
+      "id": "overwritten_bad_contract",
+      "graph": "CLASS_REFERENCE41[PANIC_INFO] claimsEXPLICIT, second fieldlessclass42 claimsEXPLICIT; valid later type must not hide firstinvalid",
+      "expected": "INVALID_INPUT"
+    }
+  ],
+  "producer_negative_count": 7,
+  "managed_nominal_wire_negatives": {
+    "variants": [
+      "Class41[I64]/optional42/anonymousaggregate43[42]",
+      "Array41[STRING]/optional42/anonymousaggregate43[42]"
+    ],
+    "base": "Full graph BUILD_OK with outer nominalNONE; actual matching outerkey decoder finds nominaloffset. Original body does not separately validate the anonymous baseline.",
+    "mutation": "Clone entire actual artifact and change only outer nominal toSTRUCT; exact SEMANTIC_REJECTED/TYPE/NULL owner, freecopy; producer rejection cannot hide the independent verifier gap.",
+    "count": 2
+  },
+  "legacy_class_wire_negative": {
+    "base": "One actual trivial value STRUCT41[I64], BUILD_OK and exact single-aggregate offset decoding; no semantic baseline validation claimed.",
+    "mutation": "Copy whole actual artifact and simultaneously set ownershipAFFINE, copyEXPLICIT, nominalCLASS while keeping AGGREGATE kind.",
+    "decode": "NONCANONICAL",
+    "verify": "STRUCTURAL_REJECTED/STRUCTURAL/NULL owner",
+    "count": 1,
+    "responsibility": "Old aggregate-class dual encoding fails closed. No compatibility alias or alternate class encoding retained."
+  },
+  "recursive_class_positive": {
+    "graph": "Start from exact old nominalCLASS/AFFINE/EXPLICIT self41 field41, change kind toCLASS_REFERENCE.",
+    "expected": "BUILD_OK, structural DECODE_OK, VERIFY_OK/non-NULL.",
+    "class_wire_negative_variants": [
+      {
+        "field": "kind",
+        "new_value": "AGGREGATE",
+        "variant": 0,
+        "expected_verify": "STRUCTURAL_REJECTED",
+        "expected_diagnostic": "STRUCTURAL",
+        "empty_owner": true,
+        "status": "OPEN"
+      },
+      {
+        "field": "kind",
+        "new_value": "0x7f",
+        "variant": 1,
+        "expected_verify": "STRUCTURAL_REJECTED",
+        "expected_diagnostic": "STRUCTURAL",
+        "empty_owner": true,
+        "status": "OPEN"
+      },
+      {
+        "field": "ownership",
+        "new_value": "TRIVIAL",
+        "variant": 2,
+        "expected_verify": "STRUCTURAL_REJECTED",
+        "expected_diagnostic": "STRUCTURAL",
+        "empty_owner": true,
+        "status": "OPEN"
+      },
+      {
+        "field": "copy_contract",
+        "new_value": "TRIVIAL",
+        "variant": 3,
+        "expected_verify": "STRUCTURAL_REJECTED",
+        "expected_diagnostic": "STRUCTURAL",
+        "empty_owner": true,
+        "status": "OPEN"
+      },
+      {
+        "field": "field_count",
+        "new_value": 2,
+        "variant": 4,
+        "expected_verify": "STRUCTURAL_REJECTED",
+        "expected_diagnostic": "STRUCTURAL",
+        "empty_owner": true,
+        "status": "OPEN"
+      },
+      {
+        "field": "first_field_type",
+        "new_value": "VOID",
+        "variant": 5,
+        "expected_verify": "STRUCTURAL_REJECTED",
+        "expected_diagnostic": "STRUCTURAL",
+        "empty_owner": true,
+        "status": "OPEN"
+      },
+      {
+        "field": "first_field_type",
+        "new_value": "0x7f",
+        "variant": 6,
+        "expected_verify": "STRUCTURAL_REJECTED",
+        "expected_diagnostic": "STRUCTURAL",
+        "empty_owner": true,
+        "status": "OPEN"
+      }
+    ],
+    "count": 7
+  },
+  "recursive_optional_positive": {
+    "graph": "CLASS_REFERENCE41 has fieldoptional42; optionalVARIANT42 has empty0 and payloadclass41 at1. BothAFFINE/EXPLICIT, full recursive graph.",
+    "expected": "BUILD_OK and VERIFY_OK/non-NULL; no runtime construction or copy claimed."
+  },
+  "self_justified_wire_negative": {
+    "base": "Original admitted recursiveoptional artifact with both actual copycontractsEXPLICIT.",
+    "mutation": "Collect exactlytwo dynamic contract offsets from the real artifact; allocate full copy; assert each original byteEXPLICIT then change BOTH toFORBIDDEN, preserving typekeys/kinds/fields/payload cycle.",
+    "expected": "SEMANTIC_REJECTED/TYPE/NULL twice with exact whole diagnostic equality via helper; freefullcopy and artifact.",
+    "count": 1
+  },
+  "concrete_forbidden_cycle_positive": {
+    "graph": "CLASS_REFERENCE41 fieldoptional42; VARIANT42 contains empty0, recursivepayloadclass41 at1, actual PANIC_INFO payload at2. BothAFFINE/FORBIDDEN.",
+    "expected": "BUILD_OK and VERIFY_OK/non-NULL.",
+    "responsibility": "A real forbidden leaf anchors transitive copy prohibition across the recursive graph. Preserve third variant and PANIC_INFO, not an ungrounded allforbidden cycle."
+  },
+  "potential_trap_owner_prefix": {
+    "signature": "One MOVE class42 parameter (VALUE/OWNER), owningclass42 result, actual ENTRY and TRAP effect. Emptyfield CLASS_REFERENCE42 isAFFINE/EXPLICIT.",
+    "constants": [
+      1,
+      2
+    ],
+    "operation_order": [
+      "BLOCK_ARGUMENT",
+      "CONSTANT_I64",
+      "CONSTANT_I64",
+      "ADD_I64",
+      "OWNER_COPY",
+      "OWNER_DROP",
+      "OWNER_MOVE",
+      "RETURN"
+    ],
+    "whole_graph": "A real live owning parameter precedes arithmetic1+2, then deepOWNER_COPY parameter, DROP copy, MOVE original and RETURN movedowner. There is no construction, cleanupedge or runtime execution in this old admission test.",
+    "wrapping_positive": "ADD immediate1 (wrapping) ->BUILD_OK thenVERIFY_OK/non-NULL.",
+    "checked_negative": "ADD immediate0 (checked) ->BUILD_OK thenSEMANTIC_REJECTED/VALUE_USE/NULL twice with diagnostic equality.",
+    "responsibility": "The checked operation is potentially trapping while actual owner lacks recoverable cleanup. Constants1+2 do not overflow; do not replace it with runtime overflow inputs or invert the wrapping positive."
+  },
+  "verifier_negative_count": 12,
+  "verified_positive_admission_graphs": 4,
+  "specified_helper_boundaries": {
+    "mutation": "expect_mutated_verify checks one actual verification status/kind/NULL and retains diagnostic mismatch decode; it does not assert repeated whole diagnostic equality. expect_semantic_reject_at does verify twice and memcmp entire diagnostic.",
+    "wirewalk": "Full builtin records, key bytes and all dynamic kind fields/display names with exact bounds/capacity. Offset helpers are original mutation machinery, not target object identity authority.",
+    "cleanup": "Each actual intermediate artifact/verifiedowner and physical forged malloc copy is freed. No current physical FI census, per-object lifecycle or native execution inferred from these admission tests.",
+    "shared": "Helpers serve other active old consumers and remain pending last-consumer verification; no shared implementation removal."
+  },
+  "shared_dependencies": [
+    {
+      "path": "src/program/xr_reference_evaluator.h",
+      "physical_raw_sha256": "d43732ceca814f67f7f04e1b51d8512aab2e199092a546d1c47d30e0f28439bf",
+      "whole_file_lf_sha256": "0b2149e8397748e84b1cbc14904cde97d5bee4c3e69474486169e4656ff89054",
+      "git_base_equal": true,
+      "status": "PRESERVE_SHARED_READONLY"
+    }
+  ],
+  "Root_contract_or_representation_review": {
+    "status": "OPEN",
+    "graphs": "Preserve recursive reference cycle versus illegal recursive by-value layout, unresolved references, legal and illegal copycontract closure, immutable string struct from previous map versus managedmutable class/array field prohibition. Root maps current Cell/Type/nominal rules atomically, not by restoring old typekind/mode/wire aliases.",
+    "forbidden": "Copy restrictions must be grounded in real uncopyable leaf and propagate across all current actual related type owners. An already valid later type must not overwrite earlier invalid evidence; dropping PANIC_INFO or recursiveoptional changes the original requirement.",
+    "owner_prefix": "Retain actual checked-versus-wrapping operation before live owning MOVE parameter/COPY/DROP/RETURN and exact safe failure semantics. Mapping must account for current genuine graph effects/cleanup; unrelated Source rejection or constant/runtime overflow is no substitute.",
+    "entry": "Type-only raw graph zeroargVOID/explicitTRAP; actualhostile graph has one MOVE classowner ->sameclassowner. Root owns role/signature/verified-owner projection; neither can be silently replaced by the synthesizedzeroargI64(0) Sourceentry or fakeanswer42 export.",
+    "qualification": "Formal qualified current producer, public Built/Checked/packet/reverify/Lowered/Program, every original positive/negative including malformedowner publication, twoInstance detached execution where applicable, complete currentFI/axes/lifecycle/VM-native-mixed/safety remainOPEN."
+  },
+  "full_FI": "NOT_RUN",
+  "axes": "NOT_RUN",
+  "full_safety": "NOT_RUN",
+  "SourceDelete": "NOT_RUN",
+  "Main": "NOT_RUN",
+  "handoff": {
+    "Root_thread": "01a11f74-a297-7b11-8441-835bde6a3d5f",
+    "formal_acceptance": "PENDING"
+  },
+  "boundaries": [
+    "All24 outer/18 helper CHECKs and original7producer/12verifier negative responsibilities OPEN; retired0.",
+    "Only static original typegraph/owner-effect/admission/wire/helper/scope evidence, no current product/Source acceptance/native run/new producer/qualification.",
+    "Product/header/CMake/stdlib/spec/SDK/docs and shared dependencies unchanged; no Main integration or deletion permit."
+  ]
+}
