@@ -15,11 +15,11 @@
     "shared_emission_owner_consumers": 7
   },
   "reference_counts": {
-    "source_with_digest_reference": 102,
-    "source_without_digest_reference": 6,
+    "source_with_digest_reference": 104,
+    "source_without_digest_reference": 4,
     "other_with_digest_reference": 40,
     "other_without_digest_reference": 120,
-    "digest_reference_values": 172,
+    "digest_reference_values": 174,
     "source_inventory_projections": 42
   },
   "mapping_inputs": [
@@ -494,6 +494,10 @@
     {
       "path": "tests/unit/xir/product_consumers/source_original_cross_module_instance_method_obligations.json",
       "lf_sha256": "34d71d71adb59738203cdb68ba9813f59e3d5cdec031ee7973d4498a61bbff70"
+    },
+    {
+      "path": "tests/unit/xir/product_consumers/source_original_defer_panic_place_obligations.json",
+      "lf_sha256": "72eb7793405098f1977911afc9c798efcc30248141b8204f698a7907f6e063ec"
     },
     {
       "path": "tests/unit/xir/product_consumers/source_original_entry_identity_obligations.json",
@@ -2673,7 +2677,13 @@
       "body_lf_sha256": "0468ca535c4be41dfa9c28822d54731c81d3be8d2746ec75f23afaff63fd401f",
       "status": "OPEN",
       "inventory_projection": null,
-      "mapping_references": []
+      "mapping_references": [
+        {
+          "mapping": "tests/unit/xir/product_consumers/source_original_defer_panic_place_obligations.json",
+          "pointer": "/legacy/0/body_lf_sha256",
+          "binding": "exact_path_name_body"
+        }
+      ]
     },
     {
       "legacy_path": "tests/unit/program/test_xr_program_source_build.c",
@@ -2681,7 +2691,13 @@
       "body_lf_sha256": "be01ac21c6ce3809a46bc37806d73ee36793fedb1c10d6e5aa030571ac9a9f39",
       "status": "OPEN",
       "inventory_projection": null,
-      "mapping_references": []
+      "mapping_references": [
+        {
+          "mapping": "tests/unit/xir/product_consumers/source_original_defer_panic_place_obligations.json",
+          "pointer": "/legacy/1/body_lf_sha256",
+          "binding": "exact_path_name_body"
+        }
+      ]
     },
     {
       "legacy_path": "tests/unit/program/test_xr_program_source_build.c",

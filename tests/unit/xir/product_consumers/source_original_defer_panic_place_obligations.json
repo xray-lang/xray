@@ -1,0 +1,670 @@
+{
+  "schema": 1,
+  "family": "original_defer_panic_place",
+  "legacy_base_commit": "01e6d38401b0f5c8684b64c35a99ac651024c0c1",
+  "status": "OPEN",
+  "retired": 0,
+  "replacement_gates": [],
+  "result": "STATIC_ORIGINAL_DEFER_PANIC_PLACE_MAP_ONLY",
+  "product_execution": "NOT_RUN_BY_THIS_MAP",
+  "producer": "25f4016d6f089169757a90ae11ba537002374711",
+  "identity": "Checked25/semantic67/Value22/Call28/Program29",
+  "producer_scope": "Authorised25f4 only; no newer/private Root producer or heavy window adopted.",
+  "legacy": [
+    {
+      "name": "source_owner_lowers_defer_panic_cleanup_across_private_executors",
+      "legacy_path": "tests/unit/program/test_xr_program_source_build.c",
+      "legacy_line": 7282,
+      "body_lf_sha256": "0468ca535c4be41dfa9c28822d54731c81d3be8d2746ec75f23afaff63fd401f",
+      "assertion_sites": 15,
+      "loop_sites": 0,
+      "status": "OPEN",
+      "replacement_gates": [],
+      "note": "Function census preserves its whole body; sites do not count executed loop iterations.",
+      "original_fixture": {
+        "id": "panic_defer_cleanup",
+        "expected_exit": 173,
+        "labels": [
+          "provider",
+          "pipe",
+          "class",
+          "panic",
+          "defer",
+          "cleanup"
+        ],
+        "backends": {
+          "vm": "execute",
+          "aot": "execute"
+        }
+      },
+      "static_input_literals": {
+        "source": {
+          "bytes": 223,
+          "sha256": "548eeb36c0126b80c70ac120b952b5b3772ba93bbe05f605a90879adff4da51d"
+        }
+      }
+    },
+    {
+      "name": "source_owner_recovers_and_reconstructs_place_backed_defer_for_resume_and_cancel",
+      "legacy_path": "tests/unit/program/test_xr_program_source_build.c",
+      "legacy_line": 7365,
+      "body_lf_sha256": "be01ac21c6ce3809a46bc37806d73ee36793fedb1c10d6e5aa030571ac9a9f39",
+      "assertion_sites": 52,
+      "loop_sites": 8,
+      "status": "OPEN",
+      "replacement_gates": [],
+      "note": "Function census preserves its whole body; sites do not count executed loop iterations.",
+      "original_fixture": {
+        "id": "pipe_cancel_cleanup",
+        "expected_exit": 226,
+        "labels": [
+          "provider",
+          "pipe",
+          "coroutine",
+          "cancel",
+          "cleanup"
+        ],
+        "backends": {
+          "vm": "execute",
+          "aot": "execute"
+        }
+      },
+      "static_input_literals": {
+        "source": {
+          "bytes": 215,
+          "sha256": "250a055ad6a16a58bc50041137306ffdae8b55dfb05e2d310a7d9a2009c057a9"
+        }
+      }
+    }
+  ],
+  "original_sources": {
+    "defer_panic": {
+      "bytes": 223,
+      "sha256": "548eeb36c0126b80c70ac120b952b5b3772ba93bbe05f605a90879adff4da51d",
+      "text": "import sys\nfn doomed(divisor: i64) -> i64 {\n  var live = sys.Pipe(2147483646, 2147483647)\n  defer {\n    live.closeRead()\n    live.closeWrite()\n  }\n  assert(divisor != 0)\n  return 1\n}\nfn answer() -> i64 { return doomed(0) }\n",
+      "origin_function": "source_owner_lowers_defer_panic_cleanup_across_private_executors"
+    },
+    "place_backed_defer": {
+      "bytes": 215,
+      "sha256": "250a055ad6a16a58bc50041137306ffdae8b55dfb05e2d310a7d9a2009c057a9",
+      "text": "import sys\nfn answer() -> i64 {\n  var live = sys.Pipe(2147483646, 2147483647)\n  defer {\n    live.closeRead()\n    live.closeWrite()\n  }\n  const readEnd = live.readEnd()\n  Coro.yield()\n  return readEnd - 2147483604\n}\n",
+      "origin_function": "source_owner_recovers_and_reconstructs_place_backed_defer_for_resume_and_cancel"
+    }
+  },
+  "source_construction": "Complete223B/215B C literals independently decoded; no Source rename/pruning/adapter.",
+  "responsibility_mapping": [
+    {
+      "legacy_name": "source_owner_lowers_defer_panic_cleanup_across_private_executors",
+      "assertion_sites": 15,
+      "groups": [
+        {
+          "responsibility": "Admit full223B Source despite the expected runtime panic.",
+          "status": "OPEN",
+          "target_consumer": "ROOT_CONTRACT_AND_QUALIFIED_PRODUCER_PENDING",
+          "original": {
+            "path": "tests/unit/program/test_xr_program_source_build.c",
+            "lines": [
+              7294,
+              7303
+            ]
+          },
+          "original_assertion_sites": 4,
+          "gap": "Real sys.Pipe and assert(divisor!=0) in doomed(0) must be admitted. Source refusal remains FAIL; return1 is unreachable, not an expected scalar success."
+        },
+        {
+          "responsibility": "Actual owned Source product and whole assertion/cleanup graph.",
+          "status": "OPEN",
+          "target_consumer": "ROOT_CONTRACT_AND_QUALIFIED_PRODUCER_PENDING",
+          "original": {
+            "path": "tests/unit/program/test_xr_program_source_build.c",
+            "lines": [
+              7304,
+              7312
+            ]
+          },
+          "original_assertion_sites": 3,
+          "gap": "Source OK/nonNULL Program, exactly one ASSERT_CONDITION with one successor and nonzero sealed direct calls. Root maps common full verification and actual condition-false semantic effect."
+        },
+        {
+          "responsibility": "Bind actual stable close requirement with bounded read/write order.",
+          "status": "OPEN",
+          "target_consumer": "ROOT_CONTRACT_AND_QUALIFIED_PRODUCER_PENDING",
+          "original": {
+            "path": "tests/unit/program/test_xr_program_source_build.c",
+            "lines": [
+              7313,
+              7349
+            ]
+          },
+          "original_assertion_sites": 5,
+          "gap": "Actual operation/profile fingerprint, typed bool-i64 callback, expected2147483646/47, rejects overrun/wrong handle before writingtrue/counting; one original Instance plus context lifetime."
+        },
+        {
+          "responsibility": "Independent VM panic and real native guard protocol.",
+          "status": "OPEN",
+          "target_consumer": "ROOT_CONTRACT_AND_QUALIFIED_PRODUCER_PENDING",
+          "original": {
+            "path": "tests/unit/program/test_xr_program_source_build.c",
+            "lines": [
+              7350,
+              7354
+            ]
+          },
+          "original_assertion_sites": 0,
+          "gap": "VM PANIC/PANIC_INFO/condition-false and exactly two close calls, dispose outcome/code before final checks. Native verified deterministic C kind3/old condition-false enum/close2/standalone173. Preserve semantic meaning through current code445 without legacy aliases."
+        },
+        {
+          "responsibility": "Drain and release original Instance/product/profile/source owners.",
+          "status": "OPEN",
+          "target_consumer": "ROOT_CONTRACT_AND_QUALIFIED_PRODUCER_PENDING",
+          "original": {
+            "path": "tests/unit/program/test_xr_program_source_build.c",
+            "lines": [
+              7355,
+              7363
+            ]
+          },
+          "original_assertion_sites": 3,
+          "gap": "Original full release statuses stay required; target escaped/copied PanicInfo and independently owned message after producer/Instance death, physical/per-object release and partial-owner cleanup are unverified."
+        }
+      ]
+    },
+    {
+      "legacy_name": "source_owner_recovers_and_reconstructs_place_backed_defer_for_resume_and_cancel",
+      "assertion_sites": 52,
+      "groups": [
+        {
+          "responsibility": "Admit full215B Source with actual place-backed deferred Pipe cleanup.",
+          "status": "OPEN",
+          "target_consumer": "ROOT_CONTRACT_AND_QUALIFIED_PRODUCER_PENDING",
+          "original": {
+            "path": "tests/unit/program/test_xr_program_source_build.c",
+            "lines": [
+              7377,
+              7386
+            ]
+          },
+          "original_assertion_sites": 4,
+          "gap": "Preserve const readEnd snapshot before yield, full read/write deferred calls and return readEnd-2147483604. No substitute source, copied owner or temporary writeback."
+        },
+        {
+          "responsibility": "Two deterministic owned products and complete place operation census.",
+          "status": "OPEN",
+          "target_consumer": "ROOT_CONTRACT_AND_QUALIFIED_PRODUCER_PENDING",
+          "original": {
+            "path": "tests/unit/program/test_xr_program_source_build.c",
+            "lines": [
+              7387,
+              7403
+            ]
+          },
+          "original_assertion_sites": 3,
+          "gap": "Both Source OK, exact products/selected entry/artifact bytes, PLACE_LOCAL6/PLACE_TAKE0/sealedDirectGT0. Metadata equality cannot qualify execution."
+        },
+        {
+          "responsibility": "Full graph recovery scan and unique safepoint/yield ownership.",
+          "status": "OPEN",
+          "target_consumer": "ROOT_CONTRACT_AND_QUALIFIED_PRODUCER_PENDING",
+          "original": {
+            "path": "tests/unit/program/test_xr_program_source_build.c",
+            "lines": [
+              7404,
+              7445
+            ]
+          },
+          "original_assertion_sites": 8,
+          "gap": "In-range entry, safepoint1/livevalues2, unique yield. For every recovery block, local/load use same place, instructionsGT2/localoperand1; recovery edge original-owner once and borrowed-result zero, recoveryGT0. Root current owner/place full reverification must map these obligations."
+        },
+        {
+          "responsibility": "Resume and cancel transfer actual owning Pipe exactly once.",
+          "status": "OPEN",
+          "target_consumer": "ROOT_CONTRACT_AND_QUALIFIED_PRODUCER_PENDING",
+          "original": {
+            "path": "tests/unit/program/test_xr_program_source_build.c",
+            "lines": [
+              7446,
+              7466
+            ]
+          },
+          "original_assertion_sites": 12,
+          "gap": "Yield2successors; resume2 ordinaryVALUE args with OWNER1/NON_OWNER1. Nonowner is the i64 readEnd snapshot, not a borrowed place/reference. Cancel1 ordinaryVALUE OWNER arg/instructionsGT1/final CANCEL_PUBLISH."
+        },
+        {
+          "responsibility": "Distinct complete trap and cancellation cleanup frontiers.",
+          "status": "OPEN",
+          "target_consumer": "ROOT_CONTRACT_AND_QUALIFIED_PRODUCER_PENDING",
+          "original": {
+            "path": "tests/unit/program/test_xr_program_source_build.c",
+            "lines": [
+              7467,
+              7495
+            ]
+          },
+          "original_assertion_sites": 5,
+          "gap": "Cancel sealedDirect2 and unique trap block sealedDirect2; trap!=cancel. Whole function/block/instruction scans remain required, not only runtime42."
+        },
+        {
+          "responsibility": "Exact hosted close requirement/binding and one original Instance.",
+          "status": "OPEN",
+          "target_consumer": "ROOT_CONTRACT_AND_QUALIFIED_PRODUCER_PENDING",
+          "original": {
+            "path": "tests/unit/program/test_xr_program_source_build.c",
+            "lines": [
+              7496,
+              7534
+            ]
+          },
+          "original_assertion_sites": 6,
+          "gap": "Providerrequirement1/actual operation/fingerprint, handles2147483646/47, successfultrue/true, alternating-handle validation. Target two detached Instances and stable Pipe IDs per execution remain missing."
+        },
+        {
+          "responsibility": "Independent VM normal42 and cancelled cleanup in the same original Instance.",
+          "status": "OPEN",
+          "target_consumer": "ROOT_CONTRACT_AND_QUALIFIED_PRODUCER_PENDING",
+          "original": {
+            "path": "tests/unit/program/test_xr_program_source_build.c",
+            "lines": [
+              7535,
+              7560
+            ]
+          },
+          "original_assertion_sites": 11,
+          "gap": "Normal suspend\u2192RETURN/I64/42/close2; second execution suspend\u2192CANCELLED/cumulativeclose4, both freed then code freed. Snapshot2147483646-2147483604 independently equals42."
+        },
+        {
+          "responsibility": "Real native two-frame normal/cancel protocol.",
+          "status": "OPEN",
+          "target_consumer": "ROOT_CONTRACT_AND_QUALIFIED_PRODUCER_PENDING",
+          "original": {
+            "path": "tests/unit/program/test_xr_program_source_build.c",
+            "lines": [
+              7561,
+              7563
+            ]
+          },
+          "original_assertion_sites": 0,
+          "gap": "Verified deterministic generated C, typed provider marker/cancel symbol/noTargetPlan; first suspendkind1/state1/point0/close0 then42/close2, second suspend/close2 then cancelkind3/state1/close4; eachframe disposed, exact orderedhandles and standalone226."
+        },
+        {
+          "responsibility": "Release complete original product/execution/source graph.",
+          "status": "OPEN",
+          "target_consumer": "ROOT_CONTRACT_AND_QUALIFIED_PRODUCER_PENDING",
+          "original": {
+            "path": "tests/unit/program/test_xr_program_source_build.c",
+            "lines": [
+              7564,
+              7572
+            ]
+          },
+          "original_assertion_sites": 3,
+          "gap": "Drain/retire/free, both products/profile/physical Source owner graph. Actual per-object construct/finalize/reclaim and all partial cleanup/FI/resources/safety stay OPEN."
+        }
+      ]
+    }
+  ],
+  "original_private_helpers": [
+    {
+      "path": "tests/unit/program/test_xr_program_source_build.c",
+      "function": "source_build_fixture_init",
+      "line": 894,
+      "end_line": 968,
+      "body_lf_sha256": "964c190cb52940aa039b9459e6a5aa0416430eadac032979ed210358216892eb",
+      "assertion_sites": 0,
+      "classification": "Actual specified direct/transitive NON_TEST helper, not extra census TEST or exhaustive shared closure.",
+      "responsibility": "Actual resolver/session/canonical source and declaration identity, physical graph and profile; all failed prefix branches release partial owners.",
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/program/test_xr_program_source_build.c",
+      "function": "source_build_fixture_free",
+      "line": 873,
+      "end_line": 892,
+      "body_lf_sha256": "54f2ca59ddb46fda789abf0411160790bcb950903858a308b984b50e6f8c1889",
+      "assertion_sites": 0,
+      "classification": "Actual specified direct/transitive NON_TEST helper, not extra census TEST or exhaustive shared closure.",
+      "responsibility": "Restore session; free resolver/session/isolate/identity and physical paths/files/temp directory, then zero fixture.",
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/program/test_xr_program_source_build.c",
+      "function": "write_source_file",
+      "line": 857,
+      "end_line": 864,
+      "body_lf_sha256": "cc03580465f59354407c5e6e4e063c40ab9759cf1f45ceb3f099884b0e28014d",
+      "assertion_sites": 0,
+      "classification": "Actual specified direct/transitive NON_TEST helper, not extra census TEST or exhaustive shared closure.",
+      "responsibility": "Write complete original223B/215B and require exact completion/close, no truncated substitute.",
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/program/test_xr_program_source_build.c",
+      "function": "semantic_fingerprint",
+      "line": 866,
+      "end_line": 871,
+      "body_lf_sha256": "08fbbce02bdf996e8c8fb5b4a0b090f8e0dad413c84d6de2ab2530ec56aa3c0a",
+      "assertion_sites": 0,
+      "classification": "Actual specified direct/transitive NON_TEST helper, not extra census TEST or exhaustive shared closure.",
+      "responsibility": "Full original semantic fingerprint independent of target/provider identities.",
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/program/test_xr_program_source_build.c",
+      "function": "assert_source_build_ok",
+      "line": 996,
+      "end_line": 1010,
+      "body_lf_sha256": "a5d0aee0a406f887ea79355380455511ee0762cfa39915fb657cfe8a4088fd94",
+      "assertion_sites": 1,
+      "classification": "Actual specified direct/transitive NON_TEST helper, not extra census TEST or exhaustive shared closure.",
+      "responsibility": "Exact required positive Source OK; retain actual diagnostic on refusal. Runtime panic expectation never licenses admission failure.",
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/program/test_xr_program_source_build.c",
+      "function": "assert_products_equal",
+      "line": 982,
+      "end_line": 994,
+      "body_lf_sha256": "ec9ae13d2d71259635fe95f5bed3da7bddec1aaa43b10a247a9930a5c6cd925b",
+      "assertion_sites": 8,
+      "classification": "Actual specified direct/transitive NON_TEST helper, not extra census TEST or exhaustive shared closure.",
+      "responsibility": "Eight sites require both Program/artifact owners, all equal bytes/size/ProgramID/selectedentry for place-backed defer.",
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/program/test_xr_program_source_build.c",
+      "function": "source_fixture_output_path",
+      "line": 63,
+      "end_line": 65,
+      "body_lf_sha256": "2c5d63f47f4b0e77e5abec0b6831c67cec2056ad89196c34fbd8e0cbd6ec1d9d",
+      "assertion_sites": 0,
+      "classification": "Actual specified direct/transitive NON_TEST helper, not extra census TEST or exhaustive shared closure.",
+      "responsibility": "Select actual panic_defer_cleanup/pipe_cancel_cleanup output from fixture registry.",
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/program/test_xr_program_source_build.c",
+      "function": "stable_id_equal",
+      "line": 357,
+      "end_line": 359,
+      "body_lf_sha256": "b7944eaf320e1112ae477f8c2d4d3513ce35bce7c8c98f0fb4a2b4b227d7f621",
+      "assertion_sites": 0,
+      "classification": "Actual specified direct/transitive NON_TEST helper, not extra census TEST or exhaustive shared closure.",
+      "responsibility": "All stable identity bytes; spelling or array index does not grant target authority.",
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/program/test_xr_program_source_build.c",
+      "function": "find_profile_provider",
+      "line": 749,
+      "end_line": 757,
+      "body_lf_sha256": "e406782a95e05ce78f909f815229bd5d4ad14c2e96001c17f2e17aad178ee048",
+      "assertion_sites": 0,
+      "classification": "Actual specified direct/transitive NON_TEST helper, not extra census TEST or exhaustive shared closure.",
+      "responsibility": "Match actual full stable contract ID in hosted profile; absent meansNULL.",
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/program/test_xr_program_source_build.c",
+      "function": "program_operation_count",
+      "line": 361,
+      "end_line": 375,
+      "body_lf_sha256": "2d6a79abce8b727c9711e86a5520d525ddefa2b890f5db5e510d4a89d9d5f68d",
+      "assertion_sites": 0,
+      "classification": "Actual specified direct/transitive NON_TEST helper, not extra census TEST or exhaustive shared closure.",
+      "responsibility": "Scan every function/block/instruction for complete local/take/sealed-direct census.",
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/program/test_xr_program_source_build.c",
+      "function": "program_operation_successor_count",
+      "line": 730,
+      "end_line": 747,
+      "body_lf_sha256": "2a628bc0a344df544557960237142787c8eb1231ca5f87285171cc85ebd440d5",
+      "assertion_sites": 0,
+      "classification": "Actual specified direct/transitive NON_TEST helper, not extra census TEST or exhaustive shared closure.",
+      "responsibility": "Complete assertion opcode AND successor cardinality census.",
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/program/test_xr_program_source_build.c",
+      "function": "pipe_close_sequence_probe",
+      "line": 815,
+      "end_line": 824,
+      "body_lf_sha256": "48c745fd95af4c4ee639f7e6ef1d33f032104680e45b0015aa8ef71bbea5e51b",
+      "assertion_sites": 0,
+      "classification": "Actual specified direct/transitive NON_TEST helper, not extra census TEST or exhaustive shared closure.",
+      "responsibility": "Reject NULL context/output, count>=expected or wrong next handle BEFORE result/count; true result/providerOK only in exact bounded sequence.",
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/program/test_xr_program_source_build.c",
+      "function": "pipe_close_sequence_reset",
+      "line": 826,
+      "end_line": 831,
+      "body_lf_sha256": "5d5f8d82a0714fdeb139fb4a609c108fbfc3fce964821e4707c21be9c8fb3f3b",
+      "assertion_sites": 0,
+      "classification": "Actual specified direct/transitive NON_TEST helper, not extra census TEST or exhaustive shared closure.",
+      "responsibility": "Zero actual calls, bind expected handle array and exact capacity2 without changing canonical close behavior.",
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/program/test_xr_program_source_build.c",
+      "function": "pipe_close_provider_probe",
+      "line": 802,
+      "end_line": 813,
+      "body_lf_sha256": "7f3d057309a232d87f21de8785710b22755b61022a845e12f8463e5912cf8413",
+      "assertion_sites": 0,
+      "classification": "Actual specified direct/transitive NON_TEST helper, not extra census TEST or exhaustive shared closure.",
+      "responsibility": "Reject wrong alternating read/write handle or invalid context/result before writing configuredtrue/counting; outer2/4 counts reject extra paired callbacks.",
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/program/test_xr_program_source_build.c",
+      "function": "assert_vm_panic_cleanup_policy",
+      "line": 612,
+      "end_line": 643,
+      "body_lf_sha256": "8647b659083abfbd4d58e51dbe335ad5469405d6340e6d9adb9c569d1f0ab633",
+      "assertion_sites": 7,
+      "classification": "Actual specified direct/transitive NON_TEST helper, not extra census TEST or exhaustive shared closure.",
+      "responsibility": "Seven sites build actual code, require diagnosticOK, execute and snapshot PANIC/PANIC_INFO/conditionfalse/close2, dispose real outcome/code BEFORE four finalchecks.",
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/program/test_xr_program_source_build.c",
+      "function": "assert_vm_panic_cleanup",
+      "line": 645,
+      "end_line": 652,
+      "body_lf_sha256": "a740031f8c8c4a60b61aa1d6026fcf95232e8fa570bd90cb1e9cddc7f231e60e",
+      "assertion_sites": 0,
+      "classification": "Actual specified direct/transitive NON_TEST helper, not extra census TEST or exhaustive shared closure.",
+      "responsibility": "Actual wrapper delegates panic cleanup policy, no additional assertion or alternate successful result.",
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/program/test_xr_program_source_build.c",
+      "function": "assert_aot_panic_cleanup",
+      "line": 656,
+      "end_line": 728,
+      "body_lf_sha256": "11e3074d349adf04d03c39d3e8174f9abfa5ad638a674767f066214cea24285f",
+      "assertion_sites": 17,
+      "classification": "Actual specified direct/transitive NON_TEST helper, not extra census TEST or exhaustive shared closure.",
+      "responsibility": "Seventeen sites verify entry/PanicInfo shape/backend bindings and deterministic fullC/noautommain; manual bounded exact booltrue callbacks, actual kind3/oldconditionfalse/close2 and standalone173. Free buffers/backend and native context.",
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/program/xr_program_source_cleanup_checks.inc.c",
+      "function": "assert_aot_pipe_cancel_cleanup",
+      "line": 939,
+      "end_line": 1017,
+      "body_lf_sha256": "4b8cd82887868e4122c19c38416e083ce3add7d7f00778df12c1bee37e45443f",
+      "assertion_sites": 13,
+      "classification": "Actual specified direct/transitive NON_TEST helper, not extra census TEST or exhaustive shared closure.",
+      "responsibility": "Thirteen sites verify backend/bindings/twoequalC/cancel+typedmarkers/noTargetPlan; complete manual native twoframes/42/fourorderedtrueclose results/226, dispose each frame and all emission/backend owners.",
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/program/xr_program_source_cleanup_checks.inc.c",
+      "function": "write_probe_typed_host",
+      "line": 414,
+      "end_line": 438,
+      "body_lf_sha256": "1de3cc218ff7c7c7c306c72863611bc68f882ad978187b0c5d99722c398dfc97",
+      "assertion_sites": 1,
+      "classification": "Actual specified direct/transitive NON_TEST helper, not extra census TEST or exhaustive shared closure.",
+      "responsibility": "One site and full actual typed pack/write/dispose bridge; preserve output/error/handle guards through Root canonical ABI review, no old bridge aliases.",
+      "status": "OPEN"
+    }
+  ],
+  "specified_helper_assertion_sites": 47,
+  "helper_policy": "Nineteen specified full actual NON_TEST helper bodies/47sites are not extra censusTESTs, executions or exhaustive deletion closure.",
+  "independent_goldens": {
+    "required_positive_Source_status": "OK",
+    "panic_outcome": "PANIC",
+    "panic_value_kind": "PANIC_INFO",
+    "panic_failure_kind": "XR_ASSERTION_FAILURE_CONDITION_FALSE",
+    "panic_old_failure_kind_value": 1,
+    "panic_close_handles": [
+      2147483646,
+      2147483647
+    ],
+    "panic_close_calls": 2,
+    "panic_source_return1": "UNREACHABLE_AFTER_ASSERT_FALSE",
+    "panic_original_native_outcome_kind": 3,
+    "panic_original_standalone_exit": 173,
+    "place_read_snapshot": 2147483646,
+    "place_subtract_literal": 2147483604,
+    "place_returned_i64": 42,
+    "place_original_VM_Instances": 1,
+    "place_VM_normal_close_calls": 2,
+    "place_VM_total_normal_plus_cancel_closes": 4,
+    "place_VM_close_handle_order": [
+      2147483646,
+      2147483647,
+      2147483646,
+      2147483647
+    ],
+    "place_VM_cancel_outcome": "CANCELLED",
+    "place_native_initial_state": 1,
+    "place_native_initial_safepoint": 0,
+    "place_native_close_calls_before_resume": 0,
+    "place_native_normal_return": 42,
+    "place_native_total_closes": 4,
+    "place_original_native_standalone_exit": 226
+  },
+  "original_place_recovery_graph": {
+    "place_local_operations": 6,
+    "place_take_operations": 0,
+    "sealed_direct_calls": "GT0",
+    "entry_in_range": true,
+    "safepoints": 1,
+    "live_values": 2,
+    "yield_count": 1,
+    "yield_successors": 2,
+    "recovery_blocks": "GT0",
+    "recovery_block_instructions": "GT2",
+    "local_operand_count": 1,
+    "recovery_edge_original_owner_occurrences": 1,
+    "recovery_edge_borrowed_result_occurrences": 0,
+    "resume_arguments": 2,
+    "resume_categories": [
+      "VALUE",
+      "VALUE"
+    ],
+    "resume_owner_count": 1,
+    "resume_nonowner_count": 1,
+    "cancel_arguments": 1,
+    "cancel_category": "VALUE",
+    "cancel_ownership": "OWNER",
+    "cancel_instructions": "GT1",
+    "cancel_final_operation": "CANCEL_PUBLISH",
+    "cancel_cleanup_calls": 2,
+    "trap_cleanup_calls": 2,
+    "unique_trap_cleanup_block": true,
+    "trap_and_cancel_distinct": true,
+    "status": "OPEN_ROOT_COMMON_OWNER_PLACE_REPRESENTATION_REVIEW"
+  },
+  "panic_representation_boundary": {
+    "original_header": {
+      "commit": "01e6d38401b0f5c8684b64c35a99ac651024c0c1",
+      "path": "src/shared/xr_assertion_plan.h",
+      "enum_lf_sha256": "1be271cc77260cca708c34f70f1ba484a32f66f009933701c9e6f991fd1313e4"
+    },
+    "original_failure_kind": 1,
+    "current_declaration_runtime_code": 445,
+    "current_headers": {
+      "src/xir/xxir_fault.h": {
+        "commit": "25f4016d6f089169757a90ae11ba537002374711",
+        "lf_sha256": "76b11f83600fac31ac6dd205511c85957fb85dd17ba6014087663095bf7c67f5"
+      },
+      "src/xir/xxir_panic.h": {
+        "commit": "25f4016d6f089169757a90ae11ba537002374711",
+        "lf_sha256": "db3471c470e74a305b80b8f75f355bbc6d14a7321e3833528ce05bf4d5a1c494"
+      }
+    },
+    "current_public_rule": "Assertion detail runtimecode445 requires reserved/index/length zero. Panic payload declares copy/move/drop. PanicInfo declares new/detail/message; message returns owned STRING independent of PanicInfo/execution owner. All are header declarations, not observed lifetime.",
+    "review": "Preserve condition-false semantic failure and owned detail, without aliasing old failure-kind1/native kind3 to the current numeric runtime representation. Public headers alone are not execution proof.",
+    "actual_product_execution": "NOT_RUN",
+    "declaration_operations": {
+      "payload": [
+        "xr_xir_panic_copy",
+        "xr_xir_panic_move",
+        "xr_xir_panic_drop"
+      ],
+      "PanicInfo": [
+        "xr_xir_panic_info_new",
+        "xr_xir_panic_info_detail",
+        "xr_xir_panic_info_message"
+      ]
+    },
+    "inspection_report_correction": "The immutable handoff inspection report overstates PanicInfo-specific copy/move/drop declarations; exact header names/boundary are corrected here after failed static audit, with first failure retained."
+  },
+  "target_contract_or_representation_review": [
+    "Admit full223B/215B original sources, real sys.Pipe, assert false, const readEnd snapshot and complete deferred cleanup.",
+    "Source must succeed despite expected runtime panic; return1 is unreachable and arbitrary Source refusal is not the panic oracle.",
+    "Preserve actual condition-false panic/PanicInfo and exact read\u2192write close2 in VM/real native; old173 is a guard protocol, not a language result.",
+    "Preserve complete owner-value transfer exactly once across recovery edges; local borrowed result is not an owning resume argument or live place.",
+    "Resume uses actual Pipe owner plus ordinary scalar snapshot; cancellation owns Pipe only and reaches a distinct complete two-call cleanup frontier from trap.",
+    "Map exact original PLACE_LOCAL6/PLACE_TAKE0/opcodes/safepoint/owner/cancel/trap shape through current common full verification, no private BackendIR/legacy numeric aliases.",
+    "Current frozen physical owner/place exclusivity and noescape apply; do not invent a temporary owner/copy/writeback to satisfy old graph labels.",
+    "Target requires independent two detached Instances, production/caller Program death, source-free packet/typed Library and actual native/applicable mixed.",
+    "Escaped/copied PanicInfo and owned message lifetime plus stable Pipe construct/finalize/reclaim, all active prefixes/stale tokens/physical release require fresh evidence.",
+    "Full compiler/runtime FI, all resource axes/safety, Root formal acceptance and shared owner7/last-consumer review remain OPEN."
+  ],
+  "target_lifecycle_proof": "Use actual stable Pipe identities for construction, owner/place recovery exactly once and both cleanup calls on normal/panic/cancel paths, then actual finalize/reclaim. Distinguish separate executions reusing endpoint2147483646/47. Observe escaped/copied PanicInfo and independent owned message through producer/Instance/finalowner death. Endpoint integers, allocator addresses, totalcounts, physical0 and CallEntry.release cannot prove per-object lifetime.",
+  "additional_target_requirements": [
+    "Public SourceProduct\u2192Built\u2192Checked\u2192specialization/fullreverification\u2192Lowered\u2192Program ownership",
+    "Source-free packet/typed Library declaration provenance and public selection authority",
+    "Independent actual VM/real native/applicable mixed condition-falsePanicInfo or42/cancel, exact provider trace and distinct complete trap/cancel frontiers",
+    "Two detached Instances after Source/session/Checked/Lowered/callerProgram death",
+    "Copied/escaped PanicInfo/independentownedmessage after production/Instance death and finalowner release",
+    "Frozen physical ref/place exclusiveowner/noescape, no copied/temporaryowner/writeback compatibility path",
+    "Actual stable per-object lifecycle/partialowner cleanup/physical release, fresh full compiler/runtime FI census and every resourceaxis",
+    "Portable generatedC/full applicable safety gates; oldnative173/226 distinct from languagepanic/42 and current harness0",
+    "Root formal integration/acceptance and shared7/last-consumer deletion review"
+  ],
+  "shared_dependency": {
+    "path": "tests/unit/aot/xr_backend_emission_owner.h",
+    "consumer_count": 7,
+    "status": "PRESERVE_SHARED_OWNER",
+    "reason": "Both actual native helpers use shared backend_emission_resources; other active consumers remain."
+  },
+  "handoff": {
+    "report": "build-consumer-evidence/consumer-session-20261009-r1/defer-panic-place-interface-request.json",
+    "raw_sha256": "eea88e1cddf05b095ca288b7e6595b70dccdff47b2d49a94ec325499c51f385d",
+    "related_observer_request": "build-consumer-evidence/consumer-session-20261009-r1/class-lifecycle-interface-request.json",
+    "Root_thread": "01a11f74-a297-7b11-8441-835bde6a3d5f",
+    "formal_acceptance": "PENDING"
+  },
+  "full_FI": "NOT_RUN",
+  "axes": "NOT_RUN",
+  "full_safety": "NOT_RUN",
+  "SourceDelete": "NOT_RUN",
+  "Main": "NOT_RUN",
+  "boundaries": [
+    "All15+52outer/47specifiedhelper sites remain OPEN; no current product execution or retirement here.",
+    "Source requiredOK differs from runtime expectedPANIC; return1 unreachable and native173 guard protocol differ from semantic results.",
+    "Oldconditionfalseenum1/nativekind3 and currentpublicruntimecode445 are distinct representations, require current typed semantic proof without aliases.",
+    "Resume NON_OWNER is ordinary readEnd scalar; original recovery excludes borrowed load result while owner appears exactlyonce. No invented borrowedref target.",
+    "Full oldgraph scans/counts/markers require Root common fullverification mapping, no BackendIR/TargetPlan restoration.",
+    "Original place VM normal/cancel reuse oneInstance; target detachedtwoInstances and stable identities/complete lifetime remain unverified.",
+    "No native/provider/allocator/lifecycle event observed; no production release/SourceDelete/Main permission."
+  ]
+}
