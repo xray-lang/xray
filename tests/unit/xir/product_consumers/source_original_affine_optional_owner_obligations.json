@@ -1,0 +1,671 @@
+{
+  "schema": 1,
+  "family": "original_affine_optional_owner",
+  "legacy_base_commit": "01e6d38401b0f5c8684b64c35a99ac651024c0c1",
+  "status": "OPEN",
+  "retired": 0,
+  "replacement_gates": [],
+  "result": "STATIC_ORIGINAL_AFFINE_OPTIONAL_OWNER_MAP_ONLY",
+  "product_execution": "NOT_RUN_BY_THIS_MAP",
+  "producer": "25f4016d6f089169757a90ae11ba537002374711",
+  "identity": "Checked25/semantic67/Value22/Call28/Program29",
+  "legacy": [
+    {
+      "name": "test_affine_owner_domain",
+      "legacy_path": "tests/unit/program/test_xr_program_verify.c",
+      "legacy_line": 3900,
+      "body_lf_sha256": "71099bc9e52beb1748f1c2b72e20de3d1ceeb7e015fbef9ee5bf4f0c7e0b90f3",
+      "assertion_sites": 14,
+      "loop_sites": 0,
+      "status": "OPEN",
+      "replacement_gates": [],
+      "note": "Function census preserves its whole body; sites do not count executed loop iterations."
+    },
+    {
+      "name": "test_optional_owner_contract",
+      "legacy_path": "tests/unit/program/test_xr_program_verify.c",
+      "legacy_line": 4157,
+      "body_lf_sha256": "649a46c3d528b9852246f625ff111a633198ce252057bf55fd90c934095e8ac1",
+      "assertion_sites": 9,
+      "loop_sites": 0,
+      "status": "OPEN",
+      "replacement_gates": [],
+      "note": "Function census preserves its whole body; sites do not count executed loop iterations."
+    }
+  ],
+  "responsibility_mapping": [
+    {
+      "path": "tests/unit/program/test_xr_program_verify.c",
+      "function": "test_affine_owner_domain",
+      "line": 3900,
+      "end_line": 3949,
+      "body_lf_sha256": "71099bc9e52beb1748f1c2b72e20de3d1ceeb7e015fbef9ee5bf4f0c7e0b90f3",
+      "CHECK_sites": 14,
+      "CHECK_bindings": [
+        {
+          "line": 3902,
+          "expression": "build_affine_copy_artifact(AFFINE_COPY_VALID, &artifact) == XR_PROGRAM_BUILD_OK",
+          "status": "OPEN"
+        },
+        {
+          "line": 3907,
+          "expression": "result.kind == XR_REFERENCE_OUTCOME_RETURN",
+          "status": "OPEN"
+        },
+        {
+          "line": 3908,
+          "expression": "result.value.kind == XR_REFERENCE_VALUE_I64",
+          "status": "OPEN"
+        },
+        {
+          "line": 3909,
+          "expression": "result.value.as.i64 == 42",
+          "status": "OPEN"
+        },
+        {
+          "line": 3914,
+          "expression": "build_affine_read_call_artifact(&artifact) == XR_PROGRAM_BUILD_OK",
+          "status": "OPEN"
+        },
+        {
+          "line": 3919,
+          "expression": "result.kind == XR_REFERENCE_OUTCOME_RETURN",
+          "status": "OPEN"
+        },
+        {
+          "line": 3920,
+          "expression": "result.value.kind == XR_REFERENCE_VALUE_I64",
+          "status": "OPEN"
+        },
+        {
+          "line": 3921,
+          "expression": "result.value.as.i64 == 42",
+          "status": "OPEN"
+        },
+        {
+          "line": 3926,
+          "expression": "build_affine_copy_artifact(AFFINE_COPY_MISSING_DROP, &artifact) == XR_PROGRAM_BUILD_OK",
+          "status": "OPEN"
+        },
+        {
+          "line": 3930,
+          "expression": "build_affine_copy_artifact(AFFINE_COPY_USE_AFTER_DROP, &artifact) == XR_PROGRAM_BUILD_OK",
+          "status": "OPEN"
+        },
+        {
+          "line": 3934,
+          "expression": "build_affine_copy_artifact(AFFINE_COPY_INVALID_TYPE_CONTRACT, &artifact) ==\n          XR_PROGRAM_BUILD_INVALID_INPUT",
+          "status": "OPEN"
+        },
+        {
+          "line": 3937,
+          "expression": "build_affine_branch_artifact(1u, &artifact) == XR_PROGRAM_BUILD_OK",
+          "status": "OPEN"
+        },
+        {
+          "line": 3942,
+          "expression": "build_affine_branch_artifact(0u, &artifact) == XR_PROGRAM_BUILD_OK",
+          "status": "OPEN"
+        },
+        {
+          "line": 3946,
+          "expression": "build_affine_branch_artifact(2u, &artifact) == XR_PROGRAM_BUILD_OK",
+          "status": "OPEN"
+        }
+      ],
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/program/test_xr_program_verify.c",
+      "function": "test_optional_owner_contract",
+      "line": 4157,
+      "end_line": 4200,
+      "body_lf_sha256": "649a46c3d528b9852246f625ff111a633198ce252057bf55fd90c934095e8ac1",
+      "CHECK_sites": 9,
+      "CHECK_bindings": [
+        {
+          "line": 4159,
+          "expression": "build_optional_owner_artifact(OPTIONAL_OWNER_VALID, &artifact) == XR_PROGRAM_BUILD_OK",
+          "status": "OPEN"
+        },
+        {
+          "line": 4164,
+          "expression": "build_optional_owner_artifact(OPTIONAL_OWNER_TRIVIAL_PARENT, &artifact) ==\n          XR_PROGRAM_BUILD_INVALID_INPUT",
+          "status": "OPEN"
+        },
+        {
+          "line": 4166,
+          "expression": "build_optional_owner_artifact(OPTIONAL_OWNER_WRONG_COPY_CONTRACT, &artifact) ==\n          XR_PROGRAM_BUILD_INVALID_INPUT",
+          "status": "OPEN"
+        },
+        {
+          "line": 4169,
+          "expression": "build_optional_owner_artifact(OPTIONAL_OWNER_NONOWNER_PAYLOAD, &artifact) ==\n          XR_PROGRAM_BUILD_OK",
+          "status": "OPEN"
+        },
+        {
+          "line": 4174,
+          "expression": "build_optional_owner_artifact(OPTIONAL_OWNER_AFFINE_PROJECT, &artifact) ==\n          XR_PROGRAM_BUILD_OK",
+          "status": "OPEN"
+        },
+        {
+          "line": 4180,
+          "expression": "build_optional_owner_artifact(OPTIONAL_OWNER_AFFINE_PROJECT_USE_AFTER_DROP, &artifact) ==\n          XR_PROGRAM_BUILD_OK",
+          "status": "OPEN"
+        },
+        {
+          "line": 4185,
+          "expression": "build_optional_owner_artifact(OPTIONAL_OWNER_AFFINE_PROJECT_ESCAPE, &artifact) ==\n          XR_PROGRAM_BUILD_OK",
+          "status": "OPEN"
+        },
+        {
+          "line": 4190,
+          "expression": "build_optional_owner_artifact(OPTIONAL_OWNER_AFFINE_PROJECT_TAKE, &artifact) ==\n          XR_PROGRAM_BUILD_OK",
+          "status": "OPEN"
+        },
+        {
+          "line": 4196,
+          "expression": "build_optional_owner_artifact(OPTIONAL_OWNER_AFFINE_PROJECT_TAKE_FROM_BORROW,\n                                        &artifact) == XR_PROGRAM_BUILD_OK",
+          "status": "OPEN"
+        }
+      ],
+      "status": "OPEN"
+    }
+  ],
+  "outer_CHECK_sites": 23,
+  "original_private_helpers": [
+    {
+      "path": "tests/unit/program/test_xr_program_verify.c",
+      "function": "key",
+      "line": 109,
+      "end_line": 111,
+      "body_lf_sha256": "027a211b78e0cfbd6b296804e37236848a76cc1980981a0d6a49a6f42d3f2e13",
+      "CHECK_sites": 0,
+      "CHECK_bindings": [],
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/program/test_xr_program_verify.c",
+      "function": "write_one_function",
+      "line": 145,
+      "end_line": 157,
+      "body_lf_sha256": "efb68b99402d38d2b891e3ac3c832ebaae2feb4e1496a197240b17ebacb4d8ce",
+      "CHECK_sites": 0,
+      "CHECK_bindings": [],
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/program/test_xr_program_verify.c",
+      "function": "write_modules",
+      "line": 140,
+      "end_line": 143,
+      "body_lf_sha256": "c0c6556c255f9d53386b17acda69b57380cb09e82386e392f4f66c725697b6da",
+      "CHECK_sites": 0,
+      "CHECK_bindings": [],
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/program/test_xr_program_verify.c",
+      "function": "write_typed_modules",
+      "line": 113,
+      "end_line": 138,
+      "body_lf_sha256": "c568d48005100fc2633344ba569a2bc8de9b62e3aac794b35057c8d838b8db65",
+      "CHECK_sites": 0,
+      "CHECK_bindings": [],
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/program/test_xr_program_verify.c",
+      "function": "validate_ok",
+      "line": 159,
+      "end_line": 174,
+      "body_lf_sha256": "94fe0ef4e0242acb810c12621ae1fe73a9887ef668f15ddc6c67ed645494f62b",
+      "CHECK_sites": 2,
+      "CHECK_bindings": [
+        {
+          "line": 171,
+          "expression": "status == XR_PROGRAM_VERIFY_OK",
+          "status": "OPEN"
+        },
+        {
+          "line": 172,
+          "expression": "program != NULL",
+          "status": "OPEN"
+        }
+      ],
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/program/test_xr_program_verify.c",
+      "function": "expect_semantic_reject_at",
+      "line": 176,
+      "end_line": 198,
+      "body_lf_sha256": "44cf0fb15bea156743a1c0e35b0be8ee844aa1af55c8653ed9361cf781c045b8",
+      "CHECK_sites": 6,
+      "CHECK_bindings": [
+        {
+          "line": 190,
+          "expression": "first_status == XR_PROGRAM_VERIFY_SEMANTIC_REJECTED",
+          "status": "OPEN"
+        },
+        {
+          "line": 191,
+          "expression": "program == NULL",
+          "status": "OPEN"
+        },
+        {
+          "line": 192,
+          "expression": "first.kind == expected",
+          "status": "OPEN"
+        },
+        {
+          "line": 195,
+          "expression": "second_status == first_status",
+          "status": "OPEN"
+        },
+        {
+          "line": 196,
+          "expression": "memcmp(&first, &second, sizeof(first)) == 0",
+          "status": "OPEN"
+        },
+        {
+          "line": 197,
+          "expression": "program == NULL",
+          "status": "OPEN"
+        }
+      ],
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/program/test_xr_program_verify.c",
+      "function": "build_affine_copy_artifact",
+      "line": 3462,
+      "end_line": 3587,
+      "body_lf_sha256": "c397edc7786c42353c1263ab979cc21f0547bba1dcd7fac7dcd0d3459d91a1df",
+      "CHECK_sites": 0,
+      "CHECK_bindings": [],
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/program/test_xr_program_verify.c",
+      "function": "build_affine_read_call_artifact",
+      "line": 3589,
+      "end_line": 3718,
+      "body_lf_sha256": "a2e2a108cb14a20842796937a8e4736ce8122093412e7d2e43b0d284844b556f",
+      "CHECK_sites": 0,
+      "CHECK_bindings": [],
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/program/test_xr_program_verify.c",
+      "function": "build_affine_branch_artifact",
+      "line": 3720,
+      "end_line": 3898,
+      "body_lf_sha256": "fada355403cfbfee1525b5586ef0b6b31eec6d2f8f7c87a422448e9762258601",
+      "CHECK_sites": 0,
+      "CHECK_bindings": [],
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/program/test_xr_program_verify.c",
+      "function": "build_optional_owner_artifact",
+      "line": 3963,
+      "end_line": 4155,
+      "body_lf_sha256": "3eea7f25fa58b6ac89abe18d407ae1dfa701258b5f1ddc63a67abf4620bf6215",
+      "CHECK_sites": 0,
+      "CHECK_bindings": [],
+      "status": "OPEN"
+    }
+  ],
+  "specified_helper_CHECK_sites": 8,
+  "input_file": {
+    "path": "tests/unit/program/test_xr_program_verify.c",
+    "whole_file_lf_sha256": "ec4b93f13bfab2aa3d4b8f8773dd5c1118a0c682ed6f8304fead515f90402802",
+    "physical_raw_sha256": "a39922500c0943c034fafcda3a82b67e511ea658f453f6c0c3204f7719de1817",
+    "git_base_equal": true
+  },
+  "input_policy": "Complete two original bodies/ten actual helpers and whole original container equal01e6; all concrete types/constants/ownership/modes/keys/full CFGs/per-edge operands/projection order/build/admission/runtime assertions retained. No reducedconstant42 graph or compatibility aliases.",
+  "affine_copy": {
+    "type": {
+      "legacy_local_id": 61,
+      "kind": "AGGREGATE",
+      "ownership": "AFFINE",
+      "copy_contract": "EXPLICIT",
+      "fields": [
+        "I64"
+      ]
+    },
+    "constant": 42,
+    "signature": "ZeroargI64 ENTRY/effect1/oneblock.",
+    "normal_ops": [
+      "CONSTANT_I64",
+      "AGGREGATE_CONSTRUCT",
+      "AGGREGATE_PROJECT",
+      "OWNER_COPY",
+      "OWNER_DROP",
+      "OWNER_DROP",
+      "RETURN"
+    ],
+    "normal": "Construct own aggregate[42], project scalar before disposal, explicit OWNER_COPY yields second owner, DROP copiedowner then originalowner, RETURN independently asserted I64(42). BUILD_OK/VERIFY_OK; actual reference RETURN/I64(42). No lifecycleevent or pointeridentity assertion.",
+    "variants": [
+      {
+        "kind": "AFFINE_COPY_MISSING_DROP",
+        "ops": [
+          "CONSTANT_I64",
+          "AGGREGATE_CONSTRUCT",
+          "AGGREGATE_PROJECT",
+          "OWNER_COPY",
+          "OWNER_DROP",
+          "RETURN"
+        ],
+        "expected": "BUILD_OK thenSEMANTIC_REJECTED/VALUE_USE/NULL twice/full diagnostic equality",
+        "meaning": "Only copiedowner dropped; originalowner still live at return."
+      },
+      {
+        "kind": "AFFINE_COPY_USE_AFTER_DROP",
+        "ops": [
+          "CONSTANT_I64",
+          "AGGREGATE_CONSTRUCT",
+          "OWNER_COPY",
+          "OWNER_DROP",
+          "OWNER_DROP",
+          "AGGREGATE_PROJECT",
+          "RETURN"
+        ],
+        "expected": "BUILD_OK thenSEMANTIC_REJECTED/VALUE_USE/NULL twice/full diagnostic equality",
+        "meaning": "Delay originalowner field read until both owners dropped, preserve originaloperands."
+      },
+      {
+        "kind": "AFFINE_COPY_INVALID_TYPE_CONTRACT",
+        "ops": [
+          "CONSTANT_I64",
+          "AGGREGATE_CONSTRUCT",
+          "AGGREGATE_PROJECT",
+          "OWNER_COPY",
+          "OWNER_DROP",
+          "OWNER_DROP",
+          "RETURN"
+        ],
+        "expected": "BUILD_INVALID_INPUT, no emitted verified graph",
+        "meaning": "Declared AFFINE61[I64] becomes copyFORBIDDEN though fieldI64 copyable; original producer failure, not runtime clonefailure."
+      }
+    ]
+  },
+  "affine_read_call": {
+    "type": {
+      "legacy_local_id": 65,
+      "kind": "AGGREGATE",
+      "ownership": "AFFINE",
+      "copy_contract": "EXPLICIT",
+      "fields": [
+        "I64"
+      ]
+    },
+    "constant": 42,
+    "functions": [
+      {
+        "key": "affine-read:function:helper",
+        "signature": "READ aggregate65 parameter/nonowner blockargument, resultI64/effect1, unflagged.",
+        "ops": [
+          "BLOCK_ARGUMENT",
+          "AGGREGATE_PROJECT",
+          "RETURN"
+        ]
+      },
+      {
+        "key": "affine-read:function:main",
+        "signature": "ZeroargI64 ENTRY/effect5.",
+        "ops": [
+          "CONSTANT_I64",
+          "AGGREGATE_CONSTRUCT",
+          "CALL_SEALED_DIRECT",
+          "OWNER_DROP",
+          "RETURN"
+        ]
+      }
+    ],
+    "normal": "Main builds own[42], genuine sealed helper borrows same owner through actual READ signature and projects I64 field0. Main drops its owner only after call, then returns scalar result. BUILD_OK/VERIFY_OK/reference actualRETURN/I64(42), NULL profile/budget. Not REF writeback, copiedowner/Cell module state or arbitrary hostentry."
+  },
+  "affine_edge_transfer": {
+    "type": {
+      "legacy_local_id": 62,
+      "kind": "AGGREGATE",
+      "ownership": "AFFINE",
+      "copy_contract": "EXPLICIT",
+      "fields": [
+        "I64"
+      ]
+    },
+    "constants": [
+      42,
+      true
+    ],
+    "signature": "ZeroargI64 ENTRY/effect1, actualthreeblocks.",
+    "entry_ops": [
+      "CONSTANT_I64",
+      "CONSTANT_BOOL",
+      "AGGREGATE_CONSTRUCT",
+      "CONDITIONAL_BRANCH"
+    ],
+    "valid_successor_ops": [
+      "BLOCK_ARGUMENT",
+      "OWNER_DROP",
+      "CONSTANT_I64",
+      "RETURN"
+    ],
+    "valid": "owner_copies_per_edge1 builds branch operands{truecondition,owner,owner}, actual mutually exclusive successors{true,false}, one actual OWNER blockargument per successor; each DROPs its receivedowner and returns ownconstant42. BUILD_OK/VERIFY_OK only, originaltest does not evaluate either branch. Parameter name copies does not imply inserted OWNER_COPY operations.",
+    "zero_negative": "owner_copies_per_edge0: branch operandcondition only, zero blockarguments/no BLOCK_ARGUMENT or DROP in either successor; originalowner leftlive. Each successor still CONST42/RETURN. BUILD_OK thenSEMANTIC_REJECTED/VALUE_USE/NULL twice/full diagnostic equality.",
+    "two_negative": "owner_copies_per_edge2: branch operands{condition,owner,owner,owner,owner}, each successor has two distinct owningblockarguments, both fed same singleowner on that selected edge and bothDROPped. Duplicate transfers within one edge are illegal. BUILD_OK thenSEMANTIC_REJECTED/VALUE_USE/NULL twice/full diagnostic equality.",
+    "boundary": "One appearance on each of two mutuallyexclusive edges is valid; globally rejecting repeated owner operands would reject the actual positive. Accepting count2 because bothsuccessors DROP would duplicate originalownership."
+  },
+  "optional_types": [
+    {
+      "name": "CLASS_TYPE",
+      "legacy_local_id": 310,
+      "kind": "AGGREGATE",
+      "nominal": "NONE",
+      "ownership": "AFFINE",
+      "copy_contract": "EXPLICIT",
+      "fields": [
+        "I64"
+      ]
+    },
+    {
+      "name": "OPTIONAL_TYPE",
+      "legacy_local_id": 311,
+      "kind": "VARIANT",
+      "ownership": "AFFINE",
+      "copy_contract": "EXPLICIT",
+      "variants": [
+        [],
+        [
+          310
+        ]
+      ]
+    },
+    {
+      "name": "WRAPPER_TYPE",
+      "legacy_local_id": 312,
+      "kind": "AGGREGATE",
+      "ownership": "AFFINE",
+      "copy_contract": "EXPLICIT",
+      "fields": [
+        310
+      ]
+    }
+  ],
+  "optional_signature": "Every graph oneparameter/I64 result/ENTRY/effect1/oneblock with exact READ or MOVE argument roles. Module retains originalconstant42 even when affineproject uses field-derived scalar and no CONSTANT_I64 operation.",
+  "optional_variants": [
+    {
+      "mode": "OPTIONAL_OWNER_VALID",
+      "parameter": "MOVE aggregate310 OWNER",
+      "operations": [
+        "BLOCK_ARGUMENT",
+        "VARIANT_CONSTRUCT",
+        "OWNER_DROP",
+        "CONSTANT_I64",
+        "RETURN"
+      ],
+      "expected": "BUILD_OK/VERIFY_OK/non-NULL, admission only",
+      "meaning": "Move actual aggregate argument into some311, drop optional owner, return constant42 graph. Original body does not execute or assert runtime42.",
+      "status": "OPEN"
+    },
+    {
+      "mode": "OPTIONAL_OWNER_TRIVIAL_PARENT",
+      "parameter": "MOVE aggregate310 OWNER",
+      "operations": [
+        "BLOCK_ARGUMENT",
+        "VARIANT_CONSTRUCT",
+        "OWNER_DROP",
+        "CONSTANT_I64",
+        "RETURN"
+      ],
+      "expected": "BUILD_INVALID_INPUT, no verification/execution",
+      "meaning": "Set optional311 ownershipTRIVIAL/copyTRIVIAL despite actual AFFINE310 payload; original full graph preserved.",
+      "status": "OPEN"
+    },
+    {
+      "mode": "OPTIONAL_OWNER_WRONG_COPY_CONTRACT",
+      "parameter": "MOVE aggregate310 OWNER",
+      "operations": [
+        "BLOCK_ARGUMENT",
+        "VARIANT_CONSTRUCT",
+        "OWNER_DROP",
+        "CONSTANT_I64",
+        "RETURN"
+      ],
+      "expected": "BUILD_INVALID_INPUT, no verification/execution",
+      "meaning": "Set optional311 copyFORBIDDEN without a noncopyable leaf;310 payload is EXPLICIT. Not a semantic rejection of an emitted packet.",
+      "status": "OPEN"
+    },
+    {
+      "mode": "OPTIONAL_OWNER_NONOWNER_PAYLOAD",
+      "parameter": "READ aggregate310 NON_OWNER",
+      "operations": [
+        "BLOCK_ARGUMENT",
+        "VARIANT_CONSTRUCT",
+        "OWNER_DROP",
+        "CONSTANT_I64",
+        "RETURN"
+      ],
+      "expected": "BUILD_OK thenSEMANTIC_REJECTED/OPERATION_TYPE/NULL twice/full diagnostic equality",
+      "meaning": "Owning some311 construction tries to consume a borrowed aggregate310; it is not a valid owning escape because the argument stays borrowed.",
+      "status": "OPEN"
+    },
+    {
+      "mode": "OPTIONAL_OWNER_AFFINE_PROJECT",
+      "parameter": "MOVE aggregate310 OWNER",
+      "operations": [
+        "BLOCK_ARGUMENT",
+        "VARIANT_CONSTRUCT",
+        "VARIANT_PROJECT",
+        "AGGREGATE_PROJECT",
+        "OWNER_DROP",
+        "RETURN"
+      ],
+      "expected": "BUILD_OK/VERIFY_OK/non-NULL, admission only",
+      "meaning": "Borrow aggregate310 NON_OWNER from some311 variant1/field0, project scalarI64 field0 while optional owner lives, then drop optional and return materialized scalar. Original does not execute.",
+      "status": "OPEN"
+    },
+    {
+      "mode": "OPTIONAL_OWNER_AFFINE_PROJECT_USE_AFTER_DROP",
+      "parameter": "MOVE aggregate310 OWNER",
+      "operations": [
+        "BLOCK_ARGUMENT",
+        "VARIANT_CONSTRUCT",
+        "VARIANT_PROJECT",
+        "OWNER_DROP",
+        "AGGREGATE_PROJECT",
+        "RETURN"
+      ],
+      "expected": "BUILD_OK thenSEMANTIC_REJECTED/VALUE_USE/NULL twice/full diagnostic equality",
+      "meaning": "Same NON_OWNER aggregate projection read is delayed until after optional owner DROP; do not replace with a realclass or runtimeUAF test.",
+      "status": "OPEN"
+    },
+    {
+      "mode": "OPTIONAL_OWNER_AFFINE_PROJECT_ESCAPE",
+      "parameter": "MOVE aggregate310 OWNER",
+      "operations": [
+        "BLOCK_ARGUMENT",
+        "VARIANT_CONSTRUCT",
+        "VARIANT_PROJECT",
+        "AGGREGATE_CONSTRUCT",
+        "OWNER_DROP",
+        "CONSTANT_I64",
+        "RETURN"
+      ],
+      "expected": "BUILD_OK thenSEMANTIC_REJECTED/OPERATION_TYPE/NULL twice/full diagnostic equality",
+      "meaning": "Try consuming borrowed projected310 into actual owning wrapper312[310]. Original escapedwrapper is also not dropped; preserve full negative input and exact original OPERATION_TYPE rather than silently repairing it.",
+      "status": "OPEN"
+    },
+    {
+      "mode": "OPTIONAL_OWNER_AFFINE_PROJECT_TAKE",
+      "parameter": "MOVE aggregate310 OWNER",
+      "operations": [
+        "BLOCK_ARGUMENT",
+        "VARIANT_CONSTRUCT",
+        "VARIANT_PROJECT",
+        "OWNER_DROP",
+        "CONSTANT_I64",
+        "RETURN"
+      ],
+      "expected": "BUILD_OK/VERIFY_OK/non-NULL, admission only",
+      "meaning": "Owning VARIANT_PROJECT310 from owning some311 transfers payload; DROP projected310 instead of nowconsumed optional311. Actual graph and original admission only, no runtime result/lifecycle assertion.",
+      "status": "OPEN"
+    },
+    {
+      "mode": "OPTIONAL_OWNER_AFFINE_PROJECT_TAKE_FROM_BORROW",
+      "parameter": "READ optional311 NON_OWNER",
+      "operations": [
+        "BLOCK_ARGUMENT",
+        "VARIANT_PROJECT",
+        "OWNER_DROP",
+        "CONSTANT_I64",
+        "RETURN"
+      ],
+      "expected": "BUILD_OK thenSEMANTIC_REJECTED/OPERATION_TYPE/NULL twice/full diagnostic equality",
+      "meaning": "No VARIANT_CONSTRUCT in this mode; owning310 projection consumes a borrowed optional311 input, then drops projected310. Cell/RC or input-type name does not grant this transfer.",
+      "status": "OPEN"
+    }
+  ],
+  "producer_negative_variants": 3,
+  "semantic_negative_variants": 8,
+  "actual_runtime_positive_graphs": 2,
+  "admission_only_positive_graphs": 4,
+  "specified_helper_boundaries": {
+    "diagnostics": "All eight semanticnegatives check exactstatus/kind/NULL twice and full diagnostic memcmp; three producernegatives assert BUILD_INVALID_INPUT and are not an emittedpacket verifier test.",
+    "naming": "Original CLASS_TYPE310 is anonymous AGGREGATE with nominalNONE, not CLASS_REFERENCE or a realidentity/eventclass. AFFINEcopy types61/65/62 likewise owningaggregates.",
+    "lifecycle": "Original validatedPrograms/artifacts freed; no detachedoutcome/dynamicobserver/identitycomparison/physicalcounter/FI assertion. Two affine runtimecases assert42; allfour other positives assert admissiononly, not runtime42 or branch execution."
+  },
+  "shared_dependencies": [
+    {
+      "path": "src/program/xr_reference_evaluator.h",
+      "physical_raw_sha256": "d43732ceca814f67f7f04e1b51d8512aab2e199092a546d1c47d30e0f28439bf",
+      "whole_file_lf_sha256": "0b2149e8397748e84b1cbc14904cde97d5bee4c3e69474486169e4656ff89054",
+      "git_base_equal": true,
+      "status": "PRESERVE_SHARED_READONLY"
+    }
+  ],
+  "Root_contract_or_representation_review": {
+    "status": "OPEN",
+    "copy_owner": "Map explicit original owner copy/independent drops and missingdrop/UAD to actual current owning value transitions. Trivial leaf fields cannot erase original asserted owner responsibilities; no legacy tag/number alias or cosmeticclass rewrite.",
+    "READ": "Actual borrowed aggregate parameter must project while caller ownerlives, caller drops after realcall, scalar remains usable. This does not qualify moduleCell REF, lifetimeescape or newdynamicalias protocol.",
+    "CFG": "Preserve mutuallyexclusive successor transfer1 versus absent0/duplicate2 on actualedge; canonical SSA/PHI ownership validation must not aggregate two alternativeedges into duplicateownership or ignore omitted transfer.",
+    "optional": "Preserve owning construction from actual MOVE input, nonowner project lifetime, forbiddenborrowescape into wrapper and validowner payloadtake versus borrowedoptionaltake. Type/copy-derived producer failures remain separate truststages; currenttypeidentity/provenance must be real.",
+    "qualification": "Public Built/Checked/packet/reverify/Lowered/Program, exactcompleteoriginal positives/negatives/independentgoldens, realVM/native/mixed/twoInstances/detachedowners, allactualFI/axes/lifecycle/safety require formalproducer/window and remainOPEN."
+  },
+  "full_FI": "NOT_RUN",
+  "axes": "NOT_RUN",
+  "full_safety": "NOT_RUN",
+  "SourceDelete": "NOT_RUN",
+  "Main": "NOT_RUN",
+  "handoff": {
+    "Root_thread": "01a11f74-a297-7b11-8441-835bde6a3d5f",
+    "formal_acceptance": "PENDING"
+  },
+  "boundaries": [
+    "All23outer/8helperCHECKs OPEN; retired0.",
+    "Static originalgraph/owner/copy/mode/transfer/projection evidence only; no newcurrentproduct or heavygate.",
+    "Shared helpers/evaluator stillserve otherconsumers; product/header/CMake/stdlib/spec/SDK/docs preserved. No Main/delete permission."
+  ]
+}
