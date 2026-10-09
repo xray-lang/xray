@@ -1,0 +1,635 @@
+{
+  "schema": 1,
+  "family": "original_coroutine_exact_liveness_timer_requests_and_owner_cancellation",
+  "legacy_base_commit": "01e6d38401b0f5c8684b64c35a99ac651024c0c1",
+  "status": "OPEN",
+  "retired": 0,
+  "replacement_gates": [],
+  "result": "STATIC_FULL_ORIGINAL_COROUTINE_LIVENESS_TIMER_AND_OWNER_MAP_ONLY",
+  "product_execution": "NOT_RUN_BY_THIS_MAP",
+  "producer": "25f4016d6f089169757a90ae11ba537002374711",
+  "identity": "Checked25/semantic67/Value22/Call28/Program29",
+  "legacy": [
+    {
+      "name": "test_coroutine_state_and_exact_liveness",
+      "legacy_path": "tests/unit/program/test_xr_program_verify.c",
+      "legacy_line": 5941,
+      "body_lf_sha256": "f2ae03d529703b2b4b417c803ecdec95a415216b5dedca20ddfdf854a3dd93da",
+      "assertion_sites": 12,
+      "loop_sites": 1,
+      "status": "OPEN",
+      "replacement_gates": [],
+      "note": "Function census preserves its whole body; sites do not count executed loop iterations."
+    },
+    {
+      "name": "test_coroutine_cancel_cleanup_requires_exact_owner_transfer",
+      "legacy_path": "tests/unit/program/test_xr_program_verify.c",
+      "legacy_line": 6070,
+      "body_lf_sha256": "19a09760f4870c09324b8b7a67368747e67850fa520b56522864645601b12183",
+      "assertion_sites": 6,
+      "loop_sites": 0,
+      "status": "OPEN",
+      "replacement_gates": [],
+      "note": "Function census preserves its whole body; sites do not count executed loop iterations."
+    }
+  ],
+  "responsibility_mapping": [
+    {
+      "path": "tests/unit/program/test_xr_program_verify.c",
+      "function": "test_coroutine_state_and_exact_liveness",
+      "line": 5941,
+      "end_line": 5998,
+      "body_lf_sha256": "f2ae03d529703b2b4b417c803ecdec95a415216b5dedca20ddfdf854a3dd93da",
+      "CHECK_sites": 12,
+      "CHECK_bindings": [
+        {
+          "line": 5945,
+          "expression": "xr_program_coroutine_fixture_write(&artifact, diagnostic, sizeof(diagnostic)) ==\n          XR_PROGRAM_BUILD_OK",
+          "status": "OPEN"
+        },
+        {
+          "line": 5947,
+          "expression": "xr_program_coroutine_fixture_write(&repeated, diagnostic, sizeof(diagnostic)) ==\n          XR_PROGRAM_BUILD_OK",
+          "status": "OPEN"
+        },
+        {
+          "line": 5949,
+          "expression": "artifact.size != 0u && artifact.size == repeated.size",
+          "status": "OPEN"
+        },
+        {
+          "line": 5950,
+          "expression": "artifact.size != 0u && memcmp(artifact.bytes, repeated.bytes, artifact.size) == 0",
+          "status": "OPEN"
+        },
+        {
+          "line": 5951,
+          "expression": "xr_program_id_equal(artifact.id, repeated.id)",
+          "status": "OPEN"
+        },
+        {
+          "line": 5954,
+          "expression": "program != NULL",
+          "status": "OPEN"
+        },
+        {
+          "line": 5958,
+          "expression": "xr_program_coroutine_fixture_write_mutated(XR_PROGRAM_COROUTINE_FIXTURE_UNUSED_LIVE,\n                                                     &artifact, diagnostic,\n                                                     sizeof(diagnostic)) == XR_PROGRAM_BUILD_OK",
+          "status": "OPEN"
+        },
+        {
+          "line": 5964,
+          "expression": "xr_program_coroutine_fixture_write_mutated(\n              XR_PROGRAM_COROUTINE_FIXTURE_MISSING_CANCEL_EDGE, &artifact, diagnostic,\n              sizeof(diagnostic)) == XR_PROGRAM_BUILD_OK",
+          "status": "OPEN"
+        },
+        {
+          "line": 5970,
+          "expression": "xr_program_coroutine_fixture_write_mutated(\n              XR_PROGRAM_COROUTINE_FIXTURE_NORMAL_EDGE_TO_CANCEL, &artifact, diagnostic,\n              sizeof(diagnostic)) == XR_PROGRAM_BUILD_OK",
+          "status": "OPEN"
+        },
+        {
+          "line": 5976,
+          "expression": "xr_program_timer_suspension_fixture_write_mutated(\n              XR_PROGRAM_TIMER_SUSPENSION_FIXTURE_VALID, &artifact, diagnostic,\n              sizeof(diagnostic)) == XR_PROGRAM_BUILD_OK",
+          "status": "OPEN"
+        },
+        {
+          "line": 5980,
+          "expression": "program != NULL",
+          "status": "OPEN"
+        },
+        {
+          "line": 5992,
+          "expression": "xr_program_timer_suspension_fixture_write_mutated(invalid_requests[index], &artifact,\n                                                                diagnostic, sizeof(diagnostic)) ==\n              XR_PROGRAM_BUILD_OK",
+          "status": "OPEN"
+        }
+      ],
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/program/test_xr_program_verify.c",
+      "function": "test_coroutine_cancel_cleanup_requires_exact_owner_transfer",
+      "line": 6070,
+      "end_line": 6103,
+      "body_lf_sha256": "19a09760f4870c09324b8b7a67368747e67850fa520b56522864645601b12183",
+      "CHECK_sites": 6,
+      "CHECK_bindings": [
+        {
+          "line": 6073,
+          "expression": "xr_program_coroutine_owner_fixture_write(&artifact, diagnostic, sizeof(diagnostic)) ==\n          XR_PROGRAM_BUILD_OK",
+          "status": "OPEN"
+        },
+        {
+          "line": 6076,
+          "expression": "program != NULL",
+          "status": "OPEN"
+        },
+        {
+          "line": 6080,
+          "expression": "xr_program_coroutine_owner_fixture_write_mutated(\n              XR_PROGRAM_COROUTINE_OWNER_FIXTURE_MISSING_CANCEL_ARGUMENT, &artifact, diagnostic,\n              sizeof(diagnostic)) == XR_PROGRAM_BUILD_OK",
+          "status": "OPEN"
+        },
+        {
+          "line": 6086,
+          "expression": "xr_program_coroutine_owner_fixture_write_mutated(\n              XR_PROGRAM_COROUTINE_OWNER_FIXTURE_CANCEL_OWNER_NOT_DROPPED, &artifact, diagnostic,\n              sizeof(diagnostic)) == XR_PROGRAM_BUILD_OK",
+          "status": "OPEN"
+        },
+        {
+          "line": 6092,
+          "expression": "xr_program_coroutine_owner_fixture_write_mutated(\n              XR_PROGRAM_COROUTINE_OWNER_FIXTURE_EXTRA_CANCEL_ARGUMENT, &artifact, diagnostic,\n              sizeof(diagnostic)) == XR_PROGRAM_BUILD_OK",
+          "status": "OPEN"
+        },
+        {
+          "line": 6098,
+          "expression": "xr_program_coroutine_owner_fixture_write_mutated(\n              XR_PROGRAM_COROUTINE_OWNER_FIXTURE_MISSING_BORROWED_CALL_OWNER_LIVE, &artifact,\n              diagnostic, sizeof(diagnostic)) == XR_PROGRAM_BUILD_OK",
+          "status": "OPEN"
+        }
+      ],
+      "status": "OPEN"
+    }
+  ],
+  "outer_CHECK_sites": 18,
+  "original_private_helpers": [
+    {
+      "path": "tests/unit/program/test_xr_program_verify.c",
+      "function": "validate_ok",
+      "line": 159,
+      "end_line": 174,
+      "body_lf_sha256": "94fe0ef4e0242acb810c12621ae1fe73a9887ef668f15ddc6c67ed645494f62b",
+      "CHECK_sites": 2,
+      "CHECK_bindings": [
+        {
+          "line": 171,
+          "expression": "status == XR_PROGRAM_VERIFY_OK",
+          "status": "OPEN"
+        },
+        {
+          "line": 172,
+          "expression": "program != NULL",
+          "status": "OPEN"
+        }
+      ],
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/program/test_xr_program_verify.c",
+      "function": "expect_semantic_reject_at",
+      "line": 176,
+      "end_line": 198,
+      "body_lf_sha256": "44cf0fb15bea156743a1c0e35b0be8ee844aa1af55c8653ed9361cf781c045b8",
+      "CHECK_sites": 6,
+      "CHECK_bindings": [
+        {
+          "line": 190,
+          "expression": "first_status == XR_PROGRAM_VERIFY_SEMANTIC_REJECTED",
+          "status": "OPEN"
+        },
+        {
+          "line": 191,
+          "expression": "program == NULL",
+          "status": "OPEN"
+        },
+        {
+          "line": 192,
+          "expression": "first.kind == expected",
+          "status": "OPEN"
+        },
+        {
+          "line": 195,
+          "expression": "second_status == first_status",
+          "status": "OPEN"
+        },
+        {
+          "line": 196,
+          "expression": "memcmp(&first, &second, sizeof(first)) == 0",
+          "status": "OPEN"
+        },
+        {
+          "line": 197,
+          "expression": "program == NULL",
+          "status": "OPEN"
+        }
+      ],
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/program/xr_program_coroutine_fixture.h",
+      "function": "xr_program_coroutine_fixture_key",
+      "line": 18,
+      "end_line": 20,
+      "body_lf_sha256": "36de2fcd5fd5ae5aabdd45004154ec4be350b7239da37d6d185be702d324c8a6",
+      "CHECK_sites": 0,
+      "CHECK_bindings": [],
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/program/xr_program_coroutine_fixture.h",
+      "function": "xr_program_coroutine_fixture_write_mutated",
+      "line": 22,
+      "end_line": 172,
+      "body_lf_sha256": "61f4143b5262b2c62b857bf4eeef0ea59c9c355cd0e1e5e1451aa2d04b98ece8",
+      "CHECK_sites": 0,
+      "CHECK_bindings": [],
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/program/xr_program_coroutine_fixture.h",
+      "function": "xr_program_coroutine_fixture_write",
+      "line": 174,
+      "end_line": 179,
+      "body_lf_sha256": "533371fa303364dfcdea5840c48b6360a26fbcef3c30255ac6fddd6c04ebb429",
+      "CHECK_sites": 0,
+      "CHECK_bindings": [],
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/program/xr_program_coroutine_fixture.h",
+      "function": "xr_program_timer_suspension_fixture_write_mutated",
+      "line": 188,
+      "end_line": 343,
+      "body_lf_sha256": "45ed31c73024a0e29f7b6842161f73e3ea521cc33198b2d95c02321a68cb1869",
+      "CHECK_sites": 0,
+      "CHECK_bindings": [],
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/program/xr_program_coroutine_fixture.h",
+      "function": "xr_program_coroutine_owner_fixture_write_mutated",
+      "line": 353,
+      "end_line": 757,
+      "body_lf_sha256": "6824eb40418e5dbc8088ebcd8c130bb771798f715653a52719c5e04f19a22d29",
+      "CHECK_sites": 0,
+      "CHECK_bindings": [],
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/program/xr_program_coroutine_fixture.h",
+      "function": "xr_program_coroutine_owner_fixture_write",
+      "line": 759,
+      "end_line": 764,
+      "body_lf_sha256": "5214cffc22e01507c3ecd44f46984d34ede227b1ada88bf45a311a164e04b726",
+      "CHECK_sites": 0,
+      "CHECK_bindings": [],
+      "status": "OPEN"
+    }
+  ],
+  "specified_helper_CHECK_sites": 8,
+  "input_files": [
+    {
+      "path": "tests/unit/program/test_xr_program_verify.c",
+      "physical_raw_sha256": "a39922500c0943c034fafcda3a82b67e511ea658f453f6c0c3204f7719de1817",
+      "whole_file_lf_sha256": "ec4b93f13bfab2aa3d4b8f8773dd5c1118a0c682ed6f8304fead515f90402802",
+      "git_base_equal": true,
+      "status": "PRESERVE_ORIGINAL_READONLY"
+    },
+    {
+      "path": "tests/unit/program/xr_program_coroutine_fixture.h",
+      "physical_raw_sha256": "3f76ce978f46af31e6e93ab514dc3e3bbbfe05c590e402f7e2af8c00294d0a64",
+      "whole_file_lf_sha256": "e3304d712b3d539026dfaa7d19deece174ccd1dfc520f0ffbad36ee0aea26e7c",
+      "git_base_equal": true,
+      "status": "PRESERVE_ORIGINAL_READONLY"
+    },
+    {
+      "path": "tests/unit/vm/test_xr_program_vm.c",
+      "physical_raw_sha256": "3a19b58076867cc70ef6c77e975286009df65e61ac1ed9edb2b5ab7813543502",
+      "whole_file_lf_sha256": "17904ef2bab8bb7eea72245fedba9878d74b6b8e93776e4314418e2db06dce8a",
+      "git_base_equal": true,
+      "status": "PRESERVE_ORIGINAL_READONLY"
+    },
+    {
+      "path": "tests/unit/aot/test_xr_program_aot.c",
+      "physical_raw_sha256": "6fea38acff96d94b2bfb414e04aa308386f6284ed12ccf05613a790a23caa700",
+      "whole_file_lf_sha256": "e7ab9301b308c7db6bf48e348257e5288f38f22c1b38c827fb040719dbf2de0e",
+      "git_base_equal": true,
+      "status": "PRESERVE_ORIGINAL_READONLY"
+    },
+    {
+      "path": "tests/unit/aot/test_xr_native_execution_allocations.c",
+      "physical_raw_sha256": "ecd40808ee560e0f3b5d65cc01e7bf183d23a6275b9a18909f730878d1478f29",
+      "whole_file_lf_sha256": "98b2b154cc2d612835aaa53a5925c133b241b41a7755b1966c126cfed29d9450",
+      "git_base_equal": true,
+      "status": "PRESERVE_ORIGINAL_READONLY"
+    },
+    {
+      "path": "tests/unit/aot/test_xr_program_aot_coroutine_native_step.c",
+      "physical_raw_sha256": "f9b2138c237eb3e77190b6b18673b8fb95f4ee11d8ea7a7fe4afd1d1d26aa64e",
+      "whole_file_lf_sha256": "5f93bcd76755439c2c9d11cfbf2a53cdd3af5895029d1fa902ca930b0ee66209",
+      "git_base_equal": true,
+      "status": "PRESERVE_ORIGINAL_READONLY"
+    }
+  ],
+  "input_policy": "Preserve both full original census bodies and eight actual helpers, including every branch of the complete shared fixture. The two DIVIDE_AFTER_YIELD branches are retained but not selected by these census bodies. No Source, product ABI, shared fixture, CMake, SDK, spec or docs mutation.",
+  "coroutine_graph": {
+    "constants": [
+      "I64 forty=40",
+      "I64 two=2"
+    ],
+    "entry": [
+      "CONSTANT_I64 forty",
+      "COROUTINE_YIELD immediate safepoint0 operands[forty] -> resume,cancel"
+    ],
+    "resume": [
+      "BLOCK_ARGUMENT I64 resumed",
+      "CONSTANT_I64 two",
+      "ADD_I64 [resumed,two] immediate U32=1",
+      "RETURN sum"
+    ],
+    "cancel": [
+      "CANCEL_PUBLISH with no value"
+    ],
+    "states": [
+      "0 -> entry",
+      "1 -> resume"
+    ],
+    "safepoint": "id0, resume_state1, live_values[forty], count1",
+    "function": "ENTRY, result I64, effects CANCEL|SUSPEND|TRAP, RUNTIME_COROUTINE_SUSPENSION capability",
+    "shape_counts": {
+      "functions": 1,
+      "blocks": 3,
+      "instructions": 7,
+      "constants": 2
+    },
+    "value_relation": "Normal arithmetic would use actual resumed40 + 2; original body does not resume/evaluate or assert42. No fixed42 runtime evidence exists here."
+  },
+  "timer_graph": {
+    "constants": [
+      "I64 ten=10",
+      "BOOL false",
+      "I64 two=2"
+    ],
+    "entry": [
+      "CONSTANT_I64 ten",
+      "CONSTANT_BOOL false",
+      "COROUTINE_SUSPEND operands[ten,ten], request TIMER_AFTER_MS/count1, safepoint0 -> resume,cancel"
+    ],
+    "resume": [
+      "BLOCK_ARGUMENT I64 resumed",
+      "CONSTANT_I64 two",
+      "ADD_I64 [resumed,two] immediate U32=1",
+      "RETURN sum"
+    ],
+    "cancel": [
+      "CANCEL_PUBLISH"
+    ],
+    "states": [
+      "0 -> entry",
+      "1 -> resume"
+    ],
+    "safepoint": "id0, resume_state1, live_values[ten], count1",
+    "function": "ENTRY, I64 result, CANCEL|SUSPEND|TRAP, COROUTINE_SUSPENSION|TIMER_SUSPENSION capabilities",
+    "shape_counts": {
+      "functions": 1,
+      "blocks": 3,
+      "instructions": 8,
+      "constants": 3
+    },
+    "value_relation": "Actual first ten is request input, actual second ten is continuation live input. This is admission only; no provider clock, deadline, sleep duration, cancellation timing or result12 is asserted."
+  },
+  "owner_graph": {
+    "main": [
+      "CONSTANT_I64 zero",
+      "RETURN zero"
+    ],
+    "owner_signature": "MOVE PANIC_INFO parameter OWNER -> OWNER PANIC_INFO result; CANCEL|SUSPEND and RUNTIME_COROUTINE_SUSPENSION; no PANIC effect or PANIC_PUBLISH.",
+    "entry": [
+      "BLOCK_ARGUMENT OWN parameter",
+      "COROUTINE_YIELD safepoint0 operands[parameter,parameter] -> resume,cancel"
+    ],
+    "resume": [
+      "BLOCK_ARGUMENT OWN resumed",
+      "RETURN resumed OWNER"
+    ],
+    "cancel": [
+      "BLOCK_ARGUMENT OWN cancelled",
+      "OWNER_DROP cancelled",
+      "CANCEL_PUBLISH"
+    ],
+    "states": [
+      "0 -> owner entry",
+      "1 -> owner resume"
+    ],
+    "safepoint": "id0, resume_state1, live_values[parameter], count1",
+    "valid_shape_counts": {
+      "functions": 2,
+      "blocks": 4,
+      "instructions": 9,
+      "constants": 1
+    },
+    "duplicate_operand_meaning": "The same actual owner transfers to mutually exclusive normal/cancel edges; do not apply a global duplicate-operand prohibition.",
+    "runtime_boundary": "No runtime evaluation, no owning input materialization, no actual owner return/cleanup/lifecycle observer assertions. Main CONST0 is retained and cannot stand in for owner qualification.",
+    "additional_child_parent": {
+      "selected_only_by": "MISSING_BORROWED_CALL_OWNER_LIVE",
+      "child": "READ PANIC_INFO NON_OWNER parameter -> VOID; entry BLOCK_ARGUMENT then YIELD with no operands; resume RETURN VOID; cancel CANCEL_PUBLISH; states0 entry/1 resume, safepoint empty. Borrowed input is unused by child after suspension.",
+      "parent": "MOVE PANIC_INFO OWNER parameter -> VOID; entry BLOCK_ARGUMENT then COROUTINE_CALL_SEALED actual READ child. Missing case operand_count1 instead3, both continuation blocks argument_count0 and one terminator, live_count0. States0 and1 both point to parent entry.",
+      "missing_shape_counts": {
+        "functions": 4,
+        "blocks": 10,
+        "instructions": 17,
+        "constants": 1
+      },
+      "contract": "A borrowed call suspending inside child still needs to retain the actual caller owner across both continuation outcomes. Full helper contains the non-missing metadata, but VALID module selects only first two functions; there is no separate admitted four-function positive in this census."
+    }
+  },
+  "builder_cases": [
+    {
+      "builder": "coroutine",
+      "mutation": "VALID",
+      "fresh_inputs": 2,
+      "expected_build": "XR_PROGRAM_BUILD_OK",
+      "expected_verify": "XR_PROGRAM_VERIFY_OK",
+      "expected_diagnostic": null,
+      "complete_graph_change": "Build the same complete one-function/three-block/seven-instruction graph twice. Require nonzero equal artifact size, all bytes equal and ProgramID equal; only the first artifact is admitted. Keep both separate fresh builder inputs.",
+      "original_runtime": "NOT_RUN",
+      "status": "OPEN"
+    },
+    {
+      "builder": "coroutine",
+      "mutation": "UNUSED_LIVE",
+      "fresh_inputs": 1,
+      "expected_build": "XR_PROGRAM_BUILD_OK",
+      "expected_verify": "XR_PROGRAM_VERIFY_SEMANTIC_REJECTED",
+      "expected_diagnostic": "XR_PROGRAM_DIAGNOSTIC_COROUTINE",
+      "complete_graph_change": "Keep forty as the sole YIELD operand, safepoint live value and resume argument. Only ADD operand0 changes resumed -> two, leaving the incoming resumed value unused. Do not replace this with an empty live set.",
+      "original_runtime": "NOT_RUN",
+      "status": "OPEN"
+    },
+    {
+      "builder": "coroutine",
+      "mutation": "MISSING_CANCEL_EDGE",
+      "fresh_inputs": 1,
+      "expected_build": "XR_PROGRAM_BUILD_OK",
+      "expected_verify": "XR_PROGRAM_VERIFY_SEMANTIC_REJECTED",
+      "expected_diagnostic": "XR_PROGRAM_DIAGNOSTIC_COROUTINE",
+      "complete_graph_change": "Keep both actual resume/cancel block definitions and both successor keys, but YIELD successor_count changes 2 -> 1. Resume arithmetic and safepoint metadata stay intact.",
+      "original_runtime": "NOT_RUN",
+      "status": "OPEN"
+    },
+    {
+      "builder": "coroutine",
+      "mutation": "NORMAL_EDGE_TO_CANCEL",
+      "fresh_inputs": 1,
+      "expected_build": "XR_PROGRAM_BUILD_OK",
+      "expected_verify": "XR_PROGRAM_VERIFY_SEMANTIC_REJECTED",
+      "expected_diagnostic": "XR_PROGRAM_DIAGNOSTIC_COROUTINE",
+      "complete_graph_change": "Replace the resume RETURN with BRANCH to the existing cancellation block, remove its return operands and add one successor. Keep resume BLOCK_ARGUMENT/CONST2/ADD and cancellation CANCEL_PUBLISH.",
+      "original_runtime": "NOT_RUN",
+      "status": "OPEN"
+    },
+    {
+      "builder": "timer",
+      "mutation": "VALID",
+      "fresh_inputs": 1,
+      "expected_build": "XR_PROGRAM_BUILD_OK",
+      "expected_verify": "XR_PROGRAM_VERIFY_OK",
+      "expected_diagnostic": null,
+      "complete_graph_change": "Complete one-function/three-block/eight-instruction graph; request TIMER_AFTER_MS consumes I64 ten, one request operand, followed by ten as the sole resumed live value. Both resume and cancel successors remain.",
+      "original_runtime": "NOT_RUN",
+      "status": "OPEN"
+    },
+    {
+      "builder": "timer",
+      "mutation": "INVALID_REQUEST_KIND",
+      "fresh_inputs": 1,
+      "expected_build": "XR_PROGRAM_BUILD_OK",
+      "expected_verify": "XR_PROGRAM_VERIFY_SEMANTIC_REJECTED",
+      "expected_diagnostic": "XR_PROGRAM_DIAGNOSTIC_COROUTINE",
+      "complete_graph_change": "Only request_kind TIMER_AFTER_MS -> UINT16_MAX; retain two operands [ten,ten], request count1, live ten, complete resume and cancel paths.",
+      "original_runtime": "NOT_RUN",
+      "status": "OPEN"
+    },
+    {
+      "builder": "timer",
+      "mutation": "INVALID_REQUEST_COUNT",
+      "fresh_inputs": 1,
+      "expected_build": "XR_PROGRAM_BUILD_OK",
+      "expected_verify": "XR_PROGRAM_VERIFY_SEMANTIC_REJECTED",
+      "expected_diagnostic": "XR_PROGRAM_DIAGNOSTIC_COROUTINE",
+      "complete_graph_change": "Only request_operand_count 1 -> 0; actual operand_count remains2 and both operands remain ten, safepoint live count1 and resume argument unchanged.",
+      "original_runtime": "NOT_RUN",
+      "status": "OPEN"
+    },
+    {
+      "builder": "timer",
+      "mutation": "INVALID_REQUEST_TYPE",
+      "fresh_inputs": 1,
+      "expected_build": "XR_PROGRAM_BUILD_OK",
+      "expected_verify": "XR_PROGRAM_VERIFY_SEMANTIC_REJECTED",
+      "expected_diagnostic": "XR_PROGRAM_DIAGNOSTIC_COROUTINE",
+      "complete_graph_change": "Only request operand0 ten -> actual BOOL false; operand1 remains I64 ten and safepoint live ten. Keep BOOL constant in every timer graph, including VALID.",
+      "original_runtime": "NOT_RUN",
+      "status": "OPEN"
+    },
+    {
+      "builder": "owner",
+      "mutation": "VALID",
+      "fresh_inputs": 1,
+      "expected_build": "XR_PROGRAM_BUILD_OK",
+      "expected_verify": "XR_PROGRAM_VERIFY_OK",
+      "expected_diagnostic": null,
+      "complete_graph_change": "Complete module has two functions: main CONST0/RETURN and a separate MOVE PANIC_INFO owner coroutine with three blocks. Main does not call that coroutine; admission only, no owner creation or execution.",
+      "original_runtime": "NOT_RUN",
+      "status": "OPEN"
+    },
+    {
+      "builder": "owner",
+      "mutation": "MISSING_CANCEL_ARGUMENT",
+      "fresh_inputs": 1,
+      "expected_build": "XR_PROGRAM_BUILD_OK",
+      "expected_verify": "XR_PROGRAM_VERIFY_SEMANTIC_REJECTED",
+      "expected_diagnostic": "XR_PROGRAM_DIAGNOSTIC_COROUTINE",
+      "complete_graph_change": "Cancel block argument_count becomes0 and arguments NULL; instruction pointer starts at CANCEL_PUBLISH, instruction_count1. YIELD still transfers the same parameter to both edges and safepoint live count1.",
+      "original_runtime": "NOT_RUN",
+      "status": "OPEN"
+    },
+    {
+      "builder": "owner",
+      "mutation": "CANCEL_OWNER_NOT_DROPPED",
+      "fresh_inputs": 1,
+      "expected_build": "XR_PROGRAM_BUILD_OK",
+      "expected_verify": "XR_PROGRAM_VERIFY_SEMANTIC_REJECTED",
+      "expected_diagnostic": "XR_PROGRAM_DIAGNOSTIC_VALUE_USE",
+      "complete_graph_change": "Keep cancel OWN PANIC_INFO argument; replace OWNER_DROP with CANCEL_PUBLISH and instruction_count2, resulting in BLOCK_ARGUMENT/CANCEL_PUBLISH with no DROP.",
+      "original_runtime": "NOT_RUN",
+      "status": "OPEN"
+    },
+    {
+      "builder": "owner",
+      "mutation": "EXTRA_CANCEL_ARGUMENT",
+      "fresh_inputs": 1,
+      "expected_build": "XR_PROGRAM_BUILD_OK",
+      "expected_verify": "XR_PROGRAM_VERIFY_SEMANTIC_REJECTED",
+      "expected_diagnostic": "XR_PROGRAM_DIAGNOSTIC_COROUTINE",
+      "complete_graph_change": "Cancel argument_count and BLOCK_ARGUMENT operand_count become2 with two OWN PANIC_INFO values [cancelled,extra]; still drop only cancelled before CANCEL_PUBLISH. YIELD still has only its original two same-owner operands.",
+      "original_runtime": "NOT_RUN",
+      "status": "OPEN"
+    },
+    {
+      "builder": "owner",
+      "mutation": "MISSING_BORROWED_CALL_OWNER_LIVE",
+      "fresh_inputs": 1,
+      "expected_build": "XR_PROGRAM_BUILD_OK",
+      "expected_verify": "XR_PROGRAM_VERIFY_SEMANTIC_REJECTED",
+      "expected_diagnostic": "XR_PROGRAM_DIAGNOSTIC_COROUTINE",
+      "complete_graph_change": "This case extends function_count2 -> 4 by including READ child and MOVE owner parent. Parent CALL_SEALED has only its READ call operand, no continuation transfers; safepoint live_values=NULL/count0; resume and cancel blocks have no arguments and only RETURN/CANCEL_PUBLISH. Preserve all four functions, not a scalar owner coroutine reduction.",
+      "original_runtime": "NOT_RUN",
+      "status": "OPEN"
+    }
+  ],
+  "fresh_builder_input_count": 14,
+  "canonical_repeat": {
+    "builder_inputs": 2,
+    "admitted_programs": 1,
+    "assertions": [
+      "nonzero equal size",
+      "memcmp all artifact bytes",
+      "ProgramID equality"
+    ],
+    "second_artifact": "freed before first admission; not independently admitted or executed"
+  },
+  "negative_expectation_policy": "All ten full semantic-negative graphs build OK, then validate twice via expect_semantic_reject_at: exact SEMANTIC_REJECTED, exact expected kind, NULL product both times, repeated status equality and full diagnostic memcmp. Nine COROUTINE and one VALUE_USE. Keep original complete graphs and exact diagnostic distinctions; no any-error acceptance.",
+  "assertion_counts": {
+    "census_functions": 2,
+    "outer_sites": 18,
+    "specified_helpers": 8,
+    "specified_helper_sites": 8,
+    "fresh_builder_inputs": 14,
+    "positive_admitted_programs": 3,
+    "repeat_writer_only_inputs": 1,
+    "semantic_negative_inputs": 10,
+    "semantic_negative_verify_calls": 20,
+    "original_runtime_evaluations": 0,
+    "wire_mutations": 0
+  },
+  "shared_fixture_owners": {
+    "path": "tests/unit/program/xr_program_coroutine_fixture.h",
+    "actual_include_users": [
+      "tests/unit/program/test_xr_program_verify.c",
+      "tests/unit/vm/test_xr_program_vm.c",
+      "tests/unit/aot/test_xr_program_aot.c",
+      "tests/unit/aot/test_xr_native_execution_allocations.c",
+      "tests/unit/aot/test_xr_program_aot_coroutine_native_step.c"
+    ],
+    "status": "PRESERVE_SHARED_READONLY",
+    "deletion": "Verifier, VM, AOT, native allocation and native coroutine-step users remain; no shared deletion candidate."
+  },
+  "Root_contract_or_representation_review": {
+    "status": "OPEN",
+    "exact_liveness": "Retain actual state/safepoint/live-value and continuation argument associations through current public Built/Checked/full-specialization reverify/Lowered/verified-owner/packet/Program path; merely accepting YIELD or scalar arithmetic cannot qualify these responsibilities.",
+    "owner_transfer": "Retain actual owning PanicInfo identity and ownership over mutually exclusive outcomes, including borrowed child invocation caller liveness. Current actual payload materialization, VM/native/mixed cancellation/resumption, distinct instances and detached owning result lifetime require formal entry roles and stable lifecycle/physical reclamation observer.",
+    "timer": "Keep request kind/count/type independently rejected while actual complete continuation live graph remains. Current provider request/deadline/cancel and allocation-FI execution remains unqualified.",
+    "negatives": "Do not infer exact failure location beyond original diagnostic kind/full repeated diagnostic equality; current representation changes need explicit atomic mapping, no restored old carrier/opcode aliases."
+  },
+  "full_FI": "NOT_RUN",
+  "axes": "NOT_RUN",
+  "full_safety": "NOT_RUN",
+  "SourceDelete": "NOT_RUN",
+  "Main": "NOT_RUN",
+  "handoff": {
+    "Root_thread": "01a11f74-a297-7b11-8441-835bde6a3d5f",
+    "formal_acceptance": "PENDING"
+  },
+  "boundaries": [
+    "Static original admission responsibilities only; all remain OPEN and retired0.",
+    "Current product execution and full qualification require formal producer/roles/observer/window.",
+    "Historical dirty generated source preserved; no private candidate or relaxed denominator adopted."
+  ]
+}
