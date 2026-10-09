@@ -1,0 +1,457 @@
+{
+  "schema": 1,
+  "family": "original_class_alias_snapshot",
+  "legacy_base_commit": "01e6d38401b0f5c8684b64c35a99ac651024c0c1",
+  "status": "OPEN",
+  "retired": 0,
+  "replacement_gates": [],
+  "result": "STATIC_ORIGINAL_CLASS_ALIAS_SNAPSHOT_MAP_ONLY",
+  "product_execution": "NOT_RUN_BY_THIS_MAP",
+  "producer": "25f4016d6f089169757a90ae11ba537002374711",
+  "identity": "Checked25/semantic67/Value22/Call28/Program29",
+  "legacy": [
+    {
+      "name": "test_class_alias_mutation_and_lifecycle",
+      "legacy_path": "tests/unit/program/test_xr_program_verify.c",
+      "legacy_line": 1411,
+      "body_lf_sha256": "28f21a5c3573a9de1cee72109151d79a21b0feb860ec6b3e48f79e7b5c53f5d0",
+      "assertion_sites": 14,
+      "loop_sites": 1,
+      "status": "OPEN",
+      "replacement_gates": [],
+      "note": "Function census preserves its whole body; sites do not count executed loop iterations."
+    },
+    {
+      "name": "test_class_trivial_field_load_is_snapshot",
+      "legacy_path": "tests/unit/program/test_xr_program_verify.c",
+      "legacy_line": 1610,
+      "body_lf_sha256": "c73c46d3673115d49e2c10b16f4aecddc8f9b3a3c67d8c92432efe22166d42c2",
+      "assertion_sites": 5,
+      "loop_sites": 0,
+      "status": "OPEN",
+      "replacement_gates": [],
+      "note": "Function census preserves its whole body; sites do not count executed loop iterations."
+    }
+  ],
+  "responsibility_mapping": [
+    {
+      "path": "tests/unit/program/test_xr_program_verify.c",
+      "function": "test_class_alias_mutation_and_lifecycle",
+      "line": 1411,
+      "end_line": 1461,
+      "body_lf_sha256": "28f21a5c3573a9de1cee72109151d79a21b0feb860ec6b3e48f79e7b5c53f5d0",
+      "CHECK_sites": 14,
+      "CHECK_bindings": [
+        {
+          "line": 1423,
+          "expression": "result.kind == XR_REFERENCE_OUTCOME_RETURN",
+          "status": "OPEN"
+        },
+        {
+          "line": 1424,
+          "expression": "result.value.kind == XR_REFERENCE_VALUE_I64",
+          "status": "OPEN"
+        },
+        {
+          "line": 1425,
+          "expression": "result.value.as.i64 == 42",
+          "status": "OPEN"
+        },
+        {
+          "line": 1437,
+          "expression": "log.count == sizeof(expected) / sizeof(expected[0])",
+          "status": "OPEN"
+        },
+        {
+          "line": 1439,
+          "expression": "class_type_id != XR_CORE_TYPE_VOID",
+          "status": "OPEN"
+        },
+        {
+          "line": 1442,
+          "expression": "log.kinds[index] == expected[index]",
+          "status": "OPEN"
+        },
+        {
+          "line": 1443,
+          "expression": "log.origins[index] == XR_REFERENCE_EVENT_ORIGIN_PROGRAM_OPERATION",
+          "status": "OPEN"
+        },
+        {
+          "line": 1445,
+          "expression": "log.identities[index] == log.identities[0]",
+          "status": "OPEN"
+        },
+        {
+          "line": 1446,
+          "expression": "log.type_ids[index] == (index == 3u ? XR_CORE_TYPE_I64 : class_type_id)",
+          "status": "OPEN"
+        },
+        {
+          "line": 1448,
+          "expression": "log.identities[3] == UINT64_MAX",
+          "status": "OPEN"
+        },
+        {
+          "line": 1449,
+          "expression": "log.related_identities[3] == UINT64_MAX",
+          "status": "OPEN"
+        },
+        {
+          "line": 1450,
+          "expression": "log.related_identities[1] == log.identities[0]",
+          "status": "OPEN"
+        },
+        {
+          "line": 1451,
+          "expression": "log.fields[2] == 0u",
+          "status": "OPEN"
+        },
+        {
+          "line": 1452,
+          "expression": "log.fields[4] == 0u",
+          "status": "OPEN"
+        }
+      ],
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/program/test_xr_program_verify.c",
+      "function": "test_class_trivial_field_load_is_snapshot",
+      "line": 1610,
+      "end_line": 1631,
+      "body_lf_sha256": "c73c46d3673115d49e2c10b16f4aecddc8f9b3a3c67d8c92432efe22166d42c2",
+      "CHECK_sites": 5,
+      "CHECK_bindings": [
+        {
+          "line": 1616,
+          "expression": "result.kind == XR_REFERENCE_OUTCOME_RETURN",
+          "status": "OPEN"
+        },
+        {
+          "line": 1617,
+          "expression": "result.value.kind == XR_REFERENCE_VALUE_I64",
+          "status": "OPEN"
+        },
+        {
+          "line": 1618,
+          "expression": "result.value.as.i64 == 7",
+          "status": "OPEN"
+        },
+        {
+          "line": 1625,
+          "expression": "result.kind == XR_REFERENCE_OUTCOME_RESOURCE_LIMIT",
+          "status": "OPEN"
+        },
+        {
+          "line": 1626,
+          "expression": "!result.owns_dynamic_values",
+          "status": "OPEN"
+        }
+      ],
+      "status": "OPEN"
+    }
+  ],
+  "outer_CHECK_sites": 19,
+  "original_private_helpers": [
+    {
+      "path": "tests/unit/program/test_xr_program_verify.c",
+      "function": "build_class_alias_mutation_artifact",
+      "line": 1288,
+      "end_line": 1409,
+      "body_lf_sha256": "09963fe45fa30b850e2dc167b393d0fb51ee2bccca28c20be676cfff6db4e40f",
+      "CHECK_sites": 1,
+      "CHECK_bindings": [
+        {
+          "line": 1407,
+          "expression": "write_typed_modules(&type, 1u, &module, 1u, &artifact) == XR_PROGRAM_BUILD_OK",
+          "status": "OPEN"
+        }
+      ],
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/program/test_xr_program_verify.c",
+      "function": "build_class_trivial_field_snapshot_artifact",
+      "line": 1463,
+      "end_line": 1608,
+      "body_lf_sha256": "7ce3200b8579113b08acb12ae92aa55a3d68c9d972508113f5d53d9dcf6555b2",
+      "CHECK_sites": 1,
+      "CHECK_bindings": [
+        {
+          "line": 1605,
+          "expression": "write_typed_modules(types, sizeof(types) / sizeof(types[0]), &module, 1u, &artifact) ==\n          XR_PROGRAM_BUILD_OK",
+          "status": "OPEN"
+        }
+      ],
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/program/test_xr_program_verify.c",
+      "function": "record_class_lifecycle",
+      "line": 1275,
+      "end_line": 1286,
+      "body_lf_sha256": "5e54de2612750209b66ec1d959a0fb513b9b52b41a01194738cdbcdc06b3237b",
+      "CHECK_sites": 0,
+      "CHECK_bindings": [],
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/program/test_xr_program_verify.c",
+      "function": "key",
+      "line": 109,
+      "end_line": 111,
+      "body_lf_sha256": "027a211b78e0cfbd6b296804e37236848a76cc1980981a0d6a49a6f42d3f2e13",
+      "CHECK_sites": 0,
+      "CHECK_bindings": [],
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/program/test_xr_program_verify.c",
+      "function": "write_typed_modules",
+      "line": 113,
+      "end_line": 138,
+      "body_lf_sha256": "c568d48005100fc2633344ba569a2bc8de9b62e3aac794b35057c8d838b8db65",
+      "CHECK_sites": 0,
+      "CHECK_bindings": [],
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/program/test_xr_program_verify.c",
+      "function": "validate_ok",
+      "line": 159,
+      "end_line": 174,
+      "body_lf_sha256": "94fe0ef4e0242acb810c12621ae1fe73a9887ef668f15ddc6c67ed645494f62b",
+      "CHECK_sites": 2,
+      "CHECK_bindings": [
+        {
+          "line": 171,
+          "expression": "status == XR_PROGRAM_VERIFY_OK",
+          "status": "OPEN"
+        },
+        {
+          "line": 172,
+          "expression": "program != NULL",
+          "status": "OPEN"
+        }
+      ],
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/program/test_xr_program_verify.c",
+      "function": "expect_semantic_reject_at",
+      "line": 176,
+      "end_line": 198,
+      "body_lf_sha256": "44cf0fb15bea156743a1c0e35b0be8ee844aa1af55c8653ed9361cf781c045b8",
+      "CHECK_sites": 6,
+      "CHECK_bindings": [
+        {
+          "line": 190,
+          "expression": "first_status == XR_PROGRAM_VERIFY_SEMANTIC_REJECTED",
+          "status": "OPEN"
+        },
+        {
+          "line": 191,
+          "expression": "program == NULL",
+          "status": "OPEN"
+        },
+        {
+          "line": 192,
+          "expression": "first.kind == expected",
+          "status": "OPEN"
+        },
+        {
+          "line": 195,
+          "expression": "second_status == first_status",
+          "status": "OPEN"
+        },
+        {
+          "line": 196,
+          "expression": "memcmp(&first, &second, sizeof(first)) == 0",
+          "status": "OPEN"
+        },
+        {
+          "line": 197,
+          "expression": "program == NULL",
+          "status": "OPEN"
+        }
+      ],
+      "status": "OPEN"
+    }
+  ],
+  "specified_helper_CHECK_sites": 10,
+  "input_file": {
+    "path": "tests/unit/program/test_xr_program_verify.c",
+    "whole_file_lf_sha256": "ec4b93f13bfab2aa3d4b8f8773dd5c1118a0c682ed6f8304fead515f90402802",
+    "physical_raw_sha256": "a39922500c0943c034fafcda3a82b67e511ea658f453f6c0c3204f7719de1817",
+    "git_base_equal": true
+  },
+  "input_policy": "Complete2 original functions,7 actual helper bodies and whole direct container equal01e6 Git. All type/constant/key/operand/owner/share/place/snapshot/drop data remain. Not exhaustive external dependency closure.",
+  "alias_complete_input": "One affine explicitly-copyable class-reference local42 with one I64 field. Actual constants7/42; construct original with7, OWNER_ALIAS yields owning identity share, obtain alias field place, exchange42, load through original, drop alias then original, return loaded42. Single real block/function/module and ENTRY. Field ordinal0 is positive; ordinal1 exact OPERATION_TYPE semantic rejection.",
+  "snapshot_complete_input": "Trivial nominal STRUCT local42 has one I64 field; affine explicitly-copyable CLASS local43 has that record field. Constants7/9. Construct record7/class(record), load record snapshot, make local place/project field0, store9 into snapshot, reload original class field, project its I64, drop class, return original7. Full12 operation/operand/type inputs retained.",
+  "alias_original_oracles": {
+    "result": "exact RETURN/I64/42",
+    "event_count": 9,
+    "event_order": [
+      {
+        "ordinal": 0,
+        "original_kind": "CLASS_CONSTRUCT",
+        "original_origin": "PROGRAM_OPERATION",
+        "identity": "same actual class identity as event0",
+        "type": "same actual non-VOID class type as event0",
+        "related_identity": "not asserted by original",
+        "field": "not asserted by original",
+        "status": "OPEN"
+      },
+      {
+        "ordinal": 1,
+        "original_kind": "CLASS_SHARE",
+        "original_origin": "PROGRAM_OPERATION",
+        "identity": "same actual class identity as event0",
+        "type": "same actual non-VOID class type as event0",
+        "related_identity": "same class identity as event0",
+        "field": "not asserted by original",
+        "status": "OPEN"
+      },
+      {
+        "ordinal": 2,
+        "original_kind": "CLASS_FIELD_PLACE",
+        "original_origin": "PROGRAM_OPERATION",
+        "identity": "same actual class identity as event0",
+        "type": "same actual non-VOID class type as event0",
+        "related_identity": "not asserted by original",
+        "field": "0",
+        "status": "OPEN"
+      },
+      {
+        "ordinal": 3,
+        "original_kind": "PLACE_EXCHANGE",
+        "original_origin": "PROGRAM_OPERATION",
+        "identity": "UINT64_MAX sentinel",
+        "type": "I64",
+        "related_identity": "UINT64_MAX sentinel",
+        "field": "not asserted by original",
+        "status": "OPEN"
+      },
+      {
+        "ordinal": 4,
+        "original_kind": "CLASS_FIELD_LOAD",
+        "original_origin": "PROGRAM_OPERATION",
+        "identity": "same actual class identity as event0",
+        "type": "same actual non-VOID class type as event0",
+        "related_identity": "not asserted by original",
+        "field": "0",
+        "status": "OPEN"
+      },
+      {
+        "ordinal": 5,
+        "original_kind": "OWNER_DROP",
+        "original_origin": "PROGRAM_OPERATION",
+        "identity": "same actual class identity as event0",
+        "type": "same actual non-VOID class type as event0",
+        "related_identity": "not asserted by original",
+        "field": "not asserted by original",
+        "status": "OPEN"
+      },
+      {
+        "ordinal": 6,
+        "original_kind": "OWNER_DROP",
+        "original_origin": "PROGRAM_OPERATION",
+        "identity": "same actual class identity as event0",
+        "type": "same actual non-VOID class type as event0",
+        "related_identity": "not asserted by original",
+        "field": "not asserted by original",
+        "status": "OPEN"
+      },
+      {
+        "ordinal": 7,
+        "original_kind": "CLASS_FINALIZE",
+        "original_origin": "PROGRAM_OPERATION",
+        "identity": "same actual class identity as event0",
+        "type": "same actual non-VOID class type as event0",
+        "related_identity": "not asserted by original",
+        "field": "not asserted by original",
+        "status": "OPEN"
+      },
+      {
+        "ordinal": 8,
+        "original_kind": "CLASS_RECLAIM",
+        "original_origin": "PROGRAM_OPERATION",
+        "identity": "same actual class identity as event0",
+        "type": "same actual non-VOID class type as event0",
+        "related_identity": "not asserted by original",
+        "field": "not asserted by original",
+        "status": "OPEN"
+      }
+    ],
+    "lifecycle": "Exactly one actual class construct/finalize/reclaim in that nine-event trace; all class operations and both owning drops carry the same actual stable identity. Scalar exchange uses sentinel identities, not class-object identity.",
+    "negative": "field ordinal1 via same full builder requires exact SEMANTIC_REJECTED/OPERATION_TYPE and NULL twice with complete diagnostic equality using helper."
+  },
+  "snapshot_original_oracles": {
+    "result": "exact RETURN/I64/7 after mutable snapshot receives9; value snapshot must not mutate original class record field.",
+    "resource": "Separate fresh evaluation with original default budget and max_value_cells=2 must exact RESOURCE_LIMIT and owns_dynamic_values false. Dispose both outcomes and validated/artifact owners.",
+    "boundary": "Original snapshot test does not install lifecycle callback or establish a physical allocation census; those current obligations remain independent."
+  },
+  "original_observer": {
+    "log_struct_lf_sha256": "9fc8510ff5c507e82606cd994e5c4e571fefae4d052f867d4c9e76f408477876",
+    "capacity": 64,
+    "fields": [
+      "kind",
+      "origin",
+      "type_id",
+      "identity",
+      "related_identity",
+      "field_ordinal"
+    ],
+    "callback": "Copies actual event fields; NULL log/event or full64 log silently ignored by original callback. Exact9 expected count protects this small original trace; no overflow-fail behavior was implemented here.",
+    "shared_legacy_header": {
+      "path": "src/program/xr_reference_evaluator.h",
+      "raw_sha256": "d43732ceca814f67f7f04e1b51d8512aab2e199092a546d1c47d30e0f28439bf",
+      "whole_file_lf_sha256": "0b2149e8397748e84b1cbc14904cde97d5bee4c3e69474486169e4656ff89054",
+      "git_base_equal": true
+    },
+    "host_disposal_boundary": "Old evaluator declares host outcome disposal outside its semantic trace; that does not discharge current escaped-owner final reclaim responsibility."
+  },
+  "target_contract_or_representation_review": {
+    "status": "OPEN; Root owns product ABI/interface and final current mapping.",
+    "current_public_header": {
+      "producer_relative_path": "src/xir/xxir_program.h",
+      "raw_sha256": "b86e54bc23554a4e62f131aa31c5dd7f18834763fd558e9ad978eefadc991b10"
+    },
+    "current_trace_events": [
+      "MODULE_BEGIN",
+      "MODULE_READY",
+      "SLOT_PUBLISHED",
+      "SLOT_RELEASED"
+    ],
+    "gap": "Inspected25f4 public instance trace has no genuine class construct/share/field/drop/finalize/reclaim identity event. Module/slot events, allocation address/counts/physical0 and CallEntry.release cannot prove original class trace.",
+    "related_minimum_request": "build-consumer-evidence/consumer-session-20261009-r1/class-lifecycle-interface-request.json",
+    "additional_original_observer_requirement": "Original raw class fixture checks nine real operation events with origin/type/identity/related/field data. Three lifecycle endpoints alone prove only that facet. Root must map remaining semantic operation responsibilities explicitly or supply bounded genuine observation, without synthesizing events from a static opcode list.",
+    "current_identity": "Genuine stable object identity scoped to actual owner/instance, independent of allocator reuse; context stays valid until last escaped owner release. No slot-address substitute; bounded observer must expose overflow to avoid silent missing proof.",
+    "representation": "Current nominal class identity/share versus value struct snapshot and forbidden copy must follow full common type/access/ownership verification. Old local42/43 and event enum numbers are historical inputs, not aliases or native ABI. Normal optimized Source coalescing does not inherit raw old evaluator nine-event counts; preserve logical semantics and justify current observation mapping.",
+    "pipeline": "Complete public Source/typed Library/packet\u2192Built/Checked\u2192owned codec reads\u2192specialization full reverify\u2192Lowered\u2192Program/Instance, detached producers, two Instances, genuine VM/native/mixed, cancelled/error/OOM/LIMIT/drain paths, per-object lifecycle, fresh FI/axes/safety all required."
+  },
+  "shared_dependencies": {
+    "paths": [
+      "tests/unit/program/test_xr_program_verify.c",
+      "src/program/xr_reference_evaluator.h"
+    ],
+    "status": "PRESERVE",
+    "emission_owners": 7,
+    "policy": "Shared evaluator header, recorder and fixture writer have other active class/clone/teardown consumers. No product/ABI/header edit or deletion authorized."
+  },
+  "full_FI": "NOT_RUN",
+  "axes": "NOT_RUN",
+  "full_safety": "NOT_RUN",
+  "SourceDelete": "NOT_RUN",
+  "Main": "NOT_RUN",
+  "handoff": {
+    "Root_thread": "01a11f74-a297-7b11-8441-835bde6a3d5f",
+    "formal_acceptance": "PENDING"
+  },
+  "boundaries": [
+    "All19 outer/10 helper CHECKs and original stable identity/event/snapshot/resource responsibilities OPEN;retired0.",
+    "Static original body/CHECK/input/event/budget/interface/scope audit only; no actual product/native/FI/lifecycle/safety execution.",
+    "No changed production source, new observer ABI, replacement qualification, main integration or deletion claim."
+  ]
+}
