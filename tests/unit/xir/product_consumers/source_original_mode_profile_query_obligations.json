@@ -1,0 +1,553 @@
+{
+  "schema": 1,
+  "family": "original_mode_profile_query",
+  "legacy_base_commit": "01e6d38401b0f5c8684b64c35a99ac651024c0c1",
+  "status": "OPEN",
+  "retired": 0,
+  "replacement_gates": [],
+  "result": "STATIC_ORIGINAL_PARAMETER_CATEGORY_AND_LOGICAL_QUERY_MAP_ONLY",
+  "product_execution": "NOT_RUN_BY_THIS_MAP",
+  "producer": "25f4016d6f089169757a90ae11ba537002374711",
+  "identity": "Checked25/semantic67/Value22/Call28/Program29",
+  "legacy": [
+    {
+      "name": "test_parameter_modes_and_value_categories",
+      "legacy_path": "tests/unit/program/test_xr_program_verify.c",
+      "legacy_line": 727,
+      "body_lf_sha256": "5335c1a75a81deba354c814f9b27a511607ccfb6e5c87ea2b1f77bbd2863bff1",
+      "assertion_sites": 8,
+      "loop_sites": 0,
+      "status": "OPEN",
+      "replacement_gates": [],
+      "note": "Function census preserves its whole body; sites do not count executed loop iterations."
+    },
+    {
+      "name": "test_target_profile_queries_are_exact_logical_scalars",
+      "legacy_path": "tests/unit/program/test_xr_program_verify.c",
+      "legacy_line": 763,
+      "body_lf_sha256": "8d93f31d9d507c7bd3c3d2f02d18fc9e0e7d28a2d845a820d817fe0b38547e1c",
+      "assertion_sites": 12,
+      "loop_sites": 1,
+      "status": "OPEN",
+      "replacement_gates": [],
+      "note": "Function census preserves its whole body; sites do not count executed loop iterations."
+    },
+    {
+      "name": "test_skip_instruction",
+      "legacy_path": "tests/unit/program/test_xr_program_verify.c",
+      "legacy_line": 227,
+      "body_lf_sha256": "05b17f1d03881763226d19ecf80ef28db2eaf2b4b15df6fb41940fcb9ed6e2f0",
+      "assertion_sites": 0,
+      "loop_sites": 2,
+      "status": "OPEN",
+      "replacement_gates": [],
+      "note": "Function census preserves its whole body; sites do not count executed loop iterations."
+    }
+  ],
+  "responsibility_mapping": [
+    {
+      "path": "tests/unit/program/test_xr_program_verify.c",
+      "function": "test_parameter_modes_and_value_categories",
+      "line": 727,
+      "end_line": 761,
+      "body_lf_sha256": "5335c1a75a81deba354c814f9b27a511607ccfb6e5c87ea2b1f77bbd2863bff1",
+      "CHECK_sites": 8,
+      "CHECK_bindings": [
+        {
+          "line": 729,
+          "expression": "build_mode_artifact(XR_PARAM_REF, XR_CORE_IR_PLACE, true, &ref) == XR_PROGRAM_BUILD_OK",
+          "status": "OPEN"
+        },
+        {
+          "line": 734,
+          "expression": "mode_fixture_offsets(&ref, &offsets)",
+          "status": "OPEN"
+        },
+        {
+          "line": 735,
+          "expression": "offsets.block_count == 2u",
+          "status": "OPEN"
+        },
+        {
+          "line": 746,
+          "expression": "build_mode_artifact(XR_PARAM_READ, XR_CORE_IR_VALUE, false, &read) ==\n          XR_PROGRAM_BUILD_OK",
+          "status": "OPEN"
+        },
+        {
+          "line": 748,
+          "expression": "mode_fixture_offsets(&read, &offsets)",
+          "status": "OPEN"
+        },
+        {
+          "line": 751,
+          "expression": "!xr_program_id_equal(ref.id, read.id)",
+          "status": "OPEN"
+        },
+        {
+          "line": 754,
+          "expression": "build_mode_artifact((XrParamMode) 3, XR_CORE_IR_VALUE, false, &invalid) ==\n          XR_PROGRAM_BUILD_INVALID_INPUT",
+          "status": "OPEN"
+        },
+        {
+          "line": 756,
+          "expression": "build_mode_artifact(XR_PARAM_REF, XR_CORE_IR_VALUE, false, &invalid) ==\n          XR_PROGRAM_BUILD_INVALID_INPUT",
+          "status": "OPEN"
+        }
+      ],
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/program/test_xr_program_verify.c",
+      "function": "test_target_profile_queries_are_exact_logical_scalars",
+      "line": 763,
+      "end_line": 911,
+      "body_lf_sha256": "8d93f31d9d507c7bd3c3d2f02d18fc9e0e7d28a2d845a820d817fe0b38547e1c",
+      "CHECK_sites": 12,
+      "CHECK_bindings": [
+        {
+          "line": 816,
+          "expression": "write_one_function(NULL, 0u, &function, &artifact) == XR_PROGRAM_BUILD_OK",
+          "status": "OPEN"
+        },
+        {
+          "line": 821,
+          "expression": "result.kind == XR_REFERENCE_OUTCOME_RETURN",
+          "status": "OPEN"
+        },
+        {
+          "line": 822,
+          "expression": "result.value.kind == cases[index].value_kind",
+          "status": "OPEN"
+        },
+        {
+          "line": 823,
+          "expression": "result.value.as.target_enum == cases[index].expected",
+          "status": "OPEN"
+        },
+        {
+          "line": 830,
+          "expression": "write_one_function(NULL, 0u, &function, &artifact) == XR_PROGRAM_BUILD_OK",
+          "status": "OPEN"
+        },
+        {
+          "line": 836,
+          "expression": "write_one_function(NULL, 0u, &function, &artifact) == XR_PROGRAM_BUILD_OK",
+          "status": "OPEN"
+        },
+        {
+          "line": 886,
+          "expression": "write_one_function(NULL, 0u, &equality_function, &equality_artifact) ==\n          XR_PROGRAM_BUILD_OK",
+          "status": "OPEN"
+        },
+        {
+          "line": 892,
+          "expression": "result.kind == XR_REFERENCE_OUTCOME_RETURN",
+          "status": "OPEN"
+        },
+        {
+          "line": 893,
+          "expression": "result.value.kind == XR_REFERENCE_VALUE_BOOL",
+          "status": "OPEN"
+        },
+        {
+          "line": 894,
+          "expression": "result.value.as.boolean",
+          "status": "OPEN"
+        },
+        {
+          "line": 900,
+          "expression": "write_one_function(NULL, 0u, &equality_function, &equality_artifact) ==\n          XR_PROGRAM_BUILD_OK",
+          "status": "OPEN"
+        },
+        {
+          "line": 907,
+          "expression": "write_one_function(NULL, 0u, &equality_function, &equality_artifact) ==\n          XR_PROGRAM_BUILD_OK",
+          "status": "OPEN"
+        }
+      ],
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/program/test_xr_program_verify.c",
+      "function": "test_skip_instruction",
+      "line": 227,
+      "end_line": 248,
+      "body_lf_sha256": "05b17f1d03881763226d19ecf80ef28db2eaf2b4b15df6fb41940fcb9ed6e2f0",
+      "CHECK_sites": 0,
+      "CHECK_bindings": [],
+      "status": "OPEN"
+    }
+  ],
+  "outer_CHECK_sites": 20,
+  "original_private_helpers": [
+    {
+      "path": "tests/unit/program/test_xr_program_verify.c",
+      "function": "build_typed_mode_artifact",
+      "line": 280,
+      "end_line": 350,
+      "body_lf_sha256": "9d9f7a1c21acb7c7cf25016c2b8b59516611cdad10ea00f33ec224897279fd43",
+      "CHECK_sites": 0,
+      "CHECK_bindings": [],
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/program/test_xr_program_verify.c",
+      "function": "build_mode_artifact",
+      "line": 352,
+      "end_line": 358,
+      "body_lf_sha256": "5b89932f46915c8b958f4213cb78fb70052c36677616489eead49b6384dec24a",
+      "CHECK_sites": 0,
+      "CHECK_bindings": [],
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/program/test_xr_program_verify.c",
+      "function": "mode_fixture_offsets",
+      "line": 370,
+      "end_line": 434,
+      "body_lf_sha256": "1df2f2a3ec657f15dcafb3c143fad69ad207318eb8ff89b1b81028ea8bf893e1",
+      "CHECK_sites": 0,
+      "CHECK_bindings": [],
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/program/test_xr_program_verify.c",
+      "function": "test_take_uvar",
+      "line": 203,
+      "end_line": 215,
+      "body_lf_sha256": "835eb97aa0c77560506ba0e421652602ae095f5e6686cce9ef331fc80a34ef4d",
+      "CHECK_sites": 1,
+      "CHECK_bindings": [
+        {
+          "line": 213,
+          "expression": "false",
+          "status": "OPEN"
+        }
+      ],
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/program/test_xr_program_verify.c",
+      "function": "test_skip_instruction",
+      "line": 227,
+      "end_line": 248,
+      "body_lf_sha256": "05b17f1d03881763226d19ecf80ef28db2eaf2b4b15df6fb41940fcb9ed6e2f0",
+      "CHECK_sites": 0,
+      "CHECK_bindings": [],
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/program/test_xr_program_verify.c",
+      "function": "key",
+      "line": 109,
+      "end_line": 111,
+      "body_lf_sha256": "027a211b78e0cfbd6b296804e37236848a76cc1980981a0d6a49a6f42d3f2e13",
+      "CHECK_sites": 0,
+      "CHECK_bindings": [],
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/program/test_xr_program_verify.c",
+      "function": "write_one_function",
+      "line": 145,
+      "end_line": 157,
+      "body_lf_sha256": "efb68b99402d38d2b891e3ac3c832ebaae2feb4e1496a197240b17ebacb4d8ce",
+      "CHECK_sites": 0,
+      "CHECK_bindings": [],
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/program/test_xr_program_verify.c",
+      "function": "write_modules",
+      "line": 140,
+      "end_line": 143,
+      "body_lf_sha256": "c0c6556c255f9d53386b17acda69b57380cb09e82386e392f4f66c725697b6da",
+      "CHECK_sites": 0,
+      "CHECK_bindings": [],
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/program/test_xr_program_verify.c",
+      "function": "write_typed_modules",
+      "line": 113,
+      "end_line": 138,
+      "body_lf_sha256": "c568d48005100fc2633344ba569a2bc8de9b62e3aac794b35057c8d838b8db65",
+      "CHECK_sites": 0,
+      "CHECK_bindings": [],
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/program/test_xr_program_verify.c",
+      "function": "validate_ok",
+      "line": 159,
+      "end_line": 174,
+      "body_lf_sha256": "94fe0ef4e0242acb810c12621ae1fe73a9887ef668f15ddc6c67ed645494f62b",
+      "CHECK_sites": 2,
+      "CHECK_bindings": [
+        {
+          "line": 171,
+          "expression": "status == XR_PROGRAM_VERIFY_OK",
+          "status": "OPEN"
+        },
+        {
+          "line": 172,
+          "expression": "program != NULL",
+          "status": "OPEN"
+        }
+      ],
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/program/test_xr_program_verify.c",
+      "function": "expect_mutated_verify",
+      "line": 436,
+      "end_line": 463,
+      "body_lf_sha256": "5ba80d137a1a9db91a8f8c115129af92e60a8d7644d056577722003739931044",
+      "CHECK_sites": 4,
+      "CHECK_bindings": [
+        {
+          "line": 440,
+          "expression": "bytes != NULL",
+          "status": "OPEN"
+        },
+        {
+          "line": 459,
+          "expression": "status == expected_status",
+          "status": "OPEN"
+        },
+        {
+          "line": 460,
+          "expression": "diagnostic.kind == expected_diagnostic",
+          "status": "OPEN"
+        },
+        {
+          "line": 461,
+          "expression": "program == NULL",
+          "status": "OPEN"
+        }
+      ],
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/program/test_xr_program_verify.c",
+      "function": "expect_semantic_reject_at",
+      "line": 176,
+      "end_line": 198,
+      "body_lf_sha256": "44cf0fb15bea156743a1c0e35b0be8ee844aa1af55c8653ed9361cf781c045b8",
+      "CHECK_sites": 6,
+      "CHECK_bindings": [
+        {
+          "line": 190,
+          "expression": "first_status == XR_PROGRAM_VERIFY_SEMANTIC_REJECTED",
+          "status": "OPEN"
+        },
+        {
+          "line": 191,
+          "expression": "program == NULL",
+          "status": "OPEN"
+        },
+        {
+          "line": 192,
+          "expression": "first.kind == expected",
+          "status": "OPEN"
+        },
+        {
+          "line": 195,
+          "expression": "second_status == first_status",
+          "status": "OPEN"
+        },
+        {
+          "line": 196,
+          "expression": "memcmp(&first, &second, sizeof(first)) == 0",
+          "status": "OPEN"
+        },
+        {
+          "line": 197,
+          "expression": "program == NULL",
+          "status": "OPEN"
+        }
+      ],
+      "status": "OPEN"
+    }
+  ],
+  "specified_helper_CHECK_sites": 13,
+  "census_classification": "Three original census functions = two actual verifier tests plus actual NON_TEST test_skip_instruction parser helper already counted by the original160 denominator. No new test/census row; helper appears in the explicit shared dependency list without double-counting it as a test.",
+  "input_file": {
+    "path": "tests/unit/program/test_xr_program_verify.c",
+    "whole_file_lf_sha256": "ec4b93f13bfab2aa3d4b8f8773dd5c1118a0c682ed6f8304fead515f90402802",
+    "physical_raw_sha256": "a39922500c0943c034fafcda3a82b67e511ea658f453f6c0c3204f7719de1817",
+    "git_base_equal": true
+  },
+  "input_policy": "Full three census bodies/twelve specified helper bodies and complete input container equal01e6. Full keys/types/signature/blocks/arguments/categories/modes/operations/branches/successors/capability/effects/return graph preserved; no pruned fixture or Source wrapper.",
+  "parameter_mode": {
+    "whole_graph": "One actual flagged ENTRY function mode:function has one I64 parameter with requested REF/READ mode, VOID result, actual one I64 block argument. REF fixture has entry and second block, BLOCK_ARGUMENT then real BRANCH transfers entry place to second block before VOID RETURN; READ fixture has one block and VOID RETURN. No constants/calls or runtime execution in this test.",
+    "ref_positive": "build REF/PLACE/branch=true exact BUILD_OK; validate_ok requires VERIFY_OK/non-NULL; actual wire offset decoder verifies two blocks.",
+    "read_positive_boundary": "build READ/VALUE/branch=false exact BUILD_OK and original offset decoder requires structural decodeOK; original test does NOT independently validate_ok the unmutated READ program or execute it.",
+    "identity": "Full actual ref/read artifact IDs differ; not names, addresses or body hashes used as runtime authority.",
+    "six_negative_variants": [
+      {
+        "variant": 0,
+        "base": "ref",
+        "mutation": "Original actual signature mode byte -> XR_PARAM_MOVE",
+        "expected_verify": "SEMANTIC_REJECTED",
+        "expected_diagnostic": "TYPE"
+      },
+      {
+        "variant": 1,
+        "base": "ref",
+        "mutation": "Original actual signature mode byte ->3 (invalid mode)",
+        "expected_verify": "STRUCTURAL_REJECTED",
+        "expected_diagnostic": "STRUCTURAL"
+      },
+      {
+        "variant": 2,
+        "base": "ref",
+        "mutation": "Non-entry block actual argument category -> VALUE",
+        "expected_verify": "SEMANTIC_REJECTED",
+        "expected_diagnostic": "OPERATION_TYPE"
+      },
+      {
+        "variant": 3,
+        "base": "read",
+        "mutation": "Entry block actual argument category -> PLACE",
+        "expected_verify": "SEMANTIC_REJECTED",
+        "expected_diagnostic": "TYPE"
+      },
+      {
+        "variant": 4,
+        "base": "writer",
+        "mutation": "build_mode_artifact((XrParamMode)3, VALUE, false)",
+        "expected_build": "INVALID_INPUT"
+      },
+      {
+        "variant": 5,
+        "base": "writer",
+        "mutation": "build_mode_artifact(REF, VALUE, false)",
+        "expected_build": "INVALID_INPUT"
+      }
+    ],
+    "wire_decode": "Actual signature parameter type/mode/result offsets; exact one signature/one parameter; optional origins/error/panic/effects/capability fields consumed; actual entry_block and one/two codeblocks/argumenttype/category preserved. No old mode numeric3 is accepted.",
+    "failure_cleanup": "Mutation helper clones whole actual artifact into physical malloc, changes one selected byte only, requires exact status/kind/NULL verifiedowner, keeps actual mismatch decode diagnostics and frees copy; original invalid writer outputs start empty."
+  },
+  "target_queries": {
+    "whole_graph": "Four complete original one-function/one-block/two-instruction programs query selected logical enum then RETURN it; no parameters. Function flaggedENTRY, effects TRAP|TARGET_QUERY and exact capability. Original synthetic semantic fingerprint task297/reference-profile kept.",
+    "reference_profile": {
+      "pointer_width": 32,
+      "operating_system": "WASI",
+      "architecture": "WASM32",
+      "native_abi": "WASM",
+      "endianness": "LITTLE"
+    },
+    "cases": [
+      {
+        "operation": "TARGET_OPERATING_SYSTEM",
+        "result_type": "TARGET_OS",
+        "capability": "PROFILE_OPERATING_SYSTEM",
+        "value_kind": "TARGET_OS",
+        "expected": "XR_TARGET_OS_WASI",
+        "parameter_count": 0,
+        "result_role": "Exact logical scalar enum, not plain integer storage",
+        "expected_terminal": "RETURN",
+        "wrong_result_type": "Next distinct enum type cyclically -> SEMANTIC_REJECTED/OPERATION_TYPE",
+        "missing_capability": "capability_mask0 -> SEMANTIC_REJECTED/CAPABILITY",
+        "status": "OPEN"
+      },
+      {
+        "operation": "TARGET_ARCHITECTURE",
+        "result_type": "TARGET_ARCH",
+        "capability": "PROFILE_ARCHITECTURE",
+        "value_kind": "TARGET_ARCH",
+        "expected": "XR_TARGET_ARCH_WASM32",
+        "parameter_count": 0,
+        "result_role": "Exact logical scalar enum, not plain integer storage",
+        "expected_terminal": "RETURN",
+        "wrong_result_type": "Next distinct enum type cyclically -> SEMANTIC_REJECTED/OPERATION_TYPE",
+        "missing_capability": "capability_mask0 -> SEMANTIC_REJECTED/CAPABILITY",
+        "status": "OPEN"
+      },
+      {
+        "operation": "TARGET_NATIVE_ABI",
+        "result_type": "TARGET_ABI",
+        "capability": "PROFILE_NATIVE_ABI",
+        "value_kind": "TARGET_ABI",
+        "expected": "XR_TARGET_ABI_WASM",
+        "parameter_count": 0,
+        "result_role": "Exact logical scalar enum, not plain integer storage",
+        "expected_terminal": "RETURN",
+        "wrong_result_type": "Next distinct enum type cyclically -> SEMANTIC_REJECTED/OPERATION_TYPE",
+        "missing_capability": "capability_mask0 -> SEMANTIC_REJECTED/CAPABILITY",
+        "status": "OPEN"
+      },
+      {
+        "operation": "TARGET_ENDIANNESS",
+        "result_type": "TARGET_ENDIAN",
+        "capability": "PROFILE_ENDIANNESS",
+        "value_kind": "TARGET_ENDIAN",
+        "expected": "XR_TARGET_ENDIAN_LITTLE",
+        "parameter_count": 0,
+        "result_role": "Exact logical scalar enum, not plain integer storage",
+        "expected_terminal": "RETURN",
+        "wrong_result_type": "Next distinct enum type cyclically -> SEMANTIC_REJECTED/OPERATION_TYPE",
+        "missing_capability": "capability_mask0 -> SEMANTIC_REJECTED/CAPABILITY",
+        "status": "OPEN"
+      }
+    ],
+    "normal": "Each actual unmutated artifact BUILD_OK then VERIFY_OK/non-NULL; original reference execution RETURN with exact enum value_kind and target_enum expected. No host Windows value or U16 mock substitutes the fixed oracle.",
+    "eight_case_negatives": "For each of four query graphs, rotate result type to the next distinct logical enum -> exact SEMANTIC/OPERATION_TYPE; restore original type, remove required capability -> exact SEMANTIC/CAPABILITY. Full artifacts still BUILD_OK, both validation diagnostics deterministic via shared helper.",
+    "equality": "Complete OS query + CONSTANT_TARGET_ENUM(TARGET_OS,WASI) + COMPARE_TARGET_ENUM predicate0 + BOOL RETURN; effects/capability exact. Actual BUILD_OK/VERIFY_OK/non-NULL and reference RETURN/BOOL true.",
+    "equality_negatives": [
+      {
+        "mutation": "WASI enum immediate->0",
+        "expected": "SEMANTIC_REJECTED/OPERATION_TYPE"
+      },
+      {
+        "mutation": "Restore WASI immediate then constant result_type->TARGET_ARCH",
+        "expected": "SEMANTIC_REJECTED/OPERATION_TYPE"
+      }
+    ],
+    "platform_boundary": "These are original logical-reference-profile observations. They are not real WASI/Wasm native execution or local Windows target-machine claims. Current target-owned profile and actual VM/native/mixed target qualification require Root mapping."
+  },
+  "specified_parser_helper": {
+    "name": "test_skip_instruction",
+    "whole_body": "Consumes all operation/result/type/category/ownership fields, every operand, every successor and immediate. For VARIANT_FIELD/MODULE_SLOT/PROVIDER_OPERATION/COROUTINE_CALL immediates consumes both actual values; no end-to-end decoder qualification implied by zero CHECKs.",
+    "shared": "Used by other wire mutation helpers in the original verification file; cannot delete it before Root verifies its last consumer."
+  },
+  "shared_dependencies": [
+    {
+      "path": "src/program/xr_reference_evaluator.h",
+      "physical_raw_sha256": "d43732ceca814f67f7f04e1b51d8512aab2e199092a546d1c47d30e0f28439bf",
+      "whole_file_lf_sha256": "0b2149e8397748e84b1cbc14904cde97d5bee4c3e69474486169e4656ff89054",
+      "git_base_equal": true,
+      "status": "PRESERVE_SHARED_READONLY"
+    },
+    {
+      "path": "src/runtime/abi/xr_target_machine_facts.h",
+      "physical_raw_sha256": "a0e38c54286f55745c8feedeee2bdb08052e112f1cc004fa8397322dae96ab13",
+      "whole_file_lf_sha256": "00f6f429df71cdccd32dc829b8e9cc83c2c44cfa94751fc439a52ec6a07e5ed5",
+      "git_base_equal": true,
+      "status": "PRESERVE_SHARED_READONLY"
+    }
+  ],
+  "Root_contract_and_representation_review": {
+    "status": "OPEN",
+    "mode": "Map actual current Cell<T>/logicalT/ref parameter authority and exact argument category compatibility. Old PLACE bytes are old representation evidence, not request to restore old categories/mode aliases. Real cross-frame exclusivity/noescape/GO/throw/panic/OOM/LIMIT/cancel/stop/close obligations are independent of these admission-only cases.",
+    "entry_signature": "Original raw ENTRY graphs here have one REF I64 ->VOID, one READ I64 ->VOID, four zeroarg ->distinct target-enums and zeroarg ->BOOL. They must not be silently renamed/coerced to zeroargI64, replaced with return42 Source wrappers, or authorized by query ordinal. Root maps exact verified-root/projection and representation duties.",
+    "queries": "Retain actual target profile provenance, nominal logical enum separation/valid domain, exact query capabilities and same-type equality. Equal integer bits do not imply equal logical types; using host machine facts would change the original WASI/WASM32 oracle.",
+    "mutation": "Replace original byte-offset machinery only through approved atomic current representation mapping preserving each exact fail-closed semantic responsibility and empty owner on failure, not any nonOK shortcut.",
+    "pipeline": "Current public Built/Checked/codec/source/typedLibrary/Lowered/Program, actual original positives/negatives/independent goldens, twoInstances detached producers, every physicalFI/allocated-live-work axis/VM-native-mixed lifecycle and applicable safety remainOPEN."
+  },
+  "full_FI": "NOT_RUN",
+  "axes": "NOT_RUN",
+  "full_safety": "NOT_RUN",
+  "SourceDelete": "NOT_RUN",
+  "Main": "NOT_RUN",
+  "handoff": {
+    "Root_thread": "01a11f74-a297-7b11-8441-835bde6a3d5f",
+    "formal_acceptance": "PENDING"
+  },
+  "boundaries": [
+    "All three census functions/twenty outer CHECKs/thirteen helper CHECKs OPEN; retired0.",
+    "Only static original signature/query/oracle/negative/helper/scope evidence; no current product test/Source acceptance/native execution/new producer or deletion/main integration claim.",
+    "Shared dependencies remain with other consumers; source/product/header/CMake/stdlib/spec/SDK/docs unchanged."
+  ]
+}
