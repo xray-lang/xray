@@ -1,0 +1,851 @@
+{
+  "schema": 1,
+  "family": "original_pipe_provider_cleanup",
+  "legacy_base_commit": "01e6d38401b0f5c8684b64c35a99ac651024c0c1",
+  "status": "OPEN",
+  "retired": 0,
+  "replacement_gates": [],
+  "result": "STATIC_ORIGINAL_PIPE_PROVIDER_CLEANUP_MAP_ONLY",
+  "product_execution": "NOT_RUN_BY_THIS_MAP",
+  "producer": "25f4016d6f089169757a90ae11ba537002374711",
+  "identity": "Checked25/semantic67/Value22/Call28/Program29",
+  "producer_scope": "Existing authorised25f4 only; no new producer, private Root source or heavy window adopted.",
+  "legacy": [
+    {
+      "name": "source_owner_pipe_provider_and_fieldwise_constructor_are_canonical",
+      "legacy_path": "tests/unit/program/test_xr_program_source_build.c",
+      "legacy_line": 6369,
+      "body_lf_sha256": "28bcfc647c8bd58ecd811e57934d42d5d5e3b7aefe9cc88daab0da4bd0502281",
+      "assertion_sites": 57,
+      "loop_sites": 5,
+      "status": "OPEN",
+      "replacement_gates": [],
+      "note": "Function census preserves its whole body; sites do not count executed loop iterations.",
+      "original_fixture": {
+        "id": "pipe_provider",
+        "expected_exit": 1,
+        "labels": [
+          "provider",
+          "pipe"
+        ],
+        "backends": {
+          "vm": "execute",
+          "aot": "execute"
+        }
+      },
+      "static_input_literals": {
+        "source": {
+          "bytes": 879,
+          "sha256": "af265172ea247f71a69ae02284a08fb12f6fabedf057eecaef1a16b992552206"
+        }
+      }
+    },
+    {
+      "name": "source_owner_pipe_failed_close_consumes_endpoints_once",
+      "legacy_path": "tests/unit/program/test_xr_program_source_build.c",
+      "legacy_line": 6624,
+      "body_lf_sha256": "fb4823667e8f6a98be6818df618d0eee6f126ef296ab7375f412584ecd508a3f",
+      "assertion_sites": 28,
+      "loop_sites": 0,
+      "status": "OPEN",
+      "replacement_gates": [],
+      "note": "Function census preserves its whole body; sites do not count executed loop iterations.",
+      "original_fixture": {
+        "id": "pipe_close_failure",
+        "expected_exit": 1,
+        "labels": [
+          "provider",
+          "pipe",
+          "cleanup",
+          "failure"
+        ],
+        "backends": {
+          "vm": "execute",
+          "aot": "execute"
+        }
+      },
+      "static_input_literals": {
+        "source": {
+          "bytes": 391,
+          "sha256": "3848597d8b9eb1ef8b5fd495ab3be6b1c83edce1597ad71fd195116abadf1dde"
+        }
+      }
+    },
+    {
+      "name": "source_owner_pipe_uncaught_error_runs_cleanup",
+      "legacy_path": "tests/unit/program/test_xr_program_source_build.c",
+      "legacy_line": 6754,
+      "body_lf_sha256": "718a215f8c356ac7b01a5ebda55990a4b0e110fe1bafedfcab268cdd6aefee33",
+      "assertion_sites": 21,
+      "loop_sites": 0,
+      "status": "OPEN",
+      "replacement_gates": [],
+      "note": "Function census preserves its whole body; sites do not count executed loop iterations.",
+      "original_fixture": {
+        "id": "pipe_uncaught_error",
+        "expected_exit": 220,
+        "labels": [
+          "provider",
+          "pipe",
+          "cleanup",
+          "error"
+        ],
+        "backends": {
+          "vm": "execute",
+          "aot": "execute"
+        }
+      },
+      "static_input_literals": {
+        "source": {
+          "bytes": 315,
+          "sha256": "ce747949999f2a18997d2329a9624affa98d41b355fb057b9c09f0590416c90a"
+        }
+      }
+    }
+  ],
+  "original_sources": {
+    "pipe_provider": {
+      "bytes": 879,
+      "sha256": "af265172ea247f71a69ae02284a08fb12f6fabedf057eecaef1a16b992552206",
+      "text": "import sys\nfn guardedAnd(guard: bool, divisor: i64) -> bool {\n  return guard && (1 / divisor > 0)\n}\nfn guardedOr(guard: bool, divisor: i64) -> bool {\n  return guard || (1 / divisor > 0)\n}\nfn answer() -> i64 {\n  var opened = sys.Pipe.open()\n  if (opened == null) { return 0 }\n  var ready = opened!\n  var live = move ready\n  var readHandle = live.readEnd()\n  var writeHandle = live.writeEnd()\n  var readClosed = live.closeRead()\n  var closedReadHandle = live.readEnd()\n  var writeClosed = live.closeWrite()\n  var closedWriteHandle = live.writeEnd()\n  var closed = (move live).close()\n  if (guardedAnd(false, 0)) { return 0 }\n  if (!guardedOr(true, 0)) { return 0 }\n  var handlesValid = readHandle >= 0 && writeHandle >= 0\n  if (!handlesValid || closedReadHandle != -1 || closedWriteHandle != -1) { return 0 }\n  if (!readClosed || !writeClosed || !closed) { return 0 }\n  return 1\n}\n",
+      "origin_function": "source_owner_pipe_provider_and_fieldwise_constructor_are_canonical",
+      "origin_variable": "source"
+    },
+    "pipe_close_failure": {
+      "bytes": 391,
+      "sha256": "3848597d8b9eb1ef8b5fd495ab3be6b1c83edce1597ad71fd195116abadf1dde",
+      "text": "import sys\nenum CleanupFailure { Negative { code: i64 } }\nfn fail(value: i64) -> i64 {\n  if (value < 0) { throw CleanupFailure.Negative { code: value } }\n  return value\n}\nfn doomed() -> i64 {\n  var live = sys.Pipe(2147483646, 2147483647)\n  defer {\n    live.closeRead()\n    live.closeWrite()\n  }\n  return fail(-2)\n}\nfn answer() -> i64 {\n  try { return doomed() } catch (error) { return 1 }\n}\n",
+      "origin_function": "source_owner_pipe_failed_close_consumes_endpoints_once",
+      "origin_variable": "source"
+    },
+    "pipe_uncaught_error": {
+      "bytes": 315,
+      "sha256": "ce747949999f2a18997d2329a9624affa98d41b355fb057b9c09f0590416c90a",
+      "text": "import sys\nenum CleanupFailure { Negative { code: i64 } }\nfn fail(value: i64) -> i64 {\n  if (value < 0) { throw CleanupFailure.Negative { code: value } }\n  return value\n}\nfn doomed() -> i64 {\n  var live = sys.Pipe(2147483646, 2147483647)\n  defer {\n    live.closeRead()\n    live.closeWrite()\n  }\n  return fail(-2)\n}\n",
+      "origin_function": "source_owner_pipe_uncaught_error_runs_cleanup",
+      "origin_variable": "source"
+    }
+  },
+  "source_construction": "Three complete879B/391B/315B C literals independently decoded and kept with exact move/short-circuit/error/defer source. No adapter, rename or pruning.",
+  "responsibility_mapping": [
+    {
+      "legacy_name": "source_owner_pipe_provider_and_fieldwise_constructor_are_canonical",
+      "assertion_sites": 57,
+      "groups": [
+        {
+          "responsibility": "Admit entire879B move/optional/short-circuit source and actual hosted profile.",
+          "status": "OPEN",
+          "target_consumer": "ROOT_CONTRACT_AND_QUALIFIED_PRODUCER_PENDING",
+          "original": {
+            "path": "tests/unit/program/test_xr_program_source_build.c",
+            "lines": [
+              6397,
+              6406
+            ]
+          },
+          "original_assertion_sites": 4,
+          "gap": "Original guardedAnd(false,0)/guardedOr(true,0) must avoid division, original Pipe open/move/field getters/close calls stay intact. Required positive refusal remains FAIL."
+        },
+        {
+          "responsibility": "Two owned Source products and actual generated-provider VM execution.",
+          "status": "OPEN",
+          "target_consumer": "ROOT_CONTRACT_AND_QUALIFIED_PRODUCER_PENDING",
+          "original": {
+            "path": "tests/unit/program/test_xr_program_source_build.c",
+            "lines": [
+              6407,
+              6422
+            ]
+          },
+          "original_assertion_sites": 0,
+          "gap": "Source success twice, exact products/artifact/Program/entry determinism; generated binding helper adds17 sites and its own Instance returning1. Metadata alone cannot qualify either execution."
+        },
+        {
+          "responsibility": "Preserve complete initializer/function and fieldwise construction graph.",
+          "status": "OPEN",
+          "target_consumer": "ROOT_CONTRACT_AND_QUALIFIED_PRODUCER_PENDING",
+          "original": {
+            "path": "tests/unit/program/test_xr_program_source_build.c",
+            "lines": [
+              6423,
+              6496
+            ]
+          },
+          "original_assertion_sites": 18,
+          "gap": "Module3/function12, every exact aggregate/place/variant/sealed/class/field/exchange count plus three nonzero logical ops and two sealed invoke2-successor calls require Root current common-verification mapping."
+        },
+        {
+          "responsibility": "Match stable IO open/close identities and exact normalized call ABI.",
+          "status": "OPEN",
+          "target_consumer": "ROOT_CONTRACT_AND_QUALIFIED_PRODUCER_PENDING",
+          "original": {
+            "path": "tests/unit/program/test_xr_program_source_build.c",
+            "lines": [
+              6497,
+              6550
+            ]
+          },
+          "original_assertion_sites": 22,
+          "gap": "Two operations matched independently of order. Old open profile3 parameters versus optional-pair nullary adapter, consumed signed close parameter, bool width1/ownershipNONE/effectIO/lifetimeCONSUMES_OWNED/failure0 remain explicit canonical-ABI review inputs, not restored aliases."
+        },
+        {
+          "responsibility": "Bind exact injected host callbacks to an owned execution Instance.",
+          "status": "OPEN",
+          "target_consumer": "ROOT_CONTRACT_AND_QUALIFIED_PRODUCER_PENDING",
+          "original": {
+            "path": "tests/unit/program/test_xr_program_source_build.c",
+            "lines": [
+              6551,
+              6596
+            ]
+          },
+          "original_assertion_sites": 4,
+          "gap": "present=true, handles17/29, close true/true, actual operation indexes/fingerprint and profile. Target two detached Instances and context lifetime after producer death remain unverified."
+        },
+        {
+          "responsibility": "Independent VM1 with one open and exactly read/write close once.",
+          "status": "OPEN",
+          "target_consumer": "ROOT_CONTRACT_AND_QUALIFIED_PRODUCER_PENDING",
+          "original": {
+            "path": "tests/unit/program/test_xr_program_source_build.c",
+            "lines": [
+              6597,
+              6611
+            ]
+          },
+          "original_assertion_sites": 6,
+          "gap": "Full source observes closed getters=-1 and final move close produces no third close. Probe requires order17\u219229, open1/close2; no scalar-only oracle."
+        },
+        {
+          "responsibility": "Deterministic generated native positive fixture.",
+          "status": "OPEN",
+          "target_consumer": "ROOT_CONTRACT_AND_QUALIFIED_PRODUCER_PENDING",
+          "original": {
+            "path": "tests/unit/program/test_xr_program_source_build.c",
+            "lines": [
+              6612,
+              6613
+            ]
+          },
+          "original_assertion_sites": 0,
+          "gap": "Original AOT family emits main, actual real stdlib provider open/close and standalone1. Shared inactive branch cannot replace this aot execute fixture; current canonical native main representation needs Root review."
+        },
+        {
+          "responsibility": "Release both Source products and all execution/host/source/profile owners.",
+          "status": "OPEN",
+          "target_consumer": "ROOT_CONTRACT_AND_QUALIFIED_PRODUCER_PENDING",
+          "original": {
+            "path": "tests/unit/program/test_xr_program_source_build.c",
+            "lines": [
+              6614,
+              6622
+            ]
+          },
+          "original_assertion_sites": 3,
+          "gap": "Drain/retire/free statuses and complete original cleanup stay OPEN; no current physical/per-object release observation here."
+        }
+      ]
+    },
+    {
+      "legacy_name": "source_owner_pipe_failed_close_consumes_endpoints_once",
+      "assertion_sites": 28,
+      "groups": [
+        {
+          "responsibility": "Admit391B source preserving the typed error and original catch.",
+          "status": "OPEN",
+          "target_consumer": "ROOT_CONTRACT_AND_QUALIFIED_PRODUCER_PENDING",
+          "original": {
+            "path": "tests/unit/program/test_xr_program_source_build.c",
+            "lines": [
+              6643,
+              6652
+            ]
+          },
+          "original_assertion_sites": 4,
+          "gap": "Keep CleanupFailure.Negative{code:value}, fail(-2), real Pipe endpoints and both deferred close calls; no replaced error/closure/source."
+        },
+        {
+          "responsibility": "Deterministic owned products and full error publication/invoke graph.",
+          "status": "OPEN",
+          "target_consumer": "ROOT_CONTRACT_AND_QUALIFIED_PRODUCER_PENDING",
+          "original": {
+            "path": "tests/unit/program/test_xr_program_source_build.c",
+            "lines": [
+              6653,
+              6669
+            ]
+          },
+          "original_assertion_sites": 3,
+          "gap": "Two Source successes, products equal, sealed invoke2/error publish2/provider requirements1. No absent positive Program success."
+        },
+        {
+          "responsibility": "Bind stable IO close with successful bool-false results.",
+          "status": "OPEN",
+          "target_consumer": "ROOT_CONTRACT_AND_QUALIFIED_PRODUCER_PENDING",
+          "original": {
+            "path": "tests/unit/program/test_xr_program_source_build.c",
+            "lines": [
+              6670,
+              6710
+            ]
+          },
+          "original_assertion_sites": 11,
+          "gap": "Exact contract/operation/fingerprint, failure flags0/lifetime consumes owned, bool-i64 callback and handles2147483646/47 with false/false. Callback returns providerOK; endpoint consumption follows real Pipe source."
+        },
+        {
+          "responsibility": "Independent VM1 and exactly two deferred close calls.",
+          "status": "OPEN",
+          "target_consumer": "ROOT_CONTRACT_AND_QUALIFIED_PRODUCER_PENDING",
+          "original": {
+            "path": "tests/unit/program/test_xr_program_source_build.c",
+            "lines": [
+              6711,
+              6740
+            ]
+          },
+          "original_assertion_sites": 7,
+          "gap": "Original catch returns1 after unchanged code-2 language error; closefalse does not become a host failure or cause extra endpoint retries. One original Instance is insufficient for detached two-Instance target."
+        },
+        {
+          "responsibility": "Real generated native failed-close positive fixture.",
+          "status": "OPEN",
+          "target_consumer": "ROOT_CONTRACT_AND_QUALIFIED_PRODUCER_PENDING",
+          "original": {
+            "path": "tests/unit/program/test_xr_program_source_build.c",
+            "lines": [
+              6741,
+              6743
+            ]
+          },
+          "original_assertion_sites": 0,
+          "gap": "Original standalone1 and deterministic verified generated main; no unsupported-operation negative fallback."
+        },
+        {
+          "responsibility": "Release both products and complete execution graph.",
+          "status": "OPEN",
+          "target_consumer": "ROOT_CONTRACT_AND_QUALIFIED_PRODUCER_PENDING",
+          "original": {
+            "path": "tests/unit/program/test_xr_program_source_build.c",
+            "lines": [
+              6744,
+              6752
+            ]
+          },
+          "original_assertion_sites": 3,
+          "gap": "Exact drain/retire/free, owned result/code/backend and all source/profile owners. Per-object lifetime/FI/resources/physical0 remain target obligations."
+        }
+      ]
+    },
+    {
+      "legacy_name": "source_owner_pipe_uncaught_error_runs_cleanup",
+      "assertion_sites": 21,
+      "groups": [
+        {
+          "responsibility": "Admit315B source with explicit doomed declaration authority.",
+          "status": "OPEN",
+          "target_consumer": "ROOT_CONTRACT_AND_QUALIFIED_PRODUCER_PENDING",
+          "original": {
+            "path": "tests/unit/program/test_xr_program_source_build.c",
+            "lines": [
+              6770,
+              6780
+            ]
+          },
+          "original_assertion_sites": 4,
+          "gap": "This source has no answer and old request selects doomed. Root must define an authorised public SourceProduct/Checked projection; default answer rejection is not a legal negative oracle."
+        },
+        {
+          "responsibility": "Determinism and exact nominal single-variant typed error shape.",
+          "status": "OPEN",
+          "target_consumer": "ROOT_CONTRACT_AND_QUALIFIED_PRODUCER_PENDING",
+          "original": {
+            "path": "tests/unit/program/test_xr_program_source_build.c",
+            "lines": [
+              6781,
+              6807
+            ]
+          },
+          "original_assertion_sites": 9,
+          "gap": "Two Source successes, exact product identity, invoke1/error publish2, in-range entry, nonVOID actual variant with one I64 payload. Map actual CleanupFailure enum, not a generic Error wrapper."
+        },
+        {
+          "responsibility": "Bind real close contract and preserve successful false results during error unwind.",
+          "status": "OPEN",
+          "target_consumer": "ROOT_CONTRACT_AND_QUALIFIED_PRODUCER_PENDING",
+          "original": {
+            "path": "tests/unit/program/test_xr_program_source_build.c",
+            "lines": [
+              6808,
+              6845
+            ]
+          },
+          "original_assertion_sites": 5,
+          "gap": "Original callback exact ordered2147483646/47, false/false under providerOK, actual profile fingerprint and Instance. Uncaught scalar/error output cannot suppress cleanup."
+        },
+        {
+          "responsibility": "Independent VM typed-error payload and all endpoint cleanup.",
+          "status": "OPEN",
+          "target_consumer": "ROOT_CONTRACT_AND_QUALIFIED_PRODUCER_PENDING",
+          "original": {
+            "path": "tests/unit/program/test_xr_program_source_build.c",
+            "lines": [
+              6846,
+              6847
+            ]
+          },
+          "original_assertion_sites": 0,
+          "gap": "OutcomeERROR/actual nominal type, variant0, one I64 field=-2 and close2; dispose actual error owner before code free. Current escaped/copied error must survive final production/Instance owner deaths."
+        },
+        {
+          "responsibility": "Independent real native typed-error220 protocol.",
+          "status": "OPEN",
+          "target_consumer": "ROOT_CONTRACT_AND_QUALIFIED_PRODUCER_PENDING",
+          "original": {
+            "path": "tests/unit/program/test_xr_program_source_build.c",
+            "lines": [
+              6848,
+              6850
+            ]
+          },
+          "original_assertion_sites": 0,
+          "gap": "Original deterministic generated output with no main, out_error present/TargetPlan absent; native kind2/tag0/payload-2/exact two false close results/order and standalone220. Root maps typed enum/native ABI representation without old aliases."
+        },
+        {
+          "responsibility": "Release original Instance/products/profile/source after error owner disposal.",
+          "status": "OPEN",
+          "target_consumer": "ROOT_CONTRACT_AND_QUALIFIED_PRODUCER_PENDING",
+          "original": {
+            "path": "tests/unit/program/test_xr_program_source_build.c",
+            "lines": [
+              6851,
+              6859
+            ]
+          },
+          "original_assertion_sites": 3,
+          "gap": "Target stable Pipe lifecycle, escaped owned error lifetime and actual physical/partial-owner cleanup require fresh execution/FI/safety evidence."
+        }
+      ]
+    }
+  ],
+  "original_private_helpers": [
+    {
+      "path": "tests/unit/program/test_xr_program_source_build.c",
+      "function": "source_build_fixture_init",
+      "line": 894,
+      "end_line": 968,
+      "body_lf_sha256": "964c190cb52940aa039b9459e6a5aa0416430eadac032979ed210358216892eb",
+      "assertion_sites": 0,
+      "classification": "Actual specified direct/transitive NON_TEST helper, including the unselected shared inactive-AOT branch; not additional census TEST or exhaustive shared closure.",
+      "responsibility": "Whole physical graph/session/resolver/native-release profile and canonical script/content/declaration authority; all boolean failure branches cleanup partial owners.",
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/program/test_xr_program_source_build.c",
+      "function": "source_build_fixture_free",
+      "line": 873,
+      "end_line": 892,
+      "body_lf_sha256": "54f2ca59ddb46fda789abf0411160790bcb950903858a308b984b50e6f8c1889",
+      "assertion_sites": 0,
+      "classification": "Actual specified direct/transitive NON_TEST helper, including the unselected shared inactive-AOT branch; not additional census TEST or exhaustive shared closure.",
+      "responsibility": "Restore session, release session/isolate/resolver/identity/path graph, unlink physical files/temp directory and zero fixture.",
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/program/test_xr_program_source_build.c",
+      "function": "write_source_file",
+      "line": 857,
+      "end_line": 864,
+      "body_lf_sha256": "cc03580465f59354407c5e6e4e063c40ab9759cf1f45ceb3f099884b0e28014d",
+      "assertion_sites": 0,
+      "classification": "Actual specified direct/transitive NON_TEST helper, including the unselected shared inactive-AOT branch; not additional census TEST or exhaustive shared closure.",
+      "responsibility": "Write all original bytes and require fclose success; missing/truncated file is not a valid input.",
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/program/test_xr_program_source_build.c",
+      "function": "semantic_fingerprint",
+      "line": 866,
+      "end_line": 871,
+      "body_lf_sha256": "08fbbce02bdf996e8c8fb5b4a0b090f8e0dad413c84d6de2ab2530ec56aa3c0a",
+      "assertion_sites": 0,
+      "classification": "Actual specified direct/transitive NON_TEST helper, including the unselected shared inactive-AOT branch; not additional census TEST or exhaustive shared closure.",
+      "responsibility": "Copy full exact semantic fingerprint without mixing target/provider identities.",
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/program/test_xr_program_source_build.c",
+      "function": "assert_source_build_ok",
+      "line": 996,
+      "end_line": 1010,
+      "body_lf_sha256": "a5d0aee0a406f887ea79355380455511ee0762cfa39915fb657cfe8a4088fd94",
+      "assertion_sites": 1,
+      "classification": "Actual specified direct/transitive NON_TEST helper, including the unselected shared inactive-AOT branch; not additional census TEST or exhaustive shared closure.",
+      "responsibility": "Require exact Source OK, retain complete actual diagnostic on refusal. Positive missing-program guards never erase the failure.",
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/program/test_xr_program_source_build.c",
+      "function": "assert_products_equal",
+      "line": 982,
+      "end_line": 994,
+      "body_lf_sha256": "ec9ae13d2d71259635fe95f5bed3da7bddec1aaa43b10a247a9930a5c6cd925b",
+      "assertion_sites": 8,
+      "classification": "Actual specified direct/transitive NON_TEST helper, including the unselected shared inactive-AOT branch; not additional census TEST or exhaustive shared closure.",
+      "responsibility": "Eight sites require both Program/artifact owners, equal artifact size/all bytes, Program ID and selected entry.",
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/program/test_xr_program_source_build.c",
+      "function": "source_fixture_output_path",
+      "line": 63,
+      "end_line": 65,
+      "body_lf_sha256": "2c5d63f47f4b0e77e5abec0b6831c67cec2056ad89196c34fbd8e0cbd6ec1d9d",
+      "assertion_sites": 0,
+      "classification": "Actual specified direct/transitive NON_TEST helper, including the unselected shared inactive-AOT branch; not additional census TEST or exhaustive shared closure.",
+      "responsibility": "Write only actual selected pipe_provider/pipe_close_failure/pipe_uncaught_error fixture.",
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/program/test_xr_program_source_build.c",
+      "function": "stable_id_equal",
+      "line": 357,
+      "end_line": 359,
+      "body_lf_sha256": "b7944eaf320e1112ae477f8c2d4d3513ce35bce7c8c98f0fb4a2b4b227d7f621",
+      "assertion_sites": 0,
+      "classification": "Actual specified direct/transitive NON_TEST helper, including the unselected shared inactive-AOT branch; not additional census TEST or exhaustive shared closure.",
+      "responsibility": "Match all stable identity bytes; operation/array ordinal or spelling cannot grant authority.",
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/program/test_xr_program_source_build.c",
+      "function": "find_profile_provider",
+      "line": 749,
+      "end_line": 757,
+      "body_lf_sha256": "e406782a95e05ce78f909f815229bd5d4ad14c2e96001c17f2e17aad178ee048",
+      "assertion_sites": 0,
+      "classification": "Actual specified direct/transitive NON_TEST helper, including the unselected shared inactive-AOT branch; not additional census TEST or exhaustive shared closure.",
+      "responsibility": "Find actual profile contract by complete stable ID; absence remains NULL.",
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/program/test_xr_program_source_build.c",
+      "function": "find_profile_provider_operation",
+      "line": 759,
+      "end_line": 766,
+      "body_lf_sha256": "8782d19230c9bc9e0f1a877805fc9f38e5192cf9672ccb5b202121d8b7248937",
+      "assertion_sites": 0,
+      "classification": "Actual specified direct/transitive NON_TEST helper, including the unselected shared inactive-AOT branch; not additional census TEST or exhaustive shared closure.",
+      "responsibility": "Find actual operation stable ID in real contract independent of requirement order.",
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/program/test_xr_program_source_build.c",
+      "function": "program_operation_count",
+      "line": 361,
+      "end_line": 375,
+      "body_lf_sha256": "2d6a79abce8b727c9711e86a5520d525ddefa2b890f5db5e510d4a89d9d5f68d",
+      "assertion_sites": 0,
+      "classification": "Actual specified direct/transitive NON_TEST helper, including the unselected shared inactive-AOT branch; not additional census TEST or exhaustive shared closure.",
+      "responsibility": "Complete instruction census across every original function/block, including invoke/error publish/static construction.",
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/program/test_xr_program_source_build.c",
+      "function": "program_operation_successor_count",
+      "line": 730,
+      "end_line": 747,
+      "body_lf_sha256": "2a628bc0a344df544557960237142787c8eb1231ca5f87285171cc85ebd440d5",
+      "assertion_sites": 0,
+      "classification": "Actual specified direct/transitive NON_TEST helper, including the unselected shared inactive-AOT branch; not additional census TEST or exhaustive shared closure.",
+      "responsibility": "Complete opcode AND successor cardinality census; preserve two canonical invoke2-successor checks.",
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/program/test_xr_program_source_build.c",
+      "function": "program_instruction_matches",
+      "line": 402,
+      "end_line": 413,
+      "body_lf_sha256": "529239843e025bc3237ed30c94480b8e7ac5b8317f2f58b55d444b951f532f1d",
+      "assertion_sites": 0,
+      "classification": "Actual specified direct/transitive NON_TEST helper, including the unselected shared inactive-AOT branch; not additional census TEST or exhaustive shared closure.",
+      "responsibility": "Bounds-check function/block/instruction and exact opcode for shared inactive-operation diagnostic. Unselected for these three aot execute originals.",
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/program/test_xr_program_source_build.c",
+      "function": "pipe_provider_probe",
+      "line": 845,
+      "end_line": 855,
+      "body_lf_sha256": "0a24b48a2a237fcf14a828d32dfacb64cc2a71ce54727dce888556c97f65fa43",
+      "assertion_sites": 0,
+      "classification": "Actual specified direct/transitive NON_TEST helper, including the unselected shared inactive-AOT branch; not additional census TEST or exhaustive shared closure.",
+      "responsibility": "Reject missing context/present/pair output, then exactly one open count and unchanged present/read/write pair with providerOK.",
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/program/test_xr_program_source_build.c",
+      "function": "pipe_close_provider_probe",
+      "line": 802,
+      "end_line": 813,
+      "body_lf_sha256": "7f3d057309a232d87f21de8785710b22755b61022a845e12f8463e5912cf8413",
+      "assertion_sites": 0,
+      "classification": "Actual specified direct/transitive NON_TEST helper, including the unselected shared inactive-AOT branch; not additional census TEST or exhaustive shared closure.",
+      "responsibility": "Reject missing context/output or wrong alternating read/write handle before count; write configured true/false, advance once and return providerOK. Exact outer count2 rejects extra alternating calls.",
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/program/test_xr_program_source_build.c",
+      "function": "assert_aot_fixture_backend_contract",
+      "line": 566,
+      "end_line": 610,
+      "body_lf_sha256": "583f92b771718b8e1d4293debcb72cf92e266292abc3ffa17db8103db6b066be",
+      "assertion_sites": 14,
+      "classification": "Actual specified direct/transitive NON_TEST helper, including the unselected shared inactive-AOT branch; not additional census TEST or exhaustive shared closure.",
+      "responsibility": "Fourteen sites in positive branch require actual verified backend, two complete equal C emissions, owned byte buffers, generated main and exact output writes/free. Shared unsupported branch is not selected for these fixtures.",
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/program/test_xr_program_source_build.c",
+      "function": "assert_aot_rejects_inactive_operation",
+      "line": 547,
+      "end_line": 564,
+      "body_lf_sha256": "348393794cdd911640b5ba647a3658dbfce1100af9b0d36cd337cd33839bd5a1",
+      "assertion_sites": 7,
+      "classification": "Actual specified direct/transitive NON_TEST helper, including the unselected shared inactive-AOT branch; not additional census TEST or exhaustive shared closure.",
+      "responsibility": "Seven sites preserve exact unsupported status/noIR/diagnostic opcode+location/CoreSpec inactive coverage for other registered unsupported fixtures. Explicitly unselected in this family; cannot turn these positives green.",
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/program/test_xr_program_process_provider.inc.c",
+      "function": "assert_generated_provider_execution",
+      "line": 11,
+      "end_line": 84,
+      "body_lf_sha256": "cace5aeb1e31a8bf8729aa5e2a2e0bad019071c28d85dad52d45c7c2e5636bd3",
+      "assertion_sites": 17,
+      "classification": "Actual specified direct/transitive NON_TEST helper, including the unselected shared inactive-AOT branch; not additional census TEST or exhaustive shared closure.",
+      "responsibility": "Seventeen sites preserve checked provider/operation allocation bounds, actual generated descriptor binding/behavior intersection/profile fingerprint, independent VM1 in another Instance and exact owner drain/free.",
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/program/xr_program_source_cleanup_checks.inc.c",
+      "function": "assert_uncaught_vm_error",
+      "line": 259,
+      "end_line": 284,
+      "body_lf_sha256": "92bcaad7cb706f38a3154929143863c37ae6702acc6f0be290cef100412b90e4",
+      "assertion_sites": 9,
+      "classification": "Actual specified direct/transitive NON_TEST helper, including the unselected shared inactive-AOT branch; not additional census TEST or exhaustive shared closure.",
+      "responsibility": "Nine sites require actualERROR, owned aggregate view actual type/variant0/one I64=-2, exact two closes; dispose error before caller code free.",
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/program/xr_program_source_cleanup_checks.inc.c",
+      "function": "write_uncaught_error_aot",
+      "line": 440,
+      "end_line": 502,
+      "body_lf_sha256": "463ffa28895583d74c2b2e3671e88d15d7e9f58b1c055be4e634b3aae3b9207e",
+      "assertion_sites": 13,
+      "classification": "Actual specified direct/transitive NON_TEST helper, including the unselected shared inactive-AOT branch; not additional census TEST or exhaustive shared closure.",
+      "responsibility": "Thirteen sites plus complete emitted guards require verified deterministic native code, no main/out_error/absentTargetPlan, bounded2 ordered false-success close callbacks and exact typed error kind2/tag0/-2/standalone220.",
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/program/xr_program_source_cleanup_checks.inc.c",
+      "function": "write_probe_typed_host",
+      "line": 414,
+      "end_line": 438,
+      "body_lf_sha256": "1de3cc218ff7c7c7c306c72863611bc68f882ad978187b0c5d99722c398dfc97",
+      "assertion_sites": 1,
+      "classification": "Actual specified direct/transitive NON_TEST helper, including the unselected shared inactive-AOT branch; not additional census TEST or exhaustive shared closure.",
+      "responsibility": "One site and complete typed pack guards/write/dispose bridge; successful false is still valid bool result. Canonical Root typed ABI cannot restore old token/bridge aliases.",
+      "status": "OPEN"
+    }
+  ],
+  "specified_helper_assertion_sites": 70,
+  "helper_policy": "Twenty-one specified actual NON_TEST helpers include7 sites in the unselected shared inactive-AOT branch. Counts are full body sites, not executions or exhaustive dependency/deletion closure.",
+  "original_Pipe_declaration": {
+    "path": "stdlib/sys/sys.xr",
+    "legacy_commit": "01e6d38401b0f5c8684b64c35a99ac651024c0c1",
+    "producer_commit": "25f4016d6f089169757a90ae11ba537002374711",
+    "text": "export class Pipe {\n    _readHandle: i64\n    _writeHandle: i64\n\n    constructor(readHandle: i64, writeHandle: i64) {\n        this._readHandle = readHandle\n        this._writeHandle = writeHandle\n    }\n\n    readEnd() -> i64 { return this._readHandle }\n\n    writeEnd() -> i64 { return this._writeHandle }\n\n    read(maxBytes: i64 = 8192) -> Array<u8>? {\n        if (this._readHandle < 0 || maxBytes < 0) { return null }\n        return __pipeRead(this._readHandle, maxBytes)\n    }\n\n    write(data: Array<u8>) -> i64 {\n        if (this._writeHandle < 0) { return -1 }\n        return __pipeWrite(this._writeHandle, data)\n    }\n\n    ref closeRead() -> bool {\n        if (this._readHandle < 0) { return true }\n        var ok = __pipeClose(this._readHandle)\n        this._readHandle = -1\n        return ok\n    }\n\n    ref closeWrite() -> bool {\n        if (this._writeHandle < 0) { return true }\n        var ok = __pipeClose(this._writeHandle)\n        this._writeHandle = -1\n        return ok\n    }\n\n    move close() -> bool {\n        var r = true\n        if (this._readHandle >= 0) { r = __pipeClose(this._readHandle) }\n        var w = true\n        if (this._writeHandle >= 0) { w = __pipeClose(this._writeHandle) }\n        if (r) { return w }\n        return false\n    }\n\n    static open() -> Pipe? {\n        var ends = __pipeOpen()\n        if (ends == null) { return null }\n        return Pipe(ends!.0, ends!.1)\n    }\n}",
+    "lf_sha256": "6e3e060f71cef358647744ac513227d5973430d1a8069ee9e0bdae137797a705",
+    "producer_and_mirror_fragment_equal": true,
+    "meaning": "On successful provider completion with bool false, closeRead/closeWrite still store endpoint=-1. Host failure interrupts before that store; it is a separate responsibility."
+  },
+  "canonical_graph": {
+    "module_count": 3,
+    "function_count_including_initializers": 12,
+    "provider_requirements": 1,
+    "operation_counts": {
+      "aggregate_constructs": 0,
+      "aggregate_projects": 2,
+      "place_projects": 0,
+      "place_loads": 0,
+      "place_stores": 0,
+      "variant_projects": 3,
+      "sealed_calls": 8,
+      "class_constructs": 1,
+      "class_field_loads": 10,
+      "class_field_places": 2,
+      "place_exchanges": 2
+    },
+    "sealed_invoke_two_successors": 2,
+    "logical_nots": "NONZERO",
+    "logical_ands": "NONZERO",
+    "logical_ors": "NONZERO",
+    "status": "OPEN_REPRESENTATION_REVIEW"
+  },
+  "old_provider_contract": {
+    "io_contract_key": "XR_PROVIDER_IO_CONTRACT_KEY",
+    "open_operation_key": "XR_PROVIDER_IO_PIPE_OPEN_OPERATION_KEY",
+    "close_operation_key": "XR_PROVIDER_IO_PIPE_CLOSE_OPERATION_KEY",
+    "operation_count": 2,
+    "open_profile_parameters": 3,
+    "open_profile_result": "UNSIGNED_INTEGER",
+    "open_trampoline": "OPTIONAL_I64_PAIR_NULLARY",
+    "close_profile_parameters": 1,
+    "close_parameter_kind": "SIGNED_INTEGER",
+    "close_parameter_ownership": "CONSUMED",
+    "close_result": "UNSIGNED_INTEGER width1 ownershipNONE",
+    "close_trampoline": "BOOL_I64_UNARY",
+    "close_effect_flags": "IO",
+    "close_lifetime_flags": "CONSUMES_OWNED",
+    "close_failure_flags": 0,
+    "status": "OPEN_ROOT_CANONICAL_TYPED_ABI_REVIEW"
+  },
+  "independent_goldens": {
+    "required_Source_status": "OK",
+    "canonical_injected_VM": {
+      "present": true,
+      "read_handle": 17,
+      "write_handle": 29,
+      "close_results": [
+        true,
+        true
+      ],
+      "returned_i64": 1,
+      "open_calls": 1,
+      "close_calls": 2,
+      "close_handle_order": [
+        17,
+        29
+      ]
+    },
+    "canonical_source_conditions": [
+      "guardedAnd(false,0) does not evaluate division",
+      "guardedOr(true,0) does not evaluate division",
+      "Initial handles nonnegative",
+      "After closeRead/closeWrite endpoint getters=-1",
+      "Final move close sees consumed endpoints and succeeds without extra provider close"
+    ],
+    "canonical_generated_VM": "Separate helper Instance executes actual generated stdlib bindings, fixed1; actual native fixture also requires1.",
+    "false_close_VM": {
+      "provider_status": "OK",
+      "close_results": [
+        false,
+        false
+      ],
+      "read_handle": 2147483646,
+      "write_handle": 2147483647,
+      "close_calls": 2,
+      "returned_i64": 1,
+      "language_error_caught": "CleanupFailure.Negative code-2"
+    },
+    "uncaught_VM": {
+      "entry": "doomed",
+      "outcome": "ERROR",
+      "nominal_enum": "CleanupFailure",
+      "variant": "Negative",
+      "variant_ordinal": 0,
+      "payload_field_count": 1,
+      "payload_kind": "I64",
+      "payload": -2,
+      "provider_status": "OK",
+      "close_results": [
+        false,
+        false
+      ],
+      "close_handle_order": [
+        2147483646,
+        2147483647
+      ],
+      "close_calls": 2
+    },
+    "uncaught_native": {
+      "old_outcome_kind": 2,
+      "old_tag": 0,
+      "payload": -2,
+      "close_calls": 2,
+      "standalone_exit": 220
+    },
+    "standalone_exits": [
+      1,
+      1,
+      220
+    ]
+  },
+  "error_graph": {
+    "caught": {
+      "sealed_invoke": 2,
+      "error_publish": 2,
+      "provider_requirements": 1
+    },
+    "uncaught": {
+      "sealed_invoke": 1,
+      "error_publish": 2,
+      "error_type": "NonVOID single-variant with one I64 payload",
+      "current_projection": "Actual nominal CleanupFailure enum, not a fabricated generic Error wrapper"
+    }
+  },
+  "authority_boundary": "315B uncaught input has no answer; original Source request explicitly selects doomed declaration. Current authorised public entry/declaration projection requires Root review; do not silently rename input or treat default answer refusal as expected.",
+  "native_scope": "All three fixtures are aot execute. Shared inactive-operation helper exists but its negative branch is unselected for these originals and cannot replace any required positive. Canonical/false-close use generated main; uncaught uses exact manual typed-error220 guard.",
+  "target_contract_or_representation_review": [
+    "Admit exact879B/391B/315B originals, move/optional/short-circuit/typed-error and complete stdlib Pipe methods; no fake builtin or source pruning.",
+    "Canonical provider open/close, real source-owned declaration provenance/common full reverification and selected doomed host authority require Root-owned current typed ABI.",
+    "Preserve bool-false successful close endpoint consumption and original language error; never convert close=false to host error or overwrite enum payload.",
+    "Map all original module/function/opcode/ownership/effect counts and generated main/typed error representation without old numeric/ABI aliases.",
+    "Use actual CleanupFailure nominal enum identity/Negative payload-2 in owned outcome and copy lifetime, not a generic Error assertion.",
+    "Target adds two detached Instances, producer/caller Program death, source-free packet/typed Library, actual native/applicable mixed and escaped error lifetime.",
+    "Observe actual stable Pipe construct/finalize/reclaim through move/false-close/error cleanup and final-owner death; endpoint/counter/physical0 is insufficient.",
+    "Full FI/axes/safety, Root formal acceptance and shared owner7/last-consumer deletion remain OPEN."
+  ],
+  "target_lifecycle_proof": "Bind actual stable Pipe identities through construction, optional unwrap, explicit move, endpoint updates and deferred false-close/error cleanup, then actual finalize/reclaim. Distinguish every real ownership transfer and final result/error owner. Endpoint integers/allocator addresses/aggregate counters/physical0/CallEntry.release are insufficient; observer owner must outlive escaped values.",
+  "additional_target_requirements": [
+    "Public SourceProduct\u2192Built\u2192Checked\u2192specialization/full reverification\u2192Lowered\u2192Program ownership",
+    "Source-free packet and typed Library declaration provenance/explicit doomed or answer host authority",
+    "Actual independent VM/real native/applicable mixed scalar1/1 or nominal CleanupFailure.Negative{-2}, exact provider callback order/count",
+    "Two detached Instances, Source/session/Checked/Lowered/caller Program death",
+    "Copied/escaped actual enum error owner valid after production/Instance death, final-owner release and complete partial cleanup",
+    "Frozen actual ref/place exclusive-owner protocol and move semantics without compatibility aliases",
+    "Stable per-object lifecycle/physical release, fresh full compiler/runtime FI census and all resource axes",
+    "Generated-C portability and applicable complete safety gates",
+    "Original native1/1/220 separate from language1/error-2 and current successful harness0",
+    "Root formal integration/acceptance and last-consumer deletion review"
+  ],
+  "shared_dependency": {
+    "path": "tests/unit/aot/xr_backend_emission_owner.h",
+    "consumer_count": 7,
+    "status": "PRESERVE_SHARED_OWNER",
+    "reason": "Actual native helpers use shared backend_emission_resources; other active consumers remain."
+  },
+  "handoff": {
+    "report": "build-consumer-evidence/consumer-session-20261009-r1/pipe-provider-cleanup-interface-request.json",
+    "raw_sha256": "547715cfca85e778cdb7024e2e8678f09de2a75867d9e3b3bd8983ac20b795e6",
+    "related_observer_request": "build-consumer-evidence/consumer-session-20261009-r1/class-lifecycle-interface-request.json",
+    "Root_thread": "01a11f74-a297-7b11-8441-835bde6a3d5f",
+    "formal_acceptance": "PENDING"
+  },
+  "full_FI": "NOT_RUN",
+  "axes": "NOT_RUN",
+  "full_safety": "NOT_RUN",
+  "SourceDelete": "NOT_RUN",
+  "Main": "NOT_RUN",
+  "boundaries": [
+    "All57+28+21 outer and70 specified-helper sites remain OPEN;7 shared inactive sites are unselected, not replacement positives.",
+    "False-close callback returns providerOK and boolfalse; typed source error/catch and endpoint consumption remain independently required.",
+    "315B uncaught source selects doomed and actual nominal enum payload-2; no invented answer/generic Error or missing-entry negative oracle.",
+    "Generated and injected canonical VM bindings use separate original Instances; target detached two-Instance proof per applicable backend remains missing.",
+    "Old open normalized3-parameter ABI/trampolines/owned flags/opcodes/module counts/main/out_error representations require Root common/typed review without old ID/ABI aliases.",
+    "Actual Pipe declaration fragment matches original/25f4/Mirror source; this is static source binding, not runtime or physical release proof.",
+    "No product/native/provider/allocator/lifecycle event is observed by this map; no current qualification/retirement/production release/deletion permission."
+  ]
+}

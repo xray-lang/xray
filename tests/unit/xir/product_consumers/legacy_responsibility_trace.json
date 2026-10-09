@@ -15,11 +15,11 @@
     "shared_emission_owner_consumers": 7
   },
   "reference_counts": {
-    "source_with_digest_reference": 99,
-    "source_without_digest_reference": 9,
+    "source_with_digest_reference": 102,
+    "source_without_digest_reference": 6,
     "other_with_digest_reference": 40,
     "other_without_digest_reference": 120,
-    "digest_reference_values": 169,
+    "digest_reference_values": 172,
     "source_inventory_projections": 42
   },
   "mapping_inputs": [
@@ -498,6 +498,10 @@
     {
       "path": "tests/unit/xir/product_consumers/source_original_entry_identity_obligations.json",
       "lf_sha256": "86192e9821ad11db1225ffce89ed952d1b41d1764f87d0396d53c859c23b6705"
+    },
+    {
+      "path": "tests/unit/xir/product_consumers/source_original_pipe_provider_cleanup_obligations.json",
+      "lf_sha256": "e632822cb0ebc6a7d01fb5d6d0de71a32b76f528d413414e94c9f8a20a6c9989"
     },
     {
       "path": "tests/unit/xir/product_consumers/source_original_prelude_enum_catch_obligations.json",
@@ -2613,7 +2617,13 @@
       "body_lf_sha256": "28bcfc647c8bd58ecd811e57934d42d5d5e3b7aefe9cc88daab0da4bd0502281",
       "status": "OPEN",
       "inventory_projection": null,
-      "mapping_references": []
+      "mapping_references": [
+        {
+          "mapping": "tests/unit/xir/product_consumers/source_original_pipe_provider_cleanup_obligations.json",
+          "pointer": "/legacy/0/body_lf_sha256",
+          "binding": "exact_path_name_body"
+        }
+      ]
     },
     {
       "legacy_path": "tests/unit/program/test_xr_program_source_build.c",
@@ -2621,7 +2631,13 @@
       "body_lf_sha256": "fb4823667e8f6a98be6818df618d0eee6f126ef296ab7375f412584ecd508a3f",
       "status": "OPEN",
       "inventory_projection": null,
-      "mapping_references": []
+      "mapping_references": [
+        {
+          "mapping": "tests/unit/xir/product_consumers/source_original_pipe_provider_cleanup_obligations.json",
+          "pointer": "/legacy/1/body_lf_sha256",
+          "binding": "exact_path_name_body"
+        }
+      ]
     },
     {
       "legacy_path": "tests/unit/program/test_xr_program_source_build.c",
@@ -2629,7 +2645,13 @@
       "body_lf_sha256": "718a215f8c356ac7b01a5ebda55990a4b0e110fe1bafedfcab268cdd6aefee33",
       "status": "OPEN",
       "inventory_projection": null,
-      "mapping_references": []
+      "mapping_references": [
+        {
+          "mapping": "tests/unit/xir/product_consumers/source_original_pipe_provider_cleanup_obligations.json",
+          "pointer": "/legacy/2/body_lf_sha256",
+          "binding": "exact_path_name_body"
+        }
+      ]
     },
     {
       "legacy_path": "tests/unit/program/test_xr_program_source_build.c",
