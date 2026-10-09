@@ -407,3 +407,5 @@ include("${CMAKE_CURRENT_LIST_DIR}/../xir/product_consumers/source_product_class
 include("${CMAKE_CURRENT_LIST_DIR}/../xir/product_consumers/source_product_generics_owned.cmake")
 
 include("${CMAKE_CURRENT_LIST_DIR}/../xir/product_consumers/source_product_callables_owned.cmake")
+
+include("${CMAKE_CURRENT_LIST_DIR}/../xir/product_consumers/source_product_cross_module_coroutines_owned.cmake")

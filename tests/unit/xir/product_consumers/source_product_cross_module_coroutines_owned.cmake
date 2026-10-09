@@ -1,0 +1,15 @@
+add_executable(test_source_product_cross_module_coroutines_owned "${CMAKE_CURRENT_LIST_DIR}/test_source_product_cross_module_coroutines_owned.c")
+target_link_libraries(test_source_product_cross_module_coroutines_owned PRIVATE xray_xir_source_product)
+target_include_directories(test_source_product_cross_module_coroutines_owned PRIVATE "${CMAKE_CURRENT_LIST_DIR}/..")
+set_target_properties(test_source_product_cross_module_coroutines_owned PROPERTIES C_STANDARD 11 C_STANDARD_REQUIRED YES C_EXTENSIONS NO)
+if(MSVC)
+    target_compile_options(test_source_product_cross_module_coroutines_owned PRIVATE /utf-8 /W4 /WX)
+else()
+    target_compile_options(test_source_product_cross_module_coroutines_owned PRIVATE -Wall -Wextra -Werror)
+endif()
+foreach(family cross_module_coroutine cross_module_static_coroutine)
+    add_test(NAME test_source_product_${family}_owned COMMAND test_source_product_cross_module_coroutines_owned
+        "${product_consumer_fixture_root}/${family}" "${product_consumer_fixture_root}/${family}/root.xr" "${CMAKE_SOURCE_DIR}/stdlib" "${family}")
+    set_tests_properties(test_source_product_${family}_owned PROPERTIES TIMEOUT 120 PROCESSORS 1
+        LABELS "unit;xir;program-consumer;coroutine;ownership;source")
+endforeach()

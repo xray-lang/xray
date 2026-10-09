@@ -15,11 +15,11 @@
     "shared_emission_owner_consumers": 7
   },
   "reference_counts": {
-    "source_with_digest_reference": 62,
-    "source_without_digest_reference": 46,
+    "source_with_digest_reference": 64,
+    "source_without_digest_reference": 44,
     "other_with_digest_reference": 40,
     "other_without_digest_reference": 120,
-    "digest_reference_values": 130,
+    "digest_reference_values": 132,
     "source_inventory_projections": 42
   },
   "mapping_inputs": [
@@ -274,6 +274,14 @@
     {
       "path": "tests/unit/xir/product_consumers/source_coroutine_panic_group4_obligations.json",
       "lf_sha256": "e6da168cb09a471b2b86f9494d371872e6af51f40250f51e89d948a89d70e676"
+    },
+    {
+      "path": "tests/unit/xir/product_consumers/source_cross_module_coroutine_source_obligations.json",
+      "lf_sha256": "c7a59c7b61b1ee02f431d4096dce3c4bfdcb8d1deefa7562466a7e3d6fa4356a"
+    },
+    {
+      "path": "tests/unit/xir/product_consumers/source_cross_module_static_coroutine_source_obligations.json",
+      "lf_sha256": "6e8888f0cccebfe675cfdaa1bec2ad74d600945f5fe3b3cb8709b0f73bb9b584"
     },
     {
       "path": "tests/unit/xir/product_consumers/source_default_assertion_group2_native_obligations.json",
@@ -1779,7 +1787,13 @@
           }
         }
       },
-      "mapping_references": []
+      "mapping_references": [
+        {
+          "mapping": "tests/unit/xir/product_consumers/source_cross_module_coroutine_source_obligations.json",
+          "pointer": "/legacy/body_lf_sha256",
+          "binding": "exact_path_name_body"
+        }
+      ]
     },
     {
       "legacy_path": "tests/unit/program/test_xr_program_source_build.c",
@@ -1801,7 +1815,13 @@
           }
         }
       },
-      "mapping_references": []
+      "mapping_references": [
+        {
+          "mapping": "tests/unit/xir/product_consumers/source_cross_module_static_coroutine_source_obligations.json",
+          "pointer": "/legacy/body_lf_sha256",
+          "binding": "exact_path_name_body"
+        }
+      ]
     },
     {
       "legacy_path": "tests/unit/program/test_xr_program_source_build.c",
