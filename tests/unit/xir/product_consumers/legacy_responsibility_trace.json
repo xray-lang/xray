@@ -17,9 +17,9 @@
   "reference_counts": {
     "source_with_digest_reference": 108,
     "source_without_digest_reference": 0,
-    "other_with_digest_reference": 118,
-    "other_without_digest_reference": 42,
-    "digest_reference_values": 320,
+    "other_with_digest_reference": 121,
+    "other_without_digest_reference": 39,
+    "digest_reference_values": 326,
     "source_inventory_projections": 42
   },
   "mapping_inputs": [
@@ -502,6 +502,10 @@
     {
       "path": "tests/unit/xir/product_consumers/source_original_assert_panic_message_obligations.json",
       "lf_sha256": "c73e861a37e247548e4b5d663b1c78b28832f792fc7afd26bde00deafa22a32a"
+    },
+    {
+      "path": "tests/unit/xir/product_consumers/source_original_atomic_channel_builder_admission_obligations.json",
+      "lf_sha256": "9cb70929914690a7934b97168fd17a5bbbaaf5eff7e9bac7de98a29a5ddd22cf"
     },
     {
       "path": "tests/unit/xir/product_consumers/source_original_branching_nested_cleanup_obligations.json",
@@ -4575,7 +4579,18 @@
       "body_lf_sha256": "c7e09f2f02dbb05f0c7f3c23696ab4483474b3c6543bf94c78c9a438d932ad1c",
       "status": "OPEN",
       "inventory_projection": null,
-      "mapping_references": []
+      "mapping_references": [
+        {
+          "mapping": "tests/unit/xir/product_consumers/source_original_atomic_channel_builder_admission_obligations.json",
+          "pointer": "/legacy/0/body_lf_sha256",
+          "binding": "exact_path_name_body"
+        },
+        {
+          "mapping": "tests/unit/xir/product_consumers/source_original_atomic_channel_builder_admission_obligations.json",
+          "pointer": "/responsibility_mapping/0/body_lf_sha256",
+          "binding": "exact_body_digest_value_only"
+        }
+      ]
     },
     {
       "legacy_path": "tests/unit/program/test_xr_program_verify.c",
@@ -4602,7 +4617,18 @@
       "body_lf_sha256": "24b2d6d0e12dfa0a11a431d0f76084408184158cfb1420ca0680026dc713bb4f",
       "status": "OPEN",
       "inventory_projection": null,
-      "mapping_references": []
+      "mapping_references": [
+        {
+          "mapping": "tests/unit/xir/product_consumers/source_original_atomic_channel_builder_admission_obligations.json",
+          "pointer": "/legacy/1/body_lf_sha256",
+          "binding": "exact_path_name_body"
+        },
+        {
+          "mapping": "tests/unit/xir/product_consumers/source_original_atomic_channel_builder_admission_obligations.json",
+          "pointer": "/responsibility_mapping/1/body_lf_sha256",
+          "binding": "exact_body_digest_value_only"
+        }
+      ]
     },
     {
       "legacy_path": "tests/unit/program/test_xr_program_verify.c",
@@ -4610,7 +4636,18 @@
       "body_lf_sha256": "6b1ed857382e29ee92acdc6d52469e6b3ad437268eb2209cbc9ab810300599ae",
       "status": "OPEN",
       "inventory_projection": null,
-      "mapping_references": []
+      "mapping_references": [
+        {
+          "mapping": "tests/unit/xir/product_consumers/source_original_atomic_channel_builder_admission_obligations.json",
+          "pointer": "/legacy/2/body_lf_sha256",
+          "binding": "exact_path_name_body"
+        },
+        {
+          "mapping": "tests/unit/xir/product_consumers/source_original_atomic_channel_builder_admission_obligations.json",
+          "pointer": "/responsibility_mapping/2/body_lf_sha256",
+          "binding": "exact_body_digest_value_only"
+        }
+      ]
     },
     {
       "legacy_path": "tests/unit/program/test_xr_program_verify.c",
