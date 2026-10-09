@@ -27,6 +27,12 @@ typedef struct XrXirVmBinding {
  * Validation consumes the artifact ledger and failure preserves both outputs. */
 XR_FUNC XrXirStatus xr_xir_compile_vm_bind(const XrXirArtifact *artifact, uint32_t function,
                                   XrXirVmBinding *binding, XrXirCallEntry *entry);
+/* Validate the complete Lowered artifact once and bind every function in ID
+ * order. Both distinct output slots must be empty. The caller owns both arrays
+ * through xr_compile_resources_free and keeps the artifact alive while using
+ * them. Failure preserves both outputs and releases all temporary storage. */
+XR_FUNC XrXirStatus xr_xir_compile_vm_bind_table(const XrXirArtifact *artifact,
+    XrXirVmBinding **bindings, XrXirCallEntry **entries);
 /* Success consumes and clears the Lowered artifact; failure preserves it. */
 XR_FUNC XrXirStatus xr_xir_compile_vm_program_take(XrXirArtifact **artifact,
                                           XrXirProgram **output);

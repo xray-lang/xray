@@ -13,7 +13,7 @@ file(GLOB XIR_LIBRARY_STATE_TYPED_VALUES_FIXTURES CONFIGURE_DEPENDS
     "${CMAKE_SOURCE_DIR}/tests/fixtures/xir_library_state_typed_values/*.xr")
 add_custom_command(OUTPUT ${XIR_LIBRARY_STATE_TYPED_VALUES_SOURCE} ${XIR_LIBRARY_STATE_TYPED_VALUES_CATALOG}
     COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_CURRENT_BINARY_DIR}/generated
-    COMMAND $<TARGET_FILE:test_xir_library_state_typed_values_source> ${XIR_LIBRARY_STATE_TYPED_VALUES_SOURCE} ${XIR_LIBRARY_STATE_TYPED_VALUES_CATALOG}
+    COMMAND $<TARGET_FILE:test_xir_library_state_typed_values_source> --write-checked ${XIR_LIBRARY_STATE_TYPED_VALUES_SOURCE} ${XIR_LIBRARY_STATE_TYPED_VALUES_CATALOG}
     DEPENDS test_xir_library_state_typed_values_source ${XIR_LIBRARY_STATE_TYPED_VALUES_FIXTURES}
         ${CMAKE_CURRENT_SOURCE_DIR}/xir/xir_library_state_typed_values_runtime.h
         ${CMAKE_CURRENT_SOURCE_DIR}/xir/xir_library_state_typed_values_source_cases.h
@@ -30,7 +30,7 @@ foreach(state_flow IN ITEMS source catalog)
     endif()
     set(state_generated ${CMAKE_CURRENT_BINARY_DIR}/generated/xir_library_state_typed_values_${state_flow}.c)
     add_custom_command(OUTPUT ${state_generated}
-        COMMAND $<TARGET_FILE:test_xir_library_state_typed_values_packet> ${state_checked} ${state_generated}
+        COMMAND $<TARGET_FILE:test_xir_library_state_typed_values_packet> --write-c ${state_checked} ${state_generated}
         DEPENDS test_xir_library_state_typed_values_packet ${state_checked}
         VERBATIM)
     add_test(NAME test_xir_library_state_typed_values_${state_flow}_packet COMMAND test_xir_library_state_typed_values_packet

@@ -34,22 +34,25 @@ static XrXirStatus library_state_typed_values_type_operation(const XrXirCompileC
     ctx.slots=source_scratch(&ctx,1,sizeof(*ctx.slots),false);
     if (!ctx.slots) return ctx.diagnostic.status;
     const XrXirType input=(XrXirType)XR_XIR_CONSTRUCTED_TYPE_BASE;
-    XrXirType mapped=(XrXirType)(XR_XIR_CONSTRUCTED_TYPE_BASE+7);
-    XrXirTypeNode node={.kind=XR_XIR_TYPE_ARRAY,.element=XR_XIR_I64};
-    XrXirTypes types={.nodes=&node,.count=1};XrXirSlot slot={0,input,1};
+    XrXirType mapped[2]={(XrXirType)(XR_XIR_CONSTRUCTED_TYPE_BASE+7),
+        (XrXirType)(XR_XIR_CONSTRUCTED_TYPE_BASE+11)};
+    XrXirTypeNode nodes[2]={{.kind=XR_XIR_TYPE_ARRAY,.element=XR_XIR_I64},
+        {.kind=XR_XIR_TYPE_CELL,.element=input}};
+    XrXirTypes types={.nodes=nodes,.count=2};XrXirSlot slot={0,(XrXirType)(input+1),1};
     XrXirDeclarations declarations={.slots=&slot,.slot_count=1};
     XrXirModule library={.types=&types,.declarations=&declarations};
     uint32_t modules[1]={3},slots[1]={0};
-    SourceLibraryUnit unit={.types=&mapped,.type_count=1};
+    SourceLibraryUnit unit={.types=mapped,.type_count=2};
     SourceLibraryMap map={.unit=&unit,.modules=modules,.module_count=1,.slots=slots,.slot_count=1};
     bool accepted=source_library_slots(&ctx,&library,&map);
     if (!accepted) {xr_compile_resources_free(ctx.slots);return ctx.diagnostic.status;}
-    CHECK(ctx.slots[0].type==mapped && ctx.slots[0].module==3 && ctx.slots[0].mutable);
-    XrXirSlot sentinel=ctx.slots[0];mapped=(XrXirType)UINT32_MAX;
+    CHECK(ctx.slots[0].type==mapped[1] && ctx.slots[0].module==3 && ctx.slots[0].mutable);
+    XrXirSlot sentinel=ctx.slots[0];mapped[1]=(XrXirType)UINT32_MAX;
     accepted=source_library_slots(&ctx,&library,&map);
     if (ctx.diagnostic.status==XR_XIR_BUDGET) {xr_compile_resources_free(ctx.slots);return XR_XIR_BUDGET;}
     CHECK(!accepted && ctx.diagnostic.status==XR_XIR_BAD_STRUCTURE && !memcmp(ctx.slots,&sentinel,sizeof(sentinel)));
-    ctx.diagnostic=(XrXirSourceDiagnostic){0};node.kind=XR_XIR_TYPE_CELL;mapped=input;
+    /* The physical binding wrapper is admitted; a nested Cell payload is not. */
+    ctx.diagnostic=(XrXirSourceDiagnostic){0};nodes[1].element=(XrXirType)(input+1);mapped[1]=slot.type;
     accepted=source_library_slots(&ctx,&library,&map);
     if (ctx.diagnostic.status==XR_XIR_BUDGET) {xr_compile_resources_free(ctx.slots);return XR_XIR_BUDGET;}
     CHECK(!accepted && ctx.diagnostic.status==XR_XIR_BAD_STAGE && !memcmp(ctx.slots,&sentinel,sizeof(sentinel)));
@@ -77,18 +80,20 @@ static void library_state_typed_values_source_negatives(const XrXirSourceRequest
 static void library_state_typed_values_bad_slots(const XrXirCompileContext *context,const XrXirArtifact *artifact) {
     const XrXirModule *module=xr_xir_compile_artifact_module(artifact);
     CHECK(module->declarations->slot_count==7 && module->declarations->slots[0].mutable &&
-        xr_xir_type_node(module->types,module->declarations->slots[0].type));
-    for (uint32_t mode=0;mode<3;++mode) {
+        xr_xir_type_is_cell(module->types,module->declarations->slots[0].type) &&
+        xr_xir_type_node(module->types,xr_xir_cell_element(module->types,module->declarations->slots[0].type)));
+    for (uint32_t mode=0;mode<4;++mode) {
         XrXirModule malformed=*module;malformed.stage=XR_XIR_BUILT;
         XrXirDeclarations declarations=*module->declarations;XrXirSlot slots[7];
         memcpy(slots,declarations.slots,sizeof(slots));declarations.slots=slots;malformed.declarations=&declarations;
         if (mode==0) slots[0].mutable=2;
         else if (mode==1) slots[0].module=declarations.module_count;
-        else slots[0].mutable=0;
+        else if (mode==2) slots[0].mutable=0;
+        else slots[0].type=xr_xir_cell_element(module->types,slots[0].type);
         XrXirArtifact *output=NULL;
         size_t live=source_program_compile_live,bytes=source_program_compile_bytes;
         XrXirStatus status=xr_xir_compile_check_v2(context,&malformed,xr_xir_compile_artifact_construction(artifact),&output,NULL);
-        XrXirStatus expected=mode==2 ? XR_XIR_BAD_TYPE : XR_XIR_BAD_STRUCTURE;
+        XrXirStatus expected=mode>=2 ? XR_XIR_BAD_TYPE : XR_XIR_BAD_STRUCTURE;
         if (status!=expected || output)
             fprintf(stderr,"typed state malformed mode%u status%u output%u\n",mode,status,output ? 1u : 0u);
         CHECK(status==expected && !output);

@@ -4514,3 +4514,5 @@ include("${CMAKE_CURRENT_LIST_DIR}/xir/root_conditional.cmake")
 include(xir/cell_owner_source.cmake)
 
 include(xir/cell_loan_lifecycle.cmake)
+
+include(${CMAKE_CURRENT_SOURCE_DIR}/xir/vm_bind_table.cmake)

@@ -992,6 +992,37 @@ XR_FUNC XrXirStatus xr_xir_compile_vm_bind(const XrXirArtifact *artifact, uint32
     return status == XR_XIR_OK ? bind_verified(artifact, function, binding, entry) : status;
 }
 
+XR_FUNC XrXirStatus xr_xir_compile_vm_bind_table(const XrXirArtifact *artifact,
+    XrXirVmBinding **bindings, XrXirCallEntry **entries) {
+    if (!bindings || !entries || (void *) bindings == (void *) entries || *bindings || *entries)
+        return XR_XIR_BAD_STRUCTURE;
+    const XrXirModule *module = xr_xir_compile_artifact_module(artifact);
+    if (!module || module->stage != XR_XIR_LOWERED) return XR_XIR_BAD_STAGE;
+    const XrXirCompileContext *context = xr_xir_compile_artifact_context(artifact);
+    XrXirStatus status = xr_xir_compile_artifact_verify(artifact, NULL);
+    if (status != XR_XIR_OK) return status;
+    XrXirVmBinding *bound = xir_compile_calloc(context, module->function_count, sizeof(*bound), &status);
+    XrXirCallEntry *table = NULL;
+    if (status != XR_XIR_OK) goto finish;
+    table = xir_compile_calloc(context, module->function_count, sizeof(*table), &status);
+    if (status != XR_XIR_OK) goto finish;
+    for (uint32_t i = 0; i < module->function_count; ++i) {
+        status = bind_verified(artifact, i, &bound[i], &table[i]);
+        if (status != XR_XIR_OK) goto finish;
+    }
+    if (!xir_compile_work(context, sizeof(*bindings) + sizeof(*entries))) {
+        status = XR_XIR_BUDGET;
+        goto finish;
+    }
+    *bindings = bound;
+    *entries = table;
+    return XR_XIR_OK;
+finish:
+    xr_compile_resources_free(table);
+    xr_compile_resources_free(bound);
+    return status;
+}
+
 typedef struct VmProgramOwner {
     XrXirArtifact *artifact;
     XrXirVmBinding *bindings;

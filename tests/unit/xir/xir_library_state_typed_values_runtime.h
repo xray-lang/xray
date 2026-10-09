@@ -54,6 +54,7 @@ static bool library_state_typed_values_call(XrXirInstance *instance,uint32_t ent
 }
 static bool library_state_typed_values_pair(XrXirProgram *program,const uint32_t ids[LIBRARY_STATE_TYPED_VALUES_EXPORTS],XrXirValue held[2]) {
     XrXirInstance *instances[2]={0};LibraryStateTypedValuesOutput outputs[2]={0};XrXirOutputSink sinks[2]={0};bool ok=false;
+    library_state_typed_class_begin();
     for (uint32_t i=0;i<2;++i) {
         XrXirInstanceConfig config;CHECK(xr_xir_instance_config_init(&config,sizeof(config))==XR_XIR_CALL_READY);
         sinks[i]=(XrXirOutputSink){XR_XIR_CALL_ABI_VERSION,0,library_state_typed_values_write,&outputs[i],64};
@@ -83,6 +84,7 @@ static bool library_state_typed_values_pair(XrXirProgram *program,const uint32_t
     ok=true;
 done:
     for (uint32_t i=0;i<2;++i) if (instances[i]) CHECK(xr_xir_instance_free(instances[i])==XR_XIR_CALL_READY);
+    library_state_typed_class_end(ok);
     return ok;
 }
 static XrXirStatus library_state_typed_values_seal_operation(const XrXirCompileContext *context,void *opaque) {

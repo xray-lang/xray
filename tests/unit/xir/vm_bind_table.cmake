@@ -1,0 +1,10 @@
+# Canonical table binding with real compiler allocation and publication checks.
+add_executable(test_xir_vm_bind_table xir/test_xir_vm_bind_table.c)
+target_link_libraries(test_xir_vm_bind_table PRIVATE xray_xir_vm)
+if(MSVC)
+    target_compile_options(test_xir_vm_bind_table PRIVATE /W4 /WX /utf-8)
+else()
+    target_compile_options(test_xir_vm_bind_table PRIVATE -Wall -Wextra -Werror)
+endif()
+add_test(NAME test_xir_vm_bind_table COMMAND test_xir_vm_bind_table)
+set_tests_properties(test_xir_vm_bind_table PROPERTIES LABELS "unit;xir;metadata;ownership;abi" TIMEOUT 300)
