@@ -34,6 +34,7 @@
 #include "static_methods_source_shape.h"
 #include "integer_sources_source_shape.h"
 #include "integer_conversions_source_shape.h"
+#include "original_arrays_source_shape.h"
 _Static_assert(XR_XIR_CHECKED_SCHEMA == 25u && XR_XIR_CHECKED_CONTRACT == 67u, "Actual Checked identity");
 
 static const SourceProductConsumerFixture *consumer_fixture;
@@ -279,6 +280,8 @@ static Consumer build(unsigned mode, const char *output, size_t failure, XrCompi
     if (integer_family) integer_sources_source_shape(module, integer_family);
     if (!strcmp(XR_CONSUMER_NAME, "integer_conversions"))
         integer_conversions_source_shape(module);
+    unsigned original_array_family = original_arrays_family(XR_CONSUMER_NAME);
+    if (original_array_family) original_arrays_source_shape(module, original_array_family);
     run.parameterized_answer = !strcmp(XR_CONSUMER_NAME, "array_default_source") ?
         array_default_source_shape(module) : !strcmp(XR_CONSUMER_NAME, "array_default_escape") ?
         array_default_escape_shape(module) : !strcmp(XR_CONSUMER_NAME, "array_managed_escape") ?

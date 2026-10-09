@@ -1,0 +1,84 @@
+{
+  "schema": 1,
+  "producer": "25f4016d6f089169757a90ae11ba537002374711",
+  "identity": "Checked25/semantic67/Value22/Call28/Program29",
+  "legacy": {
+    "legacy_path": "tests/unit/program/test_xr_program_source_build.c",
+    "name": "source_owner_narrow_array_elements_precede_allocation",
+    "body_lf_sha256": "b1c70cc5eabf14806846a203edd69a7e5d38965f1a097840cbc2183e767f01e1",
+    "status": "OPEN",
+    "inventory_projection": {
+      "fixture": "tests/unit/xir/product_consumers/fixtures/narrow_array/root.xr",
+      "sha256": "f2a61c8bb059cc08a2539039a8b258916ae4ac19b9008f1eba61d8442b0c41ae",
+      "original_prefix_sha256": "028a1edf4d0961858449f6d34f838d29ab37106c38c6fbddedf0a1e8f406ed3b",
+      "entry_adapter": "export fn consumerAnswer() -> i64 { return answer() }\n",
+      "entry": "consumerAnswer",
+      "expected_i64": 42,
+      "scope": "Exact original source prefix and fixed result through an explicitly exported adapter; additional legacy assertions stay OPEN until mapped.",
+      "state_probe": {
+        "entry": "consumerVisits",
+        "adapter": "export fn consumerVisits() -> i64 { return visits }\n",
+        "bytes": 52,
+        "sha256": "bb1cd517c04fff4f5ad948d3e009dfc7048c83876b104aaa0272cf4bc8110567",
+        "scope": "An ordinary exported no-argument i64 reader of the owning module visits slot; it grants no private host entry or direct slot access."
+      },
+      "invocation_policy": {
+        "first_result_per_instance": 42,
+        "successful_calls_per_instance": 1,
+        "second_call_status": "XR_XIR_CALL_ASSERTION",
+        "second_call_panic": "XR_XIR_PANIC_ASSERTION",
+        "note": "The original visits slot remains mutable; a second call increments it again and fails the original ordered-element assertion. No reset or source alteration is allowed."
+      }
+    },
+    "mapping_references": []
+  },
+  "status": "OPEN",
+  "retired": 0,
+  "replacement_gates": [],
+  "family": "narrow_array",
+  "original_source": {
+    "path": "tests/unit/xir/product_consumers/fixtures/narrow_array/root.xr",
+    "bytes": 535,
+    "prefix_bytes": 429,
+    "sha256": "f2a61c8bb059cc08a2539039a8b258916ae4ac19b9008f1eba61d8442b0c41ae",
+    "prefix_sha256": "028a1edf4d0961858449f6d34f838d29ab37106c38c6fbddedf0a1e8f406ed3b",
+    "adapter": "export fn consumerAnswer() -> i64 { return answer() }\n",
+    "state_probe_adapter": "export fn consumerVisits() -> i64 { return visits }\n"
+  },
+  "independent_i64": 42,
+  "required_shape": "narrow_array: root readonly Array<U8> plus mutable I64visits; next() increments the actualvisits slot then converts toU8; ordered Array<U8> consumes three next CALL SSA ids in originalorder beforeallocation, signed Array<I8> contains-128/127. array_runtime_length:length()->I64 returns actual3; three original CALL SSA counts feed U8/Bool/F64 ARRAY_REPEAT with correctlytyped zero; original U8 index1 SET42 remains.",
+  "result": "NOT_RUN",
+  "pipeline": "Original Source prefix and exported adapter plus exact optional visitsreader;SourceProduct/Closed Checked/reader and Source owner death/Lowered/Program/two Instances;VM/native/two mixed partitions.",
+  "boundaries": [
+    "Original initializer-prefix membership and allocation-before/after-element fault responsibility not replaced by a static call-order check.",
+    "narrow_array original mutablevisits prevents a second successful42; existing driver preserves repeated assertion and escaped panic.",
+    "Complete BackendIR representation/default storage assertions, full FI,resource axes,cancellation,safety,Main integration and retirement remain OPEN."
+  ],
+  "full_FI": "NOT_RUN",
+  "axes": "NOT_RUN",
+  "cancel": "NOT_RUN",
+  "full_safety": "NOT_RUN",
+  "Main": "NOT_RUN",
+  "original_array_source_execution_20261009_facet": {
+    "status": "PASS_ORIGINAL_SOURCE_ORDERED_NARROW_ARRAY_WHOLE_LEGACY_OPEN",
+    "evidence": "build-consumer-evidence/current67-original-array-source-r1",
+    "original": "Original429-byte Source literal prefix plus54-byte exported adapter and52-byte existingvisitsreader unchanged; all original assertions and independent42 retained. Firstsuccessfulcall perInstance incrementsvisits from0to3; secondcall incrementsagain andoriginalordered assertion mustfail, neverreset.",
+    "shape": "narrow:rootreadonly Array<U8> andmutableI64visits;nextactualsame-slotread/add1/store/load/U8conversion;3actualnextCALLSSA consumed inorderbeforeARRAY_NEW, signedARRAY_NEW I8minus128/127. runtime-length:actualhelperCONST3/RETURNSSA,3CALLcountsfeedtypedU8/Bool/F64 ARRAY_REPEATwithcorrecttypedzeros;actualByte index1 SET42. Existingnarrow shared oracle additionally binds actualvisits initialization, root-slot read places, source-call metadata and actualvisitsreader.",
+    "actual": "Wholebatch22registeredargv runtime allfirstPASS:16backend(2families VM/native/twoMixed),4owner,2sequenceVMcontrol. Thisfamily16independent42/16Instances and16repeated-call assertionpanics. Eachpanicmessagecopy checkedafter Instancefree,thenfinalownerrelease physical0. Source/session/readers deadbeforeProgramuse;finalcompiler/runtimephysical0.",
+    "owned": "Session/product/request/authority/path deadbeforeCheckedshape/fullwriterencodingmemcmp/reverification;CheckeddeadbeforeLoweredverify/release;finalcompiletable/physical0.",
+    "inputs": "OriginalVM2727/ownedandcontrol2726/native2728 inputs perPID including3observerheaders andactualgeneratedC/configuredwrapper;SHA/bytes/mtimebefore-afterexact. All22runtimePID EXEs archivedbeforeentry/hashbound. Runtimepreannotationmap/trace retained;only3metadata payloads updatedafterruntime.",
+    "build": "8successfulfreshCcompileevents/8distinctfinalTUs acrossMSVCReleaseandClangASan+UBSan:driver/ownerandtwoactualgeneratedC percfg;C11/W4/WX.StrictgeneratedC.SomeVM/nativewrapperOBJs reused/templatebound;4buildtimeemitters separatelylogged,notregisteredPIDqualification.",
+    "generated_payload_sha256": {
+      "msvc": "b6ae5104d214ef741ae3aff5b91db42e7c1a13282c77d177c00c90932d887cac",
+      "asan": "b6ae5104d214ef741ae3aff5b91db42e7c1a13282c77d177c00c90932d887cac"
+    },
+    "remaining": "Originalinitializerprefix/faultpointmembership/allocationfaultorder,BackendIRrepresentation,fullFI/axes/cancel/safety/Main/retirementOPEN. Neitherstaticcallorder nor normalrepeatpanic replaceswholeallocation/cancel qualification.",
+    "full_FI": "NOT_RUN",
+    "axes": "NOT_RUN",
+    "cancel": "NOT_RUN",
+    "initializer_prefix_membership": "NOT_RUN",
+    "full_safety": "NOT_RUN",
+    "Main": "NOT_RUN",
+    "retired": 0
+  }
+}

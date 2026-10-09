@@ -15,11 +15,11 @@
     "shared_emission_owner_consumers": 7
   },
   "reference_counts": {
-    "source_with_digest_reference": 53,
-    "source_without_digest_reference": 55,
+    "source_with_digest_reference": 55,
+    "source_without_digest_reference": 53,
     "other_with_digest_reference": 40,
     "other_without_digest_reference": 120,
-    "digest_reference_values": 121,
+    "digest_reference_values": 123,
     "source_inventory_projections": 42
   },
   "mapping_inputs": [
@@ -166,6 +166,10 @@
     {
       "path": "tests/unit/xir/product_consumers/source_array_places_source_obligations.json",
       "lf_sha256": "a374fdfe10f37c4ea413d279103d3a5fd19c3e4916485197d8dbda3d9833019b"
+    },
+    {
+      "path": "tests/unit/xir/product_consumers/source_array_runtime_length_source_obligations.json",
+      "lf_sha256": "47d6d609ba0860fe77aa6348ebc9c443918efe86287f08f190c4b4ac44985afa"
     },
     {
       "path": "tests/unit/xir/product_consumers/source_array_types_obligations.json",
@@ -402,6 +406,10 @@
     {
       "path": "tests/unit/xir/product_consumers/source_module_suspension_obligations.json",
       "lf_sha256": "32d80caf8a338c8ba2d69f7ee1aa57ab2102c02f090468de829094dbb21413a3"
+    },
+    {
+      "path": "tests/unit/xir/product_consumers/source_narrow_array_source_obligations.json",
+      "lf_sha256": "83ceded7afac70e5384292e0a88275917619cc98e4cd7383874baa4f40e38bdd"
     },
     {
       "path": "tests/unit/xir/product_consumers/source_nominal_name_obligations.json",
@@ -1156,7 +1164,13 @@
           "note": "The original visits slot remains mutable; a second call increments it again and fails the original ordered-element assertion. No reset or source alteration is allowed."
         }
       },
-      "mapping_references": []
+      "mapping_references": [
+        {
+          "mapping": "tests/unit/xir/product_consumers/source_narrow_array_source_obligations.json",
+          "pointer": "/legacy/body_lf_sha256",
+          "binding": "exact_path_name_body"
+        }
+      ]
     },
     {
       "legacy_path": "tests/unit/program/test_xr_program_source_build.c",
@@ -1188,7 +1202,13 @@
         "expected_i64": 42,
         "scope": "Exact original source prefix and fixed result through an explicitly exported adapter; additional legacy assertions stay OPEN until mapped."
       },
-      "mapping_references": []
+      "mapping_references": [
+        {
+          "mapping": "tests/unit/xir/product_consumers/source_array_runtime_length_source_obligations.json",
+          "pointer": "/legacy/body_lf_sha256",
+          "binding": "exact_path_name_body"
+        }
+      ]
     },
     {
       "legacy_path": "tests/unit/program/test_xr_program_source_build.c",
