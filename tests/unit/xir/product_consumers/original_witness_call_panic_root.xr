@@ -1,0 +1,20 @@
+interface Calculator { calculate(divisor: i64) -> i64 }
+struct Divider implements Calculator {
+value: i64
+calculate(divisor: i64) -> i64 { return this.value / divisor }
+}
+class Cell {
+value: i64
+constructor(value: i64) { this.value = value }
+}
+fn checked(ok: bool) -> i64 {
+var first = Cell(20)
+var second = Cell(22)
+var divisor: i64 = 0
+if (ok) { divisor = 2 }
+var selected: Calculator = Divider{value: 84}
+var result = selected.calculate(divisor)
+return first.value + second.value + result - 42
+}
+fn answer() -> i64 { return checked(false) }
+export fn consumerChecked(ok: bool) -> i64 { return checked(ok) }

@@ -1,0 +1,271 @@
+{
+  "schema": 1,
+  "family": "original_witness_call_panic",
+  "producer": "25f4016d6f089169757a90ae11ba537002374711",
+  "identity": "Checked25/semantic67/Value22/Call28/Program29",
+  "status": "OPEN",
+  "retired": 0,
+  "replacement_gates": [],
+  "result": "FAIL",
+  "full_FI": "NOT_RUN",
+  "axes": "NOT_RUN",
+  "cancel": "NOT_RUN",
+  "SourceDelete": "NOT_RUN",
+  "full_safety": "NOT_RUN",
+  "Main": "NOT_RUN",
+  "legacy": {
+    "name": "source_owner_witness_call_propagates_panic_and_cleans_owners",
+    "legacy_path": "tests/unit/program/test_xr_program_source_build.c",
+    "legacy_line": 7207,
+    "body_lf_sha256": "327bdb9e117a2bb66cc34dd89bea947ab0c3f42d361f6179f3cc599baf97acba",
+    "assertion_sites": 0,
+    "loop_sites": 0,
+    "status": "OPEN",
+    "replacement_gates": [],
+    "note": "Function census preserves its whole body; sites do not count executed loop iterations.",
+    "original_fixture": {
+      "id": "witness_call_panic",
+      "expected_exit": 1,
+      "labels": [
+        "panic",
+        "call",
+        "ownership"
+      ],
+      "backends": {
+        "vm": "execute",
+        "aot": "execute"
+      },
+      "expected_stderr_hex": "5b556e6361756768742050616e69635d2045303432303a206469766973696f6e206279207a65726f0a"
+    },
+    "static_input_literals": {}
+  },
+  "shared_helper": {
+    "path": "tests/unit/program/test_xr_program_source_build.c",
+    "function": "assert_builtin_panic_cleans_live_owners",
+    "line": 6861,
+    "end_line": 7149,
+    "body_lf_sha256": "df351143f1b981056a6bbca7f820374133e9ae1bcc11f739ccac795b745a490a",
+    "arguments": {
+      "panic_code": 420,
+      "fixture_id": "XR_SOURCE_FIXTURE_WITNESS_CALL_PANIC",
+      "deferred": false,
+      "dispatch": 3,
+      "suspends": false
+    },
+    "classification": "NON_TEST original shared helper metadata; never fabricate an extra TEST/source census row or retired family."
+  },
+  "original_source": {
+    "path": "tests/unit/xir/product_consumers/original_witness_call_panic_root.xr",
+    "prefix_bytes": 544,
+    "prefix_sha256": "8ac0340441338a502052cd28cb73d7ccbfe727994448c0f4b0735d8f3d2b280b",
+    "adapter": "export fn consumerChecked(ok: bool) -> i64 { return checked(ok) }\n",
+    "adapter_bytes": 66,
+    "adapter_sha256": "4bb1aab62b99ed0da9b5988fd0c02c9c671a45d071fe0503eb05f780e038fa54",
+    "bytes": 610,
+    "sha256": "86cdd44714d502d18cd7056fe02fab52f89c51ef57a30d31a7a386a5da631a40",
+    "construction": "Complete original helper-generated nondeferred prefix preserved. Actual wrapper name/line/body and shared helper digest/arguments independently rechecked. Static comparison against deferred sibling after removing only helper-conditional cleanup declaration/defer/answer-reader chunks reproduces exact prefix. Only consumerChecked adapter appended.",
+    "no_reader": "No original cleanupCount/readCleanupCount exists; the deferred131-byte pair is invalid here. Use only66-byte consumerChecked, never a fabricated constant0 consumerCleanup."
+  },
+  "independent_goldens": {
+    "required_Source_status": 0,
+    "checked_true_i64": 42,
+    "checked_false_panic_code": 420,
+    "cleanup_reader_call_count": 0,
+    "cleanup_reader": "ABSENT_IN_ORIGINAL_NOT_APPLICABLE",
+    "original_standalone_exit": 1,
+    "original_stderr_hex": "5b556e6361756768742050616e69635d2045303432303a206469766973696f6e206279207a65726f0a",
+    "scope": "All runtime values are preserved independent oracles, currently NOT_RUN. Zero reader calls denotes absence, not a cleanup scalar result0. No cleanup22/11 protocol belongs to these nondeferred originals."
+  },
+  "proposed_consumer": {
+    "source": "tests/unit/xir/product_consumers/test_original_witness_nondefer_source.c",
+    "cmake": "tests/unit/xir/product_consumers/source_product_original_witness_nondefer_source.cmake",
+    "status": "ACTUAL_REGISTERED_BUILT_AND_EXECUTED_REQUIRED_SOURCE_FAILED",
+    "proposed_normal_tests": [
+      {
+        "name": "test_original_witness_call_panic_source",
+        "required_source_status": "XR_XIR_OK",
+        "configurations": [
+          "MSVC Release",
+          "Clang ASan/UBSan"
+        ],
+        "result": "FAIL_BOTH_CONFIGURATIONS"
+      }
+    ],
+    "TIMEOUT": 120,
+    "PROCESSORS": 1,
+    "WILL_FAIL": false,
+    "planned_processes_per_configuration": 1,
+    "planned_processes_both_configurations": 2,
+    "registration_status": "ACTUAL_NORMAL_GATE_NO_WILL_FAIL",
+    "qualification": "Only original positive Source admission with owned failure diagnostic or future successful public Checked/Lowered metadata. No Program/Instance/runtime420/42/perCell/VM/native/mixed/gencode execution in this batch."
+  },
+  "candidate_pipeline": {
+    "status": "ACTUAL_SOURCE_FAILED_SUCCESS_BRANCH_COMPILED_NOT_RUN",
+    "input": "Read external exact full source under independent script root and actual stdlib; assigned fixed public SourceProduct and finite caller compiler ledger.",
+    "positive_requirement": "Require Source success0 without expected-rejection inversion, WILL_FAIL, skip, fallback or source mutation. Actual status/stage/location/path/message require this family real receipt.",
+    "success_path": "Future success can verify SourceProduct and own complete public Checked packet/writer metadata beyond Product/Session/borrowed path/request/authority/input death, verify/rewrite equality, lower publicly then destroy Checked/packet before Lowered verification. This is only compiled design until this family actually succeeds.",
+    "failure_path": "Owned actual diagnostic facts and path/message must survive Session/Product and request/authority/path/input death; free diagnostic/compiler owners to actual physical0/table0. Normal positive gate remains FAIL when status is nonzero; preserved diagnostic observation never changes expected0.",
+    "excluded_execution": "No Program seal, Instance/runtime calls or cleanup reader; no native/mixed/generatedC, perCell log, full shape, fullFI/axes/cancel/SourceDelete/full safety/Main."
+  },
+  "original_obligations": [
+    {
+      "obligation": "Original complete SourceProduct hosted profile/session binding and target semantic fingerprint must build unchanged prefix; Calculator local and Divider value remain exact.",
+      "status": "OPEN"
+    },
+    {
+      "obligation": "The original checked body creates Cell20 and Cell22 and uses concrete interface var selected: Calculator = Divider{value:84}; no generic T, inferred nominal Divider, cast or shadow interface can replace it.",
+      "status": "OPEN"
+    },
+    {
+      "obligation": "Original panic-only witness call presence and successor-count field2 are retained; nondeferred witness successor count is1. No thrown DivisionFailure branch is introduced.",
+      "status": "OPEN"
+    },
+    {
+      "obligation": "Original VM checked(false) must return owned PanicInfo code420 and checked(true) must return I64 fixed42. answer calls checked(false). This batch does not execute either.",
+      "status": "OPEN"
+    },
+    {
+      "obligation": "Original source has no defer, cleanupCount or readCleanupCount. There are zero cleanup-reader calls, not an observed scalar reader0. Do not import cleanup11/22 from deferred siblings or synthesize a fake reader.",
+      "status": "OPEN"
+    },
+    {
+      "obligation": "Original VM lifecycle log cannot overflow; exactly two Cell constructions and two finalizations; panic finalization reverses construction order; each actual identity finalizes and reclaims exactly once; drain/retire/free adds no event.",
+      "status": "OPEN"
+    },
+    {
+      "obligation": "Original AOT BackendIR binding must verify; original C is emitted twice with exact equal bytes and standalone int main(void). Original native harness false/true iterations preserve420/42 without any deferred cleanup reader.",
+      "status": "OPEN"
+    },
+    {
+      "obligation": "Original native per-iteration lifecycle and actual Cell identities/finalize/reclaim/reverse panic order/allocation0/context-death event constraints remain; aggregate final compiler0 cannot replace them.",
+      "status": "OPEN"
+    },
+    {
+      "obligation": "Original standalone source entry must exit1 with exact [Uncaught Panic] E0420: division by zero newline. Added consumerChecked is a separate public adapter, not the old standalone entry qualification.",
+      "status": "OPEN"
+    },
+    {
+      "obligation": "Original private owner/value/witness/panic/throw/catch SSA and complete representation responsibilities remain OPEN; metadata/proof/diagnostic lifetime does not retire the original wrapper.",
+      "status": "OPEN"
+    },
+    {
+      "obligation": "Full compiler/runtime all-ordinal FI, occupied/refusal output strong guarantees, resource exact/minus1 axes, sticky failure, active cancellation prefixes, actual disk Source deletion, determinism, full safety and Main remain outstanding.",
+      "status": "OPEN"
+    }
+  ],
+  "static_admission_lead": {
+    "status": "INFERENCE_ONLY_NOT_THIS_FAMILY_EXECUTION",
+    "review": "build-consumer-evidence/current67-cleanup-candidates-agent-r1/witness-admission-review.json",
+    "review_sha256": "36ef14c3a9bccd514a059d4f6f064ab4c28176b1c70d4ded24b8c45b0a8f6a91",
+    "lead": "Existing source named-interface annotation path does not admit SOURCE_INTERFACE as a nominal value. Other deferred witness-family actual failures and generic CALL_REQUIREMENT source support are separate evidence; neither is this nondeferred family own execution. No actual diagnostic value is assigned here.",
+    "actual_diagnostic": {
+      "status": 3,
+      "status_name": "XR_XIR_BAD_TYPE",
+      "stage": 1,
+      "stage_name": "SOURCE_PRODUCT_CHECK",
+      "line": 15,
+      "column": 15,
+      "message": "name does not resolve to an admitted nominal type"
+    },
+    "actual_receipt": [
+      "msvc-test_original_witness_call_panic_source.json",
+      "asan-test_original_witness_call_panic_source.json"
+    ],
+    "preservation": "Whole original Calculator value remains. Do not replace it with T, Divider, cast, or expected-failure test."
+  },
+  "boundaries": [
+    "Parent applied and registered the exact nondeferred roots and consumer, freshly compiled both configurations, and ran each required-positive Source gate. Both reject this original family; no expected-failure inversion or fabricated cleanup reader.",
+    "Nondeferred helper excludes cleanup declaration and reader/defer protocol. No fabricated reader0 and no transferred22/11 assertions.",
+    "Success Checked/Lowered branch is future only, not proven by other families success or by compiling the consumer C.",
+    "Original false420/true42/per-Cell identity/reverse/exact-once and standaloneE0420/privateAOT/SSA all remain OPEN independent responsibility.",
+    "Shared helper is non-TEST metadata; original denominators unchanged, retired0/replacement_gates empty.",
+    "No Instance/VM/native/mixed/gencode/fullFI/axes/cancel/SourceDelete/determinism/safety/Main claimed."
+  ],
+  "evidence_plan": {
+    "directory": "build-consumer-evidence/current67-original-witness-nondefer-source-r1",
+    "actual_product_receipts": [
+      "msvc-test_original_witness_call_panic_source.json",
+      "asan-test_original_witness_call_panic_source.json"
+    ],
+    "actual_registered_argv_executable_input_binding": "ACTUAL_REGISTERED_ARGV_AND_PRE_ENTRY_EXE_COPY",
+    "owned_failure_diagnostic": "PASS_AFTER_SESSION_PRODUCT_REQUEST_AUTHORITY_PATH_DEATH",
+    "successful_Checked_Lowered": "COMPILED_NOT_RUN_SOURCE_FAILED",
+    "runtime420_42": "NOT_RUN",
+    "cleanup_reader": "NOT_APPLICABLE_ORIGINAL_ABSENT",
+    "per_Cell_events": "NOT_RUN",
+    "standalone_stderr": "NOT_RUN",
+    "native_mixed_gencode": "NOT_RUN",
+    "raw_stdout_stderr": "ACTUAL_SAVED_RAW_WITH_RECEIPT_SHA256",
+    "input_before_after": "ACTUAL_SAME_SHA256_BYTES_MTIME"
+  },
+  "candidate_authoring": "Ignored only; parent reviews/applies/registers/builds/runs. No tracked/trace/product/build/index/Main action by candidate author.",
+  "actual_execution": {
+    "directory": "build-consumer-evidence/current67-original-witness-nondefer-source-r1",
+    "phase": "source",
+    "configurations": [
+      "MSVC Release",
+      "Clang ASan/UBSan"
+    ],
+    "normal_gate": "test_original_witness_call_panic_source",
+    "TIMEOUT": 120,
+    "PROCESSORS": 1,
+    "WILL_FAIL": false,
+    "required_source_status": 0,
+    "actual_source_status": 3,
+    "actual_source_status_name": "XR_XIR_BAD_TYPE",
+    "stage": 1,
+    "source_line": 15,
+    "source_column": 15,
+    "message": "name does not resolve to an admitted nominal type",
+    "result": "FAIL",
+    "processes": 2,
+    "exit_codes": [
+      1,
+      1
+    ],
+    "instances": 0,
+    "runtime": "NOT_RUN",
+    "native": "NOT_RUN",
+    "mixed": "NOT_RUN",
+    "generated_C": "NOT_RUN",
+    "full_original_prefix_preserved": true,
+    "input_items_per_process": 2944,
+    "retained_owned_diagnostic_after_producer_and_input_death": "PASS",
+    "compiler_physical_after_release": "0/0",
+    "compiler_observer_table_after_release": 0,
+    "compiler_owner_pre_release_final_live": 80,
+    "compiler_owner_pre_release_live_note": "80 equals the existing compile context baseline. Only subsequent actual owner destruction reaches physical0/0 and observer table0; no pre-release logical-zero or runtime-owner claim.",
+    "Checked_full_writer_and_Lowered_after_Checked_death": "SUCCESS_BRANCH_COMPILED_NOT_RUN",
+    "independent_runtime_420_42": "NOT_RUN",
+    "cleanup_reader": "NOT_APPLICABLE_ORIGINAL_ABSENT",
+    "per_Cell_identity_reverse_finalize_exact_once": "NOT_RUN",
+    "original_standalone_exit_and_E0420_stderr": "NOT_RUN",
+    "receipts": [
+      {
+        "configuration": "msvc",
+        "receipt": "msvc-test_original_witness_call_panic_source.json",
+        "pid": 9480,
+        "stdout_sha256": "b66439fd88e0666c46912ce9211991b6ea2dd1fbd027f8b076fd377e79143fea",
+        "stderr_sha256": "6cbedc1d39be4c496f8303e71ad0c491002a9cdea5fb28120433c7b12089fe89",
+        "inputs_before": "msvc-test_original_witness_call_panic_source-inputs-before.json",
+        "inputs_after": "msvc-test_original_witness_call_panic_source-inputs-after.json",
+        "binary_pre_entry_archive": "msvc-test_original_witness_call_panic_source-binary-preimage.exe"
+      },
+      {
+        "configuration": "asan",
+        "receipt": "asan-test_original_witness_call_panic_source.json",
+        "pid": 24508,
+        "stdout_sha256": "b66439fd88e0666c46912ce9211991b6ea2dd1fbd027f8b076fd377e79143fea",
+        "stderr_sha256": "6cbedc1d39be4c496f8303e71ad0c491002a9cdea5fb28120433c7b12089fe89",
+        "inputs_before": "asan-test_original_witness_call_panic_source-inputs-before.json",
+        "inputs_after": "asan-test_original_witness_call_panic_source-inputs-after.json",
+        "binary_pre_entry_archive": "asan-test_original_witness_call_panic_source-binary-preimage.exe"
+      }
+    ],
+    "producer_gap": "Original concrete Calculator local annotation fails named type admission. Do not replace it with generic T, inferred Divider, a cast or a nominal shadow; static requirement calls do not fulfill interface value semantics.",
+    "controls": "Separate sequence_length VM controls passed once per configuration; they do not convert the original required-positive failure into a pass.",
+    "caption_binding": "Product commands captured candidate maps and trace before these actual execution annotations. Their byte preimages are saved as runtime-preimage-<filename>; final metadata annotation is not a rerun.",
+    "retired": 0,
+    "completion": "OPEN"
+  }
+}

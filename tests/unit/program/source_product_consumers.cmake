@@ -423,3 +423,5 @@ include("${CMAKE_CURRENT_LIST_DIR}/../xir/product_consumers/source_product_origi
 include("${CMAKE_CURRENT_LIST_DIR}/../xir/product_consumers/source_product_original_array_error_invoke_source.cmake")
 
 include("${CMAKE_CURRENT_LIST_DIR}/../xir/product_consumers/source_product_original_witness_cleanup_source.cmake")
+
+include("${CMAKE_CURRENT_LIST_DIR}/../xir/product_consumers/source_product_original_witness_nondefer_source.cmake")
