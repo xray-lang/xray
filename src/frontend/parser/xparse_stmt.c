@@ -168,7 +168,7 @@ static char *token_to_ast_string(Parser *parser, Token tok) {
 // Parse if statement
 AstNode *xr_parse_if_statement(Parser *parser) {
     if (!xr_parser_healthy(parser)) return NULL;
-    int line = parser->previous.line;
+    int line = parser->current.line;
     do {
         xr_parser_advance(parser);
         if (!xr_parser_healthy(parser)) return NULL;

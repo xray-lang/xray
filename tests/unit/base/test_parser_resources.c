@@ -472,7 +472,87 @@ static void owning_trivia_diagnostics(void) {
     puts("owned trivia: bounded/unlimited callback, invalid count, failure output and physical zero PASS");
 }
 
+
+static XrParseStatus position_pipeline(const XrCompileResourceLimits *limits,
+    XrCompileResourceStats *stats, unsigned recovered) {
+    static const char *const texts[]={
+        "fn recover()->i64 {\n if (true) {\n  return 7\n }\n return 0\n}\n",
+        "var *** = ;\nfn recover()->i64 {\n if (true) {\n  return 7\n }\n return 0\n}\n"};
+    XrCompileResources *resources=NULL;XrCompilerSession *session=NULL;
+    XrArena arena={0};Parser parser={0};AstNode *program=NULL;
+    XrCompileResourceStatus made=xr_compile_resources_new(limits,&resources);
+    if(made!=XR_COMPILE_RESOURCE_OK)
+        return made==XR_COMPILE_RESOURCE_BUDGET?XR_PARSE_BUDGET:XR_PARSE_OUT_OF_MEMORY;
+    XrCompilerSessionStatus opened=xr_compile_session_new(resources,&session);
+    XrParseStatus status=opened==XR_COMPILER_SESSION_OK?XR_PARSE_OK:
+        opened==XR_COMPILER_SESSION_BUDGET?XR_PARSE_BUDGET:XR_PARSE_OUT_OF_MEMORY;
+    TriviaDiagnostics diagnostics={0};
+    if(status==XR_PARSE_OK) {
+        XrArenaBacking backing;
+        CHECK(xr_compiler_arena_state_backing(xr_compile_session_compile_state(session),&backing)==XR_ARENA_OK);
+        XrArenaStatus arena_status=xr_arena_open(&arena,128,&backing);
+        status=arena_status==XR_ARENA_OK?XR_PARSE_OK:
+            arena_status==XR_ARENA_BUDGET?XR_PARSE_BUDGET:XR_PARSE_OUT_OF_MEMORY;
+    }
+    if(status==XR_PARSE_OK) status=xr_compile_parser_open(&parser,session,texts[recovered],"positions.xr",&arena);
+    if(status==XR_PARSE_OK) {
+        xr_parser_set_error_callback(&parser,trivia_diagnostic,&diagnostics,100);
+        status=xr_compile_parse_recoverable(&parser,&program);
+    }
+    if(status==XR_PARSE_OK||status==XR_PARSE_RECOVERED) {
+        CHECK(status==(recovered?XR_PARSE_RECOVERED:XR_PARSE_OK));
+        CHECK(!!diagnostics.count==!!recovered && !!parser.had_error==!!recovered);
+        CHECK(program&&program->type==AST_PROGRAM);
+        const AstNode *function=NULL;
+        for(int i=0;i<program->as.program.count;++i) {
+            const AstNode *node=program->as.program.statements[i];
+            if(node&&node->type==AST_FUNCTION_DECL&&!strcmp(node->as.function_decl.name,"recover")) {
+                CHECK(!function);function=node;
+            }
+        }
+        CHECK(function&&function->line==(int)recovered+1&&function->end_line==(int)recovered+6);
+        const AstNode *body=function->as.function_decl.body;
+        CHECK(body&&body->type==AST_BLOCK&&body->as.block.count==2);
+        const AstNode *branch=body->as.block.statements[0];
+        CHECK(branch&&branch->type==AST_IF_STMT&&branch->line==(int)recovered+2);
+        const AstNode *nested=branch->as.if_stmt.then_branch;
+        CHECK(nested&&nested->type==AST_BLOCK&&nested->as.block.count==1);
+        CHECK(nested->end_line==(int)recovered+4&&nested->end_column==3);
+        CHECK(nested->as.block.statements[0]->type==AST_RETURN_STMT);
+        CHECK(body->as.block.statements[1]->type==AST_RETURN_STMT);
+    } else CHECK((status==XR_PARSE_BUDGET||status==XR_PARSE_OUT_OF_MEMORY)&&!program);
+    xr_compile_parser_close(&parser);
+    OK(xr_compile_resources_stats(resources,stats));
+    CHECK(stats->allocated_bytes==physical_total&&stats->peak_bytes==physical_peak&&stats->live_bytes==physical_live);
+    xr_compile_session_free(session);xr_compile_resources_release(resources);xr_arena_destroy(&arena);
+    CHECK(!physical_live&&!allocation_count);return status;
+}
+static void recovered_positions(void) {
+    const XrCompileResourceLimits finite={UINT64_C(1048576),UINT64_C(1048576),UINT64_C(1048576)};
+    for(unsigned recovered=0;recovered<2;++recovered) {
+        reset();XrCompileResourceStats exact={0},stats={0};
+        XrParseStatus expected=recovered?XR_PARSE_RECOVERED:XR_PARSE_OK;
+        CHECK(position_pipeline(&finite,&exact,recovered)==expected);
+        size_t sites=attempt_count;
+        CHECK(sites&&exact.allocated_bytes&&exact.peak_bytes&&exact.work);
+        for(size_t point=0;point<sites;++point) {
+            reset();fail_at=point;
+            CHECK(position_pipeline(&finite,&stats,recovered)==XR_PARSE_OUT_OF_MEMORY);
+            CHECK(attempt_count==point+1);
+        }
+        XrCompileResourceLimits limits={exact.allocated_bytes,exact.peak_bytes,exact.work};
+        reset();CHECK(position_pipeline(&limits,&stats,recovered)==expected);
+        for(unsigned axis=0;axis<3;++axis) {
+            XrCompileResourceLimits smaller=limits;
+            if(!axis)--smaller.allocated_bytes;else if(axis==1)--smaller.live_bytes;else --smaller.work;
+            reset();CHECK(position_pipeline(&smaller,&stats,recovered)==XR_PARSE_BUDGET);
+        }
+        printf("parser positions: recovered=%u allocations=%zu full FI/three axes/physical zero passed\n",recovered,sites);
+    }
+}
+
 int main(void) {
+    recovered_positions();
     owning_trivia_diagnostics();
     faults();
     recoverable_and_rollback();

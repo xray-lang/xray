@@ -1904,6 +1904,7 @@ AstNode *xr_parse_block(Parser *parser) {
     parser->block_tail_value_observed = parser->match_value_block_pending;
     parser->match_value_block_pending = false;
     int line = parser->previous.line;
+    int initial_errors = parser->error_count;
     AstNode *block = xr_ast_block(parser->compiler_session, line);
     if (!xr_parser_healthy(parser)) return NULL;
 
@@ -1972,7 +1973,7 @@ AstNode *xr_parse_block(Parser *parser) {
             xr_ast_block_add(parser->compiler_session, block, decl);
         }
 
-        if (parser->had_error)
+        if (parser->error_count != initial_errors)
             break;
     }
 
