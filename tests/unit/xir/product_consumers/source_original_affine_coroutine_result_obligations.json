@@ -1,0 +1,577 @@
+{
+  "schema": 1,
+  "family": "original_affine_coroutine_result",
+  "legacy_base_commit": "01e6d38401b0f5c8684b64c35a99ac651024c0c1",
+  "status": "OPEN",
+  "retired": 0,
+  "replacement_gates": [],
+  "result": "STATIC_ORIGINAL_AFFINE_RESULT_MAP_ONLY",
+  "product_execution": "NOT_RUN_BY_THIS_MAP",
+  "producer": "25f4016d6f089169757a90ae11ba537002374711",
+  "identity": "Checked25/semantic67/Value22/Call28/Program29",
+  "producer_scope": "Existing authorised producer identity only; no Root private source or new producer/window is adopted.",
+  "legacy": {
+    "name": "source_owner_cross_module_coroutine_transfers_affine_resource_result",
+    "legacy_path": "tests/unit/program/test_xr_program_source_build.c",
+    "legacy_line": 8359,
+    "body_lf_sha256": "8d59424f661edc2f292fdee5a290580af61987fee159ca9f79528fa3a121df15",
+    "assertion_sites": 53,
+    "loop_sites": 2,
+    "status": "OPEN",
+    "replacement_gates": [],
+    "note": "Function census preserves its whole body; sites do not count executed loop iterations.",
+    "original_fixture": {
+      "id": "affine_coroutine_result",
+      "expected_exit": 229,
+      "labels": [
+        "module-graph",
+        "provider",
+        "pipe",
+        "coroutine",
+        "affine",
+        "cancel"
+      ],
+      "backends": {
+        "vm": "execute",
+        "aot": "execute"
+      }
+    },
+    "static_input_literals": {
+      "library_source": {
+        "bytes": 266,
+        "sha256": "f1368be8d111c1d893707b2e3ace1bfb3cc235289ca34c698d2cb61dd827f382"
+      },
+      "entry_source": {
+        "bytes": 238,
+        "sha256": "d31ddb8e6c7e10531f5b3b0df4338b166aa29ba47f2c077060a0a0717ce22d1c"
+      }
+    }
+  },
+  "original_sources": {
+    "library_source": {
+      "bytes": 266,
+      "sha256": "f1368be8d111c1d893707b2e3ace1bfb3cc235289ca34c698d2cb61dd827f382",
+      "text": "import sys\nimport { Pipe } from sys\nexport fn child() -> Pipe {\n  var guard = sys.Pipe(2147483644, 2147483645)\n  defer {\n    guard.closeRead()\n    guard.closeWrite()\n  }\n  Coro.yield()\n  Coro.yield()\n  var result = sys.Pipe(2147483646, 2147483647)\n  return result\n}\n"
+    },
+    "entry_source": {
+      "bytes": 238,
+      "sha256": "d31ddb8e6c7e10531f5b3b0df4338b166aa29ba47f2c077060a0a0717ce22d1c",
+      "text": "import sys\nimport { Pipe } from sys\nimport { child } from \"./library\"\nfn answer() -> i64 {\n  var live = child()\n  defer {\n    live.closeRead()\n    live.closeWrite()\n  }\n  Coro.yield()\n  Coro.yield()\n  return live.readEnd() - 2147483604\n}\n"
+    }
+  },
+  "source_construction": "Both complete original C literals independently decoded; separate root/library imports preserved, no adapter or mutation.",
+  "responsibility_mapping": [
+    {
+      "responsibility": "Full original two-module source/profile and successful product.",
+      "status": "OPEN",
+      "target_consumer": "ROOT_CONTRACT_AND_QUALIFIED_PRODUCER_PENDING",
+      "original": {
+        "path": "tests/unit/program/test_xr_program_source_build.c",
+        "lines": [
+          8386,
+          8404
+        ]
+      },
+      "original_assertion_sites": 4,
+      "gap": "The266B library and238B root must be accepted with governed sys.Pipe. A missing Program or unrelated refusal cannot qualify the positive; do not preserve the old guard as a silent success."
+    },
+    {
+      "responsibility": "Affine child-result ownership, full state/live-root graph and continuations.",
+      "status": "OPEN",
+      "target_consumer": "ROOT_CONTRACT_AND_QUALIFIED_PRODUCER_PENDING",
+      "original": {
+        "path": "tests/unit/program/test_xr_program_source_build.c",
+        "lines": [
+          8405,
+          8441
+        ]
+      },
+      "original_assertion_sites": 19,
+      "gap": "Original parent state4/safepoints3, child state3/safepoints2, child OWNER result and normal owned continuation/cancel no result remain full representation obligations. Target typed common verification must prove actual owners and cleanup."
+    },
+    {
+      "responsibility": "Exact typed IO close contract and host binding.",
+      "status": "OPEN",
+      "target_consumer": "ROOT_CONTRACT_AND_QUALIFIED_PRODUCER_PENDING",
+      "original": {
+        "path": "tests/unit/program/test_xr_program_source_build.c",
+        "lines": [
+          8442,
+          8462
+        ]
+      },
+      "original_assertion_sites": 4,
+      "gap": "Original one provider/one operation, actual contract/fingerprint, bool-i64 unary close callback and exact handle ordering. Preserve canonical new provider identity without fake builtin or old ABI alias."
+    },
+    {
+      "responsibility": "Create the actual execution Instance.",
+      "status": "OPEN",
+      "target_consumer": "ROOT_CONTRACT_AND_QUALIFIED_PRODUCER_PENDING",
+      "original": {
+        "path": "tests/unit/program/test_xr_program_source_build.c",
+        "lines": [
+          8463,
+          8477
+        ]
+      },
+      "original_assertion_sites": 2,
+      "gap": "Original uses one Instance. New target requires two independent Instances and producer/caller Program death; no such new execution is claimed here."
+    },
+    {
+      "responsibility": "Actual lifecycle observer and normal/four-prefix VM helper.",
+      "status": "OPEN",
+      "target_consumer": "ROOT_CONTRACT_AND_QUALIFIED_PRODUCER_PENDING",
+      "original": {
+        "path": "tests/unit/program/test_xr_program_source_build.c",
+        "lines": [
+          8478,
+          8487
+        ]
+      },
+      "original_assertion_sites": 1,
+      "gap": "The attached original observer and helper check aggregate construct/finalize/reclaim/copy/origin and exact provider order. The goal additionally requires real stable guard/result identity, not allocator counters."
+    },
+    {
+      "responsibility": "Direct child yields twice and publishes a class result while its execution remains live.",
+      "status": "OPEN",
+      "target_consumer": "ROOT_CONTRACT_AND_QUALIFIED_PRODUCER_PENDING",
+      "original": {
+        "path": "tests/unit/program/test_xr_program_source_build.c",
+        "lines": [
+          8488,
+          8502
+        ]
+      },
+      "original_assertion_sites": 11,
+      "gap": "Original checkpoint constructed2/finalized1/reclaimed1/close2/lease1 must remain explicit. Root must supply an authorised current owned-result projection rather than unchecked library/private ID access."
+    },
+    {
+      "responsibility": "Caller code free, successful drain and lease-blocked retirement.",
+      "status": "OPEN",
+      "target_consumer": "ROOT_CONTRACT_AND_QUALIFIED_PRODUCER_PENDING",
+      "original": {
+        "path": "tests/unit/program/test_xr_program_source_build.c",
+        "lines": [
+          8503,
+          8505
+        ]
+      },
+      "original_assertion_sites": 2,
+      "gap": "Original GENERATION_REJECTED with lease1 is a representation review input; preserve actual ownership/gate lifetime without restoring an obsolete lease/status API."
+    },
+    {
+      "responsibility": "Outcome-drop checkpoint does not reclaim another live-owner result.",
+      "status": "OPEN",
+      "target_consumer": "ROOT_CONTRACT_AND_QUALIFIED_PRODUCER_PENDING",
+      "original": {
+        "path": "tests/unit/program/test_xr_program_source_build.c",
+        "lines": [
+          8506,
+          8507
+        ]
+      },
+      "original_assertion_sites": 1,
+      "gap": "The old test asserts reclaimed1 while host execution is still live. Current take_result transfers ordinary outcomes; do not assume an Instance retained result or duplicate affine ownership to reproduce old timing."
+    },
+    {
+      "responsibility": "Execution-free checkpoint completes lifecycle and releases lease.",
+      "status": "OPEN",
+      "target_consumer": "ROOT_CONTRACT_AND_QUALIFIED_PRODUCER_PENDING",
+      "original": {
+        "path": "tests/unit/program/test_xr_program_source_build.c",
+        "lines": [
+          8508,
+          8516
+        ]
+      },
+      "original_assertion_sites": 7,
+      "gap": "Original constructed/finalized/reclaimed2, copied0, teardown-origin3, close2 and lease0 need exact old/new representation review. Current proof must follow actual final live owners and observer lifetime."
+    },
+    {
+      "responsibility": "Actual native normal plus four cancellation prefixes.",
+      "status": "OPEN",
+      "target_consumer": "ROOT_CONTRACT_AND_QUALIFIED_PRODUCER_PENDING",
+      "original": {
+        "path": "tests/unit/program/test_xr_program_source_build.c",
+        "lines": [
+          8517,
+          8520
+        ]
+      },
+      "original_assertion_sites": 0,
+      "gap": "Actual old native helper emits deterministically and checks independent42/five traces/16 closes and standalone success229. Current successful native harness exit0 cannot replace this original process oracle."
+    },
+    {
+      "responsibility": "Retire/free Instance and release product/profile/source owners.",
+      "status": "OPEN",
+      "target_consumer": "ROOT_CONTRACT_AND_QUALIFIED_PRODUCER_PENDING",
+      "original": {
+        "path": "tests/unit/program/test_xr_program_source_build.c",
+        "lines": [
+          8521,
+          8527
+        ]
+      },
+      "original_assertion_sites": 2,
+      "gap": "Target full FI/resource/safety, physical0, producer-death and escaped-result lifetime are additional mandatory responsibilities. No actual release observation is made by this static map."
+    }
+  ],
+  "original_private_helpers": [
+    {
+      "path": "tests/unit/program/test_xr_program_source_build.c",
+      "function": "source_build_fixture_init",
+      "line": 894,
+      "end_line": 968,
+      "body_lf_sha256": "964c190cb52940aa039b9459e6a5aa0416430eadac032979ed210358216892eb",
+      "assertion_sites": 0,
+      "classification": "Actual direct or specified transitive NON_TEST helper, not a new census TEST or an exhaustive shared closure.",
+      "responsibility": "Original separate physical root/library graph and authority/session preparation; no flattening or shim.",
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/program/test_xr_program_source_build.c",
+      "function": "source_build_fixture_free",
+      "line": 873,
+      "end_line": 892,
+      "body_lf_sha256": "54f2ca59ddb46fda789abf0411160790bcb950903858a308b984b50e6f8c1889",
+      "assertion_sites": 0,
+      "classification": "Actual direct or specified transitive NON_TEST helper, not a new census TEST or an exhaustive shared closure.",
+      "responsibility": "Release complete original fixture/session/identity/path graph after all original execution owners.",
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/program/test_xr_program_source_build.c",
+      "function": "assert_source_build_ok",
+      "line": 996,
+      "end_line": 1010,
+      "body_lf_sha256": "a5d0aee0a406f887ea79355380455511ee0762cfa39915fb657cfe8a4088fd94",
+      "assertion_sites": 1,
+      "classification": "Actual direct or specified transitive NON_TEST helper, not a new census TEST or an exhaustive shared closure.",
+      "responsibility": "Exact Source success required, including diagnostic retention on refusal; any legal positive refusal remains FAIL.",
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/program/test_xr_program_source_build.c",
+      "function": "find_profile_provider",
+      "line": 749,
+      "end_line": 757,
+      "body_lf_sha256": "e406782a95e05ce78f909f815229bd5d4ad14c2e96001c17f2e17aad178ee048",
+      "assertion_sites": 0,
+      "classification": "Actual direct or specified transitive NON_TEST helper, not a new census TEST or an exhaustive shared closure.",
+      "responsibility": "Actual profile contract selected by stable identity, not a fixture-local fake provider identity.",
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/program/test_xr_program_source_build.c",
+      "function": "pipe_close_sequence_probe",
+      "line": 815,
+      "end_line": 824,
+      "body_lf_sha256": "48c745fd95af4c4ee639f7e6ef1d33f032104680e45b0015aa8ef71bbea5e51b",
+      "assertion_sites": 0,
+      "classification": "Actual direct or specified transitive NON_TEST helper, not a new census TEST or an exhaustive shared closure.",
+      "responsibility": "Reject wrong ordered handle, missing output or extra callback; each accepted callback returns true and advances once.",
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/program/test_xr_program_source_build.c",
+      "function": "pipe_close_sequence_reset",
+      "line": 826,
+      "end_line": 831,
+      "body_lf_sha256": "5d5f8d82a0714fdeb139fb4a609c108fbfc3fce964821e4707c21be9c8fb3f3b",
+      "assertion_sites": 0,
+      "classification": "Actual direct or specified transitive NON_TEST helper, not a new census TEST or an exhaustive shared closure.",
+      "responsibility": "Reset the exact expected handle sequence and callback count between independent executions.",
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/program/test_xr_program_source_build.c",
+      "function": "source_fixture_output_path",
+      "line": 63,
+      "end_line": 65,
+      "body_lf_sha256": "2c5d63f47f4b0e77e5abec0b6831c67cec2056ad89196c34fbd8e0cbd6ec1d9d",
+      "assertion_sites": 0,
+      "classification": "Actual direct or specified transitive NON_TEST helper, not a new census TEST or an exhaustive shared closure.",
+      "responsibility": "Only original selected affine_coroutine_result fixture writes native output.",
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/program/xr_program_source_cleanup_checks.inc.c",
+      "function": "record_vm_cleanup_lifecycle",
+      "line": 189,
+      "end_line": 196,
+      "body_lf_sha256": "67415f8ab93ea5f9a747d890ec4ea317a18ecfd8f852626446b92195dee55ef6",
+      "assertion_sites": 0,
+      "classification": "Actual direct or specified transitive NON_TEST helper, not a new census TEST or an exhaustive shared closure.",
+      "responsibility": "Actual kind/origin aggregate observer; legacy identity fields exist but this recorder does not inspect them.",
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/program/xr_program_source_cleanup_checks.inc.c",
+      "function": "assert_vm_cleanup_lifecycle",
+      "line": 198,
+      "end_line": 204,
+      "body_lf_sha256": "3436d2ada5e4b2ead6231fd0156ed7e262344c530eb6413877e3b47a6f5fda19",
+      "assertion_sites": 5,
+      "classification": "Actual direct or specified transitive NON_TEST helper, not a new census TEST or an exhaustive shared closure.",
+      "responsibility": "Five actual assertion sites enforce equal expected construct/finalize/reclaim counts, no CLASS_COPY and no DOMAIN_TEARDOWN during normal/cancel program cleanup.",
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/program/xr_program_source_cleanup_checks.inc.c",
+      "function": "assert_affine_vm_executions",
+      "line": 206,
+      "end_line": 257,
+      "body_lf_sha256": "67e3f1d28b0b4a4af0d8fd56685a6bb60f655186eba38637fec1208077228e7f",
+      "assertion_sites": 19,
+      "classification": "Actual direct or specified transitive NON_TEST helper, not a new census TEST or an exhaustive shared closure.",
+      "responsibility": "Nineteen actual assertion sites plus lifecycle helper verify normal42, four actual yields, exact close prefixes and all four active cancellations, before/after execution free.",
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/program/xr_program_source_cleanup_checks.inc.c",
+      "function": "assert_aot_affine_coroutine_cleanup",
+      "line": 1019,
+      "end_line": 1141,
+      "body_lf_sha256": "effa75b17cde9117a91de6bc7900c8cee96204c1153cb23aa5522957b7c40edf",
+      "assertion_sites": 13,
+      "classification": "Actual direct or specified transitive NON_TEST helper, not a new census TEST or an exhaustive shared closure.",
+      "responsibility": "Thirteen actual assertion sites and complete emitted-C guards independently enforce deterministic native source, normal42/four cancellation traces/16 closes, no xr_place_ marker and standalone229.",
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/program/xr_program_source_cleanup_checks.inc.c",
+      "function": "write_probe_typed_host",
+      "line": 414,
+      "end_line": 438,
+      "body_lf_sha256": "1de3cc218ff7c7c7c306c72863611bc68f882ad978187b0c5d99722c398dfc97",
+      "assertion_sites": 1,
+      "classification": "Actual direct or specified transitive NON_TEST helper, not a new census TEST or an exhaustive shared closure.",
+      "responsibility": "Actual original typed host call/dispose bridge; canonical target provider identity and ABI must be reviewed without restoring the old bridge.",
+      "status": "OPEN"
+    }
+  ],
+  "specified_helper_assertion_sites": 39,
+  "helper_policy": "Twelve actual direct/specified transitive NON_TEST helpers are not extra census TEST rows; their boolean and emitted-C conditions remain responsibilities. No exhaustive shared dependency/deletion claim.",
+  "old_suspension_tables": {
+    "states": {
+      "values": [
+        1,
+        1,
+        2,
+        3
+      ],
+      "declaration_lf_sha256": "508bca36cdaf3f0e6a94dd1259f71236eccbcc4a9609adee8da8766d98c2f2ee"
+    },
+    "safepoints": {
+      "values": [
+        0,
+        0,
+        1,
+        2
+      ],
+      "declaration_lf_sha256": "f53f604f22f0093f72c8a67d5a73c3a30900a5eaec891eb65d4e0e2a1a587ac9"
+    },
+    "closes_before": {
+      "values": [
+        0,
+        0,
+        2,
+        2
+      ],
+      "declaration_lf_sha256": "ee405cfd31914c5518bfb8b3c7077b1dd11a0abc4bc197a8484ace3ce6bf142c"
+    },
+    "close_handles": {
+      "values": [
+        2147483644,
+        2147483645,
+        2147483646,
+        2147483647
+      ],
+      "declaration_lf_sha256": "1eb4a2261ded1fae6092c6584723a0f7d2fd3c3164014179a37920dfe3e857b2"
+    }
+  },
+  "independent_goldens": {
+    "required_Source_status": 0,
+    "returned_i64": 42,
+    "returned_read_handle": 2147483646,
+    "subtract_literal": 2147483604,
+    "original_VM_Instances": 1,
+    "normal_host_resumes": 4,
+    "normal_close_handles": [
+      2147483644,
+      2147483645,
+      2147483646,
+      2147483647
+    ],
+    "normal_construct_finalize_reclaim": [
+      2,
+      2,
+      2
+    ],
+    "normal_class_copy_events": 0,
+    "normal_domain_teardown_events": 0,
+    "cancel_prefixes": [
+      {
+        "after_suspended": 1,
+        "close_handles": [
+          2147483644,
+          2147483645
+        ],
+        "construct_finalize_reclaim": [
+          1,
+          1,
+          1
+        ],
+        "class_copy_events": 0,
+        "domain_teardown_events": 0
+      },
+      {
+        "after_suspended": 2,
+        "close_handles": [
+          2147483644,
+          2147483645
+        ],
+        "construct_finalize_reclaim": [
+          1,
+          1,
+          1
+        ],
+        "class_copy_events": 0,
+        "domain_teardown_events": 0
+      },
+      {
+        "after_suspended": 3,
+        "close_handles": [
+          2147483644,
+          2147483645,
+          2147483646,
+          2147483647
+        ],
+        "construct_finalize_reclaim": [
+          2,
+          2,
+          2
+        ],
+        "class_copy_events": 0,
+        "domain_teardown_events": 0
+      },
+      {
+        "after_suspended": 4,
+        "close_handles": [
+          2147483644,
+          2147483645,
+          2147483646,
+          2147483647
+        ],
+        "construct_finalize_reclaim": [
+          2,
+          2,
+          2
+        ],
+        "class_copy_events": 0,
+        "domain_teardown_events": 0
+      }
+    ],
+    "native_close_call_total_normal_plus_four_cancels": 16,
+    "original_standalone_exit": 229
+  },
+  "original_host_child_escape_timeline": [
+    {
+      "phase": "Child has yielded twice and returned an actual class result",
+      "constructed": 2,
+      "finalized": 1,
+      "reclaimed": 1,
+      "close_calls": 2,
+      "Instance_lease_count": 1
+    },
+    {
+      "phase": "Free caller VM code; begin drain succeeds; retire rejects GENERATION while lease exists",
+      "retire_status": "XR_EXECUTION_GENERATION_REJECTED"
+    },
+    {
+      "phase": "Dispose exported outcome while host execution remains live; do not infer current take-result ownership from the legacy counter checkpoint",
+      "reclaimed": 1
+    },
+    {
+      "phase": "Free host execution last owner",
+      "constructed": 2,
+      "finalized": 2,
+      "reclaimed": 2,
+      "class_copy_events": 0,
+      "domain_teardown_events": 3,
+      "close_calls": 2,
+      "Instance_lease_count": 0
+    },
+    {
+      "phase": "Native cleanup helper runs, then retire/free Instance and product/profile/fixture"
+    }
+  ],
+  "original_lifecycle_observation": {
+    "header_commit": "01e6d38401b0f5c8684b64c35a99ac651024c0c1",
+    "header_path": "src/vm/xr_program_vm.h",
+    "event_definition_lf_sha256": "34cb2e032637d71bac5981e88209de559c24d6081342027caca5756acdde3d94",
+    "actual_fields_include": [
+      "kind",
+      "origin",
+      "identity",
+      "related_identity"
+    ],
+    "test_recorder": "Aggregates construct/finalize/reclaim/copy and teardown-origin counts; does not bind those counters to identity.",
+    "target_goal": "The consumer goal additionally requires actual stable per-object identity/ordered event proofs. Guard and returned Pipe must be distinguishable; allocator addresses, physical0 and CallEntry.release do not qualify."
+  },
+  "result_projection_representation_boundary": {
+    "producer": "25f4016d6f089169757a90ae11ba537002374711",
+    "header": "src/xir/xxir_program.h",
+    "current_public_contract": "xr_xir_instance_take_result transfers ordinary entry outcomes; no remaining Instance result owner may be assumed.",
+    "review": "The old outcome-dispose/execution-free/lease checkpoint needs actual owner mapping. Preserve final-live-owner semantics; do not invent a hidden retained result, duplicate an affine owner, or restore old lease/status aliases to force old numeric timing."
+  },
+  "target_contract_or_representation_review": [
+    "Admit complete separate library266B/root238B inputs, governed sys.Pipe and typed IO close contract; do not flatten graph or accept any refusal as a positive.",
+    "Transfer the actual affine result owner through child→parent normal continuation, preserve child cleanup and no result on cancellation; no implicit class copy/deep clone.",
+    "Represent original parent/child state/live-value counts and OWNER continuation with full current verification; old numeric op/state IDs are not compatibility aliases.",
+    "Root must select a currently authorised public projection for the original direct-child owned-result observation. An unchecked private/library function ID is not a host authority substitute.",
+    "Keep the old exact outcome-drop/execution-free lifecycle checkpoints for Root representation review, while target proof follows its actual remaining live owners. Current take_result transfers ordinary entry results; do not assume it retains the old execution owner. Map obsolete lease/retire status and exact3 teardown-origin events without hidden owner/copy/shim.",
+    "The Root-owned observer must outlive escaped results/Program/Instance death and bind construct/finalize/reclaim to actual stable identities. The previous minimal lifecycle interface request already contains this owner-lifetime requirement.",
+    "VM/native independently check original42 and five normal/cancel sequences. Current target adds two Instances, producer death, applicable mixed, all active-prefix stale-token checks and complete FI/axes/safety.",
+    "Original native standalone exit229 differs from internal42 and successful current harness exit0. None replaces the other."
+  ],
+  "target_lifecycle_proof": "Record the actual stable guard/result identities with bounded no-allocation event log and explicit observer owner lifetime. Bind construct/finalize/reclaim to each object through normal/cancel/escape/final-owner release; counts, allocation addresses and physical0 alone cannot qualify.",
+  "additional_target_requirements": [
+    "Complete Source→Built→Checked→specialization/full reverification→Lowered→Program ownership",
+    "Source-free packet and typed Library provenance/authority projection",
+    "Independent VM/real native/applicable mixed results and exact provider events",
+    "Two Instances and source/session/Checked/Lowered/caller Program death",
+    "Every real active suspension/cancel prefix and stale token refusal",
+    "Legally escaped owned result outlives production and Instance owners; no use-after-free observer context",
+    "Actual physical release and fresh complete compiler/runtime FI census",
+    "All resource axes and generated-C portability/applicable full safety",
+    "Original standalone229 separate from internal42 and current harness0",
+    "Root formal integration/acceptance and last-consumer deletion review"
+  ],
+  "shared_dependency": {
+    "path": "tests/unit/aot/xr_backend_emission_owner.h",
+    "consumer_count": 7,
+    "status": "PRESERVE_SHARED_OWNER",
+    "reason": "The actual AOT helper uses shared backend_emission_resources; other active consumers remain. No deletion qualification."
+  },
+  "handoff": {
+    "report": "build-consumer-evidence/consumer-session-20261009-r1/affine-coroutine-result-interface-request.json",
+    "raw_sha256": "d3778808e326230c930b52c62237147fac309617c7da3798538a37b12ddd9097",
+    "related_observer_request": "build-consumer-evidence/consumer-session-20261009-r1/class-lifecycle-interface-request.json",
+    "Root_thread": "01a11f74-a297-7b11-8441-835bde6a3d5f",
+    "formal_acceptance": "PENDING"
+  },
+  "full_FI": "NOT_RUN",
+  "axes": "NOT_RUN",
+  "full_safety": "NOT_RUN",
+  "SourceDelete": "NOT_RUN",
+  "Main": "NOT_RUN",
+  "boundaries": [
+    "All53 original TEST assertions,39 specified helper assertion sites and complete emitted-C/boolean guards remain OPEN.",
+    "Source266B/238B, fixed42, native standalone229 and ordered handle/lifecycle checkpoints are separate preserved requirements.",
+    "Current result transfer is not the old outcome representation; no hidden retained result, affine duplication or legacy lease/status alias is introduced.",
+    "Direct child library-ID execution and old exact state/lease/teardown fields require explicit target authority/owner representation review.",
+    "No product build, runtime result, provider callback, allocator/lifecycle event or physical release is observed by this static map.",
+    "Reference count and assertion coverage do not establish qualification, retirement, production release or deletion permission."
+  ]
+}
