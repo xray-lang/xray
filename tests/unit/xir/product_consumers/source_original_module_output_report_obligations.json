@@ -1,0 +1,706 @@
+{
+  "schema": 1,
+  "family": "original_module_output_report",
+  "legacy_base_commit": "01e6d38401b0f5c8684b64c35a99ac651024c0c1",
+  "status": "OPEN",
+  "retired": 0,
+  "replacement_gates": [],
+  "result": "STATIC_ORIGINAL_MODULE_OUTPUT_REPORT_MAP_ONLY",
+  "product_execution": "NOT_RUN_BY_THIS_MAP",
+  "producer": "25f4016d6f089169757a90ae11ba537002374711",
+  "identity": "Checked25/semantic67/Value22/Call28/Program29",
+  "producer_scope": "Fixed authorised25f4; Rootformalbd/privateCell newer candidates not adopted, no heavywindow.",
+  "legacy": [
+    {
+      "name": "source_owner_module_error_defer_output_preserves_failure_and_owners",
+      "legacy_path": "tests/unit/program/test_xr_program_source_build.c",
+      "legacy_line": 5163,
+      "body_lf_sha256": "3c5e2dc9dcb171a9ce46bf2d6a4b9b5f5633ca04d45b7d3eb438971685679d78",
+      "assertion_sites": 0,
+      "loop_sites": 0,
+      "status": "OPEN",
+      "replacement_gates": [],
+      "note": "Function census preserves its whole body; sites do not count executed loop iterations.",
+      "original_fixture": {
+        "id": "module_error_output",
+        "expected_exit": 0,
+        "labels": [
+          "module-graph",
+          "error",
+          "defer",
+          "typed-output",
+          "refusal",
+          "ownership"
+        ],
+        "backends": {
+          "vm": "execute",
+          "aot": "execute"
+        }
+      },
+      "static_input_literals": {}
+    },
+    {
+      "name": "source_owner_module_panic_defer_output_preserves_failure_and_owners",
+      "legacy_path": "tests/unit/program/test_xr_program_source_build.c",
+      "legacy_line": 5167,
+      "body_lf_sha256": "9da722e7d37d6644758cfeeac430de8a7d4e76889cbb2706f991c06d4e3c9fe0",
+      "assertion_sites": 0,
+      "loop_sites": 0,
+      "status": "OPEN",
+      "replacement_gates": [],
+      "note": "Function census preserves its whole body; sites do not count executed loop iterations.",
+      "original_fixture": {
+        "id": "module_panic_output",
+        "expected_exit": 0,
+        "labels": [
+          "module-graph",
+          "panic",
+          "defer",
+          "typed-output",
+          "refusal",
+          "ownership"
+        ],
+        "backends": {
+          "vm": "execute",
+          "aot": "execute"
+        }
+      },
+      "static_input_literals": {}
+    },
+    {
+      "name": "source_owner_module_report_has_instance_state_and_ordered_text",
+      "legacy_path": "tests/unit/program/test_xr_program_source_build.c",
+      "legacy_line": 5269,
+      "body_lf_sha256": "e3cd1e70040cb1a141e77c321c00e5a136c4e1896e62c8ed6b17236c67b93d17",
+      "assertion_sites": 0,
+      "loop_sites": 0,
+      "status": "OPEN",
+      "replacement_gates": [],
+      "note": "Function census preserves its whole body; sites do not count executed loop iterations.",
+      "original_fixture": {
+        "id": "module_report",
+        "expected_exit": 0,
+        "labels": [
+          "module-graph",
+          "string",
+          "typed-output",
+          "ownership"
+        ],
+        "backends": {
+          "vm": "execute",
+          "aot": "execute"
+        },
+        "expected_stdout_hex": "6c6962726172792034302072656164790a656e747279207265706f72740a616c7068613a343120626574613a34322034320a"
+      },
+      "static_input_literals": {}
+    },
+    {
+      "name": "source_owner_module_report_extension_reuses_shared_state",
+      "legacy_path": "tests/unit/program/test_xr_program_source_build.c",
+      "legacy_line": 5273,
+      "body_lf_sha256": "4e8b7fd6b56189d9d0fac35f44b6c615411b961daa34398b3ef37c84b74f40b3",
+      "assertion_sites": 0,
+      "loop_sites": 0,
+      "status": "OPEN",
+      "replacement_gates": [],
+      "note": "Function census preserves its whole body; sites do not count executed loop iterations.",
+      "original_fixture": {
+        "id": "module_report_extended",
+        "expected_exit": 0,
+        "labels": [
+          "module-graph",
+          "string",
+          "typed-output",
+          "ownership"
+        ],
+        "backends": {
+          "vm": "execute",
+          "aot": "execute"
+        },
+        "expected_stdout_hex": "6c6962726172792034302072656164790a666163616465207761726d3a34310a656e747279207265706f72740a726f773a34327c726f773a3433207461696c3a34342034340a"
+      },
+      "static_input_literals": {}
+    }
+  ],
+  "wrapper_delegations": [
+    {
+      "legacy_name": "source_owner_module_error_defer_output_preserves_failure_and_owners",
+      "status": "OPEN",
+      "outer_assertion_sites": 0,
+      "delegation": {
+        "function": "assert_output_initializer_failure",
+        "boolean_argument": "false",
+        "fixture": "module_error_output"
+      },
+      "original_inputs": [
+        "failure_entry",
+        "error_library"
+      ],
+      "required_normal_terminal": "InitFailure.Rejected{code:I64:7}",
+      "responsibility": "Whole original delegated source admission, execution, output, lifecycle and native responsibility. Zero direct assertions do not mean zero obligations.",
+      "target_consumer": "ROOT_CONTRACT_QUALIFIED_PRODUCER_AND_STABLE_LIFECYCLE_OBSERVER_PENDING"
+    },
+    {
+      "legacy_name": "source_owner_module_panic_defer_output_preserves_failure_and_owners",
+      "status": "OPEN",
+      "outer_assertion_sites": 0,
+      "delegation": {
+        "function": "assert_output_initializer_failure",
+        "boolean_argument": "true",
+        "fixture": "module_panic_output"
+      },
+      "original_inputs": [
+        "failure_entry",
+        "panic_library"
+      ],
+      "required_normal_terminal": "CONDITION_FALSE_PANIC",
+      "responsibility": "Whole original delegated source admission, execution, output, lifecycle and native responsibility. Zero direct assertions do not mean zero obligations.",
+      "target_consumer": "ROOT_CONTRACT_QUALIFIED_PRODUCER_AND_STABLE_LIFECYCLE_OBSERVER_PENDING"
+    },
+    {
+      "legacy_name": "source_owner_module_report_has_instance_state_and_ordered_text",
+      "status": "OPEN",
+      "outer_assertion_sites": 0,
+      "delegation": {
+        "function": "assert_module_report",
+        "boolean_argument": "false",
+        "fixture": "module_report"
+      },
+      "original_inputs": [
+        "report_main",
+        "report_library"
+      ],
+      "required_normal_terminal": "VOID_EXACT_OUTPUT_FINAL_COUNT42",
+      "responsibility": "Whole original delegated source admission, execution, output, lifecycle and native responsibility. Zero direct assertions do not mean zero obligations.",
+      "target_consumer": "ROOT_CONTRACT_QUALIFIED_PRODUCER_AND_STABLE_LIFECYCLE_OBSERVER_PENDING"
+    },
+    {
+      "legacy_name": "source_owner_module_report_extension_reuses_shared_state",
+      "status": "OPEN",
+      "outer_assertion_sites": 0,
+      "delegation": {
+        "function": "assert_module_report",
+        "boolean_argument": "true",
+        "fixture": "module_report_extended"
+      },
+      "original_inputs": [
+        "report_extended",
+        "report_library",
+        "report_facade"
+      ],
+      "required_normal_terminal": "VOID_EXACT_OUTPUT_FINAL_COUNT44",
+      "responsibility": "Whole original delegated source admission, execution, output, lifecycle and native responsibility. Zero direct assertions do not mean zero obligations.",
+      "target_consumer": "ROOT_CONTRACT_QUALIFIED_PRODUCER_AND_STABLE_LIFECYCLE_OBSERVER_PENDING"
+    }
+  ],
+  "original_sources": {
+    "failure_entry": {
+      "text": "import \"./library\"\nfn answer() -> i64 { return 42 }\n",
+      "bytes": 52,
+      "lf_sha256": "07d40100aab9dad1b2e1158214d20e1d1bfe89146fca668e7fe0f842a717b02e",
+      "construction": "Complete original snprintf/template literal with only its original panic?assert(ok):throw substitution."
+    },
+    "error_library": {
+      "text": "enum InitFailure { Rejected { code: i64 } }\nclass Cell {\n  value: string\n  constructor(value: string) { this.value = value }\n}\nvar state = Cell(\"ready\")\nfn initialize(ok: bool) -> i64 {\n  var transient = Cell(\"temporary\")\n  defer { print(\"cleanup\", transient.value); print(\"done\", transient.value) }\n  if (!ok) { throw InitFailure.Rejected { code: 7 } }\n  return 1\n}\nprint(\"library\", state.value)\ninitialize(false)\n",
+      "bytes": 415,
+      "lf_sha256": "8e1df179ab32c3f1195890a578c7a3c349eeb9faf8f2f920a6b8d91a5a47247a",
+      "construction": "Complete original snprintf/template literal with only its original panic?assert(ok):throw substitution."
+    },
+    "panic_library": {
+      "text": "enum InitFailure { Rejected { code: i64 } }\nclass Cell {\n  value: string\n  constructor(value: string) { this.value = value }\n}\nvar state = Cell(\"ready\")\nfn initialize(ok: bool) -> i64 {\n  var transient = Cell(\"temporary\")\n  defer { print(\"cleanup\", transient.value); print(\"done\", transient.value) }\n  if (!ok) { assert(ok) }\n  return 1\n}\nprint(\"library\", state.value)\ninitialize(false)\n",
+      "bytes": 387,
+      "lf_sha256": "5ac6f9bcb45c40d38e0e4344f3e42ed222c324a97388fcc94d50ee099a7e1c56",
+      "construction": "Complete original snprintf/template literal with only its original panic?assert(ok):throw substitution."
+    },
+    "report_main": {
+      "path": "tests/fixtures/module-report/main.xr",
+      "text": "import { next, total } from \"./library\"\n\nconst header = \"report\"\nprint(\"entry\", header)\nprint(next(\"alpha\"), next(\"beta\"), total())\nassert(total() == 42)\n",
+      "bytes": 154,
+      "lf_sha256": "4c5d7b1fa93b018d3de000f197a13caced6d1fb7537f5ec058e57d98a87dfc26",
+      "physical_raw_sha256": "d4b47240ef6535442782d72881398b4b3da7859ca6de0944737685af9a12fc50",
+      "original_read_mode": "r",
+      "git_base_equal": true
+    },
+    "report_extended": {
+      "path": "tests/fixtures/module-report/extended.xr",
+      "text": "import { next, total } from \"./library\"\nimport { render } from \"./facade\"\n\nconst header = \"report\"\nprint(\"entry\", header)\nprint(render(2), next(\"tail\"), total())\nassert(total() == 44)\n",
+      "bytes": 184,
+      "lf_sha256": "6f83dbca2b4734e538f1c6832d3e5ef9438889f21c183dc5a828ff56f651a208",
+      "physical_raw_sha256": "27de77cd1c60e3cf1480a2b5325511d30870697a617c943f2a9ddb06efb0ae86",
+      "original_read_mode": "r",
+      "git_base_equal": true
+    },
+    "report_library": {
+      "path": "tests/fixtures/module-report/library.xr",
+      "text": "var count: i64 = 40\nvar label: string = \"ready\"\nprint(\"library\", count, label)\n\nexport fn next(tag: string) -> string {\n    count = count + 1\n    label = tag\n    return \"${label}:${count}\"\n}\n\nexport fn total() -> i64 { return count }\n",
+      "bytes": 234,
+      "lf_sha256": "87c73b917abe81027d067b1e0d0d48e1689fa63c6589b49ef5afabebaa069afa",
+      "physical_raw_sha256": "a27c7a3c0e1227382fa2ca786c4202da4b9f9b5b9198f0c45f27f7d843c24568",
+      "original_read_mode": "r",
+      "git_base_equal": true
+    },
+    "report_facade": {
+      "path": "tests/fixtures/module-report/facade.xr",
+      "text": "import { next } from \"./library\"\n\nconst warmup = next(\"warm\")\nprint(\"facade\", warmup)\n\nexport fn render(limit: i64) -> string {\n    var index = 0\n    var text = \"\"\n    while (index < limit) {\n        if (index != 0) { text = text + \"|\" }\n        text = text + next(\"row\")\n        index = index + 1\n    }\n    return text\n}\n",
+      "bytes": 322,
+      "lf_sha256": "f62c5359bcbd995fdba0051bfd54742441d9c7af41f7aed2a684c0db1dc179e0",
+      "physical_raw_sha256": "798d132d39b4b4a64fbf4951aa654bb8dc526b5c96a03c32de9afa87743ac3fd",
+      "original_read_mode": "r",
+      "git_base_equal": true
+    }
+  },
+  "source_construction": "Complete52Bentry/415Berror/387Bpanic libraries plus original154/184/234/322B physical report sources; exact original substitutions only, noadapters.",
+  "original_private_helpers": [
+    {
+      "path": "tests/unit/program/test_xr_program_source_build.c",
+      "function": "source_build_fixture_init",
+      "line": 894,
+      "end_line": 968,
+      "body_lf_sha256": "964c190cb52940aa039b9459e6a5aa0416430eadac032979ed210358216892eb",
+      "assertion_sites": 0,
+      "classification": "Specified full original delegated/dependency helper or native main, not an extra Source TEST/exhaustive shared closure.",
+      "status": "OPEN",
+      "responsibility": "Actual physical Source graph/session/resolver/moduleidentity/declaration authority and all failed-prefix owner cleanup."
+    },
+    {
+      "path": "tests/unit/program/test_xr_program_source_build.c",
+      "function": "source_build_fixture_free",
+      "line": 873,
+      "end_line": 892,
+      "body_lf_sha256": "54f2ca59ddb46fda789abf0411160790bcb950903858a308b984b50e6f8c1889",
+      "assertion_sites": 0,
+      "classification": "Specified full original delegated/dependency helper or native main, not an extra Source TEST/exhaustive shared closure.",
+      "status": "OPEN",
+      "responsibility": "Restore session; release physical files/path/identity/resolver/session/isolate and zero fixture."
+    },
+    {
+      "path": "tests/unit/program/test_xr_program_source_build.c",
+      "function": "source_build_fixture_add_facade",
+      "line": 970,
+      "end_line": 978,
+      "body_lf_sha256": "0bc3c5b3d03d75193bed76c016f79c7590bc7979c452f0d67b348177e96015cf",
+      "assertion_sites": 0,
+      "classification": "Specified full original delegated/dependency helper or native main, not an extra Source TEST/exhaustive shared closure.",
+      "status": "OPEN",
+      "responsibility": "Write actual facade.xr exactly once within actual graph; reject invalid/duplicate facade."
+    },
+    {
+      "path": "tests/unit/program/test_xr_program_source_build.c",
+      "function": "write_source_file",
+      "line": 857,
+      "end_line": 864,
+      "body_lf_sha256": "cc03580465f59354407c5e6e4e063c40ab9759cf1f45ceb3f099884b0e28014d",
+      "assertion_sites": 0,
+      "classification": "Specified full original delegated/dependency helper or native main, not an extra Source TEST/exhaustive shared closure.",
+      "status": "OPEN",
+      "responsibility": "Complete original bytes and exact successfulclose; no pruned/remapped source."
+    },
+    {
+      "path": "tests/unit/program/test_xr_program_source_build.c",
+      "function": "semantic_fingerprint",
+      "line": 866,
+      "end_line": 871,
+      "body_lf_sha256": "08fbbce02bdf996e8c8fb5b4a0b090f8e0dad413c84d6de2ab2530ec56aa3c0a",
+      "assertion_sites": 0,
+      "classification": "Specified full original delegated/dependency helper or native main, not an extra Source TEST/exhaustive shared closure.",
+      "status": "OPEN",
+      "responsibility": "Full actual semantic fingerprint separate from provider/target IDs."
+    },
+    {
+      "path": "tests/unit/program/test_xr_program_source_build.c",
+      "function": "assert_source_build_ok",
+      "line": 996,
+      "end_line": 1010,
+      "body_lf_sha256": "a5d0aee0a406f887ea79355380455511ee0762cfa39915fb657cfe8a4088fd94",
+      "assertion_sites": 1,
+      "classification": "Specified full original delegated/dependency helper or native main, not an extra Source TEST/exhaustive shared closure.",
+      "status": "OPEN",
+      "responsibility": "Require positive SourceOK and retain actual diagnostic; error/panic runtime expected does not allow Source refusal."
+    },
+    {
+      "path": "tests/unit/program/test_xr_program_source_build.c",
+      "function": "source_fixture_output_path",
+      "line": 63,
+      "end_line": 65,
+      "body_lf_sha256": "2c5d63f47f4b0e77e5abec0b6831c67cec2056ad89196c34fbd8e0cbd6ec1d9d",
+      "assertion_sites": 0,
+      "classification": "Specified full original delegated/dependency helper or native main, not an extra Source TEST/exhaustive shared closure.",
+      "status": "OPEN",
+      "responsibility": "Exact selected registered module_error_output/module_panic_output/module_report/module_report_extended output."
+    },
+    {
+      "path": "tests/unit/program/test_xr_program_source_build.c",
+      "function": "stable_id_equal",
+      "line": 357,
+      "end_line": 359,
+      "body_lf_sha256": "b7944eaf320e1112ae477f8c2d4d3513ce35bce7c8c98f0fb4a2b4b227d7f621",
+      "assertion_sites": 0,
+      "classification": "Specified full original delegated/dependency helper or native main, not an extra Source TEST/exhaustive shared closure.",
+      "status": "OPEN",
+      "responsibility": "Match every full stable ID byte, not spelling/arrayordinal."
+    },
+    {
+      "path": "tests/unit/program/test_xr_program_source_build.c",
+      "function": "find_profile_provider",
+      "line": 749,
+      "end_line": 757,
+      "body_lf_sha256": "e406782a95e05ce78f909f815229bd5d4ad14c2e96001c17f2e17aad178ee048",
+      "assertion_sites": 0,
+      "classification": "Specified full original delegated/dependency helper or native main, not an extra Source TEST/exhaustive shared closure.",
+      "status": "OPEN",
+      "responsibility": "Find actual stable provider contract in real hosted target profile orNULL."
+    },
+    {
+      "path": "tests/unit/program/test_xr_program_source_build.c",
+      "function": "text_output_capture_write",
+      "line": 5148,
+      "end_line": 5159,
+      "body_lf_sha256": "74dc64d282954c6864464e54bd811e22424e6909b1f5fb28313c0f8078775c1d",
+      "assertion_sites": 0,
+      "classification": "Specified full original delegated/dependency helper or native main, not an extra Source TEST/exhaustive shared closure.",
+      "status": "OPEN",
+      "responsibility": "Bound256B/NULL-context/output guards; increment attemptedcalls before fail_at rejection, copy accepted bytes only; provider refusal distinct from language failure."
+    },
+    {
+      "path": "tests/unit/program/test_xr_program_source_build.c",
+      "function": "record_source_class_lifecycle",
+      "line": 383,
+      "end_line": 392,
+      "body_lf_sha256": "73c7e2986c3d6fe46d074f4ce8a8657ca02af719d7fac220fa6a676c76e05a13",
+      "assertion_sites": 0,
+      "classification": "Specified full original delegated/dependency helper or native main, not an extra Source TEST/exhaustive shared closure.",
+      "status": "OPEN",
+      "responsibility": "Copy each real event to bounded128 log, overflow flag, no allocation; actual identity observer must outlive every owner."
+    },
+    {
+      "path": "tests/unit/program/test_xr_program_source_build.c",
+      "function": "source_class_lifecycle_count",
+      "line": 394,
+      "end_line": 400,
+      "body_lf_sha256": "3c954edab471ac5272d011b6778ac9eb543dd49c5afeb984648da1f0d0c30531",
+      "assertion_sites": 0,
+      "classification": "Specified full original delegated/dependency helper or native main, not an extra Source TEST/exhaustive shared closure.",
+      "status": "OPEN",
+      "responsibility": "Filter actual event kind AND actual object identity; exactly-once finalize/reclaim, no aggregate substitute."
+    },
+    {
+      "path": "tests/unit/program/test_xr_program_source_build.c",
+      "function": "assert_module_report",
+      "line": 5171,
+      "end_line": 5267,
+      "body_lf_sha256": "015551ed0fe8290d54808488fa1ecb022d56553ee96d76b12bd58173066a1b58",
+      "assertion_sites": 23,
+      "classification": "Specified full original delegated/dependency helper or native main, not an extra Source TEST/exhaustive shared closure.",
+      "status": "OPEN",
+      "responsibility": "Twenty-three sites: full external2/3module Source/initializerentry, actual output binding, two originalInstances each3VOID executions, exact3/4calls/orderedbytes, initializersticky/laterstate unchanged; drain/release and real generatednative."
+    },
+    {
+      "path": "tests/unit/program/test_xr_program_source_build.c",
+      "function": "assert_aot_fixture_backend_contract",
+      "line": 566,
+      "end_line": 610,
+      "body_lf_sha256": "583f92b771718b8e1d4293debcb72cf92e266292abc3ffa17db8103db6b066be",
+      "assertion_sites": 14,
+      "classification": "Specified full original delegated/dependency helper or native main, not an extra Source TEST/exhaustive shared closure.",
+      "status": "OPEN",
+      "responsibility": "Fourteen positive sites: verified deterministic complete C withmain, exact outputwrite/free; report fixtures are aotexecute, shared unsupported branch unselected."
+    },
+    {
+      "path": "tests/unit/program/test_xr_program_source_build.c",
+      "function": "assert_aot_rejects_inactive_operation",
+      "line": 547,
+      "end_line": 564,
+      "body_lf_sha256": "348393794cdd911640b5ba647a3658dbfce1100af9b0d36cd337cd33839bd5a1",
+      "assertion_sites": 7,
+      "classification": "Specified full original delegated/dependency helper or native main, not an extra Source TEST/exhaustive shared closure.",
+      "status": "OPEN",
+      "responsibility": "Seven unselected shared negative sites retained for other fixtures; cannot turn these report positives into legal negatives."
+    },
+    {
+      "path": "tests/unit/program/test_xr_program_source_build.c",
+      "function": "program_instruction_matches",
+      "line": 402,
+      "end_line": 413,
+      "body_lf_sha256": "529239843e025bc3237ed30c94480b8e7ac5b8317f2f58b55d444b951f532f1d",
+      "assertion_sites": 0,
+      "classification": "Specified full original delegated/dependency helper or native main, not an extra Source TEST/exhaustive shared closure.",
+      "status": "OPEN",
+      "responsibility": "Full diagnostic location/opcode bounds helper for unselected inactive-AOT branch only."
+    },
+    {
+      "path": "tests/unit/program/xr_program_output_cleanup_checks.inc.c",
+      "function": "assert_output_class_cleanup",
+      "line": 11,
+      "end_line": 35,
+      "body_lf_sha256": "c722ed044337cbf2990c7ac1faea23eced542194fe14738a13070e0ccb83daac",
+      "assertion_sites": 9,
+      "classification": "Specified full original delegated/dependency helper or native main, not an extra Source TEST/exhaustive shared closure.",
+      "status": "OPEN",
+      "responsibility": "Nine sites require nooverflow, actual1/2constructed IDs, reversefinalization and each actual identity finalize1/reclaim1."
+    },
+    {
+      "path": "tests/unit/program/xr_program_output_cleanup_checks.inc.c",
+      "function": "assert_output_initializer_vm",
+      "line": 37,
+      "end_line": 121,
+      "body_lf_sha256": "952bb0300bb00ce3ed56840bf025a96a5c20a2ad7f541e69a4c79cc45868f3dc",
+      "assertion_sites": 21,
+      "classification": "Specified full original delegated/dependency helper or native main, not an extra Source TEST/exhaustive shared closure.",
+      "status": "OPEN",
+      "responsibility": "Twenty-one sites: fouroutput modes\u00d7twoInstances\u00d7threeexecutions, exact languageERROR/code7 orPANIC vs hostTRAP/refusal; complete accepted bytes/attemptcounts, sticky lifecycleeventcount, dispose each outcome, fullclassidentity cleanup and noevent afterdrain/free."
+    },
+    {
+      "path": "tests/unit/program/xr_program_output_cleanup_checks.inc.c",
+      "function": "assert_output_initializer_native",
+      "line": 123,
+      "end_line": 178,
+      "body_lf_sha256": "465ee421393d8f834615f8df5d150472709a4cd71abfe6a1f65be462680b6997",
+      "assertion_sites": 16,
+      "classification": "Specified full original delegated/dependency helper or native main, not an extra Source TEST/exhaustive shared closure.",
+      "status": "OPEN",
+      "responsibility": "Sixteen sites: full verified equalC, real whole rb harness, scopedallocator+main renaming, actual InitFailure type lookup/nonVOID and kind-specific compile macros, exact writes/close/allownerfree."
+    },
+    {
+      "path": "tests/unit/program/xr_program_output_cleanup_checks.inc.c",
+      "function": "assert_output_initializer_failure",
+      "line": 180,
+      "end_line": 218,
+      "body_lf_sha256": "a2c18cd393c24e1f02603616642f1cac83f10bb6a780db61fb9b43c2ed6059f7",
+      "assertion_sites": 6,
+      "classification": "Specified full original delegated/dependency helper or native main, not an extra Source TEST/exhaustive shared closure.",
+      "status": "OPEN",
+      "responsibility": "Six sites: expand complete original415Berror/387Bpaniclibrary in1024capacity with real classCell state/transient/defer, complete52Bentry, SourceOK/module2; execute actual VM/native and allowners cleanup."
+    },
+    {
+      "path": "tests/unit/aot/xr_program_output_trap_native_harness.c",
+      "function": "output_trap_malloc",
+      "line": 15,
+      "end_line": 25,
+      "body_lf_sha256": "3fbaae06e94bff68a4c7b96359a188ecf4c5f70d5042bf46b96633d390e68bc6",
+      "assertion_sites": 0,
+      "classification": "Specified full original delegated/dependency helper or native main, not an extra Source TEST/exhaustive shared closure.",
+      "status": "OPEN",
+      "responsibility": "Attempt counting, fail exactly chosen actualallocationpoint/enteredflag; abort unexpected realallocatorfailure; eachsuccessfulallocation incrementsphysicallive."
+    },
+    {
+      "path": "tests/unit/aot/xr_program_output_trap_native_harness.c",
+      "function": "output_trap_free",
+      "line": 27,
+      "end_line": 34,
+      "body_lf_sha256": "d38f77d696e03f62378437029c0a980d3323cf86ee52c7d2c4376d814f40614a",
+      "assertion_sites": 0,
+      "classification": "Specified full original delegated/dependency helper or native main, not an extra Source TEST/exhaustive shared closure.",
+      "status": "OPEN",
+      "responsibility": "IgnoreNULL, rejectliveunderflow, decrement eachphysicalallocation before actualfree."
+    },
+    {
+      "path": "tests/unit/aot/xr_program_output_trap_native_harness.c",
+      "function": "output_trap_write",
+      "line": 44,
+      "end_line": 55,
+      "body_lf_sha256": "17ba0047197861956220831dbf29b7776ab224463756d0505bb98e00de37218c",
+      "assertion_sites": 0,
+      "classification": "Specified full original delegated/dependency helper or native main, not an extra Source TEST/exhaustive shared closure.",
+      "status": "OPEN",
+      "responsibility": "Bound128B and typed req0/op0/nonnull guards, attemptedcalls before fail_at, append only accepted bytes."
+    },
+    {
+      "path": "tests/unit/aot/xr_program_output_trap_native_harness.c",
+      "function": "output_trap_lifecycle",
+      "line": 57,
+      "end_line": 76,
+      "body_lf_sha256": "6461b843ece6fae92db7c44a8f0552514156e39d311c2165a46d5a8faae9b9cd",
+      "assertion_sites": 0,
+      "classification": "Specified full original delegated/dependency helper or native main, not an extra Source TEST/exhaustive shared closure.",
+      "status": "OPEN",
+      "responsibility": "Record two actual IDs onconstruct; actualidentity/reverse-order finalize+reclaim and invalidflags, no eventkindnumeric aliases restored in currentobserver."
+    },
+    {
+      "path": "tests/unit/aot/xr_program_output_trap_native_harness.c",
+      "function": "output_trap_run",
+      "line": 78,
+      "end_line": 138,
+      "body_lf_sha256": "ed123f13fb0d4a97149b7f97c6baa9e7573dbd7bd7148ba27194375836ddc33b",
+      "assertion_sites": 0,
+      "classification": "Specified full original delegated/dependency helper or native main, not an extra Source TEST/exhaustive shared closure.",
+      "status": "OPEN",
+      "responsibility": "Full context/modules+observer+allocator ownership,24stickyinitializerobservations, originalprivateOOMkind4/refusalkind1trap7/languageERRORkind2nominaltag0code7/stableborrowederrorpointer/PANICkind3code1; then context/modulesdestroy/live0/actualclassidentitycleanup and exactprefix/counts."
+    },
+    {
+      "path": "tests/unit/aot/xr_program_output_trap_native_harness.c",
+      "function": "main",
+      "line": 140,
+      "end_line": 161,
+      "body_lf_sha256": "34134f7070e86ec6277af02e7a9be26cee958a14064c7421aa533ba8bdc285ec",
+      "assertion_sites": 0,
+      "classification": "Specified full original delegated/dependency helper or native main, not an extra Source TEST/exhaustive shared closure.",
+      "status": "OPEN",
+      "responsibility": "Whole native0 protocol: fouroutputmodes, two normalruns each, actualnormalallocationcensus in1..128 original bound, EVERY allocation1..census injected and entered; retainfaildiagnostics, no sampling or failurePASSmask."
+    }
+  ],
+  "specified_helper_assertion_sites": 97,
+  "unselected_inactive_helper_sites": 7,
+  "helper_policy": "FourSourceTEST wrappers0sites delegate full26specified helper/native functions97sites, including7unselected shared inactive-AOT sites. These count full bodies, not loop executions or exhaustive dependency/deletionclosure.",
+  "independent_output_failure_rows": [
+    {
+      "fail_at": 0,
+      "output_calls": 3,
+      "stdout_hex": "6c6962726172792072656164790a636c65616e75702074656d706f726172790a646f6e652074656d706f726172790a",
+      "class_identities": 2,
+      "terminal": "ORIGINAL_LANGUAGE_ERROR_OR_ASSERTION_PANIC"
+    },
+    {
+      "fail_at": 1,
+      "output_calls": 1,
+      "stdout_hex": "",
+      "class_identities": 1,
+      "terminal": "HOST_ERROR"
+    },
+    {
+      "fail_at": 2,
+      "output_calls": 3,
+      "stdout_hex": "6c6962726172792072656164790a646f6e652074656d706f726172790a",
+      "class_identities": 2,
+      "terminal": "HOST_ERROR"
+    },
+    {
+      "fail_at": 3,
+      "output_calls": 3,
+      "stdout_hex": "6c6962726172792072656164790a636c65616e75702074656d706f726172790a",
+      "class_identities": 2,
+      "terminal": "HOST_ERROR"
+    }
+  ],
+  "independent_report_rows": [
+    {
+      "source": "report_main",
+      "expected_stdout_hex": "6c6962726172792034302072656164790a656e747279207265706f72740a616c7068613a343120626574613a34322034320a",
+      "output_calls": 3,
+      "module_count": 2,
+      "final_count": 42,
+      "VM_Instances": 2,
+      "repeats_per_Instance": 3,
+      "return": "VOID",
+      "standalone_exit": 0
+    },
+    {
+      "source": "report_extended",
+      "expected_stdout_hex": "6c6962726172792034302072656164790a666163616465207761726d3a34310a656e747279207265706f72740a726f773a34327c726f773a3433207461696c3a34342034340a",
+      "output_calls": 4,
+      "module_count": 3,
+      "final_count": 44,
+      "VM_Instances": 2,
+      "repeats_per_Instance": 3,
+      "return": "VOID",
+      "standalone_exit": 0
+    }
+  ],
+  "output_failure_ownership": {
+    "module_count": 2,
+    "original_VM_Instances_per_refusal": 2,
+    "VM_refusal_modes": 4,
+    "VM_repeats_per_Instance": 3,
+    "failed_initializer_sticky": true,
+    "post_drain_lifecycle_unchanged": true,
+    "language_error": "InitFailure.Rejected{code:I64:7}",
+    "panic": "CONDITION_FALSE",
+    "original_VM_provider_refusal": "TRAP_PROVIDER_CALL_FAILED",
+    "target_provider_refusal": "HOST_ERROR",
+    "ordered_class_finalization": "REVERSE_ACTUAL_CONSTRUCTED_IDENTITIES",
+    "each_class_finalize_reclaim": [
+      1,
+      1
+    ]
+  },
+  "native_harness": {
+    "path": "tests/unit/aot/xr_program_output_trap_native_harness.c",
+    "whole_file_lf_sha256": "1d27133b6e64245f6740670b6ce9f6e66cdbb19999172b9c0294d122e0ba6e58",
+    "physical_raw_sha256": "f2c66e02d4ef8087204fc0bceaed30526b9a121d98d418adfab33a32cd934f94",
+    "text": "/*\n * xray - Lightweight typed scripting with native concurrency\n * https://www.xray-lang.org\n *\n * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>\n * Licensed under the MIT License\n *\n * xr_program_output_trap_native_harness.c - Native output refusal and allocation failure checks\n */\n\n/* This file is appended to actual generated C by the source fixture producer. */\nstatic size_t output_alloc_attempt, output_alloc_fail_at, output_alloc_live;\nstatic int output_alloc_failed;\n\nstatic void *output_trap_malloc(size_t size) {\n    if (++output_alloc_attempt == output_alloc_fail_at) {\n        output_alloc_failed = 1;\n        return NULL;\n    }\n    void *pointer = malloc(size);\n    if (!pointer)\n        abort();\n    ++output_alloc_live;\n    return pointer;\n}\n\nstatic void output_trap_free(void *pointer) {\n    if (!pointer)\n        return;\n    if (output_alloc_live == 0u)\n        abort();\n    --output_alloc_live;\n    free(pointer);\n}\n\ntypedef struct OutputTrapTrace {\n    uint32_t calls, fail_at, constructed, finalized, reclaimed;\n    uint64_t identities[2];\n    size_t size;\n    char bytes[128];\n    int invalid;\n} OutputTrapTrace;\n\nstatic int output_trap_write(void *opaque, uint32_t requirement, uint32_t operation,\n                             const uint8_t *bytes, size_t size) {\n    OutputTrapTrace *trace = opaque;\n    if (!trace || requirement != 0u || operation != 0u || !bytes ||\n        size > sizeof(trace->bytes) - trace->size)\n        return 1;\n    if (++trace->calls == trace->fail_at)\n        return 1;\n    memcpy(trace->bytes + trace->size, bytes, size);\n    trace->size += size;\n    return 0;\n}\n\nstatic void output_trap_lifecycle(void *opaque, const XrAotLifecycleEvent *event) {\n    OutputTrapTrace *trace = opaque;\n    if (event->kind == 1u) {\n        if (trace->constructed >= 2u) {\n            trace->invalid = 1;\n            return;\n        }\n        trace->identities[trace->constructed++] = event->identity;\n    } else if (event->kind == 8u) {\n        if (trace->finalized >= trace->constructed ||\n            event->identity != trace->identities[trace->constructed - 1u - trace->finalized])\n            trace->invalid = 1;\n        ++trace->finalized;\n    } else if (event->kind == 9u) {\n        if (trace->reclaimed >= trace->constructed ||\n            event->identity != trace->identities[trace->constructed - 1u - trace->reclaimed])\n            trace->invalid = 1;\n        ++trace->reclaimed;\n    }\n}\n\nstatic int output_trap_run(uint32_t fail, size_t fail_allocation) {\n    output_alloc_attempt = 0u;\n    output_alloc_fail_at = fail_allocation;\n    output_alloc_failed = 0;\n    OutputTrapTrace trace = {0};\n    trace.fail_at = fail;\n    XrAotContext context = {0};\n    XrAotModules modules = {0};\n    modules.storage.modules = &modules;\n    context.modules = &modules;\n    context.provider_context = &trace;\n    context.provider_output_write = output_trap_write;\n    context.lifecycle_context = &trace;\n    context.lifecycle_event = output_trap_lifecycle;\n    modules.storage.lifecycle_context = &trace;\n    modules.storage.lifecycle_event = output_trap_lifecycle;\n    const void *error = NULL;\n    for (uint32_t repeat = 0u; repeat < 24u; ++repeat) {\n        XrAotOutcome result = xr_aot_initialize_modules(&context);\n        /* Private initialization preserves OOM; only the public host projects trap4. */\n        uint32_t kind = output_alloc_failed ? 4u : fail ? 1u : XR_OUTPUT_PANIC ? 3u : 2u;\n        uint32_t trap = !output_alloc_failed && fail ? 7u : 0u;\n        if (result.kind != kind || result.trap != trap)\n            return 1;\n        if (result.panic_present != (kind == 3u ? 1u : 0u) ||\n            (kind == 3u && result.panic_info.code != 1u))\n            return 7;\n#if !XR_OUTPUT_PANIC\n        if (kind == 2u) {\n            if (result.error_type_id != XR_OUTPUT_ERROR_ID || !result.error_value)\n                return 8;\n            if (repeat == 0u)\n                error = result.error_value;\n            const XR_OUTPUT_ERROR_TYPE *cause = result.error_value;\n            if (error != result.error_value || cause->tag != 0u || cause->payload.case_0.f0 != 7)\n                return 9;\n        }\n#else\n        (void)error;\n#endif\n        if (!output_alloc_failed && trace.calls != (fail == 1u ? 1u : 3u))\n            return 2;\n    }\n    xr_aot_context_destroy(&context);\n    xr_aot_modules_destroy(&modules);\n    if (output_alloc_live != 0u || trace.invalid || trace.finalized != trace.constructed ||\n        trace.reclaimed != trace.constructed)\n        return 3;\n    if (output_alloc_failed)\n        return 0;\n    const char *expected = fail == 1u   ? \"\"\n                           : fail == 2u ? \"library ready\\ndone temporary\\n\"\n                           : fail == 3u ? \"library ready\\ncleanup temporary\\n\"\n                                        : \"library ready\\ncleanup temporary\\ndone temporary\\n\";\n    uint32_t count = fail == 1u ? 1u : 2u;\n    if (trace.invalid || trace.constructed != count || trace.finalized != count ||\n        trace.reclaimed != count || trace.size != strlen(expected) ||\n        memcmp(trace.bytes, expected, trace.size) != 0)\n        return 3;\n    return 0;\n}\n\nint main(void) {\n    for (uint32_t fail = 0u; fail < 4u; ++fail) {\n        for (uint32_t separate = 0u; separate < 2u; ++separate) {\n            if (output_trap_run(fail, 0u) != 0)\n                return 4;\n        }\n        size_t allocations = output_alloc_attempt;\n        if (allocations == 0u || allocations > 128u)\n            return 5;\n        fprintf(stderr, \"Native output allocation failures: refusal=%u points=%zu\\n\", fail,\n                allocations);\n        for (size_t allocation = 1u; allocation <= allocations; ++allocation) {\n            int result = output_trap_run(fail, allocation);\n            if (result != 0 || !output_alloc_failed) {\n                fprintf(stderr, \"output failure=%u allocation=%zu result=%d live=%zu\\n\", fail,\n                        allocation, result, output_alloc_live);\n                return 6;\n            }\n        }\n    }\n    return 0;\n}\n",
+    "original_read_mode": "rb",
+    "repeats_per_run": 24,
+    "refusal_modes": 4,
+    "normal_runs_per_mode": 2,
+    "same_error_pointer": "Borrowed module error pointer stable during original same-owner observations, not target escape ownership.",
+    "original_private_OOM_kind": 4,
+    "original_host_trap_projection": 4,
+    "original_refusal_kind": 1,
+    "original_refusal_trap": 7,
+    "original_language_error_kind": 2,
+    "original_panic_kind": 3,
+    "original_panic_code": 1,
+    "OOM": "Measure actual normal allocations per refusal, require1..128 original bound, run every point1..allocations and require injection entered/observed; no sampling.",
+    "release": "Actual output_alloc_live0 after context/modules destroy plus matching stable constructed/finalized/reclaimed identities/reverse order.",
+    "standalone_exit": 0,
+    "target_FI": "Fresh full compiler/runtime actual census and all resource axes; old128 cannot replace current full census.",
+    "product_execution": "NOT_RUN"
+  },
+  "helper_groups": [
+    {
+      "functions": [
+        "assert_output_initializer_failure",
+        "assert_output_initializer_vm",
+        "assert_output_class_cleanup",
+        "assert_output_initializer_native"
+      ],
+      "assertion_sites": 52,
+      "status": "OPEN",
+      "responsibility": "CompleteSource/4refusalmodes\u00d72Instances\u00d73repeats/realnative24repeats/fullactualnativeFI/individualclassidentities"
+    },
+    {
+      "functions": [
+        "assert_module_report",
+        "assert_aot_fixture_backend_contract",
+        "assert_aot_rejects_inactive_operation",
+        "assert_source_build_ok"
+      ],
+      "assertion_sites": 45,
+      "unselected_inactive_sites": 7,
+      "status": "OPEN",
+      "responsibility": "CompleteSourcegraph/2Instances\u00d73stickyVOIDrepeats/fullorderedstdout/actualnative; commonSourceOKhelperalsoappliesfailure"
+    }
+  ],
+  "representation_boundaries": [
+    "NameduserclassCell is original source; canonical builtinCell<T> module state must be implemented under frozenRootowner semantics without source rewrite/name aliases.",
+    "Original backendopcode/modulecounts/typedoutputtrampoline/enumtypeID/layout/eventkind1,8,9/privateOOM/nativeoutcomekinds require currentcommon/nativeverification mapping, noBackendIR/oldABI restore.",
+    "Original same-owner borrowederrorpointer identity is stickyobservation, not independent escaped/copiedtypederror ownership proof.",
+    "Nativeharness is full original dependency although not another added SourceTEST/censusdenominator; keep physical rb bytes and generatedmalloc/free ownership checks.",
+    "Existing source_module_output_failure_obligations.json describes independent numbereddiamond1..4 and oldmain58sites; it cannot replace these original class/code7/defer/report goldens."
+  ],
+  "target_contract_or_representation_review": [
+    "Admit every full original input and module-initializer/answer public selection; arbitrary Source refusals remainFAIL.",
+    "Do not count four zero-ASSERT wrappers as zero responsibility; retain full delegated helpers/native harness/FI and exact registered stdout.",
+    "Frozen oneactualCell<T>/logicalT module mutable state, common fullreverification/declaration provenance, no Cell source rewriting or facade copies.",
+    "Preserve provider refusal as HOST_ERROR separate from nominal language code7/assertion conditionfalse panic; never overwrite pending owner/failure.",
+    "Retain complete deferred second output after first fails and exact accepted-byte prefix, sticky repeat/no new event across drain.",
+    "Actual stable per-class construct/finalize/reclaim identities and reverse cleanup; no counters/endpoints/addresses/physical0/CallEntry.release substitutions.",
+    "Independent actual VM/realnative/mixed two detached Instances after allproductionownerdeath, packet/typed Library roots and output-context lifetime.",
+    "Copied/escaped nominal error/PanicInfo/ownedmessage and class/string references through Instance/finalowner death; original borrowederrorpointer is not escape evidence.",
+    "Full actual compiler/runtimeFI/allresourceaxes/safety plus Rootformalacceptance/sharedowner7/lastconsumerreview remainOPEN."
+  ],
+  "target_lifecycle_proof": "Bind actual stable class/object identities for library stateCell and transientCell, theirstringfields and module mutableowners. Preserve1class onlibrary-output refusal and2otherwise, reverse actualfinalization/exactlyoncefinalize+reclaim, stickyterminal/no newevents afterdrain. Prove escaped/copiederror/PanicInfo/ownedmessage validity afterproduction/Instance death and finalownerrelease. Counters/addresses/physical0/CallEntry.release/slotlifecycle alone do not substitute.",
+  "shared_dependency": {
+    "path": "tests/unit/aot/xr_backend_emission_owner.h",
+    "consumer_count": 7,
+    "status": "PRESERVE_SHARED_OWNER"
+  },
+  "handoff": {
+    "report": "build-consumer-evidence/consumer-session-20261009-r1/module-output-report-interface-request.json",
+    "raw_sha256": "954954216669a8e38d411cca2421dcadb3a8846a4bdeec1294f3a49f51f7440e",
+    "related_observer_request": "build-consumer-evidence/consumer-session-20261009-r1/class-lifecycle-interface-request.json",
+    "Root_thread": "01a11f74-a297-7b11-8441-835bde6a3d5f",
+    "formal_acceptance": "PENDING"
+  },
+  "full_FI": "NOT_RUN",
+  "axes": "NOT_RUN",
+  "full_safety": "NOT_RUN",
+  "SourceDelete": "NOT_RUN",
+  "Main": "NOT_RUN",
+  "boundaries": [
+    "All4wholewrappers/97specifiedhelpersites plus native full guards/FI remainOPEN, retired0.",
+    "RequiredSourceOK and actualnominalerror7/assertionpanic/providerHOST_ERROR/acceptedoutputtrace are separate obligations.",
+    "Actual originalnativeFI1..measuredallocations is preserved as responsibility, not executed here or currentfullFI evidence; no capped/sampled target census.",
+    "Two originalreportInstances/3repeats do not establish currentdetachedtwoInstances afterproducerdeath or typedpacketLibrary roots.",
+    "No actual product/native/provider/output/allocator/lifecycle event observed; no qualification/retirement/productionrelease/deletionpermission."
+  ]
+}
