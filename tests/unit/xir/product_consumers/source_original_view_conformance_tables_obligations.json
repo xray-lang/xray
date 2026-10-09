@@ -1,0 +1,410 @@
+{
+  "schema": 1,
+  "family": "original_immutable_view_roots_and_callable_conformance_tables",
+  "legacy_base_commit": "01e6d38401b0f5c8684b64c35a99ac651024c0c1",
+  "status": "OPEN",
+  "retired": 0,
+  "replacement_gates": [],
+  "result": "STATIC_FULL_ORIGINAL_BORROW_ROOT_AND_CONFORMANCE_TABLE_MAP_ONLY",
+  "product_execution": "NOT_RUN_BY_THIS_MAP",
+  "producer": "25f4016d6f089169757a90ae11ba537002374711",
+  "identity": "Checked25/semantic67/Value22/Call28/Program29",
+  "legacy": [
+    {
+      "name": "test_immutable_view_root_tables",
+      "legacy_path": "tests/unit/program/test_xr_program_verify.c",
+      "legacy_line": 4922,
+      "body_lf_sha256": "df9ecdb2a4e5ee68e069aa9c01d408cba95c26ae4d80c7838646b5ee2985a86d",
+      "assertion_sites": 3,
+      "loop_sites": 0,
+      "status": "OPEN",
+      "replacement_gates": [],
+      "note": "Function census preserves its whole body; sites do not count executed loop iterations."
+    },
+    {
+      "name": "test_callable_interface_conformance_tables",
+      "legacy_path": "tests/unit/program/test_xr_program_verify.c",
+      "legacy_line": 5341,
+      "body_lf_sha256": "39a5d3185fee56409e43d539dd39c2259d5dc0accd303cdf2e038cd503425f11",
+      "assertion_sites": 7,
+      "loop_sites": 0,
+      "status": "OPEN",
+      "replacement_gates": [],
+      "note": "Function census preserves its whole body; sites do not count executed loop iterations."
+    }
+  ],
+  "responsibility_mapping": [
+    {
+      "path": "tests/unit/program/test_xr_program_verify.c",
+      "function": "test_immutable_view_root_tables",
+      "line": 4922,
+      "end_line": 4937,
+      "body_lf_sha256": "df9ecdb2a4e5ee68e069aa9c01d408cba95c26ae4d80c7838646b5ee2985a86d",
+      "CHECK_sites": 3,
+      "CHECK_bindings": [
+        {
+          "line": 4925,
+          "expression": "first.size != 0u && first.size == reordered.size",
+          "status": "OPEN"
+        },
+        {
+          "line": 4926,
+          "expression": "first.size != 0u && memcmp(first.bytes, reordered.bytes, first.size) == 0",
+          "status": "OPEN"
+        },
+        {
+          "line": 4927,
+          "expression": "xr_program_id_equal(first.id, reordered.id)",
+          "status": "OPEN"
+        }
+      ],
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/program/test_xr_program_verify.c",
+      "function": "test_callable_interface_conformance_tables",
+      "line": 5341,
+      "end_line": 5364,
+      "body_lf_sha256": "39a5d3185fee56409e43d539dd39c2259d5dc0accd303cdf2e038cd503425f11",
+      "CHECK_sites": 7,
+      "CHECK_bindings": [
+        {
+          "line": 5345,
+          "expression": "build_program_table_artifact(false, false, false, &first) == XR_PROGRAM_BUILD_OK",
+          "status": "OPEN"
+        },
+        {
+          "line": 5346,
+          "expression": "build_program_table_artifact(true, false, false, &reordered) == XR_PROGRAM_BUILD_OK",
+          "status": "OPEN"
+        },
+        {
+          "line": 5347,
+          "expression": "first.size != 0u && first.size == reordered.size",
+          "status": "OPEN"
+        },
+        {
+          "line": 5348,
+          "expression": "first.size != 0u && memcmp(first.bytes, reordered.bytes, first.size) == 0",
+          "status": "OPEN"
+        },
+        {
+          "line": 5349,
+          "expression": "xr_program_id_equal(first.id, reordered.id)",
+          "status": "OPEN"
+        },
+        {
+          "line": 5352,
+          "expression": "build_program_table_artifact(false, true, false, &invalid) ==\n          XR_PROGRAM_BUILD_INVALID_INPUT",
+          "status": "OPEN"
+        },
+        {
+          "line": 5355,
+          "expression": "slot_offset != SIZE_MAX && first.bytes[slot_offset] <= 1u",
+          "status": "OPEN"
+        }
+      ],
+      "status": "OPEN"
+    }
+  ],
+  "outer_CHECK_sites": 10,
+  "original_private_helpers": [
+    {
+      "path": "tests/unit/program/test_xr_program_verify.c",
+      "function": "key",
+      "line": 109,
+      "end_line": 111,
+      "body_lf_sha256": "027a211b78e0cfbd6b296804e37236848a76cc1980981a0d6a49a6f42d3f2e13",
+      "CHECK_sites": 0,
+      "CHECK_bindings": [],
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/program/test_xr_program_verify.c",
+      "function": "write_typed_modules",
+      "line": 113,
+      "end_line": 138,
+      "body_lf_sha256": "c568d48005100fc2633344ba569a2bc8de9b62e3aac794b35057c8d838b8db65",
+      "CHECK_sites": 0,
+      "CHECK_bindings": [],
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/program/test_xr_program_verify.c",
+      "function": "validate_ok",
+      "line": 159,
+      "end_line": 174,
+      "body_lf_sha256": "94fe0ef4e0242acb810c12621ae1fe73a9887ef668f15ddc6c67ed645494f62b",
+      "CHECK_sites": 2,
+      "CHECK_bindings": [
+        {
+          "line": 171,
+          "expression": "status == XR_PROGRAM_VERIFY_OK",
+          "status": "OPEN"
+        },
+        {
+          "line": 172,
+          "expression": "program != NULL",
+          "status": "OPEN"
+        }
+      ],
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/program/test_xr_program_verify.c",
+      "function": "expect_semantic_reject_at",
+      "line": 176,
+      "end_line": 198,
+      "body_lf_sha256": "44cf0fb15bea156743a1c0e35b0be8ee844aa1af55c8653ed9361cf781c045b8",
+      "CHECK_sites": 6,
+      "CHECK_bindings": [
+        {
+          "line": 190,
+          "expression": "first_status == XR_PROGRAM_VERIFY_SEMANTIC_REJECTED",
+          "status": "OPEN"
+        },
+        {
+          "line": 191,
+          "expression": "program == NULL",
+          "status": "OPEN"
+        },
+        {
+          "line": 192,
+          "expression": "first.kind == expected",
+          "status": "OPEN"
+        },
+        {
+          "line": 195,
+          "expression": "second_status == first_status",
+          "status": "OPEN"
+        },
+        {
+          "line": 196,
+          "expression": "memcmp(&first, &second, sizeof(first)) == 0",
+          "status": "OPEN"
+        },
+        {
+          "line": 197,
+          "expression": "program == NULL",
+          "status": "OPEN"
+        }
+      ],
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/program/test_xr_program_verify.c",
+      "function": "test_take_uvar",
+      "line": 203,
+      "end_line": 215,
+      "body_lf_sha256": "835eb97aa0c77560506ba0e421652602ae095f5e6686cce9ef331fc80a34ef4d",
+      "CHECK_sites": 1,
+      "CHECK_bindings": [
+        {
+          "line": 213,
+          "expression": "false",
+          "status": "OPEN"
+        }
+      ],
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/program/test_xr_program_verify.c",
+      "function": "build_view_root_artifact",
+      "line": 4756,
+      "end_line": 4920,
+      "body_lf_sha256": "886a0ce728057333d0354ba10939fc809e1787a32d3847f0e38b57619ccb7d09",
+      "CHECK_sites": 1,
+      "CHECK_bindings": [
+        {
+          "line": 4918,
+          "expression": "write_typed_modules(&view_type, 1u, &module, 1u, &artifact) == XR_PROGRAM_BUILD_OK",
+          "status": "OPEN"
+        }
+      ],
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/program/test_xr_program_verify.c",
+      "function": "build_program_table_artifact",
+      "line": 4939,
+      "end_line": 5116,
+      "body_lf_sha256": "fb7e788673403ab92907e152aed224be0dafc0420a8d96922398a7de4d962346",
+      "CHECK_sites": 0,
+      "CHECK_bindings": [],
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/program/test_xr_program_verify.c",
+      "function": "first_conformance_slot_offset",
+      "line": 5286,
+      "end_line": 5310,
+      "body_lf_sha256": "013648346f9b976b2b3dcae2413b503fc08c8f6e900edada3321c1746d24a3af",
+      "CHECK_sites": 0,
+      "CHECK_bindings": [],
+      "status": "OPEN"
+    }
+  ],
+  "specified_helper_CHECK_sites": 10,
+  "input_file": {
+    "path": "tests/unit/program/test_xr_program_verify.c",
+    "whole_file_lf_sha256": "ec4b93f13bfab2aa3d4b8f8773dd5c1118a0c682ed6f8304fead515f90402802",
+    "physical_raw_sha256": "a39922500c0943c034fafcda3a82b67e511ea658f453f6c0c3204f7719de1817",
+    "git_base_equal": true
+  },
+  "input_policy": "Both complete original census bodies and all eight specified actual helper bodies equal01e6. Six complete builder inputs plus one byte-mutated artifact variant retain original graph, root/slot metadata, exact canonical comparison and stage-specific rejection. Current encoding may change only through explicit Root representation mapping; no old format/ID aliases are requested.",
+  "view_graph": {
+    "type": "VIEW91, I64 element, READ capability; key view-root:type:const-slice-i64. No data/address fabricated, no owning class or Cell representation introduced.",
+    "callee": "Two VIEW91 READ parameters and two block arguments a/b. One block has BLOCK_ARGUMENT(a,b), RETURN(a), actual resultVIEW91. Parameter-root rows r0->param0/r1->param1, value a->{r0}, b->{r1}. Declared result borrow origins PARAM0 and PARAM1 form the original conservative set despite body returninga. Effect1.",
+    "caller": "Two VIEW91 READ parameters/block arguments x/y. One block has BLOCK_ARGUMENT(x,y), actual CALL_SEALED_DIRECT(callee,x,y)->caller_result VIEW91, RETURN(caller_result). Root rows r0->param0/r1->param1; x->{r0}, y->{r1}, actual result->{r1,r0} for complete case. Result borrow origins PARAM0 and PARAM1, effect5, ENTRY. One module view-root:module contains exactly callee then caller; no constants/custom interface input.",
+    "reordering": "Swap callee root row0/1, caller root row0/1, callee value-root rows0/1 and caller value-root rows0/2. Do not reorder caller result root members {r1,r0}, borrow origins, operations, parameter identities or functions.",
+    "incomplete": "Only caller_result root_count changes2->1 while root array remains{r1,r0}; retained first root is param1, omitting param0 from the actual returned calleea. Build/writer succeed, semantic ROOT reject twice with exact full diagnostic equality. Not a producer rejection or runtime dangling-address experiment."
+  },
+  "view_cases": [
+    {
+      "name": "original_complete_view_roots",
+      "builder_arguments": [
+        false,
+        false
+      ],
+      "expected_build": "XR_PROGRAM_BUILD_OK",
+      "expected_verify": "XR_PROGRAM_VERIFY_OK",
+      "original_runtime": "NOT_RUN",
+      "status": "OPEN"
+    },
+    {
+      "name": "reordered_complete_view_rows",
+      "builder_arguments": [
+        true,
+        false
+      ],
+      "expected_build": "XR_PROGRAM_BUILD_OK",
+      "expected_verify": "NOT_RUN_IN_ORIGINAL_BODY",
+      "canonical_compare_to": "original_complete_view_roots",
+      "status": "OPEN"
+    },
+    {
+      "name": "incomplete_call_result_roots",
+      "builder_arguments": [
+        false,
+        true
+      ],
+      "expected_build": "XR_PROGRAM_BUILD_OK",
+      "expected_verify": "XR_PROGRAM_VERIFY_SEMANTIC_REJECTED",
+      "expected_diagnostic": "XR_PROGRAM_DIAGNOSTIC_ROOT",
+      "kept_result_roots": [
+        "caller_r1 / parameter1"
+      ],
+      "omitted_result_roots": [
+        "caller_r0 / parameter0"
+      ],
+      "verify_repetitions": 2,
+      "status": "OPEN"
+    }
+  ],
+  "table_graph": {
+    "types": [
+      "IMPLEMENTOR70: AGGREGATE, NOMINAL_STRUCT, TRIVIAL ownership/COPY_TRIVIAL, oneI64 field.",
+      "EXISTENTIAL_A71: READ interface-a.",
+      "EXISTENTIAL_B72: READ interface-b.",
+      "CALLABLE73: AFFINE/COPY_EXPLICIT, zeroargument->VOID callable signature. No callable value is packed or invoked."
+    ],
+    "interfaces": "Two interfacesa/b, one slot each, receiver READ, has_receivertrue, one parameter respectively existential71/72, resultVOID. Bad-slot variant changes only interfaceB slot resultI64.",
+    "implementation": "Actual program-table:function:implementation with one IMPLEMENTOR70 READ receiver/blockarg, has_receivertrue/receiverREAD, VOID result, oneblock/twoops BLOCK_ARGUMENT(receiver), RETURN_VOID; ENTRY. No method result constant or runtime call inserted.",
+    "unrelated": "Actual program-table:function:unrelated remains in same module: zero parameters/no receiver, resultVOID, oneblock with RETURN_VOID. It gives a valid alternative function ID with wrong receiver/signature for conformance slot.",
+    "conformances": "Two conformance rowsa/b each implementor70 NOMINAL_STRUCT, respective interface key, one slot pointing to the same actual implementation function. Class-implementor conditional helper branches are full-body preserved but this census body passesfalse for all three calls; no class conformance execution/ownership assertion is claimed here.",
+    "reordering": "Reverse allfour type rows; swap two interface rows and two conformance rows. Keep stable input keys, internal type localIDs, slot-function binding, function order/body, module and program profile unchanged.",
+    "program": "program-table:module contains implementation+unrelated, one module; semantic fingerprint key program-table:profile, CORE_BASE required feature; four types/two interfaces/two conformances; no constants."
+  },
+  "table_cases": [
+    {
+      "name": "original_struct_conformances",
+      "builder_arguments": [
+        false,
+        false,
+        false
+      ],
+      "expected_build": "XR_PROGRAM_BUILD_OK",
+      "expected_verify": "XR_PROGRAM_VERIFY_OK",
+      "original_runtime": "NOT_RUN",
+      "status": "OPEN"
+    },
+    {
+      "name": "reordered_struct_inputs",
+      "builder_arguments": [
+        true,
+        false,
+        false
+      ],
+      "expected_build": "XR_PROGRAM_BUILD_OK",
+      "expected_verify": "NOT_RUN_IN_ORIGINAL_BODY",
+      "canonical_compare_to": "original_struct_conformances",
+      "status": "OPEN"
+    },
+    {
+      "name": "slot_b_result_signature_mismatch",
+      "builder_arguments": [
+        false,
+        true,
+        false
+      ],
+      "expected_build": "XR_PROGRAM_BUILD_INVALID_INPUT",
+      "expected_verify": "NOT_RUN_IN_ORIGINAL_BODY",
+      "change": "InterfaceB slot result I64; actual implementation result staysVOID and body remains BLOCK_ARGUMENT/RETURN_VOID. InterfaceA remainsVOID.",
+      "status": "OPEN"
+    },
+    {
+      "name": "conformance_slot_retargets_other_valid_function",
+      "reuses_artifact": "original_struct_conformances after successful Program free",
+      "expected_verify": "XR_PROGRAM_VERIFY_SEMANTIC_REJECTED",
+      "expected_diagnostic": "XR_PROGRAM_DIAGNOSTIC_FUNCTION",
+      "change": "At structurally located first conformance slot, original saved byte0or1 flips to the other1or0; both target IDs refer to actual functions. Restore original byte after two equivalent full diagnostics.",
+      "verify_repetitions": 2,
+      "status": "OPEN"
+    }
+  ],
+  "canonical_responsibility": "Each pair independently requires nonzero equal artifact sizes, full original memcmp bytes equal and xr_program_id_equal. Structural row/input order should not affect canonical serialization or Program identity; equal runtime result or normalized text alone is insufficient. Original reordered artifacts are not separately validate_ok/evaluated.",
+  "wire_mutation_locator": {
+    "helper": "first_conformance_slot_offset",
+    "procedure": "Require structural decodeOK; begin semantic-metadata section offset. Decode interface count and skip each interface identity/key/slot signature IDs with test_take_uvar. Require nonzero conformance count; skip first conformance ID/key plus three uvar fields; require nonzero slot count; return actual first slot byte cursor. Outer CHECK requires offset!=SIZE_MAX and byte<=1, then toggles byte and restores it.",
+    "boundary": "This is deliberate semantic corruption to another in-range actual function. No current wire offset, table serialization or function-ID assignment is assumed. Current public packet semantic rejection must remain distinguishable from structural/identity rejection; Root must supply an equivalent current representation mutation."
+  },
+  "negative_expectation_policy": "Two semantic negatives are validated twice each: exact SEMANTIC_REJECTED/expected diagnostic/NULL product, repeated status and entire XrProgramDiagnostic memcmp equality including location fields. Bad-slot graph is exact producer BUILD_INVALID_INPUT with no semantic or runtime validation. Do not collapse these three original boundaries into any-nonzero/error success.",
+  "assertion_counts": {
+    "census_functions": 2,
+    "outer_sites": 10,
+    "specified_helpers": 8,
+    "specified_helper_sites": 10,
+    "fresh_builder_inputs": 6,
+    "successful_artifact_builds": 5,
+    "producer_negative_inputs": 1,
+    "wire_mutated_variants": 1,
+    "semantic_negative_inputs": 2,
+    "semantic_negative_verify_calls": 4,
+    "positive_admitted_programs": 2,
+    "writer_only_reordered_inputs": 2,
+    "runtime_evaluations": 0
+  },
+  "original_cleanup": "Positive validatedPrograms freed before later negatives; view artifacts incomplete/reordered/first freed, table reordered/first freed after mutation restore. Failed table artifact startszero but original does not free or assert its output fields; preserve original rejection strength and require current public output/owner cleanup separately.",
+  "Root_contract_or_representation_review": {
+    "status": "OPEN",
+    "borrow_roots": "Preserve actual READ view origin propagation through the complete sealed call and return. Current frozen exclusivity/Cell rules may change representation but do not permit dropping a required root or replacing both actual views with one synthetic constant. Original result summaries are conservative; explicit Root equivalence is required if current summaries are normalized more precisely.",
+    "tables": "Preserve interface/conformance/callable descriptor completeness, signature/receiver compatibility, actual implementation binding and unrelated in-range function confusion rejection. No callable pack/invoke or class conformance runtime qualification is part of these original bodies.",
+    "canonical": "Explicitly map original irrelevant row-order permutations to current public Built/Checked/packet canonical input boundary and test complete current serialized bytes/identity independently. Source declaration/provider identity changes are separate inputs and not equivalent under this test.",
+    "negative_stage": "Preserve producer bad-slot rejection and typed semantic root/function failures in appropriate formal stages, with complete input graph and repeated deterministic diagnostic/location proof. Format identity changes do not justify untyped any-error acceptance or retaining old numeric wire slots.",
+    "qualification": "Fresh public Built/Checked/complete specialization reverify/Lowered/current verified-owner/Program, relevant source-free packet/Library/view owner lifetime/VM/native/mixed/twoInstances/escape/fullFI/axes/safety await formal producer/window and remainOPEN."
+  },
+  "full_FI": "NOT_RUN",
+  "axes": "NOT_RUN",
+  "full_safety": "NOT_RUN",
+  "SourceDelete": "NOT_RUN",
+  "Main": "NOT_RUN",
+  "handoff": {
+    "Root_thread": "01a11f74-a297-7b11-8441-835bde6a3d5f",
+    "formal_acceptance": "PENDING"
+  },
+  "boundaries": [
+    "Two census functions/all10 outer/10 specified helperCHECK sites and exact six builder inputs plus one mutated variant remainOPEN; retired0.",
+    "Static full-body/root/descriptor/canonical/negative-stage evidence only; no current product or runtime execution.",
+    "Product/shared ABI/CMake/stdlib/spec/SDK/docs untouched, original helper/input preserved, no heavy gate or global validator/ledger."
+  ]
+}
