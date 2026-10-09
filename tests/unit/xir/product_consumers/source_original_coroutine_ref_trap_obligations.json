@@ -1,0 +1,1024 @@
+{
+  "schema": 1,
+  "family": "original_coroutine_shared_field_ref_roots_and_child_trap_recovery",
+  "legacy_base_commit": "01e6d38401b0f5c8684b64c35a99ac651024c0c1",
+  "status": "OPEN",
+  "retired": 0,
+  "replacement_gates": [],
+  "result": "STATIC_FULL_ORIGINAL_COROUTINE_REF_ROOT_AND_CHILD_TRAP_MAP_ONLY",
+  "product_execution": "NOT_RUN_BY_THIS_MAP",
+  "producer": "25f4016d6f089169757a90ae11ba537002374711",
+  "identity": "Checked25/semantic67/Value22/Call28/Program29",
+  "legacy": [
+    {
+      "name": "test_coroutine_related_field_refs_require_one_live_storage_root",
+      "legacy_path": "tests/unit/program/test_xr_program_verify.c",
+      "legacy_line": 6105,
+      "body_lf_sha256": "74cab6a92a1a5c5826f941e723177f784bcda2771511806ffa7bced4504dc0d0",
+      "assertion_sites": 3,
+      "loop_sites": 1,
+      "status": "OPEN",
+      "replacement_gates": [],
+      "note": "Function census preserves its whole body; sites do not count executed loop iterations."
+    },
+    {
+      "name": "test_coroutine_child_trap_requires_recoverable_cleanup_inputs",
+      "legacy_path": "tests/unit/program/test_xr_program_verify.c",
+      "legacy_line": 6135,
+      "body_lf_sha256": "f064d1e776de5f42db5cced329b3b1eaa6d8383ca72b2883b438f59bf642780c",
+      "assertion_sites": 7,
+      "loop_sites": 2,
+      "status": "OPEN",
+      "replacement_gates": [],
+      "note": "Function census preserves its whole body; sites do not count executed loop iterations."
+    }
+  ],
+  "responsibility_mapping": [
+    {
+      "path": "tests/unit/program/test_xr_program_verify.c",
+      "function": "test_coroutine_related_field_refs_require_one_live_storage_root",
+      "line": 6105,
+      "end_line": 6133,
+      "body_lf_sha256": "74cab6a92a1a5c5826f941e723177f784bcda2771511806ffa7bced4504dc0d0",
+      "CHECK_sites": 3,
+      "CHECK_bindings": [
+        {
+          "line": 6108,
+          "expression": "xr_program_ref_coroutine_fixture_write(XR_PROGRAM_REF_COROUTINE_VALID, &artifact,\n                                                 diagnostic,\n                                                 sizeof(diagnostic)) == XR_PROGRAM_BUILD_OK",
+          "status": "OPEN"
+        },
+        {
+          "line": 6112,
+          "expression": "program != NULL",
+          "status": "OPEN"
+        },
+        {
+          "line": 6128,
+          "expression": "xr_program_ref_coroutine_fixture_write(invalid[index].mutation, &artifact, diagnostic,\n                                                     sizeof(diagnostic)) == XR_PROGRAM_BUILD_OK",
+          "status": "OPEN"
+        }
+      ],
+      "helper_assert_sites": 0,
+      "helper_assert_bindings": [],
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/program/test_xr_program_verify.c",
+      "function": "test_coroutine_child_trap_requires_recoverable_cleanup_inputs",
+      "line": 6135,
+      "end_line": 6192,
+      "body_lf_sha256": "f064d1e776de5f42db5cced329b3b1eaa6d8383ca72b2883b438f59bf642780c",
+      "CHECK_sites": 7,
+      "CHECK_bindings": [
+        {
+          "line": 6147,
+          "expression": "xr_program_coroutine_trap_fixture_write(valid[index], &artifact, diagnostic,\n                                                      sizeof(diagnostic)) == XR_PROGRAM_BUILD_OK",
+          "status": "OPEN"
+        },
+        {
+          "line": 6150,
+          "expression": "program != NULL",
+          "status": "OPEN"
+        },
+        {
+          "line": 6154,
+          "expression": "xr_program_coroutine_trap_fixture_write(valid[index], &repeated, diagnostic,\n                                                          sizeof(diagnostic)) ==\n                  XR_PROGRAM_BUILD_OK",
+          "status": "OPEN"
+        },
+        {
+          "line": 6157,
+          "expression": "artifact.size != 0u && artifact.size == repeated.size",
+          "status": "OPEN"
+        },
+        {
+          "line": 6158,
+          "expression": "artifact.size != 0u && artifact.size == repeated.size &&\n                  memcmp(artifact.bytes, repeated.bytes, artifact.size) == 0",
+          "status": "OPEN"
+        },
+        {
+          "line": 6160,
+          "expression": "xr_program_id_equal(artifact.id, repeated.id)",
+          "status": "OPEN"
+        },
+        {
+          "line": 6186,
+          "expression": "xr_program_coroutine_trap_fixture_write(invalid[index].mutation, &artifact,\n                                                      diagnostic,\n                                                      sizeof(diagnostic)) == XR_PROGRAM_BUILD_OK",
+          "status": "OPEN"
+        }
+      ],
+      "helper_assert_sites": 0,
+      "helper_assert_bindings": [],
+      "status": "OPEN"
+    }
+  ],
+  "outer_CHECK_sites": 10,
+  "original_private_helpers": [
+    {
+      "path": "tests/unit/program/test_xr_program_verify.c",
+      "function": "validate_ok",
+      "line": 159,
+      "end_line": 174,
+      "body_lf_sha256": "94fe0ef4e0242acb810c12621ae1fe73a9887ef668f15ddc6c67ed645494f62b",
+      "CHECK_sites": 2,
+      "CHECK_bindings": [
+        {
+          "line": 171,
+          "expression": "status == XR_PROGRAM_VERIFY_OK",
+          "status": "OPEN"
+        },
+        {
+          "line": 172,
+          "expression": "program != NULL",
+          "status": "OPEN"
+        }
+      ],
+      "helper_assert_sites": 0,
+      "helper_assert_bindings": [],
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/program/test_xr_program_verify.c",
+      "function": "expect_semantic_reject_at",
+      "line": 176,
+      "end_line": 198,
+      "body_lf_sha256": "44cf0fb15bea156743a1c0e35b0be8ee844aa1af55c8653ed9361cf781c045b8",
+      "CHECK_sites": 6,
+      "CHECK_bindings": [
+        {
+          "line": 190,
+          "expression": "first_status == XR_PROGRAM_VERIFY_SEMANTIC_REJECTED",
+          "status": "OPEN"
+        },
+        {
+          "line": 191,
+          "expression": "program == NULL",
+          "status": "OPEN"
+        },
+        {
+          "line": 192,
+          "expression": "first.kind == expected",
+          "status": "OPEN"
+        },
+        {
+          "line": 195,
+          "expression": "second_status == first_status",
+          "status": "OPEN"
+        },
+        {
+          "line": 196,
+          "expression": "memcmp(&first, &second, sizeof(first)) == 0",
+          "status": "OPEN"
+        },
+        {
+          "line": 197,
+          "expression": "program == NULL",
+          "status": "OPEN"
+        }
+      ],
+      "helper_assert_sites": 0,
+      "helper_assert_bindings": [],
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/program/xr_program_ref_coroutine_fixture.h",
+      "function": "xr_program_ref_coroutine_key",
+      "line": 74,
+      "end_line": 76,
+      "body_lf_sha256": "b1dd1d55f3713847d7a3f98b165b37b1c6b4427584c3ac4481b7fd7387cdc5ae",
+      "CHECK_sites": 0,
+      "CHECK_bindings": [],
+      "helper_assert_sites": 0,
+      "helper_assert_bindings": [],
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/program/xr_program_ref_coroutine_fixture.h",
+      "function": "xr_program_ref_coroutine_child_init",
+      "line": 78,
+      "end_line": 185,
+      "body_lf_sha256": "6b471ce9005327a5ac86490e0045daada607f6b2a2802fa4be8c8303f4b0beb5",
+      "CHECK_sites": 0,
+      "CHECK_bindings": [],
+      "helper_assert_sites": 0,
+      "helper_assert_bindings": [],
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/program/xr_program_ref_coroutine_fixture.h",
+      "function": "xr_program_ref_coroutine_parent_blocks_init",
+      "line": 187,
+      "end_line": 243,
+      "body_lf_sha256": "e18071028aca14f2cb9268803e46bdf2bc5f0959dcffa0519a5ab101b925461b",
+      "CHECK_sites": 0,
+      "CHECK_bindings": [],
+      "helper_assert_sites": 0,
+      "helper_assert_bindings": [],
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/program/xr_program_ref_coroutine_fixture.h",
+      "function": "xr_program_ref_coroutine_parent_init",
+      "line": 245,
+      "end_line": 325,
+      "body_lf_sha256": "686e61668863d2e725ca96ddea4ecb72c115353a9a63f33a3b7b8fccf906498b",
+      "CHECK_sites": 0,
+      "CHECK_bindings": [],
+      "helper_assert_sites": 0,
+      "helper_assert_bindings": [],
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/program/xr_program_ref_coroutine_fixture.h",
+      "function": "xr_program_ref_coroutine_mutate",
+      "line": 327,
+      "end_line": 382,
+      "body_lf_sha256": "9407a687ceb3f8f81f9789528deb17a4689c459d3fcf7eb833dcbee56dc68172",
+      "CHECK_sites": 0,
+      "CHECK_bindings": [],
+      "helper_assert_sites": 0,
+      "helper_assert_bindings": [],
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/program/xr_program_ref_coroutine_fixture.h",
+      "function": "xr_program_ref_coroutine_fixture_write",
+      "line": 384,
+      "end_line": 427,
+      "body_lf_sha256": "b74d5bbe6eafc6ca52e80a82cf798f2b5580b8506bf9d6b612718ac94d7d8572",
+      "CHECK_sites": 0,
+      "CHECK_bindings": [],
+      "helper_assert_sites": 0,
+      "helper_assert_bindings": [],
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/program/xr_program_coroutine_trap_fixture.h",
+      "function": "xr_program_coroutine_trap_key",
+      "line": 73,
+      "end_line": 88,
+      "body_lf_sha256": "a2211d1504819987e35e31567c1a83a9d43dda6bdf789d4cd888f70d8ddc8086",
+      "CHECK_sites": 0,
+      "CHECK_bindings": [],
+      "helper_assert_sites": 2,
+      "helper_assert_bindings": [
+        {
+          "line": 79,
+          "expression": "scope_size <= sizeof(material) - cursor - 1u",
+          "status": "OPEN"
+        },
+        {
+          "line": 80,
+          "expression": "name_size <= sizeof(material) - cursor - scope_size - 1u",
+          "status": "OPEN"
+        }
+      ],
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/program/xr_program_coroutine_trap_fixture.h",
+      "function": "xr_program_coroutine_trap_body_init",
+      "line": 90,
+      "end_line": 125,
+      "body_lf_sha256": "2d9ec7bfa7905555b64f48bc37d6063b6d89ef267f6575a6400de9c5edcf5277",
+      "CHECK_sites": 0,
+      "CHECK_bindings": [],
+      "helper_assert_sites": 1,
+      "helper_assert_bindings": [
+        {
+          "line": 95,
+          "expression": "block_count <= 6u",
+          "status": "OPEN"
+        }
+      ],
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/program/xr_program_coroutine_trap_fixture.h",
+      "function": "xr_program_coroutine_trap_emit",
+      "line": 127,
+      "end_line": 148,
+      "body_lf_sha256": "10d4d77c3b1b089c39ad086ef5710dc858caf1ee5aa4352dc5b2a34bc08434df",
+      "CHECK_sites": 0,
+      "CHECK_bindings": [],
+      "helper_assert_sites": 2,
+      "helper_assert_bindings": [
+        {
+          "line": 132,
+          "expression": "block < 6u && body->blocks[block].instruction_count < 16u",
+          "status": "OPEN"
+        },
+        {
+          "line": 133,
+          "expression": "count <= 40u - body->operand_counts[block]",
+          "status": "OPEN"
+        }
+      ],
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/program/xr_program_coroutine_trap_fixture.h",
+      "function": "xr_program_coroutine_trap_argument",
+      "line": 150,
+      "end_line": 165,
+      "body_lf_sha256": "65f3141f7685f3586f98bc19d96a8ded06d30a1d906f74b4df82f9c4138c4839",
+      "CHECK_sites": 0,
+      "CHECK_bindings": [],
+      "helper_assert_sites": 1,
+      "helper_assert_bindings": [
+        {
+          "line": 154,
+          "expression": "index < 4u",
+          "status": "OPEN"
+        }
+      ],
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/program/xr_program_coroutine_trap_fixture.h",
+      "function": "xr_program_coroutine_trap_arguments",
+      "line": 167,
+      "end_line": 171,
+      "body_lf_sha256": "3f8d6e262897e3c5f298cf6a76898d06e8faf8d5ff8d0b46dce9f67c943f7fbc",
+      "CHECK_sites": 0,
+      "CHECK_bindings": [],
+      "helper_assert_sites": 0,
+      "helper_assert_bindings": [],
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/program/xr_program_coroutine_trap_fixture.h",
+      "function": "xr_program_coroutine_trap_constant",
+      "line": 173,
+      "end_line": 181,
+      "body_lf_sha256": "80ad75668b5867681dbaa6580e3371c0fb674856cd729692767e2d9309119534",
+      "CHECK_sites": 0,
+      "CHECK_bindings": [],
+      "helper_assert_sites": 0,
+      "helper_assert_bindings": [],
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/program/xr_program_coroutine_trap_fixture.h",
+      "function": "xr_program_coroutine_trap_provider",
+      "line": 183,
+      "end_line": 191,
+      "body_lf_sha256": "0477631509e287389f91b809e20138596f3f0df9c44b3a6cb041eb7524146a8b",
+      "CHECK_sites": 0,
+      "CHECK_bindings": [],
+      "helper_assert_sites": 0,
+      "helper_assert_bindings": [],
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/program/xr_program_coroutine_trap_fixture.h",
+      "function": "xr_program_coroutine_trap_drop_payload",
+      "line": 193,
+      "end_line": 204,
+      "body_lf_sha256": "83411575670237e9a6a39b2ce40af92466710b04b2422fdc777688f671ebbe43",
+      "CHECK_sites": 0,
+      "CHECK_bindings": [],
+      "helper_assert_sites": 0,
+      "helper_assert_bindings": [],
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/program/xr_program_coroutine_trap_fixture.h",
+      "function": "xr_program_coroutine_trap_child_init",
+      "line": 206,
+      "end_line": 284,
+      "body_lf_sha256": "ad01d77b1f1e1bbecf40f77313d4e4d6ea2036b1783410f83fad9c2bb6361d44",
+      "CHECK_sites": 0,
+      "CHECK_bindings": [],
+      "helper_assert_sites": 0,
+      "helper_assert_bindings": [],
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/program/xr_program_coroutine_trap_fixture.h",
+      "function": "xr_program_coroutine_trap_parent_cleanup",
+      "line": 286,
+      "end_line": 330,
+      "body_lf_sha256": "99089742cfbfe3202db6252d20eecff8e81ff8fc093240c30da01e256ff54d10",
+      "CHECK_sites": 0,
+      "CHECK_bindings": [],
+      "helper_assert_sites": 0,
+      "helper_assert_bindings": [],
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/program/xr_program_coroutine_trap_fixture.h",
+      "function": "xr_program_coroutine_trap_parent_normal",
+      "line": 332,
+      "end_line": 361,
+      "body_lf_sha256": "38a178089cb9171746aed9226037f44d6b36c0139ced8e1ba9064c88d38248b6",
+      "CHECK_sites": 0,
+      "CHECK_bindings": [],
+      "helper_assert_sites": 0,
+      "helper_assert_bindings": [],
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/program/xr_program_coroutine_trap_fixture.h",
+      "function": "xr_program_coroutine_trap_parent_init",
+      "line": 363,
+      "end_line": 448,
+      "body_lf_sha256": "cb516a500d342cbfc1e28a2fb5e74c01e45290db5258e157d24b74dc9923ef99",
+      "CHECK_sites": 0,
+      "CHECK_bindings": [],
+      "helper_assert_sites": 0,
+      "helper_assert_bindings": [],
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/program/xr_program_coroutine_trap_fixture.h",
+      "function": "xr_program_coroutine_trap_fixture_write_with_ids",
+      "line": 456,
+      "end_line": 520,
+      "body_lf_sha256": "2d8f12237cc8a6baadfd9c230b85dd1b85875606383eed9ce90f06e4818dd0cf",
+      "CHECK_sites": 0,
+      "CHECK_bindings": [],
+      "helper_assert_sites": 0,
+      "helper_assert_bindings": [],
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/program/xr_program_coroutine_trap_fixture.h",
+      "function": "xr_program_coroutine_trap_fixture_write",
+      "line": 522,
+      "end_line": 534,
+      "body_lf_sha256": "9101c01d021a641d718f71d018975704f2907ad3e8492dd3fedaf3005a853c55",
+      "CHECK_sites": 0,
+      "CHECK_bindings": [],
+      "helper_assert_sites": 0,
+      "helper_assert_bindings": [],
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/program/xr_program_provider_fixture.h",
+      "function": "xr_program_fixture_provider_contract",
+      "line": 17,
+      "end_line": 30,
+      "body_lf_sha256": "294a94d8dbafcb95dd6c67e6c5cdb538a25df5ac60d04afc3ac9e8a3d4f94527",
+      "CHECK_sites": 0,
+      "CHECK_bindings": [],
+      "helper_assert_sites": 0,
+      "helper_assert_bindings": [],
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/program/xr_program_provider_fixture.h",
+      "function": "xr_program_fixture_scalar_contract",
+      "line": 32,
+      "end_line": 46,
+      "body_lf_sha256": "8a4b92a4d10bf09fcbc31bb6ec4580768cec4b72637b0decf125d228058c69b8",
+      "CHECK_sites": 0,
+      "CHECK_bindings": [],
+      "helper_assert_sites": 0,
+      "helper_assert_bindings": [],
+      "status": "OPEN"
+    }
+  ],
+  "specified_helper_CHECK_sites": 8,
+  "specified_helper_assert_sites": 6,
+  "input_files": [
+    {
+      "path": "tests/unit/program/test_xr_program_verify.c",
+      "physical_raw_sha256": "a39922500c0943c034fafcda3a82b67e511ea658f453f6c0c3204f7719de1817",
+      "whole_file_lf_sha256": "ec4b93f13bfab2aa3d4b8f8773dd5c1118a0c682ed6f8304fead515f90402802",
+      "git_base_equal": true,
+      "status": "PRESERVE_ORIGINAL_READONLY"
+    },
+    {
+      "path": "tests/unit/program/xr_program_ref_coroutine_fixture.h",
+      "physical_raw_sha256": "82c355d1a7d401e6cc1f93159c11b8f07f0b71024c545fafaabefbfaa1bea55d",
+      "whole_file_lf_sha256": "d209358d3992db5158051fe85015352a3273ce8fd549224611c6524452f93746",
+      "git_base_equal": true,
+      "status": "PRESERVE_ORIGINAL_READONLY"
+    },
+    {
+      "path": "tests/unit/program/xr_program_coroutine_trap_fixture.h",
+      "physical_raw_sha256": "e6722999ee14d24cc67d48c53f2a5ec88ac96ab5381932892071f00d3dfa870d",
+      "whole_file_lf_sha256": "d8c750b8638ae3f0c51c9606ece210f1e340a5e706a93af68058d7bb3999d6c7",
+      "git_base_equal": true,
+      "status": "PRESERVE_ORIGINAL_READONLY"
+    },
+    {
+      "path": "tests/unit/program/xr_program_provider_fixture.h",
+      "physical_raw_sha256": "cfdda1521b56a67afa6cc7aefc5b1f5397d87d8f1ebe405dd2f41b24ec97c326",
+      "whole_file_lf_sha256": "9a7116c1fdcad29ea945a8e7b651e24490f35fd52f5f3aaab5367e755e8affea",
+      "git_base_equal": true,
+      "status": "PRESERVE_ORIGINAL_READONLY"
+    },
+    {
+      "path": "tests/unit/aot/test_xr_program_aot.c",
+      "physical_raw_sha256": "6fea38acff96d94b2bfb414e04aa308386f6284ed12ccf05613a790a23caa700",
+      "whole_file_lf_sha256": "e7ab9301b308c7db6bf48e348257e5288f38f22c1b38c827fb040719dbf2de0e",
+      "git_base_equal": true,
+      "status": "PRESERVE_ORIGINAL_READONLY"
+    },
+    {
+      "path": "tests/unit/program/test_xr_program.c",
+      "physical_raw_sha256": "5986f0f7160296f52787ca8b9443329a9a05eeff083daac530a776642971655a",
+      "whole_file_lf_sha256": "2743be628db188c386a72e59529286df64720051710599d83f9b6510aa529aff",
+      "git_base_equal": true,
+      "status": "PRESERVE_ORIGINAL_READONLY"
+    },
+    {
+      "path": "tests/unit/vm/test_xr_program_vm.c",
+      "physical_raw_sha256": "3a19b58076867cc70ef6c77e975286009df65e61ac1ed9edb2b5ab7813543502",
+      "whole_file_lf_sha256": "17904ef2bab8bb7eea72245fedba9878d74b6b8e93776e4314418e2db06dce8a",
+      "git_base_equal": true,
+      "status": "PRESERVE_ORIGINAL_READONLY"
+    },
+    {
+      "path": "tests/unit/program/xr_program_coroutine_outcome_fixture.h",
+      "physical_raw_sha256": "a04054481658aabccbf77bbb6f9368644d4d29f569912c53ad006d239b324686",
+      "whole_file_lf_sha256": "691cb5f503be69842ca4bcffc9bb830ca86dd573823e6243534ffdb947d48d78",
+      "git_base_equal": true,
+      "status": "PRESERVE_ORIGINAL_READONLY"
+    }
+  ],
+  "ref_graph": {
+    "aggregate": "Local62 anonymous AGGREGATE[I64,I64], AFFINE/COPY_EXPLICIT; no constants or construction instruction. Parent receives actual owner through MOVE argument.",
+    "parent": [
+      "BLOCK_ARGUMENT OWN aggregate",
+      "PLACE_LOCAL actual owner -> aggregate PLACE",
+      "PLACE_PROJECT field0 -> I64 PLACE",
+      "PLACE_PROJECT field1 -> I64 PLACE from same actual root",
+      "COROUTINE_CALL_SEALED [left PLACE,right PLACE,owner normal,owner cancel] safepoint0 -> resume,cancel",
+      "resume BLOCK_ARGUMENT OWN aggregate; DROP; RETURN VOID",
+      "cancel BLOCK_ARGUMENT OWN aggregate; DROP; CANCEL_PUBLISH"
+    ],
+    "parent_metadata": "states0/1 both entry; live[actual owner]/count1; CALL|CANCEL|SUSPEND/COROUTINE_SUSPENSION; parent ENTRY.",
+    "child": [
+      "BLOCK_ARGUMENT two REF I64 PLACES",
+      "YIELD safepoint0 two actual PLACES -> resume,cancel",
+      "resume BLOCK_ARGUMENT two PLACES; PLACE_LOAD left; PLACE_LOAD right; RETURN VOID",
+      "cancel CANCEL_PUBLISH"
+    ],
+    "child_metadata": "states0 entry/1 resume; live both REF parameter PLACES/count2; CANCEL|SUSPEND/COROUTINE_SUSPENSION.",
+    "valid_shape_counts": {
+      "functions": 2,
+      "blocks": 6,
+      "instructions": 18,
+      "types": 1,
+      "constants": 0
+    },
+    "mutations": [
+      {
+        "mutation": "VALID",
+        "complete_graph_change": "Full MOVE aggregate62 owner parent -> child REF I64 field0/field1; only actual aggregate owner crosses parent safepoint and both mutually exclusive outcome transfers.",
+        "fresh_inputs": 1,
+        "expected_build": "XR_PROGRAM_BUILD_OK",
+        "expected_verify": "XR_PROGRAM_VERIFY_OK",
+        "expected_diagnostic": null,
+        "original_runtime": "NOT_RUN",
+        "status": "OPEN"
+      },
+      {
+        "mutation": "MISSING_ROOT",
+        "complete_graph_change": "Parent safepoint live=NULL/count0, call operands4 -> 2 keeping only REF fields, normal/cancel arguments removed and each continuation reduced to RETURN/CANCEL_PUBLISH. Child and both actual field projections remain.",
+        "fresh_inputs": 1,
+        "expected_build": "XR_PROGRAM_BUILD_OK",
+        "expected_verify": "XR_PROGRAM_VERIFY_SEMANTIC_REJECTED",
+        "expected_diagnostic": "XR_PROGRAM_DIAGNOSTIC_COROUTINE",
+        "original_runtime": "NOT_RUN",
+        "status": "OPEN"
+      },
+      {
+        "mutation": "DUPLICATE_CANCEL_ROOT",
+        "complete_graph_change": "Keep canonical safepoint live[owner]/count1. Add same owner as fifth call operand; cancel has two distinct OWN aggregate arguments, BLOCK_ARGUMENT count2, DROP both then CANCEL_PUBLISH. Normal owner transfer unchanged.",
+        "fresh_inputs": 1,
+        "expected_build": "XR_PROGRAM_BUILD_OK",
+        "expected_verify": "XR_PROGRAM_VERIFY_SEMANTIC_REJECTED",
+        "expected_diagnostic": "XR_PROGRAM_DIAGNOSTIC_COROUTINE",
+        "original_runtime": "NOT_RUN",
+        "status": "OPEN"
+      },
+      {
+        "mutation": "RAW_PLACE_LIVE",
+        "complete_graph_change": "Parent live entry changes OWNER -> actual aggregate PLACE_LOCAL result; call suffix becomes that PLACE and operand_count3. Normal aggregate argument becomes PLACE/NON_OWNER, DROP replaced by RETURN and normal count2; cancel arguments removed and only CANCEL_PUBLISH remains.",
+        "fresh_inputs": 1,
+        "expected_build": "XR_PROGRAM_BUILD_OK",
+        "expected_verify": "XR_PROGRAM_VERIFY_SEMANTIC_REJECTED",
+        "expected_diagnostic": "XR_PROGRAM_DIAGNOSTIC_COROUTINE",
+        "original_runtime": "NOT_RUN",
+        "status": "OPEN"
+      },
+      {
+        "mutation": "VALUE_PROJECTION_BASE",
+        "complete_graph_change": "Only second PLACE_PROJECT base changes actual aggregate place -> actual aggregate owner VALUE; first field projection remains PLACE-based.",
+        "fresh_inputs": 1,
+        "expected_build": "XR_PROGRAM_BUILD_OK",
+        "expected_verify": "XR_PROGRAM_VERIFY_SEMANTIC_REJECTED",
+        "expected_diagnostic": "XR_PROGRAM_DIAGNOSTIC_OPERATION_TYPE",
+        "original_runtime": "NOT_RUN",
+        "status": "OPEN"
+      },
+      {
+        "mutation": "SCALAR_PROJECTION_BASE",
+        "complete_graph_change": "Only second PLACE_PROJECT base changes aggregate place -> first actual I64 field PLACE; result still I64 and ordinal1, so scalar has no aggregate field.",
+        "fresh_inputs": 1,
+        "expected_build": "XR_PROGRAM_BUILD_OK",
+        "expected_verify": "XR_PROGRAM_VERIFY_SEMANTIC_REJECTED",
+        "expected_diagnostic": "XR_PROGRAM_DIAGNOSTIC_OPERATION_TYPE",
+        "original_runtime": "NOT_RUN",
+        "status": "OPEN"
+      },
+      {
+        "mutation": "INVALID_FIELD",
+        "complete_graph_change": "Only second field ordinal1 -> 2 on the original two-field aggregate. Keep both real REF parameters and complete owner transfers.",
+        "fresh_inputs": 1,
+        "expected_build": "XR_PROGRAM_BUILD_OK",
+        "expected_verify": "XR_PROGRAM_VERIFY_SEMANTIC_REJECTED",
+        "expected_diagnostic": "XR_PROGRAM_DIAGNOSTIC_OPERATION_TYPE",
+        "original_runtime": "NOT_RUN",
+        "status": "OPEN"
+      }
+    ],
+    "fresh_inputs": 7,
+    "original_runtime": "Admission only; no actual owning input, field values, writes, resume/cancel or lifecycle observation. Child loads are actual operations but their results are unused.",
+    "contract": "The two field references are distinct paths of one root. Parent preserves one actual owning storage root, not duplicate owners or raw local places. Child borrowed REF parameters remain live under their parameter lifetime contract."
+  },
+  "trap_graph": {
+    "type": "Local62 anonymous AGGREGATE[I64], AFFINE/COPY_EXPLICIT.",
+    "constants": [
+      "I64 token11",
+      "I64 initial22",
+      "I64 snapshot33",
+      "I64 field44",
+      "I64 field55"
+    ],
+    "child_entry": [
+      "BLOCK_ARGUMENT READ token11 + REF caller field",
+      "CONST44; PLACE_STORE actual caller field=44",
+      "AGGREGATE_CONSTRUCT OWN child payload from token11",
+      "YIELD [field PLACE,child owner normal,child owner cancel] -> normal,cancel"
+    ],
+    "child_normal": [
+      "BLOCK_ARGUMENT REF field + OWN child aggregate",
+      "CONST55; PLACE_STORE actual caller field=55",
+      "PROJECT actual child payload11; DROP child owner",
+      "PROVIDER_CALL(payload11), result ignored",
+      "RETURN actual payload11"
+    ],
+    "child_cancel": [
+      "BLOCK_ARGUMENT OWN child aggregate",
+      "PROJECT payload11; DROP actual child owner",
+      "PROVIDER_CALL(payload11), result ignored",
+      "CANCEL_PUBLISH"
+    ],
+    "parent_entry": [
+      "CONSTtoken11; CONSTinitial22; AGGREGATE_CONSTRUCT actual OWN parent payload22",
+      "CONSTsnapshot33 distinct from mutable field value",
+      "PLACE_LOCAL parent owner; PLACE_PROJECT field0 -> actual child REF argument",
+      "COROUTINE_CALL_SEALED first params[token11,field PLACE], normal suffix[owner,snapshot33], cancel[owner], trap[owner,snapshot33]"
+    ],
+    "parent_normal": [
+      "BLOCK_ARGUMENT I64 child result + OWN parent aggregate + I64 snapshot",
+      "PROJECT actual mutable parent payload; DROP parent owner",
+      "PROVIDER_CALL(payload), ignored result",
+      "ADD actual child result + independent snapshot (U32=1); RETURN sum"
+    ],
+    "parent_cancel": [
+      "BLOCK_ARGUMENT OWN parent aggregate",
+      "PROJECT actual current parent payload; DROP owner",
+      "PROVIDER_CALL(payload), ignored result",
+      "CANCEL_PUBLISH"
+    ],
+    "parent_trap": [
+      "BLOCK_ARGUMENT OWN parent aggregate + I64 snapshot",
+      "PROJECT actual current parent payload; DROP owner",
+      "PROVIDER_CALL(payload); PROVIDER_CALL(snapshot), ignored results",
+      "TRAP immediate7"
+    ],
+    "metadata": "Child states0 entry/1 normal, live[field PLACE,child owner]/count2. Parent states0/1 entry, live[parent owner,snapshot]/count2. Both functions default result I64; effects CALL|SUSPEND|CANCEL|TRAP|PROVIDER_CALL, capabilities COROUTINE_SUSPENSION|PROVIDER_BINDING.",
+    "valid_shape_counts": {
+      "functions": 2,
+      "blocks": 7,
+      "instructions": 41,
+      "types": 1,
+      "constants": 5
+    },
+    "positive_variants": [
+      {
+        "mutation": "VALID",
+        "instructions": 41,
+        "blocks": 7,
+        "call_operands": 7,
+        "successors": 3
+      },
+      {
+        "mutation": "NO_TRAP_EDGE",
+        "instructions": 35,
+        "blocks": 6,
+        "call_operands": 5,
+        "successors": 2
+      },
+      {
+        "mutation": "BEFORE_YIELD",
+        "instructions": 42,
+        "blocks": 7,
+        "call_operands": 7,
+        "successors": 3
+      },
+      {
+        "mutation": "OTHER_CHILD_TRAP",
+        "instructions": 41,
+        "blocks": 7,
+        "call_operands": 7,
+        "successors": 3
+      },
+      {
+        "mutation": "REVERSED_LIVE_TUPLE",
+        "instructions": 41,
+        "blocks": 7,
+        "call_operands": 7,
+        "successors": 3
+      },
+      {
+        "mutation": "CANCEL_NONOWNER",
+        "instructions": 42,
+        "blocks": 7,
+        "call_operands": 8,
+        "successors": 3
+      }
+    ],
+    "mutations": [
+      {
+        "mutation": "VALID",
+        "complete_graph_change": "Complete provider-bound graph with child REF mutation of caller field, child aggregate owner from token11, parent aggregate owner22 and independent snapshot33; normal/cancel/TRAP7 cleanup paths retained. Build twice, admit only first, compare nonzero full bytes/ProgramID.",
+        "fresh_inputs": 2,
+        "expected_build": "XR_PROGRAM_BUILD_OK",
+        "expected_verify": "XR_PROGRAM_VERIFY_OK",
+        "expected_diagnostic": null,
+        "original_runtime": "NOT_RUN",
+        "status": "OPEN"
+      },
+      {
+        "mutation": "NO_TRAP_EDGE",
+        "complete_graph_change": "Parent block_count4 -> 3 omits trap cleanup block, call successor_count3 -> 2 and transfer count7 -> 5, retaining normal owner+snapshot and cancel owner. Child graph unchanged; original admission-positive, not proof of cleanup on trap.",
+        "fresh_inputs": 1,
+        "expected_build": "XR_PROGRAM_BUILD_OK",
+        "expected_verify": "XR_PROGRAM_VERIFY_OK",
+        "expected_diagnostic": null,
+        "original_runtime": "NOT_RUN",
+        "status": "OPEN"
+      },
+      {
+        "mutation": "BEFORE_YIELD",
+        "complete_graph_change": "Add actual provider call on token11 in child entry before CONST44/field store/aggregate construction/YIELD. Full parent cleanup graph unchanged.",
+        "fresh_inputs": 1,
+        "expected_build": "XR_PROGRAM_BUILD_OK",
+        "expected_verify": "XR_PROGRAM_VERIFY_OK",
+        "expected_diagnostic": null,
+        "original_runtime": "NOT_RUN",
+        "status": "OPEN"
+      },
+      {
+        "mutation": "OTHER_CHILD_TRAP",
+        "complete_graph_change": "Only child normal terminal RETURN payload -> TRAP4, operands NULL/count0/U32=4, after field55 store, child owner DROP and provider call. Parent still has TRAP7 cleanup.",
+        "fresh_inputs": 1,
+        "expected_build": "XR_PROGRAM_BUILD_OK",
+        "expected_verify": "XR_PROGRAM_VERIFY_OK",
+        "expected_diagnostic": null,
+        "original_runtime": "NOT_RUN",
+        "status": "OPEN"
+      },
+      {
+        "mutation": "REVERSED_LIVE_TUPLE",
+        "complete_graph_change": "Reorder explicit parent normal suffix owner,snapshot -> snapshot,owner and matching normal arguments result,snapshot,owner. Safepoint live table remains canonical [owner,snapshot]; both values and operations remain.",
+        "fresh_inputs": 1,
+        "expected_build": "XR_PROGRAM_BUILD_OK",
+        "expected_verify": "XR_PROGRAM_VERIFY_OK",
+        "expected_diagnostic": null,
+        "original_runtime": "NOT_RUN",
+        "status": "OPEN"
+      },
+      {
+        "mutation": "CANCEL_NONOWNER",
+        "complete_graph_change": "Add I64 snapshot argument to parent cancel after actual owner and a provider(snapshot) before CANCEL_PUBLISH; call cancellation transfer suffix becomes [owner,snapshot]. Full normal/trap paths unchanged.",
+        "fresh_inputs": 1,
+        "expected_build": "XR_PROGRAM_BUILD_OK",
+        "expected_verify": "XR_PROGRAM_VERIFY_OK",
+        "expected_diagnostic": null,
+        "original_runtime": "NOT_RUN",
+        "status": "OPEN"
+      },
+      {
+        "mutation": "MISSING_OWNER",
+        "complete_graph_change": "Parent trap block removes owner argument and its PROJECT/DROP/provider, retaining snapshot/provider/TRAP7; call trap suffix omits owner but keeps snapshot. Actual parent owner remains live across interrupted path.",
+        "fresh_inputs": 1,
+        "expected_build": "XR_PROGRAM_BUILD_OK",
+        "expected_verify": "XR_PROGRAM_VERIFY_SEMANTIC_REJECTED",
+        "expected_diagnostic": "XR_PROGRAM_DIAGNOSTIC_VALUE_USE",
+        "original_runtime": "NOT_RUN",
+        "status": "OPEN"
+      },
+      {
+        "mutation": "DUPLICATE_OWNER",
+        "complete_graph_change": "Parent trap gets two distinct OWN aggregate arguments plus snapshot; actual same owner is transferred twice on that one edge, both projected/DROPped/provider-recorded.",
+        "fresh_inputs": 1,
+        "expected_build": "XR_PROGRAM_BUILD_OK",
+        "expected_verify": "XR_PROGRAM_VERIFY_SEMANTIC_REJECTED",
+        "expected_diagnostic": "XR_PROGRAM_DIAGNOSTIC_VALUE_USE",
+        "original_runtime": "NOT_RUN",
+        "status": "OPEN"
+      },
+      {
+        "mutation": "OWNER_NOT_DROPPED",
+        "complete_graph_change": "Only omit OWNER_DROP in trap cleanup after actual aggregate PROJECT; provider payload/snapshot and TRAP7 remain.",
+        "fresh_inputs": 1,
+        "expected_build": "XR_PROGRAM_BUILD_OK",
+        "expected_verify": "XR_PROGRAM_VERIFY_SEMANTIC_REJECTED",
+        "expected_diagnostic": "XR_PROGRAM_DIAGNOSTIC_VALUE_USE",
+        "original_runtime": "NOT_RUN",
+        "status": "OPEN"
+      },
+      {
+        "mutation": "NONLIVE_INPUT",
+        "complete_graph_change": "Only last explicit trap suffix snapshot33 -> actual token11. Both I64, but token is absent from parent safepoint live[owner,snapshot].",
+        "fresh_inputs": 1,
+        "expected_build": "XR_PROGRAM_BUILD_OK",
+        "expected_verify": "XR_PROGRAM_VERIFY_SEMANTIC_REJECTED",
+        "expected_diagnostic": "XR_PROGRAM_DIAGNOSTIC_COROUTINE",
+        "original_runtime": "NOT_RUN",
+        "status": "OPEN"
+      },
+      {
+        "mutation": "WRONG_TYPE",
+        "complete_graph_change": "Only first trap suffix owner aggregate62 -> I64 snapshot33; keep original trap OWN aggregate argument and all cleanup operations.",
+        "fresh_inputs": 1,
+        "expected_build": "XR_PROGRAM_BUILD_OK",
+        "expected_verify": "XR_PROGRAM_VERIFY_SEMANTIC_REJECTED",
+        "expected_diagnostic": "XR_PROGRAM_DIAGNOSTIC_OPERATION_TYPE",
+        "original_runtime": "NOT_RUN",
+        "status": "OPEN"
+      },
+      {
+        "mutation": "WRONG_CATEGORY",
+        "complete_graph_change": "Append actual PLACE_LOCAL(snapshot33) I64 PLACE in parent entry and use that result as last trap suffix instead of I64 snapshot VALUE. Full owner transfer remains.",
+        "fresh_inputs": 1,
+        "expected_build": "XR_PROGRAM_BUILD_OK",
+        "expected_verify": "XR_PROGRAM_VERIFY_SEMANTIC_REJECTED",
+        "expected_diagnostic": "XR_PROGRAM_DIAGNOSTIC_OPERATION_TYPE",
+        "original_runtime": "NOT_RUN",
+        "status": "OPEN"
+      },
+      {
+        "mutation": "WRONG_OWNERSHIP",
+        "complete_graph_change": "Only parent trap aggregate argument ownership OWNER -> NON_OWNER; actual call owner transfer and actual DROP operation remain.",
+        "fresh_inputs": 1,
+        "expected_build": "XR_PROGRAM_BUILD_OK",
+        "expected_verify": "XR_PROGRAM_VERIFY_SEMANTIC_REJECTED",
+        "expected_diagnostic": "XR_PROGRAM_DIAGNOSTIC_OPERATION_TYPE",
+        "original_runtime": "NOT_RUN",
+        "status": "OPEN"
+      },
+      {
+        "mutation": "WRONG_TERMINAL",
+        "complete_graph_change": "Only parent trap terminal immediate7 -> 4, retaining exact same block key and continuation operands.",
+        "fresh_inputs": 1,
+        "expected_build": "XR_PROGRAM_BUILD_OK",
+        "expected_verify": "XR_PROGRAM_VERIFY_SEMANTIC_REJECTED",
+        "expected_diagnostic": "XR_PROGRAM_DIAGNOSTIC_CONTROL_FLOW",
+        "original_runtime": "NOT_RUN",
+        "status": "OPEN"
+      },
+      {
+        "mutation": "CANCEL_TARGET",
+        "complete_graph_change": "Parent has three blocks, no separate trap cleanup. Third successor key aliases existing cancel key; append actual owner for that trap suffix while original normal/cancel suffixes remain.",
+        "fresh_inputs": 1,
+        "expected_build": "XR_PROGRAM_BUILD_OK",
+        "expected_verify": "XR_PROGRAM_VERIFY_SEMANTIC_REJECTED",
+        "expected_diagnostic": "XR_PROGRAM_DIAGNOSTIC_CONTROL_FLOW",
+        "original_runtime": "NOT_RUN",
+        "status": "OPEN"
+      },
+      {
+        "mutation": "TRUNCATED_INPUT",
+        "complete_graph_change": "Only decrement full call operand_count7 -> 6, omitting final snapshot transfer but retaining full metadata/blocks.",
+        "fresh_inputs": 1,
+        "expected_build": "XR_PROGRAM_BUILD_OK",
+        "expected_verify": "XR_PROGRAM_VERIFY_SEMANTIC_REJECTED",
+        "expected_diagnostic": "XR_PROGRAM_DIAGNOSTIC_OPERATION_ARITY",
+        "original_runtime": "NOT_RUN",
+        "status": "OPEN"
+      },
+      {
+        "mutation": "EXTRA_INPUT",
+        "complete_graph_change": "Only append actual token11 beyond all normal/cancel/trap suffixes, call count7 -> 8.",
+        "fresh_inputs": 1,
+        "expected_build": "XR_PROGRAM_BUILD_OK",
+        "expected_verify": "XR_PROGRAM_VERIFY_SEMANTIC_REJECTED",
+        "expected_diagnostic": "XR_PROGRAM_DIAGNOSTIC_OPERATION_ARITY",
+        "original_runtime": "NOT_RUN",
+        "status": "OPEN"
+      },
+      {
+        "mutation": "PAYLOAD_WITHOUT_EDGE",
+        "complete_graph_change": "Parent selects no-trap three-block graph and two successors, but appends original trap [owner,snapshot] payload anyway, call count7 instead5.",
+        "fresh_inputs": 1,
+        "expected_build": "XR_PROGRAM_BUILD_OK",
+        "expected_verify": "XR_PROGRAM_VERIFY_SEMANTIC_REJECTED",
+        "expected_diagnostic": "XR_PROGRAM_DIAGNOSTIC_COROUTINE",
+        "original_runtime": "NOT_RUN",
+        "status": "OPEN"
+      },
+      {
+        "mutation": "DUPLICATE_CANCEL_OWNER",
+        "complete_graph_change": "Cancel block takes two distinct OWN aggregate arguments and independently PROJECT/DROP/provider-records both; same actual owner appears twice in cancellation suffix. Other channels intact.",
+        "fresh_inputs": 1,
+        "expected_build": "XR_PROGRAM_BUILD_OK",
+        "expected_verify": "XR_PROGRAM_VERIFY_SEMANTIC_REJECTED",
+        "expected_diagnostic": "XR_PROGRAM_DIAGNOSTIC_VALUE_USE",
+        "original_runtime": "NOT_RUN",
+        "status": "OPEN"
+      },
+      {
+        "mutation": "MOVED_CALLER_OWNER",
+        "complete_graph_change": "Child first parameter READ I64 token -> MOVE aggregate62 OWNER; omit child AGGREGATE_CONSTRUCT and reuse received owner, reorder child live/normal argument tuple to owner,field. Parent call param0 becomes actual owner while same owner is still in parent live and all continuation suffixes.",
+        "fresh_inputs": 1,
+        "expected_build": "XR_PROGRAM_BUILD_OK",
+        "expected_verify": "XR_PROGRAM_VERIFY_SEMANTIC_REJECTED",
+        "expected_diagnostic": "XR_PROGRAM_DIAGNOSTIC_VALUE_USE",
+        "original_runtime": "NOT_RUN",
+        "status": "OPEN"
+      },
+      {
+        "mutation": "DUPLICATE_LIVE_VALUE",
+        "complete_graph_change": "Only parent normal suffix snapshot replaced with the same owner, so normal transfer tuple becomes [owner,owner] while normal argument types and safepoint live[owner,snapshot] stay original.",
+        "fresh_inputs": 1,
+        "expected_build": "XR_PROGRAM_BUILD_OK",
+        "expected_verify": "XR_PROGRAM_VERIFY_SEMANTIC_REJECTED",
+        "expected_diagnostic": "XR_PROGRAM_DIAGNOSTIC_COROUTINE",
+        "original_runtime": "NOT_RUN",
+        "status": "OPEN"
+      }
+    ],
+    "fresh_inputs": 22,
+    "original_runtime": "Admission only in this census. Shared header historical provider-event legend is preserved input/design context, not executions performed by this test.",
+    "canonical_repeat": "VALID fresh build twice; first admitted/freed before repeated build, repeat only full bytes/nonzero size/ProgramID checked and then freed."
+  },
+  "provider_contract": {
+    "contract_key": "fixture.coroutine-trap.provider",
+    "operation_key": "fixture.coroutine-trap.record",
+    "IDs": "Both derived with xr_stable_id_from_key; derivation failure returns BUILD_INVALID_INPUT. All original selected cases require BUILD_OK.",
+    "operation": "One actual requirement i64(i64), nullary=false; result/error trivial, parameter IN/trivial, UNIT error, effects READS_CLOCK, all platforms, hosted profiles, threads ANY, reentry ALLOWED, callbacks NONE, refusal TRAP. Label READS_CLOCK is a logical declaration, not an actual clock execution claim.",
+    "binding": "Every actual provider instruction carries the same stable contract/operation IDs; CoreIR input includes one provider requirement. Semantic profile key coroutine-trap:profile:fixture, CORE_BASE feature. Dedicated provider return is deliberately ignored."
+  },
+  "assertion_counts": {
+    "census_functions": 2,
+    "outer_sites": 10,
+    "specified_helpers": 24,
+    "specified_helper_sites": 8,
+    "specified_helper_assert_sites": 6,
+    "fresh_builder_inputs": 29,
+    "positive_admitted_programs": 7,
+    "repeat_writer_only_inputs": 1,
+    "semantic_negative_inputs": 21,
+    "semantic_negative_verify_calls": 42,
+    "original_runtime_evaluations": 0,
+    "wire_mutations": 0
+  },
+  "negative_expectation_policy": "All 21 original full negative graphs build OK; exact expected kind/status and NULL checked twice with equal repeated status/full Diag memcmp. Field REF duplicated cancel root expects COROUTINE, while child-trap duplicate owner expects VALUE_USE. Preserve this original distinction; no any-error replacement or inferred universal failure kind.",
+  "shared_fixture_owners": {
+    "ref_path": "tests/unit/program/xr_program_ref_coroutine_fixture.h",
+    "ref_actual_include_users": [
+      "tests/unit/program/test_xr_program_verify.c",
+      "tests/unit/aot/test_xr_program_aot.c"
+    ],
+    "trap_path": "tests/unit/program/xr_program_coroutine_trap_fixture.h",
+    "trap_actual_include_users": [
+      "tests/unit/program/test_xr_program_verify.c",
+      "tests/unit/program/test_xr_program.c",
+      "tests/unit/aot/test_xr_program_aot.c",
+      "tests/unit/vm/test_xr_program_vm.c",
+      "tests/unit/program/xr_program_coroutine_outcome_fixture.h"
+    ],
+    "provider_path": "tests/unit/program/xr_program_provider_fixture.h",
+    "status": "PRESERVE_SHARED_READONLY",
+    "deletion": "AOT/verifier/Program/VM/outcome users and provider fixtures remain; no shared dependency deletion candidate."
+  },
+  "Root_contract_or_representation_review": {
+    "status": "OPEN",
+    "refs": "Preserve full distinct-field REF projection graph and one actual owning root across parent suspension. Apply current frozen Cell/loan/exclusivity contract without temporary cells, write-back adapters, duplicated-owner transfer or raw address lifetime substitution.",
+    "traps": "Preserve actual caller field mutations44/55 and snapshot33 identity, actual unique child/parent owners, provider failure stages, normal/cancel/trap channel cleanup and distinct TRAP4/TRAP7 semantics. NO_TRAP_EDGE remains an original admitted graph whose runtime/cleanup contract requires explicit current qualification.",
+    "ownership": "Current actual stable construct/finalize/reclaim and physical reclamation are additional obligations. Equal payloads, aggregate address, total live0, domain teardown and release call alone cannot prove each owner cleanup.",
+    "qualification": "Formal producer/current verified owner/full specialization reverify/VM/native/mixed/two-instance/detached owned results/active cancel/provider refusals/full FI/axes/safety remain OPEN awaiting Root roles/observer/window."
+  },
+  "full_FI": "NOT_RUN",
+  "axes": "NOT_RUN",
+  "full_safety": "NOT_RUN",
+  "SourceDelete": "NOT_RUN",
+  "Main": "NOT_RUN",
+  "handoff": {
+    "Root_thread": "01a11f74-a297-7b11-8441-835bde6a3d5f",
+    "formal_acceptance": "PENDING"
+  },
+  "boundaries": [
+    "Only full original static admission responsibility maps; retired0/all OPEN.",
+    "No current product execution, lifecycle or native provider qualification performed.",
+    "Only mapping and trace owned; all original helpers, product source, docs and historical dirty generated state preserved."
+  ]
+}
