@@ -1,0 +1,1358 @@
+{
+  "schema": 1,
+  "family": "original_aot_full_witness_and_callable_invoke_trap_continuation_inputs_and_historical_direct_rejections",
+  "legacy_base_commit": "01e6d38401b0f5c8684b64c35a99ac651024c0c1",
+  "status": "OPEN",
+  "retired": 0,
+  "replacement_gates": [],
+  "result": "STATIC_FULL_ORIGINAL_AOT_WITNESS_CALLABLE_TRAP_MAP_ONLY",
+  "product_execution": "NOT_RUN_BY_THIS_MAP",
+  "producer": "25f4016d6f089169757a90ae11ba537002374711",
+  "identity": "Checked25/contract67/Value22/Call28/Program29",
+  "identity_namespace_note": "Historicalcontract67 differs from semantic-plan schema52. LaterRootcommits/27/72 readonlyobservations, no consumer adoption.",
+  "legacy": [
+    {
+      "name": "test_witness_invoke_trap_continuation_lowering_and_mutation",
+      "legacy_path": "tests/unit/aot/test_xr_program_aot.c",
+      "legacy_line": 2678,
+      "body_lf_sha256": "084fbebbc855df49e3e732e68376d5a67a98a9a415ebccf6302e56dd611774a1",
+      "assertion_sites": 16,
+      "loop_sites": 3,
+      "status": "OPEN",
+      "replacement_gates": [],
+      "note": "Function census preserves its whole body; sites do not count executed loop iterations."
+    },
+    {
+      "name": "test_callable_invoke_trap_continuation_lowering_and_mutation",
+      "legacy_path": "tests/unit/aot/test_xr_program_aot.c",
+      "legacy_line": 2737,
+      "body_lf_sha256": "c58727ab0ff736b930fe217d87b434a6bcebe89adeff3da6396f85c4d13e0fac",
+      "assertion_sites": 16,
+      "loop_sites": 3,
+      "status": "OPEN",
+      "replacement_gates": [],
+      "note": "Function census preserves its whole body; sites do not count executed loop iterations."
+    }
+  ],
+  "responsibility_mapping": [
+    {
+      "path": "tests/unit/aot/test_xr_program_aot.c",
+      "function": "test_witness_invoke_trap_continuation_lowering_and_mutation",
+      "line": 2678,
+      "end_line": 2735,
+      "body_lf_sha256": "084fbebbc855df49e3e732e68376d5a67a98a9a415ebccf6302e56dd611774a1",
+      "REQUIRE_sites": 16,
+      "REQUIRE_bindings": [
+        {
+          "line": 2681,
+          "expression": "xr_program_existential_fixture_write_mutated(\n                XR_EXISTENTIAL_FIXTURE_WITNESS_INVOKE_TRAP, &artifact, build_diagnostic,\n                sizeof(build_diagnostic)) == XR_PROGRAM_BUILD_OK",
+          "status": "OPEN"
+        },
+        {
+          "line": 2686,
+          "expression": "xr_program_validate(artifact.bytes, artifact.size, NULL, &program,\n                                &verify_diagnostic) == XR_PROGRAM_VERIFY_OK",
+          "status": "OPEN"
+        },
+        {
+          "line": 2691,
+          "expression": "profile != NULL",
+          "status": "OPEN"
+        },
+        {
+          "line": 2701,
+          "expression": "invoke == NULL",
+          "status": "OPEN"
+        },
+        {
+          "line": 2708,
+          "expression": "invoke_function != NULL",
+          "status": "OPEN"
+        },
+        {
+          "line": 2709,
+          "expression": "invoke != NULL",
+          "status": "OPEN"
+        },
+        {
+          "line": 2710,
+          "expression": "invoke->successor_count == 3u",
+          "status": "OPEN"
+        },
+        {
+          "line": 2713,
+          "expression": "xr_compile_backend_ir_emit_c(\n                ir, &(XrBackendEmissionRequest) {backend_emission_resources, false, NULL, 0u},\n                &generated, &diagnostic) == XR_BACKEND_OK",
+          "status": "OPEN"
+        },
+        {
+          "line": 2716,
+          "expression": "strstr(generated.bytes, \".kind == 1 && call_\") != NULL",
+          "status": "OPEN"
+        },
+        {
+          "line": 2717,
+          "expression": "strstr(generated.bytes, \".trap == 7\") != NULL",
+          "status": "OPEN"
+        },
+        {
+          "line": 2720,
+          "expression": "trap_block < invoke_function->block_count",
+          "status": "OPEN"
+        },
+        {
+          "line": 2722,
+          "expression": "target->instruction_count != 0u",
+          "status": "OPEN"
+        },
+        {
+          "line": 2724,
+          "expression": "trap->operation_id == XR_CORE_OP_CORE_TRAP",
+          "status": "OPEN"
+        },
+        {
+          "line": 2726,
+          "expression": "!xr_backend_ir_verify(ir, &diagnostic)",
+          "status": "OPEN"
+        },
+        {
+          "line": 2727,
+          "expression": "diagnostic.status == XR_BACKEND_INVARIANT_REJECTED",
+          "status": "OPEN"
+        },
+        {
+          "line": 2729,
+          "expression": "xr_backend_ir_verify(ir, &diagnostic)",
+          "status": "OPEN"
+        }
+      ],
+      "CHECK_sites": 0,
+      "CHECK_bindings": [],
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/aot/test_xr_program_aot.c",
+      "function": "test_callable_invoke_trap_continuation_lowering_and_mutation",
+      "line": 2737,
+      "end_line": 2794,
+      "body_lf_sha256": "c58727ab0ff736b930fe217d87b434a6bcebe89adeff3da6396f85c4d13e0fac",
+      "REQUIRE_sites": 16,
+      "REQUIRE_bindings": [
+        {
+          "line": 2740,
+          "expression": "xr_program_callable_fixture_write_mutated(XR_CALLABLE_FIXTURE_INVOKE_TRAP, &artifact,\n                                                      build_diagnostic, sizeof(build_diagnostic)) ==\n            XR_PROGRAM_BUILD_OK",
+          "status": "OPEN"
+        },
+        {
+          "line": 2745,
+          "expression": "xr_program_validate(artifact.bytes, artifact.size, NULL, &program,\n                                &verify_diagnostic) == XR_PROGRAM_VERIFY_OK",
+          "status": "OPEN"
+        },
+        {
+          "line": 2750,
+          "expression": "profile != NULL",
+          "status": "OPEN"
+        },
+        {
+          "line": 2760,
+          "expression": "invoke == NULL",
+          "status": "OPEN"
+        },
+        {
+          "line": 2767,
+          "expression": "invoke_function != NULL",
+          "status": "OPEN"
+        },
+        {
+          "line": 2768,
+          "expression": "invoke != NULL",
+          "status": "OPEN"
+        },
+        {
+          "line": 2769,
+          "expression": "invoke->successor_count == 3u",
+          "status": "OPEN"
+        },
+        {
+          "line": 2772,
+          "expression": "xr_compile_backend_ir_emit_c(\n                ir, &(XrBackendEmissionRequest) {backend_emission_resources, false, NULL, 0u},\n                &generated, &diagnostic) == XR_BACKEND_OK",
+          "status": "OPEN"
+        },
+        {
+          "line": 2775,
+          "expression": "strstr(generated.bytes, \".kind == 1 && call_\") != NULL",
+          "status": "OPEN"
+        },
+        {
+          "line": 2776,
+          "expression": "strstr(generated.bytes, \".trap == 7\") != NULL",
+          "status": "OPEN"
+        },
+        {
+          "line": 2779,
+          "expression": "trap_block < invoke_function->block_count",
+          "status": "OPEN"
+        },
+        {
+          "line": 2781,
+          "expression": "target->instruction_count != 0u",
+          "status": "OPEN"
+        },
+        {
+          "line": 2783,
+          "expression": "trap->operation_id == XR_CORE_OP_CORE_TRAP",
+          "status": "OPEN"
+        },
+        {
+          "line": 2785,
+          "expression": "!xr_backend_ir_verify(ir, &diagnostic)",
+          "status": "OPEN"
+        },
+        {
+          "line": 2786,
+          "expression": "diagnostic.status == XR_BACKEND_INVARIANT_REJECTED",
+          "status": "OPEN"
+        },
+        {
+          "line": 2788,
+          "expression": "xr_backend_ir_verify(ir, &diagnostic)",
+          "status": "OPEN"
+        }
+      ],
+      "CHECK_sites": 0,
+      "CHECK_bindings": [],
+      "status": "OPEN"
+    }
+  ],
+  "outer_REQUIRE_sites": 32,
+  "original_private_helpers": [
+    {
+      "path": "tests/unit/aot/xr_backend_emission_owner.h",
+      "function": "backend_emission_owner_close",
+      "line": 19,
+      "end_line": 30,
+      "body_lf_sha256": "356ddfb98380e9b201920c88ffd7afccc9c9f4d4311f9983ebd20903ce66377a",
+      "REQUIRE_sites": 0,
+      "REQUIRE_bindings": [],
+      "CHECK_sites": 0,
+      "CHECK_bindings": [],
+      "status": "OPEN",
+      "standard_assert_bindings": [],
+      "standard_assert_sites": 0
+    },
+    {
+      "path": "tests/unit/aot/xr_backend_emission_owner.h",
+      "function": "backend_emission_owner_open",
+      "line": 31,
+      "end_line": 43,
+      "body_lf_sha256": "786869fb3f6675488f9b529c5c025eece534d04fffc1c8be190cea8381300214",
+      "REQUIRE_sites": 0,
+      "REQUIRE_bindings": [],
+      "CHECK_sites": 0,
+      "CHECK_bindings": [],
+      "status": "OPEN",
+      "standard_assert_bindings": [],
+      "standard_assert_sites": 0
+    },
+    {
+      "path": "tests/unit/aot/test_xr_program_aot.c",
+      "function": "build_ir",
+      "line": 1269,
+      "end_line": 1285,
+      "body_lf_sha256": "83e9015fd556844ec0d0f348a91bbf415699d2b5e2baad30652eeca642a36790",
+      "REQUIRE_sites": 4,
+      "REQUIRE_bindings": [
+        {
+          "line": 1280,
+          "expression": "status == XR_BACKEND_OK",
+          "status": "OPEN"
+        },
+        {
+          "line": 1281,
+          "expression": "ir != NULL",
+          "status": "OPEN"
+        },
+        {
+          "line": 1282,
+          "expression": "xr_backend_ir_verify(ir, &diagnostic)",
+          "status": "OPEN"
+        },
+        {
+          "line": 1283,
+          "expression": "xr_backend_ir_binding_verify(ir, &diagnostic)",
+          "status": "OPEN"
+        }
+      ],
+      "CHECK_sites": 0,
+      "CHECK_bindings": [],
+      "status": "OPEN",
+      "standard_assert_bindings": [],
+      "standard_assert_sites": 0
+    },
+    {
+      "path": "tests/unit/runtime/test_runtime_abi_contract.c",
+      "function": "init_record",
+      "line": 214,
+      "end_line": 224,
+      "body_lf_sha256": "4ab5c4c8467fa198701af703fb5bf753a184f9a42833d42913b5a5eb3f01d3f4",
+      "REQUIRE_sites": 0,
+      "REQUIRE_bindings": [],
+      "CHECK_sites": 0,
+      "CHECK_bindings": [],
+      "status": "OPEN",
+      "standard_assert_bindings": [],
+      "standard_assert_sites": 0
+    },
+    {
+      "path": "tests/unit/runtime/test_runtime_abi_contract.c",
+      "function": "make_bitmask_namespace",
+      "line": 185,
+      "end_line": 201,
+      "body_lf_sha256": "207cac9d3252a15fab701a097ddfb9cc1ab14f2b1fd12bda30d3ee3e5ba9301e",
+      "REQUIRE_sites": 0,
+      "REQUIRE_bindings": [],
+      "CHECK_sites": 0,
+      "CHECK_bindings": [],
+      "status": "OPEN",
+      "standard_assert_bindings": [],
+      "standard_assert_sites": 0
+    },
+    {
+      "path": "tests/unit/runtime/test_runtime_abi_contract.c",
+      "function": "make_call_abi",
+      "line": 435,
+      "end_line": 450,
+      "body_lf_sha256": "25dd59fd4e47cf4ba0b28325b0ad3a43be269293fbde42dc6e7031d0ed80c7b8",
+      "REQUIRE_sites": 0,
+      "REQUIRE_bindings": [],
+      "CHECK_sites": 0,
+      "CHECK_bindings": [],
+      "status": "OPEN",
+      "standard_assert_bindings": [],
+      "standard_assert_sites": 0
+    },
+    {
+      "path": "tests/unit/runtime/test_runtime_abi_contract.c",
+      "function": "make_call_slot",
+      "line": 422,
+      "end_line": 433,
+      "body_lf_sha256": "a86c6de459703f2b937b6f7973be3859d8d8c5a852ee052eea09211ffad9503c",
+      "REQUIRE_sites": 0,
+      "REQUIRE_bindings": [],
+      "CHECK_sites": 0,
+      "CHECK_bindings": [],
+      "status": "OPEN",
+      "standard_assert_bindings": [],
+      "standard_assert_sites": 0
+    },
+    {
+      "path": "tests/unit/runtime/test_runtime_abi_contract.c",
+      "function": "make_callback_abi",
+      "line": 379,
+      "end_line": 394,
+      "body_lf_sha256": "7ad3d4840e698211639d76bcb2ca9d2014e7d539124ef06c50dce2b10f494fc2",
+      "REQUIRE_sites": 0,
+      "REQUIRE_bindings": [],
+      "CHECK_sites": 0,
+      "CHECK_bindings": [],
+      "status": "OPEN",
+      "standard_assert_bindings": [],
+      "standard_assert_sites": 0
+    },
+    {
+      "path": "tests/unit/runtime/test_runtime_abi_contract.c",
+      "function": "make_domain_record",
+      "line": 232,
+      "end_line": 252,
+      "body_lf_sha256": "536703223f2c831458e8f782a0683f162e0e34ad3c62a8389a6ff475039630c2",
+      "REQUIRE_sites": 0,
+      "REQUIRE_bindings": [],
+      "CHECK_sites": 0,
+      "CHECK_bindings": [],
+      "status": "OPEN",
+      "standard_assert_bindings": [],
+      "standard_assert_sites": 0
+    },
+    {
+      "path": "tests/unit/runtime/test_runtime_abi_contract.c",
+      "function": "make_dynamic_value_abi",
+      "line": 135,
+      "end_line": 166,
+      "body_lf_sha256": "9124fffbdeed4fa0f812eeccf2e7d7b6e8e3ea7f611df834fcdc745c6c6acd9e",
+      "REQUIRE_sites": 0,
+      "REQUIRE_bindings": [],
+      "CHECK_sites": 0,
+      "CHECK_bindings": [],
+      "status": "OPEN",
+      "standard_assert_bindings": [],
+      "standard_assert_sites": 0
+    },
+    {
+      "path": "tests/unit/runtime/test_runtime_abi_contract.c",
+      "function": "make_enum_namespace",
+      "line": 168,
+      "end_line": 183,
+      "body_lf_sha256": "28d917c7691646d359b959de4873321956d24b149113134a622a2e73884904a2",
+      "REQUIRE_sites": 0,
+      "REQUIRE_bindings": [],
+      "CHECK_sites": 0,
+      "CHECK_bindings": [],
+      "status": "OPEN",
+      "standard_assert_bindings": [],
+      "standard_assert_sites": 0
+    },
+    {
+      "path": "tests/unit/runtime/test_runtime_abi_contract.c",
+      "function": "make_evaluated_record",
+      "line": 343,
+      "end_line": 363,
+      "body_lf_sha256": "11ad05329acd869a452db663387e6c24d4b92c432e6ff3c517e906c1124f25b9",
+      "REQUIRE_sites": 0,
+      "REQUIRE_bindings": [],
+      "CHECK_sites": 0,
+      "CHECK_bindings": [],
+      "status": "OPEN",
+      "standard_assert_bindings": [],
+      "standard_assert_sites": 0
+    },
+    {
+      "path": "tests/unit/runtime/test_runtime_abi_contract.c",
+      "function": "make_extent_record",
+      "line": 254,
+      "end_line": 289,
+      "body_lf_sha256": "eb2a48e1cd60915fc9b3206d7fa02a28cc76a57735dd97decf2e497f674c5bfa",
+      "REQUIRE_sites": 0,
+      "REQUIRE_bindings": [],
+      "CHECK_sites": 0,
+      "CHECK_bindings": [],
+      "status": "OPEN",
+      "standard_assert_bindings": [],
+      "standard_assert_sites": 0
+    },
+    {
+      "path": "tests/unit/runtime/test_runtime_abi_contract.c",
+      "function": "make_field",
+      "line": 60,
+      "end_line": 72,
+      "body_lf_sha256": "cd61f005fd7b857407a91167e3adaa0964fc33d9f6715c488e191bbdf88ba31f",
+      "REQUIRE_sites": 0,
+      "REQUIRE_bindings": [],
+      "CHECK_sites": 0,
+      "CHECK_bindings": [],
+      "status": "OPEN",
+      "standard_assert_bindings": [],
+      "standard_assert_sites": 0
+    },
+    {
+      "path": "tests/unit/runtime/test_runtime_abi_contract.c",
+      "function": "make_group_record",
+      "line": 365,
+      "end_line": 377,
+      "body_lf_sha256": "c075578b1ccf9e89cddd3baaafaf6e4674dc4981fd1986c7fd187c01b687f371",
+      "REQUIRE_sites": 0,
+      "REQUIRE_bindings": [],
+      "CHECK_sites": 0,
+      "CHECK_bindings": [],
+      "status": "OPEN",
+      "standard_assert_bindings": [],
+      "standard_assert_sites": 0
+    },
+    {
+      "path": "tests/unit/plan/target_profile_test_fixture.c",
+      "function": "make_header_facts",
+      "line": 43,
+      "end_line": 66,
+      "body_lf_sha256": "916a05fa9431a545e70e8905f058dba291cd7b36a15797fcfe135cded74122ac",
+      "REQUIRE_sites": 0,
+      "REQUIRE_bindings": [],
+      "CHECK_sites": 0,
+      "CHECK_bindings": [],
+      "status": "OPEN",
+      "standard_assert_bindings": [],
+      "standard_assert_sites": 0
+    },
+    {
+      "path": "tests/unit/runtime/test_runtime_abi_contract.c",
+      "function": "make_id",
+      "line": 34,
+      "end_line": 40,
+      "body_lf_sha256": "5612295a99ac5b4e526240667bd204b53b51f7159879cf4ae3c4ae0a920541a7",
+      "REQUIRE_sites": 0,
+      "REQUIRE_bindings": [],
+      "CHECK_sites": 0,
+      "CHECK_bindings": [],
+      "status": "OPEN",
+      "standard_assert_bindings": [],
+      "standard_assert_sites": 0
+    },
+    {
+      "path": "tests/unit/runtime/test_runtime_abi_contract.c",
+      "function": "make_layout_record",
+      "line": 291,
+      "end_line": 330,
+      "body_lf_sha256": "ea85e0ad196e110c75ab7442069356599c0d37f4a0966a9efbf8f3a980039519",
+      "REQUIRE_sites": 0,
+      "REQUIRE_bindings": [],
+      "CHECK_sites": 0,
+      "CHECK_bindings": [],
+      "status": "OPEN",
+      "standard_assert_bindings": [],
+      "standard_assert_sites": 0
+    },
+    {
+      "path": "tests/unit/runtime/test_runtime_abi_contract.c",
+      "function": "make_limits_record",
+      "line": 332,
+      "end_line": 341,
+      "body_lf_sha256": "18824fdbf424ca6f5b40a45c7bf693a7c363db28b2470ec2adbbdf8c04730ac4",
+      "REQUIRE_sites": 0,
+      "REQUIRE_bindings": [],
+      "CHECK_sites": 0,
+      "CHECK_bindings": [],
+      "status": "OPEN",
+      "standard_assert_bindings": [],
+      "standard_assert_sites": 0
+    },
+    {
+      "path": "tests/unit/runtime/test_runtime_abi_contract.c",
+      "function": "make_object_header_abi",
+      "line": 74,
+      "end_line": 133,
+      "body_lf_sha256": "766e70c0fe87638481dfb960992502b2ddfee5764b426f9358b26d74a3b82de0",
+      "REQUIRE_sites": 0,
+      "REQUIRE_bindings": [],
+      "CHECK_sites": 0,
+      "CHECK_bindings": [],
+      "status": "OPEN",
+      "standard_assert_bindings": [],
+      "standard_assert_sites": 0
+    },
+    {
+      "path": "tests/unit/runtime/test_runtime_abi_contract.c",
+      "function": "make_operation",
+      "line": 452,
+      "end_line": 465,
+      "body_lf_sha256": "8aa96efbebf6cf7551d604f146b654b95b6a991e6c360351584251a9ee295258",
+      "REQUIRE_sites": 0,
+      "REQUIRE_bindings": [],
+      "CHECK_sites": 0,
+      "CHECK_bindings": [],
+      "status": "OPEN",
+      "standard_assert_bindings": [],
+      "standard_assert_sites": 0
+    },
+    {
+      "path": "tests/unit/runtime/test_runtime_abi_contract.c",
+      "function": "make_providers",
+      "line": 467,
+      "end_line": 527,
+      "body_lf_sha256": "c08810adcf8ff9075582c3a86bc188fa3d60c4ca3f1f5dfa4f47ad7b61d7418e",
+      "REQUIRE_sites": 0,
+      "REQUIRE_bindings": [],
+      "CHECK_sites": 0,
+      "CHECK_bindings": [],
+      "status": "OPEN",
+      "standard_assert_bindings": [],
+      "standard_assert_sites": 0
+    },
+    {
+      "path": "tests/unit/runtime/test_runtime_abi_contract.c",
+      "function": "make_runtime_abi",
+      "line": 396,
+      "end_line": 420,
+      "body_lf_sha256": "2c8e04bb7facee00cc8895173e1e66932bcf11edd0d35dee52b04159b0a99a6c",
+      "REQUIRE_sites": 0,
+      "REQUIRE_bindings": [],
+      "CHECK_sites": 0,
+      "CHECK_bindings": [],
+      "status": "OPEN",
+      "standard_assert_bindings": [],
+      "standard_assert_sites": 0
+    },
+    {
+      "path": "tests/unit/runtime/test_runtime_abi_contract.c",
+      "function": "make_sentinel_namespace",
+      "line": 203,
+      "end_line": 212,
+      "body_lf_sha256": "f582219862890c24c3d0d6a21230755b8df4340967fad41175b41a6c4100e031",
+      "REQUIRE_sites": 0,
+      "REQUIRE_bindings": [],
+      "CHECK_sites": 0,
+      "CHECK_bindings": [],
+      "status": "OPEN",
+      "standard_assert_bindings": [],
+      "standard_assert_sites": 0
+    },
+    {
+      "path": "tests/unit/plan/target_profile_test_fixture.c",
+      "function": "retarget_call_abi",
+      "line": 68,
+      "end_line": 84,
+      "body_lf_sha256": "213f3f583b905b1b699bd3425c364701a62f17e1098fe11294b255545b5f24de",
+      "REQUIRE_sites": 0,
+      "REQUIRE_bindings": [],
+      "CHECK_sites": 0,
+      "CHECK_bindings": [],
+      "status": "OPEN",
+      "standard_assert_bindings": [],
+      "standard_assert_sites": 0
+    },
+    {
+      "path": "tests/unit/plan/target_profile_test_fixture.c",
+      "function": "retarget_providers",
+      "line": 86,
+      "end_line": 101,
+      "body_lf_sha256": "8df03b2bc968573e515c441fd5a96f87d9db2300e13e3e3b514d3032a3ccfbaa",
+      "REQUIRE_sites": 0,
+      "REQUIRE_bindings": [],
+      "CHECK_sites": 0,
+      "CHECK_bindings": [],
+      "status": "OPEN",
+      "standard_assert_bindings": [],
+      "standard_assert_sites": 0
+    },
+    {
+      "path": "tests/unit/program/xr_program_callable_fixture.h",
+      "function": "xr_callable_fixture_key",
+      "line": 34,
+      "end_line": 36,
+      "body_lf_sha256": "921b680b2e2218bcf2d1f9014ee4d15fbd64b498dbc5dd095d145b845f9b524c",
+      "REQUIRE_sites": 0,
+      "REQUIRE_bindings": [],
+      "CHECK_sites": 0,
+      "CHECK_bindings": [],
+      "status": "OPEN",
+      "standard_assert_bindings": [],
+      "standard_assert_sites": 0
+    },
+    {
+      "path": "tests/unit/program/xr_program_existential_fixture.h",
+      "function": "xr_existential_fixture_key",
+      "line": 34,
+      "end_line": 36,
+      "body_lf_sha256": "314f6c219e6391043def23e0357db0d34a96ad46a9b5a941065f4c8d1cc4b03b",
+      "REQUIRE_sites": 0,
+      "REQUIRE_bindings": [],
+      "CHECK_sites": 0,
+      "CHECK_bindings": [],
+      "status": "OPEN",
+      "standard_assert_bindings": [],
+      "standard_assert_sites": 0
+    },
+    {
+      "path": "tests/unit/program/xr_program_callable_fixture.h",
+      "function": "xr_program_callable_fixture_write_mutated",
+      "line": 38,
+      "end_line": 627,
+      "body_lf_sha256": "777c7037f3a4596fc5b7752eb35d94798ccb74a38b32273a2740e4de285ce2bc",
+      "REQUIRE_sites": 0,
+      "REQUIRE_bindings": [],
+      "CHECK_sites": 0,
+      "CHECK_bindings": [],
+      "status": "OPEN",
+      "standard_assert_bindings": [],
+      "standard_assert_sites": 0
+    },
+    {
+      "path": "tests/unit/program/xr_program_existential_fixture.h",
+      "function": "xr_program_existential_fixture_write_mutated",
+      "line": 38,
+      "end_line": 934,
+      "body_lf_sha256": "bce5394e72a6ca3cec8cc09bdd97a3c4165edb070ee79b5fd8aa70b2ea8fdb6d",
+      "REQUIRE_sites": 0,
+      "REQUIRE_bindings": [],
+      "CHECK_sites": 0,
+      "CHECK_bindings": [],
+      "status": "OPEN",
+      "standard_assert_bindings": [],
+      "standard_assert_sites": 0
+    },
+    {
+      "path": "tests/unit/plan/target_profile_test_fixture.c",
+      "function": "xr_test_target_profile_build",
+      "line": 163,
+      "end_line": 175,
+      "body_lf_sha256": "ff7f447b998483c18b76ebf7ef61f348751a9ea93fa1c0a0604c152711a5a318",
+      "REQUIRE_sites": 0,
+      "REQUIRE_bindings": [],
+      "CHECK_sites": 0,
+      "CHECK_bindings": [],
+      "status": "OPEN",
+      "standard_assert_bindings": [],
+      "standard_assert_sites": 0
+    },
+    {
+      "path": "tests/unit/plan/target_profile_test_fixture.c",
+      "function": "xr_test_target_profile_fixture_init",
+      "line": 103,
+      "end_line": 161,
+      "body_lf_sha256": "be2a37303111036a45393752a7b5c389d370d2f67ef4d302cb3b4e5af55a4888",
+      "REQUIRE_sites": 0,
+      "REQUIRE_bindings": [],
+      "CHECK_sites": 0,
+      "CHECK_bindings": [],
+      "status": "OPEN",
+      "standard_assert_bindings": [],
+      "standard_assert_sites": 0
+    }
+  ],
+  "specified_helper_REQUIRE_sites": 4,
+  "specified_helper_standard_assert_sites": 0,
+  "input_files": [
+    {
+      "path": "tests/unit/aot/test_xr_program_aot.c",
+      "physical_raw_sha256": "6fea38acff96d94b2bfb414e04aa308386f6284ed12ccf05613a790a23caa700",
+      "whole_file_lf_sha256": "e7ab9301b308c7db6bf48e348257e5288f38f22c1b38c827fb040719dbf2de0e",
+      "git_base_equal": true,
+      "status": "PRESERVE_ORIGINAL_READONLY"
+    },
+    {
+      "path": "tests/unit/program/xr_program_existential_fixture.h",
+      "physical_raw_sha256": "120cdbba4e12a66069aa1fdd15a76190d67d9c22e69e5d0b7e8200e9891b9544",
+      "whole_file_lf_sha256": "162f193bc1155dca7ac1b4e2e0649f8bf487ed176086aef5b8140deba2b37185",
+      "git_base_equal": true,
+      "status": "PRESERVE_ORIGINAL_READONLY"
+    },
+    {
+      "path": "tests/unit/program/xr_program_callable_fixture.h",
+      "physical_raw_sha256": "a36f88ff23bc4056dd7a6dba1fe5222ff30e91839b2d545a0ee224f8cf4b4972",
+      "whole_file_lf_sha256": "8649cf8f2ff8c6ab196b311d93d364a4ca2a712d58752946f00c1793ac49a9c4",
+      "git_base_equal": true,
+      "status": "PRESERVE_ORIGINAL_READONLY"
+    },
+    {
+      "path": "tests/unit/plan/target_profile_test_fixture.c",
+      "physical_raw_sha256": "a4bd280583c9b7367c8324451b411dd1bf43d32853b5b8443fa680dded7f1876",
+      "whole_file_lf_sha256": "4cda8a7654397a98661dd495628095965b2549999619a13c7bfa63614e5cd5a6",
+      "git_base_equal": true,
+      "status": "PRESERVE_ORIGINAL_READONLY"
+    },
+    {
+      "path": "tests/unit/runtime/test_runtime_abi_contract.c",
+      "physical_raw_sha256": "38ebe1b2facc5feb1e7b0c0573d66e846eb9974cc16d9aa4e92e3f550c7487c6",
+      "whole_file_lf_sha256": "fa3d630a996a22e1d515a11f73f75f515906cb5ce6afad00c6e2b183486fd858",
+      "git_base_equal": true,
+      "status": "PRESERVE_ORIGINAL_READONLY"
+    },
+    {
+      "path": "tests/unit/aot/xr_backend_emission_owner.h",
+      "physical_raw_sha256": "2b7aa3b05456861e4e539b43bac62263cc443a61850c3f81af0b43e01dad60bf",
+      "whole_file_lf_sha256": "5620237b54c2609c6db2663d8f91e6729b8c59e1a714ac4fcbd48426455d3e01",
+      "git_base_equal": true,
+      "status": "PRESERVE_ORIGINAL_READONLY"
+    },
+    {
+      "path": "tests/unit/plan/target_profile_test_fixture.h",
+      "physical_raw_sha256": "6abd9fd3829ccca28741b2e7b69f9d15e4b2bf53ca97e61af3e07f37ca5df38e",
+      "whole_file_lf_sha256": "8861b73552abd8e8c278482aa2e56bd3371be3a877f91475a43ef7ac22a9633f",
+      "git_base_equal": true,
+      "status": "PRESERVE_ORIGINAL_READONLY"
+    }
+  ],
+  "selected_helper_dependency_edges": {
+    "backend_emission_owner_open": [
+      "backend_emission_owner_close"
+    ],
+    "backend_emission_owner_close": [],
+    "test_callable_invoke_trap_continuation_lowering_and_mutation": [
+      "build_ir",
+      "xr_program_callable_fixture_write_mutated",
+      "xr_test_target_profile_build"
+    ],
+    "xr_program_callable_fixture_write_mutated": [
+      "xr_callable_fixture_key"
+    ],
+    "xr_callable_fixture_key": [],
+    "build_ir": [],
+    "xr_test_target_profile_build": [
+      "xr_test_target_profile_fixture_init"
+    ],
+    "xr_test_target_profile_fixture_init": [
+      "make_header_facts",
+      "make_providers",
+      "make_runtime_abi",
+      "retarget_providers"
+    ],
+    "make_runtime_abi": [
+      "make_callback_abi",
+      "make_domain_record",
+      "make_dynamic_value_abi",
+      "make_evaluated_record",
+      "make_extent_record",
+      "make_group_record",
+      "make_layout_record",
+      "make_limits_record",
+      "make_object_header_abi"
+    ],
+    "make_evaluated_record": [
+      "init_record"
+    ],
+    "init_record": [],
+    "make_layout_record": [
+      "init_record",
+      "make_bitmask_namespace"
+    ],
+    "make_bitmask_namespace": [
+      "make_id"
+    ],
+    "make_id": [],
+    "make_group_record": [
+      "init_record"
+    ],
+    "make_extent_record": [
+      "init_record",
+      "make_enum_namespace",
+      "make_sentinel_namespace"
+    ],
+    "make_sentinel_namespace": [],
+    "make_enum_namespace": [
+      "make_id"
+    ],
+    "make_domain_record": [
+      "init_record",
+      "make_enum_namespace"
+    ],
+    "make_callback_abi": [
+      "make_enum_namespace",
+      "make_id"
+    ],
+    "make_object_header_abi": [
+      "make_field",
+      "make_id"
+    ],
+    "make_field": [],
+    "make_limits_record": [
+      "init_record"
+    ],
+    "make_dynamic_value_abi": [
+      "make_field",
+      "make_id"
+    ],
+    "make_providers": [
+      "make_call_abi",
+      "make_call_slot",
+      "make_id",
+      "make_operation"
+    ],
+    "make_call_slot": [],
+    "make_operation": [
+      "make_id"
+    ],
+    "make_call_abi": [],
+    "retarget_providers": [
+      "retarget_call_abi"
+    ],
+    "retarget_call_abi": [],
+    "make_header_facts": [],
+    "test_witness_invoke_trap_continuation_lowering_and_mutation": [
+      "build_ir",
+      "xr_program_existential_fixture_write_mutated",
+      "xr_test_target_profile_build"
+    ],
+    "xr_program_existential_fixture_write_mutated": [
+      "xr_existential_fixture_key"
+    ],
+    "xr_existential_fixture_key": []
+  },
+  "callback_edges": [
+    "sharedmain atexit\u2192emissionowner close"
+  ],
+  "macro_bindings": [
+    {
+      "path": "tests/unit/aot/test_xr_program_aot.c",
+      "name": "REQUIRE",
+      "exact_original_body": "#define REQUIRE(condition)                                                                         \\\n    do {                                                                                           \\\n        if (!(condition)) {                                                                        \\\n            fprintf(stderr, \"requirement failed at %s:%d: %s\\n\", __FILE__, __LINE__, #condition);  \\\n            abort();                                                                               \\\n        }                                                                                          \\\n    } while (0)",
+      "lf_sha256": "5721bd5a57cfbb0474be085195895bcd0ca12fa41481b6fde47dcf66c2436ca4",
+      "status": "PRESERVE_ORIGINAL_READONLY"
+    },
+    {
+      "path": "tests/unit/runtime/test_runtime_abi_contract.c",
+      "name": "SET_RECORD_FIELD",
+      "exact_original_body": "#define SET_RECORD_FIELD(record, index, struct_type, member, member_type, field_role,              \\\n                         field_encoding)                                                           \\\n    (record).fields[index] = make_field(field_role, (uint16_t) offsetof(struct_type, member),      \\\n                                        (uint16_t) sizeof(((struct_type *) 0)->member),            \\\n                                        (uint16_t) _Alignof(member_type), field_encoding)",
+      "lf_sha256": "5ecaf173f32030d69b29e2d692116d795110b91a278f3e7c68a70c763f9875ce",
+      "status": "PRESERVE_ORIGINAL_READONLY"
+    }
+  ],
+  "full_original_witness_trap_graph": {
+    "family": "witness",
+    "selected_mutation": "XR_EXISTENTIAL_FIXTURE_WITNESS_INVOKE_TRAP",
+    "whole_writer_LF_sha256": "bce5394e72a6ca3cec8cc09bdd97a3c4165edb070ee79b5fd8aa70b2ea8fdb6d",
+    "selected_arrays": [
+      {
+        "array": "impl_instructions",
+        "operation_sequence": [
+          "BLOCK_ARGUMENT",
+          "AGGREGATE_PROJECT",
+          "RETURN"
+        ],
+        "array_body_LF_sha256": "942a829557b332596d8e4c38e297659c95494a579d6fc63828ae62c12e90ea47"
+      },
+      {
+        "array": "fallible_instructions",
+        "operation_sequence": [
+          "BLOCK_ARGUMENT",
+          "AGGREGATE_PROJECT",
+          "RETURN"
+        ],
+        "array_body_LF_sha256": "313613fadaf8f985735e197551c2c476316a297240511b88204cb1e586834705"
+      },
+      {
+        "array": "ref_instructions",
+        "operation_sequence": [
+          "BLOCK_ARGUMENT",
+          "PLACE_LOAD",
+          "AGGREGATE_PROJECT",
+          "RETURN"
+        ],
+        "array_body_LF_sha256": "d3eb74555403491aa641be28d457741801b0e1f3af75f5e6ce90448a3bc99570"
+      },
+      {
+        "array": "factory_instructions",
+        "operation_sequence": [
+          "BLOCK_ARGUMENT",
+          "CONSTANT_I64",
+          "AGGREGATE_CONSTRUCT",
+          "EXISTENTIAL_PACK",
+          "RETURN"
+        ],
+        "array_body_LF_sha256": "1c943c6f5aa35c11f692847f33d3e593a70f00b0d659e8515b90523e39266bde"
+      },
+      {
+        "array": "entry_instructions",
+        "operation_sequence": [
+          "BLOCK_ARGUMENT",
+          "CONSTANT_I64",
+          "CONSTANT_I64",
+          "CONSTANT_BOOL",
+          "AGGREGATE_CONSTRUCT",
+          "PLACE_LOCAL",
+          "EXISTENTIAL_PACK",
+          "CALL_WITNESS_DIRECT",
+          "OWNER_DROP",
+          "CALL_SEALED_DIRECT",
+          "OWNER_COPY",
+          "EXISTENTIAL_TEST",
+          "CONDITIONAL_BRANCH"
+        ],
+        "array_body_LF_sha256": "9079f3f4754b0d29304744dc4e0b13a0fc44abd34630d4d0a7d20e7a3d9cd9fe"
+      },
+      {
+        "array": "true_instructions",
+        "operation_sequence": [
+          "BLOCK_ARGUMENT",
+          "EXISTENTIAL_PROJECT",
+          "AGGREGATE_PROJECT",
+          "CALL_WITNESS_DIRECT",
+          "CALL_WITNESS_INVOKE"
+        ],
+        "array_body_LF_sha256": "b55deb4c20a588dd514568a99fd56c5b106debf5e876b1677bd5c86b07b5be23"
+      },
+      {
+        "array": "false_instructions",
+        "operation_sequence": [
+          "BLOCK_ARGUMENT",
+          "RETURN"
+        ],
+        "array_body_LF_sha256": "799c38964fd2f762384214ad047b5b311358f9e8b4d9cc498e14b1050db3315e"
+      },
+      {
+        "array": "witness_normal_instructions",
+        "operation_sequence": [
+          "BLOCK_ARGUMENT",
+          "RETURN"
+        ],
+        "array_body_LF_sha256": "b9fc9bc0c7b3c94e25301ce2ae3abb735afdc00a109cd003f409048125e3c5de"
+      },
+      {
+        "array": "witness_error_instructions",
+        "operation_sequence": [
+          "BLOCK_ARGUMENT",
+          "RETURN"
+        ],
+        "array_body_LF_sha256": "3b3488e0a9a0d778d5e7f9f0b367c239f8c4d3b23a665485c25bb70554d590bd"
+      }
+    ],
+    "trap_operations": [
+      "BLOCK_ARGUMENT",
+      "TRAP"
+    ],
+    "shape_counts": {
+      "types": 3,
+      "constants": 3,
+      "modules": 1,
+      "functions": 5,
+      "blocks": 10,
+      "instructions": 41
+    },
+    "trap_owner_count": 0,
+    "status": "OPEN",
+    "enum": {
+      "path": "tests/unit/program/xr_program_existential_fixture.h",
+      "exact_original_source": "typedef enum XrProgramExistentialFixtureMutation {\n    XR_EXISTENTIAL_FIXTURE_VALID = 0,\n    XR_EXISTENTIAL_FIXTURE_UNDOMINATED_PROJECT,\n    XR_EXISTENTIAL_FIXTURE_FALSE_EDGE_PROJECT,\n    XR_EXISTENTIAL_FIXTURE_NO_CONFORMANCE,\n    XR_EXISTENTIAL_FIXTURE_REF_RESULT_ESCAPE,\n    XR_EXISTENTIAL_FIXTURE_REF_FIELD_ESCAPE,\n    XR_EXISTENTIAL_FIXTURE_WITNESS_DIRECT_FALLIBLE,\n    XR_EXISTENTIAL_FIXTURE_WITNESS_INVOKE_INFALLIBLE,\n    XR_EXISTENTIAL_FIXTURE_WITNESS_SLOT_OUT_OF_RANGE,\n    XR_EXISTENTIAL_FIXTURE_WITNESS_DIRECT_TRAP,\n    XR_EXISTENTIAL_FIXTURE_WITNESS_DIRECT_TRAP_LOST_OWNER,\n    XR_EXISTENTIAL_FIXTURE_WITNESS_INVOKE_TRAP,\n    XR_EXISTENTIAL_FIXTURE_WITNESS_INVOKE_TRAP_BAD_TARGET,\n    XR_EXISTENTIAL_FIXTURE_MODULE_REF,\n    XR_EXISTENTIAL_FIXTURE_CONST_MODULE_REF,\n    XR_EXISTENTIAL_FIXTURE_MODULE_REF_MISSING_TRAP,\n} XrProgramExistentialFixtureMutation;",
+      "enum_lf_sha256": "194ae27e2c474cc2e5b5a136b44462d22f74c0d4016d5cd5614a93745a5dd811",
+      "status": "FULL_ORIGINAL_ENUM_UNSELECTED_MUTATIONS_NO_CREDIT"
+    },
+    "writer": "Originalfull Coreinput\u2192Corebuild\u2192write-ifBUILD_OK\u2192Corefree, exactwriterOK/admitOK in census; artifactfree beforeprofile/IR, no Programnonnull REQUIRE.",
+    "original_execution_boundary": "AOTdriver emits andchecks twoCmarkers only; no actualreference/VM/Instance/nativecompile/runtime. Derivednormal42 is input expectation, not execution evidence.",
+    "type_declarations": [
+      "100 Rect nominalSTRUCT/TRIVIAL/COPY_TRIVIAL/fieldI64",
+      "101 existentialREAD sameShape/TRIVIAL/COPY_TRIVIAL",
+      "102 existentialREF sameShape/AFFINE/COPY_FORBIDDEN"
+    ],
+    "interfaces": "OneShape actual3slots: READ101\u2192I64 infallible slot0; READ101\u2192I64/Error effectsERROR slot1; REF102\u2192I64 infallible slot2. Eachreceiver declaredactualmode.",
+    "conformance": "ActualRect100 nominalSTRUCT\u2192sameShape, full3functions[READrectarea,fallibleREADrectarea,REFrectarea] retained.",
+    "constants": [
+      "I64 42",
+      "I64 0",
+      "BOOL true"
+    ],
+    "functions": [
+      "READRect receiver oneblock3ops: ARG,PROJECTfield0,RETURNactualfield",
+      "FallibleREADRect receiver oneblock3ops: ARG,PROJECTfield0,RETURNactualfield, declaredError/effectERROR retained",
+      "REFRect receiver oneblock4ops: ARGactualPLACE,PLACE_LOAD,PROJECTfield0,RETURNactualfield",
+      "Factory noargs oneblock5ops: ARGempty,CONST42,Rectconstruct,READ existentialPACK,RETURNactualerasure",
+      "Entry noargs I64/CALL|TRAP actual6blocks, total26ops"
+    ],
+    "entry": "Full13operations createRect42,actualPLACE,OWN REF102PACK, slot2WITNESS_DIRECT actualREF, DROPactualREF BEFOREfactory; factorysealedcall,READ erasureCOPY,TESTRect,CONDfulltrue/false edges withcopiederasure and42/0fallback.",
+    "true_branch": "5ops ARG[READerasure,fallback42],dominatedEXISTENTIAL_PROJECT Rect,FIELDPROJECT, WITNESS_DIRECT actualslot0\u219242, WITNESS_INVOKE actualslot1 [READerasure,actualdirectresult42fallback]\u21923 normal/error/trap successors.",
+    "false_branch": "2ops ARG[READerasure,fallback0],RETURNactualfallback; preserved even actualtestRect true.",
+    "normal": "2ops ARGactualI64 invocationresult,RETURNactualresult",
+    "error": "2ops ARG[Error NONOWNER,actualI64 directresultfallback42],RETURNactualfallback",
+    "trap": "Actualinvoke trap hasZEROarguments/ZEROowners: ARGempty,TRAP7. Earlier actualOWN REF alreadydropped; directtrap-owner mutation is not selected.",
+    "slots": "0admitted moduleslots/initializer; conditionalmodule/constmodule6thinitializer path unselected.",
+    "normal_expected": 42,
+    "provider_requirements": 0,
+    "selected_witness_direct_trap": false,
+    "selected_witness_trap_has_owner": false,
+    "selected_witness_invoke_trap": true
+  },
+  "full_original_callable_trap_graph": {
+    "family": "callable",
+    "selected_mutation": "XR_CALLABLE_FIXTURE_INVOKE_TRAP",
+    "whole_writer_LF_sha256": "777c7037f3a4596fc5b7752eb35d94798ccb74a38b32273a2740e4de285ce2bc",
+    "selected_arrays": [
+      {
+        "array": "captured_instructions",
+        "operation_sequence": [
+          "BLOCK_ARGUMENT",
+          "AGGREGATE_PROJECT",
+          "RETURN"
+        ],
+        "array_body_LF_sha256": "ce97a5045e6a8555f1926619884317eda0736a5fe96749b41f891baa04194c71"
+      },
+      {
+        "array": "captureless_instructions",
+        "operation_sequence": [
+          "BLOCK_ARGUMENT",
+          "CONSTANT_I64",
+          "RETURN"
+        ],
+        "array_body_LF_sha256": "a52e7bc6ecaf0169b966c880ece05e0ea2045c5836361e7412ff9916df70be53"
+      },
+      {
+        "array": "fallible_instructions",
+        "operation_sequence": [
+          "BLOCK_ARGUMENT",
+          "AGGREGATE_PROJECT",
+          "RETURN"
+        ],
+        "array_body_LF_sha256": "9566e6f14ca3eff9cb1dd7a2e359935f165bce0453aac67ecb059050deb60ef5"
+      },
+      {
+        "array": "entry_instructions",
+        "operation_sequence": [
+          "BLOCK_ARGUMENT",
+          "CONSTANT_I64",
+          "AGGREGATE_CONSTRUCT",
+          "CALLABLE_PACK",
+          "OWNER_COPY",
+          "CALLABLE_PACK",
+          "AGGREGATE_CONSTRUCT",
+          "CALLABLE_PACK",
+          "CALL_INDIRECT_DIRECT",
+          "OWNER_DROP",
+          "CALL_INDIRECT_DIRECT",
+          "OWNER_DROP",
+          "CALL_INDIRECT_INVOKE"
+        ],
+        "array_body_LF_sha256": "bef21169cd88f141555ebd353995f65e08eb1249c0eb380d1d80a92348707410"
+      },
+      {
+        "array": "normal_instructions",
+        "operation_sequence": [
+          "BLOCK_ARGUMENT",
+          "OWNER_DROP",
+          "RETURN"
+        ],
+        "array_body_LF_sha256": "f7f8c90b5106ec88ac7f4c2c87d420d0fc8d2088f554e7173fb393fb3f0e9c9e"
+      },
+      {
+        "array": "error_instructions",
+        "operation_sequence": [
+          "BLOCK_ARGUMENT",
+          "OWNER_DROP",
+          "RETURN"
+        ],
+        "array_body_LF_sha256": "360b36d42e9081eb04512fccd14e6c9160d7a1b01cf915450730006fae0e55ad"
+      }
+    ],
+    "trap_operations": [
+      "BLOCK_ARGUMENT",
+      "OWNER_DROP",
+      "TRAP"
+    ],
+    "shape_counts": {
+      "types": 3,
+      "constants": 1,
+      "modules": 1,
+      "functions": 4,
+      "blocks": 7,
+      "instructions": 31
+    },
+    "trap_owner_count": 1,
+    "status": "OPEN",
+    "enum": {
+      "path": "tests/unit/program/xr_program_callable_fixture.h",
+      "exact_original_source": "typedef enum XrProgramCallableFixtureMutation {\n    XR_CALLABLE_FIXTURE_VALID = 0,\n    XR_CALLABLE_FIXTURE_RETURN_CAPTURE,\n    XR_CALLABLE_FIXTURE_PACK_SIGNATURE_MISMATCH,\n    XR_CALLABLE_FIXTURE_PACK_CAPABILITY_EXCESS,\n    XR_CALLABLE_FIXTURE_DIRECT_FALLIBLE,\n    XR_CALLABLE_FIXTURE_DIRECT_SUSPENDING,\n    XR_CALLABLE_FIXTURE_INVOKE_INFALLIBLE,\n    XR_CALLABLE_FIXTURE_INVOKE_SUSPENDING,\n    XR_CALLABLE_FIXTURE_DIRECT_TRAP,\n    XR_CALLABLE_FIXTURE_DIRECT_TRAP_LOST_OWNER,\n    XR_CALLABLE_FIXTURE_INVOKE_TRAP,\n    XR_CALLABLE_FIXTURE_INVOKE_TRAP_BAD_TARGET,\n    XR_CALLABLE_FIXTURE_INVOKE_TRAP_LOST_OWNER,\n    XR_CALLABLE_FIXTURE_DIRECT_PANIC,\n    XR_CALLABLE_FIXTURE_DIRECT_PANIC_WRONG_PAYLOAD,\n    XR_CALLABLE_FIXTURE_DIRECT_PANIC_UNDECLARED_CALLER,\n} XrProgramCallableFixtureMutation;",
+      "enum_lf_sha256": "f4625599e3b3446db9438ebf240228a0c2210a572e180855accc353950369d56",
+      "status": "FULL_ORIGINAL_ENUM_UNSELECTED_MUTATIONS_NO_CREDIT"
+    },
+    "writer": "Originalfull Coreinput\u2192Corebuild\u2192write-ifBUILD_OK\u2192Corefree, exactwriterOK/admitOK in census; artifactfree beforeprofile/IR, no Programnonnull REQUIRE.",
+    "original_execution_boundary": "AOTdriver emits andchecks twoCmarkers only; no actualreference/VM/Instance/nativecompile/runtime. Derivednormal42 is input expectation, not execution evidence.",
+    "type_declarations": [
+      "100 capture aggregate oneI64/AFFINE/COPY_EXPLICIT",
+      "101 directcallable I64 NONOWNER/VOIDerror/VOIDpanic effectTRAP/AFFINE/COPY_EXPLICIT",
+      "102 falliblecallable directsignature+Error/effectERROR/AFFINE/COPY_EXPLICIT"
+    ],
+    "constants": [
+      42
+    ],
+    "functions": [
+      "CapturedREAD receiver100 oneblock3ops ARG,FIELDPROJECT,RETURNactualfield",
+      "Capturelessnoargs oneblock3ops ARGempty,CONST42,RETURNactualconstant",
+      "FalliblecapturedREAD receiver100 oneblock3ops ARG,FIELDPROJECT,RETURNactualfield, declaredError/effectERROR",
+      "Entry noargs I64/CALL|TRAP actual4blocks22ops"
+    ],
+    "entry": "Full13ops: emptyARG,CONST42,OWNcaptureconstruct,OWNdirectPACK,OWNdirectCOPY,NONOWNERcapturelessPACK,OWNfalliblecaptureconstruct,OWNfalliblePACK,INDIRECT_DIRECT actualdirectcopy, DROPcopy,INDIRECT_DIRECT actualcaptureless, DROPactualdirect,INDIRECT_INVOKE actualfallible.",
+    "invoke": "Actual5operands [actualfallible receiver,actualfallible normal,actualfallible error,actualdirectresult42 errorfallback,actualfallible trap] andactual3 distinct fixturetargetkeys; duplicate OWN only across mutuallyexclusive edges.",
+    "normal": "3ops ARG[actualI64 invocationresult,OWN actualfallible102],DROPactualcallable,RETURNactualresult",
+    "error": "3ops ARG[Error NONOWNER,OWN actualfallible102,actualdirectresult42fallback],DROPactualcallable,RETURNactualfallback",
+    "trap": "3ops ARGactualOWN fallible102,OWNER_DROP actualcallable,TRAP7. Directcapture owners alreadydropped; captureless remainsNONOWNER.",
+    "slots": "No interfaces/conformances/moduleslots/providerrequirements/coroutines. Observe5thfunction forRETURN_CAPTURE unselected, no extraadmittedfunction credit.",
+    "normal_expected": 42,
+    "provider_requirements": 0,
+    "selected_direct_trap": false,
+    "selected_invoke_trap": true,
+    "selected_lost_trap_owner": false,
+    "selected_direct_panic": false
+  },
+  "cases": [
+    {
+      "function": "test_witness_invoke_trap_continuation_lowering_and_mutation",
+      "original_REQUIRE_sites": 16,
+      "original_loop_sites": 3,
+      "selected_mutation": "XR_EXISTENTIAL_FIXTURE_WITNESS_INVOKE_TRAP",
+      "actual_inputs": 1,
+      "profile": "General false/HOSTED, completeactualX86_64 Windows MSVC Win64 LP64/2providers",
+      "IR": "PORTABLE/fullbuild_ir4 REQUIRE verify+bindingverify",
+      "actual_search": "Allactualfunctions/blocks/instructions, uniqueactualCALL_WITNESS_INVOKE (requireoldNULL), actualfunction/invoke nonNULL and3successors; sourcefixtureactualdistinctkeys but census no distinct-successor assertion.",
+      "emission": {
+        "calls": 1,
+        "standalone_main": false,
+        "native_bindings": "NULL/count0",
+        "historical_C_probes": [
+          {
+            "original_C_string": ".kind == 1 && call_",
+            "expected": "PRESENT",
+            "original_assertion_line": 2716,
+            "status": "OPEN"
+          },
+          {
+            "original_C_string": ".trap == 7",
+            "expected": "PRESENT",
+            "original_assertion_line": 2717,
+            "status": "OPEN"
+          }
+        ],
+        "historical_private_spelling": "HistoricaltypedC structure expectations; do notrestore/freeze retired privateABI.",
+        "native_compile_calls": 0,
+        "runtime_calls": 0,
+        "status": "OPEN"
+      },
+      "mutation": {
+        "target": "Actualinvoke thirdsuccessor, requirebounds/nonempty/terminaloperationTRAP. Sourcefixture7, driver doesNOT assert initialimmediate7.",
+        "change": "Actualterminalimmediate=4",
+        "digest_refresh": false,
+        "exact_operation_assertion": false,
+        "required_reject": [
+          "verifyfalse",
+          "diagnostic.status exactINVARIANT_REJECTED"
+        ],
+        "restore": "Actualterminalimmediate=literal7 thenverifytrue only",
+        "restored_binding_verify": false,
+        "boundary": "Originalnegative may be rejected by integritydigest drift. Historicalassertions retained, no freshdigest semanticguard credit.",
+        "status": "OPEN"
+      },
+      "cleanup": [
+        "actualgeneratedC",
+        "actualIR",
+        "actualprofile",
+        "fullProgram"
+      ],
+      "status": "OPEN"
+    },
+    {
+      "function": "test_callable_invoke_trap_continuation_lowering_and_mutation",
+      "original_REQUIRE_sites": 16,
+      "original_loop_sites": 3,
+      "selected_mutation": "XR_CALLABLE_FIXTURE_INVOKE_TRAP",
+      "actual_inputs": 1,
+      "profile": "General false/HOSTED, completeactualX86_64 Windows MSVC Win64 LP64/2providers",
+      "IR": "PORTABLE/fullbuild_ir4 REQUIRE verify+bindingverify",
+      "actual_search": "Allactualfunctions/blocks/instructions, uniqueactualCALL_INDIRECT_INVOKE (requireoldNULL), actualfunction/invoke nonNULL and3successors; sourcefixtureactualdistinctkeys but census no distinct-successor assertion.",
+      "emission": {
+        "calls": 1,
+        "standalone_main": false,
+        "native_bindings": "NULL/count0",
+        "historical_C_probes": [
+          {
+            "original_C_string": ".kind == 1 && call_",
+            "expected": "PRESENT",
+            "original_assertion_line": 2775,
+            "status": "OPEN"
+          },
+          {
+            "original_C_string": ".trap == 7",
+            "expected": "PRESENT",
+            "original_assertion_line": 2776,
+            "status": "OPEN"
+          }
+        ],
+        "historical_private_spelling": "HistoricaltypedC structure expectations; do notrestore/freeze retired privateABI.",
+        "native_compile_calls": 0,
+        "runtime_calls": 0,
+        "status": "OPEN"
+      },
+      "mutation": {
+        "target": "Actualinvoke thirdsuccessor, requirebounds/nonempty/terminaloperationTRAP. Sourcefixture7, driver doesNOT assert initialimmediate7.",
+        "change": "Actualterminalimmediate=4",
+        "digest_refresh": false,
+        "exact_operation_assertion": false,
+        "required_reject": [
+          "verifyfalse",
+          "diagnostic.status exactINVARIANT_REJECTED"
+        ],
+        "restore": "Actualterminalimmediate=literal7 thenverifytrue only",
+        "restored_binding_verify": false,
+        "boundary": "Originalnegative may be rejected by integritydigest drift. Historicalassertions retained, no freshdigest semanticguard credit.",
+        "status": "OPEN"
+      },
+      "cleanup": [
+        "actualgeneratedC",
+        "actualIR",
+        "actualprofile",
+        "fullProgram"
+      ],
+      "status": "OPEN"
+    }
+  ],
+  "shared_dependencies": [
+    {
+      "path": "tests/unit/program/xr_program_existential_fixture.h",
+      "actual_direct_include_users": [
+        "tests/unit/aot/test_xr_program_aot.c",
+        "tests/unit/program/test_xr_program_verify.c",
+        "tests/unit/vm/test_xr_program_vm.c"
+      ],
+      "status": "PRESERVE_SHARED_READONLY_NOT_DELETABLE",
+      "note": "Actual anchored includes only. Full transitive/deletion responsibility remains OPEN."
+    },
+    {
+      "path": "tests/unit/program/xr_program_callable_fixture.h",
+      "actual_direct_include_users": [
+        "tests/unit/aot/test_xr_program_aot.c",
+        "tests/unit/program/test_xr_program.c",
+        "tests/unit/program/test_xr_program_verify.c",
+        "tests/unit/vm/test_xr_program_vm.c",
+        "tests/unit/vm/test_xr_program_vm_allocations.c"
+      ],
+      "status": "PRESERVE_SHARED_READONLY_NOT_DELETABLE",
+      "note": "Actual anchored includes only. Full transitive/deletion responsibility remains OPEN."
+    },
+    {
+      "path": "tests/unit/aot/xr_backend_emission_owner.h",
+      "actual_direct_include_users": [
+        "tests/unit/aot/test_xr_program_aot.c",
+        "tests/unit/aot/xr_program_allocation_fixture_writer.c",
+        "tests/unit/aot/xr_program_coroutine_graph_fixture_writer.c",
+        "tests/unit/aot/xr_typed_provider_native_writer.c",
+        "tests/unit/ir/test_xi_pipeline.c",
+        "tests/unit/ir/test_xr_program_imported_callable.c",
+        "tests/unit/program/test_xr_program_source_build.c"
+      ],
+      "status": "PRESERVE_SHARED_READONLY_NOT_DELETABLE",
+      "note": "Actual anchored includes only. Full transitive/deletion responsibility remains OPEN."
+    }
+  ],
+  "emission_resource_owner": {
+    "path": "tests/unit/aot/xr_backend_emission_owner.h",
+    "full_helpers": [
+      "backend_emission_owner_open",
+      "backend_emission_owner_close"
+    ],
+    "callback": "atexit(backend_emission_owner_close)",
+    "original_main_limits_literals": [
+      8589934592,
+      16777216,
+      34359738368
+    ],
+    "scope": "One complete AOT main finite sharedowner beforedispatch; originalactualsavedinitiallivebytes closeorabort/releaseNULL. Aggregateowner doesnotprove perobject/currentphysical release.",
+    "status": "PRESERVE_SHARED_READONLY_OPEN"
+  },
+  "assertion_counts": {
+    "census_functions": 2,
+    "outer_REQUIRE_sites": 32,
+    "original_loop_sites": 6,
+    "full_transitive_helpers": 32,
+    "helper_REQUIRE_sites": 4,
+    "helper_standard_assert_sites": 0,
+    "fresh_original_Programs": 2,
+    "fresh_original_profiles": 2,
+    "original_IR_builds": 2,
+    "original_C_emits": 2,
+    "historical_C_presence_probes": 4,
+    "historical_C_absence_probes": 0,
+    "original_backend_negative_inputs": 2,
+    "original_refreshed_digest_negatives": 0,
+    "original_exact_operation_rejects": 0,
+    "original_restored_verify_controls": 2,
+    "original_restored_binding_verify_controls": 0,
+    "original_writer_negative_inputs": 0,
+    "original_provider_runtime_calls": 0,
+    "original_VM_calls": 0,
+    "original_native_compile_calls": 0,
+    "current_product_executions": 0
+  },
+  "Root_contract_or_representation_review": {
+    "status": "OPEN",
+    "graph": "Full witness3types/3slots/3conformanceslots/5functions10blocks41ops andcallable3types/4functions7blocks31ops, actual42/0/true vs42, realREAD/REF receiver/capture/owner flow plus allnormal/error/trap edges retained. No shrinking toisolatedtrap or scalar42.",
+    "owner": "Witnessinvoke trapARG0/TRAP7 containsNOownedpayload; earlierREF owneralreadydropped. Callableinvoke trapARGOWN102/drop/TRAP7 retains actualsamefallibleowner onmutuallyexclusiveedges. Do notborrow directtrap ownership orinventwitnesscleanup.",
+    "faults": "Original2 negatives directverify+INVARIANT withoutdigestrefresh/exactoperation, restore7/directverify only. Cannot claimfreshdigest semanticproof orbindingverify. Currentpublic approvedfaultinterface mustindependently test unchanged semanticintent with fresh integrity when available.",
+    "emission": "Original2 embeddedemit false/NULLbindings with4literalpresenceprobes only. PreservetypedC trap7 routing; actualC11/MSVC/W1-W4 compile/native/mixed/runtime/dualInstance remainOPEN.",
+    "runtime": "Normal42 derivablefromfullfactory/field/capture/errorfallback, not executedbythese AOTdrivers. Fullpublic Source/Built/Checked/specialization/reverify/Lowered/Program/Instance stableobject/ownedescape/cancel/physicalrelease/fullFI/axes/ASan stillOPEN.",
+    "baseline": "Only25f4 approvedmirror; Rootformalold-to-new preservation/consumerproducer/newheavywindow pending.",
+    "deletion": "Sharedfixture/runtime/profile/emissionowner readonly; no removalcandidates/SourceDelete/Main qualification."
+  },
+  "full_FI": "NOT_RUN",
+  "axes": "NOT_RUN",
+  "full_safety": "NOT_RUN",
+  "SourceDelete": "NOT_RUN",
+  "Main": "NOT_RUN",
+  "handoff": {
+    "Root_thread": "01a11f74-a297-7b11-8441-835bde6a3d5f",
+    "formal_acceptance": "PENDING"
+  },
+  "boundaries": [
+    "Complete2 originalcensus32 REQUIRE/6loops/32fullhelpers4 REQUIRE,7wholeBASEequalfiles; allOPEN retired0.",
+    "Original2Program/profile/IR/Cemit,2historicaldirectfaults notrefreshedsemanticproof,0runtime/nativecompile/currentexecution.",
+    "Onlynewmap+traceowned; product/sharedsource/docs/12historicalgeneratedM preserved."
+  ]
+}

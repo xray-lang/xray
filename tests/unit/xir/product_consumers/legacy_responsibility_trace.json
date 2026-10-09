@@ -17,9 +17,9 @@
   "reference_counts": {
     "source_with_digest_reference": 108,
     "source_without_digest_reference": 0,
-    "other_with_digest_reference": 147,
-    "other_without_digest_reference": 13,
-    "digest_reference_values": 379,
+    "other_with_digest_reference": 149,
+    "other_without_digest_reference": 11,
+    "digest_reference_values": 383,
     "source_inventory_projections": 42
   },
   "mapping_inputs": [
@@ -526,6 +526,10 @@
     {
       "path": "tests/unit/xir/product_consumers/source_original_aot_sealed_invoke_typed_panic_lowering_obligations.json",
       "lf_sha256": "ccf3e73c3d3d7c478a630751f3a574d46afb7dbabe44748d010408158db5678f"
+    },
+    {
+      "path": "tests/unit/xir/product_consumers/source_original_aot_witness_callable_trap_obligations.json",
+      "lf_sha256": "dd827ea6994aa8ee7cd0bbdb67cb41965ed535ab030b810934260c014f9f71b1"
     },
     {
       "path": "tests/unit/xir/product_consumers/source_original_array_default_defer_obligations.json",
@@ -5688,7 +5692,18 @@
       "body_lf_sha256": "084fbebbc855df49e3e732e68376d5a67a98a9a415ebccf6302e56dd611774a1",
       "status": "OPEN",
       "inventory_projection": null,
-      "mapping_references": []
+      "mapping_references": [
+        {
+          "mapping": "tests/unit/xir/product_consumers/source_original_aot_witness_callable_trap_obligations.json",
+          "pointer": "/legacy/0/body_lf_sha256",
+          "binding": "exact_path_name_body"
+        },
+        {
+          "mapping": "tests/unit/xir/product_consumers/source_original_aot_witness_callable_trap_obligations.json",
+          "pointer": "/responsibility_mapping/0/body_lf_sha256",
+          "binding": "exact_body_digest_value_only"
+        }
+      ]
     },
     {
       "legacy_path": "tests/unit/aot/test_xr_program_aot.c",
@@ -5696,7 +5711,18 @@
       "body_lf_sha256": "c58727ab0ff736b930fe217d87b434a6bcebe89adeff3da6396f85c4d13e0fac",
       "status": "OPEN",
       "inventory_projection": null,
-      "mapping_references": []
+      "mapping_references": [
+        {
+          "mapping": "tests/unit/xir/product_consumers/source_original_aot_witness_callable_trap_obligations.json",
+          "pointer": "/legacy/1/body_lf_sha256",
+          "binding": "exact_path_name_body"
+        },
+        {
+          "mapping": "tests/unit/xir/product_consumers/source_original_aot_witness_callable_trap_obligations.json",
+          "pointer": "/responsibility_mapping/1/body_lf_sha256",
+          "binding": "exact_body_digest_value_only"
+        }
+      ]
     },
     {
       "legacy_path": "tests/unit/aot/test_xr_program_aot.c",
