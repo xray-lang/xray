@@ -1,0 +1,496 @@
+{
+  "schema": 1,
+  "family": "original_scalar_control_call",
+  "legacy_base_commit": "01e6d38401b0f5c8684b64c35a99ac651024c0c1",
+  "status": "OPEN",
+  "retired": 0,
+  "replacement_gates": [],
+  "result": "STATIC_ORIGINAL_SCALAR_CONTROL_CALL_MAP_ONLY",
+  "product_execution": "NOT_RUN_BY_THIS_MAP",
+  "producer": "25f4016d6f089169757a90ae11ba537002374711",
+  "identity": "Checked25/semantic67/Value22/Call28/Program29",
+  "legacy": [
+    {
+      "name": "test_scalar_operations",
+      "legacy_path": "tests/unit/program/test_xr_program_verify.c",
+      "legacy_line": 2661,
+      "body_lf_sha256": "0992391bd4113e2500308b9787f43c51dfa1b26c9562169a4ee48470606dc85f",
+      "assertion_sites": 5,
+      "loop_sites": 0,
+      "status": "OPEN",
+      "replacement_gates": [],
+      "note": "Function census preserves its whole body; sites do not count executed loop iterations."
+    },
+    {
+      "name": "test_control_and_profile",
+      "legacy_path": "tests/unit/program/test_xr_program_verify.c",
+      "legacy_line": 2817,
+      "body_lf_sha256": "1c2e845672d16c8d2d24ad8badc1628cb39c4c76e6c99b6e6d161cef3bddfb22",
+      "assertion_sites": 8,
+      "loop_sites": 0,
+      "status": "OPEN",
+      "replacement_gates": [],
+      "note": "Function census preserves its whole body; sites do not count executed loop iterations."
+    },
+    {
+      "name": "test_direct_call",
+      "legacy_path": "tests/unit/program/test_xr_program_verify.c",
+      "legacy_line": 2997,
+      "body_lf_sha256": "da3e34c4cea933b8f5609046db85e240c08452cc967c38a06f73c027f99e039c",
+      "assertion_sites": 5,
+      "loop_sites": 0,
+      "status": "OPEN",
+      "replacement_gates": [],
+      "note": "Function census preserves its whole body; sites do not count executed loop iterations."
+    }
+  ],
+  "responsibility_mapping": [
+    {
+      "path": "tests/unit/program/test_xr_program_verify.c",
+      "function": "test_scalar_operations",
+      "line": 2661,
+      "end_line": 2815,
+      "body_lf_sha256": "0992391bd4113e2500308b9787f43c51dfa1b26c9562169a4ee48470606dc85f",
+      "CHECK_sites": 5,
+      "CHECK_bindings": [
+        {
+          "line": 2795,
+          "expression": "write_one_function(constants, sizeof(constants) / sizeof(constants[0]), &function,\n                             &artifact) == XR_PROGRAM_BUILD_OK",
+          "status": "OPEN"
+        },
+        {
+          "line": 2802,
+          "expression": "result.kind == XR_REFERENCE_OUTCOME_RETURN",
+          "status": "OPEN"
+        },
+        {
+          "line": 2803,
+          "expression": "result.value.kind == XR_REFERENCE_VALUE_BOOL",
+          "status": "OPEN"
+        },
+        {
+          "line": 2804,
+          "expression": "result.value.as.boolean",
+          "status": "OPEN"
+        },
+        {
+          "line": 2811,
+          "expression": "write_one_function(constants, sizeof(constants) / sizeof(constants[0]), &function,\n                             &invalid_logical) == XR_PROGRAM_BUILD_OK",
+          "status": "OPEN"
+        }
+      ],
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/program/test_xr_program_verify.c",
+      "function": "test_control_and_profile",
+      "line": 2817,
+      "end_line": 2995,
+      "body_lf_sha256": "1c2e845672d16c8d2d24ad8badc1628cb39c4c76e6c99b6e6d161cef3bddfb22",
+      "CHECK_sites": 8,
+      "CHECK_bindings": [
+        {
+          "line": 2968,
+          "expression": "write_one_function(constants, sizeof(constants) / sizeof(constants[0]), &function,\n                             &artifact) == XR_PROGRAM_BUILD_OK",
+          "status": "OPEN"
+        },
+        {
+          "line": 2974,
+          "expression": "result.kind == XR_REFERENCE_OUTCOME_RETURN",
+          "status": "OPEN"
+        },
+        {
+          "line": 2975,
+          "expression": "result.value.kind == XR_REFERENCE_VALUE_U16",
+          "status": "OPEN"
+        },
+        {
+          "line": 2976,
+          "expression": "result.value.as.u16 == 64u",
+          "status": "OPEN"
+        },
+        {
+          "line": 2979,
+          "expression": "result.kind == XR_REFERENCE_OUTCOME_TRAP",
+          "status": "OPEN"
+        },
+        {
+          "line": 2980,
+          "expression": "result.trap == XR_REFERENCE_TRAP_PROFILE_UNAVAILABLE",
+          "status": "OPEN"
+        },
+        {
+          "line": 2984,
+          "expression": "builtin_kind_offset(&artifact, XR_CORE_TYPE_U16, &u16_kind_offset)",
+          "status": "OPEN"
+        },
+        {
+          "line": 2990,
+          "expression": "write_one_function(constants, sizeof(constants) / sizeof(constants[0]), &function,\n                             &artifact) == XR_PROGRAM_BUILD_OK",
+          "status": "OPEN"
+        }
+      ],
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/program/test_xr_program_verify.c",
+      "function": "test_direct_call",
+      "line": 2997,
+      "end_line": 3106,
+      "body_lf_sha256": "da3e34c4cea933b8f5609046db85e240c08452cc967c38a06f73c027f99e039c",
+      "CHECK_sites": 5,
+      "CHECK_bindings": [
+        {
+          "line": 3088,
+          "expression": "write_modules(&module, 1, &artifact) == XR_PROGRAM_BUILD_OK",
+          "status": "OPEN"
+        },
+        {
+          "line": 3094,
+          "expression": "result.kind == XR_REFERENCE_OUTCOME_RETURN",
+          "status": "OPEN"
+        },
+        {
+          "line": 3095,
+          "expression": "result.value.kind == XR_REFERENCE_VALUE_I64",
+          "status": "OPEN"
+        },
+        {
+          "line": 3096,
+          "expression": "result.value.as.i64 == 42",
+          "status": "OPEN"
+        },
+        {
+          "line": 3103,
+          "expression": "write_modules(&module, 1, &artifact) == XR_PROGRAM_BUILD_OK",
+          "status": "OPEN"
+        }
+      ],
+      "status": "OPEN"
+    }
+  ],
+  "outer_CHECK_sites": 18,
+  "original_private_helpers": [
+    {
+      "path": "tests/unit/program/test_xr_program_verify.c",
+      "function": "key",
+      "line": 109,
+      "end_line": 111,
+      "body_lf_sha256": "027a211b78e0cfbd6b296804e37236848a76cc1980981a0d6a49a6f42d3f2e13",
+      "CHECK_sites": 0,
+      "CHECK_bindings": [],
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/program/test_xr_program_verify.c",
+      "function": "write_one_function",
+      "line": 145,
+      "end_line": 157,
+      "body_lf_sha256": "efb68b99402d38d2b891e3ac3c832ebaae2feb4e1496a197240b17ebacb4d8ce",
+      "CHECK_sites": 0,
+      "CHECK_bindings": [],
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/program/test_xr_program_verify.c",
+      "function": "write_modules",
+      "line": 140,
+      "end_line": 143,
+      "body_lf_sha256": "c0c6556c255f9d53386b17acda69b57380cb09e82386e392f4f66c725697b6da",
+      "CHECK_sites": 0,
+      "CHECK_bindings": [],
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/program/test_xr_program_verify.c",
+      "function": "write_typed_modules",
+      "line": 113,
+      "end_line": 138,
+      "body_lf_sha256": "c568d48005100fc2633344ba569a2bc8de9b62e3aac794b35057c8d838b8db65",
+      "CHECK_sites": 0,
+      "CHECK_bindings": [],
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/program/test_xr_program_verify.c",
+      "function": "validate_ok",
+      "line": 159,
+      "end_line": 174,
+      "body_lf_sha256": "94fe0ef4e0242acb810c12621ae1fe73a9887ef668f15ddc6c67ed645494f62b",
+      "CHECK_sites": 2,
+      "CHECK_bindings": [
+        {
+          "line": 171,
+          "expression": "status == XR_PROGRAM_VERIFY_OK",
+          "status": "OPEN"
+        },
+        {
+          "line": 172,
+          "expression": "program != NULL",
+          "status": "OPEN"
+        }
+      ],
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/program/test_xr_program_verify.c",
+      "function": "expect_semantic_reject_at",
+      "line": 176,
+      "end_line": 198,
+      "body_lf_sha256": "44cf0fb15bea156743a1c0e35b0be8ee844aa1af55c8653ed9361cf781c045b8",
+      "CHECK_sites": 6,
+      "CHECK_bindings": [
+        {
+          "line": 190,
+          "expression": "first_status == XR_PROGRAM_VERIFY_SEMANTIC_REJECTED",
+          "status": "OPEN"
+        },
+        {
+          "line": 191,
+          "expression": "program == NULL",
+          "status": "OPEN"
+        },
+        {
+          "line": 192,
+          "expression": "first.kind == expected",
+          "status": "OPEN"
+        },
+        {
+          "line": 195,
+          "expression": "second_status == first_status",
+          "status": "OPEN"
+        },
+        {
+          "line": 196,
+          "expression": "memcmp(&first, &second, sizeof(first)) == 0",
+          "status": "OPEN"
+        },
+        {
+          "line": 197,
+          "expression": "program == NULL",
+          "status": "OPEN"
+        }
+      ],
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/program/test_xr_program_verify.c",
+      "function": "builtin_kind_offset",
+      "line": 465,
+      "end_line": 491,
+      "body_lf_sha256": "46b176653264836c6dbfd04b5f90b97a7ad28a7c10a2668dc2bab7275afd6b17",
+      "CHECK_sites": 0,
+      "CHECK_bindings": [],
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/program/test_xr_program_verify.c",
+      "function": "test_take_uvar",
+      "line": 203,
+      "end_line": 215,
+      "body_lf_sha256": "835eb97aa0c77560506ba0e421652602ae095f5e6686cce9ef331fc80a34ef4d",
+      "CHECK_sites": 1,
+      "CHECK_bindings": [
+        {
+          "line": 213,
+          "expression": "false",
+          "status": "OPEN"
+        }
+      ],
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/program/test_xr_program_verify.c",
+      "function": "expect_mutated_verify",
+      "line": 436,
+      "end_line": 463,
+      "body_lf_sha256": "5ba80d137a1a9db91a8f8c115129af92e60a8d7644d056577722003739931044",
+      "CHECK_sites": 4,
+      "CHECK_bindings": [
+        {
+          "line": 440,
+          "expression": "bytes != NULL",
+          "status": "OPEN"
+        },
+        {
+          "line": 459,
+          "expression": "status == expected_status",
+          "status": "OPEN"
+        },
+        {
+          "line": 460,
+          "expression": "diagnostic.kind == expected_diagnostic",
+          "status": "OPEN"
+        },
+        {
+          "line": 461,
+          "expression": "program == NULL",
+          "status": "OPEN"
+        }
+      ],
+      "status": "OPEN"
+    }
+  ],
+  "specified_helper_CHECK_sites": 13,
+  "input_file": {
+    "path": "tests/unit/program/test_xr_program_verify.c",
+    "whole_file_lf_sha256": "ec4b93f13bfab2aa3d4b8f8773dd5c1118a0c682ed6f8304fead515f90402802",
+    "physical_raw_sha256": "a39922500c0943c034fafcda3a82b67e511ea658f453f6c0c3204f7719de1817",
+    "git_base_equal": true
+  },
+  "input_policy": "Complete three original bodies/nine actual helper bodies and whole original input container equal01e6; every constant/key/type/operand/order/blockargument/branch/successor/callee/signature/effect/capability preserved; no replacement by a constant result Source.",
+  "scalar": {
+    "constants": [
+      6,
+      2,
+      true
+    ],
+    "signature": "ZeroargBOOL ENTRY, one block, original effect_mask1.",
+    "operation_order": [
+      "CONSTANT_I64",
+      "CONSTANT_I64",
+      "CONSTANT_BOOL",
+      "ADD_I64",
+      "SUB_I64",
+      "MUL_I64",
+      "DIV_I64",
+      "COMPARE_I64",
+      "LOGICAL_NOT",
+      "LOGICAL_AND",
+      "LOGICAL_OR",
+      "OWNER_COPY",
+      "RETURN"
+    ],
+    "whole_graph": "Real typed chain checkedADD6+2=8, SUB8-2=6, MUL6*2=12, DIV12/2=6, equalityCOMPARE6==6 true; NOTtrue false; AND(true,false) false; OR(false,true) true; scalar OWNER_COPY BOOL and RETURN. Same true result does not permit dropping arithmetic/logic/copy from original input.",
+    "normal": "BUILD_OK/VERIFY_OK/non-NULL; actual reference RETURN/BOOL true with pointerwidth64 profile. Intermediate values above are independently derived graph relationships, not separately asserted runtime sites.",
+    "negative": "Change actual LOGICAL_NOT operand from BOOLvbool to I64v6, full other graph intact; BUILD_OK then exactSEMANTIC_REJECTED/OPERATION_TYPE/NULL twice with whole diagnostic equality."
+  },
+  "control": {
+    "constants": [
+      1,
+      2,
+      true
+    ],
+    "signature": "ZeroargU16 ENTRY, fourblocks; original effect_mask9/capability_mask1.",
+    "blocks": [
+      {
+        "name": "entry",
+        "arguments": [],
+        "operations": [
+          "CONSTANT_I64",
+          "CONSTANT_I64",
+          "COMPARE_I64",
+          "CONSTANT_BOOL",
+          "CONDITIONAL_BRANCH"
+        ]
+      },
+      {
+        "name": "true",
+        "arguments": [
+          "I64"
+        ],
+        "operations": [
+          "BLOCK_ARGUMENT",
+          "TARGET_POINTER_WIDTH",
+          "BRANCH"
+        ]
+      },
+      {
+        "name": "false",
+        "arguments": [
+          "I64"
+        ],
+        "operations": [
+          "BLOCK_ARGUMENT",
+          "TARGET_POINTER_WIDTH",
+          "BRANCH"
+        ]
+      },
+      {
+        "name": "merge",
+        "arguments": [
+          "U16"
+        ],
+        "operations": [
+          "BLOCK_ARGUMENT",
+          "RETURN"
+        ]
+      }
+    ],
+    "whole_graph": "Actual compare(1,2) predicate2 result is present but actual branch condition is separately CONSTBOOLtrue. CONDITIONAL_BRANCH operands{condition,1,2} and successors{true,false}; both successor I64 blockarguments retained. Each branch queries real pointerwidth asU16, passes it to mergeU16 blockargument and returns it.",
+    "normal": "BUILD_OK/VERIFY_OK/non-NULL; original actual reference pointerwidth64 ->RETURN/U16(64). Original true condition only dynamically executes true successor; complete false CFG still verified, no claim both runtime branches executed.",
+    "runtime_profile_negative": "After first result, on same admitted Program change original reference profile.pointer_width to0; actualTRAP/PROFILE_UNAVAILABLE. Not Source parsing/admission refusal.",
+    "wire_negative": "Locate exact builtinU16 row kind byte through structural decoder and mutate onlykind toU32 in full copiedartifact ->STRUCTURAL_REJECTED/STRUCTURAL/NULL.",
+    "operation_negative": "Change actual true TARGET_POINTER_WIDTH result_type toU32 (merge remainsU16), BUILD_OK thenSEMANTIC_REJECTED/OPERATION_TYPE/NULL twice and full diagnostic equality; restore result_typeU16 afterward.",
+    "profile_boundary": "Old reference profile controls actual logical query; this static map is not native target-machine coverage. Root maps genuine immutable target/profile provenance and unavailable-profile behavior, not untrusted public caller field authority."
+  },
+  "direct_call": {
+    "constants": [
+      40,
+      2
+    ],
+    "functions": [
+      {
+        "key": "call:function:helper",
+        "signature": "ZeroargI64, unflagged internalcallee",
+        "effect_mask": 1,
+        "operations": [
+          "CONSTANT_I64",
+          "CONSTANT_I64",
+          "ADD_I64",
+          "RETURN"
+        ]
+      },
+      {
+        "key": "call:function:main",
+        "signature": "ZeroargI64, actualENTRY",
+        "effect_mask": 5,
+        "operations": [
+          "CALL_SEALED_DIRECT",
+          "RETURN"
+        ]
+      }
+    ],
+    "whole_graph": "Full helper checkedADD40+2 and RETURN; main real sealed call resolves the actual helperkey and returns its I64 result. Two distinct functions/blocks share actual module/constants.",
+    "normal": "BUILD_OK/VERIFY_OK/non-NULL; actual canonical verified entry reference RETURN/I64(42) with pointerwidth64 profile.",
+    "negative": "Keep actual two-function body, add error_typeERROR and effectERROR to helper signature; main remains ordinary CALL_SEALED_DIRECT with no INVOKE/handler. BUILD_OK thenSEMANTIC_REJECTED/OPERATION_TYPE/NULL twice/full diagnostic equality.",
+    "boundary": "Negative is call-signature compatibility despite helper body still computing42; no actual throw/runtime error occurs, and rewriting it into a throwing helper would change original responsibility."
+  },
+  "original_negative_count": 5,
+  "specified_helper_boundaries": {
+    "diagnostics": "Mutated builtin wire checks one exact status/kind/NULL; shared semantic rejection helper checks both verification outcomes and full diagnostic memcmp. Any unrelated error is insufficient.",
+    "ownership": "All actual returned verifiedPrograms/artifacts/temporary copied wire bytes freed. Old scalar results require no asserted dynamic ownership, and original bodies do not dispose outcomes or assert physical counters; complete current resource/lifecycle/FI duties remain independent.",
+    "wire": "Actual builtin row walk verifies count/order/type/kind/ownership/copy fields and matches wanted logicalU16 row; old numeric IDs are representation evidence, not requested target aliases."
+  },
+  "shared_dependencies": [
+    {
+      "path": "src/program/xr_reference_evaluator.h",
+      "physical_raw_sha256": "d43732ceca814f67f7f04e1b51d8512aab2e199092a546d1c47d30e0f28439bf",
+      "whole_file_lf_sha256": "0b2149e8397748e84b1cbc14904cde97d5bee4c3e69474486169e4656ff89054",
+      "git_base_equal": true,
+      "status": "PRESERVE_SHARED_READONLY"
+    }
+  ],
+  "Root_contract_or_representation_review": {
+    "status": "OPEN",
+    "scalar": "Keep entire typed BOOL arithmetic/logic/OWNER_COPY graph and real wrongtype operand semantic negative; equal finaltrue alone does not prove every operation/type contract.",
+    "CFG_profile": "Preserve both real successors and exact I64-to-U16 argument roles, logicalpointerwidth type/capability/provenance and actual unavailable-profile failure. If target freezes valid profiles earlier, Root must explicitly map original runtime failure stage/responsibility; not anynonOK or hostfield override.",
+    "call": "Actual callee signature/effect identity must be checked against ordinary sealed call, including unhandledfallible callee even when its body returns a constant. No target-name/ordinal authority or indirect/INVOKE fallback.",
+    "entry": "Original raw entry results here BOOL/U16/I64 must retain exact role/typed result under common verified-owner projection. No I64(0)/answer42 rewrites or Source exportadapter.",
+    "qualification": "Public current Built/Checked/packet/reverify/Lowered/Program and exact complete original positives/negatives/independentgoldens, actualtwoInstances detached owners, VM/native/mixed, allactualFI/axes/lifecycle/applicablesafety require qualified formal producer/window and remainOPEN."
+  },
+  "full_FI": "NOT_RUN",
+  "axes": "NOT_RUN",
+  "full_safety": "NOT_RUN",
+  "SourceDelete": "NOT_RUN",
+  "Main": "NOT_RUN",
+  "handoff": {
+    "Root_thread": "01a11f74-a297-7b11-8441-835bde6a3d5f",
+    "formal_acceptance": "PENDING"
+  },
+  "boundaries": [
+    "All18 outer/13 helperCHECKs OPEN; retired0.",
+    "Only original full scalar/CFG/sealed-call/signature/profile/wire/oracle/static scope evidence; no currentproduct or heavy gate.",
+    "Shared writer/decoder/evaluator dependencies still serve other consumers; product/header/CMake/stdlib/spec/SDK/docs unchanged, no Main/deletion permit."
+  ]
+}
