@@ -395,3 +395,5 @@ include("${CMAKE_CURRENT_LIST_DIR}/../xir/product_consumers/source_product_bool_
 include("${CMAKE_CURRENT_LIST_DIR}/../xir/product_consumers/source_product_class_identity_owned.cmake")
 
 include("${CMAKE_CURRENT_LIST_DIR}/../xir/product_consumers/source_product_static_methods_owned.cmake")
+
+include("${CMAKE_CURRENT_LIST_DIR}/../xir/product_consumers/source_product_integer_sources_owned.cmake")

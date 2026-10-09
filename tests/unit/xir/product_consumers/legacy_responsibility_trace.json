@@ -15,11 +15,11 @@
     "shared_emission_owner_consumers": 7
   },
   "reference_counts": {
-    "source_with_digest_reference": 49,
-    "source_without_digest_reference": 59,
+    "source_with_digest_reference": 52,
+    "source_without_digest_reference": 56,
     "other_with_digest_reference": 40,
     "other_without_digest_reference": 120,
-    "digest_reference_values": 117,
+    "digest_reference_values": 120,
     "source_inventory_projections": 42
   },
   "mapping_inputs": [
@@ -292,8 +292,16 @@
       "lf_sha256": "3b014b1c56732121f0457b27998d1bfda87aacf0c311b71f348edee608adc3c0"
     },
     {
+      "path": "tests/unit/xir/product_consumers/source_integer_arithmetic_source_obligations.json",
+      "lf_sha256": "e963e9dd5ec882930e66a571470d9c33e788e7179877add1f1096d428f1fd866"
+    },
+    {
       "path": "tests/unit/xir/product_consumers/source_integer_bitwise_obligations.json",
       "lf_sha256": "e537ff1b463bc5d7666e53dd0e6fbf22fec94dadf930095311422e3e4780b3de"
+    },
+    {
+      "path": "tests/unit/xir/product_consumers/source_integer_comparisons_source_obligations.json",
+      "lf_sha256": "e92415988b023305eecd5107b76b2e15ce2ab6e60a0f5b96c5365668964ab20b"
     },
     {
       "path": "tests/unit/xir/product_consumers/source_integer_conversion_obligations.json",
@@ -302,6 +310,10 @@
     {
       "path": "tests/unit/xir/product_consumers/source_integer_division_defer_obligations.json",
       "lf_sha256": "6d90f118d991f8aff0042cf0dca9c2602548c475417530892aa329ea5d367e1d"
+    },
+    {
+      "path": "tests/unit/xir/product_consumers/source_integer_division_source_obligations.json",
+      "lf_sha256": "f02255a868336159824e91736c6f7cf2ffd3a7bf7101e87aef368536a8a33a75"
     },
     {
       "path": "tests/unit/xir/product_consumers/source_integer_divmod_obligations.json",
@@ -1274,7 +1286,13 @@
           "original_buffer_capacity": 16384
         }
       },
-      "mapping_references": []
+      "mapping_references": [
+        {
+          "mapping": "tests/unit/xir/product_consumers/source_integer_division_source_obligations.json",
+          "pointer": "/legacy/body_lf_sha256",
+          "binding": "exact_path_name_body"
+        }
+      ]
     },
     {
       "legacy_path": "tests/unit/program/test_xr_program_source_build.c",
@@ -1458,7 +1476,13 @@
           "original_buffer_capacity": 32768
         }
       },
-      "mapping_references": []
+      "mapping_references": [
+        {
+          "mapping": "tests/unit/xir/product_consumers/source_integer_comparisons_source_obligations.json",
+          "pointer": "/legacy/body_lf_sha256",
+          "binding": "exact_path_name_body"
+        }
+      ]
     },
     {
       "legacy_path": "tests/unit/program/test_xr_program_source_build.c",
@@ -1519,7 +1543,13 @@
           "original_buffer_capacity": 16384
         }
       },
-      "mapping_references": []
+      "mapping_references": [
+        {
+          "mapping": "tests/unit/xir/product_consumers/source_integer_arithmetic_source_obligations.json",
+          "pointer": "/legacy/body_lf_sha256",
+          "binding": "exact_path_name_body"
+        }
+      ]
     },
     {
       "legacy_path": "tests/unit/program/test_xr_program_source_build.c",

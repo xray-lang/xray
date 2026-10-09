@@ -1,0 +1,111 @@
+{
+  "schema": 1,
+  "producer": "25f4016d6f089169757a90ae11ba537002374711",
+  "identity": "Checked25/semantic67/Value22/Call28/Program29",
+  "legacy": {
+    "legacy_path": "tests/unit/program/test_xr_program_source_build.c",
+    "name": "source_owner_integer_division_and_remainder_preserve_value_rules",
+    "body_lf_sha256": "11cbead819dd2a5672b146f67bca66e13e56a2b2cd8dec74c4fdaa005725cb78",
+    "status": "OPEN",
+    "inventory_projection": {
+      "fixture": "tests/unit/xir/product_consumers/fixtures/integer_division/root.xr",
+      "sha256": "6266d1efbae095eb9988e9a18d5ea51251d9a1ed70b9bb6247df63101328ae73",
+      "original_prefix_sha256": "d19b7af194ec24d30da3998326e2c5cf11e5ac83b926f82b9a59fd4066eae1dc",
+      "entry_adapter": "export fn consumerAnswer() -> i64 { return answer() }\n",
+      "entry": "consumerAnswer",
+      "expected_i64": 0,
+      "scope": "Exact original source prefix and fixed result through an explicitly exported adapter; additional legacy assertions stay OPEN until mapped.",
+      "original_source_constructor": {
+        "bytes": 1951,
+        "sha256": "d19b7af194ec24d30da3998326e2c5cf11e5ac83b926f82b9a59fd4066eae1dc",
+        "constructor_lf_sha256": "03b47b3861901127816d416b0a5133518fee42196cc8884f4e65c5e517c7305e",
+        "types": [
+          "i8",
+          "i16",
+          "i32",
+          "i64",
+          "u8",
+          "u16",
+          "u32",
+          "u64"
+        ],
+        "functions": 17,
+        "checks": 20,
+        "failure_codes": [
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10,
+          11,
+          12,
+          13,
+          14,
+          15,
+          16,
+          17,
+          18,
+          19,
+          20
+        ],
+        "original_buffer_capacity": 16384
+      }
+    },
+    "mapping_references": []
+  },
+  "status": "OPEN",
+  "retired": 0,
+  "replacement_gates": [],
+  "family": "integer_division",
+  "original_source": {
+    "path": "tests/unit/xir/product_consumers/fixtures/integer_division/root.xr",
+    "bytes": 2005,
+    "prefix_bytes": 1951,
+    "sha256": "6266d1efbae095eb9988e9a18d5ea51251d9a1ed70b9bb6247df63101328ae73",
+    "prefix_sha256": "d19b7af194ec24d30da3998326e2c5cf11e5ac83b926f82b9a59fd4066eae1dc",
+    "adapter": "export fn consumerAnswer() -> i64 { return answer() }\n"
+  },
+  "independent_i64": 0,
+  "original_checks": 20,
+  "helper_signatures": 16,
+  "required_shape": "All original integer helper names, widths and signedness; exact public operations and Bool results for comparisons; promoted operand types for mixed widths. Original answer has one helper CALL and typed Bool branch per check, all independent failure codes1..N and final0 returned by actual SSA. CALL argument/result types match actual Checked helper signatures.",
+  "result": "NOT_RUN",
+  "pipeline": "Original Source prefix and exported adapter; SourceProduct/Closed Checked/reader and Source owner death/Lowered/Program/two Instances;VM/native/two mixed partitions.",
+  "boundaries": [
+    "Original BackendIR representation assertion remains OPEN until mapped.",
+    "Zero divisors, cleanup and conditional defer are separate existing responsibilities; positive original matrix alone does not qualify them.",
+    "Full FI, resource axes, cancellation, safety, Main integration and retirement remain OPEN."
+  ],
+  "full_FI": "NOT_RUN",
+  "axes": "NOT_RUN",
+  "cancel": "NOT_RUN",
+  "full_safety": "NOT_RUN",
+  "Main": "NOT_RUN",
+  "original_integer_source_execution_20261009_facet": {
+    "status": "PASS_ORIGINAL_SOURCE_INTEGER_MATRIX_WHOLE_LEGACY_OPEN",
+    "evidence": "build-consumer-evidence/current67-integer-original-sources-r1",
+    "original": "Original1951-byte Source constructor prefix and54-byte exported adapter unchanged; all20 original checks, failure codes1..20 and independently fixed0 retained. Complete original.xr prefix is also captured.",
+    "shape": "All16 exact helper names/signatures across eight widths/signedness; actual numeric/comparison operations, argument/result types and mixed operand promotion verified. Every answer CALL targets a known helper and has exact typed operands; all independent failure-code RETURN SSA values1..N and final0 preserved. Comparison148 if checks plus75 original unary-not expansions require223 typedBool branches; other families one branch percheck.",
+    "actual": "Per family eight final VM/native/mixed executions plus two detached owned tests PASS,32 independent scalar0 checks/16Instances. Whole batch final32 runtime registered argv PASS (24backend family,6owner,2sequenceVMcontrols). Caller Program ref drops before public calls; private answer rejects BAD_ARGUMENT without allocation; Source/session/readers dead before Program use; final compiler/runtime physical0.",
+    "owned": "Session/product/request/authority/path dead before exact whole Checked writer encoding comparison/reverification; Checked dead before Lowered verification/release; final compiler table/physical0.",
+    "first_red": "0 first runtime assertion failures for this family retained. The comparison oracle originally counted148 branches, missing75 unary-not branch expansions proven from original Source and source_logic. Only the strict expected branch total changed to223, before rebuilding both driver/owner configurations. No Source/result/failure-code/check count changes. Early assertion exits do not prove physical release.",
+    "inputs": "OriginalVM2719,owned2718,sequencecontrol2717,native2720 inputs perPID include actual original.xr,three observerheaders and actualC/configuredwrapper as applicable; SHA/bytes/mtimebefore-after exact. All46 initial/final runtime PID binary preimages archived and identity-bound,includingcontrols. First header/fullpayload/OBJ bytes and runtime pre-annotation maps/trace retained.",
+    "build": "Fourteen successful C compilation events:initial driver/owner4,corrected driver/owner4,actualgeneratedC6. Ten distinct final fresh TUs across two configurations:driver/owner plusthree generatedC each. C11/W4/WX andactualClangASan+UBSan. ExistingwrapperOBJs reused/template-bound; six build-time emitters separately recorded,not runtime qualification.",
+    "generated_payload_sha256": {
+      "msvc": "1cb79061efa2b3e1b2a368bd0fb0e28c0dad3cc2dc0ee76164326f14f9995cf4",
+      "asan": "1cb79061efa2b3e1b2a368bd0fb0e28c0dad3cc2dc0ee76164326f14f9995cf4"
+    },
+    "remaining": "Original BackendIR numeric/operand representation assertions,zero-divisor cleanup anddefer separate responsibilities,fullFI/axes/cancel/safety/Main/retirement remainOPEN.",
+    "full_FI": "NOT_RUN",
+    "axes": "NOT_RUN",
+    "cancel": "NOT_RUN",
+    "full_safety": "NOT_RUN",
+    "Main": "NOT_RUN",
+    "retired": 0
+  }
+}
