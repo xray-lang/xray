@@ -1,0 +1,1397 @@
+{
+  "schema": 1,
+  "family": "original_program_identity_provider",
+  "legacy_base_commit": "01e6d38401b0f5c8684b64c35a99ac651024c0c1",
+  "status": "OPEN",
+  "retired": 0,
+  "replacement_gates": [],
+  "result": "STATIC_ORIGINAL_PROGRAM_IDENTITY_PROVIDER_MAP_ONLY",
+  "product_execution": "NOT_RUN_BY_THIS_MAP",
+  "producer": "25f4016d6f089169757a90ae11ba537002374711",
+  "identity": "Checked25/semantic67/Value22/Call28/Program29",
+  "producer_scope": "Fixedauthorised25f4 only, no privateRoot/newproducer/heavywindow.",
+  "legacy": [
+    {
+      "name": "test_determinism_roundtrip_and_identity",
+      "legacy_path": "tests/unit/program/test_xr_program.c",
+      "legacy_line": 348,
+      "body_lf_sha256": "67da580064b6f5e8b9bd3d3011255f5a393e5d0f2fda0bfeda86311647a15682",
+      "assertion_sites": 44,
+      "loop_sites": 0,
+      "status": "OPEN",
+      "replacement_gates": [],
+      "note": "Function census preserves its whole body; sites do not count executed loop iterations."
+    },
+    {
+      "name": "test_semantic_profile_and_invalid_core_ir",
+      "legacy_path": "tests/unit/program/test_xr_program.c",
+      "legacy_line": 727,
+      "body_lf_sha256": "81206040782dfcd79ea4748bb7ffcaeb20d4d245088aebf19e00696dd0aa3919",
+      "assertion_sites": 9,
+      "loop_sites": 0,
+      "status": "OPEN",
+      "replacement_gates": [],
+      "note": "Function census preserves its whole body; sites do not count executed loop iterations."
+    },
+    {
+      "name": "test_provider_semantics_are_program_identity",
+      "legacy_path": "tests/unit/program/test_xr_program.c",
+      "legacy_line": 754,
+      "body_lf_sha256": "105c784f181f003f211789c5cd41e3f8e217547d36063e4a4973ca21edf55df3",
+      "assertion_sites": 4,
+      "loop_sites": 0,
+      "status": "OPEN",
+      "replacement_gates": [],
+      "note": "Function census preserves its whole body; sites do not count executed loop iterations."
+    },
+    {
+      "name": "test_partial_core_ir_construction",
+      "legacy_path": "tests/unit/program/test_xr_program.c",
+      "legacy_line": 768,
+      "body_lf_sha256": "3e4639ac45483ce765305fa764d6f28115d2e903f512f5af4e6347437b3d1a2b",
+      "assertion_sites": 11,
+      "loop_sites": 1,
+      "status": "OPEN",
+      "replacement_gates": [],
+      "note": "Function census preserves its whole body; sites do not count executed loop iterations."
+    },
+    {
+      "name": "test_retained_function_identity_publication",
+      "legacy_path": "tests/unit/program/test_xr_program.c",
+      "legacy_line": 1254,
+      "body_lf_sha256": "57bd120393c5238d2f4722ad92eb6b6649492186d4f4a2daef81b5625c45f7e7",
+      "assertion_sites": 10,
+      "loop_sites": 5,
+      "status": "OPEN",
+      "replacement_gates": [],
+      "note": "Function census preserves its whole body; sites do not count executed loop iterations."
+    },
+    {
+      "name": "test_declared_semantics_and_owned_storage",
+      "legacy_path": "tests/unit/program/test_xr_program_provider_requirements.c",
+      "legacy_line": 75,
+      "body_lf_sha256": "40965df2cee709e9efa66b348804cde5b78cf4652998e75033d7db0811692697",
+      "assertion_sites": 7,
+      "loop_sites": 0,
+      "status": "OPEN",
+      "replacement_gates": [],
+      "note": "Function census preserves its whole body; sites do not count executed loop iterations."
+    },
+    {
+      "name": "test_hostile_logical_contracts",
+      "legacy_path": "tests/unit/program/test_xr_program_provider_requirements.c",
+      "legacy_line": 99,
+      "body_lf_sha256": "c4494c53298742420af6b223cae9c34ca828c17f8b1cab85fdc026a3326a8132",
+      "assertion_sites": 2,
+      "loop_sites": 2,
+      "status": "OPEN",
+      "replacement_gates": [],
+      "note": "Function census preserves its whole body; sites do not count executed loop iterations."
+    },
+    {
+      "name": "main",
+      "legacy_path": "tests/unit/program/test_xr_program_provider_requirements.c",
+      "legacy_line": 143,
+      "body_lf_sha256": "c2564e7ea0b819dbbbf1c4d25bf900e872d3292e1d817245ca4cc1c745afea32",
+      "assertion_sites": 0,
+      "loop_sites": 0,
+      "status": "OPEN",
+      "replacement_gates": [],
+      "note": "Function census preserves its whole body; sites do not count executed loop iterations."
+    }
+  ],
+  "responsibility_mapping": [
+    {
+      "legacy_name": "test_determinism_roundtrip_and_identity",
+      "legacy_path": "tests/unit/program/test_xr_program.c",
+      "status": "OPEN",
+      "original_lines": [
+        348,
+        637
+      ],
+      "CHECK_sites": [
+        {
+          "line": 355,
+          "expression": "build_fixture(false, false, FIXTURE_VALID, \"profile:checked\", &first, diagnostic,\n                        sizeof(diagnostic)) == XR_PROGRAM_BUILD_OK",
+          "status": "OPEN",
+          "target_consumer": "ROOT_CURRENT_CONTRACT_AND_QUALIFIED_PRODUCER_PENDING"
+        },
+        {
+          "line": 357,
+          "expression": "build_fixture(true, false, FIXTURE_VALID, \"profile:checked\", &reordered, diagnostic,\n                        sizeof(diagnostic)) == XR_PROGRAM_BUILD_OK",
+          "status": "OPEN",
+          "target_consumer": "ROOT_CURRENT_CONTRACT_AND_QUALIFIED_PRODUCER_PENDING"
+        },
+        {
+          "line": 359,
+          "expression": "build_fixture(true, true, FIXTURE_VALID, \"profile:checked\", &rerooted, diagnostic,\n                        sizeof(diagnostic)) == XR_PROGRAM_BUILD_OK",
+          "status": "OPEN",
+          "target_consumer": "ROOT_CURRENT_CONTRACT_AND_QUALIFIED_PRODUCER_PENDING"
+        },
+        {
+          "line": 361,
+          "expression": "first.size != 0",
+          "status": "OPEN",
+          "target_consumer": "ROOT_CURRENT_CONTRACT_AND_QUALIFIED_PRODUCER_PENDING"
+        },
+        {
+          "line": 362,
+          "expression": "first.size == reordered.size && memcmp(first.bytes, reordered.bytes, first.size) == 0",
+          "status": "OPEN",
+          "target_consumer": "ROOT_CURRENT_CONTRACT_AND_QUALIFIED_PRODUCER_PENDING"
+        },
+        {
+          "line": 363,
+          "expression": "first.size == rerooted.size && memcmp(first.bytes, rerooted.bytes, first.size) == 0",
+          "status": "OPEN",
+          "target_consumer": "ROOT_CURRENT_CONTRACT_AND_QUALIFIED_PRODUCER_PENDING"
+        },
+        {
+          "line": 364,
+          "expression": "xr_program_id_equal(first.id, reordered.id)",
+          "status": "OPEN",
+          "target_consumer": "ROOT_CURRENT_CONTRACT_AND_QUALIFIED_PRODUCER_PENDING"
+        },
+        {
+          "line": 365,
+          "expression": "xr_program_id_equal(first.id, rerooted.id)",
+          "status": "OPEN",
+          "target_consumer": "ROOT_CURRENT_CONTRACT_AND_QUALIFIED_PRODUCER_PENDING"
+        },
+        {
+          "line": 366,
+          "expression": "!contains_bytes(first.bytes, first.size, \"root-a\")",
+          "status": "OPEN",
+          "target_consumer": "ROOT_CURRENT_CONTRACT_AND_QUALIFIED_PRODUCER_PENDING"
+        },
+        {
+          "line": 367,
+          "expression": "!contains_bytes(first.bytes, first.size, \"module-helper\")",
+          "status": "OPEN",
+          "target_consumer": "ROOT_CURRENT_CONTRACT_AND_QUALIFIED_PRODUCER_PENDING"
+        },
+        {
+          "line": 368,
+          "expression": "xr_program_decode_structure(first.bytes, first.size, NULL, &view, diagnostic,\n                                      sizeof(diagnostic)) == XR_PROGRAM_DECODE_OK",
+          "status": "OPEN",
+          "target_consumer": "ROOT_CURRENT_CONTRACT_AND_QUALIFIED_PRODUCER_PENDING"
+        },
+        {
+          "line": 370,
+          "expression": "view.format_major == XR_PROGRAM_FORMAT_MAJOR",
+          "status": "OPEN",
+          "target_consumer": "ROOT_CURRENT_CONTRACT_AND_QUALIFIED_PRODUCER_PENDING"
+        },
+        {
+          "line": 371,
+          "expression": "view.required_feature_count == 1",
+          "status": "OPEN",
+          "target_consumer": "ROOT_CURRENT_CONTRACT_AND_QUALIFIED_PRODUCER_PENDING"
+        },
+        {
+          "line": 372,
+          "expression": "view.provider_requirement_count == 2u",
+          "status": "OPEN",
+          "target_consumer": "ROOT_CURRENT_CONTRACT_AND_QUALIFIED_PRODUCER_PENDING"
+        },
+        {
+          "line": 373,
+          "expression": "view.section_count == XR_PROGRAM_REQUIRED_SECTION_COUNT",
+          "status": "OPEN",
+          "target_consumer": "ROOT_CURRENT_CONTRACT_AND_QUALIFIED_PRODUCER_PENDING"
+        },
+        {
+          "line": 374,
+          "expression": "xr_program_id_equal(view.id, first.id)",
+          "status": "OPEN",
+          "target_consumer": "ROOT_CURRENT_CONTRACT_AND_QUALIFIED_PRODUCER_PENDING"
+        },
+        {
+          "line": 375,
+          "expression": "xr_program_reencode(&view, &reencoded, diagnostic, sizeof(diagnostic)) ==\n          XR_PROGRAM_DECODE_OK",
+          "status": "OPEN",
+          "target_consumer": "ROOT_CURRENT_CONTRACT_AND_QUALIFIED_PRODUCER_PENDING"
+        },
+        {
+          "line": 377,
+          "expression": "first.size == reencoded.size && memcmp(first.bytes, reencoded.bytes, first.size) == 0",
+          "status": "OPEN",
+          "target_consumer": "ROOT_CURRENT_CONTRACT_AND_QUALIFIED_PRODUCER_PENDING"
+        },
+        {
+          "line": 378,
+          "expression": "xr_program_id_equal(first.id, reencoded.id)",
+          "status": "OPEN",
+          "target_consumer": "ROOT_CURRENT_CONTRACT_AND_QUALIFIED_PRODUCER_PENDING"
+        },
+        {
+          "line": 384,
+          "expression": "first.size == 505u",
+          "status": "OPEN",
+          "target_consumer": "ROOT_CURRENT_CONTRACT_AND_QUALIFIED_PRODUCER_PENDING"
+        },
+        {
+          "line": 419,
+          "expression": "first.bytes[10] == 11u && first.bytes[11] == 0u",
+          "status": "OPEN",
+          "target_consumer": "ROOT_CURRENT_CONTRACT_AND_QUALIFIED_PRODUCER_PENDING"
+        },
+        {
+          "line": 427,
+          "expression": "first.bytes[12] == XR_CORE_SPEC_EPOCH",
+          "status": "OPEN",
+          "target_consumer": "ROOT_CURRENT_CONTRACT_AND_QUALIFIED_PRODUCER_PENDING"
+        },
+        {
+          "line": 433,
+          "expression": "strcmp(previous_hex, \"7afaa251d147b3e0ddc127d441f2b9ac11333e44558a757434b755f80952b3ad\") == 0",
+          "status": "OPEN",
+          "target_consumer": "ROOT_CURRENT_CONTRACT_AND_QUALIFIED_PRODUCER_PENDING"
+        },
+        {
+          "line": 437,
+          "expression": "strcmp(previous_hex, \"301cfcc1ada4b8382b88184c3ea725368b320212b3edfd74a8dc6048c6294d6d\") == 0",
+          "status": "OPEN",
+          "target_consumer": "ROOT_CURRENT_CONTRACT_AND_QUALIFIED_PRODUCER_PENDING"
+        },
+        {
+          "line": 444,
+          "expression": "strcmp(previous_hex, \"7ad5d4ff936713308fdf21da7155c686b9cfb4fe5f007dd518b002a96f7b2790\") == 0",
+          "status": "OPEN",
+          "target_consumer": "ROOT_CURRENT_CONTRACT_AND_QUALIFIED_PRODUCER_PENDING"
+        },
+        {
+          "line": 448,
+          "expression": "strcmp(previous_hex, \"b927a4891131472a526c33e3e2d90fe1e393bab5bb8bf7ee18a9d86e24582c15\") == 0",
+          "status": "OPEN",
+          "target_consumer": "ROOT_CURRENT_CONTRACT_AND_QUALIFIED_PRODUCER_PENDING"
+        },
+        {
+          "line": 455,
+          "expression": "strcmp(previous_hex, \"1d74adb599932d56e448d5f8ccc4c357b903a0499cfe242bca181b0f7f475942\") == 0",
+          "status": "OPEN",
+          "target_consumer": "ROOT_CURRENT_CONTRACT_AND_QUALIFIED_PRODUCER_PENDING"
+        },
+        {
+          "line": 462,
+          "expression": "strcmp(previous_hex, \"735d1517863c53bedc836812b58b6a96079fbadd07602ec882dd1c4f07666ab8\") == 0",
+          "status": "OPEN",
+          "target_consumer": "ROOT_CURRENT_CONTRACT_AND_QUALIFIED_PRODUCER_PENDING"
+        },
+        {
+          "line": 467,
+          "expression": "strcmp(previous_hex, \"428c18b3995c3443992cc374d7af1e5d57b0022d236b448af8b2ecdbf616c488\") == 0",
+          "status": "OPEN",
+          "target_consumer": "ROOT_CURRENT_CONTRACT_AND_QUALIFIED_PRODUCER_PENDING"
+        },
+        {
+          "line": 510,
+          "expression": "strcmp(previous_hex, \"e2fc903e3ea6b895a0e59a53cbc48aff6ee4529f9b5c90d4240a4ae593250c3e\") == 0",
+          "status": "OPEN",
+          "target_consumer": "ROOT_CURRENT_CONTRACT_AND_QUALIFIED_PRODUCER_PENDING"
+        },
+        {
+          "line": 515,
+          "expression": "strcmp(previous_hex, \"f56d74fae27c57d60dff03bf70cf0330dba85659a7c091633eae80eed66f1ccb\") == 0",
+          "status": "OPEN",
+          "target_consumer": "ROOT_CURRENT_CONTRACT_AND_QUALIFIED_PRODUCER_PENDING"
+        },
+        {
+          "line": 520,
+          "expression": "strcmp(previous_hex, \"9416a7926c2449c9f688f9795297f86ac52e45444c114b1719dcc64323995aa1\") == 0",
+          "status": "OPEN",
+          "target_consumer": "ROOT_CURRENT_CONTRACT_AND_QUALIFIED_PRODUCER_PENDING"
+        },
+        {
+          "line": 525,
+          "expression": "strcmp(previous_hex, \"1e6c03fd8b42b19a8868464dd8478f54ccd14909033927f1756970d47b18224f\") == 0",
+          "status": "OPEN",
+          "target_consumer": "ROOT_CURRENT_CONTRACT_AND_QUALIFIED_PRODUCER_PENDING"
+        },
+        {
+          "line": 530,
+          "expression": "strcmp(previous_hex, \"8f8aa69d4b9ed9ec9f947b5f567b58cccd58c26c37cf6bad8531c6016a4b6b91\") == 0",
+          "status": "OPEN",
+          "target_consumer": "ROOT_CURRENT_CONTRACT_AND_QUALIFIED_PRODUCER_PENDING"
+        },
+        {
+          "line": 534,
+          "expression": "strcmp(previous_hex, \"e5ed1fd020f8792f2a8fa3c6b4aaa930f5339911683d30f41ee499cd4b388906\") == 0",
+          "status": "OPEN",
+          "target_consumer": "ROOT_CURRENT_CONTRACT_AND_QUALIFIED_PRODUCER_PENDING"
+        },
+        {
+          "line": 538,
+          "expression": "strcmp(previous_hex, \"1bb4200bb526389bbc2ede0160828177556b4ec7348616ce519e0c5198b30c4c\") == 0",
+          "status": "OPEN",
+          "target_consumer": "ROOT_CURRENT_CONTRACT_AND_QUALIFIED_PRODUCER_PENDING"
+        },
+        {
+          "line": 541,
+          "expression": "strcmp(previous_hex, \"a0d1f933ab3323f3d95634a084180c021c6b2d6ba997534d254820659452f9f0\") == 0",
+          "status": "OPEN",
+          "target_consumer": "ROOT_CURRENT_CONTRACT_AND_QUALIFIED_PRODUCER_PENDING"
+        },
+        {
+          "line": 546,
+          "expression": "strcmp(previous_hex, \"456a1708865174e260191ed7f1654a4efa8f98cba831b31461f858f2f995b354\") == 0",
+          "status": "OPEN",
+          "target_consumer": "ROOT_CURRENT_CONTRACT_AND_QUALIFIED_PRODUCER_PENDING"
+        },
+        {
+          "line": 605,
+          "expression": "strcmp(previous_hex, \"1bc457be305a4ce40fd7c37814e57f06ea46f4333d1fc2d41738014c6476f411\") == 0",
+          "status": "OPEN",
+          "target_consumer": "ROOT_CURRENT_CONTRACT_AND_QUALIFIED_PRODUCER_PENDING"
+        },
+        {
+          "line": 608,
+          "expression": "xr_program_validate(byte_compare_vector, sizeof(byte_compare_vector), NULL,\n                              &obsolete, &obsolete_diagnostic) ==\n          XR_PROGRAM_VERIFY_SEMANTIC_REJECTED",
+          "status": "OPEN",
+          "target_consumer": "ROOT_CURRENT_CONTRACT_AND_QUALIFIED_PRODUCER_PENDING"
+        },
+        {
+          "line": 611,
+          "expression": "obsolete == NULL &&\n          obsolete_diagnostic.kind == XR_PROGRAM_DIAGNOSTIC_CORE_SPEC_IDENTITY",
+          "status": "OPEN",
+          "target_consumer": "ROOT_CURRENT_CONTRACT_AND_QUALIFIED_PRODUCER_PENDING"
+        },
+        {
+          "line": 626,
+          "expression": "strcmp(previous_hex,\n                 \"0a77e6663fd32349ac055cda9e291cd9411e19501f9c0dc192c7421eb518e12b\") == 0",
+          "status": "OPEN",
+          "target_consumer": "ROOT_CURRENT_CONTRACT_AND_QUALIFIED_PRODUCER_PENDING"
+        },
+        {
+          "line": 628,
+          "expression": "memcmp(first.bytes, array_append_vector, sizeof(array_append_vector)) == 0",
+          "status": "OPEN",
+          "target_consumer": "ROOT_CURRENT_CONTRACT_AND_QUALIFIED_PRODUCER_PENDING"
+        },
+        {
+          "line": 629,
+          "expression": "xr_program_id_equal(first.id, previous_id)",
+          "status": "OPEN",
+          "target_consumer": "ROOT_CURRENT_CONTRACT_AND_QUALIFIED_PRODUCER_PENDING"
+        }
+      ],
+      "responsibility": "Three full CoreIR inputs reorder module/provider requirement rows and reroot only physical modulekeys; same wholeartifact/ProgramID and absence root-a/module-helper. Exact decoded metadata/reencode, complete497/501/505B historicalfixedwire/20literalarrays/18fixedhistoricalhashes and505B finalcurrentoldnormativewire. Obsolete byte-comparisonwire rejectedSEMANTIC/coreSpecIdentity/NULL. Root supplies current normative representation and independent current goldens, no oldwire decoder compatibility."
+    },
+    {
+      "legacy_name": "test_semantic_profile_and_invalid_core_ir",
+      "legacy_path": "tests/unit/program/test_xr_program.c",
+      "status": "OPEN",
+      "original_lines": [
+        727,
+        752
+      ],
+      "CHECK_sites": [
+        {
+          "line": 731,
+          "expression": "build_fixture(false, false, FIXTURE_VALID, \"profile:checked\", &checked, diagnostic,\n                        sizeof(diagnostic)) == XR_PROGRAM_BUILD_OK",
+          "status": "OPEN",
+          "target_consumer": "ROOT_CURRENT_CONTRACT_AND_QUALIFIED_PRODUCER_PENDING"
+        },
+        {
+          "line": 733,
+          "expression": "build_fixture(false, false, FIXTURE_VALID, \"profile:wrapping\", &wrapping, diagnostic,\n                        sizeof(diagnostic)) == XR_PROGRAM_BUILD_OK",
+          "status": "OPEN",
+          "target_consumer": "ROOT_CURRENT_CONTRACT_AND_QUALIFIED_PRODUCER_PENDING"
+        },
+        {
+          "line": 735,
+          "expression": "!xr_program_id_equal(checked.id, wrapping.id)",
+          "status": "OPEN",
+          "target_consumer": "ROOT_CURRENT_CONTRACT_AND_QUALIFIED_PRODUCER_PENDING"
+        },
+        {
+          "line": 736,
+          "expression": "checked.size == wrapping.size &&\n          memcmp(checked.bytes, wrapping.bytes, checked.size) != 0",
+          "status": "OPEN",
+          "target_consumer": "ROOT_CURRENT_CONTRACT_AND_QUALIFIED_PRODUCER_PENDING"
+        },
+        {
+          "line": 742,
+          "expression": "build_fixture(false, false, FIXTURE_UNKNOWN_OPERATION, \"profile:checked\", &unused,\n                        diagnostic, sizeof(diagnostic)) == XR_PROGRAM_BUILD_INVALID_INPUT",
+          "status": "OPEN",
+          "target_consumer": "ROOT_CURRENT_CONTRACT_AND_QUALIFIED_PRODUCER_PENDING"
+        },
+        {
+          "line": 744,
+          "expression": "build_fixture(false, false, FIXTURE_UNRESOLVED_OPERAND, \"profile:checked\", &unused,\n                        diagnostic, sizeof(diagnostic)) == XR_PROGRAM_BUILD_UNRESOLVED_REFERENCE",
+          "status": "OPEN",
+          "target_consumer": "ROOT_CURRENT_CONTRACT_AND_QUALIFIED_PRODUCER_PENDING"
+        },
+        {
+          "line": 746,
+          "expression": "build_fixture(false, false, FIXTURE_DUPLICATE_RESULT, \"profile:checked\", &unused,\n                        diagnostic, sizeof(diagnostic)) == XR_PROGRAM_BUILD_DUPLICATE_IDENTITY",
+          "status": "OPEN",
+          "target_consumer": "ROOT_CURRENT_CONTRACT_AND_QUALIFIED_PRODUCER_PENDING"
+        },
+        {
+          "line": 748,
+          "expression": "build_fixture(false, false, FIXTURE_CONFLICTING_PROVIDER_CONTRACT, \"profile:checked\",\n                        &unused, diagnostic, sizeof(diagnostic)) == XR_PROGRAM_BUILD_INVALID_INPUT",
+          "status": "OPEN",
+          "target_consumer": "ROOT_CURRENT_CONTRACT_AND_QUALIFIED_PRODUCER_PENDING"
+        },
+        {
+          "line": 750,
+          "expression": "build_fixture(false, false, FIXTURE_INVALID_PROVIDER_CONTRACT, \"profile:checked\", &unused,\n                        diagnostic, sizeof(diagnostic)) == XR_PROGRAM_BUILD_INVALID_INPUT",
+          "status": "OPEN",
+          "target_consumer": "ROOT_CURRENT_CONTRACT_AND_QUALIFIED_PRODUCER_PENDING"
+        }
+      ],
+      "responsibility": "Same fullgraph under checked vswrapping semanticprofile must change bothidentity andbytes at same length. Exact5distinct failureinputs/statuses unknownopcode/unresolvedoperand/duplicateidentity/conflictingprovidercontract/refusal0logicalcontract. Root maps public failclosed diagnostics/atomicoutput without oldbuilder fallback."
+    },
+    {
+      "legacy_name": "test_provider_semantics_are_program_identity",
+      "legacy_path": "tests/unit/program/test_xr_program.c",
+      "status": "OPEN",
+      "original_lines": [
+        754,
+        766
+      ],
+      "CHECK_sites": [
+        {
+          "line": 758,
+          "expression": "build_fixture(false, false, FIXTURE_VALID, \"profile:checked\", &clock, diagnostic,\n                        sizeof(diagnostic)) == XR_PROGRAM_BUILD_OK",
+          "status": "OPEN",
+          "target_consumer": "ROOT_CURRENT_CONTRACT_AND_QUALIFIED_PRODUCER_PENDING"
+        },
+        {
+          "line": 760,
+          "expression": "build_fixture(false, false, FIXTURE_CHANGED_PROVIDER_EFFECT, \"profile:checked\", &process,\n                        diagnostic, sizeof(diagnostic)) == XR_PROGRAM_BUILD_OK",
+          "status": "OPEN",
+          "target_consumer": "ROOT_CURRENT_CONTRACT_AND_QUALIFIED_PRODUCER_PENDING"
+        },
+        {
+          "line": 762,
+          "expression": "!xr_program_id_equal(clock.id, process.id)",
+          "status": "OPEN",
+          "target_consumer": "ROOT_CURRENT_CONTRACT_AND_QUALIFIED_PRODUCER_PENDING"
+        },
+        {
+          "line": 763,
+          "expression": "clock.size == process.size && memcmp(clock.bytes, process.bytes, clock.size) != 0",
+          "status": "OPEN",
+          "target_consumer": "ROOT_CURRENT_CONTRACT_AND_QUALIFIED_PRODUCER_PENDING"
+        }
+      ],
+      "responsibility": "Independent READS_CLOCK\u2192READS_PROCESS logical effect mutation with identical stablecontract/op identity changesProgramID andsame-sizebytes. Do not reduce semantic provider contract to name/address/count."
+    },
+    {
+      "legacy_name": "test_partial_core_ir_construction",
+      "legacy_path": "tests/unit/program/test_xr_program.c",
+      "status": "OPEN",
+      "original_lines": [
+        768,
+        915
+      ],
+      "CHECK_sites": [
+        {
+          "line": 819,
+          "expression": "xr_core_ir_program_build(&input, &program, diagnostic, sizeof(diagnostic)) ==\n          XR_PROGRAM_BUILD_INVALID_INPUT",
+          "status": "OPEN",
+          "target_consumer": "ROOT_CURRENT_CONTRACT_AND_QUALIFIED_PRODUCER_PENDING"
+        },
+        {
+          "line": 821,
+          "expression": "program == NULL",
+          "status": "OPEN",
+          "target_consumer": "ROOT_CURRENT_CONTRACT_AND_QUALIFIED_PRODUCER_PENDING"
+        },
+        {
+          "line": 822,
+          "expression": "memcmp(first_bytes, \"first\", sizeof(first_bytes)) == 0",
+          "status": "OPEN",
+          "target_consumer": "ROOT_CURRENT_CONTRACT_AND_QUALIFIED_PRODUCER_PENDING"
+        },
+        {
+          "line": 823,
+          "expression": "memcmp(last_bytes, \"last\", sizeof(last_bytes)) == 0",
+          "status": "OPEN",
+          "target_consumer": "ROOT_CURRENT_CONTRACT_AND_QUALIFIED_PRODUCER_PENDING"
+        },
+        {
+          "line": 826,
+          "expression": "xr_core_ir_program_build(&input, &program, diagnostic, sizeof(diagnostic)) ==\n          XR_PROGRAM_BUILD_OK",
+          "status": "OPEN",
+          "target_consumer": "ROOT_CURRENT_CONTRACT_AND_QUALIFIED_PRODUCER_PENDING"
+        },
+        {
+          "line": 828,
+          "expression": "program != NULL",
+          "status": "OPEN",
+          "target_consumer": "ROOT_CURRENT_CONTRACT_AND_QUALIFIED_PRODUCER_PENDING"
+        },
+        {
+          "line": 832,
+          "expression": "xr_program_write(program, &artifact, diagnostic, sizeof(diagnostic)) ==\n          XR_PROGRAM_BUILD_OK",
+          "status": "OPEN",
+          "target_consumer": "ROOT_CURRENT_CONTRACT_AND_QUALIFIED_PRODUCER_PENDING"
+        },
+        {
+          "line": 834,
+          "expression": "contains_bytes(artifact.bytes, artifact.size, \"first\")",
+          "status": "OPEN",
+          "target_consumer": "ROOT_CURRENT_CONTRACT_AND_QUALIFIED_PRODUCER_PENDING"
+        },
+        {
+          "line": 835,
+          "expression": "contains_bytes(artifact.bytes, artifact.size, \"last\")",
+          "status": "OPEN",
+          "target_consumer": "ROOT_CURRENT_CONTRACT_AND_QUALIFIED_PRODUCER_PENDING"
+        },
+        {
+          "line": 910,
+          "expression": "xr_core_ir_program_build(&bad_input, &program, diagnostic, sizeof(diagnostic)) !=\n              XR_PROGRAM_BUILD_OK",
+          "status": "OPEN",
+          "target_consumer": "ROOT_CURRENT_CONTRACT_AND_QUALIFIED_PRODUCER_PENDING"
+        },
+        {
+          "line": 912,
+          "expression": "program == NULL",
+          "status": "OPEN",
+          "target_consumer": "ROOT_CURRENT_CONTRACT_AND_QUALIFIED_PRODUCER_PENDING"
+        }
+      ],
+      "responsibility": "Three stringconstants first/missing/last, nonemptyNULL middle rejectsINVALID_INPUT/ProgramNULL/inputunchanged; emptyNULL succeeds then callerstrings poisonedx/y while writtenartifact keepsfirst/last. Nine precise missing-storage/partial variant/signature copy prefixes reject/ProgramNULL and release partialowners. Root owns currenttypedinput/commonfullverification and no copiedowner/escape fallback."
+    },
+    {
+      "legacy_name": "test_retained_function_identity_publication",
+      "legacy_path": "tests/unit/program/test_xr_program.c",
+      "status": "OPEN",
+      "original_lines": [
+        1254,
+        1293
+      ],
+      "CHECK_sites": [
+        {
+          "line": 1259,
+          "expression": "xr_core_ir_program_build(&fixture.input, &program, diagnostic, sizeof(diagnostic)) ==\n          XR_PROGRAM_BUILD_OK",
+          "status": "OPEN",
+          "target_consumer": "ROOT_CURRENT_CONTRACT_AND_QUALIFIED_PRODUCER_PENDING"
+        },
+        {
+          "line": 1267,
+          "expression": "xr_program_function_ids_from_keys(program, keys, 4u, ids) == XR_PROGRAM_BUILD_OK",
+          "status": "OPEN",
+          "target_consumer": "ROOT_CURRENT_CONTRACT_AND_QUALIFIED_PRODUCER_PENDING"
+        },
+        {
+          "line": 1272,
+          "expression": "ids[index] == expected",
+          "status": "OPEN",
+          "target_consumer": "ROOT_CURRENT_CONTRACT_AND_QUALIFIED_PRODUCER_PENDING"
+        },
+        {
+          "line": 1276,
+          "expression": "xr_program_function_ids_from_keys(program, keys, 4u, ids) ==\n          XR_PROGRAM_BUILD_INVALID_INPUT",
+          "status": "OPEN",
+          "target_consumer": "ROOT_CURRENT_CONTRACT_AND_QUALIFIED_PRODUCER_PENDING"
+        },
+        {
+          "line": 1279,
+          "expression": "ids[index] == UINT32_MAX",
+          "status": "OPEN",
+          "target_consumer": "ROOT_CURRENT_CONTRACT_AND_QUALIFIED_PRODUCER_PENDING"
+        },
+        {
+          "line": 1282,
+          "expression": "xr_program_function_ids_from_keys(program, keys, 4u, ids) ==\n          XR_PROGRAM_BUILD_OUT_OF_MEMORY",
+          "status": "OPEN",
+          "target_consumer": "ROOT_CURRENT_CONTRACT_AND_QUALIFIED_PRODUCER_PENDING"
+        },
+        {
+          "line": 1284,
+          "expression": "allocation_probe.attempts == 1u",
+          "status": "OPEN",
+          "target_consumer": "ROOT_CURRENT_CONTRACT_AND_QUALIFIED_PRODUCER_PENDING"
+        },
+        {
+          "line": 1287,
+          "expression": "ids[index] == UINT32_MAX",
+          "status": "OPEN",
+          "target_consumer": "ROOT_CURRENT_CONTRACT_AND_QUALIFIED_PRODUCER_PENDING"
+        },
+        {
+          "line": 1289,
+          "expression": "xr_program_function_ids_from_keys(program, keys, 4u, ids) == XR_PROGRAM_BUILD_OK",
+          "status": "OPEN",
+          "target_consumer": "ROOT_CURRENT_CONTRACT_AND_QUALIFIED_PRODUCER_PENDING"
+        },
+        {
+          "line": 1290,
+          "expression": "allocation_probe.attempts == 1u",
+          "status": "OPEN",
+          "target_consumer": "ROOT_CURRENT_CONTRACT_AND_QUALIFIED_PRODUCER_PENDING"
+        }
+      ],
+      "responsibility": "Four reverse-order realdiamond initfunctionkeys map to each lexicographicstable-keyrank independent of requestorder. Missingfourthkey and injected firstallocation rejectatomically ALL4outputIDs UINT32_MAX. FirstallocationOOM attempt1/physicalbalance, failat2 success actualattempt1/physicalbalance. Currentpublicretainedroot/selectionauthority contract pendingRoot, no privatebuilder/name/ordinalauthority."
+    },
+    {
+      "legacy_name": "test_declared_semantics_and_owned_storage",
+      "legacy_path": "tests/unit/program/test_xr_program_provider_requirements.c",
+      "status": "OPEN",
+      "original_lines": [
+        75,
+        97
+      ],
+      "CHECK_sites": [
+        {
+          "line": 78,
+          "expression": "xr_program_trap_fixture_write(&artifact, message, sizeof(message)) ==\n          XR_PROGRAM_BUILD_OK",
+          "status": "OPEN",
+          "target_consumer": "ROOT_CURRENT_CONTRACT_AND_QUALIFIED_PRODUCER_PENDING"
+        },
+        {
+          "line": 82,
+          "expression": "xr_program_validate(artifact.bytes, artifact.size, NULL, &program, &diagnostic) ==\n          XR_PROGRAM_VERIFY_OK",
+          "status": "OPEN",
+          "target_consumer": "ROOT_CURRENT_CONTRACT_AND_QUALIFIED_PRODUCER_PENDING"
+        },
+        {
+          "line": 86,
+          "expression": "xr_validated_program_provider_requirement(program, 0u, &requirement)",
+          "status": "OPEN",
+          "target_consumer": "ROOT_CURRENT_CONTRACT_AND_QUALIFIED_PRODUCER_PENDING"
+        },
+        {
+          "line": 87,
+          "expression": "requirement.operation_count == 1u",
+          "status": "OPEN",
+          "target_consumer": "ROOT_CURRENT_CONTRACT_AND_QUALIFIED_PRODUCER_PENDING"
+        },
+        {
+          "line": 91,
+          "expression": "xr_provider_logical_contract_fingerprint(&expected, &wanted)",
+          "status": "OPEN",
+          "target_consumer": "ROOT_CURRENT_CONTRACT_AND_QUALIFIED_PRODUCER_PENDING"
+        },
+        {
+          "line": 92,
+          "expression": "xr_provider_logical_contract_fingerprint(&requirement.operations[0].logical_contract,\n                                                       &actual)",
+          "status": "OPEN",
+          "target_consumer": "ROOT_CURRENT_CONTRACT_AND_QUALIFIED_PRODUCER_PENDING"
+        },
+        {
+          "line": 94,
+          "expression": "memcmp(wanted.bytes, actual.bytes, sizeof(wanted.bytes)) == 0",
+          "status": "OPEN",
+          "target_consumer": "ROOT_CURRENT_CONTRACT_AND_QUALIFIED_PRODUCER_PENDING"
+        }
+      ],
+      "responsibility": "Validate fullclocktrapfixture then destroycallerartifact; actualowned oneoperation logicalcontract remains valid and fullfingerprint equals independentnullaryI64clock spec. Validatedowner freedafterinspection; targettypedprovidercontract+declarationprovenance afterallproductiondeaths remainunverified."
+    },
+    {
+      "legacy_name": "test_hostile_logical_contracts",
+      "legacy_path": "tests/unit/program/test_xr_program_provider_requirements.c",
+      "status": "OPEN",
+      "original_lines": [
+        99,
+        141
+      ],
+      "CHECK_sites": [
+        {
+          "line": 102,
+          "expression": "xr_program_trap_fixture_write(&artifact, message, sizeof(message)) ==\n          XR_PROGRAM_BUILD_OK",
+          "status": "OPEN",
+          "target_consumer": "ROOT_CURRENT_CONTRACT_AND_QUALIFIED_PRODUCER_PENDING"
+        },
+        {
+          "line": 105,
+          "expression": "offset != 0u",
+          "status": "OPEN",
+          "target_consumer": "ROOT_CURRENT_CONTRACT_AND_QUALIFIED_PRODUCER_PENDING"
+        }
+      ],
+      "responsibility": "Complete6wellformedbutunadmitted mutations must rejectSEMANTIC/OPERATION_TYPE with exactCODE/function0/block0/instruction0;10zeroedmalformedfields plus badlength0/127 andmagic2 rejectSTRUCTURAL/STRUCTURAL. Allcopiedbyte mutations retain noValidatedProgram andfree; currentRoot offsets/status/location determined by currentnormativeencoding, no arbitraryerrorgreen."
+    },
+    {
+      "legacy_name": "main",
+      "legacy_path": "tests/unit/program/test_xr_program_provider_requirements.c",
+      "status": "OPEN",
+      "original_lines": [
+        143,
+        150
+      ],
+      "CHECK_sites": [],
+      "responsibility": "Actualproviderrequirements register both complete tests, return1if any CHECKfails else0; successfulmessage not independentproof and cannot mask missingproduct. No additionalASSERTsite doesnotmean no delegatedresponsibility."
+    }
+  ],
+  "outer_CHECK_sites": 87,
+  "original_private_helpers": [
+    {
+      "path": "tests/unit/program/test_xr_program.c",
+      "function": "key",
+      "line": 137,
+      "end_line": 139,
+      "body_lf_sha256": "027a211b78e0cfbd6b296804e37236848a76cc1980981a0d6a49a6f42d3f2e13",
+      "CHECK_sites": 0,
+      "classification": "Specified actual whole helper function, not another census function/executed-loop count or exhaustive deletion closure.",
+      "status": "OPEN",
+      "responsibility": "Originalstable CoreIR key hash of complete strings, keys remain separate from targetnative names/declaration authority."
+    },
+    {
+      "path": "tests/unit/program/test_xr_program.c",
+      "function": "stable_id",
+      "line": 141,
+      "end_line": 146,
+      "body_lf_sha256": "7316e7ba0c845ef0b907b0250b3046de519961bfcffb3f568f2bd0e7d6739bd8",
+      "CHECK_sites": 0,
+      "classification": "Specified actual whole helper function, not another census function/executed-loop count or exhaustive deletion closure.",
+      "status": "OPEN",
+      "responsibility": "Copy full keybytes tostableID, no shortened/nameauthority."
+    },
+    {
+      "path": "tests/unit/program/test_xr_program.c",
+      "function": "contains_bytes",
+      "line": 148,
+      "end_line": 157,
+      "body_lf_sha256": "80cee1fa1021fb8fe0a20009e90028f20ff048ee6b22e458e66b0bc13bc51f6f",
+      "CHECK_sites": 0,
+      "classification": "Specified actual whole helper function, not another census function/executed-loop count or exhaustive deletion closure.",
+      "status": "OPEN",
+      "responsibility": "Bounds-safe complete byte search; confirms preservedfirst/last and absencephysicalname, not productadmission."
+    },
+    {
+      "path": "tests/unit/program/test_xr_program.c",
+      "function": "build_fixture",
+      "line": 159,
+      "end_line": 346,
+      "body_lf_sha256": "719a0377fae85924d560a48238b887e4a007564500601c27aaaa7e94d415d50d",
+      "CHECK_sites": 0,
+      "classification": "Specified actual whole helper function, not another census function/executed-loop count or exhaustive deletion closure.",
+      "status": "OPEN",
+      "responsibility": "Full2constant40/2\u2192add42\u2192threeprovidercalls graph/sealeddirectmain; reversemodulerows andproviderrows/de-dup, alternatephysicalmodulekeys, exactlogicalcontract/effect/invalidmutation inputs; build/write/freewholeowner."
+    },
+    {
+      "path": "tests/unit/program/test_xr_program.c",
+      "function": "allocation_probe_begin",
+      "line": 113,
+      "end_line": 117,
+      "body_lf_sha256": "0a4171c96ec946eb0df2086d56112236be218d1dadf1a6c61b1a72994872c047",
+      "CHECK_sites": 0,
+      "classification": "Specified actual whole helper function, not another census function/executed-loop count or exhaustive deletion closure.",
+      "status": "OPEN",
+      "responsibility": "Zero entirememoryledger, enable exact failat withno partialowner carryover."
+    },
+    {
+      "path": "tests/unit/program/test_xr_program.c",
+      "function": "allocation_probe_end",
+      "line": 119,
+      "end_line": 125,
+      "body_lf_sha256": "d32068a3ea12edcf70239586619dad87befe5704a9dadc26c0737e32e13da544",
+      "CHECK_sites": 1,
+      "classification": "Specified actual whole helper function, not another census function/executed-loop count or exhaustive deletion closure.",
+      "status": "OPEN",
+      "responsibility": "One CHECKrequires actualallocated==releasedbefore disablingprobe, preserveleakdiagnostics; balancealone doesnotproveperobjectidentity."
+    },
+    {
+      "path": "tests/unit/program/test_xr_program.c",
+      "function": "allocation_probe_reject",
+      "line": 38,
+      "end_line": 40,
+      "body_lf_sha256": "54f700f7d03a4aa37233ed4457c41a42ff53a1f583baf909d8a9fca238bcf17b",
+      "CHECK_sites": 0,
+      "classification": "Specified actual whole helper function, not another census function/executed-loop count or exhaustive deletion closure.",
+      "status": "OPEN",
+      "responsibility": "Onlyenabledattempt increments; exact equality failpoint, no randomsampling."
+    },
+    {
+      "path": "tests/unit/program/test_xr_program.c",
+      "function": "allocation_probe_record",
+      "line": 42,
+      "end_line": 54,
+      "body_lf_sha256": "cb5a65e4a224270480b5ab9609579688c4ad448582f4f6d9df7bbb9abacd5522",
+      "CHECK_sites": 0,
+      "classification": "Specified actual whole helper function, not another census function/executed-loop count or exhaustive deletion closure.",
+      "status": "OPEN",
+      "responsibility": "Recordeach actualsuccessfulphysicalallocation in1024boundedledger; abortcapacityoverrun, no unnoticedownership."
+    },
+    {
+      "path": "tests/unit/program/test_xr_program.c",
+      "function": "allocation_probe_slot",
+      "line": 67,
+      "end_line": 74,
+      "body_lf_sha256": "f904b6e403d2ae1fbe1cfa5826a04bc7085e26c888d0ecf8b5196f0eb809475b",
+      "CHECK_sites": 0,
+      "classification": "Specified actual whole helper function, not another census function/executed-loop count or exhaustive deletion closure.",
+      "status": "OPEN",
+      "responsibility": "Require exactcurrently-owned physicalpointer orabort, no unknownfree/realloc."
+    },
+    {
+      "path": "tests/unit/program/test_xr_program.c",
+      "function": "xr_program_test_malloc",
+      "line": 56,
+      "end_line": 59,
+      "body_lf_sha256": "de3596b76966f6c7e97f2f1ec0dc4db27cd82ae4f87eea38a9ba0dd5d90801d9",
+      "CHECK_sites": 0,
+      "classification": "Specified actual whole helper function, not another census function/executed-loop count or exhaustive deletion closure.",
+      "status": "OPEN",
+      "responsibility": "Inject before actualsystemmalloc; register successfulphysicalallocation."
+    },
+    {
+      "path": "tests/unit/program/test_xr_program.c",
+      "function": "xr_program_test_calloc",
+      "line": 61,
+      "end_line": 65,
+      "body_lf_sha256": "86c395af430110ce659df112509e39b2f069df4d8b886507f95d07a9a80e328c",
+      "CHECK_sites": 0,
+      "classification": "Specified actual whole helper function, not another census function/executed-loop count or exhaustive deletion closure.",
+      "status": "OPEN",
+      "responsibility": "Inject before actualsystemcalloc; register successfulphysicalallocation."
+    },
+    {
+      "path": "tests/unit/program/test_xr_program.c",
+      "function": "xr_program_test_realloc",
+      "line": 76,
+      "end_line": 95,
+      "body_lf_sha256": "de206d13a4f51a9702fa8fc4289e34b2420c3a77fdefe86c968c0f15f37d7520",
+      "CHECK_sites": 0,
+      "classification": "Specified actual whole helper function, not another census function/executed-loop count or exhaustive deletion closure.",
+      "status": "OPEN",
+      "responsibility": "Preserve oldowner on failedgrow; rejectsize0, updateexacttrackedslot onlyafter actualsuccessfulrealloc andbalancedreplacecounts."
+    },
+    {
+      "path": "tests/unit/program/test_xr_program.c",
+      "function": "xr_program_test_free",
+      "line": 97,
+      "end_line": 103,
+      "body_lf_sha256": "b5670383dbd38e60328f8143bae3effbb93e770d78504137a6f3b9ed36d34b8f",
+      "CHECK_sites": 0,
+      "classification": "Specified actual whole helper function, not another census function/executed-loop count or exhaustive deletion closure.",
+      "status": "OPEN",
+      "responsibility": "RemoveexacttrackednonNULLallocationbefore actualsystemfree, no escapedledgeraliases."
+    },
+    {
+      "path": "tests/unit/program/test_xr_program_provider_requirements.c",
+      "function": "logical_offset",
+      "line": 28,
+      "end_line": 47,
+      "body_lf_sha256": "0af824d7173c602325f08fb8563e0485e526078df031e557f568b91a7b4a30d6",
+      "CHECK_sites": 4,
+      "classification": "Specified actual whole helper function, not another census function/executed-loop count or exhaustive deletion closure.",
+      "status": "OPEN",
+      "responsibility": "Four CHECKanchor exactlegacyimports59B/count1/1/logical24B, returnsectionoffset+35; currentRootformatmapslogicalfields, oldoffsetsnotruntimecompatibility."
+    },
+    {
+      "path": "tests/unit/program/test_xr_program_provider_requirements.c",
+      "function": "check_mutation",
+      "line": 49,
+      "end_line": 73,
+      "body_lf_sha256": "f34c56b4f59236a04ed145caade8621ad255463765928772776d14065e23d95b",
+      "CHECK_sites": 8,
+      "classification": "Specified actual whole helper function, not another census function/executed-loop count or exhaustive deletion closure.",
+      "status": "OPEN",
+      "responsibility": "Eight CHECKrequire actualownedcopy, exactstatus/NULLValidatedProgram/diagnostickind; operationtype exactCODE/0/0/0location, freeallcopies/owners."
+    },
+    {
+      "path": "tests/unit/program/xr_program_trap_fixture.h",
+      "function": "xr_program_trap_fixture_key",
+      "line": 18,
+      "end_line": 20,
+      "body_lf_sha256": "94018e2221fdb12c97af39d2742d935558ded0d2551b288e581f3a7434b6ac9d",
+      "CHECK_sites": 0,
+      "classification": "Specified actual whole helper function, not another census function/executed-loop count or exhaustive deletion closure.",
+      "status": "OPEN",
+      "responsibility": "Complete keybytes ofactualclocktrapfunction/block/value inputs."
+    },
+    {
+      "path": "tests/unit/program/xr_program_trap_fixture.h",
+      "function": "xr_program_trap_fixture_write_with_ids_mutated",
+      "line": 22,
+      "end_line": 101,
+      "body_lf_sha256": "affa73e2c4022be800621957e4a8fd861d216a35594de15843df3088779f18bc",
+      "CHECK_sites": 0,
+      "classification": "Specified actual whole helper function, not another census function/executed-loop count or exhaustive deletion closure.",
+      "status": "OPEN",
+      "responsibility": "FullproviderI64call with1refusal successor/trap7, actualstablecontract/op andnullaryclocklogicalcontract; validonlyselection here, sharedextra-successor/wrongtrap paths remainotherresponsibilities."
+    },
+    {
+      "path": "tests/unit/program/xr_program_trap_fixture.h",
+      "function": "xr_program_trap_fixture_write_mutated",
+      "line": 103,
+      "end_line": 115,
+      "body_lf_sha256": "308b591dfe3aebee472e13a37a95a8b79f45b944cd4d9cd313ce8d6a4a175e5e",
+      "CHECK_sites": 0,
+      "classification": "Specified actual whole helper function, not another census function/executed-loop count or exhaustive deletion closure.",
+      "status": "OPEN",
+      "responsibility": "ResolveactualClockContract/realtimeNs stableIDs/fingerprint; unknownidentityrejectINVALID_INPUT, no spellinggrant."
+    },
+    {
+      "path": "tests/unit/program/xr_program_trap_fixture.h",
+      "function": "xr_program_trap_fixture_write",
+      "line": 117,
+      "end_line": 121,
+      "body_lf_sha256": "7190248ecc921c6ce4618808ea2a65193e2b376df595162960a26192bbf9b8cb",
+      "CHECK_sites": 0,
+      "classification": "Specified actual whole helper function, not another census function/executed-loop count or exhaustive deletion closure.",
+      "status": "OPEN",
+      "responsibility": "DelegatefullVALIDtrapfixture only; no simplified alternategraph."
+    },
+    {
+      "path": "tests/unit/program/xr_program_provider_fixture.h",
+      "function": "xr_program_fixture_provider_contract",
+      "line": 17,
+      "end_line": 30,
+      "body_lf_sha256": "294a94d8dbafcb95dd6c67e6c5cdb538a25df5ac60d04afc3ac9e8a3d4f94527",
+      "CHECK_sites": 0,
+      "classification": "Specified actual whole helper function, not another census function/executed-loop count or exhaustive deletion closure.",
+      "status": "OPEN",
+      "responsibility": "Wholelogicalschema/platforms/hosted/trivialresult+errorowners/threadsANY/reentryALLOWED/callbackNONE/refusalTRAPcontract; currenttypedABIowner/effectprotocolreview."
+    },
+    {
+      "path": "tests/unit/program/xr_program_provider_fixture.h",
+      "function": "xr_program_fixture_scalar_contract",
+      "line": 32,
+      "end_line": 46,
+      "body_lf_sha256": "8a4b92a4d10bf09fcbc31bb6ec4580768cec4b72637b0decf125d228058c69b8",
+      "CHECK_sites": 0,
+      "classification": "Specified actual whole helper function, not another census function/executed-loop count or exhaustive deletion closure.",
+      "status": "OPEN",
+      "responsibility": "ReadsClock logicaleffect; exactnullary/unary I64result/Uniterror, unaryIN/trivialowner parameter, alltypebytes copied."
+    },
+    {
+      "path": "tests/unit/program/xr_program_module_fixture.h",
+      "function": "xr_program_module_fixture_init",
+      "line": 33,
+      "end_line": 70,
+      "body_lf_sha256": "915b0162cae236eb17682feee9fdab215ad820ec56798cdf4a94d727b2b270f0",
+      "CHECK_sites": 0,
+      "classification": "Specified actual whole helper function, not another census function/executed-loop count or exhaustive deletion closure.",
+      "status": "OPEN",
+      "responsibility": "Wholeownedfourinitfunction/base-left-right-main diamond andstablekeys/dependencies/flags/profile, no arbitraryfourname substitutes."
+    }
+  ],
+  "specified_helper_CHECK_sites": 13,
+  "helper_policy": "Eightdistinctothercensusfunctions87CHECKsites;22specifiedactualhelperbodies13CHECKsites are not additionalcensus/loopiterations/exhaustivedeletionclosure.",
+  "original_fixed_wire": {
+    "arrays": {
+      "previous_vector": {
+        "bytes": 497,
+        "hex": "585250524f470d0a03000600013236b716d3b8ca42a724095a7a6c101162202f8337b29b7a1ecdb259c84581453893b8b111c5bdb0a0f1413f48ab5f06221df27d577ce866033bfeaf69d7d919010107010049024909035219046b6705d201a70106f9020107fa020e12000000020101000002020000030300000404000005050102060600000707000008080000090900000a0a00000c0c01010d0d00000e0e00000f0f000010100000111100001212000002000201040102015001000000000200000000452002000000010600010000010101020001000007010102000000040100010202000000040000100302000002000102000088010402000001020a01000088010502000001030a01010088010602000001040a00000023000000000105000001010000022401020000000500002300000000010000000225d884502b309c2c68348d28df75550c0134e6a090ba1e0d32d3a5cd829f4541301b01000000080000001f0000000101030001010101010101010303017bd35722642cbb62532c6cc821ff2ebd0234e6a090ba1e0d32d3a5cd829f4541301b01000000080000001f0000000101030001010101010101010303014d05d6d0b65fd06a2ad833abcba1d7d01b01000000080000001f000000010103000101010101010101030301000000020000000000010000000000",
+        "sha256": "fdbd0c6b63432ac8598ee4a7fd7165aa98ae76fba1b3b6fa82ca9514e32ca60c"
+      },
+      "previous_core_spec": {
+        "bytes": 32,
+        "hex": "0acc9c764958b4d00eeb0524e4c5a9a76ec52094a3a6e8791dc845b289503d38",
+        "sha256": "9a74abb0fc82ce4a072a9169f6edbdd458ad890349754da6e3f0efe880b1a3bf"
+      },
+      "sequence_core_spec": {
+        "bytes": 32,
+        "hex": "601e57fe0ef57afefc3d0bd666d4c8710b6fcbaeff9a6dd4bac62ce3986c9d20",
+        "sha256": "38c369a15c9bb6234549314a709395ad52ddc0c3d5a60d4f59240d313736a738"
+      },
+      "atomic_core_spec": {
+        "bytes": 32,
+        "hex": "7c6efe1e2cdd12c1c6362d523cf1c90863581ae06b3f0b1babb3756c411dae2f",
+        "sha256": "b12b0b585491dfe3096e4b01744fde94296b892425d5f79e0e3988f7fe84102f"
+      },
+      "cas_core_spec": {
+        "bytes": 32,
+        "hex": "febbc0cf89acde9b05a005c05a1f4aa47a3f196313764099e69f1709f41039b4",
+        "sha256": "f880b26ddff8ed4b329b55863a0235b8d77f6aa8b4afba61f27f6de432240f8f"
+      },
+      "update_core_spec": {
+        "bytes": 32,
+        "hex": "3236b716d3b8ca42a724095a7a6c101162202f8337b29b7a1ecdb259c8458145",
+        "sha256": "5461f267201f8d06e61af6f3e6801c37ff3c7449fcf80e7fb6219070f711d077"
+      },
+      "message_vector": {
+        "bytes": 501,
+        "hex": "585250524f470d0a030009000180e7efb972ddfede0ff405c0ce17f4267a6b81946cacdead75220425e1eb1c893893b8b111c5bdb0a0f1413f48ab5f06221df27d577ce866033bfeaf69d7d91901010701004d024d09035619046f6705d601a70106fd020107fe020e13000000020101000002020000030300000404000005050102060600000707000008080000090900000a0a00000c0c01010d0d00000e0e00000f0f00001010000011110000121200001313000002000201040102015001000000000200000000452002000000010600010000010101020001000007010102000000040100010202000000040000100302000002000102000088010402000001020a01000088010502000001030a01010088010602000001040a00000023000000000105000001010000022401020000000500002300000000010000000225d884502b309c2c68348d28df75550c0134e6a090ba1e0d32d3a5cd829f4541301b01000000080000001f0000000101030001010101010101010303017bd35722642cbb62532c6cc821ff2ebd0234e6a090ba1e0d32d3a5cd829f4541301b01000000080000001f0000000101030001010101010101010303014d05d6d0b65fd06a2ad833abcba1d7d01b01000000080000001f000000010103000101010101010101030301000000020000000000010000000000",
+        "sha256": "a0009dd6aca537ecb91c60b40f085d88202bad2f003ece46fe5f5ed80c7cab27"
+      },
+      "previous_f64_core": {
+        "bytes": 32,
+        "hex": "9bc4f933e094a9d678334d1242248a66fd928a7ecef5f9339b5503ccd4651cf9",
+        "sha256": "dc6cbce2338463939c443b34ae0e94b7e0957c5bc9e2d134e5334320ea3b2df5"
+      },
+      "scalar_core_spec": {
+        "bytes": 32,
+        "hex": "ae5b7d6da8680a79ec240a1ae7a4a9839a11376b5e9c85dd33f965b46fdb966f",
+        "sha256": "1ee45108ae6c586e53835f0a8d09f87604464ab9b756383187b4bc13b5fa779d"
+      },
+      "bitcast_core_spec": {
+        "bytes": 32,
+        "hex": "7853a450cd62667ab0b58e415acd50cbdd6266b0001fa1885d025be0ab5b754b",
+        "sha256": "7e0092e11721fdc04c58a9b28e0c6d220d54dfb8bdeb1303a20e6dadc7ecda35"
+      },
+      "output_core_spec": {
+        "bytes": 32,
+        "hex": "752ea7aa3e1342bf7b10d024dae4b5aac6d1ec594480f434d300fd977a75daf9",
+        "sha256": "9877eb390aedc20b448376e6b5bf7dad8185d90b61649774bbbcc35baa597c17"
+      },
+      "record_type_core": {
+        "bytes": 32,
+        "hex": "660c966404fd71348845d3c0f5b62711602688e0babed0f4131e082c460991f8",
+        "sha256": "5cc6c41227fd6353a312cbf8bdc6594d791dee1b344a0e2b30871de5a3ceb0ba"
+      },
+      "message_core_spec": {
+        "bytes": 32,
+        "hex": "a150eed8c055fdc2c839638d82deb9f2553d17b0cac50c21151cffbdb05012ff",
+        "sha256": "4ae055046701047245e26c917dca49761d6ec7bd55ea6f300100820e6c4d519f"
+      },
+      "channel_core_spec": {
+        "bytes": 32,
+        "hex": "e8ae1d461b9ba5e0ec96208606081a4a77ba0f7eeaad93cf2930839c08101b7b",
+        "sha256": "5c0ffde78167ec76bc40f395da553254ca8f99ac3e07289d7689b813594fa43b"
+      },
+      "bitwise_core_spec": {
+        "bytes": 32,
+        "hex": "f557924bee5dc11cde3e3e0775fec742f3571d7e42d5ce566482d3364860ffbc",
+        "sha256": "20ec4617a1ba806837d0d225b49933eb6d3a1a1fd2d3303e5e759041707d22d3"
+      },
+      "slice_core_spec": {
+        "bytes": 32,
+        "hex": "39d21659b838f7daa2881fc8609bb2690b21bc25dc9af2d438dfe331e1c4b334",
+        "sha256": "50c1a2b617e14ac60192cea703b3b659ad601d8f8248c1e549a61118e3b1d47b"
+      },
+      "array_default_core_spec": {
+        "bytes": 32,
+        "hex": "8dd297616b54e85f501b4f6850a2af350ba1d8a1802330948158cb6ec85aa5d9",
+        "sha256": "c818f9bb09ba35b0a0b08a0928598deec183cf134bb2349291dffc189f38fdd8"
+      },
+      "builder_vector": {
+        "bytes": 505,
+        "hex": "585250524f470d0a03000b0001683e50c6e2ed4e28a44d558ba2b1c4ca1724f56afeff2e6009b4569ceaaa98a33893b8b111c5bdb0a0f1413f48ab5f06221df27d577ce866033bfeaf69d7d919010107010051025109035a1904736705da01a701068103010782030e14000000020101000002020000030300000404000005050102060600000707000008080000090900000a0a00000c0c01010d0d00000e0e00000f0f0000101000001111000012120000131300001414010202000201040102015001000000000200000000452002000000010600010000010101020001000007010102000000040100010202000000040000100302000002000102000088010402000001020a01000088010502000001030a01010088010602000001040a00000023000000000105000001010000022401020000000500002300000000010000000225d884502b309c2c68348d28df75550c0134e6a090ba1e0d32d3a5cd829f4541301b01000000080000001f0000000101030001010101010101010303017bd35722642cbb62532c6cc821ff2ebd0234e6a090ba1e0d32d3a5cd829f4541301b01000000080000001f0000000101030001010101010101010303014d05d6d0b65fd06a2ad833abcba1d7d01b01000000080000001f000000010103000101010101010101030301000000020000000000010000000000",
+        "sha256": "92b5f4f7147c736b9c6cfb144ce797cf0ba2f8b2de6a732d18bfc0dea5cc0683"
+      },
+      "byte_compare_core": {
+        "bytes": 32,
+        "hex": "6bd431f90083d55f13ac849c0c715a2b42b80d5a482ccfa22973108dd25c32f8",
+        "sha256": "d9353a589e8ddb90247ba5fe93ec6723e05e5cc542c02bc943b3f16a5df5655e"
+      },
+      "array_append_core": {
+        "bytes": 32,
+        "hex": "69075c19fb8d9b74075be1c9c48e9bbcf8b8cc09dbc4118b5efa3332b6b6776a",
+        "sha256": "206b69fd5518abd51c498ee48a2a42552366550e2190ec2794ce3bb02f281925"
+      }
+    },
+    "expected_historical_ids_in_order": [
+      "7afaa251d147b3e0ddc127d441f2b9ac11333e44558a757434b755f80952b3ad",
+      "301cfcc1ada4b8382b88184c3ea725368b320212b3edfd74a8dc6048c6294d6d",
+      "7ad5d4ff936713308fdf21da7155c686b9cfb4fe5f007dd518b002a96f7b2790",
+      "b927a4891131472a526c33e3e2d90fe1e393bab5bb8bf7ee18a9d86e24582c15",
+      "1d74adb599932d56e448d5f8ccc4c357b903a0499cfe242bca181b0f7f475942",
+      "735d1517863c53bedc836812b58b6a96079fbadd07602ec882dd1c4f07666ab8",
+      "428c18b3995c3443992cc374d7af1e5d57b0022d236b448af8b2ecdbf616c488",
+      "e2fc903e3ea6b895a0e59a53cbc48aff6ee4529f9b5c90d4240a4ae593250c3e",
+      "f56d74fae27c57d60dff03bf70cf0330dba85659a7c091633eae80eed66f1ccb",
+      "9416a7926c2449c9f688f9795297f86ac52e45444c114b1719dcc64323995aa1",
+      "1e6c03fd8b42b19a8868464dd8478f54ccd14909033927f1756970d47b18224f",
+      "8f8aa69d4b9ed9ec9f947b5f567b58cccd58c26c37cf6bad8531c6016a4b6b91",
+      "e5ed1fd020f8792f2a8fa3c6b4aaa930f5339911683d30f41ee499cd4b388906",
+      "1bb4200bb526389bbc2ede0160828177556b4ec7348616ce519e0c5198b30c4c",
+      "a0d1f933ab3323f3d95634a084180c021c6b2d6ba997534d254820659452f9f0",
+      "456a1708865174e260191ed7f1654a4efa8f98cba831b31461f858f2f995b354",
+      "1bc457be305a4ce40fd7c37814e57f06ea46f4333d1fc2d41738014c6476f411",
+      "0a77e6663fd32349ac055cda9e291cd9411e19501f9c0dc192c7421eb518e12b"
+    ],
+    "digest": "SHA256(domain_with_terminating_NUL || complete_wire_bytes)",
+    "domain": "xray-program-id-v3",
+    "domain_header": {
+      "path": "src/program/xr_program_schema_gen.h",
+      "commit": "01e6d38401b0f5c8684b64c35a99ac651024c0c1",
+      "lf_sha256": "2fa878e9240b21dba7ffc955b49f4c373c5b048a70c33b5e5f79b5d5396d454c"
+    },
+    "identity_source": {
+      "path": "src/program/xr_program_identity.c",
+      "commit": "01e6d38401b0f5c8684b64c35a99ac651024c0c1",
+      "lf_sha256": "d8eb79323c0e7a760f673c922567ab9f63e85137830f8eeeb989d2a21ac39bc7"
+    },
+    "first_size": 505,
+    "last_fixed_id": "0a77e6663fd32349ac055cda9e291cd9411e19501f9c0dc192c7421eb518e12b",
+    "current_product_execution": "NOT_RUN"
+  },
+  "independent_fixed_literal_digest_review": {
+    "status": "PASS_FIXED_LITERAL_VECTOR_EDITS_AND_INDEPENDENT_SHA256_ONLY",
+    "domain_includes_terminal_NUL": true,
+    "historical_vectors": [
+      {
+        "vector": "previous_vector",
+        "bytes": 497,
+        "wire_sha256": "7b3062e3239af7e852da745501e4d7a8c3b268e72e1ae3790c31152392c196f0",
+        "independent_domain_digest": "7afaa251d147b3e0ddc127d441f2b9ac11333e44558a757434b755f80952b3ad",
+        "original_fixed_golden": "7afaa251d147b3e0ddc127d441f2b9ac11333e44558a757434b755f80952b3ad"
+      },
+      {
+        "vector": "previous_vector",
+        "bytes": 497,
+        "wire_sha256": "532eaee463cc02495067b487a31a3435fb1efa39385593f0a874757ce655fe13",
+        "independent_domain_digest": "301cfcc1ada4b8382b88184c3ea725368b320212b3edfd74a8dc6048c6294d6d",
+        "original_fixed_golden": "301cfcc1ada4b8382b88184c3ea725368b320212b3edfd74a8dc6048c6294d6d"
+      },
+      {
+        "vector": "previous_vector",
+        "bytes": 497,
+        "wire_sha256": "b47e11b2612502bec20a349fecfbf7a27572ab850b6865e3255a52ff09873e91",
+        "independent_domain_digest": "7ad5d4ff936713308fdf21da7155c686b9cfb4fe5f007dd518b002a96f7b2790",
+        "original_fixed_golden": "7ad5d4ff936713308fdf21da7155c686b9cfb4fe5f007dd518b002a96f7b2790"
+      },
+      {
+        "vector": "previous_vector",
+        "bytes": 497,
+        "wire_sha256": "5e5b3f6709d27ce601c9503acd9c6536d8f179456d514de587d04ef6a0dee74f",
+        "independent_domain_digest": "b927a4891131472a526c33e3e2d90fe1e393bab5bb8bf7ee18a9d86e24582c15",
+        "original_fixed_golden": "b927a4891131472a526c33e3e2d90fe1e393bab5bb8bf7ee18a9d86e24582c15"
+      },
+      {
+        "vector": "previous_vector",
+        "bytes": 497,
+        "wire_sha256": "ab4abee2b33cab77c4203f1907f27f340cb1137b9325435ff6a4f40d0d8d9314",
+        "independent_domain_digest": "1d74adb599932d56e448d5f8ccc4c357b903a0499cfe242bca181b0f7f475942",
+        "original_fixed_golden": "1d74adb599932d56e448d5f8ccc4c357b903a0499cfe242bca181b0f7f475942"
+      },
+      {
+        "vector": "previous_vector",
+        "bytes": 497,
+        "wire_sha256": "d690978be822bf9763cf7d08ca16ca698a66599b0530a4501b250546b7df6a42",
+        "independent_domain_digest": "735d1517863c53bedc836812b58b6a96079fbadd07602ec882dd1c4f07666ab8",
+        "original_fixed_golden": "735d1517863c53bedc836812b58b6a96079fbadd07602ec882dd1c4f07666ab8"
+      },
+      {
+        "vector": "previous_vector",
+        "bytes": 497,
+        "wire_sha256": "fdbd0c6b63432ac8598ee4a7fd7165aa98ae76fba1b3b6fa82ca9514e32ca60c",
+        "independent_domain_digest": "428c18b3995c3443992cc374d7af1e5d57b0022d236b448af8b2ecdbf616c488",
+        "original_fixed_golden": "428c18b3995c3443992cc374d7af1e5d57b0022d236b448af8b2ecdbf616c488"
+      },
+      {
+        "vector": "previous_f64_vector",
+        "bytes": 501,
+        "wire_sha256": "2da81c5e855bb58b4694f567af4a3ce7b5a43608e1dd72dce0277dbd5d44548f",
+        "independent_domain_digest": "e2fc903e3ea6b895a0e59a53cbc48aff6ee4529f9b5c90d4240a4ae593250c3e",
+        "original_fixed_golden": "e2fc903e3ea6b895a0e59a53cbc48aff6ee4529f9b5c90d4240a4ae593250c3e"
+      },
+      {
+        "vector": "previous_f64_vector",
+        "bytes": 501,
+        "wire_sha256": "ceb24966b25550453550454040058d10f2370993b642802782212eec9937f071",
+        "independent_domain_digest": "f56d74fae27c57d60dff03bf70cf0330dba85659a7c091633eae80eed66f1ccb",
+        "original_fixed_golden": "f56d74fae27c57d60dff03bf70cf0330dba85659a7c091633eae80eed66f1ccb"
+      },
+      {
+        "vector": "previous_f64_vector",
+        "bytes": 501,
+        "wire_sha256": "acc7b0d55d4c48e654afce8fb9986cdd49f7fde15694e0ab2f0e09a7e8b5faa3",
+        "independent_domain_digest": "9416a7926c2449c9f688f9795297f86ac52e45444c114b1719dcc64323995aa1",
+        "original_fixed_golden": "9416a7926c2449c9f688f9795297f86ac52e45444c114b1719dcc64323995aa1"
+      },
+      {
+        "vector": "previous_f64_vector",
+        "bytes": 501,
+        "wire_sha256": "bec4ca46175ebcd41b47b83c7395e54f29f709ee738892f19d8d552267b671c8",
+        "independent_domain_digest": "1e6c03fd8b42b19a8868464dd8478f54ccd14909033927f1756970d47b18224f",
+        "original_fixed_golden": "1e6c03fd8b42b19a8868464dd8478f54ccd14909033927f1756970d47b18224f"
+      },
+      {
+        "vector": "previous_f64_vector",
+        "bytes": 501,
+        "wire_sha256": "cd104d6d77a5f991ff341e11caadf35a6f94da073136ec37ac95e092fda0ac1f",
+        "independent_domain_digest": "8f8aa69d4b9ed9ec9f947b5f567b58cccd58c26c37cf6bad8531c6016a4b6b91",
+        "original_fixed_golden": "8f8aa69d4b9ed9ec9f947b5f567b58cccd58c26c37cf6bad8531c6016a4b6b91"
+      },
+      {
+        "vector": "previous_f64_vector",
+        "bytes": 501,
+        "wire_sha256": "2efdf6944de8ddf5fae6aff57aa3b18edfac011b62b211340f308aae79b3da3b",
+        "independent_domain_digest": "e5ed1fd020f8792f2a8fa3c6b4aaa930f5339911683d30f41ee499cd4b388906",
+        "original_fixed_golden": "e5ed1fd020f8792f2a8fa3c6b4aaa930f5339911683d30f41ee499cd4b388906"
+      },
+      {
+        "vector": "previous_f64_vector",
+        "bytes": 501,
+        "wire_sha256": "eabe914aebaca24817d222b6e66e1bfb5bb7634e8f1579cc87d5dbf0b214a64f",
+        "independent_domain_digest": "1bb4200bb526389bbc2ede0160828177556b4ec7348616ce519e0c5198b30c4c",
+        "original_fixed_golden": "1bb4200bb526389bbc2ede0160828177556b4ec7348616ce519e0c5198b30c4c"
+      },
+      {
+        "vector": "message_vector",
+        "bytes": 501,
+        "wire_sha256": "a0009dd6aca537ecb91c60b40f085d88202bad2f003ece46fe5f5ed80c7cab27",
+        "independent_domain_digest": "a0d1f933ab3323f3d95634a084180c021c6b2d6ba997534d254820659452f9f0",
+        "original_fixed_golden": "a0d1f933ab3323f3d95634a084180c021c6b2d6ba997534d254820659452f9f0"
+      },
+      {
+        "vector": "message_vector",
+        "bytes": 501,
+        "wire_sha256": "400bb238997bb10a86f71aabebb487403a3547fcf2108d926dd4fb38ae4d83e4",
+        "independent_domain_digest": "456a1708865174e260191ed7f1654a4efa8f98cba831b31461f858f2f995b354",
+        "original_fixed_golden": "456a1708865174e260191ed7f1654a4efa8f98cba831b31461f858f2f995b354"
+      },
+      {
+        "vector": "byte_compare_vector",
+        "bytes": 505,
+        "wire_sha256": "0b180c7b70fd855700909e607e0e9aefea5fe151094ef2b8186a11fc285eccbc",
+        "independent_domain_digest": "1bc457be305a4ce40fd7c37814e57f06ea46f4333d1fc2d41738014c6476f411",
+        "original_fixed_golden": "1bc457be305a4ce40fd7c37814e57f06ea46f4333d1fc2d41738014c6476f411"
+      },
+      {
+        "vector": "array_append_vector",
+        "bytes": 505,
+        "wire_sha256": "ce654a19ef930df755132df0fe8371bf874a877b40b72359371e7c62f1f7a84e",
+        "independent_domain_digest": "0a77e6663fd32349ac055cda9e291cd9411e19501f9c0dc192c7421eb518e12b",
+        "original_fixed_golden": "0a77e6663fd32349ac055cda9e291cd9411e19501f9c0dc192c7421eb518e12b"
+      }
+    ],
+    "last_vector_hex": "585250524f470d0a03000b000169075c19fb8d9b74075be1c9c48e9bbcf8b8cc09dbc4118b5efa3332b6b6776a3893b8b111c5bdb0a0f1413f48ab5f06221df27d577ce866033bfeaf69d7d919010107010051025109035a1904736705da01a701068103010782030e14000000020101000002020000030300000404000005050102060600000707000008080000090900000a0a00000c0c01010d0d00000e0e00000f0f0000101000001111000012120000131300001414010202000201040102015001000000000200000000452002000000010600010000010101020001000007010102000000040100010202000000040000100302000002000102000088010402000001020a01000088010502000001030a01010088010602000001040a00000023000000000105000001010000022401020000000500002300000000010000000225d884502b309c2c68348d28df75550c0134e6a090ba1e0d32d3a5cd829f4541301b01000000080000001f0000000101030001010101010101010303017bd35722642cbb62532c6cc821ff2ebd0234e6a090ba1e0d32d3a5cd829f4541301b01000000080000001f0000000101030001010101010101010303014d05d6d0b65fd06a2ad833abcba1d7d01b01000000080000001f000000010103000101010101010101030301000000020000000000010000000000",
+    "product_parser_execution": "NOT_RUN",
+    "old_wire_runtime_admission": "NOT_TESTED_OR_REQUESTED",
+    "current_identity_equivalence": "OPEN_ROOT_CURRENT_NORMATIVE_REPRESENTATION"
+  },
+  "original_provider_mutations": {
+    "logical_section_bytes": 59,
+    "contract_count": 1,
+    "operation_count": 1,
+    "logical_length": 24,
+    "logical_start": "IMPORTS_SECTION_OFFSET+35",
+    "valid_but_unadmitted": [
+      {
+        "field": 4,
+        "value": "READS_CLOCK|MAY_PANIC"
+      },
+      {
+        "field": 4,
+        "value": "READS_CLOCK|MAY_SUSPEND"
+      },
+      {
+        "field": 18,
+        "value": "THREADS_INSTANCE_AFFINE"
+      },
+      {
+        "field": 19,
+        "value": "REENTRY_FORBIDDEN"
+      },
+      {
+        "field": 20,
+        "value": "CALLBACK_SYNCHRONOUS"
+      },
+      {
+        "field": 22,
+        "value": "TYPE_BOOL"
+      }
+    ],
+    "valid_but_unadmitted_status": "SEMANTIC_REJECTED",
+    "valid_but_unadmitted_diagnostic": "OPERATION_TYPE",
+    "diagnostic_location": {
+      "section": "CODE",
+      "function": 0,
+      "block": 0,
+      "instruction": 0
+    },
+    "malformed_fields_written_zero": [
+      0,
+      8,
+      12,
+      16,
+      17,
+      18,
+      19,
+      20,
+      21,
+      22
+    ],
+    "malformed_extra": [
+      {
+        "relative_offset": -1,
+        "value": 0
+      },
+      {
+        "relative_offset": -1,
+        "value": 127
+      },
+      {
+        "absolute_offset": "PROGRAM_MAGIC_SIZE",
+        "value": 2
+      }
+    ],
+    "malformed_status": "STRUCTURAL_REJECTED",
+    "malformed_diagnostic": "STRUCTURAL",
+    "refusal_output": "ValidatedProgramNULL, exact diagnostic category and operation location, release all mutation copies."
+  },
+  "independent_goldens": {
+    "canonical_reorder_reroot": "Exact same artifact bytes/id, no root-a/module-helper names; decode/reencode exact bytes/id.",
+    "provider_requirements": "Three inputrows canonicalize to two contracts:contracta opA/opB andcontractb opA, exact complete logical contracts.",
+    "profile_changes_identity": [
+      "profile:checked",
+      "profile:wrapping"
+    ],
+    "provider_effect_changes_identity": [
+      "READS_CLOCK",
+      "READS_PROCESS"
+    ],
+    "invalid_build_status": {
+      "UNKNOWN_OPERATION": "INVALID_INPUT",
+      "UNRESOLVED_OPERAND": "UNRESOLVED_REFERENCE",
+      "DUPLICATE_RESULT": "DUPLICATE_IDENTITY",
+      "CONFLICTING_PROVIDER_CONTRACT": "INVALID_INPUT",
+      "INVALID_PROVIDER_CONTRACT": "INVALID_INPUT"
+    },
+    "partial_strings": [
+      "first",
+      "last"
+    ],
+    "partial_invalid_missing_nonempty_storage": "INVALID_INPUT_ProgramNULL_INPUT_UNCHANGED",
+    "partial_valid_empty_storage": "OK_WITH_OWNED_COPIES_SURVIVE_INPUT_POISON_X_Y",
+    "partial_bad_storage_cases": [
+      "module functions",
+      "function blocks",
+      "block instructions",
+      "value roots",
+      "safepoints",
+      "variant rows",
+      "second variant payload after first copied",
+      "interface slots",
+      "signature result-borrow origins after parameters copied"
+    ],
+    "retained_keys": "Four reverse-order init function keys; ID is lexicographic stable-key rank, not request order.",
+    "retained_missing_key": "INVALID_INPUT_ALL4_IDS_UINT32_MAX_ATOMIC_OUTPUT",
+    "retained_OOM": "failat1\u2192OUT_OF_MEMORY/attempt1/all4IDs_UINT32_MAX/physicalbalance; failat2\u2192OK/actualattempt1/physicalbalance.",
+    "declared_owned_provider": "Validate then free callerartifact; actual owned requirement logical fingerprint equals independent nullary I64 clock contract.",
+    "provider_standalone_exit": 0
+  },
+  "current_public_boundary": {
+    "commit": "25f4016d6f089169757a90ae11ba537002374711",
+    "path": "src/xir/xxir_program.h",
+    "lf_sha256": "29b1cca997814d0e6242a2406e6c4082be78aa1151b981020a648cc1e676fe92",
+    "proof": "compile_program_proof borrows bytes/length/identity/layouts until sourceartifact destruction; successful sealing takes codelease. Current SourceProduct/Checked retained-root projection not frozen.",
+    "status": "HEADER_DECLARATIONS_ONLY_NOT_EXECUTION_PROOF"
+  },
+  "target_contract_or_representation_review": [
+    "Preserve full original graph/function/provider logical input, independent canonicalization/digest/status/mutation oracles without reviving CoreIR/BackendIR/oldwire ABI.",
+    "Root defines current normative identity/serialization/provider contract representation, independent fixed current bytes not writer-self-agreement only; exact profile/effects identity binding.",
+    "Public SourceProduct/Checked retained roots and atomic selection/declaration provenance; no name/ordinal authority or privatebuilder key API fallback.",
+    "Root common fullreverification separates malformed encoding from wellformed operation-inadmissible logical semantics with precise current diagnostics and no successful output.",
+    "Complete partial-build typed storage/borrow-root/variant/interface/signature failed prefixes release owners and keep caller input/output atomic.",
+    "Own all decoded inputs and contract fingerprints aftercallerartifact death; Source/session/Checked/Lowered/callerProgram deaths, independenttwoInstances/native/mixed/packet/typedLibrary.",
+    "All real allocationpoints/OOM/LIMIT axes, actual physical/per-object lifetime, safety, Root acceptance and lastconsumer/dependency removal remainOPEN."
+  ],
+  "target_owner_proof": "CurrentSourceProduct/Built/Checked/specializationfullverification/Lowered/Program own code/types/declarations/providersemantics and detachfullinputs. Reject every partialprefix without leakedowner/inputmutation/outputpublication;retainedselectionfailure atomically clearsallIDs undercurrentcontract. Programproof currentlyborroweduntilsourceartifactdeath is not afterdeathproof; actualsealedlease/ownedruntimevalues mustsurvive Source/session/Checked/Lowered/callerProgram death in twoInstances and independentnative/mixed/packet/typedLibrary, then finalownersrelease. Physicalallocatorledger/CallEntry.release alone cannotprove objectlifecycle.",
+  "representation_boundaries": [
+    "HistoricalCoreIR/wire505/497/501/oldsections/minorversions/keyrank/enumstatuses/logicaloffsets preservedasoriginalresponsibility, not currentoldwireacceptance or permissionrestorecompatibility.",
+    "18oldfixedSHA256goldens replayliteralbytesonly; no oldorcurrentproductreader/writer/validator/allocator/providerinvocation observed.",
+    "Currentnormativeidentity/Checkedserialization/providerABI and publicSource/retainedrootprojection require Rootcontract; same-namedfunction/writer-self-agreement/copyoldexpectedID do not qualify.",
+    "Separatepositivewellformedlogicalcontracts from six preciseoperation-inadmissible cases and13malformedcases, retainprecisediagnosticcausality/location.",
+    "Programmainconstructor26fixtures/f64/fullhostileformatotherresponsibilities remainpreserved andoutside thiseight-functionbatch."
+  ],
+  "handoff": {
+    "report": "build-consumer-evidence/consumer-session-20261009-r1/program-identity-provider-interface-request.json",
+    "raw_sha256": "ee230d3ac6521b36492ec2d894988144c9e42108f3e77ddac6dc32e305708096",
+    "independent_vector_review": "build-consumer-evidence/consumer-session-20261009-r1/original-identity-vector-review.json",
+    "vector_review_raw_sha256": "7d70bd81405c6682c692cb0534964863524e2c919412fd3fb59e2fc43d664a2b",
+    "Root_thread": "01a11f74-a297-7b11-8441-835bde6a3d5f",
+    "formal_acceptance": "PENDING"
+  },
+  "full_FI": "NOT_RUN",
+  "axes": "NOT_RUN",
+  "full_safety": "NOT_RUN",
+  "SourceDelete": "NOT_RUN",
+  "Main": "NOT_RUN",
+  "boundaries": [
+    "All87outer/13specifiedhelperCHECKsites stayOPEN; no replacementqualified or retired.",
+    "Retainedfailat1/2 allocation responsibility inspectedonly; freshallpoints/runtimeaxes/owner-release evidence stillmissing.",
+    "Rootformalcontract/integration/acceptance/shareddependencylastconsumerreview pending; noproduct/globaldeletionpermission."
+  ]
+}
