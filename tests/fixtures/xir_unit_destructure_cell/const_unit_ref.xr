@@ -1,0 +1,8 @@
+import "./state" as state
+fn empty() {}
+export fn run()->i64 {
+    const (scratch, n) = (empty(), 0)
+    state.touch(ref scratch)
+    return n
+}
+fn main()->i64 { return 0 }

@@ -1,0 +1,17 @@
+fn empty() {}
+var (stamp, flag) = (empty(), false)
+export fn touch(value:ref ()) { value = empty() }
+export fn flip()->bool {
+    var (scratch, n) = (empty(), 0)
+    touch(ref scratch)
+    touch(ref stamp)
+    if(flag){flag=false}else{flag=true};
+    return flag
+}
+export fn current()->bool { return flag }
+export fn unitValue() { return stamp }
+export fn pure(value:i64)->i64 {
+    var (scratch, n) = (empty(), 0)
+    touch(ref scratch)
+    return value + 1
+}

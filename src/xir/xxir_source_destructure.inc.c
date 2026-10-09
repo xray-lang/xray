@@ -90,16 +90,16 @@ static bool source_destructure_binding(SourceContext *ctx, AstNode *node, bool t
         }
         symbols[i] = source_alloc(ctx,1,sizeof(*symbols[i]));
         if (!symbols[i]) return false;
-        if (!node->as.destructure_decl.is_const && fields[i].type != XR_XIR_UNIT) {
+        if (!node->as.destructure_decl.is_const) {
             if (!source_root_join_record(ctx,&values[i])) return false;
             XrXirType cell;
             if (!source_cell_type(ctx,fields[i].type,&cell) ||
                 !source_recipe_record(ctx,(XrXirInstruction){XR_XIR_CELL_NEW,cell,
-                    {values[i].id,0},{0},0,{0}},&values[i])) return false;
+                    {fields[i].type == XR_XIR_UNIT ? 0 : values[i].id,0},{0},0,{0}},&values[i])) return false;
         }
         *symbols[i] = (SourceName){NULL,field->as.identifier.name,NULL,node,
-            fields[i].type == XR_XIR_UNIT ? SOURCE_UNIT_LOCAL : SOURCE_LOCAL,
-            fields[i].type == XR_XIR_UNIT ? UINT32_MAX : values[i].id,
+            fields[i].type == XR_XIR_UNIT && node->as.destructure_decl.is_const ? SOURCE_UNIT_LOCAL : SOURCE_LOCAL,
+            fields[i].type == XR_XIR_UNIT && node->as.destructure_decl.is_const ? UINT32_MAX : values[i].id,
             ctx->module,fields[i].type,!node->as.destructure_decl.is_const,false,0, true, false};
     }
     if(top) {

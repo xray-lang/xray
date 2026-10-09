@@ -1,0 +1,20 @@
+import "./state" as state
+fn empty() {}
+var (ownStamp, own) = (empty(), false)
+export fn run()->bool {
+    var (scratch, n) = (empty(), 0)
+    state.touch(ref scratch)
+    state.touch(ref ownStamp)
+    const value = state.flip()
+    own = value
+    print(value)
+    return value
+}
+export fn ownValue()->bool { return own }
+export fn held() { return state.unitValue() }
+export fn pureWorker()->i64 { return await go state.pure(40) }
+export fn snapshot()->i64 {
+    const value = state.current() ? 1 : 0
+    return await go state.pure(value)
+}
+fn main()->i64 { return 0 }

@@ -1,0 +1,3 @@
+fn empty() {}
+const stamp:() = empty()
+export fn touch() { stamp = empty(); return stamp }
