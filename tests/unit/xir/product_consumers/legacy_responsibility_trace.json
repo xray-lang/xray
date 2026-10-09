@@ -17,9 +17,9 @@
   "reference_counts": {
     "source_with_digest_reference": 108,
     "source_without_digest_reference": 0,
-    "other_with_digest_reference": 59,
-    "other_without_digest_reference": 101,
-    "digest_reference_values": 197,
+    "other_with_digest_reference": 60,
+    "other_without_digest_reference": 100,
+    "digest_reference_values": 199,
     "source_inventory_projections": 42
   },
   "mapping_inputs": [
@@ -542,6 +542,10 @@
     {
       "path": "tests/unit/xir/product_consumers/source_original_retained_roots_obligations.json",
       "lf_sha256": "69572fe29d855e02c8efc19bd37420aca3bdbef14710da31d10c67103c259adc"
+    },
+    {
+      "path": "tests/unit/xir/product_consumers/source_original_runtime_fixture_writer_obligations.json",
+      "lf_sha256": "0f05b81cac450288e3e9cd2f1c53b8b4e8550ca982fc5b41d66f771f1cfd4b0a"
     },
     {
       "path": "tests/unit/xir/product_consumers/source_original_string_builder_snapshot_obligations.json",
@@ -4326,7 +4330,18 @@
       "body_lf_sha256": "1a22a039186517437294939806f4ccf0b56b8cf3d8fe310204e4c928eba29733",
       "status": "OPEN",
       "inventory_projection": null,
-      "mapping_references": []
+      "mapping_references": [
+        {
+          "mapping": "tests/unit/xir/product_consumers/source_original_runtime_fixture_writer_obligations.json",
+          "pointer": "/legacy/0/body_lf_sha256",
+          "binding": "exact_path_name_body"
+        },
+        {
+          "mapping": "tests/unit/xir/product_consumers/source_original_runtime_fixture_writer_obligations.json",
+          "pointer": "/original_body/body_lf_sha256",
+          "binding": "exact_body_digest_value_only"
+        }
+      ]
     },
     {
       "legacy_path": "tests/unit/aot/test_xr_program_aot.c",

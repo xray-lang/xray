@@ -1,0 +1,192 @@
+{
+  "schema": 1,
+  "family": "original_runtime_fixture_writer",
+  "legacy_base_commit": "01e6d38401b0f5c8684b64c35a99ac651024c0c1",
+  "status": "OPEN",
+  "retired": 0,
+  "replacement_gates": [],
+  "result": "STATIC_ORIGINAL_RUNTIME_FIXTURE_WRITER_MAP_ONLY",
+  "product_execution": "NOT_RUN_BY_THIS_MAP",
+  "producer": "25f4016d6f089169757a90ae11ba537002374711",
+  "identity": "Checked25/semantic67/Value22/Call28/Program29",
+  "legacy": [
+    {
+      "name": "main",
+      "legacy_path": "tests/unit/program/xr_program_vm_fixture_writer.c",
+      "legacy_line": 59,
+      "body_lf_sha256": "1a22a039186517437294939806f4ccf0b56b8cf3d8fe310204e4c928eba29733",
+      "assertion_sites": 0,
+      "loop_sites": 0,
+      "status": "OPEN",
+      "replacement_gates": [],
+      "note": "Function census preserves its whole body; sites do not count executed loop iterations."
+    }
+  ],
+  "original_body": {
+    "path": "tests/unit/program/xr_program_vm_fixture_writer.c",
+    "function": "main",
+    "line": 59,
+    "end_line": 140,
+    "body_lf_sha256": "1a22a039186517437294939806f4ccf0b56b8cf3d8fe310204e4c928eba29733",
+    "CHECK_sites": 0,
+    "status": "OPEN"
+  },
+  "outer_CHECK_sites": 0,
+  "original_private_helpers": [
+    {
+      "path": "tests/unit/program/xr_program_vm_fixture_writer.c",
+      "function": "fixture_key",
+      "line": 18,
+      "end_line": 20,
+      "body_lf_sha256": "37c710a782fc634109af5c3e9ee97d6f63f3343ca089dacb089b8115a1f64fca",
+      "CHECK_sites": 0,
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/program/xr_program_vm_fixture_writer.c",
+      "function": "write_fixture",
+      "line": 22,
+      "end_line": 57,
+      "body_lf_sha256": "47296e17da16ff53caf80311ddaf203702d5e81ca6097698d6e745514a3d42dd",
+      "CHECK_sites": 0,
+      "status": "OPEN"
+    }
+  ],
+  "helper_CHECK_sites": 0,
+  "input_file": {
+    "path": "tests/unit/program/xr_program_vm_fixture_writer.c",
+    "whole_file_lf_sha256": "9e8418945a6b029c67e4d85d76d6603a68f0c77f72cab8ff5a3b6f37691865ab",
+    "physical_raw_sha256": "b4e5cc778a218437cbfae08bdab198e08f79309d3e5b8467445d68d6180035af",
+    "git_base_equal": true
+  },
+  "zero_CHECK_policy": "Original main has no CHECK calls; real argument, build/write, fopen, output-write and fclose exits carry its responsibility. Zero sites does not mean no obligation.",
+  "complete_input": {
+    "result": "I64(42)",
+    "constant_key": "task-299:embedded:constant:42",
+    "value_key": "task-299:embedded:value:42",
+    "block_key": "task-299:embedded:block",
+    "function_key": "task-299:embedded:function",
+    "module_key": "task-299:embedded:module",
+    "profile_key": "task-299:embedded:semantic-profile",
+    "graph": "One real I64 constant, two instructions CONSTANT_I64 and RETURN of that value, one block/function/module, canonical ENTRY, oldeffect_mask1, CORE_BASE feature."
+  },
+  "failure_paths": [
+    {
+      "condition": "argc !=2",
+      "result": "usage diagnostic, exit2; no producer/output opened",
+      "status": "OPEN"
+    },
+    {
+      "condition": "CoreIR build fails || program write fails",
+      "result": "short-circuit write after build failure, diagnostic, artifact_free and program_free, exit1",
+      "status": "OPEN"
+    },
+    {
+      "condition": "fopen(argv[1],wb) fails",
+      "result": "perror, artifact_free and program_free, exit1",
+      "status": "OPEN"
+    },
+    {
+      "condition": "write_fixture fails",
+      "result": "always attempt fclose, free artifact/program, return failure1",
+      "status": "OPEN"
+    },
+    {
+      "condition": "fclose fails",
+      "result": "force failed1 even after successful writes, free artifact/program",
+      "status": "OPEN"
+    }
+  ],
+  "output_helper": {
+    "header_guard": "XR_PROGRAM_VM_EMBEDDED_FIXTURE_H",
+    "array": "xr_program_vm_embedded_fixture",
+    "format": "Every artifact byte emits lowercase0x%02x comma;4-space indent at each16-byte line; space except line16 or last byte emits newline; final size unsigned long and UL suffix, guard footer.",
+    "failures": [
+      "Initial header fprintf<0",
+      "Line-indent fprintf<0",
+      "Each byte fprintf<0",
+      "Each separator fputc==EOF",
+      "Final footer/size fprintf<0"
+    ],
+    "boundary": "Original opens wb before output; write failure may leave a partial file. Mapping preserves actual behavior and does not claim existing atomic rename or post-write verifier."
+  },
+  "read_only_external_context": [
+    {
+      "path": "tests/unit/vm/xr_program_vm_embedded_fixture.h",
+      "physical_raw_sha256": "68b3ad1b50670dbbb34542e809a05fe9429df632cb79d3da7372173876d6d9f7",
+      "whole_file_lf_sha256": "3492d2b6d3085cd9b505589b2c0f4a0bfb82178ea7ad7f79c1f58295777de4aa",
+      "git_base_equal": true,
+      "role": "Read-only external consumer/build context, not owned or authorized for edits/deletion by this map."
+    },
+    {
+      "path": "tests/unit/vm/test_xr_program_vm_runtime.c",
+      "physical_raw_sha256": "bf90402385548391f84211f3e71e7e8ccf6a59056514f9f49ea95625dc3976dc",
+      "whole_file_lf_sha256": "90def5547dc0b672d2204aab5b616b628f0110002bceb47f96607bfbf6d8147e",
+      "git_base_equal": true,
+      "role": "Read-only external consumer/build context, not owned or authorized for edits/deletion by this map."
+    },
+    {
+      "path": "tests/unit/CMakeLists.txt",
+      "physical_raw_sha256": "f3a60b9e46738e6d141966223dfb8f2c03b9d37f211ca864a480c3a5609e32a8",
+      "whole_file_lf_sha256": "f9bc1aaebc8e7ab9f43974dd02e98292fc5081285a8975faab04052d311133d0",
+      "git_base_equal": false,
+      "role": "Read-only external consumer/build context, not owned or authorized for edits/deletion by this map."
+    }
+  ],
+  "original_embedded_packets": [
+    {
+      "name": "xr_program_vm_embedded_fixture_v3_9",
+      "bytes": 237,
+      "sha256": "332d5f6740691042a8c0eef9b803ed03934ba0194abdb0dc90ebcc407f889c6f",
+      "whole_hex": "585250524f470d0a0300090001a150eed8c055fdc2c839638d82deb9f2553d17b0cac50c21151cffbdb05012ff4db2e597ae1c09aa01893acd61c9dbbda392963ee3df2b8d5ec292cd9347dc5d01010701004d024d05035213046518057d01067e01077f0913000000020101000002020000030300000404000005050102060600000707000008080000090900000a0a00000c0c01010d0d00000e0e00000f0f0000101000001111000012120000131300000100020154010000000002000000000100010000000101010100010000020101020000000400002300000000010000000000000001000000000000",
+      "old_header_identity_hex": "585250524f470d0a0300090001",
+      "role": "Historical obsolete negative"
+    },
+    {
+      "name": "xr_program_vm_embedded_fixture",
+      "bytes": 244,
+      "sha256": "adef1f144ee9aadbb111a8455c09a3d0f124220da2ac02e536e993eca588de31",
+      "whole_hex": "585250524f470d0a03000b000169075c19fb8d9b74075be1c9c48e9bbcf8b8cc09dbc4118b5efa3332b6b6776a4db2e597ae1c09aa01893acd61c9dbbda392963ee3df2b8d5ec292cd9347dc5d01010701005102510503561304691805810101068201010783010914000000020101000002020000030300000404000005050102060600000707000008080000090900000a0a00000c0c01010d0d00000e0e00000f0f000010100000111100001212000013130000141401020100020154010000000002000000000100010000000101010100010000020101020000000400002300000000010000000000000001000000000000",
+      "old_header_identity_hex": "585250524f470d0a03000b0001",
+      "role": "Original current-at-01e6 positive; not25f Checked or Program product"
+    }
+  ],
+  "runtime_consumer_obligations": {
+    "status": "OPEN; separate read-only runtime consumer, not executed or newly owned by this map.",
+    "negatives": "Old v3_9 and minor3/minor4 mutations exact STRUCTURAL_REJECTED/NULL; core fingerprint XOR and full old32-byte core identity exact SEMANTIC_REJECTED/NULL/CORE_SPEC_IDENTITY.",
+    "positive": "Full244-byte original packet VERIFY_OK/non-NULL; real hosted profile, empty provider set, VM code, actual instance. Free caller profile and validated program before execute; exact RETURN/I64/42, actual drain/retire/free and VM-code free.",
+    "build": "Writer EXCLUDE_FROM_ALL links compiler test-core; runtime-only target links xray_program_vm_runtime without depending on or executing writer. Both original warning gates preserved; current stable Source-free packet runtime archive qualification remains required."
+  },
+  "target_review": {
+    "status": "OPEN",
+    "required": "Current source-backed public pipeline must preserve complete logical42 graph, independent new canonical bytes/identity and source-free runtime ownership without a runtime compiler. Source/Checked packet and Program packet are separate contracts; old XrProgram bytes are not current Checked/Program29 ABI.",
+    "authority": "Current SourceProduct retained-root/export and typed runtime entry projection need Root frozen public interfaces; name/oldordinal/private answer or scalar proof cannot grant entry authority.",
+    "owner": "Current complete producer/codec/specialization/Lowered/Program output failure is atomic and ledger-owned; every failure releases real allocations and stable per-object lifecycle. Current output-I/O policy and build owner require explicit implementation and qualification; no product or shared CMake edits granted here.",
+    "deletion": "Runtime-only VM files and runtime archive remain outside this lane edit whitelist and have active consumers. Root owns last-consumer audit and shared library removal."
+  },
+  "shared_dependencies": {
+    "status": "PRESERVE",
+    "paths": [
+      "tests/unit/program/xr_program_vm_fixture_writer.c",
+      "tests/unit/vm/xr_program_vm_embedded_fixture.h",
+      "tests/unit/vm/test_xr_program_vm_runtime.c",
+      "tests/unit/CMakeLists.txt"
+    ],
+    "emission_owners": 7,
+    "policy": "No deletion or shared build/runtime edit authorized; all original dependencies retained."
+  },
+  "full_FI": "NOT_RUN",
+  "axes": "NOT_RUN",
+  "full_safety": "NOT_RUN",
+  "SourceDelete": "NOT_RUN",
+  "Main": "NOT_RUN",
+  "handoff": {
+    "Root_thread": "01a11f74-a297-7b11-8441-835bde6a3d5f",
+    "formal_acceptance": "PENDING"
+  },
+  "boundaries": [
+    "Static writer/body/input/I-O/build/context map only; all obligations OPEN/retired0.",
+    "No current product invocation, output generation, I-O fault simulation, FI, runtime42, native, lifecycle or safety test performed.",
+    "Fresh stable producer, public entry projection, actual qualified output/runtime/FI/axes/safety/lifecycle and Root integration remain required."
+  ]
+}
