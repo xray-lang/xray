@@ -1,0 +1,527 @@
+{
+  "schema": 1,
+  "family": "original_source_allocation_runner",
+  "legacy_base_commit": "01e6d38401b0f5c8684b64c35a99ac651024c0c1",
+  "status": "OPEN",
+  "retired": 0,
+  "replacement_gates": [],
+  "result": "STATIC_ORIGINAL_SOURCE_ALLOCATION_RUNNER_AND_EIGHT_INPUT_MAP_ONLY",
+  "product_execution": "NOT_RUN_BY_THIS_MAP",
+  "producer": "25f4016d6f089169757a90ae11ba537002374711",
+  "identity": "Checked25/semantic67/Value22/Call28/Program29",
+  "legacy": [
+    {
+      "name": "run_allocation_case",
+      "legacy_path": "tests/unit/program/test_xr_program_source_allocations.c",
+      "legacy_line": 90,
+      "body_lf_sha256": "1dc3da4130659785402b173253aafbe15b6b89901675e3062a466aa08657ecdf",
+      "assertion_sites": 17,
+      "loop_sites": 0,
+      "status": "OPEN",
+      "replacement_gates": [],
+      "note": "Function census preserves its whole body; sites do not count executed loop iterations."
+    },
+    {
+      "name": "main",
+      "legacy_path": "tests/unit/program/test_xr_program_source_allocations.c",
+      "legacy_line": 197,
+      "body_lf_sha256": "f380f9a58eb791aa37ef81798e5ac6283190a49dc22341f03bbf821135ff57cc",
+      "assertion_sites": 2,
+      "loop_sites": 2,
+      "status": "OPEN",
+      "replacement_gates": [],
+      "note": "Function census preserves its whole body; sites do not count executed loop iterations."
+    }
+  ],
+  "responsibility_mapping": [
+    {
+      "path": "tests/unit/program/test_xr_program_source_allocations.c",
+      "function": "run_allocation_case",
+      "line": 90,
+      "end_line": 195,
+      "body_lf_sha256": "1dc3da4130659785402b173253aafbe15b6b89901675e3062a466aa08657ecdf",
+      "assertion_sites": 17,
+      "assertion_bindings": [
+        {
+          "line": 145,
+          "kind": "REQUIRE",
+          "expression": "scenario < XR_COUNTOF(sources)",
+          "status": "OPEN"
+        },
+        {
+          "line": 152,
+          "kind": "REQUIRE",
+          "expression": "source_build_fixture_init(&fixture, source, NULL)",
+          "status": "OPEN"
+        },
+        {
+          "line": 154,
+          "kind": "REQUIRE",
+          "expression": "toml != NULL",
+          "status": "OPEN"
+        },
+        {
+          "line": 157,
+          "kind": "REQUIRE",
+          "expression": "plan && plan->valid",
+          "status": "OPEN"
+        },
+        {
+          "line": 163,
+          "kind": "REQUIRE",
+          "expression": "live_count == 0u",
+          "status": "OPEN"
+        },
+        {
+          "line": 174,
+          "kind": "REQUIRE",
+          "expression": "status == XR_PROGRAM_SOURCE_BUILD_OUT_OF_MEMORY",
+          "status": "OPEN"
+        },
+        {
+          "line": 175,
+          "kind": "REQUIRE",
+          "expression": "diagnostic.message[0] != '\\0'",
+          "status": "OPEN"
+        },
+        {
+          "line": 176,
+          "kind": "REQUIRE",
+          "expression": "product.program == NULL && product.artifact.bytes == NULL",
+          "status": "OPEN"
+        },
+        {
+          "line": 177,
+          "kind": "REQUIRE",
+          "expression": "product.exports == NULL && product.export_function_ids == NULL",
+          "status": "OPEN"
+        },
+        {
+          "line": 178,
+          "kind": "REQUIRE",
+          "expression": "product.tests == NULL && product.test_entry_count == 0u",
+          "status": "OPEN"
+        },
+        {
+          "line": 179,
+          "kind": "REQUIRE",
+          "expression": "product.export_count == 0u && product.retained_function_count == 0u",
+          "status": "OPEN"
+        },
+        {
+          "line": 180,
+          "kind": "REQUIRE",
+          "expression": "live_count == 0u",
+          "status": "OPEN"
+        },
+        {
+          "line": 185,
+          "kind": "REQUIRE",
+          "expression": "status == XR_PROGRAM_SOURCE_BUILD_OK",
+          "status": "OPEN"
+        },
+        {
+          "line": 186,
+          "kind": "REQUIRE",
+          "expression": "product.export_count == 2u && product.test_entry_count == 1u",
+          "status": "OPEN"
+        },
+        {
+          "line": 187,
+          "kind": "REQUIRE",
+          "expression": "strcmp(product.exports[0].symbol, \"external_answer\") == 0",
+          "status": "OPEN"
+        },
+        {
+          "line": 188,
+          "kind": "REQUIRE",
+          "expression": "product.export_function_ids[0] < xr_validated_program_function_count(product.program)",
+          "status": "OPEN"
+        },
+        {
+          "line": 193,
+          "kind": "REQUIRE",
+          "expression": "live_count == 0u",
+          "status": "OPEN"
+        }
+      ],
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/program/test_xr_program_source_allocations.c",
+      "function": "main",
+      "line": 197,
+      "end_line": 210,
+      "body_lf_sha256": "f380f9a58eb791aa37ef81798e5ac6283190a49dc22341f03bbf821135ff57cc",
+      "assertion_sites": 2,
+      "assertion_bindings": [
+        {
+          "line": 200,
+          "kind": "REQUIRE",
+          "expression": "count > 0u",
+          "status": "OPEN"
+        },
+        {
+          "line": 206,
+          "kind": "REQUIRE",
+          "expression": "run_allocation_case(scenario, 0u) == count",
+          "status": "OPEN"
+        }
+      ],
+      "status": "OPEN"
+    }
+  ],
+  "outer_assertion_sites": 19,
+  "original_private_helpers": [
+    {
+      "path": "tests/unit/program/test_xr_program_source_allocations.c",
+      "function": "track",
+      "line": 32,
+      "end_line": 42,
+      "body_lf_sha256": "86cacd338db71cffbf190751867f258bbd326d923e122ca8382ef04208b8005c",
+      "assertion_sites": 1,
+      "assertion_bindings": [
+        {
+          "line": 33,
+          "kind": "REQUIRE",
+          "expression": "pointer != NULL",
+          "status": "OPEN"
+        }
+      ],
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/program/test_xr_program_source_allocations.c",
+      "function": "xr_program_test_malloc",
+      "line": 44,
+      "end_line": 46,
+      "body_lf_sha256": "7757a12394a582d478a838fcfea8a66c643d10e653ea44c0dcbf35e313f21ad8",
+      "assertion_sites": 0,
+      "assertion_bindings": [],
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/program/test_xr_program_source_allocations.c",
+      "function": "xr_program_test_calloc",
+      "line": 48,
+      "end_line": 50,
+      "body_lf_sha256": "815a1c294842d615bbaea40be2ee79b427eb5cb6082bc64aa32727b01c3f40e2",
+      "assertion_sites": 0,
+      "assertion_bindings": [],
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/program/test_xr_program_source_allocations.c",
+      "function": "xr_program_test_realloc",
+      "line": 52,
+      "end_line": 66,
+      "body_lf_sha256": "520b8d5fe0cee9cf6217fa78638a4329130da5c4d0935f169f10a982e4eaee88",
+      "assertion_sites": 1,
+      "assertion_bindings": [
+        {
+          "line": 61,
+          "kind": "REQUIRE",
+          "expression": "grown != NULL",
+          "status": "OPEN"
+        }
+      ],
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/program/test_xr_program_source_allocations.c",
+      "function": "xr_program_test_free",
+      "line": 68,
+      "end_line": 80,
+      "body_lf_sha256": "1fc3381c893bd97956a5dd974b94425741c8cc4b00dbbe60d05ce47f6507246a",
+      "assertion_sites": 0,
+      "assertion_bindings": [],
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/program/test_xr_program_source_allocations.c",
+      "function": "xr_program_test_strdup",
+      "line": 82,
+      "end_line": 88,
+      "body_lf_sha256": "a12c075ceb6c772f50bf49f274417b5bd58ce45bb3a34cde54b960232e5bd18d",
+      "assertion_sites": 0,
+      "assertion_bindings": [],
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/program/test_xr_program_source_build.c",
+      "function": "write_source_file",
+      "line": 857,
+      "end_line": 864,
+      "body_lf_sha256": "cc03580465f59354407c5e6e4e063c40ab9759cf1f45ceb3f099884b0e28014d",
+      "assertion_sites": 0,
+      "assertion_bindings": [],
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/program/test_xr_program_source_build.c",
+      "function": "semantic_fingerprint",
+      "line": 866,
+      "end_line": 871,
+      "body_lf_sha256": "08fbbce02bdf996e8c8fb5b4a0b090f8e0dad413c84d6de2ab2530ec56aa3c0a",
+      "assertion_sites": 0,
+      "assertion_bindings": [],
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/program/test_xr_program_source_build.c",
+      "function": "source_build_fixture_init",
+      "line": 894,
+      "end_line": 968,
+      "body_lf_sha256": "964c190cb52940aa039b9459e6a5aa0416430eadac032979ed210358216892eb",
+      "assertion_sites": 0,
+      "assertion_bindings": [],
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/program/test_xr_program_source_build.c",
+      "function": "source_build_fixture_free",
+      "line": 873,
+      "end_line": 892,
+      "body_lf_sha256": "54f2ca59ddb46fda789abf0411160790bcb950903858a308b984b50e6f8c1889",
+      "assertion_sites": 0,
+      "assertion_bindings": [],
+      "status": "OPEN"
+    }
+  ],
+  "specified_helper_assertion_sites": 2,
+  "input_file": {
+    "path": "tests/unit/program/test_xr_program_source_allocations.c",
+    "whole_file_lf_sha256": "98fa4020c292966e10b18dd2f952f29e36452d325d5acd94a8bdfe3e5113a857",
+    "physical_raw_sha256": "6fa8b7fb17e51d584098709ac6ce01394172dfa0915e4c516bcdd7a0a29c7d62",
+    "git_base_equal": true
+  },
+  "input_policy": "Complete two census bodies/ten specified allocator and fixture helper bodies, whole original containers, all8 Source inputs and shared164B manifest equal01e6. Existing replacement fixtures preserved byte-exact; no extra exports/renames/adapters/rewrittenoriginalOrder or reduced Source used.",
+  "scenarios": [
+    {
+      "ordinal": 0,
+      "input_bytes": 119,
+      "input_sha256": "6c906c2d61178e524ddaa699383c3884bf0df6b2f98d2a3b9afbdda0c9d81774",
+      "source": "fn answer() -> i64 { return 0 }\nfn exported() -> i64 { return 42 }\n@test\nfn checkAnswer() { assert(exported() == 42) }\n",
+      "status": "OPEN",
+      "original_allocation_count": "NOT_MEASURED",
+      "replacement_allocation_count": "NOT_MEASURED",
+      "replacement_gates": [],
+      "whole_source_preserved": true,
+      "historical_fixture_path": "tests/unit/xir/product_consumers/allocation_original/scenario0/root.xr"
+    },
+    {
+      "ordinal": 1,
+      "input_bytes": 305,
+      "input_sha256": "73cfe7941a8be75956e59f85d58c166fc1119fcf2639f5fda1af999be7cde82c",
+      "source": "fn answer() -> i64 {\n const counter = Atomic(40)\n const alias = counter\n var (old, matched) = alias.compareExchange(40, 42)\n counter.store(42, Ordering.Release)\n counter.add(1)\n counter.sub(1)\n return counter.load()\n}\nfn exported() -> i64 { return 42 }\n@test\nfn checkAnswer() { assert(exported() == 42) }\n",
+      "status": "OPEN",
+      "original_allocation_count": "NOT_MEASURED",
+      "replacement_allocation_count": "NOT_MEASURED",
+      "replacement_gates": [],
+      "whole_source_preserved": true,
+      "historical_fixture_path": "tests/unit/xir/product_consumers/allocation_original/scenario1/root.xr"
+    },
+    {
+      "ordinal": 2,
+      "input_bytes": 352,
+      "input_sha256": "e7d7b52ca2a4a082421c1680d7b1534ae170da85f3d092895e4388c08cd286bd",
+      "source": "fn answer() -> i64 {\n const flag = Atomic(false)\n const alias = flag\n var (old, matched) = alias.compareExchange(false, true)\n flag.store(true, Ordering.AcquireRelease)\n const before = flag.toggle(Ordering.Relaxed)\n if (matched && before) { return 42 }\n return 0\n}\nfn exported() -> i64 { return 42 }\n@test\nfn checkAnswer() { assert(exported() == 42) }\n",
+      "status": "OPEN",
+      "original_allocation_count": "NOT_MEASURED",
+      "replacement_allocation_count": "NOT_MEASURED",
+      "replacement_gates": [],
+      "whole_source_preserved": true,
+      "historical_fixture_path": "tests/unit/xir/product_consumers/allocation_original/scenario2/root.xr"
+    },
+    {
+      "ordinal": 3,
+      "input_bytes": 483,
+      "input_sha256": "43550c97ba475ea6af790249bd15fa53c857735f8c8398d5355bc450f6703540",
+      "source": "fn identity(value: f64) -> f64 { return value }\nfn answer() -> i64 {\n const value = identity(1.5)\n const other = identity(2.25)\n const counter = Atomic(value)\n const old = counter.fetchAdd(other)\n var (before, matched) = counter.compareExchange(3.75, 1.5)\n counter.store(1.5, Ordering.Release)\n const text = counter.load().toString()\n if (old < other && len(text) == 3) { return 42 }\n return 0\n}\nfn exported() -> i64 { return 42 }\n@test\nfn checkAnswer() { assert(exported() == 42) }\n",
+      "status": "OPEN",
+      "original_allocation_count": "NOT_MEASURED",
+      "replacement_allocation_count": "NOT_MEASURED",
+      "replacement_gates": [],
+      "whole_source_preserved": true,
+      "historical_fixture_path": "tests/unit/xir/product_consumers/allocation_original/scenario3/root.xr"
+    },
+    {
+      "ordinal": 4,
+      "input_bytes": 208,
+      "input_sha256": "14b80d72fa93d3c58fe6c4af421044fe81529b726a6d3c067f4bb6a85618f848",
+      "source": "type State = { token:i64, enabled:bool, nested:{ text:string }? }\nvar state:State?=null\nfn answer() -> i64 { return 42 }\nfn exported() -> i64 { return 42 }\n@test\nfn checkAnswer() { assert(exported() == 42) }\n",
+      "status": "OPEN",
+      "original_allocation_count": "NOT_MEASURED",
+      "replacement_allocation_count": "NOT_MEASURED",
+      "replacement_gates": [],
+      "whole_source_preserved": true,
+      "historical_fixture_path": "tests/unit/xir/product_consumers/allocation_original/scenario4/root.xr"
+    },
+    {
+      "ordinal": 5,
+      "input_bytes": 377,
+      "input_sha256": "ba1de6818baaf15e872bfe1be06bd6f95793d053c39320c946c21dc95a867810",
+      "source": "type Child = { text:string }\ntype State = { token:i64, child:Child }\nfn answer() -> i64 {\n var child:Child={text:\"before\"}\n var state:State={child:child,token:7}\n var alias=state\n alias.token=42\n alias.child.text=\"after\"\n if (state.child.text == \"after\") { return state.token }\n return 0\n}\nfn exported() -> i64 { return 42 }\n@test\nfn checkAnswer() { assert(exported() == 42) }\n",
+      "status": "OPEN",
+      "original_allocation_count": "NOT_MEASURED",
+      "replacement_allocation_count": "NOT_MEASURED",
+      "replacement_gates": [],
+      "whole_source_preserved": true,
+      "historical_fixture_path": "tests/unit/xir/product_consumers/allocation_original/scenario5/root.xr"
+    },
+    {
+      "ordinal": 6,
+      "input_bytes": 177,
+      "input_sha256": "2e8a3680cd3d51d65977a7ace39b2f27a479bf547946944630dc290c1e282fa4",
+      "source": "import { NetConn } from net\nvar connection:NetConn?=null\nfn answer() -> i64 { return 42 }\nfn exported() -> i64 { return 42 }\n@test\nfn checkAnswer() { assert(exported() == 42) }\n",
+      "status": "OPEN",
+      "original_allocation_count": "NOT_MEASURED",
+      "replacement_allocation_count": "NOT_MEASURED",
+      "replacement_gates": [],
+      "whole_source_preserved": true,
+      "historical_fixture_path": "tests/unit/xir/product_consumers/allocation_original/scenario6/root.xr"
+    },
+    {
+      "ordinal": 7,
+      "input_bytes": 278,
+      "input_sha256": "2a9bfcbf2a340eb9dc70e30331753a2326263355154bafd2005eb5c0b3eca1df",
+      "source": "fn answer() -> i64 {\n var text = StringBuilder()\n text.append(\"first\").append(42)\n const snapshot = text.toString()\n text.clear().append(\"second\")\n assert(snapshot == \"first42\")\n return 42\n}\nfn exported() -> i64 { return 42 }\n@test\nfn checkAnswer() { assert(exported() == 42) }\n",
+      "status": "OPEN",
+      "original_allocation_count": "NOT_MEASURED",
+      "replacement_allocation_count": "NOT_MEASURED",
+      "replacement_gates": [],
+      "whole_source_preserved": true,
+      "historical_fixture_path": "tests/unit/xir/product_consumers/allocation_original/scenario7/root.xr"
+    }
+  ],
+  "scenario_count": 8,
+  "original_manifest": {
+    "source": "[[export.c]]\nxray = \"exported\"\nsymbol = \"external_answer\"\nabi = \"native\"\nvisibility = \"hidden\"\nheader = true\n[[export.c]]\nxray = \"answer\"\nsymbol = \"external_entry\"\n",
+    "input_bytes": 164,
+    "input_sha256": "cf1a1e14d20fafca09a649f47ddcba036ea57a27e5febfeb5184518c05c45ac7",
+    "roots": [
+      {
+        "xray": "exported",
+        "symbol": "external_answer",
+        "abi": "native",
+        "visibility": "hidden",
+        "header": true
+      },
+      {
+        "xray": "answer",
+        "symbol": "external_entry",
+        "other_fields": "OMITTED_IN_ORIGINAL_MANIFEST"
+      }
+    ]
+  },
+  "roles": {
+    "entry": "Actual source_build_fixture_init selects root-private ordinary answer/I64(), canonical script authority with originalSource fingerprint, NATIVE_RELEASE semantic profile; not synthesized I64(0) root for scenarios1..7.",
+    "discovery": "Run sets discover_tests1 and discover_exports1 on same fixture. Root-private exported/I64() native-metadata root external_answer; root-private answer/I64() native-metadata root external_entry; private checkAnswer actual@test. Manifest retention/discovery original2exports+1test counts independent of ordinary Sourceexport keyword.",
+    "runtime": "Original runner calls Source build only, no answer/checkAnswer/VM/native/mixed invocation. Input answer0 in scenario0 and all other full bodies must be compiled/preserved; no assumption every answer returns42, including record alias scenario5."
+  },
+  "original_fault_protocol": {
+    "normal_census": "For each scenario0..7 callrun(scenario,0), require count>0, printactual count andflush; each actualordinal1..count receives independent failure run; final normal run must return samecount. No original fixed totals or inference that old2036/newRoot150546 numbers are this8scenario census.",
+    "injection_window": "Fixture/session/isolate/resolver/source file and native plan prepared first with normal allocator; require live_count0, resetattempts0 and setfail_at immediately before Sourcebuild; snapshotcount=attempts at buildreturn thenfail_at0 before allcleanup.",
+    "malloc_calloc": "Each actual hook incrementsattempts and exactly matching ordinalreturnsNULL, else systemallocator tracked; trackrequiresnonnull and finite4096slots.",
+    "realloc": "MatchingordinalreturnsNULL before touching priorpointer/tracking; NULLinput alloc tracked; known livepointer systemreallocrequiresnonnull and updates same tracking slot; unknownpointer abort.",
+    "strdup": "Actual malloc hook with strlen+1 and copy; no separate ordinal charged in addition to malloc.",
+    "free": "Trackedpointer removed and live_count decremented; allnonNULLpointers forwarded to systemfree, including original uninstrumented graph diagnostic ownership. Raw pointer table is physical-allocation observation, not stable-object lifecycle identity."
+  },
+  "failure_requirements": [
+    "Exact SOURCE_BUILD_OUT_OF_MEMORY, nonempty diagnostic.message.",
+    "ProgramNULL/artifact.bytesNULL.",
+    "exportsNULL/export_function_idsNULL.",
+    "testsNULL/test_entry_count0.",
+    "export_count0/retained_function_count0.",
+    "live_count0 immediately after failure before fixture/plan/product cleanup.",
+    "live_count0 after final fullcleanup."
+  ],
+  "success_requirements": [
+    "Exact SOURCE_BUILD_OK.",
+    "export_count2/test_entry_count1.",
+    "First export symbol exactexternal_answer.",
+    "First export_function_id strictly less than validatedProgramfunction_count.",
+    "live_count0 after producer fixturefree -> nativeplanfree -> Sourceproductfree.",
+    "Final successful run of same scenario returns exactinitial count."
+  ],
+  "ownership_order": "SourceBuildFixture freed first (reattach original isolate Session, delete parseSession/isolate/resolver/sourceidentity/tempfiles), then nativeplan, then Sourceproduct. Original only demands product teardown survives earlier producer death; no original metadata read or execution after teardown is asserted.",
+  "probe_build_boundary": {
+    "path": "tests/unit/CMakeLists.txt",
+    "block_lf_sha256": "ba28ce4cdcf34a0bbd37db718022c7a891add72e695b768806ef37c87500a232",
+    "block_equal_legacy_base": true,
+    "object_sources": [
+      "src/program/xr_program_source_build.c",
+      "src/program/xr_program_from_xi.c"
+    ],
+    "meaning": "Test-only recompiled probe object renames Sourcebuild/defaultbudget/free/status and writefromxi, forceincludes dedicated allocatorheader; fixtureinclude main renamed. Production ordinary allocator untouched. /W4 /WX (MSVC or clangMSVC) or -Wall -Wextra -Werror retained. This old narrow two-TU probe is not whole currentcompiler/runtime FI, generated C or runtime allocation coverage."
+  },
+  "shared_dependencies": [
+    {
+      "path": "tests/unit/program/test_xr_program_source_build.c",
+      "physical_raw_sha256": "1bc336ad4b648178508c564a16698971b76ed278ce6f8d90ba9368649560dd09",
+      "whole_file_lf_sha256": "0418b77da68445daf0da7b26e2916719274737afa4d2f9e3870c70e467eeded8",
+      "git_base_equal": true,
+      "status": "PRESERVE_SHARED_READONLY"
+    },
+    {
+      "path": "tests/unit/program/xr_program_source_allocation_probe.h",
+      "physical_raw_sha256": "140a3f9c43df8354916f41c48432771549fb4055aa49347fd407b08093b0a5e5",
+      "whole_file_lf_sha256": "25292c81c4102582c6ee9cf1a94327bc443d5925cc870cae7f8cfa13b35b68f3",
+      "git_base_equal": true,
+      "status": "PRESERVE_SHARED_READONLY"
+    },
+    {
+      "path": "tests/unit/program/xr_program_allocation_probe.h",
+      "physical_raw_sha256": "67edbc823a3705e6827e8e260de00ad1e28eb481dbabe056b272185be84fb024",
+      "whole_file_lf_sha256": "a05c3ea4a5ed33200db0af13cd1ead2b5004d8c355214cef2b549f88dcd88809",
+      "git_base_equal": true,
+      "status": "PRESERVE_SHARED_READONLY"
+    }
+  ],
+  "existing_replacement_results_record": {
+    "path": "tests/unit/xir/product_consumers/source_allocation_original_obligations.json",
+    "physical_raw_sha256": "af07ea3c4d064c059121e57a6d47fda57c3fe95684849741eb2e1c62d23fee79",
+    "producer": "25f4016d6f089169757a90ae11ba537002374711",
+    "status": "NORMAL_PROJECTION_PARTIAL_PASS_WITH_ORIGINAL_POSITIVE_FAILURES",
+    "historical_normal_processes": 16,
+    "historical_pass": 6,
+    "historical_fail": 10,
+    "pass_scenarios_per_configuration": [
+      0,
+      1,
+      3
+    ],
+    "fail_scenarios_per_configuration": [
+      2,
+      4,
+      5,
+      6,
+      7
+    ],
+    "meaning": "Read existing exact25f4 evidence record only, no rerun or green reclassification. Partial projection executes synthesizedI64(0)/originalcheckAnswer, externalmanifestNOT_APPLIED and originalanswerNOT_RUN; original2metadata roots/FI obligations stillOPEN. Failed positive Source inputs2/4/5/6/7 stayFAIL, not acceptednegative orWILL_FAIL.",
+    "scenario2": "Original Atomicbool.store(true, Ordering.AcquireRelease) conflicts with current frozen store-order rule. Original unchanged positive remainsFAIL pending Root adjudication; independent legal Release diagnostic variant never replaces or retires it."
+  },
+  "Root_contract_or_representation_review": {
+    "status": "OPEN",
+    "selector_metadata": "Common verified-owner Source selector must preserve original private root answer/I64 and same canonical authority/fingerprint, native metadata retainedroles/projections and testdiscovery. No privateSource exportadapter, ordinal trust or constantI64(0) replacement of realanswer. No claim original runner executes these retained roots.",
+    "inputs": "All eight wholeinputs compile, including Atomicbool/F64, nestedoptionalrecord/modulevar, nestedrecordalias, realNetConn stdlibdependency and StringBuilder/snapshot. Preserve scenario2 contract conflict and allfirstfail stages; failures cannot be masked by reducing input or rebrandingpositive to negative.",
+    "Cell": "Modulevars in scenarios4/6 must use frozen trueCell/logicaltype/ordinary access/initialization with fullowned module provenance; empty/null initializer does not authorize direct-slot fallback. ExistingSource privatecandidate is notnewformalproducer.",
+    "FI": "Re-census every actual new Sourcebuild allocation point per fullinput and allcompiler/runtime failure paths with full emptyoutputs/diagnostic/cleanup. No forcedold counts, narrowprobe substitute, limitedsampling or skip. Originalnormal2metadata roots and1test must be applied before claiming full equivalence.",
+    "lifecycle": "Keep true stable-objectconstruct/finalize/reclaim and allcumulative resource/physicalzero obligations separately; original4096pointertable/live0 cannot authorize class/Cell/Instance lifecycle completion.",
+    "qualification": "Formalproducer with actualpublic Source/Built/Checked/packet/reverify/Lowered/Program/VM/native/mixed/SDK and newwindow for allFI/axes/safety/lifecycle, failure/cancel/ownerescape remainsOPEN."
+  },
+  "full_FI": "NOT_RUN",
+  "axes": "NOT_RUN",
+  "full_safety": "NOT_RUN",
+  "SourceDelete": "NOT_RUN",
+  "Main": "NOT_RUN",
+  "handoff": {
+    "Root_thread": "01a11f74-a297-7b11-8441-835bde6a3d5f",
+    "formal_acceptance": "PENDING"
+  },
+  "boundaries": [
+    "19outer/2helperassertion sites and8scenarios allOPEN; retired0.",
+    "No currentproduct rerun, sampling, new census or heavywindow. Historicalresults remainhistorical.",
+    "Shared allocatorheader/fixture/CMake/probe dependencies preserved; no product/spec/SDK/docs edits or deletion permission."
+  ]
+}

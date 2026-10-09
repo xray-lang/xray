@@ -17,9 +17,9 @@
   "reference_counts": {
     "source_with_digest_reference": 108,
     "source_without_digest_reference": 0,
-    "other_with_digest_reference": 80,
-    "other_without_digest_reference": 80,
-    "digest_reference_values": 242,
+    "other_with_digest_reference": 82,
+    "other_without_digest_reference": 78,
+    "digest_reference_values": 246,
     "source_inventory_projections": 42
   },
   "mapping_inputs": [
@@ -574,6 +574,10 @@
     {
       "path": "tests/unit/xir/product_consumers/source_original_scalar_control_call_obligations.json",
       "lf_sha256": "c8f308b761c5dc790fd9e9605065e71cfbae979a554590a7394664b595dfebcf"
+    },
+    {
+      "path": "tests/unit/xir/product_consumers/source_original_source_allocation_obligations.json",
+      "lf_sha256": "e1060080a5d95f21cc1d8ef7f5e5b4bc479a057b0d29bbfc2c5e569009af1521"
     },
     {
       "path": "tests/unit/xir/product_consumers/source_original_string_builder_snapshot_obligations.json",
@@ -3294,7 +3298,18 @@
       "body_lf_sha256": "1dc3da4130659785402b173253aafbe15b6b89901675e3062a466aa08657ecdf",
       "status": "OPEN",
       "inventory_projection": null,
-      "mapping_references": []
+      "mapping_references": [
+        {
+          "mapping": "tests/unit/xir/product_consumers/source_original_source_allocation_obligations.json",
+          "pointer": "/legacy/0/body_lf_sha256",
+          "binding": "exact_path_name_body"
+        },
+        {
+          "mapping": "tests/unit/xir/product_consumers/source_original_source_allocation_obligations.json",
+          "pointer": "/responsibility_mapping/0/body_lf_sha256",
+          "binding": "exact_body_digest_value_only"
+        }
+      ]
     },
     {
       "legacy_path": "tests/unit/program/test_xr_program_source_allocations.c",
@@ -3302,7 +3317,18 @@
       "body_lf_sha256": "f380f9a58eb791aa37ef81798e5ac6283190a49dc22341f03bbf821135ff57cc",
       "status": "OPEN",
       "inventory_projection": null,
-      "mapping_references": []
+      "mapping_references": [
+        {
+          "mapping": "tests/unit/xir/product_consumers/source_original_source_allocation_obligations.json",
+          "pointer": "/legacy/1/body_lf_sha256",
+          "binding": "exact_path_name_body"
+        },
+        {
+          "mapping": "tests/unit/xir/product_consumers/source_original_source_allocation_obligations.json",
+          "pointer": "/responsibility_mapping/1/body_lf_sha256",
+          "binding": "exact_body_digest_value_only"
+        }
+      ]
     },
     {
       "legacy_path": "tests/unit/program/test_xr_program_verify.c",
