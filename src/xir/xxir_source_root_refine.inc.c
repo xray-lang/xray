@@ -68,11 +68,11 @@ static bool source_root_reference(SourceContext *ctx, uint32_t f, uint32_t i,
     if (status!=XR_XIR_OK) return source_fail(ctx,NULL,status,"context generation rebuild failed");
     if (xir_effects_context_available(&ctx->compile,effects) &&
         (!ctx->has_generics || !ctx->generics[f].parameter_count)) {
-        XrXirOrigin origin={.function=f};
-        XirEffectContextInput input={&view,&ctx->types,&origin,i,NULL,0};XirEffectContextView selected={0};
-        status=xir_effects_context_select(&ctx->compile,effects,&input,&selected);
+        uint32_t mask=0;
+        status=xir_effects_reference_root(&ctx->compile,effects,&view,f,i,&mask);
         if (status==XR_XIR_OK) {
-            contextual=(XrXirRootEffects){selected.requires_root,selected.unresolved};facts=&contextual;
+            contextual=(XrXirRootEffects){!!(mask&XR_XIR_CALLABLE_ROOT_REQUIRED),
+                !!(mask&XR_XIR_CALLABLE_ROOT_UNRESOLVED)};facts=&contextual;
         } else return source_fail(ctx,NULL,status,"authentic reference context is unavailable");
     }
     const XrXirTypeNode *signature = xr_xir_callable_signature(&ctx->types,op->type);

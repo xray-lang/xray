@@ -835,14 +835,16 @@ static XrXirStatus conditional_zero_arity_cleanup(const XrXirCompileContext *con
     XrXirInstruction child[2]={{.op=XR_XIR_CLEANUP_REGISTER,.immediate=2,
         .targets={1,0},.type_arguments={0,1}},{.op=XR_XIR_RETURN}};
     XrXirInstruction done[2]={{.op=XR_XIR_RETURN},{.op=XR_XIR_RETURN}};
-    XrXirInstruction entry[3]={{.op=XR_XIR_CALL,.immediate=0,.type_arguments={0,1}},
-        {.op=XR_XIR_CALL,.immediate=0,.type_arguments={1,1}},{.op=XR_XIR_RETURN}};
-    XrXirBlock split[2]={{.count=1},{.first=1,.count=1}},one={.count=1},three={.count=3};
+    XrXirInstruction entry[4]={{.op=XR_XIR_CALL,.immediate=0,.type_arguments={0,1}},
+        {.op=XR_XIR_CALL,.immediate=0,.type_arguments={1,1}},
+        {.op=XR_XIR_CONST_INT,.type=XR_XIR_I64},{.op=XR_XIR_RETURN,.args={2,0}}};
+    XrXirBlock split[2]={{.count=1},{.first=1,.count=1,.frontier=1}},one={.count=1},four={.count=4};
     XrXirFunction functions[5]={
         {.name="outer",.name_length=5,.blocks=split,.block_count=2,.instructions=outer,.instruction_count=2},
         {.name="child",.name_length=5,.blocks=split,.block_count=2,.instructions=child,.instruction_count=2},
         {.name="nested",.name_length=6,.blocks=&one,.block_count=1,.instructions=&done[0],.instruction_count=1},
-        {.name="entry",.name_length=5,.blocks=&three,.block_count=1,.instructions=entry,.instruction_count=3},
+        {.name="entry",.name_length=5,.result=XR_XIR_I64,.blocks=&four,.block_count=1,
+         .instructions=entry,.instruction_count=4},
         {.name="init",.name_length=4,.blocks=&one,.block_count=1,.instructions=&done[1],.instruction_count=1}};
     XrXirType binder=XR_XIR_TYPE_PARAMETER_BASE,ordinary[2]={XR_XIR_I64,XR_XIR_F64};
     XrXirConstraint constraints[3]={0};
@@ -903,6 +905,133 @@ static XrXirStatus conditional_zero_arity_cleanup(const XrXirCompileContext *con
     effect_context_owner_free(owner);return status;
 }
 
+/* Declaration-free ordinary PROGRAM modules retain their valid raw/owned
+ * path. An empty lexical collector grants no context or reference permission. */
+static XrXirStatus conditional_base_without_declarations(const XrXirCompileContext *context,bool oracle) {
+    XrXirInstruction ops[2]={{.op=XR_XIR_CONST_INT,.type=XR_XIR_I64},
+        {.op=XR_XIR_RETURN,.args={0,0}}};
+    XrXirBlock block={.count=2};
+    XrXirFunction function={.name="plain",.name_length=5,.result=XR_XIR_I64,
+        .blocks=&block,.block_count=1,.instructions=ops,.instruction_count=2};
+    XrXirModule module={.stage=XR_XIR_BUILT,.functions=&function,.function_count=1,.linkage_kind=XR_XIR_PROGRAM};
+    XrXirArtifact *checked=NULL;XrXirStatus status=xir_fixture_check(context,&module,&checked,NULL);
+    const XrXirModule *owned=xr_xir_compile_artifact_module(checked);
+    if (status==XR_XIR_OK) status=xr_xir_compile_verify_v2(context,owned,
+        xr_xir_compile_artifact_construction(checked),NULL);
+    XrXirOrigin *owners=NULL;uint32_t count=0;
+    if (status==XR_XIR_OK) status=effect_context_base_owner_origins(context,owned,0,&owners,&count);
+    if (status==XR_XIR_OK && oracle) CHECK(!owned->declarations && !owners && !count);
+    xr_compile_resources_free(owners);xr_xir_compile_artifact_free(checked);return status;
+}
+
+/* Authentic nongeneric nested cleanup callers reconstruct their whole base
+ * owner chain. Constructing the ROOT reference does not execute its body. */
+static XrXirStatus conditional_base_cleanup_reference(const XrXirCompileContext *context,bool oracle) {
+    XrXirStatus plain=conditional_base_without_declarations(context,oracle);
+    if (plain!=XR_XIR_OK) return plain;
+    XrXirTypeNode nodes[2]={
+        {.kind=XR_XIR_TYPE_CALLABLE,.result=XR_XIR_UNIT,
+         .flags=XR_XIR_CALLABLE_ROOT_UNRESOLVED|XR_XIR_CALLABLE_NO_SUSPEND},
+        {.kind=XR_XIR_TYPE_CELL,.element=XR_XIR_UNIT}};
+    XrXirTypes types={nodes,2,NULL,NULL};
+    XrXirInstruction outer[2]={{.op=XR_XIR_CLEANUP_REGISTER,.immediate=1,.targets={1,0}},
+        {.op=XR_XIR_RETURN}};
+    XrXirInstruction child[2]={{.op=XR_XIR_CLEANUP_REGISTER,.immediate=2,.targets={1,0}},
+        {.op=XR_XIR_RETURN}};
+    XrXirInstruction nested[3]={{.op=XR_XIR_FUNCTION_REF,.type=(XrXirType)256,.immediate=3},
+        {.op=XR_XIR_FUNCTION_REF,.type=(XrXirType)256,.immediate=4},{.op=XR_XIR_RETURN}};
+    XrXirInstruction pure={.op=XR_XIR_RETURN};
+    XrXirInstruction shared[2]={{.op=XR_XIR_SLOT_LOAD,.type=(XrXirType)257},{.op=XR_XIR_RETURN}};
+    XrXirInstruction entry[4]={{.op=XR_XIR_CALL,.immediate=0},
+        {.op=XR_XIR_FUNCTION_REF,.type=(XrXirType)256,.immediate=3},
+        {.op=XR_XIR_CONST_INT,.type=XR_XIR_I64},{.op=XR_XIR_RETURN,.args={2,0}}};
+    XrXirInstruction init[3]={{.op=XR_XIR_CELL_NEW,.type=(XrXirType)257},
+        {.op=XR_XIR_SLOT_INIT},{.op=XR_XIR_RETURN}};
+    XrXirBlock split[2]={{.count=1},{.first=1,.count=1,.frontier=1}},one={.count=1},two={.count=2},three={.count=3},four={.count=4};
+    XrXirFunction functions[7]={
+        {.name="outer",.name_length=5,.blocks=split,.block_count=2,.instructions=outer,.instruction_count=2},
+        {.name="child",.name_length=5,.blocks=split,.block_count=2,.instructions=child,.instruction_count=2},
+        {.name="nested",.name_length=6,.blocks=&three,.block_count=1,.instructions=nested,.instruction_count=3},
+        {.name="pure",.name_length=4,.blocks=&one,.block_count=1,.instructions=&pure,.instruction_count=1},
+        {.name="shared",.name_length=6,.blocks=&two,.block_count=1,.instructions=shared,.instruction_count=2},
+        {.name="entry",.name_length=5,.result=XR_XIR_I64,.blocks=&four,.block_count=1,
+         .instructions=entry,.instruction_count=4},
+        {.name="init",.name_length=4,.blocks=&three,.block_count=1,.instructions=init,.instruction_count=3}};
+    XrXirFunctionIdentity identities[7]={[1]={.cleanup_owner=1},[2]={.cleanup_owner=2},
+        [3]={.promises=XR_XIR_FUNCTION_NO_SUSPEND},[4]={.promises=XR_XIR_FUNCTION_NO_SUSPEND}};
+    XrXirSourceModule identity={"nested-reference",16,NULL,0,6};
+    XrXirSlot slot={0,(XrXirType)257,1};
+    XrXirDeclarations declarations={.modules=&identity,.module_count=1,.functions=identities,
+        .entry_function=5,.slots=&slot,.slot_count=1};
+    XrXirModule module={.stage=XR_XIR_BUILT,.functions=functions,.function_count=7,
+        .types=&types,.declarations=&declarations,.linkage_kind=XR_XIR_PROGRAM};
+    XrXirArtifact *checked=NULL;EffectContextOwner *owner=NULL;
+    XrXirStatus status=xir_fixture_check(context,&module,&checked,NULL);
+    const XrXirModule *owned=xr_xir_compile_artifact_module(checked);
+    if (status==XR_XIR_OK) status=xr_xir_compile_verify_v2(context,owned,
+        xr_xir_compile_artifact_construction(checked),NULL);
+    if (status==XR_XIR_OK) status=effect_context_owner_build(context,owned,NULL,&owner);
+    uint32_t pure_mask=UINT32_MAX,root_mask=UINT32_MAX;
+    if (status==XR_XIR_OK) {
+        XrXirEffects effects={.resources=context->resources,.count=7,.contexts=owner};
+        status=xir_effects_reference_root(context,&effects,owned,2,0,&pure_mask);
+        if (status==XR_XIR_OK) status=xir_effects_reference_root(context,&effects,owned,2,1,&root_mask);
+        uint32_t noncleanup=UINT32_MAX;
+        if (status==XR_XIR_OK) status=xir_effects_reference_root(context,&effects,owned,5,1,&noncleanup);
+        if (status==XR_XIR_OK && oracle) {
+            CHECK(!pure_mask && !noncleanup && root_mask==XR_XIR_CALLABLE_ROOT_REQUIRED);
+            CHECK(!owner->forest->facts[2].requires_root && !owner->forest->facts[2].unresolved);
+            XrXirOrigin origin={.function=2},parents[3]={{.function=1},{.function=0},{.function=5}};
+            XirEffectContextInput input={owned,owned->types,&origin,0,parents,2};
+            XirEffectContextView selected={.declaration=UINT32_MAX};
+            CHECK(xir_effects_context_select(context,&effects,&input,&selected)==XR_XIR_OK &&
+                selected.declaration==3 && !selected.requires_root && !selected.unresolved);
+            selected.declaration=UINT32_MAX;input.owners=NULL;input.owner_count=0;
+            CHECK(xir_effects_context_select(context,&effects,&input,&selected)==XR_XIR_BAD_TYPE &&
+                selected.declaration==UINT32_MAX);
+            input.owners=parents;input.owner_count=1;
+            CHECK(xir_effects_context_select(context,&effects,&input,&selected)==XR_XIR_BAD_TYPE);
+            input.owner_count=2;parents[0].function=0;parents[1].function=1;
+            CHECK(xir_effects_context_select(context,&effects,&input,&selected)==XR_XIR_BAD_TYPE);
+            parents[0].function=1;parents[1].function=5;
+            CHECK(xir_effects_context_select(context,&effects,&input,&selected)==XR_XIR_BAD_TYPE);
+            parents[1].function=0;input.owner_count=3;
+            CHECK(xir_effects_context_select(context,&effects,&input,&selected)==XR_XIR_BAD_TYPE);
+            input.owner_count=2;
+            CHECK(xir_effects_context_select(context,&effects,&input,&selected)==XR_XIR_OK);
+            XrXirModule changed=*owned;XrXirDeclarations altered=*owned->declarations;
+            XrXirFunctionIdentity copied[7];memcpy(copied,owned->declarations->functions,sizeof(copied));
+            altered.functions=copied;changed.declarations=&altered;
+            uint32_t sentinel=UINT32_MAX;changed.declarations=NULL;
+            CHECK(xir_effects_reference_root(context,&effects,&changed,2,0,&sentinel)==XR_XIR_BAD_STRUCTURE &&
+                sentinel==UINT32_MAX);
+            changed.declarations=&altered;copied[2].cleanup_owner=8;
+            CHECK(xir_effects_reference_root(context,&effects,&changed,2,0,&sentinel)==XR_XIR_BAD_STRUCTURE &&
+                sentinel==UINT32_MAX);
+            copied[2].cleanup_owner=2;copied[1].cleanup_owner=3;
+            CHECK(xir_effects_reference_root(context,&effects,&changed,2,0,&sentinel)==XR_XIR_BAD_STRUCTURE &&
+                sentinel==UINT32_MAX);
+            copied[1].cleanup_owner=1;copied[0].cleanup_owner=2;
+            CHECK(xir_effects_reference_root(context,&effects,&changed,2,0,&sentinel)==XR_XIR_BAD_STRUCTURE &&
+                sentinel==UINT32_MAX);
+            copied[0].cleanup_owner=0;XrXirGeneric generics[7]={0};
+            generics[1].parameter_count=1;changed.generics=generics;
+            CHECK(xir_effects_reference_root(context,&effects,&changed,2,0,&sentinel)==XR_XIR_BAD_TYPE &&
+                sentinel==UINT32_MAX);
+            XrXirOrigin occupied={0},*out=&occupied;uint32_t out_count=0;
+            CHECK(effect_context_base_owner_origins(context,owned,2,&out,&out_count)==XR_XIR_BAD_STRUCTURE &&
+                out==&occupied && !out_count);
+        }
+    }
+    xr_xir_compile_artifact_free(checked);memset(functions,0,sizeof(functions));memset(nodes,0,sizeof(nodes));
+    if (status==XR_XIR_OK) {
+        XrXirRootCauseTrace *trace=NULL;status=effect_context_forest_trace(context,owner->forest,5,&trace);
+        if (status==XR_XIR_OK && oracle) CHECK(!owner->forest->facts[5].requires_root && !owner->forest->facts[5].unresolved);
+        xr_xir_compile_root_cause_trace_free(trace);
+    }
+    effect_context_owner_free(owner);return status;
+}
+
 static void conditional_zero_flow_gate(const XrXirCompileContext *context) {
     XrXirCallableParameter field={(XrXirType)256,0};
     XrXirTypeNode nodes[5]={
@@ -957,6 +1086,7 @@ static void conditional_literals(void) {
     CHECK(conditional_zero_module_fn(&context,true)==XR_XIR_OK);
     CHECK(conditional_zero_arity(&context,true)==XR_XIR_OK);
     CHECK(conditional_zero_arity_cleanup(&context,true)==XR_XIR_OK);
+    CHECK(conditional_base_cleanup_reference(&context,true)==XR_XIR_OK);
     for (uint32_t mode=0;mode<4;++mode) CHECK(conditional_classify(&context,mode,true)==XR_XIR_OK);
     CHECK(conditional_scalar(&context,true)==XR_XIR_OK);
     CHECK(conditional_forest(&context,true)==XR_XIR_OK);
@@ -977,11 +1107,12 @@ static XrXirStatus conditional_resource_case(const XrXirCompileContext *context,
         which==14 ? conditional_cell_payload(context,false) :
         which<18 ? conditional_zero_carrier(context,which-15,false) :
         which==18 ? conditional_zero_module_fn(context,false) : which==19 ? conditional_zero_arity(context,false) :
-        conditional_zero_arity_cleanup(context,false);
+        which==20 ? conditional_zero_arity_cleanup(context,false) :
+        conditional_base_cleanup_reference(context,false);
 }
 
 static void conditional_oom(void) {
-    for (uint32_t which=0;which<21;++which) {
+    for (uint32_t which=0;which<22;++which) {
         size_t sites=0;
         for (size_t pass=0;pass<=sites;++pass) {
             RootParameterMark physical=rp_mark();rp_fail_at=SIZE_MAX;rp_attempts=0;rp_injected=false;
@@ -996,7 +1127,7 @@ static void conditional_oom(void) {
 }
 
 static void conditional_axes(void) {
-    for (uint32_t which=0;which<21;++which) {
+    for (uint32_t which=0;which<22;++which) {
         RootParameterMark physical=rp_mark();XrXirCompileContext context=rp_owner(rp_caps());
         uint64_t baseline=rp_stats(&context).live_bytes;
         CHECK(conditional_resource_case(&context,which)==XR_XIR_OK);

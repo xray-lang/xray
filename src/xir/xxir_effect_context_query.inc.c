@@ -175,6 +175,52 @@ XR_FUNC XrXirStatus xir_effects_context_select(const XrXirCompileContext *contex
     return XR_XIR_OK;
 }
 
+/* The base reference API has no instantiated owner vector. It reconstructs
+ * only complete nongeneric lexical identities from the authentic declaration
+ * chain; generic ancestors require the explicit context request instead. */
+static XrXirStatus effect_context_base_owner_origins(const XrXirCompileContext *context,
+    const XrXirModule *module,uint32_t function,XrXirOrigin **output,uint32_t *output_count) {
+    if (!module || function>=module->function_count || !output || *output ||
+        !output_count || *output_count) return XR_XIR_BAD_STRUCTURE;
+    if (!xir_compile_work(context,1)) return XR_XIR_BUDGET;
+    /* An absent declaration table has no lexical chain. The complete source
+     * snapshot and strict selector still reject omission of an actual owner. */
+    if (!module->declarations) return XR_XIR_OK;
+    if (!module->declarations->functions) return XR_XIR_BAD_STRUCTURE;
+    const XrXirFunctionIdentity *identities=module->declarations->functions;
+    uint32_t current=function,count=0;
+    for (;;) {
+        if (!xir_compile_work(context,2)) return XR_XIR_BUDGET;
+        uint32_t parent=identities[current].cleanup_owner;
+        if (!parent) break;
+        if (parent>module->function_count || count>=module->function_count ||
+            parent-1==function) return XR_XIR_BAD_STRUCTURE;
+        current=parent-1;
+        if (module->generics && module->generics[current].parameter_count) return XR_XIR_BAD_TYPE;
+        ++count;
+    }
+    if ((uint64_t)count>SIZE_MAX/sizeof(XrXirOrigin)) return XR_XIR_BUDGET;
+    XrXirStatus status=XR_XIR_OK;
+    XrXirOrigin *owners=count ? xir_compile_alloc(context,(size_t)count*sizeof(*owners),&status) : NULL;
+    if (count && !owners) return status;
+    current=function;
+    for (uint32_t a=0;a<count;++a) {
+        if (!xir_compile_work(context,2+sizeof(*owners))) { status=XR_XIR_BUDGET;break; }
+        uint32_t parent=identities[current].cleanup_owner;
+        if (!parent || parent>module->function_count || parent-1==function) {
+            status=XR_XIR_BAD_STRUCTURE;break;
+        }
+        current=parent-1;
+        if (module->generics && module->generics[current].parameter_count) {
+            status=XR_XIR_BAD_TYPE;break;
+        }
+        owners[a]=(XrXirOrigin){.function=current};
+    }
+    if (status==XR_XIR_OK && identities[current].cleanup_owner) status=XR_XIR_BAD_STRUCTURE;
+    if (status!=XR_XIR_OK) { xr_compile_resources_free(owners);return status; }
+    *output=owners;*output_count=count;return XR_XIR_OK;
+}
+
 XR_FUNC XrXirStatus xir_effects_reference_root(const XrXirCompileContext *context,
     const XrXirEffects *effects, const XrXirModule *module,
     uint32_t function, uint32_t instruction, uint32_t *output) {
@@ -187,9 +233,12 @@ XR_FUNC XrXirStatus xir_effects_reference_root(const XrXirCompileContext *contex
     uint32_t mask=0;
     if (effects->contexts && (!module->generics || !module->generics[function].parameter_count)) {
         XrXirOrigin origin={.function=function};
-        XirEffectContextInput input={module,module->types,&origin,instruction,NULL,0};
+        XrXirOrigin *owners=NULL;uint32_t owner_count=0;
+        XrXirStatus status=effect_context_base_owner_origins(context,module,function,&owners,&owner_count);
+        XirEffectContextInput input={module,module->types,&origin,instruction,owners,owner_count};
         XirEffectContextView selected={0};
-        XrXirStatus status=xir_effects_context_select(context,effects,&input,&selected);
+        if (status==XR_XIR_OK) status=xir_effects_context_select(context,effects,&input,&selected);
+        xr_compile_resources_free(owners);
         if (status!=XR_XIR_OK) return status;
         mask=(selected.requires_root?XR_XIR_CALLABLE_ROOT_REQUIRED:0)|
             (selected.unresolved?XR_XIR_CALLABLE_ROOT_UNRESOLVED:0);
