@@ -1,0 +1,1843 @@
+{
+  "schema": 1,
+  "family": "original_aot_complete_reason_private_cleanup_graph_and_actual_owner_edge_verification",
+  "legacy_base_commit": "01e6d38401b0f5c8684b64c35a99ac651024c0c1",
+  "status": "OPEN",
+  "retired": 0,
+  "replacement_gates": [],
+  "result": "STATIC_FULL_ORIGINAL_AOT_CLEANUP_REASON_GRAPH_MAP_ONLY",
+  "product_execution": "NOT_RUN_BY_THIS_MAP",
+  "producer": "25f4016d6f089169757a90ae11ba537002374711",
+  "identity": "Checked25/contract67/Value22/Call28/Program29",
+  "identity_namespace_note": "Historicalcontract67 differs from semantic-plan schema52; Root27/72 development not adopted.",
+  "legacy": [
+    {
+      "name": "test_cleanup_graph_exit_mutations",
+      "legacy_path": "tests/unit/aot/test_xr_program_aot.c",
+      "legacy_line": 2146,
+      "body_lf_sha256": "682646bab802d1d82ef4f2531f3725dd2e2b9391bfcbb155f8e9c2d692117403",
+      "assertion_sites": 0,
+      "loop_sites": 1,
+      "status": "OPEN",
+      "replacement_gates": [],
+      "note": "Function census preserves its whole body; sites do not count executed loop iterations."
+    },
+    {
+      "name": "test_cleanup_graph_storage_mutations",
+      "legacy_path": "tests/unit/aot/test_xr_program_aot.c",
+      "legacy_line": 2173,
+      "body_lf_sha256": "f22b7c8f893c1e9b453e5308dae588cb9634e624e00fc3b4d4b818384d1525b3",
+      "assertion_sites": 6,
+      "loop_sites": 0,
+      "status": "OPEN",
+      "replacement_gates": [],
+      "note": "Function census preserves its whole body; sites do not count executed loop iterations."
+    },
+    {
+      "name": "test_cleanup_graph_suspension_rejected",
+      "legacy_path": "tests/unit/aot/test_xr_program_aot.c",
+      "legacy_line": 2205,
+      "body_lf_sha256": "2826bb3ed9c949cfc3eb1abe95bee9eca4bfcb8caf5b7f87eef84d62272b04ae",
+      "assertion_sites": 1,
+      "loop_sites": 0,
+      "status": "OPEN",
+      "replacement_gates": [],
+      "note": "Function census preserves its whole body; sites do not count executed loop iterations."
+    },
+    {
+      "name": "test_cleanup_graph_owner_edges",
+      "legacy_path": "tests/unit/aot/test_xr_program_aot.c",
+      "legacy_line": 2243,
+      "body_lf_sha256": "da3586cf73222d761ca558eca0d602801a3201d7270fd6d84b5d39a93614e08a",
+      "assertion_sites": 4,
+      "loop_sites": 1,
+      "status": "OPEN",
+      "replacement_gates": [],
+      "note": "Function census preserves its whole body; sites do not count executed loop iterations."
+    },
+    {
+      "name": "test_cleanup_reason_graph_lowering_and_mutation",
+      "legacy_path": "tests/unit/aot/test_xr_program_aot.c",
+      "legacy_line": 2349,
+      "body_lf_sha256": "3147d85a26f23d1a5bece7176d5dd34386ec804605cfcac2c59a9ea4125bbdfb",
+      "assertion_sites": 12,
+      "loop_sites": 1,
+      "status": "OPEN",
+      "replacement_gates": [],
+      "note": "Function census preserves its whole body; sites do not count executed loop iterations."
+    }
+  ],
+  "responsibility_mapping": [
+    {
+      "path": "tests/unit/aot/test_xr_program_aot.c",
+      "function": "test_cleanup_graph_exit_mutations",
+      "line": 2146,
+      "end_line": 2171,
+      "body_lf_sha256": "682646bab802d1d82ef4f2531f3725dd2e2b9391bfcbb155f8e9c2d692117403",
+      "REQUIRE_sites": 0,
+      "REQUIRE_bindings": [],
+      "CHECK_sites": 0,
+      "CHECK_bindings": [],
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/aot/test_xr_program_aot.c",
+      "function": "test_cleanup_graph_storage_mutations",
+      "line": 2173,
+      "end_line": 2203,
+      "body_lf_sha256": "f22b7c8f893c1e9b453e5308dae588cb9634e624e00fc3b4d4b818384d1525b3",
+      "REQUIRE_sites": 6,
+      "REQUIRE_bindings": [
+        {
+          "line": 2182,
+          "expression": "!xr_backend_ir_verify(ir, &diagnostic)",
+          "status": "OPEN"
+        },
+        {
+          "line": 2183,
+          "expression": "diagnostic.status == XR_BACKEND_INVARIANT_REJECTED",
+          "status": "OPEN"
+        },
+        {
+          "line": 2186,
+          "expression": "!xr_backend_ir_verify(ir, &diagnostic)",
+          "status": "OPEN"
+        },
+        {
+          "line": 2187,
+          "expression": "diagnostic.status == XR_BACKEND_INVARIANT_REJECTED",
+          "status": "OPEN"
+        },
+        {
+          "line": 2190,
+          "expression": "!xr_backend_ir_verify(ir, &diagnostic)",
+          "status": "OPEN"
+        },
+        {
+          "line": 2191,
+          "expression": "diagnostic.status == XR_BACKEND_INVARIANT_REJECTED",
+          "status": "OPEN"
+        }
+      ],
+      "CHECK_sites": 0,
+      "CHECK_bindings": [],
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/aot/test_xr_program_aot.c",
+      "function": "test_cleanup_graph_suspension_rejected",
+      "line": 2205,
+      "end_line": 2241,
+      "body_lf_sha256": "2826bb3ed9c949cfc3eb1abe95bee9eca4bfcb8caf5b7f87eef84d62272b04ae",
+      "REQUIRE_sites": 1,
+      "REQUIRE_bindings": [
+        {
+          "line": 2208,
+          "expression": "function->coroutine_state_count == 2u && function->coroutine_safepoint_count == 1u",
+          "status": "OPEN"
+        }
+      ],
+      "CHECK_sites": 0,
+      "CHECK_bindings": [],
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/aot/test_xr_program_aot.c",
+      "function": "test_cleanup_graph_owner_edges",
+      "line": 2243,
+      "end_line": 2347,
+      "body_lf_sha256": "da3586cf73222d761ca558eca0d602801a3201d7270fd6d84b5d39a93614e08a",
+      "REQUIRE_sites": 4,
+      "REQUIRE_bindings": [
+        {
+          "line": 2248,
+          "expression": "adapter->instruction_count == 2u",
+          "status": "OPEN"
+        },
+        {
+          "line": 2256,
+          "expression": "function->value_types && function->value_categories && function->value_ownerships",
+          "status": "OPEN"
+        },
+        {
+          "line": 2287,
+          "expression": "target->argument_count == 1u && target->instruction_count < 6u",
+          "status": "OPEN"
+        },
+        {
+          "line": 2336,
+          "expression": "xr_backend_ir_verify(ir, &diagnostic)",
+          "status": "OPEN"
+        }
+      ],
+      "CHECK_sites": 0,
+      "CHECK_bindings": [],
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/aot/test_xr_program_aot.c",
+      "function": "test_cleanup_reason_graph_lowering_and_mutation",
+      "line": 2349,
+      "end_line": 2435,
+      "body_lf_sha256": "3147d85a26f23d1a5bece7176d5dd34386ec804605cfcac2c59a9ea4125bbdfb",
+      "REQUIRE_sites": 12,
+      "REQUIRE_bindings": [
+        {
+          "line": 2352,
+          "expression": "profile != NULL",
+          "status": "OPEN"
+        },
+        {
+          "line": 2356,
+          "expression": "function->block_count == XR_CLEANUP_GRAPH_BLOCK_COUNT",
+          "status": "OPEN"
+        },
+        {
+          "line": 2358,
+          "expression": "yield->operation_id == XR_CORE_OP_CORE_COROUTINE_YIELD",
+          "status": "OPEN"
+        },
+        {
+          "line": 2362,
+          "expression": "cancel_entry->operation_id == XR_CORE_OP_CORE_BRANCH",
+          "status": "OPEN"
+        },
+        {
+          "line": 2365,
+          "expression": "cancel_branch->operation_id == XR_CORE_OP_CORE_CONDITIONAL_BRANCH",
+          "status": "OPEN"
+        },
+        {
+          "line": 2369,
+          "expression": "loop->successors[0] == cancel_body && loop->successors[1] == cancel_exit",
+          "status": "OPEN"
+        },
+        {
+          "line": 2374,
+          "expression": "provider == NULL",
+          "status": "OPEN"
+        },
+        {
+          "line": 2378,
+          "expression": "provider && provider->successor_count == 1u",
+          "status": "OPEN"
+        },
+        {
+          "line": 2381,
+          "expression": "trap_entry->operation_id == XR_CORE_OP_CORE_BRANCH",
+          "status": "OPEN"
+        },
+        {
+          "line": 2384,
+          "expression": "trap_branch->operation_id == XR_CORE_OP_CORE_CONDITIONAL_BRANCH",
+          "status": "OPEN"
+        },
+        {
+          "line": 2411,
+          "expression": "saved_count >= 2u",
+          "status": "OPEN"
+        },
+        {
+          "line": 2414,
+          "expression": "drop->operation_id == XR_CORE_OP_CORE_OWNER_DROP",
+          "status": "OPEN"
+        }
+      ],
+      "CHECK_sites": 0,
+      "CHECK_bindings": [],
+      "status": "OPEN"
+    }
+  ],
+  "outer_REQUIRE_sites": 23,
+  "original_private_helpers": [
+    {
+      "path": "tests/unit/aot/xr_backend_emission_owner.h",
+      "function": "backend_emission_owner_close",
+      "line": 19,
+      "end_line": 30,
+      "body_lf_sha256": "356ddfb98380e9b201920c88ffd7afccc9c9f4d4311f9983ebd20903ce66377a",
+      "REQUIRE_sites": 0,
+      "REQUIRE_bindings": [],
+      "CHECK_sites": 0,
+      "CHECK_bindings": [],
+      "status": "OPEN",
+      "standard_assert_bindings": [],
+      "standard_assert_sites": 0
+    },
+    {
+      "path": "tests/unit/aot/xr_backend_emission_owner.h",
+      "function": "backend_emission_owner_open",
+      "line": 31,
+      "end_line": 43,
+      "body_lf_sha256": "786869fb3f6675488f9b529c5c025eece534d04fffc1c8be190cea8381300214",
+      "REQUIRE_sites": 0,
+      "REQUIRE_bindings": [],
+      "CHECK_sites": 0,
+      "CHECK_bindings": [],
+      "status": "OPEN",
+      "standard_assert_bindings": [],
+      "standard_assert_sites": 0
+    },
+    {
+      "path": "tests/unit/aot/test_xr_program_aot.c",
+      "function": "build_cleanup_graph_program",
+      "line": 2097,
+      "end_line": 2137,
+      "body_lf_sha256": "208513cb456cb1cdc129f2789ce959a9b7785fe2732f457b9446caaa6e506eac",
+      "REQUIRE_sites": 5,
+      "REQUIRE_bindings": [
+        {
+          "line": 2099,
+          "expression": "xr_program_cleanup_graph_fixture_init(&fixture)",
+          "status": "OPEN"
+        },
+        {
+          "line": 2104,
+          "expression": "contract == NULL",
+          "status": "OPEN"
+        },
+        {
+          "line": 2108,
+          "expression": "contract && contract->operation_count == 1u",
+          "status": "OPEN"
+        },
+        {
+          "line": 2124,
+          "expression": "xr_program_cleanup_graph_fixture_write_input(&fixture, &artifact, message,\n                                                         sizeof(message)) == XR_PROGRAM_BUILD_OK",
+          "status": "OPEN"
+        },
+        {
+          "line": 2134,
+          "expression": "status == XR_PROGRAM_VERIFY_OK",
+          "status": "OPEN"
+        }
+      ],
+      "CHECK_sites": 0,
+      "CHECK_bindings": [],
+      "status": "OPEN",
+      "standard_assert_bindings": [],
+      "standard_assert_sites": 0
+    },
+    {
+      "path": "tests/unit/aot/test_xr_program_aot.c",
+      "function": "build_ir",
+      "line": 1269,
+      "end_line": 1285,
+      "body_lf_sha256": "83e9015fd556844ec0d0f348a91bbf415699d2b5e2baad30652eeca642a36790",
+      "REQUIRE_sites": 4,
+      "REQUIRE_bindings": [
+        {
+          "line": 1280,
+          "expression": "status == XR_BACKEND_OK",
+          "status": "OPEN"
+        },
+        {
+          "line": 1281,
+          "expression": "ir != NULL",
+          "status": "OPEN"
+        },
+        {
+          "line": 1282,
+          "expression": "xr_backend_ir_verify(ir, &diagnostic)",
+          "status": "OPEN"
+        },
+        {
+          "line": 1283,
+          "expression": "xr_backend_ir_binding_verify(ir, &diagnostic)",
+          "status": "OPEN"
+        }
+      ],
+      "CHECK_sites": 0,
+      "CHECK_bindings": [],
+      "status": "OPEN",
+      "standard_assert_bindings": [],
+      "standard_assert_sites": 0
+    },
+    {
+      "path": "tests/unit/aot/test_xr_program_aot.c",
+      "function": "cleanup_graph_terminal",
+      "line": 2139,
+      "end_line": 2144,
+      "body_lf_sha256": "a85a94c4d80c12951f8626840b2914c35bb65f8fbc743e2d143b79b0282292df",
+      "REQUIRE_sites": 1,
+      "REQUIRE_bindings": [
+        {
+          "line": 2141,
+          "expression": "block < function->block_count && function->blocks[block].instruction_count != 0u",
+          "status": "OPEN"
+        }
+      ],
+      "CHECK_sites": 0,
+      "CHECK_bindings": [],
+      "status": "OPEN",
+      "standard_assert_bindings": [],
+      "standard_assert_sites": 0
+    },
+    {
+      "path": "tests/unit/plan/target_profile_test_fixture.c",
+      "function": "compare_provider_ids",
+      "line": 37,
+      "end_line": 41,
+      "body_lf_sha256": "800e96b15fbf1f0de47120584ef4bda06f403ab175c9e0cc0b307b14277ca41e",
+      "REQUIRE_sites": 0,
+      "REQUIRE_bindings": [],
+      "CHECK_sites": 0,
+      "CHECK_bindings": [],
+      "status": "OPEN",
+      "standard_assert_bindings": [],
+      "standard_assert_sites": 0
+    },
+    {
+      "path": "tests/unit/runtime/test_runtime_abi_contract.c",
+      "function": "init_record",
+      "line": 214,
+      "end_line": 224,
+      "body_lf_sha256": "4ab5c4c8467fa198701af703fb5bf753a184f9a42833d42913b5a5eb3f01d3f4",
+      "REQUIRE_sites": 0,
+      "REQUIRE_bindings": [],
+      "CHECK_sites": 0,
+      "CHECK_bindings": [],
+      "status": "OPEN",
+      "standard_assert_bindings": [],
+      "standard_assert_sites": 0
+    },
+    {
+      "path": "tests/unit/runtime/test_runtime_abi_contract.c",
+      "function": "make_bitmask_namespace",
+      "line": 185,
+      "end_line": 201,
+      "body_lf_sha256": "207cac9d3252a15fab701a097ddfb9cc1ab14f2b1fd12bda30d3ee3e5ba9301e",
+      "REQUIRE_sites": 0,
+      "REQUIRE_bindings": [],
+      "CHECK_sites": 0,
+      "CHECK_bindings": [],
+      "status": "OPEN",
+      "standard_assert_bindings": [],
+      "standard_assert_sites": 0
+    },
+    {
+      "path": "tests/unit/runtime/test_runtime_abi_contract.c",
+      "function": "make_call_abi",
+      "line": 435,
+      "end_line": 450,
+      "body_lf_sha256": "25dd59fd4e47cf4ba0b28325b0ad3a43be269293fbde42dc6e7031d0ed80c7b8",
+      "REQUIRE_sites": 0,
+      "REQUIRE_bindings": [],
+      "CHECK_sites": 0,
+      "CHECK_bindings": [],
+      "status": "OPEN",
+      "standard_assert_bindings": [],
+      "standard_assert_sites": 0
+    },
+    {
+      "path": "tests/unit/runtime/test_runtime_abi_contract.c",
+      "function": "make_call_slot",
+      "line": 422,
+      "end_line": 433,
+      "body_lf_sha256": "a86c6de459703f2b937b6f7973be3859d8d8c5a852ee052eea09211ffad9503c",
+      "REQUIRE_sites": 0,
+      "REQUIRE_bindings": [],
+      "CHECK_sites": 0,
+      "CHECK_bindings": [],
+      "status": "OPEN",
+      "standard_assert_bindings": [],
+      "standard_assert_sites": 0
+    },
+    {
+      "path": "tests/unit/runtime/test_runtime_abi_contract.c",
+      "function": "make_callback_abi",
+      "line": 379,
+      "end_line": 394,
+      "body_lf_sha256": "7ad3d4840e698211639d76bcb2ca9d2014e7d539124ef06c50dce2b10f494fc2",
+      "REQUIRE_sites": 0,
+      "REQUIRE_bindings": [],
+      "CHECK_sites": 0,
+      "CHECK_bindings": [],
+      "status": "OPEN",
+      "standard_assert_bindings": [],
+      "standard_assert_sites": 0
+    },
+    {
+      "path": "tests/unit/runtime/test_runtime_abi_contract.c",
+      "function": "make_domain_record",
+      "line": 232,
+      "end_line": 252,
+      "body_lf_sha256": "536703223f2c831458e8f782a0683f162e0e34ad3c62a8389a6ff475039630c2",
+      "REQUIRE_sites": 0,
+      "REQUIRE_bindings": [],
+      "CHECK_sites": 0,
+      "CHECK_bindings": [],
+      "status": "OPEN",
+      "standard_assert_bindings": [],
+      "standard_assert_sites": 0
+    },
+    {
+      "path": "tests/unit/runtime/test_runtime_abi_contract.c",
+      "function": "make_dynamic_value_abi",
+      "line": 135,
+      "end_line": 166,
+      "body_lf_sha256": "9124fffbdeed4fa0f812eeccf2e7d7b6e8e3ea7f611df834fcdc745c6c6acd9e",
+      "REQUIRE_sites": 0,
+      "REQUIRE_bindings": [],
+      "CHECK_sites": 0,
+      "CHECK_bindings": [],
+      "status": "OPEN",
+      "standard_assert_bindings": [],
+      "standard_assert_sites": 0
+    },
+    {
+      "path": "tests/unit/runtime/test_runtime_abi_contract.c",
+      "function": "make_enum_namespace",
+      "line": 168,
+      "end_line": 183,
+      "body_lf_sha256": "28d917c7691646d359b959de4873321956d24b149113134a622a2e73884904a2",
+      "REQUIRE_sites": 0,
+      "REQUIRE_bindings": [],
+      "CHECK_sites": 0,
+      "CHECK_bindings": [],
+      "status": "OPEN",
+      "standard_assert_bindings": [],
+      "standard_assert_sites": 0
+    },
+    {
+      "path": "tests/unit/runtime/test_runtime_abi_contract.c",
+      "function": "make_evaluated_record",
+      "line": 343,
+      "end_line": 363,
+      "body_lf_sha256": "11ad05329acd869a452db663387e6c24d4b92c432e6ff3c517e906c1124f25b9",
+      "REQUIRE_sites": 0,
+      "REQUIRE_bindings": [],
+      "CHECK_sites": 0,
+      "CHECK_bindings": [],
+      "status": "OPEN",
+      "standard_assert_bindings": [],
+      "standard_assert_sites": 0
+    },
+    {
+      "path": "tests/unit/runtime/test_runtime_abi_contract.c",
+      "function": "make_extent_record",
+      "line": 254,
+      "end_line": 289,
+      "body_lf_sha256": "eb2a48e1cd60915fc9b3206d7fa02a28cc76a57735dd97decf2e497f674c5bfa",
+      "REQUIRE_sites": 0,
+      "REQUIRE_bindings": [],
+      "CHECK_sites": 0,
+      "CHECK_bindings": [],
+      "status": "OPEN",
+      "standard_assert_bindings": [],
+      "standard_assert_sites": 0
+    },
+    {
+      "path": "tests/unit/runtime/test_runtime_abi_contract.c",
+      "function": "make_field",
+      "line": 60,
+      "end_line": 72,
+      "body_lf_sha256": "cd61f005fd7b857407a91167e3adaa0964fc33d9f6715c488e191bbdf88ba31f",
+      "REQUIRE_sites": 0,
+      "REQUIRE_bindings": [],
+      "CHECK_sites": 0,
+      "CHECK_bindings": [],
+      "status": "OPEN",
+      "standard_assert_bindings": [],
+      "standard_assert_sites": 0
+    },
+    {
+      "path": "tests/unit/runtime/test_runtime_abi_contract.c",
+      "function": "make_group_record",
+      "line": 365,
+      "end_line": 377,
+      "body_lf_sha256": "c075578b1ccf9e89cddd3baaafaf6e4674dc4981fd1986c7fd187c01b687f371",
+      "REQUIRE_sites": 0,
+      "REQUIRE_bindings": [],
+      "CHECK_sites": 0,
+      "CHECK_bindings": [],
+      "status": "OPEN",
+      "standard_assert_bindings": [],
+      "standard_assert_sites": 0
+    },
+    {
+      "path": "tests/unit/plan/target_profile_test_fixture.c",
+      "function": "make_header_facts",
+      "line": 43,
+      "end_line": 66,
+      "body_lf_sha256": "916a05fa9431a545e70e8905f058dba291cd7b36a15797fcfe135cded74122ac",
+      "REQUIRE_sites": 0,
+      "REQUIRE_bindings": [],
+      "CHECK_sites": 0,
+      "CHECK_bindings": [],
+      "status": "OPEN",
+      "standard_assert_bindings": [],
+      "standard_assert_sites": 0
+    },
+    {
+      "path": "tests/unit/runtime/test_runtime_abi_contract.c",
+      "function": "make_id",
+      "line": 34,
+      "end_line": 40,
+      "body_lf_sha256": "5612295a99ac5b4e526240667bd204b53b51f7159879cf4ae3c4ae0a920541a7",
+      "REQUIRE_sites": 0,
+      "REQUIRE_bindings": [],
+      "CHECK_sites": 0,
+      "CHECK_bindings": [],
+      "status": "OPEN",
+      "standard_assert_bindings": [],
+      "standard_assert_sites": 0
+    },
+    {
+      "path": "tests/unit/runtime/test_runtime_abi_contract.c",
+      "function": "make_layout_record",
+      "line": 291,
+      "end_line": 330,
+      "body_lf_sha256": "ea85e0ad196e110c75ab7442069356599c0d37f4a0966a9efbf8f3a980039519",
+      "REQUIRE_sites": 0,
+      "REQUIRE_bindings": [],
+      "CHECK_sites": 0,
+      "CHECK_bindings": [],
+      "status": "OPEN",
+      "standard_assert_bindings": [],
+      "standard_assert_sites": 0
+    },
+    {
+      "path": "tests/unit/runtime/test_runtime_abi_contract.c",
+      "function": "make_limits_record",
+      "line": 332,
+      "end_line": 341,
+      "body_lf_sha256": "18824fdbf424ca6f5b40a45c7bf693a7c363db28b2470ec2adbbdf8c04730ac4",
+      "REQUIRE_sites": 0,
+      "REQUIRE_bindings": [],
+      "CHECK_sites": 0,
+      "CHECK_bindings": [],
+      "status": "OPEN",
+      "standard_assert_bindings": [],
+      "standard_assert_sites": 0
+    },
+    {
+      "path": "tests/unit/runtime/test_runtime_abi_contract.c",
+      "function": "make_object_header_abi",
+      "line": 74,
+      "end_line": 133,
+      "body_lf_sha256": "766e70c0fe87638481dfb960992502b2ddfee5764b426f9358b26d74a3b82de0",
+      "REQUIRE_sites": 0,
+      "REQUIRE_bindings": [],
+      "CHECK_sites": 0,
+      "CHECK_bindings": [],
+      "status": "OPEN",
+      "standard_assert_bindings": [],
+      "standard_assert_sites": 0
+    },
+    {
+      "path": "tests/unit/runtime/test_runtime_abi_contract.c",
+      "function": "make_operation",
+      "line": 452,
+      "end_line": 465,
+      "body_lf_sha256": "8aa96efbebf6cf7551d604f146b654b95b6a991e6c360351584251a9ee295258",
+      "REQUIRE_sites": 0,
+      "REQUIRE_bindings": [],
+      "CHECK_sites": 0,
+      "CHECK_bindings": [],
+      "status": "OPEN",
+      "standard_assert_bindings": [],
+      "standard_assert_sites": 0
+    },
+    {
+      "path": "tests/unit/runtime/test_runtime_abi_contract.c",
+      "function": "make_providers",
+      "line": 467,
+      "end_line": 527,
+      "body_lf_sha256": "c08810adcf8ff9075582c3a86bc188fa3d60c4ca3f1f5dfa4f47ad7b61d7418e",
+      "REQUIRE_sites": 0,
+      "REQUIRE_bindings": [],
+      "CHECK_sites": 0,
+      "CHECK_bindings": [],
+      "status": "OPEN",
+      "standard_assert_bindings": [],
+      "standard_assert_sites": 0
+    },
+    {
+      "path": "tests/unit/runtime/test_runtime_abi_contract.c",
+      "function": "make_runtime_abi",
+      "line": 396,
+      "end_line": 420,
+      "body_lf_sha256": "2c8e04bb7facee00cc8895173e1e66932bcf11edd0d35dee52b04159b0a99a6c",
+      "REQUIRE_sites": 0,
+      "REQUIRE_bindings": [],
+      "CHECK_sites": 0,
+      "CHECK_bindings": [],
+      "status": "OPEN",
+      "standard_assert_bindings": [],
+      "standard_assert_sites": 0
+    },
+    {
+      "path": "tests/unit/runtime/test_runtime_abi_contract.c",
+      "function": "make_sentinel_namespace",
+      "line": 203,
+      "end_line": 212,
+      "body_lf_sha256": "f582219862890c24c3d0d6a21230755b8df4340967fad41175b41a6c4100e031",
+      "REQUIRE_sites": 0,
+      "REQUIRE_bindings": [],
+      "CHECK_sites": 0,
+      "CHECK_bindings": [],
+      "status": "OPEN",
+      "standard_assert_bindings": [],
+      "standard_assert_sites": 0
+    },
+    {
+      "path": "tests/unit/aot/test_xr_program_aot.c",
+      "function": "require_backend_operation_rejected",
+      "line": 2071,
+      "end_line": 2085,
+      "body_lf_sha256": "ce28eb19c52d3252f31a01b68266db53a616f038e07be92e6bd663c6b031425c",
+      "REQUIRE_sites": 3,
+      "REQUIRE_bindings": [
+        {
+          "line": 2081,
+          "expression": "!accepted",
+          "status": "OPEN"
+        },
+        {
+          "line": 2082,
+          "expression": "diagnostic.status == XR_BACKEND_INVARIANT_REJECTED",
+          "status": "OPEN"
+        },
+        {
+          "line": 2083,
+          "expression": "diagnostic.operation_id == expected_operation",
+          "status": "OPEN"
+        }
+      ],
+      "CHECK_sites": 0,
+      "CHECK_bindings": [],
+      "status": "OPEN",
+      "standard_assert_bindings": [],
+      "standard_assert_sites": 0
+    },
+    {
+      "path": "tests/unit/aot/test_xr_program_aot.c",
+      "function": "require_coroutine_backend_restored",
+      "line": 2091,
+      "end_line": 2095,
+      "body_lf_sha256": "b5181e5c8bc72d7369360194a5864b179c700195b5fb8996237a81258c8d595d",
+      "REQUIRE_sites": 2,
+      "REQUIRE_bindings": [
+        {
+          "line": 2093,
+          "expression": "xr_backend_ir_verify(ir, &diagnostic)",
+          "status": "OPEN"
+        },
+        {
+          "line": 2094,
+          "expression": "xr_backend_ir_binding_verify(ir, &diagnostic)",
+          "status": "OPEN"
+        }
+      ],
+      "CHECK_sites": 0,
+      "CHECK_bindings": [],
+      "status": "OPEN",
+      "standard_assert_bindings": [],
+      "standard_assert_sites": 0
+    },
+    {
+      "path": "tests/unit/plan/target_profile_test_fixture.c",
+      "function": "retarget_call_abi",
+      "line": 68,
+      "end_line": 84,
+      "body_lf_sha256": "213f3f583b905b1b699bd3425c364701a62f17e1098fe11294b255545b5f24de",
+      "REQUIRE_sites": 0,
+      "REQUIRE_bindings": [],
+      "CHECK_sites": 0,
+      "CHECK_bindings": [],
+      "status": "OPEN",
+      "standard_assert_bindings": [],
+      "standard_assert_sites": 0
+    },
+    {
+      "path": "tests/unit/plan/target_profile_test_fixture.c",
+      "function": "retarget_providers",
+      "line": 86,
+      "end_line": 101,
+      "body_lf_sha256": "8df03b2bc968573e515c441fd5a96f87d9db2300e13e3e3b514d3032a3ccfbaa",
+      "REQUIRE_sites": 0,
+      "REQUIRE_bindings": [],
+      "CHECK_sites": 0,
+      "CHECK_bindings": [],
+      "status": "OPEN",
+      "standard_assert_bindings": [],
+      "standard_assert_sites": 0
+    },
+    {
+      "path": "tests/unit/program/xr_program_cleanup_graph_fixture.h",
+      "function": "xr_program_cleanup_graph_branch",
+      "line": 121,
+      "end_line": 126,
+      "body_lf_sha256": "a2dfe62e0d572e485017f3f69ac4f1da1ba182be1bdc18e6f7329065f46b56db",
+      "REQUIRE_sites": 0,
+      "REQUIRE_bindings": [],
+      "CHECK_sites": 0,
+      "CHECK_bindings": [],
+      "status": "OPEN",
+      "standard_assert_bindings": [],
+      "standard_assert_sites": 0
+    },
+    {
+      "path": "tests/unit/program/xr_program_cleanup_graph_fixture.h",
+      "function": "xr_program_cleanup_graph_conditional",
+      "line": 128,
+      "end_line": 138,
+      "body_lf_sha256": "240526f632042fbc72537f9fca7d8b45f1216f105e466bfbffa07a1861176c59",
+      "REQUIRE_sites": 0,
+      "REQUIRE_bindings": [],
+      "CHECK_sites": 0,
+      "CHECK_bindings": [],
+      "status": "OPEN",
+      "standard_assert_bindings": [],
+      "standard_assert_sites": 0
+    },
+    {
+      "path": "tests/unit/program/xr_program_cleanup_graph_fixture.h",
+      "function": "xr_program_cleanup_graph_constant",
+      "line": 107,
+      "end_line": 119,
+      "body_lf_sha256": "fe39feceec647db0fff5f86ac3febf9b51b9d5dbfbf8e270b7b6421af6fd388f",
+      "REQUIRE_sites": 0,
+      "REQUIRE_bindings": [],
+      "CHECK_sites": 0,
+      "CHECK_bindings": [],
+      "status": "OPEN",
+      "standard_assert_bindings": [],
+      "standard_assert_sites": 0
+    },
+    {
+      "path": "tests/unit/program/xr_program_cleanup_graph_fixture.h",
+      "function": "xr_program_cleanup_graph_edges",
+      "line": 95,
+      "end_line": 105,
+      "body_lf_sha256": "4b21225bb13bb9aa4cb451566540f8f9a268ea7e3c29294ec2f7deff5a39b51c",
+      "REQUIRE_sites": 0,
+      "REQUIRE_bindings": [],
+      "CHECK_sites": 0,
+      "CHECK_bindings": [],
+      "status": "OPEN",
+      "standard_assert_bindings": [
+        {
+          "line": 98,
+          "expression": "count <= 8u - fixture->successor_counts[block]",
+          "status": "OPEN"
+        }
+      ],
+      "standard_assert_sites": 1
+    },
+    {
+      "path": "tests/unit/program/xr_program_cleanup_graph_fixture.h",
+      "function": "xr_program_cleanup_graph_emit",
+      "line": 75,
+      "end_line": 93,
+      "body_lf_sha256": "234282a0adf41b23b8fd48df221e0104fe6d8888d636d2b96d6cd9e4cd889221",
+      "REQUIRE_sites": 0,
+      "REQUIRE_bindings": [],
+      "CHECK_sites": 0,
+      "CHECK_bindings": [],
+      "status": "OPEN",
+      "standard_assert_bindings": [
+        {
+          "line": 78,
+          "expression": "block < XR_CLEANUP_GRAPH_BLOCK_COUNT",
+          "status": "OPEN"
+        },
+        {
+          "line": 79,
+          "expression": "fixture->blocks[block].instruction_count < 8u",
+          "status": "OPEN"
+        },
+        {
+          "line": 80,
+          "expression": "count <= 24u - fixture->operand_counts[block]",
+          "status": "OPEN"
+        }
+      ],
+      "standard_assert_sites": 3
+    },
+    {
+      "path": "tests/unit/program/xr_program_cleanup_graph_fixture.h",
+      "function": "xr_program_cleanup_graph_entry",
+      "line": 167,
+      "end_line": 182,
+      "body_lf_sha256": "feaa10f2926bf79aae3db0e1b095dd92e9c5b848858d4217321b0ca3f6b98786",
+      "REQUIRE_sites": 0,
+      "REQUIRE_bindings": [],
+      "CHECK_sites": 0,
+      "CHECK_bindings": [],
+      "status": "OPEN",
+      "standard_assert_bindings": [],
+      "standard_assert_sites": 0
+    },
+    {
+      "path": "tests/unit/program/xr_program_cleanup_graph_fixture.h",
+      "function": "xr_program_cleanup_graph_fixture_init",
+      "line": 191,
+      "end_line": 294,
+      "body_lf_sha256": "60d6ece2c327108020a071fcbbb13200b6cd79f7853058092561ab2c1f16f954",
+      "REQUIRE_sites": 0,
+      "REQUIRE_bindings": [],
+      "CHECK_sites": 0,
+      "CHECK_bindings": [],
+      "status": "OPEN",
+      "standard_assert_bindings": [],
+      "standard_assert_sites": 0
+    },
+    {
+      "path": "tests/unit/program/xr_program_cleanup_graph_fixture.h",
+      "function": "xr_program_cleanup_graph_fixture_write_input",
+      "line": 296,
+      "end_line": 320,
+      "body_lf_sha256": "ae8f35650780904d35866fc05b41205899419b50c42753f51754ea28b01af7d3",
+      "REQUIRE_sites": 0,
+      "REQUIRE_bindings": [],
+      "CHECK_sites": 0,
+      "CHECK_bindings": [],
+      "status": "OPEN",
+      "standard_assert_bindings": [],
+      "standard_assert_sites": 0
+    },
+    {
+      "path": "tests/unit/program/xr_program_cleanup_graph_fixture.h",
+      "function": "xr_program_cleanup_graph_key",
+      "line": 58,
+      "end_line": 73,
+      "body_lf_sha256": "b9d0d5a4a85ca47e526a263f3a14bde045620e222f90663698ed7b3d86f08821",
+      "REQUIRE_sites": 0,
+      "REQUIRE_bindings": [],
+      "CHECK_sites": 0,
+      "CHECK_bindings": [],
+      "status": "OPEN",
+      "standard_assert_bindings": [
+        {
+          "line": 63,
+          "expression": "kind_size <= sizeof(material) - cursor - 5u",
+          "status": "OPEN"
+        }
+      ],
+      "standard_assert_sites": 1
+    },
+    {
+      "path": "tests/unit/program/xr_program_cleanup_graph_fixture.h",
+      "function": "xr_program_cleanup_graph_provider",
+      "line": 140,
+      "end_line": 153,
+      "body_lf_sha256": "a7a957ee4a53a9a89f5f06cd44ab315b83e47b7ce1b8c4bcee73a33cfa9ba9ad",
+      "REQUIRE_sites": 0,
+      "REQUIRE_bindings": [],
+      "CHECK_sites": 0,
+      "CHECK_bindings": [],
+      "status": "OPEN",
+      "standard_assert_bindings": [],
+      "standard_assert_sites": 0
+    },
+    {
+      "path": "tests/unit/program/xr_program_cleanup_graph_fixture.h",
+      "function": "xr_program_cleanup_graph_terminal",
+      "line": 155,
+      "end_line": 165,
+      "body_lf_sha256": "0708b313b3282f70d1749b24b7a8e24aa607eee8f9fe176b66eb08e3890cf0e3",
+      "REQUIRE_sites": 0,
+      "REQUIRE_bindings": [],
+      "CHECK_sites": 0,
+      "CHECK_bindings": [],
+      "status": "OPEN",
+      "standard_assert_bindings": [],
+      "standard_assert_sites": 0
+    },
+    {
+      "path": "tests/unit/program/xr_program_provider_fixture.h",
+      "function": "xr_program_fixture_provider_contract",
+      "line": 17,
+      "end_line": 30,
+      "body_lf_sha256": "294a94d8dbafcb95dd6c67e6c5cdb538a25df5ac60d04afc3ac9e8a3d4f94527",
+      "REQUIRE_sites": 0,
+      "REQUIRE_bindings": [],
+      "CHECK_sites": 0,
+      "CHECK_bindings": [],
+      "status": "OPEN",
+      "standard_assert_bindings": [],
+      "standard_assert_sites": 0
+    },
+    {
+      "path": "tests/unit/program/xr_program_provider_fixture.h",
+      "function": "xr_program_fixture_scalar_contract",
+      "line": 32,
+      "end_line": 46,
+      "body_lf_sha256": "8a4b92a4d10bf09fcbc31bb6ec4580768cec4b72637b0decf125d228058c69b8",
+      "REQUIRE_sites": 0,
+      "REQUIRE_bindings": [],
+      "CHECK_sites": 0,
+      "CHECK_bindings": [],
+      "status": "OPEN",
+      "standard_assert_bindings": [],
+      "standard_assert_sites": 0
+    },
+    {
+      "path": "tests/unit/plan/target_profile_test_fixture.c",
+      "function": "xr_test_target_profile_build_with_scalar_clock",
+      "line": 177,
+      "end_line": 226,
+      "body_lf_sha256": "2739943e48a76ac76e344ad2873b94969070fadf12ed73bd1509fb87c64f548d",
+      "REQUIRE_sites": 0,
+      "REQUIRE_bindings": [],
+      "CHECK_sites": 0,
+      "CHECK_bindings": [],
+      "status": "OPEN",
+      "standard_assert_bindings": [],
+      "standard_assert_sites": 0
+    },
+    {
+      "path": "tests/unit/plan/target_profile_test_fixture.c",
+      "function": "xr_test_target_profile_fixture_init",
+      "line": 103,
+      "end_line": 161,
+      "body_lf_sha256": "be2a37303111036a45393752a7b5c389d370d2f67ef4d302cb3b4e5af55a4888",
+      "REQUIRE_sites": 0,
+      "REQUIRE_bindings": [],
+      "CHECK_sites": 0,
+      "CHECK_bindings": [],
+      "status": "OPEN",
+      "standard_assert_bindings": [],
+      "standard_assert_sites": 0
+    },
+    {
+      "path": "tests/unit/plan/target_profile_test_fixture.c",
+      "function": "xr_test_target_profile_is_scalar_provider",
+      "line": 24,
+      "end_line": 27,
+      "body_lf_sha256": "5d47ad567c57e0b4a3cfb74ccb1bf0cc4acafccc5b681901a6cd3e4ef346b906",
+      "REQUIRE_sites": 0,
+      "REQUIRE_bindings": [],
+      "CHECK_sites": 0,
+      "CHECK_bindings": [],
+      "status": "OPEN",
+      "standard_assert_bindings": [],
+      "standard_assert_sites": 0
+    }
+  ],
+  "specified_helper_REQUIRE_sites": 15,
+  "specified_helper_standard_assert_sites": 5,
+  "standard_assert_boundary": "Original assert.h safety conditions/key-buffer/capacity bounds retained as5 source sites, historical execution dependsNDEBUG. No current execution or new negativeinput claimed.",
+  "input_files": [
+    {
+      "path": "tests/unit/aot/test_xr_program_aot.c",
+      "physical_raw_sha256": "6fea38acff96d94b2bfb414e04aa308386f6284ed12ccf05613a790a23caa700",
+      "whole_file_lf_sha256": "e7ab9301b308c7db6bf48e348257e5288f38f22c1b38c827fb040719dbf2de0e",
+      "git_base_equal": true,
+      "status": "PRESERVE_ORIGINAL_READONLY"
+    },
+    {
+      "path": "tests/unit/program/xr_program_cleanup_graph_fixture.h",
+      "physical_raw_sha256": "384edda42b9c8b7873d3e474e6f28204fa7b663fa2fd38c68e3156747a32613d",
+      "whole_file_lf_sha256": "044a204db2b9a12b3b4dd5d0f6c26ab7f4b9fbff5463f94d6a66ab111aebc869",
+      "git_base_equal": true,
+      "status": "PRESERVE_ORIGINAL_READONLY"
+    },
+    {
+      "path": "tests/unit/program/xr_program_provider_fixture.h",
+      "physical_raw_sha256": "cfdda1521b56a67afa6cc7aefc5b1f5397d87d8f1ebe405dd2f41b24ec97c326",
+      "whole_file_lf_sha256": "9a7116c1fdcad29ea945a8e7b651e24490f35fd52f5f3aaab5367e755e8affea",
+      "git_base_equal": true,
+      "status": "PRESERVE_ORIGINAL_READONLY"
+    },
+    {
+      "path": "tests/unit/plan/target_profile_test_fixture.c",
+      "physical_raw_sha256": "a4bd280583c9b7367c8324451b411dd1bf43d32853b5b8443fa680dded7f1876",
+      "whole_file_lf_sha256": "4cda8a7654397a98661dd495628095965b2549999619a13c7bfa63614e5cd5a6",
+      "git_base_equal": true,
+      "status": "PRESERVE_ORIGINAL_READONLY"
+    },
+    {
+      "path": "tests/unit/runtime/test_runtime_abi_contract.c",
+      "physical_raw_sha256": "38ebe1b2facc5feb1e7b0c0573d66e846eb9974cc16d9aa4e92e3f550c7487c6",
+      "whole_file_lf_sha256": "fa3d630a996a22e1d515a11f73f75f515906cb5ce6afad00c6e2b183486fd858",
+      "git_base_equal": true,
+      "status": "PRESERVE_ORIGINAL_READONLY"
+    },
+    {
+      "path": "tests/unit/aot/xr_backend_emission_owner.h",
+      "physical_raw_sha256": "2b7aa3b05456861e4e539b43bac62263cc443a61850c3f81af0b43e01dad60bf",
+      "whole_file_lf_sha256": "5620237b54c2609c6db2663d8f91e6729b8c59e1a714ac4fcbd48426455d3e01",
+      "git_base_equal": true,
+      "status": "PRESERVE_ORIGINAL_READONLY"
+    },
+    {
+      "path": "tests/unit/plan/target_profile_test_fixture.h",
+      "physical_raw_sha256": "6abd9fd3829ccca28741b2e7b69f9d15e4b2bf53ca97e61af3e07f37ca5df38e",
+      "whole_file_lf_sha256": "8861b73552abd8e8c278482aa2e56bd3371be3a877f91475a43ef7ac22a9633f",
+      "git_base_equal": true,
+      "status": "PRESERVE_ORIGINAL_READONLY"
+    }
+  ],
+  "selected_helper_dependency_edges": {
+    "backend_emission_owner_open": [
+      "backend_emission_owner_close"
+    ],
+    "backend_emission_owner_close": [],
+    "test_cleanup_reason_graph_lowering_and_mutation": [
+      "build_cleanup_graph_program",
+      "build_ir",
+      "cleanup_graph_terminal",
+      "require_backend_operation_rejected",
+      "require_coroutine_backend_restored",
+      "test_cleanup_graph_exit_mutations",
+      "test_cleanup_graph_owner_edges",
+      "test_cleanup_graph_storage_mutations",
+      "test_cleanup_graph_suspension_rejected",
+      "xr_test_target_profile_build_with_scalar_clock"
+    ],
+    "test_cleanup_graph_suspension_rejected": [
+      "cleanup_graph_terminal",
+      "require_backend_operation_rejected",
+      "require_coroutine_backend_restored"
+    ],
+    "require_backend_operation_rejected": [],
+    "require_coroutine_backend_restored": [],
+    "cleanup_graph_terminal": [],
+    "test_cleanup_graph_owner_edges": [
+      "require_backend_operation_rejected",
+      "require_coroutine_backend_restored"
+    ],
+    "build_ir": [],
+    "test_cleanup_graph_storage_mutations": [
+      "cleanup_graph_terminal",
+      "require_backend_operation_rejected",
+      "require_coroutine_backend_restored"
+    ],
+    "xr_test_target_profile_build_with_scalar_clock": [
+      "compare_provider_ids",
+      "make_call_abi",
+      "make_call_slot",
+      "make_id",
+      "make_operation",
+      "retarget_call_abi",
+      "xr_program_fixture_scalar_contract",
+      "xr_test_target_profile_fixture_init"
+    ],
+    "retarget_call_abi": [],
+    "make_id": [],
+    "xr_program_fixture_scalar_contract": [
+      "xr_program_fixture_provider_contract"
+    ],
+    "xr_program_fixture_provider_contract": [],
+    "make_call_slot": [],
+    "make_operation": [
+      "make_id"
+    ],
+    "xr_test_target_profile_fixture_init": [
+      "make_header_facts",
+      "make_providers",
+      "make_runtime_abi",
+      "retarget_providers"
+    ],
+    "make_header_facts": [],
+    "make_providers": [
+      "make_call_abi",
+      "make_call_slot",
+      "make_id",
+      "make_operation"
+    ],
+    "make_call_abi": [],
+    "retarget_providers": [
+      "retarget_call_abi"
+    ],
+    "make_runtime_abi": [
+      "make_callback_abi",
+      "make_domain_record",
+      "make_dynamic_value_abi",
+      "make_evaluated_record",
+      "make_extent_record",
+      "make_group_record",
+      "make_layout_record",
+      "make_limits_record",
+      "make_object_header_abi"
+    ],
+    "make_group_record": [
+      "init_record"
+    ],
+    "init_record": [],
+    "make_object_header_abi": [
+      "make_field",
+      "make_id"
+    ],
+    "make_field": [],
+    "make_evaluated_record": [
+      "init_record"
+    ],
+    "make_layout_record": [
+      "init_record",
+      "make_bitmask_namespace"
+    ],
+    "make_bitmask_namespace": [
+      "make_id"
+    ],
+    "make_dynamic_value_abi": [
+      "make_field",
+      "make_id"
+    ],
+    "make_domain_record": [
+      "init_record",
+      "make_enum_namespace"
+    ],
+    "make_enum_namespace": [
+      "make_id"
+    ],
+    "make_callback_abi": [
+      "make_enum_namespace",
+      "make_id"
+    ],
+    "make_limits_record": [
+      "init_record"
+    ],
+    "make_extent_record": [
+      "init_record",
+      "make_enum_namespace",
+      "make_sentinel_namespace"
+    ],
+    "make_sentinel_namespace": [],
+    "compare_provider_ids": [],
+    "test_cleanup_graph_exit_mutations": [
+      "cleanup_graph_terminal",
+      "require_backend_operation_rejected",
+      "require_coroutine_backend_restored"
+    ],
+    "build_cleanup_graph_program": [
+      "xr_program_cleanup_graph_fixture_init",
+      "xr_program_cleanup_graph_fixture_write_input",
+      "xr_test_target_profile_is_scalar_provider"
+    ],
+    "xr_test_target_profile_is_scalar_provider": [
+      "make_id"
+    ],
+    "xr_program_cleanup_graph_fixture_write_input": [
+      "xr_program_cleanup_graph_key"
+    ],
+    "xr_program_cleanup_graph_key": [],
+    "xr_program_cleanup_graph_fixture_init": [
+      "xr_program_cleanup_graph_branch",
+      "xr_program_cleanup_graph_conditional",
+      "xr_program_cleanup_graph_emit",
+      "xr_program_cleanup_graph_entry",
+      "xr_program_cleanup_graph_key",
+      "xr_program_cleanup_graph_provider",
+      "xr_program_cleanup_graph_terminal",
+      "xr_program_fixture_scalar_contract"
+    ],
+    "xr_program_cleanup_graph_terminal": [
+      "xr_program_cleanup_graph_emit"
+    ],
+    "xr_program_cleanup_graph_emit": [],
+    "xr_program_cleanup_graph_conditional": [
+      "xr_program_cleanup_graph_constant",
+      "xr_program_cleanup_graph_edges",
+      "xr_program_cleanup_graph_emit"
+    ],
+    "xr_program_cleanup_graph_constant": [
+      "xr_program_cleanup_graph_emit",
+      "xr_program_cleanup_graph_key"
+    ],
+    "xr_program_cleanup_graph_edges": [],
+    "xr_program_cleanup_graph_provider": [
+      "xr_program_cleanup_graph_constant",
+      "xr_program_cleanup_graph_edges",
+      "xr_program_cleanup_graph_emit",
+      "xr_program_cleanup_graph_key"
+    ],
+    "xr_program_cleanup_graph_branch": [
+      "xr_program_cleanup_graph_edges",
+      "xr_program_cleanup_graph_emit"
+    ],
+    "xr_program_cleanup_graph_entry": [
+      "xr_program_cleanup_graph_constant",
+      "xr_program_cleanup_graph_edges",
+      "xr_program_cleanup_graph_emit",
+      "xr_program_cleanup_graph_key"
+    ]
+  },
+  "callback_edges": [
+    "scalarprofile qsort\u2192compare_provider_ids",
+    "shared main atexit\u2192emissionowner close"
+  ],
+  "macro_bindings": [
+    {
+      "path": "tests/unit/aot/test_xr_program_aot.c",
+      "name": "REQUIRE",
+      "exact_original_body": "#define REQUIRE(condition)                                                                         \\\n    do {                                                                                           \\\n        if (!(condition)) {                                                                        \\\n            fprintf(stderr, \"requirement failed at %s:%d: %s\\n\", __FILE__, __LINE__, #condition);  \\\n            abort();                                                                               \\\n        }                                                                                          \\\n    } while (0)",
+      "lf_sha256": "5721bd5a57cfbb0474be085195895bcd0ca12fa41481b6fde47dcf66c2436ca4",
+      "status": "PRESERVE_ORIGINAL_READONLY"
+    },
+    {
+      "path": "tests/unit/runtime/test_runtime_abi_contract.c",
+      "name": "SET_RECORD_FIELD",
+      "exact_original_body": "#define SET_RECORD_FIELD(record, index, struct_type, member, member_type, field_role,              \\\n                         field_encoding)                                                           \\\n    (record).fields[index] = make_field(field_role, (uint16_t) offsetof(struct_type, member),      \\\n                                        (uint16_t) sizeof(((struct_type *) 0)->member),            \\\n                                        (uint16_t) _Alignof(member_type), field_encoding)",
+      "lf_sha256": "5ecaf173f32030d69b29e2d692116d795110b91a278f3e7c68a70c763f9875ce",
+      "status": "PRESERVE_ORIGINAL_READONLY"
+    }
+  ],
+  "full_original_cleanup_reason_graph": {
+    "shape_counts": {
+      "types": 1,
+      "constants": 5,
+      "modules": 1,
+      "functions": 1,
+      "blocks": 10,
+      "instructions": 32,
+      "coroutine_states": 2,
+      "coroutine_safepoints": 1,
+      "provider_requirements": 1,
+      "provider_operations": 1
+    },
+    "type": "Original62 AFFINE/COPY_EXPLICIT aggregate oneI64 field",
+    "constants": [
+      "I64 11",
+      "BOOL false",
+      "BOOL true",
+      "I64 71",
+      "I64 72"
+    ],
+    "blocks": [
+      {
+        "index": 0,
+        "role": "ENTRY",
+        "operations": [
+          "CONST11 -> seed",
+          "AGGREGATE_CONSTRUCT seed -> OWN affine62 owner",
+          "COROUTINE_YIELD safepoint0 [same actualowner normal,same actualowner cancel] -> NORMAL,CANCEL_ADAPTER"
+        ],
+        "count": 3
+      },
+      {
+        "index": 1,
+        "role": "NORMAL",
+        "operations": [
+          "BLOCK_ARGUMENT actualOWN affineowner",
+          "CONST71 -> token",
+          "PROVIDER_CALL[actualtoken,actualowner on refusal edge] -> I64 unused with exactone TRAP_ADAPTER successor",
+          "OWNER_DROP actualnormalowner",
+          "RETURN VOID"
+        ],
+        "count": 5
+      },
+      {
+        "index": 2,
+        "role": "CANCEL_ADAPTER",
+        "operations": [
+          "BLOCK_ARGUMENT actualOWN affineowner",
+          "BRANCH[actualowner] -> CANCEL_BRANCH"
+        ],
+        "count": 2
+      },
+      {
+        "index": 3,
+        "role": "CANCEL_BRANCH",
+        "operations": [
+          "BLOCK_ARGUMENT actualOWN affineowner",
+          "CONSTtrue",
+          "CONDITIONAL[condition,owner,owner] -> CANCEL_BODY,CANCEL_PUBLISH"
+        ],
+        "count": 3
+      },
+      {
+        "index": 4,
+        "role": "CANCEL_BODY",
+        "operations": [
+          "BLOCK_ARGUMENT actualOWN affineowner",
+          "CONST72 -> token",
+          "PROVIDER_CALL[actualtoken,actualowner on refusal edge] -> I64 unused with exactone TRAP_ADAPTER successor",
+          "CONSTfalse",
+          "CONDITIONAL[condition,owner,owner] -> CANCEL_BODY,CANCEL_PUBLISH (actual backedge retained)"
+        ],
+        "count": 5
+      },
+      {
+        "index": 5,
+        "role": "CANCEL_PUBLISH",
+        "operations": [
+          "BLOCK_ARGUMENT actualOWN affineowner",
+          "OWNER_DROP actualowner",
+          "CANCEL_PUBLISH"
+        ],
+        "count": 3
+      },
+      {
+        "index": 6,
+        "role": "TRAP_ADAPTER",
+        "operations": [
+          "BLOCK_ARGUMENT actualOWN affineowner",
+          "BRANCH[actualowner] -> TRAP_BRANCH"
+        ],
+        "count": 2
+      },
+      {
+        "index": 7,
+        "role": "TRAP_BRANCH",
+        "operations": [
+          "BLOCK_ARGUMENT actualOWN affineowner",
+          "CONSTtrue",
+          "CONDITIONAL[condition,owner,owner] -> TRAP_FIRST,TRAP_SECOND"
+        ],
+        "count": 3
+      },
+      {
+        "index": 8,
+        "role": "TRAP_FIRST",
+        "operations": [
+          "BLOCK_ARGUMENT actualOWN affineowner",
+          "OWNER_DROP actualowner",
+          "TRAP actual7"
+        ],
+        "count": 3
+      },
+      {
+        "index": 9,
+        "role": "TRAP_SECOND",
+        "operations": [
+          "BLOCK_ARGUMENT actualOWN affineowner",
+          "OWNER_DROP actualowner",
+          "TRAP actual7"
+        ],
+        "count": 3
+      }
+    ],
+    "function": "Actual ENTRY/noargs/VOID, CALL|TRAP|CANCEL|SUSPEND|PROVIDER_CALL, coroutine suspension andproviderbinding capabilities",
+    "states": [
+      "state0 actualENTRY block",
+      "state1 actualNORMAL block"
+    ],
+    "safepoint": "point0 resumesstate1,live actualconstructed owner,count1",
+    "fingerprint": "cleanup-graph:profile:binary index0; CORE_BASE",
+    "enum": {
+      "path": "tests/unit/program/xr_program_cleanup_graph_fixture.h",
+      "exact_original_source": "enum {\n    XR_CLEANUP_GRAPH_ENTRY = 0,\n    XR_CLEANUP_GRAPH_NORMAL,\n    XR_CLEANUP_GRAPH_CANCEL_ADAPTER,\n    XR_CLEANUP_GRAPH_CANCEL_BRANCH,\n    XR_CLEANUP_GRAPH_CANCEL_BODY,\n    XR_CLEANUP_GRAPH_CANCEL_PUBLISH,\n    XR_CLEANUP_GRAPH_TRAP_ADAPTER,\n    XR_CLEANUP_GRAPH_TRAP_BRANCH,\n    XR_CLEANUP_GRAPH_TRAP_FIRST,\n    XR_CLEANUP_GRAPH_TRAP_SECOND,\n    XR_CLEANUP_GRAPH_BLOCK_COUNT,\n    XR_CLEANUP_GRAPH_AFFINE_TYPE = 62,\n};",
+      "enum_lf_sha256": "28ff7de13ac54124430210d976b24e3f7a6f0fe501e1ca9a37ac774d04219222",
+      "status": "HISTORICAL_GRAPH_ROLES_NO_CURRENT_PRIVATE_ID_FREEZE"
+    },
+    "capacity_boundary": "fixture functions[2] is storage capacity; admitted module.function_count1 only. All10 blocks included, conditions bound actual execution but verifier must inspect opposite branch and real same-reason backedge.",
+    "logical_provider": "Full scalar(false) READS_CLOCK/I64 IN trivial\u2192I64 trivial/UNIT error/refusalTRAP, actual operation0 requirement. Initial stable fixture.cleanup-graph.provider/poll keys replaced by actual unique profile scalar contract202/operation21 throughout ALL provider call instructions before writing.",
+    "builder": "fixture init REQUIRE, unique actual profile scalar provider/nonNULL+opcount1 REQUIREs, exact writeOK/admitOK. WriterCorebuild/write-ifOK/Corefree before admit; artifactfree after admit and beforeIR. No explicit Programnonnull REQUIRE.",
+    "original_spec_comment": {
+      "initial": "SUSPENDED/no provider events",
+      "resume": "Actual token trace[71],RETURN VOID if provider succeeds",
+      "cancel": "Actual token trace[72],CANCELLED if provider succeeds",
+      "refusal": "Refusal at actual71 or72 retains same trace then TRAP7",
+      "status": "ORIGINAL_SPEC_EXPECTATIONS_ONLY_NOT_EXECUTED_BY_THIS_AOT_CENSUS"
+    },
+    "status": "OPEN"
+  },
+  "cases": [
+    {
+      "function": "test_cleanup_graph_exit_mutations",
+      "original_REQUIRE_sites": 0,
+      "original_loop_sites": 1,
+      "actual_calls": 3,
+      "expanded_negative_inputs": 14,
+      "exit_mutations": [
+        {
+          "target": "actual CANCEL_PUBLISH terminal",
+          "change": "saved terminal operation\u2192RETURN",
+          "immediate": "NONE (original helper stillwrites unionu32)",
+          "operand": "actual blockargumentID0, count1 for ERROR/PANIC; otherwise original saved operand count retained",
+          "expected_operation": "RETURN",
+          "required": "freshdigest +verifyfalse +exactINVARIANT_REJECTED +exactexpectedoperation",
+          "restore": "saved wholeterminal then verifytrue+bindingverifytrue",
+          "status": "OPEN"
+        },
+        {
+          "target": "actual CANCEL_PUBLISH terminal",
+          "change": "saved terminal operation\u2192ERROR_PUBLISH",
+          "immediate": "NONE (original helper stillwrites unionu32)",
+          "operand": "actual blockargumentID0, count1 for ERROR/PANIC; otherwise original saved operand count retained",
+          "expected_operation": "ERROR_PUBLISH",
+          "required": "freshdigest +verifyfalse +exactINVARIANT_REJECTED +exactexpectedoperation",
+          "restore": "saved wholeterminal then verifytrue+bindingverifytrue",
+          "status": "OPEN"
+        },
+        {
+          "target": "actual CANCEL_PUBLISH terminal",
+          "change": "saved terminal operation\u2192PANIC_PUBLISH",
+          "immediate": "NONE (original helper stillwrites unionu32)",
+          "operand": "actual blockargumentID0, count1 for ERROR/PANIC; otherwise original saved operand count retained",
+          "expected_operation": "PANIC_PUBLISH",
+          "required": "freshdigest +verifyfalse +exactINVARIANT_REJECTED +exactexpectedoperation",
+          "restore": "saved wholeterminal then verifytrue+bindingverifytrue",
+          "status": "OPEN"
+        },
+        {
+          "target": "actual CANCEL_PUBLISH terminal",
+          "change": "saved terminal operation\u2192TRAP",
+          "immediate": "U32 7",
+          "operand": "actual blockargumentID0, count1 for ERROR/PANIC; otherwise original saved operand count retained",
+          "expected_operation": "TRAP",
+          "required": "freshdigest +verifyfalse +exactINVARIANT_REJECTED +exactexpectedoperation",
+          "restore": "saved wholeterminal then verifytrue+bindingverifytrue",
+          "status": "OPEN"
+        },
+        {
+          "target": "actual TRAP_FIRST terminal",
+          "change": "saved terminal operation\u2192RETURN",
+          "immediate": "NONE (original helper stillwrites unionu32)",
+          "operand": "actual blockargumentID0, count1 for ERROR/PANIC; otherwise original saved operand count retained",
+          "expected_operation": "RETURN",
+          "required": "freshdigest +verifyfalse +exactINVARIANT_REJECTED +exactexpectedoperation",
+          "restore": "saved wholeterminal then verifytrue+bindingverifytrue",
+          "status": "OPEN"
+        },
+        {
+          "target": "actual TRAP_FIRST terminal",
+          "change": "saved terminal operation\u2192ERROR_PUBLISH",
+          "immediate": "NONE (original helper stillwrites unionu32)",
+          "operand": "actual blockargumentID0, count1 for ERROR/PANIC; otherwise original saved operand count retained",
+          "expected_operation": "ERROR_PUBLISH",
+          "required": "freshdigest +verifyfalse +exactINVARIANT_REJECTED +exactexpectedoperation",
+          "restore": "saved wholeterminal then verifytrue+bindingverifytrue",
+          "status": "OPEN"
+        },
+        {
+          "target": "actual TRAP_FIRST terminal",
+          "change": "saved terminal operation\u2192PANIC_PUBLISH",
+          "immediate": "NONE (original helper stillwrites unionu32)",
+          "operand": "actual blockargumentID0, count1 for ERROR/PANIC; otherwise original saved operand count retained",
+          "expected_operation": "PANIC_PUBLISH",
+          "required": "freshdigest +verifyfalse +exactINVARIANT_REJECTED +exactexpectedoperation",
+          "restore": "saved wholeterminal then verifytrue+bindingverifytrue",
+          "status": "OPEN"
+        },
+        {
+          "target": "actual TRAP_FIRST terminal",
+          "change": "saved terminal operation\u2192TRAP",
+          "immediate": "U32 4",
+          "operand": "actual blockargumentID0, count1 for ERROR/PANIC; otherwise original saved operand count retained",
+          "expected_operation": "TRAP",
+          "required": "freshdigest +verifyfalse +exactINVARIANT_REJECTED +exactexpectedoperation",
+          "restore": "saved wholeterminal then verifytrue+bindingverifytrue",
+          "status": "OPEN"
+        },
+        {
+          "target": "actual TRAP_FIRST terminal",
+          "change": "saved terminal operation\u2192CANCEL_PUBLISH",
+          "immediate": "NONE (original helper stillwrites unionu32)",
+          "operand": "actual blockargumentID0, count1 for ERROR/PANIC; otherwise original saved operand count retained",
+          "expected_operation": "CANCEL_PUBLISH",
+          "required": "freshdigest +verifyfalse +exactINVARIANT_REJECTED +exactexpectedoperation",
+          "restore": "saved wholeterminal then verifytrue+bindingverifytrue",
+          "status": "OPEN"
+        },
+        {
+          "target": "actual TRAP_SECOND terminal",
+          "change": "saved terminal operation\u2192RETURN",
+          "immediate": "NONE (original helper stillwrites unionu32)",
+          "operand": "actual blockargumentID0, count1 for ERROR/PANIC; otherwise original saved operand count retained",
+          "expected_operation": "RETURN",
+          "required": "freshdigest +verifyfalse +exactINVARIANT_REJECTED +exactexpectedoperation",
+          "restore": "saved wholeterminal then verifytrue+bindingverifytrue",
+          "status": "OPEN"
+        },
+        {
+          "target": "actual TRAP_SECOND terminal",
+          "change": "saved terminal operation\u2192ERROR_PUBLISH",
+          "immediate": "NONE (original helper stillwrites unionu32)",
+          "operand": "actual blockargumentID0, count1 for ERROR/PANIC; otherwise original saved operand count retained",
+          "expected_operation": "ERROR_PUBLISH",
+          "required": "freshdigest +verifyfalse +exactINVARIANT_REJECTED +exactexpectedoperation",
+          "restore": "saved wholeterminal then verifytrue+bindingverifytrue",
+          "status": "OPEN"
+        },
+        {
+          "target": "actual TRAP_SECOND terminal",
+          "change": "saved terminal operation\u2192PANIC_PUBLISH",
+          "immediate": "NONE (original helper stillwrites unionu32)",
+          "operand": "actual blockargumentID0, count1 for ERROR/PANIC; otherwise original saved operand count retained",
+          "expected_operation": "PANIC_PUBLISH",
+          "required": "freshdigest +verifyfalse +exactINVARIANT_REJECTED +exactexpectedoperation",
+          "restore": "saved wholeterminal then verifytrue+bindingverifytrue",
+          "status": "OPEN"
+        },
+        {
+          "target": "actual TRAP_SECOND terminal",
+          "change": "saved terminal operation\u2192TRAP",
+          "immediate": "U32 4",
+          "operand": "actual blockargumentID0, count1 for ERROR/PANIC; otherwise original saved operand count retained",
+          "expected_operation": "TRAP",
+          "required": "freshdigest +verifyfalse +exactINVARIANT_REJECTED +exactexpectedoperation",
+          "restore": "saved wholeterminal then verifytrue+bindingverifytrue",
+          "status": "OPEN"
+        },
+        {
+          "target": "actual TRAP_SECOND terminal",
+          "change": "saved terminal operation\u2192CANCEL_PUBLISH",
+          "immediate": "NONE (original helper stillwrites unionu32)",
+          "operand": "actual blockargumentID0, count1 for ERROR/PANIC; otherwise original saved operand count retained",
+          "expected_operation": "CANCEL_PUBLISH",
+          "required": "freshdigest +verifyfalse +exactINVARIANT_REJECTED +exactexpectedoperation",
+          "restore": "saved wholeterminal then verifytrue+bindingverifytrue",
+          "status": "OPEN"
+        }
+      ],
+      "status": "OPEN"
+    },
+    {
+      "function": "test_cleanup_graph_storage_mutations",
+      "original_REQUIRE_sites": 6,
+      "original_loop_sites": 0,
+      "storage_mutations": {
+        "actual_calls": 1,
+        "target": "actual CANCEL_ADAPTER block/branch",
+        "direct_unhashable": [
+          {
+            "change": "block.instructionsNULL with realcount",
+            "expected": "verifyfalse+INVARIANT_REJECTED"
+          },
+          {
+            "change": "branch.successorsNULL with actualcount",
+            "expected": "verifyfalse+INVARIANT_REJECTED"
+          },
+          {
+            "change": "branch.operandsNULL with actualcount",
+            "expected": "verifyfalse+INVARIANT_REJECTED"
+          }
+        ],
+        "unhashable_boundary": "No loweringdigest refresh; invalid storage must reject before following/hashing graph, no exactoperation assertion for these3.",
+        "semantic": [
+          {
+            "change": "actual successor0=actualfunction.block_count (outside bounds), count staysoriginal1",
+            "expected_operation": "BRANCH"
+          },
+          {
+            "change": "targets[0] restoredactual successor0, branch count2 with [sameactualtarget,sameactualtarget]",
+            "expected_operation": "BRANCH"
+          }
+        ],
+        "semantic_boundary": "Both semantic faults freshdigest/exactINVARIANT+BRANCH; original helper restores wholebranch between storage phases then fullverify/bindingverify only at end.",
+        "negative_inputs": 5,
+        "restore_helper_calls": 1,
+        "status": "OPEN"
+      },
+      "status": "OPEN"
+    },
+    {
+      "function": "test_cleanup_graph_suspension_rejected",
+      "original_REQUIRE_sites": 1,
+      "original_loop_sites": 0,
+      "suspension_mutations": {
+        "actual_calls": 2,
+        "targets": [
+          "actual CANCEL_BODY",
+          "actual TRAP_BRANCH (trap adapter successor)"
+        ],
+        "precondition": "Actual state_count2/safepoint_count1 REQUIRE",
+        "change": "Replace actualterminal with COROUTINE_YIELD, result VOID/no resultID, operands[sameactualowner,sameactualowner] on distinct resume/cancel edges, successors[currentactualblock,actualCANCEL_PUBLISH], immediateU32 safepoint1; actualcopied states appendstate2 currentblock, actualpoints appendresume2/liveactualowner1; counts3/2.",
+        "required": "freshdigest +verifyfalse+exactINVARIANT+operation COROUTINE_YIELD",
+        "restore": "wholeactualterminal, saved statepointer/count2, savedpointpointer/count1, verifytrue+bindingverifytrue",
+        "negative_inputs": 2,
+        "restore_helper_calls": 2,
+        "status": "OPEN"
+      },
+      "status": "OPEN"
+    },
+    {
+      "function": "test_cleanup_graph_owner_edges",
+      "original_REQUIRE_sites": 4,
+      "original_loop_sites": 1,
+      "owner_edge_mutations": {
+        "actual_calls": 1,
+        "target": "actual CANCEL_ADAPTER twoinstruction block REQUIRE; originalOWN argument0",
+        "storage": "Save fullfunction/adapter; allocate3 realfixture metadata arrays oldvalue_count+2, REQUIREallnonnull; copy actual value types/categories/ownership rows and replicate originaltype for copied/newargument indices.",
+        "negatives": [
+          {
+            "change": "OWNER_COPY actualoriginal\u2192newcopied OWN; original branch still passesoriginal only",
+            "meaning": "copied liveowner omitted",
+            "expected_operation": "BRANCH"
+          },
+          {
+            "change": "branchpassescopied instead oforiginal",
+            "meaning": "same type substitutes but abandons original liveowner",
+            "expected_operation": "BRANCH"
+          },
+          {
+            "change": "temporarily extendactualtarget to2 OWN args, addBLOCK_ARGUMENT+DROP secondarg, metadata/counts; single edge passes[original,original] while copied stilllive",
+            "meaning": "duplicate actualowner on oneedge loses secondowner",
+            "expected_operation": "BRANCH"
+          },
+          {
+            "change": "restore actualtarget; addDROP copied then branchpasses copied",
+            "meaning": "edgeuses alreadyconsumed copiedowner",
+            "expected_operation": "BRANCH"
+          }
+        ],
+        "required": "All4 freshdigest +verifyfalse+exactINVARIANT+BRANCH",
+        "positive": "Change insertedDROP to actualoriginal, leave actualcopied on actualedge, freshdigest and REQUIREverifytrue; freshowner may legally replace old identity AFTER old dropped.",
+        "positive_binding_boundary": "Original modifiedphysicalfixture positive calls verify only; no secondlogicalProgram graph or bindingverify of changed fixture asserted.",
+        "cleanup": "Restore savedoriginaldigest, free3 actual allocatedmetadata arrays, restorefulladapter/fullfunction, finalverifytrue+bindingverifytrue of originalgraph.",
+        "negative_inputs": 4,
+        "positive_verify_controls": 1,
+        "restore_helper_calls": 1,
+        "status": "OPEN"
+      },
+      "status": "OPEN"
+    },
+    {
+      "function": "test_cleanup_reason_graph_lowering_and_mutation",
+      "original_REQUIRE_sites": 12,
+      "original_loop_sites": 1,
+      "actual_inputs": 1,
+      "profile": "scalar_clock(false,HOSTED,SIGNED_INTEGER) complete LP64/3providers sortedactualcontract202/op21",
+      "IR": "PORTABLE/full4 build_ir assertions",
+      "actual_graph_search": "Allactual owner/yield/normal/cancel/trap roles derived from currentIR ENTRY andactualsuccessor arrays; uniqueactualprovider inactualcancelbody, exactbranch/backedge/count checks,10blocks",
+      "cached_flag_control": "Save actualir.verified, setfalse, full verify+bindingverify via restorehelper then restore oldflag; cached true alone is not proof.",
+      "reason_mutations": [
+        {
+          "change": "actualtrap adapter branch successor\u2192actualcanceladapter",
+          "expected_operation": "BRANCH"
+        },
+        {
+          "change": "actualcancel provider refusal successor\u2192actualcanceladapter",
+          "expected_operation": "PROVIDER_CALL"
+        },
+        {
+          "change": "actualnormal penultimateOWNER_DROP\u2192BRANCH tocanceladapter, temporarily decreaseinstructioncount (removeoriginalRETURN)",
+          "expected_operation": "BRANCH"
+        },
+        {
+          "change": "actualtrap conditional secondsuccessor\u2192samefirstsuccessor, orphan secondactualtrap alternative",
+          "expected_operation": "NONE0_EXACT_ORIGINAL_DIAGNOSTIC_EXPECTATION"
+        }
+      ],
+      "all_calls": "exit(cancel),exit(trapfirst),exit(trapsecond),suspension(cancelbody),suspension(trapbranch),4 directreason negatives,storage(canceladapter),owner_edges(canceladapter)",
+      "emission_calls": 0,
+      "runtime_calls": 0,
+      "native_compile_calls": 0,
+      "cleanup": [
+        "actualIR",
+        "actualProgram",
+        "actualprofile"
+      ],
+      "status": "OPEN"
+    }
+  ],
+  "semantic_rejection_helper": {
+    "function": "require_backend_operation_rejected",
+    "full_REQUIRE_sites": 3,
+    "action": "Save actual original loweringdigest, recompute on changedvalidstorage graph, verify with zeroinitializeddiag; require false+INVARIANT_REJECTED+exactsuppliedoperation, restore saveddigest after assertions.",
+    "boundary": "No arbitraryfailure green; orphancase explicitly expects diagnostic operation0, others actualsemanticoperation."
+  },
+  "restored_helper": {
+    "function": "require_coroutine_backend_restored",
+    "full_REQUIRE_sites": 2,
+    "action": "verifytrue ANDbindingverifytrue actualrestored IR",
+    "expanded_calls": 23,
+    "derivation": "14 exits+2 suspensions+4 directreason+1storagefinal+1ownerfinal+1verifiedflagfalse probe",
+    "status": "OPEN"
+  },
+  "shared_dependencies": [
+    {
+      "path": "tests/unit/program/xr_program_cleanup_graph_fixture.h",
+      "actual_direct_include_users": [
+        "tests/unit/aot/test_xr_program_aot.c",
+        "tests/unit/aot/xr_program_coroutine_graph_fixture_writer.c",
+        "tests/unit/program/test_xr_program_verify.c",
+        "tests/unit/vm/test_xr_program_vm.c"
+      ],
+      "status": "PRESERVE_SHARED_READONLY_NOT_DELETABLE",
+      "note": "Anchored real includes only; full transitive/deletion responsibility remains OPEN."
+    },
+    {
+      "path": "tests/unit/program/xr_program_provider_fixture.h",
+      "actual_direct_include_users": [
+        "tests/unit/aot/test_xr_program_aot.c",
+        "tests/unit/execution/test_xr_execution.c",
+        "tests/unit/execution/xr_typed_provider_fixture.h",
+        "tests/unit/program/test_xr_program.c",
+        "tests/unit/program/xr_program_cleanup_graph_fixture.h",
+        "tests/unit/program/xr_program_coroutine_trap_fixture.h",
+        "tests/unit/program/xr_program_output_fixture.h",
+        "tests/unit/program/xr_program_pipe_fixture.h",
+        "tests/unit/program/xr_program_trap_fixture.h",
+        "tests/unit/runtime/test_runtime_abi_contract.c",
+        "tests/unit/vm/test_xr_program_vm.c"
+      ],
+      "status": "PRESERVE_SHARED_READONLY_NOT_DELETABLE",
+      "note": "Anchored real includes only; full transitive/deletion responsibility remains OPEN."
+    },
+    {
+      "path": "tests/unit/aot/xr_backend_emission_owner.h",
+      "actual_direct_include_users": [
+        "tests/unit/aot/test_xr_program_aot.c",
+        "tests/unit/aot/xr_program_allocation_fixture_writer.c",
+        "tests/unit/aot/xr_program_coroutine_graph_fixture_writer.c",
+        "tests/unit/aot/xr_typed_provider_native_writer.c",
+        "tests/unit/ir/test_xi_pipeline.c",
+        "tests/unit/ir/test_xr_program_imported_callable.c",
+        "tests/unit/program/test_xr_program_source_build.c"
+      ],
+      "status": "PRESERVE_SHARED_READONLY_NOT_DELETABLE",
+      "note": "Anchored real includes only; full transitive/deletion responsibility remains OPEN."
+    }
+  ],
+  "emission_resource_owner": {
+    "path": "tests/unit/aot/xr_backend_emission_owner.h",
+    "full_helpers": [
+      "backend_emission_owner_open",
+      "backend_emission_owner_close"
+    ],
+    "callback": "atexit(backend_emission_owner_close)",
+    "original_main_limits_literals": [
+      8589934592,
+      16777216,
+      34359738368
+    ],
+    "scope": "One complete AOT main finite sharedowner opens beforedispatch; this driver itself0Cemit. Actualsavedinitiallivebytes closeorabort/releaseNULL and allfailure cleanup retained; notstableobject proof.",
+    "status": "PRESERVE_SHARED_READONLY_OPEN"
+  },
+  "assertion_counts": {
+    "census_functions": 5,
+    "outer_REQUIRE_sites": 23,
+    "original_loop_sites": 3,
+    "full_transitive_helpers": 47,
+    "helper_REQUIRE_sites": 15,
+    "helper_standard_assert_sites": 5,
+    "fresh_original_Programs": 1,
+    "fresh_original_profiles": 1,
+    "original_IR_builds": 1,
+    "original_C_emits": 0,
+    "original_C_probes": 0,
+    "original_backend_negative_inputs": 29,
+    "refreshed_digest_semantic_negatives": 26,
+    "unhashable_storage_negatives": 3,
+    "expanded_full_restore_helper_calls": 23,
+    "original_modified_owner_positive_verify": 1,
+    "original_fixture_metadata_allocations": 3,
+    "original_writer_negative_inputs": 0,
+    "original_provider_runtime_calls": 0,
+    "original_VM_calls": 0,
+    "original_native_compile_calls": 0,
+    "current_product_executions": 0
+  },
+  "Root_contract_or_representation_review": {
+    "status": "OPEN",
+    "graph": "Keep complete original10block32op actual owner graph, same-reason cleanup cycle, normal/cancel/refusalreason separation, both actualTRAP7 alternatives, states2/point1/liveowner, token71/72/fullprovider logicalsignature. Constantbranch does not waive oppositeedge validation.",
+    "provider": "Original fixture stablekeys actuallyrebound to full scalar202/op21 profile for ALL calls; preserve approved currentpublic actualrequirement/input/refusal effects, no fakebuiltinclock/oldID alias.",
+    "semantic_faults": "26 actualsemantic changes use freshlycomputed integritydigest and exactINVARIANT+expectedoperation, including explicitoperation0 orphancase; currentpublicfaultinterface must reach the same reason/owner/state guards. Do not substitute stale digest or anyrejectgreen.",
+    "storage": "3 NULLmetadata faults must reject before graph/hash traversal; keep storage errors distinct from semantic refreshed-digest cases, no currentphysicalfault API shortcut restoring oldlayout.",
+    "owner": "ActualOWN identities matter: copied owner remainslive until accounted, no same-type substitution/drop-use/oneedge duplicate; keep legitimate freshowner replacement after oldowner drop positiveverify. Original changedphysical fixture not independentlyrebound; only restoredoriginalbindingverify is asserted.",
+    "runtime": "Original driver0emit/Instance/provider/VM/nativecompile/runtime. Original fixturecomment initialSUSPENDED/noevents, resume[71]RETURNVOID, cancel[72]CANCELLED, refusal[71or72]TRAP7 remain independent current runtime obligations, not static evidence.",
+    "safety": "Actualfixture3 metadataarray allocations/frees, fullProgram/IR/profile cleanup and key/storage assertbounds preserved; currentphysicalrelease/FI/axes/ownership/ASan andstableconstruct/finalize/reclaim/2Instances allOPEN.",
+    "baseline": "Only25f4 approved consumer; nextformalproducer/old-to-new representation/faultinterfaces/freshheavy window pending.",
+    "deletion": "Sharedfixture/logicalprovider/profile/runtime/emissionowner readonly; no SourceDelete/Main qualification or deletioncandidate."
+  },
+  "full_FI": "NOT_RUN",
+  "axes": "NOT_RUN",
+  "full_safety": "NOT_RUN",
+  "SourceDelete": "NOT_RUN",
+  "Main": "NOT_RUN",
+  "handoff": {
+    "Root_thread": "01a11f74-a297-7b11-8441-835bde6a3d5f",
+    "formal_acceptance": "PENDING"
+  },
+  "boundaries": [
+    "Complete5 originalcensus23 REQUIRE/47fullhelpers15 REQUIRE+5 standardassert sites, allOPEN/retired0.",
+    "Original1 fullProgram/profile/IR,29 actualbackendnegatives+legalownerpositive,0emit/runtime/nativecompile/currentexecution.",
+    "Exactnewmap+trace owned, allproduct/sharedsource/docs and12 historical generated modifications preserved."
+  ]
+}
