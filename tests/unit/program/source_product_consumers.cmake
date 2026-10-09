@@ -411,3 +411,5 @@ include("${CMAKE_CURRENT_LIST_DIR}/../xir/product_consumers/source_product_calla
 include("${CMAKE_CURRENT_LIST_DIR}/../xir/product_consumers/source_product_cross_module_coroutines_owned.cmake")
 
 include("${CMAKE_CURRENT_LIST_DIR}/../xir/product_consumers/source_product_multi_safepoint_owned.cmake")
+
+include("${CMAKE_CURRENT_LIST_DIR}/../xir/product_consumers/source_product_parameter_coroutine_owned.cmake")
