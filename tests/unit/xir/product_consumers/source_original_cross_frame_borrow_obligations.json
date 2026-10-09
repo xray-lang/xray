@@ -1,0 +1,646 @@
+{
+  "schema": 1,
+  "family": "original_cross_frame_borrowed_roots",
+  "legacy_base_commit": "01e6d38401b0f5c8684b64c35a99ac651024c0c1",
+  "status": "OPEN",
+  "retired": 0,
+  "replacement_gates": [],
+  "result": "STATIC_ORIGINAL_CROSS_FRAME_BORROW_MAP_ONLY",
+  "product_execution": "NOT_RUN_BY_THIS_MAP",
+  "producer": "25f4016d6f089169757a90ae11ba537002374711",
+  "identity": "Checked25/semantic67/Value22/Call28/Program29",
+  "producer_scope": "Existing authorized producer only. This static map adopts no Root private Cell tree, new semantic identity or heavy/FI window.",
+  "original_TESTs": [
+    {
+      "legacy": {
+        "name": "source_owner_keeps_related_ref_parameter_places_stable_across_child_suspension",
+        "legacy_path": "tests/unit/program/test_xr_program_source_build.c",
+        "legacy_line": 7734,
+        "body_lf_sha256": "47182a5449aa86c92b9cde55909cceb9fd857cd1a15af2a4c23f93b9f56100ca",
+        "assertion_sites": 105,
+        "loop_sites": 12,
+        "status": "OPEN",
+        "replacement_gates": [],
+        "note": "Function census preserves its whole body; sites do not count executed loop iterations.",
+        "original_fixture": {
+          "id": "ref_parameter_coroutine",
+          "expected_exit": 230,
+          "labels": [
+            "ref",
+            "coroutine",
+            "cancel",
+            "provider",
+            "clock",
+            "pipe",
+            "refusal",
+            "cleanup",
+            "trap"
+          ],
+          "backends": {
+            "vm": "execute",
+            "aot": "execute"
+          }
+        },
+        "static_input_literals": {
+          "source": {
+            "bytes": 566,
+            "sha256": "319f23f590edb8779c9094f2bd1e7695626d1549fa12a74481d116dfe30bc767"
+          }
+        }
+      },
+      "original_source": {
+        "text": "import sys\nimport time\nfn bump(value: ref i64, left: ref i64, right: ref i64) {\n  value = value + 4\n  left = left + 5\n  right = right + 6\n  Coro.yield()\n  value = value + 1\n  left = left + 2\n  right = right + 3\n  const stamp = time.now()\n  value = value + stamp - stamp\n}\nfn answer() -> i64 {\n  var value = 10\n  var live = sys.Pipe(2147483642, 2147483643)\n  defer { live.closeRead(); live.closeWrite() }\n  const snapshot = live._readHandle\n  bump(ref value, ref live._readHandle, ref live._writeHandle)\n  return value + live.readEnd() + live.writeEnd() + snapshot\n}\n",
+        "bytes": 566,
+        "sha256": "319f23f590edb8779c9094f2bd1e7695626d1549fa12a74481d116dfe30bc767",
+        "adapter_bytes": 0,
+        "construction": "Whole original source[]; independent AST and inventory decoding; no adapter or altered semantics."
+      },
+      "responsibility_mapping": [
+        {
+          "responsibility": "Full exact source/profile and two deterministic products.",
+          "status": "OPEN",
+          "target_consumer": "NOT_IMPLEMENTED_PENDING_ROOT_QUALIFIED_PRODUCER",
+          "original": {
+            "path": "tests/unit/program/test_xr_program_source_build.c",
+            "lines": [
+              7756,
+              7778
+            ]
+          },
+          "original_assertion_sites": 3,
+          "gap": "Source success and complete source bytes are required. The old guard after build assertions must not become metadata-only or refusal-as-PASS in the target consumer."
+        },
+        {
+          "responsibility": "Parent/child coroutine and borrowed ref shape.",
+          "status": "OPEN",
+          "target_consumer": "NOT_IMPLEMENTED_PENDING_ROOT_QUALIFIED_PRODUCER",
+          "original": {
+            "path": "tests/unit/program/test_xr_program_source_build.c",
+            "lines": [
+              7779,
+              7807
+            ]
+          },
+          "original_assertion_sites": 13,
+          "gap": "Preserve one actual child call, three REF parameters, one child suspension, nonowner place categories and parent state shape. Old opcode/mode/state numeric representation needs Root review."
+        },
+        {
+          "responsibility": "Complete call successors, error/panic owners and liveness operands.",
+          "status": "OPEN",
+          "target_consumer": "NOT_IMPLEMENTED_PENDING_ROOT_QUALIFIED_PRODUCER",
+          "original": {
+            "path": "tests/unit/program/test_xr_program_source_build.c",
+            "lines": [
+              7808,
+              7817
+            ]
+          },
+          "original_assertion_sites": 7,
+          "gap": "Original parent has three live values, four call successors, child no typed error/PanicInfo panic and owned panic argument. Target common verifier must prove equivalent full control/owner shape."
+        },
+        {
+          "responsibility": "Actual three places and their storage roots.",
+          "status": "OPEN",
+          "target_consumer": "NOT_IMPLEMENTED_PENDING_ROOT_QUALIFIED_PRODUCER",
+          "original": {
+            "path": "tests/unit/program/test_xr_program_source_build.c",
+            "lines": [
+              7818,
+              7849
+            ]
+          },
+          "original_assertion_sites": 14,
+          "gap": "One scalar local and two class field places refer to actual storage roots; each root occurs exactly once in parent live values. No borrowed place may replace its actual owner."
+        },
+        {
+          "responsibility": "Distinct fields, one affine object owner and separate scalar/snapshot.",
+          "status": "OPEN",
+          "target_consumer": "NOT_IMPLEMENTED_PENDING_ROOT_QUALIFIED_PRODUCER",
+          "original": {
+            "path": "tests/unit/program/test_xr_program_source_build.c",
+            "lines": [
+              7850,
+              7873
+            ]
+          },
+          "original_assertion_sites": 14,
+          "gap": "The two field ordinals differ but share the same affine Pipe owner; the scalar root differs. Exactly one further i64 snapshot is kept. Preserve this logical meaning under the frozen actual owner/place protocol."
+        },
+        {
+          "responsibility": "Exact canonical clock/IO provider requirements and bindings.",
+          "status": "OPEN",
+          "target_consumer": "NOT_IMPLEMENTED_PENDING_ROOT_QUALIFIED_PRODUCER",
+          "original": {
+            "path": "tests/unit/program/test_xr_program_source_build.c",
+            "lines": [
+              7874,
+              7922
+            ]
+          },
+          "original_assertion_sites": 14,
+          "gap": "Two contracts with one operation each, exact stable operation identity and audited fingerprint/typed trampoline. Real clock refusal and close events must survive canonical provider migration; no fake builtin."
+        },
+        {
+          "responsibility": "Actual VM repeated resume/refusal/cancel cases.",
+          "status": "OPEN",
+          "target_consumer": "NOT_IMPLEMENTED_PENDING_ROOT_QUALIFIED_PRODUCER",
+          "original": {
+            "path": "tests/unit/program/test_xr_program_source_build.c",
+            "lines": [
+              7923,
+              7938
+            ]
+          },
+          "original_assertion_sites": 2,
+          "gap": "One original Instance invokes the complete three-mode VM helper twice. It is not the target two-Instance proof or fresh execution on the new Cell producer."
+        },
+        {
+          "responsibility": "Verified native projection and deterministic emission.",
+          "status": "OPEN",
+          "target_consumer": "NOT_IMPLEMENTED_PENDING_ROOT_QUALIFIED_PRODUCER",
+          "original": {
+            "path": "tests/unit/program/test_xr_program_source_build.c",
+            "lines": [
+              7939,
+              7964
+            ]
+          },
+          "original_assertion_sites": 11,
+          "gap": "Original two emissions match exactly, with three int64_t* parameter markers and typed call/dispose host markers. Preserve pointer/lifetime meaning through the target ABI without retaining old pointer ABI aliases."
+        },
+        {
+          "responsibility": "Reject borrowed parameter place substituted for actual live owner.",
+          "status": "OPEN",
+          "target_consumer": "NOT_IMPLEMENTED_PENDING_ROOT_QUALIFIED_PRODUCER",
+          "original": {
+            "path": "tests/unit/program/test_xr_program_source_build.c",
+            "lines": [
+              7965,
+              7993
+            ]
+          },
+          "original_assertion_sites": 10,
+          "gap": "The original BackendIR live-root/call-operand corruption fails INVARIANT_REJECTED; restoring both passes. Map to the current full common verification boundary, not private BackendIR restoration."
+        },
+        {
+          "responsibility": "Reject out-of-range field projection.",
+          "status": "OPEN",
+          "target_consumer": "NOT_IMPLEMENTED_PENDING_ROOT_QUALIFIED_PRODUCER",
+          "original": {
+            "path": "tests/unit/program/test_xr_program_source_build.c",
+            "lines": [
+              7994,
+              8010
+            ]
+          },
+          "original_assertion_sites": 9,
+          "gap": "Original field ordinal=field_count fails INVARIANT_REJECTED; restored ordinal passes. Preserve exact owner/type/range authority in the current typed representation."
+        },
+        {
+          "responsibility": "Actual native three-mode wrapper with independent value/ordered events.",
+          "status": "OPEN",
+          "target_consumer": "NOT_IMPLEMENTED_PENDING_ROOT_QUALIFIED_PRODUCER",
+          "original": {
+            "path": "tests/unit/program/test_xr_program_source_build.c",
+            "lines": [
+              8011,
+              8080
+            ]
+          },
+          "original_assertion_sites": 5,
+          "gap": "The old generated wrapper checks initial yield, normal6442450958, clock refusal trap point7, cancel, exact provider events and standalone exit230. Current successful harness exit0 cannot replace that standalone oracle."
+        },
+        {
+          "responsibility": "Free emissions/backend and close Instance/products/profile/Source.",
+          "status": "OPEN",
+          "target_consumer": "NOT_IMPLEMENTED_PENDING_ROOT_QUALIFIED_PRODUCER",
+          "original": {
+            "path": "tests/unit/program/test_xr_program_source_build.c",
+            "lines": [
+              8081,
+              8093
+            ]
+          },
+          "original_assertion_sites": 3,
+          "gap": "Original source/session survive until this cleanup. New target producer-death/two-Instance/owned result/physical0/FI/safety are additional requirements and not proven by this static map."
+        }
+      ]
+    },
+    {
+      "legacy": {
+        "name": "source_owner_keeps_read_existential_root_across_child_suspension",
+        "legacy_path": "tests/unit/program/test_xr_program_source_build.c",
+        "legacy_line": 8318,
+        "body_lf_sha256": "15cc0f11e9ae1589c2fd64a795869b6ba7f6b3163083084b73fcc0e00d8a7b7c",
+        "assertion_sites": 6,
+        "loop_sites": 0,
+        "status": "OPEN",
+        "replacement_gates": [],
+        "note": "Function census preserves its whole body; sites do not count executed loop iterations.",
+        "original_fixture": {
+          "id": "read_existential_coroutine",
+          "expected_exit": 231,
+          "labels": [
+            "interface",
+            "read",
+            "coroutine",
+            "cancel"
+          ],
+          "backends": {
+            "vm": "execute",
+            "aot": "execute"
+          }
+        },
+        "static_input_literals": {
+          "source": {
+            "bytes": 295,
+            "sha256": "badb594eecb0fc2159ab7361f50ea6a74249c336ce2d038167f4f6279331cab5"
+          }
+        }
+      },
+      "original_source": {
+        "text": "interface Reader { read() -> i64 }\nclass One implements Reader {\n  read() -> i64 { return 42 }\n}\nfn delayed(reader: Reader) -> i64 {\n  Coro.yield()\n  return reader.read()\n}\nfn answer() -> i64 {\n  var reader: Reader = One()\n  const result = delayed(reader)\n  return result + reader.read() - 42\n}\n",
+        "bytes": 295,
+        "sha256": "badb594eecb0fc2159ab7361f50ea6a74249c336ce2d038167f4f6279331cab5",
+        "adapter_bytes": 0,
+        "construction": "Whole original source[]; independent AST and inventory decoding; no adapter or altered semantics."
+      },
+      "responsibility_mapping": [
+        {
+          "responsibility": "Exact interface Source, profile and two deterministic products.",
+          "status": "OPEN",
+          "target_consumer": "NOT_IMPLEMENTED_PENDING_ROOT_QUALIFIED_PRODUCER",
+          "original": {
+            "path": "tests/unit/program/test_xr_program_source_build.c",
+            "lines": [
+              8332,
+              8346
+            ]
+          },
+          "original_assertion_sites": 3,
+          "gap": "Full295B source must succeed, keeping One/Reader and the second read after delayed(). The old read-existential source rejection is not a permanent expected outcome."
+        },
+        {
+          "responsibility": "Same-interface owned parent root and nonowner child READ value.",
+          "status": "OPEN",
+          "target_consumer": "NOT_IMPLEMENTED_PENDING_ROOT_QUALIFIED_PRODUCER",
+          "original": {
+            "path": "tests/unit/program/test_xr_program_source_build.c",
+            "lines": [
+              8347,
+              8348
+            ]
+          },
+          "original_assertion_sites": 1,
+          "gap": "The actual inspection helper checks full parent/child shape, typed existential identity, scoped owner and one actual live root. It is not only a six-assert metadata test."
+        },
+        {
+          "responsibility": "Actual resumed42 and active-cancel VM cases.",
+          "status": "OPEN",
+          "target_consumer": "NOT_IMPLEMENTED_PENDING_ROOT_QUALIFIED_PRODUCER",
+          "original": {
+            "path": "tests/unit/program/test_xr_program_source_build.c",
+            "lines": [
+              8349,
+              8349
+            ]
+          },
+          "original_assertion_sites": 1,
+          "gap": "The helper creates one original Instance and two executions, then closes it. New two-Instance and producer-death qualifications remain separate."
+        },
+        {
+          "responsibility": "Actual native emission, root corruption rejection and resume/cancel wrapper.",
+          "status": "OPEN",
+          "target_consumer": "NOT_IMPLEMENTED_PENDING_ROOT_QUALIFIED_PRODUCER",
+          "original": {
+            "path": "tests/unit/program/test_xr_program_source_build.c",
+            "lines": [
+              8350,
+              8351
+            ]
+          },
+          "original_assertion_sites": 1,
+          "gap": "The helper emits twice, rejects borrowed operand substituted for live owner, restores/reverifies and writes independent native42/cancel frames; standalone success exit231."
+        },
+        {
+          "responsibility": "Release both products, profile and fixture/session.",
+          "status": "OPEN",
+          "target_consumer": "NOT_IMPLEMENTED_PENDING_ROOT_QUALIFIED_PRODUCER",
+          "original": {
+            "path": "tests/unit/program/test_xr_program_source_build.c",
+            "lines": [
+              8352,
+              8357
+            ]
+          },
+          "original_assertion_sites": 0,
+          "gap": "Target owners/borrow records must release on every normal/error/OOM/cancel/close path; no current physical observation or full resource gate is made here."
+        }
+      ]
+    }
+  ],
+  "original_assertion_sites": 111,
+  "original_private_helpers": [
+    {
+      "path": "tests/unit/program/test_xr_program_source_build.c",
+      "function": "source_build_fixture_init",
+      "line": 894,
+      "end_line": 968,
+      "body_lf_sha256": "964c190cb52940aa039b9459e6a5aa0416430eadac032979ed210358216892eb",
+      "assertion_sites": 0,
+      "classification": "Actual direct or specified transitive NON_TEST helper, not an additional census TEST; no claim of exhaustive shared helper closure.",
+      "responsibility": "Build original physical source/session/authority without shortening source; actual helper body preserved.",
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/program/test_xr_program_source_build.c",
+      "function": "source_build_fixture_free",
+      "line": 873,
+      "end_line": 892,
+      "body_lf_sha256": "54f2ca59ddb46fda789abf0411160790bcb950903858a308b984b50e6f8c1889",
+      "assertion_sites": 0,
+      "classification": "Actual direct or specified transitive NON_TEST helper, not an additional census TEST; no claim of exhaustive shared helper closure.",
+      "responsibility": "Release source/session, module identity/path and file graph in its original complete cleanup path.",
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/program/test_xr_program_source_build.c",
+      "function": "assert_source_build_ok",
+      "line": 996,
+      "end_line": 1010,
+      "body_lf_sha256": "a5d0aee0a406f887ea79355380455511ee0762cfa39915fb657cfe8a4088fd94",
+      "assertion_sites": 1,
+      "classification": "Actual direct or specified transitive NON_TEST helper, not an additional census TEST; no claim of exhaustive shared helper closure.",
+      "responsibility": "Actual status must be SOURCE_BUILD_OK; any legal positive refusal is FAIL.",
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/program/test_xr_program_source_build.c",
+      "function": "assert_products_equal",
+      "line": 982,
+      "end_line": 994,
+      "body_lf_sha256": "ec9ae13d2d71259635fe95f5bed3da7bddec1aaa43b10a247a9930a5c6cd925b",
+      "assertion_sites": 8,
+      "classification": "Actual direct or specified transitive NON_TEST helper, not an additional census TEST; no claim of exhaustive shared helper closure.",
+      "responsibility": "Eight checks enforce complete artifact size/bytes, owned Programs, Program ID and canonical entry equality.",
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/program/test_xr_program_source_build.c",
+      "function": "find_profile_provider",
+      "line": 749,
+      "end_line": 757,
+      "body_lf_sha256": "e406782a95e05ce78f909f815229bd5d4ad14c2e96001c17f2e17aad178ee048",
+      "assertion_sites": 0,
+      "classification": "Actual direct or specified transitive NON_TEST helper, not an additional census TEST; no claim of exhaustive shared helper closure.",
+      "responsibility": "Resolve an actual profile contract by exact stable identity.",
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/program/test_xr_program_source_build.c",
+      "function": "stable_id_equal",
+      "line": 357,
+      "end_line": 359,
+      "body_lf_sha256": "b7944eaf320e1112ae477f8c2d4d3513ce35bce7c8c98f0fb4a2b4b227d7f621",
+      "assertion_sites": 0,
+      "classification": "Actual direct or specified transitive NON_TEST helper, not an additional census TEST; no claim of exhaustive shared helper closure.",
+      "responsibility": "Exact equality of all stable-ID bytes; no substitute numerical operation ordinal.",
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/program/test_xr_program_source_build.c",
+      "function": "field_ref_cleanup_clock_probe",
+      "line": 218,
+      "end_line": 227,
+      "body_lf_sha256": "7fccd7a4db3941b16569ddd5119e777f4cabdd8c8803b76a8e030df55681d9b8",
+      "assertion_sites": 0,
+      "classification": "Actual direct or specified transitive NON_TEST helper, not an additional census TEST; no claim of exhaustive shared helper closure.",
+      "responsibility": "Exactly one first clock event0; optionally refuse it, otherwise return42.",
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/program/test_xr_program_source_build.c",
+      "function": "field_ref_cleanup_close_probe",
+      "line": 229,
+      "end_line": 237,
+      "body_lf_sha256": "5c701c78ffa438f4fe5b7a1c45d5bdb88592dcf79015aa828c9ed0345f218c43",
+      "assertion_sites": 0,
+      "classification": "Actual direct or specified transitive NON_TEST helper, not an additional census TEST; no claim of exhaustive shared helper closure.",
+      "responsibility": "Bound the event log at3 and record actual post-mutation handles, returning true.",
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/program/test_xr_program_source_build.c",
+      "function": "field_ref_cleanup_assert_trace",
+      "line": 340,
+      "end_line": 355,
+      "body_lf_sha256": "7898eb1b0e508aa50657f96a3785a901415bc92a4def5a9898a98bdc80774b13",
+      "assertion_sites": 2,
+      "classification": "Actual direct or specified transitive NON_TEST helper, not an additional census TEST; no claim of exhaustive shared helper closure.",
+      "responsibility": "Two assert sites check exact count and ordered events for normal/refusal versus cancel; loop repetitions are not new assertions.",
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/program/test_xr_program_source_build.c",
+      "function": "source_fixture_output_path",
+      "line": 63,
+      "end_line": 65,
+      "body_lf_sha256": "2c5d63f47f4b0e77e5abec0b6831c67cec2056ad89196c34fbd8e0cbd6ec1d9d",
+      "assertion_sites": 0,
+      "classification": "Actual direct or specified transitive NON_TEST helper, not an additional census TEST; no claim of exhaustive shared helper closure.",
+      "responsibility": "Only the selected registered original fixture receives native output.",
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/program/test_xr_program_source_build.c",
+      "function": "inspect_read_existential_coroutine",
+      "line": 8103,
+      "end_line": 8162,
+      "body_lf_sha256": "05db72152b0465b3609d4549d0a449da4d89c472f62cbe782282dfd6214a4615",
+      "assertion_sites": 0,
+      "classification": "Actual direct or specified transitive NON_TEST helper, not an additional census TEST; no claim of exhaustive shared helper closure.",
+      "responsibility": "All boolean guards independently check one call, canonical bounds/state, child READ parameter/live value/nonowner type, actual scoped parent owner and identical interface identity.",
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/program/test_xr_program_source_build.c",
+      "function": "run_read_existential_coroutine_executors",
+      "line": 8164,
+      "end_line": 8223,
+      "body_lf_sha256": "96bc08580364fdbc5f0223a7982b372d495fa6c4c89cb9a7fc3057e73dd40db6",
+      "assertion_sites": 0,
+      "classification": "Actual direct or specified transitive NON_TEST helper, not an additional census TEST; no claim of exhaustive shared helper closure.",
+      "responsibility": "Actual one-Instance VM code/normal yield→42 plus fresh yield→cancel; every failure path frees execution/code and drains/retires/frees Instance.",
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/program/test_xr_program_source_build.c",
+      "function": "write_read_existential_coroutine_aot",
+      "line": 8225,
+      "end_line": 8256,
+      "body_lf_sha256": "8e3cf54626fdc7e17735e59714bd646c390593560ceb03ed237b918f694a508b",
+      "assertion_sites": 0,
+      "classification": "Actual direct or specified transitive NON_TEST helper, not an additional census TEST; no claim of exhaustive shared helper closure.",
+      "responsibility": "Actual complete generated bytes and two native frames, initial state1/point0, resumed42 and cancelled state1; standalone exit231.",
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/program/test_xr_program_source_build.c",
+      "function": "emit_read_existential_coroutine_aot",
+      "line": 8258,
+      "end_line": 8316,
+      "body_lf_sha256": "1e0da96c50aded656a21431fc72c6a14d9ed5a3a797c3f7fe2adbc6561e76295",
+      "assertion_sites": 0,
+      "classification": "Actual direct or specified transitive NON_TEST helper, not an additional census TEST; no claim of exhaustive shared helper closure.",
+      "responsibility": "Build/binding-verify native IR, emit twice identically, reject TargetPlan, find unique child call/owner, reject corrupted root then restore/reverify before writing native.",
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/program/xr_program_source_cleanup_checks.inc.c",
+      "function": "field_ref_cleanup_check_vm",
+      "line": 135,
+      "end_line": 169,
+      "body_lf_sha256": "10646cfe17dc0e80a03580538e41c83a21fe327f211f243aa44074609cd81cee",
+      "assertion_sites": 12,
+      "classification": "Actual direct or specified transitive NON_TEST helper, not an additional census TEST; no claim of exhaustive shared helper closure.",
+      "responsibility": "Twelve assert sites check the whole three-mode matrix, real initial yield with no provider events, fixed6442450958/refusal trap/cancel and exact trace; source TEST calls this helper twice.",
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/program/xr_program_source_cleanup_checks.inc.c",
+      "function": "write_probe_typed_host",
+      "line": 414,
+      "end_line": 438,
+      "body_lf_sha256": "1de3cc218ff7c7c7c306c72863611bc68f882ad978187b0c5d99722c398dfc97",
+      "assertion_sites": 1,
+      "classification": "Actual direct or specified transitive NON_TEST helper, not an additional census TEST; no claim of exhaustive shared helper closure.",
+      "responsibility": "Actual original typed host call/dispose bridge. Canonical current provider identity/owned results/cleanup need target ABI mapping, not old bridge restoration.",
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/plan/target_profile_test_fixture.c",
+      "function": "xr_test_target_profile_build_with_output",
+      "line": 278,
+      "end_line": 338,
+      "body_lf_sha256": "17a719cec65ed69e47767e1d41ccbb23a0538e22a43733446a206fba954c74f2",
+      "assertion_sites": 0,
+      "classification": "Actual direct or specified transitive NON_TEST helper, not an additional census TEST; no claim of exhaustive shared helper closure.",
+      "responsibility": "Actually called shared target-profile helper remains read-only/outside consumer modification scope.",
+      "status": "OPEN"
+    }
+  ],
+  "specified_helper_assertion_sites": 24,
+  "helper_policy": "These17 specified actual NON_TEST helpers are not census TEST rows; boolean conditions also carry responsibility. This is not an exhaustive shared helper dependency census or deletion authority.",
+  "ref_cleanup_mode_table": {
+    "text": "static const FieldRefCleanupMode field_ref_cleanup_modes[] = {\n    {false, false, XR_BACKEND_EXECUTION_RETURN},\n    {false, true, XR_BACKEND_EXECUTION_TRAP},\n    {true, false, XR_BACKEND_EXECUTION_CANCELLED},\n};",
+    "lf_sha256": "4131f5bd8e00f25fd53f6f8bbe1fd3caaa63ec2fec58a4a8045fff82667e7537"
+  },
+  "ref_parameter_independent_goldens": {
+    "initial_scalar": 10,
+    "initial_handles": [
+      2147483642,
+      2147483643
+    ],
+    "snapshot": 2147483642,
+    "before_yield_scalar": 14,
+    "before_yield_handles": [
+      2147483647,
+      2147483649
+    ],
+    "after_resume_scalar": 15,
+    "after_resume_handles": [
+      2147483649,
+      2147483652
+    ],
+    "returned_i64": 6442450958,
+    "ordinary_and_clock_refusal_events": [
+      0,
+      2147483649,
+      2147483652
+    ],
+    "cancel_events": [
+      2147483647,
+      2147483649
+    ],
+    "old_modes": [
+      "RETURN",
+      "PROVIDER_CALL_FAILED_TRAP",
+      "CANCELLED"
+    ],
+    "old_first_suspend": {
+      "state": 1,
+      "safepoint": 0,
+      "provider_events": 0
+    },
+    "VM_helper_invocations": 2,
+    "VM_modes_per_helper": 3,
+    "original_VM_Instances": 1,
+    "native_modes": 3,
+    "old_native_refusal_safepoint": 7,
+    "original_standalone_exit": 230
+  },
+  "read_existential_independent_goldens": {
+    "returned_i64": 42,
+    "old_first_suspend": {
+      "state": 1,
+      "safepoint": 0
+    },
+    "original_VM_Instances": 1,
+    "VM_resume_calls": 1,
+    "VM_cancel_calls": 1,
+    "native_resume_frames": 1,
+    "native_cancel_frames": 1,
+    "original_standalone_exit": 231,
+    "old_shape": "One nonowner READ existential child value kept over one yield; the parent preserves one owned existential root with the same interface identity."
+  },
+  "original_corruption_controls": [
+    "Related-ref BackendIR live root and corresponding call operand replaced by a borrowed parameter place: invariant rejection, restore and reverify.",
+    "Related-ref projected class field ordinal replaced by field_count: invariant rejection, restore and reverify.",
+    "Read-existential BackendIR owned root and corresponding call operand replaced by borrowed child operand: invariant rejection, restore and reverify."
+  ],
+  "frozen_Cell_contract_at_inspection": {
+    "path": "E:\\xxl\\xray-lang\\xray-docs\\design\\xir\\module-state-cell-owner-cn.md",
+    "raw_sha256": "bea774c2e66d82c6e02488788a7eb7b3148f7b65412a951f71e55734b2edba19",
+    "state": "IMPLEMENTATION_CONTRACT_FROZEN / NOT_IMPLEMENTED_NOT_QUALIFIED",
+    "boundary": "Single actual owner/place and cross-frame exclusive protocol, not name equality, temporary Cell/writeback, or noescape escape through RC. Source positives preserve logical semantics; representation needs actual new qualification."
+  },
+  "target_semantic_boundary": "Follow the frozen single stable owner/place and actual cross-frame borrow protocol, including distinct fields of the same affine root, noescape and no GO/worker transport. Do not retain old borrowed raw-place representation, pointer ABI, compatibility shim or temporary Cell/writeback.",
+  "additional_target_requirements": [
+    "Exact Source acceptance and complete specialization/reverification/Lowered/Program projection",
+    "Source-free packet and typed Library identity/permission projections",
+    "Actual VM, generated native and applicable mixed independent outcomes",
+    "Two independent Instances after producer/session/Checked/Lowered and caller Program owner death",
+    "Actual stable owner/place and lifecycle evidence through suspend/resume/refusal/cancel/close and noescape rejection",
+    "Drop/escape rules for every actual owned result and preserve original error/cleanup ordering",
+    "Complete compiler/runtime FI with fresh actual census and all resource axes",
+    "Strict generated C portability and applicable complete safety",
+    "Separate original standalone exits230/231 from current harness exit0",
+    "Root formal integration/acceptance and last-consumer deletion review"
+  ],
+  "existing_related_map": "source_module_ref_source_obligations.json covers two distinct CoreIR helper responsibilities and changed local Cell controls, not these two full source programs.",
+  "shared_dependency": {
+    "path": "tests/unit/aot/xr_backend_emission_owner.h",
+    "consumer_count": 7,
+    "status": "PRESERVE_SHARED_OWNER",
+    "reason": "Actual original native helpers use shared backend_emission_resources; other consumers remain. No replacement or deletion qualification."
+  },
+  "handoff": {
+    "report": "build-consumer-evidence/consumer-session-20261009-r1/cross-frame-borrow-interface-request.json",
+    "raw_sha256": "7a417dde4a994534d73f05a98380e496439d0d96c30d5f027d51574b36f6d1e6",
+    "Root_thread": "01a11f74-a297-7b11-8441-835bde6a3d5f",
+    "formal_acceptance": "PENDING"
+  },
+  "full_FI": "NOT_RUN",
+  "axes": "NOT_RUN",
+  "full_safety": "NOT_RUN",
+  "SourceDelete": "NOT_RUN",
+  "Main": "NOT_RUN",
+  "boundaries": [
+    "All original111 TEST assertions, specified helpers and typed representation responsibilities remain OPEN.",
+    "The original sources are566B/295B, and original standalone success exits230/231 are not internal result values.",
+    "Old one-Instance repetitions, physical zero or changed local Cell controls cannot prove the target full original programs.",
+    "No product invocation, native build, provider event, allocator event or release observation is made by this map.",
+    "Preserved old IR counts/roles/markers are representation review inputs; no numeric alias, fallback or old BackendIR API is added.",
+    "Mapping counts and assertion coverage are not qualification, retirement or deletion permission."
+  ]
+}
