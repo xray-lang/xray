@@ -15,11 +15,11 @@
     "shared_emission_owner_consumers": 7
   },
   "reference_counts": {
-    "source_with_digest_reference": 66,
-    "source_without_digest_reference": 42,
+    "source_with_digest_reference": 69,
+    "source_without_digest_reference": 39,
     "other_with_digest_reference": 40,
     "other_without_digest_reference": 120,
-    "digest_reference_values": 134,
+    "digest_reference_values": 137,
     "source_inventory_projections": 42
   },
   "mapping_inputs": [
@@ -284,6 +284,10 @@
       "lf_sha256": "6e8888f0cccebfe675cfdaa1bec2ad74d600945f5fe3b3cb8709b0f73bb9b584"
     },
     {
+      "path": "tests/unit/xir/product_consumers/source_deep_class_graph_source_obligations.json",
+      "lf_sha256": "bd98417abef6e2c78fd00de77b459db15b108c2f26571a645a480e084c2d74e7"
+    },
+    {
       "path": "tests/unit/xir/product_consumers/source_default_assertion_group2_native_obligations.json",
       "lf_sha256": "8c9987318594c8067e3669e968890a49b3956780436f0f8c94c877dee73312b3"
     },
@@ -444,6 +448,10 @@
       "lf_sha256": "10bebebc38e32475565df1632af71a7dd1d56a371f8d3ab97024e507227bf8fe"
     },
     {
+      "path": "tests/unit/xir/product_consumers/source_mutual_class_graph_source_obligations.json",
+      "lf_sha256": "b88c36f9349315c4c3594ca2442c1dbc100f1065236f274b67d8928ff6df3669"
+    },
+    {
       "path": "tests/unit/xir/product_consumers/source_narrow_array_source_obligations.json",
       "lf_sha256": "83ceded7afac70e5384292e0a88275917619cc98e4cd7383874baa4f40e38bdd"
     },
@@ -474,6 +482,10 @@
     {
       "path": "tests/unit/xir/product_consumers/source_recursive_call_panic_native_obligations.json",
       "lf_sha256": "611e49b64afdc6902982b346478e0cef7182768f4fcc402fe421d15fd0dfb558"
+    },
+    {
+      "path": "tests/unit/xir/product_consumers/source_recursive_class_graph_source_obligations.json",
+      "lf_sha256": "7d02a19b7945c320429d502ab8d5d6b48b92fed2aee57f32cb6d47913de797fb"
     },
     {
       "path": "tests/unit/xir/product_consumers/source_rejections_occupied_obligations.json",
@@ -2035,7 +2047,13 @@
         "expected_classes": 1,
         "scope": "Exact original structural-only input, without a callable adapter or invented runtime result. Checked and Lowered descriptor readers preserve the original one/two nullable class cycles after producers die."
       },
-      "mapping_references": []
+      "mapping_references": [
+        {
+          "mapping": "tests/unit/xir/product_consumers/source_recursive_class_graph_source_obligations.json",
+          "pointer": "/legacy/body_lf_sha256",
+          "binding": "exact_path_name_body"
+        }
+      ]
     },
     {
       "legacy_path": "tests/unit/program/test_xr_program_source_build.c",
@@ -2049,7 +2067,13 @@
         "expected_classes": 2,
         "scope": "Exact original structural-only input, without a callable adapter or invented runtime result. Checked and Lowered descriptor readers preserve the original one/two nullable class cycles after producers die."
       },
-      "mapping_references": []
+      "mapping_references": [
+        {
+          "mapping": "tests/unit/xir/product_consumers/source_mutual_class_graph_source_obligations.json",
+          "pointer": "/legacy/body_lf_sha256",
+          "binding": "exact_path_name_body"
+        }
+      ]
     },
     {
       "legacy_path": "tests/unit/program/test_xr_program_source_build.c",
@@ -2154,7 +2178,13 @@
           "original_buffer_capacity": 32768
         }
       },
-      "mapping_references": []
+      "mapping_references": [
+        {
+          "mapping": "tests/unit/xir/product_consumers/source_deep_class_graph_source_obligations.json",
+          "pointer": "/legacy/body_lf_sha256",
+          "binding": "exact_path_name_body"
+        }
+      ]
     },
     {
       "legacy_path": "tests/unit/program/test_xr_program_source_build.c",

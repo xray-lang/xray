@@ -18,6 +18,8 @@
 #include <string.h>
 #define CHECK(c) do { if (!(c)) { fprintf(stderr, "%d: %s\n", __LINE__, #c); exit(1); } } while (0)
 #include "../xir_instance_compile_observer.h"
+_Static_assert(XR_XIR_CHECKED_SCHEMA == 25u && XR_XIR_CHECKED_CONTRACT == 67u,
+    "Actual Checked identity");
 
 typedef struct NominalRun {
     XrXirStatus status;
@@ -89,6 +91,7 @@ static void graph_shape(const XrXirModule *module, unsigned expected) {
         }
     }
     CHECK(count == expected);
+    bool left_seen = false, right_seen = false;
     for (unsigned i = 0; i < count; ++i) {
         const XrXirTypeNode *node = xr_xir_type_node(types, ids[i]);
         CHECK(node && node->kind == XR_XIR_TYPE_NOMINAL && node->nominal.field_count == 1);
@@ -101,8 +104,10 @@ static void graph_shape(const XrXirModule *module, unsigned expected) {
             CHECK(name.length == 4 && !memcmp(name.bytes, "Node", 4));
             CHECK(field.length == 4 && !memcmp(field.bytes, "next", 4));
         } else if (name.length == 4 && !memcmp(name.bytes, "Left", 4)) {
+            CHECK(!left_seen); left_seen = true;
             CHECK(field.length == 5 && !memcmp(field.bytes, "right", 5));
         } else {
+            CHECK(!right_seen); right_seen = true;
             CHECK(name.length == 5 && !memcmp(name.bytes, "Right", 5));
             CHECK(field.length == 4 && !memcmp(field.bytes, "left", 4));
         }
@@ -111,6 +116,16 @@ static void graph_shape(const XrXirModule *module, unsigned expected) {
         CHECK(xr_xir_type_is_nullable(types, nullable) && xr_xir_type_is_owned(types, nullable));
         CHECK(xr_xir_nullable_element(types, nullable) == ids[count == 1 ? 0 : 1 - i]);
     }
+    CHECK(count == 1 || (left_seen && right_seen));
+}
+
+static XrXirStatus graph_detached_packet(XrXirArtifact *checked, const XrXirCheckedPacket *golden) {
+    XrXirCheckedPacket repeated = {0};
+    XrXirStatus status = xr_xir_compile_checked_write(checked, &repeated, NULL);
+    if (status == XR_XIR_OK)
+        CHECK(repeated.length == golden->length && !memcmp(repeated.bytes, golden->bytes, golden->length));
+    xr_xir_compile_checked_packet_free(&repeated);
+    return status;
 }
 
 static NominalRun graph_build(const SourceProductNominalFixture *fixture,
@@ -166,11 +181,17 @@ static NominalRun graph_build(const SourceProductNominalFixture *fixture,
     product = NULL;
     xr_compile_session_free(session);
     session = NULL;
+    memset(&request, 0xa5, sizeof(request)); memset(&authority, 0xa5, sizeof(authority));
     graph_shape(xr_xir_compile_artifact_module(checked), fixture->classes);
     run.status = xr_xir_compile_artifact_verify(checked, NULL);
     if (run.status != XR_XIR_OK) goto release;
+    run.status = graph_detached_packet(checked, &rewrite);
+    if (run.status != XR_XIR_OK) goto release;
     XrXirTarget target = {XR_XIR_ARCH_X86_64, XR_XIR_VALUE_ABI_VERSION};
     run.status = xr_xir_compile_lower(checked, &target, &lowered, NULL);
+    if (run.status != XR_XIR_OK) goto release;
+    xr_xir_compile_artifact_free(checked); checked = NULL;
+    run.status = xr_xir_compile_artifact_verify(lowered, NULL);
     if (run.status != XR_XIR_OK) goto release;
     graph_shape(xr_xir_compile_artifact_module(lowered), fixture->classes);
     run.status = xr_xir_compile_emit_c(lowered, "nominal_graph", UINT64_C(16777216), &regenerated);
@@ -259,6 +280,7 @@ int xr_source_product_nominal_main(const SourceProductNominalFixture *fixture, i
         fixture->name, run.status, run.attempts, (unsigned long long)run.stats.allocated_bytes,
         (unsigned long long)run.stats.peak_bytes, (unsigned long long)run.stats.work);
     if (run.status == XR_XIR_OK) {
+        puts("nominal-owned exact-Checked-packet-after-producers=PASS Lowered-after-Checked-death=PASS request-authority-dead=1");
         if (fixture->classes == 80)
             printf("nominal-graph case=%s classes=80 nullable-links=79 terminal-i64=1 Checked/Lowered readers survive producers; C identical\n",
                 fixture->name);
