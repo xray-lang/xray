@@ -2717,6 +2717,9 @@ include(src/app/toolchain/xir_target.cmake)
 if(BUILD_TESTS)
     enable_testing()
 
+    # Qualify the current public CLI and its exact installed Core/SDK payload.
+    include("${CMAKE_CURRENT_SOURCE_DIR}/tests/cli/xir_public_cli_product.cmake")
+
     if(XRAY_WINDOWS_ASAN_RUNTIME_DIR)
         add_test(
             NAME windows_asan_runtime_path

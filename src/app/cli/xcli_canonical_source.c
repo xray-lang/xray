@@ -163,6 +163,16 @@ XR_FUNC XrCliCompileSourceStatus xr_cli_compile_source_build(
              stdlib, xr_cli_compile_graph_authority_lockfile(authority), XR_XIR_PROGRAM, libraries},
             request->target};
         status = source_xir_status(xr_xir_compile_source_product_build(&source, &product, &detail.source));
+        if (status == XR_CLI_COMPILE_SOURCE_OK) {
+            XrXirStatus admitted = xr_xir_compile_source_product_public_admit(product, &detail.source.source);
+            status = source_xir_status(admitted);
+            if (admitted != XR_XIR_OK) {
+                detail.source.stage = XR_XIR_SOURCE_PRODUCT_FACTS;
+                detail.source.status = admitted;
+                xr_xir_compile_source_product_free(product);
+                product = NULL;
+            }
+        }
     }
     xr_compile_session_free(session);
     xr_cli_compile_graph_authority_close(authority);

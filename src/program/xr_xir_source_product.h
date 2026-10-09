@@ -68,6 +68,14 @@ XR_FUNC XrXirStatus xr_xir_compile_source_product_build(const XrXirSourceProduct
     XrXirSourceProduct **output,XrXirSourceProductDiagnostic *diagnostic);
 XR_FUNC void xr_xir_compile_source_product_free(XrXirSourceProduct *product);
 XR_FUNC void xr_xir_compile_source_product_diagnostic_free(XrXirSourceProductDiagnostic *diagnostic);
+/* Public execution admission reads the owner's authentic Program root and all
+ * state slots on the original ledger. Imported mutable slots are rejected;
+ * root mutable state and checked Sendable library constants remain admitted.
+ * This does not bypass complete Source/Checked/specialization verification.
+ * It requires the Lowered artifact before VM transfer. Diagnostic storage is a
+ * plain value and receives the result; no storage is allocated or published. */
+XR_FUNC XrXirStatus xr_xir_compile_source_product_public_admit(
+    const XrXirSourceProduct *product, XrXirSourceDiagnostic *diagnostic);
 /* Borrowed immutable facts and packets remain valid after VM code transfer. */
 XR_FUNC const XrXirSourceProductFacts *xr_xir_compile_source_product_facts(const XrXirSourceProduct *product);
 /* The borrowed context is the owner's actual ledger, including after VM take. */

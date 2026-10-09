@@ -87,10 +87,38 @@ static XrXirLibraryCatalog *catalog(const XrCliCompileSourceRequest *request) {
     XrXirSourceResult checked={0};XrXirSourceDiagnostic diagnostic={0};
     CHECK(xr_xir_compile_source_check(&source,&checked,&diagnostic,NULL)==XR_XIR_OK);
     XrXirCheckedPacket packet={0};CHECK(xr_xir_compile_checked_write(checked.checked,&packet,NULL)==XR_XIR_OK);
-    XrXirLibraryInput input={packet.bytes,packet.length,{0}, (XrXirLibraryModuleInput[]){{authority,"library.xr"}},1};
+    const XrXirModule *module=xr_xir_compile_artifact_module(checked.checked);
+    CHECK(module && module->declarations);
+    const XrXirDeclarations *declarations=module->declarations;
+    CHECK((declarations->module_count==1 || declarations->module_count==2) &&
+        declarations->modules);
+    char *identities[2]={NULL,NULL},*logical=NULL;
+    CHECK(xr_compile_module_identity_from_source(request->context->resources,&authority,path,
+        &identities[0],&logical)==XR_MODULE_OK);
+    XrModuleIdentityAuthority prelude={XR_MODULE_IDENTITY_STDLIB,"prelude",request->absolute_stdlib_path};
+    static const char prelude_path[]="prelude/builtin_symbols.def";
+    if(declarations->module_count==2)
+        CHECK(xr_compile_module_identity_from_logical(request->context->resources,&prelude,
+            prelude_path,&identities[1])==XR_MODULE_OK);
+    XrXirLibraryModuleInput bindings[2]={0};uint32_t scripts=0,governed=0;
+    size_t lengths[2]={strlen(identities[0]),identities[1]?strlen(identities[1]):0};
+    for(uint32_t m=0;m<declarations->module_count;++m) {
+        const XrXirSourceModule *actual=&declarations->modules[m];
+        bool is_script=actual->name_length==lengths[0] &&
+            !memcmp(actual->name,identities[0],actual->name_length);
+        bool is_prelude=identities[1] && actual->name_length==lengths[1] &&
+            !memcmp(actual->name,identities[1],actual->name_length);
+        CHECK(is_script!=is_prelude);
+        scripts+=is_script;governed+=is_prelude;
+        bindings[m]=is_script?(XrXirLibraryModuleInput){authority,logical}:
+            (XrXirLibraryModuleInput){prelude,prelude_path};
+    }
+    CHECK(scripts==1 && governed==declarations->module_count-1);
+    XrXirLibraryInput input={packet.bytes,packet.length,{0},bindings,declarations->module_count};
     xr_sha256(packet.bytes,packet.length,input.sha256);
     XrXirLibraryCatalog *result=NULL;
     CHECK(xr_xir_compile_library_catalog_new_v2(request->context,&input,1,&result)==XR_XIR_OK);
+    xr_compile_resources_free(identities[0]);xr_compile_resources_free(identities[1]);xr_compile_resources_free(logical);
     xr_xir_compile_checked_packet_free(&packet);xr_xir_compile_source_result_free(&checked);xr_compile_session_free(session);
     CHECK(DeleteFileA(path));
     xr_compile_resources_free(script_root);xr_compile_resources_free(path);xr_compile_resources_free(root);
@@ -243,7 +271,8 @@ static int source_owner_main(int argc,char **argv) {
     XrXirCompileContext context={resources,xr_xir_compile_default_limits()};
     XrCliCompileSourceRequest request={&context,argv[1],argv[2],NULL,{1048576,64},{XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION}};
     runtime_attempts=0;input_rejections(&request);
-    bool library=!strcmp(argv[3],"catalog");XrXirLibraryCatalog *libraries=library?catalog(&request):NULL;
+    bool library=!strcmp(argv[3],"catalog") || !strcmp(argv[3],"catalog-state-reject");
+    XrXirLibraryCatalog *libraries=library?catalog(&request):NULL;
     request.libraries=libraries;if(library)catalog_rejections(&request);
     if(!strcmp(argv[3],"limit"))request.manifest_limits.input_bytes=1;
     XrXirSourceProduct *product=NULL;XrCliCompileSourceDiagnostic diagnostic={0};
@@ -254,11 +283,18 @@ static int source_owner_main(int argc,char **argv) {
     XrCliCompileSourceStatus expected=XR_CLI_COMPILE_SOURCE_OK;
     bool semantic=!strcmp(argv[3],"reject") || !strcmp(argv[3],"failure-path");
     if(semantic || !strcmp(argv[3],"parse-reject"))expected=XR_CLI_COMPILE_SOURCE_REJECTED;
+    bool state_rejected=!strcmp(argv[3],"state-reject") || !strcmp(argv[3],"catalog-state-reject");
+    if(state_rejected)expected=XR_CLI_COMPILE_SOURCE_REJECTED;
     if(!strcmp(argv[3],"graph-reject"))expected=XR_CLI_COMPILE_SOURCE_NOT_FOUND;
     if(!strcmp(argv[3],"not-found"))expected=XR_CLI_COMPILE_SOURCE_NOT_FOUND;
     if(!strcmp(argv[3],"invalid"))expected=XR_CLI_COMPILE_SOURCE_INVALID;
     if(!strcmp(argv[3],"limit"))expected=XR_CLI_COMPILE_SOURCE_LIMIT;
     CHECK(status==expected && diagnostic.status==status);
+    if(state_rejected) {
+        CHECK(!product && diagnostic.source.status==XR_XIR_BAD_STRUCTURE);
+        CHECK(diagnostic.source.stage==XR_XIR_SOURCE_PRODUCT_FACTS);
+        CHECK(!strcmp(diagnostic.source.source.message,"library mutable or exported state is not admitted"));
+    }
     xr_xir_compile_library_catalog_free(libraries);xr_compile_resources_release(resources);
     memset(&context,0xcc,sizeof(context));memset(&request,0xcc,sizeof(request));
     if(status==XR_CLI_COMPILE_SOURCE_OK)execute(product,library?"cli-owner 42\n":"cli-owner 41\n");
