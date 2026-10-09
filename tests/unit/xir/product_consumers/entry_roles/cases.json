@@ -40,7 +40,7 @@
       "kind": "EXACT_ORIGINAL",
       "expectation": "OPEN_REQUIRED_MODULE_STATE",
       "retirement": null,
-      "responsibility_note": "The complete original private library counter40 and seven root test roles remain required positives. The oracle object below preserves the historical admission refusal and its exact diagnostic; it is observation evidence, not a successful replacement expectation. The runner must fail when the actual product rejects this source. Successful Source admission qualifies owned metadata only until the original test-role and independent runtime responsibilities are migrated and executed.",
+      "responsibility_note": "The complete original private library counter40 and seven root test roles remain required positives. The oracle object below preserves the historical admission refusal and its exact diagnostic; it is observation evidence, not a successful replacement expectation. The runner must fail on Source rejection and on metadata-only success without actual original role execution. The owned success path checks the seven exact roles and timeout2, executes the hook/test sequence in two Instances with original first-bump41 and second-read41 assertions, and denies dependency, skip and non-test authority. Current producer admission is still a prerequisite, not an assumed PASS.",
       "files": {
         "root.xr": {
           "path": "tests/unit/xir/product_consumers/entry_roles/fixtures/original_test_discovery/root.xr",
@@ -78,7 +78,18 @@
       },
       "full_candidate_input_changed": false,
       "required_source_status": 0,
-      "qualification_scope": "Required-positive Source admission and owned Checked/Lowered/C metadata only. Original root test roles, two-instance counter state, native/mixed execution, FI, resource axes and lifetime obligations remain OPEN."
+      "required_vm_test_roles": {
+        "names": ["first", "second", "skipped", "beforeEach", "afterEach", "beforeAll", "afterAll"],
+        "roles": [1, 1, 2, 5, 6, 3, 4],
+        "timeouts": [2, 0, 0, 0, 0, 0, 0],
+        "sequence": [5, 3, 0, 4, 3, 1, 4, 6],
+        "source_counter_initial": 40,
+        "first_bump": 41,
+        "second_read": 41,
+        "instances": 2,
+        "allocation_attempts": "MEASURED_NONZERO_NOT_HISTORICAL_FIXED_COUNT"
+      },
+      "qualification_scope": "Required-positive Source admission, detached Checked/Lowered/C and actual original test VM role/state/authority execution. Current Source refusal remains FAIL; native/mixed execution, complete FI, resource axes, full lifecycle and safety qualification remain OPEN."
     },
     {
       "case": "original_atomic_ordering_Relaxed",

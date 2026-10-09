@@ -18,6 +18,25 @@ def exact(lines, prefix, expected):
     require(actual == expected, f"{prefix}: {actual!r} != {expected!r}")
 
 
+def validate_test_roles(lines, roles, function_count):
+    actual = [line for line in lines if line.startswith("source-test ")]
+    require(len(actual) == 7, "root discovery count changed")
+    functions = []
+    for index, line in enumerate(actual):
+        match = re.fullmatch(r"source-test index=(\d+) function=(\d+) role=(\d+) timeout=(\d+) name=(\w+)", line)
+        require(match is not None, "malformed root role")
+        at, function, role, timeout, role_name = match.groups()
+        require((int(at), int(role), int(timeout), role_name) ==
+                (index, roles["roles"][index], roles["timeouts"][index], roles["names"][index]), "root role changed")
+        require(int(function) < function_count, "role function is outside the admitted product")
+        functions.append(int(function))
+    require(len(set(functions)) == 7, "role identities alias")
+    exact(lines, "test-execution ", [f"test-execution instance={i} role-index={r} result=Unit"
+          for i in range(2) for r in roles["sequence"]])
+    exact(lines, "test-isolation ", [f"test-isolation instance={i} first-bump=41 second-read=41 "
+          "dependency-denied=1 skip-denied=1" for i in range(2)])
+
+
 def validate_output(case, returncode, stdout, stderr, generated_exists):
     name, oracle = case["case"], case["oracle"]
     lines = stdout.splitlines()
@@ -30,7 +49,6 @@ def validate_output(case, returncode, stdout, stderr, generated_exists):
     compiler = [line for line in lines if line.startswith("compiler physical ")]
     require(len(compiler) == 1 and re.fullmatch(r"compiler physical blocks/bytes=0/0; peak=\d+", compiler[0]),
             "compiler physical release missing")
-    exact(lines, "final runtime ", [f"final runtime physical blocks/bytes=0/0; attempts={oracle['runtime_attempts']}"])
     if required_positive:
         require(generated_exists, "required positive did not emit C")
         admission = [line for line in lines if line.startswith("source-admission ")]
@@ -41,9 +59,16 @@ def validate_output(case, returncode, stdout, stderr, generated_exists):
         functions, modules, entry = map(int, match.groups())
         require(modules == len(case["files"]) and entry < functions, "original module graph changed")
         exact(lines, "projection ", [f"projection case={name} detached-Checked-Lowered=PASS C-identical=PASS"])
-        for prefix in ["source-path ", "source-test ", "test-execution ", "test-isolation ", "atomic-execution "]:
+        for prefix in ["source-path ", "atomic-execution ", "atomic-control "]:
             exact(lines, prefix, [])
-        return "SOURCE_METADATA_ONLY_ORIGINAL_EXECUTION_OPEN"
+        validate_test_roles(lines, case["required_vm_test_roles"], functions)
+        runtime = [line for line in lines if line.startswith("runtime physical ")]
+        require(len(runtime) == 1, "original runtime release missing")
+        released = re.fullmatch(r"runtime physical blocks/bytes=0/0; attempts=(\d+)", runtime[0])
+        require(released is not None and int(released[1]) > 0, "original runtime did not allocate and release")
+        exact(lines, "final runtime ", [f"final runtime physical blocks/bytes=0/0; attempts={released[1]}"])
+        return "SOURCE_DETACHED_METADATA_AND_ORIGINAL_TEST_VM"
+    exact(lines, "final runtime ", [f"final runtime physical blocks/bytes=0/0; attempts={oracle['runtime_attempts']}"])
     if "diagnostic" in oracle:
         diagnostic = oracle["diagnostic"]
         fields = " ".join(f"{key}={diagnostic[key]}" for key in
@@ -72,21 +97,7 @@ def validate_output(case, returncode, stdout, stderr, generated_exists):
         exact(lines, "atomic-execution ", [])
     roles = oracle.get("test_roles")
     if roles:
-        actual = [line for line in lines if line.startswith("source-test ")]
-        require(len(actual) == 7, "root discovery count changed")
-        functions = []
-        for index, line in enumerate(actual):
-            match = re.fullmatch(r"source-test index=(\d+) function=(\d+) role=(\d+) timeout=(\d+) name=(\w+)", line)
-            require(match is not None, "malformed root role")
-            at, function, role, timeout, role_name = match.groups()
-            require((int(at), int(role), int(timeout), role_name) ==
-                    (index, roles["roles"][index], roles["timeouts"][index], roles["names"][index]), "root role changed")
-            functions.append(int(function))
-        require(len(set(functions)) == 7, "role identities alias")
-        exact(lines, "test-execution ", [f"test-execution instance={i} role-index={r} result=Unit"
-              for i in range(2) for r in roles["sequence"]])
-        exact(lines, "test-isolation ", [f"test-isolation instance={i} first-bump=41 second-read=41 "
-              "dependency-denied=1 skip-denied=1" for i in range(2)])
+        validate_test_roles(lines, roles, facts["functions"])
     else:
         exact(lines, "source-test ", [])
         exact(lines, "test-execution ", [])

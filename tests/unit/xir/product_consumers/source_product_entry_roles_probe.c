@@ -85,7 +85,7 @@ static EntryRoles inspect_roles(const char *name, const XrXirModule *module, con
     CHECK(result.entry < module->function_count);
     result.entry_result = module->functions[result.entry].result;
     result.initializer = d->modules[d->root_module].initializer;
-    result.tests = !strcmp(name, "legal_test_discovery");
+    result.tests = !strcmp(name, "legal_test_discovery") || !strcmp(name, "original_test_discovery");
     for (uint32_t f = 0; f < module->function_count; ++f) {
         const XrXirFunction *fn = &module->functions[f];
         const XrXirFunctionIdentity *identity = &d->functions[f];
@@ -233,7 +233,7 @@ int main(int argc, char **argv) {
     FILE *output = fopen(argv[4], "wb");
     CHECK(output && fwrite(regenerated.text, 1, regenerated.length, output) == regenerated.length);
     CHECK(!fclose(output));
-    if (!strncmp(argv[1], "legal_", 6)) runtime_probe(argv[1], &program, &roles);
+    if (roles.tests || !strncmp(argv[1], "legal_", 6)) runtime_probe(argv[1], &program, &roles);
     passed = 1;
     printf("projection case=%s detached-Checked-Lowered=PASS C-identical=PASS\n", argv[1]);
 release:
