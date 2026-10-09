@@ -1,0 +1,1013 @@
+{
+  "schema": 1,
+  "family": "original_constructor_array_registration",
+  "legacy_base_commit": "01e6d38401b0f5c8684b64c35a99ac651024c0c1",
+  "status": "OPEN",
+  "retired": 0,
+  "replacement_gates": [],
+  "result": "STATIC_ORIGINAL_CONSTRUCTOR_ARRAY_REGISTRATION_MAP_ONLY",
+  "product_execution": "NOT_RUN_BY_THIS_MAP",
+  "producer": "25f4016d6f089169757a90ae11ba537002374711",
+  "identity": "Checked25/semantic67/Value22/Call28/Program29",
+  "producer_scope": "Fixedauthorised25f4 only; no privateRoot/newproducer/newheavywindow adopted.",
+  "legacy": [
+    {
+      "name": "test_constructor_allocation_failures",
+      "legacy_path": "tests/unit/program/test_xr_program.c",
+      "legacy_line": 991,
+      "body_lf_sha256": "893dbc3b920c0249511b6e6fcdff378d33648fe466862f62a3414cfe62bb1547",
+      "assertion_sites": 10,
+      "loop_sites": 2,
+      "status": "OPEN",
+      "replacement_gates": [],
+      "note": "Function census preserves its whole body; sites do not count executed loop iterations."
+    },
+    {
+      "name": "test_array_element_place_structure",
+      "legacy_path": "tests/unit/program/test_xr_program.c",
+      "legacy_line": 1295,
+      "body_lf_sha256": "e599f8efcb269c52f9b97ab8ceff0957cc600ff038f0ca666dea9940e822aa9f",
+      "assertion_sites": 5,
+      "loop_sites": 2,
+      "status": "OPEN",
+      "replacement_gates": [],
+      "note": "Function census preserves its whole body; sites do not count executed loop iterations."
+    },
+    {
+      "name": "main",
+      "legacy_path": "tests/unit/program/test_xr_program.c",
+      "legacy_line": 1449,
+      "body_lf_sha256": "e490dcc974f89aaebc03c7c0fa5a4426812135ca7e062b00a501789c6fdcf6d7",
+      "assertion_sites": 2,
+      "loop_sites": 1,
+      "status": "OPEN",
+      "replacement_gates": [],
+      "note": "Function census preserves its whole body; sites do not count executed loop iterations."
+    }
+  ],
+  "responsibility_mapping": [
+    {
+      "legacy_name": "test_constructor_allocation_failures",
+      "legacy_path": "tests/unit/program/test_xr_program.c",
+      "status": "OPEN",
+      "original_lines": [
+        991,
+        1048
+      ],
+      "CHECK_sites": [
+        {
+          "line": 1000,
+          "expression": "artifact.bytes == NULL",
+          "status": "OPEN",
+          "target_consumer": "ROOT_CURRENT_REPRESENTATION_AND_QUALIFIED_PRODUCER_PENDING"
+        },
+        {
+          "line": 1001,
+          "expression": "artifact.size == 0u",
+          "status": "OPEN",
+          "target_consumer": "ROOT_CURRENT_REPRESENTATION_AND_QUALIFIED_PRODUCER_PENDING"
+        },
+        {
+          "line": 1007,
+          "expression": "attempts + 1u == fail_at",
+          "status": "OPEN",
+          "target_consumer": "ROOT_CURRENT_REPRESENTATION_AND_QUALIFIED_PRODUCER_PENDING"
+        },
+        {
+          "line": 1014,
+          "expression": "status == XR_PROGRAM_BUILD_OUT_OF_MEMORY",
+          "status": "OPEN",
+          "target_consumer": "ROOT_CURRENT_REPRESENTATION_AND_QUALIFIED_PRODUCER_PENDING"
+        },
+        {
+          "line": 1016,
+          "expression": "builder_allocations != 0u",
+          "status": "OPEN",
+          "target_consumer": "ROOT_CURRENT_REPRESENTATION_AND_QUALIFIED_PRODUCER_PENDING"
+        },
+        {
+          "line": 1019,
+          "expression": "write_allocation_fixture(fixture, &artifact, diagnostic, sizeof(diagnostic)) ==\n          XR_PROGRAM_BUILD_OK",
+          "status": "OPEN",
+          "target_consumer": "ROOT_CURRENT_REPRESENTATION_AND_QUALIFIED_PRODUCER_PENDING"
+        },
+        {
+          "line": 1029,
+          "expression": "validated == NULL",
+          "status": "OPEN",
+          "target_consumer": "ROOT_CURRENT_REPRESENTATION_AND_QUALIFIED_PRODUCER_PENDING"
+        },
+        {
+          "line": 1034,
+          "expression": "attempts + 1u == fail_at",
+          "status": "OPEN",
+          "target_consumer": "ROOT_CURRENT_REPRESENTATION_AND_QUALIFIED_PRODUCER_PENDING"
+        },
+        {
+          "line": 1042,
+          "expression": "status == XR_PROGRAM_VERIFY_OUT_OF_MEMORY",
+          "status": "OPEN",
+          "target_consumer": "ROOT_CURRENT_REPRESENTATION_AND_QUALIFIED_PRODUCER_PENDING"
+        },
+        {
+          "line": 1044,
+          "expression": "verifier_allocations != 0u",
+          "status": "OPEN",
+          "target_consumer": "ROOT_CURRENT_REPRESENTATION_AND_QUALIFIED_PRODUCER_PENDING"
+        }
+      ],
+      "responsibility": "All26completefixtureinputs\u00d7builder+writer/fullverifier exactOOM and emptyoutput/physicalbalance at every failedactualprefix; firstuninjectedsuccess attempts+1==fail_at/nonzerocensus. Originalscan1..1023 is not targetnewcensus/cap."
+    },
+    {
+      "legacy_name": "test_array_element_place_structure",
+      "legacy_path": "tests/unit/program/test_xr_program.c",
+      "status": "OPEN",
+      "original_lines": [
+        1295,
+        1325
+      ],
+      "CHECK_sites": [
+        {
+          "line": 1297,
+          "expression": "xr_program_array_place_fixture_write(0u, &artifact) == XR_PROGRAM_BUILD_OK",
+          "status": "OPEN",
+          "target_consumer": "ROOT_CURRENT_REPRESENTATION_AND_QUALIFIED_PRODUCER_PENDING"
+        },
+        {
+          "line": 1302,
+          "expression": "xr_program_decode_structure(artifact.bytes, size, NULL, &view, NULL, 0u) !=\n              XR_PROGRAM_DECODE_OK",
+          "status": "OPEN",
+          "target_consumer": "ROOT_CURRENT_REPRESENTATION_AND_QUALIFIED_PRODUCER_PENDING"
+        },
+        {
+          "line": 1315,
+          "expression": "status == XR_PROGRAM_BUILD_OUT_OF_MEMORY",
+          "status": "OPEN",
+          "target_consumer": "ROOT_CURRENT_REPRESENTATION_AND_QUALIFIED_PRODUCER_PENDING"
+        },
+        {
+          "line": 1316,
+          "expression": "artifact.bytes == NULL && artifact.size == 0u",
+          "status": "OPEN",
+          "target_consumer": "ROOT_CURRENT_REPRESENTATION_AND_QUALIFIED_PRODUCER_PENDING"
+        },
+        {
+          "line": 1323,
+          "expression": "allocations > 0u && allocations < 1023u",
+          "status": "OPEN",
+          "target_consumer": "ROOT_CURRENT_REPRESENTATION_AND_QUALIFIED_PRODUCER_PENDING"
+        }
+      ],
+      "responsibility": "Fullactualarrayplace encoding mustdecodeOK; EVERYlength0..size-1 refuses; max_records1 exactRESOURCE_LIMIT. FullwriteractualFI/emptyoutput/balance/nonzerocensus. No actualruntime42/panic was run by thisoriginalformatfunction."
+    },
+    {
+      "legacy_name": "main",
+      "legacy_path": "tests/unit/program/test_xr_program.c",
+      "status": "OPEN",
+      "original_lines": [
+        1449,
+        1493
+      ],
+      "CHECK_sites": [
+        {
+          "line": 1453,
+          "expression": "xr_core_spec_operation_by_id(150u) == NULL",
+          "status": "OPEN",
+          "target_consumer": "ROOT_CURRENT_REPRESENTATION_AND_QUALIFIED_PRODUCER_PENDING"
+        },
+        {
+          "line": 1454,
+          "expression": "xr_core_spec_operation_by_id(167u) != NULL",
+          "status": "OPEN",
+          "target_consumer": "ROOT_CURRENT_REPRESENTATION_AND_QUALIFIED_PRODUCER_PENDING"
+        }
+      ],
+      "responsibility": "All34orderedoriginaltestcalls plus26fixtureloop retained, separately bound F64 stays inmainregistration, not among26. Oldoperation150absent/167CORE_STRING_FROM_SCALARpresent mapped to currentnormativecapability without numericalaliases; allfailedCHECKs accumulateto nonzeroexit."
+    }
+  ],
+  "outer_CHECK_sites": 17,
+  "original_private_helpers": [
+    {
+      "path": "tests/unit/program/test_xr_program.c",
+      "function": "write_allocation_fixture",
+      "line": 925,
+      "end_line": 989,
+      "body_lf_sha256": "865a5bbbd58ffc4d72bff53813dc625a2fe92df0e8fdb13e5deda6727273c3e9",
+      "CHECK_sites": 0,
+      "classification": "Specified actual full dependency helper body, not extra census TEST or exhaustive deletion closure.",
+      "status": "OPEN",
+      "responsibility": "Complete26ordinal switch/actualselectedcallee+mode, defaultINVALID_INPUT, no removed/simplifiedbranch."
+    },
+    {
+      "path": "tests/unit/program/test_xr_program.c",
+      "function": "write_module_initialization_fixture",
+      "line": 1050,
+      "end_line": 1062,
+      "body_lf_sha256": "4b8c124b61edcf794d21070c83f2e48949aac5a038b7948bac1dfed3a9b4a121",
+      "CHECK_sites": 0,
+      "classification": "Specified actual full dependency helper body, not extra census TEST or exhaustive deletion closure.",
+      "status": "OPEN",
+      "responsibility": "Fullfour-module diamond typed build/write/free ofactualinitializers."
+    },
+    {
+      "path": "tests/unit/program/test_xr_program.c",
+      "function": "expect_decode_status",
+      "line": 639,
+      "end_line": 651,
+      "body_lf_sha256": "c062c228f061de8fce1820f2bc7d214de2f64db3be097b43f644f57dfc9eecd4",
+      "CHECK_sites": 1,
+      "classification": "Specified actual full dependency helper body, not extra census TEST or exhaustive deletion closure.",
+      "status": "OPEN",
+      "responsibility": "OneCHECKrequires exactactualdecoderstatus with actualdiagnostic retained, not anyerror."
+    },
+    {
+      "path": "tests/unit/program/test_xr_program.c",
+      "function": "build_fixture",
+      "line": 159,
+      "end_line": 346,
+      "body_lf_sha256": "719a0377fae85924d560a48238b887e4a007564500601c27aaaa7e94d415d50d",
+      "CHECK_sites": 0,
+      "classification": "Specified actual full dependency helper body, not extra census TEST or exhaustive deletion closure.",
+      "status": "OPEN",
+      "responsibility": "Fullcanonicaltwo-module/providergraph with exactoldconstant/op/providerlogical inputs; thisbatch selectsfalse,false,VALID,checked."
+    },
+    {
+      "path": "tests/unit/program/test_xr_program.c",
+      "function": "allocation_probe_begin",
+      "line": 113,
+      "end_line": 117,
+      "body_lf_sha256": "0a4171c96ec946eb0df2086d56112236be218d1dadf1a6c61b1a72994872c047",
+      "CHECK_sites": 0,
+      "classification": "Specified actual full dependency helper body, not extra census TEST or exhaustive deletion closure.",
+      "status": "OPEN",
+      "responsibility": "Resetwholeledger/enable exactfailpoint, noownerleftfrompreviousprefix."
+    },
+    {
+      "path": "tests/unit/program/test_xr_program.c",
+      "function": "allocation_probe_end",
+      "line": 119,
+      "end_line": 125,
+      "body_lf_sha256": "d32068a3ea12edcf70239586619dad87befe5704a9dadc26c0737e32e13da544",
+      "CHECK_sites": 1,
+      "classification": "Specified actual full dependency helper body, not extra census TEST or exhaustive deletion closure.",
+      "status": "OPEN",
+      "responsibility": "OneCHECKrequires actualallocated==releasedbefore disable, diagnostics preserved; balanceisnotper-objectlifecycleproof."
+    },
+    {
+      "path": "tests/unit/program/test_xr_program.c",
+      "function": "allocation_probe_reject",
+      "line": 38,
+      "end_line": 40,
+      "body_lf_sha256": "54f700f7d03a4aa37233ed4457c41a42ff53a1f583baf909d8a9fca238bcf17b",
+      "CHECK_sites": 0,
+      "classification": "Specified actual full dependency helper body, not extra census TEST or exhaustive deletion closure.",
+      "status": "OPEN",
+      "responsibility": "Incrementactualattempt onlyenabled, rejectexactfailpoint."
+    },
+    {
+      "path": "tests/unit/program/test_xr_program.c",
+      "function": "allocation_probe_record",
+      "line": 42,
+      "end_line": 54,
+      "body_lf_sha256": "cb5a65e4a224270480b5ab9609579688c4ad448582f4f6d9df7bbb9abacd5522",
+      "CHECK_sites": 0,
+      "classification": "Specified actual full dependency helper body, not extra census TEST or exhaustive deletion closure.",
+      "status": "OPEN",
+      "responsibility": "Trackactualsuccessfulpointer in bounded1024ledger, abortoverflow."
+    },
+    {
+      "path": "tests/unit/program/test_xr_program.c",
+      "function": "allocation_probe_slot",
+      "line": 67,
+      "end_line": 74,
+      "body_lf_sha256": "f904b6e403d2ae1fbe1cfa5826a04bc7085e26c888d0ecf8b5196f0eb809475b",
+      "CHECK_sites": 0,
+      "classification": "Specified actual full dependency helper body, not extra census TEST or exhaustive deletion closure.",
+      "status": "OPEN",
+      "responsibility": "Unknownownedpointerfree/realloc aborts, no silentlydroppedowner."
+    },
+    {
+      "path": "tests/unit/program/test_xr_program.c",
+      "function": "xr_program_test_malloc",
+      "line": 56,
+      "end_line": 59,
+      "body_lf_sha256": "de3596b76966f6c7e97f2f1ec0dc4db27cd82ae4f87eea38a9ba0dd5d90801d9",
+      "CHECK_sites": 0,
+      "classification": "Specified actual full dependency helper body, not extra census TEST or exhaustive deletion closure.",
+      "status": "OPEN",
+      "responsibility": "Injectbeforeactualallocation; recordsuccess."
+    },
+    {
+      "path": "tests/unit/program/test_xr_program.c",
+      "function": "xr_program_test_calloc",
+      "line": 61,
+      "end_line": 65,
+      "body_lf_sha256": "86c395af430110ce659df112509e39b2f069df4d8b886507f95d07a9a80e328c",
+      "CHECK_sites": 0,
+      "classification": "Specified actual full dependency helper body, not extra census TEST or exhaustive deletion closure.",
+      "status": "OPEN",
+      "responsibility": "Injectbeforeactualallocation; recordsuccess."
+    },
+    {
+      "path": "tests/unit/program/test_xr_program.c",
+      "function": "xr_program_test_realloc",
+      "line": 76,
+      "end_line": 95,
+      "body_lf_sha256": "de206d13a4f51a9702fa8fc4289e34b2420c3a77fdefe86c968c0f15f37d7520",
+      "CHECK_sites": 0,
+      "classification": "Specified actual full dependency helper body, not extra census TEST or exhaustive deletion closure.",
+      "status": "OPEN",
+      "responsibility": "Failedgrowpreservesoldowner; updateonlyafteractualsuccess; nozero-sizeerase."
+    },
+    {
+      "path": "tests/unit/program/test_xr_program.c",
+      "function": "xr_program_test_free",
+      "line": 97,
+      "end_line": 103,
+      "body_lf_sha256": "b5670383dbd38e60328f8143bae3effbb93e770d78504137a6f3b9ed36d34b8f",
+      "CHECK_sites": 0,
+      "classification": "Specified actual full dependency helper body, not extra census TEST or exhaustive deletion closure.",
+      "status": "OPEN",
+      "responsibility": "Clearactualownedledgerentry before physicalfree."
+    },
+    {
+      "path": "tests/unit/program/xr_program_module_slot_checks.inc.c",
+      "function": "write_module_slots_fixture",
+      "line": 11,
+      "end_line": 23,
+      "body_lf_sha256": "c81cb58cf02b833c280a26f9866852988c3f999a468804305bca2f2aee8120dd",
+      "CHECK_sites": 0,
+      "classification": "Specified actual full dependency helper body, not extra census TEST or exhaustive deletion closure.",
+      "status": "OPEN",
+      "responsibility": "Fullrealmoduletypedslotdeclarations/build/write/free."
+    },
+    {
+      "path": "tests/unit/program/xr_program_display_name_checks.inc.c",
+      "function": "write_named_type_fixture",
+      "line": 11,
+      "end_line": 39,
+      "body_lf_sha256": "b4dd9e313ba311135759035427e3b60fbf30cedb1a8570c0ef8bd9e080bd2a3f",
+      "CHECK_sites": 0,
+      "classification": "Specified actual full dependency helper body, not extra census TEST or exhaustive deletion closure.",
+      "status": "OPEN",
+      "responsibility": "FullTopErr.Failed/Empty typedgraph, poisoncallername buffers beforewrite; owner mustcopy actualnames."
+    },
+    {
+      "path": "tests/unit/program/xr_program_array_fixture.h",
+      "function": "xr_program_array_place_fixture_write",
+      "line": 147,
+      "end_line": 263,
+      "body_lf_sha256": "733547291ddab0fd88660675af805e3072266f22086e5df570dfaa13ae0b3252",
+      "CHECK_sites": 0,
+      "classification": "Specified actual full dependency helper body, not extra census TEST or exhaustive deletion closure.",
+      "status": "OPEN",
+      "responsibility": "WholeI64array42/index0/checkedplace/store-load-owner-drop and ownedPanicInfo+array cleanup input. Onlymode0selectedhere; preserve sharedothermutation branches without claiming execution."
+    },
+    {
+      "path": "tests/unit/program/xr_program_array_fixture.h",
+      "function": "xr_program_array_loan_fixture_write",
+      "line": 266,
+      "end_line": 463,
+      "body_lf_sha256": "82b9781e23412e5a4f6c2f26e071fd356d8a52798b5e36dfa643529f8891d83d",
+      "CHECK_sites": 0,
+      "classification": "Specified actual full dependency helper body, not extra census TEST or exhaustive deletion closure.",
+      "status": "OPEN",
+      "responsibility": "Wholeold/newer strings/nestedarray/elementplaces/copy/exchange/ownerdrop/branch borrowed-value inputs; exactselectedscenarios0,2,3,5,8,10 preservedunder currentfrozenexclusiveowner/noescape review."
+    },
+    {
+      "path": "tests/unit/program/xr_program_module_fixture.h",
+      "function": "xr_program_module_fixture_init",
+      "line": 33,
+      "end_line": 70,
+      "body_lf_sha256": "915b0162cae236eb17682feee9fdab215ad820ec56798cdf4a94d727b2b270f0",
+      "CHECK_sites": 0,
+      "classification": "Specified actual full dependency helper body, not extra census TEST or exhaustive deletion closure.",
+      "status": "OPEN",
+      "responsibility": "Allfourinitializerfunctions/modules/dependencydiamond/realstablekeys/profileflags."
+    },
+    {
+      "path": "tests/unit/program/xr_program_module_fixture.h",
+      "function": "xr_program_module_fixture_add_slots",
+      "line": 72,
+      "end_line": 84,
+      "body_lf_sha256": "c15d44f569b9012a8af5d995ad18dcfe4c18e23a75894282aa1b88ba11ada0f9",
+      "CHECK_sites": 0,
+      "classification": "Specified actual full dependency helper body, not extra census TEST or exhaustive deletion closure.",
+      "status": "OPEN",
+      "responsibility": "Allfourmodules originalcounterI64/constlabelstring slots, no frozenCell-source rewrite."
+    },
+    {
+      "path": "tests/unit/program/xr_program_module_fixture.h",
+      "function": "xr_program_module_initializer_fixture_write",
+      "line": 86,
+      "end_line": 132,
+      "body_lf_sha256": "194134d3eef989d360390f4f8833c7c0ff244c22504707305b72746acc504966",
+      "CHECK_sites": 0,
+      "classification": "Specified actual full dependency helper body, not extra census TEST or exhaustive deletion closure.",
+      "status": "OPEN",
+      "responsibility": "OriginalfalseI64state/trueownedstringstate initializer completeconstruction+placeinitialize/build/write/free."
+    },
+    {
+      "path": "tests/unit/program/xr_program_module_fixture.h",
+      "function": "xr_program_module_array_borrow_fixture_write",
+      "line": 819,
+      "end_line": 888,
+      "body_lf_sha256": "571b050cec01b14dd0fb187363b54c87acc9a48966258a09f655933c28b38c3a",
+      "CHECK_sites": 0,
+      "classification": "Specified actual full dependency helper body, not extra census TEST or exhaustive deletion closure.",
+      "status": "OPEN",
+      "responsibility": "Modes0and3 only: realmodulearray owner/borrowcrossblock andloopcarriedborrow without exchange; sharedvariants1/2negativeelsewhere remainpreserved."
+    },
+    {
+      "path": "tests/unit/program/xr_program_text_fixture.h",
+      "function": "xr_program_text_fixture_write",
+      "line": 340,
+      "end_line": 345,
+      "body_lf_sha256": "25b5946bcf1d835993bd11c8cebab0d856fff0c7afd3064956cc349f57f1b6b3",
+      "CHECK_sites": 0,
+      "classification": "Specified actual full dependency helper body, not extra census TEST or exhaustive deletion closure.",
+      "status": "OPEN",
+      "responsibility": "DelegateactualfullVALIDtextfixture."
+    },
+    {
+      "path": "tests/unit/program/xr_program_text_fixture.h",
+      "function": "xr_program_text_fixture_write_mutated",
+      "line": 37,
+      "end_line": 338,
+      "body_lf_sha256": "6be1c893157e2497b52940a23b27593994b13c555084f69eaaf68540404bb984",
+      "CHECK_sites": 0,
+      "classification": "Specified actual full dependency helper body, not extra census TEST or exhaustive deletion closure.",
+      "status": "OPEN",
+      "responsibility": "Completeactualstring/texttypedconstant/provider/outputownergraph; sharednegativebranches not selectedhere."
+    },
+    {
+      "path": "tests/unit/program/xr_program_construct_fixture.h",
+      "function": "xr_program_construct_fixture_write",
+      "line": 320,
+      "end_line": 373,
+      "body_lf_sha256": "c8149f06ef7ea00e7c57b76eb16bfd42a9f5300b17cebe45ac341daab14b4cd6",
+      "CHECK_sites": 0,
+      "classification": "Specified actual full dependency helper body, not extra census TEST or exhaustive deletion closure.",
+      "status": "OPEN",
+      "responsibility": "FullselectedNESTED_TRANSFER typedaggregate ownergraph/build/write/free with originalinputtype/instruction helpers in wholecontainer."
+    },
+    {
+      "path": "tests/unit/program/xr_program_coroutine_trap_fixture.h",
+      "function": "xr_program_coroutine_trap_fixture_write",
+      "line": 522,
+      "end_line": 534,
+      "body_lf_sha256": "9101c01d021a641d718f71d018975704f2907ad3e8492dd3fedaf3005a853c55",
+      "CHECK_sites": 0,
+      "classification": "Specified actual full dependency helper body, not extra census TEST or exhaustive deletion closure.",
+      "status": "OPEN",
+      "responsibility": "FullVALIDnestedcoroutine/hostproviderstablecontract/trap+cleanup inputs andactualpartial-ownerfree."
+    },
+    {
+      "path": "tests/unit/program/xr_program_output_trap_fixture.h",
+      "function": "xr_program_output_trap_fixture_write",
+      "line": 89,
+      "end_line": 207,
+      "body_lf_sha256": "792a692936c55cbd90b718266664381e0832efddf65a9240a9eb415662fea321",
+      "CHECK_sites": 0,
+      "classification": "Specified actual full dependency helper body, not extra census TEST or exhaustive deletion closure.",
+      "status": "OPEN",
+      "responsibility": "FullVALIDtypedoutput borrowed prefix+owningrefusaledge suffix ownergraph, not sameprovidername substitute."
+    },
+    {
+      "path": "tests/unit/program/xr_program_output_trap_fixture.h",
+      "function": "write_output_trap_blocks",
+      "line": 27,
+      "end_line": 85,
+      "body_lf_sha256": "24410b847e1760c68bc95344e329dfd96884afa2f37f33cddd25cf22318d9032",
+      "CHECK_sites": 0,
+      "classification": "Specified actual full dependency helper body, not extra census TEST or exhaustive deletion closure.",
+      "status": "OPEN",
+      "responsibility": "Actualownedclass/string/types/stableproviderlogical graph andbuild/write/free."
+    },
+    {
+      "path": "tests/unit/program/xr_program_assert_fixture.h",
+      "function": "xr_program_panic_point_fixture_write",
+      "line": 28,
+      "end_line": 251,
+      "body_lf_sha256": "759e437ed01c720af683c522610391322d6a447258458146baf403ff69464fed",
+      "CHECK_sites": 0,
+      "classification": "Specified actual full dependency helper body, not extra census TEST or exhaustive deletion closure.",
+      "status": "OPEN",
+      "responsibility": "ExactASSERT_CONDITION/INTEGER_DIVMOD withCHAINED_CLEANUP, fullpanic/type/owned-cleanup inputs retained."
+    },
+    {
+      "path": "tests/unit/program/xr_program_callable_fixture.h",
+      "function": "xr_program_callable_fixture_write_mutated",
+      "line": 38,
+      "end_line": 627,
+      "body_lf_sha256": "777c7037f3a4596fc5b7752eb35d94798ccb74a38b32273a2740e4de285ce2bc",
+      "CHECK_sites": 0,
+      "classification": "Specified actual full dependency helper body, not extra census TEST or exhaustive deletion closure.",
+      "status": "OPEN",
+      "responsibility": "FullDIRECT_PANICcallablegraph/signatures/captureowner/effectinputs, not directscalarsubstitute."
+    },
+    {
+      "path": "tests/unit/program/xr_program_coroutine_outcome_fixture.h",
+      "function": "xr_program_coroutine_outcome_fixture_write",
+      "line": 111,
+      "end_line": 210,
+      "body_lf_sha256": "9a166c62da0763f681b197692c44c868fa474b1cd054b6fb416fceaa32cf05f6",
+      "CHECK_sites": 0,
+      "classification": "Specified actual full dependency helper body, not extra census TEST or exhaustive deletion closure.",
+      "status": "OPEN",
+      "responsibility": "All4selectedpanicsfalse/true,ownedtrue,VALID/HANDLED fullsuspendedfailurechannel/handler/owner/cancel inputs."
+    }
+  ],
+  "specified_helper_CHECK_sites": 2,
+  "original_input_files": [
+    {
+      "path": "tests/unit/program/test_xr_program.c",
+      "whole_file_lf_sha256": "2743be628db188c386a72e59529286df64720051710599d83f9b6510aa529aff",
+      "physical_raw_sha256": "5986f0f7160296f52787ca8b9443329a9a05eeff083daac530a776642971655a",
+      "git_base_equal": true,
+      "role": "Full original direct-input/helper container including type/enum tables and transitive local helpers; not exhaustive external dependency closure."
+    },
+    {
+      "path": "tests/unit/program/xr_program_module_slot_checks.inc.c",
+      "whole_file_lf_sha256": "cb50092d9aeddbece74a6f3ebce0fc68e72b72a835e56208913e8e696f102601",
+      "physical_raw_sha256": "5b8c594b329bc4b095f9eea113005e5cdf9e1d58b8f0ddd58a520340e4e09c4c",
+      "git_base_equal": true,
+      "role": "Full original direct-input/helper container including type/enum tables and transitive local helpers; not exhaustive external dependency closure."
+    },
+    {
+      "path": "tests/unit/program/xr_program_display_name_checks.inc.c",
+      "whole_file_lf_sha256": "bf41548a1d4639173df9af3ce181c7ea591020c38b7918432c81680eccd66235",
+      "physical_raw_sha256": "2c8648b78a6300c76568cf1ed01c4d239a477347f21658c58e76e810d08ab837",
+      "git_base_equal": true,
+      "role": "Full original direct-input/helper container including type/enum tables and transitive local helpers; not exhaustive external dependency closure."
+    },
+    {
+      "path": "tests/unit/program/xr_program_array_fixture.h",
+      "whole_file_lf_sha256": "911432d1a22b44d1dbd87c89f7af74175867d84907fcdc49c029bc7d6c50d3e5",
+      "physical_raw_sha256": "8933a21bd12911f2cef2c5d0b6fc75067c02cb6c132f74121e727c497a3530c3",
+      "git_base_equal": true,
+      "role": "Full original direct-input/helper container including type/enum tables and transitive local helpers; not exhaustive external dependency closure."
+    },
+    {
+      "path": "tests/unit/program/xr_program_module_fixture.h",
+      "whole_file_lf_sha256": "65db69b47101e348f8eaea39185ea91f12f795fbf451364f2c8f75c1035920b2",
+      "physical_raw_sha256": "68d57ccdc6cb4f92f1571b3215cf437b7f0cdcd3ce7b5d3f4007f01978aedac0",
+      "git_base_equal": true,
+      "role": "Full original direct-input/helper container including type/enum tables and transitive local helpers; not exhaustive external dependency closure."
+    },
+    {
+      "path": "tests/unit/program/xr_program_text_fixture.h",
+      "whole_file_lf_sha256": "dff5bfe6e111875b82de3b887c509e36f5f50a12d7f8aa14ad4008c661e68cfe",
+      "physical_raw_sha256": "486d589a3e1c6baea3fe6d4b3c8e2b67215ddb91302fc2cb7dc39a1df9f116c3",
+      "git_base_equal": true,
+      "role": "Full original direct-input/helper container including type/enum tables and transitive local helpers; not exhaustive external dependency closure."
+    },
+    {
+      "path": "tests/unit/program/xr_program_construct_fixture.h",
+      "whole_file_lf_sha256": "282629c6320114c37a21c7f036d6678a986703da677f779cb84d046e9213cb5f",
+      "physical_raw_sha256": "8784b087576032649e15eaf7ce55207b27c8b0d1ee2e7f8096ce97fca136ccd8",
+      "git_base_equal": true,
+      "role": "Full original direct-input/helper container including type/enum tables and transitive local helpers; not exhaustive external dependency closure."
+    },
+    {
+      "path": "tests/unit/program/xr_program_coroutine_trap_fixture.h",
+      "whole_file_lf_sha256": "d8c750b8638ae3f0c51c9606ece210f1e340a5e706a93af68058d7bb3999d6c7",
+      "physical_raw_sha256": "e6722999ee14d24cc67d48c53f2a5ec88ac96ab5381932892071f00d3dfa870d",
+      "git_base_equal": true,
+      "role": "Full original direct-input/helper container including type/enum tables and transitive local helpers; not exhaustive external dependency closure."
+    },
+    {
+      "path": "tests/unit/program/xr_program_output_trap_fixture.h",
+      "whole_file_lf_sha256": "c6fb5e46f4505165f40708daee6682e8891c71eac9eeb57a835e94f7712a17e0",
+      "physical_raw_sha256": "531263a2eb2d9866b12284635e1dca2a02c29826a046042bc0f1ac02b1570813",
+      "git_base_equal": true,
+      "role": "Full original direct-input/helper container including type/enum tables and transitive local helpers; not exhaustive external dependency closure."
+    },
+    {
+      "path": "tests/unit/program/xr_program_assert_fixture.h",
+      "whole_file_lf_sha256": "52288aa92eb0ed11aaddd8efe28b482e94d2e09e89dd8d574345aa783216adc4",
+      "physical_raw_sha256": "350d7b21562b9474f0b368a6ee3cc036aeb14bc220c8a1a80b3fad6f1f7dbafa",
+      "git_base_equal": true,
+      "role": "Full original direct-input/helper container including type/enum tables and transitive local helpers; not exhaustive external dependency closure."
+    },
+    {
+      "path": "tests/unit/program/xr_program_callable_fixture.h",
+      "whole_file_lf_sha256": "8649cf8f2ff8c6ab196b311d93d364a4ca2a712d58752946f00c1793ac49a9c4",
+      "physical_raw_sha256": "a36f88ff23bc4056dd7a6dba1fe5222ff30e91839b2d545a0ee224f8cf4b4972",
+      "git_base_equal": true,
+      "role": "Full original direct-input/helper container including type/enum tables and transitive local helpers; not exhaustive external dependency closure."
+    },
+    {
+      "path": "tests/unit/program/xr_program_coroutine_outcome_fixture.h",
+      "whole_file_lf_sha256": "691cb5f503be69842ca4bcffc9bb830ca86dd573823e6243534ffdb947d48d78",
+      "physical_raw_sha256": "a04054481658aabccbf77bbb6f9368644d4d29f569912c53ad006d239b324686",
+      "git_base_equal": true,
+      "role": "Full original direct-input/helper container including type/enum tables and transitive local helpers; not exhaustive external dependency closure."
+    }
+  ],
+  "input_policy": "Full3originalotherfunctions/30specifiedhelpers/12wholeoriginaldirectcontainers match01e6Git. Completeinputenum/type/constant/provider/handler/borrow tables remain original. Not exhaustiveexternaldependency/deletionclosure.",
+  "fixture_matrix": [
+    {
+      "ordinal": 0,
+      "function": "build_fixture",
+      "arguments": "false,false,FIXTURE_VALID,profile:checked",
+      "responsibility": "Complete two-module/provider canonical graph",
+      "status": "OPEN"
+    },
+    {
+      "ordinal": 1,
+      "function": "xr_program_text_fixture_write",
+      "arguments": "VALID",
+      "responsibility": "Full typed string/text graph",
+      "status": "OPEN"
+    },
+    {
+      "ordinal": 2,
+      "function": "xr_program_construct_fixture_write",
+      "arguments": "NESTED_TRANSFER",
+      "responsibility": "Nested affine aggregate owner transfer",
+      "status": "OPEN"
+    },
+    {
+      "ordinal": 3,
+      "function": "xr_program_coroutine_trap_fixture_write",
+      "arguments": "VALID",
+      "responsibility": "Full nested coroutine provider trap/cleanup",
+      "status": "OPEN"
+    },
+    {
+      "ordinal": 4,
+      "function": "write_module_initialization_fixture",
+      "arguments": "four-module diamond",
+      "responsibility": "Dependency-ordered initializer graph",
+      "status": "OPEN"
+    },
+    {
+      "ordinal": 5,
+      "function": "write_module_slots_fixture",
+      "arguments": "all original slots",
+      "responsibility": "I64/string four-module slot declarations",
+      "status": "OPEN"
+    },
+    {
+      "ordinal": 6,
+      "function": "xr_program_module_initializer_fixture_write",
+      "arguments": "false",
+      "responsibility": "I64 module state initializer",
+      "status": "OPEN"
+    },
+    {
+      "ordinal": 7,
+      "function": "xr_program_module_initializer_fixture_write",
+      "arguments": "true",
+      "responsibility": "Owned string module state initializer",
+      "status": "OPEN"
+    },
+    {
+      "ordinal": 8,
+      "function": "xr_program_output_trap_fixture_write",
+      "arguments": "VALID",
+      "responsibility": "Typed output borrowed prefix/owning refusal cleanup",
+      "status": "OPEN"
+    },
+    {
+      "ordinal": 9,
+      "function": "xr_program_panic_point_fixture_write",
+      "arguments": "ASSERT_CONDITION,CHAINED_CLEANUP",
+      "responsibility": "Assertion panic full chained cleanup",
+      "status": "OPEN"
+    },
+    {
+      "ordinal": 10,
+      "function": "xr_program_panic_point_fixture_write",
+      "arguments": "INTEGER_DIVMOD,CHAINED_CLEANUP",
+      "responsibility": "Integer divmod panic full chained cleanup",
+      "status": "OPEN"
+    },
+    {
+      "ordinal": 11,
+      "function": "xr_program_callable_fixture_write_mutated",
+      "arguments": "DIRECT_PANIC",
+      "responsibility": "Function callable direct panic graph",
+      "status": "OPEN"
+    },
+    {
+      "ordinal": 12,
+      "function": "xr_program_coroutine_outcome_fixture_write",
+      "arguments": "panics=false,owned=true,VALID",
+      "responsibility": "Suspended owned language error",
+      "status": "OPEN"
+    },
+    {
+      "ordinal": 13,
+      "function": "xr_program_coroutine_outcome_fixture_write",
+      "arguments": "panics=true,owned=true,VALID",
+      "responsibility": "Suspended owned panic",
+      "status": "OPEN"
+    },
+    {
+      "ordinal": 14,
+      "function": "xr_program_coroutine_outcome_fixture_write",
+      "arguments": "panics=false,owned=true,HANDLED",
+      "responsibility": "Handled suspended owned language error",
+      "status": "OPEN"
+    },
+    {
+      "ordinal": 15,
+      "function": "xr_program_coroutine_outcome_fixture_write",
+      "arguments": "panics=true,owned=true,HANDLED",
+      "responsibility": "Handled suspended owned panic",
+      "status": "OPEN"
+    },
+    {
+      "ordinal": 16,
+      "function": "write_named_type_fixture",
+      "arguments": "TopErr.Failed/Empty",
+      "responsibility": "Owned diagnostic names survive caller poisoning",
+      "status": "OPEN"
+    },
+    {
+      "ordinal": 17,
+      "function": "xr_program_array_place_fixture_write",
+      "arguments": "0",
+      "responsibility": "Checked I64 element place with owned panic cleanup",
+      "status": "OPEN"
+    },
+    {
+      "ordinal": 18,
+      "function": "xr_program_array_loan_fixture_write",
+      "arguments": "0",
+      "responsibility": "Observe old element before exchange",
+      "status": "OPEN"
+    },
+    {
+      "ordinal": 19,
+      "function": "xr_program_array_loan_fixture_write",
+      "arguments": "2",
+      "responsibility": "Explicit old-element copy survives exchange/old-owner drop",
+      "status": "OPEN"
+    },
+    {
+      "ordinal": 20,
+      "function": "xr_program_array_loan_fixture_write",
+      "arguments": "3",
+      "responsibility": "Observe borrowed old element before exchanged-owner drop",
+      "status": "OPEN"
+    },
+    {
+      "ordinal": 21,
+      "function": "xr_program_array_loan_fixture_write",
+      "arguments": "5",
+      "responsibility": "Equivalent second place; observe borrowed old before drop",
+      "status": "OPEN"
+    },
+    {
+      "ordinal": 22,
+      "function": "xr_program_array_loan_fixture_write",
+      "arguments": "8",
+      "responsibility": "Nested borrowed old element before inner-owner drop",
+      "status": "OPEN"
+    },
+    {
+      "ordinal": 23,
+      "function": "xr_program_array_loan_fixture_write",
+      "arguments": "10",
+      "responsibility": "Nested borrowed result crosses branch with real outer owner",
+      "status": "OPEN"
+    },
+    {
+      "ordinal": 24,
+      "function": "xr_program_module_array_borrow_fixture_write",
+      "arguments": "0",
+      "responsibility": "Cross-block module array borrow without exchange",
+      "status": "OPEN"
+    },
+    {
+      "ordinal": 25,
+      "function": "xr_program_module_array_borrow_fixture_write",
+      "arguments": "3",
+      "responsibility": "Loop-carried module array borrow without exchange",
+      "status": "OPEN"
+    }
+  ],
+  "constructor_FI": {
+    "fixtures": 26,
+    "stages": [
+      "builder+writer",
+      "full verifier"
+    ],
+    "first_failure_index": 1,
+    "original_scan_exclusive_bound": 1024,
+    "actual_census": "First uninjected success must have attempts+1==fail_at; nonzero builder/verifier totals printed per fixture.",
+    "failure": "Exact OUT_OF_MEMORY at every entered failing prefix, artifactbytesNULL/size0 or ValidatedProgramNULL.",
+    "release": "Each prefix frees output and all partial owners; actual allocation ledger allocated==released.",
+    "target": "Fresh full actual census for every retained original input/stage plus full compiler/runtime FI and all resource axes; never replace current denominator by1024 or sampling."
+  },
+  "array_format": {
+    "fixture_mutation": 0,
+    "complete_decode": "OK",
+    "truncation": "Every length0..artifactsize-1 rejected, not a sample.",
+    "max_records": 1,
+    "resource_status": "RESOURCE_LIMIT",
+    "writer_FI": "Every failat1..actualfirstsuccess under oldexclusive1024, exactOOM/NULLbytes/size0 and ledgerbalance; total1..1022.",
+    "original_graph": "I64 array[42], index0, checked element place/one panic successor, store42/load before array-owner drop/return; cleanup owns PanicInfo+array, dropsarray then panicpublish.",
+    "current_runtime": "No actual scalar42 or panic run in this original format test; target current runtime independent correctness remains required."
+  },
+  "registration_calls": [
+    {
+      "function": "test_parent_types",
+      "arguments": ""
+    },
+    {
+      "function": "test_parent_type_cycle_wire_and_allocations",
+      "arguments": ""
+    },
+    {
+      "function": "test_parent_type_requires_nominal_target_wire",
+      "arguments": ""
+    },
+    {
+      "function": "test_f64_constant_bits_and_wire",
+      "arguments": ""
+    },
+    {
+      "function": "test_array_element_place_structure",
+      "arguments": ""
+    },
+    {
+      "function": "test_display_names_roundtrip_and_wire",
+      "arguments": ""
+    },
+    {
+      "function": "test_display_names_invalid_construction",
+      "arguments": ""
+    },
+    {
+      "function": "test_display_names_are_not_type_identity",
+      "arguments": ""
+    },
+    {
+      "function": "test_retained_function_identity_publication",
+      "arguments": ""
+    },
+    {
+      "function": "test_channel_types",
+      "arguments": ""
+    },
+    {
+      "function": "test_channel_type_allocation_failures",
+      "arguments": ""
+    },
+    {
+      "function": "test_atomic_type_roundtrip",
+      "arguments": ""
+    },
+    {
+      "function": "test_atomic_type_invalid_construction",
+      "arguments": ""
+    },
+    {
+      "function": "test_atomic_type_hostile_wire",
+      "arguments": ""
+    },
+    {
+      "function": "test_atomic_type_allocation_failures",
+      "arguments": ""
+    },
+    {
+      "function": "test_resource_type_admission",
+      "arguments": ""
+    },
+    {
+      "function": "test_resource_type_allocation_failures",
+      "arguments": ""
+    },
+    {
+      "function": "test_record_type_roundtrip",
+      "arguments": ""
+    },
+    {
+      "function": "test_record_type_invalid_and_hostile",
+      "arguments": ""
+    },
+    {
+      "function": "test_record_type_allocation_failures",
+      "arguments": ""
+    },
+    {
+      "function": "test_array_type_roundtrip",
+      "arguments": ""
+    },
+    {
+      "function": "test_array_type_invalid_construction",
+      "arguments": ""
+    },
+    {
+      "function": "test_array_type_hostile_wire",
+      "arguments": ""
+    },
+    {
+      "function": "test_array_type_allocation_failures",
+      "arguments": ""
+    },
+    {
+      "function": "test_module_slots_construction",
+      "arguments": ""
+    },
+    {
+      "function": "test_module_slots_hostile_wire",
+      "arguments": ""
+    },
+    {
+      "function": "test_module_initialization_construction",
+      "arguments": ""
+    },
+    {
+      "function": "test_module_initialization_hostile_wire",
+      "arguments": ""
+    },
+    {
+      "function": "test_constructor_allocation_failures",
+      "arguments": "fixture"
+    },
+    {
+      "function": "test_partial_core_ir_construction",
+      "arguments": ""
+    },
+    {
+      "function": "test_determinism_roundtrip_and_identity",
+      "arguments": ""
+    },
+    {
+      "function": "test_hostile_structure_and_budget",
+      "arguments": ""
+    },
+    {
+      "function": "test_semantic_profile_and_invalid_core_ir",
+      "arguments": ""
+    },
+    {
+      "function": "test_provider_semantics_are_program_identity",
+      "arguments": ""
+    }
+  ],
+  "registration_boundary": "main registers all original families (including separately bound F64) and 26constructor fixtures, accumulates failures and returns1/0; fixture26 matrix does not include F64.",
+  "original_registry_guard": {
+    "absent_operation": 150,
+    "present_operation": 167,
+    "present_name": "CORE_STRING_FROM_SCALAR",
+    "path": "src/core/xr_core_spec_gen.h",
+    "lf_sha256": "e393724757512051de476d4250d1a9983c27713c2aeec9a0681cad5d1a0633bd",
+    "target": "Root maps current operation registry by normative capability; no numeric compatibility alias."
+  },
+  "target_contract_or_representation_review": [
+    "Full original26graphs and exactselectedmodes/types/ownedfailurechannels/partialownerprefixes retained; no simplified fixtures or forcelegal negative conversion.",
+    "Root maps oldCoreIR/sections/opcodes/effect/borrow-root graph to current SourceProduct/Checked/completecommonverification/typedLibrary/declarationprovenance without oldABI restoration.",
+    "Array loans/nested/module borrows preserve actual owner lifetime/exclusivity under frozenCell/ref/noescape, no permanent borrowed-copy/temporary-writeback alternate expectations.",
+    "Every currentencoding prefix and exact resource limit diagnostic/nonpublication plus full independent correctruntime VM/realnative/applicablemixed/twodetachedInstances afterproducerdeath.",
+    "Fresh actual fullFI census/allresourceaxes/physicalpartial-release/per-objectidentity/safety/Rootintegration/acceptance/lastconsumer shareddependency review remainOPEN."
+  ],
+  "target_owner_proof": "All26realinputs/currenttypedownergraphs fullyverified; everyactualfailedconstruction/deserialization/verificationprefix owns no escapedpartialstate, frees eachphysicalallocation and releases everyobjectidentityexactlyonce. Array/moduleborrow root remains actualexclusiveowner across checkedplace/exchange/branch/loop andfailurecleanup under frozenCell/ref/noescape, no copiedborrow/tempwriteback fallback. Detach callerinput/Source/session/Checked/Lowered/Program withtwoseparateInstances andindependentVM/realnative/mixed/packet/typedLibrary; escapedtypedoutcomes remainvaliduntil finalownerrelease. Needrealstableconstruct/finalize/reclaim, not allocatoraddress/counts/physical0/CallEntry.release alone.",
+  "shared_dependencies": {
+    "paths": [
+      "tests/unit/program/test_xr_program.c",
+      "tests/unit/program/xr_program_module_slot_checks.inc.c",
+      "tests/unit/program/xr_program_display_name_checks.inc.c",
+      "tests/unit/program/xr_program_array_fixture.h",
+      "tests/unit/program/xr_program_module_fixture.h",
+      "tests/unit/program/xr_program_text_fixture.h",
+      "tests/unit/program/xr_program_construct_fixture.h",
+      "tests/unit/program/xr_program_coroutine_trap_fixture.h",
+      "tests/unit/program/xr_program_output_trap_fixture.h",
+      "tests/unit/program/xr_program_assert_fixture.h",
+      "tests/unit/program/xr_program_callable_fixture.h",
+      "tests/unit/program/xr_program_coroutine_outcome_fixture.h"
+    ],
+    "status": "PRESERVE_ALL_SHARED_INPUT_AND_OWNER_CONTAINERS",
+    "policy": "Eachotherfunction/sharedfixtureowner hasindependentactiveconsumers; thismap grantsnodeletion. Sharedemissionowner7remainsunchangedalthoughthisbatchdoesnotemitnativeC."
+  },
+  "representation_boundaries": [
+    "26fixtureordinals/modes areoriginalinputresponsibilities, not replacementqualification/iterationscount or the separate8Sourceallocations denominator.",
+    "F64 retainsseparateexistingresponsibilitybindings andmainregistration; explicitlynot a26constructorfixture.",
+    "Oldexclusive1024 FI loopbound ishistorical, not currentalgorithmcensus/samplinglimit or permissionTIMEOUTchange.",
+    "Arrayformatoriginaltestobservesdecode/limit/FI only, doesnotexecutefixed42; actualcurrentruntimecorrectness/paniccleanup/lifecycle remainrequired.",
+    "OldCoreIR/IRownership/opcode/packetlayout/stableID/CoreSpec registryguard require Rootcurrentnormativerepresentationmapping, no runtimeoldwire/ABI alias.",
+    "Every mainregisteredfamilyremainsOPEN, registrationdigest isnot proof alltestbodiesqualified."
+  ],
+  "handoff": {
+    "report": "build-consumer-evidence/consumer-session-20261009-r1/constructor-array-registration-interface-request.json",
+    "raw_sha256": "896b51eb0f83d8adbe1ce51b2a2cfdee3fb5b672f1db61ab77a72c1229a15b30",
+    "Root_thread": "01a11f74-a297-7b11-8441-835bde6a3d5f",
+    "formal_acceptance": "PENDING"
+  },
+  "full_FI": "NOT_RUN",
+  "axes": "NOT_RUN",
+  "full_safety": "NOT_RUN",
+  "SourceDelete": "NOT_RUN",
+  "Main": "NOT_RUN",
+  "boundaries": [
+    "All17outer/2specifiedhelperCHECKs pluscompleteinput matrix/34registrationcalls remainOPEN;retired0.",
+    "Noactualproduct/compiler/runtimeallocation/provider/native/lifecycleevents observed by thisstaticmap.",
+    "FreshRootcurrentstableproducer/fullFI/allresourceaxes/lifecycle/safety/formalacceptance/lastconsumeraudit remainrequired."
+  ]
+}
