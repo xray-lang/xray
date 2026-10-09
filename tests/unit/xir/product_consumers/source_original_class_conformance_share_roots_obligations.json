@@ -1,0 +1,379 @@
+{
+  "schema": 1,
+  "family": "original_class_conformance_and_projected_share_roots",
+  "legacy_base_commit": "01e6d38401b0f5c8684b64c35a99ac651024c0c1",
+  "status": "OPEN",
+  "retired": 0,
+  "replacement_gates": [],
+  "result": "STATIC_FULL_ORIGINAL_CLASS_DESCRIPTOR_AND_PROJECTED_IDENTITY_SHARE_ROOT_MAP_ONLY",
+  "product_execution": "NOT_RUN_BY_THIS_MAP",
+  "producer": "25f4016d6f089169757a90ae11ba537002374711",
+  "identity": "Checked25/semantic67/Value22/Call28/Program29",
+  "legacy": [
+    {
+      "name": "test_class_reference_interface_conformance",
+      "legacy_path": "tests/unit/program/test_xr_program_verify.c",
+      "legacy_line": 5366,
+      "body_lf_sha256": "cadc61b643a7d16e5d3fe92b06dfa4a7582cabfa4442f887d44a38a62f269f81",
+      "assertion_sites": 2,
+      "loop_sites": 0,
+      "status": "OPEN",
+      "replacement_gates": [],
+      "note": "Function census preserves its whole body; sites do not count executed loop iterations."
+    },
+    {
+      "name": "test_projected_class_share_roots",
+      "legacy_path": "tests/unit/program/test_xr_program_verify.c",
+      "legacy_line": 5488,
+      "body_lf_sha256": "4611f5ee83fbd5d64aa67634e1a4a6428effc4c87483d4b1e32cb31d62b93d1c",
+      "assertion_sites": 0,
+      "loop_sites": 1,
+      "status": "OPEN",
+      "replacement_gates": [],
+      "note": "Function census preserves its whole body; sites do not count executed loop iterations."
+    }
+  ],
+  "responsibility_mapping": [
+    {
+      "path": "tests/unit/program/test_xr_program_verify.c",
+      "function": "test_class_reference_interface_conformance",
+      "line": 5366,
+      "end_line": 5373,
+      "body_lf_sha256": "cadc61b643a7d16e5d3fe92b06dfa4a7582cabfa4442f887d44a38a62f269f81",
+      "CHECK_sites": 2,
+      "CHECK_bindings": [
+        {
+          "line": 5368,
+          "expression": "build_program_table_artifact(false, false, true, &artifact) == XR_PROGRAM_BUILD_OK",
+          "status": "OPEN"
+        },
+        {
+          "line": 5369,
+          "expression": "artifact.bytes != NULL && artifact.size != 0u",
+          "status": "OPEN"
+        }
+      ],
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/program/test_xr_program_verify.c",
+      "function": "test_projected_class_share_roots",
+      "line": 5488,
+      "end_line": 5507,
+      "body_lf_sha256": "4611f5ee83fbd5d64aa67634e1a4a6428effc4c87483d4b1e32cb31d62b93d1c",
+      "CHECK_sites": 0,
+      "CHECK_bindings": [],
+      "status": "OPEN"
+    }
+  ],
+  "outer_CHECK_sites": 2,
+  "original_private_helpers": [
+    {
+      "path": "tests/unit/program/test_xr_program_verify.c",
+      "function": "key",
+      "line": 109,
+      "end_line": 111,
+      "body_lf_sha256": "027a211b78e0cfbd6b296804e37236848a76cc1980981a0d6a49a6f42d3f2e13",
+      "CHECK_sites": 0,
+      "CHECK_bindings": [],
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/program/test_xr_program_verify.c",
+      "function": "write_typed_modules",
+      "line": 113,
+      "end_line": 138,
+      "body_lf_sha256": "c568d48005100fc2633344ba569a2bc8de9b62e3aac794b35057c8d838b8db65",
+      "CHECK_sites": 0,
+      "CHECK_bindings": [],
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/program/test_xr_program_verify.c",
+      "function": "validate_ok",
+      "line": 159,
+      "end_line": 174,
+      "body_lf_sha256": "94fe0ef4e0242acb810c12621ae1fe73a9887ef668f15ddc6c67ed645494f62b",
+      "CHECK_sites": 2,
+      "CHECK_bindings": [
+        {
+          "line": 171,
+          "expression": "status == XR_PROGRAM_VERIFY_OK",
+          "status": "OPEN"
+        },
+        {
+          "line": 172,
+          "expression": "program != NULL",
+          "status": "OPEN"
+        }
+      ],
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/program/test_xr_program_verify.c",
+      "function": "expect_semantic_reject_at",
+      "line": 176,
+      "end_line": 198,
+      "body_lf_sha256": "44cf0fb15bea156743a1c0e35b0be8ee844aa1af55c8653ed9361cf781c045b8",
+      "CHECK_sites": 6,
+      "CHECK_bindings": [
+        {
+          "line": 190,
+          "expression": "first_status == XR_PROGRAM_VERIFY_SEMANTIC_REJECTED",
+          "status": "OPEN"
+        },
+        {
+          "line": 191,
+          "expression": "program == NULL",
+          "status": "OPEN"
+        },
+        {
+          "line": 192,
+          "expression": "first.kind == expected",
+          "status": "OPEN"
+        },
+        {
+          "line": 195,
+          "expression": "second_status == first_status",
+          "status": "OPEN"
+        },
+        {
+          "line": 196,
+          "expression": "memcmp(&first, &second, sizeof(first)) == 0",
+          "status": "OPEN"
+        },
+        {
+          "line": 197,
+          "expression": "program == NULL",
+          "status": "OPEN"
+        }
+      ],
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/program/test_xr_program_verify.c",
+      "function": "build_program_table_artifact",
+      "line": 4939,
+      "end_line": 5116,
+      "body_lf_sha256": "fb7e788673403ab92907e152aed224be0dafc0420a8d96922398a7de4d962346",
+      "CHECK_sites": 0,
+      "CHECK_bindings": [],
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/program/test_xr_program_verify.c",
+      "function": "build_projected_class_share",
+      "line": 5375,
+      "end_line": 5486,
+      "body_lf_sha256": "8d64d2050a7f2ea5dcfbd1f39858978add6b9fa1f822cb0f6e1cc12c77b32eca",
+      "CHECK_sites": 1,
+      "CHECK_bindings": [
+        {
+          "line": 5484,
+          "expression": "write_typed_modules(types, 2u, &module, 1u, &artifact) == XR_PROGRAM_BUILD_OK",
+          "status": "OPEN"
+        }
+      ],
+      "status": "OPEN"
+    }
+  ],
+  "specified_helper_CHECK_sites": 9,
+  "input_file": {
+    "path": "tests/unit/program/test_xr_program_verify.c",
+    "whole_file_lf_sha256": "ec4b93f13bfab2aa3d4b8f8773dd5c1118a0c682ed6f8304fead515f90402802",
+    "physical_raw_sha256": "a39922500c0943c034fafcda3a82b67e511ea658f453f6c0c3204f7719de1817",
+    "git_base_equal": true
+  },
+  "input_policy": "Both complete original census bodies plus six specified helpers equal01e6. Zero direct CHECK sites in projected-root test is not a missing responsibility: it delegates five complete graph admissions/rejections to validated helpers. Six full actual builder inputs are retained; all are admission-only.",
+  "class_conformance": {
+    "builder_arguments": [
+      false,
+      false,
+      true
+    ],
+    "expected_build": "XR_PROGRAM_BUILD_OK",
+    "expected_verify": "XR_PROGRAM_VERIFY_OK",
+    "original_assertions": [
+      "Producer BUILD_OK.",
+      "artifact.bytes nonNULL and size nonzero.",
+      "validate_ok exact VERIFY_OK/nonNULL Program."
+    ],
+    "status": "OPEN",
+    "implementor": "CLASS_REFERENCE70/NOMINAL_CLASS, AFFINE/COPY_EXPLICIT, one I64 field, key program-table:type:implementor. This is actual class conditional branch, distinct from prior struct70 mapping.",
+    "other_types": "READ EXISTENTIAL71/interface-a, READ EXISTENTIAL72/interface-b, AFFINE/COPY_EXPLICIT CALLABLE73 zeroargument->VOID. No constructed class, existential or callable value.",
+    "interfaces_and_conformances": "Two one-slot READ receiver interfacesa/b taking respective existential71/72 and returningVOID; two conformance rows NOMINAL_CLASS/implementor70 each bind one slot to same actual implementation function. No badslot or row-order permutation in this census body.",
+    "functions": "Actual implementation READ CLASS70 receiver, has_receivertrue/receiverREAD, oneblock BLOCK_ARGUMENT(receiver)/RETURN_VOID, ENTRY; actual unrelated zeroargs/no receiver VOID function with RETURN_VOID remains in same module. One module, four types/two interfaces/two conformances, original program-table profile/CORE_BASE, no constants.",
+    "boundary": "Original checks descriptor/signature admission only, not witness call execution, class clone/alias/lifecycle or actual native storage."
+  },
+  "projected_share_graph": {
+    "types": [
+      "CLASS70: actual CLASS_REFERENCE/NOMINAL_CLASS, AFFINE/COPY_FORBIDDEN, one PANIC_INFO field.",
+      "RECORD71: AGGREGATE/NOMINAL_NONE, AFFINE/COPY_FORBIDDEN, one CLASS70 field."
+    ],
+    "input": "One RECORD71 function parameter, MOVE/OWNER for owned variants or READ/NON_OWNER for borrowed variants; resultVOID/ENTRY, effect mask omittedzero. No constants, CLASS_CONSTRUCT, materialized PANIC_INFO or runtime input in this original body.",
+    "projection": "Actual AGGREGATE_PROJECT field0 root->projected CLASS70; original result ownership omitted NON_OWNER. OWNER_ALIAS retains identity into explicit OWNER result shared despite leaf noncopyability; it is not OWNER_COPY/deep clone.",
+    "blocks": "Entry block has actual RECORD71 argument but no inserted BLOCK_ARGUMENT operation. Forwarded next block has actual NON_OWNER CLASS70 incoming argument and tail ALIAS/DROP/RETURN with no inserted BLOCK_ARGUMENT. Preserve original graph shape. Unused next block declared in helper is excluded by block_count1 in unforwarded variants.",
+    "lifetime": "Borrowed READ parameter can anchor original projection through same/next block. A live local owning record permits immediate alias then shared drop and original root drop. Dropping the owning root before alias invalidates same-block use; passing only the now-dead borrow to another block cannot create a new frame anchor.",
+    "boundary": "All original programs are writer/verifier admission only. They do not allocate a class, run aliases, validate runtime finalizer/reclaim counts, materialize PANIC_INFO or demonstrate current frozen Cell/ref lifecycle."
+  },
+  "projected_share_variants": [
+    {
+      "variant": 0,
+      "owned_root": false,
+      "dropped_root": false,
+      "forwarded": false,
+      "parameter_mode": "READ",
+      "parameter_ownership": "NON_OWNER",
+      "entry_operations": [
+        "AGGREGATE_PROJECT borrowed CLASS70 field0 from original RECORD71 argument",
+        "OWNER_ALIAS projected CLASS70 -> shared OWNER CLASS70",
+        "OWNER_DROP shared CLASS70 owner",
+        "RETURN_VOID"
+      ],
+      "next_block_operations": [],
+      "block_count": 1,
+      "entry_instruction_count": 4,
+      "expected_build": "XR_PROGRAM_BUILD_OK",
+      "expected_verify": "XR_PROGRAM_VERIFY_OK",
+      "expected_diagnostic": null,
+      "verify_repetitions": 1,
+      "original_runtime": "NOT_RUN",
+      "status": "OPEN"
+    },
+    {
+      "variant": 1,
+      "owned_root": false,
+      "dropped_root": false,
+      "forwarded": true,
+      "parameter_mode": "READ",
+      "parameter_ownership": "NON_OWNER",
+      "entry_operations": [
+        "AGGREGATE_PROJECT borrowed CLASS70 field0 from original RECORD71 argument",
+        "BRANCH original projected NON_OWNER CLASS70 to actual next block argument"
+      ],
+      "next_block_operations": [
+        "OWNER_ALIAS incoming CLASS70 -> shared OWNER CLASS70",
+        "OWNER_DROP shared CLASS70 owner",
+        "RETURN_VOID"
+      ],
+      "block_count": 2,
+      "entry_instruction_count": 2,
+      "expected_build": "XR_PROGRAM_BUILD_OK",
+      "expected_verify": "XR_PROGRAM_VERIFY_OK",
+      "expected_diagnostic": null,
+      "verify_repetitions": 1,
+      "original_runtime": "NOT_RUN",
+      "status": "OPEN"
+    },
+    {
+      "variant": 2,
+      "owned_root": true,
+      "dropped_root": false,
+      "forwarded": false,
+      "parameter_mode": "MOVE",
+      "parameter_ownership": "OWNER",
+      "entry_operations": [
+        "AGGREGATE_PROJECT borrowed CLASS70 field0 from original RECORD71 argument",
+        "OWNER_ALIAS projected CLASS70 -> shared OWNER CLASS70",
+        "OWNER_DROP shared CLASS70 owner",
+        "OWNER_DROP original RECORD71 owner",
+        "RETURN_VOID"
+      ],
+      "next_block_operations": [],
+      "block_count": 1,
+      "entry_instruction_count": 5,
+      "expected_build": "XR_PROGRAM_BUILD_OK",
+      "expected_verify": "XR_PROGRAM_VERIFY_OK",
+      "expected_diagnostic": null,
+      "verify_repetitions": 1,
+      "original_runtime": "NOT_RUN",
+      "status": "OPEN"
+    },
+    {
+      "variant": 3,
+      "owned_root": true,
+      "dropped_root": true,
+      "forwarded": false,
+      "parameter_mode": "MOVE",
+      "parameter_ownership": "OWNER",
+      "entry_operations": [
+        "AGGREGATE_PROJECT borrowed CLASS70 field0 from original RECORD71 argument",
+        "OWNER_DROP original RECORD71 owner",
+        "OWNER_ALIAS projected CLASS70 -> shared OWNER CLASS70",
+        "OWNER_DROP shared CLASS70 owner",
+        "RETURN_VOID"
+      ],
+      "next_block_operations": [],
+      "block_count": 1,
+      "entry_instruction_count": 5,
+      "expected_build": "XR_PROGRAM_BUILD_OK",
+      "expected_verify": "XR_PROGRAM_VERIFY_SEMANTIC_REJECTED",
+      "expected_diagnostic": "XR_PROGRAM_DIAGNOSTIC_VALUE_USE",
+      "verify_repetitions": 2,
+      "original_runtime": "NOT_RUN",
+      "status": "OPEN"
+    },
+    {
+      "variant": 4,
+      "owned_root": true,
+      "dropped_root": true,
+      "forwarded": true,
+      "parameter_mode": "MOVE",
+      "parameter_ownership": "OWNER",
+      "entry_operations": [
+        "AGGREGATE_PROJECT borrowed CLASS70 field0 from original RECORD71 argument",
+        "OWNER_DROP original RECORD71 owner",
+        "BRANCH original projected NON_OWNER CLASS70 to actual next block argument"
+      ],
+      "next_block_operations": [
+        "OWNER_ALIAS incoming CLASS70 -> shared OWNER CLASS70",
+        "OWNER_DROP shared CLASS70 owner",
+        "RETURN_VOID"
+      ],
+      "block_count": 2,
+      "entry_instruction_count": 3,
+      "expected_build": "XR_PROGRAM_BUILD_OK",
+      "expected_verify": "XR_PROGRAM_VERIFY_SEMANTIC_REJECTED",
+      "expected_diagnostic": "XR_PROGRAM_DIAGNOSTIC_OPERATION_TYPE",
+      "verify_repetitions": 2,
+      "original_runtime": "NOT_RUN",
+      "status": "OPEN"
+    }
+  ],
+  "negative_expectation_policy": "All five projected graphs BUILD_OK. Variants3/4 each verify twice, exact SEMANTIC_REJECTED/NULL output and VALUE_USE versus OPERATION_TYPE, equal repeated status and full diagnostic including locations. Positive0/1/2 exact VERIFY_OK/nonNULL then free. Do not fold negative4 into generic dead-pointer or out-of-range rejection; complete branch graph is the required input.",
+  "assertion_counts": {
+    "census_functions": 2,
+    "outer_sites": 2,
+    "specified_helpers": 6,
+    "specified_helper_sites": 9,
+    "fresh_builder_inputs": 6,
+    "successful_artifact_builds": 6,
+    "positive_admitted_programs": 4,
+    "semantic_negative_inputs": 2,
+    "semantic_negative_verify_calls": 4,
+    "runtime_evaluations": 0
+  },
+  "original_cleanup": "Class conformance Program/artifact freed. Every projected variant frees positive Program when admitted and frees its complete artifact; negative helper requires NULL Program twice. Actual physical/stable-event/FI proof is a separate current requirement.",
+  "Root_contract_or_representation_review": {
+    "status": "OPEN",
+    "class_descriptor": "Migrate actual nominal class READ receiver/two-interface conformances with equivalent admission checks, not prior struct branch or synthesized constant-return entry.",
+    "identity_share": "Preserve identity sharing of a projected CLASS with noncopyable PANIC_INFO leaf. Current frozen noncopyability rejects deep clone but cannot silently replace original OWNER_ALIAS with deep clone or change the type to copyable. Explicit Root representation/API mapping must distinguish aliasing from cloning.",
+    "anchors": "Retain frame/root provenance for borrowed parameter and live owning local record, including actual cross-block projection. Dead owner cannot be revived by transferring only a borrow or attaching a synthetic anchor. Original no-runtime admission results cannot qualify actual current owner lifetime.",
+    "negative_stage": "Map exact same-block VALUE_USE and forwarded missing-anchor OPERATION_TYPE obligations to current formal stage/typed deterministic diagnostic semantics; old-format generic rejection or arbitrary errors are insufficient.",
+    "qualification": "Fresh actual common verified owner, public Built/Checked/specialization reverify/Lowered/packet/Library/Program and relevant VM/native/mixed/twoInstances/stableconstruct-finalize-reclaim/fullFI/axes/safety await formal producer/window. These bodies provide no runtime golden or object-event counts; do not invent originals."
+  },
+  "full_FI": "NOT_RUN",
+  "axes": "NOT_RUN",
+  "full_safety": "NOT_RUN",
+  "SourceDelete": "NOT_RUN",
+  "Main": "NOT_RUN",
+  "handoff": {
+    "Root_thread": "01a11f74-a297-7b11-8441-835bde6a3d5f",
+    "formal_acceptance": "PENDING"
+  },
+  "boundaries": [
+    "Two original census functions, six complete graph inputs/all2 outer/9 helperCHECK sites OPEN; retired0.",
+    "Static class/identity-share/anchor admission evidence only; current product/runtime/FI/axes/safety NOT_RUN.",
+    "Original source preserved; product/shared ABI/CMake/stdlib/spec/SDK/docs untouched; no heavy gate or global validator/ledger."
+  ]
+}
