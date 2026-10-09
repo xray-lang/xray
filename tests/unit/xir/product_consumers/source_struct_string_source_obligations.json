@@ -1,0 +1,68 @@
+{
+  "schema": 1,
+  "producer": "25f4016d6f089169757a90ae11ba537002374711",
+  "identity": "Checked25/semantic67/Value22/Call28/Program29",
+  "legacy": {
+    "legacy_path": "tests/unit/program/test_xr_program_source_build.c",
+    "name": "source_owner_value_struct_string_copy_preserves_original",
+    "body_lf_sha256": "0c5d541130f5a4a105ce87bbf9ec02f1dcbf3fbab344a69c0f32b164f287f4c1",
+    "status": "OPEN",
+    "inventory_projection": {
+      "fixture": "tests/unit/xir/product_consumers/fixtures/struct_string/root.xr",
+      "sha256": "0010dd4a64c28880f52bb252d20c0ccbc6bda7fc6d98d203a9b9e273e4277a3a",
+      "original_prefix_sha256": "95e9fecbbd07c03c8a1199c3ec7d8ead25dd832f7b8618b9fb869a8fd298b7e7",
+      "entry_adapter": "export fn consumerAnswer() -> i64 { return answer() }\n",
+      "entry": "consumerAnswer",
+      "expected_i64": 42,
+      "scope": "Exact original source prefix and fixed result through an explicitly exported adapter; additional legacy assertions stay OPEN until mapped."
+    },
+    "mapping_references": []
+  },
+  "status": "OPEN",
+  "retired": 0,
+  "replacement_gates": [],
+  "original_source": {
+    "path": "tests/unit/xir/product_consumers/fixtures/struct_string/root.xr",
+    "bytes": 975,
+    "prefix_bytes": 921,
+    "sha256": "0010dd4a64c28880f52bb252d20c0ccbc6bda7fc6d98d203a9b9e273e4277a3a",
+    "prefix_sha256": "95e9fecbbd07c03c8a1199c3ec7d8ead25dd832f7b8618b9fb869a8fd298b7e7",
+    "adapter": "export fn consumerAnswer() -> i64 { return answer() }\n"
+  },
+  "independent_i64": 42,
+  "required_shape": "Two exact nongeneric Report/Envelope nominal identities and three original field names/order/types each; original ready/end/40 and start/report/stop constructors; three typed field PLACE_WRITEs go/42/done and twelve String equality conditions. Source equality lowers to EQUAL with both operands String and Bool result; no assumption of specialized EQ_STRING.",
+  "result": "NOT_RUN",
+  "pipeline": "Exact original Source prefix;SourceProduct/ClosedChecked/reader andSource owner death/Lowered/Program/2Instances;VM/native/twoMixed independently fixed42.",
+  "boundaries": [
+    "Old OWNER_COPY count and no AGGREGATE_UPDATE assertions have no identical current operation encoding. Positive source semantics do not prove arbitrary old CoreIR or BackendIR mutations.",
+    "Full compiler/runtime FI, axes, cancel, safety, Main and whole retirement remain OPEN."
+  ],
+  "full_FI": "NOT_RUN",
+  "axes": "NOT_RUN",
+  "cancel": "NOT_RUN",
+  "full_safety": "NOT_RUN",
+  "Main": "NOT_RUN",
+  "value_struct_string_execution_20261009_facet": {
+    "status": "PASS_ORIGINAL_SOURCE_STRUCT_COPY_SEMANTICS_WHOLE_LEGACY_OPEN",
+    "evidence": "build-consumer-evidence/current67-struct-string-source-r1",
+    "original": "Original 921-byte literal prefix plus exact export adapter unchanged. Report and Envelope fields/name/order/type and nested nominal identity remain exact. Fixed42 source conditions check copied label/code and suffix updates preserve originals and untouched fields.",
+    "shape": "Report ready/end/40 and Envelope start/Report/stop actual constructors;field PLACE_WRITE go/42/done tofields0/2/2,typedString/I64/String. Twelve actual EQUAL instructions have both operands String,Bool result andequality immediate0.",
+    "actual": "20 actual runtime attempts:initial6(4newconsumerFAIL+2controlPASS),diagnostic2ownerFAIL,finalSource6PASS,native/mixed6PASS. Final12PASS include8backend,2owned,2sequence controls. Backend32 independent42 results/16Instances;callerProgram reference drops first;privateentry rejectswithoutallocation;Source/session/readers die before Program use. Final compiler/runtime physical0.",
+    "first_red": "Newshape assumed Source == maps to EQ_STRING. Actual Source recipe emits EQUAL with declared matching operand types, so first4+diagnostic2 assertion exits preserve count12 but do not prove physical cleanup. Diagnostic actualReport1/Envelope1/writes3/specializedStringEQ0, bothcfg. Read authoritativeSource binary plan, repair ONLY predicate to typedString EQUAL;source andindependent42/count12 unchanged. Originalheader/map/trace,failedVM/ownedEXEs anddriver/ownedobjects retained;diagnosticheader/ownedEXE/object retained.",
+    "evidence_boundary": "Initial2 sequence-control EXEs were not separately archived before final relink. Their actual before/after captured SHA/size/mtime,registeredargv,PID/rawoutputs remain;no claim of retained old binary bytes or current revalidation. Final2controls use current fully bound rebuilt driver and actualunchanged wrapper. No captured hashes fabricated or old output recounted as new execution.",
+    "owned": "Source owners/request/authority/path actually die before fullCheckedmetadata/writer compare. Checked dies before Lowered verify/release;final table/physical0.",
+    "build": "12 successful C compile events:percfginitialdriver+owner,diagnosticowner,finaldriver+owner,actualnativeC.6distinctfinalfreshTUs;strictC11/W4/WX andactualClangASan+UBSan includinggeneratedC. ExistingVM/nativewrapperobjects reused,actualconfiguredwrapper content template-bound;no fresh wrapper compilation claimed.2 buildtimeSourceemitter executions independent of registeredPID attempts.",
+    "inputs": "SourceVM2700,owned/control2699,native2701 inputs perPID including3observerheaders plusactualwrapper andactualnativeC where used. All before/afterSHA/size/mtime exact. Saved first/diagnostic/final preimage identities and phase boundaries preserved;runtime map/trace precede annotation.",
+    "generated_payload_sha256": {
+      "msvc": "80ddfafaa9f59d2722f220a472e4b95c30bfba778bc1f86f25c45f75a902e4fb",
+      "asan": "80ddfafaa9f59d2722f220a472e4b95c30bfba778bc1f86f25c45f75a902e4fb"
+    },
+    "remaining": "OldOWNER_COPY/noAGGREGATE_UPDATE/BackendIR representation checks,fullFI/axes/cancel/safety/Main andretirement OPEN.",
+    "full_FI": "NOT_RUN",
+    "axes": "NOT_RUN",
+    "cancel": "NOT_RUN",
+    "full_safety": "NOT_RUN",
+    "Main": "NOT_RUN",
+    "retired": 0
+  }
+}
