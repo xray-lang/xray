@@ -17,9 +17,9 @@
   "reference_counts": {
     "source_with_digest_reference": 108,
     "source_without_digest_reference": 0,
-    "other_with_digest_reference": 96,
-    "other_without_digest_reference": 64,
-    "digest_reference_values": 274,
+    "other_with_digest_reference": 97,
+    "other_without_digest_reference": 63,
+    "digest_reference_values": 276,
     "source_inventory_projections": 42
   },
   "mapping_inputs": [
@@ -494,6 +494,10 @@
     {
       "path": "tests/unit/xir/product_consumers/source_original_branching_nested_cleanup_obligations.json",
       "lf_sha256": "5f9a0a514ee68053eb1910a611160adfe435614ddc9b115de20335eb28354fdb"
+    },
+    {
+      "path": "tests/unit/xir/product_consumers/source_original_callable_owner_continuation_obligations.json",
+      "lf_sha256": "15e49bd7c196714ee2890f0c1cd7e05adae31336f706a8da2500af1de33fe554"
     },
     {
       "path": "tests/unit/xir/product_consumers/source_original_class_alias_snapshot_obligations.json",
@@ -4010,7 +4014,18 @@
       "body_lf_sha256": "ec5e351ad2b4910e445b50044b52f915efe9acd5fccaa77357a034b5965b6adb",
       "status": "OPEN",
       "inventory_projection": null,
-      "mapping_references": []
+      "mapping_references": [
+        {
+          "mapping": "tests/unit/xir/product_consumers/source_original_callable_owner_continuation_obligations.json",
+          "pointer": "/legacy/0/body_lf_sha256",
+          "binding": "exact_path_name_body"
+        },
+        {
+          "mapping": "tests/unit/xir/product_consumers/source_original_callable_owner_continuation_obligations.json",
+          "pointer": "/responsibility_mapping/0/body_lf_sha256",
+          "binding": "exact_body_digest_value_only"
+        }
+      ]
     },
     {
       "legacy_path": "tests/unit/program/test_xr_program_verify.c",

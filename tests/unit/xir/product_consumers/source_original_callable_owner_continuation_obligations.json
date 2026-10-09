@@ -1,0 +1,599 @@
+{
+  "schema": 1,
+  "family": "original_callable_capture_owner_edges_and_panic_signatures",
+  "legacy_base_commit": "01e6d38401b0f5c8684b64c35a99ac651024c0c1",
+  "status": "OPEN",
+  "retired": 0,
+  "replacement_gates": [],
+  "result": "STATIC_FULL_ORIGINAL_CALLABLE_OWNER_CONTINUATION_AND_PANIC_SIGNATURE_MAP_ONLY",
+  "product_execution": "NOT_RUN_BY_THIS_MAP",
+  "producer": "25f4016d6f089169757a90ae11ba537002374711",
+  "identity": "Checked25/semantic67/Value22/Call28/Program29",
+  "legacy": [
+    {
+      "name": "test_callable_pack_and_indirect_calls",
+      "legacy_path": "tests/unit/program/test_xr_program_verify.c",
+      "legacy_line": 5834,
+      "body_lf_sha256": "ec5e351ad2b4910e445b50044b52f915efe9acd5fccaa77357a034b5965b6adb",
+      "assertion_sites": 16,
+      "loop_sites": 4,
+      "status": "OPEN",
+      "replacement_gates": [],
+      "note": "Function census preserves its whole body; sites do not count executed loop iterations."
+    }
+  ],
+  "responsibility_mapping": [
+    {
+      "path": "tests/unit/program/test_xr_program_verify.c",
+      "function": "test_callable_pack_and_indirect_calls",
+      "line": 5834,
+      "end_line": 5939,
+      "body_lf_sha256": "ec5e351ad2b4910e445b50044b52f915efe9acd5fccaa77357a034b5965b6adb",
+      "CHECK_sites": 16,
+      "CHECK_bindings": [
+        {
+          "line": 5840,
+          "expression": "xr_program_callable_fixture_write(&artifact, diagnostic, sizeof(diagnostic)) ==\n          XR_PROGRAM_BUILD_OK",
+          "status": "OPEN"
+        },
+        {
+          "line": 5847,
+          "expression": "result.kind == XR_REFERENCE_OUTCOME_RETURN",
+          "status": "OPEN"
+        },
+        {
+          "line": 5848,
+          "expression": "result.value.kind == XR_REFERENCE_VALUE_I64",
+          "status": "OPEN"
+        },
+        {
+          "line": 5849,
+          "expression": "result.value.as.i64 == 42",
+          "status": "OPEN"
+        },
+        {
+          "line": 5854,
+          "expression": "xr_program_callable_fixture_write_mutated(XR_CALLABLE_FIXTURE_DIRECT_PANIC, &artifact,\n                                                    diagnostic, sizeof(diagnostic)) ==\n          XR_PROGRAM_BUILD_OK",
+          "status": "OPEN"
+        },
+        {
+          "line": 5858,
+          "expression": "program != NULL",
+          "status": "OPEN"
+        },
+        {
+          "line": 5861,
+          "expression": "xr_program_decode_structure(artifact.bytes, artifact.size, NULL, &panic_view, NULL, 0u) ==\n          XR_PROGRAM_DECODE_OK",
+          "status": "OPEN"
+        },
+        {
+          "line": 5876,
+          "expression": "origins == 0u",
+          "status": "OPEN"
+        },
+        {
+          "line": 5889,
+          "expression": "mutated != 0u",
+          "status": "OPEN"
+        },
+        {
+          "line": 5891,
+          "expression": "xr_program_callable_fixture_write_mutated(\n              XR_CALLABLE_FIXTURE_DIRECT_PANIC_WRONG_PAYLOAD, &artifact, diagnostic,\n              sizeof(diagnostic)) == XR_PROGRAM_BUILD_INVALID_INPUT",
+          "status": "OPEN"
+        },
+        {
+          "line": 5895,
+          "expression": "xr_program_callable_fixture_write_mutated(\n              XR_CALLABLE_FIXTURE_DIRECT_PANIC_UNDECLARED_CALLER, &artifact, diagnostic,\n              sizeof(diagnostic)) == XR_PROGRAM_BUILD_OK",
+          "status": "OPEN"
+        },
+        {
+          "line": 5901,
+          "expression": "xr_program_callable_fixture_write_mutated(XR_CALLABLE_FIXTURE_DIRECT_TRAP, &artifact,\n                                                    diagnostic,\n                                                    sizeof(diagnostic)) == XR_PROGRAM_BUILD_OK",
+          "status": "OPEN"
+        },
+        {
+          "line": 5905,
+          "expression": "program != NULL",
+          "status": "OPEN"
+        },
+        {
+          "line": 5909,
+          "expression": "xr_program_callable_fixture_write_mutated(XR_CALLABLE_FIXTURE_INVOKE_TRAP, &artifact,\n                                                    diagnostic,\n                                                    sizeof(diagnostic)) == XR_PROGRAM_BUILD_OK",
+          "status": "OPEN"
+        },
+        {
+          "line": 5913,
+          "expression": "program != NULL",
+          "status": "OPEN"
+        },
+        {
+          "line": 5926,
+          "expression": "xr_program_callable_fixture_write_mutated(rejected[index], &artifact, diagnostic,\n                                                        sizeof(diagnostic)) == XR_PROGRAM_BUILD_OK",
+          "status": "OPEN"
+        }
+      ],
+      "status": "OPEN"
+    }
+  ],
+  "outer_CHECK_sites": 16,
+  "original_private_helpers": [
+    {
+      "path": "tests/unit/program/test_xr_program_verify.c",
+      "function": "validate_ok",
+      "line": 159,
+      "end_line": 174,
+      "body_lf_sha256": "94fe0ef4e0242acb810c12621ae1fe73a9887ef668f15ddc6c67ed645494f62b",
+      "CHECK_sites": 2,
+      "CHECK_bindings": [
+        {
+          "line": 171,
+          "expression": "status == XR_PROGRAM_VERIFY_OK",
+          "status": "OPEN"
+        },
+        {
+          "line": 172,
+          "expression": "program != NULL",
+          "status": "OPEN"
+        }
+      ],
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/program/test_xr_program_verify.c",
+      "function": "expect_semantic_reject_at",
+      "line": 176,
+      "end_line": 198,
+      "body_lf_sha256": "44cf0fb15bea156743a1c0e35b0be8ee844aa1af55c8653ed9361cf781c045b8",
+      "CHECK_sites": 6,
+      "CHECK_bindings": [
+        {
+          "line": 190,
+          "expression": "first_status == XR_PROGRAM_VERIFY_SEMANTIC_REJECTED",
+          "status": "OPEN"
+        },
+        {
+          "line": 191,
+          "expression": "program == NULL",
+          "status": "OPEN"
+        },
+        {
+          "line": 192,
+          "expression": "first.kind == expected",
+          "status": "OPEN"
+        },
+        {
+          "line": 195,
+          "expression": "second_status == first_status",
+          "status": "OPEN"
+        },
+        {
+          "line": 196,
+          "expression": "memcmp(&first, &second, sizeof(first)) == 0",
+          "status": "OPEN"
+        },
+        {
+          "line": 197,
+          "expression": "program == NULL",
+          "status": "OPEN"
+        }
+      ],
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/program/test_xr_program_verify.c",
+      "function": "expect_mutated_verify",
+      "line": 436,
+      "end_line": 463,
+      "body_lf_sha256": "5ba80d137a1a9db91a8f8c115129af92e60a8d7644d056577722003739931044",
+      "CHECK_sites": 4,
+      "CHECK_bindings": [
+        {
+          "line": 440,
+          "expression": "bytes != NULL",
+          "status": "OPEN"
+        },
+        {
+          "line": 459,
+          "expression": "status == expected_status",
+          "status": "OPEN"
+        },
+        {
+          "line": 460,
+          "expression": "diagnostic.kind == expected_diagnostic",
+          "status": "OPEN"
+        },
+        {
+          "line": 461,
+          "expression": "program == NULL",
+          "status": "OPEN"
+        }
+      ],
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/program/test_xr_program_verify.c",
+      "function": "test_take_uvar",
+      "line": 203,
+      "end_line": 215,
+      "body_lf_sha256": "835eb97aa0c77560506ba0e421652602ae095f5e6686cce9ef331fc80a34ef4d",
+      "CHECK_sites": 1,
+      "CHECK_bindings": [
+        {
+          "line": 213,
+          "expression": "false",
+          "status": "OPEN"
+        }
+      ],
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/program/xr_program_callable_fixture.h",
+      "function": "xr_callable_fixture_key",
+      "line": 34,
+      "end_line": 36,
+      "body_lf_sha256": "921b680b2e2218bcf2d1f9014ee4d15fbd64b498dbc5dd095d145b845f9b524c",
+      "CHECK_sites": 0,
+      "CHECK_bindings": [],
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/program/xr_program_callable_fixture.h",
+      "function": "xr_program_callable_fixture_write_mutated",
+      "line": 38,
+      "end_line": 627,
+      "body_lf_sha256": "777c7037f3a4596fc5b7752eb35d94798ccb74a38b32273a2740e4de285ce2bc",
+      "CHECK_sites": 0,
+      "CHECK_bindings": [],
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/program/xr_program_callable_fixture.h",
+      "function": "xr_program_callable_fixture_write",
+      "line": 629,
+      "end_line": 634,
+      "body_lf_sha256": "e9ece50542fcbd5ebb74474bdecada7554f3df8a169c7f3a97e831871af7f895",
+      "CHECK_sites": 0,
+      "CHECK_bindings": [],
+      "status": "OPEN"
+    }
+  ],
+  "specified_helper_CHECK_sites": 13,
+  "input_files": [
+    {
+      "path": "tests/unit/program/test_xr_program_verify.c",
+      "physical_raw_sha256": "a39922500c0943c034fafcda3a82b67e511ea658f453f6c0c3204f7719de1817",
+      "whole_file_lf_sha256": "ec4b93f13bfab2aa3d4b8f8773dd5c1118a0c682ed6f8304fead515f90402802",
+      "git_base_equal": true,
+      "status": "PRESERVE_ORIGINAL_READONLY"
+    },
+    {
+      "path": "tests/unit/program/xr_program_callable_fixture.h",
+      "physical_raw_sha256": "a36f88ff23bc4056dd7a6dba1fe5222ff30e91839b2d545a0ee224f8cf4b4972",
+      "whole_file_lf_sha256": "8649cf8f2ff8c6ab196b311d93d364a4ca2a712d58752946f00c1793ac49a9c4",
+      "git_base_equal": true,
+      "status": "PRESERVE_ORIGINAL_READONLY"
+    },
+    {
+      "path": "tests/unit/aot/test_xr_program_aot.c",
+      "physical_raw_sha256": "6fea38acff96d94b2bfb414e04aa308386f6284ed12ccf05613a790a23caa700",
+      "whole_file_lf_sha256": "e7ab9301b308c7db6bf48e348257e5288f38f22c1b38c827fb040719dbf2de0e",
+      "git_base_equal": true,
+      "status": "PRESERVE_ORIGINAL_READONLY"
+    },
+    {
+      "path": "tests/unit/program/test_xr_program.c",
+      "physical_raw_sha256": "5986f0f7160296f52787ca8b9443329a9a05eeff083daac530a776642971655a",
+      "whole_file_lf_sha256": "2743be628db188c386a72e59529286df64720051710599d83f9b6510aa529aff",
+      "git_base_equal": true,
+      "status": "PRESERVE_ORIGINAL_READONLY"
+    },
+    {
+      "path": "tests/unit/vm/test_xr_program_vm_allocations.c",
+      "physical_raw_sha256": "65404153b883af360f80af2006ccb99a1742815f707bf605b7f27e11e16aa4a7",
+      "whole_file_lf_sha256": "b2e8af3a0b31c277224ec7eb93c861f43d5ab09ebf2876869fc5a87f65effdc2",
+      "git_base_equal": true,
+      "status": "PRESERVE_ORIGINAL_READONLY"
+    },
+    {
+      "path": "tests/unit/vm/test_xr_program_vm.c",
+      "physical_raw_sha256": "3a19b58076867cc70ef6c77e975286009df65e61ac1ed9edb2b5ab7813543502",
+      "whole_file_lf_sha256": "17904ef2bab8bb7eea72245fedba9878d74b6b8e93776e4314418e2db06dce8a",
+      "git_base_equal": true,
+      "status": "PRESERVE_ORIGINAL_READONLY"
+    }
+  ],
+  "input_policy": "Completeoriginalcensus/allseven actualhelpers equal01e6, includingcomplete sharedmutatedwriter. Preserveall15 selectedfreshbuilderinputs andeveryactualPANIC_INFO signaturemutation discoveredby originalwalk; no hardcoded signaturemutationcount. RETURN_CAPTURE/fifthobservefunction staysinfullhelper butthiscensus doesnot select it.",
+  "valid_graph": {
+    "types": [
+      "CAPTURE100: anonymousaggregate[I64], AFFINE/COPY_EXPLICIT.",
+      "DIRECT101: AFFINE/COPY_EXPLICIT CALLABLE, zeroexplicitparams->I64/NON_OWNER, VOIDerror/VOIDpanic, TRAPeffect.",
+      "FALLIBLE102: samecallableshape withERROR/effectERROR|TRAP."
+    ],
+    "constant": "One actualI64(42). Zeroed semanticprofiledigest, CORE_BASE feature, onemodule callable:module, fouractualfunctions forselectedcases, not fifthobservefunction.",
+    "targets": [
+      {
+        "role": "captured_target",
+        "instructions": [
+          "BLOCK_ARGUMENT READ CAPTURE100 receiver NON_OWNER",
+          "AGGREGATE_PROJECT field0 ->I64",
+          "RETURN projectedI64"
+        ],
+        "signature": "has_receivertrue/READ, I64, noerror/panic; effects originallyzero."
+      },
+      {
+        "role": "captureless_target",
+        "instructions": [
+          "BLOCK_ARGUMENT zero",
+          "CONSTANT_I64(42)",
+          "RETURN actualconstant"
+        ],
+        "signature": "zeroarguments/receiverabsent, I64, noerror/panic."
+      },
+      {
+        "role": "fallible_target",
+        "instructions": [
+          "BLOCK_ARGUMENT READ CAPTURE100 receiver NON_OWNER",
+          "AGGREGATE_PROJECT field0 ->I64",
+          "RETURN projectedI64"
+        ],
+        "signature": "Copied actualcaptured target, addsERROR/effectERROR; originalbody hasnoERROR_PUBLISH/errorbranch."
+      }
+    ],
+    "entry_blocks": [
+      {
+        "name": "entry",
+        "instructions": [
+          "BLOCK_ARGUMENT zero",
+          "CONSTANT_I64(42)",
+          "AGGREGATE_CONSTRUCT CAPTURE100 OWNER fromactual42",
+          "CALLABLE_PACK DIRECT101 OWNER consumingactualcapture ->direct_callable/capturedtarget",
+          "OWNER_COPY actualdirect_callable OWNER ->direct_copy OWNER",
+          "CALLABLE_PACK DIRECT101 NON_OWNER/nooperands ->captureless_callable/capturelesstarget",
+          "AGGREGATE_CONSTRUCT anotherCAPTURE100 OWNER fromsameactual42",
+          "CALLABLE_PACK FALLIBLE102 OWNER consumingsecondcapture ->fallible_callable/fallibletarget",
+          "CALL_INDIRECT_DIRECT actualdirect_copy ->direct_resultI64",
+          "OWNER_DROP actualdirect_copy",
+          "CALL_INDIRECT_DIRECT actualcaptureless_callable ->I64 (unusedactualresult)",
+          "OWNER_DROP actualdirect_callable",
+          "CALL_INDIRECT_INVOKE [fallible_callable receiver,fallible_callable normaltransfer,fallible_callable errortransfer,direct_result fallback] ->normal/error"
+        ]
+      },
+      {
+        "name": "normal",
+        "instructions": [
+          "BLOCK_ARGUMENT implicitI64result + OWN FALLIBLE102 callable",
+          "OWNER_DROP actualincoming callable",
+          "RETURN actualI64result"
+        ]
+      },
+      {
+        "name": "error",
+        "instructions": [
+          "BLOCK_ARGUMENT typedERROR + OWN FALLIBLE102 callable + passedI64fallback",
+          "OWNER_DROP actualincoming callable",
+          "RETURN actualI64fallback"
+        ]
+      }
+    ],
+    "shape_counts": {
+      "functions": 4,
+      "blocks": 6,
+      "instructions": 28,
+      "types": 3,
+      "constants": 1
+    },
+    "runtime": "OnlyVALID is evaluated once withactualentry/NULLargs/count0/profilepointer64/defaultbudget, requiringRETURN/I64(42). Allactualcalls/capturecopy/cleanup executed onnormalpath; errorchannel advertisedbutnotraised byoriginalcallee. Originalscalaroutcome isnot explicitlydisposed inthisbody; owningescape/independence/lifecycle notasserted."
+  },
+  "builder_cases": [
+    {
+      "mutation": "VALID",
+      "expected_build": "XR_PROGRAM_BUILD_OK",
+      "expected_verify": "XR_PROGRAM_VERIFY_OK",
+      "expected_diagnostic": null,
+      "original_scope": "actual_runtime_positive",
+      "complete_graph_change": "Complete4-function/6-block/28-op graph with captured affine aggregate/callable ownership, actualcallablecopy/capturelesscall/fallibleinvoke/owner cleanup and bothnormal/error blocks.",
+      "original_runtime_expected": "RETURN/I64(42)",
+      "status": "OPEN"
+    },
+    {
+      "mutation": "DIRECT_PANIC",
+      "expected_build": "XR_PROGRAM_BUILD_OK",
+      "expected_verify": "XR_PROGRAM_VERIFY_OK",
+      "expected_diagnostic": null,
+      "original_scope": "admission_only_positive",
+      "complete_graph_change": "Direct callable101 signature advertisesPANIC_INFO/PANIC effect, actualcaptured andcaptureless targets add samepanic_type/effect, actualentry addsPANIC_INFO/PANIC. Function bodies remainprojection/constant/RETURN; no PANIC_PUBLISH or runtimepanic input.",
+      "original_runtime_expected": "NOT_RUN",
+      "status": "OPEN"
+    },
+    {
+      "mutation": "DIRECT_PANIC_WRONG_PAYLOAD",
+      "expected_build": "XR_PROGRAM_BUILD_INVALID_INPUT",
+      "expected_verify": "NOT_RUN_IN_ORIGINAL_BODY",
+      "expected_diagnostic": null,
+      "original_scope": "producer_negative",
+      "complete_graph_change": "Only directcallable signature and actualcaptured/captureless target panic_type becomesERROR insteadPANIC_INFO; entry stilldeclaresPANIC_INFO/PANIC. No actualPANIC payloadinstruction or value exists. OriginalassertsBUILD_INVALID_INPUT only.",
+      "original_runtime_expected": "NOT_RUN",
+      "status": "OPEN"
+    },
+    {
+      "mutation": "DIRECT_PANIC_UNDECLARED_CALLER",
+      "expected_build": "XR_PROGRAM_BUILD_OK",
+      "expected_verify": "XR_PROGRAM_VERIFY_SEMANTIC_REJECTED",
+      "expected_diagnostic": "XR_PROGRAM_DIAGNOSTIC_EFFECT",
+      "original_scope": "semantic_negative",
+      "complete_graph_change": "Callable and actualtargets advertisePANIC_INFO/PANIC, butentry keepsVOIDpanic_type andCALL|TRAP effects; actualbody/order unchanged.",
+      "original_runtime_expected": "NOT_RUN",
+      "status": "OPEN"
+    },
+    {
+      "mutation": "DIRECT_TRAP",
+      "expected_build": "XR_PROGRAM_BUILD_OK",
+      "expected_verify": "XR_PROGRAM_VERIFY_OK",
+      "expected_diagnostic": null,
+      "original_scope": "admission_only_positive",
+      "complete_graph_change": "Firstdirectcall receiver isactualdirect_copy. Append4 cleanup-edge operands in orderdirect_callable,direct_copy,captureless_callable,fallible_callable; one trap successor. Trapblock4args types[DIRECT101,DIRECT101,DIRECT101,FALLIBLE102], ownership[OWN,OWN,NON_OWNER,OWN]; drop3actualowners thenTRAP7.",
+      "original_runtime_expected": "NOT_RUN",
+      "status": "OPEN"
+    },
+    {
+      "mutation": "INVOKE_TRAP",
+      "expected_build": "XR_PROGRAM_BUILD_OK",
+      "expected_verify": "XR_PROGRAM_VERIFY_OK",
+      "expected_diagnostic": null,
+      "original_scope": "admission_only_positive",
+      "complete_graph_change": "Actualfallibleinvoke gains thirdtrap successor and fifthoperandfallible_callable fortrapownertransfer; normal/error operandtransfers unchanged. Trapblock1OWN FALLIBLE102 argument, BLOCK_ARGUMENT/DROP/TRAP7.",
+      "original_runtime_expected": "NOT_RUN",
+      "status": "OPEN"
+    },
+    {
+      "mutation": "PACK_SIGNATURE_MISMATCH",
+      "expected_build": "XR_PROGRAM_BUILD_OK",
+      "expected_verify": "XR_PROGRAM_VERIFY_SEMANTIC_REJECTED",
+      "expected_diagnostic": "XR_PROGRAM_DIAGNOSTIC_OPERATION_TYPE",
+      "original_scope": "semantic_negative",
+      "complete_graph_change": "Firstdirect CALLABLE_PACK type101 capturesactualAFFINE aggregate buttarget changescaptured_target->fallible_target withERROR signature/effect. Retainactualcapture,copy,allcalls/drops.",
+      "original_runtime_expected": "NOT_RUN",
+      "status": "OPEN"
+    },
+    {
+      "mutation": "PACK_CAPABILITY_EXCESS",
+      "expected_build": "XR_PROGRAM_BUILD_OK",
+      "expected_verify": "XR_PROGRAM_VERIFY_SEMANTIC_REJECTED",
+      "expected_diagnostic": "XR_PROGRAM_DIAGNOSTIC_OPERATION_TYPE",
+      "original_scope": "semantic_negative",
+      "complete_graph_change": "Actualcaptured target addsPROFILE_POINTER_WIDTH capability whiledirectsignature remainscapability0. fallible_target iscopiedfromcaptured_target afterthisassignment andalsoinheritscapability. Bothactualpack operations retained.",
+      "original_runtime_expected": "NOT_RUN",
+      "status": "OPEN"
+    },
+    {
+      "mutation": "DIRECT_FALLIBLE",
+      "expected_build": "XR_PROGRAM_BUILD_OK",
+      "expected_verify": "XR_PROGRAM_VERIFY_SEMANTIC_REJECTED",
+      "expected_diagnostic": "XR_PROGRAM_DIAGNOSTIC_OPERATION_TYPE",
+      "original_scope": "semantic_negative",
+      "complete_graph_change": "FirstactualCALL_INDIRECT_DIRECT receiverdirect_copy->livefallible_callable (typedERROR), before laterfallibleinvoke; originalfourfunctions/allowners retained.",
+      "original_runtime_expected": "NOT_RUN",
+      "status": "OPEN"
+    },
+    {
+      "mutation": "DIRECT_SUSPENDING",
+      "expected_build": "XR_PROGRAM_BUILD_OK",
+      "expected_verify": "XR_PROGRAM_VERIFY_SEMANTIC_REJECTED",
+      "expected_diagnostic": "XR_PROGRAM_DIAGNOSTIC_OPERATION_TYPE",
+      "original_scope": "semantic_negative",
+      "complete_graph_change": "Directsignature101 addsCANCEL|SUSPEND andRUNTIME_COROUTINE_SUSPENSION capability; actual ordinarydirectcalls and targetbodies retained. No actualsuspension event/coroutine introduced.",
+      "original_runtime_expected": "NOT_RUN",
+      "status": "OPEN"
+    },
+    {
+      "mutation": "INVOKE_INFALLIBLE",
+      "expected_build": "XR_PROGRAM_BUILD_OK",
+      "expected_verify": "XR_PROGRAM_VERIFY_SEMANTIC_REJECTED",
+      "expected_diagnostic": "XR_PROGRAM_DIAGNOSTIC_VALUE_USE",
+      "original_scope": "semantic_negative",
+      "complete_graph_change": "Actualinvoke operand0 changesfallible_callable->direct_callable; originalOWNER_DROP(direct_callable) immediatelyprecedesinvoke, so this isactualdeadowner use and originalexpectedVALUE_USE, not an isolated live-infallible invocation probe. Otherfallibleowner normal/error transfers remain.",
+      "original_runtime_expected": "NOT_RUN",
+      "status": "OPEN"
+    },
+    {
+      "mutation": "INVOKE_SUSPENDING",
+      "expected_build": "XR_PROGRAM_BUILD_OK",
+      "expected_verify": "XR_PROGRAM_VERIFY_SEMANTIC_REJECTED",
+      "expected_diagnostic": "XR_PROGRAM_DIAGNOSTIC_OPERATION_TYPE",
+      "original_scope": "semantic_negative",
+      "complete_graph_change": "Falliblesignature102 addsCANCEL|SUSPEND andRUNTIME_COROUTINE_SUSPENSION capability, whileactualordinaryinvoke andcalleeprojection/RETURN retained.",
+      "original_runtime_expected": "NOT_RUN",
+      "status": "OPEN"
+    },
+    {
+      "mutation": "DIRECT_TRAP_LOST_OWNER",
+      "expected_build": "XR_PROGRAM_BUILD_OK",
+      "expected_verify": "XR_PROGRAM_VERIFY_SEMANTIC_REJECTED",
+      "expected_diagnostic": "XR_PROGRAM_DIAGNOSTIC_VALUE_USE",
+      "original_scope": "semantic_negative",
+      "complete_graph_change": "Directtrapedge omitsactualdirect_callable ownercleanup operand; receiverstilldirect_copy, remainingcleanup operandsdirect_copy,captureless_callable,fallible_callable. Trapblock3args [DIRECT101,DIRECT101,FALLIBLE102]/[OWN,NON_OWNER,OWN], DROP2/TRAP7; omittedoriginalowner remainslive across interruptedpath.",
+      "original_runtime_expected": "NOT_RUN",
+      "status": "OPEN"
+    },
+    {
+      "mutation": "INVOKE_TRAP_BAD_TARGET",
+      "expected_build": "XR_PROGRAM_BUILD_OK",
+      "expected_verify": "XR_PROGRAM_VERIFY_SEMANTIC_REJECTED",
+      "expected_diagnostic": "XR_PROGRAM_DIAGNOSTIC_CONTROL_FLOW",
+      "original_scope": "semantic_negative",
+      "complete_graph_change": "Sameinvoketrap graph withtransferredfallibleowner/thirdedge; onlyactualtrap terminatorimmediate7->4, identicalblockkey/successor.",
+      "original_runtime_expected": "NOT_RUN",
+      "status": "OPEN"
+    },
+    {
+      "mutation": "INVOKE_TRAP_LOST_OWNER",
+      "expected_build": "XR_PROGRAM_BUILD_OK",
+      "expected_verify": "XR_PROGRAM_VERIFY_SEMANTIC_REJECTED",
+      "expected_diagnostic": "XR_PROGRAM_DIAGNOSTIC_VALUE_USE",
+      "original_scope": "semantic_negative",
+      "complete_graph_change": "Thirdinvoke trapedge remainsbut fifthfallibleowner transferomitted. Trapblock0args/BLOCK_ARGUMENTzero/TRAP7 withnoDROP; originalfallible_callable islive on interruptedpath.",
+      "original_runtime_expected": "NOT_RUN",
+      "status": "OPEN"
+    }
+  ],
+  "fresh_builder_input_count": 15,
+  "panic_signature_wire_mutations": {
+    "baseline": "CompleteDIRECT_PANIC artifact afteradmittedProgramfree, structuraldecodeOK asserted",
+    "walk": "UseactualFUNCTIONS sectionoffset, decodeactualsignaturecount. Eachrow: signatureID, parametercount andtwofields perparameter, fouruvarfields, resultborroworigin count CHECK==0, anotherfield then saveactualpanic_type byteoffset, decodepanic_type andtwoadditionalfields. ForEVERY actualrow whosepanic_type==PANIC_INFO, full-copy mutateonlythatbyte->ERROR; exactsingleverifySEMANTIC_REJECTED/FUNCTION/NULLproduct. mutated++ andfinalCHECK(mutated!=0).",
+    "mutation_count": "AT_LEAST_ONE_ORIGINAL_ASSERTION; actualqualified current signaturecensus NOT_RUN and no inventedfixedrowcount.",
+    "producer_signature_negative": "DistinctfromDIRECT_PANIC_WRONG_PAYLOAD producer rejection; theseare previouslyadmitted artifacttype corruptions.",
+    "runtime": "NOT_RUN_IN_ORIGINAL_BODY",
+    "status": "OPEN"
+  },
+  "negative_expectation_policy": "Tenfresh semanticnegatives (undeclaredPANICcaller + ninearraycases) useexactexpectedkind/status/NULL twice and full repeateddiagnostic memcmp. Everydynamicpanicwire mutation usessingle expect_mutated_verify status/diag/NULL onmalloc/fullartifactcopy. Producerwrongpanictype exactBUILD_INVALID_INPUT only. No anyerror/structuralfail substitutions.",
+  "original_static_asserts": "Old operation IDs INDIRECT_DIRECT38/INDIRECT_INVOKE39/CALLABLE_PACK89 areoriginalnamespaceanchors only; current atomiccutover requires explicit Rootoperation/API mapping and doesnot permit compatibility aliases.",
+  "assertion_counts": {
+    "census_functions": 1,
+    "outer_sites": 16,
+    "specified_helpers": 7,
+    "specified_helper_sites": 13,
+    "fresh_builder_inputs": 15,
+    "successful_artifact_builds": 14,
+    "producer_negative_inputs": 1,
+    "builder_semantic_negative_inputs": 10,
+    "builder_semantic_negative_verify_calls": 20,
+    "positive_admitted_programs": 4,
+    "runtime_evaluations": 1,
+    "admission_only_positives": 3,
+    "panic_wire_mutations": "DYNAMIC>=1"
+  },
+  "shared_fixture_owners": {
+    "path": "tests/unit/program/xr_program_callable_fixture.h",
+    "actual_include_users": [
+      "tests/unit/program/test_xr_program_verify.c",
+      "tests/unit/aot/test_xr_program_aot.c",
+      "tests/unit/program/test_xr_program.c",
+      "tests/unit/vm/test_xr_program_vm_allocations.c",
+      "tests/unit/vm/test_xr_program_vm.c"
+    ],
+    "status": "PRESERVE_SHARED_READONLY",
+    "deletion": "ActualProgram,verifier,AOT,VM andVMallocation usersremain; no sharedfixture deletioncandidate."
+  },
+  "Root_contract_or_representation_review": {
+    "status": "OPEN",
+    "captures": "Migrate actualaffine captureownership/CALLABLE_PACK/OWNER_COPY/deepcapture semantics and allactualcaptured/captureless/falliblecalls, not fixed42 or capturelesssubstitution. Original42alone doesnot independentlyprove mutablecaptureclone isolation; actualcurrentstableowner/capturecleanup/ownedescape requireadditionalcurrent qualification.",
+    "edges": "Retain sameactualfallibleowner onmutuallyexclusivenormal/error/trap edges anddistinctnonownercaptureless operand in directtrapcleanup. A globalduplicateoperandban oromittingnormalpathDROP losesoriginal validgraph; receiverborrow plus interruptededge transfer mustfollow currentexclusive/liveness contract.",
+    "panic": "Preserve typedPANIC_INFO signature/admission and exactwrongERROR rejection plusundeclaredcaller effects. OriginalDIRECT_PANIC isnot actualpanicexecution. Currentopaque ownedPanicInfo materialization/lifecycle androotDOOMED behavior needformalroles/observer; no oldscalarpayload orcompatibilitycarrier restored.",
+    "negatives": "Preserve deadownerVALUE_USE in originalINVOKE_INFALLIBLE andfull signature/capability/suspension/cleanup graphinputs. Addisolatedcurrent legalprobes ifneeded withoutrewritingoriginalgoldens. Dynamicpanic signaturecount mustbe freshdecoded atcurrentqualifiedformat and allmatchingrows covered.",
+    "qualification": "Formalpublic Built/Checked/fullspecialization reverify/Lowered/currentverifiedowner/packet/Library/Program, VM/native/mixed/twoInstances/detachedownedresults/actualpanic-trap-error/cancel/stablelifecycle/fullFI/axes/safety awaitformalproducer/window andremainOPEN."
+  },
+  "full_FI": "NOT_RUN",
+  "axes": "NOT_RUN",
+  "full_safety": "NOT_RUN",
+  "SourceDelete": "NOT_RUN",
+  "Main": "NOT_RUN",
+  "handoff": {
+    "Root_thread": "01a11f74-a297-7b11-8441-835bde6a3d5f",
+    "formal_acceptance": "PENDING"
+  },
+  "boundaries": [
+    "Oneoriginalcensus/all16outer/13specifiedhelperCHECKsites,15fullbuilderinputs anddynamicpanicwire mutationsOPEN; retired0.",
+    "Staticoriginalowneredge/signature/fixed42 evidence only; no currentproductoractualexception/nativeexecution.",
+    "Originalsharedsourcepreserved; productABI/CMake/stdlib/spec/SDK/docs untouched, noheavygate or globalvalidator/ledger."
+  ]
+}
