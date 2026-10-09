@@ -1,0 +1,1721 @@
+{
+  "schema": 1,
+  "family": "original_aot_full_class_reference_stable_events_nested_finalization_and_suspended_field_owner_roots",
+  "legacy_base_commit": "01e6d38401b0f5c8684b64c35a99ac651024c0c1",
+  "status": "OPEN",
+  "retired": 0,
+  "replacement_gates": [],
+  "result": "STATIC_FULL_ORIGINAL_AOT_CLASS_MAP_ONLY",
+  "product_execution": "NOT_RUN_BY_THIS_MAP",
+  "producer": "25f4016d6f089169757a90ae11ba537002374711",
+  "identity": "Checked25/contract67/Value22/Call28/Program29",
+  "legacy": [
+    {
+      "name": "test_class_reference_semantics_lowering_and_events",
+      "legacy_path": "tests/unit/aot/test_xr_program_aot.c",
+      "legacy_line": 3055,
+      "body_lf_sha256": "905ee9f642cee9300700f7c046aacf197f3b57db218cae4367c1a6c054f284ea",
+      "assertion_sites": 17,
+      "loop_sites": 0,
+      "status": "OPEN",
+      "replacement_gates": [],
+      "note": "Function census preserves its whole body; sites do not count executed loop iterations."
+    },
+    {
+      "name": "test_class_ref_coroutine_frame_root",
+      "legacy_path": "tests/unit/aot/test_xr_program_aot_class.inc.c",
+      "legacy_line": 274,
+      "body_lf_sha256": "cf0b862ebdd1fea5a00367cf37e52d8f1f860a550a27757236f6fc02aca70724",
+      "assertion_sites": 13,
+      "loop_sites": 0,
+      "status": "OPEN",
+      "replacement_gates": [],
+      "note": "Function census preserves its whole body; sites do not count executed loop iterations."
+    }
+  ],
+  "responsibility_mapping": [
+    {
+      "path": "tests/unit/aot/test_xr_program_aot.c",
+      "function": "test_class_reference_semantics_lowering_and_events",
+      "line": 3055,
+      "end_line": 3107,
+      "body_lf_sha256": "905ee9f642cee9300700f7c046aacf197f3b57db218cae4367c1a6c054f284ea",
+      "REQUIRE_sites": 17,
+      "REQUIRE_bindings": [
+        {
+          "line": 3060,
+          "expression": "profile != NULL",
+          "status": "OPEN"
+        },
+        {
+          "line": 3067,
+          "expression": "status == XR_BACKEND_OK",
+          "status": "OPEN"
+        },
+        {
+          "line": 3068,
+          "expression": "ir != NULL && xr_backend_ir_verify(ir, &diagnostic)",
+          "status": "OPEN"
+        },
+        {
+          "line": 3069,
+          "expression": "ir->instruction_count == 10u",
+          "status": "OPEN"
+        },
+        {
+          "line": 3072,
+          "expression": "xr_compile_backend_ir_emit_c(\n                ir, &(XrBackendEmissionRequest) {backend_emission_resources, false, NULL, 0u},\n                &first, &diagnostic) == XR_BACKEND_OK",
+          "status": "OPEN"
+        },
+        {
+          "line": 3075,
+          "expression": "xr_compile_backend_ir_emit_c(\n                ir, &(XrBackendEmissionRequest) {backend_emission_resources, false, NULL, 0u},\n                &second, &diagnostic) == XR_BACKEND_OK",
+          "status": "OPEN"
+        },
+        {
+          "line": 3080,
+          "expression": "first.size == second.size && memcmp(first.bytes, second.bytes, first.size) == 0",
+          "status": "OPEN"
+        },
+        {
+          "line": 3081,
+          "expression": "xr_fingerprint_equal(first.source_digest, second.source_digest)",
+          "status": "OPEN"
+        },
+        {
+          "line": 3086,
+          "expression": "strstr(first.bytes, expected) != NULL",
+          "status": "OPEN"
+        },
+        {
+          "line": 3088,
+          "expression": "strstr(first.bytes, expected) != NULL",
+          "status": "OPEN"
+        },
+        {
+          "line": 3090,
+          "expression": "strstr(first.bytes, expected) == NULL",
+          "status": "OPEN"
+        },
+        {
+          "line": 3092,
+          "expression": "strstr(first.bytes, expected) != NULL",
+          "status": "OPEN"
+        },
+        {
+          "line": 3093,
+          "expression": "strstr(first.bytes, \".type_id = UINT16_C(2)\") != NULL",
+          "status": "OPEN"
+        },
+        {
+          "line": 3094,
+          "expression": "strstr(first.bytes, \".has_i64_exchange = UINT8_C(1)\") != NULL",
+          "status": "OPEN"
+        },
+        {
+          "line": 3095,
+          "expression": "strstr(first.bytes, \"XrVm\") == NULL",
+          "status": "OPEN"
+        },
+        {
+          "line": 3102,
+          "expression": "status == XR_BACKEND_UNSUPPORTED_OPERATION && ir == NULL",
+          "status": "OPEN"
+        },
+        {
+          "line": 3103,
+          "expression": "diagnostic.operation_id == XR_CORE_OP_CORE_OWNER_COPY",
+          "status": "OPEN"
+        }
+      ],
+      "CHECK_sites": 0,
+      "CHECK_bindings": [],
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/aot/test_xr_program_aot_class.inc.c",
+      "function": "test_class_ref_coroutine_frame_root",
+      "line": 274,
+      "end_line": 368,
+      "body_lf_sha256": "cf0b862ebdd1fea5a00367cf37e52d8f1f860a550a27757236f6fc02aca70724",
+      "REQUIRE_sites": 13,
+      "REQUIRE_bindings": [
+        {
+          "line": 278,
+          "expression": "profile != NULL",
+          "status": "OPEN"
+        },
+        {
+          "line": 281,
+          "expression": "parent != NULL",
+          "status": "OPEN"
+        },
+        {
+          "line": 288,
+          "expression": "left && right && call && parent->coroutine_safepoint_count == 1u",
+          "status": "OPEN"
+        },
+        {
+          "line": 290,
+          "expression": "point->live_value_count == 1u && call->operand_count == 4u",
+          "status": "OPEN"
+        },
+        {
+          "line": 292,
+          "expression": "left->operands[0] == owner && right->operands[0] == owner",
+          "status": "OPEN"
+        },
+        {
+          "line": 303,
+          "expression": "emission == XR_BACKEND_OK",
+          "status": "OPEN"
+        },
+        {
+          "line": 308,
+          "expression": "count_c_fragment(generated.bytes, fragment) == 1u",
+          "status": "OPEN"
+        },
+        {
+          "line": 310,
+          "expression": "strstr(generated.bytes, fragment) == NULL",
+          "status": "OPEN"
+        },
+        {
+          "line": 313,
+          "expression": "count_c_fragment(generated.bytes, fragment) == 1u",
+          "status": "OPEN"
+        },
+        {
+          "line": 316,
+          "expression": "count_c_fragment(generated.bytes, fragment) == 1u",
+          "status": "OPEN"
+        },
+        {
+          "line": 318,
+          "expression": "count_c_fragment(generated.bytes, fragment) != 0u",
+          "status": "OPEN"
+        },
+        {
+          "line": 322,
+          "expression": "strstr(generated.bytes, fragment) == NULL",
+          "status": "OPEN"
+        },
+        {
+          "line": 326,
+          "expression": "count_c_fragment(generated.bytes, fragment) == 1u",
+          "status": "OPEN"
+        }
+      ],
+      "CHECK_sites": 0,
+      "CHECK_bindings": [],
+      "status": "OPEN"
+    }
+  ],
+  "outer_REQUIRE_sites": 30,
+  "original_private_helpers": [
+    {
+      "path": "tests/unit/aot/test_xr_program_aot_class.inc.c",
+      "function": "append_c_string_literal",
+      "line": 679,
+      "end_line": 689,
+      "body_lf_sha256": "7f5a48cae6f3e8ba75140564738736945d7ffaf0680310bdd62c285e10f2c3f1",
+      "REQUIRE_sites": 0,
+      "REQUIRE_bindings": [],
+      "CHECK_sites": 0,
+      "CHECK_bindings": [],
+      "status": "OPEN",
+      "standard_assert_bindings": [],
+      "standard_assert_sites": 0
+    },
+    {
+      "path": "tests/unit/aot/xr_backend_emission_owner.h",
+      "function": "backend_emission_owner_close",
+      "line": 19,
+      "end_line": 30,
+      "body_lf_sha256": "356ddfb98380e9b201920c88ffd7afccc9c9f4d4311f9983ebd20903ce66377a",
+      "REQUIRE_sites": 0,
+      "REQUIRE_bindings": [],
+      "CHECK_sites": 0,
+      "CHECK_bindings": [],
+      "status": "OPEN",
+      "standard_assert_bindings": [],
+      "standard_assert_sites": 0
+    },
+    {
+      "path": "tests/unit/aot/xr_backend_emission_owner.h",
+      "function": "backend_emission_owner_open",
+      "line": 31,
+      "end_line": 43,
+      "body_lf_sha256": "786869fb3f6675488f9b529c5c025eece534d04fffc1c8be190cea8381300214",
+      "REQUIRE_sites": 0,
+      "REQUIRE_bindings": [],
+      "CHECK_sites": 0,
+      "CHECK_bindings": [],
+      "status": "OPEN",
+      "standard_assert_bindings": [],
+      "standard_assert_sites": 0
+    },
+    {
+      "path": "tests/unit/aot/test_xr_program_aot_class.inc.c",
+      "function": "build_class_ref_coroutine_program",
+      "line": 185,
+      "end_line": 236,
+      "body_lf_sha256": "1f94da0ed177f9c266023515d36968e7fc8722bc4a7bfcbff124bb58bcf4a65d",
+      "REQUIRE_sites": 0,
+      "REQUIRE_bindings": [],
+      "CHECK_sites": 0,
+      "CHECK_bindings": [],
+      "status": "OPEN",
+      "standard_assert_bindings": [],
+      "standard_assert_sites": 0
+    },
+    {
+      "path": "tests/unit/aot/test_xr_program_aot_class.inc.c",
+      "function": "build_class_reference_copy_program",
+      "line": 181,
+      "end_line": 183,
+      "body_lf_sha256": "935a47f853e8fba2cb43e2231f39fdb57f6502b0d77c96e763d07597104ed8c6",
+      "REQUIRE_sites": 0,
+      "REQUIRE_bindings": [],
+      "CHECK_sites": 0,
+      "CHECK_bindings": [],
+      "status": "OPEN",
+      "standard_assert_bindings": [],
+      "standard_assert_sites": 0
+    },
+    {
+      "path": "tests/unit/aot/test_xr_program_aot_class.inc.c",
+      "function": "build_class_reference_program",
+      "line": 177,
+      "end_line": 179,
+      "body_lf_sha256": "1890eb9dfcf17cf0f03976bc9e51a037d74826ed266e8ae3fb3a3377a4521e19",
+      "REQUIRE_sites": 0,
+      "REQUIRE_bindings": [],
+      "CHECK_sites": 0,
+      "CHECK_bindings": [],
+      "status": "OPEN",
+      "standard_assert_bindings": [],
+      "standard_assert_sites": 0
+    },
+    {
+      "path": "tests/unit/aot/test_xr_program_aot_class.inc.c",
+      "function": "build_class_reference_program_with_alias",
+      "line": 64,
+      "end_line": 175,
+      "body_lf_sha256": "1034d1dfabad667535bedda44ccc2d3790ab1db10144978b8cb35807160a129f",
+      "REQUIRE_sites": 0,
+      "REQUIRE_bindings": [],
+      "CHECK_sites": 0,
+      "CHECK_bindings": [],
+      "status": "OPEN",
+      "standard_assert_bindings": [],
+      "standard_assert_sites": 0
+    },
+    {
+      "path": "tests/unit/aot/test_xr_program_aot.c",
+      "function": "build_ir",
+      "line": 1269,
+      "end_line": 1285,
+      "body_lf_sha256": "83e9015fd556844ec0d0f348a91bbf415699d2b5e2baad30652eeca642a36790",
+      "REQUIRE_sites": 4,
+      "REQUIRE_bindings": [
+        {
+          "line": 1280,
+          "expression": "status == XR_BACKEND_OK",
+          "status": "OPEN"
+        },
+        {
+          "line": 1281,
+          "expression": "ir != NULL",
+          "status": "OPEN"
+        },
+        {
+          "line": 1282,
+          "expression": "xr_backend_ir_verify(ir, &diagnostic)",
+          "status": "OPEN"
+        },
+        {
+          "line": 1283,
+          "expression": "xr_backend_ir_binding_verify(ir, &diagnostic)",
+          "status": "OPEN"
+        }
+      ],
+      "CHECK_sites": 0,
+      "CHECK_bindings": [],
+      "status": "OPEN",
+      "standard_assert_bindings": [],
+      "standard_assert_sites": 0
+    },
+    {
+      "path": "tests/unit/aot/test_xr_program_aot_class.inc.c",
+      "function": "build_nested_class_reference_program",
+      "line": 370,
+      "end_line": 449,
+      "body_lf_sha256": "e10b8342822cd14c70ab37a278cf8bd5b0bb523e4acdab5079926bfaba710c6d",
+      "REQUIRE_sites": 0,
+      "REQUIRE_bindings": [],
+      "CHECK_sites": 0,
+      "CHECK_bindings": [],
+      "status": "OPEN",
+      "standard_assert_bindings": [],
+      "standard_assert_sites": 0
+    },
+    {
+      "path": "tests/unit/aot/test_xr_program_aot_class.inc.c",
+      "function": "count_c_fragment",
+      "line": 255,
+      "end_line": 262,
+      "body_lf_sha256": "4bcffabbd191ec6c89c6aa5af12e1b65e8888b9c1f0bcf5d012d31e92de3f348",
+      "REQUIRE_sites": 0,
+      "REQUIRE_bindings": [],
+      "CHECK_sites": 0,
+      "CHECK_bindings": [],
+      "status": "OPEN",
+      "standard_assert_bindings": [],
+      "standard_assert_sites": 0
+    },
+    {
+      "path": "tests/unit/aot/test_xr_program_aot_class.inc.c",
+      "function": "find_class_ref_coroutine_operation",
+      "line": 238,
+      "end_line": 253,
+      "body_lf_sha256": "ef94c39f4ab49740d1ab33488267543baa3ba15431173640207d46e120925073",
+      "REQUIRE_sites": 0,
+      "REQUIRE_bindings": [],
+      "CHECK_sites": 0,
+      "CHECK_bindings": [],
+      "status": "OPEN",
+      "standard_assert_bindings": [],
+      "standard_assert_sites": 0
+    },
+    {
+      "path": "tests/unit/aot/test_xr_program_aot_class.inc.c",
+      "function": "find_class_ref_coroutine_parent",
+      "line": 264,
+      "end_line": 272,
+      "body_lf_sha256": "32fd3c5ffa30796c0064b5981e5a2c91b3ca06c30b45a012b7b7039d38b54214",
+      "REQUIRE_sites": 0,
+      "REQUIRE_bindings": [],
+      "CHECK_sites": 0,
+      "CHECK_bindings": [],
+      "status": "OPEN",
+      "standard_assert_bindings": [],
+      "standard_assert_sites": 0
+    },
+    {
+      "path": "tests/unit/aot/test_xr_program_aot.c",
+      "function": "fixture_key",
+      "line": 106,
+      "end_line": 108,
+      "body_lf_sha256": "37c710a782fc634109af5c3e9ee97d6f63f3343ca089dacb089b8115a1f64fca",
+      "REQUIRE_sites": 0,
+      "REQUIRE_bindings": [],
+      "CHECK_sites": 0,
+      "CHECK_bindings": [],
+      "status": "OPEN",
+      "standard_assert_bindings": [],
+      "standard_assert_sites": 0
+    },
+    {
+      "path": "tests/unit/runtime/test_runtime_abi_contract.c",
+      "function": "init_record",
+      "line": 214,
+      "end_line": 224,
+      "body_lf_sha256": "4ab5c4c8467fa198701af703fb5bf753a184f9a42833d42913b5a5eb3f01d3f4",
+      "REQUIRE_sites": 0,
+      "REQUIRE_bindings": [],
+      "CHECK_sites": 0,
+      "CHECK_bindings": [],
+      "status": "OPEN",
+      "standard_assert_bindings": [],
+      "standard_assert_sites": 0
+    },
+    {
+      "path": "tests/unit/runtime/test_runtime_abi_contract.c",
+      "function": "make_bitmask_namespace",
+      "line": 185,
+      "end_line": 201,
+      "body_lf_sha256": "207cac9d3252a15fab701a097ddfb9cc1ab14f2b1fd12bda30d3ee3e5ba9301e",
+      "REQUIRE_sites": 0,
+      "REQUIRE_bindings": [],
+      "CHECK_sites": 0,
+      "CHECK_bindings": [],
+      "status": "OPEN",
+      "standard_assert_bindings": [],
+      "standard_assert_sites": 0
+    },
+    {
+      "path": "tests/unit/runtime/test_runtime_abi_contract.c",
+      "function": "make_call_abi",
+      "line": 435,
+      "end_line": 450,
+      "body_lf_sha256": "25dd59fd4e47cf4ba0b28325b0ad3a43be269293fbde42dc6e7031d0ed80c7b8",
+      "REQUIRE_sites": 0,
+      "REQUIRE_bindings": [],
+      "CHECK_sites": 0,
+      "CHECK_bindings": [],
+      "status": "OPEN",
+      "standard_assert_bindings": [],
+      "standard_assert_sites": 0
+    },
+    {
+      "path": "tests/unit/runtime/test_runtime_abi_contract.c",
+      "function": "make_call_slot",
+      "line": 422,
+      "end_line": 433,
+      "body_lf_sha256": "a86c6de459703f2b937b6f7973be3859d8d8c5a852ee052eea09211ffad9503c",
+      "REQUIRE_sites": 0,
+      "REQUIRE_bindings": [],
+      "CHECK_sites": 0,
+      "CHECK_bindings": [],
+      "status": "OPEN",
+      "standard_assert_bindings": [],
+      "standard_assert_sites": 0
+    },
+    {
+      "path": "tests/unit/runtime/test_runtime_abi_contract.c",
+      "function": "make_callback_abi",
+      "line": 379,
+      "end_line": 394,
+      "body_lf_sha256": "7ad3d4840e698211639d76bcb2ca9d2014e7d539124ef06c50dce2b10f494fc2",
+      "REQUIRE_sites": 0,
+      "REQUIRE_bindings": [],
+      "CHECK_sites": 0,
+      "CHECK_bindings": [],
+      "status": "OPEN",
+      "standard_assert_bindings": [],
+      "standard_assert_sites": 0
+    },
+    {
+      "path": "tests/unit/runtime/test_runtime_abi_contract.c",
+      "function": "make_domain_record",
+      "line": 232,
+      "end_line": 252,
+      "body_lf_sha256": "536703223f2c831458e8f782a0683f162e0e34ad3c62a8389a6ff475039630c2",
+      "REQUIRE_sites": 0,
+      "REQUIRE_bindings": [],
+      "CHECK_sites": 0,
+      "CHECK_bindings": [],
+      "status": "OPEN",
+      "standard_assert_bindings": [],
+      "standard_assert_sites": 0
+    },
+    {
+      "path": "tests/unit/runtime/test_runtime_abi_contract.c",
+      "function": "make_dynamic_value_abi",
+      "line": 135,
+      "end_line": 166,
+      "body_lf_sha256": "9124fffbdeed4fa0f812eeccf2e7d7b6e8e3ea7f611df834fcdc745c6c6acd9e",
+      "REQUIRE_sites": 0,
+      "REQUIRE_bindings": [],
+      "CHECK_sites": 0,
+      "CHECK_bindings": [],
+      "status": "OPEN",
+      "standard_assert_bindings": [],
+      "standard_assert_sites": 0
+    },
+    {
+      "path": "tests/unit/runtime/test_runtime_abi_contract.c",
+      "function": "make_enum_namespace",
+      "line": 168,
+      "end_line": 183,
+      "body_lf_sha256": "28d917c7691646d359b959de4873321956d24b149113134a622a2e73884904a2",
+      "REQUIRE_sites": 0,
+      "REQUIRE_bindings": [],
+      "CHECK_sites": 0,
+      "CHECK_bindings": [],
+      "status": "OPEN",
+      "standard_assert_bindings": [],
+      "standard_assert_sites": 0
+    },
+    {
+      "path": "tests/unit/runtime/test_runtime_abi_contract.c",
+      "function": "make_evaluated_record",
+      "line": 343,
+      "end_line": 363,
+      "body_lf_sha256": "11ad05329acd869a452db663387e6c24d4b92c432e6ff3c517e906c1124f25b9",
+      "REQUIRE_sites": 0,
+      "REQUIRE_bindings": [],
+      "CHECK_sites": 0,
+      "CHECK_bindings": [],
+      "status": "OPEN",
+      "standard_assert_bindings": [],
+      "standard_assert_sites": 0
+    },
+    {
+      "path": "tests/unit/runtime/test_runtime_abi_contract.c",
+      "function": "make_extent_record",
+      "line": 254,
+      "end_line": 289,
+      "body_lf_sha256": "eb2a48e1cd60915fc9b3206d7fa02a28cc76a57735dd97decf2e497f674c5bfa",
+      "REQUIRE_sites": 0,
+      "REQUIRE_bindings": [],
+      "CHECK_sites": 0,
+      "CHECK_bindings": [],
+      "status": "OPEN",
+      "standard_assert_bindings": [],
+      "standard_assert_sites": 0
+    },
+    {
+      "path": "tests/unit/runtime/test_runtime_abi_contract.c",
+      "function": "make_field",
+      "line": 60,
+      "end_line": 72,
+      "body_lf_sha256": "cd61f005fd7b857407a91167e3adaa0964fc33d9f6715c488e191bbdf88ba31f",
+      "REQUIRE_sites": 0,
+      "REQUIRE_bindings": [],
+      "CHECK_sites": 0,
+      "CHECK_bindings": [],
+      "status": "OPEN",
+      "standard_assert_bindings": [],
+      "standard_assert_sites": 0
+    },
+    {
+      "path": "tests/unit/runtime/test_runtime_abi_contract.c",
+      "function": "make_group_record",
+      "line": 365,
+      "end_line": 377,
+      "body_lf_sha256": "c075578b1ccf9e89cddd3baaafaf6e4674dc4981fd1986c7fd187c01b687f371",
+      "REQUIRE_sites": 0,
+      "REQUIRE_bindings": [],
+      "CHECK_sites": 0,
+      "CHECK_bindings": [],
+      "status": "OPEN",
+      "standard_assert_bindings": [],
+      "standard_assert_sites": 0
+    },
+    {
+      "path": "tests/unit/plan/target_profile_test_fixture.c",
+      "function": "make_header_facts",
+      "line": 43,
+      "end_line": 66,
+      "body_lf_sha256": "916a05fa9431a545e70e8905f058dba291cd7b36a15797fcfe135cded74122ac",
+      "REQUIRE_sites": 0,
+      "REQUIRE_bindings": [],
+      "CHECK_sites": 0,
+      "CHECK_bindings": [],
+      "status": "OPEN",
+      "standard_assert_bindings": [],
+      "standard_assert_sites": 0
+    },
+    {
+      "path": "tests/unit/runtime/test_runtime_abi_contract.c",
+      "function": "make_id",
+      "line": 34,
+      "end_line": 40,
+      "body_lf_sha256": "5612295a99ac5b4e526240667bd204b53b51f7159879cf4ae3c4ae0a920541a7",
+      "REQUIRE_sites": 0,
+      "REQUIRE_bindings": [],
+      "CHECK_sites": 0,
+      "CHECK_bindings": [],
+      "status": "OPEN",
+      "standard_assert_bindings": [],
+      "standard_assert_sites": 0
+    },
+    {
+      "path": "tests/unit/runtime/test_runtime_abi_contract.c",
+      "function": "make_layout_record",
+      "line": 291,
+      "end_line": 330,
+      "body_lf_sha256": "ea85e0ad196e110c75ab7442069356599c0d37f4a0966a9efbf8f3a980039519",
+      "REQUIRE_sites": 0,
+      "REQUIRE_bindings": [],
+      "CHECK_sites": 0,
+      "CHECK_bindings": [],
+      "status": "OPEN",
+      "standard_assert_bindings": [],
+      "standard_assert_sites": 0
+    },
+    {
+      "path": "tests/unit/runtime/test_runtime_abi_contract.c",
+      "function": "make_limits_record",
+      "line": 332,
+      "end_line": 341,
+      "body_lf_sha256": "18824fdbf424ca6f5b40a45c7bf693a7c363db28b2470ec2adbbdf8c04730ac4",
+      "REQUIRE_sites": 0,
+      "REQUIRE_bindings": [],
+      "CHECK_sites": 0,
+      "CHECK_bindings": [],
+      "status": "OPEN",
+      "standard_assert_bindings": [],
+      "standard_assert_sites": 0
+    },
+    {
+      "path": "tests/unit/runtime/test_runtime_abi_contract.c",
+      "function": "make_object_header_abi",
+      "line": 74,
+      "end_line": 133,
+      "body_lf_sha256": "766e70c0fe87638481dfb960992502b2ddfee5764b426f9358b26d74a3b82de0",
+      "REQUIRE_sites": 0,
+      "REQUIRE_bindings": [],
+      "CHECK_sites": 0,
+      "CHECK_bindings": [],
+      "status": "OPEN",
+      "standard_assert_bindings": [],
+      "standard_assert_sites": 0
+    },
+    {
+      "path": "tests/unit/runtime/test_runtime_abi_contract.c",
+      "function": "make_operation",
+      "line": 452,
+      "end_line": 465,
+      "body_lf_sha256": "8aa96efbebf6cf7551d604f146b654b95b6a991e6c360351584251a9ee295258",
+      "REQUIRE_sites": 0,
+      "REQUIRE_bindings": [],
+      "CHECK_sites": 0,
+      "CHECK_bindings": [],
+      "status": "OPEN",
+      "standard_assert_bindings": [],
+      "standard_assert_sites": 0
+    },
+    {
+      "path": "tests/unit/runtime/test_runtime_abi_contract.c",
+      "function": "make_providers",
+      "line": 467,
+      "end_line": 527,
+      "body_lf_sha256": "c08810adcf8ff9075582c3a86bc188fa3d60c4ca3f1f5dfa4f47ad7b61d7418e",
+      "REQUIRE_sites": 0,
+      "REQUIRE_bindings": [],
+      "CHECK_sites": 0,
+      "CHECK_bindings": [],
+      "status": "OPEN",
+      "standard_assert_bindings": [],
+      "standard_assert_sites": 0
+    },
+    {
+      "path": "tests/unit/runtime/test_runtime_abi_contract.c",
+      "function": "make_runtime_abi",
+      "line": 396,
+      "end_line": 420,
+      "body_lf_sha256": "2c8e04bb7facee00cc8895173e1e66932bcf11edd0d35dee52b04159b0a99a6c",
+      "REQUIRE_sites": 0,
+      "REQUIRE_bindings": [],
+      "CHECK_sites": 0,
+      "CHECK_bindings": [],
+      "status": "OPEN",
+      "standard_assert_bindings": [],
+      "standard_assert_sites": 0
+    },
+    {
+      "path": "tests/unit/runtime/test_runtime_abi_contract.c",
+      "function": "make_sentinel_namespace",
+      "line": 203,
+      "end_line": 212,
+      "body_lf_sha256": "f582219862890c24c3d0d6a21230755b8df4340967fad41175b41a6c4100e031",
+      "REQUIRE_sites": 0,
+      "REQUIRE_bindings": [],
+      "CHECK_sites": 0,
+      "CHECK_bindings": [],
+      "status": "OPEN",
+      "standard_assert_bindings": [],
+      "standard_assert_sites": 0
+    },
+    {
+      "path": "tests/unit/aot/test_xr_program_aot.c",
+      "function": "require_backend_operation_rejected",
+      "line": 2071,
+      "end_line": 2085,
+      "body_lf_sha256": "ce28eb19c52d3252f31a01b68266db53a616f038e07be92e6bd663c6b031425c",
+      "REQUIRE_sites": 3,
+      "REQUIRE_bindings": [
+        {
+          "line": 2081,
+          "expression": "!accepted",
+          "status": "OPEN"
+        },
+        {
+          "line": 2082,
+          "expression": "diagnostic.status == XR_BACKEND_INVARIANT_REJECTED",
+          "status": "OPEN"
+        },
+        {
+          "line": 2083,
+          "expression": "diagnostic.operation_id == expected_operation",
+          "status": "OPEN"
+        }
+      ],
+      "CHECK_sites": 0,
+      "CHECK_bindings": [],
+      "status": "OPEN",
+      "standard_assert_bindings": [],
+      "standard_assert_sites": 0
+    },
+    {
+      "path": "tests/unit/aot/test_xr_program_aot_class.inc.c",
+      "function": "require_class_field_finalization_lowering",
+      "line": 611,
+      "end_line": 643,
+      "body_lf_sha256": "fd0809d8f294a0b93bb2caa9522fbd1cbe9dda0be1ce01eade6cfda75afef169",
+      "REQUIRE_sites": 7,
+      "REQUIRE_bindings": [
+        {
+          "line": 620,
+          "expression": "outcome.kind == XR_REFERENCE_OUTCOME_RETURN && outcome.value.as.i64 == 42",
+          "status": "OPEN"
+        },
+        {
+          "line": 621,
+          "expression": "log.count == 8u",
+          "status": "OPEN"
+        },
+        {
+          "line": 622,
+          "expression": "log.events[4].kind == XR_REFERENCE_EVENT_OWNER_DROP &&\n            log.events[4].origin == XR_REFERENCE_EVENT_ORIGIN_FIELD_FINALIZATION",
+          "status": "OPEN"
+        },
+        {
+          "line": 624,
+          "expression": "log.events[5].kind == XR_REFERENCE_EVENT_CLASS_FINALIZE &&\n            log.events[5].origin == XR_REFERENCE_EVENT_ORIGIN_FIELD_FINALIZATION",
+          "status": "OPEN"
+        },
+        {
+          "line": 626,
+          "expression": "log.events[6].kind == XR_REFERENCE_EVENT_CLASS_RECLAIM &&\n            log.events[6].origin == XR_REFERENCE_EVENT_ORIGIN_FIELD_FINALIZATION",
+          "status": "OPEN"
+        },
+        {
+          "line": 631,
+          "expression": "xr_compile_backend_ir_emit_c(\n                ir, &(XrBackendEmissionRequest) {backend_emission_resources, false, NULL, 0u},\n                &generated, &diagnostic) == XR_BACKEND_OK",
+          "status": "OPEN"
+        },
+        {
+          "line": 638,
+          "expression": "strstr(generated.bytes, drop) != NULL",
+          "status": "OPEN"
+        }
+      ],
+      "CHECK_sites": 0,
+      "CHECK_bindings": [],
+      "status": "OPEN",
+      "standard_assert_bindings": [],
+      "standard_assert_sites": 0
+    },
+    {
+      "path": "tests/unit/aot/test_xr_program_aot_class.inc.c",
+      "function": "require_class_reference_oracle",
+      "line": 645,
+      "end_line": 677,
+      "body_lf_sha256": "e81c7480266db0c11e9956c05637c00e9c5b9fadc74ab6f9fb3274d45784a29b",
+      "REQUIRE_sites": 10,
+      "REQUIRE_bindings": [
+        {
+          "line": 660,
+          "expression": "outcome.kind == XR_REFERENCE_OUTCOME_RETURN",
+          "status": "OPEN"
+        },
+        {
+          "line": 661,
+          "expression": "outcome.value.kind == XR_REFERENCE_VALUE_I64 && outcome.value.as.i64 == 42",
+          "status": "OPEN"
+        },
+        {
+          "line": 662,
+          "expression": "log.count == 9u && log.events[0].identity != UINT64_MAX",
+          "status": "OPEN"
+        },
+        {
+          "line": 665,
+          "expression": "log.events[index].kind == kinds[index]",
+          "status": "OPEN"
+        },
+        {
+          "line": 666,
+          "expression": "log.events[index].origin == XR_REFERENCE_EVENT_ORIGIN_PROGRAM_OPERATION",
+          "status": "OPEN"
+        },
+        {
+          "line": 667,
+          "expression": "log.events[index].type_id ==\n                (index == 3u ? XR_CORE_TYPE_I64 : class_type_id)",
+          "status": "OPEN"
+        },
+        {
+          "line": 670,
+          "expression": "log.events[index].identity == log.events[0].identity",
+          "status": "OPEN"
+        },
+        {
+          "line": 672,
+          "expression": "log.events[1].related_identity == log.events[0].identity",
+          "status": "OPEN"
+        },
+        {
+          "line": 673,
+          "expression": "log.events[2].field_ordinal == 0u && log.events[4].field_ordinal == 0u",
+          "status": "OPEN"
+        },
+        {
+          "line": 674,
+          "expression": "log.events[3].identity == UINT64_MAX &&\n            log.events[3].related_identity == UINT64_MAX",
+          "status": "OPEN"
+        }
+      ],
+      "CHECK_sites": 0,
+      "CHECK_bindings": [],
+      "status": "OPEN",
+      "standard_assert_bindings": [],
+      "standard_assert_sites": 0
+    },
+    {
+      "path": "tests/unit/aot/test_xr_program_aot.c",
+      "function": "require_coroutine_backend_rejected",
+      "line": 2087,
+      "end_line": 2089,
+      "body_lf_sha256": "0655aa96561a122b8945501a9af2f93d71812bd7cb114eefc5c0c6140eb511d1",
+      "REQUIRE_sites": 0,
+      "REQUIRE_bindings": [],
+      "CHECK_sites": 0,
+      "CHECK_bindings": [],
+      "status": "OPEN",
+      "standard_assert_bindings": [],
+      "standard_assert_sites": 0
+    },
+    {
+      "path": "tests/unit/aot/test_xr_program_aot.c",
+      "function": "require_coroutine_backend_restored",
+      "line": 2091,
+      "end_line": 2095,
+      "body_lf_sha256": "b5181e5c8bc72d7369360194a5864b179c700195b5fb8996237a81258c8d595d",
+      "REQUIRE_sites": 2,
+      "REQUIRE_bindings": [
+        {
+          "line": 2093,
+          "expression": "xr_backend_ir_verify(ir, &diagnostic)",
+          "status": "OPEN"
+        },
+        {
+          "line": 2094,
+          "expression": "xr_backend_ir_binding_verify(ir, &diagnostic)",
+          "status": "OPEN"
+        }
+      ],
+      "CHECK_sites": 0,
+      "CHECK_bindings": [],
+      "status": "OPEN",
+      "standard_assert_bindings": [],
+      "standard_assert_sites": 0
+    },
+    {
+      "path": "tests/unit/aot/test_xr_program_aot_class.inc.c",
+      "function": "require_native_record_c_literal_escaping",
+      "line": 747,
+      "end_line": 756,
+      "body_lf_sha256": "d0052705831445e102fea817aba1359f9635c141865da7f301d2cfc1d7b9db10",
+      "REQUIRE_sites": 6,
+      "REQUIRE_bindings": [
+        {
+          "line": 749,
+          "expression": "output != NULL",
+          "status": "OPEN"
+        },
+        {
+          "line": 750,
+          "expression": "append_c_string_literal(output, \"{\\\"schema\\\":1}\")",
+          "status": "OPEN"
+        },
+        {
+          "line": 751,
+          "expression": "fflush(output) == 0 && fseek(output, 0, SEEK_SET) == 0",
+          "status": "OPEN"
+        },
+        {
+          "line": 753,
+          "expression": "fread(bytes, 1u, sizeof(bytes) - 1u, output) == strlen(\"\\\"{\\\\\\\"schema\\\\\\\":1}\\\"\")",
+          "status": "OPEN"
+        },
+        {
+          "line": 754,
+          "expression": "strcmp(bytes, \"\\\"{\\\\\\\"schema\\\\\\\":1}\\\"\") == 0",
+          "status": "OPEN"
+        },
+        {
+          "line": 755,
+          "expression": "fclose(output) == 0",
+          "status": "OPEN"
+        }
+      ],
+      "CHECK_sites": 0,
+      "CHECK_bindings": [],
+      "status": "OPEN",
+      "standard_assert_bindings": [],
+      "standard_assert_sites": 0
+    },
+    {
+      "path": "tests/unit/plan/target_profile_test_fixture.c",
+      "function": "retarget_call_abi",
+      "line": 68,
+      "end_line": 84,
+      "body_lf_sha256": "213f3f583b905b1b699bd3425c364701a62f17e1098fe11294b255545b5f24de",
+      "REQUIRE_sites": 0,
+      "REQUIRE_bindings": [],
+      "CHECK_sites": 0,
+      "CHECK_bindings": [],
+      "status": "OPEN",
+      "standard_assert_bindings": [],
+      "standard_assert_sites": 0
+    },
+    {
+      "path": "tests/unit/plan/target_profile_test_fixture.c",
+      "function": "retarget_providers",
+      "line": 86,
+      "end_line": 101,
+      "body_lf_sha256": "8df03b2bc968573e515c441fd5a96f87d9db2300e13e3e3b514d3032a3ccfbaa",
+      "REQUIRE_sites": 0,
+      "REQUIRE_bindings": [],
+      "CHECK_sites": 0,
+      "CHECK_bindings": [],
+      "status": "OPEN",
+      "standard_assert_bindings": [],
+      "standard_assert_sites": 0
+    },
+    {
+      "path": "tests/unit/aot/test_xr_program_aot.c",
+      "function": "validate_program",
+      "line": 110,
+      "end_line": 154,
+      "body_lf_sha256": "5975445946a7fbe0627c44dfa3c3b788a4ff3f4045b5dbc435d9c1046fbd5d5e",
+      "REQUIRE_sites": 4,
+      "REQUIRE_bindings": [
+        {
+          "line": 134,
+          "expression": "xr_core_ir_program_build(&input, &core, diagnostic, sizeof(diagnostic)) ==\n            XR_PROGRAM_BUILD_OK",
+          "status": "OPEN"
+        },
+        {
+          "line": 136,
+          "expression": "xr_program_write(core, &artifact, diagnostic, sizeof(diagnostic)) ==\n            XR_PROGRAM_BUILD_OK",
+          "status": "OPEN"
+        },
+        {
+          "line": 149,
+          "expression": "verify_status == XR_PROGRAM_VERIFY_OK",
+          "status": "OPEN"
+        },
+        {
+          "line": 152,
+          "expression": "program != NULL",
+          "status": "OPEN"
+        }
+      ],
+      "CHECK_sites": 0,
+      "CHECK_bindings": [],
+      "status": "OPEN",
+      "standard_assert_bindings": [],
+      "standard_assert_sites": 0
+    },
+    {
+      "path": "tests/unit/aot/test_xr_program_aot_class.inc.c",
+      "function": "xr_h2_record_lifecycle",
+      "line": 58,
+      "end_line": 62,
+      "body_lf_sha256": "35ea7b4f866f3908b8d76f576b384720f6ce8a6f939b02eac6ecc026bf5b2544",
+      "REQUIRE_sites": 0,
+      "REQUIRE_bindings": [],
+      "CHECK_sites": 0,
+      "CHECK_bindings": [],
+      "status": "OPEN",
+      "standard_assert_bindings": [],
+      "standard_assert_sites": 0
+    },
+    {
+      "path": "tests/unit/program/xr_program_ref_coroutine_fixture.h",
+      "function": "xr_program_ref_coroutine_child_init",
+      "line": 78,
+      "end_line": 185,
+      "body_lf_sha256": "6b471ce9005327a5ac86490e0045daada607f6b2a2802fa4be8c8303f4b0beb5",
+      "REQUIRE_sites": 0,
+      "REQUIRE_bindings": [],
+      "CHECK_sites": 0,
+      "CHECK_bindings": [],
+      "status": "OPEN",
+      "standard_assert_bindings": [],
+      "standard_assert_sites": 0
+    },
+    {
+      "path": "tests/unit/program/xr_program_ref_coroutine_fixture.h",
+      "function": "xr_program_ref_coroutine_key",
+      "line": 74,
+      "end_line": 76,
+      "body_lf_sha256": "b1dd1d55f3713847d7a3f98b165b37b1c6b4427584c3ac4481b7fd7387cdc5ae",
+      "REQUIRE_sites": 0,
+      "REQUIRE_bindings": [],
+      "CHECK_sites": 0,
+      "CHECK_bindings": [],
+      "status": "OPEN",
+      "standard_assert_bindings": [],
+      "standard_assert_sites": 0
+    },
+    {
+      "path": "tests/unit/program/xr_program_ref_coroutine_fixture.h",
+      "function": "xr_program_ref_coroutine_parent_blocks_init",
+      "line": 187,
+      "end_line": 243,
+      "body_lf_sha256": "e18071028aca14f2cb9268803e46bdf2bc5f0959dcffa0519a5ab101b925461b",
+      "REQUIRE_sites": 0,
+      "REQUIRE_bindings": [],
+      "CHECK_sites": 0,
+      "CHECK_bindings": [],
+      "status": "OPEN",
+      "standard_assert_bindings": [],
+      "standard_assert_sites": 0
+    },
+    {
+      "path": "tests/unit/program/xr_program_ref_coroutine_fixture.h",
+      "function": "xr_program_ref_coroutine_parent_init",
+      "line": 245,
+      "end_line": 325,
+      "body_lf_sha256": "686e61668863d2e725ca96ddea4ecb72c115353a9a63f33a3b7b8fccf906498b",
+      "REQUIRE_sites": 0,
+      "REQUIRE_bindings": [],
+      "CHECK_sites": 0,
+      "CHECK_bindings": [],
+      "status": "OPEN",
+      "standard_assert_bindings": [],
+      "standard_assert_sites": 0
+    },
+    {
+      "path": "tests/unit/plan/target_profile_test_fixture.c",
+      "function": "xr_test_target_profile_build",
+      "line": 163,
+      "end_line": 175,
+      "body_lf_sha256": "ff7f447b998483c18b76ebf7ef61f348751a9ea93fa1c0a0604c152711a5a318",
+      "REQUIRE_sites": 0,
+      "REQUIRE_bindings": [],
+      "CHECK_sites": 0,
+      "CHECK_bindings": [],
+      "status": "OPEN",
+      "standard_assert_bindings": [],
+      "standard_assert_sites": 0
+    },
+    {
+      "path": "tests/unit/plan/target_profile_test_fixture.c",
+      "function": "xr_test_target_profile_fixture_init",
+      "line": 103,
+      "end_line": 161,
+      "body_lf_sha256": "be2a37303111036a45393752a7b5c389d370d2f67ef4d302cb3b4e5af55a4888",
+      "REQUIRE_sites": 0,
+      "REQUIRE_bindings": [],
+      "CHECK_sites": 0,
+      "CHECK_bindings": [],
+      "status": "OPEN",
+      "standard_assert_bindings": [],
+      "standard_assert_sites": 0
+    }
+  ],
+  "specified_helper_REQUIRE_sites": 36,
+  "input_files": [
+    {
+      "path": "tests/unit/aot/test_xr_program_aot.c",
+      "physical_raw_sha256": "6fea38acff96d94b2bfb414e04aa308386f6284ed12ccf05613a790a23caa700",
+      "whole_file_lf_sha256": "e7ab9301b308c7db6bf48e348257e5288f38f22c1b38c827fb040719dbf2de0e",
+      "git_base_equal": true,
+      "status": "PRESERVE_ORIGINAL_READONLY"
+    },
+    {
+      "path": "tests/unit/aot/test_xr_program_aot_class.inc.c",
+      "physical_raw_sha256": "e9c264a5b9a3d518f6322766c3df46f1a87bea6352fc10432b5c31006d694deb",
+      "whole_file_lf_sha256": "d2f76b9963c3afe8973baf2562f3195ea7c01f47ef0c84f47d97dd82b1486529",
+      "git_base_equal": true,
+      "status": "PRESERVE_ORIGINAL_READONLY"
+    },
+    {
+      "path": "tests/unit/program/xr_program_ref_coroutine_fixture.h",
+      "physical_raw_sha256": "82c355d1a7d401e6cc1f93159c11b8f07f0b71024c545fafaabefbfaa1bea55d",
+      "whole_file_lf_sha256": "d209358d3992db5158051fe85015352a3273ce8fd549224611c6524452f93746",
+      "git_base_equal": true,
+      "status": "PRESERVE_ORIGINAL_READONLY"
+    },
+    {
+      "path": "tests/unit/plan/target_profile_test_fixture.c",
+      "physical_raw_sha256": "a4bd280583c9b7367c8324451b411dd1bf43d32853b5b8443fa680dded7f1876",
+      "whole_file_lf_sha256": "4cda8a7654397a98661dd495628095965b2549999619a13c7bfa63614e5cd5a6",
+      "git_base_equal": true,
+      "status": "PRESERVE_ORIGINAL_READONLY"
+    },
+    {
+      "path": "tests/unit/runtime/test_runtime_abi_contract.c",
+      "physical_raw_sha256": "38ebe1b2facc5feb1e7b0c0573d66e846eb9974cc16d9aa4e92e3f550c7487c6",
+      "whole_file_lf_sha256": "fa3d630a996a22e1d515a11f73f75f515906cb5ce6afad00c6e2b183486fd858",
+      "git_base_equal": true,
+      "status": "PRESERVE_ORIGINAL_READONLY"
+    },
+    {
+      "path": "tests/unit/aot/xr_backend_emission_owner.h",
+      "physical_raw_sha256": "2b7aa3b05456861e4e539b43bac62263cc443a61850c3f81af0b43e01dad60bf",
+      "whole_file_lf_sha256": "5620237b54c2609c6db2663d8f91e6729b8c59e1a714ac4fcbd48426455d3e01",
+      "git_base_equal": true,
+      "status": "PRESERVE_ORIGINAL_READONLY"
+    },
+    {
+      "path": "tests/unit/plan/target_profile_test_fixture.h",
+      "physical_raw_sha256": "6abd9fd3829ccca28741b2e7b69f9d15e4b2bf53ca97e61af3e07f37ca5df38e",
+      "whole_file_lf_sha256": "8861b73552abd8e8c278482aa2e56bd3371be3a877f91475a43ef7ac22a9633f",
+      "git_base_equal": true,
+      "status": "PRESERVE_ORIGINAL_READONLY"
+    },
+    {
+      "path": "tests/unit/program/xr_program_provider_fixture.h",
+      "physical_raw_sha256": "cfdda1521b56a67afa6cc7aefc5b1f5397d87d8f1ebe405dd2f41b24ec97c326",
+      "whole_file_lf_sha256": "9a7116c1fdcad29ea945a8e7b651e24490f35fd52f5f3aaab5367e755e8affea",
+      "git_base_equal": true,
+      "status": "PRESERVE_ORIGINAL_READONLY"
+    },
+    {
+      "path": "src/runtime/abi/xr_builtin_provider_contract.h",
+      "physical_raw_sha256": "0f89f9db26dd6fc1eb79647f0a6fc0b1e3989a30af68f6adf8175fb1387f479b",
+      "whole_file_lf_sha256": "8a7b671d219e0cb481ca2bf347b8b682b1a9b2882849edd4dd342a01563e89ec",
+      "git_base_equal": true,
+      "status": "PRESERVE_ORIGINAL_READONLY"
+    },
+    {
+      "path": "src/runtime/abi/xr_stdlib_provider_keys_gen.h",
+      "physical_raw_sha256": "e969dc5ccd6691e77b45eb22c84554f827e4f252cbb1bc5dab23b341b0481b5e",
+      "whole_file_lf_sha256": "ef42abadb6fdef8ec3ded6bd39f906aec93236f372f8ece92cf646b5b18e9f7b",
+      "git_base_equal": true,
+      "status": "PRESERVE_ORIGINAL_READONLY"
+    }
+  ],
+  "selected_helper_dependency_edges": {
+    "backend_emission_owner_open": [
+      "backend_emission_owner_close"
+    ],
+    "backend_emission_owner_close": [],
+    "test_class_ref_coroutine_frame_root": [
+      "build_class_ref_coroutine_program",
+      "build_ir",
+      "count_c_fragment",
+      "find_class_ref_coroutine_operation",
+      "find_class_ref_coroutine_parent",
+      "require_coroutine_backend_rejected",
+      "require_coroutine_backend_restored",
+      "xr_test_target_profile_build"
+    ],
+    "require_coroutine_backend_restored": [],
+    "build_class_ref_coroutine_program": [
+      "fixture_key",
+      "validate_program",
+      "xr_program_ref_coroutine_child_init",
+      "xr_program_ref_coroutine_parent_init"
+    ],
+    "xr_program_ref_coroutine_parent_init": [
+      "xr_program_ref_coroutine_key",
+      "xr_program_ref_coroutine_parent_blocks_init"
+    ],
+    "xr_program_ref_coroutine_key": [],
+    "xr_program_ref_coroutine_parent_blocks_init": [
+      "xr_program_ref_coroutine_key"
+    ],
+    "xr_program_ref_coroutine_child_init": [
+      "xr_program_ref_coroutine_key"
+    ],
+    "validate_program": [
+      "fixture_key"
+    ],
+    "fixture_key": [],
+    "xr_test_target_profile_build": [
+      "xr_test_target_profile_fixture_init"
+    ],
+    "xr_test_target_profile_fixture_init": [
+      "make_header_facts",
+      "make_providers",
+      "make_runtime_abi",
+      "retarget_providers"
+    ],
+    "make_header_facts": [],
+    "make_providers": [
+      "make_call_abi",
+      "make_call_slot",
+      "make_id",
+      "make_operation"
+    ],
+    "make_operation": [
+      "make_id"
+    ],
+    "make_id": [],
+    "make_call_abi": [],
+    "make_call_slot": [],
+    "make_runtime_abi": [
+      "make_callback_abi",
+      "make_domain_record",
+      "make_dynamic_value_abi",
+      "make_evaluated_record",
+      "make_extent_record",
+      "make_group_record",
+      "make_layout_record",
+      "make_limits_record",
+      "make_object_header_abi"
+    ],
+    "make_callback_abi": [
+      "make_enum_namespace",
+      "make_id"
+    ],
+    "make_enum_namespace": [
+      "make_id"
+    ],
+    "make_dynamic_value_abi": [
+      "make_field",
+      "make_id"
+    ],
+    "make_field": [],
+    "make_limits_record": [
+      "init_record"
+    ],
+    "init_record": [],
+    "make_group_record": [
+      "init_record"
+    ],
+    "make_extent_record": [
+      "init_record",
+      "make_enum_namespace",
+      "make_sentinel_namespace"
+    ],
+    "make_sentinel_namespace": [],
+    "make_evaluated_record": [
+      "init_record"
+    ],
+    "make_domain_record": [
+      "init_record",
+      "make_enum_namespace"
+    ],
+    "make_layout_record": [
+      "init_record",
+      "make_bitmask_namespace"
+    ],
+    "make_bitmask_namespace": [
+      "make_id"
+    ],
+    "make_object_header_abi": [
+      "make_field",
+      "make_id"
+    ],
+    "retarget_providers": [
+      "retarget_call_abi"
+    ],
+    "retarget_call_abi": [],
+    "build_ir": [],
+    "count_c_fragment": [],
+    "require_coroutine_backend_rejected": [
+      "require_backend_operation_rejected"
+    ],
+    "require_backend_operation_rejected": [],
+    "find_class_ref_coroutine_parent": [
+      "find_class_ref_coroutine_operation"
+    ],
+    "find_class_ref_coroutine_operation": [],
+    "test_class_reference_semantics_lowering_and_events": [
+      "build_class_reference_copy_program",
+      "build_class_reference_program",
+      "require_class_field_finalization_lowering",
+      "require_class_reference_oracle",
+      "require_native_record_c_literal_escaping",
+      "xr_test_target_profile_build"
+    ],
+    "build_class_reference_program": [
+      "build_class_reference_program_with_alias"
+    ],
+    "build_class_reference_program_with_alias": [
+      "fixture_key",
+      "validate_program"
+    ],
+    "require_class_field_finalization_lowering": [
+      "build_ir",
+      "build_nested_class_reference_program",
+      "xr_h2_record_lifecycle"
+    ],
+    "xr_h2_record_lifecycle": [],
+    "build_nested_class_reference_program": [
+      "fixture_key",
+      "validate_program"
+    ],
+    "require_class_reference_oracle": [
+      "xr_h2_record_lifecycle"
+    ],
+    "require_native_record_c_literal_escaping": [
+      "append_c_string_literal"
+    ],
+    "append_c_string_literal": [],
+    "build_class_reference_copy_program": [
+      "build_class_reference_program_with_alias"
+    ]
+  },
+  "callback_edges": [
+    "require_class_reference_oracle -> xr_h2_record_lifecycle",
+    "require_class_field_finalization_lowering -> xr_h2_record_lifecycle",
+    "shared main atexit -> backend_emission_owner_close"
+  ],
+  "macro_bindings": [
+    {
+      "path": "tests/unit/aot/test_xr_program_aot.c",
+      "name": "REQUIRE",
+      "exact_original_body": "#define REQUIRE(condition)                                                                         \\\n    do {                                                                                           \\\n        if (!(condition)) {                                                                        \\\n            fprintf(stderr, \"requirement failed at %s:%d: %s\\n\", __FILE__, __LINE__, #condition);  \\\n            abort();                                                                               \\\n        }                                                                                          \\\n    } while (0)",
+      "lf_sha256": "5721bd5a57cfbb0474be085195895bcd0ca12fa41481b6fde47dcf66c2436ca4",
+      "status": "PRESERVE_ORIGINAL_READONLY"
+    },
+    {
+      "path": "tests/unit/runtime/test_runtime_abi_contract.c",
+      "name": "SET_RECORD_FIELD",
+      "exact_original_body": "#define SET_RECORD_FIELD(record, index, struct_type, member, member_type, field_role,              \\\n                         field_encoding)                                                           \\\n    (record).fields[index] = make_field(field_role, (uint16_t) offsetof(struct_type, member),      \\\n                                        (uint16_t) sizeof(((struct_type *) 0)->member),            \\\n                                        (uint16_t) _Alignof(member_type), field_encoding)",
+      "lf_sha256": "5ecaf173f32030d69b29e2d692116d795110b91a278f3e7c68a70c763f9875ce",
+      "status": "PRESERVE_ORIGINAL_READONLY"
+    }
+  ],
+  "full_original_class_graph": {
+    "shape_counts": {
+      "types": 1,
+      "constants": 2,
+      "modules": 1,
+      "functions": 1,
+      "blocks": 1,
+      "instructions": 10
+    },
+    "selected_alias": "OWNER_ALIAS",
+    "selected_record": false,
+    "type": "Historical nominal Class42<I64 field0>, AFFINE/COPY_EXPLICIT",
+    "constants": [
+      7,
+      42
+    ],
+    "full_operation_sequence": [
+      "CONST7",
+      "CONST42",
+      "CLASS_CONSTRUCT owner(7)",
+      "OWNER_ALIAS owner -> alias with same stable identity",
+      "CLASS_FIELD_PLACE alias.field0 -> I64 PLACE",
+      "PLACE_EXCHANGE actual place with42 -> old7",
+      "CLASS_FIELD_LOAD actual original owner.field0 ->42",
+      "OWNER_DROP alias",
+      "OWNER_DROP original",
+      "RETURN loaded42"
+    ],
+    "independent_return": 42,
+    "expected_old_exchange": 7,
+    "expected_replacement": 42,
+    "negative_control": {
+      "alias": "OWNER_COPY",
+      "same_full_input": true,
+      "expected_build_status": "XR_BACKEND_UNSUPPORTED_OPERATION",
+      "expected_operation": "XR_CORE_OP_CORE_OWNER_COPY",
+      "expected_ir": "NULL"
+    },
+    "status": "OPEN"
+  },
+  "full_original_nested_class_graph": {
+    "shape_counts": {
+      "types": 2,
+      "constants": 1,
+      "modules": 1,
+      "functions": 1,
+      "blocks": 1,
+      "instructions": 5
+    },
+    "types": [
+      "Class42<I64 field0>",
+      "Class43<Class42 owned field0>"
+    ],
+    "constants": [
+      42
+    ],
+    "full_operation_sequence": [
+      "CONST42",
+      "CLASS_CONSTRUCT leaf(42)",
+      "CLASS_CONSTRUCT parent(move leaf)",
+      "OWNER_DROP parent recursively finalizes leaf",
+      "RETURN actual42"
+    ],
+    "independent_return": 42,
+    "original_reference_event_count": 8,
+    "exact_checked_field_finalization_events": [
+      {
+        "index": 4,
+        "kind": "OWNER_DROP",
+        "origin": "FIELD_FINALIZATION"
+      },
+      {
+        "index": 5,
+        "kind": "CLASS_FINALIZE",
+        "origin": "FIELD_FINALIZATION"
+      },
+      {
+        "index": 6,
+        "kind": "CLASS_RECLAIM",
+        "origin": "FIELD_FINALIZATION"
+      }
+    ],
+    "boundary": "Original nested oracle checks count and selected kinds/origins but does not assert either object identity or all eight event values.",
+    "status": "OPEN"
+  },
+  "full_original_class_coroutine_graph": {
+    "shape_counts": {
+      "types": 1,
+      "constants": 0,
+      "modules": 1,
+      "functions": 3,
+      "blocks": 7,
+      "instructions": 18
+    },
+    "type": "Historical nominal Class62<I64 field0,I64 field1>, AFFINE/COPY_EXPLICIT",
+    "functions": [
+      {
+        "role": "main ENTRY",
+        "blocks": 1,
+        "operations": [
+          "RETURNVOID"
+        ]
+      },
+      {
+        "role": "parent MOVE Class62 parameter; not ENTRY",
+        "blocks": 3,
+        "operations": [
+          [
+            "BLOCK_ARGUMENT OWNroot",
+            "CLASS_FIELD_PLACE root.field0",
+            "CLASS_FIELD_PLACE root.field1",
+            "COROUTINE_CALL_SEALED child(place0,place1,root resume,root cancel)"
+          ],
+          [
+            "BLOCK_ARGUMENT OWNresumed",
+            "OWNER_DROP resumed",
+            "RETURNVOID"
+          ],
+          [
+            "BLOCK_ARGUMENT OWNcancelled",
+            "OWNER_DROP cancelled",
+            "CANCEL_PUBLISH"
+          ]
+        ],
+        "states": 2,
+        "safepoints": 1,
+        "live_roots": 1
+      },
+      {
+        "role": "child two REF I64 parameters",
+        "blocks": 3,
+        "operations": [
+          [
+            "BLOCK_ARGUMENT PLACEleft/right",
+            "COROUTINE_YIELD left/right to resume/cancel"
+          ],
+          [
+            "BLOCK_ARGUMENT PLACEleft/right",
+            "PLACE_LOAD left",
+            "PLACE_LOAD right",
+            "RETURNVOID"
+          ],
+          [
+            "CANCEL_PUBLISH"
+          ]
+        ],
+        "states": 2,
+        "safepoints": 1,
+        "live_places": 2
+      }
+    ],
+    "owner_root": "Exactly one parent Class owner, both projected field places rebased from same frame root",
+    "original_text_checks": [
+      "one typed live_0_0 field",
+      "no live_0_1 field",
+      "one left/root->f0 rebase",
+      "one right/root->f1 rebase",
+      "owner restored at least once",
+      "no adjacent duplicate owner restore",
+      "one owner save followed by left-place rebase"
+    ],
+    "independent_semantics": "Child loads both original fields after suspension; normal parent drops owner once, cancel parent drops owner once; main returnsVOID and never calls parent. Original driver does not execute parent/child.",
+    "status": "OPEN"
+  },
+  "original_stable_reference_events": {
+    "expected_order": [
+      "CLASS_CONSTRUCT",
+      "CLASS_SHARE",
+      "CLASS_FIELD_PLACE",
+      "PLACE_EXCHANGE",
+      "CLASS_FIELD_LOAD",
+      "OWNER_DROP",
+      "OWNER_DROP",
+      "CLASS_FINALIZE",
+      "CLASS_RECLAIM"
+    ],
+    "stable_identity": "First identity != UINT64_MAX; all indices except scalar exchange3 equal first; share.related_identity equals first",
+    "type": "I64 at index3; actual admitted Class type otherwise",
+    "origin": "PROGRAM_OPERATION for all nine",
+    "fields": "Field ordinal0 at indices2/4",
+    "scalar_exchange": "Identity and related identity UINT64_MAX at index3",
+    "reference_boundary": "Reference helper asserts resultI64=42 and all nine event kinds/origins/type IDs and stable identity. It does not assert exchange old7/replacement42/has_i64_exchange; those checks exist in unselected native harness.",
+    "observer_boundary": "Recorder stores/increments only while count<9; excess events are silently truncated. count==9 alone cannot exclude later events. Preserve this limitation; current stable lifecycle proof must fail closed on overflow.",
+    "status": "OPEN"
+  },
+  "original_refreshed_digest_mutations": [
+    {
+      "name": "missing class owner live root",
+      "change": "call.operands[2] <- left PLACE result",
+      "restore": "original operand",
+      "fresh_lowering_digest": true,
+      "reject_status": "XR_BACKEND_INVARIANT_REJECTED",
+      "exact_reject_operation": "XR_CORE_OP_CORE_COROUTINE_CALL_SEALED",
+      "digest_restored_in_reject_helper": true,
+      "original_full_verify_after_restore": true,
+      "original_binding_verify_after_restore": true,
+      "status": "OPEN"
+    },
+    {
+      "name": "duplicate class owner live root",
+      "change": "safepoint live_value_ids <- [owner,owner], count2",
+      "restore": "original pointer,count1",
+      "fresh_lowering_digest": true,
+      "reject_status": "XR_BACKEND_INVARIANT_REJECTED",
+      "exact_reject_operation": "XR_CORE_OP_CORE_COROUTINE_CALL_SEALED",
+      "digest_restored_in_reject_helper": true,
+      "original_full_verify_after_restore": true,
+      "original_binding_verify_after_restore": true,
+      "status": "OPEN"
+    },
+    {
+      "name": "class ref ordinal",
+      "change": "right field_ordinal <-2",
+      "restore": "original ordinal1",
+      "fresh_lowering_digest": true,
+      "reject_status": "XR_BACKEND_INVARIANT_REJECTED",
+      "exact_reject_operation": "XR_CORE_OP_CORE_COROUTINE_CALL_SEALED",
+      "digest_restored_in_reject_helper": true,
+      "original_full_verify_after_restore": true,
+      "original_binding_verify_after_restore": true,
+      "status": "OPEN"
+    },
+    {
+      "name": "class ref field type",
+      "change": "right result_type and parent value_types[right.result] <-Bool",
+      "restore": "both original I64 type IDs",
+      "fresh_lowering_digest": true,
+      "reject_status": "XR_BACKEND_INVARIANT_REJECTED",
+      "exact_reject_operation": "XR_CORE_OP_CORE_COROUTINE_CALL_SEALED",
+      "digest_restored_in_reject_helper": true,
+      "original_full_verify_after_restore": true,
+      "original_binding_verify_after_restore": true,
+      "status": "OPEN"
+    },
+    {
+      "name": "class ref non-owner root",
+      "change": "right.operands[0] <-left PLACE result",
+      "restore": "original owner operand",
+      "fresh_lowering_digest": true,
+      "reject_status": "XR_BACKEND_INVARIANT_REJECTED",
+      "exact_reject_operation": "XR_CORE_OP_CORE_COROUTINE_CALL_SEALED",
+      "digest_restored_in_reject_helper": true,
+      "original_full_verify_after_restore": true,
+      "original_binding_verify_after_restore": true,
+      "status": "OPEN"
+    }
+  ],
+  "assertion_counts": {
+    "census_functions": 2,
+    "outer_REQUIRE_sites": 30,
+    "original_loop_sites": 0,
+    "full_transitive_private_helpers": 50,
+    "helper_REQUIRE_sites": 36,
+    "helper_standard_assert_sites": 0,
+    "fresh_original_Programs": 4,
+    "fresh_original_profiles": 2,
+    "original_backend_build_requests": 4,
+    "original_backend_build_successes": 3,
+    "original_unsupported_copy_inputs": 1,
+    "original_C_requests": 4,
+    "original_C_successes": 4,
+    "original_reference_execution_calls": 2,
+    "original_VM_execution_calls": 0,
+    "original_native_compile_calls": 0,
+    "original_native_execution_calls": 0,
+    "original_refreshed_digest_negatives": 5,
+    "original_exact_status_operation_rejects": 5,
+    "original_restore_full_verify_controls": 5,
+    "original_restore_binding_verify_controls": 5,
+    "current_product_executions": 0
+  },
+  "shared_dependencies": [
+    {
+      "path": "tests/unit/aot/test_xr_program_aot_class.inc.c",
+      "actual_direct_include_users": [
+        "tests/unit/aot/test_xr_program_aot.c"
+      ],
+      "status": "PRESERVE_READONLY_NOT_DELETABLE"
+    },
+    {
+      "path": "tests/unit/program/xr_program_ref_coroutine_fixture.h",
+      "actual_direct_include_users": [
+        "tests/unit/aot/test_xr_program_aot.c",
+        "tests/unit/program/test_xr_program_verify.c"
+      ],
+      "status": "PRESERVE_READONLY_NOT_DELETABLE"
+    },
+    {
+      "path": "tests/unit/aot/xr_backend_emission_owner.h",
+      "actual_direct_include_users": [
+        "tests/unit/aot/test_xr_program_aot.c",
+        "tests/unit/aot/xr_program_allocation_fixture_writer.c",
+        "tests/unit/aot/xr_program_coroutine_graph_fixture_writer.c",
+        "tests/unit/aot/xr_typed_provider_native_writer.c",
+        "tests/unit/ir/test_xi_pipeline.c",
+        "tests/unit/ir/test_xr_program_imported_callable.c",
+        "tests/unit/program/test_xr_program_source_build.c"
+      ],
+      "status": "PRESERVE_READONLY_NOT_DELETABLE"
+    },
+    {
+      "path": "tests/unit/program/xr_program_provider_fixture.h",
+      "actual_direct_include_users": [
+        "tests/unit/aot/test_xr_program_aot.c",
+        "tests/unit/execution/test_xr_execution.c",
+        "tests/unit/execution/xr_typed_provider_fixture.h",
+        "tests/unit/program/test_xr_program.c",
+        "tests/unit/program/xr_program_cleanup_graph_fixture.h",
+        "tests/unit/program/xr_program_coroutine_trap_fixture.h",
+        "tests/unit/program/xr_program_output_fixture.h",
+        "tests/unit/program/xr_program_pipe_fixture.h",
+        "tests/unit/program/xr_program_trap_fixture.h",
+        "tests/unit/runtime/test_runtime_abi_contract.c",
+        "tests/unit/vm/test_xr_program_vm.c"
+      ],
+      "status": "PRESERVE_READONLY_NOT_DELETABLE"
+    }
+  ],
+  "original_build_and_emission_boundaries": {
+    "main_class": "Default backend options, initial fullverify but no bindingverify, instruction_count10, embeddedC twice, fullbytes/source-digest equality, 5presence/2absence probes, unsupported OWNER_COPY exactop. Markers strict-native-host-run/h2-class-differential do not execute native.",
+    "nested": "Same general HOSTED profile, portable build_ir verifies full+binding, embeddedC once and exact recursive fielddrop text; reference outcome disposed after C/IR.",
+    "coroutine": "Fresh general HOSTED profile, portable build_ir full+binding, embeddedC once and 7 dynamic exact fragment probes, five fresh precise rejects restored full+binding.",
+    "profile": "General false/HOSTED LP64 Windows/MSVC/Win64X86_64, no output/pipe/scalar specialization.",
+    "validation": "Every factory retains full graph; private validate_program builds/writes/validates then frees artifact and Core before returning nonNULL admitted Program.",
+    "native_boundary": "write_class_native_source/native harness/compound drop/native run are separate main dispatch responsibilities, preserved whole class include but unselected here."
+  },
+  "emission_resource_owner": {
+    "path": "tests/unit/aot/xr_backend_emission_owner.h",
+    "full_helpers": [
+      "backend_emission_owner_open",
+      "backend_emission_owner_close"
+    ],
+    "original_main_limits_literals": [
+      8589934592,
+      16777216,
+      34359738368
+    ],
+    "status": "PRESERVE_SHARED_OPEN_NOT_PER_OBJECT_PROOF"
+  },
+  "Root_contract_or_representation_review": {
+    "status": "OPEN",
+    "responsibility": "Keep fixed42, alias identity, old7->42 field exchange, nested actual leaf ownership, suspended parent root and child REF loads. No old Class numeric ID/BackendIR/ref compatibility admission.",
+    "required": "Current public Source/Built/Checked/fullspecialization/Lowered/Program twoInstances, governed Cell/exclusive/requires_root contracts, public fault evidence, true stable per-object construct/finalize/reclaim with overflow detection, physical release/escape/cancel/FI/axes/safety and real native/mixed.",
+    "baseline": "Only25f4 authorized; Root development producer is not adopted, no new heavy window.",
+    "deletion": "No deletion candidate; shared fixture/profile/emission owner and Root product source preserved readonly."
+  },
+  "full_FI": "NOT_RUN",
+  "axes": "NOT_RUN",
+  "full_safety": "NOT_RUN",
+  "SourceDelete": "NOT_RUN",
+  "Main": "NOT_RUN",
+  "handoff": {
+    "Root_thread": "01a11f74-a297-7b11-8441-835bde6a3d5f",
+    "formal_acceptance": "PENDING"
+  },
+  "boundaries": [
+    "Static full original input preservation only; every qualification OPEN and retired0.",
+    "Original two reference calls are source obligations, not newly executed current-product evidence.",
+    "Only new map and trace are writable; both main bodies remain unbound."
+  ]
+}

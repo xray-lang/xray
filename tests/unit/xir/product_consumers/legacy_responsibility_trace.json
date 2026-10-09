@@ -17,9 +17,9 @@
   "reference_counts": {
     "source_with_digest_reference": 108,
     "source_without_digest_reference": 0,
-    "other_with_digest_reference": 156,
-    "other_without_digest_reference": 4,
-    "digest_reference_values": 397,
+    "other_with_digest_reference": 158,
+    "other_without_digest_reference": 2,
+    "digest_reference_values": 401,
     "source_inventory_projections": 42
   },
   "mapping_inputs": [
@@ -494,6 +494,10 @@
     {
       "path": "tests/unit/xir/product_consumers/source_original_aot_assert_panic_read_reborrow_obligations.json",
       "lf_sha256": "8509936bd2d260f9928603a15bd92cabe1e19fa3f840e034302c521d6c360d68"
+    },
+    {
+      "path": "tests/unit/xir/product_consumers/source_original_aot_class_obligations.json",
+      "lf_sha256": "1c2eda30966c571898f6995e379a899c6998ec96f83078a44f5c70b02875c240"
     },
     {
       "path": "tests/unit/xir/product_consumers/source_original_aot_cleanup_reason_graph_obligations.json",
@@ -5855,7 +5859,18 @@
       "body_lf_sha256": "905ee9f642cee9300700f7c046aacf197f3b57db218cae4367c1a6c054f284ea",
       "status": "OPEN",
       "inventory_projection": null,
-      "mapping_references": []
+      "mapping_references": [
+        {
+          "mapping": "tests/unit/xir/product_consumers/source_original_aot_class_obligations.json",
+          "pointer": "/legacy/0/body_lf_sha256",
+          "binding": "exact_path_name_body"
+        },
+        {
+          "mapping": "tests/unit/xir/product_consumers/source_original_aot_class_obligations.json",
+          "pointer": "/responsibility_mapping/0/body_lf_sha256",
+          "binding": "exact_body_digest_value_only"
+        }
+      ]
     },
     {
       "legacy_path": "tests/unit/aot/test_xr_program_aot.c",
@@ -5947,7 +5962,18 @@
       "body_lf_sha256": "cf0b862ebdd1fea5a00367cf37e52d8f1f860a550a27757236f6fc02aca70724",
       "status": "OPEN",
       "inventory_projection": null,
-      "mapping_references": []
+      "mapping_references": [
+        {
+          "mapping": "tests/unit/xir/product_consumers/source_original_aot_class_obligations.json",
+          "pointer": "/legacy/1/body_lf_sha256",
+          "binding": "exact_path_name_body"
+        },
+        {
+          "mapping": "tests/unit/xir/product_consumers/source_original_aot_class_obligations.json",
+          "pointer": "/responsibility_mapping/1/body_lf_sha256",
+          "binding": "exact_body_digest_value_only"
+        }
+      ]
     },
     {
       "legacy_path": "tests/unit/aot/test_xr_program_aot_coroutine_native_step.c",
