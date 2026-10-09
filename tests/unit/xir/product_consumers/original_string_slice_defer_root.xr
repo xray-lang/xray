@@ -1,0 +1,20 @@
+var cleanupCount: i64 = 0
+fn readCleanupCount() -> i64 { return cleanupCount }
+class Cell {
+value: i64
+constructor(value: i64) { this.value = value }
+}
+fn checked(ok: bool) -> i64 {
+var first = Cell(20)
+var second = Cell(22)
+defer { if (ok) { cleanupCount = 11 } else { cleanupCount = 22 } }
+var end: i64 = 4
+if (ok) { end = 2 }
+const source = "abc"
+const result = source.slice(0, end)
+assert(result == "ab")
+return first.value + second.value
+}
+fn answer() -> i64 { return checked(false) + readCleanupCount() }
+export fn consumerChecked(ok: bool) -> i64 { return checked(ok) }
+export fn consumerCleanup() -> i64 { return readCleanupCount() }

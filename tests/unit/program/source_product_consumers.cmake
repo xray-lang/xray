@@ -427,3 +427,5 @@ include("${CMAKE_CURRENT_LIST_DIR}/../xir/product_consumers/source_product_origi
 include("${CMAKE_CURRENT_LIST_DIR}/../xir/product_consumers/source_product_original_witness_nondefer_source.cmake")
 
 include("${CMAKE_CURRENT_LIST_DIR}/../xir/product_consumers/source_product_original_string_builder_snapshot_source.cmake")
+
+include("${CMAKE_CURRENT_LIST_DIR}/../xir/product_consumers/source_product_original_string_slice_defer_source.cmake")
