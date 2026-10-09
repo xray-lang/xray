@@ -1,0 +1,625 @@
+{
+  "schema": 1,
+  "family": "original_condition_assert_typed_panic_cleanup_chains_and_message_contract",
+  "legacy_base_commit": "01e6d38401b0f5c8684b64c35a99ac651024c0c1",
+  "status": "OPEN",
+  "retired": 0,
+  "replacement_gates": [],
+  "result": "STATIC_FULL_ORIGINAL_ASSERT_PANIC_POINT_AND_MESSAGE_MAP_ONLY",
+  "product_execution": "NOT_RUN_BY_THIS_MAP",
+  "producer": "25f4016d6f089169757a90ae11ba537002374711",
+  "identity": "Checked25/semantic67/Value22/Call28/Program29",
+  "legacy": [
+    {
+      "name": "test_condition_assert_panic_cleanup_cfg",
+      "legacy_path": "tests/unit/program/test_xr_program_verify.c",
+      "legacy_line": 6502,
+      "body_lf_sha256": "3feb56b120d8c66b3805055505eee76a78075a10cc99860b16187f15b7b42e19",
+      "assertion_sites": 8,
+      "loop_sites": 1,
+      "status": "OPEN",
+      "replacement_gates": [],
+      "note": "Function census preserves its whole body; sites do not count executed loop iterations."
+    },
+    {
+      "name": "test_panic_point_continuation_admission",
+      "legacy_path": "tests/unit/program/test_xr_program_verify.c",
+      "legacy_line": 7058,
+      "body_lf_sha256": "3de93a6bcd28a6c6c85db7d92fcc9c44fbe75e23f93eaa26acce74af9f81ec95",
+      "assertion_sites": 3,
+      "loop_sites": 2,
+      "status": "OPEN",
+      "replacement_gates": [],
+      "note": "Function census preserves its whole body; sites do not count executed loop iterations."
+    },
+    {
+      "name": "test_assert_message_contract",
+      "legacy_path": "tests/unit/program/test_xr_program_verify.c",
+      "legacy_line": 7252,
+      "body_lf_sha256": "1c21ea3a20e9b4f5a6f7de346fbfcbd16993e97c52a344fdcff88c312de95e67",
+      "assertion_sites": 3,
+      "loop_sites": 1,
+      "status": "OPEN",
+      "replacement_gates": [],
+      "note": "Function census preserves its whole body; sites do not count executed loop iterations."
+    }
+  ],
+  "responsibility_mapping": [
+    {
+      "path": "tests/unit/program/test_xr_program_verify.c",
+      "function": "test_condition_assert_panic_cleanup_cfg",
+      "line": 6502,
+      "end_line": 6544,
+      "body_lf_sha256": "3feb56b120d8c66b3805055505eee76a78075a10cc99860b16187f15b7b42e19",
+      "CHECK_sites": 8,
+      "CHECK_bindings": [
+        {
+          "line": 6505,
+          "expression": "xr_program_assert_fixture_write(&artifact, diagnostic, sizeof(diagnostic)) ==\n          XR_PROGRAM_BUILD_OK",
+          "status": "OPEN"
+        },
+        {
+          "line": 6516,
+          "expression": "normal.kind == XR_REFERENCE_OUTCOME_RETURN",
+          "status": "OPEN"
+        },
+        {
+          "line": 6517,
+          "expression": "normal.value.kind == XR_REFERENCE_VALUE_I64",
+          "status": "OPEN"
+        },
+        {
+          "line": 6518,
+          "expression": "normal.value.as.i64 == 42",
+          "status": "OPEN"
+        },
+        {
+          "line": 6521,
+          "expression": "panic.kind == XR_REFERENCE_OUTCOME_PANIC",
+          "status": "OPEN"
+        },
+        {
+          "line": 6522,
+          "expression": "panic.panic_value.kind == XR_REFERENCE_VALUE_PANIC_INFO",
+          "status": "OPEN"
+        },
+        {
+          "line": 6523,
+          "expression": "panic.panic_value.as.panic_info == XR_ASSERTION_FAILURE_CONDITION_FALSE",
+          "status": "OPEN"
+        },
+        {
+          "line": 6538,
+          "expression": "xr_program_assert_fixture_write_mutated(invalid[index].mutation, &artifact,\n                                                      diagnostic,\n                                                      sizeof(diagnostic)) == XR_PROGRAM_BUILD_OK",
+          "status": "OPEN"
+        }
+      ],
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/program/test_xr_program_verify.c",
+      "function": "test_panic_point_continuation_admission",
+      "line": 7058,
+      "end_line": 7095,
+      "body_lf_sha256": "3de93a6bcd28a6c6c85db7d92fcc9c44fbe75e23f93eaa26acce74af9f81ec95",
+      "CHECK_sites": 3,
+      "CHECK_bindings": [
+        {
+          "line": 7062,
+          "expression": "xr_program_panic_point_fixture_write(operations[index], XR_ASSERT_FIXTURE_CHAINED_CLEANUP,\n                                                   &artifact, NULL, 0u) == XR_PROGRAM_BUILD_OK",
+          "status": "OPEN"
+        },
+        {
+          "line": 7084,
+          "expression": "status == XR_PROGRAM_BUILD_OK",
+          "status": "OPEN"
+        },
+        {
+          "line": 7090,
+          "expression": "xr_program_panic_point_fixture_write(XR_CORE_OP_CORE_INTEGER_DIVMOD,\n                                               XR_ASSERT_FIXTURE_RESULT_ON_PANIC_EDGE,\n                                               &artifact, NULL, 0u) == XR_PROGRAM_BUILD_OK",
+          "status": "OPEN"
+        }
+      ],
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/program/test_xr_program_verify.c",
+      "function": "test_assert_message_contract",
+      "line": 7252,
+      "end_line": 7270,
+      "body_lf_sha256": "1c21ea3a20e9b4f5a6f7de346fbfcbd16993e97c52a344fdcff88c312de95e67",
+      "CHECK_sites": 3,
+      "CHECK_bindings": [
+        {
+          "line": 7255,
+          "expression": "xr_program_assert_message_fixture_write(mutation, &artifact) == XR_PROGRAM_BUILD_OK",
+          "status": "OPEN"
+        },
+        {
+          "line": 7259,
+          "expression": "mutation == 0u ? status == XR_PROGRAM_VERIFY_OK : status != XR_PROGRAM_VERIFY_OK",
+          "status": "OPEN"
+        },
+        {
+          "line": 7264,
+          "expression": "result.kind == XR_REFERENCE_OUTCOME_INVALID_INVOCATION",
+          "status": "OPEN"
+        }
+      ],
+      "status": "OPEN"
+    }
+  ],
+  "outer_CHECK_sites": 14,
+  "original_private_helpers": [
+    {
+      "path": "tests/unit/program/test_xr_program_verify.c",
+      "function": "validate_ok",
+      "line": 159,
+      "end_line": 174,
+      "body_lf_sha256": "94fe0ef4e0242acb810c12621ae1fe73a9887ef668f15ddc6c67ed645494f62b",
+      "CHECK_sites": 2,
+      "CHECK_bindings": [
+        {
+          "line": 171,
+          "expression": "status == XR_PROGRAM_VERIFY_OK",
+          "status": "OPEN"
+        },
+        {
+          "line": 172,
+          "expression": "program != NULL",
+          "status": "OPEN"
+        }
+      ],
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/program/test_xr_program_verify.c",
+      "function": "expect_semantic_reject_at",
+      "line": 176,
+      "end_line": 198,
+      "body_lf_sha256": "44cf0fb15bea156743a1c0e35b0be8ee844aa1af55c8653ed9361cf781c045b8",
+      "CHECK_sites": 6,
+      "CHECK_bindings": [
+        {
+          "line": 190,
+          "expression": "first_status == XR_PROGRAM_VERIFY_SEMANTIC_REJECTED",
+          "status": "OPEN"
+        },
+        {
+          "line": 191,
+          "expression": "program == NULL",
+          "status": "OPEN"
+        },
+        {
+          "line": 192,
+          "expression": "first.kind == expected",
+          "status": "OPEN"
+        },
+        {
+          "line": 195,
+          "expression": "second_status == first_status",
+          "status": "OPEN"
+        },
+        {
+          "line": 196,
+          "expression": "memcmp(&first, &second, sizeof(first)) == 0",
+          "status": "OPEN"
+        },
+        {
+          "line": 197,
+          "expression": "program == NULL",
+          "status": "OPEN"
+        }
+      ],
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/program/xr_program_assert_fixture.h",
+      "function": "xr_assert_fixture_key",
+      "line": 24,
+      "end_line": 26,
+      "body_lf_sha256": "a29a3b5c8934bc93c6a4912c9306c0e751b220131917c72f1c728d40f2426233",
+      "CHECK_sites": 0,
+      "CHECK_bindings": [],
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/program/xr_program_assert_fixture.h",
+      "function": "xr_program_panic_point_fixture_write",
+      "line": 28,
+      "end_line": 251,
+      "body_lf_sha256": "759e437ed01c720af683c522610391322d6a447258458146baf403ff69464fed",
+      "CHECK_sites": 0,
+      "CHECK_bindings": [],
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/program/xr_program_assert_fixture.h",
+      "function": "xr_program_assert_fixture_write_mutated",
+      "line": 253,
+      "end_line": 259,
+      "body_lf_sha256": "642141a05901d96e8880fd5cae39dbea2690957c3df9ef7151b2aba0c7772041",
+      "CHECK_sites": 0,
+      "CHECK_bindings": [],
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/program/xr_program_assert_fixture.h",
+      "function": "xr_program_assert_fixture_write",
+      "line": 261,
+      "end_line": 266,
+      "body_lf_sha256": "8d4b032c2a28f0cab909b8ae6665fd4ae85b639a11a8605db13631d5aa9aa02d",
+      "CHECK_sites": 0,
+      "CHECK_bindings": [],
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/program/xr_program_assert_fixture.h",
+      "function": "xr_program_assert_message_fixture_write",
+      "line": 270,
+      "end_line": 331,
+      "body_lf_sha256": "834bd4d68e1a96ea8496b06e8108801f8f425de507c16c0cb9224e2e7b157231",
+      "CHECK_sites": 0,
+      "CHECK_bindings": [],
+      "status": "OPEN"
+    }
+  ],
+  "specified_helper_CHECK_sites": 8,
+  "input_files": [
+    {
+      "path": "tests/unit/program/test_xr_program_verify.c",
+      "physical_raw_sha256": "a39922500c0943c034fafcda3a82b67e511ea658f453f6c0c3204f7719de1817",
+      "whole_file_lf_sha256": "ec4b93f13bfab2aa3d4b8f8773dd5c1118a0c682ed6f8304fead515f90402802",
+      "git_base_equal": true,
+      "status": "PRESERVE_ORIGINAL_READONLY"
+    },
+    {
+      "path": "tests/unit/program/xr_program_assert_fixture.h",
+      "physical_raw_sha256": "350d7b21562b9474f0b368a6ee3cc036aeb14bc220c8a1a80b3fad6f1f7dbafa",
+      "whole_file_lf_sha256": "52288aa92eb0ed11aaddd8efe28b482e94d2e09e89dd8d574345aa783216adc4",
+      "git_base_equal": true,
+      "status": "PRESERVE_ORIGINAL_READONLY"
+    },
+    {
+      "path": "tests/unit/program/test_xr_program.c",
+      "physical_raw_sha256": "5986f0f7160296f52787ca8b9443329a9a05eeff083daac530a776642971655a",
+      "whole_file_lf_sha256": "2743be628db188c386a72e59529286df64720051710599d83f9b6510aa529aff",
+      "git_base_equal": true,
+      "status": "PRESERVE_ORIGINAL_READONLY"
+    },
+    {
+      "path": "tests/unit/aot/test_xr_program_aot.c",
+      "physical_raw_sha256": "6fea38acff96d94b2bfb414e04aa308386f6284ed12ccf05613a790a23caa700",
+      "whole_file_lf_sha256": "e7ab9301b308c7db6bf48e348257e5288f38f22c1b38c827fb040719dbf2de0e",
+      "git_base_equal": true,
+      "status": "PRESERVE_ORIGINAL_READONLY"
+    },
+    {
+      "path": "tests/unit/vm/test_xr_program_vm.c",
+      "physical_raw_sha256": "3a19b58076867cc70ef6c77e975286009df65e61ac1ed9edb2b5ab7813543502",
+      "whole_file_lf_sha256": "17904ef2bab8bb7eea72245fedba9878d74b6b8e93776e4314418e2db06dce8a",
+      "git_base_equal": true,
+      "status": "PRESERVE_ORIGINAL_READONLY"
+    },
+    {
+      "path": "tests/unit/vm/test_xr_program_vm_allocations.c",
+      "physical_raw_sha256": "65404153b883af360f80af2006ccb99a1742815f707bf605b7f27e11e16aa4a7",
+      "whole_file_lf_sha256": "b2e8af3a0b31c277224ec7eb93c861f43d5ab09ebf2876869fc5a87f65effdc2",
+      "git_base_equal": true,
+      "status": "PRESERVE_ORIGINAL_READONLY"
+    },
+    {
+      "path": "src/shared/xr_assertion_plan.h",
+      "physical_raw_sha256": "a846aecceaab51b75fe64e6849abe179ed93d6be6985d7d7da8faf93f7fc8a71",
+      "whole_file_lf_sha256": "53463aef97f4b92b40cb2247b4df921aade9944aa42dbb04d3a47a84c8e9c921",
+      "git_base_equal": true,
+      "status": "PRESERVE_ORIGINAL_READONLY"
+    },
+    {
+      "path": "src/program/xr_program.h",
+      "physical_raw_sha256": "d1e735c841697b884f5f7719b0391b5fa0c7ac0a9fcb68fb44435a5fce4da63d",
+      "whole_file_lf_sha256": "10a5934658ab7487696cc912bfcc4b2e993e513d3daa2def92bf13869c05b82e",
+      "git_base_equal": true,
+      "status": "PRESERVE_ORIGINAL_READONLY"
+    },
+    {
+      "path": "src/core/xr_core_spec_gen.h",
+      "physical_raw_sha256": "c29e3958da2724dcb5857e0ab3286757d97dfbc8cbd4ca5b638741d8ab1ae484",
+      "whole_file_lf_sha256": "e393724757512051de476d4250d1a9983c27713c2aeec9a0681cad5d1a0633bd",
+      "git_base_equal": true,
+      "status": "PRESERVE_ORIGINAL_READONLY"
+    },
+    {
+      "path": "src/program/xr_reference_evaluator.c",
+      "physical_raw_sha256": "57b947317f1543e12827d5e100719554598eb6388bd3d6e5a5110193daadcf02",
+      "whole_file_lf_sha256": "31e754ab38df3b93c7256853c2aae948cba14413e75465368d239d10c719548d",
+      "git_base_equal": true,
+      "status": "PRESERVE_ORIGINAL_READONLY"
+    }
+  ],
+  "base_graph": {
+    "type": "Local dynamic base32 AGGREGATE[I64], AFFINE/COPY_EXPLICIT, one constant42.",
+    "signature": "READ condition BOOL for ASSERT or I64 for DIVMOD, READ I64 seed; I64 result, PANIC_INFO panic, PANIC effect; one ENTRY function.",
+    "entry": [
+      "BLOCK_ARGUMENT [condition,seed]",
+      "AGGREGATE_CONSTRUCT actual OWN aggregate(seed)",
+      "ASSERT_CONDITION [condition,owner suffix], U32 CONDITION_FALSE1 or INTEGER_DIVMOD [seed,condition,owner suffix], U32=0 and I64 result",
+      "OWNER_DROP aggregate on success",
+      "CONST42",
+      "RETURN actual constant42"
+    ],
+    "landing": [
+      "BLOCK_ARGUMENT implicit OWN PANIC_INFO + actual OWN aggregate suffix",
+      "OWNER_DROP actual aggregate",
+      "PANIC_PUBLISH actual payload"
+    ],
+    "shape_counts": {
+      "functions": 1,
+      "blocks": 2,
+      "instructions": 9,
+      "types": 1,
+      "constants": 1
+    },
+    "chained_shape_counts": {
+      "functions": 1,
+      "blocks": 3,
+      "instructions": 11,
+      "types": 1,
+      "constants": 1
+    },
+    "condition_cases": [
+      {
+        "mutation": "VALID",
+        "complete_graph_change": "Complete entry constructs actual affine aggregate from I64 seed9, ASSERT(condition) has owner cleanup suffix, success drops owner/returns constant42, panic landing drops transferred aggregate and publishes actual typed panic.",
+        "expected_build": "XR_PROGRAM_BUILD_OK",
+        "expected_verify": "XR_PROGRAM_VERIFY_OK",
+        "expected_diagnostic": null,
+        "status": "OPEN"
+      },
+      {
+        "mutation": "NON_BOOL_CONDITION",
+        "complete_graph_change": "Condition parameter/entry argument becomes I64 instead BOOL, actual ASSERT and complete aggregate cleanup retained.",
+        "expected_build": "XR_PROGRAM_BUILD_OK",
+        "expected_verify": "XR_PROGRAM_VERIFY_SEMANTIC_REJECTED",
+        "expected_diagnostic": "XR_PROGRAM_DIAGNOSTIC_OPERATION_TYPE",
+        "status": "OPEN"
+      },
+      {
+        "mutation": "WRONG_PANIC_TYPE",
+        "complete_graph_change": "Implicit landing payload PANIC_INFO/OWNER -> ERROR/NON_OWNER; aggregate suffix and declared PANIC_INFO signature remain.",
+        "expected_build": "XR_PROGRAM_BUILD_OK",
+        "expected_verify": "XR_PROGRAM_VERIFY_SEMANTIC_REJECTED",
+        "expected_diagnostic": "XR_PROGRAM_DIAGNOSTIC_OPERATION_TYPE",
+        "status": "OPEN"
+      },
+      {
+        "mutation": "MISSING_OWNER_TRANSFER",
+        "complete_graph_change": "ASSERT operand_count2 -> prefix1 omits aggregate cleanup suffix; landing still has PANIC_INFO plus OWN aggregate.",
+        "expected_build": "XR_PROGRAM_BUILD_OK",
+        "expected_verify": "XR_PROGRAM_VERIFY_SEMANTIC_REJECTED",
+        "expected_diagnostic": "XR_PROGRAM_DIAGNOSTIC_OPERATION_ARITY",
+        "status": "OPEN"
+      }
+    ],
+    "original_runtime": [
+      {
+        "input": [
+          "BOOL true",
+          "I64 seed9"
+        ],
+        "outcome": "RETURN/I64(42)"
+      },
+      {
+        "input": [
+          "BOOL false",
+          "same I64 seed9"
+        ],
+        "outcome": "PANIC/PANIC_INFO with original scalar reason CONDITION_FALSE1"
+      }
+    ],
+    "runtime_boundary": "Original body does not dispose either outcome; old scalar panic token and scalar output assertions do not prove current opaque owning PanicInfo payload materialization, stable identity or physical release."
+  },
+  "panic_point_matrix": {
+    "operations": [
+      "ASSERT_CONDITION",
+      "INTEGER_DIVMOD"
+    ],
+    "prefix": [
+      1,
+      2
+    ],
+    "cases": [
+      {
+        "mutation": "CHAINED_CLEANUP",
+        "complete_graph_change": "Landing becomes BLOCK_ARGUMENT/BRANCH transferring actual OWN PANIC_INFO and actual OWN aggregate to cleanup block; cleanup BLOCK_ARGUMENT/DROP aggregate/PANIC_PUBLISH payload.",
+        "expected_build": "XR_PROGRAM_BUILD_OK",
+        "expected_verify": "XR_PROGRAM_VERIFY_OK",
+        "expected_diagnostic": null,
+        "status": "OPEN"
+      },
+      {
+        "mutation": "WRONG_PANIC_TYPE",
+        "complete_graph_change": "Landing implicit PANIC_INFO/OWNER becomes ERROR/NON_OWNER; original full other paths retained.",
+        "expected_build": "XR_PROGRAM_BUILD_OK",
+        "expected_verify": "XR_PROGRAM_VERIFY_SEMANTIC_REJECTED",
+        "expected_diagnostic": "XR_PROGRAM_DIAGNOSTIC_OPERATION_TYPE",
+        "status": "OPEN"
+      },
+      {
+        "mutation": "MISSING_OWNER_TRANSFER",
+        "complete_graph_change": "Panic-point operand_count prefix+1 -> prefix, omitting actual aggregate transfer to landing.",
+        "expected_build": "XR_PROGRAM_BUILD_OK",
+        "expected_verify": "XR_PROGRAM_VERIFY_SEMANTIC_REJECTED",
+        "expected_diagnostic": "XR_PROGRAM_DIAGNOSTIC_OPERATION_ARITY",
+        "status": "OPEN"
+      },
+      {
+        "mutation": "NO_EDGE_WITH_LIVE_OWNER",
+        "complete_graph_change": "Panic-point has no successors and only value prefix, module selects one entry block; original actual aggregate owner remains live at panic point and is dropped only after successful operation.",
+        "expected_build": "XR_PROGRAM_BUILD_OK",
+        "expected_verify": "XR_PROGRAM_VERIFY_SEMANTIC_REJECTED",
+        "expected_diagnostic": "XR_PROGRAM_DIAGNOSTIC_VALUE_USE",
+        "status": "OPEN"
+      },
+      {
+        "mutation": "CHAINED_OWNER_LEAK",
+        "complete_graph_change": "Use chained graph; cleanup instruction1 DROP aggregate -> PANIC_PUBLISH, count2. Landing transfer and aggregate argument remain, aggregate never dropped.",
+        "expected_build": "XR_PROGRAM_BUILD_OK",
+        "expected_verify": "XR_PROGRAM_VERIFY_SEMANTIC_REJECTED",
+        "expected_diagnostic": "XR_PROGRAM_DIAGNOSTIC_VALUE_USE",
+        "status": "OPEN"
+      },
+      {
+        "mutation": "CHAINED_RECOVERY",
+        "complete_graph_change": "Use chained graph; cleanup drops aggregate then actual PANIC_INFO, CONST42/RETURN; count5. Even after owners consumed, panic-private reason escapes to ordinary RETURN.",
+        "expected_build": "XR_PROGRAM_BUILD_OK",
+        "expected_verify": "XR_PROGRAM_VERIFY_SEMANTIC_REJECTED",
+        "expected_diagnostic": "XR_PROGRAM_DIAGNOSTIC_CONTROL_FLOW",
+        "status": "OPEN"
+      }
+    ],
+    "fresh_inputs": 12,
+    "admitted_positives": 2,
+    "semantic_negative_graphs": 10,
+    "runtime": "NOT_RUN_IN_ORIGINAL_BODY",
+    "extra_divmod_negative": {
+      "mutation": "RESULT_ON_PANIC_EDGE",
+      "change": "Cleanup suffix owner -> actual division_result produced by this very DIVMOD; edge references a result that is unavailable on the failing path. Keep actual owning landing aggregate type and complete graph.",
+      "expected_build": "XR_PROGRAM_BUILD_OK",
+      "expected_verify": "XR_PROGRAM_VERIFY_SEMANTIC_REJECTED",
+      "expected_diagnostic": "XR_PROGRAM_DIAGNOSTIC_VALUE_USE",
+      "runtime": "NOT_RUN",
+      "status": "OPEN"
+    }
+  },
+  "message_graph": {
+    "message_bytes": [
+      97,
+      0,
+      228,
+      184,
+      173
+    ],
+    "message": "Five bytes: a, embedded NUL, UTF8 \u4e2d; no strlen truncation, replacement or empty message.",
+    "key_material": "Nine distinct 3-byte key materials [0xa5,0x19,index0..8].",
+    "entry": [
+      "BLOCK_ARGUMENT READ BOOL",
+      "CONSTANT_STRING actual five bytes -> OWN String",
+      "ASSERT_CONDITION operands[condition,message borrow,same message owner cleanup suffix], reason1|MESSAGE_PRESENT256 -> landing",
+      "DROP actual String on success",
+      "RETURN VOID"
+    ],
+    "landing": [
+      "BLOCK_ARGUMENT implicit OWN PANIC_INFO + OWN String",
+      "DROP actual message String",
+      "PANIC_PUBLISH actual payload"
+    ],
+    "shape_counts": {
+      "functions": 1,
+      "blocks": 2,
+      "instructions": 8,
+      "types": 0,
+      "constants": 1
+    },
+    "cases": [
+      {
+        "mutation": 0,
+        "expected_build": "XR_PROGRAM_BUILD_OK",
+        "original_verify_expectation": "XR_PROGRAM_VERIFY_OK",
+        "original_diagnostic": "NOT_ASSERTED",
+        "original_NULL_product": "NOT_ASSERTED",
+        "change": "Complete borrowed message + same actual String owner cleanup suffix.",
+        "original_runtime": "TRUE_BOOL -> INVALID_INVOCATION",
+        "status": "OPEN"
+      },
+      {
+        "mutation": 1,
+        "expected_build": "XR_PROGRAM_BUILD_OK",
+        "original_verify_expectation": "STATUS_NOT_OK_ONLY",
+        "original_diagnostic": "NOT_ASSERTED",
+        "original_NULL_product": "NOT_ASSERTED",
+        "change": "Only message value operand1 String -> actual BOOL condition; owning String suffix retained.",
+        "original_runtime": "NOT_RUN",
+        "status": "OPEN"
+      },
+      {
+        "mutation": 2,
+        "expected_build": "XR_PROGRAM_BUILD_OK",
+        "original_verify_expectation": "STATUS_NOT_OK_ONLY",
+        "original_diagnostic": "NOT_ASSERTED",
+        "original_NULL_product": "NOT_ASSERTED",
+        "change": "Only immediate control adds unknown bit512 to reason1|MESSAGE_PRESENT256.",
+        "original_runtime": "NOT_RUN",
+        "status": "OPEN"
+      },
+      {
+        "mutation": 3,
+        "expected_build": "XR_PROGRAM_BUILD_OK",
+        "original_verify_expectation": "STATUS_NOT_OK_ONLY",
+        "original_diagnostic": "NOT_ASSERTED",
+        "original_NULL_product": "NOT_ASSERTED",
+        "change": "Only ASSERT operand_count3 -> 2 omits owning String cleanup suffix; condition/message operands remain.",
+        "original_runtime": "NOT_RUN",
+        "status": "OPEN"
+      }
+    ],
+    "verification": "All four build OK. Original directly validates each once with NULL diagnostic; positive status OK, negative merely !=OK. It does not assert negative kind/status category/NULL product or repeated deterministic diagnostic.",
+    "runtime": "Only valid message graph with BOOL true is evaluated once and must INVALID_INVOCATION; outcome disposed, Program/artifact freed. No false message branch, message rendering/materialization, retention or owning panic lifetime is tested.",
+    "original_evaluator_context": {
+      "path": "src/program/xr_reference_evaluator.c",
+      "line": 1274,
+      "end_line": 1285,
+      "excerpt_lf_sha256": "43ea5c87275f0d2bc46155acc49153bc2ac1b38ca8f04444115fd910dbe59186",
+      "excerpt": "                case XR_CORE_OP_CORE_ASSERT_CONDITION:\n                    /* The historical reference subset has scalar panic tokens only. */\n                    if (instruction->immediate.u32 & XR_CORE_ASSERT_MESSAGE_PRESENT) {\n                        result = outcome(XR_REFERENCE_OUTCOME_INVALID_INVOCATION, context);\n                        goto done;\n                    }\n                    if (!values[instruction->operands[0]].as.value.as.boolean) {\n                        XrReferenceValue panic = {\n                            .kind = XR_REFERENCE_VALUE_PANIC_INFO,\n                            .as.panic_info = instruction->immediate.u32,\n                        };\n                        if (instruction->successor_count == 0u) {",
+      "scope": "READONLY_ORIGINAL_SOURCE_CONTEXT_NOT_CURRENT_PRODUCT_EXECUTION"
+    }
+  },
+  "assertion_counts": {
+    "census_functions": 3,
+    "outer_sites": 14,
+    "specified_helpers": 7,
+    "specified_helper_sites": 8,
+    "fresh_builder_inputs": 21,
+    "positive_admitted_programs": 4,
+    "exact_semantic_negative_inputs": 14,
+    "exact_semantic_negative_verify_calls": 28,
+    "weak_message_negative_inputs": 3,
+    "weak_message_negative_verify_calls": 3,
+    "original_runtime_evaluations": 3,
+    "wire_mutations": 0
+  },
+  "expectation_policy": "Condition three + panic-point eleven negatives retain exact original kinds/SEMANTIC_REJECTED/NULL twice and full repeated Diag memcmp. Original message three negatives remain weak status-not-OK only, not retroactively upgraded to precise diagnostic evidence. Current qualification must add independently specified strong checks without rewriting historical failure or restoring old scalar carrier.",
+  "shared_fixture_owners": {
+    "path": "tests/unit/program/xr_program_assert_fixture.h",
+    "actual_include_users": [
+      "tests/unit/program/test_xr_program_verify.c",
+      "tests/unit/program/test_xr_program.c",
+      "tests/unit/aot/test_xr_program_aot.c",
+      "tests/unit/vm/test_xr_program_vm.c",
+      "tests/unit/vm/test_xr_program_vm_allocations.c"
+    ],
+    "status": "PRESERVE_SHARED_READONLY",
+    "deletion": "Program/verifier/AOT/VM/VM allocations still include complete shared panic-point and message builders. No shared deletion candidate."
+  },
+  "Root_contract_or_representation_review": {
+    "status": "OPEN",
+    "panic": "Preserve actual condition/seed9/own aggregate, success42 and failure reason CONDITION_FALSE, actual typed panic landing and all cleanup chains. Current PanicInfo is owning/opaque; original scalar reason token must become correct logical reason observation through authorized current API, never an old ABI fallback.",
+    "message": "Original valid true-message INVALID_INVOCATION reflects explicit old evaluator rejection on MESSAGE_PRESENT before examining the condition. Keep failure evidence, but ask Root to adjudicate current frozen assertion/message execution contract; do not institutionalize old unsupported result as permanent new golden or silently rewrite it to success.",
+    "cleanup": "Retain ownership transfer suffix distinct from borrowed condition/message prefix, actual original typed ERROR negative, missing edge/live owner, unavailable DIVMOD result, leak and panic-private recovery prohibition.",
+    "qualification": "Formal public Source/current verified-owner/VM/native/mixed/two-instance/actual owning panic and message bytes/lifecycle/full FI/axes/safety remain OPEN pending Root producer/roles/observer/window."
+  },
+  "full_FI": "NOT_RUN",
+  "axes": "NOT_RUN",
+  "full_safety": "NOT_RUN",
+  "SourceDelete": "NOT_RUN",
+  "Main": "NOT_RUN",
+  "handoff": {
+    "Root_thread": "01a11f74-a297-7b11-8441-835bde6a3d5f",
+    "formal_acceptance": "PENDING"
+  },
+  "boundaries": [
+    "Static full original responsibilities only; retired0/all OPEN.",
+    "Three original runtime calls are source obligations, not current runs.",
+    "No product source/ABI/shared fixture/docs mutation; historical dirty state preserved."
+  ]
+}
