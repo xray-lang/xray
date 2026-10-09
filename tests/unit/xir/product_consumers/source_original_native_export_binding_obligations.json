@@ -53,12 +53,12 @@
         },
         {
           "line": 3821,
-          "expression": "strstr(generated.header_bytes, \"int64_t public_answer(void",
+          "expression": "strstr(generated.header_bytes, \"int64_t public_answer(void);\") != NULL",
           "status": "OPEN"
         },
         {
           "line": 3822,
-          "expression": "strstr(generated.bytes, \"if (result.kind != UINT32_C(0)) abort(",
+          "expression": "strstr(generated.bytes, \"if (result.kind != UINT32_C(0)) abort();\") != NULL",
           "status": "OPEN"
         },
         {

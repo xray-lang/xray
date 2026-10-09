@@ -629,7 +629,7 @@
     },
     {
       "path": "tests/unit/xir/product_consumers/source_original_native_export_binding_obligations.json",
-      "lf_sha256": "a34d5828d27570e2ada5564255aba26e3188fc8b72a70abd3a2fb18d50da7619"
+      "lf_sha256": "3a4a1bd193ddbe6f4bfdb0abec1ba1c94f8f98b6c028648ec4f09fee909d7639"
     },
     {
       "path": "tests/unit/xir/product_consumers/source_original_pipe_provider_cleanup_obligations.json",
