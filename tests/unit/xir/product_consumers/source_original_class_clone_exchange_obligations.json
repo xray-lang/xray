@@ -1,0 +1,827 @@
+{
+  "schema": 1,
+  "family": "original_class_clone_exchange",
+  "legacy_base_commit": "01e6d38401b0f5c8684b64c35a99ac651024c0c1",
+  "status": "OPEN",
+  "retired": 0,
+  "replacement_gates": [],
+  "result": "STATIC_ORIGINAL_CLASS_CLONE_EXCHANGE_MAP_ONLY",
+  "product_execution": "NOT_RUN_BY_THIS_MAP",
+  "producer": "25f4016d6f089169757a90ae11ba537002374711",
+  "identity": "Checked25/semantic67/Value22/Call28/Program29",
+  "legacy": [
+    {
+      "name": "test_copy_forbidden_class_can_share_but_not_clone",
+      "legacy_path": "tests/unit/program/test_xr_program_verify.c",
+      "legacy_line": 1726,
+      "body_lf_sha256": "628dba6f9ec6d9216d90263e2d6b1cbcf4ecdebe0b196895478407eab93ce717",
+      "assertion_sites": 0,
+      "loop_sites": 0,
+      "status": "OPEN",
+      "replacement_gates": [],
+      "note": "Function census preserves its whole body; sites do not count executed loop iterations."
+    },
+    {
+      "name": "test_affine_class_exchange_commit_interval",
+      "legacy_path": "tests/unit/program/test_xr_program_verify.c",
+      "legacy_line": 2011,
+      "body_lf_sha256": "7d39e4335b67fdb6938ae49c3268766cc282de8694387c787455927cc2696a9d",
+      "assertion_sites": 7,
+      "loop_sites": 2,
+      "status": "OPEN",
+      "replacement_gates": [],
+      "note": "Function census preserves its whole body; sites do not count executed loop iterations."
+    },
+    {
+      "name": "test_detached_aggregate_shared_carrier_dispose",
+      "legacy_path": "tests/unit/program/test_xr_program_verify.c",
+      "legacy_line": 2133,
+      "body_lf_sha256": "c256e17cb46cd4d76f7231f0a4dadf220a88d4214c841cd6e5f4bdf2cc8b570d",
+      "assertion_sites": 8,
+      "loop_sites": 0,
+      "status": "OPEN",
+      "replacement_gates": [],
+      "note": "Function census preserves its whole body; sites do not count executed loop iterations."
+    },
+    {
+      "name": "test_class_clone_transaction_and_teardown_origin",
+      "legacy_path": "tests/unit/program/test_xr_program_verify.c",
+      "legacy_line": 2266,
+      "body_lf_sha256": "ed79d6210b2a4723d7578ed1882941defa9ea99b83556e64b9e613f0190ae037",
+      "assertion_sites": 39,
+      "loop_sites": 3,
+      "status": "OPEN",
+      "replacement_gates": [],
+      "note": "Function census preserves its whole body; sites do not count executed loop iterations."
+    }
+  ],
+  "responsibility_mapping": [
+    {
+      "path": "tests/unit/program/test_xr_program_verify.c",
+      "function": "test_copy_forbidden_class_can_share_but_not_clone",
+      "line": 1726,
+      "end_line": 1736,
+      "body_lf_sha256": "628dba6f9ec6d9216d90263e2d6b1cbcf4ecdebe0b196895478407eab93ce717",
+      "CHECK_sites": 0,
+      "CHECK_bindings": [],
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/program/test_xr_program_verify.c",
+      "function": "test_affine_class_exchange_commit_interval",
+      "line": 2011,
+      "end_line": 2053,
+      "body_lf_sha256": "7d39e4335b67fdb6938ae49c3268766cc282de8694387c787455927cc2696a9d",
+      "CHECK_sites": 7,
+      "CHECK_bindings": [
+        {
+          "line": 2023,
+          "expression": "result.kind == XR_REFERENCE_OUTCOME_RETURN",
+          "status": "OPEN"
+        },
+        {
+          "line": 2024,
+          "expression": "result.value.kind == XR_REFERENCE_VALUE_I64",
+          "status": "OPEN"
+        },
+        {
+          "line": 2025,
+          "expression": "result.value.as.i64 == 42",
+          "status": "OPEN"
+        },
+        {
+          "line": 2030,
+          "expression": "exchange != UINT32_MAX",
+          "status": "OPEN"
+        },
+        {
+          "line": 2032,
+          "expression": "log.type_ids[exchange] == log.type_ids[0]",
+          "status": "OPEN"
+        },
+        {
+          "line": 2033,
+          "expression": "log.identities[exchange] == log.identities[0]",
+          "status": "OPEN"
+        },
+        {
+          "line": 2034,
+          "expression": "log.related_identities[exchange] == log.identities[1]",
+          "status": "OPEN"
+        }
+      ],
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/program/test_xr_program_verify.c",
+      "function": "test_detached_aggregate_shared_carrier_dispose",
+      "line": 2133,
+      "end_line": 2154,
+      "body_lf_sha256": "c256e17cb46cd4d76f7231f0a4dadf220a88d4214c841cd6e5f4bdf2cc8b570d",
+      "CHECK_sites": 8,
+      "CHECK_bindings": [
+        {
+          "line": 2139,
+          "expression": "result.kind == XR_REFERENCE_OUTCOME_RETURN",
+          "status": "OPEN"
+        },
+        {
+          "line": 2140,
+          "expression": "result.value.kind == XR_REFERENCE_VALUE_AGGREGATE",
+          "status": "OPEN"
+        },
+        {
+          "line": 2141,
+          "expression": "result.owns_dynamic_values",
+          "status": "OPEN"
+        },
+        {
+          "line": 2143,
+          "expression": "xr_reference_value_aggregate_view(&result.value, &outer)",
+          "status": "OPEN"
+        },
+        {
+          "line": 2144,
+          "expression": "outer.field_count == 2u",
+          "status": "OPEN"
+        },
+        {
+          "line": 2146,
+          "expression": "outer.fields[0].kind == XR_REFERENCE_VALUE_AGGREGATE",
+          "status": "OPEN"
+        },
+        {
+          "line": 2147,
+          "expression": "outer.fields[1].kind == XR_REFERENCE_VALUE_AGGREGATE",
+          "status": "OPEN"
+        },
+        {
+          "line": 2148,
+          "expression": "outer.fields[0].as.aggregate == outer.fields[1].as.aggregate",
+          "status": "OPEN"
+        }
+      ],
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/program/test_xr_program_verify.c",
+      "function": "test_class_clone_transaction_and_teardown_origin",
+      "line": 2266,
+      "end_line": 2343,
+      "body_lf_sha256": "ed79d6210b2a4723d7578ed1882941defa9ea99b83556e64b9e613f0190ae037",
+      "CHECK_sites": 39,
+      "CHECK_bindings": [
+        {
+          "line": 2278,
+          "expression": "result.kind == XR_REFERENCE_OUTCOME_RETURN",
+          "status": "OPEN"
+        },
+        {
+          "line": 2279,
+          "expression": "result.value.kind == XR_REFERENCE_VALUE_I64",
+          "status": "OPEN"
+        },
+        {
+          "line": 2280,
+          "expression": "result.value.as.i64 == 7",
+          "status": "OPEN"
+        },
+        {
+          "line": 2291,
+          "expression": "log.count == sizeof(expected_kinds) / sizeof(expected_kinds[0])",
+          "status": "OPEN"
+        },
+        {
+          "line": 2293,
+          "expression": "log.kinds[index] == expected_kinds[index]",
+          "status": "OPEN"
+        },
+        {
+          "line": 2294,
+          "expression": "log.origins[0] == XR_REFERENCE_EVENT_ORIGIN_PROGRAM_OPERATION",
+          "status": "OPEN"
+        },
+        {
+          "line": 2295,
+          "expression": "log.origins[1] == XR_REFERENCE_EVENT_ORIGIN_PROGRAM_OPERATION",
+          "status": "OPEN"
+        },
+        {
+          "line": 2296,
+          "expression": "log.origins[2] == XR_REFERENCE_EVENT_ORIGIN_PROGRAM_OPERATION",
+          "status": "OPEN"
+        },
+        {
+          "line": 2297,
+          "expression": "log.origins[3] == XR_REFERENCE_EVENT_ORIGIN_PROGRAM_OPERATION",
+          "status": "OPEN"
+        },
+        {
+          "line": 2298,
+          "expression": "log.related_identities[2] == log.identities[1]",
+          "status": "OPEN"
+        },
+        {
+          "line": 2299,
+          "expression": "log.related_identities[3] == log.identities[0]",
+          "status": "OPEN"
+        },
+        {
+          "line": 2300,
+          "expression": "log.identities[2] != log.identities[1]",
+          "status": "OPEN"
+        },
+        {
+          "line": 2301,
+          "expression": "log.identities[3] != log.identities[0]",
+          "status": "OPEN"
+        },
+        {
+          "line": 2302,
+          "expression": "log.origins[6] == XR_REFERENCE_EVENT_ORIGIN_FIELD_FINALIZATION",
+          "status": "OPEN"
+        },
+        {
+          "line": 2303,
+          "expression": "log.origins[7] == XR_REFERENCE_EVENT_ORIGIN_FIELD_FINALIZATION",
+          "status": "OPEN"
+        },
+        {
+          "line": 2304,
+          "expression": "log.origins[8] == XR_REFERENCE_EVENT_ORIGIN_FIELD_FINALIZATION",
+          "status": "OPEN"
+        },
+        {
+          "line": 2305,
+          "expression": "log.origins[12] == XR_REFERENCE_EVENT_ORIGIN_FIELD_FINALIZATION",
+          "status": "OPEN"
+        },
+        {
+          "line": 2306,
+          "expression": "log.origins[13] == XR_REFERENCE_EVENT_ORIGIN_FIELD_FINALIZATION",
+          "status": "OPEN"
+        },
+        {
+          "line": 2307,
+          "expression": "log.origins[14] == XR_REFERENCE_EVENT_ORIGIN_FIELD_FINALIZATION",
+          "status": "OPEN"
+        },
+        {
+          "line": 2309,
+          "expression": "log.origins[index] != XR_REFERENCE_EVENT_ORIGIN_DOMAIN_TEARDOWN",
+          "status": "OPEN"
+        },
+        {
+          "line": 2318,
+          "expression": "result.kind == XR_REFERENCE_OUTCOME_RESOURCE_LIMIT",
+          "status": "OPEN"
+        },
+        {
+          "line": 2319,
+          "expression": "result.value.kind == XR_REFERENCE_VALUE_VOID",
+          "status": "OPEN"
+        },
+        {
+          "line": 2320,
+          "expression": "!result.owns_dynamic_values",
+          "status": "OPEN"
+        },
+        {
+          "line": 2321,
+          "expression": "log.count == 5u",
+          "status": "OPEN"
+        },
+        {
+          "line": 2322,
+          "expression": "log.kinds[0] == XR_REFERENCE_EVENT_CLASS_CONSTRUCT",
+          "status": "OPEN"
+        },
+        {
+          "line": 2323,
+          "expression": "log.kinds[1] == XR_REFERENCE_EVENT_CLASS_CONSTRUCT",
+          "status": "OPEN"
+        },
+        {
+          "line": 2324,
+          "expression": "log.kinds[2] == XR_REFERENCE_EVENT_CLASS_RECLAIM",
+          "status": "OPEN"
+        },
+        {
+          "line": 2325,
+          "expression": "log.origins[2] == XR_REFERENCE_EVENT_ORIGIN_CLONE_ROLLBACK",
+          "status": "OPEN"
+        },
+        {
+          "line": 2326,
+          "expression": "log.identities[2] != log.identities[0]",
+          "status": "OPEN"
+        },
+        {
+          "line": 2327,
+          "expression": "log.identities[2] != log.identities[1]",
+          "status": "OPEN"
+        },
+        {
+          "line": 2328,
+          "expression": "log.kinds[3] == XR_REFERENCE_EVENT_CLASS_RECLAIM",
+          "status": "OPEN"
+        },
+        {
+          "line": 2329,
+          "expression": "log.kinds[4] == XR_REFERENCE_EVENT_CLASS_RECLAIM",
+          "status": "OPEN"
+        },
+        {
+          "line": 2330,
+          "expression": "log.origins[3] == XR_REFERENCE_EVENT_ORIGIN_DOMAIN_TEARDOWN",
+          "status": "OPEN"
+        },
+        {
+          "line": 2331,
+          "expression": "log.origins[4] == XR_REFERENCE_EVENT_ORIGIN_DOMAIN_TEARDOWN",
+          "status": "OPEN"
+        },
+        {
+          "line": 2332,
+          "expression": "log.identities[3] == log.identities[0]",
+          "status": "OPEN"
+        },
+        {
+          "line": 2333,
+          "expression": "log.identities[4] == log.identities[1]",
+          "status": "OPEN"
+        },
+        {
+          "line": 2335,
+          "expression": "log.kinds[index] != XR_REFERENCE_EVENT_CLASS_COPY",
+          "status": "OPEN"
+        },
+        {
+          "line": 2336,
+          "expression": "log.kinds[index] != XR_REFERENCE_EVENT_OWNER_DROP",
+          "status": "OPEN"
+        },
+        {
+          "line": 2337,
+          "expression": "log.kinds[index] != XR_REFERENCE_EVENT_CLASS_FINALIZE",
+          "status": "OPEN"
+        }
+      ],
+      "status": "OPEN"
+    }
+  ],
+  "outer_CHECK_sites": 54,
+  "original_private_helpers": [
+    {
+      "path": "tests/unit/program/test_xr_program_verify.c",
+      "function": "build_forbidden_class_alias_artifact",
+      "line": 1633,
+      "end_line": 1724,
+      "body_lf_sha256": "57cf1d2053948af74c6d5ee62f23dcd0c0ee22e932ea1fdfd0f1e3b6c9030231",
+      "CHECK_sites": 1,
+      "CHECK_bindings": [
+        {
+          "line": 1722,
+          "expression": "write_typed_modules(&type, 1u, &module, 1u, &artifact) == XR_PROGRAM_BUILD_OK",
+          "status": "OPEN"
+        }
+      ],
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/program/test_xr_program_verify.c",
+      "function": "add_class_exchange_borrow_probe",
+      "line": 1738,
+      "end_line": 1792,
+      "body_lf_sha256": "1c5e45ff5b6a3d4786e76f0e3ed3222e6f22bd8cfd2b1d25f3f819ef59be7e92",
+      "CHECK_sites": 0,
+      "CHECK_bindings": [],
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/program/test_xr_program_verify.c",
+      "function": "build_affine_class_exchange_artifact",
+      "line": 1794,
+      "end_line": 2009,
+      "body_lf_sha256": "8a9cde43e5d3f08b7d805b6e3e9d4d7c8f5819f57f8f8a32bf6805d778966140",
+      "CHECK_sites": 1,
+      "CHECK_bindings": [
+        {
+          "line": 2006,
+          "expression": "write_typed_modules(types, sizeof(types) / sizeof(types[0]), &module, 1u, &artifact) ==\n          XR_PROGRAM_BUILD_OK",
+          "status": "OPEN"
+        }
+      ],
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/program/test_xr_program_verify.c",
+      "function": "build_detached_aggregate_alias_artifact",
+      "line": 2055,
+      "end_line": 2131,
+      "body_lf_sha256": "1d92cf0edc1ea3d266c512271d1e3600df17e7a0df63139dfd4b059db1d2d64a",
+      "CHECK_sites": 1,
+      "CHECK_bindings": [
+        {
+          "line": 2129,
+          "expression": "write_typed_modules(types, 2u, &module, 1u, &artifact) == XR_PROGRAM_BUILD_OK",
+          "status": "OPEN"
+        }
+      ],
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/program/test_xr_program_verify.c",
+      "function": "build_class_clone_transaction_artifact",
+      "line": 2156,
+      "end_line": 2264,
+      "body_lf_sha256": "49ef5752b86c34b65f29b25ebd4c384f4726abd22d39c6b49772478ab6c138d5",
+      "CHECK_sites": 1,
+      "CHECK_bindings": [
+        {
+          "line": 2261,
+          "expression": "write_typed_modules(types, sizeof(types) / sizeof(types[0]), &module, 1u, &artifact) ==\n          XR_PROGRAM_BUILD_OK",
+          "status": "OPEN"
+        }
+      ],
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/program/test_xr_program_verify.c",
+      "function": "record_class_lifecycle",
+      "line": 1275,
+      "end_line": 1286,
+      "body_lf_sha256": "5e54de2612750209b66ec1d959a0fb513b9b52b41a01194738cdbcdc06b3237b",
+      "CHECK_sites": 0,
+      "CHECK_bindings": [],
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/program/test_xr_program_verify.c",
+      "function": "key",
+      "line": 109,
+      "end_line": 111,
+      "body_lf_sha256": "027a211b78e0cfbd6b296804e37236848a76cc1980981a0d6a49a6f42d3f2e13",
+      "CHECK_sites": 0,
+      "CHECK_bindings": [],
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/program/test_xr_program_verify.c",
+      "function": "write_typed_modules",
+      "line": 113,
+      "end_line": 138,
+      "body_lf_sha256": "c568d48005100fc2633344ba569a2bc8de9b62e3aac794b35057c8d838b8db65",
+      "CHECK_sites": 0,
+      "CHECK_bindings": [],
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/program/test_xr_program_verify.c",
+      "function": "validate_ok",
+      "line": 159,
+      "end_line": 174,
+      "body_lf_sha256": "94fe0ef4e0242acb810c12621ae1fe73a9887ef668f15ddc6c67ed645494f62b",
+      "CHECK_sites": 2,
+      "CHECK_bindings": [
+        {
+          "line": 171,
+          "expression": "status == XR_PROGRAM_VERIFY_OK",
+          "status": "OPEN"
+        },
+        {
+          "line": 172,
+          "expression": "program != NULL",
+          "status": "OPEN"
+        }
+      ],
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/program/test_xr_program_verify.c",
+      "function": "expect_semantic_reject_at",
+      "line": 176,
+      "end_line": 198,
+      "body_lf_sha256": "44cf0fb15bea156743a1c0e35b0be8ee844aa1af55c8653ed9361cf781c045b8",
+      "CHECK_sites": 6,
+      "CHECK_bindings": [
+        {
+          "line": 190,
+          "expression": "first_status == XR_PROGRAM_VERIFY_SEMANTIC_REJECTED",
+          "status": "OPEN"
+        },
+        {
+          "line": 191,
+          "expression": "program == NULL",
+          "status": "OPEN"
+        },
+        {
+          "line": 192,
+          "expression": "first.kind == expected",
+          "status": "OPEN"
+        },
+        {
+          "line": 195,
+          "expression": "second_status == first_status",
+          "status": "OPEN"
+        },
+        {
+          "line": 196,
+          "expression": "memcmp(&first, &second, sizeof(first)) == 0",
+          "status": "OPEN"
+        },
+        {
+          "line": 197,
+          "expression": "program == NULL",
+          "status": "OPEN"
+        }
+      ],
+      "status": "OPEN"
+    }
+  ],
+  "specified_helper_CHECK_sites": 12,
+  "input_file": {
+    "path": "tests/unit/program/test_xr_program_verify.c",
+    "whole_file_lf_sha256": "ec4b93f13bfab2aa3d4b8f8773dd5c1118a0c682ed6f8304fead515f90402802",
+    "physical_raw_sha256": "a39922500c0943c034fafcda3a82b67e511ea658f453f6c0c3204f7719de1817",
+    "git_base_equal": true
+  },
+  "input_policy": "Complete4 original bodies,10 actual helper bodies and whole input container equal01e6 Git. Complete type/constant/key/operand/owner/copy/alias/place/borrow/call/drop/return graphs retained; not exhaustive external dependency closure.",
+  "forbidden_copy": {
+    "whole_input": "Affine forbidden-copy class local42 contains PanicInfo. A real non-owner READ parameter is shared into an owning alias, then alias dropped; separate full variant uses OWNER_COPY. Full constant42/entry graph stays, but original test performs admission only.",
+    "positive": "OWNER_ALIAS exact VERIFY_OK/non-NULL via helper; no runtime result claimed.",
+    "negative": "OWNER_COPY exact SEMANTIC_REJECTED/OPERATION_TYPE/NULL twice and full diagnostic equality via helper."
+  },
+  "exchange": {
+    "whole_input": "Affine explicitly-copyable child42 with I64 field, parent43 with owned child field. Constants1/2/42; construct first child1, replacement child2, parent(first child), parent field place, exchange yields owning old child, drop old then parent, return42. Actual second helper function returns42 and is called only in a separate forbidden commit-interval variant.",
+    "normal": "exact RETURN/I64/42. Locate actual PLACE_EXCHANGE; event.type equals initial child type, event.identity=first child identity(event0), related=replacement child identity(event1). Scalar sentinel oracle from previous alias fixture cannot substitute this affine owner exchange.",
+    "commit_interval_negative": "Complete call_before_old_drop=true/borrow0 inserts actual sealed helper CALL after exchange before old-owner DROP; exact SEMANTIC_REJECTED/VALUE_USE.",
+    "borrow_matrix": [
+      {
+        "variant": 1,
+        "parent_owner_alias_inserted": false,
+        "borrow_operation": "CLASS_FIELD_LOAD",
+        "use_after_old_drop": false,
+        "original_verify": "VERIFY_OK",
+        "original_diagnostic": null,
+        "status": "OPEN"
+      },
+      {
+        "variant": 2,
+        "parent_owner_alias_inserted": false,
+        "borrow_operation": "CLASS_FIELD_LOAD",
+        "use_after_old_drop": true,
+        "original_verify": "SEMANTIC_REJECTED",
+        "original_diagnostic": "VALUE_USE",
+        "status": "OPEN"
+      },
+      {
+        "variant": 3,
+        "parent_owner_alias_inserted": false,
+        "borrow_operation": "PLACE_LOAD",
+        "use_after_old_drop": false,
+        "original_verify": "VERIFY_OK",
+        "original_diagnostic": null,
+        "status": "OPEN"
+      },
+      {
+        "variant": 4,
+        "parent_owner_alias_inserted": false,
+        "borrow_operation": "PLACE_LOAD",
+        "use_after_old_drop": true,
+        "original_verify": "SEMANTIC_REJECTED",
+        "original_diagnostic": "VALUE_USE",
+        "status": "OPEN"
+      },
+      {
+        "variant": 5,
+        "parent_owner_alias_inserted": true,
+        "borrow_operation": "CLASS_FIELD_LOAD",
+        "use_after_old_drop": false,
+        "original_verify": "VERIFY_OK",
+        "original_diagnostic": null,
+        "status": "OPEN"
+      },
+      {
+        "variant": 6,
+        "parent_owner_alias_inserted": true,
+        "borrow_operation": "CLASS_FIELD_LOAD",
+        "use_after_old_drop": true,
+        "original_verify": "SEMANTIC_REJECTED",
+        "original_diagnostic": "VALUE_USE",
+        "status": "OPEN"
+      }
+    ],
+    "boundary": "Six borrow variants exercise admission only. Original normal I64 result is not dynamically owning; original function does not invoke outcome_dispose there."
+  },
+  "detached_carrier": {
+    "whole_input": "Trivial inner aggregate42 one I64 field, outer43 has two inner fields. Full7 constant, construct one real inner, construct outer with {inner,inner}, return outer.",
+    "original": "exact RETURN/AGGREGATE and owns_dynamic_values=true, aggregate view succeeds, outer count2/both fields AGGREGATE, both actual internal carrier pointers equal, outcome disposed before program/artifact free.",
+    "boundary": "Internal carrier equality proves original sharing shape, not stable object lifecycle. Original test does not read nested I64(7) or assert final physical counts; new qualified lifetime proof stays independent."
+  },
+  "clone_transaction": {
+    "whole_input": "Affine explicitly-copyable leaf42 owns I64, box43 owns leaf. Constant7, construct original leaf then box, deep OWNER_COPY box, drop copied box then original box, return7. Complete seven operation graph retained.",
+    "normal_result": "exact RETURN/I64/7",
+    "normal_event_count": 16,
+    "normal_events": [
+      {
+        "ordinal": 0,
+        "kind": "CLASS_CONSTRUCT",
+        "origin": "PROGRAM_OPERATION",
+        "identity_relation": "not independently asserted by original",
+        "status": "OPEN"
+      },
+      {
+        "ordinal": 1,
+        "kind": "CLASS_CONSTRUCT",
+        "origin": "PROGRAM_OPERATION",
+        "identity_relation": "not independently asserted by original",
+        "status": "OPEN"
+      },
+      {
+        "ordinal": 2,
+        "kind": "CLASS_COPY",
+        "origin": "PROGRAM_OPERATION",
+        "identity_relation": "new cloned box differs from original box event1; related=event1",
+        "status": "OPEN"
+      },
+      {
+        "ordinal": 3,
+        "kind": "CLASS_COPY",
+        "origin": "PROGRAM_OPERATION",
+        "identity_relation": "new cloned leaf differs from original leaf event0; related=event0",
+        "status": "OPEN"
+      },
+      {
+        "ordinal": 4,
+        "kind": "OWNER_DROP",
+        "origin": "not fixed by original; must not DOMAIN_TEARDOWN",
+        "identity_relation": "not independently asserted by original",
+        "status": "OPEN"
+      },
+      {
+        "ordinal": 5,
+        "kind": "CLASS_FINALIZE",
+        "origin": "not fixed by original; must not DOMAIN_TEARDOWN",
+        "identity_relation": "not independently asserted by original",
+        "status": "OPEN"
+      },
+      {
+        "ordinal": 6,
+        "kind": "OWNER_DROP",
+        "origin": "FIELD_FINALIZATION",
+        "identity_relation": "not independently asserted by original",
+        "status": "OPEN"
+      },
+      {
+        "ordinal": 7,
+        "kind": "CLASS_FINALIZE",
+        "origin": "FIELD_FINALIZATION",
+        "identity_relation": "not independently asserted by original",
+        "status": "OPEN"
+      },
+      {
+        "ordinal": 8,
+        "kind": "CLASS_RECLAIM",
+        "origin": "FIELD_FINALIZATION",
+        "identity_relation": "not independently asserted by original",
+        "status": "OPEN"
+      },
+      {
+        "ordinal": 9,
+        "kind": "CLASS_RECLAIM",
+        "origin": "not fixed by original; must not DOMAIN_TEARDOWN",
+        "identity_relation": "not independently asserted by original",
+        "status": "OPEN"
+      },
+      {
+        "ordinal": 10,
+        "kind": "OWNER_DROP",
+        "origin": "not fixed by original; must not DOMAIN_TEARDOWN",
+        "identity_relation": "not independently asserted by original",
+        "status": "OPEN"
+      },
+      {
+        "ordinal": 11,
+        "kind": "CLASS_FINALIZE",
+        "origin": "not fixed by original; must not DOMAIN_TEARDOWN",
+        "identity_relation": "not independently asserted by original",
+        "status": "OPEN"
+      },
+      {
+        "ordinal": 12,
+        "kind": "OWNER_DROP",
+        "origin": "FIELD_FINALIZATION",
+        "identity_relation": "not independently asserted by original",
+        "status": "OPEN"
+      },
+      {
+        "ordinal": 13,
+        "kind": "CLASS_FINALIZE",
+        "origin": "FIELD_FINALIZATION",
+        "identity_relation": "not independently asserted by original",
+        "status": "OPEN"
+      },
+      {
+        "ordinal": 14,
+        "kind": "CLASS_RECLAIM",
+        "origin": "FIELD_FINALIZATION",
+        "identity_relation": "not independently asserted by original",
+        "status": "OPEN"
+      },
+      {
+        "ordinal": 15,
+        "kind": "CLASS_RECLAIM",
+        "origin": "not fixed by original; must not DOMAIN_TEARDOWN",
+        "identity_relation": "not independently asserted by original",
+        "status": "OPEN"
+      }
+    ],
+    "normal_exclusion": "Every observed event origin must not DOMAIN_TEARDOWN; field-driven release origins are explicitly checked at6/7/8/12/13/14. Two CLASS_COPY identities are fresh and related to exact original box/leaf.",
+    "failure_budget": "Original default budget with max_value_cells=3; exact RESOURCE_LIMIT/VOID/!owns_dynamic_values, reset log first.",
+    "failure_event_count": 5,
+    "failure_events": [
+      {
+        "ordinal": 0,
+        "kind": "CLASS_CONSTRUCT",
+        "origin": "not separately asserted",
+        "identity": "original leaf",
+        "status": "OPEN"
+      },
+      {
+        "ordinal": 1,
+        "kind": "CLASS_CONSTRUCT",
+        "origin": "not separately asserted",
+        "identity": "original box",
+        "status": "OPEN"
+      },
+      {
+        "ordinal": 2,
+        "kind": "CLASS_RECLAIM",
+        "origin": "CLONE_ROLLBACK",
+        "identity": "uncommitted clone differs from both event0/event1",
+        "status": "OPEN"
+      },
+      {
+        "ordinal": 3,
+        "kind": "CLASS_RECLAIM",
+        "origin": "DOMAIN_TEARDOWN",
+        "identity": "same as original leaf event0",
+        "status": "OPEN"
+      },
+      {
+        "ordinal": 4,
+        "kind": "CLASS_RECLAIM",
+        "origin": "DOMAIN_TEARDOWN",
+        "identity": "same as original box event1",
+        "status": "OPEN"
+      }
+    ],
+    "failure_exclusion": "Every event must not CLASS_COPY, OWNER_DROP or CLASS_FINALIZE. Uncommitted clone rollback reclaim and original objects domain teardown reclaim are distinct identities/origins; no copied object is published.",
+    "dispose": "Dispose both normal and failed outcomes, then validated program and artifact.",
+    "budget_boundary": "This is a fixed original semantic value-cell resource failure, not a measured OOM/FI census or current allocated/live/work axis substitute."
+  },
+  "original_observer": {
+    "shared_header": {
+      "path": "src/program/xr_reference_evaluator.h",
+      "raw_sha256": "d43732ceca814f67f7f04e1b51d8512aab2e199092a546d1c47d30e0f28439bf",
+      "whole_file_lf_sha256": "0b2149e8397748e84b1cbc14904cde97d5bee4c3e69474486169e4656ff89054",
+      "git_base_equal": true
+    },
+    "context": "Shared original64-event recorder and six event fields preserved; silent overflow/NULL handling is historical, not current proof policy.",
+    "normal_lifetime_boundary": "Original clone test does not assert every finalize/reclaim identity independently. Current goal still requires genuine per-object complete lifetime proof, not event cardinality alone."
+  },
+  "target_contract_or_representation_review": {
+    "status": "OPEN; Root owns current semantics, observer ABI and public entry projection.",
+    "identity_copy": "Current class identity SHARE must not replace deep clone into fresh parent/leaf identities. Forbidden PanicInfo copy still allows identity share when actual ownership permits; no scalar mock or class alias renamed clone.",
+    "transaction": "Actual current clone failure must atomically preserve original owner graph, publish no partial copy and release all private allocations with correct rollback versus teardown. Observer must distinguish uncommitted private allocation from committed semantic object; do not invent finalize on the original failure path.",
+    "exchange": "Exact old exchange commit-interval, borrowed child owner and parent alias responsibilities need explicit current representation mapping; name/address equality does not prove authority. Frozen Cell/ref/actual cross-frame exclusivity/noescape apply where state/ref is involved; no writeback fallback.",
+    "carrier": "Current detached typed aggregate/result must survive producer and Instance death and release shared physical carriers once at last owner. Old internal pointer representation cannot become allocator-address lifetime proof; Root maps sharing representation explicitly.",
+    "observer": "Real stable identities/types/related/fields/origins and endpoint events across normal/failed/cancel/teardown/last escaped owner are needed. Existing module/slot trace or CallEntry.release is not class lifecycle. Three endpoint events alone do not prove clone identity/rollback source or exchange binding.",
+    "pipeline": "Fresh public Source/typed Library/packet, complete Built/Checked/codec/specialization reverify/Lowered/Program, detached producers, two Instances, actual VM/native/mixed and every real FI/axis/safety/lifecycle duty remain required.",
+    "related_request": "build-consumer-evidence/consumer-session-20261009-r1/class-lifecycle-interface-request.json"
+  },
+  "shared_dependencies": {
+    "paths": [
+      "tests/unit/program/test_xr_program_verify.c",
+      "src/program/xr_reference_evaluator.h"
+    ],
+    "status": "PRESERVE",
+    "emission_owners": 7,
+    "policy": "Shared graph writers/observer/reference header have other active consumers. No shared product/ABI/header edit or deletion authorized."
+  },
+  "full_FI": "NOT_RUN",
+  "axes": "NOT_RUN",
+  "full_safety": "NOT_RUN",
+  "SourceDelete": "NOT_RUN",
+  "Main": "NOT_RUN",
+  "handoff": {
+    "Root_thread": "01a11f74-a297-7b11-8441-835bde6a3d5f",
+    "formal_acceptance": "PENDING"
+  },
+  "boundaries": [
+    "All54 outer/12 helper CHECKs and complete sharing/exchange/clone/rollback/carrier responsibilities OPEN; retired0.",
+    "Static original body/CHECK/input/events/budget/representation/scope only; no actual current product or heavy gate.",
+    "No clone implementation/observer ABI/new producer adoption/qualification/main integration/deletion claim."
+  ]
+}

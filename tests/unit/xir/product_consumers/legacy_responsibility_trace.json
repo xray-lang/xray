@@ -17,9 +17,9 @@
   "reference_counts": {
     "source_with_digest_reference": 108,
     "source_without_digest_reference": 0,
-    "other_with_digest_reference": 62,
-    "other_without_digest_reference": 98,
-    "digest_reference_values": 203,
+    "other_with_digest_reference": 66,
+    "other_without_digest_reference": 94,
+    "digest_reference_values": 211,
     "source_inventory_projections": 42
   },
   "mapping_inputs": [
@@ -490,6 +490,10 @@
     {
       "path": "tests/unit/xir/product_consumers/source_original_class_alias_snapshot_obligations.json",
       "lf_sha256": "1c256fbbb8cbf121e1565b0d175df50ba4963e16cb550348b5707e5f17e5ffd8"
+    },
+    {
+      "path": "tests/unit/xir/product_consumers/source_original_class_clone_exchange_obligations.json",
+      "lf_sha256": "fe99092dbb9143a6f76df06958a5feac713c0b2f5055cb92f572af0362072736"
     },
     {
       "path": "tests/unit/xir/product_consumers/source_original_constructor_array_registration_obligations.json",
@@ -3352,7 +3356,18 @@
       "body_lf_sha256": "628dba6f9ec6d9216d90263e2d6b1cbcf4ecdebe0b196895478407eab93ce717",
       "status": "OPEN",
       "inventory_projection": null,
-      "mapping_references": []
+      "mapping_references": [
+        {
+          "mapping": "tests/unit/xir/product_consumers/source_original_class_clone_exchange_obligations.json",
+          "pointer": "/legacy/0/body_lf_sha256",
+          "binding": "exact_path_name_body"
+        },
+        {
+          "mapping": "tests/unit/xir/product_consumers/source_original_class_clone_exchange_obligations.json",
+          "pointer": "/responsibility_mapping/0/body_lf_sha256",
+          "binding": "exact_body_digest_value_only"
+        }
+      ]
     },
     {
       "legacy_path": "tests/unit/program/test_xr_program_verify.c",
@@ -3360,7 +3375,18 @@
       "body_lf_sha256": "7d39e4335b67fdb6938ae49c3268766cc282de8694387c787455927cc2696a9d",
       "status": "OPEN",
       "inventory_projection": null,
-      "mapping_references": []
+      "mapping_references": [
+        {
+          "mapping": "tests/unit/xir/product_consumers/source_original_class_clone_exchange_obligations.json",
+          "pointer": "/legacy/1/body_lf_sha256",
+          "binding": "exact_path_name_body"
+        },
+        {
+          "mapping": "tests/unit/xir/product_consumers/source_original_class_clone_exchange_obligations.json",
+          "pointer": "/responsibility_mapping/1/body_lf_sha256",
+          "binding": "exact_body_digest_value_only"
+        }
+      ]
     },
     {
       "legacy_path": "tests/unit/program/test_xr_program_verify.c",
@@ -3368,7 +3394,18 @@
       "body_lf_sha256": "c256e17cb46cd4d76f7231f0a4dadf220a88d4214c841cd6e5f4bdf2cc8b570d",
       "status": "OPEN",
       "inventory_projection": null,
-      "mapping_references": []
+      "mapping_references": [
+        {
+          "mapping": "tests/unit/xir/product_consumers/source_original_class_clone_exchange_obligations.json",
+          "pointer": "/legacy/2/body_lf_sha256",
+          "binding": "exact_path_name_body"
+        },
+        {
+          "mapping": "tests/unit/xir/product_consumers/source_original_class_clone_exchange_obligations.json",
+          "pointer": "/responsibility_mapping/2/body_lf_sha256",
+          "binding": "exact_body_digest_value_only"
+        }
+      ]
     },
     {
       "legacy_path": "tests/unit/program/test_xr_program_verify.c",
@@ -3376,7 +3413,18 @@
       "body_lf_sha256": "ed79d6210b2a4723d7578ed1882941defa9ea99b83556e64b9e613f0190ae037",
       "status": "OPEN",
       "inventory_projection": null,
-      "mapping_references": []
+      "mapping_references": [
+        {
+          "mapping": "tests/unit/xir/product_consumers/source_original_class_clone_exchange_obligations.json",
+          "pointer": "/legacy/3/body_lf_sha256",
+          "binding": "exact_path_name_body"
+        },
+        {
+          "mapping": "tests/unit/xir/product_consumers/source_original_class_clone_exchange_obligations.json",
+          "pointer": "/responsibility_mapping/3/body_lf_sha256",
+          "binding": "exact_body_digest_value_only"
+        }
+      ]
     },
     {
       "legacy_path": "tests/unit/program/test_xr_program_verify.c",
