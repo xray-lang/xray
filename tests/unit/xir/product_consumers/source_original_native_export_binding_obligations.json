@@ -1,0 +1,612 @@
+{
+  "schema": 1,
+  "family": "original_native_export_binding",
+  "legacy_base_commit": "01e6d38401b0f5c8684b64c35a99ac651024c0c1",
+  "status": "OPEN",
+  "retired": 0,
+  "replacement_gates": [],
+  "result": "STATIC_FULL_ORIGINAL_EXPORT_REQUEST_AND_DETACHED_PRODUCER_PROJECTION_MAP_ONLY",
+  "product_execution": "NOT_RUN_BY_THIS_MAP",
+  "producer": "25f4016d6f089169757a90ae11ba537002374711",
+  "identity": "Checked25/semantic67/Value22/Call28/Program29",
+  "legacy": [
+    {
+      "name": "test_native_c_export_binding",
+      "legacy_path": "tests/unit/aot/test_xr_program_aot.c",
+      "legacy_line": 3803,
+      "body_lf_sha256": "5759028e5cc4c94587dbdf4fdc33e13abf55ed1c7421ab581d3bde733097f6b0",
+      "assertion_sites": 14,
+      "loop_sites": 1,
+      "status": "OPEN",
+      "replacement_gates": [],
+      "note": "Function census preserves its whole body; sites do not count executed loop iterations."
+    }
+  ],
+  "responsibility_mapping": [
+    {
+      "path": "tests/unit/aot/test_xr_program_aot.c",
+      "function": "test_native_c_export_binding",
+      "line": 3803,
+      "end_line": 3857,
+      "body_lf_sha256": "5759028e5cc4c94587dbdf4fdc33e13abf55ed1c7421ab581d3bde733097f6b0",
+      "REQUIRE_sites": 14,
+      "REQUIRE_bindings": [
+        {
+          "line": 3809,
+          "expression": "program && profile",
+          "status": "OPEN"
+        },
+        {
+          "line": 3810,
+          "expression": "xr_backend_ir_build(program, profile, &options, &backend, &diagnostic) == XR_BACKEND_OK",
+          "status": "OPEN"
+        },
+        {
+          "line": 3816,
+          "expression": "xr_compile_backend_ir_emit_c(\n                backend,\n                &(XrBackendEmissionRequest) {backend_emission_resources, true, &binding, 1u},\n                &generated, &diagnostic) == XR_BACKEND_OK",
+          "status": "OPEN"
+        },
+        {
+          "line": 3820,
+          "expression": "strstr(generated.bytes, \"int64_t public_answer(void)\") != NULL",
+          "status": "OPEN"
+        },
+        {
+          "line": 3821,
+          "expression": "strstr(generated.header_bytes, \"int64_t public_answer(void",
+          "status": "OPEN"
+        },
+        {
+          "line": 3822,
+          "expression": "strstr(generated.bytes, \"if (result.kind != UINT32_C(0)) abort(",
+          "status": "OPEN"
+        },
+        {
+          "line": 3826,
+          "expression": "xr_compile_backend_ir_emit_c(\n                backend,\n                &(XrBackendEmissionRequest) {backend_emission_resources, false, &binding, 1u},\n                &generated, &diagnostic) == XR_BACKEND_OK",
+          "status": "OPEN"
+        },
+        {
+          "line": 3830,
+          "expression": "strstr(generated.header_bytes, \"public_answer\") == NULL",
+          "status": "OPEN"
+        },
+        {
+          "line": 3836,
+          "expression": "xr_compile_backend_ir_emit_c(\n                    backend,\n                    &(XrBackendEmissionRequest) {backend_emission_resources, true, &binding, 1u},\n                    &generated, &diagnostic) == XR_BACKEND_INVALID_INPUT",
+          "status": "OPEN"
+        },
+        {
+          "line": 3840,
+          "expression": "!generated.bytes && !generated.header_bytes && generated.size == 0u",
+          "status": "OPEN"
+        },
+        {
+          "line": 3841,
+          "expression": "diagnostic.status == XR_BACKEND_INVALID_INPUT",
+          "status": "OPEN"
+        },
+        {
+          "line": 3845,
+          "expression": "xr_compile_backend_ir_emit_c(\n                backend,\n                &(XrBackendEmissionRequest) {backend_emission_resources, true, &binding, 1u},\n                &generated, &diagnostic) == XR_BACKEND_INVALID_INPUT",
+          "status": "OPEN"
+        },
+        {
+          "line": 3851,
+          "expression": "xr_compile_backend_ir_emit_c(\n                backend,\n                &(XrBackendEmissionRequest) {backend_emission_resources, true, &binding, 1u},\n                &generated, &diagnostic) == XR_BACKEND_INVALID_INPUT",
+          "status": "OPEN"
+        },
+        {
+          "line": 3855,
+          "expression": "!generated.bytes && !generated.header_bytes",
+          "status": "OPEN"
+        }
+      ],
+      "status": "OPEN"
+    }
+  ],
+  "outer_REQUIRE_sites": 14,
+  "original_private_helpers": [
+    {
+      "path": "tests/unit/aot/test_xr_program_aot.c",
+      "function": "fixture_key",
+      "line": 106,
+      "end_line": 108,
+      "body_lf_sha256": "37c710a782fc634109af5c3e9ee97d6f63f3343ca089dacb089b8115a1f64fca",
+      "REQUIRE_sites": 0,
+      "REQUIRE_bindings": [],
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/aot/test_xr_program_aot.c",
+      "function": "validate_program",
+      "line": 110,
+      "end_line": 154,
+      "body_lf_sha256": "5975445946a7fbe0627c44dfa3c3b788a4ff3f4045b5dbc435d9c1046fbd5d5e",
+      "REQUIRE_sites": 4,
+      "REQUIRE_bindings": [
+        {
+          "line": 134,
+          "expression": "xr_core_ir_program_build(&input, &core, diagnostic, sizeof(diagnostic)) ==\n            XR_PROGRAM_BUILD_OK",
+          "status": "OPEN"
+        },
+        {
+          "line": 136,
+          "expression": "xr_program_write(core, &artifact, diagnostic, sizeof(diagnostic)) ==\n            XR_PROGRAM_BUILD_OK",
+          "status": "OPEN"
+        },
+        {
+          "line": 149,
+          "expression": "verify_status == XR_PROGRAM_VERIFY_OK",
+          "status": "OPEN"
+        },
+        {
+          "line": 152,
+          "expression": "program != NULL",
+          "status": "OPEN"
+        }
+      ],
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/aot/test_xr_program_aot.c",
+      "function": "validate_functions",
+      "line": 156,
+      "end_line": 161,
+      "body_lf_sha256": "e24f1584d35129bf465a49a77f86f497e7f33b548d7ec7075a82dd021e18b96d",
+      "REQUIRE_sites": 0,
+      "REQUIRE_bindings": [],
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/aot/test_xr_program_aot.c",
+      "function": "build_binary_program",
+      "line": 956,
+      "end_line": 1013,
+      "body_lf_sha256": "9b54cf72ad708e76a5b20f6f00cd23d85d661a55ee9b2c0f9716cbe828c22f70",
+      "REQUIRE_sites": 0,
+      "REQUIRE_bindings": [],
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/aot/xr_backend_emission_owner.h",
+      "function": "backend_emission_owner_close",
+      "line": 19,
+      "end_line": 30,
+      "body_lf_sha256": "356ddfb98380e9b201920c88ffd7afccc9c9f4d4311f9983ebd20903ce66377a",
+      "REQUIRE_sites": 0,
+      "REQUIRE_bindings": [],
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/aot/xr_backend_emission_owner.h",
+      "function": "backend_emission_owner_open",
+      "line": 31,
+      "end_line": 43,
+      "body_lf_sha256": "786869fb3f6675488f9b529c5c025eece534d04fffc1c8be190cea8381300214",
+      "REQUIRE_sites": 0,
+      "REQUIRE_bindings": [],
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/plan/target_profile_test_fixture.c",
+      "function": "make_header_facts",
+      "line": 43,
+      "end_line": 66,
+      "body_lf_sha256": "916a05fa9431a545e70e8905f058dba291cd7b36a15797fcfe135cded74122ac",
+      "REQUIRE_sites": 0,
+      "REQUIRE_bindings": [],
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/plan/target_profile_test_fixture.c",
+      "function": "retarget_call_abi",
+      "line": 68,
+      "end_line": 84,
+      "body_lf_sha256": "213f3f583b905b1b699bd3425c364701a62f17e1098fe11294b255545b5f24de",
+      "REQUIRE_sites": 0,
+      "REQUIRE_bindings": [],
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/plan/target_profile_test_fixture.c",
+      "function": "retarget_providers",
+      "line": 86,
+      "end_line": 101,
+      "body_lf_sha256": "8df03b2bc968573e515c441fd5a96f87d9db2300e13e3e3b514d3032a3ccfbaa",
+      "REQUIRE_sites": 0,
+      "REQUIRE_bindings": [],
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/plan/target_profile_test_fixture.c",
+      "function": "xr_test_target_profile_fixture_init",
+      "line": 103,
+      "end_line": 161,
+      "body_lf_sha256": "be2a37303111036a45393752a7b5c389d370d2f67ef4d302cb3b4e5af55a4888",
+      "REQUIRE_sites": 0,
+      "REQUIRE_bindings": [],
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/plan/target_profile_test_fixture.c",
+      "function": "xr_test_target_profile_build",
+      "line": 163,
+      "end_line": 175,
+      "body_lf_sha256": "ff7f447b998483c18b76ebf7ef61f348751a9ea93fa1c0a0604c152711a5a318",
+      "REQUIRE_sites": 0,
+      "REQUIRE_bindings": [],
+      "status": "OPEN"
+    }
+  ],
+  "specified_helper_REQUIRE_sites": 4,
+  "input_files": [
+    {
+      "path": "tests/unit/aot/test_xr_program_aot.c",
+      "physical_raw_sha256": "6fea38acff96d94b2bfb414e04aa308386f6284ed12ccf05613a790a23caa700",
+      "whole_file_lf_sha256": "e7ab9301b308c7db6bf48e348257e5288f38f22c1b38c827fb040719dbf2de0e",
+      "git_base_equal": true,
+      "status": "PRESERVE_ORIGINAL_READONLY"
+    },
+    {
+      "path": "tests/unit/aot/xr_backend_emission_owner.h",
+      "physical_raw_sha256": "2b7aa3b05456861e4e539b43bac62263cc443a61850c3f81af0b43e01dad60bf",
+      "whole_file_lf_sha256": "5620237b54c2609c6db2663d8f91e6729b8c59e1a714ac4fcbd48426455d3e01",
+      "git_base_equal": true,
+      "status": "PRESERVE_ORIGINAL_READONLY"
+    },
+    {
+      "path": "tests/unit/plan/target_profile_test_fixture.c",
+      "physical_raw_sha256": "a4bd280583c9b7367c8324451b411dd1bf43d32853b5b8443fa680dded7f1876",
+      "whole_file_lf_sha256": "4cda8a7654397a98661dd495628095965b2549999619a13c7bfa63614e5cd5a6",
+      "git_base_equal": true,
+      "status": "PRESERVE_ORIGINAL_READONLY"
+    },
+    {
+      "path": "tests/unit/plan/target_profile_test_fixture.h",
+      "physical_raw_sha256": "6abd9fd3829ccca28741b2e7b69f9d15e4b2bf53ca97e61af3e07f37ca5df38e",
+      "whole_file_lf_sha256": "8861b73552abd8e8c278482aa2e56bd3371be3a877f91475a43ef7ac22a9633f",
+      "git_base_equal": true,
+      "status": "PRESERVE_ORIGINAL_READONLY"
+    },
+    {
+      "path": "tests/unit/runtime/test_runtime_abi_contract.c",
+      "physical_raw_sha256": "38ebe1b2facc5feb1e7b0c0573d66e846eb9974cc16d9aa4e92e3f550c7487c6",
+      "whole_file_lf_sha256": "fa3d630a996a22e1d515a11f73f75f515906cb5ce6afad00c6e2b183486fd858",
+      "git_base_equal": true,
+      "status": "PRESERVE_ORIGINAL_READONLY"
+    }
+  ],
+  "input_policy": "Complete original census function, four actual AOT graph/admission helpers, two finite emission-owner helpers and five profile helpers are bound to full bodies equal01e6. Shared target/runtime fixture files are separately whole-file digest bound and preserved; this map does not claim independent coverage of all their own tests or product implementation functions.",
+  "original_graph": {
+    "operations": [
+      "CONSTANT_I64(19)",
+      "CONSTANT_I64(23)",
+      "ADD_I64 checked modeU32=0 with original two constant values as operands",
+      "RETURN actual addition result"
+    ],
+    "independent_semantic_value_i64": 42,
+    "original_runtime_assertion": "NONE: original function does not evaluate, compile, link or invoke the exported arithmetic graph.",
+    "constants": [
+      "aot:binary:left I64=19",
+      "aot:binary:right I64=23"
+    ],
+    "result_type": "I64",
+    "function_key": "aot:binary:function",
+    "block_key": "aot:binary:block",
+    "signature": "zero parameters, one block/four instructions, ENTRY, effect_mask1",
+    "operand_order": [
+      "left=19",
+      "right=23"
+    ],
+    "construction": "Actual two constants and arithmetic dependency are retained. validate_functions delegates to validate_program; actual CoreIR BUILD_OK, writer BUILD_OK, VERIFY_OK and nonNULL Program assertions precede BackendIR construction. Artifact/CoreIR are freed inside the helper.",
+    "module": "one aot:module, semantic key aot:semantic fingerprint, required feature CORE_BASE; no custom types, providers or module root operation added to graph."
+  },
+  "original_profile": {
+    "arguments": "xr_test_target_profile_build(false,HOSTED)",
+    "facts": "Original helper selects X86_64/WINDOWS/MSVC/WIN64_X86_64 and init_lp64, not ilp32 WASM/WASI. This is original structured target input, not proof of any current native compilation/target validity.",
+    "schema": "Actual original runtime/object-header/string contracts and two structured allocator/panic provider contracts from the shared runtime fixture; retargeting sets pointer width/endian/hosted availability and call slots before xr_target_profile_build. No provider operation is called by this four-instruction arithmetic graph.",
+    "default_options": "xr_backend_default_options(); actual BackendIR build statusOK and nonNULL Program/profile REQUIRE."
+  },
+  "producer_release_order": [
+    "Build actual admitted Program and actual TargetProfile.",
+    "Build one BackendIR with default options.",
+    "Capture actual verified entry_function ID before freeing Program.",
+    "Free validatedProgram.",
+    "Free TargetProfile.",
+    "Run all14 emission requests against the same surviving BackendIR.",
+    "Free each of the two successful generated outputs before the next request.",
+    "Free BackendIR after every negative request."
+  ],
+  "request_count": 14,
+  "positive_emission_requests": 2,
+  "negative_emission_requests": 12,
+  "requests": [
+    {
+      "ordinal": 1,
+      "name": "visible_export_with_standalone_main",
+      "function": "actual verified entry",
+      "symbol": "public_answer",
+      "header": 1,
+      "hidden": 0,
+      "standalone_main": true,
+      "expected_status": "XR_BACKEND_OK",
+      "original_assertions": [
+        "Generated C contains int64_t public_answer(void).",
+        "Header contains int64_t public_answer(void);.",
+        "C contains if (result.kind != UINT32_C(0)) abort();."
+      ],
+      "status": "OPEN"
+    },
+    {
+      "ordinal": 2,
+      "name": "hidden_export_without_header",
+      "function": "same actual verified entry",
+      "symbol": "public_answer",
+      "header": 0,
+      "hidden": 1,
+      "standalone_main": false,
+      "expected_status": "XR_BACKEND_OK",
+      "original_assertions": [
+        "Generated header does not contain public_answer."
+      ],
+      "status": "OPEN"
+    },
+    {
+      "ordinal": 3,
+      "name": "invalid_symbol",
+      "function": "same actual verified entry",
+      "symbol": "",
+      "reason": "empty identifier",
+      "header": 0,
+      "hidden": 1,
+      "standalone_main": true,
+      "expected_status": "XR_BACKEND_INVALID_INPUT",
+      "original_assertions": [
+        "generated.bytes == NULL",
+        "generated.header_bytes == NULL",
+        "generated.size == 0",
+        "diagnostic.status == XR_BACKEND_INVALID_INPUT"
+      ],
+      "status": "OPEN"
+    },
+    {
+      "ordinal": 4,
+      "name": "invalid_symbol",
+      "function": "same actual verified entry",
+      "symbol": "a;void injected(void)",
+      "reason": "C source injection",
+      "header": 0,
+      "hidden": 1,
+      "standalone_main": true,
+      "expected_status": "XR_BACKEND_INVALID_INPUT",
+      "original_assertions": [
+        "generated.bytes == NULL",
+        "generated.header_bytes == NULL",
+        "generated.size == 0",
+        "diagnostic.status == XR_BACKEND_INVALID_INPUT"
+      ],
+      "status": "OPEN"
+    },
+    {
+      "ordinal": 5,
+      "name": "invalid_symbol",
+      "function": "same actual verified entry",
+      "symbol": "return",
+      "reason": "C keyword",
+      "header": 0,
+      "hidden": 1,
+      "standalone_main": true,
+      "expected_status": "XR_BACKEND_INVALID_INPUT",
+      "original_assertions": [
+        "generated.bytes == NULL",
+        "generated.header_bytes == NULL",
+        "generated.size == 0",
+        "diagnostic.status == XR_BACKEND_INVALID_INPUT"
+      ],
+      "status": "OPEN"
+    },
+    {
+      "ordinal": 6,
+      "name": "invalid_symbol",
+      "function": "same actual verified entry",
+      "symbol": "main",
+      "reason": "entry symbol collision",
+      "header": 0,
+      "hidden": 1,
+      "standalone_main": true,
+      "expected_status": "XR_BACKEND_INVALID_INPUT",
+      "original_assertions": [
+        "generated.bytes == NULL",
+        "generated.header_bytes == NULL",
+        "generated.size == 0",
+        "diagnostic.status == XR_BACKEND_INVALID_INPUT"
+      ],
+      "status": "OPEN"
+    },
+    {
+      "ordinal": 7,
+      "name": "invalid_symbol",
+      "function": "same actual verified entry",
+      "symbol": "bool",
+      "reason": "reserved C macro/type name",
+      "header": 0,
+      "hidden": 1,
+      "standalone_main": true,
+      "expected_status": "XR_BACKEND_INVALID_INPUT",
+      "original_assertions": [
+        "generated.bytes == NULL",
+        "generated.header_bytes == NULL",
+        "generated.size == 0",
+        "diagnostic.status == XR_BACKEND_INVALID_INPUT"
+      ],
+      "status": "OPEN"
+    },
+    {
+      "ordinal": 8,
+      "name": "invalid_symbol",
+      "function": "same actual verified entry",
+      "symbol": "_Atomic",
+      "reason": "C keyword",
+      "header": 0,
+      "hidden": 1,
+      "standalone_main": true,
+      "expected_status": "XR_BACKEND_INVALID_INPUT",
+      "original_assertions": [
+        "generated.bytes == NULL",
+        "generated.header_bytes == NULL",
+        "generated.size == 0",
+        "diagnostic.status == XR_BACKEND_INVALID_INPUT"
+      ],
+      "status": "OPEN"
+    },
+    {
+      "ordinal": 9,
+      "name": "invalid_symbol",
+      "function": "same actual verified entry",
+      "symbol": "xr_aot_fn_0",
+      "reason": "old generated implementation namespace",
+      "header": 0,
+      "hidden": 1,
+      "standalone_main": true,
+      "expected_status": "XR_BACKEND_INVALID_INPUT",
+      "original_assertions": [
+        "generated.bytes == NULL",
+        "generated.header_bytes == NULL",
+        "generated.size == 0",
+        "diagnostic.status == XR_BACKEND_INVALID_INPUT"
+      ],
+      "status": "OPEN"
+    },
+    {
+      "ordinal": 10,
+      "name": "invalid_symbol",
+      "function": "same actual verified entry",
+      "symbol": "XrAotOutcome",
+      "reason": "old generated carrier namespace",
+      "header": 0,
+      "hidden": 1,
+      "standalone_main": true,
+      "expected_status": "XR_BACKEND_INVALID_INPUT",
+      "original_assertions": [
+        "generated.bytes == NULL",
+        "generated.header_bytes == NULL",
+        "generated.size == 0",
+        "diagnostic.status == XR_BACKEND_INVALID_INPUT"
+      ],
+      "status": "OPEN"
+    },
+    {
+      "ordinal": 11,
+      "name": "invalid_symbol",
+      "function": "same actual verified entry",
+      "symbol": "1answer",
+      "reason": "invalid leading character",
+      "header": 0,
+      "hidden": 1,
+      "standalone_main": true,
+      "expected_status": "XR_BACKEND_INVALID_INPUT",
+      "original_assertions": [
+        "generated.bytes == NULL",
+        "generated.header_bytes == NULL",
+        "generated.size == 0",
+        "diagnostic.status == XR_BACKEND_INVALID_INPUT"
+      ],
+      "status": "OPEN"
+    },
+    {
+      "ordinal": 12,
+      "name": "invalid_symbol",
+      "function": "same actual verified entry",
+      "symbol": "answer\n",
+      "reason": "newline injection",
+      "header": 0,
+      "hidden": 1,
+      "standalone_main": true,
+      "expected_status": "XR_BACKEND_INVALID_INPUT",
+      "original_assertions": [
+        "generated.bytes == NULL",
+        "generated.header_bytes == NULL",
+        "generated.size == 0",
+        "diagnostic.status == XR_BACKEND_INVALID_INPUT"
+      ],
+      "status": "OPEN"
+    },
+    {
+      "ordinal": 13,
+      "name": "invalid_function_id",
+      "function_id": 4294967295,
+      "symbol": "public_answer",
+      "header": 0,
+      "hidden": 1,
+      "standalone_main": true,
+      "expected_status": "XR_BACKEND_INVALID_INPUT",
+      "original_assertions": [
+        "Exact emission status only; original does not assert output fields/diagnostic at this specific request."
+      ],
+      "status": "OPEN"
+    },
+    {
+      "ordinal": 14,
+      "name": "nonzero_reserved8_field",
+      "function": "restored actual verified entry",
+      "symbol": "public_answer",
+      "header": 0,
+      "hidden": 1,
+      "reserved8_index": 1,
+      "reserved8_value": 1,
+      "standalone_main": true,
+      "expected_status": "XR_BACKEND_INVALID_INPUT",
+      "original_assertions": [
+        "generated.bytes == NULL",
+        "generated.header_bytes == NULL"
+      ],
+      "status": "OPEN"
+    }
+  ],
+  "original_binding_initialization": "Designated binding initialization leaves hidden and all reserved bytes zero; generated and diagnostic initialized zero once. After positive1, set header0/hidden1. The ten symbol negatives inherit header0/hidden1 despite standalone_main=true. Function-id negative restores only symbol, reserved-byte negative restores actual entry then sets reserved8[1]=1. Preserve this exact state sequence and do not reset every case to an invented independent default.",
+  "finite_emission_owner": {
+    "open_before_dispatch": true,
+    "main_prefix": "int main(int argc, char **argv) {\n    if (!backend_emission_owner_open((XrCompileResourceLimits) {\n            UINT64_C(8589934592), UINT64_C(16777216), UINT64_C(34359738368)}))\n        return 1;\n",
+    "main_prefix_lf_sha256": "68e9b07722ab7378f5b807e3dc6142318261554b958efc51fed85acf232726b9",
+    "limits": {
+      "allocated_bytes": 8589934592,
+      "live_bytes": 16777216,
+      "work": 34359738368
+    },
+    "ownership": "One main opens one finite caller compile ledger before any dispatch and registers atexit close. All repeated emissions use the same backend_emission_resources. On close, actual stats.live_bytes must equal initial live_bytes; stats failure or mismatch aborts, then release ledger and clear pointer.",
+    "boundary": "Original close compares live bytes only. It does not assert work/allocation refunds, exhaustive allocation failure coverage, stable per-object construct/finalize/reclaim, actual generated-C runtime cleanup or physical allocator emptiness. Do not substitute this count for those independent current duties."
+  },
+  "assertion_counts": {
+    "census_sites": 14,
+    "loop_sites": 1,
+    "symbol_loop_iterations": 10,
+    "outer_require_evaluations_if_all_requests_complete": 41,
+    "specified_helper_sites": 4,
+    "graph_instances": 1,
+    "runtime_evaluations": 0
+  },
+  "Root_contract_or_representation_review": {
+    "status": "OPEN",
+    "verified_owner": "Expose a formal current common verified owner and actual admitted entry role/ID for native export projection. Emission must remain valid after relevant producer/target handles release through documented retained ownership; passing the old arbitrary numeric ID to an unrelated owner or using synthesized0 does not preserve the original graph.",
+    "symbols": "Preserve exact ten hostile symbol inputs, invalid-owner entry selection and reserved-field fail-closed behavior at current public export admission boundary. Old xr_aot_fn_0/XrAotOutcome names record original internal-namespace collision probes; Root must explicitly map current reserved namespace and justify classification without reintroducing old ABI symbols/aliases. Do not silently turn invalid rows into PASS solely because representation changed.",
+    "projection": "Preserve visible header declaration and header omission/hidden export intent. Original textual outcome-kind0/abort check represents the scalar C wrapper failing on nonreturn outcomes, not permission to restore old outcome carrier or numeric tag. Root must explicitly map current semantic failure boundary and actual C wrapper.",
+    "native": "Fresh generated C must pass relevant W1-W4/C11/MSVC ownership gates; compile/link and independently call actual public_answer -> I64(42) where current API permits, retaining the complete 19+23 checked graph. This is additional current qualification and must not be claimed as an original body assertion or static result.",
+    "resources": "Preserve finite caller-ledger lifetime across repeated successful and failed emissions, actual no-residual scratch after owner/output teardown, cumulative resource/FI/lifecycle responsibilities under current formal algorithm; single live-byte equality is only the original narrow check.",
+    "qualification": "Actual public Built/Checked/full specialization reverify/Lowered/common owner/Program, source-free packet and relevant Library/native/mixed/twoInstances/escape/cleanup/FI/axes/safety remainOPEN and need formal producer/window."
+  },
+  "full_FI": "NOT_RUN",
+  "axes": "NOT_RUN",
+  "full_safety": "NOT_RUN",
+  "SourceDelete": "NOT_RUN",
+  "Main": "NOT_RUN",
+  "handoff": {
+    "Root_thread": "01a11f74-a297-7b11-8441-835bde6a3d5f",
+    "formal_acceptance": "PENDING"
+  },
+  "boundaries": [
+    "One census function/all14 REQUIRE sites and exact14 sequential emission requests remainOPEN; retired0.",
+    "Static admission/projection and original19+23 graph evidence only; no actual current product/native/FI/axes/safety PASS.",
+    "All five original source/shared files and other responsibilities preserved; no product/shared ABI/CMake/stdlib/spec/SDK/docs edits or new global validator/ledger."
+  ]
+}
