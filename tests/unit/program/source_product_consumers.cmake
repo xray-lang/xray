@@ -419,3 +419,5 @@ include("${CMAKE_CURRENT_LIST_DIR}/../xir/product_consumers/source_product_const
 include("${CMAKE_CURRENT_LIST_DIR}/../xir/product_consumers/source_product_canonical_initializer_owned.cmake")
 
 include("${CMAKE_CURRENT_LIST_DIR}/../xir/product_consumers/source_product_original_array_cleanup.cmake")
+
+include("${CMAKE_CURRENT_LIST_DIR}/../xir/product_consumers/source_product_original_array_error_invoke_source.cmake")

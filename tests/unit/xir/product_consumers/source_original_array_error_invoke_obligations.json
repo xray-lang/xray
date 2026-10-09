@@ -1,0 +1,262 @@
+{
+  "schema": 1,
+  "family": "original_array_error_invoke",
+  "producer": "25f4016d6f089169757a90ae11ba537002374711",
+  "identity": "Checked25/semantic67/Value22/Call28/Program29",
+  "status": "OPEN",
+  "retired": 0,
+  "replacement_gates": [],
+  "result": "FAIL",
+  "full_FI": "NOT_RUN",
+  "axes": "NOT_RUN",
+  "cancel": "NOT_RUN",
+  "SourceDelete": "NOT_RUN",
+  "full_safety": "NOT_RUN",
+  "Main": "NOT_RUN",
+  "legacy": {
+    "name": "source_owner_array_error_invoke",
+    "legacy_path": "tests/unit/program/test_xr_program_source_build.c",
+    "legacy_line": 4262,
+    "body_lf_sha256": "bb6487c16138dd87704a32331e33b40d2b14188bace422415d63a83db6e43c65",
+    "assertion_sites": 3,
+    "loop_sites": 0,
+    "status": "OPEN",
+    "replacement_gates": [],
+    "note": "Function census preserves its whole body; sites do not count executed loop iterations.",
+    "original_fixture": {
+      "id": "array_error_invoke",
+      "expected_exit": 42,
+      "labels": [
+        "array",
+        "panic",
+        "error"
+      ],
+      "backends": {
+        "vm": "execute",
+        "aot": "execute"
+      }
+    },
+    "static_input_literals": {
+      "source": {
+        "bytes": 263,
+        "sha256": "0bd440025866dfa982cfc61e65405a2f1369324b30516b8ab1ed2c6339d6ea16"
+      }
+    }
+  },
+  "original_source": {
+    "path": "tests/unit/xir/product_consumers/original_array_error_invoke_root.xr",
+    "prefix_bytes": 263,
+    "prefix_sha256": "0bd440025866dfa982cfc61e65405a2f1369324b30516b8ab1ed2c6339d6ea16",
+    "adapter": "export fn consumerAnswer() -> i64 { return answer() }\n",
+    "adapter_bytes": 54,
+    "adapter_sha256": "62788122d5e32c2bf5db10a60a2939f92a226f7606d09c490da4212a1341f2fa",
+    "bytes": 317,
+    "sha256": "735902df2641749c985c7d0af2b5e530a49e9a1e8c987dd1289a9c2038bf0d33",
+    "construction": "Statically decoded exact C string literals from whole original test body at line4262; complete prefix preserved and one exported consumerAnswer adapter appended. No original helper, parameter, enum identity, catch or fixed42 oracle changed."
+  },
+  "independent_i64": 42,
+  "proposed_consumer": {
+    "source": "tests/unit/xir/product_consumers/test_original_array_error_invoke_source.c",
+    "cmake": "tests/unit/xir/product_consumers/source_product_original_array_error_invoke_source.cmake",
+    "status": "EXECUTED_REQUIRED_POSITIVE_FAIL",
+    "proposed_normal_tests": [
+      {
+        "name": "test_original_array_error_invoke_source",
+        "required_source_status": "XR_XIR_OK",
+        "configurations": [
+          "MSVC Release",
+          "Clang ASan/UBSan"
+        ],
+        "result": "FAIL"
+      }
+    ],
+    "TIMEOUT": 120,
+    "PROCESSORS": 1,
+    "WILL_FAIL": false,
+    "planned_processes_per_configuration": 1,
+    "planned_processes_both_configurations": 2,
+    "registration_status": "REGISTERED_AND_EXECUTED",
+    "qualification": "Required positive Source admission and owned Checked/Lowered or owned failure diagnostic investigation only. No Instance or invocation of consumerAnswer is part of this batch. The preserved42 is an independent original runtime oracle and is not newly verified by Source success."
+  },
+  "candidate_pipeline": {
+    "status": "FAIL_ADMISSION_WITH_RETAINED_DIAGNOSTIC_AND_PHYSICAL_RELEASE",
+    "input": "Read external full317-byte fixture under independent root with actual stdlib path, verify original263 prefix and full hash, use fixed assigned public SourceProduct producer and finite caller compiler ledger.",
+    "positive_requirement": "Require SourceProduct success0. Both actual configurations rejected the unchanged original at status4/CHECK1/location2:23; positive gate remains FAIL. Safe diagnostic ownership and release are independently observed and do not invert failure.",
+    "success_path": "Verify SourceProduct and read complete Closed Checked packet; own full writer bytes distinct from and equal to Closed bytes. Destroy SourceProduct/session and poison root/path/request/authority before detached Checked verify and full rewrite equality. Lower through public API; destroy Checked/retained packet before Lowered verify. Diagnostic is separately retained through printed facts and freed afterward. Admission and ownership only; typed catch SSA and runtime42 remain unverified. This success path is compiled but NOT_RUN because both actual Source builds fail.",
+    "failure_path": "Preserve actual owned diagnostic status/stage/line/column/path/message and compare after original SourceProduct/session/request/input/authority buffers are dead. Preserve first actual diagnostic and source-positive FAIL; no partial Checked/Lowered owner publication or fallback Source. Caller/compiler physical0 and owned table0 remain required release facts, never turn failed admission into PASS.",
+    "release": "Release actual owners through existing compile observer/caller ledger; compare physical blocks/bytes0/0 and empty ownership table when those counters are available. No runtime allocation domain or lifecycle events are manufactured.",
+    "excluded_execution": "No Program seal, no Instance, no scalar42 call, no VM/native/mixed runtime, no generated C emission or compilation in this batch."
+  },
+  "original_obligations": [
+    {
+      "obligation": "Original full source must build through the original hosted target profile with semantic fingerprint and bound owner/session input; no CryptoError or Array<u8> source rewriting.",
+      "status": "OPEN"
+    },
+    {
+      "obligation": "make(32) actually constructs Array<u8>(32), returns its actual length32; answer initial result binds that value.",
+      "status": "OPEN"
+    },
+    {
+      "obligation": "make(-2) selects n<-1 and throws the original governed/prelude CryptoError.InvalidLength before Array negative construction; typed CryptoError catch in answer adds10 to the saved32 and returns fixed42.",
+      "status": "OPEN"
+    },
+    {
+      "obligation": "Actual Checked/Lowered SSA, parameter/value/catch identity, call/invoke successors, error selector and panic/throw distinction preserve the complete original graph. Public metadata existence alone does not discharge these.",
+      "status": "OPEN"
+    },
+    {
+      "obligation": "Original assert_detached_program_i64_result requires actual private VM entry I64 value42; Instance create/begin_drain/retire/free and original private program/profile ownership contract remain.",
+      "status": "OPEN"
+    },
+    {
+      "obligation": "Original assert_aot_fixture_backend_contract queries fixture AOT coverage; exact unsupported operation/status/coordinate/spec check if applicable, otherwise BackendIR build/binding verify/diagnosticOK, two equal non-null generated C buffers and standalone int main(void), exact bytes output and native fixture backend expected exit42.",
+      "status": "OPEN"
+    },
+    {
+      "obligation": "Original old private owner, Array value allocation/refcount/free/failure cleanup, provider and standalone backend contracts are not replaced by owned Checked/Lowered diagnostic lifetime or aggregate compiler physical0.",
+      "status": "OPEN"
+    },
+    {
+      "obligation": "Original complete family/all-ordinal compiler and runtime fault injection, occupied output/refusal strong guarantees and physical release remain required; this batch performs no FI scan.",
+      "status": "OPEN"
+    },
+    {
+      "obligation": "Resource exact/minus1 axes, sticky runtime failure, every real active cancellation prefix, actual disk Source deletion and detached execution/determinism remain required.",
+      "status": "OPEN"
+    }
+  ],
+  "static_admission_lead": {
+    "status": "HISTORICAL_SOURCE_INFERENCE_ACTUAL_RESULT_IN_EXECUTION_FACET",
+    "lead": "The unchanged Source names CryptoError.InvalidLength and a CryptoError typed catch without a local enum declaration. Current named nominal lookup falls back to governed Ordering discovery; current automatically sourced native enum path observed in this investigation is Ordering. This suggests unsupported original CryptoError admission, but no actual status/stage/line/path/message is assigned before execution.",
+    "actual_diagnostic": null,
+    "actual_receipt": null,
+    "evidence": [
+      {
+        "path": "src/xir/xxir_source_struct.inc.c",
+        "sha256": "8dda7956f285511c50177c4faa0acd05cbc11362669067d779a1ae44ada36117",
+        "lines": [
+          39,
+          63
+        ],
+        "reason": "Named nominal lookup accepts SOURCE_NOMINAL; absent visible name falls back to source_ordering_lookup."
+      },
+      {
+        "path": "src/xir/xxir_source_ordering.inc.c",
+        "sha256": "a5038ee2e855c1b5a2af838ac46ed7229078d45f934273e27b900d04f2dc7c5e",
+        "lines": [
+          163,
+          187
+        ],
+        "reason": "Governed Ordering lookup/binding/type path; no CryptoError replacement or local enum introduced."
+      }
+    ],
+    "preservation": "Keep CryptoError identity and all original263 bytes. Do not replace prelude CryptoError with DivisionFailure/localenum or convert fixed42 to a negative admission expectation."
+  },
+  "boundaries": [
+    "The execution facet records two actual required-positive admission failures and diagnostic/compiler release evidence. It does not provide runtime or successful Checked/Lowered evidence.",
+    "Source positive admission must remain strict success0. A safely retained diagnostic is an independently reviewable ownership observation while the normal positive gate remains FAIL.",
+    "No Instance is constructed: original42 runtime, VM/AOT/native/mixed and standalone exit42 remain OPEN. Any future admission success alone cannot claim42.",
+    "Old private AOT/backend/owner contracts and exact throw/catch SSA remain OPEN; no representation retirement or public replacement equivalence claim.",
+    "Full FI/axes/cancel/SourceDelete/determinism/safety/Main remain NOT_RUN. Legacy row OPEN/replacement_gates empty/retired0 and family denominators remain unchanged.",
+    "Original source fixture can construct an Array only for n32 in the original answer path; make(-2) throws prior to Array construction. Existing array negative count452-versus422 evidence is a different family and is not this case actual result.",
+    "Runtime and diagnostic facets added later must bind actual pre-run map/trace bytes and receipts; later annotations are not automatic reexecution."
+  ],
+  "evidence_plan": {
+    "directory": "build-consumer-evidence/current67-original-array-error-invoke-source-r1",
+    "actual_product_receipts": "CAPTURED_ACTUAL_SOURCE_FAILURE_AND_CONTROL",
+    "raw_stdout_stderr": "CAPTURED_ACTUAL_SOURCE_FAILURE_AND_CONTROL",
+    "inputs_before_after": "CAPTURED_ACTUAL_SOURCE_FAILURE_AND_CONTROL",
+    "actual_registered_argv": "CAPTURED_ACTUAL_SOURCE_FAILURE_AND_CONTROL",
+    "executable_preimage": "CAPTURED_ACTUAL_SOURCE_FAILURE_AND_CONTROL",
+    "compiler_commands_and_header_deps": "CAPTURED_ACTUAL_SOURCE_FAILURE_AND_CONTROL",
+    "owned_diagnostic_facts": "CAPTURED_ACTUAL_SOURCE_FAILURE_AND_CONTROL",
+    "Checked_Lowered_facts": "NOT_RUN: actual positive Source build rejected",
+    "fixed42_runtime": "NOT_RUN",
+    "native_generated_C": "NOT_RUN"
+  },
+  "candidate_authoring": "The candidate was reviewed and applied by parent, freshly compiled and executed in both configurations; original expected-positive gate remains FAIL. Execution evidence is bound below.",
+  "original_array_error_invoke_execution_20261009_facet": {
+    "evidence": "build-consumer-evidence/current67-original-array-error-invoke-source-r1",
+    "result": "FAIL",
+    "required_source_success": 0,
+    "expected42_unchanged": true,
+    "source_commands": 2,
+    "control_commands": 2,
+    "source_positive_failures": 2,
+    "diagnostic_owner_release": "PASS",
+    "commands": [
+      {
+        "configuration": "msvc",
+        "name": "test_original_array_error_invoke_source",
+        "pid": 18044,
+        "receipt": "msvc-test_original_array_error_invoke_source.json",
+        "returncode": 1,
+        "status": "FAIL",
+        "required_status": 0,
+        "actual_status": 4,
+        "actual_status_name": "XR_XIR_BAD_VALUE",
+        "stage": 1,
+        "stage_name": "XR_XIR_SOURCE_PRODUCT_CHECK",
+        "line": 2,
+        "column": 23,
+        "source_path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-baseline-r2\\source\\tests\\unit\\xir\\product_consumers\\original_array_error_invoke_root.xr",
+        "message": "name is not an initialized value",
+        "diagnostic_after_session_product_input_death": "PASS",
+        "compiler_physical": "0/0",
+        "compiler_observer_table_after_free": 0,
+        "caller_final_live_before_release": 80,
+        "caller_final_live_meaning": "Unchanged owner baseline; not zero before release",
+        "allocated": 158880,
+        "peak": 88991,
+        "work": 138160,
+        "input_count": 2928,
+        "instances": 0,
+        "runtime": "NOT_RUN",
+        "successful_Checked_Lowered": "NOT_RUN"
+      },
+      {
+        "configuration": "asan",
+        "name": "test_original_array_error_invoke_source",
+        "pid": 39196,
+        "receipt": "asan-test_original_array_error_invoke_source.json",
+        "returncode": 1,
+        "status": "FAIL",
+        "required_status": 0,
+        "actual_status": 4,
+        "actual_status_name": "XR_XIR_BAD_VALUE",
+        "stage": 1,
+        "stage_name": "XR_XIR_SOURCE_PRODUCT_CHECK",
+        "line": 2,
+        "column": 23,
+        "source_path": "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\current67-baseline-r2\\source\\tests\\unit\\xir\\product_consumers\\original_array_error_invoke_root.xr",
+        "message": "name is not an initialized value",
+        "diagnostic_after_session_product_input_death": "PASS",
+        "compiler_physical": "0/0",
+        "compiler_observer_table_after_free": 0,
+        "caller_final_live_before_release": 80,
+        "caller_final_live_meaning": "Unchanged owner baseline; not zero before release",
+        "allocated": 158880,
+        "peak": 88991,
+        "work": 138160,
+        "input_count": 2928,
+        "instances": 0,
+        "runtime": "NOT_RUN",
+        "successful_Checked_Lowered": "NOT_RUN"
+      }
+    ],
+    "build": "Both configurations freshly compiled the dedicated C with C11/W4/WX; Clang ASan/UBSan instrumented. No generated C.",
+    "input_timing": "Captured pre-facet map/trace saved as runtime-preimage files. This annotation is not product reexecution.",
+    "parser_correction": "The first runner used stale preceding-control stderr after process_contract rejected exit1, falsely marking two physical flags false. First runner/JSON/raw/PIDs preserved; only same-stream reparse updated those flags, preserving source FAIL and all receipts.",
+    "runtime42": "NOT_RUN",
+    "Checked_Lowered_success": "NOT_RUN",
+    "native": "NOT_RUN",
+    "mixed": "NOT_RUN",
+    "SourceDelete": "NOT_RUN",
+    "full_FI": "NOT_RUN",
+    "axes": "NOT_RUN",
+    "cancel": "NOT_RUN",
+    "full_safety": "NOT_RUN",
+    "Main": "NOT_RUN",
+    "retired": 0
+  }
+}
