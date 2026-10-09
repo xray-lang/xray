@@ -1,0 +1,1105 @@
+{
+  "schema": 1,
+  "family": "original_provider_failure_cleanup",
+  "legacy_base_commit": "01e6d38401b0f5c8684b64c35a99ac651024c0c1",
+  "status": "OPEN",
+  "retired": 0,
+  "replacement_gates": [],
+  "result": "STATIC_ORIGINAL_PROVIDER_FAILURE_CLEANUP_MAP_ONLY",
+  "product_execution": "NOT_RUN_BY_THIS_MAP",
+  "producer": "25f4016d6f089169757a90ae11ba537002374711",
+  "identity": "Checked25/semantic67/Value22/Call28/Program29",
+  "producer_scope": "Existing authorised25f4 identity only; no new producer, Root private source or heavy window adopted.",
+  "legacy": [
+    {
+      "name": "source_owner_provider_refusal_runs_nested_explicit_trap_cleanup",
+      "legacy_path": "tests/unit/program/test_xr_program_source_build.c",
+      "legacy_line": 5842,
+      "body_lf_sha256": "d64408a2c61ed4f268eb7c3a125f6f766e029b62237fbb00d5479fef208fe4ea",
+      "assertion_sites": 35,
+      "loop_sites": 1,
+      "status": "OPEN",
+      "replacement_gates": [],
+      "note": "Function census preserves its whole body; sites do not count executed loop iterations.",
+      "original_fixture": {
+        "id": "provider_trap_cleanup",
+        "expected_exit": 207,
+        "labels": [
+          "provider",
+          "clock",
+          "refusal",
+          "cleanup",
+          "trap"
+        ],
+        "backends": {
+          "vm": "execute",
+          "aot": "execute"
+        }
+      },
+      "static_input_literals": {
+        "source": {
+          "bytes": 1039,
+          "sha256": "cac33ef788b2aa3982ea7bfc5a8d1a56e17edda13b664cb7e19712c72628a2e8"
+        }
+      }
+    },
+    {
+      "name": "source_owner_child_coroutine_provider_failure_composes_static_cleanup",
+      "legacy_path": "tests/unit/program/test_xr_program_source_build.c",
+      "legacy_line": 6028,
+      "body_lf_sha256": "873677e0613c4fb1aeeb6aed4e633a046436c917877008562e275da67360e324",
+      "assertion_sites": 30,
+      "loop_sites": 1,
+      "status": "OPEN",
+      "replacement_gates": [],
+      "note": "Function census preserves its whole body; sites do not count executed loop iterations.",
+      "original_fixture": {
+        "id": "child_coroutine_trap_cleanup",
+        "expected_exit": 232,
+        "labels": [
+          "provider",
+          "clock",
+          "pipe",
+          "coroutine",
+          "cancel",
+          "refusal",
+          "cleanup",
+          "trap"
+        ],
+        "backends": {
+          "vm": "execute",
+          "aot": "execute"
+        }
+      },
+      "static_input_literals": {
+        "source": {
+          "bytes": 437,
+          "sha256": "a945f2e67aae598c89adb9308f7eca2cdef0a897e32029a6ff183e62f55aae06"
+        },
+        "segmented_cleanup": {
+          "bytes": 219,
+          "sha256": "3985d7cf6d7b98d9b2071c87d2fb2f1a60f09f824c3058bd94fb4ca2dccc1cc6"
+        }
+      }
+    }
+  ],
+  "original_sources": {
+    "nested_refusal": {
+      "bytes": 1039,
+      "sha256": "cac33ef788b2aa3982ea7bfc5a8d1a56e17edda13b664cb7e19712c72628a2e8",
+      "text": "import sys\nimport time\nenum ClockFailure { Negative }\nfn rejectedFallible() -> i64 {\n  var inner = sys.Pipe(2147483642, 2147483643)\n  defer {\n    inner.closeRead()\n    inner.closeWrite()\n  }\n  var value = time.now()\n  if (value < 0) { throw ClockFailure.Negative }\n  return value\n}\ninterface ClockReader { read() -> i64 }\nclass RejectedClock implements ClockReader {\n  read() -> i64 { return rejectedFallible() }\n}\nfn invoke(body: fn() -> i64, reader: ClockReader, mode: i64) -> i64 {\n  var live = sys.Pipe(2147483646, 2147483647)\n  defer {\n    live.closeRead()\n    live.closeWrite()\n  }\n  var result = 0\n  if (mode == 1) {\n    try { result = body() }\n    catch (error: ClockFailure) { result = 0 }\n  } else if (mode == 2) {\n    try { result = reader.read() }\n    catch (error: ClockFailure) { result = 0 }\n  } else {\n    try { result = rejectedFallible() }\n    catch (error: ClockFailure) { result = 0 }\n  }\n  return result\n}\nfn answer() -> i64 {\n  var reader: ClockReader = RejectedClock()\n  return invoke(rejectedFallible, reader, 1)\n}\n",
+      "origin_function": "source_owner_provider_refusal_runs_nested_explicit_trap_cleanup",
+      "origin_variable": "source"
+    },
+    "child_coroutine": {
+      "bytes": 437,
+      "sha256": "a945f2e67aae598c89adb9308f7eca2cdef0a897e32029a6ff183e62f55aae06",
+      "text": "import sys\nimport time\nfn child() -> i64 {\n  var spare = sys.Pipe(2147483638, 2147483639)\n  defer { spare.closeRead(); spare.closeWrite() }\n  var inner = sys.Pipe(2147483642, 2147483643)\n  defer { inner.closeWrite() }\n  defer { inner.closeRead() }\n  Coro.yield()\n  return time.now()\n}\nfn answer() -> i64 {\n  var outer = sys.Pipe(2147483646, 2147483647)\n  defer { outer.closeWrite() }\n  defer { outer.closeRead() }\n  return child() + 1\n}\n",
+      "origin_function": "source_owner_child_coroutine_provider_failure_composes_static_cleanup",
+      "origin_variable": "source"
+    },
+    "segmented_cleanup": {
+      "bytes": 219,
+      "sha256": "3985d7cf6d7b98d9b2071c87d2fb2f1a60f09f824c3058bd94fb4ca2dccc1cc6",
+      "text": "import sys\nfn answer() -> i64 {\n  var marker = 41\n  var pipe = sys.Pipe(2147483642, 2147483643)\n  defer { marker = marker + 1 }\n  defer {}\n  defer { pipe.closeRead(); pipe.closeWrite(); pipe.closeRead() }\n  return 43\n}\n",
+      "origin_function": "source_owner_child_coroutine_provider_failure_composes_static_cleanup",
+      "origin_variable": "segmented_cleanup"
+    }
+  },
+  "source_construction": "Three whole original1039B/437B/219B C literals independently decoded and preserved with all source branches, owners and empty defer. No adapter, pruning or mutation.",
+  "responsibility_mapping": [
+    {
+      "legacy_name": "source_owner_provider_refusal_runs_nested_explicit_trap_cleanup",
+      "assertion_sites": 35,
+      "groups": [
+        {
+          "responsibility": "Admit the complete1039B source with its actual native hosted profile.",
+          "status": "OPEN",
+          "target_consumer": "ROOT_CONTRACT_AND_QUALIFIED_PRODUCER_PENDING",
+          "original": {
+            "path": "tests/unit/program/test_xr_program_source_build.c",
+            "lines": [
+              5884,
+              5893
+            ]
+          },
+          "original_assertion_sites": 4,
+          "gap": "Keep indirect function, interface witness and sealed call branches, typed ClockFailure catch, both defer owners and mode1 answer. Unrelated positive refusal remains FAIL."
+        },
+        {
+          "responsibility": "Build twice and preserve complete product size/bytes/identity/entry determinism.",
+          "status": "OPEN",
+          "target_consumer": "ROOT_CONTRACT_AND_QUALIFIED_PRODUCER_PENDING",
+          "original": {
+            "path": "tests/unit/program/test_xr_program_source_build.c",
+            "lines": [
+              5894,
+              5906
+            ]
+          },
+          "original_assertion_sites": 0,
+          "gap": "assert_products_equal adds8 sites. An absent product cannot turn either required Source-success assertion into a pass."
+        },
+        {
+          "responsibility": "Retain complete static call/effect cleanup frontiers.",
+          "status": "OPEN",
+          "target_consumer": "ROOT_CONTRACT_AND_QUALIFIED_PRODUCER_PENDING",
+          "original": {
+            "path": "tests/unit/program/test_xr_program_source_build.c",
+            "lines": [
+              5907,
+              5923
+            ]
+          },
+          "original_assertion_sites": 7,
+          "gap": "Provider3, read reborrow1, indirect/witness/sealed invoke each one four-successor operation, trap11 and provider requirements2 need a current full-verification mapping. Only indirect mode1 is executed by this source; witness/sealed counts are structural."
+        },
+        {
+          "responsibility": "Bind both exact clock/IO stable contracts and typed operations.",
+          "status": "OPEN",
+          "target_consumer": "ROOT_CONTRACT_AND_QUALIFIED_PRODUCER_PENDING",
+          "original": {
+            "path": "tests/unit/program/test_xr_program_source_build.c",
+            "lines": [
+              5924,
+              5979
+            ]
+          },
+          "original_assertion_sites": 13,
+          "gap": "Match contract and operation identities irrespective of requirement order; nullary signed clock refusal and bool-i64 close callback, fingerprints and explicit nonmissing indexes remain mandatory."
+        },
+        {
+          "responsibility": "Create the actual original single Instance.",
+          "status": "OPEN",
+          "target_consumer": "ROOT_CONTRACT_AND_QUALIFIED_PRODUCER_PENDING",
+          "original": {
+            "path": "tests/unit/program/test_xr_program_source_build.c",
+            "lines": [
+              5980,
+              5995
+            ]
+          },
+          "original_assertion_sites": 2,
+          "gap": "Binding context owns exact4 close handles. Target must add detached two-Instance and producer-death proofs without keeping raw production pointers."
+        },
+        {
+          "responsibility": "Independent VM provider failure and complete ordered cleanup.",
+          "status": "OPEN",
+          "target_consumer": "ROOT_CONTRACT_AND_QUALIFIED_PRODUCER_PENDING",
+          "original": {
+            "path": "tests/unit/program/test_xr_program_source_build.c",
+            "lines": [
+              5996,
+              6013
+            ]
+          },
+          "original_assertion_sites": 6,
+          "gap": "Original returns TRAP/PROVIDER_CALL_FAILED with events5, clock1, closes4; cleanup order2147483642/43/46/47. Source typed catch must not return0 or capture host failure."
+        },
+        {
+          "responsibility": "Deterministic actual native refusal and cleanup protocol.",
+          "status": "OPEN",
+          "target_consumer": "ROOT_CONTRACT_AND_QUALIFIED_PRODUCER_PENDING",
+          "original": {
+            "path": "tests/unit/program/test_xr_program_source_build.c",
+            "lines": [
+              6014,
+              6017
+            ]
+          },
+          "original_assertion_sites": 0,
+          "gap": "Original native helper checks void error/PanicInfo effect shape, no generated main, typed call/dispose bridge, trap7, panic.code0, exact5 events, standalone207. All old numeric/bridge representations require Root review."
+        },
+        {
+          "responsibility": "Release every result/code/backend/Instance/product/profile/source owner.",
+          "status": "OPEN",
+          "target_consumer": "ROOT_CONTRACT_AND_QUALIFIED_PRODUCER_PENDING",
+          "original": {
+            "path": "tests/unit/program/test_xr_program_source_build.c",
+            "lines": [
+              6018,
+              6026
+            ]
+          },
+          "original_assertion_sites": 3,
+          "gap": "Explicit drain/retire/free statuses and complete original graph cleanup remain. No physical/lifecycle/FI release is observed by this map."
+        }
+      ]
+    },
+    {
+      "legacy_name": "source_owner_child_coroutine_provider_failure_composes_static_cleanup",
+      "assertion_sites": 30,
+      "groups": [
+        {
+          "responsibility": "Admit complete437B child/parent coroutine source.",
+          "status": "OPEN",
+          "target_consumer": "ROOT_CONTRACT_AND_QUALIFIED_PRODUCER_PENDING",
+          "original": {
+            "path": "tests/unit/program/test_xr_program_source_build.c",
+            "lines": [
+              6046,
+              6062
+            ]
+          },
+          "original_assertion_sites": 3,
+          "gap": "Preserve spare/inner/outer owners, distinct defer items, one actual yield and time.now result. Positive refusal remains FAIL."
+        },
+        {
+          "responsibility": "Retain sealed coroutine and ordinary static cleanup continuation graph.",
+          "status": "OPEN",
+          "target_consumer": "ROOT_CONTRACT_AND_QUALIFIED_PRODUCER_PENDING",
+          "original": {
+            "path": "tests/unit/program/test_xr_program_source_build.c",
+            "lines": [
+              6063,
+              6073
+            ]
+          },
+          "original_assertion_sites": 5,
+          "gap": "One coroutine sealed call with four successors; ordinary direct one-successor/provider callsGT0 and provider requirements2. Current typed graph must prove these obligations without old enum aliases."
+        },
+        {
+          "responsibility": "Bind exact stable clock and IO close operations with their host contexts.",
+          "status": "OPEN",
+          "target_consumer": "ROOT_CONTRACT_AND_QUALIFIED_PRODUCER_PENDING",
+          "original": {
+            "path": "tests/unit/program/test_xr_program_source_build.c",
+            "lines": [
+              6074,
+              6122
+            ]
+          },
+          "original_assertion_sites": 13,
+          "gap": "Two requirements with one operation each, exact stable IDs/fingerprints/nullary clock and bool-i64 close, both index-presence checks. All callback events recorded before possible refusal."
+        },
+        {
+          "responsibility": "Execute the complete17-row VM matrix twice in one original Instance.",
+          "status": "OPEN",
+          "target_consumer": "ROOT_CONTRACT_AND_QUALIFIED_PRODUCER_PENDING",
+          "original": {
+            "path": "tests/unit/program/test_xr_program_source_build.c",
+            "lines": [
+              6123,
+              6137
+            ]
+          },
+          "original_assertion_sites": 1,
+          "gap": "At first YIELD oldstate1/point0 and events0. Independent43/host refusal/cancel category and all six close events for every row; two calls to the helper do not prove two Instances."
+        },
+        {
+          "responsibility": "Actual deterministic native17-mode cleanup matrix.",
+          "status": "OPEN",
+          "target_consumer": "ROOT_CONTRACT_AND_QUALIFIED_PRODUCER_PENDING",
+          "original": {
+            "path": "tests/unit/program/test_xr_program_source_build.c",
+            "lines": [
+              6138,
+              6141
+            ]
+          },
+          "original_assertion_sites": 0,
+          "gap": "Separate native representation kinds0/2/3, old trap7 and initialstate1/point0; exact six-close trace, no clock on cancel, scalar43 only for return and standalone232. Full native emitted guards retained."
+        },
+        {
+          "responsibility": "Retire and free the original Instance/product/source before a second Source input.",
+          "status": "OPEN",
+          "target_consumer": "ROOT_CONTRACT_AND_QUALIFIED_PRODUCER_PENDING",
+          "original": {
+            "path": "tests/unit/program/test_xr_program_source_build.c",
+            "lines": [
+              6142,
+              6154
+            ]
+          },
+          "original_assertion_sites": 3,
+          "gap": "The actual target profile remains owned while the219B segmented source is built next; do not release it too early or retain production owners to fake detached execution."
+        },
+        {
+          "responsibility": "Preserve entire segmented cleanup Source-only responsibility.",
+          "status": "OPEN",
+          "target_consumer": "ROOT_CONTRACT_AND_QUALIFIED_PRODUCER_PENDING",
+          "original": {
+            "path": "tests/unit/program/test_xr_program_source_build.c",
+            "lines": [
+              6155,
+              6176
+            ]
+          },
+          "original_assertion_sites": 5,
+          "gap": "Local marker41 captured into final defer, real empty defer and repeated closeRead item remain. Original asserts successful nonnull Source and provider-call2/sealed-direct5; it never executes this219B input. Its literal43 is not inherited runtime PASS."
+        }
+      ]
+    }
+  ],
+  "original_private_helpers": [
+    {
+      "path": "tests/unit/program/test_xr_program_source_build.c",
+      "function": "source_build_fixture_init",
+      "line": 894,
+      "end_line": 968,
+      "body_lf_sha256": "964c190cb52940aa039b9459e6a5aa0416430eadac032979ed210358216892eb",
+      "assertion_sites": 0,
+      "classification": "Actual direct or specified transitive NON_TEST helper; not an extra census TEST or exhaustive shared closure.",
+      "responsibility": "Whole physical source graph/session/resolver/canonical script authority/native release profile; all boolean failure branches cleanup. No source flattening or shim.",
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/program/test_xr_program_source_build.c",
+      "function": "source_build_fixture_free",
+      "line": 873,
+      "end_line": 892,
+      "body_lf_sha256": "54f2ca59ddb46fda789abf0411160790bcb950903858a308b984b50e6f8c1889",
+      "assertion_sites": 0,
+      "classification": "Actual direct or specified transitive NON_TEST helper; not an extra census TEST or exhaustive shared closure.",
+      "responsibility": "Restore session, destroy session/isolate/resolver, release identity/path, unlink source graph/temp directory, zero fixture.",
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/program/test_xr_program_source_build.c",
+      "function": "write_source_file",
+      "line": 857,
+      "end_line": 864,
+      "body_lf_sha256": "cc03580465f59354407c5e6e4e063c40ab9759cf1f45ceb3f099884b0e28014d",
+      "assertion_sites": 0,
+      "classification": "Actual direct or specified transitive NON_TEST helper; not an extra census TEST or exhaustive shared closure.",
+      "responsibility": "Require complete bytes written and fclose success; failure remains a real fixture failure.",
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/program/test_xr_program_source_build.c",
+      "function": "semantic_fingerprint",
+      "line": 866,
+      "end_line": 871,
+      "body_lf_sha256": "08fbbce02bdf996e8c8fb5b4a0b090f8e0dad413c84d6de2ab2530ec56aa3c0a",
+      "assertion_sites": 0,
+      "classification": "Actual direct or specified transitive NON_TEST helper; not an extra census TEST or exhaustive shared closure.",
+      "responsibility": "Copy the full exact semantic key fingerprint, separate from actual hosted profile identity.",
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/program/test_xr_program_source_build.c",
+      "function": "assert_source_build_ok",
+      "line": 996,
+      "end_line": 1010,
+      "body_lf_sha256": "a5d0aee0a406f887ea79355380455511ee0762cfa39915fb657cfe8a4088fd94",
+      "assertion_sites": 1,
+      "classification": "Actual direct or specified transitive NON_TEST helper; not an extra census TEST or exhaustive shared closure.",
+      "responsibility": "Exact Source OK with full actual diagnostic retained on failure; all positive guards remain FAIL on refusal.",
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/program/test_xr_program_source_build.c",
+      "function": "assert_products_equal",
+      "line": 982,
+      "end_line": 994,
+      "body_lf_sha256": "ec9ae13d2d71259635fe95f5bed3da7bddec1aaa43b10a247a9930a5c6cd925b",
+      "assertion_sites": 8,
+      "classification": "Actual direct or specified transitive NON_TEST helper; not an extra census TEST or exhaustive shared closure.",
+      "responsibility": "Eight sites for both Program/artifact owners, equal artifact size/bytes, Program ID and selected entry.",
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/program/test_xr_program_source_build.c",
+      "function": "source_fixture_output_path",
+      "line": 63,
+      "end_line": 65,
+      "body_lf_sha256": "2c5d63f47f4b0e77e5abec0b6831c67cec2056ad89196c34fbd8e0cbd6ec1d9d",
+      "assertion_sites": 0,
+      "classification": "Actual direct or specified transitive NON_TEST helper; not an extra census TEST or exhaustive shared closure.",
+      "responsibility": "Write only the selected original provider_trap_cleanup or child_coroutine_trap_cleanup native fixture.",
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/program/test_xr_program_source_build.c",
+      "function": "stable_id_equal",
+      "line": 357,
+      "end_line": 359,
+      "body_lf_sha256": "b7944eaf320e1112ae477f8c2d4d3513ce35bce7c8c98f0fb4a2b4b227d7f621",
+      "assertion_sites": 0,
+      "classification": "Actual direct or specified transitive NON_TEST helper; not an extra census TEST or exhaustive shared closure.",
+      "responsibility": "Compare all stable identity bytes; names or provider array ordering do not grant authority.",
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/program/test_xr_program_source_build.c",
+      "function": "find_profile_provider",
+      "line": 749,
+      "end_line": 757,
+      "body_lf_sha256": "e406782a95e05ce78f909f815229bd5d4ad14c2e96001c17f2e17aad178ee048",
+      "assertion_sites": 0,
+      "classification": "Actual direct or specified transitive NON_TEST helper; not an extra census TEST or exhaustive shared closure.",
+      "responsibility": "Find actual hosted profile contract by full stable ID; missing or mismatched contract remains NULL.",
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/program/test_xr_program_source_build.c",
+      "function": "program_operation_count",
+      "line": 361,
+      "end_line": 375,
+      "body_lf_sha256": "2d6a79abce8b727c9711e86a5520d525ddefa2b890f5db5e510d4a89d9d5f68d",
+      "assertion_sites": 0,
+      "classification": "Actual direct or specified transitive NON_TEST helper; not an extra census TEST or exhaustive shared closure.",
+      "responsibility": "Count every matching instruction in all original functions/blocks; preserve complete structural operation counts under current common verification.",
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/program/test_xr_program_source_build.c",
+      "function": "program_operation_successor_count",
+      "line": 730,
+      "end_line": 747,
+      "body_lf_sha256": "2a628bc0a344df544557960237142787c8eb1231ca5f87285171cc85ebd440d5",
+      "assertion_sites": 0,
+      "classification": "Actual direct or specified transitive NON_TEST helper; not an extra census TEST or exhaustive shared closure.",
+      "responsibility": "Count exact instruction opcode AND successor cardinality across every original function/block; not only reachable runtime traces.",
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/program/test_xr_program_source_build.c",
+      "function": "provider_trap_clock_probe",
+      "line": 779,
+      "end_line": 786,
+      "body_lf_sha256": "0ac6885b58335a49c703970000784b29978b75deb9a3a1d0bba672a2b86ee570",
+      "assertion_sites": 0,
+      "classification": "Actual direct or specified transitive NON_TEST helper; not an extra census TEST or exhaustive shared closure.",
+      "responsibility": "Reject missing context/output or nonzero phase before event; record one clock event then return FAILED without result write.",
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/program/test_xr_program_source_build.c",
+      "function": "provider_trap_close_probe",
+      "line": 788,
+      "end_line": 800,
+      "body_lf_sha256": "d58a289b7d5af79264f23cfea688e7f2c60d45755109bd1b0e482a035fce8557",
+      "assertion_sites": 0,
+      "classification": "Actual direct or specified transitive NON_TEST helper; not an extra census TEST or exhaustive shared closure.",
+      "responsibility": "After clock refusal require phases1..4 and exact ordered handle, write true and advance event/close counters once; reject wrong phase/context/output/handle.",
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/program/test_xr_program_source_build.c",
+      "function": "child_cleanup_clock_probe",
+      "line": 195,
+      "end_line": 204,
+      "body_lf_sha256": "3a50078af2c301e1e3a4faa44f1f6670a1f91c5eaaccc231f93795087ba4f7d1",
+      "assertion_sites": 0,
+      "classification": "Actual direct or specified transitive NON_TEST helper; not an extra census TEST or exhaustive shared closure.",
+      "responsibility": "Bounded8 event log with actual mode/context/output; record0 sentinel first, refuse without output when selected, otherwise write42000000ns.",
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/program/test_xr_program_source_build.c",
+      "function": "child_cleanup_close_probe",
+      "line": 206,
+      "end_line": 216,
+      "body_lf_sha256": "0311d01bb395430b9904638e00324ebde34abad54c3ce423de3175676e1beb6f",
+      "assertion_sites": 0,
+      "classification": "Actual direct or specified transitive NON_TEST helper; not an extra census TEST or exhaustive shared closure.",
+      "responsibility": "Bounded8 log records actual endpoint before single/dual refusal; successful call returns !false_close. False result is successful provider call, not host refusal.",
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/program/test_xr_program_source_build.c",
+      "function": "child_cleanup_assert_trace",
+      "line": 312,
+      "end_line": 338,
+      "body_lf_sha256": "81be24f81bf4490c852751f4077a44af5b50e7f9c4f54b4a10a418b704bed60b",
+      "assertion_sites": 3,
+      "classification": "Actual direct or specified transitive NON_TEST helper; not an extra census TEST or exhaustive shared closure.",
+      "responsibility": "Three sites plus whole boolean/diagnostic checks enforce count6 on cancellation or7 on resume, clock sentinel0 only on resume, and exact six endpoint sequence even after refusals.",
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/program/xr_program_source_cleanup_checks.inc.c",
+      "function": "child_cleanup_check_vm",
+      "line": 110,
+      "end_line": 133,
+      "body_lf_sha256": "59b937a207be4183775c32fad8b055a45d8d0de72c6aa9486c859610d31bd87d",
+      "assertion_sites": 2,
+      "classification": "Actual direct or specified transitive NON_TEST helper; not an extra census TEST or exhaustive shared closure.",
+      "responsibility": "Two sites build code/create each execution, enumerate every one of17 original modes, reset callback state, step to yield then resume/cancel, free execution before checking outcome/trace. Outer TEST calls twice with the same Instance.",
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/program/xr_program_source_cleanup_checks.inc.c",
+      "function": "child_cleanup_assert_vm",
+      "line": 91,
+      "end_line": 108,
+      "body_lf_sha256": "3985adb9a9863759bea71ddb4d7283a240bab75fdc4637f1ce16709cc3e7054c",
+      "assertion_sites": 10,
+      "classification": "Actual direct or specified transitive NON_TEST helper; not an extra census TEST or exhaustive shared closure.",
+      "responsibility": "Ten sites retain first suspension state1/point0/events0, exact trap code/cancel category or return I64=43; delegates full ordered trace. Old numeric representation requires Root review.",
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/program/xr_program_source_cleanup_checks.inc.c",
+      "function": "assert_aot_provider_trap_cleanup",
+      "line": 504,
+      "end_line": 583,
+      "body_lf_sha256": "ac03840653ce7a765a032ac100c51e6d897601307334168ece6ecc9950b90095",
+      "assertion_sites": 16,
+      "classification": "Actual direct or specified transitive NON_TEST helper; not an extra census TEST or exhaustive shared closure.",
+      "responsibility": "Sixteen sites plus all emitted-C guards prove exact effect shape, verified backend and deterministic typed host C, no automatic main, native refusal trap7/panic0/events5 and independent207 standalone protocol.",
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/program/xr_program_source_cleanup_checks.inc.c",
+      "function": "assert_aot_child_cleanup",
+      "line": 585,
+      "end_line": 701,
+      "body_lf_sha256": "18b60318adb9f5fb5657f292517b44888f8b916d65e9aad84260530c8b7a8eaf",
+      "assertion_sites": 13,
+      "classification": "Actual direct or specified transitive NON_TEST helper; not an extra census TEST or exhaustive shared closure.",
+      "responsibility": "Thirteen sites plus complete emitted-C17-row arrays/control flow prove deterministic native code, exact initial yield, result43/trap7/cancel, and all six close callbacks after every refusal. Actual standalone232 requires all rows.",
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/program/xr_program_source_cleanup_checks.inc.c",
+      "function": "write_probe_typed_host",
+      "line": 414,
+      "end_line": 438,
+      "body_lf_sha256": "1de3cc218ff7c7c7c306c72863611bc68f882ad978187b0c5d99722c398dfc97",
+      "assertion_sites": 1,
+      "classification": "Actual direct or specified transitive NON_TEST helper; not an extra census TEST or exhaustive shared closure.",
+      "responsibility": "One site and complete generated typed call/dispose bridge guard null output/count/typed arguments, emit exactly one typed I64 or bool result only on OK, dispose the pack. Canonical target ABI review cannot restore old token/numeric aliases.",
+      "status": "OPEN"
+    }
+  ],
+  "specified_helper_assertion_sites": 54,
+  "helper_policy": "Twenty-one actual specified direct/transitive NON_TEST helpers preserve complete body identity,54 assertion sites and all boolean/emitted-C guards. Shared helper sites counted once, not executed iterations or exhaustive dependency closure.",
+  "independent_goldens": {
+    "required_positive_Source_status": "OK",
+    "nested_outcome": "Provider refusal trap, not caught ClockFailure and not language panic",
+    "nested_events": 5,
+    "nested_clock_calls": 1,
+    "nested_close_calls": 4,
+    "nested_close_handles": [
+      2147483642,
+      2147483643,
+      2147483646,
+      2147483647
+    ],
+    "nested_executed_branch": "answer passes mode1 and invokes the indirect function; witness/sealed branches are structural responsibilities, not executed by this answer.",
+    "nested_old_native": {
+      "outcome_kind": 1,
+      "trap": 7,
+      "panic_code": 0,
+      "events": 5,
+      "standalone_exit": 207
+    },
+    "child_provider_nanoseconds": 42000000,
+    "child_time_now_milliseconds": 42,
+    "child_returned_i64": 43,
+    "child_first_suspend": {
+      "old_state_id": 1,
+      "old_safepoint_id": 0,
+      "provider_events": 0
+    },
+    "child_original_VM_Instances": 1,
+    "child_VM_matrix_calls_same_Instance": 2,
+    "child_modes_per_matrix": 17,
+    "child_actual_native_modes": 17,
+    "child_original_standalone_exit": 232,
+    "segmented_Source_only": {
+      "source_bytes": 219,
+      "provider_call_operations": 2,
+      "sealed_direct_call_operations": 5,
+      "source_literal_return": 43,
+      "original_runtime": "NOT_RUN_IN_ORIGINAL_TEST"
+    }
+  },
+  "child_modes": [
+    {
+      "ordinal": 0,
+      "cancel": false,
+      "refuse_clock": false,
+      "refused_handles": [
+        0,
+        0
+      ],
+      "false_close": false,
+      "old_expected_kind": "XR_BACKEND_EXECUTION_RETURN",
+      "status": "OPEN",
+      "provider_trace": [
+        0,
+        2147483642,
+        2147483643,
+        2147483638,
+        2147483639,
+        2147483646,
+        2147483647
+      ],
+      "clock_calls": 1,
+      "close_calls": 6,
+      "returned_i64": 43
+    },
+    {
+      "ordinal": 1,
+      "cancel": false,
+      "refuse_clock": true,
+      "refused_handles": [
+        0,
+        0
+      ],
+      "false_close": false,
+      "old_expected_kind": "XR_BACKEND_EXECUTION_TRAP",
+      "status": "OPEN",
+      "provider_trace": [
+        0,
+        2147483642,
+        2147483643,
+        2147483638,
+        2147483639,
+        2147483646,
+        2147483647
+      ],
+      "clock_calls": 1,
+      "close_calls": 6
+    },
+    {
+      "ordinal": 2,
+      "cancel": true,
+      "refuse_clock": false,
+      "refused_handles": [
+        0,
+        0
+      ],
+      "false_close": false,
+      "old_expected_kind": "XR_BACKEND_EXECUTION_CANCELLED",
+      "status": "OPEN",
+      "provider_trace": [
+        2147483642,
+        2147483643,
+        2147483638,
+        2147483639,
+        2147483646,
+        2147483647
+      ],
+      "clock_calls": 0,
+      "close_calls": 6
+    },
+    {
+      "ordinal": 3,
+      "cancel": true,
+      "refuse_clock": false,
+      "refused_handles": [
+        2147483642,
+        0
+      ],
+      "false_close": false,
+      "old_expected_kind": "XR_BACKEND_EXECUTION_TRAP",
+      "status": "OPEN",
+      "provider_trace": [
+        2147483642,
+        2147483643,
+        2147483638,
+        2147483639,
+        2147483646,
+        2147483647
+      ],
+      "clock_calls": 0,
+      "close_calls": 6
+    },
+    {
+      "ordinal": 4,
+      "cancel": true,
+      "refuse_clock": false,
+      "refused_handles": [
+        2147483643,
+        0
+      ],
+      "false_close": false,
+      "old_expected_kind": "XR_BACKEND_EXECUTION_TRAP",
+      "status": "OPEN",
+      "provider_trace": [
+        2147483642,
+        2147483643,
+        2147483638,
+        2147483639,
+        2147483646,
+        2147483647
+      ],
+      "clock_calls": 0,
+      "close_calls": 6
+    },
+    {
+      "ordinal": 5,
+      "cancel": false,
+      "refuse_clock": false,
+      "refused_handles": [
+        2147483642,
+        0
+      ],
+      "false_close": false,
+      "old_expected_kind": "XR_BACKEND_EXECUTION_TRAP",
+      "status": "OPEN",
+      "provider_trace": [
+        0,
+        2147483642,
+        2147483643,
+        2147483638,
+        2147483639,
+        2147483646,
+        2147483647
+      ],
+      "clock_calls": 1,
+      "close_calls": 6
+    },
+    {
+      "ordinal": 6,
+      "cancel": false,
+      "refuse_clock": false,
+      "refused_handles": [
+        2147483643,
+        0
+      ],
+      "false_close": false,
+      "old_expected_kind": "XR_BACKEND_EXECUTION_TRAP",
+      "status": "OPEN",
+      "provider_trace": [
+        0,
+        2147483642,
+        2147483643,
+        2147483638,
+        2147483639,
+        2147483646,
+        2147483647
+      ],
+      "clock_calls": 1,
+      "close_calls": 6
+    },
+    {
+      "ordinal": 7,
+      "cancel": false,
+      "refuse_clock": false,
+      "refused_handles": [
+        0,
+        0
+      ],
+      "false_close": true,
+      "old_expected_kind": "XR_BACKEND_EXECUTION_RETURN",
+      "status": "OPEN",
+      "provider_trace": [
+        0,
+        2147483642,
+        2147483643,
+        2147483638,
+        2147483639,
+        2147483646,
+        2147483647
+      ],
+      "clock_calls": 1,
+      "close_calls": 6,
+      "returned_i64": 43
+    },
+    {
+      "ordinal": 8,
+      "cancel": true,
+      "refuse_clock": false,
+      "refused_handles": [
+        0,
+        0
+      ],
+      "false_close": true,
+      "old_expected_kind": "XR_BACKEND_EXECUTION_CANCELLED",
+      "status": "OPEN",
+      "provider_trace": [
+        2147483642,
+        2147483643,
+        2147483638,
+        2147483639,
+        2147483646,
+        2147483647
+      ],
+      "clock_calls": 0,
+      "close_calls": 6
+    },
+    {
+      "ordinal": 9,
+      "cancel": false,
+      "refuse_clock": false,
+      "refused_handles": [
+        2147483638,
+        0
+      ],
+      "false_close": false,
+      "old_expected_kind": "XR_BACKEND_EXECUTION_TRAP",
+      "status": "OPEN",
+      "provider_trace": [
+        0,
+        2147483642,
+        2147483643,
+        2147483638,
+        2147483639,
+        2147483646,
+        2147483647
+      ],
+      "clock_calls": 1,
+      "close_calls": 6
+    },
+    {
+      "ordinal": 10,
+      "cancel": true,
+      "refuse_clock": false,
+      "refused_handles": [
+        2147483638,
+        0
+      ],
+      "false_close": false,
+      "old_expected_kind": "XR_BACKEND_EXECUTION_TRAP",
+      "status": "OPEN",
+      "provider_trace": [
+        2147483642,
+        2147483643,
+        2147483638,
+        2147483639,
+        2147483646,
+        2147483647
+      ],
+      "clock_calls": 0,
+      "close_calls": 6
+    },
+    {
+      "ordinal": 11,
+      "cancel": false,
+      "refuse_clock": false,
+      "refused_handles": [
+        2147483642,
+        2147483643
+      ],
+      "false_close": false,
+      "old_expected_kind": "XR_BACKEND_EXECUTION_TRAP",
+      "status": "OPEN",
+      "provider_trace": [
+        0,
+        2147483642,
+        2147483643,
+        2147483638,
+        2147483639,
+        2147483646,
+        2147483647
+      ],
+      "clock_calls": 1,
+      "close_calls": 6
+    },
+    {
+      "ordinal": 12,
+      "cancel": true,
+      "refuse_clock": false,
+      "refused_handles": [
+        2147483642,
+        2147483643
+      ],
+      "false_close": false,
+      "old_expected_kind": "XR_BACKEND_EXECUTION_TRAP",
+      "status": "OPEN",
+      "provider_trace": [
+        2147483642,
+        2147483643,
+        2147483638,
+        2147483639,
+        2147483646,
+        2147483647
+      ],
+      "clock_calls": 0,
+      "close_calls": 6
+    },
+    {
+      "ordinal": 13,
+      "cancel": false,
+      "refuse_clock": false,
+      "refused_handles": [
+        2147483639,
+        0
+      ],
+      "false_close": false,
+      "old_expected_kind": "XR_BACKEND_EXECUTION_TRAP",
+      "status": "OPEN",
+      "provider_trace": [
+        0,
+        2147483642,
+        2147483643,
+        2147483638,
+        2147483639,
+        2147483646,
+        2147483647
+      ],
+      "clock_calls": 1,
+      "close_calls": 6
+    },
+    {
+      "ordinal": 14,
+      "cancel": true,
+      "refuse_clock": false,
+      "refused_handles": [
+        2147483639,
+        0
+      ],
+      "false_close": false,
+      "old_expected_kind": "XR_BACKEND_EXECUTION_TRAP",
+      "status": "OPEN",
+      "provider_trace": [
+        2147483642,
+        2147483643,
+        2147483638,
+        2147483639,
+        2147483646,
+        2147483647
+      ],
+      "clock_calls": 0,
+      "close_calls": 6
+    },
+    {
+      "ordinal": 15,
+      "cancel": false,
+      "refuse_clock": false,
+      "refused_handles": [
+        2147483638,
+        2147483639
+      ],
+      "false_close": false,
+      "old_expected_kind": "XR_BACKEND_EXECUTION_TRAP",
+      "status": "OPEN",
+      "provider_trace": [
+        0,
+        2147483642,
+        2147483643,
+        2147483638,
+        2147483639,
+        2147483646,
+        2147483647
+      ],
+      "clock_calls": 1,
+      "close_calls": 6
+    },
+    {
+      "ordinal": 16,
+      "cancel": true,
+      "refuse_clock": false,
+      "refused_handles": [
+        2147483638,
+        2147483639
+      ],
+      "false_close": false,
+      "old_expected_kind": "XR_BACKEND_EXECUTION_TRAP",
+      "status": "OPEN",
+      "provider_trace": [
+        2147483642,
+        2147483643,
+        2147483638,
+        2147483639,
+        2147483646,
+        2147483647
+      ],
+      "clock_calls": 0,
+      "close_calls": 6
+    }
+  ],
+  "child_close_handles": [
+    2147483642,
+    2147483643,
+    2147483638,
+    2147483639,
+    2147483646,
+    2147483647
+  ],
+  "child_mode_declaration": {
+    "path": "tests/unit/program/test_xr_program_source_build.c",
+    "lf_sha256": "125eadeeca3c411f88392e7f6a5bf0504e8449aebf607eb3e46c8461e94c318d",
+    "text": "static const ChildCleanupMode child_cleanup_modes[] = {\n    {false, false, 0, 0, false, XR_BACKEND_EXECUTION_RETURN},\n    {false, true, 0, 0, false, XR_BACKEND_EXECUTION_TRAP},\n    {true, false, 0, 0, false, XR_BACKEND_EXECUTION_CANCELLED},\n    {true, false, INT64_C(2147483642), 0, false, XR_BACKEND_EXECUTION_TRAP},\n    {true, false, INT64_C(2147483643), 0, false, XR_BACKEND_EXECUTION_TRAP},\n    {false, false, INT64_C(2147483642), 0, false, XR_BACKEND_EXECUTION_TRAP},\n    {false, false, INT64_C(2147483643), 0, false, XR_BACKEND_EXECUTION_TRAP},\n    {false, false, 0, 0, true, XR_BACKEND_EXECUTION_RETURN},\n    {true, false, 0, 0, true, XR_BACKEND_EXECUTION_CANCELLED},\n    {false, false, INT64_C(2147483638), 0, false, XR_BACKEND_EXECUTION_TRAP},\n    {true, false, INT64_C(2147483638), 0, false, XR_BACKEND_EXECUTION_TRAP},\n    {false, false, INT64_C(2147483642), INT64_C(2147483643), false, XR_BACKEND_EXECUTION_TRAP},\n    {true, false, INT64_C(2147483642), INT64_C(2147483643), false, XR_BACKEND_EXECUTION_TRAP},\n    {false, false, INT64_C(2147483639), 0, false, XR_BACKEND_EXECUTION_TRAP},\n    {true, false, INT64_C(2147483639), 0, false, XR_BACKEND_EXECUTION_TRAP},\n    {false, false, INT64_C(2147483638), INT64_C(2147483639), false, XR_BACKEND_EXECUTION_TRAP},\n    {true, false, INT64_C(2147483638), INT64_C(2147483639), false, XR_BACKEND_EXECUTION_TRAP},\n};"
+  },
+  "time_unit_source": {
+    "path": "stdlib/time/time.xr",
+    "legacy_commit": "01e6d38401b0f5c8684b64c35a99ac651024c0c1",
+    "producer_commit": "25f4016d6f089169757a90ae11ba537002374711",
+    "lf_sha256": "d2ab56ef604ba773bf9625efd67450d343e2da2b0a9ec2f179d01ab07cc2bc72",
+    "producer_mirror_equal": true,
+    "derivation": "42000000 nanoseconds / 1000000 =42 milliseconds; child()+1 =43."
+  },
+  "original_graph_counts": {
+    "nested": {
+      "provider_call": 3,
+      "existential_reborrow_read": 1,
+      "indirect_invoke_four_successors": 1,
+      "witness_invoke_four_successors": 1,
+      "sealed_invoke_four_successors": 1,
+      "trap": 11,
+      "provider_requirements": 2
+    },
+    "child": {
+      "coroutine_call_sealed": 1,
+      "coroutine_call_sealed_four_successors": 1,
+      "sealed_direct_one_successor": "GT0",
+      "provider_call": "GT0",
+      "provider_requirements": 2
+    }
+  },
+  "current_public_failure_boundary": {
+    "headers": {
+      "src/xir/xxir_call.h": {
+        "commit": "25f4016d6f089169757a90ae11ba537002374711",
+        "lf_sha256": "e7b129f9f7ea67241b0a26adb43d200d343598d61044d169a74e0ebe7b69bb6e",
+        "proof": "Public declarations only; no execution or new producer qualification."
+      },
+      "src/xir/xxir_program.h": {
+        "commit": "25f4016d6f089169757a90ae11ba537002374711",
+        "lf_sha256": "29b1cca997814d0e6242a2406e6c4082be78aa1151b981020a648cc1e676fe92",
+        "proof": "Public declarations only; no execution or new producer qualification."
+      }
+    },
+    "host_service_failure": "XR_XIR_CALL_HOST_ERROR",
+    "rule": "A host service failure is not a language panic; no language handler observes it. Provider context remains host-owned.",
+    "old_trap_projection": "OPEN_ROOT_REPRESENTATION_REVIEW_NO_NUMERIC_ALIAS",
+    "actual_product_execution": "NOT_RUN"
+  },
+  "target_contract_or_representation_review": [
+    "Admit all full1039B/437B/219B positive Sources; do not remove existential/indirect/segmented cleanup or accept arbitrary refusal.",
+    "Preserve provider-failure independence from source typed catch and panic handlers; cleanup still finishes after first/second refusal.",
+    "Map exact old control graphs/common full reverification and current host-error category without restoring old trap7/state/op enum aliases.",
+    "Preserve all17 resume/cancel/closefalse/refusal rows and exact six-close traces; two old VM helper calls are same Instance, not two-Instance proof.",
+    "Keep independent native207 and232 guard protocols, native size/byte determinism and real canonical typed provider ABI; generation-only is insufficient.",
+    "Target needs two detached Instances, Source/session/Checked/Lowered/caller Program death, source-free packet/typed Library, actual native/applicable mixed.",
+    "Guard actual Pipe owner identities through construction/finalization/reclamation on every failure/cancel path; physical0/aggregate counts do not substitute.",
+    "Full FI/resources/safety and partial-owner cleanup remain required; Root owns shared observer/provider/common-product changes."
+  ],
+  "target_lifecycle_proof": "Observe actual stable Pipe inner/spare/outer and applicable RejectedClock object identities through construct/finalize/reclaim on all failure/cancel paths. Provider endpoint integers, allocator addresses, aggregate counts, physical0 or CallEntry.release do not prove object identity. Observer context must outlive every real owner.",
+  "additional_target_requirements": [
+    "Public SourceProduct\u2192Built\u2192Checked\u2192specialization/full reverification\u2192Lowered\u2192Program ownership",
+    "Source-free packet and typed Library declaration provenance/explicit public host authority",
+    "Actual VM/real native/applicable mixed independently expected result, host-error category and complete callback order",
+    "Two independent detached Instances, Source/session/Checked/Lowered/caller Program death",
+    "Every actual active cancel prefix and refusal mode, stale-resume rejection and complete static cleanup segments",
+    "Frozen ordinary execution effects, actual exclusive owner/place protocol and no fake receiver/value transport",
+    "Physical and partial-owner release, actual stable per-object lifetime evidence, fresh full compiler/runtime FI census",
+    "All resource axes and generated-C portability/applicable full safety",
+    "Original native207/232 distinct from scalar43 and current harness0",
+    "Root formal integration/acceptance and last-consumer deletion review"
+  ],
+  "shared_dependency": {
+    "path": "tests/unit/aot/xr_backend_emission_owner.h",
+    "consumer_count": 7,
+    "status": "PRESERVE_SHARED_OWNER",
+    "reason": "Actual AOT helpers use shared backend_emission_resources; other consumers remain."
+  },
+  "handoff": {
+    "report": "build-consumer-evidence/consumer-session-20261009-r1/provider-failure-cleanup-interface-request.json",
+    "raw_sha256": "78031894096ec0ee4faa9e55839c44ad25aa110caf5895e07f966640577e6c71",
+    "related_observer_request": "build-consumer-evidence/consumer-session-20261009-r1/class-lifecycle-interface-request.json",
+    "Root_thread": "01a11f74-a297-7b11-8441-835bde6a3d5f",
+    "formal_acceptance": "PENDING"
+  },
+  "full_FI": "NOT_RUN",
+  "axes": "NOT_RUN",
+  "full_safety": "NOT_RUN",
+  "SourceDelete": "NOT_RUN",
+  "Main": "NOT_RUN",
+  "boundaries": [
+    "Original35+30 outer assertion sites and54 specified helper sites stay OPEN;17 mode rows are preserved requirements, not current product passes.",
+    "Nested source executes indirect mode1 only; witness/sealed branch graph checks are retained without claiming executions.",
+    "Success-returned false close is distinct from host refusal; cleanup always attempts six child/parent closes even after one or two refusals.",
+    "Child VM matrix runs twice in one original Instance; current two-Instance proof is missing.",
+    "Segmented219B source has original Source-only graph checks; its literal43 is not old or current execution evidence.",
+    "Current public HOST_ERROR declaration is a boundary for Root mapping, not proof of original program execution.",
+    "Old trap7/native outcome/state/effect/bridge representations need reviewed current mapping without legacy ABI aliases.",
+    "No actual provider/native/allocator/lifecycle event or physical release is observed by this map; no qualification/retirement/deletion claim."
+  ]
+}

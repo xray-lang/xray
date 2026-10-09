@@ -15,11 +15,11 @@
     "shared_emission_owner_consumers": 7
   },
   "reference_counts": {
-    "source_with_digest_reference": 95,
-    "source_without_digest_reference": 13,
+    "source_with_digest_reference": 97,
+    "source_without_digest_reference": 11,
     "other_with_digest_reference": 40,
     "other_without_digest_reference": 120,
-    "digest_reference_values": 165,
+    "digest_reference_values": 167,
     "source_inventory_projections": 42
   },
   "mapping_inputs": [
@@ -502,6 +502,10 @@
     {
       "path": "tests/unit/xir/product_consumers/source_original_process_clock_provider_obligations.json",
       "lf_sha256": "0a26b2adb9ffde41ddf5f9c1b82b453cc5493c2a952954fdbb428c762ac85827"
+    },
+    {
+      "path": "tests/unit/xir/product_consumers/source_original_provider_failure_cleanup_obligations.json",
+      "lf_sha256": "a7bd8b8912bfc9f3381ec4f0e9e0538d79f422aa6a33ff83f047b095e0b4e45a"
     },
     {
       "path": "tests/unit/xir/product_consumers/source_original_retained_roots_obligations.json",
@@ -2549,7 +2553,13 @@
       "body_lf_sha256": "d64408a2c61ed4f268eb7c3a125f6f766e029b62237fbb00d5479fef208fe4ea",
       "status": "OPEN",
       "inventory_projection": null,
-      "mapping_references": []
+      "mapping_references": [
+        {
+          "mapping": "tests/unit/xir/product_consumers/source_original_provider_failure_cleanup_obligations.json",
+          "pointer": "/legacy/0/body_lf_sha256",
+          "binding": "exact_path_name_body"
+        }
+      ]
     },
     {
       "legacy_path": "tests/unit/program/test_xr_program_source_build.c",
@@ -2557,7 +2567,13 @@
       "body_lf_sha256": "873677e0613c4fb1aeeb6aed4e633a046436c917877008562e275da67360e324",
       "status": "OPEN",
       "inventory_projection": null,
-      "mapping_references": []
+      "mapping_references": [
+        {
+          "mapping": "tests/unit/xir/product_consumers/source_original_provider_failure_cleanup_obligations.json",
+          "pointer": "/legacy/1/body_lf_sha256",
+          "binding": "exact_path_name_body"
+        }
+      ]
     },
     {
       "legacy_path": "tests/unit/program/test_xr_program_source_build.c",
