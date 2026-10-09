@@ -1,0 +1,562 @@
+{
+  "schema": 1,
+  "family": "original_exchanged_borrows",
+  "legacy_base_commit": "01e6d38401b0f5c8684b64c35a99ac651024c0c1",
+  "status": "OPEN",
+  "retired": 0,
+  "replacement_gates": [],
+  "result": "STATIC_ORIGINAL_EXCHANGED_BORROWS_MAP_ONLY",
+  "product_execution": "NOT_RUN_BY_THIS_MAP",
+  "producer": "25f4016d6f089169757a90ae11ba537002374711",
+  "identity": "Checked25/semantic67/Value22/Call28/Program29",
+  "producer_scope": "Fixed authorized25f4 only; no private Root producer or heavy window adopted.",
+  "legacy": [
+    {
+      "name": "test_cross_block_module_array_borrow",
+      "legacy_path": "tests/unit/program/xr_program_module_operation_checks.inc.c",
+      "legacy_line": 293,
+      "body_lf_sha256": "6a71fe6226eb0eb10e6b5574c7f53e9f159f6909bf899103de41e2d598fa5932",
+      "assertion_sites": 1,
+      "loop_sites": 1,
+      "status": "OPEN",
+      "replacement_gates": [],
+      "note": "Function census preserves its whole body; sites do not count executed loop iterations."
+    },
+    {
+      "name": "test_module_borrow_after_exchange",
+      "legacy_path": "tests/unit/program/xr_program_module_operation_checks.inc.c",
+      "legacy_line": 308,
+      "body_lf_sha256": "19671cc049aa5f1a761b014904844807e7da705cd887de011677e3b6de0c75d5",
+      "assertion_sites": 4,
+      "loop_sites": 1,
+      "status": "OPEN",
+      "replacement_gates": [],
+      "note": "Function census preserves its whole body; sites do not count executed loop iterations."
+    },
+    {
+      "name": "test_projected_borrow_after_parent_exchange",
+      "legacy_path": "tests/unit/program/xr_program_module_operation_checks.inc.c",
+      "legacy_line": 431,
+      "body_lf_sha256": "5d2633f1193dd083c8fe8ef54db04242b3e6b68721774593c3c5e6b81e0e9331",
+      "assertion_sites": 4,
+      "loop_sites": 1,
+      "status": "OPEN",
+      "replacement_gates": [],
+      "note": "Function census preserves its whole body; sites do not count executed loop iterations."
+    }
+  ],
+  "responsibility_mapping": [
+    {
+      "legacy_name": "test_cross_block_module_array_borrow",
+      "legacy_path": "tests/unit/program/xr_program_module_operation_checks.inc.c",
+      "status": "OPEN",
+      "original_lines": [
+        293,
+        306
+      ],
+      "CHECK_sites": [
+        {
+          "line": 296,
+          "expression": "xr_program_module_array_borrow_fixture_write(variant, &artifact) == XR_PROGRAM_BUILD_OK",
+          "status": "OPEN",
+          "target_consumer": "ROOT_CURRENT_REPRESENTATION_AND_QUALIFIED_PRODUCER_PENDING"
+        }
+      ],
+      "responsibility": "All4 complete module-array variants: unmutated cross-block/loop legal, exchanged/dropped borrow VALUE_USE refusal and loop-mutated root ROOT refusal. Preserve actual argument/provenance and exact two-call diagnostic helper; do not execute loop3 as a terminating positive runtime."
+    },
+    {
+      "legacy_name": "test_module_borrow_after_exchange",
+      "legacy_path": "tests/unit/program/xr_program_module_operation_checks.inc.c",
+      "status": "OPEN",
+      "original_lines": [
+        308,
+        429
+      ],
+      "CHECK_sites": [
+        {
+          "line": 411,
+          "expression": "xr_core_ir_program_build(&fixture.input, &program, diagnostic, sizeof(diagnostic)) ==\n              XR_PROGRAM_BUILD_OK",
+          "status": "OPEN",
+          "target_consumer": "ROOT_CURRENT_REPRESENTATION_AND_QUALIFIED_PRODUCER_PENDING"
+        },
+        {
+          "line": 413,
+          "expression": "xr_program_write(program, &artifact, diagnostic, sizeof(diagnostic)) ==\n              XR_PROGRAM_BUILD_OK",
+          "status": "OPEN",
+          "target_consumer": "ROOT_CURRENT_REPRESENTATION_AND_QUALIFIED_PRODUCER_PENDING"
+        },
+        {
+          "line": 422,
+          "expression": "status == (released ? XR_PROGRAM_VERIFY_SEMANTIC_REJECTED : XR_PROGRAM_VERIFY_OK)",
+          "status": "OPEN",
+          "target_consumer": "ROOT_CURRENT_REPRESENTATION_AND_QUALIFIED_PRODUCER_PENDING"
+        },
+        {
+          "line": 424,
+          "expression": "semantic.kind == XR_PROGRAM_DIAGNOSTIC_VALUE_USE",
+          "status": "OPEN",
+          "target_consumer": "ROOT_CURRENT_REPRESENTATION_AND_QUALIFIED_PRODUCER_PENDING"
+        }
+      ],
+      "responsibility": "All6 complete String module/local/alias-equivalent-place variants: actual exchange returns old owner; copy before old-owner release remains legal, release-before-copy rejects exact SEMANTIC_REJECTED/VALUE_USE. Module transfer and final local initial-owner drop remain distinct."
+    },
+    {
+      "legacy_name": "test_projected_borrow_after_parent_exchange",
+      "legacy_path": "tests/unit/program/xr_program_module_operation_checks.inc.c",
+      "status": "OPEN",
+      "original_lines": [
+        431,
+        561
+      ],
+      "CHECK_sites": [
+        {
+          "line": 546,
+          "expression": "built == XR_PROGRAM_BUILD_OK",
+          "status": "OPEN",
+          "target_consumer": "ROOT_CURRENT_REPRESENTATION_AND_QUALIFIED_PRODUCER_PENDING"
+        },
+        {
+          "line": 547,
+          "expression": "xr_program_write(program, &artifact, NULL, 0u) == XR_PROGRAM_BUILD_OK",
+          "status": "OPEN",
+          "target_consumer": "ROOT_CURRENT_REPRESENTATION_AND_QUALIFIED_PRODUCER_PENDING"
+        },
+        {
+          "line": 554,
+          "expression": "status == (released ? XR_PROGRAM_VERIFY_SEMANTIC_REJECTED : XR_PROGRAM_VERIFY_OK)",
+          "status": "OPEN",
+          "target_consumer": "ROOT_CURRENT_REPRESENTATION_AND_QUALIFIED_PRODUCER_PENDING"
+        },
+        {
+          "line": 556,
+          "expression": "diagnostic.kind == XR_PROGRAM_DIAGNOSTIC_VALUE_USE",
+          "status": "OPEN",
+          "target_consumer": "ROOT_CURRENT_REPRESENTATION_AND_QUALIFIED_PRODUCER_PENDING"
+        }
+      ],
+      "responsibility": "All5 complete aggregate-parent projection variants: old field borrow follows returned old parent owner before/after exchange; old-parent drop invalidates copy/load.0/2 legal,1/3/4 exact SEMANTIC_REJECTED/VALUE_USE; full initial/replacement aggregates and String owners retained."
+    }
+  ],
+  "outer_CHECK_sites": 9,
+  "original_private_helpers": [
+    {
+      "path": "tests/unit/program/test_xr_program_verify.c",
+      "function": "key",
+      "line": 109,
+      "end_line": 111,
+      "body_lf_sha256": "027a211b78e0cfbd6b296804e37236848a76cc1980981a0d6a49a6f42d3f2e13",
+      "CHECK_sites": 0,
+      "status": "OPEN",
+      "classification": "Specified actual full dependency helper; not an extra census TEST or deletion closure.",
+      "CHECK_bindings": []
+    },
+    {
+      "path": "tests/unit/program/test_xr_program_verify.c",
+      "function": "validate_ok",
+      "line": 159,
+      "end_line": 174,
+      "body_lf_sha256": "94fe0ef4e0242acb810c12621ae1fe73a9887ef668f15ddc6c67ed645494f62b",
+      "CHECK_sites": 2,
+      "status": "OPEN",
+      "classification": "Specified actual full dependency helper; not an extra census TEST or deletion closure.",
+      "CHECK_bindings": [
+        {
+          "line": 171,
+          "expression": "status == XR_PROGRAM_VERIFY_OK",
+          "status": "OPEN"
+        },
+        {
+          "line": 172,
+          "expression": "program != NULL",
+          "status": "OPEN"
+        }
+      ]
+    },
+    {
+      "path": "tests/unit/program/test_xr_program_verify.c",
+      "function": "expect_semantic_reject_at",
+      "line": 176,
+      "end_line": 198,
+      "body_lf_sha256": "44cf0fb15bea156743a1c0e35b0be8ee844aa1af55c8653ed9361cf781c045b8",
+      "CHECK_sites": 6,
+      "status": "OPEN",
+      "classification": "Specified actual full dependency helper; not an extra census TEST or deletion closure.",
+      "CHECK_bindings": [
+        {
+          "line": 190,
+          "expression": "first_status == XR_PROGRAM_VERIFY_SEMANTIC_REJECTED",
+          "status": "OPEN"
+        },
+        {
+          "line": 191,
+          "expression": "program == NULL",
+          "status": "OPEN"
+        },
+        {
+          "line": 192,
+          "expression": "first.kind == expected",
+          "status": "OPEN"
+        },
+        {
+          "line": 195,
+          "expression": "second_status == first_status",
+          "status": "OPEN"
+        },
+        {
+          "line": 196,
+          "expression": "memcmp(&first, &second, sizeof(first)) == 0",
+          "status": "OPEN"
+        },
+        {
+          "line": 197,
+          "expression": "program == NULL",
+          "status": "OPEN"
+        }
+      ]
+    },
+    {
+      "path": "tests/unit/program/xr_program_module_fixture.h",
+      "function": "xr_program_module_fixture_init",
+      "line": 33,
+      "end_line": 70,
+      "body_lf_sha256": "915b0162cae236eb17682feee9fdab215ad820ec56798cdf4a94d727b2b270f0",
+      "CHECK_sites": 0,
+      "status": "OPEN",
+      "classification": "Specified actual full dependency helper; not an extra census TEST or deletion closure.",
+      "CHECK_bindings": []
+    },
+    {
+      "path": "tests/unit/program/xr_program_module_fixture.h",
+      "function": "xr_program_module_fixture_add_slots",
+      "line": 72,
+      "end_line": 84,
+      "body_lf_sha256": "c15d44f569b9012a8af5d995ad18dcfe4c18e23a75894282aa1b88ba11ada0f9",
+      "CHECK_sites": 0,
+      "status": "OPEN",
+      "classification": "Specified actual full dependency helper; not an extra census TEST or deletion closure.",
+      "CHECK_bindings": []
+    },
+    {
+      "path": "tests/unit/program/xr_program_module_fixture.h",
+      "function": "xr_program_module_array_borrow_fixture_write",
+      "line": 819,
+      "end_line": 888,
+      "body_lf_sha256": "571b050cec01b14dd0fb187363b54c87acc9a48966258a09f655933c28b38c3a",
+      "CHECK_sites": 0,
+      "status": "OPEN",
+      "classification": "Specified actual full dependency helper; not an extra census TEST or deletion closure.",
+      "CHECK_bindings": []
+    }
+  ],
+  "specified_helper_CHECK_sites": 8,
+  "original_input_files": [
+    {
+      "path": "tests/unit/program/xr_program_module_operation_checks.inc.c",
+      "whole_file_lf_sha256": "2e44190bafd86cc66cd28f630737dc90e61726d58ecd6df02b9d000159c7124c",
+      "physical_raw_sha256": "d38746d5124bb16d36dd21c436a6f3dbca416bc43ed4c9498a2d0fd03e244bca",
+      "git_base_equal": true,
+      "role": "Complete original direct input/helper container, including all type/value/operation tables and allocation hooks; not an exhaustive dependency closure."
+    },
+    {
+      "path": "tests/unit/program/test_xr_program_verify.c",
+      "whole_file_lf_sha256": "ec4b93f13bfab2aa3d4b8f8773dd5c1118a0c682ed6f8304fead515f90402802",
+      "physical_raw_sha256": "a39922500c0943c034fafcda3a82b67e511ea658f453f6c0c3204f7719de1817",
+      "git_base_equal": true,
+      "role": "Complete original direct input/helper container, including all type/value/operation tables and allocation hooks; not an exhaustive dependency closure."
+    },
+    {
+      "path": "tests/unit/program/xr_program_module_fixture.h",
+      "whole_file_lf_sha256": "65db69b47101e348f8eaea39185ea91f12f795fbf451364f2c8f75c1035920b2",
+      "physical_raw_sha256": "68d57ccdc6cb4f92f1571b3215cf437b7f0cdcd3ce7b5d3f4007f01978aedac0",
+      "git_base_equal": true,
+      "role": "Complete original direct input/helper container, including all type/value/operation tables and allocation hooks; not an exhaustive dependency closure."
+    }
+  ],
+  "input_policy": "Complete3 original bodies,6 specified helpers and3 whole direct containers match original01e6 Git. All actual type/field/module/constant/owner/projection/branch/drop inputs remain; not exhaustive external dependency closure.",
+  "cross_block_array_matrix": [
+    {
+      "variant": 0,
+      "mutated": false,
+      "loop": false,
+      "original_verify": "VERIFY_OK",
+      "original_diagnostic": null,
+      "responsibility": "Borrow crosses block; second block only reads length and returns; no exchange.",
+      "status": "OPEN"
+    },
+    {
+      "variant": 1,
+      "mutated": true,
+      "loop": false,
+      "original_verify": "SEMANTIC_REJECTED",
+      "original_diagnostic": "VALUE_USE",
+      "responsibility": "Second block obtains alias module place, exchanges array, drops old owner, then reads forwarded borrow.",
+      "status": "OPEN"
+    },
+    {
+      "variant": 2,
+      "mutated": true,
+      "loop": true,
+      "original_verify": "SEMANTIC_REJECTED",
+      "original_diagnostic": "ROOT",
+      "responsibility": "Second block reads forwarded borrow before exchange/drop then loops to itself; mutation changes borrowed root across backedge.",
+      "status": "OPEN"
+    },
+    {
+      "variant": 3,
+      "mutated": false,
+      "loop": true,
+      "original_verify": "VERIFY_OK",
+      "original_diagnostic": null,
+      "responsibility": "Borrow is read and forwarded around self loop without owner mutation; admission only, not terminating runtime execution.",
+      "status": "OPEN"
+    }
+  ],
+  "string_exchange_matrix": [
+    {
+      "variant": 0,
+      "local": false,
+      "alias": false,
+      "released_before_copy": false,
+      "original_verify": "VERIFY_OK",
+      "original_diagnostic": null,
+      "owner_sequence": "exchange -> borrow copy -> old-owner drop",
+      "status": "OPEN"
+    },
+    {
+      "variant": 1,
+      "local": false,
+      "alias": false,
+      "released_before_copy": true,
+      "original_verify": "SEMANTIC_REJECTED",
+      "original_diagnostic": "VALUE_USE",
+      "owner_sequence": "exchange -> old-owner drop -> borrow copy",
+      "status": "OPEN"
+    },
+    {
+      "variant": 2,
+      "local": false,
+      "alias": true,
+      "released_before_copy": false,
+      "original_verify": "VERIFY_OK",
+      "original_diagnostic": null,
+      "owner_sequence": "exchange -> borrow copy -> old-owner drop",
+      "status": "OPEN"
+    },
+    {
+      "variant": 3,
+      "local": false,
+      "alias": true,
+      "released_before_copy": true,
+      "original_verify": "SEMANTIC_REJECTED",
+      "original_diagnostic": "VALUE_USE",
+      "owner_sequence": "exchange -> old-owner drop -> borrow copy",
+      "status": "OPEN"
+    },
+    {
+      "variant": 4,
+      "local": true,
+      "alias": true,
+      "released_before_copy": false,
+      "original_verify": "VERIFY_OK",
+      "original_diagnostic": null,
+      "owner_sequence": "exchange -> borrow copy -> old-owner drop",
+      "status": "OPEN"
+    },
+    {
+      "variant": 5,
+      "local": true,
+      "alias": true,
+      "released_before_copy": true,
+      "original_verify": "SEMANTIC_REJECTED",
+      "original_diagnostic": "VALUE_USE",
+      "owner_sequence": "exchange -> old-owner drop -> borrow copy",
+      "status": "OPEN"
+    }
+  ],
+  "projected_parent_matrix": [
+    {
+      "variant": 0,
+      "original_verify": "VERIFY_OK",
+      "original_diagnostic": null,
+      "released": false,
+      "original_static_instruction_order": [
+        "initial String",
+        "initial aggregate",
+        "parent local place",
+        "project field0",
+        "load borrow",
+        "replacement String",
+        "replacement aggregate",
+        "parent exchange",
+        "borrow copy",
+        "old aggregate drop",
+        "copy drop",
+        "initial aggregate drop",
+        "return"
+      ],
+      "status": "OPEN"
+    },
+    {
+      "variant": 1,
+      "original_verify": "SEMANTIC_REJECTED",
+      "original_diagnostic": "VALUE_USE",
+      "released": true,
+      "original_static_instruction_order": [
+        "initial String",
+        "initial aggregate",
+        "parent local place",
+        "project field0",
+        "load borrow",
+        "replacement String",
+        "replacement aggregate",
+        "parent exchange",
+        "old aggregate drop",
+        "borrow copy",
+        "copy drop",
+        "initial aggregate drop",
+        "return"
+      ],
+      "status": "OPEN"
+    },
+    {
+      "variant": 2,
+      "original_verify": "VERIFY_OK",
+      "original_diagnostic": null,
+      "released": false,
+      "original_static_instruction_order": [
+        "initial String",
+        "initial aggregate",
+        "parent local place",
+        "project field0",
+        "replacement String",
+        "replacement aggregate",
+        "parent exchange",
+        "load borrow",
+        "borrow copy",
+        "old aggregate drop",
+        "copy drop",
+        "initial aggregate drop",
+        "return"
+      ],
+      "status": "OPEN"
+    },
+    {
+      "variant": 3,
+      "original_verify": "SEMANTIC_REJECTED",
+      "original_diagnostic": "VALUE_USE",
+      "released": true,
+      "original_static_instruction_order": [
+        "initial String",
+        "initial aggregate",
+        "parent local place",
+        "project field0",
+        "replacement String",
+        "replacement aggregate",
+        "parent exchange",
+        "load borrow",
+        "old aggregate drop",
+        "borrow copy",
+        "copy drop",
+        "initial aggregate drop",
+        "return"
+      ],
+      "status": "OPEN"
+    },
+    {
+      "variant": 4,
+      "original_verify": "SEMANTIC_REJECTED",
+      "original_diagnostic": "VALUE_USE",
+      "released": true,
+      "original_static_instruction_order": [
+        "initial String",
+        "initial aggregate",
+        "parent local place",
+        "project field0",
+        "replacement String",
+        "replacement aggregate",
+        "parent exchange",
+        "old aggregate drop",
+        "load borrow",
+        "borrow copy",
+        "copy drop",
+        "initial aggregate drop",
+        "return"
+      ],
+      "status": "OPEN"
+    }
+  ],
+  "complete_inputs": {
+    "array": "Whole four-module diamond, two slots per module; base mutable affine explicitly-copyable Array<I64> local100. Empty real array owner initialized into module slot; actual borrow forwarded as block value, optional alias exchange and real old-owner drop; loop preserves same actual argument.",
+    "string": "Whole four-module diamond, base mutable String slot or actual local place. Constant kept is4 bytes. Two logical places refer to same module slot or same local initial owner, conditional alias exchange produces a distinct old owner. Copy/drop reorder determines legality; module initial owner is transferred into slot, local initial owner is explicitly dropped at end.",
+    "projected": "Affine explicitly-copyable aggregate local100 has one String field; full8-byte snapshot literal. Actual initial aggregate owns initial String, local parent place projects field0, real replacement aggregate exchange returns old aggregate. Variants relocate load/copy/drop to test projected provenance before and after exchange and actual old-parent destruction."
+  },
+  "independent_original_oracles": {
+    "positive_helper": "validate_ok requires exact VERIFY_OK and non-NULL owned result, not arbitrary success metadata.",
+    "negative_helper": "expect_semantic_reject_at verifies twice: exact SEMANTIC_REJECTED, NULL result, exact expected kind, equal second status and complete memcmp of diagnostic struct, NULL result again. Caller __LINE__ macro preserved.",
+    "cross_block": "0/3 legal;1 exact VALUE_USE;2 exact ROOT. Loop3 is admitted without executing a nonterminating loop.",
+    "string": "Even0/2/4 legal old borrow while old owner alive; odd1/3/5 exact SEMANTIC_REJECTED/VALUE_USE after actual old-owner release.",
+    "projected": "0/2 legal;1/3/4 exact SEMANTIC_REJECTED/VALUE_USE. Variant2 load after exchange remains tied to still-live old aggregate;4 load after old aggregate drop must reject."
+  },
+  "registration": [
+    {
+      "function": "test_cross_block_module_array_borrow",
+      "path": "tests/unit/program/test_xr_program_verify.c",
+      "line": 7370,
+      "status": "OPEN"
+    },
+    {
+      "function": "test_module_borrow_after_exchange",
+      "path": "tests/unit/program/test_xr_program_verify.c",
+      "line": 7369,
+      "status": "OPEN"
+    },
+    {
+      "function": "test_projected_borrow_after_parent_exchange",
+      "path": "tests/unit/program/test_xr_program_verify.c",
+      "line": 7371,
+      "status": "OPEN"
+    }
+  ],
+  "static_order_policy": "Instruction-order matrices are independent static reconstruction of original array edits, not executing the product or claiming current runtime legality.",
+  "target_contract_or_representation_review": {
+    "status": "OPEN; no current stable replacement representation or SourceProduct projection API adopted.",
+    "Cell": "Module mutable state uses one real Cell<T> owner with logical T; full SOURCE/query/Checked/Lowered/Program import and ordinary/module-root authority stay intact. No direct-slot fallback, temporary Cell, or writeback on success.",
+    "provenance": "Actual returned old owner and parent projection determine borrowed-value lifetime, including alias-equivalent places and loop backedges. This old logical-value borrow is not automatically a ref parameter or current Cell exclusive-loan token. Current normative representations and diagnostics need explicit Root mapping; no name/address substitute and no permanent borrowed-to-owned copy that erases negative obligations.",
+    "exclusive": "If current representation uses controlled ref/place loans, actual owner identity protects duplicate aliases and cross-frame exclusivity; all throw/panic/OOM/LIMIT/cancel/stop/close exits release the same loan, noescape and GO bans remain independent.",
+    "lifecycle": "Need genuine stable object construct/finalize/reclaim on old/replacement/parent owners and independently qualified current paths; allocator addresses, physical balance or CallEntry.release are not per-object evidence.",
+    "historical_maps": "Prior25f place/ref maps retain their historical narrow PASS/actual FAIL boundaries. Their writeback wording is not authorization to retain a fallback after the newer frozen Cell cutover."
+  },
+  "target_owner_proof": "Actual module mutable owner is the frozen unique Cell<T>; logical borrowed value and any controlled ref/place loan have their own correctly derived owner provenance. Alias-equivalent places, block arguments and loop backedges do not create fresh authority. Old returned owner preserves legal borrow until real final release; parent projection retains actual old parent provenance, and every negative stays effective after owner destruction. Full common verification, typed Source/Library/packet, specialization, Lowered/Program, detached producers and applicable two-Instance VM/native/mixed must be freshly qualified. All real allocation/resource/cancel/failure prefixes and stable per-object construct/finalize/reclaim remain independent requirements.",
+  "shared_dependencies": {
+    "paths": [
+      "tests/unit/program/xr_program_module_operation_checks.inc.c",
+      "tests/unit/program/test_xr_program_verify.c",
+      "tests/unit/program/xr_program_module_fixture.h"
+    ],
+    "status": "PRESERVE_ALL_SHARED_INPUT_AND_OWNER_CONTAINERS",
+    "policy": "Each shared module/probe/verifier owner has other active consumers; emission owners7 unchanged. No native emission or deletion permission in this batch."
+  },
+  "representation_boundaries": [
+    "Original format/admission tests do not run any VM/native/mixed function, FI, stable object event or physical-release census.",
+    "Loop3 positive is admission of a real unmutated loop, not a terminating runtime result.",
+    "Old logical String/aggregate borrow is not automatically a current Cell exclusive-ref token; normative mapping stays OPEN, no aliases or copy substitute erasing negative obligations.",
+    "The newer single Cell owner cutover prohibits direct-slot/writeback fallback; previous25f maps retain only their historical qualification scopes.",
+    "Raw CoreIR ids/opcodes/ownership/diagnostics are original duties, not permission to preserve old wire or ABI compatibility."
+  ],
+  "handoff": {
+    "report": "build-consumer-evidence/consumer-session-20261009-r1/exchanged-borrows-interface-request.json",
+    "raw_sha256": "60a7d6c6f66b4858c53b87ef31eb41c612ac08300b410089e3450f0438a527f6",
+    "Root_thread": "01a11f74-a297-7b11-8441-835bde6a3d5f",
+    "formal_acceptance": "PENDING"
+  },
+  "full_FI": "NOT_RUN",
+  "axes": "NOT_RUN",
+  "full_safety": "NOT_RUN",
+  "SourceDelete": "NOT_RUN",
+  "Main": "NOT_RUN",
+  "boundaries": [
+    "All9 outer and8 helper CHECK sites and15 variant responsibilities remain OPEN; retired0.",
+    "No actual current product/native/provider/allocation/lifecycle evidence from this static map.",
+    "Fresh current stable producer, complete representation mapping/FI/axes/safety/lifecycle/formal acceptance/last-consumer audit remain required."
+  ]
+}
