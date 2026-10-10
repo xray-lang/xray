@@ -346,15 +346,66 @@ static void cell_runtime_fault_tree(XrXirProgram *program, const uint32_t *entri
     }
     cell_runtime_observer_free(events);
 }
+static void cell_runtime_call_other_limits(const CellRuntimeCost *cost,
+    const XrXirInstanceConfig *config) {
+    for (unsigned pass=0;pass<2;++pass) {
+        const XrXirDomainBudgetStats *b=&cost->budgets[pass];
+        CHECK(b->bound && b->requested_bytes < b->requested_limit &&
+            b->requested_call_bytes < b->requested_call_limit && b->work < b->work_limit);
+        CHECK(b->metadata_peak < b->metadata_limit && cost->values[pass].peak_bytes < config->value_limit);
+    }
+}
+/* A frame segment may use less than its normal reserve when a live cap is
+ * tight. Measure complete executions until exact and minus-one separate. */
+static uint64_t cell_runtime_call_boundary(XrXirProgram *program, const uint32_t *entries,
+    unsigned mode, unsigned pass, const CellRuntimeCost *baseline) {
+    uint64_t exact = baseline->budgets[pass].call_peak;
+    CHECK(exact > 1);
+    XrXirInstanceConfig config;
+    CHECK(xr_xir_instance_config_init(&config, sizeof(config)) == XR_XIR_CALL_READY);
+    config.call_limit = exact;
+    cell_runtime_fault_count = 0;
+    CellRuntimeCost measured = cell_runtime_operation(program, entries, mode, &config, pass, false);
+    CHECK(measured.complete && measured.failure == XR_XIR_CALL_READY && !measured.hits);
+    cell_runtime_call_other_limits(&measured, &config);
+    CHECK(measured.budgets[pass].call_limit == exact && measured.budgets[pass].call_peak <= exact);
+    exact = measured.budgets[pass].call_peak;
+    CHECK((baseline->budgets[pass].call_peak - exact) % XR_XIR_CALL_STATE_ALIGNMENT == 0);
+    /* These complete fixtures keep their Call table size. Every smaller
+     * frame segment changes the observed peak by at least one alignment. */
+    uint64_t remaining = baseline->budgets[pass].call_peak / XR_XIR_CALL_STATE_ALIGNMENT + 1;
+    for (uint64_t probes = 1; remaining; ++probes, --remaining) {
+        CHECK(exact > 1);
+        config.call_limit = exact - 1;
+        cell_runtime_fault_count = 0;
+        measured = cell_runtime_operation(program, entries, mode, &config, pass, false);
+        CHECK(!measured.hits && measured.budgets[pass].call_peak <= config.call_limit);
+        cell_runtime_call_other_limits(&measured, &config);
+        if (measured.failure == XR_XIR_CALL_LIMIT) {
+            printf("CELL_RUNTIME_CALL_BOUNDARY mode=%u pass=%u original=%llu exact=%llu probes=%llu minus1=LIMIT fullRun=1 physical=0/0\n",
+                mode,pass,(unsigned long long)baseline->budgets[pass].call_peak,
+                (unsigned long long)exact,(unsigned long long)probes);
+            return exact;
+        }
+        CHECK(measured.complete && measured.failure == XR_XIR_CALL_READY);
+        CHECK(measured.budgets[pass].call_limit == config.call_limit &&
+            measured.budgets[pass].call_peak > 1 && measured.budgets[pass].call_peak < exact);
+        CHECK((exact - measured.budgets[pass].call_peak) % XR_XIR_CALL_STATE_ALIGNMENT == 0);
+        exact = measured.budgets[pass].call_peak;
+    }
+    CHECK(false); return 0;
+}
 static void cell_runtime_axes(XrXirProgram *program, const uint32_t *entries, unsigned mode,
     const CellRuntimeCost *baseline) {
     /* The first three axes cover cumulative value/call/work. The remaining
      * controls independently enforce the original live value/call/metadata caps. */
-    for (unsigned pass=0;pass<2;++pass) for (unsigned axis=0;axis<6;++axis) for (unsigned minus=0;minus<2;++minus) {
+    for (unsigned pass=0;pass<2;++pass) for (unsigned axis=0;axis<6;++axis) {
         uint64_t exact = axis == 0 ? baseline->budgets[pass].requested_bytes :
             axis == 1 ? baseline->budgets[pass].requested_call_bytes : axis == 2 ? baseline->budgets[pass].work :
-            axis == 3 ? baseline->values[pass].peak_bytes : axis == 4 ? baseline->budgets[pass].call_peak : baseline->budgets[pass].metadata_peak;
+            axis == 3 ? baseline->values[pass].peak_bytes : axis == 4 ?
+                cell_runtime_call_boundary(program,entries,mode,pass,baseline) : baseline->budgets[pass].metadata_peak;
         CHECK(exact > 1);
+        for (unsigned minus=0;minus<2;++minus) {
         XrXirInstanceConfig config;
         CHECK(xr_xir_instance_config_init(&config, sizeof(config)) == XR_XIR_CALL_READY);
         if (axis == 0) config.requested_value_limit = exact - minus;
@@ -365,10 +416,30 @@ static void cell_runtime_axes(XrXirProgram *program, const uint32_t *entries, un
         else config.metadata_limit = exact - minus;
         cell_runtime_fault_count = 0;
         CellRuntimeCost cost = cell_runtime_operation(program, entries, mode, &config, pass, false);
+        if (cost.failure != (minus ? XR_XIR_CALL_LIMIT : XR_XIR_CALL_READY)) {
+            fprintf(stderr,"CELL_AXIS_FIRST mode=%u pass=%u axis=%u minus=%u exact=%llu actual=%u complete=%u sites=%zu hits=%zu outputs=%u\n",
+                mode,pass,axis,minus,(unsigned long long)exact,(unsigned)cost.failure,
+                (unsigned)cost.complete,cost.sites,cost.hits,cost.outputs);
+            for (unsigned owner=0;owner<2;++owner) {
+                const XrXirDomainBudgetStats *b=&cost.budgets[owner];
+                fprintf(stderr,"CELL_AXIS_OWNER pass=%u call_limit=%llu call_peak=%llu baseline_peak=%llu call_live=%llu requested=%llu work=%llu metadata_peak=%llu value_peak=%llu\n",
+                    owner,(unsigned long long)b->call_limit,(unsigned long long)b->call_peak,
+                    (unsigned long long)baseline->budgets[owner].call_peak,(unsigned long long)b->call_live,
+                    (unsigned long long)b->requested_call_bytes,(unsigned long long)b->work,
+                    (unsigned long long)b->metadata_peak,(unsigned long long)cost.values[owner].peak_bytes);
+            }
+            for (size_t i=0;i<cell_runtime_event_count;++i) {
+                const CellRuntimeAllocationEvent *e=&cell_runtime_events[i];
+                fprintf(stderr,"CELL_AXIS_ALLOC ordinal=%zu bytes=%zu kind=%u phase=%u instance=%u role=%u entry=%u injected=%u file=%s line=%u\n",
+                    e->ordinal,e->bytes,e->kind,e->phase,e->instance,e->role,e->entry,
+                    (unsigned)e->injected,e->file,e->line);
+            }
+        }
         CHECK(cost.failure == (minus ? XR_XIR_CALL_LIMIT : XR_XIR_CALL_READY));
         CHECK(!cost.hits);
         printf("CELL_RUNTIME_AXIS mode=%u pass=%u axis=%u minus=%u exact=%llu failure=%u physical=0/0\n",
             mode, pass, axis, minus, (unsigned long long)exact, cost.failure);
+        }
     }
 }
 static void cell_runtime_preparation(XrXirProgram *program, const uint32_t *entries, unsigned mode,

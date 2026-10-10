@@ -180,7 +180,11 @@ static void root_initialization_sticky(void) {
     XrXirDomainBudgetStats after = xr_xir_domain_budget_stats(instance->domain);
     CHECK(before.requested_bytes == after.requested_bytes && before.requested_call_bytes == after.requested_call_bytes &&
         before.work == after.work && before.metadata_live == after.metadata_live && before.call_live == after.call_live);
-    CHECK(xr_xir_instance_free(instance) == XR_XIR_CALL_READY);
+    CHECK(xr_xir_task_executor_completion_status(instance->executor) == XR_XIR_CALL_OUTPUT_ERROR);
+    XrXirCallStatus freed = xr_xir_instance_free(instance);
+    fprintf(stderr, "initialization accepted OUTPUT_ERROR free=%u expected=%u\n",
+        (unsigned)freed, (unsigned)XR_XIR_CALL_OUTPUT_ERROR);
+    CHECK(freed == XR_XIR_CALL_OUTPUT_ERROR);
     xr_xir_compile_program_drop(program); CHECK(!runtime_live && !runtime_bytes);
     puts("initialization FAILED stays sticky, provider recovery creates no activation and resets no budget; physical=0/0");
 }

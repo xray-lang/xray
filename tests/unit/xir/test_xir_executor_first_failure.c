@@ -48,6 +48,11 @@ static void root_control(uint64_t work_limit,bool retry) {
     XrXirInstanceResult first=finish_root(instance);
     XrXirCallStatus expected=work_limit==19?XR_XIR_CALL_LIMIT:XR_XIR_CALL_OUTPUT_ERROR;
     CHECK(first.outcome.status==expected && instance->executor->first_failure==expected);
+    if(work_limit==UINT64_C(128000000) && !retry) {
+        CHECK(!instance->budget.exhausted && instance->executor->shutdown_status==XR_XIR_CALL_READY);
+        CHECK(!xr_xir_call_cleanup_incomplete(instance->call));
+        CHECK(output.count==2 && output.values[0]==7 && output.values[1]==6);
+    }
     binding_rejections(instance->call);
     XrXirDomainBudgetStats before=xr_xir_domain_budget_stats(domain);
     if(retry) {
@@ -82,5 +87,6 @@ int main(void) {
         sizeof(XrXirTaskExecutor),_Alignof(XrXirTaskExecutor),offsetof(XrXirTaskExecutor,first_failure),
         sizeof(XrXirCall),sizeof(CallFrame),(sizeof(CallFrame)+15u)&~(size_t)15u,sizeof(XirTask));
     root_control(28,false);root_control(19,false);root_control(128000000,true);
+    root_control(UINT64_C(128000000),false);
     library_compile_observer_free();return 0;
 }

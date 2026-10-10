@@ -195,8 +195,12 @@ static bool pending_case(uint32_t mode,unsigned order) {
             XrXirValue empty={0},sentinel={XR_XIR_I64,0,91};
             XrXirCallStatus empty_status=xr_xir_instance_take_result(instances[i],&empty);
             XrXirCallStatus occupied_status=xr_xir_instance_take_result(instances[i],&sentinel);
-            CHECK(empty_status==(mode==PENDING_AWAIT?XR_XIR_CALL_OUTPUT_ERROR:XR_XIR_CALL_BAD_STATE));
-            CHECK(occupied_status==(mode==PENDING_AWAIT?XR_XIR_CALL_OUTPUT_ERROR:XR_XIR_CALL_BAD_ARGUMENT));
+            XrXirCallStatus expected_empty=mode==PENDING_CANCEL_BEFORE?XR_XIR_CALL_BAD_STATE:XR_XIR_CALL_OUTPUT_ERROR;
+            XrXirCallStatus expected_occupied=mode==PENDING_CANCEL_BEFORE?XR_XIR_CALL_BAD_ARGUMENT:XR_XIR_CALL_OUTPUT_ERROR;
+            fprintf(stderr,"pending take mode%u instance%u empty%u/%u occupied%u/%u\n",
+                mode,i,empty_status,expected_empty,occupied_status,expected_occupied);
+            CHECK(empty_status==expected_empty);
+            CHECK(occupied_status==expected_occupied);
             CHECK(!empty.type && !empty.reserved && !empty.payload);
             CHECK(sentinel.type==XR_XIR_I64 && !sentinel.reserved && sentinel.payload==91);
             XrXirInstanceResult cached=xr_xir_instance_poll_bounded(instances[i],UINT64_MAX);
@@ -227,9 +231,15 @@ static bool pending_case(uint32_t mode,unsigned order) {
         if(oracle && mode!=PENDING_CLEANUP_FAIL)oracle=observed_call && !xr_xir_call_cleanup_incomplete(observed_call);
         valid=valid && oracle;
     }
-    XrXirCallStatus expected_free=mode==PENDING_AWAIT?XR_XIR_CALL_OUTPUT_ERROR:XR_XIR_CALL_READY;
-    CHECK(xr_xir_instance_free(instances[order])==expected_free);
-    CHECK(xr_xir_instance_free(instances[1-order])==expected_free);
+    /* Only prior cancellation, WRITE_STREAM false, or an authenticated
+     * successful retry leaves no accepted host failure in this root epoch. */
+    XrXirCallStatus expected_free=mode==PENDING_CANCEL_BEFORE || mode==PENDING_WRITE_STREAM ||
+        mode==PENDING_RETRY?XR_XIR_CALL_READY:XR_XIR_CALL_OUTPUT_ERROR;
+    XrXirCallStatus free0=xr_xir_instance_free(instances[order]);
+    XrXirCallStatus free1=xr_xir_instance_free(instances[1-order]);
+    fprintf(stderr,"pending free mode%u order%u actual%u/%u expected%u\n",mode,order,free0,free1,expected_free);
+    CHECK(free0==expected_free);
+    CHECK(free1==expected_free);
     CHECK(!runtime_live && !runtime_bytes);
     XrCompileResourceStats stats=library_compile_stats(&owner.context);CHECK(stats.live_bytes==owner.baseline.live_bytes);
     library_compile_owner_drop(&owner);CHECK(!source_program_compile_live && !source_program_compile_bytes);

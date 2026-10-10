@@ -57,7 +57,8 @@ static void task_closed_results(void) {
     XrXirDomain *domain = NULL; CHECK(xr_xir_domain_new(1048576,&domain) == XR_XIR_VALUE_OK);
     XrXirTaskExecutorConfig config = task_config(&fixture,domain);
     XrXirTaskExecutor *executor = NULL; CHECK(task_test_executor_new(&config,&executor) == XR_XIR_CALL_READY);
-    XrXirCallRequest request = {3,NULL,0}; XrXirValue task = {0}, alias = {0};
+    XrXirCallRequest request = {.entry = 3, .arguments = NULL, .count = 0,
+        .cell_role = (XrXirCellRoleResolver)0, .cell_context = NULL}; XrXirValue task = {0}, alias = {0};
     CHECK(xr_xir_task_executor_spawn(executor,(XrXirType)256,&request,&task) == XR_XIR_CALL_READY);
     CHECK(xr_xir_value_copy(&task,&alias) == XR_XIR_VALUE_OK);
     task_fixture_drop(&fixture); CHECK(!fixture.witness.code_releases);
@@ -102,7 +103,8 @@ static void task_closed_string(void) {
     XrXirDomain *domain = NULL; CHECK(xr_xir_domain_new(1048576, &domain) == XR_XIR_VALUE_OK);
     XrXirTaskExecutorConfig config = task_config(&fixture, domain);
     XrXirTaskExecutor *executor = NULL; CHECK(task_test_executor_new(&config, &executor) == XR_XIR_CALL_READY);
-    XrXirCallRequest request = {4, NULL, 0}; XrXirValue task = {0}, alias = {0};
+    XrXirCallRequest request = {.entry = 4, .arguments = NULL, .count = 0,
+        .cell_role = (XrXirCellRoleResolver)0, .cell_context = NULL}; XrXirValue task = {0}, alias = {0};
     CHECK(xr_xir_task_executor_spawn(executor, (XrXirType)257, &request, &task) == XR_XIR_CALL_READY);
     task_fixture_drop(&fixture); CHECK(!fixture.witness.code_releases);
     CHECK(xr_xir_task_executor_poll(executor, 1) == XR_XIR_CALL_READY); /* yield */
@@ -148,7 +150,8 @@ static void task_closed_incomplete(void) {
             handle = task_core_task_value(task);
             CHECK(atomic_load_explicit(&task->state, memory_order_acquire) == XIR_TASK_PREPARING);
         } else {
-            XrXirValue argument = {XR_XIR_I64, 0, 21}; XrXirCallRequest request = {1, &argument, 1};
+            XrXirValue argument = {XR_XIR_I64, 0, 21}; XrXirCallRequest request = {.entry = 1, .arguments = &argument, .count = 1,
+                .cell_role = (XrXirCellRoleResolver)0, .cell_context = NULL};
             CHECK(xr_xir_task_executor_spawn(executor, (XrXirType)256, &request, &handle) == XR_XIR_CALL_READY);
             task = (XirTask *)object_pointer(&handle);
             CHECK(atomic_load_explicit(&task->state, memory_order_acquire) == XIR_TASK_PENDING);

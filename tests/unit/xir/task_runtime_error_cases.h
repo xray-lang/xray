@@ -82,7 +82,8 @@ static void task_runtime_errors(void) {
         XrXirDomain *domain = NULL; CHECK(xr_xir_domain_new(1048576, &domain) == XR_XIR_VALUE_OK);
         XrXirTaskExecutorConfig config = task_config(&f.base, domain);
         XrXirTaskExecutor *executor = NULL; CHECK(task_test_executor_new(&config, &executor) == XR_XIR_CALL_READY);
-        XrXirCallRequest request = {1, NULL, 0}; XrXirValue handle = {0};
+        XrXirCallRequest request = {.entry = 1, .arguments = NULL, .count = 0,
+            .cell_role = (XrXirCellRoleResolver)0, .cell_context = NULL}; XrXirValue handle = {0};
         CHECK(xr_xir_task_executor_spawn(executor, (XrXirType)256, &request, &handle) == XR_XIR_CALL_READY);
         while (xr_xir_task_executor_poll(executor, 1) == XR_XIR_CALL_READY) { }
         XrXirCallResult result = {0};
@@ -123,7 +124,8 @@ static XrXirCallStatus task_error_operation(TaskErrorFixture *f, uint64_t work_l
         status = task_test_executor_new(&config, &executor);
     }
     if (status == XR_XIR_CALL_READY) {
-        XrXirCallRequest request = {1, NULL, 0};
+        XrXirCallRequest request = {.entry = 1, .arguments = NULL, .count = 0,
+            .cell_role = (XrXirCellRoleResolver)0, .cell_context = NULL};
         status = xr_xir_task_executor_spawn(executor, (XrXirType)256, &request, &handle);
     }
     if (status == XR_XIR_CALL_READY) {
@@ -171,7 +173,8 @@ static void task_error_work_boundary(void) {
         XrXirDomain *domain = NULL; CHECK(xr_xir_domain_new(1048576, &domain) == XR_XIR_VALUE_OK);
         XrXirTaskExecutorConfig config = task_config(&f.base, domain); config.work_limit = normal.work - minus;
         XrXirTaskExecutor *executor = NULL; CHECK(task_test_executor_new(&config, &executor) == XR_XIR_CALL_READY);
-        XrXirCallRequest request = {1, NULL, 0}; XrXirValue handle = {0};
+        XrXirCallRequest request = {.entry = 1, .arguments = NULL, .count = 0,
+            .cell_role = (XrXirCellRoleResolver)0, .cell_context = NULL}; XrXirValue handle = {0};
         CHECK(xr_xir_task_executor_spawn(executor, (XrXirType)256, &request, &handle) == XR_XIR_CALL_READY);
         while (xr_xir_task_executor_poll(executor, 1) == XR_XIR_CALL_READY) { }
         CHECK(xr_xir_task_executor_free(executor, NULL) == XR_XIR_CALL_READY);

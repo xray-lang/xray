@@ -32,7 +32,8 @@ static void task_terminal_threads(void) {
     XrXirTaskExecutorConfig config = task_config(&fixture, domain);
     XrXirTaskExecutor *executor = NULL;
     CHECK(task_test_executor_new(&config, &executor) == XR_XIR_CALL_READY);
-    XrXirValue handle = {0}; XrXirCallRequest request = {4, NULL, 0};
+    XrXirValue handle = {0}; XrXirCallRequest request = {.entry = 4, .arguments = NULL, .count = 0,
+        .cell_role = (XrXirCellRoleResolver)0, .cell_context = NULL};
     CHECK(xr_xir_task_executor_spawn(executor, (XrXirType)257, &request, &handle) == XR_XIR_CALL_READY);
     _Atomic(uint32_t) ready = 0;
     TaskThreadCase cases[] = {{&handle, &ready, 0}, {&handle, &ready, 0}};

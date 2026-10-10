@@ -49,11 +49,13 @@ static void task_wait_normal(void) {
     config.entries = entries; config.entry_count = 7;
     config.admission = (XrXirValueAdmission){fixture.arena, domain, NULL, NULL, 1000000, 1048576};
     XrXirTaskExecutor *executor = NULL; CHECK(task_test_executor_new(&config, &executor) == XR_XIR_CALL_READY);
-    XrXirCallRequest subject = {3, NULL, 0};
+    XrXirCallRequest subject = {.entry = 3, .arguments = NULL, .count = 0,
+        .cell_role = (XrXirCellRoleResolver)0, .cell_context = NULL};
     CHECK(xr_xir_task_executor_spawn(executor, (XrXirType)256, &subject, &witness.subject) == XR_XIR_CALL_READY);
     XrXirValue markers[2] = {{XR_XIR_I64, 0, 1}, {XR_XIR_I64, 0, 2}}, handles[2] = {{0}};
     for (uint32_t i = 0; i < 2; ++i) {
-        XrXirCallRequest request = {1, &markers[i], 1};
+        XrXirCallRequest request = {.entry = 1, .arguments = &markers[i], .count = 1,
+            .cell_role = (XrXirCellRoleResolver)0, .cell_context = NULL};
         CHECK(xr_xir_task_executor_spawn(executor, (XrXirType)256, &request, &handles[i]) == XR_XIR_CALL_READY);
     }
     CHECK(xr_xir_task_executor_poll(executor, 3) == XR_XIR_CALL_READY && witness.waits == 2);
@@ -92,9 +94,11 @@ static void task_wait_cancel(void) {
     config.entries = entries; config.entry_count = 7;
     config.admission = (XrXirValueAdmission){fixture.arena, domain, NULL, NULL, 1000000, 1048576};
     XrXirTaskExecutor *executor = NULL; CHECK(task_test_executor_new(&config, &executor) == XR_XIR_CALL_READY);
-    XrXirCallRequest subject = {3, NULL, 0};
+    XrXirCallRequest subject = {.entry = 3, .arguments = NULL, .count = 0,
+        .cell_role = (XrXirCellRoleResolver)0, .cell_context = NULL};
     CHECK(xr_xir_task_executor_spawn(executor, (XrXirType)256, &subject, &witness.subject) == XR_XIR_CALL_READY);
-    XrXirValue marker = {XR_XIR_I64, 0, 1}, handle = {0}; XrXirCallRequest request = {1, &marker, 1};
+    XrXirValue marker = {XR_XIR_I64, 0, 1}, handle = {0}; XrXirCallRequest request = {.entry = 1, .arguments = &marker, .count = 1,
+        .cell_role = (XrXirCellRoleResolver)0, .cell_context = NULL};
     CHECK(xr_xir_task_executor_spawn(executor, (XrXirType)256, &request, &handle) == XR_XIR_CALL_READY);
     CHECK(xr_xir_task_executor_poll(executor, 2) == XR_XIR_CALL_READY);
     XirTask *waiter = (XirTask *)(uintptr_t)handle.payload;
@@ -121,12 +125,14 @@ static void task_wait_identity(void) {
         config.admission = (XrXirValueAdmission){fixture.arena, domain, NULL, NULL, 1000000, 1048576};
         XrXirTaskExecutor *executor = NULL, *other = NULL;
         CHECK(task_test_executor_new(&config, &executor) == XR_XIR_CALL_READY);
-        XrXirValue marker = {XR_XIR_I64, 0, 1}, handle = {0}; XrXirCallRequest request = {1, &marker, 1};
+        XrXirValue marker = {XR_XIR_I64, 0, 1}, handle = {0}; XrXirCallRequest request = {.entry = 1, .arguments = &marker, .count = 1,
+            .cell_role = (XrXirCellRoleResolver)0, .cell_context = NULL};
         CHECK(xr_xir_task_executor_spawn(executor, (XrXirType)256, &request, &handle) == XR_XIR_CALL_READY);
         if (!mode) CHECK(xr_xir_value_copy(&handle, &witness.subject) == XR_XIR_VALUE_OK);
         else {
             CHECK(task_test_executor_new(&config, &other) == XR_XIR_CALL_READY && other->generation != executor->generation);
-            XrXirCallRequest subject = {3, NULL, 0};
+            XrXirCallRequest subject = {.entry = 3, .arguments = NULL, .count = 0,
+                .cell_role = (XrXirCellRoleResolver)0, .cell_context = NULL};
             CHECK(xr_xir_task_executor_spawn(other, (XrXirType)256, &subject, &witness.subject) == XR_XIR_CALL_READY);
         }
         while (xr_xir_task_executor_poll(executor, 1) == XR_XIR_CALL_READY) { }
@@ -157,11 +163,13 @@ static XrXirCallStatus task_wait_operation(TaskFixture *fixture, TaskWaitCosts l
         status = task_test_executor_new(&config, &executor);
     }
     if (status == XR_XIR_CALL_READY) {
-        XrXirCallRequest subject = {3, NULL, 0};
+        XrXirCallRequest subject = {.entry = 3, .arguments = NULL, .count = 0,
+            .cell_role = (XrXirCellRoleResolver)0, .cell_context = NULL};
         status = xr_xir_task_executor_spawn(executor, (XrXirType)256, &subject, &witness.subject);
     }
     if (status == XR_XIR_CALL_READY) {
-        XrXirValue marker = {XR_XIR_I64, 0, 1}; XrXirCallRequest waiter = {1, &marker, 1};
+        XrXirValue marker = {XR_XIR_I64, 0, 1}; XrXirCallRequest waiter = {.entry = 1, .arguments = &marker, .count = 1,
+            .cell_role = (XrXirCellRoleResolver)0, .cell_context = NULL};
         status = xr_xir_task_executor_spawn(executor, (XrXirType)256, &waiter, &handle);
     }
     if (status == XR_XIR_CALL_READY) {
@@ -223,9 +231,11 @@ static void task_wait_retain_boundary(void) {
         config.entries = entries; config.entry_count = 7;
         config.admission = (XrXirValueAdmission){fixture.arena, domain, NULL, NULL, 1000000, 1048576};
         XrXirTaskExecutor *executor = NULL; CHECK(task_test_executor_new(&config, &executor) == XR_XIR_CALL_READY);
-        XrXirCallRequest subject = {3, NULL, 0};
+        XrXirCallRequest subject = {.entry = 3, .arguments = NULL, .count = 0,
+            .cell_role = (XrXirCellRoleResolver)0, .cell_context = NULL};
         CHECK(xr_xir_task_executor_spawn(executor, (XrXirType)256, &subject, &witness.subject) == XR_XIR_CALL_READY);
-        XrXirValue marker = {XR_XIR_I64, 0, 1}, handle = {0}; XrXirCallRequest request = {1, &marker, 1};
+        XrXirValue marker = {XR_XIR_I64, 0, 1}, handle = {0}; XrXirCallRequest request = {.entry = 1, .arguments = &marker, .count = 1,
+            .cell_role = (XrXirCellRoleResolver)0, .cell_context = NULL};
         CHECK(xr_xir_task_executor_spawn(executor, (XrXirType)256, &request, &handle) == XR_XIR_CALL_READY);
         XirTask *target = (XirTask *)(uintptr_t)witness.subject.payload;
         if (!phase) {
@@ -266,7 +276,9 @@ static void task_wait_closed_cycle(void) {
     config.admission = (XrXirValueAdmission){fixture.arena, domain, NULL, NULL, 1000000, 1048576};
     XrXirTaskExecutor *executor = NULL; CHECK(task_test_executor_new(&config, &executor) == XR_XIR_CALL_READY);
     XrXirValue marker = {XR_XIR_I64, 0, 1}, handles[2] = {{0}};
-    XrXirCallRequest first = {1, &marker, 1}, second = {3, NULL, 0};
+    XrXirCallRequest first = {.entry = 1, .arguments = &marker, .count = 1,
+        .cell_role = (XrXirCellRoleResolver)0, .cell_context = NULL}, second = {.entry = 3, .arguments = NULL, .count = 0,
+        .cell_role = (XrXirCellRoleResolver)0, .cell_context = NULL};
     CHECK(xr_xir_task_executor_spawn(executor, (XrXirType)256, &first, &handles[0]) == XR_XIR_CALL_READY);
     CHECK(xr_xir_task_executor_spawn(executor, (XrXirType)256, &second, &handles[1]) == XR_XIR_CALL_READY);
     CHECK(xr_xir_value_copy(&handles[1], &witnesses[0].subject) == XR_XIR_VALUE_OK);
@@ -308,7 +320,8 @@ static void task_wait_string(void) {
         config.entries = entries; config.entry_count = 7;
         config.admission = (XrXirValueAdmission){fixture.arena, domain, NULL, NULL, 1000000, 1048576};
         XrXirTaskExecutor *executor = NULL; CHECK(task_test_executor_new(&config, &executor) == XR_XIR_CALL_READY);
-        XrXirCallRequest subject = {4, NULL, 0};
+        XrXirCallRequest subject = {.entry = 4, .arguments = NULL, .count = 0,
+            .cell_role = (XrXirCellRoleResolver)0, .cell_context = NULL};
         CHECK(xr_xir_task_executor_spawn(executor, (XrXirType)257, &subject, &witness.subject) == XR_XIR_CALL_READY);
         XirTask *target = (XirTask *)(uintptr_t)witness.subject.payload;
         XirObject *string = NULL; uint32_t references = 0;
@@ -321,7 +334,8 @@ static void task_wait_string(void) {
         }
         XrXirValue marker = {0}, handle = {0};
         CHECK(xr_xir_string_new(domain, "", 0, &marker) == XR_XIR_VALUE_OK);
-        XrXirCallRequest request = {2, &marker, 1};
+        XrXirCallRequest request = {.entry = 2, .arguments = &marker, .count = 1,
+            .cell_role = (XrXirCellRoleResolver)0, .cell_context = NULL};
         CHECK(xr_xir_task_executor_spawn(executor, (XrXirType)257, &request, &handle) == XR_XIR_CALL_READY);
         xr_xir_value_drop(&marker);
         CHECK(xr_xir_task_executor_poll(executor, saturated ? 1 : 2) == XR_XIR_CALL_READY);

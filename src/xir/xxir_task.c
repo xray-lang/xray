@@ -105,10 +105,11 @@ static void task_core_record_failure(XrXirTaskExecutor *executor, XirTaskActivat
     task_core_record_status(executor, failure);
 }
 static XrXirCallStatus task_core_completion_status(const XrXirTaskExecutor *executor) {
-    if (executor->shutdown_status != XR_XIR_CALL_READY)
-        return executor->first_failure != XR_XIR_CALL_READY ? executor->first_failure : executor->shutdown_status;
-    if (executor->budget->exhausted)
-        return executor->first_failure != XR_XIR_CALL_READY ? executor->first_failure : XR_XIR_CALL_LIMIT;
+    /* A Call-local rejection need not exhaust the shared ledger. Its
+     * authenticated first failure still belongs to this root epoch. */
+    if (executor->first_failure != XR_XIR_CALL_READY) return executor->first_failure;
+    if (executor->shutdown_status != XR_XIR_CALL_READY) return executor->shutdown_status;
+    if (executor->budget->exhausted) return XR_XIR_CALL_LIMIT;
     return XR_XIR_CALL_READY;
 }
 XR_FUNC XrXirCallStatus xr_xir_task_executor_completion_status(const XrXirTaskExecutor *executor) {

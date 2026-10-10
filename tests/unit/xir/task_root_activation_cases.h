@@ -27,7 +27,8 @@ static XrXirAction task_root_entry(XrXirCallView *view) {
     CHECK(!xr_xir_task_executor_view_member(witness->executor, &forged, &child));
     if (!(*phase)++) {
         XrXirValue argument = {XR_XIR_I64, 0, 21};
-        XrXirCallRequest request = {1, &argument, 1};
+        XrXirCallRequest request = {.entry = 1, .arguments = &argument, .count = 1,
+            .cell_role = (XrXirCellRoleResolver)0, .cell_context = NULL};
         CHECK(xr_xir_task_executor_spawn_from_view(witness->executor, view, (XrXirType)256,
             &request, &witness->child) == XR_XIR_CALL_READY);
         CHECK(xr_xir_task_executor_spawn_from_view(witness->executor, &forged, (XrXirType)256,
@@ -47,7 +48,8 @@ static XrXirCall *task_root_call(TaskFixture *fixture, XrXirDomain *domain,
     config.entries = entries; config.entry_count = 7; config.accounting = accounting;
     config.byte_limit = fixture->budget.byte_limit; config.poll_limit = fixture->budget.resume_limit;
     config.admission = (XrXirValueAdmission){fixture->arena, domain, NULL, NULL, 1000000, 1048576};
-    XrXirCallRequest request = {3, NULL, 0}; XrXirCall *call = NULL;
+    XrXirCallRequest request = {.entry = 3, .arguments = NULL, .count = 0,
+        .cell_role = (XrXirCellRoleResolver)0, .cell_context = NULL}; XrXirCall *call = NULL;
     CHECK(xr_xir_call_new_budgeted(&config, &request, &fixture->budget, &call) == XR_XIR_CALL_READY);
     return call;
 }
@@ -130,9 +132,11 @@ static void task_wait_panic_protocol(void) {
         config.entries = entries; config.entry_count = 7;
         config.admission = (XrXirValueAdmission){fixture.arena, domain, NULL, NULL, 1000000, 1048576};
         XrXirTaskExecutor *executor = NULL; CHECK(task_test_executor_new(&config, &executor) == XR_XIR_CALL_READY);
-        XrXirCallRequest subject = {3, NULL, 0};
+        XrXirCallRequest subject = {.entry = 3, .arguments = NULL, .count = 0,
+            .cell_role = (XrXirCellRoleResolver)0, .cell_context = NULL};
         CHECK(xr_xir_task_executor_spawn(executor, (XrXirType)256, &subject, &witness.subject) == XR_XIR_CALL_READY);
-        XrXirValue marker = {XR_XIR_I64, 0, 1}, handle = {0}; XrXirCallRequest request = {1, &marker, 1};
+        XrXirValue marker = {XR_XIR_I64, 0, 1}, handle = {0}; XrXirCallRequest request = {.entry = 1, .arguments = &marker, .count = 1,
+            .cell_role = (XrXirCellRoleResolver)0, .cell_context = NULL};
         CHECK(xr_xir_task_executor_spawn(executor, (XrXirType)256, &request, &handle) == XR_XIR_CALL_READY);
         while (xr_xir_task_executor_poll(executor, 1) == XR_XIR_CALL_READY) { }
         XrXirCallResult outcome = {0};

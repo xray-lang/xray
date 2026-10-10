@@ -86,7 +86,9 @@ static void task_cross_domain_case(unsigned mode, unsigned order) {
     CHECK(task_test_executor_new(&config, &executor) == XR_XIR_CALL_READY);
     XrXirValue tasks[2] = {{0}}, aliases[2] = {{0}};
     XrXirValue argument = {XR_XIR_I64, 0, 21};
-    XrXirCallRequest scalar = {1, &argument, 1}, string = {4, NULL, 0};
+    XrXirCallRequest scalar = {.entry = 1, .arguments = &argument, .count = 1,
+        .cell_role = (XrXirCellRoleResolver)0, .cell_context = NULL}, string = {.entry = 4, .arguments = NULL, .count = 0,
+        .cell_role = (XrXirCellRoleResolver)0, .cell_context = NULL};
     CHECK(xr_xir_task_executor_spawn(executor, (XrXirType)256, &scalar, &tasks[0]) == XR_XIR_CALL_READY);
     CHECK(xr_xir_task_executor_spawn(executor, (XrXirType)257, &string, &tasks[1]) == XR_XIR_CALL_READY);
     size_t binding_releases = 0;

@@ -69,7 +69,9 @@ static bool role_case(uint32_t kind,XrXirOutputStatus provider_status,
             XrXirValue empty={0},sentinel={XR_XIR_I64,0,91};
             XrXirCallStatus take_empty=xr_xir_instance_take_result(instances[i],&empty);
             XrXirCallStatus take_occupied=xr_xir_instance_take_result(instances[i],&sentinel);
-            oracle=oracle && take_empty==(kind==ROLE_TASK?expected_status:XR_XIR_CALL_BAD_STATE) && take_occupied==(kind==ROLE_TASK?expected_status:XR_XIR_CALL_BAD_ARGUMENT);
+            fprintf(stderr,"origin take kind%u raw%u instance%u empty%u occupied%u expected%u\n",
+                kind,(unsigned)provider_status,i,take_empty,take_occupied,expected_status);
+            oracle=oracle && take_empty==expected_status && take_occupied==expected_status;
             oracle=oracle && !empty.type && !empty.reserved && !empty.payload && sentinel.type==XR_XIR_I64 && !sentinel.reserved && sentinel.payload==91;
             XrXirInstanceResult repeated=xr_xir_instance_poll_bounded(instances[i],UINT64_MAX);
             oracle=oracle && repeated.epoch==1 && repeated.outcome.status==expected_status;
@@ -102,8 +104,11 @@ static bool role_case(uint32_t kind,XrXirOutputStatus provider_status,
         fprintf(stderr," initialCall%u finalCall%u epoch%llu frontierCount%u oracle=%s\n",(unsigned)expected_status,(unsigned)result.outcome.status,(unsigned long long)result.epoch,observed_count-frontier_begin,oracle?"PASS":"FAIL");
         valid=valid && oracle;
     }
+    /* Accepted protocol faults remain until a successful root rebind.
+     * Execution-failure retries and WRITE_STREAM false finish normally. */
+    XrXirCallStatus expected_free=!execution_failure && kind!=ROLE_WRITE?expected_status:XR_XIR_CALL_READY;
     XrXirCallStatus free0=xr_xir_instance_free(instances[order]),free1=xr_xir_instance_free(instances[1-order]);
-    valid=valid && free0==XR_XIR_CALL_READY && free1==XR_XIR_CALL_READY;
+    valid=valid && free0==expected_free && free1==expected_free;
     CHECK(!runtime_live && !runtime_bytes);
     XrCompileResourceStats fees=library_compile_stats(&owner.context);CHECK(fees.live_bytes==owner.baseline.live_bytes);
     library_compile_owner_drop(&owner);CHECK(!source_program_compile_live && !source_program_compile_bytes);
