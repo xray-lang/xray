@@ -273,8 +273,19 @@ static XrXirStatus effect_invocation_return_origins(EffectInvocationFlow *flow,
         for (uint32_t p=0;p<child->producer_count;++p) {
             if (!xir_compile_work(owner->work,2)) return XR_XIR_BUDGET;
             if (child->producers[p].value!=returned) continue;
-            XrXirStatus status=effect_invocation_origin_bit(flow,destination,child->producers[p].site);
+            const EffectInvocationProducer *fact=&child->producers[p];
+            XrXirStatus status=effect_invocation_origin_bit(flow,destination,fact->site);
             if (status!=XR_XIR_OK) return status;
+            if (fact->atom) {
+                uint32_t word=0,bit=0;
+                status=effect_invocation_producer_column(owner,&flow->basis,fact->site,fact->atom,&word,&bit);
+                if (status!=XR_XIR_OK) return status;
+                if (!xir_compile_work(owner->work,3)) return XR_XIR_BUDGET;
+                uint64_t *column=flow->rows+(size_t)destination*flow->basis.fn_words+word;
+                uint64_t joined=*column|(UINT64_C(1)<<bit);
+                if (joined!=*column) flow->changed=true;
+                *column=joined;
+            }
         }
     }
     return XR_XIR_OK;

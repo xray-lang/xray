@@ -23,11 +23,13 @@ typedef struct EffectInvocationCause {
  * its natural alignment without padding or another allocation owner. */
 _Static_assert((2*sizeof(EffectInvocationCause))%_Alignof(uint64_t)==0,
     "Invocation cause rows preserve word alignment");
-/* A fact identifies one genuine zero-capture site at a real SSA or return
- * vertex. Descending causes cannot manufacture a producer in an SCC. */
+/* One fact identifies a genuine site or one bit of its real Cell capture
+ * relation at an SSA or return vertex. Descending authentic causes cannot
+ * manufacture either identity or an environment in an unrooted SCC. */
 typedef struct EffectInvocationProducer {
     uint32_t value,site,next_node,next_value,edge,instruction;
     uint64_t distance;
+    uint32_t atom;
 } EffectInvocationProducer;
 typedef struct EffectInvocationNode {
     uint32_t root,body,parameter_count;
@@ -77,6 +79,9 @@ typedef struct EffectInvocationOwner {
 
 static XrXirStatus effect_root_seed(const XrXirModule *module,XrXirEffects *effects,
     uint32_t function,uint32_t instruction,const XrXirCompileContext *work);
+
+static XrXirStatus effect_invocation_producer_column(const EffectInvocationOwner *owner,
+    const EffectInvocationBasis *basis,uint32_t site,uint32_t atom,uint32_t *word,uint32_t *bit);
 
 #include "xxir_effect_invocation_nodes.inc.c"
 #include "xxir_effect_invocation_causes.inc.c"
