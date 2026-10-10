@@ -13,6 +13,8 @@
  */
 #include "xxir_generic.h"
 #include "xxir_type_match_internal.h"
+#include "xxir_type_scratch_internal.h"
+#include "xxir_constraint_proof_internal.h"
 
 /* Matching keeps capacity only. Every result and physical parameter is
  * traversed again; nested invocations claim distinct live stack blocks. */
@@ -72,10 +74,17 @@ static XrXirStatus effect_callable_bound_definition_scratch(const XrXirCompileCo
     }
     XrXirProofContext proof={module,{XR_XIR_CONTEXT_FUNCTION,function,0}};
     XrXirStatus status=xr_xir_compile_context_constraints_verify(context,&proof);
-    if (status==XR_XIR_OK) status=xr_xir_compile_type_expression_shape(context,module->types,request->declared,count);
-    if (status==XR_XIR_OK) status=xr_xir_compile_type_expression_shape(context,module->types,request->actual,count);
-    if (status==XR_XIR_OK) status=xr_xir_compile_type_use_verify(context,&proof,request->declared);
-    if (status==XR_XIR_OK) status=xr_xir_compile_type_use_verify(context,&proof,request->actual);
+    /* Only this sequential pair shares storage. Each query clears its own
+     * pending/seen state and rebuilds the actual declaration proof. Neither
+     * capacity survives this definition call or overlaps final matching. */
+    XirTypeScratch shape={context->resources,NULL,0};
+    if (status==XR_XIR_OK) status=xr_xir_compile_type_expression_shape_scratch(context,module->types,request->declared,count,&shape);
+    if (status==XR_XIR_OK) status=xr_xir_compile_type_expression_shape_scratch(context,module->types,request->actual,count,&shape);
+    xir_type_scratch_free(&shape);
+    XirConstraintScratch use={context->resources,NULL};
+    if (status==XR_XIR_OK) status=xr_xir_compile_type_use_verify_scratch(context,&proof,request->declared,&use);
+    if (status==XR_XIR_OK) status=xr_xir_compile_type_use_verify_scratch(context,&proof,request->actual,&use);
+    xr_xir_constraint_scratch_free(&use);
     XrXirType *arguments=status==XR_XIR_OK && count?xir_compile_alloc(context,(size_t)count*sizeof(*arguments),&status):NULL;
     for (uint32_t p=0;p<count && status==XR_XIR_OK;++p) {
         if (!xir_compile_work(context,sizeof(*arguments)+1)) { status=XR_XIR_BUDGET;break; }

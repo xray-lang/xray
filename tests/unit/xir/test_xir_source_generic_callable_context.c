@@ -108,7 +108,18 @@ static void source_generic_definition_negative(const XrXirArtifact *artifact,uin
     CHECK(xir_effect_callable_bound_matches_definition(context,module,keep,&request)==XR_XIR_BAD_TYPE);
     CHECK(source_program_compile_attempts==attempts); /* out-of-scope bare binder: no shape/identity allocation */
     shape=source_generic_definition_function(module,"atomicShape");
-    request.declared=request.actual=module->functions[shape].parameters[0];
+    /* The declared callback is valid under keep. The second query must still
+     * rebuild Atomic(PARAM0)'s missing constraint; prior pair storage grants
+     * no facts. A rejected request releases its bytes before same-owner retry. */
+    XrCompileResourceStats sequence_baseline=library_compile_stats(context);
+    XrXirType atomic_callback=module->functions[shape].parameters[0];
+    request.declared=callback;request.actual=atomic_callback;
+    CHECK(xir_effect_callable_bound_matches_definition(context,module,keep,&request)==XR_XIR_BAD_TYPE);
+    CHECK(library_compile_stats(context).live_bytes==sequence_baseline.live_bytes);
+    request.actual=callback;
+    CHECK(xir_effect_callable_bound_matches_definition(context,module,keep,&request)==XR_XIR_OK);
+    CHECK(library_compile_stats(context).live_bytes==sequence_baseline.live_bytes);
+    request.declared=request.actual=atomic_callback;
     CHECK(xir_effect_callable_bound_matches_definition(context,module,shape,&request)==XR_XIR_OK);
     /* Its Atomic(PARAM0) is invalid under keep's unconstrained PARAM0. Full
      * type-use proof must refuse even though declared and actual IDs agree. */

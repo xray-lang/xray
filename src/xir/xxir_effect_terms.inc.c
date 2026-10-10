@@ -48,7 +48,7 @@ _Static_assert(_Alignof(EffectTermMemory)>=_Alignof(XrXirTypeNode) &&
 
 /* All slices have the same owner lifetime. Reserved tail bytes are charged
  * physical storage; only admitted slices are initialized or read. */
-static void *effect_terms_alloc(EffectTerms *pool, uint64_t count, size_t size) {
+static void *effect_terms_reserve(EffectTerms *pool, uint64_t count, size_t size) {
     if (!count || pool->status!=XR_XIR_OK) return NULL;
     if (!size) { pool->status=XR_XIR_BAD_STRUCTURE;return NULL; }
     size_t alignment=_Alignof(EffectTermMemory);
@@ -79,9 +79,18 @@ static void *effect_terms_alloc(EffectTerms *pool, uint64_t count, size_t size) 
         pool->memory=memory;
         if (rounded<=4096) { pool->slice=memory;pool->slice_capacity=capacity; }
     }
-    if (!xir_compile_work(pool->remaining,bytes)) { pool->status=XR_XIR_BUDGET;return NULL; }
     void *output=(unsigned char *)(memory+1)+memory->used;
-    memset(output,0,bytes);memory->used+=rounded;return output;
+    memory->used+=rounded;return output;
+}
+
+/* Zero-dependent callers keep initialized admitted bytes. Full-copy callers
+ * reserve only; they pay and initialize every payload byte before publication. */
+static void *effect_terms_alloc(EffectTerms *pool, uint64_t count, size_t size) {
+    void *output=effect_terms_reserve(pool,count,size);
+    if (!output) return NULL;
+    size_t bytes=(size_t)count*size;
+    if (!xir_compile_work(pool->remaining,bytes)) { pool->status=XR_XIR_BUDGET;return NULL; }
+    memset(output,0,bytes);return output;
 }
 
 /* The structural owner retains reusable stack capacity, never a type proof.

@@ -59,9 +59,9 @@ static void effect_invocation_certificate_free(EffectInvocationCertificate *cert
 
 static void *effect_invocation_copy(EffectTerms *terms,const void *source,
     uint64_t count,size_t size) {
-    if (!count) return NULL;
+    if (!count || terms->status!=XR_XIR_OK) return NULL;
     if (!source) { terms->status=XR_XIR_BAD_STRUCTURE;return NULL; }
-    void *copy=effect_terms_alloc(terms,count,size);
+    void *copy=effect_terms_reserve(terms,count,size);
     if (!copy) return NULL;
     if (!xir_compile_work(terms->remaining,count*size)) { terms->status=XR_XIR_BUDGET;return NULL; }
     memcpy(copy,source,(size_t)count*size);return copy;
