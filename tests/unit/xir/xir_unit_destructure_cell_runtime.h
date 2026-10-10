@@ -56,13 +56,34 @@ static bool unit_destructure_cell_call(XrXirInstance *instance,uint32_t entry,Xr
     return true;
 }
 static size_t unit_destructure_cell_free_failures[2];
-static void unit_destructure_cell_free_observed(XrXirInstance *instance,XrXirCallStatus failure) {
+static void unit_destructure_cell_free_observed(XrXirInstance *instance,XrXirCallStatus failure,bool pending) {
     CHECK(xr_xir_task_executor_root_idle(instance->executor));
     CHECK(!instance->executor->active && !instance->executor->ready_head);
     CHECK(!instance->call || !instance->call->top);
     XrXirCallStatus expected=xr_xir_task_executor_completion_status(instance->executor);
-    CHECK(expected==XR_XIR_CALL_READY || expected==failure);
-    CHECK(failure==XR_XIR_CALL_READY || failure==XR_XIR_CALL_OOM || failure==XR_XIR_CALL_LIMIT);
+    if (pending) {
+        XrXirTaskExecutor *executor=instance->executor;XrXirCallStatus driver=XR_XIR_CALL_READY;
+        if (executor->root.call) {
+            CHECK(executor->root.call==instance->call && executor->root_epoch==instance->epoch);
+            const XrXirExecutorBinding binding={executor,&executor->root,executor->generation,executor->root.ticket};
+            CHECK(xr_xir_call_driver_failure(instance->call,&binding,&driver));
+        } else CHECK(!instance->call && !instance->epoch);
+        /* This initializer fails before its exported task producers run.
+         * A preparation limit can exhaust the budget without binding a root. */
+        CHECK(executor->shutdown_status==XR_XIR_CALL_READY && executor->first_failure==driver);
+        if (driver!=XR_XIR_CALL_READY) CHECK(driver==failure);
+        XrXirCallStatus exact=driver;
+        if (exact==XR_XIR_CALL_READY && instance->budget.exhausted) exact=XR_XIR_CALL_LIMIT;
+        CHECK(expected==exact);
+        if (failure==XR_XIR_CALL_BAD_STATE) CHECK(driver==XR_XIR_CALL_BAD_STATE);
+        else CHECK(failure==XR_XIR_CALL_READY || failure==XR_XIR_CALL_OOM || failure==XR_XIR_CALL_LIMIT);
+        if (exact==XR_XIR_CALL_LIMIT) CHECK(failure==XR_XIR_CALL_LIMIT);
+        fprintf(stderr,"UNIT_PENDING_FREE epoch=%llu observed=%u driver=%u completion=%u\n",
+            (unsigned long long)instance->epoch,failure,driver,expected);
+    } else {
+        CHECK(expected==XR_XIR_CALL_READY || expected==failure);
+        CHECK(failure==XR_XIR_CALL_READY || failure==XR_XIR_CALL_OOM || failure==XR_XIR_CALL_LIMIT);
+    }
     /* A consumed owner still reports the exact recorded executor failure. */
     size_t attempts=runtime_attempts;
     XrXirCallStatus status=xr_xir_instance_free(instance);
@@ -103,7 +124,7 @@ static bool unit_destructure_cell_pair(XrXirProgram *program,
     }
     ok=true;
 done:
-    for (uint32_t i=0;i<2;++i) if (instances[i]) unit_destructure_cell_free_observed(instances[i],failures[i]);
+    for (uint32_t i=0;i<2;++i) if (instances[i]) unit_destructure_cell_free_observed(instances[i],failures[i],false);
     return ok;
 }
 static XrXirStatus unit_destructure_cell_seal_operation(const XrXirCompileContext *context,void *opaque) {
@@ -167,12 +188,13 @@ static UnitDestructurePendingCost unit_destructure_cell_pending_pair(XrXirProgra
         if (status!=XR_XIR_CALL_BAD_STATE) {failures[pass]=cost.status=status;goto done;}
         CHECK(xr_xir_instance_state(instances[pass])==XR_XIR_INSTANCE_FAILED);
         CHECK(logs[pass].published[1]==2 && logs[pass].ready[1]==1);
+        failures[pass]=status;
         ++completed;
     }
     CHECK(domains[0]!=domains[1]);cost.status=XR_XIR_CALL_BAD_STATE;
 done:
     for (unsigned pass=0;pass<2;++pass) {
-        if (instances[pass]) unit_destructure_cell_free_observed(instances[pass],failures[pass]);
+        if (instances[pass]) unit_destructure_cell_free_observed(instances[pass],failures[pass],true);
         CHECK(!logs[pass].published[0] && !logs[pass].released[0] && !logs[pass].ready[0]);
         CHECK(logs[pass].released[1]==logs[pass].published[1]);
         if (domains[pass]) {

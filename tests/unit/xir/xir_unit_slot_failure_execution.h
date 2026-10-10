@@ -97,8 +97,35 @@ static void init_protocol_failures(XrXirProgram *program,uint32_t entry){
         CHECK(xr_xir_instance_start(instance,entry,NULL,0)==expected);XrXirCallResult copy={0};
         XrXirValue no_take={XR_XIR_I64,0,73};CHECK(xr_xir_instance_take_result(instance,&no_take)==XR_XIR_CALL_BAD_STATE&&no_take.type==XR_XIR_I64&&no_take.payload==73);
         CHECK(xr_xir_instance_copy_failure(instance,&copy)==expected&&!copy.value.type&&xr_xir_fault_empty(copy.panic.detail));
-        CHECK(xr_xir_instance_free(instance)==XR_XIR_CALL_READY);
+        XrXirCallStatus expected_free=mode ? XR_XIR_CALL_OUTPUT_ERROR : XR_XIR_CALL_READY;
+        CHECK(xr_xir_task_executor_completion_status(instance->executor)==expected_free);
+        size_t attempts=runtime_attempts;
+        XrXirCallStatus freed=xr_xir_instance_free(instance);
+        fprintf(stderr,"UNIT_INIT_FREE mode=%u status=%u free=%u expected=%u\n",mode,expected,freed,expected_free);
+        CHECK(freed==expected_free && runtime_attempts==attempts);
     }
+}
+/* This fixture has no child task: only an authenticated current root
+ * can accept a runtime OOM. A preparation or failure-copy OOM does not. */
+static void unit_free_fault_epoch(XrXirInstance *instance,XrXirCallStatus observed) {
+    CHECK(xr_xir_task_executor_root_idle(instance->executor));
+    CHECK(!instance->call || !instance->call->top);
+    XrXirCallStatus accepted=XR_XIR_CALL_READY;
+    if(instance->call && instance->call->executor_owner) {
+        const XrXirCall *call=instance->call;
+        const XrXirExecutorBinding binding={call->executor_owner,call->executor_activation,
+            call->executor_generation,call->executor_ticket};
+        CHECK(binding.owner==instance->executor);
+        CHECK(xr_xir_call_driver_failure(call,&binding,&accepted));
+    }
+    if(accepted!=XR_XIR_CALL_READY) CHECK(accepted==XR_XIR_CALL_OOM && observed==accepted);
+    XrXirCallStatus completion=xr_xir_task_executor_completion_status(instance->executor);
+    CHECK(completion==accepted);
+    size_t attempts=runtime_attempts;uint64_t epoch=instance->epoch;
+    XrXirCallStatus freed=xr_xir_instance_free(instance);
+    fprintf(stderr,"UNIT_FAULT_FREE epoch=%llu observed=%u accepted=%u completion=%u free=%u\n",
+        (unsigned long long)epoch,observed,accepted,completion,freed);
+    CHECK(freed==accepted && runtime_attempts==attempts);
 }
 static void init_runtime_faults(XrXirProgram *program,uint32_t entry){
     size_t live_before=runtime_live,bytes_before=runtime_bytes,sites=0;
@@ -111,7 +138,7 @@ static void init_runtime_faults(XrXirProgram *program,uint32_t entry){
         if(status==XR_XIR_CALL_THROWN)status=xr_xir_instance_copy_failure(instance,&held);
         if(!pass){CHECK(status==XR_XIR_CALL_THROWN);sites=runtime_attempts;CHECK(sites);}
         else {if(status!=XR_XIR_CALL_OOM)fprintf(stderr,"init runtime failure %zu/%zu status %u\n",pass-1,sites,status);CHECK(status==XR_XIR_CALL_OOM);}
-        if(instance)CHECK(xr_xir_instance_free(instance)==XR_XIR_CALL_READY);xr_xir_value_drop(&held.value);
+        if(instance)unit_free_fault_epoch(instance,status);xr_xir_value_drop(&held.value);
         CHECK(runtime_live==live_before&&runtime_bytes==bytes_before);
     }
     runtime_fail_at=SIZE_MAX;printf("initialization runtime %zu OOM sites, physical baseline restored\n",sites);
