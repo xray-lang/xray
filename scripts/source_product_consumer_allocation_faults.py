@@ -612,6 +612,211 @@ def self_test() -> None:
                       "product_execution": "NOT_RUN", "full_FI": "NOT_RUN"}))
 
 
+
+# Dedicated typed receiver adapter. STATIC_NOT_RUN; Source0 main/43-call contract is unchanged.
+# Launch/shard/cohort binding remains OPEN. These functions parse the single-case protocol only.
+TYPED_LIBRARY_PREFIX = "typed-library-fi "
+TYPED_LIBRARY_LIMITS = {"allocated": 67108864, "live": 8388608, "work": 128000000}
+TYPED_LIBRARY_OOM = {0: 3, 1: 7, 2: 6}
+TYPED_LIBRARY_BUDGET = {0: 2, 1: 6}
+TYPED_LIBRARY_PROTOCOL = {
+    "name": "typed-library-receiver-single-case-r1",
+    "base_argv": ["binary", "mode", "full-Closed-packet", "full32-identity", "actual-C"],
+    "normal_suffix": [],
+    "compiler_suffix": ["--compiler-fault", "ordinal", "frozen-N"],
+    "runtime_suffix": ["--runtime-fault", "ordinal", "frozen-R"],
+    "axes_suffix": ["--compiler-axis", "allocated|live|work", "exact|minus1", "normal-total"],
+    "full_shard_dispatch": "OPEN", "material_cohort_binding": "OPEN",
+    "generation": "once-generated existing four materials; never in FI receiver",
+    "full_fi_caps": {"timeout": 600, "processors": 8, "jobs": 8},
+    "axes_caps": {"timeout": 120, "processors": 1, "run_serial": True},
+}
+
+
+def typed_library_rows(output: str, tag: str) -> list[dict[str, str]]:
+    # Reuse the existing strict field parser; there is no parallel parser implementation.
+    converted = "\n".join(PREFIX + line[len(TYPED_LIBRARY_PREFIX):]
+                          for line in output.splitlines() if line.startswith(TYPED_LIBRARY_PREFIX))
+    return rows(converted, tag)
+
+
+def typed_library_summary(output: str) -> dict[str, str]:
+    result = typed_library_rows(output, "summary ")
+    if len(result) != 1 or result[0].get("result") != "PASS":
+        raise ValueError("typed receiver lacks unique single-case PASS")
+    row = result[0]
+    if any(row.get(key) != "OPEN" for key in (
+            "original-writer-FI", "stable-lifecycle", "full-safety", "Main")):
+        raise ValueError("typed single case widened an original OPEN obligation")
+    if unsigned(row["mode"]) not in (1, 2, 3) or row.get("physical") != "1":
+        raise ValueError("typed mode or physical release is not valid")
+    return row
+
+
+def typed_library_cleanup(output: str, summary: dict[str, str]) -> dict[str, str]:
+    records = typed_library_rows(output, "cleanup ")
+    if len(records) != 1:
+        raise ValueError("typed cleanup is not unique")
+    row = records[0]
+    if any(row.get(key) != value for key, value in {
+            "uncharged": "1", "cleanup-sites-unsupported": "0", "physical": "1"}.items()):
+        raise ValueError("typed cleanup retained stock or hid charged cleanup sites")
+    for before, after in (("cb", "ce"), ("rb", "re"), ("allocated-before", "allocated"),
+                          ("peak-before", "peak"), ("work-before", "work")):
+        if unsigned(row[before]) != unsigned(row[after]):
+            raise ValueError("typed cleanup changed actual ordinals or cumulative charges")
+    if row["ce"] != summary["N"] or row["re"] != summary["R"]:
+        raise ValueError("typed cleanup and complete denominator differ")
+    for field in ("allocated", "peak", "work"):
+        if row[field] != summary[field]:
+            raise ValueError("typed final resource charge differs from actual cleanup capture")
+    acquired = unsigned(row["lease-acquired"])
+    if acquired not in (0, 1) or unsigned(row["lease-releases"]) != acquired:
+        raise ValueError("typed real code lease was not released exactly when acquired")
+    affected = unsigned(summary["first-slot"])
+    if affected not in (0, 1, 2):
+        raise ValueError("typed affected owned Instance slot is invalid")
+    inherited = unsigned(summary["domain"]) == 2 and unsigned(summary["status"]) == 6
+    for slot in (0, 1):
+        called = unsigned(row["called" + str(slot)]); actual = row["status" + str(slot)]
+        marked = unsigned(row["inherit-oom" + str(slot)])
+        if called not in (0, 1) or marked not in (0, 1):
+            raise ValueError("typed cleanup applicability flags are invalid")
+        if not called:
+            if actual != "-1" or marked:
+                raise ValueError("typed uncalled cleanup is not explicit NOT_CALLED")
+            continue
+        status = unsigned(actual)
+        is_inherited = inherited and slot == affected and status == 6
+        if status not in ((0, 6) if inherited and slot == affected else (0,)) or marked != int(is_inherited):
+            raise ValueError("typed healthy peer cleanup returned BUSY/LIMIT/unrelated OOM")
+    return row
+
+
+def typed_library_stages(output: str, summary: dict[str, str]) -> list[dict[str, str]]:
+    calls = typed_library_rows(output, "stage ")
+    if not calls or len(calls) != unsigned(summary["records"]):
+        raise ValueError("typed continuous public-call records differ from summary")
+    previous = None
+    for index, call in enumerate(calls):
+        if unsigned(call["record"]) != index or unsigned(call["domain"]) not in (0, 1, 2):
+            raise ValueError("typed stage order/domain is invalid")
+        for before, after in (("cb", "ce"), ("rb", "re"), ("count-before", "count-after"),
+                              ("allocated-before", "allocated"), ("peak-before", "peak"),
+                              ("work-before", "work")):
+            if unsigned(call[after]) < unsigned(call[before]):
+                raise ValueError("typed cumulative ordinal or charge was refunded")
+            if previous is not None and call[before] != previous[after]:
+                raise ValueError("typed allocation/charge occurred outside a public-call window")
+        for suffix in ("-before", ""):
+            if unsigned(call["live" + suffix]) > unsigned(call["peak" + suffix]):
+                raise ValueError("typed live resource stock exceeds actual peak")
+        if unsigned(call["valid-before"]) not in (0, 1) or unsigned(call["valid"]) not in (0, 1):
+            raise ValueError("typed resource validity observation is invalid")
+        for field in ("status", "expected", "hit", "output-preserved", "rollback"):
+            unsigned(call[field])
+        previous = call
+    if calls[0]["name"] != "owner-new" or calls[0]["cb"] != "0" or calls[0]["rb"] != "0":
+        raise ValueError("typed denominator omitted the real initial owner allocation")
+    if calls[-1]["ce"] != summary["N"] or calls[-1]["re"] != summary["R"]:
+        raise ValueError("typed final ordinals omit cleanup/outside-window allocations")
+    return calls
+
+
+def typed_library_routes(output: str, mode: int) -> list[dict[str, str]]:
+    prefix = "typed-library-native-mixed "
+    converted = "\n".join(PREFIX + line[len(prefix):] for line in output.splitlines() if line.startswith(prefix))
+    actual = rows(converted, "instance=")
+    if len(actual) != 4:
+        raise ValueError("typed normal did not execute four independent owned 42 calls")
+    for record, (instance, repeat) in zip(actual, ((0, 0), (0, 1), (1, 0), (1, 1))):
+        if (unsigned(record["instance"]) != instance or unsigned(record["repeat"]) != repeat
+                or unsigned(record["mode"]) != mode or record.get("actual-yield-resumes") != "2"
+                or record.get("owned-I64") != "42"):
+            raise ValueError("typed original two Instances/two yields/fixed 42 changed")
+        for role, native in (("constructor", mode in (1, 2)), ("child", mode in (1, 3))):
+            selected, other = ("native", "VM") if native else ("VM", "native")
+            if not unsigned(record[role + "-" + selected]) or unsigned(record[role + "-" + other]):
+                raise ValueError("typed selected actual delegate/opposite-zero obligation failed")
+    return actual
+
+
+def typed_library_normal_contract(output: str) -> dict:
+    summary = typed_library_summary(output)
+    if (summary.get("kind") != "0" or summary.get("reached-end") != "1"
+            or summary.get("hits") != "0" or summary.get("first-stage") != "NONE"):
+        raise ValueError("typed normal includes a refusal or did not complete")
+    if typed_library_rows(output, "first-error "):
+        raise ValueError("typed normal retained an original first consumer error")
+    n, r = unsigned(summary["N"]), unsigned(summary["R"])
+    if not n or not r:
+        raise ValueError("typed complete receiver allocation denominator is empty")
+    calls = typed_library_stages(output, summary)
+    if any(call["hit"] != "0" or call["status"] != call["expected"] for call in calls):
+        raise ValueError("typed normal changed an original public status")
+    caps = {axis: unsigned(summary["cap-" + axis]) for axis in TYPED_LIBRARY_LIMITS}
+    if caps != TYPED_LIBRARY_LIMITS:
+        raise ValueError("typed normal resource limits changed")
+    totals = {"allocated": unsigned(summary["allocated"]), "live": unsigned(summary["peak"]),
+              "work": unsigned(summary["work"])}
+    if any(not value or value > caps[axis] for axis, value in totals.items()):
+        raise ValueError("typed normal finite resource census is invalid")
+    cleanup = typed_library_cleanup(output, summary)
+    if cleanup.get("lease-acquired") != "1":
+        raise ValueError("typed normal did not acquire and release a real code lease")
+    routes = typed_library_routes(output, unsigned(summary["mode"]))
+    return {"N": n, "R": r, "records": len(calls), "totals": totals,
+            "summary": summary, "stages": calls, "routes": routes}
+
+
+def typed_library_fault_contract(output: str, kind: str, site: int, normal: dict) -> dict:
+    if kind not in ("compiler", "runtime"):
+        raise ValueError("unsupported typed allocation domain")
+    summary = typed_library_summary(output); calls = typed_library_stages(output, summary)
+    total = normal["N" if kind == "compiler" else "R"]
+    expected_kind = "1" if kind == "compiler" else "2"
+    if (summary.get("kind") != expected_kind or unsigned(summary["site"]) != site
+            or unsigned(summary["total"]) != total or not 0 <= site < total
+            or summary.get("mode") != normal["summary"]["mode"]):
+        raise ValueError("typed ordinal belongs to a different case/mode/denominator")
+    if (summary.get("hits") != "1" or summary.get("reached-end") != "0"
+            or summary.get("downstream") != "NOT_ENTERED"
+            or unsigned(summary["first-record"]) != len(calls) - 1):
+        raise ValueError("typed fault lacks unique first hit and downstream stop")
+    if len(calls) > normal["records"]:
+        raise ValueError("typed fault prefix exceeds its normal oracle")
+    for index, call in enumerate(calls):
+        reference = normal["stages"][index]
+        if call["name"] != reference["name"] or call["domain"] != reference["domain"]:
+            raise ValueError("typed first failure changed the original public-call prefix")
+        if index < len(calls) - 1 and (call["hit"] != "0" or call["status"] != reference["status"]):
+            raise ValueError("typed earlier call failed or hid an allocation hit")
+    last = calls[-1]; domain = unsigned(last["domain"]); oom = TYPED_LIBRARY_OOM[domain]
+    if (last["hit"] != "1" or unsigned(last["status"]) != oom or unsigned(summary["status"]) != oom
+            or unsigned(summary["expected"]) != oom or summary["first-stage"] != last["name"]
+            or summary["domain"] != last["domain"]):
+        raise ValueError("typed FI returned an arbitrary nonzero or wrong public-domain OOM")
+    begin, end = ("cb", "ce") if kind == "compiler" else ("rb", "re")
+    if not unsigned(last[begin]) <= site < unsigned(last[end]):
+        raise ValueError("typed reported hit is outside the actual operation allocation window")
+    if domain in (0, 1) and any(last.get(key) != "1" or summary.get(key) != "1"
+                               for key in ("output-preserved", "rollback")):
+        raise ValueError("typed compiler/resource refusal changed owned output or stock")
+    if last["name"] == "Instance-new" and (last.get("output-preserved") != "1" or summary.get("output-preserved") != "1"):
+        raise ValueError("typed failed Instance-new mutated its owned output")
+    if {axis: unsigned(summary["cap-" + axis]) for axis in TYPED_LIBRARY_LIMITS} != TYPED_LIBRARY_LIMITS:
+        raise ValueError("typed fault changed unchanged finite limits")
+    first = typed_library_rows(output, "first-error ")
+    domains = {0: "COMPILE_RESOURCE_STATUS", 1: "PRODUCT_XIR_STATUS", 2: "PRODUCT_CALL_STATUS"}
+    if (len(first) != 1 or first[0].get("domain") != domains[domain] or first[0].get("operation") != last["name"]
+            or first[0].get("has-status") != "1" or unsigned(first[0]["actual"]) != oom
+            or unsigned(first[0]["expected"]) != oom):
+        raise ValueError("typed original first numeric error was overwritten by later cleanup")
+    typed_library_cleanup(output, summary)
+    return {"kind": kind, "site": site, "total": total, "stage": last["name"],
+            "domain": domain, "status": oom, "records": len(calls)}
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--self-test", action="store_true")

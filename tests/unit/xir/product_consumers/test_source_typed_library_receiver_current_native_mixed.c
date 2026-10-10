@@ -11,6 +11,11 @@
  *   The receiver admits the authentic Closed packet and real host-compiled C; two
  *   Instances preserve two yields and independent I64 42 under each provider route.
  */
+#if defined(XR_SOURCE_TYPED_LIBRARY_NATIVE_PACKET_FI_RECEIVER) && \
+    (defined(XR_SOURCE_TYPED_LIBRARY_NATIVE_PACKET_WRITER) || defined(XR_SOURCE_TYPED_LIBRARY_NATIVE_PACKET_CANCEL_RECEIVER) || \
+     defined(XR_SOURCE_TYPED_LIBRARY_NATIVE_PACKET_DUAL_PENDING_RECEIVER) || defined(XR_SOURCE_TYPED_LIBRARY_CLASS_OBSERVATION_PRIVATE24))
+#error "FI receiver is separate from writer, cancellation and private class observation receivers"
+#endif
 #if defined(XR_SOURCE_TYPED_LIBRARY_NATIVE_PACKET_WRITER) && defined(XR_SOURCE_TYPED_LIBRARY_NATIVE_PACKET_CANCEL_RECEIVER)
 #error "Writer and cancellation receiver are mutually exclusive"
 #endif
@@ -150,6 +155,9 @@ typedef struct ReceiverRun {
     XrXirStatus status;
     const char *operation;
 } ReceiverRun;
+#if defined(XR_SOURCE_TYPED_LIBRARY_NATIVE_PACKET_FI_RECEIVER)
+#include "typed_library_fi_protocol.inc.c"
+#endif
 
 static void poison(void *pointer, size_t length) {
     volatile uint8_t *bytes = pointer;
@@ -157,7 +165,14 @@ static void poison(void *pointer, size_t length) {
 }
 static void *owned_allocate(const XrXirCompileContext *context, size_t count, size_t stride) {
     void *pointer = NULL;
+#if defined(XR_SOURCE_TYPED_LIBRARY_NATIVE_PACKET_FI_RECEIVER)
+    typed_fi_begin(&typed_fi.run, "receiver-owned-allocate", TFI_RESOURCE);
+#endif
     XrCompileResourceStatus status = xr_compile_resources_calloc(context->resources, count, stride, &pointer);
+#if defined(XR_SOURCE_TYPED_LIBRARY_NATIVE_PACKET_FI_RECEIVER)
+    if (status != XR_COMPILE_RESOURCE_OK && pointer) typed_fi.invariant = false;
+    typed_fi_end(&typed_fi.run, (int)status, XR_COMPILE_RESOURCE_OK);
+#endif
     if (status != XR_COMPILE_RESOURCE_OK)
         record_failure("COMPILE_RESOURCE_STATUS", receiver_operation, true, XR_COMPILE_RESOURCE_OK, status, NULL);
     CHECK(status == XR_COMPILE_RESOURCE_OK);
@@ -201,6 +216,15 @@ static bool call_completed(ReceiverRun *run, XrXirCallStatus actual, XrXirCallSt
     if (actual == expected) return true;
     record_failure("PRODUCT_CALL_STATUS", operation, true, expected, actual, NULL); return false;
 }
+#endif
+#if defined(XR_SOURCE_TYPED_LIBRARY_NATIVE_PACKET_FI_RECEIVER)
+#define completed(run, expression, operation) \
+    (typed_fi_begin((run), (operation), TFI_XIR), typed_fi_xir_result((run), (expression), (operation)))
+#define call_completed(run, expression, expected, operation) \
+    (typed_fi_begin((run), (operation), TFI_CALL), typed_fi_call_result((run), (expression), (expected), (operation)))
+#define xr_xir_instance_poll_bounded(instance, quantum) typed_fi_poll(run, (instance), (quantum))
+#define xr_xir_instance_start(instance, entry, arguments, count) typed_fi_start(run, (instance), (entry), (arguments), (count))
+#define xr_xir_instance_free(instance) typed_fi_instance_free(run, (instance))
 #endif
 
 #if defined(XR_SOURCE_TYPED_LIBRARY_NATIVE_PACKET_WRITER)
@@ -901,37 +925,11 @@ static void cleanup_failed_materials(ReceiverRun *run) {
 #endif
 #if !defined(XR_SOURCE_TYPED_LIBRARY_NATIVE_PACKET_WRITER)
 static void release_receiver_inputs(ReceiverRun *run) {
-    xr_xir_value_drop(&run->value);
-    for (unsigned i = 0; i < 2; ++i) {
-        if (!run->instances[i]) continue;
-        XrXirCallStatus status = xr_xir_instance_free(run->instances[i]);
-        if (status == XR_XIR_CALL_BUSY) {
-            receiver_cleanup_failed = true;
-            fprintf(stderr, "cleanup-error Instance=%u BUSY, physical cleanup unproved\n", i);
-        } else {
-            run->instances[i] = NULL;
-            if (status != XR_XIR_CALL_READY) {
-                receiver_cleanup_failed = true;
-                record_failure("PRODUCT_CALL_STATUS", "failure-cleanup-Instance-free", true, XR_XIR_CALL_READY, status, NULL);
-            }
-        }
-    }
-    xr_xir_compile_program_drop(run->program); run->program = NULL;
-#if defined(XR_SOURCE_TYPED_LIBRARY_CLASS_OBSERVATION_PRIVATE24) && !defined(XR_SOURCE_TYPED_LIBRARY_NATIVE_PACKET_WRITER)
-    release_class_observations(run);
+#if defined(XR_SOURCE_TYPED_LIBRARY_NATIVE_PACKET_FI_RECEIVER)
+    typed_fi_release_receiver(run);
+#else
+#include "typed_library_receiver_normal_cleanup.inc.c"
 #endif
-    if (receiver_native_owner && !run->instances[0] && !run->instances[1]) {
-        receiver_cleanup_failed = true;
-        ReceiverNativeOwner *owner = receiver_native_owner; receiver_native_owner = NULL;
-        dispose_receiver_native_owner(owner);
-    }
-    if (run->pending_native_owner) {
-        ReceiverNativeOwner *owner = run->pending_native_owner;
-        dispose_receiver_native_owner(owner); run->pending_native_owner = NULL;
-    }
-    free_poisoned_packet(&run->input_packet);
-    poison(run->input_identity, sizeof(run->input_identity)); poison(run->proof_identity, sizeof(run->proof_identity));
-    poison(run->packet_path, sizeof(run->packet_path)); poison(run->identity_path, sizeof(run->identity_path));
 }
 #else
 static void release_writer_inputs(ReceiverRun *run) {
@@ -981,75 +979,13 @@ static void release_remaining(ReceiverRun *run) {
     release_writer_inputs(run);
 #endif
 }
+#if defined(XR_SOURCE_TYPED_LIBRARY_NATIVE_PACKET_FI_RECEIVER)
+#include "typed_library_fi_entry.inc.c"
+#endif
 int main(int argc, char **argv) {
-#if defined(XR_SOURCE_TYPED_LIBRARY_NATIVE_PACKET_WRITER)
-    if (argc != 8) return 2;
+#if defined(XR_SOURCE_TYPED_LIBRARY_NATIVE_PACKET_FI_RECEIVER)
+    return typed_fi_main(argc, argv);
 #else
-    if (argc != 5) return 2;
+#include "typed_library_receiver_original_entry.inc.c"
 #endif
-    CHECK(!runtime_live && !runtime_bytes && !runtime_owned && !runtime_owned_capacity);
-    runtime_fail_at = SIZE_MAX;
-    /* Static state preserves every owned pointer across the test's failure jump. */
-    static ReceiverRun run;
-#if !defined(XR_SOURCE_TYPED_LIBRARY_NATIVE_PACKET_WRITER)
-    run.mode = !strcmp(argv[1], "1") ? 1u : !strcmp(argv[1], "2") ? 2u : !strcmp(argv[1], "3") ? 3u : 0u;
-    if (!run.mode) return 2;
-#endif
-    run.context = source_program_owner(67108864, 128000000);
-    volatile bool passed = false;
-    if (setjmp(receiver_failure) == 0) {
-        receiver_cleanup_enabled = true;
-#if defined(XR_SOURCE_TYPED_LIBRARY_NATIVE_PACKET_WRITER)
-        copy_owned_sources(&run, argv);
-        passed = library_catalog_build(&run) && program_source_build(&run) && detach_program(&run, argv);
-#else
-        passed = admit_packet(&run, argv);
-#if defined(XR_SOURCE_TYPED_LIBRARY_CLASS_OBSERVATION_PRIVATE24)
-        if (passed) run_receiver_class_observation_instances(&run, argv[4]);
-#else
-#if defined(XR_SOURCE_TYPED_LIBRARY_NATIVE_PACKET_DUAL_PENDING_RECEIVER)
-        if (passed) run_receiver_dual_pending_instances(&run, argv[4]);
-#elif defined(XR_SOURCE_TYPED_LIBRARY_NATIVE_PACKET_CANCEL_RECEIVER)
-        if (passed) run_receiver_cancel_instances(&run, argv[4]);
-#else
-        if (passed) run_receiver_instances(&run, argv[4]);
-#endif
-#endif
-#endif
-    } else passed = false;
-    receiver_cleanup_enabled = false;
-    release_remaining(&run);
-#if defined(XR_SOURCE_TYPED_LIBRARY_NATIVE_PACKET_WRITER)
-    if (!passed || receiver_cleanup_failed || receiver_first_failure.domain) cleanup_failed_materials(&run);
-#endif
-    if (receiver_first_failure.domain) fprintf(stderr,
-        "typed-library-receiver first-domain=%s operation=%s status-observed=%u expected=%d actual=%d line=%d expression=%s\n",
-        receiver_first_failure.domain, receiver_first_failure.operation, (unsigned)receiver_first_failure.has_status,
-        receiver_first_failure.expected, receiver_first_failure.actual, receiver_first_failure.line,
-        receiver_first_failure.expression ? receiver_first_failure.expression : "(status-return)");
-    source_program_owners_free();
-    bool physical_zero = !source_program_compile_live && !source_program_compile_bytes &&
-        !source_program_compile_allocations && !source_program_compile_capacity &&
-        !runtime_live && !runtime_bytes && !runtime_owned && !runtime_owned_capacity;
-    if (!physical_zero) fprintf(stderr, "cleanup-error physical-zero-unproved compile=%zu/%zu table=%p/%zu runtime=%zu/%zu table=%p/%zu\n",
-        source_program_compile_live, source_program_compile_bytes, (void *)source_program_compile_allocations,
-        source_program_compile_capacity, runtime_live, runtime_bytes, (void *)runtime_owned, runtime_owned_capacity);
-    if (!physical_zero || receiver_cleanup_failed || receiver_observer_failed) passed = false;
-#if defined(XR_SOURCE_TYPED_LIBRARY_CLASS_OBSERVATION_PRIVATE24) && !defined(XR_SOURCE_TYPED_LIBRARY_NATIVE_PACKET_WRITER)
-    report_class_observation_execution(&run, passed, physical_zero);
-#else
-#if defined(XR_SOURCE_TYPED_LIBRARY_NATIVE_PACKET_DUAL_PENDING_RECEIVER)
-    report_dual_pending_execution(&run, passed, physical_zero);
-#elif defined(XR_SOURCE_TYPED_LIBRARY_NATIVE_PACKET_CANCEL_RECEIVER)
-    report_cancel_execution(&run, passed, physical_zero);
-#else
-    printf("typed-library-native-mixed-packet last-XIR-status=%u result=%s cleanup-error=%u physical-zero=%u full-FI=NOT_RUN axes=NOT_RUN cancel=NOT_RUN stable-object-lifecycle=OPEN init-failure=OPEN owned-escape=OPEN original-AOT=OPEN deterministic-C=OPEN SourceDelete=OPEN\n",
-        (unsigned)run.status, passed ? "PASS" : "FAIL", (unsigned)receiver_cleanup_failed, (unsigned)physical_zero);
-#endif
-#endif
-#if defined(XR_SOURCE_TYPED_LIBRARY_NATIVE_PACKET_WRITER)
-    if (passed) puts("typed-Library-packet writer-runtime=NOT_RUN Source-and-Catalog-producers-released=1");
-    else puts("typed-Library-packet writer-runtime=NOT_RUN material-publication=FAIL");
-#endif
-    return passed ? 0 : 1;
 }

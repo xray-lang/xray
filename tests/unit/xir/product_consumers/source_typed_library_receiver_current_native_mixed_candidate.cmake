@@ -112,3 +112,32 @@ foreach(source_typed_native_mode IN ITEMS 1 2 3)
         WORKING_DIRECTORY "${source_typed_native_material}" TIMEOUT 120 PROCESSORS 1
         LABELS "unit;xir;program-consumer;typed-library;receiver;coroutine;ownership;packet;native;mixed;dual-pending;cancel-prefix;normal-only;current-interface-candidate")
 endforeach()
+
+# STATIC_NOT_RUN: dedicated receiver single-case census/FI/axes preparation only.
+# Shares the existing once-generated C/proof/whole32/binding. No new writer command.
+set(source_typed_native_fi_runner test_source_typed_library_receiver_current_native_mixed_faults)
+add_executable(${source_typed_native_fi_runner} "${source_typed_native_driver}" "${source_typed_native_support}"
+    "${source_typed_native_candidate}/typed_library_fi_protocol.inc.c"
+    "${source_typed_native_candidate}/typed_library_fi_entry.inc.c"
+    "${source_typed_native_candidate}/typed_library_receiver_normal_cleanup.inc.c"
+    "${source_typed_native_candidate}/typed_library_receiver_original_entry.inc.c"
+    "${source_typed_native_c}" "${source_typed_native_binding}")
+set_source_files_properties("${source_typed_native_candidate}/typed_library_fi_protocol.inc.c"
+    "${source_typed_native_candidate}/typed_library_fi_entry.inc.c"
+    "${source_typed_native_candidate}/typed_library_receiver_normal_cleanup.inc.c"
+    "${source_typed_native_candidate}/typed_library_receiver_original_entry.inc.c" PROPERTIES HEADER_FILE_ONLY TRUE)
+target_compile_definitions(${source_typed_native_fi_runner} PRIVATE XR_SOURCE_TYPED_LIBRARY_NATIVE_PACKET_FI_RECEIVER=1)
+target_link_libraries(${source_typed_native_fi_runner} PRIVATE xray_xir_vm)
+target_include_directories(${source_typed_native_fi_runner} BEFORE PRIVATE
+    "${SOURCE_TYPED_LIBRARY_CURRENT_FORMAL_ROOT}/tests/unit/xir"
+    "${SOURCE_TYPED_LIBRARY_CURRENT_FORMAL_ROOT}/src" "${source_typed_native_candidate}")
+set_target_properties(${source_typed_native_fi_runner} PROPERTIES C_STANDARD 11 C_STANDARD_REQUIRED YES C_EXTENSIONS NO)
+if(MSVC)
+    target_compile_definitions(${source_typed_native_fi_runner} PRIVATE _CRT_SECURE_NO_WARNINGS)
+    target_compile_options(${source_typed_native_fi_runner} PRIVATE /utf-8 /W4 /WX)
+else()
+    target_compile_options(${source_typed_native_fi_runner} PRIVATE -Wall -Wextra -Werror)
+endif()
+# Full FI executor/shard registration remains OPEN (600/P8/jobs8 unchanged).
+# Compiler-axis registration remains OPEN (120/P1/RUN_SERIAL unchanged).
+# Existing ordinary/cancel tests and the Source0 contracts are unchanged.

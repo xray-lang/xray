@@ -274,6 +274,77 @@ def process_contract(process: dict) -> None:
         raise ValueError("process failed, timed out or has unobserved termination; raw first failure retained")
 
 
+
+# Typed receiver adapter only. Existing Source0 CLI, 43 records and default execution are unchanged.
+# A caller must bind the same immutable four-material cohort; typed launch/registration remains OPEN.
+def typed_library_axis_contract(output: str, axis: str, cut: str, normal_output: str, helpers) -> dict:
+    if axis not in LIMITS or cut not in ("exact", "minus1"):
+        raise ValueError("unknown typed compiler resource boundary")
+    normal = helpers.typed_library_normal_contract(normal_output)
+    summary = helpers.typed_library_summary(output); calls = helpers.typed_library_stages(output, summary)
+    total = normal["totals"][axis]; limit = total - (cut == "minus1"); caps = LIMITS | {axis: limit}
+    if (summary.get("kind") != "3" or helpers.unsigned(summary["axes"]) != KINDS[axis]
+            or helpers.unsigned(summary["below"]) != int(cut == "minus1") or helpers.unsigned(summary["total"]) != total
+            or summary.get("mode") != normal["summary"]["mode"]
+            or {key: helpers.unsigned(summary["cap-" + key]) for key in LIMITS} != caps):
+        raise ValueError("typed compiler axis is not bound to its fresh normal and unchanged caps")
+    if summary.get("hits") != "0" or len(calls) > normal["records"]:
+        raise ValueError("typed budget case injected allocation failure or changed original call prefix")
+    last = calls[-1]
+    for index, call in enumerate(calls):
+        reference = normal["stages"][index]; domain = helpers.unsigned(call["domain"])
+        if call["name"] != reference["name"] or call["domain"] != reference["domain"]:
+            raise ValueError("typed compiler boundary changed the original stage/domain")
+        if call.get("hit") != "0":
+            raise ValueError("typed resource axis contains an injected OOM")
+        for suffix in ("-before", ""):
+            if (helpers.unsigned(call["allocated" + suffix]) > caps["allocated"]
+                    or helpers.unsigned(call["peak" + suffix]) > caps["live"]
+                    or helpers.unsigned(call["work" + suffix]) > caps["work"]):
+                raise ValueError("typed compiler axis crossed finite resource caps")
+        if index < len(calls) - 1 or cut == "exact":
+            if call["status"] != reference["status"]:
+                raise ValueError("typed boundary changed a successful original public status")
+        if domain == 2 and any(call[before] != call[after] for before, after in (
+                ("count-before", "count-after"), ("allocated-before", "allocated"),
+                ("peak-before", "peak"), ("work-before", "work"))):
+            raise ValueError("typed runtime Call charged the compiler resource ledger")
+    actuals = {"allocated": helpers.unsigned(summary["allocated"]), "live": helpers.unsigned(summary["peak"]),
+               "work": helpers.unsigned(summary["work"])}
+    if any(actuals[key] > caps[key] for key in LIMITS):
+        raise ValueError("typed final resource charge crossed the selected finite cap")
+    if any(summary[field] != last[field] for field in ("allocated", "peak", "work")):
+        raise ValueError("typed cleanup refunded its final cumulative charge")
+    if cut == "exact":
+        if (summary.get("reached-end") != "1" or summary.get("first-stage") != "NONE"
+                or len(calls) != normal["records"] or helpers.unsigned(summary["N"]) != normal["N"]
+                or helpers.unsigned(summary["R"]) != normal["R"] or actuals != normal["totals"]):
+            raise ValueError("typed exact boundary did not complete the full original normal oracle")
+        if helpers.typed_library_rows(output, "first-error "):
+            raise ValueError("typed exact boundary retained a first consumer error")
+        helpers.typed_library_routes(output, helpers.unsigned(summary["mode"]))
+    else:
+        domain = helpers.unsigned(last["domain"]); budget = helpers.TYPED_LIBRARY_BUDGET.get(domain)
+        if (budget is None or helpers.unsigned(last["status"]) != budget or helpers.unsigned(summary["status"]) != budget
+                or helpers.unsigned(summary["expected"]) != budget or summary["domain"] != last["domain"]
+                or summary.get("reached-end") != "0" or summary.get("downstream") != "NOT_ENTERED"
+                or helpers.unsigned(summary["first-record"]) != len(calls) - 1
+                or summary["first-stage"] != last["name"]
+                or any(last.get(key) != "1" or summary.get(key) != "1"
+                       for key in ("output-preserved", "rollback"))):
+            raise ValueError("typed minus1 did not stop on exact public BUDGET with preserved output/stock")
+        first = helpers.typed_library_rows(output, "first-error ")
+        expected_domain = "COMPILE_RESOURCE_STATUS" if domain == 0 else "PRODUCT_XIR_STATUS"
+        if (len(first) != 1 or first[0].get("domain") != expected_domain or first[0].get("operation") != last["name"]
+                or first[0].get("has-status") != "1" or helpers.unsigned(first[0]["actual"]) != budget
+                or helpers.unsigned(first[0]["expected"]) != budget):
+            raise ValueError("typed first budget error was overwritten by cleanup")
+    helpers.typed_library_cleanup(output, summary)
+    return {"axis": axis, "cut": cut, "total": total, "limit": limit,
+            "actual": actuals[axis], "records": len(calls),
+            "first_refusal": None if cut == "exact" else last["name"]}
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     for name in ("binary", "root", "file", "input-root", "source-file", "registration-file", "evidence"):
