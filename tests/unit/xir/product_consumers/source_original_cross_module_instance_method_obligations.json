@@ -1483,5 +1483,257 @@
       "Physical SourceDelete, default/SDK/external packaging and final retirement"
     ],
     "caption_binding": "Postexecution append-only annotation. Sealed before inputs, actual raw/JUnit and results remain authoritative."
+  },
+  "typed_library_source_free_native_mixed_3a884_msvc_cancel_prefix3_20261011": {
+    "status": "PASS_FIXED_PRODUCER_TYPED_LIBRARY_GENERATED_C_NATIVE_MIXED_MSVC_CANCEL_PREFIX3_ONLY",
+    "worker_preimage": "d9de15ffeb7718a1bab664c6aca5600d9edec61a",
+    "producer": "3a8841057907d85de7349dfb2bb1ee3444d07875",
+    "producer_tree": "c4f188667d7b1f6c89bb41599ad1bbb808a2d3e1",
+    "public_identity": "Checked28/contract73/LibraryC2/Value23/Call29/Program30; BUILT1/CHECKED2/LOWERED4",
+    "provider_boundary": "Reuse only the fixed3a884 normal3 Source/B/ordinary executable and authentic four-material cohort. New cancellation macro target was freshly built as exactly three objects plus one executable. No new producer epoch, Root dirty source, configure, export, writer, ordinary rerun or release qualification.",
+    "consumer_raw": {
+      "tests/unit/xir/product_consumers/test_source_typed_library_receiver_current_native_mixed.c": "1fc5f1131f308bbbe3134793ec6ffeb4ca16fbd041cd72fa37cccc8157bb70b0",
+      "tests/unit/xir/product_consumers/typed_library_native_mixed_support.h": "385100cb5038c18cf00537497d7b06040957b5a80a050758aca4bac683da39b9",
+      "tests/unit/xir/product_consumers/source_typed_library_receiver_current_native_mixed_candidate.cmake": "03b311f7f711a467eccf36b8fb361a5dabfb63cc4e0ecb094621a98862ff4c91"
+    },
+    "original_inputs": {
+      "root_bytes": 163,
+      "original_root_prefix": 109,
+      "unchanged_adapter": 54,
+      "library_bytes": 185,
+      "fixture_sha256": {
+        "root.xr": "3bb17ffe354b537a024dbf6e4c371df1c80051d72a3db21f20d48fdbeeb5f8bc",
+        "library.xr": "bb41f3d3d610b67ce6445475deb031967b10a0b069ef00b1c923599b3d6a6c87"
+      },
+      "full_stdlib_files": 75,
+      "independent_oracle": "Worker40.child2 returns owned I64 42 after two genuine yields; complete original two-module fixture and full same-provider stdlib."
+    },
+    "prior_normal3_facet": "typed_library_source_free_native_mixed_3a884_msvc_normal3_20261011",
+    "source_ledger": {
+      "path": "build-consumer-current3a884-typed-native-msvc-r1/post-configure-source-records.json",
+      "sha256": "ab039ffad9abe015a1bebad91e2a59c4b114d68945f66e4b834ce20db0018072"
+    },
+    "grant": {
+      "path": "build-consumer-current3a884-typed-native-msvc-r1/root-explicit-cancel-prefix3-short-alias-window-grant-r3.json",
+      "sha256": "c9b234c6679b1147e887d1e0e173fbe44e3d20cb85bba95574f1838f7186e62b"
+    },
+    "reused_cancel_macro_preflight": {
+      "result": {
+        "path": "build-consumer-current3a884-typed-native-msvc-r1/execution-cancel-prefix-preflight-r1/result.json",
+        "sha256": "25470458817a38c1b6875358418d63763a096e524c4ec29a4fd4cdbd8b72909b"
+      },
+      "pid": 50500,
+      "exit": 0,
+      "reaped": true,
+      "rerun": false,
+      "scope": "Actual cancel-driver macro TU, strict original Release MT/C11/utf8/W4WX command; only Fo/Fd isolated. This prior PASS and its exact input were reused."
+    },
+    "fresh_cancel_target": {
+      "result": {
+        "path": "build-consumer-current3a884-typed-native-msvc-r1/execution-cancel-prefix-build-r3/result.json",
+        "sha256": "a06e7c8761c17a23b85ad33699605084db2f2aa290731cd31fb5de623ba24ddf"
+      },
+      "raw": {
+        "path": "build-consumer-current3a884-typed-native-msvc-r1/execution-cancel-prefix-build-r3/raw.log",
+        "sha256": "c1c57933b800fce0ed0449c4bcfdf276cd583231a97cf085e4c0b6527c094bb3"
+      },
+      "INPUT": {
+        "path": "build-consumer-current3a884-typed-native-msvc-r1/INPUT-cancel-prefix-build-r3.json",
+        "sha256": "5dc7a47ffeb645f9dcb525eb757566e1830ca3da275b63d9f2dcabe94f5055fe"
+      },
+      "pid": 25804,
+      "process_seconds": 3.094000000040978,
+      "exit": 0,
+      "reaped": true,
+      "target": "test_source_typed_library_receiver_current_native_mixed_cancel_prefix",
+      "jobs": 16,
+      "outer": 1200,
+      "phase_runner": {
+        "path": "build-consumer-current3a884-typed-native-msvc-r1/run_typed_native_cancel_prefix_phases_r5.EXECUTION_ALIAS_ONLY.py",
+        "sha256": "8636e0c3a2858e4046f284951bee3233d3d4b88b7c64be8e617e85a54d3b38cc"
+      },
+      "execution_alias": "build-c3a",
+      "configured_alias": "build-tn3a884-msvc-r1",
+      "actual_B": "build-consumer-current3a884-typed-native-msvc-r1/build-short-r1",
+      "manifest": "Unmodified sole raw build.ninja copy SHA23e3f390e1d731a585548a08cdee0cb4d6ebf6551316847b7d365e6c2688de87,20881412B; both schedule and actual Ninja use the same -f graph. Configured alias remains original; short execution junction resolves to the same B.",
+      "exact_four_full_commands": "Three actual cancel TU compiles and one link; scheduled command set matched the original complete strings. No command flags or Source/material strings were rewritten.",
+      "four_reused_materials": {
+        "generated/current-typed-library-native-mixed-r1/material/actual_payload.c": {
+          "sha256": "aaeca8caa84bb64df0782d7afd114e21be93d20860f5235299eed650e1b2cd4d",
+          "bytes": 36729,
+          "mtime_ns": "1791655751354431300"
+        },
+        "generated/current-typed-library-native-mixed-r1/material/actual_proof.bin": {
+          "sha256": "d15d985e4aa41e41d3f7016808a11b96f286c6a67ba1d53c534b6d6aee1aa003",
+          "bytes": 4286,
+          "mtime_ns": "1791655751354431300"
+        },
+        "generated/current-typed-library-native-mixed-r1/material/actual_identity.bin": {
+          "sha256": "a76f97f41eacabb8afa8aa3e77548aa5403a45906cc2f7c698792d765fa69148",
+          "bytes": 32,
+          "mtime_ns": "1791655751354431300"
+        },
+        "generated/current-typed-library-native-mixed-r1/material/payload_binding.c": {
+          "sha256": "9edc933b1b91787f568ec782c4351ed72cb2780ece7d8ba1c3f56ef9d5be96d4",
+          "bytes": 130,
+          "mtime_ns": "1791655751354431300"
+        }
+      },
+      "four_fresh_cancel_artifacts": {
+        "tests/unit/CMakeFiles/test_source_typed_library_receiver_current_native_mixed_cancel_prefix.dir/xir/product_consumers/test_source_typed_library_receiver_current_native_mixed.c.obj": {
+          "sha256": "5d16f0bab4288c62512c156ec85f2d4204588fa89b4093e646990a4de3695e7e",
+          "bytes": 1680114,
+          "mtime_ns": "1791660519589164300"
+        },
+        "tests/unit/CMakeFiles/test_source_typed_library_receiver_current_native_mixed_cancel_prefix.dir/__/__/generated/current-typed-library-native-mixed-r1/material/actual_payload.c.obj": {
+          "sha256": "a38eee6e550747c9272932d443a54ade4092bc774c1dd08ec376b52d9242c3c4",
+          "bytes": 30713,
+          "mtime_ns": "1791660517944640000"
+        },
+        "tests/unit/CMakeFiles/test_source_typed_library_receiver_current_native_mixed_cancel_prefix.dir/__/__/generated/current-typed-library-native-mixed-r1/material/payload_binding.c.obj": {
+          "sha256": "d499f606bffece4957aa5d6011728499fb06439dc71e09b300dd32d6b61bd260",
+          "bytes": 921,
+          "mtime_ns": "1791660517798016300"
+        },
+        "tests/unit/test_source_typed_library_receiver_current_native_mixed_cancel_prefix.exe": {
+          "sha256": "5b171ac51c5414bf1d225e0e8affdb9e48ab9e5e7ebfcbe27a58500d572cfeec",
+          "bytes": 1088512,
+          "mtime_ns": "1791660519684437800"
+        }
+      },
+      "B_boundary": "Exactly original278 regular leaves plus these4 new outputs; existing cohort bytes/mtime preserved; terminal Ninja state records captured.",
+      "same_six_configuration_inputs_and_compiler_probes_unchanged": true,
+      "same_provider_header_dependencies": {
+        "path": "build-consumer-current3a884-typed-native-msvc-r1/post-cancel-build-real-header-dependencies-r1/result.json",
+        "sha256": "65859bb99df84c970cb283c3bef5eae5d1ae3e802b8a7b0a74f13f55672f0103"
+      },
+      "execution_alias_dependency_states": [
+        "VALID",
+        "VALID",
+        "VALID"
+      ],
+      "dependency_counts": [
+        172,
+        38,
+        0
+      ],
+      "audit_boundary": "The binding C intentionally has no includes. Original configured-alias STALE states and all six alias-specific raw queries are retained; the actual execution alias supplies the VALID records for these same B objects."
+    },
+    "cancel_prefix3_runtime": {
+      "result": {
+        "path": "build-consumer-current3a884-typed-native-msvc-r1/execution-cancel-prefix-runtime-r1/result.json",
+        "sha256": "5606dc7ba76f3fa652f4bc31a76c0f183b9c9313ed23b438de935361936137c1"
+      },
+      "raw": {
+        "path": "build-consumer-current3a884-typed-native-msvc-r1/execution-cancel-prefix-runtime-r1/raw.log",
+        "sha256": "9c0a7fca949661db7c37a051fbf7b166c03dc9080e0d93c29a20bd3d592fb61f"
+      },
+      "JUnit": {
+        "path": "build-consumer-current3a884-typed-native-msvc-r1/execution-cancel-prefix-runtime-r1/junit.xml",
+        "sha256": "2d9624dc70b33ded8043baaf1b8d6eb7d6119d2030f6cb4203d7b7c2da22c213"
+      },
+      "INPUT": {
+        "path": "build-consumer-current3a884-typed-native-msvc-r1/INPUT-cancel-prefix-runtime-r2.json",
+        "sha256": "cef60313f0b91795b7f4966226202762d4578d8450c6ace8a1e9801e96badfdc"
+      },
+      "pid": 25408,
+      "process_seconds": 1.1870000001508743,
+      "total_executor_seconds": 3.5469999997876585,
+      "exit": 0,
+      "reaped": true,
+      "kill": null,
+      "tests": 3,
+      "test_names": [
+        "test_source_typed_library_receiver_current_native_mixed_cancel_prefix_mode1",
+        "test_source_typed_library_receiver_current_native_mixed_cancel_prefix_mode2",
+        "test_source_typed_library_receiver_current_native_mixed_cancel_prefix_mode3"
+      ],
+      "TIMEOUT": 120,
+      "PROCESSORS": 1,
+      "RUN_SERIAL": "NOT_SET",
+      "ctest_jobs": 1,
+      "outer": 450,
+      "strict_exact3_run_zero_failure_skip": true,
+      "before_after_all_inputs_consumed_binary_unchanged": true,
+      "runtime_compile_link_CGen": 0,
+      "routes": {
+        "1": "actual all-native",
+        "2": "actual constructor native / child VM",
+        "3": "actual constructor VM / child native"
+      },
+      "instances_per_mode": 2,
+      "total_Instances": 6,
+      "canonical0_calls_per_Instance": 1,
+      "fixed42_calls_per_Instance": 3,
+      "total_fixed42_calls": 18,
+      "cancel_prefixes_per_Instance": [
+        1,
+        2
+      ],
+      "total_CANCELLED_calls": 12,
+      "prefix_rows_in_JUnit": 12,
+      "genuine_yields_per_fixed42_call": 2,
+      "prefix_oracle": "Prefix1 reaches one genuine WAIT_YIELD with0 earlier resumes; prefix2 reaches two distinct genuine wakes in one epoch with1 earlier resume. Public cancel_current returns CANCEL_REQUESTED; natural bounded polls reach CANCELLED/canonicalUnit/wake0/emptyPanic in that epoch. No free/stop fabricates cancellation.",
+      "recovery_oracle": "After each cancellation, actual owned I64=42 returns after two real yields and the first real poll epoch equals cancelled epoch+1. Owned result is taken/dropped to canonical Unit; budgets are not replenished.",
+      "stale_and_output_oracles": "Cancelled epoch/wake wait_request/resume reject BAD_STATE immediately, after drain and after recovery; wait sentinel stays byte-identical. Empty take rejects BAD_STATE; occupied take rejects BAD_ARGUMENT without modifying its sentinel.",
+      "route_assertion_boundary": "Actual compiled driver/support assertions passed: each selected constructor/child native or VM delegate advances, opposite remains unchanged; selected child ACTION_SUSPEND delta equals prefix for cancellation and2 for each real42, opposite unchanged. Raw/JUnit do not print delegate hit totals; no ordinary-route hit count is borrowed.",
+      "peer_scope": "Two Instances are live together after caller Program drop. Each case is driven sequentially while its peer remains READY and undriven. Simultaneous pending sibling isolation is DEFERRED.",
+      "lifetime_oracles": "Input packet/path/identity poisoned/freed, Closed/rewrite owner dead and full Lowered proof retained before public seal. NEW private entry rejects BAD_ARGUMENT with allocation attempts unchanged; canonical0 initializes both. Code lease remains alive through cancel/recovery and after first Instance free; exactly1 real release after final free. Final physical/compiler/runtime table-zero assertions pass; these do not prove per-object stable lifecycle or no early finalize/reclaim."
+    },
+    "independent_execution_review": {
+      "status": "PASS_INDEPENDENT_ACTUAL_MSVC_CANCEL_PREFIX3_EXECUTION_REVIEW",
+      "path": "build-consumer-evidence/parallel-consumer-interface-delta-r1/typed-library-native-mixed-3a884-cancel-prefix3-executed-review-r1.json",
+      "sha256": "de901233a8d0bc2b80168e1f3949b84b2346c2536ece78cbde3887f31679512b"
+    },
+    "retained_first_red": {
+      "dryrun_no_Popen": {
+        "result": {
+          "path": "build-consumer-current3a884-typed-native-msvc-r1/execution-cancel-prefix-build-r1/result.json",
+          "sha256": "341d6c9c664f82ccd6f765b0f1a44c5b361cc2997b97eda33f74da48fd599f0c"
+        },
+        "raw": {
+          "path": "build-consumer-current3a884-typed-native-msvc-r1/execution-cancel-prefix-build-r1/cancel-target-dry-run.raw.txt",
+          "sha256": "c92d809d0a927c5ceac9cc8a9f370f9fff482e2c064534a4065436c43e1ecd02"
+        },
+        "boundary": "No product Popen; CONFIGURE_DEPENDS verifier/regenerator prediction rejected. Missing new4 was a secondary NO_POPEN boundary error, not actual B drift."
+      },
+      "actual_original_alias_C1083": {
+        "result": {
+          "path": "build-consumer-current3a884-typed-native-msvc-r1/execution-cancel-prefix-build-r2/result.json",
+          "sha256": "16482e108adc156ac58288c76b1a9bf39a6e4db2c24cb01aabde3739e5ee2644"
+        },
+        "raw": {
+          "path": "build-consumer-current3a884-typed-native-msvc-r1/execution-cancel-prefix-build-r2/raw.log",
+          "sha256": "6a7399ce28fff61b7182399c9ae6e9a6d8ad140fbfb50bcbcbab5a9469089a8f"
+        },
+        "pid": 44784,
+        "exit": 1,
+        "reaped": true,
+        "boundary": "Three actual CL generated-file Invalid argument failures; lexical Fo260/260/261. All failures remain sealed; r5 changes only the execution route to Fo248/248/249, not original commands/configuration/materials."
+      }
+    },
+    "archive_identity_limit": "Actual build stamp unknown/dirty0 preserved; Git attribution independent. No CLI/package/SDK/release qualification.",
+    "prior_facets": "All previous static plans, normal3 qualification and first-red records remain unchanged; this append-only facet does not rebind historical claims.",
+    "full_FI": "NOT_RUN",
+    "axes": "NOT_RUN",
+    "ASan_UBSan": "NOT_RUN",
+    "strong_two_pending_sibling_isolation": "DEFERRED",
+    "stable_per_object_lifecycle": "OPEN",
+    "sticky_init_failure_and_owned_escape": "OPEN",
+    "standalone_AOT_double_C": "NOT_RUN",
+    "SourceDelete": "OPEN",
+    "Main": "NOT_ADOPTED",
+    "window": "CLOSED_REAPED",
+    "retired": 0,
+    "whole_completion": "OPEN",
+    "OPEN": [
+      "Complete compiler/runtime FI, all resource axes and safety profiles",
+      "Simultaneous pending sibling isolation",
+      "Stable per-object construction/finalize/reclaim and no early reclaim",
+      "Sticky init failure/partial cleanup and owned result escape",
+      "Standalone original AOT and independent double-C determinism",
+      "Physical SourceDelete, default/SDK/external packaging, Root adoption and final retirement"
+    ],
+    "caption_binding": "Postexecution append-only annotation. Sealed actual inputs, raw/JUnit, build/runtime results and independent execution receipt remain authoritative. All prior facets and failures are preserved."
   }
 }
