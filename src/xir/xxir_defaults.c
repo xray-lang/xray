@@ -10,6 +10,7 @@
  *   Only an authenticated owner and ordinal authorize a private default helper.
  */
 #include "xxir_defaults_internal.h"
+#include "xxir_metadata_domain_internal.h"
 #include "xxir_compile_memory.h"
 #include "xxir_declarations.h"
 #include "xxir_constraints.h"
@@ -24,7 +25,7 @@ static bool defaults_spend(XrXirCompileContext *b, uint64_t amount) {
     if (!xir_compile_work(b, amount)) return false;
      return true;
 }
-XR_FUNC XrXirStatus xr_xir_compile_default_lookup(const XrXirCompileContext *compile_context, const XrXirModule *m, uint32_t owner, uint32_t ordinal, const XrXirDefaultBinding **out) {
+XR_FUNC XrXirStatus xir_metadata_default_lookup(const XrXirCompileContext *compile_context, const XirMetadataDomain *m, uint32_t owner, uint32_t ordinal, const XrXirDefaultBinding **out) {
     if (!xir_compile_context_valid(compile_context)) return XR_XIR_BAD_STRUCTURE;
     XrXirCompileContext compile_state = *compile_context;
     XrXirCompileContext *b = &compile_state;
@@ -39,6 +40,12 @@ XR_FUNC XrXirStatus xr_xir_compile_default_lookup(const XrXirCompileContext *com
         if (a->owner==owner && a->ordinal==ordinal) { *out=a; return XR_XIR_OK; }
     }
     *out = NULL; return XR_XIR_OK;
+}
+XR_FUNC XrXirStatus xr_xir_compile_default_lookup(const XrXirCompileContext *compile_context,
+    const XrXirModule *module,uint32_t owner,uint32_t ordinal,const XrXirDefaultBinding **output) {
+    if (!xir_compile_context_valid(compile_context) || !output) return XR_XIR_BAD_STRUCTURE;
+    XirMetadataDomain domain=xir_metadata_domain_from_module(module);
+    return xir_metadata_default_lookup(compile_context,module ? &domain : NULL,owner,ordinal,output);
 }
 XR_FUNC XrXirStatus xr_xir_compile_default_helper(const XrXirCompileContext *compile_context, const XrXirModule *m, uint32_t function, bool *out) {
     if (!xir_compile_context_valid(compile_context)) return XR_XIR_BAD_STRUCTURE;

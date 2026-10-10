@@ -10,6 +10,17 @@
  *   State authority and missing execution proof never erase one another.
  *   Shortest owned causes do not borrow artifacts or depend on edge insertion.
  */
+#include "xxir_metadata_domain_internal.h"
+
+/* Instruction fields and the actual callee SSA type belong to the current
+ * admitted body. Metadata cannot supply or authorize an instruction. */
+typedef struct EffectRootSeedRecord {
+    const XirMetadataDomain *domain;
+    const XrXirInstruction *instruction;
+    uint32_t function,ordinal;
+    XrXirType callable_type;
+} EffectRootSeedRecord;
+
 XR_FUNC const XrXirRootEffects *xr_xir_effects_root(const XrXirEffects *effects, uint32_t function) {
     return effects && function < effects->count ? &effects->root[function] : NULL;
 }
@@ -32,20 +43,20 @@ static void effect_root_terminal(XrXirRootEffectWitness *witness,
     XrXirRootEffectWitness candidate = {cause,instruction,UINT32_MAX,slot,0};
     if (!witness->cause || effect_root_cause_before(&candidate,witness)) *witness = candidate;
 }
-static XrXirStatus effect_root_slot(const XrXirModule *module, XrXirEffects *effects,
-    uint32_t f, uint32_t i, const XrXirCompileContext *work) {
-    const XrXirInstruction *op = &module->functions[f].instructions[i];
-    const XrXirSlot *slot = &module->declarations->slots[op->immediate];
-    XrXirRootEffectCause cause = XR_XIR_ROOT_CAUSE_MUTABLE_SLOT;
+static XrXirStatus effect_root_slot(const EffectRootSeedRecord *request,XrXirEffects *effects,
+    const XrXirCompileContext *work) {
+    const XrXirInstruction *op=request->instruction;
+    const XrXirSlot *slot=&request->domain->declarations->slots[op->immediate];
+    XrXirRootEffectCause cause=XR_XIR_ROOT_CAUSE_MUTABLE_SLOT;
     if (!slot->mutable) {
-        XrXirProofContext proof = {module,{XR_XIR_CONTEXT_FUNCTION,f,0}};
-        XrXirStatus status = xr_xir_compile_type_markers_prove(work,&proof,slot->type,XR_XIR_CONSTRAINT_SENDABLE);
-        if (status == XR_XIR_OK) return XR_XIR_OK;
-        if (status != XR_XIR_BAD_TYPE) return status;
-        cause = XR_XIR_ROOT_CAUSE_NON_SENDABLE_CONST;
+        XirMetadataProofContext proof={request->domain,{XR_XIR_CONTEXT_FUNCTION,request->function,0}};
+        XrXirStatus status=xir_metadata_type_markers_prove(work,&proof,slot->type,XR_XIR_CONSTRAINT_SENDABLE);
+        if (status==XR_XIR_OK) return XR_XIR_OK;
+        if (status!=XR_XIR_BAD_TYPE) return status;
+        cause=XR_XIR_ROOT_CAUSE_NON_SENDABLE_CONST;
     }
-    effects->root[f].requires_root = true;
-    effect_root_terminal(&effects->root_witnesses[f],cause,i,(uint32_t)op->immediate);
+    effects->root[request->function].requires_root=true;
+    effect_root_terminal(&effects->root_witnesses[request->function],cause,request->ordinal,(uint32_t)op->immediate);
     return XR_XIR_OK;
 }
 
@@ -192,10 +203,12 @@ XR_FUNC XrXirStatus xr_xir_compile_root_cause_trace_copy(const XrXirCompileConte
     trace->facts = effects->root[function]; trace->counts[0] = counts[0]; trace->counts[1] = counts[1];
     *output = trace; return XR_XIR_OK;
 }
-static XrXirStatus effect_root_callable(const XrXirModule *module, XrXirEffects *effects,
-    uint32_t f, uint32_t i, const XrXirCompileContext *work) {
+static XrXirStatus effect_root_callable(const EffectRootSeedRecord *request,XrXirEffects *effects,
+    const XrXirCompileContext *work) {
     if (!xir_compile_work(work, 1)) return XR_XIR_BUDGET;
-    const XrXirInstruction *op = &module->functions[f].instructions[i];
+    const XirMetadataDomain *module=request->domain;
+    uint32_t f=request->function,i=request->ordinal;
+    const XrXirInstruction *op=request->instruction;
     const XrXirTypeNode *signature = NULL;
     XrXirRootEffectCause cause = XR_XIR_ROOT_CAUSE_INDIRECT;
     if (op->op == XR_XIR_CALL_REQUIREMENT) {
@@ -207,7 +220,7 @@ static XrXirStatus effect_root_callable(const XrXirModule *module, XrXirEffects 
         cause = XR_XIR_ROOT_CAUSE_REQUIREMENT;
     } else {
         signature = xr_xir_callable_signature(module->types,
-            xr_xir_operand_type(&module->functions[f], (uint32_t)op->immediate));
+            request->callable_type);
     }
     if (!signature || !xr_xir_callable_flags_valid(signature->flags)) return XR_XIR_BAD_TYPE;
     if (signature->flags & XR_XIR_CALLABLE_ROOT_REQUIRED) {
@@ -222,12 +235,16 @@ static XrXirStatus effect_root_callable(const XrXirModule *module, XrXirEffects 
 }
 /* Explicit classification makes a newly executing opcode fail closed until its
  * authority rule is recorded, even when control effects already know it. */
-static XrXirStatus effect_root_seed(const XrXirModule *module, XrXirEffects *effects,
-    uint32_t f, uint32_t i, const XrXirCompileContext *work) {
-    const XrXirInstruction *op = &module->functions[f].instructions[i];
+static XrXirStatus effect_root_seed_record(const EffectRootSeedRecord *request,XrXirEffects *effects,
+    const XrXirCompileContext *work) {
+    if (!request || !request->domain || !request->instruction || !effects ||
+        request->function>=request->domain->function_count || request->function>=effects->count)
+        return XR_XIR_BAD_STRUCTURE;
+    uint32_t f=request->function,i=request->ordinal;
+    const XrXirInstruction *op=request->instruction;
     switch (op->op) {
     case XR_XIR_SLOT_LOAD: case XR_XIR_SLOT_PLACE: case XR_XIR_SLOT_STORE:
-        return effect_root_slot(module,effects,f,i,work);
+        return effect_root_slot(request,effects,work);
     case XR_XIR_SLOT_INIT: case XR_XIR_SLOT_GROUP_INIT: {
         uint32_t slot = op->op == XR_XIR_SLOT_GROUP_INIT ?
             (uint32_t)((uint64_t)op->immediate >> 32) : (uint32_t)op->immediate;
@@ -236,7 +253,7 @@ static XrXirStatus effect_root_seed(const XrXirModule *module, XrXirEffects *eff
         return XR_XIR_OK;
     }
     case XR_XIR_CALL_INDIRECT: case XR_XIR_INVOKE_INDIRECT: case XR_XIR_CALL_REQUIREMENT:
-        return effect_root_callable(module, effects, f, i, work);
+        return effect_root_callable(request,effects,work);
     case XR_XIR_CONST_BOOL: case XR_XIR_CONST_INT: case XR_XIR_CONST_STRING:
     case XR_XIR_ATOMIC_NEW: case XR_XIR_ATOMIC_LOAD: case XR_XIR_ATOMIC_STORE:
     case XR_XIR_ATOMIC_ADD: case XR_XIR_ATOMIC_SUB: case XR_XIR_ATOMIC_FETCH_ADD:
@@ -289,6 +306,18 @@ static XrXirStatus effect_root_seed(const XrXirModule *module, XrXirEffects *eff
         return XR_XIR_OK;
     default: return XR_XIR_BAD_STRUCTURE;
     }
+}
+static XrXirStatus effect_root_seed(const XrXirModule *module,XrXirEffects *effects,
+    uint32_t f,uint32_t i,const XrXirCompileContext *work) {
+    if (!module || !module->functions || f>=module->function_count ||
+        i>=module->functions[f].instruction_count || !module->functions[f].instructions)
+        return XR_XIR_BAD_STRUCTURE;
+    const XrXirInstruction *op=&module->functions[f].instructions[i];
+    XirMetadataDomain domain=xir_metadata_domain_from_module(module);
+    EffectRootSeedRecord request={&domain,op,f,i,XR_XIR_UNIT};
+    if (op->op==XR_XIR_CALL_INDIRECT || op->op==XR_XIR_INVOKE_INDIRECT)
+        request.callable_type=xr_xir_operand_type(&module->functions[f],(uint32_t)op->immediate);
+    return effect_root_seed_record(&request,effects,work);
 }
 /* Each node is queued once. Equal-distance parent choices can improve without
  * requeueing because descendants refer to the same node and fixed distance. */

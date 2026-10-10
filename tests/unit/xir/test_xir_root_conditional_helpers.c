@@ -36,6 +36,7 @@
 #include "xir_invocation_reference_result_cases.h"
 #include "xir_invocation_sparse_storage_cases.h"
 #include "xir_invocation_copy_storage_cases.h"
+#include "xir_metadata_domain_bridge_cases.h"
 
 static XrXirStatus conditional_classify(const XrXirCompileContext *context, uint32_t mode, bool oracle) {
     ConditionalRawFixture f;conditional_raw_fixture(&f,mode);
@@ -1343,7 +1344,8 @@ static XrXirStatus conditional_resource_case(const XrXirCompileContext *context,
 }
 
 static XrXirStatus conditional_retry_case(const XrXirCompileContext *context,uint32_t which) {
-    if (which>=72) return XR_XIR_BAD_STRUCTURE;
+    if (which>=73) return XR_XIR_BAD_STRUCTURE;
+    if (which==72) return conditional_metadata_case(context,false);
     return which<61?conditional_resource_case(context,which):
         which<66?conditional_sparse_case(context,which-61,false):
         which<69?conditional_storage_case(context,which-66,false):conditional_copy_case(context,which-69,false);
@@ -1400,12 +1402,12 @@ static void conditional_axes(void) {
 }
 
 int main(int argc, char **argv) {
-    if (argc==2 && !strcmp(argv[1],"--compiler")) { conditional_oom();conditional_axes();conditional_sparse_resources();conditional_storage_resources();conditional_copy_resources();conditional_retry_complete(); }
+    if (argc==2 && !strcmp(argv[1],"--compiler")) { conditional_oom();conditional_axes();conditional_sparse_resources();conditional_storage_resources();conditional_copy_resources();conditional_metadata_resources();conditional_retry_complete(); }
     else if (argc==2 && !strcmp(argv[1],"--retry-census")) conditional_retry_census();
     else if (argc==2 && !strcmp(argv[1],"--rotation")) conditional_invocation_rotation_run(false);
     else if (argc==2 && !strcmp(argv[1],"--rotation-pipeline")) conditional_invocation_rotation_run(true);
     else if (argc==2 && !strcmp(argv[1],"--new")) conditional_new_literals();
     else { CHECK(argc==1);conditional_literals();conditional_new_literals(); }
-    if (argc==1 || (argc==2 && !strcmp(argv[1],"--new"))) { conditional_sparse_literals();conditional_storage_literals();conditional_copy_literals(); }
+    if (argc==1 || (argc==2 && !strcmp(argv[1],"--new"))) { conditional_sparse_literals();conditional_storage_literals();conditional_copy_literals();conditional_metadata_literals(); }
     CHECK(!rp_live && !rp_live_bytes);return 0;
 }

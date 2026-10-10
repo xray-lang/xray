@@ -69,7 +69,8 @@ static void wide_fixture(QueueFixture *f) {
     for (uint32_t i=0;i<17;++i) f->parameters[i]=(XrXirCallableParameter){constructed(16-i),0};
     f->parameters[17]=(XrXirCallableParameter){constructed(3),0};
     f->nodes[17]=(XrXirTypeNode){.kind=XR_XIR_TYPE_CALLABLE,.element=XR_XIR_UNIT,
-        .parameters=f->parameters,.parameter_count=18,.result=XR_XIR_I64};
+        .parameters=f->parameters,.parameter_count=18,.result=XR_XIR_I64,
+        .flags=XR_XIR_CALLABLE_ROOT_NONE};
     f->types.count=18;f->root=constructed(17);
 }
 static XrCompileResourceLimits caps(void) {
@@ -127,6 +128,14 @@ static void boundaries(void) {
     attempts=0;CHECK(public_proof(&context,&wide)==XR_XIR_OK);CHECK(attempts==3);
     wide.nodes[0].parameter_span=1;CHECK(public_proof(&context,&wide)==XR_XIR_BAD_TYPE);
     owner_free(&context,baseline);
+}
+static void omitted_callable_flags(void) {
+    QueueFixture f;wide_fixture(&f);f.nodes[17].flags=0;
+    XrXirCompileContext context=owner_new(caps());
+    XrCompileResourceStats before=stats(&context);size_t physical_before=attempts;
+    CHECK(xr_xir_compile_types_structure_verify(&context,&f.types)==XR_XIR_BAD_TYPE);
+    CHECK(stats(&context).allocation_count==before.allocation_count && attempts==physical_before);
+    owner_free(&context,before.live_bytes);
 }
 static void allocation_faults(QueueFixture *f,bool growth) {
     size_t sites=0;
@@ -300,6 +309,7 @@ static void prefix_work_cuts(void) {
 
 int main(void) {
     prefix_multiple_priors();prefix_reuse();prefix_multiple_faults();prefix_multiple_limits();prefix_work_cuts();
+    omitted_callable_flags();
     boundaries();QueueFixture deep,wide;deep_fixture(&deep,256);wide_fixture(&wide);
     allocation_faults(&deep,false);allocation_faults(&wide,false);allocation_faults(&deep,true);
     exact_limits(&deep,false);exact_limits(&wide,false);exact_limits(&deep,true);scoped_reuse();

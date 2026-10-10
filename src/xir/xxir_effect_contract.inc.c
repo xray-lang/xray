@@ -53,12 +53,12 @@ static XrXirStatus effect_callable_bound_matches_scratch(const XrXirCompileConte
  * entry never accepts a prepared scope count or substitutes a callee's real
  * call arguments. The current definition proves all nested type obligations
  * before the common outer-bound relation is evaluated. */
-static XrXirStatus effect_callable_bound_definition_scratch(const XrXirCompileContext *context,
-    const XirEffectCallableBound *request,const XrXirModule *module,uint32_t function,
+static XrXirStatus effect_callable_bound_metadata_scratch(const XrXirCompileContext *context,
+    const XirEffectCallableBound *request,const XirMetadataDomain *module,uint32_t function,
     XrXirTypeMatchScratch *scratch) {
     if (!xir_compile_context_valid(context) || !request || !scratch ||
         scratch->resources!=context->resources || !module || !module->types ||
-        !module->functions || function>=module->function_count ||
+        function>=module->function_count ||
         request->source!=module->types || request->destination!=module->types ||
         request->arguments || request->argument_count) return XR_XIR_BAD_STRUCTURE;
     const XrXirGeneric *generic=module->generics?&module->generics[function]:NULL;
@@ -72,8 +72,8 @@ static XrXirStatus effect_callable_bound_definition_scratch(const XrXirCompileCo
         if (!xir_compile_work(context,1)) return XR_XIR_BUDGET;
         if (xr_xir_binder_kind(generic,p)>XR_XIR_BINDER_RESULT_VARIABLE) return XR_XIR_BAD_STRUCTURE;
     }
-    XrXirProofContext proof={module,{XR_XIR_CONTEXT_FUNCTION,function,0}};
-    XrXirStatus status=xr_xir_compile_context_constraints_verify(context,&proof);
+    XirMetadataProofContext proof={module,{XR_XIR_CONTEXT_FUNCTION,function,0}};
+    XrXirStatus status=xir_metadata_context_constraints_verify(context,&proof);
     /* Only this sequential pair shares storage. Each query clears its own
      * pending/seen state and rebuilds the actual declaration proof. Neither
      * capacity survives this definition call or overlaps final matching. */
@@ -82,8 +82,8 @@ static XrXirStatus effect_callable_bound_definition_scratch(const XrXirCompileCo
     if (status==XR_XIR_OK) status=xr_xir_compile_type_expression_shape_scratch(context,module->types,request->actual,count,&shape);
     xir_type_scratch_free(&shape);
     XirConstraintScratch use={context->resources,NULL};
-    if (status==XR_XIR_OK) status=xr_xir_compile_type_use_verify_scratch(context,&proof,request->declared,&use);
-    if (status==XR_XIR_OK) status=xr_xir_compile_type_use_verify_scratch(context,&proof,request->actual,&use);
+    if (status==XR_XIR_OK) status=xir_metadata_type_use_verify_scratch(context,&proof,request->declared,&use);
+    if (status==XR_XIR_OK) status=xir_metadata_type_use_verify_scratch(context,&proof,request->actual,&use);
     xr_xir_constraint_scratch_free(&use);
     XrXirType *arguments=status==XR_XIR_OK && count?xir_compile_alloc(context,(size_t)count*sizeof(*arguments),&status):NULL;
     for (uint32_t p=0;p<count && status==XR_XIR_OK;++p) {
@@ -93,6 +93,14 @@ static XrXirStatus effect_callable_bound_definition_scratch(const XrXirCompileCo
     XirEffectCallableBound bound=*request;bound.arguments=arguments;bound.argument_count=count;
     if (status==XR_XIR_OK) status=effect_callable_bound_compare_scratch(context,&bound,count,scratch);
     xr_compile_resources_free(arguments);return status;
+}
+static XrXirStatus effect_callable_bound_definition_scratch(const XrXirCompileContext *context,
+    const XirEffectCallableBound *request,const XrXirModule *module,uint32_t function,
+    XrXirTypeMatchScratch *scratch) {
+    if (!xir_compile_context_valid(context) || !request || !scratch ||
+        scratch->resources!=context->resources) return XR_XIR_BAD_STRUCTURE;
+    XirMetadataDomain domain=xir_metadata_domain_from_module(module);
+    return effect_callable_bound_metadata_scratch(context,request,module ? &domain : NULL,function,scratch);
 }
 
 XR_FUNC XrXirStatus xir_effect_callable_bound_matches_definition(const XrXirCompileContext *context,

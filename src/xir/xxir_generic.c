@@ -10,6 +10,7 @@
  *   Unknown type arguments retain only the capabilities their declarations prove.
  */
 #include "xxir_generic.h"
+#include "xxir_metadata_domain_internal.h"
 #include "xxir_compile_memory.h"
 #include "xxir_types.h"
 #include "xxir_constraints.h"
@@ -157,11 +158,23 @@ XrXirStatus xr_xir_compile_generic_call(const XrXirCompileContext *compile_conte
     }
     return XR_XIR_OK;
 }
-XrXirStatus xr_xir_compile_call_type_matches(const XrXirCompileContext *compile_context, const XrXirModule *module, uint32_t caller, const XrXirInstruction *call, XrXirType type, XrXirType actual) {
+XR_FUNC XrXirStatus xir_metadata_call_type_matches(const XrXirCompileContext *compile_context,
+    const XirMetadataDomain *domain,uint32_t caller,const XrXirInstruction *call,
+    XrXirType type,XrXirType actual) {
+    if (!xir_compile_context_valid(compile_context) || !domain || !call ||
+        caller>=domain->function_count) return XR_XIR_BAD_STRUCTURE;
+    XrXirCompileContext compile_state=*compile_context;
+    uint32_t count=call->type_arguments[1],first=call->type_arguments[0];
+    const XrXirGeneric *generic=domain->generics ? &domain->generics[caller] : NULL;
+    if (count && (!generic || !generic->arguments || first>generic->argument_count ||
+        count>generic->argument_count-first)) return XR_XIR_BAD_STRUCTURE;
+    const XrXirType *arguments=count ? generic->arguments+first : NULL;
+    return xr_xir_compile_type_substitution_matches(&compile_state,domain->types,arguments,count,type,actual);
+}
+XR_FUNC XrXirStatus xr_xir_compile_call_type_matches(const XrXirCompileContext *compile_context,
+    const XrXirModule *module,uint32_t caller,const XrXirInstruction *call,
+    XrXirType type,XrXirType actual) {
     if (!xir_compile_context_valid(compile_context)) return XR_XIR_BAD_STRUCTURE;
-    XrXirCompileContext compile_state = *compile_context;
-    XrXirCompileContext *remaining = &compile_state;
-    uint32_t count = call->type_arguments[1];
-    const XrXirType *arguments = count ? module->generics[caller].arguments + call->type_arguments[0] : NULL;
-    return xr_xir_compile_type_substitution_matches(remaining, module->types, arguments, count, type, actual);
+    XirMetadataDomain domain=xir_metadata_domain_from_module(module);
+    return xir_metadata_call_type_matches(compile_context,module ? &domain : NULL,caller,call,type,actual);
 }

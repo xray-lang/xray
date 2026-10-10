@@ -314,16 +314,16 @@ static XrXirStatus effect_context_dense_intern(EffectContextOwner *owner,
 }
 
 static XrXirStatus effect_context_dense_actuals(EffectContextOwner *owner,
-    const XrXirModule *source, uint32_t index, uint8_t **fixed_output, bool *changed) {
+    const XrXirModule *source, uint32_t index, EffectTerms *storage, uint8_t **fixed_output, bool *changed) {
     EffectOrdinaryContexts *dense=owner->dense;
     XrXirFunction *function=&dense->functions[index];
     uint64_t count=(uint64_t)function->parameter_count+function->instruction_count;
     if (count>UINT32_MAX) return XR_XIR_BUDGET;
-    XrXirType *declared=effect_terms_alloc(&dense->terms,(size_t)count,sizeof(*declared));
-    XrXirType *values=effect_terms_alloc(&dense->terms,(size_t)count,sizeof(*values));
-    XrXirType *before=effect_terms_alloc(&dense->terms,function->instruction_count,sizeof(*before));
-    uint8_t *fixed=effect_terms_alloc(&dense->terms,(size_t)count,sizeof(*fixed));
-    if ((count && (!declared || !values || !fixed)) || (function->instruction_count && !before)) return dense->terms.status;
+    XrXirType *declared=effect_terms_alloc(storage,(size_t)count,sizeof(*declared));
+    XrXirType *values=effect_terms_alloc(storage,(size_t)count,sizeof(*values));
+    XrXirType *before=effect_terms_alloc(storage,function->instruction_count,sizeof(*before));
+    uint8_t *fixed=effect_terms_alloc(storage,(size_t)count,sizeof(*fixed));
+    if ((count && (!declared || !values || !fixed)) || (function->instruction_count && !before)) return storage->status;
     for (uint32_t v=0;v<count;++v) {
         if (!xir_compile_work(dense->terms.remaining,3)) return XR_XIR_BUDGET;
         declared[v]=values[v]=xr_xir_operand_type(function,v);
@@ -362,16 +362,18 @@ static XrXirStatus effect_context_dense_expand(EffectContextOwner *owner,
     EffectOrdinaryNode identity=dense->nodes[index];
     const XrXirGeneric *generic=source->generics ? &source->generics[identity.declaration] : NULL;
     if (index<dense->base_count && generic && generic->parameter_count) return XR_XIR_OK;
+    /* These arrays describe only this expansion. Interned types and selected
+     * physical vectors continue to belong to the complete execution owner. */
+    EffectTerms storage={.remaining=dense->terms.remaining};
     uint8_t *fixed=NULL;
-    XrXirStatus status=effect_context_dense_actuals(owner,source,index,&fixed,changed);
-    if (status!=XR_XIR_OK) return status;
+    XrXirStatus status=effect_context_dense_actuals(owner,source,index,&storage,&fixed,changed);
     uint32_t count=source->functions[identity.declaration].instruction_count;
-    for (uint32_t i=0;i<count;++i) {
-        if (!xir_compile_work(dense->terms.remaining,1)) return XR_XIR_BUDGET;
+    for (uint32_t i=0;i<count && status==XR_XIR_OK;++i) {
+        if (!xir_compile_work(dense->terms.remaining,1)) { status=XR_XIR_BUDGET;break; }
         XrXirInstruction original=source->functions[identity.declaration].instructions[i];
         if (!effect_context_family(original.op)) continue;
         uint32_t ordinary=(uint32_t)owner->ordinary->functions[identity.ordinary].instructions[i].immediate;
-        if (ordinary>=owner->ordinary->count) return XR_XIR_BAD_STRUCTURE;
+        if (ordinary>=owner->ordinary->count) { status=XR_XIR_BAD_STRUCTURE;break; }
         const XrXirFunction *caller=&dense->functions[index];
         XrXirInstruction actual=caller->instructions[i];actual.op=original.op;
         EffectDenseRequest request={.contexts=owner->ordinary,.execution=dense,.selected=ordinary,
@@ -381,7 +383,7 @@ static XrXirStatus effect_context_dense_expand(EffectContextOwner *owner,
         status=effect_dense_build(dense->terms.remaining,&request,&vector);
         uint32_t target=UINT32_MAX;
         if (status==XR_XIR_OK) status=effect_context_dense_intern(owner,source,ordinary,&vector,index,&target);
-        if (status!=XR_XIR_OK) return status;
+        if (status!=XR_XIR_OK) break;
         XrXirInstruction *op=(XrXirInstruction *)&dense->functions[index].instructions[i];
         XrXirOp expected=original.op==XR_XIR_CALL_REQUIREMENT || original.op==XR_XIR_CALL_DEFAULT ?
             XR_XIR_CALL : original.op==XR_XIR_INVOKE_DEFAULT ? XR_XIR_INVOKE : original.op;
@@ -394,7 +396,7 @@ static XrXirStatus effect_context_dense_expand(EffectContextOwner *owner,
         }
         op->type_arguments[0]=op->type_arguments[1]=0;
     }
-    return XR_XIR_OK;
+    effect_terms_free(&storage);return status;
 }
 
 static XrXirStatus effect_context_dense_solve(EffectContextOwner *owner,

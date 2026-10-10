@@ -14,6 +14,7 @@
 #ifndef XXIR_CONSTRAINT_PROOF_INTERNAL_H
 #define XXIR_CONSTRAINT_PROOF_INTERNAL_H
 #include "xxir_constraint_proof.h"
+#include "xxir_metadata_domain_internal.h"
 struct ConstraintProofMemory;
 typedef struct XirConstraintScratch {
     XrCompileResources *resources;
@@ -31,5 +32,15 @@ typedef struct XirConstraintArguments {
 } XirConstraintArguments;
 XR_FUNC XrXirStatus xr_xir_compile_constraint_arguments_prove(const XrXirCompileContext *context,
     const XrXirProofContext *proof, const XirConstraintArguments *use);
+/* Domain queries use the same obligation FIFO as raw queries. Scratch keeps
+ * only allocation capacity; no domain pointer or proof fact survives a call. */
+XR_FUNC XrXirStatus xir_metadata_type_use_verify_scratch(const XrXirCompileContext *context,
+    const XirMetadataProofContext *proof,XrXirType type,XirConstraintScratch *scratch);
+XR_FUNC XrXirStatus xir_metadata_context_constraints_verify(const XrXirCompileContext *context,
+    const XirMetadataProofContext *proof);
+XR_FUNC XrXirStatus xir_metadata_type_markers_prove(const XrXirCompileContext *context,
+    const XirMetadataProofContext *proof,XrXirType type,uint32_t markers);
+XR_FUNC XrXirStatus xir_metadata_constraint_arguments_prove(const XrXirCompileContext *context,
+    const XirMetadataProofContext *proof,const XirMetadataArguments *use);
 XR_FUNC void xr_xir_constraint_scratch_free(XirConstraintScratch *scratch);
 #endif // XXIR_CONSTRAINT_PROOF_INTERNAL_H
