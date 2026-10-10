@@ -62,5 +62,44 @@
     "full_safety": "NOT_RUN",
     "Main": "NOT_RUN",
     "retired": 0
+  },
+  "same_git1b_current_static_vm_packet_20261010_facet": {
+    "status": "PASS_SAME_SEALED_GIT1B_NORMAL_STATIC_SOURCE_VM_AND_PACKET_VM_ONLY",
+    "qualification_review": {
+      "path": "build-consumer-evidence/consumer-session-20261009-r1/static-packet-asan-1b-r2/qualification-review-r1.json",
+      "sha256": "f7a32273069b08533830d737200e0e65f0802de1a78a6f800b5c5f0ded14cc91"
+    },
+    "source_binding": {
+      "git_base": "1b10947e7eacca26e4debbbbe4de0776a7fe2f67",
+      "test_overlay_commit": "2de5a0db74055c3f665127e157fa54e0728186e9",
+      "source_manifest_sha256": "60ff2ee10a9f73b04782054f8c1d80d6ecc354a53d67d30be9dec16e5a298c25",
+      "source_paths": 11570,
+      "identity": "Checked schema27/contract72, Value22/Call28/Program29; existing static assertions compiled",
+      "policy": "Bounded Root-granted test window only; does not adopt a new immutable consumer producer. Top-level25f producer and all whole-legacy OPEN responsibilities preserved."
+    },
+    "evidence": {
+      "MSVC": "E:\\xxl\\xray-lang\\.worktrees\\312-xir-rebuild\\build-root-program\\root86-static-pure-head-r2-fresh-build-r4",
+      "ASAN_UBSAN": "build-consumer-evidence/consumer-session-20261009-r1/static-packet-asan-1b-r2",
+      "refs": {
+        "E:\\xxl\\xray-lang\\.worktrees\\312-xir-rebuild\\build-root-program\\root86-static-pure-head-r2-fresh-build-r4\\qualify\\result.json": "9b85ac4bcba8f7a89c2bae3db22776f54c1f7d3fbfd594b0eefa04c72cb9f548",
+        "E:\\xxl\\xray-lang\\.worktrees\\312-xir-rebuild\\build-root-program\\root86-static-pure-head-r2-fresh-build-r4\\qualify\\declared-output-manifest.json": "c53ab9d4bd6bb38cbf0e74eda64af806793c0392e4ffa4f25e6301f5ef0dda60",
+        "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\consumer-session-20261009-r1\\static-packet-asan-1b-r2\\qualify\\result.json": "e4d00f88646dd793517e5a2302e1e3c66bd307287d2d21d5380e0fddde9c8c87",
+        "E:\\xxl\\xray-lang\\.worktrees\\318-program-consumer-migration\\build-consumer-evidence\\consumer-session-20261009-r1\\static-packet-asan-1b-r2\\qualify\\declared-output-manifest.json": "98fc3db7c3d8ec2e91919dea1fc9f59837531b6253b4daa2b72b3c2afdeeafe9"
+      }
+    },
+    "tests": [
+      "test_source_static_methods_current_vm",
+      "test_source_static_methods_current_packet_vm"
+    ],
+    "original": "Original166-byte Source prefix plus54-byte exported adapter unchanged; First.value19 + Second.value23 independently fixed42. Existing shape assertions preserved.",
+    "build": "MSVC Root r4 and own Clang ASan/UBSan actual fresh122-step builds from same sealed11570 source paths. Own99 direct TUs instrumented in Debug/Od with assertions and source header dependencies; four consumer objects177/177/166/181 recorded. Existing native_cache pair generator remains a linked dependency.",
+    "actual": "Each configuration actual original ordinary3 PASS at120/P1/LibraryRUN_SERIAL and -j1; only static Source/packet two gates map this obligation. Actual fresh3904-byte packet plus32-byte SHA256 identity equal across MSVC/ASan and canonical inputs; receiver two distinct Instances times2 independent42, input poisoned/freed, private answer rejects without allocation, callerProgram reference dead, actual Lowered lease released, compiler/runtime physical0. TypedLibrary ordinary pass is a separate responsibility.",
+    "canonical_pair_sha256": {
+      "packet": "72e866b77286d0a98ab517dbbe30f219fe38cec07be9119d90ca2ccb97356604",
+      "full_identity": "251b7f0923ae6a96e3547c3c90e2d0a923c461afd0860236816a8c56c7cdbb15"
+    },
+    "first_red": "r1 actual CMake and Ninja exit0; profile parser rejected legal -MD and wrapped link plan before any consumer build; r2 requalified frozen configured own tree without rerunning CMake or recopying source. Original r1 failure unchanged.",
+    "remaining": "Source-free process makes no Source request but still links native_cache public Source dependency. No SourceDelete/standaloneAOT/native/mixed/fullFI/resources/cancel/stable-object lifecycle/default/SDK/new-producer/main integration/retirement claim. Whole legacy and original BackendIR representation responsibility OPEN.",
+    "retired": 0
   }
 }
