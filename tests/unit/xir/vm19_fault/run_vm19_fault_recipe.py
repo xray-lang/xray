@@ -4,8 +4,8 @@ from ctypes import wintypes
 SHA=lambda p:hashlib.sha256(p.read_bytes()).hexdigest()
 FIRST=[13,13,13,13,13,13,4,13,1,13,6,5,8,7,13,6,5,1,13]
 FINAL=[13,13,13,13,13,13,4,1,1,1,1,1,8,7,1,1,1,1,1]
-# The AWAIT child host fault remains executor shutdown status; the other controls have no unreplaced child failure.
-FREE=[0,0,13,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]
+# Unretired host/protocol faults survive release; a successful retry retires the prior root epoch.
+FREE=[13,13,13,13,13,13,0,0,0,0,0,0,8,7,0,0,0,0,0]
 OLD_S=[8,8,11,8,8,8,8,10,11,10,10,10,8,8,16,16,16,11,10]
 OLD_P=[15,25,20,21,13,9,15,29,18,29,29,29,10,10,40,40,40,18,33]
 U=4294967295;Z=18446744073709551615
