@@ -88,6 +88,14 @@ XR_FUNC XrXirStatus xr_xir_compile_structure_verify_v2(const XrXirCompileContext
     const XrXirModule *module, const XrXirConstruction *construction, XrXirDiagnostic *diagnostic);
 XR_FUNC XrXirStatus xr_xir_compile_verify_effects_v2(const XrXirCompileContext *context,
     const XrXirModule *module, const XrXirConstruction *construction, const XrXirEffects *effects, XrXirDiagnostic *diagnostic);
+/* Returns only the same complete checker's fresh, owned Template derivation.
+ * Output must be empty. Failure preserves it; success transfers ownership to
+ * this private producer call. Neither entry accepts prepared caller facts. */
+XR_FUNC XrXirStatus xr_xir_compile_verify_owned_effects_v2(const XrXirCompileContext *context,
+    const XrXirModule *module, const XrXirConstruction *construction,
+    XrXirEffects **output, XrXirDiagnostic *diagnostic);
+XR_FUNC XrXirStatus xr_xir_compile_artifact_verify_owned_effects(const XrXirArtifact *artifact,
+    XrXirEffects **output, XrXirDiagnostic *diagnostic);
 XR_FUNC XrXirStatus xr_xir_compile_effects_refine_verified(const XrXirCompileContext *context,
     const XrXirModule *module, const XrXirRootRefiner *refiner, XrXirEffects **output);
 XR_FUNC XrXirStatus xr_xir_compile_check_refined_v2(const XrXirCompileContext *context,

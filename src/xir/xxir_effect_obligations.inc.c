@@ -12,8 +12,9 @@
 #include "xxir_constraints.h"
 #include "xxir_callable_root_obligations.inc.c"
 static XrXirStatus declaration_effects_verify(const XrXirModule *module,
-    XrXirCompileContext *remaining, XrXirDiagnostic *diagnostic, const XrXirEffects *prepared) {
+    XrXirCompileContext *remaining, XrXirDiagnostic *diagnostic, const XrXirEffects *prepared, XrXirEffects **output) {
     bool templated = module->provenance && module->provenance->kind == XR_XIR_EVIDENCE_TEMPLATE;
+    if (output && (*output || prepared || !templated)) return XR_XIR_BAD_STRUCTURE;
     if (!module->declarations) {
         if (!templated) return XR_XIR_OK;
         XrXirEffects *owned = NULL;
@@ -21,6 +22,7 @@ static XrXirStatus declaration_effects_verify(const XrXirModule *module,
             xr_xir_compile_effects_infer_verified(remaining, module, &owned);
         if (status == XR_XIR_OK) status = xir_effects_parameters_match(remaining,
             module, prepared ? prepared : owned);
+        if (status==XR_XIR_OK && output) { *output=owned;owned=NULL; }
         xr_xir_compile_effects_free(owned);
         return status;
     }
@@ -101,6 +103,7 @@ static XrXirStatus declaration_effects_verify(const XrXirModule *module,
             }
         }
     }
+    if (status==XR_XIR_OK && output) { *output=effects;effects=NULL; }
     xr_xir_compile_effects_free(effects);
     return status;
 }

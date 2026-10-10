@@ -479,14 +479,13 @@ XrXirStatus xr_xir_compile_specialize(const XrXirArtifact *checked, XrXirArtifac
     XrXirCompileContext limits = c.remaining;
 
     if (!c.source || c.source->stage != XR_XIR_CHECKED || c.source->linkage_kind != XR_XIR_PROGRAM) { c.diagnostic.status = XR_XIR_BAD_STAGE; goto done; }
-    c.diagnostic.status = xr_xir_compile_artifact_verify(checked, &c.diagnostic);
+    bool templated=c.source->provenance && c.source->provenance->kind==XR_XIR_EVIDENCE_TEMPLATE;
+    c.diagnostic.status = templated ?
+        xr_xir_compile_artifact_verify_owned_effects(checked,&c.effects,&c.diagnostic) :
+        xr_xir_compile_artifact_verify(checked,&c.diagnostic);
     if (c.diagnostic.status != XR_XIR_OK) goto done;
     if (xir_effect_evidence_is_instance(c.source)) {
         c.diagnostic.status=xr_xir_compile_recheck_v2(&limits, c.source, checked->construction, output, &c.diagnostic); goto done;
-    }
-    if (c.source->provenance && c.source->provenance->kind==XR_XIR_EVIDENCE_TEMPLATE) {
-        c.diagnostic.status=xr_xir_compile_effects_infer_verified(&c.remaining,c.source,&c.effects);
-        if (c.diagnostic.status!=XR_XIR_OK) goto done;
     }
     if (c.source->types && c.source->types->nominals) {
         c.diagnostic.status = spec_nominal_seed(&c);

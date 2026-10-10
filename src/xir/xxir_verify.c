@@ -1230,11 +1230,30 @@ XR_FUNC XrXirStatus xr_xir_compile_verify_effects_v2(const XrXirCompileContext *
     XrXirStatus status = xr_xir_compile_structure_verify_v2(context,module,construction,&location);
     if (status == XR_XIR_OK) {
         XrXirCompileContext remaining = *context;
-        status = declaration_effects_verify(module,&remaining,&location,effects);
+        status = declaration_effects_verify(module,&remaining,&location,effects,NULL);
     }
     location.status = status;
     if (diagnostic) *diagnostic = location;
     return status;
+}
+/* The complete checker returns only its own freshly derived Template owner.
+ * It retains no producer callback or proof cache, and failed checks publish
+ * neither an owner nor facts. Every structural and permission gate remains. */
+XR_FUNC XrXirStatus xr_xir_compile_verify_owned_effects_v2(const XrXirCompileContext *context,
+    const XrXirModule *module, const XrXirConstruction *construction,
+    XrXirEffects **output, XrXirDiagnostic *diagnostic) {
+    if (!xir_compile_context_valid(context) || !output || *output) return XR_XIR_BAD_STRUCTURE;
+    XrXirDiagnostic location={XR_XIR_OK,UINT32_MAX,UINT32_MAX,UINT32_MAX,XR_XIR_DIAGNOSTIC_NONE};
+    XrXirEffects *owned=NULL;
+    XrXirStatus status=xr_xir_compile_structure_verify_v2(context,module,construction,&location);
+    if (status==XR_XIR_OK) {
+        XrXirCompileContext remaining=*context;
+        status=declaration_effects_verify(module,&remaining,&location,NULL,&owned);
+    }
+    if (status==XR_XIR_OK && !owned) status=XR_XIR_BAD_STRUCTURE;
+    location.status=status;if (diagnostic) *diagnostic=location;
+    if (status!=XR_XIR_OK) { xr_xir_compile_effects_free(owned);return status; }
+    *output=owned;return XR_XIR_OK;
 }
 XrXirStatus xr_xir_compile_verify_v2(const XrXirCompileContext *context,
     const XrXirModule *module, const XrXirConstruction *construction, XrXirDiagnostic *diagnostic) {

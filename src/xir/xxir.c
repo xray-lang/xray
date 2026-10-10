@@ -352,8 +352,9 @@ XrXirStatus xr_xir_compile_lower(const XrXirArtifact *checked, const XrXirTarget
     return transition(xr_xir_compile_artifact_module(checked), checked->construction, XR_XIR_CHECKED, budget, output, diagnostic, target);
 }
 
-XrXirStatus xr_xir_compile_artifact_verify(const XrXirArtifact *artifact, XrXirDiagnostic *diagnostic) {
-    if (!artifact) return XR_XIR_BAD_STRUCTURE;
+static XrXirStatus artifact_verify_owned_effects(const XrXirArtifact *artifact,
+    XrXirEffects **output, XrXirDiagnostic *diagnostic) {
+    if (!artifact || (output && *output)) return XR_XIR_BAD_STRUCTURE;
     XrXirCompileContext compile_state = artifact->context;
     XrXirCompileContext *budget = &compile_state;
     XrXirCompileContext limits = *budget;
@@ -370,9 +371,29 @@ XrXirStatus xr_xir_compile_artifact_verify(const XrXirArtifact *artifact, XrXirD
         if (memcmp(digest, artifact->checked_identity, sizeof(digest)))
             return transition_error(XR_XIR_BAD_STRUCTURE, diagnostic);
     }
-    XrXirStatus status = xr_xir_compile_verify_v2(&limits, xr_xir_compile_artifact_module(artifact), artifact->construction, diagnostic);
-    if (status != XR_XIR_OK)
-        return status;
+    XrXirEffects *owned=NULL;
+    XrXirStatus status = output ? xr_xir_compile_verify_owned_effects_v2(&limits,
+        xr_xir_compile_artifact_module(artifact),artifact->construction,&owned,diagnostic) :
+        xr_xir_compile_verify_v2(&limits,xr_xir_compile_artifact_module(artifact),artifact->construction,diagnostic);
+    if (status != XR_XIR_OK) return status;
     status = xr_xir_compile_layout_verify(artifact);
-    return status == XR_XIR_OK ? status : transition_error(status, diagnostic);
+    if (status!=XR_XIR_OK) { xr_xir_compile_effects_free(owned);return transition_error(status,diagnostic); }
+    if (output) *output=owned;
+    return XR_XIR_OK;
+}
+XrXirStatus xr_xir_compile_artifact_verify(const XrXirArtifact *artifact, XrXirDiagnostic *diagnostic) {
+    return artifact_verify_owned_effects(artifact,NULL,diagnostic);
+}
+
+/* Only this call's fully checked Template may yield its actual effects owner.
+ * Public verification keeps all gates; no derived owner is stored in an
+ * artifact, reused across calls, or accepted from a caller's pointer. */
+XR_FUNC XrXirStatus xr_xir_compile_artifact_verify_owned_effects(const XrXirArtifact *artifact,
+    XrXirEffects **output, XrXirDiagnostic *diagnostic) {
+    if (!artifact || !output || *output) return transition_error(XR_XIR_BAD_STRUCTURE,diagnostic);
+    const XrXirModule *module=xr_xir_compile_artifact_module(artifact);
+    if (!module || module->stage!=XR_XIR_CHECKED) return transition_error(XR_XIR_BAD_STAGE,diagnostic);
+    if (!module->provenance || module->provenance->kind!=XR_XIR_EVIDENCE_TEMPLATE)
+        return transition_error(XR_XIR_BAD_STRUCTURE,diagnostic);
+    return artifact_verify_owned_effects(artifact,output,diagnostic);
 }
