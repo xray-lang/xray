@@ -4535,3 +4535,5 @@ include("${CMAKE_CURRENT_LIST_DIR}/xir/product_consumers/source_typed_library_re
 include("${CMAKE_CURRENT_LIST_DIR}/xir/product_consumers/source_static_methods_current_packet_vm_candidate.cmake")
 
 include("${CMAKE_CURRENT_LIST_DIR}/xir/product_consumers/source_typed_library_receiver_current_packet_vm_candidate.cmake")
+
+include("${CMAKE_CURRENT_LIST_DIR}/xir/product_consumers/source_typed_library_receiver_current_native_mixed_candidate.cmake")
