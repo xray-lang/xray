@@ -280,12 +280,13 @@ static void packet_file_close(ReceiverRun *run) {
 
 #if defined(XR_SOURCE_TYPED_LIBRARY_NATIVE_PACKET_WRITER)
 static void packet_file_write(ReceiverRun *run, const char *path, const void *bytes, size_t length) {
-    receiver_operation = run->operation = "writer-exclusive-authentic-native-material-file";
+    receiver_operation = run->operation = "writer-owned-authentic-native-material-file";
     CHECK(!run->packet_file && path && bytes && length);
     unsigned slot = 0;
     while (slot < 4 && strcmp(path, run->material_paths[slot])) ++slot;
     CHECK(slot < 4 && !run->material_created[slot]);
-    run->packet_file = fopen(path, "wbx");
+    /* The build owns these exact validated outputs and regenerates them. */
+    run->packet_file = fopen(path, "wb");
     CHECK(run->packet_file); run->material_created[slot] = true;
     CHECK(fwrite(bytes, 1, length, run->packet_file) == length);
     packet_file_close(run);
