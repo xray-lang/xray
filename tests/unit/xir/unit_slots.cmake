@@ -11,7 +11,7 @@ target_compile_definitions(test_xir_unit_slots_source PRIVATE
     XR_SOURCE_STDLIB="${CMAKE_SOURCE_DIR}/stdlib")
 add_custom_command(OUTPUT ${XIR_UNIT_SLOTS_CHECKED}
     COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_CURRENT_BINARY_DIR}/generated
-    COMMAND $<TARGET_FILE:test_xir_unit_slots_source> ${XIR_UNIT_SLOTS_CHECKED}
+    COMMAND $<TARGET_FILE:test_xir_unit_slots_source> --write-checked ${XIR_UNIT_SLOTS_CHECKED}
     DEPENDS test_xir_unit_slots_source
         ${CMAKE_SOURCE_DIR}/tests/fixtures/xir_unit_slots/root.xr
         ${CMAKE_SOURCE_DIR}/tests/fixtures/xir_unit_slots/base.xr
@@ -21,7 +21,7 @@ add_executable(test_xir_unit_slots_packet xir/test_xir_unit_slots_packet.c ${XIR
 target_link_libraries(test_xir_unit_slots_packet PRIVATE xray_xir_vm xray_xir_cgen)
 target_compile_definitions(test_xir_unit_slots_packet PRIVATE XR_CHECKED_FIXTURE="${XIR_UNIT_SLOTS_CHECKED}")
 add_custom_command(OUTPUT ${XIR_UNIT_SLOTS_GENERATED}
-    COMMAND $<TARGET_FILE:test_xir_unit_slots_packet> ${XIR_UNIT_SLOTS_GENERATED}
+    COMMAND $<TARGET_FILE:test_xir_unit_slots_packet> --write-c ${XIR_UNIT_SLOTS_CHECKED} ${XIR_UNIT_SLOTS_GENERATED}
     DEPENDS test_xir_unit_slots_packet ${XIR_UNIT_SLOTS_CHECKED}
     VERBATIM)
 foreach(unit_slots_mode IN ITEMS native mixed)

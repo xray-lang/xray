@@ -20,9 +20,13 @@
 #include "xir_unit_locals_compile_owner.h"
 #include "xir_runtime_allocations.h"
 #include "xir_unit_locals_execution.h"
-int main(int argc,char **argv){CHECK(argc==1||argc==2);
+int main(int argc,char **argv){
+const bool write_only=argc==4&&!strcmp(argv[1],"--write-c");
+CHECK(argc==1||argc==2||write_only);
+const char *checked_path=write_only?argv[2]:XR_CHECKED_FIXTURE;
+const char *output_path=write_only?argv[3]:argc==2?argv[1]:NULL;
 UnitCompileOwner owner={0};unit_compile_owner_new(&owner);
-FILE *file=fopen(XR_CHECKED_FIXTURE,"rb");
+FILE *file=fopen(checked_path,"rb");
 CHECK(file&&!fseek(file,0,SEEK_END));
 long size=ftell(file);
 CHECK(size>=64&&size<=262144&&!fseek(file,0,SEEK_SET));
@@ -46,10 +50,16 @@ const XrXirModule *module=xr_xir_compile_artifact_module(lowered);
  UnitEntries entries=unit_entries(module);
  XrXirCSource c={0};
 CHECK(xr_xir_compile_emit_c(lowered,"unit_locals",1048576,&c)==XR_XIR_OK);
-if(argc==2){file=fopen(argv[1],"wb");
+if(output_path){file=fopen(output_path,"wb");
 CHECK(file&&fwrite(c.text,1,c.length,file)==c.length&&!fclose(file));
 }xr_xir_compile_c_source_free(&c);
 
+ if(write_only){
+  xr_xir_compile_artifact_free(lowered);lowered=NULL;
+  CHECK(!runtime_live&&!runtime_bytes);
+  unit_compile_owner_free(&owner);unit_compile_report();
+  puts("unit_locals normal C generation; compiler physical zero");return 0;
+ }
  XrXirProgram *program=NULL;
 CHECK(xr_xir_compile_vm_program_take(&lowered,&program)==XR_XIR_OK);
 XrXirValue held[2]={{0}};

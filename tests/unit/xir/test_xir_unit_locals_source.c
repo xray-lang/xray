@@ -44,10 +44,12 @@ static void unit_query_facts(const XrXirSourceResult *result){
   for(uint32_t p=0;p<m->functions[f].parameter_count;++p)CHECK(m->functions[f].parameters[p]!=XR_XIR_UNIT);
 }
 int main(int argc, char **argv) {
-    CHECK(argc == 1 || argc == 2);
+    const bool write_only = argc == 3 && !strcmp(argv[1], "--write-checked");
+    CHECK(argc == 1 || argc == 2 || write_only);
+    const char *output_path = write_only ? argv[2] : argc == 2 ? argv[1] : NULL;
     UnitCompileOwner retained = {0}; XrXirArtifact *owned = NULL;
     size_t sites = 0, retained_live = 0, retained_bytes = 0;
-    for (size_t pass = 0; pass <= sites; ++pass) {
+    for (size_t pass = 0; pass <= (write_only ? 0 : sites); ++pass) {
         UnitCompileOwner owner = {0}; unit_compile_owner_new(&owner);
         XrCompilerSession *session = NULL;
         CHECK(xr_compile_session_new(owner.context.resources, &session) == XR_COMPILER_SESSION_OK);
@@ -65,12 +67,12 @@ int main(int argc, char **argv) {
                 diagnostic.line, diagnostic.column, diagnostic.message);
             CHECK(status == XR_XIR_OK && result.checked && result.snapshot);
             sites = attempts; CHECK(sites);
-            unit_query_facts(&result);
+            if (!write_only) unit_query_facts(&result);
             CHECK(xr_xir_compile_artifact_context(result.checked)->resources == owner.context.resources);
             XrXirCheckedPacket packet = {0};
             CHECK(xr_xir_compile_checked_write(result.checked, &packet, NULL) == XR_XIR_OK && packet.length <= 262144);
-            if (argc == 2) {
-                FILE *file = fopen(argv[1], "wb");
+            if (output_path) {
+                FILE *file = fopen(output_path, "wb");
                 CHECK(file && fwrite(packet.bytes, 1, packet.length, file) == packet.length && !fclose(file));
             }
             xr_xir_compile_checked_packet_free(&packet);
@@ -90,6 +92,13 @@ int main(int argc, char **argv) {
         } else unit_compile_owner_free(&owner);
         CHECK(unit_compile_live == retained_live && unit_compile_bytes == retained_bytes);
         CHECK(!xr_test_unit_locals_runtime_live() && !xr_test_unit_locals_runtime_bytes());
+    }
+    if (write_only) {
+        xr_xir_compile_artifact_free(owned); owned = NULL;
+        unit_compile_owner_free(&retained); unit_compile_report();
+        CHECK(!xr_test_unit_locals_runtime_live() && !xr_test_unit_locals_runtime_bytes());
+        puts("unit_locals normal Checked generation; compiler physical zero");
+        return 0;
     }
     xr_test_unit_locals_source_run(&owned); CHECK(!owned);
     unit_compile_owner_free(&retained); unit_compile_report();
