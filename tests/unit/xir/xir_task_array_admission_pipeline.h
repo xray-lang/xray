@@ -101,6 +101,12 @@ static void task_array_profile_stage(TaskArrayCompile *run, const char *stage) {
         (unsigned long long)stats.peak_bytes, (unsigned long long)stats.work);
     fflush(stdout); task_array_profile_clock = now;
 }
+/* Governed generic declarations have known schema types, not closed arguments. */
+static bool task_array_concat_schema_known(const XrXirSourceDeclaration *declaration) {
+    return declaration && declaration->type.known && declaration->parameter_count==1 &&
+        declaration->parameters && declaration->parameters[0].known && declaration->signature &&
+        !strcmp(declaration->signature,"(...arrays: Array<T>) -> Array<T>");
+}
 static TaskArrayCompile task_array_build(size_t failure, XrCompileResourceLimits limits, unsigned mode, const char *emit) {
     instance_compile_zero(); instance_compile_attempts = 0; instance_compile_fail_at = failure; instance_compile_injected = false;
     TaskArrayCompile run = {0}; run.status = XR_XIR_OUT_OF_MEMORY;
@@ -135,7 +141,16 @@ static TaskArrayCompile task_array_build(size_t failure, XrCompileResourceLimits
         const XrXirSourceDeclaration *declaration = &view->declarations[d];
         if (declaration->native_identity == 14) {
             CHECK(!declaration->mutable && declaration->parameter_count == 1 && declaration->exported);
-            CHECK(!declaration->type.known && !strcmp(declaration->signature, "(...arrays: Array<T>) -> Array<T>"));
+            if (!task_array_concat_schema_known(declaration))
+                fprintf(stderr,"TASK_ARRAY_DECLARATION_FIRST_RED native=%u known=%u signature=%s\n",declaration->native_identity,(unsigned)declaration->type.known,declaration->signature);
+            CHECK(task_array_concat_schema_known(declaration));
+            XrXirSourceDeclaration unknown=*declaration;
+            unknown.type.known=false;
+            CHECK(!task_array_concat_schema_known(&unknown));
+            unknown=*declaration;
+            XrXirSourceType unknown_parameter=declaration->parameters[0];unknown_parameter.known=false;
+            unknown.parameters=&unknown_parameter;
+            CHECK(!task_array_concat_schema_known(&unknown));
             ++task_array_members;
         }
     }
