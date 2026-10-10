@@ -66,8 +66,8 @@
   "same_git1b_current_static_vm_packet_20261010_facet": {
     "status": "PASS_SAME_SEALED_GIT1B_NORMAL_STATIC_SOURCE_VM_AND_PACKET_VM_ONLY",
     "qualification_review": {
-      "path": "build-consumer-evidence/consumer-session-20261009-r1/static-packet-asan-1b-r2/qualification-review-r1.json",
-      "sha256": "f7a32273069b08533830d737200e0e65f0802de1a78a6f800b5c5f0ded14cc91"
+      "path": "build-consumer-evidence/consumer-session-20261009-r1/static-packet-asan-1b-r2/qualification-review-r2.json",
+      "sha256": "4a1f83d4bb6a2702d45a47bba3d86914465b1ade150db69862166ffa056bcc88"
     },
     "source_binding": {
       "git_base": "1b10947e7eacca26e4debbbbe4de0776a7fe2f67",
