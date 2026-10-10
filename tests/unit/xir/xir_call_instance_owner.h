@@ -25,11 +25,13 @@ static void call_runtime_retiring(void *pointer) {
     ++call_retirements;
 }
 
+static void call_instance_config(XrXirInstanceConfig *config) {
+    CHECK(xr_xir_instance_config_init(config,sizeof(*config))==XR_XIR_CALL_READY);
+    config->metadata_limit=65536;config->value_limit=65536;config->call_limit=65536;
+    config->poll_limit=100;config->depth_limit=10;
+}
 static XrXirInstance *call_instance_new(XrXirProgram *program) {
-    XrXirInstanceConfig config;
-    CHECK(xr_xir_instance_config_init(&config,sizeof(config))==XR_XIR_CALL_READY);
-    config.metadata_limit=65536;config.value_limit=65536;config.call_limit=65536;
-    config.poll_limit=100;config.depth_limit=10;
+    XrXirInstanceConfig config;call_instance_config(&config);
     XrXirInstance *instance=NULL;
     CHECK(xr_xir_instance_new(program,&config,&instance)==XR_XIR_CALL_READY);
     return instance;
@@ -57,11 +59,11 @@ static uint32_t call_instance_language_depth(const XrXirInstance *instance) {
     return depth-1;
 }
 
-static void call_instance_free(XrXirInstance *instance,XrXirCallStatus expected) {
+static XrXirCallStatus call_instance_retire(XrXirInstance *instance) {
     CHECK(instance && !call_retiring_instance);
     call_retiring_instance=instance;call_retirements=0;
     memset(call_retired_accounting,0,sizeof(call_retired_accounting));
-    CHECK(xr_xir_instance_free(instance)==expected);
+    XrXirCallStatus status=xr_xir_instance_free(instance);
     call_retiring_instance=NULL;
     CHECK(call_retirements==1);
     for (uint32_t i=0;i<2;++i) {
@@ -69,5 +71,9 @@ static void call_instance_free(XrXirInstance *instance,XrXirCallStatus expected)
         CHECK(!accounting->live_bytes && !accounting->depth && accounting->allocations==accounting->frees);
         CHECK(accounting->peak_bytes<=65536 && accounting->polls<=100 && accounting->peak_depth<=10);
     }
+    return status;
+}
+static void call_instance_free(XrXirInstance *instance,XrXirCallStatus expected) {
+    CHECK(call_instance_retire(instance)==expected);
 }
 #endif // XIR_CALL_INSTANCE_OWNER_H

@@ -78,7 +78,7 @@ static XrXirArtifact *native_inbox_fixture(const XrXirCompileContext *context, u
         {XR_XIR_CONST_INT,XR_XIR_I64,{0},{0},91,{0}},
         {XR_XIR_RETURN,XR_XIR_UNIT,{7},{0},0,{0}}};
     const XrXirBlock protected_blocks[]={{0,1,0,0},{1,2,3,1},{3,2,0,0},{5,3,0,0}};
-    XrXirFunctionIdentity identities[5]={{0}};
+    XrXirFunctionIdentity identities[5]={{.exported=1},{0},{0},{0},{0}};
     if (mode==4) {
         functions[0].instructions=protected_root; functions[0].instruction_count=8;
         functions[0].blocks=protected_blocks; functions[0].block_count=4;

@@ -6,8 +6,8 @@
  *
  * xir_native_inbox_boundaries.inc.c - Actual generated entry ownership gates
  */
-XR_DATA const XrXirCallEntry fixture_inbox0_entries[5],fixture_inbox1_entries[5],
-    fixture_inbox2_entries[5],fixture_inbox3_entries[5],fixture_inbox4_entries[5],fixture_inbox5_entries[5];
+XR_DATA const XrXirProgramSpec fixture_inbox0_program,fixture_inbox1_program,
+    fixture_inbox2_program,fixture_inbox3_program,fixture_inbox4_program,fixture_inbox5_program;
 typedef struct NativeInboxWitness {
     XrXirResumeEntry resume;
     XrXirDomain *domain;
@@ -18,7 +18,7 @@ typedef struct NativeInboxWitness {
 static const unsigned char native_inbox_input[]={ 'a',0,0xC2,0xA2 };
 static const char native_inbox_result[]={ 'r',0,'z' };
 static XrXirAction native_inbox_child(XrXirCallView *view) {
-    NativeInboxWitness *w=view->instance;
+    NativeInboxWitness *w=(NativeInboxWitness *)view->environment;CHECK(view->instance && w);
     if (!w->child_steps++) return (XrXirAction){XR_XIR_ACTION_SUSPEND,0,NULL,0,{0},{0},0};
     CHECK(w->child_steps==2);
     if (w->mode==2) return (XrXirAction){XR_XIR_ACTION_RETURN,0,NULL,0,{0},{0},0};
@@ -30,11 +30,11 @@ static XrXirAction native_inbox_child(XrXirCallView *view) {
     return (XrXirAction){XR_XIR_ACTION_RETURN,0,NULL,0,w->child_value,{0},0};
 }
 static void native_inbox_child_release(XrXirCallView *view,XrXirCallStatus reason) {
-    (void)reason; NativeInboxWitness *w=view->instance;
+    (void)reason; NativeInboxWitness *w=(NativeInboxWitness *)view->environment;CHECK(view->instance && w);
     xr_xir_value_drop(&w->child_value); ++w->child_releases;
 }
 static XrXirAction native_inbox_observe(XrXirCallView *view) {
-    NativeInboxWitness *w=view->instance;
+    NativeInboxWitness *w=(NativeInboxWitness *)view->environment;CHECK(view->instance && w);
     bool incoming=view->phase==XR_XIR_CALL_NORMAL && view->inbox.status==XR_XIR_CALL_RETURNED &&
         !w->inboxes && w->mode<3;
     bool same_frontier_panic=view->phase==XR_XIR_CALL_NORMAL && w->mode==5 && !w->panic_landings &&
@@ -125,23 +125,21 @@ static XrXirOutputStatus native_inbox_output(void *context,const XrXirOutputGrou
     return XR_XIR_OUTPUT_OK;
 }
 static bool native_inbox_run(const XrXirCompileContext *context,
-    const XrXirCallEntry *original,uint32_t mode,uint32_t attack,bool cancel) {
+    const XrXirProgramSpec *original,uint32_t mode,uint32_t attack,bool cancel) {
     XrCompileResourceStats compiler_baseline={0};
     CHECK(xr_compile_resources_stats(context->resources,&compiler_baseline)==XR_COMPILE_RESOURCE_OK);
     NativeInboxWitness witness={0};witness.mode=mode;witness.attack=attack;
-    XrXirCallEntry entries[5];memcpy(entries,original,sizeof(entries));
-    witness.resume=entries[0].resume; entries[0].resume=native_inbox_observe;
-    if (mode<3) {entries[1].resume=native_inbox_child;entries[1].release=native_inbox_child_release;}
-    XrXirDomain *domain=NULL,*foreign_domain=NULL;XrXirTypeArena *arena=NULL;
-    XrXirValue input={0};XrXirCall *call=NULL;XrXirCallAccounting accounting={0};
+    XrXirCallEntry entries[5];memcpy(entries,original->entries,sizeof(entries));
+    witness.resume=entries[0].resume;entries[0].resume=native_inbox_observe;entries[0].environment=&witness;
+    if (mode<3) {entries[1].resume=native_inbox_child;entries[1].release=native_inbox_child_release;entries[1].environment=&witness;}
+    XrXirDomain *domain=NULL,*foreign_domain=NULL;XrXirProgram *program=NULL;XrXirInstance *instance=NULL;
+    XrXirValue input={0};bool accepted=false;
     XrXirDomainStats domain_baseline={0},foreign_baseline={0};
     bool completed=false; XrXirCallStatus status=XR_XIR_CALL_OOM;
     XrXirValueStatus vs=xr_xir_domain_new(65536,&domain);
     if (vs!=XR_XIR_VALUE_OK) {CHECK(vs==XR_XIR_VALUE_OOM);goto done;}
     domain_baseline=xr_xir_domain_stats(domain);
     witness.domain=domain;
-    vs=error_fixture_arena(context,&arena);
-    if (vs!=XR_XIR_VALUE_OK) {CHECK(vs==XR_XIR_VALUE_OOM);goto done;}
     vs=xr_xir_string_new(domain,(const char *)native_inbox_input,sizeof(native_inbox_input),&input);
     if (vs!=XR_XIR_VALUE_OK) {CHECK(vs==XR_XIR_VALUE_OOM);goto done;}
     witness.input_baseline=xr_xir_domain_stats(domain);
@@ -150,20 +148,23 @@ static bool native_inbox_run(const XrXirCompileContext *context,
         foreign_baseline=xr_xir_domain_stats(foreign_domain);
         CHECK(xr_xir_string_new(foreign_domain,"foreign",7,&witness.foreign)==XR_XIR_VALUE_OK);
     }
-    XrXirCallConfig config;CHECK(xr_xir_call_config_init(&config,sizeof(config))==XR_XIR_CALL_READY);
-    config.entries=entries;config.entry_count=5;config.instance=&witness;
-    config.byte_limit=65536;config.poll_limit=100;config.depth_limit=10;config.accounting=&accounting;
-    config.admission=error_fixture_admission(domain,arena);
-    config.output=(XrXirOutputProvider){XR_XIR_CALL_ABI_VERSION,0,native_inbox_output,&witness};
-    status=xr_xir_call_new(&config,0,&input,1,&call);
+    XrXirProgramSpec spec=*original;spec.entries=entries;
+    if (!native_program_new(context,&spec,&program)) goto done;
+    XrXirOutputProvider output={XR_XIR_CALL_ABI_VERSION,0,native_inbox_output,&witness};
+    status=native_instance_new(program,&output,&instance);
     if (status!=XR_XIR_CALL_READY) {CHECK(status==XR_XIR_CALL_OOM);goto done;}
-    XrXirCallResult result=xr_xir_call_poll_bounded(call,UINT64_MAX);
-    if (result.status==XR_XIR_CALL_SUSPENDED) {
+    xr_xir_compile_program_drop(program);program=NULL;
+    status=xr_xir_instance_start(instance,0,&input,1);
+    if (status!=XR_XIR_CALL_READY) {CHECK(status==XR_XIR_CALL_OOM);goto done;}
+    accepted=true;
+    XrXirInstanceResult polled=xr_xir_instance_poll_bounded(instance,UINT64_MAX);
+    if (polled.outcome.status==XR_XIR_CALL_SUSPENDED) {
         CHECK(!witness.inboxes && !witness.outputs);
-        if (cancel) CHECK(xr_xir_call_request_cancel(call)==XR_XIR_CALL_CANCEL_REQUESTED);
-        else CHECK(xr_xir_call_resume(call,result.wake)==XR_XIR_CALL_READY);
-        result=xr_xir_call_poll_bounded(call,UINT64_MAX);
+        if (cancel) CHECK(xr_xir_instance_cancel_current(instance)==XR_XIR_CALL_CANCEL_REQUESTED);
+        else CHECK(xr_xir_instance_resume(instance,polled.epoch,polled.outcome.wake)==XR_XIR_CALL_READY);
+        polled=xr_xir_instance_poll_bounded(instance,UINT64_MAX);
     }
+    XrXirCallResult result=polled.outcome;
     status=result.status;
     if (status==XR_XIR_CALL_OOM) goto done;
     if (cancel) {
@@ -181,8 +182,7 @@ static bool native_inbox_run(const XrXirCompileContext *context,
     }
     completed=true;
  done:
-    CHECK(xr_xir_call_free(call)==XR_XIR_CALL_READY);
-    CHECK(!accounting.live_bytes && accounting.allocations==accounting.frees && !accounting.depth);
+    native_instance_retire(instance,accepted,status);xr_xir_compile_program_drop(program);
     xr_xir_value_drop(&witness.child_value);xr_xir_value_drop(&input);xr_xir_value_drop(&witness.foreign);
     if (domain) {
         XrXirDomainStats ds=xr_xir_domain_stats(domain);
@@ -201,7 +201,7 @@ static bool native_inbox_run(const XrXirCompileContext *context,
             ds.allocations>=foreign_baseline.allocations && ds.frees>=foreign_baseline.frees &&
             ds.allocations-foreign_baseline.allocations==ds.frees-foreign_baseline.frees);
     }
-    xr_xir_compile_type_arena_drop(arena);xr_xir_domain_drop(domain);xr_xir_domain_drop(foreign_domain);
+    xr_xir_domain_drop(domain);xr_xir_domain_drop(foreign_domain);
     CHECK(!runtime_live && !runtime_bytes);
     XrCompileResourceStats released={0};
     CHECK(xr_compile_resources_stats(context->resources,&released)==XR_COMPILE_RESOURCE_OK &&
@@ -211,8 +211,8 @@ static bool native_inbox_run(const XrXirCompileContext *context,
 static void native_inbox_boundaries(const XrXirCompileContext *context) {
     XrCompileResourceStats compiler_baseline={0};
     CHECK(xr_compile_resources_stats(context->resources,&compiler_baseline)==XR_COMPILE_RESOURCE_OK);
-    const XrXirCallEntry *tables[]={fixture_inbox0_entries,fixture_inbox1_entries,
-        fixture_inbox2_entries,fixture_inbox3_entries,fixture_inbox4_entries,fixture_inbox5_entries};
+    const XrXirProgramSpec *tables[]={&fixture_inbox0_program,&fixture_inbox1_program,
+        &fixture_inbox2_program,&fixture_inbox3_program,&fixture_inbox4_program,&fixture_inbox5_program};
     for (uint32_t mode=0;mode<6;++mode) for (uint32_t cancel=0;cancel<2;++cancel) {
         runtime_fail_at=SIZE_MAX;runtime_attempts=0;
         CHECK(native_inbox_run(context,tables[mode],mode,0,cancel!=0));
