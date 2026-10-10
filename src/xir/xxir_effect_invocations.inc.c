@@ -39,6 +39,7 @@ typedef struct EffectInvocationNode {
     uint64_t *local_cells,*local_parameters,*local_contexts;
     EffectInvocationProducer *producers;
     uint32_t producer_count,producer_capacity;
+    uint64_t return_coverage;
     uint32_t edge_head;
     bool deferred,local_deferred,queued,expanded;
 } EffectInvocationNode;
@@ -83,6 +84,9 @@ static XrXirStatus effect_root_seed(const XrXirModule *module,XrXirEffects *effe
 static XrXirStatus effect_invocation_producer_column(const EffectInvocationOwner *owner,
     const EffectInvocationBasis *basis,uint32_t site,uint32_t atom,uint32_t *word,uint32_t *bit);
 
+static XrXirStatus effect_invocation_coverage_verify(EffectInvocationOwner *owner);
+static XrXirStatus effect_invocation_coverage_solve(EffectInvocationOwner *owner);
+
 #include "xxir_effect_invocation_nodes.inc.c"
 #include "xxir_effect_invocation_causes.inc.c"
 #include "xxir_effect_invocation_flow.inc.c"
@@ -94,6 +98,7 @@ static XrXirStatus effect_invocation_producer_column(const EffectInvocationOwner
 #include "xxir_effect_invocation_deferred_verify.inc.c"
 #include "xxir_effect_invocation_seal.inc.c"
 #include "xxir_effect_invocation_query.inc.c"
+#include "xxir_effect_invocation_coverage.inc.c"
 #include "xxir_effect_invocation_projection.inc.c"
 #include "xxir_effect_invocation_trace.inc.c"
 #include "xxir_effect_invocation_driver.inc.c"

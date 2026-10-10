@@ -240,6 +240,7 @@ static XrXirStatus effect_invocation_seal(const XrXirCompileContext *work,
     if (owner->work->resources!=work->resources || solution->resources!=work->resources ||
         solution->count!=owner->module->function_count) return XR_XIR_BAD_STRUCTURE;
     XrXirStatus status=effect_invocation_producers_verify(owner);
+    if (status==XR_XIR_OK) status=effect_invocation_coverage_verify(owner);
     if (status==XR_XIR_OK) status=effect_invocation_closed(owner);
     if (status==XR_XIR_OK) status=effect_invocation_deferred_verify(owner);
     if (status==XR_XIR_OK) status=effect_invocation_solution_match(owner,solution);

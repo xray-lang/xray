@@ -17,17 +17,17 @@ static bool effect_invocation_witness_equal(const XrXirRootEffectWitness *a,
         a->slot==b->slot && a->distance==b->distance;
 }
 
-static XrXirStatus effect_invocation_certificate_edge(const XrXirCompileContext *work,
-    const EffectInvocationCertificate *certificate,uint32_t caller,uint32_t edge_index) {
-    const EffectInvocationOwner *equations=certificate->equations;
+static XrXirStatus effect_invocation_edge_shape(const XrXirCompileContext *work,
+    const EffectInvocationOwner *equations,const XrXirModule *module,
+    const XrXirTypes *types,uint32_t caller,uint32_t edge_index) {
     if (caller>=equations->count || edge_index>=equations->edge_count) return XR_XIR_BAD_STRUCTURE;
     EffectInvocationEdge edge=equations->edges[edge_index];
     const EffectInvocationNode *from=&equations->nodes[caller];
-    if (edge.caller!=caller || edge.target>=equations->count || from->body>=certificate->bodies.function_count)
+    if (edge.caller!=caller || edge.target>=equations->count || from->body>=module->function_count)
         return XR_XIR_BAD_STRUCTURE;
     const EffectInvocationNode *to=&equations->nodes[edge.target];
-    const XrXirFunction *function=&certificate->bodies.functions[from->body];
-    if (to->root!=from->root || to->body>=certificate->bodies.function_count ||
+    const XrXirFunction *function=&module->functions[from->body];
+    if (to->root!=from->root || to->body>=module->function_count ||
         edge.instruction>=function->instruction_count) return XR_XIR_BAD_STRUCTURE;
     const XrXirInstruction *op=&function->instructions[edge.instruction];
     if (!xir_compile_work(work,8)) return XR_XIR_BUDGET;
@@ -36,17 +36,17 @@ static XrXirStatus effect_invocation_certificate_edge(const XrXirCompileContext 
             edge.latent==(op->op==XR_XIR_GO)?XR_XIR_OK:XR_XIR_BAD_STRUCTURE;
     if (op->op==XR_XIR_CALL_DEFAULT || op->op==XR_XIR_INVOKE_DEFAULT) {
         const uint32_t *identity=xr_xir_default_identity(op);const XrXirDefaultBinding *binding=NULL;
-        XrXirStatus status=xr_xir_compile_default_lookup(work,&certificate->bodies,identity[0],identity[1],&binding);
+        XrXirStatus status=xr_xir_compile_default_lookup(work,module,identity[0],identity[1],&binding);
         if (status!=XR_XIR_OK) return status;
         return !edge.latent && edge.producer==UINT32_MAX && binding && binding->function==to->body?
             XR_XIR_OK:XR_XIR_BAD_STRUCTURE;
     }
     if (edge.producer>=equations->site_count) return XR_XIR_BAD_STRUCTURE;
     EffectInvocationSite site=equations->sites[edge.producer];
-    if (site.function>=certificate->bodies.function_count || site.target!=to->body ||
+    if (site.function>=module->function_count || site.target!=to->body ||
         site.binding>equations->binding_count || site.captures>equations->binding_count-site.binding)
         return XR_XIR_BAD_STRUCTURE;
-    const XrXirFunction *producer=&certificate->bodies.functions[site.function];
+    const XrXirFunction *producer=&module->functions[site.function];
     if (site.instruction>=producer->instruction_count) return XR_XIR_BAD_STRUCTURE;
     const XrXirInstruction *reference=&producer->instructions[site.instruction];
     if (reference->op!=XR_XIR_FUNCTION_REF || reference->immediate<0 ||
@@ -58,29 +58,35 @@ static XrXirStatus effect_invocation_certificate_edge(const XrXirCompileContext 
     if ((op->op!=XR_XIR_CALL_INDIRECT && op->op!=XR_XIR_INVOKE_INDIRECT) || edge.latent ||
         op->immediate<0 || (uint64_t)op->immediate>=(uint64_t)function->parameter_count+function->instruction_count)
         return XR_XIR_BAD_STRUCTURE;
-    const XrXirTypeNode *actual=xr_xir_callable_signature(&certificate->terms.types,
+    const XrXirTypeNode *actual=xr_xir_callable_signature(types,
         xr_xir_operand_type(function,(uint32_t)op->immediate));
-    const XrXirTypeNode *bound=xr_xir_callable_signature(&certificate->terms.types,reference->type);
-    const XrXirFunction *target=&certificate->bodies.functions[to->body];
+    const XrXirTypeNode *bound=xr_xir_callable_signature(types,reference->type);
+    const XrXirFunction *target=&module->functions[to->body];
     if (!actual || !bound || actual->parameter_count!=op->args[1] ||
         site.captures>target->parameter_count || bound->parameter_count!=target->parameter_count-site.captures ||
         actual->parameter_count!=bound->parameter_count) return XR_XIR_BAD_STRUCTURE;
     XrXirTypeMatchScratch scratch={work->resources,NULL};
     XrXirStatus status=xr_xir_compile_type_substitution_matches_between_scratch(work,
-        &certificate->terms.types,&certificate->terms.types,NULL,0,actual->result,bound->result,&scratch);
+        types,types,NULL,0,actual->result,bound->result,&scratch);
     for (uint32_t p=0;p<actual->parameter_count && status==XR_XIR_OK;++p) {
         if (!xir_compile_work(work,2)) { status=XR_XIR_BUDGET;break; }
         if (actual->parameters[p].mode!=bound->parameters[p].mode ||
-            !xr_xir_callable_parameter_storage_valid(&certificate->terms.types,&actual->parameters[p]) ||
-            !xr_xir_callable_parameter_storage_valid(&certificate->terms.types,&bound->parameters[p])) {
+            !xr_xir_callable_parameter_storage_valid(types,&actual->parameters[p]) ||
+            !xr_xir_callable_parameter_storage_valid(types,&bound->parameters[p])) {
             status=XR_XIR_BAD_STRUCTURE;break;
         }
         status=xr_xir_compile_type_substitution_matches_between_scratch(work,
-            &certificate->terms.types,&certificate->terms.types,NULL,0,
+            types,types,NULL,0,
             actual->parameters[p].type,bound->parameters[p].type,&scratch);
     }
     xr_xir_type_match_scratch_free(&scratch);
     return status==XR_XIR_BAD_TYPE?XR_XIR_BAD_STRUCTURE:status;
+}
+
+static XrXirStatus effect_invocation_certificate_edge(const XrXirCompileContext *work,
+    const EffectInvocationCertificate *certificate,uint32_t caller,uint32_t edge_index) {
+    return effect_invocation_edge_shape(work,certificate->equations,&certificate->bodies,
+        &certificate->terms.types,caller,edge_index);
 }
 
 /* Each walk consumes the immutable local terminal copy. Actual call links

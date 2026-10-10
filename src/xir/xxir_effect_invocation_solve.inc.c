@@ -98,7 +98,7 @@ static XrXirStatus effect_invocations_solve(EffectInvocationOwner *owner) {
         if (!xir_compile_work(owner->work,2)) return XR_XIR_BUDGET;
         if (!owner->nodes[n].expanded || owner->nodes[n].queued) return XR_XIR_BAD_STRUCTURE;
     }
-    return XR_XIR_OK;
+    return effect_invocation_coverage_solve(owner);
 }
 
 /* This is the existing exhaustive local opcode classifier. Only indirect
