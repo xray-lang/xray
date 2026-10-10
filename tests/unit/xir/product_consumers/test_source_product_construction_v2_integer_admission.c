@@ -13,12 +13,14 @@
 #include "xir/xxir_checked.h"
 #include "xir/xxir_construction.h"
 #include "xir/xxir_types.h"
+#include "base/xsha256.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #define CHECK(c) do { if (!(c)) { fprintf(stderr, "%d: %s\n", __LINE__, #c); exit(1); } } while (0)
 #include "xir_source_program_compile_owner.h"
 #include "integer_conversion_cases.inc.c"
+#include "construction_v2_integer_wire_cases.inc.c"
 
 _Static_assert(XR_XIR_CHECKED_SCHEMA == 27u && XR_XIR_CHECKED_CONTRACT == 72u, "Exact Checked identity");
 _Static_assert(XR_XIR_I8 == 5 && XR_XIR_U8 == 8 && XR_XIR_I16 == 6 && XR_XIR_U16 == 9 &&
@@ -31,6 +33,10 @@ _Static_assert(sizeof(integer_conversion_pairs) / sizeof(integer_conversion_pair
     "Complete original integer source and destination pairs");
 _Static_assert(sizeof(integer_conversion_cases) / sizeof(integer_conversion_cases[0]) == 8,
     "Complete original normal and malformed Built inputs");
+
+_Static_assert(XR_XIR_BAD_STAGE == 2, "Independent wrong-stage wire result");
+_Static_assert(sizeof(construction_v2_integer_wire_cases) / sizeof(construction_v2_integer_wire_cases[0]) == 8,
+    "All independent current normal and malformed integer packets");
 
 typedef XrXirStatus (*ConstructionPrototype)(const XrXirCompileContext *, const XrXirTypes *,
     const XrXirConstructionRow *, uint32_t, XrXirConstruction **);
@@ -125,6 +131,13 @@ static void integer_owner(const XrXirArtifact *owner) {
         CHECK(xr_xir_type_is_integer(pair->source) && xr_xir_type_is_integer(pair->target));
         CHECK(!xr_xir_type_is_owned(module->types, pair->source) && !xr_xir_type_is_owned(module->types, pair->target));
     }
+    const ConstructionV2IntegerWireCase *golden = &construction_v2_integer_wire_cases[0];
+    XrXirCheckedPacket packet = {0};
+    CHECK(xr_xir_compile_checked_write(owner, &packet, NULL) == XR_XIR_OK);
+    CHECK(packet.length == golden->length && !memcmp(packet.bytes, golden->bytes, packet.length));
+    xr_xir_compile_checked_packet_free(&packet);
+    CHECK(!packet.bytes && !packet.length && source_program_compile_live == live &&
+        source_program_compile_bytes == bytes);
 }
 
 static XrXirArtifact *integer_empty_admission(const XrXirCompileContext *context, unsigned mutation) {
@@ -198,6 +211,135 @@ static void integer_occupied_admission(const XrXirCompileContext *context,
         integer_conversion_cases[mutation].name, (unsigned)XR_XIR_BAD_STRUCTURE);
 }
 
+
+/* Only the digest primitive is shared; none of these fixtures comes from the codec. */
+static void integer_wire_digest(uint8_t *packet, size_t length) {
+    CHECK(packet && length >= 64);
+    XrSHA256Context sha;
+    xr_sha256_init(&sha);
+    xr_sha256_update(&sha, packet, 32);
+    xr_sha256_update(&sha, packet + 64, length - 64);
+    xr_sha256_final(&sha, packet + 32);
+}
+
+static void integer_wire_u32(uint8_t *bytes, uint32_t value) {
+    CHECK(bytes);
+    for (unsigned i = 0; i < 4; ++i) bytes[i] = (uint8_t)(value >> (8 * i));
+}
+
+static void integer_wire_payload(uint8_t *packet, size_t length) {
+    CHECK(packet && length >= 64);
+    uint64_t payload = length - 64;
+    for (unsigned i = 0; i < 8; ++i) packet[24 + i] = (uint8_t)(payload >> (8 * i));
+}
+
+static void integer_wire_read(const XrXirCompileContext *context, const XrXirArtifact *keeper,
+    const ConstructionV2IntegerWireCase *test, unsigned output_mode) {
+    CHECK(context && keeper && test && test->bytes && output_mode < 3);
+    uint8_t *input = xr_malloc(test->length);
+    CHECK(input);
+    memcpy(input, test->bytes, test->length);
+    XrXirArtifact *output = output_mode == 1 ? (XrXirArtifact *)keeper : NULL;
+    XrXirDiagnostic diagnostic = {XR_XIR_OK, 17, 18, 19, XR_XIR_DIAGNOSTIC_NO_SUSPEND};
+    XrXirStatus expected = output_mode ? XR_XIR_BAD_STRUCTURE : test->expected;
+    XrCompileResourceStats before = integer_stats(context);
+    size_t live = source_program_compile_live, bytes = source_program_compile_bytes;
+    size_t attempts = source_program_compile_attempts;
+    XrXirStatus status = xr_xir_compile_checked_read(context, input, test->length,
+        output_mode == 2 ? NULL : &output, &diagnostic);
+    CHECK(status == expected && !memcmp(input, test->bytes, test->length));
+    XrCompileResourceStats after = integer_stats(context);
+    if (output_mode) {
+        CHECK(before.allocation_count == after.allocation_count && before.allocated_bytes == after.allocated_bytes &&
+            before.live_bytes == after.live_bytes && before.work == after.work &&
+            source_program_compile_attempts == attempts);
+    }
+    memset(input, 0xa5, test->length);
+    xr_free(input);
+    if (status == XR_XIR_OK) {
+        CHECK(!output_mode && output && output != keeper);
+        CHECK(xr_xir_compile_artifact_context(output)->resources == context->resources);
+        integer_owner(output);
+        xr_xir_compile_artifact_free(output);
+    } else {
+        CHECK(output == (output_mode == 1 ? keeper : NULL) && diagnostic.status == expected);
+        if (output_mode) CHECK(diagnostic.function == UINT32_MAX && diagnostic.block == UINT32_MAX &&
+            diagnostic.instruction == UINT32_MAX && diagnostic.reason == XR_XIR_DIAGNOSTIC_NONE);
+    }
+    CHECK(source_program_compile_live == live && source_program_compile_bytes == bytes);
+    integer_owner(keeper);
+    printf("integer-current-wire case=%s output-mode=%u expected=%u actual=%u input-dead=1 keeper-preserved=1\n",
+        test->name, output_mode, (unsigned)expected, (unsigned)status);
+}
+
+static void integer_wire_matrix(const XrXirCompileContext *context, const XrXirArtifact *keeper) {
+    static const char *names[] = {"bad_magic", "foreign_schema", "foreign_contract", "wrong_stage",
+        "reserved_header", "wrong_payload", "wrong_digest", "construction_count_without_nominals",
+        "missing_dense_construction_word", "invalid_evidence_kind", "extra_tail_word",
+        "foreign_checked25_semantic67", "old_body_with_current_identity", "truncated_header",
+        "truncated_function_table"};
+    const ConstructionV2IntegerWireCase *canonical = &construction_v2_integer_wire_cases[0];
+    CHECK(canonical->length >= 92);
+    unsigned transitions = 0;
+    for (size_t i = 0; i < 8; ++i) for (unsigned mode = 0; mode < 2; ++mode) {
+        integer_wire_read(context, keeper, &construction_v2_integer_wire_cases[i], mode);
+        ++transitions;
+    }
+    integer_wire_read(context, keeper, canonical, 2);
+    ++transitions;
+    for (unsigned attack = 0; attack < 15; ++attack) {
+        uint8_t *packet = xr_malloc(canonical->length + 4);
+        CHECK(packet);
+        memcpy(packet, canonical->bytes, canonical->length);
+        size_t length = canonical->length;
+        switch (attack) {
+        case 0: packet[0] ^= 1; break;
+        case 1: integer_wire_u32(packet + 8, 26); break;
+        case 2: integer_wire_u32(packet + 12, 71); break;
+        case 3: integer_wire_u32(packet + 16, 1); break;
+        case 4: integer_wire_u32(packet + 20, 1); break;
+        case 5: integer_wire_payload(packet, length + 1); break;
+        case 6: packet[32] ^= 1; break;
+        case 7: integer_wire_u32(packet + length - 12, 1); break;
+        case 8:
+            memmove(packet + length - 12, packet + length - 8, 8);
+            length -= 4;
+            integer_wire_payload(packet, length);
+            break;
+        case 9: integer_wire_u32(packet + length - 4, UINT32_MAX); break;
+        case 10:
+            memset(packet + length, 0, 4);
+            length += 4;
+            integer_wire_payload(packet, length);
+            break;
+        case 11:
+        case 12:
+            CHECK(integer_conversion_cases[0].length + 4 == canonical->length);
+            length = integer_conversion_cases[0].length;
+            memcpy(packet, integer_conversion_cases[0].bytes, length);
+            if (attack == 12) {
+                integer_wire_u32(packet + 8, 27);
+                integer_wire_u32(packet + 12, 72);
+            }
+            break;
+        case 13: length = 63; break;
+        case 14: length = 76; integer_wire_payload(packet, length); break;
+        default: CHECK(false); break;
+        }
+        if (attack != 6 && attack != 13) integer_wire_digest(packet, length);
+        ConstructionV2IntegerWireCase test = {names[attack], packet, length,
+            attack == 3 ? XR_XIR_BAD_STAGE : XR_XIR_BAD_STRUCTURE};
+        for (unsigned mode = 0; mode < 2; ++mode) {
+            integer_wire_read(context, keeper, &test, mode);
+            ++transitions;
+        }
+        memset(packet, 0xa5, canonical->length + 4);
+        xr_free(packet);
+    }
+    CHECK(transitions == 47);
+    puts("integer-current-wire independent-packets=8 attacks=15 transitions=47 borrowed-inputs-dead=1");
+}
+
 static void integer_packet_detach(const XrXirCompileContext *context, XrXirArtifact **producer) {
     CHECK(producer && *producer);
     XrXirCheckedPacket packet = {0};
@@ -236,12 +378,13 @@ int main(void) {
         ++occupied;
     }
     CHECK(verified == 8 && checked == 8 && occupied == 8);
+    integer_wire_matrix(context, keeper);
     integer_packet_detach(context, &keeper);
     CHECK(!keeper);
     source_program_owners_free();
     CHECK(!source_program_compile_live && !source_program_compile_bytes &&
         !source_program_compile_allocations && !source_program_compile_capacity);
     puts("integer-construction-v2 pairs=64 verify=8 check=8 occupied=8 null-output=1 compiler-physical=0/0 observer=0");
-    puts("Independent current wire goldens, full FI, resource axes, Source, native and runtime qualifications remain OPEN");
+    puts("Current wire fixtures are independent; full FI, resource axes, Source, native and runtime qualifications remain OPEN");
     return 0;
 }
