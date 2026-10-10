@@ -46,7 +46,7 @@ static void native_method_body(const XrXirFunction *function, int64_t expected) 
     for (uint32_t i = 0; i < function->instruction_count; ++i) {
         const XrXirInstruction *op = &function->instructions[i];
         if (op->op == XR_XIR_CONST_INT) {
-            ++constants; CHECK(op->type == XR_XIR_I64 && op->immediate == (uint64_t)expected); value = i;
+            ++constants; CHECK(op->type == XR_XIR_I64 && op->immediate == expected); value = i;
         }
         if (op->op == XR_XIR_RETURN) {
             ++returns; CHECK(op->type == XR_XIR_UNIT && value != UINT32_MAX && op->args[0] == value);

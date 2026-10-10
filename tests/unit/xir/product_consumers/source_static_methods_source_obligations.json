@@ -324,5 +324,44 @@
     ],
     "completion": "OPEN",
     "caption_binding": "Post-static-review revision annotation. No old runtime inputs or prior proof outcomes changed; currentcandidate awaits fresh qualification."
+  },
+  "source_free_actual_native_mixed_receiver_9031_msvc_signed_immediate_fix_20261010": {
+    "status": "STATIC_FIX_COMMITTED_FRESH_EXECUTION_PENDING",
+    "producer": "9031dbc04d5f66ae2bcb356478a0d9450dc9ad4e",
+    "failed_overlay": "1f8aa29d6d79a57aa8b71269efe81db838325791",
+    "fresh_first_red": "MSVC /W4 /WX C4389/C2220 at native_mixed_support.h:49 before writer Source/CGen and all three runtimes",
+    "failed_raw_log_sha256": "15fd5293851a5812ba6284b83c0cf65539bfddf5d464c15c7e4ab9589e08a3c5",
+    "failure_guard_sha256": "695e5b380d58726db1d5b6c630367769d3014d3bea38a7c69e76fd284a36ad11",
+    "first_red_independent_receipt_sha256": "da83488a4407f67aa534fd7993dbda0b24d521c8209c94ada8db204fec8ff0ba",
+    "same_width_fix": "Remove only unsigned cast; actual public immediate and consumer expected are int64_t. No warning suppression.",
+    "support_pre_sha256": "04d5f9a7513a5f640452828c4354c0d1bd5fb7b8d1b2bcab880a85176f682963",
+    "support_post_sha256": "77e6a01aa4afe444e317f4f8936b4c99816359df131e312ffb6306fe903619c8",
+    "inverse_entire_raw_exact": true,
+    "author_freeze_sha256": "2e88e122e3e17f915ba67682ba21117fdb9a053654cd33c57ebda965ac42f1e3",
+    "main_review_sha256": "6c4ab8cb1d8f7f77504bd674d7c2c2247d6c22c756a296be24d8b343bbd8470a",
+    "independent_static_reviews": [
+      {
+        "path": "build-consumer-evidence/parallel-aot-main-audit-r1/plain-native-mixed-signed-immediate-successor-static-review-r1/report.json",
+        "sha256": "5dcbbe46487d866aded9feac85157d7d2bac407270e304cc5bb3b1b8ae3dae92"
+      },
+      {
+        "path": "build-consumer-evidence/parallel-progress-speed-analysis-r1/plain-native-mixed-signed-immediate-static-review-r1.json",
+        "sha256": "aecff1c569853fa5650104c809c6842a52b69f62ccf36e8d8898ee0c3c55a540"
+      }
+    ],
+    "original_oracles": "Same full220 byte fixture, First19+Second23=42; CONST I64 and exact RETURN checks, all three routes, two live Instances, full proof/material/lease assertions unchanged.",
+    "actual_build_census": "95 fresh target objects and4 configure probe objects;11 fresh archives. Native cache pair generation is separate from unrun consumer writer/CGen.",
+    "reuse_boundary": "Reuse only actual unchanged dependencies after explicit successor window; preserve original failed immutable inputs/log/material guards. No repeated cold product compile required.",
+    "window": "Old CLOSED_FIRST_RED; successor not granted at static application",
+    "fix_execution_counts": {
+      "configure": 0,
+      "compile": 0,
+      "CGen": 0,
+      "runtime": 0,
+      "FI": 0
+    },
+    "completion": "OPEN",
+    "retired": 0,
+    "remaining": "Fresh affected writer/CGen/actual host C/binding/receiver and original3 runtime gates; full FI/axes/sanitizers/AOT/lifecycle/escape/source-delete obligations remain OPEN."
   }
 }
