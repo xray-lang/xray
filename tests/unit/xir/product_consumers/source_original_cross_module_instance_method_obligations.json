@@ -843,5 +843,112 @@
     ],
     "whole_completion": "OPEN",
     "caption_binding": "Post-static-review revision annotation; no historical runtime input snapshot or qualification is rewritten."
+  },
+  "typed_library_source_free_native_mixed_9031_interface_candidate": {
+    "status": "STATIC_REVIEWED_NOT_RUN",
+    "retired": false,
+    "worker_parent": "1f8aa29d6d79a57aa8b71269efe81db838325791",
+    "public_Git_reference_only": "9031dbc04d5f66ae2bcb356478a0d9450dc9ad4e",
+    "candidate_paths": [
+      "tests/unit/xir/product_consumers/test_source_typed_library_receiver_current_native_mixed.c",
+      "tests/unit/xir/product_consumers/typed_library_native_mixed_support.h",
+      "tests/unit/xir/product_consumers/source_typed_library_receiver_current_native_mixed_candidate.cmake"
+    ],
+    "candidate_raw_sha256": {
+      "tests/unit/xir/product_consumers/test_source_typed_library_receiver_current_native_mixed.c": "1719b99681ee6c9872c991fea3f544deec720e6dd7d5d2359bef1aba4b556408",
+      "tests/unit/xir/product_consumers/typed_library_native_mixed_support.h": "dd0029d6afb302130fc2e7e208ba9f141726d8cc9e7ae85ad2f99c9135adbad7",
+      "tests/unit/xir/product_consumers/source_typed_library_receiver_current_native_mixed_candidate.cmake": "327a53acd51064cb31cf3c4edbc903e3de29c30a69d48c9663bb7729ca27b43c"
+    },
+    "reference_api": {
+      "Checked_schema": 28,
+      "Checked_contract": 73,
+      "Library_C_interface": 2,
+      "Value_ABI": 23,
+      "Call_ABI": 29,
+      "Program_ABI": 30
+    },
+    "producer_boundary": {
+      "authorized_general_producer": "25f4016d6f089169757a90ae11ba537002374711",
+      "new_producer_adopted": false,
+      "new_execution_window": "CLOSED",
+      "qualification": "Pure public Git reference and static declaration/ownership review only. Root must explicitly bind old-to-new immutable provider, exact source/helpers/stdlib/tools/headers/build profile and fresh four material outputs before any compile/CGen/runtime qualification. No Root WIP or old VM/native PASS inherited."
+    },
+    "original_inputs": {
+      "root_bytes": 163,
+      "root_sha256": "3bb17ffe354b537a024dbf6e4c371df1c80051d72a3db21f20d48fdbeeb5f8bc",
+      "original_root_prefix_bytes": 109,
+      "original_root_prefix_sha256": "5765d2986533f38100664640b32772722b00c0f32db226ec3f8267d19c687b43",
+      "unchanged_export_adapter_bytes": 54,
+      "library_bytes": 185,
+      "library_sha256": "bb41f3d3d610b67ce6445475deb031967b10a0b069ef00b1c923599b3d6a6c87"
+    },
+    "independent_oracle": "Complete original imported Worker(40).child(2), independent owned I64=42 and exactly two real Coro.yield per fixed call. Shape uses genuine current-stage identities and declarations, not across-stage ordinal equality; no retired private representation oracle.",
+    "writer": "Actual Library Source check/fullverify/Construction-v2, genuine SOURCE packet and all actual module ordinal authority/logical bindings. Catalog deep-owned inputs checked after caller packet/bindings/source/session death and strict owned Library leaf deletion. Preserve no-Catalog UNRESOLVED at CHECK, independent public resolver CHECKED_LIBRARY exact row and false NO_SUSPEND BAD_TYPE/reason/child control. Full SourceProduct/admission/SOURCE and authentic Closed copy; Program producer/session/Catalog/request/owned root Source leaf die before detached verify/v2/specialize/lower. Full Lowered proof bytes/all32 identity equal authentic Closed. Actual full emit_c emits one C and independent compiled digest sidecar with full packet/identity, four exclusive outputs; writer runs no Instance.",
+    "receiver": "Packet-only argc5 mode/packet/identity/actual-C; complete EOF/full32 whole SHA, owned Checked/fullverify/Construction-v2/Worker shape. Independent owner same-wire rewrite is consistency, not independent whole-Closed encoder. Input packet/path/identity poison/free before detached reverify/lower; Closed and rewrite die before seal. Whole actual-C digest matches host-compiled writer binding, compiled ProgramSpec full proof/identity/layouts admitted by actual public seal with complete current entries/types/declarations/permissions. No Source/Catalog/session/stdlib request enters receiver branch; physical Source linkage remains OPEN.",
+    "runtime_candidate_assertions": [
+      "Three genuine routes: allnative, current Lowered constructor-native/child-VM and constructor-VM/child-native; actual compiled C and VM resume receive exact original admitted view/environment",
+      "Each fixed42 call increments selected actual constructor/child delegate counters with opposite unchanged; selected actual child ACTION_SUSPEND delta exactly2, opposite unchanged; no constructor resume-count==1 premise",
+      "Each fixed42 call consumes exactly2 natural SUSPENDED/WAIT_YIELD waits under one valid nonzero epoch with distinct nonzero wake tokens via actual public wait_request/resume; READY quantum work not counted",
+      "Two distinct simultaneous live Instances before caller Program drop, each canonical0 once and fixed42 twice; four independent42 and eight consumed yield waits per mode",
+      "Private answer rejects BAD_ARGUMENT in NEW with allocation attempts unchanged; actual owned I64 take/drop to canonical Unit",
+      "Actual Lowered/VM bindings/selected entries/counter owner lease0 after caller drop,0 after first Instance free,1 after final free; actual compiler/runtime allocation bytes and physical tables zero assertions only",
+      "Static partial-owner state and sticky first failure; no longjmp through product callbacks, natural public FAULT/known-owner release; unexpected BUSY and fatal embedded observer leave generic failure cleanup unqualified"
+    ],
+    "test_properties": {
+      "TIMEOUT": 120,
+      "PROCESSORS": 1,
+      "RUN_SERIAL": "NOT_SET for normal3 independent read-only processes; resource-axis serial requirement unchanged",
+      "C_STANDARD": 11,
+      "MSVC": "utf8/W4/WX",
+      "non_MSVC": "Wall/Wextra/Werror"
+    },
+    "registration": "Dedicated candidate include only; default registration NOT_ADDED. One build custom command creates actual_payload.c, actual_proof.bin, actual_identity.bin and payload_binding.c in a fresh dedicated directory; actual C and binding are real host compiler inputs. Exact driver/support/root/library/Coro dependencies and same-provider helpers/src/stdlib remain required.",
+    "static_reviews": {
+      "author_r1_self_review": {
+        "path": "build-consumer-evidence/parallel-consumer-interface-delta-r1/typed-library-native-mixed-current-candidate-r1/author-self-review-r1.json",
+        "sha256": "a8075a42c61b47978d46ef381d265a2e033226b3b91bee49cb655e9c765685ef"
+      },
+      "author_r2_freeze": {
+        "path": "build-consumer-evidence/parallel-consumer-interface-delta-r1/typed-library-native-mixed-current-candidate-r2/manifest.AUTHOR_FROZEN_NOT_RUN.json",
+        "sha256": "d402c084ee174e9f254f073d0f1514299db17712567e55360933fc283baf2d49"
+      },
+      "aot_independent": {
+        "path": "build-consumer-evidence/parallel-aot-main-audit-r1/typed-library-native-mixed-current-static-review-r2/report.json",
+        "sha256": "db243668649191a32049131a5a68827e051d0eddcdc6d69d3979e40fce12ecdd"
+      },
+      "responsibility_independent": {
+        "path": "build-consumer-evidence/parallel-progress-speed-analysis-r1/typed-library-native-mixed-current-static-review-r2.json",
+        "sha256": "475c8da35d131c5d833f374741d08d0dd9181c55f7beee1d9df020e9a49754ce"
+      },
+      "main_full_and_r2_delta": {
+        "path": "build-consumer-evidence/consumer-session-20261009-r1/typed-library-native-mixed-candidate-r1/main-full-r1-review-and-r2-delta.json",
+        "sha256": "6e51f6429846863b4048edfc4f386856eb7fe617f270d6de8ace1495931619c3"
+      },
+      "actual_public_calls": 73,
+      "exact_pure_public_header_blobs": 20,
+      "compiler_acceptance": "NOT_RUN"
+    },
+    "reviewed_successor": "r1 complete three-file full read was concurrent with author self review. r2 only deletes16 bytes RUN_SERIAL TRUE in new normal CMake; exact inverse restores full frozen r1, C/support unchanged. No measured runtime speedup claimed.",
+    "prior_facets": "Old typed normal, source-free VM69d and plain/static native1f8a remain separately bound and unchanged. No original packet, binary, failure receipt or historical qualification is rebound.",
+    "execution_counts": {
+      "configure": 0,
+      "compile": 0,
+      "build": 0,
+      "Cgen": 0,
+      "writer": 0,
+      "receiver": 0,
+      "tests": 0
+    },
+    "OPEN": [
+      "fresh same-provider producer/material grant and actual generated-C compiler/link/native/mixed normal qualification",
+      "original first/second-yield active cancellation",
+      "stable per-object construct/finalize/reclaim and no early reclaim",
+      "initialization failure sticky cleanup and owned result escape",
+      "full original Backend/AOT and independent double-C determinism",
+      "complete compiler/runtime FI and resource axes/two profiles/default/SDK/full safety/Main",
+      "physical SourceDelete and final Root integration/whole responsibility/retirement"
+    ],
+    "whole_completion": "OPEN",
+    "caption_binding": "Static candidate annotation only; all normal runtime statements above are unexecuted assertions, not PASS evidence."
   }
 }
