@@ -234,7 +234,9 @@ static void cell_proof_indirect_ref(void) {
     CHECK(xir_fixture_verify(&context,&fixture.module,NULL) == XR_XIR_BAD_TYPE);
     cell_proof_close(&context,baseline);
 }
+#include "xir_cell_active_domain_cases.h"
 int main(void) {
+    cell_active_domains();
     cell_proof_callable_modes(); cell_proof_indirect_ref();
     cell_proof_actual_edges(); cell_proof_rejections(); cell_proof_escape_boundaries(); cell_proof_resource_failures();
     puts("Cell actual-edge roles, owned versus scoped provenance, noescape and physical resource exits passed");

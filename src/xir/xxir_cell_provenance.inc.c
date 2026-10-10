@@ -13,7 +13,7 @@
 #include "xxir_cell_provenance_internal.h"
 
 typedef struct CellProofFunction {
-    uint32_t begin, count, parameters, scope_begin, scopes, words;
+    uint32_t begin, count, parameters, scope_begin, scopes, words, stored;
     size_t dependency_begin;
 } CellProofFunction;
 struct XrXirCellProvenance {
@@ -54,6 +54,17 @@ static bool cell_proof_error(CellProofBuild *build, uint32_t function,
 static bool cell_proof_cell(const XrXirModule *module, XrXirType type) {
     return xr_xir_type_is_cell(module->types,type);
 }
+/* Every physical value is classified before any graph storage is omitted.
+ * Place nodes carry access facts even when their logical type is not Cell. */
+static bool cell_proof_place(XrXirOp op) {
+    return op == XR_XIR_SLOT_PLACE || op == XR_XIR_CELL_PLACE ||
+        op == XR_XIR_FIELD_PLACE || op == XR_XIR_INDEX_PLACE || op == XR_XIR_OBJECT_PLACE;
+}
+static uint8_t cell_proof_tracking(const XrXirCellProvenance *proof,
+    uint32_t function, uint32_t value) {
+    const CellProofFunction *f = &proof->functions[function];
+    return f->stored ? proof->tracked[f->begin+value] : 0;
+}
 static uint32_t cell_proof_operand(const XrXirFunction *function,
     const XrXirInstruction *op, uint32_t ordinal) {
     return xr_xir_op_uses_operand_table(op->op) ?
@@ -92,22 +103,51 @@ static bool cell_proof_edge(CellProofBuild *build, uint32_t from, uint32_t to, b
 }
 static bool cell_proof_inventory(CellProofBuild *build) {
     const XrXirModule *module = build->module;
-    uint64_t values = 0, edges = 0;
-    if (!cell_proof_work(build,module->function_count)) return false;
-    for (uint32_t f = 0; f < module->function_count; ++f) {
-        const XrXirFunction *function = &module->functions[f];
-        values += (uint64_t)function->parameter_count+function->instruction_count;
-        /* Two aliases per local writer, plus expanded actual operand edges. */
-        edges += (uint64_t)function->instruction_count*2+function->operand_count;
-        if (values > UINT32_MAX || edges > UINT32_MAX)
-            return cell_proof_error(build,f,UINT32_MAX,XR_XIR_BUDGET);
-    }
+    if (module->types && module->types->count && !module->types->nodes)
+        return cell_proof_error(build,UINT32_MAX,UINT32_MAX,XR_XIR_BAD_STRUCTURE);
     XrXirCellProvenance *proof = xir_compile_calloc(build->context,1,sizeof(*proof),&build->status);
     if (!proof) return false;
     build->proof = proof; proof->resources = build->context->resources;
-    proof->function_count = module->function_count; proof->value_count = (uint32_t)values;
-    build->edge_capacity = (uint32_t)edges;
+    proof->function_count = module->function_count;
     proof->functions = xir_compile_calloc(build->context,module->function_count,sizeof(*proof->functions),&build->status);
+    if (build->status != XR_XIR_OK) return false;
+    uint64_t values = 0, physical = 0, edges = 0;
+    for (uint32_t f = 0; f < module->function_count; ++f) {
+        const XrXirFunction *function = &module->functions[f];
+        uint64_t count = (uint64_t)function->parameter_count+function->instruction_count;
+        if ((function->parameter_count && !function->parameters) ||
+            (function->instruction_count && !function->instructions) ||
+            (function->operand_count && !function->operands))
+            return cell_proof_error(build,f,UINT32_MAX,XR_XIR_BAD_STRUCTURE);
+        physical += count;
+        if (count > UINT32_MAX || physical > UINT32_MAX)
+            return cell_proof_error(build,f,UINT32_MAX,XR_XIR_BUDGET);
+        bool tracked = false;
+        for (uint32_t v = 0; v < (uint32_t)count; ++v) {
+            if (!cell_proof_work(build,3)) return false;
+            tracked |= cell_proof_cell(module,xr_xir_operand_type(function,v));
+            if (v >= function->parameter_count) {
+                XrXirOp op = function->instructions[v-function->parameter_count].op;
+                if (op <= XR_XIR_INVALID || op >= XR_XIR_OP_COUNT)
+                    return cell_proof_error(build,f,v-function->parameter_count,XR_XIR_BAD_STRUCTURE);
+                tracked |= cell_proof_place(op);
+            }
+        }
+        if (!cell_proof_work(build,8)) return false;
+        proof->functions[f] = (CellProofFunction){.begin=(uint32_t)values,
+            .count=(uint32_t)count,.parameters=function->parameter_count,
+            .stored=tracked?(uint32_t)count:0};
+        if (tracked) {
+            values += count;
+            /* The original finite edge bound covers only stored value spans. */
+            edges += (uint64_t)function->instruction_count*2+function->operand_count;
+        }
+        if (values > UINT32_MAX || edges > UINT32_MAX)
+            return cell_proof_error(build,f,UINT32_MAX,XR_XIR_BUDGET);
+    }
+    proof->value_count = (uint32_t)values; build->edge_capacity = (uint32_t)edges;
+    if (values > SIZE_MAX/sizeof(uint32_t))
+        return cell_proof_error(build,UINT32_MAX,UINT32_MAX,XR_XIR_BUDGET);
     proof->origins = xir_compile_calloc(build->context,(size_t)values,1,&build->status);
     proof->roles = xir_compile_calloc(build->context,(size_t)values,1,&build->status);
     proof->tracked = xir_compile_calloc(build->context,(size_t)values,1,&build->status);
@@ -117,23 +157,20 @@ static bool cell_proof_inventory(CellProofBuild *build) {
     build->queue = xir_compile_alloc(build->context,(size_t)values*sizeof(uint32_t),&build->status);
     build->queued = xir_compile_calloc(build->context,(size_t)values,1,&build->status);
     build->uses = xir_compile_calloc(build->context,(size_t)values,1,&build->status);
-    /* Every linked edge is completely initialized by its append operation;
-     * unused capacity is never read. Keep the full finite allocation bound. */
-    if (edges>SIZE_MAX/sizeof(*build->edges))
+    /* Append initializes every edge before linking; unused capacity is unread. */
+    if (edges > SIZE_MAX/sizeof(*build->edges))
         return cell_proof_error(build,UINT32_MAX,UINT32_MAX,XR_XIR_BUDGET);
     build->edges = xir_compile_alloc(build->context,(size_t)edges*sizeof(*build->edges),&build->status);
-    if (build->status != XR_XIR_OK || !cell_proof_work(build,values*4+module->function_count)) return false;
-    uint32_t begin = 0;
+    if (build->status != XR_XIR_OK || !cell_proof_work(build,values*4)) return false;
     for (uint32_t f = 0; f < module->function_count; ++f) {
         const XrXirFunction *function = &module->functions[f];
-        uint32_t count = function->parameter_count+function->instruction_count;
-        proof->functions[f] = (CellProofFunction){begin,count,function->parameter_count,0,0,0,0};
-        for (uint32_t v = 0; v < count; ++v) {
-            proof->value_functions[begin+v] = f;
-            proof->tracked[begin+v] = cell_proof_cell(module,xr_xir_operand_type(function,v)) ? 1 : 0;
-            build->heads[begin+v] = build->reverse_heads[begin+v] = UINT32_MAX;
+        const CellProofFunction *stored = &proof->functions[f];
+        for (uint32_t v = 0; v < stored->stored; ++v) {
+            uint32_t id = stored->begin+v;
+            proof->value_functions[id] = f;
+            proof->tracked[id] = cell_proof_cell(module,xr_xir_operand_type(function,v)) ? 1 : 0;
+            build->heads[id] = build->reverse_heads[id] = UINT32_MAX;
         }
-        begin += count;
     }
     return true;
 }
@@ -156,21 +193,21 @@ static bool cell_proof_roles(CellProofBuild *build) {
             if (op->op == XR_XIR_CLEANUP_REGISTER && (!module->declarations ||
                 module->declarations->functions[target].cleanup_owner != f+1))
                 return cell_proof_error(build,f,i,XR_XIR_BAD_STRUCTURE);
-            if (!cell_proof_work(build,op->args[1]*2u)) return false;
+            if (!cell_proof_work(build,(uint64_t)op->args[1]*3)) return false;
             uint8_t use = op->op == XR_XIR_FUNCTION_REF ? 1u : op->op == XR_XIR_CLEANUP_REGISTER ? 4u : 2u;
             for (uint32_t p = 0; p < op->args[1]; ++p)
-                if (proof->tracked[callee->begin+p] == 1) build->uses[callee->begin+p] |= use;
+                if (cell_proof_tracking(proof,target,p) == 1) build->uses[callee->begin+p] |= use;
             if (op->op == XR_XIR_FUNCTION_REF) {
                 const XrXirTypeNode *signature = xr_xir_callable_signature(module->types, op->type);
                 if (!signature || signature->parameter_count != callee->parameters-op->args[1])
                     return cell_proof_error(build,f,i,XR_XIR_BAD_TYPE);
-                if (!cell_proof_work(build,signature->parameter_count)) return false;
+                if (!cell_proof_work(build,(uint64_t)signature->parameter_count*2)) return false;
                 for (uint32_t p = 0; p < signature->parameter_count; ++p) {
                     const XrXirCallableParameter *parameter = &signature->parameters[p];
                     if (!xr_xir_callable_parameter_storage_valid(module->types, parameter))
                         return cell_proof_error(build,f,i,XR_XIR_BAD_TYPE);
                     if (parameter->mode != XR_PARAM_REF) continue;
-                    if (op->args[1] || proof->tracked[callee->begin+p] != 1)
+                    if (op->args[1] || cell_proof_tracking(proof,target,p) != 1)
                         return cell_proof_error(build,f,i,XR_XIR_BAD_TYPE);
                     /* A real unbound reference authorizes only the scoped call
                      * protocol. No owner origin follows from its signature. */
@@ -183,10 +220,10 @@ static bool cell_proof_roles(CellProofBuild *build) {
     for (uint32_t f = 0; f < module->function_count; ++f) {
         CellProofFunction *function = &proof->functions[f];
         function->scope_begin = (uint32_t)scopes;
-        if (!cell_proof_work(build,(uint64_t)function->parameters*4+3)) return false;
+        if (!cell_proof_work(build,(uint64_t)function->parameters*5+3)) return false;
         for (uint32_t p = 0; p < function->parameters; ++p) {
             uint32_t id = function->begin+p;
-            if (proof->tracked[id] != 1) continue;
+            if (cell_proof_tracking(proof,f,p) != 1) continue;
             uint8_t use = build->uses[id];
             if ((use & 1u) && (use & 6u)) return cell_proof_error(build,f,UINT32_MAX,XR_XIR_BAD_TYPE);
             if ((use & 4u) && (use & 3u)) return cell_proof_error(build,f,UINT32_MAX,XR_XIR_BAD_TYPE);
@@ -198,9 +235,9 @@ static bool cell_proof_roles(CellProofBuild *build) {
         scopes += function->scopes;
         function->words = function->scopes/64u+(function->scopes%64u != 0);
         function->dependency_begin = words;
-        if (function->words && (size_t)function->count > (SIZE_MAX-words)/function->words)
+        if (function->words && (size_t)function->stored > (SIZE_MAX-words)/function->words)
             return cell_proof_error(build,f,UINT32_MAX,XR_XIR_BUDGET);
-        words += (size_t)function->count*function->words;
+        words += (size_t)function->stored*function->words;
     }
     if (words > SIZE_MAX/sizeof(uint64_t) || scopes > UINT32_MAX)
         return cell_proof_error(build,UINT32_MAX,UINT32_MAX,XR_XIR_BUDGET);
@@ -211,9 +248,9 @@ static bool cell_proof_roles(CellProofBuild *build) {
     for (uint32_t f = 0; f < module->function_count; ++f) {
         CellProofFunction *function = &proof->functions[f]; uint32_t compact = 0;
         for (uint32_t p = 0; p < function->parameters; ++p) {
-            if (!cell_proof_work(build,1)) return false;
+            if (!cell_proof_work(build,2)) return false;
             uint32_t id = function->begin+p;
-            if (proof->tracked[id] != 1 || proof->roles[id] == XR_XIR_CELL_PROOF_OWNED_CAPTURE) continue;
+            if (cell_proof_tracking(proof,f,p) != 1 || proof->roles[id] == XR_XIR_CELL_PROOF_OWNED_CAPTURE) continue;
             if (!cell_proof_work(build,2)) return false;
             proof->scope_parameters[function->scope_begin+compact] = p;
             cell_proof_dependencies(proof,id)[compact/64u] = UINT64_C(1)<<(compact%64u);
@@ -256,10 +293,10 @@ static bool cell_proof_build_edges(CellProofBuild *build) {
         const XrXirFunction *function = &module->functions[f];
         uint32_t begin = proof->functions[f].begin;
         for (uint32_t i = 0; i < function->instruction_count; ++i) {
-            if (!cell_proof_work(build,2)) return false;
+            if (!cell_proof_work(build,3)) return false;
             const XrXirInstruction *op = &function->instructions[i];
             uint32_t result = begin+function->parameter_count+i;
-            bool cell = proof->tracked[result] == 1;
+            bool cell = cell_proof_tracking(proof,f,function->parameter_count+i) == 1;
             if (op->op == XR_XIR_CELL_PROJECT && !cell_proof_project_identity(build,f,op->args[0])) return false;
             if (cell && op->op == XR_XIR_CELL_NEW) {
                 if (!cell_proof_seed(build,result,XR_XIR_CELL_ORIGIN_OWNED)) return false;
@@ -285,29 +322,44 @@ static bool cell_proof_build_edges(CellProofBuild *build) {
                 if (!cell_proof_edge(build,begin+op->args[0],result,false)) return false;
             }
             uint32_t count = operand_count(function,op,module);
-            if (!cell_proof_work(build,count)) return false;
+            if (!cell_proof_work(build,(uint64_t)count*3)) return false;
+            if (xr_xir_op_uses_operand_table(op->op) &&
+                (op->args[0] > function->operand_count || count > function->operand_count-op->args[0]))
+                return cell_proof_error(build,f,i,XR_XIR_BAD_STRUCTURE);
             for (uint32_t a = 0; a < count; ++a) {
                 if (op->op == XR_XIR_PHI && !(a & 1u)) continue;
-                uint32_t source = begin+cell_proof_operand(function,op,a);
+                uint32_t value = cell_proof_operand(function,op,a);
+                if (value >= proof->functions[f].count)
+                    return cell_proof_error(build,f,i,XR_XIR_BAD_STRUCTURE);
+                uint32_t source = begin+value;
                 if (cell && cell_proof_identity_producer(op->op)) {
                     if (!cell_proof_edge(build,source,result,true)) return false;
                 } else if (op->op == XR_XIR_FUNCTION_REF) {
                     uint32_t target = (uint32_t)op->immediate;
                     uint32_t formal = proof->functions[target].begin+a;
-                    if (proof->tracked[formal] == 1 && !cell_proof_edge(build,source,formal,true)) return false;
+                    if (cell_proof_tracking(proof,target,a) == 1) {
+                        if (!proof->functions[f].stored)
+                            return cell_proof_error(build,f,i,XR_XIR_BAD_TYPE);
+                        if (!cell_proof_edge(build,source,formal,true)) return false;
+                    }
                 }
                 if ((op->op == XR_XIR_LOCAL_WRITE || op->op == XR_XIR_OWNED_LOCAL_WRITE) && a == 1) {
                     uint32_t destination = begin+op->args[0];
-                    if (proof->tracked[destination] == 1 && !cell_proof_edge(build,source,destination,true)) return false;
+                    if (op->args[0] >= proof->functions[f].count)
+                        return cell_proof_error(build,f,i,XR_XIR_BAD_STRUCTURE);
+                    if (cell_proof_tracking(proof,f,op->args[0]) == 1 &&
+                        !cell_proof_edge(build,source,destination,true)) return false;
                 }
                 if ((op->op == XR_XIR_SLOT_INIT || op->op == XR_XIR_SLOT_GROUP_INIT) &&
-                    proof->tracked[source] == 1 && !cell_proof_seed(build,source,XR_XIR_CELL_ORIGIN_MODULE)) return false;
+                    cell_proof_tracking(proof,f,value) == 1 && !cell_proof_seed(build,source,XR_XIR_CELL_ORIGIN_MODULE)) return false;
             }
             if (op->op == XR_XIR_CELL_LOCAL_WRITE) {
                 uint32_t local = op->args[0];
+                if (local >= proof->functions[f].count)
+                    return cell_proof_error(build,f,i,XR_XIR_BAD_STRUCTURE);
                 if (local >= function->parameter_count &&
                     function->instructions[local-function->parameter_count].op == XR_XIR_LOCAL_UNINIT &&
-                    proof->tracked[begin+local] == 1 &&
+                    cell_proof_tracking(proof,f,local) == 1 &&
                     !cell_proof_seed(build,begin+local,XR_XIR_CELL_ORIGIN_OWNED)) return false;
             }
         }
@@ -401,8 +453,8 @@ static bool cell_proof_validate(CellProofBuild *build) {
         const XrXirFunction *function = &build->module->functions[f];
         uint32_t begin = proof->functions[f].begin;
         for (uint32_t p = 0; p < function->parameter_count; ++p) {
-            if (!cell_proof_work(build,2)) return false;
-            if (proof->roles[begin+p] == XR_XIR_CELL_PROOF_OWNED_CAPTURE &&
+            if (!cell_proof_work(build,3)) return false;
+            if (proof->functions[f].stored && proof->roles[begin+p] == XR_XIR_CELL_PROOF_OWNED_CAPTURE &&
                 proof->origins[begin+p] != XR_XIR_CELL_ORIGIN_OWNED)
                 return cell_proof_error(build,f,UINT32_MAX,XR_XIR_BAD_VALUE);
         }
@@ -411,10 +463,13 @@ static bool cell_proof_validate(CellProofBuild *build) {
             const XrXirInstruction *op = &function->instructions[i];
             uint32_t count = operand_count(function,op,build->module);
             for (uint32_t a = 0; a < count; ++a) {
-                if (!cell_proof_work(build,2)) return false;
+                if (!cell_proof_work(build,4)) return false;
                 if (op->op == XR_XIR_PHI && !(a & 1u)) continue;
-                uint32_t source = begin+cell_proof_operand(function,op,a);
-                if (proof->tracked[source] == 1 && !cell_proof_sink(build,f,i,a,source)) return false;
+                uint32_t value = cell_proof_operand(function,op,a);
+                if (value >= proof->functions[f].count)
+                    return cell_proof_error(build,f,i,XR_XIR_BAD_STRUCTURE);
+                uint32_t source = begin+value;
+                if (cell_proof_tracking(proof,f,value) == 1 && !cell_proof_sink(build,f,i,a,source)) return false;
             }
         }
     }
@@ -457,22 +512,24 @@ XR_FUNC uint32_t xr_xir_cell_provenance_origin(const XrXirCellProvenance *proof,
     uint32_t function, uint32_t value) {
     if (!proof || function >= proof->function_count || value >= proof->functions[function].count)
         return XR_XIR_CELL_ORIGIN_UNKNOWN;
-    return proof->origins[proof->functions[function].begin+value];
+    const CellProofFunction *f = &proof->functions[function];
+    return f->stored ? proof->origins[f->begin+value] : 0;
 }
 XR_FUNC XrXirCellProofRole xr_xir_cell_provenance_role(const XrXirCellProvenance *proof,
     uint32_t function, uint32_t parameter) {
     if (!proof || function >= proof->function_count || parameter >= proof->functions[function].parameters)
         return XR_XIR_CELL_PROOF_UNKNOWN;
-    return (XrXirCellProofRole)proof->roles[proof->functions[function].begin+parameter];
+    const CellProofFunction *f = &proof->functions[function];
+    return f->stored ? (XrXirCellProofRole)proof->roles[f->begin+parameter] : XR_XIR_CELL_PROOF_UNKNOWN;
 }
 XR_FUNC XrXirStatus xr_xir_compile_cell_origin_view(const XrXirCompileContext *context,
     const XrXirCellProvenance *proof, uint32_t function, uint32_t value, XrXirCellOriginView *output) {
     if (!xir_compile_context_valid(context) || !proof || proof->resources != context->resources ||
         !output || function >= proof->function_count ||
         value >= proof->functions[function].count) return XR_XIR_BAD_STRUCTURE;
-    if (!xir_compile_work(context,7)) return XR_XIR_BUDGET;
+    if (!xir_compile_work(context,8)) return XR_XIR_BUDGET;
     const CellProofFunction *f = &proof->functions[function]; uint32_t node = f->begin+value;
-    uint8_t origin = proof->origins[node];
+    uint8_t origin = f->stored ? proof->origins[node] : 0;
     uint32_t intrinsic = (origin & XR_XIR_CELL_ORIGIN_MODULE ? XR_XIR_CELL_ACCESS_ROOT : 0) |
         (origin & (XR_XIR_CELL_ORIGIN_UNKNOWN | XR_XIR_CELL_ORIGIN_ROOT_UNRESOLVED) ?
             XR_XIR_CELL_ACCESS_UNKNOWN : 0);
@@ -518,7 +575,8 @@ XR_FUNC XrXirStatus xr_xir_compile_cell_roles_verified(const XrXirCompileContext
         for (uint32_t f = 0; f < proof->function_count; ++f) {
             offsets[f] = cursor;
             const CellProofFunction *function = &proof->functions[f];
-            for (uint32_t p = 0; p < function->parameters; ++p) roles[cursor++] = proof->roles[function->begin+p];
+            for (uint32_t p = 0; p < function->parameters; ++p)
+                roles[cursor++] = (uint8_t)xr_xir_cell_provenance_role(proof,f,p);
         }
         offsets[proof->function_count] = cursor;
     }
