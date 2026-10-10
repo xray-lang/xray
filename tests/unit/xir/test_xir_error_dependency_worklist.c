@@ -20,20 +20,20 @@
 #include <string.h>
 #define CHECK(x) do { if (!(x)) { fprintf(stderr,"FAIL %d %s\n",__LINE__,#x);exit(1); } } while (0)
 typedef struct DependencyPhysical {void *pointer;size_t bytes;} DependencyPhysical;
-static DependencyPhysical physical[4096];
+static DependencyPhysical dependency_allocations[4096];
 static size_t live,live_bytes,attempts,fail_at=SIZE_MAX;
 static bool injected;
 static void *ed_malloc(size_t bytes){
     if(attempts++==fail_at){injected=true;return NULL;}
     void *pointer=xr_malloc(bytes);if(!pointer)return NULL;
     CHECK(live<4096 && bytes<=SIZE_MAX-live_bytes);
-    physical[live++]=(DependencyPhysical){pointer,bytes};live_bytes+=bytes;return pointer;
+    dependency_allocations[live++]=(DependencyPhysical){pointer,bytes};live_bytes+=bytes;return pointer;
 }
 static void ed_free(void *pointer){
     if(!pointer)return;
-    size_t i=0;while(i<live && physical[i].pointer!=pointer)++i;
-    CHECK(i<live && live_bytes>=physical[i].bytes);
-    live_bytes-=physical[i].bytes;physical[i]=physical[--live];xr_free(pointer);
+    size_t i=0;while(i<live && dependency_allocations[i].pointer!=pointer)++i;
+    CHECK(i<live && live_bytes>=dependency_allocations[i].bytes);
+    live_bytes-=dependency_allocations[i].bytes;dependency_allocations[i]=dependency_allocations[--live];xr_free(pointer);
 }
 #pragma push_macro("xr_malloc")
 #pragma push_macro("xr_free")
@@ -164,7 +164,17 @@ static XrXirStatus ed_restart_case(const XrXirCompileContext *c,bool payload){
         for(uint32_t f=0;f<3;++f){
             CHECK(e->functions[f].throws==(f?XR_XIR_EFFECT_MAY:XR_XIR_EFFECT_NONE));
             CHECK(e->task_errors[f]==(payload && f?XR_XIR_BAD_TYPE:XR_XIR_OK));
-            CHECK(e->root[f].requires_root==(f==0) && !e->root[f].unresolved);
+            CHECK(e->root[f].requires_root==(f==0) && e->root[f].unresolved==(f==1));
+            const XrXirRootFormula *formula=&e->contracts[f].formula;
+            CHECK(formula->constant_mask==(f==0?XR_XIR_CALLABLE_ROOT_REQUIRED:0));
+            CHECK(formula->term_count==(f==1?1u:0u));
+            if(f==1){
+                CHECK(formula->terms && formula->terms[0].kind==XR_XIR_ROOT_TERM_CONTEXT_CALL &&
+                    formula->terms[0].index==0);
+                const XrXirRootEffectWitness *w=&e->unresolved_witnesses[f];
+                CHECK(w->cause==XR_XIR_ROOT_CAUSE_CONTEXT_CALL && !w->instruction &&
+                    w->callee==UINT32_MAX && w->slot==UINT32_MAX && !w->distance);
+            }
             CHECK(!xr_xir_effects_error_unknown(e,f) && !xr_xir_effects_error_unidentified(e,f));
         }
         CHECK(xr_xir_effects_error(e,2,(XrXirType)256,60));
@@ -172,7 +182,58 @@ static XrXirStatus ed_restart_case(const XrXirCompileContext *c,bool payload){
     }else CHECK(!e);
     if(status!=XR_XIR_OK && fail_at==SIZE_MAX)fprintf(stderr,"restart status%u f%u b%u i%u\n",
         (unsigned)status,d.function,d.block,d.instruction);
-    xr_xir_compile_effects_free(e);return status;
+    XrXirRootCauseTrace *definition_trace=NULL;
+    if(status==XR_XIR_OK)status=xr_xir_compile_root_cause_trace_copy(c,e,1,&definition_trace);
+    xr_xir_compile_effects_free(e);e=NULL;
+    if(status==XR_XIR_OK){
+        /* Actual type arguments remain independently checked even though the
+         * uninstantiated definition keeps its call-context obligation. */
+        const XrXirType wrong=XR_XIR_BOOL;generics[1].arguments=&wrong;
+        XrXirDiagnostic invalid={0};XrXirStatus rejected=xir_fixture_verify(c,&module,&invalid);
+        generics[1].arguments=&concrete;
+        if(rejected==XR_XIR_OUT_OF_MEMORY || rejected==XR_XIR_BUDGET)status=rejected;
+        else CHECK(rejected==XR_XIR_BAD_TYPE && invalid.function==1 &&
+            invalid.block==0 && invalid.instruction==0);
+    }
+    if(status==XR_XIR_OK){
+        /* A separate, complete physical instance proves the opposite result.
+         * It is freshly checked; no definition formula or role is reused. */
+        node.parameter_span=0;node.nominal.arguments=&concrete;
+        functions[2].parameters=&concrete;
+        generics[1]=(XrXirGeneric){0};generics[2]=(XrXirGeneric){0};
+        module.generics=NULL;
+        call[0].type_arguments[0]=call[0].type_arguments[1]=0;
+        status=xir_fixture_verify(c,&module,&d);
+        if(status==XR_XIR_OK)status=xr_xir_compile_effects_infer_verified(c,&module,&e);
+    }
+    if(status==XR_XIR_OK){
+        CHECK(e && e->count==3 && e->source_type_count==1 && e->atom_count==61 && e->words==1);
+        CHECK(e->errors[0]==0 && e->errors[1]==(UINT64_C(1)<<62) &&
+            e->errors[2]==(UINT64_C(1)<<62));
+        for(uint32_t f=0;f<3;++f){
+            CHECK(e->root[f].requires_root==(f==0) && !e->root[f].unresolved);
+            CHECK(e->contracts[f].formula.constant_mask==(f==0?XR_XIR_CALLABLE_ROOT_REQUIRED:0) &&
+                !e->contracts[f].formula.term_count);
+            CHECK(e->functions[f].throws==(f?XR_XIR_EFFECT_MAY:XR_XIR_EFFECT_NONE));
+            CHECK(!xr_xir_effects_error_unknown(e,f) && !xr_xir_effects_error_unidentified(e,f));
+        }
+        CHECK(xr_xir_effects_error(e,1,(XrXirType)256,60) &&
+            xr_xir_effects_error(e,2,(XrXirType)256,60));
+    }else CHECK(!e);
+    xr_xir_compile_effects_free(e);e=NULL;
+    module=(XrXirModule){0};memset(functions,0xCE,sizeof(functions));
+    memset(call,0xCE,sizeof(call));node=(XrXirTypeNode){0};
+    if(status==XR_XIR_OK){
+        const XrXirRootEffects *facts=xr_xir_root_cause_trace_facts(definition_trace);
+        uint32_t count=UINT32_MAX;
+        CHECK(facts && !facts->requires_root && facts->unresolved);
+        CHECK(!xr_xir_root_cause_trace_steps(definition_trace,false,&count) && count==0);
+        const XrXirRootCauseStep *step=xr_xir_root_cause_trace_steps(definition_trace,true,&count);
+        CHECK(step && count==1 && step->function==1 && !step->instruction &&
+            step->cause==XR_XIR_ROOT_CAUSE_CONTEXT_CALL && step->callee==UINT32_MAX &&
+            step->slot==UINT32_MAX && !step->distance);
+    }
+    xr_xir_compile_root_cause_trace_free(definition_trace);return status;
 }
 /* Phantom parameters still affect identity. Payload enums lacking authentic
  * projections remain an independent worker-error qualification rejection. */
