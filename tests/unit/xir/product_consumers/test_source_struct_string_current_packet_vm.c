@@ -413,7 +413,7 @@ static bool admit_packet(ReceiverRun *run, char **argv) {
     load_packet_input(run, argv);
     if (!completed(run, xr_xir_compile_checked_read(run->context, run->input_packet.bytes,
         run->input_packet.length, &run->closed, NULL), "receiver-public-Closed-packet-read")) return false;
-    CHECK(xr_xir_compile_artifact_module(run->closed)->stage == XR_XIR_CLOSED);
+    CHECK(xr_xir_compile_artifact_module(run->closed)->stage == XR_XIR_CHECKED);
     CHECK(completed(run, xr_xir_compile_artifact_verify(run->closed, NULL), "receiver-Closed-full-verify"));
     construction_owner(run, run->closed, "receiver-Closed-real-Construction-full-v2");
     run->roles = receiver_shape(run->closed);

@@ -213,7 +213,7 @@
     },
     {
       "path": "tests/unit/xir/product_consumers/source_bool_conditions_source_obligations.json",
-      "lf_sha256": "8baba7b9d1b87e97136cffac692946230a2ef4fc416f97707e5d097fadf2ffca"
+      "lf_sha256": "dd79f3d119f43836eb5bd23372e85e589224167413c8ce935a1393c36796c9b2"
     },
     {
       "path": "tests/unit/xir/product_consumers/source_builtin_panic_group6_obligations.json",
@@ -849,7 +849,7 @@
     },
     {
       "path": "tests/unit/xir/product_consumers/source_struct_string_source_obligations.json",
-      "lf_sha256": "7e7e1b75152a8d19839d36b90fd558f5b38b7dbf1cabacf94625cc673d3762cd"
+      "lf_sha256": "33f81bff710f8380d13afc40e393e7471c441386d53c9792f2a6e447a13b2ec3"
     },
     {
       "path": "tests/unit/xir/product_consumers/source_typed_invoke_group4_native_obligations.json",

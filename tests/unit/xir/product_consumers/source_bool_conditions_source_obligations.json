@@ -135,5 +135,38 @@
     ],
     "other_legacy": "Bare nullable condition rejection at original1089-1103 is a separate responsibility; this positive program does not replace it.",
     "prior_qualification": "Existing25f original Bool facet and every previous field remain unchanged; no archived PASS upgraded to current qualification."
+  },
+  "source_free_current_packet_vm_checked_stage_fix_20261010": {
+    "status": "STATIC_PREEMPTIVE_CHECKED_STAGE_FIX_FRESH_QUALIFICATION_PENDING",
+    "public_reference_only": "9031dbc04d5f66ae2bcb356478a0d9450dc9ad4e",
+    "worker_preimage": "bf5ea7b3419c97d882a0b6aa7e592cfc34c7faaa",
+    "discovery": "Same nonexistent Stage label as the actual plain native MSVC C2065; these Bool/Struct candidates were not compiled or run.",
+    "driver": "tests/unit/xir/product_consumers/test_source_bool_conditions_current_packet_vm.c",
+    "changed_line": 419,
+    "driver_pre_sha256": "4946726bb192228929770647fc42379cbfd6f042cffcafe67656543c3849f702",
+    "driver_post_sha256": "006b5a3c3e0f27b13e781cb2bbcfd3902201ef88e34e2f3ade9cb5ca409e05cc",
+    "one_hunk_fix": "Only XR_XIR_CLOSED to XR_XIR_CHECKED after actual owned checked_read. Full raw inverse restores the exact preimage; no compatibility alias.",
+    "semantic_limit": "Physical Checked Stage and decoder INSTANCE evidence_limit do not prove closure alone. Authentic specialization, fullverify/v2, complete Lowered proof and full32 equality remain byte unchanged.",
+    "author_freeze_sha256": "3266ec9696e49315d187f68debe00bceba20dadca2938c19f05444f261c9fe52",
+    "main_static_review_sha256": "ff6f27a14a0e52c1e1d3d69181641ea5478bb62cac764fae7238ddc1646cd6f9",
+    "independent_review": {
+      "path": "build-consumer-evidence/parallel-aot-main-audit-r1/bool-struct-checked-stage-successors-static-review-r1/report.json",
+      "sha256": "93def23afe580ac7d05b44221b9c740eb49c4c4aac5f0e301cf530174caca7e6"
+    },
+    "preservation": "Complete original Source and independent42; existing CMake/shape; packet/input/Source/producer death; role checks, two live Instances, private noallocation, VM delegates, owned results and lease0/0/1 unchanged.",
+    "identity_scope": "Existing numeric Checked28/semantic73/Value23/Call29/Program30 retained. Adapting to a later formal producer, full API compatibility and fresh build/shape/runtime qualification remain separate.",
+    "new_producer_adopted": false,
+    "execution_window": "CLOSED",
+    "execution_counts": {
+      "configure": 0,
+      "compile": 0,
+      "link": 0,
+      "writer": 0,
+      "CGen": 0,
+      "runtime": 0
+    },
+    "retired": 0,
+    "completion": "OPEN",
+    "remaining": "Fresh same-provider all-stage qualification; normal/native/mixed/AOT; complete FI/axes/sanitizers; stable object lifecycle/escape/cancel/SourceDelete and original representation obligations remain OPEN."
   }
 }
