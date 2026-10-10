@@ -103,11 +103,11 @@ static void admission_replacement_budget_case(void) {
     instance->config.poll_limit = original_limit;
     /* Argument capture and the candidate's copied table succeed; its first
      * physical frame segment allocation then fails. The completed call stays. */
-    size_t failed_segment = calls + 2;
+    size_t failed_segment = allocation_calls + 2;
     fail_at = failed_segment;
     CHECK(xr_xir_instance_start(instance, 4, &function, 1) == XR_XIR_CALL_OOM);
     fail_at = SIZE_MAX;
-    CHECK(calls == failed_segment + 1 && live == baseline);
+    CHECK(allocation_calls == failed_segment + 1 && live == baseline);
     uint32_t current = (uint32_t) (epoch % 2), pending = (uint32_t) ((epoch + 1) % 2);
     CHECK(!memcmp(&before[current], &instance->accounting[current], sizeof(before[current])));
     CHECK(!instance->accounting[pending].live_bytes && !instance->accounting[pending].depth);

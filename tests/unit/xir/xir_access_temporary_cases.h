@@ -37,6 +37,6 @@ static void access_temporary_cases(void) {
     cycle_ids[2].module=1;cycle.root_module=1;
     XrXirModule private_scope={.stage=XR_XIR_CHECKED,.function_count=3,.declarations=&cycle,.types=&types};
     CHECK(xr_xir_compile_type_access(&owner.context,&private_scope,2,type)==XR_XIR_BAD_TYPE);
-    allocation_compile_owner_drop(&owner);calls=0;
+    allocation_compile_owner_drop(&owner);allocation_calls=0;
 }
 #endif // XIR_ACCESS_TEMPORARY_CASES_H

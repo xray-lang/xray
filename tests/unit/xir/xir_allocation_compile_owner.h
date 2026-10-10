@@ -45,14 +45,14 @@ typedef XrXirStatus (*AllocationCompileOperation)(const XrXirCompileContext *,vo
 static void allocation_compile_operation_cases(const char *name,AllocationCompileOperation operation,void *fixture) {
     AllocationCompileOwner owner={0};
     allocation_compile_owner_new(&owner,&allocation_compile_limits);
-    calls=0;CHECK(operation(&owner.context,fixture)==XR_XIR_OK);
-    size_t sites=calls;XrCompileResourceStats required=allocation_compile_stats(&owner.context);
+    allocation_calls=0;CHECK(operation(&owner.context,fixture)==XR_XIR_OK);
+    size_t sites=allocation_calls;XrCompileResourceStats required=allocation_compile_stats(&owner.context);
     CHECK(required.live_bytes==owner.baseline.live_bytes);
     allocation_compile_owner_drop(&owner);
     for(size_t site=0;site<sites;++site) {
         allocation_compile_owner_new(&owner,&allocation_compile_limits);
         size_t baseline=live,bytes=class_live_bytes;
-        calls=0;fail_at=site;
+        allocation_calls=0;fail_at=site;
         XrXirStatus status=operation(&owner.context,fixture);
         fail_at=SIZE_MAX;
         if(status!=XR_XIR_OUT_OF_MEMORY)fprintf(stderr,"%s site %zu status %u\n",name,site,status);
@@ -71,6 +71,6 @@ static void allocation_compile_operation_cases(const char *name,AllocationCompil
         allocation_compile_owner_drop(&owner);
     }
     printf("%s: %zu actual compiler faults, three-axis exact/minus-one, physical baseline restored\n",name,sites);
-    calls=0;
+    allocation_calls=0;
 }
 #endif // XIR_ALLOCATION_COMPILE_OWNER_H

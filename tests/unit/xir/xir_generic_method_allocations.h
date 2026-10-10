@@ -19,10 +19,10 @@ static void generic_method_clone_allocations(void) {
     for (size_t attempt = 0; attempt <= sites; ++attempt) {
         GenericMethodOwnedFixture fixture; generic_method_owned_fixture(&fixture);
         AllocationCompileOwner owner={0};allocation_compile_owner_new(&owner,&allocation_compile_limits); XrXirInterfaceTable *copy=NULL;
-        calls = 0; fail_at = attempt ? attempt-1 : SIZE_MAX;
+        allocation_calls = 0; fail_at = attempt ? attempt-1 : SIZE_MAX;
         XrXirStatus status = xr_xir_compile_interfaces_clone(&owner.context,&fixture.table,&fixture.types,&copy);
         if (!attempt) {
-            CHECK(status == XR_XIR_OK && copy); sites = calls;
+            CHECK(status == XR_XIR_OK && copy); sites = allocation_calls;
             CHECK(copy->declarations[1].methods != fixture.methods);
             for (uint32_t m = 0; m < 2; ++m) {
                 const XrXirInterfaceMethod *method = &copy->declarations[1].methods[m];
@@ -53,23 +53,23 @@ static void generic_method_packet_allocations(void) {
     XrXirArtifact *source = NULL, *decoded = NULL;
     CHECK(xir_fixture_check(&owner.context, &fixture.module, &source, NULL) == XR_XIR_OK);
     memset(&fixture,0xCC,sizeof(fixture));
-    XrXirCheckedPacket packet = {0}; size_t baseline = live; calls = 0;
+    XrXirCheckedPacket packet = {0}; size_t baseline = live; allocation_calls = 0;
     CHECK(xr_xir_compile_checked_write(source,&packet,NULL) == XR_XIR_OK);
-    size_t writes = calls;
+    size_t writes = allocation_calls;
     xr_xir_compile_checked_packet_free(&packet); CHECK(live == baseline);
     for (size_t site = 0; site < writes; ++site) {
-        calls = 0; fail_at = site;
+        allocation_calls = 0; fail_at = site;
         CHECK(xr_xir_compile_checked_write(source,&packet,NULL) == XR_XIR_OUT_OF_MEMORY);
         CHECK(!packet.bytes && !packet.length && live == baseline);
     }
     fail_at = SIZE_MAX;
     CHECK(xr_xir_compile_checked_write(source,&packet,NULL) == XR_XIR_OK);
-    xr_xir_compile_artifact_free(source); CHECK(live == owner.blocks+2); baseline = live; calls = 0;
+    xr_xir_compile_artifact_free(source); CHECK(live == owner.blocks+2); baseline = live; allocation_calls = 0;
     CHECK(xr_xir_compile_checked_read(&owner.context,packet.bytes,packet.length,&decoded,NULL) == XR_XIR_OK);
-    size_t reads = calls;
+    size_t reads = allocation_calls;
     xr_xir_compile_artifact_free(decoded); decoded=NULL; CHECK(live == baseline);
     for (size_t site = 0; site < reads; ++site) {
-        calls = 0; fail_at = site; decoded = NULL;
+        allocation_calls = 0; fail_at = site; decoded = NULL;
         CHECK(xr_xir_compile_checked_read(&owner.context,packet.bytes,packet.length,&decoded,NULL) == XR_XIR_OUT_OF_MEMORY);
         CHECK(!decoded && live == baseline);
     }

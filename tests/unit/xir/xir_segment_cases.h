@@ -115,7 +115,7 @@ static size_t segment_attempt(uint32_t bytes, uint32_t mode, uint32_t passes) {
         else if (mode != 4) CHECK(status == XR_XIR_CALL_RETURNED && result.value.payload == 48 && witness.cleanups == 48 * passes + 1);
         if (status != XR_XIR_CALL_SUSPENDED) CHECK(!call->segment && accounting.live_bytes == call->allocation_bytes);
     } else if (!call) CHECK(fail_at != SIZE_MAX && status == XR_XIR_CALL_OOM);
-    size_t sites = calls;
+    size_t sites = allocation_calls;
     CHECK(xr_xir_call_free(call) == XR_XIR_CALL_READY);
     xr_xir_value_drop(&witness.error); xr_xir_compile_type_arena_drop(arena); xr_xir_domain_drop(domain);
     if (owner.context.resources) source_fixture_owner_free(&owner);
@@ -195,11 +195,11 @@ static void segment_cases(void) {
     for (uint32_t large = 0; large < 2; ++large) {
         uint32_t bytes = large ? 8193 : 131;
         for (uint32_t mode = 0; mode < 5; ++mode) {
-            fail_at = SIZE_MAX; calls = 0; segment_attempt(bytes, mode, 1);
+            fail_at = SIZE_MAX; allocation_calls = 0; segment_attempt(bytes, mode, 1);
         }
-        calls = 0; size_t sites = segment_attempt(bytes, 0, 4);
+        allocation_calls = 0; size_t sites = segment_attempt(bytes, 0, 4);
         for (size_t i = 0; i < sites; ++i) {
-            fail_at = i; calls = 0; segment_attempt(bytes, 0, 4);
+            fail_at = i; allocation_calls = 0; segment_attempt(bytes, 0, 4);
         }
         fail_at = SIZE_MAX;
         printf("Segment frame allocation failures: state=%u sites=%zu\n", bytes, sites);

@@ -49,17 +49,17 @@ static void initialization_region_allocations(void) {
         ops[6]=mode==2?(XrXirInstruction){XR_XIR_LOCAL_WRITE,XR_XIR_UNIT,{1,0},{0},0,{0}}:
             (XrXirInstruction){XR_XIR_LOCAL_READ,XR_XIR_STRING,{1},{0},0,{0}};
         allocation_compile_owner_new(&owner,&allocation_compile_limits);
-        calls=0;XrXirDiagnostic diagnostic={0};
+        allocation_calls=0;XrXirDiagnostic diagnostic={0};
         XrXirStatus status=xr_xir_compile_initialization_check(&owner.context,&module,0,&outer,&diagnostic);
         CHECK(status==(mode?XR_XIR_BAD_VALUE:XR_XIR_OK));
         CHECK(diagnostic.status==status && diagnostic.function==0);
         CHECK(diagnostic.reason==(mode==1?XR_XIR_DIAGNOSTIC_UNINITIALIZED_READ:
             mode==2?XR_XIR_DIAGNOSTIC_READONLY_WRITE:XR_XIR_DIAGNOSTIC_NONE));
         if(mode)CHECK(diagnostic.block==mode && diagnostic.instruction==(mode==1?4u:6u));
-        size_t sites=calls;CHECK(sites);allocation_compile_owner_drop(&owner);
+        size_t sites=allocation_calls;CHECK(sites);allocation_compile_owner_drop(&owner);
         for(size_t site=0;site<sites;++site) {
             allocation_compile_owner_new(&owner,&allocation_compile_limits);
-            calls=0;fail_at=site;
+            allocation_calls=0;fail_at=site;
             CHECK(initialization_allocation_operation(&owner.context,&f)==XR_XIR_OUT_OF_MEMORY);
             fail_at=SIZE_MAX;allocation_compile_owner_drop(&owner);
         }

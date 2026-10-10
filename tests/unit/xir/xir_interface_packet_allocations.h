@@ -48,24 +48,24 @@ static void interface_packet_allocation_failures(void) {
     XrXirArtifact *source=interface_allocation_fixture(&owner.context),*decoded=NULL;
     size_t baseline = live;
     XrXirCheckedPacket packet = {0};
-    calls = 0;
+    allocation_calls = 0;
     CHECK(xr_xir_compile_checked_write(source,&packet,NULL) == XR_XIR_OK);
-    size_t writes = calls;
+    size_t writes = allocation_calls;
     xr_xir_compile_checked_packet_free(&packet); CHECK(live == baseline);
     for (size_t i = 0; i < writes; ++i) {
-        calls = 0; fail_at = i;
+        allocation_calls = 0; fail_at = i;
         CHECK(xr_xir_compile_checked_write(source,&packet,NULL) == XR_XIR_OUT_OF_MEMORY);
         CHECK(!packet.bytes && !packet.length && live == baseline);
     }
     fail_at = SIZE_MAX;
     CHECK(xr_xir_compile_checked_write(source,&packet,NULL) == XR_XIR_OK);
     xr_xir_compile_artifact_free(source); CHECK(live == owner.blocks+2);
-    baseline = live; calls = 0;
+    baseline = live; allocation_calls = 0;
     CHECK(xr_xir_compile_checked_read(&owner.context,packet.bytes,packet.length,&decoded,NULL) == XR_XIR_OK);
-    size_t reads = calls;
+    size_t reads = allocation_calls;
     xr_xir_compile_artifact_free(decoded); decoded=NULL; CHECK(live == baseline);
     for (size_t i = 0; i < reads; ++i) {
-        calls = 0; fail_at = i; decoded = NULL;
+        allocation_calls = 0; fail_at = i; decoded = NULL;
         CHECK(xr_xir_compile_checked_read(&owner.context,packet.bytes,packet.length,&decoded,NULL) == XR_XIR_OUT_OF_MEMORY);
         CHECK(!decoded && live == baseline);
     }

@@ -16,11 +16,11 @@ static void constraint_copy_allocation_failures(void) {
         XrXirInterfaceApplication applications[] = {{3,arguments,2},{4,NULL,0}};
         XrXirConstraint constraints[] = {{0,applications,2},{XR_XIR_CONSTRAINT_SENDABLE,applications,2},{0}};
         AllocationCompileOwner owner={0};allocation_compile_owner_new(&owner,&allocation_compile_limits);
-        calls = 0; fail_at = site ? site - 1 : SIZE_MAX;
+        allocation_calls = 0; fail_at = site ? site - 1 : SIZE_MAX;
         XrXirConstraint *copy=NULL;
         XrXirStatus status = xr_xir_compile_constraint_array_copy_verified(&owner.context,constraints,3,&copy);
         if (!site) {
-            CHECK(status == XR_XIR_OK && copy); sites = calls;
+            CHECK(status == XR_XIR_OK && copy); sites = allocation_calls;
             memset(arguments,0xcc,sizeof(arguments)); memset(applications,0xcc,sizeof(applications));
             memset(constraints,0xcc,sizeof(constraints));
             CHECK(!copy[0].markers && copy[0].interface_count == 2);
@@ -44,23 +44,23 @@ static void constraint_packet_allocation_failures(void) {
         XrXirArtifact *source=NULL,*decoded=NULL;
         CHECK(constraint_packet_fixture(&owner.context,markers,&source)==XR_XIR_OK);
         XrXirCheckedPacket packet = {0};
-        size_t baseline = live; calls = 0;
+        size_t baseline = live; allocation_calls = 0;
         CHECK(xr_xir_compile_checked_write(source,&packet,NULL) == XR_XIR_OK);
-        size_t writes = calls;
+        size_t writes = allocation_calls;
         xr_xir_compile_checked_packet_free(&packet); CHECK(live == baseline);
         for (size_t i = 0; i < writes; ++i) {
-            calls = 0; fail_at = i;
+            allocation_calls = 0; fail_at = i;
             CHECK(xr_xir_compile_checked_write(source,&packet,NULL) == XR_XIR_OUT_OF_MEMORY);
             CHECK(!packet.bytes && !packet.length && live == baseline);
         }
         fail_at = SIZE_MAX;
         CHECK(xr_xir_compile_checked_write(source,&packet,NULL) == XR_XIR_OK);
-        xr_xir_compile_artifact_free(source); CHECK(live == owner.blocks+2); baseline = live; calls = 0;
+        xr_xir_compile_artifact_free(source); CHECK(live == owner.blocks+2); baseline = live; allocation_calls = 0;
         CHECK(xr_xir_compile_checked_read(&owner.context,packet.bytes,packet.length,&decoded,NULL) == XR_XIR_OK);
-        size_t reads = calls;
+        size_t reads = allocation_calls;
         xr_xir_compile_artifact_free(decoded); decoded=NULL; CHECK(live == baseline);
         for (size_t i = 0; i < reads; ++i) {
-            calls = 0; fail_at = i; decoded = NULL;
+            allocation_calls = 0; fail_at = i; decoded = NULL;
             CHECK(xr_xir_compile_checked_read(&owner.context,packet.bytes,packet.length,&decoded,NULL) == XR_XIR_OUT_OF_MEMORY);
             CHECK(!decoded && live == baseline);
         }

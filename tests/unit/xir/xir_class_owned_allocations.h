@@ -123,6 +123,6 @@ static void class_owned_allocations(void) {
         char name[64];CHECK(snprintf(name,sizeof(name),"class owning phase %u full prefix",phase)>0);
         allocation_compile_operation_cases(name,class_owned_operation,&phase);
     }
-    class_owned_poisoning();CHECK(!live && !class_live_bytes);calls=0;
+    class_owned_poisoning();CHECK(!live && !class_live_bytes);allocation_calls=0;
 }
 #endif // XIR_CLASS_OWNED_ALLOCATIONS_H
