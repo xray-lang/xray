@@ -399,5 +399,80 @@
     "retired": 0,
     "completion": "OPEN",
     "remaining": "Original3 normal gates, complete AOT/FI/axes/sanitizers/stable object lifetime/escape/SourceDelete remain OPEN."
+  },
+  "plain_native_actual_9031_msvc_normal3_qualification_20261010_r5": {
+    "status": "ACTUAL_FIXED_9031_MSVC_PLAIN_NORMAL3_PASS_FULL_RESPONSIBILITY_OPEN",
+    "producer": "9031dbc04d5f66ae2bcb356478a0d9450dc9ad4e",
+    "producer_tree": "41e48cbc356d1d63bb6767f52afa1500d1e0a42a",
+    "consumer_overlay": "6e828350f8496b69a46e179db3760f7df92aa4a4",
+    "source_identity": "Checked28/semantic73 Value23/Call29/Program30; exact git6e driver55bb/support77e6 and original3path candidate, private CMake only material setter f932 selects fresh-r5; generated/private-source remain original fixed r1.",
+    "input_binding_sha256": "82fb749f9e79506291c01e7c9103d807d3275e875fa72f40415ef6025d9ce769",
+    "build_result_sha256": "4f44702fd8d81c7ffe1e2f8b95c8d9d09800c587ac433b36c798ac031ca0fe4b",
+    "runtime_result_sha256": "6226690ca3a5c1d8ca9c0dab577b3558453f56f27798b2c3bbece6b4b075aaab",
+    "junit_sha256": "086f82c2201a31960e80e0944691c6dc024b870f15ce8e57357edea2680fdff9",
+    "main_review": {
+      "path": "build-consumer-evidence/consumer-session-20261009-r1/plain-native-r5-normal-qualification-r1/main-qualification-review.json",
+      "sha256": "b129788225abf3dd806354211b229588dc7a6142e575770a1f3aada65cafccb1"
+    },
+    "independent_review": {
+      "path": "build-consumer-evidence/parallel-aot-main-audit-r1/plain-static-native9031-r5-normal-actual-independent-review-r1/report.json",
+      "sha256": "40cf29401c53595c7e08dd3e403b27686c101fe03f7f716045cf4fe1a72a3eb6"
+    },
+    "fresh_material_directory": "generated/current-static-native-r5/material",
+    "fresh_material_sha256": {
+      "actual_payload.c": "9c3cfaf2403fe889c06051fab97432321a4eea7bf4c6e903f76ce0aab8b9fe1b",
+      "actual_proof.bin": "5f432fb76411f20faa711db6e26e54d32bf67462cad5e1d674e9f4e66c447717",
+      "actual_identity.bin": "5f8d997b1f903ee34e1f3c0ebc5829e527968569de5220e66ef222ba7d1b654b",
+      "payload_binding.c": "967de38855945ac09e6d820cbe438625c62fdb26fb58b640b55b8c9b552eaac9"
+    },
+    "actual_material_proof": "Real writer invoked SourceProduct/specialize/fullverify/CGen and created new4 previously absent leaves. All3904 embedded sparse-C proof bytes equal genuine external packet; full32 equals wholepacket SHA; compiled sidecar equals wholeactualC SHA. Oldr1 four sealed leaves and first-reds unchanged.",
+    "normal_result": "Original3 registrations each actual PASS, strict present JUnit exact3 statusrun/0failure/error/skipped. Full220B Source original First19/Second23 independent42, two live Instances each twice, natural mode1 both-native/mode2 First-native Second-VM/mode3 First-VM Second-native counters each2. Receiver input poisoned/freed, Closed dead, whole Lowered proof equality, owned I64 result/caller Program drop/lease0-0-1/private-entry allocation-free reject assertions exercised.",
+    "profile": "Actual MSVC19.44.35219 x64 C11 /O2 /Ob2 /DNDEBUG /MT /utf-8 /W4 /WX; CP65001, Ninja1/CTest1; original TIMEOUT120 PROCESSORS1. No public SDK or full system-header closure qualification.",
+    "guards": {
+      "source_raw_mtime_unchanged": 11651,
+      "product_objects_unchanged": 95,
+      "archives_unchanged": 11,
+      "configuration_probes_separate": 4,
+      "build_only_probe_change": "CMakeFiles/XrayShowIncludes/probe.obj",
+      "runtime_probe_changes": 0,
+      "old4_material_drift": 0,
+      "fresh4_runtime_drift": 0,
+      "prior_failure_and_plan_files_unchanged": 30,
+      "both_processes_reaped": true
+    },
+    "executor_boundary": "Original execution runner did not fail closed on absent JUnit and did not separately freeze consumer binary raw before launch. Actual preserved JUnit is present, exact3 run with0failure/error/skipped, checked directly here; actual fresh link and runtime invocation remain preserved. Future executor must strengthen these guards without rewriting old runner/results or claiming retroactive before samples.",
+    "preserved_failure_history": "r2 real signed-I64 /WX compile first-red fixed d900; r3 real missingCLOSED Stage first-red fixed6e; r4 metadata edit changed private-source ownerroot and correctly failed195 beforeSource. r5 only material setter resolves that metadata mistake without weakening independent path golden.",
+    "window": "Explicit Rootr5 only, CLOSED_NORMAL3_PASS; latest Rootdc3a not adopted and no historical/full producer window inherited.",
+    "retired": 0,
+    "completion": "OPEN",
+    "remaining": [
+      "Complete original family AOT/Backend/deterministic-C and old-representation responsibilities",
+      "Full compiler/runtime FI, allocation/resource axes and sanitizer qualification",
+      "Typed Library/cancel and escape/per-object stable lifecycle/initialization failure responsibilities",
+      "Physical SourceDelete, default/SDK integration and formal Root acceptance/last consumer deletion"
+    ],
+    "runtime_binary_guard_supplement": {
+      "status": "ACTUAL_RUNTIME_ONLY_ORIGINAL3_PASS_ALL_BEFORE_AFTER_INPUTS_EXACT",
+      "result_path": "build-consumer-current9031-plain-native-msvc-r1/execution-runtime-r5-supplement-r1/result.json",
+      "result_sha256": "d3487dfe08dc7e1440363330c3f57ae6fa16e1960cdda3665eeb935234f3b7be",
+      "before_guard_sha256": "abc52642bc1410ef25b3714d02bea5ee12f468cba817fad37b0ac3939c49a8d6",
+      "JUnit_sha256": "f3bcad0f830b8ecac6c15d0df5bea5d34950e4ad24b0cd79ec258da73eebde32",
+      "main_supplement_review_sha256": "03b95d2c857c3e7bed36d680909e683ffca24100975313370eff7fbbe63492d1",
+      "independent_review": {
+        "path": "build-consumer-evidence/parallel-aot-main-audit-r1/plain-static-native9031-r5-runtime-supplement-actual-review-r1/report.json",
+        "sha256": "14aafd02d621ab66242f0381d4453ffe0d1342ca434b0a1022b31809ce07b175"
+      },
+      "strict_guard": "Real before saved before Popen binds exact actualregistry directreceiver (no wrapper), auxwriter+3targetobjects/source11651/95obj11archives/4probes/old+fresh4/tools10/registry/firstPASS16/oldfailures30. All after raw+mtime exact; mandatory present JUnit exact3distinct/statusrun/child+aggregate0skipfailureerrordisabled.",
+      "consumed_receiver_sha256": "cfd7e2cc2222e2a8c789cd60dc543610140d7afb4fb682c34d123f44d6fb35fc",
+      "compile_link_regenerate": 0,
+      "process_pid_reaped": [
+        29720,
+        true
+      ],
+      "history": "First-run guard weakness remains recorded; this separate authorized runtime-only window closes its missing before-binary and strictJUnit evidence. FirstPASS logs/JUnit/runner/results preserved; CTest LastTest working leaf is mutable metadata.",
+      "window": "CLOSED_ALL_PROCESSES_REAPED",
+      "retired": 0,
+      "completion": "OPEN"
+    }
   }
 }

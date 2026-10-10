@@ -845,7 +845,7 @@
     },
     {
       "path": "tests/unit/xir/product_consumers/source_static_methods_source_obligations.json",
-      "lf_sha256": "69e6b17d653f14f64ba6c7fc8729e7929b67177e19fb05f10d5723f415803bcd"
+      "lf_sha256": "7ffe2ae3deacece3ce6f292699b4a36205bc3774a26816db987deeb780f2d026"
     },
     {
       "path": "tests/unit/xir/product_consumers/source_struct_string_source_obligations.json",
