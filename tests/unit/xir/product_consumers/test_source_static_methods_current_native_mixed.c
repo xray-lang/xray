@@ -8,12 +8,14 @@
  * test_source_static_methods_current_native_mixed.c - Actual native and mixed execution
  *
  * KEY CONCEPT:
- *   Source owners die before detached artifacts are consumed. Two Instances
+ *   A separate writer exports authentic packet and native C inputs. Two Instances
  *   retain the Lowered lease after the caller drops its Program, and every
  *   exported scalar call keeps the original independent result.
  */
+#if !defined(XR_SOURCE_STATIC_NATIVE_RUNNER)
 #include "program/xr_xir_source_product.h"
 #include "toolchain/xcompiler_session.h"
+#endif
 #include "xir/xxir_construction.h"
 #include "xir/xxir_generic.h"
 #include "xir/xxir_vm.h"
@@ -47,6 +49,7 @@ static void construction_owner(const XrXirArtifact *artifact, const XrXirCompile
     CHECK(xr_xir_compile_verify_v2(context, module, construction, NULL) == XR_XIR_OK);
 }
 
+#if !defined(XR_SOURCE_STATIC_NATIVE_RUNNER)
 /* Retain the complete authentic producer packet while its borrowed view lives. */
 static void packet_copy(const XrXirCompileContext *context, const XrXirSourceProductPacketView *view,
     XrXirCheckedPacket *owned) {
@@ -64,6 +67,7 @@ static void packet_exact(const XrXirArtifact *artifact, const XrXirCheckedPacket
     CHECK(actual.length == expected->length && !memcmp(actual.bytes, expected->bytes, actual.length));
     xr_xir_compile_checked_packet_free(&actual);
 }
+#endif
 
 typedef struct StaticEntries { uint32_t entry, answer, private_answer, value_methods[2]; } StaticEntries;
 static StaticEntries source_entries(const XrXirModule *module) {
@@ -123,16 +127,9 @@ static void execute_fixed_i64(XrXirInstance *instance, uint32_t entry, int64_t e
 #endif
 #include "native_mixed_support.h"
 
-int main(int argc, char **argv) {
-#if defined(XR_SOURCE_STATIC_NATIVE_RUNNER)
-    if (argc != 7) return 2;
-    unsigned mode = !strcmp(argv[1], "1") ? 1u : !strcmp(argv[1], "2") ? 2u : !strcmp(argv[1], "3") ? 3u : 0u;
-    if (!mode) return 2;
-    const char *root_input = argv[2], *file_input = argv[3], *stdlib_input = argv[4];
-#else
-    if (argc != 8) return 2;
+#if !defined(XR_SOURCE_STATIC_NATIVE_RUNNER)
+static int write_source_native(char **argv) {
     const char *root_input = argv[1], *file_input = argv[2], *stdlib_input = argv[3];
-#endif
     CHECK(!runtime_live && !runtime_bytes && !runtime_owned && !runtime_owned_capacity);
     runtime_fail_at = SIZE_MAX;
     char root[2048], file[2048];
@@ -203,47 +200,8 @@ int main(int argc, char **argv) {
         CHECK(actual.value_methods[0] == entries.value_methods[0] && actual.value_methods[1] == entries.value_methods[1]);
         XrXirProgramProof proof = xr_xir_compile_program_proof(lowered);
         CHECK(proof.bytes && proof.length && proof.identity && proof.layouts);
-#if defined(XR_SOURCE_STATIC_NATIVE_RUNNER)
-        XrXirProgram *program = seal_observed_native(context, &lowered, mode, entries, argv[5], argv[6]);
-        CHECK(!lowered && program && observed_native_owner);
-        proof = (XrXirProgramProof){0};
-        XrXirInstanceConfig config;
-        CHECK(xr_xir_instance_config_init(&config, sizeof(config)) == XR_XIR_CALL_READY);
-        config.value_limit = UINT64_C(1048576);
-        XrXirInstance *instances[2] = {0};
-        for (unsigned i = 0; i < 2; ++i)
-            CHECK(xr_xir_instance_new(program, &config, &instances[i]) == XR_XIR_CALL_READY && instances[i]);
-        CHECK(instances[0] != instances[1]);
-        xr_xir_compile_program_drop(program); program = NULL;
-        CHECK(observed_native_owner && observed_code_lease_releases == 0);
-        /* Both live Instances retain the real binding/delegate/Lowered code lease. */
-        for (unsigned i = 0; i < 2; ++i) {
-            size_t attempts = runtime_attempts;
-            CHECK(xr_xir_instance_start(instances[i], entries.private_answer, NULL, 0) == XR_XIR_CALL_BAD_ARGUMENT);
-            CHECK(xr_xir_instance_state(instances[i]) == XR_XIR_INSTANCE_NEW && runtime_attempts == attempts);
-            execute_fixed_i64(instances[i], entries.entry, 0);
-            for (unsigned repeat = 0; repeat < 2; ++repeat) {
-                MethodResumeCounts before_call = method_resume_counts(entries);
-                execute_fixed_i64(instances[i], entries.answer, 42);
-                MethodResumeCounts after_call = method_resume_counts(entries);
-                check_actual_method_execution(mode, before_call, after_call);
-                printf("actual-provider instance=%u repeat=%u mode=%u fixed-i64=42 First-native=%llu First-VM=%llu Second-native=%llu Second-VM=%llu\n",
-                    i, repeat, mode, (unsigned long long)(after_call.native[0] - before_call.native[0]),
-                    (unsigned long long)(after_call.vm[0] - before_call.vm[0]),
-                    (unsigned long long)(after_call.native[1] - before_call.native[1]),
-                    (unsigned long long)(after_call.vm[1] - before_call.vm[1]));
-            }
-            /* READY is required only for this fully successful normal path. */
-            CHECK(xr_xir_instance_free(instances[i]) == XR_XIR_CALL_READY); instances[i] = NULL;
-            if (i == 0) CHECK(observed_native_owner && observed_code_lease_releases == 0);
-        }
-        CHECK(!runtime_live && !runtime_bytes && !runtime_owned && !runtime_owned_capacity);
-        CHECK(!observed_native_owner && observed_code_lease_releases == 1);
-        puts("static-methods-current-native-mixed normal-two-instances=2 independent-fixed42=4 actual-provider-deltas=4 caller-Program-dead=1 actual-code-lease-released=1");
-#else
         emit_native_material(lowered, argv[4], argv[5], argv[6], argv[7]);
         xr_xir_compile_artifact_free(lowered); lowered = NULL;
-#endif
     } else fprintf(stderr, "static-methods-current-native-mixed Source required=0 actual=%u stage=%u message=%s\n",
         status, diagnostic.stage, diagnostic.source.message);
     xr_xir_compile_source_product_diagnostic_free(&diagnostic);
@@ -253,4 +211,94 @@ int main(int argc, char **argv) {
     printf("static-methods-current-native-mixed required=0 actual=%u compiler-physical=0/0 runtime-physical=0/0 result=%s\n",
         status, status == XR_XIR_OK ? "PASS" : "FAIL");
     return status == XR_XIR_OK ? 0 : 1;
+}
+#else
+static void run_native_instances(XrXirProgram **program, StaticEntries entries, unsigned mode) {
+    XrXirInstanceConfig config;
+    CHECK(xr_xir_instance_config_init(&config, sizeof(config)) == XR_XIR_CALL_READY);
+    config.value_limit = UINT64_C(1048576);
+    XrXirInstance *instances[2] = {0};
+    for (unsigned i = 0; i < 2; ++i)
+        CHECK(xr_xir_instance_new(*program, &config, &instances[i]) == XR_XIR_CALL_READY && instances[i]);
+    CHECK(instances[0] != instances[1]);
+    xr_xir_compile_program_drop(*program); *program = NULL;
+    CHECK(observed_native_owner && observed_code_lease_releases == 0);
+    /* Both live Instances retain the real binding/delegate/Lowered code lease. */
+    for (unsigned i = 0; i < 2; ++i) {
+        size_t attempts = runtime_attempts;
+        CHECK(xr_xir_instance_start(instances[i], entries.private_answer, NULL, 0) == XR_XIR_CALL_BAD_ARGUMENT);
+        CHECK(xr_xir_instance_state(instances[i]) == XR_XIR_INSTANCE_NEW && runtime_attempts == attempts);
+        execute_fixed_i64(instances[i], entries.entry, 0);
+        for (unsigned repeat = 0; repeat < 2; ++repeat) {
+            MethodResumeCounts before_call = method_resume_counts(entries);
+            execute_fixed_i64(instances[i], entries.answer, 42);
+            MethodResumeCounts after_call = method_resume_counts(entries);
+            check_actual_method_execution(mode, before_call, after_call);
+            printf("actual-provider instance=%u repeat=%u mode=%u fixed-i64=42 First-native=%llu First-VM=%llu Second-native=%llu Second-VM=%llu\n",
+                i, repeat, mode, (unsigned long long)(after_call.native[0] - before_call.native[0]),
+                (unsigned long long)(after_call.vm[0] - before_call.vm[0]),
+                (unsigned long long)(after_call.native[1] - before_call.native[1]),
+                (unsigned long long)(after_call.vm[1] - before_call.vm[1]));
+        }
+        /* READY is required only for this fully successful normal path. */
+        CHECK(xr_xir_instance_free(instances[i]) == XR_XIR_CALL_READY); instances[i] = NULL;
+        if (i == 0) CHECK(observed_native_owner && observed_code_lease_releases == 0);
+    }
+    CHECK(!runtime_live && !runtime_bytes && !runtime_owned && !runtime_owned_capacity);
+    CHECK(!observed_native_owner && observed_code_lease_releases == 1);
+}
+
+static int run_source_free_native(char **argv, unsigned mode) {
+    CHECK(!runtime_live && !runtime_bytes && !runtime_owned && !runtime_owned_capacity);
+    runtime_fail_at = SIZE_MAX;
+    const XrXirCompileContext *context = source_program_owner(67108864, 128000000);
+    NativePacketInput input = {0}; native_packet_load(context, argv[2], argv[3], &input);
+    uint8_t identity[32]; memcpy(identity, input.identity, sizeof(identity));
+    XrXirArtifact *closed = NULL, *lowered = NULL;
+    CHECK(xr_xir_compile_checked_read(context, input.bytes, input.length, &closed, NULL) == XR_XIR_OK);
+    XrXirCheckedPacket expected_closed = {0};
+    CHECK(xr_xir_compile_checked_write(closed, &expected_closed, NULL) == XR_XIR_OK);
+    CHECK(expected_closed.bytes && expected_closed.bytes != input.bytes && expected_closed.length == input.length &&
+        !memcmp(expected_closed.bytes, input.bytes, input.length));
+    native_packet_die(&input);
+    CHECK(!input.bytes && !input.length);
+    CHECK(xr_xir_compile_artifact_verify(closed, NULL) == XR_XIR_OK);
+    construction_owner(closed, context);
+    static_methods_source_shape(xr_xir_compile_artifact_module(closed));
+    StaticEntries entries = source_entries(xr_xir_compile_artifact_module(closed));
+    XrXirTarget target = {XR_XIR_ARCH_X86_64, XR_XIR_VALUE_ABI_VERSION};
+    CHECK(xr_xir_compile_lower(closed, &target, &lowered, NULL) == XR_XIR_OK);
+    xr_xir_compile_artifact_free(closed); closed = NULL;
+    CHECK(xr_xir_compile_artifact_verify(lowered, NULL) == XR_XIR_OK);
+    construction_owner(lowered, context);
+    StaticEntries actual = source_entries(xr_xir_compile_artifact_module(lowered));
+    CHECK(actual.entry == entries.entry && actual.answer == entries.answer && actual.private_answer == entries.private_answer);
+    CHECK(actual.value_methods[0] == entries.value_methods[0] && actual.value_methods[1] == entries.value_methods[1]);
+    XrXirProgramProof proof = xr_xir_compile_program_proof(lowered);
+    CHECK(proof.bytes && proof.length && proof.identity && proof.layouts && !memcmp(identity, proof.identity, sizeof(identity)));
+    CHECK(proof.length == expected_closed.length && !memcmp(proof.bytes, expected_closed.bytes, proof.length));
+    xr_xir_compile_checked_packet_free(&expected_closed);
+    native_input_poison(identity, sizeof(identity)); proof = (XrXirProgramProof){0};
+    XrXirProgram *program = seal_observed_native(context, &lowered, mode, entries, argv[4]);
+    CHECK(!lowered && program && observed_native_owner);
+    run_native_instances(&program, entries, mode);
+    CHECK(!program && !closed && !lowered && !observed_native_owner && observed_code_lease_releases == 1);
+    source_program_owners_free();
+    CHECK(!source_program_compile_allocations && !source_program_compile_capacity);
+    CHECK(!runtime_live && !runtime_bytes && !runtime_owned && !runtime_owned_capacity);
+    puts("source-free-native-mixed normal-two-instances=2 independent-fixed42=4 actual-provider-deltas=4 input-poisoned-freed=1 caller-Program-dead=1 actual-code-lease-released=1");
+    return 0;
+}
+#endif
+
+int main(int argc, char **argv) {
+#if defined(XR_SOURCE_STATIC_NATIVE_RUNNER)
+    if (argc != 5) return 2;
+    unsigned mode = !strcmp(argv[1], "1") ? 1u : !strcmp(argv[1], "2") ? 2u : !strcmp(argv[1], "3") ? 3u : 0u;
+    if (!mode) return 2;
+    return run_source_free_native(argv, mode);
+#else
+    if (argc != 8) return 2;
+    return write_source_native(argv);
+#endif
 }

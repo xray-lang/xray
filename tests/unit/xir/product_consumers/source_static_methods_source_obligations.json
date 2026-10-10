@@ -101,5 +101,48 @@
     "first_red": "r1 actual CMake and Ninja exit0; profile parser rejected legal -MD and wrapped link plan before any consumer build; r2 requalified frozen configured own tree without rerunning CMake or recopying source. Original r1 failure unchanged.",
     "remaining": "Source-free process makes no Source request but still links native_cache public Source dependency. No SourceDelete/standaloneAOT/native/mixed/fullFI/resources/cancel/stable-object lifecycle/default/SDK/new-producer/main integration/retirement claim. Whole legacy and original BackendIR representation responsibility OPEN.",
     "retired": 0
+  },
+  "source_free_actual_native_mixed_receiver_20261010_candidate": {
+    "status": "IMPLEMENTED_STATIC_REVIEWED_NOT_RUN",
+    "previous_candidate_commit": "8ff26b11f34073d628313a36f082d13e3cffa550",
+    "review": {
+      "path": "build-consumer-evidence/consumer-session-20261009-r1/static-native-packet-receiver-candidate-r1/candidate-static-review.json",
+      "sha256": "c6c33119b13d1b36efe67f5a24477668c0080173f4d610754f16b15f1420d4fc"
+    },
+    "candidate_hunks": {
+      "tests/unit/xir/product_consumers/test_source_static_methods_current_native_mixed.c": {
+        "sha256": "7d81336e6c9583c2a8bae350ad50d6052683ff7eb96c1f574a78ce0f27600d66",
+        "size": 18636
+      },
+      "tests/unit/xir/product_consumers/native_mixed_support.h": {
+        "sha256": "3111edbb3eef5294a3f43a47c1053aa7d37e6651ca5d35dafdd4e7b19d4bf4e4",
+        "size": 12553
+      },
+      "tests/unit/xir/product_consumers/source_static_methods_current_native_mixed_candidate.cmake": {
+        "sha256": "c0adf78c24cc347a9d121eedccf30c9f1db09a3d7465d997ef4e4e7004b0fdf8",
+        "size": 5196
+      }
+    },
+    "scope": "Writer remains SourceProduct producer and actual C emitter. Receiver imports authentic Closed packet/full32B identity, obtains an independent canonical packet, poisons/frees borrowed file inputs, reverifies owned Closed/Lowered and exact proofs, binds the compiled native Program proof, and hashes the actual host-compiled C against the compiled writer sidecar.",
+    "preserved": [
+      "Original166-byteSource plus54-byteadapter unchanged",
+      "Full writer SourceProduct/public admission and detached Source/Closed/Lowered shape/fullverify/v2",
+      "Two live distinct Instances; callerProgram drops before calls",
+      "Private answer BAD_ARGUMENT, stateNEW, allocation attempts unchanged",
+      "Canonical entry0 and two fixed42 per Instance with complete ownedI64take/drop",
+      "Each selected First/Second native/VM resume increment positive and unselected zero in complementary modes1/2/3",
+      "Observed real Lowered lease0 after callerProgramdrop,0 after firstInstancefree,1 after lastInstancefree",
+      "Final runtime/compiler physical0 assertions retained",
+      "TIMEOUT120/PROCESSORS1 normal3 unchanged"
+    ],
+    "identity": "Existing Checked27/contract72, Value22/Call28/Program29 assertions unchanged; public APIs from same sealedGit1b candidate, no fresh qualification granted.",
+    "qualification": "No configure/Cgen/host compile/link/writer/native/mixed/runtime or sanitizer execution. Existing packetVM and historical25f qualifications remain separate. No new immutable producer, main integration or retirement.",
+    "source_free_boundary": "Receiver SourceProduct construction and C reemission removed by static inspection. Source/compiler front-end public link dependency and physical deletion remain OPEN.",
+    "full_FI": "NOT_RUN",
+    "axes": "NOT_RUN",
+    "cancel": "NOT_RUN",
+    "stable_object_lifecycle": "NOT_RUN",
+    "Main": "NOT_RUN",
+    "retired": 0
   }
 }

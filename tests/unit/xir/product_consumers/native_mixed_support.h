@@ -14,6 +14,7 @@
 #ifndef SOURCE_STATIC_CURRENT_NATIVE_MIXED_SUPPORT_H
 #define SOURCE_STATIC_CURRENT_NATIVE_MIXED_SUPPORT_H
 #include "base/xsha256.h"
+#if !defined(XR_SOURCE_STATIC_NATIVE_RUNNER)
 #include "xir/xxir_emit_c.h"
 
 static void native_payload_digest(const XrXirCSource *source, char digest[65]) {
@@ -23,7 +24,6 @@ static void native_payload_digest(const XrXirCSource *source, char digest[65]) {
         CHECK(snprintf(digest + i * 2, 3, "%02x", bytes[i]) == 2);
 }
 
-#if !defined(XR_SOURCE_STATIC_NATIVE_RUNNER)
 static void native_write_file(const char *path, const void *bytes, size_t length) {
     FILE *file = fopen(path, "wb");
     CHECK(file && fwrite(bytes, 1, length, file) == length && !fclose(file));
@@ -53,19 +53,70 @@ static void emit_native_material(const XrXirArtifact *lowered, const char *c_pat
 extern const XrXirProgramSpec source_static_current_native_program;
 extern const char source_static_current_native_c_sha256[65];
 
-/* Compare the writer's complete packet while the actual Lowered owner lives. */
-static void native_material_file_exact(const char *path, const uint8_t *bytes, size_t length) {
-    FILE *file = fopen(path, "rb");
-    CHECK(file && bytes && length);
-    uint8_t chunk[1024];
-    size_t offset = 0;
-    while (offset < length) {
-        size_t count = length - offset;
-        if (count > sizeof(chunk)) count = sizeof(chunk);
-        CHECK(fread(chunk, 1, count, file) == count && !memcmp(chunk, bytes + offset, count));
-        offset += count;
-    }
+typedef struct NativePacketInput {
+    uint8_t *bytes;
+    size_t length;
+    uint8_t identity[32];
+    char packet_path[2048], identity_path[2048];
+} NativePacketInput;
+static void native_input_poison(void *pointer, size_t length) {
+    volatile uint8_t *bytes = pointer;
+    for (size_t i = 0; i < length; ++i) bytes[i] = 0xa5;
+}
+
+/* The receiving ledger owns file bytes only until checked_read detaches them. */
+static void native_packet_load(const XrXirCompileContext *context, const char *packet_path,
+    const char *identity_path, NativePacketInput *input) {
+    CHECK(!input->bytes && !input->length);
+    CHECK(strlen(packet_path) < sizeof(input->packet_path) && strlen(identity_path) < sizeof(input->identity_path));
+    strcpy(input->packet_path, packet_path); strcpy(input->identity_path, identity_path);
+    FILE *file = fopen(input->packet_path, "rb");
+    CHECK(file && !fseek(file, 0, SEEK_END));
+    long length = ftell(file);
+    CHECK(length >= 64 && length <= 16777216 && !fseek(file, 0, SEEK_SET));
+    input->length = (size_t)length;
+    void *bytes = NULL;
+    CHECK(xr_compile_resources_calloc(context->resources, 1, input->length, &bytes) == XR_COMPILE_RESOURCE_OK);
+    input->bytes = bytes;
+    CHECK(fread(input->bytes, 1, input->length, file) == input->length);
     CHECK(fgetc(file) == EOF && !ferror(file) && !fclose(file));
+    file = fopen(input->identity_path, "rb");
+    CHECK(file && fread(input->identity, 1, sizeof(input->identity), file) == sizeof(input->identity));
+    CHECK(fgetc(file) == EOF && !ferror(file) && !fclose(file));
+    uint8_t digest[32]; xr_sha256(input->bytes, input->length, digest);
+    CHECK(!memcmp(digest, input->identity, sizeof(digest)));
+    native_input_poison(digest, sizeof(digest));
+}
+static void native_packet_die(NativePacketInput *input) {
+    CHECK(input->bytes && input->length);
+    native_input_poison(input->bytes, input->length);
+    CHECK(input->bytes[0] == 0xa5 && input->bytes[input->length - 1] == 0xa5);
+    xr_compile_resources_free(input->bytes); input->bytes = NULL; input->length = 0;
+    native_input_poison(input->identity, sizeof(input->identity));
+    native_input_poison(input->packet_path, sizeof(input->packet_path));
+    native_input_poison(input->identity_path, sizeof(input->identity_path));
+}
+
+/* Check the actual C file compiled by the host, without invoking the emitter. */
+static void native_material_file_digest(const XrXirCompileContext *context, const char *path) {
+    char copied_path[2048];
+    CHECK(strlen(path) < sizeof(copied_path)); strcpy(copied_path, path);
+    FILE *file = fopen(copied_path, "rb");
+    CHECK(file && !fseek(file, 0, SEEK_END));
+    long length = ftell(file);
+    CHECK(length > 0 && length <= 16777216 && !fseek(file, 0, SEEK_SET));
+    void *bytes = NULL;
+    CHECK(xr_compile_resources_calloc(context->resources, 1, (size_t)length, &bytes) == XR_COMPILE_RESOURCE_OK);
+    CHECK(fread(bytes, 1, (size_t)length, file) == (size_t)length);
+    CHECK(fgetc(file) == EOF && !ferror(file) && !fclose(file));
+    uint8_t digest[32]; xr_sha256(bytes, (size_t)length, digest);
+    char text[65];
+    for (unsigned i = 0; i < 32; ++i)
+        CHECK(snprintf(text + i * 2, 3, "%02x", digest[i]) == 2);
+    CHECK(!strcmp(text, source_static_current_native_c_sha256));
+    native_input_poison(bytes, (size_t)length); xr_compile_resources_free(bytes);
+    native_input_poison(digest, sizeof(digest)); native_input_poison(text, sizeof(text));
+    native_input_poison(copied_path, sizeof(copied_path));
 }
 typedef struct ObservedNativeOwner {
     XrXirArtifact *lowered;
@@ -120,7 +171,7 @@ static void *native_owner_allocate(const XrXirCompileContext *context, size_t co
     return pointer;
 }
 static XrXirProgram *seal_observed_native(const XrXirCompileContext *context, XrXirArtifact **lowered,
-    unsigned mode, StaticEntries roles, const char *proof_path, const char *identity_path) {
+    unsigned mode, StaticEntries roles, const char *c_path) {
     CHECK(lowered && *lowered && mode >= 1 && mode <= 3 && !observed_native_owner && !observed_code_lease_releases);
     const XrXirModule *module = xr_xir_compile_artifact_module(*lowered);
     const XrXirProgramSpec *compiled = &source_static_current_native_program;
@@ -129,13 +180,7 @@ static XrXirProgram *seal_observed_native(const XrXirCompileContext *context, Xr
     CHECK(proof.bytes && proof.identity && proof.layouts && compiled->proof.bytes && compiled->proof.identity);
     CHECK(proof.length == compiled->proof.length && !memcmp(proof.bytes, compiled->proof.bytes, proof.length));
     CHECK(!memcmp(proof.identity, compiled->proof.identity, 32));
-    native_material_file_exact(proof_path, proof.bytes, proof.length);
-    native_material_file_exact(identity_path, proof.identity, 32);
-    XrXirCSource regenerated = {0};
-    CHECK(xr_xir_compile_emit_c(*lowered, "source_static_current_native", 16777216, &regenerated) == XR_XIR_OK);
-    char digest[65]; native_payload_digest(&regenerated, digest);
-    CHECK(!strcmp(digest, source_static_current_native_c_sha256));
-    xr_xir_compile_c_source_free(&regenerated);
+    native_material_file_digest(context, c_path);
     ObservedNativeOwner *owner = native_owner_allocate(context, 1, sizeof(*owner));
     owner->count = module->function_count; owner->mode = mode;
     owner->entries = native_owner_allocate(context, owner->count, sizeof(*owner->entries));
@@ -165,7 +210,7 @@ static XrXirProgram *seal_observed_native(const XrXirCompileContext *context, Xr
     owner->lowered = *lowered; *lowered = NULL;
     observed_native_owner = owner;
     printf("native-binding mode=%u actual-native=%u actual-VM=%u emitted-C-sha256=%s\n",
-        mode, native_count, vm_count, digest);
+        mode, native_count, vm_count, source_static_current_native_c_sha256);
     return program;
 }
 typedef struct MethodResumeCounts { uint64_t native[2], vm[2]; } MethodResumeCounts;
