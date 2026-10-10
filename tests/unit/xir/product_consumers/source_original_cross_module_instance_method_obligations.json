@@ -646,5 +646,81 @@
     "caption_binding": "Post-execution mapping annotation. The frozen Root snapshots and raw logs are authoritative runtime inputs; this later mapping was not captured before those executions.",
     "worker_delivery_commit_of_matching_candidate_bytes": "0a325493668f38a65ad702d19e216b92be1cd166",
     "candidate_delivery_binding": "The worker delivery publishes byte-identical consumer source observed in the frozen Root windows; it is not the Git commit of the executed Root product or a replacement for each original input snapshot."
+  },
+  "typed_library_source_free_packet_receiver_20261010_candidate": {
+    "status": "STATIC_REVIEWED_NOT_RUN",
+    "retired": false,
+    "candidate_paths": [
+      "tests/unit/xir/product_consumers/test_source_typed_library_receiver_current_packet_vm.c",
+      "tests/unit/xir/product_consumers/source_typed_library_receiver_current_packet_vm_candidate.cmake"
+    ],
+    "candidate_raw_sha256": {
+      "tests/unit/xir/product_consumers/test_source_typed_library_receiver_current_packet_vm.c": "368baca00182d3281716f39c848b84da16c516fca0f53f625290281b6aaf84ca",
+      "tests/unit/xir/product_consumers/source_typed_library_receiver_current_packet_vm_candidate.cmake": "e94ebb8af74e593e5c33feb9ec1b887e0e43312dd81efb523124d5e7302d5505"
+    },
+    "reference_api": {
+      "Checked_schema": 27,
+      "Checked_contract": 72,
+      "Library_C_interface": 2,
+      "Value_ABI": 22,
+      "Call_ABI": 28,
+      "Program_ABI": 29
+    },
+    "producer_authorization": "No new producer adopted; authorized auxiliary producer remains25f4. Existing current-consumer API reference only; Root formal checkpoint and independent qualification remain required.",
+    "registration": "Dedicated candidate include only; not included in default CMake; configure/build/generation/writer/receiver execution NOT_RUN.",
+    "original_inputs": {
+      "root_bytes": 163,
+      "root_sha256": "3bb17ffe354b537a024dbf6e4c371df1c80051d72a3db21f20d48fdbeeb5f8bc",
+      "original_root_prefix_bytes": 109,
+      "original_root_prefix_sha256": "5765d2986533f38100664640b32772722b00c0f32db226ec3f8267d19c687b43",
+      "unchanged_export_adapter_bytes": 54,
+      "library_bytes": 185,
+      "library_sha256": "bb41f3d3d610b67ce6445475deb031967b10a0b069ef00b1c923599b3d6a6c87"
+    },
+    "writer": "Writer-only Source/session/Library/Catalog pipeline retains actual ordinal bindings, no-Catalog UNRESOLVED control, resolver CHECKED_LIBRARY selection, full SourceProduct public admission/verification, real Construction-v2, detached SOURCE specialization, complete Closed packet and Lowered proof equality, and full32-byte identity. Producer owners die; no Instance execution is performed by writer.",
+    "receiver": "Packet-only argc3: complete file/EOF/full32B identity SHA; public owned Checked read/full verify/Construction-v2/independent Worker shape; separate same-wire rewrite owner; volatile poison/free borrowed packet and poison copied path/identity buffers; reverify/v2/shape, lower, drop Closed, compare complete Lowered proof and identity, then release rewrite before Program seal. No Source/stdlib path, Catalog or SourceProduct request enters receiver branch.",
+    "independent_oracle": "Fixed owned I64=42 and original Worker/import/private visibility shape, every call exactly two actual distinct WAIT_YIELD tokens. Public same-wire canonical rewrite is an independently owned serialization of admitted input, not an independently encoded entire Closed oracle or VM-vs-native comparison.",
+    "runtime_candidate_assertions": [
+      "Two distinct live Instances, each answer twice: four fixed42 and eight real yield waits",
+      "Private answer BAD_ARGUMENT with Instance NEW and unchanged runtime allocation attempts",
+      "Caller Program reference drops before calls; canonical entry0 twice",
+      "Transparent same-view VM delegates preserve actual metadata and naturally return through product callbacks",
+      "Owned take/drop; Lowered CodeLease release0 after caller Program drop,0 after first Instance free,1 after final Instance free",
+      "Compiler and runtime actual allocations/tables/bytes zero at terminal; first failure and cleanup failure retain FAIL"
+    ],
+    "test_properties": {
+      "TIMEOUT": 120,
+      "PROCESSORS": 1,
+      "RUN_SERIAL": true,
+      "C_STANDARD": 11,
+      "MSVC": "utf8/W4/WX"
+    },
+    "static_reviews": {
+      "aot_r1": "build-consumer-evidence/parallel-aot-main-audit-r1/typed-library-packet-vm-static-review-r1/report.json",
+      "aot_r1_sha256": "e635bf3e955d665b6854f472215fbf311fa76642341baf9af52c8b143ee3a616",
+      "aot_semantic_correction_r2": "build-consumer-evidence/parallel-aot-main-audit-r1/typed-library-packet-vm-static-review-r2/semantic-correction.json",
+      "aot_semantic_correction_r2_sha256": "79bb0683714ae30b5b808cab0751fd6e57a3e302434de755e8db31195bc9aa2f",
+      "speed_r1": "build-consumer-evidence/parallel-progress-speed-analysis-r1/typed-library-packet-vm-static-review-r1.json",
+      "speed_r1_sha256": "6a152eed07f698394d9f494195d65a88a8e4fd31381e686b2f4130a8c6445a61"
+    },
+    "OPEN": [
+      "Actual fresh writer and packet VM receiver qualification at explicit current producer identity",
+      "Original cancel-after-first and cancel-after-second-yield responsibilities",
+      "Stable per-object actual construct/finalize/reclaim identity/count/order",
+      "Initialization failures and owned escape responsibilities not executed by this added facet",
+      "Complete FI and two-profile resource axes/default/SDK",
+      "Actual generated C native and applicable mixed/TSan/macOS",
+      "Physical SourceDelete: public VM native-cache still reaches Source/parser",
+      "Root integration acceptance and full family completion"
+    ],
+    "prior_qualification": "Prior Source/Catalog ordinary normal receipts, static_methods packet receipts and native02e candidate remain unchanged; no prior PASS is inherited by this facet.",
+    "mechanical_after_review": {
+      "change": "Removed one extra EOF blank line from each newly added candidate after staged diff-check; every code/body byte and all semantics preserved.",
+      "reviewed_raw_sha256": {
+        "tests/unit/xir/product_consumers/test_source_typed_library_receiver_current_packet_vm.c": "5afbf4168f6a2949ca9ef3adaf1f0f20fc4bafb2a035b10491571ed5245d6e80",
+        "tests/unit/xir/product_consumers/source_typed_library_receiver_current_packet_vm_candidate.cmake": "b871c26bae192fca16bbcf4fd7e1d4ab69cbf3364e5ddba7642c50cd0f86505c"
+      },
+      "receipt": "build-consumer-evidence/consumer-session-20261009-r1/typed-library-packet-receiver-candidate-r1/whitespace-only-adjustment.json"
+    }
   }
 }

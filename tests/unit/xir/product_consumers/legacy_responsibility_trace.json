@@ -633,7 +633,7 @@
     },
     {
       "path": "tests/unit/xir/product_consumers/source_original_cross_module_instance_method_obligations.json",
-      "lf_sha256": "545bc52c5388932f0a4db8ebd3fca7200d467f2df81923cecfb24d38c61741f6"
+      "lf_sha256": "2277bdd48308e5fc5c245d0beb4c22b21280e5eed7739cb7e3ffbc6d79f9e84d"
     },
     {
       "path": "tests/unit/xir/product_consumers/source_original_defer_panic_place_obligations.json",
