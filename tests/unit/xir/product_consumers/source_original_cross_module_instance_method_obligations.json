@@ -1291,5 +1291,197 @@
       "Physical SourceDelete, default/SDK/external packaging and final legacy responsibility retirement"
     ],
     "caption_binding": "Postexecution mapping annotation; original frozen plan, before snapshots, actualraw/JUnit/results remain authoritative. Mapping itself was not a preexecution input."
+  },
+  "typed_library_source_free_native_mixed_3a884_msvc_normal3_20261011": {
+    "status": "PASS_FIXED_PRODUCER_TYPED_LIBRARY_GENERATED_C_NATIVE_MIXED_MSVC_NORMAL3_ONLY",
+    "worker_preimage": "5bc05a263d2732f8acaa0d8c83ffb6ab1670589e",
+    "producer": "3a8841057907d85de7349dfb2bb1ee3444d07875",
+    "producer_tree": "c4f188667d7b1f6c89bb41599ad1bbb808a2d3e1",
+    "public_identity": "Checked28/contract73/LibraryC2/Value23/Call29/Program30; BUILT1/CHECKED2/LOWERED4",
+    "provider_boundary": "Pure immutable Git11595 leaves plus exact worker5bc three consumer leaves and one narrow unit include; no Root dirty Source copied. Only this fixed family epoch is qualified.",
+    "consumer_raw": {
+      "tests/unit/xir/product_consumers/test_source_typed_library_receiver_current_native_mixed.c": "1fc5f1131f308bbbe3134793ec6ffeb4ca16fbd041cd72fa37cccc8157bb70b0",
+      "tests/unit/xir/product_consumers/typed_library_native_mixed_support.h": "385100cb5038c18cf00537497d7b06040957b5a80a050758aca4bac683da39b9",
+      "tests/unit/xir/product_consumers/source_typed_library_receiver_current_native_mixed_candidate.cmake": "03b311f7f711a467eccf36b8fb361a5dabfb63cc4e0ecb094621a98862ff4c91"
+    },
+    "original_inputs": {
+      "root_bytes": 163,
+      "original_root_prefix": 109,
+      "unchanged_adapter": 54,
+      "library_bytes": 185,
+      "fixture_sha256": {
+        "root.xr": "3bb17ffe354b537a024dbf6e4c371df1c80051d72a3db21f20d48fdbeeb5f8bc",
+        "library.xr": "bb41f3d3d610b67ce6445475deb031967b10a0b069ef00b1c923599b3d6a6c87"
+      },
+      "full_stdlib_files": 75,
+      "independent_oracle": "Worker40.child2 returns owned I64 42 after two genuine yields; complete original two-module fixture and full same-provider stdlib."
+    },
+    "source_ledger": {
+      "path": "build-consumer-current3a884-typed-native-msvc-r1/post-configure-source-records.json",
+      "sha256": "ab039ffad9abe015a1bebad91e2a59c4b114d68945f66e4b834ce20db0018072"
+    },
+    "predeclared_configure_outputs": {
+      "path": "build-consumer-current3a884-typed-native-msvc-r1/predeclared-exact60-configure-output-closure.json",
+      "sha256": "46b76c54304ebb9d1e63bf059a59fd2dcca8dbd7564d8ebe6edb920b98ed96bc"
+    },
+    "configure": {
+      "result": {
+        "path": "build-consumer-current3a884-typed-native-msvc-r1/execution-configure-r1/result.json",
+        "sha256": "83d1d65188ecf000637c00e82f519cc4909eec9277a0e14ff4b2e858ec8532c6"
+      },
+      "pid": 31752,
+      "process_seconds": 18.32799999997951,
+      "exit": 0,
+      "reaped": true,
+      "raw": {
+        "path": "build-consumer-current3a884-typed-native-msvc-r1/execution-configure-r1/raw.log",
+        "sha256": "802f82dd680a0cb90600d7c20835b2bee88ae9d426ca14b4446d74f09e93f5a5"
+      }
+    },
+    "two_actual_macro_TUs": {
+      "result": {
+        "path": "build-consumer-current3a884-typed-native-msvc-r1/execution-preflight-r2/result.json",
+        "sha256": "fff052177735b1753546c5638a81bc385514378f9724254461d7b9a0d30ac601"
+      },
+      "pid": 46744,
+      "process_seconds": 5.125,
+      "exit": 0,
+      "reaped": true,
+      "flags": "Actual Ninja writer/ordinary receiver commands, MSVC Release /MT C11 utf8 W4WX; only Fo/Fd outputs isolated; cancel TU excluded."
+    },
+    "fresh_writer_and_target": {
+      "result": {
+        "path": "build-consumer-current3a884-typed-native-msvc-r1/execution-build-r1/result.json",
+        "sha256": "fe599b06958d752f73af8324c4a27ca94936fc0c1488a154c8bce6634f4710be"
+      },
+      "pid": 25504,
+      "process_seconds": 12.125,
+      "exit": 0,
+      "reaped": true,
+      "jobs": 16,
+      "outer": 1200,
+      "target": "test_source_typed_library_receiver_current_native_mixed",
+      "four_new_materials": {
+        "generated/current-typed-library-native-mixed-r1/material/actual_payload.c": {
+          "sha256": "aaeca8caa84bb64df0782d7afd114e21be93d20860f5235299eed650e1b2cd4d",
+          "bytes": 36729,
+          "mtime_ns": "1791655751354431300"
+        },
+        "generated/current-typed-library-native-mixed-r1/material/actual_proof.bin": {
+          "sha256": "d15d985e4aa41e41d3f7016808a11b96f286c6a67ba1d53c534b6d6aee1aa003",
+          "bytes": 4286,
+          "mtime_ns": "1791655751354431300"
+        },
+        "generated/current-typed-library-native-mixed-r1/material/actual_identity.bin": {
+          "sha256": "a76f97f41eacabb8afa8aa3e77548aa5403a45906cc2f7c698792d765fa69148",
+          "bytes": 32,
+          "mtime_ns": "1791655751354431300"
+        },
+        "generated/current-typed-library-native-mixed-r1/material/payload_binding.c": {
+          "sha256": "9edc933b1b91787f568ec782c4351ed72cb2780ece7d8ba1c3f56ef9d5be96d4",
+          "bytes": 130,
+          "mtime_ns": "1791655751354431300"
+        }
+      },
+      "material_binding": "Actual emitted C and separately emitted digest binding were host-compiled and linked; authentic full Closed packet, whole32 SHA identity and entire compiled-spec proof are checked by the actual receiver.",
+      "same_provider_header_dependencies": {
+        "path": "build-consumer-current3a884-typed-native-msvc-r1/post-build-real-header-dependencies-r2/result.json",
+        "sha256": "282ff9b2e0163c748142e3c2b95d187b16176b08c6198e7e29669ff9d9d88fcc"
+      },
+      "dependency_counts": {
+        "test_source_typed_library_receiver_current_native_writer": 188,
+        "test_source_typed_library_receiver_current_native_mixed": 172
+      }
+    },
+    "ordinary_normal3": {
+      "result": {
+        "path": "build-consumer-current3a884-typed-native-msvc-r1/execution-normal3-runtime-r1/result.json",
+        "sha256": "35198e27707b9a5ed6bc88118b543d236ff490472d340977803cb954abc10a83"
+      },
+      "raw": {
+        "path": "build-consumer-current3a884-typed-native-msvc-r1/execution-normal3-runtime-r1/raw.log",
+        "sha256": "d260144508b8e90d84842d5c02f28d7b644f9e27dba9ad05a495bc99b354a889"
+      },
+      "JUnit": {
+        "path": "build-consumer-current3a884-typed-native-msvc-r1/execution-normal3-runtime-r1/junit.xml",
+        "sha256": "49816a9a33ddc81232575db9b5156bbfb82e1043770301dd10fbb881db1084e1"
+      },
+      "INPUT": {
+        "path": "build-consumer-current3a884-typed-native-msvc-r1/INPUT-normal3-runtime-r2.json",
+        "sha256": "2e5c8bb1a7d26c18cdc1142119272dac4275eadbaa0b3d1a982013efff9104a6"
+      },
+      "pid": 50144,
+      "process_seconds": 1.2339999999385327,
+      "total_executor_seconds": 3.5,
+      "exit": 0,
+      "reaped": true,
+      "kill": null,
+      "tests": 3,
+      "TIMEOUT": 120,
+      "PROCESSORS": 1,
+      "RUN_SERIAL": "NOT_SET",
+      "ctest_jobs": 1,
+      "outer": 450,
+      "strict_exact3_run_zero_failure_skip": true,
+      "before_after_all_inputs_consumed_binary_unchanged": true,
+      "runtime_compile_link_CGen": 0,
+      "routes": {
+        "1": "actual all-native",
+        "2": "actual constructor native / child VM",
+        "3": "actual constructor VM / child native"
+      },
+      "instances_per_mode": 2,
+      "total_Instances": 6,
+      "fixed42_calls_per_mode": 4,
+      "total_fixed42_calls": 12,
+      "genuine_yields_per_call": 2,
+      "total_yield_resumes": 24,
+      "lifetime": "Producer inputs and packet/rewrite storage poisoned/freed; complete proof retained; caller Program dropped before calls. NEW private reject BAD_ARGUMENT/no allocation precedes canonical0. Lease0 after caller drop,0 after firstInstancefree,1 after final free; owned take/drop and compiler/runtime cleanup physical0. This does not establish per-object stable lifecycle."
+    },
+    "independent_execution_review": {
+      "path": "build-consumer-evidence/parallel-consumer-interface-delta-r1/typed-library-native-mixed-3a884-normal3-executed-review-r1.json",
+      "sha256": "7334974958b71201374883ea20f8a9618fef5ae26e397d8ab716f31a6bc15b14"
+    },
+    "archive_identity_limit": "Actual build stamp unknown/dirty0 preserved; Git attribution independent. No CLI/package/SDK/release qualification.",
+    "retained_tools_first_red": {
+      "preflight_parser_no_Popen": {
+        "path": "build-consumer-current3a884-typed-native-msvc-r1/execution-preflight-r1/result.json",
+        "sha256": "65c1907fd1bcdb43fc51dd7004c9a49c083f4b1ed7a97217a2232a6912e22821"
+      },
+      "spelling_amendment": {
+        "path": "build-consumer-current3a884-typed-native-msvc-r1/root-explicit-MT-spelling-successor-amendment-r1.txt",
+        "sha256": "a3f47c9d3acee7117831d18b5f7d696e96d30c6155d3d48b329eded9fe02e02b"
+      },
+      "header_audit_wrong_lexical_base_raw": {
+        "path": "build-consumer-current3a884-typed-native-msvc-r1/post-build-real-header-dependencies-r1/test_source_typed_library_receiver_current_native_writer.raw.txt",
+        "sha256": "1334d86f14112c0abcdd4e982372227176d411baae8589daf3c0a452fee2d634"
+      },
+      "header_audit_alias_only_deployment": {
+        "path": "build-consumer-current3a884-typed-native-msvc-r1/header-audit-alias-base-only-deployment-r1.json",
+        "sha256": "78cd1cb8d6c958038838af2c3e3b0298de039c9bc2ded6659899897f257f8ec9"
+      },
+      "boundary": "Routine parser/path audit corrections only; original real commands, flags, Source, scope and caps unchanged; old red receipts retained."
+    },
+    "prior_facets": "All historical25f4/9031/3124 plans, outcomes and failures preserved; no PASS inheritance or old raw mutation.",
+    "full_FI": "NOT_RUN",
+    "axes": "NOT_RUN",
+    "cancel": "NOT_RUN",
+    "ASan_UBSan": "NOT_RUN",
+    "standalone_AOT_double_C": "NOT_RUN",
+    "stable_per_object_lifecycle": "OPEN",
+    "SourceDelete": "OPEN",
+    "Main": "NOT_ADOPTED",
+    "window": "CLOSED_REAPED",
+    "retired": 0,
+    "whole_completion": "OPEN",
+    "OPEN": [
+      "Fresh Root adoption/current producer qualification",
+      "Complete compiler/runtime FI, all resource axes and safety profiles",
+      "Active cancel at both real yields, sticky init failure/partial cleanup and escaping ownership",
+      "Stable per-object identity with exact construct/finalize/reclaim",
+      "Standalone original AOT and independent double-C determinism",
+      "Physical SourceDelete, default/SDK/external packaging and final retirement"
+    ],
+    "caption_binding": "Postexecution append-only annotation. Sealed before inputs, actual raw/JUnit and results remain authoritative."
   }
 }
