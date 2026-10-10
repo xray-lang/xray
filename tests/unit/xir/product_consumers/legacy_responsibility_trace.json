@@ -17,9 +17,9 @@
   "reference_counts": {
     "source_with_digest_reference": 108,
     "source_without_digest_reference": 0,
-    "other_with_digest_reference": 159,
-    "other_without_digest_reference": 1,
-    "digest_reference_values": 403,
+    "other_with_digest_reference": 160,
+    "other_without_digest_reference": 0,
+    "digest_reference_values": 444,
     "source_inventory_projections": 42
   },
   "mapping_inputs": [
@@ -518,6 +518,10 @@
     {
       "path": "tests/unit/xir/product_consumers/source_original_aot_identity_foreign_binding_obligations.json",
       "lf_sha256": "9ef60299b18427e2cf52123c61128b04db7f0a290ad19a753aa68fa046491ff7"
+    },
+    {
+      "path": "tests/unit/xir/product_consumers/source_original_aot_main_obligations.json",
+      "lf_sha256": "2cf3ce9feadc9d02cacc0d1c0e25bd59bd9054ac355ce3f921a88c6128a80445"
     },
     {
       "path": "tests/unit/xir/product_consumers/source_original_aot_native_step_main_obligations.json",
@@ -5243,6 +5247,11 @@
       "inventory_projection": null,
       "mapping_references": [
         {
+          "mapping": "tests/unit/xir/product_consumers/source_original_aot_main_obligations.json",
+          "pointer": "/original_private_helpers/93/body_lf_sha256",
+          "binding": "exact_body_digest_value_only"
+        },
+        {
           "mapping": "tests/unit/xir/product_consumers/source_original_aot_retained_text_emission_obligations.json",
           "pointer": "/legacy/0/body_lf_sha256",
           "binding": "exact_path_name_body"
@@ -5270,6 +5279,11 @@
           "mapping": "tests/unit/xir/product_consumers/source_original_aot_coroutine_state_edge_cancel_lowering_obligations.json",
           "pointer": "/responsibility_mapping/0/body_lf_sha256",
           "binding": "exact_body_digest_value_only"
+        },
+        {
+          "mapping": "tests/unit/xir/product_consumers/source_original_aot_main_obligations.json",
+          "pointer": "/original_private_helpers/90/body_lf_sha256",
+          "binding": "exact_body_digest_value_only"
         }
       ]
     },
@@ -5280,6 +5294,11 @@
       "status": "OPEN",
       "inventory_projection": null,
       "mapping_references": [
+        {
+          "mapping": "tests/unit/xir/product_consumers/source_original_aot_main_obligations.json",
+          "pointer": "/original_private_helpers/105/body_lf_sha256",
+          "binding": "exact_body_digest_value_only"
+        },
         {
           "mapping": "tests/unit/xir/product_consumers/source_original_aot_resource_type_admission_obligations.json",
           "pointer": "/legacy/0/body_lf_sha256",
@@ -5308,6 +5327,11 @@
           "mapping": "tests/unit/xir/product_consumers/source_original_aot_coroutine_state_edge_cancel_lowering_obligations.json",
           "pointer": "/responsibility_mapping/1/body_lf_sha256",
           "binding": "exact_body_digest_value_only"
+        },
+        {
+          "mapping": "tests/unit/xir/product_consumers/source_original_aot_main_obligations.json",
+          "pointer": "/original_private_helpers/91/body_lf_sha256",
+          "binding": "exact_body_digest_value_only"
         }
       ]
     },
@@ -5326,6 +5350,11 @@
         {
           "mapping": "tests/unit/xir/product_consumers/source_original_aot_coroutine_state_edge_cancel_lowering_obligations.json",
           "pointer": "/responsibility_mapping/2/body_lf_sha256",
+          "binding": "exact_body_digest_value_only"
+        },
+        {
+          "mapping": "tests/unit/xir/product_consumers/source_original_aot_main_obligations.json",
+          "pointer": "/original_private_helpers/89/body_lf_sha256",
           "binding": "exact_body_digest_value_only"
         }
       ]
@@ -5346,6 +5375,11 @@
           "mapping": "tests/unit/xir/product_consumers/source_original_aot_affine_copy_lowering_obligations.json",
           "pointer": "/responsibility_mapping/0/body_lf_sha256",
           "binding": "exact_body_digest_value_only"
+        },
+        {
+          "mapping": "tests/unit/xir/product_consumers/source_original_aot_main_obligations.json",
+          "pointer": "/original_private_helpers/73/body_lf_sha256",
+          "binding": "exact_body_digest_value_only"
         }
       ]
     },
@@ -5360,6 +5394,11 @@
           "mapping": "tests/unit/xir/product_consumers/source_empty_aggregate_obligations.json",
           "pointer": "/legacy_function/body_lf_sha256",
           "binding": "exact_path_name_body"
+        },
+        {
+          "mapping": "tests/unit/xir/product_consumers/source_original_aot_main_obligations.json",
+          "pointer": "/original_private_helpers/94/body_lf_sha256",
+          "binding": "exact_body_digest_value_only"
         }
       ]
     },
@@ -5370,6 +5409,11 @@
       "status": "OPEN",
       "inventory_projection": null,
       "mapping_references": [
+        {
+          "mapping": "tests/unit/xir/product_consumers/source_original_aot_main_obligations.json",
+          "pointer": "/original_private_helpers/107/body_lf_sha256",
+          "binding": "exact_body_digest_value_only"
+        },
         {
           "mapping": "tests/unit/xir/product_consumers/source_original_aot_sealed_invoke_typed_panic_lowering_obligations.json",
           "pointer": "/legacy/0/body_lf_sha256",
@@ -5390,6 +5434,11 @@
       "inventory_projection": null,
       "mapping_references": [
         {
+          "mapping": "tests/unit/xir/product_consumers/source_original_aot_main_obligations.json",
+          "pointer": "/original_private_helpers/106/body_lf_sha256",
+          "binding": "exact_body_digest_value_only"
+        },
+        {
           "mapping": "tests/unit/xir/product_consumers/source_original_aot_sealed_invoke_typed_panic_lowering_obligations.json",
           "pointer": "/legacy/1/body_lf_sha256",
           "binding": "exact_path_name_body"
@@ -5408,6 +5457,11 @@
       "status": "OPEN",
       "inventory_projection": null,
       "mapping_references": [
+        {
+          "mapping": "tests/unit/xir/product_consumers/source_original_aot_main_obligations.json",
+          "pointer": "/original_private_helpers/110/body_lf_sha256",
+          "binding": "exact_body_digest_value_only"
+        },
         {
           "mapping": "tests/unit/xir/product_consumers/source_original_aot_sealed_invoke_typed_panic_lowering_obligations.json",
           "pointer": "/legacy/2/body_lf_sha256",
@@ -5436,6 +5490,11 @@
           "mapping": "tests/unit/xir/product_consumers/source_original_aot_existential_callable_pack_lowering_obligations.json",
           "pointer": "/responsibility_mapping/0/body_lf_sha256",
           "binding": "exact_body_digest_value_only"
+        },
+        {
+          "mapping": "tests/unit/xir/product_consumers/source_original_aot_main_obligations.json",
+          "pointer": "/original_private_helpers/96/body_lf_sha256",
+          "binding": "exact_body_digest_value_only"
         }
       ]
     },
@@ -5454,6 +5513,11 @@
         {
           "mapping": "tests/unit/xir/product_consumers/source_original_aot_existential_callable_pack_lowering_obligations.json",
           "pointer": "/responsibility_mapping/1/body_lf_sha256",
+          "binding": "exact_body_digest_value_only"
+        },
+        {
+          "mapping": "tests/unit/xir/product_consumers/source_original_aot_main_obligations.json",
+          "pointer": "/original_private_helpers/77/body_lf_sha256",
           "binding": "exact_body_digest_value_only"
         }
       ]
@@ -5479,6 +5543,11 @@
           "mapping": "tests/unit/xir/product_consumers/source_original_aot_identity_foreign_binding_obligations.json",
           "pointer": "/cases/0/cleanup_source_observation/original_function_lf_sha256",
           "binding": "exact_body_digest_value_only"
+        },
+        {
+          "mapping": "tests/unit/xir/product_consumers/source_original_aot_main_obligations.json",
+          "pointer": "/original_private_helpers/104/body_lf_sha256",
+          "binding": "exact_body_digest_value_only"
         }
       ]
     },
@@ -5498,6 +5567,11 @@
           "mapping": "tests/unit/xir/product_consumers/source_original_aot_identity_foreign_binding_obligations.json",
           "pointer": "/responsibility_mapping/1/body_lf_sha256",
           "binding": "exact_body_digest_value_only"
+        },
+        {
+          "mapping": "tests/unit/xir/product_consumers/source_original_aot_main_obligations.json",
+          "pointer": "/original_private_helpers/97/body_lf_sha256",
+          "binding": "exact_body_digest_value_only"
         }
       ]
     },
@@ -5508,6 +5582,11 @@
       "status": "OPEN",
       "inventory_projection": null,
       "mapping_references": [
+        {
+          "mapping": "tests/unit/xir/product_consumers/source_original_aot_main_obligations.json",
+          "pointer": "/original_private_helpers/101/body_lf_sha256",
+          "binding": "exact_body_digest_value_only"
+        },
         {
           "mapping": "tests/unit/xir/product_consumers/source_original_aot_provider_call_trap_lowering_obligations.json",
           "pointer": "/legacy/0/body_lf_sha256",
@@ -5536,6 +5615,11 @@
           "mapping": "tests/unit/xir/product_consumers/source_original_aot_assert_panic_read_reborrow_obligations.json",
           "pointer": "/responsibility_mapping/0/body_lf_sha256",
           "binding": "exact_body_digest_value_only"
+        },
+        {
+          "mapping": "tests/unit/xir/product_consumers/source_original_aot_main_obligations.json",
+          "pointer": "/original_private_helpers/86/body_lf_sha256",
+          "binding": "exact_body_digest_value_only"
         }
       ]
     },
@@ -5546,6 +5630,11 @@
       "status": "OPEN",
       "inventory_projection": null,
       "mapping_references": [
+        {
+          "mapping": "tests/unit/xir/product_consumers/source_original_aot_main_obligations.json",
+          "pointer": "/original_private_helpers/103/body_lf_sha256",
+          "binding": "exact_body_digest_value_only"
+        },
         {
           "mapping": "tests/unit/xir/product_consumers/source_original_aot_provider_call_trap_lowering_obligations.json",
           "pointer": "/legacy/1/body_lf_sha256",
@@ -5574,6 +5663,11 @@
           "mapping": "tests/unit/xir/product_consumers/source_original_aot_cleanup_reason_graph_obligations.json",
           "pointer": "/responsibility_mapping/0/body_lf_sha256",
           "binding": "exact_body_digest_value_only"
+        },
+        {
+          "mapping": "tests/unit/xir/product_consumers/source_original_aot_main_obligations.json",
+          "pointer": "/original_private_helpers/81/body_lf_sha256",
+          "binding": "exact_body_digest_value_only"
         }
       ]
     },
@@ -5592,6 +5686,11 @@
         {
           "mapping": "tests/unit/xir/product_consumers/source_original_aot_cleanup_reason_graph_obligations.json",
           "pointer": "/responsibility_mapping/1/body_lf_sha256",
+          "binding": "exact_body_digest_value_only"
+        },
+        {
+          "mapping": "tests/unit/xir/product_consumers/source_original_aot_main_obligations.json",
+          "pointer": "/original_private_helpers/83/body_lf_sha256",
           "binding": "exact_body_digest_value_only"
         }
       ]
@@ -5612,6 +5711,11 @@
           "mapping": "tests/unit/xir/product_consumers/source_original_aot_cleanup_reason_graph_obligations.json",
           "pointer": "/responsibility_mapping/2/body_lf_sha256",
           "binding": "exact_body_digest_value_only"
+        },
+        {
+          "mapping": "tests/unit/xir/product_consumers/source_original_aot_main_obligations.json",
+          "pointer": "/original_private_helpers/84/body_lf_sha256",
+          "binding": "exact_body_digest_value_only"
         }
       ]
     },
@@ -5630,6 +5734,11 @@
         {
           "mapping": "tests/unit/xir/product_consumers/source_original_aot_cleanup_reason_graph_obligations.json",
           "pointer": "/responsibility_mapping/3/body_lf_sha256",
+          "binding": "exact_body_digest_value_only"
+        },
+        {
+          "mapping": "tests/unit/xir/product_consumers/source_original_aot_main_obligations.json",
+          "pointer": "/original_private_helpers/82/body_lf_sha256",
           "binding": "exact_body_digest_value_only"
         }
       ]
@@ -5650,6 +5759,11 @@
           "mapping": "tests/unit/xir/product_consumers/source_original_aot_cleanup_reason_graph_obligations.json",
           "pointer": "/responsibility_mapping/4/body_lf_sha256",
           "binding": "exact_body_digest_value_only"
+        },
+        {
+          "mapping": "tests/unit/xir/product_consumers/source_original_aot_main_obligations.json",
+          "pointer": "/original_private_helpers/85/body_lf_sha256",
+          "binding": "exact_body_digest_value_only"
         }
       ]
     },
@@ -5668,6 +5782,11 @@
         {
           "mapping": "tests/unit/xir/product_consumers/source_original_aot_coroutine_trap_continuation_obligations.json",
           "pointer": "/responsibility_mapping/0/body_lf_sha256",
+          "binding": "exact_body_digest_value_only"
+        },
+        {
+          "mapping": "tests/unit/xir/product_consumers/source_original_aot_main_obligations.json",
+          "pointer": "/original_private_helpers/87/body_lf_sha256",
           "binding": "exact_body_digest_value_only"
         }
       ]
@@ -5688,6 +5807,11 @@
           "mapping": "tests/unit/xir/product_consumers/source_original_aot_coroutine_trap_continuation_obligations.json",
           "pointer": "/responsibility_mapping/1/body_lf_sha256",
           "binding": "exact_body_digest_value_only"
+        },
+        {
+          "mapping": "tests/unit/xir/product_consumers/source_original_aot_main_obligations.json",
+          "pointer": "/original_private_helpers/88/body_lf_sha256",
+          "binding": "exact_body_digest_value_only"
         }
       ]
     },
@@ -5707,6 +5831,11 @@
           "mapping": "tests/unit/xir/product_consumers/source_original_aot_coroutine_trap_continuation_obligations.json",
           "pointer": "/responsibility_mapping/2/body_lf_sha256",
           "binding": "exact_body_digest_value_only"
+        },
+        {
+          "mapping": "tests/unit/xir/product_consumers/source_original_aot_main_obligations.json",
+          "pointer": "/original_private_helpers/92/body_lf_sha256",
+          "binding": "exact_body_digest_value_only"
         }
       ]
     },
@@ -5717,6 +5846,11 @@
       "status": "OPEN",
       "inventory_projection": null,
       "mapping_references": [
+        {
+          "mapping": "tests/unit/xir/product_consumers/source_original_aot_main_obligations.json",
+          "pointer": "/original_private_helpers/111/body_lf_sha256",
+          "binding": "exact_body_digest_value_only"
+        },
         {
           "mapping": "tests/unit/xir/product_consumers/source_original_aot_witness_callable_trap_obligations.json",
           "pointer": "/legacy/0/body_lf_sha256",
@@ -5737,6 +5871,11 @@
       "inventory_projection": null,
       "mapping_references": [
         {
+          "mapping": "tests/unit/xir/product_consumers/source_original_aot_main_obligations.json",
+          "pointer": "/original_private_helpers/76/body_lf_sha256",
+          "binding": "exact_body_digest_value_only"
+        },
+        {
           "mapping": "tests/unit/xir/product_consumers/source_original_aot_witness_callable_trap_obligations.json",
           "pointer": "/legacy/1/body_lf_sha256",
           "binding": "exact_path_name_body"
@@ -5755,6 +5894,11 @@
       "status": "OPEN",
       "inventory_projection": null,
       "mapping_references": [
+        {
+          "mapping": "tests/unit/xir/product_consumers/source_original_aot_main_obligations.json",
+          "pointer": "/original_private_helpers/102/body_lf_sha256",
+          "binding": "exact_body_digest_value_only"
+        },
         {
           "mapping": "tests/unit/xir/product_consumers/source_original_aot_provider_output_obligations.json",
           "pointer": "/legacy/0/body_lf_sha256",
@@ -5783,6 +5927,11 @@
           "mapping": "tests/unit/xir/product_consumers/source_original_aot_array_text_obligations.json",
           "pointer": "/responsibility_mapping/0/body_lf_sha256",
           "binding": "exact_body_digest_value_only"
+        },
+        {
+          "mapping": "tests/unit/xir/product_consumers/source_original_aot_main_obligations.json",
+          "pointer": "/original_private_helpers/74/body_lf_sha256",
+          "binding": "exact_body_digest_value_only"
         }
       ]
     },
@@ -5793,6 +5942,11 @@
       "status": "OPEN",
       "inventory_projection": null,
       "mapping_references": [
+        {
+          "mapping": "tests/unit/xir/product_consumers/source_original_aot_main_obligations.json",
+          "pointer": "/original_private_helpers/108/body_lf_sha256",
+          "binding": "exact_body_digest_value_only"
+        },
         {
           "mapping": "tests/unit/xir/product_consumers/source_sequence_length_obligations.json",
           "pointer": "/legacy/1/body_lf_sha256",
@@ -5816,6 +5970,11 @@
           "mapping": "tests/unit/xir/product_consumers/source_original_aot_array_text_obligations.json",
           "pointer": "/responsibility_mapping/1/body_lf_sha256",
           "binding": "exact_body_digest_value_only"
+        },
+        {
+          "mapping": "tests/unit/xir/product_consumers/source_original_aot_main_obligations.json",
+          "pointer": "/original_private_helpers/109/body_lf_sha256",
+          "binding": "exact_body_digest_value_only"
         }
       ]
     },
@@ -5835,6 +5994,11 @@
           "mapping": "tests/unit/xir/product_consumers/source_original_aot_assert_panic_read_reborrow_obligations.json",
           "pointer": "/responsibility_mapping/1/body_lf_sha256",
           "binding": "exact_body_digest_value_only"
+        },
+        {
+          "mapping": "tests/unit/xir/product_consumers/source_original_aot_main_obligations.json",
+          "pointer": "/original_private_helpers/95/body_lf_sha256",
+          "binding": "exact_body_digest_value_only"
         }
       ]
     },
@@ -5845,6 +6009,11 @@
       "status": "OPEN",
       "inventory_projection": null,
       "mapping_references": [
+        {
+          "mapping": "tests/unit/xir/product_consumers/source_original_aot_main_obligations.json",
+          "pointer": "/original_private_helpers/100/body_lf_sha256",
+          "binding": "exact_body_digest_value_only"
+        },
         {
           "mapping": "tests/unit/xir/product_consumers/source_original_aot_pipe_obligations.json",
           "pointer": "/legacy/0/body_lf_sha256",
@@ -5873,6 +6042,11 @@
           "mapping": "tests/unit/xir/product_consumers/source_original_aot_class_obligations.json",
           "pointer": "/responsibility_mapping/0/body_lf_sha256",
           "binding": "exact_body_digest_value_only"
+        },
+        {
+          "mapping": "tests/unit/xir/product_consumers/source_original_aot_main_obligations.json",
+          "pointer": "/original_private_helpers/80/body_lf_sha256",
+          "binding": "exact_body_digest_value_only"
         }
       ]
     },
@@ -5883,6 +6057,11 @@
       "status": "OPEN",
       "inventory_projection": null,
       "mapping_references": [
+        {
+          "mapping": "tests/unit/xir/product_consumers/source_original_aot_main_obligations.json",
+          "pointer": "/original_private_helpers/98/body_lf_sha256",
+          "binding": "exact_body_digest_value_only"
+        },
         {
           "mapping": "tests/unit/xir/product_consumers/source_original_aot_storage_obligations.json",
           "pointer": "/legacy/0/body_lf_sha256",
@@ -5903,6 +6082,11 @@
       "inventory_projection": null,
       "mapping_references": [
         {
+          "mapping": "tests/unit/xir/product_consumers/source_original_aot_main_obligations.json",
+          "pointer": "/original_private_helpers/99/body_lf_sha256",
+          "binding": "exact_body_digest_value_only"
+        },
+        {
           "mapping": "tests/unit/xir/product_consumers/source_original_native_export_binding_obligations.json",
           "pointer": "/legacy/0/body_lf_sha256",
           "binding": "exact_path_name_body"
@@ -5921,6 +6105,11 @@
       "status": "OPEN",
       "inventory_projection": null,
       "mapping_references": [
+        {
+          "mapping": "tests/unit/xir/product_consumers/source_original_aot_main_obligations.json",
+          "pointer": "/original_private_helpers/78/body_lf_sha256",
+          "binding": "exact_body_digest_value_only"
+        },
         {
           "mapping": "tests/unit/xir/product_consumers/source_original_aot_storage_obligations.json",
           "pointer": "/legacy/1/body_lf_sha256",
@@ -5941,6 +6130,11 @@
       "inventory_projection": null,
       "mapping_references": [
         {
+          "mapping": "tests/unit/xir/product_consumers/source_original_aot_main_obligations.json",
+          "pointer": "/original_private_helpers/75/body_lf_sha256",
+          "binding": "exact_body_digest_value_only"
+        },
+        {
           "mapping": "tests/unit/xir/product_consumers/source_original_aot_storage_obligations.json",
           "pointer": "/legacy/2/body_lf_sha256",
           "binding": "exact_path_name_body"
@@ -5958,7 +6152,18 @@
       "body_lf_sha256": "dcf24c369761b3f6dc297665819280e20a1e53729fe179893a20c4c777d15718",
       "status": "OPEN",
       "inventory_projection": null,
-      "mapping_references": []
+      "mapping_references": [
+        {
+          "mapping": "tests/unit/xir/product_consumers/source_original_aot_main_obligations.json",
+          "pointer": "/legacy/0/body_lf_sha256",
+          "binding": "exact_path_name_body"
+        },
+        {
+          "mapping": "tests/unit/xir/product_consumers/source_original_aot_main_obligations.json",
+          "pointer": "/responsibility_mapping/0/body_lf_sha256",
+          "binding": "exact_body_digest_value_only"
+        }
+      ]
     },
     {
       "legacy_path": "tests/unit/aot/test_xr_program_aot_class.inc.c",
@@ -5975,6 +6180,11 @@
         {
           "mapping": "tests/unit/xir/product_consumers/source_original_aot_class_obligations.json",
           "pointer": "/responsibility_mapping/1/body_lf_sha256",
+          "binding": "exact_body_digest_value_only"
+        },
+        {
+          "mapping": "tests/unit/xir/product_consumers/source_original_aot_main_obligations.json",
+          "pointer": "/original_private_helpers/79/body_lf_sha256",
           "binding": "exact_body_digest_value_only"
         }
       ]
