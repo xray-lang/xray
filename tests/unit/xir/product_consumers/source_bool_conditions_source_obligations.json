@@ -63,5 +63,77 @@
     "full_safety": "NOT_RUN",
     "Main": "NOT_RUN",
     "retired": 0
+  },
+  "source_free_bool_packet_vm_20261010_candidate": {
+    "status": "STATIC_REVIEWED_NOT_RUN",
+    "retired": false,
+    "candidate_paths": [
+      "tests/unit/xir/product_consumers/test_source_bool_conditions_current_packet_vm.c",
+      "tests/unit/xir/product_consumers/source_bool_conditions_current_packet_vm_candidate.cmake"
+    ],
+    "candidate_raw_sha256": {
+      "tests/unit/xir/product_consumers/test_source_bool_conditions_current_packet_vm.c": "4946726bb192228929770647fc42379cbfd6f042cffcafe67656543c3849f702",
+      "tests/unit/xir/product_consumers/source_bool_conditions_current_packet_vm_candidate.cmake": "612ba80b8931411e3718e50d002fb6e806fa86326131efa7375488c3883519e0"
+    },
+    "reference_api": {
+      "reference_only_commit": "db3e70fe401694dc9fadc2e62cc9a4cfbb5b4f00",
+      "Checked_schema": 28,
+      "Checked_contract": 73,
+      "Value_ABI": 23,
+      "Call_ABI": 29,
+      "Program_ABI": 30
+    },
+    "producer_authorization": "No new producer adopted; authorized auxiliary producer remains25f4. Root latest6828 has not granted a pure-provider qualification or new window. No old25/67 or other-family qualification is inherited.",
+    "registration": "Dedicated candidate include only; no default registration, configure, syntaxcompile, build, generation, writer, receiver or sanitizer execution.",
+    "original_inputs": {
+      "fixture_bytes": 666,
+      "fixture_raw_sha256": "bdc9cb53993fc822e72661dc04beb3c0d274294328e157f8b3d6e6b91755a265",
+      "original_prefix_bytes": 612,
+      "original_prefix_raw_sha256": "506c7ded5d09cb0597eef032f8f2d0dfe401c8c015d61e85145d368ceda2cee4",
+      "unchanged_adapter_bytes": 54,
+      "shape_path": "tests/unit/xir/product_consumers/bool_conditions_source_shape.h",
+      "shape_raw_sha256": "b809ed6a42fcddbd824806e6428e5fc37b87e27762a603e5ba46ea49172313be"
+    },
+    "independent_oracle": "Complete original Source retains absent NONE/present SOME(0), typed conditions, short-circuit and ternary, two for iterations, while-to13, unconditional-for break, and match29. Independent fixed I64=42 is score13+selectedpresentzero0+match29. Same-wire rewrite is a product serialization with an independent owner, not an independently encoded complete Closed oracle.",
+    "shape": "Unchanged existing Bool shape: private amount Bool->NullableI64, SOME of actual CONST0 and NONE each1, two actual amount(false then true) calls, typed Bool presence>=5 and branches>=5, actual29 literal. This observes facts; full public artifact/v2 verification admits them. Full CFG/loop/return behavior still needs actual execution.",
+    "writer": "argc6 receives privateSource/fixture/stdlib/ClosedPath/identityPath. Exact full666/prefix612/suffix54 clone uses CREATE_NEW and strict owned realpath/NOT_FOUND. Authentic SourceProduct build/full verify/public_admit; genuine SOURCE and CLOSED packet copies. SourceProduct/session and own Source die before detached SOURCE verify/v2/shape, actual specialize, Closed verify/v2/shape, actual lower and Closed death. Full real Lowered proof equals complete Closed packet; independently computed full SHA equals all32 identity bytes before writing both outputs. Writer performs no Instance calls.",
+    "receiver": "argc3 only packet+identity. Complete bytes/EOF, exact32 identity/EOF and fullSHA; public owned Closed read/fullverify/Construction-v2/shape, distinct owned same-wire rewrite. Input bytes/path/identity are volatile poisoned and freed before reverify/v2/shape and actual lower. Closed owner dies before Lowered fullverify/v2/currentroles and complete proof byte+identity equality; rewrite owner dies before public VM bind_table/Program seal. No SourceProduct/Source/Catalog request in receiver.",
+    "runtime_candidate_assertions": [
+      "Two distinct live Instances retain actual Lowered CodeLease after caller Program drop",
+      "Private answer BAD_ARGUMENT with stateNEW and unchanged allocation attempts",
+      "Two canonical entry0 results; each Instance consumerAnswer twice with owned fixed42, no suspended result accepted",
+      "Real transparent VM delegates preserve admitted view/environment; amount resumes>=2 and private answer resumes>0 for each fixed42 call",
+      "Owned take/drop; actual CodeLease releases0 after caller drop,0 after first Instance free,1 after final free",
+      "All compiler/runtime allocation tables, counts and bytes zero; first error retained and cleanup errors fail"
+    ],
+    "test_properties": {
+      "TIMEOUT": 120,
+      "PROCESSORS": 1,
+      "RUN_SERIAL": true,
+      "C_STANDARD": 11,
+      "MSVC": "utf8/W4/WX"
+    },
+    "static_reviews": {
+      "aot_r2": "build-consumer-evidence/parallel-aot-main-audit-r1/bool-packet-vm-static-review-r2/report.json",
+      "aot_r2_sha256": "221c67aea520ceb5e1382b322edf7b09ccce8724e2ee5c7f1297cf84a618651e",
+      "speed_r1_preserved": "build-consumer-evidence/parallel-progress-speed-analysis-r1/bool-packet-vm-static-review-r1.json",
+      "speed_r1_sha256": "a5763293f4cd1e93a9a163d749403cda4da8a27b351df9f23d383b251969d1ef",
+      "speed_r2": "build-consumer-evidence/parallel-progress-speed-analysis-r1/bool-packet-vm-static-review-r2.json",
+      "speed_r2_sha256": "8deeda7e7929e2ba142151a203e1afccf57a45988f775de1b35d0864f530df8e"
+    },
+    "static_correction": "Initial r1 compared SOURCE ordinal with SourceProduct Lowered facts.entry without a public cross-stage equality contract. Only that predicate now checks facts.entry<facts.function_count; target checks and all stage roles/shape/fullproof/oracles retained. Reversing the one string exactly reconstructs original61db fullSHA. This was a test premise finding, not a product runtime failure.",
+    "failure_cleanup_boundary": "NonBUSY/nonREADY free status marks candidate cleanup-error, but Instance can already be physically disposed while returning original call/task status; that flag alone does not prove leak or cancellation failure. Physical-zero is independently checked; complete failure/cancel qualification remains OPEN.",
+    "OPEN": [
+      "Actual new-source/provider/Cell/codec/Lowered compiler and normal VM acceptance",
+      "Original full BackendIR binding verification and Core/Backend representation responsibilities",
+      "Two actual generated-C outputs byte-identical, int-main/output-file checks, actual native and applicable mixed/AOT",
+      "Complete FI census, original allocation points and both-profile resource axes",
+      "Initialization failure, cancellation/cleanup, escaped-owner and full safety/default/SDK responsibilities",
+      "Stable per-object identities and actual events are not newly qualified by VM aggregate counts",
+      "Physical SourceDelete: VM PUBLIC native-cache still includes Source/parser",
+      "Root product integration and whole-family retirement"
+    ],
+    "other_legacy": "Bare nullable condition rejection at original1089-1103 is a separate responsibility; this positive program does not replace it.",
+    "prior_qualification": "Existing25f original Bool facet and every previous field remain unchanged; no archived PASS upgraded to current qualification."
   }
 }

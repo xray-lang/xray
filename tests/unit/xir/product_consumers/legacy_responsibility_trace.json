@@ -213,7 +213,7 @@
     },
     {
       "path": "tests/unit/xir/product_consumers/source_bool_conditions_source_obligations.json",
-      "lf_sha256": "2c8ebe964185b56ae6e6a708d4bdcb18706e49d51a0085745a3019cdfb2aa012"
+      "lf_sha256": "8baba7b9d1b87e97136cffac692946230a2ef4fc416f97707e5d097fadf2ffca"
     },
     {
       "path": "tests/unit/xir/product_consumers/source_builtin_panic_group6_obligations.json",
