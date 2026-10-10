@@ -121,43 +121,10 @@ if(CMAKE_HOST_WIN32 AND MSVC)
     _xray_wrap_msvc_launcher(CXX)
 endif()
 
-# Release identity is captured once at configure time and is shared by the
-# binary, installed marker, and payload manifest.  Release automation rejects
-# dirty/unknown identities; source builds remain explicit instead of silently
-# pretending to be a release artifact.
+# Configure and each identity consumer use the same authentic Git capture.
 find_package(Git QUIET)
-set(XRAY_GIT_COMMIT "unknown")
-set(XRAY_GIT_DIRTY 0)
-if(GIT_FOUND AND EXISTS "${CMAKE_SOURCE_DIR}/.git")
-    execute_process(
-        COMMAND "${GIT_EXECUTABLE}" rev-parse --verify HEAD
-        WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
-        RESULT_VARIABLE _XRAY_GIT_COMMIT_RESULT
-        OUTPUT_VARIABLE _XRAY_GIT_COMMIT
-        OUTPUT_STRIP_TRAILING_WHITESPACE
-        ERROR_QUIET
-    )
-    string(LENGTH "${_XRAY_GIT_COMMIT}" _XRAY_GIT_COMMIT_LENGTH)
-    if(_XRAY_GIT_COMMIT_RESULT EQUAL 0 AND _XRAY_GIT_COMMIT_LENGTH EQUAL 40 AND
-       _XRAY_GIT_COMMIT MATCHES "^[0-9a-fA-F]+$")
-        string(TOLOWER "${_XRAY_GIT_COMMIT}" XRAY_GIT_COMMIT)
-    endif()
-    execute_process(
-        COMMAND "${GIT_EXECUTABLE}" status --porcelain --untracked-files=normal
-        WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
-        OUTPUT_VARIABLE _XRAY_GIT_STATUS
-        OUTPUT_STRIP_TRAILING_WHITESPACE
-        ERROR_QUIET
-    )
-    if(NOT _XRAY_GIT_STATUS STREQUAL "")
-        set(XRAY_GIT_DIRTY 1)
-    endif()
-endif()
-if(XRAY_GIT_DIRTY)
-    set(XRAY_GIT_DIRTY_JSON true)
-else()
-    set(XRAY_GIT_DIRTY_JSON false)
-endif()
+include("${CMAKE_SOURCE_DIR}/cmake/XrayBuildIdentity.cmake")
+xray_capture_build_identity("${CMAKE_SOURCE_DIR}" "${GIT_EXECUTABLE}")
 
 set(XRAY_PREFERRED_ZIG_VERSION "0.16.0" CACHE STRING
     "Preferred managed Zig version for the current toolchain protocol")
@@ -719,12 +686,7 @@ set(XRAY_BUILD_PROFILE "${CMAKE_BUILD_TYPE}")
 if(NOT XRAY_BUILD_PROFILE)
     set(XRAY_BUILD_PROFILE "MultiConfig")
 endif()
-file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/generated")
-configure_file(
-    "${CMAKE_SOURCE_DIR}/cmake/xray_build_identity.h.in"
-    "${CMAKE_CURRENT_BINARY_DIR}/generated/xray_build_identity.h"
-    @ONLY
-)
+xray_render_build_identity("${CMAKE_SOURCE_DIR}" "${CMAKE_CURRENT_BINARY_DIR}")
 
 # macOS Universal Binary support (Intel + Apple Silicon)
 if(APPLE)
@@ -5880,16 +5842,18 @@ set(XRAY_INSTALL_PREFIX "${CMAKE_INSTALL_PREFIX}" CACHE PATH "Xray install path"
 
 set(_XRAY_INSTALL_METADATA_DIR "${CMAKE_CURRENT_BINARY_DIR}/generated/install")
 file(MAKE_DIRECTORY "${_XRAY_INSTALL_METADATA_DIR}")
-configure_file(
-    "${CMAKE_SOURCE_DIR}/cmake/install-marker.json.in"
-    "${_XRAY_INSTALL_METADATA_DIR}/install-marker.json"
-    @ONLY
-)
-configure_file(
-    "${CMAKE_SOURCE_DIR}/cmake/GeneratePayloadManifest.cmake.in"
-    "${_XRAY_INSTALL_METADATA_DIR}/GeneratePayloadManifest.cmake"
-    @ONLY
-)
+# This small always-run producer precedes the actual header consumers. Git
+# observes HEAD, index, worktree and untracked state without reconfiguring.
+configure_file("${CMAKE_SOURCE_DIR}/cmake/XrayBuildIdentity.cmake"
+    "${CMAKE_CURRENT_BINARY_DIR}/generated/XrayBuildIdentityRefresh.cmake" @ONLY)
+add_custom_target(xray-build-identity-refresh
+    COMMAND "${CMAKE_COMMAND}" -P "${CMAKE_CURRENT_BINARY_DIR}/generated/XrayBuildIdentityRefresh.cmake"
+    BYPRODUCTS
+        "${CMAKE_CURRENT_BINARY_DIR}/generated/xray_build_identity.h"
+        "${_XRAY_INSTALL_METADATA_DIR}/install-marker.json"
+        "${_XRAY_INSTALL_METADATA_DIR}/GeneratePayloadManifest.cmake"
+    VERBATIM
+    COMMENT "Refreshing authentic build and installation identity")
 configure_file(
     "${CMAKE_SOURCE_DIR}/cmake/GenerateRuntimeManifest.cmake.in"
     "${_XRAY_INSTALL_METADATA_DIR}/GenerateRuntimeManifest.cmake"
@@ -6015,3 +5979,8 @@ message(STATUS "  make package      - Generate install package")
 # their targets and subdirectories have been declared.
 include(cmake/XrayIdentityKernel.cmake)
 xray_optimize_identity_kernel("${CMAKE_CURRENT_SOURCE_DIR}")
+
+# Bind only configured targets that compile the actual identity sources.
+xray_bind_identity_consumers("${CMAKE_CURRENT_SOURCE_DIR}")
+get_property(_XRAY_IDENTITY_CONSUMERS GLOBAL PROPERTY XRAY_BUILD_IDENTITY_CONSUMERS)
+message(STATUS "Build identity consumers: ${_XRAY_IDENTITY_CONSUMERS}")
