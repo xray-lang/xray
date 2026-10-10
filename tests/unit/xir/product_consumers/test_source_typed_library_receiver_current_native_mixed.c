@@ -18,6 +18,13 @@
     (defined(XR_SOURCE_TYPED_LIBRARY_NATIVE_PACKET_WRITER) || defined(XR_SOURCE_TYPED_LIBRARY_NATIVE_PACKET_CANCEL_RECEIVER))
 #error "Dual-pending receiver is mutually exclusive with writer and serial cancellation receiver"
 #endif
+#if defined(XR_SOURCE_TYPED_LIBRARY_CLASS_OBSERVATION_PRIVATE24) && \
+    (defined(XR_SOURCE_TYPED_LIBRARY_NATIVE_PACKET_CANCEL_RECEIVER) || defined(XR_SOURCE_TYPED_LIBRARY_NATIVE_PACKET_DUAL_PENDING_RECEIVER))
+#error "Class observation is mutually exclusive with serial and dual-pending cancellation receivers"
+#endif
+#if defined(XR_SOURCE_TYPED_LIBRARY_CLASS_OBSERVATION_PRIVATE24)
+#include "xir/xxir_class_observation.h"
+#endif
 #if defined(XR_SOURCE_TYPED_LIBRARY_NATIVE_PACKET_WRITER)
 #include "program/xr_xir_source_product.h"
 #include "toolchain/xcompiler_session.h"
@@ -70,8 +77,15 @@ _Static_assert(XR_XIR_CHECKED_SCHEMA == 28u && XR_XIR_CHECKED_CONTRACT == 73u, "
 #if defined(XR_SOURCE_TYPED_LIBRARY_NATIVE_PACKET_WRITER)
 _Static_assert(XR_XIR_LIBRARY_C_INTERFACE_VERSION == 2u, "Actual owned Catalog interface");
 #endif
+/* PRIVATE CONTRACT ONLY: the sealed root100 after-images are not an adopted provider. */
+#if defined(XR_SOURCE_TYPED_LIBRARY_CLASS_OBSERVATION_PRIVATE24)
+_Static_assert(XR_XIR_VALUE_ABI_VERSION == 24u && XR_XIR_CALL_ABI_VERSION == 29u &&
+    XR_XIR_PROGRAM_ABI_VERSION == 30u, "Private class-observation runtime identity");
+_Static_assert(XR_XIR_CLASS_OBSERVATION_CAPACITY == 128u, "Bounded owned class stream");
+#else
 _Static_assert(XR_XIR_VALUE_ABI_VERSION == 23u && XR_XIR_CALL_ABI_VERSION == 29u &&
     XR_XIR_PROGRAM_ABI_VERSION == 30u, "Formal public runtime identity");
+#endif
 
 typedef struct ReceiverRoles {
     uint32_t entry, answer, private_answer, child, constructor, nominal, library_module;
@@ -111,6 +125,13 @@ typedef struct ReceiverRun {
     XrXirCheckedPacket input_packet;
     uint8_t input_identity[32], proof_identity[32];
     char packet_path[2048], identity_path[2048];
+#if defined(XR_SOURCE_TYPED_LIBRARY_CLASS_OBSERVATION_PRIVATE24)
+    XrXirClassObservation *class_observations[2];
+    XrXirClassEvent class_events[2][128];
+    uint64_t class_cursors[2];
+    uint32_t class_counts[2];
+    unsigned completed_class_normal[2], completed_class_cancel[2][2];
+#endif
 #if defined(XR_SOURCE_TYPED_LIBRARY_NATIVE_PACKET_CANCEL_RECEIVER) || defined(XR_SOURCE_TYPED_LIBRARY_NATIVE_PACKET_DUAL_PENDING_RECEIVER)
     uint64_t last_call_epoch;
     unsigned completed_fixed42[2], completed_cancel_prefix[2][2];
@@ -238,7 +259,11 @@ static void copy_owned_sources(ReceiverRun *run, char **argv) {
     char cwd[XR_PATH_MAX], build[XR_PATH_MAX], expected[XR_PATH_MAX];
     CHECK(xr_os_io_getcwd(&policy, cwd, sizeof(cwd)) == XR_OS_IO_OK);
     CHECK(xr_os_io_realpath(&policy, cwd, build, sizeof(build)) == XR_OS_IO_OK);
+#if defined(XR_SOURCE_TYPED_LIBRARY_CLASS_OBSERVATION_PRIVATE24)
+    int size = snprintf(expected, sizeof(expected), "%s/generated/current-typed-library-native-mixed-class-observation-r1/private-source", build);
+#else
     int size = snprintf(expected, sizeof(expected), "%s/generated/current-typed-library-native-mixed-r1/private-source", build);
+#endif
     CHECK(size > 0 && (size_t)size < sizeof(expected));
     CHECK(xr_os_io_realpath(&policy, argv[1], run->root, sizeof(run->root)) == XR_OS_IO_OK);
     CHECK(same_path(expected, run->root));
@@ -754,42 +779,8 @@ static void execute_receiver_i64(ReceiverRun *run, XrXirInstance *instance, uint
     xr_xir_value_drop(&run->value);
     CHECK(run->value.type == XR_XIR_UNIT && !run->value.reserved && !run->value.payload);
 }
-#if !defined(XR_SOURCE_TYPED_LIBRARY_NATIVE_PACKET_CANCEL_RECEIVER) && !defined(XR_SOURCE_TYPED_LIBRARY_NATIVE_PACKET_DUAL_PENDING_RECEIVER)
-static void run_receiver_instances(ReceiverRun *run, const char *c_path) {
-    seal_receiver_native(run, c_path);
-    XrXirInstanceConfig config;
-    CHECK(call_completed(run, xr_xir_instance_config_init(&config, sizeof(config)), XR_XIR_CALL_READY, "xr-xir-instance-config-init"));
-    config.value_limit = UINT64_C(1048576);
-    for (unsigned i = 0; i < 2; ++i)
-        CHECK(call_completed(run, xr_xir_instance_new(run->program, &config, &run->instances[i]), XR_XIR_CALL_READY, "Instance-new") && run->instances[i]);
-    CHECK(run->instances[0] != run->instances[1]);
-    xr_xir_compile_program_drop(run->program); run->program = NULL;
-    CHECK(!receiver_observer_failed && receiver_native_owner && !receiver_native_releases);
-    for (unsigned i = 0; i < 2; ++i) {
-        size_t attempts = runtime_attempts;
-        CHECK(call_completed(run, xr_xir_instance_start(run->instances[i], run->roles.private_answer, NULL, 0), XR_XIR_CALL_BAD_ARGUMENT, "private-answer-permission-reject"));
-        CHECK(xr_xir_instance_state(run->instances[i]) == XR_XIR_INSTANCE_NEW && runtime_attempts == attempts);
-        execute_receiver_i64(run, run->instances[i], run->roles.entry, 0, 0);
-        for (unsigned repeat = 0; repeat < 2; ++repeat) {
-            NativeRouteCounts before = native_route_counts(run->roles);
-            execute_receiver_i64(run, run->instances[i], run->roles.answer, 42, 2);
-            NativeRouteCounts after = native_route_counts(run->roles);
-            check_actual_route(run->mode, before, after);
-            printf("typed-library-native-mixed instance=%u repeat=%u mode=%u constructor-native=%llu constructor-VM=%llu child-native=%llu child-VM=%llu actual-yield-resumes=2 owned-I64=42\n",
-                i, repeat, run->mode, (unsigned long long)(after.native[0] - before.native[0]),
-                (unsigned long long)(after.vm[0] - before.vm[0]), (unsigned long long)(after.native[1] - before.native[1]),
-                (unsigned long long)(after.vm[1] - before.vm[1]));
-        }
-        /* READY free applies only to these completely successful normal calls. */
-        XrXirCallStatus released = xr_xir_instance_free(run->instances[i]);
-        if (released != XR_XIR_CALL_BUSY) run->instances[i] = NULL;
-        CHECK(call_completed(run, released, XR_XIR_CALL_READY, "successful-normal-Instance-free"));
-        CHECK(!receiver_observer_failed);
-        if (i == 0) CHECK(receiver_native_owner && !receiver_native_releases);
-    }
-    CHECK(!receiver_native_owner && receiver_native_releases == 1);
-    CHECK(!runtime_live && !runtime_bytes && !runtime_owned && !runtime_owned_capacity);
-}
+#if !defined(XR_SOURCE_TYPED_LIBRARY_NATIVE_PACKET_CANCEL_RECEIVER) && !defined(XR_SOURCE_TYPED_LIBRARY_NATIVE_PACKET_DUAL_PENDING_RECEIVER) && !defined(XR_SOURCE_TYPED_LIBRARY_CLASS_OBSERVATION_PRIVATE24)
+#include "typed_library_native_mixed_normal.inc.c"
 #endif
 #if defined(XR_SOURCE_TYPED_LIBRARY_NATIVE_PACKET_CANCEL_RECEIVER) || defined(XR_SOURCE_TYPED_LIBRARY_NATIVE_PACKET_DUAL_PENDING_RECEIVER)
 static XrXirInstanceResult reach_cancel_prefix(ReceiverRun *run, XrXirInstance *instance, unsigned prefix) {
@@ -869,6 +860,9 @@ static void prepare_cancel_instances(ReceiverRun *run, const char *c_path) {
 #include "typed_library_native_mixed_dual_pending.inc.c"
 #endif
 #endif
+#if defined(XR_SOURCE_TYPED_LIBRARY_CLASS_OBSERVATION_PRIVATE24)
+#include "typed_library_native_mixed_class_observation.inc.c"
+#endif
 
 #endif
 
@@ -923,6 +917,9 @@ static void release_receiver_inputs(ReceiverRun *run) {
         }
     }
     xr_xir_compile_program_drop(run->program); run->program = NULL;
+#if defined(XR_SOURCE_TYPED_LIBRARY_CLASS_OBSERVATION_PRIVATE24) && !defined(XR_SOURCE_TYPED_LIBRARY_NATIVE_PACKET_WRITER)
+    release_class_observations(run);
+#endif
     if (receiver_native_owner && !run->instances[0] && !run->instances[1]) {
         receiver_cleanup_failed = true;
         ReceiverNativeOwner *owner = receiver_native_owner; receiver_native_owner = NULL;
@@ -1007,12 +1004,16 @@ int main(int argc, char **argv) {
         passed = library_catalog_build(&run) && program_source_build(&run) && detach_program(&run, argv);
 #else
         passed = admit_packet(&run, argv);
+#if defined(XR_SOURCE_TYPED_LIBRARY_CLASS_OBSERVATION_PRIVATE24)
+        if (passed) run_receiver_class_observation_instances(&run, argv[4]);
+#else
 #if defined(XR_SOURCE_TYPED_LIBRARY_NATIVE_PACKET_DUAL_PENDING_RECEIVER)
         if (passed) run_receiver_dual_pending_instances(&run, argv[4]);
 #elif defined(XR_SOURCE_TYPED_LIBRARY_NATIVE_PACKET_CANCEL_RECEIVER)
         if (passed) run_receiver_cancel_instances(&run, argv[4]);
 #else
         if (passed) run_receiver_instances(&run, argv[4]);
+#endif
 #endif
 #endif
     } else passed = false;
@@ -1034,6 +1035,9 @@ int main(int argc, char **argv) {
         source_program_compile_live, source_program_compile_bytes, (void *)source_program_compile_allocations,
         source_program_compile_capacity, runtime_live, runtime_bytes, (void *)runtime_owned, runtime_owned_capacity);
     if (!physical_zero || receiver_cleanup_failed || receiver_observer_failed) passed = false;
+#if defined(XR_SOURCE_TYPED_LIBRARY_CLASS_OBSERVATION_PRIVATE24) && !defined(XR_SOURCE_TYPED_LIBRARY_NATIVE_PACKET_WRITER)
+    report_class_observation_execution(&run, passed, physical_zero);
+#else
 #if defined(XR_SOURCE_TYPED_LIBRARY_NATIVE_PACKET_DUAL_PENDING_RECEIVER)
     report_dual_pending_execution(&run, passed, physical_zero);
 #elif defined(XR_SOURCE_TYPED_LIBRARY_NATIVE_PACKET_CANCEL_RECEIVER)
@@ -1041,6 +1045,7 @@ int main(int argc, char **argv) {
 #else
     printf("typed-library-native-mixed-packet last-XIR-status=%u result=%s cleanup-error=%u physical-zero=%u full-FI=NOT_RUN axes=NOT_RUN cancel=NOT_RUN stable-object-lifecycle=OPEN init-failure=OPEN owned-escape=OPEN original-AOT=OPEN deterministic-C=OPEN SourceDelete=OPEN\n",
         (unsigned)run.status, passed ? "PASS" : "FAIL", (unsigned)receiver_cleanup_failed, (unsigned)physical_zero);
+#endif
 #endif
 #if defined(XR_SOURCE_TYPED_LIBRARY_NATIVE_PACKET_WRITER)
     if (passed) puts("typed-Library-packet writer-runtime=NOT_RUN Source-and-Catalog-producers-released=1");
