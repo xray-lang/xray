@@ -79,6 +79,79 @@ static XrXirStatus effect_invocation_source_declarations(const XrXirCompileConte
     *output=types;return XR_XIR_OK;
 }
 
+/* A nongeneric authentic reference may infer its returned callable's outer
+ * bound while Source keeps the original descriptor prefix immutable. Prove
+ * that current result against the old result, then retain the old reference
+ * advertisement on this exact current physical shape. Fixed receivers never
+ * enter this path; all nested children still use the shared exact matcher. */
+static XrXirStatus effect_invocation_context_reference_result(EffectOrdinaryContexts *dense,
+    const XrXirModule *source,uint32_t index,uint32_t instruction,XrXirType *declared) {
+    EffectTerms *terms=&dense->terms;
+    if (!xir_compile_work(terms->remaining,8)) return XR_XIR_BUDGET;
+    if (index>=dense->base_count || index>=dense->count || !declared ||
+        !source || !source->functions || dense->nodes[index].declaration>=source->function_count)
+        return XR_XIR_BAD_STRUCTURE;
+    uint32_t original=dense->nodes[index].declaration;
+    const XrXirFunction *caller=&dense->functions[index],*authentic=&source->functions[original];
+    if (instruction>=caller->instruction_count || instruction>=authentic->instruction_count)
+        return XR_XIR_BAD_STRUCTURE;
+    const XrXirInstruction *op=&caller->instructions[instruction],*site=&authentic->instructions[instruction];
+    if (op->op!=XR_XIR_FUNCTION_REF || site->op!=XR_XIR_FUNCTION_REF ||
+        op->type!=site->type || op->immediate!=site->immediate ||
+        op->args[0]!=site->args[0] || op->args[1]!=site->args[1] ||
+        op->immediate<0 || (uint64_t)op->immediate>=source->function_count ||
+        op->type_arguments[1] || (source->generics &&
+        (source->generics[original].parameter_count || source->generics[op->immediate].parameter_count)))
+        return XR_XIR_BAD_TYPE;
+    const XrXirFunction *target=&source->functions[op->immediate];
+    const XrXirTypeNode *current=xr_xir_callable_signature(&terms->types,op->type);
+    const XrXirTypeNode *saved=xr_xir_callable_signature(&terms->types,*declared);
+    if (!current || !saved || current->result!=target->result ||
+        !!current->parameter_count!=!!current->parameters ||
+        !!saved->parameter_count!=!!saved->parameters ||
+        !!target->parameter_count!=!!target->parameters ||
+        current->parameter_span || saved->parameter_span ||
+        xr_xir_type_span(&terms->types,current->result) || xr_xir_type_span(&terms->types,saved->result) ||
+        op->args[1]>target->parameter_count ||
+        current->parameter_count!=target->parameter_count-op->args[1] ||
+        op->args[0]>caller->operand_count || op->args[1]>caller->operand_count-op->args[0] ||
+        (op->args[1] && !caller->operands) ||
+        !xr_xir_callable_signature(&terms->types,current->result) ||
+        !xr_xir_callable_signature(&terms->types,saved->result)) return XR_XIR_BAD_TYPE;
+    XrXirTypeNode shape=*saved;shape.result=current->result;
+    XrXirStatus status=xr_xir_compile_callable_weakening(terms->remaining,&terms->types,
+        current->result,saved->result);
+    XrXirTypeMatchScratch *scratch=effect_terms_type_scratch(terms);
+    for (uint32_t p=0;p<current->parameter_count && status==XR_XIR_OK;++p) {
+        if (!xir_compile_work(terms->remaining,2)) { status=XR_XIR_BUDGET;break; }
+        if (!xr_xir_callable_parameter_storage_valid(&terms->types,&current->parameters[p]) ||
+            (current->parameters[p].mode==XR_PARAM_REF && op->args[1])) {
+            status=XR_XIR_BAD_TYPE;break;
+        }
+        status=xr_xir_compile_type_substitution_matches_between_scratch(terms->remaining,
+            &terms->types,&terms->types,NULL,0,current->parameters[p].type,target->parameters[p+op->args[1]],scratch);
+    }
+    for (uint32_t p=0;p<op->args[1] && status==XR_XIR_OK;++p) {
+        if (!xir_compile_work(terms->remaining,2)) { status=XR_XIR_BUDGET;break; }
+        uint32_t value=caller->operands[op->args[0]+p];
+        if ((uint64_t)value>=(uint64_t)caller->parameter_count+caller->instruction_count) {
+            status=XR_XIR_BAD_VALUE;break;
+        }
+        XrXirType actual=xr_xir_operand_type(caller,value);
+        if (xr_xir_callable_signature(&terms->types,target->parameters[p])) {
+            XirEffectCallableBound request={&terms->types,&terms->types,NULL,0,target->parameters[p],actual};
+            status=effect_callable_bound_matches_scratch(terms->remaining,&request,scratch);
+        } else status=xr_xir_compile_type_substitution_matches_between_scratch(terms->remaining,
+            &terms->types,&terms->types,NULL,0,target->parameters[p],actual,scratch);
+    }
+    if (status!=XR_XIR_OK) return status;
+    XrXirType result=effect_term_intern(terms,shape);
+    if (terms->status!=XR_XIR_OK) return terms->status;
+    status=xr_xir_compile_callable_weakening(terms->remaining,&terms->types,op->type,result);
+    if (status==XR_XIR_OK) *declared=result;
+    return status;
+}
+
 /* Refinement matched the immutable source type prefix and copied declaration
  * domain before the dense pool was seeded. These original IDs therefore name
  * that verified prefix. Actual ordinary binders still undergo full substitution. */
@@ -111,9 +184,17 @@ static XrXirStatus effect_invocation_context_declarations(EffectOrdinaryContexts
         if (index>=dense->base_count) {
             status=effect_terms_substitute(&dense->terms,types[i],&environment,&types[i]);
         }
-        if (status==XR_XIR_OK && xr_xir_callable_signature(&dense->terms.types,types[i]))
-            status=xr_xir_compile_callable_weakening(dense->terms.remaining,&dense->terms.types,
-                function->instructions[i].type,types[i]);
+        if (status==XR_XIR_OK && xr_xir_callable_signature(&dense->terms.types,types[i])) {
+            const XrXirInstruction *op=&function->instructions[i];
+            const XrXirTypeNode *current=xr_xir_callable_signature(&dense->terms.types,op->type);
+            const XrXirTypeNode *saved=xr_xir_callable_signature(&dense->terms.types,types[i]);
+            if (original && index<dense->base_count && op->op==XR_XIR_FUNCTION_REF &&
+                current && current->result!=saved->result)
+                status=effect_invocation_context_reference_result(dense,source,index,i,&types[i]);
+            if (status==XR_XIR_OK)
+                status=xr_xir_compile_callable_weakening(dense->terms.remaining,&dense->terms.types,
+                    op->type,types[i]);
+        }
     }
     xr_compile_resources_free(source_types);
     if (status!=XR_XIR_OK) return status;
