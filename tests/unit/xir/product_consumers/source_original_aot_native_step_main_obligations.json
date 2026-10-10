@@ -1,0 +1,1015 @@
+{
+  "schema": 1,
+  "family": "original_aot_native_coroutine_step_main_descriptor_identity_lease_cancel_drain_successor_and_suspended_frame_drop",
+  "legacy_base_commit": "01e6d38401b0f5c8684b64c35a99ac651024c0c1",
+  "status": "OPEN",
+  "retired": 0,
+  "replacement_gates": [],
+  "result": "STATIC_FULL_ORIGINAL_NATIVE_STEP_ENTRY_MAP_ONLY",
+  "product_execution": "NOT_RUN_BY_THIS_MAP",
+  "producer": "25f4016d6f089169757a90ae11ba537002374711",
+  "identity": "Checked25/contract67/Value22/Call28/Program29",
+  "legacy": [
+    {
+      "name": "main",
+      "legacy_path": "tests/unit/aot/test_xr_program_aot_coroutine_native_step.c",
+      "legacy_line": 58,
+      "body_lf_sha256": "10a7ae46dcfd399ca80218396531f229d3db17142a33bfa07fad03cc832dad75",
+      "assertion_sites": 48,
+      "loop_sites": 0,
+      "status": "OPEN",
+      "replacement_gates": [],
+      "note": "Function census preserves its whole body; sites do not count executed loop iterations."
+    }
+  ],
+  "responsibility_mapping": [
+    {
+      "path": "tests/unit/aot/test_xr_program_aot_coroutine_native_step.c",
+      "function": "main",
+      "line": 58,
+      "end_line": 154,
+      "body_lf_sha256": "10a7ae46dcfd399ca80218396531f229d3db17142a33bfa07fad03cc832dad75",
+      "REQUIRE_sites": 48,
+      "REQUIRE_bindings": [
+        {
+          "line": 62,
+          "expression": "profile != NULL",
+          "status": "OPEN"
+        },
+        {
+          "line": 64,
+          "expression": "xr_execution_id_compute(program, profile, &execution_id)",
+          "status": "OPEN"
+        },
+        {
+          "line": 65,
+          "expression": "xr_fingerprint_equal(xr_aot_entry_coroutine_descriptor.execution_id,\n                                 execution_id)",
+          "status": "OPEN"
+        },
+        {
+          "line": 74,
+          "expression": "xr_execution_instance_create(&binding, &instance, NULL) == XR_EXECUTION_OK",
+          "status": "OPEN"
+        },
+        {
+          "line": 79,
+          "expression": "!xr_backend_execution_create(instance, &mismatch, &rejected)",
+          "status": "OPEN"
+        },
+        {
+          "line": 80,
+          "expression": "rejected == NULL",
+          "status": "OPEN"
+        },
+        {
+          "line": 81,
+          "expression": "xr_execution_instance_lease_count(instance) == 0u",
+          "status": "OPEN"
+        },
+        {
+          "line": 85,
+          "expression": "!xr_backend_execution_create(instance, &wrong_schema, &rejected)",
+          "status": "OPEN"
+        },
+        {
+          "line": 86,
+          "expression": "rejected == NULL",
+          "status": "OPEN"
+        },
+        {
+          "line": 89,
+          "expression": "xr_backend_execution_create(instance, &xr_aot_entry_coroutine_descriptor, &execution)",
+          "status": "OPEN"
+        },
+        {
+          "line": 90,
+          "expression": "xr_execution_instance_lease_count(instance) == 1u",
+          "status": "OPEN"
+        },
+        {
+          "line": 93,
+          "expression": "yielded.kind == XR_BACKEND_EXECUTION_SUSPENDED",
+          "status": "OPEN"
+        },
+        {
+          "line": 94,
+          "expression": "yielded.state_id == 1u && yielded.safepoint_id == 0u",
+          "status": "OPEN"
+        },
+        {
+          "line": 97,
+          "expression": "returned.kind == XR_BACKEND_EXECUTION_RETURN && returned.value == 42",
+          "status": "OPEN"
+        },
+        {
+          "line": 98,
+          "expression": "xr_backend_execution_step(execution).kind == XR_BACKEND_EXECUTION_INVALID",
+          "status": "OPEN"
+        },
+        {
+          "line": 100,
+          "expression": "xr_execution_instance_lease_count(instance) == 0u",
+          "status": "OPEN"
+        },
+        {
+          "line": 106,
+          "expression": "xr_backend_execution_create(instance, &observed, &cancel_execution)",
+          "status": "OPEN"
+        },
+        {
+          "line": 107,
+          "expression": "xr_backend_execution_cancel(cancel_execution).kind == XR_BACKEND_EXECUTION_INVALID",
+          "status": "OPEN"
+        },
+        {
+          "line": 109,
+          "expression": "cancel_yield.kind == XR_BACKEND_EXECUTION_SUSPENDED",
+          "status": "OPEN"
+        },
+        {
+          "line": 110,
+          "expression": "xr_execution_instance_begin_drain(instance, NULL) == XR_EXECUTION_OK",
+          "status": "OPEN"
+        },
+        {
+          "line": 111,
+          "expression": "xr_execution_instance_retire(instance, NULL) == XR_EXECUTION_GENERATION_REJECTED",
+          "status": "OPEN"
+        },
+        {
+          "line": 112,
+          "expression": "!xr_backend_execution_create(instance, &xr_aot_entry_coroutine_descriptor, &rejected)",
+          "status": "OPEN"
+        },
+        {
+          "line": 113,
+          "expression": "rejected == NULL",
+          "status": "OPEN"
+        },
+        {
+          "line": 115,
+          "expression": "cancelled.kind == XR_BACKEND_EXECUTION_CANCELLED",
+          "status": "OPEN"
+        },
+        {
+          "line": 116,
+          "expression": "cancelled.state_id == cancel_yield.state_id",
+          "status": "OPEN"
+        },
+        {
+          "line": 117,
+          "expression": "xr_backend_execution_step(cancel_execution).kind == XR_BACKEND_EXECUTION_INVALID",
+          "status": "OPEN"
+        },
+        {
+          "line": 118,
+          "expression": "xr_backend_execution_cancel(cancel_execution).kind == XR_BACKEND_EXECUTION_INVALID",
+          "status": "OPEN"
+        },
+        {
+          "line": 120,
+          "expression": "drop_calls == 1u",
+          "status": "OPEN"
+        },
+        {
+          "line": 121,
+          "expression": "xr_execution_instance_lease_count(instance) == 0u",
+          "status": "OPEN"
+        },
+        {
+          "line": 122,
+          "expression": "xr_execution_instance_retire(instance, NULL) == XR_EXECUTION_OK",
+          "status": "OPEN"
+        },
+        {
+          "line": 125,
+          "expression": "xr_execution_instance_create_successor(instance, NULL, 0u, &successor, NULL) ==\n            XR_EXECUTION_OK",
+          "status": "OPEN"
+        },
+        {
+          "line": 127,
+          "expression": "xr_execution_instance_generation(successor) == 2u",
+          "status": "OPEN"
+        },
+        {
+          "line": 128,
+          "expression": "xr_backend_execution_create(successor, &xr_aot_entry_coroutine_descriptor, &execution)",
+          "status": "OPEN"
+        },
+        {
+          "line": 129,
+          "expression": "xr_backend_execution_step(execution).kind == XR_BACKEND_EXECUTION_SUSPENDED",
+          "status": "OPEN"
+        },
+        {
+          "line": 131,
+          "expression": "returned.kind == XR_BACKEND_EXECUTION_RETURN && returned.value == 42",
+          "status": "OPEN"
+        },
+        {
+          "line": 132,
+          "expression": "xr_execution_instance_begin_drain(successor, NULL) == XR_EXECUTION_OK",
+          "status": "OPEN"
+        },
+        {
+          "line": 133,
+          "expression": "xr_execution_instance_retire(successor, NULL) == XR_EXECUTION_GENERATION_REJECTED",
+          "status": "OPEN"
+        },
+        {
+          "line": 135,
+          "expression": "xr_execution_instance_retire(successor, NULL) == XR_EXECUTION_OK",
+          "status": "OPEN"
+        },
+        {
+          "line": 136,
+          "expression": "xr_execution_instance_free(&successor, NULL) == XR_EXECUTION_OK",
+          "status": "OPEN"
+        },
+        {
+          "line": 137,
+          "expression": "xr_execution_instance_free(&instance, NULL) == XR_EXECUTION_OK",
+          "status": "OPEN"
+        },
+        {
+          "line": 139,
+          "expression": "xr_execution_instance_create(&binding, &instance, NULL) == XR_EXECUTION_OK",
+          "status": "OPEN"
+        },
+        {
+          "line": 141,
+          "expression": "xr_backend_execution_create(instance, &observed, &execution)",
+          "status": "OPEN"
+        },
+        {
+          "line": 142,
+          "expression": "xr_backend_execution_step(execution).kind == XR_BACKEND_EXECUTION_SUSPENDED",
+          "status": "OPEN"
+        },
+        {
+          "line": 143,
+          "expression": "xr_execution_instance_begin_drain(instance, NULL) == XR_EXECUTION_OK",
+          "status": "OPEN"
+        },
+        {
+          "line": 145,
+          "expression": "drop_calls == 2u",
+          "status": "OPEN"
+        },
+        {
+          "line": 146,
+          "expression": "xr_execution_instance_lease_count(instance) == 0u",
+          "status": "OPEN"
+        },
+        {
+          "line": 147,
+          "expression": "xr_execution_instance_retire(instance, NULL) == XR_EXECUTION_OK",
+          "status": "OPEN"
+        },
+        {
+          "line": 148,
+          "expression": "xr_execution_instance_free(&instance, NULL) == XR_EXECUTION_OK",
+          "status": "OPEN"
+        }
+      ],
+      "CHECK_sites": 0,
+      "CHECK_bindings": [],
+      "status": "OPEN"
+    }
+  ],
+  "outer_REQUIRE_sites": 48,
+  "original_private_helpers": [
+    {
+      "path": "tests/unit/aot/test_xr_program_aot_coroutine_native_step.c",
+      "function": "build_coroutine_program",
+      "line": 35,
+      "end_line": 46,
+      "body_lf_sha256": "c391d4a380f23f56f5d079598c0f6079764aa1eb2b9b0c2895e6346c3a1e9a0f",
+      "REQUIRE_sites": 2,
+      "REQUIRE_bindings": [
+        {
+          "line": 40,
+          "expression": "xr_program_coroutine_fixture_write(&artifact, diagnostic, sizeof(diagnostic)) ==\n            XR_PROGRAM_BUILD_OK",
+          "status": "OPEN"
+        },
+        {
+          "line": 42,
+          "expression": "xr_program_validate(artifact.bytes, artifact.size, NULL, &program,\n                                &verify_diagnostic) == XR_PROGRAM_VERIFY_OK",
+          "status": "OPEN"
+        }
+      ],
+      "CHECK_sites": 0,
+      "CHECK_bindings": [],
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/runtime/test_runtime_abi_contract.c",
+      "function": "init_record",
+      "line": 214,
+      "end_line": 224,
+      "body_lf_sha256": "4ab5c4c8467fa198701af703fb5bf753a184f9a42833d42913b5a5eb3f01d3f4",
+      "REQUIRE_sites": 0,
+      "REQUIRE_bindings": [],
+      "CHECK_sites": 0,
+      "CHECK_bindings": [],
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/runtime/test_runtime_abi_contract.c",
+      "function": "make_bitmask_namespace",
+      "line": 185,
+      "end_line": 201,
+      "body_lf_sha256": "207cac9d3252a15fab701a097ddfb9cc1ab14f2b1fd12bda30d3ee3e5ba9301e",
+      "REQUIRE_sites": 0,
+      "REQUIRE_bindings": [],
+      "CHECK_sites": 0,
+      "CHECK_bindings": [],
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/runtime/test_runtime_abi_contract.c",
+      "function": "make_call_abi",
+      "line": 435,
+      "end_line": 450,
+      "body_lf_sha256": "25dd59fd4e47cf4ba0b28325b0ad3a43be269293fbde42dc6e7031d0ed80c7b8",
+      "REQUIRE_sites": 0,
+      "REQUIRE_bindings": [],
+      "CHECK_sites": 0,
+      "CHECK_bindings": [],
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/runtime/test_runtime_abi_contract.c",
+      "function": "make_call_slot",
+      "line": 422,
+      "end_line": 433,
+      "body_lf_sha256": "a86c6de459703f2b937b6f7973be3859d8d8c5a852ee052eea09211ffad9503c",
+      "REQUIRE_sites": 0,
+      "REQUIRE_bindings": [],
+      "CHECK_sites": 0,
+      "CHECK_bindings": [],
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/runtime/test_runtime_abi_contract.c",
+      "function": "make_callback_abi",
+      "line": 379,
+      "end_line": 394,
+      "body_lf_sha256": "7ad3d4840e698211639d76bcb2ca9d2014e7d539124ef06c50dce2b10f494fc2",
+      "REQUIRE_sites": 0,
+      "REQUIRE_bindings": [],
+      "CHECK_sites": 0,
+      "CHECK_bindings": [],
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/runtime/test_runtime_abi_contract.c",
+      "function": "make_domain_record",
+      "line": 232,
+      "end_line": 252,
+      "body_lf_sha256": "536703223f2c831458e8f782a0683f162e0e34ad3c62a8389a6ff475039630c2",
+      "REQUIRE_sites": 0,
+      "REQUIRE_bindings": [],
+      "CHECK_sites": 0,
+      "CHECK_bindings": [],
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/runtime/test_runtime_abi_contract.c",
+      "function": "make_dynamic_value_abi",
+      "line": 135,
+      "end_line": 166,
+      "body_lf_sha256": "9124fffbdeed4fa0f812eeccf2e7d7b6e8e3ea7f611df834fcdc745c6c6acd9e",
+      "REQUIRE_sites": 0,
+      "REQUIRE_bindings": [],
+      "CHECK_sites": 0,
+      "CHECK_bindings": [],
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/runtime/test_runtime_abi_contract.c",
+      "function": "make_enum_namespace",
+      "line": 168,
+      "end_line": 183,
+      "body_lf_sha256": "28d917c7691646d359b959de4873321956d24b149113134a622a2e73884904a2",
+      "REQUIRE_sites": 0,
+      "REQUIRE_bindings": [],
+      "CHECK_sites": 0,
+      "CHECK_bindings": [],
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/runtime/test_runtime_abi_contract.c",
+      "function": "make_evaluated_record",
+      "line": 343,
+      "end_line": 363,
+      "body_lf_sha256": "11ad05329acd869a452db663387e6c24d4b92c432e6ff3c517e906c1124f25b9",
+      "REQUIRE_sites": 0,
+      "REQUIRE_bindings": [],
+      "CHECK_sites": 0,
+      "CHECK_bindings": [],
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/runtime/test_runtime_abi_contract.c",
+      "function": "make_extent_record",
+      "line": 254,
+      "end_line": 289,
+      "body_lf_sha256": "eb2a48e1cd60915fc9b3206d7fa02a28cc76a57735dd97decf2e497f674c5bfa",
+      "REQUIRE_sites": 0,
+      "REQUIRE_bindings": [],
+      "CHECK_sites": 0,
+      "CHECK_bindings": [],
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/runtime/test_runtime_abi_contract.c",
+      "function": "make_field",
+      "line": 60,
+      "end_line": 72,
+      "body_lf_sha256": "cd61f005fd7b857407a91167e3adaa0964fc33d9f6715c488e191bbdf88ba31f",
+      "REQUIRE_sites": 0,
+      "REQUIRE_bindings": [],
+      "CHECK_sites": 0,
+      "CHECK_bindings": [],
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/runtime/test_runtime_abi_contract.c",
+      "function": "make_group_record",
+      "line": 365,
+      "end_line": 377,
+      "body_lf_sha256": "c075578b1ccf9e89cddd3baaafaf6e4674dc4981fd1986c7fd187c01b687f371",
+      "REQUIRE_sites": 0,
+      "REQUIRE_bindings": [],
+      "CHECK_sites": 0,
+      "CHECK_bindings": [],
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/plan/target_profile_test_fixture.c",
+      "function": "make_header_facts",
+      "line": 43,
+      "end_line": 66,
+      "body_lf_sha256": "916a05fa9431a545e70e8905f058dba291cd7b36a15797fcfe135cded74122ac",
+      "REQUIRE_sites": 0,
+      "REQUIRE_bindings": [],
+      "CHECK_sites": 0,
+      "CHECK_bindings": [],
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/runtime/test_runtime_abi_contract.c",
+      "function": "make_id",
+      "line": 34,
+      "end_line": 40,
+      "body_lf_sha256": "5612295a99ac5b4e526240667bd204b53b51f7159879cf4ae3c4ae0a920541a7",
+      "REQUIRE_sites": 0,
+      "REQUIRE_bindings": [],
+      "CHECK_sites": 0,
+      "CHECK_bindings": [],
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/runtime/test_runtime_abi_contract.c",
+      "function": "make_layout_record",
+      "line": 291,
+      "end_line": 330,
+      "body_lf_sha256": "ea85e0ad196e110c75ab7442069356599c0d37f4a0966a9efbf8f3a980039519",
+      "REQUIRE_sites": 0,
+      "REQUIRE_bindings": [],
+      "CHECK_sites": 0,
+      "CHECK_bindings": [],
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/runtime/test_runtime_abi_contract.c",
+      "function": "make_limits_record",
+      "line": 332,
+      "end_line": 341,
+      "body_lf_sha256": "18824fdbf424ca6f5b40a45c7bf693a7c363db28b2470ec2adbbdf8c04730ac4",
+      "REQUIRE_sites": 0,
+      "REQUIRE_bindings": [],
+      "CHECK_sites": 0,
+      "CHECK_bindings": [],
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/runtime/test_runtime_abi_contract.c",
+      "function": "make_object_header_abi",
+      "line": 74,
+      "end_line": 133,
+      "body_lf_sha256": "766e70c0fe87638481dfb960992502b2ddfee5764b426f9358b26d74a3b82de0",
+      "REQUIRE_sites": 0,
+      "REQUIRE_bindings": [],
+      "CHECK_sites": 0,
+      "CHECK_bindings": [],
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/runtime/test_runtime_abi_contract.c",
+      "function": "make_operation",
+      "line": 452,
+      "end_line": 465,
+      "body_lf_sha256": "8aa96efbebf6cf7551d604f146b654b95b6a991e6c360351584251a9ee295258",
+      "REQUIRE_sites": 0,
+      "REQUIRE_bindings": [],
+      "CHECK_sites": 0,
+      "CHECK_bindings": [],
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/runtime/test_runtime_abi_contract.c",
+      "function": "make_providers",
+      "line": 467,
+      "end_line": 527,
+      "body_lf_sha256": "c08810adcf8ff9075582c3a86bc188fa3d60c4ca3f1f5dfa4f47ad7b61d7418e",
+      "REQUIRE_sites": 0,
+      "REQUIRE_bindings": [],
+      "CHECK_sites": 0,
+      "CHECK_bindings": [],
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/runtime/test_runtime_abi_contract.c",
+      "function": "make_runtime_abi",
+      "line": 396,
+      "end_line": 420,
+      "body_lf_sha256": "2c8e04bb7facee00cc8895173e1e66932bcf11edd0d35dee52b04159b0a99a6c",
+      "REQUIRE_sites": 0,
+      "REQUIRE_bindings": [],
+      "CHECK_sites": 0,
+      "CHECK_bindings": [],
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/runtime/test_runtime_abi_contract.c",
+      "function": "make_sentinel_namespace",
+      "line": 203,
+      "end_line": 212,
+      "body_lf_sha256": "f582219862890c24c3d0d6a21230755b8df4340967fad41175b41a6c4100e031",
+      "REQUIRE_sites": 0,
+      "REQUIRE_bindings": [],
+      "CHECK_sites": 0,
+      "CHECK_bindings": [],
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/aot/test_xr_program_aot_coroutine_native_step.c",
+      "function": "observe_native_frame_drop",
+      "line": 51,
+      "end_line": 56,
+      "body_lf_sha256": "fcff24e106db87ab0521da4a92b7f8ca5660932206149e179f7d302b90ddf86b",
+      "REQUIRE_sites": 2,
+      "REQUIRE_bindings": [
+        {
+          "line": 52,
+          "expression": "xr_execution_instance_lease_count(drop_instance) == 1u",
+          "status": "OPEN"
+        },
+        {
+          "line": 53,
+          "expression": "xr_execution_instance_retire(drop_instance, NULL) == XR_EXECUTION_GENERATION_REJECTED",
+          "status": "OPEN"
+        }
+      ],
+      "CHECK_sites": 0,
+      "CHECK_bindings": [],
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/plan/target_profile_test_fixture.c",
+      "function": "retarget_call_abi",
+      "line": 68,
+      "end_line": 84,
+      "body_lf_sha256": "213f3f583b905b1b699bd3425c364701a62f17e1098fe11294b255545b5f24de",
+      "REQUIRE_sites": 0,
+      "REQUIRE_bindings": [],
+      "CHECK_sites": 0,
+      "CHECK_bindings": [],
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/plan/target_profile_test_fixture.c",
+      "function": "retarget_providers",
+      "line": 86,
+      "end_line": 101,
+      "body_lf_sha256": "8df03b2bc968573e515c441fd5a96f87d9db2300e13e3e3b514d3032a3ccfbaa",
+      "REQUIRE_sites": 0,
+      "REQUIRE_bindings": [],
+      "CHECK_sites": 0,
+      "CHECK_bindings": [],
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/program/xr_program_coroutine_fixture.h",
+      "function": "xr_program_coroutine_fixture_key",
+      "line": 18,
+      "end_line": 20,
+      "body_lf_sha256": "36de2fcd5fd5ae5aabdd45004154ec4be350b7239da37d6d185be702d324c8a6",
+      "REQUIRE_sites": 0,
+      "REQUIRE_bindings": [],
+      "CHECK_sites": 0,
+      "CHECK_bindings": [],
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/program/xr_program_coroutine_fixture.h",
+      "function": "xr_program_coroutine_fixture_write",
+      "line": 174,
+      "end_line": 179,
+      "body_lf_sha256": "533371fa303364dfcdea5840c48b6360a26fbcef3c30255ac6fddd6c04ebb429",
+      "REQUIRE_sites": 0,
+      "REQUIRE_bindings": [],
+      "CHECK_sites": 0,
+      "CHECK_bindings": [],
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/program/xr_program_coroutine_fixture.h",
+      "function": "xr_program_coroutine_fixture_write_mutated",
+      "line": 22,
+      "end_line": 172,
+      "body_lf_sha256": "61f4143b5262b2c62b857bf4eeef0ea59c9c355cd0e1e5e1451aa2d04b98ece8",
+      "REQUIRE_sites": 0,
+      "REQUIRE_bindings": [],
+      "CHECK_sites": 0,
+      "CHECK_bindings": [],
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/plan/target_profile_test_fixture.c",
+      "function": "xr_test_target_profile_build",
+      "line": 163,
+      "end_line": 175,
+      "body_lf_sha256": "ff7f447b998483c18b76ebf7ef61f348751a9ea93fa1c0a0604c152711a5a318",
+      "REQUIRE_sites": 0,
+      "REQUIRE_bindings": [],
+      "CHECK_sites": 0,
+      "CHECK_bindings": [],
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/unit/plan/target_profile_test_fixture.c",
+      "function": "xr_test_target_profile_fixture_init",
+      "line": 103,
+      "end_line": 161,
+      "body_lf_sha256": "be2a37303111036a45393752a7b5c389d370d2f67ef4d302cb3b4e5af55a4888",
+      "REQUIRE_sites": 0,
+      "REQUIRE_bindings": [],
+      "CHECK_sites": 0,
+      "CHECK_bindings": [],
+      "status": "OPEN"
+    }
+  ],
+  "specified_helper_REQUIRE_sites": 4,
+  "input_files": [
+    {
+      "path": "tests/unit/aot/test_xr_program_aot_coroutine_native_step.c",
+      "physical_raw_sha256": "f9b2138c237eb3e77190b6b18673b8fb95f4ee11d8ea7a7fe4afd1d1d26aa64e",
+      "whole_file_lf_sha256": "5f93bcd76755439c2c9d11cfbf2a53cdd3af5895029d1fa902ca930b0ee66209",
+      "git_base_equal": true,
+      "status": "PRESERVE_ORIGINAL_READONLY"
+    },
+    {
+      "path": "tests/unit/program/xr_program_coroutine_fixture.h",
+      "physical_raw_sha256": "3f76ce978f46af31e6e93ab514dc3e3bbbfe05c590e402f7e2af8c00294d0a64",
+      "whole_file_lf_sha256": "e3304d712b3d539026dfaa7d19deece174ccd1dfc520f0ffbad36ee0aea26e7c",
+      "git_base_equal": true,
+      "status": "PRESERVE_ORIGINAL_READONLY"
+    },
+    {
+      "path": "tests/unit/plan/target_profile_test_fixture.c",
+      "physical_raw_sha256": "a4bd280583c9b7367c8324451b411dd1bf43d32853b5b8443fa680dded7f1876",
+      "whole_file_lf_sha256": "4cda8a7654397a98661dd495628095965b2549999619a13c7bfa63614e5cd5a6",
+      "git_base_equal": true,
+      "status": "PRESERVE_ORIGINAL_READONLY"
+    },
+    {
+      "path": "tests/unit/runtime/test_runtime_abi_contract.c",
+      "physical_raw_sha256": "38ebe1b2facc5feb1e7b0c0573d66e846eb9974cc16d9aa4e92e3f550c7487c6",
+      "whole_file_lf_sha256": "fa3d630a996a22e1d515a11f73f75f515906cb5ce6afad00c6e2b183486fd858",
+      "git_base_equal": true,
+      "status": "PRESERVE_ORIGINAL_READONLY"
+    },
+    {
+      "path": "tests/unit/plan/target_profile_test_fixture.h",
+      "physical_raw_sha256": "6abd9fd3829ccca28741b2e7b69f9d15e4b2bf53ca97e61af3e07f37ca5df38e",
+      "whole_file_lf_sha256": "8861b73552abd8e8c278482aa2e56bd3371be3a877f91475a43ef7ac22a9633f",
+      "git_base_equal": true,
+      "status": "PRESERVE_ORIGINAL_READONLY"
+    },
+    {
+      "path": "src/runtime/abi/xr_builtin_provider_contract.h",
+      "physical_raw_sha256": "0f89f9db26dd6fc1eb79647f0a6fc0b1e3989a30af68f6adf8175fb1387f479b",
+      "whole_file_lf_sha256": "8a7b671d219e0cb481ca2bf347b8b682b1a9b2882849edd4dd342a01563e89ec",
+      "git_base_equal": true,
+      "status": "PRESERVE_ORIGINAL_READONLY"
+    },
+    {
+      "path": "src/runtime/abi/xr_stdlib_provider_keys_gen.h",
+      "physical_raw_sha256": "e969dc5ccd6691e77b45eb22c84554f827e4f252cbb1bc5dab23b341b0481b5e",
+      "whole_file_lf_sha256": "ef42abadb6fdef8ec3ded6bd39f906aec93236f372f8ece92cf646b5b18e9f7b",
+      "git_base_equal": true,
+      "status": "PRESERVE_ORIGINAL_READONLY"
+    }
+  ],
+  "selected_helper_dependency_edges": {
+    "main": [
+      "build_coroutine_program",
+      "observe_native_frame_drop",
+      "xr_test_target_profile_build"
+    ],
+    "build_coroutine_program": [
+      "xr_program_coroutine_fixture_write"
+    ],
+    "xr_program_coroutine_fixture_write": [
+      "xr_program_coroutine_fixture_write_mutated"
+    ],
+    "xr_program_coroutine_fixture_write_mutated": [
+      "xr_program_coroutine_fixture_key"
+    ],
+    "xr_program_coroutine_fixture_key": [],
+    "xr_test_target_profile_build": [
+      "xr_test_target_profile_fixture_init"
+    ],
+    "xr_test_target_profile_fixture_init": [
+      "make_header_facts",
+      "make_providers",
+      "make_runtime_abi",
+      "retarget_providers"
+    ],
+    "make_runtime_abi": [
+      "make_callback_abi",
+      "make_domain_record",
+      "make_dynamic_value_abi",
+      "make_evaluated_record",
+      "make_extent_record",
+      "make_group_record",
+      "make_layout_record",
+      "make_limits_record",
+      "make_object_header_abi"
+    ],
+    "make_dynamic_value_abi": [
+      "make_field",
+      "make_id"
+    ],
+    "make_id": [],
+    "make_field": [],
+    "make_extent_record": [
+      "init_record",
+      "make_enum_namespace",
+      "make_sentinel_namespace"
+    ],
+    "make_sentinel_namespace": [],
+    "make_enum_namespace": [
+      "make_id"
+    ],
+    "init_record": [],
+    "make_limits_record": [
+      "init_record"
+    ],
+    "make_domain_record": [
+      "init_record",
+      "make_enum_namespace"
+    ],
+    "make_layout_record": [
+      "init_record",
+      "make_bitmask_namespace"
+    ],
+    "make_bitmask_namespace": [
+      "make_id"
+    ],
+    "make_object_header_abi": [
+      "make_field",
+      "make_id"
+    ],
+    "make_evaluated_record": [
+      "init_record"
+    ],
+    "make_group_record": [
+      "init_record"
+    ],
+    "make_callback_abi": [
+      "make_enum_namespace",
+      "make_id"
+    ],
+    "retarget_providers": [
+      "retarget_call_abi"
+    ],
+    "retarget_call_abi": [],
+    "make_providers": [
+      "make_call_abi",
+      "make_call_slot",
+      "make_id",
+      "make_operation"
+    ],
+    "make_operation": [
+      "make_id"
+    ],
+    "make_call_slot": [],
+    "make_call_abi": [],
+    "make_header_facts": [],
+    "observe_native_frame_drop": []
+  },
+  "callback_edges": [
+    "main observed.drop -> observe_native_frame_drop -> actual xr_aot_entry_coroutine_descriptor.drop(frame)"
+  ],
+  "macro_bindings": [
+    {
+      "path": "tests/unit/aot/test_xr_program_aot_coroutine_native_step.c",
+      "name": "REQUIRE",
+      "exact_original_body": "#define REQUIRE(condition)                                                                         \\\n    do {                                                                                           \\\n        if (!(condition)) {                                                                        \\\n            fprintf(stderr, \"requirement failed at %s:%d: %s\\n\", __FILE__, __LINE__, #condition);  \\\n            abort();                                                                               \\\n        }                                                                                          \\\n    } while (0)",
+      "lf_sha256": "5721bd5a57cfbb0474be085195895bcd0ca12fa41481b6fde47dcf66c2436ca4",
+      "status": "PRESERVE_ORIGINAL_READONLY"
+    },
+    {
+      "path": "tests/unit/runtime/test_runtime_abi_contract.c",
+      "name": "SET_RECORD_FIELD",
+      "exact_original_body": "#define SET_RECORD_FIELD(record, index, struct_type, member, member_type, field_role,              \\\n                         field_encoding)                                                           \\\n    (record).fields[index] = make_field(field_role, (uint16_t) offsetof(struct_type, member),      \\\n                                        (uint16_t) sizeof(((struct_type *) 0)->member),            \\\n                                        (uint16_t) _Alignof(member_type), field_encoding)",
+      "lf_sha256": "5ecaf173f32030d69b29e2d692116d795110b91a278f3e7c68a70c763f9875ce",
+      "status": "PRESERVE_ORIGINAL_READONLY"
+    }
+  ],
+  "linked_generated_C_registration": {
+    "path": "tests/unit/CMakeLists.txt",
+    "line": 2536,
+    "physical_raw_sha256": "f3a60b9e46738e6d141966223dfb8f2c03b9d37f211ca864a480c3a5609e32a8",
+    "whole_file_lf_sha256": "f9bc1aaebc8e7ab9f43974dd02e98292fc5081285a8975faab04052d311133d0",
+    "whole_file_BASE_equal": false,
+    "selected_block_BASE_equal": true,
+    "exact_original_selected_block": "set(XR_PROGRAM_AOT_COROUTINE_STEP_C\n    ${XR_PROGRAM_AOT_FIXTURE_DIR}/xr_program_aot_coroutine_step.c)\nadd_custom_command(\n    OUTPUT ${XR_PROGRAM_AOT_COROUTINE_STEP_C}\n    COMMAND $<TARGET_FILE:test_xr_program_aot>\n        ${XR_PROGRAM_AOT_COROUTINE_STEP_C} coroutine-yield-object\n    DEPENDS test_xr_program_aot\n    COMMENT \"Generating coroutine-yield native step fixture\"\n    VERBATIM)\nset_source_files_properties(${XR_PROGRAM_AOT_COROUTINE_STEP_C} PROPERTIES GENERATED TRUE)\nadd_library(test_xr_program_aot_coroutine_step_object OBJECT\n    ${XR_PROGRAM_AOT_COROUTINE_STEP_C})\nif(CMAKE_C_COMPILER_ID STREQUAL \"MSVC\"\n        OR (CMAKE_C_COMPILER_ID STREQUAL \"Clang\"\n            AND CMAKE_C_COMPILER_FRONTEND_VARIANT STREQUAL \"MSVC\"))\n    target_compile_options(test_xr_program_aot_coroutine_step_object PRIVATE /W4 /WX)\nelse()\n    target_compile_options(test_xr_program_aot_coroutine_step_object PRIVATE\n        -std=c11 -pedantic-errors -Wall -Wextra -Werror)\nendif()\nadd_executable(test_xr_program_aot_coroutine_native_step\n    aot/test_xr_program_aot_coroutine_native_step.c\n    ${XR_TARGET_PROFILE_TEST_FIXTURE}\n    $<TARGET_OBJECTS:test_xr_program_aot_coroutine_step_object>)\ntarget_compile_definitions(test_xr_program_aot_coroutine_native_step\n    PRIVATE XR_TEST_HAS_PROCESS_SHUTDOWN=1)\ntarget_include_directories(test_xr_program_aot_coroutine_native_step PRIVATE\n    ${XRAY_COMMON_INCLUDES}\n    ${CMAKE_CURRENT_SOURCE_DIR})\ntarget_link_libraries(test_xr_program_aot_coroutine_native_step PRIVATE\n    xr_program_test_core xray_program_vm_runtime xray_program_aot_compiler)\nif(CMAKE_C_COMPILER_ID STREQUAL \"MSVC\"\n        OR (CMAKE_C_COMPILER_ID STREQUAL \"Clang\"\n            AND CMAKE_C_COMPILER_FRONTEND_VARIANT STREQUAL \"MSVC\"))\n    target_compile_options(test_xr_program_aot_coroutine_native_step PRIVATE /W4 /WX)\nelse()\n    target_compile_options(test_xr_program_aot_coroutine_native_step PRIVATE\n        -Wall -Wextra -Werror)\nendif()\nadd_test(NAME test_xr_program_aot_coroutine_native_step\n    COMMAND $<TARGET_FILE:test_xr_program_aot_coroutine_native_step>)\nset_tests_properties(test_xr_program_aot_coroutine_native_step PROPERTIES\n    LABELS \"unit;aot;canonical-program;generated-c;native;generation;task-301\")",
+    "block_lf_sha256": "eedd16806e89e2a92611129f007f0a437fbd9af049b5d6deb08f5a4d79a0ac53",
+    "args": "test_xr_program_aot <fixture>/xr_program_aot_coroutine_step.c coroutine-yield-object",
+    "output": "xr_program_aot_coroutine_step.c",
+    "object_target": "test_xr_program_aot_coroutine_step_object",
+    "MSVC_flags": "/W4 /WX",
+    "other_flags": "-std=c11 -pedantic-errors -Wall -Wextra -Werror",
+    "boundary": "Selected original CMake block preserved; current whole file has scoped consumer changes. No build or native execution run by this map.",
+    "status": "OPEN"
+  },
+  "full_original_coroutine_graph": {
+    "shape_counts": {
+      "types": 0,
+      "constants": 2,
+      "modules": 1,
+      "functions": 1,
+      "blocks": 3,
+      "instructions": 7
+    },
+    "selected_mutation": "XR_PROGRAM_COROUTINE_FIXTURE_VALID",
+    "constants": [
+      40,
+      2
+    ],
+    "full_operations": [
+      [
+        "CONSTI64 actual40",
+        "COROUTINE_YIELD live40 -> resume/cancel"
+      ],
+      [
+        "BLOCK_ARGUMENT resumedI64",
+        "CONSTI64 actual2",
+        "ADD_I64 resumed+2 immediate1",
+        "RETURNsum"
+      ],
+      [
+        "CANCEL_PUBLISH"
+      ]
+    ],
+    "states": [
+      0,
+      1
+    ],
+    "safepoint": {
+      "id": 0,
+      "resume_state": 1,
+      "live_values": 1
+    },
+    "effects": [
+      "CANCEL",
+      "SUSPEND",
+      "TRAP"
+    ],
+    "independent_return": 42,
+    "independent_first_suspend": {
+      "state": 1,
+      "safepoint": 0
+    },
+    "cancel": "Publish CANCELLED from original cancel block, preserving yielded state",
+    "boundary": "Full numeric program retained, no Source/owned result/stable object graph or time timer request.",
+    "status": "OPEN"
+  },
+  "original_native_lifecycle": {
+    "descriptor": "Actual separately compiled generated-C xr_aot_entry_coroutine_descriptor, not an interpreted substitute",
+    "identity": "Fresh full fixture Program+false HOSTED profile computes execution_id equal descriptor; two mismatch controls XOR first ID byte and schema+1",
+    "primary": "Generation1: successful create/lease1 -> step SUSPENDED(state1,safepoint0) -> RETURN42 -> further stepINVALID -> free/lease0",
+    "active_cancel": "Generation1 observed.drop: cancel before first step INVALID -> step SUSPENDED -> begin_drain -> retire GENERATION_REJECTED -> new execution rejected/NULL -> cancel CANCELLED same state -> stepINVALID/cancelINVALID -> free -> observed drop_calls1, lease0, retireOK",
+    "drop_callback": "Before actual descriptor.drop(frame), require instance lease1 and retire GENERATION_REJECTED; increment drop_calls after actual drop. Two callback invocations, not per-object stable construct/finalize/reclaim evidence.",
+    "successor": "Create successor of retired generation1 without module transfer -> generation2 -> SUSPENDED -> RETURN42 -> begin_drain -> retire rejected while execution lease -> free -> retireOK -> free successor and original",
+    "free_suspended": "Fresh generation1 Instance -> observed execution -> SUSPENDED -> begin_drain -> free without explicit cancel -> cumulative drop_calls2, lease0 -> retireOK -> Instancefree",
+    "release": "After all three Instances freed, profile and full Program freed",
+    "boundary": "Sequential primary/successor/fresh Instances, no concurrent two independent Instances assertion; lease/drop protocol and frame lifetime are not generic object lifecycle.",
+    "status": "OPEN"
+  },
+  "assertion_counts": {
+    "census_functions": 1,
+    "outer_REQUIRE_sites": 48,
+    "original_loop_sites": 0,
+    "full_transitive_private_helpers": 30,
+    "helper_REQUIRE_sites": 4,
+    "original_program_builds": 1,
+    "original_profiles": 1,
+    "original_Instances": 3,
+    "original_backend_execution_create_requests": 7,
+    "original_successful_executions": 4,
+    "original_descriptor_or_drain_rejects": 3,
+    "original_native_step_calls": 8,
+    "original_cancel_calls": 3,
+    "original_execution_free_calls": 4,
+    "original_observed_frame_drop_calls": 2,
+    "original_Instance_free_calls": 3,
+    "original_return42_assertions": 2,
+    "original_suspend_assertions": 4,
+    "current_product_executions": 0
+  },
+  "shared_dependencies": [
+    {
+      "path": "tests/unit/program/xr_program_coroutine_fixture.h",
+      "actual_direct_include_users": [
+        "tests/unit/aot/test_xr_native_execution_allocations.c",
+        "tests/unit/aot/test_xr_program_aot.c",
+        "tests/unit/aot/test_xr_program_aot_coroutine_native_step.c",
+        "tests/unit/program/test_xr_program_verify.c",
+        "tests/unit/vm/test_xr_program_vm.c"
+      ],
+      "status": "PRESERVE_SHARED_READONLY_NOT_DELETABLE"
+    },
+    {
+      "path": "tests/unit/plan/target_profile_test_fixture.h",
+      "actual_direct_include_users": [
+        "tests/fuzz/fuzz_xtp_decode.c",
+        "tests/target_machine/comparison/typed_fixture.c",
+        "tests/unit/analysis/test_xglobal_summary.c",
+        "tests/unit/aot/test_backend_emission_resources.c",
+        "tests/unit/aot/test_xaot_emission_coverage.c",
+        "tests/unit/aot/test_xaot_scalar_target_cutover.c",
+        "tests/unit/aot/test_xr_aot_refinement.c",
+        "tests/unit/aot/test_xr_aot_scalar_plan.c",
+        "tests/unit/aot/test_xr_native_execution_allocations.c",
+        "tests/unit/aot/test_xr_program_aot.c",
+        "tests/unit/aot/test_xr_program_aot_coroutine_native_step.c",
+        "tests/unit/aot/test_xr_program_aot_module_instance.c",
+        "tests/unit/aot/test_xr_program_aot_module_state.c",
+        "tests/unit/aot/xr_program_allocation_fixture_writer.c",
+        "tests/unit/aot/xr_program_coroutine_graph_fixture_writer.c",
+        "tests/unit/execution/test_provider_logical_admission.c",
+        "tests/unit/execution/test_xr_boundary_materialization.c",
+        "tests/unit/execution/test_xr_execution.c",
+        "tests/unit/execution/test_xr_execution_allocations.c",
+        "tests/unit/execution/xr_typed_provider_fixture.h",
+        "tests/unit/incremental/test_cache_artifact_verify.c",
+        "tests/unit/incremental/test_program_plan_cache_qualification.c",
+        "tests/unit/incremental/test_program_target_plan_build.c",
+        "tests/unit/ir/test_xi_cgen.c",
+        "tests/unit/plan/target_profile_test_fixture.c",
+        "tests/unit/plan/test_callable52_constructor_artifact.c",
+        "tests/unit/plan/test_callable52_source_facts.c",
+        "tests/unit/plan/test_scalar_call_decision.c",
+        "tests/unit/plan/test_target_plan.c",
+        "tests/unit/plan/test_target_profile.c",
+        "tests/unit/plan/test_xtp_format.c",
+        "tests/unit/program/test_xr_program_source_build.c",
+        "tests/unit/runtime/test_typed_lifecycle_audit.c",
+        "tests/unit/vm/test_typed_dispatch.c",
+        "tests/unit/vm/test_typed_frame.c",
+        "tests/unit/vm/test_vm_decoded_cache.c",
+        "tests/unit/vm/test_xr_program_vm.c",
+        "tests/unit/vm/test_xr_program_vm_allocations.c",
+        "tests/unit/vm/test_xr_program_vm_runtime.c"
+      ],
+      "status": "PRESERVE_SHARED_READONLY_NOT_DELETABLE"
+    }
+  ],
+  "Root_contract_or_representation_review": {
+    "status": "OPEN",
+    "required": "Fresh public current-source/packet/Library full specialization/reverify, actual generatedC current descriptor/native builds/VM and mixed fixed42, applicable simultaneous two independent Instances, exact admission rejects/cancel/drain/owned escape/physical release, complete FI/axes/current safety and generic stable object lifecycle.",
+    "no_compat": "Historical XrInstance/generation/native descriptor contract must map to current public lifecycle without aliases or dual old execution path.",
+    "baseline": "Only25f4 consumer authorized; original source obligations do not imply current producer runtime qualification.",
+    "deletion": "No deletion candidate; generator depends on separate AOT main and shared profile/fixture remainOPEN."
+  },
+  "full_FI": "NOT_RUN",
+  "axes": "NOT_RUN",
+  "full_safety": "NOT_RUN",
+  "SourceDelete": "NOT_RUN",
+  "Main": "NOT_RUN",
+  "handoff": {
+    "Root_thread": "01a11f74-a297-7b11-8441-835bde6a3d5f",
+    "formal_acceptance": "PENDING"
+  },
+  "boundaries": [
+    "Static original native entry audit only, no build/compile/execution in this batch.",
+    "48 outer REQUIRE/30helpers4REQUIRE are source sites, callback executes twice in original expected path.",
+    "Generation successor is sequential; do not conflate with current two independent Instances or per-object stable lifetime."
+  ]
+}
