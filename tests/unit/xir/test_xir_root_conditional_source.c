@@ -133,6 +133,7 @@ static XrXirStatus conditional_operation(const XrXirCompileContext *context, voi
     XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_MEMORY,"root-conditional",NULL};
     XrXirSourceRequest request={session,NULL,&authority,context,NULL,NULL,XR_XIR_PROGRAM,NULL};
     XrXirSourceResult result={0};XrXirSourceDiagnostic diagnostic={0};char *failure=NULL;
+    XrXirDiagnostic xir_diagnostic={0};
     XrXirArtifact *read=NULL,*instance=NULL,*reloaded=NULL,*lowered=NULL;XrXirCheckedPacket first={0},second={0};
     const XrXirTarget target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};
     const XrXirSourceText input={NULL,oracle->text,strlen(oracle->text)};
@@ -141,20 +142,23 @@ static XrXirStatus conditional_operation(const XrXirCompileContext *context, voi
     xr_compile_session_free(session);
     conditional_stage_observe(context,operation,1,status,&observation);
     if (status==XR_XIR_OK && operation->inspect) conditional_template(result.checked);
-    if (status==XR_XIR_OK) { phase=2;status=xr_xir_compile_checked_write(result.checked,&first,NULL);conditional_stage_observe(context,operation,2,status,&observation); }
+    if (status==XR_XIR_OK) { phase=2;status=xr_xir_compile_checked_write(result.checked,&first,&xir_diagnostic);conditional_stage_observe(context,operation,2,status,&observation); }
     xr_xir_compile_source_result_free(&result);
-    if (status==XR_XIR_OK) { phase=3;status=xr_xir_compile_checked_read(context,first.bytes,first.length,&read,NULL);conditional_stage_observe(context,operation,3,status,&observation); }
-    if (status==XR_XIR_OK) { phase=4;status=xr_xir_compile_specialize(read,&instance,NULL);conditional_stage_observe(context,operation,4,status,&observation); }
+    if (status==XR_XIR_OK) { phase=3;status=xr_xir_compile_checked_read(context,first.bytes,first.length,&read,&xir_diagnostic);conditional_stage_observe(context,operation,3,status,&observation); }
+    if (status==XR_XIR_OK) { phase=4;status=xr_xir_compile_specialize(read,&instance,&xir_diagnostic);conditional_stage_observe(context,operation,4,status,&observation); }
     xr_xir_compile_artifact_free(read);read=NULL;
-    if (status==XR_XIR_OK) { phase=5;status=xr_xir_compile_checked_write(instance,&second,NULL);conditional_stage_observe(context,operation,5,status,&observation); }
+    if (status==XR_XIR_OK) { phase=5;status=xr_xir_compile_checked_write(instance,&second,&xir_diagnostic);conditional_stage_observe(context,operation,5,status,&observation); }
     xr_xir_compile_artifact_free(instance);instance=NULL;
-    if (status==XR_XIR_OK) { phase=6;status=xr_xir_compile_checked_read(context,second.bytes,second.length,&reloaded,NULL);conditional_stage_observe(context,operation,6,status,&observation); }
+    if (status==XR_XIR_OK) { phase=6;status=xr_xir_compile_checked_read(context,second.bytes,second.length,&reloaded,&xir_diagnostic);conditional_stage_observe(context,operation,6,status,&observation); }
     if (status==XR_XIR_OK && operation->inspect) conditional_closed(reloaded,oracle);
-    if (status==XR_XIR_OK) { phase=7;status=xr_xir_compile_lower(reloaded,&target,&lowered,NULL);conditional_stage_observe(context,operation,7,status,&observation); }
+    if (status==XR_XIR_OK) { phase=7;status=xr_xir_compile_lower(reloaded,&target,&lowered,&xir_diagnostic);conditional_stage_observe(context,operation,7,status,&observation); }
     xr_xir_compile_artifact_free(reloaded);reloaded=NULL;
-    if (status==XR_XIR_OK) { phase=8;status=xr_xir_compile_artifact_verify(lowered,NULL);conditional_stage_observe(context,operation,8,status,&observation); }
-    if (status!=XR_XIR_OK && source_program_compile_fail_at==SIZE_MAX && status!=XR_XIR_BUDGET)
-        fprintf(stderr,"%s phase%u status%u %d:%d %s\n",oracle->name,phase,status,diagnostic.line,diagnostic.column,diagnostic.message);
+    if (status==XR_XIR_OK) { phase=8;status=xr_xir_compile_artifact_verify(lowered,&xir_diagnostic);conditional_stage_observe(context,operation,8,status,&observation); }
+    if (status!=XR_XIR_OK && source_program_compile_fail_at==SIZE_MAX && status!=XR_XIR_BUDGET) {
+        if (phase==1) fprintf(stderr,"%s phase%u status%u %d:%d %s\n",oracle->name,phase,status,diagnostic.line,diagnostic.column,diagnostic.message);
+        else fprintf(stderr,"%s phase%u status%u f%u/b%u/i%u reason%u\n",oracle->name,phase,status,
+            xir_diagnostic.function,xir_diagnostic.block,xir_diagnostic.instruction,xir_diagnostic.reason);
+    }
     xr_xir_compile_artifact_free(lowered);xr_xir_compile_artifact_free(reloaded);xr_xir_compile_artifact_free(instance);
     xr_xir_compile_artifact_free(read);xr_xir_compile_checked_packet_free(&first);xr_xir_compile_checked_packet_free(&second);
     xr_compile_resources_free(failure);conditional_stage_observe(context,operation,9,status,&observation);return status;
