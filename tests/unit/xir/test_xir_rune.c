@@ -205,7 +205,7 @@ static const uint8_t rune_current_golden[]={
     0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
 };
 #include "xir_rune65_golden.h"
-#include "xir_rune73_golden.h"
+#include "xir_rune72_golden.h"
 #include "xir_rune73_golden.h"
 static void rune_wire(void) {
     XrXirInstruction ops[]={

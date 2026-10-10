@@ -14,6 +14,13 @@
 
 static const XrXirTypes effect_empty_types={0};
 
+/* The structural owner retains reusable stack capacity, never a type proof.
+ * Its original ledger admits every fresh comparison and owns all blocks. */
+static XrXirTypeMatchScratch *effect_terms_type_scratch(EffectTerms *pool) {
+    if (!pool->match.resources) pool->match.resources=pool->remaining->resources;
+    return &pool->match;
+}
+
 /* Declaration metadata keeps its original source IDs during resolution. Each
  * descriptor and declaration child is copied; executable layout is excluded. */
 static XrXirStatus effect_terms_seed(EffectTerms *pool, const XrXirTypes *source) {

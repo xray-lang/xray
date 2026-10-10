@@ -89,7 +89,7 @@ static XrXirAction returned_capture_runtime_fault(XrXirCallStatus status) {
 }
 static void returned_capture_runtime_release(XrXirCallView *view,XrXirCallStatus reason) {
     (void)reason;ReturnedCaptureRuntimeFrame *f=view->state;
-    ReturnedCaptureRuntimeEnvironment *environment=view->environment;
+    const ReturnedCaptureRuntimeEnvironment *environment=view->environment;
     if (environment->source==4) ++environment->owner->factory_releases;
     xr_xir_value_drop(&f->task);xr_xir_value_drop(&f->extra);
     xr_xir_value_drop(&f->function);xr_xir_value_drop(&f->cell);
@@ -142,7 +142,7 @@ static XrXirCallStatus returned_capture_runtime_probe(XrXirCallView *view,Return
     return status;
 }
 static XrXirAction returned_capture_runtime_resume(XrXirCallView *view) {
-    ReturnedCaptureRuntimeEnvironment *environment=view->environment;ReturnedCaptureRuntimeWitness *w=environment->owner;
+    const ReturnedCaptureRuntimeEnvironment *environment=view->environment;ReturnedCaptureRuntimeWitness *w=environment->owner;
     ReturnedCaptureRuntimeFrame *frame=view->state;XrXirCallStatus status=XR_XIR_CALL_READY;
     if (!environment->source) {
         if (!w->domain) {

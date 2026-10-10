@@ -137,7 +137,7 @@ static XrXirCallStatus capture_runtime_probe(XrXirCallView *view,CaptureRuntimeW
     return status;
 }
 static XrXirAction capture_runtime_resume(XrXirCallView *view) {
-    CaptureRuntimeEnvironment *environment=view->environment;CaptureRuntimeWitness *w=environment->owner;
+    const CaptureRuntimeEnvironment *environment=view->environment;CaptureRuntimeWitness *w=environment->owner;
     CaptureRuntimeFrame *frame=view->state;XrXirCallStatus status=XR_XIR_CALL_READY;
     if (!environment->source) {
         if (!w->domain) {

@@ -13,6 +13,7 @@
 #ifndef XIR_INVOCATION_RUNTIME_OWNER_CASES_H
 #define XIR_INVOCATION_RUNTIME_OWNER_CASES_H
 #include "xir/xxir_task.h"
+#include "xir/xxir_call_internal.h"
 #include "xir/xxir_instance_function_internal.h"
 typedef struct EdgeRuntimeFixture {
     XrXirTypeNode nodes[3];XrXirTypes types;XrXirCallableParameter ref;
@@ -124,7 +125,7 @@ static XrXirCallStatus edge_runtime_probe(XrXirCallView *view,EdgeRuntimeWitness
     return status;
 }
 static XrXirAction edge_runtime_resume(XrXirCallView *view) {
-    EdgeRuntimeEnvironment *environment=view->environment;EdgeRuntimeWitness *w=environment->owner;
+    const EdgeRuntimeEnvironment *environment=view->environment;EdgeRuntimeWitness *w=environment->owner;
     EdgeRuntimeFrame *frame=view->state;XrXirCallStatus status=XR_XIR_CALL_READY;
     if (!environment->source) {
         if (!w->domain) {

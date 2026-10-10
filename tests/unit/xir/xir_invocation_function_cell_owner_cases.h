@@ -96,7 +96,7 @@ static XrXirAction function_cell_runtime_fault(XrXirCallStatus status) {
 }
 static void function_cell_runtime_release(XrXirCallView *view,XrXirCallStatus reason) {
     (void)reason;FunctionCellRuntimeFrame *f=view->state;
-    FunctionCellRuntimeEnvironment *environment=view->environment;
+    const FunctionCellRuntimeEnvironment *environment=view->environment;
     if (environment->source==4) ++environment->owner->factory_releases;
     xr_xir_value_drop(&f->task);xr_xir_value_drop(&f->extra);
     xr_xir_value_drop(&f->function);xr_xir_value_drop(&f->cell);
@@ -157,7 +157,7 @@ static XrXirCallStatus function_cell_runtime_probe(XrXirCallView *view,FunctionC
     return status;
 }
 static XrXirAction function_cell_runtime_resume(XrXirCallView *view) {
-    FunctionCellRuntimeEnvironment *environment=view->environment;FunctionCellRuntimeWitness *w=environment->owner;
+    const FunctionCellRuntimeEnvironment *environment=view->environment;FunctionCellRuntimeWitness *w=environment->owner;
     FunctionCellRuntimeFrame *frame=view->state;XrXirCallStatus status=XR_XIR_CALL_READY;
     if (!environment->source) {
         if (!w->domain) {

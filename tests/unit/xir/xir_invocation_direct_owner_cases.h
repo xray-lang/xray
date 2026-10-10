@@ -13,6 +13,7 @@
 #ifndef XIR_INVOCATION_DIRECT_OWNER_CASES_H
 #define XIR_INVOCATION_DIRECT_OWNER_CASES_H
 #include "xir/xxir_task.h"
+#include "xir/xxir_call_internal.h"
 #include "xir/xxir_instance_function_internal.h"
 typedef struct DirectRuntimeFixture {
     XrXirTypeNode nodes[3];XrXirTypes types;XrXirCallableParameter ref;
@@ -139,7 +140,7 @@ static XrXirCallStatus direct_runtime_probe(XrXirCallView *view,DirectRuntimeWit
     return status;
 }
 static XrXirAction direct_runtime_resume(XrXirCallView *view) {
-    DirectRuntimeEnvironment *environment=view->environment;DirectRuntimeWitness *w=environment->owner;
+    const DirectRuntimeEnvironment *environment=view->environment;DirectRuntimeWitness *w=environment->owner;
     DirectRuntimeFrame *frame=view->state;XrXirCallStatus status=XR_XIR_CALL_READY;
     if (!environment->source) {
         if (!w->domain) {
