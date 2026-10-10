@@ -11,6 +11,9 @@
  *   The receiver admits the authentic Closed packet and real host-compiled C; two
  *   Instances preserve two yields and independent I64 42 under each provider route.
  */
+#if defined(XR_SOURCE_TYPED_LIBRARY_NATIVE_PACKET_WRITER) && defined(XR_SOURCE_TYPED_LIBRARY_NATIVE_PACKET_CANCEL_RECEIVER)
+#error "Writer and cancellation receiver are mutually exclusive"
+#endif
 #if defined(XR_SOURCE_TYPED_LIBRARY_NATIVE_PACKET_WRITER)
 #include "program/xr_xir_source_product.h"
 #include "toolchain/xcompiler_session.h"
@@ -104,6 +107,10 @@ typedef struct ReceiverRun {
     XrXirCheckedPacket input_packet;
     uint8_t input_identity[32], proof_identity[32];
     char packet_path[2048], identity_path[2048];
+#if defined(XR_SOURCE_TYPED_LIBRARY_NATIVE_PACKET_CANCEL_RECEIVER)
+    uint64_t last_call_epoch;
+    unsigned completed_fixed42[2], completed_cancel_prefix[2][2];
+#endif
 #endif
     XrXirArtifact *source_checked, *closed, *lowered;
     XrXirCheckedPacket expected_closed, transient_packet;
@@ -708,6 +715,11 @@ static void execute_receiver_i64(ReceiverRun *run, XrXirInstance *instance, uint
     for (;;) {
         CHECK(++polls < 4096);
         XrXirInstanceResult result = xr_xir_instance_poll_bounded(instance, 64);
+#if defined(XR_SOURCE_TYPED_LIBRARY_NATIVE_PACKET_CANCEL_RECEIVER)
+        if (polls == 1) {
+            CHECK(result.epoch && result.epoch != UINT64_MAX); run->last_call_epoch = result.epoch;
+        } else CHECK(result.epoch == run->last_call_epoch);
+#endif
         CHECK(!receiver_observer_failed);
         CHECK(xr_xir_call_result_valid(&result.outcome));
         if (result.outcome.status == XR_XIR_CALL_READY) continue;
@@ -734,6 +746,7 @@ static void execute_receiver_i64(ReceiverRun *run, XrXirInstance *instance, uint
     xr_xir_value_drop(&run->value);
     CHECK(run->value.type == XR_XIR_UNIT && !run->value.reserved && !run->value.payload);
 }
+#if !defined(XR_SOURCE_TYPED_LIBRARY_NATIVE_PACKET_CANCEL_RECEIVER)
 static void run_receiver_instances(ReceiverRun *run, const char *c_path) {
     seal_receiver_native(run, c_path);
     XrXirInstanceConfig config;
@@ -769,6 +782,150 @@ static void run_receiver_instances(ReceiverRun *run, const char *c_path) {
     CHECK(!receiver_native_owner && receiver_native_releases == 1);
     CHECK(!runtime_live && !runtime_bytes && !runtime_owned && !runtime_owned_capacity);
 }
+#endif
+#if defined(XR_SOURCE_TYPED_LIBRARY_NATIVE_PACKET_CANCEL_RECEIVER)
+static XrXirInstanceResult reach_cancel_prefix(ReceiverRun *run, XrXirInstance *instance, unsigned prefix) {
+    CHECK(prefix == 1 || prefix == 2);
+    CHECK(call_completed(run, xr_xir_instance_start(instance, run->roles.answer, NULL, 0),
+        XR_XIR_CALL_READY, "cancel-prefix-real-answer-start"));
+    size_t polls = 0; unsigned suspended = 0, resumed = 0;
+    uint64_t epoch = 0, previous_wake = 0;
+    for (;;) {
+        CHECK(++polls < 4096);
+        XrXirInstanceResult result = xr_xir_instance_poll_bounded(instance, 64);
+        CHECK(!receiver_observer_failed && xr_xir_call_result_valid(&result.outcome));
+        CHECK(result.epoch && result.epoch != UINT64_MAX);
+        if (!epoch) epoch = result.epoch;
+        CHECK(result.epoch == epoch);
+        if (result.outcome.status == XR_XIR_CALL_READY) continue;
+        CHECK(call_completed(run, result.outcome.status, XR_XIR_CALL_SUSPENDED, "cancel-prefix-real-suspension"));
+        CHECK(result.outcome.wake && result.outcome.wake != previous_wake);
+        XrXirWaitRequest wait = {0};
+        CHECK(call_completed(run, xr_xir_instance_wait_request(instance, result.epoch, result.outcome.wake, &wait),
+            XR_XIR_CALL_READY, "cancel-prefix-public-YIELD-request"));
+        CHECK(wait.kind == XR_XIR_WAIT_YIELD && !wait.reserved && !wait.after_ms &&
+            !wait.subject && !wait.generation && !wait.ticket);
+        ++suspended;
+        if (suspended == prefix) { CHECK(resumed == prefix - 1); return result; }
+        CHECK(suspended < prefix);
+        CHECK(call_completed(run, xr_xir_instance_resume(instance, result.epoch, result.outcome.wake),
+            XR_XIR_CALL_READY, "cancel-prefix-resume-earlier-wake-once"));
+        previous_wake = result.outcome.wake; ++resumed;
+    }
+}
+static void reject_cancelled_token(ReceiverRun *run, XrXirInstance *instance, XrXirInstanceResult pending) {
+    XrXirWaitRequest sentinel; uint8_t before[sizeof(sentinel)];
+    memset(&sentinel, 0xa5, sizeof(sentinel)); memcpy(before, &sentinel, sizeof(sentinel));
+    CHECK(call_completed(run, xr_xir_instance_wait_request(instance, pending.epoch, pending.outcome.wake, &sentinel),
+        XR_XIR_CALL_BAD_STATE, "cancelled-token-public-wait-reject"));
+    CHECK(!memcmp(&sentinel, before, sizeof(sentinel)));
+    CHECK(call_completed(run, xr_xir_instance_resume(instance, pending.epoch, pending.outcome.wake),
+        XR_XIR_CALL_BAD_STATE, "cancelled-token-public-resume-reject"));
+}
+static void drain_clean_cancel(ReceiverRun *run, XrXirInstance *instance, XrXirInstanceResult pending) {
+    CHECK(call_completed(run, xr_xir_instance_cancel_current(instance), XR_XIR_CALL_CANCEL_REQUESTED,
+        "clean-prefix-public-cancel-current"));
+    reject_cancelled_token(run, instance, pending);
+    size_t polls = 0;
+    for (;;) {
+        CHECK(++polls < 4096);
+        XrXirInstanceResult result = xr_xir_instance_poll_bounded(instance, 64);
+        CHECK(!receiver_observer_failed && xr_xir_call_result_valid(&result.outcome) && result.epoch == pending.epoch);
+        if (result.outcome.status == XR_XIR_CALL_READY) continue;
+        CHECK(call_completed(run, result.outcome.status, XR_XIR_CALL_CANCELLED, "clean-prefix-natural-terminal-CANCELLED"));
+        CHECK(result.outcome.value.type == XR_XIR_UNIT && !result.outcome.value.reserved &&
+            !result.outcome.value.payload && !result.outcome.wake && xr_xir_panic_empty(&result.outcome.panic));
+        break;
+    }
+    CHECK(xr_xir_instance_state(instance) == XR_XIR_INSTANCE_READY);
+    reject_cancelled_token(run, instance, pending);
+    CHECK(receiver_native_owner && !receiver_native_releases);
+    /* Poll outcomes borrow; cancellation transfers no owned I64 and is never dropped. */
+}
+static void cancelled_output_diagnostics(ReceiverRun *run, XrXirInstance *instance) {
+    /* Auxiliary current API controls do not redefine the original CANCELLED terminal. */
+    CHECK(run->value.type == XR_XIR_UNIT && !run->value.reserved && !run->value.payload);
+    CHECK(call_completed(run, xr_xir_instance_take_result(instance, &run->value), XR_XIR_CALL_BAD_STATE,
+        "clean-cancel-empty-take-auxiliary"));
+    CHECK(run->value.type == XR_XIR_UNIT && !run->value.reserved && !run->value.payload);
+    XrXirValue sentinel = {0}; sentinel.type = XR_XIR_I64; sentinel.payload = 123;
+    uint8_t before[sizeof(sentinel)]; memcpy(before, &sentinel, sizeof(sentinel));
+    CHECK(call_completed(run, xr_xir_instance_take_result(instance, &sentinel), XR_XIR_CALL_BAD_ARGUMENT,
+        "clean-cancel-occupied-take-auxiliary"));
+    CHECK(!memcmp(&sentinel, before, sizeof(sentinel)));
+}
+static void run_cancel_case(ReceiverRun *run, XrXirInstance *instance, XrXirInstance *peer, unsigned index, unsigned prefix) {
+    CHECK(index < 2 && xr_xir_instance_state(instance) == XR_XIR_INSTANCE_READY &&
+        xr_xir_instance_state(peer) == XR_XIR_INSTANCE_READY);
+    NativeRouteCounts before = native_route_counts(run->roles);
+    XrXirInstanceResult pending = reach_cancel_prefix(run, instance, prefix);
+    CHECK(xr_xir_instance_state(peer) == XR_XIR_INSTANCE_READY);
+    drain_clean_cancel(run, instance, pending);
+    NativeRouteCounts after = native_route_counts(run->roles);
+    check_actual_cancel_route(run->mode, prefix, before, after);
+    cancelled_output_diagnostics(run, instance);
+    ++run->completed_cancel_prefix[index][prefix - 1];
+    CHECK(xr_xir_instance_state(peer) == XR_XIR_INSTANCE_READY && receiver_native_owner && !receiver_native_releases);
+    before = native_route_counts(run->roles);
+    execute_receiver_i64(run, instance, run->roles.answer, 42, 2);
+    CHECK(run->last_call_epoch == pending.epoch + 1);
+    reject_cancelled_token(run, instance, pending);
+    after = native_route_counts(run->roles); check_actual_route(run->mode, before, after);
+    ++run->completed_fixed42[index];
+    CHECK(xr_xir_instance_state(peer) == XR_XIR_INSTANCE_READY && receiver_native_owner && !receiver_native_releases);
+    printf("typed-library-clean-cancel instance=%u mode=%u prefix=%u actual-SUSPEND=%u actual-earlier-resumes=%u terminal=CANCELLED recovered-owned-I64=42 new-epoch=1 lease=0 concurrent-pending=DEFERRED\n",
+        index, run->mode, prefix, prefix, prefix - 1);
+}
+static void prepare_cancel_instances(ReceiverRun *run, const char *c_path) {
+    seal_receiver_native(run, c_path);
+    XrXirInstanceConfig config;
+    CHECK(call_completed(run, xr_xir_instance_config_init(&config, sizeof(config)), XR_XIR_CALL_READY, "cancel-Instance-config-init"));
+    config.value_limit = UINT64_C(1048576);
+    for (unsigned i = 0; i < 2; ++i)
+        CHECK(call_completed(run, xr_xir_instance_new(run->program, &config, &run->instances[i]), XR_XIR_CALL_READY, "cancel-Instance-new") && run->instances[i]);
+    CHECK(run->instances[0] != run->instances[1]);
+    xr_xir_compile_program_drop(run->program); run->program = NULL;
+    CHECK(!receiver_observer_failed && receiver_native_owner && !receiver_native_releases);
+    for (unsigned i = 0; i < 2; ++i) {
+        size_t attempts = runtime_attempts;
+        CHECK(call_completed(run, xr_xir_instance_start(run->instances[i], run->roles.private_answer, NULL, 0),
+            XR_XIR_CALL_BAD_ARGUMENT, "cancel-private-answer-permission-reject"));
+        CHECK(xr_xir_instance_state(run->instances[i]) == XR_XIR_INSTANCE_NEW && runtime_attempts == attempts);
+        execute_receiver_i64(run, run->instances[i], run->roles.entry, 0, 0);
+    }
+    CHECK(xr_xir_instance_state(run->instances[0]) == XR_XIR_INSTANCE_READY &&
+        xr_xir_instance_state(run->instances[1]) == XR_XIR_INSTANCE_READY);
+}
+static void run_receiver_cancel_instances(ReceiverRun *run, const char *c_path) {
+    prepare_cancel_instances(run, c_path);
+    for (unsigned i = 0; i < 2; ++i) {
+        NativeRouteCounts before = native_route_counts(run->roles);
+        execute_receiver_i64(run, run->instances[i], run->roles.answer, 42, 2);
+        NativeRouteCounts after = native_route_counts(run->roles); check_actual_route(run->mode, before, after);
+        ++run->completed_fixed42[i];
+        for (unsigned prefix = 1; prefix <= 2; ++prefix)
+            run_cancel_case(run, run->instances[i], run->instances[1 - i], i, prefix);
+        CHECK(run->completed_fixed42[i] == 3 && run->completed_cancel_prefix[i][0] == 1 &&
+            run->completed_cancel_prefix[i][1] == 1 && receiver_native_owner && !receiver_native_releases);
+    }
+    for (unsigned i = 0; i < 2; ++i) {
+        CHECK(xr_xir_instance_state(run->instances[i]) == XR_XIR_INSTANCE_READY);
+        XrXirCallStatus released = xr_xir_instance_free(run->instances[i]);
+        if (released != XR_XIR_CALL_BUSY) run->instances[i] = NULL;
+        CHECK(call_completed(run, released, XR_XIR_CALL_READY, "clean-prefix-successful-Instance-free"));
+        CHECK(!receiver_observer_failed);
+        if (i == 0) CHECK(receiver_native_owner && !receiver_native_releases);
+    }
+    CHECK(!receiver_native_owner && receiver_native_releases == 1);
+    CHECK(!runtime_live && !runtime_bytes && !runtime_owned && !runtime_owned_capacity);
+}
+static void report_cancel_execution(const ReceiverRun *run, bool passed, bool physical_zero) {
+    printf("typed-library-clean-prefix result=%s cleanup-error=%u physical-zero=%u instance0-real42=%u instance0-cancel1=%u instance0-cancel2=%u instance1-real42=%u instance1-cancel1=%u instance1-cancel2=%u expected-per-Instance=3-real42+2-CANCELLED full-FI=NOT_RUN axes=NOT_RUN stable-object-lifecycle=OPEN init-failure=OPEN owned-escape=OPEN original-AOT=OPEN deterministic-C=OPEN SourceDelete=OPEN concurrent-pending=DEFERRED\n",
+        passed ? "PASS" : "FAIL", (unsigned)receiver_cleanup_failed, (unsigned)physical_zero,
+        run->completed_fixed42[0], run->completed_cancel_prefix[0][0], run->completed_cancel_prefix[0][1],
+        run->completed_fixed42[1], run->completed_cancel_prefix[1][0], run->completed_cancel_prefix[1][1]);
+}
+#endif
 
 #endif
 
@@ -907,7 +1064,11 @@ int main(int argc, char **argv) {
         passed = library_catalog_build(&run) && program_source_build(&run) && detach_program(&run, argv);
 #else
         passed = admit_packet(&run, argv);
+#if defined(XR_SOURCE_TYPED_LIBRARY_NATIVE_PACKET_CANCEL_RECEIVER)
+        if (passed) run_receiver_cancel_instances(&run, argv[4]);
+#else
         if (passed) run_receiver_instances(&run, argv[4]);
+#endif
 #endif
     } else passed = false;
     receiver_cleanup_enabled = false;
@@ -928,8 +1089,12 @@ int main(int argc, char **argv) {
         source_program_compile_live, source_program_compile_bytes, (void *)source_program_compile_allocations,
         source_program_compile_capacity, runtime_live, runtime_bytes, (void *)runtime_owned, runtime_owned_capacity);
     if (!physical_zero || receiver_cleanup_failed || receiver_observer_failed) passed = false;
+#if defined(XR_SOURCE_TYPED_LIBRARY_NATIVE_PACKET_CANCEL_RECEIVER)
+    report_cancel_execution(&run, passed, physical_zero);
+#else
     printf("typed-library-native-mixed-packet last-XIR-status=%u result=%s cleanup-error=%u physical-zero=%u full-FI=NOT_RUN axes=NOT_RUN cancel=NOT_RUN stable-object-lifecycle=OPEN init-failure=OPEN owned-escape=OPEN original-AOT=OPEN deterministic-C=OPEN SourceDelete=OPEN\n",
         (unsigned)run.status, passed ? "PASS" : "FAIL", (unsigned)receiver_cleanup_failed, (unsigned)physical_zero);
+#endif
 #if defined(XR_SOURCE_TYPED_LIBRARY_NATIVE_PACKET_WRITER)
     if (passed) puts("typed-Library-packet writer-runtime=NOT_RUN Source-and-Catalog-producers-released=1");
     else puts("typed-Library-packet writer-runtime=NOT_RUN material-publication=FAIL");

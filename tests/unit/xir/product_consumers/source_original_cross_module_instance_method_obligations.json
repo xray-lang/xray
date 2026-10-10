@@ -950,5 +950,101 @@
     ],
     "whole_completion": "OPEN",
     "caption_binding": "Static candidate annotation only; all normal runtime statements above are unexecuted assertions, not PASS evidence."
+  },
+  "typed_library_source_free_native_mixed_cancel_prefix_9031_interface_candidate": {
+    "status": "STATIC_REVIEWED_NOT_RUN",
+    "retired": false,
+    "worker_parent": "c05b133f3fbfeb5d4ebfac6618c3f675e3c5f81f",
+    "public_Git_reference_only": "9031dbc04d5f66ae2bcb356478a0d9450dc9ad4e",
+    "unchanged_cancellation_contract_reference_only": "1320ceebab645ff0f86d8bfc9717396fc8375464",
+    "candidate_paths": [
+      "tests/unit/xir/product_consumers/test_source_typed_library_receiver_current_native_mixed.c",
+      "tests/unit/xir/product_consumers/typed_library_native_mixed_support.h",
+      "tests/unit/xir/product_consumers/source_typed_library_receiver_current_native_mixed_candidate.cmake"
+    ],
+    "candidate_raw_sha256": {
+      "tests/unit/xir/product_consumers/test_source_typed_library_receiver_current_native_mixed.c": "07ac6ab125429654bcd9abcad4f7dc821839bd324ffbdb6e3715f0f0855e7d7c",
+      "tests/unit/xir/product_consumers/typed_library_native_mixed_support.h": "385100cb5038c18cf00537497d7b06040957b5a80a050758aca4bac683da39b9",
+      "tests/unit/xir/product_consumers/source_typed_library_receiver_current_native_mixed_candidate.cmake": "03b311f7f711a467eccf36b8fb361a5dabfb63cc4e0ecb094621a98862ff4c91"
+    },
+    "reference_api": {
+      "Checked_schema": 28,
+      "Checked_contract": 73,
+      "Library_C_interface": 2,
+      "Value_ABI": 23,
+      "Call_ABI": 29,
+      "Program_ABI": 30
+    },
+    "producer_boundary": {
+      "authorized_general_producer": "25f4016d6f089169757a90ae11ba537002374711",
+      "new_producer_adopted": false,
+      "new_execution_window": "CLOSED",
+      "qualification": "Exact public declaration and static consumer preparation only. No compile/CGen/build/link/runtime acceptance; Root must explicitly bind one immutable provider/source/helpers/stdlib/tools/headers/materials and a new family window."
+    },
+    "original_inputs": "Unchanged complete163B=109Boriginalroot+54Bexportadapter and185BauthenticLibrary; inherit exact original_input hashes and independentWorker(40).child(2) contract from preceding native/mixed facet. No original input, semantic42, yield2, budget or FI responsibility reduced.",
+    "material_pipeline": "Exact c05 writer/publicCatalog controls, full SOURCE/Closed/Lowered/compiled proof and actualC/whole32identity/binding; same single four-output customcommand. New cancellation target consumes the same actual C and compiled sidecar. No independent fullencoder, replacementobserver or secondgenerator.",
+    "normal_branch_preservation": "Complete difference inverse restores c05 three raw files. Writer and ordinary default normal business statements/summary preserved under conditional insertion; ordinary facet remains bound to its own original frozen raw/commit/evidence and is not rebound as a cancellation PASS.",
+    "runtime_candidate_oracles": [
+      "Two distinct Instances both live after caller Program drop; each privateentry rejects inNEW with no allocation, canonical0 completes toREADY for both before cases.",
+      "Each Instance runs actual42/twoYIELD, cancelprefix1, recovery42/twoYIELD, cancelprefix2, recovery42/twoYIELD:3real42+2actualCANCELLED.",
+      "Prefix1 obtains first genuinependingWAIT_YIELD and cancels with0successfulresume; prefix2 consumes first exactwake once then cancels second stillpendingwake with1resume; sameepoch/distinctwithin-callwake.",
+      "Public cancel_current returnsCANCEL_REQUESTED then natural boundedREADY* drains toCANCELLED/canonicalUnit/wake0/emptyPanic/sameepoch; InstanceREADY. No stop/free-manufactured terminal or borrowedoutcome drop.",
+      "Cancelled oldepoch/wake wait_request/resume rejectBAD_STATE without changing waitoutput immediately, afterdrain and afterrecovery. EmptytakeBAD_STATE/occupiedtakeBAD_ARGUMENT auxiliary diagnostics do not redefine originalcancelgolden or arbitraryfaultcleanup.",
+      "Recoveryactualpoll yields newepoch=cancelled+1, actualownedI6442 taken/dropped; value/runtime/compile cumulativebudgets never replenished.",
+      "Allnative/constructorNative-childVM/constructorVM-childNative use originaladmittedview/environment; selectedactualctor/childdelegateincrements andoppositeunchanged; selectedchildACTION_SUSPEND delta=prefix forcancel and2 fornormal/recovery.",
+      "Another Instance isREADY/undriven percallinterval; globalroutecounterdelta legitimately belongs to activecall. Simultaneouspending siblingisolation DEFERRED.",
+      "Actual Lowered/bindings/entries/counter owner codelease0throughcancel/reuse,0afterfirstactualfree,1afterlastfree; finalcompiler/runtimephysical/tablezero additional checks only.",
+      "Staticpartialowners/stickyfirstfailure andnaturalproductcallbacks preserved; cleanupfailure/BUSY/fatalembeddedobserver/fullFI remain unqualified."
+    ],
+    "registration": {
+      "new_target": "test_source_typed_library_receiver_current_native_mixed_cancel_prefix",
+      "new_tests": "Three route modes1/2/3, same four authentic read-only materials; oldordinary3 unchanged.",
+      "TIMEOUT": 120,
+      "PROCESSORS": 1,
+      "RUN_SERIAL": "NOT_SET; originalresource-axisserialruleunchanged",
+      "compiler": "C11;MSVCutf8/W4/WX;otherWall/Wextra/Werror",
+      "default_registration": "NOT_ADDED"
+    },
+    "static_reviews": {
+      "author_freeze_sha256": "a58764589fca8b27251bd220479c9dc8f406cdd1247b7debea87de16f135e1f8",
+      "main_delta_review_sha256": "26a2c7a6b855871947f78c9ade47dbd716e3695a8a3eb7b2008553ee6e554633",
+      "main_actual_API_sha256": "9d02b9452ba88849af92a0e5917e5d0b15068ec8193cf95a59221b9c1fcc563e",
+      "actual_public_functions": 75,
+      "pure_public_headers": 21,
+      "compiler_acceptance": "NOT_RUN",
+      "author": {
+        "path": "build-consumer-evidence/parallel-consumer-interface-delta-r1/typed-library-native-mixed-cancel-prefix-candidate-r1/author-self-review-r1.json",
+        "sha256": "52dd8961da7de7e5aae9ee8447ddf23fa29a695b2c0ab1fc811fe7376d337512"
+      },
+      "aot_independent": {
+        "path": "build-consumer-evidence/parallel-aot-main-audit-r1/typed-library-native-mixed-cancel-prefix-static-review-r1/report.json",
+        "sha256": "68c0896349be2ee517aac7db301cb24c566c33836b8e2eec13d204464f093bb4"
+      },
+      "responsibility_independent": {
+        "path": "build-consumer-evidence/parallel-progress-speed-analysis-r1/typed-library-native-mixed-cancel-prefix-static-review-r1.json",
+        "sha256": "0062fa606c93ebd71605c290f5afdb5e85ee3673b8297bc80e808bd75a681721"
+      }
+    },
+    "existing_stable_observer_request_sha256": "a25fba43874c3e84c982fca105ab2a6796c608c835849dc3fb8c62506e07996a",
+    "execution_counts": {
+      "configure": 0,
+      "compile": 0,
+      "build": 0,
+      "CGen": 0,
+      "writer": 0,
+      "receiver": 0,
+      "tests": 0
+    },
+    "OPEN": [
+      "fresh immutable provider/material/window and normal/native/mixed/cancelruntimequalification",
+      "actualstable perobject1construct/1finalize/1reclaim/noearlyevents/128log",
+      "simultaneouspending siblingisolation(DEFERRED)",
+      "initializationfailurestickyownership/partialcleanup/ownedescape",
+      "complete compiler/runtimeFI andresourceaxes",
+      "originalBackend/AOT andindependentdoubleCdeterminism",
+      "physicalSourceDelete/SDK/default/safety/Main/Rootintegration/retirement"
+    ],
+    "whole_completion": "OPEN",
+    "caption_binding": "Static candidate assertions only, zero executed cancellation/normal PASS. Entire original responsibility remains OPEN."
   }
 }
