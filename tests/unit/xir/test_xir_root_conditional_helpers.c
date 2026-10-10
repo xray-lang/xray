@@ -15,6 +15,7 @@
 #include <string.h>
 #define CHECK(c) do { if (!(c)) { fprintf(stderr,"%d: %s\n",__LINE__,#c);exit(1); } } while (0)
 #include "xir_root_parameter_fixture.h"
+#include "xir_conditional_retry_cases.h"
 #define XR_XIR_EFFECT_CONTEXT_TESTS 1
 #include "xir/xxir_effects.c"
 #include "xir_root_conditional_raw_fixture.h"
@@ -1341,16 +1342,29 @@ static XrXirStatus conditional_resource_case(const XrXirCompileContext *context,
         conditional_invocation_reference_result(context,false);
 }
 
+static XrXirStatus conditional_retry_case(const XrXirCompileContext *context,uint32_t which) {
+    if (which>=72) return XR_XIR_BAD_STRUCTURE;
+    return which<61?conditional_resource_case(context,which):
+        which<66?conditional_sparse_case(context,which-61,false):
+        which<69?conditional_storage_case(context,which-66,false):conditional_copy_case(context,which-69,false);
+}
+
 static void conditional_oom(void) {
     for (uint32_t which=0;which<61;++which) {
-        size_t sites=0;
+        size_t sites=0;XrCompileResourceStats single={0};
         for (size_t pass=0;pass<=sites;++pass) {
             RootParameterMark physical=rp_mark();rp_fail_at=SIZE_MAX;rp_attempts=0;rp_injected=false;
-            XrXirCompileContext context=rp_owner(rp_caps());uint64_t baseline=rp_stats(&context).live_bytes;
+            XrXirCompileContext context=rp_owner(rp_caps());XrCompileResourceStats entry=rp_stats(&context);
+            uint64_t baseline=entry.live_bytes;RootParameterMark retained=rp_mark();XrCompileResources *identity=context.resources;
             rp_attempts=0;rp_fail_at=pass ? pass-1 : SIZE_MAX;
             XrXirStatus status=conditional_resource_case(&context,which);
-            if (!pass) { CHECK(status==XR_XIR_OK);sites=rp_attempts; }
-            else CHECK(rp_injected && status==XR_XIR_OUT_OF_MEMORY);
+            if (!pass) { CHECK(status==XR_XIR_OK);sites=rp_attempts;single=rp_stats(&context); }
+            else {
+                CHECK(rp_injected && status==XR_XIR_OUT_OF_MEMORY);
+        ConditionalRetryTrial retry={.which=which,.ordinal=pass-1,.sites=sites,
+            .resources=identity,.initial=entry,.single=single,.retained=retained,.first=status};
+        conditional_retry_operation(&context,&retry);
+            }
             rp_fail_at=SIZE_MAX;rp_owner_free(&context,baseline);rp_balanced(physical);
         }
     }
@@ -1360,8 +1374,10 @@ static void conditional_axes(void) {
     for (uint32_t which=0;which<61;++which) {
         RootParameterMark physical=rp_mark();XrXirCompileContext context=rp_owner(rp_caps());
         uint64_t baseline=rp_stats(&context).live_bytes;
+        size_t census_attempts=rp_attempts;
         CHECK(conditional_resource_case(&context,which)==XR_XIR_OK);
-        XrCompileResourceStats census=rp_stats(&context);rp_owner_free(&context,baseline);rp_balanced(physical);
+        XrCompileResourceStats census=rp_stats(&context);size_t census_sites=rp_attempts-census_attempts;
+        rp_owner_free(&context,baseline);rp_balanced(physical);
         uint64_t measured[3]={census.allocated_bytes,census.peak_bytes,census.work};
         for (uint32_t axis=0;axis<3;++axis) {
             CHECK(measured[axis]>0);
@@ -1371,8 +1387,12 @@ static void conditional_axes(void) {
                 if (axis==0) limits.allocated_bytes=value;
                 else if (axis==1) limits.live_bytes=value;
                 else limits.work=value;
-                physical=rp_mark();context=rp_owner(limits);baseline=rp_stats(&context).live_bytes;
+                physical=rp_mark();context=rp_owner(limits);XrCompileResourceStats entry=rp_stats(&context);
+                baseline=entry.live_bytes;RootParameterMark retained=rp_mark();XrCompileResources *identity=context.resources;
                 CHECK(conditional_resource_case(&context,which)==(pass ? XR_XIR_OK : XR_XIR_BUDGET));
+        ConditionalRetryTrial retry={.which=which,.ordinal=SIZE_MAX,.sites=census_sites,
+            .resources=identity,.initial=entry,.single=census,.retained=retained,.first=pass?XR_XIR_OK:XR_XIR_BUDGET};
+        conditional_retry_operation(&context,&retry);
                 rp_owner_free(&context,baseline);rp_balanced(physical);
             }
         }
@@ -1380,7 +1400,8 @@ static void conditional_axes(void) {
 }
 
 int main(int argc, char **argv) {
-    if (argc==2 && !strcmp(argv[1],"--compiler")) { conditional_oom();conditional_axes();conditional_sparse_resources();conditional_storage_resources();conditional_copy_resources(); }
+    if (argc==2 && !strcmp(argv[1],"--compiler")) { conditional_oom();conditional_axes();conditional_sparse_resources();conditional_storage_resources();conditional_copy_resources();conditional_retry_complete(); }
+    else if (argc==2 && !strcmp(argv[1],"--retry-census")) conditional_retry_census();
     else if (argc==2 && !strcmp(argv[1],"--rotation")) conditional_invocation_rotation_run(false);
     else if (argc==2 && !strcmp(argv[1],"--rotation-pipeline")) conditional_invocation_rotation_run(true);
     else if (argc==2 && !strcmp(argv[1],"--new")) conditional_new_literals();

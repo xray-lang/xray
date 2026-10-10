@@ -134,20 +134,29 @@ static void conditional_sparse_literals(void) {
 
 static void conditional_sparse_resources(void) {
     for (uint32_t mode=0;mode<5;++mode) {
-        size_t sites=0;
+        size_t sites=0;XrCompileResourceStats single={0};
         for (size_t pass=0;pass<=sites;++pass) {
             RootParameterMark physical=rp_mark();rp_fail_at=SIZE_MAX;rp_attempts=0;rp_injected=false;
-            XrXirCompileContext context=rp_owner(rp_caps());uint64_t baseline=rp_stats(&context).live_bytes;
+            XrXirCompileContext context=rp_owner(rp_caps());XrCompileResourceStats entry=rp_stats(&context);
+            uint64_t baseline=entry.live_bytes;RootParameterMark retained=rp_mark();
+            XrCompileResources *identity=context.resources;
             rp_attempts=0;rp_fail_at=pass?pass-1:SIZE_MAX;
             XrXirStatus status=conditional_sparse_case(&context,mode,false);
-            if (!pass) { CHECK(status==XR_XIR_OK);sites=rp_attempts; }
-            else CHECK(rp_injected && status==XR_XIR_OUT_OF_MEMORY);
+            if (!pass) { CHECK(status==XR_XIR_OK);sites=rp_attempts;single=rp_stats(&context); }
+            else {
+                CHECK(rp_injected && status==XR_XIR_OUT_OF_MEMORY);
+        ConditionalRetryTrial retry={.which=mode+61,.ordinal=pass-1,.sites=sites,
+            .resources=identity,.initial=entry,.single=single,.retained=retained,.first=status};
+        conditional_retry_operation(&context,&retry);
+            }
             rp_fail_at=SIZE_MAX;rp_owner_free(&context,baseline);rp_balanced(physical);
         }
         RootParameterMark physical=rp_mark();XrXirCompileContext context=rp_owner(rp_caps());
         uint64_t baseline=rp_stats(&context).live_bytes;
+        size_t census_attempts=rp_attempts;
         CHECK(conditional_sparse_case(&context,mode,false)==XR_XIR_OK);
-        XrCompileResourceStats census=rp_stats(&context);rp_owner_free(&context,baseline);rp_balanced(physical);
+        XrCompileResourceStats census=rp_stats(&context);size_t census_sites=rp_attempts-census_attempts;
+        rp_owner_free(&context,baseline);rp_balanced(physical);
         uint64_t measured[3]={census.allocated_bytes,census.peak_bytes,census.work};
         for (uint32_t axis=0;axis<3;++axis) {
             CHECK(measured[axis]>0);
@@ -156,8 +165,12 @@ static void conditional_sparse_resources(void) {
                 if (axis==0) limits.allocated_bytes=value;
                 else if (axis==1) limits.live_bytes=value;
                 else limits.work=value;
-                physical=rp_mark();context=rp_owner(limits);baseline=rp_stats(&context).live_bytes;
+                physical=rp_mark();context=rp_owner(limits);XrCompileResourceStats entry=rp_stats(&context);
+                baseline=entry.live_bytes;RootParameterMark retained=rp_mark();XrCompileResources *identity=context.resources;
                 CHECK(conditional_sparse_case(&context,mode,false)==(pass?XR_XIR_OK:XR_XIR_BUDGET));
+        ConditionalRetryTrial retry={.which=mode+61,.ordinal=SIZE_MAX,.sites=census_sites,
+            .resources=identity,.initial=entry,.single=census,.retained=retained,.first=pass?XR_XIR_OK:XR_XIR_BUDGET};
+        conditional_retry_operation(&context,&retry);
                 rp_owner_free(&context,baseline);rp_balanced(physical);
             }
         }

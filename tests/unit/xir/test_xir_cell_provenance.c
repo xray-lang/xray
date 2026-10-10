@@ -235,7 +235,9 @@ static void cell_proof_indirect_ref(void) {
     cell_proof_close(&context,baseline);
 }
 #include "xir_cell_active_domain_cases.h"
+#include "xir_cell_exact_edge_cases.h"
 int main(void) {
+    cell_exact_edges();
     cell_active_domains();
     cell_proof_callable_modes(); cell_proof_indirect_ref();
     cell_proof_actual_edges(); cell_proof_rejections(); cell_proof_escape_boundaries(); cell_proof_resource_failures();

@@ -38,6 +38,7 @@ typedef struct CellProofBuild {
     uint8_t *queued, *uses;
     CellProofEdge *edges;
     uint32_t edge_count, edge_capacity, queue_read, queue_write, queue_count;
+    bool counting_edges;
 } CellProofBuild;
 
 static bool cell_proof_work(CellProofBuild *build, uint64_t units) {
@@ -93,6 +94,15 @@ static bool cell_proof_seed(CellProofBuild *build, uint32_t node, uint8_t mask) 
     return cell_proof_enqueue(build,node);
 }
 static bool cell_proof_edge(CellProofBuild *build, uint32_t from, uint32_t to, bool identity) {
+    if (!cell_proof_work(build,3)) return false;
+    if (from >= build->proof->value_count || to >= build->proof->value_count)
+        return cell_proof_error(build,UINT32_MAX,UINT32_MAX,XR_XIR_BAD_STRUCTURE);
+    if (build->counting_edges) {
+        if (build->edge_count == UINT32_MAX)
+            return cell_proof_error(build,UINT32_MAX,UINT32_MAX,XR_XIR_BUDGET);
+        if (!cell_proof_work(build,1)) return false;
+        ++build->edge_count; return true;
+    }
     if (build->edge_count == build->edge_capacity)
         return cell_proof_error(build,UINT32_MAX,UINT32_MAX,XR_XIR_BAD_STRUCTURE);
     if (!cell_proof_work(build,9)) return false;
@@ -111,7 +121,7 @@ static bool cell_proof_inventory(CellProofBuild *build) {
     proof->function_count = module->function_count;
     proof->functions = xir_compile_calloc(build->context,module->function_count,sizeof(*proof->functions),&build->status);
     if (build->status != XR_XIR_OK) return false;
-    uint64_t values = 0, physical = 0, edges = 0;
+    uint64_t values = 0, physical = 0;
     for (uint32_t f = 0; f < module->function_count; ++f) {
         const XrXirFunction *function = &module->functions[f];
         uint64_t count = (uint64_t)function->parameter_count+function->instruction_count;
@@ -137,15 +147,11 @@ static bool cell_proof_inventory(CellProofBuild *build) {
         proof->functions[f] = (CellProofFunction){.begin=(uint32_t)values,
             .count=(uint32_t)count,.parameters=function->parameter_count,
             .stored=tracked?(uint32_t)count:0};
-        if (tracked) {
-            values += count;
-            /* The original finite edge bound covers only stored value spans. */
-            edges += (uint64_t)function->instruction_count*2+function->operand_count;
-        }
-        if (values > UINT32_MAX || edges > UINT32_MAX)
+        if (tracked) values += count;
+        if (values > UINT32_MAX)
             return cell_proof_error(build,f,UINT32_MAX,XR_XIR_BUDGET);
     }
-    proof->value_count = (uint32_t)values; build->edge_capacity = (uint32_t)edges;
+    proof->value_count = (uint32_t)values;
     if (values > SIZE_MAX/sizeof(uint32_t))
         return cell_proof_error(build,UINT32_MAX,UINT32_MAX,XR_XIR_BUDGET);
     proof->origins = xir_compile_calloc(build->context,(size_t)values,1,&build->status);
@@ -157,10 +163,6 @@ static bool cell_proof_inventory(CellProofBuild *build) {
     build->queue = xir_compile_alloc(build->context,(size_t)values*sizeof(uint32_t),&build->status);
     build->queued = xir_compile_calloc(build->context,(size_t)values,1,&build->status);
     build->uses = xir_compile_calloc(build->context,(size_t)values,1,&build->status);
-    /* Append initializes every edge before linking; unused capacity is unread. */
-    if (edges > SIZE_MAX/sizeof(*build->edges))
-        return cell_proof_error(build,UINT32_MAX,UINT32_MAX,XR_XIR_BUDGET);
-    build->edges = xir_compile_alloc(build->context,(size_t)edges*sizeof(*build->edges),&build->status);
     if (build->status != XR_XIR_OK || !cell_proof_work(build,values*4)) return false;
     for (uint32_t f = 0; f < module->function_count; ++f) {
         const XrXirFunction *function = &module->functions[f];
@@ -367,6 +369,30 @@ static bool cell_proof_build_edges(CellProofBuild *build) {
     return true;
 }
 
+static bool cell_proof_edge_storage_bytes(size_t count, size_t *bytes) {
+    if (count > SIZE_MAX/sizeof(CellProofEdge)) return false;
+    *bytes = count*sizeof(CellProofEdge); return true;
+}
+/* The same complete walker seeds one proof and counts every actual edge.
+ * Replaying it appends the exact ordered graph; seed OR operations are idempotent.
+ * No solver or output observes the proof before both finite passes complete. */
+static bool cell_proof_prepare_edges(CellProofBuild *build) {
+    build->counting_edges = true;
+    bool counted = cell_proof_build_edges(build);
+    build->counting_edges = false;
+    if (!counted) return false;
+    build->edge_capacity = build->edge_count; build->edge_count = 0;
+    size_t bytes = 0;
+    if (!cell_proof_edge_storage_bytes(build->edge_capacity,&bytes))
+        return cell_proof_error(build,UINT32_MAX,UINT32_MAX,XR_XIR_BUDGET);
+    if (!cell_proof_work(build,4)) return false;
+    build->edges = xir_compile_alloc(build->context,bytes,&build->status);
+    if (build->status != XR_XIR_OK || !cell_proof_build_edges(build)) return false;
+    if (!cell_proof_work(build,1)) return false;
+    return build->edge_count == build->edge_capacity ||
+        cell_proof_error(build,UINT32_MAX,UINT32_MAX,XR_XIR_BAD_STRUCTURE);
+}
+
 static bool cell_proof_join(CellProofBuild *build, uint32_t from, uint32_t to) {
     XrXirCellProvenance *proof = build->proof;
     if (!cell_proof_work(build,3)) return false;
@@ -490,7 +516,7 @@ XR_FUNC XrXirStatus xr_xir_compile_cell_provenance_verified(const XrXirCompileCo
     CellProofBuild build = {0}; build.context = context; build.module = module;
     build.location = (XrXirDiagnostic){XR_XIR_OK,UINT32_MAX,UINT32_MAX,UINT32_MAX,XR_XIR_DIAGNOSTIC_NONE};
     if (cell_proof_inventory(&build) && cell_proof_roles(&build) &&
-        cell_proof_build_edges(&build) && cell_proof_solve(&build)) {
+        cell_proof_prepare_edges(&build) && cell_proof_solve(&build)) {
         /* Bottom is not ownership. Unrooted cycles taint every consumer before admission. */
         for (uint32_t v = 0; v < build.proof->value_count && build.status == XR_XIR_OK; ++v) {
             if (!cell_proof_work(&build,2)) break;
