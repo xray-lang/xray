@@ -1101,5 +1101,195 @@
     "retired": 0,
     "completion": "OPEN",
     "remaining": "Fresh typed/normal/cancel native+VM qualification, FI/axes/sanitizers/AOT/fullstablelifecycle/escape/SourceDelete remain OPEN."
+  },
+  "typed_library_source_free_packet_receiver_3124_msvc_normal1_20261011": {
+    "status": "PASS_FIXED_PRODUCER_TYPED_LIBRARY_PACKET_VM_MSVC_NORMAL_ONLY",
+    "worker_preimage": "6920f6297a95976a327960dabdb94388d6ed4fd2",
+    "producer_boundary": {
+      "family_producer": "3124fa8cecb79695eb6a25cdee90a9ace4abe536",
+      "producer_tree": "e2d0c3fcd9247caeaf8b3ede9468061b583f6a98",
+      "public_identity": "Checked28/contract73/LibraryC2/Value23/Call29/Program30; BUILT1/CHECKED2/LOWERED4",
+      "pure_Git_export": "All11591 provider Git leaves verified; exact853 two-leaf overlay and one124B unitCMake include only. No dirty Root source copied.",
+      "consumer_delivery_commit": "853ed28e7c7399cbea3a5c87b84efa98b24d2ebf",
+      "configured_source_records": {
+        "path": "build-consumer-current3124-typed-packet-vm-msvc-r2/configured-successor-static-r1/post-configure-source-records.json",
+        "sha256": "6ddccd09347593e24b0b366bdfcdf02743d7a9ea52734cf453a50b220035ee0d"
+      },
+      "configured_source_files": 11650,
+      "adoption": "Explicit family-scoped fixed3124 qualification only; no general producer or Root adoption. Root current HEAD or WIP must be freshly qualified after applying the narrow package.",
+      "build_identity_limit": "Archive configure emits commit unknown/dirty0; exact provider proven by Git blobs and sealed materials. This is not CLI/package/SDK release identity qualification."
+    },
+    "consumer_raw_sha256": {
+      "tests/unit/xir/product_consumers/test_source_typed_library_receiver_current_packet_vm.c": "b429d2bc6ec8fc5d95f95ae1cd70169044bf216cf302aa559b24dba7ea5cb691",
+      "tests/unit/xir/product_consumers/source_typed_library_receiver_current_packet_vm_candidate.cmake": "c311beee3d31ac9b86c6ad82da85a54a4700ccd642342606bcd3b7ca07d2bafb"
+    },
+    "original_inputs": {
+      "fixture": "tests/unit/xir/product_consumers/fixtures/module_receiver_suspend",
+      "root_bytes": 163,
+      "root_sha256": "3bb17ffe354b537a024dbf6e4c371df1c80051d72a3db21f20d48fdbeeb5f8bc",
+      "original_root_prefix_bytes": 109,
+      "unchanged_export_adapter_bytes": 54,
+      "Library_bytes": 185,
+      "Library_sha256": "bb41f3d3d610b67ce6445475deb031967b10a0b069ef00b1c923599b3d6a6c87",
+      "full_stdlib_coro_sha256": "51a94626288d0d5361a8d10563a7dd00987cdc96d8625fb54beff7912a96d51f",
+      "independent_oracle": "Original Worker40.child2 yields exactly twice and returns owned I64 42; entire two-module inputs and full same-provider stdlib retained.",
+      "same_provider_helpers": {
+        "tests/unit/xir/xir_source_program_compile_owner.h": "a0fefba6ce537cbb02018d3d5506d6b4f45388026c963169981f186833f3abf8",
+        "tests/unit/xir/xir_runtime_allocations.h": "1462e7be2ddf6abd76f3fd14d08a34802981f6e7f54d1844078a8ddd4eca242c"
+      }
+    },
+    "retained_configure_first_red": {
+      "result": {
+        "path": "build-consumer-current3124-typed-packet-vm-msvc-r2/execution-configure-r1/result.json",
+        "sha256": "91c330d265a852203cabccfbd57bd1d59eca59038ca28099b4adf102a5ce7b16"
+      },
+      "pid": 47464,
+      "exit": 0,
+      "seconds": 20.672,
+      "process_reaped": true,
+      "actual_status": "FAIL_FIRST_RED",
+      "reason": "Configure generated57 knowledge files and rewrote3 Source leaves only fromLF toCRLF. Original FAIL/raw preserved; no restoration or blanket waiver.",
+      "exact60_expected_bytes_closure": {
+        "path": "build-consumer-current3124-typed-packet-vm-msvc-r2/configured-successor-static-r1/exact60-configure-output-closure.json",
+        "sha256": "c44a4b1bddbbf343737d83c81af5926c6c0a62858696c1eee97790525f785ec0"
+      },
+      "successor": "New postconfigure11650 file-set/raw/mtime seal reused; no second export/configure."
+    },
+    "actual_two_macro_TU_preflight": {
+      "result": {
+        "path": "build-consumer-current3124-typed-packet-vm-msvc-r2/execution-preflight-r2/result.json",
+        "sha256": "65883f85d6b107be98fe5a40e3b31e985a0eb20c6ab6b306d528e5e0ca3f1678"
+      },
+      "independent": {
+        "path": "build-consumer-evidence/parallel-consumer-interface-delta-r1/typed-packet-vm-pure3124-preflight-r2-evidence-review-r1.json",
+        "sha256": "ec80f6f94aac5308f9ee507e45def200085324033642e99984f9ec8d2f30173b"
+      },
+      "pid": 41056,
+      "seconds": 7.1560000001918525,
+      "exit": 0,
+      "reaped": true,
+      "guards": 13,
+      "scope": "Real writer and receiver macro TUs, original MSVC Release /MT C11 utf8 W4WX flags; only isolatedFo/Fd. This preflight alone established compiler acceptance, not runtime."
+    },
+    "fresh_target_and_writer": {
+      "result": {
+        "path": "build-consumer-current3124-typed-packet-vm-msvc-r2/execution-build-r2/result.json",
+        "sha256": "d4d370cf63ca2a3a98b6676db41b6485a626b50eb4422a0829cc0ee4672f59ea"
+      },
+      "raw": {
+        "path": "build-consumer-current3124-typed-packet-vm-msvc-r2/execution-build-r2/raw.log",
+        "sha256": "c1b86275b6ad832530549d421cc6c068af38e76aad94e8e6c5f5db9b3e6e8f90"
+      },
+      "pid": 28184,
+      "seconds": 15.109000000171363,
+      "exit": 0,
+      "reaped": true,
+      "guards": 13,
+      "jobs": 16,
+      "outer_timeout": 1200,
+      "build_steps": 118,
+      "target": "test_source_typed_library_receiver_current_packet_vm",
+      "writer": "test_source_typed_library_receiver_current_packet_writer",
+      "writer_runs": 1,
+      "authentic_packet_and_whole32": {
+        "generated/current-typed-library-packet-receiver-r1/packet/authentic-closed.chk": {
+          "sha256": "d15d985e4aa41e41d3f7016808a11b96f286c6a67ba1d53c534b6d6aee1aa003",
+          "bytes": 4286,
+          "mtime_ns": "1791651322928103500"
+        },
+        "generated/current-typed-library-packet-receiver-r1/packet/full-packet-identity.bin": {
+          "sha256": "a76f97f41eacabb8afa8aa3e77548aa5403a45906cc2f7c698792d765fa69148",
+          "bytes": 32,
+          "mtime_ns": "1791651322929106100"
+        }
+      },
+      "same_provider_Library_controls": "Actual falseNO_SUSPEND on genuine suspending child BAD_TYPE with diagnostic; original Library reverified; Catalog source strictNOT_FOUND after input/producer death; unchanged root withoutCatalog UNRESOLVED.",
+      "writer_proof": "Full public SOURCE/Construction-v2/specialization/Closed/Lowered proof; entire4286B authentic packet and whole32 equality; ProgramSource/Catalog producers dead; writer executes no Instance runtime.",
+      "real_header_dependencies": {
+        "path": "build-consumer-current3124-typed-packet-vm-msvc-r2/post-build-real-header-dependencies-r1/result.json",
+        "sha256": "eba4189c089d14ea14a51482e146fec55e9ed00b953bfaf5233d67b7d24b8764"
+      },
+      "header_dependency_counts": {
+        "writer": 186,
+        "receiver": 170
+      }
+    },
+    "actual_normal1": {
+      "result": {
+        "path": "build-consumer-current3124-typed-packet-vm-msvc-r2/execution-normal1-runtime-r1/result.json",
+        "sha256": "5e87812922e5cda7c6de24b8a51ddbfe92690734e59c46f80782d67f54ed83ab"
+      },
+      "raw": {
+        "path": "build-consumer-current3124-typed-packet-vm-msvc-r2/execution-normal1-runtime-r1/raw.log",
+        "sha256": "45e0dd679e7890be687730d36b393319a1ec4889eab5674df8e2e2469496ff23"
+      },
+      "JUnit": {
+        "path": "build-consumer-current3124-typed-packet-vm-msvc-r2/execution-normal1-runtime-r1/junit.xml",
+        "sha256": "59b06af4d4497cd8007847f753c93bea11e0209dc32b495127117995409456ea"
+      },
+      "INPUT": {
+        "path": "build-consumer-current3124-typed-packet-vm-msvc-r2/runtime-normal1-binding-r1/INPUT.json",
+        "sha256": "a126c00900dda41071c55b3e92e270ee01765b4f004508f27fcb5810f5bdacc2"
+      },
+      "runtime_runner_sha256": "6fdd7ef83c0bdfbc7cee58c1b2e4ad4b5144e648b6c93a11a35d458e6b4441bf",
+      "pid": 12928,
+      "seconds": 3.4060000001918525,
+      "exit": 0,
+      "reaped": true,
+      "kill": null,
+      "tests": 1,
+      "JUnit_case_seconds": 0.0143258,
+      "JUnit_status": "run",
+      "failures": 0,
+      "skipped": 0,
+      "TIMEOUT": 120,
+      "PROCESSORS": 1,
+      "RUN_SERIAL": true,
+      "ctest_jobs": 1,
+      "outer_timeout": 150,
+      "complete_before_after_unchanged": true,
+      "runtime_compile_link_CGen": 0,
+      "observations": {
+        "simultaneously_live_Instances": 2,
+        "fixed42_calls_per_Instance": 2,
+        "total_fixed42_calls": 4,
+        "genuine_distinct_wait_yield_and_resume_per_call": 2,
+        "total_yield_resumes": 8,
+        "canonical_entry0_calls_per_Instance": 1,
+        "private_answer": "BAD_ARGUMENT whileNEW and allocationattempts unchanged",
+        "caller_Program_owner": "Dropped before Instance calls",
+        "packet_and_identity": "Whole32 checked then borrowed input/owned rewrite buffers poisoned/freed; originalClosed/rewrite owners dropped; complete Lowered proof preserved",
+        "VM_routes": "Actual constructor and child VM delegates both observed on each fixed42 call",
+        "owned_results": "I64 42 taken and dropped; canonical0 retained; owned escaping lifetime not qualified",
+        "shared_code_lease": "0 after callerProgramdrop,0 after firstInstancefree,1 after finalInstancefree",
+        "cleanup_error": 0,
+        "final_compile_and_runtime_physical_zero": true
+      }
+    },
+    "independent_execution_review": {
+      "path": "build-consumer-evidence/parallel-consumer-interface-delta-r1/typed-packet-vm-pure3124-build-normal1-executed-review-r1.json",
+      "sha256": "bb29ec9a640c80769faec63524ac1cfdfcb6a496cff90cada42fc077ec3b4305"
+    },
+    "prior_facets": "All old producer results, static plans and first-red receipts remain byte preserved; no old25f4/9031 or Root dirty-union PASS inherited. Same-wire rewrite is not an independently encoded complete Closed oracle.",
+    "window": "Both originalpreflight and freshbuild/normal scopes CLOSED_REAPED; no permission inherited for subsequent products or gates.",
+    "full_FI": "NOT_RUN",
+    "axes": "NOT_RUN",
+    "cancel": "NOT_RUN",
+    "ASan_UBSan": "NOT_RUN",
+    "native_mixed_AOT": "NOT_RUN",
+    "stable_per_object_lifecycle": "OPEN",
+    "SourceDelete": "OPEN",
+    "Main": "NOT_ADOPTED",
+    "retired": 0,
+    "whole_completion": "OPEN",
+    "OPEN": [
+      "Fresh Root adoption and same-current-provider qualification",
+      "Complete compiler/runtime FI, resource axes and safety profiles",
+      "Active cancel at first/second actual yield; initialization sticky failure/partial cleanup and owned escaping lifetime",
+      "Stable per-object identity and exactly-once construct/finalize/reclaim; no early reclaim or simultaneouspending sibling proof",
+      "Typed real generated C native/mixed, original standalone AOT and independent doubleC determinism",
+      "Physical SourceDelete, default/SDK/external packaging and final legacy responsibility retirement"
+    ],
+    "caption_binding": "Postexecution mapping annotation; original frozen plan, before snapshots, actualraw/JUnit/results remain authoritative. Mapping itself was not a preexecution input."
   }
 }
