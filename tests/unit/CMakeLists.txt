@@ -4529,3 +4529,5 @@ include(xir/cell_loan_lifecycle.cmake)
 include(${CMAKE_CURRENT_SOURCE_DIR}/xir/vm_bind_table.cmake)
 
 include("${CMAKE_CURRENT_LIST_DIR}/xir/product_consumers/source_static_methods_current_vm.cmake")
+
+include("${CMAKE_CURRENT_LIST_DIR}/xir/product_consumers/source_typed_library_receiver_current_vm_candidate.cmake")
