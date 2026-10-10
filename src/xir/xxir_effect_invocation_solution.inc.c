@@ -97,12 +97,16 @@ static XrXirStatus effect_invocation_closed(EffectInvocationOwner *owner) {
             if (!xir_compile_work(owner->work,2)) { status=XR_XIR_BUDGET;break; }
             if (expected[w]!=node->outputs[w]) { status=XR_XIR_BAD_STRUCTURE;break; }
         }
-        for (uint32_t i=0;i<instructions && status==XR_XIR_OK;++i) {
+        for (uint32_t w=0;w<contexts && status==XR_XIR_OK;++w) {
             if (!xir_compile_work(owner->work,2)) { status=XR_XIR_BUDGET;break; }
-            if (!(node->contexts[i/64]&(UINT64_C(1)<<(i%64)))) continue;
-            any=true;
-            if (!effect_invocation_frontier(owner->module->functions[node->body].instructions[i].op))
-                status=XR_XIR_BAD_STRUCTURE;
+            uint64_t remaining=node->contexts[w];
+            while (remaining && status==XR_XIR_OK) {
+                if (!xir_compile_work(owner->work,3)) { status=XR_XIR_BUDGET;break; }
+                uint32_t i=w*64+(uint32_t)__builtin_ctzll(remaining);
+                remaining&=remaining-1;any=true;
+                if (!effect_invocation_frontier(owner->module->functions[node->body].instructions[i].op))
+                    status=XR_XIR_BAD_STRUCTURE;
+            }
         }
         if (status==XR_XIR_OK && any!=deferred) status=XR_XIR_BAD_STRUCTURE;
     }
@@ -141,23 +145,34 @@ static XrXirStatus effect_invocation_terms(EffectInvocationOwner *owner,
         uint32_t items=kind==XR_XIR_ROOT_TERM_CONTEXT_CALL?body->instruction_count:shared?0:body->parameter_count;
         const uint64_t *bits=kind==XR_XIR_ROOT_TERM_PARAMETER?node->parameters:
             kind==XR_XIR_ROOT_TERM_CELL_PARAMETER?node->cells:node->contexts;
-        for (uint32_t i=0;i<items;++i) {
+        if (!xir_compile_work(owner->work,1)) return XR_XIR_BUDGET;
+        uint32_t words=(uint32_t)(((uint64_t)items+63)/64);
+        if (words && !bits) return XR_XIR_BAD_STRUCTURE;
+        for (uint32_t w=0;w<words;++w) {
             if (!xir_compile_work(owner->work,3)) return XR_XIR_BUDGET;
-            if (!(bits[i/64]&(UINT64_C(1)<<(i%64)))) continue;
-            if (kind==XR_XIR_ROOT_TERM_PARAMETER &&
-                (!xr_xir_callable_signature(owner->module->types,body->parameters[i]) ||
-                owner->effects->contracts[function].parameters[i].kind!=XR_XIR_EFFECT_PARAMETER_VARIABLE))
+            uint64_t remaining=bits[w];
+            if (w+1==words && items%64 && (remaining&~((UINT64_C(1)<<(items%64))-1)))
                 return XR_XIR_BAD_STRUCTURE;
-            if (kind==XR_XIR_ROOT_TERM_CELL_PARAMETER && !xr_xir_type_is_cell(owner->module->types,body->parameters[i]))
-                return XR_XIR_BAD_STRUCTURE;
-            if (kind==XR_XIR_ROOT_TERM_CONTEXT_CALL && !effect_invocation_frontier(body->instructions[i].op))
-                return XR_XIR_BAD_STRUCTURE;
-            if (at>=UINT32_MAX) return XR_XIR_BUDGET;
-            if (terms) {
-                if (!xir_compile_work(owner->work,sizeof(*terms))) return XR_XIR_BUDGET;
-                terms[at]=(XrXirRootTerm){kind,i};
+            /* Ascending words and lowest bits preserve canonical term order. */
+            while (remaining) {
+                if (!xir_compile_work(owner->work,4)) return XR_XIR_BUDGET;
+                uint32_t i=w*64+(uint32_t)__builtin_ctzll(remaining);
+                remaining&=remaining-1;
+                if (kind==XR_XIR_ROOT_TERM_PARAMETER &&
+                    (!xr_xir_callable_signature(owner->module->types,body->parameters[i]) ||
+                    owner->effects->contracts[function].parameters[i].kind!=XR_XIR_EFFECT_PARAMETER_VARIABLE))
+                    return XR_XIR_BAD_STRUCTURE;
+                if (kind==XR_XIR_ROOT_TERM_CELL_PARAMETER && !xr_xir_type_is_cell(owner->module->types,body->parameters[i]))
+                    return XR_XIR_BAD_STRUCTURE;
+                if (kind==XR_XIR_ROOT_TERM_CONTEXT_CALL && !effect_invocation_frontier(body->instructions[i].op))
+                    return XR_XIR_BAD_STRUCTURE;
+                if (at>=UINT32_MAX) return XR_XIR_BUDGET;
+                if (terms) {
+                    if (!xir_compile_work(owner->work,sizeof(*terms))) return XR_XIR_BUDGET;
+                    terms[at]=(XrXirRootTerm){kind,i};
+                }
+                ++at;
             }
-            ++at;
         }
     }
     *count=(uint32_t)at;return XR_XIR_OK;

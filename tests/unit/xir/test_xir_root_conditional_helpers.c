@@ -31,6 +31,7 @@
 #include "xir_invocation_runtime_direct_cases.h"
 #include "xir_invocation_captured_prefix_cases.h"
 #include "xir_invocation_function_cell_row_cases.h"
+#include "xir_invocation_sparse_terms_cases.h"
 #include "xir_invocation_reference_result_cases.h"
 
 static XrXirStatus conditional_classify(const XrXirCompileContext *context, uint32_t mode, bool oracle) {
@@ -1377,10 +1378,11 @@ static void conditional_axes(void) {
 }
 
 int main(int argc, char **argv) {
-    if (argc==2 && !strcmp(argv[1],"--compiler")) { conditional_oom();conditional_axes(); }
+    if (argc==2 && !strcmp(argv[1],"--compiler")) { conditional_oom();conditional_axes();conditional_sparse_resources(); }
     else if (argc==2 && !strcmp(argv[1],"--rotation")) conditional_invocation_rotation_run(false);
     else if (argc==2 && !strcmp(argv[1],"--rotation-pipeline")) conditional_invocation_rotation_run(true);
     else if (argc==2 && !strcmp(argv[1],"--new")) conditional_new_literals();
     else { CHECK(argc==1);conditional_literals();conditional_new_literals(); }
+    if (argc==1 || (argc==2 && !strcmp(argv[1],"--new"))) conditional_sparse_literals();
     CHECK(!rp_live && !rp_live_bytes);return 0;
 }
