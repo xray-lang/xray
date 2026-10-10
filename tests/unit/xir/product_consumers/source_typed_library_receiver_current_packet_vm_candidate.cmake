@@ -1,6 +1,7 @@
 # STATIC_NOT_RUN / NOT_REGISTERED. Place beside the dedicated packet driver.
-# Public interface reference: Checked 27/72, Library C interface 2,
-# Value 22 / Call 28 / Program 29. No producer authorization is supplied here.
+# Public Git reference 9031dbc04d5f66ae2bcb356478a0d9450dc9ad4e:
+# Checked 28/73, Library C interface 2,
+# Value 23 / Call 29 / Program 30. No producer authorization is supplied here.
 # Qualification requires independently sealed same-provider source, helpers,
 # libraries, stdlib, tools and generated packet bytes; path checks are not a guard.
 set(SOURCE_TYPED_LIBRARY_CURRENT_FORMAL_ROOT "${CMAKE_SOURCE_DIR}" CACHE PATH

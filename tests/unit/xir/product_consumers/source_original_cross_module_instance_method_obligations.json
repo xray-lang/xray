@@ -722,5 +722,126 @@
       },
       "receipt": "build-consumer-evidence/consumer-session-20261009-r1/typed-library-packet-receiver-candidate-r1/whitespace-only-adjustment.json"
     }
+  },
+  "typed_library_source_free_packet_receiver_9031_interface_candidate": {
+    "status": "STATIC_REVIEWED_NOT_RUN",
+    "retired": false,
+    "worker_parent": "c86e0be22bc3596cdb3a031ca849d5aaf54296c8",
+    "public_Git_reference_only": "9031dbc04d5f66ae2bcb356478a0d9450dc9ad4e",
+    "candidate_paths": [
+      "tests/unit/xir/product_consumers/test_source_typed_library_receiver_current_packet_vm.c",
+      "tests/unit/xir/product_consumers/source_typed_library_receiver_current_packet_vm_candidate.cmake"
+    ],
+    "candidate_raw_sha256": {
+      "tests/unit/xir/product_consumers/test_source_typed_library_receiver_current_packet_vm.c": "db52d82c330621ef6b88633fa2a88aa19d67f3199550ca7ec91403e40f81b2e4",
+      "tests/unit/xir/product_consumers/source_typed_library_receiver_current_packet_vm_candidate.cmake": "c311beee3d31ac9b86c6ad82da85a54a4700ccd642342606bcd3b7ca07d2bafb"
+    },
+    "reference_api": {
+      "Checked_schema": 28,
+      "Checked_contract": 73,
+      "Library_C_interface": 2,
+      "Value_ABI": 23,
+      "Call_ABI": 29,
+      "Program_ABI": 30
+    },
+    "revision": "Only current unexecuted C identity assertions and C/CMake reference comments change. Mechanical inverse restores complete archived7b Git bytes. Every business, owner, source, oracle, dependency, flag and registration byte remains unchanged.",
+    "historical_candidate": {
+      "commit": "7b18ab1491c9ba4b1abe000e6624c7f8d0795911",
+      "facet": "typed_library_source_free_packet_receiver_20261010_candidate",
+      "binding": "Historical facet still describes its original7b bytes. Current paths hold this explicitly scoped revision; old raw files were physically archived before editing. Original sealed full-read files each differed from7b by exactly one final LF.",
+      "raw_archive": [
+        {
+          "path": "tests/unit/xir/product_consumers/test_source_typed_library_receiver_current_packet_vm.c",
+          "bytes": 59174,
+          "sha256": "368baca00182d3281716f39c848b84da16c516fca0f53f625290281b6aaf84ca",
+          "mtime_ns": 1791625936344760200,
+          "archived_raw_path": "build-consumer-evidence/consumer-session-20261009-r1/typed-library-interface-9031-candidate-r1/before-test_source_typed_library_receiver_current_packet_vm.c"
+        },
+        {
+          "path": "tests/unit/xir/product_consumers/source_typed_library_receiver_current_packet_vm_candidate.cmake",
+          "bytes": 5030,
+          "sha256": "e94ebb8af74e593e5c33feb9ec1b887e0e43312dd81efb523124d5e7302d5505",
+          "mtime_ns": 1791625936344760200,
+          "archived_raw_path": "build-consumer-evidence/consumer-session-20261009-r1/typed-library-interface-9031-candidate-r1/before-source_typed_library_receiver_current_packet_vm_candidate.cmake"
+        }
+      ],
+      "all_prior_execution_packets_binaries_receipts_preserved": true
+    },
+    "producer_boundary": {
+      "authorized_general_producer": "25f4016d6f089169757a90ae11ba537002374711",
+      "new_producer_adopted": false,
+      "new_execution_window": "CLOSED",
+      "qualification": "Pure public signatures/identity are reference facts only. Fresh independently qualified same-provider source, helpers, stdlib, tools, compile/link/profile/runtime inputs and generated packet/identity bytes are required before execution. No shared-tree PASS or old packet is inherited."
+    },
+    "original_inputs": {
+      "root_bytes": 163,
+      "root_sha256": "3bb17ffe354b537a024dbf6e4c371df1c80051d72a3db21f20d48fdbeeb5f8bc",
+      "original_root_prefix_bytes": 109,
+      "original_root_prefix_sha256": "5765d2986533f38100664640b32772722b00c0f32db226ec3f8267d19c687b43",
+      "unchanged_export_adapter_bytes": 54,
+      "library_bytes": 185,
+      "library_sha256": "bb41f3d3d610b67ce6445475deb031967b10a0b069ef00b1c923599b3d6a6c87"
+    },
+    "independent_oracle": "Original imported Worker construction and child, fixed owned I64=42 twice per Instance across two live Instances, exactly two genuine distinct WAIT_YIELD tokens per call. Complete original163/185-byte inputs retained. No private Cell/Class payload interpretation or retired storage count is imposed.",
+    "API_and_representation_review": {
+      "actual_public_calls": 71,
+      "all_public_prototypes_equal_between_pure1b_and9031": true,
+      "actual_mutable_worker": "Source CELL_NEW and read CELL_READ; unchanged declaration/identity shape observes genuine constructor, CLASS_GET, ADD_INT and SUSPEND",
+      "Library_C2": "Owned Catalog deep bindings/authority/logical identity, resolver and exact false NO_SUSPEND control retained",
+      "Program": "Full Checked read/verify/Construction-v2/Lowered fullproof identity and owned Effects permissions remain required; actual Lowered lease ownership unchanged",
+      "fresh_execution": "NOT_RUN"
+    },
+    "preserved_receiver_contract": "Packet-only argc3; strict EOF/full32-byte SHA, authentic owned Checked read/fullverify/v2/shape; same-wire independent owner is not independent full encoder; borrowed bytes and copied paths poison/free before reverify/lower; Closed dies before complete Lowered proof match and Program seal. Caller Program drops, private BAD_ARGUMENT keeps NEW and allocation attempts unchanged, canonical0 and owned take/drop, lease0/0/1, callback-safe sticky first failure and compiler/runtime physical0 remain assertions only.",
+    "test_properties": {
+      "TIMEOUT": 120,
+      "PROCESSORS": 1,
+      "RUN_SERIAL": true,
+      "C_STANDARD": 11,
+      "MSVC": "utf8/W4/WX"
+    },
+    "registration": "Dedicated candidate include unchanged; default registration NOT_ADDED. Configure/compile/build/generation/writer/receiver NOT_RUN.",
+    "static_reviews": {
+      "author_API": {
+        "path": "build-consumer-evidence/parallel-consumer-interface-delta-r1/typed-library-interface-9031-candidate-r1/api-review-r1.json",
+        "sha256": "291e9aca7af71077d2404838940d3139bf3f2c9dd7d52de4a753054b82d5b381"
+      },
+      "author_freeze": {
+        "path": "build-consumer-evidence/parallel-consumer-interface-delta-r1/typed-library-interface-9031-candidate-r1/author-freeze-r1.json",
+        "sha256": "ea79d5f8b452fd3abfe4d9ae4c12710d8647e9677dec509b42635d3f9c154a71"
+      },
+      "aot_independent": {
+        "path": "build-consumer-evidence/parallel-aot-main-audit-r1/typed-library-interface-9031-static-review-r1/report.json",
+        "sha256": "3ee6dcaa433a4bee4e59650260535ac4dd033410f4267581ba0340e7a75a5810"
+      },
+      "speed_independent": {
+        "path": "build-consumer-evidence/parallel-progress-speed-analysis-r1/typed-library-interface-9031-static-review-r1.json",
+        "sha256": "0a898771d26f23673be29226761e6f30dbb360ba2cba46b60dfa0ea165db394e"
+      },
+      "main_inverse_and_API": {
+        "path": "build-consumer-evidence/consumer-session-20261009-r1/typed-library-interface-9031-candidate-r1/main-narrow-delta-review.json",
+        "sha256": "2ebe05d45ba1b58bda33b24074f93d1be4673c39d73f08990bd1fda281b5bf16"
+      }
+    },
+    "execution_counts": {
+      "configure": 0,
+      "compile": 0,
+      "build": 0,
+      "Cgen": 0,
+      "writer": 0,
+      "receiver": 0,
+      "tests": 0
+    },
+    "OPEN": [
+      "Actual fresh writer and packet VM receiver qualification at explicit current producer identity",
+      "Original cancel-after-first and cancel-after-second-yield responsibilities",
+      "Stable per-object actual construct/finalize/reclaim identity/count/order",
+      "Initialization failures and owned escape responsibilities not executed by this added facet",
+      "Complete FI and two-profile resource axes/default/SDK",
+      "Actual generated C native and applicable mixed/TSan/macOS",
+      "Physical SourceDelete: public VM native-cache still reaches Source/parser",
+      "Root integration acceptance and full family completion"
+    ],
+    "whole_completion": "OPEN",
+    "caption_binding": "Post-static-review revision annotation; no historical runtime input snapshot or qualification is rewritten."
   }
 }
