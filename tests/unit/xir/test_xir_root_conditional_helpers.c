@@ -1264,6 +1264,76 @@ static XrXirStatus conditional_invocation_generic_bounds(const XrXirCompileConte
     effect_context_owner_free(execution);return status;
 }
 
+/* Storage controls have independent finite operations. They do not add
+ * definitions to any original graph or split an original shared ledger. */
+static void conditional_dense_scratch_literals(void) {
+    RootParameterMark physical=rp_mark();XrXirCompileContext context=rp_owner(rp_caps());
+    uint64_t baseline=rp_stats(&context).live_bytes;
+    EffectDenseScratch scratch={.remaining=&context};EffectDenseArrays arrays={0};
+    size_t attempts=rp_attempts;
+    CHECK(effect_context_dense_scratch_arrays(&context,&scratch,0,0,&arrays)==XR_XIR_OK &&
+        !arrays.declared && !arrays.values && !arrays.before && !arrays.fixed && rp_attempts==attempts);
+    effect_context_dense_scratch_finish(&scratch);
+    CHECK(effect_context_dense_scratch_arrays(&context,&scratch,2,3,&arrays)==XR_XIR_OK);
+    void *memory=scratch.memory;size_t capacity=scratch.capacity;XrCompileResourceStats filled=rp_stats(&context);
+    CHECK(memory && capacity && capacity<=4096 && arrays.declared && arrays.values && arrays.before && arrays.fixed);
+    for (uint32_t v=0;v<5;++v) { arrays.declared[v]=XR_XIR_I64;arrays.values[v]=XR_XIR_STRING;arrays.fixed[v]=255; }
+    for (uint32_t i=0;i<3;++i) arrays.before[i]=XR_XIR_ERROR;
+    EffectDenseArrays blocked={0};attempts=rp_attempts;
+    CHECK(effect_context_dense_scratch_arrays(&context,&scratch,2,3,&blocked)==XR_XIR_BAD_STRUCTURE &&
+        !blocked.declared && !blocked.values && !blocked.before && !blocked.fixed && scratch.claimed && rp_attempts==attempts);
+    effect_context_dense_scratch_finish(&scratch);arrays=(EffectDenseArrays){0};
+    CHECK(effect_context_dense_scratch_arrays(&context,&scratch,1,1,&arrays)==XR_XIR_OK &&
+        scratch.memory==memory && scratch.capacity==capacity && rp_attempts==attempts);
+    XrCompileResourceStats reused=rp_stats(&context);
+    CHECK(reused.allocated_bytes==filled.allocated_bytes && reused.allocation_count==filled.allocation_count && reused.work>filled.work);
+    for (uint32_t v=0;v<2;++v) CHECK(!arrays.declared[v] && !arrays.values[v] && !arrays.fixed[v]);
+    CHECK(!arrays.before[0]);effect_context_dense_scratch_finish(&scratch);
+    arrays=(EffectDenseArrays){.declared=memory};attempts=rp_attempts;
+    CHECK(effect_context_dense_scratch_arrays(&context,&scratch,1,1,&arrays)==XR_XIR_BAD_STRUCTURE &&
+        arrays.declared==memory && !arrays.values && !arrays.before && !arrays.fixed && rp_attempts==attempts);
+    arrays=(EffectDenseArrays){0};XrXirCompileContext foreign=context;
+    CHECK(effect_context_dense_scratch_arrays(&foreign,&scratch,1,1,&arrays)==XR_XIR_BAD_STRUCTURE &&
+        !arrays.declared && !arrays.values && !arrays.before && !arrays.fixed && rp_attempts==attempts);
+    CHECK(effect_context_dense_scratch_arrays(&context,&scratch,2,3,&arrays)==XR_XIR_OK);
+    for (uint32_t v=0;v<5;++v) CHECK(!arrays.declared[v] && !arrays.values[v] && !arrays.fixed[v]);
+    for (uint32_t i=0;i<3;++i) CHECK(!arrays.before[i]);
+    effect_context_dense_scratch_finish(&scratch);arrays=(EffectDenseArrays){0};
+    CHECK(effect_context_dense_scratch_arrays(&context,&scratch,2,0,&arrays)==XR_XIR_OK && !arrays.before);
+    effect_context_dense_scratch_finish(&scratch);arrays=(EffectDenseArrays){0};
+    /* These are storage counts, not an admitted function or a changed graph
+     * limit. Exercise large transient storage and release at the definition. */
+    CHECK(effect_context_dense_scratch_arrays(&context,&scratch,0,400,&arrays)==XR_XIR_OK && scratch.capacity>4096);
+    effect_context_dense_scratch_finish(&scratch);
+    CHECK(!scratch.memory && !scratch.capacity && rp_stats(&context).live_bytes==baseline);
+    arrays=(EffectDenseArrays){0};attempts=rp_attempts;
+    CHECK(effect_context_dense_scratch_arrays(&context,&scratch,UINT32_MAX,1,&arrays)==XR_XIR_BUDGET &&
+        !arrays.declared && !arrays.values && !arrays.before && !arrays.fixed && rp_attempts==attempts);
+    effect_context_dense_scratch_finish(&scratch);
+    CHECK(effect_context_dense_scratch_arrays(&context,&scratch,1,1,&arrays)==XR_XIR_BUDGET && rp_attempts==attempts);
+    effect_context_dense_scratch_free(&scratch);rp_owner_free(&context,baseline);rp_balanced(physical);
+}
+
+static void conditional_dense_scratch_failures(void) {
+    for (uint32_t mode=0;mode<2;++mode) {
+        RootParameterMark physical=rp_mark();XrCompileResourceLimits limits=rp_caps();
+        if (mode) limits.work=1;
+        XrXirCompileContext context=rp_owner(limits);uint64_t baseline=rp_stats(&context).live_bytes;
+        EffectDenseScratch scratch={.remaining=&context};EffectDenseArrays arrays={0};
+        size_t attempts=rp_attempts;rp_injected=false;
+        if (!mode) rp_fail_at=attempts;
+        XrXirStatus expected=mode?XR_XIR_BUDGET:XR_XIR_OUT_OF_MEMORY;
+        CHECK(effect_context_dense_scratch_arrays(&context,&scratch,1,1,&arrays)==expected &&
+            !arrays.declared && !arrays.values && !arrays.before && !arrays.fixed && !scratch.memory);
+        CHECK(mode ? rp_attempts==attempts && !rp_injected : rp_attempts==attempts+1 && rp_injected);
+        attempts=rp_attempts;effect_context_dense_scratch_finish(&scratch);
+        CHECK(effect_context_dense_scratch_arrays(&context,&scratch,1,1,&arrays)==expected &&
+            !arrays.declared && !arrays.values && !arrays.before && !arrays.fixed && rp_attempts==attempts);
+        rp_fail_at=SIZE_MAX;effect_context_dense_scratch_free(&scratch);
+        rp_owner_free(&context,baseline);rp_balanced(physical);
+    }
+}
+
 static void conditional_new_literals(void) {
     /* Independent graphs own independent finite ledgers; each pipeline keeps its ledger. */
     for (uint32_t which=25;which<61;++which) {
@@ -1409,5 +1479,6 @@ int main(int argc, char **argv) {
     else if (argc==2 && !strcmp(argv[1],"--new")) conditional_new_literals();
     else { CHECK(argc==1);conditional_literals();conditional_new_literals(); }
     if (argc==1 || (argc==2 && !strcmp(argv[1],"--new"))) { conditional_sparse_literals();conditional_storage_literals();conditional_copy_literals();conditional_metadata_literals(); }
+    if (argc==1 || (argc==2 && !strcmp(argv[1],"--new"))) { conditional_dense_scratch_literals();conditional_dense_scratch_failures(); }
     CHECK(!rp_live && !rp_live_bytes);return 0;
 }

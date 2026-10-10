@@ -313,17 +313,95 @@ static XrXirStatus effect_context_dense_intern(EffectContextOwner *owner,
     return status;
 }
 
+/* A sequential expansion pass owns this temporary workspace. Only small
+ * capacities survive between definitions; no actual type or proof is reused.
+ * Large workspaces end with their definition and every workspace ends before
+ * solve/stable. Physical vectors and interned descriptors remain in terms. */
+typedef struct EffectDenseScratch {
+    const XrXirCompileContext *remaining;
+    void *memory;
+    size_t capacity;
+    XrXirStatus status;
+    bool claimed;
+} EffectDenseScratch;
+
+typedef struct EffectDenseArrays {
+    XrXirType *declared, *values, *before;
+    uint8_t *fixed;
+} EffectDenseArrays;
+
+static void effect_context_dense_scratch_free(EffectDenseScratch *scratch) {
+    xr_compile_resources_free(scratch->memory);
+    scratch->memory=NULL;scratch->capacity=0;scratch->claimed=false;
+}
+
+static void effect_context_dense_scratch_finish(EffectDenseScratch *scratch) {
+    scratch->claimed=false;
+    /* This is the existing small-slice boundary, not a new admission limit.
+     * Larger authentic definitions still receive their full exact storage. */
+    if (scratch->capacity>4096) effect_context_dense_scratch_free(scratch);
+}
+
+static bool effect_context_dense_scratch_zero(EffectDenseScratch *scratch,
+    void *memory, uint32_t count, size_t size) {
+    if (!count) return true;
+    if (!xir_compile_work(scratch->remaining,(uint64_t)count+1) ||
+        !xir_compile_work(scratch->remaining,(uint64_t)count*size)) {
+        scratch->status=XR_XIR_BUDGET;return false;
+    }
+    memset(memory,0,(size_t)count*size);return true;
+}
+
+static XrXirStatus effect_context_dense_scratch_arrays(const XrXirCompileContext *context,
+    EffectDenseScratch *scratch, uint32_t parameters, uint32_t instructions, EffectDenseArrays *output) {
+    if (!xir_compile_context_valid(context) || !scratch || scratch->remaining!=context ||
+        scratch->claimed || !output || output->declared || output->values || output->before || output->fixed)
+        return XR_XIR_BAD_STRUCTURE;
+    if (scratch->status!=XR_XIR_OK) return scratch->status;
+    scratch->claimed=true;
+    /* Charge checked layout computation. Original per-array reservation and
+     * complete zeroing charges remain below on every use, including reuse. */
+    if (!xir_compile_work(context,8)) { scratch->status=XR_XIR_BUDGET;return scratch->status; }
+    uint64_t total=(uint64_t)parameters+instructions;
+    uint64_t words=2*total+instructions;
+    if (total>UINT32_MAX || words>SIZE_MAX/sizeof(XrXirType)) {
+        scratch->status=XR_XIR_BUDGET;return scratch->status;
+    }
+    size_t typed=(size_t)words*sizeof(XrXirType);
+    if (total>SIZE_MAX-typed) { scratch->status=XR_XIR_BUDGET;return scratch->status; }
+    size_t bytes=typed+(size_t)total;
+    if (bytes>scratch->capacity) {
+        /* No old view is live at this sequential borrow. Avoid overlapping
+         * old/new capacity and preserve the first failure on fresh storage. */
+        xr_compile_resources_free(scratch->memory);scratch->memory=NULL;scratch->capacity=0;
+        scratch->memory=xir_compile_alloc(context,bytes,&scratch->status);
+        if (!scratch->memory) return scratch->status;
+        scratch->capacity=bytes;
+    }
+    if (!total) return XR_XIR_OK;
+    uint32_t count=(uint32_t)total;
+    XrXirType *types=scratch->memory;
+    EffectDenseArrays arrays={types,types+count,instructions?types+2*(size_t)count:NULL,
+        (uint8_t *)(types+(size_t)words)};
+    if (!effect_context_dense_scratch_zero(scratch,arrays.declared,count,sizeof(*arrays.declared)) ||
+        !effect_context_dense_scratch_zero(scratch,arrays.values,count,sizeof(*arrays.values)) ||
+        !effect_context_dense_scratch_zero(scratch,arrays.before,instructions,sizeof(*arrays.before)) ||
+        !effect_context_dense_scratch_zero(scratch,arrays.fixed,count,sizeof(*arrays.fixed))) return scratch->status;
+    *output=arrays;return XR_XIR_OK;
+}
+
 static XrXirStatus effect_context_dense_actuals(EffectContextOwner *owner,
-    const XrXirModule *source, uint32_t index, EffectTerms *storage, uint8_t **fixed_output, bool *changed) {
+    const XrXirModule *source, uint32_t index, EffectDenseScratch *storage, uint8_t **fixed_output, bool *changed) {
     EffectOrdinaryContexts *dense=owner->dense;
     XrXirFunction *function=&dense->functions[index];
     uint64_t count=(uint64_t)function->parameter_count+function->instruction_count;
     if (count>UINT32_MAX) return XR_XIR_BUDGET;
-    XrXirType *declared=effect_terms_alloc(storage,(size_t)count,sizeof(*declared));
-    XrXirType *values=effect_terms_alloc(storage,(size_t)count,sizeof(*values));
-    XrXirType *before=effect_terms_alloc(storage,function->instruction_count,sizeof(*before));
-    uint8_t *fixed=effect_terms_alloc(storage,(size_t)count,sizeof(*fixed));
-    if ((count && (!declared || !values || !fixed)) || (function->instruction_count && !before)) return storage->status;
+    EffectDenseArrays arrays={0};
+    XrXirStatus prepared=effect_context_dense_scratch_arrays(dense->terms.remaining,storage,
+        function->parameter_count,function->instruction_count,&arrays);
+    if (prepared!=XR_XIR_OK) return prepared;
+    XrXirType *declared=arrays.declared,*values=arrays.values,*before=arrays.before;
+    uint8_t *fixed=arrays.fixed;
     for (uint32_t v=0;v<count;++v) {
         if (!xir_compile_work(dense->terms.remaining,3)) return XR_XIR_BUDGET;
         declared[v]=values[v]=xr_xir_operand_type(function,v);
@@ -357,16 +435,15 @@ static XrXirStatus effect_context_dense_actuals(EffectContextOwner *owner,
 }
 
 static XrXirStatus effect_context_dense_expand(EffectContextOwner *owner,
-    const XrXirModule *source, uint32_t index, bool *changed) {
+    const XrXirModule *source, uint32_t index, EffectDenseScratch *storage, bool *changed) {
     EffectOrdinaryContexts *dense=owner->dense;
     EffectOrdinaryNode identity=dense->nodes[index];
     const XrXirGeneric *generic=source->generics ? &source->generics[identity.declaration] : NULL;
     if (index<dense->base_count && generic && generic->parameter_count) return XR_XIR_OK;
-    /* These arrays describe only this expansion. Interned types and selected
-     * physical vectors continue to belong to the complete execution owner. */
-    EffectTerms storage={.remaining=dense->terms.remaining};
+    /* Only workspace capacity is reused by this sequential expansion pass.
+     * Every actual and fixed bit is rebuilt before this definition's edges. */
     uint8_t *fixed=NULL;
-    XrXirStatus status=effect_context_dense_actuals(owner,source,index,&storage,&fixed,changed);
+    XrXirStatus status=effect_context_dense_actuals(owner,source,index,storage,&fixed,changed);
     uint32_t count=source->functions[identity.declaration].instruction_count;
     for (uint32_t i=0;i<count && status==XR_XIR_OK;++i) {
         if (!xir_compile_work(dense->terms.remaining,1)) { status=XR_XIR_BUDGET;break; }
@@ -396,7 +473,7 @@ static XrXirStatus effect_context_dense_expand(EffectContextOwner *owner,
         }
         op->type_arguments[0]=op->type_arguments[1]=0;
     }
-    effect_terms_free(&storage);return status;
+    effect_context_dense_scratch_finish(storage);return status;
 }
 
 static XrXirStatus effect_context_dense_solve(EffectContextOwner *owner,
@@ -468,8 +545,10 @@ static XrXirStatus effect_context_owner_build(const XrXirCompileContext *context
     while (status==XR_XIR_OK && changed) {
         changed=false;uint32_t previous=dense->count,types=dense->terms.types.count;
         dense->terms.remaining=context;
+        EffectDenseScratch scratch={.remaining=context};
         for (uint32_t f=0;f<dense->count && status==XR_XIR_OK;++f)
-            status=effect_context_dense_expand(owner,source,f,&changed);
+            status=effect_context_dense_expand(owner,source,f,&scratch,&changed);
+        effect_context_dense_scratch_free(&scratch);
         if (status==XR_XIR_OK) {
             if (!solved || changed || dense->count!=previous || dense->terms.types.count!=types)
                 status=effect_context_dense_solve(owner,context,source);
