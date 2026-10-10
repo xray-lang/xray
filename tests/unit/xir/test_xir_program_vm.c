@@ -311,13 +311,14 @@ int main(void) {
     CHECK(xr_xir_compile_vm_program_take(&struct_ops, &struct_program) == XR_XIR_OK && !struct_ops);
     struct_ops_cases(struct_program);
     for (unsigned mode = 0; mode < 3; ++mode) for (unsigned branch = 0; branch < 2; ++branch) {
-        XrXirArtifact *transport = nominal_transport_fixture(suite_context);
-        XrXirCallEntry entries[4]; XrXirVmBinding bindings[4];
-        for (uint32_t i = 0; i < 4; ++i)
-            CHECK(xr_xir_compile_vm_bind(transport, i, &bindings[i], &entries[i]) == XR_XIR_OK);
-        XrXirValue escaped = nominal_transport_cases(entries,xr_xir_compile_artifact_module(transport)->types,mode,branch != 0);
-        xr_xir_compile_artifact_free(transport);transport=NULL;
+        XrXirArtifact *transport = nominal_transport_fixture(suite_context); XrXirProgram *program = NULL;
+        CHECK(xr_xir_compile_vm_program_take(&transport,&program) == XR_XIR_OK && !transport);
+        XrXirInstance *instance = nominal_transport_instance(program);
+        const XrXirTypes *types = program->types;
+        xr_xir_compile_program_drop(program); program = NULL;
+        XrXirValue escaped = nominal_transport_cases(instance,types,mode,branch != 0);
         nominal_transport_escaped(&escaped);
+        CHECK(!runtime_live && !runtime_bytes);
     }
     XrXirArtifact *combined_artifact = nominal_generic_lowered(suite_context);
     XrXirProgram *combined = NULL;

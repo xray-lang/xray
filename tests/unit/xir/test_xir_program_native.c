@@ -105,18 +105,22 @@ int main(void) {
     struct_ops_cases(struct_program);
     XrXirProgram *transport = NULL;
     CHECK(xr_xir_compile_program_seal(suite_context, &nominal_transport_program, &transport) == XR_XIR_OK);
-    xr_xir_compile_program_drop(transport);
     XrXirNominalIdentity hidden = nominal_transport_program.types->nominals->identities[0];
     hidden.module = (XrXirLiteral) {"missing",7};
     XrXirNominalTable hidden_table = {NULL,1,&hidden};
     XrXirTypes hidden_types = *nominal_transport_program.types; hidden_types.nominals = &hidden_table;
-    XrXirProgramSpec invalid = nominal_transport_program; invalid.types = &hidden_types; transport = NULL;
-    CHECK(xr_xir_compile_program_seal(suite_context, &invalid, &transport) == XR_XIR_BAD_STRUCTURE && !transport);
+    XrXirProgramSpec invalid = nominal_transport_program; invalid.types = &hidden_types; XrXirProgram *rejected = NULL;
+    CHECK(xr_xir_compile_program_seal(suite_context, &invalid, &rejected) == XR_XIR_BAD_STRUCTURE && !rejected);
+    XrXirInstance *transport_instances[6];
+    for (unsigned i = 0; i < 6; ++i) transport_instances[i] = nominal_transport_instance(transport);
+    const XrXirTypes *transport_types = transport->types;
+    xr_xir_compile_program_drop(transport); transport = NULL;
     for (unsigned mode = 0; mode < 3; ++mode) for (unsigned branch = 0; branch < 2; ++branch) {
-        XrXirValue escaped = nominal_transport_cases(nominal_transport_program.entries,
-            nominal_transport_program.types,mode,branch != 0);
+        XrXirValue escaped = nominal_transport_cases(transport_instances[mode * 2 + branch],
+            transport_types,mode,branch != 0);
         nominal_transport_escaped(&escaped);
     }
+    CHECK(!runtime_live && !runtime_bytes);
     XrXirProgram *combined = NULL;
     CHECK(xr_xir_compile_program_seal(suite_context, &nominal_generic_program, &combined) == XR_XIR_OK);
     nominal_generic_cases(combined);
