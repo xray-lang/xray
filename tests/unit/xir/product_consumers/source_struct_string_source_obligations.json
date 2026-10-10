@@ -64,5 +64,118 @@
     "full_safety": "NOT_RUN",
     "Main": "NOT_RUN",
     "retired": 0
+  },
+  "source_free_struct_string_packet_vm_20261010_candidate": {
+    "status": "STATIC_NOT_RUN_CANDIDATE_NOT_REGISTERED",
+    "public_git_reference_only": "6828c1cb3bd33be9d97aa7050a95997cfb690d47",
+    "identity_reference": {
+      "Checked_schema": 28,
+      "Checked_contract": 73,
+      "Value_ABI": 23,
+      "Call_ABI": 29,
+      "Program_ABI": 30
+    },
+    "new_producer_adopted": false,
+    "execution_window": "CLOSED",
+    "consumer_materials": [
+      {
+        "path": "tests/unit/xir/product_consumers/test_source_struct_string_current_packet_vm.c",
+        "bytes": 39617,
+        "sha256": "58a6bd29a8e560f11048b69ebc276971bec726e09d4ba6f881fa4359c731ac24"
+      },
+      {
+        "path": "tests/unit/xir/product_consumers/source_struct_string_current_packet_vm_candidate.cmake",
+        "bytes": 5824,
+        "sha256": "7ed9bdcd937683dcd9830743cf177143ea4a6d0e855ec0347464c9001df9564d"
+      },
+      {
+        "path": "tests/unit/xir/product_consumers/struct_string_current_packet_shape.h",
+        "bytes": 18173,
+        "sha256": "7db6e3bc5243c6d861981687f5de3c548756608fe62a4fb496c862b7e37fb10f"
+      }
+    ],
+    "complete_original_fixture": {
+      "path": "tests/unit/xir/product_consumers/fixtures/struct_string/root.xr",
+      "bytes": 975,
+      "prefix_bytes": 921,
+      "sha256": "0010dd4a64c28880f52bb252d20c0ccbc6bda7fc6d98d203a9b9e273e4277a3a",
+      "prefix_sha256": "95e9fecbbd07c03c8a1199c3ec7d8ead25dd832f7b8618b9fb869a8fd298b7e7",
+      "adapter": "export fn consumerAnswer() -> i64 { return answer() }\n"
+    },
+    "fixed_independent_i64": 42,
+    "independent_semantics": "Report first retains ready/end/40; second is an independent value copy with go/end/42. Envelope wrapped retains start/first/stop; rewritten independently changes suffix to done. Return the actual second.code after all original conditions.",
+    "consumer_owned_shape": "A new dedicated header is part of this scoped delivery and explicitly listed in both target sources and writer DEPENDS; it is not a provider header or an implicit cached input. The existing struct_string_source_shape.h is unchanged.",
+    "prepared_stage_observations": [
+      "Verify every SOURCE/CLOSED/LOWERED artifact publicly before observations; resolve same-stage nominal names/arity/export visibility from declarations or projected identities, and field types from actual constructed nominal nodes.",
+      "Retain both private nongeneric Report/Envelope identities, six ordered field names/types, two exact constructors, all original literal operands and actual Envelope.report first value.",
+      "Trace four distinct actual binding Cells: first and wrapped from exact STRUCT_NEW; second from CELL_READ(first), rewritten from CELL_READ(wrapped). Do not substitute Cell counts for old OWNER_COPY census.",
+      "Trace three typed FIELD_PLACE/PLACE_WRITE paths to actual roots: second.label=go, second.code=42, rewritten.suffix=done. CELL_PROJECT is not invented for an original program with no ref.",
+      "Match twelve unique typed String EQUAL root/field/literal operands and three unique I64==40 reads; retain a success RETURN of actual second.code and false RETURN of I64 zero. This is a bounded original-program observer, not a source equivalence or full-CFG proof.",
+      "Writer builds authentic SourceProduct PROGRAM SOURCE/CLOSED packets, full public admission and Construction-v2 verification. SourceProduct/session/own source leaf/request/authority/paths die before detached SOURCE revalidation, specialization and lowering.",
+      "Writer compares complete detached packet bytes and full Lowered proof to authentic CLOSED bytes and all32 SHA identity bytes; publishes only CLOSED packet and complete identity without Program/Instance calls.",
+      "Packet-only receiver argc3 has no SourceProduct/session/catalog/Source path request; checks full packet size and EOF and exact32 identity/EOF/SHA, reads an owned CLOSED artifact, creates a separate owned same-wire rewrite, poisons/frees input bytes and paths, then publicly reverifies.",
+      "Free CLOSED owner before full Lowered verification/v2/shape; check complete proof bytes and all32 input identity bytes before freeing rewrite and sealing actual VM bindings.",
+      "Two distinct live Instances retain the code lease after caller Program drop. Private answer rejects without runtime allocation or state change; canonical entry expects0; each exported consumerAnswer expects42 twice with actual private-answer VM resumes and no yielded outcome.",
+      "Take/drop owned results; observe code lease0 after caller Program drop,0 after first Instance free,1 after final free. Compiler/runtime physical tables/counts/bytes must reach zero on actual future execution.",
+      "Sticky first failures survive consumer cleanup; callbacks return faults through product rather than jumping across product frames. Failure cleanup flags are separate from physical release observations."
+    ],
+    "cmake_candidate": {
+      "default_registration": false,
+      "writer_macro": "XR_SOURCE_STRUCT_STRING_PACKET_WRITER",
+      "writer_argc": 6,
+      "receiver_argc": 3,
+      "material_custom_commands": 1,
+      "normal_only": true,
+      "TIMEOUT": 120,
+      "PROCESSORS": 1,
+      "RUN_SERIAL": true,
+      "C_standard": 11,
+      "MSVC_flags": [
+        "/utf-8",
+        "/W4",
+        "/WX"
+      ],
+      "same_qualified_provider_required": [
+        "embedded compile/runtime helpers",
+        "product source and targets",
+        "stdlib",
+        "compiler and link profile",
+        "consumer driver/shape/full fixture",
+        "fresh packet and identity outputs"
+      ],
+      "path_checks_are_not_immutable_material_guard": true
+    },
+    "qualification": "No configure, syntax compile, build, link, Cgen, writer, receiver or test execution. Old producer PASS does not qualify this candidate; observed newer Root HEAD does not authorize its adoption.",
+    "runtime_expected_counts_only": {
+      "Instances": 2,
+      "canonical_entry_I64_zero": 2,
+      "exported_owned_I64_42": 4,
+      "private_answer_no_allocation_rejections": 2,
+      "code_lease_release_calls": 1
+    },
+    "execution_counts": {
+      "configure": 0,
+      "syntax_compile": 0,
+      "build": 0,
+      "link": 0,
+      "Cgen": 0,
+      "writer": 0,
+      "receiver": 0,
+      "tests": 0
+    },
+    "same_wire_limit": "Independent ownership and same-wire equality do not prove an independent canonical encoder.",
+    "still_OPEN": [
+      "fresh same-provider producer/material qualification and actual all-stage Cell/packet shape",
+      "all normal/native/mixed execution and real generated C",
+      "original whole-Program OWNER_COPY>0 and AGGREGATE_UPDATE==0 representation assertions",
+      "full BackendIR binding verification, two emitted C byte-identical outputs, original int-main/file/AOT execution",
+      "full compiler/runtime FI and all resource axes",
+      "initialization failure stickiness, cancellation, escaped owned result responsibilities",
+      "stable per-object construct/finalize/reclaim evidence",
+      "physical SourceDelete, default registration/build, standalone SDK, Main integration",
+      "whole legacy obligation retirement"
+    ],
+    "whole_legacy_status": "OPEN",
+    "retired": 0
   }
 }
