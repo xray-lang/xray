@@ -144,5 +144,185 @@
     "stable_object_lifecycle": "NOT_RUN",
     "Main": "NOT_RUN",
     "retired": 0
+  },
+  "source_free_actual_native_mixed_receiver_9031_interface_candidate": {
+    "status": "IMPLEMENTED_STATIC_REVIEWED_NOT_RUN",
+    "retired": false,
+    "worker_parent": "69d17ec975d680b826562a162c88bc45dc3b3644",
+    "public_Git_reference_only": "9031dbc04d5f66ae2bcb356478a0d9450dc9ad4e",
+    "reference_api": {
+      "Checked_schema": 28,
+      "Checked_contract": 73,
+      "Value_ABI": 23,
+      "Call_ABI": 29,
+      "Program_ABI": 30
+    },
+    "candidate_paths": [
+      "tests/unit/xir/product_consumers/test_source_static_methods_current_native_mixed.c",
+      "tests/unit/xir/product_consumers/native_mixed_support.h",
+      "tests/unit/xir/product_consumers/source_static_methods_current_native_mixed_candidate.cmake"
+    ],
+    "candidate_raw_sha256": {
+      "tests/unit/xir/product_consumers/test_source_static_methods_current_native_mixed.c": "503739246989e59703ea2df4f83d34530c468a22133ed646c52f27b29e7cde3a",
+      "tests/unit/xir/product_consumers/native_mixed_support.h": "04d5f9a7513a5f640452828c4354c0d1bd5fb7b8d1b2bcab880a85176f682963",
+      "tests/unit/xir/product_consumers/source_static_methods_current_native_mixed_candidate.cmake": "b4b0e27699b44edf85392b55c236a2a3b5171f6b35627d3ed5c1b0de656e613c"
+    },
+    "historical_candidate": {
+      "commit": "02e436338ef4a5af50bcf2947c92757b56da4726",
+      "facet": "source_free_actual_native_mixed_receiver_20261010_candidate",
+      "binding": "Prior facet retains old02e facts and raw hashes. Current3paths hold this explicit successor; full old raw files were archived before editing. No prior packets/C/binaries/receipts are rebound.",
+      "raw_archive": [
+        {
+          "path": "tests/unit/xir/product_consumers/test_source_static_methods_current_native_mixed.c",
+          "bytes": 18636,
+          "sha256": "7d81336e6c9583c2a8bae350ad50d6052683ff7eb96c1f574a78ce0f27600d66",
+          "mtime_ns": 1791621848370635300,
+          "archived_raw_path": "build-consumer-evidence/consumer-session-20261009-r1/native-mixed-interface-9031-candidate-r1/before-test_source_static_methods_current_native_mixed.c"
+        },
+        {
+          "path": "tests/unit/xir/product_consumers/native_mixed_support.h",
+          "bytes": 12553,
+          "sha256": "3111edbb3eef5294a3f43a47c1053aa7d37e6651ca5d35dafdd4e7b19d4bf4e4",
+          "mtime_ns": 1791621848370635300,
+          "archived_raw_path": "build-consumer-evidence/consumer-session-20261009-r1/native-mixed-interface-9031-candidate-r1/before-native_mixed_support.h"
+        },
+        {
+          "path": "tests/unit/xir/product_consumers/source_static_methods_current_native_mixed_candidate.cmake",
+          "bytes": 5196,
+          "sha256": "c0adf78c24cc347a9d121eedccf30c9f1db09a3d7465d997ef4e4e7004b0fdf8",
+          "mtime_ns": 1791621848371635100,
+          "archived_raw_path": "build-consumer-evidence/consumer-session-20261009-r1/native-mixed-interface-9031-candidate-r1/before-source_static_methods_current_native_mixed_candidate.cmake"
+        }
+      ]
+    },
+    "producer_boundary": {
+      "authorized_general_producer": "25f4016d6f089169757a90ae11ba537002374711",
+      "new_producer_adopted": false,
+      "new_execution_window": "CLOSED",
+      "same_provider_closure": "Actual qualified source, helpers, stdlib, generated headers, libraries, compiler/CRT/assert/sanitizer/profile/link/runtime and regenerated packet/C/identity/binding must be bound through existing Root material guard. Publictuple/API and path existence provide no execution qualification."
+    },
+    "original_inputs": {
+      "fixture": "tests/unit/xir/product_consumers/fixtures/static_methods/root.xr",
+      "bytes": 220,
+      "original_prefix_bytes": 166,
+      "adapter_bytes": 54,
+      "fixture_sha256": "f7192f6c9d1a6a6403fe142383c9302520840abaa2ccdaf3e6556959796c5fcd",
+      "prefix_sha256": "77396ef78a3b53c970c1940b9417801391ade4b4ca12dd5c6ae2688eea982cf5",
+      "static_methods": {
+        "First.value": 19,
+        "Second.value": 23
+      },
+      "independent_fixed_I64": 42,
+      "normal_modes": [
+        1,
+        2,
+        3
+      ],
+      "live_instances_per_mode": 2,
+      "fixed42_calls_per_instance": 2,
+      "canonical0_calls_per_mode": 2,
+      "private_answer": "BAD_ARGUMENT; NEW state; runtime allocation attempts unchanged",
+      "native_route_modes": [
+        "all native",
+        "First native + Second VM",
+        "First VM + Second native"
+      ],
+      "route_oracle": "each fixed42 call selected method delegate increments >0 and opposite delegate does not increment; exact original view and environment preserved"
+    },
+    "current_stage_shape": "Stage independently resolves First/Second private nongeneric zero-field class identities in root module; public receiver-free value19/value23, actual twoCALL/ADD_INT/RETURN in original privateanswer. Runtime resolves current Lowered roles; no Source/Closed/Lowered numericordinal equality. Full original fixture unchanged.",
+    "writer": "CREATE_NEW canonical private sourceleaf preserves full220/prefix166/adapter54 byte digests; authentic SourceProduct/publicadmit/SOURCE-owned read and Closed copies; SourceProduct/session/request/paths/privateleaf die before detached fullverify/v2/specialize/lower. Actual fullClosedbytes and all32wholeSHA match public Lowered proof after Closed death; same Lowered supplies true public emit_c. Writer does no Instance run.",
+    "outputs": [
+      "actual_payload.c",
+      "actual_proof.bin",
+      "actual_identity.bin",
+      "payload_binding.c"
+    ],
+    "C_binding": "actual_payload.c plus writer-SHA payload_binding.c are real host sources. Packet runner reads complete files/EOF, authentic full Lowered proof bytes and all32identity match compiledProgramSpec, whole actualC digest matches independently hostcompiled writerbinding. Actual compile/run NOT_RUN.",
+    "receiver": "Packet-only argc5 mode/packet/identity/actualC. Fullpublicread/verify/Construction-v2/shape; separateowned samewire rewrite is consistency, not independent fullencoder; borrowed inputs poison/free before reverify/v2/lower; Closed owner dead; complete Lowered proof equality then rewrite dies before seal. PublicProgramfullproof and current permissions admission retained.",
+    "normal_runtime_assertions": [
+      "3actual modes:allnative;Firstnative+SecondVM;FirstVM+Secondnative",
+      "Each mode2distinct liveInstances; callerProgramdrops beforecalls; canonical0 once and fixedowned42 twice each",
+      "Every42actualselectedmethoddelegate counter rises, unselectedcounter unchanged; actual admitted view/environment preserved through transparent observers",
+      "Privateanswer BAD_ARGUMENT, NEW state, allocation attempts unchanged; noyield accepted; ownedtake/drop",
+      "ActualLowered/table/bindings/delegateCodeLease0 aftercallerProgramdrop,0 afterfirstInstancefree,1 afterfinalInstancefree",
+      "Compiler/runtime/table actualphysical0 asserted; not stableperobjectidentity proof"
+    ],
+    "failure_cleanup": "Static partialowner state survives caller-boundary jump. Sticky originalstatus/observation retained; callbacks naturally returnpublicFAULT or knownleasecleanup without longjmp through product. Commoncleanup closesFILE and frees all known packets/artifacts/values/Instances/pendinglease/SourceProduct/session/ownSourceleaf. Fourwbxleaves are exclusive; on failedpublication only successfully created leaves are removed. UnexpectedBUSY/embeddedfatalobserver is not fullFI/cancelunwind proof.",
+    "fresh_directory_requirement": "Generate four material leaves once in a fresh dedicated build directory/cohort. Do not overwrite old sealed outputs when source/provider/flags change.",
+    "type_and_API_review": {
+      "actual_public_calls": 54,
+      "all_pure9031_declarations_match": true,
+      "true_fix": "Explicit constuint8_t* byte-view cast for char* emittedC SHA input",
+      "withdrawn_inference": "PublicValue.payload is int64_t already; explicit int64cast restores old oracle spelling, not a signedness bug fix",
+      "r2_delta": "Two casts only; inverse fullbytes equal frozenr1; CMakeexactcopy; r1 originalfrozen snapshots preserved"
+    },
+    "registration": "Dedicated candidate include only; not defaultregistered. No FI/default/SDK gate changed.",
+    "test_properties": {
+      "normal_modes": [
+        1,
+        2,
+        3
+      ],
+      "TIMEOUT": 120,
+      "PROCESSORS": 1,
+      "RUN_SERIAL": false,
+      "ordinary_process_parallelism": "Same old02e normal eligibility; original resourceaxes remain RUN_SERIAL",
+      "C_STANDARD": 11,
+      "MSVC": "utf8/W4/WX",
+      "other": "Wall/Wextra/Werror"
+    },
+    "static_reviews": {
+      "author_r2": {
+        "path": "build-consumer-evidence/parallel-aot-main-audit-r1/native-mixed-9031-preview-r2/manifest.AUTHOR_FROZEN_NOT_RUN.json",
+        "sha256": "42d6ce50b0ad22f599746a5dbceef98c1035514b9d20d5025bac4c6f42765322"
+      },
+      "interface_full_r1": {
+        "path": "build-consumer-evidence/parallel-consumer-interface-delta-r1/native-mixed-9031-preview-static-review-r1.json",
+        "sha256": "35d317a5666ac59416879a9d7cd4808aaeaded81cc609e544696052206d66731"
+      },
+      "interface_r2": {
+        "path": "build-consumer-evidence/parallel-consumer-interface-delta-r1/native-mixed-9031-preview-static-review-r2.json",
+        "sha256": "6ce8b093172dc667b3313b7131027df75c06ebf1253af4f70c6f1e3e13ff57c8"
+      },
+      "speed_r2": {
+        "path": "build-consumer-evidence/parallel-progress-speed-analysis-r1/native-mixed-9031-preview-static-review-r2.json",
+        "sha256": "a6ce605e158cc4941c09ddf2d2da433b7fc9d86960420227b2c9372d191f85f0"
+      },
+      "main_full_r1": {
+        "path": "build-consumer-evidence/consumer-session-20261009-r1/native-mixed-interface-9031-candidate-r1/main-full-r1-preview-review.json",
+        "sha256": "c81fd3461f756485712e3a3b437f68720a46ae223b79026595ff8e328b6eacde"
+      },
+      "main_r2_inverse": {
+        "path": "build-consumer-evidence/consumer-session-20261009-r1/native-mixed-interface-9031-candidate-r1/main-r2-narrow-delta-review.json",
+        "sha256": "e1b5dd05916bddd41f6f17133ea78de9b7ad978ec1471ecccf0ecca93c6bcffc"
+      },
+      "speed_r2_manifest_mtime_erratum": {
+        "path": "build-consumer-evidence/parallel-progress-speed-analysis-r1/native-mixed-9031-preview-static-review-r2-mtime-erratum.json",
+        "sha256": "a3b97682682b14a0ca1778927798039a355d11469a0a95a1c89b75991bb181c5"
+      }
+    },
+    "execution_counts": {
+      "configure": 0,
+      "compile": 0,
+      "build": 0,
+      "CGen": 0,
+      "runtime": 0,
+      "native": 0,
+      "mixed": 0,
+      "full_FI": 0,
+      "Root_write": 0
+    },
+    "OPEN": [
+      "new same-provider immutable producer/grant and shared material binding",
+      "MSVC and ASan/UBSan compilation and normal execution of this revision",
+      "full original Backend/AOT and double-C deterministic emission",
+      "all dynamic FI/census/axes and cancellation/escape",
+      "stable per-object construct/finalize/reclaim",
+      "physical SourceDelete and source-linked binary separation",
+      "all original broader responsibility denominators/retirement; retired0",
+      "Initialization failure sticky semantics/owned result escape/default/SDK/Main and original fullfamily qualification"
+    ],
+    "completion": "OPEN",
+    "caption_binding": "Post-static-review revision annotation. No old runtime inputs or prior proof outcomes changed; currentcandidate awaits fresh qualification."
   }
 }

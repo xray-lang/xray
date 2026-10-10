@@ -1,227 +1,248 @@
 /*
  * xray - Lightweight typed scripting with native concurrency
  * https://www.xray-lang.org
- *
  * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
  * Licensed under the MIT License
  *
- * native_mixed_support.h - Actual C payload and normal dispatch observations
+ * native_mixed_support.h - Authentic native material and transparent dispatch
  *
  * KEY CONCEPT:
- *   One authentic Lowered proof binds the generated C and VM callbacks. The
- *   observer preserves each active view and records actual provider execution.
+ *   Current artifact identities select roles; one code lease pins actual native
+ *   and VM delegates, and observers return through the product callback stack.
  */
 #ifndef SOURCE_STATIC_CURRENT_NATIVE_MIXED_SUPPORT_H
 #define SOURCE_STATIC_CURRENT_NATIVE_MIXED_SUPPORT_H
-#include "base/xsha256.h"
-#if !defined(XR_SOURCE_STATIC_NATIVE_RUNNER)
-#include "xir/xxir_emit_c.h"
-
-static void native_payload_digest(const XrXirCSource *source, char digest[65]) {
-    uint8_t bytes[32];
-    xr_sha256((const uint8_t *)source->text, source->length, bytes);
-    for (unsigned i = 0; i < 32; ++i)
-        CHECK(snprintf(digest + i * 2, 3, "%02x", bytes[i]) == 2);
+static bool native_name(XrXirLiteral name, const char *text) {
+    size_t length = strlen(text);
+    return name.bytes && name.length == length && !memcmp(name.bytes, text, length);
 }
-
-static void native_write_file(const char *path, const void *bytes, size_t length) {
-    FILE *file = fopen(path, "wb");
-    CHECK(file && fwrite(bytes, 1, length, file) == length && !fclose(file));
+static void native_nominal_roles(const XrXirModule *module, uint32_t owners[2]) {
+    const XrXirNominalTable *table = module->types->nominals;
+    CHECK(table && table->count == 2 && (table->declarations || table->identities));
+    owners[0] = owners[1] = UINT32_MAX;
+    for (uint32_t n = 0; n < table->count; ++n) {
+        XrXirLiteral name, scope; uint32_t kind, arity, fields, exported;
+        if (table->declarations) {
+            const XrXirNominalDeclaration *d = &table->declarations[n];
+            name = d->name; scope = d->module; kind = d->kind;
+            arity = d->parameter_count; fields = d->field_count; exported = d->exported;
+        } else {
+            const XrXirNominalIdentity *d = &table->identities[n];
+            name = d->name; scope = d->module; kind = d->kind;
+            arity = d->arity; fields = d->field_count; exported = d->exported;
+        }
+        const XrXirSourceModule *root = &module->declarations->modules[module->declarations->root_module];
+        CHECK(kind == XR_XIR_NOMINAL_CLASS && !arity && !fields && !exported);
+        CHECK(scope.bytes && scope.length == root->name_length && !memcmp(scope.bytes, root->name, scope.length));
+        unsigned slot = native_name(name, "First") ? 0u : 1u;
+        CHECK((slot == 0 || native_name(name, "Second")) && owners[slot] == UINT32_MAX);
+        owners[slot] = n;
+    }
+    CHECK(owners[0] != UINT32_MAX && owners[1] != UINT32_MAX && owners[0] != owners[1]);
 }
-static void emit_native_material(const XrXirArtifact *lowered, const char *c_path,
-    const char *proof_path, const char *identity_path, const char *binding_path) {
-    XrXirCSource source = {0};
-    CHECK(xr_xir_compile_emit_c(lowered, "source_static_current_native", 16777216, &source) == XR_XIR_OK);
-    CHECK(source.text && source.length);
-    XrXirProgramProof proof = xr_xir_compile_program_proof(lowered);
-    CHECK(proof.bytes && proof.length && proof.identity && proof.layouts);
-    char digest[65]; native_payload_digest(&source, digest);
-    /* The actual emitted C is unchanged. Metadata lives in a separate C unit. */
-    native_write_file(c_path, source.text, source.length);
-    native_write_file(proof_path, proof.bytes, proof.length);
-    native_write_file(identity_path, proof.identity, 32);
-    char binding[256];
-    int length = snprintf(binding, sizeof(binding),
-        "const char source_static_current_native_c_sha256[65] = \"%s\";\n", digest);
+static void native_method_body(const XrXirFunction *function, int64_t expected) {
+    CHECK(!function->parameter_count && function->result == XR_XIR_I64);
+    unsigned constants = 0, returns = 0; uint32_t value = UINT32_MAX;
+    for (uint32_t i = 0; i < function->instruction_count; ++i) {
+        const XrXirInstruction *op = &function->instructions[i];
+        if (op->op == XR_XIR_CONST_INT) {
+            ++constants; CHECK(op->type == XR_XIR_I64 && op->immediate == (uint64_t)expected); value = i;
+        }
+        if (op->op == XR_XIR_RETURN) {
+            ++returns; CHECK(op->type == XR_XIR_UNIT && value != UINT32_MAX && op->args[0] == value);
+        }
+    }
+    CHECK(constants == 1 && returns == 1);
+}
+static void native_answer_body(const XrXirFunction *function, const ReceiverRoles *roles) {
+    CHECK(!function->parameter_count && function->result == XR_XIR_I64);
+    unsigned calls = 0, adds = 0, returns = 0; uint32_t values[2] = {UINT32_MAX, UINT32_MAX}, sum = UINT32_MAX;
+    for (uint32_t i = 0; i < function->instruction_count; ++i) {
+        const XrXirInstruction *op = &function->instructions[i];
+        if (op->op == XR_XIR_CALL) {
+            CHECK(calls < 2 && op->type == XR_XIR_I64 && !op->args[1] && op->immediate == roles->value_methods[calls]);
+            values[calls++] = i;
+        }
+        if (op->op == XR_XIR_ADD_INT) {
+            ++adds; CHECK(calls == 2 && op->type == XR_XIR_I64 && op->args[0] == values[0] && op->args[1] == values[1]); sum = i;
+        }
+        if (op->op == XR_XIR_RETURN) { ++returns; CHECK(op->type == XR_XIR_UNIT && sum != UINT32_MAX && op->args[0] == sum); }
+    }
+    CHECK(calls == 2 && adds == 1 && returns == 1);
+}
+/* Facts are observations. The public artifact verifier and seal admit them. */
+static ReceiverRoles native_current_roles(const XrXirModule *module) {
+    CHECK(module && module->linkage_kind == XR_XIR_PROGRAM && module->types && module->declarations &&
+        module->declarations->functions && module->declarations->modules && module->functions);
+    const XrXirDeclarations *d = module->declarations;
+    CHECK(d->root_module < d->module_count);
+    uint32_t owners[2]; native_nominal_roles(module, owners);
+    ReceiverRoles roles = {d->entry_function, UINT32_MAX, UINT32_MAX, {UINT32_MAX, UINT32_MAX}};
+    CHECK(roles.entry < module->function_count && !module->functions[roles.entry].parameter_count &&
+        module->functions[roles.entry].result == XR_XIR_I64);
+    for (uint32_t f = 0; f < module->function_count; ++f) {
+        const XrXirFunction *fn = &module->functions[f]; const XrXirFunctionIdentity *identity = &d->functions[f];
+        if (identity->module != d->root_module) continue;
+        if (identity->method_kind == XR_XIR_STATIC_METHOD) {
+            unsigned slot = identity->nominal_owner == owners[0] + 1 ? 0u : 1u;
+            CHECK(identity->nominal_owner == owners[slot] + 1 && roles.value_methods[slot] == UINT32_MAX);
+            CHECK(fn->name_length == 5 && !memcmp(fn->name, "value", 5) && identity->member_access == XR_XIR_MEMBER_PUBLIC);
+            native_method_body(fn, slot ? 23 : 19); roles.value_methods[slot] = f;
+        }
+        if (fn->name_length == 14 && !memcmp(fn->name, "consumerAnswer", 14)) {
+            CHECK(roles.answer == UINT32_MAX && identity->exported && !fn->parameter_count && fn->result == XR_XIR_I64);
+            roles.answer = f;
+        }
+        if (fn->name_length == 6 && !memcmp(fn->name, "answer", 6)) {
+            CHECK(roles.private_answer == UINT32_MAX && !identity->exported); roles.private_answer = f;
+        }
+    }
+    CHECK(roles.answer != UINT32_MAX && roles.private_answer != UINT32_MAX && roles.answer != roles.private_answer);
+    CHECK(roles.value_methods[0] != UINT32_MAX && roles.value_methods[1] != UINT32_MAX &&
+        roles.value_methods[0] != roles.value_methods[1]);
+    native_answer_body(&module->functions[roles.private_answer], &roles);
+    return roles;
+}
+#if defined(XR_SOURCE_STATIC_NATIVE_PACKET_WRITER)
+static void emit_native_material(ReceiverRun *run, char **argv) {
+    CHECK(completed(run, xr_xir_compile_emit_c(run->lowered, "source_static_current_native",
+        16777216, &run->emitted), "writer-real-Lowered-C11-emission"));
+    CHECK(run->emitted.text && run->emitted.length);
+    XrXirProgramProof proof = xr_xir_compile_program_proof(run->lowered);
+    CHECK(proof.bytes && proof.identity && proof.layouts && proof.length == run->expected_closed.length);
+    CHECK(!memcmp(proof.bytes, run->expected_closed.bytes, proof.length));
+    uint8_t digest[32]; char hex[65], binding[256]; xr_sha256((const uint8_t *)run->emitted.text, run->emitted.length, digest);
+    for (unsigned i = 0; i < 32; ++i) CHECK(snprintf(hex + i * 2, 3, "%02x", digest[i]) == 2);
+    int length = snprintf(binding, sizeof(binding), "const char source_static_current_native_c_sha256[65] = \"%s\";\n", hex);
     CHECK(length > 0 && (size_t)length < sizeof(binding));
-    native_write_file(binding_path, binding, (size_t)length);
-    printf("native-material actual-C-bytes=%zu actual-C-sha256=%s authentic-proof-bytes=%zu runtime=NOT_RUN full-FI=NOT_RUN\n",
-        source.length, digest, proof.length);
-    xr_xir_compile_c_source_free(&source);
+    for (unsigned i = 4; i < 8; ++i) {
+        CHECK(strlen(argv[i]) < sizeof(run->material_paths[i - 4]));
+        for (unsigned j = 4; j < i; ++j) CHECK(strcmp(argv[i], argv[j]));
+        strcpy(run->material_paths[i - 4], argv[i]);
+    }
+    packet_file_write(run, argv[4], run->emitted.text, run->emitted.length);
+    packet_file_write(run, argv[5], run->expected_closed.bytes, run->expected_closed.length);
+    packet_file_write(run, argv[6], proof.identity, 32); packet_file_write(run, argv[7], binding, (size_t)length);
+    printf("native-material actual-C-bytes=%zu compiled-sidecar-sha256=%s authentic-Closed-bytes=%zu runtime=NOT_RUN\n",
+        run->emitted.length, hex, proof.length);
+    xr_xir_compile_c_source_free(&run->emitted); poison(digest, sizeof(digest)); poison(hex, sizeof(hex)); poison(binding, sizeof(binding));
 }
 #else
 extern const XrXirProgramSpec source_static_current_native_program;
 extern const char source_static_current_native_c_sha256[65];
-
-typedef struct NativePacketInput {
-    uint8_t *bytes;
-    size_t length;
-    uint8_t identity[32];
-    char packet_path[2048], identity_path[2048];
-} NativePacketInput;
-static void native_input_poison(void *pointer, size_t length) {
-    volatile uint8_t *bytes = pointer;
-    for (size_t i = 0; i < length; ++i) bytes[i] = 0xa5;
-}
-
-/* The receiving ledger owns file bytes only until checked_read detaches them. */
-static void native_packet_load(const XrXirCompileContext *context, const char *packet_path,
-    const char *identity_path, NativePacketInput *input) {
-    CHECK(!input->bytes && !input->length);
-    CHECK(strlen(packet_path) < sizeof(input->packet_path) && strlen(identity_path) < sizeof(input->identity_path));
-    strcpy(input->packet_path, packet_path); strcpy(input->identity_path, identity_path);
-    FILE *file = fopen(input->packet_path, "rb");
-    CHECK(file && !fseek(file, 0, SEEK_END));
-    long length = ftell(file);
-    CHECK(length >= 64 && length <= 16777216 && !fseek(file, 0, SEEK_SET));
-    input->length = (size_t)length;
-    void *bytes = NULL;
-    CHECK(xr_compile_resources_calloc(context->resources, 1, input->length, &bytes) == XR_COMPILE_RESOURCE_OK);
-    input->bytes = bytes;
-    CHECK(fread(input->bytes, 1, input->length, file) == input->length);
-    CHECK(fgetc(file) == EOF && !ferror(file) && !fclose(file));
-    file = fopen(input->identity_path, "rb");
-    CHECK(file && fread(input->identity, 1, sizeof(input->identity), file) == sizeof(input->identity));
-    CHECK(fgetc(file) == EOF && !ferror(file) && !fclose(file));
-    uint8_t digest[32]; xr_sha256(input->bytes, input->length, digest);
-    CHECK(!memcmp(digest, input->identity, sizeof(digest)));
-    native_input_poison(digest, sizeof(digest));
-}
-static void native_packet_die(NativePacketInput *input) {
-    CHECK(input->bytes && input->length);
-    native_input_poison(input->bytes, input->length);
-    CHECK(input->bytes[0] == 0xa5 && input->bytes[input->length - 1] == 0xa5);
-    xr_compile_resources_free(input->bytes); input->bytes = NULL; input->length = 0;
-    native_input_poison(input->identity, sizeof(input->identity));
-    native_input_poison(input->packet_path, sizeof(input->packet_path));
-    native_input_poison(input->identity_path, sizeof(input->identity_path));
-}
-
-/* Check the actual C file compiled by the host, without invoking the emitter. */
-static void native_material_file_digest(const XrXirCompileContext *context, const char *path) {
-    char copied_path[2048];
-    CHECK(strlen(path) < sizeof(copied_path)); strcpy(copied_path, path);
-    FILE *file = fopen(copied_path, "rb");
-    CHECK(file && !fseek(file, 0, SEEK_END));
-    long length = ftell(file);
-    CHECK(length > 0 && length <= 16777216 && !fseek(file, 0, SEEK_SET));
-    void *bytes = NULL;
-    CHECK(xr_compile_resources_calloc(context->resources, 1, (size_t)length, &bytes) == XR_COMPILE_RESOURCE_OK);
-    CHECK(fread(bytes, 1, (size_t)length, file) == (size_t)length);
-    CHECK(fgetc(file) == EOF && !ferror(file) && !fclose(file));
-    uint8_t digest[32]; xr_sha256(bytes, (size_t)length, digest);
-    char text[65];
-    for (unsigned i = 0; i < 32; ++i)
-        CHECK(snprintf(text + i * 2, 3, "%02x", digest[i]) == 2);
-    CHECK(!strcmp(text, source_static_current_native_c_sha256));
-    native_input_poison(bytes, (size_t)length); xr_compile_resources_free(bytes);
-    native_input_poison(digest, sizeof(digest)); native_input_poison(text, sizeof(text));
-    native_input_poison(copied_path, sizeof(copied_path));
-}
-typedef struct ObservedNativeOwner {
+typedef struct ReceiverNativeOwner {
     XrXirArtifact *lowered;
     XrXirVmBinding *bindings;
     XrXirCallEntry *vm_entries, *entries;
     uint64_t *native_resumes, *vm_resumes;
     uint32_t count;
     unsigned mode;
-} ObservedNativeOwner;
-static ObservedNativeOwner *observed_native_owner;
-static unsigned observed_code_lease_releases;
-
-/* The exact active view pointer, environment and all other facts pass unchanged. */
+} ReceiverNativeOwner;
+static ReceiverNativeOwner *receiver_native_owner;
+static unsigned receiver_native_releases;
+static bool callback_check(bool condition, int line, const char *expression) {
+    if (condition) return true;
+    receiver_observer_failed = true;
+    if (!receiver_failure_line) receiver_failure_line = line;
+    record_failure("CALLBACK_OBSERVATION_ASSERTION", "real-native-or-VM-callback", false, 0, 0, expression);
+    fprintf(stderr, "callback-failure line=%d condition=%s; natural-product-return\n", line, expression);
+    return false;
+}
+#define RECEIVER_CALLBACK(c) callback_check(!!(c), __LINE__, #c)
 static XrXirAction observed_native_resume(XrXirCallView *view) {
-    ObservedNativeOwner *owner = observed_native_owner;
-    CHECK(owner && xr_xir_call_admission(view));
-    uint32_t function = xr_xir_call_current_entry(view->activation);
-    CHECK(function < owner->count && owner->entries[function].resume == observed_native_resume);
-    const XrXirCallEntry *original = &source_static_current_native_program.entries[function];
-    CHECK(original->resume && view->environment == original->environment);
-    CHECK(owner->native_resumes[function] < UINT64_MAX);
-    ++owner->native_resumes[function];
-    return original->resume(view);
+    ReceiverNativeOwner *owner = receiver_native_owner;
+    if (!RECEIVER_CALLBACK(owner && view && xr_xir_call_admission(view))) return xr_xir_call_fault(XR_XIR_RUN_BAD_ARGUMENT);
+    uint32_t f = xr_xir_call_current_entry(view->activation);
+    if (!RECEIVER_CALLBACK(f < owner->count && owner->entries[f].resume == observed_native_resume))
+        return xr_xir_call_fault(XR_XIR_RUN_BAD_ARGUMENT);
+    const XrXirCallEntry *delegate = &source_static_current_native_program.entries[f];
+    if (!RECEIVER_CALLBACK(delegate->resume && view->environment == delegate->environment && owner->native_resumes[f] < UINT64_MAX))
+        return xr_xir_call_fault(XR_XIR_RUN_BAD_ARGUMENT);
+    ++owner->native_resumes[f]; return delegate->resume(view);
 }
 static XrXirAction observed_vm_resume(XrXirCallView *view) {
-    ObservedNativeOwner *owner = observed_native_owner;
-    CHECK(owner && xr_xir_call_admission(view));
-    uint32_t function = xr_xir_call_current_entry(view->activation);
-    CHECK(function < owner->count && owner->entries[function].resume == observed_vm_resume);
-    const XrXirCallEntry *original = &owner->vm_entries[function];
-    CHECK(original->resume && view->environment == original->environment);
-    CHECK(owner->vm_resumes[function] < UINT64_MAX);
-    ++owner->vm_resumes[function];
-    return original->resume(view);
+    ReceiverNativeOwner *owner = receiver_native_owner;
+    if (!RECEIVER_CALLBACK(owner && view && xr_xir_call_admission(view))) return xr_xir_call_fault(XR_XIR_RUN_BAD_ARGUMENT);
+    uint32_t f = xr_xir_call_current_entry(view->activation);
+    if (!RECEIVER_CALLBACK(f < owner->count && owner->entries[f].resume == observed_vm_resume && owner->vm_entries))
+        return xr_xir_call_fault(XR_XIR_RUN_BAD_ARGUMENT);
+    const XrXirCallEntry *delegate = &owner->vm_entries[f];
+    if (!RECEIVER_CALLBACK(delegate->resume && view->environment == delegate->environment && owner->vm_resumes[f] < UINT64_MAX))
+        return xr_xir_call_fault(XR_XIR_RUN_BAD_ARGUMENT);
+    ++owner->vm_resumes[f]; return delegate->resume(view);
 }
-static void observed_native_release(void *pointer) {
-    ObservedNativeOwner *owner = pointer;
-    CHECK(owner && observed_native_owner == owner);
-    observed_native_owner = NULL;
-    CHECK(observed_code_lease_releases == 0); ++observed_code_lease_releases;
-    xr_xir_compile_artifact_free(owner->lowered);
-    xr_compile_resources_free(owner->bindings);
-    xr_compile_resources_free(owner->vm_entries);
-    xr_compile_resources_free(owner->entries);
-    xr_compile_resources_free(owner->native_resumes);
-    xr_compile_resources_free(owner->vm_resumes);
+static void dispose_receiver_native_owner(ReceiverNativeOwner *owner) {
+    xr_xir_compile_artifact_free(owner->lowered); xr_compile_resources_free(owner->bindings);
+    xr_compile_resources_free(owner->vm_entries); xr_compile_resources_free(owner->entries);
+    xr_compile_resources_free(owner->native_resumes); xr_compile_resources_free(owner->vm_resumes);
     xr_compile_resources_free(owner);
 }
-static void *native_owner_allocate(const XrXirCompileContext *context, size_t count, size_t stride) {
-    void *pointer = NULL;
-    CHECK(xr_compile_resources_calloc(context->resources, count, stride, &pointer) == XR_COMPILE_RESOURCE_OK);
-    return pointer;
+static void receiver_native_release(void *pointer) {
+    ReceiverNativeOwner *owner = receiver_native_owner;
+    (void)RECEIVER_CALLBACK(owner && pointer == owner && !receiver_native_releases);
+    if (!owner) return;
+    receiver_native_owner = NULL; ++receiver_native_releases; dispose_receiver_native_owner(owner);
 }
-static XrXirProgram *seal_observed_native(const XrXirCompileContext *context, XrXirArtifact **lowered,
-    unsigned mode, StaticEntries roles, const char *c_path) {
-    CHECK(lowered && *lowered && mode >= 1 && mode <= 3 && !observed_native_owner && !observed_code_lease_releases);
-    const XrXirModule *module = xr_xir_compile_artifact_module(*lowered);
+static void native_material_file_digest(ReceiverRun *run, const char *path) {
+    receiver_operation = run->operation = "receiver-actual-host-C-versus-compiled-sidecar";
+    CHECK(path && !run->packet_file && !run->transient_bytes);
+    run->packet_file = fopen(path, "rb"); CHECK(run->packet_file && !fseek(run->packet_file, 0, SEEK_END));
+    long length = ftell(run->packet_file); CHECK(length > 0 && length <= 16777216 && !fseek(run->packet_file, 0, SEEK_SET));
+    run->transient_size = (size_t)length; run->transient_bytes = owned_allocate(run->context, run->transient_size, 1);
+    CHECK(fread(run->transient_bytes, 1, run->transient_size, run->packet_file) == run->transient_size);
+    CHECK(fgetc(run->packet_file) == EOF && !ferror(run->packet_file)); packet_file_close(run);
+    uint8_t digest[32]; char hex[65]; xr_sha256(run->transient_bytes, run->transient_size, digest);
+    for (unsigned i = 0; i < 32; ++i) CHECK(snprintf(hex + i * 2, 3, "%02x", digest[i]) == 2);
+    CHECK(!strcmp(hex, source_static_current_native_c_sha256));
+    poison(run->transient_bytes, run->transient_size); xr_compile_resources_free(run->transient_bytes);
+    run->transient_bytes = NULL; run->transient_size = 0; poison(digest, sizeof(digest)); poison(hex, sizeof(hex));
+}
+static void native_select_entries(ReceiverRun *run, ReceiverNativeOwner *owner) {
     const XrXirProgramSpec *compiled = &source_static_current_native_program;
-    XrXirProgramProof proof = xr_xir_compile_program_proof(*lowered);
-    CHECK(module && module->declarations && compiled->entry_count == module->function_count);
-    CHECK(proof.bytes && proof.identity && proof.layouts && compiled->proof.bytes && compiled->proof.identity);
-    CHECK(proof.length == compiled->proof.length && !memcmp(proof.bytes, compiled->proof.bytes, proof.length));
-    CHECK(!memcmp(proof.identity, compiled->proof.identity, 32));
-    native_material_file_digest(context, c_path);
-    ObservedNativeOwner *owner = native_owner_allocate(context, 1, sizeof(*owner));
-    owner->count = module->function_count; owner->mode = mode;
-    owner->entries = native_owner_allocate(context, owner->count, sizeof(*owner->entries));
-    owner->native_resumes = native_owner_allocate(context, owner->count, sizeof(*owner->native_resumes));
-    owner->vm_resumes = native_owner_allocate(context, owner->count, sizeof(*owner->vm_resumes));
-    if (mode != 1)
-        CHECK(xr_xir_compile_vm_bind_table(*lowered, &owner->bindings, &owner->vm_entries) == XR_XIR_OK);
-    unsigned native_count = 0, vm_count = 0;
+    unsigned natives = 0, vms = 0;
     for (uint32_t f = 0; f < owner->count; ++f) {
-        bool native = mode == 1 || (f % 2 == 0) == (mode == 2);
-        if (mode != 1 && f == roles.value_methods[0]) native = mode == 2;
-        if (mode != 1 && f == roles.value_methods[1]) native = mode == 3;
+        bool native = owner->mode == 1 || (f % 2 == 0) == (owner->mode == 2);
+        if (owner->mode != 1 && f == run->roles.value_methods[0]) native = owner->mode == 2;
+        if (owner->mode != 1 && f == run->roles.value_methods[1]) native = owner->mode == 3;
         owner->entries[f] = native ? compiled->entries[f] : owner->vm_entries[f];
         CHECK(owner->entries[f].resume && owner->entries[f].release);
-        /* Only resume changes. All authenticated ABI/layout/cleanup facts remain. */
         owner->entries[f].resume = native ? observed_native_resume : observed_vm_resume;
-        if (native) ++native_count; else ++vm_count;
+        if (native) ++natives; else ++vms;
     }
-    CHECK(native_count && (mode == 1 ? !vm_count : vm_count != 0));
+    CHECK(natives && (owner->mode == 1 ? !vms : vms != 0));
+}
+static void seal_receiver_native(ReceiverRun *run, const char *c_path) {
+    CHECK(run->lowered && !run->program && !receiver_native_owner && !receiver_native_releases && run->mode >= 1 && run->mode <= 3);
+    const XrXirModule *module = xr_xir_compile_artifact_module(run->lowered);
+    const XrXirProgramSpec *compiled = &source_static_current_native_program;
+    XrXirProgramProof proof = xr_xir_compile_program_proof(run->lowered);
+    CHECK(module && module->stage == XR_XIR_LOWERED && compiled->entry_count == module->function_count);
+    CHECK(compiled->entries && proof.bytes && proof.identity && proof.layouts && compiled->proof.bytes && compiled->proof.identity);
+    CHECK(proof.length == compiled->proof.length && !memcmp(proof.bytes, compiled->proof.bytes, proof.length));
+    CHECK(!memcmp(proof.identity, compiled->proof.identity, 32)); native_material_file_digest(run, c_path);
+    ReceiverNativeOwner *owner = owned_allocate(run->context, 1, sizeof(*owner)); run->pending_native_owner = owner;
+    owner->count = module->function_count; owner->mode = run->mode;
+    owner->entries = owned_allocate(run->context, owner->count, sizeof(*owner->entries));
+    owner->native_resumes = owned_allocate(run->context, owner->count, sizeof(*owner->native_resumes));
+    owner->vm_resumes = owned_allocate(run->context, owner->count, sizeof(*owner->vm_resumes));
+    if (owner->mode != 1) CHECK(completed(run, xr_xir_compile_vm_bind_table(run->lowered,
+        &owner->bindings, &owner->vm_entries), "public-complete-VM-bind-table"));
+    native_select_entries(run, owner);
     XrXirProgramSpec spec = *compiled;
-    spec.target = *xr_xir_compile_artifact_target(*lowered);
-    spec.entries = owner->entries; spec.entry_count = owner->count;
+    spec.target = *xr_xir_compile_artifact_target(run->lowered); spec.entries = owner->entries; spec.entry_count = owner->count;
     spec.declarations = module->declarations; spec.types = module->types; spec.proof = proof;
-    spec.code = (XrXirCodeLease){owner, observed_native_release};
-    XrXirProgram *program = NULL;
-    CHECK(xr_xir_compile_program_seal(context, &spec, &program) == XR_XIR_OK && program);
-    owner->lowered = *lowered; *lowered = NULL;
-    observed_native_owner = owner;
-    printf("native-binding mode=%u actual-native=%u actual-VM=%u emitted-C-sha256=%s\n",
-        mode, native_count, vm_count, source_static_current_native_c_sha256);
-    return program;
+    spec.code = (XrXirCodeLease){owner, receiver_native_release};
+    CHECK(completed(run, xr_xir_compile_program_seal(run->context, &spec, &run->program), "public-native-mixed-fullproof-seal"));
+    CHECK(run->program); owner->lowered = run->lowered; run->lowered = NULL;
+    receiver_native_owner = owner; run->pending_native_owner = NULL;
 }
 typedef struct MethodResumeCounts { uint64_t native[2], vm[2]; } MethodResumeCounts;
-static MethodResumeCounts method_resume_counts(StaticEntries roles) {
-    ObservedNativeOwner *owner = observed_native_owner;
-    CHECK(owner);
-    MethodResumeCounts counts;
+static MethodResumeCounts method_resume_counts(ReceiverRoles roles) {
+    CHECK(receiver_native_owner); MethodResumeCounts counts;
     for (unsigned n = 0; n < 2; ++n) {
-        CHECK(roles.value_methods[n] < owner->count);
-        counts.native[n] = owner->native_resumes[roles.value_methods[n]];
-        counts.vm[n] = owner->vm_resumes[roles.value_methods[n]];
+        CHECK(roles.value_methods[n] < receiver_native_owner->count);
+        counts.native[n] = receiver_native_owner->native_resumes[roles.value_methods[n]];
+        counts.vm[n] = receiver_native_owner->vm_resumes[roles.value_methods[n]];
     }
     return counts;
 }
@@ -233,4 +254,4 @@ static void check_actual_method_execution(unsigned mode, MethodResumeCounts befo
     }
 }
 #endif
-#endif
+#endif // SOURCE_STATIC_CURRENT_NATIVE_MIXED_SUPPORT_H
