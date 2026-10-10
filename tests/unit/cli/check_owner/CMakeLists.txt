@@ -13,7 +13,7 @@ if(NOT IS_ABSOLUTE "${CHECK_SOURCE_BUILD}")
 endif()
 set(check_libraries "${CHECK_SOURCE_BUILD}/xray_cli_source.lib"
     "${CHECK_SOURCE_BUILD}/src/base/xray_compile_resources.lib")
-foreach(name xray_xir_source_product xray_xir_source xray_xir_vm xray_xir_cgen xray_xir xray_compiler_parser xray_xir_scalar xray_xir_admission xray_xir_declarations)
+foreach(name xray_xir_source_product xray_xir_source xray_xir_vm xray_xir_cgen xray_xir xray_compiler_parser xray_xir_scalar xray_xir_admission xray_xir_declarations xray_xir_native_cache xray_xir_native_cache_catalog)
     list(APPEND check_libraries "${CHECK_SOURCE_BUILD}/src/xir/${name}.lib")
 endforeach()
 foreach(library IN LISTS check_libraries)

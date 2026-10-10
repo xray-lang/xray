@@ -91,8 +91,19 @@ static void cache_execute(XrXirProgram *program, const uint32_t ids[2]) {
                 if (mode < 2) {
                     CHECK(xr_xir_instance_take_result(instance,&output) == XR_XIR_CALL_RETURNED);
                     CHECK(output.type == XR_XIR_BOOL && output.payload == (mode == 0));
-                } else CHECK(xr_xir_instance_take_result(instance,&output) == XR_XIR_CALL_BAD_STATE && !output.type && !output.payload && !output.reserved);
-                xr_xir_value_drop(&output); CHECK(xr_xir_instance_free(instance) == XR_XIR_CALL_READY);
+                } else {
+                    /* Ordinary root resource faults survive result transfer and physical release. */
+                    CHECK(xr_xir_instance_take_result(instance,&output) == status);
+                    CHECK(!output.type && !output.payload && !output.reserved);
+                    output = (XrXirValue){XR_XIR_I64,0,77};
+                    XrXirValue sentinel; memcpy(&sentinel,&output,sizeof(output));
+                    CHECK(xr_xir_instance_take_result(instance,&output) == status);
+                    CHECK(!memcmp(&output,&sentinel,sizeof(output)));
+                    CHECK(xr_xir_instance_poll_bounded(instance,UINT64_MAX).outcome.status == status);
+                }
+                xr_xir_value_drop(&output);
+                CHECK(xr_xir_instance_free(instance) == (mode < 2 ? XR_XIR_CALL_READY : status));
+                CHECK(!runtime_live && !runtime_bytes);
             }
 }
 static void cache_corruption(const XrXirCompileContext *context) {

@@ -1,6 +1,6 @@
 add_executable(test_xir_stdlib_catalog ${CMAKE_CURRENT_LIST_DIR}/test_xir_stdlib_catalog.c)
 target_include_directories(test_xir_stdlib_catalog PRIVATE ${XRAY_COMMON_INCLUDES})
-target_link_libraries(test_xir_stdlib_catalog PRIVATE xray_xir_native_cache)
+target_link_libraries(test_xir_stdlib_catalog PRIVATE xray_xir_native_cache_catalog)
 if(MSVC)
     target_compile_options(test_xir_stdlib_catalog PRIVATE /W4 /WX)
 else()

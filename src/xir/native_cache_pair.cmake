@@ -58,12 +58,15 @@ add_custom_command(OUTPUT ${XIR_NATIVE_CACHE_REGISTRY} ${XIR_NATIVE_CACHE_MANIFE
     VERBATIM)
 add_library(xray_xir_native_cache STATIC xxir_native_cache.c ${XIR_NATIVE_CACHE_REGISTRY}
     $<TARGET_OBJECTS:xir_native_cache_image>)
-target_link_libraries(xray_xir_native_cache PUBLIC xray_xir_source xray_xir_scalar)
+target_link_libraries(xray_xir_native_cache PUBLIC xray_xir_scalar)
+add_library(xray_xir_native_cache_catalog STATIC xxir_native_cache_catalog.c)
+target_link_libraries(xray_xir_native_cache_catalog PUBLIC xray_xir_source xray_xir_native_cache)
+target_include_directories(xray_xir_native_cache_catalog PUBLIC ${PROJECT_SOURCE_DIR}/src)
 target_include_directories(xray_xir_native_cache PUBLIC ${PROJECT_SOURCE_DIR}/src)
 target_link_libraries(xray_xir_vm PUBLIC xray_xir_native_cache)
 install(FILES ${XIR_NATIVE_CACHE_CHECKED} ${XIR_NATIVE_CACHE_C} ${XIR_NATIVE_CACHE_OBJECT_COPY}
     DESTINATION lib/xray/stdlib-xir/io/output COMPONENT XrayCore)
-foreach(cache_target xir_native_cache_pairgen xir_native_cache_image xray_xir_native_cache)
+foreach(cache_target xir_native_cache_pairgen xir_native_cache_image xray_xir_native_cache xray_xir_native_cache_catalog)
     if(MSVC)
         target_compile_options(${cache_target} PRIVATE /W4 /WX)
     else()
