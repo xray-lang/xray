@@ -114,7 +114,7 @@ static XrXirStatus effect_invocation_arguments(EffectInvocationFlow *flow,
         uint32_t suffix=p-captures,actual=flow->function->operands[op->args[0]+suffix];
         if (actual>=flow->values) { status=XR_XIR_BAD_VALUE;break; }
         XrXirType provided=xr_xir_operand_type(flow->function,actual);
-        status=effect_invocation_value_matches(owner,expected,provided,&scratch);
+        status=effect_invocation_value_matches(flow,expected,provided,&scratch);
         if (status!=XR_XIR_OK) break;
         if (signature) {
             if (!xr_xir_callable_parameter_storage_valid(owner->module->types,&signature->parameters[suffix])) {
@@ -267,7 +267,7 @@ static XrXirStatus effect_invocation_indirect(EffectInvocationFlow *flow,
         if (!xir_compile_work(owner->work,1)) { status=XR_XIR_BUDGET;break; }
         uint32_t actual=flow->function->operands[op->args[0]+p];
         if (actual>=flow->values) { status=XR_XIR_BAD_VALUE;break; }
-        status=effect_invocation_value_matches(owner,signature->parameters[p].type,
+        status=effect_invocation_value_matches(flow,signature->parameters[p].type,
             xr_xir_operand_type(flow->function,actual),&scratch);
     }
     xr_xir_type_match_scratch_free(&scratch);

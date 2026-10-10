@@ -42,6 +42,15 @@ typedef struct XirEffectCallableBound {
  * This structural relation is not an effect-instance or permission proof. */
 XR_FUNC XrXirStatus xir_effect_callable_bound_matches(const XrXirCompileContext *context,
     const XirEffectCallableBound *request);
+/* Requires the real module's complete prior descriptor, generic-call,
+ * binder/Unit-use and body admission. This helper does not reconstruct those
+ * proofs from metadata. Definition-local structural matching of open callable
+ * types: both pools
+ * must be the authentic module pool; the function's full declaration context
+ * supplies symbolic binder identities. This never proves execution authority
+ * and cannot replace a real generic-call substitution vector. */
+XR_FUNC XrXirStatus xir_effect_callable_bound_matches_definition(const XrXirCompileContext *context,
+    const XrXirModule *module,uint32_t function,const XirEffectCallableBound *request);
 /* These values borrow only the current verified effects owner. */
 XR_FUNC const XrXirFunctionEffectContract *xir_effects_contract(
     const XrXirEffects *effects, uint32_t function);

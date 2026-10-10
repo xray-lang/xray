@@ -59,3 +59,21 @@ add_test(NAME test_xir_source_effect_value_refine_compiler
     COMMAND test_xir_source_effect_value_refine --compiler)
 set_tests_properties(test_xir_source_effect_value_refine_compiler PROPERTIES
     LABELS "unit;xir;root-effects;higher-order;compiler-fault;ownership" TIMEOUT 600 RUN_SERIAL TRUE PROCESSORS 1)
+
+# A genuine open Fn(A)->B is checked in its own complete generic definition.
+add_executable(test_xir_source_generic_callable_context
+    ${CMAKE_CURRENT_LIST_DIR}/test_xir_source_generic_callable_context.c)
+target_include_directories(test_xir_source_generic_callable_context PRIVATE ${XRAY_COMMON_INCLUDES})
+target_link_libraries(test_xir_source_generic_callable_context PRIVATE xray_xir_source)
+if(MSVC)
+    target_compile_options(test_xir_source_generic_callable_context PRIVATE /W4 /WX /utf-8)
+else()
+    target_compile_options(test_xir_source_generic_callable_context PRIVATE -Wall -Wextra -Werror)
+endif()
+add_test(NAME test_xir_source_generic_callable_context COMMAND test_xir_source_generic_callable_context)
+set_tests_properties(test_xir_source_generic_callable_context PROPERTIES
+    LABELS "unit;xir;root-effects;higher-order;compiler;ownership" TIMEOUT 300 RUN_SERIAL TRUE PROCESSORS 1)
+add_test(NAME test_xir_source_generic_callable_context_compiler
+    COMMAND test_xir_source_generic_callable_context --compiler)
+set_tests_properties(test_xir_source_generic_callable_context_compiler PROPERTIES
+    LABELS "unit;xir;root-effects;higher-order;compiler-fault;ownership" TIMEOUT 600 RUN_SERIAL TRUE PROCESSORS 1)

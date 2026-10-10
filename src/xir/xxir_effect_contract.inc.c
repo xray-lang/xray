@@ -16,15 +16,15 @@
 
 /* Matching keeps capacity only. Every result and physical parameter is
  * traversed again; nested invocations claim distinct live stack blocks. */
-static XrXirStatus effect_callable_bound_matches_scratch(const XrXirCompileContext *context,
-    const XirEffectCallableBound *request, XrXirTypeMatchScratch *scratch) {
+static XrXirStatus effect_callable_bound_compare_scratch(const XrXirCompileContext *context,
+    const XirEffectCallableBound *request,uint32_t actual_scope,XrXirTypeMatchScratch *scratch) {
     if (!xir_compile_context_valid(context) || !request || !scratch ||
         scratch->resources!=context->resources ||
         !!request->arguments != !!request->argument_count) return XR_XIR_BAD_STRUCTURE;
     if (!xir_compile_work(context,1)) return XR_XIR_BUDGET;
     const XrXirTypeNode *declared=xr_xir_callable_signature(request->source,request->declared);
     const XrXirTypeNode *actual=xr_xir_callable_signature(request->destination,request->actual);
-    if (!declared || !actual || actual->parameter_span ||
+    if (!declared || !actual || actual->parameter_span>actual_scope ||
         !!declared->parameters != !!declared->parameter_count ||
         !!actual->parameters != !!actual->parameter_count ||
         declared->parameter_count != actual->parameter_count ||
@@ -40,6 +40,58 @@ static XrXirStatus effect_callable_bound_matches_scratch(const XrXirCompileConte
             declared->parameters[p].type,actual->parameters[p].type,scratch);
     }
     return status;
+}
+
+static XrXirStatus effect_callable_bound_matches_scratch(const XrXirCompileContext *context,
+    const XirEffectCallableBound *request,XrXirTypeMatchScratch *scratch) {
+    return effect_callable_bound_compare_scratch(context,request,0,scratch);
+}
+
+/* An open actual Fn belongs to one authentic definition context. This
+ * entry never accepts a prepared scope count or substitutes a callee's real
+ * call arguments. The current definition proves all nested type obligations
+ * before the common outer-bound relation is evaluated. */
+static XrXirStatus effect_callable_bound_definition_scratch(const XrXirCompileContext *context,
+    const XirEffectCallableBound *request,const XrXirModule *module,uint32_t function,
+    XrXirTypeMatchScratch *scratch) {
+    if (!xir_compile_context_valid(context) || !request || !scratch ||
+        scratch->resources!=context->resources || !module || !module->types ||
+        !module->functions || function>=module->function_count ||
+        request->source!=module->types || request->destination!=module->types ||
+        request->arguments || request->argument_count) return XR_XIR_BAD_STRUCTURE;
+    const XrXirGeneric *generic=module->generics?&module->generics[function]:NULL;
+    uint32_t count=generic?generic->parameter_count:0;
+    if (count>XR_XIR_TYPE_PARAMETER_LIMIT-XR_XIR_TYPE_PARAMETER_BASE ||
+        (uint64_t)count*sizeof(XrXirType)>SIZE_MAX) return XR_XIR_BUDGET;
+    if (generic && (!!generic->constraints!=!!count ||
+        !!generic->arguments!=!!generic->argument_count || (!count && generic->parameter_kinds)))
+        return XR_XIR_BAD_STRUCTURE;
+    for (uint32_t p=0;p<count;++p) {
+        if (!xir_compile_work(context,1)) return XR_XIR_BUDGET;
+        if (xr_xir_binder_kind(generic,p)>XR_XIR_BINDER_RESULT_VARIABLE) return XR_XIR_BAD_STRUCTURE;
+    }
+    XrXirProofContext proof={module,{XR_XIR_CONTEXT_FUNCTION,function,0}};
+    XrXirStatus status=xr_xir_compile_context_constraints_verify(context,&proof);
+    if (status==XR_XIR_OK) status=xr_xir_compile_type_expression_shape(context,module->types,request->declared,count);
+    if (status==XR_XIR_OK) status=xr_xir_compile_type_expression_shape(context,module->types,request->actual,count);
+    if (status==XR_XIR_OK) status=xr_xir_compile_type_use_verify(context,&proof,request->declared);
+    if (status==XR_XIR_OK) status=xr_xir_compile_type_use_verify(context,&proof,request->actual);
+    XrXirType *arguments=status==XR_XIR_OK && count?xir_compile_alloc(context,(size_t)count*sizeof(*arguments),&status):NULL;
+    for (uint32_t p=0;p<count && status==XR_XIR_OK;++p) {
+        if (!xir_compile_work(context,sizeof(*arguments)+1)) { status=XR_XIR_BUDGET;break; }
+        arguments[p]=(XrXirType)(XR_XIR_TYPE_PARAMETER_BASE+p);
+    }
+    XirEffectCallableBound bound=*request;bound.arguments=arguments;bound.argument_count=count;
+    if (status==XR_XIR_OK) status=effect_callable_bound_compare_scratch(context,&bound,count,scratch);
+    xr_compile_resources_free(arguments);return status;
+}
+
+XR_FUNC XrXirStatus xir_effect_callable_bound_matches_definition(const XrXirCompileContext *context,
+    const XrXirModule *module,uint32_t function,const XirEffectCallableBound *request) {
+    if (!xir_compile_context_valid(context)) return XR_XIR_BAD_STRUCTURE;
+    XrXirTypeMatchScratch scratch={context->resources,NULL};
+    XrXirStatus status=effect_callable_bound_definition_scratch(context,request,module,function,&scratch);
+    xr_xir_type_match_scratch_free(&scratch);return status;
 }
 
 XR_FUNC XrXirStatus xir_effect_callable_bound_matches(const XrXirCompileContext *context,

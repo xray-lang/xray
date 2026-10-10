@@ -34,7 +34,7 @@ static XrXirStatus effect_invocation_deferred_arguments(EffectInvocationFlow *fl
         if (actual>=flow->values || !xr_xir_callable_parameter_storage_valid(owner->module->types,parameter)) {
             status=XR_XIR_BAD_TYPE;break;
         }
-        status=effect_invocation_value_matches(owner,parameter->type,
+        status=effect_invocation_value_matches(flow,parameter->type,
             xr_xir_operand_type(flow->function,actual),&scratch);
         if (status!=XR_XIR_OK) break;
         uint64_t *row=input+(size_t)p*flow->basis.row_words;

@@ -23,11 +23,18 @@ static XrXirStatus effect_invocation_cell(EffectInvocationFlow *flow,
 
 /* Outer callable bounds use the shared complete result/parameter/mode
  * matcher. Every storage type and every structural child remains exact. */
-static XrXirStatus effect_invocation_value_matches(EffectInvocationOwner *owner,
+static XrXirStatus effect_invocation_value_matches(EffectInvocationFlow *flow,
     XrXirType expected,XrXirType actual,XrXirTypeMatchScratch *scratch) {
+    EffectInvocationOwner *owner=flow->owner;
     if (xr_xir_callable_signature(owner->module->types,expected)) {
         XirEffectCallableBound request={owner->module->types,owner->module->types,
             NULL,0,expected,actual};
+        if (xr_xir_type_span(owner->module->types,expected) ||
+            xr_xir_type_span(owner->module->types,actual)) {
+            if (flow->node>=owner->count) return XR_XIR_BAD_STRUCTURE;
+            return effect_callable_bound_definition_scratch(owner->work,&request,owner->module,
+                owner->nodes[flow->node].body,scratch);
+        }
         return effect_callable_bound_matches_scratch(owner->work,&request,scratch);
     }
     return xr_xir_compile_type_substitution_matches_between_scratch(owner->work,
@@ -121,7 +128,7 @@ static XrXirStatus effect_invocation_ref_target(EffectInvocationFlow *flow,
         if (xr_xir_type_span(module->types,target->parameters[p])) {
             xr_xir_type_match_scratch_free(&scratch);return XR_XIR_OK;
         }
-        status=effect_invocation_value_matches(flow->owner,target->parameters[p],
+        status=effect_invocation_value_matches(flow,target->parameters[p],
             xr_xir_operand_type(flow->function,value),&scratch);
     }
     xr_xir_type_match_scratch_free(&scratch);
