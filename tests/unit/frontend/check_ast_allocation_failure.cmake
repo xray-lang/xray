@@ -1,21 +1,21 @@
-# The signal handler records that the real always-on abort path ran.
-# A successful parser or a different fatal cause must not satisfy this check.
+# Each original isolated mode must reach the real typed failure, keep its
+# first owner failure and publish no syntax, then release every physical block.
 if(NOT DEFINED TEST_EXECUTABLE)
     message(FATAL_ERROR "TEST_EXECUTABLE is required")
 endif()
 foreach(mode IN ITEMS oom overflow)
     execute_process(COMMAND "${TEST_EXECUTABLE}" "${mode}"
         RESULT_VARIABLE result ERROR_VARIABLE diagnostic OUTPUT_VARIABLE output TIMEOUT 15)
-    if(NOT "${result}" STREQUAL "73")
-        message(FATAL_ERROR "AST ${mode}: expected abort handler 73, got ${result}: ${diagnostic}")
+    if(NOT "${result}" STREQUAL "0")
+        message(FATAL_ERROR "AST ${mode}: typed failure/cleanup proof failed, got ${result}: ${diagnostic}")
     endif()
     if(mode STREQUAL "oom")
-        set(expected "ast_alloc: arena allocation failed")
+        set(expected "AST oom: OUT_OF_MEMORY NULL sticky no-publication physical-zero")
     else()
-        set(expected "ast_alloc_array: array size overflow")
+        set(expected "AST overflow: BUDGET NULL sticky no-publication physical-zero")
     endif()
-    string(FIND "${diagnostic}" "${expected}" at)
-    if(at EQUAL -1)
-        message(FATAL_ERROR "AST ${mode}: wrong fatal reason: ${diagnostic}")
+    string(FIND "${output}" "${expected}" at)
+    if(at EQUAL -1 OR NOT "${diagnostic}" STREQUAL "")
+        message(FATAL_ERROR "AST ${mode}: wrong typed reason or unexpected diagnostic: ${output} ${diagnostic}")
     endif()
 endforeach()

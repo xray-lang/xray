@@ -19,42 +19,7 @@
 
 #define CHECK(c) do { if (!(c)) { fprintf(stderr, "%d: %s\n", __LINE__, #c); exit(1); } } while (0)
 #define OK(c) CHECK((c) == XR_COMPILE_RESOURCE_OK)
-typedef struct Allocation { void *pointer; size_t bytes; } Allocation;
-static Allocation allocations[8192];
-static size_t physical_live, physical_peak, physical_total, allocation_count, attempt_count;
-static size_t fail_at = SIZE_MAX;
-
-static void *observed_malloc(size_t bytes) {
-    if (attempt_count++ == fail_at) return NULL;
-    void *memory = xr_malloc(bytes);
-    CHECK(memory);
-    size_t slot = 0;
-    while (slot < 8192 && allocations[slot].pointer) ++slot;
-    CHECK(slot < 8192);
-    allocations[slot] = (Allocation) {memory, bytes};
-    physical_live += bytes;
-    physical_total += bytes;
-    if (physical_live > physical_peak) physical_peak = physical_live;
-    ++allocation_count;
-    return memory;
-}
-
-static void observed_free(void *memory) {
-    if (!memory) return;
-    size_t slot = 0;
-    while (slot < 8192 && allocations[slot].pointer != memory) ++slot;
-    CHECK(slot < 8192);
-    physical_live -= allocations[slot].bytes;
-    --allocation_count;
-    allocations[slot] = (Allocation) {0};
-    xr_free(memory);
-}
-
-#undef xr_malloc
-#undef xr_free
-#define xr_malloc(bytes) observed_malloc(bytes)
-#define xr_free(memory) observed_free(memory)
-#include "base/xcompile_resources.c"
+#include "parser_resources_observer.h"
 
 static const XrCompileResourceLimits unlimited = {UINT64_MAX, UINT64_MAX, UINT64_MAX};
 static const char source[] = "// retained trivia\ntype Thing = { value: i64 }\nconst answer = 42\nconst text = \"value ${answer}\"\n";
@@ -62,12 +27,6 @@ static const char nul_source[] =
     "const escaped = \"a\\0b\"\n"
     "const unicode = \"a\\u{0}b\"\n"
     "const template = \"a\\u{0}b${1}c\\0d\"\n";
-
-static void reset(void) {
-    CHECK(!physical_live && !allocation_count);
-    physical_peak = physical_total = attempt_count = 0;
-    fail_at = SIZE_MAX;
-}
 
 static XrCompileResourceStatus pipeline(const XrCompileResourceLimits *limits, XrCompileResourceStats *observed) {
     XrCompileResources *resources = NULL;

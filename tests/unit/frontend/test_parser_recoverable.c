@@ -8,8 +8,8 @@
  * test_parser_recoverable.c - parser error-recovery contract tests
  *
  * KEY CONCEPT:
- *   xr_parse_recoverable() is the LSP / MCP / fuzz entry point. Its
- *   contract differs from xr_parse() in three load-bearing ways:
+ *   xr_compile_parse_recoverable() is the typed recovery entry point.
+ *   Its recoverable AST contract has three load-bearing properties:
  *
  *     1. It MUST return a (possibly partial) AST_PROGRAM even when
  *        errors are present -- LSP shows incomplete symbol lists
@@ -31,8 +31,8 @@
  *   AST partial construction) shows up here.
  *
  *   The test only uses public APIs:
- *     - xr_parser_init / xr_parser_set_error_callback
- *     - xr_parse_recoverable
+ *     - xr_compile_parser_open / xr_parser_set_error_callback
+ *     - xr_compile_parse_recoverable
  *     - parser.had_error / parser.error_count / parser.max_errors
  *     - the AST_PROGRAM root structure
  */
@@ -45,7 +45,7 @@
 #include "base/xarena.h"
 #include "base/xmalloc.h"
 #include "toolchain/xcompiler_session.h"
-#include "xray_vm.h"
+#include "toolchain/xcompiler_arena_backing.h"
 
 #include <stdint.h>
 #include <stdlib.h>
@@ -55,25 +55,34 @@
 /* Fixtures                                                                */
 /* ====================================================================== */
 
-static XrVMRuntime *g_iso = NULL;
+#define OWNER_CHECK(c) do { if (!(c)) { fprintf(stderr, "%d: %s\n", __LINE__, #c); exit(1); } } while (0)
+static XrCompileResources *g_resources = NULL;
 static XrCompilerSession *g_session = NULL;
+static XrCompileResourceStats g_baseline;
 
 static void setup(void) {
-    if (!g_iso) {
-        XrVMConfig p = {0};
-        g_iso = xray_vm_new_full(&p);
-        ASSERT_NOT_NULL(g_iso);
-        g_session = xr_compiler_session_current_for_isolate(g_iso);
-        ASSERT_NOT_NULL(g_session);
-    }
+    /* Each original test is one finite root; repeated parses keep its ledger. */
+    /* The original depth-overflow case includes nested arrow-head lookahead. */
+    const XrCompileResourceLimits limits = {1024 * 1024, 512 * 1024, 128 * 1024 * 1024};
+    OWNER_CHECK(!g_resources && !g_session);
+    OWNER_CHECK(xr_compile_resources_new(&limits, &g_resources) == XR_COMPILE_RESOURCE_OK);
+    OWNER_CHECK(xr_compile_resources_stats(g_resources, &g_baseline) == XR_COMPILE_RESOURCE_OK);
+    OWNER_CHECK(xr_compile_session_new(g_resources, &g_session) == XR_COMPILER_SESSION_OK);
 }
 
 static void teardown(void) {
-    if (g_iso) {
-        xray_vm_delete(g_iso);
-        g_iso = NULL;
-        g_session = NULL;
-    }
+    OWNER_CHECK(xr_compile_session_resource_status(g_session) == XR_COMPILE_RESOURCE_OK);
+    OWNER_CHECK(!xr_compile_session_current_arena(g_session));
+    xr_compile_session_free(g_session);
+    g_session = NULL;
+    XrCompileResourceStats observed = {0};
+    OWNER_CHECK(xr_compile_resources_stats(g_resources, &observed) == XR_COMPILE_RESOURCE_OK);
+    OWNER_CHECK(observed.live_bytes == g_baseline.live_bytes);
+    printf("Recoverable fixed root allocated=%llu peak=%llu work=%llu owner-live-baseline=%llu\n",
+        (unsigned long long) observed.allocated_bytes, (unsigned long long) observed.peak_bytes,
+        (unsigned long long) observed.work, (unsigned long long) observed.live_bytes);
+    xr_compile_resources_release(g_resources);
+    g_resources = NULL;
 }
 
 // Diagnostic capture: collects every callback invocation so the test
@@ -113,45 +122,48 @@ static void diag_callback(void *user_data, int line, int column, int end_line, i
     }
 }
 
-// Drive xr_parse_recoverable with a captured-diagnostic sink.
-// Each call owns its own arena so the parser has somewhere to
-// allocate AST nodes; LSP/MCP callers in production pre-install
-// an arena on the isolate, but in unit-test scope the cleanest
-// contract-faithful path is to pass the arena explicitly via the
-// API parameter xr_parser_init already exposes.
-//
-// Returns the parsed AST. The arena is captured into *out_arena
-// so the caller can free it after inspection.
+// The parser owns its scope; the caller retains the exact State-backed arena
+// until all borrowed AST and diagnostic fields have been inspected.
 static AstNode *parse_recoverable(const char *source, Parser *out_parser, DiagSink *sink,
                                   int max_errors, XrArena **out_arena) {
+    OWNER_CHECK(source && out_parser && sink && out_arena && !*out_arena);
     sink->count = 0;
-    XrArena *arena = (XrArena *) xr_malloc(sizeof(XrArena));
-    xr_arena_init(arena, XR_ARENA_SEGMENT_SIZE);
-    *out_arena = arena;
-
-    XrCompilerSessionScope parse_scope;
-    if (!xr_compiler_session_push_arena(xr_compiler_session_current_for_isolate(g_iso), arena,
-                                        "<test>", &parse_scope)) {
-        xr_arena_destroy(arena);
-        xr_free(arena);
-        *out_arena = NULL;
-        return NULL;
-    }
-    xr_parser_init(out_parser, xr_compiler_session_current_for_isolate(g_iso), source, "<test>",
-                   arena);
+    XrCompileState *state = xr_compile_session_compile_state(g_session);
+    OWNER_CHECK(xr_compile_state_resources(state) == g_resources);
+    void *memory = NULL;
+    OWNER_CHECK(xr_compile_state_calloc(state, 1, sizeof(XrArena), &memory) == XR_COMPILE_RESOURCE_OK);
+    XrArena *arena = memory;
+    XrArenaBacking backing;
+    OWNER_CHECK(xr_compiler_arena_state_backing(state, &backing) == XR_ARENA_OK);
+    OWNER_CHECK(xr_arena_open(arena, XR_ARENA_SEGMENT_SIZE, &backing) == XR_ARENA_OK);
+    OWNER_CHECK(xr_compiler_arena_matches_state(arena, state));
+    *out_parser = (Parser) {0};
+    OWNER_CHECK(xr_compile_parser_open(out_parser, g_session, source, "<test>", arena) == XR_PARSE_OK);
     xr_parser_set_error_callback(out_parser, diag_callback, sink, max_errors);
-    AstNode *ast = xr_parse_recoverable(out_parser);
-    xr_compiler_session_pop_arena(&parse_scope);
+    AstNode *ast = NULL;
+    XrParseStatus status = xr_compile_parse_recoverable(out_parser, &ast);
+    if (status != XR_PARSE_OK && status != XR_PARSE_RECOVERED) {
+        XrCompileResourceStats stats = {0};
+        OWNER_CHECK(xr_compile_resources_stats(g_resources, &stats) == XR_COMPILE_RESOURCE_OK);
+        fprintf(stderr, "Recoverable failure status=%u state=%u allocated=%llu peak=%llu work=%llu diagnostics=%d\n",
+            status, xr_compile_state_status(state), (unsigned long long) stats.allocated_bytes,
+            (unsigned long long) stats.peak_bytes, (unsigned long long) stats.work, sink->count);
+    }
+    OWNER_CHECK(status == XR_PARSE_OK || status == XR_PARSE_RECOVERED);
+    OWNER_CHECK(ast && ast->type == AST_PROGRAM && ast->as.program.arena == arena);
+    OWNER_CHECK(!ast->as.program.owns_arena);
+    OWNER_CHECK(out_parser->state == state && !out_parser->type_scope);
+    OWNER_CHECK(!xr_compile_session_current_arena(g_session));
+    OWNER_CHECK(xr_compile_session_resource_status(g_session) == XR_COMPILE_RESOURCE_OK);
+    *out_arena = arena;
     return ast;
 }
 
-// Release the arena returned by parse_recoverable. AST nodes live
-// inside the arena, so this single call frees the entire AST.
+// Release the borrowed AST only after the parser has closed its scopes.
 static void release_arena(XrArena *arena) {
-    if (!arena)
-        return;
+    if (!arena) return;
     xr_arena_destroy(arena);
-    xr_free(arena);
+    xr_compile_state_free(arena);
 }
 
 // Count how many top-level statements made it into the AST.
@@ -206,6 +218,7 @@ TEST(generic_closers_preserve_adjacent_assignment) {
     ASSERT_EQ_INT(ast->as.program.statements[2]->as.var_decl.initializer->type, AST_BINARY_RSHIFT);
     ASSERT_EQ_INT(ast->as.program.statements[3]->as.var_decl.initializer->type, AST_BINARY_GE);
     release_arena(arena);
+    arena = NULL;
     ast = parse_recoverable("var extra:Array<i64>>=[1]\n", &parser, &sink, 0, &arena);
     ASSERT_NOT_NULL(ast);
     ASSERT_TRUE(sink.count > 0);
@@ -215,13 +228,13 @@ TEST(generic_closers_preserve_adjacent_assignment) {
 
 TEST(invalid_utf8_source_reports_lexer_diagnostic) {
     setup();
-    static const char source[] = {'v', 'a', 'r', ' ', 'a', '=', '1',         '\n', 'v',
-                                  'a', 'r', ' ', 'b', '=', ' ', (char) 0x80, '\n', 'v',
+    static const unsigned char source[] = {'v', 'a', 'r', ' ', 'a', '=', '1',         '\n', 'v',
+                                  'a', 'r', ' ', 'b', '=', ' ', 0x80, '\n', 'v',
                                   'a', 'r', ' ', 'c', '=', '2', '\n',        '\0'};
     Parser parser;
     DiagSink sink;
     XrArena *arena = NULL;
-    AstNode *ast = parse_recoverable(source, &parser, &sink, 1, &arena);
+    AstNode *ast = parse_recoverable((const char *) source, &parser, &sink, 1, &arena);
 
     ASSERT_NOT_NULL(ast);
     ASSERT_EQ_INT(parser.had_error, 1);
@@ -562,8 +575,8 @@ TEST(override_modifier_has_exact_declaration_scope) {
         "enum A { One; override value() {} }",
         "interface A { override value() }",
     };
+    setup();
     for (unsigned i = 0; i < sizeof(rejected) / sizeof(rejected[0]); ++i) {
-        setup();
         Parser parser;
         DiagSink sink;
         XrArena *arena = NULL;
@@ -571,9 +584,7 @@ TEST(override_modifier_has_exact_declaration_scope) {
         ASSERT_TRUE(parser.had_error != 0);
         ASSERT_TRUE(sink.count > 0);
         release_arena(arena);
-        teardown();
     }
-    setup();
     Parser parser;
     DiagSink sink;
     XrArena *arena = NULL;
@@ -680,7 +691,8 @@ TEST(null_parser_returns_null_safely) {
     // NULL-safety: xr_parse_recoverable with NULL parser must NOT
     // crash. Callers (e.g. fuzz harness) rely on this for early-
     // exit on init failure.
-    AstNode *ast = xr_parse_recoverable(NULL);
+    AstNode *ast = NULL;
+    ASSERT_EQ_INT(xr_compile_parse_recoverable(NULL, &ast), XR_PARSE_BAD_ARGUMENT);
     ASSERT_NULL(ast);
 }
 

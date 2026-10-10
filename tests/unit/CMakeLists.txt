@@ -1277,38 +1277,39 @@ add_xray_unit_test(test_lexer_positions frontend/test_lexer_positions.c)
 add_xray_unit_test(test_lexer_trivia frontend/test_lexer_trivia.c)
 add_xray_bootstrap_unit_test(test_parser frontend/test_parser.c)
 add_xray_bootstrap_unit_test(test_parser_type_scope frontend/test_parser_type_scope.c)
-add_xray_bootstrap_unit_test(test_parser_recoverable frontend/test_parser_recoverable.c)
+add_executable(test_parser_recoverable frontend/test_parser_recoverable.c)
+target_link_libraries(test_parser_recoverable PRIVATE xray_compiler_parser)
+add_test(NAME test_parser_recoverable COMMAND $<TARGET_FILE:test_parser_recoverable>)
+if(MSVC)
+    target_compile_options(test_parser_recoverable PRIVATE /W4 /WX /utf-8)
+else()
+    target_compile_options(test_parser_recoverable PRIVATE -Wall -Wextra -Werror)
+endif()
 add_executable(test_parser_where_limits frontend/test_parser_where_limits.c)
 target_link_libraries(test_parser_where_limits PRIVATE xray_compiler_parser)
 add_test(NAME test_parser_where_limits COMMAND $<TARGET_FILE:test_parser_where_limits>)
 set_tests_properties(test_parser_where_limits PROPERTIES LABELS "unit;parser;ownership;safety")
-if(TARGET xray_core_objs AND TARGET xray_stdlib_bootstrap_core)
-    # The injected AST translation unit supplies every xast symbol. Archive the
-    # already-compiled bootstrap objects so its original xast object is extracted
-    # only if needed; never link the OBJECT aggregate directly to this executable.
-    add_library(xray_ast_test_bootstrap STATIC
-        $<TARGET_OBJECTS:xray_core_objs>
-        $<TARGET_OBJECTS:xray_stdlib_bootstrap_core>)
-    # OBJECT targets in INTERFACE_LINK_LIBRARIES propagate usage requirements
-    # (including system/libffi libraries), not their objects. The objects above
-    # are therefore present only in the archive and remain demand-loaded.
-    target_link_libraries(xray_ast_test_bootstrap INTERFACE
-        xray_core_objs xray_stdlib_bootstrap_core)
-    add_executable(test_ast_allocation_failure frontend/test_ast_allocation_failure.c)
-    target_include_directories(test_ast_allocation_failure PRIVATE ${XRAY_COMMON_INCLUDES} ${CMAKE_CURRENT_SOURCE_DIR})
-    target_link_libraries(test_ast_allocation_failure PRIVATE xray_ast_test_bootstrap)
-    foreach(parser_boundary IN ITEMS test_parser_where_limits test_ast_allocation_failure)
-        if(MSVC)
-            target_compile_options(${parser_boundary} PRIVATE /W4 /WX)
-        else()
-            target_compile_options(${parser_boundary} PRIVATE -Wall -Wextra -Werror)
-        endif()
-    endforeach()
-    add_test(NAME test_ast_allocation_failure
-        COMMAND ${CMAKE_COMMAND} -DTEST_EXECUTABLE=$<TARGET_FILE:test_ast_allocation_failure>
-            -P ${CMAKE_CURRENT_SOURCE_DIR}/frontend/check_ast_allocation_failure.cmake)
-    set_tests_properties(test_ast_allocation_failure PROPERTIES LABELS "unit;parser;ownership;safety" TIMEOUT 45)
+if(MSVC)
+    target_compile_options(test_parser_where_limits PRIVATE /W4 /WX)
+else()
+    target_compile_options(test_parser_where_limits PRIVATE -Wall -Wextra -Werror)
 endif()
+add_executable(test_ast_allocation_failure frontend/test_ast_allocation_failure.c)
+target_link_libraries(test_ast_allocation_failure PRIVATE xray_compiler_parser)
+target_compile_features(test_ast_allocation_failure PRIVATE c_std_11)
+if(MSVC)
+    target_compile_definitions(test_ast_allocation_failure PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX _CRT_SECURE_NO_WARNINGS)
+    target_compile_options(test_ast_allocation_failure PRIVATE /W4 /WX /utf-8 /Gy)
+    if(CMAKE_C_COMPILER_ID STREQUAL "MSVC")
+        target_compile_options(test_ast_allocation_failure PRIVATE /experimental:c11atomics)
+    endif()
+else()
+    target_compile_options(test_ast_allocation_failure PRIVATE -Wall -Wextra -Werror)
+endif()
+add_test(NAME test_ast_allocation_failure
+    COMMAND ${CMAKE_COMMAND} -DTEST_EXECUTABLE=$<TARGET_FILE:test_ast_allocation_failure>
+        -P ${CMAKE_CURRENT_SOURCE_DIR}/frontend/check_ast_allocation_failure.cmake)
+set_tests_properties(test_ast_allocation_failure PROPERTIES LABELS "unit;parser;ownership;safety" TIMEOUT 45)
 add_executable(test_parser_asi frontend/test_parser_asi.c)
 target_link_libraries(test_parser_asi PRIVATE xray_compiler_parser)
 add_test(NAME test_parser_asi COMMAND $<TARGET_FILE:test_parser_asi>)
