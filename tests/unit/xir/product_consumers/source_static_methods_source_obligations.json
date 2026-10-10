@@ -363,5 +363,41 @@
     "completion": "OPEN",
     "retired": 0,
     "remaining": "Fresh affected writer/CGen/actual host C/binding/receiver and original3 runtime gates; full FI/axes/sanitizers/AOT/lifecycle/escape/source-delete obligations remain OPEN."
+  },
+  "source_free_actual_native_mixed_receiver_9031_checked_stage_fix_20261010": {
+    "status": "STATIC_CURRENT_CHECKED_STAGE_FIX_FRESH_EXECUTION_PENDING",
+    "producer": "9031dbc04d5f66ae2bcb356478a0d9450dc9ad4e",
+    "failed_overlay": "d900823b83f466f2356b83aba7165f5425e92014",
+    "first_red": "Receiver driver395 C2065 undeclared XR_XIR_CLOSED after real writer/Source/CGen; all3 normal runtimes0",
+    "r3_raw_log_sha256": "6df5df737864e91454fd6faa4f738b9e8e96cd3cb3e4c18face16dd305fdc71f",
+    "r3_terminal_guard_sha256": "03ff827e9348ad07434b1b71b860ab1c5d10eff10c3cb7f9cd5d913f795edd17",
+    "one_hunk_fix": "Use actual public CHECKED stage after actual checked_read; preserve actual packet evidence/fullverify_v2 and all subsequent checks. Decoder INSTANCE evidence_limit does not itself guarantee closure. No compatibility alias.",
+    "driver_pre_sha256": "503739246989e59703ea2df4f83d34530c468a22133ed646c52f27b29e7cde3a",
+    "driver_post_sha256": "55bbad1507752243ec1edf6c01c629b36beaceb7efa850e33cd9140e29ec6804",
+    "full_raw_inverse_exact": true,
+    "author_freeze_sha256": "7e57fc03a9cccddd2ab7a4c92e52d30a0b8c71747c4c623fed92eb36789efa27",
+    "main_review_sha256": "6fb93db8be496a42b53cb59441ff90a95eba0120d05f07e0877a769e3359d6dd",
+    "independent_reviews": [
+      {
+        "path": "build-consumer-evidence/parallel-aot-main-audit-r1/plain-native-mixed-checked-stage-successor-static-review-r1/report.json",
+        "sha256": "37b0e337af5ad23de1926a3e89091be9d0b9b38256a12a08c9428d0c1bf751e8"
+      },
+      {
+        "path": "build-consumer-evidence/parallel-progress-speed-analysis-r1/plain-native-mixed-checked-stage-static-review-r1.json",
+        "sha256": "45adfc10b969a54a897c041d1be893e299c8043de6ef4b5edae0e367a9b0378f"
+      },
+      {
+        "path": "build-consumer-evidence/parallel-consumer-interface-delta-r1/plain-native-mixed-checked-stage-successor-r1/stage-evidence-author-erratum-r1.json",
+        "sha256": "fce1ad846e679b0c1825b670d8f5c8be14e084ebd10b977c357417c34620f4fd"
+      }
+    ],
+    "material_fact": "Actual C32921/Closed packet3904/whole32identity/binding123 freshly emitted. Generated C embeds all3904proof bytes and all32identity; C SHA9c3cfaf2403fe889c06051fab97432321a4eea7bf4c6e903f76ce0aab8b9fe1b equals sidecar literal. Host compilation/runtime not qualified.",
+    "original_oracles": "Full220 Source First19+Second23=independent42, three actual routes/two Instances/fullproof/producerdeath/callerProgramdrop/sharedlease unchanged.",
+    "successor_cohort": "Keep r3 four sealed leaves at original paths. Explicit next private CMake cohort output-directory metadata r4 under same provider before fresh writer/CGen/actualC/binding/receiver; no old overwrite or cold unaffected objects.",
+    "window": "r3 CLOSED_FIRST_RED; Root running FI, next normal3 not yet opened at static application",
+    "fix_compile_runtime": 0,
+    "retired": 0,
+    "completion": "OPEN",
+    "remaining": "Original3 normal gates, complete AOT/FI/axes/sanitizers/stable object lifetime/escape/SourceDelete remain OPEN."
   }
 }
