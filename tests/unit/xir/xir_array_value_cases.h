@@ -13,7 +13,7 @@
 static XrXirTypeArena *array_value_arena(XrXirDomain *domain) {
     (void)domain;
     const XrXirTypeNode nodes[] = {
-        {.kind = XR_XIR_TYPE_CALLABLE, .result = XR_XIR_I64},
+        {.kind = XR_XIR_TYPE_CALLABLE, .result = XR_XIR_I64, .flags = XR_XIR_CALLABLE_ROOT_UNRESOLVED},
         {.kind = XR_XIR_TYPE_ARRAY, .element = XR_XIR_STRING},
         {.kind = XR_XIR_TYPE_ARRAY, .element = (XrXirType) 257},
         {.kind = XR_XIR_TYPE_ARRAY, .element = (XrXirType) 256},

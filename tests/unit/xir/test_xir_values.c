@@ -271,7 +271,7 @@ static void arena_identity_and_revocation(void) {
     uint64_t baseline = xr_xir_domain_stats(domain).live_bytes;
     XrXirCallableParameter parameter = {XR_XIR_STRING, 0};
     XrXirTypeNode nodes[] = {
-        {.kind = XR_XIR_TYPE_CALLABLE, .parameters = &parameter, .parameter_count = 1, .result = XR_XIR_I64},
+        {.kind = XR_XIR_TYPE_CALLABLE, .parameters = &parameter, .parameter_count = 1, .result = XR_XIR_I64, .flags = XR_XIR_CALLABLE_ROOT_UNRESOLVED},
         {.kind = XR_XIR_TYPE_CELL, .element = (XrXirType) 256},
         {.kind = XR_XIR_TYPE_ARRAY, .element = XR_XIR_STRING},
         {.kind = XR_XIR_TYPE_ARRAY, .element = (XrXirType) 258},

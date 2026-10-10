@@ -51,7 +51,7 @@ static void cell_allocation_cases(void) {
     xr_xir_compile_type_arena_drop(arena); xr_xir_domain_drop(domain); xr_xir_domain_drop(other);
     xr_xir_value_drop(&cell); xr_xir_value_drop(&alias); xr_xir_value_drop(&initial);
     xr_xir_value_drop(&replacement); xr_xir_value_drop(&snapshot); xr_xir_value_drop(&latest);
-    CHECK(!live); fail_at = SIZE_MAX;
+    CHECK(!live); fail_at = SIZE_MAX; domain = NULL;
     CHECK(xr_xir_domain_new(65536, &domain) == XR_XIR_VALUE_OK);
     arena = allocation_arena(domain);
     admission = allocation_admission(domain, arena, NULL);
