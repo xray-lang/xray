@@ -188,7 +188,7 @@ static void check_actual_route(unsigned mode, NativeRouteCounts before, NativeRo
         after.child_suspends[selected_child] - before.child_suspends[selected_child] == 2);
     CHECK(after.child_suspends[1 - selected_child] == before.child_suspends[1 - selected_child]);
 }
-#if defined(XR_SOURCE_TYPED_LIBRARY_NATIVE_PACKET_CANCEL_RECEIVER)
+#if defined(XR_SOURCE_TYPED_LIBRARY_NATIVE_PACKET_CANCEL_RECEIVER) || defined(XR_SOURCE_TYPED_LIBRARY_NATIVE_PACKET_DUAL_PENDING_RECEIVER)
 static void check_actual_cancel_route(unsigned mode, unsigned prefix, NativeRouteCounts before, NativeRouteCounts after) {
     CHECK(prefix == 1 || prefix == 2);
     for (unsigned n = 0; n < 2; ++n) {

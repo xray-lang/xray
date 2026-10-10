@@ -60,8 +60,20 @@ add_executable(${source_typed_native_cancel_runner} "${source_typed_native_drive
     "${source_typed_native_c}" "${source_typed_native_binding}")
 target_compile_definitions(${source_typed_native_cancel_runner} PRIVATE XR_SOURCE_TYPED_LIBRARY_NATIVE_PACKET_CANCEL_RECEIVER=1)
 target_link_libraries(${source_typed_native_cancel_runner} PRIVATE xray_xir_vm)
+# The serial-only implementation retains the original cancellation functions verbatim.
+set(source_typed_native_serial_body "${source_typed_native_candidate}/typed_library_native_mixed_serial_cancel.inc.c")
+set_source_files_properties("${source_typed_native_serial_body}" PROPERTIES HEADER_FILE_ONLY TRUE)
+target_sources(${source_typed_native_cancel_runner} PRIVATE "${source_typed_native_serial_body}")
+# Simultaneous pending cancellation reuses the single writer and all four authentic outputs.
+set(source_typed_native_dual_runner test_source_typed_library_receiver_current_native_mixed_dual_pending)
+set(source_typed_native_dual_body "${source_typed_native_candidate}/typed_library_native_mixed_dual_pending.inc.c")
+set_source_files_properties("${source_typed_native_dual_body}" PROPERTIES HEADER_FILE_ONLY TRUE)
+add_executable(${source_typed_native_dual_runner} "${source_typed_native_driver}" "${source_typed_native_support}"
+    "${source_typed_native_dual_body}" "${source_typed_native_c}" "${source_typed_native_binding}")
+target_compile_definitions(${source_typed_native_dual_runner} PRIVATE XR_SOURCE_TYPED_LIBRARY_NATIVE_PACKET_DUAL_PENDING_RECEIVER=1)
+target_link_libraries(${source_typed_native_dual_runner} PRIVATE xray_xir_vm)
 # The public VM native-cache closure still includes Source; physical SourceDelete is OPEN.
-foreach(source_typed_native_target IN ITEMS ${source_typed_native_writer} ${source_typed_native_runner} ${source_typed_native_cancel_runner})
+foreach(source_typed_native_target IN ITEMS ${source_typed_native_writer} ${source_typed_native_runner} ${source_typed_native_cancel_runner} ${source_typed_native_dual_runner})
     target_include_directories(${source_typed_native_target} BEFORE PRIVATE
         "${SOURCE_TYPED_LIBRARY_CURRENT_FORMAL_ROOT}/tests/unit/xir"
         "${SOURCE_TYPED_LIBRARY_CURRENT_FORMAL_ROOT}/src" "${source_typed_native_candidate}")
@@ -90,4 +102,13 @@ foreach(source_typed_native_mode IN ITEMS 1 2 3)
     set_tests_properties(${source_typed_native_cancel_runner}_mode${source_typed_native_mode} PROPERTIES
         WORKING_DIRECTORY "${source_typed_native_material}" TIMEOUT 120 PROCESSORS 1
         LABELS "unit;xir;program-consumer;typed-library;module-graph;receiver;coroutine;ownership;packet;native;mixed;cancel-prefix;normal-only;current-interface-candidate")
+endforeach()
+# Each process owns two simultaneously suspended Instances and swaps the cancellation victim.
+foreach(source_typed_native_mode IN ITEMS 1 2 3)
+    add_test(NAME ${source_typed_native_dual_runner}_mode${source_typed_native_mode}
+        COMMAND ${source_typed_native_dual_runner} "${source_typed_native_mode}"
+        "${source_typed_native_proof}" "${source_typed_native_identity}" "${source_typed_native_c}")
+    set_tests_properties(${source_typed_native_dual_runner}_mode${source_typed_native_mode} PROPERTIES
+        WORKING_DIRECTORY "${source_typed_native_material}" TIMEOUT 120 PROCESSORS 1
+        LABELS "unit;xir;program-consumer;typed-library;receiver;coroutine;ownership;packet;native;mixed;dual-pending;cancel-prefix;normal-only;current-interface-candidate")
 endforeach()
