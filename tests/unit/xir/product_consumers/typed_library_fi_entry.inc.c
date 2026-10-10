@@ -219,12 +219,15 @@ static bool typed_fi_number(const char *text, size_t *out) {
     if (value == SIZE_MAX) return false;
     *out = value; return true;
 }
+#include "typed_library_fi_shards.inc.c"
 static int typed_fi_main(int argc, char **argv) {
     if (argc < 5) return 2;
     unsigned mode = !strcmp(argv[1], "1") ? 1u : !strcmp(argv[1], "2") ? 2u : !strcmp(argv[1], "3") ? 3u : 0u;
     if (!mode) return 2;
     TypedFiRequest r = {.limits = {UINT64_C(67108864), UINT64_C(8388608), UINT64_C(128000000)}};
     if (argc == 5) return typed_fi_run(argv, r, mode) ? 0 : 1;
+    if (argc == 10 && (!strcmp(argv[5], "--compiler-shard") || !strcmp(argv[5], "--runtime-shard")))
+        return typed_fi_shard(argv, r, mode);
     if (argc == 8 && (!strcmp(argv[5], "--compiler-fault") || !strcmp(argv[5], "--runtime-fault"))) {
         r.kind = !strcmp(argv[5], "--compiler-fault") ? TFI_COMPILER : TFI_RUNTIME;
         if (!typed_fi_number(argv[6], &r.site) || !typed_fi_number(argv[7], &r.total) || r.site >= r.total) return 2;
@@ -243,5 +246,5 @@ static int typed_fi_main(int argc, char **argv) {
         else r.limits.work = value;
         return typed_fi_run(argv, r, mode) ? 0 : 1;
     }
-    return 2; /* Full shard dispatch remains OPEN; do not label single ordinal as full coverage. */
+    return 2; /* A single ordinal never substitutes for the full frozen domain. */
 }

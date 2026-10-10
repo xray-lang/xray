@@ -119,11 +119,13 @@ set(source_typed_native_fi_runner test_source_typed_library_receiver_current_nat
 add_executable(${source_typed_native_fi_runner} "${source_typed_native_driver}" "${source_typed_native_support}"
     "${source_typed_native_candidate}/typed_library_fi_protocol.inc.c"
     "${source_typed_native_candidate}/typed_library_fi_entry.inc.c"
+    "${source_typed_native_candidate}/typed_library_fi_shards.inc.c"
     "${source_typed_native_candidate}/typed_library_receiver_normal_cleanup.inc.c"
     "${source_typed_native_candidate}/typed_library_receiver_original_entry.inc.c"
     "${source_typed_native_c}" "${source_typed_native_binding}")
 set_source_files_properties("${source_typed_native_candidate}/typed_library_fi_protocol.inc.c"
     "${source_typed_native_candidate}/typed_library_fi_entry.inc.c"
+    "${source_typed_native_candidate}/typed_library_fi_shards.inc.c"
     "${source_typed_native_candidate}/typed_library_receiver_normal_cleanup.inc.c"
     "${source_typed_native_candidate}/typed_library_receiver_original_entry.inc.c" PROPERTIES HEADER_FILE_ONLY TRUE)
 target_compile_definitions(${source_typed_native_fi_runner} PRIVATE XR_SOURCE_TYPED_LIBRARY_NATIVE_PACKET_FI_RECEIVER=1)
@@ -138,6 +140,6 @@ if(MSVC)
 else()
     target_compile_options(${source_typed_native_fi_runner} PRIVATE -Wall -Wextra -Werror)
 endif()
-# Full FI executor/shard registration remains OPEN (600/P8/jobs8 unchanged).
+# Complete typed executor/shards are prepared; explicit Root cohort/CTest binding is required (600/P8/jobs8).
 # Compiler-axis registration remains OPEN (120/P1/RUN_SERIAL unchanged).
 # Existing ordinary/cancel tests and the Source0 contracts are unchanged.

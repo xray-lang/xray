@@ -9,6 +9,7 @@ import json
 from pathlib import Path
 import re
 import subprocess
+import sys
 import time
 import uuid
 
@@ -278,6 +279,7 @@ def process_contract(process: dict) -> None:
 # Typed receiver adapter only. Existing Source0 CLI, 43 records and default execution are unchanged.
 # A caller must bind the same immutable four-material cohort; typed launch/registration remains OPEN.
 def typed_library_axis_contract(output: str, axis: str, cut: str, normal_output: str, helpers) -> dict:
+    helpers.typed_library_case_blocks(output, shard=False)
     if axis not in LIMITS or cut not in ("exact", "minus1"):
         raise ValueError("unknown typed compiler resource boundary")
     normal = helpers.typed_library_normal_contract(normal_output)
@@ -344,6 +346,55 @@ def typed_library_axis_contract(output: str, axis: str, cut: str, normal_output:
             "actual": actuals[axis], "records": len(calls),
             "first_refusal": None if cut == "exact" else last["name"]}
 
+
+
+def typed_library_axis_main() -> None:
+    parser = argparse.ArgumentParser(add_help=False)
+    parser.add_argument("--input-root", type=Path, required=True)
+    partial, _ = parser.parse_known_args()
+    faults = load_fault_helpers(partial.input_root.resolve(strict=True))
+    parser = faults.typed_library_parser("One typed receiver compiler resource boundary; original Source0 unchanged")
+    parser.add_argument("--axis", choices=LIMITS, required=True)
+    parser.add_argument("--cut", choices=("exact", "minus1"), required=True)
+    args = parser.parse_args()
+    cohort, guard_record, guard, original, run = faults.typed_library_prepare(args)
+    started = time.monotonic(); deadline = started + 110
+    issues, normals, normal, result, before, after = [], [], None, None, None, None
+    try:
+        before = faults.typed_library_capture(args, guard, cohort, guard_record)
+        original.write(run / "inputs-before.json", before); base = before["base_argv"]
+        normals, normal, errors = faults.typed_library_normals(base, run, deadline, original, args.input_root)
+        issues += errors
+        if normal is not None and normal["summary"]["mode"] != str(args.mode):
+            issues.append("fresh normal executed a different requested route mode")
+        if not issues and normal is not None:
+            total = normal["totals"][args.axis]
+            command = base + ["--compiler-axis", args.axis, args.cut, str(total)]
+            try:
+                process = process_run(command, "typed-axis", run, deadline, original, args.input_root)
+                process_contract(process); faults.typed_library_stderr(Path(process["stderr"]).read_bytes())
+                output = Path(process["stdout"]).read_text(encoding="utf-8")
+                normal_output = Path(normals[-1]["stdout"]).read_text(encoding="utf-8")
+                result = typed_library_axis_contract(output, args.axis, args.cut, normal_output, faults)
+                process["typed_axis_result"] = result
+                process_receipt_write(run / "typed-axis.json", process, original)
+            except Exception as error:
+                faults.process_failure(command, "typed-axis", run, error, original); issues.append(str(error))
+    except Exception as error: issues.append("typed first input/execution failure: " + str(error))
+    finally:
+        try:
+            after = faults.typed_library_capture(args, guard, cohort, guard_record)
+            original.write(run / "inputs-after.json", after)
+            if before != after: issues.append("complete shared Source/material/tool/input cohort changed")
+        except Exception as error: issues.append("typed terminal guard failure: " + str(error))
+    faults.finish_report({"status": "FAIL" if issues else "PASS", "scope": "TYPED_RECEIVER_ONE_COMPILER_RESOURCE_BOUNDARY",
+                          "mode": args.mode, "axis": args.axis, "cut": args.cut, "issues": issues,
+                          "fresh_normals_verified": sum("normal_census" in item for item in normals),
+                          "normal_census": normal, "axis_result": result, "process_budget_seconds": 110,
+                          "CTest_caps": {"timeout": 120, "processors": 1, "run_serial": True},
+                          "elapsed_seconds": time.monotonic() - started, "input_guard_before": before,
+                          "input_guard_after": after, "evidence": str(run),
+                          "qualification_boundary": "Only actual bound typed compiler axis/cut; runtime byte/work, FI/writer/Source/stable/full safety/Main remain separate."}, run, original)
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
@@ -419,4 +470,7 @@ def main() -> None:
 
 
 if __name__ == "__main__":
-    main()
+    if "--typed-library" in sys.argv[1:]:
+        typed_library_axis_main()
+    else:
+        main()

@@ -12,6 +12,7 @@ import os
 from pathlib import Path
 import re
 import subprocess
+import sys
 import time
 import traceback
 import uuid
@@ -626,7 +627,7 @@ TYPED_LIBRARY_PROTOCOL = {
     "compiler_suffix": ["--compiler-fault", "ordinal", "frozen-N"],
     "runtime_suffix": ["--runtime-fault", "ordinal", "frozen-R"],
     "axes_suffix": ["--compiler-axis", "allocated|live|work", "exact|minus1", "normal-total"],
-    "full_shard_dispatch": "OPEN", "material_cohort_binding": "OPEN",
+    "full_shard_dispatch": "DRAFT_IMPLEMENTED_NOT_RUN", "material_cohort_binding": "EXPLICIT_SHARED_GUARD_INPUT_REQUIRED",
     "generation": "once-generated existing four materials; never in FI receiver",
     "full_fi_caps": {"timeout": 600, "processors": 8, "jobs": 8},
     "axes_caps": {"timeout": 120, "processors": 1, "run_serial": True},
@@ -723,25 +724,41 @@ def typed_library_stages(output: str, summary: dict[str, str]) -> list[dict[str,
     return calls
 
 
-def typed_library_routes(output: str, mode: int) -> list[dict[str, str]]:
+def typed_library_route(line: str, position: int, mode: int | None = None) -> dict[str, str]:
     prefix = "typed-library-native-mixed "
-    converted = "\n".join(PREFIX + line[len(prefix):] for line in output.splitlines() if line.startswith(prefix))
-    actual = rows(converted, "instance=")
-    if len(actual) != 4:
+    actual = rows(PREFIX + line[len(prefix):], "instance=") if line.startswith(prefix) else []
+    fields = {"instance", "repeat", "mode", "constructor-native", "constructor-VM",
+              "child-native", "child-VM", "actual-yield-resumes", "owned-I64"}
+    if len(actual) != 1 or set(actual[0]) != fields:
+        raise ValueError("unknown, missing, duplicate or extra typed route fields")
+    record = actual[0]
+    values = {key: unsigned(value) for key, value in record.items()}
+    for key, value in values.items():
+        bound = 4294967295 if key in ("instance", "repeat", "mode") else 18446744073709551615
+        if str(value) != record[key] or value > bound:
+            raise ValueError("typed route number is not its actual printf unsigned representation")
+    sequence = ((0, 0), (0, 1), (1, 0), (1, 1))
+    actual_mode = values["mode"]
+    if (not 0 <= position < len(sequence) or (values["instance"], values["repeat"]) != sequence[position]
+            or actual_mode not in (1, 2, 3) or (mode is not None and actual_mode != mode)
+            or record["actual-yield-resumes"] != "2" or record["owned-I64"] != "42"):
+        raise ValueError("typed completed route changed its actual call prefix/mode/two yields/fixed 42")
+    for role, native in (("constructor", actual_mode in (1, 2)), ("child", actual_mode in (1, 3))):
+        selected, other = ("native", "VM") if native else ("VM", "native")
+        if not values[role + "-" + selected] or values[role + "-" + other]:
+            raise ValueError("typed selected actual delegate/opposite-zero obligation failed")
+    return record
+
+
+def typed_library_routes(output: str, mode: int) -> list[dict[str, str]]:
+    lines = [line for line in output.splitlines() if line.startswith("typed-library-native-mixed ")]
+    if len(lines) != 4:
         raise ValueError("typed normal did not execute four independent owned 42 calls")
-    for record, (instance, repeat) in zip(actual, ((0, 0), (0, 1), (1, 0), (1, 1))):
-        if (unsigned(record["instance"]) != instance or unsigned(record["repeat"]) != repeat
-                or unsigned(record["mode"]) != mode or record.get("actual-yield-resumes") != "2"
-                or record.get("owned-I64") != "42"):
-            raise ValueError("typed original two Instances/two yields/fixed 42 changed")
-        for role, native in (("constructor", mode in (1, 2)), ("child", mode in (1, 3))):
-            selected, other = ("native", "VM") if native else ("VM", "native")
-            if not unsigned(record[role + "-" + selected]) or unsigned(record[role + "-" + other]):
-                raise ValueError("typed selected actual delegate/opposite-zero obligation failed")
-    return actual
+    return [typed_library_route(line, position, mode) for position, line in enumerate(lines)]
 
 
 def typed_library_normal_contract(output: str) -> dict:
+    typed_library_case_blocks(output, shard=False)
     summary = typed_library_summary(output)
     if (summary.get("kind") != "0" or summary.get("reached-end") != "1"
             or summary.get("hits") != "0" or summary.get("first-stage") != "NONE"):
@@ -770,6 +787,7 @@ def typed_library_normal_contract(output: str) -> dict:
 
 
 def typed_library_fault_contract(output: str, kind: str, site: int, normal: dict) -> dict:
+    typed_library_case_blocks(output, shard=False)
     if kind not in ("compiler", "runtime"):
         raise ValueError("unsupported typed allocation domain")
     summary = typed_library_summary(output); calls = typed_library_stages(output, summary)
@@ -816,6 +834,284 @@ def typed_library_fault_contract(output: str, kind: str, site: int, normal: dict
     return {"kind": kind, "site": site, "total": total, "stage": last["name"],
             "domain": domain, "status": oom, "records": len(calls)}
 
+
+
+def typed_library_expected_record(text: str) -> dict:
+    match = re.fullmatch(r"([0-9a-f]{64}):([0-9]+):([0-9]+)", text)
+    if match is None:
+        raise ValueError("explicit cohort/module record must be sha256:bytes:mtime_ns")
+    return {"sha256": match[1], "bytes": int(match[2]), "mtime_ns": match[3]}
+
+
+def typed_library_file_record(path: Path) -> dict:
+    raw = path.read_bytes()
+    return {"sha256": hashlib.sha256(raw).hexdigest(), "bytes": len(raw),
+            "mtime_ns": str(path.stat().st_mtime_ns)}
+
+
+def typed_library_cohort_record(args) -> dict:
+    literal, name = args.typed_cohort_record, args.typed_cohort_record_env
+    if (literal is None) == (name is None):
+        raise ValueError("select exactly one explicit literal or caller-named INPUT record environment")
+    if name is not None:
+        if not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", name):
+            raise ValueError("caller INPUT record environment name is invalid")
+        literal = os.environ.get(name)
+        if not literal:
+            raise ValueError("caller INPUT record environment value missing; no fallback or guard skip")
+    return typed_library_expected_record(literal)
+
+
+def typed_library_guard_module(path: Path, expected: dict):
+    if typed_library_file_record(path) != expected:
+        raise ValueError("caller-bound shared guard module raw/mtime drift")
+    spec = importlib.util.spec_from_file_location("typed_library_shared_root_guard", path)
+    if spec is None or spec.loader is None:
+        raise ValueError("caller-bound shared guard module unavailable")
+    guard = importlib.util.module_from_spec(spec); spec.loader.exec_module(guard)
+    if not callable(getattr(guard, "source_guard", None)) or not callable(getattr(guard, "protected_guard", None)):
+        raise ValueError("shared source_guard(meta)/protected_guard(meta) interface missing")
+    return guard
+
+
+def typed_library_capture(args, guard, cohort_record: dict, guard_record: dict) -> dict:
+    if (typed_library_cohort_record(args) != cohort_record
+            or typed_library_file_record(args.typed_cohort_input) != cohort_record
+            or typed_library_file_record(args.typed_guard_module) != guard_record):
+        raise ValueError("explicit INPUT/shared guard module raw/mtime drift")
+    meta = json.loads(args.typed_cohort_input.read_bytes())
+    if meta.get("scope") != "typed_library_native_mixed_receiver_fi_axes":
+        raise ValueError("old ordinary/cancellation INPUT is not fresh receiver FI admission")
+    if Path(meta["source"]).resolve(strict=True) != args.input_root:
+        raise ValueError("Source ledger/actual helper root differ")
+    if Path(meta["typed_fi_binary"]).resolve(strict=True) != args.binary:
+        raise ValueError("fresh caller-bound FI executable differs")
+    source = guard.source_guard(meta); protected = guard.protected_guard(meta)
+    build = Path(meta["build_actual"]).resolve(strict=True)
+    auxiliary = {str((build / key).resolve(strict=True)): value for key, value in meta["auxiliary_artifacts"].items()}
+    roles = meta["typed_fi_target_object_roles"]
+    if set(roles) != {"fi_driver", "fi_generated_c", "fi_binding_c"}:
+        raise ValueError("fresh FI three-object material roles are incomplete")
+    objects = {str(Path(path).resolve(strict=True)) for path in roles.values()}
+    if len(objects) != 3 or not objects.issubset(auxiliary) or str(args.binary) not in auxiliary:
+        raise ValueError("fresh FI objects/executable absent from shared frozen auxiliary cohort")
+    if meta["typed_fi_binary_record"] != auxiliary[str(args.binary)]:
+        raise ValueError("fresh FI executable record is not the shared actual cohort record")
+    if typed_library_file_record(args.binary) != meta["typed_fi_binary_record"]:
+        raise ValueError("fresh FI executable raw/mtime drift")
+    files = {name: str(Path(meta[name]).resolve(strict=True)) for name in
+             ("packet_path", "identity_path", "generated_c_path", "binding_c_path")}
+    # The shared guard verifies all four materials, whole32 packet SHA, original
+    # normal object roles, tools, Source ledger and protected prior evidence.
+    encoded = json.dumps(protected, sort_keys=True, separators=(",", ":")).encode()
+    argv = [str(args.binary), str(args.mode), files["packet_path"], files["identity_path"], files["generated_c_path"]]
+    return {"source_guard": source, "protected_guard_sha256": hashlib.sha256(encoded).hexdigest(),
+            "INPUT_record": cohort_record, "guard_module_record": guard_record, "fi_objects": sorted(objects),
+            "binary_record": meta["typed_fi_binary_record"], "four_material_paths": files,
+            "base_argv": argv, "scope": meta["scope"],
+            "qualification_boundary": "Explicit fresh INPUT and shared guard reuse only; Root grants/build qualification remain external."}
+
+
+def typed_library_case_blocks(output: str, shard: bool = True) -> dict:
+    blocks, confirmations, pending, case_routes = [], [], [], []
+    phase, awaiting, footer = "between", False, None
+    for line in output.splitlines(keepends=True):
+        protocol = line.startswith(TYPED_LIBRARY_PREFIX)
+        route = line.startswith("typed-library-native-mixed ")
+        if awaiting:
+            if not line.startswith(TYPED_LIBRARY_PREFIX + "shard-case "):
+                raise ValueError("fault summary is not immediately followed by its unique shard-case")
+            confirmations.append(line); awaiting = False; phase = "between"; continue
+        if phase == "done":
+            if line.strip():
+                raise ValueError("nonempty raw appeared after the terminal case summary/shard footer")
+            continue
+        if line.startswith(TYPED_LIBRARY_PREFIX + "shard-summary "):
+            if not shard or not blocks or phase != "between" or pending:
+                raise ValueError("shard footer preceded normal or interrupted an incomplete case")
+            footer = line; phase = "done"; continue
+        if line.startswith(TYPED_LIBRARY_PREFIX + "shard-"):
+            raise ValueError("unknown, duplicate or misplaced shard control row")
+        if not protocol and not route:
+            if line.strip(): raise ValueError("unknown nonempty typed receiver stdout; raw retained")
+            continue
+        if line.startswith(TYPED_LIBRARY_PREFIX + "stage "):
+            if phase not in ("between", "stages"):
+                raise ValueError("stage appeared after case cleanup/first-error")
+            phase = "stages"
+        elif route:
+            if phase != "stages": raise ValueError("route appeared outside the active case stages")
+            case_routes.append(typed_library_route(line, len(case_routes)))
+        elif line.startswith(TYPED_LIBRARY_PREFIX + "cleanup "):
+            if phase != "stages": raise ValueError("case cleanup missing, duplicate or misplaced")
+            phase = "cleanup"
+        elif line.startswith(TYPED_LIBRARY_PREFIX + "first-error "):
+            if phase != "cleanup": raise ValueError("first numeric error not after its actual cleanup")
+            phase = "error"
+        elif line.startswith(TYPED_LIBRARY_PREFIX + "summary "):
+            if phase not in ("cleanup", "error"): raise ValueError("case summary lacks its actual cleanup")
+            summary_mode = unsigned(typed_library_rows(line, "summary ")[0]["mode"])
+            if any(unsigned(record["mode"]) != summary_mode for record in case_routes):
+                raise ValueError("completed route mode differs from its actual case summary")
+            pending.append(line); blocks.append("".join(pending)); pending, case_routes = [], []
+            awaiting = shard and len(blocks) > 1
+            phase = "between" if shard else "done"; continue
+        else:
+            raise ValueError("unknown typed protocol row")
+        pending.append(line)
+    if (phase != "done" or awaiting or pending or (shard and footer is None)
+            or (not shard and (len(blocks) != 1 or footer is not None))):
+        raise ValueError("typed raw has no complete single-case or normal/case/footer sequence; partial retained")
+    return {"blocks": blocks, "confirmations": confirmations, "footer": footer}
+
+
+def typed_library_shard_contract(output: str, kind: str, index: int, normal: dict) -> list[int]:
+    total = normal["N" if kind == "compiler" else "R"]
+    expected = list(range(index, total, 8)); layout = typed_library_case_blocks(output)
+    blocks = layout["blocks"]
+    if len(blocks) != 1 + len(expected) or typed_library_normal_contract(blocks[0]) != normal:
+        raise ValueError("typed shard fresh normal/domain case count drifted")
+    confirmations = typed_library_rows("".join(layout["confirmations"]), "shard-case ")
+    if len(confirmations) != len(expected):
+        raise ValueError("typed completed ordinal confirmations missing/extra")
+    for site, block, confirmation in zip(expected, blocks[1:], confirmations):
+        typed_library_fault_contract(block, kind, site, normal)
+        summary = typed_library_summary(block); calls = typed_library_stages(block, summary)
+        begin, end = ("cb", "ce") if kind == "compiler" else ("rb", "re")
+        other = ("rb", "re") if kind == "compiler" else ("cb", "ce")
+        # A normal census cannot silently absorb new allocation sites on a
+        # failure path. This bounded full-domain admission fails closed there.
+        for position, call in enumerate(calls):
+            reference = normal["stages"][position]
+            if call[begin] != reference[begin] or any(call[key] != reference[key] for key in other):
+                raise ValueError("failure path introduced unqualified cross-domain/pre-hit allocation sites")
+            if position < len(calls) - 1 and call[end] != reference[end]:
+                raise ValueError("successful prefix changed its allocation ordinal identity")
+        if unsigned(calls[-1][end]) != site + 1:
+            raise ValueError("post-hit allocation sites require denominator extension; full admission stopped")
+        fields = {"result": "PASS", "kind": kind, "mode": normal["summary"]["mode"],
+                  "shard": str(index), "ordinal": str(site)}
+        if confirmation != fields:
+            raise ValueError("typed completed ordinal order/identity changed")
+    summaries = typed_library_rows(layout["footer"], "shard-summary ")
+    expected_summary = {"result": "PASS", "kind": kind, "mode": normal["summary"]["mode"],
+                        "shard": str(index), "shards": "8", "total": str(total), "covered": str(len(expected)),
+                        "ordinal-start": str(index), "ordinal-step": "8", "physical": "1"}
+    if summaries != [expected_summary]:
+        raise ValueError("typed shard terminal coverage is incomplete or ambiguous")
+    return expected
+
+
+def typed_library_stderr(stderr: bytes) -> None:
+    if stderr:
+        raise ValueError("typed stderr is not yet bound to an observed exact public diagnostic; raw retained, never arbitrary accepted")
+
+
+def typed_library_parser(description: str):
+    parser = argparse.ArgumentParser(description=description)
+    parser.add_argument("--typed-library", action="store_true", required=True)
+    for name in ("binary", "input-root", "typed-cohort-input", "typed-guard-module", "evidence"):
+        parser.add_argument("--" + name, type=Path, required=True)
+    admission = parser.add_mutually_exclusive_group(required=True)
+    admission.add_argument("--typed-cohort-record")
+    admission.add_argument("--typed-cohort-record-env")
+    parser.add_argument("--typed-guard-record", required=True)
+    parser.add_argument("--mode", type=int, choices=(1, 2, 3), required=True)
+    return parser
+
+
+def typed_library_prepare(args):
+    for name in ("binary", "input_root", "typed_cohort_input", "typed_guard_module"):
+        setattr(args, name, getattr(args, name).resolve(strict=True))
+    if not args.input_root.is_dir() or any(not getattr(args, name).is_file() for name in
+            ("binary", "typed_cohort_input", "typed_guard_module")):
+        raise ValueError("typed executable/Source/explicit shared guard INPUT paths invalid")
+    cohort = typed_library_cohort_record(args)
+    guard_record = typed_library_expected_record(args.typed_guard_record)
+    guard = typed_library_guard_module(args.typed_guard_module, guard_record)
+    original = load_helpers(args.input_root)
+    run = args.evidence / (datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ-") + uuid.uuid4().hex[:8])
+    run.mkdir(parents=True, exist_ok=False)
+    return cohort, guard_record, guard, original, run
+
+
+def typed_library_normals(base: list[str], run: Path, deadline: float, helpers, cwd: Path) -> tuple[list, dict | None, list]:
+    results, normal, issues = [], None, []
+    for index in range(2):
+        label = "typed-normal-" + str(index)
+        try:
+            result = process_run(base, label, run, deadline, helpers, cwd); process_contract(result)
+            output = Path(result["stdout"]).read_text(encoding="utf-8")
+            typed_library_stderr(Path(result["stderr"]).read_bytes())
+            actual = typed_library_normal_contract(output)
+            if normal is not None and normal != actual:
+                raise ValueError("two fresh typed normals disagree on exact complete N/R/stages/resources/routes")
+            normal = actual; result["normal_census"] = actual
+            process_receipt_write(run / (label + ".json"), result, helpers); results.append(result)
+        except Exception as error:
+            results.append(process_failure(base, label, run, error, helpers)); issues.append(str(error)); break
+    return results, normal, issues
+
+
+def typed_library_main() -> None:
+    parser = typed_library_parser("Complete typed receiver ordinal union; Source0 default path unchanged")
+    parser.add_argument("--kind", choices=("compiler", "runtime"), required=True)
+    parser.add_argument("--jobs", type=int, choices=(8,), default=8)
+    args = parser.parse_args()
+    cohort, guard_record, guard, helpers, run = typed_library_prepare(args)
+    started = time.monotonic(); deadline = started + 570
+    issues, results, covered, normals, normal = [], [], [], [], None
+    before, after = None, None
+    try:
+        before = typed_library_capture(args, guard, cohort, guard_record); helpers.write(run / "inputs-before.json", before)
+        base = before["base_argv"]
+        normals, normal, errors = typed_library_normals(base, run, deadline, helpers, args.input_root); issues += errors
+        if normal is not None and normal["summary"]["mode"] != str(args.mode):
+            issues.append("fresh normal executed a different requested route mode")
+        if not issues and normal is not None:
+            def shard(index):
+                command = base + ["--" + args.kind + "-shard", str(index), "8", str(normal["N"]), str(normal["R"])]
+                label = "typed-shard-" + str(index)
+                try:
+                    result = process_run(command, label, run, deadline, helpers, args.input_root); process_contract(result)
+                    typed_library_stderr(Path(result["stderr"]).read_bytes())
+                    output = Path(result["stdout"]).read_text(encoding="utf-8")
+                    result["ordinals"] = typed_library_shard_contract(output, args.kind, index, normal)
+                    result["shard"] = index; process_receipt_write(run / (label + ".json"), result, helpers)
+                except Exception as error:
+                    result = process_failure(command, label, run, error, helpers); result["shard"] = index
+                return result
+            with ThreadPoolExecutor(max_workers=8) as pool:
+                futures = []
+                for index in range(8):
+                    try: futures.append((index, pool.submit(shard, index)))
+                    except Exception as error:
+                        issues.append("shard " + str(index) + " submission: " + str(error)); break
+                for index, future in futures:
+                    try: results.append(future.result())
+                    except Exception as error: issues.append("shard " + str(index) + ": " + str(error))
+            results.sort(key=lambda item: item["shard"])
+            for result in results:
+                if result.get("parse_issue"): issues.append(result["parse_issue"])
+                covered += result.get("ordinals", [])
+            total = normal["N" if args.kind == "compiler" else "R"]
+            if len(results) != 8 or len(covered) != total or sorted(covered) != list(range(total)):
+                issues.append("complete typed ordinal domain not covered exactly once in eight bound shards")
+    except Exception as error:
+        issues.append("typed first execution/input failure: " + str(error))
+    finally:
+        try:
+            after = typed_library_capture(args, guard, cohort, guard_record); helpers.write(run / "inputs-after.json", after)
+            if before != after: issues.append("complete shared Source/material/tool/input cohort changed")
+        except Exception as error: issues.append("typed terminal guard failure: " + str(error))
+    finish_report({"status": "FAIL" if issues else "PASS", "scope": "COMPLETE_TYPED_RECEIVER_ORDINAL_COVERAGE",
+                   "kind": args.kind, "mode": args.mode, "jobs": 8, "issues": issues,
+                   "fresh_normals_verified": sum("normal_census" in item for item in normals),
+                   "normal_census": normal, "sites": None if normal is None else normal["N" if args.kind == "compiler" else "R"],
+                   "covered": len(covered), "processes": results, "parent_pid": os.getpid(),
+                   "process_budget_seconds": 570, "CTest_caps": {"timeout": 600, "processors": 8},
+                   "elapsed_seconds": time.monotonic() - started, "input_guard_before": before, "input_guard_after": after,
+                   "evidence": str(run), "qualification_boundary": "Only fresh bound typed mode/domain; writer/Source FI, cleanup-only extension, stable/full safety/AOT/Main OPEN."}, run, helpers)
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
@@ -949,4 +1245,7 @@ def main() -> None:
 
 
 if __name__ == "__main__":
-    main()
+    if "--typed-library" in sys.argv[1:]:
+        typed_library_main()
+    else:
+        main()
