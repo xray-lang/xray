@@ -256,6 +256,7 @@ static XrXirStatus effect_root_seed(const XrXirModule *module, XrXirEffects *eff
     case XR_XIR_OR_INT: case XR_XIR_XOR_INT: case XR_XIR_SHL_INT:
     case XR_XIR_SHR_INT: case XR_XIR_PHI: case XR_XIR_FUNCTION_REF:
     case XR_XIR_CELL_NEW: case XR_XIR_CELL_READ: case XR_XIR_CELL_WRITE:
+    case XR_XIR_CELL_PROJECT:
     case XR_XIR_CONVERT_NUMBER: case XR_XIR_CONST_FLOAT: case XR_XIR_NEG_FLOAT:
     case XR_XIR_EQ_FLOAT: case XR_XIR_NE_FLOAT: case XR_XIR_LT_FLOAT:
     case XR_XIR_LE_FLOAT: case XR_XIR_GT_FLOAT: case XR_XIR_GE_FLOAT:

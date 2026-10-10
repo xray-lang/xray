@@ -21,8 +21,8 @@
 #include "xir_array_metadata_fixture.h"
 _Static_assert(XR_XIR_ARRAY_CAPACITY == 149 && XR_XIR_ARRAY_WITH_CAPACITY == 150 &&
     XR_XIR_ARRAY_RESERVE == 151, "Capacity operation ordinals are fixed");
-_Static_assert(XR_XIR_OP_COUNT == 152 && XR_XIR_CHECKED_SCHEMA == 27 &&
-    XR_XIR_CHECKED_CONTRACT == 72, "Capacity operation framing is fixed");
+_Static_assert(XR_XIR_OP_COUNT == 153 && XR_XIR_CHECKED_SCHEMA == 28 &&
+    XR_XIR_CHECKED_CONTRACT == 73, "Capacity operation framing is fixed");
 
 static void capacity_checked_fixture(XirArrayMetadataFixture *f) {
     xir_array_metadata_init(f); XrXirType array = (XrXirType)256, cell = (XrXirType)257;

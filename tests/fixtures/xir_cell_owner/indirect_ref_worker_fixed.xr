@@ -1,0 +1,4 @@
+fn pure()->i64 { return 42 }
+fn worker()->i64 { const callback:fn()->i64=pure; return callback() }
+export fn run()->i64 { const task=go worker(); return await task }
+fn main()->i64 { return 0 }

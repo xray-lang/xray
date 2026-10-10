@@ -75,6 +75,12 @@ typedef struct SourceCallPlan {
     uint32_t parameter_offset, value_offset;
     const uint32_t *parameter_kinds;
 } SourceCallPlan;
+typedef union SourceCallArgumentPlan {
+    SourceExpressionPlan *value;
+    SourceReferencePlan *reference;
+} SourceCallArgumentPlan;
+_Static_assert(sizeof(SourceCallArgumentPlan) == sizeof(SourceExpressionPlan *) &&
+    _Alignof(SourceCallArgumentPlan) == _Alignof(SourceExpressionPlan *),"argument plan storage layout");
 static bool source_call_evidence_view(SourceContext *ctx,XrXirType formal,XrXirType actual_type,XrXirType *evidence) {
     *evidence=actual_type;
     if (xr_xir_type_is_nullable(&ctx->types,formal) && !xr_xir_type_is_nullable(&ctx->types,actual_type))
@@ -105,34 +111,36 @@ static bool source_call_observe(SourceContext *ctx,AstNode *node,XrXirInferenceS
 /* A ref argument transports the binding's stable Cell owner. The common
  * call admission establishes actual exclusive access after argument preparation. */
 static bool source_reference_argument(SourceContext *ctx, AstNode *node, uint32_t index,
-    const bool *references, const SourceValue *values, SourceValue *value) {
+    const bool *references, const SourceReferencePlan *plan, SourceValue *value) {
     SourceCallSyntax syntax;if (!source_call_syntax(ctx,node,&syntax)) return false;
     const SourceCallSyntax *call=&syntax;
     AstNode *argument=call->arguments[index];
     if (!call->arg_accesses || call->arg_accesses[index]!=XR_CALL_ARG_REF)
         return source_fail(ctx,argument,XR_XIR_BAD_TYPE,"a ref parameter requires a ref argument");
-    if (argument->type!=AST_VARIABLE)
-        return source_fail(ctx,argument,XR_XIR_BAD_TYPE,"ref argument place is not implemented in XIR");
-    SourceName *symbol=visible_name(ctx,argument->as.variable.name);
+    AstNode *root=source_ref_root_syntax(ctx,argument);
+    if (!root || (root->type!=AST_VARIABLE && root->type!=AST_THIS_EXPR))
+        return source_fail(ctx,argument,XR_XIR_BAD_TYPE,"ref argument requires an authentic named place root");
+    SourceName *symbol=source_ref_binding(ctx,argument);
     if (!symbol) return source_fail(ctx,argument,XR_XIR_BAD_TYPE,"ref argument does not name a binding");
+    bool object_field = root != argument && xr_xir_type_is_class(&ctx->types,source_symbol_type(ctx,symbol));
     if ((symbol->kind!=SOURCE_LOCAL && symbol->kind!=SOURCE_SLOT && symbol->kind!=SOURCE_UNIT_SLOT) ||
-        !symbol->mutable || symbol->construction)
+        (!symbol->mutable && !object_field) || symbol->construction)
         return source_fail(ctx,argument,XR_XIR_BAD_TYPE,"ref argument requires a mutable stored binding");
     for (uint32_t earlier=0;earlier<index;++earlier) {
         if (!source_work(ctx,node)) return false;
-        if (references[earlier] && call->arguments[earlier]->type==AST_VARIABLE &&
+        if (argument->type==AST_VARIABLE && references[earlier] && call->arguments[earlier]->type==AST_VARIABLE &&
             visible_name(ctx,call->arguments[earlier]->as.variable.name)==symbol)
             return source_fail(ctx,argument,XR_XIR_BAD_TYPE,"ref arguments of one call must not alias");
     }
-    (void)values;
-    return source_query_reference(ctx,argument,symbol,symbol,XR_XIR_SOURCE_READ_WRITE) &&
-        source_query_ref_argument(ctx,symbol->declaration,argument->as.variable.access_marker_span) &&
-        source_binding_cell(ctx, symbol, value);
+    XrNameSpan marker = root->type == AST_THIS_EXPR ? root->as.this_expr.access_marker_span :
+        root->as.variable.access_marker_span;
+    return source_query_ref_argument(ctx,symbol->declaration,marker) &&
+        source_reference_place_planned(ctx,argument,plan,value);
 }
 /* Earlier argument effects invalidate only later argument planning. Values
  * still complete once in source order, and already read SSA values stay valid. */
 static bool source_call_collect_arguments(SourceContext *ctx,AstNode *node,const SourceCallPlan *plan,
-    SourceExpressionPlan **arguments,bool *references) {
+    SourceCallArgumentPlan *arguments,bool *references) {
     SourceCallSyntax syntax;if (!source_call_syntax(ctx,node,&syntax)) return false;
     const SourceCallSyntax *call=&syntax;
     SourceFact *facts=ctx->facts;SourceEpoch *epochs=ctx->epochs;bool ok=true;
@@ -140,12 +148,13 @@ static bool source_call_collect_arguments(SourceContext *ctx,AstNode *node,const
         if (!source_work(ctx,node)) {ok=false;break;}
         uint32_t parameter=a+plan->parameter_offset;
         references[a]=plan->family!=SOURCE_CALL_REQUIREMENT && xr_xir_type_is_cell(&ctx->types,plan->function_parameters[parameter]);
-        arguments[a]=NULL;
+        arguments[a].value=NULL;
         if (references[a]) {
-            /* Resolving an outer ref place does not execute the callee. */
+            /* The place recipe completes these same selector plans once. */
+            ok=source_reference_effects(ctx,call->arguments[a],&arguments[a].reference);
         } else {
-            arguments[a]=source_plan_collect(ctx,call->arguments[a],(SourceExpectedType){false,XR_XIR_UNIT,false, false});
-            ok=arguments[a] && source_planned_effects(ctx,arguments[a],0);
+            arguments[a].value=source_plan_collect(ctx,call->arguments[a],(SourceExpectedType){false,XR_XIR_UNIT,false, false});
+            ok=arguments[a].value && source_planned_effects(ctx,arguments[a].value,0);
         }
     }
     ctx->facts=facts;ctx->epochs=epochs;return ok && ctx->diagnostic.status==XR_XIR_OK;
@@ -167,7 +176,7 @@ static bool source_call_plan_arguments(SourceContext *ctx, AstNode *node, const 
     } else for (uint32_t p=0;p<own;++p)
         if (!source_work(ctx,node) || !source_type(ctx,call->type_args[p],&types[prefix+p])) return false;
     uint32_t argument_count=(uint32_t)call->arg_count;
-    SourceExpressionPlan **arguments=argument_count ? source_recipe_storage(ctx,argument_count,sizeof(*arguments)) : NULL;
+    SourceCallArgumentPlan *arguments=argument_count ? source_recipe_storage(ctx,argument_count,sizeof(*arguments)) : NULL;
     bool *references=argument_count ? source_recipe_storage(ctx,argument_count,sizeof(*references)) : NULL;
     if (argument_count && (!arguments || !references)) goto done;
     if (!source_call_collect_arguments(ctx,node,plan,arguments,references)) goto done;
@@ -176,7 +185,7 @@ static bool source_call_plan_arguments(SourceContext *ctx, AstNode *node, const 
          * acquire their conversion recipes. This visits types only: all value
          * evaluation remains in the ordered completion loop below. */
         for (uint32_t a=0;a<argument_count;++a) {
-            SourceExpressionPlan *argument=arguments[a];
+            SourceExpressionPlan *argument=references[a] ? NULL : arguments[a].value;
             if (references[a]) continue;
             uint32_t parameter=a+plan->parameter_offset;
             XrXirType formal=requirement ? plan->requirement_parameters[parameter].type : plan->function_parameters[parameter];
@@ -187,7 +196,7 @@ static bool source_call_plan_arguments(SourceContext *ctx, AstNode *node, const 
             if (!source_call_observe(ctx,node,state,formal,argument->ground_type,requirement)) goto done;
         }
         for (uint32_t a=0;a<argument_count;++a) {
-            SourceExpressionPlan *argument=arguments[a];
+            SourceExpressionPlan *argument=references[a] ? NULL : arguments[a].value;
             if (references[a] || !argument->type_ready) continue;
             uint32_t parameter=a+plan->parameter_offset;
             XrXirType formal=requirement ? plan->requirement_parameters[parameter].type : plan->function_parameters[parameter];
@@ -210,7 +219,7 @@ static bool source_call_plan_arguments(SourceContext *ctx, AstNode *node, const 
         }
         if (!source_inference_result(ctx,node,state,plan->result,plan->expected_result)) goto done;
         for (uint32_t a=0;a<argument_count;++a) {
-            SourceExpressionPlan *argument=arguments[a];
+            SourceExpressionPlan *argument=references[a] ? NULL : arguments[a].value;
             if (references[a] || argument->conversion_ready) continue;
             bool soft=false;
             if (!source_plan_soft_numeric(ctx,argument,&soft)) goto done;
@@ -242,7 +251,7 @@ static bool source_call_plan_arguments(SourceContext *ctx, AstNode *node, const 
         XrXirType formal=requirement ? plan->requirement_parameters[parameter].type : plan->function_parameters[parameter];
         if (references[a]) {
             SourceValue *reference=&plan->values[a+plan->value_offset];
-            if (!source_reference_argument(ctx,node,a,references,plan->values,reference)) goto done;
+            if (!source_reference_argument(ctx,node,a,references,arguments[a].reference,reference)) goto done;
             if (inferred && !source_call_observe(ctx,node,state,formal,reference->type,requirement)) goto done;
             continue;
         }
@@ -262,21 +271,21 @@ static bool source_call_plan_arguments(SourceContext *ctx, AstNode *node, const 
             if (!source_substitute(ctx,&plan->substitution,formal,0,&expected.type)) goto done;
         }
         SourceValue *value=&plan->values[a+plan->value_offset];
-        arguments[a]->expected=expected;
+        arguments[a].value->expected=expected;
         SourceExpressionPlan *previous_argument = ctx->effect_argument;
         bool callback = expected.present &&
             xr_xir_callable_signature(&ctx->types,expected.type);
         if (callback) {
-            arguments[a]->conversion_ready = false;
-            ctx->effect_argument = arguments[a];
+            arguments[a].value->conversion_ready = false;
+            ctx->effect_argument = arguments[a].value;
         }
-        bool completed = source_plan_complete(ctx,arguments[a],value);
+        bool completed = source_plan_complete(ctx,arguments[a].value,value);
         ctx->effect_argument = previous_argument;
         if (!completed) goto done;
         if (!requirement && value->type==XR_XIR_UNIT) {
             source_fail(ctx,node,XR_XIR_BAD_TYPE,"unit argument is not admitted"); goto done;
         }
-        if (inferred && !arguments[a]->conversion_ready &&
+        if (inferred && !arguments[a].value->conversion_ready &&
             !source_call_observe(ctx,node,state,formal,value->type,requirement)) goto done;
     }
     if (inferred) {
@@ -288,7 +297,7 @@ static bool source_call_plan_arguments(SourceContext *ctx, AstNode *node, const 
     /* The call's borrow begins after every argument value has completed. */
     for (uint32_t a=0;a<argument_count;++a) if (references[a]) {
         if (!source_work(ctx,node)) goto done;
-        SourceName *binding=visible_name(ctx,call->arguments[a]->as.variable.name);
+        SourceName *binding=source_ref_binding(ctx,call->arguments[a]);
         if (!binding || !source_fact_push(ctx,binding,0)) goto done;
     }
     ok=true;

@@ -988,6 +988,28 @@ static bool source_type_arguments(SourceContext *ctx, AstNode *node, const XrXir
     if (count && !source_copy_bytes(ctx, node, (XrXirType *) caller->arguments + caller->argument_count, types, count * sizeof(*types))) return false;
     caller->argument_count = needed; return true;
 }
+/* A reference place has one authentic named root. Selectors are evaluated
+ * by source_value_place; this finite syntax walk grants no storage authority. */
+static AstNode *source_ref_root_syntax(SourceContext *ctx, AstNode *node) {
+    uint32_t depth = 0;
+    while (node && (node->type == AST_MEMBER_ACCESS || node->type == AST_INDEX_GET)) {
+        if (!source_work(ctx,node)) return NULL;
+        if (++depth >= 128 - ctx->depth) {
+            source_fail(ctx,node,XR_XIR_BUDGET,"source reference place depth exhausted"); return NULL;
+        }
+        node = node->type == AST_MEMBER_ACCESS ? node->as.member_access.object : node->as.index_get.array;
+    }
+    return node && (node->type == AST_VARIABLE || node->type == AST_THIS_EXPR) ? node : NULL;
+}
+static SourceName *source_ref_binding(SourceContext *ctx, AstNode *node) {
+    AstNode *root = source_ref_root_syntax(ctx,node);
+    return root ? visible_name(ctx,root->type == AST_THIS_EXPR ? "this" : root->as.variable.name) : NULL;
+}
+typedef struct SourceReferencePlan SourceReferencePlan;
+static bool source_reference_place(SourceContext *ctx, AstNode *node, SourceValue *cell);
+static bool source_reference_place_planned(SourceContext *ctx, AstNode *node,
+    const SourceReferencePlan *plan, SourceValue *cell);
+static bool source_reference_effects(SourceContext *ctx, AstNode *node, SourceReferencePlan **output);
 #include "xxir_source_flow.inc.c"
 static bool source_instantiation_prove(SourceContext *ctx, AstNode *node,
     XrXirDeclarationContext callee, SourceSubstitution substitution) {
@@ -1294,7 +1316,7 @@ static bool source_call(SourceContext *ctx, AstNode *node, SourceExpectedType re
                     if (!references) return false;
                 }
                 references[i] = true;
-                if (!source_reference_argument(ctx, node, (uint32_t)i, references, args, &args[i])) return false;
+                if (!source_reference_argument(ctx, node, (uint32_t)i, references, NULL, &args[i])) return false;
                 continue;
             }
         }
@@ -1311,6 +1333,11 @@ static bool source_call(SourceContext *ctx, AstNode *node, SourceExpectedType re
         for (uint32_t p = 0; p < (uint32_t) call->arg_count; ++p)
             if (args[p].type != signature.parameters[p].type)
                 return source_fail(ctx, node, XR_XIR_BAD_TYPE, "indirect argument type mismatch");
+        /* Every actual completes before invalidating borrowed roots. */
+        for (uint32_t p = 0; p < (uint32_t)call->arg_count; ++p) if (references && references[p]) {
+            SourceName *root = source_ref_binding(ctx,call->arguments[p]);
+            if (!root || !source_fact_push(ctx,root,0)) return false;
+        }
         return source_recipe_group(ctx, (XrXirInstruction) {XR_XIR_CALL_INDIRECT, signature.result, {0}, {0}, indirect.id, {0}},
             args, (uint32_t) call->arg_count, value);
     }

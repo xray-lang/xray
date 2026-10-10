@@ -15,6 +15,7 @@
 #include "xir/xxir_emit_c.h"
 #include "xir_float_transport_fixture.h"
 #include <string.h>
+#include "xir_emit_checked_identity.h"
 
 int main(int argc, char **argv) {
     scalar_compile_begin();
@@ -29,16 +30,19 @@ int main(int argc, char **argv) {
     CHECK(!source.text && !source.length);
     CHECK(xr_xir_compile_emit_leaf_c(artifact, "fixture", 1048576, &source) == XR_XIR_OK);
     xr_xir_compile_artifact_free(artifact);
+    emit_checked_identity_oracle(source.text);
     CHECK(source.text[source.length] == '\0' && source.length == strlen(source.text));
     CHECK(!strstr(source.text, "({"));
     XrXirArtifact *uninitialized = uninitialized_leaf_fixture(&scalar_owner.context);
     XrXirCSource extra = {0};
     CHECK(xr_xir_compile_emit_leaf_c(uninitialized, "uninitialized", 65536, &extra) == XR_XIR_OK);
+    emit_checked_identity_oracle(extra.text);
     CHECK(extra.text[extra.length] == '\0' && extra.length == strlen(extra.text));
     xr_xir_compile_artifact_free(uninitialized);
     XrXirArtifact *transport = float_transport_fixture(&scalar_owner.context);
     XrXirCSource transported = {0};
     CHECK(xr_xir_compile_emit_leaf_c(transport, "float_transport", 65536, &transported) == XR_XIR_OK);
+    emit_checked_identity_oracle(transported.text);
     CHECK(transported.text[transported.length] == '\0' && transported.length == strlen(transported.text));
     CHECK(!strstr(transported.text, "({"));
     xr_xir_compile_artifact_free(transport);

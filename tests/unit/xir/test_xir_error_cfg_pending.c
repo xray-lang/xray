@@ -419,7 +419,9 @@ static void pc_empty_limits(void) {
 #include "xir_error_closed_carriers_controls.h"
 #include "xir_error_callee_first_controls.h"
 #include "xir_error_unit_cell_controls.h"
+#include "xir_error_invocation_controls.h"
 int main(void) {
+    pc_invocation_controls();
     pc_unit_cell_controls();
     pc_callee_first_controls();
     pc_compact_controls();pc_closed_carriers_controls();

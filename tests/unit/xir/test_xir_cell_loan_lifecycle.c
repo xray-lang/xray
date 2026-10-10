@@ -119,7 +119,7 @@ static void cell_life_existing(const char *name, bool unit) {
 }
 #include "xir_cell_lifecycle_resources.h"
 int main(int argc, char **argv) {
-    const char *fixtures[] = {"lifecycle.xr", "indirect_ref_lifecycle.xr"};
+    const char *fixtures[] = {"lifecycle.xr", "indirect_ref_lifecycle.xr", "project_lifecycle.xr", "class_project_lifecycle.xr"};
     if (argc == 2) {
         CHECK(!strcmp(argv[1],"--runtime-normal") || !strcmp(argv[1],"--runtime-fi") ||
             !strcmp(argv[1],"--runtime-axes") || !strcmp(argv[1],"--runtime-prepare"));

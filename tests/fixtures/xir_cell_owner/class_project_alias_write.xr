@@ -1,0 +1,11 @@
+final class Holder {
+    value: i64
+    constructor() { this.value = 0; }
+    write() { this.value = 9; }
+    read() -> i64 { return this.value; }
+}
+var storage = Holder();
+fn illegal(value: ref i64, alias: Holder) -> i64 { alias.write(); return value; }
+export fn run() -> i64 { return illegal(ref storage.value, storage); }
+export fn cellCounter() -> i64 { return storage.read(); }
+fn main() -> i64 { return run(); }

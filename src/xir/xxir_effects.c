@@ -194,7 +194,8 @@ static bool effect_seed(const XrXirModule *module, const XrXirFunction *function
     case XR_XIR_SHL_INT: case XR_XIR_SHR_INT: case XR_XIR_PHI:
     case XR_XIR_FUNCTION_WEAKEN:
     case XR_XIR_CELL_LOCAL_WRITE: case XR_XIR_FUNCTION_REF: case XR_XIR_CELL_NEW: case XR_XIR_CELL_READ:
-    case XR_XIR_CELL_WRITE: case XR_XIR_CONVERT_NUMBER: case XR_XIR_CONST_FLOAT:
+    case XR_XIR_CELL_WRITE: case XR_XIR_CELL_PROJECT:
+    case XR_XIR_CONVERT_NUMBER: case XR_XIR_CONST_FLOAT:
     case XR_XIR_NEG_FLOAT: case XR_XIR_EQ_FLOAT: case XR_XIR_NE_FLOAT:
     case XR_XIR_LT_FLOAT: case XR_XIR_LE_FLOAT: case XR_XIR_GT_FLOAT:
     case XR_XIR_GE_FLOAT: case XR_XIR_CELL_PLACE: case XR_XIR_SLOT_PLACE: case XR_XIR_OBJECT_PLACE:
@@ -365,6 +366,7 @@ static XrXirStatus effect_propagate(XrXirEffects *effects, EffectGraph *graph, c
 #include "xxir_effect_invocations.inc.c"
 #include "xxir_effect_invocation_public_trace.inc.c"
 #include "xxir_effect_invocation_publish.inc.c"
+#include "xxir_effect_error_invocations.inc.c"
 
 /* A breadth-first forest over final facts cannot inherit a cyclic cause chain
  * from recursive fixed-point updates. Each function enters the queue once. */
@@ -466,6 +468,9 @@ static XrXirStatus effect_entry_roots_seal(const XrXirModule *module,
     return XR_XIR_OK;
 }
 
+#include "xxir_effect_invocation_producer.inc.c"
+#include "xxir_effect_invocation_runtime.inc.c"
+
 XR_FUNC XrXirStatus xir_effects_entry_root(const XrXirCompileContext *context,
     const XrXirEffects *effects, uint32_t function, XirEffectEntryRootView *output) {
     if (!output || !xir_effects_context_matches(context,effects,effects?effects->count:0) ||
@@ -517,7 +522,10 @@ static XrXirStatus effect_infer(const XrXirCompileContext *compile_context,
             /* Discard temporary pre-bottom SSA storage and rebuild from the
              * final graph. Real CALL_BIND declarations remain source bounds. */
             effect_refinement_free(effects->refinement);effects->refinement=NULL;
-            status=effect_context_owner_refresh(remaining,module,effects);
+            /* Final equation input has changed even when Source's body is
+             * stable. Seal it before Source copies the canonical contracts. */
+            status=effect_invocation_publish(remaining,module,effects,&graph,NULL,NULL);
+            if (status==XR_XIR_OK) status=effect_context_owner_refresh(remaining,module,effects);
             if (status!=XR_XIR_OK) break;
             status=refiner->update(refiner->context,effects,&changed);
         }

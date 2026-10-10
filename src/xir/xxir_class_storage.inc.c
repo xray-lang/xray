@@ -9,11 +9,11 @@
  * KEY CONCEPT:
  *   Identity handles pin their field storage, type arena and physical accounting domain.
  */
-enum { XIR_OBJECT_CLASS = 0x100u };
 typedef struct XirClassObject {
     XirObject object;
     size_t allocation_bytes, release_offset;
     uint32_t release_capacity;
+    XrXirCellLoan *borrow_top;
 } XirClassObject;
 _Static_assert(_Alignof(XirClassObject) >= _Alignof(int64_t), "class body alignment");
 _Static_assert((uint32_t)XR_XIR_TYPE_NOMINAL < (uint32_t)XIR_OBJECT_CLASS, "class object tag is not a type-node kind");

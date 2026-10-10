@@ -19,7 +19,7 @@
 /* Only a completed proof publishes this owner. Root facts and worker eligibility
  * have different meanings even when both deny a particular worker call. */
 typedef struct XrXirProgramFunctionRef {
-    uint32_t entry, captures;
+    uint32_t entry, captures, instruction, site;
     XrXirType type;
 } XrXirProgramFunctionRef;
 typedef struct XrXirProgramPermission {
@@ -35,8 +35,12 @@ typedef struct XrXirProgramPermissions {
     uint32_t *parameter_offsets;
     uint32_t *root_parameters;
     uint8_t *cell_roles;
-    uint32_t root_parameter_count;
+    uint32_t root_parameter_count, reference_count;
+    struct XrXirEffects *effects;
 } XrXirProgramPermissions;
+/* This consumes the complete Effects certificate before the enclosing owner.
+ * Its destruction is shared by failed sealing and final Program retirement. */
+XR_FUNC void xir_program_permissions_free(XrXirProgramPermissions *permissions);
 struct XrXirProgram {
     _Atomic(uint32_t) references;
     XrXirCompileContext context;

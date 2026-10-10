@@ -1,0 +1,14 @@
+final class Holder {
+    values: Array<i64>
+    constructor(values: Array<i64>) { this.values = values; }
+}
+var storage = Holder([40]);
+fn replace() -> i64 { storage = Holder([90]); return 1; }
+fn update(value: ref i64, ignored: i64) -> i64 { value += 2; return value; }
+export fn run() -> i64 {
+    storage = Holder([40]);
+    const prior = storage;
+    const result = update(ref storage.values[0], replace());
+    return result * 10000 + prior.values[0] * 100 + storage.values[0];
+}
+fn main() -> i64 { return run(); }

@@ -1,0 +1,7 @@
+fn worker()->i64 {
+    const make=fn() { var value:i64=40; return fn()->i64 { value+=2; return value; }; };
+    const callback=make();
+    return callback();
+}
+export fn run()->i64 { const task=go worker(); return await task; }
+fn main()->i64 { return 0; }

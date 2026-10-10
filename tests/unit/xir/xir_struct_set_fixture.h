@@ -24,69 +24,82 @@ static XrXirArtifact *struct_set_checked(const XrXirCompileContext *context, uns
         {XR_XIR_CONST_STRING,XR_XIR_STRING,{0},{0},0, {0}},
         {XR_XIR_CONST_INT,XR_XIR_I64,{0},{0},7, {0}},
         {XR_XIR_STRUCT_NEW,pair,{0,2},{0},0, {0}},
-        {XR_XIR_SLOT_INIT,XR_XIR_UNIT,{2},{0},0, {0}},
+        {XR_XIR_CELL_NEW,cell,{2},{0},0, {0}},
+        {XR_XIR_SLOT_INIT,XR_XIR_UNIT,{3},{0},0, {0}},
         {XR_XIR_SLOT_INIT,XR_XIR_UNIT,{2},{0},1, {0}},
         {XR_XIR_RETURN,XR_XIR_UNIT,{0},{0},0, {0}}};
     XrXirInstruction entry[] = {
-        {XR_XIR_SLOT_LOAD,pair,{0},{0},0, {0}},
-        {XR_XIR_LOCAL_NEW,pair,{0},{0},0, {0}},
-        {XR_XIR_CELL_NEW,cell,{0},{0},0, {0}},
+        {XR_XIR_SLOT_LOAD,cell,{0},{0},0, {0}},
+        {XR_XIR_CELL_READ,pair,{0},{0},0, {0}},
+        {XR_XIR_LOCAL_NEW,pair,{1},{0},0, {0}},
+        {XR_XIR_CELL_NEW,cell,{1},{0},0, {0}},
         {XR_XIR_CONST_INT,XR_XIR_I64,{0},{0},23, {0}},
-        {XR_XIR_STRUCT_SET,XR_XIR_UNIT,{1,3},{0},0, {0}},
-        {XR_XIR_CELL_PLACE,pair,{2},{0},0, {0}},
+        {XR_XIR_STRUCT_SET,XR_XIR_UNIT,{2,4},{0},0, {0}},
+        {XR_XIR_CELL_PLACE,pair,{3},{0},0, {0}},
         {XR_XIR_CONST_INT,XR_XIR_I64,{0},{0},31, {0}},
-        {XR_XIR_STRUCT_SET,XR_XIR_UNIT,{5,6},{0},0, {0}},
-        {XR_XIR_SLOT_PLACE,pair,{0},{0},0, {0}},
+        {XR_XIR_STRUCT_SET,XR_XIR_UNIT,{6,7},{0},0, {0}},
+        {XR_XIR_CELL_PLACE,pair,{0},{0},0, {0}},
         {XR_XIR_CALL,XR_XIR_I64,{0},{0},2, {0}},
-        {XR_XIR_STRUCT_SET,XR_XIR_UNIT,{8,9},{0},0, {0}},
-        {XR_XIR_LOCAL_READ,pair,{1},{0},0, {0}},
-        {XR_XIR_STRUCT_GET,XR_XIR_I64,{11},{0},0, {0}},
-        {XR_XIR_CELL_READ,pair,{2},{0},0, {0}},
-        {XR_XIR_STRUCT_GET,XR_XIR_I64,{13},{0},0, {0}},
-        {XR_XIR_SLOT_LOAD,pair,{0},{0},0, {0}},
-        {XR_XIR_STRUCT_GET,XR_XIR_I64,{15},{0},0, {0}},
-        {XR_XIR_STRUCT_GET,XR_XIR_STRING,{15},{0},1, {0}},
-        {XR_XIR_OUTPUT,XR_XIR_UNIT,{17},{0},1, {0}},
-        {XR_XIR_STRUCT_GET,XR_XIR_I64,{0},{0},0, {0}},
+        {XR_XIR_STRUCT_SET,XR_XIR_UNIT,{9,10},{0},0, {0}},
+        {XR_XIR_LOCAL_READ,pair,{2},{0},0, {0}},
+        {XR_XIR_STRUCT_GET,XR_XIR_I64,{12},{0},0, {0}},
+        {XR_XIR_CELL_READ,pair,{3},{0},0, {0}},
+        {XR_XIR_STRUCT_GET,XR_XIR_I64,{14},{0},0, {0}},
+        {XR_XIR_CELL_READ,pair,{0},{0},0, {0}},
+        {XR_XIR_STRUCT_GET,XR_XIR_I64,{16},{0},0, {0}},
+        {XR_XIR_STRUCT_GET,XR_XIR_STRING,{16},{0},1, {0}},
+        {XR_XIR_OUTPUT,XR_XIR_UNIT,{18},{0},1, {0}},
+        {XR_XIR_STRUCT_GET,XR_XIR_I64,{1},{0},0, {0}},
         {XR_XIR_SLOT_LOAD,pair,{0},{0},1, {0}},
-        {XR_XIR_STRUCT_GET,XR_XIR_I64,{20},{0},0, {0}},
-        {XR_XIR_ADD_INT,XR_XIR_I64,{12,14},{0},0, {0}},
-        {XR_XIR_ADD_INT,XR_XIR_I64,{22,16},{0},0, {0}},
-        {XR_XIR_ADD_INT,XR_XIR_I64,{23,19},{0},0, {0}},
-        {XR_XIR_ADD_INT,XR_XIR_I64,{24,21},{0},0, {0}},
+        {XR_XIR_STRUCT_GET,XR_XIR_I64,{21},{0},0, {0}},
+        {XR_XIR_ADD_INT,XR_XIR_I64,{13,15},{0},0, {0}},
+        {XR_XIR_ADD_INT,XR_XIR_I64,{23,17},{0},0, {0}},
+        {XR_XIR_ADD_INT,XR_XIR_I64,{24,20},{0},0, {0}},
+        {XR_XIR_ADD_INT,XR_XIR_I64,{25,22},{0},0, {0}},
         {XR_XIR_PRINT,XR_XIR_UNIT,{0,5},{0},0, {0}},
-        {XR_XIR_RETURN,XR_XIR_UNIT,{25},{0},0, {0}}};
+        {XR_XIR_RETURN,XR_XIR_UNIT,{26},{0},0, {0}}};
     XrXirInstruction replace[] = {
         {XR_XIR_CONST_INT,XR_XIR_I64,{0},{0},73, {0}},
         {XR_XIR_CONST_STRING,XR_XIR_STRING,{0},{0},1, {0}},
         {XR_XIR_STRUCT_NEW,pair,{0,2},{0},0, {0}},
-        {XR_XIR_SLOT_STORE,XR_XIR_UNIT,{2},{0},0, {0}},
+        {XR_XIR_SLOT_LOAD,cell,{0},{0},0, {0}},
+        {XR_XIR_CELL_WRITE,XR_XIR_UNIT,{3,2},{0},0, {0}},
         {XR_XIR_CONST_INT,XR_XIR_I64,{0},{0},41, {0}},
-        {XR_XIR_RETURN,XR_XIR_UNIT,{4},{0},0, {0}}};
+        {XR_XIR_RETURN,XR_XIR_UNIT,{5},{0},0, {0}}};
     uint32_t init_values[] = {1,0}, replace_values[] = {0,1};
-    uint32_t printed[] = {12,14,16,19,21};
-    XrXirBlock six = {0,6, 0, 0}, all = {0,28, 0, 0};
+    uint32_t printed[] = {13,15,17,20,22};
+    XrXirBlock seven = {0,7, 0, 0}, all = {0,29, 0, 0};
     XrXirFunction functions[] = {
-        {"init",4,NULL,0,XR_XIR_UNIT,&six,1,init,6,init_values,2},
-        {"entry",5,NULL,0,XR_XIR_I64,&all,1,entry,28,printed,5},
-        {"replace",7,NULL,0,XR_XIR_I64,&six,1,replace,6,replace_values,2}};
+        {"init",4,NULL,0,XR_XIR_UNIT,&seven,1,init,7,init_values,2},
+        {"entry",5,NULL,0,XR_XIR_I64,&all,1,entry,29,printed,5},
+        {"replace",7,NULL,0,XR_XIR_I64,&seven,1,replace,7,replace_values,2}};
     XrXirSourceModule source = {"alpha",5,NULL,0,0};
     XrXirFunctionIdentity identities[] = {{0,0,0, 0, 0, 0, XR_XIR_NON_MEMBER, 0, 0},{0,1,0, 0, 0, 0, XR_XIR_NON_MEMBER, 0, 0},{0,0,0, 0, 0, 0, XR_XIR_NON_MEMBER, 0, 0}};
     XrXirLiteral literals[] = {{"roots",5},{"replacement",11}};
-    XrXirSlot slots[] = {{0,pair,1},{0,pair,0}};
+    XrXirSlot slots[] = {{0,cell,1},{0,pair,0}};
     XrXirDeclarations declarations = {&source,1,identities,slots,2,literals,2,0,1, NULL};
     XrXirModule built = {XR_XIR_BUILT,functions,3,&declarations,NULL,&types, NULL, XR_XIR_PROGRAM, NULL};
-    if (invalid == 1) entry[4].args[0] = 0;
+    if (invalid == 1) entry[5].args[0] = 1;
     if (invalid == 2) nominal.fields[0].flags = 0;
-    if (invalid == 3) slots[0].mutable = 0;
+    if (invalid == 3) {
+        /* Keep the immutable binding representation valid before rejecting its writes. */
+        slots[0] = (XrXirSlot){0,pair,0};
+        init[3] = (XrXirInstruction){XR_XIR_COPY,pair,{2},{0},0,{0}};
+        entry[0].type = pair;
+        entry[1] = (XrXirInstruction){XR_XIR_COPY,pair,{0},{0},0,{0}};
+        entry[9] = (XrXirInstruction){XR_XIR_SLOT_PLACE,pair,{0},{0},0,{0}};
+        entry[16] = (XrXirInstruction){XR_XIR_SLOT_LOAD,pair,{0},{0},0,{0}};
+        replace[3] = (XrXirInstruction){XR_XIR_COPY,pair,{2},{0},0,{0}};
+        replace[4] = (XrXirInstruction){XR_XIR_SLOT_STORE,XR_XIR_UNIT,{2},{0},0,{0}};
+    }
     if (invalid == 4) nominal.fields[0].flags |= XR_XIR_FIELD_PRIVATE;
-    if (invalid == 5) entry[4].args[1] = 0;
-    if (invalid == 6) entry[4].immediate = 2;
-    if (invalid == 7) entry[4].immediate = -1;
-    if (invalid == 8) entry[4].type = XR_XIR_I64;
-    if (invalid == 9) entry[7].args[0] = 2;
-    if (invalid == 10) entry[4].targets[0] = 1;
-    if (invalid == 11) entry[4].args[0] = 11;
+    if (invalid == 5) entry[5].args[1] = 1;
+    if (invalid == 6) entry[5].immediate = 2;
+    if (invalid == 7) entry[5].immediate = -1;
+    if (invalid == 8) entry[5].type = XR_XIR_I64;
+    if (invalid == 9) entry[8].args[0] = 3;
+    if (invalid == 10) entry[5].targets[0] = 1;
+    if (invalid == 11) entry[5].args[0] = 12;
     XrXirArtifact *checked = NULL;
     XrXirStatus status = xir_fixture_check(context, &built, &checked, NULL);
     if (invalid) CHECK(status != XR_XIR_OK && !checked);

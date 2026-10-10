@@ -66,20 +66,24 @@ static bool source_write_scan(AstNode *node, void *pointer) {
     case AST_DEC: written = node->as.dec.name; break;
     case AST_CALL_EXPR: {
         CallExprNode *call = &node->as.call_expr;
-        for (int a = 0; counted && a < call->arg_count; ++a)
-            if (call->arg_accesses && call->arg_accesses[a] == XR_CALL_ARG_REF && call->arguments[a] &&
-                call->arguments[a]->type == AST_VARIABLE &&
-                source_text_same(scan->ctx, node, call->arguments[a]->as.variable.name, scan->name)) { scan->found = true; return true; }
+        for (int a = 0; counted && a < call->arg_count; ++a) {
+            if (!call->arg_accesses || call->arg_accesses[a]!=XR_CALL_ARG_REF) continue;
+            AstNode *root=source_ref_root_syntax(scan->ctx,call->arguments[a]);
+            if (scan->ctx->diagnostic.status!=XR_XIR_OK) return false;
+            if (root && root->type==AST_VARIABLE &&
+                source_text_same(scan->ctx,node,root->as.variable.name,scan->name)) {scan->found=true;return true;}
+        }
         break;
     }
     case AST_NEW_EXPR: {
         const NewExprNode *call=&node->as.new_expr;
-        for (int a=0;counted && !call->is_type_namespace && a<call->arg_count;++a)
-            if (call->arg_accesses && call->arg_accesses[a]==XR_CALL_ARG_REF && call->arguments[a] &&
-                call->arguments[a]->type==AST_VARIABLE &&
-                source_text_same(scan->ctx,node,call->arguments[a]->as.variable.name,scan->name)) {
-                scan->found=true;return true;
-            }
+        for (int a=0;counted && !call->is_type_namespace && a<call->arg_count;++a) {
+            if (!call->arg_accesses || call->arg_accesses[a]!=XR_CALL_ARG_REF) continue;
+            AstNode *root=source_ref_root_syntax(scan->ctx,call->arguments[a]);
+            if (scan->ctx->diagnostic.status!=XR_XIR_OK) return false;
+            if (root && root->type==AST_VARIABLE &&
+                source_text_same(scan->ctx,node,root->as.variable.name,scan->name)) {scan->found=true;return true;}
+        }
         break;
     }
     default: break;

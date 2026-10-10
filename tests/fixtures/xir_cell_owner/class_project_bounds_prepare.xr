@@ -1,0 +1,16 @@
+var selectors: i64 = 0;
+var bodyCalls: i64 = 0;
+final class Holder {
+    values: Array<i64>
+    constructor(values: Array<i64>) { this.values = values; }
+}
+var storage = Holder([40]);
+fn index() -> i64 { selectors += 1; return 0; }
+fn replace() -> i64 { storage.values = []; return 1; }
+fn body(value: ref i64, ignored: i64) -> i64 { bodyCalls += 1; value += 1; return value; }
+export fn run() -> i64 {
+    selectors = 0; bodyCalls = 0; storage.values = [40];
+    return body(ref storage.values[index()], replace());
+}
+export fn cellCounter() -> i64 { return selectors * 10 + bodyCalls; }
+fn main() -> i64 { return run(); }

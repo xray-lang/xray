@@ -84,7 +84,7 @@ static void go_proof(const XrXirArtifact *lowered) {
         entries,module->function_count,module->declarations,{0},module->types,xr_xir_compile_program_proof(lowered)};
     XrXirProgramPermissions *authority=NULL;EffectMark mark=effect_mark();
     CHECK(xr_xir_compile_program_proof_verify(&effect_context,&spec,&spec.proof,&authority)==XR_XIR_OK&&authority);
-    go_authority_oracles(module,authority);xr_compile_resources_free(authority);effect_mark_check(mark);
+    go_authority_oracles(module,authority);xir_program_permissions_free(authority);effect_mark_check(mark);
     go_authority_failures(&spec);
 }
 static void go_query_cases(void) {

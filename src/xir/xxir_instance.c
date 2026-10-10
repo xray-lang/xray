@@ -14,6 +14,7 @@
 
 #include "xxir_program_internal.h"
 #include "xxir_instance_value.h"
+#include "xxir_instance_function_internal.h"
 #include "xxir_value_internal.h"
 #include "xxir_call_internal.h"
 #include "xxir_cell_owner_internal.h"
@@ -529,6 +530,8 @@ static bool view_is_child(const XrXirInstance *instance, const XrXirCallView *vi
         "an admitted instance view keeps its exact activation membership");
     return child;
 }
+#include "xxir_instance_invocation.inc.c"
+
 /* The private admission owner distinguishes an Instance from an opaque host
  * context. Conditional Cell-root inspection charges the current Domain before
  * the Call owner prepares any callee loans. */
@@ -562,6 +565,16 @@ XR_FUNC XrXirCallStatus xr_xir_instance_call_entry_admit(XrXirCallView *view, ui
     if (!instance->ready[module] && instance->current_module != module) return XR_XIR_CALL_BAD_STATE;
     if (!child) return XR_XIR_CALL_READY;
     if (!function) return XR_XIR_CALL_BAD_STATE;
+    uint32_t instruction=UINT32_MAX;
+    if (xr_xir_call_invocation_pending(view,&instruction)) {
+        XirEffectInvocationSelection selection={0};
+        XrXirCallStatus selected=function->type!=XR_XIR_UNIT ?
+            instance_invocation_select(view,instruction,function,arguments,count,&selection) :
+            instance_invocation_direct(view,instruction,entry,arguments,count,&selection);
+        if (selected!=XR_XIR_CALL_READY) return selected;
+        if (selection.target!=entry) return XR_XIR_CALL_BAD_STATE;
+        return xr_xir_call_invocation_accept(view,&selection);
+    }
     uint32_t actual_root = 0;
     XrXirCallStatus root_status = instance_entry_cell_root(view, program, entry,
         function, arguments, count, &actual_root);
@@ -668,6 +681,10 @@ XR_FUNC XrXirCallStatus xr_xir_instance_array_reserve(XrXirCallView *view,
 }
 XR_FUNC XrXirCallStatus xr_xir_instance_array_capacity(XrXirCallView *view,
     const XrXirValueReceiver *receiver, XrXirValue *output) {
+    if (receiver && receiver->kind == XR_XIR_ROOT_CELL) {
+        XrXirValuePath path = {0}; XrXirFaultDetail fault = {0};
+        return xr_xir_instance_path_capacity(view, receiver, &path, output, &fault);
+    }
     XrXirInstance *instance = view_instance(view);
     if (!instance || !receiver || !output || !value_unit(*output)) return XR_XIR_CALL_BAD_STATE;
     XrXirValueAdmission *admission = xr_xir_call_admission(view);
@@ -691,6 +708,12 @@ XR_FUNC XrXirCallStatus xr_xir_instance_array_capacity(XrXirCallView *view,
 XrXirCallStatus xr_xir_instance_array_read(XrXirCallView *view,
     const XrXirValueReceiver *receiver, int64_t index, bool length,
     XrXirValue *output, XrXirFaultDetail *fault) {
+    if (receiver && receiver->kind == XR_XIR_ROOT_CELL) {
+        XrXirValuePathStep step = {XR_XIR_PATH_INDEX, receiver->type, index};
+        XrXirValuePath path = {length ? NULL : &step, !length};
+        return length ? xr_xir_instance_path_length(view, receiver, &path, output, fault) :
+            xr_xir_instance_path_read(view, receiver, &path, output, fault);
+    }
     if (!fault) return XR_XIR_CALL_BAD_ARGUMENT;
     *fault = (XrXirFaultDetail) {0};
     XrXirInstance *instance = view_instance(view);
@@ -725,6 +748,12 @@ XrXirCallStatus xr_xir_instance_array_read(XrXirCallView *view,
 XrXirCallStatus xr_xir_instance_array_write(XrXirCallView *view,
     const XrXirValueReceiver *receiver, int64_t index, const XrXirValue *element,
     bool append, XrXirFaultDetail *fault) {
+    if (receiver && receiver->kind == XR_XIR_ROOT_CELL) {
+        XrXirValuePathStep step = {XR_XIR_PATH_INDEX, receiver->type, index};
+        XrXirValuePath path = {append ? NULL : &step, !append};
+        return append ? xr_xir_instance_path_push(view, receiver, &path, element, fault) :
+            xr_xir_instance_path_write(view, receiver, &path, element, fault);
+    }
     if (!fault) return XR_XIR_CALL_BAD_ARGUMENT;
     *fault = (XrXirFaultDetail) {0};
     XrXirInstance *instance = view_instance(view);
@@ -738,6 +767,11 @@ XrXirCallStatus xr_xir_instance_array_write(XrXirCallView *view,
 }
 XrXirCallStatus xr_xir_instance_struct_write(XrXirCallView *view,
     const XrXirValueReceiver *receiver, uint32_t field, const XrXirValue *value) {
+    if (receiver && receiver->kind == XR_XIR_ROOT_CELL) {
+        XrXirValuePathStep step = {XR_XIR_PATH_FIELD, receiver->type, field};
+        XrXirValuePath path = {&step, 1}; XrXirFaultDetail fault = {0};
+        return xr_xir_instance_path_write(view, receiver, &path, value, &fault);
+    }
     XrXirInstance *instance = view_instance(view);
     if (!instance || !receiver) return XR_XIR_CALL_BAD_STATE;
     XrXirValueAdmission *admission = xr_xir_call_admission(view);
@@ -900,6 +934,29 @@ XrXirCallStatus xr_xir_instance_resolve_function(XrXirCallView *view, const XrXi
     *entry = candidate;
     return XR_XIR_CALL_READY;
 }
+XR_FUNC XrXirCallStatus xr_xir_instance_call_at(XrXirCallView *view,uint32_t instruction,
+    uint32_t entry,const XrXirValue *arguments,uint32_t count) {
+    XrXirInstance *instance=view_instance(view);
+    if (!instance) return XR_XIR_CALL_BAD_STATE;
+    if (!view_is_child(instance,view)) return XR_XIR_CALL_READY;
+    XirEffectInvocationSelection selected={0};
+    XrXirCallStatus status=instance_invocation_direct(view,instruction,entry,arguments,count,&selected);
+    return status==XR_XIR_CALL_READY?xr_xir_call_invocation_stage(view,instruction):status;
+}
+XR_FUNC XrXirCallStatus xr_xir_instance_resolve_function_at(XrXirCallView *view,
+    uint32_t instruction,const XrXirValue *function,const XrXirValue *arguments,
+    uint32_t count,uint32_t *entry) {
+    XrXirInstance *instance=view_instance(view);
+    if (!instance) return XR_XIR_CALL_BAD_STATE;
+    if (!entry) return XR_XIR_CALL_BAD_ARGUMENT;
+    if (!view_is_child(instance,view)) return xr_xir_instance_resolve_function(view,function,entry);
+    XirEffectInvocationSelection selected={0};
+    XrXirCallStatus status=instance_invocation_select(view,instruction,function,arguments,count,&selected);
+    if (status!=XR_XIR_CALL_READY) return status;
+    status=xr_xir_call_invocation_stage(view,instruction);
+    if (status!=XR_XIR_CALL_READY) return status;
+    *entry=selected.target;return XR_XIR_CALL_READY;
+}
 static bool instance_admission_work(void *owner, uint64_t units) {
     uint64_t *remaining = owner;
     if (units > *remaining) return false;
@@ -956,8 +1013,16 @@ static XrXirCallStatus instance_private_reference(XrXirInstance *instance,
     }
     return XR_XIR_CALL_BAD_ARGUMENT;
 }
-XrXirCallStatus xr_xir_instance_function(XrXirCallView *view, XrXirType type, uint32_t entry,
-    const XrXirValue *captures, uint32_t count, XrXirValue *output) {
+typedef struct InstanceFunctionRequest {
+    XrXirType type;uint32_t entry;
+    const XrXirValue *captures;uint32_t count;
+    const XirFunctionProducer *producer;
+} InstanceFunctionRequest;
+static XrXirCallStatus instance_function_create(XrXirCallView *view,
+    const InstanceFunctionRequest *request,XrXirValue *output) {
+    if (!request) return XR_XIR_CALL_BAD_ARGUMENT;
+    XrXirType type=request->type;uint32_t entry=request->entry,count=request->count;
+    const XrXirValue *captures=request->captures;
     XrXirInstance *instance = view_instance(view);
     if (!instance) return XR_XIR_CALL_BAD_STATE;
     const XrXirTypeNode *signature = xr_xir_callable_signature(instance->program->types, type);
@@ -986,11 +1051,21 @@ XrXirCallStatus xr_xir_instance_function(XrXirCallView *view, XrXirType type, ui
     if (status != XR_XIR_CALL_READY) return status;
     if (!function_gate_retain(instance->function_gate)) return XR_XIR_CALL_LIMIT;
     XrXirFunctionBinding binding = {instance->function_gate, function_gate_drop, entry, captures, count};
-    status = value_call_status(xr_xir_function_new(instance->domain, instance->program->arena,
+    if (request->producer) {
+        const XirFunctionConstruction construction={&binding,admission,request->producer};
+        status=value_call_status(xr_xir_function_new_produced(instance->domain,instance->program->arena,
+            type,&construction,output));
+    } else status = value_call_status(xr_xir_function_new(instance->domain, instance->program->arena,
         type, &binding, admission, output));
     if (status != XR_XIR_CALL_READY) function_gate_drop(instance->function_gate);
     return status;
 }
+XrXirCallStatus xr_xir_instance_function(XrXirCallView *view,XrXirType type,uint32_t entry,
+    const XrXirValue *captures,uint32_t count,XrXirValue *output) {
+    const InstanceFunctionRequest request={type,entry,captures,count,NULL};
+    return instance_function_create(view,&request,output);
+}
+#include "xxir_instance_function_producer.inc.c"
 XR_FUNC XrXirCallStatus xr_xir_task_go(XrXirCallView *view, XrXirType task_type, uint32_t direct_entry,
     const XrXirValue *arguments, uint32_t count, XrXirValue *output) {
     if (!output || !value_unit(*output) || (count && !arguments)) return XR_XIR_CALL_BAD_ARGUMENT;

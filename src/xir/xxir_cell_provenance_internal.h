@@ -17,6 +17,8 @@
 #define XR_XIR_CELL_ORIGIN_SCOPED 2u
 #define XR_XIR_CELL_ORIGIN_MODULE 4u
 #define XR_XIR_CELL_ORIGIN_UNKNOWN 8u
+/* An authenticated scoped owner can retain an unresolved execution origin. */
+#define XR_XIR_CELL_ORIGIN_ROOT_UNRESOLVED 16u
 #define XR_XIR_CELL_ACCESS_ROOT 1u
 #define XR_XIR_CELL_ACCESS_UNKNOWN 2u
 typedef enum XrXirCellProofRole {

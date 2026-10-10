@@ -38,12 +38,12 @@ static void capacity_goldens(CapacityCompile *run) {
         CHECK(xr_xir_instance_start(current,capacity_find(run->module,"overflow"),NULL,0)==XR_XIR_CALL_READY);
         CHECK(xr_xir_instance_poll_bounded(current,UINT64_MAX).outcome.status==XR_XIR_CALL_LIMIT);
         XrXirValue output={0};
-        CHECK(xr_xir_instance_take_result(current,&output)==XR_XIR_CALL_BAD_STATE);
+        CHECK(xr_xir_instance_take_result(current,&output)==XR_XIR_CALL_LIMIT);
         CHECK(!output.type&&!output.reserved&&!output.payload);
         XrXirCallResult cache={0},before=cache;
         CHECK(xr_xir_instance_copy_failure(current,&cache)==XR_XIR_CALL_BAD_STATE);
         CHECK(!memcmp(&cache,&before,sizeof(cache)));
-        CHECK(xr_xir_instance_free(current)==XR_XIR_CALL_READY);
+        CHECK(xr_xir_instance_free(current)==XR_XIR_CALL_LIMIT);
         CHECK(!runtime_live&&!runtime_bytes);
     }
     puts("capacity bounds/alias/currentRoot/once12/generic/negative422/overflowLIMIT dual physical0");

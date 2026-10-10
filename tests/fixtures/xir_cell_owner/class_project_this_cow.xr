@@ -1,0 +1,18 @@
+fn leaf(value: ref i64) -> i64 { value += 1; return value; }
+fn middle(value: ref i64) -> i64 { leaf(ref value); value += 1; return value; }
+final class Holder {
+    private values: Array<i64>
+    constructor(values: Array<i64>) { this.values = values; }
+    read() -> Array<i64> { return this.values; }
+    adjust() -> i64 { return middle(ref this.values[0]); }
+}
+export fn run() -> i64 {
+    const input = [40];
+    const first = Holder(input);
+    const alias = first;
+    const before = first.read();
+    const result = alias.adjust();
+    if (input[0] != 40) { return 0; }
+    return result * 10000 + first.read()[0] * 100 + before[0];
+}
+fn main() -> i64 { return run(); }

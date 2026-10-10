@@ -54,6 +54,7 @@ typedef struct XirAtomic {
 typedef struct XirFunction {
     XirObject object;
     XrXirFunctionBinding binding;
+    XirFunctionProducer producer;
 } XirFunction;
 typedef struct XirCell {
     XirObject object;
@@ -62,7 +63,14 @@ typedef struct XirCell {
     const void *module_owner;
     uint32_t module_slot;
     bool initialized, module_storage;
+    uint32_t projection_count;
+    size_t allocation_bytes;
+    XrXirCellAuthority projection_authority;
 } XirCell;
+static bool cell_projection_valid(const XirCell *cell);
+static XrXirValueStatus cell_projection_write(const XrXirValue *cell,
+    const XrXirCellAuthority *authority, const XrXirValue *value,
+    XrXirValueAdmission *admission);
 static bool cell_access(const XirCell *cell, const XrXirCellAuthority *authority);
 typedef struct XirArray {
     XirObject object;
@@ -147,6 +155,16 @@ static XrXirValue storage_leaf_value(XrXirType type, const unsigned char *bytes,
     return value;
 }
 #include "xxir_class_storage.inc.c"
+static uint32_t object_storage_kind(uint32_t node_kind) {
+    return node_kind == XR_XIR_TYPE_CELL ? XIR_OBJECT_CELL :
+        node_kind == XR_XIR_TYPE_CALLABLE ? XIR_OBJECT_FUNCTION : node_kind;
+}
+static bool value_object_kind_known(uint32_t kind) {
+    return !kind || kind == XIR_OBJECT_CLASS || kind == XIR_OBJECT_CELL ||
+        kind == XIR_OBJECT_FUNCTION || kind == XR_XIR_TYPE_ARRAY ||
+        kind == XR_XIR_TYPE_NOMINAL || kind == XR_XIR_TYPE_NULLABLE ||
+        kind == XR_XIR_TYPE_TUPLE || kind == XR_XIR_TYPE_ATOMIC || kind == XR_XIR_TYPE_TASK;
+}
 static bool value_header_valid(const XrXirValue *value) {
     if (!value || value->reserved) return false;
     XrXirType type = (XrXirType) value->type;
@@ -157,7 +175,8 @@ static bool value_header_valid(const XrXirValue *value) {
         (type == XR_XIR_BOOL && (value->payload == 0 || value->payload == 1))) return true;
     if (!owned_carrier_type(type)) return false;
     XirObject *object = object_pointer(value);
-    if (!object || (type != XR_XIR_ERROR && object->type != type) ||
+    if (!object || !value_object_kind_known(object->kind)) return false;
+    if ((type != XR_XIR_ERROR && object->type != type) ||
         !atomic_load_explicit(&object->references, memory_order_relaxed)) return false;
     if (!object->domain) {
         if (object->kind != XR_XIR_TYPE_NOMINAL || object->release_next) return false;
@@ -177,7 +196,7 @@ static bool value_header_valid(const XrXirValue *value) {
     const XrXirTypeNode *node = xr_xir_type_node(xr_xir_compile_type_arena_types(object->arena), type);
     if (object->kind == XIR_OBJECT_CLASS)
         return node && !node->parameter_span && xr_xir_type_is_class(xr_xir_compile_type_arena_types(object->arena),type);
-    return node && !node->parameter_span && node->kind == object->kind &&
+    return node && !node->parameter_span && object_storage_kind(node->kind) == object->kind &&
         (node->kind == XR_XIR_TYPE_CALLABLE || node->kind == XR_XIR_TYPE_CELL || node->kind == XR_XIR_TYPE_ARRAY ||
          node->kind == XR_XIR_TYPE_NOMINAL || node->kind == XR_XIR_TYPE_NULLABLE || node->kind == XR_XIR_TYPE_TUPLE ||
          node->kind == XR_XIR_TYPE_TASK ||
@@ -237,19 +256,21 @@ XR_FUNC bool xr_xir_value_valid(const XrXirValue *value) {
         return true;
     }
     if (object->kind == XR_XIR_TYPE_ARRAY) return array_storage_valid((XirArray *) object);
-    if (object->kind == XR_XIR_TYPE_CALLABLE) {
+    if (object->kind == XIR_OBJECT_FUNCTION) {
         const XrXirFunctionBinding *binding = &((XirFunction *) object)->binding;
         return binding->owner && binding->release && binding->capture_count <= 65536 &&
             ((binding->capture_count != 0) == (binding->captures != NULL));
     }
-    if (object->kind == XR_XIR_TYPE_CELL) {
+    if (object->kind == XIR_OBJECT_CELL) {
         const XirCell *cell = (const XirCell *)object;
+        if (cell->projection_count) return cell_projection_valid(cell);
+        if (cell->allocation_bytes != sizeof(*cell)) return false;
         const XrXirValue *content = &cell->value;
         XrXirType element = xr_xir_cell_element(xr_xir_compile_type_arena_types(object->arena), object->type);
         if (!cell->initialized || content->type != (uint32_t) element || !value_header_valid(content)) return false;
         if (owned_carrier_type(element) && !arena_free_carrier(element)) {
             XirObject *child = object_pointer(content);
-            return child->arena == object->arena && child->kind != XR_XIR_TYPE_CELL && xr_xir_value_valid(content);
+            return child->arena == object->arena && child->kind != XIR_OBJECT_CELL && xr_xir_value_valid(content);
         }
     }
     return true;
@@ -646,11 +667,11 @@ static void release_pending(XirObject *pending) {
                 queue_release(&task->outcome.panic.message, &pending);
             }
             xr_xir_domain_deallocate(domain, task, sizeof(*task));
-        } else if (object->kind == XR_XIR_TYPE_CELL) {
+        } else if (object->kind == XIR_OBJECT_CELL) {
             XirCell *cell = (XirCell *) object;
             if (!object->graph_dead) queue_release(&cell->value, &pending);
-            xr_xir_domain_deallocate(domain, cell, sizeof(*cell));
-        } else if (object->kind == XR_XIR_TYPE_CALLABLE) {
+            xr_xir_domain_deallocate(domain, cell, cell->allocation_bytes);
+        } else if (object->kind == XIR_OBJECT_FUNCTION) {
             XirFunction *function = (XirFunction *) object;
             XrXirFunctionBinding binding = function->binding;
             for (uint32_t i = 0; !object->graph_dead && i < binding.capture_count; ++i)
@@ -972,7 +993,7 @@ static XirObject *constructed_allocate(XrXirDomain *domain, XrXirTypeArena *aren
     const XrXirTypeNode *node = xr_xir_type_node(xr_xir_compile_type_arena_types(arena), type);
     XR_CHECK(node, "constructed allocation requires an exact runtime descriptor");
     atomic_init(&object->references, 1);
-    object->domain = domain; object->arena = arena; object->type = type; object->kind = node->kind;
+    object->domain = domain; object->arena = arena; object->type = type; object->kind = object_storage_kind(node->kind);
     object->release_next = NULL;
     graph_object_initialize(object);
     return object;
@@ -993,14 +1014,19 @@ static bool admission_owner(const XrXirValueAdmission *admission,
 #include "xxir_tuple_value.inc.c"
 #include "xxir_atomic_value.inc.c"
 static XrXirValueStatus xr_xir_function_new_graph_operation(XrXirDomain *domain, XrXirTypeArena *arena,
-    XrXirType type, const XrXirFunctionBinding *binding, XrXirValueAdmission *admission,
-    XrXirValue *output) {
-    if (!admission_owner(admission, arena, domain) || !unit_value(output) ||
+    XrXirType type,const XirFunctionConstruction *construction,XrXirValue *output) {
+    const XrXirFunctionBinding *binding=construction?construction->binding:NULL;
+    XrXirValueAdmission *admission=construction?construction->admission:NULL;
+    if ((construction && construction->producer && !construction->producer->owner) ||
+        !admission_owner(admission, arena, domain) || !unit_value(output) ||
         !xr_xir_type_is_callable(xr_xir_compile_type_arena_types(arena), type) ||
         !binding || !binding->owner || !binding->release || binding->capture_count > 65536 ||
         (binding->capture_count && !binding->captures)) return XR_XIR_VALUE_BAD_ARGUMENT;
     if (!admission->work) return XR_XIR_VALUE_LIMIT;
     --admission->work;
+    uint64_t producer_work=sizeof(XirFunctionProducer);
+    if (producer_work>admission->work || !xr_xir_domain_work(domain,producer_work)) return XR_XIR_VALUE_LIMIT;
+    admission->work-=producer_work;
     if (!admission->function) return XR_XIR_VALUE_BAD_ARGUMENT;
     XrXirValueStatus admitted = admission->function(admission->context, binding, type, &admission->work);
     if (admitted != XR_XIR_VALUE_OK) return admitted;
@@ -1018,6 +1044,7 @@ static XrXirValueStatus xr_xir_function_new_graph_operation(XrXirDomain *domain,
     XirFunction *function = (XirFunction *) constructed_allocate(domain, arena, type, bytes, &status);
     if (!function) return status;
     function->binding = *binding;
+    function->producer=construction->producer?*construction->producer:(XirFunctionProducer){0};
     XrXirValue *captures = (XrXirValue *) (function + 1);
     function->binding.captures = binding->capture_count ? captures : NULL;
     memset(captures, 0, (size_t) binding->capture_count * sizeof(*captures));
@@ -1036,15 +1063,34 @@ static XrXirValueStatus xr_xir_function_new_graph_operation(XrXirDomain *domain,
 XR_FUNC XrXirValueStatus xr_xir_function_new(XrXirDomain *domain, XrXirTypeArena *arena,
     XrXirType type, const XrXirFunctionBinding *binding, XrXirValueAdmission *admission,
     XrXirValue *output) {
+    const XirFunctionConstruction construction={binding,admission,NULL};
     xr_xir_value_graph_begin();
-    XrXirValueStatus graph_outcome = xr_xir_function_new_graph_operation(domain, arena, type, binding, admission, output);
+    XrXirValueStatus graph_outcome = xr_xir_function_new_graph_operation(domain,arena,type,&construction,output);
     xr_xir_value_graph_end();
     return graph_outcome;
+}
+XR_FUNC XrXirValueStatus xr_xir_function_new_produced(XrXirDomain *domain,XrXirTypeArena *arena,
+    XrXirType type,const XirFunctionConstruction *construction,XrXirValue *output) {
+    if (!construction || !construction->producer || !construction->producer->owner)
+        return XR_XIR_VALUE_BAD_ARGUMENT;
+    xr_xir_value_graph_begin();
+    XrXirValueStatus result=xr_xir_function_new_graph_operation(domain,arena,type,construction,output);
+    xr_xir_value_graph_end();return result;
+}
+XR_FUNC const XirFunctionProducer *xr_xir_function_producer(const XrXirValue *value) {
+    xr_xir_value_graph_begin();
+    const XirFunctionProducer *result=NULL;
+    if (xr_xir_value_valid(value) && owned_carrier_type((XrXirType)value->type)) {
+        XirObject *object=object_pointer(value);
+        if (object->kind==XIR_OBJECT_FUNCTION && ((XirFunction *)object)->producer.owner)
+            result=&((XirFunction *)object)->producer;
+    }
+    xr_xir_value_graph_end();return result;
 }
 static const XrXirFunctionBinding * xr_xir_function_binding_graph_operation(const XrXirValue *value) {
     if (!xr_xir_value_valid(value) || !owned_carrier_type((XrXirType) value->type)) return NULL;
     XirObject *object = object_pointer(value);
-    return object->kind == XR_XIR_TYPE_CALLABLE ? &((XirFunction *) object)->binding : NULL;
+    return object->kind == XIR_OBJECT_FUNCTION ? &((XirFunction *) object)->binding : NULL;
 }
 XR_FUNC const XrXirFunctionBinding * xr_xir_function_binding(const XrXirValue *value) {
     xr_xir_value_graph_begin();
@@ -1074,6 +1120,9 @@ static XrXirValueStatus xr_xir_cell_new_graph_operation(XrXirDomain *domain, XrX
     cell->module_slot = UINT32_MAX;
     cell->initialized = false;
     cell->module_storage = false;
+    cell->projection_count = 0;
+    cell->allocation_bytes = sizeof(*cell);
+    cell->projection_authority = (XrXirCellAuthority){0};
     status = xr_xir_value_copy(initial, &cell->value);
     if (status != XR_XIR_VALUE_OK) { constructed_discard(&cell->object, sizeof(*cell)); return status; }
     cell->initialized = true;
@@ -1093,7 +1142,7 @@ XR_FUNC XrXirValueStatus xr_xir_cell_new(XrXirDomain *domain, XrXirTypeArena *ar
 static bool xr_xir_cell_in_domain_graph_operation(const XrXirValue *cell, XrXirDomain *domain) {
     if (!xr_xir_value_valid(cell) || !owned_carrier_type((XrXirType) cell->type)) return false;
     XirObject *object = object_pointer(cell);
-    return object->kind == XR_XIR_TYPE_CELL && object->domain == domain;
+    return object->kind == XIR_OBJECT_CELL && object->domain == domain;
 }
 XR_FUNC bool xr_xir_cell_in_domain(const XrXirValue *cell, XrXirDomain *domain) {
     xr_xir_value_graph_begin();
@@ -1103,7 +1152,7 @@ XR_FUNC bool xr_xir_cell_in_domain(const XrXirValue *cell, XrXirDomain *domain) 
 }
 static XrXirValueStatus xr_xir_cell_read_graph_operation(const XrXirValue *cell, XrXirValue *output) {
     if (!xr_xir_value_valid(cell) || !owned_carrier_type((XrXirType) cell->type) ||
-        object_pointer(cell)->kind != XR_XIR_TYPE_CELL) return XR_XIR_VALUE_BAD_ARGUMENT;
+        object_pointer(cell)->kind != XIR_OBJECT_CELL) return XR_XIR_VALUE_BAD_ARGUMENT;
     if (!cell_access((XirCell *)object_pointer(cell), NULL)) return XR_XIR_VALUE_BAD_ARGUMENT;
     return xr_xir_value_copy(&((XirCell *) object_pointer(cell))->value, output);
 }
@@ -1116,9 +1165,10 @@ XR_FUNC XrXirValueStatus xr_xir_cell_read(const XrXirValue *cell, XrXirValue *ou
 static XrXirValueStatus xr_xir_cell_write_graph_operation(const XrXirValue *cell, const XrXirValue *value,
     XrXirValueAdmission *admission, const XrXirCellAuthority *authority) {
     if (!xr_xir_value_valid(cell) || !owned_carrier_type((XrXirType) cell->type) ||
-        object_pointer(cell)->kind != XR_XIR_TYPE_CELL) return XR_XIR_VALUE_BAD_ARGUMENT;
+        object_pointer(cell)->kind != XIR_OBJECT_CELL) return XR_XIR_VALUE_BAD_ARGUMENT;
     XirCell *target = (XirCell *) object_pointer(cell);
     if (!cell_access(target, authority)) return XR_XIR_VALUE_BAD_ARGUMENT;
+    if (target->projection_count) return cell_projection_write(cell, authority, value, admission);
     if (!admission_owner(admission, target->object.arena, target->object.domain)) return XR_XIR_VALUE_BAD_ARGUMENT;
     XrXirType element = xr_xir_cell_element(xr_xir_compile_type_arena_types(target->object.arena), target->object.type);
     XrXirValueStatus status;
@@ -1532,7 +1582,7 @@ static XrXirValueStatus xr_xir_cell_value_place_graph_operation(const XrXirValue
     if (!xr_xir_value_argument(cell, admission->arena, (XrXirType) cell->type) ||
         !xr_xir_cell_in_domain(cell, admission->domain)) return XR_XIR_VALUE_BAD_ARGUMENT;
     XirCell *holder = (XirCell *) object_pointer(cell);
-    if (!cell_access(holder, authority)) return XR_XIR_VALUE_BAD_ARGUMENT;
+    if (holder->projection_count || !cell_access(holder, authority)) return XR_XIR_VALUE_BAD_ARGUMENT;
     XrXirType type = (XrXirType) holder->value.type;
     const XrXirTypes *types = xr_xir_compile_type_arena_types(admission->arena);
     if (!xr_xir_type_is_array(types, type) && !xr_xir_type_is_nominal(types, type)) return XR_XIR_VALUE_BAD_ARGUMENT;
@@ -1551,6 +1601,7 @@ XR_FUNC XrXirValueStatus xr_xir_cell_value_place(const XrXirValue *cell,
 #include "xxir_class_value.inc.c"
 #include "xxir_struct_value.inc.c"
 #include "xxir_value_path.inc.c"
+#include "xxir_cell_projection.inc.c"
 #include "xxir_enum_value.inc.c"
 #include "xxir_error_value.inc.c"
 #include "xxir_panic_value.inc.c"

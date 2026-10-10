@@ -265,6 +265,15 @@ static XrXirStatus effect_scalar_instruction(EffectScalarFlow *flow, uint32_t in
         return effect_scalar_phi(flow,instruction);
     case XR_XIR_FUNCTION_REF:
         return effect_scalar_capture(flow,instruction);
+    case XR_XIR_CELL_PROJECT:
+        if (op.args[0]>=flow->value_count) return XR_XIR_BAD_VALUE;
+        if (!xr_xir_type_is_cell(&flow->terms->types,op.type)) return XR_XIR_BAD_TYPE;
+        if (!xir_compile_work(flow->terms->remaining,1)) return XR_XIR_BUDGET;
+        /* Preserve the physical descriptor type and its storage barrier. */
+        if (!(flow->fixed[destination]&EFFECT_SCALAR_OPAQUE)) {
+            flow->fixed[destination]|=EFFECT_SCALAR_OPAQUE;flow->changed=true;
+        }
+        return XR_XIR_OK;
     case XR_XIR_FUNCTION_WEAKEN:
         if (!xir_compile_work(flow->terms->remaining,1)) return XR_XIR_BUDGET;
         if (!(flow->fixed[destination]&EFFECT_SCALAR_OPAQUE)) {

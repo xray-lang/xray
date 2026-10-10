@@ -29,6 +29,7 @@
 #include "xxir_types.h"
 #include "xxir_operand_roles.h"
 #include "xxir_instance_value.h"
+#include "xxir_instance_function_internal.h"
 #include "xxir_struct.h"
 #include "xxir_class.h"
 #include "xxir_enum.h"
@@ -131,8 +132,8 @@ static XrXirRunStatus instance_step(ScalarRun *run, VmState *state, const XrXirI
             state->arguments[i] = (XrXirValue) {(uint32_t) xr_xir_operand_type(run->function, id), 0,
                 xr_xir_scalar_load(run->frame, run->layout->offsets[id])};
         }
-        status = xr_xir_instance_function(run->view, op->type, (uint32_t) op->immediate,
-            state->arguments, op->args[1], &value); break;
+        status = xr_xir_instance_function_at(run->view,(uint32_t)(op-run->function->instructions),
+            state->arguments,op->args[1],&value); break;
     case XR_XIR_CONST_STRING:
         status = xr_xir_instance_literal(run->view, (uint32_t) op->immediate, &value); break;
     case XR_XIR_TO_STRING: {
@@ -403,21 +404,30 @@ static XrXirRunStatus vm_call_step(ScalarRun *run, VmState *state, const XrXirIn
     XrXirAction *action, uint32_t destination) {
     uint32_t callee = (uint32_t) op->immediate;
     XrXirValue value = {0};
-    if (op->op == XR_XIR_CALL_INDIRECT || op->op == XR_XIR_INVOKE_INDIRECT) {
-        value = (XrXirValue) {(uint32_t) xr_xir_operand_type(run->function, callee), 0,
-            xr_xir_scalar_load(run->frame, run->layout->offsets[callee])};
-        XrXirCallStatus status = xr_xir_instance_resolve_function(run->view, &value, &callee);
-        if (status != XR_XIR_CALL_READY) {
-            *action = (XrXirAction) {XR_XIR_ACTION_FAULT, 0, NULL, 0, {XR_XIR_I64, 0, status}, {0}, 0};
-            return XR_XIR_RUN_OK;
-        }
-    }
     for (uint32_t i = 0; i < op->args[1]; ++i) {
         uint32_t id = run->function->operands[op->args[0] + i];
         state->arguments[i] = (XrXirValue) {(uint32_t) xr_xir_operand_type(run->function, id), 0,
             xr_xir_scalar_load(run->frame, run->layout->offsets[id])};
     }
     uint32_t at = (uint32_t) (op - run->function->instructions);
+    if (op->op == XR_XIR_CALL_INDIRECT || op->op == XR_XIR_INVOKE_INDIRECT) {
+        value = (XrXirValue) {(uint32_t) xr_xir_operand_type(run->function, callee), 0,
+            xr_xir_scalar_load(run->frame, run->layout->offsets[callee])};
+        XrXirCallStatus status = xr_xir_instance_resolve_function_at(run->view,at,&value,
+            op->args[1]?state->arguments:NULL,op->args[1],&callee);
+        if (status != XR_XIR_CALL_READY) {
+            *action = (XrXirAction) {XR_XIR_ACTION_FAULT, 0, NULL, 0, {XR_XIR_I64, 0, status}, {0}, 0};
+            return XR_XIR_RUN_OK;
+        }
+    }
+    if (op->op == XR_XIR_CALL || op->op == XR_XIR_INVOKE) {
+        XrXirCallStatus status=xr_xir_instance_call_at(run->view,at,callee,
+            op->args[1]?state->arguments:NULL,op->args[1]);
+        if (status!=XR_XIR_CALL_READY) {
+            *action=(XrXirAction){XR_XIR_ACTION_FAULT,0,NULL,0,{XR_XIR_I64,0,status},{0},0};
+            return XR_XIR_RUN_OK;
+        }
+    }
     state->invoke = op->op == XR_XIR_INVOKE || op->op == XR_XIR_INVOKE_INDIRECT ? at + 1 : 0;
     state->panic = run->function->blocks[vm_block(run->function, at)].panic;
     state->waiting = true; state->destination = destination; state->expected = op->type;

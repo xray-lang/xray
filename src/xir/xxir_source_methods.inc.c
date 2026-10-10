@@ -84,20 +84,15 @@ static bool source_method_call(SourceContext *ctx, AstNode *node, SourceValue re
             method->declaration,XR_XIR_SOURCE_CALL) &&
         source_recipe_group(ctx,op,prepared.values,prepared.count,value);
 }
-/* A ref receiver is the named mutable local's own cell; any other receiver place would need a
- * write-back contract and is rejected instead of mutating a temporary copy. */
+/* A direct ref receiver uses the same actual owner/path capability as ref
+ * arguments. Bound borrowed function captures remain independently closed. */
 static bool source_ref_method_call(SourceContext *ctx, AstNode *node, AstNode *object,
     SourceName *method, SourceExpectedType result_context, SourceValue *value) {
-    if (object->type != AST_VARIABLE && object->type != AST_THIS_EXPR)
-        return source_fail(ctx, object, XR_XIR_BAD_TYPE, "ref receiver place is not implemented in XIR");
-    SourceName *symbol = visible_name(ctx, object->type == AST_THIS_EXPR ? "this" : object->as.variable.name);
-    if (!symbol) return source_fail(ctx, object, XR_XIR_BAD_TYPE, "ref receiver does not name a binding");
-    if (!symbol->mutable || symbol->construction)
-        return source_fail(ctx, object, XR_XIR_BAD_TYPE, "ref receiver requires a stored mutable binding");
+    SourceName *symbol=source_ref_binding(ctx,object);
+    if (!symbol) return source_fail(ctx,object,XR_XIR_BAD_TYPE,"ref receiver does not name a binding");
     SourceValue receiver;
-    if (!source_query_reference(ctx, object, symbol, symbol, XR_XIR_SOURCE_READ_WRITE) ||
-        !source_binding_cell(ctx, symbol, &receiver)) return false;
-    return source_method_call(ctx, node, receiver, method, result_context, value);
+    if (!source_reference_place(ctx,object,&receiver)) return false;
+    return source_method_call(ctx,node,receiver,method,result_context,value) && source_fact_push(ctx,symbol,0);
 }
 static bool source_member_value(SourceContext *ctx, AstNode *node, SourceTypeArguments *type_arguments,
     SourceExpectedType expected, SourceValue *value) {

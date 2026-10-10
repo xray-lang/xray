@@ -1,0 +1,11 @@
+struct Box { items: Array<i64>; mark: i64 }
+var root = Box{items: [40, 70], mark: 5}
+var picks: i64 = 0
+fn choose() -> i64 { picks += 1; return 0; }
+fn bump(value: ref i64) -> i64 { value += 2; return value; }
+export fn run() -> i64 {
+    const snapshot = root;
+    bump(ref root.items[choose()]);
+    return root.items[0] * 1000 + snapshot.items[0] * 10 + picks + root.mark;
+}
+fn main() -> i64 { return run(); }

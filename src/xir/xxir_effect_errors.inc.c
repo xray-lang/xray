@@ -30,6 +30,8 @@ bool xr_xir_effects_error_unknown(const XrXirEffects *effects, uint32_t f) {
 bool xr_xir_effects_error_unidentified(const XrXirEffects *effects, uint32_t f) {
     return effects && f < effects->count && error_bit(effects->errors + (size_t)f * effects->words, 1);
 }
+typedef struct ErrorInvocationContexts ErrorInvocationContexts;
+static uint32_t error_invocation_summary(const ErrorInvocationContexts *contexts,uint32_t n);
 enum { ERROR_BLOCK_REACHABLE = 1, ERROR_BLOCK_PENDING = 2 };
 typedef struct ErrorFlow {
     const XrXirModule *module;
@@ -45,8 +47,16 @@ typedef struct ErrorFlow {
     size_t storage_capacity;
     size_t stride;
     uint32_t values, cell_count, active_count;
+    ErrorInvocationContexts *invocations;
+    uint32_t invocation,summary_count;
     bool changed, summary_changed, restart;
 } ErrorFlow;
+static XrXirStatus error_invocation_contexts_new(ErrorFlow *flow,ErrorInvocationContexts **output);
+static void error_invocation_contexts_free(ErrorInvocationContexts *contexts);
+static XrXirStatus error_invocation_functions(ErrorFlow *flow);
+static XrXirStatus error_invocation_summaries(ErrorFlow *flow);
+static XrXirStatus error_invocation_call(ErrorFlow *flow,const XrXirInstruction *call,
+    uint64_t *set,bool *handled);
 /* Missing scalar rows are read-only zero facts, never writable aliases. */
 static uint64_t *error_value(ErrorFlow *flow, uint64_t *row, uint32_t value) {
     if (value >= flow->values || flow->slots[value] == UINT32_MAX) return NULL;
@@ -187,21 +197,9 @@ static XrXirStatus error_atom(ErrorFlow *flow, EffectErrorAtom atom, uint64_t *s
     flow->restart = true;
     return XR_XIR_OK;
 }
-static XrXirStatus error_call(ErrorFlow *flow, const XrXirInstruction *call, uint64_t *set) {
-    if (call->op == XR_XIR_CALL_INDIRECT || call->op == XR_XIR_INVOKE_INDIRECT || call->op == XR_XIR_CALL_REQUIREMENT) {
-        error_add(set, 0); return XR_XIR_OK;
-    }
-    XrXirInstruction resolved;
-    if(call->op==XR_XIR_CALL_DEFAULT || call->op==XR_XIR_INVOKE_DEFAULT) {
-        const XrXirDefaultBinding *binding=NULL;
-        const uint32_t *identity=xr_xir_default_identity(call);
-        XrXirStatus status=xr_xir_compile_default_lookup(flow->remaining, flow->module, identity[0], identity[1], &binding);
-        if(status!=XR_XIR_OK) return status;
-        if(!binding) return XR_XIR_BAD_STRUCTURE;
-        resolved=*call;resolved.immediate=binding->function;call=&resolved;
-    }
+static XrXirStatus error_call_summary(ErrorFlow *flow, const XrXirInstruction *call,
+    const uint64_t *from,uint64_t *set) {
     uint32_t caller = (uint32_t)(flow->function - flow->module->functions);
-    const uint64_t *from = flow->effects->errors + (size_t)call->immediate * flow->effects->words;
     if (error_bit(from, 0)) error_add(set, 0);
     if (error_bit(from, 1)) error_add(set, 1);
     for (uint32_t a = 0; a < flow->effects->atom_count; ++a) if (error_bit(from, a + 2)) {
@@ -223,6 +221,26 @@ static XrXirStatus error_call(ErrorFlow *flow, const XrXirInstruction *call, uin
         if (status != XR_XIR_OK || flow->restart) return status;
     }
     return XR_XIR_OK;
+}
+
+static XrXirStatus error_call(ErrorFlow *flow, const XrXirInstruction *call, uint64_t *set) {
+    bool handled=false;
+    XrXirStatus precise=error_invocation_call(flow,call,set,&handled);
+    if (precise!=XR_XIR_OK || handled) return precise;
+    if (call->op == XR_XIR_CALL_INDIRECT || call->op == XR_XIR_INVOKE_INDIRECT || call->op == XR_XIR_CALL_REQUIREMENT) {
+        error_add(set, 0); return XR_XIR_OK;
+    }
+    XrXirInstruction resolved;
+    if(call->op==XR_XIR_CALL_DEFAULT || call->op==XR_XIR_INVOKE_DEFAULT) {
+        const XrXirDefaultBinding *binding=NULL;
+        const uint32_t *identity=xr_xir_default_identity(call);
+        XrXirStatus status=xr_xir_compile_default_lookup(flow->remaining, flow->module, identity[0], identity[1], &binding);
+        if(status!=XR_XIR_OK) return status;
+        if(!binding) return XR_XIR_BAD_STRUCTURE;
+        resolved=*call;resolved.immediate=binding->function;call=&resolved;
+    }
+    const uint64_t *from = flow->effects->errors + (size_t)call->immediate * flow->effects->words;
+    return error_call_summary(flow,call,from,set);
 }
 
 /* Calls, scheduler/host boundaries and writes through other references can
@@ -280,6 +298,12 @@ static XrXirStatus error_instruction(ErrorFlow *flow, uint32_t i) {
                 memcpy(target, source, (size_t)words * sizeof(*target));
             }
         }
+    else if (op->op == XR_XIR_CELL_PROJECT) {
+        /* The descriptor has no leaf SSA payload or independent value.
+         * Existing writes invalidate all other COPY identities. */
+        if (!out) return XR_XIR_BAD_STRUCTURE;
+        error_type(flow,op->type,out);
+    }
     else if (op->op == XR_XIR_ENUM_NEW) {
         if (!out) return XR_XIR_BAD_STRUCTURE;
         for (uint32_t a = 0; a < flow->effects->atom_count; ++a)
@@ -528,7 +552,9 @@ static XrXirStatus error_function(ErrorFlow *flow, uint32_t f) {
         if (cell != flow->cell_count || active != flow->active_count) return XR_XIR_BAD_STRUCTURE;
         flow->work = flow->states + (size_t)flow->function->block_count * flow->stride;
         flow->edge = flow->work + flow->stride; flow->snapshot = flow->edge + flow->stride;
-        flow->escaping = flow->effects->errors + (size_t)f * flow->effects->words;
+        uint32_t summary=flow->invocations?error_invocation_summary(flow->invocations,flow->invocation):f;
+        if (summary>=(flow->invocations?flow->summary_count:flow->effects->count)) return XR_XIR_BAD_STRUCTURE;
+        flow->escaping = flow->effects->errors + (size_t)summary * flow->effects->words;
         status = error_roots(flow); flow->reachable[0] = ERROR_BLOCK_REACHABLE | ERROR_BLOCK_PENDING;
         for (uint32_t p = 0; p < flow->function->parameter_count && status == XR_XIR_OK; ++p) {
             if (!xir_compile_work(flow->remaining, flow->effects->atom_count + 1)) status = XR_XIR_BUDGET;
@@ -592,17 +618,19 @@ static XrXirStatus effect_errors_seed(const XrXirModule *module, XrXirEffects *e
         effects->atoms[at++]=(EffectErrorAtom){(XrXirType)(XR_XIR_TYPE_PARAMETER_BASE+p),XR_XIR_ERROR_SYMBOLIC_VARIANT};
     return XR_XIR_OK;
 }
-static XrXirStatus error_summary_resize(XrXirEffects *effects, XrXirCompileContext *remaining) {
+static XrXirStatus error_summary_resize(ErrorFlow *flow) {
+    XrXirEffects *effects=flow->effects;XrXirCompileContext *remaining=flow->remaining;
     XrXirStatus allocation_status = XR_XIR_OK;
     uint32_t words = (uint32_t)(((uint64_t)effects->atom_count + 65) / 64);
     if (words == effects->words) return XR_XIR_OK;
-    uint64_t count = (uint64_t)effects->count * words;
+    uint32_t summaries=flow->invocations?flow->summary_count:effects->count;
+    uint64_t count = (uint64_t)summaries * words;
     if (count > SIZE_MAX / sizeof(uint64_t) ||(count * sizeof(uint64_t) > SIZE_MAX) ||
         !xir_compile_work(remaining, count)) return XR_XIR_BUDGET;
     uint64_t *errors = xir_compile_calloc(remaining, (size_t)count, sizeof(*errors), &allocation_status);
     if (!errors) return allocation_status;
 
-    for (uint32_t f = 0; f < effects->count; ++f)
+    for (uint32_t f = 0; f < summaries; ++f)
         { if (!xir_compile_work(remaining, (size_t)effects->words * sizeof(*errors))) { xr_compile_resources_free(errors); return XR_XIR_BUDGET; } memcpy(errors + (size_t)f * words, effects->errors + (size_t)f * effects->words,
             (size_t)effects->words * sizeof(*errors)); }
     xr_compile_resources_free(effects->errors); effects->errors = errors; effects->words = words;
@@ -674,7 +702,8 @@ static XrXirStatus error_empty_escaping(const XrXirFunction *function,
         case XR_XIR_NE_INT: case XR_XIR_LE_INT: case XR_XIR_GT_INT: case XR_XIR_GE_INT:
         case XR_XIR_AND_INT: case XR_XIR_OR_INT: case XR_XIR_XOR_INT: case XR_XIR_SHL_INT:
         case XR_XIR_SHR_INT: case XR_XIR_PHI: case XR_XIR_FUNCTION_REF: case XR_XIR_CELL_NEW:
-        case XR_XIR_CELL_READ: case XR_XIR_CELL_WRITE: case XR_XIR_CONVERT_NUMBER: case XR_XIR_CONST_FLOAT:
+        case XR_XIR_CELL_READ: case XR_XIR_CELL_WRITE: case XR_XIR_CELL_PROJECT:
+        case XR_XIR_CONVERT_NUMBER: case XR_XIR_CONST_FLOAT:
         case XR_XIR_NEG_FLOAT: case XR_XIR_EQ_FLOAT: case XR_XIR_NE_FLOAT: case XR_XIR_LT_FLOAT:
         case XR_XIR_LE_FLOAT: case XR_XIR_GT_FLOAT: case XR_XIR_GE_FLOAT: case XR_XIR_CELL_PLACE:
         case XR_XIR_SLOT_PLACE: case XR_XIR_ARRAY_NEW: case XR_XIR_ARRAY_GET: case XR_XIR_ARRAY_SET:
@@ -841,19 +870,24 @@ static XrXirStatus error_functions(const XrXirModule *module, XrXirEffects *effe
                 }
             }
         }
-        if (status == XR_XIR_OK && flow->restart) status = error_summary_resize(effects, flow->remaining);
+        if (status == XR_XIR_OK && flow->restart) status = error_summary_resize(flow);
     } while (status == XR_XIR_OK && flow->restart);
     return status;
 }
 static XrXirStatus effect_errors_analyze(const XrXirModule *module, XrXirEffects *effects,
     EffectGraph *graph, XrXirCompileContext *remaining) {
-    XrXirStatus status = effect_errors_seed(module, effects, remaining);
-    if (status != XR_XIR_OK) return status;
     EffectTerms terms = {0}; terms.remaining = remaining;
     if (module->types) terms.types = *module->types;
     ErrorFlow flow = {0}; flow.module = module; flow.effects = effects; flow.remaining = remaining; flow.terms = &terms;
-    status = error_graph_prepare(module, graph, remaining);
-    if (status == XR_XIR_OK) status = error_functions(module, effects, graph, &flow);
+    flow.summary_count=effects->count;flow.invocation=UINT32_MAX;
+    XrXirStatus status=error_invocation_contexts_new(&flow,&flow.invocations);
+    if (status==XR_XIR_OK) status=effect_errors_seed(module,effects,remaining);
+    if (status==XR_XIR_OK && flow.invocations) status=error_invocation_summaries(&flow);
+    if (status==XR_XIR_OK && flow.invocations) status=error_invocation_functions(&flow);
+    else if (status==XR_XIR_OK) {
+        status = error_graph_prepare(module, graph, remaining);
+        if (status == XR_XIR_OK) status = error_functions(module, effects, graph, &flow);
+    }
     /* Temporary substituted identities die with terms. Prove their complete
      * outcomes while the sole error summary and authentic binders are alive. */
     XrXirModule permission = *module; permission.types = &terms.types;
@@ -871,6 +905,7 @@ static XrXirStatus effect_errors_analyze(const XrXirModule *module, XrXirEffects
         effects->task_errors[f] = qualified;
     }
     error_storage_free(&flow);
+    error_invocation_contexts_free(flow.invocations);
     effect_terms_free(&terms);
     if (status != XR_XIR_OK) return status;
     for (uint32_t f = 0; f < effects->count; ++f) {

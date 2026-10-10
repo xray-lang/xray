@@ -85,6 +85,9 @@ static void *runtime_calloc(size_t count, size_t size) {
     void *pointer = xr_calloc(count, size); runtime_record(pointer, count * size); return pointer;
 }
 static void runtime_free(void *pointer) {
+#ifdef XIR_RUNTIME_BEFORE_FREE
+    XIR_RUNTIME_BEFORE_FREE(pointer);
+#endif
     (void) runtime_forget(pointer);
     xr_free(pointer);
     if (!runtime_live) {

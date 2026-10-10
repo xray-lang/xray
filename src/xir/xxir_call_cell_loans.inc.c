@@ -28,6 +28,11 @@ XR_FUNC XrXirValueStatus xr_xir_call_cell_read(const XrXirCallView *view,
     XrXirCellAuthority authority = {0};
     if (!view_cell_authority(view, &authority)) return XR_XIR_VALUE_BAD_ARGUMENT;
     if (!call_cell_work(view->activation, 1)) return XR_XIR_VALUE_LIMIT;
+    if (xr_xir_cell_is_projection(cell)) {
+        XrXirValuePath path = {0}; XrXirFaultDetail fault = {0};
+        return xr_xir_cell_authorized_path_read(cell, &authority, &path,
+            xr_xir_call_admission(view), output, &fault);
+    }
     return xr_xir_cell_authorized_read(cell, &authority, output);
 }
 XR_FUNC XrXirValueStatus xr_xir_call_cell_write(const XrXirCallView *view,
@@ -44,6 +49,33 @@ XR_FUNC XrXirValueStatus xr_xir_call_cell_place(const XrXirCallView *view,
     if (!call_cell_work(view->activation, 1)) return XR_XIR_VALUE_LIMIT;
     return xr_xir_cell_authorized_place(cell, &authority, xr_xir_call_admission(view), output);
 }
+XR_FUNC XrXirValueStatus xr_xir_call_cell_project(const XrXirCallView *view,
+    XrXirType type, const XrXirValue *root, const XrXirValuePath *path, XrXirValue *output) {
+    XrXirCellAuthority authority = {0};
+    if (!view_cell_authority(view, &authority)) return XR_XIR_VALUE_BAD_ARGUMENT;
+    if (!call_cell_work(view->activation, 1)) return XR_XIR_VALUE_LIMIT;
+    return xr_xir_cell_project_authorized(type, root, path, &authority,
+        xr_xir_call_admission(view), output);
+}
+XR_FUNC XrXirValueStatus xr_xir_call_cell_path_read(const XrXirCallView *view,
+    const XrXirValue *cell, const XrXirValuePath *path,
+    XrXirValue *output, XrXirFaultDetail *fault) {
+    XrXirCellAuthority authority = {0};
+    if (!view_cell_authority(view, &authority)) return XR_XIR_VALUE_BAD_ARGUMENT;
+    if (!call_cell_work(view->activation, 1)) return XR_XIR_VALUE_LIMIT;
+    return xr_xir_cell_authorized_path_read(cell, &authority, path,
+        xr_xir_call_admission(view), output, fault);
+}
+XR_FUNC XrXirValueStatus xr_xir_call_cell_path_write(const XrXirCallView *view,
+    const XrXirValue *cell, const XrXirValuePath *path,
+    const XrXirValue *value, XrXirFaultDetail *fault, bool append) {
+    XrXirCellAuthority authority = {0};
+    if (!view_cell_authority(view, &authority)) return XR_XIR_VALUE_BAD_ARGUMENT;
+    if (!call_cell_work(view->activation, 1)) return XR_XIR_VALUE_LIMIT;
+    XrXirValueAdmission *admission = xr_xir_call_admission(view);
+    return append ? xr_xir_cell_authorized_path_push(cell, &authority, path, value, admission, fault) :
+        xr_xir_cell_authorized_path_write(cell, &authority, path, value, admission, fault);
+}
 static uint32_t frame_cell_count(const XrXirCall *call, const XrXirCallEntry *entry) {
     const XrXirTypes *types = xr_xir_compile_type_arena_types(call->config.admission.arena);
     uint32_t count = 0;
@@ -51,7 +83,8 @@ static uint32_t frame_cell_count(const XrXirCall *call, const XrXirCallEntry *en
         if (xr_xir_type_is_cell(types, entry->parameters[p])) ++count;
     return count;
 }
-static XrXirCallStatus frame_cell_prepare(XrXirCall *call, CallFrame *frame, uint32_t captures) {
+static XrXirCallStatus frame_cell_prepare(XrXirCall *call, CallFrame *frame,
+    uint32_t captures, XrXirFaultDetail *fault) {
     if (!frame->cell_capacity) return XR_XIR_CALL_READY;
     const XrXirTypes *types = xr_xir_compile_type_arena_types(call->config.admission.arena);
     uint32_t entry = (uint32_t)(frame->entry - call->config.entries), count = 0;
@@ -79,7 +112,12 @@ static XrXirCallStatus frame_cell_prepare(XrXirCall *call, CallFrame *frame, uin
             if (xr_xir_type_is_cell(types, frame->entry->parameters[prior]) &&
                 xr_xir_cell_same_owner(cell, &frame->arguments[prior])) return XR_XIR_CALL_BAD_ARGUMENT;
         }
-        if (xr_xir_cell_loan_prepare(cell, &parent) != XR_XIR_VALUE_OK) return XR_XIR_CALL_BAD_ARGUMENT;
+        XrXirValueStatus prepared = xr_xir_cell_loan_prepare_path(cell, &parent,
+            &call->config.admission, fault);
+        if (prepared != XR_XIR_VALUE_OK) return prepared == XR_XIR_VALUE_OOM ? XR_XIR_CALL_OOM :
+            prepared == XR_XIR_VALUE_LIMIT || prepared == XR_XIR_VALUE_REFCOUNT_LIMIT ? XR_XIR_CALL_LIMIT :
+            prepared == XR_XIR_VALUE_BOUNDS && xr_xir_fault_bounds_valid(*fault) ?
+                XR_XIR_CALL_BOUNDS : XR_XIR_CALL_BAD_ARGUMENT;
         /* Store ordinal before publication; commit replaces it with the live owner. */
         XR_CHECK(count < frame->cell_capacity, "frame reserves every possible cell loan before preparation");
         frame->loans[count++].parameter = p;

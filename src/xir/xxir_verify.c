@@ -161,7 +161,8 @@ static XrXirStatus instruction_shape(const XrXirFunction *function,
         XrXirStatus status = requirement_shape(function, op, module, remaining);
         if (status != XR_XIR_OK) return status;
     }
-    if (op->op == XR_XIR_CELL_NEW && (!module->declarations || !xr_xir_type_is_cell(module->types, op->type))) return XR_XIR_BAD_TYPE;
+    if ((op->op == XR_XIR_CELL_NEW || op->op == XR_XIR_CELL_PROJECT) &&
+        (!module->declarations || !xr_xir_type_is_cell(module->types, op->type))) return XR_XIR_BAD_TYPE;
     if (op->op == XR_XIR_CELL_READ && xr_xir_type_is_cell(module->types, op->type)) return XR_XIR_BAD_TYPE;
     if ((op->op == XR_XIR_NULLABLE_NONE || op->op == XR_XIR_NULLABLE_SOME) &&
         !xr_xir_type_is_nullable(module->types, op->type)) return XR_XIR_BAD_TYPE;
@@ -818,7 +819,7 @@ static XrXirStatus graph_uses(const Graph *graph, const XrXirFunction *function,
             if (status!=XR_XIR_OK) return status;
             continue;
         }
-        if (op->op >= XR_XIR_FIELD_PLACE && op->op <= XR_XIR_PLACE_WRITE) {
+        if ((op->op >= XR_XIR_FIELD_PLACE && op->op <= XR_XIR_PLACE_WRITE) || op->op == XR_XIR_CELL_PROJECT) {
             XrXirStatus status = path_uses(graph, function, context, i);
             if (status != XR_XIR_OK) return status;
             continue;

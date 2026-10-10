@@ -1,0 +1,8 @@
+var shared:i64=40;
+fn worker()->i64 {
+    const make=fn() { return fn()->i64 { shared+=2; return shared; }; };
+    const callback=make();
+    return callback();
+}
+export fn run()->i64 { const task=go worker(); return await task; }
+fn main()->i64 { return 0; }

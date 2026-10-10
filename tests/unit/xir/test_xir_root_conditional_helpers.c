@@ -26,6 +26,11 @@
 #include "xir_invocation_publish_cases.h"
 #include "xir_lowered_snapshot_cases.h"
 #include "xir_invocation_returned_producer_cases.h"
+#include "xir_invocation_producer_cases.h"
+#include "xir_invocation_runtime_edges_cases.h"
+#include "xir_invocation_runtime_direct_cases.h"
+#include "xir_invocation_captured_prefix_cases.h"
+#include "xir_invocation_function_cell_row_cases.h"
 
 static XrXirStatus conditional_classify(const XrXirCompileContext *context, uint32_t mode, bool oracle) {
     ConditionalRawFixture f;conditional_raw_fixture(&f,mode);
@@ -1255,7 +1260,7 @@ static XrXirStatus conditional_invocation_generic_bounds(const XrXirCompileConte
 
 static void conditional_new_literals(void) {
     /* Independent graphs own independent finite ledgers; each pipeline keeps its ledger. */
-    for (uint32_t which=25;which<49;++which) {
+    for (uint32_t which=25;which<60;++which) {
         RootParameterMark physical=rp_mark();XrXirCompileContext context=rp_owner(rp_caps());
         uint64_t baseline=rp_stats(&context).live_bytes;
         XrXirStatus status=which<29 ? conditional_invocation_core(&context,which-25,true) :
@@ -1265,7 +1270,12 @@ static void conditional_new_literals(void) {
             which<36 ? conditional_invocation_publish(&context,which-34,true) :
             which<38 ? conditional_invocation_template_publish(&context,which-36,true) :
             which<41 ? conditional_lowered_snapshot(&context,which-38,true) :
-            conditional_invocation_returned(&context,which-41,true);
+            which<49 ? conditional_invocation_returned(&context,which-41,true) :
+            which<51 ? conditional_invocation_producer(&context,which-49,true) :
+            which<53 ? conditional_invocation_runtime_edge(&context,which-51,true) :
+            which<56 ? conditional_invocation_runtime_direct(&context,which-53,true) :
+            which<58 ? conditional_invocation_captured_prefix(&context,which-56,true) :
+            conditional_invocation_function_cell_row(&context,which-58,true);
         if (status!=XR_XIR_OK) fprintf(stderr,"conditional new fixture %u status %u\n",which,(uint32_t)status);
         CHECK(status==XR_XIR_OK);
         rp_owner_free(&context,baseline);rp_balanced(physical);
@@ -1317,11 +1327,16 @@ static XrXirStatus conditional_resource_case(const XrXirCompileContext *context,
         which<36 ? conditional_invocation_publish(context,which-34,false) :
         which<38 ? conditional_invocation_template_publish(context,which-36,false) :
         which<41 ? conditional_lowered_snapshot(context,which-38,false) :
-        conditional_invocation_returned(context,which-41,false);
+        which<49 ? conditional_invocation_returned(context,which-41,false) :
+        which<51 ? conditional_invocation_producer(context,which-49,false) :
+        which<53 ? conditional_invocation_runtime_edge(context,which-51,false) :
+        which<56 ? conditional_invocation_runtime_direct(context,which-53,false) :
+        which<58 ? conditional_invocation_captured_prefix(context,which-56,false) :
+        conditional_invocation_function_cell_row(context,which-58,false);
 }
 
 static void conditional_oom(void) {
-    for (uint32_t which=0;which<49;++which) {
+    for (uint32_t which=0;which<60;++which) {
         size_t sites=0;
         for (size_t pass=0;pass<=sites;++pass) {
             RootParameterMark physical=rp_mark();rp_fail_at=SIZE_MAX;rp_attempts=0;rp_injected=false;
@@ -1336,7 +1351,7 @@ static void conditional_oom(void) {
 }
 
 static void conditional_axes(void) {
-    for (uint32_t which=0;which<49;++which) {
+    for (uint32_t which=0;which<60;++which) {
         RootParameterMark physical=rp_mark();XrXirCompileContext context=rp_owner(rp_caps());
         uint64_t baseline=rp_stats(&context).live_bytes;
         CHECK(conditional_resource_case(&context,which)==XR_XIR_OK);

@@ -213,7 +213,7 @@ typedef struct NewExprNode {
 } NewExprNode;
 
 typedef struct ThisExprNode {
-    int placeholder;
+    XrNameSpan access_marker_span;
 } ThisExprNode;
 
 typedef struct SuperCallNode {

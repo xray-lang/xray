@@ -1,0 +1,12 @@
+# Private prefix controls do not replace the actual old SDK provider gate.
+if(WIN32)
+    add_executable(test_xir_object_storage_prefix xir/test_xir_object_storage_prefix.c)
+    target_link_libraries(test_xir_object_storage_prefix PRIVATE xray_xir_scalar)
+    if(MSVC)
+        target_compile_options(test_xir_object_storage_prefix PRIVATE /W4 /WX /utf-8)
+    else()
+        target_compile_options(test_xir_object_storage_prefix PRIVATE -Wall -Wextra -Werror)
+    endif()
+    add_test(NAME test_xir_object_storage_prefix COMMAND test_xir_object_storage_prefix)
+    set_tests_properties(test_xir_object_storage_prefix PROPERTIES LABELS "unit;xir;ownership;abi" TIMEOUT 120)
+endif()

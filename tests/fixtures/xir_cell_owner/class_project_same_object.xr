@@ -1,0 +1,15 @@
+var bodyCalls: i64 = 0;
+fn pair(left: ref i64, right: ref i64) -> i64 {
+    bodyCalls += 1; left += 1; right += 1; return left;
+}
+final class Holder {
+    private left: i64
+    private right: i64
+    constructor() { this.left = 0; this.right = 0; }
+    collide(alias: Holder) -> i64 { return pair(ref this.left, ref alias.right); }
+    current() -> i64 { return this.left * 10 + this.right; }
+}
+var storage = Holder();
+export fn run() -> i64 { return storage.collide(storage); }
+export fn cellCounter() -> i64 { return bodyCalls * 100 + storage.current(); }
+fn main() -> i64 { return run(); }

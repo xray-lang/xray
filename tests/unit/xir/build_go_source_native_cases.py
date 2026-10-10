@@ -14,7 +14,7 @@ for name in NAMES:
  entry=re.search(rb'^'+name.encode()+rb' entry=(\d+) bytes=(\d+)\r?$',result.stdout,re.M)
  if not entry:raise SystemExit('missing public producer entry receipt '+name)
  raw=target.read_bytes()
- if len(raw)!=int(entry[2]) or b'({' in raw or b'XR_XIR_CALL_ABI_VERSION == 28u' not in raw:raise SystemExit('invalid genuine C receipt '+name)
+ if len(raw)!=int(entry[2]) or b'({' in raw or b'XR_XIR_CALL_ABI_VERSION == 29u' not in raw:raise SystemExit('invalid genuine C receipt '+name)
  entries.append(int(entry[1]));rows.append({'name':name,'entry':entries[-1],'bytes':len(raw),'sha256':hashlib.sha256(raw).hexdigest(),'producer_argv':[a.producer,str(target),name]})
 header=''.join('XR_DATA const XrXirProgramSpec source17_'+name+'_program;\n' for name in NAMES)
 header+='static const XrXirProgramSpec *const source17_specs[] = {'+','.join('&source17_'+name+'_program' for name in NAMES)+'};\n'

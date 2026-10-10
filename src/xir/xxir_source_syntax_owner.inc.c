@@ -9,6 +9,7 @@
  * KEY CONCEPT:
  *   Deep-own display facts without construction or execution authority.
  */
+#include "xxir_types.h"
 /* Scalar syntax facts are copied after the semantic/construction owner exists,
  * before publication. A failed attachment leaves that owner unchanged. */
 static bool query_syntax_range(const XrXirSourceView *view,XrXirSourceRange range,bool absent) {
@@ -61,7 +62,12 @@ XR_FUNC XrXirStatus xr_xir_compile_source_snapshot_syntax_copy(XrXirSourceSnapsh
         const XrXirSourceDeclarationSyntax *fact=&syntax->declarations[marker->declaration-1];
         if(marker->range.module!=decl->range.module)return XR_XIR_BAD_STRUCTURE;
         if(marker->role==XR_XIR_SOURCE_MARKER_REF_ARGUMENT) {
-            if(!decl->mutable||(decl->kind!=XR_XIR_SOURCE_BINDING&&decl->kind!=XR_XIR_SOURCE_PARAMETER))return XR_XIR_BAD_STRUCTURE;
+            /* A readonly Class binding may name an exclusive field projection.
+             * This marker is observational; the checked place still authenticates
+             * field mutability and the actual object's runtime loan separately. */
+            bool class_root=decl->type.known&&xr_xir_type_is_class(view->types,decl->type.type);
+            if((!decl->mutable&&!class_root)||
+                (decl->kind!=XR_XIR_SOURCE_BINDING&&decl->kind!=XR_XIR_SOURCE_PARAMETER))return XR_XIR_BAD_STRUCTURE;
         } else if((decl->kind!=XR_XIR_SOURCE_PARAMETER&&fact->role!=XR_XIR_SOURCE_SYNTAX_METHOD)||
             (fact->flags&XR_XIR_SOURCE_SYNTAX_STATIC))return XR_XIR_BAD_STRUCTURE;
         if(marker->range.end_column-marker->range.column!=(marker->role==XR_XIR_SOURCE_MARKER_MOVE?4:3))return XR_XIR_BAD_STRUCTURE;

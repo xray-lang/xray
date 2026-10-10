@@ -1,0 +1,8 @@
+final class Holder {
+    value: i64
+    constructor(value: i64) { this.value = value; }
+    replace() -> i64 { return whole(ref this); }
+}
+fn whole(value: ref Holder) -> i64 { value = Holder(42); return value.value; }
+export fn run() -> i64 { const object = Holder(40); return object.replace(); }
+fn main() -> i64 { return run(); }

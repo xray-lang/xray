@@ -111,7 +111,8 @@ int main(int argc, char **argv) {
         XrXirCSource source = {0};
         CHECK(xr_xir_compile_emit_c(artifact, prefix, 200000, &source) == XR_XIR_OK);
         xr_xir_compile_artifact_free(artifact);artifact=NULL;
-        CHECK(strstr(source.text, "XrXirProgramSpec") && strstr(source.text, "xr_xir_instance_slot_write"));
+        CHECK(strstr(source.text, "XrXirProgramSpec") && strstr(source.text, "xr_xir_instance_slot_write") &&
+            strstr(source.text, "xr_xir_instance_cell_write"));
         CHECK(!strstr(source.text, "xr_xir_vm") && !strstr(source.text, "({"));
         if (file) CHECK(fwrite(source.text, 1, source.length, file) == source.length);
         xr_xir_compile_c_source_free(&source);

@@ -132,6 +132,12 @@ static void *counted_realloc(void *pointer, size_t size) {
 #include "xir_local_fixture.h"
 #include "xir_segment_cases.h"
 #include "xir_function_cases.h"
+#include "xir_function_producer_owner_cases.h"
+#include "xir_invocation_runtime_owner_cases.h"
+#include "xir_invocation_direct_owner_cases.h"
+#include "xir_invocation_capture_owner_cases.h"
+#include "xir_invocation_return_capture_owner_cases.h"
+#include "xir_invocation_function_cell_owner_cases.h"
 #include "xir_instance_admission_cases.h"
 #include "xir_type_temporary_core_budget_cases.h"
 #include "xir_constraint_temporary_core_cases.h"
@@ -635,6 +641,64 @@ int main(void) {
     invoke_allocation_failures();
     phi_snapshot_failure();
     function_allocation_failures();
+    calls=0;fail_at=SIZE_MAX;CHECK(function_producer_owner_run() && !live);
+    size_t producer_sites=calls;CHECK(producer_sites && producer_sites<10000);
+    for (size_t p=0;p<producer_sites;++p) {
+        calls=0;fail_at=p;CHECK(!function_producer_owner_run() && !live);
+    }
+    fail_at=SIZE_MAX;
+    printf("Real callable producer physical release: %zu complete allocation sites\n",producer_sites);
+    for (unsigned mode=0;mode<8;++mode) {
+        calls=0;fail_at=SIZE_MAX;CHECK(invocation_runtime_owner_run(mode,NULL,NULL) && !live);
+        size_t edge_sites=calls;CHECK(edge_sites && edge_sites<10000);
+        for (size_t p=0;p<edge_sites;++p) {
+            calls=0;fail_at=p;CHECK(!invocation_runtime_owner_run(mode,NULL,NULL) && !live);
+        }
+        printf("Authentic child invocation mode%u physical release: %zu complete allocation sites\n",mode,edge_sites);
+    }
+    fail_at=SIZE_MAX;invocation_runtime_owner_axes();CHECK(!live);
+    for (unsigned mode=0;mode<8;++mode) {
+        calls=0;fail_at=SIZE_MAX;CHECK(invocation_direct_owner_run(mode,NULL,NULL) && !live);
+        size_t direct_sites=calls;CHECK(direct_sites && direct_sites<10000);
+        for (size_t p=0;p<direct_sites;++p) {
+            calls=0;fail_at=p;CHECK(!invocation_direct_owner_run(mode,NULL,NULL) && !live);
+        }
+        printf("Authentic direct context mode%u physical release: %zu complete allocation sites\n",mode,direct_sites);
+    }
+    fail_at=SIZE_MAX;invocation_direct_owner_axes();CHECK(!live);
+    for (unsigned scalar=0;scalar<2;++scalar) {
+        for (unsigned mode=0;mode<8;++mode) {
+            calls=0;fail_at=SIZE_MAX;CHECK(invocation_capture_owner_run(mode,scalar!=0,NULL,NULL) && !live);
+            size_t capture_sites=calls;CHECK(capture_sites && capture_sites<10000);
+            for (size_t p=0;p<capture_sites;++p) {
+                calls=0;fail_at=p;CHECK(!invocation_capture_owner_run(mode,scalar!=0,NULL,NULL) && !live);
+            }
+            printf("Authentic captured prefix scalar%u mode%u physical release: %zu complete allocation sites\n",scalar,mode,capture_sites);
+        }
+        fail_at=SIZE_MAX;invocation_capture_owner_axes(scalar!=0);CHECK(!live);
+    }
+    for (unsigned scalar=0;scalar<2;++scalar) {
+        for (unsigned mode=0;mode<8;++mode) {
+            calls=0;fail_at=SIZE_MAX;CHECK(invocation_return_capture_owner_run(mode,scalar!=0,NULL,NULL) && !live);
+            size_t capture_sites=calls;CHECK(capture_sites && capture_sites<10000);
+            for (size_t p=0;p<capture_sites;++p) {
+                calls=0;fail_at=p;CHECK(!invocation_return_capture_owner_run(mode,scalar!=0,NULL,NULL) && !live);
+            }
+            printf("Authentic captured prefix scalar%u mode%u physical release: %zu complete allocation sites\n",scalar,mode,capture_sites);
+        }
+        fail_at=SIZE_MAX;invocation_return_capture_owner_axes(scalar!=0);CHECK(!live);
+    }
+    for (unsigned scalar=0;scalar<2;++scalar) {
+        for (unsigned mode=0;mode<8;++mode) {
+            calls=0;fail_at=SIZE_MAX;CHECK(invocation_function_cell_owner_run(mode,scalar!=0,NULL,NULL) && !live);
+            size_t capture_sites=calls;CHECK(capture_sites && capture_sites<10000);
+            for (size_t p=0;p<capture_sites;++p) {
+                calls=0;fail_at=p;CHECK(!invocation_function_cell_owner_run(mode,scalar!=0,NULL,NULL) && !live);
+            }
+            printf("Returned HOF actual scalar%u mode%u physical release: %zu complete allocation sites\n",scalar,mode,capture_sites);
+        }
+        fail_at=SIZE_MAX;invocation_function_cell_owner_axes(scalar!=0);CHECK(!live);
+    }
     instance_admission_cases();
     initialization_region_allocations();
     return 0;

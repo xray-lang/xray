@@ -264,6 +264,9 @@ static XrXirStatus effect_parameter_instruction(EffectParameterFlow *flow,
             if (status != XR_XIR_OK) return status;
         }
         return XR_XIR_OK;
+    case XR_XIR_CELL_PROJECT:
+        /* A scoped descriptor contains no copied callable payload. */
+        return XR_XIR_OK;
     case XR_XIR_CELL_NEW:
         if (xr_xir_cell_is_unit(flow->module->types,op->type)) return XR_XIR_OK;
         return effect_parameter_transfer(flow, destination, op->args[0], XR_XIR_EFFECT_USE_STORE);

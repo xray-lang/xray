@@ -43,7 +43,9 @@ static XrXirRunStatus vm_path_step(ScalarRun *run, VmState *state,
     XrXirValue output = {0}; XrXirFaultDetail fault = {0};
     XrXirCallStatus status = vm_path_receiver(run, state, op, &receiver, &path);
     if (status == XR_XIR_CALL_READY) {
-        if (op->op == XR_XIR_PLACE_READ || op->op == XR_XIR_ARRAY_GET)
+        if (op->op == XR_XIR_CELL_PROJECT)
+            status = xr_xir_instance_cell_project(run->view, op->type, &receiver, &path, &output);
+        else if (op->op == XR_XIR_PLACE_READ || op->op == XR_XIR_ARRAY_GET)
             status = xr_xir_instance_path_read(run->view, &receiver, &path, &output, &fault);
         else if (op->op == XR_XIR_ARRAY_LEN)
             status = xr_xir_instance_path_length(run->view, &receiver, &path, &output, &fault);

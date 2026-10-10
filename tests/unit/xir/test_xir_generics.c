@@ -21,7 +21,12 @@
 #include <stdlib.h>
 #define CHECK(c) do { if (!(c)) { fprintf(stderr, "%d: %s\n", __LINE__, #c); exit(1); } } while (0)
 #include "xir_consumer_context_owner.h"
+static void generic_runtime_retiring(void *pointer);
+#define XIR_RUNTIME_BEFORE_FREE(pointer) generic_runtime_retiring(pointer)
+#include "xir_runtime_allocations.h"
+#undef XIR_RUNTIME_BEFORE_FREE
 #include "xir_generic_fixture.h"
+#include "xir_error_marker73_golden.h"
 #include "xir_nominal_generic_fixture.h"
 #include "xir_nominal_expression_fixture.h"
 #include "xir_nominal_checked_fixture.h"
@@ -89,31 +94,35 @@ static void nominal_field_closure(void) {
         xr_xir_compile_artifact_free(checked); checked=NULL;
         if (mode) { CHECK(!closed); continue; }
         const XrXirModule *module = xr_xir_compile_artifact_module(closed);
-        CHECK(!module->generics && module->types->count == 4);
+        CHECK(!module->generics && module->types->count == 5);
         CHECK(module->types->nodes[0].nominal.declaration == 0 &&
             module->types->nodes[0].nominal.arguments[0] == (XrXirType)XR_XIR_TYPE_PARAMETER_BASE &&
             !module->types->nodes[0].nominal.field_count);
         CHECK(module->types->nodes[1].nominal.declaration == 1 &&
             module->types->nodes[1].nominal.arguments[0] == XR_XIR_I64 &&
-            module->types->nodes[1].nominal.fields[0] == (XrXirType)259);
+            module->types->nodes[1].nominal.fields[0] == (XrXirType)260);
         CHECK(xr_xir_type_is_atomic(module->types, (XrXirType)258) &&
             xr_xir_atomic_element(module->types, (XrXirType)258) == XR_XIR_I64);
-        CHECK(module->types->nodes[3].nominal.declaration == 0 &&
-            module->types->nodes[3].nominal.arguments[0] == XR_XIR_I64 &&
-            module->types->nodes[3].nominal.fields[0] == XR_XIR_I64);
+        CHECK(xr_xir_type_is_cell(module->types,(XrXirType)259) &&
+            xr_xir_cell_element(module->types,(XrXirType)259)==XR_XIR_STRING);
+        CHECK(module->types->nodes[4].nominal.declaration == 0 &&
+            module->types->nodes[4].nominal.arguments[0] == XR_XIR_I64 &&
+            module->types->nodes[4].nominal.fields[0] == XR_XIR_I64);
         XrXirArtifact *lowered = NULL;
         const XrXirTarget target = {XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};
         CHECK(xr_xir_compile_lower(closed, &target, &lowered, NULL) == XR_XIR_OK);
         xr_xir_compile_artifact_free(closed); closed=NULL;
         module = xr_xir_compile_artifact_module(lowered);
-        CHECK(module->types->count == 3 && module->types->nodes[0].nominal.declaration == 1 &&
+        CHECK(module->types->count == 4 && module->types->nodes[0].nominal.declaration == 1 &&
             module->types->nodes[0].nominal.arguments[0] == XR_XIR_I64 &&
-            module->types->nodes[0].nominal.fields[0] == (XrXirType)258);
+            module->types->nodes[0].nominal.fields[0] == (XrXirType)259);
         CHECK(xr_xir_type_is_atomic(module->types, (XrXirType)257) &&
             xr_xir_atomic_element(module->types, (XrXirType)257) == XR_XIR_I64);
-        CHECK(module->types->nodes[2].nominal.declaration == 0 &&
-            module->types->nodes[2].nominal.arguments[0] == XR_XIR_I64 &&
-            module->types->nodes[2].nominal.fields[0] == XR_XIR_I64);
+        CHECK(xr_xir_type_is_cell(module->types,(XrXirType)258) &&
+            xr_xir_cell_element(module->types,(XrXirType)258)==XR_XIR_STRING);
+        CHECK(module->types->nodes[3].nominal.declaration == 0 &&
+            module->types->nodes[3].nominal.arguments[0] == XR_XIR_I64 &&
+            module->types->nodes[3].nominal.fields[0] == XR_XIR_I64);
         xr_xir_compile_artifact_free(lowered); lowered=NULL;
     }
 }
@@ -150,21 +159,22 @@ static void cross_pool_substitution(void) {
 static void nominal_argument_visibility(void) {
     XrXirArtifact *checked = nominal_checked_fixture(suite_context, 2);
     XrXirModule module = *xr_xir_compile_artifact_module(checked);
-    CHECK(module.types->count == 4 && xr_xir_type_is_atomic(module.types, (XrXirType)259));
-    XrXirTypeNode nodes[5]; memcpy(nodes, module.types->nodes, 4 * sizeof(*nodes));
+    CHECK(module.types->count == 5 && xr_xir_type_is_atomic(module.types, (XrXirType)259) &&
+        xr_xir_type_is_cell(module.types,(XrXirType)260) && xr_xir_cell_element(module.types,(XrXirType)260)==XR_XIR_STRING);
+    XrXirTypeNode nodes[6]; memcpy(nodes, module.types->nodes, 5 * sizeof(*nodes));
     XrXirType argument = (XrXirType)258;
-    nodes[4] = (XrXirTypeNode) {XR_XIR_TYPE_NOMINAL, XR_XIR_UNIT, NULL, 0, XR_XIR_UNIT, 0, 0,
+    nodes[5] = (XrXirTypeNode) {XR_XIR_TYPE_NOMINAL, XR_XIR_UNIT, NULL, 0, XR_XIR_UNIT, 0, 0,
         {0, &argument, 1, NULL, 0}};
     ((XrXirConstraint *) module.types->nominals->declarations[0].constraints)[0].markers = 0;
-    XrXirTypes types = {nodes, 5, module.types->nominals, NULL}; module.types = &types;
+    XrXirTypes types = {nodes, 6, module.types->nominals, NULL}; module.types = &types;
     CHECK(xir_fixture_verify(suite_context, &module, NULL) == XR_XIR_OK);
     XrXirCompileContext budget = consumer_context_default();
-    CHECK(xr_xir_compile_type_access(&budget, &module, 4, (XrXirType)260) == XR_XIR_BAD_TYPE);
+    CHECK(xr_xir_compile_type_access(&budget, &module, 4, (XrXirType)261) == XR_XIR_BAD_TYPE);
     budget = consumer_context_default();
-    CHECK(xr_xir_compile_type_access(&budget, &module, 8, (XrXirType)260) == XR_XIR_OK);
+    CHECK(xr_xir_compile_type_access(&budget, &module, 8, (XrXirType)261) == XR_XIR_OK);
     ((XrXirNominalDeclaration *) types.nominals->declarations)[1].exported = 0;
     budget = consumer_context_default();
-    CHECK(xr_xir_compile_type_access(&budget, &module, 8, (XrXirType)260) == XR_XIR_BAD_TYPE);
+    CHECK(xr_xir_compile_type_access(&budget, &module, 8, (XrXirType)261) == XR_XIR_BAD_TYPE);
     xr_xir_compile_artifact_free(checked); checked=NULL;
 }
 static void nominal_expression_closure(void) {
@@ -280,12 +290,19 @@ static void error_marker_definition(void) {
     XrXirCheckedPacket packet={0};
     CHECK(xr_xir_compile_checked_write(checked, &packet, NULL)==XR_XIR_OK);
     xr_xir_compile_artifact_free(checked); checked=NULL;
-    CHECK(packet.length==205 && !packet.bytes[169] && packet.bytes[173]==XR_XIR_CONSTRAINT_ERROR);
+    _Static_assert(XR_XIR_THROW==30 && XR_XIR_TYPE_PARAMETER_BASE==65536u &&
+        XR_XIR_CONSTRAINT_ERROR==2u,"independent ERROR definition fields");
+    CHECK(packet.length==sizeof(error_marker73_golden) &&
+        !memcmp(packet.bytes,error_marker73_golden,packet.length));
+    CHECK(!packet.bytes[ERROR_MARKER73_KINDS_PRESENT] &&
+        packet.bytes[ERROR_MARKER73_MARKER]==XR_XIR_CONSTRAINT_ERROR);
+    CHECK(xr_xir_compile_checked_read(suite_context,error_marker72_previous,
+        sizeof(error_marker72_previous),&decoded,NULL)==XR_XIR_BAD_STRUCTURE && !decoded);
     CHECK(xr_xir_compile_checked_read(suite_context, packet.bytes, packet.length, &decoded, NULL)==XR_XIR_OK);
     xr_xir_compile_artifact_free(decoded); decoded=NULL; decoded=NULL;
     const uint8_t forged[]={0,XR_XIR_CONSTRAINT_SENDABLE,4};
     for (unsigned i=0;i<sizeof(forged);++i) {
-        packet.bytes[173]=forged[i]; rehash_generic(&packet);
+        packet.bytes[ERROR_MARKER73_MARKER]=forged[i]; rehash_generic(&packet);
         CHECK(xr_xir_compile_checked_read(suite_context, packet.bytes, packet.length, &decoded, NULL)==XR_XIR_BAD_TYPE && !decoded);
     }
     xr_xir_compile_checked_packet_free(&packet);
@@ -352,29 +369,121 @@ static void forwarding(void) {
     xr_xir_compile_checked_packet_free(&packet);
     xr_xir_compile_artifact_free(checked); checked=NULL;
 }
+/* Observe the actual Instance accounting after its Call and executor retire,
+ * immediately before the Instance storage is physically freed. */
+static XrXirInstance *generic_retiring_instance;
+static XrXirCallAccounting generic_retired_accounting[2];
+static uint32_t generic_retirements;
+static void generic_runtime_retiring(void *pointer) {
+    if (!generic_retiring_instance || pointer != generic_retiring_instance) return;
+    CHECK(!generic_retiring_instance->call && !generic_retiring_instance->executor);
+    memcpy(generic_retired_accounting, generic_retiring_instance->accounting,
+        sizeof(generic_retired_accounting));
+    ++generic_retirements;
+}
+static XrXirProgram *generic_result_program(XrXirArtifact *original) {
+    XrXirCompileContext context = consumer_context_default();
+    XrXirProgramProof proof = xr_xir_compile_program_proof(original);
+    CHECK(proof.bytes && proof.length && proof.identity && proof.layouts);
+    XrXirArtifact *decoded = NULL, *checked = NULL, *closed = NULL, *lowered = NULL;
+    CHECK(xr_xir_compile_checked_read(&context, proof.bytes, proof.length, &decoded, NULL) == XR_XIR_OK);
+    CHECK(xr_xir_compile_artifact_verify(decoded, NULL) == XR_XIR_OK);
+    const XrXirModule *source = xr_xir_compile_artifact_module(decoded);
+    CHECK(source->stage == XR_XIR_CHECKED && source->function_count == 3 && !source->generics && !source->declarations);
+    XrXirFunction functions[5]; memcpy(functions, source->functions, 3 * sizeof(*functions));
+    const XrXirInstruction finish = {.op = XR_XIR_RETURN, .type = XR_XIR_UNIT};
+    const XrXirBlock block = {.first = 0, .count = 1};
+    functions[3] = (XrXirFunction) {.name = "init", .name_length = 4, .result = XR_XIR_UNIT,
+        .blocks = &block, .block_count = 1, .instructions = &finish, .instruction_count = 1};
+    const XrXirInstruction entry_body[] = {
+        {.op = XR_XIR_CONST_INT, .type = XR_XIR_I64},
+        {.op = XR_XIR_RETURN, .type = XR_XIR_UNIT, .args = {0}}};
+    const XrXirBlock entry_block = {.first = 0, .count = 2};
+    functions[4] = (XrXirFunction) {.name = "entry", .name_length = 5, .result = XR_XIR_I64,
+        .blocks = &entry_block, .block_count = 1, .instructions = entry_body, .instruction_count = 2};
+    const XrXirSourceModule module = {.name = "generic", .name_length = 7, .initializer = 3};
+    const XrXirFunctionIdentity identities[5] = {{.exported = 1}, {0}, {0}, {0}, {0}};
+    const XrXirDeclarations declarations = {.modules = &module, .module_count = 1,
+        .functions = identities, .root_module = 0, .entry_function = 4};
+    /* This is a new concrete fixture, fully proved from its literal bodies.
+     * It does not claim the old Instance provenance for the appended function. */
+    XrXirModule built = *source; built.stage = XR_XIR_BUILT; built.provenance = NULL;
+    built.functions = functions; built.function_count = 5; built.declarations = &declarations;
+    XrXirDiagnostic diagnostic = {0};
+    XrXirStatus status = xir_fixture_check(&context, &built, &checked, &diagnostic);
+    if (status != XR_XIR_OK)
+        fprintf(stderr, "GENERIC_PROGRAM_BUILD status=%u function=%u block=%u instruction=%u reason=%u\n",
+            (unsigned)status, diagnostic.function, diagnostic.block, diagnostic.instruction, (unsigned)diagnostic.reason);
+    CHECK(status == XR_XIR_OK);
+    xr_xir_compile_artifact_free(decoded); decoded = NULL;
+    CHECK(xr_xir_compile_artifact_verify(checked, NULL) == XR_XIR_OK);
+    CHECK(xr_xir_compile_specialize(checked, &closed, NULL) == XR_XIR_OK);
+    xr_xir_compile_artifact_free(checked); checked = NULL;
+    const XrXirTarget target = *xr_xir_compile_artifact_target(original);
+    CHECK(xr_xir_compile_lower(closed, &target, &lowered, NULL) == XR_XIR_OK);
+    xr_xir_compile_artifact_free(closed); closed = NULL;
+    CHECK(xr_xir_compile_artifact_verify(lowered, NULL) == XR_XIR_OK);
+    const XrXirModule *owned = xr_xir_compile_artifact_module(lowered);
+    CHECK(owned->function_count == 5 && owned->declarations && owned->declarations->entry_function == 4 &&
+        owned->declarations->modules[0].initializer == 3);
+    const XrXirModule *before = xr_xir_compile_artifact_module(original);
+    for (uint32_t f = 0; f < 3; ++f) {
+        const XrXirFunction *actual = &owned->functions[f], *expected = &before->functions[f];
+        CHECK(actual->name_length == expected->name_length && actual->parameter_count == expected->parameter_count &&
+            actual->result == expected->result && actual->block_count == expected->block_count &&
+            actual->instruction_count == expected->instruction_count && actual->operand_count == expected->operand_count);
+        CHECK(!memcmp(actual->name, expected->name, actual->name_length) &&
+            !memcmp(actual->parameters, expected->parameters, (size_t)actual->parameter_count * sizeof(XrXirType)) &&
+            !memcmp(actual->blocks, expected->blocks, (size_t)actual->block_count * sizeof(XrXirBlock)) &&
+            !memcmp(actual->instructions, expected->instructions, (size_t)actual->instruction_count * sizeof(XrXirInstruction)));
+        CHECK(!actual->operand_count || !memcmp(actual->operands, expected->operands,
+            (size_t)actual->operand_count * sizeof(uint32_t)));
+    }
+    XrXirProgram *program = NULL;
+    CHECK(xr_xir_compile_vm_program_take(&lowered, &program) == XR_XIR_OK && !lowered && program);
+    return program;
+}
 static void specialized_result(XrXirArtifact *lowered) {
-    XrXirVmBinding bindings[3]; XrXirCallEntry entries[3];
-    for (uint32_t f = 0; f < 3; ++f) CHECK(xr_xir_compile_vm_bind(lowered, f, &bindings[f], &entries[f]) == XR_XIR_OK);
+    CHECK(!runtime_live && !runtime_bytes);
     XrXirDomain *domain = NULL;
     CHECK(xr_xir_domain_new(65536, &domain) == XR_XIR_VALUE_OK);
     XrXirDomainStats baseline = xr_xir_domain_stats(domain);
+    size_t baseline_live = runtime_live, baseline_bytes = runtime_bytes;
+    XrXirProgram *program = generic_result_program(lowered);
+    xr_xir_compile_artifact_free(lowered); lowered = NULL;
     XrXirValue arguments[] = {{XR_XIR_I64, 0, 7}, {0}}, result = {0};
     CHECK(xr_xir_string_new(domain, "generic", 7, &arguments[1]) == XR_XIR_VALUE_OK);
-    XrXirCallAccounting accounting = {0};
-    XrXirCallConfig config; CHECK(xr_xir_call_config_init(&config, sizeof(config)) == XR_XIR_CALL_READY); config.entries = entries; config.entry_count = 3; config.instance = NULL; config.byte_limit = 65536; config.poll_limit = 100; config.depth_limit = 8; config.accounting = &accounting; config.output = (XrXirOutputProvider) {0}; config.admission = (XrXirValueAdmission) {0};
-    XrXirCall *call = NULL;
-    CHECK(xr_xir_call_new(&config, 0, arguments, 2, &call) == XR_XIR_CALL_READY);
-    CHECK(xr_xir_call_poll_bounded(call, UINT64_MAX).status == XR_XIR_CALL_RETURNED);
-    CHECK(xr_xir_call_take_result(call, &result) == XR_XIR_CALL_RETURNED);
-    CHECK(xr_xir_call_free(call) == XR_XIR_CALL_READY);
-    CHECK(!accounting.live_bytes && accounting.allocations == accounting.frees);
-    xr_xir_value_drop(&arguments[1]); xr_xir_compile_artifact_free(lowered); lowered=NULL;
+    XrXirInstanceConfig config;
+    CHECK(xr_xir_instance_config_init(&config, sizeof(config)) == XR_XIR_CALL_READY);
+    config.metadata_limit = 65536; config.value_limit = 65536; config.call_limit = 65536;
+    config.poll_limit = 100; config.depth_limit = 8;
+    XrXirInstance *instance = NULL;
+    CHECK(xr_xir_instance_new(program, &config, &instance) == XR_XIR_CALL_READY);
+    xr_xir_compile_program_drop(program); program = NULL;
+    CHECK(xr_xir_instance_start(instance, 0, arguments, 2) == XR_XIR_CALL_READY);
+    CHECK(xr_xir_instance_poll_bounded(instance, UINT64_MAX).outcome.status == XR_XIR_CALL_RETURNED);
+    CHECK(xr_xir_instance_take_result(instance, &result) == XR_XIR_CALL_RETURNED);
+    generic_retiring_instance = instance;
+    CHECK(xr_xir_instance_free(instance) == XR_XIR_CALL_READY); instance = NULL;
+    generic_retiring_instance = NULL;
+    CHECK(generic_retirements == 1);
+    uint64_t allocations = 0;
+    for (uint32_t i = 0; i < 2; ++i) {
+        const XrXirCallAccounting *accounting = &generic_retired_accounting[i];
+        CHECK(!accounting->live_bytes && accounting->allocations == accounting->frees && !accounting->depth);
+        CHECK(accounting->peak_bytes <= 65536 && accounting->polls <= 100 && accounting->peak_depth <= 8);
+        allocations += accounting->allocations;
+    }
+    CHECK(allocations);
+    xr_xir_value_drop(&arguments[1]);
     const char *bytes = NULL; size_t length = 0;
     CHECK(xr_xir_string_view(&result, &bytes, &length) && length == 7 && !memcmp(bytes, "generic", 7));
     xr_xir_value_drop(&result);
     XrXirDomainStats stats = xr_xir_domain_stats(domain);
     CHECK(stats.live_bytes == baseline.live_bytes && stats.allocations == stats.frees + 1);
+    CHECK(runtime_live == baseline_live && runtime_bytes == baseline_bytes);
     xr_xir_domain_drop(domain);
+    CHECK(!runtime_live && !runtime_bytes);
 }
 static void recursive_closure(void) {
     XrXirArtifact *fixture = generic_fixture(suite_context), *checked = NULL, *closed = NULL;

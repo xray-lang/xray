@@ -1,0 +1,7 @@
+fn leaf(value: ref i64) -> i64 { value += 1; return value; }
+fn middle(value: ref i64) -> i64 { leaf(ref value); value += 1; return value; }
+export final class Holder {
+    private values: Array<i64>
+    constructor(values: Array<i64>) { this.values = values; }
+    adjust() -> i64 { return middle(ref this.values[0]); }
+}

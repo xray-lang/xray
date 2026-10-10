@@ -11,6 +11,7 @@
  */
 #ifndef XIR_ARRAY_FILL_PIPELINE_H
 #define XIR_ARRAY_FILL_PIPELINE_H
+#include "xir/xxir_types.h"
 #include "base/xsha256.h"
 #ifndef XR_FILL_COMPONENT
 #define XR_FILL_COMPONENT "transaction"
@@ -135,7 +136,19 @@ static FillCompile fill_build(size_t failure, XrCompileResourceLimits limits, un
         const XrXirSourceDeclaration *declaration = &view->declarations[d];
         if (declaration->native_identity == 28) {
             CHECK(declaration->mutable && declaration->parameter_count == 3 && declaration->exported);
-            CHECK(!declaration->type.known && !strcmp(declaration->signature, "(value: T, start?: i64, end?: i64) -> Array<T>"));
+            CHECK(!strcmp(declaration->signature, "(value: T, start?: i64, end?: i64) -> Array<T>"));
+            CHECK(declaration->type.known && declaration->parent &&
+                declaration->type.generic_owner == declaration->parent);
+            const XrXirTypeNode *result_type = xr_xir_type_node(view->types, declaration->type.type);
+            CHECK(result_type && result_type->kind == XR_XIR_TYPE_ARRAY &&
+                result_type->element == (XrXirType) XR_XIR_TYPE_PARAMETER_BASE);
+            CHECK(declaration->parameters && declaration->parameters[0].known &&
+                declaration->parameters[0].type == (XrXirType) XR_XIR_TYPE_PARAMETER_BASE &&
+                declaration->parameters[0].generic_owner == declaration->parent);
+            for (uint32_t parameter = 1; parameter < 3; ++parameter)
+                CHECK(declaration->parameters[parameter].known &&
+                    declaration->parameters[parameter].type == XR_XIR_I64 &&
+                    !declaration->parameters[parameter].generic_owner);
             ++fill_members;
         }
     }

@@ -40,7 +40,7 @@ static XrXirStatus effect_invocation_bound_row(EffectInvocationFlow *flow,
         return XR_XIR_OK;
     }
     if (!xir_compile_work(owner->work,(uint64_t)flow->basis.fn_words*sizeof(*row)+3)) return XR_XIR_BUDGET;
-    memset(row,0,(size_t)flow->basis.fn_words*sizeof(*row));
+    /* Retain the authenticated site relation alongside the original bound. */
     uint32_t opaque=owner->site_count+flow->basis.parameters;
     row[opaque/64]|=UINT64_C(1)<<(opaque%64);
     if (mask&XR_XIR_CALLABLE_ROOT_REQUIRED)
@@ -153,7 +153,7 @@ static XrXirStatus effect_invocation_arguments(EffectInvocationFlow *flow,
                 if (!xir_compile_work(owner->work,(uint64_t)flow->basis.fn_words*sizeof(*row)+3)) {
                     status=XR_XIR_BUDGET;break;
                 }
-                memset(row,0,(size_t)flow->basis.fn_words*sizeof(*row));
+                /* The fixed advertisement never erases the actual producer relation. */
                 uint32_t opaque=owner->site_count+flow->basis.parameters;
                 row[opaque/64]|=UINT64_C(1)<<(opaque%64);
                 if (mask&XR_XIR_CALLABLE_ROOT_REQUIRED)
@@ -483,7 +483,7 @@ static XrXirStatus effect_invocation_instruction(EffectInvocationFlow *flow,
     case XR_XIR_FUNCTION_REF:
         return effect_invocation_latent(flow,instruction);
     case XR_XIR_CELL_READ: case XR_XIR_CELL_WRITE: case XR_XIR_CELL_LOCAL_WRITE:
-    case XR_XIR_PLACE_READ: case XR_XIR_PLACE_WRITE: {
+    case XR_XIR_PLACE_READ: case XR_XIR_PLACE_WRITE: case XR_XIR_CELL_PROJECT: {
         if (!owner->effects->cells && (op->op==XR_XIR_PLACE_READ || op->op==XR_XIR_PLACE_WRITE))
             return XR_XIR_OK;
         XrXirStatus status=XR_XIR_OK;

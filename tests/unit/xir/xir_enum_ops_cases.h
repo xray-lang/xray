@@ -50,7 +50,27 @@ static void enum_wrong_variant_cases(XrXirProgram *program) {
     XrXirInstanceConfig config; CHECK(xr_xir_instance_config_init(&config, sizeof(config)) == XR_XIR_CALL_READY); config.output = (XrXirOutputProvider) {XR_XIR_CALL_ABI_VERSION, 0, enum_ops_output, &outputs};
     CHECK(xr_xir_instance_new(program,&config,&instance) == XR_XIR_CALL_READY); xr_xir_compile_program_drop(program);
     CHECK(xr_xir_instance_start(instance,2,NULL,0) == XR_XIR_CALL_READY);
+    uint64_t epoch = instance->epoch; XrXirCall *call = instance->call;
+    const XrXirExecutorBinding binding = {instance->executor,call->executor_activation,
+        call->executor_generation,call->executor_ticket};
+    CHECK(epoch && xr_xir_call_executor_member(call,&binding));
     CHECK(xr_xir_instance_poll_bounded(instance, UINT64_MAX).outcome.status == XR_XIR_CALL_BAD_STATE && outputs == 0);
-    CHECK(xr_xir_instance_free(instance) == XR_XIR_CALL_READY);
+    CHECK(instance->epoch == epoch && instance->call == call &&
+        xr_xir_task_executor_root_idle(instance->executor));
+    XrXirCallStatus failure = XR_XIR_CALL_READY;
+    CHECK(xr_xir_call_driver_failure(call,&binding,&failure) && failure == XR_XIR_CALL_BAD_STATE);
+    CHECK(xr_xir_task_executor_completion_status(instance->executor) == XR_XIR_CALL_BAD_STATE);
+    XrXirExecutorBinding wrong = binding; wrong.ticket ^= 1u;
+    failure = XR_XIR_CALL_LIMIT;
+    CHECK(!xr_xir_call_driver_failure(call,&wrong,&failure) && failure == XR_XIR_CALL_LIMIT);
+    XrXirValue sentinel = {XR_XIR_I64,0,41};
+    CHECK(xr_xir_instance_take_result(instance,&sentinel) == XR_XIR_CALL_BAD_STATE &&
+        sentinel.type == XR_XIR_I64 && !sentinel.reserved && sentinel.payload == 41);
+    XrXirInstanceResult repeated = xr_xir_instance_poll_bounded(instance, UINT64_MAX);
+    CHECK(repeated.epoch == epoch && repeated.outcome.status == XR_XIR_CALL_BAD_STATE &&
+        !repeated.outcome.value.type && !repeated.outcome.value.reserved &&
+        !repeated.outcome.value.payload && !repeated.outcome.wake && outputs == 0);
+    CHECK(instance->epoch == epoch && instance->call == call);
+    CHECK(xr_xir_instance_free(instance) == XR_XIR_CALL_BAD_STATE && outputs == 0);
 }
 #endif // XIR_ENUM_OPS_CASES_H

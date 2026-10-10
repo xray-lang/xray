@@ -46,7 +46,7 @@ static void emit_path_receiver(CBuffer *buffer, const XrXirFunction *function,
 static void emit_path_step(CBuffer *buffer, const XrXirFunction *function,
     const XrXirInstruction *op, const XrXirFunctionLayout *layout, uint32_t destination, uint32_t index) {
     append(buffer, "        { XrXirFaultDetail fault = {0};\n");
-    bool read = op->op == XR_XIR_PLACE_READ || op->op == XR_XIR_ARRAY_GET ||
+    bool read = op->op == XR_XIR_CELL_PROJECT || op->op == XR_XIR_PLACE_READ || op->op == XR_XIR_ARRAY_GET ||
         op->op == XR_XIR_ARRAY_LEN || op->op == XR_XIR_ARRAY_CAPACITY;
     if (read) append(buffer, "        XrXirValue value = {0};\n");
     else {
@@ -58,7 +58,11 @@ static void emit_path_step(CBuffer *buffer, const XrXirFunction *function,
     const char *operation = read ? (op->op == XR_XIR_ARRAY_CAPACITY ? "capacity" :
         op->op == XR_XIR_ARRAY_LEN ? "length" : "read") :
         op->op == XR_XIR_ARRAY_PUSH ? "push" : "write";
-    append(buffer, "        if (status == XR_XIR_CALL_READY)\n"
+    if (op->op == XR_XIR_CELL_PROJECT)
+        append(buffer, "        if (status == XR_XIR_CALL_READY)\n"
+            "            status = xr_xir_instance_cell_project(view, (XrXirType)%uu, &receiver, &path, &value);\n"
+            "        if (status != XR_XIR_CALL_READY) ", (uint32_t)op->type);
+    else append(buffer, "        if (status == XR_XIR_CALL_READY)\n"
         "            status = xr_xir_instance_path_%s(view, &receiver, &path, &value, &fault);\n"
         "        if (status != XR_XIR_CALL_READY) ", operation);
     emit_fault_return(buffer, function, layout, index,

@@ -1,0 +1,10 @@
+fn worker()->i64 {
+    const relay=fn() {
+        const make=fn() { var value:i64=40; return fn()->i64 { value+=2; return value; }; };
+        return make();
+    };
+    const callback=relay();
+    return callback();
+}
+export fn run()->i64 { const task=go worker(); return await task; }
+fn main()->i64 { return 0; }

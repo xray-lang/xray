@@ -1,0 +1,9 @@
+fn bump(value: ref i64) -> i64 { value += 1; return value; }
+final class Holder {
+    value: i64
+    constructor() { this.value = 40; }
+    adjust() -> i64 { return bump(ref this.value); }
+}
+fn worker() -> i64 { const storage = Holder(); return storage.adjust(); }
+export fn run() -> i64 { return await go worker(); }
+fn main() -> i64 { return run(); }

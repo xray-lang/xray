@@ -52,6 +52,7 @@ static bool library_catalog_local_instruction(XrXirOp op) {
     case XR_XIR_CELL_WRITE:
     case XR_XIR_CELL_LOCAL_WRITE:
     case XR_XIR_CELL_PLACE:
+    case XR_XIR_CELL_PROJECT:
     case XR_XIR_FIELD_PLACE:
     case XR_XIR_INDEX_PLACE:
     case XR_XIR_PLACE_READ:

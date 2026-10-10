@@ -26,9 +26,9 @@ static bool graph_edges(XirObject *object, GraphEdgeVisitor visit, void *context
     if (object->type == XR_XIR_STRING || object->kind == XR_XIR_TYPE_ATOMIC) return true;
     if (object->type == XR_XIR_PANIC_INFO)
         return graph_direct_edge(&((XirPanicInfo *)object)->panic.message, visit, context);
-    if (object->kind == XR_XIR_TYPE_CELL)
+    if (object->kind == XIR_OBJECT_CELL)
         return graph_direct_edge(&((XirCell *)object)->value, visit, context);
-    if (object->kind == XR_XIR_TYPE_CALLABLE) {
+    if (object->kind == XIR_OBJECT_FUNCTION) {
         const XrXirFunctionBinding *binding = &((XirFunction *)object)->binding;
         for (uint32_t i = 0; i < binding->capture_count; ++i)
             if (!graph_direct_edge(&binding->captures[i], visit, context)) return false;

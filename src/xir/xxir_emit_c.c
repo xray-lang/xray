@@ -14,6 +14,7 @@
  */
 
 #include "xxir_emit_c.h"
+#include "xxir_checked.h"
 #include "xxir_program.h"
 #include "xxir_atomic.h"
 #include "xxir_types.h"
@@ -26,6 +27,13 @@
 #include <limits.h>
 
 #include "xxir_emit_buffer.inc.c"
+
+static void emit_checked_identity(CBuffer *buffer) {
+    EMIT_FORMAT(buffer, et_925816b4a0c26dd3, "#include \"xir/xxir_checked.h\"\n"
+        "_Static_assert(XR_XIR_CHECKED_SCHEMA == %uu, \"XIR Checked schema\");\n"
+        "_Static_assert(XR_XIR_CHECKED_CONTRACT == %uu, \"XIR Checked contract\");\n",
+        XR_XIR_CHECKED_SCHEMA, XR_XIR_CHECKED_CONTRACT);
+}
 
 static void emit_reject(CBuffer *buffer, XrXirStatus status) {
     if (buffer->status == XR_XIR_OK) buffer->status = status;
@@ -344,6 +352,7 @@ XR_FUNC XrXirStatus xr_xir_compile_emit_leaf_c(const XrXirArtifact *artifact, co
     }
     if (module->declarations) for (uint32_t f = 0; f < module->function_count && emit_work(&buffer, 1); ++f)
         if (module->declarations->functions[f].cleanup_owner) return XR_XIR_BAD_STAGE;
+    emit_checked_identity(&buffer);
     append(&buffer, "#include \"xir/xxir_float.h\"\n"
            "#if !defined(XR_ARCH_X86_64)\n#error XIR_target_mismatch\n#endif\n"
            "_Static_assert(XR_XIR_VALUE_ABI_VERSION == %uu, \"XIR scalar ABI\");\n"
@@ -423,8 +432,8 @@ static void emit_instance_step(CBuffer *buffer, const XrXirModule *module,
             EMIT_FORMAT(buffer, et_7f1bcb7df267d207, "state->arguments[%u] = (XrXirValue) {%uu, 0, xr_xir_scalar_load(state->frame, %uu)};\n",
                 p, (uint32_t) xr_xir_operand_type(function, id), layout->offsets[id]);
         }
-        append(buffer, "status = xr_xir_instance_function(view, (XrXirType) %u, %uu, %s, %uu, &value);\n",
-            (uint32_t) op->type, (uint32_t) op->immediate, op->args[1] ? "state->arguments" : "NULL", op->args[1]); break;
+        append(buffer, "status = xr_xir_instance_function_at(view, %uu, %s, %uu, &value);\n",
+            (uint32_t)(op-function->instructions),op->args[1]?"state->arguments":"NULL",op->args[1]);break;
     case XR_XIR_CONST_STRING:
     case XR_XIR_SLOT_LOAD:
         append(buffer, " status = %s(view, %uu, &value);\n",
@@ -471,10 +480,7 @@ static void emit_resume_call(CBuffer *buffer, const XrXirFunction *function,
     EMIT_FORMAT(buffer, et_79564e185903c374, " { uint32_t callee = %uu; XrXirValue target = {0};\n", (uint32_t) op->immediate);
     if (op->op == XR_XIR_CALL_INDIRECT || op->op == XR_XIR_INVOKE_INDIRECT) {
         uint32_t id = (uint32_t) op->immediate;
-        EMIT_FORMAT(buffer, et_c8732ade9f8b73ad, " target = (XrXirValue) {%uu, 0, xr_xir_scalar_load(state->frame, %uu)};\n"
-            " XrXirCallStatus status = xr_xir_instance_resolve_function(view, &target, &callee);\n"
-            " if (status != XR_XIR_CALL_READY) return (XrXirAction) "
-            "{XR_XIR_ACTION_FAULT, 0, NULL, 0, {XR_XIR_I64, 0, status}, {0}, 0};\n",
+        EMIT_FORMAT(buffer, et_40228ac8335a0aa3, " target = (XrXirValue) {%uu, 0, xr_xir_scalar_load(state->frame, %uu)};\n",
             (uint32_t) xr_xir_operand_type(function, id), layout->offsets[id]);
     }
     if (op->op == XR_XIR_INVOKE || op->op == XR_XIR_INVOKE_INDIRECT) {
@@ -501,6 +507,16 @@ static void emit_resume_call(CBuffer *buffer, const XrXirFunction *function,
         EMIT_FORMAT(buffer, et_700bb40b61790c72, " state->arguments[%u] = (XrXirValue) {%uu, 0, xr_xir_scalar_load(state->frame, %uu)};\n",
             p, (uint32_t) xr_xir_operand_type(function, id), layout->offsets[id]);
     }
+    if (op->op == XR_XIR_CALL_INDIRECT || op->op == XR_XIR_INVOKE_INDIRECT)
+        append(buffer, " XrXirCallStatus status = xr_xir_instance_resolve_function_at(view, %uu, &target, %s, %uu, &callee);\n"
+            " if (status != XR_XIR_CALL_READY) return (XrXirAction) "
+            "{XR_XIR_ACTION_FAULT, 0, NULL, 0, {XR_XIR_I64, 0, status}, {0}, 0};\n",
+            (uint32_t)(op-function->instructions),op->args[1]?"state->arguments":"NULL",op->args[1]);
+    if (op->op == XR_XIR_CALL || op->op == XR_XIR_INVOKE)
+        append(buffer, " XrXirCallStatus status = xr_xir_instance_call_at(view, %uu, callee, %s, %uu);\n"
+            " if (status != XR_XIR_CALL_READY) return (XrXirAction) "
+            "{XR_XIR_ACTION_FAULT, 0, NULL, 0, {XR_XIR_I64, 0, status}, {0}, 0};\n",
+            (uint32_t)(op-function->instructions),op->args[1]?"state->arguments":"NULL",op->args[1]);
     append(buffer, " return (XrXirAction) {XR_XIR_ACTION_CALL, callee, %s, %uu, target, {0}, %s}; }\n",
         op->args[1] ? "state->arguments" : "NULL", op->args[1], protected_call ? "XR_XIR_ACTION_PROTECTED" : "0u");
 }
@@ -1594,8 +1610,9 @@ static void emit_program(CBuffer *buffer, const XrXirArtifact *artifact, const c
 static void emit_native_unit(CBuffer *buffer, const XrXirArtifact *artifact,
     const char *symbol_prefix) {
     const XrXirModule *module = xr_xir_compile_artifact_module(artifact);
-    EMIT_FORMAT(buffer, et_d0c82aedd2c7ec34, "#include \"xir/xxir_program.h\"\n#include \"xir/xxir_float.h\"\n"
-           "#include \"xir/xxir_instance_value.h\"\n#include \"xir/xxir_struct.h\"\n#include \"xir/xxir_class.h\"\n#include \"xir/xxir_enum.h\"\n#include \"xir/xxir_error.h\"\n"
+    emit_checked_identity(buffer);
+    EMIT_FORMAT(buffer, et_9ba6727bb474d42c, "#include \"xir/xxir_program.h\"\n#include \"xir/xxir_float.h\"\n"
+           "#include \"xir/xxir_instance_function_internal.h\"\n#include \"xir/xxir_instance_value.h\"\n#include \"xir/xxir_struct.h\"\n#include \"xir/xxir_class.h\"\n#include \"xir/xxir_enum.h\"\n#include \"xir/xxir_error.h\"\n"
            "#include \"xir/xxir_panic.h\"\n#include \"xir/xxir_equal.h\"\n#include \"xir/xxir_nullable.h\"\n#include \"xir/xxir_tuple.h\"\n"
            "#include \"xir/xxir_atomic.h\"\n"
            "#include \"xir/xxir_task.h\"\n"

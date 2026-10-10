@@ -384,7 +384,7 @@ static void native_packet_proof(void) {
         CHECK(xr_xir_compile_program_proof_verify(&probe,&spec,&proof,&permissions)==(attempt?XR_XIR_OUT_OF_MEMORY:XR_XIR_OK));
         CHECK((permissions!=NULL)==!attempt);
         if(!attempt){sites=calls;required=consumer_context_stats(&probe);}
-        xr_compile_resources_free(permissions);permissions=NULL;
+        xir_program_permissions_free(permissions);permissions=NULL;
         fail_at=SIZE_MAX;consumer_context_ephemeral_free(&probe,before);
         CHECK(live==baseline && live_bytes==baseline_bytes);
     }
@@ -413,7 +413,7 @@ static void native_packet_proof(void) {
             CHECK((permissions!=NULL)==(status==XR_XIR_OK));
             XrCompileResourceStats actual=consumer_context_stats(&probe);
             CHECK(actual.peak_bytes<=cap*7-minus && actual.allocated_bytes<=cap*7-minus);
-            xr_compile_resources_free(permissions);permissions=NULL;
+            xir_program_permissions_free(permissions);permissions=NULL;
             consumer_context_ephemeral_free(&probe,before);CHECK(live==baseline && live_bytes==baseline_bytes);
             printf("native proof whole cap %llu minus%u status%u peak%llu\n",(unsigned long long)cap,minus,status,(unsigned long long)actual.peak_bytes);
         }
@@ -425,7 +425,7 @@ static void native_packet_proof(void) {
         if(axis==2)limits.work=required.work-minus;
         XrXirCompileContext probe=consumer_context_ephemeral(limits);XrCompileResourceStats before=consumer_context_stats(&probe);
         CHECK(xr_xir_compile_program_proof_verify(&probe,&spec,&proof,&permissions)==(minus?XR_XIR_BUDGET:XR_XIR_OK));
-        CHECK((permissions!=NULL)==!minus);xr_compile_resources_free(permissions);permissions=NULL;
+        CHECK((permissions!=NULL)==!minus);xir_program_permissions_free(permissions);permissions=NULL;
         consumer_context_ephemeral_free(&probe,before);CHECK(live==baseline && live_bytes==baseline_bytes);
     }
     XrXirCompileContext probe=consumer_context_ephemeral((XrCompileResourceLimits){67108864,8388608,16000001});

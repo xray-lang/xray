@@ -1,0 +1,46 @@
+enum Problem { Failed }
+struct State { values: Array<i64> }
+var storage = State{values: [0]}
+fn leaf(value: ref i64) -> i64 { value += 1; return value; }
+fn middle(value: ref i64) -> i64 { leaf(ref value); value += 1; return value; }
+export fn run() -> i64 { return middle(ref storage.values[0]); }
+export fn cellCounter() -> i64 { return storage.values[0]; }
+
+fn throwing(value: ref i64) {
+    defer { value += 10; print(value); }
+    value += 1;
+    throw Problem.Failed;
+}
+export fn caughtThrow() -> i64 {
+    try { throwing(ref storage.values[0]); } catch(e: Problem) { }
+    storage.values[0] += 1;
+    return storage.values[0];
+}
+export fn uncaughtThrow() -> i64 { throwing(ref storage.values[0]); return 0; }
+fn panicking(value: ref i64) -> i64 {
+    defer { value += 10; print(value); }
+    value += 1;
+    return 10 / 0;
+}
+export fn caughtPanic() -> i64 {
+    try { panicking(ref storage.values[0]); } catch panic { }
+    storage.values[0] += 1;
+    return storage.values[0];
+}
+
+fn paused(value: ref i64) -> i64 {
+    defer { value += 10; print(value); }
+    value += 1;
+    print(value);
+    Coro.yield();
+    value += 2;
+    return value;
+}
+fn bridge(value: ref i64) -> i64 {
+    defer { value += 100; print(value); }
+    const result = paused(ref value);
+    value += 4;
+    return result;
+}
+export fn suspended() -> i64 { return bridge(ref storage.values[0]); }
+fn main() -> i64 { return run(); }

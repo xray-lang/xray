@@ -1,0 +1,4 @@
+import {Holder} from "./class_project_library_value"
+var storage = Holder([40]);
+export fn run() -> i64 { const alias = storage; return alias.adjust(); }
+fn main() -> i64 { return run(); }

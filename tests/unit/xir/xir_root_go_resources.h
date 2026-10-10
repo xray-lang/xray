@@ -50,7 +50,7 @@ static void go_authority_failures(const XrXirProgramSpec *spec) {
     EffectMark mark=effect_mark();XrXirCompileContext context=effect_owner_new(effect_caps());
     uint64_t baseline=effect_stats(&context).live_bytes;XrXirProgramPermissions *authority=NULL;
     attempts=0;CHECK(xr_xir_compile_program_proof_verify(&context,spec,&spec->proof,&authority)==XR_XIR_OK&&authority);
-    size_t sites=attempts;CHECK(sites);xr_compile_resources_free(authority);authority=NULL;
+    size_t sites=attempts;CHECK(sites);xir_program_permissions_free(authority);authority=NULL;
     XrCompileResourceStats measured=effect_stats(&context);effect_owner_free(&context,baseline);effect_mark_check(mark);
     for(size_t point=0;point<sites;++point){
         context=effect_owner_new(effect_caps());baseline=effect_stats(&context).live_bytes;
@@ -60,7 +60,7 @@ static void go_authority_failures(const XrXirProgramSpec *spec) {
         CHECK(xr_xir_compile_program_proof_verify(&context,spec,&spec->proof,&authority)==XR_XIR_OK&&authority);
         XrCompileResourceStats retried=effect_stats(&context);
         CHECK(retried.allocated_bytes>paid.allocated_bytes&&retried.work>paid.work);
-        xr_compile_resources_free(authority);effect_owner_free(&context,baseline);effect_mark_check(mark);
+        xir_program_permissions_free(authority);effect_owner_free(&context,baseline);effect_mark_check(mark);
     }
     for(unsigned axis=0;axis<3;++axis)for(unsigned minus=0;minus<2;++minus){
         XrCompileResourceLimits limits=effect_caps();
@@ -68,7 +68,7 @@ static void go_authority_failures(const XrXirProgramSpec *spec) {
         *limit=(axis==0?measured.allocated_bytes:axis==1?measured.peak_bytes:measured.work)-minus;
         context=effect_owner_new(limits);baseline=effect_stats(&context).live_bytes;authority=NULL;
         CHECK(xr_xir_compile_program_proof_verify(&context,spec,&spec->proof,&authority)==(minus?XR_XIR_BUDGET:XR_XIR_OK));
-        CHECK(minus?!authority:authority!=NULL);xr_compile_resources_free(authority);
+        CHECK(minus?!authority:authority!=NULL);xir_program_permissions_free(authority);
         effect_owner_free(&context,baseline);effect_mark_check(mark);
     }
     context=effect_owner_new(effect_caps());baseline=effect_stats(&context).live_bytes;

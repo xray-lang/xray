@@ -17,32 +17,59 @@ typedef struct CheckedAtomicPool {
     XrXirTypeNode nodes[512];
     XrXirTypes types;
     XrXirFunction functions[9];
-    XrXirInstruction instructions[8][11];
+    XrXirInstruction instructions[8][12];
     XrXirSlot slots[5];
     XrXirDeclarations declarations;
 } CheckedAtomicPool;
 static void checked_atomic_pool(XrXirModule *built,CheckedAtomicPool *pool) {
-    CHECK(built && built->types && built->types->count<512 && built->function_count==9);
+    CHECK(built && built->types && built->types->count<=510 && built->function_count==9);
     XrXirType old=built->declarations->slots[0].type;
+    XrXirType old_cell=built->declarations->slots[4].type;
+    CHECK(old!=old_cell && built->declarations->slots[4].mutable==1 &&
+        built->functions[0].instruction_count==5 &&
+        built->functions[0].instructions[1].op==XR_XIR_CELL_NEW &&
+        built->functions[0].instructions[1].type==old_cell);
     XrXirType atomic=(XrXirType)(XR_XIR_CONSTRUCTED_TYPE_BASE+built->types->count);
+    XrXirType cell=XR_XIR_UNIT;
     pool->types=*built->types;
     if(pool->types.count)memcpy(pool->nodes,pool->types.nodes,pool->types.count*sizeof(*pool->nodes));
+    for(uint32_t i=0;i<pool->types.count;++i) {
+        const XrXirTypeNode *node=&pool->nodes[i];
+        if(node->kind==XR_XIR_TYPE_CELL && node->element==XR_XIR_STRING &&
+            !node->parameters && !node->parameter_count && node->result==XR_XIR_UNIT &&
+            !node->flags && !node->parameter_span && !node->nominal.declaration &&
+            !node->nominal.arguments && !node->nominal.argument_count &&
+            !node->nominal.fields && !node->nominal.field_count) {
+            cell=(XrXirType)(XR_XIR_CONSTRUCTED_TYPE_BASE+i);
+            break;
+        }
+    }
     pool->nodes[pool->types.count++]=(XrXirTypeNode){.kind=XR_XIR_TYPE_ATOMIC,.element=XR_XIR_I64};
+    if(cell==XR_XIR_UNIT) {
+        cell=(XrXirType)(XR_XIR_CONSTRUCTED_TYPE_BASE+pool->types.count);
+        pool->nodes[pool->types.count++]=(XrXirTypeNode){.kind=XR_XIR_TYPE_CELL,.element=XR_XIR_STRING};
+    }
     pool->types.nodes=pool->nodes;
     memcpy(pool->functions,built->functions,sizeof(pool->functions));
     for(uint32_t f=0;f<8;++f){
-        CHECK(pool->functions[f].instruction_count<=11);
+        CHECK(pool->functions[f].instruction_count<=12);
         memcpy(pool->instructions[f],pool->functions[f].instructions,
             pool->functions[f].instruction_count*sizeof(XrXirInstruction));
         pool->functions[f].instructions=pool->instructions[f];
         if(pool->functions[f].result==old)pool->functions[f].result=atomic;
-        for(uint32_t i=0;i<pool->functions[f].instruction_count;++i)
+        else if(pool->functions[f].result==old_cell)pool->functions[f].result=cell;
+        for(uint32_t i=0;i<pool->functions[f].instruction_count;++i) {
             if(pool->instructions[f][i].type==old)pool->instructions[f][i].type=atomic;
+            else if(pool->instructions[f][i].type==old_cell)pool->instructions[f][i].type=cell;
+        }
     }
     pool->declarations=*built->declarations;
     CHECK(pool->declarations.slot_count==5);
     memcpy(pool->slots,pool->declarations.slots,sizeof(pool->slots));
-    for(uint32_t i=0;i<5;++i)if(pool->slots[i].type==old)pool->slots[i].type=atomic;
+    for(uint32_t i=0;i<5;++i) {
+        if(pool->slots[i].type==old)pool->slots[i].type=atomic;
+        else if(pool->slots[i].type==old_cell)pool->slots[i].type=cell;
+    }
     pool->declarations.slots=pool->slots;
     built->functions=pool->functions;built->declarations=&pool->declarations;built->types=&pool->types;
 }

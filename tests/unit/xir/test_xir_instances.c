@@ -487,6 +487,12 @@ static void occupied_outputs(void) {
     native_fixture_owner_free(&f.compiler); instance_compile_zero();
 }
 #include "xir_function_cases.h"
+#include "xir_function_producer_owner_cases.h"
+#include "xir_invocation_runtime_owner_cases.h"
+#include "xir_invocation_direct_owner_cases.h"
+#include "xir_invocation_capture_owner_cases.h"
+#include "xir_invocation_return_capture_owner_cases.h"
+#include "xir_invocation_function_cell_owner_cases.h"
 #include "xir_effect_binding_cases.h"
 #include "xir_weaken_authority_cases.h"
 #include "xir_array_instance_cases.h"
@@ -517,6 +523,19 @@ int main(void) {
     weaken_authority_cases();
     array_instance_cases();
     CHECK(function_case_run(false) && function_case_run(true));
+    CHECK(function_producer_owner_run());
+    for (unsigned mode=0;mode<8;++mode) CHECK(invocation_runtime_owner_run(mode,NULL,NULL));
+    invocation_runtime_owner_axes();
+    for (unsigned mode=0;mode<8;++mode) CHECK(invocation_direct_owner_run(mode,NULL,NULL));
+    invocation_direct_owner_axes();
+    for (unsigned scalar=0;scalar<2;++scalar) {
+        for (unsigned mode=0;mode<8;++mode) CHECK(invocation_capture_owner_run(mode,scalar!=0,NULL,NULL));
+        invocation_capture_owner_axes(scalar!=0);
+        for (unsigned mode=0;mode<8;++mode) CHECK(invocation_return_capture_owner_run(mode,scalar!=0,NULL,NULL));
+        invocation_return_capture_owner_axes(scalar!=0);
+        for (unsigned mode=0;mode<8;++mode) CHECK(invocation_function_cell_owner_run(mode,scalar!=0,NULL,NULL));
+        invocation_function_cell_owner_axes(scalar!=0);
+    }
     isolation(); borrowed_restart(); failed_initialization(); seal_rejection();
     instance_compile_report(); native_fixture_owner_report();
     puts("Program leases, deterministic initialization, isolated cells, sticky failure and result lifetime passed");

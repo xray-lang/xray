@@ -21,7 +21,8 @@
 #include "xir_cell_owner_source_pipeline.h"
 
 typedef enum CellSourceKind { CELL_SOURCE_VALUE, CELL_SOURCE_FORWARD, CELL_SOURCE_FACTORY,
-    CELL_SOURCE_ALIAS, CELL_SOURCE_REJECT, CELL_SOURCE_MODE_REJECT } CellSourceKind;
+    CELL_SOURCE_ALIAS, CELL_SOURCE_REJECT, CELL_SOURCE_MODE_REJECT,
+    CELL_SOURCE_PROJECT_VALUE, CELL_SOURCE_PROJECT_REJECT, CELL_SOURCE_CLASS_RETAINED } CellSourceKind;
 typedef struct CellSourceCase {
     const char *name;
     CellSourceKind kind;
@@ -58,7 +59,40 @@ static const CellSourceCase cell_source_cases[] = {
     {"indirect_ref_wrong_type.xr", CELL_SOURCE_MODE_REJECT, 0, XR_XIR_CALL_READY, false},
     {"indirect_ref_scoped_capture.xr", CELL_SOURCE_REJECT, 0, XR_XIR_CALL_READY, false},
     {"indirect_ref_go.xr", CELL_SOURCE_REJECT, 0, XR_XIR_CALL_READY, false},
-    {"indirect_ref_worker_signature.xr", CELL_SOURCE_VALUE, 42, XR_XIR_CALL_READY, false}
+    {"indirect_ref_worker_signature.xr", CELL_SOURCE_VALUE, 42, XR_XIR_CALL_READY, false},
+    {"project_struct_array_cow.xr", CELL_SOURCE_PROJECT_VALUE, 42406, XR_XIR_CALL_READY, false},
+    {"project_array_replaced.xr", CELL_SOURCE_PROJECT_VALUE, 92401, XR_XIR_CALL_READY, false},
+    {"project_struct_same_root.xr", CELL_SOURCE_PROJECT_REJECT, 0, XR_XIR_CALL_BAD_ARGUMENT, false},
+    {"project_array_same_root.xr", CELL_SOURCE_PROJECT_REJECT, 20, XR_XIR_CALL_BAD_ARGUMENT, false},
+    {"project_array_bounds_prepare.xr", CELL_SOURCE_PROJECT_REJECT, 10, XR_XIR_CALL_BOUNDS, false},
+    {"class_project_this_cow.xr", CELL_SOURCE_PROJECT_VALUE, 424240, XR_XIR_CALL_READY, false},
+    {"class_project_module.xr", CELL_SOURCE_FORWARD, 1, XR_XIR_CALL_READY, false},
+    {"class_project_same_object.xr", CELL_SOURCE_PROJECT_REJECT, 0, XR_XIR_CALL_BAD_ARGUMENT, false},
+    {"class_project_rebind.xr", CELL_SOURCE_PROJECT_VALUE, 424290, XR_XIR_CALL_READY, false},
+    {"class_project_bounds_prepare.xr", CELL_SOURCE_PROJECT_REJECT, 10, XR_XIR_CALL_BOUNDS, false},
+    {"class_project_alias_read.xr", CELL_SOURCE_ALIAS, 0, XR_XIR_CALL_BAD_STATE, false},
+    {"class_project_alias_write.xr", CELL_SOURCE_ALIAS, 0, XR_XIR_CALL_BAD_STATE, false},
+    {"class_project_ref_method_reject.xr", CELL_SOURCE_MODE_REJECT, 0, XR_XIR_CALL_READY, false},
+    {"class_project_scoped_capture_reject.xr", CELL_SOURCE_REJECT, 0, XR_XIR_CALL_READY, false},
+    {"class_project_go_reject.xr", CELL_SOURCE_REJECT, 0, XR_XIR_CALL_READY, false},
+    {"class_project_worker_unresolved.xr", CELL_SOURCE_REJECT, 0, XR_XIR_CALL_READY, false},
+    {"class_project_worker_plain.xr", CELL_SOURCE_PROJECT_VALUE, 41, XR_XIR_CALL_READY, false},
+    {"class_project_typed_library.xr", CELL_SOURCE_VALUE, 42, XR_XIR_CALL_READY, false},
+    {"class_project_retained.xr", CELL_SOURCE_CLASS_RETAINED, 42, XR_XIR_CALL_READY, false},
+    {"class_project_const_binding_reject.xr", CELL_SOURCE_MODE_REJECT, 0, XR_XIR_CALL_READY, false},
+    {"class_project_this_binding_reject.xr", CELL_SOURCE_MODE_REJECT, 0, XR_XIR_CALL_READY, false},
+    {"indirect_ref_worker_local.xr", CELL_SOURCE_VALUE, 42, XR_XIR_CALL_READY, false},
+    {"indirect_ref_worker_module.xr", CELL_SOURCE_REJECT, 0, XR_XIR_CALL_READY, false},
+    {"indirect_ref_worker_fixed.xr", CELL_SOURCE_REJECT, 0, XR_XIR_CALL_READY, false},
+    {"indirect_ref_worker_forward.xr", CELL_SOURCE_VALUE, 42, XR_XIR_CALL_READY, false},
+    {"indirect_capture_worker_scalar.xr", CELL_SOURCE_VALUE, 42, XR_XIR_CALL_READY, false},
+    {"indirect_capture_worker_owned.xr", CELL_SOURCE_VALUE, 42, XR_XIR_CALL_READY, false},
+    {"indirect_capture_worker_module.xr", CELL_SOURCE_REJECT, 0, XR_XIR_CALL_READY, false},
+    {"returned_capture_worker_scalar.xr", CELL_SOURCE_VALUE, 42, XR_XIR_CALL_READY, false},
+    {"returned_capture_worker_owned.xr", CELL_SOURCE_VALUE, 42, XR_XIR_CALL_READY, false},
+    {"returned_capture_worker_relay.xr", CELL_SOURCE_VALUE, 42, XR_XIR_CALL_READY, false},
+    {"returned_capture_worker_fixed.xr", CELL_SOURCE_REJECT, 0, XR_XIR_CALL_READY, false},
+    {"returned_capture_worker_module.xr", CELL_SOURCE_REJECT, 0, XR_XIR_CALL_READY, false}
 };
 static void cell_source_physical_zero(const char *name) {
     instance_compile_zero();
@@ -148,6 +182,31 @@ static void cell_source_value(XrXirProgram *program, const CellSourceEntries *en
     cell_source_i64(&result, expected);
     xr_xir_value_drop(&result);
 }
+#include "xir_cell_project_source_cases.h"
+/* The result keeps actual storage metadata alive after code and execution die.
+ * Its data access supplies no activation, frame or executable permission. */
+static void cell_source_class_retained(XrXirProgram *program, const CellSourceEntries *entries,
+    SourceFixtureOwner *owner, int64_t expected) {
+    XrXirInstance *instance = cell_source_instance(program);
+    XrXirValue object = {0}, field = {0};
+    xr_xir_compile_program_drop(program);
+    CHECK(cell_source_execute(instance, entries->run, &object) == XR_XIR_CALL_RETURNED);
+    CHECK(xr_xir_type_is_class(xr_xir_compile_type_arena_types(xr_xir_value_arena(&object)),
+        (XrXirType)object.type));
+    CHECK(xr_xir_instance_free(instance) == XR_XIR_CALL_READY);
+    XrCompileResourceStats retained = {0};
+    CHECK(xr_compile_resources_stats(owner->context.resources, &retained) == XR_COMPILE_RESOURCE_OK);
+    CHECK(retained.live_bytes > owner->baseline.live_bytes &&
+        retained.allocated_bytes > owner->baseline.allocated_bytes && retained.work > owner->baseline.work);
+    xr_compile_resources_release(owner->context.resources);
+    *owner = (SourceFixtureOwner){0};
+    CHECK(xr_xir_value_valid(&object));
+    XrXirValueAdmission admission = {.arena=xr_xir_value_arena(&object), .work=10000};
+    CHECK(xr_xir_class_get(&object, 0, &admission, &field) == XR_XIR_VALUE_OK);
+    cell_source_i64(&field, expected);
+    xr_xir_value_drop(&object);
+    xr_xir_value_drop(&field);
+}
 static void cell_source_case(const CellSourceCase *fixture) {
     cell_source_physical_zero("before fresh fixture");
     SourceFixtureOwner owner = {0};
@@ -166,12 +225,16 @@ static void cell_source_case(const CellSourceCase *fixture) {
         case CELL_SOURCE_FORWARD: cell_source_forward(program, &entries); break;
         case CELL_SOURCE_FACTORY: cell_source_factory(program, &entries); break;
         case CELL_SOURCE_ALIAS: cell_source_alias(program, &entries, fixture->failure); break;
+        case CELL_SOURCE_PROJECT_VALUE: cell_source_project_values(program, &entries, fixture->expected); break;
+        case CELL_SOURCE_PROJECT_REJECT: cell_source_project_reject(program, &entries, fixture); break;
+        case CELL_SOURCE_CLASS_RETAINED: cell_source_class_retained(program, &entries, &owner, fixture->expected); break;
         default: cell_source_value(program, &entries, fixture->expected); break;
         }
         program = NULL;
     }
     xr_xir_compile_program_drop(program);
-    source_fixture_owner_free(&owner);
+    if (fixture->kind == CELL_SOURCE_CLASS_RETAINED) CHECK(!owner.context.resources);
+    else source_fixture_owner_free(&owner);
     cell_source_physical_zero(fixture->name);
 }
 int main(void) {

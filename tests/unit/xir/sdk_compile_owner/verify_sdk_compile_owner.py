@@ -87,7 +87,7 @@ def main():
             assert code != 0 and len(unresolved) == 1 and re.search(r'\b' + re.escape(symbol) + r'\b', unresolved[0]), (symbol, unresolved, text)
             outcomes[symbol] = 'exact retired symbol unresolved; no other missing symbol'
     manifest = json.loads((bundle / 'sdk_manifest.json').read_text())
-    assert [manifest[name] for name in ('wire', 'semantic', 'value_abi', 'call_abi', 'program_abi')] == [27, 72, 22, 28, 29]
+    assert [manifest[name] for name in ('wire', 'semantic', 'value_abi', 'call_abi', 'program_abi')] == [28, 73, 23, 29, 30]
     sys.path.insert(0,str(root/'scripts'))
     from derive_xir_sdk_abi import prepare
     with tempfile.TemporaryDirectory(prefix='sdk-owner-independent-abi-') as temporary:
@@ -107,7 +107,8 @@ def main():
     for name,value in [('semantic',64),('value_abi',17),('call_abi',21),('program_abi',26),
                        ('value_abi',20),('call_abi',25),('program_abi',28),
                        ('semantic',65),('value_abi',21),('call_abi',26),('call_abi',27),('semantic',66),('semantic',67),('semantic',68),('semantic',69),
-                       ('semantic',70),('wire',25),('semantic',71),('wire',26)]:
+                       ('semantic',70),('wire',25),('semantic',71),('wire',26),
+                       ('wire',27),('semantic',72),('value_abi',22),('call_abi',28),('program_abi',29)]:
         changed = json.loads(json.dumps(manifest)); changed[name] = value
         status('old-' + name+'-'+str(value), changed, 1)
     # Reject the complete previous 25/70 pair as well as each crossed prefix above.
@@ -115,6 +116,8 @@ def main():
     status('old-wire25-semantic70', changed, 1)
     changed=json.loads(json.dumps(manifest));changed.update(wire=26,semantic=71)
     status('old-wire26-semantic71',changed,1)
+    changed=json.loads(json.dumps(manifest));changed.update(wire=27,semantic=72,value_abi=22,call_abi=28,program_abi=29)
+    status('old-complete27-72-22-28-29',changed,1)
     changed = json.loads(json.dumps(manifest)); changed['abi_measurements'] = changed['abi_measurements'][:197]
     status('old-layout-recipe', changed, 1)
     changed=json.loads(json.dumps(manifest));changed['abi_measurements']=changed['abi_measurements'][:233]

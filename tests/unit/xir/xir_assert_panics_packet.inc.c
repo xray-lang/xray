@@ -13,7 +13,8 @@
 #include "xir_assert_panics69_golden.h"
 #include "xir_assert_panics70_golden.h"
 #include "xir_assert_panics71_golden.h"
-#include "xir_assert_panics72_golden.h"
+#include "xir_assert_panics73_golden.h"
+#include "xir_assert_panics73_golden.h"
 #include "xir_assert_atomic64_packet_rejection.h"
 static void panics_word(uint8_t *bytes,uint32_t value) {
     for (uint32_t i=0;i<4;++i) bytes[i]=(uint8_t)(value>>(i*8));
@@ -124,9 +125,8 @@ static void panics_previous_full_packet_rejected(const uint8_t *bytes,size_t len
     printf("Complete prior25/%u assertion packet rejected before allocation; empty/occupied output preserved PASS\n",(unsigned)semantic);
 }
 
-static void panics_previous71_rejected(void) {
-    const uint8_t *bytes=assert_panics71_golden;size_t length=sizeof(assert_panics71_golden);
-    CHECK(length==2183 && bytes[8]==26 && bytes[12]==71);
+static void panics_previous_identity_rejected(const uint8_t *bytes,size_t length,uint32_t wire,uint32_t semantic) {
+    CHECK(length==(wire==26 ? 2183u : 2187u) && bytes[8]==wire && bytes[12]==semantic);
     XrSHA256Context hash;uint8_t digest[32];xr_sha256_init(&hash);
     xr_sha256_update(&hash,bytes,32);xr_sha256_update(&hash,bytes+64,length-64);
     xr_sha256_final(&hash,digest);CHECK(!memcmp(digest,bytes+32,32));
@@ -139,17 +139,18 @@ static void panics_previous71_rejected(void) {
     }
 }
 static void panics_packet_gates(void) {
-    panics_previous71_rejected();
-    _Static_assert(XR_XIR_CHECKED_SCHEMA==27 && XR_XIR_CHECKED_CONTRACT==72,
+    panics_previous_identity_rejected(assert_panics71_golden,sizeof(assert_panics71_golden),26,71);
+    panics_previous_identity_rejected(assert_panics72_golden,sizeof(assert_panics72_golden),27,72);
+    _Static_assert(XR_XIR_CHECKED_SCHEMA==28 && XR_XIR_CHECKED_CONTRACT==73,
         "Core packet known bytes require the independently encoded contract");
     panics_core_bound_rejections();
     XrXirArtifact *checked=panics_core_checked();XrXirCheckedPacket packet={0};
     CHECK(xr_xir_compile_checked_write(checked,&packet,NULL)==XR_XIR_OK);
-    if (packet.length!=sizeof(assert_panics72_golden) || memcmp(packet.bytes,assert_panics72_golden,packet.length)) {
-        size_t at=0;while (at<packet.length && at<sizeof(assert_panics72_golden) && packet.bytes[at]==assert_panics72_golden[at]) ++at;
-        fprintf(stderr,"independent Core KAT mismatch length=%zu expected=%zu first=%zu\n",packet.length,sizeof(assert_panics72_golden),at);
+    if (packet.length!=sizeof(assert_panics73_golden) || memcmp(packet.bytes,assert_panics73_golden,packet.length)) {
+        size_t at=0;while (at<packet.length && at<sizeof(assert_panics73_golden) && packet.bytes[at]==assert_panics73_golden[at]) ++at;
+        fprintf(stderr,"independent Core KAT mismatch length=%zu expected=%zu first=%zu\n",packet.length,sizeof(assert_panics73_golden),at);
     }
-    CHECK(packet.length==sizeof(assert_panics72_golden) && !memcmp(packet.bytes,assert_panics72_golden,packet.length));
+    CHECK(packet.length==sizeof(assert_panics73_golden) && !memcmp(packet.bytes,assert_panics73_golden,packet.length));
     assert_previous_packet_rejected(assert_panics_golden, sizeof(assert_panics_golden));
     assert_previous_packet_rejected(assert_panics64_golden,sizeof(assert_panics64_golden));
     panics_previous_full_packet_rejected(assert_panics65_golden,sizeof(assert_panics65_golden),65);
@@ -159,26 +160,26 @@ static void panics_packet_gates(void) {
     size_t op=panics_instruction_offset(&packet,2),live=runtime_live,bytes=runtime_bytes;
     size_t compiler_live=source_program_compile_live,compiler_bytes=source_program_compile_bytes;
     const struct {size_t offset;uint32_t value;XrXirStatus expected;} attacks[]={
-        {XR_PANICS72_VECTOR_GENERIC2+4,2,XR_XIR_BAD_STRUCTURE},{XR_PANICS72_VECTOR_GENERIC2+8,2,XR_XIR_BAD_STRUCTURE},{XR_PANICS72_VECTOR_GENERIC2+8,0,XR_XIR_BAD_STRUCTURE},
-        {XR_PANICS72_VECTOR_GENERIC2+12,XR_XIR_CONSTRAINT_SENDABLE,XR_XIR_BAD_TYPE},{XR_PANICS72_VECTOR_GENERIC5+8,0,XR_XIR_BAD_STRUCTURE},
-        {XR_PANICS72_VECTOR_DEFAULTS+4,1,XR_XIR_BAD_STRUCTURE},{XR_PANICS72_VECTOR_DEFAULTS+28,0,XR_XIR_BAD_STRUCTURE},{XR_PANICS72_VECTOR_DEFAULTS+32,3,XR_XIR_BAD_STRUCTURE},
+        {XR_PANICS73_VECTOR_GENERIC2+4,2,XR_XIR_BAD_STRUCTURE},{XR_PANICS73_VECTOR_GENERIC2+8,2,XR_XIR_BAD_STRUCTURE},{XR_PANICS73_VECTOR_GENERIC2+8,0,XR_XIR_BAD_STRUCTURE},
+        {XR_PANICS73_VECTOR_GENERIC2+12,XR_XIR_CONSTRAINT_SENDABLE,XR_XIR_BAD_TYPE},{XR_PANICS73_VECTOR_GENERIC5+8,0,XR_XIR_BAD_STRUCTURE},
+        {XR_PANICS73_VECTOR_DEFAULTS+4,1,XR_XIR_BAD_STRUCTURE},{XR_PANICS73_VECTOR_DEFAULTS+28,0,XR_XIR_BAD_STRUCTURE},{XR_PANICS73_VECTOR_DEFAULTS+32,3,XR_XIR_BAD_STRUCTURE},
         {op+2*40+24,0,XR_XIR_BAD_TYPE},{op+2*40+4,XR_XIR_I64,XR_XIR_BAD_TYPE},
         {op+4*40+12,0,XR_XIR_BAD_TYPE},{op+8*40+4,XR_XIR_PANIC_INFO,XR_XIR_BAD_TYPE},
-        {XR_PANICS72_CALLABLE_FLAGS,0,XR_XIR_BAD_TYPE},{XR_PANICS72_CALLABLE_FLAGS,1,XR_XIR_BAD_TYPE},
-        {XR_PANICS72_CALLABLE_FLAGS,2,XR_XIR_BAD_TYPE},{XR_PANICS72_CALLABLE_FLAGS,3,XR_XIR_BAD_TYPE},{XR_PANICS72_CALLABLE_FLAGS,4,XR_XIR_BAD_TYPE},
-        {XR_PANICS72_CALLABLE_FLAGS,5,XR_XIR_BAD_TYPE},{XR_PANICS72_CALLABLE_FLAGS,9,XR_XIR_BAD_TYPE},{XR_PANICS72_CALLABLE_FLAGS,12,XR_XIR_BAD_TYPE},
-        {XR_PANICS72_CALLABLE_FLAGS,13,XR_XIR_BAD_TYPE},{XR_PANICS72_CALLABLE_FLAGS,10,XR_XIR_BAD_TYPE},{XR_PANICS72_CALLABLE_FLAGS,24,XR_XIR_BAD_TYPE}
+        {XR_PANICS73_CALLABLE_FLAGS,0,XR_XIR_BAD_TYPE},{XR_PANICS73_CALLABLE_FLAGS,1,XR_XIR_BAD_TYPE},
+        {XR_PANICS73_CALLABLE_FLAGS,2,XR_XIR_BAD_TYPE},{XR_PANICS73_CALLABLE_FLAGS,3,XR_XIR_BAD_TYPE},{XR_PANICS73_CALLABLE_FLAGS,4,XR_XIR_BAD_TYPE},
+        {XR_PANICS73_CALLABLE_FLAGS,5,XR_XIR_BAD_TYPE},{XR_PANICS73_CALLABLE_FLAGS,9,XR_XIR_BAD_TYPE},{XR_PANICS73_CALLABLE_FLAGS,12,XR_XIR_BAD_TYPE},
+        {XR_PANICS73_CALLABLE_FLAGS,13,XR_XIR_BAD_TYPE},{XR_PANICS73_CALLABLE_FLAGS,10,XR_XIR_BAD_TYPE},{XR_PANICS73_CALLABLE_FLAGS,24,XR_XIR_BAD_TYPE}
     };
     for (uint32_t i=0;i<sizeof(attacks)/sizeof(attacks[0]);++i) {
-        memcpy(packet.bytes,assert_panics72_golden,packet.length);panics_word(packet.bytes+attacks[i].offset,attacks[i].value);panics_hash(&packet);
+        memcpy(packet.bytes,assert_panics73_golden,packet.length);panics_word(packet.bytes+attacks[i].offset,attacks[i].value);panics_hash(&packet);
         XrXirArtifact *read=NULL;XrXirStatus status=xr_xir_compile_checked_read(assert_compile_context,packet.bytes,packet.length,&read,NULL);
         if (status!=attacks[i].expected) fprintf(stderr,"panics packet attack=%u status=%u expected=%u\n",i,status,attacks[i].expected);
         CHECK(status==attacks[i].expected && !read && runtime_live==live && runtime_bytes==bytes &&
             source_program_compile_live==compiler_live && source_program_compile_bytes==compiler_bytes);
     }
-    const uint32_t obsolete[][2]={{8,21},{12,56},{8,25},{12,70},{8,26},{12,71}};
+    const uint32_t obsolete[][2]={{8,21},{12,56},{8,25},{12,70},{8,26},{12,71},{8,27},{12,72}};
     for (uint32_t group=0;group<sizeof(obsolete)/sizeof(obsolete[0]);++group) {
-        memcpy(packet.bytes,assert_panics72_golden,packet.length);panics_word(packet.bytes+obsolete[group][0],obsolete[group][1]);
+        memcpy(packet.bytes,assert_panics73_golden,packet.length);panics_word(packet.bytes+obsolete[group][0],obsolete[group][1]);
         panics_hash(&packet);size_t early_attempts=source_program_compile_attempts;XrXirArtifact *read=NULL;
         CHECK(xr_xir_compile_checked_read(assert_compile_context,packet.bytes,packet.length,&read,NULL)==XR_XIR_BAD_STRUCTURE && !read && source_program_compile_attempts==early_attempts);
     }

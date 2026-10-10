@@ -47,6 +47,7 @@ static XrXirValueStatus xr_xir_class_new_graph_operation(XrXirType type, const X
     XirClassObject *instance=(XirClassObject *)object;
     instance->allocation_bytes=allocation.bytes;instance->release_offset=allocation.release_offset;
     instance->release_capacity=allocation.release_capacity;
+    instance->borrow_top=NULL;
     unsigned char *body=(unsigned char *)(instance+1);
     memset(body,0,layout->body.size);
     for (uint32_t i=0;i<count;++i) {
@@ -77,7 +78,8 @@ static XrXirValueStatus xr_xir_class_get_graph_operation(const XrXirValue *recei
         !owned_carrier_type((XrXirType)receiver->type)) return XR_XIR_VALUE_BAD_ARGUMENT;
     XirObject *object=object_pointer(receiver);
     const XrXirStorageLayout *layout=class_body_layout(object);
-    if (!layout || field >= layout->field_count || admission->arena != object->arena)
+    if (!layout || ((const XirClassObject *)object)->borrow_top ||
+        field >= layout->field_count || admission->arena != object->arena)
         return XR_XIR_VALUE_BAD_ARGUMENT;
     if (!admission->work) return XR_XIR_VALUE_LIMIT;
     --admission->work;
@@ -100,7 +102,7 @@ static XrXirValueStatus xr_xir_class_set_graph_operation(const XrXirValue *recei
     XirObject *object=object_pointer(receiver);
     const XrXirTypes *types=xr_xir_compile_type_arena_types(object->arena);
     const XrXirTypeNode *node=xr_xir_type_node(types,object->type);
-    if (field >= node->nominal.field_count ||
+    if (((const XirClassObject *)object)->borrow_top || field >= node->nominal.field_count ||
         !(types->nominals->identities[node->nominal.declaration].fields[field].flags & XR_XIR_FIELD_MUTABLE))
         return XR_XIR_VALUE_BAD_ARGUMENT;
     status=xr_xir_value_admit(replacement,node->nominal.fields[field],admission);

@@ -1,0 +1,14 @@
+var root: Array<i64> = [0, 0]
+var bodies: i64 = 0
+var picks: i64 = 0
+fn first() -> i64 { picks += 1; return 0; }
+fn second() -> i64 { picks += 1; return 1; }
+fn inner(left: ref i64, right: ref i64) -> i64 {
+    bodies += 1;
+    left += 1;
+    right += 1;
+    return left + right;
+}
+export fn run() -> i64 { picks = 0; return inner(ref root[first()], ref root[second()]); }
+export fn cellCounter() -> i64 { return bodies * 1000 + picks * 10 + root[0] * 2 + root[1]; }
+fn main() -> i64 { return run(); }

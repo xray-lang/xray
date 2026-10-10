@@ -1,0 +1,7 @@
+fn worker(value: ref i64) -> i64 { value += 1; return value; }
+final class Holder {
+    value: i64
+    constructor() { this.value = 40; }
+}
+export fn run() -> i64 { const storage = Holder(); return await go worker(ref storage.value); }
+fn main() -> i64 { return run(); }

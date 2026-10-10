@@ -1,0 +1,7 @@
+fn worker(seed:i64)->i64 {
+    var value:i64=seed
+    const callback=fn()->i64 { value+=2; return value }
+    return callback()
+}
+export fn run()->i64 { const task=go worker(40); return await task }
+fn main()->i64 { return 0 }

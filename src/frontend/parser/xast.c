@@ -1542,7 +1542,7 @@ AstNode *xr_ast_this_expr(XrCompilerSession *session, int line) {
     if (xr_compile_session_resource_status(session) != XR_COMPILE_RESOURCE_OK) return NULL;
     AstNode *node = alloc_node(session, AST_THIS_EXPR, line);
     if (xr_compile_session_resource_status(session) != XR_COMPILE_RESOURCE_OK) return NULL;
-    node->as.this_expr.placeholder = 0;
+    node->as.this_expr.access_marker_span = (XrNameSpan){0};
     return node;
 }
 

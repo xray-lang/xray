@@ -113,7 +113,7 @@ static void task_go_reject(void) {
     XrXirCompileContext c = owner_new(caps()); uint64_t baseline = stats(&c).live_bytes;
     _Static_assert(XR_XIR_GO == 146 && XR_XIR_TASK_AWAIT == 147 && XR_XIR_RANGE_CHECK == 148 &&
         XR_XIR_ARRAY_CAPACITY == 149 && XR_XIR_ARRAY_WITH_CAPACITY == 150 &&
-        XR_XIR_ARRAY_RESERVE == 151 && XR_XIR_OP_COUNT == 152,
+        XR_XIR_ARRAY_RESERVE == 151 && XR_XIR_OP_COUNT == 153,
         "Capacity operations append after the unchanged Task and range ordinals");
     for (uint32_t mutation = 0; mutation < 14; ++mutation) {
         TaskGoFixture f; task_go_fixture(&f);

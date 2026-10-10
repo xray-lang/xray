@@ -1,0 +1,12 @@
+struct Pair { left: i64; right: i64 }
+var root = Pair{left: 0, right: 0}
+var bodies: i64 = 0
+fn inner(left: ref i64, right: ref i64) -> i64 {
+    bodies += 1;
+    left += 1;
+    right += 1;
+    return left + right;
+}
+export fn run() -> i64 { return inner(ref root.left, ref root.right); }
+export fn cellCounter() -> i64 { return bodies * 100 + root.left * 10 + root.right; }
+fn main() -> i64 { return run(); }

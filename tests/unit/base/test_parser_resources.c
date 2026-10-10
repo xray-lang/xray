@@ -588,9 +588,92 @@ static void this_positions(void) {
     printf("parser this spans: allocations=%zu full FI/three axes/producer death/physical zero passed\n",sites);
 }
 
+static const char this_ref_source[] =
+    "final class Holder {\n"
+    " value:i64\n"
+    " constructor(){this.value=0}\n"
+    " update()->i64 {\n"
+    "  touch(ref this.value)\n"
+    "  return this.value\n"
+    " }\n"
+    "}\n";
+static void this_ref_facts(const AstNode *program) {
+    CHECK(program && program->type==AST_PROGRAM && program->as.program.count==1);
+    const AstNode *owner=program->as.program.statements[0];
+    CHECK(owner && owner->type==AST_CLASS_DECL && owner->as.class_decl.method_count==2);
+    const AstNode *method=owner->as.class_decl.methods[1];
+    CHECK(method && method->type==AST_METHOD_DECL && !strcmp(method->as.method_decl.name,"update") &&
+        method->as.method_decl.receiver_mode==XR_PARAM_READ);
+    const AstNode *body=method->as.method_decl.body;
+    CHECK(body && body->type==AST_BLOCK && body->as.block.count==2);
+    const AstNode *statement=body->as.block.statements[0],*returned=body->as.block.statements[1];
+    CHECK(statement && statement->type==AST_EXPR_STMT && statement->as.expr_stmt);
+    const AstNode *call=statement->as.expr_stmt;
+    CHECK(call->type==AST_CALL_EXPR && call->as.call_expr.arg_count==1 &&
+        call->as.call_expr.arg_accesses[0]==XR_CALL_ARG_REF);
+    const AstNode *field=call->as.call_expr.arguments[0];
+    CHECK(field && field->type==AST_MEMBER_ACCESS && !strcmp(field->as.member_access.name,"value"));
+    const AstNode *receiver=field->as.member_access.object;
+    CHECK(receiver && receiver->type==AST_THIS_EXPR && receiver->line==5 && receiver->column==13 &&
+        receiver->end_line==5 && receiver->end_column==17);
+    CHECK(receiver->as.this_expr.access_marker_span.line==5 &&
+        receiver->as.this_expr.access_marker_span.column==9);
+    CHECK(returned && returned->type==AST_RETURN_STMT && returned->as.return_stmt.value_count==1);
+    field=returned->as.return_stmt.values[0];
+    CHECK(field && field->type==AST_MEMBER_ACCESS && !strcmp(field->as.member_access.name,"value"));
+    receiver=field->as.member_access.object;
+    CHECK(receiver && receiver->type==AST_THIS_EXPR && receiver->line==6 && receiver->column==10 &&
+        receiver->end_line==6 && receiver->end_column==14);
+    CHECK(!receiver->as.this_expr.access_marker_span.line && !receiver->as.this_expr.access_marker_span.column);
+}
+static XrParseStatus this_ref_pipeline(const XrCompileResourceLimits *limits,XrCompileResourceStats *stats) {
+    XrCompileResources *resources=NULL;XrCompilerSession *session=NULL;AstNode *program=NULL;
+    char input[sizeof(this_ref_source)];memcpy(input,this_ref_source,sizeof(input));
+    XrCompileResourceStatus made=xr_compile_resources_new(limits,&resources);
+    if(made!=XR_COMPILE_RESOURCE_OK)
+        return made==XR_COMPILE_RESOURCE_BUDGET?XR_PARSE_BUDGET:XR_PARSE_OUT_OF_MEMORY;
+    XrCompilerSessionStatus opened=xr_compile_session_new(resources,&session);
+    XrParseStatus status=opened==XR_COMPILER_SESSION_BUDGET?XR_PARSE_BUDGET:XR_PARSE_OUT_OF_MEMORY;
+    if(opened==XR_COMPILER_SESSION_OK) {
+        status=xr_compile_parse(session,input,&program);
+        if(status==XR_PARSE_OK) {
+            CHECK(program && program->as.program.owns_arena);this_ref_facts(program);
+        } else {
+            CHECK((status==XR_PARSE_BUDGET||status==XR_PARSE_OUT_OF_MEMORY)&&!program);
+            size_t attempts=attempt_count;
+            CHECK(xr_compile_parse(session,(const char *)(uintptr_t)1,&program)==status);
+            CHECK(attempt_count==attempts&&!program);
+        }
+    }
+    OK(xr_compile_resources_stats(resources,stats));
+    CHECK(stats->allocated_bytes==physical_total&&stats->peak_bytes==physical_peak&&stats->live_bytes==physical_live);
+    memset(input,'?',sizeof(input));xr_compile_session_free(session);xr_compile_resources_release(resources);
+    if(program){this_ref_facts(program);xr_program_destroy(program);}
+    CHECK(!physical_live&&!allocation_count);return status;
+}
+static void this_ref_positions(void) {
+    const XrCompileResourceLimits finite={UINT64_C(1048576),UINT64_C(1048576),UINT64_C(1048576)};
+    reset();XrCompileResourceStats exact={0},stats={0};
+    CHECK(this_ref_pipeline(&finite,&exact)==XR_PARSE_OK);
+    size_t sites=attempt_count;CHECK(sites&&exact.allocated_bytes&&exact.peak_bytes&&exact.work);
+    for(size_t point=0;point<sites;++point) {
+        reset();fail_at=point;
+        CHECK(this_ref_pipeline(&finite,&stats)==XR_PARSE_OUT_OF_MEMORY);
+        CHECK(attempt_count==point+1);
+    }
+    for(unsigned axis=0;axis<3;++axis)for(int delta=-1;delta<=1;++delta) {
+        XrCompileResourceLimits limits={exact.allocated_bytes,exact.peak_bytes,exact.work};
+        uint64_t *bound=axis==0?&limits.allocated_bytes:axis==1?&limits.live_bytes:&limits.work;
+        CHECK(*bound&&*bound<UINT64_MAX);*bound=(uint64_t)((int64_t)*bound+delta);
+        reset();CHECK(this_ref_pipeline(&limits,&stats)==(delta<0?XR_PARSE_BUDGET:XR_PARSE_OK));
+    }
+    printf("parser real ref THIS marker spans: allocations=%zu full FI/three axes/producer death/physical zero passed\n",sites);
+}
+
 int main(void) {
     recovered_positions();
     this_positions();
+    this_ref_positions();
     owning_trivia_diagnostics();
     faults();
     recoverable_and_rollback();

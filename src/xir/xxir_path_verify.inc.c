@@ -29,6 +29,31 @@ static XrXirStatus path_uses(const Graph *graph, const XrXirFunction *function,
     XrXirType parent = xr_xir_operand_type(function, op->args[0]);
     XrXirStatus status = role_operand(function, graph, context, index, 0, parent);
     if (status != XR_XIR_OK) return status;
+    if (op->op == XR_XIR_CELL_PROJECT) {
+        const XrXirTypes *types = context->module->types;
+        if (!xr_xir_type_is_cell(types, op->type) || xr_xir_cell_element(types, op->type) != parent ||
+            parent == XR_XIR_UNIT || xr_xir_type_is_class(types, parent) ||
+            xr_xir_type_is_cell(types, parent)) return XR_XIR_BAD_TYPE;
+        uint32_t id = op->args[0], depth = 0;
+        for (;;) {
+            if (!xir_compile_work(&context->remaining, 1)) return XR_XIR_BUDGET;
+            XrXirPlaceKind kind = xr_xir_place_kind(function, id);
+            if (kind != XR_XIR_PLACE_FIELD && kind != XR_XIR_PLACE_INDEX)
+                return depth && (kind == XR_XIR_PLACE_CELL || kind == XR_XIR_PLACE_OBJECT) ?
+                    XR_XIR_OK : XR_XIR_BAD_VALUE;
+            if (++depth > function->instruction_count) return XR_XIR_BAD_STRUCTURE;
+            const XrXirInstruction *step = &function->instructions[id-function->parameter_count];
+            XrXirType container = xr_xir_operand_type(function, step->args[0]);
+            bool object_root = kind == XR_XIR_PLACE_FIELD &&
+                xr_xir_place_kind(function, step->args[0]) == XR_XIR_PLACE_OBJECT &&
+                xr_xir_type_is_class(types, container);
+            if (kind == XR_XIR_PLACE_FIELD ? (!xr_xir_type_is_struct(types, container) && !object_root) :
+                !xr_xir_type_is_array(types, container)) return XR_XIR_BAD_TYPE;
+            /* Each producer already passed the same typed field/index checker.
+             * This walk only restricts descriptor roots and identity boundaries. */
+            id = step->args[0];
+        }
+    }
     if (op->op == XR_XIR_FIELD_PLACE) return path_field_type(op, parent, context);
     if (op->op == XR_XIR_INDEX_PLACE) {
         if (!xr_xir_type_is_array(context->module->types, parent) ||

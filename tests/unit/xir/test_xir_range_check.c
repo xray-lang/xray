@@ -22,10 +22,11 @@
 #include "xir_checked_range68_golden.h"
 #include "xir_checked_range69_golden.h"
 #include "xir_checked_range70_golden.h"
-#include "xir_checked_range72_golden.h"
+#include "xir_checked_range73_golden.h"
+#include "xir_checked_range73_golden.h"
 _Static_assert(XR_XIR_RANGE_CHECK == 148 && XR_XIR_GO == 146 && XR_XIR_TASK_AWAIT == 147,
     "The range instruction preserves existing operation ordinals");
-_Static_assert(XR_XIR_CHECKED_SCHEMA == 27 && XR_XIR_CHECKED_CONTRACT == 72,
+_Static_assert(XR_XIR_CHECKED_SCHEMA == 28 && XR_XIR_CHECKED_CONTRACT == 73,
     "The unchanged wire schema carries the range semantic revision");
 
 typedef struct RangeView {
@@ -134,9 +135,9 @@ static size_t range_pipeline(size_t failure, bool execute) {
     XrXirStatus status = xir_fixture_check(&context, &view.module, &checked, NULL);
     if (status == XR_XIR_OK) status = xr_xir_compile_checked_write(checked,&packet,NULL);
     if (status == XR_XIR_OK) {
-        CHECK(packet.length == sizeof(checked_range72_golden));
-        CHECK(!memcmp(packet.bytes,checked_range72_golden,packet.length));
-        status = xr_xir_compile_checked_read(&context,checked_range72_golden,sizeof(checked_range72_golden),&decoded,NULL);
+        CHECK(packet.length == sizeof(checked_range73_golden));
+        CHECK(!memcmp(packet.bytes,checked_range73_golden,packet.length));
+        status = xr_xir_compile_checked_read(&context,checked_range73_golden,sizeof(checked_range73_golden),&decoded,NULL);
     }
     const XrXirTarget target = {XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};
     if (status == XR_XIR_OK) status = xr_xir_compile_lower(decoded,&target,&lowered,NULL);
@@ -157,8 +158,8 @@ static size_t range_pipeline(size_t failure, bool execute) {
 static void range_old_packet(void) {
     XrXirCompileContext context = range_context();
     const size_t before = instance_compile_attempts;
-    const uint8_t *packets[] = {checked_range67_rejected, checked_range68_rejected, checked_range69_golden, checked_range70_golden};
-    const size_t lengths[] = {sizeof(checked_range67_rejected), sizeof(checked_range68_rejected), sizeof(checked_range69_golden), sizeof(checked_range70_golden)};
+    const uint8_t *packets[] = {checked_range67_rejected, checked_range68_rejected, checked_range69_golden, checked_range70_golden, checked_range72_golden};
+    const size_t lengths[] = {sizeof(checked_range67_rejected), sizeof(checked_range68_rejected), sizeof(checked_range69_golden), sizeof(checked_range70_golden), sizeof(checked_range72_golden)};
     CHECK(sizeof(checked_range68_rejected) == sizeof(checked_range68_golden) &&
         !memcmp(checked_range68_rejected, checked_range68_golden, sizeof(checked_range68_golden)));
     for (size_t i = 0; i < sizeof(packets) / sizeof(packets[0]); ++i) {
@@ -181,6 +182,6 @@ int main(void) {
     for (size_t i = 0; i < sites; ++i) CHECK(range_pipeline(i,false) == i+1);
     instance_compile_fail_at = SIZE_MAX;
     instance_compile_report();
-    printf("range vectors=13 rejections=11 complete compiler OOM=%zu old67/68/69/70=early-reject-zeroalloc-empty-occupied\n",sites);
+    printf("range vectors=13 rejections=11 complete compiler OOM=%zu old67/68/69/70/72=early-reject-zeroalloc-empty-occupied\n",sites);
     return 0;
 }

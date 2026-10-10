@@ -1,0 +1,7 @@
+final class Holder {
+    value: i64
+    constructor() { this.value = 0; }
+    ref next() -> i64 { this.value += 1; return this.value; }
+}
+export fn run() -> i64 { var storage = Holder(); return storage.next(); }
+fn main() -> i64 { return run(); }

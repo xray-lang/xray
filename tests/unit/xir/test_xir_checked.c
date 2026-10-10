@@ -28,6 +28,7 @@
 #include "xir_checked_scalar70_golden.h"
 #include "xir_checked_scalar71_golden.h"
 #include "xir_checked_scalar72_golden.h"
+#include "xir_checked_scalar73_golden.h"
 #include "xir_types_fixture.h"
 #include "xir_struct_ops_fixture.h"
 #include "xir_struct_set_fixture.h"
@@ -184,7 +185,7 @@ static void byte_order(void) {
         XR_XIR_OWNED_RETAIN, XR_XIR_CONCAT_STRING, XR_XIR_OUTPUT, XR_XIR_WRITE_STREAM,
         XR_XIR_PRINT, XR_XIR_ADD_INT, XR_XIR_EQ_INT, XR_XIR_LT_INT, XR_XIR_CALL,
         XR_XIR_SUSPEND, XR_XIR_THROW, XR_XIR_JUMP, XR_XIR_BRANCH, XR_XIR_RETURN};
-    _Static_assert(XR_XIR_CHECKED_SCHEMA == 27 && XR_XIR_CHECKED_CONTRACT == 72 && XR_XIR_OP_COUNT == 152, "packet revision");
+    _Static_assert(XR_XIR_CHECKED_SCHEMA == 28 && XR_XIR_CHECKED_CONTRACT == 73 && XR_XIR_OP_COUNT == 153, "packet revision");
     _Static_assert(XR_XIR_NULLABLE_NONE == 126 && XR_XIR_NULLABLE_SOME == 127, "typed nullable operations");
     _Static_assert(XR_XIR_EQUAL == 125, "typed value equality operation");
     _Static_assert(XR_XIR_INVOKE_DISCARD == 124, "typed normal result discard operation");
@@ -215,7 +216,7 @@ static void byte_order(void) {
     XrXirModule built = {XR_XIR_BUILT, &function, 1, NULL, NULL, NULL, NULL, XR_XIR_PROGRAM, NULL};
     XrXirArtifact *checked = NULL, *decoded = NULL;
     CHECK(xir_fixture_check(suite_context, &built, &checked, NULL) == XR_XIR_OK);
-    XrXirCheckedPacket packet;
+    XrXirCheckedPacket packet = {0};
     CHECK(xr_xir_compile_checked_write(checked, &packet, NULL) == XR_XIR_OK);
     CHECK(!xr_xir_compile_artifact_module(checked)->provenance);
     CHECK(packet.length == 225 && packet.bytes[24] == 161);
@@ -224,8 +225,9 @@ static void byte_order(void) {
     CHECK(packet.bytes[144] == 128);
     /* Independent fixed little-endian fixture, including the signed minimum
      * and the block's zero panic handler and cleanup frontier. */
-    CHECK(!memcmp(packet.bytes + 32, checked_scalar72_digest, 32));
-    CHECK(packet.length==sizeof(checked_scalar72_golden) && !memcmp(packet.bytes,checked_scalar72_golden,packet.length));
+    CHECK(!memcmp(packet.bytes + 32, checked_scalar73_digest, 32));
+    CHECK(packet.length==sizeof(checked_scalar73_golden) && !memcmp(packet.bytes,checked_scalar73_golden,packet.length));
+    checked_previous_identity_rejected(checked_scalar72_golden,sizeof(checked_scalar72_golden));
     checked_previous_identity_rejected(checked_scalar71_golden,sizeof(checked_scalar71_golden));
     checked_previous_identity_rejected(checked_scalar70_golden,sizeof(checked_scalar70_golden));
     checked_previous_identity_rejected(checked_scalar65_golden,sizeof(checked_scalar65_golden));
@@ -530,14 +532,15 @@ static void nominal_packet_cases(void) {
         CHECK(xr_xir_compile_artifact_module(specialized)->types->nominals->count == 2);
         if (arrays == 2) {
             const XrXirTypes *types = xr_xir_compile_artifact_module(specialized)->types;
-            CHECK(types->count == 4 && xr_xir_type_is_atomic(types, (XrXirType)259) && xr_xir_atomic_element(types, (XrXirType)259) == XR_XIR_I64 && types->nodes[0].nominal.arguments[0] == XR_XIR_I64 &&
+            CHECK(types->count == 5 && xr_xir_type_is_atomic(types, (XrXirType)259) &&
+                xr_xir_type_is_cell(types,(XrXirType)260) && xr_xir_cell_element(types,(XrXirType)260)==XR_XIR_STRING && xr_xir_atomic_element(types, (XrXirType)259) == XR_XIR_I64 && types->nodes[0].nominal.arguments[0] == XR_XIR_I64 &&
                 types->nodes[1].nominal.arguments[0] == XR_XIR_STRING && types->nodes[2].nominal.declaration == 1);
             CHECK(types->nodes[0].nominal.arguments != xr_xir_compile_artifact_module(decoded)->types->nodes[0].nominal.arguments);
         }
         if (arrays >= 2) {
             const XrXirTypes *types = xr_xir_compile_artifact_module(specialized)->types;
             uint32_t first = arrays == 3 ? 1 : 0;
-            CHECK(types->count == (arrays == 3 ? 7u : 4u));
+            CHECK(types->count == (arrays == 3 ? 8u : 5u));
             CHECK(types->nodes[first].nominal.field_count == 2);
             CHECK(types->nodes[first].nominal.fields[1] == XR_XIR_STRING);
             CHECK(types->nodes[first].nominal.fields[0] == types->nodes[first + 2].nominal.fields[0]);
@@ -551,7 +554,7 @@ static void nominal_packet_cases(void) {
             CHECK(xr_xir_compile_checked_read(suite_context, closed_packet.bytes, closed_packet.length, &closed_read, NULL) == XR_XIR_OK);
             uint8_t field_wire[32] = {4, 0, 0, 0};
             put32(field_wire + 12, 1); put32(field_wire + 16, XR_XIR_I64); put32(field_wire + 20, 2);
-            put32(field_wire + 24, arrays == 3 ? XR_XIR_CONSTRUCTED_TYPE_BASE + 5 : XR_XIR_I64);
+            put32(field_wire + 24, arrays == 3 ? XR_XIR_CONSTRUCTED_TYPE_BASE + 6 : XR_XIR_I64);
             put32(field_wire + 28, XR_XIR_STRING);
             size_t field_offset = 0; unsigned field_matches = 0;
             for (size_t i = 64; i + sizeof(field_wire) <= closed_packet.length; ++i)
@@ -658,7 +661,9 @@ static void deep_nominal_fields(void) {
     xr_xir_compile_artifact_free(bounded);bounded=NULL;
     xr_xir_compile_artifact_free(checked);checked=NULL;
     const XrXirTypes *result = xr_xir_compile_artifact_module(closed)->types;
-    CHECK(result->count == DEPTH * 3 + 4 && xr_xir_type_is_atomic(result, (XrXirType)(256 + DEPTH + 3)) && xr_xir_atomic_element(result, (XrXirType)(256 + DEPTH + 3)) == XR_XIR_I64);
+    CHECK(result->count == DEPTH * 3 + 5 &&
+        xr_xir_type_is_cell(result,(XrXirType)(256+DEPTH+4)) &&
+        xr_xir_cell_element(result,(XrXirType)(256+DEPTH+4))==XR_XIR_STRING && xr_xir_type_is_atomic(result, (XrXirType)(256 + DEPTH + 3)) && xr_xir_atomic_element(result, (XrXirType)(256 + DEPTH + 3)) == XR_XIR_I64);
     for (uint32_t n = 0; n < 3; ++n) {
         const XrXirNominalType *instance = &result->nodes[DEPTH + n].nominal;
         CHECK(instance->field_count == 2 && instance->fields[1] == XR_XIR_STRING);
@@ -744,7 +749,8 @@ static void nominal_field_graph(void) {
     CHECK(xr_xir_compile_lower(closed, &target, &lowered, NULL) == XR_XIR_OK);
     xr_xir_compile_artifact_free(closed);closed=NULL;
     XrXirTypes *types = (XrXirTypes *) xr_xir_compile_artifact_module(lowered)->types;
-    CHECK(types->count == 161 && xr_xir_type_is_atomic(types, (XrXirType)416) && xr_xir_atomic_element(types, (XrXirType)416) == XR_XIR_I64 && types->nodes[0].nominal.fields[0] == (XrXirType)257);
+    CHECK(types->count == 162 && xr_xir_type_is_cell(types,(XrXirType)417) &&
+        xr_xir_cell_element(types,(XrXirType)417)==XR_XIR_STRING && xr_xir_type_is_atomic(types, (XrXirType)416) && xr_xir_atomic_element(types, (XrXirType)416) == XR_XIR_I64 && types->nodes[0].nominal.fields[0] == (XrXirType)257);
     CHECK(xr_xir_compile_artifact_verify(lowered, NULL) == XR_XIR_OK);
     XrXirType *end = (XrXirType *) types->nodes[159].nominal.fields;
     end[0] = (XrXirType)256;
@@ -758,11 +764,13 @@ static void nominal_projection_cases(void) {
         const XrXirModule *module = xr_xir_compile_artifact_module(lowered);
         const XrXirTypes *types = module->types;
         CHECK(types && types->nominals && !types->nominals->declarations && types->nominals->identities);
-        CHECK(types->count == (mode == 3 ? 6u : mode == 2 ? 4u : 1u));
+        CHECK(types->count == (mode == 3 ? 7u : mode == 2 ? 5u : 2u));
+        XrXirType cell=(XrXirType)(mode>=2 ? 260 : 257);
+        CHECK(xr_xir_type_is_cell(types,cell) && xr_xir_cell_element(types,cell)==XR_XIR_STRING);
         CHECK(types->nominals->identities[0].arity == 1 && types->nominals->identities[0].field_count == 2);
         if (mode >= 2) {
-            CHECK(types->nodes[0].nominal.fields[0] == (mode == 3 ? (XrXirType)260 : XR_XIR_I64));
-            CHECK(types->nodes[1].nominal.fields[0] == (mode == 3 ? (XrXirType)261 : XR_XIR_STRING));
+            CHECK(types->nodes[0].nominal.fields[0] == (mode == 3 ? (XrXirType)261 : XR_XIR_I64));
+            CHECK(types->nodes[1].nominal.fields[0] == (mode == 3 ? (XrXirType)262 : XR_XIR_STRING));
         }
         for (uint32_t i = 0; i < types->count; ++i) CHECK(!types->nodes[i].parameter_span);
         XrXirModule forged = *module; forged.stage = XR_XIR_CHECKED;

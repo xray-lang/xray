@@ -28,6 +28,10 @@ typedef struct XrXirValueReceiver {
     uint32_t slot;
 } XrXirValueReceiver;
 
+/* The checked CELL_PROJECT instruction is the only descriptor producer. */
+XR_FUNC XrXirCallStatus xr_xir_instance_cell_project(XrXirCallView *view,
+    XrXirType type, const XrXirValueReceiver *receiver, const XrXirValuePath *path,
+    XrXirValue *output);
 XR_FUNC XrXirCallStatus xr_xir_instance_path_read(XrXirCallView *view,
     const XrXirValueReceiver *receiver, const XrXirValuePath *path,
     XrXirValue *output, XrXirFaultDetail *fault);

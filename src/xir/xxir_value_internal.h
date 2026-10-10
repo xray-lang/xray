@@ -13,8 +13,21 @@
 #ifndef XXIR_VALUE_INTERNAL_H
 #define XXIR_VALUE_INTERNAL_H
 #include "xxir_value.h"
+#include "xxir.h"
 #include "../base/xchecks.h"
 #include <stdatomic.h>
+
+/* Storage generations are distinct from logical descriptor kinds. */
+enum { XIR_OBJECT_CLASS = 257u,
+       XIR_OBJECT_CELL = 258u,
+       XIR_OBJECT_FUNCTION = 259u };
+_Static_assert((uint32_t)XIR_OBJECT_CLASS > (uint32_t)XR_XIR_TYPE_TASK &&
+    (uint32_t)XIR_OBJECT_CELL > (uint32_t)XR_XIR_TYPE_TASK && (uint32_t)XIR_OBJECT_FUNCTION > (uint32_t)XR_XIR_TYPE_TASK &&
+    XIR_OBJECT_CLASS != 0x100u && XIR_OBJECT_CELL != 0x100u &&
+    XIR_OBJECT_FUNCTION != 0x100u, "storage tags exclude retired generations");
+_Static_assert(XIR_OBJECT_CLASS != XIR_OBJECT_CELL &&
+    XIR_OBJECT_CLASS != XIR_OBJECT_FUNCTION && XIR_OBJECT_CELL != XIR_OBJECT_FUNCTION,
+    "storage tags are distinct");
 
 typedef struct XirObject {
     _Atomic(uint32_t) references;
@@ -91,4 +104,19 @@ XR_FUNC void *xr_xir_domain_call_allocate(XrXirDomain *domain, uint64_t bytes, X
 XR_FUNC void xr_xir_domain_call_deallocate(XrXirDomain *domain, void *memory, uint64_t bytes);
 XR_FUNC bool xr_xir_domain_work(XrXirDomain *domain, uint64_t work);
 XR_FUNC XrXirDomainBudgetStats xr_xir_domain_budget_stats(XrXirDomain *domain);
+/* Only the real Instance producer path supplies this private source identity.
+ * The binding gate pins the Program and its immutable certificate. Public
+ * construction and weakening do not copy this identity into another object. */
+typedef struct XirFunctionProducer {
+    const void *owner;
+    uint32_t function, instruction, site;
+} XirFunctionProducer;
+typedef struct XirFunctionConstruction {
+    const XrXirFunctionBinding *binding;
+    XrXirValueAdmission *admission;
+    const XirFunctionProducer *producer;
+} XirFunctionConstruction;
+XR_FUNC XrXirValueStatus xr_xir_function_new_produced(XrXirDomain *domain,XrXirTypeArena *arena,
+    XrXirType type,const XirFunctionConstruction *construction,XrXirValue *output);
+XR_FUNC const XirFunctionProducer *xr_xir_function_producer(const XrXirValue *value);
 #endif // XXIR_VALUE_INTERNAL_H

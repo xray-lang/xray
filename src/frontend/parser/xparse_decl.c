@@ -1198,9 +1198,17 @@ AstNode *xr_parse_call_argument_with_access(Parser *parser, XrCallArgAccess *out
         if (!xr_parser_healthy(parser)) return NULL;
         if (!place)
             return NULL;
-        if (place->type == AST_VARIABLE) {
+        AstNode *root = place;
+        while (root && (root->type == AST_MEMBER_ACCESS || root->type == AST_INDEX_GET)) {
+            if (!ast_work(parser->compiler_session, 1)) return NULL;
+            root = root->type == AST_MEMBER_ACCESS ? root->as.member_access.object : root->as.index_get.array;
+        }
+        if (root && root->type == AST_VARIABLE) {
             if (!ast_work(parser->compiler_session, sizeof(XrNameSpan))) return NULL;
-            place->as.variable.access_marker_span = marker_span;
+            root->as.variable.access_marker_span = marker_span;
+        } else if (root && root->type == AST_THIS_EXPR) {
+            if (!ast_work(parser->compiler_session, sizeof(XrNameSpan))) return NULL;
+            root->as.this_expr.access_marker_span = marker_span;
         }
         return place;
     }

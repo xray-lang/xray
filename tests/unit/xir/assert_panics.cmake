@@ -54,3 +54,10 @@ add_test(NAME test_xir_construction_family_wire_vector COMMAND ${XRAY_PYTHON}
     "${CMAKE_CURRENT_SOURCE_DIR}/xir/derive_construction_family72.py"
     --source-root "${PROJECT_SOURCE_DIR}" --output-root "${PROJECT_SOURCE_DIR}")
 set_tests_properties(test_xir_construction_family_wire_vector PROPERTIES TIMEOUT 30 LABELS "unit;xir;abi;independent-golden")
+
+# Current common frames keep all complete historical construction vectors.
+add_test(NAME test_xir_cell_checked_identity_vectors COMMAND ${XRAY_PYTHON}
+    "${CMAKE_CURRENT_SOURCE_DIR}/xir/derive_cell73_checked_vectors.py"
+    --source-root "${PROJECT_SOURCE_DIR}" --output-root "${PROJECT_SOURCE_DIR}")
+set_tests_properties(test_xir_cell_checked_identity_vectors PROPERTIES
+    TIMEOUT 30 LABELS "unit;xir;abi;independent-golden")

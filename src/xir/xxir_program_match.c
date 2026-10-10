@@ -176,14 +176,10 @@ XR_FUNC XrXirStatus xr_xir_compile_program_match(const XrXirCompileContext *cont
 #undef MATCH
 #undef TRY
 
-/* A private cross-module reference is usable only from a body containing the
- * exact reference edge already accepted by full provenance verification. */
-static bool program_private_reference(const XrXirModule *module, uint32_t caller,
-    const XrXirInstruction *op) {
-    if (op->op != XR_XIR_FUNCTION_REF) return false;
-    const XrXirDeclarations *d = module->declarations;
-    return !d->functions[op->immediate].exported &&
-        d->functions[caller].module != d->functions[op->immediate].module;
+XR_FUNC void xir_program_permissions_free(XrXirProgramPermissions *permissions) {
+    if (!permissions) return;
+    xr_xir_compile_effects_free(permissions->effects);
+    xr_compile_resources_free(permissions);
 }
 
 static XrXirStatus program_permissions(const XrXirCompileContext *context,
@@ -203,7 +199,7 @@ static XrXirStatus program_permissions(const XrXirCompileContext *context,
         root_parameters += root.parameter_count;
         if (!xir_compile_work(context, function->instruction_count)) { status = XR_XIR_BUDGET; break; }
         for (uint32_t i = 0; i < function->instruction_count; ++i)
-            if (program_private_reference(module, f, &function->instructions[i])) ++references;
+            if (function->instructions[i].op == XR_XIR_FUNCTION_REF) ++references;
     }
     if (references > UINT32_MAX || parameters > UINT32_MAX || root_parameters > UINT32_MAX)
         status = XR_XIR_BUDGET;
@@ -219,6 +215,7 @@ static XrXirStatus program_permissions(const XrXirCompileContext *context,
         permissions->root_parameters = permissions->parameter_offsets + module->function_count + 1;
         permissions->cell_roles = (uint8_t *)(permissions->root_parameters + root_parameters);
         permissions->root_parameter_count = (uint32_t)root_parameters;
+        permissions->reference_count = (uint32_t)references;
         permissions->function_count = module->function_count;
         permissions->slot_count = module->declarations->slot_count;
     }
@@ -256,9 +253,16 @@ static XrXirStatus program_permissions(const XrXirCompileContext *context,
         if (!xir_compile_work(context, function->instruction_count)) { status = XR_XIR_BUDGET; break; }
         for (uint32_t i = 0; i < function->instruction_count; ++i) {
             const XrXirInstruction *op = &function->instructions[i];
-            if (!program_private_reference(module, f, op)) continue;
+            if (op->op != XR_XIR_FUNCTION_REF) continue;
+            XirEffectProducerView real={0};
+            status=xir_effects_producer(context,effects,f,i,&real);
+            if (status!=XR_XIR_OK) break;
+            if (reference_at>=references || real.function!=f || real.instruction!=i ||
+                real.target!=(uint64_t)op->immediate || real.capture_count!=op->args[1] || real.type!=op->type) {
+                status=XR_XIR_BAD_STRUCTURE;break;
+            }
             permissions->references[reference_at++] = (XrXirProgramFunctionRef){
-                (uint32_t)op->immediate, op->args[1], op->type};
+                real.target, real.capture_count, real.instruction, real.site, real.type};
             ++permissions->entries[f].reference_count;
         }
         if (permission == XR_XIR_OK)
@@ -277,9 +281,12 @@ static XrXirStatus program_permissions(const XrXirCompileContext *context,
         if (permission == XR_XIR_BUDGET || permission == XR_XIR_OUT_OF_MEMORY) status = permission;
         else permissions->entries[(uint64_t)module->function_count + slot].worker = permission;
     }
-    xr_xir_compile_effects_free(effects);
-    if (status == XR_XIR_OK && root_parameter_at != root_parameters) status = XR_XIR_BAD_STRUCTURE;
-    if (status != XR_XIR_OK) { xr_compile_resources_free(permissions); return status; }
+    if (status == XR_XIR_OK && (root_parameter_at != root_parameters || reference_at != references))
+        status = XR_XIR_BAD_STRUCTURE;
+    if (status != XR_XIR_OK) {
+        xr_xir_compile_effects_free(effects);xir_program_permissions_free(permissions);return status;
+    }
+    permissions->effects=effects;
     *output = permissions;
     return XR_XIR_OK;
 }

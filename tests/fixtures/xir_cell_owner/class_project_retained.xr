@@ -1,0 +1,13 @@
+fn leaf(value: ref i64) -> i64 { value += 1; return value; }
+fn middle(value: ref i64) -> i64 { leaf(ref value); value += 1; return value; }
+export final class Holder {
+    value: i64
+    constructor(value: i64) { this.value = value; }
+    adjust() -> i64 { return middle(ref this.value); }
+}
+export fn run() -> Holder {
+    const object = Holder(40);
+    object.adjust();
+    return object;
+}
+fn main() -> i64 { return run().value; }

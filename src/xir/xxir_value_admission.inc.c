@@ -131,8 +131,8 @@ static XrXirValueStatus value_admit_summary(const XrXirValue *value, XrXirType t
             }
             if (owned_carrier_type(type)) {
                 XirObject *object = object_pointer(&current);
-                if (domain_sensitive && (object->kind == XIR_OBJECT_CLASS || object->kind == XR_XIR_TYPE_CELL ||
-                    object->kind == XR_XIR_TYPE_CALLABLE || object->kind == XR_XIR_TYPE_TASK))
+                if (domain_sensitive && (object->kind == XIR_OBJECT_CLASS || object->kind == XIR_OBJECT_CELL ||
+                    object->kind == XIR_OBJECT_FUNCTION || object->kind == XR_XIR_TYPE_TASK))
                     *domain_sensitive = true;
                 size_t count = 0;
                 if (object->kind == XIR_OBJECT_CLASS) {
@@ -158,17 +158,19 @@ static XrXirValueStatus value_admit_summary(const XrXirValue *value, XrXirType t
                     if (!admission->domain) { status = XR_XIR_VALUE_BAD_ARGUMENT; break; }
                 } else if (object->kind) {
                     if (object->domain != admission->domain) { status = XR_XIR_VALUE_BAD_ARGUMENT; break; }
-                    if (object->kind == XR_XIR_TYPE_CALLABLE) {
+                    if (object->kind == XIR_OBJECT_FUNCTION) {
                         if (!admission->function) { status = XR_XIR_VALUE_BAD_ARGUMENT; break; }
                         status = admission->function(admission->context,
                             &((XirFunction *) object)->binding, type, &admission->work);
                         if (status != XR_XIR_VALUE_OK) break;
                     } else if (object->kind == XR_XIR_TYPE_ATOMIC) {
                         /* Atomic cells have scalar payloads and no graph children. */
-                    } else if (object->kind == XR_XIR_TYPE_CELL) {
-                        type = xr_xir_cell_element(xr_xir_compile_type_arena_types(object->arena), type);
-                        tuple_field = type == XR_XIR_UNIT;
-                        current = ((XirCell *) object)->value; inlined = false; continue;
+                    } else if (object->kind == XIR_OBJECT_CELL) {
+                        const XirCell *cell = (const XirCell *)object;
+                        type = cell->projection_count ? (XrXirType)cell->value.type :
+                            xr_xir_cell_element(xr_xir_compile_type_arena_types(object->arena), type);
+                        tuple_field = !cell->projection_count && type == XR_XIR_UNIT;
+                        current = cell->value; inlined = false; continue;
                     } else { status = XR_XIR_VALUE_BAD_ARGUMENT; break; }
                 }
                 if (count) {

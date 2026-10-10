@@ -178,6 +178,38 @@ typedef struct XirEffectEntryRootView {
 XR_FUNC XrXirStatus xir_effects_entry_root(const XrXirCompileContext *context,
     const struct XrXirEffects *effects, uint32_t function, XirEffectEntryRootView *output);
 
+/* A producer view names a real instruction from the sealed owned body. It
+ * contains no permission bit, and a consumer keeps its Effects owner alive. */
+typedef struct XirEffectProducerView {
+    uint32_t site, function, instruction, target, capture_count;
+    XrXirType type;
+} XirEffectProducerView;
+XR_FUNC XrXirStatus xir_effects_producer(const XrXirCompileContext *context,
+    const struct XrXirEffects *effects, uint32_t function, uint32_t instruction,
+    XirEffectProducerView *output);
+
+/* Runtime matching reads only existing completed equations. The callback
+ * consumes the live runtime ledger, never the retired compile context. */
+typedef struct XirEffectRuntimeRead {
+    void *owner;
+    bool (*work)(void *owner,uint64_t units);
+    uint32_t (*cell)(void *owner,uint32_t parameter);
+    XrXirStatus (*function)(void *owner,uint32_t parameter,uint32_t *producer);
+    XrXirStatus (*capture_cell)(void *owner,uint32_t parameter,uint32_t capture,
+        uint32_t producer,uint32_t *origin);
+} XirEffectRuntimeRead;
+typedef struct XirEffectInvocationRequest {
+    uint32_t caller,instruction,target,producer,node,count,captures;
+    bool contextual;
+    XirEffectRuntimeRead read;
+} XirEffectInvocationRequest;
+typedef struct XirEffectInvocationSelection {
+    const struct XrXirEffects *owner;
+    uint32_t caller,instruction,target,producer,parent,node,edge;
+} XirEffectInvocationSelection;
+XR_FUNC XrXirStatus xir_effects_execution_edge(const struct XrXirEffects *effects,
+    const XirEffectInvocationRequest *request,XirEffectInvocationSelection *output);
+
 /* A discriminant is only a grammar choice. Complete checking proves authority. */
 static inline bool xir_effect_evidence_is_instance(const XrXirModule *module) {
     return module && module->provenance &&

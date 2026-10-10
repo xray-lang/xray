@@ -73,7 +73,7 @@ static XrXirValueStatus path_unique(ValuePathSlot *slot,
 }
 static XrXirValueStatus path_step(ValuePathSlot *slot,
     const XrXirValuePathStep *step, XrXirValueAdmission *admission,
-    ValuePathWrite *write, XrXirFaultDetail *fault) {
+    ValuePathWrite *write, XrXirFaultDetail *fault, const XirObject *borrow_owner) {
     if (!admission->work) return XR_XIR_VALUE_LIMIT;
     --admission->work;
     if (slot->type != step->container) return XR_XIR_VALUE_BAD_ARGUMENT;
@@ -90,7 +90,8 @@ static XrXirValueStatus path_step(ValuePathSlot *slot,
         XrXirValue handle = path_handle(*slot);
         XirObject *object = object_pointer(&handle);
         const XrXirStorageLayout *layout = class_body_layout(object);
-        if (!layout || field >= layout->field_count) return XR_XIR_VALUE_BAD_ARGUMENT;
+        if (!layout || (((const XirClassObject *)object)->borrow_top && object != borrow_owner) ||
+            field >= layout->field_count) return XR_XIR_VALUE_BAD_ARGUMENT;
         *slot = (ValuePathSlot){node->nominal.fields[field],
             (unsigned char *)((XirClassObject *)object + 1) + layout->field_offsets[field], true};
         return XR_XIR_VALUE_OK;
@@ -169,19 +170,44 @@ static XrXirValueStatus path_store(ValuePathSlot slot,
     prepared.owns = false; release_pending(pending); storage_prepared_end(&prepared);
     return XR_XIR_VALUE_OK;
 }
-static XrXirValueStatus xr_xir_value_path_read_graph_operation(const XrXirValuePlace *root,
-    const XrXirValuePath *path, XrXirValueAdmission *admission,
+typedef struct ValuePathRoute {
+    XrXirValuePath prefix, suffix;
+    const XirObject *borrow_owner;
+} ValuePathRoute;
+static const XrXirValuePathStep *path_route_step(const ValuePathRoute *route, uint32_t i) {
+    return i < route->prefix.count ? &route->prefix.steps[i] :
+        &route->suffix.steps[i - route->prefix.count];
+}
+static XrXirValueStatus path_route_begin(const XrXirValuePlace *root,
+    const ValuePathRoute *route, XrXirValueAdmission *admission,
+    ValuePathSlot *slot, uint32_t *count, XrXirFaultDetail *fault) {
+    if (!route || !count || (route->prefix.count && !route->prefix.steps) ||
+        (route->suffix.count && !route->suffix.steps) ||
+        route->suffix.count > UINT32_MAX - route->prefix.count) return XR_XIR_VALUE_BAD_ARGUMENT;
+    *count = route->prefix.count + route->suffix.count;
+    XrXirValuePath shape = {route->prefix.count ? route->prefix.steps : route->suffix.steps, *count};
+    return path_begin(root, &shape, admission, slot, fault);
+}
+static XrXirValueStatus value_path_read_route(const XrXirValuePlace *root,
+    const ValuePathRoute *route, XrXirValueAdmission *admission,
     XrXirValue *output, XrXirFaultDetail *fault) {
     if (!unit_value(output)) return XR_XIR_VALUE_BAD_ARGUMENT;
-    ValuePathSlot slot = {0};
-    XrXirValueStatus status = path_begin(root, path, admission, &slot, fault);
+    ValuePathSlot slot = {0}; uint32_t count = 0;
+    XrXirValueStatus status = path_route_begin(root, route, admission, &slot, &count, fault);
     if (status != XR_XIR_VALUE_OK) return status;
-    for (uint32_t i = 0; i < path->count; ++i) {
-        status = path_step(&slot, &path->steps[i], admission, NULL, fault);
+    for (uint32_t i = 0; i < count; ++i) {
+        status = path_step(&slot, path_route_step(route, i), admission, NULL, fault, i ? NULL : route->borrow_owner);
         if (status != XR_XIR_VALUE_OK) return status;
     }
     if (slot.inline_storage) return storage_unpack((StorageSpan){slot.type, slot.bytes}, admission, output);
     XrXirValue value = path_handle(slot); return xr_xir_value_copy(&value, output);
+}
+static XrXirValueStatus xr_xir_value_path_read_graph_operation(const XrXirValuePlace *root,
+    const XrXirValuePath *path, XrXirValueAdmission *admission,
+    XrXirValue *output, XrXirFaultDetail *fault) {
+    if (!path) return XR_XIR_VALUE_BAD_ARGUMENT;
+    ValuePathRoute route = {*path, {0}, NULL};
+    return value_path_read_route(root, &route, admission, output, fault);
 }
 XR_FUNC XrXirValueStatus xr_xir_value_path_read(const XrXirValuePlace *root,
     const XrXirValuePath *path, XrXirValueAdmission *admission,
@@ -191,18 +217,19 @@ XR_FUNC XrXirValueStatus xr_xir_value_path_read(const XrXirValuePlace *root,
     xr_xir_value_graph_end();
     return graph_outcome;
 }
-static XrXirValueStatus path_mutate(const XrXirValuePlace *root,
-    const XrXirValuePath *path, const XrXirValue *value,
+static XrXirValueStatus path_mutate_route(const XrXirValuePlace *root,
+    const ValuePathRoute *route, const XrXirValue *value,
     XrXirValueAdmission *admission, XrXirFaultDetail *fault, bool append) {
     if (!admission || !admission->domain || !value) return XR_XIR_VALUE_BAD_ARGUMENT;
     ValuePathSlot slot = {0};
     ValuePathWrite write = {0};
-    XrXirValueStatus status = path_begin(root, path, admission, &slot, fault);
+    uint32_t count = 0;
+    XrXirValueStatus status = path_route_begin(root, route, admission, &slot, &count, fault);
     if (status != XR_XIR_VALUE_OK) return status;
     status = value_admit_summary(value, (XrXirType)value->type, admission, &write.domain_sensitive);
     if (status != XR_XIR_VALUE_OK) return status;
-    for (uint32_t i = 0; i < path->count; ++i) {
-        status = path_step(&slot, &path->steps[i], admission, &write, fault);
+    for (uint32_t i = 0; i < count; ++i) {
+        status = path_step(&slot, path_route_step(route, i), admission, &write, fault, i ? NULL : route->borrow_owner);
         if (status != XR_XIR_VALUE_OK) break;
     }
     if (status == XR_XIR_VALUE_OK) {
@@ -217,6 +244,13 @@ static XrXirValueStatus path_mutate(const XrXirValuePlace *root,
         write.candidate = (XrXirValue){0}; xr_xir_value_drop(&previous);
     }
     xr_xir_value_drop(&write.candidate); return status;
+}
+static XrXirValueStatus path_mutate(const XrXirValuePlace *root,
+    const XrXirValuePath *path, const XrXirValue *value,
+    XrXirValueAdmission *admission, XrXirFaultDetail *fault, bool append) {
+    if (!path) return XR_XIR_VALUE_BAD_ARGUMENT;
+    ValuePathRoute route = {*path, {0}, NULL};
+    return path_mutate_route(root, &route, value, admission, fault, append);
 }
 static XrXirValueStatus xr_xir_value_path_write_graph_operation(const XrXirValuePlace *root,
     const XrXirValuePath *path, const XrXirValue *value,

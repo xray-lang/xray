@@ -111,7 +111,10 @@ static void cell_checked_cases(void) {
         if (mode == 5) ops[2].args[0] = 0;
         if (mode == 6) functions[8].result = (XrXirType)256;
         if (mode == 7) { parameters[0] = (XrXirType)257; identities[8].exported = 1; }
-        if (mode == 8) nodes[0].element = XR_XIR_UNIT;
+        if (mode == 8) {
+            /* Unit has no payload; the read still forges its String leaf type. */
+            nodes[0].element = XR_XIR_UNIT; ops[0].args[0] = 0; ops[2].args[1] = 0;
+        }
         CheckedAtomicPool atomic_pool; checked_atomic_pool(&built, &atomic_pool);
         XrXirStatus status = xir_fixture_check(suite_context, &built, &checked, NULL);
         xr_xir_compile_artifact_free(base);base=NULL;

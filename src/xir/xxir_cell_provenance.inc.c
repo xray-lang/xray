@@ -229,6 +229,26 @@ static bool cell_proof_identity_producer(XrXirOp op) {
         op == XR_XIR_LOCAL_NEW || op == XR_XIR_OWNED_LOCAL_NEW ||
         op == XR_XIR_LOCAL_READ || op == XR_XIR_OWNED_LOCAL_READ;
 }
+/* A projected Class requires a conditional identity proof that is not yet
+ * represented. Only that actual descriptor path becomes unresolved; ordinary
+ * Class operations and known local Cell projections keep their existing facts. */
+static bool cell_proof_project_identity(CellProofBuild *build, uint32_t f, uint32_t value) {
+    const XrXirFunction *function = &build->module->functions[f];
+    uint32_t begin = build->proof->functions[f].begin, depth = 0;
+    for (;;) {
+        if (!cell_proof_work(build,1)) return false;
+        if (value < function->parameter_count || value-function->parameter_count >= function->instruction_count)
+            return cell_proof_error(build,f,UINT32_MAX,XR_XIR_BAD_STRUCTURE);
+        const XrXirInstruction *op = &function->instructions[value-function->parameter_count];
+        if (op->op == XR_XIR_OBJECT_PLACE)
+            return cell_proof_seed(build,begin+value,XR_XIR_CELL_ORIGIN_ROOT_UNRESOLVED);
+        if (op->op == XR_XIR_CELL_PLACE) return true;
+        if ((op->op != XR_XIR_FIELD_PLACE && op->op != XR_XIR_INDEX_PLACE) ||
+            ++depth > function->instruction_count)
+            return cell_proof_error(build,f,UINT32_MAX,XR_XIR_BAD_STRUCTURE);
+        value = op->args[0];
+    }
+}
 static bool cell_proof_build_edges(CellProofBuild *build) {
     XrXirCellProvenance *proof = build->proof;
     const XrXirModule *module = build->module;
@@ -240,8 +260,12 @@ static bool cell_proof_build_edges(CellProofBuild *build) {
             const XrXirInstruction *op = &function->instructions[i];
             uint32_t result = begin+function->parameter_count+i;
             bool cell = proof->tracked[result] == 1;
+            if (op->op == XR_XIR_CELL_PROJECT && !cell_proof_project_identity(build,f,op->args[0])) return false;
             if (cell && op->op == XR_XIR_CELL_NEW) {
                 if (!cell_proof_seed(build,result,XR_XIR_CELL_ORIGIN_OWNED)) return false;
+            } else if (cell && op->op == XR_XIR_CELL_PROJECT) {
+                if (!cell_proof_seed(build,result,XR_XIR_CELL_ORIGIN_SCOPED) ||
+                    !cell_proof_edge(build,begin+op->args[0],result,false)) return false;
             } else if (cell && op->op == XR_XIR_SLOT_LOAD) {
                 if (!module->declarations || op->immediate < 0 ||
                     (uint64_t)op->immediate >= module->declarations->slot_count ||
@@ -336,7 +360,8 @@ static bool cell_proof_sink(CellProofBuild *build, uint32_t f, uint32_t i,
     const XrXirInstruction *op = &build->module->functions[f].instructions[i];
     XrXirCellProvenance *proof = build->proof;
     uint8_t origin = proof->origins[source];
-    if (!origin || (origin & XR_XIR_CELL_ORIGIN_UNKNOWN)) return cell_proof_error(build,f,i,XR_XIR_BAD_VALUE);
+    if (!(origin & (XR_XIR_CELL_ORIGIN_OWNED | XR_XIR_CELL_ORIGIN_SCOPED | XR_XIR_CELL_ORIGIN_MODULE)) ||
+        (origin & XR_XIR_CELL_ORIGIN_UNKNOWN)) return cell_proof_error(build,f,i,XR_XIR_BAD_VALUE);
     if (cell_proof_identity_producer(op->op)) return true;
     if ((op->op == XR_XIR_CELL_READ || op->op == XR_XIR_CELL_WRITE ||
         op->op == XR_XIR_CELL_PLACE || op->op == XR_XIR_CELL_LOCAL_WRITE) && !ordinal) return true;
@@ -449,7 +474,8 @@ XR_FUNC XrXirStatus xr_xir_compile_cell_origin_view(const XrXirCompileContext *c
     const CellProofFunction *f = &proof->functions[function]; uint32_t node = f->begin+value;
     uint8_t origin = proof->origins[node];
     uint32_t intrinsic = (origin & XR_XIR_CELL_ORIGIN_MODULE ? XR_XIR_CELL_ACCESS_ROOT : 0) |
-        (origin & XR_XIR_CELL_ORIGIN_UNKNOWN ? XR_XIR_CELL_ACCESS_UNKNOWN : 0);
+        (origin & (XR_XIR_CELL_ORIGIN_UNKNOWN | XR_XIR_CELL_ORIGIN_ROOT_UNRESOLVED) ?
+            XR_XIR_CELL_ACCESS_UNKNOWN : 0);
     *output = (XrXirCellOriginView){intrinsic,
         f->words ? proof->dependencies+f->dependency_begin+(size_t)value*f->words : NULL,
         f->words,f->scopes ? proof->scope_parameters+f->scope_begin : NULL,f->scopes};

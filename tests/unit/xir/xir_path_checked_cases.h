@@ -106,25 +106,29 @@ static void path_field_checked_cases(void) {
     XrXirArtifact *checked = struct_set_checked(suite_context, 0);
     XrXirModule *module = &checked->module;
     XrXirInstruction *ops = (XrXirInstruction *)module->functions[1].instructions;
-    ops[4] = (XrXirInstruction){XR_XIR_FIELD_PLACE,XR_XIR_I64,{1},{0},0,{0}};
-    ops[6] = (XrXirInstruction){XR_XIR_PLACE_READ,XR_XIR_I64,{4},{0},0,{0}};
-    ops[7] = (XrXirInstruction){XR_XIR_PLACE_WRITE,XR_XIR_UNIT,{4,3},{0},0,{0}};
+    /* The Cell-backed slot adds a payload read before the local Pair root. */
+    CHECK(module->functions[1].parameter_count == 0 && module->functions[1].instruction_count == 29 &&
+        ops[2].op == XR_XIR_LOCAL_NEW && ops[3].op == XR_XIR_CELL_NEW &&
+        ops[4].op == XR_XIR_CONST_INT && ops[4].immediate == 23);
+    ops[5] = (XrXirInstruction){XR_XIR_FIELD_PLACE,XR_XIR_I64,{2},{0},0,{0}};
+    ops[7] = (XrXirInstruction){XR_XIR_PLACE_READ,XR_XIR_I64,{5},{0},0,{0}};
+    ops[8] = (XrXirInstruction){XR_XIR_PLACE_WRITE,XR_XIR_UNIT,{5,4},{0},0,{0}};
     CHECK(xr_xir_compile_artifact_verify(checked, NULL) == XR_XIR_OK);
     XrXirNominalField *fields = (XrXirNominalField *)module->types->nominals->declarations[0].fields;
     uint32_t flags = fields[0].flags; XrXirDiagnostic diagnostic = {0};
     fields[0].flags = 0;
     CHECK(xr_xir_compile_artifact_verify(checked, &diagnostic) != XR_XIR_OK);
-    CHECK(diagnostic.function == 1 && diagnostic.instruction == 7);
+    CHECK(diagnostic.function == 1 && diagnostic.instruction == 8);
     fields[0].flags = flags | XR_XIR_FIELD_PRIVATE;
     CHECK(xr_xir_compile_artifact_verify(checked, &diagnostic) != XR_XIR_OK);
     /* This fixture constructs the type in its module initializer, so private
      * construction must already fail before its later projection is reached. */
     CHECK(diagnostic.function == 0 && diagnostic.instruction == 2);
     fields[0].flags = flags;
-    ops[4].type = XR_XIR_STRING;
+    ops[5].type = XR_XIR_STRING;
     CHECK(xr_xir_compile_artifact_verify(checked, &diagnostic) == XR_XIR_BAD_TYPE);
-    CHECK(diagnostic.function == 1 && diagnostic.instruction == 4);
-    ops[4].type = XR_XIR_I64;
+    CHECK(diagnostic.function == 1 && diagnostic.instruction == 5);
+    ops[5].type = XR_XIR_I64;
     CHECK(xr_xir_compile_artifact_verify(checked, NULL) == XR_XIR_OK);
     xr_xir_compile_artifact_free(checked);checked=NULL;
 }

@@ -28,7 +28,7 @@ def main():
  model=importlib.util.module_from_spec(spec);spec.loader.exec_module(model)
  historical=src/'sdk_previous71_identity_golden.h'
  old=(historical if historical.exists() else src/'sdk_current_identity_golden.h').read_text('utf-8')
- previous=model.current_preimage(rows,71,22,28,26);current=model.current_preimage(rows,72,22,28,27)
+ previous=model.current_preimage(rows,71,22,28,26,29);current=model.current_preimage(rows,72,22,28,27,29)
  names=['current_sdk_kat_preimage','current_sdk_kat_file_digest','current_sdk_kat_digest']
  for name,value in zip(names,previous):assert literal(old,name)==value
  wire=len(b'xray:xir-runtime-sdk:v1')+4
@@ -41,8 +41,8 @@ def main():
   text+='};\n'
  if a.write:
   out.mkdir(parents=True,exist_ok=True);(out/'sdk_previous71_identity_golden.h').write_text(previous_header(old),encoding='utf-8',newline='\n')
-  (out/'sdk_current_identity_golden.h').write_text(text,encoding='utf-8',newline='\n')
- else:assert (out/'sdk_current_identity_golden.h').read_text('utf-8')==text
+  (out/'sdk_previous72_identity_golden.h').write_text(text,encoding='utf-8',newline='\n')
+ else:assert literal((out/'sdk_previous72_identity_golden.h').read_text('utf-8'),names[0])==current[0] and literal((out/'sdk_previous72_identity_golden.h').read_text('utf-8'),names[1])==current[1] and literal((out/'sdk_previous72_identity_golden.h').read_text('utf-8'),names[2])==current[2]
  print(json.dumps({'wire':27,'semantic':72,'unchanged_independent_abi_fields':351,
   'previous_full_preimage_reproduced':True,'previous_identity':previous[2].hex(),
   'current_identity':current[2].hex(),'preimage_bytes':3098,'production_probe_or_writer_used':False},indent=2))

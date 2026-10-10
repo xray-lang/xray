@@ -191,13 +191,13 @@ static void admission(void) {
         case 12: alpha[3].immediate = 5; break;
         case 13: alpha[2].immediate = 1; break;
         case 14: alpha[2].args[0] = 0; break;
-        case 15: root[9].op = XR_XIR_SLOT_INIT; break;
+        case 15: root[10].op = XR_XIR_SLOT_INIT; root[10].immediate = 4; break;
         case 16: root[0].immediate = 2; break;
         case 17: root[6].type = XR_XIR_I64; break;
         case 18: alpha[1].args[0] = 3; break;
         case 19: alpha[5].args[0] = 1; break;
         case 20: ((XrXirInstruction *) module->functions[4].instructions)[2].args[1] = 0; break;
-        case 21: root[9].immediate = 0; break;
+        case 21: root[6].immediate = 0; break;
         case 22: ids[4].exported = 2; break;
         }
         XrXirProgram *program = NULL;

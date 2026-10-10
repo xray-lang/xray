@@ -91,7 +91,7 @@ static void program_dispose(XrXirProgram *program) {
     xr_compile_resources_free(program->order);
     xr_compile_resources_free(program->active_modules);
     xr_compile_resources_free(program->module_slots);
-    xr_compile_resources_free(program->permissions);
+    xir_program_permissions_free(program->permissions);
     xr_compile_resources_free(program);
 }
 static XrXirStatus program_execution_order(XrXirProgram *program) {
@@ -140,12 +140,12 @@ XR_FUNC XrXirStatus xr_xir_compile_program_seal(const XrXirCompileContext *conte
     status = xr_xir_compile_program_proof_verify(context, spec, &spec->proof, &permissions);
     if (status != XR_XIR_OK) return status;
     if (spec->types) for (uint32_t i = 0; i < spec->types->count; ++i) {
-        if (!xir_compile_work(context, 1)) { xr_compile_resources_free(permissions); return XR_XIR_BUDGET; }
+        if (!xir_compile_work(context, 1)) { xir_program_permissions_free(permissions); return XR_XIR_BUDGET; }
         if (spec->types->nodes[i].kind == XR_XIR_TYPE_ATOMIC && !xr_xir_atomic_capability())
-            { xr_compile_resources_free(permissions); return XR_XIR_UNSUPPORTED; }
+            { xir_program_permissions_free(permissions); return XR_XIR_UNSUPPORTED; }
     }
     XrXirProgram *program = xir_compile_calloc(context, 1, sizeof(*program), &status);
-    if (!program) { xr_compile_resources_free(permissions); return status; }
+    if (!program) { xir_program_permissions_free(permissions); return status; }
     program->permissions = permissions;
     atomic_init(&program->references, 1);
     program->context = *context;

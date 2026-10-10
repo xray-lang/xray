@@ -1,0 +1,17 @@
+var root: Array<i64> = [40]
+var bodies: i64 = 0
+var picks: i64 = 0
+fn choose() -> i64 { picks += 1; return 0; }
+fn shrink() -> i64 { root = []; return 0; }
+fn inner(value: ref i64, ignored: i64) -> i64 {
+    bodies += 1;
+    value += 1;
+    return value + ignored;
+}
+export fn run() -> i64 {
+    root = [40];
+    picks = 0;
+    return inner(ref root[choose()], shrink());
+}
+export fn cellCounter() -> i64 { return bodies * 100 + picks * 10 + len(root); }
+fn main() -> i64 { return run(); }

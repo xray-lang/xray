@@ -13,6 +13,7 @@
 #define XXIR_CALL_INTERNAL_H
 #include "xxir_call.h"
 #include "xxir_cell_owner_internal.h"
+#include "xxir_effect_contract_internal.h"
 typedef struct XrXirCallBudget {
     uint64_t byte_limit, requested_limit, requested_bytes, live_bytes, peak_bytes, allocations, frees;
     uint64_t resume_limit, resumes;
@@ -34,6 +35,13 @@ typedef struct XrXirCallRequest {
     XrXirCellRoleResolver cell_role;
     void *cell_context;
 } XrXirCallRequest;
+/* A pending instruction is not a permission. Instance admission rechecks
+ * actual values before the driver transfers a sealed selection to a frame. */
+XR_FUNC const XirEffectInvocationSelection *xr_xir_call_invocation(const XrXirCallView *view);
+XR_FUNC bool xr_xir_call_invocation_pending(const XrXirCallView *view,uint32_t *instruction);
+XR_FUNC XrXirCallStatus xr_xir_call_invocation_stage(XrXirCallView *view,uint32_t instruction);
+XR_FUNC XrXirCallStatus xr_xir_call_invocation_accept(XrXirCallView *view,
+    const XirEffectInvocationSelection *selection);
 /* Module access still requires the instance's root execution admission. */
 XR_FUNC XrXirValueStatus xr_xir_call_cell_read(const XrXirCallView *view,
     const XrXirValue *cell, XrXirValue *output);
@@ -41,6 +49,15 @@ XR_FUNC XrXirValueStatus xr_xir_call_cell_write(const XrXirCallView *view,
     const XrXirValue *cell, const XrXirValue *value);
 XR_FUNC XrXirValueStatus xr_xir_call_cell_place(const XrXirCallView *view,
     const XrXirValue *cell, XrXirValuePlace *output);
+/* Scoped descriptors own evaluated selectors, never a borrowed payload address. */
+XR_FUNC XrXirValueStatus xr_xir_call_cell_project(const XrXirCallView *view,
+    XrXirType type, const XrXirValue *root, const XrXirValuePath *path, XrXirValue *output);
+XR_FUNC XrXirValueStatus xr_xir_call_cell_path_read(const XrXirCallView *view,
+    const XrXirValue *cell, const XrXirValuePath *path,
+    XrXirValue *output, XrXirFaultDetail *fault);
+XR_FUNC XrXirValueStatus xr_xir_call_cell_path_write(const XrXirCallView *view,
+    const XrXirValue *cell, const XrXirValuePath *path,
+    const XrXirValue *value, XrXirFaultDetail *fault, bool append);
 XR_FUNC void *xr_xir_call_budget_allocate(XrXirCallBudget *budget, uint64_t bytes, XrXirCallStatus *status);
 XR_FUNC void xr_xir_call_budget_deallocate(XrXirCallBudget *budget, void *memory, uint64_t bytes);
 XR_FUNC XrXirCallStatus xr_xir_call_new_budgeted(const XrXirCallConfig *config,
