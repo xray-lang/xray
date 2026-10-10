@@ -33,30 +33,40 @@
 #include "frontend/parser/xast_api.h"
 #include "frontend/parser/xast_types.h"
 #include "frontend/parser/xast_nodes.h"
-#include "xray.h"
 #include "base/xarena.h"
 #include "base/xmalloc.h"
 #include "toolchain/xcompiler_session.h"
+#include "toolchain/xcompiler_arena_backing.h"
 
 /* ========== Fixtures ========== */
 
-static XrVMRuntime *g_vm = NULL;
+#define OWNER_CHECK(c) do { if (!(c)) { fprintf(stderr,"%d: %s\n",__LINE__,#c); exit(1); } } while (0)
+static XrCompileResources *g_resources = NULL;
 static XrCompilerSession *g_session = NULL;
+static XrCompileResourceStats g_baseline;
 
 static void setup(void) {
-    XrVMConfig params = {0};
-    g_vm = xray_vm_new_full(&params);
-    ASSERT_NOT_NULL(g_vm);
-    g_session = xr_compiler_session_current_for_isolate(g_vm);
-    ASSERT_NOT_NULL(g_session);
+    /* Every original test owns one finite root; loops keep the same ledger. */
+    const XrCompileResourceLimits limits = {1024 * 1024, 512 * 1024, 1024 * 1024};
+    OWNER_CHECK(!g_resources && !g_session);
+    OWNER_CHECK(xr_compile_resources_new(&limits,&g_resources) == XR_COMPILE_RESOURCE_OK);
+    OWNER_CHECK(xr_compile_resources_stats(g_resources,&g_baseline) == XR_COMPILE_RESOURCE_OK);
+    OWNER_CHECK(xr_compile_session_new(g_resources,&g_session) == XR_COMPILER_SESSION_OK);
 }
 
 static void teardown(void) {
-    if (g_vm) {
-        xray_vm_delete(g_vm);
-        g_vm = NULL;
-        g_session = NULL;
-    }
+    OWNER_CHECK(xr_compile_session_resource_status(g_session) == XR_COMPILE_RESOURCE_OK);
+    OWNER_CHECK(!xr_compile_session_current_arena(g_session));
+    xr_compile_session_free(g_session);
+    g_session = NULL;
+    XrCompileResourceStats observed = {0};
+    OWNER_CHECK(xr_compile_resources_stats(g_resources,&observed) == XR_COMPILE_RESOURCE_OK);
+    OWNER_CHECK(observed.live_bytes == g_baseline.live_bytes);
+    printf("ASI fixed root allocated=%llu peak=%llu work=%llu owner-live-baseline=%llu\n",
+        (unsigned long long)observed.allocated_bytes,(unsigned long long)observed.peak_bytes,
+        (unsigned long long)observed.work,(unsigned long long)observed.live_bytes);
+    xr_compile_resources_release(g_resources);
+    g_resources = NULL;
 }
 
 /* ========== Dual-role token cases ==========
@@ -93,28 +103,32 @@ static const AsiCase k_asi_cases[] = {
  * second line still yields a full AST to inspect. The arena is caller-owned
  * and captured into *out_arena; AST nodes live inside it. */
 static AstNode *parse_recoverable_src(const char *source, Parser *parser, XrArena **out_arena) {
-    XrArena *arena = (XrArena *) xr_malloc(sizeof(XrArena));
-    xr_arena_init(arena, XR_ARENA_SEGMENT_SIZE);
+    OWNER_CHECK(parser && out_arena && !*out_arena);
+    XrCompileState *state = xr_compile_session_compile_state(g_session);
+    OWNER_CHECK(xr_compile_state_resources(state) == g_resources);
+    void *memory = NULL;
+    OWNER_CHECK(xr_compile_state_calloc(state,1,sizeof(XrArena),&memory) == XR_COMPILE_RESOURCE_OK);
+    XrArena *arena = memory;
+    XrArenaBacking backing;
+    OWNER_CHECK(xr_compiler_arena_state_backing(state,&backing) == XR_ARENA_OK);
+    OWNER_CHECK(xr_arena_open(arena,XR_ARENA_SEGMENT_SIZE,&backing) == XR_ARENA_OK);
+    OWNER_CHECK(xr_compiler_arena_matches_state(arena,state));
+    *parser = (Parser) {0};
+    OWNER_CHECK(xr_compile_parser_open(parser,g_session,source,"<asi>",arena) == XR_PARSE_OK);
+    AstNode *ast = NULL;
+    XrParseStatus status = xr_compile_parse_recoverable(parser,&ast);
+    OWNER_CHECK(status == XR_PARSE_OK || status == XR_PARSE_RECOVERED);
+    OWNER_CHECK(ast && ast->as.program.arena == arena && !ast->as.program.owns_arena);
+    OWNER_CHECK(parser->state == state && !parser->type_scope && !xr_compile_session_current_arena(g_session));
+    OWNER_CHECK(xr_compile_session_resource_status(g_session) == XR_COMPILE_RESOURCE_OK);
     *out_arena = arena;
-
-    XrCompilerSessionScope parse_scope;
-    if (!xr_compiler_session_push_arena(g_session, arena, "<asi>", &parse_scope)) {
-        xr_arena_destroy(arena);
-        xr_free(arena);
-        *out_arena = NULL;
-        return NULL;
-    }
-    xr_parser_init(parser, g_session, source, "<asi>", arena);
-    AstNode *ast = xr_parse_recoverable(parser);
-    xr_compiler_session_pop_arena(&parse_scope);
     return ast;
 }
 
 static void release_arena(XrArena *arena) {
-    if (!arena)
-        return;
+    if (!arena) return;
     xr_arena_destroy(arena);
-    xr_free(arena);
+    xr_compile_state_free(arena);
 }
 
 /* Build the probe program for one dual-role token case. */
@@ -202,8 +216,8 @@ TEST(single_role_infix_tokens_still_continue_the_line) {
         "var s = \"a\"\n    .len()\n",  NULL,
     };
     for (int i = 0; continuations[i]; i++) {
-        AstNode *program =
-            xr_parse(xr_compiler_session_current_for_isolate(g_vm), continuations[i]);
+        AstNode *program = NULL;
+        OWNER_CHECK(xr_compile_parse(g_session,continuations[i],&program) == XR_PARSE_OK);
         if (!program)
             fprintf(stderr, "  FAIL: continuation rejected: %s\n", continuations[i]);
         ASSERT_NOT_NULL(program);
@@ -223,7 +237,8 @@ TEST(line_breaks_inside_groups_do_not_split) {
         NULL,
     };
     for (int i = 0; grouped[i]; i++) {
-        AstNode *program = xr_parse(xr_compiler_session_current_for_isolate(g_vm), grouped[i]);
+        AstNode *program = NULL;
+        OWNER_CHECK(xr_compile_parse(g_session,grouped[i],&program) == XR_PARSE_OK);
         if (!program)
             fprintf(stderr, "  FAIL: grouped continuation rejected: %s\n", grouped[i]);
         ASSERT_NOT_NULL(program);

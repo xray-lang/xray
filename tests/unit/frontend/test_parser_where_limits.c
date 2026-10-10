@@ -14,6 +14,7 @@
 #include "frontend/parser/xtype_ref.h"
 #include "base/xarena.h"
 #include "toolchain/xcompiler_session.h"
+#include "toolchain/xcompiler_arena_backing.h"
 #include <limits.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -32,7 +33,8 @@ static void where_same_constraints(XrCompilerSession *session) {
         "interface I<A:Sendable>{map<U,V>(value:U,tag:V)->U where U:Evidence<A> & Sendable}"
     };
     for (uint32_t spelling = 0; spelling < 2; ++spelling) {
-        AstNode *program = xr_parse(session,sources[spelling]);
+        AstNode *program = NULL;
+        CHECK(xr_compile_parse(session,sources[spelling],&program) == XR_PARSE_OK);
         CHECK(program && program->type == AST_PROGRAM && program->as.program.count == 1);
         AstNode *node = program->as.program.statements[0];
         CHECK(node->type == AST_INTERFACE_DECL);
@@ -51,13 +53,25 @@ static void where_same_constraints(XrCompilerSession *session) {
     }
 }
 int main(void) {
-    XrCompilerSession *session = xr_compiler_session_new(NULL); CHECK(session);
+    /* All three fixed parser operations share one finite ledger. */
+    const XrCompileResourceLimits limits = {1024 * 1024, 512 * 1024, 1024 * 1024};
+    XrCompileResources *resources = NULL;
+    CHECK(xr_compile_resources_new(&limits,&resources) == XR_COMPILE_RESOURCE_OK);
+    XrCompileResourceStats baseline = {0}, observed = {0};
+    CHECK(xr_compile_resources_stats(resources,&baseline) == XR_COMPILE_RESOURCE_OK);
+    XrCompilerSession *session = NULL;
+    CHECK(xr_compile_session_new(resources,&session) == XR_COMPILER_SESSION_OK);
     where_same_constraints(session);
-    XrArena arena; xr_arena_init(&arena,4096);
-    XrCompilerSessionScope scope;
-    CHECK(xr_compiler_session_push_arena(session,&arena,"where-limit.xr",&scope));
+    XrCompileState *state = xr_compile_session_compile_state(session);
+    CHECK(xr_compile_state_resources(state) == resources);
+    XrArena arena = {0};
+    XrArenaBacking backing;
+    CHECK(xr_compiler_arena_state_backing(state,&backing) == XR_ARENA_OK);
+    CHECK(xr_arena_open(&arena,4096,&backing) == XR_ARENA_OK);
+    CHECK(xr_compiler_arena_matches_state(&arena,state));
     Parser parser = {0};
-    xr_parser_init(&parser,session,"where U:Sendable","where-limit.xr",&arena);
+    CHECK(xr_compile_parser_open(&parser,session,"where U:Sendable","where-limit.xr",&arena) == XR_PARSE_OK);
+    CHECK(parser.state == state && xr_compile_session_current_arena(session) == &arena);
     bool seen = false;
     xr_parser_set_error_callback(&parser,limit_diagnostic,&seen,0);
     XrGenericParam parameter = {0}; parameter.name = "U"; parameter.constraint_count = INT_MAX;
@@ -66,8 +80,19 @@ int main(void) {
     xr_parse_where_clause(&parser,parameters,1);
     CHECK(seen && parser.had_error && parser.error_count == 1);
     CHECK(parameter.constraint_count == INT_MAX && !parameter.constraints);
-    xr_type_scope_free(parser.type_scope);
-    xr_compiler_session_pop_arena(&scope);
-    xr_arena_destroy(&arena); xr_compiler_session_delete(session);
+    CHECK(xr_compile_parser_status(&parser) == XR_PARSE_SYNTAX);
+    CHECK(xr_compile_session_resource_status(session) == XR_COMPILE_RESOURCE_OK);
+    xr_compile_parser_close(&parser);
+    CHECK(!parser.type_scope && !xr_compile_session_current_arena(session));
+    xr_arena_destroy(&arena);
+    xr_compile_session_free(session);
+    CHECK(xr_compile_resources_stats(resources,&observed) == XR_COMPILE_RESOURCE_OK);
+    CHECK(observed.live_bytes == baseline.live_bytes);
+    CHECK(observed.allocated_bytes <= limits.allocated_bytes && observed.peak_bytes <= limits.live_bytes &&
+          observed.work <= limits.work);
+    printf("where fixed root allocated=%llu peak=%llu work=%llu owner-live-baseline=%llu\n",
+        (unsigned long long)observed.allocated_bytes,(unsigned long long)observed.peak_bytes,
+        (unsigned long long)observed.work,(unsigned long long)observed.live_bytes);
+    xr_compile_resources_release(resources);
     return 0;
 }
