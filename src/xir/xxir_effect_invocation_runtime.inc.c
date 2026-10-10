@@ -91,11 +91,15 @@ static XrXirStatus effect_runtime_original_none(const EffectInvocationCertificat
     uint32_t actual=caller->operands[op->args[0]+parameter-request->captures];
     const EffectInvocationFunctionBounds *source=&bounds->functions[request->caller];
     const EffectInvocationFunctionBounds *target=&bounds->functions[request->target];
-    if (actual>=source->values || parameter>=target->values || !source->bounds || !target->bounds)
-        return XR_XIR_BAD_STRUCTURE;
-    XrXirStatus status=effect_runtime_work(&request->read,8);
+    if (actual>=source->values || parameter>=target->values || source->count>source->values ||
+        target->count>target->values || (!!source->bounds!=!!source->count) ||
+        (!!target->bounds!=!!target->count)) return XR_XIR_BAD_STRUCTURE;
+    uint32_t comparisons=0;
+    const EffectInvocationValueBound *provided=effect_invocation_bound_find(source,actual,&comparisons);
+    const EffectInvocationValueBound *expected=effect_invocation_bound_find(target,parameter,&comparisons);
+    XrXirStatus status=effect_runtime_work(&request->read,8+(uint64_t)comparisons*3);
     if (status!=XR_XIR_OK) return status;
-    const EffectInvocationValueBound *provided=&source->bounds[actual],*expected=&target->bounds[parameter];
+    if (!provided || !expected) return XR_XIR_BAD_STRUCTURE;
     uint32_t valid=XR_XIR_CALLABLE_ROOT_REQUIRED|XR_XIR_CALLABLE_ROOT_UNRESOLVED;
     if (!provided->callable || !expected->callable || (provided->mask&~valid) || (expected->mask&~valid))
         return XR_XIR_BAD_STRUCTURE;

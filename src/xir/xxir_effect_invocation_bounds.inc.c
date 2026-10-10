@@ -14,10 +14,11 @@
 typedef struct EffectInvocationValueBound {
     uint32_t mask;
     bool callable;
+    uint32_t value;
 } EffectInvocationValueBound;
 
 typedef struct EffectInvocationFunctionBounds {
-    uint32_t values;
+    uint32_t values,count;
     EffectInvocationValueBound *bounds;
 } EffectInvocationFunctionBounds;
 
@@ -66,6 +67,23 @@ static XrXirStatus effect_invocation_bounds_capacity(const XrXirCompileContext *
     bounds->capacity=capacity;return XR_XIR_OK;
 }
 
+/* A sorted record names the original physical SSA, not its compact position.
+ * The receiving owner proves completeness against every original value. */
+static const EffectInvocationValueBound *effect_invocation_bound_find(
+    const EffectInvocationFunctionBounds *function,uint32_t value,uint32_t *comparisons) {
+    if (!function || !comparisons || value>=function->values || function->count>function->values ||
+        (!!function->bounds!=!!function->count)) return NULL;
+    uint32_t first=0,last=function->count;
+    while (first<last) {
+        ++*comparisons;
+        uint32_t middle=first+(last-first)/2;
+        if (function->bounds[middle].value<value) first=middle+1;
+        else last=middle;
+    }
+    return first<function->count && function->bounds[first].value==value ?
+        &function->bounds[first] : NULL;
+}
+
 /* This private hook is called exactly once for each newly copied dense body,
  * after its real physical vector is assigned and before FUNCTION_REF bottom.
  * Instruction types may come from the same owner's fully substituted
@@ -82,11 +100,17 @@ static XrXirStatus effect_invocation_bounds_capture(const XrXirCompileContext *w
     if (index==UINT32_MAX) return XR_XIR_BUDGET;
     XrXirStatus status=effect_invocation_bounds_capacity(work,bounds,index+1);
     if (status!=XR_XIR_OK) return status;
-    EffectInvocationValueBound *records=values ? xir_compile_alloc(work,
-        (size_t)values*sizeof(*records),&status) : NULL;
-    if (values && !records) return status;
+    uint32_t count=0;
     for (uint32_t v=0;v<(uint32_t)values;++v) {
-        if (!xir_compile_work(work,2+sizeof(*records))) { status=XR_XIR_BUDGET;break; }
+        if (!xir_compile_work(work,2)) return XR_XIR_BUDGET;
+        if (xr_xir_callable_signature(types,xr_xir_operand_type(function,v))) ++count;
+    }
+    EffectInvocationValueBound *records=count ? xir_compile_alloc(work,
+        (size_t)count*sizeof(*records),&status) : NULL;
+    if (count && !records) return status;
+    uint32_t at=0;
+    for (uint32_t v=0;v<(uint32_t)values;++v) {
+        if (!xir_compile_work(work,2)) { status=XR_XIR_BUDGET;break; }
         XrXirType type=v>=function->parameter_count && declared_instructions ?
             declared_instructions[v-function->parameter_count] : xr_xir_operand_type(function,v);
         bool actual_callable=xr_xir_callable_signature(types,xr_xir_operand_type(function,v))!=NULL;
@@ -94,12 +118,17 @@ static XrXirStatus effect_invocation_bounds_capture(const XrXirCompileContext *w
         if (!!signature!=actual_callable || (signature && !xr_xir_callable_flags_valid(signature->flags))) {
             status=XR_XIR_BAD_TYPE;break;
         }
-        records[v]=(EffectInvocationValueBound){signature ? signature->flags&
-            (XR_XIR_CALLABLE_ROOT_REQUIRED|XR_XIR_CALLABLE_ROOT_UNRESOLVED) : 0,signature!=NULL};
+        if (signature) {
+            if (at>=count) { status=XR_XIR_BAD_STRUCTURE;break; }
+            if (!xir_compile_work(work,sizeof(*records))) { status=XR_XIR_BUDGET;break; }
+            records[at++]=(EffectInvocationValueBound){.mask=signature->flags&
+                (XR_XIR_CALLABLE_ROOT_REQUIRED|XR_XIR_CALLABLE_ROOT_UNRESOLVED),.callable=true,.value=v};
+        }
     }
+    if (status==XR_XIR_OK && at!=count) status=XR_XIR_BAD_STRUCTURE;
     if (status==XR_XIR_OK && !xir_compile_work(work,sizeof(*bounds->functions)+1)) status=XR_XIR_BUDGET;
     if (status!=XR_XIR_OK) { xr_compile_resources_free(records);return status; }
-    bounds->functions[index]=(EffectInvocationFunctionBounds){(uint32_t)values,records};
+    bounds->functions[index]=(EffectInvocationFunctionBounds){(uint32_t)values,count,records};
     ++bounds->count;return XR_XIR_OK;
 }
 
@@ -111,9 +140,12 @@ static inline XrXirStatus effect_invocation_bounds_mask(const XrXirCompileContex
     if (!xir_compile_context_valid(work) || !bounds || bounds->resources!=work->resources ||
         !output || function>=bounds->count || value>=bounds->functions[function].values)
         return XR_XIR_BAD_STRUCTURE;
-    if (!xir_compile_work(work,2)) return XR_XIR_BUDGET;
-    const EffectInvocationValueBound *record=&bounds->functions[function].bounds[value];
-    if (!record->callable || record->mask&~
+    const EffectInvocationFunctionBounds *body=&bounds->functions[function];
+    if (body->count>body->values || (!!body->bounds!=!!body->count)) return XR_XIR_BAD_STRUCTURE;
+    uint32_t comparisons=0;
+    const EffectInvocationValueBound *record=effect_invocation_bound_find(body,value,&comparisons);
+    if (!xir_compile_work(work,2+(uint64_t)comparisons*3)) return XR_XIR_BUDGET;
+    if (!record || !record->callable || record->mask&~
         (XR_XIR_CALLABLE_ROOT_REQUIRED|XR_XIR_CALLABLE_ROOT_UNRESOLVED)) return XR_XIR_BAD_TYPE;
     *output=record->mask;return XR_XIR_OK;
 }

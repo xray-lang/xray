@@ -134,7 +134,9 @@ static XrXirStatus effect_invocation_arguments(EffectInvocationFlow *flow,
             if (!xir_compile_work(owner->work,(uint64_t)flow->basis.fn_words*sizeof(*row))) {
                 status=XR_XIR_BUDGET;break;
             }
-            memcpy(row,flow->rows+(size_t)actual*flow->basis.fn_words,
+            const uint64_t *actual_row=effect_invocation_row(flow,actual);
+            if (!actual_row) { status=XR_XIR_BAD_STRUCTURE;break; }
+            memcpy(row,actual_row,
                 (size_t)flow->basis.fn_words*sizeof(*row));
             const XrXirEffectParameter *parameter=&owner->effects->contracts[target].parameters[p];
             bool ref=false;
@@ -272,7 +274,8 @@ static XrXirStatus effect_invocation_indirect(EffectInvocationFlow *flow,
     }
     xr_xir_type_match_scratch_free(&scratch);
     if (status!=XR_XIR_OK) return status;
-    const uint64_t *descriptor=flow->rows+(size_t)value*flow->basis.fn_words;
+    const uint64_t *descriptor=effect_invocation_row(flow,value);
+    if (!descriptor) return XR_XIR_BAD_STRUCTURE;
     uint32_t opaque=owner->site_count+flow->basis.parameters;
     bool any=false;
     if (!xir_compile_work(owner->work,4)) return XR_XIR_BUDGET;
@@ -356,7 +359,9 @@ static XrXirStatus effect_invocation_latent(EffectInvocationFlow *flow,
                 if (!xir_compile_work(owner->work,(uint64_t)flow->basis.fn_words*sizeof(*row))) {
                     status=XR_XIR_BUDGET;break;
                 }
-                memcpy(row,flow->rows+(size_t)actual*flow->basis.fn_words,
+                const uint64_t *actual_row=effect_invocation_row(flow,actual);
+                if (!actual_row) { status=XR_XIR_BAD_STRUCTURE;break; }
+                memcpy(row,actual_row,
                     (size_t)flow->basis.fn_words*sizeof(*row));
                 status=effect_invocation_bound_row(flow,site.target,p,row);
             }

@@ -26,7 +26,8 @@ static XrXirStatus effect_invocation_deferred_match(EffectInvocationFlow *flow,
     if (status!=XR_XIR_OK) return status;
     if (!ref || record->count!=signature->parameter_count) return XR_XIR_BAD_STRUCTURE;
     uint32_t bit=owner->site_count+record->parameter;
-    const uint64_t *descriptor=flow->rows+(size_t)op->immediate*flow->basis.fn_words;
+    const uint64_t *descriptor=effect_invocation_row(flow,(uint32_t)op->immediate);
+    if (!descriptor) return XR_XIR_BAD_STRUCTURE;
     if (!xir_compile_work(owner->work,2)) return XR_XIR_BUDGET;
     if (!(descriptor[bit/64]&(UINT64_C(1)<<(bit%64)))) return XR_XIR_BAD_STRUCTURE;
     uint64_t *actual=NULL;flow->instruction=record->instruction;
@@ -58,7 +59,8 @@ static XrXirStatus effect_invocation_deferred_frontiers(EffectInvocationFlow *fl
         bool ref=false;XrXirStatus status=effect_invocation_has_ref(flow,signature,&ref);
         if (status!=XR_XIR_OK) return status;
         if (!ref) continue;
-        const uint64_t *descriptor=flow->rows+(size_t)op->immediate*flow->basis.fn_words;
+        const uint64_t *descriptor=effect_invocation_row(flow,(uint32_t)op->immediate);
+        if (!descriptor) return XR_XIR_BAD_STRUCTURE;
         for (uint32_t p=0;p<flow->basis.parameters;++p) {
             if (!xir_compile_work(owner->work,2)) return XR_XIR_BUDGET;
             uint32_t bit=owner->site_count+p;

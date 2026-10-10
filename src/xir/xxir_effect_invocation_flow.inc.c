@@ -11,7 +11,8 @@ typedef struct EffectInvocationFlow {
     EffectInvocationOwner *owner;
     const XrXirFunction *function;
     EffectInvocationBasis basis;
-    uint32_t node,values,instruction;
+    uint32_t node,values,instruction,row_count;
+    uint32_t *row_indices;
     uint64_t *rows;
     uint8_t *fixed,*certified;
     void *memory;
@@ -20,6 +21,46 @@ typedef struct EffectInvocationFlow {
 
 static XrXirStatus effect_invocation_cell(EffectInvocationFlow *flow,
     uint32_t value,uint64_t *output,bool *changed);
+
+/* The map belongs to this one immutable body replay, never to a Source
+ * refiner generation. MAX denotes absent callable storage, not ROOT None. */
+static uint64_t *effect_invocation_row(const EffectInvocationFlow *flow,uint32_t value) {
+    if (!flow || value>=flow->values || !flow->row_count || !flow->row_indices)
+        return NULL;
+    uint32_t row=flow->row_indices[value];
+    return row<flow->row_count ? flow->rows+(size_t)row*flow->basis.fn_words : NULL;
+}
+
+static XrXirStatus effect_invocation_flow_storage(EffectInvocationFlow *flow) {
+    const XrXirFunction *function=flow->function;
+    uint64_t values=(uint64_t)function->parameter_count+function->instruction_count;
+    if (values>UINT32_MAX) return XR_XIR_BUDGET;
+    uint32_t count=0;
+    for (uint32_t v=0;v<(uint32_t)values;++v) {
+        if (!xir_compile_work(flow->owner->work,2)) return XR_XIR_BUDGET;
+        if (xr_xir_callable_signature(flow->owner->module->types,xr_xir_operand_type(function,v))) ++count;
+    }
+    uint64_t words=(uint64_t)count*flow->basis.fn_words;
+    uint64_t indices=count ? values*sizeof(uint32_t) : 0;
+    if (words>SIZE_MAX/sizeof(*flow->rows) || indices>SIZE_MAX-words*sizeof(*flow->rows) ||
+        values>(SIZE_MAX-words*sizeof(*flow->rows)-indices)/2) return XR_XIR_BUDGET;
+    size_t bytes=(size_t)(words*sizeof(*flow->rows)+indices+values*2);
+    XrXirStatus status=XR_XIR_OK;
+    flow->memory=xir_compile_calloc(flow->owner->work,1,bytes,&status);
+    if (!flow->memory) return status;
+    flow->rows=flow->memory;flow->row_count=count;flow->values=(uint32_t)values;
+    flow->row_indices=count ? (uint32_t *)(flow->rows+(size_t)words) : NULL;
+    flow->fixed=(uint8_t *)flow->memory+(size_t)(words*sizeof(*flow->rows)+indices);
+    flow->certified=flow->fixed+(size_t)values;
+    uint32_t row=0;
+    if (count) for (uint32_t v=0;v<(uint32_t)values;++v) {
+        if (!xir_compile_work(flow->owner->work,2+sizeof(*flow->row_indices))) return XR_XIR_BUDGET;
+        flow->row_indices[v]=xr_xir_callable_signature(flow->owner->module->types,
+            xr_xir_operand_type(function,v)) ? row++ : UINT32_MAX;
+    }
+    return row==count ? XR_XIR_OK : XR_XIR_BAD_STRUCTURE;
+}
+
 
 /* Outer callable bounds use the shared complete result/parameter/mode
  * matcher. Every storage type and every structural child remains exact. */
@@ -45,7 +86,9 @@ static XrXirStatus effect_invocation_origin_bit(EffectInvocationFlow *flow,
     uint32_t value,uint32_t bit) {
     if (value>=flow->values || bit/64>=flow->basis.origin_words) return XR_XIR_BAD_VALUE;
     if (!xir_compile_work(flow->owner->work,3)) return XR_XIR_BUDGET;
-    uint64_t *word=flow->rows+(size_t)value*flow->basis.fn_words+bit/64;
+    uint64_t *row=effect_invocation_row(flow,value);
+    if (!row) return XR_XIR_BAD_TYPE;
+    uint64_t *word=row+bit/64;
     uint64_t joined=*word|(UINT64_C(1)<<(bit%64));
     if (joined!=*word) flow->changed=true;
     *word=joined;return XR_XIR_OK;
@@ -54,8 +97,17 @@ static XrXirStatus effect_invocation_origin_bit(EffectInvocationFlow *flow,
 static XrXirStatus effect_invocation_origin_join(EffectInvocationFlow *flow,
     uint32_t destination,uint32_t source) {
     if (destination>=flow->values || source>=flow->values) return XR_XIR_BAD_VALUE;
-    uint64_t *to=flow->rows+(size_t)destination*flow->basis.fn_words;
-    const uint64_t *from=flow->rows+(size_t)source*flow->basis.fn_words;
+    uint64_t *to=effect_invocation_row(flow,destination);
+    const uint64_t *from=effect_invocation_row(flow,source);
+    if (!to || !from) {
+        /* Scalar/aggregate aliases retain their full fixed flags below. A
+         * genuine callable with missing storage is never an empty origin. */
+        if (xr_xir_callable_signature(flow->owner->module->types,
+                xr_xir_operand_type(flow->function,destination)) ||
+            xr_xir_callable_signature(flow->owner->module->types,
+                xr_xir_operand_type(flow->function,source))) return XR_XIR_BAD_STRUCTURE;
+        return XR_XIR_OK;
+    }
     for (uint32_t w=0;w<flow->basis.fn_words;++w) {
         if (!xir_compile_work(flow->owner->work,3)) return XR_XIR_BUDGET;
         uint64_t joined=to[w]|from[w];
@@ -168,7 +220,8 @@ static XrXirStatus effect_invocation_capture(EffectInvocationFlow *flow,
         site->binding>flow->owner->binding_count ||
         site->captures>flow->owner->binding_count-site->binding) return XR_XIR_BAD_STRUCTURE;
     status=effect_invocation_origin_bit(flow,destination,selected);
-    uint64_t *descriptor=flow->rows+(size_t)destination*flow->basis.fn_words;
+    uint64_t *descriptor=effect_invocation_row(flow,destination);
+    if (!descriptor) return XR_XIR_BAD_STRUCTURE;
     uint32_t binding_words=flow->basis.origin_words+flow->basis.cell_words;
     for (uint32_t p=0;p<site->captures && status==XR_XIR_OK;++p) {
         if (!xir_compile_work(flow->owner->work,2)) return XR_XIR_BUDGET;
@@ -181,7 +234,8 @@ static XrXirStatus effect_invocation_capture(EffectInvocationFlow *flow,
             /* Capture Cell facts come only from the shared real producer proof. */
             status=effect_invocation_cell(flow,value,cell,&flow->changed);
         } else if (xr_xir_callable_signature(flow->owner->module->types,target->parameters[p])) {
-            const uint64_t *source=flow->rows+(size_t)value*flow->basis.fn_words;
+            const uint64_t *source=effect_invocation_row(flow,value);
+            if (!source) return XR_XIR_BAD_STRUCTURE;
             for (uint32_t w=0;w<flow->basis.origin_words;++w) {
                 if (!xir_compile_work(flow->owner->work,3)) return XR_XIR_BUDGET;
                 uint64_t joined=binding[w]|source[w];
@@ -288,7 +342,9 @@ static XrXirStatus effect_invocation_return_origins(EffectInvocationFlow *flow,
                 status=effect_invocation_producer_column(owner,&flow->basis,fact->site,fact->atom,&word,&bit);
                 if (status!=XR_XIR_OK) return status;
                 if (!xir_compile_work(owner->work,3)) return XR_XIR_BUDGET;
-                uint64_t *column=flow->rows+(size_t)destination*flow->basis.fn_words+word;
+                uint64_t *row=effect_invocation_row(flow,destination);
+                if (!row) return XR_XIR_BAD_STRUCTURE;
+                uint64_t *column=row+word;
                 uint64_t joined=*column|(UINT64_C(1)<<bit);
                 if (joined!=*column) flow->changed=true;
                 *column=joined;
@@ -335,22 +391,23 @@ static XrXirStatus effect_invocation_origins(EffectInvocationFlow *flow) {
     flow->function=&owner->module->functions[identity.body];
     XrXirStatus status=effect_invocation_basis(owner,identity.root,&flow->basis);
     if (status!=XR_XIR_OK) return status;
-    uint64_t values=(uint64_t)flow->function->parameter_count+flow->function->instruction_count;
-    uint64_t words=values*flow->basis.fn_words;
-    if (values>UINT32_MAX || words>SIZE_MAX/sizeof(*flow->rows) ||
-        values>(SIZE_MAX-words*sizeof(*flow->rows))/2) return XR_XIR_BUDGET;
-    size_t bytes=(size_t)(words*sizeof(*flow->rows)+values*2);
-    flow->memory=xir_compile_calloc(owner->work,1,bytes,&status);
-    if (!flow->memory) return status;
-    flow->rows=flow->memory;flow->fixed=(uint8_t *)(flow->rows+(size_t)words);
-    flow->certified=flow->fixed+(size_t)values;
-    flow->values=(uint32_t)values;
+    status=effect_invocation_flow_storage(flow);
+    if (status!=XR_XIR_OK) return status;
     for (uint32_t p=0;p<flow->function->parameter_count;++p) {
-        if (!xir_compile_work(owner->work,(uint64_t)flow->basis.fn_words*sizeof(*flow->rows)))
+        uint64_t *row=effect_invocation_row(flow,p);
+        const uint64_t *input=identity.input+(size_t)p*flow->basis.row_words;
+        if (!row) {
+            /* The physical key remains complete. Non-callable formals must
+             * not smuggle a callable producer through omitted storage. */
+            for (uint32_t w=0;w<flow->basis.fn_words;++w) {
+                if (!xir_compile_work(owner->work,1)) return XR_XIR_BUDGET;
+                if (input[w]) return XR_XIR_BAD_STRUCTURE;
+            }
+            continue;
+        }
+        if (!xir_compile_work(owner->work,(uint64_t)flow->basis.fn_words*sizeof(*row)))
             return XR_XIR_BUDGET;
-        memcpy(flow->rows+(size_t)p*flow->basis.fn_words,
-            identity.input+(size_t)p*flow->basis.row_words,
-            (size_t)flow->basis.fn_words*sizeof(*flow->rows));
+        memcpy(row,input,(size_t)flow->basis.fn_words*sizeof(*row));
     }
     status=effect_invocation_barriers(flow);
     for (uint32_t i=0;i<flow->function->instruction_count && status==XR_XIR_OK;++i) {
@@ -381,10 +438,12 @@ static XrXirStatus effect_invocation_origins(EffectInvocationFlow *flow) {
     for (uint32_t v=0;v<flow->values && status==XR_XIR_OK;++v) {
         if (!xir_compile_work(owner->work,1)) return XR_XIR_BUDGET;
         if (!xr_xir_callable_signature(owner->module->types,xr_xir_operand_type(flow->function,v))) continue;
+        const uint64_t *row=effect_invocation_row(flow,v);
+        if (!row) return XR_XIR_BAD_STRUCTURE;
         bool present=false;
         for (uint32_t w=0;w<flow->basis.origin_words;++w) {
             if (!xir_compile_work(owner->work,1)) return XR_XIR_BUDGET;
-            if (flow->rows[(size_t)v*flow->basis.fn_words+w]) present=true;
+            if (row[w]) present=true;
         }
         if (!present) status=effect_invocation_opaque(flow,v,true);
     }

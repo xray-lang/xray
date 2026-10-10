@@ -72,7 +72,9 @@ static XrXirStatus conditional_invocation_function_cell_row(const XrXirCompileCo
         const EffectInvocationOwner *owner=certificate->equations;
         CHECK(producer.capture_count==1 && selected.owner==effects && selected.target==3 &&
             child.parent==selected.node && child.target==2 && !effects->root[0].requires_root &&
-            !effects->root[0].unresolved && !certificate->declared->functions[3].bounds[0].mask);
+            !effects->root[0].unresolved && certificate->declared->functions[3].count &&
+            certificate->declared->functions[3].bounds[0].value==0 &&
+            !certificate->declared->functions[3].bounds[0].mask);
         if (!mode) CHECK(xr_xir_cell_provenance_role(effects->cells,2,0)==XR_XIR_CELL_PROOF_OWNED_CAPTURE);
         CHECK(owner->nodes[selected.node].parameter_count==1 && owner->sites[producer.site].captures==1);
         XirEffectInvocationSelection masked=selected;

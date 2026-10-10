@@ -146,9 +146,10 @@ static XrXirStatus effect_invocation_copy_bounds(EffectInvocationCertificate *ce
         if (!xir_compile_work(work,3)) return XR_XIR_BUDGET;
         const XrXirFunction *function=&certificate->bodies.functions[f];
         uint64_t values=(uint64_t)function->parameter_count+function->instruction_count;
-        if (values!=source->functions[f].values || (values && !source->functions[f].bounds) ||
-            values>SIZE_MAX/sizeof(EffectInvocationValueBound)) return XR_XIR_BAD_STRUCTURE;
-        size_t row_bytes=(size_t)values*sizeof(EffectInvocationValueBound);
+        const EffectInvocationFunctionBounds *body=&source->functions[f];
+        if (values!=body->values || body->count>values || (!!body->bounds!=!!body->count) ||
+            (uint64_t)body->count>SIZE_MAX/sizeof(EffectInvocationValueBound)) return XR_XIR_BAD_STRUCTURE;
+        size_t row_bytes=(size_t)body->count*sizeof(EffectInvocationValueBound);
         if (row_bytes>SIZE_MAX-bytes) return XR_XIR_BUDGET;
         bytes+=row_bytes;
     }
@@ -168,21 +169,30 @@ static XrXirStatus effect_invocation_copy_bounds(EffectInvocationCertificate *ce
     certificate->declared=copy;
     for (uint32_t f=0;f<source->count && status==XR_XIR_OK;++f) {
         const XrXirFunction *function=&certificate->bodies.functions[f];
-        uint32_t values=source->functions[f].values;
-        for (uint32_t v=0;v<values;++v) {
-            if (!xir_compile_work(work,3+sizeof(*records))) { status=XR_XIR_BUDGET;break; }
-            EffectInvocationValueBound record=source->functions[f].bounds[v];
-            if (record.mask&~(XR_XIR_CALLABLE_ROOT_REQUIRED|XR_XIR_CALLABLE_ROOT_UNRESOLVED) ||
-                record.callable!=(xr_xir_callable_signature(&certificate->terms.types,
-                    xr_xir_operand_type(function,v))!=NULL) || (!record.callable && record.mask)) {
+        const EffectInvocationFunctionBounds *body=&source->functions[f];
+        uint32_t at=0;
+        for (uint32_t v=0;v<body->values;++v) {
+            if (!xir_compile_work(work,3)) { status=XR_XIR_BUDGET;break; }
+            bool callable=xr_xir_callable_signature(&certificate->terms.types,
+                xr_xir_operand_type(function,v))!=NULL;
+            if (!callable) {
+                if (at<body->count && body->bounds[at].value<=v) { status=XR_XIR_BAD_STRUCTURE;break; }
+                continue;
+            }
+            if (at>=body->count) { status=XR_XIR_BAD_STRUCTURE;break; }
+            EffectInvocationValueBound record=body->bounds[at];
+            if (record.value!=v || !record.callable || record.mask&~
+                (XR_XIR_CALLABLE_ROOT_REQUIRED|XR_XIR_CALLABLE_ROOT_UNRESOLVED)) {
                 status=XR_XIR_BAD_STRUCTURE;break;
             }
-            records[v]=record;
+            if (!xir_compile_work(work,sizeof(*records))) { status=XR_XIR_BUDGET;break; }
+            records[at++]=record;
         }
+        if (status==XR_XIR_OK && at!=body->count) status=XR_XIR_BAD_STRUCTURE;
         if (status!=XR_XIR_OK) break;
         if (!xir_compile_work(work,sizeof(*functions)+1)) { status=XR_XIR_BUDGET;break; }
-        functions[f]=(EffectInvocationFunctionBounds){values,values?records:NULL};
-        ++copy->count;records+=values;
+        functions[f]=(EffectInvocationFunctionBounds){body->values,body->count,body->count?records:NULL};
+        ++copy->count;records+=body->count;
     }
     return status;
 }

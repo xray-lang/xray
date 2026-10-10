@@ -29,11 +29,11 @@ static XrXirStatus effect_invocation_instance_bound(const XrXirCompileContext *w
     const XrXirTypeNode *declared=xr_xir_callable_signature(bound.source,bound.declared);
     const XrXirTypeNode *actual=xr_xir_callable_signature(bound.destination,bound.actual);
     if (!!declared!=!!actual) return XR_XIR_BAD_TYPE;
-    if (!declared) { *output=(EffectInvocationValueBound){0,false};return XR_XIR_OK; }
+    if (!declared) { *output=(EffectInvocationValueBound){0};return XR_XIR_OK; }
     XrXirStatus status=xir_effect_callable_bound_matches(work,&bound);
     if (status!=XR_XIR_OK) return status;
-    *output=(EffectInvocationValueBound){declared->flags&
-        (XR_XIR_CALLABLE_ROOT_REQUIRED|XR_XIR_CALLABLE_ROOT_UNRESOLVED),true};
+    *output=(EffectInvocationValueBound){.mask=declared->flags&
+        (XR_XIR_CALLABLE_ROOT_REQUIRED|XR_XIR_CALLABLE_ROOT_UNRESOLVED),.callable=true};
     return XR_XIR_OK;
 }
 
@@ -57,10 +57,16 @@ static XrXirStatus effect_invocation_instance_function(const XrXirCompileContext
     uint64_t values=(uint64_t)body->parameter_count+body->instruction_count;
     if (values>UINT32_MAX || values>SIZE_MAX/sizeof(EffectInvocationValueBound)) return XR_XIR_BUDGET;
     XrXirStatus status=effect_invocation_bounds_capacity(work,bounds,f+1);
-    EffectInvocationValueBound *records=status==XR_XIR_OK && values ?
-        xir_compile_alloc(work,(size_t)values*sizeof(*records),&status) : NULL;
     if (status!=XR_XIR_OK) return status;
-    uint32_t identity=0;
+    uint32_t count=0;
+    for (uint32_t v=0;v<(uint32_t)values;++v) {
+        if (!xir_compile_work(work,2)) return XR_XIR_BUDGET;
+        if (xr_xir_callable_signature(module->types,xr_xir_operand_type(body,v))) ++count;
+    }
+    EffectInvocationValueBound *records=count ?
+        xir_compile_alloc(work,(size_t)count*sizeof(*records),&status) : NULL;
+    if (count && !records) return status;
+    uint32_t identity=0,at=0;
     for (uint32_t v=0;v<(uint32_t)values && status==XR_XIR_OK;++v) {
         if (!xir_compile_work(work,2)) { status=XR_XIR_BUDGET;break; }
         XrXirType actual=xr_xir_operand_type(body,v);
@@ -85,12 +91,18 @@ static XrXirStatus effect_invocation_instance_function(const XrXirCompileContext
                 }
             }
         }
-        status=effect_invocation_instance_bound(work,&request,&records[v]);
+        EffectInvocationValueBound record={0};
+        status=effect_invocation_instance_bound(work,&request,&record);
+        if (status==XR_XIR_OK && record.callable) {
+            if (at>=count) { status=XR_XIR_BAD_STRUCTURE;break; }
+            if (!xir_compile_work(work,sizeof(record))) { status=XR_XIR_BUDGET;break; }
+            record.value=v;records[at++]=record;
+        }
     }
-    if (status==XR_XIR_OK && contract && identity!=contract->value_count) status=XR_XIR_BAD_STRUCTURE;
+    if (status==XR_XIR_OK && ((contract && identity!=contract->value_count) || at!=count)) status=XR_XIR_BAD_STRUCTURE;
     if (status==XR_XIR_OK && !xir_compile_work(work,sizeof(*bounds->functions)+1)) status=XR_XIR_BUDGET;
     if (status!=XR_XIR_OK) { xr_compile_resources_free(records);return status; }
-    bounds->functions[f]=(EffectInvocationFunctionBounds){(uint32_t)values,records};
+    bounds->functions[f]=(EffectInvocationFunctionBounds){(uint32_t)values,count,records};
     ++bounds->count;return XR_XIR_OK;
 }
 

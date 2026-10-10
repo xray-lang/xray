@@ -144,9 +144,10 @@ static XrXirStatus conditional_invocation_lowered_context(const XrXirCompileCont
         bool found=false;
         for (uint32_t f=0;f<bounds->count;++f) {
             const EffectInvocationFunctionBounds *function=&bounds->functions[f];
-            for (uint32_t v=0;v<function->values;++v) {
-                if (!function->bounds[v].callable ||
-                    function->bounds[v].mask!=XR_XIR_CALLABLE_ROOT_UNRESOLVED) continue;
+            for (uint32_t r=0;r<function->count;++r) {
+                uint32_t v=function->bounds[r].value;
+                if (!function->bounds[r].callable ||
+                    function->bounds[r].mask!=XR_XIR_CALLABLE_ROOT_UNRESOLVED) continue;
                 uint32_t mask=UINT32_MAX;
                 CHECK(effect_invocation_bounds_mask(context,bounds,f,v,&mask)==XR_XIR_OK &&
                     mask==XR_XIR_CALLABLE_ROOT_UNRESOLVED);

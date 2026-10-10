@@ -187,11 +187,13 @@ static XrXirStatus effect_context_dense_body_match(const XrXirCompileContext *co
     const EffectInvocationFunctionBounds *bounds=&owner->declared->functions[index];
     const EffectInvocationFunctionBounds *copied=&certificate->declared->functions[index];
     uint64_t values=(uint64_t)actual->parameter_count+actual->instruction_count;
-    if (status==XR_XIR_OK && (bounds->values!=values || bounds->values!=copied->values ||
-        (values && (!bounds->bounds || !copied->bounds)))) status=XR_XIR_BAD_STRUCTURE;
-    for (uint32_t v=0;v<bounds->values && status==XR_XIR_OK;++v) {
+    if (status==XR_XIR_OK && (values!=bounds->values || values!=copied->values ||
+        bounds->count!=copied->count || bounds->count>values ||
+        (!!bounds->bounds!=!!bounds->count) || (!!copied->bounds!=!!copied->count))) status=XR_XIR_BAD_STRUCTURE;
+    for (uint32_t v=0;v<bounds->count && status==XR_XIR_OK;++v) {
         if (!xir_compile_work(context,4)) { status=XR_XIR_BUDGET;break; }
-        if (bounds->bounds[v].mask!=copied->bounds[v].mask ||
+        if (bounds->bounds[v].value!=copied->bounds[v].value ||
+            bounds->bounds[v].mask!=copied->bounds[v].mask ||
             bounds->bounds[v].callable!=copied->bounds[v].callable) status=XR_XIR_BAD_STRUCTURE;
     }
     return status;

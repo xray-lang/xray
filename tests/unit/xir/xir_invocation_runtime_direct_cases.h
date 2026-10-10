@@ -78,7 +78,9 @@ static XrXirStatus conditional_invocation_runtime_direct(const XrXirCompileConte
             uint32_t opaque=certificate->equations->site_count+
                 certificate->bodies.functions[node->root].parameter_count;
             CHECK(certificate->parameter_kinds[1][0]==XR_XIR_EFFECT_PARAMETER_FIXED &&
-                !certificate->declared->functions[1].bounds[0].mask &&
+                certificate->declared->functions[1].count &&
+            certificate->declared->functions[1].bounds[0].value==0 &&
+            !certificate->declared->functions[1].bounds[0].mask &&
                 (node->input[producer.site/64]&(UINT64_C(1)<<(producer.site%64))) &&
                 (node->input[opaque/64]&(UINT64_C(1)<<(opaque%64))));
         }

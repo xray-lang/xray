@@ -255,7 +255,8 @@ static XrXirStatus effect_invocations_create(const XrXirCompileContext *work,
         if (!xir_compile_work(work,1)) return XR_XIR_BUDGET;
         uint64_t values=(uint64_t)module->functions[f].parameter_count+module->functions[f].instruction_count;
         if (values!=declared->functions[f].values ||
-            (values && !declared->functions[f].bounds)) return XR_XIR_BAD_STRUCTURE;
+            declared->functions[f].count>values ||
+            (!!declared->functions[f].bounds!=!!declared->functions[f].count)) return XR_XIR_BAD_STRUCTURE;
     }
     uint64_t maximum=(uint64_t)work->limits.functions*work->limits.instructions;
     /* Wide default structural allowances need not fit an equation ordinal.

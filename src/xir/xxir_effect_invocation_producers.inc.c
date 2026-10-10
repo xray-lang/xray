@@ -130,7 +130,7 @@ static XrXirStatus effect_invocation_producer_put(EffectInvocationFlow *flow,
     EffectInvocationNode *node=&owner->nodes[flow->node];
     if (fact->value<flow->values) {
         const uint64_t *row=NULL;
-        if (flow->rows) row=flow->rows+(size_t)fact->value*flow->basis.fn_words;
+        if (flow->memory) row=effect_invocation_row(flow,fact->value);
         else if (fact->value<flow->function->parameter_count)
             row=node->input+(size_t)fact->value*flow->basis.row_words;
         if (!row) return XR_XIR_BAD_STRUCTURE;
@@ -201,7 +201,8 @@ static XrXirStatus effect_invocation_producer_seed(EffectInvocationFlow *flow,
     status=effect_invocation_producer_put(flow,&fact,changed,verify);
     const EffectInvocationSite *source=&flow->owner->sites[site];
     const XrXirFunction *target=&flow->owner->module->functions[source->target];
-    const uint64_t *row=flow->rows+(size_t)destination*flow->basis.fn_words;
+    const uint64_t *row=effect_invocation_row(flow,destination);
+    if (!row) return XR_XIR_BAD_STRUCTURE;
     uint64_t bits=(uint64_t)flow->basis.parameters+3;
     for (uint32_t p=0;status==XR_XIR_OK && p<source->captures;++p) {
         if (!xir_compile_work(flow->owner->work,2)) return XR_XIR_BUDGET;
@@ -449,13 +450,14 @@ static XrXirStatus effect_invocation_producer_record_verify(EffectInvocationFlow
     if (admitted!=XR_XIR_OK) return admitted;
     if (!supported || fact->atom>=atoms) return XR_XIR_BAD_STRUCTURE;
     if (!xir_compile_work(owner->work,5)) return XR_XIR_BUDGET;
-    if (fact->value<flow->values && !(flow->rows[(size_t)fact->value*flow->basis.fn_words+fact->site/64]&
-        (UINT64_C(1)<<(fact->site%64)))) return XR_XIR_BAD_STRUCTURE;
+    const uint64_t *row=fact->value<flow->values ? effect_invocation_row(flow,fact->value) : NULL;
+    if (fact->value<flow->values && (!row || !(row[fact->site/64]&
+        (UINT64_C(1)<<(fact->site%64))))) return XR_XIR_BAD_STRUCTURE;
     if (fact->atom && fact->value<flow->values) {
         uint32_t word=0,bit=0;
         admitted=effect_invocation_producer_column(owner,&flow->basis,fact->site,fact->atom,&word,&bit);
         if (admitted!=XR_XIR_OK) return admitted;
-        if (!(flow->rows[(size_t)fact->value*flow->basis.fn_words+word]&(UINT64_C(1)<<bit)))
+        if (!(row[word]&(UINT64_C(1)<<bit)))
             return XR_XIR_BAD_STRUCTURE;
     }
     if (!fact->distance) {

@@ -44,7 +44,9 @@ static XrXirStatus effect_invocation_deferred_arguments(EffectInvocationFlow *fl
             if (!xir_compile_work(owner->work,(uint64_t)flow->basis.fn_words*sizeof(*row))) {
                 status=XR_XIR_BUDGET;break;
             }
-            memcpy(row,flow->rows+(size_t)actual*flow->basis.fn_words,
+            const uint64_t *actual_row=effect_invocation_row(flow,actual);
+            if (!actual_row) { status=XR_XIR_BAD_STRUCTURE;break; }
+            memcpy(row,actual_row,
                 (size_t)flow->basis.fn_words*sizeof(*row));
             if (flow->fixed[actual]) {
                 uint32_t mask=0;

@@ -140,7 +140,8 @@ static XrXirStatus error_invocation_indirect_check(EffectInvocationFlow *replay,
     uint32_t instruction,bool *unknown) {
     const XrXirInstruction *op=&replay->function->instructions[instruction];
     if (op->immediate<0 || (uint64_t)op->immediate>=replay->values) return XR_XIR_BAD_STRUCTURE;
-    const uint64_t *row=replay->rows+(size_t)op->immediate*replay->basis.fn_words;
+    const uint64_t *row=effect_invocation_row(replay,(uint32_t)op->immediate);
+    if (!row) return XR_XIR_BAD_STRUCTURE;
     EffectInvocationOwner *owner=replay->owner;
     uint32_t opaque=owner->site_count+replay->basis.parameters;
     bool unresolved=false,present=false;
@@ -193,7 +194,8 @@ static XrXirStatus error_invocation_input_match(EffectInvocationFlow *replay,
     const uint64_t *closure=NULL;
     if (edge.producer!=UINT32_MAX) {
         if (op->immediate<0 || (uint64_t)op->immediate>=replay->values) return XR_XIR_BAD_STRUCTURE;
-        closure=replay->rows+(size_t)op->immediate*replay->basis.fn_words;
+        closure=effect_invocation_row(replay,(uint32_t)op->immediate);
+        if (!closure) return XR_XIR_BAD_STRUCTURE;
     }
     uint64_t *input=NULL;replay->instruction=edge.instruction;
     status=effect_invocation_arguments(replay,edge.instruction,target->body,edge.producer,closure,&input);

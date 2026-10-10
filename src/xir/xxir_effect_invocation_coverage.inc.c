@@ -39,7 +39,8 @@ static XrXirStatus effect_invocation_coverage_input(EffectInvocationFlow *flow,
     const uint64_t *closure=NULL;
     if (edge.producer!=UINT32_MAX) {
         if (op->immediate<0 || (uint64_t)op->immediate>=flow->values) return XR_XIR_BAD_STRUCTURE;
-        closure=flow->rows+(size_t)op->immediate*flow->basis.fn_words;
+        closure=effect_invocation_row(flow,(uint32_t)op->immediate);
+        if (!closure) return XR_XIR_BAD_STRUCTURE;
     }
     uint64_t *input=NULL;flow->instruction=edge.instruction;
     status=effect_invocation_arguments(flow,edge.instruction,target->body,edge.producer,closure,&input);
@@ -89,7 +90,8 @@ static XrXirStatus effect_invocation_coverage_sites(EffectInvocationCoverage *co
     uint32_t value,bool parameter,bool *complete) {
     EffectInvocationFlow *flow=coverage->flow;EffectInvocationOwner *owner=flow->owner;
     if (value>=flow->values) return XR_XIR_BAD_STRUCTURE;
-    const uint64_t *row=flow->rows+(size_t)value*flow->basis.fn_words;
+    const uint64_t *row=effect_invocation_row(flow,value);
+    if (!row) return XR_XIR_BAD_STRUCTURE;
     bool present=false;
     for (uint32_t s=0;s<owner->site_count;++s) {
         if (!xir_compile_work(owner->work,1)) return XR_XIR_BUDGET;
@@ -166,7 +168,8 @@ static XrXirStatus effect_invocation_coverage_call(EffectInvocationCoverage *cov
     }
     if (!count) *complete=false;
     if (indirect) {
-        const uint64_t *row=flow->rows+(size_t)op->immediate*flow->basis.fn_words;
+        const uint64_t *row=effect_invocation_row(flow,(uint32_t)op->immediate);
+        if (!row) return XR_XIR_BAD_STRUCTURE;
         for (uint32_t s=0;s<owner->site_count;++s) {
             if (!xir_compile_work(owner->work,2)) return XR_XIR_BUDGET;
             if ((row[s/64]&(UINT64_C(1)<<(s%64))) && coverage->matches[s]!=1) *complete=false;
