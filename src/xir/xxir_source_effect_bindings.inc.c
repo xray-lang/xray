@@ -61,6 +61,47 @@ static uint32_t source_effect_value_mode(const XrXirInstruction *op,
     }
 }
 
+/* Only the existing Source-owned record follows an actual producer change.
+ * A missing record is not synthesized here: the complete original records pass
+ * still owns membership and capacity. Pre-bottom advertisements remain owned
+ * by the effects refinement snapshot; CALL_BIND keeps its consuming bound. */
+static bool source_effect_value_refresh(SourceContext *ctx, uint32_t f, uint32_t i) {
+    if (!ctx->effect_evidence || ctx->bodies[f].library_effect) return true;
+    if (!source_effect_work(ctx,4)) return false;
+    SourceFunction *body = &ctx->bodies[f];
+    const XrXirFunction *function = &ctx->functions[f];
+    if (ctx->effect_evidence->contract_count != ctx->function_count ||
+        !ctx->effect_evidence->contracts || i >= function->instruction_count)
+        return source_fail(ctx,NULL,XR_XIR_BAD_STRUCTURE,"prepared effect record owner changed shape");
+    XrXirFunctionEffectContract *contract = &ctx->effect_evidence->contracts[f];
+    if (contract->value_count != body->effect_value_capacity ||
+        body->effect_value_capacity > function->instruction_count ||
+        !!body->effect_values != !!body->effect_value_capacity ||
+        contract->values != (contract->value_count ? body->effect_values : NULL))
+        return source_fail(ctx,NULL,XR_XIR_BAD_STRUCTURE,"prepared effect value storage changed shape");
+    uint32_t first = 0, last = contract->value_count;
+    while (first < last) {
+        if (!source_effect_work(ctx,3)) return false;
+        uint32_t middle = first + (last - first) / 2;
+        if (body->effect_values[middle].instruction < i) first = middle + 1;
+        else last = middle;
+    }
+    const XrXirInstruction *op = &function->instructions[i];
+    const SourceRootValue *root = body->root_values ? &body->root_values[i] : NULL;
+    uint32_t mode = source_effect_value_mode(op,root);
+    if (first == contract->value_count || body->effect_values[first].instruction != i) {
+        if (mode && root && xr_xir_callable_signature(&ctx->types,root->declared))
+            return source_fail(ctx,NULL,XR_XIR_BAD_STRUCTURE,"prepared callable producer lost its effect record");
+        return true;
+    }
+    if (!mode || !xr_xir_callable_signature(&ctx->types,op->type))
+        return source_fail(ctx,NULL,XR_XIR_BAD_STRUCTURE,"prepared effect value lost its callable producer");
+    if (!source_effect_work(ctx,3)) return false;
+    body->effect_values[first] = (XrXirRootValueIdentity){i,mode,
+        mode == XR_XIR_EFFECT_VALUE_CALL_BIND ? root->declared : op->type};
+    return true;
+}
+
 static bool source_effect_records(SourceContext *ctx, uint32_t f, bool prepare) {
     SourceFunction *body = &ctx->bodies[f];
     const XrXirFunction *function = &ctx->functions[f];

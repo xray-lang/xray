@@ -41,3 +41,21 @@ foreach(_root_conditional_gate helpers source)
             LABELS "unit;xir;root-effects;higher-order;compiler-fault;ownership" TIMEOUT 600 RUN_SERIAL TRUE PROCESSORS 1)
     endif()
 endforeach()
+
+# Existing producer identities must follow actual Source normalization.
+add_executable(test_xir_source_effect_value_refine
+    ${CMAKE_CURRENT_LIST_DIR}/test_xir_source_effect_value_refine.c)
+target_include_directories(test_xir_source_effect_value_refine PRIVATE ${XRAY_COMMON_INCLUDES})
+target_link_libraries(test_xir_source_effect_value_refine PRIVATE xray_xir_source)
+if(MSVC)
+    target_compile_options(test_xir_source_effect_value_refine PRIVATE /W4 /WX /utf-8)
+else()
+    target_compile_options(test_xir_source_effect_value_refine PRIVATE -Wall -Wextra -Werror)
+endif()
+add_test(NAME test_xir_source_effect_value_refine COMMAND test_xir_source_effect_value_refine)
+set_tests_properties(test_xir_source_effect_value_refine PROPERTIES
+    LABELS "unit;xir;root-effects;higher-order;compiler;ownership" TIMEOUT 300 RUN_SERIAL TRUE PROCESSORS 1)
+add_test(NAME test_xir_source_effect_value_refine_compiler
+    COMMAND test_xir_source_effect_value_refine --compiler)
+set_tests_properties(test_xir_source_effect_value_refine_compiler PROPERTIES
+    LABELS "unit;xir;root-effects;higher-order;compiler-fault;ownership" TIMEOUT 600 RUN_SERIAL TRUE PROCESSORS 1)

@@ -13,7 +13,7 @@ static bool source_root_set(SourceContext *ctx, uint32_t function, uint32_t inst
     XrXirType type, bool *changed) {
     XrXirInstruction *op = (XrXirInstruction *)ctx->functions[function].instructions + instruction;
     if (op->type != type) { op->type = type; *changed = true; }
-    return true;
+    return source_effect_value_refresh(ctx,function,instruction);
 }
 static bool source_root_join_type(SourceContext *ctx, XrXirType left,
     XrXirType right, XrXirType *output) {
