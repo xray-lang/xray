@@ -13,7 +13,7 @@ fn throwing(value: ref i64) {
 }
 export fn caughtThrow() -> i64 {
     try { throwing(ref storage.values[0]); } catch(e: Problem) { }
-    storage.values[0] += 1;
+    storage.values[0] = storage.values[0] + 1;
     return storage.values[0];
 }
 export fn uncaughtThrow() -> i64 { throwing(ref storage.values[0]); return 0; }
@@ -24,7 +24,7 @@ fn panicking(value: ref i64) -> i64 {
 }
 export fn caughtPanic() -> i64 {
     try { panicking(ref storage.values[0]); } catch panic { }
-    storage.values[0] += 1;
+    storage.values[0] = storage.values[0] + 1;
     return storage.values[0];
 }
 
