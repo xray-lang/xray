@@ -120,14 +120,14 @@ static XrXirStatus effect_ordinary_environment_same(EffectOrdinaryContexts *cont
     const EffectOrdinaryNode *node, uint32_t declaration, const XrXirType *arguments,
     uint32_t count, bool *equal) {
     *equal=node->declaration==declaration && node->argument_count==count;
-    XrXirTypeMatchScratch scratch={contexts->terms.remaining->resources,NULL};
+    XrXirTypeMatchScratch *scratch=effect_terms_type_scratch(&contexts->terms);
     XrXirStatus status=XR_XIR_OK;
     for (uint32_t a=0;*equal && a<count && status==XR_XIR_OK;++a) {
         status=xr_xir_compile_type_substitution_matches_between_scratch(contexts->terms.remaining,
-            &contexts->terms.types,&contexts->terms.types,NULL,0,node->arguments[a],arguments[a],&scratch);
+            &contexts->terms.types,&contexts->terms.types,NULL,0,node->arguments[a],arguments[a],scratch);
         if (status==XR_XIR_BAD_TYPE) { *equal=false;status=XR_XIR_OK; }
     }
-    xr_xir_type_match_scratch_free(&scratch);return status;
+    return status;
 }
 
 static XrXirStatus effect_ordinary_intern(EffectOrdinaryContexts *contexts,

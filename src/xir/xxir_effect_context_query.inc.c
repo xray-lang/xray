@@ -164,8 +164,8 @@ XR_FUNC XrXirStatus xir_effects_context_select(const XrXirCompileContext *contex
     uint32_t edge_mask=(facts->requires_root?XR_XIR_CALLABLE_ROOT_REQUIRED:0)|
         (facts->unresolved?XR_XIR_CALLABLE_ROOT_UNRESOLVED:0);
     if (input->instruction!=UINT32_MAX) {
-        status=effect_formula_edge_mask(context,&dense->terms.types,&dense->uses,dense->functions,caller,
-            &dense->functions[caller].instructions[input->instruction],target,&edge_mask);
+        status=effect_invocation_context_edge_mask(context,effects->contexts->forest,
+            caller,input->instruction,target,&edge_mask);
         if (status!=XR_XIR_OK) return status;
     }
     *output=(XirEffectContextView){&dense->terms.types,&dense->functions[target],
@@ -243,8 +243,8 @@ XR_FUNC XrXirStatus xir_effects_reference_root(const XrXirCompileContext *contex
         mask=(selected.requires_root?XR_XIR_CALLABLE_ROOT_REQUIRED:0)|
             (selected.unresolved?XR_XIR_CALLABLE_ROOT_UNRESOLVED:0);
     } else if (effects->contracts && !effects->contexts) {
-        XrXirStatus status=effect_formula_edge_mask(context,module->types,effects,module->functions,
-            function,op,(uint32_t)op->immediate,&mask);
+        XrXirStatus status=effect_invocation_effect_edge_mask(context,effects,
+            function,instruction,(uint32_t)op->immediate,&mask);
         if (status!=XR_XIR_OK) return status;
     } else {
         const XrXirRootEffects *facts=&effects->root[op->immediate];

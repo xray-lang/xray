@@ -14,9 +14,12 @@
 #include "xxir_generic.h"
 #include "xxir_type_match_internal.h"
 
-XR_FUNC XrXirStatus xir_effect_callable_bound_matches(const XrXirCompileContext *context,
-    const XirEffectCallableBound *request) {
-    if (!xir_compile_context_valid(context) || !request ||
+/* Matching keeps capacity only. Every result and physical parameter is
+ * traversed again; nested invocations claim distinct live stack blocks. */
+static XrXirStatus effect_callable_bound_matches_scratch(const XrXirCompileContext *context,
+    const XirEffectCallableBound *request, XrXirTypeMatchScratch *scratch) {
+    if (!xir_compile_context_valid(context) || !request || !scratch ||
+        scratch->resources!=context->resources ||
         !!request->arguments != !!request->argument_count) return XR_XIR_BAD_STRUCTURE;
     if (!xir_compile_work(context,1)) return XR_XIR_BUDGET;
     const XrXirTypeNode *declared=xr_xir_callable_signature(request->source,request->declared);
@@ -26,17 +29,24 @@ XR_FUNC XrXirStatus xir_effect_callable_bound_matches(const XrXirCompileContext 
         !!actual->parameters != !!actual->parameter_count ||
         declared->parameter_count != actual->parameter_count ||
         !xr_xir_callable_flags_compatible(actual->flags,declared->flags)) return XR_XIR_BAD_TYPE;
-    XrXirTypeMatchScratch scratch={context->resources,NULL};
     XrXirStatus status=xr_xir_compile_type_substitution_matches_between_scratch(context,
         request->source,request->destination,request->arguments,request->argument_count,
-        declared->result,actual->result,&scratch);
+        declared->result,actual->result,scratch);
     for (uint32_t p=0;status==XR_XIR_OK && p<declared->parameter_count;++p) {
         if (!xir_compile_work(context,1)) { status=XR_XIR_BUDGET;break; }
         if (declared->parameters[p].mode != actual->parameters[p].mode) { status=XR_XIR_BAD_TYPE;break; }
         status=xr_xir_compile_type_substitution_matches_between_scratch(context,
             request->source,request->destination,request->arguments,request->argument_count,
-            declared->parameters[p].type,actual->parameters[p].type,&scratch);
+            declared->parameters[p].type,actual->parameters[p].type,scratch);
     }
+    return status;
+}
+
+XR_FUNC XrXirStatus xir_effect_callable_bound_matches(const XrXirCompileContext *context,
+    const XirEffectCallableBound *request) {
+    if (!xir_compile_context_valid(context)) return XR_XIR_BAD_STRUCTURE;
+    XrXirTypeMatchScratch scratch={context->resources,NULL};
+    XrXirStatus status=effect_callable_bound_matches_scratch(context,request,&scratch);
     xr_xir_type_match_scratch_free(&scratch);return status;
 }
 
@@ -49,7 +59,8 @@ static XrXirStatus effect_contract_vector(const XrXirCompileContext *context,
 
 static bool effect_contract_context_op(XrXirOp op) {
     return op == XR_XIR_CALL || op == XR_XIR_INVOKE || op == XR_XIR_CALL_DEFAULT ||
-        op == XR_XIR_INVOKE_DEFAULT || op == XR_XIR_CALL_REQUIREMENT;
+        op == XR_XIR_INVOKE_DEFAULT || op == XR_XIR_CALL_REQUIREMENT ||
+        op == XR_XIR_CALL_INDIRECT || op == XR_XIR_INVOKE_INDIRECT;
 }
 
 static XrXirStatus effect_contract_formula(const XrXirCompileContext *context,

@@ -32,13 +32,6 @@ static void effect_root_terminal(XrXirRootEffectWitness *witness,
     XrXirRootEffectWitness candidate = {cause,instruction,UINT32_MAX,slot,0};
     if (!witness->cause || effect_root_cause_before(&candidate,witness)) *witness = candidate;
 }
-static void effect_root_initializer(const XrXirModule *module, XrXirEffects *effects, uint32_t f) {
-    const XrXirDeclarations *d = module->declarations;
-    if (d && d->modules[d->functions[f].module].initializer == f) {
-        effects->root[f].requires_root = true;
-        effect_root_terminal(&effects->root_witnesses[f],XR_XIR_ROOT_CAUSE_INITIALIZER,UINT32_MAX,UINT32_MAX);
-    }
-}
 static XrXirStatus effect_root_slot(const XrXirModule *module, XrXirEffects *effects,
     uint32_t f, uint32_t i, const XrXirCompileContext *work) {
     const XrXirInstruction *op = &module->functions[f].instructions[i];
@@ -171,6 +164,9 @@ XR_FUNC XrXirStatus xr_xir_compile_root_cause_trace_copy(const XrXirCompileConte
     const XrXirEffects *effects, uint32_t function, XrXirRootCauseTrace **output) {
     if (effects && effects->contexts)
         return effect_context_owner_trace(context,effects,function,output);
+    if (effects && effects->invocations)
+        return effect_invocation_public_trace(context,effects->invocations,effects->count,function,
+            function<effects->count?&effects->root[function]:NULL,output);
     if (!xir_compile_context_valid(context) || !effects || effects->resources != context->resources ||
         function >= effects->count || !effects->root || !effects->root_witnesses ||
         !effects->unresolved_witnesses || !output || *output) return XR_XIR_BAD_STRUCTURE;
@@ -351,7 +347,7 @@ static XrXirStatus effect_root_forest(XrXirEffects *effects, EffectGraph *graph,
 
 /* Constant propagation follows only its authenticated constant forest. The
  * public choice still uses the original ordering across both domains. */
-static XrXirStatus effect_root_witnesses(XrXirEffects *effects, EffectGraph *graph,
+static inline XrXirStatus effect_root_witnesses(XrXirEffects *effects, EffectGraph *graph,
     const XrXirCompileContext *work, bool unresolved) {
     if (!effects->contracts) return effect_root_forest(effects,graph,work,unresolved,false);
     if (!effects->constant_witnesses || !effects->formula_terminals) return XR_XIR_BAD_STRUCTURE;
@@ -378,25 +374,6 @@ static XrXirStatus effect_root_witnesses(XrXirEffects *effects, EffectGraph *gra
         if (!xir_compile_work(work,1)) return XR_XIR_BUDGET;
         bool fact=unresolved?effects->root[f].unresolved:effects->root[f].requires_root;
         if (fact!=(to->cause!=XR_XIR_ROOT_CAUSE_NONE)) return XR_XIR_BAD_STRUCTURE;
-    }
-    return XR_XIR_OK;
-}
-
-/* Value refinement changes only local root seeds. Reuse the prepared owner's
- * execution graph and queue instead of deriving another set of call edges. */
-static XrXirStatus effect_root_refresh(const XrXirModule *module,
-    XrXirEffects *effects, const XrXirCompileContext *work) {
-    if (!xir_compile_work(work,(uint64_t)effects->count *
-        (sizeof(*effects->root) + 2 * sizeof(*effects->root_witnesses)))) return XR_XIR_BUDGET;
-    memset(effects->root,0,effects->count * sizeof(*effects->root));
-    memset(effects->root_witnesses,0,effects->count * sizeof(*effects->root_witnesses));
-    memset(effects->unresolved_witnesses,0,effects->count * sizeof(*effects->unresolved_witnesses));
-    for (uint32_t f = 0; f < effects->count; ++f) {
-        effect_root_initializer(module,effects,f);
-        for (uint32_t i = 0; i < module->functions[f].instruction_count; ++i) {
-            XrXirStatus status = effect_root_seed(module,effects,f,i,work);
-            if (status != XR_XIR_OK) return status;
-        }
     }
     return XR_XIR_OK;
 }

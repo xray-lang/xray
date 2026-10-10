@@ -26,6 +26,11 @@
 
 typedef struct EffectContextOwner EffectContextOwner;
 typedef struct EffectRefinementBounds EffectRefinementBounds;
+typedef struct EffectInvocationCertificate EffectInvocationCertificate;
+typedef struct EffectInvocationDeclaredBounds EffectInvocationDeclaredBounds;
+typedef struct EffectOrdinaryContexts EffectOrdinaryContexts;
+static void effect_invocation_certificate_free(EffectInvocationCertificate *certificate);
+static void effect_invocation_bounds_free(EffectInvocationDeclaredBounds *bounds);
 static void effect_refinement_free(EffectRefinementBounds *bounds);
 static void effect_context_owner_free(EffectContextOwner *owner);
 static XrXirStatus effect_context_owner_trace(const XrXirCompileContext *context,
@@ -53,6 +58,8 @@ struct XrXirEffects {
     XirEffectEntryRootView *entry_roots;
     EffectContextOwner *contexts;
     EffectRefinementBounds *refinement;
+    /* One sealed ROOT owner; control and error analyses remain independent. */
+    EffectInvocationCertificate *invocations;
 };
 
 /* Ledger identity rejects foreign requests; it is not an admission proof. */
@@ -81,6 +88,16 @@ typedef struct EffectGraph {
 
 static bool effect_root_cause_before(const XrXirRootEffectWitness *a, const XrXirRootEffectWitness *b);
 
+static XrXirStatus effect_invocation_publish(const XrXirCompileContext *work,
+    const XrXirModule *module,XrXirEffects *effects,EffectGraph *graph,
+    const EffectInvocationDeclaredBounds *declared,const EffectOrdinaryContexts *dense);
+static XrXirStatus effect_invocation_effect_edge_mask(const XrXirCompileContext *work,
+    const XrXirEffects *effects,uint32_t caller,uint32_t instruction,uint32_t target,uint32_t *output);
+static XrXirStatus effect_invocation_public_gate(const XrXirCompileContext *work,
+    const EffectInvocationCertificate *certificate,uint32_t limit);
+static XrXirStatus effect_invocation_public_trace(const XrXirCompileContext *work,
+    const EffectInvocationCertificate *certificate,uint32_t limit,uint32_t function,
+    const XrXirRootEffects *facts,XrXirRootCauseTrace **output);
 #include "xxir_effect_parameters.inc.c"
 
 static void effect_graph_free(EffectGraph *graph) {
@@ -250,13 +267,10 @@ static XrXirStatus effect_graph_build(const XrXirModule *module, XrXirEffects *e
     for (uint32_t f = 0; f < module->function_count; ++f) {
         const XrXirFunction *function = &module->functions[f];
         if (!xir_compile_work(remaining, (uint64_t)function->instruction_count + 1)) return XR_XIR_BUDGET;
-        effect_root_initializer(module, effects, f);
         for (uint32_t i = 0; i < function->instruction_count; ++i) {
             XrXirOp op = function->instructions[i].op;
             if (!effect_seed(module, function, &function->instructions[i], &effects->functions[f]))
                 return XR_XIR_BAD_STRUCTURE;
-            XrXirStatus root_status = effect_root_seed(module, effects, f, i, remaining);
-            if (root_status != XR_XIR_OK) return root_status;
             if (op == XR_XIR_GO) effects->task_creation[f] = XR_XIR_EFFECT_MAY;
             if (symbolic && op == XR_XIR_FUNCTION_REF) {
                 if (!xir_compile_work(remaining, 1)) return XR_XIR_BUDGET;
@@ -321,12 +335,6 @@ static XrXirStatus effect_propagate(XrXirEffects *effects, EffectGraph *graph, c
              * separate no-throw/no-suspend obligations govern control effects. */
             XrXirFunctionEffects *to = &effects->functions[link.caller];
             bool changed = false;
-            if (!effects->contracts && effects->root[callee].requires_root && !effects->root[link.caller].requires_root) {
-                effects->root[link.caller].requires_root = true; changed = true;
-            }
-            if (!effects->contracts && effects->root[callee].unresolved && !effects->root[link.caller].unresolved) {
-                effects->root[link.caller].unresolved = true; changed = true;
-            }
             if (!link.cleanup && from.suspend > to->suspend) { to->suspend = from.suspend; changed = true; }
             if (!link.cleanup && effects->task_creation[callee] > effects->task_creation[link.caller]) {
                 effects->task_creation[link.caller] = effects->task_creation[callee]; changed = true;
@@ -354,6 +362,9 @@ static XrXirStatus effect_propagate(XrXirEffects *effects, EffectGraph *graph, c
 #include "xxir_effect_invocation_bounds.inc.c"
 #include "xxir_effect_context_owner.inc.c"
 #include "xxir_effect_context_query.inc.c"
+#include "xxir_effect_invocations.inc.c"
+#include "xxir_effect_invocation_public_trace.inc.c"
+#include "xxir_effect_invocation_publish.inc.c"
 
 /* A breadth-first forest over final facts cannot inherit a cyclic cause chain
  * from recursive fixed-point updates. Each function enters the queue once. */
@@ -495,8 +506,7 @@ static XrXirStatus effect_infer(const XrXirCompileContext *compile_context,
     XrXirStatus status = refiner ? refiner->update(refiner->context,effects,&changed) : XR_XIR_OK;
     if (status == XR_XIR_OK) status = effect_graph_build(module, effects, &graph, remaining);
     if (status == XR_XIR_OK) status = effect_parameters_derive(module, effects, &graph, remaining);
-    if (status == XR_XIR_OK) status = effect_formulas_derive(module, effects, &graph, remaining);
-    if (status == XR_XIR_OK) status = effect_formulas_project(module,effects,remaining);
+    if (status == XR_XIR_OK) status = effect_invocation_publish(remaining,module,effects,&graph,NULL,NULL);
     if (status == XR_XIR_OK) status = effect_propagate(effects, &graph, remaining);
     if (status == XR_XIR_OK) status = effect_context_owner_refresh(remaining,module,effects);
     while (status == XR_XIR_OK && refiner) {
@@ -504,8 +514,8 @@ static XrXirStatus effect_infer(const XrXirCompileContext *compile_context,
         status = refiner->update(refiner->context,effects,&changed);
         if (status != XR_XIR_OK) break;
         if (!changed && effects->refinement) {
-            /* Advertisements serve only the temporary equation. Rebuild from
-             * the final graph and require Source to agree without them. */
+            /* Discard temporary pre-bottom SSA storage and rebuild from the
+             * final graph. Real CALL_BIND declarations remain source bounds. */
             effect_refinement_free(effects->refinement);effects->refinement=NULL;
             status=effect_context_owner_refresh(remaining,module,effects);
             if (status!=XR_XIR_OK) break;
@@ -513,19 +523,17 @@ static XrXirStatus effect_infer(const XrXirCompileContext *compile_context,
         }
         if (status != XR_XIR_OK || !changed) break;
         status = effect_parameters_derive(module, effects, &graph, remaining);
-        if (status == XR_XIR_OK) status = effect_root_refresh(module,effects,remaining);
-        if (status == XR_XIR_OK) status = effect_formulas_derive(module, effects, &graph, remaining);
-        if (status == XR_XIR_OK) status = effect_formulas_project(module,effects,remaining);
+        if (status == XR_XIR_OK) status = effect_invocation_publish(remaining,module,effects,&graph,NULL,NULL);
         if (status == XR_XIR_OK) status = effect_propagate(effects,&graph,remaining);
         if (status == XR_XIR_OK) status = effect_context_owner_refresh(remaining,module,effects);
     }
     if (status == XR_XIR_OK) status = effect_go_safe(module, effects, &graph, remaining);
     if (status == XR_XIR_OK) status = effect_witnesses(module, effects, &graph, remaining);
-    if (status == XR_XIR_OK) status = effect_root_witnesses(effects, &graph, remaining, false);
-    if (status == XR_XIR_OK) status = effect_root_witnesses(effects, &graph, remaining, true);
     if (status==XR_XIR_OK && effects->contexts)
         status=effect_context_owner_project(remaining,module,effects,effects->contexts);
     if (status == XR_XIR_OK) status = effect_errors_analyze(module, effects, &graph, remaining);
+    if (status == XR_XIR_OK && !effects->contexts)
+        status=effect_invocation_public_gate(remaining,effects->invocations,effects->count);
     if (status == XR_XIR_OK) status = effect_entry_roots_seal(module,effects,remaining);
     effect_graph_free(&graph);
     if (status != XR_XIR_OK) { xr_xir_compile_effects_free(effects); return status; }

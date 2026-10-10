@@ -61,12 +61,11 @@ static XrXirStatus effect_dense_parameter(const EffectDenseRequest *request,
     const XrXirTypeNode *callable=xr_xir_callable_signature(&terms->types,declared);
     if (actual.present && callable) {
         XirEffectCallableBound bound={&terms->types,&terms->types,NULL,0,declared,actual.type};
-        status=xir_effect_callable_bound_matches(terms->remaining,&bound);
+        status=effect_callable_bound_matches_scratch(terms->remaining,&bound,effect_terms_type_scratch(terms));
     } else if (actual.present) {
-        XrXirTypeMatchScratch scratch={terms->remaining->resources,NULL};
+        XrXirTypeMatchScratch *scratch=effect_terms_type_scratch(terms);
         status=xr_xir_compile_type_substitution_matches_between_scratch(terms->remaining,
-            &terms->types,&terms->types,NULL,0,declared,actual.type,&scratch);
-        xr_xir_type_match_scratch_free(&scratch);
+            &terms->types,&terms->types,NULL,0,declared,actual.type,scratch);
     }
     if (status!=XR_XIR_OK) return status;
     if (!xir_compile_work(terms->remaining,3+sizeof(*output))) return XR_XIR_BUDGET;

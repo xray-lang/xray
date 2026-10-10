@@ -117,3 +117,5 @@ static inline XrXirStatus effect_invocation_bounds_mask(const XrXirCompileContex
         (XR_XIR_CALLABLE_ROOT_REQUIRED|XR_XIR_CALLABLE_ROOT_UNRESOLVED)) return XR_XIR_BAD_TYPE;
     *output=record->mask;return XR_XIR_OK;
 }
+
+#include "xxir_effect_invocation_instance_bounds.inc.c"

@@ -14,7 +14,7 @@ struct EffectContextOwner {
     EffectOrdinaryContexts *ordinary, *dense;
     EffectContextForest *forest;
     EffectInvocationDeclaredBounds *declared;
-    const EffectRefinementBounds *refinement;
+    EffectRefinementBounds *refinement;
 };
 
 static void effect_context_owner_free(EffectContextOwner *owner) {
@@ -36,39 +36,107 @@ static void effect_context_summary_clear(EffectOrdinaryContexts *contexts) {
 }
 
 
+/* A true CALL_BIND COPY keeps the original consuming declaration after
+ * Source discards its temporary refinement owner. Other records describe
+ * their current authentic producer and cannot invent a stronger bound. */
+static XrXirStatus effect_invocation_source_declarations(const XrXirCompileContext *work,
+    const XrXirModule *source,uint32_t function,const XrXirType *prebottom,XrXirType **output) {
+    if (!source || !source->functions || function>=source->function_count || !output || *output)
+        return XR_XIR_BAD_STRUCTURE;
+    const XrXirProvenance *provenance=source->provenance;
+    if (!provenance || provenance->kind!=XR_XIR_EVIDENCE_TEMPLATE) return XR_XIR_OK;
+    /* Internal ordinary views carry a marker without stored source records.
+     * Their actual types still undergo complete bounds and equation proof. */
+    if (!provenance->contracts && !provenance->contract_count) return XR_XIR_OK;
+    if (!provenance->contracts || provenance->contract_count!=source->function_count)
+        return XR_XIR_BAD_STRUCTURE;
+    const XrXirFunction *body=&source->functions[function];
+    const XrXirFunctionEffectContract *contract=&provenance->contracts[function];
+    XrXirStatus status=effect_contract_values(work,source,function,contract);
+    bool present=false;
+    for (uint32_t v=0;v<contract->value_count && status==XR_XIR_OK;++v) {
+        if (!xir_compile_work(work,1)) { status=XR_XIR_BUDGET;break; }
+        if (contract->values[v].mode==XR_XIR_EFFECT_VALUE_CALL_BIND) present=true;
+    }
+    if (status!=XR_XIR_OK || !present) return status;
+    uint64_t bytes=(uint64_t)body->instruction_count*sizeof(XrXirType);
+    if (bytes>SIZE_MAX) return XR_XIR_BUDGET;
+    XrXirType *types=xir_compile_alloc(work,(size_t)bytes,&status);
+    if (!types) return status;
+    for (uint32_t i=0;i<body->instruction_count && status==XR_XIR_OK;++i) {
+        if (!xir_compile_work(work,sizeof(*types)+1)) { status=XR_XIR_BUDGET;break; }
+        types[i]=prebottom?prebottom[i]:body->instructions[i].type;
+    }
+    for (uint32_t v=0;v<contract->value_count && status==XR_XIR_OK;++v) {
+        if (!xir_compile_work(work,2)) { status=XR_XIR_BUDGET;break; }
+        const XrXirRootValueIdentity *identity=&contract->values[v];
+        if (identity->mode!=XR_XIR_EFFECT_VALUE_CALL_BIND) continue;
+        status=xr_xir_compile_callable_weakening(work,source->types,
+            body->instructions[identity->instruction].type,identity->declared_type);
+        if (status==XR_XIR_OK) types[identity->instruction]=identity->declared_type;
+    }
+    if (status!=XR_XIR_OK) { xr_compile_resources_free(types);return status; }
+    *output=types;return XR_XIR_OK;
+}
+
 /* Refinement matched the immutable source type prefix and copied declaration
  * domain before the dense pool was seeded. These original IDs therefore name
  * that verified prefix. Actual ordinary binders still undergo full substitution. */
-static XrXirStatus effect_context_dense_declarations(EffectContextOwner *owner,
-    uint32_t index,const XrXirType **output) {
-    if (!owner || !owner->dense || !output || *output || index>=owner->dense->count)
+static XrXirStatus effect_invocation_context_declarations(EffectOrdinaryContexts *dense,
+    const XrXirModule *source,const EffectRefinementBounds *bounds,uint32_t index,const XrXirType **output) {
+    if (!dense || !output || *output || index>=dense->count)
         return XR_XIR_BAD_STRUCTURE;
-    if (!owner->refinement) return XR_XIR_OK;
-    EffectOrdinaryContexts *dense=owner->dense;
-    const EffectRefinementBounds *bounds=owner->refinement;
     EffectOrdinaryNode node=dense->nodes[index];
     const XrXirFunction *function=&dense->functions[index];
-    if (bounds->resources!=dense->terms.remaining->resources ||
-        node.declaration>=bounds->count || bounds->source_type_count>dense->source_type_count ||
+    if (!source || node.declaration>=source->function_count ||
+        (bounds && (bounds->resources!=dense->terms.remaining->resources ||
+        node.declaration>=bounds->count || bounds->source_type_count>dense->source_type_count)) ||
         dense->source_type_count>dense->terms.types.count ||
         !!node.arguments!=!!node.argument_count) return XR_XIR_BAD_STRUCTURE;
-    const EffectRefinementFunction *original=&bounds->functions[node.declaration];
-    if (original->instruction_count!=function->instruction_count ||
+    const EffectRefinementFunction *original=bounds?&bounds->functions[node.declaration]:NULL;
+    if (original && (original->instruction_count!=function->instruction_count ||
         original->parameter_count!=function->parameter_count ||
-        (original->instruction_count && !original->instructions)) return XR_XIR_BAD_STRUCTURE;
-    XrXirType *types=original->instruction_count ?
-        effect_terms_alloc(&dense->terms,original->instruction_count,sizeof(*types)) : NULL;
-    if (original->instruction_count && !types) return dense->terms.status;
+        (original->instruction_count && !original->instructions))) return XR_XIR_BAD_STRUCTURE;
+    XrXirType *source_types=NULL;
+    XrXirStatus status=effect_invocation_source_declarations(dense->terms.remaining,
+        source,node.declaration,original?original->instructions:NULL,&source_types);
+    if (status!=XR_XIR_OK || (!original && !source_types)) return status;
+    uint32_t count=function->instruction_count;
+    XrXirType *types=count?effect_terms_alloc(&dense->terms,count,sizeof(*types)):NULL;
+    if (count && !types) { xr_compile_resources_free(source_types);return dense->terms.status; }
     XrXirGeneric environment={.arguments=node.arguments,.argument_count=node.argument_count};
-    for (uint32_t i=0;i<original->instruction_count;++i) {
-        if (!xir_compile_work(dense->terms.remaining,sizeof(*types)+1)) return XR_XIR_BUDGET;
-        types[i]=original->instructions[i];
+    for (uint32_t i=0;i<count && status==XR_XIR_OK;++i) {
+        if (!xir_compile_work(dense->terms.remaining,sizeof(*types)+1)) { status=XR_XIR_BUDGET;break; }
+        types[i]=source_types?source_types[i]:original->instructions[i];
         if (index>=dense->base_count) {
-            XrXirStatus status=effect_terms_substitute(&dense->terms,types[i],&environment,&types[i]);
-            if (status!=XR_XIR_OK) return status;
+            status=effect_terms_substitute(&dense->terms,types[i],&environment,&types[i]);
         }
+        if (status==XR_XIR_OK && xr_xir_callable_signature(&dense->terms.types,types[i]))
+            status=xr_xir_compile_callable_weakening(dense->terms.remaining,&dense->terms.types,
+                function->instructions[i].type,types[i]);
     }
+    xr_compile_resources_free(source_types);
+    if (status!=XR_XIR_OK) return status;
     *output=types;return XR_XIR_OK;
+}
+
+/* Ordinary views carry a TEMPLATE marker for actual physical-use derivation,
+ * not stored source records. Capture each authentic source advertisement in
+ * this exact ordinary pool before the common queue receives that view. */
+static XrXirStatus effect_invocation_context_bounds(const XrXirCompileContext *work,
+    const XrXirModule *source,EffectOrdinaryContexts *contexts,EffectInvocationDeclaredBounds **output) {
+    if (!contexts || !output || *output || contexts->terms.remaining!=work ||
+        contexts->uses.resources!=work->resources) return XR_XIR_BAD_STRUCTURE;
+    EffectInvocationDeclaredBounds *bounds=NULL;
+    XrXirStatus status=effect_invocation_bounds_new(work,&bounds);
+    for (uint32_t f=0;f<contexts->count && status==XR_XIR_OK;++f) {
+        const XrXirType *instructions=NULL;
+        status=effect_invocation_context_declarations(contexts,source,NULL,f,&instructions);
+        if (status==XR_XIR_OK) status=effect_invocation_bounds_capture(work,bounds,
+            &contexts->terms.types,&contexts->functions[f],f,instructions);
+    }
+    if (status!=XR_XIR_OK) { effect_invocation_bounds_free(bounds);return status; }
+    *output=bounds;return XR_XIR_OK;
 }
 
 static XrXirStatus effect_context_dense_function(EffectContextOwner *owner,
@@ -85,7 +153,7 @@ static XrXirStatus effect_context_dense_function(EffectContextOwner *owner,
         parameters[p]=physical[p];
     }
     const XrXirType *declared_instructions=NULL;
-    status=effect_context_dense_declarations(owner,index,&declared_instructions);
+    status=effect_invocation_context_declarations(dense,source,owner->refinement,index,&declared_instructions);
     if (status==XR_XIR_OK) status=effect_invocation_bounds_capture(dense->terms.remaining,owner->declared,
         &dense->terms.types,&dense->functions[index],index,declared_instructions);
     if (status!=XR_XIR_OK) return status;
@@ -125,7 +193,7 @@ static XrXirStatus effect_context_dense_intern(EffectContextOwner *owner,
             return XR_XIR_BAD_STRUCTURE;
         owner_index=caller;
     }
-    XrXirTypeMatchScratch scratch={dense->terms.remaining->resources,NULL};
+    XrXirTypeMatchScratch *scratch=effect_terms_type_scratch(&dense->terms);
     for (uint32_t n=0;n<dense->count && status==XR_XIR_OK;++n) {
         if (!xir_compile_work(dense->terms.remaining,3)) { status=XR_XIR_BUDGET;break; }
         if (dense->nodes[n].ordinary!=ordinary || dense->nodes[n].owner!=owner_index) continue;
@@ -136,13 +204,12 @@ static XrXirStatus effect_context_dense_intern(EffectContextOwner *owner,
              * different IDs still undergo complete structural matching. */
             if (dense->nodes[n].physical_types[p]==physical[p]) continue;
             status=xr_xir_compile_type_substitution_matches_between_scratch(dense->terms.remaining,
-                &dense->terms.types,&dense->terms.types,NULL,0,dense->nodes[n].physical_types[p],physical[p],&scratch);
+                &dense->terms.types,&dense->terms.types,NULL,0,dense->nodes[n].physical_types[p],physical[p],scratch);
             if (status==XR_XIR_BAD_TYPE) { equal=false;status=XR_XIR_OK; }
             else if (status!=XR_XIR_OK) break;
         }
-        if (status==XR_XIR_OK && equal) { *output=n;xr_xir_type_match_scratch_free(&scratch);return XR_XIR_OK; }
+        if (status==XR_XIR_OK && equal) { *output=n;return XR_XIR_OK; }
     }
-    xr_xir_type_match_scratch_free(&scratch);
     if (status!=XR_XIR_OK) return status;
     if (dense->count==UINT32_MAX) return XR_XIR_BUDGET;
     status=effect_ordinary_capacity(dense,dense->count+1);
@@ -260,9 +327,12 @@ static XrXirStatus effect_context_dense_solve(EffectContextOwner *owner,
     XrXirStatus status=effect_ordinary_view(dense,source,&view);
     if (status==XR_XIR_OK) status=effect_parameters_derive(&view.module,&dense->uses,&graph,context);
     xr_compile_resources_free(graph.flow_rows);
-    if (status==XR_XIR_OK) status=effect_ordinary_roots(context,source,dense);
+    if (status==XR_XIR_OK) status=effect_ordinary_roots_with_bounds(context,source,dense,owner->declared);
     return status;
 }
+
+static XrXirStatus effect_context_dense_stable(const XrXirCompileContext *context,
+    EffectContextOwner *owner,const XrXirModule *source);
 
 static XrXirStatus effect_context_owner_build(const XrXirCompileContext *context,
     const XrXirModule *source, EffectRefinementBounds *bounds, EffectContextOwner **output) {
@@ -313,10 +383,15 @@ static XrXirStatus effect_context_owner_build(const XrXirCompileContext *context
     }
     bool changed=true, solved=false;
     while (status==XR_XIR_OK && changed) {
-        changed=false;uint32_t previous=dense->count;dense->terms.remaining=context;
+        changed=false;uint32_t previous=dense->count,types=dense->terms.types.count;
+        dense->terms.remaining=context;
         for (uint32_t f=0;f<dense->count && status==XR_XIR_OK;++f)
             status=effect_context_dense_expand(owner,source,f,&changed);
-        if (status==XR_XIR_OK) status=effect_context_dense_solve(owner,context,source);
+        if (status==XR_XIR_OK) {
+            if (!solved || changed || dense->count!=previous || dense->terms.types.count!=types)
+                status=effect_context_dense_solve(owner,context,source);
+            else status=effect_context_dense_stable(context,owner,source);
+        }
         if (!solved || dense->count!=previous) changed=true;
         solved=true;
     }

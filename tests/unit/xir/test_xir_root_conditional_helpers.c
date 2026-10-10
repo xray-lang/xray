@@ -19,6 +19,13 @@
 #include "xir/xxir_effects.c"
 #include "xir_root_conditional_raw_fixture.h"
 #include "xir_construction_fixture.h"
+#include "xir_invocation_core_cases.h"
+#include "xir_invocation_rotation_cases.h"
+#include "xir_invocation_deferred_cases.h"
+#include "xir_invocation_lowered_context_cases.h"
+#include "xir_invocation_publish_cases.h"
+#include "xir_lowered_snapshot_cases.h"
+#include "xir_invocation_returned_producer_cases.h"
 
 static XrXirStatus conditional_classify(const XrXirCompileContext *context, uint32_t mode, bool oracle) {
     ConditionalRawFixture f;conditional_raw_fixture(&f,mode);
@@ -145,18 +152,20 @@ static XrXirStatus conditional_scalar(const XrXirCompileContext *context, bool o
 }
 
 static XrXirStatus conditional_forest(const XrXirCompileContext *context, bool oracle) {
+    XrCompileResourceStats begin=rp_stats(context);
+    uint32_t phase=0;
     ConditionalRawFixture fixture;conditional_raw_fixture(&fixture,4);
     XrXirStatus status=xr_xir_compile_implementations_verify(context,&fixture.module);
     EffectContextResolved *resolved=NULL;EffectOrdinaryContexts *contexts=NULL;
     EffectContextForest *forest=NULL;XrXirRootCauseTrace *trace=NULL;
     EffectContextRequest request={&fixture.module,&fixture.types,NULL,0,2,0};
     uint32_t selected=UINT32_MAX;
-    if (status==XR_XIR_OK) status=effect_context_resolve(context,&request,&resolved);
+    if (status==XR_XIR_OK) { phase=1;status=effect_context_resolve(context,&request,&resolved); }
     if (status==XR_XIR_OK)
-        status=effect_ordinary_classify(context,&fixture.module,resolved,&contexts,&selected);
-    if (status==XR_XIR_OK) status=effect_context_forest_seal(context,&fixture.module,contexts,&forest);
+        { phase=2;status=effect_ordinary_classify(context,&fixture.module,resolved,&contexts,&selected); }
+    if (status==XR_XIR_OK) { phase=3;status=effect_context_forest_seal(context,&fixture.module,contexts,&forest); }
     effect_ordinary_free(contexts);effect_context_free(resolved);memset(&fixture,0,sizeof(fixture));
-    if (status==XR_XIR_OK) status=effect_context_forest_trace(context,forest,2,&trace);
+    if (status==XR_XIR_OK) { phase=4;status=effect_context_forest_trace(context,forest,2,&trace); }
     if (status==XR_XIR_OK && oracle) {
         uint32_t count=0;const XrXirRootCauseStep *steps=xr_xir_root_cause_trace_steps(trace,false,&count);
         CHECK(forest && forest->count==5 && selected==4 && count==3 && steps);
@@ -192,7 +201,15 @@ static XrXirStatus conditional_forest(const XrXirCompileContext *context, bool o
         CHECK(count==3 && steps[1].cause==5 && steps[2].cause==1);
         CHECK(xr_xir_root_cause_trace_facts(trace)->requires_root);
     }
-    xr_xir_compile_root_cause_trace_free(trace);return status;
+    xr_xir_compile_root_cause_trace_free(trace);
+    if (oracle && status!=XR_XIR_OK) {
+        XrCompileResourceStats end=rp_stats(context);
+        fprintf(stderr,"CONDITIONAL_FOREST phase=%u status=%u allocated=%llu/%llu work=%llu/%llu live=%llu peak=%llu\n",
+            phase,(uint32_t)status,(unsigned long long)begin.allocated_bytes,(unsigned long long)end.allocated_bytes,
+            (unsigned long long)begin.work,(unsigned long long)end.work,
+            (unsigned long long)end.live_bytes,(unsigned long long)end.peak_bytes);
+    }
+    return status;
 }
 
 static void conditional_shape_candidates(const XrXirCompileContext *context) {
@@ -1236,6 +1253,25 @@ static XrXirStatus conditional_invocation_generic_bounds(const XrXirCompileConte
     effect_context_owner_free(execution);return status;
 }
 
+static void conditional_new_literals(void) {
+    /* Independent graphs own independent finite ledgers; each pipeline keeps its ledger. */
+    for (uint32_t which=25;which<46;++which) {
+        RootParameterMark physical=rp_mark();XrXirCompileContext context=rp_owner(rp_caps());
+        uint64_t baseline=rp_stats(&context).live_bytes;
+        XrXirStatus status=which<29 ? conditional_invocation_core(&context,which-25,true) :
+            which==29 ? conditional_invocation_rotation(&context,false,true) :
+            which<32 ? conditional_invocation_deferred(&context,which-30,true) :
+            which<34 ? conditional_invocation_lowered_context(&context,which-32,true) :
+            which<36 ? conditional_invocation_publish(&context,which-34,true) :
+            which<38 ? conditional_invocation_template_publish(&context,which-36,true) :
+            which<41 ? conditional_lowered_snapshot(&context,which-38,true) :
+            conditional_invocation_returned(&context,which-41,true);
+        if (status!=XR_XIR_OK) fprintf(stderr,"conditional new fixture %u status %u\n",which,(uint32_t)status);
+        CHECK(status==XR_XIR_OK);
+        rp_owner_free(&context,baseline);rp_balanced(physical);
+    }
+}
+
 static void conditional_literals(void) {
     RootParameterMark physical=rp_mark();XrXirCompileContext context=rp_owner(rp_caps());
     uint64_t baseline=rp_stats(&context).live_bytes;
@@ -1273,11 +1309,19 @@ static XrXirStatus conditional_resource_case(const XrXirCompileContext *context,
         which==21 ? conditional_base_cleanup_reference(context,false) :
         which==22 ? conditional_invocation_bounds(context,false) :
         which==23 ? conditional_invocation_refinement(context,false) :
-        conditional_invocation_generic_bounds(context,false);
+        which==24 ? conditional_invocation_generic_bounds(context,false) :
+        which<29 ? conditional_invocation_core(context,which-25,false) :
+        which==29 ? conditional_invocation_rotation(context,false,false) :
+        which<32 ? conditional_invocation_deferred(context,which-30,false) :
+        which<34 ? conditional_invocation_lowered_context(context,which-32,false) :
+        which<36 ? conditional_invocation_publish(context,which-34,false) :
+        which<38 ? conditional_invocation_template_publish(context,which-36,false) :
+        which<41 ? conditional_lowered_snapshot(context,which-38,false) :
+        conditional_invocation_returned(context,which-41,false);
 }
 
 static void conditional_oom(void) {
-    for (uint32_t which=0;which<25;++which) {
+    for (uint32_t which=0;which<46;++which) {
         size_t sites=0;
         for (size_t pass=0;pass<=sites;++pass) {
             RootParameterMark physical=rp_mark();rp_fail_at=SIZE_MAX;rp_attempts=0;rp_injected=false;
@@ -1292,7 +1336,7 @@ static void conditional_oom(void) {
 }
 
 static void conditional_axes(void) {
-    for (uint32_t which=0;which<25;++which) {
+    for (uint32_t which=0;which<46;++which) {
         RootParameterMark physical=rp_mark();XrXirCompileContext context=rp_owner(rp_caps());
         uint64_t baseline=rp_stats(&context).live_bytes;
         CHECK(conditional_resource_case(&context,which)==XR_XIR_OK);
@@ -1316,6 +1360,9 @@ static void conditional_axes(void) {
 
 int main(int argc, char **argv) {
     if (argc==2 && !strcmp(argv[1],"--compiler")) { conditional_oom();conditional_axes(); }
-    else { CHECK(argc==1);conditional_literals(); }
+    else if (argc==2 && !strcmp(argv[1],"--rotation")) conditional_invocation_rotation_run(false);
+    else if (argc==2 && !strcmp(argv[1],"--rotation-pipeline")) conditional_invocation_rotation_run(true);
+    else if (argc==2 && !strcmp(argv[1],"--new")) conditional_new_literals();
+    else { CHECK(argc==1);conditional_literals();conditional_new_literals(); }
     CHECK(!rp_live && !rp_live_bytes);return 0;
 }

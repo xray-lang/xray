@@ -50,10 +50,9 @@ static XrXirStatus effect_ordinary_op_match(EffectOrdinaryContexts *contexts,
         expected.targets[0]!=actual.targets[0] || expected.targets[1]!=actual.targets[1] ||
         expected.type_arguments[0]!=actual.type_arguments[0] ||
         expected.type_arguments[1]!=actual.type_arguments[1]) return XR_XIR_BAD_STRUCTURE;
-    XrXirTypeMatchScratch scratch={contexts->terms.remaining->resources,NULL};
+    XrXirTypeMatchScratch *scratch=effect_terms_type_scratch(&contexts->terms);
     status=xr_xir_compile_type_substitution_matches_between_scratch(contexts->terms.remaining,
-        &contexts->terms.types,&contexts->terms.types,NULL,0,expected.type,actual.type,&scratch);
-    xr_xir_type_match_scratch_free(&scratch);
+        &contexts->terms.types,&contexts->terms.types,NULL,0,expected.type,actual.type,scratch);
     return status==XR_XIR_BAD_TYPE ? XR_XIR_BAD_STRUCTURE : status;
 }
 
@@ -63,7 +62,7 @@ static XrXirStatus effect_ordinary_signature_match(EffectOrdinaryContexts *conte
     const XrXirFunction *original=&source->functions[identity.declaration];
     const XrXirFunction *actual=&contexts->functions[function];
     XrXirGeneric environment={.arguments=identity.arguments,.argument_count=identity.argument_count};
-    XrXirTypeMatchScratch scratch={contexts->terms.remaining->resources,NULL};
+    XrXirTypeMatchScratch *scratch=effect_terms_type_scratch(&contexts->terms);
     XrXirStatus status=XR_XIR_OK;
     for (uint32_t p=0;p<=actual->parameter_count && status==XR_XIR_OK;++p) {
         XrXirType expected=p==actual->parameter_count ? original->result : original->parameters[p];
@@ -73,9 +72,8 @@ static XrXirStatus effect_ordinary_signature_match(EffectOrdinaryContexts *conte
             status=effect_terms_substitute(&contexts->terms,expected,&environment,&expected);
         if (status==XR_XIR_OK)
             status=xr_xir_compile_type_substitution_matches_between_scratch(contexts->terms.remaining,
-                &contexts->terms.types,&contexts->terms.types,NULL,0,expected,type,&scratch);
+                &contexts->terms.types,&contexts->terms.types,NULL,0,expected,type,scratch);
     }
-    xr_xir_type_match_scratch_free(&scratch);
     return status==XR_XIR_BAD_TYPE ? XR_XIR_BAD_STRUCTURE : status;
 }
 
@@ -220,8 +218,12 @@ static XrXirStatus effect_ordinary_root_storage(EffectOrdinaryContexts *contexts
 
 /* Descriptor declarations, structural children, equations, facts and
  * forests are owned. Source bodies are consulted only during this proof. */
-static XrXirStatus effect_ordinary_roots(const XrXirCompileContext *context,
-    const XrXirModule *source, EffectOrdinaryContexts *contexts) {
+static XrXirStatus effect_invocation_context_bounds(const XrXirCompileContext *work,
+    const XrXirModule *source,EffectOrdinaryContexts *contexts,EffectInvocationDeclaredBounds **output);
+
+static XrXirStatus effect_ordinary_roots_with_bounds(const XrXirCompileContext *context,
+    const XrXirModule *source,EffectOrdinaryContexts *contexts,
+    const EffectInvocationDeclaredBounds *declared) {
     if (!xir_compile_context_valid(context) || !source || !source->declarations ||
         !source->declarations->functions || !source->declarations->modules || !contexts ||
         contexts->uses.resources!=context->resources || contexts->uses.root ||
@@ -229,16 +231,23 @@ static XrXirStatus effect_ordinary_roots(const XrXirCompileContext *context,
     contexts->terms.remaining=context;
     XrXirStatus status=effect_terms_snapshot_match(&contexts->terms,source->types,contexts->source_type_count);
     if (status==XR_XIR_OK && !contexts->dense) status=effect_ordinary_bodies_match(contexts,source);
+    EffectInvocationDeclaredBounds *temporary=NULL;
+    if (status==XR_XIR_OK && !declared)
+        status=effect_invocation_context_bounds(context,source,contexts,&temporary);
     EffectOrdinaryView view={0};
     if (status==XR_XIR_OK) status=effect_ordinary_view(contexts,source,&view);
     if (status==XR_XIR_OK) status=effect_ordinary_root_storage(contexts,context);
     EffectGraph graph={0};XrXirCompileContext remaining=*context;
     if (status==XR_XIR_OK) status=effect_graph_build(&view.module,&contexts->uses,&graph,&remaining);
-    if (status==XR_XIR_OK) status=effect_formulas_derive(&view.module,&contexts->uses,&graph,context);
-    if (status==XR_XIR_OK) status=effect_formulas_project(&view.module,&contexts->uses,context);
-    if (status==XR_XIR_OK) status=effect_root_witnesses(&contexts->uses,&graph,context,false);
-    if (status==XR_XIR_OK) status=effect_root_witnesses(&contexts->uses,&graph,context,true);
+    if (status==XR_XIR_OK) status=effect_invocation_publish(context,&view.module,&contexts->uses,
+        &graph,declared?declared:temporary,contexts);
     effect_graph_free(&graph);
+    effect_invocation_bounds_free(temporary);
     contexts->terms.remaining=NULL;
     return status;
+}
+
+static XrXirStatus effect_ordinary_roots(const XrXirCompileContext *context,
+    const XrXirModule *source,EffectOrdinaryContexts *contexts) {
+    return effect_ordinary_roots_with_bounds(context,source,contexts,NULL);
 }

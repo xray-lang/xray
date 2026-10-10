@@ -24,6 +24,8 @@ typedef struct EffectContextCertificate {
 } EffectContextCertificate;
 
 typedef struct EffectContextForest {
+    /* Type storage belongs to the transferred immutable invocation owner.
+     * This arena owns only forest metadata and construction scratch. */
     EffectTerms terms;
     XrCompileResources *resources;
     uint32_t count;
@@ -31,11 +33,16 @@ typedef struct EffectContextForest {
     XrXirRootEffects *facts;
     XrXirRootEffectWitness *witnesses;
     EffectContextCertificate *certificates;
+    EffectInvocationCertificate *invocations;
+    uint8_t **requirements;
 } EffectContextForest;
 
 static void effect_context_forest_free(EffectContextForest *forest) {
     if (!forest) return;
-    effect_terms_free(&forest->terms);xr_compile_resources_free(forest);
+    /* Release all borrowing metadata before its retained type owner. */
+    effect_terms_free(&forest->terms);
+    effect_invocation_certificate_free(forest->invocations);
+    xr_compile_resources_free(forest);
 }
 
 static bool effect_context_witness_same(const XrXirRootEffectWitness *a,
@@ -74,103 +81,74 @@ static XrXirStatus effect_context_forest_node(EffectContextForest *forest,
     return XR_XIR_OK;
 }
 
-static XrXirStatus effect_context_forest_record(EffectContextForest *forest,
-    const EffectOrdinaryContexts *contexts, const XrXirModule *source,
-    uint32_t domain, uint32_t function) {
-    bool unresolved=(domain&1)!=0,constant=(domain&2)!=0;
-    const XrXirRootEffectWitness *records=constant ?
-        contexts->uses.constant_witnesses+(size_t)unresolved*forest->count :
-        unresolved ? contexts->uses.unresolved_witnesses : contexts->uses.root_witnesses;
-    XrXirRootEffectWitness raw=records[function],public_value=raw;
-    uint32_t declaration=forest->nodes[function].declaration;
-    const XrXirFunction *original=&source->functions[declaration];
-    uint32_t next=UINT32_MAX,parameter_owner=function;
-    if (!xir_compile_work(forest->terms.remaining,7)) return XR_XIR_BUDGET;
-    if (raw.callee!=UINT32_MAX) {
-        if (raw.callee>=forest->count) return XR_XIR_BAD_STRUCTURE;
-        public_value.callee=forest->nodes[raw.callee].declaration;parameter_owner=raw.callee;
-    }
-    if (raw.distance) {
-        if ((raw.cause!=XR_XIR_ROOT_CAUSE_CALL && raw.cause!=XR_XIR_ROOT_CAUSE_CLEANUP) ||
-            raw.callee>=forest->count || raw.instruction>=original->instruction_count ||
-            raw.slot!=UINT32_MAX) return XR_XIR_BAD_STRUCTURE;
-        next=raw.callee;
-        XrXirOp operation=original->instructions[raw.instruction].op;
-        if (operation==XR_XIR_CALL_REQUIREMENT) {
-            if (raw.cause!=XR_XIR_ROOT_CAUSE_CALL ||
-                contexts->functions[function].instructions[raw.instruction].op!=XR_XIR_CALL ||
-                contexts->functions[function].instructions[raw.instruction].immediate!=raw.callee)
-                return XR_XIR_BAD_STRUCTURE;
-            public_value.cause=XR_XIR_ROOT_CAUSE_REQUIREMENT;
+static XrXirStatus effect_context_forest_requirements(const XrXirCompileContext *work,
+    const XrXirModule *source,const EffectOrdinaryContexts *contexts,EffectContextForest *forest) {
+    forest->requirements=effect_terms_alloc(&forest->terms,forest->count,sizeof(*forest->requirements));
+    if (!forest->requirements) return forest->terms.status;
+    for (uint32_t f=0;f<forest->count;++f) {
+        uint32_t declaration=contexts->nodes[f].declaration;
+        if (declaration>=source->function_count) return XR_XIR_BAD_STRUCTURE;
+        const XrXirFunction *original=&source->functions[declaration];
+        const XrXirFunction *actual=&contexts->functions[f];bool any=false;
+        if (original->instruction_count!=actual->instruction_count) return XR_XIR_BAD_STRUCTURE;
+        for (uint32_t i=0;i<original->instruction_count;++i) {
+            if (!xir_compile_work(work,1)) return XR_XIR_BUDGET;
+            if (original->instructions[i].op==XR_XIR_CALL_REQUIREMENT) any=true;
         }
-    } else if (raw.cause==XR_XIR_ROOT_CAUSE_PARAMETER || raw.cause==XR_XIR_ROOT_CAUSE_CONTEXT_CALL ||
-        raw.cause==XR_XIR_ROOT_CAUSE_CELL_ACCESS || raw.cause==XR_XIR_ROOT_CAUSE_CELL_PARAMETER) {
-        if (!xir_compile_work(forest->terms.remaining,5)) return XR_XIR_BUDGET;
-        const XrXirRootEffectWitness *proof=&contexts->uses.formula_terminals[(size_t)domain*forest->count+function];
-        if (!effect_context_witness_same(&raw,proof)) return XR_XIR_BAD_STRUCTURE;
-        if (raw.cause==XR_XIR_ROOT_CAUSE_CONTEXT_CALL && !unresolved) return XR_XIR_BAD_STRUCTURE;
-        if (raw.cause==XR_XIR_ROOT_CAUSE_PARAMETER &&
-            (raw.slot>=forest->nodes[parameter_owner].parameter_count ||
-             forest->nodes[parameter_owner].parameter_kinds[raw.slot]!=XR_XIR_EFFECT_PARAMETER_VARIABLE))
-            return XR_XIR_BAD_STRUCTURE;
-        if (raw.cause==XR_XIR_ROOT_CAUSE_CELL_PARAMETER &&
-            (raw.callee!=UINT32_MAX || raw.slot>=forest->nodes[parameter_owner].parameter_count ||
-             !xr_xir_type_is_cell(&forest->terms.types,forest->nodes[parameter_owner].physical_types[raw.slot])))
-            return XR_XIR_BAD_STRUCTURE;
-        if (raw.cause==XR_XIR_ROOT_CAUSE_CELL_ACCESS &&
-            (raw.callee!=UINT32_MAX || raw.instruction>=original->instruction_count ||
-             raw.slot>=(uint64_t)original->parameter_count+original->instruction_count))
-            return XR_XIR_BAD_STRUCTURE;
-    } else if (raw.cause==XR_XIR_ROOT_CAUSE_REQUIREMENT &&
-        (raw.instruction>=original->instruction_count ||
-         original->instructions[raw.instruction].op!=XR_XIR_CALL_REQUIREMENT ||
-         raw.callee!=UINT32_MAX)) return XR_XIR_BAD_STRUCTURE;
-    size_t index=(size_t)domain*forest->count+function;
-    if (!xir_compile_work(forest->terms.remaining,
-        sizeof(*forest->witnesses)+sizeof(*forest->certificates))) return XR_XIR_BUDGET;
-    forest->witnesses[index]=public_value;
-    uint32_t target=next==UINT32_MAX ? parameter_owner : next;
-    forest->certificates[index]=(EffectContextCertificate){public_value,next,parameter_owner,
-        (uint8_t)domain,(uint8_t)(2+(uint32_t)unresolved),forest->nodes[function],forest->nodes[target]};
+        uint8_t *bits=any?effect_terms_alloc(&forest->terms,original->instruction_count,1):NULL;
+        if (any && !bits) return forest->terms.status;
+        if (any) for (uint32_t i=0;i<original->instruction_count;++i) {
+            if (!xir_compile_work(work,2)) return XR_XIR_BUDGET;
+            bits[i]=(uint8_t)(original->instructions[i].op==XR_XIR_CALL_REQUIREMENT);
+            if (bits[i] && actual->instructions[i].op!=XR_XIR_CALL_REQUIREMENT &&
+                actual->instructions[i].op!=XR_XIR_CALL) return XR_XIR_BAD_STRUCTURE;
+        }
+        forest->requirements[f]=bits;
+    }
     return XR_XIR_OK;
 }
 
-/* The shared solver closes actual dense views before their exact identities
- * and selected-domain witnesses enter this independent certificate owner. */
+static XrXirStatus effect_invocation_forest_types(const XrXirCompileContext *work,
+    const EffectOrdinaryContexts *contexts,EffectTerms *output);
+static XrXirStatus effect_invocation_forest_records(const XrXirCompileContext *work,
+    EffectContextForest *forest,const EffectOrdinaryContexts *contexts);
+static XrXirStatus effect_invocation_forest_trace(const XrXirCompileContext *work,
+    const EffectContextForest *forest,uint32_t function,XrXirRootCauseTrace **output);
+static XrXirStatus effect_invocation_context_edge_mask(const XrXirCompileContext *work,
+    const EffectContextForest *forest,uint32_t caller,uint32_t instruction,uint32_t target,uint32_t *output);
+
+/* The real dense count remains the public forest bound. Equation and atom
+ * identities stay in the independent sealed owner; they never replace it. */
 static XrXirStatus effect_context_forest_seal(const XrXirCompileContext *context,
-    const XrXirModule *source, EffectOrdinaryContexts *contexts, EffectContextForest **output) {
+    const XrXirModule *source,EffectOrdinaryContexts *contexts,EffectContextForest **output) {
     if (!xir_compile_context_valid(context) || !source || !contexts || !output || *output ||
         contexts->uses.resources!=context->resources) return XR_XIR_BAD_STRUCTURE;
-    XrXirStatus status=contexts->uses.root ? XR_XIR_OK : effect_ordinary_roots(context,source,contexts);
+    XrXirStatus status=contexts->uses.root?XR_XIR_OK:effect_ordinary_roots(context,source,contexts);
+    if (status==XR_XIR_OK) status=effect_invocation_public_gate(context,contexts->uses.invocations,contexts->count);
     if (status!=XR_XIR_OK) return status;
     EffectContextForest *forest=xir_compile_calloc(context,1,sizeof(*forest),&status);
     if (!forest) return status;
     forest->resources=context->resources;forest->count=contexts->count;forest->terms.remaining=context;
-    status=effect_terms_seed(&forest->terms,&contexts->terms.types);
+    status=effect_invocation_forest_types(context,contexts,&forest->terms);
     uint64_t records=(uint64_t)forest->count*4;
     if (records>SIZE_MAX/sizeof(*forest->certificates)) status=XR_XIR_BUDGET;
     if (status==XR_XIR_OK) {
         forest->nodes=effect_terms_alloc(&forest->terms,forest->count,sizeof(*forest->nodes));
         forest->facts=effect_terms_alloc(&forest->terms,forest->count,sizeof(*forest->facts));
-        forest->witnesses=effect_terms_alloc(&forest->terms,(size_t)records,sizeof(*forest->witnesses));
-        forest->certificates=effect_terms_alloc(&forest->terms,(size_t)records,sizeof(*forest->certificates));
+        forest->witnesses=effect_terms_alloc(&forest->terms,records,sizeof(*forest->witnesses));
+        forest->certificates=effect_terms_alloc(&forest->terms,records,sizeof(*forest->certificates));
         if (!forest->nodes || !forest->facts || !forest->witnesses || !forest->certificates)
             status=forest->terms.status;
     }
     for (uint32_t f=0;f<forest->count && status==XR_XIR_OK;++f)
         status=effect_context_forest_node(forest,contexts,f);
-    for (uint32_t domain=0;domain<4 && status==XR_XIR_OK;++domain)
-        for (uint32_t f=0;f<forest->count && status==XR_XIR_OK;++f)
-            status=effect_context_forest_record(forest,contexts,source,domain,f);
+    if (status==XR_XIR_OK) status=effect_context_forest_requirements(context,source,contexts,forest);
+    if (status==XR_XIR_OK) status=effect_invocation_forest_records(context,forest,contexts);
     if (status!=XR_XIR_OK) { effect_context_forest_free(forest);return status; }
+    /* No fallible step follows the actual transfer. The type view stays
+     * live until this same retained owner is released by forest_free. */
+    forest->invocations=contexts->uses.invocations;contexts->uses.invocations=NULL;
     forest->terms.remaining=NULL;*output=forest;return XR_XIR_OK;
-}
-
-static bool effect_context_forest_fact(const EffectContextForest *forest, uint32_t context,
-    uint32_t domain) {
-    uint32_t bit=(domain&1) ? XR_XIR_CALLABLE_ROOT_UNRESOLVED : XR_XIR_CALLABLE_ROOT_REQUIRED;
-    return (domain&2) ? (forest->nodes[context].constant_mask&bit)!=0 :
-        (domain&1) ? forest->facts[context].unresolved : forest->facts[context].requires_root;
 }
 
 static XrXirStatus effect_context_identity_matches(const XrXirCompileContext *context,
@@ -191,92 +169,7 @@ static XrXirStatus effect_context_identity_matches(const XrXirCompileContext *co
     return status==XR_XIR_BAD_TYPE ? XR_XIR_BAD_STRUCTURE : status;
 }
 
-/* The private next context is independent of the public declaration ordinal.
- * A copied step is rechecked against the certificate for this exact domain. */
-static XrXirStatus effect_context_forest_walk(const XrXirCompileContext *context,
-    const EffectContextForest *forest, uint32_t selected, bool unresolved,
-    uint32_t *length, XrXirRootCauseStep *steps) {
-    uint32_t current=selected,domain=(uint32_t)unresolved,count=0;
-    if (!effect_context_forest_fact(forest,current,domain)) {
-        if (!xir_compile_work(context,1)) return XR_XIR_BUDGET;
-        if (forest->witnesses[(size_t)domain*forest->count+current].cause) return XR_XIR_BAD_STRUCTURE;
-        *length=0;return XR_XIR_OK;
-    }
-    for (;;) {
-        if (!xir_compile_work(context,10)) return XR_XIR_BUDGET;
-        size_t index=(size_t)domain*forest->count+current;
-        const EffectContextCertificate *certificate=&forest->certificates[index];
-        XrXirRootEffectWitness witness=forest->witnesses[index];
-        if (count>=forest->count || witness.distance>=forest->count || certificate->domain!=domain ||
-            !effect_context_forest_fact(forest,current,domain) ||
-            !effect_context_witness_same(&witness,&certificate->witness)) return XR_XIR_BAD_STRUCTURE;
-        XrXirStatus identity=effect_context_identity_matches(context,forest,&certificate->subject,current);
-        if (identity!=XR_XIR_OK) return identity;
-        if (steps) {
-            if (!xir_compile_work(context,sizeof(*steps))) return XR_XIR_BUDGET;
-            steps[count]=(XrXirRootCauseStep){forest->nodes[current].declaration,witness.instruction,
-                witness.callee,witness.slot,witness.distance,witness.cause};
-        }
-        ++count;
-        if (!witness.distance) {
-            if (certificate->next!=UINT32_MAX || !witness.cause ||
-                (witness.cause==XR_XIR_ROOT_CAUSE_CONTEXT_CALL && !unresolved))
-                return XR_XIR_BAD_STRUCTURE;
-            if (witness.cause==XR_XIR_ROOT_CAUSE_PARAMETER) {
-                identity=effect_context_identity_matches(context,forest,&certificate->target,
-                    certificate->parameter_owner);
-                if (identity!=XR_XIR_OK) return identity;
-                const EffectForestNode *owner=&forest->nodes[certificate->parameter_owner];
-                if (witness.slot>=owner->parameter_count ||
-                    owner->parameter_kinds[witness.slot]!=XR_XIR_EFFECT_PARAMETER_VARIABLE)
-                    return XR_XIR_BAD_STRUCTURE;
-            }
-            if (witness.cause==XR_XIR_ROOT_CAUSE_CELL_PARAMETER) {
-                identity=effect_context_identity_matches(context,forest,&certificate->target,
-                    certificate->parameter_owner);
-                if (identity!=XR_XIR_OK) return identity;
-                const EffectForestNode *owner=&forest->nodes[certificate->parameter_owner];
-                if (witness.slot>=owner->parameter_count ||
-                    !xr_xir_type_is_cell(&forest->terms.types,owner->physical_types[witness.slot]))
-                    return XR_XIR_BAD_STRUCTURE;
-            }
-            *length=count;return XR_XIR_OK;
-        }
-        if ((witness.cause!=XR_XIR_ROOT_CAUSE_CALL && witness.cause!=XR_XIR_ROOT_CAUSE_CLEANUP &&
-            witness.cause!=XR_XIR_ROOT_CAUSE_REQUIREMENT) || certificate->next>=forest->count ||
-            certificate->next_domain!=(uint8_t)(2+(uint32_t)unresolved) ||
-            witness.callee!=forest->nodes[certificate->next].declaration) return XR_XIR_BAD_STRUCTURE;
-        identity=effect_context_identity_matches(context,forest,&certificate->target,certificate->next);
-        if (identity!=XR_XIR_OK) return identity;
-        size_t next=(size_t)certificate->next_domain*forest->count+certificate->next;
-        if (forest->witnesses[next].distance!=witness.distance-1) return XR_XIR_BAD_STRUCTURE;
-        current=certificate->next;domain=certificate->next_domain;
-    }
-}
-
 static XrXirStatus effect_context_forest_trace(const XrXirCompileContext *context,
-    const EffectContextForest *forest, uint32_t selected, XrXirRootCauseTrace **output) {
-    if (!xir_compile_context_valid(context) || !forest || forest->resources!=context->resources ||
-        selected>=forest->count || !output || *output) return XR_XIR_BAD_STRUCTURE;
-    uint32_t counts[2]={0};XrXirStatus status=effect_context_forest_walk(context,forest,selected,false,&counts[0],NULL);
-    if (status==XR_XIR_OK) status=effect_context_forest_walk(context,forest,selected,true,&counts[1],NULL);
-    if (status!=XR_XIR_OK) return status;
-    uint64_t total=(uint64_t)counts[0]+counts[1];
-    if (total>(SIZE_MAX-sizeof(XrXirRootCauseTrace))/sizeof(XrXirRootCauseStep)) return XR_XIR_BUDGET;
-    size_t bytes=sizeof(XrXirRootCauseTrace)+(size_t)total*sizeof(XrXirRootCauseStep);
-    XrXirRootCauseTrace *trace=xir_compile_calloc(context,1,bytes,&status);
-    if (!trace) return status;
-    XrXirRootCauseStep *steps=effect_root_trace_storage(trace);
-    uint32_t copied=0;
-    status=effect_context_forest_walk(context,forest,selected,false,&copied,steps);
-    if (status==XR_XIR_OK && copied!=counts[0]) status=XR_XIR_BAD_STRUCTURE;
-    if (status==XR_XIR_OK)
-        status=effect_context_forest_walk(context,forest,selected,true,&copied,steps+counts[0]);
-    if (status==XR_XIR_OK && copied!=counts[1]) status=XR_XIR_BAD_STRUCTURE;
-    if (status!=XR_XIR_OK) { xr_xir_compile_root_cause_trace_free(trace);return status; }
-    if (!xir_compile_work(context,sizeof(*trace))) {
-        xr_xir_compile_root_cause_trace_free(trace);return XR_XIR_BUDGET;
-    }
-    trace->facts=forest->facts[selected];trace->counts[0]=counts[0];trace->counts[1]=counts[1];
-    *output=trace;return XR_XIR_OK;
+    const EffectContextForest *forest,uint32_t selected,XrXirRootCauseTrace **output) {
+    return effect_invocation_forest_trace(context,forest,selected,output);
 }

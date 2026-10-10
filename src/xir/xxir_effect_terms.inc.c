@@ -84,6 +84,13 @@ static void *effect_terms_alloc(EffectTerms *pool, uint64_t count, size_t size) 
     memset(output,0,bytes);memory->used+=rounded;return output;
 }
 
+/* The structural owner retains reusable stack capacity, never a type proof.
+ * Its original ledger admits every fresh comparison and owns all blocks. */
+static XrXirTypeMatchScratch *effect_terms_type_scratch(EffectTerms *pool) {
+    if (!pool->match.resources) pool->match.resources=pool->remaining->resources;
+    return &pool->match;
+}
+
 static void effect_terms_free(EffectTerms *pool) {
     xr_xir_compile_nominal_free(pool->owned_nominals);pool->owned_nominals=NULL;
     xr_xir_compile_interfaces_free(pool->owned_interfaces);pool->owned_interfaces=NULL;
