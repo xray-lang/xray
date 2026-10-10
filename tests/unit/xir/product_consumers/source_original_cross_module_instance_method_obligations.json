@@ -1046,5 +1046,60 @@
     ],
     "whole_completion": "OPEN",
     "caption_binding": "Static candidate assertions only, zero executed cancellation/normal PASS. Entire original responsibility remains OPEN."
+  },
+  "typed_current_receivers_checked_stage_enum_fixes_20261010": {
+    "status": "STATIC_PREEMPTIVE_CURRENT_STAGE_FIXES_NOT_RUN",
+    "public_reference": "9031dbc04d5f66ae2bcb356478a0d9450dc9ad4e",
+    "discovery": "Two current typed receivers contain same undeclared stage already observed in actual plain MSVC C2065. No typed compiler failure was reproduced or claimed.",
+    "files": [
+      {
+        "path": "tests/unit/xir/product_consumers/test_source_typed_library_receiver_current_packet_vm.c",
+        "pre_sha256": "db52d82c330621ef6b88633fa2a88aa19d67f3199550ca7ec91403e40f81b2e4",
+        "post_sha256": "b429d2bc6ec8fc5d95f95ae1cd70169044bf216cf302aa559b24dba7ea5cb691",
+        "unique_enum_change_full_raw_inverse_exact": true
+      },
+      {
+        "path": "tests/unit/xir/product_consumers/test_source_typed_library_receiver_current_native_mixed.c",
+        "pre_sha256": "07ac6ab125429654bcd9abcad4f7dc821839bd324ffbdb6e3715f0f0855e7d7c",
+        "post_sha256": "1fc5f1131f308bbbe3134793ec6ffeb4ca16fbd041cd72fa37cccc8157bb70b0",
+        "unique_enum_change_full_raw_inverse_exact": true
+      }
+    ],
+    "change": "Only packet-VM658 and native/cancel679 XR_XIR_CLOSED to XR_XIR_CHECKED.",
+    "semantic_scope": "Physical Checked Stage alone and decoder INSTANCE upper evidence_limit do not establish closure. Actual complete evidence/v2/Library/shape/fullproof/32/material/producer-death chain remains byte unchanged.",
+    "author_freezes": [
+      "defc34b6059734eb9d57a88340a9bd9c8eaa4a1c36c616f57b58c5fc2d4cb45b",
+      "9e0ea1d426b9211fd3aab95c48db20ffa0d4bca25e7126a3db3e6e81f49cc77f"
+    ],
+    "author_material_count_erratum": "45b74424980ea9da75c321e7cdce0108b7575aa0f3eb7ccee4a06f4d162b80dc",
+    "actual_writer_outputs": "Packet VM2(material packet/identity); native4(actual C/fullproof/identity/host binding). No typed outputs generated here.",
+    "main_static_review_sha256": "c3aed6aca65e671bb978c46616bdbb5066e80dc372f4b49a842eb3669bb9751c",
+    "independent_reviews": [
+      {
+        "path": "build-consumer-evidence/parallel-aot-main-audit-r1/typed-receivers-checked-stage-successors-static-review-r1/report.json",
+        "sha256": "a1c705032e365e197bbef62b58d48a54168ab8b02a9abdf1db3152d2ee56387c"
+      },
+      {
+        "path": "build-consumer-evidence/parallel-progress-speed-analysis-r1/typed-receivers-checked-stage-static-review-r1.json",
+        "sha256": "863a6d4fd3f920c64cb9bffa60cbefced38121a5983b12ffd0313b5c7f5181a7"
+      },
+      {
+        "path": "build-consumer-evidence/parallel-consumer-interface-delta-r1/typed-receivers-checked-stage-successors-r1/material-count-author-erratum-r1.json",
+        "sha256": "45b74424980ea9da75c321e7cdce0108b7575aa0f3eb7ccee4a06f4d162b80dc"
+      }
+    ],
+    "preserved_controls": "Normal full Library fixture/independent42/two realYIELD/sharedcode lease; native routes; cancelprefix1/2/recovery/epochs/oldtoken rejection/canonical cancelled result; exact full inverse outside Stage text.",
+    "execution_counts": {
+      "configure": 0,
+      "compile": 0,
+      "CGen": 0,
+      "normal": 0,
+      "cancel": 0,
+      "FI": 0
+    },
+    "window": "Typed family not opened; plain normal3 is a separate explicit same9031 window.",
+    "retired": 0,
+    "completion": "OPEN",
+    "remaining": "Fresh typed/normal/cancel native+VM qualification, FI/axes/sanitizers/AOT/fullstablelifecycle/escape/SourceDelete remain OPEN."
   }
 }
