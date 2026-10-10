@@ -48,6 +48,10 @@
       "lf_sha256": "3b955531dea3be90c5e03f612c04ace936b9326b44418369d3ac700e851e4189"
     },
     {
+      "path": "tests/unit/xir/product_consumers/construction_v2_integer_wire_cases.json",
+      "lf_sha256": "949f6e46605d4dac99edfd18c8dc90e319c0778a783bd2876f7e29b9f80277a3"
+    },
+    {
       "path": "tests/unit/xir/product_consumers/element_admission_cases.json",
       "lf_sha256": "bbab1fb996c73b6b130d73301367af93c71ad420aabafb0ca1fed834006cf167"
     },
@@ -629,7 +633,7 @@
     },
     {
       "path": "tests/unit/xir/product_consumers/source_original_cross_module_instance_method_obligations.json",
-      "lf_sha256": "34d71d71adb59738203cdb68ba9813f59e3d5cdec031ee7973d4498a61bbff70"
+      "lf_sha256": "545bc52c5388932f0a4db8ebd3fca7200d467f2df81923cecfb24d38c61741f6"
     },
     {
       "path": "tests/unit/xir/product_consumers/source_original_defer_panic_place_obligations.json",

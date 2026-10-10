@@ -526,5 +526,125 @@
       }
     ],
     "caption_binding": "All actual products captured the earlier map/trace. Two runtime-preimage files preserve those exact bytes; this later facet is an annotation, not product reexecution."
+  },
+  "typed_library_normal_root_guarded_20261010": {
+    "status": "PASS_TYPED_LIBRARY_NORMAL_ONLY_IN_ROOT_GUARDED_DIRTY_UNION",
+    "consumer_path": "tests/unit/xir/product_consumers/test_source_typed_library_receiver_current_vm.c",
+    "consumer_raw_sha256": "cc0295e8b628e72cc97a36b1fbe8d012681d9bab7c2ecd4057b9bd4f33a9c6dc",
+    "producer_boundary": {
+      "Root_formal_HEAD_at_windows": "e82c0c1a6203b56c70c162b22109323a1114c128",
+      "executed_product": "Root guarded dirty union, not this formal HEAD alone",
+      "new_immutable_producer": false,
+      "auxiliary_producer_adopted": false,
+      "authorized_auxiliary_producer_unchanged": "25f4016d6f089169757a90ae11ba537002374711"
+    },
+    "source_authority": {
+      "path": "tests/unit/xir/product_consumers/fixtures/module_receiver_suspend",
+      "root_bytes": 163,
+      "root_original_prefix_bytes": 109,
+      "root_adapter_bytes": 54,
+      "root_sha256": "3bb17ffe354b537a024dbf6e4c371df1c80051d72a3db21f20d48fdbeeb5f8bc",
+      "library_bytes": 185,
+      "library_sha256": "bb41f3d3d610b67ce6445475deb031967b10a0b069ef00b1c923599b3d6a6c87",
+      "bytes_equal_original_mapping": true,
+      "separate_module_import_receiver_and_two_original_yields_preserved": true,
+      "scope": "This physical projection has its own complete Program proof. Do not concatenate it with the earlier original_cross_module_instance_method metadata proof or the previous immutable producer native/mixed proof."
+    },
+    "normal_observations": {
+      "Library_SOURCE_owned_Checked_and_full_Construction": "PASS",
+      "owned_Library_Catalog_survives_packet_and_Source_producer_death": "PASS",
+      "owned_private_Library_source_strict_NOT_FOUND": "PASS",
+      "missing_Catalog_unchanged_original_root": "UNRESOLVED as required",
+      "false_NO_SUSPEND_on_real_child_with_two_yields": "BAD_TYPE with NO_SUSPEND diagnostic and exact child identity",
+      "original_Library_full_verify_after_control": "PASS",
+      "Program_producer_Catalog_and_caller_owner_dead_before_runtime": "PASS",
+      "detached_full_v2_Program_proof_and_packet_bytes": "PASS",
+      "simultaneously_live_Instances": 2,
+      "independent_owned_I64_per_call": 42,
+      "actual_child_and_constructor_VM_delegate_observed": true,
+      "private_entry_rejected_before_allocation": true,
+      "CodeLease_final_release_count": 1,
+      "cleanup_error": 0,
+      "compiler_and_runtime_final_physical_zero": "PASS",
+      "fixed42_calls_per_Instance": 2,
+      "canonical0_calls_per_Instance": 1,
+      "canonical_owned_I64": 0,
+      "real_yields_and_resumes_per_fixed42_call": 2
+    },
+    "windows": [
+      {
+        "path": "E:\\xxl\\xray-lang\\.worktrees\\312-xir-rebuild\\build-root-program\\root85-library-receiver-r4\\test-both-result.json",
+        "result_sha256": "cff702d5bd1d08ea02367af0bf8865dad91a81c2e3403510f17b3edb262112bf",
+        "runs": [
+          {
+            "configuration": "msvc",
+            "exact_selected_tests": 1,
+            "selected_CTest_seconds": 0.09072189987637103,
+            "raw_sha256": "2c2c336e9036a44394497e1c9dc497667139ad10cfab3d2b7d6815fa511cc582",
+            "LastTest_sha256": "f839ea619188e82e3669b1cc4d33a6c5e42a0479c113db2c9f8ddd15636f70bc"
+          },
+          {
+            "configuration": "asan-ubsan",
+            "exact_selected_tests": 1,
+            "selected_CTest_seconds": 0.2596427998505533,
+            "raw_sha256": "c126da07f108638cb3f2f2237d670c16d7cd993f11ae96cd17cdfd2cafa2f709",
+            "LastTest_sha256": "c287d020ce57055b240c26793b6c3b2153cba7d9ce771767d9759b47414c1b39"
+          }
+        ],
+        "binding": "Independent Root proof and guards for this normal window. Both configurations contain the real false-NO_SUSPEND control. The executed candidate raw bytes match the worker delivery; do not merge the windows or rebind their runtime inputs."
+      },
+      {
+        "path": "E:\\xxl\\xray-lang\\.worktrees\\312-xir-rebuild\\build-root-program\\root85-returned-producer-r2\\test-both-result.json",
+        "result_sha256": "33dfe21cb068f10e19b02c28b0fea3d8fb57b14753204a4fd0c4cdb792051958",
+        "runs": [
+          {
+            "configuration": "msvc",
+            "exact_selected_tests": 3,
+            "selected_CTest_seconds": 0.18523370008915663,
+            "raw_sha256": "e6eac8bb878be9f60a9e2becf4996b9698ac2835351e797735e920e03288b7d1",
+            "LastTest_sha256": "5b34fd070968cd3f9895f9846256bdbbdf009b86c14082b9554c0c2db0475565"
+          },
+          {
+            "configuration": "asan-ubsan",
+            "exact_selected_tests": 3,
+            "selected_CTest_seconds": 1.761447099968791,
+            "raw_sha256": "e05d2ead5f8d5cd999b3b64d6ca435ff0ad74fdbca1d51c4cf54fd473a4f408e",
+            "LastTest_sha256": "fc615a6bf37ec5dd1d41c998366ac18ed59795cd6b878829ec2eb56491bd6069"
+          }
+        ],
+        "binding": "Independent Root proof and guards for this normal window. Both configurations contain the real false-NO_SUSPEND control. The executed candidate raw bytes match the worker delivery; do not merge the windows or rebind their runtime inputs."
+      }
+    ],
+    "evidence_boundary": "Fresh Windows MSVC and Clang ASan/UBSan normal windows only. Input and binary guards hold within each frozen window; current executables can be replaced by later builds. Declared export outputs are empty, so there is no export artifact qualification.",
+    "retained_first_failure": {
+      "path": "E:\\xxl\\xray-lang\\.worktrees\\312-xir-rebuild\\build-root-program\\root85-library-receiver-r3\\test-both-result.json",
+      "operation": "Library-Catalog-EXPECT-OK",
+      "expected_status": 0,
+      "actual_status": 2,
+      "actual_enum": "XR_XIR_BAD_STAGE",
+      "root_cause": "Missing shared local SUSPEND admission; repaired by Root without changing the original successful expectation."
+    },
+    "still_open": [
+      "Current immutable producer publication and adoption",
+      "Complete Library compiler/runtime FI and resource axes",
+      "Active cancel prefixes 1 and 2",
+      "Stable per-object construct/finalize/reclaim and no early reclaim during suspension",
+      "Original private operation counts and standalone AOT/stream contract",
+      "Typed Library real generated C native and mixed execution",
+      "Full safety and Main integration",
+      "Whole legacy responsibility and retirement"
+    ],
+    "original_fixed_goldens_changed": false,
+    "full_FI": "NOT_RUN",
+    "axes": "NOT_RUN",
+    "cancel": "NOT_RUN",
+    "per_identity_construct_finalize_reclaim": "NOT_RUN",
+    "full_safety": "NOT_RUN",
+    "Main": "NOT_RUN",
+    "retired": 0,
+    "completion": "OPEN",
+    "caption_binding": "Post-execution mapping annotation. The frozen Root snapshots and raw logs are authoritative runtime inputs; this later mapping was not captured before those executions.",
+    "worker_delivery_commit_of_matching_candidate_bytes": "0a325493668f38a65ad702d19e216b92be1cd166",
+    "candidate_delivery_binding": "The worker delivery publishes byte-identical consumer source observed in the frozen Root windows; it is not the Git commit of the executed Root product or a replacement for each original input snapshot."
   }
 }
