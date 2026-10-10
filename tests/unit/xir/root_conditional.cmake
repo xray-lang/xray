@@ -1,4 +1,7 @@
 # Root registers these gates after the complete production closure is reviewed.
+set(XRAY_ROOT_CONDITIONAL_COMPILER_REPORTS_ROOT
+    "${CMAKE_BINARY_DIR}/root-conditional-source-compiler" CACHE PATH
+    "Exclusive reports root for complete conditional Source compiler faults")
 foreach(_root_conditional_gate helpers source)
     add_executable(test_xir_root_conditional_${_root_conditional_gate}
         ${CMAKE_CURRENT_LIST_DIR}/test_xir_root_conditional_${_root_conditional_gate}.c)
@@ -17,8 +20,24 @@ foreach(_root_conditional_gate helpers source)
         COMMAND test_xir_root_conditional_${_root_conditional_gate})
     set_tests_properties(test_xir_root_conditional_${_root_conditional_gate} PROPERTIES
         LABELS "unit;xir;root-effects;higher-order;compiler;ownership" TIMEOUT 300 RUN_SERIAL TRUE PROCESSORS 1)
-    add_test(NAME test_xir_root_conditional_${_root_conditional_gate}_compiler
-        COMMAND test_xir_root_conditional_${_root_conditional_gate} --compiler)
-    set_tests_properties(test_xir_root_conditional_${_root_conditional_gate}_compiler PROPERTIES
-        LABELS "unit;xir;root-effects;higher-order;compiler-fault;ownership" TIMEOUT 600 RUN_SERIAL TRUE PROCESSORS 1)
+    # Observed Windows wall costs: complete MSVC 110s; ASan reaches its 600s cap.
+    if(ENABLE_ASAN OR ENABLE_SANITIZERS)
+        set(_root_source_compiler_cost 600.113)
+    else()
+        set(_root_source_compiler_cost 110.006)
+    endif()
+    if(WIN32 AND _root_conditional_gate STREQUAL "source")
+        add_test(NAME test_xir_root_conditional_${_root_conditional_gate}_compiler
+            COMMAND "${Python3_EXECUTABLE}" "${PROJECT_SOURCE_DIR}/tests/unit/xir/run_root_conditional_source_compiler.py"
+                --executable "$<TARGET_FILE:test_xir_root_conditional_source>"
+                --source-root "${PROJECT_SOURCE_DIR}"
+                --reports-root "${XRAY_ROOT_CONDITIONAL_COMPILER_REPORTS_ROOT}" --workers 8)
+        set_tests_properties(test_xir_root_conditional_${_root_conditional_gate}_compiler PROPERTIES
+            LABELS "unit;xir;root-effects;higher-order;compiler-fault;ownership" TIMEOUT 600 RUN_SERIAL TRUE PROCESSORS 8 COST ${_root_source_compiler_cost})
+    else()
+        add_test(NAME test_xir_root_conditional_${_root_conditional_gate}_compiler
+            COMMAND test_xir_root_conditional_${_root_conditional_gate} --compiler)
+        set_tests_properties(test_xir_root_conditional_${_root_conditional_gate}_compiler PROPERTIES
+            LABELS "unit;xir;root-effects;higher-order;compiler-fault;ownership" TIMEOUT 600 RUN_SERIAL TRUE PROCESSORS 1)
+    endif()
 endforeach()

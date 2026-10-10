@@ -16,6 +16,7 @@
 #include "xir/xxir_effects.h"
 #include "xir/xxir_internal.h"
 #include "toolchain/xcompiler_session.h"
+#include "base/xsha256.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -23,6 +24,27 @@
 #include "xir_library_compile_owner.h"
 #include "xir_root_conditional_oracles.h"
 typedef struct RootConditionalOperation { const RootConditionalOracle *oracle; bool inspect, observe; } RootConditionalOperation;
+typedef struct RootConditionalCompilerIdentity {
+    bool digest;
+    uint32_t phase;
+    size_t lengths[2];
+    char sha[2][65];
+} RootConditionalCompilerIdentity;
+static RootConditionalCompilerIdentity *conditional_parallel_identity;
+/* Test observations are outside the compiler ledger and physical fault sites.
+ * Only complete fresh baselines hash both actual canonical Checked packets. */
+static void conditional_parallel_hash(const void *bytes,size_t length,char output[65]) {
+    uint8_t digest[32];xr_sha256(bytes,length,digest);
+    static const char hex[]="0123456789abcdef";
+    for(size_t i=0;i<sizeof(digest);++i) { output[2*i]=hex[digest[i]>>4];output[2*i+1]=hex[digest[i]&15]; }
+    output[64]=0;
+}
+static void conditional_parallel_packet(unsigned ordinal,const XrXirCheckedPacket *packet) {
+    if(!conditional_parallel_identity || !conditional_parallel_identity->digest)return;
+    CHECK(ordinal<2 && packet->bytes && packet->length);
+    conditional_parallel_identity->lengths[ordinal]=packet->length;
+    conditional_parallel_hash(packet->bytes,packet->length,conditional_parallel_identity->sha[ordinal]);
+}
 typedef struct RootConditionalStageObservation { XrCompileResourceStats stats; size_t attempts; } RootConditionalStageObservation;
 static void conditional_stage_observe(const XrXirCompileContext *context, const RootConditionalOperation *operation,
     uint32_t phase, XrXirStatus status, RootConditionalStageObservation *previous) {
@@ -142,12 +164,12 @@ static XrXirStatus conditional_operation(const XrXirCompileContext *context, voi
     xr_compile_session_free(session);
     conditional_stage_observe(context,operation,1,status,&observation);
     if (status==XR_XIR_OK && operation->inspect) conditional_template(result.checked);
-    if (status==XR_XIR_OK) { phase=2;status=xr_xir_compile_checked_write(result.checked,&first,&xir_diagnostic);conditional_stage_observe(context,operation,2,status,&observation); }
+    if (status==XR_XIR_OK) { phase=2;status=xr_xir_compile_checked_write(result.checked,&first,&xir_diagnostic);if(status==XR_XIR_OK)conditional_parallel_packet(0,&first);conditional_stage_observe(context,operation,2,status,&observation); }
     xr_xir_compile_source_result_free(&result);
     if (status==XR_XIR_OK) { phase=3;status=xr_xir_compile_checked_read(context,first.bytes,first.length,&read,&xir_diagnostic);conditional_stage_observe(context,operation,3,status,&observation); }
     if (status==XR_XIR_OK) { phase=4;status=xr_xir_compile_specialize(read,&instance,&xir_diagnostic);conditional_stage_observe(context,operation,4,status,&observation); }
     xr_xir_compile_artifact_free(read);read=NULL;
-    if (status==XR_XIR_OK) { phase=5;status=xr_xir_compile_checked_write(instance,&second,&xir_diagnostic);conditional_stage_observe(context,operation,5,status,&observation); }
+    if (status==XR_XIR_OK) { phase=5;status=xr_xir_compile_checked_write(instance,&second,&xir_diagnostic);if(status==XR_XIR_OK)conditional_parallel_packet(1,&second);conditional_stage_observe(context,operation,5,status,&observation); }
     xr_xir_compile_artifact_free(instance);instance=NULL;
     if (status==XR_XIR_OK) { phase=6;status=xr_xir_compile_checked_read(context,second.bytes,second.length,&reloaded,&xir_diagnostic);conditional_stage_observe(context,operation,6,status,&observation); }
     if (status==XR_XIR_OK && operation->inspect) conditional_closed(reloaded,oracle);
@@ -161,9 +183,12 @@ static XrXirStatus conditional_operation(const XrXirCompileContext *context, voi
     }
     xr_xir_compile_artifact_free(lowered);xr_xir_compile_artifact_free(reloaded);xr_xir_compile_artifact_free(instance);
     xr_xir_compile_artifact_free(read);xr_xir_compile_checked_packet_free(&first);xr_xir_compile_checked_packet_free(&second);
-    xr_compile_resources_free(failure);conditional_stage_observe(context,operation,9,status,&observation);return status;
+    xr_compile_resources_free(failure);conditional_stage_observe(context,operation,9,status,&observation);
+    if(conditional_parallel_identity)conditional_parallel_identity->phase=phase;return status;
 }
+#include "xir_root_conditional_compiler_parallel.h"
 int main(int argc, char **argv) {
+    if(conditional_parallel_cli(argc,argv)) { library_compile_observer_free();return 0; }
     CHECK(argc<=2);bool census=argc==2 && !strcmp(argv[1],"--census");
     bool compiler=argc==2 && !census;CHECK(!compiler || !strcmp(argv[1],"--compiler"));
     for (size_t i=0;i<sizeof(root_conditional_oracles)/sizeof(root_conditional_oracles[0]);++i) {
