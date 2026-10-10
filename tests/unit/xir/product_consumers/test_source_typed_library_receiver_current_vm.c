@@ -70,6 +70,7 @@ typedef struct ReceiverRun {
     char *library_failure_path;
     XrXirCheckedPacket library_packet, expected_source, expected_closed;
     XrXirLibraryModuleInput *bindings;
+    XrXirFunctionIdentity *control_identities;
     size_t binding_count;
     XrXirLibraryCatalog *catalog;
     XrXirSourceProduct *product;
@@ -367,6 +368,28 @@ static void library_inputs_die(ReceiverRun *run) {
     free_text(run->library_failure_path); run->library_failure_path = NULL;
     poison(&run->library_diagnostic, sizeof(run->library_diagnostic));
 }
+/* Importing a suspension does not authorize a false no-suspend promise.
+ * Only this independently owned identity table changes; the real body and
+ * construction remain the original fully checked Library. */
+static void receiver_suspend_promise_reject(ReceiverRun *run) {
+    const XrXirArtifact *artifact = run->library_source.checked;
+    XrXirModule module = *xr_xir_compile_artifact_module(artifact);
+    XrXirDeclarations declarations = *module.declarations;
+    ReceiverRoles roles = receiver_shape(artifact);
+    CHECK(module.function_count && module.function_count <= 10000);
+    run->control_identities = owned_allocate(run->context, module.function_count, sizeof(*run->control_identities));
+    memcpy(run->control_identities, declarations.functions, module.function_count * sizeof(*run->control_identities));
+    declarations.functions = run->control_identities; module.declarations = &declarations;
+    run->control_identities[roles.child].promises |= XR_XIR_FUNCTION_NO_SUSPEND;
+    XrXirDiagnostic diagnostic = {0};
+    XrXirStatus status = xr_xir_compile_verify_v2(run->context, &module,
+        xr_xir_compile_artifact_construction(artifact), &diagnostic);
+    CHECK(status == XR_XIR_BAD_TYPE && diagnostic.reason == XR_XIR_DIAGNOSTIC_NO_SUSPEND && diagnostic.function == roles.child);
+    xr_compile_resources_free(run->control_identities); run->control_identities = NULL;
+    CHECK(completed(run, xr_xir_compile_artifact_verify(artifact, NULL), "original-Library-after-false-promise-reject"));
+    puts("Library-suspension-false-NO_SUSPEND-promise-rejected=1 original-owned-body-unchanged=1");
+}
+
 static bool library_catalog_build(ReceiverRun *run) {
     CHECK(session_completed(xr_compile_session_new(run->context->resources, &run->library_session), "Library-session-new"));
     XrModuleIdentityAuthority authority = {XR_MODULE_IDENTITY_SCRIPT, NULL, run->root};
@@ -382,6 +405,7 @@ static bool library_catalog_build(ReceiverRun *run) {
     CHECK(completed(run, xr_xir_compile_artifact_verify(run->library_source.checked, NULL), "Library-SOURCE-full-artifact-verify"));
     construction_owner(run, run->library_source.checked, "Library-SOURCE-full-v2");
     (void)receiver_shape(run->library_source.checked);
+    receiver_suspend_promise_reject(run);
     if (!completed(run, xr_xir_compile_checked_write(run->library_source.checked,
         &run->library_packet, NULL), "Library-SOURCE-full-packet")) return false;
     library_bindings(run);
@@ -562,17 +586,17 @@ static bool callback_check(bool condition, int line, const char *expression) {
     fprintf(stderr, "callback-observation-failure line=%d condition=%s; returning through product API\n", line, expression);
     return false;
 }
-#define CALLBACK(c) callback_check(!!(c), __LINE__, #c)
+#define RECEIVER_CALLBACK(c) callback_check(!!(c), __LINE__, #c)
 
 /* The delegate receives the admitted active view, environment and state unchanged. */
 static XrXirAction observed_receiver_vm_resume(XrXirCallView *view) {
     ReceiverVmOwner *owner = receiver_vm_owner;
-    if (!CALLBACK(owner && view && xr_xir_call_admission(view))) return xr_xir_call_fault(XR_XIR_RUN_BAD_ARGUMENT);
+    if (!RECEIVER_CALLBACK(owner && view && xr_xir_call_admission(view))) return xr_xir_call_fault(XR_XIR_RUN_BAD_ARGUMENT);
     uint32_t function = xr_xir_call_current_entry(view->activation);
-    if (!CALLBACK(function < owner->count && owner->entries[function].resume == observed_receiver_vm_resume))
+    if (!RECEIVER_CALLBACK(function < owner->count && owner->entries[function].resume == observed_receiver_vm_resume))
         return xr_xir_call_fault(XR_XIR_RUN_BAD_ARGUMENT);
     const XrXirCallEntry *delegate = &owner->delegates[function];
-    if (!CALLBACK(delegate->resume && view->environment == delegate->environment && owner->resumes[function] < UINT64_MAX))
+    if (!RECEIVER_CALLBACK(delegate->resume && view->environment == delegate->environment && owner->resumes[function] < UINT64_MAX))
         return xr_xir_call_fault(XR_XIR_RUN_BAD_ARGUMENT);
     ++owner->resumes[function];
     return delegate->resume(view);
@@ -588,7 +612,7 @@ static void dispose_receiver_vm_owner(ReceiverVmOwner *owner) {
 static void receiver_vm_release(void *pointer) {
     /* A void lease callback records errors and releases only our known owner. */
     ReceiverVmOwner *owner = receiver_vm_owner;
-    (void)CALLBACK(owner && pointer == owner && !receiver_vm_releases);
+    (void)RECEIVER_CALLBACK(owner && pointer == owner && !receiver_vm_releases);
     if (!owner) return;
     receiver_vm_owner = NULL; ++receiver_vm_releases;
     dispose_receiver_vm_owner(owner);
@@ -707,6 +731,7 @@ static void cleanup_created_leaf(ReceiverRun *run, unsigned leaf) {
     if (!absent) { receiver_cleanup_failed = true; fprintf(stderr, "cleanup-error own-leaf=%u strict-NOT_FOUND-unproved\n", leaf); }
 }
 static void release_remaining(ReceiverRun *run) {
+    xr_compile_resources_free(run->control_identities); run->control_identities = NULL;
     xr_xir_value_drop(&run->value);
     for (unsigned i = 0; i < 2; ++i) {
         if (!run->instances[i]) continue;
