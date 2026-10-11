@@ -285,19 +285,19 @@ static void conditional_generation_projected_controls(const XrXirCompileContext 
  * the actual product selector/writer. No test-only reader or permission source
  * is introduced; external product gate and trace entry points are unchanged. */
 static XrXirStatus conditional_generation_publication_stage(const XrXirCompileContext *work,
-    const EffectInvocationCertificate *certificate,EffectInvocationPublication **output) {
-    if (!certificate || !effect_body_material_shape(certificate->body) ||
-        certificate->body->resources!=certificate->resources || certificate->resources!=work->resources || !certificate->solution ||
-        !output || *output || !certificate->facts || !certificate->witnesses ||
-        certificate->solution->count!=effect_body_count(certificate->body)) return XR_XIR_BAD_STRUCTURE;
-    EffectInvocationPublication *publication=NULL;XrXirStatus status=XR_XIR_OK;
-    for (uint32_t f=0;f<certificate->solution->count && status==XR_XIR_OK;++f) {
-        EffectInvocationProjectionSelection selected[4];
-        status=effect_invocation_projection_domains(work,certificate,f,0,4,selected);
-        if (status==XR_XIR_OK)
-            status=effect_invocation_publication_write(work,certificate,f,selected,&publication);
-    }
-    if (status!=XR_XIR_OK) { effect_invocation_publication_free(publication);return status; }
+    const EffectInvocationCertificate *certificate,EffectInvocationResult **output) {
+    if (!xir_compile_context_valid(work) || !certificate || !certificate->result ||
+        !output || *output || !certificate->projection_atoms) return XR_XIR_BAD_STRUCTURE;
+    EffectInvocationResult *publication=NULL;
+    XrXirStatus status=effect_invocation_result_read_new(work,certificate,&publication);
+    EffectInvocationCertificate probe=*certificate;
+    probe.terms=(EffectTerms){.remaining=work};probe.projection_atoms=NULL;probe.result=publication;
+    EffectInvocationProjectionSink sink={work->resources,effect_body_count(certificate->body),
+        &publication,effect_invocation_publication_write};
+    if (status==XR_XIR_OK) status=effect_invocation_certificate_project(work,&probe,publication,&sink);
+    if (status==XR_XIR_OK) status=effect_invocation_publication_match(work,&probe,publication);
+    effect_terms_free(&probe.terms);
+    if (status!=XR_XIR_OK) { effect_invocation_result_free(publication);return status; }
     *output=publication;return XR_XIR_OK;
 }
 
@@ -330,18 +330,18 @@ static void conditional_generation_publication_controls(const XrXirCompileContex
     CHECK(owner->local_roots==certificate->body->local_roots &&
         owner->local_witnesses==certificate->body->local_witnesses);
     size_t attempts=rp_attempts;XrCompileResourceStats before=rp_stats(context);
-    XrXirRootEffects *facts=certificate->facts;XrXirRootEffectWitness *witnesses=certificate->witnesses;
+    XrXirRootEffects *facts=certificate->result->facts;XrXirRootEffectWitness *witnesses=certificate->result->witnesses;
     uint32_t *atoms=certificate->projection_atoms;
-    CHECK(effect_invocation_certificate_project(context,certificate,NULL)==XR_XIR_BAD_STRUCTURE &&
-        certificate->facts==facts && certificate->witnesses==witnesses && certificate->projection_atoms==atoms);
-    EffectInvocationPublication occupied={0};EffectInvocationPublication *output=&occupied;
+    CHECK(effect_invocation_certificate_project(context,certificate,NULL,NULL)==XR_XIR_BAD_STRUCTURE &&
+        certificate->result->facts==facts && certificate->result->witnesses==witnesses && certificate->projection_atoms==atoms);
+    EffectInvocationResult occupied={0};EffectInvocationResult *output=&occupied;
     CHECK(conditional_generation_publication_stage(context,certificate,&output)==XR_XIR_BAD_STRUCTURE &&
-        output==&occupied && !occupied.formulas && !occupied.witnesses && !occupied.count &&
+        output==&occupied && !occupied.functions && !occupied.witnesses && !occupied.count &&
         rp_attempts==attempts && rp_stats(context).work==before.work &&
         rp_stats(context).live_bytes==before.live_bytes);
     RootParameterMark physical=rp_mark();uint64_t live=rp_stats(context).live_bytes;
     output=NULL;CHECK(conditional_generation_publication_stage(context,certificate,&output)==XR_XIR_OK);
-    CHECK(output && output->count==certificate->solution->count);
+    CHECK(output && output->count==certificate->result->count);
     for (uint32_t f=0;f<output->count;++f) for (uint32_t domain=0;domain<4;++domain) {
         XrXirRootEffectWitness expected={0};bool symbolic=false;
         CHECK(effect_invocation_public_selected(context,certificate,f,domain,&expected,&symbolic)==XR_XIR_OK);
@@ -350,7 +350,7 @@ static void conditional_generation_publication_controls(const XrXirCompileContex
     uint32_t mask=UINT32_C(0x87654321);
     CHECK(effect_invocation_certificate_node_mask(context,certificate,owner->count,&mask)==
         XR_XIR_BAD_STRUCTURE && mask==UINT32_C(0x87654321));
-    effect_invocation_publication_free(output);
+    effect_invocation_result_free(output);
     CHECK(rp_stats(context).live_bytes==live);rp_balanced(physical);
 }
 
@@ -359,49 +359,103 @@ static void conditional_generation_publication_controls(const XrXirCompileContex
 static uint32_t conditional_generation_sink_calls,conditional_generation_sink_refuse;
 static XrXirStatus conditional_generation_counted_publication(const XrXirCompileContext *context,
     const EffectInvocationCertificate *certificate,uint32_t function,
-    const EffectInvocationProjectionSelection *selected,void *receiver) {
+    const uint32_t *selected,EffectInvocationResult *result,void *receiver) {
     ++conditional_generation_sink_calls;
     if (function==conditional_generation_sink_refuse) return XR_XIR_BAD_STRUCTURE;
-    return effect_invocation_publication_write(context,certificate,function,selected,receiver);
+    return effect_invocation_publication_write(context,certificate,function,selected,result,receiver);
 }
 
 static void conditional_generation_sink_boundary(const XrXirCompileContext *context,
     EffectInvocationCertificate *certificate) {
-    RootParameterMark physical=rp_mark();XrCompileResourceStats before=rp_stats(context);
-    size_t attempts=rp_attempts;EffectInvocationPublication *publication=NULL;
+    RootParameterMark physical=rp_mark();uint64_t entry_live=rp_stats(context).live_bytes;
+    EffectInvocationResult *publication=NULL;
+    CHECK(effect_invocation_result_read_new(context,certificate,&publication)==XR_XIR_OK);
+    XrCompileResourceStats before=rp_stats(context);size_t attempts=rp_attempts;
     EffectInvocationCertificate probe={.resources=certificate->resources,.body=certificate->body,
         .origins=certificate->origins,.declarations=certificate->declarations,.parameter_kinds=certificate->parameter_kinds,
-        .declared=certificate->declared,.equations=certificate->equations,.solution=certificate->solution};
+        .declared=certificate->declared,.equations=certificate->equations,.result=publication};
     probe.terms.remaining=context;
     EffectInvocationProjectionSink sink={context->resources,effect_body_count(certificate->body),
         &publication,conditional_generation_counted_publication};
     conditional_generation_sink_calls=0;conditional_generation_sink_refuse=1;
     ++sink.count;
-    CHECK(effect_invocation_certificate_project(context,&probe,&sink)==XR_XIR_BAD_STRUCTURE);
+    CHECK(effect_invocation_certificate_project(context,&probe,publication,&sink)==XR_XIR_BAD_STRUCTURE);
     --sink.count;sink.resources=NULL;
-    CHECK(effect_invocation_certificate_project(context,&probe,&sink)==XR_XIR_BAD_STRUCTURE);
+    CHECK(effect_invocation_certificate_project(context,&probe,publication,&sink)==XR_XIR_BAD_STRUCTURE);
     sink.resources=context->resources;sink.owner=NULL;
-    CHECK(effect_invocation_certificate_project(context,&probe,&sink)==XR_XIR_BAD_STRUCTURE);
+    CHECK(effect_invocation_certificate_project(context,&probe,publication,&sink)==XR_XIR_BAD_STRUCTURE);
     sink.owner=&publication;sink.write=NULL;
-    CHECK(effect_invocation_certificate_project(context,&probe,&sink)==XR_XIR_BAD_STRUCTURE);
-    CHECK(!probe.facts && !probe.witnesses && !probe.projection_atoms && !publication &&
+    CHECK(effect_invocation_certificate_project(context,&probe,publication,&sink)==XR_XIR_BAD_STRUCTURE);
+    CHECK(!publication->facts && !publication->witnesses && !probe.projection_atoms &&
         !conditional_generation_sink_calls && rp_attempts==attempts && rp_stats(context).work==before.work);
     sink.write=conditional_generation_counted_publication;
-    CHECK(effect_invocation_certificate_project(context,&probe,&sink)==XR_XIR_BAD_STRUCTURE &&
-        conditional_generation_sink_calls==2 && publication && probe.facts && probe.witnesses);
-    CHECK(certificate->facts && certificate->witnesses && certificate->projection_atoms);
-    effect_invocation_publication_free(publication);effect_terms_free(&probe.terms);
-    CHECK(rp_stats(context).live_bytes==before.live_bytes);rp_balanced(physical);
+    CHECK(effect_invocation_certificate_project(context,&probe,publication,&sink)==XR_XIR_BAD_STRUCTURE &&
+        conditional_generation_sink_calls==2 && publication->facts && publication->witnesses && probe.projection_atoms);
+    CHECK(certificate->result->facts && certificate->result->witnesses && certificate->projection_atoms);
+    effect_invocation_result_free(publication);effect_terms_free(&probe.terms);
+    CHECK(rp_stats(context).live_bytes==entry_live);rp_balanced(physical);
     conditional_generation_sink_refuse=UINT32_MAX;
 }
 
+/* This is the actual post-death receiving owner, not an expected mirror.
+ * Each mutation is refused by a fresh complete replay, then restored before
+ * the real destructor follows its independently owned storage pointers. */
+static void conditional_generation_result_rejections(const XrXirCompileContext *context,
+    EffectInvocationCertificate *certificate) {
+    EffectInvocationResult *result=certificate->result;
+    CHECK(result && result->count && result->count==result->capacity &&
+        effect_invocation_publication_match(context,certificate,result)==XR_XIR_OK);
+    uint32_t count=result->count,total=result->term_count;
+    result->count=count+1;
+    CHECK(effect_invocation_publication_match(context,certificate,result)==XR_XIR_BAD_STRUCTURE);
+    result->count=count;result->capacity=count+1;
+    CHECK(effect_invocation_publication_match(context,certificate,result)==XR_XIR_BAD_STRUCTURE);
+    result->capacity=count;result->term_count=total+1;
+    CHECK(effect_invocation_publication_match(context,certificate,result)==XR_XIR_BAD_STRUCTURE);
+    result->term_count=total;
+    EffectInvocationResultFunction *record=&result->functions[0];
+    uint32_t capacity=record->capacity,mask=record->formula.constant_mask;
+    record->capacity=capacity+1;
+    CHECK(effect_invocation_publication_match(context,certificate,result)==XR_XIR_BAD_STRUCTURE);
+    record->capacity=capacity;record->formula.constant_mask=mask^XR_XIR_CALLABLE_ROOT_REQUIRED;
+    CHECK(effect_invocation_publication_match(context,certificate,result)==XR_XIR_BAD_STRUCTURE);
+    record->formula.constant_mask=mask;
+    for (uint32_t f=0;f<count;++f) {
+        record=&result->functions[f];
+        CHECK(record->formula.terms==record->storage && record->formula.term_count==record->capacity);
+        if (!record->capacity) continue;
+        const XrXirRootTerm *span=record->formula.terms;
+        record->formula.terms=NULL;
+        CHECK(effect_invocation_publication_match(context,certificate,result)==XR_XIR_BAD_STRUCTURE);
+        record->formula.terms=span;
+        XrXirRootTerm *storage=record->storage;record->storage=NULL;
+        CHECK(effect_invocation_publication_match(context,certificate,result)==XR_XIR_BAD_STRUCTURE);
+        record->storage=storage;
+        uint32_t index=storage[0].index;storage[0].index^=UINT32_C(0x80000000);
+        CHECK(effect_invocation_publication_match(context,certificate,result)==XR_XIR_BAD_STRUCTURE);
+        storage[0].index=index;
+    }
+    XrXirRootEffects facts=result->facts[0];result->facts[0].unresolved=!facts.unresolved;
+    CHECK(effect_invocation_publication_match(context,certificate,result)==XR_XIR_BAD_STRUCTURE);
+    result->facts[0]=facts;
+    XrXirRootEffectWitness witness=result->witnesses[0];result->witnesses[0].distance^=1;
+    CHECK(effect_invocation_publication_match(context,certificate,result)==XR_XIR_BAD_STRUCTURE);
+    result->witnesses[0]=witness;
+    RootParameterMark physical=rp_mark();XrXirCompileContext foreign=rp_owner(rp_caps());
+    uint64_t live=rp_stats(&foreign).live_bytes,work=rp_stats(&foreign).work;
+    CHECK(effect_invocation_publication_match(&foreign,certificate,result)==XR_XIR_BAD_STRUCTURE &&
+        rp_stats(&foreign).live_bytes==live && rp_stats(&foreign).work==work);
+    rp_owner_free(&foreign,live);rp_balanced(physical);
+    CHECK(effect_invocation_publication_match(context,certificate,result)==XR_XIR_OK);
+}
+
 static void conditional_generation_paired_matches(const XrXirCompileContext *context,
-    const EffectInvocationCertificate *certificate,const EffectInvocationPublication *publication) {
+    const EffectInvocationCertificate *certificate,const EffectInvocationResult *publication) {
     CHECK(publication && publication->resources==context->resources &&
-        publication->count==certificate->solution->count);
+        publication->count==certificate->result->count);
     for (uint32_t f=0;f<publication->count;++f) {
-        const XrXirRootFormula *expected=&certificate->solution->formulas[f];
-        const XrXirRootFormula *actual=&publication->formulas[f];
+        const XrXirRootFormula *expected=&certificate->result->functions[f].formula;
+        const XrXirRootFormula *actual=&publication->functions[f].formula;
         CHECK(actual->constant_mask==expected->constant_mask && actual->term_count==expected->term_count);
         for (uint32_t t=0;t<actual->term_count;++t)
             CHECK(actual->terms[t].kind==expected->terms[t].kind && actual->terms[t].index==expected->terms[t].index);
@@ -418,9 +472,8 @@ static XrXirStatus conditional_generation_case(const XrXirCompileContext *contex
     InvocationDeferredFixture fixture;invocation_deferred_fixture(&fixture,mode==1);
     XrXirInstruction entry[6]={0};conditional_generation_alias_fixture(&fixture,entry,mode==1);
     XrXirArtifact *checked=NULL;XrXirEffects effects={0};EffectGraph graph={0};
-    EffectInvocationOwner *owner=NULL;EffectInvocationSolution *solution=NULL;
+    EffectInvocationOwner *owner=NULL;EffectInvocationResult *solution=NULL;
     EffectInvocationCertificate *certificate=NULL;EffectBodyMaterial *material=NULL;
-    EffectInvocationPublication *publication=NULL;
     XrXirStatus status=xir_fixture_check(context,&fixture.module,&checked,NULL);
     if (status==XR_XIR_OK) status=xr_xir_compile_artifact_verify(checked,NULL);
     const XrXirModule *source=checked?xr_xir_compile_artifact_module(checked):NULL;
@@ -462,13 +515,14 @@ static XrXirStatus conditional_generation_case(const XrXirCompileContext *contex
     if (status==XR_XIR_OK && !xir_compile_work(context,sizeof(sink))) status=XR_XIR_BUDGET;
     if (status==XR_XIR_OK) {
         sink=(EffectInvocationProjectionSink){context->resources,source->function_count,
-            &publication,effect_invocation_publication_write};
+            &solution,effect_invocation_publication_write};
         status=effect_invocation_seal(context,&request,&certificate,&sink);
     }
     if (status==XR_XIR_OK && oracle) CHECK(!owner && !solution && certificate->body==material &&
         certificate->declared==material->declared && !effects.generation &&
         certificate->equations->material==material && certificate->equations->cells==material->cells);
-    effect_invocation_free(owner);effect_invocation_solution_free(solution);
+    EffectInvocationResult *publication=certificate?certificate->result:NULL;
+    effect_invocation_free(owner);effect_invocation_result_free(solution);
     effect_graph_free(&graph);invocation_core_storage_free(&effects);
     xr_xir_compile_artifact_free(checked);memset(&fixture,0xCE,sizeof(fixture));
     if (status==XR_XIR_OK) {
@@ -484,6 +538,7 @@ static XrXirStatus conditional_generation_case(const XrXirCompileContext *contex
         if (status==XR_XIR_OK && oracle) {
             conditional_generation_publication_controls(context,certificate);
             conditional_generation_sink_boundary(context,certificate);
+            conditional_generation_result_rejections(context,certificate);
             conditional_generation_paired_matches(context,certificate,publication);
         }
         uint32_t mask=UINT32_MAX;
@@ -491,7 +546,7 @@ static XrXirStatus conditional_generation_case(const XrXirCompileContext *contex
             certificate->equations->roots[0],&mask);
         if (status==XR_XIR_OK && oracle) CHECK(mask==(mode==1?XR_XIR_CALLABLE_ROOT_REQUIRED:0));
     }
-    effect_invocation_publication_free(publication);effect_invocation_certificate_free(certificate);return status;
+    effect_invocation_certificate_free(certificate);return status;
 }
 
 static void conditional_generation_literals(void) {

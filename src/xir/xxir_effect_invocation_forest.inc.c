@@ -38,7 +38,7 @@ static XrXirStatus effect_invocation_forest_types(const XrXirCompileContext *wor
 /* A record request borrows only this call's fresh four-domain selection.
  * It carries no authority and is not retained by the forest or certificate. */
 typedef struct EffectInvocationForestProjection {
-    const EffectInvocationProjectionSelection *selection;
+    const uint32_t *selection;
     uint32_t domain;
 } EffectInvocationForestProjection;
 
@@ -48,17 +48,20 @@ static XrXirStatus effect_invocation_forest_record(const XrXirCompileContext *wo
     if (!request || !request->selection || request->domain>=4) return XR_XIR_BAD_STRUCTURE;
     if (!xir_compile_work(work,10)) return XR_XIR_BUDGET;
     uint32_t domain=request->domain;
-    const EffectInvocationProjectionSelection *selection=request->selection;
+    const uint32_t *selection=request->selection;
     uint32_t n=certificate->equations->roots[function];
     const EffectInvocationNode *node=&certificate->equations->nodes[n];
     size_t at=(size_t)domain*forest->count+function;
-    if (!selection || selection->atom!=certificate->projection_atoms[at] ||
-        !effect_invocation_witness_equal(&selection->witness,&certificate->witnesses[at])) return XR_XIR_BAD_STRUCTURE;
-    uint32_t atom=selection->atom;
-    if (!xir_compile_work(work,sizeof(EffectInvocationTraceSelection))) return XR_XIR_BUDGET;
-    EffectInvocationTraceSelection projected={atom,selection->witness};
+    if (!selection || *selection!=certificate->projection_atoms[at]) return XR_XIR_BAD_STRUCTURE;
+    uint32_t atom=*selection;XrXirRootEffectWitness selected_witness;
+    XrXirStatus status=effect_invocation_selected_witness(work,certificate,function,atom,&selected_witness);
+    if (status!=XR_XIR_OK) return status;
+    status=effect_invocation_projection_result_match(work,certificate,function,domain,atom,&selected_witness);
+    if (status!=XR_XIR_OK) return status;
+    if (!xir_compile_work(work,sizeof(EffectInvocationProjectedCause))) return XR_XIR_BUDGET;
+    const EffectInvocationProjectedCause projected={atom,&selected_witness};
     XrXirRootEffectWitness witness={0};bool symbolic=false;
-    XrXirStatus status=effect_invocation_public_transform(work,certificate,function,&projected,&witness,&symbolic);
+    status=effect_invocation_public_transform(work,certificate,function,&projected,&witness,&symbolic);
     if (status!=XR_XIR_OK) return status;
     uint32_t next=UINT32_MAX,parameter_owner=function;
     if (atom!=UINT32_MAX) {
@@ -95,7 +98,7 @@ static XrXirStatus effect_invocation_forest_records(const XrXirCompileContext *w
         certificate->body->resources!=certificate->resources || certificate->resources!=work->resources || effect_body_count(certificate->body)!=forest->count)
         return XR_XIR_BAD_STRUCTURE;
     for (uint32_t f=0;f<forest->count;++f) {
-        EffectInvocationProjectionSelection selected[4];
+        uint32_t selected[4];
         XrXirStatus status=effect_invocation_projection_domains(work,certificate,f,0,4,selected);
         if (status!=XR_XIR_OK) return status;
         for (uint32_t domain=0;domain<4;++domain) {
@@ -132,12 +135,15 @@ static XrXirStatus effect_invocation_forest_match(const XrXirCompileContext *wor
         const EffectBodyFunction *body=&certificate->body->functions[f];
         uint32_t scope=certificate->generics?certificate->generics[f].parameter_count:0;
         if (scope>XR_XIR_TYPE_PARAMETER_LIMIT-XR_XIR_TYPE_PARAMETER_BASE) { status=XR_XIR_BAD_STRUCTURE;break; }
+        XrXirRootEffects facts={0};
+        status=effect_invocation_certificate_facts(work,certificate,f,&facts);
+        if (status!=XR_XIR_OK) break;
         if (!xir_compile_work(work,8)) { status=XR_XIR_BUDGET;break; }
         if (node->declaration!=origin->function || node->owner!=certificate->owners[f] ||
             node->argument_count!=origin->argument_count || node->parameter_count!=body->parameter_count ||
-            node->constant_mask!=certificate->solution->formulas[f].constant_mask ||
-            forest->facts[f].requires_root!=certificate->facts[f].requires_root ||
-            forest->facts[f].unresolved!=certificate->facts[f].unresolved) { status=XR_XIR_BAD_STRUCTURE;break; }
+            node->constant_mask!=certificate->equations->nodes[certificate->equations->roots[f]].intrinsic_mask ||
+            forest->facts[f].requires_root!=facts.requires_root ||
+            forest->facts[f].unresolved!=facts.unresolved) { status=XR_XIR_BAD_STRUCTURE;break; }
         for (uint32_t a=0;a<node->argument_count && status==XR_XIR_OK;++a)
             status=effect_terms_domain_type(&comparison,&certificate->terms.types,
                 node->arguments[a],origin->arguments[a],scope);
@@ -151,7 +157,7 @@ static XrXirStatus effect_invocation_forest_match(const XrXirCompileContext *wor
     /* Each identity has one owned inventory. Admit every node against the
      * independent sealed domain before any four-domain link is accepted. */
     for (uint32_t f=0;f<forest->count && status==XR_XIR_OK;++f) {
-        EffectInvocationProjectionSelection selected[4];
+        uint32_t selected[4];
         status=effect_invocation_projection_domains(work,certificate,f,0,4,selected);
         for (uint32_t d=0;d<4 && status==XR_XIR_OK;++d) {
             size_t at=(size_t)d*forest->count+f;EffectContextCertificate expected={0};

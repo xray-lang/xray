@@ -147,7 +147,7 @@ static XrXirStatus conditional_parameter_case(const XrXirCompileContext *context
     if (status==XR_XIR_OK) status=xr_xir_compile_effects_analyze(checked,&published);
     const XrXirModule *module=checked?xr_xir_compile_artifact_module(checked):NULL;
     XrXirEffects effects={0};EffectGraph graph={0};EffectInvocationDeclaredBounds *bounds=NULL;
-    EffectInvocationOwner *owner=NULL;EffectInvocationSolution *solution=NULL;
+    EffectInvocationOwner *owner=NULL;EffectInvocationResult *solution=NULL;
     EffectInvocationCertificate *certificate=NULL;
     if (status==XR_XIR_OK) status=invocation_core_storage(context,module,&effects);
     if (status==XR_XIR_OK) status=effect_graph_build(module,&effects,&graph,(XrXirCompileContext *)context);
@@ -163,7 +163,7 @@ static XrXirStatus conditional_parameter_case(const XrXirCompileContext *context
         EffectInvocationSealRequest request={&owner,&solution,NULL};
         status=effect_invocation_seal(context,&request,&certificate,NULL);
     }
-    effect_invocation_solution_free(solution);effect_invocation_free(owner);
+    effect_invocation_result_free(solution);effect_invocation_free(owner);
     effect_invocation_bounds_free(bounds);effect_graph_free(&graph);invocation_core_storage_free(&effects);
     xr_xir_compile_artifact_free(checked);memset(&fixture,0,sizeof(fixture));
     if (status==XR_XIR_OK) {

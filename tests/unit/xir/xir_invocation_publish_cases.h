@@ -22,8 +22,14 @@ static XrXirStatus conditional_invocation_publish(const XrXirCompileContext *con
         const XrXirRootFormula *formula=&effects->contracts[1].formula;
         CHECK(!formula->constant_mask && formula->term_count==1 &&
             formula->terms[0].kind==XR_XIR_ROOT_TERM_CONTEXT_CALL && !formula->terms[0].index);
-        CHECK(formula->terms!=effects->invocations->solution->formulas[1].terms &&
-            !memcmp(formula->terms,effects->invocations->solution->formulas[1].terms,sizeof(*formula->terms)));
+        CHECK(formula->terms==effects->invocations->result->functions[1].storage &&
+            !memcmp(formula->terms,effects->invocations->result->functions[1].formula.terms,sizeof(*formula->terms)));
+        EffectInvocationResult *result=effects->invocations->result;
+        CHECK(effects->result_borrow==result);
+        CHECK(effects->formula_terminals==result->witnesses &&
+            effects->constant_witnesses==result->witnesses+(size_t)result->count*2 &&
+            effects->root!=result->facts && effects->root_witnesses!=result->witnesses &&
+            effects->unresolved_witnesses!=result->witnesses+result->count);
         XirEffectEntryRootView entry={0};
         CHECK(xir_effects_entry_root(context,effects,1,&entry)==XR_XIR_OK &&
             entry.intrinsic_mask==XR_XIR_CALLABLE_ROOT_UNRESOLVED);
@@ -35,7 +41,8 @@ static XrXirStatus conditional_invocation_publish(const XrXirCompileContext *con
         EffectInvocationDeclaredBounds malformed={.resources=context->resources};
         CHECK(effect_invocation_publish(context,module,effects,&graph,&malformed,NULL)==XR_XIR_BAD_STRUCTURE &&
             effects->invocations==saved && effects->contracts[1].formula.terms==prior.terms &&
-            effects->root[0].requires_root==fact.requires_root && effects->root[0].unresolved==fact.unresolved);
+            effects->root[0].requires_root==fact.requires_root && effects->root[0].unresolved==fact.unresolved &&
+            effects->result_borrow==result);
         effect_graph_free(&graph);
         size_t attempts=rp_attempts;XrXirEffects *occupied=effects;
         CHECK(xr_xir_compile_effects_analyze(checked,&occupied)==XR_XIR_BAD_STRUCTURE &&
@@ -57,8 +64,12 @@ static XrXirStatus conditional_invocation_publish(const XrXirCompileContext *con
         XrXirRootFormula *published=&effects->contracts[1].formula;
         XrXirRootTerm *term=(XrXirRootTerm *)published->terms;uint32_t kind=term[0].kind;
         term[0].kind=XR_XIR_ROOT_TERM_PARAMETER;EffectInvocationCertificate *certificate=effects->invocations;
-        CHECK(certificate->solution->formulas[1].terms[0].kind==XR_XIR_ROOT_TERM_CONTEXT_CALL);
+        CHECK(certificate->result->functions[1].formula.terms[0].kind==XR_XIR_ROOT_TERM_PARAMETER);
+        XrXirRootCauseTrace *refused=NULL;
+        CHECK(xr_xir_compile_root_cause_trace_copy(context,effects,1,&refused)==XR_XIR_BAD_STRUCTURE && !refused);
         term[0].kind=kind;
+        CHECK(xr_xir_compile_root_cause_trace_copy(context,effects,1,&refused)==XR_XIR_OK && refused);
+        xr_xir_compile_root_cause_trace_free(refused);
     }
     xr_xir_compile_effects_free(effects);effects=NULL;
     if (status==XR_XIR_OK && oracle) {
@@ -87,6 +98,17 @@ static XrXirStatus conditional_invocation_template_publish(const XrXirCompileCon
     if (status==XR_XIR_OK && oracle) {
         CHECK(effects->contexts && !effects->refinement && effects->invocations &&
             effects->contexts->forest->invocations && !effects->contexts->dense->uses.invocations);
+        const XrXirEffects *summary=&effects->contexts->dense->uses;
+        const EffectInvocationResult *borrowed=effects->contexts->forest->invocations->result;
+        CHECK(effects->result_borrow==effects->invocations->result && summary->result_borrow==borrowed &&
+            summary->formula_terminals==borrowed->witnesses &&
+            summary->constant_witnesses==borrowed->witnesses+(size_t)borrowed->count*2);
+        for (uint32_t f=0;f<summary->count;++f) {
+            const XrXirRootFormula *view=&summary->contracts[f].formula;
+            const XrXirRootFormula *actual=&borrowed->functions[f].formula;
+            CHECK(view->terms==actual->terms && view->term_count==actual->term_count &&
+                view->constant_mask==actual->constant_mask);
+        }
         const XrXirModule *module=xr_xir_compile_artifact_module(checked);
         uint32_t mask=UINT32_MAX;
         CHECK(effect_invocation_bounds_mask(context,effects->invocations->declared,0,1,&mask)==XR_XIR_OK &&

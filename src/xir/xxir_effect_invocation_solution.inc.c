@@ -11,18 +11,29 @@
  *   A staged result owns its canonical records. No borrowed producer, pending
  *   equation or merely empty lattice state can become an executable permission.
  */
-typedef struct EffectInvocationSolution {
-    XrCompileResources *resources;
-    uint32_t count,term_count;
-    XrXirRootFormula *formulas;
-    void *storage;
-} EffectInvocationSolution;
-_Static_assert(sizeof(XrXirRootFormula)%_Alignof(XrXirRootTerm)==0,
-    "Packed canonical term records must remain aligned");
+/* This is the final receiving owner. Each term vector is written once and
+ * transfers to its public contract only after independent comparison. */
+typedef struct EffectInvocationResultFunction {
+    XrXirRootFormula formula;
+    XrXirRootTerm *storage;
+    uint32_t capacity;
+} EffectInvocationResultFunction;
 
-static void effect_invocation_solution_free(EffectInvocationSolution *solution) {
-    if (!solution) return;
-    xr_compile_resources_free(solution->storage);xr_compile_resources_free(solution);
+typedef struct EffectInvocationResult {
+    XrCompileResources *resources;
+    uint32_t count,capacity,term_count;
+    EffectInvocationResultFunction *functions;
+    XrXirRootEffects *facts;
+    XrXirRootEffectWitness *witnesses;
+} EffectInvocationResult;
+
+static void effect_invocation_result_free(EffectInvocationResult *result) {
+    if (!result) return;
+    for (uint32_t f=0;f<result->count;++f)
+        xr_compile_resources_free(result->functions[f].storage);
+    xr_compile_resources_free(result->functions);
+    xr_compile_resources_free(result->facts);xr_compile_resources_free(result->witnesses);
+    xr_compile_resources_free(result);
 }
 
 static bool effect_invocation_frontier(XrXirOp op) {
@@ -135,129 +146,218 @@ static XrXirStatus effect_invocation_closed(EffectInvocationOwner *owner) {
 /* The same canonical enumerator counts, writes or compares a bounded
  * receiving span. Comparison reads the actual stored kind/index directly;
  * no expected array or permission result survives this one request. */
-static XrXirStatus effect_invocation_terms_read(EffectInvocationOwner *owner,
+/* Sources are lifetime adapters for actual role metadata, not permission
+ * hints. The immutable role inventory is explicit when available;
+ * otherwise the generating owner supplies its actual contracts. */
+typedef struct EffectInvocationTermSource {
+    const XrXirCompileContext *work;
+    const EffectInvocationOwner *equations;
+    const uint8_t *const *kinds;
+} EffectInvocationTermSource;
+typedef struct EffectInvocationTermTarget {
+    uint32_t limit,kind,index;
+    bool *present;
+} EffectInvocationTermTarget;
+
+static XrXirStatus effect_body_result_head(const XrXirCompileContext *work,
+    const EffectBodyMaterial *material,uint32_t function) {
+    if (!xir_compile_context_valid(work) || !effect_body_material_shape(material) ||
+        material->resources!=work->resources || function>=effect_body_count(material)) return XR_XIR_BAD_STRUCTURE;
+    const EffectBodyFunction *head=&material->functions[function];
+    if ((head->name_length && !head->name) || (head->parameter_count && !head->parameters) ||
+        (head->block_count && !head->blocks) || (head->operand_count && !head->operands) ||
+        (head->instruction_count && (!head->stream || !head->run_count)) ||
+        head->stream_words>head->stream_capacity) return XR_XIR_BAD_STRUCTURE;
+    return xir_compile_work(work,11)?XR_XIR_OK:XR_XIR_BUDGET;
+}
+
+static uint32_t effect_invocation_result_parameter(const EffectInvocationTermSource *source,
+    uint32_t function,uint32_t parameter) {
+    if (source->kinds)
+        return source->kinds[function]?source->kinds[function][parameter]:UINT32_MAX;
+    if (source->equations->effects) {
+        const XrXirFunctionEffectContract *contract=&source->equations->effects->contracts[function];
+        if (contract->parameter_count!=source->equations->material->functions[function].parameter_count ||
+            !contract->parameters) return UINT32_MAX;
+        return contract->parameters[parameter].kind;
+    }
+    return UINT32_MAX;
+}
+
+static XrXirStatus effect_invocation_result_terms(const EffectInvocationTermSource *source,
     uint32_t function,XrXirRootTerm *terms,const XrXirRootTerm *expected,
-    uint32_t limit,uint32_t *count) {
-    if (!owner || !count || (terms && expected) || !owner->roots ||
-        function>=owner->body.domain.function_count || owner->roots[function]>=owner->count)
+    const EffectInvocationTermTarget *target,uint32_t *count) {
+    if (!source || !source->equations || !xir_compile_context_valid(source->work) ||
+        !effect_body_material_shape(source->equations->material) || source->equations->material->resources!=source->work->resources ||
+        !source->equations->nodes ||
+        (!source->equations->effects && !source->kinds) ||
+        (!source->kinds && source->equations->effects && !source->equations->effects->contracts) || !target || !count || (terms && expected) || !source->equations->roots ||
+        function>=source->equations->material->domain.function_count || source->equations->roots[function]>=source->equations->count)
         return XR_XIR_BAD_STRUCTURE;
-    const EffectInvocationNode *node=&owner->nodes[owner->roots[function]];
-    EffectBodyFunctionHead head={0};XrXirStatus read_status=effect_invocation_head(owner,function,&head);
+    const EffectInvocationNode *node=&source->equations->nodes[source->equations->roots[function]];
+    const EffectBodyFunction *body=&source->equations->material->functions[function];
+    XrXirStatus read_status=effect_body_result_head(source->work,source->equations->material,function);
     if (read_status!=XR_XIR_OK) return read_status;
-    const EffectBodyFunctionHead *body=&head;
-    if (!owner->root_spaces || node->root!=owner->root_spaces[function] ||
+    if (!source->equations->root_spaces || node->root!=source->equations->root_spaces[function] ||
         node->body!=function || node->parameter_count!=body->parameter_count)
         return XR_XIR_BAD_STRUCTURE;
+    if (node->root>=effect_body_count(source->equations->material) || !node->expanded || node->queued)
+        return XR_XIR_BAD_STRUCTURE;
+    uint32_t root_parameters=source->equations->material->functions[node->root].parameter_count;
+    if (!xir_compile_work(source->work,9)) return XR_XIR_BUDGET;
+    if (!effect_invocation_node_shape(node,root_parameters,body->instruction_count)) return XR_XIR_BAD_STRUCTURE;
     bool shared=node->root!=function;
     if (shared) for (uint32_t p=0;p<body->parameter_count;++p) {
-        if (!xir_compile_work(owner->work,3)) return XR_XIR_BUDGET;
-        if (xr_xir_callable_signature(owner->body.domain.types,body->parameters[p]) ||
-            xr_xir_type_is_cell(owner->body.domain.types,body->parameters[p])) return XR_XIR_BAD_STRUCTURE;
+        if (!xir_compile_work(source->work,3)) return XR_XIR_BUDGET;
+        if (xr_xir_callable_signature(source->equations->material->domain.types,body->parameters[p]) ||
+            xr_xir_type_is_cell(source->equations->material->domain.types,body->parameters[p])) return XR_XIR_BAD_STRUCTURE;
     }
     if (shared) {
-        EffectInvocationBasis basis={0};
-        XrXirStatus status=effect_invocation_basis(owner,node->root,&basis);
+        XrXirStatus status=effect_body_result_head(source->work,source->equations->material,node->root);
         if (status!=XR_XIR_OK) return status;
-        uint32_t words=(uint32_t)(((uint64_t)basis.parameters+63)/64);
+        uint32_t words=(uint32_t)(((uint64_t)source->equations->material->functions[node->root].parameter_count+63)/64);
         for (uint32_t w=0;w<words;++w) {
-            if (!xir_compile_work(owner->work,3)) return XR_XIR_BUDGET;
+            if (!xir_compile_work(source->work,3)) return XR_XIR_BUDGET;
             if (node->cells[w] || effect_invocation_node_row(node,EFFECT_INVOCATION_PARAMETERS,false)[w]) return XR_XIR_BAD_STRUCTURE;
         }
     }
-    uint64_t at=0;
+    uint64_t at=0;bool found=false;uint32_t limit=target->limit;
     for (uint32_t kind=XR_XIR_ROOT_TERM_PARAMETER;kind<=XR_XIR_ROOT_TERM_CELL_PARAMETER;++kind) {
         uint32_t items=kind==XR_XIR_ROOT_TERM_CONTEXT_CALL?body->instruction_count:shared?0:body->parameter_count;
         const uint64_t *bits=kind==XR_XIR_ROOT_TERM_PARAMETER?effect_invocation_node_row(node,EFFECT_INVOCATION_PARAMETERS,false):
             kind==XR_XIR_ROOT_TERM_CELL_PARAMETER?node->cells:effect_invocation_node_row(node,EFFECT_INVOCATION_CONTEXTS,false);
-        if (!xir_compile_work(owner->work,1)) return XR_XIR_BUDGET;
+        if (!xir_compile_work(source->work,1)) return XR_XIR_BUDGET;
         uint32_t words=(uint32_t)(((uint64_t)items+63)/64);
         if (words && !bits) return XR_XIR_BAD_STRUCTURE;
         for (uint32_t w=0;w<words;++w) {
-            if (!xir_compile_work(owner->work,3)) return XR_XIR_BUDGET;
+            if (!xir_compile_work(source->work,3)) return XR_XIR_BUDGET;
             uint64_t remaining=bits[w];
             if (w+1==words && items%64 && (remaining&~((UINT64_C(1)<<(items%64))-1)))
                 return XR_XIR_BAD_STRUCTURE;
             /* Ascending words and lowest bits preserve canonical term order. */
             while (remaining) {
-                if (!xir_compile_work(owner->work,4)) return XR_XIR_BUDGET;
+                if (!xir_compile_work(source->work,4)) return XR_XIR_BUDGET;
                 uint32_t i=w*64+(uint32_t)__builtin_ctzll(remaining);
                 remaining&=remaining-1;
                 if (kind==XR_XIR_ROOT_TERM_PARAMETER &&
-                    (!xr_xir_callable_signature(owner->body.domain.types,body->parameters[i]) ||
-                    owner->effects->contracts[function].parameters[i].kind!=XR_XIR_EFFECT_PARAMETER_VARIABLE))
+                    (!xr_xir_callable_signature(source->equations->material->domain.types,body->parameters[i]) ||
+                    effect_invocation_result_parameter(source,function,i)!=XR_XIR_EFFECT_PARAMETER_VARIABLE))
                     return XR_XIR_BAD_STRUCTURE;
-                if (kind==XR_XIR_ROOT_TERM_CELL_PARAMETER && !xr_xir_type_is_cell(owner->body.domain.types,body->parameters[i]))
+                if (kind==XR_XIR_ROOT_TERM_CELL_PARAMETER && !xr_xir_type_is_cell(source->equations->material->domain.types,body->parameters[i]))
                     return XR_XIR_BAD_STRUCTURE;
                 if (kind==XR_XIR_ROOT_TERM_CONTEXT_CALL) {
-                    EffectBodyInstructionShape shape={0};read_status=effect_invocation_shape(owner,function,i,&shape);
+                    EffectBodyRead read=effect_body_compile_read(source->work);XrXirOp opcode=XR_XIR_INVALID;
+                    read_status=effect_body_instruction_op(&read,body,i,&opcode);
                     if (read_status!=XR_XIR_OK) return read_status;
-                    if (!effect_invocation_frontier(shape.op)) return XR_XIR_BAD_STRUCTURE;
+                    if (!effect_invocation_frontier(opcode)) return XR_XIR_BAD_STRUCTURE;
                 }
                 if (at>=UINT32_MAX) return XR_XIR_BUDGET;
                 if (limit!=UINT32_MAX) {
-                    if (!xir_compile_work(owner->work,1)) return XR_XIR_BUDGET;
+                    if (!xir_compile_work(source->work,1)) return XR_XIR_BUDGET;
                     if (at>=limit) return XR_XIR_BAD_STRUCTURE;
                 }
                 if (terms) {
-                    if (!xir_compile_work(owner->work,sizeof(*terms))) return XR_XIR_BUDGET;
+                    if (!xir_compile_work(source->work,sizeof(*terms))) return XR_XIR_BUDGET;
                     terms[at]=(XrXirRootTerm){kind,i};
                 }
                 if (expected) {
-                    if (!xir_compile_work(owner->work,4)) return XR_XIR_BUDGET;
+                    if (!xir_compile_work(source->work,4)) return XR_XIR_BUDGET;
                     if (expected[at].kind!=kind || expected[at].index!=i) return XR_XIR_BAD_STRUCTURE;
                 }
+                if (target->present && kind==target->kind && i==target->index) found=true;
                 ++at;
             }
         }
     }
+    if (target->present) {
+        if (!xir_compile_work(source->work,sizeof(*target->present))) return XR_XIR_BUDGET;
+        *target->present=found;
+    }
     *count=(uint32_t)at;return XR_XIR_OK;
 }
+static inline XrXirStatus effect_invocation_terms_read(EffectInvocationOwner *owner,
+    uint32_t function,XrXirRootTerm *terms,const XrXirRootTerm *expected,
+    uint32_t limit,uint32_t *count) {
+    if (!owner || !xir_compile_context_valid(owner->work) || !owner->effects ||
+        !owner->effects->contracts) return XR_XIR_BAD_STRUCTURE;
+    if (!xir_compile_work(owner->work,sizeof(EffectInvocationTermSource)+sizeof(EffectInvocationTermTarget)))
+        return XR_XIR_BUDGET;
+    const EffectInvocationTermSource source={owner->work,owner,NULL};
+    const EffectInvocationTermTarget target={limit,0,0,NULL};
+    return effect_invocation_result_terms(&source,function,terms,expected,&target,count);
+}
 
-static XrXirStatus effect_invocation_terms(EffectInvocationOwner *owner,
+
+static inline XrXirStatus effect_invocation_terms(EffectInvocationOwner *owner,
     uint32_t function,XrXirRootTerm *terms,uint32_t *count) {
     return effect_invocation_terms_read(owner,function,terms,NULL,UINT32_MAX,count);
 }
 
-/* This stage does not write Effects, contracts, carriers or permission tables.
- * Its caller must retain the complete sealed equation/cause certificate before
- * one final atomic publication through the common owner. */
-static XrXirStatus effect_invocation_stage(EffectInvocationOwner *owner,
-    EffectInvocationSolution **output) {
-    if (!output || *output || !owner || !owner->effects || !owner->effects->contracts)
+/* The same constructor owns the final term spans for generating equations or
+ * for an independent replay of an immutable certificate. Neither adapter
+ * retains its caller, and no second canonical formula inventory is stored. */
+static XrXirStatus effect_invocation_result_new(const EffectInvocationTermSource *source,
+    EffectInvocationResult **output) {
+    if (!source || !source->equations || !xir_compile_context_valid(source->work) ||
+        !output || *output || !effect_body_material_shape(source->equations->material) ||
+        source->equations->material->resources!=source->work->resources)
         return XR_XIR_BAD_STRUCTURE;
-    /* Formulas depend on closed facts. The sealed owner constructs and
-     * verifies the complete cause forest once, before any publication. */
-    XrXirStatus status=effect_invocation_closed(owner);
-    uint32_t count=owner->body.domain.function_count;
-    uint64_t term_count=0;
-    for (uint32_t f=0;f<count && status==XR_XIR_OK;++f) {
-        uint32_t terms=0;status=effect_invocation_terms(owner,f,NULL,&terms);term_count+=terms;
-        if (term_count>UINT32_MAX) status=XR_XIR_BUDGET;
+    uint32_t count=effect_body_count(source->equations->material);
+    if (!count || !source->equations->roots || !source->equations->nodes) return XR_XIR_BAD_STRUCTURE;
+    XrXirStatus status=XR_XIR_OK;
+    EffectInvocationResult *result=xir_compile_calloc(source->work,1,sizeof(*result),&status);
+    if (!result) return status==XR_XIR_OK?XR_XIR_OUT_OF_MEMORY:status;
+    if (!xir_compile_work(source->work,sizeof(result->resources)+sizeof(result->capacity))) {
+        effect_invocation_result_free(result);return XR_XIR_BUDGET;
     }
-    uint64_t bytes=(uint64_t)count*sizeof(XrXirRootFormula)+term_count*sizeof(XrXirRootTerm);
-    if (status==XR_XIR_OK && bytes>SIZE_MAX) status=XR_XIR_BUDGET;
-    EffectInvocationSolution *solution=status==XR_XIR_OK ?
-        xir_compile_calloc(owner->work,1,sizeof(*solution),&status) : NULL;
-    if (status==XR_XIR_OK && !solution) status=XR_XIR_OUT_OF_MEMORY;
-    if (status==XR_XIR_OK) {
-        solution->resources=owner->work->resources;solution->count=count;solution->term_count=(uint32_t)term_count;
-        solution->storage=bytes?xir_compile_calloc(owner->work,1,(size_t)bytes,&status):NULL;
-        if (status==XR_XIR_OK && bytes && !solution->storage) status=XR_XIR_OUT_OF_MEMORY;
-        solution->formulas=solution->storage;
-    }
-    XrXirRootTerm *records=solution && solution->storage ? (XrXirRootTerm *)(solution->formulas+count):NULL;
-    uint32_t at=0;
+    result->resources=source->work->resources;result->capacity=count;
+    if ((uint64_t)count*sizeof(*result->functions)>SIZE_MAX) status=XR_XIR_BUDGET;
+    if (status==XR_XIR_OK) result->functions=xir_compile_alloc(source->work,
+        (size_t)count*sizeof(*result->functions),&status);
+    if (!result->functions) status=status==XR_XIR_OK?XR_XIR_OUT_OF_MEMORY:status;
+    uint64_t total=0;
     for (uint32_t f=0;f<count && status==XR_XIR_OK;++f) {
-        uint32_t terms=0;
-        status=effect_invocation_terms(owner,f,records?records+at:NULL,&terms);
+        if (!xir_compile_work(source->work,sizeof(*result->functions)+sizeof(result->count))) { status=XR_XIR_BUDGET;break; }
+        result->functions[f]=(EffectInvocationResultFunction){0};++result->count;
+        EffectInvocationResultFunction *record=&result->functions[f];uint32_t terms=0;
+        if (!xir_compile_work(source->work,sizeof(EffectInvocationTermTarget))) { status=XR_XIR_BUDGET;break; }
+        const EffectInvocationTermTarget unlimited={UINT32_MAX,0,0,NULL};
+        status=effect_invocation_result_terms(source,f,NULL,NULL,&unlimited,&terms);total+=terms;
         if (status!=XR_XIR_OK) break;
-        if (at>term_count || terms>term_count-at || !xir_compile_work(owner->work,sizeof(XrXirRootFormula))) {
-            status=at>term_count || terms>term_count-at?XR_XIR_BAD_STRUCTURE:XR_XIR_BUDGET;break;
+        if (total>UINT32_MAX || (uint64_t)terms*sizeof(*record->storage)>SIZE_MAX) {
+            status=XR_XIR_BUDGET;break;
         }
-        solution->formulas[f]=(XrXirRootFormula){owner->nodes[owner->roots[f]].intrinsic_mask,
-            terms,terms?records+at:NULL};at+=terms;
+        XrXirRootTerm *storage=terms?xir_compile_alloc(source->work,
+            (size_t)terms*sizeof(*storage),&status):NULL;
+        if (terms && !storage) { if (status==XR_XIR_OK) status=XR_XIR_OUT_OF_MEMORY;break; }
+        if (!xir_compile_work(source->work,sizeof(record->storage)+sizeof(record->capacity))) {
+            xr_compile_resources_free(storage);status=XR_XIR_BUDGET;break;
+        }
+        record->storage=storage;record->capacity=terms;
+        if (!xir_compile_work(source->work,sizeof(EffectInvocationTermTarget))) { status=XR_XIR_BUDGET;break; }
+        const EffectInvocationTermTarget bounded={terms,0,0,NULL};uint32_t written=0;
+        status=effect_invocation_result_terms(source,f,storage,NULL,&bounded,&written);
+        if (status!=XR_XIR_OK) break;
+        if (written!=terms) { status=XR_XIR_BAD_STRUCTURE;break; }
+        if (!xir_compile_work(source->work,sizeof(record->formula))) { status=XR_XIR_BUDGET;break; }
+        record->formula=(XrXirRootFormula){source->equations->nodes[source->equations->roots[f]].intrinsic_mask,
+            terms,storage};
     }
-    if (status==XR_XIR_OK && at!=term_count) status=XR_XIR_BAD_STRUCTURE;
-    if (status!=XR_XIR_OK) { effect_invocation_solution_free(solution);return status; }
-    *output=solution;return XR_XIR_OK;
+    if (status==XR_XIR_OK && !xir_compile_work(source->work,sizeof(result->term_count))) status=XR_XIR_BUDGET;
+    if (status==XR_XIR_OK) result->term_count=(uint32_t)total;
+    if (status!=XR_XIR_OK) { effect_invocation_result_free(result);return status; }
+    *output=result;return XR_XIR_OK;
+}
+
+/* Staging never changes public contracts. Closure and subsequent independent
+ * comparison both consume the complete current equations before transfer. */
+static XrXirStatus effect_invocation_stage(EffectInvocationOwner *owner,
+    EffectInvocationResult **output) {
+    if (!output || *output || !owner || !xir_compile_context_valid(owner->work) ||
+        !owner->effects || !owner->effects->contracts) return XR_XIR_BAD_STRUCTURE;
+    XrXirStatus status=effect_invocation_closed(owner);
+    if (status!=XR_XIR_OK) return status;
+    if (!xir_compile_work(owner->work,sizeof(EffectInvocationTermSource))) return XR_XIR_BUDGET;
+    const EffectInvocationTermSource source={owner->work,owner,NULL};
+    return effect_invocation_result_new(&source,output);
 }

@@ -19,9 +19,11 @@ struct EffectContextOwner {
 
 static void effect_context_owner_free(EffectContextOwner *owner) {
     if (!owner) return;
-    effect_context_forest_free(owner->forest);
+    /* Retire summary views while the forest still owns their Result.
+     * Its retained Material keeps all immutable backbone payloads live. */
     effect_invocation_bounds_free(owner->declared);
     effect_ordinary_free(owner->dense);effect_ordinary_free(owner->ordinary);
+    effect_context_forest_free(owner->forest);
     xr_compile_resources_free(owner);
 }
 

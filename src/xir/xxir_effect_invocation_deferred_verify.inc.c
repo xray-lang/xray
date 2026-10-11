@@ -147,31 +147,41 @@ static XrXirStatus effect_invocation_deferred_verify(EffectInvocationOwner *owne
     return matched==owner->deferred_count?XR_XIR_OK:XR_XIR_BAD_STRUCTURE;
 }
 
-/* A staged packed formula is rechecked against the completed equation before
- * transfer. Exact storage/term order prevents a forged staged NONE or changed
- * term from becoming a canonical result. This does not run the call solver. */
-static XrXirStatus effect_invocation_solution_match(EffectInvocationOwner *owner,
-    const EffectInvocationSolution *solution) {
-    if (!owner || !owner->work || !owner->roots || !solution ||
-        solution->resources!=owner->work->resources ||
-        solution->count!=owner->body.domain.function_count || !solution->count ||
-        !solution->storage || solution->formulas!=solution->storage) return XR_XIR_BAD_STRUCTURE;
-    const XrXirRootTerm *records=(const XrXirRootTerm *)(solution->formulas+solution->count);
-    uint32_t at=0;XrXirStatus status=XR_XIR_OK;
-    for (uint32_t f=0;f<solution->count && status==XR_XIR_OK;++f) {
-        const XrXirRootFormula *formula=&solution->formulas[f];
-        if (!xir_compile_work(owner->work,6)) { status=XR_XIR_BUDGET;break; }
-        if (owner->roots[f]>=owner->count || at>solution->term_count ||
-            formula->term_count>solution->term_count-at ||
-            formula->constant_mask!=owner->nodes[owner->roots[f]].intrinsic_mask ||
-            formula->terms!=(formula->term_count?records+at:NULL)) {
+/* Both lifetime adapters compare the actual final vector to the same
+ * complete canonical enumeration. No expected formula or term copy is made. */
+static XrXirStatus effect_invocation_result_match_source(const EffectInvocationTermSource *source,
+    const EffectInvocationResult *result) {
+    if (!source || !source->equations || !xir_compile_context_valid(source->work) ||
+        !effect_body_material_shape(source->equations->material) || !source->equations->roots ||
+        !source->equations->nodes || !result ||
+        result->resources!=source->work->resources || !result->count ||
+        result->count!=effect_body_count(source->equations->material) || result->capacity!=result->count ||
+        !result->functions) return XR_XIR_BAD_STRUCTURE;
+    uint64_t total=0;XrXirStatus status=XR_XIR_OK;
+    for (uint32_t f=0;f<result->count && status==XR_XIR_OK;++f) {
+        const EffectInvocationResultFunction *record=&result->functions[f];
+        const XrXirRootFormula *formula=&record->formula;
+        if (!xir_compile_work(source->work,6)) { status=XR_XIR_BUDGET;break; }
+        if (source->equations->roots[f]>=source->equations->count || formula->term_count!=record->capacity ||
+            !!record->storage!=!!record->capacity || formula->terms!=record->storage ||
+            formula->constant_mask!=source->equations->nodes[source->equations->roots[f]].intrinsic_mask) {
             status=XR_XIR_BAD_STRUCTURE;break;
         }
-        uint32_t count=0;
-        status=effect_invocation_terms_read(owner,f,NULL,formula->terms,formula->term_count,&count);
-        if (status==XR_XIR_OK && count!=formula->term_count) status=XR_XIR_BAD_STRUCTURE;
-        at+=count;
+        if (!xir_compile_work(source->work,sizeof(EffectInvocationTermTarget))) { status=XR_XIR_BUDGET;break; }
+        const EffectInvocationTermTarget target={record->capacity,0,0,NULL};uint32_t count=0;
+        status=effect_invocation_result_terms(source,f,NULL,record->storage,&target,&count);
+        if (status==XR_XIR_OK && count!=record->capacity) status=XR_XIR_BAD_STRUCTURE;
+        total+=count;
     }
-    if (status==XR_XIR_OK && at!=solution->term_count) status=XR_XIR_BAD_STRUCTURE;
+    if (status==XR_XIR_OK && total!=result->term_count) status=XR_XIR_BAD_STRUCTURE;
     return status;
+}
+
+static XrXirStatus effect_invocation_result_match(EffectInvocationOwner *owner,
+    const EffectInvocationResult *result) {
+    if (!owner || !xir_compile_context_valid(owner->work) || !owner->effects ||
+        !owner->effects->contracts) return XR_XIR_BAD_STRUCTURE;
+    if (!xir_compile_work(owner->work,sizeof(EffectInvocationTermSource))) return XR_XIR_BUDGET;
+    const EffectInvocationTermSource source={owner->work,owner,NULL};
+    return effect_invocation_result_match_source(&source,result);
 }

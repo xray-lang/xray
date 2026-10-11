@@ -134,7 +134,7 @@ static XrXirStatus conditional_storage_case(const XrXirCompileContext *context,u
     if (status==XR_XIR_OK) { phase=1;status=xr_xir_compile_artifact_verify(checked,&diagnostic); }
     const XrXirModule *module=checked?xr_xir_compile_artifact_module(checked):NULL;
     XrXirEffects effects={0};EffectGraph graph={0};EffectInvocationDeclaredBounds *bounds=NULL;
-    EffectInvocationOwner *owner=NULL;EffectInvocationSolution *solution=NULL;
+    EffectInvocationOwner *owner=NULL;EffectInvocationResult *solution=NULL;
     EffectInvocationCertificate *certificate=NULL;
     if (status==XR_XIR_OK) { phase=2;status=invocation_core_storage(context,module,&effects); }
     if (status==XR_XIR_OK) { phase=3;status=effect_graph_build(module,&effects,&graph,(XrXirCompileContext *)context); }
@@ -153,7 +153,7 @@ static XrXirStatus conditional_storage_case(const XrXirCompileContext *context,u
     if (status!=XR_XIR_OK && oracle) fprintf(stderr,
         "INVOCATION_STORAGE mode=%u phase=%u status=%u f=%u b=%u i=%u\n",mode,phase,status,
         diagnostic.function,diagnostic.block,diagnostic.instruction);
-    effect_invocation_free(owner);effect_invocation_solution_free(solution);
+    effect_invocation_free(owner);effect_invocation_result_free(solution);
     effect_graph_free(&graph);invocation_core_storage_free(&effects);
     effect_invocation_bounds_free(bounds);xr_xir_compile_artifact_free(checked);
     memset(&fixture,0xCE,sizeof(fixture));memset(wide,0xCE,sizeof(wide));memset(init,0xCE,sizeof(init));

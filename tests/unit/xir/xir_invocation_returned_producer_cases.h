@@ -242,8 +242,8 @@ static XrXirStatus invocation_returned_lowered_snapshot(const XrXirCompileContex
     }
     const EffectInvocationOwner *equations=certificate->equations;
     if (status==XR_XIR_OK && (!equations || equations->work || equations->module || equations->effects ||
-        equations->graph || equations->declared || equations->pending || !certificate->solution ||
-        certificate->solution->count!=module->function_count || !certificate->declared ||
+        equations->graph || equations->declared || equations->pending || !certificate->result ||
+        certificate->result->count!=module->function_count || !certificate->declared ||
         certificate->declared->resources!=context->resources)) status=XR_XIR_BAD_STRUCTURE;
     return status;
 }
@@ -321,7 +321,7 @@ static XrXirStatus conditional_invocation_returned(const XrXirCompileContext *co
     if (status==XR_XIR_OK) { phase=2;status=xr_xir_compile_effects_analyze(checked,&published); }
     const XrXirModule *module=checked?xr_xir_compile_artifact_module(checked):NULL;
     XrXirEffects effects={0};EffectGraph graph={0};EffectInvocationDeclaredBounds *bounds=NULL;
-    EffectInvocationOwner *owner=NULL;EffectInvocationSolution *solution=NULL;
+    EffectInvocationOwner *owner=NULL;EffectInvocationResult *solution=NULL;
     EffectInvocationCertificate *certificate=NULL;
     if (status==XR_XIR_OK) { phase=3;status=invocation_core_storage(context,module,&effects); }
     if (status==XR_XIR_OK) status=effect_graph_build(module,&effects,&graph,(XrXirCompileContext *)context);
@@ -337,7 +337,7 @@ static XrXirStatus conditional_invocation_returned(const XrXirCompileContext *co
         phase=5;EffectInvocationSealRequest request={&owner,&solution,NULL};
         status=effect_invocation_seal(context,&request,&certificate,NULL);
     }
-    effect_invocation_solution_free(solution);effect_invocation_free(owner);
+    effect_invocation_result_free(solution);effect_invocation_free(owner);
     effect_invocation_bounds_free(bounds);effect_graph_free(&graph);invocation_core_storage_free(&effects);
     if (status==XR_XIR_OK && mode>=5) status=invocation_returned_lowered(context,checked,oracle);
     xr_xir_compile_artifact_free(checked);checked=NULL;memset(&fixture,0,sizeof(fixture));

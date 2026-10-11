@@ -222,10 +222,10 @@ static void conditional_compact_null_body(const XrXirCompileContext *context,XrX
  * still replay the complete selected equation and reject independent damage. */
 static void conditional_compact_public_selection(const XrXirCompileContext *context,
     EffectInvocationCertificate *certificate) {
-    CHECK(certificate->solution->formulas[1].constant_mask==0 &&
-        certificate->solution->formulas[1].term_count==1 &&
-        certificate->solution->formulas[1].terms[0].kind==XR_XIR_ROOT_TERM_CONTEXT_CALL &&
-        certificate->solution->formulas[1].terms[0].index==0);
+    CHECK(certificate->result->functions[1].formula.constant_mask==0 &&
+        certificate->result->functions[1].formula.term_count==1 &&
+        certificate->result->functions[1].formula.terms[0].kind==XR_XIR_ROOT_TERM_CONTEXT_CALL &&
+        certificate->result->functions[1].formula.terms[0].index==0);
     for (uint32_t f=0;f<2;++f) for (uint32_t d=0;d<4;++d) {
         EffectInvocationTraceRequest request={.function=f,.domain=d};uint32_t length=77;
         CHECK(effect_invocation_public_walk(context,certificate,&request,4,&length)==XR_XIR_OK &&
@@ -238,15 +238,15 @@ static void conditional_compact_public_selection(const XrXirCompileContext *cont
     CHECK(effect_invocation_trace_walk_selected(context,certificate,&request,&length,&selected)==XR_XIR_OK &&
         length==1 && selected.atom==6 && selected.witness.cause==XR_XIR_ROOT_CAUSE_CONTEXT_CALL &&
         selected.witness.instruction==0 && selected.witness.distance==0);
-    uint32_t at=certificate->solution->count+1,atom=certificate->projection_atoms[at];
-    XrXirRootEffectWitness witness=certificate->witnesses[at];
-    bool fact=certificate->facts[1].unresolved;
-    XrXirRootTerm *term=(XrXirRootTerm *)certificate->solution->formulas[1].terms;
+    uint32_t at=certificate->result->count+1,atom=certificate->projection_atoms[at];
+    XrXirRootEffectWitness witness=certificate->result->witnesses[at];
+    bool fact=certificate->result->facts[1].unresolved;
+    XrXirRootTerm *term=(XrXirRootTerm *)certificate->result->functions[1].formula.terms;
     uint32_t index=term[0].index;
     for (uint32_t damage=0;damage<4;++damage) {
         if (!damage) certificate->projection_atoms[at]=UINT32_MAX;
-        else if (damage==1) certificate->witnesses[at].distance^=1;
-        else if (damage==2) certificate->facts[1].unresolved=false;
+        else if (damage==1) certificate->result->witnesses[at].distance^=1;
+        else if (damage==2) certificate->result->facts[1].unresolved=false;
         else term[0].index=1;
         length=77;
         CHECK(effect_invocation_public_walk(context,certificate,&request,4,&length)==XR_XIR_BAD_STRUCTURE && length==77);
@@ -256,8 +256,8 @@ static void conditional_compact_public_selection(const XrXirCompileContext *cont
                 XR_XIR_BAD_STRUCTURE && length==77 && selected.atom==sentinel.atom &&
                 effect_invocation_witness_equal(&selected.witness,&sentinel.witness));
         }
-        certificate->projection_atoms[at]=atom;certificate->witnesses[at]=witness;
-        certificate->facts[1].unresolved=fact;term[0].index=index;
+        certificate->projection_atoms[at]=atom;certificate->result->witnesses[at]=witness;
+        certificate->result->facts[1].unresolved=fact;term[0].index=index;
         length=77;
         CHECK(effect_invocation_public_walk(context,certificate,&request,4,&length)==XR_XIR_OK && length==1);
     }
@@ -311,20 +311,22 @@ static void conditional_compact_projection_domains(const XrXirCompileContext *co
         {UINT32_MAX,3,UINT32_MAX,UINT32_MAX},
         {0,UINT32_MAX,0,UINT32_MAX}};
     for (uint32_t f=0;f<4;++f) {
-        EffectInvocationProjectionSelection selected[4];
+        uint32_t selected[4];
         CHECK(effect_invocation_projection_domains(context,certificate,f,0,4,selected)==XR_XIR_OK);
         for (uint32_t domain=0;domain<4;++domain) {
-            CHECK(selected[domain].atom==expected[f][domain]);
-            if (expected[f][domain]==UINT32_MAX) CHECK(!selected[domain].witness.cause);
-            else CHECK(selected[domain].witness.distance==0 && selected[domain].witness.callee==UINT32_MAX &&
-                selected[domain].witness.cause==(f==1?XR_XIR_ROOT_CAUSE_CONTEXT_CALL:
+            CHECK(selected[domain]==expected[f][domain]);
+            XrXirRootEffectWitness chosen;
+            CHECK(effect_invocation_selected_witness(context,certificate,f,selected[domain],&chosen)==XR_XIR_OK);
+            if (expected[f][domain]==UINT32_MAX) CHECK(!chosen.cause);
+            else CHECK(chosen.distance==0 && chosen.callee==UINT32_MAX &&
+                chosen.cause==(f==1?XR_XIR_ROOT_CAUSE_CONTEXT_CALL:
                     f==2?XR_XIR_ROOT_CAUSE_CELL_PARAMETER:XR_XIR_ROOT_CAUSE_INITIALIZER));
             uint32_t atom=UINT32_C(77);XrXirRootEffectWitness witness={0};
             CHECK(effect_invocation_projection_select(context,certificate,f,domain,&atom,&witness)==XR_XIR_OK &&
-                atom==expected[f][domain] && effect_invocation_witness_equal(&witness,&selected[domain].witness));
+                atom==expected[f][domain] && effect_invocation_witness_equal(&witness,&chosen));
         }
     }
-    EffectInvocationProjectionSelection selected[4];
+    uint32_t selected[4];
     uint32_t root=certificate->equations->roots[1];EffectInvocationNode *node=&certificate->equations->nodes[root];
     EffectInvocationCause *cause=&node->causes[6],*local=&effect_invocation_local_causes(node)[6];
     XrXirRootEffectWitness saved=cause->witness,local_saved=local->witness;
@@ -345,8 +347,8 @@ static void conditional_compact_projection_domains(const XrXirCompileContext *co
         cause->witness=saved;local->witness=local_saved;
         certificate->body->functions[1].stream[0]=stream_first;certificate->equations->roots[1]=root;
         CHECK(effect_invocation_projection_domains(context,certificate,1,0,4,selected)==XR_XIR_OK &&
-            selected[1].atom==6 && selected[0].atom==UINT32_MAX && selected[2].atom==UINT32_MAX &&
-            selected[3].atom==UINT32_MAX);
+            selected[1]==6 && selected[0]==UINT32_MAX && selected[2]==UINT32_MAX &&
+            selected[3]==UINT32_MAX);
     }
 }
 

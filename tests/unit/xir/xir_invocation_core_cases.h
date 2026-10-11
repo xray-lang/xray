@@ -50,6 +50,7 @@ static XrXirStatus conditional_invocation_core(const XrXirCompileContext *contex
     if (status==XR_XIR_OK) { phase=1;status=xr_xir_compile_artifact_verify(checked,&diagnostic); }
     const XrXirModule *module=checked?xr_xir_compile_artifact_module(checked):NULL;
     XrXirEffects effects={0};EffectGraph graph={0};EffectInvocationDeclaredBounds *bounds=NULL;
+    EffectInvocationResult *receiving=NULL;
     EffectInvocationCertificate *certificate=NULL;
     if (status==XR_XIR_OK) { phase=2;status=invocation_core_storage(context,module,&effects); }
     if (status==XR_XIR_OK) { phase=3;status=effect_graph_build(module,&effects,&graph,(XrXirCompileContext *)context); }
@@ -59,11 +60,12 @@ static XrXirStatus conditional_invocation_core(const XrXirCompileContext *contex
         status=effect_invocation_bounds_capture(context,bounds,module->types,&module->functions[f],f,NULL);
     if (status==XR_XIR_OK) {
         phase=6;EffectInvocationDriverInput input={context,module,&effects,&graph,bounds,NULL};
-        status=effect_invocation_derive(&input,&certificate,NULL);
+        status=effect_invocation_derive(&input,&certificate,NULL,&receiving);
     }
     if (status!=XR_XIR_OK && oracle) fprintf(stderr,
         "INVOCATION_CORE mode=%u phase=%u status=%u f=%u b=%u i=%u\n",mode,phase,status,
         diagnostic.function,diagnostic.block,diagnostic.instruction);
+    effect_invocation_result_free(receiving);
     effect_graph_free(&graph);invocation_core_storage_free(&effects);
     effect_invocation_bounds_free(bounds);xr_xir_compile_artifact_free(checked);checked=NULL;
     memset(&fixture,0,sizeof(fixture));memset(recursive,0,sizeof(recursive));
@@ -77,15 +79,15 @@ static XrXirStatus conditional_invocation_core(const XrXirCompileContext *contex
         if (status==XR_XIR_OK) status=effect_invocation_certificate_trace(context,certificate,1,&trace);
         if (status==XR_XIR_OK && oracle) {
             CHECK(!caller_mask && formal_mask==XR_XIR_CALLABLE_ROOT_UNRESOLVED && !edge_mask);
-            CHECK(certificate->solution->formulas[1].term_count==1 &&
-                certificate->solution->formulas[1].terms[0].kind==XR_XIR_ROOT_TERM_PARAMETER &&
-                certificate->solution->formulas[1].terms[0].index==0);
+            CHECK(certificate->result->functions[1].formula.term_count==1 &&
+                certificate->result->functions[1].formula.terms[0].kind==XR_XIR_ROOT_TERM_PARAMETER &&
+                certificate->result->functions[1].formula.terms[0].index==0);
             CHECK(trace && !trace->counts[0] && trace->counts[1]==1 &&
                 trace->steps[0].function==1 && trace->steps[0].witness.cause==XR_XIR_ROOT_CAUSE_PARAMETER &&
                 !trace->steps[0].witness.distance && trace->steps[0].witness.slot==0);
             size_t attempts=rp_attempts;EffectInvocationCertificate *occupied=certificate;
             EffectInvocationDriverInput empty={.work=context};
-            CHECK(effect_invocation_derive(&empty,&occupied,NULL)==XR_XIR_BAD_STRUCTURE &&
+            CHECK(effect_invocation_derive(&empty,&occupied,NULL,&receiving)==XR_XIR_BAD_STRUCTURE &&
                 occupied==certificate && rp_attempts==attempts);
             EffectInvocationCauseTrace *occupied_trace=trace;
             CHECK(effect_invocation_certificate_trace(context,certificate,1,&occupied_trace)==XR_XIR_BAD_STRUCTURE &&

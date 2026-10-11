@@ -71,8 +71,8 @@ static void invocation_deferred_fixture(InvocationDeferredFixture *f,uint32_t mo
 }
 
 static void invocation_deferred_rejections(const XrXirCompileContext *context,
-    EffectInvocationOwner **owner,EffectInvocationSolution **solution) {
-    EffectInvocationOwner *original=*owner;EffectInvocationSolution *staged=*solution;
+    EffectInvocationOwner **owner,EffectInvocationResult **solution) {
+    EffectInvocationOwner *original=*owner;EffectInvocationResult *staged=*solution;
     CHECK(original->deferred_count==1 && original->deferred_capacity>=2);
     EffectInvocationDeferred *record=&original->deferred_calls[0];
     EffectInvocationBasis basis={0};
@@ -114,13 +114,13 @@ static void invocation_deferred_rejections(const XrXirCompileContext *context,
     CHECK(effect_invocation_seal(context,&request,&out,NULL)==XR_XIR_BAD_STRUCTURE && !out &&
         *owner==original && *solution==staged);
     record->parameter=0;
-    uint32_t constant=staged->formulas[0].constant_mask;
-    staged->formulas[0].constant_mask^=XR_XIR_CALLABLE_ROOT_REQUIRED;
+    uint32_t constant=staged->functions[0].formula.constant_mask;
+    staged->functions[0].formula.constant_mask^=XR_XIR_CALLABLE_ROOT_REQUIRED;
     CHECK(effect_invocation_seal(context,&request,&out,NULL)==XR_XIR_BAD_STRUCTURE && !out &&
         *owner==original && *solution==staged);
-    staged->formulas[0].constant_mask=constant;
-    XrXirRootTerm *term=(XrXirRootTerm *)staged->formulas[1].terms;
-    CHECK(staged->formulas[1].term_count==1 && term && term->kind==XR_XIR_ROOT_TERM_CONTEXT_CALL);
+    staged->functions[0].formula.constant_mask=constant;
+    XrXirRootTerm *term=(XrXirRootTerm *)staged->functions[1].formula.terms;
+    CHECK(staged->functions[1].formula.term_count==1 && term && term->kind==XR_XIR_ROOT_TERM_CONTEXT_CALL);
     term->kind=XR_XIR_ROOT_TERM_PARAMETER;
     CHECK(effect_invocation_seal(context,&request,&out,NULL)==XR_XIR_BAD_STRUCTURE && !out &&
         *owner==original && *solution==staged);
@@ -136,7 +136,7 @@ static XrXirStatus conditional_invocation_deferred(const XrXirCompileContext *co
     if (status==XR_XIR_OK) { phase=1;status=xr_xir_compile_artifact_verify(checked,&diagnostic); }
     const XrXirModule *module=checked?xr_xir_compile_artifact_module(checked):NULL;
     XrXirEffects effects={0};EffectGraph graph={0};EffectInvocationDeclaredBounds *bounds=NULL;
-    EffectInvocationOwner *owner=NULL;EffectInvocationSolution *solution=NULL;
+    EffectInvocationOwner *owner=NULL;EffectInvocationResult *solution=NULL;
     EffectInvocationCertificate *certificate=NULL;
     if (status==XR_XIR_OK) { phase=2;status=invocation_core_storage(context,module,&effects); }
     if (status==XR_XIR_OK) { phase=3;status=effect_graph_build(module,&effects,&graph,(XrXirCompileContext *)context); }
@@ -153,7 +153,7 @@ static XrXirStatus conditional_invocation_deferred(const XrXirCompileContext *co
     if (status!=XR_XIR_OK && oracle) fprintf(stderr,
         "INVOCATION_DEFERRED mode=%u phase=%u status=%u f=%u b=%u i=%u\n",mode,phase,status,
         diagnostic.function,diagnostic.block,diagnostic.instruction);
-    effect_invocation_free(owner);effect_invocation_solution_free(solution);
+    effect_invocation_free(owner);effect_invocation_result_free(solution);
     effect_graph_free(&graph);invocation_core_storage_free(&effects);
     effect_invocation_bounds_free(bounds);xr_xir_compile_artifact_free(checked);
     memset(&fixture,0xCE,sizeof(fixture));
@@ -166,7 +166,7 @@ static XrXirStatus conditional_invocation_deferred(const XrXirCompileContext *co
         if (status==XR_XIR_OK) status=effect_invocation_certificate_trace(context,certificate,1,&trace);
         if (status==XR_XIR_OK && oracle) {
             CHECK(caller==(mode?XR_XIR_CALLABLE_ROOT_REQUIRED:0) && formal==XR_XIR_CALLABLE_ROOT_UNRESOLVED);
-            const XrXirRootFormula *formula=&certificate->solution->formulas[1];
+            const XrXirRootFormula *formula=&certificate->result->functions[1].formula;
             CHECK(!formula->constant_mask && formula->term_count==1 &&
                 formula->terms[0].kind==XR_XIR_ROOT_TERM_CONTEXT_CALL && !formula->terms[0].index);
             CHECK(certificate->equations->deferred_count==1 &&

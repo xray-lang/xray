@@ -20,12 +20,12 @@ static const uint32_t sparse_counts[5]={1,1,3,1,1};
  * before allocating or publishing a receiving certificate. Restore it before
  * the original seal; the independent raw classifier supplies the expected set. */
 static void conditional_sparse_physical_bound_rejections(EffectInvocationOwner *owner,
-    EffectInvocationSolution *solution) {
+    EffectInvocationResult *solution) {
     const XrXirCompileContext *context=owner->work;
     EffectPhysicalFunction *physical=&owner->physical->functions[1];
     CHECK(physical->count && physical->records[0].value==0 &&
         physical->records[0].mask&EFFECT_PHYSICAL_CALLABLE);
-    EffectInvocationOwner *held=owner;EffectInvocationSolution *staged=solution;
+    EffectInvocationOwner *held=owner;EffectInvocationResult *staged=solution;
     EffectInvocationSealRequest request={&held,&staged,NULL};EffectInvocationCertificate *output=NULL;
     uint32_t original_mask=physical->records[0].mask;
     XrCompileResourceStats before=rp_stats(context);RootParameterMark retained=rp_mark();
@@ -44,34 +44,34 @@ static void conditional_sparse_physical_bound_rejections(EffectInvocationOwner *
  * Matching may read it once, but must neither allocate an expected copy nor
  * write through either the staged storage or an aliased receiving request. */
 static void conditional_sparse_receiver_rejections(EffectInvocationOwner *owner,
-    EffectInvocationSolution *solution,uint32_t mode) {
+    EffectInvocationResult *solution,uint32_t mode) {
     const XrXirCompileContext *context=owner->work;
-    XrXirRootFormula *formula=&solution->formulas[1];
+    XrXirRootFormula *formula=&solution->functions[1].formula;
     XrXirRootTerm *terms=(XrXirRootTerm *)formula->terms;
     CHECK(formula->term_count==sparse_counts[mode] && terms);
     size_t attempts=rp_attempts;RootParameterMark physical=rp_mark();
     XrCompileResourceStats before=rp_stats(context);
-    CHECK(effect_invocation_solution_match(owner,solution)==XR_XIR_OK && rp_attempts==attempts);
+    CHECK(effect_invocation_result_match(owner,solution)==XR_XIR_OK && rp_attempts==attempts);
     uint32_t count=UINT32_C(0x12345678),limit=formula->term_count;
     CHECK(effect_invocation_terms_read(owner,1,terms,terms,limit,&count)==XR_XIR_BAD_STRUCTURE &&
         count==UINT32_C(0x12345678) && rp_attempts==attempts);
     CHECK(effect_invocation_terms_read(owner,1,NULL,terms,limit-1,&count)==XR_XIR_BAD_STRUCTURE &&
         count==UINT32_C(0x12345678) && rp_attempts==attempts);
     uint32_t kind=terms[0].kind;terms[0].kind=XR_XIR_ROOT_TERM_CELL_PARAMETER;
-    CHECK(effect_invocation_solution_match(owner,solution)==XR_XIR_BAD_STRUCTURE && rp_attempts==attempts);
+    CHECK(effect_invocation_result_match(owner,solution)==XR_XIR_BAD_STRUCTURE && rp_attempts==attempts);
     terms[0].kind=kind;
     const XrXirRootTerm *span=formula->terms;
     formula->term_count=0;formula->terms=NULL;
-    CHECK(effect_invocation_solution_match(owner,solution)==XR_XIR_BAD_STRUCTURE && rp_attempts==attempts);
+    CHECK(effect_invocation_result_match(owner,solution)==XR_XIR_BAD_STRUCTURE && rp_attempts==attempts);
     formula->term_count=limit;formula->terms=span+1;
-    CHECK(effect_invocation_solution_match(owner,solution)==XR_XIR_BAD_STRUCTURE && rp_attempts==attempts);
+    CHECK(effect_invocation_result_match(owner,solution)==XR_XIR_BAD_STRUCTURE && rp_attempts==attempts);
     formula->terms=span;formula->term_count=limit+1;
-    CHECK(effect_invocation_solution_match(owner,solution)==XR_XIR_BAD_STRUCTURE && rp_attempts==attempts);
+    CHECK(effect_invocation_result_match(owner,solution)==XR_XIR_BAD_STRUCTURE && rp_attempts==attempts);
     formula->term_count=limit;
     uint32_t root=owner->roots[1];owner->roots[1]=owner->count;
-    CHECK(effect_invocation_solution_match(owner,solution)==XR_XIR_BAD_STRUCTURE && rp_attempts==attempts);
+    CHECK(effect_invocation_result_match(owner,solution)==XR_XIR_BAD_STRUCTURE && rp_attempts==attempts);
     owner->roots[1]=root;
-    CHECK(effect_invocation_solution_match(owner,solution)==XR_XIR_OK && rp_attempts==attempts &&
+    CHECK(effect_invocation_result_match(owner,solution)==XR_XIR_OK && rp_attempts==attempts &&
         rp_stats(context).live_bytes==before.live_bytes &&
         rp_stats(context).allocated_bytes==before.allocated_bytes);
     for (uint32_t t=0;t<limit;++t)
@@ -82,7 +82,7 @@ static void conditional_sparse_receiver_rejections(EffectInvocationOwner *owner,
 /* The mutations attack a solved real owner, never manufacture a trusted row.
  * Restoration must precede the independent seal and producer destruction. */
 static void conditional_sparse_rejections(EffectInvocationOwner *owner,
-    EffectInvocationSolution *solution,uint32_t mode) {
+    EffectInvocationResult *solution,uint32_t mode) {
     CHECK(mode<5 && owner->roots[1]<owner->count);
     conditional_sparse_physical_bound_rejections(owner,solution);
     conditional_sparse_receiver_rejections(owner,solution,mode);
@@ -124,15 +124,15 @@ static void conditional_sparse_rejections(EffectInvocationOwner *owner,
     saved=contexts[(last+1)/64];contexts[(last+1)/64]|=UINT64_C(1)<<((last+1)%64);
     CHECK(effect_invocation_terms(owner,1,NULL,&count)==XR_XIR_BAD_STRUCTURE && count==UINT32_C(0x12345678));
     contexts[(last+1)/64]=saved;
-    const XrXirRootFormula *formula=&solution->formulas[1];
+    const XrXirRootFormula *formula=&solution->functions[1].formula;
     CHECK(!formula->constant_mask && formula->term_count==sparse_counts[mode] && formula->terms);
     XrXirRootTerm *terms=(XrXirRootTerm *)formula->terms;
     uint32_t original=terms[0].index;terms[0].index=last+1;
-    CHECK(effect_invocation_solution_match(owner,solution)==XR_XIR_BAD_STRUCTURE);
+    CHECK(effect_invocation_result_match(owner,solution)==XR_XIR_BAD_STRUCTURE);
     terms[0].index=original;
     if (sparse_counts[mode]>1) {
         XrXirRootTerm first=terms[0];terms[0]=terms[1];terms[1]=first;
-        CHECK(effect_invocation_solution_match(owner,solution)==XR_XIR_BAD_STRUCTURE);
+        CHECK(effect_invocation_result_match(owner,solution)==XR_XIR_BAD_STRUCTURE);
         terms[1]=terms[0];terms[0]=first;
     }
     XrXirRootTerm copy[4]={{0}};copy[3]=(XrXirRootTerm){UINT32_C(0x12345678),UINT32_C(0x87654321)};
@@ -163,7 +163,7 @@ static XrXirStatus conditional_sparse_case(const XrXirCompileContext *context,ui
     if (status==XR_XIR_OK) { phase=1;status=xr_xir_compile_artifact_verify(checked,&diagnostic); }
     const XrXirModule *module=checked?xr_xir_compile_artifact_module(checked):NULL;
     XrXirEffects effects={0};EffectGraph graph={0};EffectInvocationDeclaredBounds *bounds=NULL;
-    EffectInvocationOwner *owner=NULL;EffectInvocationSolution *solution=NULL;
+    EffectInvocationOwner *owner=NULL;EffectInvocationResult *solution=NULL;
     EffectInvocationCertificate *certificate=NULL;
     if (status==XR_XIR_OK) { phase=2;status=invocation_core_storage(context,module,&effects); }
     if (status==XR_XIR_OK) { phase=3;status=effect_graph_build(module,&effects,&graph,(XrXirCompileContext *)context); }
@@ -180,7 +180,7 @@ static XrXirStatus conditional_sparse_case(const XrXirCompileContext *context,ui
     if (status!=XR_XIR_OK && oracle) fprintf(stderr,
         "INVOCATION_SPARSE mode=%u phase=%u status=%u f=%u b=%u i=%u\n",mode,phase,status,
         diagnostic.function,diagnostic.block,diagnostic.instruction);
-    effect_invocation_free(owner);effect_invocation_solution_free(solution);
+    effect_invocation_free(owner);effect_invocation_result_free(solution);
     effect_graph_free(&graph);invocation_core_storage_free(&effects);
     effect_invocation_bounds_free(bounds);xr_xir_compile_artifact_free(checked);
     memset(&fixture,0xCE,sizeof(fixture));memset(wide,0xCE,sizeof(wide));memset(&block,0xCE,sizeof(block));
@@ -192,7 +192,7 @@ static XrXirStatus conditional_sparse_case(const XrXirCompileContext *context,ui
             certificate->equations->roots[1],&formal);
         if (status==XR_XIR_OK && oracle) {
             CHECK(!caller && formal==XR_XIR_CALLABLE_ROOT_UNRESOLVED);
-            const XrXirRootFormula *formula=&certificate->solution->formulas[1];
+            const XrXirRootFormula *formula=&certificate->result->functions[1].formula;
             CHECK(!formula->constant_mask && formula->term_count==sparse_counts[mode] && formula->terms);
             for (uint32_t t=0;t<formula->term_count;++t)
                 CHECK(formula->terms[t].kind==XR_XIR_ROOT_TERM_CONTEXT_CALL &&

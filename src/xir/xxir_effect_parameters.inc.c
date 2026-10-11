@@ -34,17 +34,20 @@ static const uint8_t effect_parameter_operands[XR_XIR_OP_COUNT] = {
 };
 
 static void effect_parameters_free(XrXirEffects *effects) {
+    /* The forest may already own or have released the unique Result.
+     * Retire its views without dereferencing the borrowed storage owner. */
+    bool owned_result=effects->result_borrow!=NULL;
     effect_invocation_certificate_free(effects->invocations);effects->invocations=NULL;
     effects->cells=NULL;
     effect_body_material_free(effects->generation);effects->generation=NULL;
-    xr_compile_resources_free(effects->formula_terminals);
+    if (!owned_result) xr_compile_resources_free(effects->formula_terminals);
     effects->formula_terminals=NULL;
-    xr_compile_resources_free(effects->constant_witnesses);
-    effects->constant_witnesses=NULL;
+    if (!owned_result) xr_compile_resources_free(effects->constant_witnesses);
+    effects->constant_witnesses=NULL;effects->result_borrow=NULL;
     if (!effects->contracts) return;
     for (uint32_t f = 0; f < effects->count; ++f) {
         xr_compile_resources_free((void *)effects->contracts[f].parameters);
-        xr_compile_resources_free((void *)effects->contracts[f].formula.terms);
+        if (!owned_result) xr_compile_resources_free((void *)effects->contracts[f].formula.terms);
         xr_compile_resources_free((void *)effects->contracts[f].values);
         xr_compile_resources_free((void *)effects->contracts[f].bindings);
     }
@@ -91,14 +94,6 @@ static XrXirStatus effect_parameters_allocate(const XrXirModule *module,
     effects->contracts = xir_compile_calloc(work, effects->count,
         sizeof(*effects->contracts), &status);
     if (!effects->contracts) return status;
-    uint64_t terminal_count=(uint64_t)effects->count*4;
-    if (terminal_count>SIZE_MAX/sizeof(*effects->formula_terminals)) return XR_XIR_BUDGET;
-    effects->formula_terminals=xir_compile_calloc(work,(size_t)terminal_count,
-        sizeof(*effects->formula_terminals),&status);
-    if (!effects->formula_terminals) return status;
-    effects->constant_witnesses=xir_compile_calloc(work,(size_t)effects->count*2,
-        sizeof(*effects->constant_witnesses),&status);
-    if (!effects->constant_witnesses) return status;
     for (uint32_t f=0;f<effects->count;++f) {
         if (!xir_compile_work(work,1)) return XR_XIR_BUDGET;
         const EffectBodyFunction *function=&material->functions[f];

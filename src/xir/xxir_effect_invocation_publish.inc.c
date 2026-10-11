@@ -10,75 +10,27 @@
  *   The single invocation queue completes and seals every equation before
  *   canonical formulas, facts and cause copies enter the receiving owner.
  */
-typedef struct EffectInvocationPublication {
-    XrCompileResources *resources;
-    uint32_t count;
-    XrXirRootFormula *formulas;
-    XrXirRootEffectWitness *witnesses;
-} EffectInvocationPublication;
-
-static void effect_invocation_publication_free(EffectInvocationPublication *publication) {
-    if (!publication) return;
-    for (uint32_t f=0;f<publication->count;++f)
-        xr_compile_resources_free((void *)publication->formulas[f].terms);
-    xr_compile_resources_free(publication->witnesses);
-    xr_compile_resources_free(publication->formulas);xr_compile_resources_free(publication);
-}
-
-/* The receiving contracts free each term vector independently. Copy exact
- * canonical records; never lend pointers into the packed solution. Allocation
- * is lazy at the first completed projection, after all independent seal gates. */
-static XrXirStatus effect_invocation_publication_new(const XrXirCompileContext *work,
-    const EffectInvocationCertificate *certificate,EffectInvocationPublication **output) {
-    XrXirStatus status=XR_XIR_OK;uint32_t count=certificate->solution->count;
-    EffectInvocationPublication *publication=xir_compile_calloc(work,1,sizeof(*publication),&status);
-    if (!publication) return status;
-    publication->resources=work->resources;
-    publication->formulas=xir_compile_calloc(work,count,sizeof(*publication->formulas),&status);
-    if (!publication->formulas) { effect_invocation_publication_free(publication);return status; }
-    publication->count=count;
-    uint64_t witness_count=(uint64_t)count*4;
-    if (witness_count>SIZE_MAX/sizeof(*publication->witnesses)) status=XR_XIR_BUDGET;
-    if (status==XR_XIR_OK) publication->witnesses=xir_compile_alloc(work,
-        (size_t)witness_count*sizeof(*publication->witnesses),&status);
-    if (!publication->witnesses) { effect_invocation_publication_free(publication);return status; }
-    *output=publication;return XR_XIR_OK;
-}
-
 /* Only the current private request supplies selected values. A failure leaves
  * partial parent scratch for unconditional free, with no public field changed. */
 static XrXirStatus effect_invocation_publication_write(const XrXirCompileContext *work,
     const EffectInvocationCertificate *certificate,uint32_t function,
-    const EffectInvocationProjectionSelection *selected,void *receiver) {
-    EffectInvocationPublication **output=receiver;
-    if (!xir_compile_context_valid(work) || !certificate || !selected || !output ||
-        !effect_body_material_shape(certificate->body) || !certificate->solution ||
+    const uint32_t *selected,EffectInvocationResult *result,void *receiver) {
+    EffectInvocationResult **expected=receiver;
+    if (!xir_compile_context_valid(work) || !certificate || !selected || !expected || *expected!=result ||
+        !effect_body_material_shape(certificate->body) || !result || certificate->result!=result || !result->functions ||
         certificate->body->resources!=work->resources || certificate->resources!=work->resources ||
-        certificate->solution->count!=effect_body_count(certificate->body) ||
-        function>=certificate->solution->count || (!function && *output) || (function && !*output))
+        result->resources!=work->resources || result->count!=effect_body_count(certificate->body) ||
+        result->capacity!=result->count || function>=result->count || !result->facts || !result->witnesses)
         return XR_XIR_BAD_STRUCTURE;
-    XrXirStatus status=XR_XIR_OK;
-    if (!function) status=effect_invocation_publication_new(work,certificate,output);
-    if (status!=XR_XIR_OK) return status;
-    EffectInvocationPublication *publication=*output;
-    if (publication->resources!=work->resources || publication->count!=certificate->solution->count ||
-        !publication->formulas || !publication->witnesses) return XR_XIR_BAD_STRUCTURE;
-    XrXirRootFormula value=certificate->solution->formulas[function];
-    uint64_t bytes=(uint64_t)value.term_count*sizeof(*value.terms);
-    if (bytes>SIZE_MAX || !!value.terms!=!!value.term_count) return XR_XIR_BAD_STRUCTURE;
-    XrXirRootTerm *terms=bytes?xir_compile_alloc(work,(size_t)bytes,&status):NULL;
-    if (bytes && !terms) return status;
-    if (!xir_compile_work(work,bytes+sizeof(value))) {
-        xr_compile_resources_free(terms);return XR_XIR_BUDGET;
-    }
-    if (bytes) memcpy(terms,value.terms,(size_t)bytes);
-    value.terms=terms;publication->formulas[function]=value;
     for (uint32_t domain=0;domain<4;++domain) {
-        if (!xir_compile_work(work,sizeof(EffectInvocationTraceSelection))) return XR_XIR_BUDGET;
-        EffectInvocationTraceSelection selection={selected[domain].atom,selected[domain].witness};
+        XrXirRootEffectWitness witness;
+        XrXirStatus status=effect_invocation_selected_witness(work,certificate,function,selected[domain],&witness);
+        if (status!=XR_XIR_OK) return status;
         bool symbolic=false;
-        status=effect_invocation_public_transform(work,certificate,function,&selection,
-            &publication->witnesses[(size_t)domain*publication->count+function],&symbolic);
+        if (!xir_compile_work(work,sizeof(EffectInvocationProjectedCause))) return XR_XIR_BUDGET;
+        const EffectInvocationProjectedCause projected={selected[domain],&witness};
+        status=effect_invocation_public_transform(work,certificate,function,&projected,
+            &result->witnesses[(size_t)domain*result->count+function],&symbolic);
         if (status!=XR_XIR_OK) return status;
     }
     return XR_XIR_OK;
@@ -111,33 +63,78 @@ static inline XrXirStatus effect_invocation_publication_bounds(const XrXirCompil
     *output=bounds;return XR_XIR_OK;
 }
 
-/* Precharge the complete commit before changing any receiving field. All
- * allocations, typed proof and cause construction have already succeeded. */
-static XrXirStatus effect_invocation_publication_commit(const XrXirCompileContext *work,
-    XrXirEffects *effects,EffectInvocationCertificate **certificate,
-    EffectInvocationPublication *publication) {
-    EffectInvocationCertificate *fresh=*certificate;uint32_t count=effects->count;
-    if (!publication || publication->resources!=work->resources || publication->count!=count ||
-        !fresh || fresh->resources!=work->resources || fresh->solution->count!=count ||
-        !effects->contracts || !effects->root || !effects->root_witnesses ||
-        !effects->unresolved_witnesses || !effects->formula_terminals || !effects->constant_witnesses)
+/* The receiving packet has no permission mirror. Compare every final field
+ * to an independent current-material replay after all projection callbacks,
+ * before any public contract or witness changes. Atom indices only locate. */
+static XrXirStatus effect_invocation_publication_match(const XrXirCompileContext *work,
+    const EffectInvocationCertificate *certificate,const EffectInvocationResult *result) {
+    if (!xir_compile_context_valid(work) || !certificate || !result ||
+        !certificate->projection_atoms || !result->facts || !result->witnesses)
         return XR_XIR_BAD_STRUCTURE;
-    uint64_t bytes=(uint64_t)count*(sizeof(XrXirRootFormula)+sizeof(XrXirRootEffects)+
-        8*sizeof(XrXirRootEffectWitness));
-    if (!xir_compile_work(work,bytes)) return XR_XIR_BUDGET;
-    for (uint32_t f=0;f<count;++f) {
-        xr_compile_resources_free((void *)effects->contracts[f].formula.terms);
-        effects->contracts[f].formula=publication->formulas[f];
-        publication->formulas[f].terms=NULL;
+    XrXirStatus status=effect_invocation_certificate_result_match(work,certificate,result);
+    for (uint32_t f=0;f<result->count && status==XR_XIR_OK;++f) {
+        uint32_t selected[4];
+        status=effect_invocation_projection_domains(work,certificate,f,0,4,selected);
+        if (status!=XR_XIR_OK) break;
+        if (!xir_compile_work(work,4)) { status=XR_XIR_BUDGET;break; }
+        if (result->facts[f].requires_root!=(selected[0]!=UINT32_MAX) ||
+            result->facts[f].unresolved!=(selected[1]!=UINT32_MAX)) {
+            status=XR_XIR_BAD_STRUCTURE;break;
+        }
+        for (uint32_t domain=0;domain<4 && status==XR_XIR_OK;++domain) {
+            size_t at=(size_t)domain*result->count+f;
+            if (!xir_compile_work(work,2)) { status=XR_XIR_BUDGET;break; }
+            if (certificate->projection_atoms[at]!=selected[domain]) { status=XR_XIR_BAD_STRUCTURE;break; }
+            XrXirRootEffectWitness witness,expected;bool symbolic=false;
+            status=effect_invocation_selected_witness(work,certificate,f,selected[domain],&witness);
+            if (status!=XR_XIR_OK) break;
+            if (!xir_compile_work(work,sizeof(EffectInvocationProjectedCause))) { status=XR_XIR_BUDGET;break; }
+            const EffectInvocationProjectedCause cause={selected[domain],&witness};
+            status=effect_invocation_public_transform(work,certificate,f,&cause,&expected,&symbolic);
+            if (status!=XR_XIR_OK) break;
+            if (!xir_compile_work(work,5)) { status=XR_XIR_BUDGET;break; }
+            if (!effect_invocation_witness_equal(&expected,&result->witnesses[at])) status=XR_XIR_BAD_STRUCTURE;
+        }
     }
-    memcpy(effects->root,fresh->facts,(size_t)count*sizeof(*effects->root));
-    memcpy(effects->root_witnesses,publication->witnesses,(size_t)count*sizeof(*effects->root_witnesses));
-    memcpy(effects->unresolved_witnesses,publication->witnesses+count,
-        (size_t)count*sizeof(*effects->unresolved_witnesses));
-    memcpy(effects->formula_terminals,publication->witnesses,(size_t)count*4*sizeof(*effects->formula_terminals));
-    memcpy(effects->constant_witnesses,publication->witnesses+(size_t)count*2,
-        (size_t)count*2*sizeof(*effects->constant_witnesses));
+    return status;
+}
+
+/* Precharge every final assignment before changing a receiving field.
+ * Canonical vectors and the immutable four-domain witness inventory belong
+ * solely to the new certificate. Mutable context projections stay separate. */
+static XrXirStatus effect_invocation_publication_commit(const XrXirCompileContext *work,
+    XrXirEffects *effects,EffectInvocationCertificate **certificate) {
+    if (!xir_compile_context_valid(work) || !effects || effects->resources!=work->resources ||
+        !certificate) return XR_XIR_BAD_STRUCTURE;
+    EffectInvocationCertificate *fresh=*certificate;uint32_t count=effects->count;
+    EffectInvocationResult *result=fresh?fresh->result:NULL;
+    if (!result || result->resources!=work->resources || result->count!=count ||
+        fresh->resources!=work->resources || result->capacity!=count ||
+        !result->functions || !result->facts || !result->witnesses || !effects->contracts ||
+        !effects->root || !effects->root_witnesses || !effects->unresolved_witnesses)
+        return XR_XIR_BAD_STRUCTURE;
+    XrXirStatus status=effect_invocation_publication_match(work,fresh,result);
+    if (status!=XR_XIR_OK) return status;
+    uint64_t bytes=(uint64_t)count*(sizeof(XrXirRootFormula)+sizeof(XrXirRootEffects)+
+        2*sizeof(XrXirRootEffectWitness))+3*sizeof(void *);
+    if (!xir_compile_work(work,bytes)) return XR_XIR_BUDGET;
     EffectInvocationCertificate *old=effects->invocations;
+    const EffectInvocationResult *old_result=effects->result_borrow;
+    for (uint32_t f=0;f<count;++f) {
+        if (!old_result) xr_compile_resources_free((void *)effects->contracts[f].formula.terms);
+        effects->contracts[f].formula=result->functions[f].formula;
+    }
+    memcpy(effects->root,result->facts,(size_t)count*sizeof(*effects->root));
+    memcpy(effects->root_witnesses,result->witnesses,(size_t)count*sizeof(*effects->root_witnesses));
+    memcpy(effects->unresolved_witnesses,result->witnesses+count,
+        (size_t)count*sizeof(*effects->unresolved_witnesses));
+    if (!old_result) {
+        xr_compile_resources_free(effects->formula_terminals);
+        xr_compile_resources_free(effects->constant_witnesses);
+    }
+    effects->formula_terminals=result->witnesses;
+    effects->constant_witnesses=result->witnesses+(size_t)count*2;
+    effects->result_borrow=result;
     effects->invocations=fresh;effects->cells=fresh->body->cells;*certificate=NULL;
     effect_invocation_certificate_free(old);return XR_XIR_OK;
 }
@@ -150,7 +147,7 @@ static XrXirStatus effect_invocation_publish(const XrXirCompileContext *work,
     if (!module || !graph || !xir_effects_context_matches(work,effects,module->function_count) ||
         !effects->contracts || (declared && declared->resources!=work->resources)) return XR_XIR_BAD_STRUCTURE;
     EffectInvocationDeclaredBounds *temporary=NULL;EffectInvocationCertificate *certificate=NULL;
-    EffectInvocationPublication *publication=NULL;XrXirStatus status=XR_XIR_OK;
+    EffectInvocationResult *publication=NULL;XrXirStatus status=XR_XIR_OK;
     if (!graph->material || (!graph->physical_owned && graph->material!=effects->generation))
         status=effect_graph_physical_refresh(work,module,graph,effects->refinement);
     if (status==XR_XIR_OK && (!effect_body_material_shape(graph->material) ||
@@ -170,10 +167,10 @@ static XrXirStatus effect_invocation_publish(const XrXirCompileContext *work,
     if (status==XR_XIR_OK) {
         sink=(EffectInvocationProjectionSink){work->resources,module->function_count,
             &publication,effect_invocation_publication_write};
-        status=effect_invocation_derive(&input,&certificate,&sink);
+        status=effect_invocation_derive(&input,&certificate,&sink,&publication);
     }
     if (status==XR_XIR_OK && !xir_compile_work(work,2)) status=XR_XIR_BUDGET;
-    if (status==XR_XIR_OK) status=effect_invocation_publication_commit(work,effects,&certificate,publication);
+    if (status==XR_XIR_OK) status=effect_invocation_publication_commit(work,effects,&certificate);
     if (status==XR_XIR_OK) {
         /* Construction ownership has moved through seal to this certificate.
          * The graph borrows it only while the same generation remains live. */
@@ -186,7 +183,7 @@ static XrXirStatus effect_invocation_publish(const XrXirCompileContext *work,
             graph->material=NULL;graph->physical=NULL;graph->physical_owned=false;
         }
     }
-    effect_invocation_publication_free(publication);effect_invocation_certificate_free(certificate);
+    effect_invocation_result_free(publication);effect_invocation_certificate_free(certificate);
     effect_invocation_bounds_free(temporary);return status;
 }
 
@@ -264,7 +261,7 @@ static XrXirStatus effect_context_dense_stable(const XrXirCompileContext *contex
         dense->uses.resources!=context->resources || dense->uses.count!=dense->count || !dense->uses.root ||
         !certificate || !effect_body_material_shape(certificate->body) ||
         certificate->body->resources!=certificate->resources || certificate->resources!=context->resources || !certificate->equations ||
-        !certificate->solution || certificate->solution->count!=dense->count ||
+        !certificate->projection_atoms ||
         certificate->equations->work || certificate->equations->module || certificate->equations->graph ||
         certificate->equations->effects || certificate->equations->declared ||
         effect_body_count(certificate->body)!=dense->count || !certificate->body->functions ||

@@ -26,7 +26,7 @@ static XrXirStatus invocation_lowered_context_oracle(const XrXirCompileContext *
             uint32_t derived=UINT32_MAX;
             status=effect_invocation_certificate_node_mask(context,certificate,certificate->equations->roots[f],&derived);
             if (status!=XR_XIR_OK) return status;
-            const XrXirRootFormula *formula=&certificate->solution->formulas[f];
+            const XrXirRootFormula *formula=&certificate->result->functions[f].formula;
             if (oracle) {
                 CHECK(contract->parameters[0].kind==XR_XIR_EFFECT_PARAMETER_VARIABLE &&
                     contract->parameters[0].uses==XR_XIR_EFFECT_USE_INVOKE);
@@ -92,6 +92,7 @@ static XrXirStatus conditional_invocation_lowered_context(const XrXirCompileCont
     RootParameterBindingFixture fixture;rp_binding_fixture(&fixture,context,mode!=0);
     XrXirArtifact *checked=NULL,*specialized=NULL,*lowered=NULL;
     XrXirEffects effects={0};EffectGraph graph={0};EffectInvocationDeclaredBounds *bounds=NULL;
+    EffectInvocationResult *receiving=NULL;
     EffectInvocationCertificate *certificate=NULL;
     XrXirDiagnostic diagnostic={0};uint32_t phase=0;uint64_t selected_bodies=0;
     XrXirStatus status=xir_fixture_check(context,&fixture.module,&checked,&diagnostic);
@@ -110,7 +111,7 @@ static XrXirStatus conditional_invocation_lowered_context(const XrXirCompileCont
     if (status==XR_XIR_OK) { phase=7;status=effect_invocation_instance_bounds(context,module,&bounds); }
     if (status==XR_XIR_OK) {
         phase=8;EffectInvocationDriverInput input={context,module,&effects,&graph,bounds,NULL};
-        status=effect_invocation_derive(&input,&certificate,NULL);
+        status=effect_invocation_derive(&input,&certificate,NULL,&receiving);
     }
     if (status==XR_XIR_OK) status=invocation_lowered_context_oracle(context,module,&effects,bounds,certificate,oracle);
     if (status==XR_XIR_OK && oracle) {
@@ -137,6 +138,7 @@ static XrXirStatus conditional_invocation_lowered_context(const XrXirCompileCont
             if (module->provenance->origins[f].function==1) selected_bodies|=UINT64_C(1)<<f;
         CHECK(selected_bodies);
     }
+    effect_invocation_result_free(receiving);
     effect_graph_free(&graph);invocation_core_storage_free(&effects);
     xr_xir_compile_artifact_free(lowered);xr_xir_compile_artifact_free(specialized);
     xr_xir_compile_artifact_free(checked);memset(&fixture,0,sizeof(fixture));
@@ -164,7 +166,7 @@ static XrXirStatus conditional_invocation_lowered_context(const XrXirCompileCont
             if (!(selected_bodies&(UINT64_C(1)<<f))) continue;
             CHECK(certificate->origins[f].function==f);
             const EffectBodyFunction *function=&certificate->body->functions[f];
-            const XrXirRootFormula *formula=&certificate->solution->formulas[f];
+            const XrXirRootFormula *formula=&certificate->result->functions[f].formula;
             uint32_t original=UINT32_MAX,closed=UINT32_MAX;
             CHECK(function->parameter_count==1 && certificate->parameter_kinds[f][0]==XR_XIR_EFFECT_PARAMETER_VARIABLE);
             CHECK(effect_invocation_bounds_mask(context,certificate->declared,f,0,&original)==XR_XIR_OK);

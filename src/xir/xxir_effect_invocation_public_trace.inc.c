@@ -15,9 +15,12 @@
  * remains independently sealed and is verified before this projection. */
 static XrXirStatus effect_invocation_public_transform(const XrXirCompileContext *work,
     const EffectInvocationCertificate *certificate,uint32_t function,
-    const EffectInvocationTraceSelection *selection,XrXirRootEffectWitness *output,bool *symbolic) {
+    const EffectInvocationProjectedCause *selection,XrXirRootEffectWitness *output,bool *symbolic) {
+    if (!xir_compile_context_valid(work) || !certificate || !certificate->result ||
+        !certificate->result->functions || function>=certificate->result->count ||
+        !selection || !selection->witness || !symbolic) return XR_XIR_BAD_STRUCTURE;
     if (!xir_compile_work(work,1)) return XR_XIR_BUDGET;
-    uint32_t atom=selection->atom;const XrXirRootEffectWitness *witness=&selection->witness;
+    uint32_t atom=selection->atom;const XrXirRootEffectWitness *witness=selection->witness;
     uint32_t kind=0,index=0;*symbolic=false;
     if (atom!=UINT32_MAX && atom>=2) {
         const EffectInvocationOwner *equations=certificate->equations;
@@ -27,11 +30,11 @@ static XrXirStatus effect_invocation_public_transform(const XrXirCompileContext 
         else if (atom-2-parameters<parameters) { kind=XR_XIR_ROOT_TERM_CELL_PARAMETER;index=atom-2-parameters; }
         else if (atom==(uint64_t)parameters*2+2) { kind=XR_XIR_ROOT_TERM_CONTEXT_CALL;index=witness->instruction; }
         else return XR_XIR_BAD_STRUCTURE;
-        const XrXirRootFormula *formula=&certificate->solution->formulas[function];bool found=false;
-        for (uint32_t t=0;t<formula->term_count;++t) {
-            if (!xir_compile_work(work,2)) return XR_XIR_BUDGET;
-            if (formula->terms[t].kind==kind && formula->terms[t].index==index) found=true;
-        }
+        bool found=false;uint32_t terms=0;
+        if (!xir_compile_work(work,sizeof(EffectInvocationTermTarget))) return XR_XIR_BUDGET;
+        const EffectInvocationTermTarget target={certificate->result->functions[function].capacity,kind,index,&found};
+        XrXirStatus status=effect_invocation_certificate_terms(work,certificate,function,&target,&terms);
+        if (status!=XR_XIR_OK) return status;
         if (!found || node->body!=function || (kind!=XR_XIR_ROOT_TERM_CONTEXT_CALL && node->root!=function) ||
             witness->instruction>=certificate->body->functions[function].instruction_count)
             return XR_XIR_BAD_STRUCTURE;
@@ -58,7 +61,9 @@ static XrXirStatus effect_invocation_public_selected(const XrXirCompileContext *
     XrXirStatus status=effect_invocation_projection_select(work,certificate,function,domain,
         &selection.atom,&selection.witness);
     if (status!=XR_XIR_OK) return status;
-    return effect_invocation_public_transform(work,certificate,function,&selection,output,symbolic);
+    if (!xir_compile_work(work,sizeof(EffectInvocationProjectedCause))) return XR_XIR_BUDGET;
+    const EffectInvocationProjectedCause projected={selection.atom,&selection.witness};
+    return effect_invocation_public_transform(work,certificate,function,&projected,output,symbolic);
 }
 
 static XrXirStatus effect_invocation_public_walk(const XrXirCompileContext *work,
@@ -68,7 +73,9 @@ static XrXirStatus effect_invocation_public_walk(const XrXirCompileContext *work
     XrXirStatus status=effect_invocation_trace_walk_selected(work,certificate,request,&count,&selection);
     if (status!=XR_XIR_OK) return status;
     bool symbolic=false;
-    status=effect_invocation_public_transform(work,certificate,request->function,&selection,NULL,&symbolic);
+    if (!xir_compile_work(work,sizeof(EffectInvocationProjectedCause))) return XR_XIR_BUDGET;
+    const EffectInvocationProjectedCause projected={selection.atom,&selection.witness};
+    status=effect_invocation_public_transform(work,certificate,request->function,&projected,NULL,&symbolic);
     if (status!=XR_XIR_OK) return status;
     if (!limit) return XR_XIR_BAD_STRUCTURE;
     if (!count) { *length=0;return XR_XIR_OK; }
@@ -128,8 +135,11 @@ static XrXirStatus effect_invocation_public_trace(const XrXirCompileContext *wor
         certificate->body->resources!=certificate->resources || certificate->resources!=work->resources ||
         !facts || !output || *output || function>=effect_body_count(certificate->body) ||
         limit!=effect_body_count(certificate->body)) return XR_XIR_BAD_STRUCTURE;
-    if (facts->requires_root!=certificate->facts[function].requires_root ||
-        facts->unresolved!=certificate->facts[function].unresolved) return XR_XIR_BAD_STRUCTURE;
+    XrXirRootEffects expected={0};
+    XrXirStatus fact_status=effect_invocation_certificate_facts(work,certificate,function,&expected);
+    if (fact_status!=XR_XIR_OK) return fact_status;
+    if (facts->requires_root!=expected.requires_root || facts->unresolved!=expected.unresolved)
+        return XR_XIR_BAD_STRUCTURE;
     uint32_t counts[2]={0};EffectInvocationTraceRequest request={.function=function};
     XrXirStatus status=effect_invocation_public_walk(work,certificate,&request,limit,&counts[0]);
     request.domain=1;

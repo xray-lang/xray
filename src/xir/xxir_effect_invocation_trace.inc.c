@@ -50,20 +50,16 @@ static XrXirStatus effect_invocation_trace_walk_selected(const XrXirCompileConte
     if (!certificate || !effect_body_material_shape(certificate->body) ||
         certificate->body->resources!=certificate->resources || certificate->resources!=work->resources || !request || !length ||
         request->domain>=4 || request->function>=effect_body_count(certificate->body) ||
-        !certificate->facts || !certificate->witnesses || !certificate->projection_atoms)
+        !certificate->projection_atoms || !certificate->result)
         return XR_XIR_BAD_STRUCTURE;
     uint32_t atom=UINT32_MAX;XrXirRootEffectWitness witness={0};
     XrXirStatus status=effect_invocation_projection_select(work,certificate,request->function,request->domain,
         &atom,&witness);
     if (status!=XR_XIR_OK) return status;
-    size_t at=(size_t)request->domain*effect_body_count(certificate->body)+request->function;
-    if (certificate->projection_atoms[at]!=atom ||
-        !effect_invocation_witness_equal(&certificate->witnesses[at],&witness)) return XR_XIR_BAD_STRUCTURE;
-    bool fact=(request->domain&2)?!!(certificate->solution->formulas[request->function].constant_mask&
-        ((request->domain&1)?XR_XIR_CALLABLE_ROOT_UNRESOLVED:XR_XIR_CALLABLE_ROOT_REQUIRED)):
-        (request->domain&1)?certificate->facts[request->function].unresolved:
-        certificate->facts[request->function].requires_root;
-    if (fact!=(atom!=UINT32_MAX)) return XR_XIR_BAD_STRUCTURE;
+    status=effect_invocation_projection_result_match(work,certificate,request->function,request->domain,
+        atom,&witness);
+    if (status!=XR_XIR_OK) return status;
+    bool fact=atom!=UINT32_MAX;
     if (!fact) return effect_invocation_trace_finish(work,0,atom,witness,length,selection);
     const EffectInvocationOwner *equations=certificate->equations;
     uint32_t current=equations->roots[request->function],count=0;
@@ -128,7 +124,9 @@ static inline XrXirStatus effect_invocation_certificate_trace(const XrXirCompile
     if (status==XR_XIR_OK && copied!=counts[1]) status=XR_XIR_BAD_STRUCTURE;
     if (status==XR_XIR_OK && !xir_compile_work(work,sizeof(*trace))) status=XR_XIR_BUDGET;
     if (status!=XR_XIR_OK) { effect_invocation_trace_free(trace);return status; }
-    trace->resources=work->resources;trace->facts=certificate->facts[function];
+    trace->resources=work->resources;
+    status=effect_invocation_certificate_facts(work,certificate,function,&trace->facts);
+    if (status!=XR_XIR_OK) { effect_invocation_trace_free(trace);return status; }
     trace->counts[0]=counts[0];trace->counts[1]=counts[1];
     *output=trace;return XR_XIR_OK;
 }

@@ -27,6 +27,7 @@
 typedef struct EffectContextOwner EffectContextOwner;
 typedef struct EffectRefinementBounds EffectRefinementBounds;
 typedef struct EffectInvocationCertificate EffectInvocationCertificate;
+typedef struct EffectInvocationResult EffectInvocationResult;
 typedef struct EffectInvocationDeclaredBounds EffectInvocationDeclaredBounds;
 typedef struct EffectOrdinaryContexts EffectOrdinaryContexts;
 static void effect_invocation_certificate_free(EffectInvocationCertificate *certificate);
@@ -50,7 +51,7 @@ struct XrXirEffects {
     XrXirEffect *task_creation;
     XrXirRootEffects *root;
     XrXirRootEffectWitness *root_witnesses, *unresolved_witnesses;
-    /* Two certified symbolic terminals per function, owned by this graph. */
+    /* Symbolic views borrow the unique Result after successful publication. */
     XrXirRootEffectWitness *formula_terminals;
     XrXirRootEffectWitness *constant_witnesses;
     XrXirFunctionEffectContract *contracts;
@@ -60,6 +61,9 @@ struct XrXirEffects {
     EffectRefinementBounds *refinement;
     /* One sealed ROOT owner; control and error analyses remain independent. */
     EffectInvocationCertificate *invocations;
+    /* Destruction provenance survives transfer of the certificate to a
+     * forest. This borrowed storage identity grants no permission. */
+    const EffectInvocationResult *result_borrow;
     /* Construction-only owner; seal transfers this same generation. */
     struct EffectBodyMaterial *generation;
 };
@@ -670,7 +674,7 @@ static XrXirStatus effect_witnesses(const XrXirModule *module, XrXirEffects *eff
 }
 
 /* Seal only after the common formula owner and all other analyses agree.
- * The publication owns a second, compact copy rather than borrowing formulas. */
+ * The sealed result owns the sole canonical vectors and final witness inventory. */
 static XrXirStatus effect_entry_roots_seal(const XrXirModule *module,
     XrXirEffects *effects, const XrXirCompileContext *work) {
     if (effects->entry_roots || effects->count!=module->function_count)
