@@ -81,8 +81,8 @@ static uint32_t checked_count(CheckedCursor *c, uint32_t value, uint32_t *remain
     *remaining -= count;
     return count;
 }
-static void *checked_array(CheckedCursor *c, const void *source, uint32_t count,
-                           size_t size, size_t wire_minimum) {
+static void *checked_array_storage(CheckedCursor *c, const void *source, uint32_t count,
+    size_t size, size_t wire_minimum, bool zero) {
     XrXirStatus allocation_status = XR_XIR_OK;
     if (c->status != XR_XIR_OK || !count) return NULL;
     if (!c->reading) return (void *) source;
@@ -92,9 +92,14 @@ static void *checked_array(CheckedCursor *c, const void *source, uint32_t count,
     if (count > SIZE_MAX / size) {
         c->status = XR_XIR_BUDGET; return NULL;
     }
-    void *memory = xir_compile_calloc(&c->remaining, count, size, &allocation_status);
+    void *memory = zero ? xir_compile_calloc(&c->remaining, count, size, &allocation_status) :
+        xir_compile_alloc(&c->remaining, (size_t)count * size, &allocation_status);
     if (!memory) { c->status = allocation_status; return NULL; }
     return memory;
+}
+static void *checked_array(CheckedCursor *c, const void *source, uint32_t count,
+    size_t size, size_t wire_minimum) {
+    return checked_array_storage(c, source, count, size, wire_minimum, true);
 }
 static const char *checked_blob(CheckedCursor *c, const char *bytes, uint32_t *length) {
     *length = checked_u32(c, *length);
@@ -135,18 +140,28 @@ static void checked_function(CheckedCursor *c, XrXirFunction *f) {
         if (c->reading) blocks[i] = b;
     }
     f->instruction_count = checked_count(c, f->instruction_count, &c->structural.instructions, 40);
-    XrXirInstruction *instructions = checked_array(c, f->instructions, f->instruction_count, sizeof(*instructions), 40);
+    /* Instruction slots own no pointers and failed slabs are freed without reading them. */
+    XrXirInstruction *instructions = checked_array_storage(c, f->instructions,
+        f->instruction_count, sizeof(*instructions), 40, false);
     f->instructions = instructions;
-    for (uint32_t i = 0; i < f->instruction_count && c->status == XR_XIR_OK; ++i) {
-        XrXirInstruction in = instructions[i];
-        in.op = (XrXirOp) checked_u32(c, (uint32_t) in.op);
-        in.type = (XrXirType) checked_u32(c, (uint32_t) in.type);
-        for (unsigned j = 0; j < 2; ++j) in.args[j] = checked_u32(c, in.args[j]);
-        for (unsigned j = 0; j < 2; ++j) in.targets[j] = checked_u32(c, in.targets[j]);
-        uint64_t bits = checked_integer(c, (uint64_t) in.immediate, 8);
-        in.immediate = bits <= INT64_MAX ? (int64_t) bits : -1 - (int64_t) (UINT64_MAX - bits);
-        for (unsigned j = 0; j < 2; ++j) in.type_arguments[j] = checked_u32(c, in.type_arguments[j]);
-        if (c->reading) instructions[i] = in;
+    if (f->instruction_count && c->status == XR_XIR_OK) {
+        XrXirInstruction in;
+        if (c->reading) {
+            if (!checked_read_work(c, sizeof(in))) return;
+            in = (XrXirInstruction){0};
+        } else in = instructions[0];
+        /* Every wire field replaces the reused, initialized decode scratch. */
+        for (uint32_t i = 0; i < f->instruction_count && c->status == XR_XIR_OK; ++i) {
+            if (!c->reading && i) in = instructions[i];
+            in.op = (XrXirOp) checked_u32(c, (uint32_t) in.op);
+            in.type = (XrXirType) checked_u32(c, (uint32_t) in.type);
+            for (unsigned j = 0; j < 2; ++j) in.args[j] = checked_u32(c, in.args[j]);
+            for (unsigned j = 0; j < 2; ++j) in.targets[j] = checked_u32(c, in.targets[j]);
+            uint64_t bits = checked_integer(c, (uint64_t) in.immediate, 8);
+            in.immediate = bits <= INT64_MAX ? (int64_t) bits : -1 - (int64_t) (UINT64_MAX - bits);
+            for (unsigned j = 0; j < 2; ++j) in.type_arguments[j] = checked_u32(c, in.type_arguments[j]);
+            if (c->reading) instructions[i] = in;
+        }
     }
     f->operand_count = checked_u32(c, f->operand_count);
     uint32_t *operands = checked_array(c, f->operands, f->operand_count, sizeof(*operands), 4);
