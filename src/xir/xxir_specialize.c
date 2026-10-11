@@ -460,7 +460,9 @@ static XrXirStatus spec_provenance(SpecContext *c, const XrXirConstruction *cons
     if (!spec_effect_proofs(c,&evidence.bindings,&evidence.binding_count)) {
         xr_compile_resources_free(origins);return c->diagnostic.status;
     }
-    XrXirStatus status = xr_xir_compile_provenance_copy(&c->remaining, &evidence, output);
+    XrXirStatus status = c->effects ? xr_xir_compile_provenance_copy_source_effects(
+        &c->remaining,&evidence,c->effects,output) :
+        xr_xir_compile_provenance_copy(&c->remaining,&evidence,output);
     xr_compile_resources_free(origins);
     return status;
 }
@@ -540,8 +542,14 @@ XrXirStatus xr_xir_compile_specialize(const XrXirArtifact *checked, XrXirArtifac
     specialized.provenance = provenance;
     XrXirConstruction *projected = NULL;
     c.diagnostic.status = xir_construction_empty(&limits, specialized.types, &projected);
-    if (c.diagnostic.status == XR_XIR_OK)
-        c.diagnostic.status = xr_xir_compile_recheck_v2(&limits, &specialized, projected, output, &c.diagnostic);
+    if (c.diagnostic.status == XR_XIR_OK) {
+        if (!xir_compile_work(&limits,sizeof(XirProvenanceReceiving))) c.diagnostic.status=XR_XIR_BUDGET;
+        else {
+            XirProvenanceReceiving receiving={projected,c.effects};
+            c.diagnostic.status = xr_xir_compile_recheck_provenance_take(&limits, &specialized,
+                &receiving, &provenance, output, &c.diagnostic);
+        }
+    }
     xr_xir_compile_construction_free(projected);
     xr_xir_compile_provenance_free(provenance);
 done:

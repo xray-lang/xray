@@ -90,6 +90,12 @@ add_test(NAME test_xir_source_generic_callable_context_compiler
 set_tests_properties(test_xir_source_generic_callable_context_compiler PROPERTIES
     LABELS "unit;xir;root-effects;higher-order;compiler-fault;ownership" TIMEOUT 600 RUN_SERIAL TRUE PROCESSORS 1)
 
+# The unique provenance receiver has its own whole-operation fault census.
+add_test(NAME test_xir_source_provenance_take_resources
+    COMMAND test_xir_source_generic_callable_context --provenance-take)
+set_tests_properties(test_xir_source_provenance_take_resources PROPERTIES
+    LABELS "unit;xir;root-effects;compiler-fault;ownership" TIMEOUT 600 RUN_SERIAL TRUE PROCESSORS 1)
+
 # True Class subjects reach the same Cell terminal and retained-owner replay.
 add_test(NAME test_xir_root_conditional_class_cells
     COMMAND test_xir_root_conditional_helpers --class-cells)

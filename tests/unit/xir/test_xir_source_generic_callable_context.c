@@ -18,6 +18,7 @@
 #include <string.h>
 #define CHECK(c) do { if (!(c)) { fprintf(stderr,"%d: %s\n",__LINE__,#c); exit(1); } } while (0)
 #include "xir_library_compile_owner.h"
+#include "xir_specialize_provenance_take_cases.h"
 
 /* keep/nested are the actual wide Source's failing generic definitions,
  * without its unrelated modules. Neither UNKNOWN nor a private bottom grants
@@ -194,12 +195,17 @@ static XrXirStatus source_generic_definition_operation(const XrXirCompileContext
 }
 
 int main(int argc,char **argv) {
+    if(argc==2 && !strcmp(argv[1],"--provenance-take")) {
+        provenance_take_controls(); provenance_take_resources();
+        library_compile_observer_free(); return 0;
+    }
     CHECK(argc==1 || (argc==2 && !strcmp(argv[1],"--compiler")));
     bool inspect=argc==1;
     if(!inspect)library_compile_operation_cases("source-generic-callable-context",source_generic_definition_operation,&inspect);
     else {
         LibraryCompileOwner owner={0};CHECK(library_compile_owner_new(&owner,&library_compile_limits)==XR_XIR_OK);
         CHECK(source_generic_definition_operation(&owner.context,&inspect)==XR_XIR_OK);library_compile_owner_drop(&owner);
+        provenance_take_controls();
     }
     library_compile_observer_free();return 0;
 }

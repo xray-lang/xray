@@ -800,11 +800,12 @@ XrXirStatus xr_xir_compile_provenance_functions_match(const XrXirCompileContext 
     return provenance_functions_match_owned(context,source,destination,instance,NULL,diagnostic);
 }
 
-/* The complete checker creates the only owner passed to the common matcher.
- * Source mutation, declaration proof and destination correspondence are still
- * checked on every call; the owner is retired on both success and failure. */
+/* Raw verification creates and retires its fresh Source derivation.
+ * The unique producer may borrow this call's existing owner, but full current
+ * Source, permissions and destination correspondence still run every time. */
 XR_FUNC XrXirStatus xr_xir_compile_provenance_verify(const XrXirCompileContext *context,
-    const XrXirModule *destination, const XrXirProvenance *instance, XrXirDiagnostic *diagnostic) {
+    const XrXirModule *destination, const XrXirProvenance *instance,
+    XrXirEffects *source_effects, XrXirDiagnostic *diagnostic) {
     if (!xir_compile_context_valid(context) || !instance ||
         instance->kind!=XR_XIR_EVIDENCE_INSTANCE || !instance->source) {
         if (diagnostic) *diagnostic=(XrXirDiagnostic){XR_XIR_BAD_STRUCTURE,
@@ -815,11 +816,13 @@ XR_FUNC XrXirStatus xr_xir_compile_provenance_verify(const XrXirCompileContext *
     bool templated=source->module.provenance &&
         source->module.provenance->kind==XR_XIR_EVIDENCE_TEMPLATE;
     XrXirEffects *effects=NULL;
-    XrXirStatus status=templated ?
-        xr_xir_compile_verify_owned_effects_v2(context,&source->module,source->construction,&effects,diagnostic) :
+    XrXirStatus status=source_effects ?
+        xr_xir_compile_verify_source_effects_v2(context,&source->module,source->construction,source_effects,diagnostic) :
+        templated ? xr_xir_compile_verify_owned_effects_v2(context,&source->module,source->construction,&effects,diagnostic) :
         xr_xir_compile_verify_v2(context,&source->module,source->construction,diagnostic);
     if (status==XR_XIR_OK)
-        status=provenance_functions_match_owned(context,&source->module,destination,instance,effects,diagnostic);
+        status=provenance_functions_match_owned(context,&source->module,destination,instance,
+            source_effects ? source_effects : effects,diagnostic);
     xr_xir_compile_effects_free(effects);
     return status;
 }

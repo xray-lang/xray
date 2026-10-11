@@ -22,13 +22,21 @@
 
 /* Requires verified source and type pools; proves function correspondence and instance closure. */
 XR_FUNC XrXirStatus xr_xir_compile_provenance_functions_match(const XrXirCompileContext *compile_context, const XrXirModule *source, const XrXirModule *destination, const XrXirProvenance *instance, XrXirDiagnostic *diagnostic);
-/* Complete source admission and correspondence consume one fresh effects
- * owner within this call. No caller-supplied facts or retained cache are used. */
+/* Complete current Source admission and correspondence use a genuine
+ * same-call derivation. A raw entry constructs its owner; the private producer
+ * borrow still repeats every field, type, contract and permission gate. */
 XR_FUNC XrXirStatus xr_xir_compile_provenance_verify(const XrXirCompileContext *context,
-    const XrXirModule *destination, const XrXirProvenance *instance, XrXirDiagnostic *diagnostic);
+    const XrXirModule *destination, const XrXirProvenance *instance,
+    XrXirEffects *source_effects, XrXirDiagnostic *diagnostic);
 XR_FUNC void xr_xir_compile_provenance_free(XrXirProvenance *provenance);
 XR_FUNC XrXirStatus xr_xir_compile_provenance_copy(const XrXirCompileContext *compile_context,
     const XrXirProvenance *source, XrXirProvenance **output);
+/* Only the same specialization call supplies the fresh owning derivation.
+ * Full Source verification and physical correspondence precede every copy. */
+XR_FUNC XrXirStatus xr_xir_compile_provenance_copy_source_effects(const XrXirCompileContext *context,
+    const XrXirProvenance *source, XrXirEffects *source_effects, XrXirProvenance **output);
+XR_FUNC XrXirStatus xir_effects_source_body_match(const XrXirCompileContext *context,
+    const XrXirModule *source, const XrXirEffects *effects);
 /* Metadata shape cannot authorize substitutions; the common owner derives facts. */
 XR_FUNC XrXirStatus xir_effect_contract_shape_verify(const XrXirCompileContext *context,
     const XrXirModule *module);
@@ -101,6 +109,14 @@ XR_FUNC XrXirStatus xr_xir_compile_structure_verify_v2(const XrXirCompileContext
     const XrXirModule *module, const XrXirConstruction *construction, XrXirDiagnostic *diagnostic);
 XR_FUNC XrXirStatus xr_xir_compile_verify_effects_v2(const XrXirCompileContext *context,
     const XrXirModule *module, const XrXirConstruction *construction, const XrXirEffects *effects, XrXirDiagnostic *diagnostic);
+/* This same-call Source borrow is never a verification exemption. Fresh
+ * structure, body/domain correspondence and all permission obligations run. */
+XR_FUNC XrXirStatus xr_xir_compile_verify_source_effects_v2(const XrXirCompileContext *context,
+    const XrXirModule *source, const XrXirConstruction *construction,
+    const XrXirEffects *effects, XrXirDiagnostic *diagnostic);
+XR_FUNC XrXirStatus xr_xir_compile_verify_provenance_effects_v2(const XrXirCompileContext *context,
+    const XrXirModule *module, const XrXirConstruction *construction,
+    XrXirEffects *source_effects, XrXirDiagnostic *diagnostic);
 /* Returns only the same complete checker's fresh, owned Template derivation.
  * Output must be empty. Failure preserves it; success transfers ownership to
  * this private producer call. Neither entry accepts prepared caller facts. */
@@ -128,6 +144,17 @@ XR_FUNC XrXirEffect xr_xir_effects_task_creation(const XrXirEffects *effects, ui
 
 XR_FUNC XrXirStatus xr_xir_compile_layout_build(XrXirArtifact *artifact);
 XR_FUNC XrXirStatus xr_xir_compile_recheck_v2(const XrXirCompileContext *compile_context, const XrXirModule *checked, const XrXirConstruction *construction, XrXirArtifact **output, XrXirDiagnostic *diagnostic);
+/* Rejection preserves both slots. Acceptance clears the unique provenance
+ * slot and every subsequent failure releases that owner. The main body and
+ * construction are still cloned; source and final receiving proofs are fresh.
+ * The provenance must have been allocated on this same finite ledger. */
+typedef struct XirProvenanceReceiving {
+    const XrXirConstruction *construction;
+    XrXirEffects *source_effects;
+} XirProvenanceReceiving;
+XR_FUNC XrXirStatus xr_xir_compile_recheck_provenance_take(const XrXirCompileContext *context,
+    const XrXirModule *checked, const XirProvenanceReceiving *receiving,
+    XrXirProvenance **owned_provenance, XrXirArtifact **output, XrXirDiagnostic *diagnostic);
 XR_FUNC XrXirStatus xr_xir_compile_layout_verify(const XrXirArtifact *artifact);
 /* Only the complete artifact checker in this call supplies the metadata
  * admission. Every physical row and function bound is still recomputed. */
@@ -146,5 +173,15 @@ XR_FUNC XrXirStatus xr_xir_compile_checked_read_lower(const XrXirCompileContext 
     const void *bytes, size_t length, const XrXirTarget *target,
     XrXirArtifact **output, XrXirDiagnostic *diagnostic);
 
+/* This private byte reader returns two fresh owners from one complete final
+ * check. Neither owner is accepted from a caller or retained in an artifact.
+ * Rejection preserves occupied output; failure publishes neither owner. */
+typedef struct XirLoweredEffects {
+    XrXirArtifact *artifact;
+    XrXirEffects *effects;
+} XirLoweredEffects;
+XR_FUNC XrXirStatus xr_xir_compile_checked_read_lower_effects(const XrXirCompileContext *context,
+    const void *bytes, size_t length, const XrXirTarget *target,
+    XirLoweredEffects *output, XrXirDiagnostic *diagnostic);
 
 #endif // XXIR_INTERNAL_H

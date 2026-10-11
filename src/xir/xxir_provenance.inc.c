@@ -179,14 +179,16 @@ failed:
     return NULL;
 }
 
-XR_FUNC XrXirStatus xr_xir_compile_provenance_copy(const XrXirCompileContext *context,
-    const XrXirProvenance *source, XrXirProvenance **output) {
+static XrXirStatus provenance_copy_source(const XrXirCompileContext *context,
+    const XrXirProvenance *source, XrXirEffects *source_effects, XrXirProvenance **output) {
     if (!xir_compile_context_valid(context)) return XR_XIR_BAD_STRUCTURE;
     if (!output || *output || !source) return XR_XIR_BAD_STRUCTURE;
     XrXirStatus status = provenance_storage_shape(context, source);
     if (status != XR_XIR_OK) return status;
     if (source->kind == XR_XIR_EVIDENCE_INSTANCE) {
-        status = xr_xir_compile_verify_v2(context, &source->source->module, source->source->construction, NULL);
+        status = source_effects ? xr_xir_compile_verify_source_effects_v2(context,
+            &source->source->module,source->source->construction,source_effects,NULL) :
+            xr_xir_compile_verify_v2(context,&source->source->module,source->source->construction,NULL);
         if (status != XR_XIR_OK) return status;
         for (uint32_t f = 0; f < source->count; ++f) {
             if (!xir_compile_work(context, 2)) return XR_XIR_BUDGET;
@@ -200,4 +202,14 @@ XR_FUNC XrXirStatus xr_xir_compile_provenance_copy(const XrXirCompileContext *co
     if (!copy) return status;
     *output = copy;
     return XR_XIR_OK;
+}
+XR_FUNC XrXirStatus xr_xir_compile_provenance_copy(const XrXirCompileContext *context,
+    const XrXirProvenance *source, XrXirProvenance **output) {
+    return provenance_copy_source(context,source,NULL,output);
+}
+XR_FUNC XrXirStatus xr_xir_compile_provenance_copy_source_effects(const XrXirCompileContext *context,
+    const XrXirProvenance *source, XrXirEffects *source_effects, XrXirProvenance **output) {
+    if (!source_effects || !source || source->kind!=XR_XIR_EVIDENCE_INSTANCE)
+        return XR_XIR_BAD_STRUCTURE;
+    return provenance_copy_source(context,source,source_effects,output);
 }

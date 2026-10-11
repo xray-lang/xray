@@ -823,6 +823,22 @@ XR_FUNC XrXirStatus xr_xir_compile_effects_refine_verified(const XrXirCompileCon
     if (!refiner || !refiner->update || !refiner->context) return XR_XIR_BAD_STRUCTURE;
     return effect_infer(context,module,refiner,output);
 }
+/* This lexical producer retains the sole fresh derivation. Each use still
+ * proves the entire current Source against its owned physical representation,
+ * including blocks, every instruction word and metadata. The complete caller
+ * separately replays the original Template and permission obligations. */
+XR_FUNC XrXirStatus xir_effects_source_body_match(const XrXirCompileContext *context,
+    const XrXirModule *source, const XrXirEffects *effects) {
+    if (!xir_compile_context_valid(context) || !source || !effects ||
+        effects->resources!=context->resources || effects->count!=source->function_count ||
+        !effects->invocations || effects->invocations->resources!=context->resources ||
+        !effect_body_material_shape(effects->invocations->body) ||
+        effects->invocations->body->resources!=context->resources)
+        return XR_XIR_BAD_STRUCTURE;
+    if (!xir_compile_work(context,4)) return XR_XIR_BUDGET;
+    return effect_body_source_match(context,effects->invocations->body,source);
+}
+
 XrXirStatus xr_xir_compile_effects_analyze(const XrXirArtifact *artifact, XrXirEffects **output) {
     if (!artifact) return XR_XIR_BAD_STRUCTURE;
     XrXirCompileContext compile_state = artifact->context;

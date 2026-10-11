@@ -43,6 +43,7 @@
 #include "xir_cleanup_program_cases.h"
 #include "xir_path_program_fixture.h"
 #include "xir_path_program_cases.h"
+#include "xir_program_collected_effects_cases.h"
 extern const XrXirProgramSpec path0_program, path1_program, path2_program;
 static void path_program_mixed(void) {
     const XrXirProgramSpec *specs[] = {&path0_program,&path1_program,&path2_program};
@@ -274,6 +275,7 @@ static void array_mixed(void) {
 }
 int main(void) {
     consumer_context=consumer_context_default();
+    program_collected_effects_cases();
     CHECK(!module_forest_fixture(suite_context, true));
     XrXirArtifact *forest = module_forest_fixture(suite_context, false); XrXirProgram *forest_program = NULL;
     CHECK(xr_xir_compile_vm_program_take(&forest, &forest_program) == XR_XIR_OK);

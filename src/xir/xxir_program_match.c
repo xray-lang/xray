@@ -183,10 +183,11 @@ XR_FUNC void xir_program_permissions_free(XrXirProgramPermissions *permissions) 
 }
 
 static XrXirStatus program_permissions(const XrXirCompileContext *context,
-    const XrXirArtifact *lowered, XrXirProgramPermissions **output) {
+    const XrXirArtifact *lowered, XrXirEffects **owned_effects, XrXirProgramPermissions **output) {
     const XrXirModule *module = xr_xir_compile_artifact_module(lowered);
-    XrXirEffects *effects = NULL;
-    XrXirStatus status = xr_xir_compile_effects_infer_verified(context, module, &effects);
+    XrXirEffects *effects = *owned_effects;
+    if (!xir_effects_context_matches(context, effects, module->function_count)) return XR_XIR_BAD_STRUCTURE;
+    XrXirStatus status = XR_XIR_OK;
     XrXirProgramPermissions *permissions = NULL;
     uint64_t count = (uint64_t)module->function_count + module->declarations->slot_count;
     uint64_t references = 0, parameters = 0, root_parameters = 0;
@@ -283,10 +284,10 @@ static XrXirStatus program_permissions(const XrXirCompileContext *context,
     }
     if (status == XR_XIR_OK && (root_parameter_at != root_parameters || reference_at != references))
         status = XR_XIR_BAD_STRUCTURE;
-    if (status != XR_XIR_OK) {
-        xr_xir_compile_effects_free(effects);xir_program_permissions_free(permissions);return status;
-    }
+    if (status == XR_XIR_OK && !xir_compile_work(context, sizeof(*owned_effects))) status = XR_XIR_BUDGET;
+    if (status != XR_XIR_OK) { xir_program_permissions_free(permissions);return status; }
     permissions->effects=effects;
+    *owned_effects=NULL;
     *output = permissions;
     return XR_XIR_OK;
 }
@@ -300,13 +301,16 @@ XR_FUNC XrXirStatus xr_xir_compile_program_proof_verify(const XrXirCompileContex
     xr_sha256(proof->bytes, proof->length, digest);
     if (!xir_compile_work(context, sizeof(digest))) return XR_XIR_BUDGET;
     if (memcmp(digest, proof->identity, sizeof(digest))) return XR_XIR_BAD_STRUCTURE;
-    XrXirArtifact *lowered = NULL;
-    XrXirStatus status = xr_xir_compile_checked_read_lower(context, proof->bytes, proof->length,
+    if (!xir_compile_work(context, sizeof(XirLoweredEffects))) return XR_XIR_BUDGET;
+    XirLoweredEffects lowered = {0};
+    XrXirStatus status = xr_xir_compile_checked_read_lower_effects(context, proof->bytes, proof->length,
         &spec->target, &lowered, NULL);
     if (status == XR_XIR_OK)
-        status = xr_xir_compile_program_match(context, spec, proof->layouts, lowered);
-    if (status == XR_XIR_OK) status = program_permissions(context, lowered, permissions);
-    xr_xir_compile_artifact_free(lowered);
+        status = xr_xir_compile_program_match(context, spec, proof->layouts, lowered.artifact);
+    if (status == XR_XIR_OK)
+        status = program_permissions(context, lowered.artifact, &lowered.effects, permissions);
+    xr_xir_compile_effects_free(lowered.effects);
+    xr_xir_compile_artifact_free(lowered.artifact);
     return status;
 }
 

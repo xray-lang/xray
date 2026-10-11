@@ -1066,7 +1066,7 @@ static XrXirStatus verify_nominal_modules(const XrXirModule *module, XrXirCompil
 }
 
 static XrXirStatus verify_provenance(const XrXirModule *module, XrXirCompileContext *remaining,
-    XrXirDiagnostic *diagnostic) {
+    XrXirEffects *source_effects, XrXirDiagnostic *diagnostic) {
     const XrXirProvenance *p = module->provenance;
     XrXirStatus shape = xir_effect_contract_shape_verify(remaining, module);
     if (shape != XR_XIR_OK) return shape;
@@ -1080,7 +1080,7 @@ static XrXirStatus verify_provenance(const XrXirModule *module, XrXirCompileCont
         bytes = (uint64_t)p->origins[i].argument_count * sizeof(XrXirType);
         if (!(bytes <= SIZE_MAX)) return XR_XIR_BUDGET;
     }
-    return xr_xir_compile_provenance_verify(remaining, module, p, diagnostic);
+    return xr_xir_compile_provenance_verify(remaining, module, p, source_effects, diagnostic);
 }
 
 static XrXirStatus verify_signature_structure(const XrXirModule *module, XrXirCompileContext *remaining) {
@@ -1118,7 +1118,9 @@ static XrXirStatus verify_metadata_parameter_count(const XrXirModule *module, Xr
     return XR_XIR_OK;
 }
 
-XrXirStatus xr_xir_compile_structure_verify_v2(const XrXirCompileContext *compile_context, const XrXirModule *module, const XrXirConstruction *construction, XrXirDiagnostic *diagnostic) {
+static XrXirStatus structure_verify_source(const XrXirCompileContext *compile_context,
+    const XrXirModule *module, const XrXirConstruction *construction,
+    XrXirEffects *source_effects, XrXirDiagnostic *diagnostic) {
     if (!xir_compile_context_valid(compile_context)) return XR_XIR_BAD_STRUCTURE;
     XrXirCompileContext compile_state = *compile_context;
     XrXirCompileContext *remaining = &compile_state;
@@ -1216,13 +1218,54 @@ XrXirStatus xr_xir_compile_structure_verify_v2(const XrXirCompileContext *compil
         xr_xir_compile_cell_provenance_free(cell_proof);
     }
     if (status == XR_XIR_OK && module->provenance)
-        status = verify_provenance(module, &context.remaining, &context.location);
+        status = verify_provenance(module, &context.remaining, source_effects, &context.location);
     context.location.status = status;
     *remaining = context.remaining;
     if (diagnostic)
         *diagnostic = context.location;
     xir_type_scratch_free(&context.pending);
     xr_xir_constraint_scratch_free(&context.scratch);
+    return status;
+}
+
+XrXirStatus xr_xir_compile_structure_verify_v2(const XrXirCompileContext *context,
+    const XrXirModule *module, const XrXirConstruction *construction, XrXirDiagnostic *diagnostic) {
+    return structure_verify_source(context,module,construction,NULL,diagnostic);
+}
+
+/* Every use repeats complete current Source admission before consuming this
+ * call's retained derivation. No stored address authorizes an input field. */
+XR_FUNC XrXirStatus xr_xir_compile_verify_source_effects_v2(const XrXirCompileContext *context,
+    const XrXirModule *source, const XrXirConstruction *construction,
+    const XrXirEffects *effects, XrXirDiagnostic *diagnostic) {
+    if (!xir_compile_context_valid(context) || !effects || !source || !source->provenance ||
+        source->provenance->kind!=XR_XIR_EVIDENCE_TEMPLATE) return XR_XIR_BAD_STRUCTURE;
+    XrXirDiagnostic location={XR_XIR_OK,UINT32_MAX,UINT32_MAX,UINT32_MAX,XR_XIR_DIAGNOSTIC_NONE};
+    XrXirStatus status=structure_verify_source(context,source,construction,NULL,&location);
+    if (status==XR_XIR_OK) status=xir_effects_source_body_match(context,source,effects);
+    if (status==XR_XIR_OK) {
+        XrXirCompileContext remaining=*context;
+        status=declaration_effects_verify(source,&remaining,&location,effects,NULL);
+    }
+    location.status=status;if (diagnostic) *diagnostic=location;
+    return status;
+}
+
+/* Receiving facts are independently derived from the destination. Only the
+ * immutable Source derivation is borrowed through full fresh correspondence. */
+XR_FUNC XrXirStatus xr_xir_compile_verify_provenance_effects_v2(const XrXirCompileContext *context,
+    const XrXirModule *module, const XrXirConstruction *construction,
+    XrXirEffects *source_effects, XrXirDiagnostic *diagnostic) {
+    if (!source_effects) return xr_xir_compile_verify_v2(context,module,construction,diagnostic);
+    if (!xir_compile_context_valid(context) || !module || !module->provenance ||
+        module->provenance->kind!=XR_XIR_EVIDENCE_INSTANCE) return XR_XIR_BAD_STRUCTURE;
+    XrXirDiagnostic location={XR_XIR_OK,UINT32_MAX,UINT32_MAX,UINT32_MAX,XR_XIR_DIAGNOSTIC_NONE};
+    XrXirStatus status=structure_verify_source(context,module,construction,source_effects,&location);
+    if (status==XR_XIR_OK) {
+        XrXirCompileContext remaining=*context;
+        status=declaration_effects_verify(module,&remaining,&location,NULL,NULL);
+    }
+    location.status=status;if (diagnostic) *diagnostic=location;
     return status;
 }
 
