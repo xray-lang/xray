@@ -78,4 +78,21 @@ XR_FUNC XrXirValueStatus xr_xir_cell_authorized_path_write(const XrXirValue *cel
 XR_FUNC XrXirValueStatus xr_xir_cell_authorized_path_push(const XrXirValue *cell,
     const XrXirCellAuthority *authority, const XrXirValuePath *suffix,
     const XrXirValue *value, XrXirValueAdmission *admission, XrXirFaultDetail *fault);
+/* A NULL scope is an actual whole Class loan; projected scopes retain their
+ * original descriptor identity. All terminal loan work is prepaid by the caller. */
+XR_FUNC XrXirValueStatus xr_xir_class_loan_prepare(const XrXirValue *value,
+    const XrXirCellAuthority *parent,XrXirValueAdmission *admission,XrXirCellLoan *output);
+XR_FUNC XrXirValueStatus xr_xir_class_access_loan_prepare(const XrXirValue *value,
+    const XrXirCellAuthority *parent,XrXirValueAdmission *admission,XrXirCellLoan *output);
+XR_FUNC void xr_xir_class_loan_commit(const XrXirValue *value,XrXirCellLoan *loan,
+    const XrXirCellAuthority *authority);
+XR_FUNC XrXirValueStatus xr_xir_class_authorized_path_read(const XrXirValue *value,
+    const XrXirCellAuthority *authority,const XrXirValuePath *path,
+    XrXirValueAdmission *admission,XrXirValue *output,XrXirFaultDetail *fault);
+XR_FUNC XrXirValueStatus xr_xir_class_authorized_path_write(const XrXirValue *value,
+    const XrXirCellAuthority *authority,const XrXirValuePath *path,
+    const XrXirValue *replacement,XrXirValueAdmission *admission,XrXirFaultDetail *fault);
+XR_FUNC XrXirValueStatus xr_xir_class_authorized_path_push(const XrXirValue *value,
+    const XrXirCellAuthority *authority,const XrXirValuePath *path,
+    const XrXirValue *replacement,XrXirValueAdmission *admission,XrXirFaultDetail *fault);
 #endif // XXIR_CELL_OWNER_INTERNAL_H

@@ -9,6 +9,7 @@
 #include "execution/xr_xir_host_execution.h"
 #include "toolchain/xr_xir_runtime_sdk.h"
 #include "xir/xxir_construction.h"
+#include "xir/xxir_instance_value.h"
 #include <stddef.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -49,6 +50,45 @@ typedef XrXirCompileLimits (*LimitsPrototype)(void);
 _Static_assert(_Generic(&xr_xir_compile_program_seal,SealPrototype:1,default:0),"Mandatory compile context");
 _Static_assert(_Generic(&xr_xir_compile_program_drop,DropPrototype:1,default:0),"Owned program destructor");
 _Static_assert(_Generic(&xr_xir_compile_default_limits,LimitsPrototype:1,default:0),"Pure structural defaults");
+typedef XrXirCallStatus (*OrdinalCellReadPrototype)(XrXirCallView *,uint32_t,
+    const XrXirValue *,XrXirValue *,XrXirFaultDetail *);
+typedef XrXirCallStatus (*OrdinalCellWritePrototype)(XrXirCallView *,uint32_t,
+    const XrXirValue *,const XrXirValue *,XrXirFaultDetail *);
+typedef XrXirCallStatus (*OrdinalProjectPrototype)(XrXirCallView *,uint32_t,XrXirType,
+    const XrXirValueReceiver *,const XrXirValuePath *,XrXirValue *);
+typedef XrXirCallStatus (*OrdinalPathReadPrototype)(XrXirCallView *,uint32_t,
+    const XrXirValueReceiver *,const XrXirValuePath *,XrXirValue *,XrXirFaultDetail *);
+typedef XrXirCallStatus (*OrdinalPathWritePrototype)(XrXirCallView *,uint32_t,
+    const XrXirValueReceiver *,const XrXirValuePath *,const XrXirValue *,XrXirFaultDetail *);
+_Static_assert(_Generic(&xr_xir_instance_cell_read_at,OrdinalCellReadPrototype:1,default:0),
+    "Ordinal Cell read prototype");
+_Static_assert(_Generic(&xr_xir_instance_cell_write_at,OrdinalCellWritePrototype:1,default:0),
+    "Ordinal Cell write prototype");
+_Static_assert(_Generic(&xr_xir_instance_cell_project_at,OrdinalProjectPrototype:1,default:0),
+    "Ordinal Cell projection prototype");
+_Static_assert(_Generic(&xr_xir_instance_path_read_at,OrdinalPathReadPrototype:1,default:0),
+    "Ordinal path read prototype");
+_Static_assert(_Generic(&xr_xir_instance_path_write_at,OrdinalPathWritePrototype:1,default:0),
+    "Ordinal path write prototype");
+_Static_assert(_Generic(&xr_xir_instance_path_push_at,OrdinalPathWritePrototype:1,default:0),
+    "Ordinal path push prototype");
+_Static_assert(_Generic(&xr_xir_instance_path_length_at,OrdinalPathReadPrototype:1,default:0),
+    "Ordinal path length prototype");
+_Static_assert(_Generic(&xr_xir_instance_path_capacity_at,OrdinalPathReadPrototype:1,default:0),
+    "Ordinal path capacity prototype");
+/* Volatile function pointers require the exact SDK archive definitions at link. */
+static void current_ordinal_access_links(void) {
+    OrdinalCellReadPrototype volatile read=xr_xir_instance_cell_read_at;
+    OrdinalCellWritePrototype volatile write=xr_xir_instance_cell_write_at;
+    OrdinalProjectPrototype volatile project=xr_xir_instance_cell_project_at;
+    OrdinalPathReadPrototype volatile path=xr_xir_instance_path_read_at;
+    OrdinalPathReadPrototype volatile length=xr_xir_instance_path_length_at;
+    OrdinalPathReadPrototype volatile capacity=xr_xir_instance_path_capacity_at;
+    OrdinalPathWritePrototype volatile replace=xr_xir_instance_path_write_at;
+    OrdinalPathWritePrototype volatile push=xr_xir_instance_path_push_at;
+    CHECK(read && write && project && path && length && capacity && replace && push);
+}
+
 static DWORD handles(void) { DWORD count=0;CHECK(GetProcessHandleCount(GetCurrentProcess(),&count));return count; }
 static char *input(const char *path,size_t *length) {
     FILE *file=fopen(path,"rb");CHECK(file && !fseek(file,0,SEEK_END));long bytes=ftell(file);
@@ -248,7 +288,7 @@ static void failure_matrix(const XrXirRuntimeSdkRequest *original) {
     printf("Admitted SDK + Program same ledger: exact/minus1 and %zu actual malloc OOM points; physical zero\n",points);
 }
 int main(int argc,char **argv) {
-    CHECK(argc==3);size_t length=0;char *manifest=input(argv[2],&length);
+    CHECK(argc==3);current_ordinal_access_links();size_t length=0;char *manifest=input(argv[2],&length);
     XrXirRuntimeSdkRequest request={argv[1],manifest,length,NULL};old_versions(&request);current_entry_version(&request);positive(&request);failure_matrix(&request);
     xr_free(manifest);puts("SDK native 42 and owned embedded-NUL UTF-8 remain correct after producer destruction");return 0;
 }

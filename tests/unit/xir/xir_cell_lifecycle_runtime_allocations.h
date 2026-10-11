@@ -126,6 +126,9 @@ static void *runtime_calloc(size_t count, size_t size, const char *file, unsigne
     void *pointer = xr_calloc(count, size); runtime_record(pointer, count * size); return pointer;
 }
 static void runtime_free(void *pointer) {
+#ifdef XR_CELL_RUNTIME_BEFORE_FREE
+    XR_CELL_RUNTIME_BEFORE_FREE(pointer);
+#endif
     (void) runtime_forget(pointer);
     xr_free(pointer);
     if (!runtime_live) {
@@ -175,4 +178,5 @@ static void *runtime_realloc(void *pointer, size_t size, const char *file, unsig
 #include "xir/xxir_program.c"
 #include "xir/xxir_instance.c"
 #include "xir/xxir_output.c"
+#include "xir/xxir_vm.c"
 #endif // XIR_CELL_LIFECYCLE_RUNTIME_ALLOCATIONS_H

@@ -66,7 +66,7 @@ struct XrXirCall {
     XrXirCallConfig config;
     CallFrame *top;
     CallSegment *segment;
-    const XrXirCallView *active_view;
+    XrXirCallView *active_view;
     XrXirCallResult result;
     uint64_t allocation_bytes, polls_left, next_wake;
     uint64_t next_epoch;
@@ -336,12 +336,39 @@ static uint64_t state_offset(void) {
     return (sizeof(CallFrame) + alignment - 1) / alignment * alignment;
 }
 #include "xxir_call_cell_loans.inc.c"
+#include "xxir_call_class_access.inc.c"
 
 typedef struct CallFramePreparation {
     bool admitted;
     XrXirFaultDetail *fault;
     const XirEffectInvocationSelection *invocation;
+    const XrXirValue *function;
 } CallFramePreparation;
+/* The real parent callback stays active until child preparation completes.
+ * Class reservations, not the graph operation lease, exclude publication. */
+static XrXirCallStatus frame_class_recheck(XrXirCall *call, const CallFrame *frame,
+    const CallFramePreparation *preparation) {
+    if (!frame->parent || !frame->loan_count) return XR_XIR_CALL_READY;
+    const XrXirTypes *types = xr_xir_compile_type_arena_types(call->config.admission.arena);
+    bool identity = false;
+    for (uint32_t i = 0; i < frame->loan_count; ++i) {
+        if (!call_cell_work(call, 1)) return XR_XIR_CALL_LIMIT;
+        uint32_t parameter = frame->loans[i].parameter;
+        if (parameter >= frame->entry->parameter_count) return XR_XIR_CALL_BAD_STATE;
+        const XrXirValue *root = xr_xir_cell_canonical_root(&frame->arguments[parameter]);
+        if (!root) return XR_XIR_CALL_BAD_STATE;
+        identity |= xr_xir_type_is_class(types, (XrXirType)root->type);
+    }
+    if (!identity) return XR_XIR_CALL_READY;
+    if (!call->active_view || !preparation->function || call->top != frame->parent)
+        return XR_XIR_CALL_BAD_STATE;
+    const XrXirFunctionBinding *binding = xr_xir_function_binding(preparation->function);
+    uint32_t captures = binding ? binding->capture_count : 0;
+    if (captures > frame->entry->parameter_count) return XR_XIR_CALL_BAD_STATE;
+    return xr_xir_instance_call_entry_recheck(call->active_view,
+        (uint32_t)(frame->entry - call->config.entries), preparation->function,
+        frame->arguments + captures, frame->entry->parameter_count - captures, &frame->invocation);
+}
 static XrXirCallStatus push_frame(XrXirCall *call, uint32_t id,
     const XrXirValue *arguments, uint32_t count, const XrXirFunctionBinding *binding,
     const CallFramePreparation *preparation) {
@@ -401,6 +428,7 @@ static XrXirCallStatus push_frame(XrXirCall *call, uint32_t id,
         frame->invocation=*preparation->invocation;
     }
     status = frame_cell_prepare(call, frame, captures, fault);
+    if (status == XR_XIR_CALL_READY) status = frame_class_recheck(call, frame, preparation);
     if (status != XR_XIR_CALL_READY) {
         frame_cell_abort(frame);
         for (uint32_t p = entry->parameter_count; p; --p) xr_xir_value_drop(&frame->arguments[p - 1]);
@@ -640,7 +668,8 @@ static void accept_child_action(XrXirCall *call, XrXirAction action) {
     call->admitting = false;
     XrXirFaultDetail preparation_fault = {0};
     CallFramePreparation preparation = {.admitted=true, .fault=&preparation_fault,
-        .invocation=parent->pending_invocation.owner?&parent->pending_invocation:NULL};
+        .invocation=parent->pending_invocation.owner?&parent->pending_invocation:NULL,
+        .function=&action.value};
     if (status == XR_XIR_CALL_READY)
         status = push_frame(call, action.callee, action.arguments, action.argument_count, binding,
             &preparation);
@@ -887,15 +916,24 @@ XrXirCallResult xr_xir_call_poll_bounded(XrXirCall *call, uint64_t quantum) {
         call->top->effect_pending=false;
         call->top->pending_invocation=(XirEffectInvocationSelection){0};
         XrXirAction action = call->top->entry->resume(&view);
+        /* Missing module publication is an owned initializer rejection, not
+         * a malformed host action or incomplete cleanup. Classify it while
+         * the exact callback view and executor binding are still active. */
+        bool publication_missing = action.kind == XR_XIR_ACTION_FAULT &&
+            xr_xir_instance_initialization_publication_missing(&view, &action);
         /* Authenticate the caller before invalidating its callback view. */
         XrXirCallStatus permission = action.kind == XR_XIR_ACTION_CALL ?
             xr_xir_instance_call_entry_admit(&view, action.callee, &action.value,
                 action.arguments, action.argument_count) : XR_XIR_CALL_READY;
-        call->active_view = NULL;
+        /* A child prepare reuses this authentic parent view before commit.
+         * Non-call actions retain the original callback boundary. */
+        if (action.kind != XR_XIR_ACTION_CALL) call->active_view = NULL;
         if (call->cancel_requested && !cleanup_active(call) && call->abort_reason == XR_XIR_CALL_READY)
             request_exit_status(call, XR_XIR_CALL_CANCELLED);
         else if (permission != XR_XIR_CALL_READY) abort_frames(call, permission);
+        else if (publication_missing) request_exit_status(call, XR_XIR_CALL_BAD_STATE);
         else accept_action(call, action);
+        call->active_view = NULL;
         if (call->top) {
             /* A selection is consumed only by a successful frame publication. */
             call->top->effect_pending=false;

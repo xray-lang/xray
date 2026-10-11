@@ -244,7 +244,9 @@ static XrXirValueStatus path_mutate_route(const XrXirValuePlace *root,
     }
     if (status == XR_XIR_VALUE_OK) {
         if (write.module_publication)
-            status = xr_xir_class_publication_prepare(value, 1, admission, &publication);
+            status = class_publication_prepare_route(value, 1, admission,
+                route->borrow_owner && route->borrow_owner->kind == XIR_OBJECT_CLASS ?
+                    route->borrow_owner : NULL, &publication);
         if (status == XR_XIR_VALUE_OK) {
             XrXirValuePlace leaf = {slot.type, slot.bytes};
             XrXirClassPublication *prepared = publication.operation ? &publication : NULL;

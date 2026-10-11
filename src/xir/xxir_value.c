@@ -1709,6 +1709,7 @@ XR_FUNC XrXirValueStatus xr_xir_cell_value_place(const XrXirValue *cell,
 #include "xxir_struct_value.inc.c"
 #include "xxir_value_path.inc.c"
 #include "xxir_cell_projection.inc.c"
+#include "xxir_class_access.inc.c"
 #include "xxir_enum_value.inc.c"
 #include "xxir_error_value.inc.c"
 #include "xxir_panic_value.inc.c"

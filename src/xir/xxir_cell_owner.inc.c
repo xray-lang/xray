@@ -54,7 +54,7 @@ static bool cell_access(const XirCell *cell, const XrXirCellAuthority *authority
     if (*top) {
         const XirCell *scope = (*top)->scope;
         return cell_authority_equal(&(*top)->authority, authority) &&
-            (!scope->projection_count || scope == cell);
+            (!scope || !scope->projection_count || scope == cell);
     }
     if (cell->projection_count) return cell_authority_equal(&cell->projection_authority, authority);
     return !((const XirCell *)owner)->module_storage || cell_authority_valid(authority);
@@ -82,8 +82,11 @@ XR_FUNC bool xr_xir_cell_publication_matches(const XrXirValue *value,
         cell->module_slot == publication->slot && cell->object.domain == publication->domain;
 }
 XR_FUNC bool xr_xir_cell_module_storage(const XrXirValue *value) {
-    XirCell *cell = cell_root(cell_owner(value));
-    return cell && cell->module_storage;
+    const XirObject *owner = cell_root_object(cell_owner(value));
+    if (!owner) return false;
+    if (owner->kind == XIR_OBJECT_CLASS)
+        return (class_origin_state((const XirClassObject *)owner) & XIR_CLASS_ORIGIN_MODULE) != 0;
+    return owner->kind == XIR_OBJECT_CELL && ((const XirCell *)owner)->module_storage;
 }
 XR_FUNC bool xr_xir_cell_same_owner(const XrXirValue *left, const XrXirValue *right) {
     XirObject *owner = cell_root_object(cell_owner(left));
@@ -116,7 +119,7 @@ XR_FUNC XrXirValueStatus xr_xir_cell_loan_prepare(const XrXirValue *value,
     if (identity && !class_origin_reserve(identity, true)) return XR_XIR_VALUE_BAD_ARGUMENT;
     bool allowed = !*top ? !cell->projection_count ||
         cell_authority_equal(&cell->projection_authority, parent) :
-        cell_authority_equal(&(*top)->authority, parent) && cell_scope_contains((*top)->scope, cell);
+        cell_authority_equal(&(*top)->authority, parent) && (!(*top)->scope || cell_scope_contains((*top)->scope, cell));
     if (identity && ((class_origin_state(identity) & XIR_CLASS_ORIGIN_BORROWED) != 0) != (*top != NULL))
         allowed = false;
     if (!allowed) {

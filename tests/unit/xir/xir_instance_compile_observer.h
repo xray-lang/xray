@@ -20,6 +20,9 @@ static size_t instance_compile_live, instance_compile_bytes, instance_compile_pe
 static size_t instance_compile_attempts, instance_compile_fail_at = SIZE_MAX;
 static bool instance_compile_injected;
 static void *instance_compile_malloc(size_t bytes) {
+    #ifdef XR_INSTANCE_COMPILE_BEFORE_ALLOCATION
+    XR_INSTANCE_COMPILE_BEFORE_ALLOCATION(bytes);
+    #endif
     if (instance_compile_attempts++ == instance_compile_fail_at) {
         instance_compile_injected = true;
         return NULL;

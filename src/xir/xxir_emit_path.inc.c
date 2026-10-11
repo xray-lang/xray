@@ -60,11 +60,11 @@ static void emit_path_step(CBuffer *buffer, const XrXirFunction *function,
         op->op == XR_XIR_ARRAY_PUSH ? "push" : "write";
     if (op->op == XR_XIR_CELL_PROJECT)
         append(buffer, "        if (status == XR_XIR_CALL_READY)\n"
-            "            status = xr_xir_instance_cell_project(view, (XrXirType)%uu, &receiver, &path, &value);\n"
-            "        if (status != XR_XIR_CALL_READY) ", (uint32_t)op->type);
+            "            status = xr_xir_instance_cell_project_at(view, %uu, (XrXirType)%uu, &receiver, &path, &value);\n"
+            "        if (status != XR_XIR_CALL_READY) ", index, (uint32_t)op->type);
     else append(buffer, "        if (status == XR_XIR_CALL_READY)\n"
-        "            status = xr_xir_instance_path_%s(view, &receiver, &path, &value, &fault);\n"
-        "        if (status != XR_XIR_CALL_READY) ", operation);
+        "            status = xr_xir_instance_path_%s_at(view, %uu, &receiver, &path, &value, &fault);\n"
+        "        if (status != XR_XIR_CALL_READY) ", operation, index);
     emit_fault_return(buffer, function, layout, index,
         "(XrXirAction) {XR_XIR_ACTION_FAULT, 0, NULL, 0, {XR_XIR_I64, 0, status}, {fault, {0}}, 0}");
     append(buffer, "\n");

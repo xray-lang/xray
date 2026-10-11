@@ -8,6 +8,7 @@
  */
 #ifndef XIR_CELL_OWNER_SOURCE_PIPELINE_H
 #define XIR_CELL_OWNER_SOURCE_PIPELINE_H
+#include "xir/xxir_internal.h"
 typedef struct CellSourceEntries { uint32_t run, counter, factory; } CellSourceEntries;
 
 static XrXirDiagnostic cell_source_diagnostic(void) {
@@ -60,7 +61,12 @@ static XrXirStatus cell_source_lower(const XrXirCompileContext *context, const c
     int length = snprintf(path, sizeof(path), "%s/%s", XR_CELL_OWNER_FIXTURES, name);
     CHECK(length > 0 && (size_t)length < sizeof(path));
     XrCompilerSession *session = NULL;
-    CHECK(xr_compile_session_new(context->resources, &session) == XR_COMPILER_SESSION_OK);
+    XrCompilerSessionStatus opened = xr_compile_session_new(context->resources, &session);
+    if (opened != XR_COMPILER_SESSION_OK) {
+        CHECK(!session && !*output);
+        return opened == XR_COMPILER_SESSION_OUT_OF_MEMORY ? XR_XIR_OUT_OF_MEMORY :
+            opened == XR_COMPILER_SESSION_BUDGET ? XR_XIR_BUDGET : XR_XIR_BAD_STRUCTURE;
+    }
     XrModuleIdentityAuthority authority = {XR_MODULE_IDENTITY_SCRIPT, NULL, XR_CELL_OWNER_FIXTURES};
     XrXirSourceRequest request = {session, path, &authority, context, NULL, NULL, XR_XIR_PROGRAM, NULL};
     XrXirSourceResult result = {0};
@@ -78,7 +84,7 @@ static XrXirStatus cell_source_lower(const XrXirCompileContext *context, const c
     } else {
         CHECK(!result.checked && !result.snapshot);
         fprintf(stderr, "%s Source rejected: %u at %u:%d:%d %s\n", name, status,
-            diagnostic.module, diagnostic.line, diagnostic.column, diagnostic.message);
+            diagnostic.module, diagnostic.line, diagnostic.column, diagnostic.message[0] ? diagnostic.message : "(none)");
     }
     xr_xir_compile_source_result_free(&result);
     xr_compile_session_free(session);
@@ -98,7 +104,7 @@ static XrXirStatus cell_source_lower(const XrXirCompileContext *context, const c
     const XrXirTarget target = {XR_XIR_ARCH_X86_64, XR_XIR_VALUE_ABI_VERSION};
     if (status == XR_XIR_OK) {
         stage_diagnostic = cell_source_diagnostic();
-        status = xr_xir_compile_lower(closed, &target, output, &stage_diagnostic);
+        status = xr_xir_compile_lower_take(&closed, &target, output, &stage_diagnostic);
         cell_source_stage(name, "lower", status, &stage_diagnostic);
     }
     xr_xir_compile_artifact_free(closed);

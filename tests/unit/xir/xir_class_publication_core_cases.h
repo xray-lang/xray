@@ -145,6 +145,7 @@ static void publication_core_reservation(XrXirTypeArena *arena) {
     CHECK(class_origin_state(physical) == 0);
     CHECK(xr_xir_cell_loan_prepare_path(&projection, &parent, &admission, &fault, &loan) == XR_XIR_VALUE_OK);
     CHECK(class_origin_state(physical) == 2 && !physical->borrow_top);
+    CHECK(!xr_xir_cell_module_storage(&projection));
     CHECK(xr_xir_class_publication_prepare(&object, 1, &admission, &publication) == XR_XIR_VALUE_BAD_ARGUMENT);
     CHECK(class_publication_empty(&publication) && !xr_xir_class_module_storage(&object));
     XrXirCellLoan occupied = {.cell = physical}, saved;
@@ -172,9 +173,18 @@ static void publication_core_reservation(XrXirTypeArena *arena) {
     CHECK(xr_xir_class_publication_prepare(&object, 1, &admission, &publication) == XR_XIR_VALUE_OK);
     xr_xir_class_publication_commit(&publication); xr_xir_class_publication_drop(&publication);
     CHECK(class_origin_state(physical) == 1 && xr_xir_class_module_storage(&object));
+    CHECK(xr_xir_cell_module_storage(&projection));
     CHECK(xr_xir_cell_loan_prepare_path(&projection, &parent, &admission, &fault, &loan) == XR_XIR_VALUE_OK);
-    xr_xir_cell_loan_commit(&projection, &loan, &parent); CHECK(class_origin_state(physical) == 5);
-    xr_xir_cell_loan_release(&loan); CHECK(class_origin_state(physical) == 1);
+    CHECK(class_origin_state(physical) == 3 && !physical->borrow_top && xr_xir_cell_module_storage(&projection));
+    CHECK(xr_xir_class_publication_prepare(&object, 1, &admission, &publication) == XR_XIR_VALUE_BAD_ARGUMENT);
+    CHECK(class_publication_empty(&publication) && class_origin_state(physical) == 3);
+    xr_xir_cell_loan_abort(&loan); CHECK(class_origin_state(physical) == 1 && cell_loan_empty(&loan));
+    CHECK(xr_xir_cell_module_storage(&projection));
+    CHECK(xr_xir_cell_loan_prepare_path(&projection, &parent, &admission, &fault, &loan) == XR_XIR_VALUE_OK);
+    xr_xir_cell_loan_commit(&projection, &loan, &parent);
+    CHECK(class_origin_state(physical) == 5 && xr_xir_cell_module_storage(&projection));
+    xr_xir_cell_loan_release(&loan);
+    CHECK(class_origin_state(physical) == 1 && xr_xir_cell_module_storage(&projection));
     xr_xir_value_drop(&projection); xr_xir_value_drop(&object);
     xr_xir_domain_close(domain); xr_xir_domain_drop(domain);
     CHECK(cell_owner_live == blocks && cell_owner_bytes == bytes);

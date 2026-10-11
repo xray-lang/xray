@@ -32,6 +32,20 @@ static uint32_t instance_invocation_cell(void *owner,uint32_t parameter) {
     if (!xr_xir_cell_in_domain(actual,read->admission->domain)) return 2;
     return xr_xir_cell_module_storage(actual)?1:0;
 }
+/* Complete admission proves current storage and its true arena/Domain before
+ * the sticky bit is read. A local bit alone is never a Class origin proof. */
+static XrXirStatus instance_invocation_class(void *owner,uint32_t parameter,uint32_t *output) {
+    InstanceInvocationRead *read=owner;
+    const XrXirInstance *instance=read?view_instance(read->view):NULL;
+    if (!instance || !output || !read->admission) return XR_XIR_BAD_STRUCTURE;
+    const XrXirValue *value=instance_invocation_parameter(read,parameter);
+    if (!value || !xr_xir_type_is_class(instance->program->types,(XrXirType)value->type)) return XR_XIR_BAD_TYPE;
+    XrXirCallStatus admitted=admit_instance_value(read->admission,value,(XrXirType)value->type);
+    if (admitted!=XR_XIR_CALL_READY) return admitted==XR_XIR_CALL_LIMIT?XR_XIR_BUDGET:
+        admitted==XR_XIR_CALL_OOM?XR_XIR_OUT_OF_MEMORY:XR_XIR_BAD_TYPE;
+    if (!instance_invocation_work(read,2)) return XR_XIR_BUDGET;
+    *output=xr_xir_class_module_storage(value)?1u:0u;return XR_XIR_OK;
+}
 /* The full Program producer and binding are rechecked before exposing any
  * capture column. Physical Cell types alone cannot grant owned authority. */
 static XrXirStatus instance_invocation_function_view(InstanceInvocationRead *read,uint32_t parameter,
@@ -133,7 +147,7 @@ static XrXirCallStatus instance_invocation_select(XrXirCallView *view,uint32_t i
         .instruction=instruction,.target=producer.target,.producer=producer.site,
         .node=current?current->node:UINT32_MAX,.count=target->parameter_count,
         .captures=producer.capture_count,.contextual=current!=NULL,
-        .read={.owner=&actual,.work=instance_invocation_work,.cell=instance_invocation_cell,
+        .read={.owner=&actual,.work=instance_invocation_work,.cell=instance_invocation_cell,.class_value=instance_invocation_class,
             .function=instance_invocation_function,.capture_cell=instance_invocation_capture_cell}};
     XrXirStatus selected=xir_effects_execution_edge(program->permissions->effects,&request,output);
     return selected==XR_XIR_OK?XR_XIR_CALL_READY:selected==XR_XIR_BUDGET?
@@ -164,7 +178,7 @@ static XrXirCallStatus instance_invocation_direct(XrXirCallView *view,uint32_t i
     XirEffectInvocationRequest request={.caller=xr_xir_call_current_entry(view->activation),
         .instruction=instruction,.target=target,.producer=UINT32_MAX,
         .node=current?current->node:UINT32_MAX,.count=count,.contextual=current!=NULL,
-        .read={.owner=&actual,.work=instance_invocation_work,.cell=instance_invocation_cell,
+        .read={.owner=&actual,.work=instance_invocation_work,.cell=instance_invocation_cell,.class_value=instance_invocation_class,
             .function=instance_invocation_function,.capture_cell=instance_invocation_capture_cell}};
     XrXirStatus selected=xir_effects_execution_edge(program->permissions->effects,&request,output);
     return selected==XR_XIR_OK?XR_XIR_CALL_READY:selected==XR_XIR_BUDGET?

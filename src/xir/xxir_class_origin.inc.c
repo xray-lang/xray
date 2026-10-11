@@ -15,12 +15,24 @@ typedef struct ClassPublicationScan {
 static bool class_publication_empty(const XrXirClassPublication *publication) {
     return publication && !publication->admission && !publication->values &&
         !publication->count && !publication->capacity && !publication->bytes &&
-        !publication->operation && !publication->committed;
+        !publication->operation && !publication->committed &&
+        !publication->borrow_owner && !publication->borrow_loan;
 }
 static bool class_publication_work(XrXirValueAdmission *admission, uint64_t work) {
     if (work > admission->work || !xr_xir_domain_work(admission->domain, work)) return false;
     admission->work -= work;
     return true;
+}
+/* The only exception is the same already-MODULE object held by the immediate
+ * path route. Every reachable child is still walked and separately reserved. */
+static bool class_publication_borrowed(const XrXirClassPublication *publication,
+    const XirClassObject *identity) {
+    if (!publication->borrow_owner || publication->borrow_owner != identity) return false;
+    const XrXirCellLoan *loan = publication->borrow_loan;
+    uint32_t state = class_origin_state(identity);
+    return loan && identity->borrow_top == loan && loan->cell == identity &&
+        loan->authority.activation && loan->authority.frame && loan->authority.epoch &&
+        state == (XIR_CLASS_ORIGIN_MODULE | XIR_CLASS_ORIGIN_BORROWED);
 }
 static XrXirValueStatus class_publication_grow(XrXirClassPublication *publication) {
     XrXirValueAdmission *admission = publication->admission;
@@ -64,7 +76,7 @@ static bool class_publication_edge(const XrXirValue *value, void *payload, void 
     /* Own-slot write, drop, commit classification and atomic write are prepaid;
      * Class additionally pays reservation CAS and possible rollback. The unused
      * rollback ticket stays charged. Retaining never grants a loan. */
-    if (!class_publication_work(admission, identity ? 6 : 3)) {
+    if (!class_publication_work(admission, identity ? (object == publication->borrow_owner ? 16 : 6) : 3)) {
         scan->status = XR_XIR_VALUE_LIMIT; return false;
     }
     if (publication->count == publication->capacity) {
@@ -76,6 +88,13 @@ static bool class_publication_edge(const XrXirValue *value, void *payload, void 
     if (scan->status != XR_XIR_VALUE_OK) return false;
     if (identity) {
         XirClassObject *instance = (XirClassObject *)object;
+        if (object == publication->borrow_owner) {
+            if (!class_publication_borrowed(publication, instance)) {
+                xr_xir_value_drop(&owned); scan->status = XR_XIR_VALUE_BAD_ARGUMENT; return false;
+            }
+            publication->values[publication->count++] = owned;
+            return true;
+        }
         if (!class_origin_reserve(instance, false)) {
             xr_xir_value_drop(&owned); scan->status = XR_XIR_VALUE_BAD_ARGUMENT; return false;
         }
@@ -93,10 +112,16 @@ XR_FUNC void xr_xir_class_publication_drop(XrXirClassPublication *publication) {
     *publication = (XrXirClassPublication){0};
     XR_CHECK(owned.operation && admission_domain_current(owned.admission),
         "prepared Class publication retains its original admission owner");
+    XR_CHECK(!owned.borrow_owner || class_publication_borrowed(&owned, owned.borrow_owner),
+        "MODULE route drop retains its exact live loan even for a scalar replacement");
     for (size_t i = 0; i < owned.count; ++i) {
         XirObject *object = object_pointer(&owned.values[i]);
-        if (!owned.committed && object->kind == XIR_OBJECT_CLASS)
+        if (object == owned.borrow_owner) {
+            XR_CHECK(class_publication_borrowed(&owned, (XirClassObject *)object),
+                "MODULE route drops while its exact active loan remains top");
+        } else if (!owned.committed && object->kind == XIR_OBJECT_CLASS) {
             class_origin_cancel((XirClassObject *)object);
+        }
         xr_xir_value_drop(&owned.values[i]);
     }
     if (owned.values) {
@@ -105,17 +130,30 @@ XR_FUNC void xr_xir_class_publication_drop(XrXirClassPublication *publication) {
     }
     xr_xir_value_graph_end();
 }
-XR_FUNC XrXirValueStatus xr_xir_class_publication_prepare(const XrXirValue *values,
-    uint32_t count, XrXirValueAdmission *admission, XrXirClassPublication *output) {
+static XrXirValueStatus class_publication_prepare_route(const XrXirValue *values,
+    uint32_t count, XrXirValueAdmission *admission, const XirObject *borrow_owner,
+    XrXirClassPublication *output) {
     if (!class_publication_empty(output) || !admission_domain_current(admission) ||
         !admission || !admission->domain || !admission->arena || (count && !values))
         return XR_XIR_VALUE_BAD_ARGUMENT;
     for (uint32_t i = 0; i < count; ++i)
         if (!xr_xir_value_valid(&values[i])) return XR_XIR_VALUE_BAD_ARGUMENT;
+    XrXirClassPublication publication = {.admission = admission, .operation = true};
+    if (borrow_owner) {
+        if (borrow_owner->kind != XIR_OBJECT_CLASS || !class_allocation_valid(borrow_owner) ||
+            !admission_owner(admission, borrow_owner->arena, borrow_owner->domain))
+            return XR_XIR_VALUE_BAD_ARGUMENT;
+        publication.borrow_owner = borrow_owner;
+        publication.borrow_loan = ((const XirClassObject *)borrow_owner)->borrow_top;
+        if (!class_publication_borrowed(&publication, (const XirClassObject *)borrow_owner))
+            return XR_XIR_VALUE_BAD_ARGUMENT;
+        /* Prepay preparation, commit and drop checks even when the replacement
+         * contains no owning object and the identity never enters the worklist. */
+        if (!class_publication_work(admission, 24)) return XR_XIR_VALUE_LIMIT;
+    }
     /* A legitimate empty preparation also pays its begin/publish/commit/drop
      * control work. Finite-prefix roots and occupied outputs are rejected first. */
     if (!class_publication_work(admission, (uint64_t)count + 4)) return XR_XIR_VALUE_LIMIT;
-    XrXirClassPublication publication = {.admission = admission, .operation = true};
     ClassPublicationScan scan = {&publication, XR_XIR_VALUE_OK};
     xr_xir_value_graph_begin();
     for (uint32_t i = 0; scan.status == XR_XIR_VALUE_OK && i < count; ++i)
@@ -130,13 +168,24 @@ XR_FUNC XrXirValueStatus xr_xir_class_publication_prepare(const XrXirValue *valu
     *output = publication;
     return XR_XIR_VALUE_OK;
 }
+XR_FUNC XrXirValueStatus xr_xir_class_publication_prepare(const XrXirValue *values,
+    uint32_t count, XrXirValueAdmission *admission, XrXirClassPublication *output) {
+    return class_publication_prepare_route(values, count, admission, NULL, output);
+}
 XR_FUNC void xr_xir_class_publication_commit(XrXirClassPublication *publication) {
     XR_CHECK(publication && publication->operation && !publication->committed &&
         admission_domain_current(publication->admission), "Class publication commits one prepared owner");
+    XR_CHECK(!publication->borrow_owner || class_publication_borrowed(publication, publication->borrow_owner),
+        "MODULE route commit retains its exact live loan even for a scalar replacement");
     for (size_t i = 0; i < publication->count; ++i) {
         XirObject *object = object_pointer(&publication->values[i]);
         if (object->kind == XIR_OBJECT_CLASS) {
             XirClassObject *instance = (XirClassObject *)object;
+            if (object == publication->borrow_owner) {
+                XR_CHECK(class_publication_borrowed(publication, instance),
+                    "MODULE route commits while its exact active loan remains top");
+                continue;
+            }
             uint32_t state = class_origin_state(instance);
             XR_CHECK((state & XIR_CLASS_ORIGIN_PREPARED) &&
                 !(state & XIR_CLASS_ORIGIN_BORROWED) && !instance->borrow_top,

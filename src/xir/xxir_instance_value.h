@@ -28,6 +28,20 @@ typedef struct XrXirValueReceiver {
     uint32_t slot;
 } XrXirValueReceiver;
 
+/* Only the real ordinal-bearing consumer may authorize a child Class access. */
+XR_FUNC XrXirCallStatus xr_xir_instance_cell_project_at(XrXirCallView *view,uint32_t instruction,
+    XrXirType type,const XrXirValueReceiver *receiver,const XrXirValuePath *path,XrXirValue *output);
+XR_FUNC XrXirCallStatus xr_xir_instance_path_read_at(XrXirCallView *view,uint32_t instruction,
+    const XrXirValueReceiver *receiver,const XrXirValuePath *path,XrXirValue *output,XrXirFaultDetail *fault);
+XR_FUNC XrXirCallStatus xr_xir_instance_path_write_at(XrXirCallView *view,uint32_t instruction,
+    const XrXirValueReceiver *receiver,const XrXirValuePath *path,const XrXirValue *value,XrXirFaultDetail *fault);
+XR_FUNC XrXirCallStatus xr_xir_instance_path_push_at(XrXirCallView *view,uint32_t instruction,
+    const XrXirValueReceiver *receiver,const XrXirValuePath *path,const XrXirValue *value,XrXirFaultDetail *fault);
+XR_FUNC XrXirCallStatus xr_xir_instance_path_length_at(XrXirCallView *view,uint32_t instruction,
+    const XrXirValueReceiver *receiver,const XrXirValuePath *path,XrXirValue *output,XrXirFaultDetail *fault);
+XR_FUNC XrXirCallStatus xr_xir_instance_path_capacity_at(XrXirCallView *view,uint32_t instruction,
+    const XrXirValueReceiver *receiver,const XrXirValuePath *path,XrXirValue *output,XrXirFaultDetail *fault);
+
 /* The checked CELL_PROJECT instruction is the only descriptor producer. */
 XR_FUNC XrXirCallStatus xr_xir_instance_cell_project(XrXirCallView *view,
     XrXirType type, const XrXirValueReceiver *receiver, const XrXirValuePath *path,

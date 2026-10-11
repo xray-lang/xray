@@ -86,7 +86,9 @@ static XrXirRunStatus value_run_status(XrXirValueStatus status) {
     return XR_XIR_RUN_BAD_ARTIFACT;
 }
 
-static XrXirRunStatus instance_step(ScalarRun *run, VmState *state, const XrXirInstruction *op, uint32_t destination) {
+static XrXirRunStatus instance_step(ScalarRun *run, VmState *state, const XrXirInstruction *op, uint32_t destination, XrXirAction *action) {
+    XrXirFaultDetail fault={0};
+    uint32_t ordinal=(uint32_t)(op-run->function->instructions);
     XrXirValue value = {0};
     XrXirCallStatus status = XR_XIR_CALL_READY;
     switch (op->op) {
@@ -98,7 +100,7 @@ static XrXirRunStatus instance_step(ScalarRun *run, VmState *state, const XrXirI
         if (xr_xir_cell_payload_operands(run->module->types, type, op->op) == 2)
             incoming = (XrXirValue){(uint32_t)xr_xir_operand_type(run->function, op->args[1]), 0,
                 xr_xir_scalar_load(run->frame, run->layout->offsets[op->args[1]])};
-        if (cell.payload) status = xr_xir_instance_cell_write(run->view, &cell, &incoming);
+        if (cell.payload) status = xr_xir_instance_cell_write_at(run->view, ordinal, &cell, &incoming, &fault);
         else {
             status = xr_xir_instance_cell(run->view, type, &incoming, &value);
             if (status == XR_XIR_CALL_READY) xr_xir_owned_slot_move(run->frame, offset, &value);
@@ -112,12 +114,12 @@ static XrXirRunStatus instance_step(ScalarRun *run, VmState *state, const XrXirI
         if (count) left = (XrXirValue){(uint32_t)xr_xir_operand_type(run->function, op->args[0]), 0,
             xr_xir_scalar_load(run->frame, run->layout->offsets[op->args[0]])};
         if (op->op == XR_XIR_CELL_NEW) status = xr_xir_instance_cell(run->view, op->type, &left, &value);
-        else if (op->op == XR_XIR_CELL_READ) status = xr_xir_instance_cell_read(run->view, &left, &value);
+        else if (op->op == XR_XIR_CELL_READ) status = xr_xir_instance_cell_read_at(run->view, ordinal, &left, &value, &fault);
         else {
             XrXirValue right = {0};
             if (count == 2) right = (XrXirValue){(uint32_t)xr_xir_operand_type(run->function, op->args[1]), 0,
                 xr_xir_scalar_load(run->frame, run->layout->offsets[op->args[1]])};
-            status = xr_xir_instance_cell_write(run->view, &left, &right);
+            status = xr_xir_instance_cell_write_at(run->view, ordinal, &left, &right, &fault);
         }
         break;
     }
@@ -151,6 +153,10 @@ static XrXirRunStatus instance_step(ScalarRun *run, VmState *state, const XrXirI
         status = xr_xir_instance_slot_write(run->view, (uint32_t) op->immediate, &value, op->op == XR_XIR_SLOT_INIT);
         break;
     default: return XR_XIR_RUN_BAD_ARTIFACT;
+    }
+    if (status==XR_XIR_CALL_BOUNDS && xr_xir_fault_bounds_valid(fault)) {
+        *action=(XrXirAction){XR_XIR_ACTION_FAULT,0,NULL,0,{XR_XIR_I64,0,status},{fault,{0}},0};
+        return XR_XIR_RUN_OK;
     }
     if (status != XR_XIR_CALL_READY) return status == XR_XIR_CALL_OOM ? XR_XIR_RUN_OUT_OF_MEMORY :
         status == XR_XIR_CALL_LIMIT ? XR_XIR_RUN_FRAME_LIMIT : XR_XIR_RUN_BAD_ARTIFACT;
@@ -199,8 +205,8 @@ static XrXirRunStatus vm_array_capacity_step(ScalarRun *run, VmState *state,
         XrXirValuePath path = {0};
         status = vm_path_receiver(run, state, op, &receiver, &path);
         if (status == XR_XIR_CALL_READY)
-            status = path.count ? xr_xir_instance_path_capacity(run->view,
-                &receiver, &path, &output, &fault) :
+            status = path.count ? xr_xir_instance_path_capacity_at(run->view,
+                (uint32_t)(op-run->function->instructions), &receiver, &path, &output, &fault) :
                 xr_xir_instance_array_capacity(run->view, &receiver, &output);
     } else if (op->op == XR_XIR_ARRAY_WITH_CAPACITY) {
         status = xr_xir_instance_array_with_capacity(run->view, op->type,
@@ -690,7 +696,7 @@ static XrXirRunStatus scalar_step(ScalarRun *run, VmState *state, XrXirAction *a
         op->op == XR_XIR_TO_STRING ||
         (op->op >= XR_XIR_CELL_NEW && op->op <= XR_XIR_CELL_WRITE) || op->op == XR_XIR_CELL_LOCAL_WRITE) {
         state->instruction = next;
-        return instance_step(run, state, op, run->layout->offsets[result_id]);
+        return instance_step(run, state, op, run->layout->offsets[result_id], action);
     }
     if (op->op == XR_XIR_JUMP || op->op == XR_XIR_BRANCH) {
         uint32_t edge = op->op == XR_XIR_BRANCH && !xr_xir_scalar_load(run->frame, run->layout->offsets[op->args[0]]) ? 1 : 0;

@@ -13,6 +13,7 @@
 #ifndef XXIR_PROGRAM_INTERNAL_H
 #define XXIR_PROGRAM_INTERNAL_H
 #include "xxir_program.h"
+#include "xxir_effect_contract_internal.h"
 #include "xxir_types.h"
 #include "xxir_type_arena.h"
 #include <stdatomic.h>
@@ -65,7 +66,15 @@ XR_FUNC XrXirStatus xr_xir_compile_program_match(const XrXirCompileContext *cont
 XR_FUNC XrXirStatus xr_xir_compile_program_proof_verify(const XrXirCompileContext *context,
     const XrXirProgramSpec *spec, const XrXirProgramProof *proof, XrXirProgramPermissions **permissions);
 XR_FUNC bool xr_xir_compile_program_retain(XrXirProgram *program);
+/* Only the real synthetic initializer can report missing publication after
+ * its owned module initializer returned Unit. This is not a host-fault waiver. */
+XR_FUNC bool xr_xir_instance_initialization_publication_missing(
+    XrXirCallView *view, const XrXirAction *action);
 /* Inspect sealed facts and the advertised bound during the actual callback view. */
 XR_FUNC XrXirCallStatus xr_xir_instance_call_entry_admit(XrXirCallView *view, uint32_t entry,
     const XrXirValue *function, const XrXirValue *arguments, uint32_t count);
+/* Revalidate the same selection while every actual Class loan is reserved. */
+XR_FUNC XrXirCallStatus xr_xir_instance_call_entry_recheck(XrXirCallView *view, uint32_t entry,
+    const XrXirValue *function, const XrXirValue *arguments, uint32_t count,
+    const XirEffectInvocationSelection *prepared);
 #endif // XXIR_PROGRAM_INTERNAL_H

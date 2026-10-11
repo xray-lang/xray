@@ -1,0 +1,12 @@
+var count: i64 = 0;
+fn inner(left: ref i64, right: ref i64) -> i64 {
+    count += 1; left += 1; right += 1; return left;
+}
+final class Holder {
+    left: i64
+    right: i64
+    constructor() { this.left = 40; this.right = 90; }
+}
+export fn run() -> i64 { const value = Holder(); return inner(ref value.left, ref value.right); }
+export fn cellCounter() -> i64 { return count; }
+fn main() -> i64 { return run(); }

@@ -75,7 +75,7 @@ static const CellSourceCase cell_source_cases[] = {
     {"class_project_ref_method_reject.xr", CELL_SOURCE_MODE_REJECT, 0, XR_XIR_CALL_READY, false},
     {"class_project_scoped_capture_reject.xr", CELL_SOURCE_REJECT, 0, XR_XIR_CALL_READY, false},
     {"class_project_go_reject.xr", CELL_SOURCE_REJECT, 0, XR_XIR_CALL_READY, false},
-    {"class_project_worker_unresolved.xr", CELL_SOURCE_REJECT, 0, XR_XIR_CALL_READY, false},
+    {"class_project_worker_unresolved.xr", CELL_SOURCE_PROJECT_VALUE, 41, XR_XIR_CALL_READY, false},
     {"class_project_worker_plain.xr", CELL_SOURCE_PROJECT_VALUE, 41, XR_XIR_CALL_READY, false},
     {"class_project_typed_library.xr", CELL_SOURCE_VALUE, 42, XR_XIR_CALL_READY, false},
     {"class_project_retained.xr", CELL_SOURCE_CLASS_RETAINED, 42, XR_XIR_CALL_READY, false},
@@ -237,11 +237,23 @@ static void cell_source_case(const CellSourceCase *fixture) {
     else source_fixture_owner_free(&owner);
     cell_source_physical_zero(fixture->name);
 }
-int main(void) {
+#include "xir_class_access_source_cases.h"
+int main(int argc, char **argv) {
+    if (argc == 2 && !strcmp(argv[1], "--class-access")) {
+        bool found = false;
+        for (unsigned i = 0; i < sizeof(cell_source_cases) / sizeof(cell_source_cases[0]); ++i) {
+            if (!strcmp(cell_source_cases[i].name, "class_project_worker_unresolved.xr")) {
+                CHECK(!found); found = true; cell_source_case(&cell_source_cases[i]);
+            }
+        }
+        CHECK(found); class_access_source_cases(); instance_compile_report(); return 0;
+    }
+    if (argc != 1) return 2;
     for (unsigned i = 0; i < sizeof(cell_source_cases) / sizeof(cell_source_cases[0]); ++i) {
         printf("Source Cell case %u: %s\n", i, cell_source_cases[i].name);
         cell_source_case(&cell_source_cases[i]);
     }
+    class_access_source_cases();
     instance_compile_report();
     printf("Source Cell ownership: %zu independent finite owners and real VM executions passed\n",
         sizeof(cell_source_cases) / sizeof(cell_source_cases[0]));

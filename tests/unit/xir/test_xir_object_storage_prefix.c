@@ -256,6 +256,7 @@ static void prefix_current_factories(XrXirTypeArena *arena, XrXirDomain *domain,
 #include "xir_class_observation_core_cases.h"
 #include "xir_class_observation_runtime_resource_cases.h"
 #include "xir_class_publication_core_cases.h"
+#include "xir_class_access_core_cases.h"
 #include "xir_domain_admission_generation_cases.h"
 #include "xir_domain_storage_prefix_cases.h"
 #include "xir_domain_release_generation_cases.h"
@@ -284,6 +285,7 @@ int main(int argc, char **argv) {
     observation_core_cases(&compiler, arena);
     observation_resource_cases(&compiler, arena);
     publication_core_cases(&compiler, arena);
+    class_access_core_cases(&compiler, arena);
     xr_xir_domain_drop(domain); xr_xir_compile_type_arena_drop(arena);
     CHECK(value_compile_stats(&compiler.context).live_bytes == compiler.baseline.live_bytes);
     value_compile_owner_release(&compiler);

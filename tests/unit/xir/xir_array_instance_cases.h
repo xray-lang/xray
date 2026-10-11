@@ -16,9 +16,12 @@
 #include "xir/xxir_instance_value.h"
 
 typedef struct ArrayAccessWitness { uint32_t mode, reads, cleanups; } ArrayAccessWitness;
-typedef struct ArrayAccessFrame { XrXirValue value, cell; uint32_t phase; } ArrayAccessFrame;
+typedef struct ArrayAccessFrame { XrXirValue value, cell, module_cell; uint32_t phase; } ArrayAccessFrame;
 static XrXirValueReceiver array_slot_receiver(uint32_t slot) {
     return (XrXirValueReceiver) {XR_XIR_ROOT_SLOT, (XrXirType) 256, {0}, NULL, slot};
+}
+static XrXirValueReceiver array_cell_receiver(const XrXirValue *cell) {
+    return (XrXirValueReceiver) {XR_XIR_ROOT_CELL,(XrXirType)256,*cell,NULL,0};
 }
 static void array_access_cleanup(XrXirCallView *view, XrXirCallStatus reason) {
     (void) reason;
@@ -26,6 +29,7 @@ static void array_access_cleanup(XrXirCallView *view, XrXirCallStatus reason) {
     ArrayAccessFrame *frame = view->state;
     CHECK(xr_xir_call_admission(view) == NULL);
     xr_xir_value_drop(&frame->value); xr_xir_value_drop(&frame->cell);
+    xr_xir_value_drop(&frame->module_cell);
     ++witness->cleanups;
 }
 static XrXirAction array_access_initializer(XrXirCallView *view) {
@@ -35,12 +39,14 @@ static XrXirAction array_access_initializer(XrXirCallView *view) {
     XrXirValueReceiver unpublished = array_slot_receiver(0);
     XrXirValue output = {0}; XrXirFaultDetail detail = {0};
     CHECK(xr_xir_instance_array_read(view,&unpublished,0,false,&output,&detail) == XR_XIR_CALL_BAD_STATE);
+    CHECK(xr_xir_instance_slot_read(view,0,&output) == XR_XIR_CALL_BAD_STATE && !output.type);
     XrXirValue element = {XR_XIR_I64,0,7};
     CHECK(xr_xir_instance_array_new(view,(XrXirType)256,&element,1,&frame->value) == XR_XIR_CALL_READY);
     if (xr_xir_call_current_entry(view->activation) == 2) {
         CHECK(xr_xir_instance_slot_write(view,2,&frame->value,true) == XR_XIR_CALL_READY);
     } else {
-        CHECK(xr_xir_instance_slot_write(view,0,&frame->value,true) == XR_XIR_CALL_READY);
+        CHECK(xr_xir_instance_cell(view,(XrXirType)257,&frame->value,&frame->cell) == XR_XIR_CALL_READY);
+        CHECK(xr_xir_instance_slot_write(view,0,&frame->cell,true) == XR_XIR_CALL_READY);
         CHECK(xr_xir_instance_slot_write(view,1,&frame->value,true) == XR_XIR_CALL_READY);
     }
     return done();
@@ -55,7 +61,7 @@ static void array_path_permissions(XrXirCallView *view) {
     XrXirValuePathStep steps[] = {{XR_XIR_PATH_INDEX,(XrXirType)258,0},
         {XR_XIR_PATH_INDEX,(XrXirType)256,0}};
     XrXirValuePath path = {steps + 1,1}, root_path = {NULL,0};
-    XrXirValueReceiver root = array_slot_receiver(0), receiver = array_slot_receiver(1);
+    XrXirValueReceiver root = array_cell_receiver(&frame->module_cell), receiver = array_slot_receiver(1);
     XrXirValue output = {0}, element = {XR_XIR_I64,0,17}; XrXirFaultDetail detail = {0};
     XrXirCallView copied = *view;
     CHECK(xr_xir_instance_path_read(&copied,&root,&path,&output,&detail) == XR_XIR_CALL_BAD_STATE);
@@ -101,8 +107,9 @@ static void array_path_permissions(XrXirCallView *view) {
 static XrXirAction array_access_permissions(XrXirCallView *view) {
     ArrayAccessFrame *frame = view->state;
     if (!frame->phase++) return (XrXirAction) {XR_XIR_ACTION_CALL,3,NULL,0,{0},{0}, 0};
+    CHECK(xr_xir_instance_slot_read(view,0,&frame->module_cell) == XR_XIR_CALL_READY);
     XrXirFaultDetail detail = {0}; XrXirValue output = {0}, element = {XR_XIR_I64,0,9};
-    XrXirValueReceiver root = array_slot_receiver(0), receiver = array_slot_receiver(1);
+    XrXirValueReceiver root = array_cell_receiver(&frame->module_cell), receiver = array_slot_receiver(1);
     CHECK(xr_xir_call_admission(view) != NULL);
     XrXirCallView copied = *view;
     CHECK(xr_xir_call_admission(&copied) == NULL);
@@ -115,7 +122,7 @@ static XrXirAction array_access_permissions(XrXirCallView *view) {
     CHECK(xr_xir_instance_array_read(view,&receiver,0,false,&output,&detail) == XR_XIR_CALL_BAD_STATE);
     receiver = root; receiver.type = XR_XIR_I64;
     CHECK(xr_xir_instance_array_write(view,&receiver,0,&element,false,&detail) == XR_XIR_CALL_BAD_STATE);
-    CHECK(xr_xir_instance_slot_read(view,0,&frame->value) == XR_XIR_CALL_READY);
+    CHECK(xr_xir_instance_cell_read(view,&frame->module_cell,&frame->value) == XR_XIR_CALL_READY);
     receiver = (XrXirValueReceiver) {XR_XIR_ROOT_VALUE,(XrXirType)256,frame->value,NULL,0};
     CHECK(xr_xir_instance_array_write(view,&receiver,0,&element,false,&detail) == XR_XIR_CALL_BAD_STATE);
     receiver = (XrXirValueReceiver) {XR_XIR_ROOT_LOCAL,(XrXirType)256,{0},
@@ -143,6 +150,7 @@ static XrXirAction array_access_library(XrXirCallView *view) {
     XrXirValue output = {0}, element = {XR_XIR_I64,0,9}; XrXirFaultDetail detail = {0};
     CHECK(xr_xir_instance_array_write(view,&receiver,0,&element,false,&detail) == XR_XIR_CALL_BAD_STATE);
     receiver.slot = 0;
+    CHECK(xr_xir_instance_slot_read(view,0,&output) == XR_XIR_CALL_BAD_STATE && !output.type);
     CHECK(xr_xir_instance_array_read(view,&receiver,0,false,&output,&detail) == XR_XIR_CALL_BAD_STATE);
     CHECK(xr_xir_instance_array_write(view,&receiver,0,&element,false,&detail) == XR_XIR_CALL_BAD_STATE);
     CHECK(xr_xir_fault_empty(detail));
@@ -195,7 +203,7 @@ static void array_instance_cases(void) {
         XrXirSourceModule modules[] = {{"array",5,mode ? NULL : &dependency,mode ? 0 : 1,0},
             {"library",7,NULL,0,2}};
         XrXirFunctionIdentity identities[] = {{0,0, 0, 0, 0, 0, XR_XIR_NON_MEMBER, 0, 0},{0,1, 0, 0, 0, 0, XR_XIR_NON_MEMBER, 0, 0},{1,0, 0, 0, 0, 0, XR_XIR_NON_MEMBER, 0, 0},{1,1, 0, 0, 0, 0, XR_XIR_NON_MEMBER, 0, 0}};
-        XrXirSlot slots[] = {{0,(XrXirType)256,1},{0,(XrXirType)256,0},{1,(XrXirType)256,0}};
+        XrXirSlot slots[] = {{0,(XrXirType)257,1},{0,(XrXirType)256,0},{1,(XrXirType)256,0}};
         XrXirDeclarations declarations = {modules,mode ? 1 : 2,identities,slots,mode ? 0 : 3,NULL,0,0,1, NULL};
         XrXirCallEntry entries[] = {
             {XR_XIR_CALL_ABI_VERSION,NULL,0,XR_XIR_UNIT,sizeof(ArrayAccessFrame),array_access_initializer,array_access_cleanup,&witness, 0, 0},
@@ -226,7 +234,12 @@ static void array_instance_cases(void) {
         CHECK(result.outcome.status == (mode ? XR_XIR_CALL_LIMIT : XR_XIR_CALL_RETURNED));
         CHECK(xr_xir_instance_state(instance) == XR_XIR_INSTANCE_READY && witness.cleanups == (mode ? 2u : 4u));
         if (mode) completed[mode-1] = witness.reads;
-        CHECK(xr_xir_instance_free(instance) == XR_XIR_CALL_READY);
+        XrXirCallStatus released = xr_xir_instance_free(instance);
+        XrXirCallStatus expected = mode ? XR_XIR_CALL_LIMIT : XR_XIR_CALL_READY;
+        if (released != expected)
+            fprintf(stderr, "Array release mode%u poll%u free%u cleanups%u reads%u\n",
+                mode, result.outcome.status, released, witness.cleanups, witness.reads);
+        CHECK(released == expected);
     }
     CHECK(completed[0] == completed[1] && completed[2] == completed[3]);
 }

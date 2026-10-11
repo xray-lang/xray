@@ -26,8 +26,14 @@ static bool instance_cell_published(const XrXirInstance *instance, uint32_t slot
 static XrXirCallStatus instance_cell_access(XrXirCallView *view,
     const XrXirInstance *instance, const XrXirValue *cell) {
     if (!xr_xir_cell_in_domain(cell, instance->domain)) return XR_XIR_CALL_BAD_ARGUMENT;
+    const XrXirValue *root=xr_xir_cell_canonical_root(cell);
+    if (root && xr_xir_type_is_class(instance->program->types,(XrXirType)root->type) &&
+        view_is_child(instance,view)) return XR_XIR_CALL_BAD_STATE;
     if (!xr_xir_cell_module_storage(cell)) return XR_XIR_CALL_READY;
     if (view_is_child(instance, view)) return XR_XIR_CALL_BAD_STATE;
+    if (root && xr_xir_type_is_class(instance->program->types, (XrXirType)root->type))
+        return xr_xir_value_argument(root, instance->program->arena, (XrXirType)root->type) &&
+            xr_xir_class_module_storage(root) ? XR_XIR_CALL_READY : XR_XIR_CALL_BAD_STATE;
     const XrXirDeclarations *d = instance->program->declarations;
     for (uint32_t slot = 0; slot < d->slot_count; ++slot) {
         if (!instance_cell_work(view, 1)) return XR_XIR_CALL_LIMIT;

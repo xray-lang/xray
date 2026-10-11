@@ -25,6 +25,9 @@ typedef struct XrXirClassPublication {
     XrXirValue *values;
     size_t count, capacity, bytes;
     bool operation, committed;
+    /* Stack-scoped route identity, valid only while its actual loan stays top.
+     * It is neither retained executable permission nor a publication source. */
+    const void *borrow_owner, *borrow_loan;
 } XrXirClassPublication;
 /* Output must be zero; failure preserves output and all publication bits. */
 XR_FUNC XrXirValueStatus xr_xir_class_publication_prepare(const XrXirValue *values,

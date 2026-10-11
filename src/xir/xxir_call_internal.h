@@ -42,6 +42,15 @@ XR_FUNC bool xr_xir_call_invocation_pending(const XrXirCallView *view,uint32_t *
 XR_FUNC XrXirCallStatus xr_xir_call_invocation_stage(XrXirCallView *view,uint32_t instruction);
 XR_FUNC XrXirCallStatus xr_xir_call_invocation_accept(XrXirCallView *view,
     const XirEffectInvocationSelection *selection);
+typedef struct XrXirCallClassAccess {
+    const XrXirValue *value;
+    XrXirCellAuthority authority;
+    XrXirCellLoan loan;
+} XrXirCallClassAccess;
+XR_FUNC XrXirValueStatus xr_xir_call_class_access_prepare(const XrXirCallView *view,
+    const XrXirValue *value,XrXirCallClassAccess *output);
+XR_FUNC void xr_xir_call_class_access_commit(const XrXirCallView *view,XrXirCallClassAccess *access);
+XR_FUNC void xr_xir_call_class_access_finish(XrXirCallClassAccess *access);
 /* Module access still requires the instance's root execution admission. */
 XR_FUNC XrXirValueStatus xr_xir_call_cell_read(const XrXirCallView *view,
     const XrXirValue *cell, XrXirValue *output);

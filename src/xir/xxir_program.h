@@ -119,6 +119,12 @@ XR_FUNC XrXirCallStatus xr_xir_instance_scalar_text(XrXirCallView *view, const X
     XrXirValue *output);
 XR_FUNC XrXirCallStatus xr_xir_instance_cell(XrXirCallView *view, XrXirType type,
     const XrXirValue *initial, XrXirValue *output);
+/* Genuine access instructions keep Class publication and authorization in
+ * one scoped loan transaction. The output is empty on every failed access. */
+XR_FUNC XrXirCallStatus xr_xir_instance_cell_read_at(XrXirCallView *view,uint32_t instruction,
+    const XrXirValue *cell,XrXirValue *output,XrXirFaultDetail *fault);
+XR_FUNC XrXirCallStatus xr_xir_instance_cell_write_at(XrXirCallView *view,uint32_t instruction,
+    const XrXirValue *cell,const XrXirValue *value,XrXirFaultDetail *fault);
 XR_FUNC XrXirCallStatus xr_xir_instance_cell_read(XrXirCallView *view, const XrXirValue *cell, XrXirValue *output);
 XR_FUNC XrXirCallStatus xr_xir_instance_cell_write(XrXirCallView *view, const XrXirValue *cell, const XrXirValue *value);
 XR_FUNC XrXirCallStatus xr_xir_instance_slot_read(XrXirCallView *view, uint32_t slot, XrXirValue *output);

@@ -44,17 +44,17 @@ static XrXirRunStatus vm_path_step(ScalarRun *run, VmState *state,
     XrXirCallStatus status = vm_path_receiver(run, state, op, &receiver, &path);
     if (status == XR_XIR_CALL_READY) {
         if (op->op == XR_XIR_CELL_PROJECT)
-            status = xr_xir_instance_cell_project(run->view, op->type, &receiver, &path, &output);
+            status = xr_xir_instance_cell_project_at(run->view, (uint32_t)(op-run->function->instructions), op->type, &receiver, &path, &output);
         else if (op->op == XR_XIR_PLACE_READ || op->op == XR_XIR_ARRAY_GET)
-            status = xr_xir_instance_path_read(run->view, &receiver, &path, &output, &fault);
+            status = xr_xir_instance_path_read_at(run->view, (uint32_t)(op-run->function->instructions), &receiver, &path, &output, &fault);
         else if (op->op == XR_XIR_ARRAY_LEN)
-            status = xr_xir_instance_path_length(run->view, &receiver, &path, &output, &fault);
+            status = xr_xir_instance_path_length_at(run->view, (uint32_t)(op-run->function->instructions), &receiver, &path, &output, &fault);
         else {
             uint32_t id = op->op == XR_XIR_ARRAY_SET ? run->function->operands[op->args[0] + 2] : op->args[1];
             XrXirValue value = vm_value_operand(run, id);
             status = op->op == XR_XIR_ARRAY_PUSH ?
-                xr_xir_instance_path_push(run->view, &receiver, &path, &value, &fault) :
-                xr_xir_instance_path_write(run->view, &receiver, &path, &value, &fault);
+                xr_xir_instance_path_push_at(run->view, (uint32_t)(op-run->function->instructions), &receiver, &path, &value, &fault) :
+                xr_xir_instance_path_write_at(run->view, (uint32_t)(op-run->function->instructions), &receiver, &path, &value, &fault);
         }
     }
     if (status != XR_XIR_CALL_READY) {

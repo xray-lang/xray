@@ -30,6 +30,7 @@ struct DirectRuntimeWitness {
     XrXirType cell,task,callback;
     XrXirValue module_cell;
     XrXirDomain *domain;
+    XrXirDomainStats domain_baseline;
     DirectRuntimeEnvironment environments[16];
 };
 typedef struct DirectRuntimeFrame { unsigned phase;XrXirValue cell,function,extra,task,arguments[2]; } DirectRuntimeFrame;
@@ -146,9 +147,18 @@ static XrXirAction direct_runtime_resume(XrXirCallView *view) {
         if (!w->domain) {
             w->domain=xr_xir_call_admission(view)->domain;
             if (!xr_xir_domain_retain(w->domain)) { w->domain=NULL;return direct_runtime_fault(XR_XIR_CALL_LIMIT); }
+            /* Metadata uses its separate ledger. Before this initializer's first
+             * value, the public value stats expose this Domain's own bootstrap. */
+            w->domain_baseline=xr_xir_domain_stats(w->domain);
+            CHECK(w->domain_baseline.live_bytes && w->domain_baseline.allocations==1 && !w->domain_baseline.frees);
         }
         const XrXirValue initial={XR_XIR_I64,0,40};
         status=xr_xir_instance_cell(view,w->cell,&initial,&frame->cell);
+        if (status==XR_XIR_CALL_READY) {
+            const XrXirDomainStats occupied=xr_xir_domain_stats(w->domain);
+            CHECK(occupied.live_bytes>w->domain_baseline.live_bytes &&
+                occupied.allocations>occupied.frees+1);
+        }
         if (status==XR_XIR_CALL_READY) status=xr_xir_instance_slot_write(view,0,&frame->cell,true);
         if (status==XR_XIR_CALL_READY && xr_xir_value_copy(&frame->cell,&w->module_cell)!=XR_XIR_VALUE_OK)
             status=XR_XIR_CALL_LIMIT;
@@ -211,48 +221,56 @@ static XrXirStatus direct_runtime_seal(DirectRuntimeWitness *w,XrXirProgram **ou
     if (status==XR_XIR_OK) status=xr_xir_compile_artifact_verify(lowered,NULL);
     if (status==XR_XIR_OK) {
         const XrXirModule *module=xr_xir_compile_artifact_module(lowered);
-        CHECK(module->function_count<=16 && module->provenance && module->provenance->origins);
-        XrXirCallEntry entries[16]={0};
-        for (uint32_t f=0;f<module->function_count;++f) {
-            uint32_t source=module->provenance->origins[f].function;CHECK(source<5);
+        const XrXirModule *closed_module=xr_xir_compile_artifact_module(closed);
+        CHECK(module->function_count<=16 && (!module->provenance || module->provenance->origins));
+        XrXirCallEntry entries[16]={0};uint32_t sources[16]={0};
+        for (uint32_t f=0;status==XR_XIR_OK && f<module->function_count;++f) {
+            uint32_t source=f;
+            if (module->provenance) source=module->provenance->origins[f].function;
+            else status=producer_runtime_closed_identity(&owner.context,closed_module,module,f,5);
+            if (status!=XR_XIR_OK) break;
+            CHECK(source<5);sources[f]=source;
             w->environments[f]=(DirectRuntimeEnvironment){w,source};
             entries[f]=(XrXirCallEntry){XR_XIR_CALL_ABI_VERSION,module->functions[f].parameters,
                 module->functions[f].parameter_count,module->functions[f].result,sizeof(DirectRuntimeFrame),
                 direct_runtime_resume,direct_runtime_release,&w->environments[f],0,0};
         }
-        w->entries[0]=module->declarations->modules[0].initializer;
-        w->entries[1]=module->declarations->entry_function;
-        CHECK(w->entries[1]<module->function_count);
-        const XrXirFunction *run=&module->functions[w->entries[1]];unsigned go=0,sites=0,calls=0;
-        for (uint32_t i=0;i<run->instruction_count;++i) {
-            const XrXirInstruction *op=&run->instructions[i];
-            if (op->op!=XR_XIR_GO) continue;
-            CHECK(op->immediate>=0 && (uint64_t)op->immediate<module->function_count);
-            ++go;w->entries[2]=(uint32_t)op->immediate;w->task=op->type;
-        }
-        CHECK(go==1);const XrXirFunction *worker=&module->functions[w->entries[2]];
-        for (uint32_t i=0;i<worker->instruction_count;++i) {
-            const XrXirInstruction *op=&worker->instructions[i];
-            if (op->op==XR_XIR_FUNCTION_REF) {
+        if (status==XR_XIR_OK) {
+            w->entries[0]=module->declarations->modules[0].initializer;
+            w->entries[1]=module->declarations->entry_function;
+            CHECK(w->entries[1]<module->function_count);
+            const XrXirFunction *run=&module->functions[w->entries[1]];unsigned go=0,sites=0,calls=0;
+            for (uint32_t i=0;i<run->instruction_count;++i) {
+                const XrXirInstruction *op=&run->instructions[i];
+                if (op->op!=XR_XIR_GO) continue;
                 CHECK(op->immediate>=0 && (uint64_t)op->immediate<module->function_count);
-                ++sites;w->producer_instruction=i;w->entries[3]=(uint32_t)op->immediate;w->callback=op->type;
+                ++go;w->entries[2]=(uint32_t)op->immediate;w->task=op->type;
             }
-            if (op->op==XR_XIR_CALL) {
-                CHECK(op->immediate>=0 && (uint64_t)op->immediate<module->function_count);
-                ++calls;w->call_instruction=i;w->entries[4]=(uint32_t)op->immediate;
+            CHECK(go==1);const XrXirFunction *worker=&module->functions[w->entries[2]];
+            for (uint32_t i=0;i<worker->instruction_count;++i) {
+                const XrXirInstruction *op=&worker->instructions[i];
+                if (op->op==XR_XIR_FUNCTION_REF) {
+                    CHECK(op->immediate>=0 && (uint64_t)op->immediate<module->function_count);
+                    ++sites;w->producer_instruction=i;w->entries[3]=(uint32_t)op->immediate;w->callback=op->type;
+                }
+                if (op->op==XR_XIR_CALL) {
+                    CHECK(op->immediate>=0 && (uint64_t)op->immediate<module->function_count);
+                    ++calls;w->call_instruction=i;w->entries[4]=(uint32_t)op->immediate;
+                }
             }
+            CHECK(sites==1 && calls==1);const XrXirFunction *apply=&module->functions[w->entries[4]];
+            unsigned indirect=0;
+            for (uint32_t i=0;i<apply->instruction_count;++i)
+                if (apply->instructions[i].op==XR_XIR_CALL_INDIRECT) { ++indirect;w->indirect_instruction=i; }
+            CHECK(indirect==1);
+            CHECK(module->functions[w->entries[3]].parameter_count==1);
+            w->cell=module->functions[w->entries[3]].parameters[0];
+            for (uint32_t p=0;p<5;++p)
+                CHECK(w->entries[p]<module->function_count && sources[w->entries[p]]==p);
+            XrXirProgramSpec spec={XR_XIR_PROGRAM_ABI_VERSION,target,entries,module->function_count,
+                module->declarations,{w,direct_runtime_code_drop},module->types,xr_xir_compile_program_proof(lowered)};
+            status=xr_xir_compile_program_seal(&owner.context,&spec,output);
         }
-        CHECK(sites==1 && calls==1);const XrXirFunction *apply=&module->functions[w->entries[4]];
-        unsigned indirect=0;
-        for (uint32_t i=0;i<apply->instruction_count;++i)
-            if (apply->instructions[i].op==XR_XIR_CALL_INDIRECT) { ++indirect;w->indirect_instruction=i; }
-        CHECK(indirect==1);
-        CHECK(module->functions[w->entries[3]].parameter_count==1);
-        w->cell=module->functions[w->entries[3]].parameters[0];
-        for (uint32_t p=0;p<5;++p) CHECK(module->provenance->origins[w->entries[p]].function==p);
-        XrXirProgramSpec spec={XR_XIR_PROGRAM_ABI_VERSION,target,entries,module->function_count,
-            module->declarations,{w,direct_runtime_code_drop},module->types,xr_xir_compile_program_proof(lowered)};
-        status=xr_xir_compile_program_seal(&owner.context,&spec,output);
     }
     xr_xir_compile_artifact_free(lowered);xr_xir_compile_artifact_free(closed);xr_xir_compile_artifact_free(checked);
     memset(&fixture,0,sizeof(fixture));native_fixture_owner_free(&owner);return status;
@@ -292,7 +310,11 @@ static bool invocation_direct_owner_run(unsigned mode,const XrXirInstanceConfig 
     xr_xir_value_drop(&result);xr_xir_value_drop(&witness.module_cell);
     if (witness.domain) {
         if (cost) *cost=xr_xir_domain_budget_stats(witness.domain);
-        CHECK(!xr_xir_domain_stats(witness.domain).live_bytes);
+        const XrXirDomainStats retired=xr_xir_domain_stats(witness.domain);
+        const XrXirDomainBudgetStats budget=xr_xir_domain_budget_stats(witness.domain);
+        CHECK(retired.live_bytes==witness.domain_baseline.live_bytes && retired.allocations==retired.frees+1);
+        CHECK(!budget.metadata_live && !budget.call_live &&
+            budget.metadata_allocations==budget.metadata_frees && budget.call_allocations==budget.call_frees);
         xr_xir_domain_drop(witness.domain);
     }
     CHECK(witness.releases==1);return complete;

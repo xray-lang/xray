@@ -11,6 +11,7 @@
  *   Host callbacks exercise the runtime contract without a compiler oracle.
  */
 #include "xir/xxir_program.h"
+#include "xir/xxir_program_internal.h"
 #include "xir/xxir_atomic.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -22,12 +23,16 @@
 
 typedef struct Witness { uint32_t mode, releases, begins[3]; } Witness;
 typedef struct Environment { Witness *witness; uint32_t module; } Environment;
-typedef struct Frame { uint32_t phase; XrXirValue value; int64_t sum; } Frame;
+typedef struct Frame { uint32_t phase; XrXirValue value, cell; int64_t sum; } Frame;
 typedef struct Trace { uint32_t events[64], count; XrXirInstance *instance; } Trace;
 static XrXirAction action(XrXirActionKind kind, XrXirValue value) {
     return (XrXirAction) {kind, 0, NULL, 0, value, {0}, 0};
 }
 static XrXirAction done(void) { return action(XR_XIR_ACTION_RETURN, (XrXirValue) {0}); }
+static XrXirAction initialization_fault_child(XrXirCallView *view) {
+    (void)view;
+    return done();
+}
 static XrXirAction fault(XrXirCallStatus status) {
     CHECK(status != XR_XIR_CALL_READY);
     return action(XR_XIR_ACTION_FAULT, (XrXirValue) {0});
@@ -36,6 +41,7 @@ static void cleanup(XrXirCallView *view, XrXirCallStatus reason) {
     (void) reason;
     Frame *frame = view->state;
     xr_xir_value_drop(&frame->value);
+    xr_xir_value_drop(&frame->cell);
 }
 static XrXirAction initializer(XrXirCallView *view) {
     const Environment *env = view->environment;
@@ -46,20 +52,39 @@ static XrXirAction initializer(XrXirCallView *view) {
         CHECK(xr_xir_instance_start(view->instance, 3, NULL, 0) == XR_XIR_CALL_BUSY);
         CHECK(xr_xir_instance_free(view->instance) == XR_XIR_CALL_BUSY);
         if (env->witness->mode == 3 && module == 2) return done();
+        if (env->witness->mode == 5 && module == 2) {
+            frame->phase = 1;
+            return (XrXirAction){XR_XIR_ACTION_CALL, 10, NULL, 0, {0}, {0}, 0};
+        }
         XrXirCallStatus status=XR_XIR_CALL_READY;
         if(module){
             XrXirValue initial={XR_XIR_I64,0,module==2?10:20};
             XrXirValueStatus created=xr_xir_atomic_new((XrXirType)257,&initial,xr_xir_call_admission(view),&frame->value);
             if(created!=XR_XIR_VALUE_OK)status=created==XR_XIR_VALUE_OOM?XR_XIR_CALL_OOM:
                 created==XR_XIR_VALUE_LIMIT?XR_XIR_CALL_LIMIT:XR_XIR_CALL_BAD_ARGUMENT;
-        }else status=xr_xir_instance_literal(view,0,&frame->value);
+        }else {
+            status=xr_xir_instance_literal(view,0,&frame->value);
+            if (status==XR_XIR_CALL_READY)
+                status=xr_xir_instance_cell(view,(XrXirType)258,&frame->value,&frame->cell);
+        }
         if (status != XR_XIR_CALL_READY) return fault(status);
-        CHECK(xr_xir_instance_slot_write(view, slot, &frame->value, true) == XR_XIR_CALL_READY);
-        CHECK(xr_xir_instance_slot_write(view, slot, &frame->value, true) == XR_XIR_CALL_BAD_STATE);
-        xr_xir_value_drop(&frame->value);
+        const XrXirValue *published=module?&frame->value:&frame->cell;
+        CHECK(xr_xir_instance_slot_write(view, slot, published, true) == XR_XIR_CALL_READY);
+        CHECK(xr_xir_instance_slot_write(view, slot, published, true) == XR_XIR_CALL_BAD_STATE);
+        xr_xir_value_drop(&frame->value);xr_xir_value_drop(&frame->cell);
         frame->phase = 1;
         if (module == 2 && (env->witness->mode == 1 || env->witness->mode == 2))
             return action(XR_XIR_ACTION_SUSPEND, (XrXirValue) {0});
+    }
+    if (module == 2 && env->witness->mode == 5) {
+        XrXirAction rejected = fault(XR_XIR_CALL_BAD_STATE);
+        CHECK(frame->phase == 1 && view->phase == XR_XIR_CALL_NORMAL);
+        CHECK(view->inbox.status == XR_XIR_CALL_RETURNED && view->inbox.value.type == XR_XIR_UNIT &&
+            !view->inbox.value.reserved && !view->inbox.value.payload && !view->inbox.wake);
+        CHECK(!xr_xir_instance_initialization_publication_missing(view, &rejected));
+        XrXirCallView copied = *view; copied.instance = (void *)(uintptr_t)1;
+        CHECK(!xr_xir_instance_initialization_publication_missing(&copied, &rejected));
+        return rejected;
     }
     if (module == 2 && env->witness->mode == 2) {
         frame->value=error_fixture_code(xr_xir_call_admission(view),91);
@@ -101,11 +126,16 @@ static XrXirAction root(XrXirCallView *view) {
 }
 static XrXirAction string_result(XrXirCallView *view) {
     Frame *frame = view->state;
-    CHECK(xr_xir_instance_slot_read(view, 2, &frame->value) == XR_XIR_CALL_READY);
+    CHECK(xr_xir_instance_slot_read(view, 2, &frame->cell) == XR_XIR_CALL_READY);
+    CHECK(xr_xir_instance_cell_read(view, &frame->cell, &frame->value) == XR_XIR_CALL_READY);
+    CHECK(frame->value.type==XR_XIR_STRING);
     return action(XR_XIR_ACTION_RETURN, frame->value);
 }
 static XrXirAction echo(XrXirCallView *view) {
-    CHECK(xr_xir_instance_slot_write(view, 2, &view->arguments[0], false) == XR_XIR_CALL_READY);
+    Frame *frame=view->state;
+    CHECK(xr_xir_instance_slot_read(view, 2, &frame->cell) == XR_XIR_CALL_READY);
+    CHECK(xr_xir_instance_slot_write(view, 2, &frame->cell, false) == XR_XIR_CALL_BAD_STATE);
+    CHECK(xr_xir_instance_cell_write(view, &frame->cell, &view->arguments[0]) == XR_XIR_CALL_READY);
     return action(XR_XIR_ACTION_RETURN, view->arguments[0]);
 }
 static XrXirAction suspended_string(XrXirCallView *view) {
@@ -132,15 +162,15 @@ typedef struct Fixture {
     Environment env[3];
     uint32_t dependencies[2];
     XrXirSourceModule modules[3];
-    XrXirFunctionIdentity identities[10];
+    XrXirFunctionIdentity identities[11];
     XrXirSlot slots[3];
     XrXirLiteral literals[2];
-    XrXirCallEntry entries[10];
+    XrXirCallEntry entries[11];
     XrXirDeclarations declarations;
     XrXirProgramSpec spec;
     XrXirArtifact *proof;
     ErrorFixture error;
-    XrXirTypeNode types_nodes[2];
+    XrXirTypeNode types_nodes[3];
     XrXirTypes types;
     NativeFixtureOwner compiler;
 } Fixture;
@@ -168,18 +198,25 @@ static void fixture_spec(Fixture *f, uint32_t mode) {
     f->entries[7].parameters = &string_parameter; f->entries[7].parameter_count = 1;
     f->entries[8].resume = suspended_string; f->entries[8].result = XR_XIR_STRING;
     f->entries[9].resume = instance_atomic_result; f->entries[9].result = (XrXirType)257;
+    if (mode == 5) {
+        f->identities[10] = (XrXirFunctionIdentity){2, 0, 0, 0, 0, 0, XR_XIR_NON_MEMBER, 0, 0};
+        f->entries[10] = (XrXirCallEntry){XR_XIR_CALL_ABI_VERSION, NULL, 0, XR_XIR_UNIT,
+            0, initialization_fault_child, NULL, NULL, 0, 0};
+    }
     f->slots[0] = (XrXirSlot) {2, (XrXirType)257, 0};
     f->slots[1] = (XrXirSlot) {1, (XrXirType)257, 0};
-    f->slots[2] = (XrXirSlot) {0, XR_XIR_STRING, 1};
+    f->slots[2] = (XrXirSlot) {0, (XrXirType)258, 1};
     f->literals[0] = (XrXirLiteral) {"A\0\xe4\xb8\xad", 5};
     f->literals[1] = (XrXirLiteral) {"independent", 11};
     f->declarations = (XrXirDeclarations) {f->modules, 3, f->identities, f->slots, 3, f->literals, 2, 0, 3, NULL};
     f->spec = (XrXirProgramSpec) {XR_XIR_PROGRAM_ABI_VERSION,
-        {XR_XIR_ARCH_X86_64, XR_XIR_VALUE_ABI_VERSION}, f->entries, 10, &f->declarations, {&f->witness, release}, NULL, {0}};
+        {XR_XIR_ARCH_X86_64, XR_XIR_VALUE_ABI_VERSION}, f->entries, mode == 5 ? 11u : 10u,
+        &f->declarations, {&f->witness, release}, NULL, {0}};
     error_fixture_init(&f->error,false);
     f->types_nodes[0]=f->error.node;
     f->types_nodes[1]=(XrXirTypeNode){.kind=XR_XIR_TYPE_ATOMIC,.element=XR_XIR_I64};
-    f->types=(XrXirTypes){f->types_nodes,2,&f->error.table,NULL};f->spec.types=&f->types;
+    f->types_nodes[2]=(XrXirTypeNode){.kind=XR_XIR_TYPE_CELL,.element=XR_XIR_STRING};
+    f->types=(XrXirTypes){f->types_nodes,3,&f->error.table,NULL};f->spec.types=&f->types;
 }
 static void fixture(Fixture *f, uint32_t mode) {
     fixture_spec(f, mode);
@@ -324,14 +361,41 @@ static void failed_initialization(void) {
             CHECK(repeated.status == expected && !memcmp(&repeated.panic.detail, &copy.panic.detail, sizeof(copy.panic.detail)));
         }
         CHECK(f.witness.begins[2] == 1 && !f.witness.begins[0] && !f.witness.begins[1]);
+        CHECK(xr_xir_instance_state(instance) ==
+            (mode == 1 ? XR_XIR_INSTANCE_DRAINING : XR_XIR_INSTANCE_FAILED));
         CHECK(xr_xir_instance_free(instance) == XR_XIR_CALL_READY);
         xr_xir_compile_program_drop(program); CHECK(f.witness.releases == 1);
         if (mode == 4) CHECK(escaped.panic.detail.code == 430 && escaped.panic.detail.index == INT64_MIN && escaped.panic.detail.length == 3);
         xr_xir_domain_drop(reader);
     }
 }
+static void initialization_protocol_fault(void) {
+    Fixture f; fixture(&f, 5);
+    XrXirProgram *program = NULL;
+    CHECK(xr_xir_compile_program_seal(xr_xir_compile_artifact_context(f.proof), &f.spec, &program) == XR_XIR_OK);
+    xr_xir_compile_artifact_free(f.proof); f.proof = NULL;
+    native_fixture_owner_free(&f.compiler);
+    Trace log = {0}; XrXirInstance *instance = new_instance(program, &log);
+    CHECK(xr_xir_instance_start(instance, 3, NULL, 0) == XR_XIR_CALL_READY);
+    XrXirInstanceResult rejected = xr_xir_instance_poll_bounded(instance, UINT64_MAX);
+    CHECK(rejected.outcome.status == XR_XIR_CALL_BAD_STATE && rejected.epoch == 1 && log.count == 1);
+    for (uint32_t repeat = 0; repeat < 3; ++repeat) {
+        CHECK(xr_xir_instance_start(instance, 3, NULL, 0) == XR_XIR_CALL_BAD_STATE);
+        XrXirCallResult copy = {0};
+        CHECK(xr_xir_instance_copy_failure(instance, &copy) == XR_XIR_CALL_BAD_STATE);
+        CHECK(copy.status == XR_XIR_CALL_BAD_STATE && !copy.value.type && !copy.value.reserved &&
+            !copy.value.payload && !copy.wake && xr_xir_panic_empty(&copy.panic));
+        xr_xir_call_result_drop(&copy);
+        CHECK(xr_xir_instance_poll_bounded(instance, UINT64_MAX).outcome.status == XR_XIR_CALL_BAD_STATE);
+    }
+    CHECK(f.witness.begins[2] == 1 && !f.witness.begins[0] && !f.witness.begins[1]);
+    CHECK(xr_xir_instance_state(instance) == XR_XIR_INSTANCE_FAILED);
+    CHECK(xr_xir_instance_free(instance) == XR_XIR_CALL_BAD_STATE);
+    xr_xir_compile_program_drop(program); CHECK(f.witness.releases == 1);
+    instance_compile_zero();
+}
 static void seal_rejection(void) {
-    for (uint32_t invalid = 0; invalid < 27; ++invalid) {
+    for (uint32_t invalid = 0; invalid < 28; ++invalid) {
         Fixture f; fixture(&f, 0);
         uint32_t cycle = 0;
         uint8_t identity[32];
@@ -384,6 +448,8 @@ static void seal_rejection(void) {
             f.spec.abi_version = 21;
             f.spec.declarations = (const XrXirDeclarations *) (uintptr_t) 1;
             break;
+        case 27:
+            f.slots[0].type = (XrXirType)258; f.slots[0].mutable = 1; break;
         case 26:
             f.spec.abi_version = 22;
             f.spec.declarations = (const XrXirDeclarations *) (uintptr_t) 1;
@@ -395,14 +461,21 @@ static void seal_rejection(void) {
         const XrXirCompileContext *context = xr_xir_compile_artifact_context(f.proof);
         void *reservation = invalid == 9 ? native_fixture_one_byte_remaining(context) : NULL;
         XrXirStatus status = xr_xir_compile_program_seal(context, &f.spec, &program);
+        XrXirStatus expected_rejection = invalid == 23 ? XR_XIR_BAD_TYPE : XR_XIR_BAD_STRUCTURE;
+        if (invalid == 23)
+            fprintf(stderr, "INSTANCE_SEAL_TYPE_REJECTION invalid=%u status=%u expected=%u "
+                "slot0_type=%u slot0_mutable=%u program=%u releases=%u\n",
+                (unsigned) invalid, (unsigned) status, (unsigned) expected_rejection,
+                (unsigned) f.slots[0].type, (unsigned) f.slots[0].mutable,
+                (unsigned) (program != NULL), (unsigned) f.witness.releases);
         xr_compile_resources_free(reservation);
         if (invalid == 9) CHECK(status == XR_XIR_BUDGET);
         xr_xir_compile_artifact_free(f.proof); f.proof = NULL;
         native_fixture_owner_free(&f.compiler);
         CHECK(status != XR_XIR_OK);
         if (invalid >= 15 && invalid <= 18) CHECK(status == XR_XIR_BAD_LAYOUT);
-        if (invalid >= 19 && invalid < 25) CHECK(status == XR_XIR_BAD_STRUCTURE);
-        if (invalid >= 25) CHECK(status == XR_XIR_BAD_LAYOUT);
+        if ((invalid >= 19 && invalid < 25) || invalid == 27) CHECK(status == expected_rejection);
+        if (invalid == 25 || invalid == 26) CHECK(status == XR_XIR_BAD_LAYOUT);
         CHECK(!program && !f.witness.releases);
     }
 }
@@ -536,7 +609,7 @@ int main(void) {
         for (unsigned mode=0;mode<8;++mode) CHECK(invocation_function_cell_owner_run(mode,scalar!=0,NULL,NULL));
         invocation_function_cell_owner_axes(scalar!=0);
     }
-    isolation(); borrowed_restart(); failed_initialization(); seal_rejection();
+    isolation(); borrowed_restart(); failed_initialization(); initialization_protocol_fault(); seal_rejection();
     instance_compile_report(); native_fixture_owner_report();
     puts("Program leases, deterministic initialization, isolated cells, sticky failure and result lifetime passed");
     return 0;

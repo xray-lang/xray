@@ -377,48 +377,43 @@ XR_FUNC XrXirStatus xr_xir_compile_emit_leaf_c(const XrXirArtifact *artifact, co
     return XR_XIR_OK;
 }
 
+static void emit_value(CBuffer *buffer, const XrXirFunction *function,
+    const XrXirFunctionLayout *layout, uint32_t id);
+
 static void emit_instance_step(CBuffer *buffer, const XrXirModule *module,
                                const XrXirFunction *function, const XrXirInstruction *op,
                                const XrXirFunctionLayout *layout, uint32_t destination) {
-    EMIT_STATIC(buffer, es_925aeddb103458bb, " { XrXirCallStatus status = XR_XIR_CALL_READY;\n");
+    append(buffer, " { XrXirCallStatus status = XR_XIR_CALL_READY; XrXirFaultDetail fault={0};\n");
     if (op->op != XR_XIR_CELL_WRITE && op->op != XR_XIR_SLOT_GROUP_INIT) EMIT_STATIC(buffer, es_2543e90d643759e3, " XrXirValue value = {0};\n");
     switch (op->op) {
     case XR_XIR_CELL_LOCAL_WRITE: {
-        uint32_t offset = layout->offsets[op->args[0]];
-        XrXirType type = xr_xir_operand_type(function, op->args[0]);
-        if (xr_xir_cell_payload_operands(module->types, type, op->op) == 1) {
-            append(buffer, " XrXirValue cell = {%uu, 0, xr_xir_scalar_load(state->frame, %uu)};\n"
-                " XrXirValue incoming = {0};\n"
-                " if (cell.payload) status = xr_xir_instance_cell_write(view, &cell, &incoming);\n"
-                " else { status = xr_xir_instance_cell(view, (XrXirType)%u, &incoming, &value);\n"
-                " if (status == XR_XIR_CALL_READY) xr_xir_owned_slot_move(state->frame, %uu, &value); }\n",
-                (uint32_t)type, offset, (uint32_t)type, offset);
-            break;
-        }
-        EMIT_FORMAT(buffer, et_a5693d883144b6ba, " XrXirValue cell = {%uu, 0, xr_xir_scalar_load(state->frame, %uu)};\n"
-            " XrXirValue incoming = {%uu, 0, xr_xir_scalar_load(state->frame, %uu)};\n"
-            " if (cell.payload) status = xr_xir_instance_cell_write(view, &cell, &incoming);\n"
-            " else { status = xr_xir_instance_cell(view, (XrXirType)%u, &incoming, &value);\n"
-            " if (status == XR_XIR_CALL_READY) xr_xir_owned_slot_move(state->frame, %uu, &value); }\n",
-            (uint32_t)type, offset, (uint32_t)xr_xir_operand_type(function, op->args[1]),
-            layout->offsets[op->args[1]], (uint32_t)type, offset);
-        break;
+        uint32_t offset=layout->offsets[op->args[0]];
+        XrXirType type=xr_xir_operand_type(function,op->args[0]);
+        append(buffer," XrXirValue cell = {%uu,0,xr_xir_scalar_load(state->frame,%uu)};\n"
+            " XrXirValue incoming = ",(uint32_t)type,offset);
+        if (xr_xir_cell_payload_operands(module->types,type,op->op)==2)
+            emit_value(buffer,function,layout,op->args[1]);
+        else append(buffer,"{0}");
+        append(buffer,";\n if (cell.payload) status = xr_xir_instance_cell_write_at(view,%uu,&cell,&incoming,&fault);\n"
+            " else { status = xr_xir_instance_cell(view,(XrXirType)%u,&incoming,&value);\n"
+            " if (status == XR_XIR_CALL_READY) xr_xir_owned_slot_move(state->frame,%uu,&value); }\n",
+            (uint32_t)(op-function->instructions),(uint32_t)type,offset);break;
     }
     case XR_XIR_CELL_NEW: case XR_XIR_CELL_READ: case XR_XIR_CELL_WRITE: {
-        XrXirType cell = op->op == XR_XIR_CELL_NEW ? op->type : xr_xir_operand_type(function, op->args[0]);
-        uint32_t count = xr_xir_cell_payload_operands(module->types, cell, op->op);
-        if (!count) append(buffer, " XrXirValue left = {0};\n");
-        else EMIT_FORMAT(buffer, et_8e665894555b9825, " XrXirValue left = {%uu, 0, xr_xir_scalar_load(state->frame, %uu)};\n",
-                (uint32_t) xr_xir_operand_type(function, op->args[0]), layout->offsets[op->args[0]]);
-        if (op->op == XR_XIR_CELL_WRITE) {
-            if (count == 1) append(buffer, " XrXirValue right = {0};\n"
-                " status = xr_xir_instance_cell_write(view, &left, &right);\n");
-            else EMIT_FORMAT(buffer, et_910397964cb135d8, " XrXirValue right = {%uu, 0, xr_xir_scalar_load(state->frame, %uu)};\n"
-                " status = xr_xir_instance_cell_write(view, &left, &right);\n",
-                (uint32_t) xr_xir_operand_type(function, op->args[1]), layout->offsets[op->args[1]]);
-        } else if (op->op == XR_XIR_CELL_NEW)
-            EMIT_FORMAT(buffer, et_f2f32b8e51b6cd87, " status = xr_xir_instance_cell(view, (XrXirType) %u, &left, &value);\n", (uint32_t) op->type);
-        else EMIT_STATIC(buffer, es_3eb84c99889b3eb0, " status = xr_xir_instance_cell_read(view, &left, &value);\n");
+        XrXirType cell=op->op==XR_XIR_CELL_NEW?op->type:xr_xir_operand_type(function,op->args[0]);
+        uint32_t count=xr_xir_cell_payload_operands(module->types,cell,op->op);
+        append(buffer," XrXirValue left = ");
+        if (count) emit_value(buffer,function,layout,op->args[0]);else append(buffer,"{0}");
+        append(buffer,";\n");
+        if (op->op==XR_XIR_CELL_WRITE) {
+            append(buffer," XrXirValue right = ");
+            if (count==2) emit_value(buffer,function,layout,op->args[1]);else append(buffer,"{0}");
+            append(buffer,";\n status = xr_xir_instance_cell_write_at(view,%uu,&left,&right,&fault);\n",
+                (uint32_t)(op-function->instructions));
+        } else if (op->op==XR_XIR_CELL_NEW)
+            append(buffer," status = xr_xir_instance_cell(view,(XrXirType)%uu,&left,&value);\n",(uint32_t)op->type);
+        else append(buffer," status = xr_xir_instance_cell_read_at(view,%uu,&left,&value,&fault);\n",
+            (uint32_t)(op-function->instructions));
         break;
     }
     case XR_XIR_FUNCTION_WEAKEN:
@@ -466,8 +461,8 @@ static void emit_instance_step(CBuffer *buffer, const XrXirModule *module,
         break;
     default: emit_reject(buffer, XR_XIR_BAD_STAGE); break;
     }
-    EMIT_STATIC(buffer, es_fd6407e501c6d412, " if (status != XR_XIR_CALL_READY) return (XrXirAction) "
-        "{XR_XIR_ACTION_FAULT, 0, NULL, 0, {XR_XIR_I64, 0, status}, {0}, 0};\n");
+    EMIT_STATIC(buffer, es_bf88de7cd2177400, " if (status != XR_XIR_CALL_READY) return (XrXirAction) "
+        "{XR_XIR_ACTION_FAULT, 0, NULL, 0, {XR_XIR_I64, 0, status}, {fault,{0}}, 0};\n");
     if (xr_xir_type_is_owned(buffer->types, op->type))
         EMIT_FORMAT(buffer, et_47856f87172c63ea, " xr_xir_owned_slot_move(state->frame, %uu, &value);\n", destination);
     else if (op->type != XR_XIR_UNIT)

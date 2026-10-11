@@ -16,6 +16,7 @@
 #include "xir/xxir_instance_function_internal.h"
 #include "xir/xxir_value_internal.h"
 #include "xir/xxir_type_arena.h"
+#include "xir/xxir_types.h"
 typedef struct ProducerRuntimeEnvironment { uint32_t source; } ProducerRuntimeEnvironment;
 typedef struct ProducerRuntimeFrame { uint32_t phase;XrXirValue owned; } ProducerRuntimeFrame;
 typedef struct ProducerRuntimeWitness {
@@ -141,6 +142,25 @@ static XrXirAction producer_runtime_resume(XrXirCallView *view) {
     CHECK(actual.capture_count==1 && actual.instruction==(source==2?1u:0u));
     return (XrXirAction){XR_XIR_ACTION_RETURN,0,NULL,0,frame->owned,{0},0};
 }
+static XrXirStatus producer_runtime_closed_identity(const XrXirCompileContext *context,
+    const XrXirModule *closed,const XrXirModule *lowered,uint32_t ordinal,uint32_t count) {
+    if (!closed || closed->provenance || !closed->declarations || !lowered->declarations ||
+        !closed->declarations->functions || !lowered->declarations->functions ||
+        closed->function_count!=count || lowered->function_count!=closed->function_count ||
+        ordinal>=closed->function_count) return XR_XIR_BAD_STRUCTURE;
+    const XrXirFunction *expected=&closed->functions[ordinal],*actual=&lowered->functions[ordinal];
+    if (expected->name_length!=actual->name_length || !expected->name || !actual->name ||
+        memcmp(expected->name,actual->name,expected->name_length) ||
+        expected->parameter_count!=actual->parameter_count ||
+        memcmp(&closed->declarations->functions[ordinal],&lowered->declarations->functions[ordinal],
+            sizeof(*closed->declarations->functions))) return XR_XIR_BAD_STRUCTURE;
+    XrXirStatus status=xr_xir_compile_type_substitution_matches_between(context,closed->types,
+        lowered->types,NULL,0,expected->result,actual->result);
+    for (uint32_t p=0;status==XR_XIR_OK && p<expected->parameter_count;++p)
+        status=xr_xir_compile_type_substitution_matches_between(context,closed->types,
+            lowered->types,NULL,0,expected->parameters[p],actual->parameters[p]);
+    return status;
+}
 static XrXirStatus producer_runtime_seal(ProducerRuntimeWitness *witness,XrXirProgram **output,
     uint32_t *make,uint32_t *nested) {
     NativeFixtureOwner owner={0};ProducerRuntimeFixture fixture;producer_runtime_fixture(&fixture);
@@ -155,10 +175,15 @@ static XrXirStatus producer_runtime_seal(ProducerRuntimeWitness *witness,XrXirPr
     if (status==XR_XIR_OK) status=xr_xir_compile_artifact_verify(lowered,NULL);
     if (status==XR_XIR_OK) {
         const XrXirModule *module=xr_xir_compile_artifact_module(lowered);
-        CHECK(module->function_count<=16 && module->provenance && module->provenance->origins);
+        const XrXirModule *closed_module=xr_xir_compile_artifact_module(closed);
+        CHECK(module->function_count<=16 && (!module->provenance || module->provenance->origins));
         XrXirCallEntry entries[16]={0};*make=UINT32_MAX;*nested=UINT32_MAX;
-        for (uint32_t f=0;f<module->function_count;++f) {
-            uint32_t source=module->provenance->origins[f].function;CHECK(source<6);
+        for (uint32_t f=0;status==XR_XIR_OK && f<module->function_count;++f) {
+            uint32_t source=f;
+            if (module->provenance) source=module->provenance->origins[f].function;
+            else status=producer_runtime_closed_identity(&owner.context,closed_module,module,f,6);
+            if (status!=XR_XIR_OK) break;
+            CHECK(source<6);
             witness->environments[f].source=source;
             if (source==2) *make=f;
             if (source==5) *nested=f;
@@ -166,11 +191,13 @@ static XrXirStatus producer_runtime_seal(ProducerRuntimeWitness *witness,XrXirPr
                 module->functions[f].parameter_count,module->functions[f].result,sizeof(ProducerRuntimeFrame),
                 producer_runtime_resume,producer_runtime_frame_release,&witness->environments[f],0,0};
         }
-        CHECK(*make!=UINT32_MAX && *nested!=UINT32_MAX);
-        XrXirProgramSpec spec={XR_XIR_PROGRAM_ABI_VERSION,target,entries,module->function_count,
-            module->declarations,{witness,producer_runtime_code_release},module->types,
-            xr_xir_compile_program_proof(lowered)};
-        status=xr_xir_compile_program_seal(&owner.context,&spec,output);
+        if (status==XR_XIR_OK) {
+            CHECK(*make!=UINT32_MAX && *nested!=UINT32_MAX);
+            XrXirProgramSpec spec={XR_XIR_PROGRAM_ABI_VERSION,target,entries,module->function_count,
+                module->declarations,{witness,producer_runtime_code_release},module->types,
+                xr_xir_compile_program_proof(lowered)};
+            status=xr_xir_compile_program_seal(&owner.context,&spec,output);
+        }
     }
     xr_xir_compile_artifact_free(lowered);xr_xir_compile_artifact_free(closed);
     xr_xir_compile_artifact_free(checked);memset(&fixture,0,sizeof(fixture));native_fixture_owner_free(&owner);

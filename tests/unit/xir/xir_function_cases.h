@@ -13,7 +13,7 @@
 #define XIR_FUNCTION_CASES_H
 #include "xir/xxir_program.h"
 #include <string.h>
-typedef struct FunctionCaseFrame { uint32_t phase; XrXirValue owned; } FunctionCaseFrame;
+typedef struct FunctionCaseFrame { uint32_t phase; XrXirValue owned, cell; } FunctionCaseFrame;
 static XrXirAction function_case_fault(XrXirCallStatus status) {
     return (XrXirAction) {XR_XIR_ACTION_FAULT, 0, NULL, 0, {XR_XIR_I64, 0, status}, {0}, 0};
 }
@@ -23,11 +23,14 @@ static XrXirAction function_case_resume(XrXirCallView *view) {
     XrXirCallStatus status = XR_XIR_CALL_READY;
     if (entry == 0) {
         status = xr_xir_instance_literal(view, 0, &frame->owned);
-        if (status == XR_XIR_CALL_READY) status = xr_xir_instance_slot_write(view, 0, &frame->owned, true);
+        if (status == XR_XIR_CALL_READY)
+            status = xr_xir_instance_cell(view, (XrXirType)257, &frame->owned, &frame->cell);
+        if (status == XR_XIR_CALL_READY) status = xr_xir_instance_slot_write(view, 0, &frame->cell, true);
     } else if (entry == 1) return (XrXirAction) {XR_XIR_ACTION_RETURN, 0, NULL, 0, {XR_XIR_I64, 0, 17}, {0}, 0};
     else if (entry == 2) {
         XrXirValue capture = {0};
-        status = xr_xir_instance_slot_read(view, 0, &capture);
+        status = xr_xir_instance_slot_read(view, 0, &frame->cell);
+        if (status == XR_XIR_CALL_READY) status = xr_xir_instance_cell_read(view, &frame->cell, &capture);
         if (status == XR_XIR_CALL_READY)
             status = xr_xir_instance_function(view, (XrXirType) 256, 3, &capture, 1, &frame->owned);
         xr_xir_value_drop(&capture);
@@ -47,18 +50,21 @@ static XrXirAction function_case_resume(XrXirCallView *view) {
     return (XrXirAction) {XR_XIR_ACTION_RETURN, 0, NULL, 0, entry ? frame->owned : (XrXirValue) {0}, {0}, 0};
 }
 static void function_case_cleanup(XrXirCallView *view, XrXirCallStatus reason) {
-    (void) reason; xr_xir_value_drop(&((FunctionCaseFrame *) view->state)->owned);
+    (void) reason;FunctionCaseFrame *frame=view->state;
+    xr_xir_value_drop(&frame->owned);xr_xir_value_drop(&frame->cell);
 }
 static void function_case_release(void *owner) { ++*(unsigned *) owner; }
 #include "xir_native_metadata_fixture.h"
 static XrXirStatus function_case_seal(unsigned *releases, XrXirProgram **program) {
     XrXirSourceModule module = {"root", 4, NULL, 0, 0};
     XrXirFunctionIdentity identities[] = {{0,0, 0, 0, 0, 0, XR_XIR_NON_MEMBER, 0, 0}, {0,1, 0, 0, 0, 0, XR_XIR_NON_MEMBER, 0, 0}, {0,1, 0, 0, 0, 0, XR_XIR_NON_MEMBER, 0, 0}, {0,0, 0, 0, 0, 0, XR_XIR_NON_MEMBER, 0, 0}, {0,1, 0, 0, 0, 0, XR_XIR_NON_MEMBER, 0, 0}};
-    XrXirSlot slot = {0, XR_XIR_STRING, 1};
+    XrXirSlot slot = {0, (XrXirType)257, 1};
     XrXirLiteral literal = {"owned callback result", 21};
     XrXirDeclarations declarations = {&module, 1, identities, &slot, 1, &literal, 1, 0, 1, NULL};
-    XrXirTypeNode signature = {XR_XIR_TYPE_CALLABLE, XR_XIR_UNIT, NULL, 0, XR_XIR_STRING, XR_XIR_CALLABLE_ROOT_UNRESOLVED, 0, {0}};
-    XrXirTypes types = {&signature, 1, NULL, NULL};
+    XrXirTypeNode nodes[] = {
+        {XR_XIR_TYPE_CALLABLE, XR_XIR_UNIT, NULL, 0, XR_XIR_STRING, XR_XIR_CALLABLE_ROOT_UNRESOLVED, 0, {0}},
+        {.kind=XR_XIR_TYPE_CELL,.element=XR_XIR_STRING}};
+    XrXirTypes types = {nodes, 2, NULL, NULL};
     XrXirType callback_type = (XrXirType) 256, capture_type = XR_XIR_STRING;
     XrXirCallEntry entries[5];
     for (unsigned i = 0; i < 5; ++i) entries[i] = (XrXirCallEntry) {XR_XIR_CALL_ABI_VERSION,
@@ -74,11 +80,11 @@ static XrXirStatus function_case_seal(unsigned *releases, XrXirProgram **program
     XrXirStatus prepared = native_metadata_fixture(&compiler.context, &spec, &proof);
     if (prepared != XR_XIR_OK) { native_fixture_owner_free(&compiler); return prepared; }
     spec.proof = xr_xir_compile_program_proof(proof);
-    signature.result = (XrXirType) XR_XIR_TYPE_PARAMETER_BASE; signature.parameter_span = 1;
+    nodes[0].result = (XrXirType) XR_XIR_TYPE_PARAMETER_BASE; nodes[0].parameter_span = 1;
     XrXirStatus rejected = xr_xir_compile_program_seal(xr_xir_compile_artifact_context(proof), &spec, program);
     if (rejected == XR_XIR_OUT_OF_MEMORY) { xr_xir_compile_artifact_free(proof); native_fixture_owner_free(&compiler); return rejected; }
     CHECK(rejected == XR_XIR_BAD_TYPE && !*program);
-    signature.result = XR_XIR_STRING; signature.parameter_span = 0;
+    nodes[0].result = XR_XIR_STRING; nodes[0].parameter_span = 0;
     status = xr_xir_compile_program_seal(xr_xir_compile_artifact_context(proof), &spec, program);
     xr_xir_compile_artifact_free(proof); native_fixture_owner_free(&compiler); return status;
 }

@@ -63,6 +63,14 @@ static XrXirValueStatus cell_projection_shape(const XrXirValuePath *path,
     *leaf = current;
     return XR_XIR_VALUE_OK;
 }
+static bool cell_project_class_authority(const XirClassObject *identity,
+    const XrXirCellAuthority *authority) {
+    uint32_t state = class_origin_state(identity);
+    const XrXirCellLoan *top = identity->borrow_top;
+    if ((state & XIR_CLASS_ORIGIN_PREPARED) ||
+        (((state & XIR_CLASS_ORIGIN_BORROWED) != 0) != (top != NULL))) return false;
+    return !top || (!top->scope && cell_authority_equal(&top->authority, authority));
+}
 static XrXirValueStatus cell_project_operation(XrXirType type,
     const XrXirValue *value, const XrXirValuePath *path,
     const XrXirCellAuthority *authority, XrXirValueAdmission *admission,
@@ -74,9 +82,7 @@ static XrXirValueStatus cell_project_operation(XrXirType type,
     bool object_root = identity && identity->kind == XIR_OBJECT_CLASS;
     XirObject *owner = cell ? cell_root_object(cell) : identity;
     if ((!cell && !object_root) || (cell && !cell_access(cell, authority)) ||
-        (object_root && ((class_origin_state((const XirClassObject *)identity) &
-            (XIR_CLASS_ORIGIN_PREPARED | XIR_CLASS_ORIGIN_BORROWED)) ||
-            ((const XirClassObject *)identity)->borrow_top)) ||
+        (object_root && !cell_project_class_authority((const XirClassObject *)identity, authority)) ||
         !admission_owner(admission, owner->arena, owner->domain)) return XR_XIR_VALUE_BAD_ARGUMENT;
     const XrXirTypes *types = xr_xir_compile_type_arena_types(admission->arena);
     /* A Cell containing a Class is a binding owner, never the object owner. */
