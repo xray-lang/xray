@@ -99,30 +99,30 @@ static void invocation_deferred_rejections(const XrXirCompileContext *context,
     EffectInvocationSealRequest request={owner,solution,NULL};EffectInvocationCertificate *out=NULL;
     uint64_t actual=record->arguments[basis.fn_words];
     record->arguments[basis.fn_words]|=UINT64_C(1)<<basis.parameters;
-    CHECK(effect_invocation_seal(context,&request,&out)==XR_XIR_BAD_STRUCTURE && !out &&
+    CHECK(effect_invocation_seal(context,&request,&out,NULL)==XR_XIR_BAD_STRUCTURE && !out &&
         *owner==original && *solution==staged && original->module && original->effects);
     record->arguments[basis.fn_words]=actual;
     original->deferred_count=0;
-    CHECK(effect_invocation_seal(context,&request,&out)==XR_XIR_BAD_STRUCTURE && !out &&
+    CHECK(effect_invocation_seal(context,&request,&out,NULL)==XR_XIR_BAD_STRUCTURE && !out &&
         *owner==original && *solution==staged);
     original->deferred_count=1;
     original->deferred_calls[1]=*record;original->deferred_count=2;
-    CHECK(effect_invocation_seal(context,&request,&out)==XR_XIR_BAD_STRUCTURE && !out &&
+    CHECK(effect_invocation_seal(context,&request,&out,NULL)==XR_XIR_BAD_STRUCTURE && !out &&
         *owner==original && *solution==staged);
     original->deferred_count=1;
     record->parameter=1;
-    CHECK(effect_invocation_seal(context,&request,&out)==XR_XIR_BAD_STRUCTURE && !out &&
+    CHECK(effect_invocation_seal(context,&request,&out,NULL)==XR_XIR_BAD_STRUCTURE && !out &&
         *owner==original && *solution==staged);
     record->parameter=0;
     uint32_t constant=staged->formulas[0].constant_mask;
     staged->formulas[0].constant_mask^=XR_XIR_CALLABLE_ROOT_REQUIRED;
-    CHECK(effect_invocation_seal(context,&request,&out)==XR_XIR_BAD_STRUCTURE && !out &&
+    CHECK(effect_invocation_seal(context,&request,&out,NULL)==XR_XIR_BAD_STRUCTURE && !out &&
         *owner==original && *solution==staged);
     staged->formulas[0].constant_mask=constant;
     XrXirRootTerm *term=(XrXirRootTerm *)staged->formulas[1].terms;
     CHECK(staged->formulas[1].term_count==1 && term && term->kind==XR_XIR_ROOT_TERM_CONTEXT_CALL);
     term->kind=XR_XIR_ROOT_TERM_PARAMETER;
-    CHECK(effect_invocation_seal(context,&request,&out)==XR_XIR_BAD_STRUCTURE && !out &&
+    CHECK(effect_invocation_seal(context,&request,&out,NULL)==XR_XIR_BAD_STRUCTURE && !out &&
         *owner==original && *solution==staged);
     term->kind=XR_XIR_ROOT_TERM_CONTEXT_CALL;
 }
@@ -149,7 +149,7 @@ static XrXirStatus conditional_invocation_deferred(const XrXirCompileContext *co
     if (status==XR_XIR_OK) { phase=8;status=effect_invocation_stage(owner,&solution); }
     if (status==XR_XIR_OK && oracle) invocation_deferred_rejections(context,&owner,&solution);
     EffectInvocationSealRequest request={&owner,&solution,NULL};
-    if (status==XR_XIR_OK) { phase=9;status=effect_invocation_seal(context,&request,&certificate); }
+    if (status==XR_XIR_OK) { phase=9;status=effect_invocation_seal(context,&request,&certificate,NULL); }
     if (status!=XR_XIR_OK && oracle) fprintf(stderr,
         "INVOCATION_DEFERRED mode=%u phase=%u status=%u f=%u b=%u i=%u\n",mode,phase,status,
         diagnostic.function,diagnostic.block,diagnostic.instruction);

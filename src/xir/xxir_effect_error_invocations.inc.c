@@ -179,7 +179,7 @@ static XrXirStatus error_invocation_input_match(EffectInvocationFlow *replay,
         if (!closure) return XR_XIR_BAD_STRUCTURE;
     }
     uint64_t *input=NULL;replay->instruction=edge.instruction;
-    status=effect_invocation_arguments(replay,edge.instruction,target->body,edge.producer,closure,&input);
+    status=effect_invocation_arguments(replay,op,target->body,edge.producer,closure,&input);
     uint64_t words=(uint64_t)target->parameter_count*replay->basis.row_words;
     if (status==XR_XIR_OK && words>SIZE_MAX/sizeof(*input)) status=XR_XIR_BUDGET;
     if (status==XR_XIR_OK && words && (!input || !target->input)) status=XR_XIR_BAD_STRUCTURE;

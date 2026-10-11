@@ -143,6 +143,32 @@ static XrXirStatus effect_body_advertisements_value(EffectBodyAdvertisementBuild
     if (builder->next==builder->bounds->functions[function].values) { ++builder->function;builder->open=false; }
     return XR_XIR_OK;
 }
+/* Only a declaration-identical non-generic definition can aggregate a
+ * constant scalar span. INSTANCE and original advertisement vectors always
+ * consume their complete original per-value correspondence. */
+static bool effect_body_advertisements_span_ready(const EffectBodyAdvertisementBuilder *builder,uint32_t f) {
+    if (!builder || !builder->open || f!=builder->function || f>=builder->bounds->count ||
+        builder->instructions || (builder->source->provenance &&
+        builder->source->provenance->kind==XR_XIR_EVIDENCE_INSTANCE)) return false;
+    const XrXirModule *source=builder->source;
+    return !source->generics || !source->generics[f].parameter_count;
+}
+static XrXirStatus effect_body_advertisements_span(EffectBodyAdvertisementBuilder *builder,
+    uint32_t f,uint32_t value,uint32_t count,XrXirType actual) {
+    if (!effect_body_advertisements_span_ready(builder,f) || !count || value!=builder->next ||
+        value>=builder->bounds->functions[f].values || count>builder->bounds->functions[f].values-value)
+        return XR_XIR_BAD_STRUCTURE;
+    const XrXirFunction *body=&builder->source->functions[f];
+    if (value<body->parameter_count || value-body->parameter_count>=body->instruction_count ||
+        body->instructions[value-body->parameter_count].type!=actual ||
+        (actual!=XR_XIR_UNIT && actual!=XR_XIR_BOOL && actual!=XR_XIR_I64 &&
+        actual!=XR_XIR_F64 && actual!=XR_XIR_RUNE) || xr_xir_callable_signature(builder->source->types,actual))
+        return XR_XIR_BAD_TYPE;
+    if (!xir_compile_work(builder->work,7+sizeof(builder->next))) return XR_XIR_BUDGET;
+    builder->next+=count;
+    if (builder->next==builder->bounds->functions[f].values) { ++builder->function;builder->open=false; }
+    return XR_XIR_OK;
+}
 static XrXirStatus effect_body_advertisements_finish(EffectBodyAdvertisementBuilder **input,
     EffectInvocationDeclaredBounds **output) {
     if (!input || !*input || !output || *output) return XR_XIR_BAD_STRUCTURE;

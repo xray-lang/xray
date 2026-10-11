@@ -121,6 +121,10 @@ static XrXirStatus effect_body_metadata_copy(EffectBodyMaterial *body,const XrXi
     return status;
 }
 
+static bool effect_body_advertisements_span_ready(const EffectBodyAdvertisementBuilder *builder,uint32_t f);
+static XrXirStatus effect_body_advertisements_span(EffectBodyAdvertisementBuilder *builder,
+    uint32_t f,uint32_t value,uint32_t count,XrXirType actual);
+
 typedef struct EffectBodyWriter {
     const XrXirCompileContext *work;
     const XrXirModule *source;
@@ -158,11 +162,52 @@ static XrXirStatus effect_body_writer_row(void *owner,uint32_t instruction,
     if (status!=XR_XIR_OK) return status;
     status=effect_physical_value(writer->work,writer->material->domain.types,
         &writer->material->physical->functions[writer->function],value,operation->type,operation->op);
-    if (status==XR_XIR_OK) {
-        if (!xir_compile_work(writer->work,sizeof(XrXirCellProofInstructionShape))) return XR_XIR_BUDGET;
-        XrXirCellProofInstructionShape shape={operation->op,operation->type};
-        status=xir_cell_proof_builder_row(writer->cells,writer->function,value,operation->type,&shape);
+    if (status==XR_XIR_OK)
+        status=xir_cell_proof_builder_instruction(writer->cells,writer->function,value,operation->type,
+            operation->op,operation->type);
+    return status;
+}
+
+/* The codec has compared every physical word of every row before this
+ * synchronous intake. Its mask only selects a layout opportunity: the actual
+ * Source row, independent owned span and genuine semantic kernels still
+ * establish inventory. No range publishes a completed provider or NONE fact. */
+static XrXirStatus effect_body_writer_span(void *owner,uint32_t first,uint32_t count) {
+    EffectBodyWriter *writer=owner;
+    if (!writer || writer->function>=effect_body_count(writer->material) || !count)
+        return XR_XIR_BAD_STRUCTURE;
+    const XrXirFunction *source=&writer->source->functions[writer->function];
+    const EffectBodyFunction *function=&writer->material->functions[writer->function];
+    if (first>=source->instruction_count || count>source->instruction_count-first ||
+        source->instruction_count!=function->instruction_count || !source->instructions)
+        return XR_XIR_BAD_STRUCTURE;
+    const XrXirInstruction *operation=&source->instructions[first];
+    if (!xir_compile_work(writer->work,8)) return XR_XIR_BUDGET;
+    if (!effect_body_advertisements_span_ready(writer->advertisements,writer->function) ||
+        !xir_cell_proof_scalar_shape(operation->op,operation->type)) {
+        for (uint32_t i=first;i<first+count;++i) {
+            if (!xir_compile_work(writer->work,1)) return XR_XIR_BUDGET;
+            XrXirStatus status=effect_body_writer_row(owner,i,&source->instructions[i]);
+            if (status!=XR_XIR_OK) return status;
+        }
+        return XR_XIR_OK;
     }
+    if (!xir_compile_work(writer->work,1+sizeof(XrXirCellProofInstructionShape))) return XR_XIR_BUDGET;
+    XrXirCellProofInstructionShape shape={operation->op,operation->type};
+    XrXirStatus status=xir_cell_proof_builder_span(writer->cells,writer->function,first,count,&shape);
+    if (status!=XR_XIR_OK) return status;
+    if (!effect_seed(writer->source,source,operation,&writer->material->control[writer->function]))
+        return XR_XIR_BAD_STRUCTURE;
+    XrXirEffects local={.count=effect_body_count(writer->material),.root=writer->material->local_roots,
+        .root_witnesses=writer->material->local_witnesses,
+        .unresolved_witnesses=writer->material->local_witnesses+effect_body_count(writer->material)};
+    EffectRootSeedRecord seed={&writer->material->domain,operation,writer->function,first,XR_XIR_UNIT};
+    status=effect_root_seed_record(&seed,&local,writer->work);
+    if (status!=XR_XIR_OK) return status;
+    uint32_t value=function->parameter_count+first;
+    status=effect_body_advertisements_span(writer->advertisements,writer->function,value,count,operation->type);
+    if (status==XR_XIR_OK) status=effect_physical_value(writer->work,writer->material->domain.types,
+        &writer->material->physical->functions[writer->function],value,operation->type,operation->op);
     return status;
 }
 
@@ -264,9 +309,10 @@ static XrXirStatus effect_body_material_generation_input(const XrXirCompileConte
             if (!xir_compile_work(work,2)) { status=XR_XIR_BUDGET;break; }
             status=effect_body_advertisements_value(advertisements,f,p,function->parameters[p]);
             if (status==XR_XIR_OK) status=effect_physical_value(work,body->domain.types,physical,p,function->parameters[p],XR_XIR_INVALID);
-            if (status==XR_XIR_OK) status=xir_cell_proof_builder_row(cells,f,p,function->parameters[p],NULL);
+            if (status==XR_XIR_OK) status=xir_cell_proof_builder_parameter(cells,f,p,function->parameters[p]);
         }
-        EffectBodyWriter writer={work,source,body,cells,advertisements,f};EffectBodyWriteSink sink={&writer,effect_body_writer_row};
+        EffectBodyWriter writer={work,source,body,cells,advertisements,f};EffectBodyWriteSink sink={&writer,effect_body_writer_row,effect_body_writer_span};
+        if (status==XR_XIR_OK && !xir_compile_work(work,sizeof(sink.span))) status=XR_XIR_BUDGET;
         if (status==XR_XIR_OK) status=effect_body_records_write(work,&source->functions[f],function,&sink);
         if (status==XR_XIR_OK) status=xir_cell_proof_builder_function(cells,f);
     }

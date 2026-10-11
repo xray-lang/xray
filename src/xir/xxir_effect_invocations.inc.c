@@ -117,8 +117,8 @@ typedef struct EffectInvocationOwner {
     EffectInvocationDeferred *deferred_calls;
     uint32_t *consumers;
     uint32_t *roots,*root_spaces;
-    XrXirRootEffects *local_roots;
-    XrXirRootEffectWitness *local_witnesses;
+    const XrXirRootEffects *local_roots;
+    const XrXirRootEffectWitness *local_witnesses;
     uint32_t site_count,binding_count;
     uint32_t deferred_count,deferred_capacity;
     uint32_t count,capacity,edge_count,edge_capacity,maximum;

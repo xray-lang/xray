@@ -575,15 +575,21 @@ static XrXirStatus effect_invocation_producers_verify_read(EffectInvocationOwner
         if (node->body>=request->domain.function_count || node->producer_count>node->producer_capacity ||
             (!!node->producers!=!!node->producer_capacity) || (!enabled && node->producer_count))
             return XR_XIR_BAD_STRUCTURE;
-        EffectBodyFunctionHead body_head={0},root_head={0};
-        XrXirStatus head_status=effect_body_request_head(request,node->body,&body_head);
-        if (head_status==XR_XIR_OK) head_status=effect_body_request_head(request,node->root,&root_head);
+        EffectBodyFunctionDimensions body_head={0};
+        XrXirStatus head_status=effect_body_request_dimensions(request,node->body,&body_head);
         if (head_status!=XR_XIR_OK) return head_status;
-        const EffectBodyFunctionHead *function=&body_head;
-        uint64_t values=(uint64_t)function->parameter_count+function->instruction_count;
+        if (!xir_compile_work(owner->work,1)) return XR_XIR_BUDGET;
+        uint32_t root_parameters=body_head.parameter_count;
+        if (node->root!=node->body) {
+            EffectBodyFunctionDimensions root_head={0};
+            head_status=effect_body_request_dimensions(request,node->root,&root_head);
+            if (head_status!=XR_XIR_OK) return head_status;
+            root_parameters=root_head.parameter_count;
+        }
+        uint64_t values=(uint64_t)body_head.parameter_count+body_head.instruction_count;
         if (values>UINT32_MAX) return XR_XIR_BAD_STRUCTURE;
         EffectInvocationBasis basis={0};uint32_t atoms=0;
-        XrXirStatus status=effect_invocation_basis_parameters(owner,root_head.parameter_count,&basis);
+        XrXirStatus status=effect_invocation_basis_parameters(owner,root_parameters,&basis);
         if (status==XR_XIR_OK) status=effect_invocation_producer_atoms(owner,&basis,&atoms);
         if (status!=XR_XIR_OK) return status;
         uint64_t keys=(values+1)*owner->site_count;

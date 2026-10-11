@@ -69,6 +69,59 @@ static XrXirStatus effect_cell_body_shape(const XrXirCompileContext *work,const 
     if (!xir_compile_work(work,sizeof(*output))) return XR_XIR_BUDGET;
     *output=(XrXirCellProofInstructionShape){shape.op,shape.type};return XR_XIR_OK;
 }
+/* A prefix is an unfinished inventory, never a complete body proof. Count
+ * zero is the independent end request: every row, run and stream word must
+ * then agree with the complete owned head, including the last EOF boundary. */
+static XrXirStatus effect_cell_body_span(const XrXirCompileContext *work,const void *owner,
+    uint32_t f,uint32_t first,uint32_t count,XrXirCellProofSpanCursor *cursor) {
+    const EffectCellBodyAdapter *adapter=owner;
+    if (!effect_cell_body_adapter_valid(work,adapter) || !cursor ||
+        adapter->request.head!=effect_body_owned_head || adapter->request.instruction!=effect_body_owned_instruction ||
+        adapter->request.type!=effect_body_owned_type || adapter->request.shape!=effect_body_owned_shape)
+        return XR_XIR_BAD_STRUCTURE;
+    const EffectBodyMaterial *body=adapter->request.owner;
+    if (!effect_body_material_shape(body) || body->resources!=work->resources || f>=effect_body_count(body) ||
+        cursor->function!=f) return XR_XIR_BAD_STRUCTURE;
+    const EffectBodyFunction *function=&body->functions[f];
+    if (first>function->instruction_count || count>function->instruction_count-first ||
+        (!count && first!=function->instruction_count) || cursor->next>first ||
+        cursor->offset>function->stream_words || cursor->run>function->run_count ||
+        function->run_count>function->instruction_count || function->stream_words>function->stream_capacity)
+        return XR_XIR_BAD_STRUCTURE;
+    if (!xir_compile_work(work,16+sizeof(*cursor))) return XR_XIR_BUDGET;
+    XrXirCellProofSpanCursor current=*cursor;
+    while (current.run<function->run_count) {
+        if (!xir_compile_work(work,1)) return XR_XIR_BUDGET;
+        EffectBodyRunRef ref;
+        XrXirStatus status=effect_body_run_ref(&adapter->request.read,function,current.offset,current.next,&ref);
+        if (status!=XR_XIR_OK) return status;
+        if (ref.next==function->stream_words) {
+            if (current.run+1!=function->run_count) return XR_XIR_BAD_STRUCTURE;
+        } else {
+            if (current.run+1>=function->run_count) return XR_XIR_BAD_STRUCTURE;
+            EffectBodyRunRef neighbor;
+            status=effect_body_run_ref(&adapter->request.read,function,ref.next,ref.first+ref.count,&neighbor);
+            if (status!=XR_XIR_OK) return status;
+        }
+        if (count && current.next==first) {
+            if (ref.count!=count || (ref.mask&UINT32_C(3))) return XR_XIR_BAD_TYPE;
+            if (ref.base[0]<=XR_XIR_INVALID || ref.base[0]>=XR_XIR_OP_COUNT) return XR_XIR_BAD_STRUCTURE;
+            if (!xir_compile_work(work,2+sizeof(current.shape))) return XR_XIR_BUDGET;
+            current.shape=(XrXirCellProofInstructionShape){(XrXirOp)ref.base[0],(XrXirType)ref.base[1]};
+        } else if (current.next>=first || ref.count>first-current.next) return XR_XIR_BAD_STRUCTURE;
+        if (!xir_compile_work(work,3+sizeof(current.next)+sizeof(current.offset)+sizeof(current.run)))
+            return XR_XIR_BUDGET;
+        current.next+=ref.count;current.offset=ref.next;++current.run;
+        if (count && current.next==first+count) {
+            if (!xir_compile_work(work,sizeof(*cursor))) return XR_XIR_BUDGET;
+            *cursor=current;return XR_XIR_OK;
+        }
+    }
+    if (count || current.next!=function->instruction_count || current.offset!=function->stream_words)
+        return XR_XIR_BAD_STRUCTURE;
+    if (!xir_compile_work(work,sizeof(*cursor))) return XR_XIR_BUDGET;
+    *cursor=current;return XR_XIR_OK;
+}
 static XrXirStatus effect_cell_body_bind(const XrXirCompileContext *work,
     const EffectBodyRequest *request,EffectCellBodyAdapter *adapter,XrXirCellProofBodyRead *output) {
     if (!xir_compile_context_valid(work) || !request || !adapter || !output || !request->owner ||
@@ -78,7 +131,8 @@ static XrXirStatus effect_cell_body_bind(const XrXirCompileContext *work,
     if (!xir_compile_work(work,10+sizeof(*adapter)+sizeof(*output))) return XR_XIR_BUDGET;
     *adapter=(EffectCellBodyAdapter){work,*request};
     *output=(XrXirCellProofBodyRead){request->domain,work->resources,adapter,
-        effect_cell_body_head,effect_cell_body_instruction,effect_cell_body_type,effect_cell_body_shape};return XR_XIR_OK;
+        effect_cell_body_head,effect_cell_body_instruction,effect_cell_body_type,effect_cell_body_shape,
+        request->head==effect_body_owned_head?effect_cell_body_span:NULL};return XR_XIR_OK;
 }
 /* Getter identity selects only the genuine storage layout. It supplies no
  * permission fact; full admission and independent source matching remain

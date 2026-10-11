@@ -51,10 +51,6 @@ static XrXirStatus effect_invocation_projection_atom(const XrXirCompileContext *
  * NONE advertisements never authorize an unrooted or incomplete equation. */
 /* This value belongs only to the present projection request. Each domain
  * keeps its own atom and ordering; no result is retained between requests. */
-typedef struct EffectInvocationProjectionSelection {
-    uint32_t atom;
-    XrXirRootEffectWitness witness;
-} EffectInvocationProjectionSelection;
 
 /* One complete four-domain request uses the same actual atom/cause and
  * advertisement reader as the direct scalar selector below. Each active
@@ -149,18 +145,21 @@ static XrXirStatus effect_invocation_projection_select(const XrXirCompileContext
 /* All records remain private to this not-yet-published certificate. No external
  * Effects, contract, carrier or entry permission changes on any failure path. */
 static XrXirStatus effect_invocation_certificate_project(const XrXirCompileContext *work,
-    EffectInvocationCertificate *certificate) {
+    EffectInvocationCertificate *certificate,const EffectInvocationProjectionSink *sink) {
     if (!xir_compile_context_valid(work) || !certificate || !effect_body_material_shape(certificate->body) ||
         certificate->body->resources!=certificate->resources || certificate->resources!=work->resources ||
         certificate->terms.remaining!=work || !certificate->solution || certificate->facts ||
         certificate->witnesses || certificate->projection_atoms) return XR_XIR_BAD_STRUCTURE;
     uint32_t count=effect_body_count(certificate->body);
     uint64_t records=(uint64_t)count*4;
+    if (!effect_invocation_projection_sink_matches(work,sink,count)) return XR_XIR_BAD_STRUCTURE;
     if (!count || count!=certificate->solution->count || records>SIZE_MAX/sizeof(*certificate->witnesses))
         return count?XR_XIR_BUDGET:XR_XIR_BAD_STRUCTURE;
-    certificate->facts=effect_terms_alloc(&certificate->terms,count,sizeof(*certificate->facts));
-    certificate->witnesses=effect_terms_alloc(&certificate->terms,records,sizeof(*certificate->witnesses));
-    certificate->projection_atoms=effect_terms_alloc(&certificate->terms,records,sizeof(*certificate->projection_atoms));
+    /* All admitted fields are written below before the certificate escapes.
+     * Failure destroys the whole term pool without reading these payloads. */
+    certificate->facts=effect_terms_reserve(&certificate->terms,count,sizeof(*certificate->facts));
+    certificate->witnesses=effect_terms_reserve(&certificate->terms,records,sizeof(*certificate->witnesses));
+    certificate->projection_atoms=effect_terms_reserve(&certificate->terms,records,sizeof(*certificate->projection_atoms));
     if (!certificate->facts || !certificate->witnesses || !certificate->projection_atoms)
         return certificate->terms.status;
     for (uint32_t f=0;f<count;++f) {
@@ -181,6 +180,10 @@ static XrXirStatus effect_invocation_certificate_project(const XrXirCompileConte
         if (!xir_compile_work(work,sizeof(*certificate->facts))) return XR_XIR_BUDGET;
         certificate->facts[f]=(XrXirRootEffects){!!(mask&XR_XIR_CALLABLE_ROOT_REQUIRED),
             !!(mask&XR_XIR_CALLABLE_ROOT_UNRESOLVED)};
+        if (sink) {
+            status=sink->write(work,certificate,f,selected,sink->owner);
+            if (status!=XR_XIR_OK) return status;
+        }
     }
     return XR_XIR_OK;
 }

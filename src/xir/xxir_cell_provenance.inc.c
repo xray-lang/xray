@@ -128,27 +128,33 @@ static bool cell_proof_edge(CellProofBuild *build, uint32_t from, uint32_t to, b
 /* The writer and callback walker submit the same physical row. This sink
  * owns no permission: it only accumulates genuine Cell and Place inventory,
  * and the ordinary role, edge, solve and validation stages still follow. */
-static bool cell_proof_inventory_row(CellProofBuild *build,uint32_t f,
-    const XrXirCellProofBodyHead *function,uint32_t value,XrXirType type,
-    const XrXirCellProofInstructionShape *instruction,bool *tracked) {
-    if (!function || !tracked || value>=(uint64_t)function->parameter_count+function->instruction_count)
+static bool cell_proof_inventory_value(CellProofBuild *build,uint32_t f,
+    const XrXirCellProofBodyHead *function,uint32_t value) {
+    if (!function || value>=(uint64_t)function->parameter_count+function->instruction_count)
         return cell_proof_error(build,f,UINT32_MAX,XR_XIR_BAD_STRUCTURE);
-    if (value<function->parameter_count) {
-        if (instruction || !function->parameters || type!=function->parameters[value])
-            return cell_proof_error(build,f,UINT32_MAX,XR_XIR_BAD_TYPE);
-    } else {
-        uint32_t i=value-function->parameter_count;
-        if (!instruction || instruction->type!=type)
-            return cell_proof_error(build,f,i,XR_XIR_BAD_TYPE);
-        if (instruction->op<=XR_XIR_INVALID || instruction->op>=XR_XIR_OP_COUNT)
-            return cell_proof_error(build,f,i,XR_XIR_BAD_STRUCTURE);
-        *tracked|=cell_proof_place(instruction->op);
-        if (instruction->op==XR_XIR_CELL_PROJECT) {
-            if (!cell_proof_work(build,2)) return false;
-            if (build->proof->project_count==UINT32_MAX)
-                return cell_proof_error(build,f,i,XR_XIR_BUDGET);
-            ++build->proof->project_count;
-        }
+    return true;
+}
+static bool cell_proof_inventory_parameter(CellProofBuild *build,uint32_t f,
+    const XrXirCellProofBodyHead *function,uint32_t value,XrXirType type,bool *tracked) {
+    if (!tracked) return cell_proof_error(build,f,UINT32_MAX,XR_XIR_BAD_STRUCTURE);
+    if (!cell_proof_inventory_value(build,f,function,value)) return false;
+    if (value>=function->parameter_count || !function->parameters || type!=function->parameters[value])
+        return cell_proof_error(build,f,UINT32_MAX,XR_XIR_BAD_TYPE);
+    *tracked|=cell_proof_cell(&build->body->domain,type);return true;
+}
+/* Both readers validate the physical range and independent actual type before
+ * this shared instruction inventory; no shape temporary or permission is passed. */
+static bool cell_proof_inventory_instruction(CellProofBuild *build,uint32_t f,
+    uint32_t i,XrXirType type,XrXirOp opcode,bool *tracked) {
+    if (!tracked) return cell_proof_error(build,f,i,XR_XIR_BAD_STRUCTURE);
+    if (opcode<=XR_XIR_INVALID || opcode>=XR_XIR_OP_COUNT)
+        return cell_proof_error(build,f,i,XR_XIR_BAD_STRUCTURE);
+    *tracked|=cell_proof_place(opcode);
+    if (opcode==XR_XIR_CELL_PROJECT) {
+        if (!cell_proof_work(build,2)) return false;
+        if (build->proof->project_count==UINT32_MAX)
+            return cell_proof_error(build,f,i,XR_XIR_BUDGET);
+        ++build->proof->project_count;
     }
     *tracked|=cell_proof_cell(&build->body->domain,type);return true;
 }
@@ -226,7 +232,14 @@ static bool cell_proof_inventory(CellProofBuild *build) {
                     return cell_proof_error(build,f,v-function->parameter_count,XR_XIR_BAD_TYPE);
                 instruction=&shape;
             }
-            if (!cell_proof_inventory_row(build,f,function,v,type,instruction,&tracked)) return false;
+            if (!instruction) {
+                if (!cell_proof_inventory_parameter(build,f,function,v,type,&tracked)) return false;
+            } else {
+                if (!cell_proof_inventory_value(build,f,function,v)) return false;
+                uint32_t i=v-function->parameter_count;
+                if (instruction->type!=type) return cell_proof_error(build,f,i,XR_XIR_BAD_TYPE);
+                if (!cell_proof_inventory_instruction(build,f,i,type,instruction->op,&tracked)) return false;
+            }
         }
         if (!cell_proof_work(build,8)) return false;
         proof->functions[f] = (CellProofFunction){.begin=(uint32_t)values,
@@ -745,6 +758,7 @@ struct XrXirCellProofBuilder {
     CellProofBuild build;
     XrXirCellProofBodyRead body;
     XrXirCellProofBodyHead head;
+    XrXirCellProofSpanCursor span;
     uint64_t values,physical;
     uint32_t function,value;
     bool open,tracked;
@@ -787,11 +801,15 @@ XR_FUNC XrXirStatus xir_cell_proof_builder_head(XrXirCellProofBuilder *builder,
     }
     if (!cell_proof_work(build,6+sizeof(*head)+sizeof(builder->physical)+
         sizeof(builder->value)+sizeof(builder->open)+sizeof(builder->tracked))) return build->status;
+    if (builder->body.span) {
+        if (!cell_proof_work(build,sizeof(builder->span))) return build->status;
+        builder->span=(XrXirCellProofSpanCursor){.function=f};
+    }
     builder->physical+=count;builder->head=*head;builder->value=0;
     builder->open=true;builder->tracked=false;return XR_XIR_OK;
 }
-XR_FUNC XrXirStatus xir_cell_proof_builder_row(XrXirCellProofBuilder *builder,
-    uint32_t f,uint32_t value,XrXirType type,const XrXirCellProofInstructionShape *shape) {
+static XrXirStatus cell_proof_builder_begin_row(XrXirCellProofBuilder *builder,
+    uint32_t f,uint32_t value) {
     if (!builder) return XR_XIR_BAD_STRUCTURE;
     CellProofBuild *build=&builder->build;
     if (build->status!=XR_XIR_OK) return build->status;
@@ -799,8 +817,78 @@ XR_FUNC XrXirStatus xir_cell_proof_builder_row(XrXirCellProofBuilder *builder,
         cell_proof_error(build,f,UINT32_MAX,XR_XIR_BAD_STRUCTURE);return build->status;
     }
     if (!cell_proof_work(build,3+sizeof(builder->value))) return build->status;
-    if (!cell_proof_inventory_row(build,f,&builder->head,value,type,shape,&builder->tracked)) return build->status;
+    return XR_XIR_OK;
+}
+/* Distinct real row kinds share range/type/op inventory without a caller
+ * verified flag. Every new entry and kernel has at most six parameters. */
+XR_FUNC XrXirStatus xir_cell_proof_builder_parameter(XrXirCellProofBuilder *builder,
+    uint32_t f,uint32_t value,XrXirType type) {
+    XrXirStatus status=cell_proof_builder_begin_row(builder,f,value);
+    if (status!=XR_XIR_OK) return status;
+    CellProofBuild *build=&builder->build;
+    if (!cell_proof_inventory_parameter(build,f,&builder->head,value,type,&builder->tracked))
+        return build->status;
     ++builder->value;return XR_XIR_OK;
+}
+XR_FUNC XrXirStatus xir_cell_proof_builder_instruction(XrXirCellProofBuilder *builder,
+    uint32_t f,uint32_t value,XrXirType type,XrXirOp opcode,XrXirType actual_type) {
+    XrXirStatus status=cell_proof_builder_begin_row(builder,f,value);
+    if (status!=XR_XIR_OK) return status;
+    CellProofBuild *build=&builder->build;
+    if (!cell_proof_inventory_value(build,f,&builder->head,value)) return build->status;
+    if (value<builder->head.parameter_count || actual_type!=type) {
+        cell_proof_error(build,f,value<builder->head.parameter_count?UINT32_MAX:
+            value-builder->head.parameter_count,XR_XIR_BAD_TYPE);return build->status;
+    }
+    uint32_t i=value-builder->head.parameter_count;
+    if (!cell_proof_inventory_instruction(build,f,i,type,opcode,&builder->tracked)) return build->status;
+    ++builder->value;return XR_XIR_OK;
+}
+XR_FUNC XrXirStatus xir_cell_proof_builder_span(XrXirCellProofBuilder *builder,
+    uint32_t f,uint32_t first,uint32_t count,const XrXirCellProofInstructionShape *source) {
+    if (!builder) return XR_XIR_BAD_STRUCTURE;
+    CellProofBuild *build=&builder->build;
+    if (build->status!=XR_XIR_OK) return build->status;
+    if (!builder->open || f!=builder->function || !source || !count || !builder->body.span ||
+        first>builder->head.instruction_count || count>builder->head.instruction_count-first ||
+        (uint64_t)builder->head.parameter_count+first!=builder->value ||
+        source->op<=XR_XIR_INVALID || source->op>=XR_XIR_OP_COUNT) {
+        cell_proof_error(build,f,first,XR_XIR_BAD_STRUCTURE);return build->status;
+    }
+    if (!cell_proof_work(build,3+sizeof(builder->value))) return build->status;
+    XrXirStatus status=builder->body.span(build->context,builder->body.owner,f,first,count,&builder->span);
+    if (status!=XR_XIR_OK) { cell_proof_error(build,f,first,status);return build->status; }
+    if (!cell_proof_work(build,4)) return build->status;
+    if (builder->span.shape.op!=source->op || builder->span.shape.type!=source->type ||
+        !xir_cell_proof_scalar_shape(builder->span.shape.op,builder->span.shape.type)) {
+        cell_proof_error(build,f,first,XR_XIR_BAD_TYPE);return build->status;
+    }
+    if (!cell_proof_inventory_instruction(build,f,first,builder->span.shape.type,
+        builder->span.shape.op,&builder->tracked)) return build->status;
+    builder->value+=count;return XR_XIR_OK;
+}
+static bool cell_proof_builder_span_end(XrXirCellProofBuilder *builder,uint32_t f) {
+    CellProofBuild *build=&builder->build;
+    if (!cell_proof_work(build,sizeof(XrXirCellProofBodyHead))) return false;
+    XrXirCellProofBodyHead head={0};
+    XrXirStatus status=builder->body.head(build->context,builder->body.owner,f,&head);
+    if (status!=XR_XIR_OK) return cell_proof_error(build,f,UINT32_MAX,status);
+    if (!cell_proof_work(build,7)) return false;
+    if (head.parameter_count!=builder->head.parameter_count || head.result!=builder->head.result ||
+        head.instruction_count!=builder->head.instruction_count || head.operand_count!=builder->head.operand_count ||
+        (head.parameter_count && (!head.parameters || !builder->head.parameters)) ||
+        (head.operand_count && (!head.operands || !builder->head.operands)))
+        return cell_proof_error(build,f,UINT32_MAX,XR_XIR_BAD_STRUCTURE);
+    for (uint32_t p=0;p<head.parameter_count;++p) {
+        if (!cell_proof_work(build,2)) return false;
+        if (head.parameters[p]!=builder->head.parameters[p]) return cell_proof_error(build,f,UINT32_MAX,XR_XIR_BAD_TYPE);
+    }
+    for (uint32_t a=0;a<head.operand_count;++a) {
+        if (!cell_proof_work(build,2)) return false;
+        if (head.operands[a]!=builder->head.operands[a]) return cell_proof_error(build,f,UINT32_MAX,XR_XIR_BAD_STRUCTURE);
+    }
+    status=builder->body.span(build->context,builder->body.owner,f,head.instruction_count,0,&builder->span);
+    return status==XR_XIR_OK || cell_proof_error(build,f,UINT32_MAX,status);
 }
 XR_FUNC XrXirStatus xir_cell_proof_builder_function(XrXirCellProofBuilder *builder,uint32_t f) {
     if (!builder) return XR_XIR_BAD_STRUCTURE;
@@ -810,6 +898,7 @@ XR_FUNC XrXirStatus xir_cell_proof_builder_function(XrXirCellProofBuilder *build
     if (!builder->open || f!=builder->function || builder->value!=count) {
         cell_proof_error(build,f,UINT32_MAX,XR_XIR_BAD_STRUCTURE);return build->status;
     }
+    if (builder->body.span && !cell_proof_builder_span_end(builder,f)) return build->status;
     if (builder->tracked && count>UINT32_MAX-builder->values) {
         cell_proof_error(build,f,UINT32_MAX,XR_XIR_BUDGET);return build->status;
     }

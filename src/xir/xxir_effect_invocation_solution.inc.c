@@ -132,9 +132,14 @@ static XrXirStatus effect_invocation_closed(EffectInvocationOwner *owner) {
     return status;
 }
 
-static XrXirStatus effect_invocation_terms(EffectInvocationOwner *owner,
-    uint32_t function,XrXirRootTerm *terms,uint32_t *count) {
-    if (!count || function>=owner->body.domain.function_count || owner->roots[function]>=owner->count)
+/* The same canonical enumerator counts, writes or compares a bounded
+ * receiving span. Comparison reads the actual stored kind/index directly;
+ * no expected array or permission result survives this one request. */
+static XrXirStatus effect_invocation_terms_read(EffectInvocationOwner *owner,
+    uint32_t function,XrXirRootTerm *terms,const XrXirRootTerm *expected,
+    uint32_t limit,uint32_t *count) {
+    if (!owner || !count || (terms && expected) || !owner->roots ||
+        function>=owner->body.domain.function_count || owner->roots[function]>=owner->count)
         return XR_XIR_BAD_STRUCTURE;
     const EffectInvocationNode *node=&owner->nodes[owner->roots[function]];
     EffectBodyFunctionHead head={0};XrXirStatus read_status=effect_invocation_head(owner,function,&head);
@@ -189,15 +194,28 @@ static XrXirStatus effect_invocation_terms(EffectInvocationOwner *owner,
                     if (!effect_invocation_frontier(shape.op)) return XR_XIR_BAD_STRUCTURE;
                 }
                 if (at>=UINT32_MAX) return XR_XIR_BUDGET;
+                if (limit!=UINT32_MAX) {
+                    if (!xir_compile_work(owner->work,1)) return XR_XIR_BUDGET;
+                    if (at>=limit) return XR_XIR_BAD_STRUCTURE;
+                }
                 if (terms) {
                     if (!xir_compile_work(owner->work,sizeof(*terms))) return XR_XIR_BUDGET;
                     terms[at]=(XrXirRootTerm){kind,i};
+                }
+                if (expected) {
+                    if (!xir_compile_work(owner->work,4)) return XR_XIR_BUDGET;
+                    if (expected[at].kind!=kind || expected[at].index!=i) return XR_XIR_BAD_STRUCTURE;
                 }
                 ++at;
             }
         }
     }
     *count=(uint32_t)at;return XR_XIR_OK;
+}
+
+static XrXirStatus effect_invocation_terms(EffectInvocationOwner *owner,
+    uint32_t function,XrXirRootTerm *terms,uint32_t *count) {
+    return effect_invocation_terms_read(owner,function,terms,NULL,UINT32_MAX,count);
 }
 
 /* This stage does not write Effects, contracts, carriers or permission tables.

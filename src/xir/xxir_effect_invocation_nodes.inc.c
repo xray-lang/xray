@@ -113,9 +113,7 @@ static void effect_invocation_free(EffectInvocationOwner *owner) {
     xr_compile_resources_free(owner->consumers);
     xr_compile_resources_free(owner->sites);
     xr_compile_resources_free(owner->roots);xr_compile_resources_free(owner->root_spaces);
-    xr_compile_resources_free(owner->local_roots);
-    xr_compile_resources_free(owner->local_witnesses);
-    /* Physical rows and Cell proof share the generation material owner. */
+    /* Local seeds, physical rows and Cell proof share the material lifetime. */
     xr_compile_resources_free(owner);
 }
 
@@ -133,7 +131,9 @@ static XrXirStatus effect_invocation_capacity(EffectInvocationOwner *owner) {
     if (capacity<=owner->count || node_bytes>SIZE_MAX ||
         index_bytes>SIZE_MAX) return XR_XIR_BUDGET;
     XrXirStatus status=XR_XIR_OK;
-    EffectInvocationNode *nodes=xir_compile_calloc(owner->work,capacity,sizeof(*nodes),&status);
+    /* Each admitted slot receives a complete value in intern. Unused capacity
+     * has no initialized node and is never visited by lookup or destruction. */
+    EffectInvocationNode *nodes=xir_compile_alloc(owner->work,(size_t)node_bytes,&status);
     uint32_t *consumers=status==XR_XIR_OK ?
         xir_compile_alloc(owner->work,(size_t)capacity*sizeof(*consumers),&status) : NULL;
     uint32_t *queue=status==XR_XIR_OK ?

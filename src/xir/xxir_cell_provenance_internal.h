@@ -39,8 +39,26 @@ typedef struct XrXirCellProofInstructionShape {
     XrXirOp op;
     XrXirType type;
 } XrXirCellProofInstructionShape;
-/* This metadata view grants no body admission. All callbacks read one complete
- * admitted generation and charge its live ledger, without retaining a producer. */
+/* A construction-local stream cursor contains no permission or completed
+ * proof. Its owner validates every preceding canonical run before advancing. */
+typedef struct XrXirCellProofSpanCursor {
+    uint32_t function,next,offset,run;
+    XrXirCellProofInstructionShape shape;
+} XrXirCellProofSpanCursor;
+static inline bool xir_cell_proof_scalar_shape(XrXirOp opcode,XrXirType type) {
+    switch (opcode) {
+    case XR_XIR_CONST_BOOL:return type==XR_XIR_BOOL;
+    case XR_XIR_CONST_INT:return type==XR_XIR_I64;
+    case XR_XIR_CONST_FLOAT:return type==XR_XIR_F64;
+    case XR_XIR_CONST_RUNE:return type==XR_XIR_RUNE;
+    case XR_XIR_JUMP:return type==XR_XIR_UNIT;
+    default:return false;
+    }
+}
+/* This metadata view grants no body admission. Ordinary callbacks read one
+ * complete generation. The optional span reader consumes only its owner's
+ * unpublished construction prefix; the builder checks the real complete head
+ * and canonical EOF before publication. All requests charge the live ledger. */
 typedef struct XrXirCellProofBodyRead {
     XirMetadataDomain domain;
     XrCompileResources *resources;
@@ -49,6 +67,7 @@ typedef struct XrXirCellProofBodyRead {
     XrXirStatus (*instruction)(const XrXirCompileContext *,const void *,uint32_t,uint32_t,XrXirInstruction *);
     XrXirStatus (*type)(const XrXirCompileContext *,const void *,uint32_t,uint32_t,XrXirType *);
     XrXirStatus (*shape)(const XrXirCompileContext *,const void *,uint32_t,uint32_t,XrXirCellProofInstructionShape *);
+    XrXirStatus (*span)(const XrXirCompileContext *,const void *,uint32_t,uint32_t,uint32_t,XrXirCellProofSpanCursor *);
 } XrXirCellProofBodyRead;
 
 /* One construction-local provider builder consumes actual writer rows. It
@@ -59,8 +78,14 @@ XR_FUNC XrXirStatus xir_cell_proof_builder_begin(const XrXirCompileContext *cont
     const XrXirCellProofBodyRead *body,XrXirCellProofBuilder **output);
 XR_FUNC XrXirStatus xir_cell_proof_builder_head(XrXirCellProofBuilder *builder,
     uint32_t function,const XrXirCellProofBodyHead *head);
-XR_FUNC XrXirStatus xir_cell_proof_builder_row(XrXirCellProofBuilder *builder,
-    uint32_t function,uint32_t value,XrXirType type,const XrXirCellProofInstructionShape *shape);
+XR_FUNC XrXirStatus xir_cell_proof_builder_parameter(XrXirCellProofBuilder *builder,
+    uint32_t function,uint32_t value,XrXirType type);
+XR_FUNC XrXirStatus xir_cell_proof_builder_instruction(XrXirCellProofBuilder *builder,
+    uint32_t function,uint32_t value,XrXirType type,XrXirOp opcode,XrXirType actual_type);
+/* Only a genuine optional reader can submit a constant physical span.
+ * The ordinary function end still validates the complete stream and head. */
+XR_FUNC XrXirStatus xir_cell_proof_builder_span(XrXirCellProofBuilder *builder,
+    uint32_t function,uint32_t first,uint32_t count,const XrXirCellProofInstructionShape *source);
 XR_FUNC XrXirStatus xir_cell_proof_builder_function(XrXirCellProofBuilder *builder,uint32_t function);
 XR_FUNC XrXirStatus xir_cell_proof_builder_finish(XrXirCellProofBuilder **builder,
     XrXirCellProvenance **output);

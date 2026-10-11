@@ -8,14 +8,11 @@
  * xxir_effect_invocation_calls.inc.c - Actual physical invocation and latent reference edges
  */
 static XrXirStatus effect_invocation_bound_row(EffectInvocationFlow *flow,
-    uint32_t target,uint32_t parameter,uint64_t *row) {
+    uint32_t target,uint32_t parameter,const EffectBodyFunctionHead *head,uint64_t *row) {
     EffectInvocationOwner *owner=flow->owner;
-    if (!row || target>=flow->body.domain.function_count) return XR_XIR_BAD_STRUCTURE;
-    EffectBodyFunctionHead head={0};
-    XrXirStatus head_status=effect_invocation_flow_head(flow,target,&head);
-    if (head_status!=XR_XIR_OK) return head_status;
-    if (parameter>=head.parameter_count || !head.parameters) return XR_XIR_BAD_STRUCTURE;
-    const XrXirTypeNode *bound=xr_xir_callable_signature(flow->body.domain.types,head.parameters[parameter]);
+    if (!row || !head || target>=flow->body.domain.function_count ||
+        parameter>=head->parameter_count || !head->parameters) return XR_XIR_BAD_STRUCTURE;
+    const XrXirTypeNode *bound=xr_xir_callable_signature(flow->body.domain.types,head->parameters[parameter]);
     if (!bound) return XR_XIR_OK;
     bool ref=false;
     for (uint32_t a=0;a<bound->parameter_count;++a) {
@@ -53,16 +50,14 @@ static XrXirStatus effect_invocation_bound_row(EffectInvocationFlow *flow,
 }
 
 /* Complete environments are temporary until exact structural admission and
- * deep-copy interning succeed. They never replace a dense physical type key. */
+ * deep-copy interning succeed. The caller supplies the complete row read from
+ * this request's real ordinal; no subsequent queue visit reuses its address. */
 static XrXirStatus effect_invocation_arguments(EffectInvocationFlow *flow,
-    uint32_t instruction,uint32_t target,uint32_t producer,
+    const XrXirInstruction *op,uint32_t target,uint32_t producer,
     const uint64_t *closure,uint64_t **output) {
     EffectInvocationOwner *owner=flow->owner;
-    if (!output || *output || instruction>=flow->function->instruction_count ||
-        target>=flow->body.domain.function_count) return XR_XIR_BAD_STRUCTURE;
-    XrXirInstruction body_op_1;const XrXirInstruction *op=NULL;
-    XrXirStatus body_read_1=effect_invocation_flow_instruction(flow,instruction,&body_op_1,&op);
-    if (body_read_1!=XR_XIR_OK) return body_read_1;
+    if (!output || *output || !op || target>=flow->body.domain.function_count)
+        return XR_XIR_BAD_STRUCTURE;
     EffectBodyFunctionHead callee_head={0};
     XrXirStatus head_status=effect_invocation_flow_head(flow,target,&callee_head);
     if (head_status!=XR_XIR_OK) return head_status;
@@ -116,7 +111,7 @@ static XrXirStatus effect_invocation_arguments(EffectInvocationFlow *flow,
                 memcpy(row,captured,(size_t)flow->basis.origin_words*sizeof(*row));
                 memcpy(row+flow->basis.origin_words,closure+flow->basis.origin_words,
                     (size_t)(flow->basis.fn_words-flow->basis.origin_words)*sizeof(*row));
-                status=effect_invocation_bound_row(flow,target,p,row);
+                status=effect_invocation_bound_row(flow,target,p,callee,row);
             }
             if (xr_xir_type_is_class(flow->body.domain.types,expected))
                 status=effect_invocation_class_encode(flow,EFFECT_CLASS_KNOWN|EFFECT_CLASS_UNKNOWN,
@@ -178,7 +173,7 @@ static XrXirStatus effect_invocation_arguments(EffectInvocationFlow *flow,
                 if (mask&XR_XIR_CALLABLE_ROOT_UNRESOLVED)
                     row[(opaque+2)/64]|=UINT64_C(1)<<((opaque+2)%64);
             } else if (parameter->kind==XR_XIR_EFFECT_PARAMETER_FIXED && ref)
-                status=effect_invocation_bound_row(flow,target,p,row);
+                status=effect_invocation_bound_row(flow,target,p,callee,row);
         }
     }
     if (status==XR_XIR_OK && signature)
@@ -190,11 +185,18 @@ static XrXirStatus effect_invocation_arguments(EffectInvocationFlow *flow,
 }
 
 static XrXirStatus effect_invocation_connect(EffectInvocationFlow *flow,
-    uint32_t instruction,uint32_t target,uint32_t producer,
+    uint32_t instruction,const XrXirInstruction *op,uint32_t producer,
     const uint64_t *closure,bool *changed) {
-    if (!changed) return XR_XIR_BAD_STRUCTURE;
-    uint64_t *input=NULL;EffectInvocationOwner *owner=flow->owner;
-    XrXirStatus status=effect_invocation_arguments(flow,instruction,target,producer,closure,&input);
+    if (!changed || !op || instruction>=flow->function->instruction_count)
+        return XR_XIR_BAD_STRUCTURE;
+    EffectInvocationOwner *owner=flow->owner;
+    if (producer!=UINT32_MAX && producer>=owner->site_count) return XR_XIR_BAD_STRUCTURE;
+    if (producer==UINT32_MAX && (op->immediate<0 ||
+        (uint64_t)op->immediate>=flow->body.domain.function_count)) return XR_XIR_BAD_STRUCTURE;
+    if (!xir_compile_work(owner->work,2)) return XR_XIR_BUDGET;
+    uint32_t target=producer==UINT32_MAX?(uint32_t)op->immediate:owner->sites[producer].target;
+    uint64_t *input=NULL;
+    XrXirStatus status=effect_invocation_arguments(flow,op,target,producer,closure,&input);
     if (status==XR_XIR_UNRESOLVED) return XR_XIR_OK;
     if (status!=XR_XIR_OK) return status;
     uint32_t node=UINT32_MAX,root=owner->nodes[flow->node].root;
@@ -264,11 +266,9 @@ static XrXirStatus effect_invocation_has_ref(EffectInvocationFlow *flow,
  * actual argument mapping. Ordinary symbolic parameters retain the original
  * PARAMETER obligation; fixed opaque values consume their advertised bound. */
 static XrXirStatus effect_invocation_indirect(EffectInvocationFlow *flow,
-    uint32_t instruction,bool *changed) {
+    uint32_t instruction,const XrXirInstruction *op,bool *changed) {
     EffectInvocationOwner *owner=flow->owner;
-    XrXirInstruction body_op_2;const XrXirInstruction *op=NULL;
-    XrXirStatus body_read_2=effect_invocation_flow_instruction(flow,instruction,&body_op_2,&op);
-    if (body_read_2!=XR_XIR_OK) return body_read_2;
+    if (!op) return XR_XIR_BAD_STRUCTURE;
     if ((op->op!=XR_XIR_CALL_INDIRECT && op->op!=XR_XIR_INVOKE_INDIRECT) ||
         op->immediate<0 || (uint64_t)op->immediate>=flow->values)
         return XR_XIR_BAD_VALUE;
@@ -346,8 +346,7 @@ static XrXirStatus effect_invocation_indirect(EffectInvocationFlow *flow,
         if (!xir_compile_work(owner->work,2)) return XR_XIR_BUDGET;
         if (!(descriptor[s/64]&(UINT64_C(1)<<(s%64)))) continue;
         any=true;
-        status=effect_invocation_connect(flow,instruction,owner->sites[s].target,s,
-            descriptor,changed);
+        status=effect_invocation_connect(flow,instruction,op,s,descriptor,changed);
     }
     if (status==XR_XIR_OK && !any)
         status=effect_invocation_mask(flow,XR_XIR_CALLABLE_ROOT_UNRESOLVED,changed);
@@ -360,9 +359,9 @@ static XrXirStatus effect_invocation_indirect(EffectInvocationFlow *flow,
 /* Replay the original complete latent input without linking another key.
  * Unbound suffixes remain opaque; captured inputs keep their physical rows. */
 static XrXirStatus effect_invocation_latent_input(EffectInvocationFlow *flow,
-    uint32_t instruction,uint32_t selected,uint64_t **output) {
+    uint32_t instruction,uint32_t selected,const XrXirInstruction *op,uint64_t **output) {
     EffectInvocationOwner *owner=flow->owner;
-    if (!output || *output || selected>=owner->site_count ||
+    if (!output || *output || !op || selected>=owner->site_count ||
         instruction>=flow->function->instruction_count) return XR_XIR_BAD_STRUCTURE;
     XrXirStatus status=XR_XIR_OK;
     const EffectInvocationSite site=owner->sites[selected];
@@ -370,9 +369,6 @@ static XrXirStatus effect_invocation_latent_input(EffectInvocationFlow *flow,
     status=effect_invocation_flow_head(flow,site.target,&target_head);
     if (status!=XR_XIR_OK) return status;
     const EffectBodyFunctionHead *target=&target_head;
-    XrXirInstruction body_op_3;const XrXirInstruction *op=NULL;
-    XrXirStatus body_read_3=effect_invocation_flow_instruction(flow,instruction,&body_op_3,&op);
-    if (body_read_3!=XR_XIR_OK) return body_read_3;
     uint64_t words=(uint64_t)target->parameter_count*flow->basis.row_words;
     if (words>SIZE_MAX/sizeof(uint64_t)) return XR_XIR_BUDGET;
     uint64_t *input=words ? xir_compile_calloc(owner->work,(size_t)words,sizeof(*input),&status) : NULL;
@@ -397,7 +393,7 @@ static XrXirStatus effect_invocation_latent_input(EffectInvocationFlow *flow,
                 if (!actual_row) { status=XR_XIR_BAD_STRUCTURE;break; }
                 memcpy(row,actual_row,
                     (size_t)flow->basis.fn_words*sizeof(*row));
-                status=effect_invocation_bound_row(flow,site.target,p,row);
+                status=effect_invocation_bound_row(flow,site.target,p,target,row);
             }
         } else if (xr_xir_type_is_cell(flow->body.domain.types,target->parameters[p])) {
             uint32_t unknown=flow->basis.parameters+1,known=unknown+1;
@@ -422,14 +418,14 @@ static XrXirStatus effect_invocation_latent_input(EffectInvocationFlow *flow,
 }
 
 static XrXirStatus effect_invocation_latent(EffectInvocationFlow *flow,
-    uint32_t instruction) {
+    uint32_t instruction,const XrXirInstruction *op) {
     uint32_t value=flow->function->parameter_count+instruction;
     if (value>=flow->values || !flow->certified[value]) return XR_XIR_OK;
     EffectInvocationOwner *owner=flow->owner;uint32_t selected=UINT32_MAX;
     XrXirStatus status=effect_invocation_site(flow,instruction,&selected);
     if (status!=XR_XIR_OK) return status;
     uint64_t *input=NULL;
-    status=effect_invocation_latent_input(flow,instruction,selected,&input);
+    status=effect_invocation_latent_input(flow,instruction,selected,op,&input);
     uint32_t node=UINT32_MAX,root=owner->nodes[flow->node].root;
     if (status==XR_XIR_OK) status=effect_invocation_intern(owner,root,owner->sites[selected].target,input,&node);
     xr_compile_resources_free(input);
@@ -438,15 +434,12 @@ static XrXirStatus effect_invocation_latent(EffectInvocationFlow *flow,
 }
 
 static XrXirStatus effect_invocation_closed_arguments(EffectInvocationFlow *flow,
-    uint32_t instruction,uint32_t target,bool *output) {
-    if (!output || target>=flow->body.domain.function_count) return XR_XIR_BAD_STRUCTURE;
+    uint32_t target,const XrXirInstruction *op,bool *output) {
+    if (!output || !op || target>=flow->body.domain.function_count) return XR_XIR_BAD_STRUCTURE;
     EffectBodyFunctionHead callee_head={0};
     XrXirStatus head_status=effect_invocation_flow_head(flow,target,&callee_head);
     if (head_status!=XR_XIR_OK) return head_status;
     const EffectBodyFunctionHead *callee=&callee_head;
-    XrXirInstruction body_op_4;const XrXirInstruction *op=NULL;
-    XrXirStatus body_read_4=effect_invocation_flow_instruction(flow,instruction,&body_op_4,&op);
-    if (body_read_4!=XR_XIR_OK) return body_read_4;
     if (op->args[1]!=callee->parameter_count || op->args[0]>flow->function->operand_count ||
         op->args[1]>flow->function->operand_count-op->args[0] ||
         (op->args[1] && !flow->function->operands)) return XR_XIR_BAD_STRUCTURE;
@@ -467,9 +460,10 @@ static XrXirStatus effect_invocation_closed_arguments(EffectInvocationFlow *flow
 /* GO installs a real actual environment and schedules the target equation
  * for admission queries. It never joins that body into the creating stream. */
 static XrXirStatus effect_invocation_transport(EffectInvocationFlow *flow,
-    uint32_t instruction,uint32_t target) {
+    uint32_t instruction,uint32_t target,const XrXirInstruction *op) {
+    if (!op || instruction>=flow->function->instruction_count) return XR_XIR_BAD_STRUCTURE;
     uint64_t *input=NULL;EffectInvocationOwner *owner=flow->owner;
-    XrXirStatus status=effect_invocation_arguments(flow,instruction,target,UINT32_MAX,NULL,&input);
+    XrXirStatus status=effect_invocation_arguments(flow,op,target,UINT32_MAX,NULL,&input);
     if (status==XR_XIR_UNRESOLVED) return XR_XIR_OK;
     if (status!=XR_XIR_OK) return status;
     uint32_t node=UINT32_MAX,root=owner->nodes[flow->node].root;
@@ -479,13 +473,15 @@ static XrXirStatus effect_invocation_transport(EffectInvocationFlow *flow,
     return status;
 }
 
-static XrXirStatus effect_invocation_instruction(EffectInvocationFlow *flow,
-    uint32_t instruction,bool *changed) {
-    if (!xir_compile_work(flow->owner->work,1)) return XR_XIR_BUDGET;
+/* The caller owns this complete decoded stack row for only this request.
+ * It was read from the same BodyRequest at this actual ordinal; it is never
+ * retained by an equation, descriptor or another queue visit. */
+static XrXirStatus effect_invocation_instruction_decoded(EffectInvocationFlow *flow,
+    uint32_t instruction,const XrXirInstruction *op,bool *changed) {
+    if (!flow || !flow->owner || !flow->function || !op || !changed ||
+        instruction>=flow->function->instruction_count) return XR_XIR_BAD_STRUCTURE;
+    if (!xir_compile_work(flow->owner->work,2)) return XR_XIR_BUDGET;
     EffectInvocationOwner *owner=flow->owner;
-    XrXirInstruction body_op_5;const XrXirInstruction *op=NULL;
-    XrXirStatus body_read_5=effect_invocation_flow_instruction(flow,instruction,&body_op_5,&op);
-    if (body_read_5!=XR_XIR_OK) return body_read_5;
     switch (op->op) {
     case XR_XIR_CALL: case XR_XIR_INVOKE: case XR_XIR_CLEANUP_REGISTER: {
         if (op->immediate<0 || (uint64_t)op->immediate>=flow->body.domain.function_count)
@@ -499,10 +495,10 @@ static XrXirStatus effect_invocation_instruction(EffectInvocationFlow *flow,
                 return XR_XIR_BAD_STRUCTURE;
         }
         bool closed=false;
-        XrXirStatus status=effect_invocation_closed_arguments(flow,instruction,target,&closed);
+        XrXirStatus status=effect_invocation_closed_arguments(flow,target,op,&closed);
         if (status!=XR_XIR_OK) return status;
         if (!closed) return effect_invocation_defer(flow,instruction,changed);
-        return effect_invocation_connect(flow,instruction,target,UINT32_MAX,NULL,changed);
+        return effect_invocation_connect(flow,instruction,op,UINT32_MAX,NULL,changed);
     }
     case XR_XIR_CALL_DEFAULT: case XR_XIR_INVOKE_DEFAULT: {
         const uint32_t *identity=xr_xir_default_identity(op);
@@ -537,17 +533,17 @@ static XrXirStatus effect_invocation_instruction(EffectInvocationFlow *flow,
         if (op->immediate<0 || (uint64_t)op->immediate>=flow->body.domain.function_count)
             return XR_XIR_BAD_STRUCTURE;
         uint32_t target=(uint32_t)op->immediate;bool closed=false;
-        XrXirStatus status=effect_invocation_closed_arguments(flow,instruction,target,&closed);
+        XrXirStatus status=effect_invocation_closed_arguments(flow,target,op,&closed);
         if (status!=XR_XIR_OK) return status;
         /* Open definition metadata retains its ordinary context obligation;
          * only a complete actual target can enter this private invocation key. */
         if (!closed) return XR_XIR_OK;
-        return effect_invocation_transport(flow,instruction,target);
+        return effect_invocation_transport(flow,instruction,target,op);
     }
     case XR_XIR_CALL_INDIRECT: case XR_XIR_INVOKE_INDIRECT:
-        return effect_invocation_indirect(flow,instruction,changed);
+        return effect_invocation_indirect(flow,instruction,op,changed);
     case XR_XIR_FUNCTION_REF:
-        return effect_invocation_latent(flow,instruction);
+        return effect_invocation_latent(flow,instruction,op);
     case XR_XIR_CELL_READ: case XR_XIR_CELL_WRITE: case XR_XIR_CELL_LOCAL_WRITE:
     case XR_XIR_PLACE_READ: case XR_XIR_PLACE_WRITE: case XR_XIR_CELL_PROJECT: {
         if (!owner->cells && (op->op==XR_XIR_PLACE_READ || op->op==XR_XIR_PLACE_WRITE))
@@ -564,4 +560,15 @@ static XrXirStatus effect_invocation_instruction(EffectInvocationFlow *flow,
          * GO transports a target and does not join its body into this root. */
         return XR_XIR_OK;
     }
+}
+
+/* Callers without a decoded row perform the original complete status-returning
+ * read. A failed callback or canonical record cannot reach the dispatcher. */
+static XrXirStatus effect_invocation_instruction(EffectInvocationFlow *flow,
+    uint32_t instruction,bool *changed) {
+    if (!xir_compile_work(flow->owner->work,1)) return XR_XIR_BUDGET;
+    XrXirInstruction storage;const XrXirInstruction *op=NULL;
+    XrXirStatus status=effect_invocation_flow_instruction(flow,instruction,&storage,&op);
+    if (status!=XR_XIR_OK) return status;
+    return effect_invocation_instruction_decoded(flow,instruction,op,changed);
 }

@@ -101,7 +101,7 @@ static XrXirStatus invocation_rotation_derive(const XrXirCompileContext *context
         status=effect_invocation_bounds_capture(context,bounds,module->types,&module->functions[f],f,NULL);
     if (status==XR_XIR_OK) {
         EffectInvocationDriverInput input={context,module,&effects,&graph,bounds,NULL};
-        status=effect_invocation_derive(&input,output);
+        status=effect_invocation_derive(&input,output,NULL);
     }
     effect_graph_free(&graph);invocation_core_storage_free(&effects);
     effect_invocation_bounds_free(bounds);return status;

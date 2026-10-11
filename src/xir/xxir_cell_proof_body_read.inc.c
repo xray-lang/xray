@@ -48,7 +48,7 @@ static XrXirStatus cell_proof_raw_shape(const XrXirCompileContext *context,const
 }
 static XrXirCellProofBodyRead cell_proof_raw_body(const XrXirCompileContext *context,const XrXirModule *module) {
     return (XrXirCellProofBodyRead){xir_metadata_domain_from_module(module),context->resources,module,
-        cell_proof_raw_head,cell_proof_raw_instruction,cell_proof_raw_type,cell_proof_raw_shape};
+        cell_proof_raw_head,cell_proof_raw_instruction,cell_proof_raw_type,cell_proof_raw_shape,NULL};
 }
 static bool cell_proof_body_valid(const XrXirCompileContext *context,const XrXirCellProofBodyRead *body) {
     return xir_compile_context_valid(context) && body && body->resources==context->resources && body->owner &&

@@ -110,7 +110,7 @@ static XrXirStatus conditional_invocation_lowered_context(const XrXirCompileCont
     if (status==XR_XIR_OK) { phase=7;status=effect_invocation_instance_bounds(context,module,&bounds); }
     if (status==XR_XIR_OK) {
         phase=8;EffectInvocationDriverInput input={context,module,&effects,&graph,bounds,NULL};
-        status=effect_invocation_derive(&input,&certificate);
+        status=effect_invocation_derive(&input,&certificate,NULL);
     }
     if (status==XR_XIR_OK) status=invocation_lowered_context_oracle(context,module,&effects,bounds,certificate,oracle);
     if (status==XR_XIR_OK && oracle) {

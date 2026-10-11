@@ -48,8 +48,8 @@ static XrXirStatus effect_invocation_coverage_input(EffectInvocationFlow *flow,
     }
     uint64_t *input=NULL;flow->instruction=edge.instruction;
     if (op->op==XR_XIR_FUNCTION_REF)
-        status=effect_invocation_latent_input(flow,edge.instruction,edge.producer,&input);
-    else status=effect_invocation_arguments(flow,edge.instruction,target->body,edge.producer,closure,&input);
+        status=effect_invocation_latent_input(flow,edge.instruction,edge.producer,op,&input);
+    else status=effect_invocation_arguments(flow,op,target->body,edge.producer,closure,&input);
     uint64_t words=(uint64_t)target->parameter_count*flow->basis.row_words;
     if (status==XR_XIR_OK && words>SIZE_MAX/sizeof(*input)) status=XR_XIR_BUDGET;
     if (status==XR_XIR_OK && words && (!input || !target->input)) status=XR_XIR_BAD_STRUCTURE;

@@ -34,8 +34,29 @@ _Static_assert(sizeof(EffectInvocationDeclaredBounds)%_Alignof(EffectInvocationF
     sizeof(EffectInvocationFunctionBounds)%_Alignof(EffectInvocationValueBound)==0,
     "Certificate bounds preserve descriptor and value alignment");
 
+/* Both outputs consume this call's fresh selected values. The receiver is
+ * private parent scratch, never a saved authorization or a public output. */
+typedef struct EffectInvocationProjectionSelection {
+    uint32_t atom;
+    XrXirRootEffectWitness witness;
+} EffectInvocationProjectionSelection;
+
+typedef struct EffectInvocationProjectionSink {
+    XrCompileResources *resources;
+    uint32_t count;
+    void *owner;
+    XrXirStatus (*write)(const XrXirCompileContext *work,
+        const EffectInvocationCertificate *certificate,uint32_t function,
+        const EffectInvocationProjectionSelection *selected,void *owner);
+} EffectInvocationProjectionSink;
+
+static bool effect_invocation_projection_sink_matches(const XrXirCompileContext *work,
+    const EffectInvocationProjectionSink *sink,uint32_t count) {
+    return !sink || (sink->resources==work->resources && sink->count==count && sink->owner && sink->write);
+}
+
 static XrXirStatus effect_invocation_certificate_project(const XrXirCompileContext *work,
-    EffectInvocationCertificate *certificate);
+    EffectInvocationCertificate *certificate,const EffectInvocationProjectionSink *sink);
 
 typedef struct EffectInvocationSealRequest {
     EffectInvocationOwner **equations;
@@ -163,12 +184,15 @@ static XrXirStatus effect_invocation_copy_origins(EffectInvocationCertificate *c
  * Ownership moves only after complete copied correspondence and closure proof;
  * construction-only pointers are then removed from the published certificate. */
 static XrXirStatus effect_invocation_seal(const XrXirCompileContext *work,
-    const EffectInvocationSealRequest *request,EffectInvocationCertificate **output) {
+    const EffectInvocationSealRequest *request,EffectInvocationCertificate **output,
+    const EffectInvocationProjectionSink *sink) {
     if (!xir_compile_context_valid(work) || !request || !output || *output || !request->equations ||
         !*request->equations || !request->solution || !*request->solution) return XR_XIR_BAD_STRUCTURE;
     EffectInvocationOwner *owner=*request->equations;EffectInvocationSolution *solution=*request->solution;
     if (owner->work->resources!=work->resources || solution->resources!=work->resources ||
-        solution->count!=owner->module->function_count) return XR_XIR_BAD_STRUCTURE;
+        solution->count!=owner->module->function_count ||
+        !effect_invocation_projection_sink_matches(work,sink,owner->module->function_count))
+        return XR_XIR_BAD_STRUCTURE;
     XrXirStatus status=effect_physical_match(work,owner->physical,owner->module);
     if (status==XR_XIR_OK) status=effect_invocation_producers_verify(owner);
     if (status==XR_XIR_OK) status=effect_invocation_coverage_verify(owner);
@@ -189,7 +213,7 @@ static XrXirStatus effect_invocation_seal(const XrXirCompileContext *work,
     if (status==XR_XIR_OK) status=effect_body_type_domain_match(work,certificate->body,owner->module);
     if (status==XR_XIR_OK) {
         certificate->equations=owner;certificate->solution=solution;
-        status=effect_invocation_certificate_project(work,certificate);
+        status=effect_invocation_certificate_project(work,certificate,sink);
     }
     if (status==XR_XIR_OK && !xir_compile_work(work,9)) status=XR_XIR_BUDGET;
     if (status!=XR_XIR_OK) {

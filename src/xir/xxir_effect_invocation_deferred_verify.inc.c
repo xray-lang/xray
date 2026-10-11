@@ -152,38 +152,26 @@ static XrXirStatus effect_invocation_deferred_verify(EffectInvocationOwner *owne
  * term from becoming a canonical result. This does not run the call solver. */
 static XrXirStatus effect_invocation_solution_match(EffectInvocationOwner *owner,
     const EffectInvocationSolution *solution) {
-    if (!solution || solution->resources!=owner->work->resources ||
+    if (!owner || !owner->work || !owner->roots || !solution ||
+        solution->resources!=owner->work->resources ||
         solution->count!=owner->body.domain.function_count || !solution->count ||
         !solution->storage || solution->formulas!=solution->storage) return XR_XIR_BAD_STRUCTURE;
     const XrXirRootTerm *records=(const XrXirRootTerm *)(solution->formulas+solution->count);
-    XrXirRootTerm *expected=NULL;uint32_t capacity=0,at=0;
-    XrXirStatus status=XR_XIR_OK;
+    uint32_t at=0;XrXirStatus status=XR_XIR_OK;
     for (uint32_t f=0;f<solution->count && status==XR_XIR_OK;++f) {
-        uint32_t count=0;status=effect_invocation_terms(owner,f,NULL,&count);
-        if (status!=XR_XIR_OK) break;
         const XrXirRootFormula *formula=&solution->formulas[f];
-        if (!xir_compile_work(owner->work,5)) { status=XR_XIR_BUDGET;break; }
-        if (at>solution->term_count || count>solution->term_count-at ||
+        if (!xir_compile_work(owner->work,6)) { status=XR_XIR_BUDGET;break; }
+        if (owner->roots[f]>=owner->count || at>solution->term_count ||
+            formula->term_count>solution->term_count-at ||
             formula->constant_mask!=owner->nodes[owner->roots[f]].intrinsic_mask ||
-            formula->term_count!=count || formula->terms!=(count?records+at:NULL)) {
+            formula->terms!=(formula->term_count?records+at:NULL)) {
             status=XR_XIR_BAD_STRUCTURE;break;
         }
-        if (count>capacity) {
-            if ((uint64_t)count>SIZE_MAX/sizeof(*expected)) { status=XR_XIR_BUDGET;break; }
-            XrXirRootTerm *replacement=xir_compile_alloc(owner->work,(size_t)count*sizeof(*expected),&status);
-            if (!replacement) break;
-            xr_compile_resources_free(expected);expected=replacement;capacity=count;
-        }
-        uint32_t produced=0;status=effect_invocation_terms(owner,f,expected,&produced);
-        if (status==XR_XIR_OK && produced!=count) status=XR_XIR_BAD_STRUCTURE;
-        for (uint32_t t=0;status==XR_XIR_OK && t<count;++t) {
-            if (!xir_compile_work(owner->work,4)) { status=XR_XIR_BUDGET;break; }
-            if (formula->terms[t].kind!=expected[t].kind || formula->terms[t].index!=expected[t].index)
-                status=XR_XIR_BAD_STRUCTURE;
-        }
+        uint32_t count=0;
+        status=effect_invocation_terms_read(owner,f,NULL,formula->terms,formula->term_count,&count);
+        if (status==XR_XIR_OK && count!=formula->term_count) status=XR_XIR_BAD_STRUCTURE;
         at+=count;
     }
-    xr_compile_resources_free(expected);
     if (status==XR_XIR_OK && at!=solution->term_count) status=XR_XIR_BAD_STRUCTURE;
     return status;
 }

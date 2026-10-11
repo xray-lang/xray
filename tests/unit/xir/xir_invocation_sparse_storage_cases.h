@@ -149,7 +149,7 @@ static XrXirStatus conditional_storage_case(const XrXirCompileContext *context,u
         status=invocation_storage_rows(owner,n,mode,oracle);
     if (status==XR_XIR_OK) { phase=8;status=effect_invocation_stage(owner,&solution); }
     EffectInvocationSealRequest request={&owner,&solution,NULL};
-    if (status==XR_XIR_OK) { phase=9;status=effect_invocation_seal(context,&request,&certificate); }
+    if (status==XR_XIR_OK) { phase=9;status=effect_invocation_seal(context,&request,&certificate,NULL); }
     if (status!=XR_XIR_OK && oracle) fprintf(stderr,
         "INVOCATION_STORAGE mode=%u phase=%u status=%u f=%u b=%u i=%u\n",mode,phase,status,
         diagnostic.function,diagnostic.block,diagnostic.instruction);

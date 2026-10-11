@@ -177,11 +177,9 @@ static XrXirStatus effect_invocation_opaque(EffectInvocationFlow *flow,
 }
 
 static XrXirStatus effect_invocation_ref_target(EffectInvocationFlow *flow,
-    uint32_t instruction,bool *authentic) {
+    const XrXirInstruction *op,bool *authentic) {
+    if (!op || !authentic) return XR_XIR_BAD_STRUCTURE;
     const XirMetadataDomain *module=&flow->body.domain;
-    XrXirInstruction body_op_1;const XrXirInstruction *op=NULL;
-    XrXirStatus body_read_1=effect_invocation_flow_instruction(flow,instruction,&body_op_1,&op);
-    if (body_read_1!=XR_XIR_OK) return body_read_1;
     const XrXirTypeNode *signature=xr_xir_callable_signature(module->types,op->type);
     *authentic=false;
     if (!signature || op->immediate<0 || (uint64_t)op->immediate>=module->function_count)
@@ -250,16 +248,14 @@ static XrXirStatus effect_invocation_site(EffectInvocationFlow *flow,
  * producer site. It does not recursively copy another descriptor's captures.
  * Equal producer sites encountered through PHI or recursion only OR rows. */
 static XrXirStatus effect_invocation_capture(EffectInvocationFlow *flow,
-    uint32_t instruction) {
+    uint32_t instruction,const XrXirInstruction *op) {
     uint32_t destination=flow->function->parameter_count+instruction;
     if (!flow->certified[destination]) return XR_XIR_OK;
     uint32_t selected=UINT32_MAX;
     XrXirStatus status=effect_invocation_site(flow,instruction,&selected);
     if (status!=XR_XIR_OK) return status;
     const EffectInvocationSite *site=&flow->owner->sites[selected];
-    XrXirInstruction body_op_2;const XrXirInstruction *op=NULL;
-    XrXirStatus body_read_2=effect_invocation_flow_instruction(flow,instruction,&body_op_2,&op);
-    if (body_read_2!=XR_XIR_OK) return body_read_2;
+    if (!op) return XR_XIR_BAD_STRUCTURE;
     EffectBodyFunctionHead target_head={0};
     XrXirStatus head_status=effect_invocation_flow_head(flow,site->target,&target_head);
     if (head_status!=XR_XIR_OK) return head_status;
@@ -367,12 +363,10 @@ static XrXirStatus effect_invocation_transfer(EffectInvocationFlow *flow,
  * ordinary NONE return signatures participate; REF/UNKNOWN/fixed barriers
  * retain their original bounds and cannot acquire a permission here. */
 static XrXirStatus effect_invocation_return_origins(EffectInvocationFlow *flow,
-    uint32_t instruction) {
+    uint32_t instruction,const XrXirInstruction *op) {
     EffectInvocationOwner *owner=flow->owner;
     if (!owner->producer_enabled) return XR_XIR_OK;
-    XrXirInstruction body_op_4;const XrXirInstruction *op=NULL;
-    XrXirStatus body_read_4=effect_invocation_flow_instruction(flow,instruction,&body_op_4,&op);
-    if (body_read_4!=XR_XIR_OK) return body_read_4;
+    if (!op) return XR_XIR_BAD_STRUCTURE;
     uint32_t frontier=instruction,destination=flow->function->parameter_count+instruction;
     if (op->op==XR_XIR_INVOKE_RESULT) {
         if (op->immediate<0 || (uint64_t)op->immediate>=flow->function->instruction_count)
@@ -425,9 +419,9 @@ static XrXirStatus effect_invocation_origins_step(EffectInvocationFlow *flow,
     uint32_t destination=flow->function->parameter_count+instruction;
     switch (op->op) {
     case XR_XIR_CALL: case XR_XIR_CALL_DEFAULT: case XR_XIR_CALL_INDIRECT: case XR_XIR_INVOKE_RESULT:
-        return effect_invocation_return_origins(flow,instruction);
+        return effect_invocation_return_origins(flow,instruction,op);
     case XR_XIR_FUNCTION_REF:
-        return effect_invocation_capture(flow,instruction);
+        return effect_invocation_capture(flow,instruction,op);
     case XR_XIR_COPY: case XR_XIR_SCALAR_COPY: case XR_XIR_OWNED_RETAIN:
     case XR_XIR_LOCAL_NEW: case XR_XIR_SCALAR_LOCAL_NEW: case XR_XIR_OWNED_LOCAL_NEW:
     case XR_XIR_LOCAL_READ: case XR_XIR_SCALAR_LOCAL_READ: case XR_XIR_OWNED_LOCAL_READ:
@@ -448,6 +442,42 @@ static XrXirStatus effect_invocation_origins_step(EffectInvocationFlow *flow,
     }
 }
 
+/* Classification locates a real FnRef, whose complete row is still read.
+ * Other initial callable values consume only opcode here; the shape reader
+ * retains full canonical run checks without constructing an unused row. */
+static XrXirStatus effect_invocation_initial_origins(EffectInvocationFlow *flow) {
+    EffectInvocationOwner *owner=flow->owner;XrXirStatus status=XR_XIR_OK;
+    for (uint32_t r=0;r<flow->physical->count && status==XR_XIR_OK;++r) {
+        if (!xir_compile_work(owner->work,1)) return XR_XIR_BUDGET;
+        EffectPhysicalRecord record=flow->physical->records[r];
+        if (!(record.mask&EFFECT_PHYSICAL_CALLABLE) || record.value<flow->function->parameter_count) continue;
+        if (record.value>=flow->values) return XR_XIR_BAD_STRUCTURE;
+        uint32_t destination=record.value,i=destination-flow->function->parameter_count;
+        if (record.mask&EFFECT_PHYSICAL_REFERENCE) {
+            XrXirInstruction storage;const XrXirInstruction *op=NULL;
+            status=effect_invocation_flow_instruction(flow,i,&storage,&op);
+            if (status!=XR_XIR_OK) return status;
+            if (op->op!=XR_XIR_FUNCTION_REF) return XR_XIR_BAD_STRUCTURE;
+            bool authentic=false;
+            status=effect_invocation_ref_target(flow,op,&authentic);
+            if (status==XR_XIR_OK && authentic) flow->certified[destination]=1;
+            else if (status==XR_XIR_OK) status=effect_invocation_opaque(flow,destination,true);
+        } else {
+            EffectBodyInstructionShape shape={0};
+            status=effect_body_request_shape(&flow->body,owner->nodes[flow->node].body,i,&shape);
+            if (status!=XR_XIR_OK) return status;
+            if (shape.op==XR_XIR_FUNCTION_REF) return XR_XIR_BAD_STRUCTURE;
+            if (shape.op!=XR_XIR_COPY && shape.op!=XR_XIR_LOCAL_NEW &&
+                shape.op!=XR_XIR_LOCAL_READ && shape.op!=XR_XIR_PHI &&
+                shape.op!=XR_XIR_SCALAR_COPY && shape.op!=XR_XIR_OWNED_RETAIN &&
+                shape.op!=XR_XIR_SCALAR_LOCAL_NEW && shape.op!=XR_XIR_SCALAR_LOCAL_READ &&
+                shape.op!=XR_XIR_OWNED_LOCAL_NEW && shape.op!=XR_XIR_OWNED_LOCAL_READ)
+                status=effect_invocation_opaque(flow,destination,false);
+        }
+    }
+    return status;
+}
+
 static XrXirStatus effect_invocation_origins_read(EffectInvocationFlow *flow,
     const EffectBodyRequest *request) {
     EffectInvocationOwner *owner=flow->owner;
@@ -455,12 +485,18 @@ static XrXirStatus effect_invocation_origins_read(EffectInvocationFlow *flow,
     if (!xir_compile_work(owner->work,sizeof(flow->body))) return XR_XIR_BUDGET;
     flow->body=*request;
     EffectInvocationNode identity=owner->nodes[flow->node];
-    EffectBodyFunctionHead root={0};
     XrXirStatus status=effect_invocation_flow_head(flow,identity.body,&flow->head);
-    if (status==XR_XIR_OK) status=effect_invocation_flow_head(flow,identity.root,&root);
     if (status!=XR_XIR_OK) return status;
+    if (!xir_compile_work(owner->work,1)) return XR_XIR_BUDGET;
+    uint32_t root_parameters=flow->head.parameter_count;
+    if (identity.root!=identity.body) {
+        EffectBodyFunctionDimensions root={0};
+        status=effect_body_request_dimensions(&flow->body,identity.root,&root);
+        if (status!=XR_XIR_OK) return status;
+        root_parameters=root.parameter_count;
+    }
     flow->function=&flow->head;
-    status=effect_invocation_basis_parameters(owner,root.parameter_count,&flow->basis);
+    status=effect_invocation_basis_parameters(owner,root_parameters,&flow->basis);
     if (status!=XR_XIR_OK) return status;
     status=effect_invocation_flow_storage(flow);
     if (status!=XR_XIR_OK) return status;
@@ -481,27 +517,7 @@ static XrXirStatus effect_invocation_origins_read(EffectInvocationFlow *flow,
         memcpy(row,input,(size_t)flow->basis.fn_words*sizeof(*row));
     }
     status=effect_invocation_barriers(flow);
-    for (uint32_t r=0;r<flow->physical->count && status==XR_XIR_OK;++r) {
-        if (!xir_compile_work(owner->work,1)) return XR_XIR_BUDGET;
-        EffectPhysicalRecord record=flow->physical->records[r];
-        if (!(record.mask&EFFECT_PHYSICAL_CALLABLE) || record.value<flow->function->parameter_count) continue;
-        if (record.value>=flow->values) return XR_XIR_BAD_STRUCTURE;
-        uint32_t destination=record.value,i=destination-flow->function->parameter_count;
-        XrXirInstruction body_op_6;const XrXirInstruction *op=NULL;
-        XrXirStatus body_read_6=effect_invocation_flow_instruction(flow,i,&body_op_6,&op);
-        if (body_read_6!=XR_XIR_OK) return body_read_6;
-        if (op->op==XR_XIR_FUNCTION_REF) {
-            bool authentic=false;
-            status=effect_invocation_ref_target(flow,i,&authentic);
-            if (status==XR_XIR_OK && authentic) flow->certified[destination]=1;
-            else if (status==XR_XIR_OK) status=effect_invocation_opaque(flow,destination,true);
-        } else if (op->op!=XR_XIR_COPY && op->op!=XR_XIR_LOCAL_NEW &&
-            op->op!=XR_XIR_LOCAL_READ && op->op!=XR_XIR_PHI &&
-            op->op!=XR_XIR_SCALAR_COPY && op->op!=XR_XIR_OWNED_RETAIN &&
-            op->op!=XR_XIR_SCALAR_LOCAL_NEW && op->op!=XR_XIR_SCALAR_LOCAL_READ &&
-            op->op!=XR_XIR_OWNED_LOCAL_NEW && op->op!=XR_XIR_OWNED_LOCAL_READ)
-            status=effect_invocation_opaque(flow,destination,false);
-    }
+    if (status==XR_XIR_OK) status=effect_invocation_initial_origins(flow);
     flow->changed=true;
     while (status==XR_XIR_OK && flow->changed) {
         flow->changed=false;
@@ -544,8 +560,9 @@ static XrXirStatus effect_invocation_origins_read(EffectInvocationFlow *flow,
     return status;
 }
 
-/* Construction borrows its already-admitted real raw input. The replay
- * core above is also used with the sole immutable owning representation. */
+/* One replay consumes the sole immutable owning representation. Complete
+ * rows may be shared only within the current request; no queue visit retains
+ * its stack instruction or derives authority from a previous read. */
 static XrXirStatus effect_invocation_origins(EffectInvocationFlow *flow) {
     if (!flow || !flow->owner || !effect_body_material_shape(flow->owner->material)) return XR_XIR_BAD_STRUCTURE;
     EffectBodyRequest request=effect_body_owned_request(flow->owner->work,flow->owner->material);

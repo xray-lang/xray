@@ -310,14 +310,20 @@ static XrXirStatus error_cells(ErrorFlow *flow, uint32_t target, const uint64_t 
     }
     return XR_XIR_OK;
 }
+/* Even a locally proven zero transfer retains the original finite step. */
+static XrXirStatus error_instruction_begin(ErrorFlow *flow,uint32_t i) {
+    if (!flow || !flow->function || i>=flow->function->instruction_count)
+        return XR_XIR_BAD_STRUCTURE;
+    flow->instruction=i;
+    return xir_compile_work(flow->remaining,(uint64_t)flow->effects->words+
+        flow->effects->atom_count+1) ? XR_XIR_OK : XR_XIR_BUDGET;
+}
 static XrXirStatus error_instruction(ErrorFlow *flow, uint32_t i,
     const XrXirInstruction *op) {
-    if (!flow || !flow->function || !op || i>=flow->function->instruction_count)
-        return XR_XIR_BAD_STRUCTURE;
-    XrXirStatus read=XR_XIR_OK;
-    flow->instruction=i;
+    if (!op) return XR_XIR_BAD_STRUCTURE;
+    XrXirStatus read=error_instruction_begin(flow,i);
+    if (read!=XR_XIR_OK) return read;
     uint32_t words = flow->effects->words;
-    if (!xir_compile_work(flow->remaining, (uint64_t)words + flow->effects->atom_count + 1)) return XR_XIR_BUDGET;
     uint64_t *out = error_value(flow, flow->work, flow->function->parameter_count + i);
     if (op->op == XR_XIR_PHI) return XR_XIR_OK;
     if (out) { if (!xir_compile_work(flow->remaining, (size_t)words * sizeof(*out))) { return XR_XIR_BUDGET; } memset(out, 0, (size_t)words * sizeof(*out)); }
@@ -504,16 +510,26 @@ static XrXirStatus error_edge(ErrorFlow *flow, uint32_t from, uint32_t to,
     }
     return XR_XIR_OK;
 }
-static XrXirStatus error_block(ErrorFlow *flow, uint32_t b) {
+static XrXirStatus error_block(ErrorFlow *flow, uint32_t b,const uint8_t *zero_copy) {
     const XrXirBlock *block = &flow->function->blocks[b];
     if (!xir_compile_work(flow->remaining, flow->stride)) return XR_XIR_BUDGET;
     { if (!xir_compile_work(flow->remaining, flow->stride * sizeof(uint64_t))) { return XR_XIR_BUDGET; } memcpy(flow->work, flow->states + (size_t)b * flow->stride, flow->stride * sizeof(uint64_t)); }
     XrXirInstruction storage;const XrXirInstruction *end=NULL;
     for (uint32_t i = block->first; i < block->first + block->count; ++i) {
         XrXirStatus status = block->panic ? error_edge(flow, b, block->panic, NULL, true) : XR_XIR_OK;
-        if (status == XR_XIR_OK)
-            status = error_operation(flow,flow->function_index,i,&storage,&end);
-        if (status == XR_XIR_OK) status = error_instruction(flow, i, end);
+        bool copied_zero=false;
+        if (status==XR_XIR_OK && zero_copy && i+1<block->first+block->count) {
+            if (!xir_compile_work(flow->remaining,1)) return XR_XIR_BUDGET;
+            copied_zero=(zero_copy[i/8]&(UINT32_C(1)<<(i%8)))!=0;
+            if (copied_zero && flow->slots[flow->function->parameter_count+i]!=UINT32_MAX)
+                return XR_XIR_BAD_STRUCTURE;
+        }
+        if (status==XR_XIR_OK && copied_zero) status=error_instruction_begin(flow,i);
+        else {
+            if (status == XR_XIR_OK)
+                status = error_operation(flow,flow->function_index,i,&storage,&end);
+            if (status == XR_XIR_OK) status = error_instruction(flow, i, end);
+        }
         if (status != XR_XIR_OK || flow->restart) return status;
     }
     if (!end) return XR_XIR_BAD_STRUCTURE;
@@ -592,6 +608,10 @@ static XrXirStatus error_function(ErrorFlow *flow, uint32_t f) {
     uint32_t inline_sources[1024], *sources = inline_sources;
     uint8_t *membership = inline_membership;
     XrXirStatus status = XR_XIR_OK;
+    /* Representation dispatch is not authority. Each physical row still
+     * rebuilds full membership through the complete owned decoder below. */
+    bool owned=flow->body.instruction==effect_body_owned_instruction;
+    uint32_t zero_copy_count=0;
     if (flow->values > sizeof(inline_membership)) {
         uint64_t temporary_bytes=(uint64_t)flow->values*(sizeof(*sources)+sizeof(*membership));
         if (temporary_bytes>SIZE_MAX) return XR_XIR_BUDGET;
@@ -611,14 +631,16 @@ static XrXirStatus error_function(ErrorFlow *flow, uint32_t f) {
             (cell ? ERROR_ROW_CELL : 0) | (copy ? ERROR_ROW_COPY : 0));
         if (active) ++flow->active_count;
         if (cell) ++flow->cell_count;
+        if (owned && copy && !active) ++zero_copy_count;
         if (copy) {
             if (!xir_compile_work(flow->remaining,1)) { status=XR_XIR_BUDGET;goto membership_done; }
             sources[v]=source;
         }
     }
     uint64_t stride = (uint64_t)(flow->active_count ? flow->active_count : 1) * words;
+    uint64_t copy_bytes=zero_copy_count ? ((uint64_t)flow->function->instruction_count+7)/8 : 0;
     uint64_t extra = ((uint64_t)flow->values * 2 + flow->active_count + flow->cell_count) *
-        sizeof(uint32_t) + flow->function->block_count;
+        sizeof(uint32_t) + flow->function->block_count + copy_bytes;
     uint64_t zero_bytes = words * sizeof(uint64_t);
     if (extra > SIZE_MAX - zero_bytes ||
         stride > (SIZE_MAX - zero_bytes - extra) / sizeof(uint64_t) / rows) { status = XR_XIR_BUDGET;goto membership_done; }
@@ -639,6 +661,7 @@ static XrXirStatus error_function(ErrorFlow *flow, uint32_t f) {
         /* Charge the temporary byte scan and all map, inverse and Cell writes. */
         if (!xir_compile_work(flow->remaining, (uint64_t)flow->values * 2 + flow->active_count + flow->cell_count))
             { status = XR_XIR_BUDGET;goto membership_done; }
+        uint8_t *zero_copy=copy_bytes ? flow->reachable+flow->function->block_count : NULL;
         uint32_t cell = 0, active = 0;
         for (uint32_t v = 0; v < flow->values; ++v) {
             uint8_t classified = membership[v];
@@ -646,6 +669,12 @@ static XrXirStatus error_function(ErrorFlow *flow, uint32_t f) {
                 if (active >= flow->active_count) { status = XR_XIR_BAD_STRUCTURE;goto membership_done; }
                 flow->slots[v] = active; flow->active[active++] = v;
             } else flow->slots[v] = UINT32_MAX;
+            if (zero_copy && (classified&ERROR_ROW_COPY) && !(classified&ERROR_ROW_ACTIVE)) {
+                if (v<flow->function->parameter_count) { status=XR_XIR_BAD_STRUCTURE;goto membership_done; }
+                if (!xir_compile_work(flow->remaining,1)) { status=XR_XIR_BUDGET;goto membership_done; }
+                uint32_t i=v-flow->function->parameter_count;
+                zero_copy[i/8]|=(uint8_t)(UINT32_C(1)<<(i%8));
+            }
             if (classified & ERROR_ROW_CELL) {
                 if (cell >= flow->cell_count) { status = XR_XIR_BAD_STRUCTURE;goto membership_done; }
                 flow->cells[cell++] = v;
@@ -674,7 +703,7 @@ static XrXirStatus error_function(ErrorFlow *flow, uint32_t f) {
                 else if (flow->reachable[b] & ERROR_BLOCK_PENDING) {
                     /* Clear before transfer so self/back edges can schedule it again. */
                     flow->reachable[b] &= (uint8_t)~ERROR_BLOCK_PENDING;
-                    status = error_block(flow, b);
+                    status = error_block(flow, b,zero_copy);
                 }
             }
         } while (status == XR_XIR_OK && flow->changed && !flow->restart);

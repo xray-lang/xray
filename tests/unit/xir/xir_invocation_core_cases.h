@@ -59,7 +59,7 @@ static XrXirStatus conditional_invocation_core(const XrXirCompileContext *contex
         status=effect_invocation_bounds_capture(context,bounds,module->types,&module->functions[f],f,NULL);
     if (status==XR_XIR_OK) {
         phase=6;EffectInvocationDriverInput input={context,module,&effects,&graph,bounds,NULL};
-        status=effect_invocation_derive(&input,&certificate);
+        status=effect_invocation_derive(&input,&certificate,NULL);
     }
     if (status!=XR_XIR_OK && oracle) fprintf(stderr,
         "INVOCATION_CORE mode=%u phase=%u status=%u f=%u b=%u i=%u\n",mode,phase,status,
@@ -85,7 +85,7 @@ static XrXirStatus conditional_invocation_core(const XrXirCompileContext *contex
                 !trace->steps[0].witness.distance && trace->steps[0].witness.slot==0);
             size_t attempts=rp_attempts;EffectInvocationCertificate *occupied=certificate;
             EffectInvocationDriverInput empty={.work=context};
-            CHECK(effect_invocation_derive(&empty,&occupied)==XR_XIR_BAD_STRUCTURE &&
+            CHECK(effect_invocation_derive(&empty,&occupied,NULL)==XR_XIR_BAD_STRUCTURE &&
                 occupied==certificate && rp_attempts==attempts);
             EffectInvocationCauseTrace *occupied_trace=trace;
             CHECK(effect_invocation_certificate_trace(context,certificate,1,&occupied_trace)==XR_XIR_BAD_STRUCTURE &&

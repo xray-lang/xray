@@ -20,8 +20,9 @@ typedef struct EffectInvocationDriverInput {
  * ROOT solve and never lowers a precomputed permission. A success transfers
  * a completely sealed computation; publication belongs to the common caller. */
 static inline XrXirStatus effect_invocation_derive(const EffectInvocationDriverInput *input,
-    EffectInvocationCertificate **output) {
-    if (!input || !output || *output || !xir_compile_context_valid(input->work))
+    EffectInvocationCertificate **output,const EffectInvocationProjectionSink *sink) {
+    if (!input || !output || *output || !xir_compile_context_valid(input->work) || !input->module ||
+        !effect_invocation_projection_sink_matches(input->work,sink,input->module->function_count))
         return XR_XIR_BAD_STRUCTURE;
     EffectInvocationOwner *equations=NULL;EffectInvocationSolution *solution=NULL;
     XrXirStatus status=effect_invocations_create(input->work,input->module,input->effects,
@@ -29,7 +30,7 @@ static inline XrXirStatus effect_invocation_derive(const EffectInvocationDriverI
     if (status==XR_XIR_OK) status=effect_invocations_solve(equations);
     if (status==XR_XIR_OK) status=effect_invocation_stage(equations,&solution);
     EffectInvocationSealRequest request={&equations,&solution,input->dense};
-    if (status==XR_XIR_OK) status=effect_invocation_seal(input->work,&request,output);
+    if (status==XR_XIR_OK) status=effect_invocation_seal(input->work,&request,output,sink);
     effect_invocation_solution_free(solution);effect_invocation_free(equations);
     return status;
 }

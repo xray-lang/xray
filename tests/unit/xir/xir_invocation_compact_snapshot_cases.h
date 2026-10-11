@@ -134,6 +134,25 @@ static void conditional_compact_malformed(const XrXirCompileContext *context,
     }
 }
 
+/* Poisoned inactive pending words are not physical fields. Every physical
+ * base word, including signed and unused bits, still round-trips independently. */
+static void conditional_compact_pending_state(const XrXirCompileContext *context,
+    const XrXirInstruction *expected) {
+    uint64_t held_bytes=rp_stats(context).live_bytes;
+    EffectBodyPendingRun run;memset(&run,0xA5,sizeof(run));
+    EffectBodyFunction body={.instruction_count=1};
+    CHECK(effect_body_run_seed(context,&run,expected,0)==XR_XIR_OK && run.first==0 && run.count==1 && !run.mask);
+    CHECK(effect_body_run_append(context,&body,&run)==XR_XIR_OK && body.run_count==1 && body.stream_words==EFFECT_BODY_HEADER);
+    EffectBodyRead read=effect_body_compile_read(context);XrXirInstruction decoded;
+    CHECK(effect_body_instruction_get(&read,&body,0,&decoded)==XR_XIR_OK && conditional_compact_same(&decoded,expected));
+    uint32_t words=body.stream_words,runs=body.run_count;
+    run.mask=1;
+    CHECK(effect_body_run_append(context,&body,&run)==XR_XIR_BAD_STRUCTURE && body.stream_words==words && body.run_count==runs);
+    run.count=2;run.delta[0]=0;body.instruction_count=2;
+    CHECK(effect_body_run_append(context,&body,&run)==XR_XIR_BAD_STRUCTURE && body.stream_words==words && body.run_count==runs);
+    xr_compile_resources_free(body.stream);CHECK(rp_stats(context).live_bytes==held_bytes);
+}
+
 static XrXirStatus conditional_compact_codec(const XrXirCompileContext *context,uint32_t mode,bool oracle) {
     XrXirInstruction original[8],source[8];conditional_compact_rows(original);memcpy(source,original,sizeof(source));
     XrXirFunction expected={.instructions=original,.instruction_count=8};
@@ -164,6 +183,7 @@ static XrXirStatus conditional_compact_codec(const XrXirCompileContext *context,
         CHECK(effect_body_instruction_get(&read,&body,8,&out)==XR_XIR_BAD_STRUCTURE &&
             conditional_compact_same(&out,&sentinel));
         if (mode) conditional_compact_malformed(context,&body,&expected);
+        else conditional_compact_pending_state(context,&original[0]);
     }
     xr_compile_resources_free(body.stream);return status;
 }
@@ -328,7 +348,7 @@ static void conditional_compact_projection_domains(const XrXirCompileContext *co
  * callbacks. Partial requests retain every original owned head refusal. */
 static void conditional_compact_dimensions(const XrXirCompileContext *context,
     const EffectBodyRequest *request) {
-    const uint32_t parameters[4]={0,2,1,0},instructions[4]={5,2,2,1};
+    const uint32_t parameters[4]={0,2,1,0},instructions[4]={5,2,2,3};
     for (uint32_t f=0;f<4;++f) {
         EffectBodyFunctionDimensions dimensions={77,78};
         CHECK(effect_body_request_dimensions(request,f,&dimensions)==XR_XIR_OK &&
@@ -410,6 +430,106 @@ static void conditional_compact_edge_reads(const XrXirCompileContext *context,
 
 /* Each access delegates to the sole physical reader. Fresh provider facts
  * remain distinct from full body/source correspondence and ROOT closure. */
+/* Rejections consume genuine owned post-death heads. Row kind, ordinal,
+ * actual type and opcode are all independent checks, with first failure sticky. */
+static void conditional_compact_builder_rows(const XrXirCompileContext *context,
+    XrXirCellProofBodyRead *request) {
+    XrXirCellProofBodyHead head={0};XrXirInstruction actual;
+    CHECK(request->head(context,request->owner,0,&head)==XR_XIR_OK && !head.parameter_count && head.instruction_count);
+    CHECK(request->instruction(context,request->owner,0,0,&actual)==XR_XIR_OK &&
+        actual.op==XR_XIR_CONST_INT && actual.type==XR_XIR_I64);
+    for (uint32_t mode=0;mode<4;++mode) {
+        uint64_t held_bytes=rp_stats(context).live_bytes;
+        XrXirCellProofBuilder *builder=NULL;XrXirCellProvenance *output=NULL;
+        CHECK(xir_cell_proof_builder_begin(context,request,&builder)==XR_XIR_OK && builder);
+        CHECK(xir_cell_proof_builder_head(builder,0,&head)==XR_XIR_OK);
+        XrXirStatus expected=mode==0 || mode==3?XR_XIR_BAD_STRUCTURE:XR_XIR_BAD_TYPE;
+        XrXirStatus status;
+        if (!mode) status=xir_cell_proof_builder_instruction(builder,0,1,actual.type,actual.op,actual.type);
+        else if (mode==1) status=xir_cell_proof_builder_parameter(builder,0,0,actual.type);
+        else status=xir_cell_proof_builder_instruction(builder,0,0,actual.type,
+            mode==3?XR_XIR_INVALID:actual.op,mode==2?XR_XIR_F64:actual.type);
+        CHECK(status==expected);
+        XrCompileResourceStats before=rp_stats(context);
+        CHECK(xir_cell_proof_builder_instruction(builder,0,0,actual.type,actual.op,actual.type)==expected);
+        XrCompileResourceStats after=rp_stats(context);CHECK(!memcmp(&before,&after,sizeof(before)));
+        CHECK(xir_cell_proof_builder_finish(&builder,&output)==expected && !builder && !output);
+        CHECK(rp_stats(context).live_bytes==held_bytes);
+    }
+}
+
+/* The genuine producer dies before every span attack. Ordinary head,
+ * scalar, role and edge replay remains complete for all four functions. */
+static void conditional_compact_builder_spans(const XrXirCompileContext *context,
+    XrXirCellProofBodyRead *request) {
+    CHECK(request->span);
+    XrXirCellProofSpanCursor sentinel={.function=3,.shape={XR_XIR_RETURN,XR_XIR_F64}},cursor=sentinel;
+    CHECK(request->span(context,request->owner,4,0,2,&cursor)==XR_XIR_BAD_STRUCTURE &&
+        !memcmp(&cursor,&sentinel,sizeof(cursor)));
+    CHECK(request->span(context,request->owner,3,1,2,&cursor)==XR_XIR_BAD_STRUCTURE &&
+        !memcmp(&cursor,&sentinel,sizeof(cursor)));
+    cursor.function=sentinel.function=0;
+    CHECK(request->span(context,request->owner,0,0,2,&cursor)==XR_XIR_BAD_TYPE &&
+        !memcmp(&cursor,&sentinel,sizeof(cursor)));
+    for (uint32_t mode=0;mode<9;++mode) {
+        uint64_t held_bytes=rp_stats(context).live_bytes;
+        XrXirCellProofBuilder *builder=NULL;XrXirCellProvenance *output=NULL;
+        CHECK(xir_cell_proof_builder_begin(context,request,&builder)==XR_XIR_OK && builder);
+        for (uint32_t f=0;f<3;++f) {
+            XrXirCellProofBodyHead head={0};
+            CHECK(request->head(context,request->owner,f,&head)==XR_XIR_OK);
+            CHECK(xir_cell_proof_builder_head(builder,f,&head)==XR_XIR_OK);
+            for (uint32_t v=0;v<head.parameter_count;++v)
+                CHECK(xir_cell_proof_builder_parameter(builder,f,v,head.parameters[v])==XR_XIR_OK);
+            for (uint32_t i=0;i<head.instruction_count;++i) {
+                XrXirInstruction actual;
+                CHECK(request->instruction(context,request->owner,f,i,&actual)==XR_XIR_OK);
+                CHECK(xir_cell_proof_builder_instruction(builder,f,head.parameter_count+i,
+                    actual.type,actual.op,actual.type)==XR_XIR_OK);
+            }
+            CHECK(xir_cell_proof_builder_function(builder,f)==XR_XIR_OK);
+        }
+        XrXirCellProofBodyHead head={0};
+        CHECK(request->head(context,request->owner,3,&head)==XR_XIR_OK && !head.parameter_count && head.instruction_count==3);
+        CHECK(xir_cell_proof_builder_head(builder,3,&head)==XR_XIR_OK);
+        XrXirCellProofInstructionShape shape={XR_XIR_CONST_INT,XR_XIR_I64};
+        XrXirStatus status;
+        if (mode<6) {
+            if (mode==4) shape.type=XR_XIR_F64;
+            if (mode==5) shape.op=XR_XIR_INVALID;
+            status=xir_cell_proof_builder_span(builder,mode==0?2:3,mode==1?1:0,
+                mode==2?0:mode==3?4:2,&shape);
+            XrXirStatus expected=mode==4?XR_XIR_BAD_TYPE:XR_XIR_BAD_STRUCTURE;
+            CHECK(status==expected);
+            XrCompileResourceStats before_retry=rp_stats(context);
+            shape=(XrXirCellProofInstructionShape){XR_XIR_CONST_INT,XR_XIR_I64};
+            CHECK(xir_cell_proof_builder_span(builder,3,0,2,&shape)==expected);
+            XrCompileResourceStats after_retry=rp_stats(context);CHECK(!memcmp(&before_retry,&after_retry,sizeof(before_retry)));
+            CHECK(xir_cell_proof_builder_finish(&builder,&output)==expected && !builder && !output);
+        } else {
+            CHECK(xir_cell_proof_builder_span(builder,3,0,2,&shape)==XR_XIR_OK);
+            XrXirInstruction actual;
+            CHECK(request->instruction(context,request->owner,3,2,&actual)==XR_XIR_OK && actual.op==XR_XIR_RETURN);
+            CHECK(xir_cell_proof_builder_instruction(builder,3,2,actual.type,actual.op,actual.type)==XR_XIR_OK);
+            const EffectCellBodyAdapter *adapter=request->owner;
+            EffectBodyMaterial *material=(EffectBodyMaterial *)adapter->request.owner;
+            EffectBodyFunction *function=&material->functions[3];
+            uint32_t words=function->stream_words,runs=function->run_count;
+            if (mode==6) function->stream_words-=EFFECT_BODY_HEADER;
+            if (mode==7) --function->run_count;
+            status=xir_cell_proof_builder_function(builder,3);
+            function->stream_words=words;function->run_count=runs;
+            if (mode<8) CHECK(status==XR_XIR_BAD_STRUCTURE);
+            else CHECK(status==XR_XIR_OK);
+            CHECK(xir_cell_proof_builder_finish(&builder,&output)==(mode<8?XR_XIR_BAD_STRUCTURE:XR_XIR_OK) && !builder);
+            if (mode<8) CHECK(!output);
+            else CHECK(output && xr_xir_compile_cell_provenance_body_matches(context,output,request,NULL)==XR_XIR_OK);
+            xr_xir_compile_cell_provenance_free(output);
+        }
+        CHECK(rp_stats(context).live_bytes==held_bytes);
+    }
+}
+
 static void conditional_compact_cell_attacks(const XrXirCompileContext *context,
     XrXirEffects *effects,EffectCellBodyAdapter *adapter,XrXirCellProofBodyRead *request) {
     XrXirInstruction sentinel={.op=XR_XIR_RETURN,.type=XR_XIR_I64,.immediate=INT64_MIN},out=sentinel;
@@ -420,6 +540,8 @@ static void conditional_compact_cell_attacks(const XrXirCompileContext *context,
         !memcmp(&head,&head_sentinel,sizeof(head)));
     XrXirType type=XR_XIR_F64;
     CHECK(request->type(context,request->owner,0,5,&type)==XR_XIR_BAD_STRUCTURE && type==XR_XIR_F64);
+    conditional_compact_builder_rows(context,request);
+    conditional_compact_builder_spans(context,request);
     XrXirCellOriginView view={0};
     CHECK(xr_xir_compile_cell_origin_view(context,effects->cells,2,0,&view)==XR_XIR_OK &&
         !view.intrinsic_mask && view.parameter_count==1 && view.parameters[0]==0 &&
@@ -433,6 +555,9 @@ static void conditional_compact_cell_attacks(const XrXirCompileContext *context,
     CHECK(request->instruction(&foreign,request->owner,0,0,&out)==XR_XIR_BAD_STRUCTURE &&
         conditional_compact_same(&out,&sentinel));
     CHECK(xr_xir_compile_cell_provenance_body_matches(&foreign,effects->cells,request,NULL)==XR_XIR_BAD_STRUCTURE);
+    XrXirCellProofSpanCursor cursor={.function=3},cursor_sentinel=cursor;
+    CHECK(request->span(&foreign,request->owner,3,0,2,&cursor)==XR_XIR_BAD_STRUCTURE &&
+        !memcmp(&cursor,&cursor_sentinel,sizeof(cursor)));
     XrCompileResourceStats after=rp_stats(&foreign);CHECK(!memcmp(&before,&after,sizeof(before)));
     EffectCellBodyAdapter destination={0};XrXirCellProofBodyRead occupied=*request;
     CHECK(effect_cell_body_owned(&foreign,effects->invocations->body,&destination,&occupied)==XR_XIR_BAD_STRUCTURE &&
@@ -454,6 +579,10 @@ static void conditional_compact_cell_attacks(const XrXirCompileContext *context,
  * raw and Checked producers die before replay, lookups and adversarial checks. */
 static XrXirStatus conditional_compact_owned(const XrXirCompileContext *context,bool oracle) {
     InvocationDeferredFixture fixture;invocation_deferred_fixture(&fixture,0);
+    fixture.init[0]=(XrXirInstruction){.op=XR_XIR_CONST_INT,.type=XR_XIR_I64,.immediate=1};
+    fixture.init[1]=(XrXirInstruction){.op=XR_XIR_CONST_INT,.type=XR_XIR_I64,.immediate=2};
+    fixture.init[2]=(XrXirInstruction){.op=XR_XIR_RETURN};
+    fixture.init_block.count=fixture.functions[3].instruction_count=3;
     XrXirArtifact *checked=NULL;XrXirEffects *effects=NULL;
     XrXirStatus status=xir_fixture_check(context,&fixture.module,&checked,NULL);
     if (status==XR_XIR_OK) status=xr_xir_compile_artifact_verify(checked,NULL);
@@ -474,10 +603,14 @@ static XrXirStatus conditional_compact_owned(const XrXirCompileContext *context,
             raw_operation==&original->functions[0].instructions[0] && !memcmp(&raw_fields,&raw_sentinel,sizeof(raw_fields)));
         CHECK(rp_stats(context).work-raw_before.work==2+sizeof(raw_operation) &&
             rp_stats(context).allocation_count==raw_before.allocation_count && rp_stats(context).live_bytes==raw_before.live_bytes);
-        conditional_compact_dimensions(context,&raw);
+        conditional_compact_dimensions(context,&raw);CHECK(!body_read.span);
         XrXirModule changed=*original;XrXirFunction functions[4];XrXirInstruction entry[5];
         memcpy(functions,original->functions,sizeof(functions));memcpy(entry,functions[0].instructions,sizeof(entry));
         functions[0].instructions=entry;changed.functions=functions;entry[0].immediate=99;
+        CHECK(effect_body_source_match(context,effects->invocations->body,&changed)==XR_XIR_BAD_STRUCTURE);
+        functions[0]=original->functions[0];XrXirInstruction initializer[3];
+        memcpy(initializer,functions[3].instructions,sizeof(initializer));functions[3].instructions=initializer;
+        initializer[1].targets[1]=UINT32_MAX;
         CHECK(effect_body_source_match(context,effects->invocations->body,&changed)==XR_XIR_BAD_STRUCTURE);
     }
     xr_xir_compile_artifact_free(checked);memset(&fixture,0xCE,sizeof(fixture));

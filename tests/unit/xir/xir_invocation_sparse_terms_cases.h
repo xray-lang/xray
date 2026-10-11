@@ -30,7 +30,7 @@ static void conditional_sparse_physical_bound_rejections(EffectInvocationOwner *
     uint32_t original_mask=physical->records[0].mask;
     XrCompileResourceStats before=rp_stats(context);RootParameterMark retained=rp_mark();
     physical->records[0].mask&=~EFFECT_PHYSICAL_CALLABLE;
-    CHECK(effect_invocation_seal(context,&request,&output)==XR_XIR_BAD_STRUCTURE && !output &&
+    CHECK(effect_invocation_seal(context,&request,&output,NULL)==XR_XIR_BAD_STRUCTURE && !output &&
         held==owner && staged==solution && rp_stats(context).live_bytes==before.live_bytes &&
         rp_stats(context).allocation_count==before.allocation_count);
     physical->records[0].mask=original_mask;rp_balanced(retained);
@@ -40,12 +40,52 @@ static void conditional_sparse_physical_bound_rejections(EffectInvocationOwner *
     CHECK(bound->value==0 && bound->callable && bound->mask==XR_XIR_CALLABLE_ROOT_UNRESOLVED);
 }
 
+/* The independent sparse indices define the expected canonical stream.
+ * Matching may read it once, but must neither allocate an expected copy nor
+ * write through either the staged storage or an aliased receiving request. */
+static void conditional_sparse_receiver_rejections(EffectInvocationOwner *owner,
+    EffectInvocationSolution *solution,uint32_t mode) {
+    const XrXirCompileContext *context=owner->work;
+    XrXirRootFormula *formula=&solution->formulas[1];
+    XrXirRootTerm *terms=(XrXirRootTerm *)formula->terms;
+    CHECK(formula->term_count==sparse_counts[mode] && terms);
+    size_t attempts=rp_attempts;RootParameterMark physical=rp_mark();
+    XrCompileResourceStats before=rp_stats(context);
+    CHECK(effect_invocation_solution_match(owner,solution)==XR_XIR_OK && rp_attempts==attempts);
+    uint32_t count=UINT32_C(0x12345678),limit=formula->term_count;
+    CHECK(effect_invocation_terms_read(owner,1,terms,terms,limit,&count)==XR_XIR_BAD_STRUCTURE &&
+        count==UINT32_C(0x12345678) && rp_attempts==attempts);
+    CHECK(effect_invocation_terms_read(owner,1,NULL,terms,limit-1,&count)==XR_XIR_BAD_STRUCTURE &&
+        count==UINT32_C(0x12345678) && rp_attempts==attempts);
+    uint32_t kind=terms[0].kind;terms[0].kind=XR_XIR_ROOT_TERM_CELL_PARAMETER;
+    CHECK(effect_invocation_solution_match(owner,solution)==XR_XIR_BAD_STRUCTURE && rp_attempts==attempts);
+    terms[0].kind=kind;
+    const XrXirRootTerm *span=formula->terms;
+    formula->term_count=0;formula->terms=NULL;
+    CHECK(effect_invocation_solution_match(owner,solution)==XR_XIR_BAD_STRUCTURE && rp_attempts==attempts);
+    formula->term_count=limit;formula->terms=span+1;
+    CHECK(effect_invocation_solution_match(owner,solution)==XR_XIR_BAD_STRUCTURE && rp_attempts==attempts);
+    formula->terms=span;formula->term_count=limit+1;
+    CHECK(effect_invocation_solution_match(owner,solution)==XR_XIR_BAD_STRUCTURE && rp_attempts==attempts);
+    formula->term_count=limit;
+    uint32_t root=owner->roots[1];owner->roots[1]=owner->count;
+    CHECK(effect_invocation_solution_match(owner,solution)==XR_XIR_BAD_STRUCTURE && rp_attempts==attempts);
+    owner->roots[1]=root;
+    CHECK(effect_invocation_solution_match(owner,solution)==XR_XIR_OK && rp_attempts==attempts &&
+        rp_stats(context).live_bytes==before.live_bytes &&
+        rp_stats(context).allocated_bytes==before.allocated_bytes);
+    for (uint32_t t=0;t<limit;++t)
+        CHECK(terms[t].kind==XR_XIR_ROOT_TERM_CONTEXT_CALL && terms[t].index==sparse_indices[mode][t]);
+    rp_balanced(physical);
+}
+
 /* The mutations attack a solved real owner, never manufacture a trusted row.
  * Restoration must precede the independent seal and producer destruction. */
 static void conditional_sparse_rejections(EffectInvocationOwner *owner,
     EffectInvocationSolution *solution,uint32_t mode) {
     CHECK(mode<5 && owner->roots[1]<owner->count);
     conditional_sparse_physical_bound_rejections(owner,solution);
+    conditional_sparse_receiver_rejections(owner,solution,mode);
     EffectInvocationNode *node=&owner->nodes[owner->roots[1]];
     uint32_t causes=node->cause_count;node->cause_count=causes-1;
     CHECK(effect_invocation_closed(owner)==XR_XIR_BAD_STRUCTURE);node->cause_count=causes;
@@ -130,7 +170,7 @@ static XrXirStatus conditional_sparse_case(const XrXirCompileContext *context,ui
     if (status==XR_XIR_OK) { phase=8;status=effect_invocation_stage(owner,&solution); }
     if (status==XR_XIR_OK && oracle) conditional_sparse_rejections(owner,solution,mode);
     EffectInvocationSealRequest request={&owner,&solution,NULL};
-    if (status==XR_XIR_OK) { phase=9;status=effect_invocation_seal(context,&request,&certificate); }
+    if (status==XR_XIR_OK) { phase=9;status=effect_invocation_seal(context,&request,&certificate,NULL); }
     if (status!=XR_XIR_OK && oracle) fprintf(stderr,
         "INVOCATION_SPARSE mode=%u phase=%u status=%u f=%u b=%u i=%u\n",mode,phase,status,
         diagnostic.function,diagnostic.block,diagnostic.instruction);

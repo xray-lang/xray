@@ -1652,6 +1652,8 @@ static void conditional_axes(void) {
 
 int main(int argc, char **argv) {
     conditional_ordinary_instruction_resources();
+    /* Independent storage and receiving controls run before cumulative budget probes. */
+    conditional_compact_literals();conditional_generation_literals();
     if (argc==2 && !strcmp(argv[1],"--compiler")) { conditional_oom();conditional_axes();conditional_sparse_resources();conditional_storage_resources();conditional_copy_resources();conditional_metadata_resources();conditional_physical_resources();conditional_descriptor_resources();conditional_class_rows_resources();conditional_parameter_resources();conditional_compact_resources();conditional_class_cell_resources();conditional_generation_resources();conditional_retry_complete(); }
     else if (argc==2 && !strcmp(argv[1],"--class-cells")) conditional_class_cell_literals();
     else if (argc==2 && !strcmp(argv[1],"--class-cells-compiler")) conditional_class_cell_resources();
@@ -1663,6 +1665,6 @@ int main(int argc, char **argv) {
     else if (argc==2 && !strcmp(argv[1],"--new")) conditional_new_literals();
     else { CHECK(argc==1);conditional_literals();conditional_new_literals(); }
     if (argc==1 || (argc==2 && !strcmp(argv[1],"--new"))) { conditional_sparse_literals();conditional_storage_literals();conditional_copy_literals();conditional_metadata_literals();conditional_physical_literals(); }
-    if (argc==1 || (argc==2 && !strcmp(argv[1],"--new"))) { conditional_dense_scratch_literals();conditional_dense_scratch_failures();conditional_descriptor_literals();conditional_class_rows_literals();conditional_class_cell_literals();conditional_parameter_literals();conditional_compact_literals();conditional_generation_literals();conditional_initial_role_literals(); }
+    if (argc==1 || (argc==2 && !strcmp(argv[1],"--new"))) { conditional_dense_scratch_literals();conditional_dense_scratch_failures();conditional_descriptor_literals();conditional_class_rows_literals();conditional_class_cell_literals();conditional_parameter_literals();conditional_initial_role_literals(); }
     CHECK(!rp_live && !rp_live_bytes);return 0;
 }

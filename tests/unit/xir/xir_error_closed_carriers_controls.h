@@ -169,6 +169,115 @@ static void cc_private(void) {
     CHECK(error_instruction(&flow,0,actual)==XR_XIR_OK && flow.work[0]==poison && flow.zero[0]==0);
     pc_private_free(&flow,&terms,&e);pc_release(&c,baseline);
 }
+/* The bitmap is a local transfer fact, not a substitute for raw or owned
+ * admission. Inactive calls and writes must still update their real facts. */
+static void cc_cfg_transfer_fixture(ClosedCarrierFixture *f) {
+    cc_fixture(f,0);EdgeFixture *e=&f->edge;
+    e->parameters[0]=(XrXirType)CC_ARRAY;e->parameters[1]=(XrXirType)EE_CELL;
+    e->functions[1].parameters=e->parameters;e->functions[1].parameter_count=2;
+    e->subject[0]=(XrXirInstruction){.op=XR_XIR_COPY,.type=(XrXirType)CC_ARRAY,.args={0}};
+    e->subject[1]=(XrXirInstruction){.op=XR_XIR_ENUM_NEW,.type=(XrXirType)EE_ENUM,.immediate=1};
+    e->subject[2]=(XrXirInstruction){.op=XR_XIR_CELL_WRITE,.args={1,3}};
+    e->subject[3]=(XrXirInstruction){.op=XR_XIR_CALL,.immediate=2};
+    e->subject[4]=(XrXirInstruction){.op=XR_XIR_CELL_READ,.type=(XrXirType)EE_ENUM,.args={1}};
+    e->subject[5]=(XrXirInstruction){.op=XR_XIR_THROW,.args={6}};
+    e->blocks[0]=(XrXirBlock){.count=6};e->functions[1].instruction_count=6;
+    e->functions[1].block_count=1;
+}
+static void cc_cfg_continuation(void) {
+    for (unsigned effectful=0;effectful<2;++effectful) for (unsigned owned=0;owned<2;++owned) {
+        ClosedCarrierFixture f;
+        if (effectful) cc_cfg_transfer_fixture(&f);else cc_fixture(&f,0);
+        XrXirCompileContext c=pc_owner(pc_caps());uint64_t baseline=pc_stats(&c).live_bytes;
+        XrXirEffects e={0};EffectTerms terms={0};ErrorFlow flow={0};flow.remaining=&c;
+        pc_private_begin(&c,&f.edge,&e,&terms,&flow);e.errors[2]=8;
+        EffectBodyMaterial *material=NULL;
+        if (owned) {
+            CHECK(effect_body_material_create(&c,&f.edge.module,&material)==XR_XIR_OK && material);
+            flow.body=effect_body_owned_request(&c,material);
+        }
+        size_t allocations=attempts;
+        CHECK(error_function(&flow,1)==XR_XIR_OK && e.errors[1]==(effectful ? 12u : 4u));
+        CHECK(attempts==allocations+1 && flow.zero[0]==0);
+        if (!effectful) {
+            CHECK(flow.values==546 && flow.active_count==1 && flow.active[0]==513 && flow.stride==1);
+            CHECK(flow.storage_capacity==(owned ? 4761u : 4692u));
+            if (owned) {
+                const uint8_t *bits=flow.reachable+flow.function->block_count;
+                for (uint32_t i=0;i<69;++i) CHECK(bits[i]==(i<64 ? 255u : 0u));
+                uint32_t first=material->functions[1].stream[0];uint64_t saved=e.errors[1];
+                allocations=attempts;uint64_t held=pc_stats(&c).live_bytes;
+                material->functions[1].stream[0]=1;
+                CHECK(error_function(&flow,1)==XR_XIR_BAD_STRUCTURE && e.errors[1]==saved);
+                CHECK(attempts==allocations && pc_stats(&c).live_bytes==held);
+                material->functions[1].stream[0]=first;
+                f.edge.subject[0].op=XR_XIR_INVALID;f.nodes[2].flags=1;
+                CHECK(xir_fixture_verify(&c,&f.edge.module,NULL)==XR_XIR_BAD_STRUCTURE);
+                allocations=attempts;held=pc_stats(&c).live_bytes;
+                memset(flow.storage,0xff,flow.storage_capacity);
+                CHECK(error_function(&flow,1)==XR_XIR_OK && e.errors[1]==4 && flow.zero[0]==0);
+                CHECK(attempts==allocations && pc_stats(&c).live_bytes==held);
+            }
+        } else {
+            /* CALL has no output row, yet contributes variant1 and invalidates
+             * the Cell after the concrete variant1 write. */
+            CHECK(flow.slots[4]==UINT32_MAX && flow.slots[5]==UINT32_MAX);
+            CHECK(error_read(&flow,flow.work,6)[0]==12 && flow.cell_count==1);
+            if (owned) CHECK(*(flow.reachable+flow.function->block_count)==1);
+        }
+        effect_body_material_free(material);pc_private_free(&flow,&terms,&e);pc_release(&c,baseline);
+    }
+}
+static void cc_cfg_watchdog(void) {
+    for (unsigned enough=0;enough<2;++enough) {
+        ClosedCarrierFixture f;cc_fixture(&f,0);
+        XrCompileResourceLimits caps=pc_caps();XrXirCompileContext c=pc_owner(caps);
+        uint64_t baseline=pc_stats(&c).live_bytes;
+        XrXirEffects e={0};EffectTerms terms={0};ErrorFlow flow={0};flow.remaining=&c;
+        pc_private_begin(&c,&f.edge,&e,&terms,&flow);
+        CHECK(error_function(&flow,1)==XR_XIR_OK);
+        uint64_t used=pc_stats(&c).work,left=enough ? 4u : 3u;
+        CHECK(e.words==1 && e.atom_count==2 && used<=caps.work-left);
+        CHECK(xr_compile_resources_work(c.resources,caps.work-used-left)==XR_COMPILE_RESOURCE_OK);
+        uint64_t before=pc_stats(&c).work,held_live=pc_stats(&c).live_bytes;size_t allocations=attempts;
+        CHECK(error_instruction_begin(&flow,0)==(enough ? XR_XIR_OK : XR_XIR_BUDGET));
+        CHECK(pc_stats(&c).work-before==(enough ? 4u : 0u) && e.errors[1]==4 && flow.zero[0]==0);
+        CHECK(error_instruction_begin(&flow,flow.function->instruction_count)==XR_XIR_BAD_STRUCTURE);
+        CHECK(pc_stats(&c).live_bytes==held_live && attempts==allocations);
+        pc_private_free(&flow,&terms,&e);pc_release(&c,baseline);
+    }
+}
+static void cc_cfg_large_faults(void) {
+    static XrXirInstruction instructions[1025];size_t sites=0;
+    for (size_t pass=0;pass<=sites;++pass) {
+        EdgeFixture f;ee_fixture(&f,EE_JUMP,false);
+        instructions[0]=(XrXirInstruction){.op=XR_XIR_CONST_INT,.type=XR_XIR_I64};
+        for (uint32_t i=1;i<1024;++i)
+            instructions[i]=(XrXirInstruction){.op=XR_XIR_COPY,.type=XR_XIR_I64,.args={i-1}};
+        instructions[1024]=f.init;f.blocks[0]=(XrXirBlock){.count=1025};
+        f.functions[1].parameters=NULL;f.functions[1].parameter_count=0;
+        f.functions[1].instructions=instructions;f.functions[1].instruction_count=1025;
+        f.functions[1].block_count=1;
+        XrXirCompileContext c=pc_owner(pc_caps());uint64_t baseline=pc_stats(&c).live_bytes;
+        XrXirEffects e={0};EffectTerms terms={0};ErrorFlow flow={0};flow.remaining=&c;
+        pc_private_begin(&c,&f,&e,&terms,&flow);EffectBodyMaterial *material=NULL;
+        CHECK(effect_body_material_create(&c,&f.module,&material)==XR_XIR_OK && material);
+        flow.body=effect_body_owned_request(&c,material);
+        uint64_t prepared=pc_stats(&c).live_bytes;size_t before=attempts;
+        injected=false;fail_at=pass ? before+pass-1 : SIZE_MAX;
+        XrXirStatus status=error_function(&flow,1);size_t actual=attempts-before;fail_at=SIZE_MAX;
+        if (!pass) { CHECK(status==XR_XIR_OK);sites=actual;CHECK(sites==2); }
+        else {
+            CHECK(injected && actual>=pass && status==XR_XIR_OUT_OF_MEMORY);
+            CHECK(!flow.storage && !e.errors[1] && pc_stats(&c).live_bytes==prepared);
+            CHECK(error_function(&flow,1)==XR_XIR_OK);
+        }
+        CHECK(!e.errors[1] && !flow.active_count && !flow.cell_count && flow.zero[0]==0);
+        for (uint32_t v=0;v<1024;++v) CHECK(flow.roots[v]==0 && flow.slots[v]==UINT32_MAX);
+        effect_body_material_free(material);pc_private_free(&flow,&terms,&e);pc_release(&c,baseline);
+    }
+    printf("owned COPY classification CFG full OOM sites%zu sameowner retry physical0\n",sites);
+}
 static XrXirStatus cc_whole(const XrXirCompileContext *c,unsigned mode) {
     ClosedCarrierFixture f;cc_fixture(&f,mode<9 ? mode : 8);
     XrXirInstruction actual[4]={{0}},initialize[4]={{0}};
@@ -293,6 +402,7 @@ static void cc_bad_types(void) {
 }
 static void pc_closed_carriers_controls(void) {
     cc_classification();cc_classification_limits();cc_private();cc_bad_types();
+    cc_cfg_continuation();cc_cfg_watchdog();cc_cfg_large_faults();
     for (unsigned mode=0;mode<11;++mode) {
         XrXirCompileContext c=pc_owner(pc_caps());uint64_t baseline=pc_stats(&c).live_bytes;
         CHECK(cc_whole(&c,mode)==XR_XIR_OK);pc_release(&c,baseline);

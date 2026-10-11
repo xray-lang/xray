@@ -77,7 +77,8 @@ static XrXirStatus effect_invocation_precision(EffectInvocationOwner *owner,
             op!=XR_XIR_INVOKE_DEFAULT && op!=XR_XIR_CALL_REQUIREMENT && op!=XR_XIR_CLEANUP_REGISTER &&
             op!=XR_XIR_CALL_INDIRECT && op!=XR_XIR_INVOKE_INDIRECT &&
             op!=XR_XIR_GO && op!=XR_XIR_FUNCTION_REF && !effect_invocation_cell_terminal(op)) continue;
-        flow.instruction=i;status=effect_invocation_instruction(&flow,i,changed);
+        if (!xir_compile_work(owner->work,1)) { status=XR_XIR_BUDGET;break; }
+        flow.instruction=i;status=effect_invocation_instruction_decoded(&flow,i,instruction,changed);
     }
     if (status==XR_XIR_OK && owner->producer_enabled) status=effect_invocation_producer_step(&flow,changed,false);
     if (status==XR_XIR_OK) status=effect_invocation_class_step(&flow,changed);
@@ -141,15 +142,12 @@ static XrXirStatus effect_invocation_intrinsics(EffectInvocationOwner *owner) {
     uint32_t count=owner->body.domain.function_count;
     if ((uint64_t)count>SIZE_MAX/sizeof(*owner->local_roots) ||
         (uint64_t)count*2>SIZE_MAX/sizeof(*owner->local_witnesses)) return XR_XIR_BUDGET;
-    XrXirStatus status=XR_XIR_OK;
-    owner->local_roots=xir_compile_alloc(owner->work,(size_t)count*sizeof(*owner->local_roots),&status);
-    if (!owner->local_roots) return status;
-    owner->local_witnesses=xir_compile_alloc(owner->work,(size_t)count*2*sizeof(*owner->local_witnesses),&status);
-    if (!owner->local_witnesses) return status;
-    uint64_t bytes=(uint64_t)count*(sizeof(*owner->local_roots)+2*sizeof(*owner->local_witnesses));
-    if (!xir_compile_work(owner->work,bytes)) return XR_XIR_BUDGET;
-    memcpy(owner->local_roots,owner->material->local_roots,(size_t)count*sizeof(*owner->local_roots));
-    memcpy(owner->local_witnesses,owner->material->local_witnesses,(size_t)count*2*sizeof(*owner->local_witnesses));
+    /* The generation owns these immutable seeds before any equation is built.
+     * The equation owner dies before its transferred material on every path. */
+    if (!xir_compile_work(owner->work,sizeof(owner->local_roots)+sizeof(owner->local_witnesses)))
+        return XR_XIR_BUDGET;
+    owner->local_roots=owner->material->local_roots;
+    owner->local_witnesses=owner->material->local_witnesses;
     return XR_XIR_OK;
 }
 

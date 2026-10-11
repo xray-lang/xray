@@ -335,7 +335,7 @@ static XrXirStatus conditional_invocation_returned(const XrXirCompileContext *co
     if (status==XR_XIR_OK) status=effect_invocation_stage(owner,&solution);
     if (status==XR_XIR_OK) {
         phase=5;EffectInvocationSealRequest request={&owner,&solution,NULL};
-        status=effect_invocation_seal(context,&request,&certificate);
+        status=effect_invocation_seal(context,&request,&certificate,NULL);
     }
     effect_invocation_solution_free(solution);effect_invocation_free(owner);
     effect_invocation_bounds_free(bounds);effect_graph_free(&graph);invocation_core_storage_free(&effects);
