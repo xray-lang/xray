@@ -43,11 +43,13 @@
 #include "xir_invocation_class_cell_cases.h"
 #include "xir_invocation_compact_snapshot_cases.h"
 #include "xir_invocation_early_generation_cases.h"
+#include "xir_invocation_generation_range_cases.h"
 #include "xir_ordinary_initial_role_cases.h"
 #include "xir_ordinary_instruction_copy_cases.h"
 #include "xir_ordinary_material_continuation_cases.h"
 #include "xir_initial_ordinary_material_cases.h"
 #include "xir_error_owned_material_cases.h"
+#include "xir_cell_owned_run_cases.h"
 
 static XrXirStatus conditional_classify(const XrXirCompileContext *context, uint32_t mode, bool oracle) {
     ConditionalRawFixture f;conditional_raw_fixture(&f,mode);
@@ -1654,6 +1656,14 @@ static void conditional_axes(void) {
 }
 
 int main(int argc, char **argv) {
+    if (argc==2 && !strcmp(argv[1],"--generation-ranges")) {
+        conditional_generation_literals();generation_range_controls();
+        conditional_generation_resources();CHECK(!rp_live && !rp_live_bytes);return 0;
+    }
+    if (argc==2 && !strcmp(argv[1],"--cell-owned-ranges")) {
+        cell_owned_run_literals();cell_owned_run_resources();
+        CHECK(!rp_live && !rp_live_bytes);return 0;
+    }
     if (argc==2 && !strcmp(argv[1],"--compact-codec-material")) {
         conditional_compact_literals();conditional_compact_resources();
         CHECK(!rp_live && !rp_live_bytes);return 0;

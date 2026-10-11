@@ -122,3 +122,15 @@ add_test(NAME test_xir_root_conditional_compact_codec_material
     COMMAND test_xir_root_conditional_helpers --compact-codec-material)
 set_tests_properties(test_xir_root_conditional_compact_codec_material PROPERTIES
     LABELS "unit;xir;root-effects;compiler-fault;ownership" TIMEOUT 300 RUN_SERIAL TRUE PROCESSORS 1)
+
+# Owned canonical ranges retain complete provider replay and real fault census.
+add_test(NAME test_xir_root_conditional_cell_owned_ranges
+    COMMAND test_xir_root_conditional_helpers --cell-owned-ranges)
+set_tests_properties(test_xir_root_conditional_cell_owned_ranges PROPERTIES
+    LABELS "unit;xir;root-effects;compiler-fault;ownership" TIMEOUT 300 RUN_SERIAL TRUE PROCESSORS 1)
+
+# Complete original generation faults precede unrelated cumulative cost gates.
+add_test(NAME test_xir_root_conditional_generation_ranges
+    COMMAND test_xir_root_conditional_helpers --generation-ranges)
+set_tests_properties(test_xir_root_conditional_generation_ranges PROPERTIES
+    LABELS "unit;xir;root-effects;compiler-fault;ownership" TIMEOUT 300 RUN_SERIAL TRUE PROCESSORS 1)

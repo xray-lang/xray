@@ -122,6 +122,44 @@ static XrXirStatus effect_cell_body_span(const XrXirCompileContext *work,const v
     if (!xir_compile_work(work,sizeof(*cursor))) return XR_XIR_BUDGET;
     *cursor=current;return XR_XIR_OK;
 }
+
+/* Only this complete owned adapter can expose a canonical range. Callback
+ * identity selects layout and rejects mixed requests; it grants no authority.
+ * Every run decodes all ten first-row words through the sole physical reader. */
+static XrXirStatus effect_cell_body_range(const XrXirCompileContext *work,
+    const XrXirCellProofBodyRead *read,XrXirCellProofRunCursor *cursor,XrXirCellProofRun *output) {
+    if (!xir_compile_context_valid(work) || !read || !cursor || !output || read->resources!=work->resources ||
+        read->head!=effect_cell_body_head || read->instruction!=effect_cell_body_instruction ||
+        read->type!=effect_cell_body_type || read->shape!=effect_cell_body_shape ||
+        read->range!=effect_cell_body_range) return XR_XIR_BAD_STRUCTURE;
+    const EffectCellBodyAdapter *adapter=read->owner;
+    if (!effect_cell_body_adapter_valid(work,adapter) ||
+        adapter->request.head!=effect_body_owned_head || adapter->request.instruction!=effect_body_owned_instruction ||
+        adapter->request.type!=effect_body_owned_type || adapter->request.shape!=effect_body_owned_shape)
+        return XR_XIR_BAD_STRUCTURE;
+    const EffectBodyMaterial *body=adapter->request.owner;
+    if (!effect_body_material_shape(body) || body->resources!=work->resources ||
+        read->domain.types!=body->domain.types || read->domain.declarations!=body->domain.declarations ||
+        read->domain.generics!=body->domain.generics || read->domain.defaults!=body->domain.defaults ||
+        read->domain.function_count!=effect_body_count(body) || cursor->function>=effect_body_count(body))
+        return XR_XIR_BAD_STRUCTURE;
+    const EffectBodyFunction *function=&body->functions[cursor->function];
+    if (cursor->next>function->instruction_count || cursor->run>function->run_count ||
+        cursor->offset>function->stream_words || (!cursor->run && (cursor->next || cursor->offset)))
+        return XR_XIR_BAD_STRUCTURE;
+    if (!xir_compile_work(work,20+sizeof(EffectBodyRecordCursor)+sizeof(XrXirInstruction))) return XR_XIR_BUDGET;
+    EffectBodyRecordCursor position={cursor->offset,cursor->next,cursor->run,UINT32_MAX};
+    EffectBodyRunRef ref;XrXirInstruction operation={0};uint32_t words[EFFECT_BODY_WORDS];
+    XrXirStatus status=effect_body_range_ref(&adapter->request.read,function,&position,&ref);
+    if (status==XR_XIR_OK) status=effect_body_instruction_ref_words(&adapter->request.read,&ref,ref.first,words);
+    if (status==XR_XIR_OK) status=effect_body_instruction_words_publish(&adapter->request.read,words,&operation);
+    if (status!=XR_XIR_OK) return status;
+    if (!xir_compile_work(work,sizeof(*output)+3*sizeof(uint32_t))) return XR_XIR_BUDGET;
+    *output=(XrXirCellProofRun){ref.first,ref.count,ref.mask,operation};
+    cursor->next=position.first;cursor->offset=position.offset;cursor->run=position.run;
+    return XR_XIR_OK;
+}
+
 static XrXirStatus effect_cell_body_bind(const XrXirCompileContext *work,
     const EffectBodyRequest *request,EffectCellBodyAdapter *adapter,XrXirCellProofBodyRead *output) {
     if (!xir_compile_context_valid(work) || !request || !adapter || !output || !request->owner ||
@@ -132,7 +170,8 @@ static XrXirStatus effect_cell_body_bind(const XrXirCompileContext *work,
     *adapter=(EffectCellBodyAdapter){work,*request};
     *output=(XrXirCellProofBodyRead){request->domain,work->resources,adapter,
         effect_cell_body_head,effect_cell_body_instruction,effect_cell_body_type,effect_cell_body_shape,
-        request->head==effect_body_owned_head?effect_cell_body_span:NULL};return XR_XIR_OK;
+        request->head==effect_body_owned_head?effect_cell_body_span:NULL,
+        request->head==effect_body_owned_head?effect_cell_body_range:NULL};return XR_XIR_OK;
 }
 /* Getter identity selects only the genuine storage layout. It supplies no
  * permission fact; full admission and independent source matching remain

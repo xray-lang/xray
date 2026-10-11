@@ -63,7 +63,7 @@ static XrXirCellProofBodyRead cell_body_read_request(const XrXirCompileContext *
     CellBodyReadFixture *fixture) {
     fixture->resources=context->resources;
     return (XrXirCellProofBodyRead){xir_metadata_domain_from_module(fixture->module),context->resources,
-        fixture,cell_body_read_head,cell_body_read_instruction,cell_body_read_type,cell_body_read_shape,NULL};
+        fixture,cell_body_read_head,cell_body_read_instruction,cell_body_read_type,cell_body_read_shape,NULL,NULL};
 }
 static void cell_body_read_attacks(const XrXirCompileContext *context,XrXirCellProvenance *proof,
     CellBodyReadFixture *fixture,XrXirCellProofBodyRead *request) {

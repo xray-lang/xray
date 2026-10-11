@@ -45,6 +45,17 @@ typedef struct XrXirCellProofSpanCursor {
     uint32_t function,next,offset,run;
     XrXirCellProofInstructionShape shape;
 } XrXirCellProofSpanCursor;
+
+/* This cursor belongs to one complete physical walk. It contains numeric
+ * positions only; no borrowed reference or permission survives the request. */
+typedef struct XrXirCellProofRunCursor {
+    uint32_t function,next,offset,run;
+} XrXirCellProofRunCursor;
+typedef struct XrXirCellProofRun {
+    uint32_t first,count,varying;
+    XrXirInstruction operation;
+} XrXirCellProofRun;
+
 static inline bool xir_cell_proof_scalar_shape(XrXirOp opcode,XrXirType type) {
     switch (opcode) {
     case XR_XIR_CONST_BOOL:return type==XR_XIR_BOOL;
@@ -58,8 +69,9 @@ static inline bool xir_cell_proof_scalar_shape(XrXirOp opcode,XrXirType type) {
 /* This metadata view grants no body admission. Ordinary callbacks read one
  * complete generation. The optional span reader consumes only its owner's
  * unpublished construction prefix; the builder checks the real complete head
- * and canonical EOF before publication. All requests charge the live ledger. */
-typedef struct XrXirCellProofBodyRead {
+ * and canonical EOF before publication. The complete range reader is independent of this prefix. All requests charge the live ledger. */
+typedef struct XrXirCellProofBodyRead XrXirCellProofBodyRead;
+struct XrXirCellProofBodyRead {
     XirMetadataDomain domain;
     XrCompileResources *resources;
     const void *owner;
@@ -68,7 +80,11 @@ typedef struct XrXirCellProofBodyRead {
     XrXirStatus (*type)(const XrXirCompileContext *,const void *,uint32_t,uint32_t,XrXirType *);
     XrXirStatus (*shape)(const XrXirCompileContext *,const void *,uint32_t,uint32_t,XrXirCellProofInstructionShape *);
     XrXirStatus (*span)(const XrXirCompileContext *,const void *,uint32_t,uint32_t,uint32_t,XrXirCellProofSpanCursor *);
-} XrXirCellProofBodyRead;
+    /* Complete owned runs retain every physical word in the canonical codec.
+     * The callback reads the actual first row, never a semantic permission. */
+    XrXirStatus (*range)(const XrXirCompileContext *,const XrXirCellProofBodyRead *,
+        XrXirCellProofRunCursor *,XrXirCellProofRun *);
+};
 
 /* One construction-local provider builder consumes actual writer rows. It
  * holds no authority; complete role/edge/solve/validation follows inventory.

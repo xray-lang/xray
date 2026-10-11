@@ -269,6 +269,34 @@ typedef struct EffectBodyRecordCursor {
     uint32_t offset,first,run,last;
 } EffectBodyRecordCursor;
 
+
+/* One complete walk visits every canonical run and its adjacent boundary.
+ * Numeric positions are stack-local; the reference is consumed immediately
+ * by the existing word decoder. This is a storage projection, not admission. */
+static XrXirStatus effect_body_range_ref(const EffectBodyRead *read,
+    const EffectBodyFunction *function,EffectBodyRecordCursor *cursor,EffectBodyRunRef *output) {
+    if (!read || !function || !cursor || !output ||
+        !function->run_count || function->run_count>function->instruction_count ||
+        cursor->run>=function->run_count || cursor->first>=function->instruction_count ||
+        cursor->offset>function->stream_words ||
+        (!cursor->run && (cursor->offset || cursor->first))) return XR_XIR_BAD_STRUCTURE;
+    if (!effect_body_read_work(read,6)) return XR_XIR_BUDGET;
+    EffectBodyRunRef ref;
+    XrXirStatus status=effect_body_run_ref(read,function,cursor->offset,cursor->first,&ref);
+    if (status!=XR_XIR_OK) return status;
+    if (cursor->run+1==function->run_count) {
+        if (ref.next!=function->stream_words || ref.first+ref.count!=function->instruction_count)
+            return XR_XIR_BAD_STRUCTURE;
+    } else {
+        EffectBodyRunRef next;
+        status=effect_body_run_ref(read,function,ref.next,ref.first+ref.count,&next);
+        if (status!=XR_XIR_OK) return status;
+    }
+    if (!effect_body_read_work(read,sizeof(*output)+3*sizeof(uint32_t))) return XR_XIR_BUDGET;
+    cursor->first=ref.first+ref.count;cursor->offset=ref.next;++cursor->run;
+    *output=ref;return XR_XIR_OK;
+}
+
 static XrXirStatus effect_body_record_cursor_ref(const EffectBodyRead *read,
     const EffectBodyFunction *function,uint32_t instruction,EffectBodyRecordCursor *cursor,
     EffectBodyRunRef *output) {
@@ -386,7 +414,7 @@ static XrXirStatus effect_body_instruction_cursor_words(const EffectBodyRead *re
     return status==XR_XIR_OK?effect_body_instruction_ref_words(read,&ref,instruction,words):status;
 }
 
-static XrXirStatus effect_body_instruction_cursor_fields(const EffectBodyRead *read,
+static inline XrXirStatus effect_body_instruction_cursor_fields(const EffectBodyRead *read,
     const EffectBodyFunction *function,uint32_t instruction,EffectBodyRecordCursor *cursor,
     EffectBodyInstructionFields *output) {
     if (!output) return XR_XIR_BAD_STRUCTURE;
@@ -398,7 +426,7 @@ static XrXirStatus effect_body_instruction_cursor_fields(const EffectBodyRead *r
     return XR_XIR_OK;
 }
 
-static XrXirStatus effect_body_instruction_cursor_get(const EffectBodyRead *read,
+static inline XrXirStatus effect_body_instruction_cursor_get(const EffectBodyRead *read,
     const EffectBodyFunction *function,uint32_t instruction,EffectBodyRecordCursor *cursor,
     XrXirInstruction *output) {
     if (!output) return XR_XIR_BAD_STRUCTURE;

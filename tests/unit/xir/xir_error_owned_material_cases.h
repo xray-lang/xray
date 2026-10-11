@@ -37,11 +37,27 @@ static void owned_error_input_controls(const XrXirCompileContext *context,
     flow->body.owner=NULL;
     CHECK(error_invocation_contexts_new(flow,&output)==XR_XIR_BAD_STRUCTURE && !output);
     flow->body=saved;
+    const EffectBodyFunction *function=(const EffectBodyFunction *)(uintptr_t)1;
+    before=rp_stats(context);attempts=rp_attempts;
+    CHECK(error_owned_function(flow,&function)==XR_XIR_BAD_STRUCTURE &&
+        function==(const EffectBodyFunction *)(uintptr_t)1 &&
+        rp_stats(context).work==before.work && rp_attempts==attempts);
+    function=NULL;
+    for (uint32_t mismatch=0;mismatch<3;++mismatch) {
+        if (!mismatch) flow->body.domain.defaults=(const XrXirDefaultTable *)(uintptr_t)1;
+        else if (mismatch==1) ++flow->body.domain.function_count;
+        else flow->body.domain.types=(const XrXirTypes *)(uintptr_t)1;
+        CHECK(error_owned_function(flow,&function)==XR_XIR_BAD_STRUCTURE && !function &&
+            rp_stats(context).work==before.work && rp_attempts==attempts);
+        flow->body=saved;
+    }
     XrXirCompileContext foreign=rp_owner(rp_caps());uint64_t baseline=rp_stats(&foreign).live_bytes;
     XrXirCompileContext *remaining=flow->remaining;flow->remaining=&foreign;
     before=rp_stats(&foreign);attempts=rp_attempts;
     CHECK(error_invocation_contexts_new(flow,&output)==XR_XIR_BAD_STRUCTURE && !output);
     CHECK(rp_stats(&foreign).work==before.work && rp_attempts==attempts && effects->resources==context->resources);
+    CHECK(error_owned_function(flow,&function)==XR_XIR_BAD_STRUCTURE && !function &&
+        rp_stats(&foreign).work==before.work && rp_attempts==attempts);
     flow->remaining=remaining;rp_owner_free(&foreign,baseline);
 }
 
@@ -183,6 +199,11 @@ static void owned_error_cursor_malformed(const XrXirCompileContext *context,
         EffectBodyInstructionFields fields_sentinel={XR_XIR_RETURN,XR_XIR_BOOL,UINT32_MAX},fields=fields_sentinel;
         CHECK(effect_body_instruction_cursor_fields(&read,body,4,&cursor,&fields)==XR_XIR_BAD_STRUCTURE &&
             !memcmp(&fields,&fields_sentinel,sizeof(fields)));
+        CHECK(xir_compile_work(context,sizeof(EffectBodyRecordCursor)));
+        EffectBodyRecordCursor range={0,0,0,UINT32_MAX},range_before=range;
+        EffectBodyRunRef ref_sentinel={0},ref_output=ref_sentinel;
+        CHECK(effect_body_range_ref(&read,body,&range,&ref_output)==XR_XIR_BAD_STRUCTURE &&
+            !memcmp(&range,&range_before,sizeof(range)) && !memcmp(&ref_output,&ref_sentinel,sizeof(ref_output)));
         memcpy(body->stream,saved,words*sizeof(*saved));body->stream_words=words;
         body->run_count=runs;body->stream_capacity=capacity;body->instruction_count=8;
         CHECK(effect_body_records_match(&read,body,expected)==XR_XIR_OK);
@@ -197,6 +218,86 @@ static void owned_error_cursor_malformed(const XrXirCompileContext *context,
     memcpy(body->stream,saved,words*sizeof(*saved));
 }
 
+/* A complete range walk is independent of semantic membership. Full rows
+ * retain unused words; the narrow projection returns only actual COPY sources. */
+static void owned_error_range_values(const XrXirCompileContext *context,
+    const EffectBodyFunction *body,const XrXirInstruction *expected) {
+    EffectBodyRead read=effect_body_compile_read(context);
+    CHECK(xir_compile_work(context,sizeof(EffectBodyRecordCursor)));
+    EffectBodyRecordCursor cursor={0,0,0,UINT32_MAX};
+    for (uint32_t run=0;run<body->run_count;++run) {
+        EffectBodyRunRef ref;
+        CHECK(effect_body_range_ref(&read,body,&cursor,&ref)==XR_XIR_OK);
+        for (uint32_t i=ref.first;i-ref.first<ref.count;++i) {
+            EffectBodyInstructionFields fields;uint32_t words[EFFECT_BODY_WORDS];XrXirInstruction decoded;
+            CHECK(error_range_fields(&read,&ref,i,&fields)==XR_XIR_OK &&
+                fields.op==expected[i].op && fields.type==expected[i].type &&
+                fields.source==(error_copy_op(expected[i].op)?expected[i].args[0]:UINT32_MAX));
+            CHECK(effect_body_instruction_ref_words(&read,&ref,i,words)==XR_XIR_OK &&
+                effect_body_instruction_words_publish(&read,words,&decoded)==XR_XIR_OK &&
+                conditional_compact_same(&decoded,&expected[i]));
+        }
+    }
+    CHECK(cursor.first==body->instruction_count && cursor.offset==body->stream_words);
+    EffectBodyRunRef sentinel={0},output=sentinel;
+    EffectBodyRecordCursor saved=cursor;
+    CHECK(effect_body_range_ref(&read,body,&cursor,&output)==XR_XIR_BAD_STRUCTURE &&
+        !memcmp(&cursor,&saved,sizeof(cursor)) && !memcmp(&output,&sentinel,sizeof(output)));
+}
+
+/* Refusals cover the actual canonical read and every selected-field fee.
+ * A failure never publishes either output or the next numeric range position. */
+static void owned_error_range_refusals(const XrXirCompileContext *context,
+    const EffectBodyFunction *body) {
+    for (uint32_t mode=0;mode<2;++mode) {
+        ConditionalCompactRead observation={context,0,UINT64_MAX};
+        EffectBodyRead read={&observation,conditional_compact_read_work};
+        CHECK(xir_compile_work(context,sizeof(EffectBodyRecordCursor)));
+        EffectBodyRecordCursor cursor={0,0,0,UINT32_MAX};EffectBodyRunRef ref;
+        CHECK(effect_body_range_ref(&read,body,&cursor,&ref)==XR_XIR_OK);
+        if (mode) {
+            observation.calls=0;
+            EffectBodyInstructionFields fields;
+            CHECK(error_range_fields(&read,&ref,ref.first,&fields)==XR_XIR_OK);
+        }
+        uint64_t points=observation.calls;CHECK(points);
+        for (uint64_t at=0;at<points;++at) {
+            observation.calls=0;observation.reject=at;
+            EffectBodyInstructionFields sentinel={XR_XIR_RETURN,XR_XIR_BOOL,17},fields=sentinel;
+            if (mode) CHECK(error_range_fields(&read,&ref,ref.first,&fields)==XR_XIR_BUDGET &&
+                !memcmp(&fields,&sentinel,sizeof(fields)));
+            else {
+                CHECK(xir_compile_work(context,sizeof(cursor)));cursor=(EffectBodyRecordCursor){0,0,0,UINT32_MAX};
+                EffectBodyRecordCursor saved=cursor;EffectBodyRunRef marker={0},output=marker;
+                CHECK(effect_body_range_ref(&read,body,&cursor,&output)==XR_XIR_BUDGET &&
+                    !memcmp(&cursor,&saved,sizeof(cursor)) && !memcmp(&output,&marker,sizeof(output)));
+            }
+            CHECK(observation.calls==at+1);
+        }
+    }
+}
+
+/* Storage-only COPY literals keep five independent source identities. They
+ * do not claim complete IR admission or reuse Error facts from a producer. */
+static void owned_error_range_copies(void) {
+    RootParameterMark physical=rp_mark();XrXirCompileContext context=rp_owner(rp_caps());
+    uint64_t baseline=rp_stats(&context).live_bytes;
+    const XrXirOp kinds[5]={XR_XIR_COPY,XR_XIR_SCALAR_COPY,XR_XIR_OWNED_RETAIN,
+        XR_XIR_ERROR_ERASE,XR_XIR_ERROR_NARROW};
+    XrXirInstruction original[5],producer[5];
+    for (uint32_t i=0;i<5;++i) original[i]=(XrXirInstruction){.op=kinds[i],.type=XR_XIR_ERROR,
+        .args={19+i,29+i},.targets={39+i,49+i},.immediate=INT64_MIN+(int64_t)i,
+        .type_arguments={59+i,69+i}};
+    memcpy(producer,original,sizeof(producer));
+    XrXirFunction input={.instructions=producer,.instruction_count=5};
+    EffectBodyFunction body={.instruction_count=5};
+    CHECK(effect_body_records_copy(&context,&input,&body)==XR_XIR_OK);
+    memset(producer,0xCE,sizeof(producer));
+    owned_error_range_values(&context,&body,original);
+    owned_error_range_refusals(&context,&body);
+    xr_compile_resources_free(body.stream);rp_owner_free(&context,baseline);rp_balanced(physical);
+}
+
 static void conditional_owned_error_cursor_literals(void) {
     RootParameterMark physical=rp_mark();XrXirCompileContext context=rp_owner(rp_caps());
     uint64_t baseline=rp_stats(&context).live_bytes;
@@ -208,6 +309,8 @@ static void conditional_owned_error_cursor_literals(void) {
     CHECK(effect_body_records_copy(&context,&input,&body)==XR_XIR_OK);
     memset(producer,0xCE,sizeof(producer));
     owned_error_cursor_values(&context,&body,original);
+    owned_error_range_values(&context,&body,original);
+    owned_error_range_refusals(&context,&body);
     owned_error_cursor_refusals(&context,&body,&original[4]);
     owned_error_cursor_malformed(&context,&body,&expected);
     EffectBodyRead read=effect_body_compile_read(&context);
@@ -221,6 +324,7 @@ static void conditional_owned_error_cursor_literals(void) {
 
 static void conditional_owned_error_literals(void) {
     conditional_owned_error_cursor_literals();
+    owned_error_range_copies();
     for (uint32_t mode=0;mode<2;++mode) {
         RootParameterMark physical=rp_mark();XrXirCompileContext context=rp_owner(rp_caps());
         uint64_t baseline=rp_stats(&context).live_bytes;

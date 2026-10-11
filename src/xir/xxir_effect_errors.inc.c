@@ -178,34 +178,105 @@ static XrXirStatus error_row_active(const ErrorFlow *flow, uint32_t value, bool 
     if (status!=XR_XIR_OK) return status;
     *type_output=type;*copy_output=copy;*source_output=source;return XR_XIR_OK;
 }
-/* The cursor is stack-local to this one membership or block scan. The
- * actual request selects storage only; all row fields and type semantics are
- * read again, and the existing raw callback remains the construction adapter. */
-static XrXirStatus error_owned_cursor_row(const ErrorFlow *flow,uint32_t instruction,
-    EffectBodyRecordCursor *cursor,XrXirInstruction *operation,EffectBodyInstructionFields *fields) {
-    if (!flow || !cursor || (!operation && !fields) || (operation && fields) ||
-        flow->body.instruction!=effect_body_owned_instruction) return XR_XIR_BAD_STRUCTURE;
+/* A range reference belongs only to the enclosing membership or CFG walk.
+ * Storage identity never supplies Error, ROOT or Cell authority. */
+static XrXirStatus error_owned_function(const ErrorFlow *flow,
+    const EffectBodyFunction **output) {
+    if (!flow || !output || *output || flow->body.instruction!=effect_body_owned_instruction ||
+        flow->body.head!=effect_body_owned_head || flow->body.type!=effect_body_owned_type ||
+        flow->body.shape!=effect_body_owned_shape)
+        return XR_XIR_BAD_STRUCTURE;
     const EffectBodyMaterial *body=flow->body.owner;
     if (!xir_compile_context_valid(flow->remaining) || !effect_body_material_shape(body) ||
         body->resources!=flow->remaining->resources || flow->body.read.owner!=flow->remaining ||
-        flow->body.read.consume!=effect_body_compile_consume || flow->body.domain.types!=body->domain.types ||
+        flow->body.read.consume!=effect_body_compile_consume ||
+        flow->body.domain.types!=body->domain.types ||
+        flow->body.domain.declarations!=body->domain.declarations ||
+        flow->body.domain.generics!=body->domain.generics ||
+        flow->body.domain.defaults!=body->domain.defaults ||
         flow->body.domain.function_count!=effect_body_count(body) ||
         flow->function_index>=effect_body_count(body)) return XR_XIR_BAD_STRUCTURE;
-    const EffectBodyFunction *function=&body->functions[flow->function_index];
-    if (fields) return effect_body_instruction_cursor_fields(&flow->body.read,function,instruction,cursor,fields);
-    XrXirStatus status=effect_body_instruction_cursor_get(&flow->body.read,function,instruction,cursor,operation);
-    if (status==XR_XIR_OK && !xir_compile_work(flow->remaining,sizeof(const XrXirInstruction *)))
-        status=XR_XIR_BUDGET;
-    return status;
+    if (!xir_compile_work(flow->remaining,sizeof(*output))) return XR_XIR_BUDGET;
+    *output=&body->functions[flow->function_index];return XR_XIR_OK;
 }
 
-static XrXirStatus error_owned_cursor_active(const ErrorFlow *flow,uint32_t instruction,
-    EffectBodyRecordCursor *cursor,EffectBodyInstructionFields *fields,bool *active) {
-    XrXirStatus status=error_owned_cursor_row(flow,instruction,cursor,NULL,fields);
+/* Membership consumes opcode and physical type; only a real COPY reads its
+ * source. Canonical encoding and external ten-word correspondence are kept
+ * by their original complete readers, independent of this projection. */
+static XrXirStatus error_range_fields(const EffectBodyRead *read,
+    const EffectBodyRunRef *ref,uint32_t instruction,EffectBodyInstructionFields *output) {
+    if (!output) return XR_XIR_BAD_STRUCTURE;
+    if (!effect_body_read_work(read,3*sizeof(uint32_t))) return XR_XIR_BUDGET;
+    uint32_t opcode=XR_XIR_INVALID,type=XR_XIR_UNIT,source=UINT32_MAX;
+    XrXirStatus status=effect_body_run_word(read,ref,instruction,0,&opcode);
+    if (status==XR_XIR_OK) status=effect_body_run_word(read,ref,instruction,1,&type);
     if (status!=XR_XIR_OK) return status;
-    if (!xir_compile_work(flow->remaining,1)) return XR_XIR_BUDGET;
-    if (fields->op==XR_XIR_GO || fields->op==XR_XIR_INVOKE_ERROR) { *active=true;return XR_XIR_OK; }
-    return error_type_active(flow,fields->type,active);
+    if (opcode<=XR_XIR_INVALID || opcode>=XR_XIR_OP_COUNT) return XR_XIR_BAD_STRUCTURE;
+    if (error_copy_op((XrXirOp)opcode)) {
+        status=effect_body_run_word(read,ref,instruction,2,&source);
+        if (status!=XR_XIR_OK) return status;
+    }
+    if (!effect_body_read_work(read,sizeof(*output)+2)) return XR_XIR_BUDGET;
+    *output=(EffectBodyInstructionFields){(XrXirOp)opcode,(XrXirType)type,source};return XR_XIR_OK;
+}
+
+static XrXirStatus error_membership_row(ErrorFlow *flow,uint32_t value,
+    const EffectBodyInstructionFields *fields,uint8_t *membership,uint32_t *sources,
+    uint32_t *zero_copy_count) {
+    if (!xir_compile_work(flow->remaining,2+(fields?1:0))) return XR_XIR_BUDGET;
+    bool active=true,copy=false;XrXirType type=XR_XIR_UNIT;uint32_t source=UINT32_MAX;
+    XrXirStatus status=XR_XIR_OK;
+    if (fields) {
+        if (value<flow->function->parameter_count || !xir_compile_work(flow->remaining,1))
+            return value<flow->function->parameter_count?XR_XIR_BAD_STRUCTURE:XR_XIR_BUDGET;
+        type=fields->type;copy=error_copy_op(fields->op);if (copy) source=fields->source;
+        if (fields->op!=XR_XIR_GO && fields->op!=XR_XIR_INVOKE_ERROR)
+            status=error_type_active(flow,type,&active);
+    } else status=error_row_active(flow,value,&active,&type,&copy,&source);
+    if (status!=XR_XIR_OK) return status;
+    bool cell=xr_xir_type_is_cell(flow->body.domain.types,type);
+    membership[value]=(uint8_t)((active?ERROR_ROW_ACTIVE:0) |
+        (cell?ERROR_ROW_CELL:0) | (copy?ERROR_ROW_COPY:0));
+    if (active) ++flow->active_count;
+    if (cell) ++flow->cell_count;
+    if (fields && copy && !active) ++*zero_copy_count;
+    if (copy) {
+        if (!xir_compile_work(flow->remaining,1)) return XR_XIR_BUDGET;
+        sources[value]=source;
+    }
+    return XR_XIR_OK;
+}
+
+static XrXirStatus error_membership(ErrorFlow *flow,uint8_t *membership,
+    uint32_t *sources,uint32_t *zero_copy_count) {
+    bool owned=flow->body.instruction==effect_body_owned_instruction;
+    uint32_t prefix=owned?flow->function->parameter_count:flow->values;
+    for (uint32_t value=0;value<prefix;++value) {
+        XrXirStatus status=error_membership_row(flow,value,NULL,membership,sources,zero_copy_count);
+        if (status!=XR_XIR_OK) return status;
+    }
+    if (!owned) return XR_XIR_OK;
+    const EffectBodyFunction *function=NULL;
+    XrXirStatus status=error_owned_function(flow,&function);
+    if (status!=XR_XIR_OK) return status;
+    if (!xir_compile_work(flow->remaining,sizeof(EffectBodyRecordCursor))) return XR_XIR_BUDGET;
+    EffectBodyRecordCursor cursor={0,0,0,UINT32_MAX};
+    if (!xir_compile_work(flow->remaining,sizeof(uint32_t))) return XR_XIR_BUDGET;
+    for (uint32_t run=0;run<function->run_count;++run) {
+        if (!xir_compile_work(flow->remaining,1+sizeof(run))) return XR_XIR_BUDGET;
+        EffectBodyRunRef ref;
+        status=effect_body_range_ref(&flow->body.read,function,&cursor,&ref);
+        if (status!=XR_XIR_OK) return status;
+        for (uint32_t i=ref.first;i-ref.first<ref.count;++i) {
+            EffectBodyInstructionFields fields;
+            status=error_range_fields(&flow->body.read,&ref,i,&fields);
+            if (status==XR_XIR_OK) status=error_membership_row(flow,
+                flow->function->parameter_count+i,&fields,membership,sources,zero_copy_count);
+            if (status!=XR_XIR_OK) return status;
+        }
+    }
+    return cursor.first==function->instruction_count && cursor.offset==function->stream_words?
+        XR_XIR_OK:XR_XIR_BAD_STRUCTURE;
 }
 
 static bool error_any(const uint64_t *set, uint32_t words) {
@@ -545,36 +616,82 @@ static XrXirStatus error_edge(ErrorFlow *flow, uint32_t from, uint32_t to,
     }
     return XR_XIR_OK;
 }
+typedef struct ErrorBlockRead {
+    XrXirInstruction storage;
+    const XrXirInstruction *end;
+} ErrorBlockRead;
+
+static XrXirStatus error_block_row(ErrorFlow *flow,uint32_t b,uint32_t i,
+    const uint8_t *zero_copy,const EffectBodyRunRef *ref,ErrorBlockRead *row) {
+    const XrXirBlock *block=&flow->function->blocks[b];
+    XrXirStatus status=block->panic?error_edge(flow,b,block->panic,NULL,true):XR_XIR_OK;
+    bool copied_zero=false;
+    if (status==XR_XIR_OK && zero_copy && i+1<block->first+block->count) {
+        if (!xir_compile_work(flow->remaining,1)) return XR_XIR_BUDGET;
+        copied_zero=(zero_copy[i/8]&(UINT32_C(1)<<(i%8)))!=0;
+        if (copied_zero && flow->slots[flow->function->parameter_count+i]!=UINT32_MAX)
+            return XR_XIR_BAD_STRUCTURE;
+    }
+    if (status!=XR_XIR_OK) return status;
+    if (copied_zero) return error_instruction_begin(flow,i);
+    if (ref) {
+        uint32_t words[EFFECT_BODY_WORDS];
+        status=effect_body_instruction_ref_words(&flow->body.read,ref,i,words);
+        if (status==XR_XIR_OK)
+            status=effect_body_instruction_words_publish(&flow->body.read,words,&row->storage);
+        if (status==XR_XIR_OK) {
+            if (!xir_compile_work(flow->remaining,sizeof(row->end))) return XR_XIR_BUDGET;
+            row->end=&row->storage;
+        }
+    } else status=error_operation(flow,flow->function_index,i,&row->storage,&row->end);
+    return status==XR_XIR_OK?error_instruction(flow,i,row->end):status;
+}
+
+static XrXirStatus error_block_transfer(ErrorFlow *flow,uint32_t b,
+    const uint8_t *zero_copy,ErrorBlockRead *row) {
+    const XrXirBlock *block=&flow->function->blocks[b];
+    if (flow->body.instruction!=effect_body_owned_instruction) {
+        for (uint32_t i=block->first;i<block->first+block->count;++i) {
+            XrXirStatus status=error_block_row(flow,b,i,zero_copy,NULL,row);
+            if (status!=XR_XIR_OK || flow->restart) return status;
+        }
+        return XR_XIR_OK;
+    }
+    const EffectBodyFunction *function=NULL;
+    XrXirStatus status=error_owned_function(flow,&function);
+    if (status!=XR_XIR_OK) return status;
+    if (!xir_compile_work(flow->remaining,sizeof(EffectBodyRecordCursor))) return XR_XIR_BUDGET;
+    EffectBodyRecordCursor cursor={0,0,0,UINT32_MAX};
+    if (!xir_compile_work(flow->remaining,sizeof(uint32_t))) return XR_XIR_BUDGET;
+    uint32_t end=block->first+block->count;
+    if (!block->count || block->first>=function->instruction_count ||
+        block->count>function->instruction_count-block->first) return XR_XIR_BAD_STRUCTURE;
+    while (cursor.first<end) {
+        if (!xir_compile_work(flow->remaining,1)) return XR_XIR_BUDGET;
+        EffectBodyRunRef ref;
+        status=effect_body_range_ref(&flow->body.read,function,&cursor,&ref);
+        if (status!=XR_XIR_OK) return status;
+        if (!xir_compile_work(flow->remaining,2+2*sizeof(uint32_t))) return XR_XIR_BUDGET;
+        uint32_t first=ref.first<block->first?block->first:ref.first;
+        uint32_t limit=ref.first+ref.count<end?ref.first+ref.count:end;
+        for (uint32_t i=first;i<limit;++i) {
+            status=error_block_row(flow,b,i,zero_copy,&ref,row);
+            if (status!=XR_XIR_OK || flow->restart) return status;
+        }
+    }
+    return XR_XIR_OK;
+}
+
 static XrXirStatus error_block(ErrorFlow *flow, uint32_t b,const uint8_t *zero_copy) {
     const XrXirBlock *block = &flow->function->blocks[b];
     if (!xir_compile_work(flow->remaining, flow->stride)) return XR_XIR_BUDGET;
     { if (!xir_compile_work(flow->remaining, flow->stride * sizeof(uint64_t))) { return XR_XIR_BUDGET; } memcpy(flow->work, flow->states + (size_t)b * flow->stride, flow->stride * sizeof(uint64_t)); }
-    XrXirInstruction storage;const XrXirInstruction *end=NULL;
-    bool owned=flow->body.instruction==effect_body_owned_instruction;EffectBodyRecordCursor cursor;
-    if (owned) {
-        if (!xir_compile_work(flow->remaining,sizeof(cursor))) return XR_XIR_BUDGET;
-        cursor=(EffectBodyRecordCursor){0,0,0,UINT32_MAX};
-    }
-    for (uint32_t i = block->first; i < block->first + block->count; ++i) {
-        XrXirStatus status = block->panic ? error_edge(flow, b, block->panic, NULL, true) : XR_XIR_OK;
-        bool copied_zero=false;
-        if (status==XR_XIR_OK && zero_copy && i+1<block->first+block->count) {
-            if (!xir_compile_work(flow->remaining,1)) return XR_XIR_BUDGET;
-            copied_zero=(zero_copy[i/8]&(UINT32_C(1)<<(i%8)))!=0;
-            if (copied_zero && flow->slots[flow->function->parameter_count+i]!=UINT32_MAX)
-                return XR_XIR_BAD_STRUCTURE;
-        }
-        if (status==XR_XIR_OK && copied_zero) status=error_instruction_begin(flow,i);
-        else {
-            if (status==XR_XIR_OK && owned) {
-                status=error_owned_cursor_row(flow,i,&cursor,&storage,NULL);
-                if (status==XR_XIR_OK) end=&storage;
-            } else if (status==XR_XIR_OK)
-                status=error_operation(flow,flow->function_index,i,&storage,&end);
-            if (status == XR_XIR_OK) status = error_instruction(flow, i, end);
-        }
-        if (status != XR_XIR_OK || flow->restart) return status;
-    }
+    ErrorBlockRead row;
+    if (!xir_compile_work(flow->remaining,sizeof(row.end))) return XR_XIR_BUDGET;
+    row.end=NULL;
+    XrXirStatus transferred=error_block_transfer(flow,b,zero_copy,&row);
+    if (transferred!=XR_XIR_OK || flow->restart) return transferred;
+    const XrXirInstruction *end=row.end;
     if (!end) return XR_XIR_BAD_STRUCTURE;
     uint32_t last=block->first+block->count-1;
     flow->instruction=last;
@@ -651,14 +768,9 @@ static XrXirStatus error_function(ErrorFlow *flow, uint32_t f) {
     uint32_t inline_sources[1024], *sources = inline_sources;
     uint8_t *membership = inline_membership;
     XrXirStatus status = XR_XIR_OK;
-    /* Representation dispatch is not authority. Each physical row still
-     * rebuilds full membership through the complete owned decoder below. */
-    bool owned=flow->body.instruction==effect_body_owned_instruction;
-    uint32_t zero_copy_count=0;EffectBodyRecordCursor cursor;
-    if (owned) {
-        if (!xir_compile_work(flow->remaining,sizeof(cursor))) return XR_XIR_BUDGET;
-        cursor=(EffectBodyRecordCursor){0,0,0,UINT32_MAX};
-    }
+    /* Representation dispatch is not authority. Every real SSA rebuilds
+     * membership through the current immutable body's canonical ranges. */
+    uint32_t zero_copy_count=0;
     if (flow->values > sizeof(inline_membership)) {
         uint64_t temporary_bytes=(uint64_t)flow->values*(sizeof(*sources)+sizeof(*membership));
         if (temporary_bytes>SIZE_MAX) return XR_XIR_BUDGET;
@@ -667,29 +779,8 @@ static XrXirStatus error_function(ErrorFlow *flow, uint32_t f) {
         sources=(uint32_t *)heap_membership;
         membership=heap_membership+(size_t)flow->values*sizeof(*sources);
     }
-    for (uint32_t v = 0; v < flow->values; ++v) {
-        /* Charge the original scan and the actual temporary byte write. */
-        if (!xir_compile_work(flow->remaining, 2)) { status = XR_XIR_BUDGET;goto membership_done; }
-        bool active = true, copy = false;XrXirType type=XR_XIR_UNIT;uint32_t source=UINT32_MAX;
-        if (owned && v>=flow->function->parameter_count) {
-            EffectBodyInstructionFields fields;
-            status=error_owned_cursor_active(flow,v-flow->function->parameter_count,&cursor,&fields,&active);
-            if (status==XR_XIR_OK) {
-                type=fields.type;copy=error_copy_op(fields.op);if (copy) source=fields.source;
-            }
-        } else status=error_row_active(flow,v,&active,&type,&copy,&source);
-        if (status != XR_XIR_OK) goto membership_done;
-        bool cell = xr_xir_type_is_cell(flow->body.domain.types,type);
-        membership[v] = (uint8_t)((active ? ERROR_ROW_ACTIVE : 0) |
-            (cell ? ERROR_ROW_CELL : 0) | (copy ? ERROR_ROW_COPY : 0));
-        if (active) ++flow->active_count;
-        if (cell) ++flow->cell_count;
-        if (owned && copy && !active) ++zero_copy_count;
-        if (copy) {
-            if (!xir_compile_work(flow->remaining,1)) { status=XR_XIR_BUDGET;goto membership_done; }
-            sources[v]=source;
-        }
-    }
+    status=error_membership(flow,membership,sources,&zero_copy_count);
+    if (status!=XR_XIR_OK) goto membership_done;
     uint64_t stride = (uint64_t)(flow->active_count ? flow->active_count : 1) * words;
     uint64_t copy_bytes=zero_copy_count ? ((uint64_t)flow->function->instruction_count+7)/8 : 0;
     uint64_t extra = ((uint64_t)flow->values * 2 + flow->active_count + flow->cell_count) *
