@@ -145,6 +145,14 @@ static void reader_lower_canonical(void) {
         CHECK(xr_xir_compile_checked_read(&c,packet.bytes,packet.length,&decoded,NULL) == XR_XIR_OK);
         reader_lower_occupied(&c,&packet,decoded);
         CHECK(xr_xir_compile_lower(decoded,&target,&b,NULL) == XR_XIR_OK); reader_lower_equal(a,b);
+        CHECK(b->module.functions != decoded->module.functions &&
+            b->module.functions[0].instructions != decoded->module.functions[0].instructions);
+        if (kind) {
+            CHECK(b->module.provenance != decoded->module.provenance &&
+                b->module.provenance->origins != decoded->module.provenance->origins);
+            CHECK(b->module.provenance->source != decoded->module.provenance->source &&
+                b->module.provenance->source->module.functions != decoded->module.provenance->source->module.functions);
+        }
         CHECK(a->checked_packet.length == packet.length && !memcmp(a->checked_packet.bytes,packet.bytes,packet.length));
         XrXirInstruction *instruction = (XrXirInstruction *)decoded->module.functions[0].instructions;
         XrXirOp saved = instruction->op; instruction->op = XR_XIR_INVALID;
@@ -169,7 +177,10 @@ static void reader_lower_canonical(void) {
         CHECK(stats(owner).live_bytes == before); decoded->target.architecture = 0;
         out = NULL; CHECK(xr_xir_compile_lower(decoded,&target,&out,NULL) == XR_XIR_OK);
         reader_lower_equal(a,out); xr_xir_compile_artifact_free(out);
-        xr_xir_compile_artifact_free(a); xr_xir_compile_artifact_free(b); xr_xir_compile_artifact_free(decoded);
+        xr_xir_compile_artifact_free(decoded); decoded = NULL;
+        CHECK(xr_xir_compile_artifact_verify(b,NULL) == XR_XIR_OK);
+        reader_lower_equal(a,b);
+        xr_xir_compile_artifact_free(a); xr_xir_compile_artifact_free(b);
         xr_compile_resources_release(owner);
         CHECK(packet.length >= 64 && !memcmp(packet.bytes,"XRCHK",5));
         xr_xir_compile_checked_packet_free(&packet); CHECK(!live && !live_count);

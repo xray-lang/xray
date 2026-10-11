@@ -288,7 +288,9 @@ static XrXirStatus transition(const XrXirModule *input, const XrXirConstruction 
     XrXirStatus status = transition_shape(input, source, budget, target, diagnostic);
     if (status == XR_XIR_OK) status = xr_xir_compile_verify_v2(budget, input, construction, diagnostic);
     if (status != XR_XIR_OK) return status;
-    const TransitionInputProof proof = {xr_xir_compile_checked_write, NULL};
+    /* Complete admission precedes the private exact clone. Its encoder needs
+     * no second admission; complete receiving checks precede publication. */
+    const TransitionInputProof proof = {checked_encode, NULL};
     return transition_owned(input, construction, budget, output, diagnostic, target, &proof);
 }
 
