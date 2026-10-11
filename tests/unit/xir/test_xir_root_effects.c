@@ -153,7 +153,9 @@ static void root_var_atomic_case(void) {
         CHECK(witness && witness->cause==XR_XIR_ROOT_CAUSE_MUTABLE_SLOT && witness->distance==0);
         CHECK(witness->slot<module->declarations->slot_count);
         const XrXirSlot *slot=&module->declarations->slots[witness->slot];
-        CHECK(slot->mutable && xr_xir_type_is_atomic(module->types,slot->type));
+        CHECK(slot->mutable && xr_xir_type_is_cell(module->types,slot->type));
+        CHECK(xr_xir_type_is_atomic(module->types,xr_xir_cell_element(module->types,slot->type)));
+        CHECK(xr_xir_atomic_element(module->types,xr_xir_cell_element(module->types,slot->type))==XR_XIR_I64);
         effect_summary_free(effects);
     }
     effect_artifact_free(lowered);effect_artifact_free(specialized);effect_artifact_free(checked);
