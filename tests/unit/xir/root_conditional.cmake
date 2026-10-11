@@ -134,3 +134,9 @@ add_test(NAME test_xir_root_conditional_generation_ranges
     COMMAND test_xir_root_conditional_helpers --generation-ranges)
 set_tests_properties(test_xir_root_conditional_generation_ranges PROPERTIES
     LABELS "unit;xir;root-effects;compiler-fault;ownership" TIMEOUT 300 RUN_SERIAL TRUE PROCESSORS 1)
+
+# Exact edge identity and every constant-row handler retain their own census.
+add_test(NAME test_xir_root_conditional_invocation_edge_keys
+    COMMAND test_xir_root_conditional_helpers --invocation-edge-keys)
+set_tests_properties(test_xir_root_conditional_invocation_edge_keys PROPERTIES
+    LABELS "unit;xir;root-effects;compiler-fault;ownership" TIMEOUT 300 RUN_SERIAL TRUE PROCESSORS 1)

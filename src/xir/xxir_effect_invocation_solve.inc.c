@@ -47,6 +47,39 @@ static XrXirStatus effect_invocation_dispatch_scalar(EffectInvocationFlow *flow,
     return XR_XIR_OK;
 }
 
+/* A canonical constant run has ten identical physical fields. The complete
+ * stack value remains local to this run; every selected ordinal still enters
+ * the original handler with its own current coordinate and semantic charges. */
+static XrXirStatus effect_invocation_dispatch_constant(EffectInvocationFlow *flow,
+    const EffectBodyRunRef *ref,uint32_t *record_index,bool *changed) {
+    if (ref->mask || *record_index>=flow->physical->count) return XR_XIR_BAD_STRUCTURE;
+    if (!xir_compile_work(flow->owner->work,2*sizeof(uint32_t)+6)) return XR_XIR_BUDGET;
+    uint32_t parameters=flow->function->parameter_count;
+    uint32_t first=flow->physical->records[*record_index].value;
+    if (first<parameters || first>=flow->values || first-parameters<ref->first ||
+        first-parameters>=ref->first+ref->count) return XR_XIR_BAD_STRUCTURE;
+    XrXirInstruction op;
+    XrXirStatus status=effect_body_instruction_ref_value(&flow->body.read,ref,first-parameters,&op);
+    if (status!=XR_XIR_OK) return status;
+    while (*record_index<flow->physical->count &&
+        flow->physical->records[*record_index].value-parameters<ref->first+ref->count) {
+        if (!xir_compile_work(flow->owner->work,3+sizeof(*record_index))) return XR_XIR_BUDGET;
+        EffectPhysicalRecord record=flow->physical->records[(*record_index)++];
+        if (record.value<parameters || record.value>=flow->values ||
+            record.value-parameters<ref->first) return XR_XIR_BAD_STRUCTURE;
+        if (!(record.mask&EFFECT_PHYSICAL_INVOCATION)) continue;
+        uint32_t i=record.value-parameters;
+        if (!flow->precision && !xir_compile_work(flow->owner->work,1)) return XR_XIR_BUDGET;
+        if (flow->precision) {
+            if (!effect_invocation_dispatch_precision(op.op)) continue;
+            if (!xir_compile_work(flow->owner->work,1)) return XR_XIR_BUDGET;
+        }
+        flow->instruction=i;status=effect_invocation_instruction_decoded(flow,i,&op,changed);
+        if (status!=XR_XIR_OK) return status;
+    }
+    return XR_XIR_OK;
+}
+
 /* The first selected row used the complete scalar path. Only a second real
  * invocation starts this fresh owning walk, so unused and singleton requests
  * never initialize an unused 40-byte row or scan the rest of their body. */
@@ -60,6 +93,23 @@ static XrXirStatus effect_invocation_dispatch_range(EffectInvocationFlow *flow,
     for (uint32_t run=0;run<body->run_count;++run) {
         EffectBodyRunRef ref;XrXirStatus status=effect_body_range_ref(&flow->body.read,body,&cursor,&ref);
         if (status!=XR_XIR_OK) return status;
+        if (!xir_compile_work(owner->work,1)) return XR_XIR_BUDGET;
+        if (!ref.mask) {
+            while (r<flow->physical->count &&
+                flow->physical->records[r].value-body->parameter_count<ref.first+ref.count &&
+                !(flow->physical->records[r].mask&EFFECT_PHYSICAL_INVOCATION)) {
+                if (!xir_compile_work(owner->work,3)) return XR_XIR_BUDGET;
+                uint32_t value=flow->physical->records[r++].value;
+                if (value<body->parameter_count || value>=flow->values ||
+                    value-body->parameter_count<ref.first) return XR_XIR_BAD_STRUCTURE;
+            }
+            if (r<flow->physical->count &&
+                flow->physical->records[r].value-body->parameter_count<ref.first+ref.count) {
+                status=effect_invocation_dispatch_constant(flow,&ref,&r,changed);
+                if (status!=XR_XIR_OK) return status;
+            }
+            continue;
+        }
         while (r<flow->physical->count &&
             flow->physical->records[r].value-body->parameter_count<ref.first+ref.count) {
             if (!xir_compile_work(owner->work,3)) return XR_XIR_BUDGET;

@@ -113,6 +113,8 @@ typedef struct EffectInvocationOwner {
     const XrXirCellProvenance *cells;
     EffectInvocationNode *nodes;
     EffectInvocationEdge *edges;
+    uint32_t *edge_index;
+    size_t edge_index_capacity;
     EffectInvocationSite *sites;
     EffectInvocationDeferred *deferred_calls;
     uint32_t *consumers;

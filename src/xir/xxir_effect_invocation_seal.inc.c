@@ -215,7 +215,8 @@ static XrXirStatus effect_invocation_seal(const XrXirCompileContext *work,
         certificate->equations=owner;certificate->solution=solution;
         status=effect_invocation_certificate_project(work,certificate,sink);
     }
-    if (status==XR_XIR_OK && !xir_compile_work(work,9)) status=XR_XIR_BUDGET;
+    if (status==XR_XIR_OK && !xir_compile_work(work,9+
+        sizeof(owner->edge_index)+sizeof(owner->edge_index_capacity))) status=XR_XIR_BUDGET;
     if (status!=XR_XIR_OK) {
         if (certificate) { certificate->equations=NULL;certificate->solution=NULL;certificate->body=NULL; }
         effect_invocation_certificate_free(certificate);return status;
@@ -228,6 +229,8 @@ static XrXirStatus effect_invocation_seal(const XrXirCompileContext *work,
     owner->graph->physical_owned=false;
     if (owner->effects->generation==certificate->body) owner->effects->generation=NULL;
     certificate->terms.remaining=NULL;certificate->body->terms.remaining=NULL;
+    xr_compile_resources_free(owner->edge_index);
+    owner->edge_index=NULL;owner->edge_index_capacity=0;
     owner->body.read=(EffectBodyRead){0};
     owner->work=NULL;owner->module=NULL;owner->effects=NULL;owner->graph=NULL;owner->declared=NULL;
     *request->equations=NULL;*request->solution=NULL;*output=certificate;return XR_XIR_OK;

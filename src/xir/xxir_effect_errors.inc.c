@@ -699,6 +699,7 @@ static XrXirStatus error_edge(ErrorFlow *flow, uint32_t from, uint32_t to,
 typedef struct ErrorBlockRead {
     XrXirInstruction storage;
     const XrXirInstruction *end;
+    bool constant,decoded;
 } ErrorBlockRead;
 
 static XrXirStatus error_block_row(ErrorFlow *flow,uint32_t b,uint32_t i,
@@ -715,7 +716,13 @@ static XrXirStatus error_block_row(ErrorFlow *flow,uint32_t b,uint32_t i,
     if (status!=XR_XIR_OK) return status;
     if (copied_zero) return error_instruction_begin(flow,i);
     if (ref) {
-        status=effect_body_instruction_ref_value(&flow->body.read,ref,i,&row->storage);
+        if (!xir_compile_work(flow->remaining,2)) return XR_XIR_BUDGET;
+        if (!row->constant || !row->decoded) {
+            status=effect_body_instruction_ref_value(&flow->body.read,ref,i,&row->storage);
+            if (status!=XR_XIR_OK) return status;
+            if (!xir_compile_work(flow->remaining,sizeof(row->decoded))) return XR_XIR_BUDGET;
+            row->decoded=true;
+        }
         if (status==XR_XIR_OK) {
             if (!xir_compile_work(flow->remaining,sizeof(row->end))) return XR_XIR_BUDGET;
             row->end=&row->storage;
@@ -749,6 +756,9 @@ static XrXirStatus error_block_transfer(ErrorFlow *flow,uint32_t b,
         status=effect_body_range_ref(&flow->body.read,function,&cursor,&ref);
         if (status!=XR_XIR_OK) return status;
         if (!xir_compile_work(flow->remaining,2+2*sizeof(uint32_t))) return XR_XIR_BUDGET;
+        if (!xir_compile_work(flow->remaining,1+sizeof(row->constant)+sizeof(row->decoded)))
+            return XR_XIR_BUDGET;
+        row->constant=ref.mask==0;row->decoded=false;
         uint32_t first=ref.first<block->first?block->first:ref.first;
         uint32_t limit=ref.first+ref.count<end?ref.first+ref.count:end;
         for (uint32_t i=first;i<limit;++i) {

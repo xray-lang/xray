@@ -110,6 +110,7 @@ static void effect_invocation_free(EffectInvocationOwner *owner) {
     xr_compile_resources_free(owner->deferred_calls);
     xr_compile_resources_free(owner->nodes);
     xr_compile_resources_free(owner->edges);
+    xr_compile_resources_free(owner->edge_index);
     xr_compile_resources_free(owner->consumers);
     xr_compile_resources_free(owner->sites);
     xr_compile_resources_free(owner->roots);xr_compile_resources_free(owner->root_spaces);
@@ -252,6 +253,8 @@ static XrXirStatus effect_invocation_intern(EffectInvocationOwner *owner,
     *output=at;return XR_XIR_OK;
 }
 
+#include "xxir_effect_invocation_edge_index.inc.c"
+
 static XrXirStatus effect_invocation_edge(EffectInvocationOwner *owner,
     uint32_t caller,uint32_t target,uint32_t instruction,uint32_t producer,bool latent) {
     if (caller>=owner->count || target>=owner->count) return XR_XIR_BAD_STRUCTURE;
@@ -263,11 +266,26 @@ static XrXirStatus effect_invocation_edge(EffectInvocationOwner *owner,
         (producer!=UINT32_MAX && (producer>=owner->site_count ||
             owner->sites[producer].target!=owner->nodes[target].body)))
         return XR_XIR_BAD_STRUCTURE;
-    for (uint32_t e=owner->nodes[caller].edge_head;e!=UINT32_MAX;e=owner->edges[e].next) {
-        if (!xir_compile_work(owner->work,2)) return XR_XIR_BUDGET;
-        if (owner->edges[e].target==target && owner->edges[e].instruction==instruction &&
-            owner->edges[e].producer==producer && owner->edges[e].latent==latent)
-            return XR_XIR_OK;
+    if (!!owner->edge_index!=!!owner->edge_index_capacity ||
+        (owner->edge_count && !owner->edge_index)) return XR_XIR_BAD_STRUCTURE;
+    if (!xir_compile_work(owner->work,sizeof(EffectInvocationEdgeKey)+2*sizeof(size_t)+3))
+        return XR_XIR_BUDGET;
+    EffectInvocationEdgeKey key={caller,target,instruction,producer,(uint32_t)latent};
+    size_t position=0;
+    if (owner->edge_index) {
+        read_status=effect_invocation_edge_slot(owner,owner->edge_index,
+            owner->edge_index_capacity,&key,&position);
+        if (read_status!=XR_XIR_OK) return read_status;
+        if (owner->edge_index[position]) return XR_XIR_OK;
+    }
+    size_t previous_capacity=owner->edge_index_capacity;
+    read_status=effect_invocation_edge_index_reserve(owner);
+    if (read_status!=XR_XIR_OK) return read_status;
+    if (previous_capacity!=owner->edge_index_capacity) {
+        read_status=effect_invocation_edge_slot(owner,owner->edge_index,
+            owner->edge_index_capacity,&key,&position);
+        if (read_status!=XR_XIR_OK) return read_status;
+        if (owner->edge_index[position]) return XR_XIR_BAD_STRUCTURE;
     }
     if (owner->edge_count==owner->edge_capacity) {
         uint32_t maximum=owner->maximum;
@@ -286,12 +304,12 @@ static XrXirStatus effect_invocation_edge(EffectInvocationOwner *owner,
         if (owner->edge_count) memcpy(edges,owner->edges,(size_t)owner->edge_count*sizeof(*edges));
         xr_compile_resources_free(owner->edges);owner->edges=edges;owner->edge_capacity=capacity;
     }
-    if (!xir_compile_work(owner->work,sizeof(EffectInvocationEdge)+2)) return XR_XIR_BUDGET;
+    if (!xir_compile_work(owner->work,sizeof(EffectInvocationEdge)+2+sizeof(uint32_t))) return XR_XIR_BUDGET;
     uint32_t at=owner->edge_count;
     owner->edges[at]=(EffectInvocationEdge){caller,target,instruction,producer,
         owner->nodes[caller].edge_head,owner->consumers[target],latent};
     owner->nodes[caller].edge_head=at;owner->consumers[target]=at;
-    ++owner->edge_count;
+    ++owner->edge_count;owner->edge_index[position]=at+1;
     /* A completed child's producer can predate a newly linked real edge. */
     return owner->producer_enabled || owner->class_enabled ? effect_invocation_enqueue(owner,caller) : XR_XIR_OK;
 }

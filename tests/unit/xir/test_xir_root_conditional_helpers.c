@@ -50,6 +50,7 @@
 #include "xir_initial_ordinary_material_cases.h"
 #include "xir_error_owned_material_cases.h"
 #include "xir_cell_owned_run_cases.h"
+#include "xir_invocation_edge_key_cases.h"
 
 static XrXirStatus conditional_classify(const XrXirCompileContext *context, uint32_t mode, bool oracle) {
     ConditionalRawFixture f;conditional_raw_fixture(&f,mode);
@@ -1656,6 +1657,10 @@ static void conditional_axes(void) {
 }
 
 int main(int argc, char **argv) {
+    if (argc==2 && !strcmp(argv[1],"--invocation-edge-keys")) {
+        invocation_edge_literals();invocation_edge_resources();
+        CHECK(!rp_live && !rp_live_bytes);return 0;
+    }
     if (argc==2 && !strcmp(argv[1],"--generation-ranges")) {
         conditional_generation_literals();generation_range_controls();
         conditional_generation_resources();CHECK(!rp_live && !rp_live_bytes);return 0;
