@@ -50,6 +50,7 @@ static XrXirStatus initial_ordinary_owner(const XrXirCompileContext *context,
         CHECK(ordinary->references==1 && initial->references==references+1);
         status=ordinary_material_cell_match(context,dense,tracked);
         if (status==XR_XIR_OK) status=effect_invocation_public_gate(context,forest->invocations,source->function_count);
+        if (status==XR_XIR_OK) status=effect_invocation_forest_match(context,forest);
     }
     effect_context_forest_free(forest);effect_context_owner_free(owner);return status;
 }
@@ -278,7 +279,78 @@ static void initial_ordinary_refresh_controls(void) {
     xr_xir_compile_effects_free(effects);rp_owner_free(&context,baseline);rp_balanced(physical);
 }
 
+/* Every node remains a fresh correspondence obligation. The record retains
+ * its own four-domain witness and link; sharing node storage grants nothing. */
+static void initial_ordinary_forest_literals(const XrXirCompileContext *context,
+    EffectContextForest *forest) {
+    CHECK(forest->count==2 && forest->nodes[0].parameter_count==1 &&
+        forest->invocations && effect_invocation_forest_match(context,forest)==XR_XIR_OK);
+    EffectForestNode node=forest->nodes[0];XrXirRootEffects facts=forest->facts[0];
+    EffectContextCertificate record=forest->certificates[0];
+    XrXirRootEffectWitness witness=forest->witnesses[0];
+    XrXirType wrong_type=XR_XIR_I64;
+    uint8_t wrong_kind=(uint8_t)(node.parameter_kinds[0]^1u);
+    for (uint32_t attack=0;attack<14;++attack) {
+        uint64_t live=rp_stats(context).live_bytes;
+        switch (attack) {
+            case 0: forest->nodes[0].declaration=UINT32_MAX;break;
+            case 1: forest->nodes[0].owner=node.owner?0:UINT32_MAX;break;
+            case 2: forest->nodes[0].constant_mask^=1u;break;
+            case 3: ++forest->nodes[0].argument_count;break;
+            case 4: ++forest->nodes[0].parameter_count;break;
+            case 5: forest->facts[0].unresolved=!facts.unresolved;break;
+            case 6: forest->nodes[0].physical_types=&wrong_type;break;
+            case 7: forest->nodes[0].parameter_kinds=&wrong_kind;break;
+            case 8: forest->certificates[0].witness.cause=
+                (XrXirRootEffectCause)((uint32_t)record.witness.cause^1u);break;
+            case 9: forest->certificates[0].next=forest->count;break;
+            case 10: forest->certificates[0].parameter_owner=forest->count;break;
+            case 11: forest->certificates[0].domain^=1u;break;
+            case 12: forest->certificates[0].next_domain^=1u;break;
+            case 13: forest->witnesses[0].cause=
+                (XrXirRootEffectCause)((uint32_t)witness.cause^1u);break;
+        }
+        CHECK(effect_invocation_forest_match(context,forest)==XR_XIR_BAD_STRUCTURE &&
+            rp_stats(context).live_bytes==live);
+        forest->nodes[0]=node;forest->facts[0]=facts;
+        forest->certificates[0]=record;forest->witnesses[0]=witness;
+        CHECK(effect_invocation_forest_match(context,forest)==XR_XIR_OK &&
+            rp_stats(context).live_bytes==live);
+    }
+    EffectForestNode target=forest->nodes[1];forest->nodes[1].owner=target.owner?0:UINT32_MAX;
+    CHECK(effect_invocation_forest_match(context,forest)==XR_XIR_BAD_STRUCTURE);
+    forest->nodes[1]=target;
+    XrXirRootCauseTrace *occupied=(XrXirRootCauseTrace *)(uintptr_t)1;
+    XrCompileResourceStats prepared=rp_stats(context);size_t attempts=rp_attempts;
+    CHECK(effect_context_forest_trace(context,forest,0,&occupied)==XR_XIR_BAD_STRUCTURE &&
+        occupied==(XrXirRootCauseTrace *)(uintptr_t)1 && rp_stats(context).work==prepared.work && rp_attempts==attempts);
+    XrXirCompileContext foreign=rp_owner(rp_caps());prepared=rp_stats(&foreign);occupied=NULL;
+    CHECK(effect_context_forest_trace(&foreign,forest,0,&occupied)==XR_XIR_BAD_STRUCTURE && !occupied &&
+        rp_stats(&foreign).work==prepared.work && rp_stats(&foreign).live_bytes==prepared.live_bytes);
+    rp_owner_free(&foreign,prepared.live_bytes);
+    CHECK(effect_context_forest_trace(context,forest,0,&occupied)==XR_XIR_OK && occupied);
+    xr_xir_compile_root_cause_trace_free(occupied);
+}
+
+/* Neither Source storage nor its producer summary is live for this fresh
+ * reconstruction. The genuine retained forest owns all remaining inputs. */
+static void initial_ordinary_forest_controls(void) {
+    RootParameterMark physical=rp_mark();XrXirCompileContext context=rp_owner(rp_caps());
+    uint64_t baseline=rp_stats(&context).live_bytes;
+    OrdinaryMaterialFixture fixture;initial_ordinary_fixture(&fixture,1);
+    XrXirEffects *effects=NULL;EffectContextOwner *owner=NULL;
+    CHECK(initial_ordinary_effects(&context,&fixture.source,&effects)==XR_XIR_OK);
+    CHECK(effect_context_owner_build(&context,&fixture.source,NULL,effects->invocations->body,&owner)==XR_XIR_OK);
+    EffectContextForest *forest=owner->forest;owner->forest=NULL;
+    effect_context_owner_free(owner);xr_xir_compile_effects_free(effects);
+    memset(&fixture,0xCE,sizeof(fixture));
+    initial_ordinary_forest_literals(&context,forest);
+    CHECK(ordinary_material_cell_match(&context,forest->invocations->body,true)==XR_XIR_OK);
+    effect_context_forest_free(forest);rp_owner_free(&context,baseline);rp_balanced(physical);
+}
+
 static void initial_ordinary_controls(void) {
+    initial_ordinary_forest_controls();
     initial_ordinary_refresh_controls();
     RootParameterMark physical=rp_mark();XrXirCompileContext context=rp_owner(rp_caps());
     uint64_t baseline=rp_stats(&context).live_bytes;OrdinaryMaterialFixture fixture;initial_ordinary_fixture(&fixture,0);

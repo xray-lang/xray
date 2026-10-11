@@ -20,7 +20,6 @@ typedef struct EffectContextCertificate {
     XrXirRootEffectWitness witness;
     uint32_t next, parameter_owner;
     uint8_t domain, next_domain;
-    EffectForestNode subject, target;
 } EffectContextCertificate;
 
 typedef struct EffectContextForest {
@@ -149,24 +148,6 @@ static XrXirStatus effect_context_forest_seal(const XrXirCompileContext *context
      * live until this same retained owner is released by forest_free. */
     forest->invocations=contexts->uses.invocations;contexts->uses.invocations=NULL;
     forest->terms.remaining=NULL;*output=forest;return XR_XIR_OK;
-}
-
-static XrXirStatus effect_context_identity_matches(const XrXirCompileContext *context,
-    const EffectContextForest *forest, const EffectForestNode *expected, uint32_t actual) {
-    if (actual>=forest->count) return XR_XIR_BAD_STRUCTURE;
-    const EffectForestNode *node=&forest->nodes[actual];
-    if (!xir_compile_work(context,3)) return XR_XIR_BUDGET;
-    if (expected->declaration!=node->declaration || expected->argument_count!=node->argument_count ||
-        expected->parameter_count!=node->parameter_count || expected->owner!=node->owner) return XR_XIR_BAD_STRUCTURE;
-    XrXirTypeMatchScratch scratch={context->resources,NULL};XrXirStatus status=XR_XIR_OK;
-    for (uint32_t a=0;a<node->argument_count && status==XR_XIR_OK;++a)
-        status=xr_xir_compile_type_substitution_matches_between_scratch(context,
-            &forest->terms.types,&forest->terms.types,NULL,0,expected->arguments[a],node->arguments[a],&scratch);
-    for (uint32_t p=0;p<node->parameter_count && status==XR_XIR_OK;++p)
-        status=xr_xir_compile_type_substitution_matches_between_scratch(context,
-            &forest->terms.types,&forest->terms.types,NULL,0,expected->physical_types[p],node->physical_types[p],&scratch);
-    xr_xir_type_match_scratch_free(&scratch);
-    return status==XR_XIR_BAD_TYPE ? XR_XIR_BAD_STRUCTURE : status;
 }
 
 static XrXirStatus effect_context_forest_trace(const XrXirCompileContext *context,

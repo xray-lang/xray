@@ -84,7 +84,7 @@ static XrXirStatus effect_invocation_forest_record(const XrXirCompileContext *wo
     }
     if (!xir_compile_work(work,sizeof(*output))) return XR_XIR_BUDGET;
     *output=(EffectContextCertificate){witness,next,parameter_owner,(uint8_t)domain,
-        (uint8_t)(2+(domain&1)),forest->nodes[function],forest->nodes[target]};
+        (uint8_t)(2+(domain&1))};
     return XR_XIR_OK;
 }
 
@@ -147,8 +147,12 @@ static XrXirStatus effect_invocation_forest_match(const XrXirCompileContext *wor
             status=effect_terms_domain_type(&comparison,&certificate->terms.types,
                 node->physical_types[p],body->parameters[p],scope);
         }
+    }
+    /* Each identity has one owned inventory. Admit every node against the
+     * independent sealed domain before any four-domain link is accepted. */
+    for (uint32_t f=0;f<forest->count && status==XR_XIR_OK;++f) {
         EffectInvocationProjectionSelection selected[4];
-        if (status==XR_XIR_OK) status=effect_invocation_projection_domains(work,certificate,f,0,4,selected);
+        status=effect_invocation_projection_domains(work,certificate,f,0,4,selected);
         for (uint32_t d=0;d<4 && status==XR_XIR_OK;++d) {
             size_t at=(size_t)d*forest->count+f;EffectContextCertificate expected={0};
             if (!xir_compile_work(work,sizeof(EffectInvocationForestProjection))) { status=XR_XIR_BUDGET;break; }
@@ -161,9 +165,6 @@ static XrXirStatus effect_invocation_forest_match(const XrXirCompileContext *wor
                 !effect_context_witness_same(&actual->witness,&expected.witness) || actual->next!=expected.next ||
                 actual->parameter_owner!=expected.parameter_owner || actual->domain!=expected.domain ||
                 actual->next_domain!=expected.next_domain) { status=XR_XIR_BAD_STRUCTURE;break; }
-            status=effect_context_identity_matches(work,forest,&actual->subject,f);
-            uint32_t target=expected.next==UINT32_MAX?expected.parameter_owner:expected.next;
-            if (status==XR_XIR_OK) status=effect_context_identity_matches(work,forest,&actual->target,target);
         }
     }
     effect_terms_free(&comparison);return status==XR_XIR_BAD_TYPE?XR_XIR_BAD_STRUCTURE:status;
