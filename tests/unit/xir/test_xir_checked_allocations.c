@@ -138,6 +138,7 @@ static void packet_failures(unsigned kind) {
 }
 
 static void specialization_failures(unsigned callable) {
+    consumer_context=consumer_context_default();
     XrXirArtifact *checked = callable == 9 ? enum_checked_fixture(suite_context) : callable == 8 ? nominal_expression_fixture(suite_context) : callable == 7 ? nominal_chain_fixture(suite_context, 3, 2) : callable == 6 ? nominal_generic_fixture(suite_context, true) : callable == 5 ? nominal_checked_fixture(suite_context, 3) : callable == 4 ? array_generic_fixture(suite_context) : callable == 3 ? constructed_fixture(suite_context) : callable == 2 ? generic_callable_fixture(suite_context) : callable ? callable_fixture(suite_context) : generic_fixture(suite_context), *output = NULL;
     XrXirModule built = *xr_xir_compile_artifact_module(checked); built.stage = XR_XIR_BUILT;
     size_t baseline=live,baseline_bytes=live_bytes,sites[2]={0};
