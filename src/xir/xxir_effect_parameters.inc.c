@@ -79,6 +79,14 @@ static XrXirStatus effect_parameters_allocate(const XrXirModule *module,
     for (uint32_t t=0;module->types && t<module->types->count;++t) {
         if (!xir_compile_work(work,1)) return XR_XIR_BUDGET;
         if (module->types->nodes[t].kind==XR_XIR_TYPE_CELL) cells=true;
+        else {
+            if (!xir_compile_work(work,1)) return XR_XIR_BUDGET;
+            /* Ordinary parameter views precede physical graph creation.
+             * Every real Class value or result has a declaration node here;
+             * the provider independently derives its complete place facts. */
+            cells|=xr_xir_type_is_class(module->types,
+                (XrXirType)(XR_XIR_CONSTRUCTED_TYPE_BASE+t));
+        }
     }
     effect_parameters_free(effects);
     XrXirStatus status = XR_XIR_OK;
