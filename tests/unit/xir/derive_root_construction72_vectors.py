@@ -5,6 +5,7 @@ import copy
 import hashlib
 import importlib.util
 import json
+import re
 import struct
 import sys
 
@@ -39,7 +40,10 @@ def model():
     return dict(linkage=0, functions=functions,
                 declarations=dict(modules=[['alpha', [], 0]], identities=identities,
                                   slots=[], literals=[], root=0, entry=1),
-                generics=[[None, [], []] for _ in functions],
+                generics=None,
+                template_facts=[dict(parameters=[], constant_mask=4 if f == 0 else 0,
+                                     terms=[], values=[], bindings=[])
+                                for f in range(len(functions))],
                 nodes=[[4, 0, 0, [], []]],
                 nominals=[['alpha', 'Pair', 1, 0, 0, 0, '00' * 32, [],
                            [['a', 2, 0], ['b', 2, 0]], []]],
@@ -57,10 +61,23 @@ def main():
     spec.loader.exec_module(encoder)
     words = lambda *values: struct.pack('<' + 'I' * len(values), *values)
     original = model()
+    checked = (args.source_root / 'src/xir/xxir_checked.h').read_text(encoding='utf-8')
+    assert re.search(r'XR_XIR_CHECKED_SCHEMA\s+28u', checked)
+    assert re.search(r'XR_XIR_CHECKED_CONTRACT\s+73u', checked)
     body, _ = encoder.encode_body(original, 0)
-    assert body[-8:] == bytes(8)
+    assert body[-8:] == bytes(8) and original['generics'] is None
+    # Actual alpha.initializer is f0; none of the remaining five definitions
+    # has a callable/Cell formal, indirect edge, deferred frontier or unknown.
+    assert original['declarations']['modules'][0][2] == 0
+    assert all(not f['parameters'] for f in original['functions'])
+    assert [[op[0] for op in f['instructions']] for f in original['functions']] == [
+        [33], [28,83,83,25,33], [28,28,82,33], [2,33], [2,33]]
+    facts = original['template_facts']
+    assert [c['constant_mask'] for c in facts] == [4,0,0,0,0]
+    assert all(not c[k] for c in facts for k in ['parameters','terms','values','bindings'])
+    template = words(1,5) + b''.join(words(0,c['constant_mask'],0,0,0) for c in facts)
     owner = words(1, 3, 2, 4, 5)  # one nominal; make+1, two fields, a+1,b+1.
-    checked_body = body[:-8] + owner + body[-8:]
+    checked_body = body[:-8] + owner + words(0) + template
     checked_offset = 64 + len(body) - 8
     instance = copy.deepcopy(original)
     instance['generics'] = None
@@ -72,12 +89,17 @@ def main():
     recursive_offset = 64 + len(prefix) + len(body) - 8
     origins = words(5) + b''.join(words(f, 0, 0) for f in range(5)) + words(0)
     instance_body = prefix + checked_body + origins
-    def frame(payload, schema=27, semantic=72):
+    def frame(payload, schema=28, semantic=73):
         header = b'XRCHK\0\0\0' + words(schema, semantic, 2, 0) + struct.pack('<Q', len(payload))
         return header + hashlib.sha256(header + payload).digest() + payload
+    # Preserve the independent historical 26/71 malformed/previous input:
+    # its old noncanonical empty generic table is part of that original byte map.
+    legacy = copy.deepcopy(original)
+    legacy['generics'] = [[None, [], []] for _ in legacy['functions']]
+    legacy_body, _ = encoder.encode_body(legacy, 0)
     rows = [('root_construction72_checked', frame(checked_body)),
             ('root_construction72_instance', frame(instance_body)),
-            ('root_construction71_previous', frame(body, 26, 71))]
+            ('root_construction71_previous', frame(legacy_body, 26, 71))]
     lines = ['/*',
              ' * xray - Lightweight typed scripting with native concurrency',
              ' * https://www.xray-lang.org',

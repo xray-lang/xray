@@ -9,12 +9,16 @@
 #ifndef ROOT_CONSTRUCTION72_CASES_H
 #define ROOT_CONSTRUCTION72_CASES_H
 #include "xir/xxir_internal.h"
+#include "xir/xxir_checked.h"
 #include "xir/xxir_nominal.h"
 #include "base/xsha256.h"
 #include "root_construction72_goldens.h"
 _Static_assert(XR_XIR_CONST_INT == 2 && XR_XIR_ADD_INT == 25 && XR_XIR_CALL == 28 &&
     XR_XIR_RETURN == 33 && XR_XIR_STRUCT_NEW == 82 && XR_XIR_STRUCT_GET == 83,
     "Independent construction vector opcode identities changed");
+
+_Static_assert(XR_XIR_CHECKED_SCHEMA == 28u && XR_XIR_CHECKED_CONTRACT == 73u &&
+    XR_XIR_CALLABLE_ROOT_REQUIRED == 4u, "Independent construction wire facts changed");
 
 static XrXirStatus root_construction72_build(const XrXirCompileContext *context,
     XrXirArtifact **output) {
@@ -57,9 +61,15 @@ static XrXirStatus root_construction72_build(const XrXirCompileContext *context,
     XrXirTypeNode node = {XR_XIR_TYPE_NOMINAL,XR_XIR_UNIT,NULL,0,XR_XIR_UNIT,0,0,
         {0,NULL,0,NULL,0}};
     XrXirTypes types = {&node,1,&table,NULL};
-    XrXirGeneric generics[5] = {{0}};
-    XrXirModule built = {XR_XIR_BUILT,functions,5,&declarations,generics,&types,
-        NULL,XR_XIR_PROGRAM,NULL};
+    /* The initializer owns ROOT. These direct scalar construction calls have
+     * no callable, Cell, unknown or deferred input. The complete checker must
+     * derive and compare every stored fact before specialization consumes it. */
+    XrXirFunctionEffectContract contracts[5] = {0};
+    contracts[0].formula.constant_mask = XR_XIR_CALLABLE_ROOT_REQUIRED;
+    XrXirProvenance evidence = {.kind=XR_XIR_EVIDENCE_TEMPLATE,
+        .contracts=contracts,.contract_count=5};
+    XrXirModule built = {XR_XIR_BUILT,functions,5,&declarations,NULL,&types,
+        &evidence,XR_XIR_PROGRAM,NULL};
     uint32_t helpers[] = {4,5};
     XrXirConstructionRow row = {3,helpers,2};
     XrXirConstruction *facts = NULL;
@@ -68,6 +78,7 @@ static XrXirStatus root_construction72_build(const XrXirCompileContext *context,
     xr_xir_compile_construction_free(facts);
     memset(helpers,0xCC,sizeof(helpers)); memset(fields,0xCC,sizeof(fields));
     memset(functions,0xCC,sizeof(functions)); memset(identities,0xCC,sizeof(identities));
+    memset(contracts,0xCC,sizeof(contracts)); memset(&evidence,0xCC,sizeof(evidence));
     return status;
 }
 
