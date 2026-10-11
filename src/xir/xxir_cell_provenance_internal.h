@@ -38,6 +38,17 @@ typedef struct XrXirCellOriginView {
     const uint32_t *parameters;
     uint32_t parameter_count;
 } XrXirCellOriginView;
+typedef struct XrXirCellClassRoot {
+    uint32_t place,value;
+} XrXirCellClassRoot;
+typedef struct XrXirCellClassOriginView {
+    XrXirCellOriginView cells;
+    uint32_t residual_intrinsic_mask;
+    const uint64_t *dependencies;
+    uint32_t word_count;
+    const XrXirCellClassRoot *roots;
+    uint32_t root_count;
+} XrXirCellClassOriginView;
 /* Requires full structural/type/SSA/initialization checks; does not re-enter them.
  * Output owns all facts and never borrows the module, declarations or context. */
 XR_FUNC XrXirStatus xr_xir_compile_cell_provenance_verified(const XrXirCompileContext *context,
@@ -50,6 +61,11 @@ XR_FUNC XrXirCellProofRole xr_xir_cell_provenance_role(const XrXirCellProvenance
 /* Borrowed immutable compact dependency bits map through physical parameter IDs. */
 XR_FUNC XrXirStatus xr_xir_compile_cell_origin_view(const XrXirCompileContext *context,
     const XrXirCellProvenance *proof, uint32_t function, uint32_t value, XrXirCellOriginView *output);
+/* Empty output only. The original cells view preserves all conservative
+ * UNKNOWN bits. Substituting Class dependencies requires every true subject's
+ * current equation mask/rank; these facts alone never grant permission. */
+XR_FUNC XrXirStatus xr_xir_compile_cell_class_origin_view(const XrXirCompileContext *context,
+    const XrXirCellProvenance *proof,uint32_t function,uint32_t value,XrXirCellClassOriginView *output);
 /* NULL owners is the open definition context; every actual parameter dependency
  * then contributes UNKNOWN. Explicit owners cover the complete physical prefix. */
 XR_FUNC XrXirStatus xr_xir_compile_cell_access(const XrXirCompileContext *context,

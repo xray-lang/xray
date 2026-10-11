@@ -15,6 +15,8 @@
 typedef struct CellProofFunction {
     uint32_t begin, count, parameters, scope_begin, scopes, words, stored;
     size_t dependency_begin;
+    uint32_t class_begin,class_count,class_words;
+    size_t class_dependency_begin;
 } CellProofFunction;
 struct XrXirCellProvenance {
     XrCompileResources *resources;
@@ -23,6 +25,10 @@ struct XrXirCellProvenance {
     uint8_t *origins, *roles, *tracked;
     uint32_t *scope_parameters, *value_functions;
     uint64_t *dependencies;
+    uint32_t class_count,project_count;
+    size_t class_dependency_count;
+    XrXirCellClassRoot *class_roots;
+    uint64_t *class_dependencies;
 };
 typedef struct CellProofEdge {
     uint32_t from, to, next, reverse;
@@ -74,6 +80,11 @@ static uint32_t cell_proof_operand(const XrXirFunction *function,
 static uint64_t *cell_proof_dependencies(XrXirCellProvenance *proof, uint32_t node) {
     CellProofFunction *f = &proof->functions[proof->value_functions[node]];
     return f->words ? proof->dependencies+f->dependency_begin+(size_t)(node-f->begin)*f->words : NULL;
+}
+static uint64_t *cell_proof_class_dependencies(XrXirCellProvenance *proof,uint32_t node) {
+    CellProofFunction *f=&proof->functions[proof->value_functions[node]];
+    return f->class_words ? proof->class_dependencies+f->class_dependency_begin+
+        (size_t)(node-f->begin)*f->class_words : NULL;
 }
 static bool cell_proof_enqueue(CellProofBuild *build, uint32_t node) {
     if (!cell_proof_work(build,1)) return false;
@@ -141,6 +152,12 @@ static bool cell_proof_inventory(CellProofBuild *build) {
                 if (op <= XR_XIR_INVALID || op >= XR_XIR_OP_COUNT)
                     return cell_proof_error(build,f,v-function->parameter_count,XR_XIR_BAD_STRUCTURE);
                 tracked |= cell_proof_place(op);
+                if (op==XR_XIR_CELL_PROJECT) {
+                    if (!cell_proof_work(build,2)) return false;
+                    if (proof->project_count==UINT32_MAX)
+                        return cell_proof_error(build,f,v-function->parameter_count,XR_XIR_BUDGET);
+                    ++proof->project_count;
+                }
             }
         }
         if (!cell_proof_work(build,8)) return false;
@@ -268,25 +285,125 @@ static bool cell_proof_identity_producer(XrXirOp op) {
         op == XR_XIR_LOCAL_NEW || op == XR_XIR_OWNED_LOCAL_NEW ||
         op == XR_XIR_LOCAL_READ || op == XR_XIR_OWNED_LOCAL_READ;
 }
-/* A projected Class requires a conditional identity proof that is not yet
- * represented. Only that actual descriptor path becomes unresolved; ordinary
- * Class operations and known local Cell projections keep their existing facts. */
-static bool cell_proof_project_identity(CellProofBuild *build, uint32_t f, uint32_t value) {
-    const XrXirFunction *function = &build->module->functions[f];
-    uint32_t begin = build->proof->functions[f].begin, depth = 0;
+/* One finite path walker names the real root place. Class facts describe
+ * its actual SSA subject; they do not grant a borrow or execution permission. */
+static bool cell_proof_project_root(CellProofBuild *build,uint32_t f,uint32_t value,
+    uint32_t *output) {
+    const XrXirFunction *function=&build->module->functions[f];uint32_t depth=0;
     for (;;) {
         if (!cell_proof_work(build,1)) return false;
-        if (value < function->parameter_count || value-function->parameter_count >= function->instruction_count)
+        if (value<function->parameter_count || value-function->parameter_count>=function->instruction_count)
             return cell_proof_error(build,f,UINT32_MAX,XR_XIR_BAD_STRUCTURE);
-        const XrXirInstruction *op = &function->instructions[value-function->parameter_count];
-        if (op->op == XR_XIR_OBJECT_PLACE)
-            return cell_proof_seed(build,begin+value,XR_XIR_CELL_ORIGIN_ROOT_UNRESOLVED);
-        if (op->op == XR_XIR_CELL_PLACE) return true;
-        if ((op->op != XR_XIR_FIELD_PLACE && op->op != XR_XIR_INDEX_PLACE) ||
-            ++depth > function->instruction_count)
+        const XrXirInstruction *op=&function->instructions[value-function->parameter_count];
+        if (op->op==XR_XIR_OBJECT_PLACE || op->op==XR_XIR_CELL_PLACE) {
+            if (op->op==XR_XIR_OBJECT_PLACE && (op->args[0]>=build->proof->functions[f].count ||
+                !xr_xir_type_is_class(build->module->types,xr_xir_operand_type(function,op->args[0])) ||
+                op->type!=xr_xir_operand_type(function,op->args[0])))
+                return cell_proof_error(build,f,value-function->parameter_count,XR_XIR_BAD_TYPE);
+            *output=value;return true;
+        }
+        if ((op->op!=XR_XIR_FIELD_PLACE && op->op!=XR_XIR_INDEX_PLACE) ||
+            ++depth>function->instruction_count)
             return cell_proof_error(build,f,UINT32_MAX,XR_XIR_BAD_STRUCTURE);
-        value = op->args[0];
+        value=op->args[0];
     }
+}
+
+/* The existing uses byte records exact projected OBJECT_PLACE membership.
+ * Bit8 cannot overlap parameter capture/scoped/cleanup uses1/2/4. */
+static bool cell_proof_class_collect(CellProofBuild *build) {
+    if (!build->proof->project_count) return true;
+    for (uint32_t f=0;f<build->module->function_count;++f) {
+        const XrXirFunction *function=&build->module->functions[f];
+        for (uint32_t i=0;i<function->instruction_count;++i) {
+            if (!cell_proof_work(build,1)) return false;
+            const XrXirInstruction *op=&function->instructions[i];
+            if (op->op!=XR_XIR_CELL_PROJECT) continue;
+            uint32_t root=0;
+            if (!cell_proof_project_root(build,f,op->args[0],&root)) return false;
+            if (function->instructions[root-function->parameter_count].op!=XR_XIR_OBJECT_PLACE) continue;
+            if (!cell_proof_work(build,2)) return false;
+            build->uses[build->proof->functions[f].begin+root]|=8u;
+        }
+    }
+    return true;
+}
+
+/* Every record and bit matrix belongs to this proof's physical function
+ * domain. No producer array, Class object or type arena remains borrowed. */
+static bool cell_proof_class_storage(CellProofBuild *build) {
+    XrXirCellProvenance *proof=build->proof;size_t words=0;uint64_t roots=0;
+    if (!proof->project_count) return true;
+    for (uint32_t f=0;f<proof->function_count;++f) {
+        CellProofFunction *function=&proof->functions[f];function->class_begin=(uint32_t)roots;
+        for (uint32_t v=0;v<function->stored;++v) {
+            if (!cell_proof_work(build,1)) return false;
+            if (!(build->uses[function->begin+v]&8u)) continue;
+            if (!cell_proof_work(build,1)) return false;
+            ++function->class_count;
+        }
+        roots+=function->class_count;
+        if (!cell_proof_work(build,6)) return false;
+        function->class_words=function->class_count/64u+(function->class_count%64u!=0);
+        function->class_dependency_begin=words;
+        if (roots>UINT32_MAX || (function->class_words &&
+            function->stored>(SIZE_MAX-words)/function->class_words))
+            return cell_proof_error(build,f,UINT32_MAX,XR_XIR_BUDGET);
+        words+=(size_t)function->stored*function->class_words;
+    }
+    if (roots>SIZE_MAX/sizeof(*proof->class_roots) || words>SIZE_MAX/sizeof(uint64_t))
+        return cell_proof_error(build,UINT32_MAX,UINT32_MAX,XR_XIR_BUDGET);
+    proof->class_count=(uint32_t)roots;proof->class_dependency_count=words;
+    proof->class_roots=xir_compile_calloc(build->context,(size_t)roots,sizeof(*proof->class_roots),&build->status);
+    proof->class_dependencies=xir_compile_calloc(build->context,words,sizeof(uint64_t),&build->status);
+    if (build->status!=XR_XIR_OK) return false;
+    for (uint32_t f=0;f<proof->function_count;++f) {
+        const CellProofFunction *stored=&proof->functions[f];uint32_t at=0;
+        const XrXirFunction *function=&build->module->functions[f];
+        for (uint32_t v=0;v<stored->stored;++v) {
+            if (!cell_proof_work(build,1)) return false;
+            if (!(build->uses[stored->begin+v]&8u)) continue;
+            if (v<function->parameter_count || at>=stored->class_count)
+                return cell_proof_error(build,f,UINT32_MAX,XR_XIR_BAD_STRUCTURE);
+            const XrXirInstruction *op=&function->instructions[v-function->parameter_count];
+            if (op->op!=XR_XIR_OBJECT_PLACE || op->args[0]>=stored->count ||
+                !xr_xir_type_is_class(build->module->types,xr_xir_operand_type(function,op->args[0])))
+                return cell_proof_error(build,f,v-function->parameter_count,XR_XIR_BAD_TYPE);
+            if (!cell_proof_work(build,sizeof(*proof->class_roots))) return false;
+            proof->class_roots[stored->class_begin+at++]=(XrXirCellClassRoot){v,op->args[0]};
+            if (!cell_proof_work(build,1)) return false;
+            proof->tracked[stored->begin+op->args[0]]|=4u;
+        }
+        if (at!=stored->class_count) return cell_proof_error(build,f,UINT32_MAX,XR_XIR_BAD_STRUCTURE);
+    }
+    return true;
+}
+
+static bool cell_proof_class_seed(CellProofBuild *build,uint32_t f,uint32_t place) {
+    XrXirCellProvenance *proof=build->proof;const CellProofFunction *function=&proof->functions[f];
+    uint32_t low=0,high=function->class_count;
+    while (low<high) {
+        if (!cell_proof_work(build,3)) return false;
+        uint32_t middle=low+(high-low)/2;
+        if (proof->class_roots[function->class_begin+middle].place<place) low=middle+1;
+        else high=middle;
+    }
+    if (!cell_proof_work(build,2)) return false;
+    if (low>=function->class_count || proof->class_roots[function->class_begin+low].place!=place)
+        return cell_proof_error(build,f,UINT32_MAX,XR_XIR_BAD_STRUCTURE);
+    uint64_t *row=cell_proof_class_dependencies(proof,function->begin+place);
+    uint64_t bit=UINT64_C(1)<<(low%64u);
+    if (row[low/64u]&bit) return true;
+    if (!cell_proof_work(build,1)) return false;
+    row[low/64u]|=bit;return cell_proof_enqueue(build,function->begin+place);
+}
+static bool cell_proof_project_identity(CellProofBuild *build,uint32_t f,uint32_t value) {
+    uint32_t root=0;
+    if (!cell_proof_project_root(build,f,value,&root)) return false;
+    const XrXirFunction *function=&build->module->functions[f];
+    if (function->instructions[root-function->parameter_count].op!=XR_XIR_OBJECT_PLACE) return true;
+    return cell_proof_seed(build,build->proof->functions[f].begin+root,XR_XIR_CELL_ORIGIN_ROOT_UNRESOLVED) &&
+        cell_proof_class_seed(build,f,root);
 }
 static bool cell_proof_build_edges(CellProofBuild *build) {
     XrXirCellProvenance *proof = build->proof;
@@ -411,6 +528,19 @@ static bool cell_proof_join(CellProofBuild *build, uint32_t from, uint32_t to) {
             }
         }
     }
+    if (proof->value_functions[from]==proof->value_functions[to]) {
+        uint32_t words=proof->functions[proof->value_functions[from]].class_words;
+        const uint64_t *source=cell_proof_class_dependencies(proof,from);
+        uint64_t *destination=cell_proof_class_dependencies(proof,to);
+        for (uint32_t w=0;w<words;++w) {
+            if (!cell_proof_work(build,3)) return false;
+            uint64_t joined=source[w]|destination[w];
+            if (joined!=destination[w]) {
+                if (!cell_proof_work(build,1)) return false;
+                destination[w]=joined;changed=true;
+            }
+        }
+    }
     return !changed || cell_proof_enqueue(build,to);
 }
 static bool cell_proof_solve(CellProofBuild *build) {
@@ -507,7 +637,8 @@ XR_FUNC void xr_xir_compile_cell_provenance_free(XrXirCellProvenance *proof) {
     xr_compile_resources_free(proof->functions); xr_compile_resources_free(proof->origins);
     xr_compile_resources_free(proof->roles); xr_compile_resources_free(proof->tracked);
     xr_compile_resources_free(proof->scope_parameters); xr_compile_resources_free(proof->value_functions);
-    xr_compile_resources_free(proof->dependencies); xr_compile_resources_free(proof);
+    xr_compile_resources_free(proof->dependencies);xr_compile_resources_free(proof->class_roots);
+    xr_compile_resources_free(proof->class_dependencies);xr_compile_resources_free(proof);
 }
 XR_FUNC XrXirStatus xr_xir_compile_cell_provenance_verified(const XrXirCompileContext *context,
     const XrXirModule *module, XrXirCellProvenance **output, XrXirDiagnostic *diagnostic) {
@@ -515,7 +646,10 @@ XR_FUNC XrXirStatus xr_xir_compile_cell_provenance_verified(const XrXirCompileCo
         (module->function_count && !module->functions)) return XR_XIR_BAD_STRUCTURE;
     CellProofBuild build = {0}; build.context = context; build.module = module;
     build.location = (XrXirDiagnostic){XR_XIR_OK,UINT32_MAX,UINT32_MAX,UINT32_MAX,XR_XIR_DIAGNOSTIC_NONE};
-    if (cell_proof_inventory(&build) && cell_proof_roles(&build) &&
+    /* Full inventory proves that no physical Cell or access place exists.
+     * The verified caller still owns every call, signature and SSA check. */
+    if (cell_proof_inventory(&build) && build.proof->value_count &&
+        cell_proof_class_collect(&build) && cell_proof_class_storage(&build) && cell_proof_roles(&build) &&
         cell_proof_prepare_edges(&build) && cell_proof_solve(&build)) {
         /* Bottom is not ownership. Unrooted cycles taint every consumer before admission. */
         for (uint32_t v = 0; v < build.proof->value_count && build.status == XR_XIR_OK; ++v) {
@@ -563,6 +697,54 @@ XR_FUNC XrXirStatus xr_xir_compile_cell_origin_view(const XrXirCompileContext *c
         f->words ? proof->dependencies+f->dependency_begin+(size_t)value*f->words : NULL,
         f->words,f->scopes ? proof->scope_parameters+f->scope_begin : NULL,f->scopes};
     return XR_XIR_OK;
+}
+/* The legacy view remains conservative. Only the unique equation replay
+ * may substitute every real Class subject and retain actual MODULE checks. */
+XR_FUNC XrXirStatus xr_xir_compile_cell_class_origin_view(const XrXirCompileContext *context,
+    const XrXirCellProvenance *proof,uint32_t function,uint32_t value,XrXirCellClassOriginView *output) {
+    if (!xir_compile_context_valid(context) || !proof || proof->resources!=context->resources ||
+        !output || function>=proof->function_count || value>=proof->functions[function].count ||
+        output->cells.intrinsic_mask || output->cells.dependencies || output->cells.word_count ||
+        output->cells.parameters || output->cells.parameter_count || output->residual_intrinsic_mask ||
+        output->dependencies || output->word_count || output->roots || output->root_count)
+        return XR_XIR_BAD_STRUCTURE;
+    const CellProofFunction *f=&proof->functions[function];
+    if (!xir_compile_work(context,10)) return XR_XIR_BUDGET;
+    if (f->class_words!=f->class_count/64u+(f->class_count%64u!=0) ||
+        f->class_begin>proof->class_count || f->class_count>proof->class_count-f->class_begin ||
+        f->class_dependency_begin>proof->class_dependency_count ||
+        (f->class_words && f->stored>(proof->class_dependency_count-f->class_dependency_begin)/f->class_words) ||
+        (!!proof->class_roots!=!!proof->class_count) ||
+        (!!proof->class_dependencies!=!!proof->class_dependency_count) ||
+        (f->class_count && f->stored!=f->count)) return XR_XIR_BAD_STRUCTURE;
+    for (uint32_t r=0;r<f->class_count;++r) {
+        if (!xir_compile_work(context,5)) return XR_XIR_BUDGET;
+        XrXirCellClassRoot root=proof->class_roots[f->class_begin+r];
+        if (root.place<f->parameters || root.place>=f->count || root.value>=f->count ||
+            !(proof->tracked[f->begin+root.value]&4u) ||
+            (r && proof->class_roots[f->class_begin+r-1].place>=root.place))
+            return XR_XIR_BAD_STRUCTURE;
+    }
+    const uint64_t *row=f->class_words ? proof->class_dependencies+f->class_dependency_begin+
+        (size_t)value*f->class_words : NULL;
+    bool present=false;
+    for (uint32_t w=0;w<f->class_words;++w) {
+        if (!xir_compile_work(context,2)) return XR_XIR_BUDGET;
+        if (w+1==f->class_words && f->class_count%64u &&
+            row[w]>>(f->class_count%64u)) return XR_XIR_BAD_STRUCTURE;
+        present|=row[w]!=0;
+    }
+    uint8_t origin=f->stored ? proof->origins[f->begin+value] : 0;
+    if (!!(origin&XR_XIR_CELL_ORIGIN_ROOT_UNRESOLVED)!=present) return XR_XIR_BAD_STRUCTURE;
+    XrXirCellClassOriginView view={0};
+    XrXirStatus status=xr_xir_compile_cell_origin_view(context,proof,function,value,&view.cells);
+    if (status!=XR_XIR_OK) return status;
+    view.residual_intrinsic_mask=(origin&XR_XIR_CELL_ORIGIN_MODULE ? XR_XIR_CELL_ACCESS_ROOT:0) |
+        (origin&XR_XIR_CELL_ORIGIN_UNKNOWN ? XR_XIR_CELL_ACCESS_UNKNOWN:0);
+    view.dependencies=row;view.word_count=f->class_words;
+    view.roots=f->class_count ? proof->class_roots+f->class_begin : NULL;view.root_count=f->class_count;
+    if (!xir_compile_work(context,sizeof(view))) return XR_XIR_BUDGET;
+    *output=view;return XR_XIR_OK;
 }
 XR_FUNC XrXirStatus xr_xir_compile_cell_access(const XrXirCompileContext *context,
     const XrXirCellProvenance *proof, const XrXirCellAccessRequest *request, uint32_t *output) {
