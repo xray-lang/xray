@@ -62,14 +62,14 @@ static XrXirValueStatus storage_cursor_enter(StorageCursor *cursor, StorageSpan 
     }
     return XR_XIR_VALUE_OK;
 }
-static XrXirValueStatus storage_cursor_next(StorageCursor *cursor, uint64_t *work,
-    StorageSpan *leaf, bool *found) {
+static XrXirValueStatus storage_cursor_next_bounded(StorageCursor *cursor, uint64_t *work,
+    XrXirDomain *domain, StorageSpan *leaf, bool *found) {
     if (!cursor || !leaf || !found) return XR_XIR_VALUE_BAD_ARGUMENT;
     *found = false; *leaf = (StorageSpan) {0};
     const XrXirTypes *types = xr_xir_compile_type_arena_types(cursor->arena);
     while (cursor->has_pending || cursor->depth) {
         if (work) {
-            if (!*work) return XR_XIR_VALUE_LIMIT;
+            if (!*work || (domain && !xr_xir_domain_work(domain, 1))) return XR_XIR_VALUE_LIMIT;
             --*work;
         }
         StorageSpan span = cursor->pending;
@@ -92,6 +92,10 @@ static XrXirValueStatus storage_cursor_next(StorageCursor *cursor, uint64_t *wor
         }
     }
     return XR_XIR_VALUE_OK;
+}
+static XrXirValueStatus storage_cursor_next(StorageCursor *cursor, uint64_t *work,
+    StorageSpan *leaf, bool *found) {
+    return storage_cursor_next_bounded(cursor, work, NULL, leaf, found);
 }
 /* Only initialized owners may reach this path. A finite prefix stops before
  * any later field or enum tag is read, including during failed construction. */

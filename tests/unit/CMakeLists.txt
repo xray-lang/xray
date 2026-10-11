@@ -448,8 +448,10 @@ add_custom_command(OUTPUT ${XIR_STRING_GENERATED}
     DEPENDS test_xir_emit_strings
     VERBATIM)
 add_executable(test_xir_string_native xir/test_xir_string_native.c ${XIR_STRING_GENERATED})
+target_sources(test_xir_string_native PRIVATE xir/xir_string_instance_probe.c)
 target_link_libraries(test_xir_string_native PRIVATE xray_xir_scalar)
 add_executable(test_xir_string_vm xir/test_xir_string_vm.c ${XIR_STRING_GENERATED})
+target_sources(test_xir_string_vm PRIVATE xir/xir_string_instance_probe.c)
 target_link_libraries(test_xir_string_vm PRIVATE xray_xir_vm)
 include("${CMAKE_CURRENT_SOURCE_DIR}/xir/string_allocation_owner.cmake")
 add_executable(test_xir_emit_output xir/test_xir_emit_output.c)

@@ -136,6 +136,7 @@ static XrXirValueStatus storage_unpack_operation(StorageSpan span,
 
 static XrXirValueStatus storage_unpack(StorageSpan span,
     XrXirValueAdmission *admission, XrXirValue *output) {
+    if (!admission_domain_current(admission)) return XR_XIR_VALUE_BAD_ARGUMENT;
     xr_xir_value_graph_begin();
     XrXirValueStatus status = storage_unpack_operation(span, admission, output);
     xr_xir_value_graph_end();

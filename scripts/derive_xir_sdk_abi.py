@@ -98,6 +98,8 @@ PUBLIC_STRUCTURES = [
  (4300, 'XrXirAtomicProgress', [('receiver','XrXirValue'),('operands','u64array2'),('observed','u64'),
      ('result_type','enum'),('operation','enum'),('ordering','u32'),('phase','u32'),('observed_ready','bool')]),
  (4400, 'XrXirAtomicOutcome', [('status','enum'),('permission','enum'),('continuing','bool')]),
+ (4500, 'XrXirClassEvent', [('serial','u64'),('type','u32'),('declaration','u32'),
+     ('kind','u32'),('flags','u32'),('initialized_fields','u32'),('status','u32')]),
 ]
 
 PUBLIC_SCALARS = [
@@ -105,10 +107,35 @@ PUBLIC_SCALARS = [
  (46,'AtomicOperation.align',4,'_Alignof(XrXirAtomicOperation)'),
  (47,'RunStatus.size',4,'sizeof(XrXirRunStatus)'),
  (48,'RunStatus.align',4,'_Alignof(XrXirRunStatus)'),
+ (49,'ClassEventKind.size',4,'sizeof(XrXirClassEventKind)'),
+ (50,'ClassEventKind.align',4,'_Alignof(XrXirClassEventKind)'),
  (2904,'XrXirNominalNativeRecord.source_fingerprint.bytes',32,
   'sizeof(((XrXirNominalNativeRecord *)0)->source_fingerprint)'),
  (4310,'XrXirAtomicProgress.operands.bytes',16,'sizeof(((XrXirAtomicProgress *)0)->operands)'),
 ]
+
+OBSERVER_PROTOTYPES = '''_Static_assert(_Generic(&xr_xir_instance_class_observation_open,
+    XrXirCallStatus (*)(XrXirInstance *, uint32_t, XrXirClassObservation **): 1,
+    default: 0), "instance observation prototype");
+_Static_assert(_Generic(&xr_xir_class_observation_retain,
+    XrXirValueStatus (*)(XrXirClassObservation *): 1,
+    default: 0), "observation retain prototype");
+_Static_assert(_Generic(&xr_xir_class_observation_drop,
+    void (*)(XrXirClassObservation **): 1,
+    default: 0), "observation drop prototype");
+_Static_assert(_Generic(&xr_xir_class_observation_drain,
+    XrXirValueStatus (*)(XrXirClassObservation *, uint64_t *, XrXirClassEvent *,
+                       uint32_t, uint32_t *, bool *): 1,
+    default: 0), "observation drain prototype");
+'''
+OBSERVER_LINKS = '''    XrXirCallStatus (*volatile open_api)(XrXirInstance *, uint32_t,
+        XrXirClassObservation **) = xr_xir_instance_class_observation_open;
+    XrXirValueStatus (*volatile retain_api)(XrXirClassObservation *) = xr_xir_class_observation_retain;
+    void (*volatile drop_api)(XrXirClassObservation **) = xr_xir_class_observation_drop;
+    XrXirValueStatus (*volatile drain_api)(XrXirClassObservation *, uint64_t *, XrXirClassEvent *,
+        uint32_t, uint32_t *, bool *) = xr_xir_class_observation_drain;
+    (void)open_api; (void)retain_api; (void)drop_api; (void)drain_api;
+'''
 
 def align(value: int, alignment: int) -> int:
     return (value + alignment - 1) // alignment * alignment
@@ -139,7 +166,7 @@ def prepare(output: Path) -> None:
                         'u32/int/enum align4, bool align1; declaration field sequence copied '
                         'from actual versioned runtime headers. Never from a compiler probe output.'}
     (output/'EXPECTED.json').write_text(json.dumps(document,indent=2)+'\n',encoding='utf-8',newline='\n')
-    source = '#include "xir/xxir_program.h"\n#include "xir/xxir_atomic.h"\n#include "xir/xxir_nominal.h"\n#include "xir/xxir_output.h"\n#include "execution/xr_xir_host_execution.h"\n#include <limits.h>\n#include <float.h>\n#include <stdio.h>\nint main(void) { const uint32_t endian=1; puts("[");\n'
+    source = '#include "xir/xxir_program.h"\n#include "xir/xxir_class_observation.h"\n#include "xir/xxir_atomic.h"\n#include "xir/xxir_nominal.h"\n#include "xir/xxir_output.h"\n#include "execution/xr_xir_host_execution.h"\n#include <limits.h>\n#include <float.h>\n#include <stdio.h>\n' + OBSERVER_PROTOTYPES + 'int main(void) { const uint32_t endian=1; puts("[");\n' + OBSERVER_LINKS
     for index, row in enumerate(rows):
         tail = ',' if index+1 < len(rows) else ''
         source += f'printf("  {{\\"id\\":{row["id"]},\\"value\\":%u}}{tail}\\n",(unsigned)({row["expression"]}));\n'

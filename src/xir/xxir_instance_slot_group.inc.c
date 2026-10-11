@@ -6,8 +6,10 @@
  *
  * xxir_instance_slot_group.inc.c - Complete owned preparation and infallible publication
  */
+#include "xxir_class_origin_internal.h"
 XR_FUNC XrXirCallStatus xr_xir_instance_slot_group_init(XrXirCallView *view,uint32_t first,uint32_t count,
     const XrXirValue *compact,uint32_t payload_count) {
+    if (!instance_view_current(view)) return XR_XIR_CALL_BAD_ARGUMENT;
     XrXirInstance *instance=view_instance(view);XrXirValueAdmission *admission=xr_xir_call_admission(view);
     if(!instance || view_is_child(instance,view) || !admission || !admission->domain || !count || (payload_count && !compact))return XR_XIR_CALL_BAD_STATE;
     const XrXirDeclarations *d=instance->program->declarations;
@@ -61,8 +63,12 @@ XR_FUNC XrXirCallStatus xr_xir_instance_slot_group_init(XrXirCallView *view,uint
             }
         }
     }
+    XrXirClassPublication class_publication = {0};
+    if(status==XR_XIR_CALL_READY)
+        status=value_call_status(xr_xir_class_publication_prepare(owned,count,admission,&class_publication));
     if(status==XR_XIR_CALL_READY)status=xr_xir_call_execution_status(view);
     if(status==XR_XIR_CALL_READY) {
+        xr_xir_class_publication_commit(&class_publication);
         for(uint32_t i=0;i<count;++i) {
             if(d->slots[first+i].mutable) {
                 XrXirCellPublication publication={instance,instance->domain,first+i};
@@ -77,6 +83,7 @@ XR_FUNC XrXirCallStatus xr_xir_instance_slot_group_init(XrXirCallView *view,uint
         instance->published_counts[module]+=count;
         for(uint32_t i=0;i<count;++i)instance_trace(instance,XR_XIR_SLOT_PUBLISHED,first+i);
     }
+    xr_xir_class_publication_drop(&class_publication);
     for(uint32_t i=0;i<count;++i)xr_xir_value_drop(&owned[i]);
     xr_xir_domain_deallocate(admission->domain,owned,(size_t)bytes);admission->scratch_bytes+=bytes;
     return status;

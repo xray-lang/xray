@@ -74,7 +74,9 @@ static XrXirValueStatus cell_project_operation(XrXirType type,
     bool object_root = identity && identity->kind == XIR_OBJECT_CLASS;
     XirObject *owner = cell ? cell_root_object(cell) : identity;
     if ((!cell && !object_root) || (cell && !cell_access(cell, authority)) ||
-        (object_root && ((const XirClassObject *)identity)->borrow_top) ||
+        (object_root && ((class_origin_state((const XirClassObject *)identity) &
+            (XIR_CLASS_ORIGIN_PREPARED | XIR_CLASS_ORIGIN_BORROWED)) ||
+            ((const XirClassObject *)identity)->borrow_top)) ||
         !admission_owner(admission, owner->arena, owner->domain)) return XR_XIR_VALUE_BAD_ARGUMENT;
     const XrXirTypes *types = xr_xir_compile_type_arena_types(admission->arena);
     /* A Cell containing a Class is a binding owner, never the object owner. */
@@ -120,6 +122,7 @@ XR_FUNC XrXirValueStatus xr_xir_cell_project_authorized(XrXirType type,
     const XrXirValue *root, const XrXirValuePath *path,
     const XrXirCellAuthority *authority, XrXirValueAdmission *admission,
     XrXirValue *output) {
+    if (!admission_domain_current(admission)) return XR_XIR_VALUE_BAD_ARGUMENT;
     xr_xir_value_graph_begin();
     XrXirValueStatus status = cell_project_operation(type, root, path, authority, admission, output);
     xr_xir_value_graph_end();
@@ -130,12 +133,17 @@ static ValuePathRoute cell_projection_route(const XirCell *cell,
     XrXirValuePath prefix = {cell->projection_count ? (const XrXirValuePathStep *)(cell + 1) : NULL,
         cell->projection_count};
     XirObject *owner = cell_root_object(cell);
-    return (ValuePathRoute){prefix, *suffix, owner && owner->kind == XIR_OBJECT_CLASS ? owner : NULL};
+    bool identity = owner && owner->kind == XIR_OBJECT_CLASS;
+    bool published = identity ?
+        (atomic_load_explicit(&((const XirClassObject *)owner)->publication_state, memory_order_acquire) &
+            XIR_CLASS_ORIGIN_MODULE) != 0 : owner && ((const XirCell *)owner)->module_storage;
+    return (ValuePathRoute){prefix, *suffix, identity ? owner : NULL, published};
 }
 XR_FUNC XrXirValueStatus xr_xir_cell_loan_prepare_path(const XrXirValue *value,
     const XrXirCellAuthority *parent, XrXirValueAdmission *admission,
-    XrXirFaultDetail *fault) {
-    if (!fault) return XR_XIR_VALUE_BAD_ARGUMENT;
+    XrXirFaultDetail *fault, XrXirCellLoan *output) {
+    if (!admission_domain_current(admission)) return XR_XIR_VALUE_BAD_ARGUMENT;
+    if (!fault || !cell_loan_empty(output)) return XR_XIR_VALUE_BAD_ARGUMENT;
     *fault = (XrXirFaultDetail){0};
     XirCell *cell = cell_owner(value);
     if (!cell || !admission_owner(admission, cell->object.arena, cell->object.domain))
@@ -143,7 +151,7 @@ XR_FUNC XrXirValueStatus xr_xir_cell_loan_prepare_path(const XrXirValue *value,
     /* The finite scope comparison is charged before the ordinary authority check. */
     if (cell->projection_count && !cell_projection_work(admission, cell->projection_count))
         return XR_XIR_VALUE_LIMIT;
-    XrXirValueStatus status = xr_xir_cell_loan_prepare(value, parent);
+    XrXirValueStatus status = xr_xir_cell_loan_prepare(value, parent, output);
     if (status != XR_XIR_VALUE_OK || !cell->projection_count) return status;
     xr_xir_value_graph_begin();
     XirObject *owner = cell_root_object(cell);
@@ -158,6 +166,7 @@ XR_FUNC XrXirValueStatus xr_xir_cell_loan_prepare_path(const XrXirValue *value,
             xr_xir_cell_element(xr_xir_compile_type_arena_types(admission->arena), (XrXirType)value->type))
         status = XR_XIR_VALUE_BAD_ARGUMENT;
     xr_xir_value_graph_end();
+    if (status != XR_XIR_VALUE_OK) xr_xir_cell_loan_abort(output);
     return status;
 }
 typedef struct CellPathOperation {
@@ -189,6 +198,7 @@ static XrXirValueStatus cell_path_operation(const XrXirValue *value,
 XR_FUNC XrXirValueStatus xr_xir_cell_authorized_path_read(const XrXirValue *cell,
     const XrXirCellAuthority *authority, const XrXirValuePath *suffix,
     XrXirValueAdmission *admission, XrXirValue *output, XrXirFaultDetail *fault) {
+    if (!admission_domain_current(admission)) return XR_XIR_VALUE_BAD_ARGUMENT;
     xr_xir_value_graph_begin();
     CellPathOperation operation = {suffix, NULL, output, fault, false};
     XrXirValueStatus status = cell_path_operation(cell, authority, admission, &operation);
@@ -198,6 +208,7 @@ XR_FUNC XrXirValueStatus xr_xir_cell_authorized_path_read(const XrXirValue *cell
 XR_FUNC XrXirValueStatus xr_xir_cell_authorized_path_write(const XrXirValue *cell,
     const XrXirCellAuthority *authority, const XrXirValuePath *suffix,
     const XrXirValue *value, XrXirValueAdmission *admission, XrXirFaultDetail *fault) {
+    if (!admission_domain_current(admission)) return XR_XIR_VALUE_BAD_ARGUMENT;
     xr_xir_value_graph_begin();
     CellPathOperation operation = {suffix, value, NULL, fault, false};
     XrXirValueStatus status = cell_path_operation(cell, authority, admission, &operation);
@@ -207,6 +218,7 @@ XR_FUNC XrXirValueStatus xr_xir_cell_authorized_path_write(const XrXirValue *cel
 XR_FUNC XrXirValueStatus xr_xir_cell_authorized_path_push(const XrXirValue *cell,
     const XrXirCellAuthority *authority, const XrXirValuePath *suffix,
     const XrXirValue *value, XrXirValueAdmission *admission, XrXirFaultDetail *fault) {
+    if (!admission_domain_current(admission)) return XR_XIR_VALUE_BAD_ARGUMENT;
     xr_xir_value_graph_begin();
     CellPathOperation operation = {suffix, value, NULL, fault, true};
     XrXirValueStatus status = cell_path_operation(cell, authority, admission, &operation);

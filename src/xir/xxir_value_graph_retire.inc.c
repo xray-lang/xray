@@ -12,17 +12,38 @@ typedef bool (*GraphEdgeVisitor)(const XrXirValue *value, void *payload, void *c
 static bool graph_direct_edge(const XrXirValue *value, GraphEdgeVisitor visit, void *context) {
     return visit(value, (void *)&value->payload, context);
 }
-static bool graph_storage_edges(StorageCursor *cursor, GraphEdgeVisitor visit, void *context) {
+typedef struct GraphEdgeBudget {
+    XrXirValueAdmission *admission;
+    XrXirValueStatus status;
+} GraphEdgeBudget;
+static bool graph_edge_work(GraphEdgeBudget *budget) {
+    if (!budget) return true;
+    XrXirValueAdmission *admission = budget->admission;
+    if (!admission->work || !xr_xir_domain_work(admission->domain, 1)) {
+        budget->status = XR_XIR_VALUE_LIMIT; return false;
+    }
+    --admission->work; return true;
+}
+static bool graph_storage_edges(StorageCursor *cursor, GraphEdgeVisitor visit, void *context,
+    GraphEdgeBudget *budget) {
     for (;;) {
         StorageSpan leaf = {0}; bool found = false;
-        if (storage_cursor_next(cursor, NULL, &leaf, &found) != XR_XIR_VALUE_OK) return false;
+        XrXirValueStatus status = storage_cursor_next_bounded(cursor,
+            budget ? &budget->admission->work : NULL,
+            budget ? budget->admission->domain : NULL, &leaf, &found);
+        if (status != XR_XIR_VALUE_OK) {
+            if (budget) budget->status = status;
+            return false;
+        }
         if (!found) return true;
         XrXirValue value = {(uint32_t)leaf.type, 0, 0};
         memcpy(&value.payload, leaf.bytes, sizeof(value.payload));
         if (!visit(&value, (void *)leaf.bytes, context)) return false;
     }
 }
-static bool graph_edges(XirObject *object, GraphEdgeVisitor visit, void *context) {
+static bool graph_edges_bounded(XirObject *object, GraphEdgeVisitor visit, void *context,
+    GraphEdgeBudget *budget) {
+    if (!graph_edge_work(budget)) return false;
     if (object->type == XR_XIR_STRING || object->kind == XR_XIR_TYPE_ATOMIC) return true;
     if (object->type == XR_XIR_PANIC_INFO)
         return graph_direct_edge(&((XirPanicInfo *)object)->panic.message, visit, context);
@@ -31,7 +52,7 @@ static bool graph_edges(XirObject *object, GraphEdgeVisitor visit, void *context
     if (object->kind == XIR_OBJECT_FUNCTION) {
         const XrXirFunctionBinding *binding = &((XirFunction *)object)->binding;
         for (uint32_t i = 0; i < binding->capture_count; ++i)
-            if (!graph_direct_edge(&binding->captures[i], visit, context)) return false;
+            if (!graph_edge_work(budget) || !graph_direct_edge(&binding->captures[i], visit, context)) return false;
         return true;
     }
     if (object->kind == XR_XIR_TYPE_TASK) {
@@ -44,13 +65,13 @@ static bool graph_edges(XirObject *object, GraphEdgeVisitor visit, void *context
     if (object->kind == XR_XIR_TYPE_TUPLE) {
         XirTuple *tuple = (XirTuple *)object;
         for (uint32_t i = 0; i < tuple->count; ++i)
-            if (!graph_direct_edge(&tuple->fields[i], visit, context)) return false;
+            if (!graph_edge_work(budget) || !graph_direct_edge(&tuple->fields[i], visit, context)) return false;
         return true;
     }
     if (object->kind == XR_XIR_TYPE_NOMINAL || object->kind == XR_XIR_TYPE_NULLABLE) {
         XirNominalValue *record = (XirNominalValue *)object;
         for (uint32_t i = 0; i < record->count; ++i)
-            if (!graph_direct_edge(&record->fields[i], visit, context)) return false;
+            if (!graph_edge_work(budget) || !graph_direct_edge(&record->fields[i], visit, context)) return false;
         return true;
     }
     if (object->kind == XIR_OBJECT_CLASS) {
@@ -62,10 +83,11 @@ static bool graph_edges(XirObject *object, GraphEdgeVisitor visit, void *context
             (StorageFrame *)((unsigned char *)object + instance->release_offset) : NULL;
         const unsigned char *body = (const unsigned char *)(instance + 1);
         for (uint32_t i = 0; i < layout->field_count; ++i) {
+            if (!graph_edge_work(budget)) return false;
             StorageCursor cursor = {0};
             StorageSpan span = {node->nominal.fields[i], body + layout->field_offsets[i]};
             if (storage_cursor_init(object->arena, span, frames, instance->release_capacity, true, &cursor) != XR_XIR_VALUE_OK ||
-                !graph_storage_edges(&cursor, visit, context)) return false;
+                !graph_storage_edges(&cursor, visit, context, budget)) return false;
         }
         return true;
     }
@@ -74,14 +96,18 @@ static bool graph_edges(XirObject *object, GraphEdgeVisitor visit, void *context
         if (!array_storage_valid(array)) return false;
         uint32_t depth = array_release_depth(object->arena, array->element);
         for (size_t i = 0; array_owned_elements(array) && i < array->length; ++i) {
+            if (!graph_edge_work(budget)) return false;
             StorageCursor cursor = {0};
             StorageSpan span = {array->element, array->data ? array->data + i * array->stride : NULL};
             if (storage_cursor_init(object->arena, span, depth ? (StorageFrame *)(array + 1) : NULL,
-                depth, true, &cursor) != XR_XIR_VALUE_OK || !graph_storage_edges(&cursor, visit, context)) return false;
+                depth, true, &cursor) != XR_XIR_VALUE_OK || !graph_storage_edges(&cursor, visit, context, budget)) return false;
         }
         return true;
     }
     return false;
+}
+static bool graph_edges(XirObject *object, GraphEdgeVisitor visit, void *context) {
+    return graph_edges_bounded(object, visit, context, NULL);
 }
 typedef struct GraphScan {
     XrXirDomain *domain;
@@ -145,6 +171,7 @@ static bool graph_active_task(XirObject *object) {
         task->executor || task->call;
 }
 static XirObject *graph_retire_locked(XrXirDomain *domain, XirObject **pending) {
+    XR_CHECK(xr_xir_domain_current(domain), "graph retirement owns the current domain generation");
     GraphScan scan = {.domain = domain};
     if (domain->graph_invalid) return NULL;
     for (XirObject *o = domain->objects; o; o = o->graph_next) {
@@ -172,8 +199,10 @@ static XirObject *graph_retire_locked(XrXirDomain *domain, XirObject **pending) 
         }
         o = next;
     }
-    for (XirObject *o = dead; o; o = o->release_next)
+    for (XirObject *o = dead; o; o = o->release_next) {
+        if (o->kind == XIR_OBJECT_CLASS) class_observation_finalize_locked(o);
         XR_CHECK(graph_edges(o, graph_unlink_edge, &scan), "validated residual graph changed during unlink");
+    }
     *pending = scan.pending;
     return dead;
 }
@@ -181,7 +210,11 @@ static void graph_drain(void) {
     for (;;) {
         graph_lock();
         XrXirDomain *domain = value_graph_closed;
-        while (domain && !domain->close_pending) domain = domain->closed_next;
+        while (domain) {
+            XR_CHECK(xr_xir_domain_current(domain), "closed-list traversal owns only current domains");
+            if (domain->close_pending) break;
+            domain = domain->closed_next;
+        }
         if (value_graph_operations || !domain) {
             value_graph_draining = false;
             graph_unlock(); return;

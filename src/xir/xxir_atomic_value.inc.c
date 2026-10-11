@@ -54,6 +54,7 @@ static XrXirValueStatus xr_xir_atomic_new_graph_operation(XrXirType type, const 
 }
 XR_FUNC XrXirValueStatus xr_xir_atomic_new(XrXirType type, const XrXirValue *initial,
     XrXirValueAdmission *admission, XrXirValue *output) {
+    if (!admission_domain_current(admission)) return XR_XIR_VALUE_BAD_ARGUMENT;
     xr_xir_value_graph_begin();
     XrXirValueStatus graph_outcome = xr_xir_atomic_new_graph_operation(type, initial, admission, output);
     xr_xir_value_graph_end();
@@ -253,6 +254,7 @@ static XrXirAtomicOutcome xr_xir_atomic_resume_graph_operation(XrXirAtomicProgre
 }
 XR_FUNC XrXirAtomicOutcome xr_xir_atomic_resume(XrXirAtomicProgress *progress,
     XrXirValueAdmission *admission, const XrXirCallView *view, XrXirValue *output) {
+    if (!admission_domain_current(admission)) return atomic_outcome(XR_XIR_RUN_BAD_ARGUMENT);
     xr_xir_value_graph_begin();
     XrXirAtomicOutcome graph_outcome = xr_xir_atomic_resume_graph_operation(progress, admission, view, output);
     xr_xir_value_graph_end();
@@ -300,6 +302,7 @@ static XrXirAtomicOutcome xr_xir_atomic_start_graph_operation(const XrXirAtomicR
 XR_FUNC XrXirAtomicOutcome xr_xir_atomic_start(const XrXirAtomicRequest *request,
     XrXirValueAdmission *admission, const XrXirCallView *view,
     XrXirAtomicProgress *progress, XrXirValue *output) {
+    if (!admission_domain_current(admission)) return atomic_outcome(XR_XIR_RUN_BAD_ARGUMENT);
     xr_xir_value_graph_begin();
     XrXirAtomicOutcome graph_outcome = xr_xir_atomic_start_graph_operation(request, admission, view, progress, output);
     xr_xir_value_graph_end();

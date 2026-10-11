@@ -87,13 +87,13 @@ def main():
             assert code != 0 and len(unresolved) == 1 and re.search(r'\b' + re.escape(symbol) + r'\b', unresolved[0]), (symbol, unresolved, text)
             outcomes[symbol] = 'exact retired symbol unresolved; no other missing symbol'
     manifest = json.loads((bundle / 'sdk_manifest.json').read_text())
-    assert [manifest[name] for name in ('wire', 'semantic', 'value_abi', 'call_abi', 'program_abi')] == [28, 73, 23, 29, 30]
+    assert [manifest[name] for name in ('wire', 'semantic', 'value_abi', 'call_abi', 'program_abi')] == [28, 73, 24, 29, 30]
     sys.path.insert(0,str(root/'scripts'))
     from derive_xir_sdk_abi import prepare
     with tempfile.TemporaryDirectory(prefix='sdk-owner-independent-abi-') as temporary:
         facts=Path(temporary)/'facts';prepare(facts)
         expected=json.loads((facts/'EXPECTED.json').read_text())['rows']
-    assert len(expected)==351 and len({row['id'] for row in expected})==351
+    assert len(expected)==362 and len({row['id'] for row in expected})==362
     assert manifest['abi_measurements']==[dict(id=row['id'],value=row['value']) for row in expected]
     assert [row['path'] for row in manifest['files'] if row['kind'] == 5] == sorted('lib/' + name + '.lib' for name in ARCHIVES)
     def status(name, document, expected, sdk_root=bundle):
@@ -108,7 +108,7 @@ def main():
                        ('value_abi',20),('call_abi',25),('program_abi',28),
                        ('semantic',65),('value_abi',21),('call_abi',26),('call_abi',27),('semantic',66),('semantic',67),('semantic',68),('semantic',69),
                        ('semantic',70),('wire',25),('semantic',71),('wire',26),
-                       ('wire',27),('semantic',72),('value_abi',22),('call_abi',28),('program_abi',29)]:
+                       ('wire',27),('semantic',72),('value_abi',22),('value_abi',23),('call_abi',28),('program_abi',29)]:
         changed = json.loads(json.dumps(manifest)); changed[name] = value
         status('old-' + name+'-'+str(value), changed, 1)
     # Reject the complete previous 25/70 pair as well as each crossed prefix above.

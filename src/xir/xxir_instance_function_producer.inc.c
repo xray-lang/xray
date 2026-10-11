@@ -35,6 +35,7 @@ static XrXirCallStatus instance_producer_site(XrXirInstance *instance,XrXirValue
 
 XR_FUNC XrXirCallStatus xr_xir_instance_function_at(XrXirCallView *view,uint32_t instruction,
     const XrXirValue *captures,uint32_t count,XrXirValue *output) {
+    if (!instance_view_current(view)) return XR_XIR_CALL_BAD_ARGUMENT;
     XrXirInstance *instance=view_instance(view);
     if (!instance) return XR_XIR_CALL_BAD_STATE;
     if (!output || !value_unit(*output) || (count && !captures)) return XR_XIR_CALL_BAD_ARGUMENT;
@@ -51,6 +52,7 @@ XR_FUNC XrXirCallStatus xr_xir_instance_function_at(XrXirCallView *view,uint32_t
 
 XR_FUNC XrXirCallStatus xr_xir_instance_function_producer(XrXirCallView *view,
     const XrXirValue *function,XirEffectProducerView *output) {
+    if (!instance_view_current(view)) return XR_XIR_CALL_BAD_ARGUMENT;
     XrXirInstance *instance=view_instance(view);
     if (!instance) return XR_XIR_CALL_BAD_STATE;
     if (!function || !output) return XR_XIR_CALL_BAD_ARGUMENT;

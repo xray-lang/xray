@@ -47,6 +47,7 @@ static XrXirValueStatus xr_xir_struct_new_graph_operation(XrXirType type, const 
 }
 XR_FUNC XrXirValueStatus xr_xir_struct_new(XrXirType type, const XrXirValue *fields,
     uint32_t count, XrXirValueAdmission *admission, XrXirValue *output) {
+    if (!admission_domain_current(admission)) return XR_XIR_VALUE_BAD_ARGUMENT;
     xr_xir_value_graph_begin();
     XrXirValueStatus graph_outcome = xr_xir_struct_new_graph_operation(type, fields, count, admission, output);
     xr_xir_value_graph_end();
@@ -64,6 +65,7 @@ static XrXirValueStatus xr_xir_struct_get_graph_operation(const XrXirValue *valu
 }
 XR_FUNC XrXirValueStatus xr_xir_struct_get(const XrXirValue *value, uint32_t field,
     XrXirValueAdmission *admission, XrXirValue *output) {
+    if (!admission_domain_current(admission)) return XR_XIR_VALUE_BAD_ARGUMENT;
     xr_xir_value_graph_begin();
     XrXirValueStatus graph_outcome = xr_xir_struct_get_graph_operation(value, field, admission, output);
     xr_xir_value_graph_end();
@@ -103,6 +105,7 @@ static XrXirValueStatus xr_xir_struct_set_graph_operation(const XrXirValuePlace 
 }
 XR_FUNC XrXirValueStatus xr_xir_struct_set(const XrXirValuePlace *place, uint32_t field,
     const XrXirValue *value, XrXirValueAdmission *admission) {
+    if (!admission_domain_current(admission)) return XR_XIR_VALUE_BAD_ARGUMENT;
     xr_xir_value_graph_begin();
     XrXirValueStatus graph_outcome = xr_xir_struct_set_graph_operation(place, field, value, admission);
     xr_xir_value_graph_end();

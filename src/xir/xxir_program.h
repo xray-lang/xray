@@ -14,6 +14,7 @@
 #define XXIR_PROGRAM_H
 #include "xxir.h"
 #include "xxir_call.h"
+#include "xxir_class_observation.h"
 
 #define XR_XIR_PROGRAM_ABI_VERSION 30u
 typedef struct XrXirProgram XrXirProgram;
@@ -73,6 +74,10 @@ XR_FUNC XrXirCallStatus xr_xir_instance_weaken_function(XrXirCallView *view,
 XR_FUNC XrXirCallStatus xr_xir_instance_new(XrXirProgram *program, const XrXirInstanceConfig *config,
                                           XrXirInstance **output);
 XR_FUNC XrXirInstanceState xr_xir_instance_state(const XrXirInstance *instance);
+/* Open once while NEW, before start. Capacity is bounded by 128; failure keeps
+ * the empty output unchanged. The owned stream survives Instance disposal. */
+XR_FUNC XrXirCallStatus xr_xir_instance_class_observation_open(XrXirInstance *instance,
+    uint32_t capacity, XrXirClassObservation **output);
 XR_FUNC XrXirCallStatus xr_xir_instance_start(XrXirInstance *instance, uint32_t entry,
     const XrXirValue *arguments, uint32_t count);
 /* Starts an admitted root-module test or hook, including private declarations.
@@ -92,7 +97,8 @@ XR_FUNC XrXirCallStatus xr_xir_instance_wait_request(const XrXirInstance *instan
 XR_FUNC XrXirCallStatus xr_xir_instance_take_result(XrXirInstance *instance, XrXirValue *output);
 XR_FUNC XrXirCallStatus xr_xir_instance_copy_failure(XrXirInstance *instance, XrXirCallResult *output);
 XR_FUNC XrXirCallStatus xr_xir_instance_stop(XrXirInstance *instance);
-/* Consumes the instance except on BUSY; reports a failed language cleanup. */
+/* Consumes a current instance except on BUSY; reports failed language cleanup.
+ * A retired nonNULL Domain is rejected before mutation or consuming children. */
 XR_FUNC XrXirCallStatus xr_xir_instance_free(XrXirInstance *instance);
 XR_FUNC XrXirCallStatus xr_xir_instance_start_function(XrXirInstance *instance, const XrXirValue *function,
     const XrXirValue *arguments, uint32_t count);

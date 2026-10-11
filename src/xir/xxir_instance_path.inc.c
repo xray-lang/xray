@@ -17,6 +17,7 @@ static XrXirCallStatus instance_path_cell(XrXirCallView *view,
 XR_FUNC XrXirCallStatus xr_xir_instance_cell_project(XrXirCallView *view,
     XrXirType type, const XrXirValueReceiver *receiver, const XrXirValuePath *path,
     XrXirValue *output) {
+    if (!instance_view_current(view)) return XR_XIR_CALL_BAD_ARGUMENT;
     XrXirInstance *instance = view_instance(view);
     if (!instance || !receiver || !output || !value_unit(*output)) return XR_XIR_CALL_BAD_STATE;
     XrXirCallStatus status = XR_XIR_CALL_READY;
@@ -31,6 +32,7 @@ XR_FUNC XrXirCallStatus xr_xir_instance_cell_project(XrXirCallView *view,
 XR_FUNC XrXirCallStatus xr_xir_instance_path_read(XrXirCallView *view,
     const XrXirValueReceiver *receiver, const XrXirValuePath *path,
     XrXirValue *output, XrXirFaultDetail *fault) {
+    if (!instance_view_current(view)) return XR_XIR_CALL_BAD_ARGUMENT;
     if (!fault) return XR_XIR_CALL_BAD_ARGUMENT;
     *fault = (XrXirFaultDetail){0};
     XrXirInstance *instance = view_instance(view);
@@ -68,6 +70,7 @@ static XrXirCallStatus instance_path_mutate(XrXirCallView *view,
 XR_FUNC XrXirCallStatus xr_xir_instance_path_length(XrXirCallView *view,
     const XrXirValueReceiver *receiver, const XrXirValuePath *path,
     XrXirValue *output, XrXirFaultDetail *fault) {
+    if (!instance_view_current(view)) return XR_XIR_CALL_BAD_ARGUMENT;
     if (fault) *fault = (XrXirFaultDetail){0};
     if (!output || !value_unit(*output)) return XR_XIR_CALL_BAD_STATE;
     XrXirValue array = {0};
@@ -82,11 +85,13 @@ XR_FUNC XrXirCallStatus xr_xir_instance_path_length(XrXirCallView *view,
 XR_FUNC XrXirCallStatus xr_xir_instance_path_write(XrXirCallView *view,
     const XrXirValueReceiver *receiver, const XrXirValuePath *path,
     const XrXirValue *value, XrXirFaultDetail *fault) {
+    if (!instance_view_current(view)) return XR_XIR_CALL_BAD_ARGUMENT;
     return instance_path_mutate(view, receiver, path, value, fault, false);
 }
 XR_FUNC XrXirCallStatus xr_xir_instance_path_capacity(XrXirCallView *view,
     const XrXirValueReceiver *receiver, const XrXirValuePath *path,
     XrXirValue *output, XrXirFaultDetail *fault) {
+    if (!instance_view_current(view)) return XR_XIR_CALL_BAD_ARGUMENT;
     if (fault) *fault = (XrXirFaultDetail){0};
     if (!output || !value_unit(*output)) return XR_XIR_CALL_BAD_STATE;
     XrXirValue array = {0};
@@ -101,5 +106,6 @@ XR_FUNC XrXirCallStatus xr_xir_instance_path_capacity(XrXirCallView *view,
 XR_FUNC XrXirCallStatus xr_xir_instance_path_push(XrXirCallView *view,
     const XrXirValueReceiver *receiver, const XrXirValuePath *path,
     const XrXirValue *value, XrXirFaultDetail *fault) {
+    if (!instance_view_current(view)) return XR_XIR_CALL_BAD_ARGUMENT;
     return instance_path_mutate(view, receiver, path, value, fault, true);
 }

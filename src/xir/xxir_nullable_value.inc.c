@@ -35,6 +35,7 @@ static XrXirValueStatus xr_xir_nullable_new_graph_operation(XrXirType type,
 }
 XR_FUNC XrXirValueStatus xr_xir_nullable_new(XrXirType type,
     const XrXirValue *payload, XrXirValueAdmission *admission, XrXirValue *output) {
+    if (!admission_domain_current(admission)) return XR_XIR_VALUE_BAD_ARGUMENT;
     xr_xir_value_graph_begin();
     XrXirValueStatus graph_outcome = xr_xir_nullable_new_graph_operation(type, payload, admission, output);
     xr_xir_value_graph_end();

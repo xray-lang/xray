@@ -40,6 +40,9 @@ static XrXirValueStatus xr_xir_class_new_graph_operation(XrXirType type, const X
     ClassAllocation allocation={0};
     XrXirValueStatus status=class_allocation_layout(admission,type,&allocation);
     if (status != XR_XIR_VALUE_OK) return status;
+    uint64_t serial = 0;
+    status = class_observation_prepare(admission->domain, &serial);
+    if (status != XR_XIR_VALUE_OK) return status;
     XirObject *object=constructed_allocate(admission->domain,(XrXirTypeArena *)admission->arena,
         type,allocation.bytes,&status);
     if (!object) return status;
@@ -47,7 +50,11 @@ static XrXirValueStatus xr_xir_class_new_graph_operation(XrXirType type, const X
     XirClassObject *instance=(XirClassObject *)object;
     instance->allocation_bytes=allocation.bytes;instance->release_offset=allocation.release_offset;
     instance->release_capacity=allocation.release_capacity;
+    atomic_init(&instance->publication_state, 0);
     instance->borrow_top=NULL;
+    instance->observation_serial = serial;
+    instance->observation_state = serial ? CLASS_OBSERVATION_PREPARED : 0;
+    instance->observation_declaration = node->nominal.declaration;
     unsigned char *body=(unsigned char *)(instance+1);
     memset(body,0,layout->body.size);
     for (uint32_t i=0;i<count;++i) {
@@ -58,15 +65,17 @@ static XrXirValueStatus xr_xir_class_new_graph_operation(XrXirType type, const X
         storage_pack_end(&pack);
         if (status != XR_XIR_VALUE_OK) {
             XirObject *pending=NULL;class_release_fields(object,i,&pending);
-            constructed_discard(object,allocation.bytes);release_pending(pending);return status;
+            class_discard_partial(instance, i, status);release_pending(pending);return status;
         }
     }
     xr_xir_value_object_publish(object);
+    class_observation_complete(instance);
     *output=(XrXirValue){(uint32_t)type,0,0};memcpy(&output->payload,&object,sizeof(object));
     return XR_XIR_VALUE_OK;
 }
 XR_FUNC XrXirValueStatus xr_xir_class_new(XrXirType type, const XrXirValue *fields,
     uint32_t count, XrXirValueAdmission *admission, XrXirValue *output) {
+    if (!admission_domain_current(admission)) return XR_XIR_VALUE_BAD_ARGUMENT;
     xr_xir_value_graph_begin();
     XrXirValueStatus graph_outcome = xr_xir_class_new_graph_operation(type, fields, count, admission, output);
     xr_xir_value_graph_end();
@@ -78,7 +87,9 @@ static XrXirValueStatus xr_xir_class_get_graph_operation(const XrXirValue *recei
         !owned_carrier_type((XrXirType)receiver->type)) return XR_XIR_VALUE_BAD_ARGUMENT;
     XirObject *object=object_pointer(receiver);
     const XrXirStorageLayout *layout=class_body_layout(object);
-    if (!layout || ((const XirClassObject *)object)->borrow_top ||
+    if (!layout || (class_origin_state((const XirClassObject *)object) &
+            (XIR_CLASS_ORIGIN_PREPARED | XIR_CLASS_ORIGIN_BORROWED)) ||
+        ((const XirClassObject *)object)->borrow_top ||
         field >= layout->field_count || admission->arena != object->arena)
         return XR_XIR_VALUE_BAD_ARGUMENT;
     if (!admission->work) return XR_XIR_VALUE_LIMIT;
@@ -90,6 +101,7 @@ static XrXirValueStatus xr_xir_class_get_graph_operation(const XrXirValue *recei
 }
 XR_FUNC XrXirValueStatus xr_xir_class_get(const XrXirValue *receiver, uint32_t field,
     XrXirValueAdmission *admission, XrXirValue *output) {
+    if (!admission_domain_current(admission)) return XR_XIR_VALUE_BAD_ARGUMENT;
     xr_xir_value_graph_begin();
     XrXirValueStatus graph_outcome = xr_xir_class_get_graph_operation(receiver, field, admission, output);
     xr_xir_value_graph_end();
@@ -102,7 +114,9 @@ static XrXirValueStatus xr_xir_class_set_graph_operation(const XrXirValue *recei
     XirObject *object=object_pointer(receiver);
     const XrXirTypes *types=xr_xir_compile_type_arena_types(object->arena);
     const XrXirTypeNode *node=xr_xir_type_node(types,object->type);
-    if (((const XirClassObject *)object)->borrow_top || field >= node->nominal.field_count ||
+    if ((class_origin_state((const XirClassObject *)object) &
+            (XIR_CLASS_ORIGIN_PREPARED | XIR_CLASS_ORIGIN_BORROWED)) ||
+        ((const XirClassObject *)object)->borrow_top || field >= node->nominal.field_count ||
         !(types->nominals->identities[node->nominal.declaration].fields[field].flags & XR_XIR_FIELD_MUTABLE))
         return XR_XIR_VALUE_BAD_ARGUMENT;
     status=xr_xir_value_admit(replacement,node->nominal.fields[field],admission);
@@ -113,6 +127,11 @@ static XrXirValueStatus xr_xir_class_set_graph_operation(const XrXirValue *recei
     StoragePrepared prepared={0};
     status=storage_prepared_begin(&prepared,replacement,physical.size,admission);
     if (status != XR_XIR_VALUE_OK) return status;
+    XrXirClassPublication publication = {0};
+    if (xr_xir_class_module_storage(receiver)) {
+        status = xr_xir_class_publication_prepare(replacement, 1, admission, &publication);
+        if (status != XR_XIR_VALUE_OK) { storage_prepared_end(&prepared); return status; }
+    }
     const XrXirStorageLayout *layout=class_body_layout(object);
     unsigned char *bytes=(unsigned char *)((XirClassObject *)object+1)+layout->field_offsets[field];
     /* Detach the old owners before publication, but defer their callbacks until
@@ -121,13 +140,16 @@ static XrXirValueStatus xr_xir_class_set_graph_operation(const XrXirValue *recei
     XR_CHECK(storage_cursor_init(admission->arena,(StorageSpan){prepared.pack.type,bytes},
         (StorageFrame *)prepared.pack.frames,prepared.pack.capacity,true,&cursor)==XR_XIR_VALUE_OK,
         "class overwrite reserves release traversal before publication");
+    if (publication.operation) xr_xir_class_publication_commit(&publication);
     storage_queue_release(&cursor,UINT64_MAX,&pending);
     if (physical.size) memcpy(bytes,prepared.bytes,physical.size);
     prepared.owns=false;release_pending(pending);storage_prepared_end(&prepared);
+    xr_xir_class_publication_drop(&publication);
     return XR_XIR_VALUE_OK;
 }
 XR_FUNC XrXirValueStatus xr_xir_class_set(const XrXirValue *receiver, uint32_t field,
     const XrXirValue *replacement, XrXirValueAdmission *admission) {
+    if (!admission_domain_current(admission)) return XR_XIR_VALUE_BAD_ARGUMENT;
     xr_xir_value_graph_begin();
     XrXirValueStatus graph_outcome = xr_xir_class_set_graph_operation(receiver, field, replacement, admission);
     xr_xir_value_graph_end();

@@ -17,14 +17,17 @@ static bool call_invocation_work(XrXirCallView *view,uint64_t work) {
     admission->work-=work;return true;
 }
 XR_FUNC const XirEffectInvocationSelection *xr_xir_call_invocation(const XrXirCallView *view) {
+    if (!(!view || call_owner_current(view->activation))) return NULL;
     return xr_xir_call_admission(view) && view->activation->top->invocation.owner?
         &view->activation->top->invocation:NULL;
 }
 XR_FUNC bool xr_xir_call_invocation_pending(const XrXirCallView *view,uint32_t *instruction) {
+    if (!(!view || call_owner_current(view->activation))) return false;
     if (!instruction || !xr_xir_call_admission(view) || !view->activation->top->effect_pending) return false;
     *instruction=view->activation->top->effect_instruction;return true;
 }
 XR_FUNC XrXirCallStatus xr_xir_call_invocation_stage(XrXirCallView *view,uint32_t instruction) {
+    if (!(!view || call_owner_current(view->activation))) return XR_XIR_CALL_BAD_ARGUMENT;
     if (!xr_xir_call_admission(view) || instruction==UINT32_MAX) return XR_XIR_CALL_BAD_STATE;
     CallFrame *frame=view->activation->top;
     if (frame->effect_pending || frame->pending_invocation.owner) return XR_XIR_CALL_BAD_STATE;
@@ -33,6 +36,7 @@ XR_FUNC XrXirCallStatus xr_xir_call_invocation_stage(XrXirCallView *view,uint32_
 }
 XR_FUNC XrXirCallStatus xr_xir_call_invocation_accept(XrXirCallView *view,
     const XirEffectInvocationSelection *selection) {
+    if (!(!view || call_owner_current(view->activation))) return XR_XIR_CALL_BAD_ARGUMENT;
     if (!xr_xir_call_admission(view) || !selection || !selection->owner) return XR_XIR_CALL_BAD_STATE;
     CallFrame *frame=view->activation->top;
     if (!frame->effect_pending || frame->pending_invocation.owner ||

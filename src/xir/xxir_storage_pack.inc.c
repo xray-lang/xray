@@ -82,6 +82,7 @@ static XrXirValueStatus storage_pack_walk(StoragePack *pack,
 }
 static XrXirValueStatus storage_pack_begin(XrXirValueAdmission *admission,
     XrXirType type, StoragePack *pack) {
+    if (!admission_domain_current(admission)) return XR_XIR_VALUE_BAD_ARGUMENT;
     if (!admission || !admission->domain) return XR_XIR_VALUE_BAD_ARGUMENT;
     *pack = (StoragePack){admission, NULL, 0, 0, 0, type};
     const XrXirTypes *types = xr_xir_compile_type_arena_types(admission->arena);

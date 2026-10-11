@@ -14,6 +14,10 @@
 #include "../base/xmalloc.h"
 
 XR_FUNC void *xr_xir_call_budget_allocate(XrXirCallBudget *budget, uint64_t bytes, XrXirCallStatus *status) {
+    if (budget && budget->work_domain && !xr_xir_domain_current(budget->work_domain)) {
+        if (status) *status = XR_XIR_CALL_BAD_ARGUMENT;
+        return NULL;
+    }
     if (!budget || !status || !budget->work_domain || !bytes || bytes > SIZE_MAX ||
         budget->live_bytes > budget->byte_limit || bytes > budget->byte_limit - budget->live_bytes ||
         budget->requested_bytes > budget->requested_limit || bytes > budget->requested_limit - budget->requested_bytes ||
@@ -36,6 +40,7 @@ XR_FUNC void *xr_xir_call_budget_allocate(XrXirCallBudget *budget, uint64_t byte
     return memory;
 }
 XR_FUNC void xr_xir_call_budget_deallocate(XrXirCallBudget *budget, void *memory, uint64_t bytes) {
+    XR_CHECK(budget && xr_xir_domain_current(budget->work_domain), "executor release requires a current domain before accounting");
     XR_CHECK(budget && memory && bytes && budget->live_bytes >= bytes &&
         budget->allocations > budget->frees, "executor storage requires its original allocation owner");
     budget->live_bytes -= bytes;

@@ -19,6 +19,7 @@ static XrXirValueStatus xr_xir_error_erase_graph_operation(const XrXirValue *val
 }
 XR_FUNC XrXirValueStatus xr_xir_error_erase(const XrXirValue *value,
     XrXirValueAdmission *admission, XrXirValue *output) {
+    if (!admission_domain_current(admission)) return XR_XIR_VALUE_BAD_ARGUMENT;
     xr_xir_value_graph_begin();
     XrXirValueStatus graph_outcome = xr_xir_error_erase_graph_operation(value, admission, output);
     xr_xir_value_graph_end();
@@ -37,6 +38,7 @@ static XrXirValueStatus xr_xir_error_is_graph_operation(const XrXirValue *value,
 }
 XR_FUNC XrXirValueStatus xr_xir_error_is(const XrXirValue *value, XrXirType type,
     XrXirValueAdmission *admission, bool *matches) {
+    if (!admission_domain_current(admission)) return XR_XIR_VALUE_BAD_ARGUMENT;
     xr_xir_value_graph_begin();
     XrXirValueStatus graph_outcome = xr_xir_error_is_graph_operation(value, type, admission, matches);
     xr_xir_value_graph_end();
@@ -55,6 +57,7 @@ static XrXirValueStatus xr_xir_error_narrow_graph_operation(const XrXirValue *va
 }
 XR_FUNC XrXirValueStatus xr_xir_error_narrow(const XrXirValue *value, XrXirType type,
     XrXirValueAdmission *admission, XrXirValue *output) {
+    if (!admission_domain_current(admission)) return XR_XIR_VALUE_BAD_ARGUMENT;
     xr_xir_value_graph_begin();
     XrXirValueStatus graph_outcome = xr_xir_error_narrow_graph_operation(value, type, admission, output);
     xr_xir_value_graph_end();

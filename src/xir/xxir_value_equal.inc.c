@@ -163,6 +163,7 @@ static XrXirValueStatus xr_xir_value_equal_graph_operation(const XrXirValue *lef
 }
 XR_FUNC XrXirValueStatus xr_xir_value_equal(const XrXirValue *left, const XrXirValue *right,
     XrXirType type, XrXirValueAdmission *admission, bool *output) {
+    if (!admission_domain_current(admission)) return XR_XIR_VALUE_BAD_ARGUMENT;
     xr_xir_value_graph_begin();
     XrXirValueStatus graph_outcome = xr_xir_value_equal_graph_operation(left, right, type, admission, output);
     xr_xir_value_graph_end();

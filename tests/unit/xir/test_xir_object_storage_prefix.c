@@ -76,7 +76,9 @@ static void *prefix_realloc(void *pointer, size_t bytes) {
 #define xr_malloc(bytes) prefix_malloc(bytes)
 #define xr_calloc(count, bytes) prefix_calloc(count, bytes)
 #define xr_realloc(pointer, bytes) prefix_realloc(pointer, bytes)
+#include "xir_class_observation_runtime_faults.h"
 #include "cell_owner_value_physical.h"
+#undef CELL_OWNER_ALLOCATION_FAIL
 #pragma pop_macro("xr_realloc")
 #pragma pop_macro("xr_calloc")
 #pragma pop_macro("xr_malloc")
@@ -122,6 +124,11 @@ static void prefix_reject_apis(const XrXirValue *value, XrXirValueAdmission *adm
     XrXirCellAuthority authority = {&activation, &frame, 1};
     XrXirValuePathStep step = {XR_XIR_PATH_FIELD, (XrXirType)value->type, 0};
     XrXirValuePath path = {&step, 1};
+    XrXirClassPublication publication = {0};
+    uint64_t publication_work = admission->work;
+    CHECK(!xr_xir_class_module_storage(value));
+    CHECK(xr_xir_class_publication_prepare(value, 1, admission, &publication) == XR_XIR_VALUE_BAD_ARGUMENT);
+    CHECK(class_publication_empty(&publication) && admission->work == publication_work);
     CHECK(!xr_xir_value_valid(value) && !xr_xir_value_arena(value));
     CHECK(!xr_xir_value_argument(value, admission->arena, (XrXirType)value->type));
     CHECK(xr_xir_value_copy(value, &output) == XR_XIR_VALUE_BAD_ARGUMENT);
@@ -133,7 +140,9 @@ static void prefix_reject_apis(const XrXirValue *value, XrXirValueAdmission *adm
     CHECK(!xr_xir_cell_unborrowed(value) && !xr_xir_cell_is_projection(value));
     CHECK(!xr_xir_cell_canonical_root(value) && !xr_xir_cell_module_storage(value));
     CHECK(!xr_xir_cell_same_owner(value, value));
-    CHECK(xr_xir_cell_loan_prepare(value, NULL) == XR_XIR_VALUE_BAD_ARGUMENT);
+    XrXirCellLoan rejected_loan = {0};
+    CHECK(xr_xir_cell_loan_prepare(value, NULL, &rejected_loan) == XR_XIR_VALUE_BAD_ARGUMENT);
+    CHECK(cell_loan_empty(&rejected_loan));
     CHECK(xr_xir_cell_publication_prepare(value, NULL) == XR_XIR_VALUE_BAD_ARGUMENT);
     CHECK(!xr_xir_cell_publication_matches(value, NULL));
     CHECK(xr_xir_cell_authorized_read(value, NULL, &output) == XR_XIR_VALUE_BAD_ARGUMENT);
@@ -224,7 +233,7 @@ static void prefix_current_factories(XrXirTypeArena *arena, XrXirDomain *domain,
     prefix_copy_reset(&object); prefix_copy_reset(&cell); prefix_copy_reset(&unit_cell);
     prefix_copy_reset(&function); prefix_copy_reset(&projection);
     XrXirCellLoan loan = {0};
-    CHECK(xr_xir_cell_loan_prepare(&projection, &authority) == XR_XIR_VALUE_OK);
+    CHECK(xr_xir_cell_loan_prepare(&projection, &authority, &loan) == XR_XIR_VALUE_OK);
     xr_xir_cell_loan_commit(&projection, &loan, &authority);
     CHECK(((XirClassObject *)object_pointer(&object))->borrow_top == &loan);
     xr_xir_cell_loan_release(&loan);
@@ -244,8 +253,16 @@ static void prefix_current_factories(XrXirTypeArena *arena, XrXirDomain *domain,
     CHECK(cell_owner_live == live && cell_owner_bytes == bytes);
     lease.active = false;
 }
-int main(void) {
-    _Static_assert(XIR_OBJECT_CLASS == 0x101u && XIR_OBJECT_CELL == 0x102u && XIR_OBJECT_FUNCTION == 0x103u,
+#include "xir_class_observation_core_cases.h"
+#include "xir_class_observation_runtime_resource_cases.h"
+#include "xir_class_publication_core_cases.h"
+#include "xir_domain_admission_generation_cases.h"
+#include "xir_domain_storage_prefix_cases.h"
+#include "xir_domain_release_generation_cases.h"
+int main(int argc, char **argv) {
+    int child = prefix_domain_release_child(argc,argv);
+    if (child >= 0) return child;
+    _Static_assert(XIR_OBJECT_CLASS == 260u && XIR_OBJECT_CELL == 0x102u && XIR_OBJECT_FUNCTION == 0x103u,
         "Root-selected physical kinds required");
     /* Keep this existing observer's other entry points referenced without running them. */
     (void)value_compile_limits; (void)value_compile_boundaries; (void)value_compile_arena;
@@ -254,12 +271,19 @@ int main(void) {
     XrXirTypeArena *arena = prefix_arena_new(&compiler);
     XrXirDomain *domain = NULL; CHECK(xr_xir_domain_new(65536, &domain) == XR_XIR_VALUE_OK);
     XrXirValueAdmission admission = {arena, domain, NULL, NULL, 65536, 65536};
-    const uint32_t kinds[] = {0x100u, 3u, 1u, UINT32_MAX, 42u};
-    const XrXirType types[] = {(XrXirType)PREFIX_CLASS_T, (XrXirType)PREFIX_CELL_T, (XrXirType)PREFIX_FN_T,
+    prefix_domain_current_identity(domain);
+    prefix_domain_release_cases();
+    prefix_domain_current_scalar_call();
+    prefix_domain_cases(arena, domain, &admission);
+    const uint32_t kinds[] = {0x100u, 257u, 3u, 1u, UINT32_MAX, 42u};
+    const XrXirType types[] = {(XrXirType)PREFIX_CLASS_T, (XrXirType)PREFIX_CLASS_T, (XrXirType)PREFIX_CELL_T, (XrXirType)PREFIX_FN_T,
         (XrXirType)PREFIX_CLASS_T, (XrXirType)PREFIX_UNIT_CELL_T};
-    for (uint32_t i = 0; i < 5; ++i) prefix_fake_case(kinds[i], types[i], &admission);
+    for (uint32_t i = 0; i < 6; ++i) prefix_fake_case(kinds[i], types[i], &admission);
     prefix_current_factories(arena, domain, false);
     prefix_current_factories(arena, domain, true);
+    observation_core_cases(&compiler, arena);
+    observation_resource_cases(&compiler, arena);
+    publication_core_cases(&compiler, arena);
     xr_xir_domain_drop(domain); xr_xir_compile_type_arena_drop(arena);
     CHECK(value_compile_stats(&compiler.context).live_bytes == compiler.baseline.live_bytes);
     value_compile_owner_release(&compiler);

@@ -25,6 +25,7 @@ static bool view_cell_authority(const XrXirCallView *view, XrXirCellAuthority *o
 }
 XR_FUNC XrXirValueStatus xr_xir_call_cell_read(const XrXirCallView *view,
     const XrXirValue *cell, XrXirValue *output) {
+    if (!(!view || call_owner_current(view->activation))) return XR_XIR_VALUE_BAD_ARGUMENT;
     XrXirCellAuthority authority = {0};
     if (!view_cell_authority(view, &authority)) return XR_XIR_VALUE_BAD_ARGUMENT;
     if (!call_cell_work(view->activation, 1)) return XR_XIR_VALUE_LIMIT;
@@ -37,6 +38,7 @@ XR_FUNC XrXirValueStatus xr_xir_call_cell_read(const XrXirCallView *view,
 }
 XR_FUNC XrXirValueStatus xr_xir_call_cell_write(const XrXirCallView *view,
     const XrXirValue *cell, const XrXirValue *value) {
+    if (!(!view || call_owner_current(view->activation))) return XR_XIR_VALUE_BAD_ARGUMENT;
     XrXirCellAuthority authority = {0};
     if (!view_cell_authority(view, &authority)) return XR_XIR_VALUE_BAD_ARGUMENT;
     if (!call_cell_work(view->activation, 1)) return XR_XIR_VALUE_LIMIT;
@@ -44,6 +46,7 @@ XR_FUNC XrXirValueStatus xr_xir_call_cell_write(const XrXirCallView *view,
 }
 XR_FUNC XrXirValueStatus xr_xir_call_cell_place(const XrXirCallView *view,
     const XrXirValue *cell, XrXirValuePlace *output) {
+    if (!(!view || call_owner_current(view->activation))) return XR_XIR_VALUE_BAD_ARGUMENT;
     XrXirCellAuthority authority = {0};
     if (!view_cell_authority(view, &authority)) return XR_XIR_VALUE_BAD_ARGUMENT;
     if (!call_cell_work(view->activation, 1)) return XR_XIR_VALUE_LIMIT;
@@ -51,6 +54,7 @@ XR_FUNC XrXirValueStatus xr_xir_call_cell_place(const XrXirCallView *view,
 }
 XR_FUNC XrXirValueStatus xr_xir_call_cell_project(const XrXirCallView *view,
     XrXirType type, const XrXirValue *root, const XrXirValuePath *path, XrXirValue *output) {
+    if (!(!view || call_owner_current(view->activation))) return XR_XIR_VALUE_BAD_ARGUMENT;
     XrXirCellAuthority authority = {0};
     if (!view_cell_authority(view, &authority)) return XR_XIR_VALUE_BAD_ARGUMENT;
     if (!call_cell_work(view->activation, 1)) return XR_XIR_VALUE_LIMIT;
@@ -60,6 +64,7 @@ XR_FUNC XrXirValueStatus xr_xir_call_cell_project(const XrXirCallView *view,
 XR_FUNC XrXirValueStatus xr_xir_call_cell_path_read(const XrXirCallView *view,
     const XrXirValue *cell, const XrXirValuePath *path,
     XrXirValue *output, XrXirFaultDetail *fault) {
+    if (!(!view || call_owner_current(view->activation))) return XR_XIR_VALUE_BAD_ARGUMENT;
     XrXirCellAuthority authority = {0};
     if (!view_cell_authority(view, &authority)) return XR_XIR_VALUE_BAD_ARGUMENT;
     if (!call_cell_work(view->activation, 1)) return XR_XIR_VALUE_LIMIT;
@@ -69,6 +74,7 @@ XR_FUNC XrXirValueStatus xr_xir_call_cell_path_read(const XrXirCallView *view,
 XR_FUNC XrXirValueStatus xr_xir_call_cell_path_write(const XrXirCallView *view,
     const XrXirValue *cell, const XrXirValuePath *path,
     const XrXirValue *value, XrXirFaultDetail *fault, bool append) {
+    if (!(!view || call_owner_current(view->activation))) return XR_XIR_VALUE_BAD_ARGUMENT;
     XrXirCellAuthority authority = {0};
     if (!view_cell_authority(view, &authority)) return XR_XIR_VALUE_BAD_ARGUMENT;
     if (!call_cell_work(view->activation, 1)) return XR_XIR_VALUE_LIMIT;
@@ -87,7 +93,7 @@ static XrXirCallStatus frame_cell_prepare(XrXirCall *call, CallFrame *frame,
     uint32_t captures, XrXirFaultDetail *fault) {
     if (!frame->cell_capacity) return XR_XIR_CALL_READY;
     const XrXirTypes *types = xr_xir_compile_type_arena_types(call->config.admission.arena);
-    uint32_t entry = (uint32_t)(frame->entry - call->config.entries), count = 0;
+    uint32_t entry = (uint32_t)(frame->entry - call->config.entries);
     XrXirCellAuthority parent = frame_cell_authority(call, frame->parent);
     for (uint32_t p = 0; p < frame->entry->parameter_count; ++p) {
         if (!call_cell_work(call, 1)) return XR_XIR_CALL_LIMIT;
@@ -112,17 +118,18 @@ static XrXirCallStatus frame_cell_prepare(XrXirCall *call, CallFrame *frame,
             if (xr_xir_type_is_cell(types, frame->entry->parameters[prior]) &&
                 xr_xir_cell_same_owner(cell, &frame->arguments[prior])) return XR_XIR_CALL_BAD_ARGUMENT;
         }
+        XR_CHECK(frame->loan_count < frame->cell_capacity,
+            "frame reserves every possible cell loan before preparation");
+        CallCellLoan *record = &frame->loans[frame->loan_count];
         XrXirValueStatus prepared = xr_xir_cell_loan_prepare_path(cell, &parent,
-            &call->config.admission, fault);
+            &call->config.admission, fault, &record->loan);
         if (prepared != XR_XIR_VALUE_OK) return prepared == XR_XIR_VALUE_OOM ? XR_XIR_CALL_OOM :
             prepared == XR_XIR_VALUE_LIMIT || prepared == XR_XIR_VALUE_REFCOUNT_LIMIT ? XR_XIR_CALL_LIMIT :
             prepared == XR_XIR_VALUE_BOUNDS && xr_xir_fault_bounds_valid(*fault) ?
                 XR_XIR_CALL_BOUNDS : XR_XIR_CALL_BAD_ARGUMENT;
-        /* Store ordinal before publication; commit replaces it with the live owner. */
-        XR_CHECK(count < frame->cell_capacity, "frame reserves every possible cell loan before preparation");
-        frame->loans[count++].parameter = p;
+        /* Every successful preparation is now an owned rollback obligation. */
+        record->parameter = p; ++frame->loan_count;
     }
-    frame->loan_count = count;
     return XR_XIR_CALL_READY;
 }
 static void frame_cell_commit(XrXirCall *call, CallFrame *frame) {
@@ -131,6 +138,9 @@ static void frame_cell_commit(XrXirCall *call, CallFrame *frame) {
         CallCellLoan *record = &frame->loans[i];
         xr_xir_cell_loan_commit(&frame->arguments[record->parameter], &record->loan, &authority);
     }
+}
+static void frame_cell_abort(CallFrame *frame) {
+    while (frame->loan_count) xr_xir_cell_loan_abort(&frame->loans[--frame->loan_count].loan);
 }
 static void frame_cell_release(CallFrame *frame) {
     while (frame->loan_count) xr_xir_cell_loan_release(&frame->loans[--frame->loan_count].loan);

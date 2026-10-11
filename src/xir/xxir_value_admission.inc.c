@@ -15,6 +15,7 @@ typedef struct ValueAdmissionFrame {
 typedef struct ValueAdmissionStack {
     ValueAdmissionFrame *frames;
     size_t depth, capacity, bytes;
+    ValueAdmissionFrame first;
 } ValueAdmissionStack;
 static XrXirValueStatus admission_push(ValueAdmissionStack *stack, ValueAdmissionFrame frame,
     XrXirValueAdmission *admission) {
@@ -25,12 +26,22 @@ static XrXirValueStatus admission_push(ValueAdmissionStack *stack, ValueAdmissio
         if (bytes > admission->scratch_bytes) return XR_XIR_VALUE_LIMIT;
         if (!admission->domain) return XR_XIR_VALUE_BAD_ARGUMENT;
         XrXirValueStatus status = XR_XIR_VALUE_OK;
-        ValueAdmissionFrame *frames = xr_xir_domain_allocate(admission->domain, bytes, &status);
-        if (!frames) return status;
+        ValueAdmissionFrame *frames;
+        if (!stack->capacity) {
+            if (!xr_xir_domain_current(admission->domain)) return XR_XIR_VALUE_BAD_ARGUMENT;
+            /* A call-local first frame still reserves the original scratch and
+             * pays the same owner's push work. Only its heap request disappears. */
+            if (!xr_xir_domain_work(admission->domain, 1)) return XR_XIR_VALUE_LIMIT;
+            frames = &stack->first;
+        } else {
+            frames = xr_xir_domain_allocate(admission->domain, bytes, &status);
+            if (!frames) return status;
+        }
         admission->scratch_bytes -= bytes;
         if (stack->frames) {
             memcpy(frames, stack->frames, stack->depth * sizeof(*frames));
-            xr_xir_domain_deallocate(admission->domain, stack->frames, stack->bytes);
+            if (stack->frames != &stack->first)
+                xr_xir_domain_deallocate(admission->domain, stack->frames, stack->bytes);
             admission->scratch_bytes += stack->bytes;
         }
         stack->frames = frames; stack->capacity = capacity; stack->bytes = bytes;
@@ -105,6 +116,7 @@ static XrXirValueStatus admission_inline(ValueAdmissionStack *stack,
  * charges. Empty or pure scalar/String aggregates need no foreign detachment. */
 static XrXirValueStatus value_admit_summary(const XrXirValue *value, XrXirType type,
     XrXirValueAdmission *admission, bool *domain_sensitive) {
+    if (!admission_domain_current(admission)) return XR_XIR_VALUE_BAD_ARGUMENT;
     if (domain_sensitive) *domain_sensitive = false;
     if (!admission || !value) return XR_XIR_VALUE_BAD_ARGUMENT;
     ValueAdmissionStack stack = {0}; XrXirValue current = *value;
@@ -186,13 +198,15 @@ static XrXirValueStatus value_admit_summary(const XrXirValue *value, XrXirType t
         type = inlined ? span.type : (XrXirType)current.type;
     }
     if (stack.frames) {
-        xr_xir_domain_deallocate(admission->domain, stack.frames, stack.bytes);
+        if (stack.frames != &stack.first)
+            xr_xir_domain_deallocate(admission->domain, stack.frames, stack.bytes);
         admission->scratch_bytes += stack.bytes;
     }
     return status;
 }
 XR_FUNC XrXirValueStatus xr_xir_value_admit(const XrXirValue *value, XrXirType type,
     XrXirValueAdmission *admission) {
+    if (!admission_domain_current(admission)) return XR_XIR_VALUE_BAD_ARGUMENT;
     xr_xir_value_graph_begin();
     XrXirValueStatus graph_outcome = value_admit_summary(value, type, admission, NULL);
     xr_xir_value_graph_end();

@@ -183,6 +183,17 @@ static void array_nested_gate_scratch(void) {
     CHECK(xr_xir_array_new((XrXirType) 257, &function, 1, &admission, &array) == XR_XIR_VALUE_OK);
     CHECK(xr_xir_array_new((XrXirType) 258, &array, 1, &admission, &nested) == XR_XIR_VALUE_OK);
     size_t physical = live; uint64_t bytes = domain->stats.live_bytes, scratch = admission.scratch_bytes;
+    size_t first_attempts = calls;
+    admission.work = 5; admission.scratch_bytes = sizeof(ValueAdmissionFrame); fail_at = calls;
+    CHECK(xr_xir_value_admit(&array, (XrXirType)257, &admission) == XR_XIR_VALUE_OK);
+    CHECK(!admission.work && admission.scratch_bytes == sizeof(ValueAdmissionFrame) && calls == first_attempts);
+    admission.work = 4;
+    CHECK(xr_xir_value_admit(&array, (XrXirType)257, &admission) == XR_XIR_VALUE_LIMIT);
+    CHECK(!admission.work && admission.scratch_bytes == sizeof(ValueAdmissionFrame) && calls == first_attempts);
+    admission.work = 100; admission.context = NULL;
+    CHECK(xr_xir_value_admit(&array, (XrXirType)257, &admission) == XR_XIR_VALUE_BAD_ARGUMENT);
+    CHECK(admission.scratch_bytes == sizeof(ValueAdmissionFrame) && calls == first_attempts);
+    admission.context = &releases; admission.work = 100; admission.scratch_bytes = scratch;
     fail_at = calls;
     CHECK(xr_xir_value_admit(&nested, (XrXirType) 258, &admission) == XR_XIR_VALUE_OOM);
     fail_at = SIZE_MAX;
@@ -191,8 +202,18 @@ static void array_nested_gate_scratch(void) {
     size_t allocations = calls;
     CHECK(xr_xir_value_admit(&nested, (XrXirType) 258, &admission) == XR_XIR_VALUE_LIMIT && calls == allocations);
     admission.scratch_bytes = 3 * sizeof(ValueAdmissionFrame) - 1;
-    CHECK(xr_xir_value_admit(&nested, (XrXirType) 258, &admission) == XR_XIR_VALUE_LIMIT && calls == allocations + 1);
+    CHECK(xr_xir_value_admit(&nested, (XrXirType) 258, &admission) == XR_XIR_VALUE_LIMIT && calls == allocations);
     CHECK(admission.scratch_bytes == 3 * sizeof(ValueAdmissionFrame) - 1 && live == physical && domain->stats.live_bytes == bytes);
+    admission.scratch_bytes = 3 * sizeof(ValueAdmissionFrame);
+    admission.work = 100; allocations = calls;
+    CHECK(xr_xir_value_admit(&nested, (XrXirType)258, &admission) == XR_XIR_VALUE_OK && calls == allocations + 1);
+    CHECK(admission.scratch_bytes == 3 * sizeof(ValueAdmissionFrame) && live == physical && domain->stats.live_bytes == bytes);
+    ValueAdmissionStack overflow = {.depth = SIZE_MAX / 2 / sizeof(ValueAdmissionFrame) + 1,
+        .capacity = SIZE_MAX / 2 / sizeof(ValueAdmissionFrame) + 1};
+    allocations = calls;
+    CHECK(admission_push(&overflow, (ValueAdmissionFrame){0}, &admission) == XR_XIR_VALUE_LIMIT);
+    CHECK(!overflow.frames && !overflow.bytes && calls == allocations &&
+        admission.scratch_bytes == 3 * sizeof(ValueAdmissionFrame));
     admission.scratch_bytes = scratch;
     admission.work = 5;
     CHECK(xr_xir_value_admit(&nested, (XrXirType) 258, &admission) == XR_XIR_VALUE_LIMIT);

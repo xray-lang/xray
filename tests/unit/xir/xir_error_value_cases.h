@@ -153,11 +153,12 @@ static void error_value_cases(const XrXirTypes *types, const XrXirValue *empty,
     xr_xir_value_drop(&error); xr_xir_owned_slot_clear(&slot, 0); CHECK(!slot);
     before = calls;
     CHECK(xr_xir_error_erase(pair, admission, &error) == XR_XIR_VALUE_OK);
-    CHECK(error.payload == pair->payload && calls == before + 1 && live == baseline);
+    CHECK(error.payload == pair->payload && calls == before && live == baseline);
     CHECK(xr_xir_enum_get(&error, 1, 0, admission, &copy) == XR_XIR_VALUE_BAD_ARGUMENT && !copy.type);
     fail_at = calls;
-    CHECK(xr_xir_error_narrow(&error, (XrXirType)256, admission, &copy) == XR_XIR_VALUE_OOM && !copy.type);
+    CHECK(xr_xir_error_narrow(&error, (XrXirType)256, admission, &copy) == XR_XIR_VALUE_OK && copy.payload == pair->payload && calls == before);
     fail_at = SIZE_MAX;
+    xr_xir_value_drop(&copy); CHECK(live == baseline);
     XirObject *object = object_pointer(pair); uint32_t references = atomic_load(&object->references);
     atomic_store(&object->references, UINT32_MAX);
     CHECK(xr_xir_error_narrow(&error, (XrXirType)256, admission, &copy) == XR_XIR_VALUE_REFCOUNT_LIMIT && !copy.type);

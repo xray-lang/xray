@@ -107,7 +107,11 @@ static void class_backing_authority(void) {
         runtime_attempts=0;runtime_fail_at=pass ? pass-1 : SIZE_MAX;
         XrXirValueStatus status=xr_xir_value_admit(&box,constructed(4),&walk);
         size_t attempts=runtime_attempts;runtime_fail_at=SIZE_MAX;
-        if (!pass) {CHECK(status==XR_XIR_VALUE_OK);walk_sites=attempts;CHECK(walk_sites>=3);}
+        if (!pass) {
+            /* Class -> inline Nullable -> Array -> Tuple has four active frames;
+             * the local first frame grows to capacities two and four. */
+            CHECK(status==XR_XIR_VALUE_OK);walk_sites=attempts;CHECK(walk_sites==2);
+        }
         else CHECK(status==XR_XIR_VALUE_OOM && attempts>=pass);
         CHECK(walk.scratch_bytes==262144 && runtime_live==baseline_live && runtime_bytes==baseline_bytes);
     }

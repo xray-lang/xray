@@ -116,9 +116,10 @@ XR_FUNCDEF bool xr_xir_panic_message_borrow(const XrXirPanicPayload *panic, char
 }
 static XrXirValueStatus xr_xir_panic_info_new_graph_operation(XrXirDomain *domain, const XrXirPanicPayload *panic,
                                              XrXirValue *output) {
+    if (!xr_xir_domain_current(domain)) return XR_XIR_VALUE_BAD_ARGUMENT;
     if (!domain || !unit_value(output) || !xr_xir_panic_valid(panic) || xr_xir_panic_empty(panic))
         return XR_XIR_VALUE_BAD_ARGUMENT;
-    if (!xr_xir_reference_retain(&domain->references)) return XR_XIR_VALUE_REFCOUNT_LIMIT;
+    if (!xr_xir_domain_retain(domain)) return XR_XIR_VALUE_REFCOUNT_LIMIT;
     XrXirPanicPayload owned = {0};
     XrXirValueStatus status = xr_xir_panic_copy(panic, &owned);
     if (status != XR_XIR_VALUE_OK) { xr_xir_domain_drop(domain); return status; }
@@ -138,6 +139,7 @@ static XrXirValueStatus xr_xir_panic_info_new_graph_operation(XrXirDomain *domai
 }
 XR_FUNCDEF XrXirValueStatus xr_xir_panic_info_new(XrXirDomain *domain, const XrXirPanicPayload *panic,
                                              XrXirValue *output) {
+    if (!xr_xir_domain_current(domain)) return XR_XIR_VALUE_BAD_ARGUMENT;
     xr_xir_value_graph_begin();
     XrXirValueStatus graph_outcome = xr_xir_panic_info_new_graph_operation(domain, panic, output);
     xr_xir_value_graph_end();

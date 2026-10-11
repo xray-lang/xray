@@ -739,7 +739,7 @@ static XrXirRunStatus scalar_step(ScalarRun *run, VmState *state, XrXirAction *a
         int64_t left = xr_xir_scalar_load(run->frame, run->layout->offsets[op->args[0]]);
         XrXirValueStatus status = op->op != XR_XIR_CONCAT_STRING ?
             xr_xir_owned_slot_copy(run->frame, run->layout->offsets[result_id], run->view ? run->view->arena : NULL, op->type, left) :
-            xr_xir_string_slot_concat(run->frame, run->layout->offsets[result_id], left,
+            xr_xir_string_slot_concat(run->frame, run->layout->offsets[result_id], xr_xir_call_admission(run->view), left,
                 xr_xir_scalar_load(run->frame, run->layout->offsets[op->args[1]]));
         state->instruction = next;
         return value_run_status(status);

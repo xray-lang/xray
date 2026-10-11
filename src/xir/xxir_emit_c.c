@@ -956,6 +956,7 @@ static void emit_resume_step(CBuffer *buffer, const XrXirModule *module,
         append(buffer, " { XrXirValueStatus status = %s(state->frame, %uu, ",
                op->op != XR_XIR_CONCAT_STRING ? "xr_xir_owned_slot_copy" : "xr_xir_string_slot_concat", destination);
         if (op->op != XR_XIR_CONCAT_STRING) EMIT_U_SHAPE(buffer, et_0dd5db27fc786018, "view->arena, (XrXirType) %u, ", "view->arena, (XrXirType) ", ", ", (uint32_t) op->type);
+        else EMIT_STATIC(buffer, es_6005496ddebcbb24, "xr_xir_call_admission(view), ");
         EMIT_U_SHAPE(buffer, et_1cf00b902a57630a, "xr_xir_scalar_load(state->frame, %uu)", "xr_xir_scalar_load(state->frame, ", "u)", layout->offsets[op->args[0]]);
         if (op->op == XR_XIR_CONCAT_STRING)
             EMIT_U_SHAPE(buffer, et_76e8bc034350cedc, ", xr_xir_scalar_load(state->frame, %uu)", ", xr_xir_scalar_load(state->frame, ", "u)", layout->offsets[op->args[1]]);

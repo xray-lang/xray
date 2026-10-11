@@ -53,14 +53,14 @@ static void cell_owner_values(void) {
     XrXirCellAuthority parent = {&activation,&parent_frame,1}, child = {&activation,&child_frame,2};
     XrXirCellAuthority wrong = parent; wrong.epoch = 2;
     XrXirCellLoan parent_loan = {0}, child_loan = {0};
-    CHECK(xr_xir_cell_loan_prepare(&cell,NULL) == XR_XIR_VALUE_OK);
+    CHECK(xr_xir_cell_loan_prepare(&cell,NULL,&parent_loan) == XR_XIR_VALUE_OK);
     xr_xir_cell_loan_commit(&cell,&parent_loan,&parent);
     CHECK(!xr_xir_cell_unborrowed(&cell));
     CHECK(xr_xir_cell_read(&alias,&output) == XR_XIR_VALUE_BAD_ARGUMENT && !output.type);
     CHECK(xr_xir_cell_write(&alias,&replacement,&admission) == XR_XIR_VALUE_BAD_ARGUMENT);
     CHECK(xr_xir_cell_authorized_read(&alias,&wrong,&output) == XR_XIR_VALUE_BAD_ARGUMENT && !output.type);
-    CHECK(xr_xir_cell_loan_prepare(&alias,&wrong) == XR_XIR_VALUE_BAD_ARGUMENT);
-    CHECK(xr_xir_cell_loan_prepare(&alias,&parent) == XR_XIR_VALUE_OK);
+    CHECK(xr_xir_cell_loan_prepare(&alias,&wrong,&child_loan) == XR_XIR_VALUE_BAD_ARGUMENT);
+    CHECK(xr_xir_cell_loan_prepare(&alias,&parent,&child_loan) == XR_XIR_VALUE_OK);
     xr_xir_cell_loan_commit(&alias,&child_loan,&child);
     CHECK(xr_xir_cell_authorized_read(&cell,&parent,&output) == XR_XIR_VALUE_BAD_ARGUMENT);
     CHECK(xr_xir_cell_authorized_write(&cell,&child,&replacement,&admission) == XR_XIR_VALUE_OK);

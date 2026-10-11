@@ -86,6 +86,16 @@ struct XrXirCall {
     XrXirCallStatus abort_reason;
 };
 
+/* Call layout is unchanged; its original config precedes private frame state.
+ * A NULL admission domain remains legal for unbudgeted scalar activations. */
+static bool call_owner_current(const XrXirCall *call) {
+    if (!call) return true;
+    if (call->config.abi_version != XR_XIR_CALL_ABI_VERSION ||
+        call->config.struct_size != sizeof(call->config)) return false;
+    if (call->config.admission.domain && !xr_xir_domain_current(call->config.admission.domain)) return false;
+    return !call->budget || xr_xir_domain_current(call->budget->work_domain);
+}
+
 XrXirAction xr_xir_call_fault(XrXirRunStatus status) {
     XrXirCallStatus reason;
     switch (status) {
@@ -132,19 +142,23 @@ XR_FUNCDEF bool xr_xir_call_panic_payload(XrXirCallStatus status, const XrXirPan
 }
 
 uint32_t xr_xir_call_current_entry(const XrXirCall *call) {
+    if (!call_owner_current(call)) return UINT32_MAX;
     return call && call->driving && !call->cleaning && call->top ?
         (uint32_t) (call->top->entry - call->config.entries) : UINT32_MAX;
 }
 XrXirCallStatus xr_xir_call_state(const XrXirCall *call) {
+    if (!call_owner_current(call)) return XR_XIR_CALL_BAD_ARGUMENT;
     return !call ? XR_XIR_CALL_BAD_ARGUMENT : call->driving ? XR_XIR_CALL_BUSY : call->result.status;
 }
 static bool cleanup_active(const XrXirCall *call) {
     return call->top && (call->top->exiting || call->top->in_cleanup);
 }
 bool xr_xir_call_cleanup_active(const XrXirCall *call) {
+    if (!call_owner_current(call)) return false;
     return call && call->driving && !call->cleaning && (call->active_view || call->admitting) && cleanup_active(call);
 }
 XrXirValueAdmission *xr_xir_call_admission(const XrXirCallView *view) {
+    if (!(!view || call_owner_current(view->activation))) return NULL;
     if (!view || !view->activation) return NULL;
     XrXirCall *call = view->activation;
     if (!call->driving || call->cleaning || !call->top || call->active_view != view)
@@ -161,16 +175,19 @@ XrXirValueAdmission *xr_xir_call_admission(const XrXirCallView *view) {
 #include "xxir_call_invocation.inc.c"
 
 XR_FUNC XrXirCallStatus xr_xir_call_cleanup_frontier(XrXirCallView *view, uint32_t frontier) {
+    if (!(!view || call_owner_current(view->activation))) return XR_XIR_CALL_BAD_ARGUMENT;
     if (!xr_xir_call_admission(view) || !(view->activation->top->entry->flags & XR_XIR_ENTRY_EXIT))
         return XR_XIR_CALL_BAD_STATE;
     view->activation->top->cleanup_frontier = frontier;
     return XR_XIR_CALL_READY;
 }
 XR_FUNC bool xr_xir_call_cleanup_incomplete(const XrXirCall *call) {
+    if (!call_owner_current(call)) return false;
     return call && call->cleanup_incomplete;
 }
 
 XR_FUNC XrXirCallStatus xr_xir_call_execution_status(const XrXirCallView *view) {
+    if (!(!view || call_owner_current(view->activation))) return XR_XIR_CALL_BAD_ARGUMENT;
     if (!xr_xir_call_admission(view)) return XR_XIR_CALL_BAD_STATE;
     XrXirCall *call = view->activation;
     return call->cancel_requested && !cleanup_active(call) && call->abort_reason == XR_XIR_CALL_READY ?
@@ -207,6 +224,8 @@ XrXirAction xr_xir_call_bounds(int64_t index, int64_t length) {
 
 static XrXirCallStatus admit_value(const XrXirValue *value, XrXirType type,
                                    XrXirValueAdmission *admission) {
+    if (admission && admission->domain && !xr_xir_domain_current(admission->domain))
+        return XR_XIR_CALL_BAD_ARGUMENT;
     if (type == XR_XIR_UNIT)
         return value && boundary_value(*value, type) ? XR_XIR_CALL_READY : XR_XIR_CALL_BAD_ARGUMENT;
     if (!xr_xir_value_argument(value, admission->arena, type)) return XR_XIR_CALL_BAD_ARGUMENT;
@@ -348,7 +367,7 @@ static XrXirCallStatus push_frame(XrXirCall *call, uint32_t id,
     uint32_t cells = frame_cell_count(call, entry);
     uint64_t bytes = loans_offset + (uint64_t)cells * sizeof(CallCellLoan);
     if (cells && !call_cell_work(call, (uint64_t)entry->parameter_count + (uint64_t)cells *
-            (sizeof(CallCellLoan) + 12))) return XR_XIR_CALL_LIMIT;
+            (sizeof(CallCellLoan) + 16))) return XR_XIR_CALL_LIMIT;
     XrXirCallStatus status = XR_XIR_CALL_READY;
     CallFrame *frame = frame_reserve(call, bytes, &status);
     if (!frame)
@@ -383,6 +402,7 @@ static XrXirCallStatus push_frame(XrXirCall *call, uint32_t id,
     }
     status = frame_cell_prepare(call, frame, captures, fault);
     if (status != XR_XIR_CALL_READY) {
+        frame_cell_abort(frame);
         for (uint32_t p = entry->parameter_count; p; --p) xr_xir_value_drop(&frame->arguments[p - 1]);
         frame_release(call, frame);
         return status;
@@ -445,6 +465,8 @@ static XrXirCallStatus table_size(const XrXirCallConfig *config, uint64_t *bytes
     if (!config) return XR_XIR_CALL_BAD_ARGUMENT;
     if (config->abi_version != XR_XIR_CALL_ABI_VERSION || config->struct_size != sizeof(*config))
         return XR_XIR_CALL_BAD_ABI;
+    if (config->admission.domain && !xr_xir_domain_current(config->admission.domain))
+        return XR_XIR_CALL_BAD_ARGUMENT;
     if (!xr_xir_output_provider_valid(&config->output)) return XR_XIR_CALL_BAD_ABI;
     if (!config->entries || !config->entry_count || config->entry_count > 65536 ||
         !config->accounting || config->accounting->live_bytes || config->accounting->depth ||
@@ -792,15 +814,22 @@ static void accept_action(XrXirCall *call, XrXirAction action) {
 
 XR_FUNC XrXirCallStatus xr_xir_call_new(const XrXirCallConfig *config, uint32_t entry,
     const XrXirValue *arguments, uint32_t count, XrXirCall **output) {
+    if (config && config->abi_version == XR_XIR_CALL_ABI_VERSION &&
+        config->struct_size == sizeof(*config) && config->admission.domain &&
+        !xr_xir_domain_current(config->admission.domain)) return XR_XIR_CALL_BAD_ARGUMENT;
     XrXirCallRequest request = {entry, arguments, count, NULL, NULL};
     return call_new(config, entry, &request, NULL, output);
 }
 XR_FUNC XrXirCallStatus xr_xir_call_new_budgeted(const XrXirCallConfig *config,
     const XrXirCallRequest *request, XrXirCallBudget *budget, XrXirCall **output) {
-    if (!request || !budget || !budget->work_domain) return XR_XIR_CALL_BAD_ARGUMENT;
+    if (config && config->abi_version == XR_XIR_CALL_ABI_VERSION &&
+        config->struct_size == sizeof(*config) && config->admission.domain &&
+        !xr_xir_domain_current(config->admission.domain)) return XR_XIR_CALL_BAD_ARGUMENT;
+    if (!request || !budget || !xr_xir_domain_current(budget->work_domain)) return XR_XIR_CALL_BAD_ARGUMENT;
     return call_new(config, request->entry, request, budget, output);
 }
 XR_FUNC XrXirCallStatus xr_xir_call_take_outcome(XrXirCall *call, XrXirCallResult *output) {
+    if (!call_owner_current(call)) return XR_XIR_CALL_BAD_ARGUMENT;
     if (!call || !xr_xir_call_result_empty(output)) return XR_XIR_CALL_BAD_ARGUMENT;
     if (call->driving) return XR_XIR_CALL_BUSY;
     XrXirCallStatus status = call->result.status;
@@ -811,6 +840,7 @@ XR_FUNC XrXirCallStatus xr_xir_call_take_outcome(XrXirCall *call, XrXirCallResul
     return status;
 }
 XrXirCallResult xr_xir_call_poll_bounded(XrXirCall *call, uint64_t quantum) {
+    if (!call_owner_current(call)) return (XrXirCallResult){.status = XR_XIR_CALL_BAD_ARGUMENT};
     if (!call || !quantum)
         return call_result(XR_XIR_CALL_BAD_ARGUMENT);
     if (call->driving)
@@ -877,6 +907,7 @@ XrXirCallResult xr_xir_call_poll_bounded(XrXirCall *call, uint64_t quantum) {
 }
 
 XrXirCallStatus xr_xir_call_resume(XrXirCall *call, uint64_t wake) {
+    if (!call_owner_current(call)) return XR_XIR_CALL_BAD_ARGUMENT;
     if (!call)
         return XR_XIR_CALL_BAD_ARGUMENT;
     if (call->driving)
@@ -889,6 +920,7 @@ XrXirCallStatus xr_xir_call_resume(XrXirCall *call, uint64_t wake) {
     return XR_XIR_CALL_READY;
 }
 XR_FUNC XrXirCallStatus xr_xir_call_bind_executor(XrXirCall *call, const XrXirExecutorBinding *binding) {
+    if (!call_owner_current(call)) return XR_XIR_CALL_BAD_ARGUMENT;
     if (!call || !binding || !binding->owner || !binding->activation || !binding->generation || !binding->ticket)
         return XR_XIR_CALL_BAD_ARGUMENT;
     if (call->driving) return XR_XIR_CALL_BUSY;
@@ -899,17 +931,20 @@ XR_FUNC XrXirCallStatus xr_xir_call_bind_executor(XrXirCall *call, const XrXirEx
     return XR_XIR_CALL_READY;
 }
 XR_FUNC bool xr_xir_call_executor_member(const XrXirCall *call, const XrXirExecutorBinding *binding) {
+    if (!call_owner_current(call)) return false;
     return call && binding && binding->owner && binding->activation && binding->generation && binding->ticket &&
         call->executor_owner == binding->owner && call->executor_activation == binding->activation &&
         call->executor_generation == binding->generation && call->executor_ticket == binding->ticket;
 }
 XR_FUNC bool xr_xir_call_driver_failure(const XrXirCall *call, const XrXirExecutorBinding *binding,
     XrXirCallStatus *output) {
+    if (!call_owner_current(call)) return false;
     if (!output || !call || call->driving || !xr_xir_call_executor_member(call, binding)) return false;
     *output = call->abort_reason;
     return true;
 }
 XR_FUNC bool xr_xir_call_task_wait_token(const XrXirCall *call, XrXirTaskWaitToken *output) {
+    if (!call_owner_current(call)) return false;
     if (!call || !output || call->driving || call->result.status != XR_XIR_CALL_SUSPENDED ||
         call->wait.kind != XR_XIR_WAIT_TASK || !call->executor_owner || !call->executor_activation) return false;
     *output = (XrXirTaskWaitToken){{call->executor_owner, call->executor_activation,
@@ -943,6 +978,7 @@ static void unlink_task_wait(XrXirCall *call) {
     call->wait_previous = call->wait_next = NULL; call->wait_linked = false;
 }
 XR_FUNC XrXirCallStatus xr_xir_call_link_task_wait(XrXirCall *call, const XrXirTaskWaitToken *token) {
+    if (!call_owner_current(call)) return XR_XIR_CALL_BAD_ARGUMENT;
     if (!call || !token) return XR_XIR_CALL_BAD_ARGUMENT;
     if (call->driving) return XR_XIR_CALL_BUSY;
     if (!task_wait_token_matches(call, token) || call->wait_linked) return XR_XIR_CALL_BAD_STATE;
@@ -960,6 +996,7 @@ XR_FUNC XrXirCallStatus xr_xir_call_link_task_wait(XrXirCall *call, const XrXirT
 }
 XR_FUNC XrXirCallStatus xr_xir_call_complete_task_wait(XrXirCall *call, const XrXirTaskWaitToken *token,
     XrXirCallResult *outcome) {
+    if (!call_owner_current(call)) return XR_XIR_CALL_BAD_ARGUMENT;
     if (!call || !token || !outcome) return XR_XIR_CALL_BAD_ARGUMENT;
     if (call->driving) return XR_XIR_CALL_BUSY;
     if (!task_wait_token_matches(call, token) || !xr_xir_call_result_valid(outcome) ||
@@ -998,6 +1035,7 @@ XR_FUNC XrXirCallStatus xr_xir_call_complete_task_wait(XrXirCall *call, const Xr
 }
 XR_FUNC XrXirCallStatus xr_xir_call_fail_task_wait(XrXirCall *call, const XrXirTaskWaitToken *token,
     XrXirCallStatus reason) {
+    if (!call_owner_current(call)) return XR_XIR_CALL_BAD_ARGUMENT;
     if (!call || !token) return XR_XIR_CALL_BAD_ARGUMENT;
     if (call->driving) return XR_XIR_CALL_BUSY;
     if (!task_wait_token_matches(call, token) || (reason != XR_XIR_CALL_OOM && reason != XR_XIR_CALL_LIMIT &&
@@ -1010,6 +1048,7 @@ XR_FUNC XrXirCallStatus xr_xir_call_fail_task_wait(XrXirCall *call, const XrXirT
 }
 
 XrXirCallStatus xr_xir_call_wait_request(const XrXirCall *call, uint64_t wake, XrXirWaitRequest *output) {
+    if (!call_owner_current(call)) return XR_XIR_CALL_BAD_ARGUMENT;
     if (!call || !output) return XR_XIR_CALL_BAD_ARGUMENT;
     if (call->driving) return XR_XIR_CALL_BUSY;
     if (call->result.status != XR_XIR_CALL_SUSPENDED || !wake || wake != call->result.wake ||
@@ -1019,6 +1058,7 @@ XrXirCallStatus xr_xir_call_wait_request(const XrXirCall *call, uint64_t wake, X
 }
 
 XrXirCallStatus xr_xir_call_take_result(XrXirCall *call, XrXirValue *output) {
+    if (!call_owner_current(call)) return XR_XIR_CALL_BAD_ARGUMENT;
     if (!call || !output || !boundary_value(*output, XR_XIR_UNIT)) return XR_XIR_CALL_BAD_ARGUMENT;
     if (call->driving) return XR_XIR_CALL_BUSY;
     XrXirCallStatus status = call->result.status;
@@ -1029,6 +1069,7 @@ XrXirCallStatus xr_xir_call_take_result(XrXirCall *call, XrXirValue *output) {
 }
 
 XrXirCallStatus xr_xir_call_request_cancel(XrXirCall *call) {
+    if (!call_owner_current(call)) return XR_XIR_CALL_BAD_ARGUMENT;
     if (!call)
         return XR_XIR_CALL_BAD_ARGUMENT;
     if (call->cleaning)
@@ -1046,6 +1087,7 @@ XrXirCallStatus xr_xir_call_request_cancel(XrXirCall *call) {
 }
 
 XrXirCallStatus xr_xir_call_free(XrXirCall *call) {
+    if (!call_owner_current(call)) return XR_XIR_CALL_BAD_ARGUMENT;
     if (!call)
         return XR_XIR_CALL_READY;
     if (call->driving)

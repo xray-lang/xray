@@ -13,17 +13,18 @@
 #ifndef XXIR_VALUE_INTERNAL_H
 #define XXIR_VALUE_INTERNAL_H
 #include "xxir_value.h"
+#include "xxir_class_observation.h"
 #include "xxir.h"
 #include "../base/xchecks.h"
 #include <stdatomic.h>
 
 /* Storage generations are distinct from logical descriptor kinds. */
-enum { XIR_OBJECT_CLASS = 257u,
+enum { XIR_OBJECT_CLASS = 260u,
        XIR_OBJECT_CELL = 258u,
        XIR_OBJECT_FUNCTION = 259u };
 _Static_assert((uint32_t)XIR_OBJECT_CLASS > (uint32_t)XR_XIR_TYPE_TASK &&
     (uint32_t)XIR_OBJECT_CELL > (uint32_t)XR_XIR_TYPE_TASK && (uint32_t)XIR_OBJECT_FUNCTION > (uint32_t)XR_XIR_TYPE_TASK &&
-    XIR_OBJECT_CLASS != 0x100u && XIR_OBJECT_CELL != 0x100u &&
+    XIR_OBJECT_CLASS != 0x100u && XIR_OBJECT_CLASS != 257u && XIR_OBJECT_CELL != 0x100u &&
     XIR_OBJECT_FUNCTION != 0x100u, "storage tags exclude retired generations");
 _Static_assert(XIR_OBJECT_CLASS != XIR_OBJECT_CELL &&
     XIR_OBJECT_CLASS != XIR_OBJECT_FUNCTION && XIR_OBJECT_CELL != XIR_OBJECT_FUNCTION,
@@ -78,7 +79,12 @@ static inline bool xr_xir_reference_release(_Atomic(uint32_t) *references) {
                 memory_order_acq_rel, memory_order_relaxed)) return count == 1;
     }
 }
+/* Reads only the immutable eight-byte prefix, before current storage access. */
+XR_FUNC bool xr_xir_domain_current(const XrXirDomain *domain);
 XR_FUNC bool xr_xir_domain_retain(XrXirDomain *domain);
+/* Only the actual NEW Instance calls this before any value publication. */
+XR_FUNC XrXirValueStatus xr_xir_domain_class_observation_open(XrXirDomain *domain,
+    uint32_t capacity, XrXirClassObservation **output);
 XR_FUNC void *xr_xir_domain_allocate(XrXirDomain *domain, size_t bytes, XrXirValueStatus *status);
 XR_FUNC void xr_xir_domain_deallocate(XrXirDomain *domain, void *memory, size_t bytes);
 typedef struct XrXirDomainBudgetStats {

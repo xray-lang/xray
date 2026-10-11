@@ -30,7 +30,7 @@ typedef struct XrXirCellPublication {
     uint32_t slot;
 } XrXirCellPublication;
 
-/* Preparation changes no publication or loan state. Commit cannot allocate. */
+/* Cell binding publication is separate from Class object reservation. */
 XR_FUNC XrXirValueStatus xr_xir_cell_publication_prepare(const XrXirValue *cell,
     const XrXirCellPublication *publication);
 XR_FUNC void xr_xir_cell_publication_commit(const XrXirValue *cell,
@@ -44,8 +44,11 @@ XR_FUNC bool xr_xir_cell_unborrowed(const XrXirValue *cell);
 XR_FUNC bool xr_xir_cell_is_projection(const XrXirValue *cell);
 XR_FUNC const XrXirValue *xr_xir_cell_canonical_root(const XrXirValue *cell);
 /* Only the immediate live parent authority may authorize a nested loan. */
+/* Output is zero. Prepare owns a Class reservation until abort or commit;
+ * the caller pins the actual scope and prepays all terminal record work. */
 XR_FUNC XrXirValueStatus xr_xir_cell_loan_prepare(const XrXirValue *cell,
-    const XrXirCellAuthority *parent);
+    const XrXirCellAuthority *parent, XrXirCellLoan *output);
+XR_FUNC void xr_xir_cell_loan_abort(XrXirCellLoan *loan);
 XR_FUNC void xr_xir_cell_loan_commit(const XrXirValue *cell,
     XrXirCellLoan *loan, const XrXirCellAuthority *authority);
 XR_FUNC void xr_xir_cell_loan_release(XrXirCellLoan *loan);
@@ -65,7 +68,7 @@ XR_FUNC XrXirValueStatus xr_xir_cell_project_authorized(XrXirType type,
     XrXirValue *output);
 XR_FUNC XrXirValueStatus xr_xir_cell_loan_prepare_path(const XrXirValue *cell,
     const XrXirCellAuthority *parent, XrXirValueAdmission *admission,
-    XrXirFaultDetail *fault);
+    XrXirFaultDetail *fault, XrXirCellLoan *output);
 XR_FUNC XrXirValueStatus xr_xir_cell_authorized_path_read(const XrXirValue *cell,
     const XrXirCellAuthority *authority, const XrXirValuePath *suffix,
     XrXirValueAdmission *admission, XrXirValue *output, XrXirFaultDetail *fault);

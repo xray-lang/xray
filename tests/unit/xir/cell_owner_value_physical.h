@@ -25,9 +25,15 @@ static size_t cell_owner_find(void *pointer) {
     return i;
 }
 static void *cell_owner_malloc(size_t bytes) {
+#ifdef CELL_OWNER_ALLOCATION_FAIL
+    if (CELL_OWNER_ALLOCATION_FAIL()) return NULL;
+#endif
     void *pointer = xr_malloc(bytes); cell_owner_record(pointer,bytes); return pointer;
 }
 static void *cell_owner_calloc(size_t count, size_t bytes) {
+#ifdef CELL_OWNER_ALLOCATION_FAIL
+    if (CELL_OWNER_ALLOCATION_FAIL()) return NULL;
+#endif
     CHECK(!count || bytes <= SIZE_MAX/count);
     void *pointer = xr_calloc(count,bytes); cell_owner_record(pointer,count*bytes); return pointer;
 }
@@ -40,6 +46,9 @@ static void cell_owner_free(void *pointer) {
     xr_free(pointer);
 }
 static void *cell_owner_realloc(void *pointer, size_t bytes) {
+#ifdef CELL_OWNER_ALLOCATION_FAIL
+    if (CELL_OWNER_ALLOCATION_FAIL()) return NULL;
+#endif
     if (!pointer) { void *result = xr_realloc(NULL,bytes); cell_owner_record(result,bytes); return result; }
     size_t i = cell_owner_find(pointer);
     void *result = xr_realloc(pointer,bytes);

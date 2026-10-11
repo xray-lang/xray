@@ -55,6 +55,7 @@ XR_FUNCDEF void xr_xir_call_result_drop(XrXirCallResult *result) {
     *result = call_result(XR_XIR_CALL_READY);
 }
 XR_FUNCDEF XrXirCallStatus xr_xir_call_discard_inbox(XrXirCallView *view, XrXirType expected) {
+    if (!(!view || call_owner_current(view->activation))) return XR_XIR_CALL_BAD_ARGUMENT;
     if (!xr_xir_call_admission(view) || view->phase != XR_XIR_CALL_NORMAL || view->scope_exit)
         return XR_XIR_CALL_BAD_STATE;
     CallFrame *frame = view->activation->top;

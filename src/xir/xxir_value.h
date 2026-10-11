@@ -14,7 +14,7 @@
 #define XXIR_VALUE_H
 #include "../base/xdefs.h"
 
-#define XR_XIR_VALUE_ABI_VERSION 23u
+#define XR_XIR_VALUE_ABI_VERSION 24u
 #define XR_XIR_CONSTRUCTED_TYPE_BASE 256u
 #define XR_XIR_CONSTRUCTED_TYPE_LIMIT 65536u
 #define XR_XIR_TYPE_PARAMETER_BASE 65536u
@@ -116,8 +116,6 @@ XR_FUNC XrXirValueStatus xr_xir_string_last_index_of(const XrXirValue *value,
 XR_FUNC void xr_xir_owned_slot_clear(void *frame, uint32_t offset);
 XR_FUNC XrXirValueStatus xr_xir_owned_slot_copy(void *frame, uint32_t offset, const XrXirTypeArena *arena,
                                                 XrXirType type, int64_t payload);
-XR_FUNC XrXirValueStatus xr_xir_string_slot_concat(void *frame, uint32_t offset,
-                                                  int64_t left, int64_t right);
 XR_FUNC void xr_xir_owned_slot_move(void *frame, uint32_t offset, XrXirValue *owned);
 typedef struct XrXirFunctionBinding {
     void *owner;
@@ -136,6 +134,10 @@ typedef struct XrXirValueAdmission {
     void *context;
     uint64_t work, scratch_bytes;
 } XrXirValueAdmission;
+
+/* A derived String is charged to the receiving admission Domain. */
+XR_FUNC XrXirValueStatus xr_xir_string_slot_concat(void *frame, uint32_t offset,
+    XrXirValueAdmission *admission, int64_t left, int64_t right);
 /* Admission consumes work before inspecting a value and never publishes it. */
 XR_FUNC XrXirValueStatus xr_xir_value_admit(const XrXirValue *value, XrXirType type,
                                            XrXirValueAdmission *admission);

@@ -51,6 +51,7 @@ static XrXirValueStatus xr_xir_enum_new_graph_operation(XrXirType type, uint32_t
 }
 XR_FUNC XrXirValueStatus xr_xir_enum_new(XrXirType type, uint32_t variant,
     const XrXirValue *fields, uint32_t count, XrXirValueAdmission *admission, XrXirValue *output) {
+    if (!admission_domain_current(admission)) return XR_XIR_VALUE_BAD_ARGUMENT;
     xr_xir_value_graph_begin();
     XrXirValueStatus graph_outcome = xr_xir_enum_new_graph_operation(type, variant, fields, count, admission, output);
     xr_xir_value_graph_end();
@@ -83,6 +84,7 @@ static XrXirValueStatus xr_xir_enum_get_graph_operation(const XrXirValue *value,
 }
 XR_FUNC XrXirValueStatus xr_xir_enum_get(const XrXirValue *value, uint32_t variant,
     uint32_t field, XrXirValueAdmission *admission, XrXirValue *output) {
+    if (!admission_domain_current(admission)) return XR_XIR_VALUE_BAD_ARGUMENT;
     xr_xir_value_graph_begin();
     XrXirValueStatus graph_outcome = xr_xir_enum_get_graph_operation(value, variant, field, admission, output);
     xr_xir_value_graph_end();

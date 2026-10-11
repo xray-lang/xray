@@ -14,7 +14,7 @@ typedef struct ValuePathSlot {
 typedef struct ValuePathWrite {
     XrXirValue candidate;
     unsigned char *publish;
-    bool domain_sensitive;
+    bool domain_sensitive, module_publication;
 } ValuePathWrite;
 
 static XrXirValue path_handle(ValuePathSlot slot) {
@@ -90,8 +90,12 @@ static XrXirValueStatus path_step(ValuePathSlot *slot,
         XrXirValue handle = path_handle(*slot);
         XirObject *object = object_pointer(&handle);
         const XrXirStorageLayout *layout = class_body_layout(object);
-        if (!layout || (((const XirClassObject *)object)->borrow_top && object != borrow_owner) ||
+        if (!layout || (object != borrow_owner &&
+                ((class_origin_state((const XirClassObject *)object) &
+                    (XIR_CLASS_ORIGIN_PREPARED | XIR_CLASS_ORIGIN_BORROWED)) ||
+                    ((const XirClassObject *)object)->borrow_top)) ||
             field >= layout->field_count) return XR_XIR_VALUE_BAD_ARGUMENT;
+        if (write && xr_xir_class_module_storage(&handle)) write->module_publication = true;
         *slot = (ValuePathSlot){node->nominal.fields[field],
             (unsigned char *)((XirClassObject *)object + 1) + layout->field_offsets[field], true};
         return XR_XIR_VALUE_OK;
@@ -144,7 +148,8 @@ static XrXirValueStatus path_begin(const XrXirValuePlace *root,
     return xr_xir_value_admit(&value, root->type, admission);
 }
 static XrXirValueStatus path_store(ValuePathSlot slot,
-    const XrXirValue *value, XrXirValueAdmission *admission) {
+    const XrXirValue *value, XrXirValueAdmission *admission,
+    XrXirClassPublication *publication) {
     /* The incoming tree was admitted once before any ancestor replacement.
      * The final place still requires its exact type and arena. */
     if (!xr_xir_value_argument(value, admission->arena, slot.type)) return XR_XIR_VALUE_BAD_ARGUMENT;
@@ -153,6 +158,7 @@ static XrXirValueStatus path_store(ValuePathSlot slot,
         XrXirValue owned = {0}, previous = path_handle(slot);
         status = xr_xir_value_copy(value, &owned);
         if (status != XR_XIR_VALUE_OK) return status;
+        if (publication) xr_xir_class_publication_commit(publication);
         memcpy(slot.bytes, &owned.payload, sizeof(owned.payload));
         xr_xir_value_drop(&previous); return XR_XIR_VALUE_OK;
     }
@@ -165,6 +171,7 @@ static XrXirValueStatus path_store(ValuePathSlot slot,
     XR_CHECK(storage_cursor_init(admission->arena, (StorageSpan){slot.type, slot.bytes},
         (StorageFrame *)prepared.pack.frames, prepared.pack.capacity, true, &cursor) == XR_XIR_VALUE_OK,
         "inline overwrite reserves release traversal before publication");
+    if (publication) xr_xir_class_publication_commit(publication);
     storage_queue_release(&cursor, UINT64_MAX, &pending);
     if (layout.size) memcpy(slot.bytes, prepared.bytes, layout.size);
     prepared.owns = false; release_pending(pending); storage_prepared_end(&prepared);
@@ -173,6 +180,7 @@ static XrXirValueStatus path_store(ValuePathSlot slot,
 typedef struct ValuePathRoute {
     XrXirValuePath prefix, suffix;
     const XirObject *borrow_owner;
+    bool module_publication;
 } ValuePathRoute;
 static const XrXirValuePathStep *path_route_step(const ValuePathRoute *route, uint32_t i) {
     return i < route->prefix.count ? &route->prefix.steps[i] :
@@ -206,12 +214,13 @@ static XrXirValueStatus xr_xir_value_path_read_graph_operation(const XrXirValueP
     const XrXirValuePath *path, XrXirValueAdmission *admission,
     XrXirValue *output, XrXirFaultDetail *fault) {
     if (!path) return XR_XIR_VALUE_BAD_ARGUMENT;
-    ValuePathRoute route = {*path, {0}, NULL};
+    ValuePathRoute route = {*path, {0}, NULL, false};
     return value_path_read_route(root, &route, admission, output, fault);
 }
 XR_FUNC XrXirValueStatus xr_xir_value_path_read(const XrXirValuePlace *root,
     const XrXirValuePath *path, XrXirValueAdmission *admission,
     XrXirValue *output, XrXirFaultDetail *fault) {
+    if (!admission_domain_current(admission)) return XR_XIR_VALUE_BAD_ARGUMENT;
     xr_xir_value_graph_begin();
     XrXirValueStatus graph_outcome = xr_xir_value_path_read_graph_operation(root, path, admission, output, fault);
     xr_xir_value_graph_end();
@@ -222,7 +231,8 @@ static XrXirValueStatus path_mutate_route(const XrXirValuePlace *root,
     XrXirValueAdmission *admission, XrXirFaultDetail *fault, bool append) {
     if (!admission || !admission->domain || !value) return XR_XIR_VALUE_BAD_ARGUMENT;
     ValuePathSlot slot = {0};
-    ValuePathWrite write = {0};
+    ValuePathWrite write = {.module_publication = route && route->module_publication};
+    XrXirClassPublication publication = {0};
     uint32_t count = 0;
     XrXirValueStatus status = path_route_begin(root, route, admission, &slot, &count, fault);
     if (status != XR_XIR_VALUE_OK) return status;
@@ -233,9 +243,15 @@ static XrXirValueStatus path_mutate_route(const XrXirValuePlace *root,
         if (status != XR_XIR_VALUE_OK) break;
     }
     if (status == XR_XIR_VALUE_OK) {
-        XrXirValuePlace leaf = {slot.type, slot.bytes};
-        status = append ? array_mutate(&leaf, 0, value, true, admission, NULL,
-            true, write.domain_sensitive) : path_store(slot, value, admission);
+        if (write.module_publication)
+            status = xr_xir_class_publication_prepare(value, 1, admission, &publication);
+        if (status == XR_XIR_VALUE_OK) {
+            XrXirValuePlace leaf = {slot.type, slot.bytes};
+            XrXirClassPublication *prepared = publication.operation ? &publication : NULL;
+            const ArrayMutation mutation = {true, true, write.domain_sensitive, prepared};
+            status = append ? array_mutate(&leaf, 0, value, admission, NULL, &mutation) :
+                path_store(slot, value, admission, prepared);
+        }
     }
     if (status == XR_XIR_VALUE_OK && write.publish) {
         XrXirValue previous = {(uint32_t)write.candidate.type, 0, 0};
@@ -243,13 +259,14 @@ static XrXirValueStatus path_mutate_route(const XrXirValuePlace *root,
         memcpy(write.publish, &write.candidate.payload, sizeof(write.candidate.payload));
         write.candidate = (XrXirValue){0}; xr_xir_value_drop(&previous);
     }
-    xr_xir_value_drop(&write.candidate); return status;
+    xr_xir_value_drop(&write.candidate);
+    xr_xir_class_publication_drop(&publication); return status;
 }
 static XrXirValueStatus path_mutate(const XrXirValuePlace *root,
     const XrXirValuePath *path, const XrXirValue *value,
     XrXirValueAdmission *admission, XrXirFaultDetail *fault, bool append) {
     if (!path) return XR_XIR_VALUE_BAD_ARGUMENT;
-    ValuePathRoute route = {*path, {0}, NULL};
+    ValuePathRoute route = {*path, {0}, NULL, false};
     return path_mutate_route(root, &route, value, admission, fault, append);
 }
 static XrXirValueStatus xr_xir_value_path_write_graph_operation(const XrXirValuePlace *root,
@@ -260,6 +277,7 @@ static XrXirValueStatus xr_xir_value_path_write_graph_operation(const XrXirValue
 XR_FUNC XrXirValueStatus xr_xir_value_path_write(const XrXirValuePlace *root,
     const XrXirValuePath *path, const XrXirValue *value,
     XrXirValueAdmission *admission, XrXirFaultDetail *fault) {
+    if (!admission_domain_current(admission)) return XR_XIR_VALUE_BAD_ARGUMENT;
     xr_xir_value_graph_begin();
     XrXirValueStatus graph_outcome = xr_xir_value_path_write_graph_operation(root, path, value, admission, fault);
     xr_xir_value_graph_end();
@@ -273,6 +291,7 @@ static XrXirValueStatus xr_xir_value_path_push_graph_operation(const XrXirValueP
 XR_FUNC XrXirValueStatus xr_xir_value_path_push(const XrXirValuePlace *root,
     const XrXirValuePath *path, const XrXirValue *value,
     XrXirValueAdmission *admission, XrXirFaultDetail *fault) {
+    if (!admission_domain_current(admission)) return XR_XIR_VALUE_BAD_ARGUMENT;
     xr_xir_value_graph_begin();
     XrXirValueStatus graph_outcome = xr_xir_value_path_push_graph_operation(root, path, value, admission, fault);
     xr_xir_value_graph_end();

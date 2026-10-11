@@ -53,14 +53,21 @@ static void metadata_free(void *pointer) {
 #define xr_free(pointer) physical_free(pointer)
 
 /* The production runtime bodies allocate through the independent observer. */
+static void string_instance_retiring(void *pointer);
+#define XIR_RUNTIME_BEFORE_FREE(pointer) string_instance_retiring(pointer)
 #include "xir_runtime_allocations.h"
+#undef XIR_RUNTIME_BEFORE_FREE
+#define XIR_STRING_INSTANCE_IMPLEMENTATION_PRESENT
+#include "xir_string_instance_probe.c"
+#undef XIR_STRING_INSTANCE_IMPLEMENTATION_PRESENT
 #include "xir_source_fixture_owner.h"
 #include "xir_string_fixture.h"
+#include "xir_string_vm_program.h"
 
 static const char left_bytes[]="A\0\xE4\xB8\xAD";
 static const char right_bytes[]="\xF0\x9F\x98\x80!";
 static const char expected_bytes[]="A\0\xE4\xB8\xAD\xF0\x9F\x98\x80!";
-typedef struct StringProbe { XrXirCall *call; unsigned mode, outputs; } StringProbe;
+typedef struct StringProbe { XrXirInstance *instance; unsigned mode, outputs; } StringProbe;
 typedef struct StringRun { size_t sites; XrXirCallStatus status; XrXirValue escaped; } StringRun;
 
 static void bytes_equal(const XrXirValue *value) {
@@ -81,12 +88,7 @@ static XrXirOutputStatus publish_string(void *context, const XrXirOutputGroup *g
     CHECK(group && !group->line && group->count==1);
     CHECK(group->stream==(probe->mode==5 || probe->mode==6 || probe->outputs ? XR_XIR_STDOUT : XR_XIR_STDERR));
     bytes_equal(&group->values[0]); ++probe->outputs;
-    XrXirValue untouched={0};
-    CHECK(xr_xir_call_poll_bounded(probe->call,UINT64_MAX).status==XR_XIR_CALL_BUSY);
-    CHECK(xr_xir_call_take_result(probe->call,&untouched)==XR_XIR_CALL_BUSY && !untouched.type);
-    CHECK(xr_xir_call_free(probe->call)==XR_XIR_CALL_BUSY);
-    if (probe->mode==6 && probe->outputs==3)
-        CHECK(xr_xir_call_request_cancel(probe->call)==XR_XIR_CALL_CANCEL_REQUESTED);
+    xr_string_instance_output_busy(probe->instance,probe->mode==6 && probe->outputs==3);
     return probe->mode==3 ? XR_XIR_OUTPUT_ERROR : XR_XIR_OUTPUT_OK;
 }
 static XrCompileResourceStats observed_stats(const SourceFixtureOwner *owner) {
@@ -107,127 +109,145 @@ static XrXirCallStatus expected_status(unsigned variant, unsigned mode) {
     return variant ? XR_XIR_CALL_THROWN : XR_XIR_CALL_RETURNED;
 }
 
-/* Preserve the original managed-string allocation scan's order: bind, domain,
- * arena, argument owners, activation and polls, then release every partial owner. */
-static StringRun managed_run(const SourceFixtureOwner *owner, XrXirArtifact *artifact,
-    unsigned variant, unsigned mode, bool escape) {
-    XrXirDomain *domain=NULL; XrXirTypeArena *arena=NULL;
-    XrXirValue arguments[2]={{0},{0}}, owned={0}; XrXirCall *call=NULL;
-    XrXirCallEntry entries[3]; XrXirVmBinding bindings[3];
-    XrXirCallAccounting accounting={0}; XrXirCallConfig config;
-    StringProbe probe={NULL,mode,0}; StringRun run={0,XR_XIR_CALL_OOM,{0}};
+/* Every runtime trial receives a new Instance of one already sealed Program.
+ * Its compiler owner and code lease remain unchanged across the whole sweep. */
+static StringRun managed_run(const SourceFixtureOwner *owner,XrXirProgram *program,
+    unsigned variant,unsigned mode,bool escape) {
+    XrXirDomain *domain=NULL,*input_domain=NULL;XrXirInstance *instance=NULL;
+    XrXirValue arguments[2]={{0},{0}},owned={0};
+    StringProbe probe={NULL,mode,0};StringRun run={0,XR_XIR_CALL_OOM,{0}};
+    XrXirCallStatus retirement=XR_XIR_CALL_READY;
     bool injected=runtime_fail_at!=SIZE_MAX;
     XrCompileResourceStats metadata_base=observed_stats(owner);
-    CHECK(xr_xir_call_config_init(&config,sizeof(config))==XR_XIR_CALL_READY);
-    config.entries=entries; config.entry_count=3; config.byte_limit=65536;
-    config.poll_limit=mode==5 ? 15 : 100; config.depth_limit=10; config.accounting=&accounting;
-    config.output=mode==4 ? (XrXirOutputProvider){0} :
+    XrXirInstanceConfig config;
+    CHECK(xr_xir_instance_config_init(&config,sizeof(config))==XR_XIR_CALL_READY);
+    config.metadata_limit=65536;config.value_limit=mode==8?240:65536;config.call_limit=65536;
+    config.poll_limit=mode==5?15:100;config.depth_limit=10;
+    config.output=mode==4?(XrXirOutputProvider){0}:
         (XrXirOutputProvider){XR_XIR_CALL_ABI_VERSION,0,publish_string,&probe};
-    for (uint32_t i=0;i<3;++i) {
-        XrXirStatus status=xr_xir_compile_vm_bind(artifact,i,&bindings[i],&entries[i]);
-        CHECK(status==XR_XIR_OK);
+    XrXirCallStatus admitted=xr_xir_instance_new(program,&config,&instance);
+    if (admitted!=XR_XIR_CALL_READY) { CHECK(admitted==XR_XIR_CALL_OOM && injected && !instance);goto done; }
+    probe.instance=instance;domain=xr_string_instance_domain(instance);
+    XrXirValueStatus value_status=XR_XIR_VALUE_OK;
+    if (mode==8 || mode==9) {
+        value_status=xr_xir_domain_new(65536,&input_domain);
+        if (value_status!=XR_XIR_VALUE_OK) { CHECK(value_status==XR_XIR_VALUE_OOM && injected);goto done; }
     }
-    XrXirValueStatus value_status=xr_xir_domain_new(mode==8 ? 240 : 65536,&domain);
-    if (value_status!=XR_XIR_VALUE_OK) { CHECK(value_status==XR_XIR_VALUE_OOM && injected); goto done; }
-    CHECK(error_fixture_arena(&owner->context,&arena)==XR_XIR_VALUE_OK);
-    config.admission=error_fixture_admission(domain,arena);
-    value_status=xr_xir_string_new(domain,left_bytes,sizeof(left_bytes)-1,&arguments[0]);
-    if (value_status!=XR_XIR_VALUE_OK) { CHECK(value_status==XR_XIR_VALUE_OOM && injected); goto done; }
-    value_status=xr_xir_string_new(domain,right_bytes,sizeof(right_bytes)-1,&arguments[1]);
-    if (value_status!=XR_XIR_VALUE_OK) { CHECK(value_status==XR_XIR_VALUE_OOM && injected); goto done; }
-    XrXirCallStatus admitted=xr_xir_call_new(&config,mode==5 || mode==6 ? 2 : 0,arguments,2,&call);
-    if (admitted!=XR_XIR_CALL_READY) { CHECK(admitted==XR_XIR_CALL_OOM && injected); goto done; }
-    probe.call=call;
-    xr_xir_value_drop(&arguments[0]); xr_xir_value_drop(&arguments[1]);
-    CHECK(xr_xir_call_take_result(call,&owned)==XR_XIR_CALL_BAD_STATE);
-    XrXirCallResult result=xr_xir_call_poll_bounded(call,UINT64_MAX);
-    if (!injected && (mode==0 || mode==1 || mode==2 || mode==7))
+    XrXirDomain *arguments_domain=input_domain?input_domain:domain;
+    value_status=xr_xir_string_new(arguments_domain,left_bytes,sizeof(left_bytes)-1,&arguments[0]);
+    if (value_status!=XR_XIR_VALUE_OK) { CHECK(value_status==XR_XIR_VALUE_OOM && injected);goto done; }
+    value_status=xr_xir_string_new(arguments_domain,right_bytes,sizeof(right_bytes)-1,&arguments[1]);
+    if (value_status!=XR_XIR_VALUE_OK) { CHECK(value_status==XR_XIR_VALUE_OOM && injected);goto done; }
+    admitted=xr_xir_instance_start(instance,mode==5 || mode==6?2:0,arguments,2);
+    if (admitted!=XR_XIR_CALL_READY) { CHECK(admitted==XR_XIR_CALL_OOM && injected);goto done; }
+    xr_xir_value_drop(&arguments[0]);xr_xir_value_drop(&arguments[1]);
+    CHECK(xr_xir_instance_take_result(instance,&owned)==XR_XIR_CALL_BAD_STATE && !owned.type);
+    XrXirInstanceResult polled=xr_xir_instance_poll_bounded(instance,UINT64_MAX);
+    XrXirCallResult result=polled.outcome;
+    if (!injected && (mode==0 || mode==1 || mode==2 || mode==7 || mode==9))
         CHECK(result.status==XR_XIR_CALL_SUSPENDED && probe.outputs==1);
     if (result.status==XR_XIR_CALL_SUSPENDED) {
-        CHECK(probe.outputs==1 && xr_xir_call_take_result(call,&owned)==XR_XIR_CALL_BAD_STATE);
+        CHECK(probe.outputs==1 && xr_xir_instance_take_result(instance,&owned)==XR_XIR_CALL_BAD_STATE);
         if (mode!=2) {
-            if (mode==1) CHECK(xr_xir_call_request_cancel(call)==XR_XIR_CALL_CANCEL_REQUESTED);
-            else CHECK(xr_xir_call_resume(call,result.wake)==XR_XIR_CALL_READY);
-            result=xr_xir_call_poll_bounded(call,UINT64_MAX);
+            if (mode==1) CHECK(xr_xir_instance_cancel_current(instance)==XR_XIR_CALL_CANCEL_REQUESTED);
+            else CHECK(xr_xir_instance_resume(instance,polled.epoch,result.wake)==XR_XIR_CALL_READY);
+            result=xr_xir_instance_poll_bounded(instance,UINT64_MAX).outcome;
         }
     }
     run.status=result.status;
-    CHECK(run.status==(injected ? XR_XIR_CALL_OOM : expected_status(variant,mode)));
-    run.sites=runtime_attempts; runtime_fail_at=SIZE_MAX;
+    CHECK(run.status==(injected?XR_XIR_CALL_OOM:expected_status(variant,mode)));
+    if (run.status!=XR_XIR_CALL_SUSPENDED) {
+        retirement=xr_string_instance_completion(instance);
+        XrXirCallStatus expected=run.status==XR_XIR_CALL_OOM?XR_XIR_CALL_OOM:
+            mode==3 || mode==4?XR_XIR_CALL_OUTPUT_ERROR:mode==5 || mode==8?XR_XIR_CALL_LIMIT:XR_XIR_CALL_READY;
+        CHECK(retirement==expected);
+    }
+    run.sites=runtime_attempts;runtime_fail_at=SIZE_MAX;
     if (run.status==XR_XIR_CALL_RETURNED || run.status==XR_XIR_CALL_THROWN) {
-        if (variant) error_bytes_equal(&result.value,domain); else bytes_equal(&result.value);
+        if (variant) error_bytes_equal(&result.value,domain);else bytes_equal(&result.value);
         if (mode!=7) {
-            CHECK(xr_xir_call_take_result(call,&owned)==run.status);
-            CHECK(xr_xir_call_poll_bounded(call,UINT64_MAX).status==XR_XIR_CALL_CONSUMED);
+            CHECK(xr_xir_instance_take_result(instance,&owned)==run.status);
+            CHECK(xr_xir_instance_poll_bounded(instance,UINT64_MAX).outcome.status==XR_XIR_CALL_CONSUMED);
             XrXirValue second={0};
-            CHECK(xr_xir_call_take_result(call,&second)==XR_XIR_CALL_BAD_STATE && !second.type);
+            CHECK(xr_xir_instance_take_result(instance,&second)==XR_XIR_CALL_BAD_STATE && !second.type);
         }
     }
     if (!injected) {
-        if (mode==0 || mode==7) CHECK(probe.outputs==(variant ? 1u : 2u));
+        if (mode==0 || mode==7 || mode==9) CHECK(probe.outputs==(variant?1u:2u));
         if (mode==1 || mode==2 || mode==3) CHECK(probe.outputs==1);
         if (mode==4 || mode==8) CHECK(!probe.outputs);
         if (mode==5) CHECK(probe.outputs && probe.outputs<15);
         if (mode==6) CHECK(probe.outputs==3);
     }
 done:
-    /* Independent reader allocations are oracle work, outside the failing
-     * activation's measured allocation set; physical accounting still sees them. */
     if (!run.sites) run.sites=runtime_attempts;
     runtime_fail_at=SIZE_MAX;
-    CHECK(xr_xir_call_free(call)==XR_XIR_CALL_READY);
-    CHECK(!accounting.live_bytes && !accounting.depth && accounting.allocations==accounting.frees);
-    xr_xir_compile_type_arena_drop(arena);
-    xr_xir_value_drop(&arguments[0]); xr_xir_value_drop(&arguments[1]); xr_xir_domain_drop(domain);
+    xr_xir_value_drop(&arguments[0]);xr_xir_value_drop(&arguments[1]);
+    if (instance) {
+        XirStringRetirement record=xr_string_instance_retire(instance,retirement,config.poll_limit);
+        CHECK(record.domain==domain);
+        XrXirDomainStats stats=xr_xir_domain_stats(domain);
+        if (!owned.type) CHECK(stats.live_bytes==record.baseline.live_bytes && stats.allocations==stats.frees+1);
+        else CHECK(stats.live_bytes>record.baseline.live_bytes);
+        xr_xir_domain_drop(domain);
+    }
+    xr_xir_domain_drop(input_domain);
     if (owned.type && owned.type!=XR_XIR_STRING) {
-        XrCompileResourceStats held=observed_stats(owner);
-        CHECK(held.live_bytes>metadata_base.live_bytes);
-        XrXirDomain *reader=NULL; CHECK(xr_xir_domain_new(65536,&reader)==XR_XIR_VALUE_OK);
-        error_bytes_equal(&owned,reader); xr_xir_domain_drop(reader);
+        CHECK(xr_xir_value_arena(&owned)==program->arena && xr_xir_value_valid(&owned));
+        XrXirDomain *reader=NULL;CHECK(xr_xir_domain_new(65536,&reader)==XR_XIR_VALUE_OK);
+        error_bytes_equal(&owned,reader);xr_xir_domain_drop(reader);
     } else if (owned.type==XR_XIR_STRING) bytes_equal(&owned);
+    CHECK(observed_stats(owner).live_bytes==metadata_base.live_bytes);
     if (escape) run.escaped=owned;
     else {
         xr_xir_value_drop(&owned);
-        CHECK(observed_stats(owner).live_bytes==metadata_base.live_bytes);
         CHECK(!runtime_live && !runtime_bytes);
     }
     return run;
 }
 static void runtime_allocation_failures(void) {
-    for (unsigned variant=0;variant<2;++variant) for (unsigned mode=0;mode<9;++mode) {
+    for (unsigned variant=0;variant<2;++variant) for (unsigned mode=0;mode<10;++mode) {
         CHECK(!runtime_live && !runtime_bytes); reset_metadata();
         SourceFixtureOwner owner={0}; source_fixture_owner_new(&owner);
-        XrXirArtifact *artifact=string_fixture(&owner.context,variant);
+        XrXirArtifact *artifact=string_fixture(&owner.context,variant);XrXirProgram *program=NULL;
+        CHECK(string_vm_program_take(&artifact,NULL,&program)==XR_XIR_OK && program && !artifact);
         runtime_fail_at=SIZE_MAX; runtime_attempts=0;
-        StringRun baseline=managed_run(&owner,artifact,variant,mode,false);
+        StringRun baseline=managed_run(&owner,program,variant,mode,false);
         CHECK(baseline.sites && baseline.status==expected_status(variant,mode));
         for (size_t failure=0;failure<baseline.sites;++failure) {
             runtime_fail_at=failure; runtime_attempts=0;
-            StringRun rejected=managed_run(&owner,artifact,variant,mode,false);
+            StringRun rejected=managed_run(&owner,program,variant,mode,false);
             CHECK(rejected.status==XR_XIR_CALL_OOM && rejected.sites>failure);
         }
-        xr_xir_compile_artifact_free(artifact); source_fixture_owner_free(&owner);
+        xr_xir_compile_program_drop(program);source_fixture_owner_free(&owner);
         CHECK(!metadata_live && !metadata_bytes && !runtime_live && !runtime_bytes);
         printf("String runtime physical OOM: variant=%u mode=%u actual sites=%zu\n",variant,mode,baseline.sites);
     }
 }
 static void escaped_result_after_artifact(void) {
     for (unsigned variant=0;variant<2;++variant) {
-        reset_metadata(); SourceFixtureOwner owner={0}; source_fixture_owner_new(&owner);
-        XrXirArtifact *artifact=string_fixture(&owner.context,variant);
-        runtime_fail_at=SIZE_MAX; runtime_attempts=0;
-        StringRun run=managed_run(&owner,artifact,variant,0,true);
-        CHECK(run.escaped.type && runtime_live && runtime_bytes);
-        xr_xir_compile_artifact_free(artifact);
+        reset_metadata();SourceFixtureOwner owner={0};source_fixture_owner_new(&owner);
+        XrXirArtifact *artifact=string_fixture(&owner.context,variant);XrXirProgram *program=NULL;
+        CHECK(string_vm_program_take(&artifact,NULL,&program)==XR_XIR_OK && program && !artifact);
+        runtime_fail_at=SIZE_MAX;runtime_attempts=0;
+        StringRun runs[2];
+        for (uint32_t i=0;i<2;++i) {
+            runs[i]=managed_run(&owner,program,variant,0,true);
+            CHECK(runs[i].escaped.type && runtime_live && runtime_bytes);
+        }
+        xr_xir_compile_program_drop(program);
         XrCompileResourceStats held=observed_stats(&owner);
-        CHECK(variant ? held.live_bytes>owner.baseline.live_bytes : held.live_bytes==owner.baseline.live_bytes);
-        if (variant) {
-            XrXirDomain *reader=NULL; CHECK(xr_xir_domain_new(65536,&reader)==XR_XIR_VALUE_OK);
-            error_bytes_equal(&run.escaped,reader); xr_xir_domain_drop(reader);
-        } else bytes_equal(&run.escaped);
-        xr_xir_value_drop(&run.escaped);
+        CHECK(variant?held.live_bytes>owner.baseline.live_bytes:held.live_bytes==owner.baseline.live_bytes);
+        for (uint32_t i=0;i<2;++i) {
+            if (variant) {
+                XrXirDomain *reader=NULL;CHECK(xr_xir_domain_new(65536,&reader)==XR_XIR_VALUE_OK);
+                error_bytes_equal(&runs[i].escaped,reader);xr_xir_domain_drop(reader);
+            } else bytes_equal(&runs[i].escaped);
+            xr_xir_value_drop(&runs[i].escaped);
+            if (!i) CHECK(runtime_live && runtime_bytes);
+        }
         CHECK(!runtime_live && !runtime_bytes);
-        source_fixture_owner_free(&owner); CHECK(!metadata_live && !metadata_bytes);
+        source_fixture_owner_free(&owner);CHECK(!metadata_live && !metadata_bytes);
     }
 }
 /* This is a separate actual metadata fault scan, rather than attributing
@@ -269,8 +289,9 @@ static void metadata_allocation_failures(void) {
     for (size_t failure=0;failure<sites;++failure) metadata_arena_run(failure);
     printf("String Error metadata actual allocation OOM: ledger+arena sites=%zu\n",sites);
 }
+#include "xir_string_factory_cases.h"
 int main(void) {
-    runtime_allocation_failures(); escaped_result_after_artifact(); metadata_allocation_failures();
+    string_factory_failures();runtime_allocation_failures();escaped_result_after_artifact();metadata_allocation_failures();
     CHECK(!metadata_live && !metadata_bytes && !runtime_live && !runtime_bytes);
     puts("Independent string bytes, runtime and metadata OOM, cancellation and escaped Error physical zero");
     return 0;
