@@ -210,7 +210,7 @@ static XrXirStatus effect_invocation_expand(EffectInvocationOwner *owner,
         uint32_t dependencies=(uint32_t)(((uint64_t)flow.basis.parameters+63)/64);
         uint32_t contexts=(uint32_t)(((uint64_t)flow.function->instruction_count+63)/64);
         uint64_t words=(uint64_t)dependencies*2+contexts;
-        if (!xir_compile_work(owner->work,8)) return XR_XIR_BUDGET;
+        if (!xir_compile_work(owner->work,9)) return XR_XIR_BUDGET;
         if (!effect_invocation_node_shape(record,flow.basis.parameters,
             flow.function->instruction_count)) return XR_XIR_BAD_STRUCTURE;
         if (!xir_compile_work(owner->work,words*sizeof(uint64_t)+

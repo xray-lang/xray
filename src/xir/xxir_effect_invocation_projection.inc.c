@@ -72,7 +72,7 @@ static XrXirStatus effect_invocation_projection_domains(const XrXirCompileContex
     if (node->root>=effect_body_count(certificate->body) || node->body>=effect_body_count(certificate->body))
         return XR_XIR_BAD_STRUCTURE;
     uint32_t parameters=certificate->body->functions[node->root].parameter_count;
-    if (!xir_compile_work(work,8)) return XR_XIR_BUDGET;
+    if (!xir_compile_work(work,9)) return XR_XIR_BUDGET;
     if (!effect_invocation_node_shape(node,parameters,
         certificate->body->functions[node->body].instruction_count)) return XR_XIR_BAD_STRUCTURE;
     if (!xir_compile_work(work,(uint64_t)width*sizeof(*output))) return XR_XIR_BUDGET;
@@ -117,7 +117,7 @@ static XrXirStatus effect_invocation_projection_select(const XrXirCompileContext
     if (node->root>=effect_body_count(certificate->body) || node->body>=effect_body_count(certificate->body))
         return XR_XIR_BAD_STRUCTURE;
     uint32_t parameters=certificate->body->functions[node->root].parameter_count;
-    if (!xir_compile_work(work,8)) return XR_XIR_BUDGET;
+    if (!xir_compile_work(work,9)) return XR_XIR_BUDGET;
     if (!effect_invocation_node_shape(node,parameters,
         certificate->body->functions[node->body].instruction_count)) return XR_XIR_BAD_STRUCTURE;
     uint32_t bit=(domain&1)?XR_XIR_CALLABLE_ROOT_UNRESOLVED:XR_XIR_CALLABLE_ROOT_REQUIRED;

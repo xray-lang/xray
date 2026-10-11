@@ -199,7 +199,7 @@ static XrXirStatus effect_invocation_certificate_cause(const XrXirCompileContext
         if (!xir_compile_work(work,10)) return XR_XIR_BUDGET;
         if (current>=equations->count || ++walked>equations->count) return XR_XIR_BAD_STRUCTURE;
         const EffectInvocationNode *node=&equations->nodes[current];
-        if (!xir_compile_work(work,8)) return XR_XIR_BUDGET;
+        if (!xir_compile_work(work,9)) return XR_XIR_BUDGET;
         if (node->root!=root || node->body>=effect_body_count(certificate->body) || atom>=node->cause_count ||
             !effect_invocation_node_shape(node,parameters,certificate->body->functions[node->body].instruction_count) ||
             !effect_invocation_local_causes(node) || !effect_invocation_atom(node,parameters,atom,false))
@@ -311,7 +311,7 @@ static XrXirStatus effect_invocation_certificate_node_mask(const XrXirCompileCon
             certificate->body->functions[node->root].parameter_count*2+3)
         return XR_XIR_BAD_STRUCTURE;
     uint32_t parameters=certificate->body->functions[node->root].parameter_count;
-    if (!xir_compile_work(work,8)) return XR_XIR_BUDGET;
+    if (!xir_compile_work(work,9)) return XR_XIR_BUDGET;
     if (!effect_invocation_node_shape(node,parameters,
         certificate->body->functions[node->body].instruction_count)) return XR_XIR_BAD_STRUCTURE;
     uint32_t mask=node->intrinsic_mask;

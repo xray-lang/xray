@@ -128,6 +128,7 @@ static XrXirStatus effect_invocation_class_terminals_match(EffectInvocationFlow 
     if (!owner || flow->node>=owner->count || !flow->physical || !flow->basis.cell_words)
         return XR_XIR_BAD_STRUCTURE;
     const EffectInvocationNode *node=&owner->nodes[flow->node];
+    if (!xir_compile_work(owner->work,1)) return XR_XIR_BUDGET;
     if (!node->expanded || !effect_invocation_node_shape(node,flow->basis.parameters,
         flow->function->instruction_count)) return XR_XIR_BAD_STRUCTURE;
     uint64_t bytes=(uint64_t)flow->basis.cell_words*sizeof(uint64_t);
@@ -196,6 +197,7 @@ static XrXirStatus effect_invocation_cell_local(EffectInvocationFlow *flow,
         witness.instruction!=flow->instruction || witness.callee!=UINT32_MAX ||
         flow->instruction>=flow->function->instruction_count) return XR_XIR_BAD_STRUCTURE;
     EffectInvocationNode *node=&owner->nodes[flow->node];
+    if (!xir_compile_work(owner->work,1)) return XR_XIR_BUDGET;
     if (!node->expanded || atom>=node->cause_count ||
         !effect_invocation_node_shape(node,flow->basis.parameters,flow->function->instruction_count))
         return XR_XIR_BAD_STRUCTURE;

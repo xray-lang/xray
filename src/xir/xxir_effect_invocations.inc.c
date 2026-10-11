@@ -41,7 +41,7 @@ typedef struct EffectInvocationClassFact {
 } EffectInvocationClassFact;
 
 typedef struct EffectInvocationNode {
-    uint32_t root,body,parameter_count;
+    uint32_t root,body,parameter_count,instruction_count;
     uint32_t intrinsic_mask,local_mask,cause_count;
     EffectInvocationCause *causes;
     uint64_t *input,*cells,*local_cells;
@@ -83,7 +83,8 @@ static bool effect_invocation_node_shape(const EffectInvocationNode *node,
     uint64_t dependencies=((uint64_t)parameters+63)/64;
     uint64_t contexts=((uint64_t)instructions+63)/64;
     uint64_t words=dependencies*2+contexts;
-    return node->cause_count==(uint64_t)parameters*2+3 && node->causes &&
+    return node->instruction_count==instructions &&
+        node->cause_count==(uint64_t)parameters*2+3 && node->causes &&
         !!node->cells==!!words && !!node->local_cells==!!words &&
         !!node->parameter_coverage==!!node->parameter_count;
 }

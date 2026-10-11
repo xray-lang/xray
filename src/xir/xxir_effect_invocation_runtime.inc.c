@@ -41,7 +41,7 @@ static XrXirStatus effect_runtime_closed(const EffectInvocationCertificate *cert
         !node->expanded || node->queued || !node->causes ||
         node->cause_count!=(uint64_t)certificate->body->functions[node->root].parameter_count*2+3)
         return XR_XIR_BAD_STRUCTURE;
-    XrXirStatus shape_status=effect_runtime_work(read,8);
+    XrXirStatus shape_status=effect_runtime_work(read,9);
     if (shape_status!=XR_XIR_OK) return shape_status;
     if (!effect_invocation_node_shape(node,certificate->body->functions[node->root].parameter_count,
         certificate->body->functions[node->body].instruction_count)) return XR_XIR_BAD_STRUCTURE;

@@ -86,6 +86,15 @@ static XrXirStatus conditional_generation_counted_instruction(const EffectBodyRe
     return effect_body_owned_instruction(request,function,ordinal,storage,output,fields);
 }
 
+static uint32_t conditional_generation_head_reads;
+static bool conditional_generation_head_refused;
+static XrXirStatus conditional_generation_counted_callee_head(const EffectBodyRequest *request,
+    uint32_t function,EffectBodyFunctionHead *output,EffectBodyFunctionDimensions *dimensions) {
+    ++conditional_generation_head_reads;
+    if (conditional_generation_head_refused) return XR_XIR_BAD_STRUCTURE;
+    return effect_body_owned_head(request,function,output,dimensions);
+}
+
 static XrXirStatus conditional_generation_decoded_controls(const XrXirCompileContext *context,
     EffectInvocationOwner *owner) {
     EffectInvocationFlow flow={.owner=owner,.node=owner->roots[0],.instruction=UINT32_MAX};
@@ -129,14 +138,33 @@ static XrXirStatus conditional_generation_decoded_controls(const XrXirCompileCon
                 }
                 xr_compile_resources_free(arguments);
             }
-            bool closed=false;
-            CHECK(effect_invocation_closed_arguments(&flow,(uint32_t)op->immediate,op,&closed)==XR_XIR_OK &&
-                closed && conditional_generation_instruction_reads==1);
+            CHECK(flow.body.head==effect_body_owned_head);
+            flow.body.head=conditional_generation_counted_callee_head;
+            conditional_generation_head_reads=0;conditional_generation_head_refused=false;
+            bool closed=false;EffectBodyFunctionHead callee;
+            CHECK(effect_invocation_closed_arguments(&flow,(uint32_t)op->immediate,op,&closed,&callee)==XR_XIR_OK &&
+                closed && conditional_generation_instruction_reads==1 && conditional_generation_head_reads==1);
+            CHECK(xir_compile_work(context,sizeof(EffectInvocationActual)));
+            EffectInvocationActual actual={(uint32_t)op->immediate,UINT32_MAX,NULL};
+            uint64_t *current=NULL;
+            CHECK(effect_invocation_arguments_read(&flow,op,&actual,&callee,&current)==XR_XIR_OK &&
+                current && conditional_generation_head_reads==1);
+            size_t current_attempts=rp_attempts;XrCompileResourceStats current_before=rp_stats(context);
+            uint64_t *occupied=current;
+            CHECK(effect_invocation_arguments_read(&flow,op,&actual,&callee,&occupied)==XR_XIR_BAD_STRUCTURE &&
+                occupied==current && rp_attempts==current_attempts && rp_stats(context).work==current_before.work);
+            xr_compile_resources_free(current);current=NULL;
+            conditional_generation_head_refused=true;current_before=rp_stats(context);
+            CHECK(effect_invocation_arguments(&flow,op,(uint32_t)op->immediate,UINT32_MAX,NULL,&current)==
+                XR_XIR_BAD_STRUCTURE && !current && rp_attempts==current_attempts &&
+                rp_stats(context).work==current_before.work && conditional_generation_head_reads==2);
+            conditional_generation_head_refused=false;
             XrXirInstruction malformed=*op;malformed.args[1]++;
             closed=true;size_t attempts=rp_attempts;
-            CHECK(effect_invocation_closed_arguments(&flow,(uint32_t)op->immediate,&malformed,&closed)==
+            CHECK(effect_invocation_closed_arguments(&flow,(uint32_t)op->immediate,&malformed,&closed,&callee)==
                 XR_XIR_BAD_STRUCTURE && closed && rp_attempts==attempts &&
-                conditional_generation_instruction_reads==1);
+                conditional_generation_instruction_reads==1 && conditional_generation_head_reads==3);
+            flow.body.head=effect_body_owned_head;
             bool changed=false;uint32_t edges=owner->edge_count;
             attempts=rp_attempts;XrCompileResourceStats before=rp_stats(context);
             CHECK(effect_invocation_instruction_decoded(&flow,call,NULL,&changed)==XR_XIR_BAD_STRUCTURE &&

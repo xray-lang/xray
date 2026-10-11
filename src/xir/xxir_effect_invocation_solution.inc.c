@@ -52,7 +52,7 @@ static XrXirStatus effect_invocation_closed(EffectInvocationOwner *owner) {
         uint32_t instructions=head.instruction_count;
         uint32_t contexts=(uint32_t)(((uint64_t)instructions+63)/64);
         uint64_t words=(uint64_t)dependencies*2+contexts;
-        if (!xir_compile_work(owner->work,8)) { status=XR_XIR_BUDGET;break; }
+        if (!xir_compile_work(owner->work,9)) { status=XR_XIR_BUDGET;break; }
         if (!effect_invocation_node_shape(node,basis.parameters,instructions)) {
             status=XR_XIR_BAD_STRUCTURE;break;
         }
@@ -78,7 +78,7 @@ static XrXirStatus effect_invocation_closed(EffectInvocationOwner *owner) {
                 owner->nodes[edge.target].root!=node->root) { status=XR_XIR_BAD_STRUCTURE;break; }
             if (edge.latent) continue;
             const EffectInvocationNode *child=&owner->nodes[edge.target];
-            if (!xir_compile_work(owner->work,8)) { status=XR_XIR_BUDGET;break; }
+            if (!xir_compile_work(owner->work,9)) { status=XR_XIR_BUDGET;break; }
             EffectBodyFunctionDimensions child_head={0};
             status=effect_invocation_dimensions(owner,child->body,&child_head);
             if (status!=XR_XIR_OK) break;

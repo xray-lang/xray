@@ -87,6 +87,12 @@ static void conditional_sparse_rejections(EffectInvocationOwner *owner,
     conditional_sparse_physical_bound_rejections(owner,solution);
     conditional_sparse_receiver_rejections(owner,solution,mode);
     EffectInvocationNode *node=&owner->nodes[owner->roots[1]];
+    uint32_t instructions=node->instruction_count;
+    CHECK(instructions==owner->material->functions[node->body].instruction_count && instructions);
+    node->instruction_count=instructions-1;
+    CHECK(effect_invocation_closed(owner)==XR_XIR_BAD_STRUCTURE);
+    node->instruction_count=instructions+1;
+    CHECK(effect_invocation_closed(owner)==XR_XIR_BAD_STRUCTURE);node->instruction_count=instructions;
     uint32_t causes=node->cause_count;node->cause_count=causes-1;
     CHECK(effect_invocation_closed(owner)==XR_XIR_BAD_STRUCTURE);node->cause_count=causes;
     node->cause_count=causes+2;

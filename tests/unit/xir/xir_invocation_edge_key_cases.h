@@ -115,6 +115,29 @@ static void invocation_edge_published_keys(const EffectInvocationOwner *owner,ui
     CHECK(expected);
 }
 
+/* Retained numeric spans never become permission. The sealed current body
+ * independently rejects both a smaller and a larger span after producer death. */
+static void invocation_edge_dimension_controls(const XrXirCompileContext *context,
+    XrXirEffects *effects) {
+    const EffectInvocationCertificate *certificate=effects->invocations;
+    EffectInvocationOwner *owner=certificate->equations;uint32_t pure=UINT32_MAX;
+    for (uint32_t n=0;n<owner->count;++n) {
+        EffectInvocationNode *node=&owner->nodes[n];
+        CHECK(node->instruction_count==certificate->body->functions[node->body].instruction_count);
+        if (node->body==2) pure=n;
+    }
+    CHECK(pure<owner->count);EffectInvocationNode *node=&owner->nodes[pure];
+    InvocationDirectRead delegated={context,effects,UINT32_MAX,false};
+    XirEffectRuntimeRead read={.owner=&delegated,.work=invocation_direct_work};
+    CHECK(effect_runtime_closed(certificate,pure,&read)==XR_XIR_OK);
+    uint32_t held=node->instruction_count;CHECK(held && held<UINT32_MAX);
+    node->instruction_count=held-1;
+    CHECK(effect_runtime_closed(certificate,pure,&read)==XR_XIR_BAD_STRUCTURE);
+    node->instruction_count=held+1;
+    CHECK(effect_runtime_closed(certificate,pure,&read)==XR_XIR_BAD_STRUCTURE);
+    node->instruction_count=held;CHECK(effect_runtime_closed(certificate,pure,&read)==XR_XIR_OK);
+}
+
 /* Both public admission and the infer remain genuine. Error summaries are
  * independently recomputed from owned input after every producer is dead. */
 static XrXirStatus invocation_edge_operation(const XrXirCompileContext *context,
@@ -141,6 +164,7 @@ static XrXirStatus invocation_edge_operation(const XrXirCompileContext *context,
         }
     }
     memset(&cells,0xCE,sizeof(cells));memset(&phi,0xCE,sizeof(phi));
+    if (status==XR_XIR_OK && oracle) invocation_edge_dimension_controls(context,effects);
     EffectTerms terms={0};terms.remaining=context;ErrorFlow flow={0};
     if (status==XR_XIR_OK) {
         flow.body=effect_body_owned_request(context,effects->invocations->body);
@@ -187,10 +211,11 @@ static void invocation_edge_resources(void) {
             XrXirStatus status=invocation_edge_operation(&context,mode,false);
             if (!pass) {
                 CHECK(status==XR_XIR_OK);sites=rp_attempts-first;census=rp_stats(&context);CHECK(sites);
-                printf("INVOCATION_EDGE_CENSUS mode=%u sites=%zu work=%llu allocated=%llu peak=%llu\n",
+                printf("INVOCATION_EDGE_CENSUS mode=%u sites=%zu work=%llu allocated=%llu peak=%llu node_bytes=%zu actual_bytes=%zu head_bytes=%zu\n",
                     mode,sites,(unsigned long long)(census.work-entry.work),
                     (unsigned long long)(census.allocated_bytes-entry.allocated_bytes),
-                    (unsigned long long)census.peak_bytes);
+                    (unsigned long long)census.peak_bytes,sizeof(EffectInvocationNode),
+                    sizeof(EffectInvocationActual),sizeof(EffectBodyFunctionHead));
             } else {
                 CHECK(status==XR_XIR_OUT_OF_MEMORY && rp_injected && rp_attempts-first==pass);
                 CHECK(rp_stats(&context).live_bytes==entry.live_bytes);rp_balanced(retained);

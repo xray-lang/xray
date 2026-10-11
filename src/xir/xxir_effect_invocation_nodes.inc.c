@@ -199,7 +199,11 @@ static XrXirStatus effect_invocation_intern(EffectInvocationOwner *owner,
             if (!xir_compile_work(owner->work,1)) return XR_XIR_BUDGET;
             if (node->input[w]!=input[w]) same=false;
         }
-        if (same) { *output=n;return XR_XIR_OK; }
+        if (same) {
+            if (!xir_compile_work(owner->work,1)) return XR_XIR_BUDGET;
+            if (node->instruction_count!=head.instruction_count) return XR_XIR_BAD_STRUCTURE;
+            *output=n;return XR_XIR_OK;
+        }
     }
     status=effect_invocation_capacity(owner);
     if (status!=XR_XIR_OK) return status;
@@ -244,7 +248,8 @@ static XrXirStatus effect_invocation_intern(EffectInvocationOwner *owner,
     if (status!=XR_XIR_OK) { xr_compile_resources_free(causes);return status; }
     uint32_t at=owner->count;
     owner->nodes[at]=(EffectInvocationNode){.root=root,.body=body,
-        .parameter_count=parameters,.input=owned,.cells=outputs,
+        .parameter_count=parameters,.instruction_count=head.instruction_count,
+        .input=owned,.cells=outputs,
         .causes=causes,.cause_count=(uint32_t)cause_count,.local_cells=local_cells,
         .parameter_coverage=coverage,.edge_head=UINT32_MAX,.classes=classes,.class_count=class_count};
     ++owner->count;
@@ -258,11 +263,14 @@ static XrXirStatus effect_invocation_intern(EffectInvocationOwner *owner,
 static XrXirStatus effect_invocation_edge(EffectInvocationOwner *owner,
     uint32_t caller,uint32_t target,uint32_t instruction,uint32_t producer,bool latent) {
     if (caller>=owner->count || target>=owner->count) return XR_XIR_BAD_STRUCTURE;
-    EffectBodyFunctionDimensions head={0};
-    XrXirStatus read_status=effect_invocation_dimensions(owner,owner->nodes[caller].body,&head);
-    if (read_status!=XR_XIR_OK) return read_status;
+    /* This numeric span was copied from the actual owned head in intern.
+     * Independent closed/seal and every runtime node_shape still compare
+     * it with this generation's complete immutable Material. */
+    if (!xir_compile_work(owner->work,sizeof(uint32_t))) return XR_XIR_BUDGET;
+    uint32_t instructions=owner->nodes[caller].instruction_count;
+    XrXirStatus read_status=XR_XIR_OK;
     if (owner->nodes[caller].root!=owner->nodes[target].root ||
-        instruction>=head.instruction_count ||
+        instruction>=instructions ||
         (producer!=UINT32_MAX && (producer>=owner->site_count ||
             owner->sites[producer].target!=owner->nodes[target].body)))
         return XR_XIR_BAD_STRUCTURE;

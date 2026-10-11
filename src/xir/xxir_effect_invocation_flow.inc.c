@@ -594,14 +594,16 @@ static XrXirStatus effect_invocation_origins_read(EffectInvocationFlow *flow,
     if (!request || flow->node>=owner->count) return XR_XIR_BAD_STRUCTURE;
     if (!xir_compile_work(owner->work,sizeof(flow->body))) return XR_XIR_BUDGET;
     flow->body=*request;
-    EffectInvocationNode identity=owner->nodes[flow->node];
-    XrXirStatus status=effect_invocation_flow_head(flow,identity.body,&flow->head);
+    if (!xir_compile_work(owner->work,2*sizeof(uint32_t)+sizeof(const uint64_t *))) return XR_XIR_BUDGET;
+    uint32_t key_body=owner->nodes[flow->node].body,key_root=owner->nodes[flow->node].root;
+    const uint64_t *key_input=owner->nodes[flow->node].input;
+    XrXirStatus status=effect_invocation_flow_head(flow,key_body,&flow->head);
     if (status!=XR_XIR_OK) return status;
     if (!xir_compile_work(owner->work,1)) return XR_XIR_BUDGET;
     uint32_t root_parameters=flow->head.parameter_count;
-    if (identity.root!=identity.body) {
+    if (key_root!=key_body) {
         EffectBodyFunctionDimensions root={0};
-        status=effect_body_request_dimensions(&flow->body,identity.root,&root);
+        status=effect_body_request_dimensions(&flow->body,key_root,&root);
         if (status!=XR_XIR_OK) return status;
         root_parameters=root.parameter_count;
     }
@@ -612,7 +614,7 @@ static XrXirStatus effect_invocation_origins_read(EffectInvocationFlow *flow,
     if (status!=XR_XIR_OK) return status;
     for (uint32_t p=0;p<flow->function->parameter_count;++p) {
         uint64_t *row=effect_invocation_row(flow,p);
-        const uint64_t *input=identity.input+(size_t)p*flow->basis.row_words;
+        const uint64_t *input=key_input+(size_t)p*flow->basis.row_words;
         if (!row) {
             /* The physical key remains complete. Non-callable formals must
              * not smuggle a callable producer through omitted storage. */
@@ -675,10 +677,12 @@ static XrXirStatus effect_invocation_cell(EffectInvocationFlow *flow,
     EffectInvocationOwner *owner=flow->owner;
     if (flow->node>=owner->count || !output || value>=flow->values)
         return XR_XIR_BAD_STRUCTURE;
-    EffectInvocationNode identity=owner->nodes[flow->node];
+    if (!xir_compile_work(owner->work,sizeof(uint32_t)+sizeof(const uint64_t *))) return XR_XIR_BUDGET;
+    uint32_t key_body=owner->nodes[flow->node].body;
+    const uint64_t *key_input=owner->nodes[flow->node].input;
     XrXirCellOriginView view={0};
     XrXirStatus status=owner->class_enabled ? effect_invocation_class_cell_view(flow,value,&view) :
-        xr_xir_compile_cell_origin_view(owner->work,owner->cells,identity.body,value,&view);
+        xr_xir_compile_cell_origin_view(owner->work,owner->cells,key_body,value,&view);
     if (status!=XR_XIR_OK) return status;
     if (view.word_count!=((uint64_t)view.parameter_count+63)/64 ||
         (!!view.dependencies!=!!view.word_count) ||
@@ -708,7 +712,7 @@ static XrXirStatus effect_invocation_cell(EffectInvocationFlow *flow,
         if (parameter>=flow->function->parameter_count ||
             !xr_xir_type_is_cell(flow->body.domain.types,flow->function->parameters[parameter]))
             return XR_XIR_BAD_STRUCTURE;
-        const uint64_t *row=identity.input+(size_t)parameter*flow->basis.row_words+flow->basis.fn_words;
+        const uint64_t *row=key_input+(size_t)parameter*flow->basis.row_words+flow->basis.fn_words;
         bool present=(row[known/64]&(UINT64_C(1)<<(known%64)))!=0;
         for (uint32_t w=0;w<flow->basis.cell_words;++w) {
             if (!xir_compile_work(owner->work,3)) return XR_XIR_BUDGET;
