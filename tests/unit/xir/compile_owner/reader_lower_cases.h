@@ -248,6 +248,48 @@ static XrXirStatus reader_lower_take_closed(const XrXirCompileContext *context,
     if (status == XR_XIR_OK) status = xr_xir_compile_specialize(template,output,NULL);
     xr_xir_compile_artifact_free(template); return status;
 }
+/* Both independent public admissions reject metadata mutations. The
+ * complete artifact checker also compares every receiving physical row. */
+static void reader_lower_layout_admission(void) {
+    reset(SIZE_MAX); XrCompileResources *owner = NULL;
+    CHECK(xr_compile_resources_new(&reader_lower_caps,&owner)==XR_COMPILE_RESOURCE_OK);
+    XrXirCompileContext context={owner,xr_xir_compile_default_limits()};
+    XrXirArtifact *closed=NULL, *lowered=NULL;
+    CHECK(reader_lower_take_closed(&context,2,&closed)==XR_XIR_OK);
+    CHECK(xr_xir_compile_lower(closed,&target,&lowered,NULL)==XR_XIR_OK);
+    xr_xir_compile_artifact_free(closed); closed=NULL;
+    CHECK(lowered->module.types && lowered->module.types->count && lowered->module.declarations);
+    uint64_t baseline=stats(owner).live_bytes;
+    CHECK(xr_xir_compile_layout_verify(lowered)==XR_XIR_OK);
+    CHECK(xr_xir_compile_artifact_verify(lowered,NULL)==XR_XIR_OK);
+    XrXirTypeNode *node=(XrXirTypeNode *)lowered->module.types->nodes;
+    CHECK(node->kind==XR_XIR_TYPE_NOMINAL && node->result==XR_XIR_UNIT);
+    node->result=XR_XIR_I64;
+    CHECK(xr_xir_compile_layout_verify(lowered)==XR_XIR_BAD_STRUCTURE);
+    CHECK(xr_xir_compile_artifact_verify(lowered,NULL)==XR_XIR_BAD_STRUCTURE);
+    node->result=XR_XIR_UNIT;
+    XrXirFunctionIdentity *identity=(XrXirFunctionIdentity *)lowered->module.declarations->functions;
+    uint32_t module_id=identity->module; identity->module=lowered->module.declarations->module_count;
+    CHECK(xr_xir_compile_layout_verify(lowered)==XR_XIR_BAD_STRUCTURE);
+    CHECK(xr_xir_compile_artifact_verify(lowered,NULL)==XR_XIR_BAD_STRUCTURE);
+    identity->module=module_id;
+    XrXirFunctionLayout *layout=&lowered->layouts[0];
+    uint32_t *fields[]={ (uint32_t *)layout->offsets, &layout->owned_count,
+        &layout->outgoing_count, &layout->path_count, &layout->result.size, &layout->result.alignment };
+    for (unsigned field=0;field<sizeof(fields)/sizeof(fields[0]);++field) {
+        uint32_t saved=*fields[field]; *fields[field]^=1;
+        CHECK(xr_xir_compile_layout_verify(lowered)==XR_XIR_BAD_LAYOUT);
+        CHECK(xr_xir_compile_artifact_verify(lowered,NULL)==XR_XIR_BAD_LAYOUT);
+        *fields[field]=saved;
+        CHECK(stats(owner).live_bytes==baseline);
+    }
+    CHECK(xr_xir_compile_layout_verify(lowered)==XR_XIR_OK);
+    CHECK(xr_xir_compile_artifact_verify(lowered,NULL)==XR_XIR_OK);
+    CHECK(stats(owner).live_bytes==baseline);
+    xr_xir_compile_artifact_free(lowered); CHECK(live_count==1);
+    xr_compile_resources_release(owner); CHECK(!live && !live_count);
+}
+
 static void reader_lower_take_equal(const XrXirArtifact *a, const XrXirArtifact *b) {
     reader_lower_equal(a,b);
     CHECK(a->module.stage == b->module.stage && a->module.linkage_kind == b->module.linkage_kind);
@@ -433,5 +475,5 @@ static void reader_lower_take_cases(void) {
 static void reader_lower_cases(void) {
     reader_lower_rejections(); reader_lower_canonical();
     for (unsigned kind = 0; kind < 2; ++kind) reader_lower_boundaries(kind);
-    reader_lower_take_cases();
+    reader_lower_take_cases(); reader_lower_layout_admission();
 }

@@ -54,11 +54,7 @@ static XrXirStatus path_capacity(const XrXirFunction *function, const XrXirCompi
     }
     return XR_XIR_OK;
 }
-static XrXirStatus layout_structure(const XrXirModule *module, const XrXirCompileContext *context) {
-    XrXirStatus status = xr_xir_compile_types_structure_verify(context, module->types);
-    if (status == XR_XIR_OK) status = xr_xir_compile_declarations_verify(context,
-        module->declarations, module->types, module->function_count, module->linkage_kind);
-    if (status != XR_XIR_OK) return status;
+static XrXirStatus layout_function_bounds(const XrXirModule *module, const XrXirCompileContext *context) {
     for (uint32_t f = 0; f < module->function_count; ++f) {
         if (!xir_compile_work(context, 1)) return XR_XIR_BUDGET;
         const XrXirFunction *function = &module->functions[f];
@@ -66,6 +62,13 @@ static XrXirStatus layout_structure(const XrXirModule *module, const XrXirCompil
         if (slots > UINT32_MAX / 2 || slots > SIZE_MAX / (sizeof(uint32_t) * 2)) return XR_XIR_BUDGET;
     }
     return XR_XIR_OK;
+}
+
+static XrXirStatus layout_structure(const XrXirModule *module, const XrXirCompileContext *context) {
+    XrXirStatus status = xr_xir_compile_types_structure_verify(context, module->types);
+    if (status == XR_XIR_OK) status = xr_xir_compile_declarations_verify(context,
+        module->declarations, module->types, module->function_count, module->linkage_kind);
+    return status == XR_XIR_OK ? layout_function_bounds(module, context) : status;
 }
 
 static XrXirStatus function_layout(XrXirArtifact *artifact, uint32_t index,
@@ -197,6 +200,26 @@ XrXirStatus xr_xir_compile_layout_build(XrXirArtifact *artifact) {
     return XR_XIR_OK;
 }
 
+static XrXirStatus layout_match(const XrXirArtifact *artifact, const XrXirCompileContext *budget) {
+    for (uint32_t f = 0; f < artifact->module.function_count; ++f) {
+        XrXirStatus status = function_layout((XrXirArtifact *) artifact, f, budget, false);
+        if (status != XR_XIR_OK) return status;
+    }
+    return XR_XIR_OK;
+}
+
+/* The calling artifact checker has just completed all metadata admission.
+ * This matcher retains no caller proof and never crosses a request boundary. */
+XR_FUNC XrXirStatus xr_xir_compile_layout_match_verified(const XrXirArtifact *artifact) {
+    if (!artifact) return XR_XIR_BAD_STRUCTURE;
+    if (artifact->module.stage != XR_XIR_LOWERED)
+        return (!artifact->layouts && !artifact->target.architecture && !artifact->target.abi_version) ? XR_XIR_OK : XR_XIR_BAD_LAYOUT;
+    if (!artifact->layouts) return XR_XIR_BAD_LAYOUT;
+    XrXirCompileContext budget = artifact->context;
+    XrXirStatus status = layout_function_bounds(&artifact->module, &budget);
+    return status == XR_XIR_OK ? layout_match(artifact, &budget) : status;
+}
+
 XrXirStatus xr_xir_compile_layout_verify(const XrXirArtifact *artifact) {
     if (!artifact) return XR_XIR_BAD_STRUCTURE;
     XrXirCompileContext compile_state = artifact->context;
@@ -209,10 +232,5 @@ XrXirStatus xr_xir_compile_layout_verify(const XrXirArtifact *artifact) {
     XrXirStatus status = layout_structure(&artifact->module, budget);
     if (status != XR_XIR_OK)
         return status;
-    for (uint32_t f = 0; f < artifact->module.function_count; ++f) {
-        status = function_layout((XrXirArtifact *) artifact, f, budget, false);
-        if (status != XR_XIR_OK)
-            return status;
-    }
-    return XR_XIR_OK;
+    return layout_match(artifact, budget);
 }

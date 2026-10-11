@@ -404,7 +404,7 @@ static XrXirStatus artifact_verify_owned_effects(const XrXirArtifact *artifact,
         xr_xir_compile_artifact_module(artifact),artifact->construction,&owned,diagnostic) :
         xr_xir_compile_verify_v2(&limits,xr_xir_compile_artifact_module(artifact),artifact->construction,diagnostic);
     if (status != XR_XIR_OK) return status;
-    status = xr_xir_compile_layout_verify(artifact);
+    status = xr_xir_compile_layout_match_verified(artifact);
     if (status!=XR_XIR_OK) { xr_xir_compile_effects_free(owned);return transition_error(status,diagnostic); }
     if (output) *output=owned;
     return XR_XIR_OK;

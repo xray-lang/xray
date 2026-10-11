@@ -129,6 +129,9 @@ XR_FUNC XrXirEffect xr_xir_effects_task_creation(const XrXirEffects *effects, ui
 XR_FUNC XrXirStatus xr_xir_compile_layout_build(XrXirArtifact *artifact);
 XR_FUNC XrXirStatus xr_xir_compile_recheck_v2(const XrXirCompileContext *compile_context, const XrXirModule *checked, const XrXirConstruction *construction, XrXirArtifact **output, XrXirDiagnostic *diagnostic);
 XR_FUNC XrXirStatus xr_xir_compile_layout_verify(const XrXirArtifact *artifact);
+/* Only the complete artifact checker in this call supplies the metadata
+ * admission. Every physical row and function bound is still recomputed. */
+XR_FUNC XrXirStatus xr_xir_compile_layout_match_verified(const XrXirArtifact *artifact);
 
 /* Request rejection preserves both slots and charges no work. Acceptance
  * clears the unique input slot; every later failure releases that owner.
