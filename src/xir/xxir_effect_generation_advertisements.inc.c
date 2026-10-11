@@ -143,9 +143,9 @@ static XrXirStatus effect_body_advertisements_value(EffectBodyAdvertisementBuild
     if (builder->next==builder->bounds->functions[function].values) { ++builder->function;builder->open=false; }
     return XR_XIR_OK;
 }
-/* Only a declaration-identical non-generic definition can aggregate a
- * constant scalar span. INSTANCE and original advertisement vectors always
- * consume their complete original per-value correspondence. */
+/* Only a declaration-identical non-generic definition can aggregate its
+ * advertisement intake. Other scopes keep every original per-value proof;
+ * the independent Cell/physical span does not grant any declared bound. */
 static bool effect_body_advertisements_span_ready(const EffectBodyAdvertisementBuilder *builder,uint32_t f) {
     if (!builder || !builder->open || f!=builder->function || f>=builder->bounds->count ||
         builder->instructions || (builder->source->provenance &&
@@ -155,8 +155,9 @@ static bool effect_body_advertisements_span_ready(const EffectBodyAdvertisementB
 }
 static XrXirStatus effect_body_advertisements_span(EffectBodyAdvertisementBuilder *builder,
     uint32_t f,uint32_t value,uint32_t count,XrXirType actual) {
-    if (!effect_body_advertisements_span_ready(builder,f) || !count || value!=builder->next ||
-        value>=builder->bounds->functions[f].values || count>builder->bounds->functions[f].values-value)
+    if (!builder || !builder->open || f!=builder->function || f>=builder->bounds->count ||
+        !count || value!=builder->next || value>=builder->bounds->functions[f].values ||
+        count>builder->bounds->functions[f].values-value)
         return XR_XIR_BAD_STRUCTURE;
     const XrXirFunction *body=&builder->source->functions[f];
     if (value<body->parameter_count || value-body->parameter_count>=body->instruction_count ||
@@ -164,6 +165,15 @@ static XrXirStatus effect_body_advertisements_span(EffectBodyAdvertisementBuilde
         (actual!=XR_XIR_UNIT && actual!=XR_XIR_BOOL && actual!=XR_XIR_I64 &&
         actual!=XR_XIR_F64 && actual!=XR_XIR_RUNE) || xr_xir_callable_signature(builder->source->types,actual))
         return XR_XIR_BAD_TYPE;
+    if (!effect_body_advertisements_span_ready(builder,f)) {
+        if (!xir_compile_work(builder->work,7)) return XR_XIR_BUDGET;
+        for (uint32_t i=0;i<count;++i) {
+            if (!xir_compile_work(builder->work,1)) return XR_XIR_BUDGET;
+            XrXirStatus status=effect_body_advertisements_value(builder,f,value+i,actual);
+            if (status!=XR_XIR_OK) return status;
+        }
+        return XR_XIR_OK;
+    }
     if (!xir_compile_work(builder->work,7+sizeof(builder->next))) return XR_XIR_BUDGET;
     builder->next+=count;
     if (builder->next==builder->bounds->functions[f].values) { ++builder->function;builder->open=false; }

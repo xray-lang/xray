@@ -122,6 +122,7 @@ static XrXirStatus cell_body_read_operation(const XrXirCompileContext *context,u
         source=&scalar_source.module;material.module=&scalar_material.module;
     }
     XrXirCellProofBodyRead request=cell_body_read_request(context,&material);
+    CHECK(!request.span);
     XrXirCellProvenance *proof=NULL;
     XrXirStatus status=xir_fixture_verify(context,source,NULL);
     if (status==XR_XIR_OK) status=xir_fixture_verify(context,material.module,NULL);

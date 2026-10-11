@@ -898,7 +898,14 @@ XR_FUNC XrXirStatus xir_cell_proof_builder_function(XrXirCellProofBuilder *build
     if (!builder->open || f!=builder->function || builder->value!=count) {
         cell_proof_error(build,f,UINT32_MAX,XR_XIR_BAD_STRUCTURE);return build->status;
     }
-    if (builder->body.span && !cell_proof_builder_span_end(builder,f)) return build->status;
+    if (builder->body.span) {
+        if (!cell_proof_work(build,2)) return build->status;
+        /* Only a successful numeric span advance needs the new prefix EOF
+         * check. A nonempty scalar function still completes its original
+         * full writer; an empty function has no scalar row to prove EOF. */
+        if ((!builder->head.instruction_count || builder->span.next) &&
+            !cell_proof_builder_span_end(builder,f)) return build->status;
+    }
     if (builder->tracked && count>UINT32_MAX-builder->values) {
         cell_proof_error(build,f,UINT32_MAX,XR_XIR_BUDGET);return build->status;
     }

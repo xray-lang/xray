@@ -471,6 +471,22 @@ static void conditional_compact_builder_spans(const XrXirCompileContext *context
     cursor.function=sentinel.function=0;
     CHECK(request->span(context,request->owner,0,0,2,&cursor)==XR_XIR_BAD_TYPE &&
         !memcmp(&cursor,&sentinel,sizeof(cursor)));
+    /* A zero supplied head has no scalar row. It must still be rejected
+     * against the genuine nonempty owned head before any provider escapes. */
+    uint64_t empty_held=rp_stats(context).live_bytes;
+    XrXirCellProofBodyHead empty={0};
+    CHECK(request->head(context,request->owner,0,&empty)==XR_XIR_OK);
+    empty.instruction_count=0;
+    XrXirCellProofBuilder *empty_builder=NULL;XrXirCellProvenance *empty_output=NULL;
+    CHECK(xir_cell_proof_builder_begin(context,request,&empty_builder)==XR_XIR_OK);
+    CHECK(xir_cell_proof_builder_head(empty_builder,0,&empty)==XR_XIR_OK);
+    CHECK(xir_cell_proof_builder_function(empty_builder,0)==XR_XIR_BAD_STRUCTURE);
+    XrCompileResourceStats empty_retry=rp_stats(context);
+    CHECK(xir_cell_proof_builder_function(empty_builder,0)==XR_XIR_BAD_STRUCTURE);
+    XrCompileResourceStats empty_after=rp_stats(context);
+    CHECK(!memcmp(&empty_retry,&empty_after,sizeof(empty_retry)));
+    CHECK(xir_cell_proof_builder_finish(&empty_builder,&empty_output)==XR_XIR_BAD_STRUCTURE &&
+        !empty_builder && !empty_output && rp_stats(context).live_bytes==empty_held);
     for (uint32_t mode=0;mode<9;++mode) {
         uint64_t held_bytes=rp_stats(context).live_bytes;
         XrXirCellProofBuilder *builder=NULL;XrXirCellProvenance *output=NULL;
@@ -487,7 +503,10 @@ static void conditional_compact_builder_spans(const XrXirCompileContext *context
                 CHECK(xir_cell_proof_builder_instruction(builder,f,head.parameter_count+i,
                     actual.type,actual.op,actual.type)==XR_XIR_OK);
             }
+            XrCompileResourceStats scalar_end=rp_stats(context);
             CHECK(xir_cell_proof_builder_function(builder,f)==XR_XIR_OK);
+            CHECK(rp_stats(context).work-scalar_end.work==
+                2+8+sizeof(uint64_t)+sizeof(uint32_t)+sizeof(bool));
         }
         XrXirCellProofBodyHead head={0};
         CHECK(request->head(context,request->owner,3,&head)==XR_XIR_OK && !head.parameter_count && head.instruction_count==3);
@@ -577,6 +596,9 @@ static void conditional_compact_cell_attacks(const XrXirCompileContext *context,
 
 /* The public effects constructor receives genuine owned Checked input. Both
  * raw and Checked producers die before replay, lookups and adversarial checks. */
+static void conditional_compact_refinement_span(const XrXirCompileContext *context,
+    const XrXirModule *source);
+
 static XrXirStatus conditional_compact_owned(const XrXirCompileContext *context,bool oracle) {
     InvocationDeferredFixture fixture;invocation_deferred_fixture(&fixture,0);
     fixture.init[0]=(XrXirInstruction){.op=XR_XIR_CONST_INT,.type=XR_XIR_I64,.immediate=1};
@@ -604,6 +626,7 @@ static XrXirStatus conditional_compact_owned(const XrXirCompileContext *context,
         CHECK(rp_stats(context).work-raw_before.work==2+sizeof(raw_operation) &&
             rp_stats(context).allocation_count==raw_before.allocation_count && rp_stats(context).live_bytes==raw_before.live_bytes);
         conditional_compact_dimensions(context,&raw);CHECK(!body_read.span);
+        conditional_compact_refinement_span(context,original);
         XrXirModule changed=*original;XrXirFunction functions[4];XrXirInstruction entry[5];
         memcpy(functions,original->functions,sizeof(functions));memcpy(entry,functions[0].instructions,sizeof(entry));
         functions[0].instructions=entry;changed.functions=functions;entry[0].immediate=99;
@@ -664,6 +687,136 @@ static XrXirStatus conditional_compact_owned(const XrXirCompileContext *context,
     xr_xir_compile_effects_free(effects);return status;
 }
 
+/* Two genuine declaration paths use the same old per-value bounds as their
+ * independent oracle. This helper changes no allocation or failure engine. */
+static XrXirStatus conditional_compact_advertisements(const XrXirCompileContext *context,
+    const XrXirModule *source,EffectRefinementBounds *refinement,bool spans,
+    EffectInvocationDeclaredBounds **output) {
+    EffectBodyAdvertisementBuilder *builder=NULL;
+    XrXirStatus status=effect_body_advertisements_begin(context,source,refinement,&builder);
+    for (uint32_t f=0;status==XR_XIR_OK && f<source->function_count;++f) {
+        const XrXirFunction *function=&source->functions[f];
+        status=effect_body_advertisements_function(builder,f);
+        for (uint32_t v=0;status==XR_XIR_OK && v<function->parameter_count;++v)
+            status=effect_body_advertisements_value(builder,f,v,function->parameters[v]);
+        for (uint32_t i=0;status==XR_XIR_OK && i<function->instruction_count;++i) {
+            const XrXirInstruction *operation=&function->instructions[i];
+            if (spans && i==0 && function->instruction_count>=2 &&
+                operation->op==XR_XIR_CONST_INT && operation->type==XR_XIR_I64 &&
+                function->instructions[1].op==XR_XIR_CONST_INT && function->instructions[1].type==XR_XIR_I64) {
+                status=effect_body_advertisements_span(builder,f,function->parameter_count,2,XR_XIR_I64);++i;
+            } else status=effect_body_advertisements_value(builder,f,function->parameter_count+i,operation->type);
+        }
+    }
+    if (status==XR_XIR_OK) status=effect_body_advertisements_finish(&builder,output);
+    effect_body_advertisements_free(builder);return status;
+}
+static void conditional_compact_advertisement_pair(const XrXirCompileContext *context,
+    const XrXirModule *source,EffectRefinementBounds *refinement) {
+    uint64_t held_bytes=rp_stats(context).live_bytes;
+    EffectInvocationDeclaredBounds *scalar=NULL,*span=NULL;
+    CHECK(conditional_compact_advertisements(context,source,refinement,false,&scalar)==XR_XIR_OK && scalar);
+    CHECK(conditional_compact_advertisements(context,source,refinement,true,&span)==XR_XIR_OK && span);
+    CHECK(scalar->count==source->function_count && span->count==scalar->count);
+    for (uint32_t f=0;f<scalar->count;++f) {
+        const EffectInvocationFunctionBounds *a=&scalar->functions[f],*b=&span->functions[f];
+        CHECK(a->values==b->values && a->count==b->count);
+        for (uint32_t v=0;v<a->count;++v) CHECK(a->bounds[v].value==b->bounds[v].value &&
+            a->bounds[v].mask==b->bounds[v].mask && a->bounds[v].callable==b->bounds[v].callable);
+    }
+    effect_invocation_bounds_free(scalar);effect_invocation_bounds_free(span);
+    CHECK(rp_stats(context).live_bytes==held_bytes);
+}
+static void conditional_compact_refinement_span(const XrXirCompileContext *context,
+    const XrXirModule *source) {
+    uint64_t held_bytes=rp_stats(context).live_bytes;
+    XrXirEffects captured={.resources=context->resources,.count=source->function_count};
+    CHECK(xir_effects_refinement_capture(context,source,&captured)==XR_XIR_OK && captured.refinement);
+    conditional_compact_advertisement_pair(context,source,captured.refinement);
+    EffectBodyMaterial *material=NULL;
+    CHECK(effect_body_material_generation(context,source,captured.refinement,&material)==XR_XIR_OK && material);
+    CHECK(effect_body_source_match(context,material,source)==XR_XIR_OK);
+    effect_body_material_free(material);
+    XrXirType *declared=(XrXirType *)captured.refinement->functions[3].instructions;
+    CHECK(source->functions[3].instruction_count==3 && declared[0]==XR_XIR_I64 && declared[1]==XR_XIR_I64);
+    XrXirType saved=declared[1];declared[1]=(XrXirType)257;
+    CHECK(xr_xir_callable_signature(source->types,declared[1]));
+    uint64_t retained=rp_stats(context).live_bytes;
+    for (uint32_t spans=0;spans<2;++spans) {
+        EffectInvocationDeclaredBounds *output=NULL;
+        CHECK(conditional_compact_advertisements(context,source,captured.refinement,spans!=0,&output)==
+            XR_XIR_BAD_TYPE && !output && rp_stats(context).live_bytes==retained);
+    }
+    declared[1]=saved;conditional_compact_advertisement_pair(context,source,captured.refinement);
+    effect_refinement_free(captured.refinement);CHECK(rp_stats(context).live_bytes==held_bytes);
+}
+/* The open forward definition has a real interface constraint, and specialize
+ * supplies real INSTANCE origins/arguments. No phantom generic or fake evidence
+ * selects this path. The two constants precede its original requirement call. */
+static void conditional_compact_instance_span(void) {
+    RootParameterMark physical=rp_mark();XrXirCompileContext context=rp_owner(rp_caps());
+    uint64_t held_bytes=rp_stats(&context).live_bytes;
+    ConditionalRawFixture fixture;conditional_raw_fixture(&fixture,2);
+    XrXirInstruction forward[4]={
+        {.op=XR_XIR_CONST_INT,.type=XR_XIR_I64,.immediate=1},
+        {.op=XR_XIR_CONST_INT,.type=XR_XIR_I64,.immediate=2},
+        fixture.forward_ops[0],{.op=XR_XIR_RETURN,.args={4,0}}};
+    fixture.functions[1].instructions=forward;fixture.functions[1].instruction_count=4;
+    /* The raw internal fixture has no CFG and its caller takes arguments.
+     * A complete Artifact needs genuine blocks and a separate I64 entry. */
+    XrXirInstruction entry[2]={{.op=XR_XIR_CONST_INT,.type=XR_XIR_I64,.immediate=7},
+        {.op=XR_XIR_RETURN,.args={0,0}}};
+    XrXirFunction functions[5]={0};XrXirGeneric generics[5]={0};
+    XrXirFunctionIdentity identities[5]={0};XrXirBlock blocks[5]={0};
+    memcpy(functions,fixture.functions,sizeof(fixture.functions));
+    memcpy(generics,fixture.generics,sizeof(fixture.generics));
+    memcpy(identities,fixture.identities,sizeof(fixture.identities));
+    functions[4]=(XrXirFunction){.name="entry",.name_length=5,.result=XR_XIR_I64,
+        .instructions=entry,.instruction_count=2};
+    for (uint32_t f=0;f<5;++f) {
+        blocks[f]=(XrXirBlock){.first=0,.count=functions[f].instruction_count};
+        functions[f].blocks=&blocks[f];functions[f].block_count=1;
+    }
+    fixture.declarations.functions=identities;fixture.declarations.entry_function=4;
+    fixture.module.functions=functions;fixture.module.function_count=5;fixture.module.generics=generics;
+    CHECK(generics[1].parameter_count==1 && generics[1].constraints==&fixture.bound);
+    XrXirArtifact *checked=NULL,*instance=NULL;
+    CHECK(xir_fixture_check(&context,&fixture.module,&checked,NULL)==XR_XIR_OK && checked);
+    const XrXirModule *source=xr_xir_compile_artifact_module(checked);
+    CHECK(source->generics && source->generics[1].parameter_count==1);
+    conditional_compact_advertisement_pair(&context,source,NULL);
+    EffectBodyMaterial *generic_material=NULL;
+    CHECK(effect_body_material_create(&context,source,&generic_material)==XR_XIR_OK && generic_material);
+    CHECK(effect_body_source_match(&context,generic_material,source)==XR_XIR_OK);
+    effect_body_material_free(generic_material);
+    CHECK(xr_xir_compile_specialize(checked,&instance,NULL)==XR_XIR_OK && instance);
+    const XrXirModule *module=xr_xir_compile_artifact_module(instance);
+    CHECK(module->provenance && module->provenance->kind==XR_XIR_EVIDENCE_INSTANCE && module->provenance->source);
+    uint32_t selected=UINT32_MAX;
+    for (uint32_t f=0;f<module->function_count;++f) if (module->provenance->origins[f].function==1) selected=f;
+    CHECK(selected!=UINT32_MAX && module->functions[selected].instruction_count==4 &&
+        module->provenance->origins[selected].argument_count==1 &&
+        module->provenance->origins[selected].arguments);
+    conditional_compact_advertisement_pair(&context,module,NULL);
+    EffectBodyMaterial *material=NULL;
+    CHECK(effect_body_material_create(&context,module,&material)==XR_XIR_OK && material);
+    CHECK(effect_body_source_match(&context,material,module)==XR_XIR_OK);
+    effect_body_material_free(material);
+    const XrXirModule *original=&module->provenance->source->module;
+    XrXirInstruction *instructions=(XrXirInstruction *)original->functions[1].instructions;
+    XrXirType saved=instructions[1].type;CHECK(saved==XR_XIR_I64);
+    instructions[1].type=(XrXirType)257;CHECK(xr_xir_callable_signature(original->types,instructions[1].type));
+    uint64_t retained=rp_stats(&context).live_bytes;
+    for (uint32_t spans=0;spans<2;++spans) {
+        EffectInvocationDeclaredBounds *output=NULL;
+        CHECK(conditional_compact_advertisements(&context,module,NULL,spans!=0,&output)==XR_XIR_BAD_TYPE &&
+            !output && rp_stats(&context).live_bytes==retained);
+    }
+    instructions[1].type=saved;conditional_compact_advertisement_pair(&context,module,NULL);
+    xr_xir_compile_artifact_free(instance);xr_xir_compile_artifact_free(checked);
+    rp_owner_free(&context,held_bytes);rp_balanced(physical);
+}
+
 static XrXirStatus conditional_compact_case(const XrXirCompileContext *context,uint32_t mode,bool oracle) {
     return mode<2?conditional_compact_codec(context,mode,oracle):conditional_compact_owned(context,oracle);
 }
@@ -674,6 +827,7 @@ static void conditional_compact_literals(void) {
         CHECK(conditional_compact_case(&context,mode,true)==XR_XIR_OK);
         rp_owner_free(&context,baseline);rp_balanced(physical);
     }
+    conditional_compact_instance_span();
 }
 static void conditional_compact_resources(void) {
     for (uint32_t mode=0;mode<3;++mode) {

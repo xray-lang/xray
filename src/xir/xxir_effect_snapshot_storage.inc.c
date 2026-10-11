@@ -183,8 +183,7 @@ static XrXirStatus effect_body_writer_span(void *owner,uint32_t first,uint32_t c
         return XR_XIR_BAD_STRUCTURE;
     const XrXirInstruction *operation=&source->instructions[first];
     if (!xir_compile_work(writer->work,8)) return XR_XIR_BUDGET;
-    if (!effect_body_advertisements_span_ready(writer->advertisements,writer->function) ||
-        !xir_cell_proof_scalar_shape(operation->op,operation->type)) {
+    if (!xir_cell_proof_scalar_shape(operation->op,operation->type)) {
         for (uint32_t i=first;i<first+count;++i) {
             if (!xir_compile_work(writer->work,1)) return XR_XIR_BUDGET;
             XrXirStatus status=effect_body_writer_row(owner,i,&source->instructions[i]);
