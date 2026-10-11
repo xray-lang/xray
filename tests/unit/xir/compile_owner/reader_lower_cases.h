@@ -227,7 +227,200 @@ static void reader_lower_rejections(void) {
     xr_compile_resources_release(owner); CHECK(!live && !live_count);
     puts("reader/lower: valid Library and open generic refuse; malformed/semantic precede target; public tamper reverified");
 }
+/* The transferred owner retains its function storage; canonical bytes and
+ * complete receiving layout must equal the independent borrowed transition. */
+static XrXirStatus reader_lower_take_closed(const XrXirCompileContext *context,
+    unsigned kind, XrXirArtifact **output) {
+    if (!kind) return xir_fixture_check(context,&module,output,NULL);
+    XrXirArtifact *template = NULL;
+    XrXirStatus status = kind == 1 ? generic_built(context,&template) : nominal_built(context,&template);
+    if (status == XR_XIR_OK) status = xr_xir_compile_specialize(template,output,NULL);
+    xr_xir_compile_artifact_free(template); return status;
+}
+static void reader_lower_take_equal(const XrXirArtifact *a, const XrXirArtifact *b) {
+    reader_lower_equal(a,b);
+    CHECK(a->module.stage == b->module.stage && a->module.linkage_kind == b->module.linkage_kind);
+    for (uint32_t f=0;f<a->module.function_count;++f) {
+        const XrXirFunction *x=&a->module.functions[f], *y=&b->module.functions[f];
+        CHECK(x->block_count==y->block_count && x->operand_count==y->operand_count);
+        if (x->parameter_count) CHECK(!memcmp(x->parameters,y->parameters,
+            (size_t)x->parameter_count*sizeof(*x->parameters)));
+        CHECK(!memcmp(x->blocks,y->blocks,(size_t)x->block_count*sizeof(*x->blocks)));
+        if (x->operand_count) CHECK(!memcmp(x->operands,y->operands,
+            (size_t)x->operand_count*sizeof(*x->operands)));
+        if (x->parameter_count) CHECK(!memcmp(a->layouts[f].parameters,b->layouts[f].parameters,
+            (size_t)x->parameter_count*sizeof(*a->layouts[f].parameters)));
+    }
+}
+static void reader_lower_take_requests(const XrXirCompileContext *context, XrXirArtifact *checked) {
+    XrXirArtifact *other=NULL;
+    CHECK(reader_lower_take_closed(context,0,&other)==XR_XIR_OK);
+    for (unsigned request=0;request<7;++request) {
+        XrXirArtifact *input=checked, *output=request==4?checked:request==5?other:NULL, *empty=NULL;
+        XrCompileResourceStats before=stats(context->resources);
+        size_t sites=attempts, blocks=live_count, bytes=live;
+        XrXirDiagnostic diagnostic={0}; XrXirStatus status;
+        if (!request) status=xr_xir_compile_lower_take(NULL,&target,&output,&diagnostic);
+        else if (request==1) status=xr_xir_compile_lower_take(&empty,&target,&output,&diagnostic);
+        else if (request==2) status=xr_xir_compile_lower_take(&input,&target,NULL,&diagnostic);
+        else if (request==3) status=xr_xir_compile_lower_take(&input,&target,&input,&diagnostic);
+        else if (request==6) {
+            XrCompileResources *saved=checked->context.resources; checked->context.resources=NULL;
+            status=xr_xir_compile_lower_take(&input,&target,&output,&diagnostic);
+            checked->context.resources=saved;
+        } else status=xr_xir_compile_lower_take(&input,&target,&output,&diagnostic);
+        CHECK(status==XR_XIR_BAD_STRUCTURE && diagnostic.status==status && input==checked && !empty);
+        CHECK(output==(request==4?checked:request==5?other:NULL));
+        XrCompileResourceStats after=stats(context->resources);
+        CHECK(attempts==sites && live_count==blocks && live==bytes);
+        CHECK(after.allocated_bytes==before.allocated_bytes && after.live_bytes==before.live_bytes &&
+            after.peak_bytes==before.peak_bytes && after.work==before.work);
+    }
+    CHECK(xr_xir_compile_artifact_verify(checked,NULL)==XR_XIR_OK);
+    CHECK(xr_xir_compile_artifact_verify(other,NULL)==XR_XIR_OK);
+    xr_xir_compile_artifact_free(other);
+}
+static void reader_lower_take_canonical(unsigned kind) {
+    reset(SIZE_MAX); XrCompileResources *owner=NULL;
+    CHECK(xr_compile_resources_new(&reader_lower_caps,&owner)==XR_COMPILE_RESOURCE_OK);
+    XrXirCompileContext context={owner,xr_xir_compile_default_limits()};
+    XrXirArtifact *closed=NULL, *borrowed=NULL, *taken=NULL;
+    CHECK(reader_lower_take_closed(&context,kind,&closed)==XR_XIR_OK);
+    reader_lower_take_requests(&context,closed);
+    CHECK(xr_xir_compile_lower(closed,&target,&borrowed,NULL)==XR_XIR_OK);
+    XrXirArtifact *identity=closed;
+    const XrXirFunction *functions=closed->module.functions;
+    CHECK(xr_xir_compile_lower_take(&closed,&target,&taken,NULL)==XR_XIR_OK);
+    CHECK(!closed && taken==identity && taken!=borrowed && taken->module.functions==functions);
+    CHECK(taken->context.resources==owner && borrowed->context.resources==owner);
+    reader_lower_take_equal(borrowed,taken);
+    xr_xir_compile_artifact_free(borrowed);
+    CHECK(xr_xir_compile_artifact_verify(taken,NULL)==XR_XIR_OK);
+    XrXirInstruction *op=(XrXirInstruction *)taken->module.functions[0].instructions;
+    XrXirOp saved=op->op; op->op=XR_XIR_INVALID;
+    CHECK(xr_xir_compile_artifact_verify(taken,NULL)==XR_XIR_BAD_STRUCTURE); op->op=saved;
+    uint32_t *offsets=(uint32_t *)taken->layouts[0].offsets; uint32_t saved_offset=offsets[0];
+    offsets[0]=UINT32_MAX;
+    CHECK(xr_xir_compile_artifact_verify(taken,NULL)==XR_XIR_BAD_LAYOUT); offsets[0]=saved_offset;
+    taken->checked_identity[0]^=1;
+    CHECK(xr_xir_compile_artifact_verify(taken,NULL)==XR_XIR_BAD_STRUCTURE); taken->checked_identity[0]^=1;
+    CHECK(xr_xir_compile_artifact_verify(taken,NULL)==XR_XIR_OK);
+    xr_xir_compile_artifact_free(taken); CHECK(live_count==1);
+    xr_compile_resources_release(owner); CHECK(!live && !live_count);
+}
+/* Task<U8> is a valid definition but its executable await result is outside
+ * the current receiving Task ABI. Only final Lowered verification rejects it. */
+static XrXirStatus reader_lower_take_unsupported(const XrXirCompileContext *context, XrXirArtifact **output) {
+    const XrXirTypeNode node={.kind=XR_XIR_TYPE_TASK,.element=XR_XIR_U8};
+    const XrXirTypes types={&node,1,NULL,NULL}; const XrXirType parameter=(XrXirType)256;
+    const XrXirInstruction body[]={
+        {.op=XR_XIR_TASK_AWAIT,.args={0},.targets={1,2}},
+        {.op=XR_XIR_INVOKE_RESULT,.type=XR_XIR_U8}, {.op=XR_XIR_RETURN,.args={2}},
+        {.op=XR_XIR_INVOKE_ERROR,.type=XR_XIR_ERROR}, {.op=XR_XIR_THROW,.args={4}}};
+    const XrXirBlock blocks[]={{0,1,0,0},{1,2,0,0},{3,2,0,0}};
+    const XrXirFunction entry={"awaitByte",9,&parameter,1,XR_XIR_U8,blocks,3,body,5,NULL,0};
+    const XrXirModule built={XR_XIR_BUILT,&entry,1,NULL,NULL,&types,NULL,XR_XIR_PROGRAM,NULL};
+    return xir_fixture_check(context,&built,output,NULL);
+}
+static void reader_lower_take_rejections(void) {
+    for (unsigned refusal=0;refusal<10;++refusal) {
+        reset(SIZE_MAX); XrCompileResources *owner=NULL;
+        CHECK(xr_compile_resources_new(&reader_lower_caps,&owner)==XR_COMPILE_RESOURCE_OK);
+        XrXirCompileContext context={owner,xr_xir_compile_default_limits()};
+        XrXirArtifact *closed=NULL, *output=NULL;
+        XrXirStatus prepared=refusal==3?reader_lower_library(&context,&closed):
+            refusal==4?generic_built(&context,&closed):refusal==9?reader_lower_take_unsupported(&context,&closed):
+            reader_lower_take_closed(&context,0,&closed);
+        CHECK(prepared==XR_XIR_OK && closed);
+        XrXirTarget invalid={0}; const XrXirTarget *receiving=refusal==0?&invalid:refusal==1?NULL:&target;
+        XrXirStatus expected=refusal<2?XR_XIR_BAD_LAYOUT:refusal<5?XR_XIR_BAD_STAGE:
+            refusal==6?XR_XIR_BAD_TYPE:refusal==7?XR_XIR_BAD_LAYOUT:refusal==9?XR_XIR_UNSUPPORTED:XR_XIR_BAD_STRUCTURE;
+        if (refusal==2) closed->module.stage=XR_XIR_BUILT;
+        if (refusal==5) ((XrXirInstruction *)closed->module.functions[0].instructions)[0].op=XR_XIR_INVALID;
+        if (refusal==6) ((XrXirFunction *)closed->module.functions)[0].result=XR_XIR_BOOL;
+        if (refusal==7) closed->target=target;
+        if (refusal==8) CHECK(xr_xir_compile_checked_write(closed,&closed->checked_packet,NULL)==XR_XIR_OK);
+        XrXirDiagnostic diagnostic={0};
+        XrXirStatus status=xr_xir_compile_lower_take(&closed,receiving,&output,&diagnostic);
+        if (status!=expected) fprintf(stderr,"take refusal=%u actual=%u expected=%u f=%u b=%u i=%u\n",
+            refusal,(unsigned)status,(unsigned)expected,diagnostic.function,diagnostic.block,diagnostic.instruction);
+        CHECK(status==expected && !closed && !output && diagnostic.status==status);
+        CHECK(live_count==1); (void)stats(owner);
+        xr_compile_resources_release(owner); CHECK(!live && !live_count);
+    }
+}
+static XrXirStatus reader_lower_take_pipeline(XrCompileResources *owner, unsigned kind) {
+    XrXirCompileContext context={owner,xr_xir_compile_default_limits()};
+    XrXirArtifact *closed=NULL, *output=NULL;
+    XrXirStatus status=reader_lower_take_closed(&context,kind,&closed);
+    if (status==XR_XIR_OK) {
+        status=xr_xir_compile_lower_take(&closed,&target,&output,NULL); CHECK(!closed);
+        if (status==XR_XIR_OK) {
+            CHECK(output && output->context.resources==owner && output->module.stage==XR_XIR_LOWERED);
+            status=xr_xir_compile_artifact_verify(output,NULL);
+        } else CHECK(!output);
+    } else CHECK(!closed && !output);
+    xr_xir_compile_artifact_free(output); xr_xir_compile_artifact_free(closed);
+    CHECK(live_count==1); (void)stats(owner); return status;
+}
+static void reader_lower_take_boundaries(unsigned kind) {
+    reset(0); XrCompileResources *bootstrap=NULL;
+    CHECK(xr_compile_resources_new(&reader_lower_caps,&bootstrap)==XR_COMPILE_RESOURCE_OUT_OF_MEMORY);
+    CHECK(!bootstrap && attempts==1 && !live && !live_count);
+    reset(SIZE_MAX); XrCompileResources *owner=NULL;
+    CHECK(xr_compile_resources_new(&reader_lower_caps,&owner)==XR_COMPILE_RESOURCE_OK);
+    XrCompileResourceStats initial=stats(owner);
+    CHECK(reader_lower_take_pipeline(owner,kind)==XR_XIR_OK);
+    size_t count=attempts; XrCompileResourceStats measured=stats(owner);
+    CHECK(count>1 && count<4096); xr_compile_resources_release(owner); CHECK(!live && !live_count);
+    for (size_t failure=1;failure<count;++failure) {
+        reset(failure); owner=NULL;
+        CHECK(xr_compile_resources_new(&reader_lower_caps,&owner)==XR_COMPILE_RESOURCE_OK);
+        CHECK(reader_lower_take_pipeline(owner,kind)==XR_XIR_OUT_OF_MEMORY && attempts==failure+1);
+        XrCompileResourceStats failed=stats(owner);
+        size_t failed_sites=attempts;
+        fail_at=SIZE_MAX; CHECK(reader_lower_take_pipeline(owner,kind)==XR_XIR_OK);
+        XrCompileResourceStats retried=stats(owner);
+        CHECK(retried.allocated_bytes-failed.allocated_bytes==measured.allocated_bytes-initial.allocated_bytes &&
+            retried.work-failed.work==measured.work-initial.work && attempts-failed_sites==count-1);
+        CHECK(live_count==1); xr_compile_resources_release(owner); CHECK(!live && !live_count);
+    }
+    uint64_t live_boundary=measured.peak_bytes;
+    for (;;) {
+        CHECK(live_boundary>initial.live_bytes);
+        reset(SIZE_MAX); owner=NULL; XrCompileResourceLimits limits=reader_lower_caps;
+        limits.live_bytes=live_boundary-1;
+        CHECK(xr_compile_resources_new(&limits,&owner)==XR_COMPILE_RESOURCE_OK);
+        XrXirStatus status=reader_lower_take_pipeline(owner,kind);
+        XrCompileResourceStats actual=stats(owner);
+        CHECK(status==XR_XIR_OK || status==XR_XIR_BUDGET);
+        CHECK(actual.peak_bytes<=limits.live_bytes && actual.allocated_bytes<limits.allocated_bytes &&
+            actual.work<limits.work);
+        xr_compile_resources_release(owner); CHECK(!live && !live_count);
+        if (status==XR_XIR_BUDGET) break;
+        CHECK(actual.peak_bytes<live_boundary); live_boundary=actual.peak_bytes;
+    }
+    for (unsigned axis=0;axis<3;++axis) for (unsigned minus=0;minus<2;++minus) {
+        reset(SIZE_MAX); owner=NULL; XrCompileResourceLimits limits=reader_lower_caps;
+        if (!axis) limits.allocated_bytes=measured.allocated_bytes-minus;
+        else if (axis==1) limits.live_bytes=live_boundary-minus;
+        else limits.work=measured.work-minus;
+        CHECK(xr_compile_resources_new(&limits,&owner)==XR_COMPILE_RESOURCE_OK);
+        CHECK(reader_lower_take_pipeline(owner,kind)==(minus?XR_XIR_BUDGET:XR_XIR_OK));
+        xr_compile_resources_release(owner); CHECK(!live && !live_count);
+    }
+    printf("take/lower kind=%u actualOOM=%zu allocated=%llu peak=%llu work=%llu allsites retry sameLedger axes6 physical0\n",
+        kind,count-1,(unsigned long long)measured.allocated_bytes,(unsigned long long)measured.peak_bytes,
+        (unsigned long long)measured.work);
+}
+static void reader_lower_take_cases(void) {
+    reader_lower_take_rejections();
+    for (unsigned kind=0;kind<3;++kind) {
+        reader_lower_take_canonical(kind); reader_lower_take_boundaries(kind);
+    }
+}
 static void reader_lower_cases(void) {
     reader_lower_rejections(); reader_lower_canonical();
     for (unsigned kind = 0; kind < 2; ++kind) reader_lower_boundaries(kind);
+    reader_lower_take_cases();
 }

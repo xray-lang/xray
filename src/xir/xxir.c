@@ -352,6 +352,32 @@ XrXirStatus xr_xir_compile_lower(const XrXirArtifact *checked, const XrXirTarget
     return transition(xr_xir_compile_artifact_module(checked), checked->construction, XR_XIR_CHECKED, budget, output, diagnostic, target);
 }
 
+/* Accepting this private request consumes its only owner, including failure.
+ * Complete input and receiving verification remain independent gates. */
+XR_FUNC XrXirStatus xr_xir_compile_lower_take(XrXirArtifact **owned_input,
+    const XrXirTarget *target, XrXirArtifact **output, XrXirDiagnostic *diagnostic) {
+    if (!owned_input || !*owned_input || !output || output == owned_input || *output ||
+        !xir_compile_context_valid(&(*owned_input)->context))
+        return transition_error(XR_XIR_BAD_STRUCTURE, diagnostic);
+    XrXirArtifact *checked = *owned_input;
+    *owned_input = NULL;
+    XrXirCompileContext limits = checked->context;
+    XrXirStatus status = transition_shape(&checked->module, XR_XIR_CHECKED, &limits, target, diagnostic);
+    if (status == XR_XIR_OK)
+        status = xr_xir_compile_verify_v2(&limits, &checked->module, checked->construction, diagnostic);
+    if (status == XR_XIR_OK && (checked->checked_packet.bytes || checked->checked_packet.length))
+        status = transition_error(XR_XIR_BAD_STRUCTURE, diagnostic);
+    if (status == XR_XIR_OK) {
+        status = xr_xir_compile_layout_verify(checked);
+        if (status != XR_XIR_OK) status = transition_error(status, diagnostic);
+    }
+    const TransitionInputProof proof = {checked_encode, &checked};
+    if (status == XR_XIR_OK)
+        status = transition_owned(&checked->module, checked->construction, &limits, output, diagnostic, target, &proof);
+    xr_xir_compile_artifact_free(checked);
+    return status;
+}
+
 static XrXirStatus artifact_verify_owned_effects(const XrXirArtifact *artifact,
     XrXirEffects **output, XrXirDiagnostic *diagnostic) {
     if (!artifact || (output && *output)) return XR_XIR_BAD_STRUCTURE;

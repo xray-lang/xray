@@ -121,6 +121,13 @@ XR_FUNC XrXirStatus xr_xir_compile_layout_build(XrXirArtifact *artifact);
 XR_FUNC XrXirStatus xr_xir_compile_recheck_v2(const XrXirCompileContext *compile_context, const XrXirModule *checked, const XrXirConstruction *construction, XrXirArtifact **output, XrXirDiagnostic *diagnostic);
 XR_FUNC XrXirStatus xr_xir_compile_layout_verify(const XrXirArtifact *artifact);
 
+/* Request rejection preserves both slots and charges no work. Acceptance
+ * clears the unique input slot; every later failure releases that owner.
+ * Same-slot and occupied-output aliases are rejected before acceptance.
+ * The caller must own the Artifact exclusively; all full proofs still run. */
+XR_FUNC XrXirStatus xr_xir_compile_lower_take(XrXirArtifact **owned_input,
+    const XrXirTarget *target, XrXirArtifact **output, XrXirDiagnostic *diagnostic);
+
 /* Couples fresh owned decoding and its full verification to immediate lowering.
  * Accepts bytes only; no published artifact grants a verification exemption. */
 XR_FUNC XrXirStatus xr_xir_compile_checked_read_lower(const XrXirCompileContext *context,
