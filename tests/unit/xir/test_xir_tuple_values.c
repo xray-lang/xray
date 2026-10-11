@@ -80,7 +80,7 @@ static void class_backing_authority(void) {
     XrXirNominalIdentity identity={.module={"root",4},.name={"Box",3},.kind=XR_XIR_NOMINAL_CLASS,
         .fields=&identity_field,.field_count=1,.flags=XR_XIR_NOMINAL_FINAL};
     XrXirNominalTable nominals={NULL,1,&identity};
-    XrXirTypeNode nodes[]={{.kind=XR_XIR_TYPE_CALLABLE,.result=XR_XIR_I64},
+    XrXirTypeNode nodes[]={{.kind=XR_XIR_TYPE_CALLABLE,.result=XR_XIR_I64,.flags=XR_XIR_CALLABLE_ROOT_UNRESOLVED},
         {.kind=XR_XIR_TYPE_TUPLE,.parameters=fields,.parameter_count=2},
         {.kind=XR_XIR_TYPE_ARRAY,.element=constructed(1)},
         {.kind=XR_XIR_TYPE_NULLABLE,.element=constructed(2)},
