@@ -25,6 +25,7 @@ typedef struct ProvenanceMatch {
     XrXirTypeMatchScratch scratch;
     const XrXirProvenance *instance;
     XrXirEffects *effects;
+    XirEffectContextScope *selection_scope;
 } ProvenanceMatch;
 
 static XrXirStatus provenance_effect_context(ProvenanceMatch *c, uint32_t caller,
@@ -47,7 +48,9 @@ static XrXirStatus provenance_effect_context(ProvenanceMatch *c, uint32_t caller
         current=c->destination->declarations->functions[current-1].cleanup_owner;
     }
     XirEffectContextInput input={c->source,c->destination->types,&c->origins[caller],instruction,owners,count};
-    if (status==XR_XIR_OK) status=xir_effects_context_select(c->remaining,c->effects,&input,output);
+    if (status==XR_XIR_OK) status=c->selection_scope ?
+        xir_effects_context_select_scoped(c->selection_scope,&input,output) :
+        xir_effects_context_select(c->remaining,c->effects,&input,output);
     xr_compile_resources_free(owners);return status;
 }
 
@@ -731,7 +734,19 @@ done:
     return status;
 }
 
-XrXirStatus xr_xir_compile_provenance_functions_match(const XrXirCompileContext *compile_context, const XrXirModule *source, const XrXirModule *destination, const XrXirProvenance *instance, XrXirDiagnostic *diagnostic) {
+static XrXirStatus provenance_match_scoped(void *data,XirEffectContextScope *scope) {
+    ProvenanceMatch *match=data;match->selection_scope=scope;
+    XrXirStatus status=provenance_nominals(match);
+    if (status==XR_XIR_OK) status=provenance_functions_match(match);
+    if (status==XR_XIR_OK) status=provenance_effect_proofs(match);
+    if (status==XR_XIR_OK) status=provenance_declarations(match);
+    if (status==XR_XIR_OK) status=provenance_reachable(match);
+    match->selection_scope=NULL;return status;
+}
+
+static XrXirStatus provenance_functions_match_owned(const XrXirCompileContext *compile_context,
+    const XrXirModule *source, const XrXirModule *destination, const XrXirProvenance *instance,
+    XrXirEffects *effects, XrXirDiagnostic *diagnostic) {
     if (!xir_compile_context_valid(compile_context)) return XR_XIR_BAD_STRUCTURE;
     XrXirCompileContext compile_state = *compile_context;
     XrXirCompileContext *remaining = &compile_state;
@@ -761,19 +776,50 @@ XrXirStatus xr_xir_compile_provenance_functions_match(const XrXirCompileContext 
         }
         if (status == XR_XIR_OK) {
             ProvenanceMatch context = {source, destination, origins, destination->function_count, remaining, &location,
-                {remaining->resources, NULL},instance,NULL};
-            if (source->provenance && source->provenance->kind==XR_XIR_EVIDENCE_TEMPLATE)
-                status=xr_xir_compile_effects_infer_verified(remaining,source,&context.effects);
-            if (status==XR_XIR_OK) status = provenance_nominals(&context);
-            if (status == XR_XIR_OK) status = provenance_functions_match(&context);
-            if (status == XR_XIR_OK) status = provenance_effect_proofs(&context);
-            if (status == XR_XIR_OK) status = provenance_declarations(&context);
-            if (status == XR_XIR_OK) status = provenance_reachable(&context);
+                {remaining->resources, NULL},instance,effects,NULL};
+            XrXirEffects *inferred=NULL;
+            if (!effects && source->provenance && source->provenance->kind==XR_XIR_EVIDENCE_TEMPLATE) {
+                status=xr_xir_compile_effects_infer_verified(remaining,source,&inferred);
+                context.effects=inferred;
+            }
+            if (status==XR_XIR_OK) status=xir_effects_context_available(remaining,context.effects) ?
+                xir_effects_context_operation(remaining,context.effects,source,destination->types,
+                    provenance_match_scoped,&context) : provenance_match_scoped(&context,NULL);
             xr_xir_type_match_scratch_free(&context.scratch);
-            xr_xir_compile_effects_free(context.effects);
+            xr_xir_compile_effects_free(inferred);
         }
     }
     location.status = status;
     if (diagnostic) *diagnostic = location;
+    return status;
+}
+
+XrXirStatus xr_xir_compile_provenance_functions_match(const XrXirCompileContext *context,
+    const XrXirModule *source, const XrXirModule *destination, const XrXirProvenance *instance,
+    XrXirDiagnostic *diagnostic) {
+    return provenance_functions_match_owned(context,source,destination,instance,NULL,diagnostic);
+}
+
+/* The complete checker creates the only owner passed to the common matcher.
+ * Source mutation, declaration proof and destination correspondence are still
+ * checked on every call; the owner is retired on both success and failure. */
+XR_FUNC XrXirStatus xr_xir_compile_provenance_verify(const XrXirCompileContext *context,
+    const XrXirModule *destination, const XrXirProvenance *instance, XrXirDiagnostic *diagnostic) {
+    if (!xir_compile_context_valid(context) || !instance ||
+        instance->kind!=XR_XIR_EVIDENCE_INSTANCE || !instance->source) {
+        if (diagnostic) *diagnostic=(XrXirDiagnostic){XR_XIR_BAD_STRUCTURE,
+            UINT32_MAX,UINT32_MAX,UINT32_MAX,XR_XIR_DIAGNOSTIC_NONE};
+        return XR_XIR_BAD_STRUCTURE;
+    }
+    const XrXirArtifact *source=instance->source;
+    bool templated=source->module.provenance &&
+        source->module.provenance->kind==XR_XIR_EVIDENCE_TEMPLATE;
+    XrXirEffects *effects=NULL;
+    XrXirStatus status=templated ?
+        xr_xir_compile_verify_owned_effects_v2(context,&source->module,source->construction,&effects,diagnostic) :
+        xr_xir_compile_verify_v2(context,&source->module,source->construction,diagnostic);
+    if (status==XR_XIR_OK)
+        status=provenance_functions_match_owned(context,&source->module,destination,instance,effects,diagnostic);
+    xr_xir_compile_effects_free(effects);
     return status;
 }

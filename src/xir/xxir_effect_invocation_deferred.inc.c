@@ -16,7 +16,9 @@ static XrXirStatus effect_invocation_deferred_arguments(EffectInvocationFlow *fl
     if (!output || *output || !signature || instruction>=flow->function->instruction_count)
         return XR_XIR_BAD_STRUCTURE;
     EffectInvocationOwner *owner=flow->owner;
-    const XrXirInstruction *op=&flow->function->instructions[instruction];
+    XrXirInstruction body_op_1;const XrXirInstruction *op=NULL;
+    XrXirStatus body_read_1=effect_invocation_flow_instruction(flow,instruction,&body_op_1,&op);
+    if (body_read_1!=XR_XIR_OK) return body_read_1;
     if (op->args[1]!=signature->parameter_count ||
         op->args[0]>flow->function->operand_count ||
         op->args[1]>flow->function->operand_count-op->args[0] ||
@@ -31,16 +33,19 @@ static XrXirStatus effect_invocation_deferred_arguments(EffectInvocationFlow *fl
         if (!xir_compile_work(owner->work,2)) { status=XR_XIR_BUDGET;break; }
         const XrXirCallableParameter *parameter=&signature->parameters[p];
         uint32_t actual=flow->function->operands[op->args[0]+p];
-        if (actual>=flow->values || !xr_xir_callable_parameter_storage_valid(owner->module->types,parameter)) {
+        if (actual>=flow->values || !xr_xir_callable_parameter_storage_valid(flow->body.domain.types,parameter)) {
             status=XR_XIR_BAD_TYPE;break;
         }
-        status=effect_invocation_value_matches(flow,parameter->type,
-            xr_xir_operand_type(flow->function,actual),&scratch);
+        XrXirType actual_type=0;status=effect_invocation_flow_type(flow,actual,&actual_type);
+        if (status==XR_XIR_OK)
+            status=effect_invocation_value_matches(flow,parameter->type,actual_type,&scratch);
         if (status!=XR_XIR_OK) break;
         uint64_t *row=input+(size_t)p*flow->basis.row_words;
-        if (xr_xir_type_is_cell(owner->module->types,parameter->type))
+        if (xr_xir_type_is_cell(flow->body.domain.types,parameter->type))
             status=effect_invocation_cell(flow,actual,row+flow->basis.fn_words,NULL);
-        else if (xr_xir_callable_signature(owner->module->types,parameter->type)) {
+        else if (xr_xir_type_is_class(flow->body.domain.types,parameter->type))
+            status=effect_invocation_class_word(flow,actual,row+flow->basis.fn_words);
+        else if (xr_xir_callable_signature(flow->body.domain.types,parameter->type)) {
             if (!xir_compile_work(owner->work,(uint64_t)flow->basis.fn_words*sizeof(*row))) {
                 status=XR_XIR_BUDGET;break;
             }
@@ -78,6 +83,7 @@ static XrXirStatus effect_invocation_deferred_record(EffectInvocationFlow *flow,
         instruction>=flow->function->instruction_count || !signature) return XR_XIR_BAD_STRUCTURE;
     uint64_t *input=NULL;
     XrXirStatus status=effect_invocation_deferred_arguments(flow,instruction,signature,&input);
+    if (status==XR_XIR_UNRESOLVED) return XR_XIR_OK;
     if (status!=XR_XIR_OK) return status;
     uint64_t words=(uint64_t)signature->parameter_count*flow->basis.row_words;
     for (uint32_t d=0;d<owner->deferred_count;++d) {

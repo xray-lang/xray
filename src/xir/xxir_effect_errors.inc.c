@@ -34,8 +34,11 @@ typedef struct ErrorInvocationContexts ErrorInvocationContexts;
 static uint32_t error_invocation_summary(const ErrorInvocationContexts *contexts,uint32_t n);
 enum { ERROR_BLOCK_REACHABLE = 1, ERROR_BLOCK_PENDING = 2 };
 typedef struct ErrorFlow {
-    const XrXirModule *module;
-    const XrXirFunction *function;
+    const XrXirModule *source;
+    EffectBodyRequest body;
+    EffectBodyFunctionHead head;
+    const EffectBodyFunctionHead *function;
+    uint32_t function_index,instruction;
     XrXirEffects *effects;
     XrXirCompileContext *remaining;
     EffectTerms *terms;
@@ -57,6 +60,22 @@ static XrXirStatus error_invocation_functions(ErrorFlow *flow);
 static XrXirStatus error_invocation_summaries(ErrorFlow *flow);
 static XrXirStatus error_invocation_call(ErrorFlow *flow,const XrXirInstruction *call,
     uint64_t *set,bool *handled);
+/* Execution reads use the sole immutable owner. Raw input is kept only
+ * for the independent complete external source matcher. */
+static XrXirStatus error_type_at(const ErrorFlow *flow,uint32_t value,XrXirType *output) {
+    if (!flow) return XR_XIR_BAD_STRUCTURE;
+    return effect_body_request_type(&flow->body,flow->function_index,value,output);
+}
+static XrXirStatus error_operation(const ErrorFlow *flow,uint32_t function,uint32_t instruction,
+    XrXirInstruction *storage,const XrXirInstruction **output) {
+    if (!flow) return XR_XIR_BAD_STRUCTURE;
+    return effect_body_request_instruction(&flow->body,function,instruction,storage,output);
+}
+static XrXirStatus error_shape(const ErrorFlow *flow,uint32_t function,uint32_t instruction,
+    EffectBodyInstructionShape *output) {
+    if (!flow) return XR_XIR_BAD_STRUCTURE;
+    return effect_body_request_shape(&flow->body,function,instruction,output);
+}
 /* Missing scalar rows are read-only zero facts, never writable aliases. */
 static uint64_t *error_value(ErrorFlow *flow, uint64_t *row, uint32_t value) {
     if (value >= flow->values || flow->slots[value] == UINT32_MAX) return NULL;
@@ -93,43 +112,65 @@ static bool error_closed_node_shape(const XrXirTypeNode *node) {
     default: return false;
     }
 }
-static XrXirStatus error_row_active(const ErrorFlow *flow, uint32_t value, bool *active) {
-    if (!flow || !flow->function || !active ||
+static bool error_copy_op(XrXirOp op) {
+    return op == XR_XIR_COPY || op == XR_XIR_SCALAR_COPY || op == XR_XIR_OWNED_RETAIN ||
+        op == XR_XIR_ERROR_ERASE || op == XR_XIR_ERROR_NARROW;
+}
+enum { ERROR_ROW_ACTIVE = 1, ERROR_ROW_CELL = 2, ERROR_ROW_COPY = 4 };
+/* One fresh shape read supplies membership and alias classification. These
+ * results describe storage, never execution authority or declaration proof. */
+static XrXirStatus error_row_active(const ErrorFlow *flow, uint32_t value, bool *active,
+    XrXirType *type_output, bool *copy_output, uint32_t *source_output) {
+    if (!flow || !flow->function || !active || !type_output || !copy_output || !source_output ||
         (uint64_t)value >= (uint64_t)flow->function->parameter_count + flow->function->instruction_count)
         return XR_XIR_BAD_STRUCTURE;
+    XrXirType type=XR_XIR_UNIT;bool copy=false;uint32_t source=UINT32_MAX;
     if (value >= flow->function->parameter_count) {
-        if (!flow->function->instructions) return XR_XIR_BAD_STRUCTURE;
-        XrXirOp op = flow->function->instructions[value - flow->function->parameter_count].op;
-        if (op == XR_XIR_GO || op == XR_XIR_INVOKE_ERROR) { *active = true; return XR_XIR_OK; }
-    } else if (!flow->function->parameters) return XR_XIR_BAD_STRUCTURE;
-    XrXirType type = xr_xir_operand_type(flow->function, value);
+        XrXirInstruction storage;const XrXirInstruction *actual=NULL;
+        EffectBodyInstructionFields fields;
+        XrXirStatus status=effect_body_request_fields(&flow->body,flow->function_index,
+            value-flow->function->parameter_count,&storage,&actual,&fields);
+        if (status!=XR_XIR_OK) return status;
+        if (!xir_compile_work(flow->remaining,1)) return XR_XIR_BUDGET;
+        XrXirOp op=actual?actual->op:fields.op;type=actual?actual->type:fields.type;
+        if (op<=XR_XIR_INVALID || op>=XR_XIR_OP_COUNT) return XR_XIR_BAD_STRUCTURE;
+        copy=error_copy_op(op);if (copy) source=actual?actual->args[0]:fields.source;
+        if (op == XR_XIR_GO || op == XR_XIR_INVOKE_ERROR) {
+            *active = true;*type_output=type;*copy_output=copy;*source_output=source;return XR_XIR_OK;
+        }
+    } else {
+        if (!flow->function->parameters) return XR_XIR_BAD_STRUCTURE;
+        XrXirStatus read=error_type_at(flow,value,&type);
+        if (read!=XR_XIR_OK) return read;
+    }
     switch (type) {
     case XR_XIR_UNIT: case XR_XIR_BOOL: case XR_XIR_I64: case XR_XIR_STRING:
     case XR_XIR_I8: case XR_XIR_I16: case XR_XIR_I32: case XR_XIR_U8:
     case XR_XIR_U16: case XR_XIR_U32: case XR_XIR_U64: case XR_XIR_F32:
     case XR_XIR_F64: case XR_XIR_PANIC_INFO: case XR_XIR_RUNE:
-        *active = false; return XR_XIR_OK;
+        *active = false;*type_output=type;*copy_output=copy;*source_output=source;return XR_XIR_OK;
     default: break;
     }
-    const XrXirTypes *types = flow->module ? flow->module->types : NULL;
+    const XrXirTypes *types = flow->body.domain.types;
     uint32_t id = (uint32_t)type;
     if (!types || !types->nodes || id < XR_XIR_CONSTRUCTED_TYPE_BASE ||
-        id >= XR_XIR_CONSTRUCTED_TYPE_LIMIT) { *active = true; return XR_XIR_OK; }
+        id >= XR_XIR_CONSTRUCTED_TYPE_LIMIT) { *active = true;*type_output=type;*copy_output=copy;*source_output=source;return XR_XIR_OK; }
     if (!xir_compile_work(flow->remaining, 1)) return XR_XIR_BUDGET;
     const XrXirTypeNode *node = xr_xir_type_node(types, type);
     if (!node || node->parameter_span || !error_closed_node_shape(node)) {
-        *active = true; return XR_XIR_OK;
+        *active = true;*type_output=type;*copy_output=copy;*source_output=source;return XR_XIR_OK;
     }
-    if (node->kind != XR_XIR_TYPE_NOMINAL) { *active = false; return XR_XIR_OK; }
+    if (node->kind != XR_XIR_TYPE_NOMINAL) { *active = false;*type_output=type;*copy_output=copy;*source_output=source;return XR_XIR_OK; }
     const XrXirNominalTable *table = types->nominals;
     if (!table || node->nominal.declaration >= table->count ||
         (table->declarations != NULL) == (table->identities != NULL)) {
-        *active = true; return XR_XIR_OK;
+        *active = true;*type_output=type;*copy_output=copy;*source_output=source;return XR_XIR_OK;
     }
     if (!xir_compile_work(flow->remaining, 1)) return XR_XIR_BUDGET;
     uint32_t d = node->nominal.declaration;
     uint32_t kind = table->declarations ? table->declarations[d].kind : table->identities[d].kind;
     *active = kind != XR_XIR_NOMINAL_STRUCT && kind != XR_XIR_NOMINAL_CLASS;
+    *type_output=type;*copy_output=copy;*source_output=source;
     return XR_XIR_OK;
 }
 static bool error_any(const uint64_t *set, uint32_t words) {
@@ -144,30 +185,34 @@ static bool error_join(uint64_t *to, const uint64_t *from, size_t words) {
     return changed;
 }
 static void error_type(ErrorFlow *flow, XrXirType type, uint64_t *set) {
-    if (xr_xir_type_is_cell(flow->module->types, type)) type = xr_xir_cell_element(flow->module->types, type);
-    const XrXirTypeNode *node = xr_xir_type_node(flow->module->types, type);
+    if (xr_xir_type_is_cell(flow->body.domain.types, type)) type = xr_xir_cell_element(flow->body.domain.types, type);
+    const XrXirTypeNode *node = xr_xir_type_node(flow->body.domain.types, type);
     if (type == XR_XIR_ERROR || (node && node->kind == XR_XIR_TYPE_TASK)) error_add(set, 1);
     else for (uint32_t a = 0; a < flow->effects->atom_count; ++a)
         if (flow->effects->atoms[a].type == type) error_add(set, a + 2);
 }
-static const XrXirInstruction *error_definition(ErrorFlow *flow, uint32_t value) {
-    return value >= flow->function->parameter_count && value < flow->values ?
-        &flow->function->instructions[value - flow->function->parameter_count] : NULL;
+static XrXirStatus error_definition(ErrorFlow *flow,uint32_t value,
+    XrXirInstruction *storage,const XrXirInstruction **output) {
+    if (!flow || !flow->function || !storage || !output || *output || value>=flow->values)
+        return XR_XIR_BAD_STRUCTURE;
+    if (value<flow->function->parameter_count) return XR_XIR_OK;
+    return error_operation(flow,flow->function_index,value-flow->function->parameter_count,storage,output);
 }
-static bool error_copy_op(XrXirOp op) {
-    return op == XR_XIR_COPY || op == XR_XIR_SCALAR_COPY || op == XR_XIR_OWNED_RETAIN ||
-        op == XR_XIR_ERROR_ERASE || op == XR_XIR_ERROR_NARROW;
-}
-static XrXirStatus error_roots(ErrorFlow *flow) {
-    for (uint32_t v = 0; v < flow->values; ++v) {
-        uint32_t root = v;
-        for (;;) {
-            if (!xir_compile_work(flow->remaining, 1)) return XR_XIR_BUDGET;
-            const XrXirInstruction *op = error_definition(flow, root);
-            if (!op || !error_copy_op(op->op)) break;
-            root = op->args[0];
+/* Completed roots are local derived values, not callable or Cell authority.
+ * Forward COPY edges retain the original finite per-visit watchdog. */
+static XrXirStatus error_roots(ErrorFlow *flow,const uint8_t *membership,
+    const uint32_t *sources) {
+    for (uint32_t v=0;v<flow->values;++v) {
+        if (!xir_compile_work(flow->remaining,1)) return XR_XIR_BUDGET;
+        uint32_t root=v;
+        while (membership[root]&ERROR_ROW_COPY) {
+            uint32_t target=sources[root];
+            if (target>=flow->values) return XR_XIR_BAD_STRUCTURE;
+            if (target<v) { root=flow->roots[target];break; }
+            root=target;
+            if (!xir_compile_work(flow->remaining,1)) return XR_XIR_BUDGET;
         }
-        flow->roots[v] = root;
+        flow->roots[v]=root;
     }
     return XR_XIR_OK;
 }
@@ -199,7 +244,7 @@ static XrXirStatus error_atom(ErrorFlow *flow, EffectErrorAtom atom, uint64_t *s
 }
 static XrXirStatus error_call_summary(ErrorFlow *flow, const XrXirInstruction *call,
     const uint64_t *from,uint64_t *set) {
-    uint32_t caller = (uint32_t)(flow->function - flow->module->functions);
+    uint32_t caller=flow->function_index;
     if (error_bit(from, 0)) error_add(set, 0);
     if (error_bit(from, 1)) error_add(set, 1);
     for (uint32_t a = 0; a < flow->effects->atom_count; ++a) if (error_bit(from, a + 2)) {
@@ -208,12 +253,12 @@ static XrXirStatus error_call_summary(ErrorFlow *flow, const XrXirInstruction *c
         if (atom.variant == XR_XIR_ERROR_SYMBOLIC_VARIANT) {
             uint32_t p = (uint32_t)atom.type - XR_XIR_TYPE_PARAMETER_BASE;
             if (p >= call->type_arguments[1]) return XR_XIR_BAD_TYPE;
-            XrXirType type = flow->module->generics[caller].arguments[call->type_arguments[0] + p];
+            XrXirType type = flow->body.domain.generics[caller].arguments[call->type_arguments[0] + p];
             error_type(flow, type, set); continue;
         }
         if (call->type_arguments[1]) {
             XrXirGeneric arguments = {0}; arguments.argument_count = call->type_arguments[1];
-            arguments.arguments = flow->module->generics[caller].arguments + call->type_arguments[0];
+            arguments.arguments = flow->body.domain.generics[caller].arguments + call->type_arguments[0];
             XrXirStatus status = effect_terms_substitute(flow->terms, atom.type, &arguments, &atom.type);
             if (status != XR_XIR_OK) return status;
         }
@@ -234,7 +279,7 @@ static XrXirStatus error_call(ErrorFlow *flow, const XrXirInstruction *call, uin
     if(call->op==XR_XIR_CALL_DEFAULT || call->op==XR_XIR_INVOKE_DEFAULT) {
         const XrXirDefaultBinding *binding=NULL;
         const uint32_t *identity=xr_xir_default_identity(call);
-        XrXirStatus status=xr_xir_compile_default_lookup(flow->remaining, flow->module, identity[0], identity[1], &binding);
+        XrXirStatus status=xir_metadata_default_lookup(flow->remaining,&flow->body.domain, identity[0], identity[1], &binding);
         if(status!=XR_XIR_OK) return status;
         if(!binding) return XR_XIR_BAD_STRUCTURE;
         resolved=*call;resolved.immediate=binding->function;call=&resolved;
@@ -252,8 +297,10 @@ static XrXirStatus error_cells(ErrorFlow *flow, uint32_t target, const uint64_t 
             return XR_XIR_BUDGET;
         uint32_t v = flow->cells[c];
         if (v >= flow->values) return XR_XIR_BAD_STRUCTURE;
-        XrXirType type = xr_xir_operand_type(flow->function,v);
-        if (!xr_xir_type_is_cell(flow->module->types,type)) return XR_XIR_BAD_STRUCTURE;
+        XrXirType type=XR_XIR_UNIT;
+        XrXirStatus read=error_type_at(flow,v,&type);
+        if (read!=XR_XIR_OK) return read;
+        if (!xr_xir_type_is_cell(flow->body.domain.types,type)) return XR_XIR_BAD_STRUCTURE;
         uint64_t *set = error_value(flow,flow->work,v);
         if (!set) return XR_XIR_BAD_STRUCTURE;
         { if (!xir_compile_work(flow->remaining, (size_t)flow->effects->words*sizeof(uint64_t))) { return XR_XIR_BUDGET; } memset(set,0,(size_t)flow->effects->words*sizeof(uint64_t)); }
@@ -263,28 +310,34 @@ static XrXirStatus error_cells(ErrorFlow *flow, uint32_t target, const uint64_t 
     }
     return XR_XIR_OK;
 }
-static XrXirStatus error_instruction(ErrorFlow *flow, uint32_t i) {
-    const XrXirInstruction *op = &flow->function->instructions[i];
+static XrXirStatus error_instruction(ErrorFlow *flow, uint32_t i,
+    const XrXirInstruction *op) {
+    if (!flow || !flow->function || !op || i>=flow->function->instruction_count)
+        return XR_XIR_BAD_STRUCTURE;
+    XrXirStatus read=XR_XIR_OK;
+    flow->instruction=i;
     uint32_t words = flow->effects->words;
     if (!xir_compile_work(flow->remaining, (uint64_t)words + flow->effects->atom_count + 1)) return XR_XIR_BUDGET;
     uint64_t *out = error_value(flow, flow->work, flow->function->parameter_count + i);
     if (op->op == XR_XIR_PHI) return XR_XIR_OK;
     if (out) { if (!xir_compile_work(flow->remaining, (size_t)words * sizeof(*out))) { return XR_XIR_BUDGET; } memset(out, 0, (size_t)words * sizeof(*out)); }
     if (op->op == XR_XIR_CELL_WRITE) {
-        XrXirType cell=xr_xir_operand_type(flow->function,op->args[0]);
-        const uint64_t *source=xr_xir_cell_payload_operands(flow->module->types,cell,op->op)==1 ?
+        XrXirType cell=XR_XIR_UNIT;
+        read=error_type_at(flow,op->args[0],&cell);
+        if (read!=XR_XIR_OK) return read;
+        const uint64_t *source=xr_xir_cell_payload_operands(flow->body.domain.types,cell,op->op)==1 ?
             flow->zero : error_read(flow,flow->work,op->args[1]);
         { if (!xir_compile_work(flow->remaining, (size_t)words*sizeof(uint64_t))) { return XR_XIR_BUDGET; } memcpy(flow->snapshot,source,(size_t)words*sizeof(uint64_t)); }
         XrXirStatus status = error_cells(flow,op->args[0],flow->snapshot);
         if (status != XR_XIR_OK) return status;
     }
     if (error_copy_op(op->op) || op->op == XR_XIR_CELL_NEW ||
-        (op->op == XR_XIR_CELL_READ && !xr_xir_type_is_cell(flow->module->types,op->type)) || op->op == XR_XIR_LOCAL_NEW || op->op == XR_XIR_OWNED_LOCAL_NEW ||
+        (op->op == XR_XIR_CELL_READ && !xr_xir_type_is_cell(flow->body.domain.types,op->type)) || op->op == XR_XIR_LOCAL_NEW || op->op == XR_XIR_OWNED_LOCAL_NEW ||
         op->op == XR_XIR_SCALAR_LOCAL_NEW || op->op == XR_XIR_LOCAL_READ ||
         op->op == XR_XIR_OWNED_LOCAL_READ || op->op == XR_XIR_SCALAR_LOCAL_READ)
         { if (out) {
             const uint64_t *source=op->op==XR_XIR_CELL_NEW &&
-                !xr_xir_cell_payload_operands(flow->module->types,op->type,op->op) ?
+                !xr_xir_cell_payload_operands(flow->body.domain.types,op->type,op->op) ?
                 flow->zero : error_read(flow,flow->work,op->args[0]);
             if (!xir_compile_work(flow->remaining, (size_t)words * sizeof(*out))) return XR_XIR_BUDGET;
             memcpy(out,source,(size_t)words*sizeof(*out));
@@ -315,13 +368,17 @@ static XrXirStatus error_instruction(ErrorFlow *flow, uint32_t i) {
         if (status != XR_XIR_OK || flow->restart) return status;
     } else if (op->op == XR_XIR_INVOKE_ERROR) {
         if (!out) return XR_XIR_BAD_STRUCTURE;
-        const XrXirInstruction *call = &flow->function->instructions[op->immediate];
+        if (op->immediate<0 || (uint64_t)op->immediate>=flow->function->instruction_count) return XR_XIR_BAD_STRUCTURE;
+        XrXirInstruction call_storage;const XrXirInstruction *call=NULL;
+        read=error_operation(flow,flow->function_index,(uint32_t)op->immediate,&call_storage,&call);
+        if (read!=XR_XIR_OK) return read;
         if (call->op == XR_XIR_TASK_AWAIT) {
             if (!xir_compile_work(flow->remaining, (uint64_t)words * sizeof(*out))) return XR_XIR_BUDGET;
             memcpy(out, error_read(flow, flow->work, call->args[0]), (size_t)words * sizeof(*out));
             return XR_XIR_OK;
         }
-        XrXirStatus status=error_call(flow, call, out);
+        uint32_t saved=flow->instruction;flow->instruction=(uint32_t)op->immediate;
+        XrXirStatus status=error_call(flow,call,out);flow->instruction=saved;
         if (status!=XR_XIR_OK || flow->restart) return status;
     }
     else if (out) error_type(flow, op->type, out);
@@ -342,24 +399,32 @@ static XrXirStatus error_instruction(ErrorFlow *flow, uint32_t i) {
     return XR_XIR_OK;
 }
 /* Return false only when a recognized filter excludes the complete value set. */
-static bool error_filter(ErrorFlow *flow, const XrXirInstruction *branch, bool yes) {
-    const XrXirInstruction *test = error_definition(flow, branch->args[0]);
-    if (!test) return true;
+static XrXirStatus error_filter(ErrorFlow *flow,const XrXirInstruction *branch,bool yes,bool *possible) {
+    if (!possible) return XR_XIR_BAD_STRUCTURE;
+    *possible=true;
+    XrXirInstruction test_storage;const XrXirInstruction *test=NULL;
+    XrXirStatus status=error_definition(flow,branch->args[0],&test_storage,&test);
+    if (status!=XR_XIR_OK) return status;
+    if (!test) return XR_XIR_OK;
     uint32_t value;
     XrXirType type = XR_XIR_UNIT;
     int64_t variant = -1;
     if (test->op == XR_XIR_ERROR_IS) { value = test->args[0]; type = (XrXirType)test->immediate; }
     else if (test->op == XR_XIR_EQ_INT || test->op == XR_XIR_NE_INT) {
-        const XrXirInstruction *tag = error_definition(flow, test->args[0]);
-        const XrXirInstruction *constant = error_definition(flow, test->args[1]);
-        if (!tag || !constant) return true;
+        XrXirInstruction tag_storage,constant_storage;
+        const XrXirInstruction *tag=NULL,*constant=NULL;
+        status=error_definition(flow,test->args[0],&tag_storage,&tag);
+        if (status==XR_XIR_OK) status=error_definition(flow,test->args[1],&constant_storage,&constant);
+        if (status!=XR_XIR_OK) return status;
+        if (!tag || !constant) return XR_XIR_OK;
         if (tag->op == XR_XIR_CONST_INT) { const XrXirInstruction *swap = tag; tag = constant; constant = swap; }
-        if (tag->op != XR_XIR_ENUM_TAG || constant->op != XR_XIR_CONST_INT) return true;
+        if (tag->op != XR_XIR_ENUM_TAG || constant->op != XR_XIR_CONST_INT) return XR_XIR_OK;
         value = tag->args[0]; variant = constant->immediate;
-        if (variant < 0) return test->op == XR_XIR_EQ_INT ? !yes : yes;
-        type = xr_xir_operand_type(flow->function, value);
+        if (variant<0) { *possible=test->op==XR_XIR_EQ_INT?!yes:yes;return XR_XIR_OK; }
+        status=error_type_at(flow,value,&type);
+        if (status!=XR_XIR_OK) return status;
         if (test->op == XR_XIR_NE_INT) yes = !yes;
-    } else return true;
+    } else return XR_XIR_OK;
     uint32_t root = flow->roots[value];
     for (uint32_t slot = 0; slot < flow->active_count; ++slot) {
         uint32_t v = flow->active[slot];
@@ -372,7 +437,8 @@ static bool error_filter(ErrorFlow *flow, const XrXirInstruction *branch, bool y
             if (match != yes) set[(a + 2) / 64] &= ~((uint64_t)1 << ((a + 2) % 64));
         }
     }
-    return error_any(error_read(flow, flow->edge, value), flow->effects->words);
+    *possible=error_any(error_read(flow,flow->edge,value),flow->effects->words);
+    return XR_XIR_OK;
 }
 static XrXirStatus error_edge(ErrorFlow *flow, uint32_t from, uint32_t to,
     const XrXirInstruction *branch, bool yes) {
@@ -381,7 +447,13 @@ static XrXirStatus error_edge(ErrorFlow *flow, uint32_t from, uint32_t to,
         return XR_XIR_BUDGET;
     /* Both original charges precede metadata access, including extreme probes. */
     const XrXirBlock *block = &flow->function->blocks[to];
-    bool has_phi = block->count && flow->function->instructions[block->first].op == XR_XIR_PHI;
+    bool has_phi=false;
+    if (block->count) {
+        EffectBodyInstructionShape shape={0};
+        XrXirStatus status=error_shape(flow,flow->function_index,block->first,&shape);
+        if (status!=XR_XIR_OK) return status;
+        has_phi=shape.op==XR_XIR_PHI;
+    }
     bool panic_cells = flow->function->blocks[from].panic == to &&
         flow->function->blocks[from].frontier != block->frontier;
     uint64_t *incoming = flow->work;
@@ -395,13 +467,18 @@ static XrXirStatus error_edge(ErrorFlow *flow, uint32_t from, uint32_t to,
             flow->work = saved;
             if (status != XR_XIR_OK) return status;
         }
-        if (branch && !error_filter(flow, branch, yes)) return XR_XIR_OK;
-        if (block->count && flow->function->instructions[block->first].op == XR_XIR_PHI) {
+        if (branch) {
+            bool possible=false;XrXirStatus status=error_filter(flow,branch,yes,&possible);
+            if (status!=XR_XIR_OK || !possible) return status;
+        }
+        if (has_phi) {
             if (!xir_compile_work(flow->remaining, flow->stride * sizeof(uint64_t))) return XR_XIR_BUDGET;
             memcpy(flow->snapshot, flow->edge, flow->stride * sizeof(uint64_t));
         }
         for (uint32_t i = block->first; i < block->first + block->count; ++i) {
-            const XrXirInstruction *phi = &flow->function->instructions[i];
+            XrXirInstruction storage;const XrXirInstruction *phi=NULL;
+            XrXirStatus read=error_operation(flow,flow->function_index,i,&storage,&phi);
+            if (read!=XR_XIR_OK) return read;
             if (phi->op != XR_XIR_PHI) break;
             for (uint32_t p = 0; p < phi->args[1]; p += 2) {
                 if (!xir_compile_work(flow->remaining, 1)) return XR_XIR_BUDGET;
@@ -431,12 +508,17 @@ static XrXirStatus error_block(ErrorFlow *flow, uint32_t b) {
     const XrXirBlock *block = &flow->function->blocks[b];
     if (!xir_compile_work(flow->remaining, flow->stride)) return XR_XIR_BUDGET;
     { if (!xir_compile_work(flow->remaining, flow->stride * sizeof(uint64_t))) { return XR_XIR_BUDGET; } memcpy(flow->work, flow->states + (size_t)b * flow->stride, flow->stride * sizeof(uint64_t)); }
+    XrXirInstruction storage;const XrXirInstruction *end=NULL;
     for (uint32_t i = block->first; i < block->first + block->count; ++i) {
         XrXirStatus status = block->panic ? error_edge(flow, b, block->panic, NULL, true) : XR_XIR_OK;
-        if (status == XR_XIR_OK) status = error_instruction(flow, i);
+        if (status == XR_XIR_OK)
+            status = error_operation(flow,flow->function_index,i,&storage,&end);
+        if (status == XR_XIR_OK) status = error_instruction(flow, i, end);
         if (status != XR_XIR_OK || flow->restart) return status;
     }
-    const XrXirInstruction *end = &flow->function->instructions[block->first + block->count - 1];
+    if (!end) return XR_XIR_BAD_STRUCTURE;
+    uint32_t last=block->first+block->count-1;
+    flow->instruction=last;
     if (end->op == XR_XIR_JUMP || end->op == XR_XIR_CLEANUP_REGISTER ||
         end->op == XR_XIR_CLEANUP_LEAVE || end->op == XR_XIR_CLEANUP_ERROR) return error_edge(flow, b, end->targets[0], NULL, true);
     if (end->op == XR_XIR_BRANCH) {
@@ -482,7 +564,10 @@ static XrXirStatus error_storage_prepare(ErrorFlow *flow, size_t bytes) {
     return XR_XIR_OK;
 }
 static XrXirStatus error_function(ErrorFlow *flow, uint32_t f) {
-    flow->function = &flow->module->functions[f];
+    flow->function_index=f;
+    XrXirStatus head_status=effect_body_request_head(&flow->body,f,&flow->head);
+    if (head_status!=XR_XIR_OK) return head_status;
+    flow->function=&flow->head;
     flow->cells = NULL; flow->cell_count = flow->active_count = 0;
     if (flow->function->parameter_count > UINT32_MAX - flow->function->instruction_count)
         return XR_XIR_BAD_STRUCTURE;
@@ -501,28 +586,47 @@ static XrXirStatus error_function(ErrorFlow *flow, uint32_t f) {
             flow->remaining->resources, (size_t)minimum, minimum));
         if (admitted != XR_XIR_OK) return admitted;
     }
-    /* Every invocation recounts immutable type membership; no summary or
-     * permission proof is cached across functions or atom-width restarts. */
+    /* Only byte capacity is local. Every request rebuilds every actual SSA
+     * classification; no fact survives a function or atom-width restart. */
+    uint8_t inline_membership[1024], *heap_membership = NULL;
+    uint32_t inline_sources[1024], *sources = inline_sources;
+    uint8_t *membership = inline_membership;
+    XrXirStatus status = XR_XIR_OK;
+    if (flow->values > sizeof(inline_membership)) {
+        uint64_t temporary_bytes=(uint64_t)flow->values*(sizeof(*sources)+sizeof(*membership));
+        if (temporary_bytes>SIZE_MAX) return XR_XIR_BUDGET;
+        heap_membership = xir_compile_alloc(flow->remaining,(size_t)temporary_bytes,&status);
+        if (!heap_membership) return status;
+        sources=(uint32_t *)heap_membership;
+        membership=heap_membership+(size_t)flow->values*sizeof(*sources);
+    }
     for (uint32_t v = 0; v < flow->values; ++v) {
-        if (!xir_compile_work(flow->remaining, 1)) return XR_XIR_BUDGET;
-        bool active = true;
-        XrXirStatus classified = error_row_active(flow, v, &active);
-        if (classified != XR_XIR_OK) return classified;
+        /* Charge the original scan and the actual temporary byte write. */
+        if (!xir_compile_work(flow->remaining, 2)) { status = XR_XIR_BUDGET;goto membership_done; }
+        bool active = true, copy = false;XrXirType type=XR_XIR_UNIT;uint32_t source=UINT32_MAX;
+        status = error_row_active(flow, v, &active, &type, &copy, &source);
+        if (status != XR_XIR_OK) goto membership_done;
+        bool cell = xr_xir_type_is_cell(flow->body.domain.types,type);
+        membership[v] = (uint8_t)((active ? ERROR_ROW_ACTIVE : 0) |
+            (cell ? ERROR_ROW_CELL : 0) | (copy ? ERROR_ROW_COPY : 0));
         if (active) ++flow->active_count;
-        if (xr_xir_type_is_cell(flow->module->types, xr_xir_operand_type(flow->function,v)))
-            ++flow->cell_count;
+        if (cell) ++flow->cell_count;
+        if (copy) {
+            if (!xir_compile_work(flow->remaining,1)) { status=XR_XIR_BUDGET;goto membership_done; }
+            sources[v]=source;
+        }
     }
     uint64_t stride = (uint64_t)(flow->active_count ? flow->active_count : 1) * words;
     uint64_t extra = ((uint64_t)flow->values * 2 + flow->active_count + flow->cell_count) *
         sizeof(uint32_t) + flow->function->block_count;
     uint64_t zero_bytes = words * sizeof(uint64_t);
     if (extra > SIZE_MAX - zero_bytes ||
-        stride > (SIZE_MAX - zero_bytes - extra) / sizeof(uint64_t) / rows) return XR_XIR_BUDGET;
+        stride > (SIZE_MAX - zero_bytes - extra) / sizeof(uint64_t) / rows) { status = XR_XIR_BUDGET;goto membership_done; }
     uint64_t bytes = stride * rows * sizeof(uint64_t) + zero_bytes + extra;
     if (!xir_compile_work(flow->remaining, stride * rows + words + flow->values + flow->function->block_count))
-        return XR_XIR_BUDGET;
+        { status = XR_XIR_BUDGET;goto membership_done; }
     flow->stride = (size_t)stride;
-    XrXirStatus status = error_storage_prepare(flow, (size_t)bytes);
+    status = error_storage_prepare(flow, (size_t)bytes);
     if (status == XR_XIR_OK) {
         size_t state_bytes = (size_t)(stride * rows) * sizeof(uint64_t);
         flow->states = (uint64_t *)flow->storage;
@@ -532,30 +636,30 @@ static XrXirStatus error_function(ErrorFlow *flow, uint32_t f) {
         flow->active = flow->slots + flow->values;
         flow->cells = flow->active + flow->active_count;
         flow->reachable = (uint8_t *)(flow->cells + flow->cell_count);
-        /* Charge the membership scan and all map, inverse and Cell writes. */
+        /* Charge the temporary byte scan and all map, inverse and Cell writes. */
         if (!xir_compile_work(flow->remaining, (uint64_t)flow->values * 2 + flow->active_count + flow->cell_count))
-            return XR_XIR_BUDGET;
+            { status = XR_XIR_BUDGET;goto membership_done; }
         uint32_t cell = 0, active = 0;
         for (uint32_t v = 0; v < flow->values; ++v) {
-            bool member = true;
-            XrXirStatus classified = error_row_active(flow, v, &member);
-            if (classified != XR_XIR_OK) return classified;
-            if (member) {
-                if (active >= flow->active_count) return XR_XIR_BAD_STRUCTURE;
+            uint8_t classified = membership[v];
+            if (classified & ERROR_ROW_ACTIVE) {
+                if (active >= flow->active_count) { status = XR_XIR_BAD_STRUCTURE;goto membership_done; }
                 flow->slots[v] = active; flow->active[active++] = v;
             } else flow->slots[v] = UINT32_MAX;
-            if (xr_xir_type_is_cell(flow->module->types, xr_xir_operand_type(flow->function,v))) {
-                if (cell >= flow->cell_count) return XR_XIR_BAD_STRUCTURE;
+            if (classified & ERROR_ROW_CELL) {
+                if (cell >= flow->cell_count) { status = XR_XIR_BAD_STRUCTURE;goto membership_done; }
                 flow->cells[cell++] = v;
             }
         }
-        if (cell != flow->cell_count || active != flow->active_count) return XR_XIR_BAD_STRUCTURE;
+        if (cell != flow->cell_count || active != flow->active_count) { status = XR_XIR_BAD_STRUCTURE;goto membership_done; }
         flow->work = flow->states + (size_t)flow->function->block_count * flow->stride;
         flow->edge = flow->work + flow->stride; flow->snapshot = flow->edge + flow->stride;
         uint32_t summary=flow->invocations?error_invocation_summary(flow->invocations,flow->invocation):f;
-        if (summary>=(flow->invocations?flow->summary_count:flow->effects->count)) return XR_XIR_BAD_STRUCTURE;
+        if (summary>=(flow->invocations?flow->summary_count:flow->effects->count)) { status = XR_XIR_BAD_STRUCTURE;goto membership_done; }
         flow->escaping = flow->effects->errors + (size_t)summary * flow->effects->words;
-        status = error_roots(flow); flow->reachable[0] = ERROR_BLOCK_REACHABLE | ERROR_BLOCK_PENDING;
+        status = error_roots(flow,membership,sources);
+        xr_compile_resources_free(heap_membership);heap_membership = NULL;
+        flow->reachable[0] = ERROR_BLOCK_REACHABLE | ERROR_BLOCK_PENDING;
         for (uint32_t p = 0; p < flow->function->parameter_count && status == XR_XIR_OK; ++p) {
             if (!xir_compile_work(flow->remaining, flow->effects->atom_count + 1)) status = XR_XIR_BUDGET;
             else {
@@ -575,6 +679,8 @@ static XrXirStatus error_function(ErrorFlow *flow, uint32_t f) {
             }
         } while (status == XR_XIR_OK && flow->changed && !flow->restart);
     }
+membership_done:
+    xr_compile_resources_free(heap_membership);
     return status;
 }
 static uint32_t error_variant_count(const XrXirTypes *types, uint32_t t) {
@@ -582,7 +688,7 @@ static uint32_t error_variant_count(const XrXirTypes *types, uint32_t t) {
     return types->nominals->declarations ? types->nominals->declarations[d].variant_count :
         types->nominals->identities[d].variant_count;
 }
-static XrXirStatus effect_errors_seed(const XrXirModule *module, XrXirEffects *effects, XrXirCompileContext *remaining) {
+static XrXirStatus effect_errors_seed(const XirMetadataDomain *module, XrXirEffects *effects, XrXirCompileContext *remaining) {
     XrXirStatus allocation_status = XR_XIR_OK;
     uint32_t parameters=0;
     for (uint32_t f=0;module->generics && f<module->function_count;++f) {
@@ -642,10 +748,23 @@ static XrXirStatus error_graph_prepare(const XrXirModule *module, EffectGraph *g
     XrXirCompileContext *remaining) {
     uint32_t count = 0;
     for (uint32_t f = 0; f < module->function_count; ++f) {
-        const XrXirFunction *function = &module->functions[f];
-        if (!xir_compile_work(remaining, (uint64_t)function->instruction_count + 1)) return XR_XIR_BUDGET;
-        for (uint32_t i = 0; i < function->instruction_count; ++i) {
-            if (function->instructions[i].op != XR_XIR_GO) continue;
+        EffectBodyRequest body=effect_body_owned_request(remaining,graph->material);
+        EffectBodyFunctionDimensions dimensions={0};
+        XrXirStatus dimension_status=effect_body_request_dimensions(&body,f,&dimensions);
+        if (dimension_status!=XR_XIR_OK) return dimension_status;
+        const EffectBodyFunctionDimensions *function=&dimensions;
+        const EffectPhysicalFunction *physical=NULL;
+        XrXirStatus status=effect_graph_physical_function(remaining,module,graph,f,&physical);
+        if (status!=XR_XIR_OK) return status;
+        for (uint32_t r=0;r<physical->count;++r) {
+            if (!xir_compile_work(remaining,1)) return XR_XIR_BUDGET;
+            EffectPhysicalRecord record=physical->records[r];
+            if (!(record.mask&EFFECT_PHYSICAL_GO)) continue;
+            if (record.value<function->parameter_count || record.value>=physical->values) return XR_XIR_BAD_STRUCTURE;
+            EffectBodyInstructionShape shape={0};
+            status=effect_body_request_shape(&body,f,record.value-function->parameter_count,&shape);
+            if (status!=XR_XIR_OK) return status;
+            if (shape.op!=XR_XIR_GO) return XR_XIR_BAD_STRUCTURE;
             if (count == UINT32_MAX) return XR_XIR_BUDGET;
             ++count;
         }
@@ -664,11 +783,25 @@ static XrXirStatus error_graph_prepare(const XrXirModule *module, EffectGraph *g
     for (uint32_t f = 0; f < module->function_count; ++f) graph->error_heads[f] = UINT32_MAX;
     uint32_t at = 0;
     for (uint32_t f = 0; f < module->function_count; ++f) {
-        const XrXirFunction *function = &module->functions[f];
-        if (!xir_compile_work(remaining, (uint64_t)function->instruction_count + 1)) return XR_XIR_BUDGET;
-        for (uint32_t i = 0; i < function->instruction_count; ++i) {
-            const XrXirInstruction *op = &function->instructions[i];
-            if (op->op != XR_XIR_GO) continue;
+        EffectBodyRequest body=effect_body_owned_request(remaining,graph->material);
+        EffectBodyFunctionDimensions dimensions={0};
+        XrXirStatus dimension_status=effect_body_request_dimensions(&body,f,&dimensions);
+        if (dimension_status!=XR_XIR_OK) return dimension_status;
+        const EffectBodyFunctionDimensions *function=&dimensions;
+        const EffectPhysicalFunction *physical=NULL;
+        status=effect_graph_physical_function(remaining,module,graph,f,&physical);
+        if (status!=XR_XIR_OK) return status;
+        for (uint32_t r=0;r<physical->count;++r) {
+            if (!xir_compile_work(remaining,1)) return XR_XIR_BUDGET;
+            EffectPhysicalRecord record=physical->records[r];
+            if (!(record.mask&EFFECT_PHYSICAL_GO)) continue;
+            if (record.value<function->parameter_count || record.value>=physical->values)
+                return XR_XIR_BAD_STRUCTURE;
+            uint32_t i=record.value-function->parameter_count;
+            XrXirInstruction storage;const XrXirInstruction *op=NULL;
+            status=effect_body_request_instruction(&body,f,i,&storage,&op);
+            if (status!=XR_XIR_OK) return status;
+            if (op->op != XR_XIR_GO) return XR_XIR_BAD_STRUCTURE;
             uint32_t callee = (uint32_t)op->immediate;
             if (callee >= module->function_count || at >= count) return XR_XIR_BAD_STRUCTURE;
             if (!xir_compile_work(remaining, 2)) return XR_XIR_BUDGET;
@@ -680,65 +813,70 @@ static XrXirStatus error_graph_prepare(const XrXirModule *module, EffectGraph *g
 }
 /* Empty escaping is an exact equation only for these known op semantics.
  * Every visit rebuilds this proof; new operations conservatively interpret CFG. */
-static XrXirStatus error_empty_escaping(const XrXirFunction *function,
+static inline XrXirStatus error_empty_escaping(const XrXirFunction *function,
     const XrXirCompileContext *remaining, bool *empty) {
     *empty = false;
     for (uint32_t i = 0; i < function->instruction_count; ++i) {
         if (!xir_compile_work(remaining, 1)) return XR_XIR_BUDGET;
         XrXirOp op = function->instructions[i].op;
         if (op <= XR_XIR_INVALID || op >= XR_XIR_OP_COUNT) return XR_XIR_BAD_STRUCTURE;
-        switch (op) {
-        case XR_XIR_CONST_BOOL: case XR_XIR_CONST_INT: case XR_XIR_CONST_STRING: case XR_XIR_SLOT_LOAD:
-        case XR_XIR_SLOT_INIT: case XR_XIR_SLOT_STORE: case XR_XIR_ATOMIC_NEW: case XR_XIR_ATOMIC_LOAD:
-        case XR_XIR_ATOMIC_STORE: case XR_XIR_ATOMIC_ADD: case XR_XIR_ATOMIC_SUB: case XR_XIR_ATOMIC_FETCH_ADD:
-        case XR_XIR_ATOMIC_FETCH_SUB: case XR_XIR_ATOMIC_SWAP: case XR_XIR_ATOMIC_COMPARE_EXCHANGE: case XR_XIR_ATOMIC_TOGGLE:
-        case XR_XIR_ATOMIC_TO_STRING: case XR_XIR_COPY: case XR_XIR_SCALAR_COPY: case XR_XIR_OWNED_RETAIN:
-        case XR_XIR_CONCAT_STRING: case XR_XIR_OUTPUT: case XR_XIR_WRITE_STREAM: case XR_XIR_PRINT:
-        case XR_XIR_ADD_INT: case XR_XIR_EQ_INT: case XR_XIR_LT_INT: case XR_XIR_SUSPEND:
-        case XR_XIR_JUMP: case XR_XIR_BRANCH: case XR_XIR_RETURN: case XR_XIR_LOCAL_NEW:
-        case XR_XIR_LOCAL_READ: case XR_XIR_LOCAL_WRITE: case XR_XIR_SCALAR_LOCAL_NEW: case XR_XIR_SCALAR_LOCAL_READ:
-        case XR_XIR_SCALAR_LOCAL_WRITE: case XR_XIR_OWNED_LOCAL_NEW: case XR_XIR_OWNED_LOCAL_READ: case XR_XIR_OWNED_LOCAL_WRITE:
-        case XR_XIR_SUB_INT: case XR_XIR_MUL_INT: case XR_XIR_DIV_INT: case XR_XIR_REM_INT:
-        case XR_XIR_NE_INT: case XR_XIR_LE_INT: case XR_XIR_GT_INT: case XR_XIR_GE_INT:
-        case XR_XIR_AND_INT: case XR_XIR_OR_INT: case XR_XIR_XOR_INT: case XR_XIR_SHL_INT:
-        case XR_XIR_SHR_INT: case XR_XIR_PHI: case XR_XIR_FUNCTION_REF: case XR_XIR_CELL_NEW:
-        case XR_XIR_CELL_READ: case XR_XIR_CELL_WRITE: case XR_XIR_CELL_PROJECT:
-        case XR_XIR_CONVERT_NUMBER: case XR_XIR_CONST_FLOAT:
-        case XR_XIR_NEG_FLOAT: case XR_XIR_EQ_FLOAT: case XR_XIR_NE_FLOAT: case XR_XIR_LT_FLOAT:
-        case XR_XIR_LE_FLOAT: case XR_XIR_GT_FLOAT: case XR_XIR_GE_FLOAT: case XR_XIR_CELL_PLACE:
-        case XR_XIR_SLOT_PLACE: case XR_XIR_ARRAY_NEW: case XR_XIR_ARRAY_GET: case XR_XIR_ARRAY_SET:
-        case XR_XIR_ARRAY_PUSH: case XR_XIR_ARRAY_LEN: case XR_XIR_ADD_FLOAT: case XR_XIR_SUB_FLOAT:
-        case XR_XIR_MUL_FLOAT: case XR_XIR_DIV_FLOAT: case XR_XIR_STRUCT_NEW: case XR_XIR_STRUCT_GET:
-        case XR_XIR_STRUCT_SET: case XR_XIR_LOCAL_UNINIT: case XR_XIR_STRING_LEN: case XR_XIR_EQ_STRING:
-        case XR_XIR_NE_STRING: case XR_XIR_STRING_CONTAINS: case XR_XIR_STRING_STARTS_WITH: case XR_XIR_STRING_ENDS_WITH:
-        case XR_XIR_STRING_INDEX_OF: case XR_XIR_STRING_LAST_INDEX_OF: case XR_XIR_ENUM_NEW: case XR_XIR_ENUM_TAG:
-        case XR_XIR_ENUM_GET: case XR_XIR_MATCH_FAIL: case XR_XIR_ERROR_ERASE: case XR_XIR_INVOKE_RESULT:
-        case XR_XIR_ERROR_IS: case XR_XIR_ERROR_NARROW: case XR_XIR_PANIC_CATCH: case XR_XIR_PANIC_CODE:
-        case XR_XIR_PANIC_MESSAGE: case XR_XIR_CLEANUP_REGISTER: case XR_XIR_CLEANUP_LEAVE: case XR_XIR_CLEANUP_ERROR:
-        case XR_XIR_CELL_LOCAL_WRITE: case XR_XIR_FIELD_PLACE: case XR_XIR_INDEX_PLACE: case XR_XIR_PLACE_READ:
-        case XR_XIR_PLACE_WRITE: case XR_XIR_FUNCTION_WEAKEN: case XR_XIR_CLASS_NEW: case XR_XIR_CLASS_GET:
-        case XR_XIR_CLASS_SET: case XR_XIR_ASSERT_CONDITION: case XR_XIR_INVOKE_DISCARD: case XR_XIR_EQUAL:
-        case XR_XIR_NULLABLE_NONE: case XR_XIR_NULLABLE_SOME: case XR_XIR_CLOCK_NANOS: case XR_XIR_UTC_OFFSET_AT:
-        case XR_XIR_TIMER_AFTER_MS: case XR_XIR_TO_STRING: case XR_XIR_OBJECT_PLACE: case XR_XIR_ARRAY_REPEAT:
-        case XR_XIR_NULLABLE_IS_SOME: case XR_XIR_NULLABLE_UNWRAP: case XR_XIR_CONST_RUNE: case XR_XIR_RUNE_TO_INTEGER:
-        case XR_XIR_INTEGER_TO_RUNE: case XR_XIR_LT_STRING: case XR_XIR_LE_STRING: case XR_XIR_GT_STRING:
-        case XR_XIR_GE_STRING: case XR_XIR_TUPLE_NEW: case XR_XIR_TUPLE_FIELD: case XR_XIR_SLOT_GROUP_INIT:
-        case XR_XIR_RANGE_CHECK: case XR_XIR_ARRAY_CAPACITY: case XR_XIR_ARRAY_WITH_CAPACITY: case XR_XIR_ARRAY_RESERVE:
-            break;
-        default: return XR_XIR_OK;
-        }
+        if (!effect_physical_error_empty_opcode(op)) return XR_XIR_OK;
     }
     *empty = true;
     return XR_XIR_OK;
+}
+static XrXirStatus error_empty_escaping_read(const EffectBodyRequest *body,uint32_t function,
+    const XrXirCompileContext *remaining,bool *empty) {
+    if (!body || !empty) return XR_XIR_BAD_STRUCTURE;
+    *empty=false;EffectBodyFunctionDimensions head={0};
+    XrXirStatus status=effect_body_request_dimensions(body,function,&head);
+    for (uint32_t i=0;status==XR_XIR_OK && i<head.instruction_count;++i) {
+        if (!xir_compile_work(remaining,1)) return XR_XIR_BUDGET;
+        EffectBodyInstructionShape shape={0};status=effect_body_request_shape(body,function,i,&shape);
+        if (status!=XR_XIR_OK) return status;
+        if (shape.op<=XR_XIR_INVALID || shape.op>=XR_XIR_OP_COUNT) return XR_XIR_BAD_STRUCTURE;
+        if (!effect_physical_error_empty_opcode(shape.op)) return XR_XIR_OK;
+    }
+    if (status==XR_XIR_OK) *empty=true;
+    return status;
+}
+/* Only the inference generation that built this complete inventory can
+ * consume the sparse locator. Existing nonempty summaries still force CFG. */
+static XrXirStatus error_empty_escaping_graph(const XrXirModule *module,uint32_t index,
+    const EffectGraph *graph,const XrXirCompileContext *work,bool *empty) {
+    if (!empty) return XR_XIR_BAD_STRUCTURE;
+    *empty=false;const EffectPhysicalFunction *physical=NULL;
+    XrXirStatus status=effect_graph_physical_function(work,module,graph,index,&physical);
+    if (status!=XR_XIR_OK) return status;
+    EffectBodyRequest body=effect_body_owned_request(work,graph->material);
+    EffectBodyFunctionDimensions dimensions={0};
+    status=effect_body_request_dimensions(&body,index,&dimensions);
+    if (status!=XR_XIR_OK) return status;
+    const EffectBodyFunctionDimensions *function=&dimensions;
+    for (uint32_t r=0;r<physical->count;++r) {
+        if (!xir_compile_work(work,1)) return XR_XIR_BUDGET;
+        EffectPhysicalRecord record=physical->records[r];
+        if (!(record.mask&EFFECT_PHYSICAL_ERROR_ESCAPE)) continue;
+        if (record.value<function->parameter_count || record.value>=physical->values)
+            return XR_XIR_BAD_STRUCTURE;
+        EffectBodyInstructionShape shape={0};
+        status=effect_body_request_shape(&body,index,record.value-function->parameter_count,&shape);
+        if (status!=XR_XIR_OK) return status;
+        XrXirOp op=shape.op;
+        if (op<=XR_XIR_INVALID || op>=XR_XIR_OP_COUNT || effect_physical_error_empty_opcode(op))
+            return XR_XIR_BAD_STRUCTURE;
+        return XR_XIR_OK;
+    }
+    *empty=true;return XR_XIR_OK;
 }
 /* Callees with no outstanding dependencies run first. Cycles retain original
  * function order and the existing fair FIFO reaches their least fixed point.
  * Ordering is rebuilt on every atom-width restart, never a cached summary. */
 static XrXirStatus error_queue_prepare(EffectGraph *graph, ErrorFlow *flow) {
-    if (!graph || !flow || !flow->module || !flow->effects ||
+    if (!graph || !flow || !flow->body.owner || !flow->effects ||
         !xir_compile_context_valid(flow->remaining)) return XR_XIR_BAD_STRUCTURE;
     uint32_t count = flow->effects->count;
-    if (!count || count != flow->module->function_count || !graph->heads ||
+    if (!count || count != flow->body.domain.function_count || !graph->heads ||
         !graph->queue || !graph->queued || (graph->edge_count && !graph->edges) ||
         (graph->error_edge_count && (!graph->error_heads || !graph->error_edges)))
         return XR_XIR_BAD_STRUCTURE;
@@ -846,7 +984,7 @@ static XrXirStatus error_functions(const XrXirModule *module, XrXirEffects *effe
             front = front + 1 == effects->count ? 0 : front + 1;
             --pending; graph->queued[f] = 0; flow->summary_changed = false;
             bool empty = false;
-            status = error_empty_escaping(&module->functions[f], flow->remaining, &empty);
+            status = error_empty_escaping_graph(module,f,graph,flow->remaining,&empty);
             if (status == XR_XIR_OK && empty) {
                 /* Preserve an existing nonempty summary rather than washing it. */
                 if (!xir_compile_work(flow->remaining, effects->words)) status = XR_XIR_BUDGET;
@@ -877,11 +1015,14 @@ static XrXirStatus error_functions(const XrXirModule *module, XrXirEffects *effe
 static XrXirStatus effect_errors_analyze(const XrXirModule *module, XrXirEffects *effects,
     EffectGraph *graph, XrXirCompileContext *remaining) {
     EffectTerms terms = {0}; terms.remaining = remaining;
-    if (module->types) terms.types = *module->types;
-    ErrorFlow flow = {0}; flow.module = module; flow.effects = effects; flow.remaining = remaining; flow.terms = &terms;
+    if (!effect_body_material_shape(graph->material) || graph->material->resources!=remaining->resources)
+        return XR_XIR_BAD_STRUCTURE;
+    terms.types=*graph->material->domain.types;
+    ErrorFlow flow={0};flow.source=module;flow.body=effect_body_owned_request(remaining,graph->material);
+    flow.effects=effects;flow.remaining=remaining;flow.terms=&terms;
     flow.summary_count=effects->count;flow.invocation=UINT32_MAX;
     XrXirStatus status=error_invocation_contexts_new(&flow,&flow.invocations);
-    if (status==XR_XIR_OK) status=effect_errors_seed(module,effects,remaining);
+    if (status==XR_XIR_OK) status=effect_errors_seed(&flow.body.domain,effects,remaining);
     if (status==XR_XIR_OK && flow.invocations) status=error_invocation_summaries(&flow);
     if (status==XR_XIR_OK && flow.invocations) status=error_invocation_functions(&flow);
     else if (status==XR_XIR_OK) {
@@ -890,15 +1031,15 @@ static XrXirStatus effect_errors_analyze(const XrXirModule *module, XrXirEffects
     }
     /* Temporary substituted identities die with terms. Prove their complete
      * outcomes while the sole error summary and authentic binders are alive. */
-    XrXirModule permission = *module; permission.types = &terms.types;
+    XirMetadataDomain permission=flow.body.domain;permission.types=&terms.types;
     for (uint32_t f = 0; status == XR_XIR_OK && f < effects->count; ++f) {
         const uint64_t *set = effects->errors + (size_t)f * effects->words;
         XrXirStatus qualified = error_bit(set, 0) || error_bit(set, 1) ? XR_XIR_BAD_TYPE : XR_XIR_OK;
-        XrXirProofContext proof = {&permission, {XR_XIR_CONTEXT_FUNCTION, f, 0}};
+        XirMetadataProofContext proof={&permission,{XR_XIR_CONTEXT_FUNCTION,f,0}};
         for (uint32_t a = 0; qualified == XR_XIR_OK && a < effects->atom_count; ++a) {
             if (!xir_compile_work(remaining, 1)) { status = XR_XIR_BUDGET; break; }
             if (!error_bit(set, a + 2)) continue;
-            qualified = xr_xir_compile_type_markers_prove(remaining, &proof, effects->atoms[a].type,
+            qualified = xir_metadata_type_markers_prove(remaining,&proof, effects->atoms[a].type,
                 XR_XIR_CONSTRAINT_ERROR | XR_XIR_CONSTRAINT_SENDABLE);
             if (qualified == XR_XIR_BUDGET || qualified == XR_XIR_OUT_OF_MEMORY) { status = qualified; break; }
         }

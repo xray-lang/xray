@@ -86,17 +86,23 @@ static bool scalar(XrXirType type) {
     return type == XR_XIR_BOOL || type == XR_XIR_RUNE || xr_xir_type_is_number(type);
 }
 
-static uint32_t operand_count(const XrXirFunction *function, const XrXirInstruction *op,
-                              const XrXirModule *module) {
+static uint32_t operand_count_metadata(const XrXirTypes *types,const XrXirDeclarations *declarations,
+    XrXirType result,XrXirType cell,const XrXirInstruction *op) {
     if (op->op == XR_XIR_SLOT_INIT || op->op == XR_XIR_SLOT_STORE)
-        return module->declarations ? xr_xir_slot_payload_operands(module->declarations->slots,
-            module->declarations->slot_count,op) : 1u;
+        return declarations ? xr_xir_slot_payload_operands(declarations->slots,
+            declarations->slot_count,op) : 1u;
     if (op->op == XR_XIR_CELL_NEW || op->op == XR_XIR_CELL_READ ||
         op->op == XR_XIR_CELL_WRITE || op->op == XR_XIR_CELL_LOCAL_WRITE)
-        return xr_xir_cell_payload_operands(module->types, op->op == XR_XIR_CELL_NEW ?
-            op->type : xr_xir_operand_type(function, op->args[0]), op->op);
+        return xr_xir_cell_payload_operands(types,op->op == XR_XIR_CELL_NEW ? op->type : cell,op->op);
     if (xr_xir_op_uses_operand_table(op->op)) return op->args[1];
-    return op->op == XR_XIR_RETURN ? (function->result != XR_XIR_UNIT) : op_rules[op->op].operands;
+    return op->op == XR_XIR_RETURN ? (result != XR_XIR_UNIT) : op_rules[op->op].operands;
+}
+static uint32_t operand_count(const XrXirFunction *function,const XrXirInstruction *op,
+    const XrXirModule *module) {
+    XrXirType cell=XR_XIR_UNIT;
+    if (op->op == XR_XIR_CELL_READ || op->op == XR_XIR_CELL_WRITE || op->op == XR_XIR_CELL_LOCAL_WRITE)
+        cell=xr_xir_operand_type(function,op->args[0]);
+    return operand_count_metadata(module->types,module->declarations,function->result,cell,op);
 }
 
 #include "xxir_cell_provenance.inc.c"
@@ -1074,9 +1080,7 @@ static XrXirStatus verify_provenance(const XrXirModule *module, XrXirCompileCont
         bytes = (uint64_t)p->origins[i].argument_count * sizeof(XrXirType);
         if (!(bytes <= SIZE_MAX)) return XR_XIR_BUDGET;
     }
-    XrXirStatus status = xr_xir_compile_verify_v2(remaining, &p->source->module, p->source->construction, diagnostic);
-    if (status != XR_XIR_OK) return status;
-    return xr_xir_compile_provenance_functions_match(remaining, &p->source->module, module, p, diagnostic);
+    return xr_xir_compile_provenance_verify(remaining, module, p, diagnostic);
 }
 
 static XrXirStatus verify_signature_structure(const XrXirModule *module, XrXirCompileContext *remaining) {
@@ -1237,16 +1241,18 @@ XR_FUNC XrXirStatus xr_xir_compile_verify_effects_v2(const XrXirCompileContext *
     if (diagnostic) *diagnostic = location;
     return status;
 }
-/* The complete checker returns only its own freshly derived Template owner.
- * It retains no producer callback or proof cache, and failed checks publish
- * neither an owner nor facts. Every structural and permission gate remains. */
-XR_FUNC XrXirStatus xr_xir_compile_verify_owned_effects_v2(const XrXirCompileContext *context,
+/* Structural, source and permission checks finish before the fresh owner
+ * becomes observable. Only the Template consumer restricts this collector's
+ * domain; ordinary verification never requests otherwise unused facts. */
+static XrXirStatus verify_collected_effects(const XrXirCompileContext *context,
     const XrXirModule *module, const XrXirConstruction *construction,
-    XrXirEffects **output, XrXirDiagnostic *diagnostic) {
+    XrXirEffects **output, XrXirDiagnostic *diagnostic, bool template_only) {
     if (!xir_compile_context_valid(context) || !output || *output) return XR_XIR_BAD_STRUCTURE;
     XrXirDiagnostic location={XR_XIR_OK,UINT32_MAX,UINT32_MAX,UINT32_MAX,XR_XIR_DIAGNOSTIC_NONE};
     XrXirEffects *owned=NULL;
     XrXirStatus status=xr_xir_compile_structure_verify_v2(context,module,construction,&location);
+    if (status==XR_XIR_OK && template_only &&
+        (!module->provenance || module->provenance->kind!=XR_XIR_EVIDENCE_TEMPLATE)) status=XR_XIR_BAD_STRUCTURE;
     if (status==XR_XIR_OK) {
         XrXirCompileContext remaining=*context;
         status=declaration_effects_verify(module,&remaining,&location,NULL,&owned);
@@ -1255,6 +1261,16 @@ XR_FUNC XrXirStatus xr_xir_compile_verify_owned_effects_v2(const XrXirCompileCon
     location.status=status;if (diagnostic) *diagnostic=location;
     if (status!=XR_XIR_OK) { xr_xir_compile_effects_free(owned);return status; }
     *output=owned;return XR_XIR_OK;
+}
+XR_FUNC XrXirStatus xr_xir_compile_verify_owned_effects_v2(const XrXirCompileContext *context,
+    const XrXirModule *module, const XrXirConstruction *construction,
+    XrXirEffects **output, XrXirDiagnostic *diagnostic) {
+    return verify_collected_effects(context,module,construction,output,diagnostic,true);
+}
+XR_FUNC XrXirStatus xr_xir_compile_verify_analyzed_effects_v2(const XrXirCompileContext *context,
+    const XrXirModule *module, const XrXirConstruction *construction,
+    XrXirEffects **output, XrXirDiagnostic *diagnostic) {
+    return verify_collected_effects(context,module,construction,output,diagnostic,false);
 }
 XrXirStatus xr_xir_compile_verify_v2(const XrXirCompileContext *context,
     const XrXirModule *module, const XrXirConstruction *construction, XrXirDiagnostic *diagnostic) {

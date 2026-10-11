@@ -49,23 +49,23 @@ static XrXirStatus conditional_copy_bodies(const XrXirCompileContext *context,bo
     XrXirArtifact *checked=NULL;XrXirDiagnostic diagnostic={0};
     XrXirStatus status=xir_fixture_check(context,&fixture.module,&checked,&diagnostic);
     if (status==XR_XIR_OK) status=xr_xir_compile_artifact_verify(checked,&diagnostic);
-    EffectInvocationCertificate *copy=status==XR_XIR_OK?xir_compile_calloc(context,1,sizeof(*copy),&status):NULL;
-    if (copy) { copy->resources=context->resources;copy->terms.remaining=context;
-        status=effect_invocation_copy_bodies(copy,xr_xir_compile_artifact_module(checked)); }
+    EffectBodyMaterial *copy=NULL;
+    if (status==XR_XIR_OK)
+        status=effect_body_material_create(context,xr_xir_compile_artifact_module(checked),&copy);
     XrXirInstruction saved[2];memcpy(saved,fixture.apply,sizeof(saved));
     if (status==XR_XIR_OK && oracle) {
         const XrXirModule *original=xr_xir_compile_artifact_module(checked);
-        CHECK(copy->bodies.function_count==original->function_count && !copy->bodies.provenance);
+        CHECK(copy && effect_body_count(copy)==original->function_count);
+        CHECK(effect_body_source_match(context,copy,original)==XR_XIR_OK);
         for (uint32_t f=0;f<original->function_count;++f) {
-            const XrXirFunction *a=&original->functions[f],*b=&copy->bodies.functions[f];
+            const XrXirFunction *a=&original->functions[f];const EffectBodyFunction *b=&copy->functions[f];
             CHECK(a->result==b->result && a->name_length==b->name_length &&
                 a->parameter_count==b->parameter_count && a->instruction_count==b->instruction_count &&
                 a->block_count==b->block_count && a->operand_count==b->operand_count);
             CHECK(!memcmp(a->name,b->name,a->name_length));
             if (a->parameter_count) CHECK(a->parameters!=b->parameters &&
                 !memcmp(a->parameters,b->parameters,a->parameter_count*sizeof(*a->parameters)));
-            CHECK(a->instructions!=b->instructions &&
-                !memcmp(a->instructions,b->instructions,a->instruction_count*sizeof(*a->instructions)));
+            CHECK((const void *)a->instructions!=(const void *)b->stream);
             CHECK(a->blocks!=b->blocks && !memcmp(a->blocks,b->blocks,a->block_count*sizeof(*a->blocks)));
             if (a->operand_count) CHECK(a->operands!=b->operands &&
                 !memcmp(a->operands,b->operands,a->operand_count*sizeof(*a->operands)));
@@ -73,13 +73,15 @@ static XrXirStatus conditional_copy_bodies(const XrXirCompileContext *context,bo
     }
     xr_xir_compile_artifact_free(checked);memset(&fixture,0xCE,sizeof(fixture));
     if (status==XR_XIR_OK && oracle) {
-        CHECK(copy->bodies.functions[1].instruction_count==2 &&
-            !memcmp(copy->bodies.functions[1].instructions,saved,sizeof(saved)));
-        CHECK(!memcmp(copy->bodies.functions[1].name,"apply",5));
+        CHECK(copy->functions[1].instruction_count==2);
+        XrXirFunction expected={.instructions=saved,.instruction_count=2};
+        EffectBodyRead read=effect_body_compile_read(context);
+        CHECK(effect_body_records_match(&read,&copy->functions[1],&expected)==XR_XIR_OK);
+        CHECK(!memcmp(copy->functions[1].name,"apply",5));
         CHECK(copy->terms.types.count==2 && copy->terms.types.nodes[1].parameter_count==1 &&
             copy->terms.types.nodes[1].parameters[0].mode==XR_PARAM_REF);
     }
-    effect_invocation_certificate_free(copy);return status;
+    effect_body_material_free(copy);return status;
 }
 
 static XrXirStatus conditional_copy_case(const XrXirCompileContext *context,uint32_t mode,bool oracle) {

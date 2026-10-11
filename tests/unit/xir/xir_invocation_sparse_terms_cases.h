@@ -16,32 +16,68 @@
 static const uint32_t sparse_indices[5][3]={{0,0,0},{31,0,0},{62,63,64},{63,0,0},{64,0,0}};
 static const uint32_t sparse_counts[5]={1,1,3,1,1};
 
+/* A complete real owner rejects missing physical Callable membership
+ * before allocating or publishing a receiving certificate. Restore it before
+ * the original seal; the independent raw classifier supplies the expected set. */
+static void conditional_sparse_physical_bound_rejections(EffectInvocationOwner *owner,
+    EffectInvocationSolution *solution) {
+    const XrXirCompileContext *context=owner->work;
+    EffectPhysicalFunction *physical=&owner->physical->functions[1];
+    CHECK(physical->count && physical->records[0].value==0 &&
+        physical->records[0].mask&EFFECT_PHYSICAL_CALLABLE);
+    EffectInvocationOwner *held=owner;EffectInvocationSolution *staged=solution;
+    EffectInvocationSealRequest request={&held,&staged,NULL};EffectInvocationCertificate *output=NULL;
+    uint32_t original_mask=physical->records[0].mask;
+    XrCompileResourceStats before=rp_stats(context);RootParameterMark retained=rp_mark();
+    physical->records[0].mask&=~EFFECT_PHYSICAL_CALLABLE;
+    CHECK(effect_invocation_seal(context,&request,&output)==XR_XIR_BAD_STRUCTURE && !output &&
+        held==owner && staged==solution && rp_stats(context).live_bytes==before.live_bytes &&
+        rp_stats(context).allocation_count==before.allocation_count);
+    physical->records[0].mask=original_mask;rp_balanced(retained);
+    CHECK(effect_physical_match(context,owner->physical,owner->module)==XR_XIR_OK);
+    EffectInvocationDeclaredBounds *bounds=(EffectInvocationDeclaredBounds *)owner->declared;
+    EffectInvocationValueBound *bound=&bounds->functions[1].bounds[0];
+    CHECK(bound->value==0 && bound->callable && bound->mask==XR_XIR_CALLABLE_ROOT_UNRESOLVED);
+}
+
 /* The mutations attack a solved real owner, never manufacture a trusted row.
  * Restoration must precede the independent seal and producer destruction. */
 static void conditional_sparse_rejections(EffectInvocationOwner *owner,
     EffectInvocationSolution *solution,uint32_t mode) {
     CHECK(mode<5 && owner->roots[1]<owner->count);
+    conditional_sparse_physical_bound_rejections(owner,solution);
     EffectInvocationNode *node=&owner->nodes[owner->roots[1]];
+    uint32_t causes=node->cause_count;node->cause_count=causes-1;
+    CHECK(effect_invocation_closed(owner)==XR_XIR_BAD_STRUCTURE);node->cause_count=causes;
+    node->cause_count=causes+2;
+    CHECK(effect_invocation_closed(owner)==XR_XIR_BAD_STRUCTURE);node->cause_count=causes;
+    uint64_t *cells=node->cells;node->cells=NULL;
+    CHECK(effect_invocation_closed(owner)==XR_XIR_BAD_STRUCTURE);node->cells=cells;
+    uint64_t *local_cells=node->local_cells;node->local_cells=NULL;
+    CHECK(effect_invocation_closed(owner)==XR_XIR_BAD_STRUCTURE);node->local_cells=local_cells;
+    CHECK(effect_invocation_closed(owner)==XR_XIR_OK);
     uint32_t last=sparse_indices[mode][sparse_counts[mode]-1];
     uint32_t words=(last+2+63)/64,count=UINT32_C(0x12345678);
-    uint64_t saved=node->contexts[words-1];
-    node->contexts[words-1]|=UINT64_C(1)<<63;
+    uint64_t *contexts=effect_invocation_node_row(node,EFFECT_INVOCATION_CONTEXTS,false);
+    uint64_t *parameters=effect_invocation_node_row(node,EFFECT_INVOCATION_PARAMETERS,false);
+    uint64_t saved=contexts[words-1];
+    contexts[words-1]|=UINT64_C(1)<<63;
     CHECK(effect_invocation_terms(owner,1,NULL,&count)==XR_XIR_BAD_STRUCTURE && count==UINT32_C(0x12345678));
     CHECK(effect_invocation_closed(owner)==XR_XIR_BAD_STRUCTURE);
-    node->contexts[words-1]=saved;
-    saved=node->parameters[0];node->parameters[0]|=UINT64_C(1)<<63;
+    contexts[words-1]=saved;
+    saved=parameters[0];parameters[0]|=UINT64_C(1)<<63;
     CHECK(effect_invocation_terms(owner,1,NULL,&count)==XR_XIR_BAD_STRUCTURE && count==UINT32_C(0x12345678));
     CHECK(effect_invocation_closed(owner)==XR_XIR_BAD_STRUCTURE);
-    node->parameters[0]=saved;
-    node->parameters[0]|=UINT64_C(1)<<1;
+    parameters[0]=saved;
+    parameters[0]|=UINT64_C(1)<<1;
     CHECK(effect_invocation_terms(owner,1,NULL,&count)==XR_XIR_BAD_STRUCTURE && count==UINT32_C(0x12345678));
-    node->parameters[0]=saved;
+    parameters[0]=saved;
     saved=node->cells[0];node->cells[0]|=UINT64_C(1);
     CHECK(effect_invocation_terms(owner,1,NULL,&count)==XR_XIR_BAD_STRUCTURE && count==UINT32_C(0x12345678));
     node->cells[0]=saved;
-    saved=node->contexts[(last+1)/64];node->contexts[(last+1)/64]|=UINT64_C(1)<<((last+1)%64);
+    saved=contexts[(last+1)/64];contexts[(last+1)/64]|=UINT64_C(1)<<((last+1)%64);
     CHECK(effect_invocation_terms(owner,1,NULL,&count)==XR_XIR_BAD_STRUCTURE && count==UINT32_C(0x12345678));
-    node->contexts[(last+1)/64]=saved;
+    contexts[(last+1)/64]=saved;
     const XrXirRootFormula *formula=&solution->formulas[1];
     CHECK(!formula->constant_mask && formula->term_count==sparse_counts[mode] && formula->terms);
     XrXirRootTerm *terms=(XrXirRootTerm *)formula->terms;
@@ -116,6 +152,9 @@ static XrXirStatus conditional_sparse_case(const XrXirCompileContext *context,ui
                 CHECK(formula->terms[t].kind==XR_XIR_ROOT_TERM_CONTEXT_CALL &&
                     formula->terms[t].index==sparse_indices[mode][t]);
             CHECK(certificate->equations->deferred_count==sparse_counts[mode]);
+            uint32_t original_mask=UINT32_MAX;
+            CHECK(effect_invocation_bounds_mask(context,certificate->declared,1,0,&original_mask)==XR_XIR_OK &&
+                original_mask==XR_XIR_CALLABLE_ROOT_UNRESOLVED);
             CHECK(!certificate->equations->work && !certificate->equations->module &&
                 !certificate->equations->effects && !certificate->equations->graph && !certificate->equations->declared);
         }

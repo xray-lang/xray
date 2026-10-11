@@ -14,13 +14,13 @@
 static XrXirStatus declaration_effects_verify(const XrXirModule *module,
     XrXirCompileContext *remaining, XrXirDiagnostic *diagnostic, const XrXirEffects *prepared, XrXirEffects **output) {
     bool templated = module->provenance && module->provenance->kind == XR_XIR_EVIDENCE_TEMPLATE;
-    if (output && (*output || prepared || !templated)) return XR_XIR_BAD_STRUCTURE;
+    if (output && (*output || prepared)) return XR_XIR_BAD_STRUCTURE;
     if (!module->declarations) {
-        if (!templated) return XR_XIR_OK;
+        if (!templated && !output) return XR_XIR_OK;
         XrXirEffects *owned = NULL;
         XrXirStatus status = prepared ? XR_XIR_OK :
             xr_xir_compile_effects_infer_verified(remaining, module, &owned);
-        if (status == XR_XIR_OK) status = xir_effects_parameters_match(remaining,
+        if (status == XR_XIR_OK && templated) status = xir_effects_parameters_match(remaining,
             module, prepared ? prepared : owned);
         if (status==XR_XIR_OK && output) { *output=owned;owned=NULL; }
         xr_xir_compile_effects_free(owned);
@@ -50,7 +50,7 @@ static XrXirStatus declaration_effects_verify(const XrXirModule *module,
             }
         }
     }
-    if (!present) return XR_XIR_OK;
+    if (!present) return output ? xr_xir_compile_effects_infer_verified(remaining, module, output) : XR_XIR_OK;
     XrXirEffects *effects = NULL;
     XrXirStatus status = prepared ? XR_XIR_OK : xr_xir_compile_effects_infer_verified(remaining, module, &effects);
     const XrXirEffects *facts = prepared ? prepared : effects;

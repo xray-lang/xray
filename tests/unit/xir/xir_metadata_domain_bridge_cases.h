@@ -126,23 +126,29 @@ static XrXirStatus conditional_metadata_default(const XrXirCompileContext *conte
 /* Independent literal expectations cover every function head/body field and
  * every declaration child used by the proof. No clone helper builds this
  * expected snapshot, and both generic and nominal/interface facts are checked. */
-static void conditional_metadata_snapshot(const XrXirModule *module) {
-    CHECK(module->stage==XR_XIR_CHECKED && module->function_count==3 && module->functions &&
+static void conditional_metadata_snapshot(const XrXirCompileContext *context,
+    const EffectBodyMaterial *module) {
+    CHECK(module->stage==XR_XIR_CHECKED && effect_body_count(module)==3 && module->functions &&
         module->declarations && module->declarations->functions && module->generics &&
-        !module->provenance && !module->defaults && module->linkage_kind==XR_XIR_PROGRAM);
+        !module->domain.defaults && module->linkage_kind==XR_XIR_PROGRAM);
     const char *names[3]={"entry","init","generic"};uint32_t lengths[3]={5,4,7};
     const XrXirInstruction expected[2]={{.op=XR_XIR_CONST_INT,.type=XR_XIR_I64,.immediate=41},
         {.op=XR_XIR_RETURN}};
     const XrXirFunctionIdentity identity={0};
     for (uint32_t f=0;f<3;++f) {
-        const XrXirFunction *body=&module->functions[f];
+        const EffectBodyFunction *body=&module->functions[f];
         CHECK(body->name_length==lengths[f] && !memcmp(body->name,names[f],lengths[f]) &&
             !body->parameters && !body->parameter_count && !body->operands && !body->operand_count &&
             body->result==(f?XR_XIR_UNIT:XR_XIR_I64) && body->block_count==1 &&
-            body->instruction_count==(f?1u:2u) && body->blocks && body->instructions);
+            body->instruction_count==(f?1u:2u) && body->blocks && body->stream);
         const XrXirBlock block={.count=f?1u:2u};
         CHECK(!memcmp(body->blocks,&block,sizeof(block)));
-        CHECK(!memcmp(body->instructions,expected+(f?1:0),body->instruction_count*sizeof(*expected)));
+        EffectBodyRead read=effect_body_compile_read(context);
+        for (uint32_t i=0;i<body->instruction_count;++i) {
+            XrXirInstruction actual;
+            CHECK(effect_body_instruction_get(&read,body,i,&actual)==XR_XIR_OK);
+            CHECK(!memcmp(&actual,&expected[f?1:i],sizeof(actual)));
+        }
         CHECK(!memcmp(&module->declarations->functions[f],&identity,sizeof(identity)));
         const XrXirGeneric *generic=&module->generics[f];
         CHECK(generic->parameter_count==(f==2?1u:0u) && !generic->arguments &&
@@ -154,7 +160,7 @@ static void conditional_metadata_snapshot(const XrXirModule *module) {
         !d->literals && !d->literal_count && !d->root_module && !d->entry_function && !d->implementations);
     CHECK(d->modules[0].name_length==5 && !memcmp(d->modules[0].name,"alpha",5) &&
         !d->modules[0].dependencies && !d->modules[0].dependency_count && d->modules[0].initializer==1);
-    const XrXirTypes *types=module->types;
+    const XrXirTypes *types=module->domain.types;
     CHECK(types && !types->count && !types->nodes && types->nominals && types->nominals->count==1 &&
         types->nominals->declarations && types->interfaces && types->interfaces->count==2 && types->interfaces->declarations);
     const XrXirNominalDeclaration *nominal=types->nominals->declarations;
@@ -191,21 +197,61 @@ static void conditional_metadata_snapshot(const XrXirModule *module) {
     }
 }
 
+/* The opaque metadata owner is queried after the actual raw artifact dies.
+ * These requests reach the same common proof core without a Module alias. */
+static XrXirStatus conditional_metadata_owned_proof(const XrXirCompileContext *context,
+    const EffectBodyMaterial *body,bool oracle) {
+    XirMetadataProofContext proof={&body->domain,{XR_XIR_CONTEXT_FUNCTION,2,0}};
+    XrXirStatus status=xir_metadata_context_constraints_verify(context,&proof);
+    XirConstraintScratch scratch={context->resources,NULL};
+    if (status==XR_XIR_OK) status=xir_metadata_type_use_verify_scratch(context,&proof,
+        XR_XIR_TYPE_PARAMETER_BASE,&scratch);
+    xr_xir_constraint_scratch_free(&scratch);
+    if (status==XR_XIR_OK) status=xir_metadata_type_markers_prove(context,&proof,
+        XR_XIR_TYPE_PARAMETER_BASE,XR_XIR_CONSTRAINT_SENDABLE);
+    if (status==XR_XIR_OK && oracle) {
+        CHECK(body->domain.function_count==3 && body->generics[2].parameter_count==1);
+        proof.owner.declaration=3;
+        CHECK(xir_metadata_context_constraints_verify(context,&proof)==XR_XIR_BAD_STRUCTURE);
+        proof.owner.declaration=2;
+        CHECK(xir_metadata_type_markers_prove(context,&proof,
+            (XrXirType)(XR_XIR_TYPE_PARAMETER_BASE+1),XR_XIR_CONSTRAINT_SENDABLE)==XR_XIR_BAD_TYPE);
+        /* The original missing-function, nominal and closed controls now
+         * use the owned metadata domain after the producer has died. */
+        XirMetadataDomain absent=body->domain;absent.function_count=0;
+        proof.domain=&absent;
+        CHECK(xir_metadata_context_constraints_verify(context,&proof)==XR_XIR_BAD_STRUCTURE);
+        proof.owner=(XrXirDeclarationContext){XR_XIR_CONTEXT_NOMINAL,0,0};
+        CHECK(xir_metadata_context_constraints_verify(context,&proof)==XR_XIR_OK);
+        proof.owner=(XrXirDeclarationContext){XR_XIR_CONTEXT_CLOSED,0,0};
+        CHECK(xir_metadata_type_markers_prove(context,&proof,XR_XIR_I64,
+            XR_XIR_CONSTRAINT_SENDABLE)==XR_XIR_OK);
+    }
+    return status;
+}
+
 /* The producer and its raw declaration children die before the copied domain
  * is queried. Only the existing receiving owner retains these records. */
 static XrXirStatus conditional_metadata_case(const XrXirCompileContext *context,bool oracle) {
     XrXirArtifact *checked=NULL;
     XrXirStatus status=constraint_packet_fixture(context,XR_XIR_CONSTRAINT_SENDABLE,&checked);
     if (status==XR_XIR_OK && oracle) constraint_packet_owned(checked,XR_XIR_CONSTRAINT_SENDABLE);
-    EffectInvocationCertificate *copy=status==XR_XIR_OK?xir_compile_calloc(context,1,sizeof(*copy),&status):NULL;
-    if (copy) { copy->resources=context->resources;copy->terms.remaining=context;
-        status=effect_invocation_copy_bodies(copy,xr_xir_compile_artifact_module(checked)); }
-    if (status==XR_XIR_OK) status=effect_terms_snapshot_match(&copy->terms,
+    EffectBodyMaterial *copy=NULL;
+    if (status==XR_XIR_OK)
+        status=effect_body_material_create(context,xr_xir_compile_artifact_module(checked),&copy);
+    EffectTerms comparison={.remaining=context};
+    if (status==XR_XIR_OK) comparison.types=copy->terms.types;
+    if (status==XR_XIR_OK) status=effect_terms_snapshot_match(&comparison,
         xr_xir_compile_artifact_module(checked)->types,xr_xir_compile_artifact_module(checked)->types->count);
+    effect_terms_free(&comparison);
+    if (status==XR_XIR_OK) status=effect_body_source_match(context,copy,
+        xr_xir_compile_artifact_module(checked));
+    if (status==XR_XIR_OK) status=conditional_metadata_proof(context,
+        xr_xir_compile_artifact_module(checked),oracle);
     xr_xir_compile_artifact_free(checked);checked=NULL;
-    if (status==XR_XIR_OK && oracle) conditional_metadata_snapshot(&copy->bodies);
-    if (status==XR_XIR_OK) status=conditional_metadata_proof(context,&copy->bodies,oracle);
-    effect_invocation_certificate_free(copy);
+    if (status==XR_XIR_OK && oracle) conditional_metadata_snapshot(context,copy);
+    if (status==XR_XIR_OK) status=conditional_metadata_owned_proof(context,copy,oracle);
+    effect_body_material_free(copy);
     if (status==XR_XIR_OK) status=conditional_metadata_default(context,oracle);
     InvocationDeferredFixture fixture;invocation_deferred_fixture(&fixture,1);
     if (status==XR_XIR_OK) status=xir_fixture_check(context,&fixture.module,&checked,NULL);

@@ -14,11 +14,9 @@
 #include <stdio.h>
 #include <stdlib.h>
 #define CHECK(c) do { if (!(c)) { fprintf(stderr, "%d: %s\n", __LINE__, #c); exit(1); } } while (0)
-#include "xir_effect_analysis_owner.h"
+#include "xir_effects_compile_owner.h"
 #include "xir/xxir_effects.c"
-static const XrXirCompileContext *suite_context = &effect_context;
-#include "xir_enum_ops_fixture.h"
-#include "xir_enum_generic_fixture.h"
+#include "xir_effects_enum_fixture.h"
 #include "xir_effect_witness_cases.h"
 _Static_assert(XR_XIR_CALLABLE_NO_SUSPEND == 1u && XR_XIR_CALLABLE_ROOT_NONE == 2u &&
     XR_XIR_CALLABLE_ROOT_UNRESOLVED == 8u && XR_XIR_CALLABLE_ROOT_MASK == 14u, "independent callable bits");
@@ -132,7 +130,7 @@ static void effect_cases(bool suspends) {
 }
 static void effect_long_cycle(void) {
     enum { COUNT = 128 };
-    XrXirFunction functions[COUNT]; XrXirBlock blocks[COUNT]; XrXirInstruction ops[COUNT][3];
+    XrXirFunction functions[COUNT + 2]; XrXirBlock blocks[COUNT]; XrXirInstruction ops[COUNT][3];
     for (uint32_t f = 0; f < COUNT; ++f) {
         ops[f][0] = (XrXirInstruction) {XR_XIR_CALL, XR_XIR_UNIT, {0}, {0}, (f + 1) % COUNT, {0}};
         ops[f][1] = (XrXirInstruction) {XR_XIR_CONST_INT, XR_XIR_I64, {0}, {0}, 0, {0}};
@@ -141,7 +139,14 @@ static void effect_long_cycle(void) {
         functions[f] = (XrXirFunction) {"cycle", 5, NULL, 0, XR_XIR_UNIT, &blocks[f], 1, ops[f], 3, NULL, 0};
     }
     ops[COUNT - 1][1] = (XrXirInstruction) {XR_XIR_SUSPEND, XR_XIR_UNIT, {0}, {0}, 0, {0}};
-    XrXirModule module = {XR_XIR_BUILT, functions, COUNT, NULL, NULL, NULL, NULL, XR_XIR_PROGRAM, NULL};
+    XrXirInstruction init = {.op=XR_XIR_RETURN,.type=XR_XIR_UNIT};
+    XrXirInstruction entry[] = {{.op=XR_XIR_CONST_INT,.type=XR_XIR_I64},{.op=XR_XIR_RETURN,.type=XR_XIR_UNIT,.args={0}}};
+    XrXirBlock init_block={0,1,0,0}, entry_block={0,2,0,0};
+    functions[COUNT]=(XrXirFunction){"init",4,NULL,0,XR_XIR_UNIT,&init_block,1,&init,1,NULL,0};
+    functions[COUNT+1]=(XrXirFunction){"entry",5,NULL,0,XR_XIR_I64,&entry_block,1,entry,2,NULL,0};
+    XrXirSourceModule source={"cycle",5,NULL,0,COUNT}; XrXirFunctionIdentity ids[COUNT+2]={{0}};
+    XrXirDeclarations declarations={&source,1,ids,NULL,0,NULL,0,0,COUNT+1,NULL};
+    XrXirModule module = {XR_XIR_BUILT, functions, COUNT+2, &declarations, NULL, NULL, NULL, XR_XIR_PROGRAM, NULL};
     XrXirArtifact *artifact = NULL;
     CHECK(xir_fixture_check(&effect_context, &module, &artifact, NULL) == XR_XIR_OK);
     XrXirEffects *effects = NULL;
@@ -156,7 +161,7 @@ static void effect_long_cycle(void) {
     effect_artifact_free(artifact);
 }
 static void effect_enum_ownership(void) {
-    XrXirArtifact *original=enum_ops_checked(&effect_context,0,false), *artifact=NULL;
+    XrXirArtifact *original=effect_enum_ops_checked(&effect_context, 0,false), *artifact=NULL;
     XrXirModule built=*xr_xir_compile_artifact_module(original); built.stage=XR_XIR_BUILT;
     XrXirFunction functions[3]; memcpy(functions,built.functions,sizeof(functions));
     XrXirInstruction ops[11]; memcpy(ops,functions[2].instructions,sizeof(ops));
@@ -170,7 +175,7 @@ static void effect_enum_ownership(void) {
     CHECK(!xr_xir_effects_error(effects,2,(XrXirType)256,0));
     CHECK(!xr_xir_effects_error_unknown(effects,2));
     effect_summary_free(effects); CHECK(effect_balanced());
-    artifact=enum_ops_lowered(&effect_context,false); sites+=effect_failures(artifact); effect_artifact_free(artifact);
+    artifact=effect_enum_ops_lowered(&effect_context, false); sites+=effect_failures(artifact); effect_artifact_free(artifact);
     printf("Error atoms: %zu allocation failure sites released across checked and lowered\n",sites);
 }
 static void effect_extreme_budgets(void) {
@@ -178,7 +183,8 @@ static void effect_extreme_budgets(void) {
     XrXirFunction function={0}; function.parameter_count=UINT32_MAX-1; function.instruction_count=1;
     function.block_count=UINT32_MAX;
     XrXirModule module={0}; module.functions=&function; module.function_count=1;
-    ErrorFlow flow={0}; flow.module=&module; flow.effects=&effects; flow.remaining=&effect_context;
+    ErrorFlow flow={0};flow.source=&module;flow.body=effect_body_raw_request(&effect_context,&module);
+    flow.effects=&effects;flow.remaining=&effect_context;
     EffectMark mark=effect_mark(); attempts=0;
     CHECK(error_function(&flow,0)==XR_XIR_BUDGET && !attempts); effect_mark_check(mark);
     flow.values=UINT32_MAX; flow.stride=(size_t)UINT32_MAX*effects.words;
@@ -186,8 +192,8 @@ static void effect_extreme_budgets(void) {
 
 }
 static void effect_generic_errors(void) {
-    enum_generic_cases();
-    XrXirArtifact *source=enum_generic_checked(&effect_context,0), *artifact=NULL;
+    effect_enum_generic_cases(&effect_context);
+    XrXirArtifact *source=effect_enum_generic_checked(&effect_context, 0), *artifact=NULL;
     XrXirModule built=*xr_xir_compile_artifact_module(source); built.stage=XR_XIR_BUILT;
     XrXirFunction functions[4]; memcpy(functions,built.functions,sizeof(functions));
     XrXirInstruction ops[2]; memcpy(ops,functions[2].instructions,sizeof(ops));
@@ -202,19 +208,19 @@ static void effect_generic_errors(void) {
     CHECK(!xr_xir_effects_error_unknown(effects,1) && !xr_xir_effects_error_unidentified(effects,1));
     effect_summary_free(effects);
     EffectMark mark=effect_mark(); XrCompileResourceLimits caps=effect_caps();
-    caps.live_bytes=effect_baseline.live_bytes;
-    XrXirCompileContext bounded=effect_owner_new(caps);
-    EffectTerms terms={0}; terms.types=*xr_xir_compile_artifact_module(artifact)->types; terms.remaining=&bounded;
-    XrXirType argument=XR_XIR_I64, concrete=XR_XIR_UNIT;
+    caps.allocated_bytes=caps.live_bytes=effect_baseline.live_bytes;
+    XrXirCompileContext budget=effect_owner_new(caps);
+    EffectTerms terms={0}; terms.types=*xr_xir_compile_artifact_module(artifact)->types; terms.remaining=&budget;
+    XrXirType argument=XR_XIR_I64, output=XR_XIR_UNIT;
     XrXirGeneric arguments={0}; arguments.arguments=&argument; arguments.argument_count=1;
-    CHECK(effect_terms_substitute(&terms,(XrXirType)256,&arguments,&concrete)==XR_XIR_BUDGET);
-    CHECK(concrete==XR_XIR_UNIT); effect_terms_free(&terms);
-    effect_owner_free(&bounded,effect_baseline.live_bytes); effect_mark_check(mark);
+    CHECK(effect_terms_substitute(&terms,(XrXirType)256,&arguments,&output)==XR_XIR_BUDGET);
+    CHECK(output==XR_XIR_UNIT); effect_terms_free(&terms);
+    effect_owner_free(&budget,effect_baseline.live_bytes); effect_mark_check(mark);
     effect_artifact_free(artifact); CHECK(effect_balanced());
     printf("Generic error substitution: %zu allocation failures released\n",allocations);
 }
 static XrXirArtifact *effect_missing_fixture(bool wide) {
-    XrXirArtifact *source = enum_generic_checked(&effect_context,0), *artifact = NULL;
+    XrXirArtifact *source = effect_enum_generic_checked(&effect_context, 0), *artifact = NULL;
     XrXirModule built = *xr_xir_compile_artifact_module(source); built.stage = XR_XIR_BUILT;
     XrXirFunction functions[4]; memcpy(functions, built.functions, sizeof(functions));
     XrXirInstruction make[2]; memcpy(make, functions[2].instructions, sizeof(make));
@@ -489,7 +495,11 @@ static void effect_callable_weakening(void) {
         {XR_XIR_RETURN, XR_XIR_UNIT, {1, 0}, {0}, 0, {0}}};
     XrXirBlock block = {0, 2, 0, 0};
     XrXirFunction function = {"weaken", 6, &source, 1, (XrXirType)256, &block, 1, ops, 2, NULL, 0};
-    XrXirModule module = {XR_XIR_BUILT, &function, 1, NULL, NULL, &types, NULL, XR_XIR_PROGRAM, NULL};
+    XrXirInstruction init={.op=XR_XIR_RETURN,.type=XR_XIR_UNIT}; XrXirBlock init_block={0,1,0,0};
+    XrXirFunction functions[2]={function,{"init",4,NULL,0,XR_XIR_UNIT,&init_block,1,&init,1,NULL,0}};
+    XrXirSourceModule source_module={"weaken",6,NULL,0,1}; XrXirFunctionIdentity ids[2]={{0}};
+    XrXirDeclarations declarations={&source_module,1,ids,NULL,0,NULL,0,UINT32_MAX,UINT32_MAX,NULL};
+    XrXirModule module = {XR_XIR_BUILT, functions, 2, &declarations, NULL, &types, NULL, XR_XIR_LIBRARY, NULL};
     XrXirArtifact *checked = NULL;
     CHECK(xir_fixture_check(&effect_context, &module, &checked, NULL) == XR_XIR_OK);
     effect_artifact_free(checked); checked = NULL;
@@ -501,31 +511,32 @@ static void effect_callable_weakening(void) {
             (units==1 ? XR_XIR_BUDGET : XR_XIR_OK));
         CHECK(effect_stats(&c).work==caps.work); effect_owner_free(&c,effect_baseline.live_bytes); effect_mark_check(mark);
     }
+    /* Equal contracts use one canonical identity; the unused node stays distinct. */
+    for (unsigned equal=0;equal<2;++equal) {
+        source=(XrXirType)256;
+        nodes[0].flags=XR_XIR_CALLABLE_ROOT_UNRESOLVED | (equal ? XR_XIR_CALLABLE_NO_SUSPEND : 0);
+        nodes[1].flags=XR_XIR_CALLABLE_ROOT_UNRESOLVED | (equal ? 0 : XR_XIR_CALLABLE_NO_SUSPEND);
+        CHECK(xir_fixture_check(&effect_context,&module,&checked,NULL)==XR_XIR_OK && checked);
+        effect_artifact_free(checked);checked=NULL;
+    }
     for (unsigned bad = 0; bad < 6; ++bad) {
-        source = bad == 0 ? (XrXirType)256 : (XrXirType)257;
-        nodes[0].flags = XR_XIR_CALLABLE_ROOT_UNRESOLVED | (bad == 1 || bad == 5 ? XR_XIR_CALLABLE_NO_SUSPEND : 0);
-        nodes[1].flags = XR_XIR_CALLABLE_ROOT_UNRESOLVED | (bad == 5 ? 0 : XR_XIR_CALLABLE_NO_SUSPEND);
+        source = (XrXirType)257;
+        /* UNKNOWN and REQUIRED cannot acquire a pure destination bound. */
+        nodes[0].flags = (bad <= 1 ? XR_XIR_CALLABLE_ROOT_NONE : XR_XIR_CALLABLE_ROOT_UNRESOLVED) |
+            (bad == 1 || bad == 5 ? XR_XIR_CALLABLE_NO_SUSPEND : 0);
+        nodes[1].flags = (bad == 1 ? XR_XIR_CALLABLE_ROOT_REQUIRED : XR_XIR_CALLABLE_ROOT_UNRESOLVED) |
+            (bad == 5 ? 0 : XR_XIR_CALLABLE_NO_SUSPEND);
         nodes[0].result = bad == 2 ? XR_XIR_BOOL : XR_XIR_I64;
         parameters[0].type = bad == 3 ? XR_XIR_BOOL : XR_XIR_I64;
         nodes[0].parameter_count = bad == 4 ? 0 : 1;
         CHECK(xir_fixture_check(&effect_context, &module, &checked, NULL) != XR_XIR_OK && !checked);
     }
 }
-static void effect_failure_outputs(void) {
-    XrXirArtifact *artifact = effect_fixture(false);
-    XrXirArtifact wrong_stage = *artifact;
-    wrong_stage.module.stage = XR_XIR_BUILT;
-    XrXirEffects occupied = {0}, before = occupied, *output = &occupied;
-    EffectMark mark = effect_mark();
-    CHECK(xr_xir_compile_effects_analyze(&wrong_stage, &output) == XR_XIR_BAD_STAGE);
-    CHECK(output == &occupied && !memcmp(&occupied, &before, sizeof(before)));
-    effect_mark_check(mark);
-    CHECK(xr_xir_compile_effects_analyze(artifact, NULL) == XR_XIR_BAD_STRUCTURE);
-    effect_mark_check(mark);
-    effect_artifact_free(artifact);
-}
 #define EFFECT_CASE(call) do { effect_case_begin(); call; effect_case_end(); } while (0)
+#include "xir_effect_collector_cases.h"
 int main(void) {
+    EFFECT_CASE(collector_bare_case(false)); EFFECT_CASE(collector_bare_case(true));
+    EFFECT_CASE(collector_declaration_cases());
     EFFECT_CASE(effect_callable_weakening());
     EFFECT_CASE(effect_qualified_callable()); EFFECT_CASE(effect_mixed_callable_witness());
     EFFECT_CASE(effect_declared_promises());
@@ -538,10 +549,11 @@ int main(void) {
     EFFECT_CASE(effect_enum_ownership());
     EFFECT_CASE(effect_long_cycle());
     EFFECT_CASE(effect_cases(false)); EFFECT_CASE(effect_cases(true));
-    EFFECT_CASE(effect_failure_outputs());
     XrXirEffects *effects = NULL;
-    CHECK(xr_xir_compile_effects_analyze(NULL, &effects) == XR_XIR_BAD_STRUCTURE && !effects);
-    CHECK(!xr_xir_effects_function(NULL, 0));
+    CHECK(xr_xir_compile_effects_analyze(NULL,&effects) == XR_XIR_BAD_STRUCTURE && !effects);
+    XrXirEffects *sentinel=(XrXirEffects *)(uintptr_t)1;
+    CHECK(xr_xir_compile_effects_analyze(NULL,&sentinel)==XR_XIR_BAD_STRUCTURE && sentinel==(XrXirEffects *)(uintptr_t)1);
+    CHECK(!xr_xir_effects_function(NULL,0));
     CHECK(!live && !live_bytes);
     puts("Control effect fixed points, error edges and physical ownership passed");
     return 0;

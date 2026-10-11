@@ -48,10 +48,23 @@ static void invocation_storage_fixture(InvocationDeferredFixture *fixture,uint32
  * It produces no executable permission. The real owner is sealed separately. */
 static XrXirStatus invocation_storage_copy_bounds(const XrXirCompileContext *context,
     const XrXirModule *module,const EffectInvocationDeclaredBounds *bounds) {
-    EffectInvocationCertificate copy={.resources=context->resources,.bodies=*module};
-    copy.terms.remaining=context;copy.terms.types=*module->types;
-    XrXirStatus status=effect_invocation_copy_bounds(&copy,bounds);
-    xr_compile_resources_free(copy.declared);return status;
+    EffectBodyMaterial *material=NULL;
+    EffectInvocationDeclaredBounds *selected=NULL;
+    XrXirStatus status=effect_body_material_create(context,module,&material);
+    if (status==XR_XIR_OK) status=effect_physical_match(context,material->physical,module);
+    if (status==XR_XIR_OK) status=effect_invocation_bounds_copy_physical(context,bounds,
+        material->physical,&selected);
+    if (status==XR_XIR_OK) {
+        /* This is the production explicit-bound receiving operation before
+         * equations consume a Material, followed by the real seal membership gate. */
+        effect_invocation_bounds_free(material->declared);material->declared=selected;selected=NULL;
+        EffectInvocationCertificate receiving={.resources=context->resources,.body=material,
+            .terms={.remaining=context}};
+        status=effect_invocation_bind_bounds(&receiving,material->declared,material->physical);
+        if (status==XR_XIR_OK) CHECK(receiving.declared==material->declared);
+        effect_terms_free(&receiving.terms);
+    } else CHECK(!selected);
+    effect_invocation_bounds_free(selected);effect_body_material_free(material);return status;
 }
 
 static void invocation_storage_rejections(const XrXirCompileContext *context,
@@ -88,7 +101,8 @@ static XrXirStatus invocation_storage_rows(EffectInvocationOwner *owner,uint32_t
     if (status==XR_XIR_OK && oracle) {
         uint32_t body=owner->nodes[node].body,expected=0;
         for (uint32_t v=0;v<flow.values;++v) {
-            bool callable=xr_xir_callable_signature(owner->module->types,xr_xir_operand_type(flow.function,v))!=NULL;
+            XrXirType type=XR_XIR_UNIT;CHECK(effect_invocation_flow_type(&flow,v,&type)==XR_XIR_OK);
+            bool callable=xr_xir_callable_signature(flow.body.domain.types,type)!=NULL;
             CHECK((effect_invocation_row(&flow,v)!=NULL)==callable);
             if (callable) CHECK(flow.row_indices[v]==expected++);
             else CHECK(!flow.row_indices || flow.row_indices[v]==UINT32_MAX);

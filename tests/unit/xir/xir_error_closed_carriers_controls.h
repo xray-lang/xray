@@ -91,12 +91,16 @@ static void cc_fixture(ClosedCarrierFixture *f,unsigned mode) {
 static void cc_classification(void) {
     ClosedCarrierFixture f;cc_fixture(&f,0);EdgeFixture *e=&f.edge;
     XrXirCompileContext c=pc_owner(pc_caps());uint64_t baseline=pc_stats(&c).live_bytes;
-    ErrorFlow flow={0};flow.module=&e->module;flow.function=&e->functions[1];flow.remaining=&c;
+    ErrorFlow flow={0};flow.source=&e->module;flow.body=effect_body_raw_request(&c,&e->module);
+    flow.function_index=1;flow.remaining=&c;
+    CHECK(effect_body_request_head(&flow.body,1,&flow.head)==XR_XIR_OK);flow.function=&flow.head;
+    XrXirType classification_type=(XrXirType)UINT32_MAX;bool classified_copy=false;uint32_t classified_source=UINT32_MAX;
     for (uint32_t t=0;t<14;++t) {
         f.parameter=(XrXirType)(256+t);bool active=true;uint64_t before=pc_stats(&c).work;
-        CHECK(error_row_active(&flow,0,&active)==XR_XIR_OK);
+        CHECK(error_row_active(&flow,0,&active,&classification_type,&classified_copy,&classified_source)==XR_XIR_OK);
+        CHECK(classification_type==f.parameter && !classified_copy && classified_source==UINT32_MAX);
         CHECK(active==(t==0 || t==1 || t==10 || t==12 || t==13));
-        CHECK(pc_stats(&c).work-before==((t==0 || t==8 || t==9) ? 2u : 1u));
+        CHECK(pc_stats(&c).work-before==((t==0 || t==8 || t==9) ? 7u : 6u));
     }
     f.parameter=(XrXirType)CC_ARRAY;
     XrXirTypeNode saved=f.nodes[2];
@@ -106,25 +110,25 @@ static void cc_classification(void) {
         else if (mode==1) f.nodes[2].kind=999;
         else if (mode==2) f.nodes[2].flags=1;
         else f.nodes[2].nominal.field_count=1;
-        bool active=false;CHECK(error_row_active(&flow,0,&active)==XR_XIR_OK && active);
+        bool active=false;CHECK(error_row_active(&flow,0,&active,&classification_type,&classified_copy,&classified_source)==XR_XIR_OK && active);
     }
     f.nodes[2]=saved;f.parameter=(XrXirType)CC_STRUCT;
     XrXirNominalIdentity identities[3]={{0}};
     for (uint32_t d=0;d<3;++d) identities[d].kind=f.declarations[d].kind;
     e->nominals.identities=identities;
-    bool active=false;CHECK(error_row_active(&flow,0,&active)==XR_XIR_OK && active);
+    bool active=false;CHECK(error_row_active(&flow,0,&active,&classification_type,&classified_copy,&classified_source)==XR_XIR_OK && active);
     e->nominals.declarations=NULL;
-    CHECK(error_row_active(&flow,0,&active)==XR_XIR_OK && !active);
+    CHECK(error_row_active(&flow,0,&active,&classification_type,&classified_copy,&classified_source)==XR_XIR_OK && !active);
     identities[1].kind=XR_XIR_NOMINAL_ENUM;
-    CHECK(error_row_active(&flow,0,&active)==XR_XIR_OK && active);
+    CHECK(error_row_active(&flow,0,&active,&classification_type,&classified_copy,&classified_source)==XR_XIR_OK && active);
     identities[1].kind=999;
-    CHECK(error_row_active(&flow,0,&active)==XR_XIR_OK && active);
+    CHECK(error_row_active(&flow,0,&active,&classification_type,&classified_copy,&classified_source)==XR_XIR_OK && active);
     e->nominals.identities=NULL;
-    CHECK(error_row_active(&flow,0,&active)==XR_XIR_OK && active);
+    CHECK(error_row_active(&flow,0,&active,&classification_type,&classified_copy,&classified_source)==XR_XIR_OK && active);
     f.parameter=(XrXirType)XR_XIR_TYPE_PARAMETER_BASE;
-    CHECK(error_row_active(&flow,0,&active)==XR_XIR_OK && active);
-    f.parameter=XR_XIR_ERROR;CHECK(error_row_active(&flow,0,&active)==XR_XIR_OK && active);
-    f.parameter=(XrXirType)UINT32_MAX;CHECK(error_row_active(&flow,0,&active)==XR_XIR_OK && active);
+    CHECK(error_row_active(&flow,0,&active,&classification_type,&classified_copy,&classified_source)==XR_XIR_OK && active);
+    f.parameter=XR_XIR_ERROR;CHECK(error_row_active(&flow,0,&active,&classification_type,&classified_copy,&classified_source)==XR_XIR_OK && active);
+    f.parameter=(XrXirType)UINT32_MAX;CHECK(error_row_active(&flow,0,&active,&classification_type,&classified_copy,&classified_source)==XR_XIR_OK && active);
     CHECK(pc_stats(&c).live_bytes==baseline);pc_release(&c,baseline);
 }
 static void cc_classification_limits(void) {
@@ -132,15 +136,20 @@ static void cc_classification_limits(void) {
         ClosedCarrierFixture f;cc_fixture(&f,0);
         f.parameter=(XrXirType)(nominal ? CC_STRUCT : CC_ARRAY);
         XrCompileResourceLimits caps=pc_caps();XrXirCompileContext c=pc_owner(caps);
-        uint64_t baseline=pc_stats(&c).live_bytes,remaining=nominal ? 2u : 1u;
+        uint64_t baseline=pc_stats(&c).live_bytes,remaining=nominal ? 7u : 6u;
+        ErrorFlow flow={0};flow.source=&f.edge.module;flow.body=effect_body_raw_request(&c,&f.edge.module);
+        flow.function_index=1;flow.remaining=&c;
+        CHECK(effect_body_request_head(&flow.body,1,&flow.head)==XR_XIR_OK);flow.function=&flow.head;
+        XrXirType classification_type=(XrXirType)UINT32_MAX;bool classified_copy=false;uint32_t classified_source=UINT32_MAX;
         if (!enough) --remaining;
         uint64_t used=pc_stats(&c).work;
         CHECK(xr_compile_resources_work(c.resources,caps.work-used-remaining)==XR_COMPILE_RESOURCE_OK);
-        ErrorFlow flow={0};flow.module=&f.edge.module;flow.function=&f.edge.functions[1];flow.remaining=&c;
         bool active=true;uint64_t before=pc_stats(&c).work;size_t allocations=attempts;
-        CHECK(error_row_active(&flow,0,&active)==(enough ? XR_XIR_OK : XR_XIR_BUDGET));
+        CHECK(error_row_active(&flow,0,&active,&classification_type,&classified_copy,&classified_source)==(enough ? XR_XIR_OK : XR_XIR_BUDGET));
         CHECK(active==(enough==0) && attempts==allocations);
-        CHECK(pc_stats(&c).work-before==(enough ? nominal+1u : nominal));pc_release(&c,baseline);
+        CHECK(classification_type==(enough ? f.parameter : (XrXirType)UINT32_MAX));
+        CHECK(!classified_copy && classified_source==UINT32_MAX);
+        CHECK(pc_stats(&c).work-before==(enough ? nominal+6u : nominal+5u));pc_release(&c,baseline);
     }
 }
 static void cc_private(void) {
@@ -155,7 +164,9 @@ static void cc_private(void) {
     CHECK(flow.slots[0]==UINT32_MAX && flow.slots[513]==0 && flow.zero[0]==0);
     for (uint32_t v=0;v<513;++v) CHECK(!error_value(&flow,flow.work,v) && error_read(&flow,flow.work,v)[0]==0);
     memset(flow.work,0xa5,sizeof(uint64_t));uint64_t poison=flow.work[0];
-    CHECK(error_instruction(&flow,0)==XR_XIR_OK && flow.work[0]==poison && flow.zero[0]==0);
+    XrXirInstruction storage;const XrXirInstruction *actual=NULL;
+    CHECK(error_operation(&flow,flow.function_index,0,&storage,&actual)==XR_XIR_OK);
+    CHECK(error_instruction(&flow,0,actual)==XR_XIR_OK && flow.work[0]==poison && flow.zero[0]==0);
     pc_private_free(&flow,&terms,&e);pc_release(&c,baseline);
 }
 static XrXirStatus cc_whole(const XrXirCompileContext *c,unsigned mode) {

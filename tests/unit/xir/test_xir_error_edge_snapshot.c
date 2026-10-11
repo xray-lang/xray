@@ -92,9 +92,11 @@ static void ee_private_begin(const XrXirCompileContext *c, EdgeFixture *f,
     CHECK(xir_fixture_verify(c, &f->module, NULL)==XR_XIR_OK);
     *e=(XrXirEffects){0};e->count=f->module.function_count;
     XrXirCompileContext context=*c;
-    CHECK(effect_errors_seed(&f->module,e,&context)==XR_XIR_OK);
+    EffectBodyRequest input=effect_body_raw_request(&context,&f->module);
+    CHECK(effect_errors_seed(&input.domain,e,&context)==XR_XIR_OK);
     *terms=(EffectTerms){0};terms->remaining=flow->remaining;terms->types=f->types;
-    flow->module=&f->module;flow->effects=e;flow->terms=terms;
+    flow->source=&f->module;flow->body=effect_body_raw_request(flow->remaining,&f->module);
+    flow->effects=e;flow->terms=terms;
 }
 static void ee_private_free(ErrorFlow *flow, EffectTerms *terms, XrXirEffects *e) {
     error_storage_free(flow);effect_terms_free(terms);

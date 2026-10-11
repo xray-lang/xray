@@ -9,11 +9,25 @@
  * KEY CONCEPT:
  *   Root permission consumes final facts; borrow shape is an independent rule.
  */
-static XrXirStatus effect_go_shape(const XrXirFunction *function,
-    const XrXirCompileContext *work) {
-    for (uint32_t i = 0; i < function->instruction_count; ++i) {
-        if (!xir_compile_work(work, 1)) return XR_XIR_BUDGET;
-        if (function->instructions[i].op == XR_XIR_SLOT_PLACE) return XR_XIR_BAD_TYPE;
+static XrXirStatus effect_go_shape(const XrXirModule *module,uint32_t index,
+    const EffectGraph *graph,const XrXirCompileContext *work) {
+    const EffectPhysicalFunction *physical=NULL;
+    XrXirStatus status=effect_graph_physical_function(work,module,graph,index,&physical);
+    if (status!=XR_XIR_OK) return status;
+    EffectBodyRequest request=effect_body_owned_request(work,graph->material);
+    EffectBodyFunctionDimensions head={0};status=effect_body_request_dimensions(&request,index,&head);
+    if (status!=XR_XIR_OK) return status;
+    const EffectBodyFunctionDimensions *function=&head;
+    for (uint32_t r=0;r<physical->count;++r) {
+        if (!xir_compile_work(work,1)) return XR_XIR_BUDGET;
+        EffectPhysicalRecord record=physical->records[r];
+        if (!(record.mask&EFFECT_PHYSICAL_SLOT_PLACE)) continue;
+        if (record.value<function->parameter_count || record.value>=physical->values) return XR_XIR_BAD_STRUCTURE;
+        EffectBodyInstructionShape shape={0};
+        status=effect_body_request_shape(&request,index,record.value-function->parameter_count,&shape);
+        if (status!=XR_XIR_OK) return status;
+        if (shape.op!=XR_XIR_SLOT_PLACE) return XR_XIR_BAD_STRUCTURE;
+        return XR_XIR_BAD_TYPE;
     }
     return XR_XIR_OK;
 }
@@ -24,8 +38,8 @@ static XrXirStatus effect_go_safe(const XrXirModule *module, XrXirEffects *effec
         if (!xir_compile_work(work, 1)) return XR_XIR_BUDGET;
         /* Permission to enter through GO is a separate shape obligation.
          * A safe lexical cleanup body may execute inside an ordinary worker. */
-        XrXirStatus qualified = effect_go_shape(&module->functions[f], work);
-        if (qualified == XR_XIR_BUDGET) return qualified;
+        XrXirStatus qualified = effect_go_shape(module,f,graph,work);
+        if (qualified != XR_XIR_OK && qualified != XR_XIR_BAD_TYPE) return qualified;
         effects->go_safe[f] = qualified;
         if (qualified != XR_XIR_OK) graph->queue[back++] = f;
     }

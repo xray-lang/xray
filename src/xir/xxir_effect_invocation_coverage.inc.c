@@ -24,26 +24,32 @@ typedef struct EffectInvocationCoverage {
 static XrXirStatus effect_invocation_coverage_input(EffectInvocationFlow *flow,
     uint32_t e,bool *matched) {
     EffectInvocationOwner *owner=flow->owner;*matched=false;
-    XrXirStatus status=effect_invocation_edge_shape(owner->work,owner,owner->module,
-        owner->module->types,flow->node,e);
+    XrXirStatus status=effect_invocation_edge_shape_read(owner->work,owner,&flow->body,
+        flow->body.domain.types,flow->node,e);
     if (status!=XR_XIR_OK) return status;
     EffectInvocationEdge edge=owner->edges[e];
     const EffectInvocationNode *target=&owner->nodes[edge.target];
-    const XrXirInstruction *op=&flow->function->instructions[edge.instruction];
-    if (target->parameter_count!=owner->module->functions[target->body].parameter_count)
-        return XR_XIR_BAD_STRUCTURE;
+    XrXirInstruction body_op_1;const XrXirInstruction *op=NULL;
+    XrXirStatus body_read_1=effect_invocation_flow_instruction(flow,edge.instruction,&body_op_1,&op);
+    if (body_read_1!=XR_XIR_OK) return body_read_1;
+    EffectBodyFunctionHead target_head={0};
+    status=effect_invocation_flow_head(flow,target->body,&target_head);
+    if (status!=XR_XIR_OK) return status;
+    if (target->parameter_count!=target_head.parameter_count) return XR_XIR_BAD_STRUCTURE;
     if (op->op==XR_XIR_CALL_DEFAULT || op->op==XR_XIR_INVOKE_DEFAULT) {
         if (target->parameter_count || target->input) return XR_XIR_BAD_STRUCTURE;
         *matched=true;return XR_XIR_OK;
     }
     const uint64_t *closure=NULL;
-    if (edge.producer!=UINT32_MAX) {
+    if (edge.producer!=UINT32_MAX && op->op!=XR_XIR_FUNCTION_REF) {
         if (op->immediate<0 || (uint64_t)op->immediate>=flow->values) return XR_XIR_BAD_STRUCTURE;
         closure=effect_invocation_row(flow,(uint32_t)op->immediate);
         if (!closure) return XR_XIR_BAD_STRUCTURE;
     }
     uint64_t *input=NULL;flow->instruction=edge.instruction;
-    status=effect_invocation_arguments(flow,edge.instruction,target->body,edge.producer,closure,&input);
+    if (op->op==XR_XIR_FUNCTION_REF)
+        status=effect_invocation_latent_input(flow,edge.instruction,edge.producer,&input);
+    else status=effect_invocation_arguments(flow,edge.instruction,target->body,edge.producer,closure,&input);
     uint64_t words=(uint64_t)target->parameter_count*flow->basis.row_words;
     if (status==XR_XIR_OK && words>SIZE_MAX/sizeof(*input)) status=XR_XIR_BUDGET;
     if (status==XR_XIR_OK && words && (!input || !target->input)) status=XR_XIR_BAD_STRUCTURE;
@@ -74,7 +80,9 @@ static XrXirStatus effect_invocation_coverage_storage(EffectInvocationFlow *flow
     for (uint32_t v=0;v<flow->values;++v) coverage->writes[v]=UINT32_MAX;
     for (uint32_t i=0;i<flow->function->instruction_count;++i) {
         if (!xir_compile_work(flow->owner->work,1)) return XR_XIR_BUDGET;
-        const XrXirInstruction *op=&flow->function->instructions[i];
+        XrXirInstruction body_op_2;const XrXirInstruction *op=NULL;
+        XrXirStatus body_read_2=effect_invocation_flow_instruction(flow,i,&body_op_2,&op);
+        if (body_read_2!=XR_XIR_OK) return body_read_2;
         if (op->op!=XR_XIR_LOCAL_WRITE && op->op!=XR_XIR_SCALAR_LOCAL_WRITE &&
             op->op!=XR_XIR_OWNED_LOCAL_WRITE) continue;
         if (op->args[0]>=flow->values || op->args[1]>=flow->values) return XR_XIR_BAD_STRUCTURE;
@@ -109,7 +117,8 @@ static XrXirStatus effect_invocation_coverage_sites(EffectInvocationCoverage *co
         uint32_t last=owner->site_count+flow->basis.parameters+2;
         for (uint32_t bit=owner->site_count;bit<=last;++bit) {
             if (!xir_compile_work(owner->work,1)) return XR_XIR_BUDGET;
-            if (row[bit/64]&(UINT64_C(1)<<(bit%64))) present=false;
+            uint32_t opaque=owner->site_count+flow->basis.parameters;
+            if (bit!=opaque && (row[bit/64]&(UINT64_C(1)<<(bit%64)))) present=false;
         }
     }
     *complete=present;return XR_XIR_OK;
@@ -130,13 +139,17 @@ static XrXirStatus effect_invocation_coverage_source(EffectInvocationCoverage *c
 static XrXirStatus effect_invocation_coverage_call(EffectInvocationCoverage *coverage,
     uint32_t i,uint64_t *maximum,bool *complete) {
     EffectInvocationFlow *flow=coverage->flow;EffectInvocationOwner *owner=flow->owner;
-    const XrXirInstruction *value=&flow->function->instructions[i];uint32_t frontier=i;
+    XrXirInstruction body_op_3;const XrXirInstruction *value=NULL;
+    XrXirStatus body_read_3=effect_invocation_flow_instruction(flow,i,&body_op_3,&value);
+    if (body_read_3!=XR_XIR_OK) return body_read_3;uint32_t frontier=i;
     if (value->op==XR_XIR_INVOKE_RESULT) {
         if (value->immediate<0 || (uint64_t)value->immediate>=flow->function->instruction_count)
             return XR_XIR_BAD_STRUCTURE;
         frontier=(uint32_t)value->immediate;
     }
-    const XrXirInstruction *op=&flow->function->instructions[frontier];
+    XrXirInstruction body_op_4;const XrXirInstruction *op=NULL;
+    XrXirStatus body_read_4=effect_invocation_flow_instruction(flow,frontier,&body_op_4,&op);
+    if (body_read_4!=XR_XIR_OK) return body_read_4;
     bool indirect=op->op==XR_XIR_CALL_INDIRECT || op->op==XR_XIR_INVOKE_INDIRECT;
     if (!indirect && op->op!=XR_XIR_CALL && op->op!=XR_XIR_INVOKE &&
         op->op!=XR_XIR_CALL_DEFAULT && op->op!=XR_XIR_INVOKE_DEFAULT) return XR_XIR_BAD_STRUCTURE;
@@ -181,20 +194,29 @@ static XrXirStatus effect_invocation_coverage_call(EffectInvocationCoverage *cov
 static XrXirStatus effect_invocation_coverage_value(EffectInvocationCoverage *coverage,
     uint32_t v,uint64_t *output) {
     EffectInvocationFlow *flow=coverage->flow;*output=0;
-    if (v>=flow->values || !xr_xir_callable_signature(flow->owner->module->types,
-        xr_xir_operand_type(flow->function,v)) || flow->fixed[v]) return XR_XIR_OK;
+    if (v>=flow->values) return XR_XIR_BAD_STRUCTURE;
+    XrXirType actual_type=0;
+    XrXirStatus read_status=effect_invocation_flow_type(flow,v,&actual_type);
+    if (read_status!=XR_XIR_OK) return read_status;
+    if (!xr_xir_callable_signature(flow->body.domain.types,actual_type) || flow->fixed[v]) return XR_XIR_OK;
     bool complete=false;XrXirStatus status=effect_invocation_coverage_sites(coverage,v,
         v<flow->function->parameter_count,&complete);
     if (status!=XR_XIR_OK || !complete) return status;
     uint64_t maximum=0;
-    if (v>=flow->function->parameter_count) {
+    if (v<flow->function->parameter_count) {
+        const EffectInvocationNode *node=&flow->owner->nodes[flow->node];
+        if (!node->parameter_coverage || !node->parameter_coverage[v]) return XR_XIR_OK;
+        maximum=node->parameter_coverage[v]-1;
+    } else {
         uint32_t i=v-flow->function->parameter_count;
-        const XrXirInstruction *op=&flow->function->instructions[i];
+        XrXirInstruction body_op_5;const XrXirInstruction *op=NULL;
+        XrXirStatus body_read_5=effect_invocation_flow_instruction(flow,i,&body_op_5,&op);
+        if (body_read_5!=XR_XIR_OK) return body_read_5;
         switch (op->op) {
         case XR_XIR_FUNCTION_REF: {
             uint32_t site=UINT32_MAX;bool supported=false;
             status=effect_invocation_site(flow,i,&site);
-            if (status==XR_XIR_OK) status=effect_invocation_producer_site_supported(flow->owner,site,&supported);
+            if (status==XR_XIR_OK) status=effect_invocation_producer_site_supported_read(flow->owner,&flow->body,site,&supported);
             complete=flow->certified[v] && supported;break;
         }
         case XR_XIR_COPY: case XR_XIR_SCALAR_COPY: case XR_XIR_OWNED_RETAIN:
@@ -218,7 +240,10 @@ static XrXirStatus effect_invocation_coverage_value(EffectInvocationCoverage *co
     for (uint32_t i=coverage->writes[v];status==XR_XIR_OK && i!=UINT32_MAX;i=coverage->next[i]) {
         if (i>=flow->function->instruction_count || ++walked>flow->function->instruction_count)
             return XR_XIR_BAD_STRUCTURE;
-        status=effect_invocation_coverage_source(coverage,flow->function->instructions[i].args[1],&maximum,&complete);
+        XrXirInstruction write_storage;const XrXirInstruction *write=NULL;
+        status=effect_invocation_flow_instruction(flow,i,&write_storage,&write);
+        if (status==XR_XIR_OK)
+            status=effect_invocation_coverage_source(coverage,write->args[1],&maximum,&complete);
     }
     if (status==XR_XIR_OK && complete) {
         if (maximum==UINT64_MAX) return XR_XIR_BUDGET;
@@ -244,20 +269,24 @@ static XrXirStatus effect_invocation_coverage_values(EffectInvocationFlow *flow,
     return status;
 }
 
+#include "xxir_effect_invocation_parameter_coverage.inc.c"
+
 /* Every actual RETURN is checked, including conservatively unreachable
  * blocks. A throw-only or cyclic bottom cannot manufacture a returned target. */
-static XrXirStatus effect_invocation_coverage_return(EffectInvocationOwner *owner,
-    uint32_t n,uint64_t *output) {
+static XrXirStatus effect_invocation_coverage_return_read(EffectInvocationOwner *owner,
+    const EffectBodyRequest *request,uint32_t n,uint64_t *output) {
     *output=0;bool supported=false;
-    XrXirStatus status=effect_invocation_producer_return(owner,owner->nodes[n].body,&supported);
+    XrXirStatus status=effect_invocation_producer_return_read(owner,request,owner->nodes[n].body,&supported);
     if (status!=XR_XIR_OK || !supported) return status;
     EffectInvocationFlow flow={.owner=owner,.node=n,.instruction=UINT32_MAX};
-    status=effect_invocation_origins(&flow);EffectInvocationCoverage coverage={0};
+    status=effect_invocation_origins_read(&flow,request);EffectInvocationCoverage coverage={0};
     if (status==XR_XIR_OK) status=effect_invocation_coverage_values(&flow,&coverage);
     bool present=false,complete=true;uint64_t maximum=0;
     for (uint32_t i=0;status==XR_XIR_OK && i<flow.function->instruction_count;++i) {
         if (!xir_compile_work(owner->work,1)) { status=XR_XIR_BUDGET;break; }
-        const XrXirInstruction *op=&flow.function->instructions[i];
+        XrXirInstruction body_op_6;const XrXirInstruction *op=NULL;
+        status=effect_invocation_flow_instruction(&flow,i,&body_op_6,&op);
+        if (status!=XR_XIR_OK) break;
         if (op->op!=XR_XIR_RETURN) continue;
         present=true;status=effect_invocation_coverage_source(&coverage,op->args[0],&maximum,&complete);
     }
@@ -267,14 +296,28 @@ static XrXirStatus effect_invocation_coverage_return(EffectInvocationOwner *owne
     }
     xr_compile_resources_free(coverage.memory);xr_compile_resources_free(flow.memory);return status;
 }
+static XrXirStatus effect_invocation_coverage_return(EffectInvocationOwner *owner,
+    uint32_t n,uint64_t *output) {
+    if (!owner || !effect_body_material_shape(owner->material)) return XR_XIR_BAD_STRUCTURE;
+    EffectBodyRequest request=effect_body_owned_request(owner->work,owner->material);
+    return effect_invocation_coverage_return_read(owner,&request,n,output);
+}
 
 /* Target discovery has already reached closure. Positive coverage uses the
  * same owned graph queue and cannot add nodes, edges, ROOT bits or permissions. */
 static XrXirStatus effect_invocation_coverage_solve(EffectInvocationOwner *owner) {
     if (!owner || owner->pending || !owner->graph || !owner->work) return XR_XIR_BAD_STRUCTURE;
     if (!owner->producer_enabled) return XR_XIR_OK;
+    XrXirStatus shape=effect_invocation_coverage_incoming_shape(owner);
+    if (shape!=XR_XIR_OK) return shape;
     for (uint32_t n=0;n<owner->count;++n) {
-        if (owner->nodes[n].return_coverage || owner->nodes[n].queued) return XR_XIR_BAD_STRUCTURE;
+        if (owner->nodes[n].return_coverage || owner->nodes[n].queued ||
+            (!!owner->nodes[n].parameter_coverage!=!!owner->nodes[n].parameter_count))
+            return XR_XIR_BAD_STRUCTURE;
+        for (uint32_t p=0;p<owner->nodes[n].parameter_count;++p) {
+            if (!xir_compile_work(owner->work,1)) return XR_XIR_BUDGET;
+            if (owner->nodes[n].parameter_coverage[p]) return XR_XIR_BAD_STRUCTURE;
+        }
         XrXirStatus status=effect_invocation_enqueue(owner,n);
         if (status!=XR_XIR_OK) return status;
     }
@@ -284,17 +327,14 @@ static XrXirStatus effect_invocation_coverage_solve(EffectInvocationOwner *owner
         if (n>=owner->count || !owner->nodes[n].queued) return XR_XIR_BAD_STRUCTURE;
         owner->front=owner->front+1==owner->capacity?0:owner->front+1;
         --owner->pending;owner->nodes[n].queued=false;
-        if (owner->nodes[n].return_coverage) continue;
-        uint64_t rank=0;XrXirStatus status=effect_invocation_coverage_return(owner,n,&rank);
+        bool changed=false;XrXirStatus status=effect_invocation_parameter_step(owner,n,&changed,false,0);
+        uint64_t rank=0;
+        if (status==XR_XIR_OK && !owner->nodes[n].return_coverage)
+            status=effect_invocation_coverage_return(owner,n,&rank);
         if (status!=XR_XIR_OK) return status;
-        if (!rank) continue;
-        owner->nodes[n].return_coverage=rank;
-        uint32_t walked=0;
-        for (uint32_t e=owner->consumers[n];e!=UINT32_MAX;e=owner->edges[e].consumer_next) {
-            if (!xir_compile_work(owner->work,2)) return XR_XIR_BUDGET;
-            if (e>=owner->edge_count || ++walked>owner->edge_count || owner->edges[e].target!=n)
-                return XR_XIR_BAD_STRUCTURE;
-            status=effect_invocation_enqueue(owner,owner->edges[e].caller);
+        if (rank) { owner->nodes[n].return_coverage=rank;changed=true; }
+        if (changed) {
+            status=effect_invocation_coverage_notify(owner,n);
             if (status!=XR_XIR_OK) return status;
         }
     }
@@ -303,13 +343,33 @@ static XrXirStatus effect_invocation_coverage_solve(EffectInvocationOwner *owner
 
 /* Strict rank descent makes forged circular completeness fail independently
  * of queue history. Exact stable input replay proves every positive clause. */
-static XrXirStatus effect_invocation_coverage_verify(EffectInvocationOwner *owner) {
-    if (!owner || owner->pending) return XR_XIR_BAD_STRUCTURE;
-    if (!owner->producer_enabled) return XR_XIR_OK;
+static XrXirStatus effect_invocation_coverage_verify_read(EffectInvocationOwner *owner,const EffectBodyRequest *request) {
+    if (!owner || owner->pending || !owner->work || !owner->roots || !request ||
+        !request->owner || !request->domain.types || !request->domain.function_count ||
+        !owner->nodes || !owner->count) return XR_XIR_BAD_STRUCTURE;
+    if (!owner->producer_enabled) {
+        /* A disabled producer has no positive coverage authority. Validate
+         * its real storage without running the producer replay algorithm. */
+        for (uint32_t n=0;n<owner->count;++n) {
+            if (!xir_compile_work(owner->work,2)) return XR_XIR_BUDGET;
+            XrXirStatus zero=effect_invocation_parameter_zero_shape(owner,request,n);
+            if (zero!=XR_XIR_OK) return zero;
+            if (owner->nodes[n].return_coverage || owner->nodes[n].queued) return XR_XIR_BAD_STRUCTURE;
+        }
+        return XR_XIR_OK;
+    }
+    XrXirStatus shape=effect_invocation_coverage_incoming_shape(owner);
+    if (shape!=XR_XIR_OK) return shape;
     uint64_t maximum=0;
     for (uint32_t n=0;n<owner->count;++n) {
         if (!xir_compile_work(owner->work,2)) return XR_XIR_BUDGET;
-        const XrXirFunction *function=&owner->module->functions[owner->nodes[n].body];
+        if (owner->nodes[n].body>=request->domain.function_count) return XR_XIR_BAD_STRUCTURE;
+        XrXirStatus zero=effect_invocation_parameter_zero_shape(owner,request,n);
+        if (zero!=XR_XIR_OK) return zero;
+        EffectBodyFunctionHead head={0};
+        XrXirStatus head_status=effect_body_request_head(request,owner->nodes[n].body,&head);
+        if (head_status!=XR_XIR_OK) return head_status;
+        const EffectBodyFunctionHead *function=&head;
         uint64_t vertices=(uint64_t)function->parameter_count+function->instruction_count+1;
         if (vertices>UINT64_MAX-maximum) return XR_XIR_BUDGET;
         maximum+=vertices;
@@ -317,11 +377,17 @@ static XrXirStatus effect_invocation_coverage_verify(EffectInvocationOwner *owne
     for (uint32_t n=0;n<owner->count;++n) {
         if (!xir_compile_work(owner->work,2)) return XR_XIR_BUDGET;
         uint64_t stored=owner->nodes[n].return_coverage;
-        if (stored>maximum || owner->nodes[n].queued)
-            return XR_XIR_BAD_STRUCTURE;
-        uint64_t actual=0;XrXirStatus status=effect_invocation_coverage_return(owner,n,&actual);
+        if (stored>maximum || owner->nodes[n].queued) return XR_XIR_BAD_STRUCTURE;
+        bool changed=false;XrXirStatus status=effect_invocation_parameter_step_read(owner,request,n,&changed,true,maximum);
+        uint64_t actual=0;
+        if (status==XR_XIR_OK) status=effect_invocation_coverage_return_read(owner,request,n,&actual);
         if (status!=XR_XIR_OK) return status;
         if (!!stored!=!!actual || (stored && actual>stored)) return XR_XIR_BAD_STRUCTURE;
     }
     return XR_XIR_OK;
+}
+static XrXirStatus effect_invocation_coverage_verify(EffectInvocationOwner *owner) {
+    if (!owner || !effect_body_material_shape(owner->material)) return XR_XIR_BAD_STRUCTURE;
+    EffectBodyRequest request=effect_body_owned_request(owner->work,owner->material);
+    return effect_invocation_coverage_verify_read(owner,&request);
 }

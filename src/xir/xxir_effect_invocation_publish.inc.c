@@ -29,9 +29,10 @@ static void effect_invocation_publication_free(EffectInvocationPublication *publ
  * their exact canonical records; never lend pointers into the packed solution. */
 static XrXirStatus effect_invocation_publication_stage(const XrXirCompileContext *work,
     const EffectInvocationCertificate *certificate,EffectInvocationPublication **output) {
-    if (!certificate || certificate->resources!=work->resources || !certificate->solution ||
+    if (!certificate || !effect_body_material_shape(certificate->body) ||
+        certificate->body->resources!=certificate->resources || certificate->resources!=work->resources || !certificate->solution ||
         !output || *output || !certificate->facts || !certificate->witnesses ||
-        certificate->solution->count!=certificate->bodies.function_count) return XR_XIR_BAD_STRUCTURE;
+        certificate->solution->count!=effect_body_count(certificate->body)) return XR_XIR_BAD_STRUCTURE;
     XrXirStatus status=XR_XIR_OK;uint32_t count=certificate->solution->count;
     EffectInvocationPublication *publication=xir_compile_calloc(work,1,sizeof(*publication),&status);
     if (!publication) return status;
@@ -55,9 +56,13 @@ static XrXirStatus effect_invocation_publication_stage(const XrXirCompileContext
         }
         if (bytes) memcpy(terms,value.terms,(size_t)bytes);
         value.terms=terms;publication->formulas[f]=value;
+        EffectInvocationProjectionSelection selected[4];
+        status=effect_invocation_projection_domains(work,certificate,f,0,4,selected);
         for (uint32_t domain=0;domain<4 && status==XR_XIR_OK;++domain) {
+            if (!xir_compile_work(work,sizeof(EffectInvocationTraceSelection))) { status=XR_XIR_BUDGET;break; }
+            EffectInvocationTraceSelection selection={selected[domain].atom,selected[domain].witness};
             bool symbolic=false;
-            status=effect_invocation_public_selected(work,certificate,f,domain,
+            status=effect_invocation_public_transform(work,certificate,f,&selection,
                 &publication->witnesses[(size_t)domain*count+f],&symbolic);
         }
     }
@@ -67,7 +72,7 @@ static XrXirStatus effect_invocation_publication_stage(const XrXirCompileContext
 
 /* A source refinement owns its pre-bottom records in the verified descriptor
  * prefix. INSTANCE originals instead come from the full owned source proof. */
-static XrXirStatus effect_invocation_publication_bounds(const XrXirCompileContext *work,
+static inline XrXirStatus effect_invocation_publication_bounds(const XrXirCompileContext *work,
     const XrXirModule *module,const XrXirEffects *effects,EffectInvocationDeclaredBounds **output) {
     if (module->provenance && module->provenance->kind==XR_XIR_EVIDENCE_INSTANCE)
         return effect_invocation_instance_bounds(work,module,output);
@@ -118,7 +123,8 @@ static XrXirStatus effect_invocation_publication_commit(const XrXirCompileContex
     memcpy(effects->formula_terminals,publication->witnesses,(size_t)count*4*sizeof(*effects->formula_terminals));
     memcpy(effects->constant_witnesses,publication->witnesses+(size_t)count*2,
         (size_t)count*2*sizeof(*effects->constant_witnesses));
-    EffectInvocationCertificate *old=effects->invocations;effects->invocations=fresh;*certificate=NULL;
+    EffectInvocationCertificate *old=effects->invocations;
+    effects->invocations=fresh;effects->cells=fresh->body->cells;*certificate=NULL;
     effect_invocation_certificate_free(old);return XR_XIR_OK;
 }
 
@@ -131,11 +137,36 @@ static XrXirStatus effect_invocation_publish(const XrXirCompileContext *work,
         !effects->contracts || (declared && declared->resources!=work->resources)) return XR_XIR_BAD_STRUCTURE;
     EffectInvocationDeclaredBounds *temporary=NULL;EffectInvocationCertificate *certificate=NULL;
     EffectInvocationPublication *publication=NULL;XrXirStatus status=XR_XIR_OK;
-    if (!declared) status=effect_invocation_publication_bounds(work,module,effects,&temporary);
-    EffectInvocationDriverInput input={work,module,effects,graph,declared?declared:temporary,dense};
+    if (!graph->material || (!graph->physical_owned && graph->material!=effects->generation))
+        status=effect_graph_physical_refresh(work,module,graph,effects->refinement);
+    if (status==XR_XIR_OK && (!effect_body_material_shape(graph->material) ||
+        graph->material->resources!=work->resources || !graph->material->declared)) status=XR_XIR_BAD_STRUCTURE;
+    if (status==XR_XIR_OK && declared) {
+        status=effect_invocation_bounds_copy_physical(work,declared,graph->physical,&temporary);
+        if (status==XR_XIR_OK && !xir_compile_work(work,2)) status=XR_XIR_BUDGET;
+        if (status==XR_XIR_OK) {
+            effect_invocation_bounds_free(graph->material->declared);
+            graph->material->declared=temporary;temporary=NULL;
+        }
+    }
+    EffectInvocationDriverInput input={work,module,effects,graph,
+        status==XR_XIR_OK?graph->material->declared:NULL,dense};
     if (status==XR_XIR_OK) status=effect_invocation_derive(&input,&certificate);
     if (status==XR_XIR_OK) status=effect_invocation_publication_stage(work,certificate,&publication);
+    if (status==XR_XIR_OK && !xir_compile_work(work,2)) status=XR_XIR_BUDGET;
     if (status==XR_XIR_OK) status=effect_invocation_publication_commit(work,effects,&certificate,publication);
+    if (status==XR_XIR_OK) {
+        /* Construction ownership has moved through seal to this certificate.
+         * The graph borrows it only while the same generation remains live. */
+        graph->material=effects->invocations->body;
+        graph->physical=graph->material->physical;graph->physical_owned=false;
+    }
+    if (certificate && certificate->body) {
+        if (effects->cells==certificate->body->cells) effects->cells=NULL;
+        if (graph->material==certificate->body) {
+            graph->material=NULL;graph->physical=NULL;graph->physical_owned=false;
+        }
+    }
     effect_invocation_publication_free(publication);effect_invocation_certificate_free(certificate);
     effect_invocation_bounds_free(temporary);return status;
 }
@@ -163,7 +194,8 @@ static XrXirStatus effect_context_dense_body_match(const XrXirCompileContext *co
     const EffectContextOwner *owner,uint32_t index) {
     const EffectOrdinaryContexts *dense=owner->dense;
     const EffectInvocationCertificate *certificate=dense->uses.invocations;
-    const XrXirFunction *actual=&dense->functions[index],*sealed=&certificate->bodies.functions[index];
+    const XrXirFunction *actual=&dense->functions[index];
+    const EffectBodyFunction *sealed=&certificate->body->functions[index];
     const EffectOrdinaryNode *node=&dense->nodes[index];const XrXirOrigin *origin=&certificate->origins[index];
     if (!xir_compile_work(context,10)) return XR_XIR_BUDGET;
     if (actual->name_length!=sealed->name_length || actual->parameter_count!=sealed->parameter_count ||
@@ -176,8 +208,10 @@ static XrXirStatus effect_context_dense_body_match(const XrXirCompileContext *co
         actual->parameter_count,sizeof(*actual->parameters));
     if (status==XR_XIR_OK) status=effect_context_dense_bytes(context,node->physical_types,sealed->parameters,
         actual->parameter_count,sizeof(*actual->parameters));
-    if (status==XR_XIR_OK) status=effect_context_dense_bytes(context,actual->instructions,sealed->instructions,
-        actual->instruction_count,sizeof(*actual->instructions));
+    if (status==XR_XIR_OK) {
+        EffectBodyRead read=effect_body_compile_read(context);
+        status=effect_body_records_match(&read,sealed,actual);
+    }
     if (status==XR_XIR_OK) status=effect_context_dense_bytes(context,actual->operands,sealed->operands,
         actual->operand_count,sizeof(*actual->operands));
     if (status==XR_XIR_OK) status=effect_context_dense_bytes(context,actual->blocks,sealed->blocks,
@@ -209,13 +243,14 @@ static XrXirStatus effect_context_dense_stable(const XrXirCompileContext *contex
         !ordinary || ordinary->dense || ordinary->base_count!=source->function_count ||
         dense->base_count!=source->function_count || ordinary->uses.resources!=context->resources ||
         dense->uses.resources!=context->resources || dense->uses.count!=dense->count || !dense->uses.root ||
-        !certificate || certificate->resources!=context->resources || !certificate->equations ||
+        !certificate || !effect_body_material_shape(certificate->body) ||
+        certificate->body->resources!=certificate->resources || certificate->resources!=context->resources || !certificate->equations ||
         !certificate->solution || certificate->solution->count!=dense->count ||
         certificate->equations->work || certificate->equations->module || certificate->equations->graph ||
         certificate->equations->effects || certificate->equations->declared ||
-        certificate->bodies.function_count!=dense->count || !certificate->bodies.functions ||
-        certificate->bodies.stage!=source->stage || certificate->bodies.linkage_kind!=source->linkage_kind ||
-        certificate->bodies.types!=&certificate->terms.types || !certificate->origins || !certificate->owners ||
+        effect_body_count(certificate->body)!=dense->count || !certificate->body->functions ||
+        certificate->body->stage!=source->stage || certificate->body->linkage_kind!=source->linkage_kind ||
+        certificate->body->domain.types!=&certificate->body->terms.types || !certificate->origins || !certificate->owners ||
         !source->declarations || !certificate->declarations ||
         certificate->declarations->root_module!=source->declarations->root_module ||
         certificate->declarations->entry_function!=source->declarations->entry_function ||

@@ -26,21 +26,37 @@ static void effect_invocation_trace_free(EffectInvocationCauseTrace *trace) {
     xr_compile_resources_free(trace);
 }
 
+/* A selection is a value local to one completed trace request. It never
+ * survives the caller, changes an owner, or substitutes for a fresh query. */
+typedef struct EffectInvocationTraceSelection {
+    uint32_t atom;
+    XrXirRootEffectWitness witness;
+} EffectInvocationTraceSelection;
+
+static XrXirStatus effect_invocation_trace_finish(const XrXirCompileContext *work,
+    uint32_t count,uint32_t atom,XrXirRootEffectWitness witness,uint32_t *length,
+    EffectInvocationTraceSelection *selection) {
+    if (selection && !xir_compile_work(work,sizeof(*selection))) return XR_XIR_BUDGET;
+    if (selection) *selection=(EffectInvocationTraceSelection){atom,witness};
+    *length=count;return XR_XIR_OK;
+}
+
 /* The selected atom retains the namespace's complete physical input identity
  * for the whole descent. Repeated declaration IDs cannot replace an actual
  * equation edge, and public ordinals are emitted only after that proof. */
-static XrXirStatus effect_invocation_trace_walk(const XrXirCompileContext *work,
+static XrXirStatus effect_invocation_trace_walk_selected(const XrXirCompileContext *work,
     const EffectInvocationCertificate *certificate,const EffectInvocationTraceRequest *request,
-    uint32_t *length) {
-    if (!certificate || certificate->resources!=work->resources || !request || !length ||
-        request->domain>=4 || request->function>=certificate->bodies.function_count ||
+    uint32_t *length,EffectInvocationTraceSelection *selection) {
+    if (!certificate || !effect_body_material_shape(certificate->body) ||
+        certificate->body->resources!=certificate->resources || certificate->resources!=work->resources || !request || !length ||
+        request->domain>=4 || request->function>=effect_body_count(certificate->body) ||
         !certificate->facts || !certificate->witnesses || !certificate->projection_atoms)
         return XR_XIR_BAD_STRUCTURE;
     uint32_t atom=UINT32_MAX;XrXirRootEffectWitness witness={0};
     XrXirStatus status=effect_invocation_projection_select(work,certificate,request->function,request->domain,
         &atom,&witness);
     if (status!=XR_XIR_OK) return status;
-    size_t at=(size_t)request->domain*certificate->bodies.function_count+request->function;
+    size_t at=(size_t)request->domain*effect_body_count(certificate->body)+request->function;
     if (certificate->projection_atoms[at]!=atom ||
         !effect_invocation_witness_equal(&certificate->witnesses[at],&witness)) return XR_XIR_BAD_STRUCTURE;
     bool fact=(request->domain&2)?!!(certificate->solution->formulas[request->function].constant_mask&
@@ -48,17 +64,17 @@ static XrXirStatus effect_invocation_trace_walk(const XrXirCompileContext *work,
         (request->domain&1)?certificate->facts[request->function].unresolved:
         certificate->facts[request->function].requires_root;
     if (fact!=(atom!=UINT32_MAX)) return XR_XIR_BAD_STRUCTURE;
-    if (!fact) { *length=0;return XR_XIR_OK; }
+    if (!fact) return effect_invocation_trace_finish(work,0,atom,witness,length,selection);
     const EffectInvocationOwner *equations=certificate->equations;
     uint32_t current=equations->roots[request->function],count=0;
     for (;;) {
         if (!xir_compile_work(work,8)) return XR_XIR_BUDGET;
         if (current>=equations->count || count>=equations->count) return XR_XIR_BAD_STRUCTURE;
         const EffectInvocationNode *node=&equations->nodes[current];
-        if (node->body>=certificate->bodies.function_count || atom>=node->cause_count)
+        if (node->body>=effect_body_count(certificate->body) || atom>=node->cause_count)
             return XR_XIR_BAD_STRUCTURE;
         const EffectInvocationCause *cause=&node->causes[atom];
-        if (cause->witness.callee!=UINT32_MAX && cause->witness.callee>=certificate->bodies.function_count)
+        if (cause->witness.callee!=UINT32_MAX && cause->witness.callee>=effect_body_count(certificate->body))
             return XR_XIR_BAD_STRUCTURE;
         XrXirRootEffectWitness public_value=effect_invocation_public_witness(certificate,node,cause);
         if (request->steps) {
@@ -69,7 +85,7 @@ static XrXirStatus effect_invocation_trace_walk(const XrXirCompileContext *work,
         ++count;
         if (!cause->distance) {
             if (cause->next!=UINT32_MAX || cause->edge!=UINT32_MAX) return XR_XIR_BAD_STRUCTURE;
-            *length=count;return XR_XIR_OK;
+            return effect_invocation_trace_finish(work,count,atom,witness,length,selection);
         }
         if (cause->next>=equations->count || cause->edge>=equations->edge_count ||
             equations->edges[cause->edge].caller!=current ||
@@ -80,10 +96,17 @@ static XrXirStatus effect_invocation_trace_walk(const XrXirCompileContext *work,
     }
 }
 
+static XrXirStatus effect_invocation_trace_walk(const XrXirCompileContext *work,
+    const EffectInvocationCertificate *certificate,const EffectInvocationTraceRequest *request,
+    uint32_t *length) {
+    return effect_invocation_trace_walk_selected(work,certificate,request,length,NULL);
+}
+
 static inline XrXirStatus effect_invocation_certificate_trace(const XrXirCompileContext *work,
     const EffectInvocationCertificate *certificate,uint32_t function,EffectInvocationCauseTrace **output) {
-    if (!xir_compile_context_valid(work) || !certificate || certificate->resources!=work->resources ||
-        !output || *output || function>=certificate->bodies.function_count) return XR_XIR_BAD_STRUCTURE;
+    if (!xir_compile_context_valid(work) || !certificate || !effect_body_material_shape(certificate->body) ||
+        certificate->body->resources!=certificate->resources || certificate->resources!=work->resources ||
+        !output || *output || function>=effect_body_count(certificate->body)) return XR_XIR_BAD_STRUCTURE;
     uint32_t counts[2]={0};EffectInvocationTraceRequest request={.function=function};
     XrXirStatus status=effect_invocation_trace_walk(work,certificate,&request,&counts[0]);
     request.domain=1;

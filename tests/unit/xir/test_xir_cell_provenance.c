@@ -238,7 +238,9 @@ static void cell_proof_indirect_ref(void) {
 #include "xir_cell_exact_edge_cases.h"
 #include "xir_cell_zero_tracked_cases.h"
 #include "xir_cell_class_fact_cases.h"
+#include "xir_cell_body_read_cases.h"
 int main(void) {
+    cell_body_read_cases();
     cell_class_fact_cases();
     cell_zero_tracked_cases();
     cell_exact_edges();

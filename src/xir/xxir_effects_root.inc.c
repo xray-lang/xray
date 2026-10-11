@@ -12,15 +12,6 @@
  */
 #include "xxir_metadata_domain_internal.h"
 
-/* Instruction fields and the actual callee SSA type belong to the current
- * admitted body. Metadata cannot supply or authorize an instruction. */
-typedef struct EffectRootSeedRecord {
-    const XirMetadataDomain *domain;
-    const XrXirInstruction *instruction;
-    uint32_t function,ordinal;
-    XrXirType callable_type;
-} EffectRootSeedRecord;
-
 XR_FUNC const XrXirRootEffects *xr_xir_effects_root(const XrXirEffects *effects, uint32_t function) {
     return effects && function < effects->count ? &effects->root[function] : NULL;
 }
@@ -307,7 +298,7 @@ static XrXirStatus effect_root_seed_record(const EffectRootSeedRecord *request,X
     default: return XR_XIR_BAD_STRUCTURE;
     }
 }
-static XrXirStatus effect_root_seed(const XrXirModule *module,XrXirEffects *effects,
+static inline XrXirStatus effect_root_seed(const XrXirModule *module,XrXirEffects *effects,
     uint32_t f,uint32_t i,const XrXirCompileContext *work) {
     if (!module || !module->functions || f>=module->function_count ||
         i>=module->functions[f].instruction_count || !module->functions[f].instructions)

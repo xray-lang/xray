@@ -19,7 +19,12 @@ typedef struct CalleeOrderFixture {
     uint8_t queued[5];
     EffectEdge edges[4],error_edges[2];
     uint64_t summary[10];
+    XrXirTypes types;
+    XrXirInstruction instruction;
+    XrXirBlock block;
+    XrXirFunction functions[5];
     XrXirModule module;
+    EffectBodyMaterial *material;
     XrXirEffects effects;
     EffectGraph graph;
 } CalleeOrderFixture;
@@ -32,7 +37,14 @@ static void cf_edge(CalleeOrderFixture *f,uint32_t callee,uint32_t caller,bool g
 }
 static void cf_order_fixture(CalleeOrderFixture *f,unsigned mode) {
     memset(f,0,sizeof(*f));uint32_t n=mode==3 ? 5u : mode>=2 ? 3u : 4u;
-    f->module.function_count=n;f->effects.count=n;f->effects.words=2;
+    f->instruction=(XrXirInstruction){.op=XR_XIR_RETURN};
+    f->block=(XrXirBlock){.count=1};
+    for (uint32_t i=0;i<n;++i)
+        f->functions[i]=(XrXirFunction){.result=XR_XIR_UNIT,.blocks=&f->block,.block_count=1,
+            .instructions=&f->instruction,.instruction_count=1};
+    f->module=(XrXirModule){.stage=XR_XIR_LOWERED,.linkage_kind=XR_XIR_LIBRARY,
+        .types=&f->types,.functions=f->functions,.function_count=n};
+    f->effects.count=n;f->effects.words=2;
     for (uint32_t i=0;i<10;++i) f->summary[i]=UINT64_C(0x9182736455aa6600)+i;
     f->effects.errors=f->summary;
     for (uint32_t i=0;i<5;++i) f->heads[i]=f->error_heads[i]=UINT32_MAX;
@@ -61,8 +73,12 @@ static void cf_order_golden(const CalleeOrderFixture *f,unsigned mode) {
         CHECK(f->graph.queue[i]==orders[mode][i] && f->graph.queued[i]==1);
 }
 static ErrorFlow cf_flow(CalleeOrderFixture *f,XrXirCompileContext *c,bool reuse) {
-    ErrorFlow flow={0};flow.module=&f->module;flow.effects=&f->effects;flow.remaining=c;
-    flow.escaping=f->summary;flow.function=(const XrXirFunction *)f;
+    CHECK(!f->material && effect_body_material_create(c,&f->module,&f->material)==XR_XIR_OK);
+    ErrorFlow flow={0};flow.source=&f->module;flow.body=effect_body_owned_request(c,f->material);
+    CHECK(flow.body.owner==f->material && flow.body.domain.function_count==f->effects.count &&
+        f->material->resources==c->resources);
+    flow.effects=&f->effects;flow.remaining=c;
+    flow.escaping=f->summary;flow.function=(const EffectBodyFunctionHead *)f;
     flow.stride=77;flow.values=99;flow.cell_count=3;flow.active_count=5;
     flow.changed=true;flow.summary_changed=true;flow.restart=true;
     if (reuse) {
@@ -76,9 +92,13 @@ static ErrorFlow cf_flow(CalleeOrderFixture *f,XrXirCompileContext *c,bool reuse
     }
     return flow;
 }
+static void cf_order_free(CalleeOrderFixture *f,ErrorFlow *flow) {
+    error_storage_free(flow);effect_body_material_free(f->material);f->material=NULL;
+    flow->body=(EffectBodyRequest){0};
+}
 static void cf_preserved(const CalleeOrderFixture *f,const ErrorFlow *flow,bool reuse) {
     for (uint32_t i=0;i<10;++i) CHECK(f->summary[i]==UINT64_C(0x9182736455aa6600)+i);
-    CHECK(flow->escaping==f->summary && flow->function==(const XrXirFunction *)f);
+    CHECK(flow->escaping==f->summary && flow->function==(const EffectBodyFunctionHead *)f);
     CHECK(flow->stride==77 && flow->values==99 && flow->cell_count==3 && flow->active_count==5);
     CHECK(flow->changed && flow->summary_changed && flow->restart);
     if (reuse) {
@@ -97,7 +117,7 @@ static void cf_order_cases(void) {
         CHECK(error_queue_prepare(&f.graph,&flow)==XR_XIR_OK);cf_order_golden(&f,mode);
         CHECK(pc_stats(&c).work-before==(reuse ? reuse_work[mode] : fresh[mode]));
         CHECK(attempts-count==(reuse ? 0u : 1u));cf_preserved(&f,&flow,reuse!=0);
-        error_storage_free(&flow);pc_release(&c,baseline);
+        cf_order_free(&f,&flow);pc_release(&c,baseline);
     }
     puts("callee-first DAG/duplicate/GO/cycle/cross-list/self-cycle literal order and actual fees");
 }
@@ -112,17 +132,18 @@ static void cf_order_budget(void) {
         CHECK(error_queue_prepare(&f.graph,&flow)==(enough ? XR_XIR_OK : XR_XIR_BUDGET));
         CHECK(pc_stats(&c).work-before==available && attempts-count==(reuse ? 0u : 1u));
         cf_preserved(&f,&flow,reuse!=0);if (enough) cf_order_golden(&f,0);
-        error_storage_free(&flow);pc_release(&c,baseline);
+        cf_order_free(&f,&flow);pc_release(&c,baseline);
     }
     CalleeOrderFixture f;cf_order_fixture(&f,0);
     XrXirCompileContext c=pc_owner(pc_caps());uint64_t baseline=pc_stats(&c).live_bytes;
     ErrorFlow flow=cf_flow(&f,&c,false);uint64_t before=pc_stats(&c).work;
+    uint64_t queue_live=pc_stats(&c).live_bytes;
     attempts=0;injected=false;fail_at=0;
     CHECK(error_queue_prepare(&f.graph,&flow)==XR_XIR_OUT_OF_MEMORY && injected && attempts==1);
-    fail_at=SIZE_MAX;CHECK(pc_stats(&c).work-before==1 && pc_stats(&c).live_bytes==baseline);
+    fail_at=SIZE_MAX;CHECK(pc_stats(&c).work-before==1 && pc_stats(&c).live_bytes==queue_live);
     cf_preserved(&f,&flow,false);pc_pattern(f.queue,sizeof(f.queue),0xa5);
     CHECK(error_queue_prepare(&f.graph,&flow)==XR_XIR_OK && pc_stats(&c).work-before==58);
-    cf_order_golden(&f,0);cf_preserved(&f,&flow,false);pc_release(&c,baseline);
+    cf_order_golden(&f,0);cf_preserved(&f,&flow,false);cf_order_free(&f,&flow);pc_release(&c,baseline);
 }
 static void cf_order_invalid(void) {
     for (unsigned mode=0;mode<5;++mode) {
@@ -135,7 +156,7 @@ static void cf_order_invalid(void) {
         else if (mode==3) f.graph.edge_count=3;
         else f.graph.edges=NULL;
         CHECK(error_queue_prepare(&f.graph,&flow)==XR_XIR_BAD_STRUCTURE);
-        cf_preserved(&f,&flow,false);pc_release(&c,baseline);
+        cf_preserved(&f,&flow,false);cf_order_free(&f,&flow);pc_release(&c,baseline);
     }
 }
 typedef enum CalleeWholeMode { CF_CHAIN,CF_DUPLICATE,CF_CYCLE,CF_GO,CF_UNKNOWN } CalleeWholeMode;

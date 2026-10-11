@@ -151,3 +151,50 @@ static inline XrXirStatus effect_invocation_bounds_mask(const XrXirCompileContex
 }
 
 #include "xxir_effect_invocation_instance_bounds.inc.c"
+
+/* An authentic dense producer can supply a different pre-bottom vector on
+ * this exact physical body. Copy and validate it once before any equation
+ * consumes it; seal then transfers the same material's bound owner. */
+static XrXirStatus effect_invocation_bounds_copy_physical(const XrXirCompileContext *work,
+    const EffectInvocationDeclaredBounds *source,const EffectPhysicalDomain *physical,
+    EffectInvocationDeclaredBounds **output) {
+    if (!xir_compile_context_valid(work) || !source || !physical || !output || *output ||
+        source->resources!=work->resources || physical->resources!=work->resources ||
+        source->count!=physical->count || source->count>source->capacity ||
+        (source->count && (!source->functions || !physical->functions))) return XR_XIR_BAD_STRUCTURE;
+    EffectInvocationDeclaredBounds *copy=NULL;
+    XrXirStatus status=effect_invocation_bounds_new(work,&copy);
+    if (status==XR_XIR_OK) status=effect_invocation_bounds_capacity(work,copy,source->count);
+    for (uint32_t f=0;status==XR_XIR_OK && f<source->count;++f) {
+        if (!xir_compile_work(work,10)) { status=XR_XIR_BUDGET;break; }
+        const EffectInvocationFunctionBounds *body=&source->functions[f];
+        const EffectPhysicalFunction *domain=&physical->functions[f];
+        if (body->values!=domain->values || domain->rows!=body->count || body->count>body->values ||
+            domain->count>domain->capacity || domain->capacity>domain->values ||
+            !!domain->records!=!!domain->capacity || !!body->bounds!=!!body->count ||
+            (uint64_t)body->count>SIZE_MAX/sizeof(*body->bounds)) { status=XR_XIR_BAD_STRUCTURE;break; }
+        EffectInvocationValueBound *records=body->count?xir_compile_alloc(work,
+            (size_t)body->count*sizeof(*records),&status):NULL;
+        if (status!=XR_XIR_OK) break;
+        uint32_t at=0,previous=0;
+        for (uint32_t i=0;i<domain->count && status==XR_XIR_OK;++i) {
+            if (!xir_compile_work(work,4)) { status=XR_XIR_BUDGET;break; }
+            EffectPhysicalRecord row=domain->records[i];
+            if (!row.mask || row.value>=domain->values || (i && row.value<=previous)) { status=XR_XIR_BAD_STRUCTURE;break; }
+            previous=row.value;
+            if (!(row.mask&EFFECT_PHYSICAL_CALLABLE)) continue;
+            if (at>=body->count || !records) { status=XR_XIR_BAD_STRUCTURE;break; }
+            const EffectInvocationValueBound *bound=&body->bounds[at];
+            if (!xir_compile_work(work,3+sizeof(*records))) { status=XR_XIR_BUDGET;break; }
+            if (bound->value!=row.value || !bound->callable || bound->mask&~
+                (XR_XIR_CALLABLE_ROOT_REQUIRED|XR_XIR_CALLABLE_ROOT_UNRESOLVED)) { status=XR_XIR_BAD_STRUCTURE;break; }
+            records[at++]=*bound;
+        }
+        if (status==XR_XIR_OK && at!=body->count) status=XR_XIR_BAD_STRUCTURE;
+        if (status==XR_XIR_OK && !xir_compile_work(work,sizeof(*copy->functions)+1)) status=XR_XIR_BUDGET;
+        if (status!=XR_XIR_OK) { xr_compile_resources_free(records);break; }
+        copy->functions[f]=(EffectInvocationFunctionBounds){body->values,body->count,records};++copy->count;
+    }
+    if (status!=XR_XIR_OK) { effect_invocation_bounds_free(copy);return status; }
+    *output=copy;return XR_XIR_OK;
+}

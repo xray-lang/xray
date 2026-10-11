@@ -11,34 +11,57 @@
  * environments are flat rows for these real sites; a repeated nested site
  * cannot manufacture another basis atom or a recursively copied path. */
 static XrXirStatus effect_invocation_sites(EffectInvocationOwner *owner) {
-    if (!owner || !owner->module || !owner->work || owner->sites || owner->site_count ||
-        owner->binding_count) return XR_XIR_BAD_STRUCTURE;
+    if (!owner || !effect_body_material_shape(owner->material) || !owner->work || owner->sites || owner->site_count ||
+        owner->binding_count || !owner->physical ||
+        owner->physical->resources!=owner->work->resources ||
+        owner->physical->count!=owner->body.domain.function_count ||
+        (owner->physical->count && !owner->physical->functions)) return XR_XIR_BAD_STRUCTURE;
     uint64_t count=0,bindings=0;
-    for (uint32_t f=0;f<owner->module->function_count;++f) {
-        const XrXirFunction *function=&owner->module->functions[f];
-        for (uint32_t i=0;i<function->instruction_count;++i) {
+    XrXirStatus status=XR_XIR_OK;
+    for (uint32_t f=0;f<owner->body.domain.function_count;++f) {
+        EffectBodyFunctionDimensions head={0};status=effect_invocation_dimensions(owner,f,&head);
+        if (status!=XR_XIR_OK) return status;
+        const EffectBodyFunctionDimensions *function=&head;
+        const EffectPhysicalFunction *physical=&owner->physical->functions[f];
+        for (uint32_t r=0;r<physical->count;++r) {
             if (!xir_compile_work(owner->work,1)) return XR_XIR_BUDGET;
-            const XrXirInstruction *op=&function->instructions[i];
-            if (op->op!=XR_XIR_FUNCTION_REF) continue;
-            if (op->immediate<0 || (uint64_t)op->immediate>=owner->module->function_count ||
-                op->args[1]>owner->module->functions[op->immediate].parameter_count)
-                return XR_XIR_BAD_STRUCTURE;
+            if (!(physical->records[r].mask&EFFECT_PHYSICAL_REFERENCE)) continue;
+            uint32_t value=physical->records[r].value;
+            if (value<function->parameter_count || value>=physical->values) return XR_XIR_BAD_STRUCTURE;
+            uint32_t i=value-function->parameter_count;
+            XrXirInstruction storage;const XrXirInstruction *op=NULL;
+            status=effect_invocation_operation(owner,f,i,&storage,&op);
+            if (status!=XR_XIR_OK) return status;
+            if (op->op!=XR_XIR_FUNCTION_REF || op->immediate<0 ||
+                (uint64_t)op->immediate>=owner->body.domain.function_count) return XR_XIR_BAD_STRUCTURE;
+            EffectBodyFunctionDimensions target={0};
+            status=effect_invocation_dimensions(owner,(uint32_t)op->immediate,&target);
+            if (status!=XR_XIR_OK) return status;
+            if (op->args[1]>target.parameter_count) return XR_XIR_BAD_STRUCTURE;
             ++count;bindings+=op->args[1];
             if (count>UINT32_MAX || bindings>UINT32_MAX) return XR_XIR_BUDGET;
         }
     }
     if (count>SIZE_MAX/sizeof(EffectInvocationSite)) return XR_XIR_BUDGET;
-    XrXirStatus status=XR_XIR_OK;
     EffectInvocationSite *sites=count ? xir_compile_alloc(owner->work,
         (size_t)count*sizeof(*sites),&status) : NULL;
     if (count && !sites) return status;
     uint32_t at=0,binding=0;
-    for (uint32_t f=0;f<owner->module->function_count && status==XR_XIR_OK;++f) {
-        const XrXirFunction *function=&owner->module->functions[f];
-        for (uint32_t i=0;i<function->instruction_count;++i) {
+    for (uint32_t f=0;f<owner->body.domain.function_count && status==XR_XIR_OK;++f) {
+        EffectBodyFunctionDimensions head={0};status=effect_invocation_dimensions(owner,f,&head);
+        if (status!=XR_XIR_OK) break;
+        const EffectBodyFunctionDimensions *function=&head;
+        const EffectPhysicalFunction *physical=&owner->physical->functions[f];
+        for (uint32_t r=0;r<physical->count;++r) {
             if (!xir_compile_work(owner->work,1)) { status=XR_XIR_BUDGET;break; }
-            const XrXirInstruction *op=&function->instructions[i];
-            if (op->op!=XR_XIR_FUNCTION_REF) continue;
+            if (!(physical->records[r].mask&EFFECT_PHYSICAL_REFERENCE)) continue;
+            uint32_t value=physical->records[r].value;
+            if (value<function->parameter_count || value>=physical->values) { status=XR_XIR_BAD_STRUCTURE;break; }
+            uint32_t i=value-function->parameter_count;
+            XrXirInstruction storage;const XrXirInstruction *op=NULL;
+            status=effect_invocation_operation(owner,f,i,&storage,&op);
+            if (status!=XR_XIR_OK) break;
+            if (op->op!=XR_XIR_FUNCTION_REF) { status=XR_XIR_BAD_STRUCTURE;break; }
             if (!xir_compile_work(owner->work,sizeof(*sites))) { status=XR_XIR_BUDGET;break; }
             if (at>=count || binding>bindings || op->args[1]>bindings-binding) {
                 status=XR_XIR_BAD_STRUCTURE;break;
@@ -52,10 +75,8 @@ static XrXirStatus effect_invocation_sites(EffectInvocationOwner *owner) {
     owner->sites=sites;owner->site_count=at;owner->binding_count=binding;return XR_XIR_OK;
 }
 
-static XrXirStatus effect_invocation_basis(const EffectInvocationOwner *owner,
-    uint32_t root,EffectInvocationBasis *output) {
-    if (root>=owner->module->function_count) return XR_XIR_BAD_STRUCTURE;
-    uint32_t parameters=owner->module->functions[root].parameter_count;
+static XrXirStatus effect_invocation_basis_parameters(const EffectInvocationOwner *owner,
+    uint32_t parameters,EffectInvocationBasis *output) {
     uint64_t fn_bits=(uint64_t)owner->site_count+parameters+3;
     uint64_t cell_bits=(uint64_t)parameters+3;
     uint64_t origin_words=(fn_bits+63)/64,cell_words=(cell_bits+63)/64;
@@ -69,11 +90,20 @@ static XrXirStatus effect_invocation_basis(const EffectInvocationOwner *owner,
     return XR_XIR_OK;
 }
 
+static XrXirStatus effect_invocation_basis(const EffectInvocationOwner *owner,
+    uint32_t root,EffectInvocationBasis *output) {
+    if (!owner || !effect_body_material_shape(owner->material) || root>=owner->body.domain.function_count)
+        return XR_XIR_BAD_STRUCTURE;
+    EffectBodyFunctionDimensions head={0};XrXirStatus status=effect_invocation_dimensions(owner,root,&head);
+    return status==XR_XIR_OK?effect_invocation_basis_parameters(owner,head.parameter_count,output):status;
+}
+
 static void effect_invocation_free(EffectInvocationOwner *owner) {
     if (!owner) return;
     for (uint32_t n=0;n<owner->count;++n) {
         xr_compile_resources_free(owner->nodes[n].causes);
         xr_compile_resources_free(owner->nodes[n].producers);
+        xr_compile_resources_free(owner->nodes[n].classes);
     }
     for (uint32_t d=0;d<owner->deferred_count;++d)
         xr_compile_resources_free(owner->deferred_calls[d].arguments);
@@ -85,6 +115,7 @@ static void effect_invocation_free(EffectInvocationOwner *owner) {
     xr_compile_resources_free(owner->roots);xr_compile_resources_free(owner->root_spaces);
     xr_compile_resources_free(owner->local_roots);
     xr_compile_resources_free(owner->local_witnesses);
+    /* Physical rows and Cell proof share the generation material owner. */
     xr_compile_resources_free(owner);
 }
 
@@ -150,10 +181,12 @@ static XrXirStatus effect_invocation_enqueue(EffectInvocationOwner *owner,uint32
  * physical origin rows are copied into this owner before the node is linked. */
 static XrXirStatus effect_invocation_intern(EffectInvocationOwner *owner,
     uint32_t root,uint32_t body,const uint64_t *input,uint32_t *output) {
-    if (body>=owner->module->function_count || !output) return XR_XIR_BAD_STRUCTURE;
+    if (body>=owner->body.domain.function_count || !output) return XR_XIR_BAD_STRUCTURE;
     EffectInvocationBasis basis={0};XrXirStatus status=effect_invocation_basis(owner,root,&basis);
     if (status!=XR_XIR_OK) return status;
-    uint32_t parameters=owner->module->functions[body].parameter_count;
+    EffectBodyFunctionDimensions head={0};status=effect_invocation_dimensions(owner,body,&head);
+    if (status!=XR_XIR_OK) return status;
+    uint32_t parameters=head.parameter_count;
     uint64_t words=(uint64_t)parameters*basis.row_words;
     if (words>SIZE_MAX/sizeof(*input) || (words && !input)) return XR_XIR_BAD_STRUCTURE;
     for (uint32_t n=0;n<owner->count;++n) {
@@ -170,7 +203,7 @@ static XrXirStatus effect_invocation_intern(EffectInvocationOwner *owner,
     status=effect_invocation_capacity(owner);
     if (status!=XR_XIR_OK) return status;
     uint32_t dependency_words=(uint32_t)(((uint64_t)basis.parameters+63)/64);
-    uint32_t context_words=(uint32_t)(((uint64_t)owner->module->functions[body].instruction_count+63)/64);
+    uint32_t context_words=(uint32_t)(((uint64_t)head.instruction_count+63)/64);
     uint64_t output_words=(uint64_t)dependency_words*2+context_words;
     uint64_t cause_count=(uint64_t)basis.parameters*2+3;
     if (output_words>SIZE_MAX/(2*sizeof(uint64_t)) || cause_count>UINT32_MAX ||
@@ -180,19 +213,21 @@ static XrXirStatus effect_invocation_intern(EffectInvocationOwner *owner,
     size_t cause_bytes=(size_t)cause_count*2*sizeof(EffectInvocationCause);
     if (input_bytes>SIZE_MAX-cause_bytes || output_bytes>SIZE_MAX-cause_bytes-input_bytes)
         return XR_XIR_BUDGET;
+    uint64_t coverage_words=parameters;
+    if (coverage_words>SIZE_MAX/sizeof(uint64_t)) return XR_XIR_BUDGET;
+    size_t coverage_bytes=(size_t)coverage_words*sizeof(uint64_t);
+    if (coverage_bytes>SIZE_MAX-cause_bytes-input_bytes-output_bytes) return XR_XIR_BUDGET;
     /* These rows share exactly one equation lifetime. The cause pointer is
      * the allocation root; every input and output pointer is an interior view. */
     EffectInvocationCause *causes=xir_compile_calloc(owner->work,1,
-        cause_bytes+input_bytes+output_bytes,&status);
+        cause_bytes+input_bytes+output_bytes+coverage_bytes,&status);
     if (!causes) return status;
     uint8_t *memory=(uint8_t *)causes;
     uint64_t *owned=words ? (uint64_t *)(memory+cause_bytes) : NULL;
     uint64_t *outputs=output_words ? (uint64_t *)(memory+cause_bytes+input_bytes) : NULL;
-    uint64_t *cells=outputs,*callables=outputs ? outputs+dependency_words : NULL;
-    uint64_t *contexts=outputs ? outputs+(size_t)dependency_words*2 : NULL;
     uint64_t *local_cells=outputs ? outputs+(size_t)output_words : NULL;
-    uint64_t *local_parameters=local_cells ? local_cells+dependency_words : NULL;
-    uint64_t *local_contexts=local_cells ? local_cells+(size_t)dependency_words*2 : NULL;
+    uint64_t *coverage=parameters ?
+        (uint64_t *)(memory+cause_bytes+input_bytes+output_bytes) : NULL;
     if (!xir_compile_work(owner->work,cause_count)) {
         xr_compile_resources_free(causes);return XR_XIR_BUDGET;
     }
@@ -203,13 +238,14 @@ static XrXirStatus effect_invocation_intern(EffectInvocationOwner *owner,
         xr_compile_resources_free(causes);return XR_XIR_BUDGET;
     }
     if (words) memcpy(owned,input,(size_t)words*sizeof(*owned));
+    EffectInvocationClassFact *classes=NULL; uint32_t class_count=0;
+    status=effect_invocation_class_storage(owner,body,&classes,&class_count);
+    if (status!=XR_XIR_OK) { xr_compile_resources_free(causes);return status; }
     uint32_t at=owner->count;
     owner->nodes[at]=(EffectInvocationNode){.root=root,.body=body,
-        .parameter_count=parameters,.input=owned,.outputs=outputs,
-        .causes=causes,.local_causes=causes+(size_t)cause_count,.cause_count=(uint32_t)cause_count,
-        .cells=cells,.parameters=callables,.contexts=contexts,
-        .local_cells=local_cells,.local_parameters=local_parameters,.local_contexts=local_contexts,
-        .edge_head=UINT32_MAX};
+        .parameter_count=parameters,.input=owned,.cells=outputs,
+        .causes=causes,.cause_count=(uint32_t)cause_count,.local_cells=local_cells,
+        .parameter_coverage=coverage,.edge_head=UINT32_MAX,.classes=classes,.class_count=class_count};
     ++owner->count;
     status=effect_invocation_enqueue(owner,at);
     if (status!=XR_XIR_OK) return status;
@@ -218,9 +254,12 @@ static XrXirStatus effect_invocation_intern(EffectInvocationOwner *owner,
 
 static XrXirStatus effect_invocation_edge(EffectInvocationOwner *owner,
     uint32_t caller,uint32_t target,uint32_t instruction,uint32_t producer,bool latent) {
-    if (caller>=owner->count || target>=owner->count ||
-        owner->nodes[caller].root!=owner->nodes[target].root ||
-        instruction>=owner->module->functions[owner->nodes[caller].body].instruction_count ||
+    if (caller>=owner->count || target>=owner->count) return XR_XIR_BAD_STRUCTURE;
+    EffectBodyFunctionDimensions head={0};
+    XrXirStatus read_status=effect_invocation_dimensions(owner,owner->nodes[caller].body,&head);
+    if (read_status!=XR_XIR_OK) return read_status;
+    if (owner->nodes[caller].root!=owner->nodes[target].root ||
+        instruction>=head.instruction_count ||
         (producer!=UINT32_MAX && (producer>=owner->site_count ||
             owner->sites[producer].target!=owner->nodes[target].body)))
         return XR_XIR_BAD_STRUCTURE;
@@ -254,7 +293,7 @@ static XrXirStatus effect_invocation_edge(EffectInvocationOwner *owner,
     owner->nodes[caller].edge_head=at;owner->consumers[target]=at;
     ++owner->edge_count;
     /* A completed child's producer can predate a newly linked real edge. */
-    return owner->producer_enabled ? effect_invocation_enqueue(owner,caller) : XR_XIR_OK;
+    return owner->producer_enabled || owner->class_enabled ? effect_invocation_enqueue(owner,caller) : XR_XIR_OK;
 }
 
 static XrXirStatus effect_invocation_join(EffectInvocationOwner *owner,
@@ -271,20 +310,24 @@ static XrXirStatus effect_invocation_join(EffectInvocationOwner *owner,
     if (mask!=to->intrinsic_mask || deferred!=to->deferred) *changed=true;
     to->intrinsic_mask=mask;to->deferred=deferred;
     if (from->deferred) {
-        uint32_t instructions=owner->module->functions[to->body].instruction_count;
-        if (instruction>=instructions || !to->contexts) return XR_XIR_BAD_STRUCTURE;
+        EffectBodyFunctionDimensions head={0};status=effect_invocation_dimensions(owner,to->body,&head);
+        if (status!=XR_XIR_OK) return status;
+        uint32_t instructions=head.instruction_count;
+        if (instruction>=instructions || !effect_invocation_node_row(to,EFFECT_INVOCATION_CONTEXTS,false)) return XR_XIR_BAD_STRUCTURE;
         if (!xir_compile_work(owner->work,3)) return XR_XIR_BUDGET;
         uint64_t bit=UINT64_C(1)<<(instruction%64);
-        if (!(to->contexts[instruction/64]&bit)) *changed=true;
-        to->contexts[instruction/64]|=bit;
+        if (!(effect_invocation_node_row(to,EFFECT_INVOCATION_CONTEXTS,false)[instruction/64]&bit)) *changed=true;
+        effect_invocation_node_row(to,EFFECT_INVOCATION_CONTEXTS,false)[instruction/64]|=bit;
     }
     uint32_t words=(uint32_t)(((uint64_t)basis.parameters+63)/64);
+    uint64_t *to_parameters=effect_invocation_node_row(to,EFFECT_INVOCATION_PARAMETERS,false);
+    const uint64_t *from_parameters=effect_invocation_node_row(from,EFFECT_INVOCATION_PARAMETERS,false);
     for (uint32_t w=0;w<words;++w) {
         if (!xir_compile_work(owner->work,6)) return XR_XIR_BUDGET;
         uint64_t cells=to->cells[w]|from->cells[w];
-        uint64_t parameters=to->parameters[w]|from->parameters[w];
-        if (cells!=to->cells[w] || parameters!=to->parameters[w]) *changed=true;
-        to->cells[w]=cells;to->parameters[w]=parameters;
+        uint64_t parameters=to_parameters[w]|from_parameters[w];
+        if (cells!=to->cells[w] || parameters!=to_parameters[w]) *changed=true;
+        to->cells[w]=cells;to_parameters[w]=parameters;
     }
     return XR_XIR_OK;
 }

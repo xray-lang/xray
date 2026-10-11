@@ -105,9 +105,10 @@ static void ci_storage(void){
     CellIndexFixture f;ci_fixture(&f,CI_CALL,false,false);XrXirCompileContext c=ci_owner(ci_caps());uint64_t baseline=ci_stats(&c).live_bytes;
     CHECK(xir_fixture_verify(&c, &f.module, NULL)==XR_XIR_OK);
     XrXirEffects e={0};e.count=f.module.function_count;CHECK(e.count==3);
-    CHECK(effect_errors_seed(&f.module,&e,&c)==XR_XIR_OK);
+    EffectBodyRequest input=effect_body_raw_request(&c,&f.module);
+    CHECK(effect_errors_seed(&input.domain,&e,&c)==XR_XIR_OK);
     EffectTerms terms={0};terms.remaining=&c;terms.types=f.types;
-    ErrorFlow flow={0};flow.module=&f.module;flow.effects=&e;flow.remaining=&c;flow.terms=&terms;
+    ErrorFlow flow={0};flow.source=&f.module;flow.body=input;flow.effects=&e;flow.remaining=&c;flow.terms=&terms;
     CHECK(error_function(&flow,1)==XR_XIR_OK && e.errors[1]==12 && flow.cell_count==3);
     for(uint32_t i=0;i<3;++i)CHECK(flow.cells[i]==f.expected_ids[i]);
     CHECK(flow.roots[f.alias]==f.new_cell && flow.roots[0]==0);

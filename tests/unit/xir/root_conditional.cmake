@@ -42,6 +42,18 @@ foreach(_root_conditional_gate helpers source)
     endif()
 endforeach()
 
+# These literals remain reachable before the complete helper cost gate.
+add_test(NAME test_xir_root_conditional_class_rows
+    COMMAND test_xir_root_conditional_helpers --class-rows)
+set_tests_properties(test_xir_root_conditional_class_rows PROPERTIES
+    LABELS "unit;xir;root-effects;class;compiler;ownership" TIMEOUT 300 RUN_SERIAL TRUE PROCESSORS 1)
+
+# Complete incoming actuals are exercised independently of the full cost gate.
+add_test(NAME test_xir_root_conditional_parameter_coverage
+    COMMAND test_xir_root_conditional_helpers --parameter-coverage)
+set_tests_properties(test_xir_root_conditional_parameter_coverage PROPERTIES
+    LABELS "unit;xir;root-effects;higher-order;compiler;ownership" TIMEOUT 300 RUN_SERIAL TRUE PROCESSORS 1)
+
 # Existing producer identities must follow actual Source normalization.
 add_executable(test_xir_source_effect_value_refine
     ${CMAKE_CURRENT_LIST_DIR}/test_xir_source_effect_value_refine.c)
@@ -77,3 +89,13 @@ add_test(NAME test_xir_source_generic_callable_context_compiler
     COMMAND test_xir_source_generic_callable_context --compiler)
 set_tests_properties(test_xir_source_generic_callable_context_compiler PROPERTIES
     LABELS "unit;xir;root-effects;higher-order;compiler-fault;ownership" TIMEOUT 600 RUN_SERIAL TRUE PROCESSORS 1)
+
+# True Class subjects reach the same Cell terminal and retained-owner replay.
+add_test(NAME test_xir_root_conditional_class_cells
+    COMMAND test_xir_root_conditional_helpers --class-cells)
+set_tests_properties(test_xir_root_conditional_class_cells PROPERTIES
+    LABELS "unit;xir;root-effects;class;compiler;ownership" TIMEOUT 300 RUN_SERIAL TRUE PROCESSORS 1)
+add_test(NAME test_xir_root_conditional_class_cells_compiler
+    COMMAND test_xir_root_conditional_helpers --class-cells-compiler)
+set_tests_properties(test_xir_root_conditional_class_cells_compiler PROPERTIES
+    LABELS "unit;xir;root-effects;class;compiler-fault;ownership" TIMEOUT 600 RUN_SERIAL TRUE PROCESSORS 1)

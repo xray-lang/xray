@@ -103,29 +103,31 @@ static XrXirStatus lowered_snapshot_empty_copy(const XrXirCompileContext *contex
         .instruction_count = 1, .blocks = &block, .block_count = 1};
     XrXirModule module = {.stage = XR_XIR_LOWERED, .functions = &function,
         .function_count = 1, .types = &empty};
-    EffectInvocationCertificate certificate = {.resources = context->resources,
-        .terms = {.remaining = context}};
-    XrXirStatus status = effect_invocation_copy_bodies(&certificate, &module);
-    if (status == XR_XIR_OK) status = effect_lowered_snapshot_match(context, &certificate.terms.types, &empty);
+    EffectBodyMaterial *body = NULL;
+    XrXirStatus status = effect_body_material_create(context, &module, &body);
+    if (status == XR_XIR_OK) status = effect_lowered_snapshot_match(context, &body->terms.types, &empty);
     if (status == XR_XIR_OK && oracle) {
-        CHECK(!certificate.lowered_types && !certificate.terms.types.count &&
-            !certificate.terms.types.nodes && !certificate.terms.types.nominals &&
-            !certificate.terms.types.interfaces && certificate.bodies.functions != &function &&
-            certificate.bodies.functions[0].instructions != &instruction &&
-            certificate.bodies.functions[0].blocks != &block &&
-            certificate.bodies.functions[0].name != function.name);
-        EffectInvocationCertificate rejected = {.resources = context->resources,
-            .terms = {.remaining = context}};
+        CHECK(effect_body_material_shape(body) && !body->owned_types &&
+            !body->terms.types.count && !body->terms.types.nodes &&
+            !body->terms.types.nominals && !body->terms.types.interfaces &&
+            (const void *)body->functions != (const void *)&function &&
+            (const void *)body->functions[0].stream != (const void *)&instruction &&
+            body->functions[0].blocks != &block &&
+            body->functions[0].name != function.name);
+        EffectBodyRead read = effect_body_compile_read(context);XrXirInstruction decoded;
+        CHECK(effect_body_instruction_get(&read, &body->functions[0], 0, &decoded) == XR_XIR_OK &&
+            decoded.op == XR_XIR_RETURN && decoded.type == XR_XIR_UNIT && !decoded.immediate &&
+            !decoded.args[0] && !decoded.args[1] && !decoded.targets[0] && !decoded.targets[1] &&
+            !decoded.type_arguments[0] && !decoded.type_arguments[1]);
+        EffectBodyMaterial *rejected = NULL;
         XrXirTypes missing = {.count = 1};module.types = &missing;
-        CHECK(effect_invocation_copy_bodies(&rejected, &module) == XR_XIR_BAD_STRUCTURE);
+        CHECK(effect_body_material_create(context, &module, &rejected) == XR_XIR_BAD_STRUCTURE);
         XrXirNominalTable malformed = {.count = 1};
         missing = (XrXirTypes){.nominals = &malformed};
-        CHECK(effect_invocation_copy_bodies(&rejected, &module) == XR_XIR_BAD_STRUCTURE);
-        CHECK(!rejected.lowered_types && !rejected.terms.types.nodes && !rejected.terms.memory);
-        effect_terms_free(&rejected.terms);
+        CHECK(effect_body_material_create(context, &module, &rejected) == XR_XIR_BAD_STRUCTURE);
+        CHECK(!rejected);
     }
-    effect_terms_free(&certificate.terms);
-    xr_xir_compile_types_free(certificate.lowered_types);return status;
+    effect_body_material_free(body);return status;
 }
 
 static XrXirStatus conditional_lowered_snapshot(const XrXirCompileContext *context,

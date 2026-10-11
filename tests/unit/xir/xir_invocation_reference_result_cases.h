@@ -62,8 +62,8 @@ static XrXirStatus conditional_invocation_reference_result(const XrXirCompileCon
         const XrXirTypeNode *returned=xr_xir_callable_signature(&dense->terms.types,reference->result);
         CHECK(returned && returned->result==XR_XIR_I64 && returned->parameter_count==0 &&
             returned->flags==XR_XIR_CALLABLE_ROOT_NONE);
-        CHECK(certificate->bodies.functions!=dense->functions && certificate->bodies.function_count==dense->count &&
-            certificate->bodies.functions[1].result==dense->functions[1].result &&
+        CHECK((const void *)certificate->body->functions!=(const void *)dense->functions && effect_body_count(certificate->body)==dense->count &&
+            certificate->body->functions[1].result==dense->functions[1].result &&
             certificate->terms.types.nodes!=dense->terms.types.nodes);
         CHECK(effect_lowered_snapshot_match(context,&certificate->terms.types,&dense->terms.types)==XR_XIR_OK);
         /* Public nested/UNKNOWN rules remain exact. */

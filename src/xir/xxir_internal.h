@@ -22,6 +22,10 @@
 
 /* Requires verified source and type pools; proves function correspondence and instance closure. */
 XR_FUNC XrXirStatus xr_xir_compile_provenance_functions_match(const XrXirCompileContext *compile_context, const XrXirModule *source, const XrXirModule *destination, const XrXirProvenance *instance, XrXirDiagnostic *diagnostic);
+/* Complete source admission and correspondence consume one fresh effects
+ * owner within this call. No caller-supplied facts or retained cache are used. */
+XR_FUNC XrXirStatus xr_xir_compile_provenance_verify(const XrXirCompileContext *context,
+    const XrXirModule *destination, const XrXirProvenance *instance, XrXirDiagnostic *diagnostic);
 XR_FUNC void xr_xir_compile_provenance_free(XrXirProvenance *provenance);
 XR_FUNC XrXirStatus xr_xir_compile_provenance_copy(const XrXirCompileContext *compile_context,
     const XrXirProvenance *source, XrXirProvenance **output);
@@ -104,6 +108,11 @@ XR_FUNC XrXirStatus xr_xir_compile_verify_owned_effects_v2(const XrXirCompileCon
     const XrXirModule *module, const XrXirConstruction *construction,
     XrXirEffects **output, XrXirDiagnostic *diagnostic);
 XR_FUNC XrXirStatus xr_xir_compile_artifact_verify_owned_effects(const XrXirArtifact *artifact,
+    XrXirEffects **output, XrXirDiagnostic *diagnostic);
+/* Complete analysis collects this call's fresh owner for every admitted stage.
+ * It accepts no prepared facts and publishes only after all obligations pass. */
+XR_FUNC XrXirStatus xr_xir_compile_verify_analyzed_effects_v2(const XrXirCompileContext *context,
+    const XrXirModule *module, const XrXirConstruction *construction,
     XrXirEffects **output, XrXirDiagnostic *diagnostic);
 XR_FUNC XrXirStatus xr_xir_compile_effects_refine_verified(const XrXirCompileContext *context,
     const XrXirModule *module, const XrXirRootRefiner *refiner, XrXirEffects **output);

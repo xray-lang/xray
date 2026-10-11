@@ -11,14 +11,11 @@
  *   The certificate owns its private body correspondence and complete inputs.
  *   This copy is evidence metadata, never an independently admitted executable.
  */
-#include "xxir_effect_lowered_snapshot.inc.c"
-#include "xxir_effect_invocation_declarations.inc.c"
 
 typedef struct EffectInvocationCertificate {
     XrCompileResources *resources;
     EffectTerms terms;
-    XrXirTypes *lowered_types;
-    XrXirModule bodies;
+    EffectBodyMaterial *body;
     XrXirDeclarations *declarations;
     XrXirGeneric *generics;
     XrXirDefaultTable defaults;
@@ -50,11 +47,10 @@ static void effect_invocation_certificate_free(EffectInvocationCertificate *cert
     if (!certificate) return;
     effect_invocation_free(certificate->equations);
     effect_invocation_solution_free(certificate->solution);
-    xr_compile_resources_free(certificate->declared);
-    effect_invocation_declarations_free(certificate->declarations);
-    xr_xir_compile_generics_free(certificate->generics,certificate->bodies.function_count);
+    /* Original bounds are a child of the sole transferred material. */
+    effect_body_material_free(certificate->body);
     effect_terms_free(&certificate->terms);
-    xr_xir_compile_types_free(certificate->lowered_types);xr_compile_resources_free(certificate);
+    xr_compile_resources_free(certificate);
 }
 
 static void *effect_invocation_copy(EffectTerms *terms,const void *source,
@@ -67,134 +63,58 @@ static void *effect_invocation_copy(EffectTerms *terms,const void *source,
     memcpy(copy,source,(size_t)count*size);return copy;
 }
 
-/* Full typed children and declaration domains are copied by the existing
- * owned type/metadata implementations. Every referenced numeric type keeps
- * its real ID because this seed preserves the verified descriptor order. */
-static XrXirStatus effect_invocation_copy_bodies(EffectInvocationCertificate *certificate,
-    const XrXirModule *source) {
-    EffectTerms *terms=&certificate->terms;
-    const XrXirTypes *types=source->types?source->types:&effect_empty_types;
-    XrXirStatus status=XR_XIR_OK;
-    if (source->stage==XR_XIR_LOWERED) {
-        /* Projected identities and every physical payload child belong to
-         * this copy. They cannot enter the semantic declaration seed. */
-        if (!xir_compile_work(terms->remaining,sizeof(*types))) return XR_XIR_BUDGET;
-        if (types->interfaces || ((types->count!=0)!=(types->nodes!=NULL)) ||
-            (types->nominals && (!types->nominals->count || types->nominals->declarations ||
-             !types->nominals->identities))) return XR_XIR_BAD_STRUCTURE;
-        if (!types->count && !types->nodes && !types->nominals && !types->interfaces) {
-            /* An empty owned snapshot contains no producer storage to borrow. */
-            terms->types=(XrXirTypes){0};terms->capacity=0;
-        } else {
-            status=xr_xir_compile_types_clone(terms->remaining,types,&certificate->lowered_types);
-            if (status==XR_XIR_OK) {
-                terms->types=*certificate->lowered_types;
-                terms->capacity=types->count;
-            }
-        }
-    } else {
-        status=effect_terms_seed(terms,types);
-        if (status==XR_XIR_OK) status=effect_terms_domain_match(terms,types);
-    }
-    if (status!=XR_XIR_OK) return status;
-    uint32_t count=source->function_count;
-    certificate->bodies=*source;certificate->bodies.types=&terms->types;
-    certificate->bodies.provenance=NULL;certificate->bodies.functions=NULL;
-    certificate->bodies.declarations=NULL;certificate->bodies.generics=NULL;certificate->bodies.defaults=NULL;
-    XrXirFunction *functions=effect_terms_alloc(terms,count,sizeof(*functions));
-    if (count && !functions) return terms->status;
-    for (uint32_t f=0;f<count;++f) {
-        if (!xir_compile_work(terms->remaining,2*sizeof(*functions))) return XR_XIR_BUDGET;
-        XrXirFunction value=source->functions[f];
-        value.parameters=effect_invocation_copy(terms,value.parameters,value.parameter_count,sizeof(*value.parameters));
-        value.instructions=effect_invocation_copy(terms,value.instructions,value.instruction_count,sizeof(*value.instructions));
-        value.blocks=effect_invocation_copy(terms,value.blocks,value.block_count,sizeof(*value.blocks));
-        value.operands=effect_invocation_copy(terms,value.operands,value.operand_count,sizeof(*value.operands));
-        value.name=effect_invocation_copy(terms,value.name,value.name_length,1);
-        if (terms->status!=XR_XIR_OK) return terms->status;
-        functions[f]=value;
-    }
-    certificate->bodies.functions=functions;
-    if (source->declarations) status=effect_invocation_declarations_clone(terms->remaining,
-        source->declarations,count,&certificate->declarations);
-    if (status==XR_XIR_OK && source->generics)
-        status=xr_xir_compile_generics_clone(terms->remaining,source,&certificate->generics);
-    if (status==XR_XIR_OK && source->defaults) {
-        certificate->defaults.records=effect_invocation_copy(terms,source->defaults->records,
-            source->defaults->count,sizeof(*source->defaults->records));
-        certificate->defaults.count=source->defaults->count;status=terms->status;
-        certificate->bodies.defaults=&certificate->defaults;
-    }
-    certificate->bodies.declarations=certificate->declarations;certificate->bodies.generics=certificate->generics;
-    return status;
+/* This generation already owns every body field. Seal borrows it while
+ * all independent proofs run and transfers that same owner only at commit. */
+static XrXirStatus effect_invocation_bind_bodies(EffectInvocationCertificate *certificate,
+    const EffectInvocationOwner *owner) {
+    EffectBodyMaterial *body=owner->material;
+    if (!effect_body_material_shape(body) || body->resources!=certificate->resources ||
+        owner->physical!=body->physical || owner->cells!=body->cells) return XR_XIR_BAD_STRUCTURE;
+    if (!xir_compile_work(certificate->terms.remaining,5)) return XR_XIR_BUDGET;
+    certificate->body=body;certificate->terms.types=body->terms.types;
+    certificate->terms.capacity=body->terms.capacity;
+    certificate->declarations=body->declarations;certificate->generics=body->generics;
+    certificate->defaults=body->defaults;return XR_XIR_OK;
 }
 
-/* Original advertisements remain owned independently of every Source,
- * refinement and temporary dense producer. They cannot be reconstructed from
- * narrowed instruction flags during a later certificate query. */
-static XrXirStatus effect_invocation_copy_bounds(EffectInvocationCertificate *certificate,
-    const EffectInvocationDeclaredBounds *source) {
+/* Bounds were copied or written before the first equation consumes them.
+ * Their sorted complete physical membership remains independently checked
+ * at seal; this boundary does not allocate or copy another bound owner. */
+static XrXirStatus effect_invocation_bind_bounds(EffectInvocationCertificate *certificate,
+    const EffectInvocationDeclaredBounds *source,const EffectPhysicalDomain *domain) {
     const XrXirCompileContext *work=certificate->terms.remaining;
-    if (!source || source->resources!=work->resources || source->count!=certificate->bodies.function_count ||
-        (source->count && !source->functions)) return XR_XIR_BAD_STRUCTURE;
-    if (source->count>work->limits.functions) return XR_XIR_BUDGET;
-    uint64_t header_bytes=sizeof(EffectInvocationDeclaredBounds)+
-        (uint64_t)source->count*sizeof(EffectInvocationFunctionBounds);
-    if (header_bytes>SIZE_MAX) return XR_XIR_BUDGET;
-    size_t bytes=(size_t)header_bytes;
+    if (!effect_body_material_shape(certificate->body) || certificate->body->declared!=source ||
+        !source || source->resources!=work->resources || source->count!=effect_body_count(certificate->body) ||
+        source->count>source->capacity || (source->count && !source->functions) || !domain ||
+        domain->resources!=work->resources || domain->count!=source->count ||
+        (domain->count && !domain->functions)) return XR_XIR_BAD_STRUCTURE;
     for (uint32_t f=0;f<source->count;++f) {
-        if (!xir_compile_work(work,3)) return XR_XIR_BUDGET;
-        const XrXirFunction *function=&certificate->bodies.functions[f];
+        if (!xir_compile_work(work,10)) return XR_XIR_BUDGET;
+        const EffectBodyFunction *function=&certificate->body->functions[f];
+        const EffectInvocationFunctionBounds *body=&source->functions[f];
+        const EffectPhysicalFunction *physical=&domain->functions[f];
         uint64_t values=(uint64_t)function->parameter_count+function->instruction_count;
-        const EffectInvocationFunctionBounds *body=&source->functions[f];
-        if (values!=body->values || body->count>values || (!!body->bounds!=!!body->count) ||
-            (uint64_t)body->count>SIZE_MAX/sizeof(EffectInvocationValueBound)) return XR_XIR_BAD_STRUCTURE;
-        size_t row_bytes=(size_t)body->count*sizeof(EffectInvocationValueBound);
-        if (row_bytes>SIZE_MAX-bytes) return XR_XIR_BUDGET;
-        bytes+=row_bytes;
-    }
-    XrXirStatus status=XR_XIR_OK;
-    EffectInvocationDeclaredBounds *copy=xir_compile_alloc(work,bytes,&status);
-    if (!copy) return status;
-    if (!xir_compile_work(work,sizeof(*copy))) {
-        xr_compile_resources_free(copy);return XR_XIR_BUDGET;
-    }
-    EffectInvocationFunctionBounds *functions=source->count?
-        (EffectInvocationFunctionBounds *)(copy+1):NULL;
-    EffectInvocationValueBound *records=(EffectInvocationValueBound *)((uint8_t *)copy+(size_t)header_bytes);
-    *copy=(EffectInvocationDeclaredBounds){.resources=work->resources,
-        .capacity=source->count,.functions=functions};
-    /* This receiving copy is one certificate allocation. Mutable original
-     * bounds keep their independent allocation and destruction contracts. */
-    certificate->declared=copy;
-    for (uint32_t f=0;f<source->count && status==XR_XIR_OK;++f) {
-        const XrXirFunction *function=&certificate->bodies.functions[f];
-        const EffectInvocationFunctionBounds *body=&source->functions[f];
-        uint32_t at=0;
-        for (uint32_t v=0;v<body->values;++v) {
-            if (!xir_compile_work(work,3)) { status=XR_XIR_BUDGET;break; }
-            bool callable=xr_xir_callable_signature(&certificate->terms.types,
-                xr_xir_operand_type(function,v))!=NULL;
-            if (!callable) {
-                if (at<body->count && body->bounds[at].value<=v) { status=XR_XIR_BAD_STRUCTURE;break; }
-                continue;
-            }
-            if (at>=body->count) { status=XR_XIR_BAD_STRUCTURE;break; }
-            EffectInvocationValueBound record=body->bounds[at];
-            if (record.value!=v || !record.callable || record.mask&~
-                (XR_XIR_CALLABLE_ROOT_REQUIRED|XR_XIR_CALLABLE_ROOT_UNRESOLVED)) {
-                status=XR_XIR_BAD_STRUCTURE;break;
-            }
-            if (!xir_compile_work(work,sizeof(*records))) { status=XR_XIR_BUDGET;break; }
-            records[at++]=record;
+        if (physical->parameters!=function->parameter_count || physical->instructions!=function->instruction_count ||
+            physical->values!=values || body->values!=values || physical->rows!=body->count ||
+            body->count>values || !!body->bounds!=!!body->count || physical->count>physical->capacity ||
+            physical->capacity>values || !!physical->records!=!!physical->capacity) return XR_XIR_BAD_STRUCTURE;
+        uint32_t at=0,previous=0;
+        for (uint32_t r=0;r<physical->count;++r) {
+            if (!xir_compile_work(work,4)) return XR_XIR_BUDGET;
+            EffectPhysicalRecord record=physical->records[r];
+            if (!record.mask || record.value>=values || (r && record.value<=previous)) return XR_XIR_BAD_STRUCTURE;
+            previous=record.value;
+            if (!(record.mask&EFFECT_PHYSICAL_CALLABLE)) continue;
+            if (at>=body->count) return XR_XIR_BAD_STRUCTURE;
+            const EffectInvocationValueBound *bound=&body->bounds[at++];
+            if (!xir_compile_work(work,3)) return XR_XIR_BUDGET;
+            if (bound->value!=record.value || !bound->callable || bound->mask&~
+                (XR_XIR_CALLABLE_ROOT_REQUIRED|XR_XIR_CALLABLE_ROOT_UNRESOLVED)) return XR_XIR_BAD_STRUCTURE;
         }
-        if (status==XR_XIR_OK && at!=body->count) status=XR_XIR_BAD_STRUCTURE;
-        if (status!=XR_XIR_OK) break;
-        if (!xir_compile_work(work,sizeof(*functions)+1)) { status=XR_XIR_BUDGET;break; }
-        functions[f]=(EffectInvocationFunctionBounds){body->values,body->count,body->count?records:NULL};
-        ++copy->count;records+=body->count;
+        if (at!=body->count) return XR_XIR_BAD_STRUCTURE;
     }
-    return status;
+    if (!xir_compile_work(work,1)) return XR_XIR_BUDGET;
+    certificate->declared=certificate->body->declared;return XR_XIR_OK;
 }
 
 /* Origins, owner links and parameter-use kinds come from this actual common
@@ -225,7 +145,7 @@ static XrXirStatus effect_invocation_copy_origins(EffectInvocationCertificate *c
             return terms->status!=XR_XIR_OK?terms->status:XR_XIR_BAD_STRUCTURE;
         certificate->origins[f]=origin;certificate->owners[f]=parent;
         const XrXirFunctionEffectContract *contract=&equations->effects->contracts[f];
-        uint32_t parameters=certificate->bodies.functions[f].parameter_count;
+        uint32_t parameters=certificate->body->functions[f].parameter_count;
         if (contract->parameter_count!=parameters || (parameters && !contract->parameters)) return XR_XIR_BAD_STRUCTURE;
         uint8_t *kinds=effect_terms_alloc(terms,parameters,sizeof(*kinds));
         if (parameters && !kinds) return terms->status;
@@ -249,8 +169,10 @@ static XrXirStatus effect_invocation_seal(const XrXirCompileContext *work,
     EffectInvocationOwner *owner=*request->equations;EffectInvocationSolution *solution=*request->solution;
     if (owner->work->resources!=work->resources || solution->resources!=work->resources ||
         solution->count!=owner->module->function_count) return XR_XIR_BAD_STRUCTURE;
-    XrXirStatus status=effect_invocation_producers_verify(owner);
+    XrXirStatus status=effect_physical_match(work,owner->physical,owner->module);
+    if (status==XR_XIR_OK) status=effect_invocation_producers_verify(owner);
     if (status==XR_XIR_OK) status=effect_invocation_coverage_verify(owner);
+    if (status==XR_XIR_OK) status=effect_invocation_class_verify(owner);
     if (status==XR_XIR_OK) status=effect_invocation_closed(owner);
     if (status==XR_XIR_OK) status=effect_invocation_deferred_verify(owner);
     if (status==XR_XIR_OK) status=effect_invocation_solution_match(owner,solution);
@@ -260,26 +182,29 @@ static XrXirStatus effect_invocation_seal(const XrXirCompileContext *work,
     if (status==XR_XIR_OK && !certificate) status=XR_XIR_OUT_OF_MEMORY;
     if (status==XR_XIR_OK) {
         certificate->resources=work->resources;certificate->terms.remaining=work;
-        status=effect_invocation_copy_bodies(certificate,owner->module);
+        status=effect_invocation_bind_bodies(certificate,owner);
     }
-    if (status==XR_XIR_OK) status=effect_invocation_copy_bounds(certificate,owner->declared);
+    if (status==XR_XIR_OK) status=effect_invocation_bind_bounds(certificate,owner->declared,owner->physical);
     if (status==XR_XIR_OK) status=effect_invocation_copy_origins(certificate,owner,request->dense);
-    if (status==XR_XIR_OK) {
-        const XrXirTypes *source_types=owner->module->types?owner->module->types:&effect_empty_types;
-        status=owner->module->stage==XR_XIR_LOWERED ?
-            effect_lowered_snapshot_match(work,&certificate->terms.types,source_types) :
-            effect_terms_snapshot_match(&certificate->terms,source_types,source_types->count);
-    }
+    if (status==XR_XIR_OK) status=effect_body_type_domain_match(work,certificate->body,owner->module);
     if (status==XR_XIR_OK) {
         certificate->equations=owner;certificate->solution=solution;
         status=effect_invocation_certificate_project(work,certificate);
     }
     if (status==XR_XIR_OK && !xir_compile_work(work,9)) status=XR_XIR_BUDGET;
     if (status!=XR_XIR_OK) {
-        if (certificate) { certificate->equations=NULL;certificate->solution=NULL; }
+        if (certificate) { certificate->equations=NULL;certificate->solution=NULL;certificate->body=NULL; }
         effect_invocation_certificate_free(certificate);return status;
     }
-    certificate->terms.remaining=NULL;
+    if (!owner->graph || owner->graph->material!=certificate->body ||
+        (!owner->graph->physical_owned && owner->effects->generation!=certificate->body)) {
+        certificate->equations=NULL;certificate->solution=NULL;certificate->body=NULL;
+        effect_invocation_certificate_free(certificate);return XR_XIR_BAD_STRUCTURE;
+    }
+    owner->graph->physical_owned=false;
+    if (owner->effects->generation==certificate->body) owner->effects->generation=NULL;
+    certificate->terms.remaining=NULL;certificate->body->terms.remaining=NULL;
+    owner->body.read=(EffectBodyRead){0};
     owner->work=NULL;owner->module=NULL;owner->effects=NULL;owner->graph=NULL;owner->declared=NULL;
     *request->equations=NULL;*request->solution=NULL;*output=certificate;return XR_XIR_OK;
 }

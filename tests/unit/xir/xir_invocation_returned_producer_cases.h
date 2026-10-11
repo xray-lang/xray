@@ -170,14 +170,26 @@ static void invocation_returned_rejections(EffectInvocationOwner *owner,uint32_t
     if (mode>=6) invocation_returned_environment_rejections(owner,index,values);
 }
 
+typedef struct InvocationReturnedLedger {
+    const XrXirCompileContext *context;
+} InvocationReturnedLedger;
+static bool invocation_returned_work(void *owner,uint64_t units) {
+    return xir_compile_work(((InvocationReturnedLedger *)owner)->context,units);
+}
+
 /* The producer and Checked Artifact have already died. Full certified
  * current-body keys still carry the Cell column and the real callback edge. */
 static void invocation_returned_environment_owned(const XrXirCompileContext *context,
-    const EffectInvocationCertificate *certificate,const XrXirEffects *published) {
+    const EffectInvocationCertificate *certificate,XrXirEffects *published) {
     const EffectInvocationOwner *owner=certificate->equations;EffectInvocationBasis basis={0};
+    EffectInvocationOwner replay=*owner;replay.work=context;replay.effects=published;
+    replay.declared=certificate->declared;
+    EffectBodyRequest request=effect_body_owned_request(context,certificate->body);
+    CHECK(!replay.module && effect_invocation_producers_verify_read(&replay,&request)==XR_XIR_OK);
     uint32_t factory=owner->roots[1],entry=owner->roots[0];
-    EffectInvocationOwner view=*owner;view.module=&certificate->bodies;view.work=context;
-    CHECK(effect_invocation_basis(&view,owner->nodes[entry].root,&basis)==XR_XIR_OK);
+    InvocationReturnedLedger ledger={context};
+    XirEffectRuntimeRead read={.owner=&ledger,.work=invocation_returned_work};
+    CHECK(effect_runtime_basis(certificate,owner->nodes[entry].root,&basis,&read)==XR_XIR_OK);
     uint32_t known=1+owner->sites[0].binding*(basis.parameters+3)+basis.parameters+2;
     CHECK(effect_invocation_producer_find_atom(&owner->nodes[factory],4,0,known));
     CHECK(effect_invocation_producer_find_atom(&owner->nodes[entry],0,0,known));
@@ -194,6 +206,12 @@ static void invocation_returned_environment_owned(const XrXirCompileContext *con
         found=true;
     }
     CHECK(found);
+    EffectInvocationNode *factory_node=&replay.nodes[factory];
+    CHECK(factory_node->producer_count);
+    uint32_t site=factory_node->producers[0].site;factory_node->producers[0].site=UINT32_MAX;
+    CHECK(effect_invocation_producers_verify_read(&replay,&request)==XR_XIR_BAD_STRUCTURE);
+    factory_node->producers[0].site=site;
+    CHECK(effect_invocation_producers_verify_read(&replay,&request)==XR_XIR_OK);
     const EffectInvocationOwner *public_owner=published->invocations->equations;
     CHECK(effect_invocation_producer_find_atom(&public_owner->nodes[public_owner->roots[0]],0,0,known));
 }
@@ -207,50 +225,20 @@ static XrXirStatus invocation_returned_lowered_snapshot(const XrXirCompileContex
         module->stage!=XR_XIR_LOWERED || module->provenance || module->generics || module->defaults ||
         module->function_count!=5 || !module->types || !module->declarations || !module->functions)
         return XR_XIR_BAD_STRUCTURE;
-    const XrXirModule *owned=&certificate->bodies;
-    if (owned->stage!=module->stage || owned->linkage_kind!=module->linkage_kind ||
-        owned->function_count!=module->function_count || owned->provenance || owned->generics || owned->defaults ||
-        owned->types!=&certificate->terms.types || owned->functions==module->functions ||
+    const EffectBodyMaterial *owned=certificate->body;
+    if (!effect_body_material_shape(owned) || owned->stage!=module->stage ||
+        owned->linkage_kind!=module->linkage_kind || effect_body_count(owned)!=module->function_count ||
+        owned->domain.generics || owned->domain.defaults || owned->functions==(const void *)module->functions ||
         owned->declarations!=certificate->declarations || !certificate->declarations ||
         owned->declarations==module->declarations || certificate->terms.remaining)
         return XR_XIR_BAD_STRUCTURE;
-    XrXirStatus status=effect_lowered_snapshot_match(context,owned->types,module->types);
-    const XrXirDeclarations *a=owned->declarations,*b=module->declarations;
-    if (status!=XR_XIR_OK) return status;
-    if (a->module_count!=1 || b->module_count!=1 || a->slot_count || b->slot_count ||
-        a->literal_count || b->literal_count || a->implementations || b->implementations ||
-        a->root_module!=b->root_module || a->entry_function!=b->entry_function ||
-        !a->functions || !b->functions || !a->modules || !b->modules || a->functions==b->functions)
-        return XR_XIR_BAD_STRUCTURE;
-    if (!xir_compile_work(context,2*(sizeof(*a)+5*sizeof(*a->functions)))) return XR_XIR_BUDGET;
-    if (memcmp(a->functions,b->functions,5*sizeof(*a->functions))) return XR_XIR_BAD_STRUCTURE;
-    if (a->modules[0].initializer!=b->modules[0].initializer || a->modules[0].dependency_count ||
-        b->modules[0].dependency_count || a->modules[0].name==b->modules[0].name)
-        return XR_XIR_BAD_STRUCTURE;
-    status=effect_lowered_snapshot_literal(context,
-        (XrXirLiteral){a->modules[0].name,a->modules[0].name_length},
-        (XrXirLiteral){b->modules[0].name,b->modules[0].name_length});
+    XrXirStatus status=effect_body_source_match(context,owned,module);
     for (uint32_t f=0;status==XR_XIR_OK && f<5;++f) {
-        const XrXirFunction *actual=&owned->functions[f],*source=&module->functions[f];
-        if (actual->parameter_count!=source->parameter_count || actual->result!=source->result ||
-            actual->block_count!=source->block_count || actual->instruction_count!=source->instruction_count ||
-            actual->operand_count!=source->operand_count || actual->name==source->name ||
+        const EffectBodyFunction *actual=&owned->functions[f];const XrXirFunction *source=&module->functions[f];
+        if (actual->name==source->name ||
             (actual->parameter_count && actual->parameters==source->parameters) ||
-            actual->instructions==source->instructions || actual->blocks==source->blocks ||
-            (actual->operand_count && actual->operands==source->operands)) return XR_XIR_BAD_STRUCTURE;
-        status=effect_lowered_snapshot_literal(context,
-            (XrXirLiteral){actual->name,actual->name_length},(XrXirLiteral){source->name,source->name_length});
-        if (status==XR_XIR_OK) status=effect_lowered_snapshot_vector(context,
-            actual->parameters,source->parameters,actual->parameter_count);
-        uint64_t bytes=(uint64_t)actual->instruction_count*sizeof(*actual->instructions)+
-            (uint64_t)actual->block_count*sizeof(*actual->blocks)+
-            (uint64_t)actual->operand_count*sizeof(*actual->operands);
-        if (status==XR_XIR_OK && !xir_compile_work(context,bytes*2)) status=XR_XIR_BUDGET;
-        if (status==XR_XIR_OK && (memcmp(actual->instructions,source->instructions,
-            (size_t)actual->instruction_count*sizeof(*actual->instructions)) ||
-            memcmp(actual->blocks,source->blocks,(size_t)actual->block_count*sizeof(*actual->blocks)) ||
-            (actual->operand_count && memcmp(actual->operands,source->operands,
-                (size_t)actual->operand_count*sizeof(*actual->operands))))) status=XR_XIR_BAD_STRUCTURE;
+            (const void *)actual->stream==(const void *)source->instructions || actual->blocks==source->blocks ||
+            (actual->operand_count && actual->operands==source->operands)) status=XR_XIR_BAD_STRUCTURE;
     }
     const EffectInvocationOwner *equations=certificate->equations;
     if (status==XR_XIR_OK && (!equations || equations->work || equations->module || equations->effects ||
@@ -297,9 +285,11 @@ static XrXirStatus invocation_returned_lowered(const XrXirCompileContext *contex
             if (edge->instruction!=1 || edge->latent || edge->producer==UINT32_MAX) continue;
             CHECK(edge->producer<owner->site_count && owner->sites[edge->producer].captures==1);
             const EffectInvocationSite *site=&owner->sites[edge->producer];
-            const XrXirFunction *factory=&certificate->bodies.functions[site->function];
+            const EffectBodyFunction *factory=&certificate->body->functions[site->function];
+            EffectBodyRead read=effect_body_compile_read(context);XrXirOp opcode;
             CHECK(site->instruction<factory->instruction_count &&
-                factory->instructions[site->instruction].op==XR_XIR_FUNCTION_REF);
+                effect_body_instruction_op(&read,factory,site->instruction,&opcode)==XR_XIR_OK &&
+                opcode==XR_XIR_FUNCTION_REF);
             uint32_t mask=UINT32_MAX;
             CHECK(effect_invocation_certificate_node_mask(context,certificate,edge->target,&mask)==XR_XIR_OK && !mask);
             found=true;
@@ -308,7 +298,7 @@ static XrXirStatus invocation_returned_lowered(const XrXirCompileContext *contex
     }
     xr_xir_compile_artifact_free(lowered);xr_xir_compile_artifact_free(specialized);
     if (status==XR_XIR_OK && oracle) {
-        uint32_t mask=UINT32_MAX,entry=effects->invocations->bodies.declarations->entry_function;
+        uint32_t mask=UINT32_MAX,entry=effects->invocations->body->declarations->entry_function;
         CHECK(effect_invocation_certificate_node_mask(context,effects->invocations,
             effects->invocations->equations->roots[entry],&mask)==XR_XIR_OK && !mask);
     }
@@ -358,7 +348,7 @@ static XrXirStatus conditional_invocation_returned(const XrXirCompileContext *co
         CHECK(effect_invocation_certificate_node_mask(context,certificate,owned->roots[0],&mask)==XR_XIR_OK &&
             mask==(mode==2?XR_XIR_CALLABLE_ROOT_UNRESOLVED:0));
         CHECK(published->root[0].unresolved==(mode==2) && !published->root[0].requires_root);
-        CHECK(certificate->bodies.function_count==5 && published->count==5);
+        CHECK(effect_body_count(certificate->body)==5 && published->count==5);
         uint32_t callback=mode==3?2:1;bool found=false;
         const EffectInvocationNode *entry=&owned->nodes[owned->roots[0]];
         for (uint32_t e=entry->edge_head;e!=UINT32_MAX;e=owned->edges[e].next) {

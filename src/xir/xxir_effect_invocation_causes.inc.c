@@ -17,7 +17,7 @@ static bool effect_invocation_atom(const EffectInvocationNode *node,
         (atom?XR_XIR_CALLABLE_ROOT_UNRESOLVED:XR_XIR_CALLABLE_ROOT_REQUIRED));
     if (atom-2<parameters) {
         uint32_t p=atom-2;
-        return !!((local?node->local_parameters:node->parameters)[p/64]&(UINT64_C(1)<<(p%64)));
+        return !!(effect_invocation_node_row(node,EFFECT_INVOCATION_PARAMETERS,local)[p/64]&(UINT64_C(1)<<(p%64)));
     }
     if (atom-2-parameters<parameters) {
         uint32_t p=atom-2-parameters;
@@ -29,10 +29,11 @@ static bool effect_invocation_atom(const EffectInvocationNode *node,
 static XrXirStatus effect_invocation_local(EffectInvocationOwner *owner,
     uint32_t node,uint32_t atom,XrXirRootEffectWitness witness) {
     if (!owner || node>=owner->count || atom>=owner->nodes[node].cause_count ||
-        owner->nodes[node].expanded || !witness.cause || witness.distance ||
-        (witness.instruction==UINT32_MAX ? witness.cause!=XR_XIR_ROOT_CAUSE_INITIALIZER :
-            witness.instruction>=owner->module->functions[owner->nodes[node].body].instruction_count))
-        return XR_XIR_BAD_STRUCTURE;
+        owner->nodes[node].expanded || !witness.cause || witness.distance) return XR_XIR_BAD_STRUCTURE;
+    EffectBodyFunctionDimensions head={0};XrXirStatus status=effect_invocation_dimensions(owner,owner->nodes[node].body,&head);
+    if (status!=XR_XIR_OK) return status;
+    if (witness.instruction==UINT32_MAX ? witness.cause!=XR_XIR_ROOT_CAUSE_INITIALIZER :
+        witness.instruction>=head.instruction_count) return XR_XIR_BAD_STRUCTURE;
     if (!xir_compile_work(owner->work,6+sizeof(EffectInvocationCause))) return XR_XIR_BUDGET;
     EffectInvocationCause *to=&owner->nodes[node].causes[atom];
     if (to->witness.cause && !effect_root_cause_before(&witness,&to->witness)) return XR_XIR_OK;
@@ -81,8 +82,10 @@ static XrXirStatus effect_invocation_cause_atom(EffectInvocationOwner *owner,
                 return XR_XIR_BAD_STRUCTURE;
             EffectInvocationNode *node=&owner->nodes[edge.caller];
             if (!effect_invocation_atom(node,parameters,atom,false)) return XR_XIR_BAD_STRUCTURE;
-            const XrXirInstruction *op=&owner->module->functions[node->body].instructions[edge.instruction];
-            XrXirRootEffectWitness witness={op->op==XR_XIR_CLEANUP_REGISTER?
+            EffectBodyInstructionShape shape={0};
+            XrXirStatus status=effect_invocation_shape(owner,node->body,edge.instruction,&shape);
+            if (status!=XR_XIR_OK) return status;
+            XrXirRootEffectWitness witness={shape.op==XR_XIR_CLEANUP_REGISTER?
                 XR_XIR_ROOT_CAUSE_CLEANUP:XR_XIR_ROOT_CAUSE_CALL,edge.instruction,
                 owner->nodes[n].body,UINT32_MAX,from.distance+1};
             EffectInvocationCause *to=&node->causes[atom];
@@ -117,9 +120,11 @@ static XrXirStatus effect_invocation_cause_atom(EffectInvocationOwner *owner,
 
 static XrXirStatus effect_invocation_causes(EffectInvocationOwner *owner) {
     if (!owner || owner->pending || !owner->count || !owner->graph) return XR_XIR_BAD_STRUCTURE;
-    for (uint32_t root=0;root<owner->module->function_count;++root) {
+    for (uint32_t root=0;root<owner->body.domain.function_count;++root) {
         if (!owner->root_spaces || owner->root_spaces[root]!=root) continue;
-        uint32_t parameters=owner->module->functions[root].parameter_count;
+        EffectBodyFunctionDimensions head={0};XrXirStatus read_status=effect_invocation_dimensions(owner,root,&head);
+        if (read_status!=XR_XIR_OK) return read_status;
+        uint32_t parameters=head.parameter_count;
         uint64_t count=(uint64_t)parameters*2+3;
         if (count>UINT32_MAX) return XR_XIR_BUDGET;
         for (uint32_t atom=0;atom<(uint32_t)count;++atom) {

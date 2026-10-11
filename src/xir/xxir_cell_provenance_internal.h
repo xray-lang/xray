@@ -12,6 +12,7 @@
 #ifndef XXIR_CELL_PROVENANCE_INTERNAL_H
 #define XXIR_CELL_PROVENANCE_INTERNAL_H
 #include "xxir.h"
+#include "xxir_metadata_domain_internal.h"
 
 #define XR_XIR_CELL_ORIGIN_OWNED 1u
 #define XR_XIR_CELL_ORIGIN_SCOPED 2u
@@ -26,6 +27,45 @@ typedef enum XrXirCellProofRole {
     XR_XIR_CELL_PROOF_SCOPED_REF, XR_XIR_CELL_PROOF_LEXICAL_CLEANUP
 } XrXirCellProofRole;
 typedef struct XrXirCellProvenance XrXirCellProvenance;
+typedef struct XrXirCellProofBodyHead {
+    const XrXirType *parameters;
+    uint32_t parameter_count;
+    XrXirType result;
+    uint32_t instruction_count;
+    const uint32_t *operands;
+    uint32_t operand_count;
+} XrXirCellProofBodyHead;
+typedef struct XrXirCellProofInstructionShape {
+    XrXirOp op;
+    XrXirType type;
+} XrXirCellProofInstructionShape;
+/* This metadata view grants no body admission. All callbacks read one complete
+ * admitted generation and charge its live ledger, without retaining a producer. */
+typedef struct XrXirCellProofBodyRead {
+    XirMetadataDomain domain;
+    XrCompileResources *resources;
+    const void *owner;
+    XrXirStatus (*head)(const XrXirCompileContext *,const void *,uint32_t,XrXirCellProofBodyHead *);
+    XrXirStatus (*instruction)(const XrXirCompileContext *,const void *,uint32_t,uint32_t,XrXirInstruction *);
+    XrXirStatus (*type)(const XrXirCompileContext *,const void *,uint32_t,uint32_t,XrXirType *);
+    XrXirStatus (*shape)(const XrXirCompileContext *,const void *,uint32_t,uint32_t,XrXirCellProofInstructionShape *);
+} XrXirCellProofBodyRead;
+
+/* One construction-local provider builder consumes actual writer rows. It
+ * holds no authority; complete role/edge/solve/validation follows inventory.
+ * The verified caller must own the full same-generation body at finish. */
+typedef struct XrXirCellProofBuilder XrXirCellProofBuilder;
+XR_FUNC XrXirStatus xir_cell_proof_builder_begin(const XrXirCompileContext *context,
+    const XrXirCellProofBodyRead *body,XrXirCellProofBuilder **output);
+XR_FUNC XrXirStatus xir_cell_proof_builder_head(XrXirCellProofBuilder *builder,
+    uint32_t function,const XrXirCellProofBodyHead *head);
+XR_FUNC XrXirStatus xir_cell_proof_builder_row(XrXirCellProofBuilder *builder,
+    uint32_t function,uint32_t value,XrXirType type,const XrXirCellProofInstructionShape *shape);
+XR_FUNC XrXirStatus xir_cell_proof_builder_function(XrXirCellProofBuilder *builder,uint32_t function);
+XR_FUNC XrXirStatus xir_cell_proof_builder_finish(XrXirCellProofBuilder **builder,
+    XrXirCellProvenance **output);
+XR_FUNC void xir_cell_proof_builder_free(XrXirCellProofBuilder *builder);
+
 typedef struct XrXirCellAccessRequest {
     uint32_t function, value;
     const uint8_t *parameter_owners;
@@ -53,6 +93,10 @@ typedef struct XrXirCellClassOriginView {
  * Output owns all facts and never borrows the module, declarations or context. */
 XR_FUNC XrXirStatus xr_xir_compile_cell_provenance_verified(const XrXirCompileContext *context,
     const XrXirModule *module, XrXirCellProvenance **output, XrXirDiagnostic *diagnostic);
+/* Replays the same provider core against a fully admitted body generation.
+ * No permission or second proof is published; every owned fact must match. */
+XR_FUNC XrXirStatus xr_xir_compile_cell_provenance_body_matches(const XrXirCompileContext *context,
+    const XrXirCellProvenance *proof,const XrXirCellProofBodyRead *body,XrXirDiagnostic *diagnostic);
 XR_FUNC void xr_xir_compile_cell_provenance_free(XrXirCellProvenance *proof);
 XR_FUNC uint32_t xr_xir_cell_provenance_origin(const XrXirCellProvenance *proof,
     uint32_t function, uint32_t value);

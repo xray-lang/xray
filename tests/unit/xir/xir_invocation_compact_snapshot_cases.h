@@ -1,0 +1,581 @@
+/*
+ * xray - Lightweight typed scripting with native concurrency
+ * https://www.xray-lang.org
+ * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
+ * Licensed under the MIT License
+ *
+ * xir_invocation_compact_snapshot_cases.h - Lossless final owning body boundaries
+ */
+#ifndef XIR_INVOCATION_COMPACT_SNAPSHOT_CASES_H
+#define XIR_INVOCATION_COMPACT_SNAPSHOT_CASES_H
+
+/* These storage-only rows deliberately contain unused words. They do not
+ * claim IR admission; the independent Checked case below uses valid IR. */
+static void conditional_compact_rows(XrXirInstruction *ops) {
+    for (uint32_t i=0;i<8;++i) {
+        uint64_t bits=i<4 ? UINT64_C(0xfffffff100000003)+i :
+            UINT64_C(0x8000000000000000)+(i-4)*UINT64_C(0x0010000000000000);
+        int64_t immediate;memcpy(&immediate,&bits,sizeof(immediate));
+        ops[i]=(XrXirInstruction){.op=i<4?XR_XIR_CONST_INT:XR_XIR_CONST_FLOAT,
+            .type=i<4?XR_XIR_I64:XR_XIR_F64,.args={UINT32_MAX-i,19+i*7},
+            .targets={7+i*3,UINT32_MAX-i*5},.immediate=immediate,
+            .type_arguments={65536+i,65537+i*2}};
+    }
+}
+static bool conditional_compact_same(const XrXirInstruction *a,const XrXirInstruction *b) {
+    uint64_t left,right;memcpy(&left,&a->immediate,sizeof(left));memcpy(&right,&b->immediate,sizeof(right));
+    return a->op==b->op && a->type==b->type && a->args[0]==b->args[0] && a->args[1]==b->args[1] &&
+        a->targets[0]==b->targets[0] && a->targets[1]==b->targets[1] && left==right &&
+        a->type_arguments[0]==b->type_arguments[0] && a->type_arguments[1]==b->type_arguments[1];
+}
+
+/* A read refusal is injected only into this finite decoder request. Every
+ * accepted read still consumes the original receiving ledger; neither the
+ * owner nor its accumulated resources are reset for a second decode. */
+typedef struct ConditionalCompactRead {
+    const XrXirCompileContext *context;
+    uint64_t calls,reject;
+} ConditionalCompactRead;
+static bool conditional_compact_read_work(const void *owner,uint64_t units) {
+    ConditionalCompactRead *read=(ConditionalCompactRead *)owner;
+    return read->calls++!=read->reject && xir_compile_work(read->context,units);
+}
+static void conditional_compact_read_failures(const XrXirCompileContext *context,
+    const EffectBodyFunction *body,const XrXirInstruction *expected) {
+    ConditionalCompactRead observation={context,0,UINT64_MAX};
+    EffectBodyRead read={&observation,conditional_compact_read_work};
+    XrXirInstruction decoded={0};
+    CHECK(effect_body_instruction_get(&read,body,2,&decoded)==XR_XIR_OK &&
+        conditional_compact_same(&decoded,expected));
+    uint64_t points=observation.calls;
+    CHECK(points);
+    for (uint64_t at=0;at<points;++at) {
+        observation.calls=0;observation.reject=at;
+        XrXirInstruction sentinel={.op=XR_XIR_RETURN,.type=XR_XIR_BOOL,
+            .args={11,12},.targets={13,14},.immediate=INT64_MIN,.type_arguments={15,16}};
+        decoded=sentinel;
+        CHECK(effect_body_instruction_get(&read,body,2,&decoded)==XR_XIR_BUDGET &&
+            conditional_compact_same(&decoded,&sentinel) && observation.calls==at+1);
+    }
+    observation.calls=0;observation.reject=UINT64_MAX;
+    CHECK(effect_body_instruction_get(&read,body,2,&decoded)==XR_XIR_OK &&
+        conditional_compact_same(&decoded,expected));
+}
+
+/* Narrow output retains every original decoder refusal. Partial words
+ * never escape when any canonical read or output charge fails. */
+static void conditional_compact_fields_failures(const XrXirCompileContext *context,
+    const EffectBodyFunction *body,const XrXirInstruction *expected) {
+    ConditionalCompactRead observation={context,0,UINT64_MAX};
+    EffectBodyRead read={&observation,conditional_compact_read_work};
+    EffectBodyInstructionFields fields;
+    CHECK(effect_body_instruction_fields_get(&read,body,2,&fields)==XR_XIR_OK &&
+        fields.op==expected->op && fields.type==expected->type && fields.source==expected->args[0]);
+    uint64_t points=observation.calls;CHECK(points);
+    for (uint64_t at=0;at<points;++at) {
+        observation.calls=0;observation.reject=at;
+        EffectBodyInstructionFields sentinel={XR_XIR_RETURN,XR_XIR_BOOL,UINT32_MAX};fields=sentinel;
+        CHECK(effect_body_instruction_fields_get(&read,body,2,&fields)==XR_XIR_BUDGET &&
+            !memcmp(&fields,&sentinel,sizeof(fields)) && observation.calls==at+1);
+    }
+    observation.calls=0;observation.reject=UINT64_MAX;
+    CHECK(effect_body_instruction_fields_get(&read,body,2,&fields)==XR_XIR_OK &&
+        fields.op==expected->op && fields.type==expected->type && fields.source==expected->args[0]);
+}
+
+/* Each field is changed independently in a fresh source value. No expected
+ * value is obtained from the writer's word selector or run decoder. */
+static void conditional_compact_change(XrXirInstruction *op,uint32_t field) {
+    switch (field) {
+    case 0:op->op=XR_XIR_CONST_BOOL;break;
+    case 1:op->type=XR_XIR_BOOL;break;
+    case 2:op->args[0]^=UINT32_C(0x80000000);break;
+    case 3:op->args[1]^=UINT32_C(0x40000000);break;
+    case 4:op->targets[0]^=UINT32_C(0x20000000);break;
+    case 5:op->targets[1]^=UINT32_C(0x10000000);break;
+    case 6:op->immediate^=INT64_C(1);break;
+    case 7:op->immediate^=INT64_C(0x4000000000000000);break;
+    case 8:op->type_arguments[0]^=UINT32_C(0x08000000);break;
+    case 9:op->type_arguments[1]^=UINT32_C(0x04000000);break;
+    default:CHECK(false);
+    }
+}
+
+static void conditional_compact_malformed(const XrXirCompileContext *context,
+    EffectBodyFunction *function,const XrXirFunction *expected) {
+    EffectBodyRead read=effect_body_compile_read(context);
+    CHECK(function->stream_words<=64 && function->run_count==2);
+    uint32_t saved[64];memcpy(saved,function->stream,function->stream_words*sizeof(*saved));
+    uint32_t words=function->stream_words,runs=function->run_count,capacity=function->stream_capacity;
+    EffectBodyRunRef first;
+    CHECK(effect_body_run_ref(&read,function,0,0,&first)==XR_XIR_OK);
+    for (uint32_t mode=0;mode<8;++mode) {
+        if (!mode) function->stream[0]=1;
+        else if (mode==1) function->stream[1]=0;
+        else if (mode==2) function->stream[2]|=UINT32_C(1024);
+        else if (mode==3) function->stream_words=EFFECT_BODY_HEADER-1;
+        else if (mode==4) function->run_count=0;
+        else if (mode==5) function->stream_capacity=function->stream_words-1;
+        else if (mode==6) function->stream[EFFECT_BODY_HEADER]=0;
+        else function->stream[first.next]=first.first+first.count+1;
+        XrXirInstruction sentinel={.op=XR_XIR_RETURN,.type=XR_XIR_I64,.immediate=INT64_MIN},out=sentinel;
+        XrXirOp opcode=XR_XIR_RETURN;XrXirType type=XR_XIR_UNIT;
+        CHECK(effect_body_instruction_get(&read,function,0,&out)==XR_XIR_BAD_STRUCTURE &&
+            conditional_compact_same(&out,&sentinel));
+        EffectBodyInstructionFields narrow_sentinel={XR_XIR_RETURN,XR_XIR_BOOL,UINT32_MAX},narrow=narrow_sentinel;
+        CHECK(effect_body_instruction_fields_get(&read,function,0,&narrow)==XR_XIR_BAD_STRUCTURE &&
+            !memcmp(&narrow,&narrow_sentinel,sizeof(narrow)));
+        CHECK(effect_body_instruction_op(&read,function,0,&opcode)==XR_XIR_BAD_STRUCTURE && opcode==XR_XIR_RETURN);
+        CHECK(effect_body_operand_type(&read,function,0,&type)==XR_XIR_BAD_STRUCTURE && type==XR_XIR_UNIT);
+        CHECK(effect_body_records_match(&read,function,expected)==XR_XIR_BAD_STRUCTURE);
+        memcpy(function->stream,saved,words*sizeof(*saved));function->stream_words=words;
+        function->run_count=runs;function->stream_capacity=capacity;
+        CHECK(effect_body_records_match(&read,function,expected)==XR_XIR_OK);
+    }
+}
+
+static XrXirStatus conditional_compact_codec(const XrXirCompileContext *context,uint32_t mode,bool oracle) {
+    XrXirInstruction original[8],source[8];conditional_compact_rows(original);memcpy(source,original,sizeof(source));
+    XrXirFunction expected={.instructions=original,.instruction_count=8};
+    XrXirFunction input={.instructions=source,.instruction_count=8};
+    EffectBodyFunction body={.instruction_count=8};
+    XrXirStatus status=effect_body_records_copy(context,&input,&body);
+    memset(source,0xCE,sizeof(source));EffectBodyRead read=effect_body_compile_read(context);
+    for (uint32_t i=0;i<8 && status==XR_XIR_OK;++i) {
+        XrXirInstruction decoded;status=effect_body_instruction_get(&read,&body,i,&decoded);
+        if (status==XR_XIR_OK && oracle) {
+            CHECK(conditional_compact_same(&decoded,&original[i]));
+            EffectBodyInstructionFields fields;
+            CHECK(effect_body_instruction_fields_get(&read,&body,i,&fields)==XR_XIR_OK &&
+                fields.op==original[i].op && fields.type==original[i].type && fields.source==original[i].args[0]);
+        }
+    }
+    if (status==XR_XIR_OK) status=effect_body_records_match(&read,&body,&expected);
+    if (status==XR_XIR_OK && oracle) {
+        CHECK(body.run_count>=2 && body.stream_words<=body.stream_capacity);
+        conditional_compact_read_failures(context,&body,&original[2]);
+        conditional_compact_fields_failures(context,&body,&original[2]);
+        for (uint32_t field=0;field<10;++field) {
+            XrXirInstruction saved=original[2];conditional_compact_change(&original[2],field);
+            CHECK(effect_body_records_match(&read,&body,&expected)==XR_XIR_BAD_STRUCTURE);
+            original[2]=saved;CHECK(effect_body_records_match(&read,&body,&expected)==XR_XIR_OK);
+        }
+        XrXirInstruction sentinel={.op=XR_XIR_RETURN},out=sentinel;
+        CHECK(effect_body_instruction_get(&read,&body,8,&out)==XR_XIR_BAD_STRUCTURE &&
+            conditional_compact_same(&out,&sentinel));
+        if (mode) conditional_compact_malformed(context,&body,&expected);
+    }
+    xr_compile_resources_free(body.stream);return status;
+}
+
+static void conditional_compact_null_body(const XrXirCompileContext *context,XrXirEffects *effects) {
+    EffectInvocationCertificate *certificate=effects->invocations;
+    EffectBodyMaterial *owned=certificate->body;certificate->body=NULL;
+    XirEffectProducerView producer={11,12,13,14,15,XR_XIR_I64},view=producer;
+    CHECK(xir_effects_producer(context,effects,0,2,&view)==XR_XIR_BAD_STRUCTURE &&
+        !memcmp(&producer,&view,sizeof(view)));
+    uint32_t mask=UINT32_C(0x6a6a);
+    CHECK(effect_invocation_certificate_edge_mask(context,certificate,0,3,1,&mask)==XR_XIR_BAD_STRUCTURE &&
+        mask==UINT32_C(0x6a6a));
+    InvocationDirectRead read={context,effects,2,false};
+    XirEffectInvocationRequest request={.caller=0,.instruction=3,.target=1,.producer=UINT32_MAX,
+        .node=UINT32_MAX,.count=2,.read={.owner=&read,.work=invocation_direct_work,
+        .cell=invocation_direct_cell,.function=invocation_direct_function}};
+    XirEffectInvocationSelection sentinel={effects,11,12,13,14,15,16,17},selection=sentinel;
+    CHECK(xir_effects_execution_edge(effects,&request,&selection)==XR_XIR_BAD_STRUCTURE &&
+        !memcmp(&selection,&sentinel,sizeof(selection)));
+    CHECK(effect_invocation_public_gate(context,certificate,effects->count)==XR_XIR_BAD_STRUCTURE);
+    XrXirRootCauseTrace *trace=NULL;
+    CHECK(effect_invocation_public_trace(context,certificate,effects->count,0,&effects->root[0],&trace)==
+        XR_XIR_BAD_STRUCTURE && !trace);
+    certificate->body=owned;
+    CHECK(effect_body_material_shape(owned) && effect_invocation_public_gate(context,certificate,effects->count)==XR_XIR_OK);
+}
+
+/* This genuine Checked producer has already died. Every trace request must
+ * still replay the complete selected equation and reject independent damage. */
+static void conditional_compact_public_selection(const XrXirCompileContext *context,
+    EffectInvocationCertificate *certificate) {
+    CHECK(certificate->solution->formulas[1].constant_mask==0 &&
+        certificate->solution->formulas[1].term_count==1 &&
+        certificate->solution->formulas[1].terms[0].kind==XR_XIR_ROOT_TERM_CONTEXT_CALL &&
+        certificate->solution->formulas[1].terms[0].index==0);
+    for (uint32_t f=0;f<2;++f) for (uint32_t d=0;d<4;++d) {
+        EffectInvocationTraceRequest request={.function=f,.domain=d};uint32_t length=77;
+        CHECK(effect_invocation_public_walk(context,certificate,&request,4,&length)==XR_XIR_OK &&
+            length==((f==1 && d==1)?1u:0u));
+    }
+    EffectInvocationTraceRequest request={.function=1,.domain=1};
+    EffectInvocationTraceSelection selected={UINT32_C(73),
+        {XR_XIR_ROOT_CAUSE_MUTABLE_SLOT,11,12,13,14}},sentinel=selected;
+    uint32_t length=77;
+    CHECK(effect_invocation_trace_walk_selected(context,certificate,&request,&length,&selected)==XR_XIR_OK &&
+        length==1 && selected.atom==6 && selected.witness.cause==XR_XIR_ROOT_CAUSE_CONTEXT_CALL &&
+        selected.witness.instruction==0 && selected.witness.distance==0);
+    uint32_t at=certificate->solution->count+1,atom=certificate->projection_atoms[at];
+    XrXirRootEffectWitness witness=certificate->witnesses[at];
+    bool fact=certificate->facts[1].unresolved;
+    XrXirRootTerm *term=(XrXirRootTerm *)certificate->solution->formulas[1].terms;
+    uint32_t index=term[0].index;
+    for (uint32_t damage=0;damage<4;++damage) {
+        if (!damage) certificate->projection_atoms[at]=UINT32_MAX;
+        else if (damage==1) certificate->witnesses[at].distance^=1;
+        else if (damage==2) certificate->facts[1].unresolved=false;
+        else term[0].index=1;
+        length=77;
+        CHECK(effect_invocation_public_walk(context,certificate,&request,4,&length)==XR_XIR_BAD_STRUCTURE && length==77);
+        if (damage<3) {
+            selected=sentinel;length=77;
+            CHECK(effect_invocation_trace_walk_selected(context,certificate,&request,&length,&selected)==
+                XR_XIR_BAD_STRUCTURE && length==77 && selected.atom==sentinel.atom &&
+                effect_invocation_witness_equal(&selected.witness,&sentinel.witness));
+        }
+        certificate->projection_atoms[at]=atom;certificate->witnesses[at]=witness;
+        certificate->facts[1].unresolved=fact;term[0].index=index;
+        length=77;
+        CHECK(effect_invocation_public_walk(context,certificate,&request,4,&length)==XR_XIR_OK && length==1);
+    }
+    length=77;
+    CHECK(effect_invocation_public_walk(context,certificate,&request,0,&length)==XR_XIR_BAD_STRUCTURE && length==77);
+}
+
+/* Genuine owned CONTEXT_CALL terminal; the producer and raw fixture have
+ * died. This verifies the opcode-only cause path and its canonical boundaries,
+ * without using the new reader as the expected instruction oracle. */
+static void conditional_compact_cause_opcode(const XrXirCompileContext *context,
+    EffectInvocationCertificate *certificate) {
+    uint32_t selected=certificate->equations->roots[1],atom=6;
+    CHECK(selected<certificate->equations->count &&
+        certificate->equations->nodes[selected].body==1 &&
+        certificate->equations->nodes[selected].causes[atom].witness.cause==XR_XIR_ROOT_CAUSE_CONTEXT_CALL);
+    EffectBodyFunction *function=&certificate->body->functions[1];
+    CHECK(function->stream && function->instruction_count==2 && function->stream_words>=EFFECT_BODY_HEADER &&
+        function->stream[0]==0 && function->stream[3]==XR_XIR_CALL_INDIRECT);
+    CHECK(effect_invocation_certificate_cause(context,certificate,selected,atom)==XR_XIR_OK);
+    uint32_t first=function->stream[0],count=function->stream[1],mask=function->stream[2],opcode=function->stream[3];
+    uint32_t words=function->stream_words,capacity=function->stream_capacity,runs=function->run_count;
+    EffectInvocationTraceRequest request={.function=1,.domain=1};
+    for (uint32_t damage=0;damage<8;++damage) {
+        if (!damage) function->stream[3]=XR_XIR_RETURN;
+        else if (damage==1) function->stream[3]=XR_XIR_INVALID;
+        else if (damage==2) function->stream[0]=1;
+        else if (damage==3) function->stream[1]=0;
+        else if (damage==4) function->stream[2]|=UINT32_C(1024);
+        else if (damage==5) function->stream_words=EFFECT_BODY_HEADER-1;
+        else if (damage==6) function->stream_capacity=words-1;
+        else function->run_count=0;
+        CHECK(effect_invocation_certificate_cause(context,certificate,selected,atom)==XR_XIR_BAD_STRUCTURE);
+        uint32_t length=77;
+        CHECK(effect_invocation_public_walk(context,certificate,&request,4,&length)==XR_XIR_BAD_STRUCTURE && length==77);
+        function->stream[0]=first;function->stream[1]=count;function->stream[2]=mask;function->stream[3]=opcode;
+        function->stream_words=words;function->stream_capacity=capacity;function->run_count=runs;
+        CHECK(effect_invocation_certificate_cause(context,certificate,selected,atom)==XR_XIR_OK);
+    }
+    uint32_t length=77;
+    CHECK(effect_invocation_public_walk(context,certificate,&request,4,&length)==XR_XIR_OK && length==1);
+}
+
+/* Literal domains of the genuine four-function Checked producer. ROOT
+ * and UNKNOWN are independent, and constant domains exclude symbolic atoms. */
+static void conditional_compact_projection_domains(const XrXirCompileContext *context,
+    EffectInvocationCertificate *certificate) {
+    const uint32_t expected[4][4]={
+        {UINT32_MAX,UINT32_MAX,UINT32_MAX,UINT32_MAX},
+        {UINT32_MAX,6,UINT32_MAX,UINT32_MAX},
+        {UINT32_MAX,3,UINT32_MAX,UINT32_MAX},
+        {0,UINT32_MAX,0,UINT32_MAX}};
+    for (uint32_t f=0;f<4;++f) {
+        EffectInvocationProjectionSelection selected[4];
+        CHECK(effect_invocation_projection_domains(context,certificate,f,0,4,selected)==XR_XIR_OK);
+        for (uint32_t domain=0;domain<4;++domain) {
+            CHECK(selected[domain].atom==expected[f][domain]);
+            if (expected[f][domain]==UINT32_MAX) CHECK(!selected[domain].witness.cause);
+            else CHECK(selected[domain].witness.distance==0 && selected[domain].witness.callee==UINT32_MAX &&
+                selected[domain].witness.cause==(f==1?XR_XIR_ROOT_CAUSE_CONTEXT_CALL:
+                    f==2?XR_XIR_ROOT_CAUSE_CELL_PARAMETER:XR_XIR_ROOT_CAUSE_INITIALIZER));
+            uint32_t atom=UINT32_C(77);XrXirRootEffectWitness witness={0};
+            CHECK(effect_invocation_projection_select(context,certificate,f,domain,&atom,&witness)==XR_XIR_OK &&
+                atom==expected[f][domain] && effect_invocation_witness_equal(&witness,&selected[domain].witness));
+        }
+    }
+    EffectInvocationProjectionSelection selected[4];
+    uint32_t root=certificate->equations->roots[1];EffectInvocationNode *node=&certificate->equations->nodes[root];
+    EffectInvocationCause *cause=&node->causes[6],*local=&effect_invocation_local_causes(node)[6];
+    XrXirRootEffectWitness saved=cause->witness,local_saved=local->witness;
+    uint32_t stream_first=certificate->body->functions[1].stream[0];
+    for (uint32_t damage=0;damage<5;++damage) {
+        if (!damage) cause->witness.slot=0;
+        else if (damage==1) local->witness.cause=XR_XIR_ROOT_CAUSE_PARAMETER;
+        else if (damage==2) certificate->body->functions[1].stream[0]=1;
+        else if (damage==3) certificate->equations->roots[1]=certificate->equations->roots[0];
+        CHECK(effect_invocation_projection_domains(context,certificate,1,damage==4?1u:0u,4,selected)==
+            XR_XIR_BAD_STRUCTURE);
+        /* Private scratch has no failure value. The public request still
+         * preserves its output when the same damaged proof is rejected. */
+        EffectInvocationTraceRequest request={.function=1,.domain=damage==4?4u:1u};
+        uint32_t length=77;
+        CHECK(effect_invocation_public_walk(context,certificate,&request,4,&length)==
+            XR_XIR_BAD_STRUCTURE && length==77);
+        cause->witness=saved;local->witness=local_saved;
+        certificate->body->functions[1].stream[0]=stream_first;certificate->equations->roots[1]=root;
+        CHECK(effect_invocation_projection_domains(context,certificate,1,0,4,selected)==XR_XIR_OK &&
+            selected[1].atom==6 && selected[0].atom==UINT32_MAX && selected[2].atom==UINT32_MAX &&
+            selected[3].atom==UINT32_MAX);
+    }
+}
+
+/* The count oracle is literal Checked input, independent of both lifetime
+ * callbacks. Partial requests retain every original owned head refusal. */
+static void conditional_compact_dimensions(const XrXirCompileContext *context,
+    const EffectBodyRequest *request) {
+    const uint32_t parameters[4]={0,2,1,0},instructions[4]={5,2,2,1};
+    for (uint32_t f=0;f<4;++f) {
+        EffectBodyFunctionDimensions dimensions={77,78};
+        CHECK(effect_body_request_dimensions(request,f,&dimensions)==XR_XIR_OK &&
+            dimensions.parameter_count==parameters[f] && dimensions.instruction_count==instructions[f]);
+    }
+    EffectBodyFunctionDimensions sentinel={77,78},dimensions=sentinel;
+    CHECK(effect_body_request_dimensions(request,4,&dimensions)==XR_XIR_BAD_STRUCTURE &&
+        dimensions.parameter_count==77 && dimensions.instruction_count==78);
+    EffectBodyRequest rejected=*request;rejected.head=NULL;
+    CHECK(effect_body_request_dimensions(&rejected,0,&dimensions)==XR_XIR_BAD_STRUCTURE &&
+        dimensions.parameter_count==77 && dimensions.instruction_count==78);
+    ConditionalCompactRead refusal={context,0,0};rejected=*request;
+    rejected.read=(EffectBodyRead){&refusal,conditional_compact_read_work};
+    CHECK(effect_body_request_dimensions(&rejected,0,&dimensions)==XR_XIR_BUDGET &&
+        dimensions.parameter_count==77 && dimensions.instruction_count==78 && refusal.calls==1);
+}
+
+static void conditional_compact_dimension_damage(const XrXirCompileContext *context,
+    EffectInvocationCertificate *certificate) {
+    EffectBodyRequest request=effect_body_owned_request(context,certificate->body);
+    EffectBodyFunction *function=&certificate->body->functions[0],saved=*function;
+    for (uint32_t damage=0;damage<7;++damage) {
+        if (!damage) function->name=NULL;
+        else if (damage==1) { function->parameter_count=1;function->parameters=NULL; }
+        else if (damage==2) function->blocks=NULL;
+        else if (damage==3) function->operands=NULL;
+        else if (damage==4) function->stream=NULL;
+        else if (damage==5) function->stream_capacity=function->stream_words-1;
+        else function->run_count=0;
+        EffectBodyFunctionDimensions dimensions={77,78};EffectBodyFunctionHead head={0};
+        CHECK(effect_body_request_dimensions(&request,0,&dimensions)==XR_XIR_BAD_STRUCTURE &&
+            dimensions.parameter_count==77 && dimensions.instruction_count==78);
+        CHECK(effect_body_request_head(&request,0,&head)==XR_XIR_BAD_STRUCTURE && !head.name && !head.instruction_count);
+        *function=saved;conditional_compact_dimensions(context,&request);
+    }
+}
+
+/* Every genuine call/indirect/reference edge still proves full physical
+ * identity. Only its already-decoded opcode is reused inside this request. */
+static void conditional_compact_edge_reads(const XrXirCompileContext *context,
+    EffectInvocationCertificate *certificate) {
+    EffectInvocationOwner *equations=certificate->equations;uint32_t matched=0,chosen=UINT32_MAX;
+    for (uint32_t e=0;e<equations->edge_count;++e) {
+        const EffectInvocationEdge *edge=&equations->edges[e];
+        uint32_t body=equations->nodes[edge->caller].body;XrXirOp expected=XR_XIR_INVALID;
+        if (body==0 && edge->instruction==3) expected=XR_XIR_CALL;
+        else if (body==0 && edge->instruction==2) expected=XR_XIR_FUNCTION_REF;
+        else if (body==1 && edge->instruction==0) expected=XR_XIR_CALL_INDIRECT;
+        else continue;
+        XrXirOp opcode=XR_XIR_RETURN;
+        CHECK(effect_invocation_certificate_edge_selected(context,certificate,edge->caller,e,&opcode)==XR_XIR_OK &&
+            opcode==expected);
+        CHECK(effect_invocation_certificate_edge(context,certificate,edge->caller,e)==XR_XIR_OK);
+        matched|=expected==XR_XIR_CALL?1u:expected==XR_XIR_FUNCTION_REF?2u:4u;
+        if (expected==XR_XIR_CALL) chosen=e;
+    }
+    CHECK(matched==7 && chosen!=UINT32_MAX);
+    EffectInvocationEdge *edge=&equations->edges[chosen];uint32_t target=edge->target;
+    edge->target=equations->count;XrXirOp opcode=XR_XIR_RETURN;
+    CHECK(effect_invocation_certificate_edge_selected(context,certificate,edge->caller,chosen,&opcode)==
+        XR_XIR_BAD_STRUCTURE && opcode==XR_XIR_RETURN);
+    edge->target=target;
+    EffectBodyRequest request=effect_body_owned_request(context,certificate->body);
+    ConditionalCompactRead refusal={context,0,UINT64_MAX};
+    request.read=(EffectBodyRead){&refusal,conditional_compact_read_work};
+    EffectInvocationEdgeRead read={edge->caller,chosen,&opcode};
+    CHECK(effect_invocation_edge_read_selected(context,equations,&request,&certificate->terms.types,&read)==XR_XIR_OK &&
+        opcode==XR_XIR_CALL && refusal.calls);
+    uint64_t calls=refusal.calls;
+    for (uint64_t at=0;at<calls;++at) {
+        refusal.calls=0;refusal.reject=at;opcode=XR_XIR_RETURN;
+        CHECK(effect_invocation_edge_read_selected(context,equations,&request,&certificate->terms.types,&read)==
+            XR_XIR_BUDGET && opcode==XR_XIR_RETURN && refusal.calls==at+1);
+    }
+    refusal.calls=0;refusal.reject=UINT64_MAX;
+    CHECK(effect_invocation_edge_read_selected(context,equations,&request,&certificate->terms.types,&read)==XR_XIR_OK &&
+        opcode==XR_XIR_CALL);
+}
+
+/* Each access delegates to the sole physical reader. Fresh provider facts
+ * remain distinct from full body/source correspondence and ROOT closure. */
+static void conditional_compact_cell_attacks(const XrXirCompileContext *context,
+    XrXirEffects *effects,EffectCellBodyAdapter *adapter,XrXirCellProofBodyRead *request) {
+    XrXirInstruction sentinel={.op=XR_XIR_RETURN,.type=XR_XIR_I64,.immediate=INT64_MIN},out=sentinel;
+    CHECK(request->instruction(context,request->owner,0,5,&out)==XR_XIR_BAD_STRUCTURE &&
+        conditional_compact_same(&out,&sentinel));
+    XrXirCellProofBodyHead head={.result=XR_XIR_I64,.instruction_count=999},head_sentinel=head;
+    CHECK(request->head(context,request->owner,4,&head)==XR_XIR_BAD_STRUCTURE &&
+        !memcmp(&head,&head_sentinel,sizeof(head)));
+    XrXirType type=XR_XIR_F64;
+    CHECK(request->type(context,request->owner,0,5,&type)==XR_XIR_BAD_STRUCTURE && type==XR_XIR_F64);
+    XrXirCellOriginView view={0};
+    CHECK(xr_xir_compile_cell_origin_view(context,effects->cells,2,0,&view)==XR_XIR_OK &&
+        !view.intrinsic_mask && view.parameter_count==1 && view.parameters[0]==0 &&
+        view.word_count==1 && view.dependencies[0]==1 &&
+        xr_xir_cell_provenance_role(effects->cells,2,0)==XR_XIR_CELL_PROOF_SCOPED_REF);
+    uint64_t *dependencies=(uint64_t *)view.dependencies;dependencies[0]=0;
+    CHECK(xr_xir_compile_cell_provenance_body_matches(context,effects->cells,request,NULL)==XR_XIR_BAD_STRUCTURE);
+    dependencies[0]=1;
+    CHECK(xr_xir_compile_cell_provenance_body_matches(context,effects->cells,request,NULL)==XR_XIR_OK);
+    XrXirCompileContext foreign=rp_owner(rp_caps());XrCompileResourceStats before=rp_stats(&foreign);
+    CHECK(request->instruction(&foreign,request->owner,0,0,&out)==XR_XIR_BAD_STRUCTURE &&
+        conditional_compact_same(&out,&sentinel));
+    CHECK(xr_xir_compile_cell_provenance_body_matches(&foreign,effects->cells,request,NULL)==XR_XIR_BAD_STRUCTURE);
+    XrCompileResourceStats after=rp_stats(&foreign);CHECK(!memcmp(&before,&after,sizeof(before)));
+    EffectCellBodyAdapter destination={0};XrXirCellProofBodyRead occupied=*request;
+    CHECK(effect_cell_body_owned(&foreign,effects->invocations->body,&destination,&occupied)==XR_XIR_BAD_STRUCTURE &&
+        !destination.work && !destination.request.owner && !memcmp(&occupied,request,sizeof(occupied)));
+    rp_owner_free(&foreign,before.live_bytes);
+    EffectBodyRequest mixed=adapter->request;mixed.instruction=effect_body_raw_instruction;
+    CHECK(effect_cell_body_request(context,&mixed,&destination,&occupied)==XR_XIR_BAD_STRUCTURE &&
+        !destination.work && !destination.request.owner && !memcmp(&occupied,request,sizeof(occupied)));
+    mixed=adapter->request;++mixed.domain.function_count;
+    CHECK(effect_cell_body_request(context,&mixed,&destination,&occupied)==XR_XIR_BAD_STRUCTURE &&
+        !destination.work && !destination.request.owner && !memcmp(&occupied,request,sizeof(occupied)));
+    const XrXirCompileContext *work=adapter->work;adapter->work=NULL;
+    CHECK(request->instruction(context,request->owner,0,0,&out)==XR_XIR_BAD_STRUCTURE &&
+        conditional_compact_same(&out,&sentinel));adapter->work=work;
+    CHECK(xr_xir_compile_cell_provenance_body_matches(context,effects->cells,request,NULL)==XR_XIR_OK);
+}
+
+/* The public effects constructor receives genuine owned Checked input. Both
+ * raw and Checked producers die before replay, lookups and adversarial checks. */
+static XrXirStatus conditional_compact_owned(const XrXirCompileContext *context,bool oracle) {
+    InvocationDeferredFixture fixture;invocation_deferred_fixture(&fixture,0);
+    XrXirArtifact *checked=NULL;XrXirEffects *effects=NULL;
+    XrXirStatus status=xir_fixture_check(context,&fixture.module,&checked,NULL);
+    if (status==XR_XIR_OK) status=xr_xir_compile_artifact_verify(checked,NULL);
+    if (status==XR_XIR_OK) status=xr_xir_compile_effects_analyze(checked,&effects);
+    EffectCellBodyAdapter adapter={0};XrXirCellProofBodyRead body_read={0};
+    if (status==XR_XIR_OK) status=effect_cell_body_raw(context,xr_xir_compile_artifact_module(checked),&adapter,&body_read);
+    if (status==XR_XIR_OK) status=xr_xir_compile_cell_provenance_body_matches(context,effects->cells,&body_read,NULL);
+    if (status==XR_XIR_OK && oracle) {
+        CHECK(effects->invocations && effect_body_material_shape(effects->invocations->body));
+        const XrXirModule *original=xr_xir_compile_artifact_module(checked);
+        CHECK(original->function_count==4 && original->functions[0].instruction_count==5);
+        CHECK(effect_body_source_match(context,effects->invocations->body,original)==XR_XIR_OK);
+        EffectBodyRequest raw=effect_body_raw_request(context,original);
+        XrXirInstruction raw_storage;const XrXirInstruction *raw_operation=NULL;
+        EffectBodyInstructionFields raw_sentinel={XR_XIR_RETURN,XR_XIR_BOOL,UINT32_MAX},raw_fields=raw_sentinel;
+        XrCompileResourceStats raw_before=rp_stats(context);
+        CHECK(effect_body_request_fields(&raw,0,0,&raw_storage,&raw_operation,&raw_fields)==XR_XIR_OK &&
+            raw_operation==&original->functions[0].instructions[0] && !memcmp(&raw_fields,&raw_sentinel,sizeof(raw_fields)));
+        CHECK(rp_stats(context).work-raw_before.work==2+sizeof(raw_operation) &&
+            rp_stats(context).allocation_count==raw_before.allocation_count && rp_stats(context).live_bytes==raw_before.live_bytes);
+        conditional_compact_dimensions(context,&raw);
+        XrXirModule changed=*original;XrXirFunction functions[4];XrXirInstruction entry[5];
+        memcpy(functions,original->functions,sizeof(functions));memcpy(entry,functions[0].instructions,sizeof(entry));
+        functions[0].instructions=entry;changed.functions=functions;entry[0].immediate=99;
+        CHECK(effect_body_source_match(context,effects->invocations->body,&changed)==XR_XIR_BAD_STRUCTURE);
+    }
+    xr_xir_compile_artifact_free(checked);memset(&fixture,0xCE,sizeof(fixture));
+    adapter=(EffectCellBodyAdapter){0};body_read=(XrXirCellProofBodyRead){0};
+    if (status==XR_XIR_OK) status=effect_cell_body_owned(context,effects->invocations->body,&adapter,&body_read);
+    if (status==XR_XIR_OK) status=xr_xir_compile_cell_provenance_body_matches(context,effects->cells,&body_read,NULL);
+    if (status==XR_XIR_OK && oracle) conditional_compact_cell_attacks(context,effects,&adapter,&body_read);
+    if (status==XR_XIR_OK && oracle) {
+        EffectInvocationCertificate *certificate=effects->invocations;
+        CHECK(certificate->equations && !certificate->equations->work && !certificate->equations->module &&
+            !certificate->equations->effects && !certificate->equations->graph);
+        EffectBodyRequest request=effect_body_owned_request(context,certificate->body);
+        EffectBodyFunctionHead head={0};XrXirInstruction storage;const XrXirInstruction *op=NULL;
+        CHECK(effect_body_request_head(&request,0,&head)==XR_XIR_OK && head.parameter_count==0 &&
+            head.instruction_count==5 && head.result==XR_XIR_I64 && head.name_length==5 && !memcmp(head.name,"entry",5));
+        CHECK(effect_body_request_instruction(&request,0,0,&storage,&op)==XR_XIR_OK && op==&storage &&
+            op->op==XR_XIR_CONST_INT && op->type==XR_XIR_I64 && op->immediate==42 && !op->args[0] && !op->args[1] &&
+            !op->targets[0] && !op->targets[1] && !op->type_arguments[0] && !op->type_arguments[1]);
+        EffectBodyInstructionFields fields_sentinel={XR_XIR_RETURN,XR_XIR_BOOL,UINT32_MAX},fields=fields_sentinel;
+        const XrXirInstruction *narrow_operation=NULL;
+        XrXirInstruction untouched={.op=XR_XIR_RETURN,.type=XR_XIR_BOOL},narrow_storage=untouched;
+        XrCompileResourceStats narrow_before=rp_stats(context);
+        CHECK(effect_body_request_fields(&request,0,0,&narrow_storage,&narrow_operation,&fields)==XR_XIR_OK &&
+            !narrow_operation && fields.op==XR_XIR_CONST_INT && fields.type==XR_XIR_I64 && !fields.source &&
+            conditional_compact_same(&narrow_storage,&untouched));
+        CHECK(rp_stats(context).allocation_count==narrow_before.allocation_count &&
+            rp_stats(context).live_bytes==narrow_before.live_bytes);
+        fields=fields_sentinel;
+        CHECK(effect_body_request_fields(&request,0,head.instruction_count,&narrow_storage,&narrow_operation,&fields)==
+            XR_XIR_BAD_STRUCTURE && !narrow_operation && !memcmp(&fields,&fields_sentinel,sizeof(fields)) &&
+            conditional_compact_same(&narrow_storage,&untouched));
+        const XrXirType *parameters=certificate->body->functions[0].parameters;
+        uint32_t count=certificate->body->functions[0].parameter_count;
+        certificate->body->functions[0].parameters=NULL;certificate->body->functions[0].parameter_count=1;
+        EffectBodyFunctionHead sentinel_head=head;
+        CHECK(effect_body_request_head(&request,0,&head)==XR_XIR_BAD_STRUCTURE &&
+            !memcmp(&head,&sentinel_head,sizeof(head)));
+        certificate->body->functions[0].parameters=parameters;
+        certificate->body->functions[0].parameter_count=count;
+        CHECK(effect_body_request_head(&request,0,&head)==XR_XIR_OK);
+        XirEffectProducerView view={0};CHECK(xir_effects_producer(context,effects,0,2,&view)==XR_XIR_OK &&
+            view.function==0 && view.instruction==2 && view.target==2 && !view.capture_count && view.type==(XrXirType)257);
+        conditional_compact_null_body(context,effects);
+        conditional_compact_public_selection(context,certificate);
+        conditional_compact_cause_opcode(context,certificate);
+        conditional_compact_projection_domains(context,certificate);
+        conditional_compact_dimensions(context,&request);
+        conditional_compact_dimension_damage(context,certificate);
+        conditional_compact_edge_reads(context,certificate);
+    }
+    xr_xir_compile_effects_free(effects);return status;
+}
+
+static XrXirStatus conditional_compact_case(const XrXirCompileContext *context,uint32_t mode,bool oracle) {
+    return mode<2?conditional_compact_codec(context,mode,oracle):conditional_compact_owned(context,oracle);
+}
+static void conditional_compact_literals(void) {
+    for (uint32_t mode=0;mode<3;++mode) {
+        RootParameterMark physical=rp_mark();XrXirCompileContext context=rp_owner(rp_caps());
+        uint64_t baseline=rp_stats(&context).live_bytes;
+        CHECK(conditional_compact_case(&context,mode,true)==XR_XIR_OK);
+        rp_owner_free(&context,baseline);rp_balanced(physical);
+    }
+}
+static void conditional_compact_resources(void) {
+    for (uint32_t mode=0;mode<3;++mode) {
+        size_t sites=0;XrCompileResourceStats single={0};
+        for (size_t pass=0;pass<=sites;++pass) {
+            RootParameterMark physical=rp_mark();rp_fail_at=SIZE_MAX;rp_attempts=0;rp_injected=false;
+            XrXirCompileContext context=rp_owner(rp_caps());XrCompileResourceStats entry=rp_stats(&context);
+            uint64_t baseline=entry.live_bytes;RootParameterMark retained=rp_mark();XrCompileResources *identity=context.resources;
+            rp_attempts=0;rp_fail_at=pass?pass-1:SIZE_MAX;
+            XrXirStatus status=conditional_compact_case(&context,mode,false);
+            if (!pass) { CHECK(status==XR_XIR_OK);sites=rp_attempts;single=rp_stats(&context); }
+            else {
+                CHECK(rp_injected && status==XR_XIR_OUT_OF_MEMORY);
+                ConditionalRetryTrial retry={.which=mode+87,.ordinal=pass-1,.sites=sites,
+                    .resources=identity,.initial=entry,.single=single,.retained=retained,.first=status};
+                conditional_retry_operation(&context,&retry);
+            }
+            rp_fail_at=SIZE_MAX;rp_owner_free(&context,baseline);rp_balanced(physical);
+        }
+        RootParameterMark physical=rp_mark();XrXirCompileContext context=rp_owner(rp_caps());
+        XrCompileResourceStats entry=rp_stats(&context);uint64_t baseline=entry.live_bytes;
+        size_t before=rp_attempts;CHECK(conditional_compact_case(&context,mode,false)==XR_XIR_OK);
+        XrCompileResourceStats census=rp_stats(&context);size_t census_sites=rp_attempts-before;
+        rp_owner_free(&context,baseline);rp_balanced(physical);
+        uint64_t measured[3]={census.allocated_bytes,census.peak_bytes,census.work};
+        for (uint32_t axis=0;axis<3;++axis) for (uint32_t pass=0;pass<2;++pass) {
+            XrCompileResourceLimits limits=rp_caps();uint64_t value=measured[axis]-(pass?0:1);
+            if (!axis) limits.allocated_bytes=value;else if (axis==1) limits.live_bytes=value;else limits.work=value;
+            physical=rp_mark();context=rp_owner(limits);entry=rp_stats(&context);baseline=entry.live_bytes;
+            RootParameterMark retained=rp_mark();XrCompileResources *identity=context.resources;
+            CHECK(conditional_compact_case(&context,mode,false)==(pass?XR_XIR_OK:XR_XIR_BUDGET));
+            ConditionalRetryTrial retry={.which=mode+87,.ordinal=SIZE_MAX,.sites=census_sites,
+                .resources=identity,.initial=entry,.single=census,.retained=retained,.first=pass?XR_XIR_OK:XR_XIR_BUDGET};
+            conditional_retry_operation(&context,&retry);rp_owner_free(&context,baseline);rp_balanced(physical);
+        }
+    }
+}
+#endif // XIR_INVOCATION_COMPACT_SNAPSHOT_CASES_H

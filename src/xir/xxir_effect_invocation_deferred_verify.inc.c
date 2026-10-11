@@ -17,11 +17,15 @@ static XrXirStatus effect_invocation_deferred_match(EffectInvocationFlow *flow,
     if (record->node!=flow->node || record->instruction>=flow->function->instruction_count ||
         record->parameter>=flow->basis.parameters || !!record->arguments!=!!record->count)
         return XR_XIR_BAD_STRUCTURE;
-    const XrXirInstruction *op=&flow->function->instructions[record->instruction];
+    XrXirInstruction body_op_1;const XrXirInstruction *op=NULL;
+    XrXirStatus body_read_1=effect_invocation_flow_instruction(flow,record->instruction,&body_op_1,&op);
+    if (body_read_1!=XR_XIR_OK) return body_read_1;
     if ((op->op!=XR_XIR_CALL_INDIRECT && op->op!=XR_XIR_INVOKE_INDIRECT) ||
         op->immediate<0 || (uint64_t)op->immediate>=flow->values) return XR_XIR_BAD_STRUCTURE;
-    const XrXirTypeNode *signature=xr_xir_callable_signature(owner->module->types,
-        xr_xir_operand_type(flow->function,(uint32_t)op->immediate));
+    XrXirType actual_type=0;
+    XrXirStatus type_status=effect_invocation_flow_type(flow,(uint32_t)op->immediate,&actual_type);
+    if (type_status!=XR_XIR_OK) return type_status;
+    const XrXirTypeNode *signature=xr_xir_callable_signature(flow->body.domain.types,actual_type);
     bool ref=false;XrXirStatus status=effect_invocation_has_ref(flow,signature,&ref);
     if (status!=XR_XIR_OK) return status;
     if (!ref || record->count!=signature->parameter_count) return XR_XIR_BAD_STRUCTURE;
@@ -48,14 +52,19 @@ static XrXirStatus effect_invocation_deferred_frontiers(EffectInvocationFlow *fl
     uint32_t *matched) {
     EffectInvocationOwner *owner=flow->owner;
     const EffectInvocationNode *node=&owner->nodes[flow->node];
+    const uint64_t *local_contexts=effect_invocation_node_row(node,EFFECT_INVOCATION_CONTEXTS,true);
     for (uint32_t i=0;i<flow->function->instruction_count;++i) {
         if (!xir_compile_work(owner->work,3)) return XR_XIR_BUDGET;
-        const XrXirInstruction *op=&flow->function->instructions[i];
-        if (!(node->local_contexts[i/64]&(UINT64_C(1)<<(i%64))) ||
+        XrXirInstruction body_op_2;const XrXirInstruction *op=NULL;
+        XrXirStatus body_read_2=effect_invocation_flow_instruction(flow,i,&body_op_2,&op);
+        if (body_read_2!=XR_XIR_OK) return body_read_2;
+        if (!(local_contexts[i/64]&(UINT64_C(1)<<(i%64))) ||
             (op->op!=XR_XIR_CALL_INDIRECT && op->op!=XR_XIR_INVOKE_INDIRECT)) continue;
         if (op->immediate<0 || (uint64_t)op->immediate>=flow->values) return XR_XIR_BAD_STRUCTURE;
-        const XrXirTypeNode *signature=xr_xir_callable_signature(owner->module->types,
-            xr_xir_operand_type(flow->function,(uint32_t)op->immediate));
+        XrXirType actual_type=0;
+        XrXirStatus type_status=effect_invocation_flow_type(flow,(uint32_t)op->immediate,&actual_type);
+        if (type_status!=XR_XIR_OK) return type_status;
+        const XrXirTypeNode *signature=xr_xir_callable_signature(flow->body.domain.types,actual_type);
         bool ref=false;XrXirStatus status=effect_invocation_has_ref(flow,signature,&ref);
         if (status!=XR_XIR_OK) return status;
         if (!ref) continue;
@@ -85,19 +94,25 @@ static XrXirStatus effect_invocation_deferred_frontiers(EffectInvocationFlow *fl
 
 static XrXirStatus effect_invocation_deferred_needed(EffectInvocationOwner *owner,
     uint32_t n,bool *output) {
+    if (!owner || n>=owner->count || !output) return XR_XIR_BAD_STRUCTURE;
     const EffectInvocationNode *node=&owner->nodes[n];
-    const XrXirFunction *function=&owner->module->functions[node->body];
-    uint64_t values=(uint64_t)function->parameter_count+function->instruction_count;
-    bool needed=false;EffectInvocationFlow flow={.owner=owner};
-    for (uint32_t i=0;i<function->instruction_count && node->local_deferred;++i) {
+    const uint64_t *contexts=effect_invocation_node_row(node,EFFECT_INVOCATION_CONTEXTS,true);
+    EffectBodyFunctionDimensions head={0};XrXirStatus status=effect_invocation_dimensions(owner,node->body,&head);
+    if (status!=XR_XIR_OK) return status;
+    uint64_t values=(uint64_t)head.parameter_count+head.instruction_count;
+    bool needed=false;EffectInvocationFlow flow={.owner=owner,.node=n,.body=effect_invocation_body(owner)};
+    for (uint32_t i=0;i<head.instruction_count && node->local_deferred;++i) {
         if (!xir_compile_work(owner->work,3)) return XR_XIR_BUDGET;
-        const XrXirInstruction *op=&function->instructions[i];
-        if (!(node->local_contexts[i/64]&(UINT64_C(1)<<(i%64))) ||
-            (op->op!=XR_XIR_CALL_INDIRECT && op->op!=XR_XIR_INVOKE_INDIRECT)) continue;
+        if (!(contexts[i/64]&(UINT64_C(1)<<(i%64)))) continue;
+        XrXirInstruction storage;const XrXirInstruction *op=NULL;
+        status=effect_invocation_operation(owner,node->body,i,&storage,&op);
+        if (status!=XR_XIR_OK) return status;
+        if (op->op!=XR_XIR_CALL_INDIRECT && op->op!=XR_XIR_INVOKE_INDIRECT) continue;
         if (op->immediate<0 || (uint64_t)op->immediate>=values) return XR_XIR_BAD_STRUCTURE;
-        const XrXirTypeNode *signature=xr_xir_callable_signature(owner->module->types,
-            xr_xir_operand_type(function,(uint32_t)op->immediate));
-        bool ref=false;XrXirStatus status=effect_invocation_has_ref(&flow,signature,&ref);
+        XrXirType type;status=effect_body_request_type(&flow.body,node->body,(uint32_t)op->immediate,&type);
+        if (status!=XR_XIR_OK) return status;
+        const XrXirTypeNode *signature=xr_xir_callable_signature(flow.body.domain.types,type);
+        bool ref=false;status=effect_invocation_has_ref(&flow,signature,&ref);
         if (status!=XR_XIR_OK) return status;
         needed|=ref;
     }
@@ -108,7 +123,7 @@ static XrXirStatus effect_invocation_deferred_needed(EffectInvocationOwner *owne
  * All records, including missing and duplicate frontiers, are consumed before
  * any certificate ownership transfer. A failure leaves every producer owned. */
 static XrXirStatus effect_invocation_deferred_verify(EffectInvocationOwner *owner) {
-    if (!owner || !owner->module || !owner->effects || !owner->work || owner->pending ||
+    if (!owner || !effect_body_material_shape(owner->material) || !owner->effects || !owner->work || owner->pending ||
         owner->deferred_count>owner->deferred_capacity ||
         (owner->deferred_count && !owner->deferred_calls)) return XR_XIR_BAD_STRUCTURE;
     for (uint32_t d=0;d<owner->deferred_count;++d) {
@@ -138,7 +153,7 @@ static XrXirStatus effect_invocation_deferred_verify(EffectInvocationOwner *owne
 static XrXirStatus effect_invocation_solution_match(EffectInvocationOwner *owner,
     const EffectInvocationSolution *solution) {
     if (!solution || solution->resources!=owner->work->resources ||
-        solution->count!=owner->module->function_count || !solution->count ||
+        solution->count!=owner->body.domain.function_count || !solution->count ||
         !solution->storage || solution->formulas!=solution->storage) return XR_XIR_BAD_STRUCTURE;
     const XrXirRootTerm *records=(const XrXirRootTerm *)(solution->formulas+solution->count);
     XrXirRootTerm *expected=NULL;uint32_t capacity=0,at=0;

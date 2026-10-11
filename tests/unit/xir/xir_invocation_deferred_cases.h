@@ -79,6 +79,23 @@ static void invocation_deferred_rejections(const XrXirCompileContext *context,
     CHECK(effect_invocation_basis(original,original->nodes[record->node].root,&basis)==XR_XIR_OK);
     CHECK(record->parameter==0 && record->instruction==0 && record->count==1 && basis.parameters==2);
     CHECK(!record->arguments[0] && record->arguments[basis.fn_words]==UINT64_C(18));
+    bool deferred_needed=false;
+    CHECK(effect_invocation_deferred_needed(original,record->node,&deferred_needed)==XR_XIR_OK && deferred_needed);
+    uint32_t body_index=original->nodes[record->node].body;
+    XrXirInstruction call_storage;const XrXirInstruction *call=NULL;
+    CHECK(effect_invocation_operation(original,body_index,record->instruction,&call_storage,&call)==XR_XIR_OK);
+    EffectBodyRequest body_read=effect_invocation_body(original);XrXirType callable_type=XR_XIR_UNIT;
+    CHECK(effect_body_request_type(&body_read,body_index,(uint32_t)call->immediate,&callable_type)==XR_XIR_OK);
+    const XrXirTypeNode *deferred_signature=xr_xir_callable_signature(body_read.domain.types,callable_type);
+    CHECK(deferred_signature && deferred_signature->parameter_count==1 &&
+        deferred_signature->parameters[0].mode==XR_PARAM_REF &&
+        xr_xir_type_is_cell(body_read.domain.types,deferred_signature->parameters[0].type));
+    XrXirCallableParameter *deferred_parameters=(XrXirCallableParameter *)deferred_signature->parameters;
+    XrXirType deferred_type=deferred_parameters[0].type;deferred_parameters[0].type=XR_XIR_I64;
+    CHECK(effect_invocation_deferred_needed(original,record->node,&deferred_needed)==XR_XIR_BAD_TYPE &&
+        deferred_needed && *owner==original && *solution==staged);
+    deferred_parameters[0].type=deferred_type;deferred_needed=false;
+    CHECK(effect_invocation_deferred_needed(original,record->node,&deferred_needed)==XR_XIR_OK && deferred_needed);
     EffectInvocationSealRequest request={owner,solution,NULL};EffectInvocationCertificate *out=NULL;
     uint64_t actual=record->arguments[basis.fn_words];
     record->arguments[basis.fn_words]|=UINT64_C(1)<<basis.parameters;

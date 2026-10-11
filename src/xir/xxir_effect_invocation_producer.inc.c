@@ -15,15 +15,20 @@ XR_FUNC XrXirStatus xir_effects_producer(const XrXirCompileContext *context,
         !effects->invocations || !effects->invocations->equations ||
         effects->invocations->resources!=context->resources) return XR_XIR_BAD_STRUCTURE;
     const EffectInvocationCertificate *certificate=effects->invocations;
+    if (!effect_body_material_shape(certificate->body) ||
+        certificate->body->resources!=certificate->resources) return XR_XIR_BAD_STRUCTURE;
     const EffectInvocationOwner *owner=certificate->equations;
-    if (function>=certificate->bodies.function_count || function>=effects->count ||
-        instruction>=certificate->bodies.functions[function].instruction_count ||
+    if (function>=effect_body_count(certificate->body) || function>=effects->count ||
+        instruction>=certificate->body->functions[function].instruction_count ||
         (owner->site_count && !owner->sites)) return XR_XIR_BAD_STRUCTURE;
-    const XrXirFunction *body=&certificate->bodies.functions[function];
-    const XrXirInstruction *op=&body->instructions[instruction];
+    const EffectBodyFunction *body=&certificate->body->functions[function];
+    EffectBodyRead read=effect_body_compile_read(context);XrXirInstruction decoded;
+    XrXirStatus decoded_status=effect_body_instruction_get(&read,body,instruction,&decoded);
+    if (decoded_status!=XR_XIR_OK) return decoded_status;
+    const XrXirInstruction *op=&decoded;
     if (!xir_compile_work(context,8)) return XR_XIR_BUDGET;
     if (op->op!=XR_XIR_FUNCTION_REF || op->immediate<0 ||
-        (uint64_t)op->immediate>=certificate->bodies.function_count ||
+        (uint64_t)op->immediate>=effect_body_count(certificate->body) ||
         op->args[0]>body->operand_count || op->args[1]>body->operand_count-op->args[0] ||
         (op->args[1] && !body->operands)) return XR_XIR_BAD_STRUCTURE;
     uint32_t selected=UINT32_MAX;
@@ -37,7 +42,7 @@ XR_FUNC XrXirStatus xir_effects_producer(const XrXirCompileContext *context,
         selected=site;
     }
     if (selected==UINT32_MAX) return XR_XIR_BAD_STRUCTURE;
-    const XrXirFunction *target=&certificate->bodies.functions[op->immediate];
+    const EffectBodyFunction *target=&certificate->body->functions[op->immediate];
     const XrXirTypeNode *signature=xr_xir_callable_signature(&certificate->terms.types,op->type);
     if (!signature || op->args[1]>target->parameter_count ||
         signature->parameter_count!=target->parameter_count-op->args[1] ||
@@ -46,15 +51,16 @@ XR_FUNC XrXirStatus xir_effects_producer(const XrXirCompileContext *context,
         if (!xir_compile_work(context,3)) return XR_XIR_BUDGET;
         uint32_t value=body->operands[op->args[0]+p];
         if (value>=(uint64_t)body->parameter_count+body->instruction_count) return XR_XIR_BAD_STRUCTURE;
-        XrXirStatus status=xr_xir_compile_call_type_matches(context,&certificate->bodies,function,op,
-            target->parameters[p],xr_xir_operand_type(body,value));
+        XrXirType actual;XrXirStatus status=effect_body_operand_type(&read,body,value,&actual);
+        if (status==XR_XIR_OK) status=xir_metadata_call_type_matches(context,&certificate->body->domain,function,op,
+            target->parameters[p],actual);
         if (status!=XR_XIR_OK) return status==XR_XIR_BAD_TYPE?XR_XIR_BAD_STRUCTURE:status;
     }
     for (uint32_t p=0;p<signature->parameter_count;++p) {
         if (!xir_compile_work(context,3)) return XR_XIR_BUDGET;
         if (!xr_xir_callable_parameter_storage_valid(&certificate->terms.types,&signature->parameters[p]))
             return XR_XIR_BAD_STRUCTURE;
-        XrXirStatus status=xr_xir_compile_call_type_matches(context,&certificate->bodies,function,op,
+        XrXirStatus status=xir_metadata_call_type_matches(context,&certificate->body->domain,function,op,
             target->parameters[p+op->args[1]],signature->parameters[p].type);
         if (status!=XR_XIR_OK) return status==XR_XIR_BAD_TYPE?XR_XIR_BAD_STRUCTURE:status;
     }

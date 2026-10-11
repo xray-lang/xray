@@ -31,18 +31,62 @@ typedef struct EffectInvocationProducer {
     uint64_t distance;
     uint32_t atom;
 } EffectInvocationProducer;
+enum { EFFECT_CLASS_KNOWN=1u, EFFECT_CLASS_ROOT=2u, EFFECT_CLASS_UNKNOWN=4u,
+    EFFECT_CLASS_VALID=7u };
+/* Masks preserve residual uncertainty. Only a complete local relation has a
+ * positive descending rank; a type or a temporary lattice bottom has none. */
+typedef struct EffectInvocationClassFact {
+    uint32_t value,mask;
+    uint64_t rank;
+} EffectInvocationClassFact;
+
 typedef struct EffectInvocationNode {
     uint32_t root,body,parameter_count;
     uint32_t intrinsic_mask,local_mask,cause_count;
-    EffectInvocationCause *causes,*local_causes;
-    uint64_t *input,*outputs,*cells,*parameters,*contexts;
-    uint64_t *local_cells,*local_parameters,*local_contexts;
+    EffectInvocationCause *causes;
+    uint64_t *input,*cells,*local_cells;
     EffectInvocationProducer *producers;
     uint32_t producer_count,producer_capacity;
     uint64_t return_coverage;
+    uint64_t *parameter_coverage;
+    EffectInvocationClassFact *classes;
+    uint32_t class_count,class_return_mask;
+    uint64_t class_return_rank;
     uint32_t edge_head;
     bool deferred,local_deferred,queued,expanded;
 } EffectInvocationNode;
+
+/* The two output copies and cause copies share one payload lifetime. These
+ * views store no permission facts and are checked against the real root and
+ * body dimensions before the closed owner can be sealed or consumed. */
+typedef enum EffectInvocationRow {
+    EFFECT_INVOCATION_CELLS,
+    EFFECT_INVOCATION_PARAMETERS,
+    EFFECT_INVOCATION_CONTEXTS
+} EffectInvocationRow;
+
+static uint64_t *effect_invocation_node_row(const EffectInvocationNode *node,
+    EffectInvocationRow row,bool local) {
+    uint64_t *base=local?node->local_cells:node->cells;
+    if (!base || node->cause_count<3 || !(node->cause_count&1)) return NULL;
+    uint32_t parameters=(node->cause_count-3)/2;
+    size_t dependencies=(size_t)(((uint64_t)parameters+63)/64);
+    return base+(size_t)row*dependencies;
+}
+
+static EffectInvocationCause *effect_invocation_local_causes(const EffectInvocationNode *node) {
+    return node->causes?node->causes+(size_t)node->cause_count:NULL;
+}
+
+static bool effect_invocation_node_shape(const EffectInvocationNode *node,
+    uint32_t parameters,uint32_t instructions) {
+    uint64_t dependencies=((uint64_t)parameters+63)/64;
+    uint64_t contexts=((uint64_t)instructions+63)/64;
+    uint64_t words=dependencies*2+contexts;
+    return node->cause_count==(uint64_t)parameters*2+3 && node->causes &&
+        !!node->cells==!!words && !!node->local_cells==!!words &&
+        !!node->parameter_coverage==!!node->parameter_count;
+}
 
 typedef struct EffectInvocationEdge {
     uint32_t caller,target,instruction,producer,next,consumer_next;
@@ -63,6 +107,10 @@ typedef struct EffectInvocationOwner {
     XrXirEffects *effects;
     EffectGraph *graph;
     const EffectInvocationDeclaredBounds *declared;
+    EffectPhysicalDomain *physical;
+    EffectBodyMaterial *material;
+    EffectBodyRequest body;
+    const XrXirCellProvenance *cells;
     EffectInvocationNode *nodes;
     EffectInvocationEdge *edges;
     EffectInvocationSite *sites;
@@ -75,21 +123,64 @@ typedef struct EffectInvocationOwner {
     uint32_t deferred_count,deferred_capacity;
     uint32_t count,capacity,edge_count,edge_capacity,maximum;
     uint32_t front,back,pending;
-    bool producer_enabled;
+    bool producer_enabled,class_enabled;
 } EffectInvocationOwner;
 
 static XrXirStatus effect_root_seed(const XrXirModule *module,XrXirEffects *effects,
     uint32_t function,uint32_t instruction,const XrXirCompileContext *work);
 
-static XrXirStatus effect_invocation_producer_column(const EffectInvocationOwner *owner,
+static inline XrXirStatus effect_invocation_producer_column(const EffectInvocationOwner *owner,
     const EffectInvocationBasis *basis,uint32_t site,uint32_t atom,uint32_t *word,uint32_t *bit);
 
 static XrXirStatus effect_invocation_coverage_verify(EffectInvocationOwner *owner);
 static XrXirStatus effect_invocation_coverage_solve(EffectInvocationOwner *owner);
+static XrXirStatus effect_invocation_class_verify(EffectInvocationOwner *owner);
 
+typedef struct EffectInvocationColumn { uint32_t word,bit; } EffectInvocationColumn;
+static XrXirStatus effect_invocation_producer_column_read(const EffectInvocationOwner *owner,
+    const EffectBodyRequest *request,const EffectInvocationBasis *basis,
+    uint32_t index,uint32_t atom,EffectInvocationColumn *output);
+static XrXirStatus effect_invocation_class_verify_read(EffectInvocationOwner *owner,
+    const EffectBodyRequest *request);
+static XrXirStatus effect_invocation_edge_shape_read(const XrXirCompileContext *work,
+    const EffectInvocationOwner *equations,const EffectBodyRequest *body,
+    const XrXirTypes *types,uint32_t caller,uint32_t edge_index);
+/* Each request charges the current real context and reads the sole immutable
+ * material. There is no construction-time raw instruction fallback. */
+static inline EffectBodyRequest effect_invocation_body(const EffectInvocationOwner *owner) {
+    return effect_body_owned_request(owner->work,owner->material);
+}
+static XrXirStatus effect_invocation_head(const EffectInvocationOwner *owner,uint32_t function,
+    EffectBodyFunctionHead *output) {
+    if (!owner || !owner->work || !effect_body_material_shape(owner->material)) return XR_XIR_BAD_STRUCTURE;
+    EffectBodyRequest request=effect_invocation_body(owner);
+    return effect_body_request_head(&request,function,output);
+}
+static XrXirStatus effect_invocation_dimensions(const EffectInvocationOwner *owner,uint32_t function,
+    EffectBodyFunctionDimensions *output) {
+    if (!owner || !owner->work || !effect_body_material_shape(owner->material)) return XR_XIR_BAD_STRUCTURE;
+    EffectBodyRequest request=effect_invocation_body(owner);
+    return effect_body_request_dimensions(&request,function,output);
+}
+static XrXirStatus effect_invocation_operation(const EffectInvocationOwner *owner,uint32_t function,
+    uint32_t instruction,XrXirInstruction *storage,const XrXirInstruction **output) {
+    if (!owner || !owner->work || !effect_body_material_shape(owner->material)) return XR_XIR_BAD_STRUCTURE;
+    EffectBodyRequest request=effect_invocation_body(owner);
+    return effect_body_request_instruction(&request,function,instruction,storage,output);
+}
+
+static XrXirStatus effect_invocation_shape(const EffectInvocationOwner *owner,uint32_t function,
+    uint32_t instruction,EffectBodyInstructionShape *output) {
+    if (!owner || !owner->work || !effect_body_material_shape(owner->material)) return XR_XIR_BAD_STRUCTURE;
+    EffectBodyRequest request=effect_invocation_body(owner);
+    return effect_body_request_shape(&request,function,instruction,output);
+}
+
+#include "xxir_effect_invocation_class_nodes.inc.c"
 #include "xxir_effect_invocation_nodes.inc.c"
 #include "xxir_effect_invocation_causes.inc.c"
 #include "xxir_effect_invocation_flow.inc.c"
+#include "xxir_effect_invocation_class_flow.inc.c"
 #include "xxir_effect_invocation_deferred.inc.c"
 #include "xxir_effect_invocation_calls.inc.c"
 #include "xxir_effect_invocation_producers.inc.c"
@@ -99,6 +190,7 @@ static XrXirStatus effect_invocation_coverage_solve(EffectInvocationOwner *owner
 #include "xxir_effect_invocation_seal.inc.c"
 #include "xxir_effect_invocation_query.inc.c"
 #include "xxir_effect_invocation_coverage.inc.c"
+#include "xxir_effect_invocation_class_verify.inc.c"
 #include "xxir_effect_invocation_projection.inc.c"
 #include "xxir_effect_invocation_trace.inc.c"
 #include "xxir_effect_invocation_driver.inc.c"

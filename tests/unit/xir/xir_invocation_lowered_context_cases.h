@@ -159,11 +159,11 @@ static XrXirStatus conditional_invocation_lowered_context(const XrXirCompileCont
         }
         CHECK(found);
         bool unknown_parameter=false,selected_none=false;
-        for (uint32_t f=0;f<certificate->bodies.function_count;++f) {
+        for (uint32_t f=0;f<effect_body_count(certificate->body);++f) {
             CHECK(f<64);
             if (!(selected_bodies&(UINT64_C(1)<<f))) continue;
             CHECK(certificate->origins[f].function==f);
-            const XrXirFunction *function=&certificate->bodies.functions[f];
+            const EffectBodyFunction *function=&certificate->body->functions[f];
             const XrXirRootFormula *formula=&certificate->solution->formulas[f];
             uint32_t original=UINT32_MAX,closed=UINT32_MAX;
             CHECK(function->parameter_count==1 && certificate->parameter_kinds[f][0]==XR_XIR_EFFECT_PARAMETER_VARIABLE);

@@ -201,7 +201,7 @@ static XrXirStatus effect_invocation_context_declarations(EffectOrdinaryContexts
     *output=types;return XR_XIR_OK;
 }
 
-/* Ordinary views carry a TEMPLATE marker for actual physical-use derivation,
+/* Ordinary views carry actual typed initial-role products for physical-use derivation,
  * not stored source records. Capture each authentic source advertisement in
  * this exact ordinary pool before the common queue receives that view. */
 static XrXirStatus effect_invocation_context_bounds(const XrXirCompileContext *work,
@@ -485,9 +485,19 @@ static XrXirStatus effect_context_dense_solve(EffectContextOwner *owner,
     effect_context_summary_clear(dense);
     EffectGraph graph={0};EffectOrdinaryView view={0};dense->terms.remaining=context;
     XrXirStatus status=effect_ordinary_view(dense,source,&view);
-    if (status==XR_XIR_OK) status=effect_parameters_derive(&view.module,&dense->uses,&graph,context);
+    if (status==XR_XIR_OK) {
+        graph.ordinary=view.input;
+        status=effect_parameters_derive(&view.module,&dense->uses,&graph,context);
+    }
     xr_compile_resources_free(graph.flow_rows);
-    if (status==XR_XIR_OK) status=effect_ordinary_roots_with_bounds(context,source,dense,owner->declared);
+    if (status==XR_XIR_OK && !xir_compile_work(context,2)) status=XR_XIR_BUDGET;
+    graph.flow_rows=NULL;graph.flow_capacity=0;
+    EffectInvocationDeclaredBounds *temporary=NULL;
+    if (status==XR_XIR_OK) status=effect_ordinary_roots_prepare(context,source,dense,owner->declared,&temporary);
+    if (status==XR_XIR_OK) status=effect_ordinary_roots_publish(context,dense,
+        owner->declared?owner->declared:temporary,&graph,&view);
+    effect_graph_free(&graph);effect_invocation_bounds_free(temporary);
+    dense->terms.remaining=NULL;
     return status;
 }
 

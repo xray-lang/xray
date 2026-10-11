@@ -111,7 +111,7 @@ static XrXirStatus invocation_rotation_masks(const XrXirCompileContext *context,
     const EffectInvocationCertificate *certificate,bool oracle) {
     static const uint32_t expected[5]={XR_XIR_CALLABLE_ROOT_REQUIRED,
         XR_XIR_CALLABLE_ROOT_UNRESOLVED,0,XR_XIR_CALLABLE_ROOT_REQUIRED,XR_XIR_CALLABLE_ROOT_REQUIRED};
-    if (!certificate || certificate->bodies.function_count!=5 || !certificate->solution ||
+    if (!certificate || effect_body_count(certificate->body)!=5 || !certificate->solution ||
         certificate->solution->count!=5) return XR_XIR_BAD_STRUCTURE;
     XrXirStatus status=XR_XIR_OK;
     for (uint32_t f=0;f<5 && status==XR_XIR_OK;++f) {
@@ -141,16 +141,16 @@ static void invocation_rotation_trace_oracle(const EffectInvocationCertificate *
     const EffectInvocationCauseTrace *trace) {
     static const uint32_t bodies[7]={0,1,1,1,1,1,3};
     static const uint32_t instructions[7]={2,1,1,1,1,0,0};
-    CHECK(certificate->bodies.stage==XR_XIR_CHECKED && certificate->bodies.function_count==5);
+    CHECK(certificate->body->stage==XR_XIR_CHECKED && effect_body_count(certificate->body)==5);
     CHECK(trace && trace->facts.requires_root && !trace->facts.unresolved &&
-        trace->counts[0]==7 && !trace->counts[1] && trace->counts[0]>certificate->bodies.function_count);
+        trace->counts[0]==7 && !trace->counts[1] && trace->counts[0]>effect_body_count(certificate->body));
     const EffectInvocationOwner *equations=certificate->equations;
     CHECK(equations && equations->site_count==2 && !equations->binding_count);
     CHECK(equations->sites[0].function==0 && !equations->sites[0].instruction &&
         equations->sites[0].target==2 && equations->sites[1].function==0 &&
         equations->sites[1].instruction==1 && equations->sites[1].target==3);
     CHECK(equations->root_spaces && !equations->root_spaces[0] &&
-        !certificate->bodies.functions[0].parameter_count);
+        !certificate->body->functions[0].parameter_count);
     /* Two sites, zero bindings and zero namespace parameters give one Fn
      * word and one Cell word. No construction-only API survives sealing. */
     const uint32_t row_words=2;

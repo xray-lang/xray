@@ -19,14 +19,14 @@ typedef struct ConditionalRetryTrial {
 } ConditionalRetryTrial;
 
 static XrXirStatus conditional_retry_case(const XrXirCompileContext *context,uint32_t which);
-static bool conditional_retry_reported[73];
-static uint64_t conditional_retry_counts[73];
+static bool conditional_retry_reported[100];
+static uint64_t conditional_retry_counts[100];
 
 /* The original single successful operation supplies the minimum complete
  * cost. Nothing resets the retained ledger or resumes a successful substage. */
 static void conditional_retry_operation(const XrXirCompileContext *context,
     const ConditionalRetryTrial *trial) {
-    CHECK(trial->which<73 && context->resources==trial->resources);
+    CHECK(trial->which<100 && context->resources==trial->resources);
     XrCompileResourceStats consumed=rp_stats(context),initial=trial->initial,single=trial->single;
     CHECK(consumed.live_bytes==initial.live_bytes && single.live_bytes==initial.live_bytes);
     CHECK(single.work>=initial.work && single.allocated_bytes>=initial.allocated_bytes &&
@@ -74,7 +74,7 @@ static void conditional_retry_operation(const XrXirCompileContext *context,
 /* Every case runs once before any retry. This short observer cannot
  * replace the original all-ordinal and resource-boundary registrations. */
 static void conditional_retry_census(void) {
-    for (uint32_t which=0;which<73;++which) {
+    for (uint32_t which=0;which<100;++which) {
         RootParameterMark physical=rp_mark();rp_fail_at=SIZE_MAX;rp_injected=false;
         XrXirCompileContext context=rp_owner(rp_caps());XrCompileResourceStats initial=rp_stats(&context);
         RootParameterMark retained=rp_mark();size_t attempts=rp_attempts;
@@ -92,6 +92,6 @@ static void conditional_retry_census(void) {
 }
 
 static void conditional_retry_complete(void) {
-    for (uint32_t which=0;which<73;++which) CHECK(conditional_retry_counts[which]>=6);
+    for (uint32_t which=0;which<100;++which) CHECK(conditional_retry_counts[which]>=6);
 }
 #endif // XIR_CONDITIONAL_RETRY_CASES_H

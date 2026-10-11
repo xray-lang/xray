@@ -119,9 +119,11 @@ static void pc_private_begin(const XrXirCompileContext *c,EdgeFixture *f,
     CHECK(xir_fixture_verify(c, &f->module, NULL)==XR_XIR_OK);
     *e=(XrXirEffects){0};e->count=f->module.function_count;
     XrXirCompileContext copy=*c;
-    CHECK(effect_errors_seed(&f->module,e,&copy)==XR_XIR_OK);
+    EffectBodyRequest input=effect_body_raw_request(&copy,&f->module);
+    CHECK(effect_errors_seed(&input.domain,e,&copy)==XR_XIR_OK);
     *terms=(EffectTerms){0};terms->remaining=flow->remaining;terms->types=f->types;
-    flow->module=&f->module;flow->effects=e;flow->terms=terms;
+    flow->source=&f->module;flow->body=effect_body_raw_request(flow->remaining,&f->module);
+    flow->effects=e;flow->terms=terms;
 }
 static void pc_private_free(ErrorFlow *flow,EffectTerms *terms,XrXirEffects *e) {
     error_storage_free(flow);effect_terms_free(terms);
@@ -209,21 +211,23 @@ static void pc_direct_budget(void) {
         memset(flow.work,0,bytes);error_value(&flow,flow.work,512)[0]=4;
         memset(dest,0,bytes);flow.reachable[30]=0;flow.changed=false;
         memset(flow.edge,0xa5,bytes);memset(flow.snapshot,0x5a,bytes);
-        uint64_t remaining=enough ? UINT64_C(6) : UINT64_C(5);
+        /* The original edge charge is six; the exact raw opcode/type projection
+         * performs and charges twelve additional read/output units. */
+        uint64_t remaining=enough ? UINT64_C(18) : UINT64_C(17);
         uint64_t used=pc_stats(&c).work;CHECK(used<=caps.work-remaining);
         /* Deliberate same-ledger admission fixture, without mutating its limits. */
         CHECK(xr_compile_resources_work(c.resources,caps.work-used-remaining)==XR_COMPILE_RESOURCE_OK);
         XrCompileResourceStats before=pc_stats(&c);size_t allocations=attempts;
         CHECK(error_edge(&flow,31,30,NULL,true)==(enough ? XR_XIR_OK : XR_XIR_BUDGET));
         XrCompileResourceStats after=pc_stats(&c);
-        CHECK(after.work-before.work==(enough ? UINT64_C(6) : UINT64_C(3)));
+        CHECK(after.work-before.work==(enough ? UINT64_C(18) : UINT64_C(10)));
         CHECK(attempts==allocations && before.allocated_bytes==after.allocated_bytes && before.live_bytes==after.live_bytes);
         pc_plain_row(&flow,flow.work);pc_pattern(flow.edge,bytes,0xa5);pc_pattern(flow.snapshot,bytes,0x5a);
         if (enough) { pc_plain_row(&flow,dest);CHECK(flow.reachable[30]==3 && flow.changed); }
         else { pc_pattern(dest,bytes,0);CHECK(!flow.reachable[30] && !flow.changed); }
         pc_private_free(&flow,&terms,&e);pc_release(&c,baseline);
     }
-    puts("strict edge sameowner remaining6/5: no refund, failure state unchanged, allocator0");
+    puts("strict edge sameowner remaining18/17: no refund, failure state unchanged, allocator0");
 }
 static void pc_bulk(void) {
     for (unsigned reverse=0;reverse<2;++reverse) {
@@ -382,7 +386,8 @@ static void pc_empty_nonempty_summary(void) {
     e->errors[1]=4;EffectGraph graph={0};
     CHECK(effect_graph_build(owned,e,&graph,&c)==XR_XIR_OK);
     EffectTerms terms={0};terms.remaining=&c;terms.types=*owned->types;
-    ErrorFlow flow={0};flow.module=owned;flow.effects=e;flow.remaining=&c;flow.terms=&terms;
+    ErrorFlow flow={0};flow.source=owned;flow.body=effect_body_owned_request(&c,graph.material);
+    flow.effects=e;flow.remaining=&c;flow.terms=&terms;
     CHECK(error_functions(owned,e,&graph,&flow)==XR_XIR_OK);
     CHECK(e->errors[1]==4 && flow.storage_capacity==4684);
     error_storage_free(&flow);effect_terms_free(&terms);effect_graph_free(&graph);

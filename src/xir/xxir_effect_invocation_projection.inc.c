@@ -27,7 +27,7 @@ static XrXirStatus effect_invocation_projection_atom(const XrXirCompileContext *
     const EffectInvocationCertificate *certificate,uint32_t node_index,uint32_t atom,uint32_t *output) {
     const EffectInvocationOwner *equations=certificate->equations;
     const EffectInvocationNode *node=&equations->nodes[node_index];
-    uint32_t parameters=certificate->bodies.functions[node->root].parameter_count;
+    uint32_t parameters=certificate->body->functions[node->root].parameter_count;
     if (atom>=node->cause_count || !effect_invocation_atom(node,parameters,atom,false))
         return XR_XIR_BAD_STRUCTURE;
     XrXirStatus status=effect_invocation_certificate_cause(work,certificate,node_index,atom);
@@ -49,17 +49,81 @@ static XrXirStatus effect_invocation_projection_atom(const XrXirCompileContext *
 /* Constant domains consume only true intrinsic atoms. Projected domains also
  * consume the owned original formal advertisements and unresolved dependencies.
  * NONE advertisements never authorize an unrooted or incomplete equation. */
+/* This value belongs only to the present projection request. Each domain
+ * keeps its own atom and ordering; no result is retained between requests. */
+typedef struct EffectInvocationProjectionSelection {
+    uint32_t atom;
+    XrXirRootEffectWitness witness;
+} EffectInvocationProjectionSelection;
+
+/* One complete four-domain request uses the same actual atom/cause and
+ * advertisement reader as the direct scalar selector below. Each active
+ * atom is proved once, with independent projected/constant ROOT and UNKNOWN
+ * orderings. This request is never used for a single-domain output.
+ * Its output is private caller scratch and may be partially filled on failure.
+ * Callers consume it only after success; public outputs have separate gates. */
+static XrXirStatus effect_invocation_projection_domains(const XrXirCompileContext *work,
+    const EffectInvocationCertificate *certificate,uint32_t function,uint32_t first,uint32_t width,
+    EffectInvocationProjectionSelection *output) {
+    if (!certificate || !effect_body_material_shape(certificate->body) ||
+        certificate->body->resources!=certificate->resources || !certificate->equations || !certificate->origins ||
+        !output || first || width!=4 ||
+        function>=effect_body_count(certificate->body)) return XR_XIR_BAD_STRUCTURE;
+    const EffectInvocationOwner *equations=certificate->equations;
+    uint32_t n=equations->roots[function];
+    if (n>=equations->count || equations->nodes[n].body!=function) return XR_XIR_BAD_STRUCTURE;
+    const EffectInvocationNode *node=&equations->nodes[n];
+    if (node->root>=effect_body_count(certificate->body) || node->body>=effect_body_count(certificate->body))
+        return XR_XIR_BAD_STRUCTURE;
+    uint32_t parameters=certificate->body->functions[node->root].parameter_count;
+    if (!xir_compile_work(work,8)) return XR_XIR_BUDGET;
+    if (!effect_invocation_node_shape(node,parameters,
+        certificate->body->functions[node->body].instruction_count)) return XR_XIR_BAD_STRUCTURE;
+    if (!xir_compile_work(work,(uint64_t)width*sizeof(*output))) return XR_XIR_BUDGET;
+    for (uint32_t d=0;d<width;++d) output[d]=(EffectInvocationProjectionSelection){UINT32_MAX,{0}};
+    uint32_t count=node->cause_count;
+    for (uint32_t atom=0;atom<count;++atom) {
+        if (!xir_compile_work(work,4)) return XR_XIR_BUDGET;
+        if (!effect_invocation_atom(node,parameters,atom,false)) continue;
+        uint32_t mask=0;
+        XrXirStatus status=effect_invocation_projection_atom(work,certificate,n,atom,&mask);
+        if (status!=XR_XIR_OK) return status;
+        const EffectInvocationCause *cause=&node->causes[atom];
+        if (mask && cause->witness.callee!=UINT32_MAX &&
+            cause->witness.callee>=effect_body_count(certificate->body)) return XR_XIR_BAD_STRUCTURE;
+        for (uint32_t d=0;d<width;++d) {
+            uint32_t domain=first+d;
+            if (!xir_compile_work(work,4)) return XR_XIR_BUDGET;
+            uint32_t bit=(domain&1)?XR_XIR_CALLABLE_ROOT_UNRESOLVED:XR_XIR_CALLABLE_ROOT_REQUIRED;
+            if (((domain&2) && atom>=2) || !(mask&bit)) continue;
+            XrXirRootEffectWitness candidate=effect_invocation_public_witness(certificate,node,cause);
+            const XrXirRootEffectWitness *best=&output[d].witness;
+            if (output[d].atom!=UINT32_MAX && (best->distance<candidate.distance ||
+                (best->distance==candidate.distance && !effect_root_cause_before(&candidate,best)))) continue;
+            if (!xir_compile_work(work,sizeof(*output))) return XR_XIR_BUDGET;
+            output[d]=(EffectInvocationProjectionSelection){atom,candidate};
+        }
+    }
+    return XR_XIR_OK;
+}
+
 static XrXirStatus effect_invocation_projection_select(const XrXirCompileContext *work,
     const EffectInvocationCertificate *certificate,uint32_t function,uint32_t domain,
     uint32_t *atom_output,XrXirRootEffectWitness *witness_output) {
-    if (!certificate || !certificate->equations || !certificate->origins || !atom_output ||
-        !witness_output || domain>=4 || function>=certificate->bodies.function_count)
+    if (!certificate || !effect_body_material_shape(certificate->body) ||
+        certificate->body->resources!=certificate->resources || !certificate->equations || !certificate->origins || !atom_output ||
+        !witness_output || domain>=4 || function>=effect_body_count(certificate->body))
         return XR_XIR_BAD_STRUCTURE;
     const EffectInvocationOwner *equations=certificate->equations;
     uint32_t n=equations->roots[function];
     if (n>=equations->count || equations->nodes[n].body!=function) return XR_XIR_BAD_STRUCTURE;
     const EffectInvocationNode *node=&equations->nodes[n];
-    uint32_t parameters=certificate->bodies.functions[node->root].parameter_count;
+    if (node->root>=effect_body_count(certificate->body) || node->body>=effect_body_count(certificate->body))
+        return XR_XIR_BAD_STRUCTURE;
+    uint32_t parameters=certificate->body->functions[node->root].parameter_count;
+    if (!xir_compile_work(work,8)) return XR_XIR_BUDGET;
+    if (!effect_invocation_node_shape(node,parameters,
+        certificate->body->functions[node->body].instruction_count)) return XR_XIR_BAD_STRUCTURE;
     uint32_t bit=(domain&1)?XR_XIR_CALLABLE_ROOT_UNRESOLVED:XR_XIR_CALLABLE_ROOT_REQUIRED;
     uint32_t selected=UINT32_MAX;XrXirRootEffectWitness best={0};
     uint32_t count=(domain&2)?2:node->cause_count;
@@ -71,7 +135,7 @@ static XrXirStatus effect_invocation_projection_select(const XrXirCompileContext
         if (status!=XR_XIR_OK) return status;
         if (!(mask&bit)) continue;
         const EffectInvocationCause *cause=&node->causes[atom];
-        if (cause->witness.callee!=UINT32_MAX && cause->witness.callee>=certificate->bodies.function_count)
+        if (cause->witness.callee!=UINT32_MAX && cause->witness.callee>=effect_body_count(certificate->body))
             return XR_XIR_BAD_STRUCTURE;
         XrXirRootEffectWitness candidate=effect_invocation_public_witness(certificate,node,cause);
         if (selected!=UINT32_MAX && (best.distance<candidate.distance ||
@@ -86,10 +150,11 @@ static XrXirStatus effect_invocation_projection_select(const XrXirCompileContext
  * Effects, contract, carrier or entry permission changes on any failure path. */
 static XrXirStatus effect_invocation_certificate_project(const XrXirCompileContext *work,
     EffectInvocationCertificate *certificate) {
-    if (!xir_compile_context_valid(work) || !certificate || certificate->resources!=work->resources ||
+    if (!xir_compile_context_valid(work) || !certificate || !effect_body_material_shape(certificate->body) ||
+        certificate->body->resources!=certificate->resources || certificate->resources!=work->resources ||
         certificate->terms.remaining!=work || !certificate->solution || certificate->facts ||
         certificate->witnesses || certificate->projection_atoms) return XR_XIR_BAD_STRUCTURE;
-    uint32_t count=certificate->bodies.function_count;
+    uint32_t count=effect_body_count(certificate->body);
     uint64_t records=(uint64_t)count*4;
     if (!count || count!=certificate->solution->count || records>SIZE_MAX/sizeof(*certificate->witnesses))
         return count?XR_XIR_BUDGET:XR_XIR_BAD_STRUCTURE;
@@ -99,12 +164,14 @@ static XrXirStatus effect_invocation_certificate_project(const XrXirCompileConte
     if (!certificate->facts || !certificate->witnesses || !certificate->projection_atoms)
         return certificate->terms.status;
     for (uint32_t f=0;f<count;++f) {
-        uint32_t mask=0;
+        uint32_t mask=0;EffectInvocationProjectionSelection selected[4];
+        XrXirStatus status=effect_invocation_projection_domains(work,certificate,f,0,4,selected);
+        if (status!=XR_XIR_OK) return status;
         for (uint32_t domain=0;domain<4;++domain) {
             size_t at=(size_t)domain*count+f;
-            XrXirStatus status=effect_invocation_projection_select(work,certificate,f,domain,
-                &certificate->projection_atoms[at],&certificate->witnesses[at]);
-            if (status!=XR_XIR_OK) return status;
+            if (!xir_compile_work(work,sizeof(*certificate->witnesses)+1)) return XR_XIR_BUDGET;
+            certificate->projection_atoms[at]=selected[domain].atom;
+            certificate->witnesses[at]=selected[domain].witness;
             bool fact=certificate->projection_atoms[at]!=UINT32_MAX;
             uint32_t bit=(domain&1)?XR_XIR_CALLABLE_ROOT_UNRESOLVED:XR_XIR_CALLABLE_ROOT_REQUIRED;
             if (domain<2 && fact) mask|=bit;
