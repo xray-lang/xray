@@ -237,6 +237,8 @@ static void owned_error_range_values(const XrXirCompileContext *context,
             CHECK(effect_body_instruction_ref_words(&read,&ref,i,words)==XR_XIR_OK &&
                 effect_body_instruction_words_publish(&read,words,&decoded)==XR_XIR_OK &&
                 conditional_compact_same(&decoded,&expected[i]));
+            CHECK(effect_body_instruction_ref_value(&read,&ref,i,&decoded)==XR_XIR_OK &&
+                conditional_compact_same(&decoded,&expected[i]));
         }
     }
     CHECK(cursor.first==body->instruction_count && cursor.offset==body->stream_words);
@@ -250,24 +252,32 @@ static void owned_error_range_values(const XrXirCompileContext *context,
  * A failure never publishes either output or the next numeric range position. */
 static void owned_error_range_refusals(const XrXirCompileContext *context,
     const EffectBodyFunction *body) {
-    for (uint32_t mode=0;mode<2;++mode) {
+    for (uint32_t mode=0;mode<3;++mode) {
         ConditionalCompactRead observation={context,0,UINT64_MAX};
         EffectBodyRead read={&observation,conditional_compact_read_work};
         CHECK(xir_compile_work(context,sizeof(EffectBodyRecordCursor)));
         EffectBodyRecordCursor cursor={0,0,0,UINT32_MAX};EffectBodyRunRef ref;
         CHECK(effect_body_range_ref(&read,body,&cursor,&ref)==XR_XIR_OK);
-        if (mode) {
-            observation.calls=0;
-            EffectBodyInstructionFields fields;
+        if (mode==1) {
+            observation.calls=0;EffectBodyInstructionFields fields;
             CHECK(error_range_fields(&read,&ref,ref.first,&fields)==XR_XIR_OK);
+        } else if (mode==2) {
+            observation.calls=0;XrXirInstruction decoded;
+            CHECK(effect_body_instruction_ref_value(&read,&ref,ref.first,&decoded)==XR_XIR_OK);
         }
         uint64_t points=observation.calls;CHECK(points);
         for (uint64_t at=0;at<points;++at) {
             observation.calls=0;observation.reject=at;
-            EffectBodyInstructionFields sentinel={XR_XIR_RETURN,XR_XIR_BOOL,17},fields=sentinel;
-            if (mode) CHECK(error_range_fields(&read,&ref,ref.first,&fields)==XR_XIR_BUDGET &&
-                !memcmp(&fields,&sentinel,sizeof(fields)));
-            else {
+            if (mode==1) {
+                EffectBodyInstructionFields sentinel={XR_XIR_RETURN,XR_XIR_BOOL,17},fields=sentinel;
+                CHECK(error_range_fields(&read,&ref,ref.first,&fields)==XR_XIR_BUDGET &&
+                    !memcmp(&fields,&sentinel,sizeof(fields)));
+            } else if (mode==2) {
+                XrXirInstruction sentinel={.op=XR_XIR_RETURN,.type=XR_XIR_BOOL,.args={17,19},
+                    .targets={23,29},.immediate=INT64_MIN,.type_arguments={31,37}},decoded=sentinel;
+                CHECK(effect_body_instruction_ref_value(&read,&ref,ref.first,&decoded)==XR_XIR_BUDGET &&
+                    conditional_compact_same(&decoded,&sentinel));
+            } else {
                 CHECK(xir_compile_work(context,sizeof(cursor)));cursor=(EffectBodyRecordCursor){0,0,0,UINT32_MAX};
                 EffectBodyRecordCursor saved=cursor;EffectBodyRunRef marker={0},output=marker;
                 CHECK(effect_body_range_ref(&read,body,&cursor,&output)==XR_XIR_BUDGET &&
@@ -276,6 +286,69 @@ static void owned_error_range_refusals(const XrXirCompileContext *context,
             CHECK(observation.calls==at+1);
         }
     }
+}
+
+/* Malformed projection inputs fail before publishing the destination. A
+ * canonical reader still owns stream length, adjacency and complete EOF. */
+static void owned_error_direct_ref_controls(const XrXirCompileContext *context,
+    const EffectBodyFunction *body) {
+    EffectBodyRead read=effect_body_compile_read(context);
+    CHECK(xir_compile_work(context,sizeof(EffectBodyRecordCursor)));
+    EffectBodyRecordCursor cursor={0,0,0,UINT32_MAX};EffectBodyRunRef ref;
+    CHECK(effect_body_range_ref(&read,body,&cursor,&ref)==XR_XIR_OK);
+    CHECK(xir_compile_work(context,EFFECT_BODY_WORDS*sizeof(uint32_t)));
+    uint32_t base[EFFECT_BODY_WORDS];memcpy(base,ref.base,sizeof(base));
+    XrXirInstruction sentinel={.op=XR_XIR_RETURN,.type=XR_XIR_BOOL,.args={17,19},
+        .targets={23,29},.immediate=INT64_MIN,.type_arguments={31,37}};
+    for (uint32_t mode=0;mode<7;++mode) {
+        CHECK(xir_compile_work(context,sizeof(EffectBodyRunRef)+sizeof(uint32_t)+sizeof(sentinel)));
+        EffectBodyRunRef bad=ref;uint32_t index=ref.first;XrXirInstruction output=sentinel;
+        if (!mode) bad.base=NULL;
+        else if (mode==1) { bad.mask|=UINT32_C(1);bad.delta=NULL; }
+        else if (mode==2) bad.mask|=UINT32_C(1024);
+        else if (mode==3) bad.count=0;
+        else if (mode==4) index=UINT32_MAX;
+        else if (mode==5) index=ref.first+ref.count;
+        else { base[0]=XR_XIR_OP_COUNT;bad.base=base;bad.mask&=~UINT32_C(1); }
+        uint64_t work=rp_stats(context).work;
+        CHECK(effect_body_instruction_ref_value(&read,&bad,index,&output)==XR_XIR_BAD_STRUCTURE &&
+            conditional_compact_same(&output,&sentinel));
+        if (mode<6) CHECK(rp_stats(context).work==work);
+    }
+}
+
+/* Two complete storage literals distinguish a constant run from one whose
+ * ten physical columns all vary. Neither encoding is a semantic admission. */
+static void owned_error_direct_fields(void) {
+    RootParameterMark physical=rp_mark();XrXirCompileContext context=rp_owner(rp_caps());
+    uint64_t baseline=rp_stats(&context).live_bytes;
+    for (uint32_t mode=0;mode<2;++mode) {
+        const XrXirInstruction first={.op=XR_XIR_COPY,.type=XR_XIR_I64,
+            .args={UINT32_MAX,19},.targets={23,UINT32_MAX-29},
+            .immediate=INT64_MIN+INT64_C(17),.type_arguments={31,37}};
+        const XrXirInstruction second={.op=XR_XIR_SCALAR_COPY,.type=XR_XIR_F64,
+            .args={17,UINT32_MAX-19},.targets={UINT32_MAX-23,29},
+            .immediate=INT64_MAX-INT64_C(41),.type_arguments={UINT32_MAX-31,UINT32_MAX-37}};
+        CHECK(xir_compile_work(&context,4*sizeof(XrXirInstruction)));
+        XrXirInstruction original[2]={first,mode?second:first},producer[2];
+        memcpy(producer,original,sizeof(producer));
+        XrXirFunction input={.instructions=producer,.instruction_count=2};
+        EffectBodyFunction body={.instruction_count=2};
+        CHECK(effect_body_records_copy(&context,&input,&body)==XR_XIR_OK && body.run_count==1 &&
+            (uint32_t)body.stream[2]==(mode?(uint32_t)EFFECT_BODY_MASK:UINT32_C(0)));
+        CHECK(xir_compile_work(&context,sizeof(producer)));memset(producer,0xCE,sizeof(producer));
+        owned_error_range_values(&context,&body,original);owned_error_range_refusals(&context,&body);
+        owned_error_direct_ref_controls(&context,&body);input.instructions=original;
+        EffectBodyRead read=effect_body_compile_read(&context);
+        for (uint32_t field=0;field<EFFECT_BODY_WORDS;++field) {
+            CHECK(xir_compile_work(&context,2*sizeof(XrXirInstruction)));
+            XrXirInstruction saved=original[1];conditional_compact_change(&original[1],field);
+            CHECK(effect_body_records_match(&read,&body,&input)==XR_XIR_BAD_STRUCTURE);
+            original[1]=saved;CHECK(effect_body_records_match(&read,&body,&input)==XR_XIR_OK);
+        }
+        xr_compile_resources_free(body.stream);CHECK(rp_stats(&context).live_bytes==baseline);
+    }
+    rp_owner_free(&context,baseline);rp_balanced(physical);
 }
 
 /* Storage-only COPY literals keep five independent source identities. They
@@ -481,6 +554,7 @@ static void conditional_owned_error_cell_resources(void) {
 }
 
 static void conditional_owned_error_literals(void) {
+    owned_error_direct_fields();
     conditional_owned_error_cursor_literals();
     owned_error_range_copies();
     for (uint32_t mode=0;mode<2;++mode) {

@@ -375,28 +375,67 @@ static XrXirStatus effect_body_instruction_words_get(const EffectBodyRead *read,
     return status==XR_XIR_OK?effect_body_instruction_ref_words(read,&ref,instruction,words):status;
 }
 
-/* Callers already own all ten decoded words. This one value constructor
- * preserves every unused word and the exact signed immediate bit pattern. */
-static XrXirInstruction effect_body_instruction_words_value(const uint32_t *words) {
-    uint64_t immediate=(uint64_t)words[6]|((uint64_t)words[7]<<32);int64_t signed_immediate;
-    memcpy(&signed_immediate,&immediate,sizeof(immediate));
-    return (XrXirInstruction){.op=(XrXirOp)words[0],.type=words[1],
-        .args={words[2],words[3]},.targets={words[4],words[5]},
-        .immediate=signed_immediate,.type_arguments={words[8],words[9]}};
+/* The canonical run has already bounded every selected column. Sequential
+ * field assignments consume packed deltas in physical word order, including
+ * unused fields and both unsigned halves of the signed immediate. */
+static XrXirInstruction effect_body_instruction_words_value(const uint32_t *base,
+    uint32_t mask,const uint32_t *delta,uint32_t offset) {
+    uint32_t at=0;XrXirInstruction value;
+    value.op=(XrXirOp)(base[0]+((mask&UINT32_C(1))?delta[at++]*offset:0));
+    value.type=base[1]+((mask&UINT32_C(2))?delta[at++]*offset:0);
+    value.args[0]=base[2]+((mask&UINT32_C(4))?delta[at++]*offset:0);
+    value.args[1]=base[3]+((mask&UINT32_C(8))?delta[at++]*offset:0);
+    value.targets[0]=base[4]+((mask&UINT32_C(16))?delta[at++]*offset:0);
+    value.targets[1]=base[5]+((mask&UINT32_C(32))?delta[at++]*offset:0);
+    uint64_t immediate=base[6]+((mask&UINT32_C(64))?delta[at++]*offset:0);
+    immediate|=(uint64_t)(base[7]+((mask&UINT32_C(128))?delta[at++]*offset:0))<<32;
+    memcpy(&value.immediate,&immediate,sizeof(immediate));
+    value.type_arguments[0]=base[8]+((mask&UINT32_C(256))?delta[at++]*offset:0);
+    value.type_arguments[1]=base[9]+((mask&UINT32_C(512))?delta[at++]*offset:0);
+    return value;
 }
-static XrXirStatus effect_body_instruction_words_publish(const EffectBodyRead *read,
+
+/* Counting and opcode validation finish before the full row is published.
+ * The value core writes no temporary ten-word array; its actual cursor,
+ * selected reads and complete Instruction output remain charged. */
+static XrXirStatus effect_body_instruction_ref_value(const EffectBodyRead *read,
+    const EffectBodyRunRef *ref,uint32_t instruction,XrXirInstruction *output) {
+    if (!read || !ref || !output || !ref->base || (ref->mask&~EFFECT_BODY_MASK) ||
+        (ref->mask && !ref->delta) || instruction<ref->first ||
+        instruction-ref->first>=ref->count) return XR_XIR_BAD_STRUCTURE;
+    if (!effect_body_read_work(read,sizeof(uint32_t))) return XR_XIR_BUDGET;
+    uint32_t deltas=0;
+    for (uint32_t w=0;w<EFFECT_BODY_WORDS;++w) {
+        if (!effect_body_read_work(read,1)) return XR_XIR_BUDGET;
+        if (!(ref->mask&(UINT32_C(1)<<w))) continue;
+        if (!effect_body_read_work(read,1)) return XR_XIR_BUDGET;
+        ++deltas;
+    }
+    if (!effect_body_read_work(read,1+sizeof(uint32_t)+((ref->mask&UINT32_C(1))?3:0)))
+        return XR_XIR_BUDGET;
+    uint32_t operation=ref->base[0]+((ref->mask&UINT32_C(1))?
+        ref->delta[0]*(instruction-ref->first):0);
+    if (operation<=XR_XIR_INVALID || operation>=XR_XIR_OP_COUNT) return XR_XIR_BAD_STRUCTURE;
+    if (!effect_body_read_work(read,sizeof(uint32_t)+EFFECT_BODY_WORDS+4*deltas+sizeof(*output)+2))
+        return XR_XIR_BUDGET;
+    *output=effect_body_instruction_words_value(ref->base,ref->mask,ref->delta,instruction-ref->first);
+    return XR_XIR_OK;
+}
+
+static inline XrXirStatus effect_body_instruction_words_publish(const EffectBodyRead *read,
     const uint32_t *words,XrXirInstruction *output) {
     if (!words || !output) return XR_XIR_BAD_STRUCTURE;
-    if (!effect_body_read_work(read,sizeof(*output)+2)) return XR_XIR_BUDGET;
-    *output=effect_body_instruction_words_value(words);return XR_XIR_OK;
+    if (!effect_body_read_work(read,sizeof(uint32_t)+EFFECT_BODY_WORDS+sizeof(*output)+2))
+        return XR_XIR_BUDGET;
+    *output=effect_body_instruction_words_value(words,0,NULL,0);return XR_XIR_OK;
 }
 
 static XrXirStatus effect_body_instruction_get(const EffectBodyRead *read,
     const EffectBodyFunction *function,uint32_t instruction,XrXirInstruction *output) {
     if (!output) return XR_XIR_BAD_STRUCTURE;
-    uint32_t words[EFFECT_BODY_WORDS];
-    XrXirStatus status=effect_body_instruction_words_get(read,function,instruction,words);
-    return status==XR_XIR_OK?effect_body_instruction_words_publish(read,words,output):status;
+    EffectBodyRunRef ref;
+    XrXirStatus status=effect_body_record_ref(read,function,instruction,&ref);
+    return status==XR_XIR_OK?effect_body_instruction_ref_value(read,&ref,instruction,output):status;
 }
 
 static XrXirStatus effect_body_instruction_fields_get(const EffectBodyRead *read,
@@ -434,9 +473,9 @@ static inline XrXirStatus effect_body_instruction_cursor_get(const EffectBodyRea
     const EffectBodyFunction *function,uint32_t instruction,EffectBodyRecordCursor *cursor,
     XrXirInstruction *output) {
     if (!output) return XR_XIR_BAD_STRUCTURE;
-    uint32_t words[EFFECT_BODY_WORDS];
-    XrXirStatus status=effect_body_instruction_cursor_words(read,function,instruction,cursor,words);
-    return status==XR_XIR_OK?effect_body_instruction_words_publish(read,words,output):status;
+    EffectBodyRunRef ref;
+    XrXirStatus status=effect_body_record_cursor_ref(read,function,instruction,cursor,&ref);
+    return status==XR_XIR_OK?effect_body_instruction_ref_value(read,&ref,instruction,output):status;
 }
 
 static XrXirStatus effect_body_operand_type(const EffectBodyRead *read,

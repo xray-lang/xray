@@ -542,9 +542,8 @@ static XrXirStatus effect_invocation_origins_pass(EffectInvocationFlow *flow) {
                 unused=effect_invocation_origins_unused(flow,(XrXirOp)opcode,(XrXirType)type);
             }
             if (unused) continue;
-            uint32_t words[EFFECT_BODY_WORDS];XrXirInstruction op;
-            status=effect_body_instruction_ref_words(&flow->body.read,&ref,i,words);
-            if (status==XR_XIR_OK) status=effect_body_instruction_words_publish(&flow->body.read,words,&op);
+            XrXirInstruction op;
+            status=effect_body_instruction_ref_value(&flow->body.read,&ref,i,&op);
             if (status==XR_XIR_OK) status=effect_invocation_origins_decoded(flow,i,&op);
             if (status!=XR_XIR_OK) return status;
         }

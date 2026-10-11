@@ -69,11 +69,9 @@ static XrXirStatus effect_invocation_dispatch_range(EffectInvocationFlow *flow,
             if (!(record.mask&EFFECT_PHYSICAL_INVOCATION)) continue;
             uint32_t i=record.value-body->parameter_count;
             if (!flow->precision && !xir_compile_work(owner->work,1)) return XR_XIR_BUDGET;
-            uint32_t words[EFFECT_BODY_WORDS];
-            status=effect_body_instruction_ref_words(&flow->body.read,&ref,i,words);
+            XrXirInstruction op;
+            status=effect_body_instruction_ref_value(&flow->body.read,&ref,i,&op);
             if (status!=XR_XIR_OK) return status;
-            if (!effect_body_read_work(&flow->body.read,sizeof(XrXirInstruction)+2)) return XR_XIR_BUDGET;
-            XrXirInstruction op=effect_body_instruction_words_value(words);
             if (flow->precision) {
                 if (!effect_invocation_dispatch_precision(op.op)) continue;
                 if (!xir_compile_work(owner->work,1)) return XR_XIR_BUDGET;

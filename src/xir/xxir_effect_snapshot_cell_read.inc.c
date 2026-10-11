@@ -149,12 +149,11 @@ static XrXirStatus effect_cell_body_range(const XrXirCompileContext *work,
         return XR_XIR_BAD_STRUCTURE;
     if (!xir_compile_work(work,20+sizeof(EffectBodyRecordCursor))) return XR_XIR_BUDGET;
     EffectBodyRecordCursor position={cursor->offset,cursor->next,cursor->run,UINT32_MAX};
-    EffectBodyRunRef ref;uint32_t words[EFFECT_BODY_WORDS];
+    EffectBodyRunRef ref;XrXirInstruction operation;
     XrXirStatus status=effect_body_range_ref(&adapter->request.read,function,&position,&ref);
-    if (status==XR_XIR_OK) status=effect_body_instruction_ref_words(&adapter->request.read,&ref,ref.first,words);
     if (status!=XR_XIR_OK) return status;
-    if (!effect_body_read_work(&adapter->request.read,sizeof(XrXirInstruction)+2)) return XR_XIR_BUDGET;
-    XrXirInstruction operation=effect_body_instruction_words_value(words);
+    status=effect_body_instruction_ref_value(&adapter->request.read,&ref,ref.first,&operation);
+    if (status!=XR_XIR_OK) return status;
     if (!xir_compile_work(work,sizeof(*output)+3*sizeof(uint32_t))) return XR_XIR_BUDGET;
     *output=(XrXirCellProofRun){ref.first,ref.count,ref.mask,operation};
     cursor->next=position.first;cursor->offset=position.offset;cursor->run=position.run;

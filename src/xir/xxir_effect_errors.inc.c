@@ -715,10 +715,7 @@ static XrXirStatus error_block_row(ErrorFlow *flow,uint32_t b,uint32_t i,
     if (status!=XR_XIR_OK) return status;
     if (copied_zero) return error_instruction_begin(flow,i);
     if (ref) {
-        uint32_t words[EFFECT_BODY_WORDS];
-        status=effect_body_instruction_ref_words(&flow->body.read,ref,i,words);
-        if (status==XR_XIR_OK)
-            status=effect_body_instruction_words_publish(&flow->body.read,words,&row->storage);
+        status=effect_body_instruction_ref_value(&flow->body.read,ref,i,&row->storage);
         if (status==XR_XIR_OK) {
             if (!xir_compile_work(flow->remaining,sizeof(row->end))) return XR_XIR_BUDGET;
             row->end=&row->storage;

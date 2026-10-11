@@ -516,12 +516,10 @@ static XrXirStatus effect_graph_build_material(const XrXirModule *module, XrXirE
                 if (record.value<function->parameter_count || record.value>=physical->values ||
                     record.value-function->parameter_count<ref.first) return XR_XIR_BAD_STRUCTURE;
                 if (!(record.mask&EFFECT_PHYSICAL_DIRECT)) continue;
-                uint32_t i=record.value-function->parameter_count,words[EFFECT_BODY_WORDS];
+                uint32_t i=record.value-function->parameter_count;
                 XrXirInstruction storage;const XrXirInstruction *op=NULL;
                 if (ref.mask || !decoded) {
-                    status=effect_body_instruction_ref_words(&request.read,&ref,i,words);
-                    if (status==XR_XIR_OK) status=effect_body_instruction_words_publish(&request.read,words,
-                        ref.mask?&storage:&constant);
+                    status=effect_body_instruction_ref_value(&request.read,&ref,i,ref.mask?&storage:&constant);
                     if (status!=XR_XIR_OK) return status;
                     if (!ref.mask) {
                         if (!xir_compile_work(remaining,sizeof(decoded))) return XR_XIR_BUDGET;
