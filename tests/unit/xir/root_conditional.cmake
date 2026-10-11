@@ -110,3 +110,9 @@ add_test(NAME test_xir_root_conditional_initial_ordinary_material
     COMMAND test_xir_root_conditional_helpers --initial-ordinary-material)
 set_tests_properties(test_xir_root_conditional_initial_ordinary_material PROPERTIES
     LABELS "unit;xir;root-effects;compiler-fault;ownership" TIMEOUT 300 RUN_SERIAL TRUE PROCESSORS 1)
+
+# Owned Error replay has an independent complete all-ordinal resource census.
+add_test(NAME test_xir_root_conditional_owned_error_material
+    COMMAND test_xir_root_conditional_helpers --owned-error-material)
+set_tests_properties(test_xir_root_conditional_owned_error_material PROPERTIES
+    LABELS "unit;xir;root-effects;compiler-fault;ownership" TIMEOUT 300 RUN_SERIAL TRUE PROCESSORS 1)

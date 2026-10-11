@@ -108,7 +108,7 @@ static void ci_storage(void){
     EffectBodyRequest input=effect_body_raw_request(&c,&f.module);
     CHECK(effect_errors_seed(&input.domain,&e,&c)==XR_XIR_OK);
     EffectTerms terms={0};terms.remaining=&c;terms.types=f.types;
-    ErrorFlow flow={0};flow.source=&f.module;flow.body=input;flow.effects=&e;flow.remaining=&c;flow.terms=&terms;
+    ErrorFlow flow={0};flow.body=input;flow.effects=&e;flow.remaining=&c;flow.terms=&terms;
     CHECK(error_function(&flow,1)==XR_XIR_OK && e.errors[1]==12 && flow.cell_count==3);
     for(uint32_t i=0;i<3;++i)CHECK(flow.cells[i]==f.expected_ids[i]);
     CHECK(flow.roots[f.alias]==f.new_cell && flow.roots[0]==0);

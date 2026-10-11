@@ -183,7 +183,7 @@ static void effect_extreme_budgets(void) {
     XrXirFunction function={0}; function.parameter_count=UINT32_MAX-1; function.instruction_count=1;
     function.block_count=UINT32_MAX;
     XrXirModule module={0}; module.functions=&function; module.function_count=1;
-    ErrorFlow flow={0};flow.source=&module;flow.body=effect_body_raw_request(&effect_context,&module);
+    ErrorFlow flow={0};flow.body=effect_body_raw_request(&effect_context,&module);
     flow.effects=&effects;flow.remaining=&effect_context;
     EffectMark mark=effect_mark(); attempts=0;
     CHECK(error_function(&flow,0)==XR_XIR_BUDGET && !attempts); effect_mark_check(mark);

@@ -91,7 +91,7 @@ static void cc_fixture(ClosedCarrierFixture *f,unsigned mode) {
 static void cc_classification(void) {
     ClosedCarrierFixture f;cc_fixture(&f,0);EdgeFixture *e=&f.edge;
     XrXirCompileContext c=pc_owner(pc_caps());uint64_t baseline=pc_stats(&c).live_bytes;
-    ErrorFlow flow={0};flow.source=&e->module;flow.body=effect_body_raw_request(&c,&e->module);
+    ErrorFlow flow={0};flow.body=effect_body_raw_request(&c,&e->module);
     flow.function_index=1;flow.remaining=&c;
     CHECK(effect_body_request_head(&flow.body,1,&flow.head)==XR_XIR_OK);flow.function=&flow.head;
     XrXirType classification_type=(XrXirType)UINT32_MAX;bool classified_copy=false;uint32_t classified_source=UINT32_MAX;
@@ -137,7 +137,7 @@ static void cc_classification_limits(void) {
         f.parameter=(XrXirType)(nominal ? CC_STRUCT : CC_ARRAY);
         XrCompileResourceLimits caps=pc_caps();XrXirCompileContext c=pc_owner(caps);
         uint64_t baseline=pc_stats(&c).live_bytes,remaining=nominal ? 7u : 6u;
-        ErrorFlow flow={0};flow.source=&f.edge.module;flow.body=effect_body_raw_request(&c,&f.edge.module);
+        ErrorFlow flow={0};flow.body=effect_body_raw_request(&c,&f.edge.module);
         flow.function_index=1;flow.remaining=&c;
         CHECK(effect_body_request_head(&flow.body,1,&flow.head)==XR_XIR_OK);flow.function=&flow.head;
         XrXirType classification_type=(XrXirType)UINT32_MAX;bool classified_copy=false;uint32_t classified_source=UINT32_MAX;

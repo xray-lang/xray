@@ -34,16 +34,6 @@ static uint32_t error_invocation_summary(const ErrorInvocationContexts *contexts
     return contexts->nodes[n].summary;
 }
 
-/* This internal operation consumes the certificate produced earlier in the
- * same full inference. Check complete copied IR/type correspondence, not a
- * source address, digest or same-number function identity. */
-static XrXirStatus error_invocation_source_match(ErrorFlow *flow,
-    const EffectInvocationCertificate *certificate) {
-    if (!certificate || !certificate->body || !certificate->equations ||
-        certificate->resources!=flow->remaining->resources) return XR_XIR_BAD_STRUCTURE;
-    return effect_body_source_match(flow->remaining,certificate->body,flow->source);
-}
-
 static XrXirStatus error_invocation_storage(ErrorFlow *flow,
     const EffectInvocationCertificate *certificate,ErrorInvocationContexts **output) {
     const EffectInvocationOwner *owner=certificate->equations;
@@ -258,7 +248,11 @@ static XrXirStatus error_invocation_contexts_new(ErrorFlow *flow,ErrorInvocation
     if (!certificate) return XR_XIR_OK;
     if (!xir_effects_context_matches(flow->remaining,flow->effects,flow->body.domain.function_count) ||
         certificate->resources!=flow->remaining->resources || !certificate->equations ||
-        !effect_body_material_shape(certificate->body))
+        !effect_body_material_shape(certificate->body) || flow->body.owner!=certificate->body ||
+        flow->body.domain.types!=certificate->body->domain.types ||
+        flow->body.domain.declarations!=certificate->body->domain.declarations ||
+        flow->body.domain.generics!=certificate->body->domain.generics ||
+        flow->body.domain.defaults!=certificate->body->domain.defaults)
         return XR_XIR_BAD_STRUCTURE;
     const EffectInvocationOwner *sealed=certificate->equations;
     if (!sealed->site_count) return XR_XIR_OK;
@@ -276,14 +270,13 @@ static XrXirStatus error_invocation_contexts_new(ErrorFlow *flow,ErrorInvocation
     }
     if (!indirect) return XR_XIR_OK;
     XrXirStatus status=effect_body_physical_match(flow->remaining,sealed->physical,certificate->body);
-    if (status==XR_XIR_OK) status=error_invocation_source_match(flow,certificate);
     ErrorInvocationContexts *contexts=NULL;
     if (status==XR_XIR_OK) status=error_invocation_storage(flow,certificate,&contexts);
     EffectInvocationOwner owner=*sealed;
-    /* The error CFG already owns this actual admitted input. Complete body,
-     * type and metadata correspondence above precedes replay on that input;
-     * the immutable snapshot is never exposed as an executable Module. */
-    owner.work=flow->remaining;owner.module=flow->source;owner.effects=flow->effects;
+    /* This replay consumes the same independent sealed body as the CFG.
+     * It has no raw Module adapter and cannot authorize a mutable producer.
+     * The existing physical replay and every current input check remain. */
+    owner.work=flow->remaining;owner.effects=flow->effects;
     owner.declared=certificate->declared;owner.body=effect_body_owned_request(flow->remaining,certificate->body);
     for (uint32_t n=0;status==XR_XIR_OK && n<owner.count;++n) {
         EffectInvocationFlow replay={.owner=&owner,.node=n,.instruction=UINT32_MAX};
@@ -412,4 +405,57 @@ static XrXirStatus error_invocation_functions(ErrorFlow *flow) {
         if (status==XR_XIR_OK && flow->restart) status=error_summary_resize(flow);
     } while (status==XR_XIR_OK && flow->restart);
     return status;
+}
+
+static XrXirStatus effect_errors_analyze(XrXirEffects *effects,
+    EffectGraph *graph, XrXirCompileContext *remaining) {
+    EffectTerms terms = {0}; terms.remaining = remaining;
+    if (!effects || !graph || !xir_compile_context_valid(remaining) ||
+        !effects->invocations || effects->invocations->resources!=remaining->resources ||
+        effects->resources!=remaining->resources || !effects->functions || !effects->task_errors ||
+        graph->physical_owned || graph->material!=effects->invocations->body ||
+        !effect_body_material_shape(graph->material) || graph->material->resources!=remaining->resources ||
+        graph->physical!=graph->material->physical || effects->count!=effect_body_count(graph->material))
+        return XR_XIR_BAD_STRUCTURE;
+    terms.types=*graph->material->domain.types;
+    ErrorFlow flow={0};flow.body=effect_body_owned_request(remaining,effects->invocations->body);
+    flow.effects=effects;flow.remaining=remaining;flow.terms=&terms;
+    flow.summary_count=effects->count;flow.invocation=UINT32_MAX;
+    XrXirStatus status=error_invocation_contexts_new(&flow,&flow.invocations);
+    if (status==XR_XIR_OK) status=effect_errors_seed(&flow.body.domain,effects,remaining);
+    if (status==XR_XIR_OK && flow.invocations) status=error_invocation_summaries(&flow);
+    if (status==XR_XIR_OK && flow.invocations) status=error_invocation_functions(&flow);
+    else if (status==XR_XIR_OK) {
+        status = error_graph_prepare(graph, remaining);
+        if (status == XR_XIR_OK) status = error_functions(effects, graph, &flow);
+    }
+    /* Temporary substituted identities die with terms. Prove their complete
+     * outcomes while the sole error summary and authentic binders are alive. */
+    XirMetadataDomain permission=flow.body.domain;permission.types=&terms.types;
+    for (uint32_t f = 0; status == XR_XIR_OK && f < effects->count; ++f) {
+        const uint64_t *set = effects->errors + (size_t)f * effects->words;
+        XrXirStatus qualified = error_bit(set, 0) || error_bit(set, 1) ? XR_XIR_BAD_TYPE : XR_XIR_OK;
+        XirMetadataProofContext proof={&permission,{XR_XIR_CONTEXT_FUNCTION,f,0}};
+        for (uint32_t a = 0; qualified == XR_XIR_OK && a < effects->atom_count; ++a) {
+            if (!xir_compile_work(remaining, 1)) { status = XR_XIR_BUDGET; break; }
+            if (!error_bit(set, a + 2)) continue;
+            qualified = xir_metadata_type_markers_prove(remaining,&proof, effects->atoms[a].type,
+                XR_XIR_CONSTRAINT_ERROR | XR_XIR_CONSTRAINT_SENDABLE);
+            if (qualified == XR_XIR_BUDGET || qualified == XR_XIR_OUT_OF_MEMORY) { status = qualified; break; }
+        }
+        effects->task_errors[f] = qualified;
+    }
+    error_storage_free(&flow);
+    error_invocation_contexts_free(flow.invocations);
+    effect_terms_free(&terms);
+    if (status != XR_XIR_OK) return status;
+    for (uint32_t f = 0; f < effects->count; ++f) {
+        const uint64_t *set = effects->errors + (size_t)f * effects->words;
+        XrXirEffect fact = error_bit(set, 0) ? XR_XIR_EFFECT_UNKNOWN : XR_XIR_EFFECT_NONE;
+        if (error_bit(set,1)) fact=XR_XIR_EFFECT_MAY;
+        if (!xir_compile_work(remaining, effects->atom_count + 1)) return XR_XIR_BUDGET;
+        for (uint32_t a = 0; a < effects->atom_count; ++a) if (error_bit(set, a + 2)) fact = XR_XIR_EFFECT_MAY;
+        effects->functions[f].throws = fact;
+    }
+    return XR_XIR_OK;
 }

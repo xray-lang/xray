@@ -52,7 +52,7 @@ static void pc_compact_classification(void) {
     XrXirFunction function={.instructions=&op,.instruction_count=1};
     XrXirModule source={.functions=&function,.function_count=1};
     XrXirCompileContext context=pc_owner(pc_caps());uint64_t baseline=pc_stats(&context).live_bytes;
-    ErrorFlow flow={0};flow.source=&source;flow.body=effect_body_raw_request(&context,&source);
+    ErrorFlow flow={0};flow.body=effect_body_raw_request(&context,&source);
     flow.remaining=&context;CHECK(effect_body_request_head(&flow.body,0,&flow.head)==XR_XIR_OK);flow.function=&flow.head;
     bool active=true;XrXirType classification_type=(XrXirType)UINT32_MAX;bool classified_copy=false;uint32_t classified_source=UINT32_MAX;
     for (size_t i=0;i<sizeof(scalars)/sizeof(*scalars);++i) {

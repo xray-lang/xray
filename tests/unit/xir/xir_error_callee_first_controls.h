@@ -74,7 +74,7 @@ static void cf_order_golden(const CalleeOrderFixture *f,unsigned mode) {
 }
 static ErrorFlow cf_flow(CalleeOrderFixture *f,XrXirCompileContext *c,bool reuse) {
     CHECK(!f->material && effect_body_material_create(c,&f->module,&f->material)==XR_XIR_OK);
-    ErrorFlow flow={0};flow.source=&f->module;flow.body=effect_body_owned_request(c,f->material);
+    ErrorFlow flow={0};flow.body=effect_body_owned_request(c,f->material);
     CHECK(flow.body.owner==f->material && flow.body.domain.function_count==f->effects.count &&
         f->material->resources==c->resources);
     flow.effects=&f->effects;flow.remaining=c;

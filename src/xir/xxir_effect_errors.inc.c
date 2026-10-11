@@ -34,7 +34,6 @@ typedef struct ErrorInvocationContexts ErrorInvocationContexts;
 static uint32_t error_invocation_summary(const ErrorInvocationContexts *contexts,uint32_t n);
 enum { ERROR_BLOCK_REACHABLE = 1, ERROR_BLOCK_PENDING = 2 };
 typedef struct ErrorFlow {
-    const XrXirModule *source;
     EffectBodyRequest body;
     EffectBodyFunctionHead head;
     const EffectBodyFunctionHead *function;
@@ -60,8 +59,8 @@ static XrXirStatus error_invocation_functions(ErrorFlow *flow);
 static XrXirStatus error_invocation_summaries(ErrorFlow *flow);
 static XrXirStatus error_invocation_call(ErrorFlow *flow,const XrXirInstruction *call,
     uint64_t *set,bool *handled);
-/* Execution reads use the sole immutable owner. Raw input is kept only
- * for the independent complete external source matcher. */
+/* Execution reads consume the sole immutable body. External raw admission
+ * and source correspondence remain with their original public callers. */
 static XrXirStatus error_type_at(const ErrorFlow *flow,uint32_t value,XrXirType *output) {
     if (!flow) return XR_XIR_BAD_STRUCTURE;
     return effect_body_request_type(&flow->body,flow->function_index,value,output);
@@ -773,17 +772,18 @@ static XrXirStatus error_summary_resize(ErrorFlow *flow) {
 }
 /* A child task's errors affect GO values and await paths, but cannot grant
  * parent execution authority. Keep these dependencies outside authority heads. */
-static XrXirStatus error_graph_prepare(const XrXirModule *module, EffectGraph *graph,
-    XrXirCompileContext *remaining) {
-    uint32_t count = 0;
-    for (uint32_t f = 0; f < module->function_count; ++f) {
+static XrXirStatus error_graph_prepare(EffectGraph *graph, XrXirCompileContext *remaining) {
+    if (!xir_compile_context_valid(remaining) || !graph || !effect_body_material_shape(graph->material) ||
+        graph->material->resources!=remaining->resources) return XR_XIR_BAD_STRUCTURE;
+    uint32_t functions=effect_body_count(graph->material),count=0;
+    for (uint32_t f = 0; f < functions; ++f) {
         EffectBodyRequest body=effect_body_owned_request(remaining,graph->material);
         EffectBodyFunctionDimensions dimensions={0};
         XrXirStatus dimension_status=effect_body_request_dimensions(&body,f,&dimensions);
         if (dimension_status!=XR_XIR_OK) return dimension_status;
         const EffectBodyFunctionDimensions *function=&dimensions;
         const EffectPhysicalFunction *physical=NULL;
-        XrXirStatus status=effect_graph_physical_function(remaining,module,graph,f,&physical);
+        XrXirStatus status=effect_graph_owned_physical_function(remaining,graph,f,&physical);
         if (status!=XR_XIR_OK) return status;
         for (uint32_t r=0;r<physical->count;++r) {
             if (!xir_compile_work(remaining,1)) return XR_XIR_BUDGET;
@@ -801,24 +801,24 @@ static XrXirStatus error_graph_prepare(const XrXirModule *module, EffectGraph *g
     if (!xir_compile_work(remaining, 1)) return XR_XIR_BUDGET;
     graph->error_edge_count = count;
     if (!count) return XR_XIR_OK;
-    uint64_t bytes = (uint64_t)module->function_count * sizeof(*graph->error_heads) +
+    uint64_t bytes = (uint64_t)functions * sizeof(*graph->error_heads) +
         (uint64_t)count * sizeof(*graph->error_edges);
     if (bytes > SIZE_MAX) return XR_XIR_BUDGET;
     XrXirStatus status = XR_XIR_OK;
-    graph->error_heads = xir_compile_calloc(remaining, module->function_count, sizeof(*graph->error_heads), &status);
+    graph->error_heads = xir_compile_calloc(remaining, functions, sizeof(*graph->error_heads), &status);
     graph->error_edges = xir_compile_calloc(remaining, count, sizeof(*graph->error_edges), &status);
     if (!graph->error_heads || !graph->error_edges) return status;
-    if (!xir_compile_work(remaining, module->function_count)) return XR_XIR_BUDGET;
-    for (uint32_t f = 0; f < module->function_count; ++f) graph->error_heads[f] = UINT32_MAX;
+    if (!xir_compile_work(remaining, functions)) return XR_XIR_BUDGET;
+    for (uint32_t f = 0; f < functions; ++f) graph->error_heads[f] = UINT32_MAX;
     uint32_t at = 0;
-    for (uint32_t f = 0; f < module->function_count; ++f) {
+    for (uint32_t f = 0; f < functions; ++f) {
         EffectBodyRequest body=effect_body_owned_request(remaining,graph->material);
         EffectBodyFunctionDimensions dimensions={0};
         XrXirStatus dimension_status=effect_body_request_dimensions(&body,f,&dimensions);
         if (dimension_status!=XR_XIR_OK) return dimension_status;
         const EffectBodyFunctionDimensions *function=&dimensions;
         const EffectPhysicalFunction *physical=NULL;
-        status=effect_graph_physical_function(remaining,module,graph,f,&physical);
+        status=effect_graph_owned_physical_function(remaining,graph,f,&physical);
         if (status!=XR_XIR_OK) return status;
         for (uint32_t r=0;r<physical->count;++r) {
             if (!xir_compile_work(remaining,1)) return XR_XIR_BUDGET;
@@ -832,7 +832,7 @@ static XrXirStatus error_graph_prepare(const XrXirModule *module, EffectGraph *g
             if (status!=XR_XIR_OK) return status;
             if (op->op != XR_XIR_GO) return XR_XIR_BAD_STRUCTURE;
             uint32_t callee = (uint32_t)op->immediate;
-            if (callee >= module->function_count || at >= count) return XR_XIR_BAD_STRUCTURE;
+            if (callee >= functions || at >= count) return XR_XIR_BAD_STRUCTURE;
             if (!xir_compile_work(remaining, 2)) return XR_XIR_BUDGET;
             graph->error_edges[at] = (EffectEdge){f, graph->error_heads[callee], i, false};
             graph->error_heads[callee] = at++;
@@ -871,11 +871,11 @@ static XrXirStatus error_empty_escaping_read(const EffectBodyRequest *body,uint3
 }
 /* Only the inference generation that built this complete inventory can
  * consume the sparse locator. Existing nonempty summaries still force CFG. */
-static XrXirStatus error_empty_escaping_graph(const XrXirModule *module,uint32_t index,
+static XrXirStatus error_empty_escaping_graph(uint32_t index,
     const EffectGraph *graph,const XrXirCompileContext *work,bool *empty) {
     if (!empty) return XR_XIR_BAD_STRUCTURE;
     *empty=false;const EffectPhysicalFunction *physical=NULL;
-    XrXirStatus status=effect_graph_physical_function(work,module,graph,index,&physical);
+    XrXirStatus status=effect_graph_owned_physical_function(work,graph,index,&physical);
     if (status!=XR_XIR_OK) return status;
     EffectBodyRequest body=effect_body_owned_request(work,graph->material);
     EffectBodyFunctionDimensions dimensions={0};
@@ -999,8 +999,7 @@ done:
 }
 /* Summaries grow monotonically. Only reverse dependants need fresh local CFG
  * interpretation; new atom identities still restart every function. */
-static XrXirStatus error_functions(const XrXirModule *module, XrXirEffects *effects,
-    EffectGraph *graph, ErrorFlow *flow) {
+static XrXirStatus error_functions(XrXirEffects *effects, EffectGraph *graph, ErrorFlow *flow) {
     XrXirStatus status = XR_XIR_OK;
     uint32_t front = 0, back = 0, pending = 0;
     do {
@@ -1013,7 +1012,7 @@ static XrXirStatus error_functions(const XrXirModule *module, XrXirEffects *effe
             front = front + 1 == effects->count ? 0 : front + 1;
             --pending; graph->queued[f] = 0; flow->summary_changed = false;
             bool empty = false;
-            status = error_empty_escaping_graph(module,f,graph,flow->remaining,&empty);
+            status = error_empty_escaping_graph(f,graph,flow->remaining,&empty);
             if (status == XR_XIR_OK && empty) {
                 /* Preserve an existing nonempty summary rather than washing it. */
                 if (!xir_compile_work(flow->remaining, effects->words)) status = XR_XIR_BUDGET;
@@ -1028,7 +1027,7 @@ static XrXirStatus error_functions(const XrXirModule *module, XrXirEffects *effe
                 for (uint32_t e = heads[f]; e != UINT32_MAX; e = edges[e].next) {
                     if (!xir_compile_work(flow->remaining, 1)) { status = XR_XIR_BUDGET; break; }
                     uint32_t caller = edges[e].caller;
-                    if (caller >= module->function_count) { status = XR_XIR_BAD_STRUCTURE; break; }
+                    if (caller >= flow->body.domain.function_count) { status = XR_XIR_BAD_STRUCTURE; break; }
                     if (graph->queued[caller]) continue;
                     if (!xir_compile_work(flow->remaining, 2)) { status = XR_XIR_BUDGET; break; }
                     graph->queue[back] = caller;
@@ -1040,51 +1039,4 @@ static XrXirStatus error_functions(const XrXirModule *module, XrXirEffects *effe
         if (status == XR_XIR_OK && flow->restart) status = error_summary_resize(flow);
     } while (status == XR_XIR_OK && flow->restart);
     return status;
-}
-static XrXirStatus effect_errors_analyze(const XrXirModule *module, XrXirEffects *effects,
-    EffectGraph *graph, XrXirCompileContext *remaining) {
-    EffectTerms terms = {0}; terms.remaining = remaining;
-    if (!effect_body_material_shape(graph->material) || graph->material->resources!=remaining->resources)
-        return XR_XIR_BAD_STRUCTURE;
-    terms.types=*graph->material->domain.types;
-    ErrorFlow flow={0};flow.source=module;flow.body=effect_body_owned_request(remaining,graph->material);
-    flow.effects=effects;flow.remaining=remaining;flow.terms=&terms;
-    flow.summary_count=effects->count;flow.invocation=UINT32_MAX;
-    XrXirStatus status=error_invocation_contexts_new(&flow,&flow.invocations);
-    if (status==XR_XIR_OK) status=effect_errors_seed(&flow.body.domain,effects,remaining);
-    if (status==XR_XIR_OK && flow.invocations) status=error_invocation_summaries(&flow);
-    if (status==XR_XIR_OK && flow.invocations) status=error_invocation_functions(&flow);
-    else if (status==XR_XIR_OK) {
-        status = error_graph_prepare(module, graph, remaining);
-        if (status == XR_XIR_OK) status = error_functions(module, effects, graph, &flow);
-    }
-    /* Temporary substituted identities die with terms. Prove their complete
-     * outcomes while the sole error summary and authentic binders are alive. */
-    XirMetadataDomain permission=flow.body.domain;permission.types=&terms.types;
-    for (uint32_t f = 0; status == XR_XIR_OK && f < effects->count; ++f) {
-        const uint64_t *set = effects->errors + (size_t)f * effects->words;
-        XrXirStatus qualified = error_bit(set, 0) || error_bit(set, 1) ? XR_XIR_BAD_TYPE : XR_XIR_OK;
-        XirMetadataProofContext proof={&permission,{XR_XIR_CONTEXT_FUNCTION,f,0}};
-        for (uint32_t a = 0; qualified == XR_XIR_OK && a < effects->atom_count; ++a) {
-            if (!xir_compile_work(remaining, 1)) { status = XR_XIR_BUDGET; break; }
-            if (!error_bit(set, a + 2)) continue;
-            qualified = xir_metadata_type_markers_prove(remaining,&proof, effects->atoms[a].type,
-                XR_XIR_CONSTRAINT_ERROR | XR_XIR_CONSTRAINT_SENDABLE);
-            if (qualified == XR_XIR_BUDGET || qualified == XR_XIR_OUT_OF_MEMORY) { status = qualified; break; }
-        }
-        effects->task_errors[f] = qualified;
-    }
-    error_storage_free(&flow);
-    error_invocation_contexts_free(flow.invocations);
-    effect_terms_free(&terms);
-    if (status != XR_XIR_OK) return status;
-    for (uint32_t f = 0; f < effects->count; ++f) {
-        const uint64_t *set = effects->errors + (size_t)f * effects->words;
-        XrXirEffect fact = error_bit(set, 0) ? XR_XIR_EFFECT_UNKNOWN : XR_XIR_EFFECT_NONE;
-        if (error_bit(set,1)) fact=XR_XIR_EFFECT_MAY;
-        if (!xir_compile_work(remaining, effects->atom_count + 1)) return XR_XIR_BUDGET;
-        for (uint32_t a = 0; a < effects->atom_count; ++a) if (error_bit(set, a + 2)) fact = XR_XIR_EFFECT_MAY;
-        effects->functions[f].throws = fact;
-    }
-    return XR_XIR_OK;
 }

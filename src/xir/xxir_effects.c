@@ -143,13 +143,13 @@ static XrXirStatus effect_graph_physical_refresh(const XrXirCompileContext *work
 
 /* This view contains ordinal membership, never a permission. A sealed owner
  * still performs the complete independent physical/source correspondence. */
-static XrXirStatus effect_graph_physical_function(const XrXirCompileContext *work,
-    const XrXirModule *module,const EffectGraph *graph,uint32_t function,
+static XrXirStatus effect_graph_owned_physical_function(const XrXirCompileContext *work,
+    const EffectGraph *graph,uint32_t function,
     const EffectPhysicalFunction **output) {
-    if (!xir_compile_context_valid(work) || !module || !graph || !output || *output ||
+    if (!xir_compile_context_valid(work) || !graph || !output || *output ||
         !effect_body_material_shape(graph->material) || graph->material->resources!=work->resources ||
         graph->physical!=graph->material->physical || !graph->physical ||
-        graph->physical->resources!=work->resources || graph->physical->count!=module->function_count ||
+        graph->physical->resources!=work->resources || graph->physical->count!=effect_body_count(graph->material) ||
         function>=effect_body_count(graph->material) || !graph->physical->functions)
         return XR_XIR_BAD_STRUCTURE;
     EffectBodyRequest request=effect_body_owned_request(work,graph->material);
@@ -163,6 +163,14 @@ static XrXirStatus effect_graph_physical_function(const XrXirCompileContext *wor
         body->count>body->capacity || body->capacity>body->values ||
         !!body->records!=!!body->capacity) return XR_XIR_BAD_STRUCTURE;
     *output=body;return XR_XIR_OK;
+}
+
+static XrXirStatus effect_graph_physical_function(const XrXirCompileContext *work,
+    const XrXirModule *module,const EffectGraph *graph,uint32_t function,
+    const EffectPhysicalFunction **output) {
+    if (!module || !graph || !graph->physical || graph->physical->count!=module->function_count)
+        return XR_XIR_BAD_STRUCTURE;
+    return effect_graph_owned_physical_function(work,graph,function,output);
 }
 
 #ifdef XR_XIR_EFFECT_CONTEXT_TESTS
@@ -736,7 +744,7 @@ static XrXirStatus effect_infer(const XrXirCompileContext *compile_context,
     if (status == XR_XIR_OK) status = effect_witnesses(module, effects, &graph, remaining);
     if (status==XR_XIR_OK && effects->contexts)
         status=effect_context_owner_project(remaining,module,effects,effects->contexts);
-    if (status == XR_XIR_OK) status = effect_errors_analyze(module, effects, &graph, remaining);
+    if (status == XR_XIR_OK) status = effect_errors_analyze(effects, &graph, remaining);
     if (status == XR_XIR_OK && !effects->contexts)
         status=effect_invocation_public_gate(remaining,effects->invocations,effects->count);
     if (status == XR_XIR_OK) status = effect_entry_roots_seal(module,effects,remaining);

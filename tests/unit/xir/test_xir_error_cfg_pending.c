@@ -122,7 +122,7 @@ static void pc_private_begin(const XrXirCompileContext *c,EdgeFixture *f,
     EffectBodyRequest input=effect_body_raw_request(&copy,&f->module);
     CHECK(effect_errors_seed(&input.domain,e,&copy)==XR_XIR_OK);
     *terms=(EffectTerms){0};terms->remaining=flow->remaining;terms->types=f->types;
-    flow->source=&f->module;flow->body=effect_body_raw_request(flow->remaining,&f->module);
+    flow->body=effect_body_raw_request(flow->remaining,&f->module);
     flow->effects=e;flow->terms=terms;
 }
 static void pc_private_free(ErrorFlow *flow,EffectTerms *terms,XrXirEffects *e) {
@@ -386,9 +386,9 @@ static void pc_empty_nonempty_summary(void) {
     e->errors[1]=4;EffectGraph graph={0};
     CHECK(effect_graph_build(owned,e,&graph,&c)==XR_XIR_OK);
     EffectTerms terms={0};terms.remaining=&c;terms.types=*owned->types;
-    ErrorFlow flow={0};flow.source=owned;flow.body=effect_body_owned_request(&c,graph.material);
+    ErrorFlow flow={0};flow.body=effect_body_owned_request(&c,graph.material);
     flow.effects=e;flow.remaining=&c;flow.terms=&terms;
-    CHECK(error_functions(owned,e,&graph,&flow)==XR_XIR_OK);
+    CHECK(error_functions(e,&graph,&flow)==XR_XIR_OK);
     CHECK(e->errors[1]==4 && flow.storage_capacity==4684);
     error_storage_free(&flow);effect_terms_free(&terms);effect_graph_free(&graph);
     xr_xir_compile_effects_free(e);xr_xir_compile_artifact_free(checked);pc_release(&c,baseline);

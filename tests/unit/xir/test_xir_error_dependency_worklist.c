@@ -103,7 +103,7 @@ static void ed_graph_isolation(void){
     EffectGraph graph={0};CHECK(effect_graph_build(&f.module,e,&graph,&c)==XR_XIR_OK);
     for(uint32_t link=graph.heads[3];link!=UINT32_MAX;link=graph.edges[link].next)CHECK(graph.edges[link].caller!=2);
     CHECK(!graph.error_heads && !graph.error_edges && !e->root[2].requires_root && !e->root[2].unresolved);
-    CHECK(error_graph_prepare(&f.module,&graph,&c)==XR_XIR_OK);
+    CHECK(error_graph_prepare(&graph,&c)==XR_XIR_OK);
     CHECK(graph.error_heads && graph.error_edges && graph.error_heads[3]==0);
     CHECK(graph.error_edges[0].caller==2 && graph.error_edges[0].instruction==0 && graph.error_edges[0].next==UINT32_MAX);
     for(uint32_t link=graph.heads[3];link!=UINT32_MAX;link=graph.edges[link].next)CHECK(graph.edges[link].caller!=2);

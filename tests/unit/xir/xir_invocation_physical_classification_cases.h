@@ -54,7 +54,7 @@ static void conditional_physical_generations(const XrXirCompileContext *context,
         bool raw=!escaping_empty[f],shared=!escaping_empty[f];
         CHECK(error_empty_escaping(&module->functions[f],context,&raw)==XR_XIR_OK &&
             raw==escaping_empty[f]);
-        CHECK(error_empty_escaping_graph(module,f,&graph,context,&shared)==XR_XIR_OK &&
+        CHECK(error_empty_escaping_graph(f,&graph,context,&shared)==XR_XIR_OK &&
             shared==escaping_empty[f]);
     }
     effect_graph_free(&graph);
