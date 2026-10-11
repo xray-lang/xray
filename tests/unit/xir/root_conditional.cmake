@@ -99,3 +99,8 @@ add_test(NAME test_xir_root_conditional_class_cells_compiler
     COMMAND test_xir_root_conditional_helpers --class-cells-compiler)
 set_tests_properties(test_xir_root_conditional_class_cells_compiler PROPERTIES
     LABELS "unit;xir;root-effects;class;compiler-fault;ownership" TIMEOUT 600 RUN_SERIAL TRUE PROCESSORS 1)
+
+add_test(NAME test_xir_root_conditional_ordinary_material
+    COMMAND test_xir_root_conditional_helpers --ordinary-material)
+set_tests_properties(test_xir_root_conditional_ordinary_material PROPERTIES
+    TIMEOUT 300 RUN_SERIAL TRUE PROCESSORS 1)

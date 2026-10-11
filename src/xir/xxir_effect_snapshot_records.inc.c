@@ -108,6 +108,22 @@ static XrXirStatus effect_body_run_submit(const XrXirCompileContext *work,
     return XR_XIR_OK;
 }
 
+/* A zero or single varying column selects only an encoding comparison.
+ * Every physical word is still compared. No column index is a type, role,
+ * permission or proof, and it never survives this run's local request. */
+static XrXirStatus effect_body_single_column(const EffectBodyRead *read,uint32_t mask,uint32_t *output) {
+    if (!output || (mask&~EFFECT_BODY_MASK)) return XR_XIR_BAD_STRUCTURE;
+    if (!effect_body_read_work(read,3+sizeof(*output))) return XR_XIR_BUDGET;
+    if (!mask) { *output=EFFECT_BODY_WORDS;return XR_XIR_OK; }
+    if (mask&(mask-1)) { *output=UINT32_MAX;return XR_XIR_OK; }
+    uint32_t word=0;
+    while ((mask>>word)!=1) {
+        if (!effect_body_read_work(read,3)) return XR_XIR_BUDGET;
+        ++word;
+    }
+    *output=word;return XR_XIR_OK;
+}
+
 /* The writer reads each physical row once. It does not materialize a second
  * forty-byte instruction array or perform a separate whole-body copy pass. */
 static XrXirStatus effect_body_records_write(const XrXirCompileContext *work,
@@ -115,8 +131,8 @@ static XrXirStatus effect_body_records_write(const XrXirCompileContext *work,
     if (source->instruction_count && !source->instructions) return XR_XIR_BAD_STRUCTURE;
     /* Only count is read before the first seed. Mask guards every delta read;
      * all ten base words are still copied from each genuine run's first row. */
-    if (!xir_compile_work(work,sizeof(uint32_t))) return XR_XIR_BUDGET;
-    EffectBodyPendingRun run;run.count=0;
+    if (!xir_compile_work(work,2*sizeof(uint32_t))) return XR_XIR_BUDGET;
+    EffectBodyPendingRun run;run.count=0;uint32_t column=UINT32_MAX;
     for (uint32_t i=0;i<source->instruction_count;++i) {
         const XrXirInstruction *op=&source->instructions[i];
         if (!xir_compile_work(work,3)) return XR_XIR_BUDGET;
@@ -136,13 +152,36 @@ static XrXirStatus effect_body_records_write(const XrXirCompileContext *work,
             }
             ++run.count;
         } else {
+            if (run.count==2) {
+                if (!xir_compile_work(work,sizeof(EffectBodyRead))) return XR_XIR_BUDGET;
+                EffectBodyRead read=effect_body_compile_read(work);
+                XrXirStatus status=effect_body_single_column(&read,run.mask,&column);
+                if (status!=XR_XIR_OK) return status;
+            }
             bool same=true;
-            for (uint32_t w=0;w<EFFECT_BODY_WORDS;++w) {
-                bool varying=!!(run.mask&(UINT32_C(1)<<w));
-                if (!xir_compile_work(work,2+(varying?2:0))) return XR_XIR_BUDGET;
-                uint32_t expected=run.base[w];
-                if (varying) expected+=run.delta[w]*run.count;
-                if (effect_body_source_word(op,w)!=expected) same=false;
+            if (!xir_compile_work(work,1)) return XR_XIR_BUDGET;
+            if (column<=EFFECT_BODY_WORDS) {
+                for (uint32_t w=0;w<column;++w) {
+                    if (!xir_compile_work(work,1)) return XR_XIR_BUDGET;
+                    if (effect_body_source_word(op,w)!=run.base[w]) same=false;
+                }
+                if (column<EFFECT_BODY_WORDS) {
+                    if (!xir_compile_work(work,3)) return XR_XIR_BUDGET;
+                    uint32_t expected=run.base[column]+run.delta[column]*run.count;
+                    if (effect_body_source_word(op,column)!=expected) same=false;
+                }
+                for (uint32_t w=column+1;w<EFFECT_BODY_WORDS;++w) {
+                    if (!xir_compile_work(work,1)) return XR_XIR_BUDGET;
+                    if (effect_body_source_word(op,w)!=run.base[w]) same=false;
+                }
+            } else {
+                for (uint32_t w=0;w<EFFECT_BODY_WORDS;++w) {
+                    bool varying=!!(run.mask&(UINT32_C(1)<<w));
+                    if (!xir_compile_work(work,2+(varying?2:0))) return XR_XIR_BUDGET;
+                    uint32_t expected=run.base[w];
+                    if (varying) expected+=run.delta[w]*run.count;
+                    if (effect_body_source_word(op,w)!=expected) same=false;
+                }
             }
             if (same) {
                 if (!xir_compile_work(work,1)) return XR_XIR_BUDGET;
@@ -329,29 +368,90 @@ static XrXirStatus effect_body_instruction_shape_words(const EffectBodyRead *rea
     *opcode=operation;*type=physical_type;return XR_XIR_OK;
 }
 
+/* The canonical reference was obtained in this same correspondence call.
+ * Constant columns avoid a per-row mask interpretation; the changing column
+ * retains unsigned multiply/add. Signed and unused bits are never omitted. */
+static XrXirStatus effect_body_column_match(const EffectBodyRead *read,
+    const EffectBodyRunRef *ref,const XrXirFunction *source,uint32_t column,bool *same) {
+    if (!ref || !source || column>EFFECT_BODY_WORDS || !ref->base ||
+        ref->mask!=(column<EFFECT_BODY_WORDS?(UINT32_C(1)<<column):0) ||
+        !ref->count || ref->first>=source->instruction_count ||
+        ref->count>source->instruction_count-ref->first || !source->instructions ||
+        (column<EFFECT_BODY_WORDS && !ref->delta)) return XR_XIR_BAD_STRUCTURE;
+    if (!effect_body_read_work(read,6)) return XR_XIR_BUDGET;
+    for (uint32_t i=ref->first;i-ref->first<ref->count;++i) {
+        for (uint32_t w=0;w<column;++w) {
+            if (!effect_body_read_work(read,2)) return XR_XIR_BUDGET;
+            if (ref->base[w]!=effect_body_source_word(&source->instructions[i],w)) {
+                if (!same) return XR_XIR_BAD_STRUCTURE;
+                if (!effect_body_read_work(read,sizeof(*same))) return XR_XIR_BUDGET;
+                *same=false;
+            }
+        }
+        if (column<EFFECT_BODY_WORDS) {
+            if (!effect_body_read_work(read,6)) return XR_XIR_BUDGET;
+            if (ref->base[column]+ref->delta[0]*(i-ref->first)!=
+                effect_body_source_word(&source->instructions[i],column)) {
+                if (!same) return XR_XIR_BAD_STRUCTURE;
+                if (!effect_body_read_work(read,sizeof(*same))) return XR_XIR_BUDGET;
+                *same=false;
+            }
+        }
+        for (uint32_t w=column+1;w<EFFECT_BODY_WORDS;++w) {
+            if (!effect_body_read_work(read,2)) return XR_XIR_BUDGET;
+            if (ref->base[w]!=effect_body_source_word(&source->instructions[i],w)) {
+                if (!same) return XR_XIR_BAD_STRUCTURE;
+                if (!effect_body_read_work(read,sizeof(*same))) return XR_XIR_BUDGET;
+                *same=false;
+            }
+        }
+    }
+    return XR_XIR_OK;
+}
+
 /* Independent correspondence is linear in physical rows and fields. It
  * validates every run boundary and all words, even unused instruction words. */
-static XrXirStatus effect_body_records_match(const EffectBodyRead *read,
-    const EffectBodyFunction *function,const XrXirFunction *source) {
-    if (!function || !source || function->instruction_count!=source->instruction_count ||
-        (source->instruction_count && !source->instructions) ||
+static XrXirStatus effect_body_records_compare(const EffectBodyRead *read,
+    const EffectBodyFunction *function,const XrXirFunction *source,bool *same) {
+    if (!function || !source || (source->instruction_count && !source->instructions) ||
         function->run_count>function->instruction_count) return XR_XIR_BAD_STRUCTURE;
+    if (function->instruction_count!=source->instruction_count) {
+        if (!same) return XR_XIR_BAD_STRUCTURE;
+        *same=false;return XR_XIR_OK;
+    }
     uint32_t first=0,offset=0;
     for (uint32_t r=0;r<function->run_count;++r) {
         EffectBodyRunRef ref;
         XrXirStatus status=effect_body_run_ref(read,function,offset,first,&ref);
         if (status!=XR_XIR_OK) return status;
-        for (uint32_t i=first;i-first<ref.count;++i) {
+        uint32_t column=UINT32_MAX;
+        if (!effect_body_read_work(read,sizeof(column)+2)) return XR_XIR_BUDGET;
+        if (ref.count>2) {
+            status=effect_body_single_column(read,ref.mask,&column);
+            if (status!=XR_XIR_OK) return status;
+        }
+        if (column<=EFFECT_BODY_WORDS) {
+            status=effect_body_column_match(read,&ref,source,column,same);
+            if (status!=XR_XIR_OK) return status;
+        } else for (uint32_t i=first;i-first<ref.count;++i) {
             uint32_t at=0;
             for (uint32_t w=0;w<EFFECT_BODY_WORDS;++w) {
                 bool delta=!!(ref.mask&(UINT32_C(1)<<w));
                 if (!effect_body_read_work(read,3+(delta?4:0))) return XR_XIR_BUDGET;
                 if (ref.base[w]+(delta?ref.delta[at++]*(i-first):0)!=
-                    effect_body_source_word(&source->instructions[i],w)) return XR_XIR_BAD_STRUCTURE;
+                    effect_body_source_word(&source->instructions[i],w)) {
+                    if (!same) return XR_XIR_BAD_STRUCTURE;
+                    *same=false;
+                }
             }
         }
         first+=ref.count;offset=ref.next;
     }
     return first==function->instruction_count && offset==function->stream_words?
         XR_XIR_OK:XR_XIR_BAD_STRUCTURE;
+}
+
+static XrXirStatus effect_body_records_match(const EffectBodyRead *read,
+    const EffectBodyFunction *function,const XrXirFunction *source) {
+    return effect_body_records_compare(read,function,source,NULL);
 }

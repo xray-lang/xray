@@ -18,6 +18,8 @@ enum { EFFECT_BODY_WORDS=10, EFFECT_BODY_MASK=1023, EFFECT_BODY_HEADER=13 };
 typedef struct EffectBodyOrdinaryInput {
     EffectOrdinaryContexts *contexts;
     const XrXirModule *source;
+    /* A live generating ordinary owner is a lifetime input, never authority. */
+    EffectOrdinaryContexts *basis;
 } EffectBodyOrdinaryInput;
 typedef struct EffectBodyOrdinaryIdentity {
     uint32_t declaration,owner;
@@ -45,6 +47,11 @@ typedef struct EffectBodyFunction {
 } EffectBodyFunction;
 typedef struct EffectBodyMaterial {
     XrCompileResources *resources;
+    /* Only private compiler owners acquire/release these prepaid references. */
+    uint32_t references;
+    /* A thin generation owns its mutable advertisement overlay and retains
+     * the complete immutable backbone. It never frees borrowed child owners. */
+    struct EffectBodyMaterial *backbone;
     EffectTerms terms;
     XrXirTypes *owned_types;
     XirMetadataDomain domain;
@@ -66,6 +73,8 @@ typedef struct EffectBodyMaterial {
     XrXirRootEffects *local_roots;
     XrXirRootEffectWitness *local_witnesses;
 } EffectBodyMaterial;
+static XrXirStatus effect_body_ordinary_basis(const XrXirCompileContext *work,
+    const EffectBodyOrdinaryInput *input,EffectBodyMaterial **output);
 typedef struct EffectBodyRead {
     const void *owner;
     bool (*consume)(const void *owner,uint64_t units);
@@ -102,7 +111,7 @@ static inline uint32_t effect_body_count(const EffectBodyMaterial *body) {
 /* Ownership consistency is only a storage precondition. Semantic callers
  * still prove complete external correspondence and actual equation closure. */
 static inline bool effect_body_material_shape(const EffectBodyMaterial *body) {
-    return body && body->resources && body->domain.types==&body->terms.types &&
+    return body && body->resources && body->references && body->domain.types==&body->terms.types &&
         (!!body->domain.function_count==!!body->functions) &&
         body->domain.declarations==body->declarations && body->domain.generics==body->generics &&
         (!body->domain.defaults || body->domain.defaults==&body->defaults) &&

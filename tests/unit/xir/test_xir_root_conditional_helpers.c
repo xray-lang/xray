@@ -45,6 +45,7 @@
 #include "xir_invocation_early_generation_cases.h"
 #include "xir_ordinary_initial_role_cases.h"
 #include "xir_ordinary_instruction_copy_cases.h"
+#include "xir_ordinary_material_continuation_cases.h"
 
 static XrXirStatus conditional_classify(const XrXirCompileContext *context, uint32_t mode, bool oracle) {
     ConditionalRawFixture f;conditional_raw_fixture(&f,mode);
@@ -1651,6 +1652,10 @@ static void conditional_axes(void) {
 }
 
 int main(int argc, char **argv) {
+    if (argc==2 && !strcmp(argv[1],"--ordinary-material")) {
+        conditional_ordinary_material_resources();return 0;
+    }
+    ordinary_material_controls();
     conditional_ordinary_instruction_resources();
     /* Independent storage and receiving controls run before cumulative budget probes. */
     conditional_compact_literals();conditional_generation_literals();

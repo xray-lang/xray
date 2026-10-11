@@ -153,7 +153,13 @@ static void conditional_compact_pending_state(const XrXirCompileContext *context
     xr_compile_resources_free(body.stream);CHECK(rp_stats(context).live_bytes==held_bytes);
 }
 
+#include "xir_invocation_single_column_cases.h"
+
 static XrXirStatus conditional_compact_codec(const XrXirCompileContext *context,uint32_t mode,bool oracle) {
+    if (!mode) {
+        XrXirStatus sparse=conditional_compact_sparse_codec(context,oracle);
+        if (sparse!=XR_XIR_OK) return sparse;
+    }
     XrXirInstruction original[8],source[8];conditional_compact_rows(original);memcpy(source,original,sizeof(source));
     XrXirFunction expected={.instructions=original,.instruction_count=8};
     XrXirFunction input={.instructions=source,.instruction_count=8};

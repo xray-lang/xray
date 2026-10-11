@@ -333,6 +333,57 @@ static XrXirStatus effect_body_ordinary_identity(const XrXirCompileContext *work
     *output=(EffectBodyOrdinaryIdentity){node->declaration,node->owner};return XR_XIR_OK;
 }
 
+/* This live ordinary owner supplies lifetime only. The complete current
+ * request is compared independently before its material can be retained. */
+static XrXirStatus effect_ordinary_bodies_match(EffectOrdinaryContexts *contexts,
+    const XrXirModule *source);
+
+/* The retained material never aliases producer arrays. Recheck the real
+ * source relation using the original ordinary matcher before retaining it. */
+static XrXirStatus effect_ordinary_basis_source(const XrXirCompileContext *work,
+    EffectOrdinaryContexts *basis,const XrXirModule *source) {
+    if (!source || !source->types || !source->functions || !source->declarations ||
+        !source->declarations->functions || !source->declarations->modules)
+        return XR_XIR_BAD_STRUCTURE;
+    for (uint32_t f=0;f<basis->count;++f) {
+        if (!xir_compile_work(work,8)) return XR_XIR_BUDGET;
+        uint32_t declaration=basis->nodes[f].declaration;
+        if (declaration>=source->function_count) return XR_XIR_BAD_STRUCTURE;
+        const XrXirFunction *actual=&source->functions[declaration];
+        if ((actual->parameter_count && !actual->parameters) ||
+            (actual->instruction_count && !actual->instructions) ||
+            (actual->operand_count && !actual->operands) ||
+            (actual->name_length && !actual->name)) return XR_XIR_BAD_STRUCTURE;
+    }
+    const XrXirCompileContext *previous=basis->terms.remaining;
+    basis->terms.remaining=work;
+    XrXirStatus status=effect_terms_snapshot_match(&basis->terms,source->types,basis->source_type_count);
+    if (status==XR_XIR_OK) status=effect_ordinary_bodies_match(basis,source);
+    basis->terms.remaining=previous;
+    return status;
+}
+
+static XrXirStatus effect_body_ordinary_basis(const XrXirCompileContext *work,
+    const EffectBodyOrdinaryInput *input,EffectBodyMaterial **output) {
+    if (!xir_compile_context_valid(work) || !input || !input->contexts || !input->source ||
+        !input->basis || !output || *output) return XR_XIR_BAD_STRUCTURE;
+    EffectOrdinaryContexts *basis=input->basis;
+    if (basis==input->contexts || basis->dense || !input->contexts->dense ||
+        basis->uses.resources!=work->resources || basis->terms.status!=XR_XIR_OK ||
+        basis->base_count!=input->source->function_count ||
+        basis->source_type_count!=input->source->types->count ||
+        basis->count>basis->capacity || !basis->nodes || !basis->functions ||
+        basis->uses.count!=basis->count || basis->uses.invocations ||
+        !effect_body_material_shape(basis->uses.generation) ||
+        basis->uses.generation->resources!=work->resources || basis->uses.generation->backbone ||
+        !basis->uses.generation->ordinary_identities ||
+        effect_body_count(basis->uses.generation)!=basis->count) return XR_XIR_BAD_STRUCTURE;
+    if (!xir_compile_work(work,12+sizeof(*output))) return XR_XIR_BUDGET;
+    XrXirStatus status=effect_ordinary_basis_source(work,input->basis,input->source);
+    if (status!=XR_XIR_OK) return status;
+    *output=basis->uses.generation;return XR_XIR_OK;
+}
+
 typedef struct EffectOrdinaryView {
     XrXirModule module;
     XrXirDeclarations declarations;
@@ -362,7 +413,7 @@ static XrXirStatus effect_ordinary_view(EffectOrdinaryContexts *contexts,
         } else if (contexts->nodes[f].owner!=UINT32_MAX) return XR_XIR_BAD_STRUCTURE;
     }
     *output=(EffectOrdinaryView){0};output->declarations=*source->declarations;
-    output->declarations.functions=identities;output->input=(EffectBodyOrdinaryInput){contexts,source};
+    output->declarations.functions=identities;output->input=(EffectBodyOrdinaryInput){.contexts=contexts,.source=source};
     output->module=*source;output->module.functions=contexts->functions;
     output->module.function_count=contexts->count;output->module.types=&contexts->terms.types;
     output->module.generics=generics;output->module.declarations=&output->declarations;

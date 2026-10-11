@@ -485,7 +485,9 @@ static XrXirStatus effect_context_dense_solve(EffectContextOwner *owner,
     effect_context_summary_clear(dense);
     EffectGraph graph={0};EffectOrdinaryView view={0};dense->terms.remaining=context;
     XrXirStatus status=effect_ordinary_view(dense,source,&view);
+    if (status==XR_XIR_OK && !xir_compile_work(context,sizeof(view.input.basis))) status=XR_XIR_BUDGET;
     if (status==XR_XIR_OK) {
+        view.input.basis=owner->ordinary;
         graph.ordinary=view.input;
         status=effect_parameters_derive(&view.module,&dense->uses,&graph,context);
     }
