@@ -24,15 +24,25 @@ static XrXirStatus cell_body_read_head(const XrXirCompileContext *context,const 
     *output=(XrXirCellProofBodyHead){function->parameters,function->parameter_count,function->result,
         function->instruction_count,function->operands,function->operand_count};return XR_XIR_OK;
 }
+/* Custom callbacks retain caller-stack ownership of their complete row.
+ * Only the genuine raw reader borrows the current physical instruction. */
 static XrXirStatus cell_body_read_instruction(const XrXirCompileContext *context,const void *owner,
-    uint32_t f,uint32_t i,XrXirInstruction *output) {
+    uint32_t f,uint32_t i,XrXirInstruction *storage,const XrXirInstruction **output) {
     const CellBodyReadFixture *fixture=owner;
     if (!fixture || !fixture->module || fixture->resources!=context->resources ||
-        f>=fixture->module->function_count || !output ||
+        f>=fixture->module->function_count || !storage || !output ||
         i>=fixture->module->functions[f].instruction_count) return XR_XIR_BAD_STRUCTURE;
     if (fixture->failure==1 && f==3 && i==13) return XR_XIR_IO;
-    if (xr_compile_resources_work(context->resources,3+sizeof(*output))!=XR_COMPILE_RESOURCE_OK) return XR_XIR_BUDGET;
-    *output=fixture->module->functions[f].instructions[i];return XR_XIR_OK;
+    if (xr_compile_resources_work(context->resources,3+sizeof(*storage))!=XR_COMPILE_RESOURCE_OK) return XR_XIR_BUDGET;
+    *storage=fixture->module->functions[f].instructions[i];
+    if (fixture->failure==7 && f==3 && i==13) {
+        if (xr_compile_resources_work(context->resources,sizeof(storage->op))!=XR_COMPILE_RESOURCE_OK)
+            return XR_XIR_BUDGET;
+        storage->op=XR_XIR_INVALID;
+    }
+    if (xr_compile_resources_work(context->resources,sizeof(*output))!=XR_COMPILE_RESOURCE_OK) return XR_XIR_BUDGET;
+    *output=fixture->failure==6 && f==3 && i==13 ? NULL : storage;
+    return XR_XIR_OK;
 }
 static XrXirStatus cell_body_read_type(const XrXirCompileContext *context,const void *owner,
     uint32_t f,uint32_t value,XrXirType *output) {
@@ -96,6 +106,11 @@ static void cell_body_read_attacks(const XrXirCompileContext *context,XrXirCellP
     CHECK(xr_xir_compile_cell_provenance_body_matches(context,proof,request,NULL)==XR_XIR_BAD_TYPE);
     fixture->failure=5;
     CHECK(xr_xir_compile_cell_provenance_body_matches(context,proof,request,NULL)==XR_XIR_BAD_STRUCTURE);
+    for (unsigned failure=6;failure<8;++failure) {
+        fixture->failure=failure;diagnostic=(XrXirDiagnostic){0};
+        CHECK(xr_xir_compile_cell_provenance_body_matches(context,proof,request,&diagnostic)==XR_XIR_BAD_STRUCTURE &&
+            diagnostic.status==XR_XIR_BAD_STRUCTURE && diagnostic.function==3 && diagnostic.instruction==13);
+    }
     fixture->failure=0;
     CHECK(xr_xir_compile_cell_provenance_body_matches(context,proof,request,NULL)==XR_XIR_OK);
     size_t sites=value_compile_calls,physical=value_compile_live,bytes=value_compile_bytes;

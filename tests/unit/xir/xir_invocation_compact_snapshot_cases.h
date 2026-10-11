@@ -441,9 +441,10 @@ static void conditional_compact_edge_reads(const XrXirCompileContext *context,
 static void conditional_compact_builder_rows(const XrXirCompileContext *context,
     XrXirCellProofBodyRead *request) {
     XrXirCellProofBodyHead head={0};XrXirInstruction actual;
+    const XrXirInstruction *operation=NULL;
     CHECK(request->head(context,request->owner,0,&head)==XR_XIR_OK && !head.parameter_count && head.instruction_count);
-    CHECK(request->instruction(context,request->owner,0,0,&actual)==XR_XIR_OK &&
-        actual.op==XR_XIR_CONST_INT && actual.type==XR_XIR_I64);
+    CHECK(request->instruction(context,request->owner,0,0,&actual,&operation)==XR_XIR_OK && operation==&actual &&
+        operation->op==XR_XIR_CONST_INT && operation->type==XR_XIR_I64);
     for (uint32_t mode=0;mode<4;++mode) {
         uint64_t held_bytes=rp_stats(context).live_bytes;
         XrXirCellProofBuilder *builder=NULL;XrXirCellProvenance *output=NULL;
@@ -451,13 +452,13 @@ static void conditional_compact_builder_rows(const XrXirCompileContext *context,
         CHECK(xir_cell_proof_builder_head(builder,0,&head)==XR_XIR_OK);
         XrXirStatus expected=mode==0 || mode==3?XR_XIR_BAD_STRUCTURE:XR_XIR_BAD_TYPE;
         XrXirStatus status;
-        if (!mode) status=xir_cell_proof_builder_instruction(builder,0,1,actual.type,actual.op,actual.type);
-        else if (mode==1) status=xir_cell_proof_builder_parameter(builder,0,0,actual.type);
-        else status=xir_cell_proof_builder_instruction(builder,0,0,actual.type,
-            mode==3?XR_XIR_INVALID:actual.op,mode==2?XR_XIR_F64:actual.type);
+        if (!mode) status=xir_cell_proof_builder_instruction(builder,0,1,operation->type,operation->op,operation->type);
+        else if (mode==1) status=xir_cell_proof_builder_parameter(builder,0,0,operation->type);
+        else status=xir_cell_proof_builder_instruction(builder,0,0,operation->type,
+            mode==3?XR_XIR_INVALID:operation->op,mode==2?XR_XIR_F64:operation->type);
         CHECK(status==expected);
         XrCompileResourceStats before=rp_stats(context);
-        CHECK(xir_cell_proof_builder_instruction(builder,0,0,actual.type,actual.op,actual.type)==expected);
+        CHECK(xir_cell_proof_builder_instruction(builder,0,0,operation->type,operation->op,operation->type)==expected);
         XrCompileResourceStats after=rp_stats(context);CHECK(!memcmp(&before,&after,sizeof(before)));
         CHECK(xir_cell_proof_builder_finish(&builder,&output)==expected && !builder && !output);
         CHECK(rp_stats(context).live_bytes==held_bytes);
@@ -504,10 +505,11 @@ static void conditional_compact_builder_spans(const XrXirCompileContext *context
             for (uint32_t v=0;v<head.parameter_count;++v)
                 CHECK(xir_cell_proof_builder_parameter(builder,f,v,head.parameters[v])==XR_XIR_OK);
             for (uint32_t i=0;i<head.instruction_count;++i) {
-                XrXirInstruction actual;
-                CHECK(request->instruction(context,request->owner,f,i,&actual)==XR_XIR_OK);
+                XrXirInstruction actual;const XrXirInstruction *operation=NULL;
+                CHECK(request->instruction(context,request->owner,f,i,&actual,&operation)==XR_XIR_OK &&
+                    operation==&actual);
                 CHECK(xir_cell_proof_builder_instruction(builder,f,head.parameter_count+i,
-                    actual.type,actual.op,actual.type)==XR_XIR_OK);
+                    operation->type,operation->op,operation->type)==XR_XIR_OK);
             }
             XrCompileResourceStats scalar_end=rp_stats(context);
             CHECK(xir_cell_proof_builder_function(builder,f)==XR_XIR_OK);
@@ -533,9 +535,11 @@ static void conditional_compact_builder_spans(const XrXirCompileContext *context
             CHECK(xir_cell_proof_builder_finish(&builder,&output)==expected && !builder && !output);
         } else {
             CHECK(xir_cell_proof_builder_span(builder,3,0,2,&shape)==XR_XIR_OK);
-            XrXirInstruction actual;
-            CHECK(request->instruction(context,request->owner,3,2,&actual)==XR_XIR_OK && actual.op==XR_XIR_RETURN);
-            CHECK(xir_cell_proof_builder_instruction(builder,3,2,actual.type,actual.op,actual.type)==XR_XIR_OK);
+            XrXirInstruction actual;const XrXirInstruction *operation=NULL;
+            CHECK(request->instruction(context,request->owner,3,2,&actual,&operation)==XR_XIR_OK &&
+                operation==&actual && operation->op==XR_XIR_RETURN);
+            CHECK(xir_cell_proof_builder_instruction(builder,3,2,
+                operation->type,operation->op,operation->type)==XR_XIR_OK);
             const EffectCellBodyAdapter *adapter=request->owner;
             EffectBodyMaterial *material=(EffectBodyMaterial *)adapter->request.owner;
             EffectBodyFunction *function=&material->functions[3];
@@ -558,8 +562,13 @@ static void conditional_compact_builder_spans(const XrXirCompileContext *context
 static void conditional_compact_cell_attacks(const XrXirCompileContext *context,
     XrXirEffects *effects,EffectCellBodyAdapter *adapter,XrXirCellProofBodyRead *request) {
     XrXirInstruction sentinel={.op=XR_XIR_RETURN,.type=XR_XIR_I64,.immediate=INT64_MIN},out=sentinel;
-    CHECK(request->instruction(context,request->owner,0,5,&out)==XR_XIR_BAD_STRUCTURE &&
-        conditional_compact_same(&out,&sentinel));
+    const XrXirInstruction *operation=&sentinel;
+    CHECK(request->instruction(context,request->owner,0,5,&out,&operation)==XR_XIR_BAD_STRUCTURE &&
+        operation==&sentinel && conditional_compact_same(&out,&sentinel));
+    CHECK(request->instruction(context,request->owner,0,0,NULL,&operation)==XR_XIR_BAD_STRUCTURE &&
+        operation==&sentinel && conditional_compact_same(&out,&sentinel));
+    CHECK(request->instruction(context,request->owner,0,0,&out,NULL)==XR_XIR_BAD_STRUCTURE &&
+        operation==&sentinel && conditional_compact_same(&out,&sentinel));
     XrXirCellProofBodyHead head={.result=XR_XIR_I64,.instruction_count=999},head_sentinel=head;
     CHECK(request->head(context,request->owner,4,&head)==XR_XIR_BAD_STRUCTURE &&
         !memcmp(&head,&head_sentinel,sizeof(head)));
@@ -577,8 +586,8 @@ static void conditional_compact_cell_attacks(const XrXirCompileContext *context,
     dependencies[0]=1;
     CHECK(xr_xir_compile_cell_provenance_body_matches(context,effects->cells,request,NULL)==XR_XIR_OK);
     XrXirCompileContext foreign=rp_owner(rp_caps());XrCompileResourceStats before=rp_stats(&foreign);
-    CHECK(request->instruction(&foreign,request->owner,0,0,&out)==XR_XIR_BAD_STRUCTURE &&
-        conditional_compact_same(&out,&sentinel));
+    CHECK(request->instruction(&foreign,request->owner,0,0,&out,&operation)==XR_XIR_BAD_STRUCTURE &&
+        operation==&sentinel && conditional_compact_same(&out,&sentinel));
     CHECK(xr_xir_compile_cell_provenance_body_matches(&foreign,effects->cells,request,NULL)==XR_XIR_BAD_STRUCTURE);
     XrXirCellProofSpanCursor cursor={.function=3},cursor_sentinel=cursor;
     CHECK(request->span(&foreign,request->owner,3,0,2,&cursor)==XR_XIR_BAD_STRUCTURE &&
@@ -595,8 +604,8 @@ static void conditional_compact_cell_attacks(const XrXirCompileContext *context,
     CHECK(effect_cell_body_request(context,&mixed,&destination,&occupied)==XR_XIR_BAD_STRUCTURE &&
         !destination.work && !destination.request.owner && !memcmp(&occupied,request,sizeof(occupied)));
     const XrXirCompileContext *work=adapter->work;adapter->work=NULL;
-    CHECK(request->instruction(context,request->owner,0,0,&out)==XR_XIR_BAD_STRUCTURE &&
-        conditional_compact_same(&out,&sentinel));adapter->work=work;
+    CHECK(request->instruction(context,request->owner,0,0,&out,&operation)==XR_XIR_BAD_STRUCTURE &&
+        operation==&sentinel && conditional_compact_same(&out,&sentinel));adapter->work=work;
     CHECK(xr_xir_compile_cell_provenance_body_matches(context,effects->cells,request,NULL)==XR_XIR_OK);
 }
 

@@ -76,7 +76,10 @@ struct XrXirCellProofBodyRead {
     XrCompileResources *resources;
     const void *owner;
     XrXirStatus (*head)(const XrXirCompileContext *,const void *,uint32_t,XrXirCellProofBodyHead *);
-    XrXirStatus (*instruction)(const XrXirCompileContext *,const void *,uint32_t,uint32_t,XrXirInstruction *);
+    /* The returned row lives only in this call: genuine raw storage returns its
+     * actual row; owned storage decodes into the caller-provided stack. */
+    XrXirStatus (*instruction)(const XrXirCompileContext *,const void *,uint32_t,uint32_t,
+        XrXirInstruction *,const XrXirInstruction **);
     XrXirStatus (*type)(const XrXirCompileContext *,const void *,uint32_t,uint32_t,XrXirType *);
     XrXirStatus (*shape)(const XrXirCompileContext *,const void *,uint32_t,uint32_t,XrXirCellProofInstructionShape *);
     XrXirStatus (*span)(const XrXirCompileContext *,const void *,uint32_t,uint32_t,uint32_t,XrXirCellProofSpanCursor *);

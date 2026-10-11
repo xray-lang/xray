@@ -19,12 +19,12 @@ static XrXirStatus cell_proof_raw_head(const XrXirCompileContext *context,const 
         function->instruction_count,function->operands,function->operand_count};return XR_XIR_OK;
 }
 static XrXirStatus cell_proof_raw_instruction(const XrXirCompileContext *context,const void *owner,
-    uint32_t f,uint32_t i,XrXirInstruction *output) {
+    uint32_t f,uint32_t i,XrXirInstruction *storage,const XrXirInstruction **output) {
     const XrXirModule *module=owner;
-    if (!module || !output || f>=module->function_count || !module->functions ||
+    if (!module || !storage || !output || f>=module->function_count || !module->functions ||
         i>=module->functions[f].instruction_count || !module->functions[f].instructions) return XR_XIR_BAD_STRUCTURE;
     if (!xir_compile_work(context,3+sizeof(*output))) return XR_XIR_BUDGET;
-    *output=module->functions[f].instructions[i];return XR_XIR_OK;
+    *output=&module->functions[f].instructions[i];return XR_XIR_OK;
 }
 static XrXirStatus cell_proof_raw_type(const XrXirCompileContext *context,const void *owner,
     uint32_t f,uint32_t value,XrXirType *output) {
@@ -70,12 +70,14 @@ static bool cell_proof_head(CellProofBuild *build,uint32_t f,XrXirCellProofBodyH
 static const XrXirInstruction *cell_proof_instruction(CellProofBuild *build,uint32_t f,uint32_t i,
     XrXirInstruction *storage) {
     if (build->status!=XR_XIR_OK) return NULL;
-    XrXirStatus status=build->body->instruction(build->context,build->body->owner,f,i,storage);
+    if (!cell_proof_work(build,sizeof(const XrXirInstruction *))) return NULL;
+    const XrXirInstruction *operation=NULL;
+    XrXirStatus status=build->body->instruction(build->context,build->body->owner,f,i,storage,&operation);
     if (status!=XR_XIR_OK) {cell_proof_error(build,f,i,status);return NULL;}
-    if (storage->op<=XR_XIR_INVALID || storage->op>=XR_XIR_OP_COUNT) {
+    if (!operation || operation->op<=XR_XIR_INVALID || operation->op>=XR_XIR_OP_COUNT) {
         cell_proof_error(build,f,i,XR_XIR_BAD_STRUCTURE);return NULL;
     }
-    return storage;
+    return operation;
 }
 
 /* One owned walker receives one canonical run at a time. Raw and custom

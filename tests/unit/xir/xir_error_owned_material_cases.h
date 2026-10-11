@@ -11,6 +11,7 @@
  */
 #ifndef XIR_ERROR_OWNED_MATERIAL_CASES_H
 #define XIR_ERROR_OWNED_MATERIAL_CASES_H
+#include "xir_error_cell_index_fixture.h"
 
 static unsigned owned_error_refusals;
 static XrXirStatus owned_error_refuse_head(const EffectBodyRequest *read,uint32_t function,
@@ -322,6 +323,163 @@ static void conditional_owned_error_cursor_literals(void) {
     xr_compile_resources_free(body.stream);rp_owner_free(&context,baseline);rp_balanced(physical);
 }
 
+static unsigned owned_error_cell_type_reads;
+static XrXirStatus owned_error_cell_custom_type(const EffectBodyRequest *request,uint32_t f,
+    uint32_t value,XrXirType *output) {
+    ++owned_error_cell_type_reads;
+    return effect_body_owned_type(request,f,value,output);
+}
+
+/* Mutations are independent of the fixture's classification. A custom reader
+ * remains observable even after the canonical inventory has been constructed. */
+static void owned_error_cell_identity_controls(const XrXirCompileContext *context,ErrorFlow *flow) {
+    CHECK(flow->cell_types && flow->cell_material==flow->body.owner &&
+        flow->cell_function==1 && flow->cell_type_count==3 && flow->cell_count==3);
+    const uint32_t ids[3]={0,5,6};
+    for (uint32_t c=0;c<3;++c) {
+        XrXirType type=XR_XIR_UNIT;
+        CHECK(error_type_at(flow,ids[c],&type)==XR_XIR_OK && type==(XrXirType)CI_CELL);
+        CHECK(flow->cells[c]==ids[c] && flow->cell_types[c].value==ids[c] && flow->cell_types[c].type==type);
+    }
+    CHECK(flow->stride<=16);uint64_t saved[16];
+    memcpy(saved,flow->work,flow->stride*sizeof(*saved));
+    ErrorCellType row=flow->cell_types[0];uint32_t value=flow->cells[0];
+    const EffectBodyMaterial *material=flow->cell_material;
+    uint32_t function=flow->cell_function,count=flow->cell_type_count;
+    for (uint32_t mode=0;mode<7;++mode) {
+        if (!mode) flow->cells[0]=flow->values;
+        else if (mode==1) flow->cells[0]=2;
+        else if (mode==2) flow->cell_types[0].value=2;
+        else if (mode==3) flow->cell_types[0].type=XR_XIR_I64;
+        else if (mode==4) flow->cell_material=NULL;
+        else if (mode==5) flow->cell_function=2;
+        else flow->cell_type_count=2;
+        CHECK(error_cells(flow,UINT32_MAX,NULL)==XR_XIR_BAD_STRUCTURE &&
+            !memcmp(saved,flow->work,flow->stride*sizeof(*saved)));
+        flow->cells[0]=value;flow->cell_types[0]=row;flow->cell_material=material;
+        flow->cell_function=function;flow->cell_type_count=count;
+    }
+    EffectBodyRequest request=flow->body;XrCompileResourceStats before=rp_stats(context);
+    flow->body.domain.defaults=(const XrXirDefaultTable *)(uintptr_t)1;
+    CHECK(error_cells(flow,UINT32_MAX,NULL)==XR_XIR_BAD_STRUCTURE &&
+        rp_stats(context).work==before.work && !memcmp(saved,flow->work,flow->stride*sizeof(*saved)));
+    flow->body=request;
+    XrXirCompileContext foreign=rp_owner(rp_caps());uint64_t baseline=rp_stats(&foreign).live_bytes;
+    XrXirCompileContext *remaining=flow->remaining;flow->remaining=&foreign;before=rp_stats(&foreign);
+    CHECK(error_cells(flow,UINT32_MAX,NULL)==XR_XIR_BAD_STRUCTURE && rp_stats(&foreign).work==before.work &&
+        !memcmp(saved,flow->work,flow->stride*sizeof(*saved)));
+    flow->remaining=remaining;rp_owner_free(&foreign,baseline);
+    flow->body.type=owned_error_cell_custom_type;owned_error_cell_type_reads=0;
+    flow->cell_types[0].type=XR_XIR_I64;
+    CHECK(error_cells(flow,UINT32_MAX,NULL)==XR_XIR_OK && owned_error_cell_type_reads==3);
+    flow->cell_types[0]=row;flow->body=request;
+    CHECK(error_value(flow,flow->work,5)[0]==UINT64_C(12) && error_value(flow,flow->work,6)[0]==UINT64_C(12));
+    uint64_t second=UINT64_C(8);
+    CHECK(error_cells(flow,5,&second)==XR_XIR_OK && error_value(flow,flow->work,5)[0]==second &&
+        error_value(flow,flow->work,6)[0]==second && error_value(flow,flow->work,0)[0]==UINT64_C(12) &&
+        error_value(flow,flow->work,7)[0]==UINT64_C(4));
+    CHECK(error_cells(flow,UINT32_MAX,NULL)==XR_XIR_OK && error_value(flow,flow->work,5)[0]==UINT64_C(12));
+}
+
+/* This genuine checked library retains a Cell formal, a new Cell and its COPY
+ * alias. The two literals distinguish an immutable snapshot from invalidation. */
+static XrXirStatus conditional_owned_error_cells(const XrXirCompileContext *context,
+    uint32_t mode,bool oracle) {
+    CellIndexFixture fixture;ci_fixture(&fixture,CI_CALL,mode!=0,false);
+    XrXirEffects *effects=NULL;
+    XrXirStatus status=xir_fixture_verify(context,&fixture.module,NULL);
+    if (status==XR_XIR_OK) status=xr_xir_compile_effects_infer_verified(context,&fixture.module,&effects);
+    if (status==XR_XIR_OK && oracle) {
+        CHECK(effect_body_source_match(context,effects->invocations->body,&fixture.module)==XR_XIR_OK);
+        XrXirInstruction saved=fixture.subject[1];fixture.subject[1].type=XR_XIR_I64;
+        CHECK(effect_body_source_match(context,effects->invocations->body,&fixture.module)==XR_XIR_BAD_STRUCTURE);
+        fixture.subject[1]=saved;
+        CHECK(effect_body_source_match(context,effects->invocations->body,&fixture.module)==XR_XIR_OK);
+    }
+    memset(&fixture,0xCE,sizeof(fixture));
+    EffectTerms terms={0};terms.remaining=context;ErrorFlow flow={0};
+    if (status==XR_XIR_OK) {
+        flow.body=effect_body_owned_request(context,effects->invocations->body);
+        terms.types=*flow.body.domain.types;flow.effects=effects;
+        flow.remaining=(XrXirCompileContext *)context;flow.terms=&terms;
+        flow.summary_count=effects->count;flow.invocation=UINT32_MAX;
+        size_t bytes=(size_t)effects->count*effects->words*sizeof(*effects->errors);
+        if (!xir_compile_work(context,bytes)) status=XR_XIR_BUDGET;
+        else memset(effects->errors,0,bytes);
+    }
+    if (status==XR_XIR_OK) status=error_function(&flow,1);
+    if (status==XR_XIR_OK) {
+        CHECK(effects->count==3 && effects->words==1 && effects->atom_count==2 &&
+            effects->errors[1]==(mode?UINT64_C(4):UINT64_C(12)) &&
+            !xr_xir_effects_error_unknown(effects,1) && !xr_xir_effects_error_unidentified(effects,1));
+        CHECK(ci_expected(CI_CALL,mode!=0)==(mode?UINT64_C(4):UINT64_C(12)));
+        CHECK(flow.cell_count==3 && flow.cell_type_count==3 && flow.cell_material==flow.body.owner &&
+            !effects->invocations->equations->module && !effects->invocations->equations->work);
+        if (oracle) {
+            owned_error_cell_identity_controls(context,&flow);
+            uint8_t *storage=flow.storage;size_t capacity=flow.storage_capacity;
+            CHECK(error_function(&flow,2)==XR_XIR_OK && !flow.cell_types && !flow.cell_material &&
+                !flow.cell_count && !flow.cell_type_count && flow.storage==storage && flow.storage_capacity==capacity);
+            CHECK(error_function(&flow,1)==XR_XIR_OK && flow.cell_type_count==3 &&
+                effects->errors[1]==(mode?UINT64_C(4):UINT64_C(12)));
+        }
+    }
+    error_storage_free(&flow);
+    CHECK(!flow.cell_types && !flow.cell_material && !flow.cell_type_count);
+    effect_terms_free(&terms);xr_xir_compile_effects_free(effects);return status;
+}
+
+/* The original two recipes retain their complete loops unchanged. These two
+ * new Cell recipes measure their own real census, retry and three exact axes. */
+static void conditional_owned_error_cell_resources(void) {
+    for (uint32_t mode=0;mode<2;++mode) {
+        size_t sites=0;XrCompileResourceStats census={0},entry={0};
+        for (size_t pass=0;pass<=sites;++pass) {
+            RootParameterMark physical=rp_mark();rp_fail_at=SIZE_MAX;rp_injected=false;
+            XrXirCompileContext context=rp_owner(rp_caps());entry=rp_stats(&context);
+            RootParameterMark retained=rp_mark();size_t first=rp_attempts;
+            rp_fail_at=pass?first+pass-1:SIZE_MAX;
+            XrXirStatus status=conditional_owned_error_cells(&context,mode,false);
+            if (!pass) {
+                CHECK(status==XR_XIR_OK);sites=rp_attempts-first;census=rp_stats(&context);CHECK(sites);
+                printf("OWNED_ERROR_CELL_CENSUS mode=%u sites=%zu operation_work=%llu operation_bytes=%llu owner_work=%llu owner_bytes=%llu peak=%llu allocations=%llu\n",
+                    mode,sites,(unsigned long long)(census.work-entry.work),
+                    (unsigned long long)(census.allocated_bytes-entry.allocated_bytes),
+                    (unsigned long long)census.work,(unsigned long long)census.allocated_bytes,
+                    (unsigned long long)census.peak_bytes,
+                    (unsigned long long)(census.allocation_count-entry.allocation_count));
+            } else {
+                CHECK(status==XR_XIR_OUT_OF_MEMORY && rp_injected && rp_attempts-first==pass);
+                CHECK(rp_stats(&context).live_bytes==entry.live_bytes);rp_balanced(retained);
+                XrCompileResourceStats consumed=rp_stats(&context);
+                uint64_t work=census.work-entry.work,bytes=census.allocated_bytes-entry.allocated_bytes;
+                bool fits=work<=context.resources->limits.work-consumed.work &&
+                    bytes<=context.resources->limits.allocated_bytes-consumed.allocated_bytes;
+                rp_fail_at=SIZE_MAX;size_t retry=rp_attempts;
+                status=conditional_owned_error_cells(&context,mode,false);
+                CHECK(status==(fits?XR_XIR_OK:XR_XIR_BUDGET));
+                CHECK(rp_stats(&context).live_bytes==entry.live_bytes);rp_balanced(retained);
+                if (fits) CHECK(rp_stats(&context).work-consumed.work==work &&
+                    rp_stats(&context).allocated_bytes-consumed.allocated_bytes==bytes &&
+                    rp_stats(&context).allocation_count-consumed.allocation_count==census.allocation_count-entry.allocation_count &&
+                    rp_attempts-retry==sites);
+            }
+            rp_fail_at=SIZE_MAX;rp_owner_free(&context,entry.live_bytes);rp_balanced(physical);
+        }
+        uint64_t measured[3]={census.allocated_bytes,census.peak_bytes,census.work};
+        for (uint32_t axis=0;axis<3;++axis) for (uint32_t minus=0;minus<2;++minus) {
+            XrCompileResourceLimits limits=rp_caps();uint64_t limit=measured[axis]-minus;
+            if (axis==0) limits.allocated_bytes=limit;
+            else if (axis==1) limits.live_bytes=limit;
+            else limits.work=limit;
+            RootParameterMark physical=rp_mark();XrXirCompileContext context=rp_owner(limits);
+            uint64_t baseline=rp_stats(&context).live_bytes;
+            CHECK(conditional_owned_error_cells(&context,mode,false)==(minus?XR_XIR_BUDGET:XR_XIR_OK));
+            rp_owner_free(&context,baseline);rp_balanced(physical);
+        }
+    }
+}
+
 static void conditional_owned_error_literals(void) {
     conditional_owned_error_cursor_literals();
     owned_error_range_copies();
@@ -329,6 +487,12 @@ static void conditional_owned_error_literals(void) {
         RootParameterMark physical=rp_mark();XrXirCompileContext context=rp_owner(rp_caps());
         uint64_t baseline=rp_stats(&context).live_bytes;
         CHECK(conditional_owned_error(&context,mode,true)==XR_XIR_OK);
+        rp_owner_free(&context,baseline);rp_balanced(physical);
+    }
+    for (uint32_t mode=0;mode<2;++mode) {
+        RootParameterMark physical=rp_mark();XrXirCompileContext context=rp_owner(rp_caps());
+        uint64_t baseline=rp_stats(&context).live_bytes;
+        CHECK(conditional_owned_error_cells(&context,mode,true)==XR_XIR_OK);
         rp_owner_free(&context,baseline);rp_balanced(physical);
     }
 }
@@ -382,5 +546,6 @@ static void conditional_owned_error_resources(void) {
             rp_owner_free(&context,baseline);rp_balanced(physical);
         }
     }
+    conditional_owned_error_cell_resources();
 }
 #endif // XIR_ERROR_OWNED_MATERIAL_CASES_H

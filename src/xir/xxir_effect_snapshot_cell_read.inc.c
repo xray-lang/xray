@@ -36,16 +36,16 @@ static XrXirStatus effect_cell_body_head(const XrXirCompileContext *work,const v
         head.instruction_count,head.operands,head.operand_count};return XR_XIR_OK;
 }
 static XrXirStatus effect_cell_body_instruction(const XrXirCompileContext *work,const void *owner,
-    uint32_t f,uint32_t i,XrXirInstruction *output) {
+    uint32_t f,uint32_t i,XrXirInstruction *storage,const XrXirInstruction **output) {
     const EffectCellBodyAdapter *adapter=owner;
-    if (!effect_cell_body_adapter_valid(work,adapter) || !output) return XR_XIR_BAD_STRUCTURE;
+    if (!effect_cell_body_adapter_valid(work,adapter) || !storage || !output) return XR_XIR_BAD_STRUCTURE;
     if (!xir_compile_work(work,11)) return XR_XIR_BUDGET;
-    XrXirInstruction storage={0};const XrXirInstruction *operation=NULL;
-    XrXirStatus status=effect_body_request_instruction(&adapter->request,f,i,&storage,&operation);
+    const XrXirInstruction *operation=NULL;
+    XrXirStatus status=effect_body_request_instruction(&adapter->request,f,i,storage,&operation);
     if (status!=XR_XIR_OK) return status;
     if (!operation) return XR_XIR_BAD_STRUCTURE;
     if (!xir_compile_work(work,1+sizeof(*output))) return XR_XIR_BUDGET;
-    *output=*operation;return XR_XIR_OK;
+    *output=operation;return XR_XIR_OK;
 }
 static XrXirStatus effect_cell_body_type(const XrXirCompileContext *work,const void *owner,
     uint32_t f,uint32_t value,XrXirType *output) {
@@ -147,13 +147,14 @@ static XrXirStatus effect_cell_body_range(const XrXirCompileContext *work,
     if (cursor->next>function->instruction_count || cursor->run>function->run_count ||
         cursor->offset>function->stream_words || (!cursor->run && (cursor->next || cursor->offset)))
         return XR_XIR_BAD_STRUCTURE;
-    if (!xir_compile_work(work,20+sizeof(EffectBodyRecordCursor)+sizeof(XrXirInstruction))) return XR_XIR_BUDGET;
+    if (!xir_compile_work(work,20+sizeof(EffectBodyRecordCursor))) return XR_XIR_BUDGET;
     EffectBodyRecordCursor position={cursor->offset,cursor->next,cursor->run,UINT32_MAX};
-    EffectBodyRunRef ref;XrXirInstruction operation={0};uint32_t words[EFFECT_BODY_WORDS];
+    EffectBodyRunRef ref;uint32_t words[EFFECT_BODY_WORDS];
     XrXirStatus status=effect_body_range_ref(&adapter->request.read,function,&position,&ref);
     if (status==XR_XIR_OK) status=effect_body_instruction_ref_words(&adapter->request.read,&ref,ref.first,words);
-    if (status==XR_XIR_OK) status=effect_body_instruction_words_publish(&adapter->request.read,words,&operation);
     if (status!=XR_XIR_OK) return status;
+    if (!effect_body_read_work(&adapter->request.read,sizeof(XrXirInstruction)+2)) return XR_XIR_BUDGET;
+    XrXirInstruction operation=effect_body_instruction_words_value(words);
     if (!xir_compile_work(work,sizeof(*output)+3*sizeof(uint32_t))) return XR_XIR_BUDGET;
     *output=(XrXirCellProofRun){ref.first,ref.count,ref.mask,operation};
     cursor->next=position.first;cursor->offset=position.offset;cursor->run=position.run;

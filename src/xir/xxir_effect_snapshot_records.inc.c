@@ -375,16 +375,20 @@ static XrXirStatus effect_body_instruction_words_get(const EffectBodyRead *read,
     return status==XR_XIR_OK?effect_body_instruction_ref_words(read,&ref,instruction,words):status;
 }
 
+/* Callers already own all ten decoded words. This one value constructor
+ * preserves every unused word and the exact signed immediate bit pattern. */
+static XrXirInstruction effect_body_instruction_words_value(const uint32_t *words) {
+    uint64_t immediate=(uint64_t)words[6]|((uint64_t)words[7]<<32);int64_t signed_immediate;
+    memcpy(&signed_immediate,&immediate,sizeof(immediate));
+    return (XrXirInstruction){.op=(XrXirOp)words[0],.type=words[1],
+        .args={words[2],words[3]},.targets={words[4],words[5]},
+        .immediate=signed_immediate,.type_arguments={words[8],words[9]}};
+}
 static XrXirStatus effect_body_instruction_words_publish(const EffectBodyRead *read,
     const uint32_t *words,XrXirInstruction *output) {
     if (!words || !output) return XR_XIR_BAD_STRUCTURE;
     if (!effect_body_read_work(read,sizeof(*output)+2)) return XR_XIR_BUDGET;
-    uint64_t immediate=(uint64_t)words[6]|((uint64_t)words[7]<<32);int64_t signed_immediate;
-    memcpy(&signed_immediate,&immediate,sizeof(immediate));
-    *output=(XrXirInstruction){.op=(XrXirOp)words[0],.type=words[1],
-        .args={words[2],words[3]},.targets={words[4],words[5]},
-        .immediate=signed_immediate,.type_arguments={words[8],words[9]}};
-    return XR_XIR_OK;
+    *output=effect_body_instruction_words_value(words);return XR_XIR_OK;
 }
 
 static XrXirStatus effect_body_instruction_get(const EffectBodyRead *read,

@@ -65,6 +65,25 @@ static void cell_owned_run_semantics(const XrXirCompileContext *context,
 
 /* The independent source oracle reads every unused word and signed bit.
  * Provider range projection is not a replacement for this full matcher. */
+/* A raw callback borrows the current actual row only for this call. The
+ * owned callback publishes the complete ten-word decode in caller storage. */
+static void cell_owned_run_instruction_reference(const XrXirCompileContext *context,
+    const EffectBodyMaterial *material,const CellIndexFixture *fixture) {
+    EffectCellBodyAdapter raw={0},owned={0};XrXirCellProofBodyRead read={0},sealed={0};
+    CHECK(effect_cell_body_raw(context,&fixture->module,&raw,&read)==XR_XIR_OK && !read.range);
+    CHECK(effect_cell_body_owned(context,material,&owned,&sealed)==XR_XIR_OK && sealed.range);
+    XrXirInstruction storage={.op=XR_XIR_RETURN,.type=XR_XIR_F64,.immediate=INT64_MIN},sentinel=storage;
+    const XrXirInstruction *output=NULL;
+    CHECK(read.instruction(context,read.owner,1,4,&storage,&output)==XR_XIR_OK &&
+        output==&fixture->functions[1].instructions[4] && !memcmp(&storage,&sentinel,sizeof(storage)));
+    CHECK(sealed.instruction(context,sealed.owner,1,4,&storage,&output)==XR_XIR_OK && output==&storage &&
+        conditional_compact_same(output,&fixture->functions[1].instructions[4]));
+    const XrXirInstruction *held=output;size_t attempts=rp_attempts;XrCompileResourceStats before=rp_stats(context);
+    CHECK(read.instruction(context,read.owner,1,4,NULL,&output)==XR_XIR_BAD_STRUCTURE && output==held);
+    CHECK(sealed.instruction(context,sealed.owner,1,4,NULL,&output)==XR_XIR_BAD_STRUCTURE && output==held &&
+        rp_attempts==attempts && rp_stats(context).work==before.work);
+}
+
 static void cell_owned_run_source(const XrXirCompileContext *context,
     const EffectBodyMaterial *material,CellIndexFixture *fixture) {
     CHECK(effect_body_source_match(context,material,&fixture->module)==XR_XIR_OK);
@@ -75,6 +94,7 @@ static void cell_owned_run_source(const XrXirCompileContext *context,
         fixture->subject[4]=old;
         CHECK(effect_body_source_match(context,material,&fixture->module)==XR_XIR_OK);
     }
+    cell_owned_run_instruction_reference(context,material,fixture);
     EffectCellBodyAdapter adapter={0};XrXirCellProofBodyRead read={0};
     CHECK(effect_cell_body_owned(context,material,&adapter,&read)==XR_XIR_OK && read.range);
     for (uint32_t f=0;f<fixture->module.function_count;++f) {
