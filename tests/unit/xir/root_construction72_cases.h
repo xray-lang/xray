@@ -42,14 +42,14 @@ static XrXirStatus root_construction72_build(const XrXirCompileContext *context,
         {"make",4,NULL,0,(XrXirType)256,&blocks[2],1,make,4,operands,2},
         {"a",1,NULL,0,XR_XIR_I64,&blocks[3],1,a,2,NULL,0},
         {"b",1,NULL,0,XR_XIR_I64,&blocks[3],1,b,2,NULL,0}};
-    XrXirSourceModule module = {"alpha",5,NULL,0,0};
+    XrXirSourceModule construction_source_module = {"alpha",5,NULL,0,0};
     XrXirFunctionIdentity identities[] = {
         {0,0,0,0,0,0,XR_XIR_NON_MEMBER,0,0},
         {0,1,0,0,0,0,XR_XIR_NON_MEMBER,0,0},
         {0,1,1,0,0,0,XR_XIR_CONSTRUCTOR,0,0},
         {0,1,1,0,0,0,XR_XIR_MEMBER_HELPER,0,0},
         {0,1,1,0,0,0,XR_XIR_MEMBER_HELPER,0,0}};
-    XrXirDeclarations declarations = {&module,1,identities,NULL,0,NULL,0,0,1,NULL};
+    XrXirDeclarations declarations = {&construction_source_module,1,identities,NULL,0,NULL,0,0,1,NULL};
     XrXirNominalField fields[] = {{{"a",1},XR_XIR_I64,0},{{"b",1},XR_XIR_I64,0}};
     XrXirNominalDeclaration nominal = {{"alpha",5},{"Pair",4},1,NULL,0,fields,2,
         XR_XIR_NOMINAL_STRUCT,NULL,0,0,{0}};
@@ -118,8 +118,8 @@ static XrXirStatus root_construction72_pipeline(XrCompileResources *resources) {
         root_construction72_rows(m->provenance->source,true);
         CHECK(xr_xir_compile_artifact_construction(decoded) !=
             xr_xir_compile_artifact_construction(m->provenance->source));
-        const XrXirTarget target = {XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};
-        status = xr_xir_compile_lower(decoded,&target,&lowered,NULL);
+        const XrXirTarget construction_target = {XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};
+        status = xr_xir_compile_lower(decoded,&construction_target,&lowered,NULL);
     }
     xr_xir_compile_artifact_free(decoded);
     xr_xir_compile_artifact_free(lowered);

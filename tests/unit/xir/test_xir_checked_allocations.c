@@ -15,7 +15,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #define CHECK(c) do { if (!(c)) { fprintf(stderr, "%d: %s\n", __LINE__, #c); exit(1); } } while (0)
-static size_t calls, live, fail_at = SIZE_MAX, live_bytes, peak_bytes;
+static size_t packet_allocation_calls, live, fail_at = SIZE_MAX, live_bytes, peak_bytes;
 static struct { void *pointer; size_t bytes; } packet_owned[16384];
 static void packet_record(void *pointer, size_t bytes) {
     if (!pointer) return;
@@ -26,7 +26,7 @@ static void packet_record(void *pointer, size_t bytes) {
     if (live_bytes > peak_bytes) peak_bytes = live_bytes;
 }
 static void *packet_malloc(size_t size) {
-    if (calls++ == fail_at) return NULL;
+    if (packet_allocation_calls++ == fail_at) return NULL;
     void *p = xr_malloc(size); packet_record(p, size); return p;
 }
 static void packet_free(void *p) {
@@ -99,12 +99,12 @@ static void packet_failures(unsigned kind) {
     }
     size_t baseline = live;
     XrXirCheckedPacket packet = {0};
-    calls = 0;
+    packet_allocation_calls = 0;
     CHECK(xr_xir_compile_checked_write(checked, &packet, NULL) == XR_XIR_OK);
-    size_t write_sites = calls;
+    size_t write_sites = packet_allocation_calls;
     xr_xir_compile_checked_packet_free(&packet); CHECK(live == baseline);
     for (size_t i = 0; i < write_sites; ++i) {
-        calls = 0; fail_at = i;
+        packet_allocation_calls = 0; fail_at = i;
         CHECK(xr_xir_compile_checked_write(checked, &packet, NULL) == XR_XIR_OUT_OF_MEMORY);
         CHECK(!packet.bytes && !packet.length && live == baseline);
     }
@@ -112,12 +112,12 @@ static void packet_failures(unsigned kind) {
     CHECK(xr_xir_compile_checked_write(checked, &packet, NULL) == XR_XIR_OK);
     xr_xir_compile_artifact_free(checked);checked=NULL; CHECK(live==consumer_context_owner_count+1);
     XrXirArtifact *decoded = NULL;
-    calls = 0;
+    packet_allocation_calls = 0;
     CHECK(xr_xir_compile_checked_read(suite_context, packet.bytes, packet.length, &decoded, NULL) == XR_XIR_OK);
-    size_t read_sites = calls;
+    size_t read_sites = packet_allocation_calls;
     xr_xir_compile_artifact_free(decoded); decoded=NULL; CHECK(live==consumer_context_owner_count+1);
     for (size_t i = 0; i < read_sites; ++i) {
-        calls = 0; fail_at = i;
+        packet_allocation_calls = 0; fail_at = i;
         CHECK(xr_xir_compile_checked_read(suite_context, packet.bytes, packet.length, &decoded, NULL) == XR_XIR_OUT_OF_MEMORY);
         CHECK(!decoded && live==consumer_context_owner_count+1);
     }
@@ -148,9 +148,9 @@ static void specialization_failures(unsigned callable) {
             XrXirArtifact *producer=NULL;
             if(mode)CHECK(xir_fixture_check(&probe, &built, &producer, NULL)==XR_XIR_OK);
             size_t stage_baseline=live,stage_bytes=live_bytes;
-            calls=0;fail_at=attempt?attempt-1:SIZE_MAX;
+            packet_allocation_calls=0;fail_at=attempt?attempt-1:SIZE_MAX;
             XrXirStatus status=mode?xr_xir_compile_specialize(producer,&output,NULL):xir_fixture_check(&probe, &built, &output, NULL);
-            if(!attempt){CHECK(status==XR_XIR_OK && output);sites[mode]=calls;}
+            if(!attempt){CHECK(status==XR_XIR_OK && output);sites[mode]=packet_allocation_calls;}
             else CHECK(status==XR_XIR_OUT_OF_MEMORY && !output);
             xr_xir_compile_artifact_free(output);output=NULL;
             CHECK(live==stage_baseline && live_bytes==stage_bytes);
@@ -175,10 +175,10 @@ static void nominal_field_closure_failures(void) {
             XrCompileResourceStats owner_baseline=consumer_context_stats(&probe);
             XrXirArtifact *checked=nominal_field_closure_fixture(&probe,mode),*output=NULL;
             size_t baseline=live,baseline_bytes=live_bytes;
-            calls=0;fail_at=attempt?attempt-1:SIZE_MAX;
+            packet_allocation_calls=0;fail_at=attempt?attempt-1:SIZE_MAX;
             XrXirStatus expected=attempt?XR_XIR_OUT_OF_MEMORY:mode==0?XR_XIR_OK:mode==1?XR_XIR_BAD_TYPE:XR_XIR_BUDGET;
             CHECK(xr_xir_compile_specialize(checked,&output,NULL)==expected);
-            if(!attempt)sites=calls;
+            if(!attempt)sites=packet_allocation_calls;
             if(attempt || mode)CHECK(!output);
             xr_xir_compile_artifact_free(output);CHECK(live==baseline && live_bytes==baseline_bytes);
             fail_at=SIZE_MAX;xr_xir_compile_artifact_free(checked);consumer_context_ephemeral_free(&probe,owner_baseline);
@@ -192,11 +192,11 @@ static void nominal_lowering_failures(void) {
     const XrXirTarget target = {XR_XIR_ARCH_X86_64, XR_XIR_VALUE_ABI_VERSION};
     CHECK(xr_xir_compile_specialize(checked, &closed, NULL) == XR_XIR_OK);
     xr_xir_compile_artifact_free(checked);checked=NULL;
-    size_t baseline = live; calls = 0; fail_at = SIZE_MAX;
+    size_t baseline = live; packet_allocation_calls = 0; fail_at = SIZE_MAX;
     CHECK(xr_xir_compile_lower(closed, &target, &lowered, NULL) == XR_XIR_OK);
-    size_t sites = calls; xr_xir_compile_artifact_free(lowered); lowered=NULL; CHECK(live == baseline);
+    size_t sites = packet_allocation_calls; xr_xir_compile_artifact_free(lowered); lowered=NULL; CHECK(live == baseline);
     for (size_t i = 0; i < sites; ++i) {
-        calls = 0; fail_at = i;
+        packet_allocation_calls = 0; fail_at = i;
         CHECK(xr_xir_compile_lower(closed, &target, &lowered, NULL) == XR_XIR_OUT_OF_MEMORY);
         CHECK(!lowered && live == baseline);
     }
@@ -212,14 +212,14 @@ static void nominal_layout_failures(void) {
     const XrXirTarget target = {XR_XIR_ARCH_X86_64, XR_XIR_VALUE_ABI_VERSION};
     XrXirCompileContext original = consumer_context_default(), budget = original;
     XrXirLayout layout = {0}; uint32_t offsets[] = {99, 99};
-    size_t baseline = live; calls = 0;
+    size_t baseline = live; packet_allocation_calls = 0;
     CHECK(xr_xir_compile_nominal_layout(&budget, types, (XrXirType)256, &target, &layout, offsets, 2) == XR_XIR_OK);
     CHECK(layout.size == 64 && layout.alignment == 8 && offsets[0] == 0 && offsets[1] == 32 && live == baseline);
-    size_t sites = calls;
+    size_t sites = packet_allocation_calls;
     XrCompileResourceStats required=consumer_context_stats(&budget);
     uint64_t work=required.work;
     for (size_t i = 0; i < sites; ++i) {
-        calls = 0; fail_at = i; budget = original; layout=(XrXirLayout){0};offsets[0] = offsets[1] = 99;
+        packet_allocation_calls = 0; fail_at = i; budget = original; layout=(XrXirLayout){0};offsets[0] = offsets[1] = 99;
         CHECK(xr_xir_compile_nominal_layout(&budget, types, (XrXirType)256, &target, &layout, offsets, 2) == XR_XIR_OUT_OF_MEMORY);
         CHECK(live == baseline && !layout.size && !layout.alignment && offsets[0] == 99 && offsets[1] == 99 &&
             !memcmp(&budget, &original, sizeof(budget)));
@@ -245,9 +245,9 @@ static void provenance_ownership(void) {
         .source=source,.origins=origins,.count=3};
     XrXirCompileContext initial = consumer_context_default(), remaining = initial;
     XrXirProvenance *copy = NULL;
-    size_t baseline = live; calls = 0;
+    size_t baseline = live; packet_allocation_calls = 0;
     CHECK(xr_xir_compile_provenance_copy(&remaining, &instance, &copy) == XR_XIR_OK);
-    size_t sites = calls;
+    size_t sites = packet_allocation_calls;
     XrCompileResourceStats required=consumer_context_stats(&remaining);
     CHECK(copy && copy->kind == XR_XIR_EVIDENCE_INSTANCE && copy->count == 3 && copy->source != source);
     CHECK(!copy->contracts && !copy->contract_count && !copy->bindings && !copy->binding_count);
@@ -256,7 +256,7 @@ static void provenance_ownership(void) {
     CHECK(copy->source->module.functions != source->module.functions);
     xr_xir_compile_provenance_free(copy);copy=NULL; CHECK(live == baseline);
     for (size_t i = 0; i < sites; ++i) {
-        calls = 0; fail_at = i; remaining = initial; copy = NULL;
+        packet_allocation_calls = 0; fail_at = i; remaining = initial; copy = NULL;
         CHECK(xr_xir_compile_provenance_copy(&remaining, &instance, &copy) == XR_XIR_OUT_OF_MEMORY);
         CHECK(!copy && live == baseline);
     }
@@ -302,25 +302,25 @@ static void provenance_ownership(void) {
 static void provenance_packet_roundtrip(XrXirArtifact *closed) {
     size_t baseline = live;
     XrXirCheckedPacket packet = {0}; XrXirArtifact *decoded = NULL;
-    calls = 0;
+    packet_allocation_calls = 0;
     CHECK(xr_xir_compile_checked_write(closed, &packet, NULL) == XR_XIR_OK);
-    size_t writes = calls;
+    size_t writes = packet_allocation_calls;
     xr_xir_compile_checked_packet_free(&packet);
     for (size_t i = 0; i < writes; ++i) {
-        calls = 0; fail_at = i;
+        packet_allocation_calls = 0; fail_at = i;
         CHECK(xr_xir_compile_checked_write(closed, &packet, NULL) == XR_XIR_OUT_OF_MEMORY);
         CHECK(!packet.bytes && live == baseline);
     }
     fail_at = SIZE_MAX;
     CHECK(xr_xir_compile_checked_write(closed, &packet, NULL) == XR_XIR_OK);
-    calls = 0;
+    packet_allocation_calls = 0;
     CHECK(xr_xir_compile_checked_read(suite_context, packet.bytes, packet.length, &decoded, NULL) == XR_XIR_OK);
-    size_t reads = calls;
+    size_t reads = packet_allocation_calls;
     CHECK(decoded->module.provenance && decoded->module.provenance->kind == XR_XIR_EVIDENCE_INSTANCE &&
         decoded->module.provenance->count == 3);
     xr_xir_compile_artifact_free(decoded);decoded=NULL;
     for (size_t i = 0; i < reads; ++i) {
-        calls = 0; fail_at = i;
+        packet_allocation_calls = 0; fail_at = i;
         CHECK(xr_xir_compile_checked_read(suite_context, packet.bytes, packet.length, &decoded, NULL) == XR_XIR_OUT_OF_MEMORY);
         CHECK(!decoded && live == baseline + 1);
     }
@@ -380,10 +380,10 @@ static void native_packet_proof(void) {
     for(size_t attempt=0;attempt<=sites;++attempt){
         XrXirCompileContext probe=consumer_context_ephemeral((XrCompileResourceLimits){67108864,8388608,16000001});
         XrCompileResourceStats before=consumer_context_stats(&probe);
-        calls=0;fail_at=attempt?attempt-1:SIZE_MAX;
+        packet_allocation_calls=0;fail_at=attempt?attempt-1:SIZE_MAX;
         CHECK(xr_xir_compile_program_proof_verify(&probe,&spec,&proof,&permissions)==(attempt?XR_XIR_OUT_OF_MEMORY:XR_XIR_OK));
         CHECK((permissions!=NULL)==!attempt);
-        if(!attempt){sites=calls;required=consumer_context_stats(&probe);}
+        if(!attempt){sites=packet_allocation_calls;required=consumer_context_stats(&probe);}
         xir_program_permissions_free(permissions);permissions=NULL;
         fail_at=SIZE_MAX;consumer_context_ephemeral_free(&probe,before);
         CHECK(live==baseline && live_bytes==baseline_bytes);
@@ -430,7 +430,7 @@ static void native_packet_proof(void) {
     }
     XrXirCompileContext probe=consumer_context_ephemeral((XrCompileResourceLimits){67108864,8388608,16000001});
     XrCompileResourceStats before=consumer_context_stats(&probe);XrXirProgramProof overflowing=proof;overflowing.length=SIZE_MAX;
-    calls=0;CHECK(xr_xir_compile_program_proof_verify(&probe,&spec,&overflowing,&permissions)==XR_XIR_BUDGET && !calls && !permissions);
+    packet_allocation_calls=0;CHECK(xr_xir_compile_program_proof_verify(&probe,&spec,&overflowing,&permissions)==XR_XIR_BUDGET && !packet_allocation_calls && !permissions);
     consumer_context_ephemeral_free(&probe,before);
     probe=consumer_context_ephemeral((XrCompileResourceLimits){67108864,8388608,proof.length});before=consumer_context_stats(&probe);
     CHECK(xr_xir_compile_program_proof_verify(&probe,&spec,&proof,&permissions)==XR_XIR_BUDGET && !permissions);
@@ -446,9 +446,9 @@ static void native_packet_proof(void) {
 static void provenance_lowering(XrXirArtifact *closed) {
     XrXirTarget target = {XR_XIR_ARCH_X86_64, XR_XIR_VALUE_ABI_VERSION};
     XrXirArtifact *lowered = NULL;
-    size_t baseline = live; calls = 0;
+    size_t baseline = live; packet_allocation_calls = 0;
     CHECK(xr_xir_compile_lower(closed, &target, &lowered, NULL) == XR_XIR_OK);
-    size_t sites = calls;
+    size_t sites = packet_allocation_calls;
     CHECK(lowered->checked_packet.bytes && lowered->checked_packet.length >= 64);
     XrXirCheckedPacket expected = {0};
     CHECK(xr_xir_compile_checked_write(closed, &expected, NULL) == XR_XIR_OK);
@@ -482,7 +482,7 @@ static void provenance_lowering(XrXirArtifact *closed) {
     CHECK(xr_xir_compile_artifact_verify(lowered, NULL) == XR_XIR_OK);
     xr_xir_compile_artifact_free(lowered); lowered=NULL; CHECK(live == baseline);
     for (size_t i = 0; i < sites; ++i) {
-        calls = 0; fail_at = i; lowered = NULL;
+        packet_allocation_calls = 0; fail_at = i; lowered = NULL;
         CHECK(xr_xir_compile_lower(closed, &target, &lowered, NULL) == XR_XIR_OUT_OF_MEMORY);
         CHECK(!lowered && live == baseline);
     }
@@ -507,13 +507,13 @@ static void provenance_artifact_ownership(void) {
     closed->module.provenance = proof;
     xr_xir_compile_artifact_free(source);source=NULL;
     CHECK(xr_xir_compile_artifact_verify(closed, NULL) == XR_XIR_OK);
-    size_t baseline = live; calls = 0;
+    size_t baseline = live; packet_allocation_calls = 0;
     CHECK(xr_xir_compile_recheck_v2(suite_context, &closed->module, xr_xir_compile_artifact_construction(closed), &copy, NULL) == XR_XIR_OK);
-    size_t sites = calls;
+    size_t sites = packet_allocation_calls;
     CHECK(copy->module.provenance != proof && copy->module.provenance->source != proof->source);
     xr_xir_compile_artifact_free(copy);copy=NULL; CHECK(live == baseline);
     for (size_t i = 0; i < sites; ++i) {
-        calls = 0; fail_at = i; copy = NULL;
+        packet_allocation_calls = 0; fail_at = i; copy = NULL;
         CHECK(xr_xir_compile_recheck_v2(suite_context, &closed->module, xr_xir_compile_artifact_construction(closed), &copy, NULL) == XR_XIR_OUT_OF_MEMORY);
         CHECK(!copy && live == baseline);
     }
