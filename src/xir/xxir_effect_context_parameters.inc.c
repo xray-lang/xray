@@ -106,7 +106,7 @@ static XrXirStatus effect_ordinary_function(EffectOrdinaryContexts *contexts,
     XrXirType *parameters=function.parameter_count ?
         effect_terms_alloc(&contexts->terms,function.parameter_count,sizeof(*parameters)) : NULL;
     XrXirInstruction *ops=function.instruction_count ?
-        effect_terms_alloc(&contexts->terms,function.instruction_count,sizeof(*ops)) : NULL;
+        effect_terms_reserve(&contexts->terms,function.instruction_count,sizeof(*ops)) : NULL;
     uint32_t *operands=function.operand_count ?
         effect_terms_alloc(&contexts->terms,function.operand_count,sizeof(*operands)) : NULL;
     if ((function.parameter_count && !parameters) || (function.instruction_count && !ops) ||

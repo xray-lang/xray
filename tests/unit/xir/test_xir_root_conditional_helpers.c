@@ -44,6 +44,7 @@
 #include "xir_invocation_compact_snapshot_cases.h"
 #include "xir_invocation_early_generation_cases.h"
 #include "xir_ordinary_initial_role_cases.h"
+#include "xir_ordinary_instruction_copy_cases.h"
 
 static XrXirStatus conditional_classify(const XrXirCompileContext *context, uint32_t mode, bool oracle) {
     ConditionalRawFixture f;conditional_raw_fixture(&f,mode);
@@ -1542,7 +1543,11 @@ static void conditional_literals(void) {
     for (uint32_t mode=0;mode<4;++mode) CHECK(conditional_classify(&context,mode,true)==XR_XIR_OK);
     CHECK(conditional_scalar(&context,true)==XR_XIR_OK);
     CHECK(conditional_forest(&context,true)==XR_XIR_OK);
-    for (uint32_t mode=0;mode<5;++mode) CHECK(conditional_dense_owner(&context,mode,true)==XR_XIR_OK);
+    for (uint32_t mode=0;mode<5;++mode) {
+        XrXirStatus dense_status=conditional_dense_owner(&context,mode,true);
+        if (dense_status!=XR_XIR_OK) fprintf(stderr,"dense owner mode%u status%u\n",mode,(uint32_t)dense_status);
+        CHECK(dense_status==XR_XIR_OK);
+    }
     CHECK(conditional_refinement(&context,true)==XR_XIR_OK);
     conditional_projection_rejections(&context);
     CHECK(conditional_cleanup_owner(&context,true)==XR_XIR_OK);
@@ -1646,6 +1651,7 @@ static void conditional_axes(void) {
 }
 
 int main(int argc, char **argv) {
+    conditional_ordinary_instruction_resources();
     if (argc==2 && !strcmp(argv[1],"--compiler")) { conditional_oom();conditional_axes();conditional_sparse_resources();conditional_storage_resources();conditional_copy_resources();conditional_metadata_resources();conditional_physical_resources();conditional_descriptor_resources();conditional_class_rows_resources();conditional_parameter_resources();conditional_compact_resources();conditional_class_cell_resources();conditional_generation_resources();conditional_retry_complete(); }
     else if (argc==2 && !strcmp(argv[1],"--class-cells")) conditional_class_cell_literals();
     else if (argc==2 && !strcmp(argv[1],"--class-cells-compiler")) conditional_class_cell_resources();
