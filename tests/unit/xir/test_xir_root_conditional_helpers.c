@@ -46,6 +46,7 @@
 #include "xir_ordinary_initial_role_cases.h"
 #include "xir_ordinary_instruction_copy_cases.h"
 #include "xir_ordinary_material_continuation_cases.h"
+#include "xir_initial_ordinary_material_cases.h"
 
 static XrXirStatus conditional_classify(const XrXirCompileContext *context, uint32_t mode, bool oracle) {
     ConditionalRawFixture f;conditional_raw_fixture(&f,mode);
@@ -73,7 +74,7 @@ static XrXirStatus conditional_classify(const XrXirCompileContext *context, uint
         XrXirDeclarations declarations=f.declarations;declarations.functions=identities;
         XrXirModule module=f.module;module.functions=functions;module.function_count=5;
         module.generics=generics;module.declarations=&declarations;
-        status=effect_context_owner_build(context,&module,NULL,&execution);
+        status=effect_context_owner_build(context,&module,NULL,NULL,&execution);
         if (status==XR_XIR_OK) {
             uint32_t caller_index=(uint32_t)execution->dense->functions[4].instructions[0].immediate;
             CHECK(caller_index<execution->dense->count);
@@ -296,7 +297,7 @@ static XrXirStatus conditional_dense_owner(const XrXirCompileContext *context,
         .result=XR_XIR_I64,.instructions=ops,.instruction_count=2,.operands=operands,.operand_count=2};
     f.declarations.functions=identities;f.declarations.entry_function=4;
     f.module.functions=functions;f.module.function_count=5;f.module.generics=generics;
-    EffectContextOwner *owner=NULL;XrXirStatus status=effect_context_owner_build(context,&f.module,NULL,&owner);
+    EffectContextOwner *owner=NULL;XrXirStatus status=effect_context_owner_build(context,&f.module,NULL,NULL,&owner);
     XrXirRootCauseTrace *trace=NULL;
     if (status==XR_XIR_OK && oracle) {
         const XrXirRootEffects *facts=&owner->forest->facts[4];
@@ -352,7 +353,7 @@ static XrXirStatus conditional_refinement(const XrXirCompileContext *context, bo
     XrXirEffects effects={.resources=context->resources,.count=4};
     XrXirStatus status=xir_effects_refinement_capture(context,&f.module,&effects);
     EffectOrdinaryContexts *ordinary=NULL;
-    if (status==XR_XIR_OK) status=effect_ordinary_build(context,&f.module,&ordinary);
+    if (status==XR_XIR_OK) status=effect_ordinary_build(context,&f.module,NULL,&ordinary);
     if (status==XR_XIR_OK) {
         f.method_parameters[1]=(XrXirType)259;
         ordinary->terms.remaining=context;
@@ -449,7 +450,7 @@ static XrXirStatus conditional_cleanup_owner(const XrXirCompileContext *context,
     XrXirProvenance template={.kind=XR_XIR_EVIDENCE_TEMPLATE};
     XrXirModule module={.stage=XR_XIR_CHECKED,.functions=functions,.function_count=4,.declarations=&declarations,
         .types=&types,.provenance=&template,.linkage_kind=XR_XIR_PROGRAM};
-    EffectContextOwner *owner=NULL;XrXirStatus status=effect_context_owner_build(context,&module,NULL,&owner);
+    EffectContextOwner *owner=NULL;XrXirStatus status=effect_context_owner_build(context,&module,NULL,NULL,&owner);
     if (status==XR_XIR_OK && oracle) {
         XrXirEffects effects={.resources=context->resources,.count=4,.contexts=owner};
         XrXirEffectArgument physical[2]={{0,(XrXirType)257},{1,(XrXirType)258}};
@@ -519,7 +520,7 @@ static XrXirStatus conditional_cell_owner(const XrXirCompileContext *context, bo
     XrXirEffects *effects=NULL;XrXirRootCauseTrace *trace=NULL;EffectContextOwner *owner=NULL;
     XrXirStatus status=xr_xir_compile_effects_infer_verified(context,&module,&effects);
     XrXirProvenance template={.kind=XR_XIR_EVIDENCE_TEMPLATE};module.provenance=&template;
-    if (status==XR_XIR_OK) status=effect_context_owner_build(context,&module,NULL,&owner);
+    if (status==XR_XIR_OK) status=effect_context_owner_build(context,&module,NULL,NULL,&owner);
     if (status==XR_XIR_OK && oracle) {
         CHECK(effects->root[0].unresolved && !effects->root[0].requires_root);
         CHECK(!effects->root[1].unresolved && !effects->root[1].requires_root);
@@ -646,7 +647,7 @@ static void conditional_empty_domains(const XrXirCompileContext *context) {
     XrXirModule module={.stage=XR_XIR_CHECKED,.functions=functions,.function_count=3,
         .declarations=&declarations,.linkage_kind=XR_XIR_PROGRAM,.provenance=&template};
     EffectContextOwner *owner=NULL;
-    CHECK(effect_context_owner_build(context,&module,NULL,&owner)==XR_XIR_OK);
+    CHECK(effect_context_owner_build(context,&module,NULL,NULL,&owner)==XR_XIR_OK);
     XrXirEffects effects={.resources=context->resources,.count=3,.contexts=owner};
     XrXirOrigin origin={.function=1};XirEffectContextInput input={&module,NULL,&origin,0,NULL,0};
     XirEffectContextView selected={0};
@@ -657,7 +658,7 @@ static void conditional_empty_domains(const XrXirCompileContext *context) {
     effect_context_owner_free(owner);
 
     ConditionalRawFixture nominal;conditional_raw_fixture(&nominal,0);owner=NULL;
-    CHECK(effect_context_owner_build(context,&nominal.module,NULL,&owner)==XR_XIR_OK);
+    CHECK(effect_context_owner_build(context,&nominal.module,NULL,NULL,&owner)==XR_XIR_OK);
     effects=(XrXirEffects){.resources=context->resources,.count=4,.contexts=owner};
     origin=(XrXirOrigin){.function=2};input=(XirEffectContextInput){&nominal.module,NULL,&origin,UINT32_MAX,NULL,0};
     selected.declaration=UINT32_MAX;
@@ -818,7 +819,7 @@ static XrXirStatus conditional_zero_arity(const XrXirCompileContext *context,boo
     const XrXirModule *owned=xr_xir_compile_artifact_module(checked);
     if (status==XR_XIR_OK) status=xr_xir_compile_verify_v2(context,owned,
         xr_xir_compile_artifact_construction(checked),NULL);
-    if (status==XR_XIR_OK) status=effect_context_owner_build(context,owned,NULL,&owner);
+    if (status==XR_XIR_OK) status=effect_context_owner_build(context,owned,NULL,NULL,&owner);
     if (status==XR_XIR_OK) {
         XrXirEffects effects={.resources=context->resources,.count=3,.contexts=owner};
         XrXirOrigin origin={.function=0,.arguments=&ordinary[0],.argument_count=1};
@@ -901,7 +902,7 @@ static XrXirStatus conditional_zero_arity_cleanup(const XrXirCompileContext *con
     const XrXirModule *owned=xr_xir_compile_artifact_module(checked);
     if (status==XR_XIR_OK) status=xr_xir_compile_verify_v2(context,owned,
         xr_xir_compile_artifact_construction(checked),NULL);
-    if (status==XR_XIR_OK) status=effect_context_owner_build(context,owned,NULL,&owner);
+    if (status==XR_XIR_OK) status=effect_context_owner_build(context,owned,NULL,NULL,&owner);
     if (status==XR_XIR_OK) {
         XrXirEffects effects={.resources=context->resources,.count=5,.contexts=owner};
         XrXirOrigin nested={.function=2,.arguments=&ordinary[0],.argument_count=1};
@@ -1008,7 +1009,7 @@ static XrXirStatus conditional_base_cleanup_reference(const XrXirCompileContext 
     const XrXirModule *owned=xr_xir_compile_artifact_module(checked);
     if (status==XR_XIR_OK) status=xr_xir_compile_verify_v2(context,owned,
         xr_xir_compile_artifact_construction(checked),NULL);
-    if (status==XR_XIR_OK) status=effect_context_owner_build(context,owned,NULL,&owner);
+    if (status==XR_XIR_OK) status=effect_context_owner_build(context,owned,NULL,NULL,&owner);
     uint32_t pure_mask=UINT32_MAX,root_mask=UINT32_MAX;
     if (status==XR_XIR_OK) {
         XrXirEffects effects={.resources=context->resources,.count=7,.contexts=owner};
@@ -1165,7 +1166,7 @@ static XrXirStatus conditional_invocation_bounds(const XrXirCompileContext *cont
     if (status!=XR_XIR_OK) return status;
     ConditionalRawFixture fixture;conditional_raw_fixture(&fixture,2);
     EffectContextOwner *execution=NULL;
-    status=effect_context_owner_build(context,&fixture.module,NULL,&execution);
+    status=effect_context_owner_build(context,&fixture.module,NULL,NULL,&execution);
     if (status==XR_XIR_OK && oracle) {
         CHECK(execution && execution->declared && execution->declared->count==execution->dense->count);
         uint32_t mask=UINT32_MAX;
@@ -1187,7 +1188,7 @@ static XrXirStatus conditional_invocation_refinement(const XrXirCompileContext *
         fixture.method_ops[0].type=(XrXirType)259;
     }
     EffectContextOwner *execution=NULL;
-    if (status==XR_XIR_OK) status=effect_context_owner_build(context,&fixture.module,effects.refinement,&execution);
+    if (status==XR_XIR_OK) status=effect_context_owner_build(context,&fixture.module,effects.refinement,NULL,&execution);
     effect_refinement_free(effects.refinement);effects.refinement=NULL;
     memset(&fixture,0,sizeof(fixture));
     if (status==XR_XIR_OK && oracle) {
@@ -1249,7 +1250,7 @@ static XrXirStatus conditional_invocation_generic_bounds(const XrXirCompileConte
     if (status==XR_XIR_OK) status=xir_effects_refinement_capture(context,&module,&effects);
     if (status==XR_XIR_OK) maker[0].type=(XrXirType)257;
     EffectContextOwner *execution=NULL;
-    if (status==XR_XIR_OK) status=effect_context_owner_build(context,&module,effects.refinement,&execution);
+    if (status==XR_XIR_OK) status=effect_context_owner_build(context,&module,effects.refinement,NULL,&execution);
     xr_xir_compile_artifact_free(checked);
     effect_refinement_free(effects.refinement);effects.refinement=NULL;
     memset(nodes,0,sizeof(nodes));memset(functions,0,sizeof(functions));
@@ -1405,7 +1406,7 @@ static XrXirStatus conditional_descriptor_case(const XrXirCompileContext *contex
     if (status!=XR_XIR_OK) return status;
     ConditionalRawFixture fixture;conditional_raw_fixture(&fixture,0);
     EffectContextOwner *owner=NULL;XrXirRootCauseTrace *trace=NULL;
-    status=effect_context_owner_build(context,&fixture.module,NULL,&owner);
+    status=effect_context_owner_build(context,&fixture.module,NULL,NULL,&owner);
     for (uint32_t which=0;which<2 && status==XR_XIR_OK;++which) {
         EffectOrdinaryContexts *records=which?owner->dense:owner->ordinary;
         records->terms.remaining=context;
@@ -1652,6 +1653,10 @@ static void conditional_axes(void) {
 }
 
 int main(int argc, char **argv) {
+    if (argc==2 && !strcmp(argv[1],"--initial-ordinary-material")) {
+        conditional_initial_ordinary_resources();return 0;
+    }
+    initial_ordinary_controls();
     if (argc==2 && !strcmp(argv[1],"--ordinary-material")) {
         conditional_ordinary_material_resources();return 0;
     }

@@ -22,11 +22,11 @@ static XrXirStatus effect_context_owner_project(const XrXirCompileContext *conte
 }
 
 static XrXirStatus effect_context_owner_refresh(const XrXirCompileContext *context,
-    const XrXirModule *source, XrXirEffects *effects) {
+    const XrXirModule *source, XrXirEffects *effects,EffectBodyMaterial *initial) {
     if (!source->provenance || source->provenance->kind!=XR_XIR_EVIDENCE_TEMPLATE ||
         !source->declarations || !source->declarations->functions) return XR_XIR_OK;
     EffectContextOwner *fresh=NULL;
-    XrXirStatus status=effect_context_owner_build(context,source,effects->refinement,&fresh);
+    XrXirStatus status=effect_context_owner_build(context,source,effects->refinement,initial,&fresh);
     if (status!=XR_XIR_OK) return status;
     status=effect_context_owner_project(context,source,effects,fresh);
     if (status!=XR_XIR_OK) { effect_context_owner_free(fresh);return status; }
@@ -58,7 +58,9 @@ XR_FUNC XrXirStatus xir_effects_context_refresh(const XrXirCompileContext *conte
     if (status==XR_XIR_OK) status=effect_ordinary_bodies_match(ordinary,source);
     ordinary->terms.remaining=NULL;
     if (status==XR_XIR_BAD_TYPE || status==XR_XIR_BAD_STRUCTURE)
-        return effect_context_owner_refresh(context,source,(XrXirEffects *)effects);
+        /* Source may have advanced inside the refiner before the next outer
+         * invocation publication. Its changed view needs the original writer. */
+        return effect_context_owner_refresh(context,source,(XrXirEffects *)effects,NULL);
     return status;
 }
 

@@ -19,7 +19,7 @@ static void conditional_initial_role_literals(void) {
     XrXirModule source={.stage=XR_XIR_BUILT,.types=&types,.functions=functions,.function_count=2,
         .declarations=&declarations,.linkage_kind=XR_XIR_PROGRAM};
     EffectOrdinaryContexts *contexts=NULL;EffectBodyMaterial *material=NULL;
-    CHECK(effect_ordinary_build(&context,&source,&contexts)==XR_XIR_OK);
+    CHECK(effect_ordinary_build(&context,&source,NULL,&contexts)==XR_XIR_OK);
     contexts->terms.remaining=&context;EffectOrdinaryView view={0};
     CHECK(effect_ordinary_view(contexts,&source,&view)==XR_XIR_OK && !view.module.provenance);
     CHECK(effect_body_material_generation_input(&context,&view.module,NULL,&view.input,&material)==XR_XIR_OK);

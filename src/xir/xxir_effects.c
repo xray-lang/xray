@@ -518,6 +518,7 @@ static XrXirStatus effect_propagate(XrXirEffects *effects, EffectGraph *graph, c
 #include "xxir_go_safe.inc.c"
 #include "xxir_effect_context.inc.c"
 #include "xxir_effect_context_parameters.inc.c"
+#include "xxir_effect_snapshot_initial_ordinary.inc.c"
 #include "xxir_effect_context_roots.inc.c"
 #include "xxir_effect_context_forest.inc.c"
 #include "xxir_effect_context_scalar.inc.c"
@@ -707,7 +708,7 @@ static XrXirStatus effect_infer(const XrXirCompileContext *compile_context,
     if (status == XR_XIR_OK) status = effect_parameters_derive(module, effects, &graph, remaining);
     if (status == XR_XIR_OK) status = effect_invocation_publish(remaining,module,effects,&graph,NULL,NULL);
     if (status == XR_XIR_OK) status = effect_propagate(effects, &graph, remaining);
-    if (status == XR_XIR_OK) status = effect_context_owner_refresh(remaining,module,effects);
+    if (status == XR_XIR_OK) status = effect_context_owner_refresh(remaining,module,effects,effects->invocations->body);
     while (status == XR_XIR_OK && refiner) {
         changed = false;
         status = refiner->update(refiner->context,effects,&changed);
@@ -720,7 +721,7 @@ static XrXirStatus effect_infer(const XrXirCompileContext *compile_context,
              * stable. Seal it before Source copies the canonical contracts. */
             status=effect_graph_physical_refresh(remaining,module,&graph,effects->refinement);
             if (status==XR_XIR_OK) status=effect_invocation_publish(remaining,module,effects,&graph,NULL,NULL);
-            if (status==XR_XIR_OK) status=effect_context_owner_refresh(remaining,module,effects);
+            if (status==XR_XIR_OK) status=effect_context_owner_refresh(remaining,module,effects,effects->invocations->body);
             if (status!=XR_XIR_OK) break;
             status=refiner->update(refiner->context,effects,&changed);
         }
@@ -729,7 +730,7 @@ static XrXirStatus effect_infer(const XrXirCompileContext *compile_context,
         if (status == XR_XIR_OK) status = effect_parameters_derive(module, effects, &graph, remaining);
         if (status == XR_XIR_OK) status = effect_invocation_publish(remaining,module,effects,&graph,NULL,NULL);
         if (status == XR_XIR_OK) status = effect_propagate(effects,&graph,remaining);
-        if (status == XR_XIR_OK) status = effect_context_owner_refresh(remaining,module,effects);
+        if (status == XR_XIR_OK) status = effect_context_owner_refresh(remaining,module,effects,effects->invocations->body);
     }
     if (status == XR_XIR_OK) status = effect_go_safe(module, effects, &graph, remaining);
     if (status == XR_XIR_OK) status = effect_witnesses(module, effects, &graph, remaining);

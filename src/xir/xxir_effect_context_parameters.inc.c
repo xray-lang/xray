@@ -375,7 +375,8 @@ static XrXirStatus effect_body_ordinary_basis(const XrXirCompileContext *work,
         basis->count>basis->capacity || !basis->nodes || !basis->functions ||
         basis->uses.count!=basis->count || basis->uses.invocations ||
         !effect_body_material_shape(basis->uses.generation) ||
-        basis->uses.generation->resources!=work->resources || basis->uses.generation->backbone ||
+        basis->uses.generation->resources!=work->resources ||
+        (basis->uses.generation->backbone && basis->uses.generation->backbone->backbone) ||
         !basis->uses.generation->ordinary_identities ||
         effect_body_count(basis->uses.generation)!=basis->count) return XR_XIR_BAD_STRUCTURE;
     if (!xir_compile_work(work,12+sizeof(*output))) return XR_XIR_BUDGET;
@@ -486,9 +487,11 @@ static XrXirStatus effect_ordinary_classify(const XrXirCompileContext *context,
 #endif
 
 static XrXirStatus effect_ordinary_build(const XrXirCompileContext *context,
-    const XrXirModule *source, EffectOrdinaryContexts **output) {
+    const XrXirModule *source,EffectBodyMaterial *initial,EffectOrdinaryContexts **output) {
     if (!xir_compile_context_valid(context) || !source || !source->types ||
-        !source->functions || !source->function_count || !output || *output) return XR_XIR_BAD_STRUCTURE;
+        !source->functions || !source->function_count || !output || *output ||
+        (initial && (!effect_body_material_shape(initial) || initial->resources!=context->resources)))
+        return XR_XIR_BAD_STRUCTURE;
     XrXirStatus status=XR_XIR_OK;
     EffectOrdinaryContexts *contexts=xir_compile_calloc(context,1,sizeof(*contexts),&status);
     if (!contexts) return status;
@@ -509,8 +512,9 @@ static XrXirStatus effect_ordinary_build(const XrXirCompileContext *context,
     EffectGraph graph={0};EffectOrdinaryView view={0};
     contexts->uses.resources=context->resources;contexts->uses.count=contexts->count;
     if (status==XR_XIR_OK) status=effect_ordinary_view(contexts,source,&view);
+    if (status==XR_XIR_OK && !xir_compile_work(context,sizeof(view.input.initial))) status=XR_XIR_BUDGET;
     if (status==XR_XIR_OK) {
-        graph.ordinary=view.input;
+        view.input.initial=initial;graph.ordinary=view.input;
         status=effect_parameters_derive(&view.module,&contexts->uses,&graph,context);
     }
     effect_graph_free(&graph);

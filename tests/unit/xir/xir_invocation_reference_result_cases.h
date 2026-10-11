@@ -45,7 +45,7 @@ static XrXirStatus conditional_invocation_reference_result(const XrXirCompileCon
         entry[1].type=(XrXirType)259;entry[2].type=(XrXirType)258;
     }
     EffectContextOwner *execution=NULL;
-    if (status==XR_XIR_OK) status=effect_context_owner_build(context,&module,effects.refinement,&execution);
+    if (status==XR_XIR_OK) status=effect_context_owner_build(context,&module,effects.refinement,NULL,&execution);
     xr_xir_compile_artifact_free(checked);effect_refinement_free(effects.refinement);effects.refinement=NULL;
     if (status==XR_XIR_OK && oracle) {
         CHECK(execution && !execution->refinement && execution->forest && execution->forest->invocations &&

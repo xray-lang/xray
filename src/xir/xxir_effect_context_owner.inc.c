@@ -507,8 +507,10 @@ static XrXirStatus effect_context_dense_stable(const XrXirCompileContext *contex
     EffectContextOwner *owner,const XrXirModule *source);
 
 static XrXirStatus effect_context_owner_build(const XrXirCompileContext *context,
-    const XrXirModule *source, EffectRefinementBounds *bounds, EffectContextOwner **output) {
-    if (!source || !source->declarations || !source->declarations->functions || !output || *output)
+    const XrXirModule *source,EffectRefinementBounds *bounds,EffectBodyMaterial *initial,EffectContextOwner **output) {
+    if (!xir_compile_context_valid(context) || !source || !source->declarations ||
+        !source->declarations->functions || !output || *output ||
+        (initial && (!effect_body_material_shape(initial) || initial->resources!=context->resources)))
         return XR_XIR_BAD_STRUCTURE;
     XrXirModule normalized=*source;
     if (!normalized.types) normalized.types=&effect_empty_types;
@@ -518,7 +520,7 @@ static XrXirStatus effect_context_owner_build(const XrXirCompileContext *context
     if (!owner) return status;
     owner->refinement=bounds;
     status=effect_invocation_bounds_new(context,&owner->declared);
-    if (status==XR_XIR_OK) status=effect_ordinary_build(context,source,&owner->ordinary);
+    if (status==XR_XIR_OK) status=effect_ordinary_build(context,source,bounds?NULL:initial,&owner->ordinary);
     if (status==XR_XIR_OK && bounds) {
         owner->ordinary->terms.remaining=context;
         status=effect_refinement_apply(owner->ordinary,source,bounds);

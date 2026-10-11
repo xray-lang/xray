@@ -15,14 +15,17 @@
 static XrXirStatus effect_body_material_continue(const XrXirCompileContext *work,
     const XrXirModule *source,const EffectBodyOrdinaryInput *ordinary,EffectBodyMaterial **output);
 
+static void effect_body_ordinary_overlay_free(EffectBodyOrdinaryOverlay *overlay);
+static XrXirStatus effect_body_material_initial(const XrXirCompileContext *work,
+    const XrXirModule *source,const EffectBodyOrdinaryInput *ordinary,EffectBodyMaterial **output);
 static void effect_body_material_free(EffectBodyMaterial *body) {
     if (!body) return;
     XR_CHECK(body->references,"effect body reference must be live");
     if (--body->references) return;
     if (body->backbone) {
-        XR_CHECK(body->backbone!=body && !body->backbone->backbone &&
-            body->backbone->resources==body->resources && body->backbone->references,
+        XR_CHECK(effect_body_backbone_shape(body),
             "effect body backbone must be a live same-ledger complete owner");
+        effect_body_ordinary_overlay_free(body->overlay);
         effect_invocation_bounds_free(body->declared);
         effect_body_material_free(body->backbone);
         xr_compile_resources_free(body);return;
@@ -219,6 +222,10 @@ static XrXirStatus effect_body_material_generation_input(const XrXirCompileConte
         status=effect_body_material_continue(work,source,ordinary,output);
         if (status!=XR_XIR_OK || *output) return status;
     }
+    if (ordinary && ordinary->initial && !refinement) {
+        status=effect_body_material_initial(work,source,ordinary,output);
+        if (status!=XR_XIR_OK || *output) return status;
+    }
     /* Prepay the initial reference write and its unavoidable release. */
     if (!xir_compile_work(work,3*sizeof(uint32_t)+2*sizeof(void *)+3)) return XR_XIR_BUDGET;
     EffectBodyMaterial *body=xir_compile_calloc(work,1,sizeof(*body),&status);
@@ -371,6 +378,8 @@ static XrXirStatus effect_body_function_match(const XrXirCompileContext *work,
 }
 
 #include "xxir_effect_snapshot_continuation.inc.c"
+static XrXirStatus effect_body_source_match(const XrXirCompileContext *work,
+    const EffectBodyMaterial *body,const XrXirModule *source);
 
 /* The original seal boundary proves complete type/domain correspondence.
  * Its single writer already consumed every source body field. It does not

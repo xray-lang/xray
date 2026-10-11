@@ -20,6 +20,8 @@ typedef struct EffectBodyOrdinaryInput {
     const XrXirModule *source;
     /* A live generating ordinary owner is a lifetime input, never authority. */
     EffectOrdinaryContexts *basis;
+    /* The current operation retains this genuine initial certificate body. */
+    struct EffectBodyMaterial *initial;
 } EffectBodyOrdinaryInput;
 typedef struct EffectBodyOrdinaryIdentity {
     uint32_t declaration,owner;
@@ -45,6 +47,14 @@ typedef struct EffectBodyFunction {
     /* Concrete initial roles follow the constructor's real evidence proof. */
     const uint8_t *initial_roles;
 } EffectBodyFunction;
+typedef struct EffectBodyOrdinaryOverlay {
+    uint32_t count;
+    EffectBodyFunction *functions;
+    XrXirFunctionIdentity *identities;
+    XrXirGeneric *generics;
+    EffectBodyOrdinaryIdentity *ordinary_identities;
+    XrXirDeclarations declarations;
+} EffectBodyOrdinaryOverlay;
 typedef struct EffectBodyMaterial {
     XrCompileResources *resources;
     /* Only private compiler owners acquire/release these prepaid references. */
@@ -52,6 +62,8 @@ typedef struct EffectBodyMaterial {
     /* A thin generation owns its mutable advertisement overlay and retains
      * the complete immutable backbone. It never frees borrowed child owners. */
     struct EffectBodyMaterial *backbone;
+    /* Only an initial ordinary holder owns these transformed heads. */
+    EffectBodyOrdinaryOverlay *overlay;
     EffectTerms terms;
     XrXirTypes *owned_types;
     XirMetadataDomain domain;
@@ -108,10 +120,63 @@ static inline uint32_t effect_body_count(const EffectBodyMaterial *body) {
     return body->domain.function_count;
 }
 
+/* A holder owns bookkeeping and declared bounds, while payload storage stays
+ * on a live parent. These comparisons express only the bounded lifetime edge. */
+static inline bool effect_body_parent_shape(const EffectBodyMaterial *body,
+    const EffectBodyMaterial *parent) {
+    return parent!=body && parent->references && parent->resources==body->resources &&
+        body->declared && body->declared!=parent->declared &&
+        parent->domain.types==&parent->terms.types &&
+        body->domain.function_count==parent->domain.function_count &&
+        body->stage==parent->stage && body->linkage_kind==parent->linkage_kind &&
+        body->terms.types.nodes==parent->terms.types.nodes &&
+        body->terms.types.count==parent->terms.types.count &&
+        body->terms.types.nominals==parent->terms.types.nominals &&
+        body->terms.types.interfaces==parent->terms.types.interfaces &&
+        body->terms.memory==parent->terms.memory && body->owned_types==parent->owned_types &&
+        body->physical==parent->physical && body->cells==parent->cells &&
+        body->control==parent->control && body->local_roots==parent->local_roots &&
+        body->local_witnesses==parent->local_witnesses &&
+        !!body->domain.defaults==!!parent->domain.defaults &&
+        body->defaults.records==parent->defaults.records && body->defaults.count==parent->defaults.count;
+}
+
+static inline bool effect_body_overlay_shape(const EffectBodyMaterial *body) {
+    const EffectBodyOrdinaryOverlay *overlay=body->overlay;
+    return overlay && overlay->count==body->domain.function_count &&
+        overlay->functions && overlay->identities && overlay->generics && overlay->ordinary_identities &&
+        body->functions==overlay->functions && body->generics==overlay->generics &&
+        body->ordinary_identities==overlay->ordinary_identities &&
+        body->ordinary_source_count==overlay->count && !body->evidence_kind &&
+        body->declarations==&overlay->declarations && overlay->declarations.functions==overlay->identities &&
+        body->domain.declarations==body->declarations && body->domain.generics==body->generics;
+}
+
+/* There are at most two edges: dense -> ordinary overlay -> initial. Old
+ * ordinary owners remain valid parents. Neither self-links nor a third edge
+ * are storage; no recursion or public source comparison is replaced here. */
+static inline bool effect_body_backbone_shape(const EffectBodyMaterial *body) {
+    const EffectBodyMaterial *parent=body->backbone;
+    if (!parent) return !body->overlay;
+    if (!effect_body_parent_shape(body,parent) || !body->ordinary_identities || body->evidence_kind)
+        return false;
+    if (body->overlay) return effect_body_overlay_shape(body) && !parent->backbone &&
+        !parent->overlay && !parent->ordinary_identities;
+    if (body->functions!=parent->functions || body->declarations!=parent->declarations ||
+        body->generics!=parent->generics || body->ordinary_identities!=parent->ordinary_identities ||
+        body->ordinary_source_count!=parent->ordinary_source_count || parent->evidence_kind)
+        return false;
+    if (!parent->backbone) return !parent->overlay && parent->ordinary_identities;
+    const EffectBodyMaterial *initial=parent->backbone;
+    return initial!=body && !initial->backbone && !initial->overlay && !initial->ordinary_identities &&
+        effect_body_overlay_shape(parent) && effect_body_parent_shape(parent,initial);
+}
+
 /* Ownership consistency is only a storage precondition. Semantic callers
  * still prove complete external correspondence and actual equation closure. */
 static inline bool effect_body_material_shape(const EffectBodyMaterial *body) {
-    return body && body->resources && body->references && body->domain.types==&body->terms.types &&
+    return body && body->resources && body->references && effect_body_backbone_shape(body) &&
+        body->domain.types==&body->terms.types &&
         (!!body->domain.function_count==!!body->functions) &&
         body->domain.declarations==body->declarations && body->domain.generics==body->generics &&
         (!body->domain.defaults || body->domain.defaults==&body->defaults) &&

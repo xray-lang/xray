@@ -9,7 +9,7 @@ foreach(_root_conditional_gate helpers source)
     if(_root_conditional_gate STREQUAL "source")
         target_link_libraries(test_xir_root_conditional_${_root_conditional_gate} PRIVATE xray_xir_source)
     else()
-        target_link_libraries(test_xir_root_conditional_${_root_conditional_gate} PRIVATE xray_xir xray_xir_scalar)
+        target_link_libraries(test_xir_root_conditional_${_root_conditional_gate} PRIVATE xray_xir xray_xir_scalar xray_xir_source)
     endif()
     if(MSVC)
         target_compile_options(test_xir_root_conditional_${_root_conditional_gate} PRIVATE /W4 /WX /utf-8)
@@ -104,3 +104,9 @@ add_test(NAME test_xir_root_conditional_ordinary_material
     COMMAND test_xir_root_conditional_helpers --ordinary-material)
 set_tests_properties(test_xir_root_conditional_ordinary_material PROPERTIES
     TIMEOUT 300 RUN_SERIAL TRUE PROCESSORS 1)
+
+# Initial certificates and transformed ordinary views have independent owners.
+add_test(NAME test_xir_root_conditional_initial_ordinary_material
+    COMMAND test_xir_root_conditional_helpers --initial-ordinary-material)
+set_tests_properties(test_xir_root_conditional_initial_ordinary_material PROPERTIES
+    LABELS "unit;xir;root-effects;compiler-fault;ownership" TIMEOUT 300 RUN_SERIAL TRUE PROCESSORS 1)
