@@ -8,6 +8,8 @@
  */
 #ifndef XIR_SPECIALIZE_PROVENANCE_TAKE_CASES_H
 #define XIR_SPECIALIZE_PROVENANCE_TAKE_CASES_H
+#include "xir/xxir_nominal.h"
+#include "xir/xxir_interface.h"
 
 static const char provenance_take_text[] =
     "fn identity<T>(value:T)->T{return value}\n"
@@ -235,6 +237,141 @@ static void provenance_source_mismatched(void) {
     library_compile_owner_drop(&owner);
 }
 
+/* Matching a cloned pool is a fresh field comparison, with no temporary
+ * substitution allocation. Failed views retain their complete input owner. */
+static void provenance_source_type_status(const XrXirCompileContext *context,
+    const XrXirModule *source,const XrXirEffects *effects,XrXirStatus expected) {
+    XrCompileResourceStats before=library_compile_stats(context);
+    size_t attempts=source_program_compile_attempts;
+    CHECK(xir_effects_source_body_match(context,source,effects)==expected);
+    XrCompileResourceStats after=library_compile_stats(context);
+    CHECK(source_program_compile_attempts==attempts && after.live_bytes==before.live_bytes &&
+        after.allocated_bytes==before.allocated_bytes && after.work>=before.work);
+}
+
+static void provenance_source_node_fields(const XrXirCompileContext *context,
+    XrXirModule *source,const XrXirEffects *effects,XrXirTypes *types) {
+    uint32_t callable=UINT32_MAX,nominal=UINT32_MAX;
+    XrXirTypeNode *nodes=(XrXirTypeNode *)types->nodes;
+    for(uint32_t t=0;t<types->count;++t) {
+        if(nodes[t].kind==XR_XIR_TYPE_CALLABLE && nodes[t].parameter_count) callable=t;
+        if(nodes[t].kind==XR_XIR_TYPE_NOMINAL && nodes[t].nominal.argument_count) nominal=t;
+    }
+    CHECK(callable!=UINT32_MAX && nominal!=UINT32_MAX);
+    XrXirTypeNode held=nodes[callable];
+    nodes[callable].element=held.element==XR_XIR_I64?XR_XIR_BOOL:XR_XIR_I64;
+    provenance_source_type_status(context,source,effects,XR_XIR_BAD_STRUCTURE);
+    nodes[callable]=held;provenance_source_type_status(context,source,effects,XR_XIR_OK);
+    ++nodes[callable].parameter_span;
+    provenance_source_type_status(context,source,effects,XR_XIR_BAD_STRUCTURE);
+    nodes[callable]=held;
+    nodes[callable].parameters=NULL;
+    provenance_source_type_status(context,source,effects,XR_XIR_BAD_STRUCTURE);
+    nodes[callable]=held;
+    XrXirCallableParameter *parameters=(XrXirCallableParameter *)held.parameters;
+    XrXirCallableParameter parameter=parameters[0];
+    parameters[0].mode^=1;
+    provenance_source_type_status(context,source,effects,XR_XIR_BAD_STRUCTURE);
+    parameters[0]=parameter;
+    parameters[0].type=parameter.type==XR_XIR_I64?XR_XIR_BOOL:XR_XIR_I64;
+    provenance_source_type_status(context,source,effects,XR_XIR_BAD_STRUCTURE);
+    parameters[0]=parameter;
+    XrXirType *arguments=(XrXirType *)nodes[nominal].nominal.arguments;
+    XrXirType argument=arguments[0];
+    arguments[0]=argument==XR_XIR_I64?XR_XIR_BOOL:XR_XIR_I64;
+    provenance_source_type_status(context,source,effects,XR_XIR_BAD_STRUCTURE);
+    arguments[0]=argument;
+    uint32_t count=types->count;--types->count;
+    provenance_source_type_status(context,source,effects,XR_XIR_BAD_STRUCTURE);
+    types->count=count;provenance_source_type_status(context,source,effects,XR_XIR_OK);
+}
+
+static void provenance_source_table_fields(const XrXirCompileContext *context,
+    XrXirModule *source,const XrXirEffects *effects,XrXirTypes *types) {
+    CHECK(types->nominals && types->interfaces);
+    XrXirNominalTable *nominals=(XrXirNominalTable *)types->nominals;
+    XrXirInterfaceTable *interfaces=(XrXirInterfaceTable *)types->interfaces;
+    uint32_t box=UINT32_MAX,probe=UINT32_MAX;
+    for(uint32_t n=0;n<nominals->count;++n)
+        if(nominals->declarations[n].name.length==3 &&
+            !memcmp(nominals->declarations[n].name.bytes,"Box",3)) box=n;
+    for(uint32_t i=0;i<interfaces->count;++i)
+        if(interfaces->declarations[i].name.length==5 &&
+            !memcmp(interfaces->declarations[i].name.bytes,"Probe",5)) probe=i;
+    CHECK(box!=UINT32_MAX && probe!=UINT32_MAX);
+    XrXirNominalDeclaration *declaration=(XrXirNominalDeclaration *)&nominals->declarations[box];
+    CHECK(declaration->parameter_count==2 && declaration->field_count==1);
+    declaration->native.source_fingerprint[0]^=1;
+    provenance_source_type_status(context,source,effects,XR_XIR_BAD_STRUCTURE);
+    declaration->native.source_fingerprint[0]^=1;
+    XrXirConstraint *constraints=(XrXirConstraint *)declaration->constraints;
+    constraints[0].markers^=XR_XIR_CONSTRAINT_SENDABLE;
+    provenance_source_type_status(context,source,effects,XR_XIR_BAD_STRUCTURE);
+    constraints[0].markers^=XR_XIR_CONSTRAINT_SENDABLE;
+    XrXirNominalField *fields=(XrXirNominalField *)declaration->fields;
+    XrXirType field=fields[0].type;fields[0].type=field==XR_XIR_I64?XR_XIR_BOOL:XR_XIR_I64;
+    provenance_source_type_status(context,source,effects,XR_XIR_BAD_STRUCTURE);
+    fields[0].type=field;
+    XrXirInterfaceDeclaration *requirement=(XrXirInterfaceDeclaration *)&interfaces->declarations[probe];
+    CHECK(requirement->parameter_count==1 && requirement->method_count==1);
+    constraints=(XrXirConstraint *)requirement->constraints;
+    constraints[0].markers^=XR_XIR_CONSTRAINT_SENDABLE;
+    provenance_source_type_status(context,source,effects,XR_XIR_BAD_STRUCTURE);
+    constraints[0].markers^=XR_XIR_CONSTRAINT_SENDABLE;
+    XrXirInterfaceMethod *methods=(XrXirInterfaceMethod *)requirement->methods;
+    CHECK(methods[0].own_parameter_count==2);
+    XrXirType signature=methods[0].signature;methods[0].signature=XR_XIR_I64;
+    provenance_source_type_status(context,source,effects,XR_XIR_BAD_STRUCTURE);
+    methods[0].signature=signature;
+    constraints=(XrXirConstraint *)methods[0].constraints;
+    constraints[0].markers^=XR_XIR_CONSTRAINT_SENDABLE;
+    provenance_source_type_status(context,source,effects,XR_XIR_BAD_STRUCTURE);
+    constraints[0].markers^=XR_XIR_CONSTRAINT_SENDABLE;
+    const XrXirNominalDeclaration *records=nominals->declarations;nominals->declarations=NULL;
+    provenance_source_type_status(context,source,effects,XR_XIR_BAD_STRUCTURE);
+    nominals->declarations=records;
+    const XrXirInterfaceDeclaration *abstracts=interfaces->declarations;interfaces->declarations=NULL;
+    provenance_source_type_status(context,source,effects,XR_XIR_BAD_STRUCTURE);
+    interfaces->declarations=abstracts;provenance_source_type_status(context,source,effects,XR_XIR_OK);
+}
+
+/* This is the genuine generic requirement/nominal Source used by the method
+ * provenance controls. Its copied physical pool changes no function or proof. */
+static void provenance_source_types_controls(void) {
+    static const char text[]=
+        "interface Probe<A> { measure<U,V>()->i64 }\n"
+        "struct Box<X,Y> implements Probe<X> { value:i64; measure<W,Z>()->i64{return this.value} }\n"
+        "fn read<A,T:Probe<A>,U,V>(value:T)->i64{return value.measure<U,V>()}\n"
+        "fn physical(value:Box<i64,string>,callback:fn(i64)->i64)->i64{return value.value}\n"
+        "export fn first()->i64{return read<i64,Box<i64,string>,i64,string>(Box<i64,string>{value:41})}\n"
+        "export fn second()->i64{return read<i64,Box<i64,string>,string,i64>(Box<i64,string>{value:41})}\n";
+    LibraryCompileOwner owner={0};CHECK(library_compile_owner_new(&owner,&library_compile_limits)==XR_XIR_OK);
+    XrCompilerSession *session=NULL;CHECK(xr_compile_session_new(owner.context.resources,&session)==XR_COMPILER_SESSION_OK);
+    XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_MEMORY,"provenance-source-types",NULL};
+    XrXirSourceRequest request={session,NULL,&authority,&owner.context,NULL,NULL,XR_XIR_PROGRAM,NULL};
+    XrXirSourceText input={NULL,text,sizeof(text)-1};XrXirSourceResult result={0};char *failure=NULL;
+    CHECK(xr_xir_compile_source_check_text(&request,&input,&result,NULL,&failure)==XR_XIR_OK && result.checked);
+    xr_compile_session_free(session);xr_compile_resources_free(failure);
+    XrXirEffects *effects=NULL;CHECK(xr_xir_compile_artifact_verify_owned_effects(result.checked,&effects,NULL)==XR_XIR_OK);
+    XrCompileResourceStats baseline=library_compile_stats(&owner.context);
+    XrXirTypes *types=NULL;CHECK(xr_xir_compile_types_clone(&owner.context,result.checked->module.types,&types)==XR_XIR_OK && types);
+    XrXirModule changed=result.checked->module;changed.types=types;
+    CHECK(xr_xir_compile_structure_verify_v2(&owner.context,&changed,result.checked->construction,NULL)==XR_XIR_OK);
+    provenance_source_type_status(&owner.context,&changed,effects,XR_XIR_OK);
+    provenance_source_node_fields(&owner.context,&changed,effects,types);
+    provenance_source_table_fields(&owner.context,&changed,effects,types);
+    CHECK(xr_xir_compile_verify_source_effects_v2(&owner.context,&changed,result.checked->construction,effects,NULL)==XR_XIR_OK);
+    size_t attempts=source_program_compile_attempts;
+    source_program_compile_fail_at=attempts;source_program_compile_injected=false;
+    provenance_source_type_status(&owner.context,&changed,effects,XR_XIR_OK);
+    source_program_compile_fail_at=SIZE_MAX;CHECK(!source_program_compile_injected);
+    xr_xir_compile_types_free(types);
+    CHECK(library_compile_stats(&owner.context).live_bytes==baseline.live_bytes);
+    CHECK(xr_xir_compile_artifact_verify(result.checked,NULL)==XR_XIR_OK);
+    xr_xir_compile_effects_free(effects);xr_xir_compile_source_result_free(&result);
+    library_compile_owner_drop(&owner);
+}
+
 static void provenance_source_controls(void) {
     LibraryCompileOwner owner={0},foreign={0};
     CHECK(library_compile_owner_new(&owner,&library_compile_limits)==XR_XIR_OK);
@@ -251,7 +388,11 @@ static void provenance_source_controls(void) {
     provenance_source_mismatched();
 }
 
+#include "xir_source_facts_cases.h"
+
 static void provenance_take_controls(void) {
+    source_facts_case_lifetime();
+    provenance_source_types_controls();
     provenance_source_controls();
     LibraryCompileOwner owner={0},foreign={0};
     CHECK(library_compile_owner_new(&owner,&library_compile_limits)==XR_XIR_OK);

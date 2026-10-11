@@ -24,7 +24,7 @@ typedef struct ProvenanceMatch {
     XrXirDiagnostic *diagnostic;
     XrXirTypeMatchScratch scratch;
     const XrXirProvenance *instance;
-    XrXirEffects *effects;
+    const XrXirEffects *effects;
     XirEffectContextScope *selection_scope;
 } ProvenanceMatch;
 
@@ -746,7 +746,7 @@ static XrXirStatus provenance_match_scoped(void *data,XirEffectContextScope *sco
 
 static XrXirStatus provenance_functions_match_owned(const XrXirCompileContext *compile_context,
     const XrXirModule *source, const XrXirModule *destination, const XrXirProvenance *instance,
-    XrXirEffects *effects, XrXirDiagnostic *diagnostic) {
+    const XrXirEffects *effects, XrXirDiagnostic *diagnostic) {
     if (!xir_compile_context_valid(compile_context)) return XR_XIR_BAD_STRUCTURE;
     XrXirCompileContext compile_state = *compile_context;
     XrXirCompileContext *remaining = &compile_state;
@@ -805,7 +805,7 @@ XrXirStatus xr_xir_compile_provenance_functions_match(const XrXirCompileContext 
  * Source, permissions and destination correspondence still run every time. */
 XR_FUNC XrXirStatus xr_xir_compile_provenance_verify(const XrXirCompileContext *context,
     const XrXirModule *destination, const XrXirProvenance *instance,
-    XrXirEffects *source_effects, XrXirDiagnostic *diagnostic) {
+    const XrXirEffects *source_effects, XrXirDiagnostic *diagnostic) {
     if (!xir_compile_context_valid(context) || !instance ||
         instance->kind!=XR_XIR_EVIDENCE_INSTANCE || !instance->source) {
         if (diagnostic) *diagnostic=(XrXirDiagnostic){XR_XIR_BAD_STRUCTURE,

@@ -207,9 +207,8 @@ static XrXirStatus effect_context_dense_bytes(const XrXirCompileContext *context
 }
 
 static XrXirStatus effect_context_dense_body_match(const XrXirCompileContext *context,
-    const EffectContextOwner *owner,uint32_t index) {
+    const EffectContextOwner *owner,uint32_t index,const EffectInvocationCertificate *certificate) {
     const EffectOrdinaryContexts *dense=owner->dense;
-    const EffectInvocationCertificate *certificate=dense->uses.invocations;
     const XrXirFunction *actual=&dense->functions[index];
     const EffectBodyFunction *sealed=&certificate->body->functions[index];
     const EffectOrdinaryNode *node=&dense->nodes[index];const XrXirOrigin *origin=&certificate->origins[index];
@@ -249,19 +248,20 @@ static XrXirStatus effect_context_dense_body_match(const XrXirCompileContext *co
     return status;
 }
 
-static XrXirStatus effect_context_dense_stable(const XrXirCompileContext *context,
-    EffectContextOwner *owner,const XrXirModule *source) {
+static XrXirStatus effect_context_dense_stable_read(const XrXirCompileContext *context,
+    const EffectContextOwner *owner,const XrXirModule *source,
+    const EffectInvocationCertificate *certificate,EffectTerms *ordinary_terms,EffectTerms *dense_terms) {
     if (!xir_compile_context_valid(context) || !owner || !source || !owner->dense || !owner->ordinary)
         return XR_XIR_BAD_STRUCTURE;
-    EffectOrdinaryContexts *dense=owner->dense,*ordinary=owner->ordinary;
-    const EffectInvocationCertificate *certificate=dense->uses.invocations;
-    if (!xir_compile_context_valid(context) || dense->terms.remaining!=context || !dense->dense ||
+    const EffectOrdinaryContexts *dense=owner->dense,*ordinary=owner->ordinary;
+    if (!xir_compile_context_valid(context) || !dense->dense ||
         !ordinary || ordinary->dense || ordinary->base_count!=source->function_count ||
         dense->base_count!=source->function_count || ordinary->uses.resources!=context->resources ||
         dense->uses.resources!=context->resources || dense->uses.count!=dense->count || !dense->uses.root ||
         !certificate || !effect_body_material_shape(certificate->body) ||
         certificate->body->resources!=certificate->resources || certificate->resources!=context->resources || !certificate->equations ||
-        !certificate->projection_atoms ||
+        !certificate->result || certificate->result->count!=dense->count ||
+        dense->uses.result_borrow!=certificate->result ||
         certificate->equations->work || certificate->equations->module || certificate->equations->graph ||
         certificate->equations->effects || certificate->equations->declared ||
         effect_body_count(certificate->body)!=dense->count || !certificate->body->functions ||
@@ -276,15 +276,27 @@ static XrXirStatus effect_context_dense_stable(const XrXirCompileContext *contex
         !owner->declared || owner->declared->resources!=context->resources || owner->declared->count!=dense->count ||
         !certificate->declared || certificate->declared->resources!=context->resources ||
         certificate->declared->count!=dense->count) return XR_XIR_BAD_STRUCTURE;
-    ordinary->terms.remaining=context;
+    if (!ordinary_terms || !dense_terms || ordinary_terms->remaining!=context ||
+        dense_terms->remaining!=context) return XR_XIR_BAD_STRUCTURE;
     XrXirStatus status=owner->refinement?effect_refinement_match(context,source,owner->refinement):XR_XIR_OK;
     if (status==XR_XIR_OK)
-        status=effect_terms_snapshot_match(&ordinary->terms,source->types,ordinary->source_type_count);
-    if (status==XR_XIR_OK) status=effect_ordinary_bodies_match(ordinary,source);
-    ordinary->terms.remaining=NULL;
+        status=effect_terms_snapshot_match(ordinary_terms,source->types,ordinary->source_type_count);
+    if (status==XR_XIR_OK) status=effect_ordinary_bodies_match(ordinary,source,ordinary_terms);
     if (status==XR_XIR_OK)
-        status=effect_terms_snapshot_match(&dense->terms,&certificate->terms.types,dense->terms.types.count);
+        status=effect_terms_snapshot_match(dense_terms,&certificate->terms.types,dense->terms.types.count);
     for (uint32_t f=0;f<dense->count && status==XR_XIR_OK;++f)
-        status=effect_context_dense_body_match(context,owner,f);
+        status=effect_context_dense_body_match(context,owner,f,certificate);
     return status;
+}
+
+/* Mutable construction retains its own scratch capacity. Published queries
+ * supply separate request-owned Terms to the exact same correspondence core. */
+static XrXirStatus effect_context_dense_stable(const XrXirCompileContext *context,
+    EffectContextOwner *owner,const XrXirModule *source) {
+    if (!owner || !owner->dense || !owner->ordinary || owner->dense->terms.remaining!=context)
+        return XR_XIR_BAD_STRUCTURE;
+    owner->ordinary->terms.remaining=context;
+    XrXirStatus status=effect_context_dense_stable_read(context,owner,source,
+        owner->dense->uses.invocations,&owner->ordinary->terms,&owner->dense->terms);
+    owner->ordinary->terms.remaining=NULL;return status;
 }

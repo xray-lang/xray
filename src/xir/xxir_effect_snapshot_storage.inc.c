@@ -403,13 +403,32 @@ static XrXirStatus effect_body_type_domain_match(const XrXirCompileContext *work
     return status;
 }
 
+/* A Source receiver requires the exact ordered declaration and node fields
+ * retained by the sole type clone. Reinterpreting those same numeric children
+ * through a temporary substitution domain constructs no additional evidence.
+ * Lowered identity projection still uses its independent semantic matcher. */
+static XrXirStatus effect_body_source_types_match(const XrXirCompileContext *work,
+    const EffectBodyMaterial *body,const XrXirModule *source) {
+    if (!xir_compile_context_valid(work) || !effect_body_material_shape(body) || !source ||
+        body->resources!=work->resources || source->stage!=body->stage ||
+        source->linkage_kind!=body->linkage_kind ||
+        source->function_count!=effect_body_count(body) ||
+        (source->function_count && (!source->functions || !body->functions)))
+        return XR_XIR_BAD_STRUCTURE;
+    if (source->stage==XR_XIR_LOWERED) return effect_body_type_domain_match(work,body,source);
+    const XrXirTypes *types=source->types ? source->types : &effect_empty_types;
+    XrXirStatus status=effect_body_type_nodes_match(work,body->domain.types,types);
+    if (status==XR_XIR_OK) status=effect_body_type_tables_compare(work,body->domain.types,types,NULL);
+    return status;
+}
+
 /* Error/source fresh correspondence retains the complete independent body
  * and metadata traversal. Both lifetime adapters use the same sole reader;
  * no pointer identity substitutes for any source field comparison. */
 static XrXirStatus effect_body_source_match(const XrXirCompileContext *work,
     const EffectBodyMaterial *body,const XrXirModule *source) {
     if (!effect_body_material_shape(body) || body->ordinary_identities) return XR_XIR_BAD_STRUCTURE;
-    XrXirStatus status=effect_body_type_domain_match(work,body,source);
+    XrXirStatus status=effect_body_source_types_match(work,body,source);
     if (status==XR_XIR_OK) status=xir_effect_contract_shape_verify(work,source);
     if (status!=XR_XIR_OK) return status;
     uint32_t kind=source->provenance?source->provenance->kind:0;

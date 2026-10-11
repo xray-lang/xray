@@ -69,7 +69,8 @@ XR_FUNC XrXirStatus xr_xir_compile_checked_read(const XrXirCompileContext *compi
     if (c.status!=XR_XIR_OK) goto decode_failure;
     /* Decoding and semantic verification share the allocation owner. */
 
-    c.status=xr_xir_compile_verify_v2(&limits, &artifact->module, artifact->construction, diagnostic);
+    c.status=xir_source_facts_prepare_decoded(artifact,diagnostic);
+    if (c.status==XR_XIR_OK) c.status=xr_xir_compile_artifact_verify(artifact,diagnostic);
 
     if (c.status!=XR_XIR_OK) { xr_xir_compile_artifact_free(artifact); return c.status; }
     *output=artifact;

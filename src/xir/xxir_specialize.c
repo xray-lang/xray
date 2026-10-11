@@ -31,7 +31,9 @@ typedef struct SpecInstance {
 typedef struct SpecTypeFrame { uint32_t index, next; XrXirTypeNode node; } SpecTypeFrame;
 typedef struct SpecContext {
     const XrXirModule *source;
-    XrXirEffects *effects;
+    const XrXirArtifact *source_artifact;
+    XirSourceFacts *source_facts;
+    const XrXirEffects *effects;
     XrXirCompileContext remaining;
     XrXirDiagnostic diagnostic;
     SpecMemory *memory;
@@ -441,7 +443,7 @@ static XrXirStatus spec_nominal_fields(SpecContext *c) {
     }
     return XR_XIR_OK;
 }
-static XrXirStatus spec_provenance(SpecContext *c, const XrXirConstruction *construction, XrXirProvenance **output) {
+static XrXirStatus spec_provenance(SpecContext *c, XrXirProvenance **output) {
     XrXirStatus allocation_status = XR_XIR_OK;
     uint64_t bytes = (uint64_t)c->count * sizeof(XrXirOrigin);
     if (bytes > SIZE_MAX) return XR_XIR_BUDGET;
@@ -451,11 +453,7 @@ static XrXirStatus spec_provenance(SpecContext *c, const XrXirConstruction *cons
     for (uint32_t f = 0; f < c->count; ++f)
         origins[f] = (XrXirOrigin) {c->instances[f].declaration, c->instances[f].arguments,
             c->instances[f].count,c->instances[f].effects,c->instances[f].effect_count};
-    XrXirArtifact original = {0};
-    original.module = *c->source;
-    original.context = c->remaining;
-    original.construction = (XrXirConstruction *)construction;
-    XrXirProvenance evidence = {XR_XIR_EVIDENCE_INSTANCE, &original, origins, c->count,
+    XrXirProvenance evidence = {XR_XIR_EVIDENCE_INSTANCE, (XrXirArtifact *)c->source_artifact, origins, c->count,
         NULL, 0, NULL, 0};
     if (!spec_effect_proofs(c,&evidence.bindings,&evidence.binding_count)) {
         xr_compile_resources_free(origins);return c->diagnostic.status;
@@ -476,16 +474,17 @@ XrXirStatus xr_xir_compile_specialize(const XrXirArtifact *checked, XrXirArtifac
     XrXirCompileContext *budget = &compile_state;
     SpecContext c = {0};
     c.diagnostic = (XrXirDiagnostic) {XR_XIR_OK, UINT32_MAX, UINT32_MAX, UINT32_MAX, XR_XIR_DIAGNOSTIC_NONE};
-    c.source = xr_xir_compile_artifact_module(checked);c.cleanup_owner=UINT32_MAX;
+    c.source = xr_xir_compile_artifact_module(checked);c.source_artifact=checked;c.cleanup_owner=UINT32_MAX;
     c.remaining = *budget;
     XrXirCompileContext limits = c.remaining;
 
     if (!c.source || c.source->stage != XR_XIR_CHECKED || c.source->linkage_kind != XR_XIR_PROGRAM) { c.diagnostic.status = XR_XIR_BAD_STAGE; goto done; }
     bool templated=c.source->provenance && c.source->provenance->kind==XR_XIR_EVIDENCE_TEMPLATE;
     c.diagnostic.status = templated ?
-        xr_xir_compile_artifact_verify_owned_effects(checked,&c.effects,&c.diagnostic) :
+        xir_source_facts_acquire(checked,&c.source_facts,&c.diagnostic) :
         xr_xir_compile_artifact_verify(checked,&c.diagnostic);
     if (c.diagnostic.status != XR_XIR_OK) goto done;
+    c.effects=xir_source_facts_effects(c.source_facts);
     if (xir_effect_evidence_is_instance(c.source)) {
         c.diagnostic.status=xr_xir_compile_recheck_v2(&limits, c.source, checked->construction, output, &c.diagnostic); goto done;
     }
@@ -537,7 +536,7 @@ XrXirStatus xr_xir_compile_specialize(const XrXirArtifact *checked, XrXirArtifac
     if (c.diagnostic.status != XR_XIR_OK) goto done;
     XrXirModule specialized = {XR_XIR_CHECKED, c.functions, c.count, c.source->declarations ? &declarations : NULL, NULL, c.types.count || c.types.nominals ? &c.types : NULL, NULL, XR_XIR_PROGRAM, NULL};
     XrXirProvenance *provenance = NULL;
-    c.diagnostic.status = spec_provenance(&c, checked->construction, &provenance);
+    c.diagnostic.status = spec_provenance(&c,&provenance);
     if (c.diagnostic.status != XR_XIR_OK) goto done;
     specialized.provenance = provenance;
     XrXirConstruction *projected = NULL;
@@ -553,7 +552,7 @@ XrXirStatus xr_xir_compile_specialize(const XrXirArtifact *checked, XrXirArtifac
     xr_xir_compile_construction_free(projected);
     xr_xir_compile_provenance_free(provenance);
 done:
-    xr_xir_compile_effects_free(c.effects);
+    xir_source_facts_release(c.source_facts);
     while (c.memory) { SpecMemory *next = c.memory->next; xr_compile_resources_free(c.memory); c.memory = next; }
     if (diagnostic) *diagnostic = c.diagnostic;
     return c.diagnostic.status;

@@ -143,15 +143,15 @@ static XrXirStatus effect_ordinary_function(EffectOrdinaryContexts *contexts,
     return XR_XIR_OK;
 }
 
-static XrXirStatus effect_ordinary_environment_same(EffectOrdinaryContexts *contexts,
+static XrXirStatus effect_ordinary_environment_same(EffectTerms *terms,
     const EffectOrdinaryNode *node, uint32_t declaration, const XrXirType *arguments,
     uint32_t count, bool *equal) {
     *equal=node->declaration==declaration && node->argument_count==count;
-    XrXirTypeMatchScratch *scratch=effect_terms_type_scratch(&contexts->terms);
+    XrXirTypeMatchScratch *scratch=effect_terms_type_scratch(terms);
     XrXirStatus status=XR_XIR_OK;
     for (uint32_t a=0;*equal && a<count && status==XR_XIR_OK;++a) {
-        status=xr_xir_compile_type_substitution_matches_between_scratch(contexts->terms.remaining,
-            &contexts->terms.types,&contexts->terms.types,NULL,0,node->arguments[a],arguments[a],scratch);
+        status=xr_xir_compile_type_substitution_matches_between_scratch(terms->remaining,
+            &terms->types,&terms->types,NULL,0,node->arguments[a],arguments[a],scratch);
         if (status==XR_XIR_BAD_TYPE) { *equal=false;status=XR_XIR_OK; }
     }
     return status;
@@ -187,7 +187,7 @@ static XrXirStatus effect_ordinary_intern(EffectOrdinaryContexts *contexts,
         EffectOrdinaryNode node=contexts->nodes[n];
         if (node.owner!=owner) continue;
         bool equal=false;
-        status=effect_ordinary_environment_same(contexts,&node,target->target,arguments,
+        status=effect_ordinary_environment_same(&contexts->terms,&node,target->target,arguments,
             target->argument_count,&equal);
         if (status!=XR_XIR_OK) return status;
         if (equal) { *output=n;return XR_XIR_OK; }
@@ -253,8 +253,8 @@ static XrXirStatus effect_ordinary_snapshot(EffectOrdinaryContexts *contexts,
     return status;
 }
 
-static XrXirStatus effect_ordinary_signature_match(EffectOrdinaryContexts *contexts,
-    const XrXirModule *source,uint32_t function);
+static XrXirStatus effect_ordinary_signature_match(const EffectOrdinaryContexts *contexts,
+    const XrXirModule *source,uint32_t function, EffectTerms *terms);
 
 /* Internal role products are derived from the real generating vector. No
  * incomplete public TEMPLATE, stored writer role or permission hint enters it. */
@@ -307,7 +307,7 @@ static XrXirStatus effect_body_ordinary_input_verify(const XrXirCompileContext *
             generic.arguments!=current->arguments || generic.argument_count!=current->argument_count ||
             generic.parameter_kinds!=current->parameter_kinds) return XR_XIR_BAD_STRUCTURE;
         if (!contexts->dense) {
-            status=effect_ordinary_signature_match(contexts,source,f);
+            status=effect_ordinary_signature_match(contexts,source,f,&contexts->terms);
             if (status!=XR_XIR_OK) return status;
         }
         const XrXirType *physical=contexts->dense?node->physical_types:node->source_parameters;
@@ -335,8 +335,8 @@ static XrXirStatus effect_body_ordinary_identity(const XrXirCompileContext *work
 
 /* This live ordinary owner supplies lifetime only. The complete current
  * request is compared independently before its material can be retained. */
-static XrXirStatus effect_ordinary_bodies_match(EffectOrdinaryContexts *contexts,
-    const XrXirModule *source);
+static XrXirStatus effect_ordinary_bodies_match(const EffectOrdinaryContexts *contexts,
+    const XrXirModule *source, EffectTerms *terms);
 
 /* The retained material never aliases producer arrays. Recheck the real
  * source relation using the original ordinary matcher before retaining it. */
@@ -358,7 +358,7 @@ static XrXirStatus effect_ordinary_basis_source(const XrXirCompileContext *work,
     const XrXirCompileContext *previous=basis->terms.remaining;
     basis->terms.remaining=work;
     XrXirStatus status=effect_terms_snapshot_match(&basis->terms,source->types,basis->source_type_count);
-    if (status==XR_XIR_OK) status=effect_ordinary_bodies_match(basis,source);
+    if (status==XR_XIR_OK) status=effect_ordinary_bodies_match(basis,source,&basis->terms);
     basis->terms.remaining=previous;
     return status;
 }

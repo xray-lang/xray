@@ -1066,7 +1066,7 @@ static XrXirStatus verify_nominal_modules(const XrXirModule *module, XrXirCompil
 }
 
 static XrXirStatus verify_provenance(const XrXirModule *module, XrXirCompileContext *remaining,
-    XrXirEffects *source_effects, XrXirDiagnostic *diagnostic) {
+    const XrXirEffects *source_effects, XrXirDiagnostic *diagnostic) {
     const XrXirProvenance *p = module->provenance;
     XrXirStatus shape = xir_effect_contract_shape_verify(remaining, module);
     if (shape != XR_XIR_OK) return shape;
@@ -1120,7 +1120,7 @@ static XrXirStatus verify_metadata_parameter_count(const XrXirModule *module, Xr
 
 static XrXirStatus structure_verify_source(const XrXirCompileContext *compile_context,
     const XrXirModule *module, const XrXirConstruction *construction,
-    XrXirEffects *source_effects, XrXirDiagnostic *diagnostic) {
+    const XrXirEffects *source_effects, XrXirDiagnostic *diagnostic) {
     if (!xir_compile_context_valid(compile_context)) return XR_XIR_BAD_STRUCTURE;
     XrXirCompileContext compile_state = *compile_context;
     XrXirCompileContext *remaining = &compile_state;
@@ -1255,7 +1255,7 @@ XR_FUNC XrXirStatus xr_xir_compile_verify_source_effects_v2(const XrXirCompileCo
  * immutable Source derivation is borrowed through full fresh correspondence. */
 XR_FUNC XrXirStatus xr_xir_compile_verify_provenance_effects_v2(const XrXirCompileContext *context,
     const XrXirModule *module, const XrXirConstruction *construction,
-    XrXirEffects *source_effects, XrXirDiagnostic *diagnostic) {
+    const XrXirEffects *source_effects, XrXirDiagnostic *diagnostic) {
     if (!source_effects) return xr_xir_compile_verify_v2(context,module,construction,diagnostic);
     if (!xir_compile_context_valid(context) || !module || !module->provenance ||
         module->provenance->kind!=XR_XIR_EVIDENCE_INSTANCE) return XR_XIR_BAD_STRUCTURE;
@@ -1289,13 +1289,11 @@ XR_FUNC XrXirStatus xr_xir_compile_verify_effects_v2(const XrXirCompileContext *
  * domain; ordinary verification never requests otherwise unused facts. */
 static XrXirStatus verify_collected_effects(const XrXirCompileContext *context,
     const XrXirModule *module, const XrXirConstruction *construction,
-    XrXirEffects **output, XrXirDiagnostic *diagnostic, bool template_only) {
+    const XrXirEffects *source_effects,XrXirEffects **output, XrXirDiagnostic *diagnostic) {
     if (!xir_compile_context_valid(context) || !output || *output) return XR_XIR_BAD_STRUCTURE;
     XrXirDiagnostic location={XR_XIR_OK,UINT32_MAX,UINT32_MAX,UINT32_MAX,XR_XIR_DIAGNOSTIC_NONE};
     XrXirEffects *owned=NULL;
-    XrXirStatus status=xr_xir_compile_structure_verify_v2(context,module,construction,&location);
-    if (status==XR_XIR_OK && template_only &&
-        (!module->provenance || module->provenance->kind!=XR_XIR_EVIDENCE_TEMPLATE)) status=XR_XIR_BAD_STRUCTURE;
+    XrXirStatus status=structure_verify_source(context,module,construction,source_effects,&location);
     if (status==XR_XIR_OK) {
         XrXirCompileContext remaining=*context;
         status=declaration_effects_verify(module,&remaining,&location,NULL,&owned);
@@ -1308,12 +1306,23 @@ static XrXirStatus verify_collected_effects(const XrXirCompileContext *context,
 XR_FUNC XrXirStatus xr_xir_compile_verify_owned_effects_v2(const XrXirCompileContext *context,
     const XrXirModule *module, const XrXirConstruction *construction,
     XrXirEffects **output, XrXirDiagnostic *diagnostic) {
-    return verify_collected_effects(context,module,construction,output,diagnostic,true);
+    if (!module || !module->provenance || module->provenance->kind!=XR_XIR_EVIDENCE_TEMPLATE)
+        return XR_XIR_BAD_STRUCTURE;
+    return verify_collected_effects(context,module,construction,NULL,output,diagnostic);
 }
 XR_FUNC XrXirStatus xr_xir_compile_verify_analyzed_effects_v2(const XrXirCompileContext *context,
     const XrXirModule *module, const XrXirConstruction *construction,
     XrXirEffects **output, XrXirDiagnostic *diagnostic) {
-    return verify_collected_effects(context,module,construction,output,diagnostic,false);
+    return verify_collected_effects(context,module,construction,NULL,output,diagnostic);
+}
+/* The destination collector still reconstructs all receiving facts. Its
+ * genuine Source owner must already have passed full current input admission. */
+XR_FUNC XrXirStatus xr_xir_compile_verify_receiving_effects_v2(const XrXirCompileContext *context,
+    const XrXirModule *module,const XrXirConstruction *construction,
+    const XrXirEffects *source_effects,XrXirEffects **output,XrXirDiagnostic *diagnostic) {
+    if (source_effects && (!module || !module->provenance ||
+        module->provenance->kind!=XR_XIR_EVIDENCE_INSTANCE)) return XR_XIR_BAD_STRUCTURE;
+    return verify_collected_effects(context,module,construction,source_effects,output,diagnostic);
 }
 XrXirStatus xr_xir_compile_verify_v2(const XrXirCompileContext *context,
     const XrXirModule *module, const XrXirConstruction *construction, XrXirDiagnostic *diagnostic) {

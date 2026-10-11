@@ -748,6 +748,8 @@ XR_FUNC XrXirStatus xir_effects_entry_root(const XrXirCompileContext *context,
     *output=effects->entry_roots[function];return XR_XIR_OK;
 }
 
+#include "xxir_effect_source_terminal.inc.c"
+
 static XrXirStatus effect_infer(const XrXirCompileContext *compile_context,
     const XrXirModule *module, const XrXirRootRefiner *refiner, XrXirEffects **output) {
     XrXirStatus allocation_status = XR_XIR_OK;

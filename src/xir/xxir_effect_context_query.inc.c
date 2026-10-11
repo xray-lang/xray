@@ -52,11 +52,12 @@ XR_FUNC XrXirStatus xir_effects_context_refresh(const XrXirCompileContext *conte
         XrXirStatus bound_status=effect_refinement_match(context,source,effects->refinement);
         if (bound_status!=XR_XIR_OK) return bound_status;
     }
-    EffectOrdinaryContexts *ordinary=effects->contexts->ordinary;
-    ordinary->terms.remaining=context;
-    XrXirStatus status=effect_terms_snapshot_match(&ordinary->terms,source->types,ordinary->source_type_count);
-    if (status==XR_XIR_OK) status=effect_ordinary_bodies_match(ordinary,source);
-    ordinary->terms.remaining=NULL;
+    const EffectOrdinaryContexts *ordinary=effects->contexts->ordinary;
+    EffectTerms terms={.types=ordinary->terms.types,.remaining=context};
+    if (!xir_compile_work(context,sizeof(terms))) return XR_XIR_BUDGET;
+    XrXirStatus status=effect_terms_snapshot_match(&terms,source->types,ordinary->source_type_count);
+    if (status==XR_XIR_OK) status=effect_ordinary_bodies_match(ordinary,source,&terms);
+    effect_terms_free(&terms);
     if (status==XR_XIR_BAD_TYPE || status==XR_XIR_BAD_STRUCTURE)
         /* Source may have advanced inside the refiner before the next outer
          * invocation publication. Its changed view needs the original writer. */
@@ -149,14 +150,15 @@ static XrXirStatus effect_context_admission(const XrXirCompileContext *context,
     if (!normalized.types) normalized.types=&effect_empty_types;
     if (!types) types=&effect_empty_types;
     const EffectOrdinaryContexts *dense=effects->contexts->dense;
-    EffectOrdinaryContexts *ordinary=effects->contexts->ordinary;
-    ordinary->terms.remaining=context;
-    XrXirStatus status=effect_terms_snapshot_match(&ordinary->terms,normalized.types,dense->source_type_count);
-    if (status==XR_XIR_OK) status=effect_ordinary_bodies_match(ordinary,&normalized);
+    const EffectOrdinaryContexts *ordinary=effects->contexts->ordinary;
+    EffectTerms terms={.types=ordinary->terms.types,.remaining=context};
+    if (!xir_compile_work(context,sizeof(terms))) return XR_XIR_BUDGET;
+    XrXirStatus status=effect_terms_snapshot_match(&terms,normalized.types,dense->source_type_count);
+    if (status==XR_XIR_OK) status=effect_ordinary_bodies_match(ordinary,&normalized,&terms);
     if (status==XR_XIR_OK) status=types->interfaces ?
-        effect_terms_domain_match(&ordinary->terms,types) :
-        effect_terms_projected_domain(&ordinary->terms,types);
-    ordinary->terms.remaining=NULL;
+        effect_terms_domain_match(&terms,types) :
+        effect_terms_projected_domain(&terms,types);
+    effect_terms_free(&terms);
     return status;
 }
 
