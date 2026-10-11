@@ -155,6 +155,18 @@ static XrXirValueStatus value_admit_summary(const XrXirValue *value, XrXirType t
                     if (body->field_count > admission->work) {status=XR_XIR_VALUE_LIMIT;break;}
                     admission->work-=body->field_count;
                     count=body->field_count;
+                    /* This identity's active ancestor already schedules every
+                     * child. Revalidate this handle, then stop only its back edge. */
+                    for (size_t i = 0; i < stack.depth; ++i) {
+                        if (!admission->work || !xr_xir_domain_work(admission->domain, 1)) {
+                            status = XR_XIR_VALUE_LIMIT; break;
+                        }
+                        --admission->work;
+                        if (!stack.frames[i].inline_storage && stack.frames[i].object == object) {
+                            count = 0; break;
+                        }
+                    }
+                    if (status != XR_XIR_VALUE_OK) break;
                 } else if (object->kind==XR_XIR_TYPE_TUPLE) {
                     if (!admission->domain) {status=XR_XIR_VALUE_BAD_ARGUMENT;break;}
                     count=((XirTuple *)object)->count;

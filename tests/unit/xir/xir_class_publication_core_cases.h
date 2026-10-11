@@ -254,6 +254,9 @@ static void publication_core_cycle(ValueCompileOwner *compiler) {
     CHECK(xr_xir_class_new((XrXirType)256, &none, 1, &admission, &object) == XR_XIR_VALUE_OK);
     CHECK(xr_xir_nullable_new((XrXirType)257, &object, &admission, &some) == XR_XIR_VALUE_OK);
     CHECK(xr_xir_class_set(&object, 0, &some, &admission) == XR_XIR_VALUE_OK);
+    uint64_t work = admission.work, scratch = admission.scratch_bytes;
+    CHECK(xr_xir_value_admit(&object, (XrXirType)256, &admission) == XR_XIR_VALUE_OK);
+    CHECK(admission.work < work && admission.scratch_bytes == scratch);
     CHECK(xr_xir_value_copy(&object, &alias) == XR_XIR_VALUE_OK);
     XrXirClassPublication publication = {0};
     CHECK(xr_xir_class_publication_prepare(&object, 1, &admission, &publication) == XR_XIR_VALUE_OK);
