@@ -1654,6 +1654,10 @@ static void conditional_axes(void) {
 }
 
 int main(int argc, char **argv) {
+    if (argc==2 && !strcmp(argv[1],"--compact-codec-material")) {
+        conditional_compact_literals();conditional_compact_resources();
+        CHECK(!rp_live && !rp_live_bytes);return 0;
+    }
     if (argc==2 && !strcmp(argv[1],"--owned-error-material")) {
         conditional_owned_error_literals();conditional_owned_error_resources();
         CHECK(!rp_live && !rp_live_bytes);return 0;

@@ -132,9 +132,9 @@ static void ci_bulk(void){
     /* One old invalidation pass must visit at least 772 values at 256 calls,
      * at four work per value. The literal 500000 ceiling also includes the full
      * common checker, complete fixed points and exact enum qualification. */
+    printf("Cell sparse index: 512 scalar definitions, 256 calls, whole verifier+inference actual_work=%llu limit500000\n",(unsigned long long)work);
     CHECK(work<UINT64_C(500000));
     _Static_assert(UINT64_C(772)*256*4>UINT64_C(500000), "old full-value scan exceeds the independent work ceiling");
-    printf("Cell sparse index: 512 scalar definitions, 256 calls, whole verifier+inference work=%llu below literal500000\n",(unsigned long long)work);
     ci_release(&c,baseline);
 }
 static void ci_invalid_types(void){

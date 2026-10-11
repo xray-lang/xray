@@ -8,9 +8,57 @@
  */
 #ifndef XIR_INVOCATION_SINGLE_COLUMN_CASES_H
 #define XIR_INVOCATION_SINGLE_COLUMN_CASES_H
+/* A mismatch in the last physical word starts a new complete seed. These
+ * storage-only values preserve nonzero unused words and signed high bits. */
+static XrXirStatus conditional_compact_writer_boundary(const XrXirCompileContext *context,bool oracle) {
+    XrXirInstruction expected[6],source[6];
+    for (uint32_t i=0;i<6;++i) {
+        uint64_t bits=UINT64_C(0x8000000000000000)+i;
+        int64_t immediate;memcpy(&immediate,&bits,sizeof(immediate));
+        expected[i]=(XrXirInstruction){.op=XR_XIR_CONST_INT,.type=XR_XIR_I64,
+            .args={UINT32_MAX,19},.targets={7,12},.immediate=immediate,
+            .type_arguments={65536,i<3?65537u:65538u}};
+    }
+    memcpy(source,expected,sizeof(source));
+    XrXirFunction input={.instructions=source,.instruction_count=6};
+    XrXirFunction original={.instructions=expected,.instruction_count=6};
+    EffectBodyFunction body={.instruction_count=6};
+    XrXirStatus status=effect_body_records_copy(context,&input,&body);
+    memset(source,0xCD,sizeof(source));EffectBodyRead read=effect_body_compile_read(context);
+    if (status==XR_XIR_OK) status=effect_body_records_match(&read,&body,&original);
+    for (uint32_t i=0;i<6 && status==XR_XIR_OK;++i) {
+        XrXirInstruction decoded;status=effect_body_instruction_get(&read,&body,i,&decoded);
+        if (status==XR_XIR_OK && oracle) CHECK(conditional_compact_same(&decoded,&expected[i]));
+    }
+    if (status==XR_XIR_OK && oracle) CHECK(body.run_count==2);
+    xr_compile_resources_free(body.stream);
+    if (status!=XR_XIR_OK || !oracle) return status;
+    uint64_t held_bytes=rp_stats(context).live_bytes;
+    const XrXirOp invalid[]={XR_XIR_INVALID,XR_XIR_OP_COUNT,(XrXirOp)UINT32_MAX};
+    for (uint32_t i=0;i<4;++i) for (uint32_t bad=0;bad<3;++bad) {
+        for (uint32_t row=0;row<4;++row)
+            source[row]=(XrXirInstruction){.op=XR_XIR_CONST_INT,.type=XR_XIR_I64,.immediate=row};
+        source[i].op=invalid[bad];input.instruction_count=4;
+        body=(EffectBodyFunction){.instruction_count=4};size_t allocations=rp_attempts;
+        CHECK(effect_body_records_copy(context,&input,&body)==XR_XIR_BAD_STRUCTURE &&
+            !body.stream && !body.stream_words && !body.run_count && rp_attempts==allocations &&
+            rp_stats(context).live_bytes==held_bytes);
+    }
+    /* A real affine opcode column can reach an invalid ordinal. Its actual
+     * third value is checked even when every encoded delta predicts it. */
+    for (uint32_t i=0;i<3;++i)
+        source[i]=(XrXirInstruction){.op=(XrXirOp)(XR_XIR_OP_COUNT-2+i),.type=XR_XIR_I64};
+    input.instruction_count=3;body=(EffectBodyFunction){.instruction_count=3};size_t allocations=rp_attempts;
+    CHECK(effect_body_records_copy(context,&input,&body)==XR_XIR_BAD_STRUCTURE && !body.stream &&
+        !body.stream_words && !body.run_count && rp_attempts==allocations && rp_stats(context).live_bytes==held_bytes);
+    return XR_XIR_OK;
+}
+
 /* The two four-row runs have independent constant and one-delta models.
  * Unused fields remain nonzero and the exact signed immediate bits survive. */
 static XrXirStatus conditional_compact_sparse_codec(const XrXirCompileContext *context,bool oracle) {
+    XrXirStatus boundary=conditional_compact_writer_boundary(context,oracle);
+    if (boundary!=XR_XIR_OK) return boundary;
     XrXirInstruction expected[8],source[8];
     for (uint32_t i=0;i<8;++i) {
         uint64_t bits=i<4?UINT64_C(0x8000000000000000):UINT64_C(0xfffffff000000003)+(i-4);

@@ -844,7 +844,12 @@ static void conditional_compact_resources(void) {
             uint64_t baseline=entry.live_bytes;RootParameterMark retained=rp_mark();XrCompileResources *identity=context.resources;
             rp_attempts=0;rp_fail_at=pass?pass-1:SIZE_MAX;
             XrXirStatus status=conditional_compact_case(&context,mode,false);
-            if (!pass) { CHECK(status==XR_XIR_OK);sites=rp_attempts;single=rp_stats(&context); }
+            if (!pass) {
+                CHECK(status==XR_XIR_OK);sites=rp_attempts;single=rp_stats(&context);
+                printf("compact material mode%u census sites%zu work%llu allocated%llu live%llu peak%llu\n",
+                    mode,sites,(unsigned long long)single.work,(unsigned long long)single.allocated_bytes,
+                    (unsigned long long)single.live_bytes,(unsigned long long)single.peak_bytes);
+            }
             else {
                 CHECK(rp_injected && status==XR_XIR_OUT_OF_MEMORY);
                 ConditionalRetryTrial retry={.which=mode+87,.ordinal=pass-1,.sites=sites,

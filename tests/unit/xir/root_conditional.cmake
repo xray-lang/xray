@@ -116,3 +116,9 @@ add_test(NAME test_xir_root_conditional_owned_error_material
     COMMAND test_xir_root_conditional_helpers --owned-error-material)
 set_tests_properties(test_xir_root_conditional_owned_error_material PROPERTIES
     LABELS "unit;xir;root-effects;compiler-fault;ownership" TIMEOUT 300 RUN_SERIAL TRUE PROCESSORS 1)
+
+# Lossless codec controls and all actual faults precede unrelated cost gates.
+add_test(NAME test_xir_root_conditional_compact_codec_material
+    COMMAND test_xir_root_conditional_helpers --compact-codec-material)
+set_tests_properties(test_xir_root_conditional_compact_codec_material PROPERTIES
+    LABELS "unit;xir;root-effects;compiler-fault;ownership" TIMEOUT 300 RUN_SERIAL TRUE PROCESSORS 1)

@@ -97,7 +97,130 @@ static XrXirStatus conditional_owned_error(const XrXirCompileContext *context,
     effect_terms_free(&terms);xr_xir_compile_effects_free(effects);return status;
 }
 
+/* Each scan starts at physical zero. The independent literal rows retain
+ * unused words, signed high bits and both nonconstant affine runs. */
+static void owned_error_cursor_values(const XrXirCompileContext *context,
+    const EffectBodyFunction *body,const XrXirInstruction *expected) {
+    EffectBodyRead read=effect_body_compile_read(context);
+    CHECK(xir_compile_work(context,sizeof(EffectBodyRecordCursor)));
+    EffectBodyRecordCursor cursor={0,0,0,UINT32_MAX};
+    for (uint32_t i=0;i<body->instruction_count;++i) {
+        XrXirInstruction decoded;
+        CHECK(effect_body_instruction_cursor_get(&read,body,i,&cursor,&decoded)==XR_XIR_OK &&
+            conditional_compact_same(&decoded,&expected[i]));
+    }
+    CHECK(xir_compile_work(context,sizeof(cursor)));cursor=(EffectBodyRecordCursor){0,0,0,UINT32_MAX};
+    for (uint32_t i=0;i<body->instruction_count;++i) {
+        EffectBodyInstructionFields fields;
+        CHECK(effect_body_instruction_cursor_fields(&read,body,i,&cursor,&fields)==XR_XIR_OK &&
+            fields.op==expected[i].op && fields.type==expected[i].type && fields.source==expected[i].args[0]);
+    }
+    XrXirInstruction sentinel={.op=XR_XIR_RETURN,.type=XR_XIR_I64,.immediate=INT64_MIN},out=sentinel;
+    CHECK(effect_body_instruction_cursor_get(&read,body,0,&cursor,&out)==XR_XIR_BAD_STRUCTURE &&
+        conditional_compact_same(&out,&sentinel));
+    CHECK(effect_body_instruction_cursor_get(&read,body,body->instruction_count,&cursor,&out)==XR_XIR_BAD_STRUCTURE &&
+        conditional_compact_same(&out,&sentinel));
+    CHECK(xir_compile_work(context,sizeof(cursor)));cursor=(EffectBodyRecordCursor){1,0,0,UINT32_MAX};
+    CHECK(effect_body_instruction_cursor_get(&read,body,0,&cursor,&out)==XR_XIR_BAD_STRUCTURE &&
+        conditional_compact_same(&out,&sentinel));
+}
+
+/* Every real read/output charge is a refusal point. Cursor movement is
+ * private progress and may survive a refusal; neither output is published. */
+static void owned_error_cursor_refusals(const XrXirCompileContext *context,
+    const EffectBodyFunction *body,const XrXirInstruction *expected) {
+    for (uint32_t narrow=0;narrow<2;++narrow) {
+        ConditionalCompactRead observation={context,0,UINT64_MAX};
+        EffectBodyRead read={&observation,conditional_compact_read_work};
+        CHECK(xir_compile_work(context,sizeof(EffectBodyRecordCursor)));
+        EffectBodyRecordCursor cursor={0,0,0,UINT32_MAX};
+        XrXirInstruction decoded;
+        EffectBodyInstructionFields fields;
+        if (narrow) CHECK(effect_body_instruction_cursor_fields(&read,body,4,&cursor,&fields)==XR_XIR_OK &&
+            fields.op==expected->op && fields.type==expected->type && fields.source==expected->args[0]);
+        else CHECK(effect_body_instruction_cursor_get(&read,body,4,&cursor,&decoded)==XR_XIR_OK &&
+            conditional_compact_same(&decoded,expected));
+        uint64_t points=observation.calls;CHECK(points);
+        for (uint64_t at=0;at<points;++at) {
+            observation.calls=0;observation.reject=at;
+            CHECK(xir_compile_work(context,sizeof(cursor)));cursor=(EffectBodyRecordCursor){0,0,0,UINT32_MAX};
+            XrXirInstruction sentinel={.op=XR_XIR_RETURN,.type=XR_XIR_BOOL,
+                .args={11,12},.targets={13,14},.immediate=INT64_MIN,.type_arguments={15,16}};
+            EffectBodyInstructionFields narrow_sentinel={XR_XIR_RETURN,XR_XIR_BOOL,UINT32_MAX};
+            decoded=sentinel;fields=narrow_sentinel;
+            if (narrow) CHECK(effect_body_instruction_cursor_fields(&read,body,4,&cursor,&fields)==XR_XIR_BUDGET &&
+                !memcmp(&fields,&narrow_sentinel,sizeof(fields)));
+            else CHECK(effect_body_instruction_cursor_get(&read,body,4,&cursor,&decoded)==XR_XIR_BUDGET &&
+                conditional_compact_same(&decoded,&sentinel));
+            CHECK(observation.calls==at+1);
+        }
+    }
+}
+
+static void owned_error_cursor_malformed(const XrXirCompileContext *context,
+    EffectBodyFunction *body,const XrXirFunction *expected) {
+    EffectBodyRead read=effect_body_compile_read(context);EffectBodyRunRef first;
+    CHECK(body->stream_words<=64 && body->run_count==2);
+    CHECK(effect_body_run_ref(&read,body,0,0,&first)==XR_XIR_OK);
+    uint32_t saved[64];memcpy(saved,body->stream,body->stream_words*sizeof(*saved));
+    uint32_t words=body->stream_words,runs=body->run_count,capacity=body->stream_capacity;
+    for (uint32_t mode=0;mode<9;++mode) {
+        if (!mode) body->stream[0]=1;
+        else if (mode==1) body->stream[1]=0;
+        else if (mode==2) body->stream[2]|=UINT32_C(1024);
+        else if (mode==3) body->stream_words=EFFECT_BODY_HEADER-1;
+        else if (mode==4) body->run_count=0;
+        else if (mode==5) body->stream_capacity=body->stream_words-1;
+        else if (mode==6) body->stream[EFFECT_BODY_HEADER]=0;
+        else if (mode==7) body->stream[first.next]=first.first+first.count+1;
+        else --body->instruction_count;
+        CHECK(xir_compile_work(context,sizeof(EffectBodyRecordCursor)));
+        EffectBodyRecordCursor cursor={0,0,0,UINT32_MAX};
+        XrXirInstruction sentinel={.op=XR_XIR_RETURN,.type=XR_XIR_I64,.immediate=INT64_MIN},out=sentinel;
+        CHECK(effect_body_instruction_cursor_get(&read,body,4,&cursor,&out)==XR_XIR_BAD_STRUCTURE &&
+            conditional_compact_same(&out,&sentinel));
+        CHECK(xir_compile_work(context,sizeof(cursor)));cursor=(EffectBodyRecordCursor){0,0,0,UINT32_MAX};
+        EffectBodyInstructionFields fields_sentinel={XR_XIR_RETURN,XR_XIR_BOOL,UINT32_MAX},fields=fields_sentinel;
+        CHECK(effect_body_instruction_cursor_fields(&read,body,4,&cursor,&fields)==XR_XIR_BAD_STRUCTURE &&
+            !memcmp(&fields,&fields_sentinel,sizeof(fields)));
+        memcpy(body->stream,saved,words*sizeof(*saved));body->stream_words=words;
+        body->run_count=runs;body->stream_capacity=capacity;body->instruction_count=8;
+        CHECK(effect_body_records_match(&read,body,expected)==XR_XIR_OK);
+    }
+    CHECK(xir_compile_work(context,sizeof(EffectBodyRecordCursor)));
+    EffectBodyRecordCursor cursor={0,0,0,UINT32_MAX};XrXirInstruction out;
+    CHECK(effect_body_instruction_cursor_get(&read,body,0,&cursor,&out)==XR_XIR_OK);
+    body->stream[first.next]=first.first+first.count+1;
+    XrXirInstruction sentinel={.op=XR_XIR_RETURN,.type=XR_XIR_I64,.immediate=INT64_MIN};out=sentinel;
+    CHECK(effect_body_instruction_cursor_get(&read,body,1,&cursor,&out)==XR_XIR_BAD_STRUCTURE &&
+        conditional_compact_same(&out,&sentinel));
+    memcpy(body->stream,saved,words*sizeof(*saved));
+}
+
+static void conditional_owned_error_cursor_literals(void) {
+    RootParameterMark physical=rp_mark();XrXirCompileContext context=rp_owner(rp_caps());
+    uint64_t baseline=rp_stats(&context).live_bytes;
+    XrXirInstruction original[8],producer[8];conditional_compact_rows(original);
+    memcpy(producer,original,sizeof(producer));
+    XrXirFunction input={.instructions=producer,.instruction_count=8};
+    XrXirFunction expected={.instructions=original,.instruction_count=8};
+    EffectBodyFunction body={.instruction_count=8};
+    CHECK(effect_body_records_copy(&context,&input,&body)==XR_XIR_OK);
+    memset(producer,0xCE,sizeof(producer));
+    owned_error_cursor_values(&context,&body,original);
+    owned_error_cursor_refusals(&context,&body,&original[4]);
+    owned_error_cursor_malformed(&context,&body,&expected);
+    EffectBodyRead read=effect_body_compile_read(&context);
+    for (uint32_t field=0;field<10;++field) {
+        XrXirInstruction saved=original[2];conditional_compact_change(&original[2],field);
+        CHECK(effect_body_records_match(&read,&body,&expected)==XR_XIR_BAD_STRUCTURE);
+        original[2]=saved;CHECK(effect_body_records_match(&read,&body,&expected)==XR_XIR_OK);
+    }
+    xr_compile_resources_free(body.stream);rp_owner_free(&context,baseline);rp_balanced(physical);
+}
+
 static void conditional_owned_error_literals(void) {
+    conditional_owned_error_cursor_literals();
     for (uint32_t mode=0;mode<2;++mode) {
         RootParameterMark physical=rp_mark();XrXirCompileContext context=rp_owner(rp_caps());
         uint64_t baseline=rp_stats(&context).live_bytes;
@@ -106,8 +229,8 @@ static void conditional_owned_error_literals(void) {
     }
 }
 
-/* Only the original complete compiler lane runs this extra two-operation
- * census. No focused ordinary argv repeats its full all-ordinal fault work. */
+/* The dedicated owned Error gate runs the complete two-operation census.
+ * Other argv retain their original fault responsibility without repeating it. */
 static void conditional_owned_error_resources(void) {
     for (uint32_t mode=0;mode<2;++mode) {
         size_t sites=0;XrCompileResourceStats census={0},entry={0};

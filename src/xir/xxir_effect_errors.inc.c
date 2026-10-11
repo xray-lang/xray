@@ -118,6 +118,38 @@ static bool error_copy_op(XrXirOp op) {
 enum { ERROR_ROW_ACTIVE = 1, ERROR_ROW_CELL = 2, ERROR_ROW_COPY = 4 };
 /* One fresh shape read supplies membership and alias classification. These
  * results describe storage, never execution authority or declaration proof. */
+static XrXirStatus error_type_active(const ErrorFlow *flow,XrXirType type,bool *active) {
+    if (!flow || !active) return XR_XIR_BAD_STRUCTURE;
+    switch (type) {
+    case XR_XIR_UNIT: case XR_XIR_BOOL: case XR_XIR_I64: case XR_XIR_STRING:
+    case XR_XIR_I8: case XR_XIR_I16: case XR_XIR_I32: case XR_XIR_U8:
+    case XR_XIR_U16: case XR_XIR_U32: case XR_XIR_U64: case XR_XIR_F32:
+    case XR_XIR_F64: case XR_XIR_PANIC_INFO: case XR_XIR_RUNE:
+        *active = false;return XR_XIR_OK;
+    default: break;
+    }
+    const XrXirTypes *types = flow->body.domain.types;
+    uint32_t id = (uint32_t)type;
+    if (!types || !types->nodes || id < XR_XIR_CONSTRUCTED_TYPE_BASE ||
+        id >= XR_XIR_CONSTRUCTED_TYPE_LIMIT) { *active = true;return XR_XIR_OK; }
+    if (!xir_compile_work(flow->remaining, 1)) return XR_XIR_BUDGET;
+    const XrXirTypeNode *node = xr_xir_type_node(types, type);
+    if (!node || node->parameter_span || !error_closed_node_shape(node)) {
+        *active = true;return XR_XIR_OK;
+    }
+    if (node->kind != XR_XIR_TYPE_NOMINAL) { *active = false;return XR_XIR_OK; }
+    const XrXirNominalTable *table = types->nominals;
+    if (!table || node->nominal.declaration >= table->count ||
+        (table->declarations != NULL) == (table->identities != NULL)) {
+        *active = true;return XR_XIR_OK;
+    }
+    if (!xir_compile_work(flow->remaining, 1)) return XR_XIR_BUDGET;
+    uint32_t d = node->nominal.declaration;
+    uint32_t kind = table->declarations ? table->declarations[d].kind : table->identities[d].kind;
+    *active = kind != XR_XIR_NOMINAL_STRUCT && kind != XR_XIR_NOMINAL_CLASS;
+    return XR_XIR_OK;
+}
+
 static XrXirStatus error_row_active(const ErrorFlow *flow, uint32_t value, bool *active,
     XrXirType *type_output, bool *copy_output, uint32_t *source_output) {
     if (!flow || !flow->function || !active || !type_output || !copy_output || !source_output ||
@@ -142,36 +174,40 @@ static XrXirStatus error_row_active(const ErrorFlow *flow, uint32_t value, bool 
         XrXirStatus read=error_type_at(flow,value,&type);
         if (read!=XR_XIR_OK) return read;
     }
-    switch (type) {
-    case XR_XIR_UNIT: case XR_XIR_BOOL: case XR_XIR_I64: case XR_XIR_STRING:
-    case XR_XIR_I8: case XR_XIR_I16: case XR_XIR_I32: case XR_XIR_U8:
-    case XR_XIR_U16: case XR_XIR_U32: case XR_XIR_U64: case XR_XIR_F32:
-    case XR_XIR_F64: case XR_XIR_PANIC_INFO: case XR_XIR_RUNE:
-        *active = false;*type_output=type;*copy_output=copy;*source_output=source;return XR_XIR_OK;
-    default: break;
-    }
-    const XrXirTypes *types = flow->body.domain.types;
-    uint32_t id = (uint32_t)type;
-    if (!types || !types->nodes || id < XR_XIR_CONSTRUCTED_TYPE_BASE ||
-        id >= XR_XIR_CONSTRUCTED_TYPE_LIMIT) { *active = true;*type_output=type;*copy_output=copy;*source_output=source;return XR_XIR_OK; }
-    if (!xir_compile_work(flow->remaining, 1)) return XR_XIR_BUDGET;
-    const XrXirTypeNode *node = xr_xir_type_node(types, type);
-    if (!node || node->parameter_span || !error_closed_node_shape(node)) {
-        *active = true;*type_output=type;*copy_output=copy;*source_output=source;return XR_XIR_OK;
-    }
-    if (node->kind != XR_XIR_TYPE_NOMINAL) { *active = false;*type_output=type;*copy_output=copy;*source_output=source;return XR_XIR_OK; }
-    const XrXirNominalTable *table = types->nominals;
-    if (!table || node->nominal.declaration >= table->count ||
-        (table->declarations != NULL) == (table->identities != NULL)) {
-        *active = true;*type_output=type;*copy_output=copy;*source_output=source;return XR_XIR_OK;
-    }
-    if (!xir_compile_work(flow->remaining, 1)) return XR_XIR_BUDGET;
-    uint32_t d = node->nominal.declaration;
-    uint32_t kind = table->declarations ? table->declarations[d].kind : table->identities[d].kind;
-    *active = kind != XR_XIR_NOMINAL_STRUCT && kind != XR_XIR_NOMINAL_CLASS;
-    *type_output=type;*copy_output=copy;*source_output=source;
-    return XR_XIR_OK;
+    XrXirStatus status=error_type_active(flow,type,active);
+    if (status!=XR_XIR_OK) return status;
+    *type_output=type;*copy_output=copy;*source_output=source;return XR_XIR_OK;
 }
+/* The cursor is stack-local to this one membership or block scan. The
+ * actual request selects storage only; all row fields and type semantics are
+ * read again, and the existing raw callback remains the construction adapter. */
+static XrXirStatus error_owned_cursor_row(const ErrorFlow *flow,uint32_t instruction,
+    EffectBodyRecordCursor *cursor,XrXirInstruction *operation,EffectBodyInstructionFields *fields) {
+    if (!flow || !cursor || (!operation && !fields) || (operation && fields) ||
+        flow->body.instruction!=effect_body_owned_instruction) return XR_XIR_BAD_STRUCTURE;
+    const EffectBodyMaterial *body=flow->body.owner;
+    if (!xir_compile_context_valid(flow->remaining) || !effect_body_material_shape(body) ||
+        body->resources!=flow->remaining->resources || flow->body.read.owner!=flow->remaining ||
+        flow->body.read.consume!=effect_body_compile_consume || flow->body.domain.types!=body->domain.types ||
+        flow->body.domain.function_count!=effect_body_count(body) ||
+        flow->function_index>=effect_body_count(body)) return XR_XIR_BAD_STRUCTURE;
+    const EffectBodyFunction *function=&body->functions[flow->function_index];
+    if (fields) return effect_body_instruction_cursor_fields(&flow->body.read,function,instruction,cursor,fields);
+    XrXirStatus status=effect_body_instruction_cursor_get(&flow->body.read,function,instruction,cursor,operation);
+    if (status==XR_XIR_OK && !xir_compile_work(flow->remaining,sizeof(const XrXirInstruction *)))
+        status=XR_XIR_BUDGET;
+    return status;
+}
+
+static XrXirStatus error_owned_cursor_active(const ErrorFlow *flow,uint32_t instruction,
+    EffectBodyRecordCursor *cursor,EffectBodyInstructionFields *fields,bool *active) {
+    XrXirStatus status=error_owned_cursor_row(flow,instruction,cursor,NULL,fields);
+    if (status!=XR_XIR_OK) return status;
+    if (!xir_compile_work(flow->remaining,1)) return XR_XIR_BUDGET;
+    if (fields->op==XR_XIR_GO || fields->op==XR_XIR_INVOKE_ERROR) { *active=true;return XR_XIR_OK; }
+    return error_type_active(flow,fields->type,active);
+}
+
 static bool error_any(const uint64_t *set, uint32_t words) {
     for (uint32_t w = 0; w < words; ++w) if (set[w]) return true;
     return false;
@@ -514,6 +550,11 @@ static XrXirStatus error_block(ErrorFlow *flow, uint32_t b,const uint8_t *zero_c
     if (!xir_compile_work(flow->remaining, flow->stride)) return XR_XIR_BUDGET;
     { if (!xir_compile_work(flow->remaining, flow->stride * sizeof(uint64_t))) { return XR_XIR_BUDGET; } memcpy(flow->work, flow->states + (size_t)b * flow->stride, flow->stride * sizeof(uint64_t)); }
     XrXirInstruction storage;const XrXirInstruction *end=NULL;
+    bool owned=flow->body.instruction==effect_body_owned_instruction;EffectBodyRecordCursor cursor;
+    if (owned) {
+        if (!xir_compile_work(flow->remaining,sizeof(cursor))) return XR_XIR_BUDGET;
+        cursor=(EffectBodyRecordCursor){0,0,0,UINT32_MAX};
+    }
     for (uint32_t i = block->first; i < block->first + block->count; ++i) {
         XrXirStatus status = block->panic ? error_edge(flow, b, block->panic, NULL, true) : XR_XIR_OK;
         bool copied_zero=false;
@@ -525,8 +566,11 @@ static XrXirStatus error_block(ErrorFlow *flow, uint32_t b,const uint8_t *zero_c
         }
         if (status==XR_XIR_OK && copied_zero) status=error_instruction_begin(flow,i);
         else {
-            if (status == XR_XIR_OK)
-                status = error_operation(flow,flow->function_index,i,&storage,&end);
+            if (status==XR_XIR_OK && owned) {
+                status=error_owned_cursor_row(flow,i,&cursor,&storage,NULL);
+                if (status==XR_XIR_OK) end=&storage;
+            } else if (status==XR_XIR_OK)
+                status=error_operation(flow,flow->function_index,i,&storage,&end);
             if (status == XR_XIR_OK) status = error_instruction(flow, i, end);
         }
         if (status != XR_XIR_OK || flow->restart) return status;
@@ -610,7 +654,11 @@ static XrXirStatus error_function(ErrorFlow *flow, uint32_t f) {
     /* Representation dispatch is not authority. Each physical row still
      * rebuilds full membership through the complete owned decoder below. */
     bool owned=flow->body.instruction==effect_body_owned_instruction;
-    uint32_t zero_copy_count=0;
+    uint32_t zero_copy_count=0;EffectBodyRecordCursor cursor;
+    if (owned) {
+        if (!xir_compile_work(flow->remaining,sizeof(cursor))) return XR_XIR_BUDGET;
+        cursor=(EffectBodyRecordCursor){0,0,0,UINT32_MAX};
+    }
     if (flow->values > sizeof(inline_membership)) {
         uint64_t temporary_bytes=(uint64_t)flow->values*(sizeof(*sources)+sizeof(*membership));
         if (temporary_bytes>SIZE_MAX) return XR_XIR_BUDGET;
@@ -623,7 +671,13 @@ static XrXirStatus error_function(ErrorFlow *flow, uint32_t f) {
         /* Charge the original scan and the actual temporary byte write. */
         if (!xir_compile_work(flow->remaining, 2)) { status = XR_XIR_BUDGET;goto membership_done; }
         bool active = true, copy = false;XrXirType type=XR_XIR_UNIT;uint32_t source=UINT32_MAX;
-        status = error_row_active(flow, v, &active, &type, &copy, &source);
+        if (owned && v>=flow->function->parameter_count) {
+            EffectBodyInstructionFields fields;
+            status=error_owned_cursor_active(flow,v-flow->function->parameter_count,&cursor,&fields,&active);
+            if (status==XR_XIR_OK) {
+                type=fields.type;copy=error_copy_op(fields.op);if (copy) source=fields.source;
+            }
+        } else status=error_row_active(flow,v,&active,&type,&copy,&source);
         if (status != XR_XIR_OK) goto membership_done;
         bool cell = xr_xir_type_is_cell(flow->body.domain.types,type);
         membership[v] = (uint8_t)((active ? ERROR_ROW_ACTIVE : 0) |
