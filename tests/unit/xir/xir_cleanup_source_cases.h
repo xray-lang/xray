@@ -159,6 +159,7 @@ static void cleanup_source_allocations(XrXirProgram *program, const uint32_t *fu
             XrXirInstance *instance = NULL; XrXirValue value = {0};
             XrXirCallStatus status = xr_xir_instance_new(program, &config, &instance);
             if (status == XR_XIR_CALL_READY) status = xr_xir_instance_start(instance, functions[f], NULL, 0);
+            bool started = status == XR_XIR_CALL_READY;
             XrXirInstanceResult step = {0};
             if (status == XR_XIR_CALL_READY) { step = xr_xir_instance_poll_bounded(instance, UINT64_MAX); status = step.outcome.status; }
             if (status == XR_XIR_CALL_SUSPENDED) {
@@ -181,7 +182,9 @@ static void cleanup_source_allocations(XrXirProgram *program, const uint32_t *fu
                 CHECK(runtime_attempts > runtime_fail_at && status == XR_XIR_CALL_OOM);
             }
             runtime_fail_at = SIZE_MAX;
-            CHECK(xr_xir_instance_free(instance) == XR_XIR_CALL_READY);
+            /* A driven root retains its authenticated OOM through retirement. */
+            XrXirCallStatus retired = pass && started ? XR_XIR_CALL_OOM : XR_XIR_CALL_READY;
+            CHECK(xr_xir_instance_free(instance) == retired);
             xr_xir_value_drop(&value);
             CHECK(runtime_live == baseline && runtime_bytes == bytes);
         }

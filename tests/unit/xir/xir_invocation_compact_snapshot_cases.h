@@ -41,11 +41,11 @@ static bool conditional_compact_read_work(const void *owner,uint64_t units) {
     return read->calls++!=read->reject && xir_compile_work(read->context,units);
 }
 static void conditional_compact_read_failures(const XrXirCompileContext *context,
-    const EffectBodyFunction *body,const XrXirInstruction *expected) {
+    const EffectBodyFunction *body,uint32_t instruction,const XrXirInstruction *expected) {
     ConditionalCompactRead observation={context,0,UINT64_MAX};
     EffectBodyRead read={&observation,conditional_compact_read_work};
     XrXirInstruction decoded={0};
-    CHECK(effect_body_instruction_get(&read,body,2,&decoded)==XR_XIR_OK &&
+    CHECK(effect_body_instruction_get(&read,body,instruction,&decoded)==XR_XIR_OK &&
         conditional_compact_same(&decoded,expected));
     uint64_t points=observation.calls;
     CHECK(points);
@@ -54,32 +54,32 @@ static void conditional_compact_read_failures(const XrXirCompileContext *context
         XrXirInstruction sentinel={.op=XR_XIR_RETURN,.type=XR_XIR_BOOL,
             .args={11,12},.targets={13,14},.immediate=INT64_MIN,.type_arguments={15,16}};
         decoded=sentinel;
-        CHECK(effect_body_instruction_get(&read,body,2,&decoded)==XR_XIR_BUDGET &&
+        CHECK(effect_body_instruction_get(&read,body,instruction,&decoded)==XR_XIR_BUDGET &&
             conditional_compact_same(&decoded,&sentinel) && observation.calls==at+1);
     }
     observation.calls=0;observation.reject=UINT64_MAX;
-    CHECK(effect_body_instruction_get(&read,body,2,&decoded)==XR_XIR_OK &&
+    CHECK(effect_body_instruction_get(&read,body,instruction,&decoded)==XR_XIR_OK &&
         conditional_compact_same(&decoded,expected));
 }
 
 /* Narrow output retains every original decoder refusal. Partial words
  * never escape when any canonical read or output charge fails. */
 static void conditional_compact_fields_failures(const XrXirCompileContext *context,
-    const EffectBodyFunction *body,const XrXirInstruction *expected) {
+    const EffectBodyFunction *body,uint32_t instruction,const XrXirInstruction *expected) {
     ConditionalCompactRead observation={context,0,UINT64_MAX};
     EffectBodyRead read={&observation,conditional_compact_read_work};
     EffectBodyInstructionFields fields;
-    CHECK(effect_body_instruction_fields_get(&read,body,2,&fields)==XR_XIR_OK &&
+    CHECK(effect_body_instruction_fields_get(&read,body,instruction,&fields)==XR_XIR_OK &&
         fields.op==expected->op && fields.type==expected->type && fields.source==expected->args[0]);
     uint64_t points=observation.calls;CHECK(points);
     for (uint64_t at=0;at<points;++at) {
         observation.calls=0;observation.reject=at;
         EffectBodyInstructionFields sentinel={XR_XIR_RETURN,XR_XIR_BOOL,UINT32_MAX};fields=sentinel;
-        CHECK(effect_body_instruction_fields_get(&read,body,2,&fields)==XR_XIR_BUDGET &&
+        CHECK(effect_body_instruction_fields_get(&read,body,instruction,&fields)==XR_XIR_BUDGET &&
             !memcmp(&fields,&sentinel,sizeof(fields)) && observation.calls==at+1);
     }
     observation.calls=0;observation.reject=UINT64_MAX;
-    CHECK(effect_body_instruction_fields_get(&read,body,2,&fields)==XR_XIR_OK &&
+    CHECK(effect_body_instruction_fields_get(&read,body,instruction,&fields)==XR_XIR_OK &&
         fields.op==expected->op && fields.type==expected->type && fields.source==expected->args[0]);
 }
 
@@ -118,16 +118,18 @@ static void conditional_compact_malformed(const XrXirCompileContext *context,
         else if (mode==5) function->run_capacity=function->run_count-1;
         else if (mode==6) first->delta[column]=0;
         else second->first=begin+count+1;
-        XrXirInstruction sentinel={.op=XR_XIR_RETURN,.type=XR_XIR_I64,.immediate=INT64_MIN},out=sentinel;
-        XrXirOp opcode=XR_XIR_RETURN;XrXirType type=XR_XIR_UNIT;
-        CHECK(effect_body_instruction_get(&read,function,0,&out)==XR_XIR_BAD_STRUCTURE &&
-            conditional_compact_same(&out,&sentinel));
-        EffectBodyInstructionFields narrow_sentinel={XR_XIR_RETURN,XR_XIR_BOOL,UINT32_MAX},narrow=narrow_sentinel;
-        CHECK(effect_body_instruction_fields_get(&read,function,0,&narrow)==XR_XIR_BAD_STRUCTURE &&
-            !memcmp(&narrow,&narrow_sentinel,sizeof(narrow)));
-        CHECK(effect_body_instruction_op(&read,function,0,&opcode)==XR_XIR_BAD_STRUCTURE && opcode==XR_XIR_RETURN);
-        CHECK(effect_body_operand_type(&read,function,0,&type)==XR_XIR_BAD_STRUCTURE && type==XR_XIR_UNIT);
-        CHECK(effect_body_records_match(&read,function,expected)==XR_XIR_BAD_STRUCTURE);
+        for (uint32_t instruction=0;instruction<expected->instruction_count;++instruction) {
+            XrXirInstruction sentinel={.op=XR_XIR_RETURN,.type=XR_XIR_I64,.immediate=INT64_MIN},out=sentinel;
+            XrXirOp opcode=XR_XIR_RETURN;XrXirType type=XR_XIR_UNIT;
+            CHECK(effect_body_instruction_get(&read,function,instruction,&out)==XR_XIR_BAD_STRUCTURE &&
+                conditional_compact_same(&out,&sentinel));
+            EffectBodyInstructionFields narrow_sentinel={XR_XIR_RETURN,XR_XIR_BOOL,UINT32_MAX},narrow=narrow_sentinel;
+            CHECK(effect_body_instruction_fields_get(&read,function,instruction,&narrow)==XR_XIR_BAD_STRUCTURE &&
+                !memcmp(&narrow,&narrow_sentinel,sizeof(narrow)));
+            CHECK(effect_body_instruction_op(&read,function,instruction,&opcode)==XR_XIR_BAD_STRUCTURE && opcode==XR_XIR_RETURN);
+            CHECK(effect_body_operand_type(&read,function,instruction,&type)==XR_XIR_BAD_STRUCTURE && type==XR_XIR_UNIT);
+            CHECK(effect_body_records_match(&read,function,expected)==XR_XIR_BAD_STRUCTURE);
+        }
         first->first=begin;first->count=count;first->mask=mask;first->delta[column]=delta;
         second->first=neighbor;function->run_count=runs;function->run_capacity=capacity;
         CHECK(effect_body_records_match(&read,function,expected)==XR_XIR_OK);
@@ -185,8 +187,10 @@ static XrXirStatus conditional_compact_codec(const XrXirCompileContext *context,
     if (status==XR_XIR_OK) status=effect_body_records_match(&read,&body,&expected);
     if (status==XR_XIR_OK && oracle) {
         CHECK(body.run_count>=2 && body.run_count<=body.run_capacity);
-        conditional_compact_read_failures(context,&body,&original[2]);
-        conditional_compact_fields_failures(context,&body,&original[2]);
+        conditional_compact_read_failures(context,&body,2,&original[2]);
+        conditional_compact_read_failures(context,&body,7,&original[7]);
+        conditional_compact_fields_failures(context,&body,2,&original[2]);
+        conditional_compact_fields_failures(context,&body,7,&original[7]);
         for (uint32_t field=0;field<10;++field) {
             XrXirInstruction saved=original[2];conditional_compact_change(&original[2],field);
             CHECK(effect_body_records_match(&read,&body,&expected)==XR_XIR_BAD_STRUCTURE);
@@ -844,6 +848,8 @@ static void conditional_compact_instance_span(void) {
 static XrXirStatus conditional_compact_case(const XrXirCompileContext *context,uint32_t mode,bool oracle) {
     return mode<2?conditional_compact_codec(context,mode,oracle):conditional_compact_owned(context,oracle);
 }
+#include "xir_invocation_compact_directory_cases.h"
+
 static void conditional_compact_literals(void) {
     for (uint32_t mode=0;mode<3;++mode) {
         RootParameterMark physical=rp_mark();XrXirCompileContext context=rp_owner(rp_caps());
@@ -851,7 +857,7 @@ static void conditional_compact_literals(void) {
         CHECK(conditional_compact_case(&context,mode,true)==XR_XIR_OK);
         rp_owner_free(&context,baseline);rp_balanced(physical);
     }
-    conditional_compact_instance_span();
+    conditional_compact_instance_span();conditional_compact_directory_literals();
 }
 static void conditional_compact_resources(void) {
     for (uint32_t mode=0;mode<3;++mode) {
