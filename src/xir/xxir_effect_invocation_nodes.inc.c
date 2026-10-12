@@ -100,6 +100,7 @@ static XrXirStatus effect_invocation_basis(const EffectInvocationOwner *owner,
 
 static void effect_invocation_free(EffectInvocationOwner *owner) {
     if (!owner) return;
+    effect_invocation_result_free(owner->prepared_result);
     for (uint32_t n=0;n<owner->count;++n) {
         xr_compile_resources_free(owner->nodes[n].causes);
         xr_compile_resources_free(owner->nodes[n].producers);

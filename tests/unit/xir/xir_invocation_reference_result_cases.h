@@ -116,7 +116,7 @@ static XrXirStatus conditional_invocation_reference_result(const XrXirCompileCon
         const EffectInvocationCertificate *certificate=execution->forest->invocations;
         uint32_t mask=UINT32_MAX;
         CHECK(!execution->dense->uses.invocations && !certificate->terms.remaining && certificate->equations &&
-            !certificate->equations->work && !certificate->equations->module && !certificate->equations->graph);
+            !certificate->equations->work && !certificate->equations->body.read.owner && !certificate->equations->graph);
         CHECK(effect_invocation_bounds_mask(context,certificate->declared,0,1,&mask)==XR_XIR_OK &&
             mask==XR_XIR_CALLABLE_ROOT_UNRESOLVED);
         CHECK(effect_invocation_certificate_node_mask(context,certificate,certificate->equations->roots[1],&mask)==XR_XIR_OK && !mask);

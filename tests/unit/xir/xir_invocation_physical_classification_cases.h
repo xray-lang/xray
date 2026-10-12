@@ -107,7 +107,7 @@ static void conditional_physical_rejections(const XrXirCompileContext *context,
     CHECK(effect_physical_match(context,domain,module)==XR_XIR_OK);
     conditional_physical_generations(context,certificate,module);
     EffectInvocationOwner replay=*certificate->equations;
-    replay.work=context;replay.module=module;replay.physical=NULL;
+    replay.work=context;replay.physical=NULL;
     EffectInvocationFlow flow={.owner=&replay,.node=replay.roots[1]};
     CHECK(effect_invocation_origins(&flow)==XR_XIR_BAD_STRUCTURE && !flow.memory);
     RootParameterMark physical=rp_mark();XrXirCompileContext foreign=rp_owner(rp_caps());
@@ -146,7 +146,7 @@ static XrXirStatus conditional_physical_case(const XrXirCompileContext *context,
     }
     if (status==XR_XIR_OK && oracle) {
         CHECK(!effects->root[0].requires_root && !effects->root[0].unresolved && effects->root[1].unresolved);
-        CHECK(!effects->invocations->equations->module && !effects->invocations->equations->work &&
+        CHECK(!effects->invocations->equations->body.read.owner && !effects->invocations->equations->work &&
             effects->invocations->equations->physical->resources==context->resources);
         const XrXirTypeNode *signature=xr_xir_callable_signature(&effects->invocations->terms.types,
             effects->invocations->body->functions[1].parameters[0]);

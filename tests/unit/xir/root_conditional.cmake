@@ -146,3 +146,9 @@ add_test(NAME test_xir_root_conditional_invocation_edge_keys
     COMMAND test_xir_root_conditional_helpers --invocation-edge-keys)
 set_tests_properties(test_xir_root_conditional_invocation_edge_keys PROPERTIES
     LABELS "unit;xir;root-effects;compiler-fault;ownership" TIMEOUT 300 RUN_SERIAL TRUE PROCESSORS 1)
+
+# Native fixed/certified facts retain all three original storage recipes.
+add_test(NAME test_xir_root_conditional_canonical_run_storage
+    COMMAND test_xir_root_conditional_helpers --canonical-run-storage)
+set_tests_properties(test_xir_root_conditional_canonical_run_storage PROPERTIES
+    LABELS "unit;xir;root-effects;compiler-fault;ownership" TIMEOUT 300 RUN_SERIAL TRUE PROCESSORS 1)

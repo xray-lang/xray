@@ -53,7 +53,9 @@ static XrXirStatus effect_invocation_deferred_arguments(EffectInvocationFlow *fl
             if (!actual_row) { status=XR_XIR_BAD_STRUCTURE;break; }
             memcpy(row,actual_row,
                 (size_t)flow->basis.fn_words*sizeof(*row));
-            if (flow->fixed[actual]) {
+            bool fixed=false;status=effect_invocation_flag_get(flow,actual,false,&fixed);
+            if (status!=XR_XIR_OK) break;
+            if (fixed) {
                 uint32_t mask=0;
                 status=effect_invocation_bounds_mask(owner->work,owner->declared,
                     owner->nodes[flow->node].body,actual,&mask);

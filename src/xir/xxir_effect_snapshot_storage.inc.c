@@ -31,7 +31,7 @@ static void effect_body_material_free(EffectBodyMaterial *body) {
         xr_compile_resources_free(body);return;
     }
     if (body->functions) for (uint32_t f=0;f<effect_body_count(body);++f)
-        xr_compile_resources_free(body->functions[f].stream);
+        xr_compile_resources_free(body->functions[f].runs);
     effect_physical_free(body->physical);
     xr_xir_compile_cell_provenance_free(body->cells);
     effect_invocation_bounds_free(body->declared);
@@ -120,6 +120,10 @@ static bool effect_body_advertisements_span_ready(const EffectBodyAdvertisementB
 static XrXirStatus effect_body_advertisements_span(EffectBodyAdvertisementBuilder *builder,
     uint32_t f,uint32_t value,uint32_t count,XrXirType actual);
 
+static XrXirStatus effect_root_seed_output(const EffectRootSeedRecord *request,XrXirRootEffects *facts,
+    XrXirRootEffectWitness *required,XrXirRootEffectWitness *unresolved,
+    const XrXirCompileContext *work);
+
 typedef struct EffectBodyWriter {
     const XrXirCompileContext *work;
     const XrXirModule *source;
@@ -139,17 +143,19 @@ static XrXirStatus effect_body_writer_row(void *owner,uint32_t instruction,
     if (!xir_compile_work(writer->work,1)) return XR_XIR_BUDGET;
     if (!effect_seed(writer->source,&writer->source->functions[writer->function],operation,
         &writer->material->control[writer->function])) return XR_XIR_BAD_STRUCTURE;
-    XrXirEffects local={.count=effect_body_count(writer->material),.root=writer->material->local_roots,
-        .root_witnesses=writer->material->local_witnesses,
-        .unresolved_witnesses=writer->material->local_witnesses+effect_body_count(writer->material)};
+    if (!xir_compile_work(writer->work,3*sizeof(void *))) return XR_XIR_BUDGET;
+    XrXirRootEffects *facts=&writer->material->local_roots[writer->function];
+    XrXirRootEffectWitness *required=&writer->material->local_witnesses[writer->function];
+    XrXirRootEffectWitness *unresolved=&writer->material->local_witnesses[
+        effect_body_count(writer->material)+writer->function];
     if (operation->op!=XR_XIR_CALL_INDIRECT && operation->op!=XR_XIR_INVOKE_INDIRECT) {
         EffectRootSeedRecord seed={&writer->material->domain,operation,writer->function,instruction,XR_XIR_UNIT};
-        XrXirStatus seeded=effect_root_seed_record(&seed,&local,writer->work);
+        XrXirStatus seeded=effect_root_seed_output(&seed,facts,required,unresolved,writer->work);
         if (seeded!=XR_XIR_OK) return seeded;
         if (operation->op==XR_XIR_CALL_REQUIREMENT) {
             if (!xir_compile_work(writer->work,1+sizeof(XrXirRootEffectWitness))) return XR_XIR_BUDGET;
-            local.root[writer->function].unresolved=false;
-            local.unresolved_witnesses[writer->function]=(XrXirRootEffectWitness){0};
+            facts->unresolved=false;
+            *unresolved=(XrXirRootEffectWitness){0};
         }
     }
     uint32_t value=function->parameter_count+instruction;
@@ -192,11 +198,13 @@ static XrXirStatus effect_body_writer_span(void *owner,uint32_t first,uint32_t c
     if (status!=XR_XIR_OK) return status;
     if (!effect_seed(writer->source,source,operation,&writer->material->control[writer->function]))
         return XR_XIR_BAD_STRUCTURE;
-    XrXirEffects local={.count=effect_body_count(writer->material),.root=writer->material->local_roots,
-        .root_witnesses=writer->material->local_witnesses,
-        .unresolved_witnesses=writer->material->local_witnesses+effect_body_count(writer->material)};
+    if (!xir_compile_work(writer->work,3*sizeof(void *))) return XR_XIR_BUDGET;
+    XrXirRootEffects *facts=&writer->material->local_roots[writer->function];
+    XrXirRootEffectWitness *required=&writer->material->local_witnesses[writer->function];
+    XrXirRootEffectWitness *unresolved=&writer->material->local_witnesses[
+        effect_body_count(writer->material)+writer->function];
     EffectRootSeedRecord seed={&writer->material->domain,operation,writer->function,first,XR_XIR_UNIT};
-    status=effect_root_seed_record(&seed,&local,writer->work);
+    status=effect_root_seed_output(&seed,facts,required,unresolved,writer->work);
     if (status!=XR_XIR_OK) return status;
     uint32_t value=function->parameter_count+first;
     status=effect_body_advertisements_span(writer->advertisements,writer->function,value,count,operation->type);
@@ -451,8 +459,89 @@ static XrXirStatus effect_body_source_match(const XrXirCompileContext *work,
     return status;
 }
 
-/* This adapter replays the unchanged exhaustive physical opcode classifier.
- * It uses the sole immutable reader, never an executable Module facsimile. */
+/* The canonical empty pool has no descriptor owner to validate. All
+ * nonempty actual descriptors and their nominal/interface graphs are replayed
+ * from the sole owned domain, independently of its membership index. */
+static XrXirStatus effect_body_owned_types_verify(const XrXirCompileContext *work,
+    const EffectBodyMaterial *body) {
+    if (!xir_compile_context_valid(work) || !effect_body_material_shape(body) ||
+        body->resources!=work->resources) return XR_XIR_BAD_STRUCTURE;
+    if (!xir_compile_work(work,4+sizeof(void *))) return XR_XIR_BUDGET;
+    const XrXirTypes *types=body->domain.types;
+    if (!types->count && !types->nodes && !types->nominals && !types->interfaces) types=NULL;
+    return xr_xir_compile_types_structure_verify(work,types);
+}
+
+/* A run is only a lossless storage range. This classifier derives each mask
+ * from its actual opcode and type, independent of the stored membership. */
+typedef struct EffectBodyPhysicalReplay {
+    uint32_t at,rows,classes;
+} EffectBodyPhysicalReplay;
+
+static XrXirStatus effect_body_physical_values(const XrXirCompileContext *work,
+    const EffectPhysicalFunction *physical,EffectBodyPhysicalReplay *state,
+    uint32_t first,uint32_t count,uint32_t mask) {
+    if (!count || first>=physical->values || count>physical->values-first)
+        return XR_XIR_BAD_STRUCTURE;
+    if (!xir_compile_work(work,7)) return XR_XIR_BUDGET;
+    if (mask&EFFECT_PHYSICAL_CALLABLE) state->rows+=count;
+    if (mask&EFFECT_PHYSICAL_CLASS) state->classes+=count;
+    if (!mask) {
+        if (state->at<physical->count && physical->records[state->at].value<first+count)
+            return XR_XIR_BAD_STRUCTURE;
+        return XR_XIR_OK;
+    }
+    if (state->at>physical->count || count>physical->count-state->at)
+        return XR_XIR_BAD_STRUCTURE;
+    for (uint32_t offset=0;offset<count;++offset) {
+        if (!xir_compile_work(work,5)) return XR_XIR_BUDGET;
+        const EffectPhysicalRecord *record=&physical->records[state->at];
+        if (record->value!=first+offset || record->mask!=mask) return XR_XIR_BAD_STRUCTURE;
+        ++state->at;
+    }
+    return XR_XIR_OK;
+}
+
+static XrXirStatus effect_body_physical_typed(const XrXirCompileContext *work,
+    const XrXirTypes *types,XrXirOp op,XrXirType type,uint32_t *output) {
+    if (!output || (op!=XR_XIR_INVALID && (op<=XR_XIR_INVALID || op>=XR_XIR_OP_COUNT)))
+        return XR_XIR_BAD_STRUCTURE;
+    if (!xir_compile_work(work,5+sizeof(*output))) return XR_XIR_BUDGET;
+    uint32_t mask=op==XR_XIR_INVALID?0:effect_physical_opcode(op);
+    if (xr_xir_callable_signature(types,type)) mask|=EFFECT_PHYSICAL_CALLABLE;
+    if (xr_xir_type_is_class(types,type)) mask|=EFFECT_PHYSICAL_CLASS;
+    *output=mask;return XR_XIR_OK;
+}
+
+/* Every canonical range is read afresh. Only mathematically constant op/type
+ * can share a classification; a nonempty mask still compares every ordinal.
+ * All other physical fields stay lossless and their consumers replay them. */
+static XrXirStatus effect_body_physical_run(const XrXirCompileContext *work,
+    const EffectBodyMaterial *material,uint32_t function,const EffectPhysicalFunction *physical,const EffectBodyRun *run,
+    EffectBodyPhysicalReplay *state) {
+    const EffectBodyFunction *body=&material->functions[function];
+    bool constant=!(run->mask&UINT32_C(3));
+    if (!xir_compile_work(work,3)) return XR_XIR_BUDGET;
+    uint32_t points=constant?1:run->count;
+    for (uint32_t offset=0;offset<points;++offset) {
+        if (!xir_compile_work(work,4+(constant?0:6))) return XR_XIR_BUDGET;
+        uint32_t opcode=run->base.op,type=run->base.type,mask=0;
+        if (!constant) {
+            if (run->mask&UINT32_C(1)) opcode+=run->delta[0]*offset;
+            if (run->mask&UINT32_C(2)) type+=run->delta[1]*offset;
+        }
+        if (opcode<=XR_XIR_INVALID || opcode>=XR_XIR_OP_COUNT) return XR_XIR_BAD_STRUCTURE;
+        XrXirStatus status=effect_body_physical_typed(work,material->domain.types,
+            (XrXirOp)opcode,(XrXirType)type,&mask);
+        if (status==XR_XIR_OK) status=effect_body_physical_values(work,physical,state,
+            body->parameter_count+run->first+offset,constant?run->count:1,mask);
+        if (status!=XR_XIR_OK) return status;
+    }
+    return XR_XIR_OK;
+}
+
+/* The index cannot prove its own completeness. Parameters and all complete
+ * runs are independently classified from the current sole owned input. */
 static XrXirStatus effect_body_physical_match(const XrXirCompileContext *work,
     const EffectPhysicalDomain *domain,const EffectBodyMaterial *material) {
     if (!xir_compile_context_valid(work) || !effect_body_material_shape(material) || !domain ||
@@ -461,50 +550,39 @@ static XrXirStatus effect_body_physical_match(const XrXirCompileContext *work,
         return XR_XIR_BAD_STRUCTURE;
     EffectBodyRead read=effect_body_compile_read(work);
     for (uint32_t f=0;f<domain->count;++f) {
-        const EffectPhysicalFunction *body=&domain->functions[f];
-        const EffectBodyFunction *function=&material->functions[f];
-        if (!xir_compile_work(work,7)) return XR_XIR_BUDGET;
-        if (body->parameters!=function->parameter_count || body->instructions!=function->instruction_count ||
-            body->values!=(uint64_t)function->parameter_count+function->instruction_count ||
-            body->rows>body->values || body->classes>body->values || body->count>body->capacity ||
-            body->capacity>body->values || !!body->records!=!!body->capacity ||
-            (function->parameter_count && !function->parameters)) return XR_XIR_BAD_STRUCTURE;
-        uint32_t row=0,classes=0,at=0;
-        if (!xir_compile_work(work,sizeof(EffectBodyRecordCursor))) return XR_XIR_BUDGET;
-        EffectBodyRecordCursor cursor={0,0,0,UINT32_MAX};
-        if (!function->instruction_count && (function->run_count || function->stream_words))
+        const EffectPhysicalFunction *physical=&domain->functions[f];
+        const EffectBodyFunction *body=&material->functions[f];
+        if (!xir_compile_work(work,11+sizeof(EffectBodyPhysicalReplay)+sizeof(EffectBodyRecordCursor)))
+            return XR_XIR_BUDGET;
+        if (physical->parameters!=body->parameter_count || physical->instructions!=body->instruction_count ||
+            physical->values!=(uint64_t)body->parameter_count+body->instruction_count ||
+            physical->rows>physical->values || physical->classes>physical->values ||
+            physical->count>physical->capacity || physical->capacity>physical->values ||
+            !!physical->records!=!!physical->capacity || (body->parameter_count && !body->parameters) ||
+            body->run_count>body->run_capacity || body->run_capacity>body->instruction_count ||
+            body->run_count>body->instruction_count ||
+            !!body->run_count!=!!body->instruction_count || !!body->runs!=!!body->run_capacity)
             return XR_XIR_BAD_STRUCTURE;
-        for (uint32_t v=0;v<body->values;++v) {
-            if (!xir_compile_work(work,v<body->parameters?2:3)) return XR_XIR_BUDGET;
-            uint32_t mask=0;XrXirType type;
-            XrXirStatus status=XR_XIR_OK;
-            if (v<body->parameters) status=effect_body_operand_type(&read,function,v,&type);
-            else {
-                EffectBodyRunRef ref;uint32_t operation,physical_type;
-                status=effect_body_record_cursor_ref(&read,function,v-body->parameters,&cursor,&ref);
-                if (status!=XR_XIR_OK) return status;
-                status=effect_body_run_word(&read,&ref,v-body->parameters,1,&physical_type);
-                if (status!=XR_XIR_OK) return status;
-                status=effect_body_run_word(&read,&ref,v-body->parameters,0,&operation);
-                if (status!=XR_XIR_OK) return status;
-                if (operation<=XR_XIR_INVALID || operation>=XR_XIR_OP_COUNT) return XR_XIR_BAD_STRUCTURE;
-                if (!xir_compile_work(work,sizeof(type))) return XR_XIR_BUDGET;
-                type=(XrXirType)physical_type;mask=effect_physical_opcode((XrXirOp)operation);
-            }
+        EffectBodyPhysicalReplay state={0};EffectBodyRecordCursor cursor={0,0,UINT32_MAX};
+        for (uint32_t p=0;p<body->parameter_count;++p) {
+            uint32_t mask=0;
+            if (!xir_compile_work(work,2+sizeof(mask))) return XR_XIR_BUDGET;
+            XrXirStatus status=effect_body_physical_typed(work,material->domain.types,
+                XR_XIR_INVALID,body->parameters[p],&mask);
+            if (status==XR_XIR_OK) status=effect_body_physical_values(work,physical,&state,p,1,mask);
             if (status!=XR_XIR_OK) return status;
-            if (xr_xir_callable_signature(material->domain.types,type)) mask|=EFFECT_PHYSICAL_CALLABLE;
-            if (!xir_compile_work(work,1)) return XR_XIR_BUDGET;
-            if (xr_xir_type_is_class(material->domain.types,type)) { mask|=EFFECT_PHYSICAL_CLASS;++classes; }
-            if (mask&EFFECT_PHYSICAL_CALLABLE) ++row;
-            if (!mask) continue;
-            if (!xir_compile_work(work,2)) return XR_XIR_BUDGET;
-            if (at>=body->count || body->records[at].value!=v || body->records[at].mask!=mask)
-                return XR_XIR_BAD_STRUCTURE;
-            ++at;
         }
-        if (function->instruction_count && (cursor.last!=function->instruction_count-1 ||
-            cursor.run+1!=function->run_count)) return XR_XIR_BAD_STRUCTURE;
-        if (at!=body->count || row!=body->rows || classes!=body->classes) return XR_XIR_BAD_STRUCTURE;
+        for (uint32_t r=0;r<body->run_count;++r) {
+            const EffectBodyRun *run=NULL;
+            if (!xir_compile_work(work,sizeof(run)+1)) return XR_XIR_BUDGET;
+            XrXirStatus status=effect_body_range_ref(&read,body,&cursor,&run);
+            if (status==XR_XIR_OK) status=effect_body_physical_run(work,material,f,physical,run,&state);
+            if (status!=XR_XIR_OK) return status;
+        }
+        if (!xir_compile_work(work,5)) return XR_XIR_BUDGET;
+        if (cursor.first!=body->instruction_count || cursor.run!=body->run_count ||
+            state.at!=physical->count || state.rows!=physical->rows || state.classes!=physical->classes)
+            return XR_XIR_BAD_STRUCTURE;
     }
     return XR_XIR_OK;
 }

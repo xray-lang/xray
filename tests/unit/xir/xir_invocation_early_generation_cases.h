@@ -467,6 +467,100 @@ static void conditional_generation_paired_matches(const XrXirCompileContext *con
     }
 }
 
+/* Raw correspondence belongs to explicit intake and external full matching.
+ * The equation reader never follows a raw producer after receiving its input. */
+static void conditional_generation_owned_input_controls(const XrXirCompileContext *context,
+    const XrXirModule *source,XrXirEffects *effects,EffectGraph *graph) {
+    EffectBodyMaterial *material=graph->material;EffectBodyRequest input={0};
+    CHECK(effect_invocation_collect(context,source,effects,graph,material->declared,&input)==XR_XIR_OK);
+    CHECK(input.owner==material && input.domain.types==material->domain.types);
+    EffectBodyRequest occupied=input;size_t attempts=rp_attempts;
+    CHECK(effect_invocation_collect(context,source,effects,graph,material->declared,&occupied)==XR_XIR_BAD_STRUCTURE &&
+        occupied.owner==material && rp_attempts==attempts);
+    EffectBodyRequest partial={.domain={.function_count=1}};
+    CHECK(effect_invocation_collect(context,source,effects,graph,material->declared,&partial)==XR_XIR_BAD_STRUCTURE &&
+        !partial.owner && partial.domain.function_count==1 && rp_attempts==attempts);
+    EffectInvocationOwner *unchanged=NULL;EffectBodyRequest mixed=input;
+    mixed.head=effect_body_raw_head;
+    CHECK(effect_invocations_create(context,&mixed,effects,graph,material->declared,&unchanged)==XR_XIR_BAD_STRUCTURE &&
+        !unchanged && rp_attempts==attempts);
+    mixed=input;mixed.domain.function_count=source->function_count-1;
+    CHECK(effect_invocations_create(context,&mixed,effects,graph,material->declared,&unchanged)==XR_XIR_BAD_STRUCTURE &&
+        !unchanged && rp_attempts==attempts);
+    XrXirInstruction *operations=(XrXirInstruction *)source->functions[0].instructions;
+    XrXirOp opcode=operations[0].op;operations[0].op=XR_XIR_SUSPEND;
+    CHECK(effect_invocation_current_input_match(context,source,material)==XR_XIR_BAD_STRUCTURE &&
+        rp_attempts==attempts);
+    XrXirInstruction storage;const XrXirInstruction *actual=NULL;
+    CHECK(effect_body_request_instruction(&input,0,0,&storage,&actual)==XR_XIR_OK && actual->op==opcode);
+    operations[0].op=opcode;
+    int64_t immediate=operations[0].immediate;operations[0].immediate^=INT64_C(1);
+    CHECK(effect_body_source_match(context,material,source)==XR_XIR_BAD_STRUCTURE);
+    operations[0].immediate=immediate;
+    CHECK(effect_body_source_match(context,material,source)==XR_XIR_OK);
+    uint32_t function=0;
+    while (function<material->physical->count && !material->physical->functions[function].count) ++function;
+    CHECK(function<material->physical->count);
+    EffectPhysicalFunction *physical=&material->physical->functions[function];
+    uint32_t count=physical->count;physical->count=count-1;
+    CHECK(effect_body_physical_match(context,material->physical,material)==XR_XIR_BAD_STRUCTURE);
+    physical->count=count;
+    uint32_t mask=physical->records[0].mask;physical->records[0].mask=0;
+    CHECK(effect_body_physical_match(context,material->physical,material)==XR_XIR_BAD_STRUCTURE);
+    physical->records[0].mask=mask;
+    CHECK(effect_body_physical_match(context,material->physical,material)==XR_XIR_OK);
+    RootParameterMark retained=rp_mark();XrXirCompileContext foreign=rp_owner(rp_caps());
+    uint64_t baseline=rp_stats(&foreign).live_bytes;
+    CHECK(effect_invocations_create(&foreign,&input,effects,graph,material->declared,&unchanged)==XR_XIR_BAD_STRUCTURE &&
+        !unchanged);
+    rp_owner_free(&foreign,baseline);rp_balanced(retained);
+}
+
+typedef struct ConditionalGenerationRawBoundary {
+    const XrXirModule *source;
+    EffectInvocationResult **publication;
+} ConditionalGenerationRawBoundary;
+
+static XrXirStatus conditional_generation_raw_boundary_write(const XrXirCompileContext *context,
+    const EffectInvocationCertificate *certificate,uint32_t function,const uint32_t *selected,
+    EffectInvocationResult *result,void *receiver) {
+    ConditionalGenerationRawBoundary *boundary=receiver;
+    XrXirStatus status=effect_invocation_publication_write(context,certificate,function,selected,
+        result,boundary->publication);
+    if (status==XR_XIR_OK && !function) {
+        if (!xir_compile_work(context,sizeof(XrXirOp))) return XR_XIR_BUDGET;
+        XrXirInstruction *operations=(XrXirInstruction *)boundary->source->functions[0].instructions;
+        operations[0].op=XR_XIR_SUSPEND;
+    }
+    return status;
+}
+
+/* A callback may change its external raw producer without changing the
+ * immutable receiving body. The explicit post-callback boundary must reject
+ * that producer before a contract or public witness can be published. */
+static void conditional_generation_raw_callback_controls(const XrXirCompileContext *context,
+    const XrXirModule *source,const EffectInvocationCertificate *certificate) {
+    uint64_t live=rp_stats(context).live_bytes;RootParameterMark retained=rp_mark();
+    XrXirInstruction *operations=(XrXirInstruction *)source->functions[0].instructions;
+    XrXirOp opcode=operations[0].op;EffectInvocationResult *publication=NULL;
+    CHECK(effect_invocation_result_read_new(context,certificate,&publication)==XR_XIR_OK);
+    EffectInvocationCertificate probe=*certificate;
+    probe.result=publication;probe.projection_atoms=NULL;
+    probe.terms=(EffectTerms){.types=certificate->terms.types,.remaining=context};
+    ConditionalGenerationRawBoundary boundary={source,&publication};
+    EffectInvocationProjectionSink sink={context->resources,source->function_count,
+        &boundary,conditional_generation_raw_boundary_write};
+    CHECK(effect_invocation_current_input_match(context,source,certificate->body)==XR_XIR_OK);
+    CHECK(effect_invocation_certificate_project(context,&probe,publication,&sink)==XR_XIR_OK);
+    CHECK(operations[0].op==XR_XIR_SUSPEND &&
+        effect_invocation_current_input_match(context,source,certificate->body)==XR_XIR_BAD_STRUCTURE);
+    CHECK(effect_invocation_publication_match(context,certificate,certificate->result)==XR_XIR_OK);
+    operations[0].op=opcode;
+    CHECK(effect_invocation_current_input_match(context,source,certificate->body)==XR_XIR_OK);
+    effect_invocation_result_free(publication);effect_terms_free(&probe.terms);
+    CHECK(rp_stats(context).live_bytes==live);rp_balanced(retained);
+}
+
 static XrXirStatus conditional_generation_case(const XrXirCompileContext *context,uint32_t mode,bool oracle) {
     if (mode>=3) return XR_XIR_BAD_STRUCTURE;
     InvocationDeferredFixture fixture;invocation_deferred_fixture(&fixture,mode==1);
@@ -504,7 +598,8 @@ static XrXirStatus conditional_generation_case(const XrXirCompileContext *contex
         }
         operations[0].immediate=immediate;effect_body_material_free(later);
     }
-    if (status==XR_XIR_OK) status=effect_invocations_create(context,source,&effects,&graph,material->declared,&owner);
+    if (status==XR_XIR_OK && oracle) conditional_generation_owned_input_controls(context,source,&effects,&graph);
+    if (status==XR_XIR_OK) status=effect_invocations_receive(context,source,&effects,&graph,material->declared,&owner);
     if (status==XR_XIR_OK && oracle) conditional_generation_reserved_controls(context,owner);
     if (status==XR_XIR_OK && oracle) status=conditional_generation_decoded_controls(context,owner);
     if (status==XR_XIR_OK) status=effect_invocations_solve(owner);
@@ -521,6 +616,7 @@ static XrXirStatus conditional_generation_case(const XrXirCompileContext *contex
     if (status==XR_XIR_OK && oracle) CHECK(!owner && !solution && certificate->body==material &&
         certificate->declared==material->declared && !effects.generation &&
         certificate->equations->material==material && certificate->equations->cells==material->cells);
+    if (status==XR_XIR_OK && oracle) conditional_generation_raw_callback_controls(context,source,certificate);
     EffectInvocationResult *publication=certificate?certificate->result:NULL;
     effect_invocation_free(owner);effect_invocation_result_free(solution);
     effect_graph_free(&graph);invocation_core_storage_free(&effects);

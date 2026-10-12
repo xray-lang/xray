@@ -106,8 +106,8 @@ static XrXirStatus effect_body_owned_head(const EffectBodyRequest *request,uint3
     const EffectBodyFunction *a=&material->functions[f];
     if ((a->name_length && !a->name) || (a->parameter_count && !a->parameters) ||
         (a->block_count && !a->blocks) || (a->operand_count && !a->operands) ||
-        (a->instruction_count && (!a->stream || !a->run_count)) ||
-        a->stream_words>a->stream_capacity) return XR_XIR_BAD_STRUCTURE;
+        (a->instruction_count && (!a->runs || !a->run_count)) ||
+        a->run_count>a->run_capacity) return XR_XIR_BAD_STRUCTURE;
     if (dimensions) {
         if (!effect_body_read_work(&request->read,11+sizeof(*dimensions))) return XR_XIR_BUDGET;
         *dimensions=(EffectBodyFunctionDimensions){a->parameter_count,a->instruction_count};return XR_XIR_OK;
@@ -161,6 +161,30 @@ static inline EffectBodyRequest effect_body_owned_request(const XrXirCompileCont
     return (EffectBodyRequest){body->domain,effect_body_compile_read(work),body,
         effect_body_owned_head,effect_body_owned_instruction,effect_body_owned_type,effect_body_owned_shape};
 }
+/* This is only the identity of the sole current storage adapter. Every
+ * permission and final semantic fact is independently replayed by its consumer. */
+static bool effect_body_request_owned_matches(const XrXirCompileContext *work,
+    const EffectBodyRequest *request,const EffectBodyMaterial *material) {
+    return xir_compile_context_valid(work) && request && effect_body_material_shape(material) &&
+        material->resources==work->resources && request->owner==material &&
+        request->read.owner==work && request->read.consume==effect_body_compile_consume &&
+        request->head==effect_body_owned_head && request->instruction==effect_body_owned_instruction &&
+        request->type==effect_body_owned_type && request->shape==effect_body_owned_shape &&
+        request->domain.types==material->domain.types &&
+        request->domain.function_count==effect_body_count(material) &&
+        request->domain.declarations==material->domain.declarations &&
+        request->domain.generics==material->domain.generics && request->domain.defaults==material->domain.defaults;
+}
+
+/* An unpublished projection has no live field, even if its owner is NULL.
+ * Field checks avoid reading structure padding or an uninitialized tail. */
+static bool effect_body_request_empty(const EffectBodyRequest *request) {
+    return request && !request->owner && !request->head && !request->instruction &&
+        !request->type && !request->shape && !request->read.owner && !request->read.consume &&
+        !request->domain.types && !request->domain.declarations && !request->domain.generics &&
+        !request->domain.defaults && !request->domain.function_count;
+}
+
 static inline XrXirStatus effect_body_request_head(const EffectBodyRequest *request,
     uint32_t f,EffectBodyFunctionHead *output) {
     if (!request || !request->owner || !request->head || !request->domain.types ||
@@ -179,6 +203,88 @@ static inline XrXirStatus effect_body_request_instruction(const EffectBodyReques
         !storage || !output || f>=request->domain.function_count) return XR_XIR_BAD_STRUCTURE;
     return request->instruction(request,f,i,storage,output,NULL);
 }
+/* Callback identity selects a storage adapter only. Every canonical read
+ * still checks the current owner, metadata domain and complete physical row.
+ * Delegated and raw requests retain their original reader and fees. */
+static inline bool effect_body_request_sequence_owned(const EffectBodyRequest *request) {
+    return request && request->head==effect_body_owned_head &&
+        request->instruction==effect_body_owned_instruction && request->type==effect_body_owned_type &&
+        request->shape==effect_body_owned_shape && request->read.consume==effect_body_compile_consume;
+}
+static XrXirStatus effect_body_request_sequence_binding(const EffectBodyRequest *request) {
+    const EffectBodyMaterial *material=request->owner;
+    const XrXirCompileContext *work=request->read.owner;
+    if (!xir_compile_context_valid(work) || !effect_body_material_shape(material) ||
+        material->resources!=work->resources || request->domain.types!=material->domain.types ||
+        request->domain.declarations!=material->domain.declarations ||
+        request->domain.generics!=material->domain.generics ||
+        request->domain.defaults!=material->domain.defaults ||
+        request->domain.function_count!=material->domain.function_count) return XR_XIR_BAD_STRUCTURE;
+    return effect_body_read_work(&request->read,6)?XR_XIR_OK:XR_XIR_BUDGET;
+}
+static XrXirStatus effect_body_request_sequence_begin(const EffectBodyRequest *request,
+    EffectBodyRecordCursor *cursor) {
+    if (!request || !request->owner || !request->instruction || !request->domain.types || !cursor)
+        return XR_XIR_BAD_STRUCTURE;
+    if (!effect_body_request_sequence_owned(request)) return XR_XIR_OK;
+    XrXirStatus status=effect_body_request_sequence_binding(request);
+    if (status!=XR_XIR_OK) return status;
+    if (!effect_body_read_work(&request->read,sizeof(*cursor))) return XR_XIR_BUDGET;
+    *cursor=(EffectBodyRecordCursor){0,0,UINT32_MAX};return XR_XIR_OK;
+}
+
+/* Only numeric location survives one ascending pass. Failed scratch is
+ * discarded by that pass; no decoded value or permission is retained. The
+ * unique full-row decoder also reads all unused and signed physical fields. */
+static XrXirStatus effect_body_request_sequence_instruction(const EffectBodyRequest *request,
+    uint32_t f,uint32_t i,EffectBodyRecordCursor *cursor,XrXirInstruction *storage,
+    const XrXirInstruction **output) {
+    if (!request || !request->owner || !request->instruction || !request->domain.types ||
+        !storage || !output || f>=request->domain.function_count) return XR_XIR_BAD_STRUCTURE;
+    if (!effect_body_request_sequence_owned(request))
+        return effect_body_request_instruction(request,f,i,storage,output);
+    if (!cursor) return XR_XIR_BAD_STRUCTURE;
+    if (cursor->last==UINT32_MAX?i!=0:i!=cursor->last+1) return XR_XIR_BAD_STRUCTURE;
+    XrXirStatus status=effect_body_request_sequence_binding(request);
+    if (status!=XR_XIR_OK) return status;
+    const EffectBodyMaterial *material=request->owner;
+    if (!effect_body_read_work(&request->read,2)) return XR_XIR_BUDGET;
+    const EffectBodyRun *ref=NULL;
+    status=effect_body_record_cursor_ref(&request->read,&material->functions[f],i,cursor,&ref);
+    if (status==XR_XIR_OK) status=effect_body_instruction_ref_value(&request->read,ref,i,storage);
+    if (status!=XR_XIR_OK) return status;
+    if (!effect_body_read_work(&request->read,sizeof(*output))) return XR_XIR_BUDGET;
+    *output=storage;return XR_XIR_OK;
+}
+
+/* Re-read the current final run and exact EOF independently of the cursor.
+ * Completion describes this storage walk; Source, type, ROOT and terminal
+ * correspondence remain the caller's independent full obligations. */
+static XrXirStatus effect_body_request_sequence_finish(const EffectBodyRequest *request,
+    uint32_t f,const EffectBodyRecordCursor *cursor) {
+    if (!request || !request->owner || !request->instruction || !request->domain.types ||
+        f>=request->domain.function_count) return XR_XIR_BAD_STRUCTURE;
+    if (!effect_body_request_sequence_owned(request)) return XR_XIR_OK;
+    if (!cursor) return XR_XIR_BAD_STRUCTURE;
+    XrXirStatus status=effect_body_request_sequence_binding(request);
+    if (status!=XR_XIR_OK) return status;
+    const EffectBodyMaterial *material=request->owner;
+    const EffectBodyFunction *function=&material->functions[f];
+    if (!effect_body_read_work(&request->read,7)) return XR_XIR_BUDGET;
+    if (!function->instruction_count)
+        return !function->run_count && !function->run_capacity && !function->runs &&
+            !cursor->first && !cursor->run && cursor->last==UINT32_MAX?XR_XIR_OK:XR_XIR_BAD_STRUCTURE;
+    if (!function->run_count || cursor->run>=function->run_count ||
+        cursor->run+1!=function->run_count || cursor->last!=function->instruction_count-1)
+        return XR_XIR_BAD_STRUCTURE;
+    const EffectBodyRun *ref=NULL;
+    status=effect_body_run_ref(&request->read,function,cursor->run,cursor->first,&ref);
+    if (status!=XR_XIR_OK) return status;
+    if (!effect_body_read_work(&request->read,2)) return XR_XIR_BUDGET;
+    return ref->first+ref->count==function->instruction_count?
+        XR_XIR_OK:XR_XIR_BAD_STRUCTURE;
+}
+
 /* Raw storage still returns its original row pointer and cost. Owned
  * storage publishes only the requested fields after complete record checks. */
 static inline XrXirStatus effect_body_request_fields(const EffectBodyRequest *request,

@@ -155,7 +155,7 @@ static void invocation_returned_rejections(EffectInvocationOwner *owner,uint32_t
         node->producers=NULL;node->producer_count=node->producer_capacity=0;
         CHECK(effect_invocation_producers_verify(owner)==XR_XIR_OK);return;
     }
-    uint32_t values=owner->module->functions[1].instruction_count;
+    uint32_t values=owner->material->functions[1].instruction_count;
     const EffectInvocationProducer *returned=effect_invocation_producer_find(node,values,0);
     CHECK(returned && returned->distance==1 && returned->instruction==values-1 && returned->next_node==index);
     EffectInvocationProducer *fact=&node->producers[returned-node->producers];
@@ -185,7 +185,7 @@ static void invocation_returned_environment_owned(const XrXirCompileContext *con
     EffectInvocationOwner replay=*owner;replay.work=context;replay.effects=published;
     replay.declared=certificate->declared;
     EffectBodyRequest request=effect_body_owned_request(context,certificate->body);
-    CHECK(!replay.module && effect_invocation_producers_verify_read(&replay,&request)==XR_XIR_OK);
+    CHECK(!replay.body.read.owner && effect_invocation_producers_verify_read(&replay,&request)==XR_XIR_OK);
     uint32_t factory=owner->roots[1],entry=owner->roots[0];
     InvocationReturnedLedger ledger={context};
     XirEffectRuntimeRead read={.owner=&ledger,.work=invocation_returned_work};
@@ -237,11 +237,11 @@ static XrXirStatus invocation_returned_lowered_snapshot(const XrXirCompileContex
         const EffectBodyFunction *actual=&owned->functions[f];const XrXirFunction *source=&module->functions[f];
         if (actual->name==source->name ||
             (actual->parameter_count && actual->parameters==source->parameters) ||
-            (const void *)actual->stream==(const void *)source->instructions || actual->blocks==source->blocks ||
+            (const void *)actual->runs==(const void *)source->instructions || actual->blocks==source->blocks ||
             (actual->operand_count && actual->operands==source->operands)) status=XR_XIR_BAD_STRUCTURE;
     }
     const EffectInvocationOwner *equations=certificate->equations;
-    if (status==XR_XIR_OK && (!equations || equations->work || equations->module || equations->effects ||
+    if (status==XR_XIR_OK && (!equations || equations->work || equations->body.read.owner || equations->effects ||
         equations->graph || equations->declared || equations->pending || !certificate->result ||
         certificate->result->count!=module->function_count || !certificate->declared ||
         certificate->declared->resources!=context->resources)) status=XR_XIR_BAD_STRUCTURE;
@@ -329,7 +329,7 @@ static XrXirStatus conditional_invocation_returned(const XrXirCompileContext *co
     if (status==XR_XIR_OK) status=effect_invocation_bounds_new(context,&bounds);
     for (uint32_t f=0;status==XR_XIR_OK && f<module->function_count;++f)
         status=effect_invocation_bounds_capture(context,bounds,module->types,&module->functions[f],f,NULL);
-    if (status==XR_XIR_OK) { phase=4;status=effect_invocations_create(context,module,&effects,&graph,bounds,&owner); }
+    if (status==XR_XIR_OK) { phase=4;status=effect_invocations_receive(context,module,&effects,&graph,bounds,&owner); }
     if (status==XR_XIR_OK) status=effect_invocations_solve(owner);
     if (status==XR_XIR_OK && oracle) invocation_returned_rejections(owner,mode);
     if (status==XR_XIR_OK) status=effect_invocation_stage(owner,&solution);
@@ -343,7 +343,9 @@ static XrXirStatus conditional_invocation_returned(const XrXirCompileContext *co
     xr_xir_compile_artifact_free(checked);checked=NULL;memset(&fixture,0,sizeof(fixture));
     if (status==XR_XIR_OK && oracle) {
         const EffectInvocationOwner *owned=certificate->equations;
-        CHECK(!owned->work && !owned->module && !owned->graph && !owned->declared && !owned->effects);
+        CHECK(!owned->work && !owned->body.read.owner && !owned->body.read.consume &&
+            owned->material==certificate->body && owned->body.owner==certificate->body &&
+            !owned->graph && !owned->declared && !owned->effects);
         uint32_t mask=UINT32_MAX;
         CHECK(effect_invocation_certificate_node_mask(context,certificate,owned->roots[0],&mask)==XR_XIR_OK &&
             mask==(mode==2?XR_XIR_CALLABLE_ROOT_UNRESOLVED:0));

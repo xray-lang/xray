@@ -104,7 +104,6 @@ typedef struct EffectInvocationSite {
 
 typedef struct EffectInvocationOwner {
     const XrXirCompileContext *work;
-    const XrXirModule *module;
     XrXirEffects *effects;
     EffectGraph *graph;
     const EffectInvocationDeclaredBounds *declared;
@@ -113,6 +112,7 @@ typedef struct EffectInvocationOwner {
     EffectBodyRequest body;
     const XrXirCellProvenance *cells;
     EffectInvocationNode *nodes;
+    EffectInvocationResult *prepared_result;
     EffectInvocationEdge *edges;
     uint32_t *edge_index;
     size_t edge_index_capacity;
@@ -178,6 +178,10 @@ static XrXirStatus effect_invocation_shape(const EffectInvocationOwner *owner,ui
     EffectBodyRequest request=effect_invocation_body(owner);
     return effect_body_request_shape(&request,function,instruction,output);
 }
+
+static void effect_invocation_result_free(EffectInvocationResult *result);
+static bool effect_invocation_witness_equal(const XrXirRootEffectWitness *a,
+    const XrXirRootEffectWitness *b);
 
 #include "xxir_effect_invocation_class_nodes.inc.c"
 #include "xxir_effect_invocation_nodes.inc.c"

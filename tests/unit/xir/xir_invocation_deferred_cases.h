@@ -100,7 +100,8 @@ static void invocation_deferred_rejections(const XrXirCompileContext *context,
     uint64_t actual=record->arguments[basis.fn_words];
     record->arguments[basis.fn_words]|=UINT64_C(1)<<basis.parameters;
     CHECK(effect_invocation_seal(context,&request,&out,NULL)==XR_XIR_BAD_STRUCTURE && !out &&
-        *owner==original && *solution==staged && original->module && original->effects);
+        *owner==original && *solution==staged && original->effects &&
+        effect_body_request_owned_matches(context,&original->body,original->material));
     record->arguments[basis.fn_words]=actual;
     original->deferred_count=0;
     CHECK(effect_invocation_seal(context,&request,&out,NULL)==XR_XIR_BAD_STRUCTURE && !out &&
@@ -144,7 +145,7 @@ static XrXirStatus conditional_invocation_deferred(const XrXirCompileContext *co
     if (status==XR_XIR_OK) { phase=5;status=effect_invocation_bounds_new(context,&bounds); }
     for (uint32_t f=0;status==XR_XIR_OK && f<module->function_count;++f)
         status=effect_invocation_bounds_capture(context,bounds,module->types,&module->functions[f],f,NULL);
-    if (status==XR_XIR_OK) { phase=6;status=effect_invocations_create(context,module,&effects,&graph,bounds,&owner); }
+    if (status==XR_XIR_OK) { phase=6;status=effect_invocations_receive(context,module,&effects,&graph,bounds,&owner); }
     if (status==XR_XIR_OK) { phase=7;status=effect_invocations_solve(owner); }
     if (status==XR_XIR_OK) { phase=8;status=effect_invocation_stage(owner,&solution); }
     if (status==XR_XIR_OK && oracle) invocation_deferred_rejections(context,&owner,&solution);
@@ -171,7 +172,7 @@ static XrXirStatus conditional_invocation_deferred(const XrXirCompileContext *co
                 formula->terms[0].kind==XR_XIR_ROOT_TERM_CONTEXT_CALL && !formula->terms[0].index);
             CHECK(certificate->equations->deferred_count==1 &&
                 certificate->equations->deferred_calls[0].arguments[1]==UINT64_C(18));
-            CHECK(!certificate->equations->work && !certificate->equations->module &&
+            CHECK(!certificate->equations->work && !certificate->equations->body.read.owner &&
                 !certificate->equations->effects && !certificate->equations->graph && !certificate->equations->declared);
             CHECK(trace && !trace->counts[0] && trace->counts[1]==1 &&
                 trace->steps[0].witness.cause==XR_XIR_ROOT_CAUSE_CONTEXT_CALL &&

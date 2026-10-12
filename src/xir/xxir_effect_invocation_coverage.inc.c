@@ -78,10 +78,14 @@ static XrXirStatus effect_invocation_coverage_storage(EffectInvocationFlow *flow
     coverage->matches=coverage->next+flow->function->instruction_count;
     if (!xir_compile_work(flow->owner->work,flow->values)) return XR_XIR_BUDGET;
     for (uint32_t v=0;v<flow->values;++v) coverage->writes[v]=UINT32_MAX;
+    EffectBodyRecordCursor cursor;
+    status=effect_body_request_sequence_begin(&flow->body,&cursor);
+    if (status!=XR_XIR_OK) return status;
     for (uint32_t i=0;i<flow->function->instruction_count;++i) {
         if (!xir_compile_work(flow->owner->work,1)) return XR_XIR_BUDGET;
         XrXirInstruction body_op_2;const XrXirInstruction *op=NULL;
-        XrXirStatus body_read_2=effect_invocation_flow_instruction(flow,i,&body_op_2,&op);
+        XrXirStatus body_read_2=effect_body_request_sequence_instruction(&flow->body,
+            flow->owner->nodes[flow->node].body,i,&cursor,&body_op_2,&op);
         if (body_read_2!=XR_XIR_OK) return body_read_2;
         if (op->op!=XR_XIR_LOCAL_WRITE && op->op!=XR_XIR_SCALAR_LOCAL_WRITE &&
             op->op!=XR_XIR_OWNED_LOCAL_WRITE) continue;
@@ -89,7 +93,7 @@ static XrXirStatus effect_invocation_coverage_storage(EffectInvocationFlow *flow
         if (!xir_compile_work(flow->owner->work,3)) return XR_XIR_BUDGET;
         coverage->next[i]=coverage->writes[op->args[0]];coverage->writes[op->args[0]]=i;
     }
-    return XR_XIR_OK;
+    return effect_body_request_sequence_finish(&flow->body,flow->owner->nodes[flow->node].body,&cursor);
 }
 
 /* Every bit of the existing target superset needs its genuine producer cause.
@@ -198,7 +202,9 @@ static XrXirStatus effect_invocation_coverage_value(EffectInvocationCoverage *co
     XrXirType actual_type=0;
     XrXirStatus read_status=effect_invocation_flow_type(flow,v,&actual_type);
     if (read_status!=XR_XIR_OK) return read_status;
-    if (!xr_xir_callable_signature(flow->body.domain.types,actual_type) || flow->fixed[v]) return XR_XIR_OK;
+    if (!xr_xir_callable_signature(flow->body.domain.types,actual_type)) return XR_XIR_OK;
+    bool fixed=false;read_status=effect_invocation_flag_get(flow,v,false,&fixed);
+    if (read_status!=XR_XIR_OK || fixed) return read_status;
     bool complete=false;XrXirStatus status=effect_invocation_coverage_sites(coverage,v,
         v<flow->function->parameter_count,&complete);
     if (status!=XR_XIR_OK || !complete) return status;
@@ -217,7 +223,9 @@ static XrXirStatus effect_invocation_coverage_value(EffectInvocationCoverage *co
             uint32_t site=UINT32_MAX;bool supported=false;
             status=effect_invocation_site(flow,i,&site);
             if (status==XR_XIR_OK) status=effect_invocation_producer_site_supported_read(flow->owner,&flow->body,site,&supported);
-            complete=flow->certified[v] && supported;break;
+            bool certified=false;
+            if (status==XR_XIR_OK) status=effect_invocation_flag_get(flow,v,true,&certified);
+            complete=certified && supported;break;
         }
         case XR_XIR_COPY: case XR_XIR_SCALAR_COPY: case XR_XIR_OWNED_RETAIN:
         case XR_XIR_LOCAL_NEW: case XR_XIR_SCALAR_LOCAL_NEW: case XR_XIR_OWNED_LOCAL_NEW:
@@ -281,15 +289,20 @@ static XrXirStatus effect_invocation_coverage_return_read(EffectInvocationOwner 
     EffectInvocationFlow flow={.owner=owner,.node=n,.instruction=UINT32_MAX};
     status=effect_invocation_origins_read(&flow,request);EffectInvocationCoverage coverage={0};
     if (status==XR_XIR_OK) status=effect_invocation_coverage_values(&flow,&coverage);
+    EffectBodyRecordCursor cursor;
+    if (status==XR_XIR_OK) status=effect_body_request_sequence_begin(&flow.body,&cursor);
     bool present=false,complete=true;uint64_t maximum=0;
     for (uint32_t i=0;status==XR_XIR_OK && i<flow.function->instruction_count;++i) {
         if (!xir_compile_work(owner->work,1)) { status=XR_XIR_BUDGET;break; }
         XrXirInstruction body_op_6;const XrXirInstruction *op=NULL;
-        status=effect_invocation_flow_instruction(&flow,i,&body_op_6,&op);
+        status=effect_body_request_sequence_instruction(&flow.body,
+            owner->nodes[n].body,i,&cursor,&body_op_6,&op);
         if (status!=XR_XIR_OK) break;
         if (op->op!=XR_XIR_RETURN) continue;
         present=true;status=effect_invocation_coverage_source(&coverage,op->args[0],&maximum,&complete);
     }
+    if (status==XR_XIR_OK)
+        status=effect_body_request_sequence_finish(&flow.body,owner->nodes[n].body,&cursor);
     if (status==XR_XIR_OK && present && complete) {
         if (maximum==UINT64_MAX) status=XR_XIR_BUDGET;
         else *output=maximum+1;

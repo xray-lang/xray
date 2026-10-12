@@ -164,7 +164,7 @@ static XrXirStatus effect_source_certificate(const XrXirCompileContext *work,
         certificate->resources!=work->resources || certificate->body->resources!=work->resources ||
         !certificate->equations || !certificate->result || !certificate->declared ||
         certificate->terms.remaining || certificate->body->terms.remaining ||
-        certificate->equations->work || certificate->equations->module || certificate->equations->effects ||
+        certificate->equations->work || certificate->equations->effects ||
         certificate->equations->graph || certificate->equations->declared ||
         certificate->equations->body.read.owner || certificate->equations->body.read.consume ||
         certificate->equations->body.owner!=certificate->body ||

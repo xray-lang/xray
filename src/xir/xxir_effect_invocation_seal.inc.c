@@ -149,9 +149,9 @@ static XrXirStatus effect_invocation_bind_bounds(EffectInvocationCertificate *ce
  * context owner. There is no reconstructed role table or permission flag. */
 static XrXirStatus effect_invocation_copy_origins(EffectInvocationCertificate *certificate,
     const EffectInvocationOwner *equations,const EffectOrdinaryContexts *dense) {
-    EffectTerms *terms=&certificate->terms;uint32_t count=equations->module->function_count;
-    if (dense && (dense->count!=count || dense->functions!=equations->module->functions ||
-        &dense->terms.types!=equations->module->types || &dense->uses!=equations->effects))
+    EffectTerms *terms=&certificate->terms;uint32_t count=effect_body_count(equations->material);
+    if (dense && (dense->count!=count || &dense->uses!=equations->effects ||
+        !equations->material->ordinary_identities))
         return XR_XIR_BAD_STRUCTURE;
     certificate->origins=effect_terms_alloc(terms,count,sizeof(*certificate->origins));
     certificate->owners=effect_terms_alloc(terms,count,sizeof(*certificate->owners));
@@ -214,6 +214,29 @@ static XrXirStatus effect_invocation_certificate_terms(const XrXirCompileContext
     return status;
 }
 
+/* This independently derived relation has no formal or call terms. Actual
+ * canonical result fields are still compared, including every empty owner. */
+static XrXirStatus effect_invocation_local_result_match(const XrXirCompileContext *work,
+    const EffectInvocationOwner *owner,const EffectInvocationLocalInput *inputs,
+    const EffectInvocationResult *result) {
+    if (!xir_compile_context_valid(work) || !owner || !inputs || !result ||
+        result->resources!=work->resources || !result->functions || !owner->material)
+        return XR_XIR_BAD_STRUCTURE;
+    if (!xir_compile_work(work,4)) return XR_XIR_BUDGET;
+    uint32_t count=effect_body_count(owner->material);
+    if (result->count!=count || result->capacity!=count || result->term_count)
+        return XR_XIR_BAD_STRUCTURE;
+    for (uint32_t f=0;f<count;++f) {
+        if (!xir_compile_work(work,8)) return XR_XIR_BUDGET;
+        const EffectInvocationResultFunction *actual=&result->functions[f];
+        uint32_t mask=(inputs[f].facts.requires_root?XR_XIR_CALLABLE_ROOT_REQUIRED:0)|
+            (inputs[f].facts.unresolved?XR_XIR_CALLABLE_ROOT_UNRESOLVED:0);
+        if (actual->capacity || actual->storage || actual->formula.terms || actual->formula.term_count ||
+            actual->formula.constant_mask!=mask) return XR_XIR_BAD_STRUCTURE;
+    }
+    return XR_XIR_OK;
+}
+
 /* All failure paths keep both input owners and the occupied output intact.
  * Ownership moves only after complete copied correspondence and closure proof;
  * construction-only pointers are then removed from the published certificate. */
@@ -223,18 +246,27 @@ static XrXirStatus effect_invocation_seal(const XrXirCompileContext *work,
     if (!xir_compile_context_valid(work) || !request || !output || *output || !request->equations ||
         !*request->equations || !request->result || !*request->result) return XR_XIR_BAD_STRUCTURE;
     EffectInvocationOwner *owner=*request->equations;EffectInvocationResult *result=*request->result;
-    if (!xir_compile_context_valid(owner->work) || !owner->module || owner->work->resources!=work->resources || result->resources!=work->resources ||
-        result->count!=owner->module->function_count ||
-        !effect_invocation_projection_sink_matches(work,sink,owner->module->function_count))
+    if (!effect_body_request_owned_matches(owner->work,&owner->body,owner->material) ||
+        owner->work->resources!=work->resources || result->resources!=work->resources ||
+        result->count!=effect_body_count(owner->material) ||
+        !effect_invocation_projection_sink_matches(work,sink,effect_body_count(owner->material)))
         return XR_XIR_BAD_STRUCTURE;
-    XrXirStatus status=effect_physical_match(work,owner->physical,owner->module);
-    if (status==XR_XIR_OK) status=effect_invocation_producers_verify(owner);
-    if (status==XR_XIR_OK) status=effect_invocation_coverage_verify(owner);
-    if (status==XR_XIR_OK) status=effect_invocation_class_verify(owner);
-    if (status==XR_XIR_OK) status=effect_invocation_closed(owner);
-    if (status==XR_XIR_OK) status=effect_invocation_deferred_verify(owner);
-    if (status==XR_XIR_OK) status=effect_invocation_result_match(owner,result);
-    if (status==XR_XIR_OK) status=effect_invocation_causes(owner);
+    XrXirStatus status=effect_body_physical_match(work,owner->physical,owner->material);
+    EffectInvocationLocalInput *local_inputs=NULL;
+    if (status==XR_XIR_OK) status=effect_invocation_local_inputs(work,owner->material,&local_inputs);
+    if (status==XR_XIR_OK && local_inputs) {
+        status=effect_invocation_local_equations_match(work,owner,local_inputs);
+        if (status==XR_XIR_OK) status=effect_invocation_local_result_match(work,owner,local_inputs,result);
+    } else if (status==XR_XIR_OK) {
+        status=effect_invocation_producers_verify(owner);
+        if (status==XR_XIR_OK) status=effect_invocation_coverage_verify(owner);
+        if (status==XR_XIR_OK) status=effect_invocation_class_verify(owner);
+        if (status==XR_XIR_OK) status=effect_invocation_closed(owner);
+        if (status==XR_XIR_OK) status=effect_invocation_deferred_verify(owner);
+        if (status==XR_XIR_OK) status=effect_invocation_result_match(owner,result);
+        if (status==XR_XIR_OK) status=effect_invocation_causes(owner);
+    }
+    xr_compile_resources_free(local_inputs);
     EffectInvocationCertificate *certificate=status==XR_XIR_OK ?
         xir_compile_calloc(work,1,sizeof(*certificate),&status):NULL;
     if (status==XR_XIR_OK && !certificate) status=XR_XIR_OUT_OF_MEMORY;
@@ -244,7 +276,7 @@ static XrXirStatus effect_invocation_seal(const XrXirCompileContext *work,
     }
     if (status==XR_XIR_OK) status=effect_invocation_bind_bounds(certificate,owner->declared,owner->physical);
     if (status==XR_XIR_OK) status=effect_invocation_copy_origins(certificate,owner,request->dense);
-    if (status==XR_XIR_OK) status=effect_body_type_domain_match(work,certificate->body,owner->module);
+    if (status==XR_XIR_OK) status=effect_body_owned_types_verify(work,certificate->body);
     if (status==XR_XIR_OK) {
         certificate->equations=owner;
         if (!xir_compile_work(work,sizeof(certificate->result))) status=XR_XIR_BUDGET;
@@ -268,7 +300,7 @@ static XrXirStatus effect_invocation_seal(const XrXirCompileContext *work,
     xr_compile_resources_free(owner->edge_index);
     owner->edge_index=NULL;owner->edge_index_capacity=0;
     owner->body.read=(EffectBodyRead){0};
-    owner->work=NULL;owner->module=NULL;owner->effects=NULL;owner->graph=NULL;owner->declared=NULL;
+    owner->work=NULL;owner->effects=NULL;owner->graph=NULL;owner->declared=NULL;
     *request->result=NULL;
     *request->equations=NULL;*output=certificate;return XR_XIR_OK;
 }
@@ -295,5 +327,13 @@ static XrXirStatus effect_invocation_certificate_result_match(const XrXirCompile
     if (!xir_compile_work(work,sizeof(EffectInvocationTermSource))) return XR_XIR_BUDGET;
     const EffectInvocationTermSource source={work,certificate->equations,
         (const uint8_t *const *)certificate->parameter_kinds};
-    return effect_invocation_result_match_source(&source,result);
+    EffectInvocationLocalInput *inputs=NULL;
+    XrXirStatus status=effect_invocation_local_inputs(work,certificate->body,&inputs);
+    if (status==XR_XIR_OK && inputs) {
+        status=effect_invocation_local_equations_match(work,certificate->equations,inputs);
+        if (status==XR_XIR_OK)
+            status=effect_invocation_local_result_match(work,certificate->equations,inputs,result);
+    }
+    xr_compile_resources_free(inputs);
+    return status==XR_XIR_OK?effect_invocation_result_match_source(&source,result):status;
 }

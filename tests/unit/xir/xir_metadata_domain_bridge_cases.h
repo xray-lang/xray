@@ -140,7 +140,7 @@ static void conditional_metadata_snapshot(const XrXirCompileContext *context,
         CHECK(body->name_length==lengths[f] && !memcmp(body->name,names[f],lengths[f]) &&
             !body->parameters && !body->parameter_count && !body->operands && !body->operand_count &&
             body->result==(f?XR_XIR_UNIT:XR_XIR_I64) && body->block_count==1 &&
-            body->instruction_count==(f?1u:2u) && body->blocks && body->stream);
+            body->instruction_count==(f?1u:2u) && body->blocks && body->runs);
         const XrXirBlock block={.count=f?1u:2u};
         CHECK(!memcmp(body->blocks,&block,sizeof(block)));
         EffectBodyRead read=effect_body_compile_read(context);

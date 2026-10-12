@@ -59,8 +59,11 @@ static XrXirStatus conditional_invocation_core(const XrXirCompileContext *contex
     for (uint32_t f=0;status==XR_XIR_OK && f<module->function_count;++f)
         status=effect_invocation_bounds_capture(context,bounds,module->types,&module->functions[f],f,NULL);
     if (status==XR_XIR_OK) {
-        phase=6;EffectInvocationDriverInput input={context,module,&effects,&graph,bounds,NULL};
-        status=effect_invocation_derive(&input,&certificate,NULL,&receiving);
+        phase=6;EffectBodyRequest owned_input={0};
+        status=effect_invocation_collect(context,module,&effects,&graph,bounds,&owned_input);
+        if (status==XR_XIR_OK) status=effect_invocation_current_input_match(context,module,graph.material);
+        EffectInvocationDriverInput input={context,&owned_input,&effects,&graph,graph.material->declared,NULL};
+        if (status==XR_XIR_OK) status=effect_invocation_derive(&input,&certificate,NULL,&receiving);
     }
     if (status!=XR_XIR_OK && oracle) fprintf(stderr,
         "INVOCATION_CORE mode=%u phase=%u status=%u f=%u b=%u i=%u\n",mode,phase,status,

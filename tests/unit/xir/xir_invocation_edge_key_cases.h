@@ -81,7 +81,7 @@ static void invocation_edge_phi_fixture(InvocationEdgePhiFixture *f) {
 }
 
 static void invocation_edge_published_keys(const EffectInvocationOwner *owner,uint32_t mode) {
-    CHECK(!owner->edge_index && !owner->edge_index_capacity && !owner->work && !owner->module);
+    CHECK(!owner->edge_index && !owner->edge_index_capacity && !owner->work && !owner->body.read.owner);
     uint32_t calls=0,latent=0,producers=0,target=UINT32_MAX;
     for (uint32_t e=0;e<owner->edge_count;++e) {
         const EffectInvocationEdge *edge=&owner->edges[e];

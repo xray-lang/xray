@@ -162,11 +162,13 @@ static XrXirStatus effect_invocation_arguments_read(EffectInvocationFlow *flow,
                 if (bound->parameters[a].mode==XR_PARAM_REF) ref=true;
             }
             if (status!=XR_XIR_OK) break;
-            if (flow->fixed[actual] || (parameter->kind==XR_XIR_EFFECT_PARAMETER_FIXED && !ref)) {
+            bool fixed=false;status=effect_invocation_flag_get(flow,actual,false,&fixed);
+            if (status!=XR_XIR_OK) break;
+            if (fixed || (parameter->kind==XR_XIR_EFFECT_PARAMETER_FIXED && !ref)) {
                 uint32_t mask=0;
                 status=effect_invocation_bounds_mask(owner->work,owner->declared,
-                    flow->fixed[actual] ? owner->nodes[flow->node].body : target,
-                    flow->fixed[actual] ? actual : p,&mask);
+                    fixed ? owner->nodes[flow->node].body : target,
+                    fixed ? actual : p,&mask);
                 if (status!=XR_XIR_OK) break;
                 if (!xir_compile_work(owner->work,(uint64_t)flow->basis.fn_words*sizeof(*row)+3)) {
                     status=XR_XIR_BUDGET;break;
@@ -447,9 +449,11 @@ static XrXirStatus effect_invocation_latent_input(EffectInvocationFlow *flow,
 static XrXirStatus effect_invocation_latent(EffectInvocationFlow *flow,
     uint32_t instruction,const XrXirInstruction *op) {
     uint32_t value=flow->function->parameter_count+instruction;
-    if (value>=flow->values || !flow->certified[value]) return XR_XIR_OK;
+    if (value>=flow->values) return XR_XIR_OK;
+    bool certified=false;XrXirStatus status=effect_invocation_flag_get(flow,value,true,&certified);
+    if (status!=XR_XIR_OK || !certified) return status;
     EffectInvocationOwner *owner=flow->owner;uint32_t selected=UINT32_MAX;
-    XrXirStatus status=effect_invocation_site(flow,instruction,&selected);
+    status=effect_invocation_site(flow,instruction,&selected);
     if (status!=XR_XIR_OK) return status;
     uint64_t *input=NULL;
     status=effect_invocation_latent_input(flow,instruction,selected,op,&input);

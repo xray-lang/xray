@@ -160,7 +160,14 @@ static XrXirStatus effect_invocation_publish(const XrXirCompileContext *work,
             graph->material->declared=temporary;temporary=NULL;
         }
     }
-    EffectInvocationDriverInput input={work,module,effects,graph,
+    if (status==XR_XIR_OK && dense && (dense->count!=module->function_count ||
+        dense->functions!=module->functions || &dense->terms.types!=module->types ||
+        &dense->uses!=effects)) status=XR_XIR_BAD_STRUCTURE;
+    EffectBodyRequest body={0};
+    if (status==XR_XIR_OK && !xir_compile_work(work,sizeof(body))) status=XR_XIR_BUDGET;
+    if (status==XR_XIR_OK) status=effect_invocation_collect(work,module,effects,graph,
+        graph->material->declared,&body);
+    EffectInvocationDriverInput input={work,&body,effects,graph,
         status==XR_XIR_OK?graph->material->declared:NULL,dense};
     EffectInvocationProjectionSink sink;
     if (status==XR_XIR_OK && !xir_compile_work(work,sizeof(sink))) status=XR_XIR_BUDGET;
@@ -169,6 +176,9 @@ static XrXirStatus effect_invocation_publish(const XrXirCompileContext *work,
             &publication,effect_invocation_publication_write};
         status=effect_invocation_derive(&input,&certificate,&sink,&publication);
     }
+    /* The raw boundary remains inside this whole operation, after the
+     * last projection callback and before any public result changes. */
+    if (status==XR_XIR_OK) status=effect_invocation_current_input_match(work,module,certificate->body);
     if (status==XR_XIR_OK && !xir_compile_work(work,2)) status=XR_XIR_BUDGET;
     if (status==XR_XIR_OK) status=effect_invocation_publication_commit(work,effects,&certificate);
     if (status==XR_XIR_OK) {
@@ -262,7 +272,7 @@ static XrXirStatus effect_context_dense_stable_read(const XrXirCompileContext *c
         certificate->body->resources!=certificate->resources || certificate->resources!=context->resources || !certificate->equations ||
         !certificate->result || certificate->result->count!=dense->count ||
         dense->uses.result_borrow!=certificate->result ||
-        certificate->equations->work || certificate->equations->module || certificate->equations->graph ||
+        certificate->equations->work || certificate->equations->graph ||
         certificate->equations->effects || certificate->equations->declared ||
         effect_body_count(certificate->body)!=dense->count || !certificate->body->functions ||
         certificate->body->stage!=source->stage || certificate->body->linkage_kind!=source->linkage_kind ||

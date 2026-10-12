@@ -104,20 +104,20 @@ static void conditional_compact_change(XrXirInstruction *op,uint32_t field) {
 static void conditional_compact_malformed(const XrXirCompileContext *context,
     EffectBodyFunction *function,const XrXirFunction *expected) {
     EffectBodyRead read=effect_body_compile_read(context);
-    CHECK(function->stream_words<=64 && function->run_count==2);
-    uint32_t saved[64];memcpy(saved,function->stream,function->stream_words*sizeof(*saved));
-    uint32_t words=function->stream_words,runs=function->run_count,capacity=function->stream_capacity;
-    EffectBodyRunRef first;
-    CHECK(effect_body_run_ref(&read,function,0,0,&first)==XR_XIR_OK);
+    CHECK(function->runs && function->run_count==2 && function->run_capacity==2);
+    EffectBodyRun *first=&function->runs[0],*second=&function->runs[1];
+    uint32_t column=0;while (!(first->mask&(UINT32_C(1)<<column))) ++column;
+    uint32_t begin=first->first,count=first->count,mask=first->mask,delta=first->delta[column];
+    uint32_t neighbor=second->first,runs=function->run_count,capacity=function->run_capacity;
     for (uint32_t mode=0;mode<8;++mode) {
-        if (!mode) function->stream[0]=1;
-        else if (mode==1) function->stream[1]=0;
-        else if (mode==2) function->stream[2]|=UINT32_C(1024);
-        else if (mode==3) function->stream_words=EFFECT_BODY_HEADER-1;
+        if (!mode) first->first=1;
+        else if (mode==1) first->count=0;
+        else if (mode==2) first->mask|=UINT32_C(1024);
+        else if (mode==3) function->run_count=1;
         else if (mode==4) function->run_count=0;
-        else if (mode==5) function->stream_capacity=function->stream_words-1;
-        else if (mode==6) function->stream[EFFECT_BODY_HEADER]=0;
-        else function->stream[first.next]=first.first+first.count+1;
+        else if (mode==5) function->run_capacity=function->run_count-1;
+        else if (mode==6) first->delta[column]=0;
+        else second->first=begin+count+1;
         XrXirInstruction sentinel={.op=XR_XIR_RETURN,.type=XR_XIR_I64,.immediate=INT64_MIN},out=sentinel;
         XrXirOp opcode=XR_XIR_RETURN;XrXirType type=XR_XIR_UNIT;
         CHECK(effect_body_instruction_get(&read,function,0,&out)==XR_XIR_BAD_STRUCTURE &&
@@ -128,8 +128,8 @@ static void conditional_compact_malformed(const XrXirCompileContext *context,
         CHECK(effect_body_instruction_op(&read,function,0,&opcode)==XR_XIR_BAD_STRUCTURE && opcode==XR_XIR_RETURN);
         CHECK(effect_body_operand_type(&read,function,0,&type)==XR_XIR_BAD_STRUCTURE && type==XR_XIR_UNIT);
         CHECK(effect_body_records_match(&read,function,expected)==XR_XIR_BAD_STRUCTURE);
-        memcpy(function->stream,saved,words*sizeof(*saved));function->stream_words=words;
-        function->run_count=runs;function->stream_capacity=capacity;
+        first->first=begin;first->count=count;first->mask=mask;first->delta[column]=delta;
+        second->first=neighbor;function->run_count=runs;function->run_capacity=capacity;
         CHECK(effect_body_records_match(&read,function,expected)==XR_XIR_OK);
     }
 }
@@ -139,18 +139,25 @@ static void conditional_compact_malformed(const XrXirCompileContext *context,
 static void conditional_compact_pending_state(const XrXirCompileContext *context,
     const XrXirInstruction *expected) {
     uint64_t held_bytes=rp_stats(context).live_bytes;
-    EffectBodyPendingRun run;memset(&run,0xA5,sizeof(run));
+    EffectBodyRun run;memset(&run,0xA5,sizeof(run));
     EffectBodyFunction body={.instruction_count=1};
     CHECK(effect_body_run_seed(context,&run,expected,0)==XR_XIR_OK && run.first==0 && run.count==1 && !run.mask);
-    CHECK(effect_body_run_append(context,&body,&run)==XR_XIR_OK && body.run_count==1 && body.stream_words==EFFECT_BODY_HEADER);
+    CHECK(effect_body_run_append(context,&body,&run)==XR_XIR_OK && body.run_count==1 && body.run_capacity==1);
     EffectBodyRead read=effect_body_compile_read(context);XrXirInstruction decoded;
     CHECK(effect_body_instruction_get(&read,&body,0,&decoded)==XR_XIR_OK && conditional_compact_same(&decoded,expected));
-    uint32_t words=body.stream_words,runs=body.run_count;
+    uint32_t capacity=body.run_capacity,runs=body.run_count;
+    /* The ledger includes its allocation header. Alias refusal preserves the
+     * actual charged owner, without treating payload size as total live bytes. */
+    uint64_t retained_bytes=rp_stats(context).live_bytes;size_t retained_attempts=rp_attempts;
+    CHECK(retained_bytes>held_bytes);
+    CHECK(effect_body_run_append(context,&body,&body.runs[0])==XR_XIR_BAD_STRUCTURE &&
+        body.run_capacity==capacity && body.run_count==runs &&
+        rp_stats(context).live_bytes==retained_bytes && rp_attempts==retained_attempts);
     run.mask=1;
-    CHECK(effect_body_run_append(context,&body,&run)==XR_XIR_BAD_STRUCTURE && body.stream_words==words && body.run_count==runs);
+    CHECK(effect_body_run_append(context,&body,&run)==XR_XIR_BAD_STRUCTURE && body.run_capacity==capacity && body.run_count==runs);
     run.count=2;run.delta[0]=0;body.instruction_count=2;
-    CHECK(effect_body_run_append(context,&body,&run)==XR_XIR_BAD_STRUCTURE && body.stream_words==words && body.run_count==runs);
-    xr_compile_resources_free(body.stream);CHECK(rp_stats(context).live_bytes==held_bytes);
+    CHECK(effect_body_run_append(context,&body,&run)==XR_XIR_BAD_STRUCTURE && body.run_capacity==capacity && body.run_count==runs);
+    xr_compile_resources_free(body.runs);CHECK(rp_stats(context).live_bytes==held_bytes);
 }
 
 #include "xir_invocation_single_column_cases.h"
@@ -177,7 +184,7 @@ static XrXirStatus conditional_compact_codec(const XrXirCompileContext *context,
     }
     if (status==XR_XIR_OK) status=effect_body_records_match(&read,&body,&expected);
     if (status==XR_XIR_OK && oracle) {
-        CHECK(body.run_count>=2 && body.stream_words<=body.stream_capacity);
+        CHECK(body.run_count>=2 && body.run_count<=body.run_capacity);
         conditional_compact_read_failures(context,&body,&original[2]);
         conditional_compact_fields_failures(context,&body,&original[2]);
         for (uint32_t field=0;field<10;++field) {
@@ -191,7 +198,7 @@ static XrXirStatus conditional_compact_codec(const XrXirCompileContext *context,
         if (mode) conditional_compact_malformed(context,&body,&expected);
         else conditional_compact_pending_state(context,&original[0]);
     }
-    xr_compile_resources_free(body.stream);return status;
+    xr_compile_resources_free(body.runs);return status;
 }
 
 static void conditional_compact_null_body(const XrXirCompileContext *context,XrXirEffects *effects) {
@@ -275,26 +282,26 @@ static void conditional_compact_cause_opcode(const XrXirCompileContext *context,
         certificate->equations->nodes[selected].body==1 &&
         certificate->equations->nodes[selected].causes[atom].witness.cause==XR_XIR_ROOT_CAUSE_CONTEXT_CALL);
     EffectBodyFunction *function=&certificate->body->functions[1];
-    CHECK(function->stream && function->instruction_count==2 && function->stream_words>=EFFECT_BODY_HEADER &&
-        function->stream[0]==0 && function->stream[3]==XR_XIR_CALL_INDIRECT);
+    CHECK(function->runs && function->instruction_count==2 && function->run_count &&
+        function->runs[0].first==0 && function->runs[0].base.op==XR_XIR_CALL_INDIRECT);
     CHECK(effect_invocation_certificate_cause(context,certificate,selected,atom)==XR_XIR_OK);
-    uint32_t first=function->stream[0],count=function->stream[1],mask=function->stream[2],opcode=function->stream[3];
-    uint32_t words=function->stream_words,capacity=function->stream_capacity,runs=function->run_count;
+    uint32_t first=function->runs[0].first,count=function->runs[0].count,mask=function->runs[0].mask,opcode=function->runs[0].base.op;
+    uint32_t words=function->run_count,capacity=function->run_capacity,runs=function->run_count;
     EffectInvocationTraceRequest request={.function=1,.domain=1};
     for (uint32_t damage=0;damage<8;++damage) {
-        if (!damage) function->stream[3]=XR_XIR_RETURN;
-        else if (damage==1) function->stream[3]=XR_XIR_INVALID;
-        else if (damage==2) function->stream[0]=1;
-        else if (damage==3) function->stream[1]=0;
-        else if (damage==4) function->stream[2]|=UINT32_C(1024);
-        else if (damage==5) function->stream_words=EFFECT_BODY_HEADER-1;
-        else if (damage==6) function->stream_capacity=words-1;
+        if (!damage) function->runs[0].base.op=XR_XIR_RETURN;
+        else if (damage==1) function->runs[0].base.op=XR_XIR_INVALID;
+        else if (damage==2) function->runs[0].first=1;
+        else if (damage==3) function->runs[0].count=0;
+        else if (damage==4) function->runs[0].mask|=UINT32_C(1024);
+        else if (damage==5) function->run_count=0;
+        else if (damage==6) function->run_capacity=words-1;
         else function->run_count=0;
         CHECK(effect_invocation_certificate_cause(context,certificate,selected,atom)==XR_XIR_BAD_STRUCTURE);
         uint32_t length=77;
         CHECK(effect_invocation_public_walk(context,certificate,&request,4,&length)==XR_XIR_BAD_STRUCTURE && length==77);
-        function->stream[0]=first;function->stream[1]=count;function->stream[2]=mask;function->stream[3]=opcode;
-        function->stream_words=words;function->stream_capacity=capacity;function->run_count=runs;
+        function->runs[0].first=first;function->runs[0].count=count;function->runs[0].mask=mask;function->runs[0].base.op=(XrXirOp)opcode;
+        function->run_count=words;function->run_capacity=capacity;function->run_count=runs;
         CHECK(effect_invocation_certificate_cause(context,certificate,selected,atom)==XR_XIR_OK);
     }
     uint32_t length=77;
@@ -330,11 +337,11 @@ static void conditional_compact_projection_domains(const XrXirCompileContext *co
     uint32_t root=certificate->equations->roots[1];EffectInvocationNode *node=&certificate->equations->nodes[root];
     EffectInvocationCause *cause=&node->causes[6],*local=&effect_invocation_local_causes(node)[6];
     XrXirRootEffectWitness saved=cause->witness,local_saved=local->witness;
-    uint32_t stream_first=certificate->body->functions[1].stream[0];
+    uint32_t stream_first=certificate->body->functions[1].runs[0].first;
     for (uint32_t damage=0;damage<5;++damage) {
         if (!damage) cause->witness.slot=0;
         else if (damage==1) local->witness.cause=XR_XIR_ROOT_CAUSE_PARAMETER;
-        else if (damage==2) certificate->body->functions[1].stream[0]=1;
+        else if (damage==2) certificate->body->functions[1].runs[0].first=1;
         else if (damage==3) certificate->equations->roots[1]=certificate->equations->roots[0];
         CHECK(effect_invocation_projection_domains(context,certificate,1,damage==4?1u:0u,4,selected)==
             XR_XIR_BAD_STRUCTURE);
@@ -345,7 +352,7 @@ static void conditional_compact_projection_domains(const XrXirCompileContext *co
         CHECK(effect_invocation_public_walk(context,certificate,&request,4,&length)==
             XR_XIR_BAD_STRUCTURE && length==77);
         cause->witness=saved;local->witness=local_saved;
-        certificate->body->functions[1].stream[0]=stream_first;certificate->equations->roots[1]=root;
+        certificate->body->functions[1].runs[0].first=stream_first;certificate->equations->roots[1]=root;
         CHECK(effect_invocation_projection_domains(context,certificate,1,0,4,selected)==XR_XIR_OK &&
             selected[1]==6 && selected[0]==UINT32_MAX && selected[2]==UINT32_MAX &&
             selected[3]==UINT32_MAX);
@@ -383,8 +390,8 @@ static void conditional_compact_dimension_damage(const XrXirCompileContext *cont
         else if (damage==1) { function->parameter_count=1;function->parameters=NULL; }
         else if (damage==2) function->blocks=NULL;
         else if (damage==3) function->operands=NULL;
-        else if (damage==4) function->stream=NULL;
-        else if (damage==5) function->stream_capacity=function->stream_words-1;
+        else if (damage==4) function->runs=NULL;
+        else if (damage==5) function->run_capacity=function->run_count-1;
         else function->run_count=0;
         EffectBodyFunctionDimensions dimensions={77,78};EffectBodyFunctionHead head={0};
         CHECK(effect_body_request_dimensions(&request,0,&dimensions)==XR_XIR_BAD_STRUCTURE &&
@@ -545,11 +552,11 @@ static void conditional_compact_builder_spans(const XrXirCompileContext *context
             const EffectCellBodyAdapter *adapter=request->owner;
             EffectBodyMaterial *material=(EffectBodyMaterial *)adapter->request.owner;
             EffectBodyFunction *function=&material->functions[3];
-            uint32_t words=function->stream_words,runs=function->run_count;
-            if (mode==6) function->stream_words-=EFFECT_BODY_HEADER;
+            uint32_t capacity=function->run_capacity,runs=function->run_count;
+            if (mode==6) function->run_capacity=function->run_count-1;
             if (mode==7) --function->run_count;
             status=xir_cell_proof_builder_function(builder,3);
-            function->stream_words=words;function->run_count=runs;
+            function->run_capacity=capacity;function->run_count=runs;
             if (mode<8) CHECK(status==XR_XIR_BAD_STRUCTURE);
             else CHECK(status==XR_XIR_OK);
             CHECK(xir_cell_proof_builder_finish(&builder,&output)==(mode<8?XR_XIR_BAD_STRUCTURE:XR_XIR_OK) && !builder);
@@ -660,7 +667,7 @@ static XrXirStatus conditional_compact_owned(const XrXirCompileContext *context,
     if (status==XR_XIR_OK && oracle) conditional_compact_cell_attacks(context,effects,&adapter,&body_read);
     if (status==XR_XIR_OK && oracle) {
         EffectInvocationCertificate *certificate=effects->invocations;
-        CHECK(certificate->equations && !certificate->equations->work && !certificate->equations->module &&
+        CHECK(certificate->equations && !certificate->equations->work && !certificate->equations->body.read.owner &&
             !certificate->equations->effects && !certificate->equations->graph);
         EffectBodyRequest request=effect_body_owned_request(context,certificate->body);
         EffectBodyFunctionHead head={0};XrXirInstruction storage;const XrXirInstruction *op=NULL;

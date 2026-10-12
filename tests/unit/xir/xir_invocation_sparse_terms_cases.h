@@ -34,7 +34,7 @@ static void conditional_sparse_physical_bound_rejections(EffectInvocationOwner *
         held==owner && staged==solution && rp_stats(context).live_bytes==before.live_bytes &&
         rp_stats(context).allocation_count==before.allocation_count);
     physical->records[0].mask=original_mask;rp_balanced(retained);
-    CHECK(effect_physical_match(context,owner->physical,owner->module)==XR_XIR_OK);
+    CHECK(effect_body_physical_match(context,owner->physical,owner->material)==XR_XIR_OK);
     EffectInvocationDeclaredBounds *bounds=(EffectInvocationDeclaredBounds *)owner->declared;
     EffectInvocationValueBound *bound=&bounds->functions[1].bounds[0];
     CHECK(bound->value==0 && bound->callable && bound->mask==XR_XIR_CALLABLE_ROOT_UNRESOLVED);
@@ -171,7 +171,7 @@ static XrXirStatus conditional_sparse_case(const XrXirCompileContext *context,ui
     if (status==XR_XIR_OK) { phase=5;status=effect_invocation_bounds_new(context,&bounds); }
     for (uint32_t f=0;status==XR_XIR_OK && f<module->function_count;++f)
         status=effect_invocation_bounds_capture(context,bounds,module->types,&module->functions[f],f,NULL);
-    if (status==XR_XIR_OK) { phase=6;status=effect_invocations_create(context,module,&effects,&graph,bounds,&owner); }
+    if (status==XR_XIR_OK) { phase=6;status=effect_invocations_receive(context,module,&effects,&graph,bounds,&owner); }
     if (status==XR_XIR_OK) { phase=7;status=effect_invocations_solve(owner); }
     if (status==XR_XIR_OK) { phase=8;status=effect_invocation_stage(owner,&solution); }
     if (status==XR_XIR_OK && oracle) conditional_sparse_rejections(owner,solution,mode);
@@ -201,7 +201,7 @@ static XrXirStatus conditional_sparse_case(const XrXirCompileContext *context,ui
             uint32_t original_mask=UINT32_MAX;
             CHECK(effect_invocation_bounds_mask(context,certificate->declared,1,0,&original_mask)==XR_XIR_OK &&
                 original_mask==XR_XIR_CALLABLE_ROOT_UNRESOLVED);
-            CHECK(!certificate->equations->work && !certificate->equations->module &&
+            CHECK(!certificate->equations->work && !certificate->equations->body.read.owner &&
                 !certificate->equations->effects && !certificate->equations->graph && !certificate->equations->declared);
         }
     }

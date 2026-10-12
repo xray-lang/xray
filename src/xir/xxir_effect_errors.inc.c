@@ -269,7 +269,7 @@ static XrXirStatus error_cell_types_current(const ErrorFlow *flow) {
  * source. Canonical encoding and external ten-word correspondence are kept
  * by their original complete readers, independent of this projection. */
 static XrXirStatus error_range_fields(const EffectBodyRead *read,
-    const EffectBodyRunRef *ref,uint32_t instruction,EffectBodyInstructionFields *output) {
+    const EffectBodyRun *ref,uint32_t instruction,EffectBodyInstructionFields *output) {
     if (!output) return XR_XIR_BAD_STRUCTURE;
     if (!effect_body_read_work(read,3*sizeof(uint32_t))) return XR_XIR_BUDGET;
     uint32_t opcode=XR_XIR_INVALID,type=XR_XIR_UNIT,source=UINT32_MAX;
@@ -329,22 +329,22 @@ static XrXirStatus error_membership(ErrorFlow *flow,ErrorMembership *membership)
     XrXirStatus status=error_owned_function(flow,&function);
     if (status!=XR_XIR_OK) return status;
     if (!xir_compile_work(flow->remaining,sizeof(EffectBodyRecordCursor))) return XR_XIR_BUDGET;
-    EffectBodyRecordCursor cursor={0,0,0,UINT32_MAX};
+    EffectBodyRecordCursor cursor={0,0,UINT32_MAX};
     if (!xir_compile_work(flow->remaining,sizeof(uint32_t))) return XR_XIR_BUDGET;
     for (uint32_t run=0;run<function->run_count;++run) {
         if (!xir_compile_work(flow->remaining,1+sizeof(run))) return XR_XIR_BUDGET;
-        EffectBodyRunRef ref;
+        const EffectBodyRun *ref;
         status=effect_body_range_ref(&flow->body.read,function,&cursor,&ref);
         if (status!=XR_XIR_OK) return status;
-        for (uint32_t i=ref.first;i-ref.first<ref.count;++i) {
+        for (uint32_t i=ref->first;i-ref->first<ref->count;++i) {
             EffectBodyInstructionFields fields;
-            status=error_range_fields(&flow->body.read,&ref,i,&fields);
+            status=error_range_fields(&flow->body.read,ref,i,&fields);
             if (status==XR_XIR_OK) status=error_membership_row(flow,
                 flow->function->parameter_count+i,&fields,membership);
             if (status!=XR_XIR_OK) return status;
         }
     }
-    return cursor.first==function->instruction_count && cursor.offset==function->stream_words?
+    return cursor.first==function->instruction_count && cursor.run==function->run_count?
         XR_XIR_OK:XR_XIR_BAD_STRUCTURE;
 }
 
@@ -703,7 +703,7 @@ typedef struct ErrorBlockRead {
 } ErrorBlockRead;
 
 static XrXirStatus error_block_row(ErrorFlow *flow,uint32_t b,uint32_t i,
-    const uint8_t *zero_copy,const EffectBodyRunRef *ref,ErrorBlockRead *row) {
+    const uint8_t *zero_copy,const EffectBodyRun *ref,ErrorBlockRead *row) {
     const XrXirBlock *block=&flow->function->blocks[b];
     XrXirStatus status=block->panic?error_edge(flow,b,block->panic,NULL,true):XR_XIR_OK;
     bool copied_zero=false;
@@ -745,24 +745,24 @@ static XrXirStatus error_block_transfer(ErrorFlow *flow,uint32_t b,
     XrXirStatus status=error_owned_function(flow,&function);
     if (status!=XR_XIR_OK) return status;
     if (!xir_compile_work(flow->remaining,sizeof(EffectBodyRecordCursor))) return XR_XIR_BUDGET;
-    EffectBodyRecordCursor cursor={0,0,0,UINT32_MAX};
+    EffectBodyRecordCursor cursor={0,0,UINT32_MAX};
     if (!xir_compile_work(flow->remaining,sizeof(uint32_t))) return XR_XIR_BUDGET;
     uint32_t end=block->first+block->count;
     if (!block->count || block->first>=function->instruction_count ||
         block->count>function->instruction_count-block->first) return XR_XIR_BAD_STRUCTURE;
     while (cursor.first<end) {
         if (!xir_compile_work(flow->remaining,1)) return XR_XIR_BUDGET;
-        EffectBodyRunRef ref;
+        const EffectBodyRun *ref;
         status=effect_body_range_ref(&flow->body.read,function,&cursor,&ref);
         if (status!=XR_XIR_OK) return status;
         if (!xir_compile_work(flow->remaining,2+2*sizeof(uint32_t))) return XR_XIR_BUDGET;
         if (!xir_compile_work(flow->remaining,1+sizeof(row->constant)+sizeof(row->decoded)))
             return XR_XIR_BUDGET;
-        row->constant=ref.mask==0;row->decoded=false;
-        uint32_t first=ref.first<block->first?block->first:ref.first;
-        uint32_t limit=ref.first+ref.count<end?ref.first+ref.count:end;
+        row->constant=ref->mask==0;row->decoded=false;
+        uint32_t first=ref->first<block->first?block->first:ref->first;
+        uint32_t limit=ref->first+ref->count<end?ref->first+ref->count:end;
         for (uint32_t i=first;i<limit;++i) {
-            status=error_block_row(flow,b,i,zero_copy,&ref,row);
+            status=error_block_row(flow,b,i,zero_copy,ref,row);
             if (status!=XR_XIR_OK || flow->restart) return status;
         }
     }

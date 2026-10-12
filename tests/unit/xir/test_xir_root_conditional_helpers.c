@@ -1661,6 +1661,10 @@ int main(int argc, char **argv) {
         invocation_edge_literals();invocation_edge_resources();
         CHECK(!rp_live && !rp_live_bytes);return 0;
     }
+    if (argc==2 && !strcmp(argv[1],"--canonical-run-storage")) {
+        conditional_storage_literals();conditional_storage_resources();
+        CHECK(!rp_live && !rp_live_bytes);return 0;
+    }
     if (argc==2 && !strcmp(argv[1],"--generation-ranges")) {
         conditional_generation_literals();generation_range_controls();
         conditional_generation_resources();CHECK(!rp_live && !rp_live_bytes);return 0;

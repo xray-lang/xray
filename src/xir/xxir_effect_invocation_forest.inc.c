@@ -20,7 +20,7 @@ static XrXirStatus effect_invocation_forest_types(const XrXirCompileContext *wor
     if (!certificate || !effect_body_material_shape(certificate->body) ||
         certificate->body->resources!=certificate->resources || certificate->resources!=work->resources || certificate->terms.remaining ||
         certificate->body->domain.types!=&certificate->body->terms.types || !certificate->equations ||
-        certificate->equations->work || certificate->equations->module || certificate->equations->effects ||
+        certificate->equations->work || certificate->equations->effects ||
         certificate->equations->graph || certificate->equations->declared ||
         effect_body_count(certificate->body)!=contexts->count ||
         certificate->terms.types.count!=contexts->terms.types.count) return XR_XIR_BAD_STRUCTURE;

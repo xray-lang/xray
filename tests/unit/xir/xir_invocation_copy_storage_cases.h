@@ -65,7 +65,9 @@ static XrXirStatus conditional_copy_bodies(const XrXirCompileContext *context,bo
             CHECK(!memcmp(a->name,b->name,a->name_length));
             if (a->parameter_count) CHECK(a->parameters!=b->parameters &&
                 !memcmp(a->parameters,b->parameters,a->parameter_count*sizeof(*a->parameters)));
-            CHECK((const void *)a->instructions!=(const void *)b->stream);
+            CHECK(b->runs && b->run_count && b->run_count<=b->run_capacity &&
+                (const void *)a->instructions!=(const void *)b->runs &&
+                (const void *)a->instructions!=(const void *)&b->runs[0].base);
             CHECK(a->blocks!=b->blocks && !memcmp(a->blocks,b->blocks,a->block_count*sizeof(*a->blocks)));
             if (a->operand_count) CHECK(a->operands!=b->operands &&
                 !memcmp(a->operands,b->operands,a->operand_count*sizeof(*a->operands)));

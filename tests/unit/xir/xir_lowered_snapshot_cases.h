@@ -111,7 +111,7 @@ static XrXirStatus lowered_snapshot_empty_copy(const XrXirCompileContext *contex
             !body->terms.types.count && !body->terms.types.nodes &&
             !body->terms.types.nominals && !body->terms.types.interfaces &&
             (const void *)body->functions != (const void *)&function &&
-            (const void *)body->functions[0].stream != (const void *)&instruction &&
+            (const void *)body->functions[0].runs != (const void *)&instruction &&
             body->functions[0].blocks != &block &&
             body->functions[0].name != function.name);
         EffectBodyRead read = effect_body_compile_read(context);XrXirInstruction decoded;

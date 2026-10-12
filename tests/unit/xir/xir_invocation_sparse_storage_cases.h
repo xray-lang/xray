@@ -95,6 +95,25 @@ static void invocation_storage_rejections(const XrXirCompileContext *context,
     CHECK(invocation_storage_copy_bounds(context,module,bounds)==XR_XIR_OK);
 }
 
+
+static bool invocation_storage_fixed(EffectInvocationFlow *flow,uint32_t value) {
+    bool fixed=false;CHECK(effect_invocation_flag_get(flow,value,false,&fixed)==XR_XIR_OK);return fixed;
+}
+static void invocation_storage_bitmap_controls(EffectInvocationFlow *flow) {
+    CHECK(flow->values && effect_invocation_flags_match(flow)==XR_XIR_OK);
+    bool sentinel=true,output=sentinel,changed=false;
+    CHECK(effect_invocation_flag_get(flow,flow->values,false,&output)==XR_XIR_BAD_STRUCTURE && output==sentinel);
+    CHECK(effect_invocation_flag_put(flow,flow->values,true,&changed)==XR_XIR_BAD_STRUCTURE && !changed);
+    uint32_t tail=flow->values%64;
+    if (tail) {
+        uint32_t last=(flow->values-1)/64;uint64_t bit=UINT64_C(1)<<tail;
+        flow->fixed[last]|=bit;
+        CHECK(effect_invocation_flags_match(flow)==XR_XIR_BAD_STRUCTURE);
+        flow->fixed[last]&=~bit;flow->certified[last]|=bit;
+        CHECK(effect_invocation_flags_match(flow)==XR_XIR_BAD_STRUCTURE);
+        flow->certified[last]&=~bit;CHECK(effect_invocation_flags_match(flow)==XR_XIR_OK);
+    }
+}
 static XrXirStatus invocation_storage_rows(EffectInvocationOwner *owner,uint32_t node,uint32_t mode,bool oracle) {
     EffectInvocationFlow flow={.owner=owner,.node=node,.instruction=UINT32_MAX};
     XrXirStatus status=effect_invocation_origins(&flow);
@@ -108,16 +127,17 @@ static XrXirStatus invocation_storage_rows(EffectInvocationOwner *owner,uint32_t
             else CHECK(!flow.row_indices || flow.row_indices[v]==UINT32_MAX);
         }
         CHECK(flow.row_count==expected && flow.fixed && flow.certified);
+        invocation_storage_bitmap_controls(&flow);
         if (!expected) CHECK(!flow.row_indices);
         if (body==1) {
-            CHECK(expected==mode+1 && flow.values==98 && flow.fixed[2] && flow.fixed[4] &&
-                flow.fixed[5] && flow.fixed[6]);
+            CHECK(expected==mode+1 && flow.values==98 && invocation_storage_fixed(&flow,2) && invocation_storage_fixed(&flow,4) &&
+                invocation_storage_fixed(&flow,5) && invocation_storage_fixed(&flow,6));
             uint32_t row=flow.row_indices[0];flow.row_indices[0]=UINT32_MAX;
             CHECK(effect_invocation_origin_bit(&flow,0,0)==XR_XIR_BAD_TYPE);
             CHECK(effect_invocation_origin_join(&flow,0,0)==XR_XIR_BAD_STRUCTURE);
             flow.row_indices[0]=row;
         } else if (body==3) {
-            CHECK(!expected && flow.fixed[0] && flow.fixed[2] && flow.fixed[4] && flow.fixed[5] && flow.fixed[6]);
+            CHECK(!expected && invocation_storage_fixed(&flow,0) && invocation_storage_fixed(&flow,2) && invocation_storage_fixed(&flow,4) && invocation_storage_fixed(&flow,5) && invocation_storage_fixed(&flow,6));
             CHECK(effect_invocation_origin_join(&flow,4,2)==XR_XIR_OK);
         }
     }
@@ -143,7 +163,7 @@ static XrXirStatus conditional_storage_case(const XrXirCompileContext *context,u
     for (uint32_t f=0;status==XR_XIR_OK && f<module->function_count;++f)
         status=effect_invocation_bounds_capture(context,bounds,module->types,&module->functions[f],f,NULL);
     if (status==XR_XIR_OK && oracle) invocation_storage_rejections(context,module,bounds);
-    if (status==XR_XIR_OK) { phase=6;status=effect_invocations_create(context,module,&effects,&graph,bounds,&owner); }
+    if (status==XR_XIR_OK) { phase=6;status=effect_invocations_receive(context,module,&effects,&graph,bounds,&owner); }
     if (status==XR_XIR_OK) { phase=7;status=effect_invocations_solve(owner); }
     for (uint32_t n=0;status==XR_XIR_OK && n<owner->count;++n)
         status=invocation_storage_rows(owner,n,mode,oracle);
@@ -174,7 +194,7 @@ static XrXirStatus conditional_storage_case(const XrXirCompileContext *context,u
                     saved==XR_XIR_CALLABLE_ROOT_UNRESOLVED);
             }
             CHECK(!certificate->declared->functions[3].count && !certificate->declared->functions[3].bounds);
-            CHECK(!certificate->equations->module && !certificate->equations->effects && !certificate->equations->declared);
+            CHECK(!certificate->equations->body.read.owner && !certificate->equations->effects && !certificate->equations->declared);
         }
     }
     effect_invocation_certificate_free(certificate);return status;

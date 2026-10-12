@@ -49,16 +49,17 @@ static void cell_owned_run_boundary(const XrXirCompileContext *context,
  * operand-table bounds must still reject before any proof can be accepted. */
 static void cell_owned_run_semantics(const XrXirCompileContext *context,
     const EffectBodyMaterial *material,const XrXirCellProofBodyRead *read) {
-    EffectBodyRead physical=effect_body_compile_read(context);EffectBodyRunRef ref;
+    EffectBodyRead physical=effect_body_compile_read(context);const EffectBodyRun *ref=NULL;
     const EffectBodyFunction *function=&material->functions[1];
     CHECK(effect_body_record_ref(&physical,function,516,&ref)==XR_XIR_OK &&
-        ref.first==516 && ref.count==256 && !ref.mask);
-    uint32_t *words=(uint32_t *)ref.base;
-    const uint32_t fields[3]={6,2,3},changed[3]={3,1,1};
+        ref->first==516 && ref->count==256 && !ref->mask);
+    XrXirInstruction *base=(XrXirInstruction *)&ref->base;
+    XrXirInstruction saved=*base;
     for (uint32_t k=0;k<3;++k) {
-        uint32_t old=words[fields[k]];words[fields[k]]=changed[k];
+        if (!k) base->immediate=3;
+        else base->args[k-1]=1;
         CHECK(xr_xir_compile_cell_provenance_body_matches(context,material->cells,read,NULL)==XR_XIR_BAD_STRUCTURE);
-        words[fields[k]]=old;
+        *base=saved;
         CHECK(xr_xir_compile_cell_provenance_body_matches(context,material->cells,read,NULL)==XR_XIR_OK);
     }
 }
@@ -112,36 +113,37 @@ static void cell_owned_run_source(const XrXirCompileContext *context,
 static void cell_owned_run_malformed(const XrXirCompileContext *context,
     const EffectBodyMaterial *material,const XrXirCellProofBodyRead *read) {
     EffectBodyFunction *body=(EffectBodyFunction *)&material->functions[1];
-    uint32_t *stream=body->stream;uint32_t count=body->stream_words;
+    CHECK(body->runs && body->run_count>1 && body->run_capacity==body->run_count);
+    EffectBodyRun *first=&body->runs[0],*second=&body->runs[1];
+    uint32_t count=body->run_count,column=0;while (!(first->mask&(UINT32_C(1)<<column))) ++column;
+    uint32_t old_mask=first->mask,old_first=first->first,old_delta=first->delta[column],old_neighbor=second->first;
     XrXirCellProofRunCursor held={.function=1};
     XrXirCellProofRun sentinel={.first=99,.count=3,.operation={.op=XR_XIR_RETURN,.immediate=INT64_MIN}};
     for (uint32_t mode=0;mode<5;++mode) {
-        uint32_t old_mask=stream[2],old_first=stream[0],old_delta=stream[EFFECT_BODY_HEADER];
-        uint32_t second=EFFECT_BODY_HEADER+3,old_neighbor=stream[second];
-        if (!mode) stream[2]|=UINT32_C(1024);
-        if (mode==1) stream[0]=1;
-        if (mode==2) stream[EFFECT_BODY_HEADER]=0;
-        if (mode==3) stream[second]=0;
-        if (mode==4) body->stream_words=EFFECT_BODY_HEADER-1;
+        if (!mode) first->mask|=UINT32_C(1024);
+        if (mode==1) first->first=1;
+        if (mode==2) first->delta[column]=0;
+        if (mode==3) second->first=0;
+        if (mode==4) body->run_capacity=body->run_count-1;
         XrXirCellProofRunCursor cursor=held;XrXirCellProofRun out=sentinel;
         CHECK(read->range(context,read,&cursor,&out)==XR_XIR_BAD_STRUCTURE &&
             !memcmp(&cursor,&held,sizeof(cursor)) && !memcmp(&out,&sentinel,sizeof(out)));
-        stream[2]=old_mask;stream[0]=old_first;stream[EFFECT_BODY_HEADER]=old_delta;
-        stream[second]=old_neighbor;body->stream_words=count;
+        first->mask=old_mask;first->first=old_first;first->delta[column]=old_delta;
+        second->first=old_neighbor;body->run_capacity=count;
     }
-    uint32_t runs=body->run_count;--body->run_count;
+    --body->run_count;
     CHECK(xr_xir_compile_cell_provenance_body_matches(context,material->cells,read,NULL)==XR_XIR_BAD_STRUCTURE);
-    body->run_count=runs;
+    body->run_count=count;
     EffectBodyFunction *single=(EffectBodyFunction *)&material->functions[0];
-    uint32_t mask=single->stream[2];single->stream[2]=1;
+    uint32_t mask=single->runs[0].mask;single->runs[0].mask=1;
     XrXirCellProofRunCursor cursor={.function=0};XrXirCellProofRun out=sentinel;
     XrXirCellProofRunCursor cursor_before=cursor;
     CHECK(read->range(context,read,&cursor,&out)==XR_XIR_BAD_STRUCTURE &&
         !memcmp(&cursor,&cursor_before,sizeof(cursor)) && !memcmp(&out,&sentinel,sizeof(out)));
-    single->stream[2]=mask;
-    CHECK(body->stream_words<body->stream_capacity);++body->stream_words;
+    single->runs[0].mask=mask;
+    ++body->run_count;
     CHECK(xr_xir_compile_cell_provenance_body_matches(context,material->cells,read,NULL)==XR_XIR_BAD_STRUCTURE);
-    --body->stream_words;
+    body->run_count=count;
     CHECK(xr_xir_compile_cell_provenance_body_matches(context,material->cells,read,NULL)==XR_XIR_OK);
 }
 

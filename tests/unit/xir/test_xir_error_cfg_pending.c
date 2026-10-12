@@ -323,6 +323,185 @@ static void pc_empty_cases(void) {
     pc_release(&c,baseline);
     puts("empty whole literals: wide/reverse/PHI/filter/Error return/cleanup/panic/suspend and badcleanup");
 }
+/* Literal authority and error goldens do not come from the local producer.
+ * Each counterfactual targets the complete final receiver, then restores the
+ * exact owned field before destruction or the nearest positive check. */
+static void pc_local_final_mutations(const XrXirCompileContext *c,
+    EffectInvocationCertificate *certificate,const EffectInvocationLocalInput *inputs) {
+    EffectInvocationOwner *equations=certificate->equations;
+    EffectInvocationNode *node=&equations->nodes[1];EffectInvocationNode saved=*node;
+    for (unsigned mode=0;mode<10;++mode) {
+        if (!mode) node->intrinsic_mask=XR_XIR_CALLABLE_ROOT_REQUIRED;
+        if (mode==1) node->local_mask=XR_XIR_CALLABLE_ROOT_UNRESOLVED;
+        if (mode==2) ++node->instruction_count;
+        if (mode==3) node->expanded=false;
+        if (mode==4) node->queued=true;
+        if (mode==5) node->return_coverage=1;
+        if (mode==6) node->class_return_mask=EFFECT_CLASS_ROOT;
+        if (mode==7) node->edge_head=0;
+        if (mode==8) node->deferred=true;
+        if (mode==9) node->producer_count=1;
+        CHECK(effect_invocation_local_equations_match(c,equations,inputs)==XR_XIR_BAD_STRUCTURE);
+        *node=saved;
+        CHECK(effect_invocation_local_equations_match(c,equations,inputs)==XR_XIR_OK);
+    }
+    EffectInvocationCause old=node->causes[0];node->causes[0].witness.cause=XR_XIR_ROOT_CAUSE_INITIALIZER;
+    CHECK(effect_invocation_local_equations_match(c,equations,inputs)==XR_XIR_BAD_STRUCTURE);
+    node->causes[0]=old;
+    uint64_t bits=node->cells[0];node->cells[0]=UINT64_C(1)<<63;
+    CHECK(effect_invocation_local_equations_match(c,equations,inputs)==XR_XIR_BAD_STRUCTURE);
+    node->cells[0]=bits;
+    EffectPhysicalFunction *physical=&certificate->body->physical->functions[1];
+    CHECK(physical->count);uint32_t count=physical->count;--physical->count;
+    CHECK(effect_body_physical_match(c,certificate->body->physical,certificate->body)==XR_XIR_BAD_STRUCTURE);
+    physical->count=count;
+    EffectInvocationResultFunction *function=&certificate->result->functions[0];
+    XrXirRootFormula formula=function->formula;function->formula.constant_mask=0;
+    CHECK(effect_invocation_local_result_match(c,equations,inputs,certificate->result)==XR_XIR_BAD_STRUCTURE);
+    function->formula=formula;
+    /* Removing the entire initializer result remains invalid even if all
+     * mutable receiving rows are made mutually consistent after a callback. */
+    EffectInvocationNode init=equations->nodes[0];equations->nodes[0].intrinsic_mask=0;
+    equations->nodes[0].local_mask=0;function->formula.constant_mask=0;
+    CHECK(effect_invocation_certificate_result_match(c,certificate,certificate->result)==XR_XIR_BAD_STRUCTURE);
+    equations->nodes[0]=init;function->formula=formula;
+    CHECK(effect_invocation_certificate_result_match(c,certificate,certificate->result)==XR_XIR_OK);
+}
+
+static void pc_local_source_fields(const XrXirCompileContext *c,
+    const EffectBodyMaterial *body,const XrXirModule *source) {
+    CHECK(source && source->functions && source->function_count==3);
+    CHECK(effect_body_source_match(c,body,source)==XR_XIR_OK);
+    XrXirInstruction *row=(XrXirInstruction *)&source->functions[1].instructions[4];
+    XrXirInstruction saved=*row;
+    for (uint32_t word=0;word<10;++word) {
+        if (!word) row->op=XR_XIR_RETURN;
+        if (word==1) row->type=XR_XIR_BOOL;
+        if (word==2) row->args[0]=1;
+        if (word==3) row->args[1]=1;
+        if (word==4) row->targets[0]=1;
+        if (word==5) row->targets[1]=1;
+        if (word==6) row->immediate=-1;
+        if (word==7) row->immediate=INT64_MIN;
+        if (word==8) row->type_arguments[0]=1;
+        if (word==9) row->type_arguments[1]=1;
+        CHECK(effect_body_source_match(c,body,source)==XR_XIR_BAD_STRUCTURE);
+        /* Complete source equality rejects both scalar IDs. Physical
+         * membership deliberately projects only the actual type category. */
+        if (!word)
+            CHECK(effect_invocation_current_input_match(c,source,body)==XR_XIR_BAD_STRUCTURE);
+        else if (word==1)
+            CHECK(effect_invocation_current_input_match(c,source,body)==XR_XIR_OK);
+        *row=saved;
+    }
+    CHECK(effect_invocation_current_input_match(c,source,body)==XR_XIR_OK);
+}
+
+static void pc_local_transfer_positive(void) {
+    XrXirCompileContext c=pc_owner(pc_caps());uint64_t baseline=pc_stats(&c).live_bytes;
+    EdgeFixture fixture;pc_empty_fixture(&fixture,0);
+    fixture.subject[1]=(XrXirInstruction){.op=XR_XIR_COPY,.type=XR_XIR_I64,.args={0}};
+    XrXirArtifact *checked=NULL;XrXirEffects *effects=NULL;
+    CHECK(xir_fixture_check(&c,&fixture.module,&checked,NULL)==XR_XIR_OK);
+    /* COPY remains a real transfer in Checked. SCALAR_COPY is emitted only
+     * by lowering and cannot enter this Built admission control. */
+    const XrXirModule *actual=xr_xir_compile_artifact_module(checked);
+    CHECK(actual && actual->stage==XR_XIR_CHECKED && actual->functions[1].instruction_count>1 &&
+        actual->functions[1].instructions[1].op==XR_XIR_COPY &&
+        actual->functions[1].instructions[1].type==XR_XIR_I64 &&
+        !actual->functions[1].instructions[1].args[0]);
+    CHECK(effect_physical_opcode(actual->functions[1].instructions[1].op)&EFFECT_PHYSICAL_TRANSFER);
+    CHECK(xr_xir_compile_effects_analyze(checked,&effects)==XR_XIR_OK);pc_empty_golden(effects,0);
+    EffectInvocationLocalInput *inputs=NULL;
+    CHECK(effect_invocation_local_inputs(&c,effects->invocations->body,&inputs)==XR_XIR_OK && !inputs);
+    CHECK(effect_invocation_public_gate(&c,effects->invocations,effects->count)==XR_XIR_OK);
+    xr_xir_compile_effects_free(effects);xr_xir_compile_artifact_free(checked);pc_release(&c,baseline);
+}
+
+typedef struct PcLocalCallback {
+    EffectInvocationResult *receiving;
+    uint32_t calls;
+} PcLocalCallback;
+
+/* The last genuine projection callback forges a consistent receiving ROOT
+ * absence. Final publication must still derive the initializer independently. */
+static XrXirStatus pc_local_callback_write(const XrXirCompileContext *work,
+    const EffectInvocationCertificate *certificate,uint32_t function,
+    const uint32_t *selected,EffectInvocationResult *result,void *receiver) {
+    PcLocalCallback *probe=receiver;
+    XrXirStatus status=effect_invocation_publication_write(work,certificate,function,selected,
+        result,&probe->receiving);
+    if (status!=XR_XIR_OK) return status;
+    ++probe->calls;
+    if (function+1!=result->count) return XR_XIR_OK;
+    EffectInvocationNode *node=&certificate->equations->nodes[0];
+    node->intrinsic_mask=node->local_mask=0;result->functions[0].formula.constant_mask=0;
+    result->facts[0]=(XrXirRootEffects){0};
+    for (uint32_t domain=0;domain<4;++domain) {
+        size_t at=(size_t)domain*result->count;
+        certificate->projection_atoms[at]=UINT32_MAX;result->witnesses[at]=(XrXirRootEffectWitness){0};
+    }
+    for (uint32_t cause=0;cause<6;++cause)
+        node->causes[cause]=(EffectInvocationCause){.next=UINT32_MAX,.edge=UINT32_MAX,.distance=UINT32_MAX};
+    return XR_XIR_OK;
+}
+
+static void pc_local_callback_boundary(void) {
+    XrXirCompileContext c=pc_owner(pc_caps());uint64_t baseline=pc_stats(&c).live_bytes;
+    EdgeFixture fixture;pc_empty_fixture(&fixture,0);
+    XrXirArtifact *checked=NULL;XrXirEffects *effects=NULL;
+    CHECK(xir_fixture_check(&c,&fixture.module,&checked,NULL)==XR_XIR_OK);
+    CHECK(xr_xir_compile_effects_analyze(checked,&effects)==XR_XIR_OK);pc_empty_golden(effects,0);
+    const XrXirModule *source=xr_xir_compile_artifact_module(checked);EffectGraph graph={0};
+    CHECK(effect_graph_build(source,effects,&graph,&c)==XR_XIR_OK && graph.physical_owned);
+    EffectBodyRequest body=effect_body_owned_request(&c,graph.material);
+    EffectInvocationDriverInput input={&c,&body,effects,&graph,graph.material->declared,NULL};
+    PcLocalCallback probe={0};EffectInvocationCertificate *certificate=NULL,*old=effects->invocations;
+    EffectInvocationProjectionSink sink={c.resources,effects->count,&probe,pc_local_callback_write};
+    CHECK(effect_invocation_derive(&input,&certificate,&sink,&probe.receiving)==XR_XIR_OK &&
+        certificate && !probe.receiving && probe.calls==3 && !graph.physical_owned);
+    CHECK(effect_invocation_current_input_match(&c,source,certificate->body)==XR_XIR_OK);
+    CHECK(effect_invocation_publication_commit(&c,effects,&certificate)==XR_XIR_BAD_STRUCTURE &&
+        certificate && effects->invocations==old && effects->root[0].requires_root);
+    pc_empty_golden(effects,0);effect_invocation_certificate_free(certificate);effect_graph_free(&graph);
+    xr_xir_compile_effects_free(effects);xr_xir_compile_artifact_free(checked);pc_release(&c,baseline);
+}
+
+static void pc_local_equation_controls(void) {
+    XrXirCompileContext c=pc_owner(pc_caps());uint64_t baseline=pc_stats(&c).live_bytes;
+    EdgeFixture fixture;pc_empty_fixture(&fixture,0);
+    XrXirArtifact *checked=NULL;XrXirEffects *effects=NULL;
+    CHECK(xir_fixture_check(&c,&fixture.module,&checked,NULL)==XR_XIR_OK);
+    CHECK(xr_xir_compile_effects_analyze(checked,&effects)==XR_XIR_OK);pc_empty_golden(effects,0);
+    EffectInvocationCertificate *certificate=effects->invocations;EffectInvocationLocalInput *inputs=NULL;
+    CHECK(certificate && certificate->equations && certificate->body->domain.types->count==2 &&
+        xr_xir_type_is_cell(certificate->body->domain.types,(XrXirType)EE_CELL));
+    CHECK(effect_invocation_local_inputs(&c,certificate->body,&inputs)==XR_XIR_OK && inputs);
+    CHECK(inputs[0].facts.requires_root && !inputs[0].facts.unresolved &&
+        inputs[0].witnesses[0].cause==XR_XIR_ROOT_CAUSE_INITIALIZER &&
+        !inputs[1].facts.requires_root && !inputs[2].facts.requires_root && effects->errors[2]==8);
+    CHECK(effect_invocation_local_equations_match(&c,certificate->equations,inputs)==XR_XIR_OK);
+    pc_local_final_mutations(&c,certificate,inputs);
+    pc_local_source_fields(&c,certificate->body,xr_xir_compile_artifact_module(checked));
+    XrXirCompileContext foreign={0};XrCompileResourceLimits caps=pc_caps();
+    CHECK(xr_compile_resources_new(&caps,&foreign.resources)==XR_COMPILE_RESOURCE_OK);
+    foreign.limits=c.limits;EffectInvocationLocalInput *occupied=inputs,*missing=NULL;
+    size_t allocations=attempts;XrCompileResourceStats before=pc_stats(&c);
+    CHECK(effect_invocation_local_inputs(&c,certificate->body,&occupied)==XR_XIR_BAD_STRUCTURE && occupied==inputs);
+    CHECK(effect_invocation_local_inputs(&foreign,certificate->body,&missing)==XR_XIR_BAD_STRUCTURE && !missing);
+    CHECK(effect_invocation_local_inputs(NULL,certificate->body,&missing)==XR_XIR_BAD_STRUCTURE && !missing &&
+        attempts==allocations && pc_stats(&c).work==before.work);
+    xr_compile_resources_release(foreign.resources);xr_compile_resources_free(inputs);inputs=NULL;
+    xr_xir_compile_artifact_free(checked);checked=NULL;memset(&fixture,0xa5,sizeof(fixture));
+    CHECK(effect_invocation_local_inputs(&c,certificate->body,&inputs)==XR_XIR_OK && inputs);
+    CHECK(effect_invocation_local_equations_match(&c,certificate->equations,inputs)==XR_XIR_OK);
+    CHECK(effect_invocation_certificate_result_match(&c,certificate,certificate->result)==XR_XIR_OK);
+    CHECK(effect_invocation_public_gate(&c,certificate,effects->count)==XR_XIR_OK);pc_empty_golden(effects,0);
+    xr_compile_resources_free(inputs);xr_xir_compile_effects_free(effects);pc_release(&c,baseline);
+    pc_local_transfer_positive();pc_local_callback_boundary();
+    puts("empty transfer: genuine unused Cell pool, initializer/thrower, final counterfacts, raw ten fields and producer death");
+}
+
 static void pc_empty_cost(void) {
     for (unsigned reverse=0;reverse<2;++reverse) {
         EdgeFixture f;pc_empty_fixture(&f,reverse);
@@ -449,7 +628,7 @@ static void pc_semantics(void) {
         XrXirCompileContext c=pc_owner(pc_caps());uint64_t baseline=pc_stats(&c).live_bytes;
         CHECK(cc_whole(&c,mode)==XR_XIR_OK);pc_release(&c,baseline);
     }
-    pc_empty_cases();pc_empty_classifier();pc_empty_nonempty_summary();
+    pc_empty_cases();pc_local_equation_controls();pc_empty_classifier();pc_empty_nonempty_summary();
     pc_cases();pc_edge_controls();pc_freshness();pc_negative();pc_occupied();
 }
 static void pc_performance(void) {
@@ -488,7 +667,7 @@ int main(int argc,char **argv) {
     pc_unit_cell_controls();
     pc_callee_first_controls();
     pc_compact_controls();pc_closed_carriers_controls();
-    pc_empty_cases();pc_empty_cost();pc_empty_classifier();pc_empty_nonempty_summary();
+    pc_empty_cases();pc_local_equation_controls();pc_empty_cost();pc_empty_classifier();pc_empty_nonempty_summary();
     pc_empty_faults();pc_empty_limits();
     pc_cases();pc_edge_controls();pc_direct_budget();pc_bulk();pc_freshness();pc_negative();pc_occupied();
     pc_faults(PC_PHI_SELF);pc_faults(PC_LATE_JOIN);

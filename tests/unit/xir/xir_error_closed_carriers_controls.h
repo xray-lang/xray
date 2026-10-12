@@ -205,12 +205,12 @@ static void cc_cfg_continuation(void) {
             if (owned) {
                 const uint8_t *bits=flow.reachable+flow.function->block_count;
                 for (uint32_t i=0;i<69;++i) CHECK(bits[i]==(i<64 ? 255u : 0u));
-                uint32_t first=material->functions[1].stream[0];uint64_t saved=e.errors[1];
+                uint32_t first=material->functions[1].runs[0].first;uint64_t saved=e.errors[1];
                 allocations=attempts;uint64_t held=pc_stats(&c).live_bytes;
-                material->functions[1].stream[0]=1;
+                material->functions[1].runs[0].first=1;
                 CHECK(error_function(&flow,1)==XR_XIR_BAD_STRUCTURE && e.errors[1]==saved);
                 CHECK(attempts==allocations && pc_stats(&c).live_bytes==held);
-                material->functions[1].stream[0]=first;
+                material->functions[1].runs[0].first=first;
                 f.edge.subject[0].op=XR_XIR_INVALID;f.nodes[2].flags=1;
                 CHECK(xir_fixture_verify(&c,&f.edge.module,NULL)==XR_XIR_BAD_STRUCTURE);
                 allocations=attempts;held=pc_stats(&c).live_bytes;

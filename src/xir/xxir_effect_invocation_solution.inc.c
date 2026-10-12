@@ -19,13 +19,13 @@ typedef struct EffectInvocationResultFunction {
     uint32_t capacity;
 } EffectInvocationResultFunction;
 
-typedef struct EffectInvocationResult {
+struct EffectInvocationResult {
     XrCompileResources *resources;
     uint32_t count,capacity,term_count;
     EffectInvocationResultFunction *functions;
     XrXirRootEffects *facts;
     XrXirRootEffectWitness *witnesses;
-} EffectInvocationResult;
+};
 
 static void effect_invocation_result_free(EffectInvocationResult *result) {
     if (!result) return;
@@ -166,8 +166,8 @@ static XrXirStatus effect_body_result_head(const XrXirCompileContext *work,
     const EffectBodyFunction *head=&material->functions[function];
     if ((head->name_length && !head->name) || (head->parameter_count && !head->parameters) ||
         (head->block_count && !head->blocks) || (head->operand_count && !head->operands) ||
-        (head->instruction_count && (!head->stream || !head->run_count)) ||
-        head->stream_words>head->stream_capacity) return XR_XIR_BAD_STRUCTURE;
+        (head->instruction_count && (!head->runs || !head->run_count)) ||
+        head->run_count>head->run_capacity) return XR_XIR_BAD_STRUCTURE;
     return xir_compile_work(work,11)?XR_XIR_OK:XR_XIR_BUDGET;
 }
 
@@ -349,12 +349,61 @@ static XrXirStatus effect_invocation_result_new(const EffectInvocationTermSource
     *output=result;return XR_XIR_OK;
 }
 
+/* The local relation has one actual canonical result, created directly from
+ * this producer's complete input. Stage transfers this owner; seal independently
+ * derives the actual input again before comparing any result or permission. */
+static XrXirStatus effect_invocation_local_result_new(const XrXirCompileContext *work,
+    const EffectInvocationOwner *owner,const EffectInvocationLocalInput *inputs,
+    EffectInvocationResult **output) {
+    if (!xir_compile_context_valid(work) || !owner || !inputs || !output || *output ||
+        !effect_body_material_shape(owner->material) || owner->material->resources!=work->resources)
+        return XR_XIR_BAD_STRUCTURE;
+    uint32_t count=effect_body_count(owner->material);XrXirStatus status=XR_XIR_OK;
+    if (!count || (uint64_t)count>SIZE_MAX/sizeof(EffectInvocationResultFunction)) return XR_XIR_BUDGET;
+    EffectInvocationResult *result=xir_compile_alloc(work,sizeof(*result),&status);
+    if (!result) return status;
+    if (!xir_compile_work(work,sizeof(*result)+sizeof(result->functions))) {
+        xr_compile_resources_free(result);return XR_XIR_BUDGET;
+    }
+    *result=(EffectInvocationResult){.resources=work->resources,.capacity=count};
+    result->functions=xir_compile_alloc(work,(size_t)count*sizeof(*result->functions),&status);
+    if (!result->functions) { effect_invocation_result_free(result);return status; }
+    for (uint32_t f=0;f<count;++f) {
+        if (!xir_compile_work(work,sizeof(*result->functions)+sizeof(result->count)+2)) {
+            effect_invocation_result_free(result);return XR_XIR_BUDGET;
+        }
+        uint32_t mask=(inputs[f].facts.requires_root?XR_XIR_CALLABLE_ROOT_REQUIRED:0)|
+            (inputs[f].facts.unresolved?XR_XIR_CALLABLE_ROOT_UNRESOLVED:0);
+        result->functions[f]=(EffectInvocationResultFunction){.formula={.constant_mask=mask}};
+        ++result->count;
+    }
+    if (!xir_compile_work(work,sizeof(*output))) { effect_invocation_result_free(result);return XR_XIR_BUDGET; }
+    *output=result;return XR_XIR_OK;
+}
+
 /* Staging never changes public contracts. Closure and subsequent independent
  * comparison both consume the complete current equations before transfer. */
 static XrXirStatus effect_invocation_stage(EffectInvocationOwner *owner,
     EffectInvocationResult **output) {
     if (!output || *output || !owner || !xir_compile_context_valid(owner->work) ||
         !owner->effects || !owner->effects->contracts) return XR_XIR_BAD_STRUCTURE;
+    if (owner->prepared_result) {
+        EffectInvocationResult *result=owner->prepared_result;
+        if (!effect_body_material_shape(owner->material) || owner->material->resources!=owner->work->resources ||
+            result->resources!=owner->work->resources || result->count!=effect_body_count(owner->material) ||
+            result->count!=result->capacity || !result->functions || result->facts || result->witnesses ||
+            owner->pending || owner->count!=result->count || !owner->nodes || !owner->roots)
+            return XR_XIR_BAD_STRUCTURE;
+        for (uint32_t f=0;f<result->count;++f) {
+            if (!xir_compile_work(owner->work,8)) return XR_XIR_BUDGET;
+            const EffectInvocationNode *node=&owner->nodes[f];
+            if (owner->roots[f]!=f || node->body!=f || node->root || node->parameter_count ||
+                !node->expanded || node->queued || !effect_invocation_node_shape(node,0,
+                    owner->material->functions[f].instruction_count)) return XR_XIR_BAD_STRUCTURE;
+        }
+        if (!xir_compile_work(owner->work,2*sizeof(void *))) return XR_XIR_BUDGET;
+        *output=result;owner->prepared_result=NULL;return XR_XIR_OK;
+    }
     XrXirStatus status=effect_invocation_closed(owner);
     if (status!=XR_XIR_OK) return status;
     if (!xir_compile_work(owner->work,sizeof(EffectInvocationTermSource))) return XR_XIR_BUDGET;

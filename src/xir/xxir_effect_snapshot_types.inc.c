@@ -12,7 +12,15 @@
  */
 #include "xxir_metadata_domain_internal.h"
 
-enum { EFFECT_BODY_WORDS=10, EFFECT_BODY_MASK=1023, EFFECT_BODY_HEADER=13 };
+enum { EFFECT_BODY_WORDS=10, EFFECT_BODY_MASK=1023 };
+/* The sole owned representation is an actual affine record. Inactive delta
+ * slots are neither initialized nor read. No summary, authority or pointer to
+ * the generating Module is retained by a record. */
+typedef struct EffectBodyRun {
+    uint32_t first,count,mask;
+    XrXirInstruction base;
+    uint32_t delta[EFFECT_BODY_WORDS];
+} EffectBodyRun;
 /* This request borrows the actual generating contexts only during construction.
  * Its owned ordinal products contain no caller-supplied role or authority bit. */
 typedef struct EffectBodyOrdinaryInput {
@@ -42,8 +50,8 @@ typedef struct EffectBodyFunction {
     uint32_t instruction_count;
     const uint32_t *operands;
     uint32_t operand_count;
-    uint32_t *stream;
-    uint32_t stream_words,stream_capacity,run_count;
+    EffectBodyRun *runs;
+    uint32_t run_count,run_capacity;
     /* Concrete initial roles follow the constructor's real evidence proof. */
     const uint8_t *initial_roles;
 } EffectBodyFunction;
@@ -91,14 +99,6 @@ typedef struct EffectBodyRead {
     const void *owner;
     bool (*consume)(const void *owner,uint64_t units);
 } EffectBodyRead;
-typedef struct EffectBodyRunRef {
-    const uint32_t *base,*delta;
-    uint32_t first,count,mask,next;
-} EffectBodyRunRef;
-typedef struct EffectBodyPendingRun {
-    uint32_t first,count,mask;
-    uint32_t base[EFFECT_BODY_WORDS],delta[EFFECT_BODY_WORDS];
-} EffectBodyPendingRun;
 
 static inline bool effect_body_compile_consume(const void *owner,uint64_t units) {
     return xir_compile_work((const XrXirCompileContext *)owner,units);

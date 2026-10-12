@@ -155,7 +155,7 @@ static XrXirStatus conditional_parameter_case(const XrXirCompileContext *context
     if (status==XR_XIR_OK) status=effect_invocation_bounds_new(context,&bounds);
     for (uint32_t f=0;status==XR_XIR_OK && f<module->function_count;++f)
         status=effect_invocation_bounds_capture(context,bounds,module->types,&module->functions[f],f,NULL);
-    if (status==XR_XIR_OK) status=effect_invocations_create(context,module,&effects,&graph,bounds,&owner);
+    if (status==XR_XIR_OK) status=effect_invocations_receive(context,module,&effects,&graph,bounds,&owner);
     if (status==XR_XIR_OK) status=effect_invocations_solve(owner);
     if (status==XR_XIR_OK && oracle) invocation_parameter_rejections(owner,mode);
     if (status==XR_XIR_OK) status=effect_invocation_stage(owner,&solution);
@@ -168,7 +168,7 @@ static XrXirStatus conditional_parameter_case(const XrXirCompileContext *context
     xr_xir_compile_artifact_free(checked);memset(&fixture,0,sizeof(fixture));
     if (status==XR_XIR_OK) {
         EffectInvocationOwner replay=*certificate->equations;
-        replay.work=context;replay.module=NULL;replay.effects=published;
+        replay.work=context;replay.effects=published;
         replay.declared=certificate->declared;
         EffectBodyRequest request=effect_body_owned_request(context,certificate->body);
         status=effect_invocation_coverage_verify_read(&replay,&request);
@@ -178,7 +178,7 @@ static XrXirStatus conditional_parameter_case(const XrXirCompileContext *context
         CHECK(xr_xir_effects_error_unknown(published,5));
         const EffectInvocationNode *formal=&certificate->equations->nodes[certificate->equations->roots[5]];
         CHECK(!formal->parameter_coverage[0]);
-        CHECK(!certificate->equations->module && !certificate->equations->work);
+        CHECK(!certificate->equations->body.read.owner && !certificate->equations->work);
     }
     if (status!=XR_XIR_OK && oracle) fprintf(stderr,"INVOCATION_PARAMETER mode=%u status=%u f=%u b=%u i=%u\n",
         mode,(unsigned)status,diagnostic.function,diagnostic.block,diagnostic.instruction);

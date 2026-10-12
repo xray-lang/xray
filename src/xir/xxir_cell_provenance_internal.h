@@ -42,14 +42,14 @@ typedef struct XrXirCellProofInstructionShape {
 /* A construction-local stream cursor contains no permission or completed
  * proof. Its owner validates every preceding canonical run before advancing. */
 typedef struct XrXirCellProofSpanCursor {
-    uint32_t function,next,offset,run;
+    uint32_t function,next,run;
     XrXirCellProofInstructionShape shape;
 } XrXirCellProofSpanCursor;
 
 /* This cursor belongs to one complete physical walk. It contains numeric
  * positions only; no borrowed reference or permission survives the request. */
 typedef struct XrXirCellProofRunCursor {
-    uint32_t function,next,offset,run;
+    uint32_t function,next,run;
 } XrXirCellProofRunCursor;
 typedef struct XrXirCellProofRun {
     uint32_t first,count,varying;

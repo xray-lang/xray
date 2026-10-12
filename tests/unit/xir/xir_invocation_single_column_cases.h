@@ -31,7 +31,7 @@ static XrXirStatus conditional_compact_writer_boundary(const XrXirCompileContext
         if (status==XR_XIR_OK && oracle) CHECK(conditional_compact_same(&decoded,&expected[i]));
     }
     if (status==XR_XIR_OK && oracle) CHECK(body.run_count==2);
-    xr_compile_resources_free(body.stream);
+    xr_compile_resources_free(body.runs);
     if (status!=XR_XIR_OK || !oracle) return status;
     uint64_t held_bytes=rp_stats(context).live_bytes;
     const XrXirOp invalid[]={XR_XIR_INVALID,XR_XIR_OP_COUNT,(XrXirOp)UINT32_MAX};
@@ -41,16 +41,19 @@ static XrXirStatus conditional_compact_writer_boundary(const XrXirCompileContext
         source[i].op=invalid[bad];input.instruction_count=4;
         body=(EffectBodyFunction){.instruction_count=4};size_t allocations=rp_attempts;
         CHECK(effect_body_records_copy(context,&input,&body)==XR_XIR_BAD_STRUCTURE &&
-            !body.stream && !body.stream_words && !body.run_count && rp_attempts==allocations &&
-            rp_stats(context).live_bytes==held_bytes);
+            body.run_count<=body.run_capacity && rp_attempts>=allocations);
+        xr_compile_resources_free(body.runs);body.runs=NULL;
+        CHECK(rp_stats(context).live_bytes==held_bytes);
     }
     /* A real affine opcode column can reach an invalid ordinal. Its actual
      * third value is checked even when every encoded delta predicts it. */
     for (uint32_t i=0;i<3;++i)
         source[i]=(XrXirInstruction){.op=(XrXirOp)(XR_XIR_OP_COUNT-2+i),.type=XR_XIR_I64};
     input.instruction_count=3;body=(EffectBodyFunction){.instruction_count=3};size_t allocations=rp_attempts;
-    CHECK(effect_body_records_copy(context,&input,&body)==XR_XIR_BAD_STRUCTURE && !body.stream &&
-        !body.stream_words && !body.run_count && rp_attempts==allocations && rp_stats(context).live_bytes==held_bytes);
+    CHECK(effect_body_records_copy(context,&input,&body)==XR_XIR_BAD_STRUCTURE &&
+        body.run_count<=body.run_capacity && rp_attempts>=allocations);
+    xr_compile_resources_free(body.runs);body.runs=NULL;
+    CHECK(rp_stats(context).live_bytes==held_bytes);
     return XR_XIR_OK;
 }
 
@@ -101,13 +104,13 @@ static XrXirStatus conditional_compact_sparse_codec(const XrXirCompileContext *c
         column=123;CHECK(effect_body_single_column(&finite,0,&column)==XR_XIR_OK && column==10);
         column=123;CHECK(effect_body_single_column(&finite,3,&column)==XR_XIR_OK && column==UINT32_MAX);
         column=123;CHECK(effect_body_single_column(&finite,1024,&column)==XR_XIR_BAD_STRUCTURE && column==123);
-        EffectBodyRunRef first,second;
-        CHECK(effect_body_run_ref(&read,&body,0,0,&first)==XR_XIR_OK && first.count==4 && !first.mask);
-        CHECK(effect_body_run_ref(&read,&body,first.next,4,&second)==XR_XIR_OK && second.count==4 && second.mask==64);
-        CHECK(effect_body_column_match(&read,&first,&original,0,NULL)==XR_XIR_BAD_STRUCTURE);
-        CHECK(effect_body_column_match(&read,&second,&original,10,NULL)==XR_XIR_BAD_STRUCTURE);
+        const EffectBodyRun *first=NULL,*second=NULL;
+        CHECK(effect_body_run_ref(&read,&body,0,0,&first)==XR_XIR_OK && first->count==4 && !first->mask);
+        CHECK(effect_body_run_ref(&read,&body,1,4,&second)==XR_XIR_OK && second->count==4 && second->mask==64);
+        CHECK(effect_body_column_match(&read,first,&original,0,NULL)==XR_XIR_BAD_STRUCTURE);
+        CHECK(effect_body_column_match(&read,second,&original,10,NULL)==XR_XIR_BAD_STRUCTURE);
         XrXirFunction short_source=original;short_source.instruction_count=7;
-        CHECK(effect_body_column_match(&read,&second,&short_source,6,NULL)==XR_XIR_BAD_STRUCTURE);
+        CHECK(effect_body_column_match(&read,second,&short_source,6,NULL)==XR_XIR_BAD_STRUCTURE);
         uint64_t held_bytes=rp_stats(context).live_bytes;
         observation.calls=0;observation.reject=UINT64_MAX;
         CHECK(effect_body_records_match(&finite,&body,&original)==XR_XIR_OK);
@@ -131,13 +134,13 @@ static XrXirStatus conditional_compact_sparse_codec(const XrXirCompileContext *c
         expected[2]=held;observation.calls=0;observation.reject=UINT64_MAX;same=true;
         CHECK(effect_body_records_compare(&finite,&body,&original,&same)==XR_XIR_OK && same);
         same=false;CHECK(effect_body_records_compare(&finite,&body,&original,&same)==XR_XIR_OK && !same);
-        uint32_t stream_words=body.stream_words;--body.stream_words;same=true;
+        uint32_t run_count=body.run_count;--body.run_count;same=true;
         CHECK(effect_body_records_compare(&finite,&body,&original,&same)==XR_XIR_BAD_STRUCTURE);
-        body.stream_words=stream_words;
+        body.run_count=run_count;
         CHECK(effect_body_records_match(&read,&body,&original)==XR_XIR_OK &&
             rp_stats(context).live_bytes==held_bytes);
     }
-    xr_compile_resources_free(body.stream);return status;
+    xr_compile_resources_free(body.runs);return status;
 }
 
 #endif

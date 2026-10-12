@@ -404,7 +404,7 @@ XR_FUNC XrXirStatus xir_effects_class_value(const XrXirCompileContext *context,
     const EffectInvocationCertificate *certificate=effects->invocations;
     const EffectInvocationOwner *owner=certificate->equations;
     if (!effect_body_material_shape(certificate->body) ||
-        certificate->body->resources!=certificate->resources || !owner || owner->work || owner->module || owner->graph || owner->pending ||
+        certificate->body->resources!=certificate->resources || !owner || owner->work || owner->graph || owner->pending ||
         certificate->resources!=context->resources || function>=effect_body_count(certificate->body) ||
         selected>=owner->count || !owner->nodes) return XR_XIR_BAD_STRUCTURE;
     const EffectInvocationNode *node=&owner->nodes[selected];

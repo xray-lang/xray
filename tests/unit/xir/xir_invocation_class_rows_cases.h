@@ -130,7 +130,7 @@ static XrXirStatus conditional_class_rows_replay(const XrXirCompileContext *cont
     EffectInvocationOwner replay=*certificate->equations;
     if (!effect_body_material_shape(certificate->body) ||
         certificate->body->resources!=context->resources) return XR_XIR_BAD_STRUCTURE;
-    replay.work=context;replay.module=NULL;replay.effects=effects;
+    replay.work=context;replay.effects=effects;
     replay.declared=certificate->declared;
     EffectBodyRequest body=effect_body_owned_request(context,certificate->body);
     return effect_invocation_class_verify_read(&replay,&body);
@@ -189,7 +189,7 @@ static XrXirStatus conditional_class_rows_case(const XrXirCompileContext *contex
         EffectInvocationOwner *owner=certificate->equations;
         const uint32_t values[7]={2,9,7,4,9,2,7},masks[7]={1,1,1,5,5,5,5};
         uint32_t selected=owner->roots[3],output=0;
-        CHECK(!owner->module && !owner->work && owner->class_enabled);
+        CHECK(!owner->body.read.owner && !owner->work && owner->class_enabled);
         CHECK(xir_effects_class_value(context,effects,selected,3,values[mode],&output)==XR_XIR_OK && output==masks[mode]);
         if (mode==6) {
             output=0;CHECK(xir_effects_class_value(context,effects,selected,3,2,&output)==XR_XIR_OK && output==5);

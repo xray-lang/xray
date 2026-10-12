@@ -108,7 +108,7 @@ static XrXirStatus conditional_owned_error(const XrXirCompileContext *context,
     if (status==XR_XIR_OK) {
         CHECK(effects->count==5 && effects->errors && effects->words==1);
         CHECK(error_bit(effects->errors,0)==(mode!=0) && !error_bit(effects->errors,1));
-        CHECK(!effects->invocations->equations->module && !effects->invocations->equations->work);
+        CHECK(!effects->invocations->equations->body.read.owner && !effects->invocations->equations->work);
     }
     error_storage_free(&flow);error_invocation_contexts_free(flow.invocations);
     effect_terms_free(&terms);xr_xir_compile_effects_free(effects);return status;
@@ -120,13 +120,13 @@ static void owned_error_cursor_values(const XrXirCompileContext *context,
     const EffectBodyFunction *body,const XrXirInstruction *expected) {
     EffectBodyRead read=effect_body_compile_read(context);
     CHECK(xir_compile_work(context,sizeof(EffectBodyRecordCursor)));
-    EffectBodyRecordCursor cursor={0,0,0,UINT32_MAX};
+    EffectBodyRecordCursor cursor={0,0,UINT32_MAX};
     for (uint32_t i=0;i<body->instruction_count;++i) {
         XrXirInstruction decoded;
         CHECK(effect_body_instruction_cursor_get(&read,body,i,&cursor,&decoded)==XR_XIR_OK &&
             conditional_compact_same(&decoded,&expected[i]));
     }
-    CHECK(xir_compile_work(context,sizeof(cursor)));cursor=(EffectBodyRecordCursor){0,0,0,UINT32_MAX};
+    CHECK(xir_compile_work(context,sizeof(cursor)));cursor=(EffectBodyRecordCursor){0,0,UINT32_MAX};
     for (uint32_t i=0;i<body->instruction_count;++i) {
         EffectBodyInstructionFields fields;
         CHECK(effect_body_instruction_cursor_fields(&read,body,i,&cursor,&fields)==XR_XIR_OK &&
@@ -137,7 +137,7 @@ static void owned_error_cursor_values(const XrXirCompileContext *context,
         conditional_compact_same(&out,&sentinel));
     CHECK(effect_body_instruction_cursor_get(&read,body,body->instruction_count,&cursor,&out)==XR_XIR_BAD_STRUCTURE &&
         conditional_compact_same(&out,&sentinel));
-    CHECK(xir_compile_work(context,sizeof(cursor)));cursor=(EffectBodyRecordCursor){1,0,0,UINT32_MAX};
+    CHECK(xir_compile_work(context,sizeof(cursor)));cursor=(EffectBodyRecordCursor){1,0,UINT32_MAX};
     CHECK(effect_body_instruction_cursor_get(&read,body,0,&cursor,&out)==XR_XIR_BAD_STRUCTURE &&
         conditional_compact_same(&out,&sentinel));
 }
@@ -150,7 +150,7 @@ static void owned_error_cursor_refusals(const XrXirCompileContext *context,
         ConditionalCompactRead observation={context,0,UINT64_MAX};
         EffectBodyRead read={&observation,conditional_compact_read_work};
         CHECK(xir_compile_work(context,sizeof(EffectBodyRecordCursor)));
-        EffectBodyRecordCursor cursor={0,0,0,UINT32_MAX};
+        EffectBodyRecordCursor cursor={0,0,UINT32_MAX};
         XrXirInstruction decoded;
         EffectBodyInstructionFields fields;
         if (narrow) CHECK(effect_body_instruction_cursor_fields(&read,body,4,&cursor,&fields)==XR_XIR_OK &&
@@ -160,7 +160,7 @@ static void owned_error_cursor_refusals(const XrXirCompileContext *context,
         uint64_t points=observation.calls;CHECK(points);
         for (uint64_t at=0;at<points;++at) {
             observation.calls=0;observation.reject=at;
-            CHECK(xir_compile_work(context,sizeof(cursor)));cursor=(EffectBodyRecordCursor){0,0,0,UINT32_MAX};
+            CHECK(xir_compile_work(context,sizeof(cursor)));cursor=(EffectBodyRecordCursor){0,0,UINT32_MAX};
             XrXirInstruction sentinel={.op=XR_XIR_RETURN,.type=XR_XIR_BOOL,
                 .args={11,12},.targets={13,14},.immediate=INT64_MIN,.type_arguments={15,16}};
             EffectBodyInstructionFields narrow_sentinel={XR_XIR_RETURN,XR_XIR_BOOL,UINT32_MAX};
@@ -176,47 +176,48 @@ static void owned_error_cursor_refusals(const XrXirCompileContext *context,
 
 static void owned_error_cursor_malformed(const XrXirCompileContext *context,
     EffectBodyFunction *body,const XrXirFunction *expected) {
-    EffectBodyRead read=effect_body_compile_read(context);EffectBodyRunRef first;
-    CHECK(body->stream_words<=64 && body->run_count==2);
-    CHECK(effect_body_run_ref(&read,body,0,0,&first)==XR_XIR_OK);
-    uint32_t saved[64];memcpy(saved,body->stream,body->stream_words*sizeof(*saved));
-    uint32_t words=body->stream_words,runs=body->run_count,capacity=body->stream_capacity;
+    EffectBodyRead read=effect_body_compile_read(context);
+    CHECK(body->runs && body->run_count==2 && body->run_capacity==2);
+    EffectBodyRun *first=&body->runs[0],*second=&body->runs[1];
+    uint32_t column=0;while (!(first->mask&(UINT32_C(1)<<column))) ++column;
+    uint32_t begin=first->first,count=first->count,mask=first->mask,delta=first->delta[column];
+    uint32_t neighbor=second->first,runs=body->run_count,capacity=body->run_capacity;
     for (uint32_t mode=0;mode<9;++mode) {
-        if (!mode) body->stream[0]=1;
-        else if (mode==1) body->stream[1]=0;
-        else if (mode==2) body->stream[2]|=UINT32_C(1024);
-        else if (mode==3) body->stream_words=EFFECT_BODY_HEADER-1;
+        if (!mode) first->first=1;
+        else if (mode==1) first->count=0;
+        else if (mode==2) first->mask|=UINT32_C(1024);
+        else if (mode==3) body->run_count=1;
         else if (mode==4) body->run_count=0;
-        else if (mode==5) body->stream_capacity=body->stream_words-1;
-        else if (mode==6) body->stream[EFFECT_BODY_HEADER]=0;
-        else if (mode==7) body->stream[first.next]=first.first+first.count+1;
+        else if (mode==5) body->run_capacity=body->run_count-1;
+        else if (mode==6) first->delta[column]=0;
+        else if (mode==7) second->first=begin+count+1;
         else --body->instruction_count;
         CHECK(xir_compile_work(context,sizeof(EffectBodyRecordCursor)));
-        EffectBodyRecordCursor cursor={0,0,0,UINT32_MAX};
+        EffectBodyRecordCursor cursor={0,0,UINT32_MAX};
         XrXirInstruction sentinel={.op=XR_XIR_RETURN,.type=XR_XIR_I64,.immediate=INT64_MIN},out=sentinel;
         CHECK(effect_body_instruction_cursor_get(&read,body,4,&cursor,&out)==XR_XIR_BAD_STRUCTURE &&
             conditional_compact_same(&out,&sentinel));
-        CHECK(xir_compile_work(context,sizeof(cursor)));cursor=(EffectBodyRecordCursor){0,0,0,UINT32_MAX};
+        CHECK(xir_compile_work(context,sizeof(cursor)));cursor=(EffectBodyRecordCursor){0,0,UINT32_MAX};
         EffectBodyInstructionFields fields_sentinel={XR_XIR_RETURN,XR_XIR_BOOL,UINT32_MAX},fields=fields_sentinel;
         CHECK(effect_body_instruction_cursor_fields(&read,body,4,&cursor,&fields)==XR_XIR_BAD_STRUCTURE &&
             !memcmp(&fields,&fields_sentinel,sizeof(fields)));
         CHECK(xir_compile_work(context,sizeof(EffectBodyRecordCursor)));
-        EffectBodyRecordCursor range={0,0,0,UINT32_MAX},range_before=range;
-        EffectBodyRunRef ref_sentinel={0},ref_output=ref_sentinel;
+        EffectBodyRecordCursor range={0,0,UINT32_MAX},range_before=range;
+        const EffectBodyRun *ref_sentinel=(const EffectBodyRun *)(uintptr_t)1,*ref_output=ref_sentinel;
         CHECK(effect_body_range_ref(&read,body,&range,&ref_output)==XR_XIR_BAD_STRUCTURE &&
-            !memcmp(&range,&range_before,sizeof(range)) && !memcmp(&ref_output,&ref_sentinel,sizeof(ref_output)));
-        memcpy(body->stream,saved,words*sizeof(*saved));body->stream_words=words;
-        body->run_count=runs;body->stream_capacity=capacity;body->instruction_count=8;
+            !memcmp(&range,&range_before,sizeof(range)) && ref_output==ref_sentinel);
+        first->first=begin;first->count=count;first->mask=mask;first->delta[column]=delta;
+        second->first=neighbor;body->run_count=runs;body->run_capacity=capacity;body->instruction_count=8;
         CHECK(effect_body_records_match(&read,body,expected)==XR_XIR_OK);
     }
     CHECK(xir_compile_work(context,sizeof(EffectBodyRecordCursor)));
-    EffectBodyRecordCursor cursor={0,0,0,UINT32_MAX};XrXirInstruction out;
+    EffectBodyRecordCursor cursor={0,0,UINT32_MAX};XrXirInstruction out;
     CHECK(effect_body_instruction_cursor_get(&read,body,0,&cursor,&out)==XR_XIR_OK);
-    body->stream[first.next]=first.first+first.count+1;
+    second->first=begin+count+1;
     XrXirInstruction sentinel={.op=XR_XIR_RETURN,.type=XR_XIR_I64,.immediate=INT64_MIN};out=sentinel;
     CHECK(effect_body_instruction_cursor_get(&read,body,1,&cursor,&out)==XR_XIR_BAD_STRUCTURE &&
         conditional_compact_same(&out,&sentinel));
-    memcpy(body->stream,saved,words*sizeof(*saved));
+    second->first=neighbor;
 }
 
 /* A complete range walk is independent of semantic membership. Full rows
@@ -225,24 +226,24 @@ static void owned_error_range_values(const XrXirCompileContext *context,
     const EffectBodyFunction *body,const XrXirInstruction *expected) {
     EffectBodyRead read=effect_body_compile_read(context);
     CHECK(xir_compile_work(context,sizeof(EffectBodyRecordCursor)));
-    EffectBodyRecordCursor cursor={0,0,0,UINT32_MAX};
+    EffectBodyRecordCursor cursor={0,0,UINT32_MAX};
     for (uint32_t run=0;run<body->run_count;++run) {
-        EffectBodyRunRef ref;
+        const EffectBodyRun *ref=NULL;
         CHECK(effect_body_range_ref(&read,body,&cursor,&ref)==XR_XIR_OK);
-        for (uint32_t i=ref.first;i-ref.first<ref.count;++i) {
+        for (uint32_t i=ref->first;i-ref->first<ref->count;++i) {
             EffectBodyInstructionFields fields;uint32_t words[EFFECT_BODY_WORDS];XrXirInstruction decoded;
-            CHECK(error_range_fields(&read,&ref,i,&fields)==XR_XIR_OK &&
+            CHECK(error_range_fields(&read,ref,i,&fields)==XR_XIR_OK &&
                 fields.op==expected[i].op && fields.type==expected[i].type &&
                 fields.source==(error_copy_op(expected[i].op)?expected[i].args[0]:UINT32_MAX));
-            CHECK(effect_body_instruction_ref_words(&read,&ref,i,words)==XR_XIR_OK &&
+            CHECK(effect_body_instruction_ref_words(&read,ref,i,words)==XR_XIR_OK &&
                 effect_body_instruction_words_publish(&read,words,&decoded)==XR_XIR_OK &&
                 conditional_compact_same(&decoded,&expected[i]));
-            CHECK(effect_body_instruction_ref_value(&read,&ref,i,&decoded)==XR_XIR_OK &&
+            CHECK(effect_body_instruction_ref_value(&read,ref,i,&decoded)==XR_XIR_OK &&
                 conditional_compact_same(&decoded,&expected[i]));
         }
     }
-    CHECK(cursor.first==body->instruction_count && cursor.offset==body->stream_words);
-    EffectBodyRunRef sentinel={0},output=sentinel;
+    CHECK(cursor.first==body->instruction_count && cursor.run==body->run_count);
+    const EffectBodyRun *sentinel=(const EffectBodyRun *)(uintptr_t)1,*output=sentinel;
     EffectBodyRecordCursor saved=cursor;
     CHECK(effect_body_range_ref(&read,body,&cursor,&output)==XR_XIR_BAD_STRUCTURE &&
         !memcmp(&cursor,&saved,sizeof(cursor)) && !memcmp(&output,&sentinel,sizeof(output)));
@@ -256,30 +257,30 @@ static void owned_error_range_refusals(const XrXirCompileContext *context,
         ConditionalCompactRead observation={context,0,UINT64_MAX};
         EffectBodyRead read={&observation,conditional_compact_read_work};
         CHECK(xir_compile_work(context,sizeof(EffectBodyRecordCursor)));
-        EffectBodyRecordCursor cursor={0,0,0,UINT32_MAX};EffectBodyRunRef ref;
+        EffectBodyRecordCursor cursor={0,0,UINT32_MAX};const EffectBodyRun *ref=NULL;
         CHECK(effect_body_range_ref(&read,body,&cursor,&ref)==XR_XIR_OK);
         if (mode==1) {
             observation.calls=0;EffectBodyInstructionFields fields;
-            CHECK(error_range_fields(&read,&ref,ref.first,&fields)==XR_XIR_OK);
+            CHECK(error_range_fields(&read,ref,ref->first,&fields)==XR_XIR_OK);
         } else if (mode==2) {
             observation.calls=0;XrXirInstruction decoded;
-            CHECK(effect_body_instruction_ref_value(&read,&ref,ref.first,&decoded)==XR_XIR_OK);
+            CHECK(effect_body_instruction_ref_value(&read,ref,ref->first,&decoded)==XR_XIR_OK);
         }
         uint64_t points=observation.calls;CHECK(points);
         for (uint64_t at=0;at<points;++at) {
             observation.calls=0;observation.reject=at;
             if (mode==1) {
                 EffectBodyInstructionFields sentinel={XR_XIR_RETURN,XR_XIR_BOOL,17},fields=sentinel;
-                CHECK(error_range_fields(&read,&ref,ref.first,&fields)==XR_XIR_BUDGET &&
+                CHECK(error_range_fields(&read,ref,ref->first,&fields)==XR_XIR_BUDGET &&
                     !memcmp(&fields,&sentinel,sizeof(fields)));
             } else if (mode==2) {
                 XrXirInstruction sentinel={.op=XR_XIR_RETURN,.type=XR_XIR_BOOL,.args={17,19},
                     .targets={23,29},.immediate=INT64_MIN,.type_arguments={31,37}},decoded=sentinel;
-                CHECK(effect_body_instruction_ref_value(&read,&ref,ref.first,&decoded)==XR_XIR_BUDGET &&
+                CHECK(effect_body_instruction_ref_value(&read,ref,ref->first,&decoded)==XR_XIR_BUDGET &&
                     conditional_compact_same(&decoded,&sentinel));
             } else {
-                CHECK(xir_compile_work(context,sizeof(cursor)));cursor=(EffectBodyRecordCursor){0,0,0,UINT32_MAX};
-                EffectBodyRecordCursor saved=cursor;EffectBodyRunRef marker={0},output=marker;
+                CHECK(xir_compile_work(context,sizeof(cursor)));cursor=(EffectBodyRecordCursor){0,0,UINT32_MAX};
+                EffectBodyRecordCursor saved=cursor;const EffectBodyRun *marker=(const EffectBodyRun *)(uintptr_t)1,*output=marker;
                 CHECK(effect_body_range_ref(&read,body,&cursor,&output)==XR_XIR_BUDGET &&
                     !memcmp(&cursor,&saved,sizeof(cursor)) && !memcmp(&output,&marker,sizeof(output)));
             }
@@ -294,24 +295,28 @@ static void owned_error_direct_ref_controls(const XrXirCompileContext *context,
     const EffectBodyFunction *body) {
     EffectBodyRead read=effect_body_compile_read(context);
     CHECK(xir_compile_work(context,sizeof(EffectBodyRecordCursor)));
-    EffectBodyRecordCursor cursor={0,0,0,UINT32_MAX};EffectBodyRunRef ref;
+    EffectBodyRecordCursor cursor={0,0,UINT32_MAX};const EffectBodyRun *ref=NULL;
     CHECK(effect_body_range_ref(&read,body,&cursor,&ref)==XR_XIR_OK);
-    CHECK(xir_compile_work(context,EFFECT_BODY_WORDS*sizeof(uint32_t)));
-    uint32_t base[EFFECT_BODY_WORDS];memcpy(base,ref.base,sizeof(base));
     XrXirInstruction sentinel={.op=XR_XIR_RETURN,.type=XR_XIR_BOOL,.args={17,19},
         .targets={23,29},.immediate=INT64_MIN,.type_arguments={31,37}};
-    for (uint32_t mode=0;mode<7;++mode) {
-        CHECK(xir_compile_work(context,sizeof(EffectBodyRunRef)+sizeof(uint32_t)+sizeof(sentinel)));
-        EffectBodyRunRef bad=ref;uint32_t index=ref.first;XrXirInstruction output=sentinel;
-        if (!mode) bad.base=NULL;
-        else if (mode==1) { bad.mask|=UINT32_C(1);bad.delta=NULL; }
+    for (uint32_t mode=0;mode<8;++mode) {
+        CHECK(xir_compile_work(context,3*sizeof(uint32_t)+sizeof(ref->base)+EFFECT_BODY_WORDS+sizeof(sentinel)));
+        EffectBodyRun bad;bad.first=ref->first;bad.count=ref->count;bad.mask=ref->mask;
+        bad.base=ref->base;
+        for (uint32_t w=0;w<EFFECT_BODY_WORDS;++w) if (ref->mask&(UINT32_C(1)<<w)) {
+            CHECK(xir_compile_work(context,sizeof(uint32_t)));bad.delta[w]=ref->delta[w];
+        }
+        uint32_t index=ref->first;const EffectBodyRun *input=&bad;XrXirInstruction output=sentinel;
+        if (!mode) input=NULL;
+        else if (mode==1) { bad.count=1;bad.mask=1; }
         else if (mode==2) bad.mask|=UINT32_C(1024);
         else if (mode==3) bad.count=0;
         else if (mode==4) index=UINT32_MAX;
-        else if (mode==5) index=ref.first+ref.count;
-        else { base[0]=XR_XIR_OP_COUNT;bad.base=base;bad.mask&=~UINT32_C(1); }
+        else if (mode==5) index=ref->first+ref->count;
+        else if (mode==6) { bad.base.op=XR_XIR_OP_COUNT;bad.mask&=~UINT32_C(1); }
+        else { bad.mask|=UINT32_C(1);bad.delta[0]=0; }
         uint64_t work=rp_stats(context).work;
-        CHECK(effect_body_instruction_ref_value(&read,&bad,index,&output)==XR_XIR_BAD_STRUCTURE &&
+        CHECK(effect_body_instruction_ref_value(&read,input,index,&output)==XR_XIR_BAD_STRUCTURE &&
             conditional_compact_same(&output,&sentinel));
         if (mode<6) CHECK(rp_stats(context).work==work);
     }
@@ -335,7 +340,7 @@ static void owned_error_direct_fields(void) {
         XrXirFunction input={.instructions=producer,.instruction_count=2};
         EffectBodyFunction body={.instruction_count=2};
         CHECK(effect_body_records_copy(&context,&input,&body)==XR_XIR_OK && body.run_count==1 &&
-            (uint32_t)body.stream[2]==(mode?(uint32_t)EFFECT_BODY_MASK:UINT32_C(0)));
+            body.runs[0].mask==(mode?(uint32_t)EFFECT_BODY_MASK:UINT32_C(0)));
         CHECK(xir_compile_work(&context,sizeof(producer)));memset(producer,0xCE,sizeof(producer));
         owned_error_range_values(&context,&body,original);owned_error_range_refusals(&context,&body);
         owned_error_direct_ref_controls(&context,&body);input.instructions=original;
@@ -346,7 +351,7 @@ static void owned_error_direct_fields(void) {
             CHECK(effect_body_records_match(&read,&body,&input)==XR_XIR_BAD_STRUCTURE);
             original[1]=saved;CHECK(effect_body_records_match(&read,&body,&input)==XR_XIR_OK);
         }
-        xr_compile_resources_free(body.stream);CHECK(rp_stats(&context).live_bytes==baseline);
+        xr_compile_resources_free(body.runs);CHECK(rp_stats(&context).live_bytes==baseline);
     }
     rp_owner_free(&context,baseline);rp_balanced(physical);
 }
@@ -369,7 +374,7 @@ static void owned_error_range_copies(void) {
     memset(producer,0xCE,sizeof(producer));
     owned_error_range_values(&context,&body,original);
     owned_error_range_refusals(&context,&body);
-    xr_compile_resources_free(body.stream);rp_owner_free(&context,baseline);rp_balanced(physical);
+    xr_compile_resources_free(body.runs);rp_owner_free(&context,baseline);rp_balanced(physical);
 }
 
 static void conditional_owned_error_cursor_literals(void) {
@@ -393,7 +398,7 @@ static void conditional_owned_error_cursor_literals(void) {
         CHECK(effect_body_records_match(&read,&body,&expected)==XR_XIR_BAD_STRUCTURE);
         original[2]=saved;CHECK(effect_body_records_match(&read,&body,&expected)==XR_XIR_OK);
     }
-    xr_compile_resources_free(body.stream);rp_owner_free(&context,baseline);rp_balanced(physical);
+    xr_compile_resources_free(body.runs);rp_owner_free(&context,baseline);rp_balanced(physical);
 }
 
 static unsigned owned_error_cell_type_reads;
@@ -487,7 +492,7 @@ static XrXirStatus conditional_owned_error_cells(const XrXirCompileContext *cont
             !xr_xir_effects_error_unknown(effects,1) && !xr_xir_effects_error_unidentified(effects,1));
         CHECK(ci_expected(CI_CALL,mode!=0)==(mode?UINT64_C(4):UINT64_C(12)));
         CHECK(flow.cell_count==3 && flow.cell_type_count==3 && flow.cell_material==flow.body.owner &&
-            !effects->invocations->equations->module && !effects->invocations->equations->work);
+            !effects->invocations->equations->body.read.owner && !effects->invocations->equations->work);
         if (oracle) {
             owned_error_cell_identity_controls(context,&flow);
             uint8_t *storage=flow.storage;size_t capacity=flow.storage_capacity;
