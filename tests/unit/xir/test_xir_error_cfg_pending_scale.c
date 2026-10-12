@@ -47,8 +47,16 @@ static void pm_free(void *pointer) {
 typedef struct PmCase {
     uint32_t scalars, blocks, reverse;
     bool empty;
-    uint32_t subject_instructions, module_instructions, functions, types;
+    uint32_t subject_instructions, module_instructions, functions, types, module_blocks;
+    size_t fixture_bytes, scratch_bytes;
 } PmCase;
+enum { PM_SCALAR_MAX=1024, PM_INSTRUCTION_MAX=PM_SCALAR_MAX+EE_BLOCKS+1 };
+typedef struct PmFixture {
+    EdgeFixture base;
+    XrXirInstruction subject[PM_INSTRUCTION_MAX], saved[PM_INSTRUCTION_MAX];
+    uint32_t indices[PM_INSTRUCTION_MAX];
+    XrXirBlock saved_blocks[EE_BLOCKS];
+} PmFixture;
 typedef struct PmPoint {
     XrCompileResourceStats stats;
     size_t attempts, physical_blocks, physical_bytes;
@@ -63,14 +71,16 @@ static PmPoint pm_point(const XrXirCompileContext *context) {
 }
 static void pm_identity(const PmCase *input) {
     printf("\"scalars\":%u,\"subject_blocks\":%u,\"subject_instructions\":%u,"
-        "\"module_instructions\":%u,\"functions\":%u,\"types\":%u,\"reverse\":%u,\"empty\":%s",
+        "\"module_instructions\":%u,\"module_blocks\":%u,\"functions\":%u,\"types\":%u,"
+        "\"fixture_bytes\":%zu,\"scratch_bytes\":%zu,\"reverse\":%u,\"empty\":%s",
         input->scalars,input->blocks,input->subject_instructions,
-        input->module_instructions,input->functions,input->types,input->reverse,input->empty?"true":"false");
+        input->module_instructions,input->module_blocks,input->functions,input->types,
+        input->fixture_bytes,input->scratch_bytes,input->reverse,input->empty?"true":"false");
 }
 static void pm_phase(const PmCase *input,const char *name,const PmPoint *before,const PmPoint *after) {
     CHECK(after->stats.work>=before->stats.work && after->stats.allocated_bytes>=before->stats.allocated_bytes);
     CHECK(after->stats.allocation_count>=before->stats.allocation_count && after->attempts>=before->attempts);
-    printf("{\"schema\":\"task324.pending.scale.v1\",\"event\":\"phase\",\"phase\":\"%s\",",name);
+    printf("{\"schema\":\"task324.pending.scale.v2\",\"event\":\"phase\",\"phase\":\"%s\",",name);
     pm_identity(input);
     printf(",\"status\":0,\"work_before\":%llu,\"work_after\":%llu,\"work_delta\":%llu,"
         "\"allocated_before\":%llu,\"allocated_after\":%llu,\"allocated_delta\":%llu,"
@@ -88,34 +98,78 @@ static void pm_phase(const PmCase *input,const char *name,const PmPoint *before,
         (unsigned long long)before->stats.peak_bytes,(unsigned long long)after->stats.peak_bytes,
         before->physical_blocks,after->physical_blocks,before->physical_bytes,after->physical_bytes);
 }
-static void pm_fixture(EdgeFixture *fixture,PmCase *input) {
-    CHECK(input->scalars+input->blocks+1<=EE_MAX_OPS && input->blocks>=2 && input->blocks<=EE_BLOCKS);
-    pc_fixture(fixture,PC_FORWARD,false);
+static void pm_reverse(PmFixture *storage) {
+    EdgeFixture *fixture=&storage->base;
+    XrXirFunction *function=&fixture->functions[1];
+    uint32_t blocks=function->block_count, instructions=function->instruction_count, at=0;
+    CHECK(function->instructions==storage->subject && !function->parameter_count);
+    CHECK(blocks<=EE_BLOCKS && instructions<=PM_INSTRUCTION_MAX);
+    memcpy(storage->saved_blocks,fixture->blocks,(size_t)blocks*sizeof(*fixture->blocks));
+    memcpy(storage->saved,storage->subject,(size_t)instructions*sizeof(*storage->subject));
+    for(uint32_t b=0;b<blocks;++b) {
+        uint32_t original=b?blocks-b:0;
+        fixture->blocks[b]=storage->saved_blocks[original]; fixture->blocks[b].first=at;
+        const XrXirBlock *source=&storage->saved_blocks[original];
+        CHECK(source->first<=instructions && source->count<=instructions-source->first);
+        for(uint32_t i=source->first;i<source->first+source->count;++i) {
+            CHECK(at<instructions); storage->indices[i]=at;
+            storage->subject[at++]=storage->saved[i];
+        }
+    }
+    CHECK(at==instructions);
+    for(uint32_t b=0;b<blocks;++b) {
+        if(fixture->blocks[b].panic) {
+            CHECK(fixture->blocks[b].panic<blocks); fixture->blocks[b].panic=blocks-fixture->blocks[b].panic;
+        }
+        if(fixture->blocks[b].frontier) {
+            CHECK(fixture->blocks[b].frontier<=instructions);
+            fixture->blocks[b].frontier=storage->indices[fixture->blocks[b].frontier-1]+1;
+        }
+    }
+    for(uint32_t i=0;i<instructions;++i) {
+        XrXirInstruction *op=&storage->subject[i];
+        if(op->op==XR_XIR_JUMP) {
+            CHECK(op->targets[0]<blocks);
+            if(op->targets[0])op->targets[0]=blocks-op->targets[0];
+        } else if(op->op==XR_XIR_THROW) {
+            CHECK(op->args[0]<instructions); op->args[0]=storage->indices[op->args[0]];
+        } else CHECK(op->op==XR_XIR_CONST_INT || op->op==XR_XIR_ENUM_NEW || op->op==XR_XIR_RETURN);
+    }
+}
+static void pm_fixture(PmFixture *storage,PmCase *input) {
+    CHECK(input->scalars && input->scalars<=PM_SCALAR_MAX && input->blocks>=2 && input->blocks<=EE_BLOCKS);
+    CHECK(input->scalars<=PM_INSTRUCTION_MAX-input->blocks-1);
+    EdgeFixture *fixture=&storage->base; pc_fixture(fixture,PC_FORWARD,false);
     for(uint32_t i=0;i<input->scalars;++i)
-        fixture->subject[i]=(XrXirInstruction){.op=XR_XIR_CONST_INT,.type=XR_XIR_I64,.immediate=i};
+        storage->subject[i]=(XrXirInstruction){.op=XR_XIR_CONST_INT,.type=XR_XIR_I64,.immediate=i};
     uint32_t at=input->scalars;
-    fixture->subject[at++]=(XrXirInstruction){.op=XR_XIR_ENUM_NEW,.type=(XrXirType)EE_ENUM};
-    fixture->subject[at++]=(XrXirInstruction){.op=XR_XIR_JUMP,.targets={1}};
+    storage->subject[at++]=(XrXirInstruction){.op=XR_XIR_ENUM_NEW,.type=(XrXirType)EE_ENUM};
+    storage->subject[at++]=(XrXirInstruction){.op=XR_XIR_JUMP,.targets={1}};
     fixture->blocks[0]=(XrXirBlock){.count=at};
     for(uint32_t b=1;b<input->blocks-1;++b) {
         fixture->blocks[b]=(XrXirBlock){.first=at,.count=1};
-        fixture->subject[at++]=(XrXirInstruction){.op=XR_XIR_JUMP,.targets={b+1}};
+        storage->subject[at++]=(XrXirInstruction){.op=XR_XIR_JUMP,.targets={b+1}};
     }
     fixture->blocks[input->blocks-1]=(XrXirBlock){.first=at,.count=1};
-    fixture->subject[at++]=input->empty?(XrXirInstruction){.op=XR_XIR_RETURN}:
+    storage->subject[at++]=input->empty?(XrXirInstruction){.op=XR_XIR_RETURN}:
         (XrXirInstruction){.op=XR_XIR_THROW,.args={input->scalars}};
     XrXirFunction *function=&fixture->functions[1];
     function->parameters=NULL; function->parameter_count=0;
     function->blocks=fixture->blocks; function->block_count=input->blocks;
-    function->instructions=fixture->subject; function->instruction_count=at;
+    function->instructions=storage->subject; function->instruction_count=at;
     function->operands=NULL; function->operand_count=0;
-    if(input->reverse)pc_reverse_blocks(fixture);
+    if(input->reverse)pm_reverse(storage);
     fixture->module.stage=XR_XIR_BUILT;
     CHECK(at==input->scalars+input->blocks+1 && fixture->module.function_count==3 && fixture->types.count==2);
-    input->subject_instructions=function->instruction_count; input->module_instructions=0;
+    input->subject_instructions=function->instruction_count; input->module_instructions=0; input->module_blocks=0;
     input->functions=fixture->module.function_count; input->types=fixture->types.count;
-    for(uint32_t f=0;f<input->functions;++f)input->module_instructions+=fixture->functions[f].instruction_count;
-    CHECK(input->module_instructions==input->scalars+input->blocks+4);
+    for(uint32_t f=0;f<input->functions;++f) {
+        input->module_instructions+=fixture->functions[f].instruction_count;
+        input->module_blocks+=fixture->functions[f].block_count;
+    }
+    input->fixture_bytes=sizeof(*storage);
+    input->scratch_bytes=sizeof(storage->saved)+sizeof(storage->indices)+sizeof(storage->saved_blocks);
+    CHECK(input->module_instructions==input->scalars+input->blocks+4 && input->module_blocks==input->blocks+2);
 }
 static void pm_golden(const XrXirEffects *effects,const PmCase *input) {
     CHECK(effects && effects->count==3 && effects->atom_count==2 && effects->words==1);
@@ -132,7 +186,7 @@ static void pm_golden(const XrXirEffects *effects,const PmCase *input) {
 }
 static void pm_summary(const PmCase *input,const PmPoint *before,const PmPoint *after,uint64_t infer_work) {
     bool original=input->empty && input->scalars==EE_SCALARS && input->blocks==EE_BLOCKS;
-    printf("{\"schema\":\"task324.pending.scale.v1\",\"event\":\"summary\","); pm_identity(input);
+    printf("{\"schema\":\"task324.pending.scale.v2\",\"event\":\"summary\","); pm_identity(input);
     printf(",\"status\":0,\"inclusive_work\":%llu,\"inclusive_allocated\":%llu,\"inclusive_attempts\":%zu,"
         "\"inclusive_allocation_count\":%llu,\"final_live\":%llu,\"peak\":%llu,\"infer_work\":%llu,"
         "\"original_20k_applies\":%s,\"original_20k_pass\":%s,\"qualification\":\"MEASUREMENT_ONLY\"}\n",
@@ -145,13 +199,13 @@ static void pm_summary(const PmCase *input,const PmPoint *before,const PmPoint *
 static void pm_run(const PmCase *input) {
     CHECK(!pm_live && !pm_bytes); XrXirCompileContext context={0};
     PmCase current_case=*input; input=&current_case;
-    PmPoint initial=pm_point(&context); EdgeFixture fixture; pm_fixture(&fixture,&current_case);
+    PmPoint initial=pm_point(&context); PmFixture fixture; pm_fixture(&fixture,&current_case);
     PmPoint point=pm_point(&context); pm_phase(input,"fixture",&initial,&point);
     CHECK(xr_compile_resources_new(&pm_caps,&context.resources)==XR_COMPILE_RESOURCE_OK);
     context.limits=xr_xir_compile_default_limits();
     PmPoint owner=pm_point(&context); pm_phase(input,"owner",&point,&owner);
     XrXirArtifact *checked=NULL; XrXirEffects *effects=NULL;
-    CHECK(xir_fixture_check(&context,&fixture.module,&checked,NULL)==XR_XIR_OK);
+    CHECK(xir_fixture_check(&context,&fixture.base.module,&checked,NULL)==XR_XIR_OK);
     PmPoint admitted=pm_point(&context); pm_phase(input,"check",&owner,&admitted);
     const XrXirModule *current=xr_xir_compile_artifact_module(checked);
     CHECK(current && current->stage==XR_XIR_CHECKED);
@@ -166,12 +220,13 @@ static void pm_run(const PmCase *input) {
     pm_summary(input,&initial,&final,inferred.stats.work-verified.stats.work);
     xr_compile_resources_release(context.resources); context.resources=NULL;
     CHECK(!pm_live && !pm_bytes);
-    printf("{\"schema\":\"task324.pending.scale.v1\",\"event\":\"owner_drop\","); pm_identity(input);
+    printf("{\"schema\":\"task324.pending.scale.v2\",\"event\":\"owner_drop\","); pm_identity(input);
     printf(",\"physical_blocks\":%zu,\"physical_bytes\":%zu,\"ledger_released\":true}\n",pm_live,pm_bytes);
 }
 static bool pm_parse(int argc,char **argv,PmCase *input) {
     if(argc!=6 || strcmp(argv[1],"--case"))return false;
-    input->scalars=!strcmp(argv[2],"128")?128u:!strcmp(argv[2],"256")?256u:!strcmp(argv[2],"512")?512u:0u;
+    input->scalars=!strcmp(argv[2],"128")?128u:!strcmp(argv[2],"256")?256u:
+        !strcmp(argv[2],"512")?512u:!strcmp(argv[2],"1024")?1024u:0u;
     input->blocks=!strcmp(argv[3],"8")?8u:!strcmp(argv[3],"16")?16u:!strcmp(argv[3],"32")?32u:0u;
     if(!strcmp(argv[4],"forward"))input->reverse=0;
     else if(!strcmp(argv[4],"reverse"))input->reverse=1;
@@ -179,16 +234,17 @@ static bool pm_parse(int argc,char **argv,PmCase *input) {
     if(!strcmp(argv[5],"empty"))input->empty=true;
     else if(!strcmp(argv[5],"nonempty"))input->empty=false;
     else return false;
-    return input->scalars && input->blocks && (input->blocks==32 || input->scalars==512);
+    return input->scalars && input->blocks && input->scalars<=PM_INSTRUCTION_MAX-input->blocks-1 &&
+        (input->blocks==32 || input->scalars==512);
 }
 int main(int argc,char **argv) {
     if(argc!=1) {
         PmCase input={0}; if(!pm_parse(argc,argv,&input))return 2;
         pm_run(&input); return 0;
     }
-    static const uint32_t scales[5][2]={{128,32},{256,32},{512,32},{512,8},{512,16}};
+    static const uint32_t scales[6][2]={{128,32},{256,32},{512,32},{512,8},{512,16},{1024,32}};
     for(unsigned empty=0;empty<2;++empty)for(unsigned reverse=0;reverse<2;++reverse)
-        for(unsigned i=0;i<5;++i) {
+        for(unsigned i=0;i<6;++i) {
             PmCase input={.scalars=scales[i][0],.blocks=scales[i][1],.reverse=reverse,.empty=empty!=0}; pm_run(&input);
         }
     return 0;
