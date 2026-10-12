@@ -11,6 +11,7 @@
  *   evidence. Neither a stored effect kind nor this lookup proves body effects.
  */
 #include "xxir_implementation_verify.h"
+#include "xxir_constraint_proof_internal.h"
 
 typedef struct EffectContextRequest {
     const XrXirModule *source;
@@ -96,13 +97,9 @@ static XrXirStatus effect_context_target_constraints(EffectContextResolved *reso
         &request->source->generics[resolved->target] : NULL;
     uint32_t count=generic ? generic->parameter_count : 0;
     if (resolved->argument_count!=count) return XR_XIR_BAD_STRUCTURE;
-    for (uint32_t p=0;p<count;++p) {
-        XrXirConstraintUse use={request->source,{XR_XIR_CONTEXT_FUNCTION,resolved->target,0},
-            p,resolved->arguments,count};
-        XrXirStatus status=xr_xir_compile_constraints_prove(resolved->terms.remaining,proof,&use);
-        if (status!=XR_XIR_OK) return status;
-    }
-    return XR_XIR_OK;
+    XirConstraintArguments use={request->source,{XR_XIR_CONTEXT_FUNCTION,resolved->target,0},
+        resolved->arguments,count};
+    return xr_xir_compile_constraint_arguments_prove(resolved->terms.remaining,proof,&use);
 }
 
 static XrXirStatus effect_context_requirement(EffectContextResolved *resolved,

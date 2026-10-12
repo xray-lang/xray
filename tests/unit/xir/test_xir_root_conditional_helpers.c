@@ -51,6 +51,7 @@
 #include "xir_error_owned_material_cases.h"
 #include "xir_cell_owned_run_cases.h"
 #include "xir_invocation_edge_key_cases.h"
+#include "xir_context_constraint_vector_cases.h"
 
 static XrXirStatus conditional_classify(const XrXirCompileContext *context, uint32_t mode, bool oracle) {
     ConditionalRawFixture f;conditional_raw_fixture(&f,mode);
@@ -1697,7 +1698,9 @@ int main(int argc, char **argv) {
     else if (argc==2 && !strcmp(argv[1],"--class-cells")) conditional_class_cell_literals();
     else if (argc==2 && !strcmp(argv[1],"--class-cells-compiler")) conditional_class_cell_resources();
     else if (argc==2 && !strcmp(argv[1],"--parameter-coverage")) conditional_parameter_literals();
-    else if (argc==2 && !strcmp(argv[1],"--class-rows")) conditional_class_rows_literals();
+    else if (argc==2 && !strcmp(argv[1],"--class-rows")) {
+        context_constraint_vector_controls();conditional_class_rows_literals();
+    }
     else if (argc==2 && !strcmp(argv[1],"--retry-census")) conditional_retry_census();
     else if (argc==2 && !strcmp(argv[1],"--rotation")) conditional_invocation_rotation_run(false);
     else if (argc==2 && !strcmp(argv[1],"--rotation-pipeline")) conditional_invocation_rotation_run(true);

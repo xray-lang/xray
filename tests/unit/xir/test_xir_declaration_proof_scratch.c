@@ -88,7 +88,7 @@ static void fixture(DeclarationFixture *f) {
         .nominal={.declaration=0,.fields=&f->projected_field,.field_count=1}};
     f->callable_parameter=(XrXirCallableParameter){constructed(0),0};
     f->nodes[19]=(XrXirTypeNode){.kind=XR_XIR_TYPE_CALLABLE,.parameters=&f->callable_parameter,
-        .parameter_count=1,.result=XR_XIR_UNIT};
+        .parameter_count=1,.result=XR_XIR_UNIT,.flags=XR_XIR_CALLABLE_ROOT_UNRESOLVED};
     f->nodes[20]=f->nodes[18];f->nodes[20].nominal.declaration=1;
     f->method=(XrXirInterfaceMethod){.name={"inspect",7},.signature=constructed(19)};
     f->interface=(XrXirInterfaceDeclaration){.module={"proofs",6},.name={"Inspect",7},
@@ -239,7 +239,8 @@ static void batch_fixture(BatchFixture *f) {
     f->nominal=(XrXirNominalDeclaration){.module={"batch",5},.name={"Record",6},.exported=1,
         .constraints=&f->nominal_bound,.parameter_count=1,.kind=XR_XIR_NOMINAL_STRUCT};
     f->nominals=(XrXirNominalTable){&f->nominal,1,NULL};
-    f->nodes[0]=(XrXirTypeNode){.kind=XR_XIR_TYPE_CALLABLE,.result=XR_XIR_UNIT};
+    f->nodes[0]=(XrXirTypeNode){.kind=XR_XIR_TYPE_CALLABLE,.result=XR_XIR_UNIT,
+        .flags=XR_XIR_CALLABLE_ROOT_UNRESOLVED};
     f->nodes[1]=(XrXirTypeNode){.kind=XR_XIR_TYPE_NOMINAL,.parameter_span=1,
         .nominal={.declaration=0,.arguments=f->arguments,.argument_count=1}};
     f->nodes[2]=(XrXirTypeNode){.kind=XR_XIR_TYPE_ARRAY,.element=XR_XIR_I64};
