@@ -11,6 +11,23 @@ static bool source_ground_type(SourceContext *ctx,AstNode *node,uint32_t depth,S
     if (!node || !source_work(ctx,node)) return node==NULL;
     if (depth>=128) return source_fail(ctx,node,XR_XIR_BUDGET,"ground type collection depth exhausted");
     if (node->type==AST_GROUPING) return source_ground_type(ctx,node->as.grouping,depth+1,output);
+    if (node->type==AST_COMPTIME_EXPR) {
+        AstNode *child=node->as.comptime_expr.expr;
+        if (!child || child->type==AST_BLOCK) return true;
+        if (child->type==AST_LITERAL_TRUE || child->type==AST_LITERAL_FALSE) {
+            *output=(SourceExpectedType){true,XR_XIR_BOOL,false,false};return true;
+        }
+        if (child->type==AST_CALL_EXPR && child->as.call_expr.callee &&
+            child->as.call_expr.callee->type==AST_VARIABLE) {
+            SourceName *binding=visible_name(ctx,child->as.call_expr.callee->as.variable.name);
+            if (binding && binding->kind==SOURCE_FUNCTION && !ctx->generics[binding->index].parameter_count)
+                *output=(SourceExpectedType){true,ctx->functions[binding->index].result,false,false};
+            return true;
+        }
+        /* Detached lowering resolves every value independently. Unknown ground
+         * facts stay unknown and cannot bind a runtime local into a thunk. */
+        return true;
+    }
     if (node->type==AST_AWAIT_EXPR) {
         SourceExpectedType task;
         if (!source_ground_type(ctx,node->as.await_expr.expr,depth+1,&task)) return false;

@@ -103,8 +103,11 @@ static XrXirStatus source_check_input(const XrXirSourceRequest *request, SourceI
     }
     semantic_started = true;
     source_construct(&ctx, &result);
+    source_comptime_receive(&ctx, &result);
 done:
-    source_query_publish(&ctx, &result);
+    /* A comptime receiver has already copied the complete final query from its
+     * own construction. The original context publishes only its own result. */
+    if (!result.snapshot) source_query_publish(&ctx, &result);
     if (failure_path && semantic_started && ctx.diagnostic.status != XR_XIR_OK &&
         ctx.diagnostic.line > 0 && ctx.graph &&
         ctx.diagnostic.module < (uint32_t)ctx.graph->spec_count) {

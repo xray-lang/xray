@@ -10,6 +10,8 @@
  *   Source names are resolved before lowering and never rediscovered at runtime.
  */
 #include "xxir_source.h"
+#include "xxir_ctfe.h"
+#include "../base/xsha256.h"
 #include "xxir_internal.h"
 #include "xxir_operand_roles.h"
 #include "xxir_library_catalog.h"
@@ -194,6 +196,7 @@ typedef struct SourceRootQuery {
     bool expression, cell;
 } SourceRootQuery;
 typedef struct SourceLibraryUnit SourceLibraryUnit;
+typedef struct SourceComptimeSite SourceComptimeSite;
 typedef struct SourceContext {
     XrModuleGraph *graph;
     XrXirLinkageKind linkage_kind;
@@ -241,6 +244,9 @@ typedef struct SourceContext {
     SourceName *assertion, *assert_panics, *assert_equal;
     uint32_t first_closure, next_closure, closure_limit, function_capacity;
     uint32_t function, module, depth;
+    SourceComptimeSite *comptime_sites;
+    const SourceComptimeSite *comptime_input;
+    uint32_t comptime_capacity,comptime_count,comptime_matched;
     SourceExpressionPlan *active_expression;
     /* This exact argument plan owns the pre-loss role, never its children. */
     SourceExpressionPlan *effect_argument;
@@ -1619,6 +1625,7 @@ static bool source_explicit_reference(SourceContext *ctx, AstNode *node, SourceE
     }
     return source_function_value(ctx,node,binding,symbol,expected,value);
 }
+static bool source_comptime_expression(SourceContext *ctx,AstNode *node,SourceExpectedType expected,SourceValue *value);
 static bool source_closure(SourceContext *ctx, AstNode *node, SourceExpectedType expected, SourceValue *value);
 static bool source_defer(SourceContext *ctx, AstNode *node);
 static bool expression_body(SourceContext *ctx, AstNode *node, SourceExpectedType context, SourceValue *value) {
@@ -1665,6 +1672,7 @@ static bool expression_body(SourceContext *ctx, AstNode *node, SourceExpectedTyp
         source_read_forward(ctx->active_expression,child);
         return true;
     }
+    case AST_COMPTIME_EXPR: return source_comptime_expression(ctx,node,context,value);
     case AST_CALL_EXPR: return source_call(ctx, node, context, value);
     case AST_GO_EXPR: return source_go_call(ctx, node, context, value);
     case AST_AWAIT_EXPR: return source_task_await(ctx, node, context, value);
@@ -2238,53 +2246,13 @@ static bool declare_import(SourceContext *ctx, AstNode *node) {
     }
     return true;
 }
-typedef struct SourceClosureCount { SourceContext *ctx; uint32_t count, depth, defaults, members; } SourceClosureCount;
-static bool count_closures(AstNode *node, void *pointer) {
-    SourceClosureCount *scan = pointer;
-    if (!node) return true;
-    if (!source_work(scan->ctx,node)) return false;
-    /* A module-level declaration is a direct child of the program node, at depth one. */
-    bool closure = node->type == AST_FUNCTION_EXPR || node->type == AST_DEFER_STMT ||
-        (node->type == AST_FUNCTION_DECL && scan->depth > 1);
-    if (scan->depth == 128 || (closure && scan->count == scan->ctx->compile.limits.functions))
-        return source_fail(scan->ctx,node,XR_XIR_BUDGET,"closure declaration budget exhausted");
-    if (closure) ++scan->count;
-    if (node->type == AST_MEMBER_ACCESS) {
-        if (scan->members == UINT32_MAX)
-            return source_fail(scan->ctx,node,XR_XIR_BUDGET,"member helper capacity exhausted");
-        ++scan->members;
-    }
-    XrParamNode **parameters = node->type == AST_FUNCTION_DECL ? node->as.function_decl.params :
-        node->type == AST_METHOD_DECL ? node->as.method_decl.params : NULL;
-    int count = node->type == AST_FUNCTION_DECL ? node->as.function_decl.param_count :
-        node->type == AST_METHOD_DECL ? node->as.method_decl.param_count : 0;
-    for (int p = 0; p < count; ++p) {
-        if (!source_work(scan->ctx, node)) return false;
-        if (parameters[p]->default_value) {
-            if (scan->defaults == scan->ctx->compile.limits.functions)
-                return source_fail(scan->ctx, node, XR_XIR_BUDGET, "default argument function budget exhausted");
-            ++scan->defaults;
-        }
-    }
-    ++scan->depth;
-    bool ok = xr_ast_for_each_child(node,count_closures,scan);
-    --scan->depth;
-    return ok || source_fail(scan->ctx,node,XR_XIR_BAD_STRUCTURE,"unknown source declaration shape");
-}
-/* Code after return, throw, break or continue never runs and has no control-flow edge, so it is dropped.
- * Closures in it are rejected because their declarations are counted ahead of lowering and must each be lowered. */
-static bool source_unreachable_statement(SourceContext *ctx, AstNode *node) {
-    SourceClosureCount scan = {ctx, 0, 2, 0, 0};
-    if (!count_closures(node, &scan)) return false;
-    if (scan.count) return source_fail(ctx, node, XR_XIR_BAD_STRUCTURE, "closures in unreachable statements are not admitted");
-    return true;
-}
+#include "xxir_source_function_inventory.inc.c"
 #include "xxir_source_library.inc.c"
 #include "xxir_source_declaration_storage.inc.c"
 
 static bool collect_declarations(SourceContext *ctx) {
     uint32_t count = (uint32_t) ctx->graph->spec_count, functions = count + (ctx->linkage_kind == XR_XIR_PROGRAM), slots = 0, nominals = 0, interfaces = 0;
-    SourceClosureCount closures = {ctx,0,0,0,0};
+    SourceClosureCount closures = {ctx,0,0,0,0,0};
     for (uint32_t m = 0; m < count; ++m) {
         ctx->module = m;
         AstNode *ast = ctx->graph->specs[m].ast;
@@ -2353,6 +2321,7 @@ static bool collect_declarations(SourceContext *ctx) {
     if (nominals > UINT32_MAX - functions)
         return source_fail(ctx, NULL, XR_XIR_BUDGET, "default constructor capacity exhausted");
     uint32_t capacity = functions + nominals;
+    if (!source_comptime_inventory(ctx,closures.comptime,&capacity)) return false;
     if (closures.members > UINT32_MAX - capacity)
         return source_fail(ctx,NULL,XR_XIR_BUDGET,"member helper capacity exhausted");
     capacity += closures.members;
@@ -2873,6 +2842,7 @@ static bool source_closure(SourceContext *ctx, AstNode *node, SourceExpectedType
 }
 #include "xxir_source_array_recipes.inc.c"
 #include "xxir_source_core_panics.inc.c"
+#include "xxir_source_comptime_expression.inc.c"
 static bool build_bodies(SourceContext *ctx) {
     uint32_t count = (uint32_t) ctx->graph->spec_count;
     for (int t = 0; t < ctx->graph->topo_count; ++t) {
@@ -2985,4 +2955,5 @@ static void source_query_publish(SourceContext *ctx, XrXirSourceResult *output) 
     }
 }
 #include "xxir_core_source.inc.c"
+#include "xxir_source_comptime_pipeline.inc.c"
 #include "xxir_source_input.inc.c"

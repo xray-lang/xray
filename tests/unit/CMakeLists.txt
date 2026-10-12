@@ -4504,6 +4504,7 @@ endif()
 include("${CMAKE_CURRENT_SOURCE_DIR}/xir/source_dependencies.cmake")
 
 include("${CMAKE_CURRENT_LIST_DIR}/xir/ctfe_leaf.cmake")
+include("${CMAKE_CURRENT_LIST_DIR}/xir/source_comptime.cmake")
 
 include(${CMAKE_CURRENT_SOURCE_DIR}/xir/ordinary_live_limit.cmake)
 add_test(NAME test_xir_ctfe_leaf_resources COMMAND test_xir_ctfe_leaf --resources)

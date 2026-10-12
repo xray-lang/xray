@@ -61,6 +61,62 @@ static XrXirStatus lsp_facts(XlspSourceSnapshot *snapshot, const char *root_uri,
     CHECK(xlsp_source_hover(snapshot,root_uri,strlen(root_uri),(XrLspPosition){1,43},&occupied)==XR_XIR_BAD_STRUCTURE&&occupied.text==hover.text);
     xlsp_source_hover_free(&hover);return XR_XIR_OK;
 }
+/* Literal UTF-16 positions keep the existing named callee at (1,42)..(1,47).
+ * The comptime keyword at (1,33)..(1,41) has no source-spelled function name. */
+static void lsp_comptime_cases(const char *root) {
+    static const char text[]="import { value } from \"./lib\"\n"
+        "export fn result()->i64 { return comptime value() }\n";
+    XrCompileResourceLimits limits=lsp_limits();XrXirCompileContext context={0};
+    XrCompilerSession *session=NULL;XlspSourceSnapshot *snapshot=NULL;
+    CHECK(xr_compile_resources_new(&limits,&context.resources)==XR_COMPILE_RESOURCE_OK);
+    context.limits=xr_xir_compile_default_limits();
+    XrCompileResourceStats baseline={0};
+    CHECK(xr_compile_resources_stats(context.resources,&baseline)==XR_COMPILE_RESOURCE_OK);
+    CHECK(xr_compile_session_new(context.resources,&session)==XR_COMPILER_SESSION_OK);
+    char root_uri[XR_TEST_PATH_MAX],library_uri[XR_TEST_PATH_MAX];
+    char input_root_uri[XR_TEST_PATH_MAX],input_library_uri[XR_TEST_PATH_MAX];
+    lsp_uri(root_uri,sizeof(root_uri),root,"root.xr");lsp_uri(library_uri,sizeof(library_uri),root,"lib.xr");
+    memcpy(input_root_uri,root_uri,strlen(root_uri)+1);memcpy(input_library_uri,library_uri,strlen(library_uri)+1);
+    char root_text[sizeof(text)],library_text[sizeof(source_library_text)];
+    memcpy(root_text,text,sizeof(text));memcpy(library_text,source_library_text,sizeof(source_library_text));
+    XlspSourceDocument documents[2]={
+        {input_root_uri,root_text,strlen(input_root_uri),sizeof(root_text)-1,1},
+        {input_library_uri,library_text,strlen(input_library_uri),sizeof(library_text)-1,7}};
+    XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_SCRIPT,NULL,root};
+    XrXirSourceRequest request={session,NULL,&authority,&context,NULL,NULL,XR_XIR_PROGRAM,NULL};
+    XrXirSourceDiagnostic diagnostic={0};
+    XrXirStatus status=xlsp_source_snapshot_build(&request,documents,2,0,&snapshot,&diagnostic,NULL);
+    if(status!=XR_XIR_OK)fprintf(stderr,"LSP comptime overlay status%u %d:%d %s\n",
+        (unsigned)status,diagnostic.line,diagnostic.column,diagnostic.message);
+    CHECK(status==XR_XIR_OK && snapshot);
+    memset(root_text,'?',sizeof(root_text));memset(library_text,'?',sizeof(library_text));
+    memset(input_root_uri,'?',sizeof(input_root_uri));memset(input_library_uri,'?',sizeof(input_library_uri));
+    memset(documents,0,sizeof(documents));memset(&request,0,sizeof(request));
+    xr_compile_session_free(session);session=NULL;
+    CHECK(xr_compile_resources_retain(context.resources)==XR_COMPILE_RESOURCE_OK);
+    xr_compile_resources_release(context.resources);
+    CHECK(lsp_facts(snapshot,root_uri,library_uri,0,7)==XR_XIR_OK);
+    XlspSourceLocation absent={"sentinel",{{91,92},{93,94}},99,XR_XIR_SOURCE_READ},original=absent;
+    CHECK(xlsp_source_definition(snapshot,root_uri,strlen(root_uri),(XrLspPosition){1,34},&absent)==XR_XIR_UNRESOLVED);
+    CHECK(absent.uri==original.uri && absent.version==original.version &&
+        absent.range.start.line==91 && absent.range.start.character==92 &&
+        absent.range.end.line==93 && absent.range.end.character==94 && absent.access==original.access);
+    CHECK(xlsp_source_definition(snapshot,root_uri,strlen(root_uri),(XrLspPosition){1,48},&absent)==XR_XIR_UNRESOLVED);
+    CHECK(absent.uri==original.uri && absent.version==99 && absent.range.start.line==91);
+    XlspSourceLocations references={0};XlspSourceHover hover={0};
+    CHECK(xlsp_source_references(snapshot,root_uri,strlen(root_uri),(XrLspPosition){1,34},true,&references)==XR_XIR_UNRESOLVED);
+    CHECK(!references.items && !references.count);
+    CHECK(xlsp_source_hover(snapshot,root_uri,strlen(root_uri),(XrLspPosition){1,34},&hover)==XR_XIR_UNRESOLVED);
+    CHECK(!hover.text && !hover.length);
+    CHECK(lsp_facts(snapshot,root_uri,library_uri,0,7)==XR_XIR_OK);
+    xlsp_source_locations_free(&references);xlsp_source_hover_free(&hover);
+    xlsp_source_snapshot_free(snapshot);
+    XrCompileResourceStats final={0};CHECK(xr_compile_resources_stats(context.resources,&final)==XR_COMPILE_RESOURCE_OK);
+    CHECK(final.live_bytes==baseline.live_bytes && final.work>=baseline.work && final.allocated_bytes>=baseline.allocated_bytes);
+    CHECK(final.work<=limits.work && final.allocated_bytes<=limits.allocated_bytes && final.peak_bytes<=limits.live_bytes);
+    xr_compile_resources_release(context.resources);lsp_zero();
+}
+
 static XrXirStatus lsp_once(const char *root, XrCompileResourceLimits limits, XrCompileResourceStats *stats) {
     XrXirCompileContext context = {0}; XrCompilerSession *session = NULL; XlspSourceSnapshot *snapshot = NULL;
     XrCompileResourceStatus resource = xr_compile_resources_new(&limits, &context.resources);
@@ -169,7 +225,7 @@ static void lsp_rejections(const char *root) {
 int main(void) {
     char directory[XR_TEST_PATH_MAX]="lsp-source-query-XXXXXX",root[XR_TEST_PATH_MAX];
     CHECK(xr_test_mkdtemp(directory) && xr_test_realpath_buf(directory,root,sizeof(root)));
-    lsp_versions(root); lsp_rejections(root); lsp_failure_matrix(root); lsp_json_cases(root); lsp_navigation_many_cases(root); lsp_syntax_cases(root); lsp_buffer_cases(); lsp_hover_cases(root); lsp_outline_cases(root); lsp_semantic_cases(root); lsp_roles_cases(root); CHECK(xr_test_rmdir(directory) == 0);
+    lsp_comptime_cases(root); lsp_versions(root); lsp_rejections(root); lsp_failure_matrix(root); lsp_json_cases(root); lsp_navigation_many_cases(root); lsp_syntax_cases(root); lsp_buffer_cases(); lsp_hover_cases(root); lsp_outline_cases(root); lsp_semantic_cases(root); lsp_roles_cases(root); CHECK(xr_test_rmdir(directory) == 0);
     puts("LSP unsaved two-document navigation, same-Session versions, Unicode, producer death passed");
     return 0;
 }
