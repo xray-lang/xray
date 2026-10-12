@@ -428,7 +428,61 @@ static void pc_empty_limits(void) {
 #include "xir_error_unit_cell_controls.h"
 #include "xir_error_invocation_controls.h"
 #include "xir_error_return_coverage_controls.h"
-int main(void) {
+static void pc_semantics(void) {
+    for (unsigned mode=0;mode<EI_CASES;++mode) {
+        XrXirCompileContext c=pc_owner(pc_caps());uint64_t baseline=pc_stats(&c).live_bytes;
+        CHECK(ei_whole(&c,mode)==XR_XIR_OK);pc_release(&c,baseline);
+    }
+    for (unsigned mode=0;mode<ER_CASES;++mode) {
+        XrXirCompileContext c=pc_owner(pc_caps());uint64_t baseline=pc_stats(&c).live_bytes;
+        CHECK(er_whole(&c,mode)==XR_XIR_OK);pc_release(&c,baseline);
+    }
+    pc_unit_cell_controls();cf_order_cases();cf_order_invalid();cf_whole_cases();cf_occupied();
+    pc_compact_classification();pc_compact_zero_private();pc_compact_reuse();pc_compact_bad_types();
+    pc_compact_root_membership();pc_compact_mixed_membership();
+    for (unsigned mode=0;mode<3;++mode) {
+        XrXirCompileContext c=pc_owner(pc_caps());uint64_t baseline=pc_stats(&c).live_bytes;
+        CHECK(pc_compact_whole(&c,mode)==XR_XIR_OK);pc_release(&c,baseline);
+    }
+    cc_classification();cc_bad_types();cc_cfg_continuation();
+    for (unsigned mode=0;mode<11;++mode) {
+        XrXirCompileContext c=pc_owner(pc_caps());uint64_t baseline=pc_stats(&c).live_bytes;
+        CHECK(cc_whole(&c,mode)==XR_XIR_OK);pc_release(&c,baseline);
+    }
+    pc_empty_cases();pc_empty_classifier();pc_empty_nonempty_summary();
+    pc_cases();pc_edge_controls();pc_freshness();pc_negative();pc_occupied();
+}
+static void pc_performance(void) {
+    pc_empty_cost();pc_bulk();pc_compact_bulk();cc_private();cf_whole_cases();pc_edge_controls();
+    static const unsigned modes[]={0,3,9,10};
+    for (unsigned i=0;i<sizeof(modes)/sizeof(*modes);++i) cc_limits(modes[i]);
+}
+static void pc_resources(void) {
+    for (unsigned mode=0;mode<EI_CASES;++mode) { ei_faults(mode);ei_limits(mode); }
+    for (unsigned mode=0;mode<ER_CASES;++mode) { er_faults(mode);er_limits(mode); }
+    cf_order_budget();cf_whole_faults();cf_whole_limits();
+    pc_compact_two_words();pc_compact_forward_roots();pc_compact_large_membership();
+    for (unsigned mode=0;mode<2;++mode) { pc_compact_faults(mode);pc_compact_limits(mode); }
+    cc_classification_limits();cc_cfg_watchdog();cc_cfg_large_faults();
+    static const unsigned modes[]={0,3,9,10};
+    for (unsigned i=0;i<sizeof(modes)/sizeof(*modes);++i) { cc_faults(modes[i]);cc_limits(modes[i]); }
+    pc_empty_faults();pc_empty_limits();pc_direct_budget();
+    pc_faults(PC_PHI_SELF);pc_faults(PC_LATE_JOIN);
+    pc_limits(PC_PHI_SELF);pc_limits(PC_LATE_JOIN);
+}
+int main(int argc,char **argv) {
+    if (argc!=1) {
+        if (argc!=2 || (strcmp(argv[1],"--semantics") && strcmp(argv[1],"--performance") &&
+            strcmp(argv[1],"--resources"))) {
+            fputs("usage: test_xir_error_cfg_pending [--semantics|--performance|--resources]\n",stderr);
+            return 2;
+        }
+        if (!strcmp(argv[1],"--semantics")) pc_semantics();
+        else if (!strcmp(argv[1],"--performance")) pc_performance();
+        else pc_resources();
+        CHECK(!live && !live_bytes);puts("typed-error CFG pending selected feedback PASS");return 0;
+    }
+
     pc_invocation_controls();
     pc_return_coverage_controls();
     pc_unit_cell_controls();

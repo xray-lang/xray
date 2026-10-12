@@ -9,3 +9,13 @@ endif()
 add_test(NAME test_xir_error_cfg_pending COMMAND test_xir_error_cfg_pending)
 set_tests_properties(test_xir_error_cfg_pending PROPERTIES
     LABELS "unit;xir;metadata;ownership;budget" TIMEOUT 300 RUN_SERIAL TRUE PROCESSORS 1)
+
+
+# Independent feedback does not replace the original aggregate deadline.
+foreach(pending_kind IN ITEMS semantics performance resources)
+    add_test(NAME test_xir_error_cfg_pending_${pending_kind}
+        COMMAND test_xir_error_cfg_pending --${pending_kind})
+    set_tests_properties(test_xir_error_cfg_pending_${pending_kind} PROPERTIES
+        LABELS "unit;xir;metadata;ownership;pending-${pending_kind};partial-feedback"
+        TIMEOUT 300 RUN_SERIAL TRUE PROCESSORS 1)
+endforeach()
