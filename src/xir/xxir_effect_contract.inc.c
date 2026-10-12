@@ -128,7 +128,7 @@ static XrXirStatus effect_contract_vector(const XrXirCompileContext *context,
 
 static bool effect_contract_context_op(XrXirOp op) {
     return op == XR_XIR_CALL || op == XR_XIR_INVOKE || op == XR_XIR_CALL_DEFAULT ||
-        op == XR_XIR_INVOKE_DEFAULT || op == XR_XIR_CALL_REQUIREMENT ||
+        op == XR_XIR_INVOKE_DEFAULT || op == XR_XIR_CLEANUP_REGISTER || op == XR_XIR_CALL_REQUIREMENT ||
         op == XR_XIR_CALL_INDIRECT || op == XR_XIR_INVOKE_INDIRECT;
 }
 

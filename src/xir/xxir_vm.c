@@ -15,7 +15,6 @@
  */
 
 #include "xxir_vm.h"
-#include "xxir_ctfe.h"
 #include "xxir_internal.h"
 #include "xxir_vm_internal.h"
 #include "xxir_native_cache_internal.h"
@@ -46,36 +45,13 @@ typedef struct ScalarRun {
     XrCompileResources *compile_resources;
 } ScalarRun;
 
-static bool scalar_compile_work(ScalarRun *run, uint64_t units) {
-    return !run->compile_resources ||
-        xr_compile_resources_work(run->compile_resources, units) == XR_COMPILE_RESOURCE_OK;
-}
 
-typedef struct VmState {
-    uint32_t instruction, destination, invoke, panic;
-    uint32_t frontier, exit_target, exit_block, landing;
-    XrXirType expected;
-    bool initialized, waiting, cleanup_waiting, leaving;
-    XrXirValue *arguments;
-    XrXirValuePathStep *path_steps;
-    XrXirAtomicProgress atomic;
-} VmState;
 
-static int arithmetic_operation(XrXirOp op) {
-    switch (op) {
-    case XR_XIR_ADD_INT: return XR_XIR_ARITH_ADD;
-    case XR_XIR_SUB_INT: return XR_XIR_ARITH_SUB;
-    case XR_XIR_MUL_INT: return XR_XIR_ARITH_MUL;
-    case XR_XIR_DIV_INT: return XR_XIR_ARITH_DIV;
-    case XR_XIR_REM_INT: return XR_XIR_ARITH_REM;
-    case XR_XIR_AND_INT: return XR_XIR_ARITH_AND;
-    case XR_XIR_OR_INT: return XR_XIR_ARITH_OR;
-    case XR_XIR_XOR_INT: return XR_XIR_ARITH_XOR;
-    case XR_XIR_SHL_INT: return XR_XIR_ARITH_SHL;
-    case XR_XIR_SHR_INT: return XR_XIR_ARITH_SHR;
-    default: return -1;
-    }
-}
+#include "xxir_interpreter_state.h"
+#include "xxir_scalar_core.h"
+_Static_assert(sizeof(ScalarRun)==sizeof(XirScalarCoreRun), "scalar descriptor physical size is unchanged");
+
+
 
 static XrXirRunStatus value_run_status(XrXirValueStatus status) {
     if (status == XR_XIR_VALUE_OK) return XR_XIR_RUN_OK;
@@ -362,47 +338,10 @@ static XrXirAction vm_panic_land(ScalarRun *run, VmState *state, uint32_t handle
         run->layout->offsets[run->function->parameter_count + first];
     return xr_xir_instance_panic_land(run->view, run->frame, action, destination, first + 1, &state->instruction);
 }
-static XrXirRunStatus scalar_edge(ScalarRun *run, uint32_t instruction, uint32_t target) {
-    const XrXirFunction *function = run->function;
-    uint32_t low = 0, high = function->block_count;
-    while (low + 1 < high) {
-        if (!scalar_compile_work(run, 1)) return XR_XIR_RUN_STEP_LIMIT;
-        uint32_t middle = low + (high - low) / 2;
-        if (function->blocks[middle].first <= instruction) low = middle;
-        else high = middle;
-    }
-    uint32_t first = function->blocks[target].first, end = first;
-    while (end < function->instruction_count && function->instructions[end].op == XR_XIR_PHI) {
-        const XrXirInstruction *phi = &function->instructions[end];
-        uint32_t source = UINT32_MAX;
-        for (uint32_t a = 0; a < phi->args[1]; a += 2) {
-            if (!scalar_compile_work(run, 1)) return XR_XIR_RUN_STEP_LIMIT;
-            if (function->operands[phi->args[0] + a] == low) {
-                if (!scalar_compile_work(run, 1)) return XR_XIR_RUN_STEP_LIMIT;
-                source = function->operands[phi->args[0] + a + 1]; break;
-            }
-        }
-        if (source == UINT32_MAX) return XR_XIR_RUN_BAD_ARTIFACT;
-        if (!scalar_compile_work(run, 2)) return XR_XIR_RUN_STEP_LIMIT;
-        uint32_t scratch = run->layout->offsets[function->parameter_count + end] + 8;
-        int64_t value = xr_xir_scalar_load(run->frame, run->layout->offsets[source]);
-        if (xr_xir_type_is_owned(run->module->types, phi->type)) {
-            XrXirValueStatus status = xr_xir_owned_slot_copy(run->frame, scratch,
-                run->view ? run->view->arena : NULL, phi->type, value);
-            if (status != XR_XIR_VALUE_OK) return value_run_status(status);
-        } else xr_xir_scalar_store(run->frame, scratch, value);
-        ++end;
-    }
-    for (uint32_t i = first; i < end; ++i) {
-        if (!scalar_compile_work(run, 3)) return XR_XIR_RUN_STEP_LIMIT;
-        const XrXirInstruction *phi = &function->instructions[i];
-        uint32_t destination = run->layout->offsets[function->parameter_count + i];
-        XrXirValue value = {(uint32_t) phi->type, 0, xr_xir_scalar_load(run->frame, destination + 8)};
-        xr_xir_scalar_store(run->frame, destination + 8, 0);
-        if (xr_xir_type_is_owned(run->module->types, phi->type)) xr_xir_owned_slot_move(run->frame, destination, &value);
-        else xr_xir_scalar_store(run->frame, destination, value.payload);
-    }
-    return XR_XIR_RUN_OK;
+static XrXirRunStatus scalar_edge(ScalarRun *run,uint32_t instruction,uint32_t target) {
+    XirScalarCoreRun core={run->module,run->function,run->layout,run->frame,
+        run->view ? run->view->arena : NULL,run->compile_resources};
+    return xir_scalar_core_edge(&core,instruction,target);
 }
 #include "xxir_vm_cleanup.inc.c"
 
@@ -573,68 +512,12 @@ static XrXirRunStatus vm_io_step(ScalarRun *run, VmState *state, XrXirAction *ac
     default: return XR_XIR_RUN_BAD_ARTIFACT;
     }
 }
-static XrXirRunStatus vm_integer_step(ScalarRun *run, VmState *state) {
-    uint32_t instruction = state->instruction;
-    const XrXirInstruction *op = &run->function->instructions[instruction];
-    uint32_t result_id = run->function->parameter_count + instruction;
-    uint32_t next = instruction + 1;
-    int64_t value = 0;
-    switch (op->op) {
-    case XR_XIR_ADD_INT: case XR_XIR_SUB_INT: case XR_XIR_MUL_INT:
-    case XR_XIR_AND_INT: case XR_XIR_OR_INT: case XR_XIR_XOR_INT:
-    case XR_XIR_SHL_INT: case XR_XIR_SHR_INT:
-    case XR_XIR_DIV_INT: case XR_XIR_REM_INT: {
-        int64_t left = xr_xir_scalar_load(run->frame, run->layout->offsets[op->args[0]]);
-        int64_t right = xr_xir_scalar_load(run->frame, run->layout->offsets[op->args[1]]);
-        XrXirRunStatus status = xr_xir_integer_arithmetic(xr_xir_integer_format(op->type), (XrXirArithmetic) arithmetic_operation(op->op), left, right, &value);
-        if (status != XR_XIR_RUN_OK) return status;
-        break;
-    }
-    case XR_XIR_EQ_INT: case XR_XIR_NE_INT: case XR_XIR_LT_INT:
-    case XR_XIR_LE_INT: case XR_XIR_GT_INT: case XR_XIR_GE_INT: {
-        int ordering = 0;
-        XrXirType type = xr_xir_operand_type(run->function, op->args[0]);
-        XrXirRunStatus status = xr_xir_integer_compare(xr_xir_integer_format(type),
-            xr_xir_scalar_load(run->frame, run->layout->offsets[op->args[0]]),
-            xr_xir_scalar_load(run->frame, run->layout->offsets[op->args[1]]), &ordering);
-        if (status != XR_XIR_RUN_OK) return status;
-        switch (op->op) {
-        case XR_XIR_EQ_INT: value = ordering == 0; break;
-        case XR_XIR_NE_INT: value = ordering != 0; break;
-        case XR_XIR_LT_INT: value = ordering < 0; break;
-        case XR_XIR_LE_INT: value = ordering <= 0; break;
-        case XR_XIR_GT_INT: value = ordering > 0; break;
-        default: value = ordering >= 0; break;
-        }
-        break;
-    }
-    case XR_XIR_RUNE_TO_INTEGER: case XR_XIR_INTEGER_TO_RUNE: {
-        XrXirType from=xr_xir_operand_type(run->function,op->args[0]);
-        XrXirRunStatus status=xr_xir_rune_convert(from,op->type,
-            xr_xir_scalar_load(run->frame,run->layout->offsets[op->args[0]]),&value);
-        if (status!=XR_XIR_RUN_OK) return status;
-        break;
-    }
-    case XR_XIR_CONVERT_NUMBER: {
-        XrXirType from = xr_xir_operand_type(run->function, op->args[0]);
-        XrXirRunStatus status = xr_xir_number_convert(from, op->type,
-            xr_xir_scalar_load(run->frame, run->layout->offsets[op->args[0]]), &value);
-        if (status != XR_XIR_RUN_OK) return status;
-        break;
-    }
-    default: return XR_XIR_RUN_BAD_ARTIFACT;
-    }
-    xr_xir_scalar_store(run->frame, run->layout->offsets[result_id], value);
-    state->instruction = next;
-    return XR_XIR_RUN_OK;
-}
-static XrXirRunStatus scalar_step(ScalarRun *run, VmState *state, XrXirAction *action) {
-    uint32_t instruction = state->instruction;
-    const XrXirInstruction *op = &run->function->instructions[instruction];
-    uint32_t result_id = run->function->parameter_count + instruction;
-    uint32_t next = instruction + 1;
-    int64_t value = 0;
-    *action = (XrXirAction) {XR_XIR_ACTION_CONTINUE, 0, NULL, 0, {0, 0, 0}, {0}, 0};
+
+static XrXirRunStatus vm_step_dispatch(ScalarRun *run,VmState *state,const XrXirInstruction *op,
+    XrXirAction *action,bool *handled) {
+    uint32_t instruction=state->instruction,result_id=run->function->parameter_count+instruction;
+    uint32_t next=instruction+1;int64_t value=0;
+    *handled=true;
     if(op->op==XR_XIR_SLOT_GROUP_INIT) {
         if(!run->view)return XR_XIR_RUN_BAD_ARTIFACT;
         for(uint32_t p=0;p<op->args[1];++p)
@@ -652,10 +535,16 @@ static XrXirRunStatus scalar_step(ScalarRun *run, VmState *state, XrXirAction *a
         (op->op >= XR_XIR_LT_STRING && op->op <= XR_XIR_GE_STRING) ||
         op->op == XR_XIR_OUTPUT || op->op == XR_XIR_WRITE_STREAM || op->op == XR_XIR_PRINT)
         return vm_io_step(run, state, action);
-    if (arithmetic_operation(op->op) >= 0 || (op->op == XR_XIR_EQ_INT || op->op == XR_XIR_NE_INT || op->op == XR_XIR_LT_INT ||
-        op->op == XR_XIR_LE_INT || op->op == XR_XIR_GT_INT || op->op == XR_XIR_GE_INT) ||
-        op->op == XR_XIR_CONVERT_NUMBER || op->op == XR_XIR_RUNE_TO_INTEGER ||
-        op->op == XR_XIR_INTEGER_TO_RUNE) return vm_integer_step(run, state);
+    if (xir_scalar_core_opcode(op->op)) {
+        XirScalarCoreRun core={run->module,run->function,run->layout,run->frame,
+            run->view ? run->view->arena : NULL,run->compile_resources};
+        XirScalarCoreAction result;
+        XrXirRunStatus status=xir_scalar_core_step(&core,&state->instruction,&result);
+        if (status==XR_XIR_RUN_OK && result.kind==XIR_SCALAR_RETURN) {
+            action->kind=XR_XIR_ACTION_RETURN;action->value=result.value;
+        }
+        return status;
+    }
     if (op->op == XR_XIR_CLEANUP_REGISTER || op->op == XR_XIR_CLEANUP_LEAVE || op->op == XR_XIR_CLEANUP_ERROR)
         return vm_cleanup_step(run, state, op, action);
     if (op->op == XR_XIR_CELL_PLACE || op->op == XR_XIR_SLOT_PLACE || op->op == XR_XIR_OBJECT_PLACE ||
@@ -698,13 +587,6 @@ static XrXirRunStatus scalar_step(ScalarRun *run, VmState *state, XrXirAction *a
         state->instruction = next;
         return instance_step(run, state, op, run->layout->offsets[result_id], action);
     }
-    if (op->op == XR_XIR_JUMP || op->op == XR_XIR_BRANCH) {
-        uint32_t edge = op->op == XR_XIR_BRANCH && !xr_xir_scalar_load(run->frame, run->layout->offsets[op->args[0]]) ? 1 : 0;
-        XrXirRunStatus status = scalar_edge(run, instruction, op->targets[edge]);
-        state->instruction = run->function->blocks[op->targets[edge]].first;
-        return status;
-    }
-    if (op->op == XR_XIR_PHI) { state->instruction = next; return XR_XIR_RUN_OK; }
     if ((op->op >= XR_XIR_NEG_FLOAT && op->op <= XR_XIR_GE_FLOAT) ||
         (op->op >= XR_XIR_ADD_FLOAT && op->op <= XR_XIR_DIV_FLOAT)) {
         XrXirRunStatus status = floating_step(run, op, &value);
@@ -712,32 +594,19 @@ static XrXirRunStatus scalar_step(ScalarRun *run, VmState *state, XrXirAction *a
         xr_xir_scalar_store(run->frame, run->layout->offsets[result_id], value);
         state->instruction = next; return XR_XIR_RUN_OK;
     }
+    *handled=false;return XR_XIR_RUN_OK;
+}
+static XrXirRunStatus scalar_step(ScalarRun *run, VmState *state, XrXirAction *action) {
+    uint32_t instruction = state->instruction;
+    const XrXirInstruction *op = &run->function->instructions[instruction];
+    uint32_t result_id = run->function->parameter_count + instruction;
+    uint32_t next = instruction + 1;
+    int64_t value = 0;
+    *action = (XrXirAction) {XR_XIR_ACTION_CONTINUE, 0, NULL, 0, {0, 0, 0}, {0}, 0};
+    bool handled=false;
+    XrXirRunStatus dispatched=vm_step_dispatch(run,state,op,action,&handled);
+    if (handled) return dispatched;
     switch (op->op) {
-    case XR_XIR_CONST_RUNE:
-    case XR_XIR_CONST_BOOL:
-    case XR_XIR_CONST_FLOAT:
-    case XR_XIR_CONST_INT:
-        value = op->immediate;
-        break;
-    case XR_XIR_LOCAL_UNINIT:
-        if (xr_xir_type_is_owned(run->module->types, op->type))
-            xr_xir_owned_slot_clear(run->frame, run->layout->offsets[result_id]);
-        state->instruction = next; return XR_XIR_RUN_OK;
-    case XR_XIR_SCALAR_LOCAL_NEW:
-    case XR_XIR_SCALAR_LOCAL_READ:
-    case XR_XIR_SCALAR_COPY:
-        value = xr_xir_scalar_load(run->frame, run->layout->offsets[op->args[0]]);
-        break;
-    case XR_XIR_SCALAR_LOCAL_WRITE:
-        xr_xir_scalar_store(run->frame, run->layout->offsets[op->args[0]],
-            xr_xir_scalar_load(run->frame, run->layout->offsets[op->args[1]]));
-        break;
-    case XR_XIR_OWNED_LOCAL_WRITE: {
-        XrXirType type = run->function->instructions[op->args[0] - run->function->parameter_count].type;
-        XrXirValueStatus status = xr_xir_owned_slot_copy(run->frame, run->layout->offsets[op->args[0]], run->view ? run->view->arena : NULL, type,
-            xr_xir_scalar_load(run->frame, run->layout->offsets[op->args[1]]));
-        state->instruction = next; return value_run_status(status);
-    }
     case XR_XIR_OWNED_LOCAL_NEW:
     case XR_XIR_OWNED_LOCAL_READ:
     case XR_XIR_OWNED_RETAIN:
@@ -866,12 +735,6 @@ static XrXirRunStatus scalar_step(ScalarRun *run, VmState *state, XrXirAction *a
             if (!xr_xir_error_borrow(&action->value, &concrete)) return XR_XIR_RUN_BAD_ARTIFACT;
             action->value = concrete;
         }
-        return XR_XIR_RUN_OK;
-    case XR_XIR_RETURN:
-        action->kind = XR_XIR_ACTION_RETURN;
-        action->value.type = (uint32_t) run->function->result;
-        if (run->function->result != XR_XIR_UNIT)
-            action->value.payload = xr_xir_scalar_load(run->frame, run->layout->offsets[op->args[0]]);
         return XR_XIR_RUN_OK;
     default:
         return XR_XIR_RUN_BAD_ARTIFACT;
@@ -1166,5 +1029,3 @@ XR_FUNC XrXirRunStatus xr_xir_compile_vm_run(const XrXirArtifact *artifact, uint
         *result = (XrXirValue) {0, 0, 0};
     return status;
 }
-
-#include "xxir_ctfe.inc.c"

@@ -9,3 +9,10 @@ else()
 endif()
 add_test(NAME test_xir_ctfe_leaf COMMAND test_xir_ctfe_leaf)
 set_tests_properties(test_xir_ctfe_leaf PROPERTIES LABELS "unit;xir;metadata;ownership;ctfe" TIMEOUT 60)
+
+add_test(NAME test_xir_ctfe_calls COMMAND test_xir_ctfe_leaf --calls)
+set_tests_properties(test_xir_ctfe_calls PROPERTIES TIMEOUT 60 RUN_SERIAL TRUE PROCESSORS 1
+    LABELS "unit;xir;metadata;ownership;ctfe;direct-call")
+add_test(NAME test_xir_ctfe_calls_resources COMMAND test_xir_ctfe_leaf --call-resources)
+set_tests_properties(test_xir_ctfe_calls_resources PROPERTIES TIMEOUT 600 RUN_SERIAL TRUE PROCESSORS 1
+    LABELS "unit;xir;metadata;ownership;compiler-fault;ctfe;direct-call")

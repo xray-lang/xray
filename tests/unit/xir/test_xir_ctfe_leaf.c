@@ -179,7 +179,15 @@ static void ctfe_work_exhaustion(void) {
     CHECK(ctfe_stats(&fixture).work == stopped.work);
     ctfe_fixture_free(&fixture);
 }
+#include "xir_ctfe_calls_cases.h"
+#include "xir_ctfe_calls_resources.h"
 int main(int argc,char **argv) {
+    if (argc==2 && (!strcmp(argv[1],"--calls") || !strcmp(argv[1],"--call-resources"))) {
+        if (!strcmp(argv[1],"--calls")) ctfe_calls_semantics();
+        else ctfe_calls_resources();
+        CHECK(!source_fixture_compile_live && !source_fixture_compile_bytes);
+        return 0;
+    }
     CHECK(argc==1 || (argc==2 && !strcmp(argv[1],"--resources")));
     if (argc==2) ctfe_whole_resources();
     else { ctfe_semantics(); ctfe_allocation_failures(); ctfe_work_exhaustion(); }

@@ -9,6 +9,8 @@
  * KEY CONCEPT:
  *   Shared array storage does not prove reflexivity of its floating leaves.
  */
+#include "xxir_scalar_core.h"
+
 typedef struct ValueEqualFrame {
     const XirArray *left, *right;
     size_t next, count;
@@ -74,12 +76,10 @@ static XrXirValueStatus equal_leaf(const XrXirValue *left, const XrXirValue *rig
         if (xr_xir_float_relation(type, XR_XIR_FLOAT_EQ, left->payload, right->payload, &result) != XR_XIR_RUN_OK)
             return XR_XIR_VALUE_BAD_ARGUMENT;
         *equal = result != 0;
-    } else if (xr_xir_type_is_integer(type)) {
-        int ordering = 0;
-        if (xr_xir_integer_compare(xr_xir_integer_format(type), left->payload, right->payload, &ordering) != XR_XIR_RUN_OK)
+    } else if (type == XR_XIR_BOOL || xr_xir_type_is_integer(type)) {
+        if (xir_scalar_core_equal(type,left->payload,right->payload,equal) != XR_XIR_RUN_OK)
             return XR_XIR_VALUE_BAD_ARGUMENT;
-        *equal = ordering == 0;
-    } else if ((type == XR_XIR_BOOL || type == XR_XIR_RUNE)) *equal = left->payload == right->payload;
+    } else if (type == XR_XIR_RUNE) *equal = left->payload == right->payload;
     else return XR_XIR_VALUE_BAD_ARGUMENT;
     return XR_XIR_VALUE_OK;
 }

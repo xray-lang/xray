@@ -25,6 +25,7 @@ static bool ctfe_opcode_work(XrXirOp op, uint64_t *work) {
     switch (op) {
     case XR_XIR_CONST_BOOL: case XR_XIR_CONST_INT: *work = 1; return true;
     case XR_XIR_SCALAR_COPY: case XR_XIR_CONVERT_NUMBER: *work = 2; return true;
+    case XR_XIR_EQUAL: *work = 5; return true;
     case XR_XIR_ADD_INT: case XR_XIR_SUB_INT: case XR_XIR_MUL_INT:
     case XR_XIR_DIV_INT: case XR_XIR_REM_INT: case XR_XIR_AND_INT:
     case XR_XIR_OR_INT: case XR_XIR_XOR_INT: case XR_XIR_SHL_INT:
@@ -74,6 +75,10 @@ static XrXirCtfeStatus ctfe_admit(const XrXirArtifact *artifact, uint32_t select
         bool terminal = op->op == XR_XIR_JUMP || op->op == XR_XIR_BRANCH || op->op == XR_XIR_RETURN;
         if ((!terminal && !ctfe_scalar_type(op->type)) || (terminal && op->type != XR_XIR_UNIT))
             return XR_XIR_CTFE_NOT_LEAF;
+        if (op->op == XR_XIR_EQUAL) {
+            if (!xir_compile_work(context, 2)) return XR_XIR_CTFE_BUDGET;
+            if (!ctfe_scalar_type(xr_xir_operand_type(body, op->args[0]))) return XR_XIR_CTFE_NOT_LEAF;
+        }
         if (op->op == XR_XIR_CONVERT_NUMBER &&
             (!xr_xir_type_is_integer(op->type) ||
             !xr_xir_type_is_integer(xr_xir_operand_type(body, op->args[0])))) return XR_XIR_CTFE_NOT_LEAF;
@@ -144,21 +149,23 @@ XR_FUNC XrXirCtfeStatus xr_xir_compile_ctfe_leaf(const XrXirCtfeRequest *request
                 status = XR_XIR_CTFE_NOT_LEAF; break;
             }
             if (!scalar_compile_work(&run, work + 1)) { status = XR_XIR_CTFE_BUDGET; break; }
-            XrXirAction action; XrXirRunStatus ran = scalar_step(&run, state, &action);
+            XirScalarCoreAction action; XrXirRunStatus ran = xir_scalar_core_step(&run, &state->instruction, &action);
             if (ran != XR_XIR_RUN_OK) {
                 status = ran == XR_XIR_RUN_STEP_LIMIT ? XR_XIR_CTFE_BUDGET :
                     ran == XR_XIR_RUN_DIVIDE_BY_ZERO ? XR_XIR_CTFE_DIVIDE_BY_ZERO :
                     ran == XR_XIR_RUN_NUMERIC_RANGE ? XR_XIR_CTFE_NUMERIC_RANGE : XR_XIR_CTFE_BAD_ARTIFACT;
                 break;
             }
-            if (action.kind == XR_XIR_ACTION_RETURN) {
+            if (action.kind == XIR_SCALAR_RETURN) {
                 if (!scalar_compile_work(&run, sizeof(action.value))) { status = XR_XIR_CTFE_BUDGET; break; }
                 *output = action.value; break;
             }
-            if (action.kind != XR_XIR_ACTION_CONTINUE) { status = XR_XIR_CTFE_BAD_ARTIFACT; break; }
+            if (action.kind != XIR_SCALAR_CONTINUE) { status = XR_XIR_CTFE_BAD_ARTIFACT; break; }
         }
     }
 done:
     xr_compile_resources_free(activation);
     return status;
 }
+
+#include "xxir_ctfe_calls.inc.c"
