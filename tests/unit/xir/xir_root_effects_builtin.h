@@ -10,35 +10,41 @@
 #ifndef XIR_ROOT_EFFECTS_BUILTIN_H
 #define XIR_ROOT_EFFECTS_BUILTIN_H
 static XrXirArtifact *root_builtin(unsigned mode) {
+    XrXirType cell=(XrXirType)(XR_XIR_CONSTRUCTED_TYPE_BASE+1);
     XrXirInstruction init[]={{XR_XIR_CONST_INT,XR_XIR_I64,{0},{0},1,{0}},
-        {XR_XIR_SLOT_INIT,XR_XIR_UNIT,{0},{0},0,{0}},{XR_XIR_RETURN,XR_XIR_UNIT,{0},{0},0,{0}}};
+        {XR_XIR_CELL_NEW,(XrXirType)(XR_XIR_CONSTRUCTED_TYPE_BASE+1),{0},{0},0,{0}},
+        {XR_XIR_SLOT_INIT,XR_XIR_UNIT,{1},{0},0,{0}},{XR_XIR_RETURN,XR_XIR_UNIT,{0},{0},0,{0}}};
     XrXirInstruction pure[]={{XR_XIR_CONST_INT,XR_XIR_I64,{0},{0},0,{0}},
         {XR_XIR_RETURN,XR_XIR_UNIT,{0},{0},0,{0}}};
-    XrXirInstruction rooted[]={{XR_XIR_SLOT_LOAD,XR_XIR_I64,{0},{0},0,{0}},pure[1]};
+    XrXirInstruction rooted[]={{XR_XIR_SLOT_LOAD,(XrXirType)(XR_XIR_CONSTRUCTED_TYPE_BASE+1),{0},{0},0,{0}},
+        {XR_XIR_CELL_READ,XR_XIR_I64,{0},{0},0,{0}},
+        {XR_XIR_RETURN,XR_XIR_UNIT,{1},{0},0,{0}}};
     XrXirInstruction owner={XR_XIR_RETURN,XR_XIR_UNIT,{0},{0},0,{0}};
     XrXirInstruction caller[]={{XR_XIR_CALL_DEFAULT,XR_XIR_I64,{0},{4,0},0,{0}},pure[1]};
     XrXirInstruction dynamic[]={{XR_XIR_CALL_INDIRECT,XR_XIR_I64,{0},{0},0,{0}},
         {XR_XIR_RETURN,XR_XIR_UNIT,{1},{0},0,{0}}};
     XrXirInstruction reference[]={{XR_XIR_FUNCTION_REF,XR_XIR_CONSTRUCTED_TYPE_BASE,{0},{0},8,{0}},pure[1]};
-    XrXirBlock one={0,1,0,0},two={0,2,0,0},three={0,3,0,0};
+    XrXirBlock one={0,1,0,0},two={0,2,0,0},three={0,3,0,0},four={0,4,0,0};
     XrXirType i64=XR_XIR_I64,callable=XR_XIR_CONSTRUCTED_TYPE_BASE;
     XrXirFunction functions[]={
-        {"init",4,NULL,0,XR_XIR_UNIT,&three,1,init,3,NULL,0},
+        {"init",4,NULL,0,XR_XIR_UNIT,&four,1,init,4,NULL,0},
         {"entry",5,NULL,0,XR_XIR_I64,&two,1,pure,2,NULL,0},
-        {"rooted",6,NULL,0,XR_XIR_I64,&two,1,rooted,2,NULL,0},
+        {"rooted",6,NULL,0,XR_XIR_I64,&three,1,rooted,3,NULL,0},
         {"pure",4,NULL,0,XR_XIR_I64,&two,1,pure,2,NULL,0},
         {"owner",5,&i64,1,XR_XIR_I64,&one,1,&owner,1,NULL,0},
         {"caller",6,NULL,0,XR_XIR_I64,&two,1,caller,2,NULL,0},
         {"dynamic",7,&callable,1,XR_XIR_I64,&two,1,dynamic,2,NULL,0},
         {"reference",9,NULL,0,callable,&two,1,reference,2,NULL,0},
-        {"refTarget",9,NULL,0,XR_XIR_I64,&two,1,rooted,2,NULL,0}};
+        {"refTarget",9,NULL,0,XR_XIR_I64,&three,1,rooted,3,NULL,0}};
     XrXirFunctionIdentity identities[9]={{0}};
     identities[8].promises=XR_XIR_FUNCTION_NO_SUSPEND;
-    XrXirSourceModule source={"root",4,NULL,0,0};XrXirSlot slot={0,XR_XIR_I64,1};
+    XrXirSourceModule source={"root",4,NULL,0,0};XrXirSlot slot={0,cell,1};
     XrXirDeclarations declarations={.modules=&source,.module_count=1,.functions=identities,
         .slots=&slot,.slot_count=1,.entry_function=1};
-    XrXirTypeNode node={.kind=XR_XIR_TYPE_CALLABLE,.result=XR_XIR_I64,.flags=XR_XIR_CALLABLE_NO_SUSPEND|XR_XIR_CALLABLE_ROOT_UNRESOLVED};
-    XrXirTypes types={&node,1,NULL,NULL};
+    XrXirTypeNode nodes[]={{.kind=XR_XIR_TYPE_CALLABLE,.result=XR_XIR_I64,
+        .flags=XR_XIR_CALLABLE_NO_SUSPEND|XR_XIR_CALLABLE_ROOT_UNRESOLVED},
+        {.kind=XR_XIR_TYPE_CELL,.element=XR_XIR_I64}};
+    XrXirTypes types={nodes,2,NULL,NULL};
     XrXirDefaultBinding binding={XR_XIR_DEFAULT_PARAMETER,4,0,mode==1?3u:2u};
     XrXirDefaultTable defaults={&binding,1};
     XrXirModule built={XR_XIR_BUILT,functions,9,&declarations,NULL,&types,NULL,XR_XIR_PROGRAM,&defaults};

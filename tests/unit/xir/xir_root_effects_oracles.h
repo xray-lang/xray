@@ -20,7 +20,7 @@ static const RootExpected root_expected[]={
     {"rootFail",true,false,false},{"invoke",true,false,false},{"defaultOwner",false,false,false},
     {"defaultUse",true,false,false},{"cleanupOwner",true,false,false},
     {"indirect",false,true,true},{"indirectInvoke",false,true,true},
-    {"requirement",false,true,false},{"instantiateRequirement",false,true,false},
+    {"requirement",false,true,false},{"instantiateRequirement",false,false,false},
     {"reference",false,false,false},{"mixed",true,true,true},{"mixedRelay",true,true,true},
     {"worker",false,false,false},{"goParent",true,false,false},
     {"left",true,false,false},{"right",true,false,false},{"diamond",true,false,false},{"emptyUse",false,false,false}};
@@ -61,14 +61,34 @@ static void root_paths(const XrXirModule *module,const XrXirEffects *effects) {
             CHECK(module->declarations->modules[module->declarations->functions[current].module].initializer==current);
         }else{
             CHECK(w->instruction<module->functions[current].instruction_count);
-            if(kind)CHECK(w->cause==XR_XIR_ROOT_CAUSE_INDIRECT||w->cause==XR_XIR_ROOT_CAUSE_REQUIREMENT);
+            if(kind){
+                XrXirOp op=module->functions[current].instructions[w->instruction].op;
+                const XrXirFunctionEffectContract *contract=xir_effects_contract(effects,current);
+                if(w->cause==XR_XIR_ROOT_CAUSE_PARAMETER || w->cause==XR_XIR_ROOT_CAUSE_CONTEXT_CALL){
+                    CHECK(contract);
+                    uint32_t term_kind=w->cause==XR_XIR_ROOT_CAUSE_PARAMETER?
+                        XR_XIR_ROOT_TERM_PARAMETER:XR_XIR_ROOT_TERM_CONTEXT_CALL;
+                    uint32_t index=term_kind==XR_XIR_ROOT_TERM_PARAMETER?w->slot:w->instruction;
+                    bool matched=false;
+                    for(uint32_t t=0;t<contract->formula.term_count;++t)
+                        if(contract->formula.terms[t].kind==term_kind && contract->formula.terms[t].index==index)
+                            matched=true;
+                    CHECK(matched);
+                    if(term_kind==XR_XIR_ROOT_TERM_PARAMETER){
+                        CHECK(w->slot<module->functions[current].parameter_count &&
+                            w->slot<contract->parameter_count && contract->parameters &&
+                            contract->parameters[w->slot].kind==XR_XIR_EFFECT_PARAMETER_VARIABLE);
+                    }else CHECK(w->slot==UINT32_MAX);
+                    CHECK(op==XR_XIR_CALL_REQUIREMENT || op==XR_XIR_CALL || op==XR_XIR_INVOKE ||
+                        op==XR_XIR_CALL_DEFAULT || op==XR_XIR_INVOKE_DEFAULT || op==XR_XIR_CLEANUP_REGISTER ||
+                        op==XR_XIR_CALL_INDIRECT || op==XR_XIR_INVOKE_INDIRECT);
+                }else CHECK(w->cause==XR_XIR_ROOT_CAUSE_INDIRECT || w->cause==XR_XIR_ROOT_CAUSE_REQUIREMENT);
+            }
             else CHECK(w->slot<module->declarations->slot_count);
         }
     }
 }
-static void root_source_oracles(const XrXirArtifact *artifact,bool closed) {
-    const XrXirModule *module=xr_xir_compile_artifact_module(artifact);XrXirEffects *effects=NULL;
-    CHECK(effect_analyze(artifact,&effects)==XR_XIR_OK);
+static void root_source_facts(const XrXirModule *module,const XrXirEffects *effects,bool closed) {
     for(size_t e=0;e<sizeof(root_expected)/sizeof(root_expected[0]);++e){
         const RootExpected *expected=&root_expected[e];uint32_t matches=0;
         for(uint32_t f=0;f<module->function_count;++f){
@@ -102,6 +122,10 @@ static void root_source_oracles(const XrXirArtifact *artifact,bool closed) {
     root_paths(module,effects);
     CHECK(!xr_xir_effects_root(NULL,0)&&!xr_xir_effects_root(effects,module->function_count));
     CHECK(!xr_xir_effects_root_witness(NULL,0)&&!xr_xir_effects_unresolved_witness(effects,UINT32_MAX));
+}
+static inline void root_source_oracles(const XrXirArtifact *artifact,bool closed) {
+    XrXirEffects *effects=NULL;CHECK(effect_analyze(artifact,&effects)==XR_XIR_OK);
+    root_source_facts(xr_xir_compile_artifact_module(artifact),effects,closed);
     effect_summary_free(effects);CHECK(effect_balanced());
 }
 static void root_permutation(void) {

@@ -86,13 +86,19 @@ static void root_detached_owner(const XrXirArtifact *artifact) {
     xr_xir_compile_artifact_free(copy);xr_compile_resources_release(context.resources);context.resources=NULL;
     root_fact(summary,f,true,true);
     CHECK(xr_xir_effects_root_witness(summary,f)->distance==1);
-    CHECK(xr_xir_effects_unresolved_witness(summary,f)->distance==1);
+    const XrXirRootEffectWitness *parameter=xr_xir_effects_unresolved_witness(summary,f);
+    CHECK(parameter->distance==0 && parameter->cause==XR_XIR_ROOT_CAUSE_PARAMETER);
+    CHECK(parameter->slot==0 && parameter->callee==UINT32_MAX);
     xr_xir_compile_effects_free(summary);effect_mark_check(mark);
 }
-static void root_source_cases(void) {
+static void root_source_cases(bool resources) {
     XrXirArtifact *checked=root_replay(root_source("root.xr",XR_XIR_OK));root_source_oracles(checked,false);
-    root_occupied(checked);root_failures(checked);effect_budget_boundaries(checked);root_detached_owner(checked);
-    effect_analysis_work_cut(checked,1,false);effect_analysis_work_cut(checked,0,true);
+    root_occupied(checked);
+    if(resources){
+        root_failures(checked);effect_budget_boundaries(checked);
+        effect_analysis_work_cut(checked,1,false);effect_analysis_work_cut(checked,0,true);
+    }
+    root_detached_owner(checked);
     XrXirArtifact *specialized=NULL,*lowered=NULL;
     CHECK(xr_xir_compile_specialize(checked,&specialized,NULL)==XR_XIR_OK);
     XrXirTarget target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};
@@ -167,10 +173,11 @@ static void root_go_rejections(void) {
     puts("root GO child/parent BAD_TYPE remain fail closed PASS");
 }
 int main(int argc,char **argv) {
-    CHECK(argc==1 || (argc==2 && !strcmp(argv[1],"--var-atomic")));
+    CHECK(argc==1 || (argc==2 && (!strcmp(argv[1],"--var-atomic") || !strcmp(argv[1],"--ordinary"))));
+    bool resources=argc==1;
     effect_case_begin();root_var_atomic_case();effect_case_end();
-    if (argc==2) return 0;
-    effect_case_begin();root_source_cases();effect_case_end();
+    if (argc==2 && !strcmp(argv[1],"--var-atomic")) return 0;
+    effect_case_begin();root_source_cases(resources);effect_case_end();
     effect_case_begin();root_builtin_cases();effect_case_end();
     effect_case_begin();root_go_rejections();effect_case_end();
     puts("owned root fact queries and independent causes PASS; GO consumer/full qualification remain separate");return 0;

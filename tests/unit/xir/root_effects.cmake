@@ -14,3 +14,8 @@ set_tests_properties(test_xir_root_effects PROPERTIES TIMEOUT 180 RUN_SERIAL TRU
 add_test(NAME test_xir_root_var_atomic_binding COMMAND test_xir_root_effects --var-atomic)
 set_tests_properties(test_xir_root_var_atomic_binding PROPERTIES TIMEOUT 180 RUN_SERIAL TRUE PROCESSORS 1
     LABELS "unit;xir;root-effects;metadata;ownership;budget")
+
+# Ordinary feedback uses the same cases; the original entry retains every resource probe.
+add_test(NAME test_xir_root_effects_ordinary COMMAND test_xir_root_effects --ordinary)
+set_tests_properties(test_xir_root_effects_ordinary PROPERTIES TIMEOUT 180 RUN_SERIAL TRUE PROCESSORS 1
+    LABELS "unit;xir;root-effects;metadata;ownership")

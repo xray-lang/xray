@@ -144,19 +144,22 @@ static void effect_budget_boundaries(const XrXirArtifact *source) {
         effect_budget_probe(source,caps,true); CHECK(*field > 1); --*field; effect_budget_probe(source,caps,false);
     }
 }
-static void effect_analysis_work_cut(const XrXirArtifact *source, uint64_t units, bool verify_fits) {
+static void effect_analysis_work_cut(const XrXirArtifact *source, uint64_t units, bool exact_analyze) {
     EffectMark mark = effect_mark(); XrXirCompileContext c = effect_owner_new(effect_caps());
     uint64_t baseline = effect_stats(&c).live_bytes; XrXirArtifact *copy = NULL;
     CHECK(effect_reproduce(source,&c,&copy) == XR_XIR_OK);
-    uint64_t setup_work = effect_stats(&c).work, verify_work = 0;
-    if (verify_fits) {
-        CHECK(xr_xir_compile_verify_v2(&c, xr_xir_compile_artifact_module(copy), xr_xir_compile_artifact_construction(copy), NULL) == XR_XIR_OK);
-        verify_work = effect_stats(&c).work - setup_work;
+    uint64_t setup_work = effect_stats(&c).work, analyze_work = 0;
+    if (exact_analyze) {
+        XrXirEffects *summary=NULL;
+        CHECK(xr_xir_compile_effects_analyze(copy,&summary)==XR_XIR_OK && summary);
+        analyze_work=effect_stats(&c).work-setup_work;CHECK(analyze_work>1);
+        xr_xir_compile_effects_free(summary);
     }
     xr_xir_compile_artifact_free(copy); effect_owner_free(&c,baseline); effect_mark_check(mark);
     XrCompileResourceLimits caps = effect_caps();
-    CHECK(units <= caps.work - setup_work && verify_work <= caps.work - setup_work);
-    caps.work = setup_work + (verify_fits ? verify_work : units);
+    CHECK(units <= caps.work - setup_work && analyze_work <= caps.work - setup_work);
+    caps.work = setup_work + (exact_analyze ? analyze_work : units);
+    if (exact_analyze) { effect_budget_probe(source,caps,true);--caps.work; }
     c = effect_owner_new(caps); baseline = effect_stats(&c).live_bytes; copy = NULL;
     CHECK(effect_reproduce(source,&c,&copy) == XR_XIR_OK);
     attempts = 0; XrXirEffects *summary = NULL;

@@ -1,6 +1,15 @@
 /* Real GO-check and native authority failures retain one cumulative ledger. */
 #ifndef XIR_ROOT_GO_RESOURCES_H
 #define XIR_ROOT_GO_RESOURCES_H
+static void go_check_occupied(void) {
+    EffectMark mark=effect_mark();XrXirCompileContext context=effect_owner_new(effect_caps());
+    XrCompileResourceStats before=effect_stats(&context);
+    XrXirArtifact *output=(XrXirArtifact *)(uintptr_t)1;attempts=0;
+    CHECK(go_shape_check(&context,true,true,&output,NULL)==XR_XIR_BAD_STRUCTURE&&output==(XrXirArtifact *)(uintptr_t)1);
+    XrCompileResourceStats after=effect_stats(&context);
+    CHECK(!attempts&&after.live_bytes==before.live_bytes&&after.allocated_bytes==before.allocated_bytes&&after.work==before.work);
+    effect_owner_free(&context,before.live_bytes);effect_mark_check(mark);
+}
 static void go_check_failures(void) {
     EffectMark mark=effect_mark();XrXirCompileContext context=effect_owner_new(effect_caps());
     uint64_t baseline=effect_stats(&context).live_bytes;XrXirArtifact *output=NULL;
@@ -25,11 +34,7 @@ static void go_check_failures(void) {
         CHECK(go_shape_check(&context,true,true,&output,NULL)==(minus?XR_XIR_BUDGET:XR_XIR_BAD_TYPE)&&!output);
         effect_owner_free(&context,baseline);effect_mark_check(mark);
     }
-    context=effect_owner_new(effect_caps());baseline=effect_stats(&context).live_bytes;
-    output=(XrXirArtifact *)(uintptr_t)1;attempts=0;
-    CHECK(go_shape_check(&context,true,true,&output,NULL)==XR_XIR_BAD_TYPE&&output==(XrXirArtifact *)(uintptr_t)1);
-    CHECK(attempts&&effect_stats(&context).live_bytes==baseline);
-    effect_owner_free(&context,baseline);effect_mark_check(mark);
+    go_check_occupied();
     printf("GO check %zu real allocation failures, retry/no-refund, exact-minus1 and occupied-output physical0\n",sites);
 }
 static void go_authority_oracles(const XrXirModule *module,const XrXirProgramPermissions *authority) {
