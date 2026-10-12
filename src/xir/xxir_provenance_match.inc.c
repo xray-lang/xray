@@ -655,9 +655,91 @@ static XrXirStatus provenance_declarations(ProvenanceMatch *c) {
     return XR_XIR_OK;
 }
 
+/* The ordinal table belongs to this one receiving operation. Hashes choose
+ * buckets only; the complete current key still decides every duplicate. */
+static XrXirStatus provenance_origin_hash(ProvenanceMatch *c,uint32_t f,uint32_t *output) {
+    if (!c || !xir_compile_context_valid(c->remaining) || !c->source || !c->destination ||
+        !c->origins || !output || f>=c->count ||
+        (c->destination->declarations && !c->destination->declarations->functions))
+        return XR_XIR_BAD_STRUCTURE;
+    const XrXirOrigin *origin=&c->origins[f];
+    if (origin->function>=c->source->function_count ||
+        !!origin->arguments!=!!origin->argument_count ||
+        (origin->effect_argument_count && !origin->effect_arguments) ||
+        origin->argument_count!=(c->source->generics?
+            c->source->generics[origin->function].parameter_count:0)) return XR_XIR_BAD_STRUCTURE;
+    /* Four field reads, four xor/multiply pairs and the actual scalar write
+     * are charged here. Variable vector loops charge their own element work. */
+    if (!xir_compile_work(c->remaining,4+8+sizeof(*output))) return XR_XIR_BUDGET;
+    uint32_t hash=UINT32_C(2166136261);
+    hash=(hash^origin->function)*UINT32_C(16777619);
+    hash=(hash^origin->argument_count)*UINT32_C(16777619);
+    hash=(hash^origin->effect_argument_count)*UINT32_C(16777619);
+    uint32_t cleanup=c->destination->declarations?
+        c->destination->declarations->functions[f].cleanup_owner:0;
+    hash=(hash^cleanup)*UINT32_C(16777619);
+    for (uint32_t a=0;a<origin->argument_count;++a) {
+        if (!xir_compile_work(c->remaining,4)) return XR_XIR_BUDGET;
+        hash=(hash^origin->arguments[a])*UINT32_C(16777619);
+    }
+    for (uint32_t a=0;a<origin->effect_argument_count;++a) {
+        if (!xir_compile_work(c->remaining,7)) return XR_XIR_BUDGET;
+        hash=(hash^origin->effect_arguments[a].parameter)*UINT32_C(16777619);
+        hash=(hash^origin->effect_arguments[a].type)*UINT32_C(16777619);
+    }
+    *output=hash;return XR_XIR_OK;
+}
+
+static XrXirStatus provenance_origin_equal(ProvenanceMatch *c,uint32_t f,uint32_t prior,bool *output) {
+    if (!output || f>=c->count || prior>=f) return XR_XIR_BAD_STRUCTURE;
+    const XrXirOrigin *a=&c->origins[f],*b=&c->origins[prior];
+    if (!xir_compile_work(c->remaining,4+sizeof(*output))) return XR_XIR_BUDGET;
+    *output=false;
+    if (a->function!=b->function || a->argument_count!=b->argument_count ||
+        a->effect_argument_count!=b->effect_argument_count ||
+        (c->destination->declarations &&
+            c->destination->declarations->functions[f].cleanup_owner!=
+            c->destination->declarations->functions[prior].cleanup_owner)) return XR_XIR_OK;
+    for (uint32_t v=0;v<a->argument_count;++v) {
+        if (!xir_compile_work(c->remaining,1)) return XR_XIR_BUDGET;
+        if (a->arguments[v]!=b->arguments[v]) return XR_XIR_OK;
+    }
+    for (uint32_t v=0;v<a->effect_argument_count;++v) {
+        if (!xir_compile_work(c->remaining,2)) return XR_XIR_BUDGET;
+        if (a->effect_arguments[v].parameter!=b->effect_arguments[v].parameter ||
+            a->effect_arguments[v].type!=b->effect_arguments[v].type) return XR_XIR_OK;
+    }
+    if (!xir_compile_work(c->remaining,sizeof(*output))) return XR_XIR_BUDGET;
+    *output=true;return XR_XIR_OK;
+}
+
+/* Insert in discovery order, so an equal key rejects at the same current
+ * origin as the former pair scan. Even a full collision chain is bounded. */
+static XrXirStatus provenance_origin_insert(ProvenanceMatch *c,uint32_t *index,uint32_t f) {
+    if (!index || !c || !c->count || f>=c->count) return XR_XIR_BAD_STRUCTURE;
+    uint32_t hash=0;XrXirStatus status=provenance_origin_hash(c,f,&hash);
+    if (status!=XR_XIR_OK) return status;
+    if (!xir_compile_work(c->remaining,2+sizeof(uint32_t))) return XR_XIR_BUDGET;
+    uint32_t slot=hash%c->count;
+    for (uint32_t probe=0;probe<c->count;++probe) {
+        if (!xir_compile_work(c->remaining,4)) return XR_XIR_BUDGET;
+        uint32_t prior=index[slot];
+        if (prior==UINT32_MAX) {
+            if (!xir_compile_work(c->remaining,sizeof(*index))) return XR_XIR_BUDGET;
+            index[slot]=f;return XR_XIR_OK;
+        }
+        bool same=false;status=provenance_origin_equal(c,f,prior,&same);
+        if (status!=XR_XIR_OK) return status;
+        if (same) return XR_XIR_BAD_STRUCTURE;
+        if (!xir_compile_work(c->remaining,3+sizeof(slot))) return XR_XIR_BUDGET;
+        slot=slot==c->count-1?0:slot+1;
+    }
+    return XR_XIR_BAD_STRUCTURE;
+}
+
 static XrXirStatus provenance_reachable(ProvenanceMatch *c) {
     XrXirStatus allocation_status = XR_XIR_OK;
-    uint64_t bytes = (uint64_t)c->count * (sizeof(uint32_t) + 1) + c->source->function_count;
+    uint64_t bytes = (uint64_t)c->count * (2*sizeof(uint32_t) + 1) + c->source->function_count;
     uint64_t work = (uint64_t)c->count + c->source->function_count;
     if (bytes > SIZE_MAX ||!xir_compile_work(c->remaining, work))
         return XR_XIR_BUDGET;
@@ -665,11 +747,16 @@ static XrXirStatus provenance_reachable(ProvenanceMatch *c) {
 
     uint32_t *queue = xir_compile_alloc(c->remaining, (size_t)bytes, &allocation_status);
     if (!queue) return allocation_status;
-    uint8_t *seen = (uint8_t *)(queue + c->count), *roots = seen + c->count;
+    uint32_t *index=queue+c->count;
+    uint8_t *seen = (uint8_t *)(index+c->count), *roots = seen + c->count;
     if (!xir_compile_work(c->remaining, (uint64_t)c->count + c->source->function_count)) {
         xr_compile_resources_free(queue); return XR_XIR_BUDGET;
     }
     memset(seen, 0, (size_t)c->count + c->source->function_count);
+    if (!xir_compile_work(c->remaining,(uint64_t)c->count*sizeof(*index))) {
+        xr_compile_resources_free(queue);return XR_XIR_BUDGET;
+    }
+    memset(index,0xff,(size_t)c->count*sizeof(*index));
     uint32_t tail = 0;
     XrXirStatus status = XR_XIR_OK;
     for (uint32_t f = 0; f < c->count; ++f) {
@@ -683,27 +770,8 @@ static XrXirStatus provenance_reachable(ProvenanceMatch *c) {
             if (roots[origin->function]) { status = XR_XIR_BAD_STRUCTURE; goto done; }
             roots[origin->function] = 1; seen[f] = 1; queue[tail++] = f;
         }
-        for (uint32_t prior = 0; prior < f; ++prior) {
-            if (!xir_compile_work(c->remaining, 1)) { status = XR_XIR_BUDGET; goto done; }
-
-            const XrXirOrigin *other = &c->origins[prior];
-            if (origin->function != other->function || origin->argument_count != other->argument_count) continue;
-            if (c->destination->declarations && c->destination->declarations->functions[f].cleanup_owner!=
-                c->destination->declarations->functions[prior].cleanup_owner) continue;
-            if (origin->effect_argument_count!=other->effect_argument_count) continue;
-            bool same = true;
-            for (uint32_t a = 0; a < origin->argument_count; ++a) {
-                if (!xir_compile_work(c->remaining, 1)) { status = XR_XIR_BUDGET; goto done; }
-
-                if (origin->arguments[a] != other->arguments[a]) { same = false; break; }
-            }
-            for (uint32_t a=0;same && a<origin->effect_argument_count;++a) {
-                if (!xir_compile_work(c->remaining,2)) { status=XR_XIR_BUDGET;goto done; }
-                if (origin->effect_arguments[a].parameter!=other->effect_arguments[a].parameter ||
-                    origin->effect_arguments[a].type!=other->effect_arguments[a].type) same=false;
-            }
-            if (same) { status = XR_XIR_BAD_STRUCTURE; goto done; }
-        }
+        status=provenance_origin_insert(c,index,f);
+        if (status!=XR_XIR_OK) goto done;
     }
     for (uint32_t f = 0; f < c->source->function_count; ++f) {
         bool cleanup=c->source->declarations && c->source->declarations->functions[f].cleanup_owner;
