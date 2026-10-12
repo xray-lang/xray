@@ -107,7 +107,9 @@ static void generation_range_eof(const XrXirCompileContext *context,EffectBodyMa
             if (status!=XR_XIR_OK) CHECK(status==XR_XIR_BAD_STRUCTURE &&
                 !memcmp(&cursor,&before,sizeof(cursor)) && !memcmp(&out,&sentinel,sizeof(out)));
         }
-        CHECK(status==XR_XIR_BAD_STRUCTURE);function->stream_words=words;
+        CHECK(status==XR_XIR_BAD_STRUCTURE);
+        CHECK(effect_body_physical_match(context,material->physical,material)==XR_XIR_BAD_STRUCTURE);
+        function->stream_words=words;
     }
 }
 

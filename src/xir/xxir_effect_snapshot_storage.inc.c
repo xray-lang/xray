@@ -470,17 +470,28 @@ static XrXirStatus effect_body_physical_match(const XrXirCompileContext *work,
             body->capacity>body->values || !!body->records!=!!body->capacity ||
             (function->parameter_count && !function->parameters)) return XR_XIR_BAD_STRUCTURE;
         uint32_t row=0,classes=0,at=0;
+        if (!xir_compile_work(work,sizeof(EffectBodyRecordCursor))) return XR_XIR_BUDGET;
+        EffectBodyRecordCursor cursor={0,0,0,UINT32_MAX};
+        if (!function->instruction_count && (function->run_count || function->stream_words))
+            return XR_XIR_BAD_STRUCTURE;
         for (uint32_t v=0;v<body->values;++v) {
             if (!xir_compile_work(work,v<body->parameters?2:3)) return XR_XIR_BUDGET;
             uint32_t mask=0;XrXirType type;
-            XrXirStatus status=effect_body_operand_type(&read,function,v,&type);
-            if (status!=XR_XIR_OK) return status;
-            if (v>=body->parameters) {
-                XrXirOp op;
-                status=effect_body_instruction_op(&read,function,v-body->parameters,&op);
+            XrXirStatus status=XR_XIR_OK;
+            if (v<body->parameters) status=effect_body_operand_type(&read,function,v,&type);
+            else {
+                EffectBodyRunRef ref;uint32_t operation,physical_type;
+                status=effect_body_record_cursor_ref(&read,function,v-body->parameters,&cursor,&ref);
                 if (status!=XR_XIR_OK) return status;
-                mask=effect_physical_opcode(op);
+                status=effect_body_run_word(&read,&ref,v-body->parameters,1,&physical_type);
+                if (status!=XR_XIR_OK) return status;
+                status=effect_body_run_word(&read,&ref,v-body->parameters,0,&operation);
+                if (status!=XR_XIR_OK) return status;
+                if (operation<=XR_XIR_INVALID || operation>=XR_XIR_OP_COUNT) return XR_XIR_BAD_STRUCTURE;
+                if (!xir_compile_work(work,sizeof(type))) return XR_XIR_BUDGET;
+                type=(XrXirType)physical_type;mask=effect_physical_opcode((XrXirOp)operation);
             }
+            if (status!=XR_XIR_OK) return status;
             if (xr_xir_callable_signature(material->domain.types,type)) mask|=EFFECT_PHYSICAL_CALLABLE;
             if (!xir_compile_work(work,1)) return XR_XIR_BUDGET;
             if (xr_xir_type_is_class(material->domain.types,type)) { mask|=EFFECT_PHYSICAL_CLASS;++classes; }
@@ -491,6 +502,8 @@ static XrXirStatus effect_body_physical_match(const XrXirCompileContext *work,
                 return XR_XIR_BAD_STRUCTURE;
             ++at;
         }
+        if (function->instruction_count && (cursor.last!=function->instruction_count-1 ||
+            cursor.run+1!=function->run_count)) return XR_XIR_BAD_STRUCTURE;
         if (at!=body->count || row!=body->rows || classes!=body->classes) return XR_XIR_BAD_STRUCTURE;
     }
     return XR_XIR_OK;
