@@ -19,6 +19,7 @@
 #define CHECK(c) do { if (!(c)) { fprintf(stderr,"%d: %s\n",__LINE__,#c); exit(1); } } while (0)
 #include "xir_library_compile_owner.h"
 #include "xir_specialize_provenance_take_cases.h"
+#include "xir_specialize_instance_index_cases.h"
 
 /* keep/nested are the actual wide Source's failing generic definitions,
  * without its unrelated modules. Neither UNKNOWN nor a private bottom grants
@@ -155,9 +156,14 @@ static void source_generic_definition_inspect(const XrXirArtifact *artifact) {
 /* Every physical fail-at trial and all six resource boundaries replay this
  * exact eight-stage operation under its one finite owner. Producer death and
  * all public packet, specialization and Lowered proof gates remain complete. */
+static XrXirStatus source_generic_definition_operation(const XrXirCompileContext *context,void *opaque);
+#include "xir_source_generic_measurement_cases.h"
 static XrXirStatus source_generic_definition_operation(const XrXirCompileContext *context,void *opaque) {
     bool inspect=*(bool *)opaque;XrCompilerSession *session=NULL;
+    sgm_begin(context);
     XrCompilerSessionStatus opened=xr_compile_session_new(context->resources,&session);
+    sgm_end(context,"session-new","prepare",opened==XR_COMPILER_SESSION_OK?XR_XIR_OK:
+        opened==XR_COMPILER_SESSION_BUDGET?XR_XIR_BUDGET:XR_XIR_OUT_OF_MEMORY);
     if(opened!=XR_COMPILER_SESSION_OK)return opened==XR_COMPILER_SESSION_BUDGET?XR_XIR_BUDGET:XR_XIR_OUT_OF_MEMORY;
     XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_MEMORY,"source-generic-callable-context",NULL};
     XrXirSourceRequest request={session,NULL,&authority,context,NULL,NULL,XR_XIR_PROGRAM,NULL};
@@ -165,8 +171,11 @@ static XrXirStatus source_generic_definition_operation(const XrXirCompileContext
     XrXirSourceResult result={0};XrXirSourceDiagnostic diagnostic={0};char *failure=NULL;
     XrXirArtifact *read=NULL,*instance=NULL,*reloaded=NULL,*lowered=NULL;
     XrXirCheckedPacket first={0},second={0};XrXirDiagnostic location={0};uint32_t phase=1;
+    sgm_begin(context);
     XrXirStatus status=xr_xir_compile_source_check_text(&request,&input,&result,&diagnostic,&failure);
-    xr_compile_session_free(session);
+    sgm_end(context,"source-check-text","public",status);
+    if(status==XR_XIR_OK)sgm_artifact("source-template",result.checked);
+    sgm_begin(context); xr_compile_session_free(session); sgm_end(context,"session-free","drop",status);
     if(status==XR_XIR_OK && inspect) {
         source_generic_definition_inspect(result.checked);
         source_generic_definition_source_negative(context,
@@ -174,28 +183,63 @@ static XrXirStatus source_generic_definition_operation(const XrXirCompileContext
         source_generic_definition_source_negative(context,
             "fn id<T>(x:T)->T{return x}\nconst f=id<()>\n");
     }
-    if(status==XR_XIR_OK){phase=2;status=xr_xir_compile_checked_write(result.checked,&first,&location);}
-    xr_xir_compile_source_result_free(&result);
-    if(status==XR_XIR_OK){phase=3;status=xr_xir_compile_checked_read(context,first.bytes,first.length,&read,&location);}
-    if(status==XR_XIR_OK){phase=4;status=xr_xir_compile_specialize(read,&instance,&location);}
-    xr_xir_compile_artifact_free(read);read=NULL;
+    if(status==XR_XIR_OK) {
+        phase=2; sgm_begin(context); status=xr_xir_compile_checked_write(result.checked,&first,&location);
+        sgm_end(context,"checked-write-template","public",status);
+        if(status==XR_XIR_OK)sgm_packet("template",&first);
+    }
+    sgm_begin(context); xr_xir_compile_source_result_free(&result); sgm_end(context,"source-result-free","drop",status);
+    if(status==XR_XIR_OK) {
+        phase=3; sgm_begin(context); status=xr_xir_compile_checked_read(context,first.bytes,first.length,&read,&location);
+        sgm_end(context,"checked-read-template","public",status);
+        if(status==XR_XIR_OK)sgm_artifact("read-template",read);
+    }
+    if(status==XR_XIR_OK) {
+        phase=4; sgm_begin(context); status=xr_xir_compile_specialize(read,&instance,&location);
+        sgm_end(context,"specialize-borrowed","public",status);
+        if(status==XR_XIR_OK)sgm_artifact("specialized",instance);
+    }
+    sgm_begin(context); xr_xir_compile_artifact_free(read);read=NULL; sgm_end(context,"checked-template-free","drop",status);
     if(status==XR_XIR_OK && inspect)provenance_binding_membership_controls(context,instance);
-    if(status==XR_XIR_OK){phase=5;status=xr_xir_compile_checked_write(instance,&second,&location);}
-    xr_xir_compile_artifact_free(instance);instance=NULL;
-    if(status==XR_XIR_OK){phase=6;status=xr_xir_compile_checked_read(context,second.bytes,second.length,&reloaded,&location);}
+    if(status==XR_XIR_OK) {
+        phase=5; sgm_begin(context); status=xr_xir_compile_checked_write(instance,&second,&location);
+        sgm_end(context,"checked-write-instance","public",status);
+        if(status==XR_XIR_OK)sgm_packet("instance",&second);
+    }
+    sgm_begin(context); xr_xir_compile_artifact_free(instance);instance=NULL; sgm_end(context,"instance-free","drop",status);
+    if(status==XR_XIR_OK) {
+        phase=6; sgm_begin(context); status=xr_xir_compile_checked_read(context,second.bytes,second.length,&reloaded,&location);
+        sgm_end(context,"checked-read-instance","public",status);
+        if(status==XR_XIR_OK)sgm_artifact("read-instance",reloaded);
+    }
     const XrXirTarget target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};
-    if(status==XR_XIR_OK){phase=7;status=xr_xir_compile_lower(reloaded,&target,&lowered,&location);}
-    xr_xir_compile_artifact_free(reloaded);reloaded=NULL;
-    if(status==XR_XIR_OK){phase=8;status=xr_xir_compile_artifact_verify(lowered,&location);}
+    if(status==XR_XIR_OK) {
+        phase=7; sgm_begin(context); status=xr_xir_compile_lower(reloaded,&target,&lowered,&location);
+        sgm_end(context,"lower-borrowed","public",status);
+        if(status==XR_XIR_OK)sgm_artifact("lowered",lowered);
+    }
+    sgm_begin(context); xr_xir_compile_artifact_free(reloaded);reloaded=NULL; sgm_end(context,"checked-instance-free","drop",status);
+    if(status==XR_XIR_OK) {
+        phase=8; sgm_begin(context); status=xr_xir_compile_artifact_verify(lowered,&location);
+        sgm_end(context,"artifact-verify-lowered","public",status);
+    }
     if(status!=XR_XIR_OK && source_program_compile_fail_at==SIZE_MAX && status!=XR_XIR_BUDGET)
         fprintf(stderr,"generic-callable-context phase%u status%u %d:%d %s f%u/b%u/i%u\n",phase,(unsigned)status,
             diagnostic.line,diagnostic.column,diagnostic.message,location.function,location.block,location.instruction);
+    sgm_begin(context);
     xr_xir_compile_artifact_free(lowered);xr_xir_compile_artifact_free(reloaded);xr_xir_compile_artifact_free(instance);
     xr_xir_compile_artifact_free(read);xr_xir_compile_checked_packet_free(&first);xr_xir_compile_checked_packet_free(&second);
-    xr_compile_resources_free(failure);return status;
+    xr_compile_resources_free(failure); sgm_end(context,"final-packets-artifacts-free","drop",status);return status;
 }
 
 int main(int argc,char **argv) {
+    if (argc==2 && !strcmp(argv[1],"--spec-index")) {
+        spec_index_source_scales();library_compile_observer_free();return 0;
+    }
+    if (argc==2 && !strcmp(argv[1],"--spec-index-resources")) {
+        spec_index_source_resources();library_compile_observer_free();return 0;
+    }
+    if(argc==2 && !strcmp(argv[1],"--measure-original")) { sgm_original();return 0; }
     if(argc==2 && !strcmp(argv[1],"--provenance-take")) {
         provenance_take_controls(); provenance_take_resources();
         library_compile_observer_free(); return 0;

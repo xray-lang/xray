@@ -96,6 +96,16 @@ add_test(NAME test_xir_source_provenance_take_resources
 set_tests_properties(test_xir_source_provenance_take_resources PROPERTIES
     LABELS "unit;xir;root-effects;compiler-fault;ownership" TIMEOUT 600 RUN_SERIAL TRUE PROCESSORS 1)
 
+# Exact instance indexing has a genuine Source scale and whole-operation census.
+add_test(NAME test_xir_specialize_instance_index_scale
+    COMMAND test_xir_source_generic_callable_context --spec-index)
+set_tests_properties(test_xir_specialize_instance_index_scale PROPERTIES
+    LABELS "unit;xir;specialization;performance;ownership" TIMEOUT 300 RUN_SERIAL TRUE PROCESSORS 1)
+add_test(NAME test_xir_specialize_instance_index_resources
+    COMMAND test_xir_source_generic_callable_context --spec-index-resources)
+set_tests_properties(test_xir_specialize_instance_index_resources PROPERTIES
+    LABELS "unit;xir;specialization;compiler-fault;ownership" TIMEOUT 600 RUN_SERIAL TRUE PROCESSORS 1)
+
 # True Class subjects reach the same Cell terminal and retained-owner replay.
 add_test(NAME test_xir_root_conditional_class_cells
     COMMAND test_xir_root_conditional_helpers --class-cells)
@@ -146,6 +156,13 @@ add_test(NAME test_xir_root_conditional_invocation_edge_keys
     COMMAND test_xir_root_conditional_helpers --invocation-edge-keys)
 set_tests_properties(test_xir_root_conditional_invocation_edge_keys PROPERTIES
     LABELS "unit;xir;root-effects;compiler-fault;ownership" TIMEOUT 300 RUN_SERIAL TRUE PROCESSORS 1)
+
+# The original eight-stage pipeline has a separate one-operation measurement.
+add_test(NAME test_xir_source_generic_callable_context_measure_original
+    COMMAND test_xir_source_generic_callable_context --measure-original)
+set_tests_properties(test_xir_source_generic_callable_context_measure_original PROPERTIES
+    LABELS "unit;xir;root-effects;higher-order;compiler;ownership;scale-measurement;partial-feedback"
+    TIMEOUT 300 RUN_SERIAL TRUE PROCESSORS 1)
 
 # Native fixed/certified facts retain all three original storage recipes.
 add_test(NAME test_xir_root_conditional_canonical_run_storage

@@ -484,19 +484,19 @@ static XrXirStatus effect_invocation_local_run(const XrXirCompileContext *work,
     return XR_XIR_OK;
 }
 
-static XrXirStatus effect_invocation_local_input(const XrXirCompileContext *work,
-    const EffectBodyMaterial *body,uint32_t f,EffectInvocationLocalInput *output,bool *empty) {
+static XrXirStatus effect_invocation_local_head(const XrXirCompileContext *work,
+    const EffectBodyMaterial *body,uint32_t f,bool *empty) {
     if (!xir_compile_context_valid(work) || !effect_body_material_shape(body) ||
-        body->resources!=work->resources || !output || !empty || f>=effect_body_count(body))
+        body->resources!=work->resources || !empty || f>=effect_body_count(body))
         return XR_XIR_BAD_STRUCTURE;
     const EffectBodyFunction *head=&body->functions[f];
-    if (!xir_compile_work(work,11+sizeof(*output)+sizeof(*empty))) return XR_XIR_BUDGET;
+    if (!xir_compile_work(work,11+sizeof(*empty))) return XR_XIR_BUDGET;
     if ((head->name_length && !head->name) || (head->parameter_count && !head->parameters) ||
         (head->operand_count && !head->operands) || (head->block_count && !head->blocks) ||
         head->run_count>head->run_capacity || head->run_capacity>head->instruction_count ||
         !!head->runs!=!!head->run_capacity || !!head->run_count!=!!head->instruction_count)
         return XR_XIR_BAD_STRUCTURE;
-    *output=(EffectInvocationLocalInput){0};*empty=true;
+    *empty=true;
     /* A formal relation needs the ordinary complete binding algorithm. This
      * restriction is dimensional, never a promise about the function's effect. */
     if (head->parameter_count || xr_xir_callable_signature(body->domain.types,head->result) ||
@@ -510,6 +510,16 @@ static XrXirStatus effect_invocation_local_input(const XrXirCompileContext *work
         if (!xir_compile_work(work,sizeof(*empty))) return XR_XIR_BUDGET;
         *empty=false;return XR_XIR_OK;
     }
+    return XR_XIR_OK;
+}
+
+/* The same request consumes a structurally admitted head immediately.
+ * No callback, retained verdict or permission flag separates its two parts. */
+static XrXirStatus effect_invocation_local_input_body(const XrXirCompileContext *work,
+    const EffectBodyMaterial *body,uint32_t f,EffectInvocationLocalInput *output,bool *empty) {
+    const EffectBodyFunction *head=&body->functions[f];
+    if (!xir_compile_work(work,sizeof(*output))) return XR_XIR_BUDGET;
+    *output=(EffectInvocationLocalInput){0};
     XrXirStatus typed=xr_xir_compile_type_expression_shape(work,body->domain.types,head->result,0);
     if (typed!=XR_XIR_OK) return typed;
     if (body->declarations) {
@@ -538,6 +548,14 @@ static XrXirStatus effect_invocation_local_input(const XrXirCompileContext *work
         XR_XIR_OK:XR_XIR_BAD_STRUCTURE;
 }
 
+/* Later functions keep the same head-to-body order as the first one. */
+static XrXirStatus effect_invocation_local_input(const XrXirCompileContext *work,
+    const EffectBodyMaterial *body,uint32_t f,EffectInvocationLocalInput *output,bool *empty) {
+    XrXirStatus status=effect_invocation_local_head(work,body,f,empty);
+    if (status!=XR_XIR_OK || !*empty) return status;
+    return effect_invocation_local_input_body(work,body,f,output,empty);
+}
+
 /* A failed mathematical classification leaves the generating owner untouched.
  * No failed callback or malformed range is converted into the normal path. */
 static XrXirStatus effect_invocation_local_inputs(const XrXirCompileContext *work,
@@ -546,11 +564,21 @@ static XrXirStatus effect_invocation_local_inputs(const XrXirCompileContext *wor
         body->resources!=work->resources) return XR_XIR_BAD_STRUCTURE;
     uint32_t count=effect_body_count(body);XrXirStatus status=XR_XIR_OK;
     if ((uint64_t)count>SIZE_MAX/sizeof(**output)) return XR_XIR_BUDGET;
-    EffectInvocationLocalInput *inputs=count?xir_compile_alloc(work,(size_t)count*sizeof(*inputs),&status):NULL;
-    if (count && !inputs) return status;
-    for (uint32_t f=0;f<count;++f) {
-        bool empty=false;status=effect_invocation_local_input(work,body,f,&inputs[f],&empty);
-        if (status!=XR_XIR_OK || !empty) { xr_compile_resources_free(inputs);return status; }
+    /* The original count branch precedes one allocation. An empty domain
+     * publishes the same empty output; no result storage is created. */
+    if (!count) {
+        if (!xir_compile_work(work,sizeof(*output))) return XR_XIR_BUDGET;
+        *output=NULL;return XR_XIR_OK;
+    }
+    bool empty=false;status=effect_invocation_local_head(work,body,0,&empty);
+    if (status!=XR_XIR_OK || !empty) return status;
+    EffectInvocationLocalInput *inputs=xir_compile_alloc(work,(size_t)count*sizeof(*inputs),&status);
+    if (!inputs) return status;
+    status=effect_invocation_local_input_body(work,body,0,&inputs[0],&empty);
+    if (status!=XR_XIR_OK || !empty) { xr_compile_resources_free(inputs);return status; }
+    for (uint32_t f=1;f<count;++f) {
+        bool supported=false;status=effect_invocation_local_input(work,body,f,&inputs[f],&supported);
+        if (status!=XR_XIR_OK || !supported) { xr_compile_resources_free(inputs);return status; }
     }
     if (!xir_compile_work(work,sizeof(*output))) { xr_compile_resources_free(inputs);return XR_XIR_BUDGET; }
     *output=inputs;return XR_XIR_OK;

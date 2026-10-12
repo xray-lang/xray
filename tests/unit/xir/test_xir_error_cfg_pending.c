@@ -467,6 +467,62 @@ static void pc_local_callback_boundary(void) {
     xr_xir_compile_effects_free(effects);xr_xir_compile_artifact_free(checked);pc_release(&c,baseline);
 }
 
+/* A genuine complete Library with one scalar formal needs the ordinary
+ * binding algorithm. The independent dimensional test constructs no result. */
+static void pc_local_formal_preflight(const XrXirCompileContext *c) {
+    XrXirType parameter=XR_XIR_I64;
+    XrXirInstruction operation={.op=XR_XIR_RETURN,.args={0}};
+    XrXirBlock block={.count=1};
+    XrXirFunction function={.name="formal",.name_length=6,.parameters=&parameter,
+        .parameter_count=1,.result=XR_XIR_I64,.blocks=&block,.block_count=1,
+        .instructions=&operation,.instruction_count=1};
+    XrXirInstruction initializer={.op=XR_XIR_RETURN};
+    XrXirFunction functions[2]={function,{.name="init",.name_length=4,
+        .result=XR_XIR_UNIT,.blocks=&block,.block_count=1,
+        .instructions=&initializer,.instruction_count=1}};
+    XrXirFunctionIdentity identities[2]={{.exported=1},{0}};
+    XrXirSourceModule module={.name="formal",.name_length=6,.initializer=1};
+    XrXirDeclarations declarations={.modules=&module,.module_count=1,
+        .functions=identities,.root_module=UINT32_MAX,.entry_function=UINT32_MAX};
+    XrXirModule source={.stage=XR_XIR_BUILT,.functions=functions,.declarations=&declarations,
+        .function_count=2,.linkage_kind=XR_XIR_LIBRARY};
+    XrXirArtifact *checked=NULL;EffectBodyMaterial *body=NULL;
+    CHECK(xir_fixture_check(c,&source,&checked,NULL)==XR_XIR_OK && checked);
+    CHECK(effect_body_material_create(c,xr_xir_compile_artifact_module(checked),&body)==XR_XIR_OK && body);
+    EffectInvocationLocalInput *input=NULL;
+    XrCompileResourceStats before=pc_stats(c);size_t allocations=attempts;
+    size_t saved_failure=fail_at;bool saved_injected=injected;
+    fail_at=attempts;injected=false;
+    CHECK(effect_invocation_local_inputs(c,body,&input)==XR_XIR_OK && !input && !injected);
+    fail_at=saved_failure;injected=saved_injected;
+    XrCompileResourceStats after=pc_stats(c);
+    CHECK(attempts==allocations && after.allocation_count==before.allocation_count &&
+        after.allocated_bytes==before.allocated_bytes && after.live_bytes==before.live_bytes &&
+        after.work-before.work==13);
+    EffectBodyFunction *head=&body->functions[0],saved=*head;
+    for (unsigned mode=0;mode<4;++mode) {
+        if (!mode) head->parameters=NULL;
+        if (mode==1) head->blocks=NULL;
+        if (mode==2) head->runs=NULL;
+        if (mode==3) head->run_capacity=head->instruction_count+1;
+        before=pc_stats(c);allocations=attempts;
+        CHECK(effect_invocation_local_inputs(c,body,&input)==XR_XIR_BAD_STRUCTURE && !input &&
+            attempts==allocations && pc_stats(c).allocated_bytes==before.allocated_bytes &&
+            pc_stats(c).live_bytes==before.live_bytes);
+        *head=saved;
+        CHECK(effect_invocation_local_inputs(c,body,&input)==XR_XIR_OK && !input);
+    }
+    xr_xir_compile_artifact_free(checked);memset(functions,0xa5,sizeof(functions));
+    memset(identities,0xa5,sizeof(identities));memset(&module,0xa5,sizeof(module));
+    memset(&operation,0xa5,sizeof(operation));memset(&initializer,0xa5,sizeof(initializer));
+    parameter=XR_XIR_BOOL;
+    before=pc_stats(c);allocations=attempts;
+    CHECK(effect_invocation_local_inputs(c,body,&input)==XR_XIR_OK && !input &&
+        attempts==allocations && pc_stats(c).live_bytes==before.live_bytes &&
+        pc_stats(c).work-before.work==13);
+    effect_body_material_free(body);
+}
+
 static void pc_local_equation_controls(void) {
     XrXirCompileContext c=pc_owner(pc_caps());uint64_t baseline=pc_stats(&c).live_bytes;
     EdgeFixture fixture;pc_empty_fixture(&fixture,0);
@@ -497,7 +553,8 @@ static void pc_local_equation_controls(void) {
     CHECK(effect_invocation_local_equations_match(&c,certificate->equations,inputs)==XR_XIR_OK);
     CHECK(effect_invocation_certificate_result_match(&c,certificate,certificate->result)==XR_XIR_OK);
     CHECK(effect_invocation_public_gate(&c,certificate,effects->count)==XR_XIR_OK);pc_empty_golden(effects,0);
-    xr_compile_resources_free(inputs);xr_xir_compile_effects_free(effects);pc_release(&c,baseline);
+    xr_compile_resources_free(inputs);xr_xir_compile_effects_free(effects);
+    pc_local_formal_preflight(&c);pc_release(&c,baseline);
     pc_local_transfer_positive();pc_local_callback_boundary();
     puts("empty transfer: genuine unused Cell pool, initializer/thrower, final counterfacts, raw ten fields and producer death");
 }
