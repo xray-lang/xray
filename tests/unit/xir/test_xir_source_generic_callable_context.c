@@ -179,6 +179,7 @@ static XrXirStatus source_generic_definition_operation(const XrXirCompileContext
     if(status==XR_XIR_OK){phase=3;status=xr_xir_compile_checked_read(context,first.bytes,first.length,&read,&location);}
     if(status==XR_XIR_OK){phase=4;status=xr_xir_compile_specialize(read,&instance,&location);}
     xr_xir_compile_artifact_free(read);read=NULL;
+    if(status==XR_XIR_OK && inspect)provenance_binding_membership_controls(context,instance);
     if(status==XR_XIR_OK){phase=5;status=xr_xir_compile_checked_write(instance,&second,&location);}
     xr_xir_compile_artifact_free(instance);instance=NULL;
     if(status==XR_XIR_OK){phase=6;status=xr_xir_compile_checked_read(context,second.bytes,second.length,&reloaded,&location);}

@@ -267,8 +267,12 @@ static int effect_contract_proof_order(const XrXirEffectBindingProof *left,
     return 0;
 }
 
-static XrXirStatus effect_contract_proofs(const XrXirCompileContext *context,
+XR_FUNC XrXirStatus xir_effect_binding_proofs_shape(const XrXirCompileContext *context,
     const XrXirModule *module, const XrXirProvenance *p) {
+    if (!xir_compile_context_valid(context) || !module || !p ||
+        !!p->bindings != !!p->binding_count || (module->function_count && !module->functions))
+        return XR_XIR_BAD_STRUCTURE;
+    if (!xir_compile_work(context,2)) return XR_XIR_BUDGET;
     for (uint32_t b = 0; b < p->binding_count; ++b) {
         if (!xir_compile_work(context, 14)) return XR_XIR_BUDGET;
         const XrXirEffectBindingProof *proof = &p->bindings[b];
@@ -283,6 +287,73 @@ static XrXirStatus effect_contract_proofs(const XrXirCompileContext *context,
             return XR_XIR_BAD_STRUCTURE;
     }
     return XR_XIR_OK;
+}
+
+/* Keys are read from this request's full sorted/unique inventory. The two
+ * remaining fields still establish exact membership, never authority. */
+static XrXirStatus effect_contract_proof_key_compare(const XrXirCompileContext *context,
+    const XrXirEffectBindingProof *left,const XrXirEffectBindingProof *right,int *output) {
+    if (!xir_compile_work(context,1)) return XR_XIR_BUDGET;
+    if (left->caller!=right->caller) {
+        if (!xir_compile_work(context,1+sizeof(*output))) return XR_XIR_BUDGET;
+        *output=left->caller<right->caller?-1:1;return XR_XIR_OK;
+    }
+    if (!xir_compile_work(context,1)) return XR_XIR_BUDGET;
+    if (left->family!=right->family) {
+        if (!xir_compile_work(context,1+sizeof(*output))) return XR_XIR_BUDGET;
+        *output=left->family<right->family?-1:1;return XR_XIR_OK;
+    }
+    if (!xir_compile_work(context,1)) return XR_XIR_BUDGET;
+    if (left->instruction!=right->instruction) {
+        if (!xir_compile_work(context,1+sizeof(*output))) return XR_XIR_BUDGET;
+        *output=left->instruction<right->instruction?-1:1;return XR_XIR_OK;
+    }
+    if (!xir_compile_work(context,1)) return XR_XIR_BUDGET;
+    if (left->parameter!=right->parameter) {
+        if (!xir_compile_work(context,1+sizeof(*output))) return XR_XIR_BUDGET;
+        *output=left->parameter<right->parameter?-1:1;return XR_XIR_OK;
+    }
+    if (!xir_compile_work(context,sizeof(*output))) return XR_XIR_BUDGET;
+    *output=0;return XR_XIR_OK;
+}
+
+/* Both callers execute the complete current inventory shape before reaching
+ * this common lookup. No order bit, cached index or retained result is used.
+ * Output remains untouched on failure, including a budget cut at publication. */
+XR_FUNC XrXirStatus xir_effect_binding_proof_lookup(const XrXirCompileContext *context,
+    const XrXirProvenance *p,const XrXirEffectBindingProof *wanted,bool *output) {
+    if (!xir_compile_context_valid(context) || !p || !wanted || !output ||
+        !!p->bindings!=!!p->binding_count) return XR_XIR_BAD_STRUCTURE;
+    if (!xir_compile_work(context,2*sizeof(uint32_t))) return XR_XIR_BUDGET;
+    uint32_t first=0,last=p->binding_count;
+    while (first<last) {
+        if (!xir_compile_work(context,3+sizeof(uint32_t)+sizeof(int))) return XR_XIR_BUDGET;
+        uint32_t middle=first+(last-first)/2;int order=0;
+        XrXirStatus status=effect_contract_proof_key_compare(context,&p->bindings[middle],wanted,&order);
+        if (status!=XR_XIR_OK) return status;
+        if (!xir_compile_work(context,1+sizeof(uint32_t))) return XR_XIR_BUDGET;
+        if (order<0) {
+            if (!xir_compile_work(context,1)) return XR_XIR_BUDGET;
+            first=middle+1;
+        } else last=middle;
+    }
+    if (!xir_compile_work(context,sizeof(bool)+1)) return XR_XIR_BUDGET;
+    bool same=false;
+    if (first<p->binding_count) {
+        if (!xir_compile_work(context,sizeof(int))) return XR_XIR_BUDGET;
+        int order=0;
+        XrXirStatus status=effect_contract_proof_key_compare(context,&p->bindings[first],wanted,&order);
+        if (status!=XR_XIR_OK) return status;
+        if (!xir_compile_work(context,1)) return XR_XIR_BUDGET;
+        if (!order) {
+            if (!xir_compile_work(context,3+2*sizeof(bool)+sizeof(same))) return XR_XIR_BUDGET;
+            bool callee=p->bindings[first].callee==wanted->callee;
+            bool value=p->bindings[first].actual_value==wanted->actual_value;
+            same=callee && value;
+        }
+    }
+    if (!xir_compile_work(context,sizeof(*output))) return XR_XIR_BUDGET;
+    *output=same;return XR_XIR_OK;
 }
 
 static XrXirStatus effect_contract_instance(const XrXirCompileContext *context,
@@ -321,7 +392,7 @@ static XrXirStatus effect_contract_instance(const XrXirCompileContext *context,
                 return XR_XIR_BAD_TYPE;
         }
     }
-    return effect_contract_proofs(context, module, p);
+    return xir_effect_binding_proofs_shape(context, module, p);
 }
 
 XR_FUNC XrXirStatus xir_effect_contract_shape_verify(const XrXirCompileContext *context,
@@ -450,14 +521,11 @@ static XrXirStatus effect_contract_instance_candidate(const XrXirCompileContext 
             binding->parameter==parameter && binding->value==value) ++matches;
     }
     if (matches!=1) return XR_XIR_BAD_STRUCTURE;
-    matches=0;
-    for (uint32_t b=0;b<p->binding_count;++b) {
-        if (!xir_compile_work(context,6)) return XR_XIR_BUDGET;
-        const XrXirEffectBindingProof *proof=&p->bindings[b];
-        if (proof->family==family && proof->caller==caller && proof->instruction==instruction &&
-            proof->callee==target && proof->parameter==parameter && proof->actual_value==value) ++matches;
-    }
-    if (matches!=1) return XR_XIR_BAD_STRUCTURE;
+    if (!xir_compile_work(context,sizeof(XrXirEffectBindingProof)+sizeof(bool))) return XR_XIR_BUDGET;
+    XrXirEffectBindingProof wanted={family,caller,instruction,target,parameter,value};bool found=false;
+    status=xir_effect_binding_proof_lookup(context,p,&wanted,&found);
+    if (status!=XR_XIR_OK) return status;
+    if (!found) return XR_XIR_BAD_STRUCTURE;
     XirEffectCallableBound declared={source->types,module->types,origin->arguments,
         origin->argument_count,identity->declared_type,module->functions[target].parameters[parameter]};
     status=xir_effect_callable_bound_matches(context,&declared);

@@ -161,15 +161,12 @@ static XrXirStatus provenance_effect_call(ProvenanceMatch *c,
             c->destination->types,c->destination->types,NULL,0,argument->type,actual,&c->scratch);
         if (selection!=XR_XIR_OK) return selection;
         if (!family) continue;
-        uint32_t matches=0;
-        for (uint32_t b=0;b<c->instance->binding_count;++b) {
-            if (!xir_compile_work(c->remaining,6)) return XR_XIR_BUDGET;
-            const XrXirEffectBindingProof *proof=&c->instance->bindings[b];
-            if (proof->caller==caller && proof->family==family && proof->instruction==instruction &&
-                proof->parameter==argument->parameter && proof->callee==(uint32_t)op->immediate &&
-                proof->actual_value==value) ++matches;
-        }
-        if (matches!=1) return XR_XIR_BAD_STRUCTURE;
+        if (!xir_compile_work(c->remaining,sizeof(XrXirEffectBindingProof)+sizeof(bool))) return XR_XIR_BUDGET;
+        XrXirEffectBindingProof wanted={family,caller,instruction,(uint32_t)op->immediate,argument->parameter,value};
+        bool found=false;
+        selection=xir_effect_binding_proof_lookup(c->remaining,c->instance,&wanted,&found);
+        if (selection!=XR_XIR_OK) return selection;
+        if (!found) return XR_XIR_BAD_STRUCTURE;
     }
     return XR_XIR_OK;
 }
@@ -774,6 +771,7 @@ static XrXirStatus provenance_functions_match_owned(const XrXirCompileContext *c
                 status = XR_XIR_BAD_STRUCTURE; break;
             }
         }
+        if (status==XR_XIR_OK) status=xir_effect_binding_proofs_shape(remaining,destination,instance);
         if (status == XR_XIR_OK) {
             ProvenanceMatch context = {source, destination, origins, destination->function_count, remaining, &location,
                 {remaining->resources, NULL},instance,effects,NULL};

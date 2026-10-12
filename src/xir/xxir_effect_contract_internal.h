@@ -133,6 +133,14 @@ typedef struct XrXirProvenance {
     uint32_t binding_count;
 } XrXirProvenance;
 
+/* Each raw correspondence entry replays the complete order/unique/range
+ * inventory on its current input. These helpers publish membership only;
+ * independent Source, destination, owner and permission checks still decide. */
+XR_FUNC XrXirStatus xir_effect_binding_proofs_shape(const XrXirCompileContext *context,
+    const XrXirModule *module,const XrXirProvenance *instance);
+XR_FUNC XrXirStatus xir_effect_binding_proof_lookup(const XrXirCompileContext *context,
+    const XrXirProvenance *instance,const XrXirEffectBindingProof *wanted,bool *output);
+
 struct XrXirEffects;
 
 /* Context selection rechecks a full structural origin against the owned

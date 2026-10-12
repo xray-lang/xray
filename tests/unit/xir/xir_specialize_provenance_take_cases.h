@@ -76,6 +76,75 @@ static XrXirStatus provenance_take_operation(const XrXirCompileContext *context,
     return status;
 }
 
+/* These mutations borrow an actual specialized Source receiver. No test
+ * creates its proof inventory or substitutes a selected implementation. */
+static void provenance_binding_raw_status(const XrXirCompileContext *context,
+    const XrXirModule *module,const XrXirProvenance *instance,XrXirStatus expected,bool early) {
+    XrCompileResourceStats before=library_compile_stats(context);
+    size_t calls_before=source_program_compile_attempts;
+    CHECK(xr_xir_compile_provenance_functions_match(context,&instance->source->module,
+        module,instance,NULL)==expected);
+    XrCompileResourceStats after=library_compile_stats(context);
+    CHECK(after.live_bytes==before.live_bytes && after.work>=before.work &&
+        after.allocated_bytes>=before.allocated_bytes);
+    if(early)CHECK(source_program_compile_attempts==calls_before &&
+        after.allocated_bytes==before.allocated_bytes && after.allocation_count==before.allocation_count);
+}
+
+static void provenance_binding_membership_controls(const XrXirCompileContext *context,
+    const XrXirArtifact *donor) {
+    const XrXirModule *original=&donor->module;
+    const XrXirProvenance *stored=original->provenance;
+    CHECK(stored && stored->kind==XR_XIR_EVIDENCE_INSTANCE && stored->source && stored->binding_count>=2);
+    XrCompileResourceStats baseline=library_compile_stats(context);void *memory=NULL;
+    CHECK(xr_compile_resources_alloc(context->resources,
+        (size_t)stored->binding_count*sizeof(*stored->bindings),&memory)==XR_COMPILE_RESOURCE_OK);
+    XrXirEffectBindingProof *proofs=memory;
+    memcpy(proofs,stored->bindings,(size_t)stored->binding_count*sizeof(*proofs));
+    XrXirProvenance changed=*stored;changed.bindings=proofs;
+    XrXirModule view=*original;view.provenance=&changed;
+    provenance_binding_raw_status(context,&view,&changed,XR_XIR_OK,false);
+    CHECK(xir_effect_binding_proofs_shape(context,&view,&changed)==XR_XIR_OK);
+    size_t lookups_before=source_program_compile_attempts;
+    XrCompileResourceStats lookup_entry=library_compile_stats(context);
+    bool same=false;
+    CHECK(xir_effect_binding_proof_lookup(context,&changed,&proofs[0],&same)==XR_XIR_OK && same);
+    XrXirEffectBindingProof absent=proofs[0];absent.parameter=UINT32_MAX;same=true;
+    CHECK(xir_effect_binding_proof_lookup(context,&changed,&absent,&same)==XR_XIR_OK && !same);
+    same=true;
+    CHECK(xir_effect_binding_proof_lookup(NULL,&changed,&absent,&same)==XR_XIR_BAD_STRUCTURE && same);
+    XrCompileResourceStats lookup_end=library_compile_stats(context);
+    CHECK(lookup_end.work>lookup_entry.work && lookup_end.live_bytes==lookup_entry.live_bytes &&
+        lookup_end.allocated_bytes==lookup_entry.allocated_bytes && source_program_compile_attempts==lookups_before);
+    XrXirEffectBindingProof held=proofs[0];
+    proofs[0]=proofs[stored->binding_count-1];proofs[stored->binding_count-1]=held;
+    provenance_binding_raw_status(context,&view,&changed,XR_XIR_BAD_STRUCTURE,true);
+    memcpy(proofs,stored->bindings,(size_t)stored->binding_count*sizeof(*proofs));
+    proofs[1]=proofs[0];
+    provenance_binding_raw_status(context,&view,&changed,XR_XIR_BAD_STRUCTURE,true);
+    proofs[1]=stored->bindings[1];changed.bindings=NULL;
+    provenance_binding_raw_status(context,&view,&changed,XR_XIR_BAD_STRUCTURE,true);
+    changed.bindings=proofs;
+    uint32_t other=UINT32_MAX;
+    for(uint32_t f=0;f<view.function_count;++f)
+        if(f!=held.callee && view.functions[f].parameter_count>held.parameter) { other=f;break; }
+    CHECK(other!=UINT32_MAX);proofs[0].callee=other;
+    provenance_binding_raw_status(context,&view,&changed,XR_XIR_BAD_STRUCTURE,false);
+    proofs[0]=held;
+    const XrXirFunction *caller=&view.functions[held.caller];
+    uint64_t values=(uint64_t)caller->parameter_count+caller->instruction_count;
+    CHECK(values>1 && values<=UINT32_MAX);
+    proofs[0].actual_value=(held.actual_value+1u)%(uint32_t)values;
+    provenance_binding_raw_status(context,&view,&changed,XR_XIR_BAD_STRUCTURE,false);
+    proofs[0]=held;--changed.binding_count;
+    provenance_binding_raw_status(context,&view,&changed,XR_XIR_BAD_STRUCTURE,false);
+    changed.binding_count=stored->binding_count;
+    provenance_binding_raw_status(context,&view,&changed,XR_XIR_OK,false);
+    CHECK(!memcmp(proofs,stored->bindings,(size_t)stored->binding_count*sizeof(*proofs)));
+    xr_compile_resources_free(memory);
+    CHECK(library_compile_stats(context).live_bytes==baseline.live_bytes);
+}
+
 static void provenance_take_requests(const XrXirCompileContext *context,XrXirArtifact *donor,
     const XrXirCompileContext *foreign) {
     XrXirProvenance *owned=(XrXirProvenance *)donor->module.provenance;
