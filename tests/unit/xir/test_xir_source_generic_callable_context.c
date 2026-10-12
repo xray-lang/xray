@@ -232,7 +232,10 @@ static XrXirStatus source_generic_definition_operation(const XrXirCompileContext
     xr_compile_resources_free(failure); sgm_end(context,"final-packets-artifacts-free","drop",status);return status;
 }
 
+#include "xir_generic_compiler_fault_shards.h"
+
 int main(int argc,char **argv) {
+    if(generic_fault_dispatch(argc,argv))return 0;
     if (argc==2 && !strcmp(argv[1],"--spec-index")) {
         spec_index_source_scales();library_compile_observer_free();return 0;
     }
@@ -244,13 +247,9 @@ int main(int argc,char **argv) {
         provenance_take_controls(); provenance_take_resources();
         library_compile_observer_free(); return 0;
     }
-    CHECK(argc==1 || (argc==2 && !strcmp(argv[1],"--compiler")));
-    bool inspect=argc==1;
-    if(!inspect)library_compile_operation_cases("source-generic-callable-context",source_generic_definition_operation,&inspect);
-    else {
-        LibraryCompileOwner owner={0};CHECK(library_compile_owner_new(&owner,&library_compile_limits)==XR_XIR_OK);
-        CHECK(source_generic_definition_operation(&owner.context,&inspect)==XR_XIR_OK);library_compile_owner_drop(&owner);
-        provenance_take_controls();
-    }
+    CHECK(argc==1);bool inspect=true;
+    LibraryCompileOwner owner={0};CHECK(library_compile_owner_new(&owner,&library_compile_limits)==XR_XIR_OK);
+    CHECK(source_generic_definition_operation(&owner.context,&inspect)==XR_XIR_OK);library_compile_owner_drop(&owner);
+    provenance_take_controls();
     library_compile_observer_free();return 0;
 }

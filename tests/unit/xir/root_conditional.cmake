@@ -85,10 +85,20 @@ endif()
 add_test(NAME test_xir_source_generic_callable_context COMMAND test_xir_source_generic_callable_context)
 set_tests_properties(test_xir_source_generic_callable_context PROPERTIES
     LABELS "unit;xir;root-effects;higher-order;compiler;ownership" TIMEOUT 300 RUN_SERIAL TRUE PROCESSORS 1)
+set(XRAY_GENERIC_CALLABLE_COMPILER_REPORTS_ROOT "" CACHE PATH
+    "Exclusive qualification reports root outside Source and Build; empty uses system temporary storage")
+set(_generic_compiler_report_arguments)
+if(NOT XRAY_GENERIC_CALLABLE_COMPILER_REPORTS_ROOT STREQUAL "")
+    list(APPEND _generic_compiler_report_arguments
+        --reports-root "${XRAY_GENERIC_CALLABLE_COMPILER_REPORTS_ROOT}")
+endif()
 add_test(NAME test_xir_source_generic_callable_context_compiler
-    COMMAND test_xir_source_generic_callable_context --compiler)
+    COMMAND "${Python3_EXECUTABLE}" "${PROJECT_SOURCE_DIR}/tests/unit/xir/run_generic_callable_compiler_faults.py"
+        --executable "$<TARGET_FILE:test_xir_source_generic_callable_context>"
+        --source-root "${PROJECT_SOURCE_DIR}" --build-root "${CMAKE_BINARY_DIR}"
+        ${_generic_compiler_report_arguments})
 set_tests_properties(test_xir_source_generic_callable_context_compiler PROPERTIES
-    LABELS "unit;xir;root-effects;higher-order;compiler-fault;ownership" TIMEOUT 600 RUN_SERIAL TRUE PROCESSORS 1)
+    LABELS "unit;xir;root-effects;higher-order;compiler-fault;ownership" TIMEOUT 600 RUN_SERIAL TRUE PROCESSORS 8 COST 600)
 
 # The unique provenance receiver has its own whole-operation fault census.
 add_test(NAME test_xir_source_provenance_take_resources
