@@ -68,6 +68,7 @@ static void packet_free(void *p) {
 #include "xir_consumer_context_owner.h"
 #include "xir_checked_fixture.h"
 #include "xir_generic_fixture.h"
+#include "xir_generic_argument_work_cases.h"
 #include "xir_source_fixture_owner.h"
 #include "xir_local_fixture.h"
 #include "xir_types_fixture.h"
@@ -706,6 +707,7 @@ static void specialization_correspondence_attacks(void) {
     xr_xir_compile_artifact_free(closed);closed=NULL; xr_xir_compile_artifact_free(source);source=NULL; CHECK(live==consumer_context_owner_count && live_bytes==consumer_context_ledger_bytes());
 }
 int main(void) {
+    generic_argument_work_cases();
     consumer_context=consumer_context_default();
     packet_failures(20); packet_failures(21);
     specialization_failures(9);

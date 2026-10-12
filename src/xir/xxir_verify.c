@@ -393,7 +393,6 @@ static XrXirStatus function_shape(const XrXirFunction *function, XrXirStage stag
             const XrXirInstruction *op = &function->instructions[i];
             visibility = type_use_context(context, function_id, op->type);
             if (visibility != XR_XIR_OK) return visibility;
-            if (xr_xir_op_uses_type_arguments(op->op) && !xir_compile_work(&context->remaining, op->type_arguments[1])) return XR_XIR_BUDGET;
             if ((xr_xir_op_references_function(op->op)) && context->module->declarations) {
                 const XrXirDeclarations *d = context->module->declarations;
                 uint32_t caller = (uint32_t) (function - context->module->functions);
@@ -407,6 +406,7 @@ static XrXirStatus function_shape(const XrXirFunction *function, XrXirStage stag
             XrXirStatus status = instruction_shape(function, op, stage, context->module, &context->remaining);
             if (status != XR_XIR_OK)
                 return status;
+            if (xr_xir_op_uses_type_arguments(op->op) && !xir_compile_work(&context->remaining, op->type_arguments[1])) return XR_XIR_BUDGET;
             if (xr_xir_op_uses_type_arguments(op->op) && op->type_arguments[1]) {
                 if (op->type_arguments[0] != type_end) return XR_XIR_BAD_STRUCTURE;
                 type_end += op->type_arguments[1];
