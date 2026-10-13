@@ -122,11 +122,14 @@ source-derived API inventory，并在生成时自动注入 `## API` 表格，避
 
 ### 标准库 API 变更
 
-1. 修改标准库实现和源码 API 入口（analyzer builtin metadata、纯 Xray 导出、native type 声明等）。
-2. 通过 `xray builtin-dump` 导出 API metadata。
-3. 通过 `scripts/gen_api_inventory.py` 合并标准库模块、纯 Xray 导出、native type、全局 builtin、prelude、接口、关键字和 IR intrinsic。
-4. 只在 `spec/source/cards/stdlib/*.json` 更新人工说明、示例和 gotchas。
-5. 重新生成 MCP knowledge。
+1. 修改标准库实现和源码 API 入口（stdlib metadata、纯 Xray 导出、native type 声明等）。
+2. 通过 `scripts/gen_api_inventory.py` 直接从源码合并标准库模块、纯 Xray 导出、native type、全局 builtin、prelude、接口、约束谓词、关键字和 IR intrinsic。
+3. 只在 `spec/source/cards/stdlib/*.json` 更新人工说明、示例和 gotchas。
+4. 重新生成 MCP knowledge。
+
+库存记录源码声明，`scope` 为 `source-declarations`，`execution_authority` 为 `false`。
+声明存在不表示 VM、AOT 或工具入口已经支持执行；执行能力须由对应的真实消费者测试证明。
+生成器无需构建或调用 `xray builtin-dump`，也不接受 `--builtin-dump` 参数。
 
 ## 生成与校验
 
@@ -142,13 +145,11 @@ cmake --build build --target regen-mcp-knowledge
 python3 scripts/gen_language_docs.py --root .
 ```
 
-然后运行 `xray builtin-dump`，生成完整 API inventory，再调用 MCP generator：
+然后直接从源码生成 API inventory，再调用 MCP generator：
 
 ```sh
-./build/xray builtin-dump > build/xmcp_builtin_dump.json
 python3 scripts/gen_api_inventory.py \
     --root . \
-    --builtin-dump build/xmcp_builtin_dump.json \
     --json build/xray_api_inventory.json \
     --check-docs
 python3 scripts/gen_mcp_knowledge.py \
