@@ -1,5 +1,6 @@
 """Negative controls for legacy denominator and independent-observation checks."""
 import copy
+import collections
 import tempfile
 from pathlib import Path
 import unittest
@@ -15,6 +16,112 @@ class PreparationChecks(unittest.TestCase):
         cls.routes = audit.read_json(audit.HERE / "consumer_routes.json")
         cls.runner_routes = audit.read_json(audit.HERE / "runner_routes.json")
         cls.legacy = audit.read_json(audit.ROOT / "tests/unit/xir/product_consumers/legacy_responsibilities.json")
+        # One immutable discovery fixture per control suite. The separate
+        # inventory CTest and audit CLI always rediscover the actual filesystem.
+        regression = audit.load_module("control_suite_regression", "scripts/run_regression_tests.py")
+        differential = audit.load_module("control_suite_differential", "tests/diff/run_backend_diff.py")
+        errors = audit.load_module("control_suite_errors", "tests/compile_errors/run_compile_error_tests.py")
+        cls.actual_runner_entries = collections.defaultdict(list)
+        for path in regression.collect_cases():
+            cls.actual_runner_entries[audit.relative(path)].append({"suite":"regression", "entry":"test" if regression.is_test_module(path) else "run"})
+        for path in differential.collect_cases("", str(differential.SCRIPT_DIR / "coro_regression_cases.txt")):
+            cls.actual_runner_entries[audit.relative(path)].append({"suite":"differential", "entry":"run"})
+        for path in errors.collect_cases():
+            cls.actual_runner_entries[audit.relative(path)].append({"suite":"compile_errors", "entry":"implicit_compile"})
+
+    def validate_runner_routes(self, data):
+        # Source, sidecar, fixture existence/content/hash and every obligation
+        # are checked freshly on each call; only runner discovery is fixture data.
+        return audit.validate_runner_routes(data, self.mapping, self.actual_runner_entries)
+
+
+    def mutated_runner_route(self, identity):
+        # Preserve the complete input set, copying only the row under mutation.
+        # Check that row first so a negative control fails before rereading all
+        # unrelated inputs. Positive inventory gates still check every input.
+        row = copy.deepcopy(next(r for r in self.runner_routes["cases"] if r["case_id"] == identity))
+        data = dict(self.runner_routes)
+        data["cases"] = [row] + [r for r in self.runner_routes["cases"] if r["case_id"] != identity]
+        return data, row
+
+    def test_complete_explicit_discovery_still_exposes_named_semantic_review_gap(self):
+        counts = self.validate_runner_routes(self.runner_routes)
+        audit.require_full_explicit_runner_coverage(counts)
+        self.assertEqual(counts["unreviewed_runner_inputs"], 0)
+        self.assertEqual(counts["unreviewed_runner_entry_links"], 0)
+        self.assertEqual(counts["unreviewed_named_regression_test_files"], 129)
+        bad = copy.deepcopy(self.runner_routes)
+        bad["cases"] = [r for r in bad["cases"] if not r["case_id"].endswith("/1500_project_mode_detect.xr")]
+        counts = self.validate_runner_routes(bad)
+        with self.assertRaisesRegex(ValueError, "lost original discovered"):
+            audit.require_full_explicit_runner_coverage(counts)
+
+    def test_accept_helpers_do_not_defer_close_before_launched_child_uses_handle(self):
+        for filename, function, variable in (("1434_net_byte_array_loopback.xr", "acceptBytesEcho", "conn"),
+                                              ("1434_net_byte_array_loopback.xr", "acceptBytesMaxLen", "conn"),
+                                              ("1436_net_halfclose_bidi.xr", "acceptReadUntilEof", "c")):
+            row = next(r for r in self.runner_routes["cases"] if r["case_id"].endswith("/"+filename))
+            source = (audit.ROOT/row["target_source_port"]["fixture"]).read_text(encoding="utf-8")
+            body = source.split("fn "+function+"(",1)[1].split("\n}",1)[0]
+            self.assertIn("go ", body)
+            self.assertNotIn("defer { net.close("+variable+") }", body)
+
+    def test_websocket_full_roundtrips_and_first_local_counter_remain_required(self):
+        expected = self.regression_library_expected("1438_ws_self_connect")
+        for observed in (dict(expected, message_roundtrip_counts=[1,2,3]),
+                         dict(expected, passed_final=1),
+                         dict(expected, first_local_name="running"),
+                         dict(expected, running_stopped_on_all_exits=False)):
+            with self.assertRaises(ValueError):
+                audit.compare_required(expected, observed)
+
+    def test_tls_absolute_budget_and_actual_profile_cannot_be_skip_or_rearm(self):
+        expected = self.regression_library_expected("1437_net_tls_timeout")
+        for observed in (dict(expected, tls_provider_required=False),
+                         dict(expected, absolute_deadline_not_per_yield_rearmed=False),
+                         dict(expected, upgrade_failure_fd=9)):
+            with self.assertRaises(ValueError):
+                audit.compare_required(expected, observed)
+
+    def test_http_binary_framings_and_body_publication_cannot_be_header_only(self):
+        expected = self.regression_library_expected("1502_http_request_options")
+        for observed in (dict(expected, three_response_framings=["content-length"]),
+                         dict(expected, all_framings_raw_body=[0,127]),
+                         dict(expected, request_body_tail="\r\n\r\n")):
+            with self.assertRaises(ValueError):
+                audit.compare_required(expected, observed)
+
+    def test_hpack_dynamic_state_and_control_frame_bytes_are_independent(self):
+        expected = self.regression_library_expected("1512_http2_protocol")
+        observed = copy.deepcopy(expected)
+        observed["independent_hpack_vectors"]["decoded_blocks"]["request_second"][-1][1] = "wrong"
+        with self.assertRaises(ValueError):
+            audit.compare_required(expected, observed)
+        observed = copy.deepcopy(expected)
+        observed["independent_hpack_vectors"]["frame_vectors"]["window_update"] = "000004080000000001ffff0000"
+        with self.assertRaises(ValueError):
+            audit.compare_required(expected, observed)
+        for observed in (dict(expected, valid_then_invalid_payload_leaves_all_prior_settings_unchanged=False),
+                         dict(expected, header28_positive_admission_actually_called=False)):
+            with self.assertRaises(ValueError):
+                audit.compare_required(expected, observed)
+
+    def test_cluster_opaque_queue_pressure_and_query_policy_cannot_be_shortcut(self):
+        expected = self.regression_library_expected("1511_cluster_opaque_transport")
+        for observed in (dict(expected, queued_envelopes=6),
+                         dict(expected, envelope_bytes=63),
+                         dict(expected, overflow_delivery="Accepted"),
+                         dict(expected, opaque_buffer_mutable_view_and_owned_transport="PASS")):
+            with self.assertRaises(ValueError):
+                audit.compare_required(expected, observed)
+
+    def test_project_print_body_cannot_claim_config_or_actual_project_resolution(self):
+        expected = self.regression_library_expected("1500_project_mode_detect")
+        for observed in (dict(expected, original_case_directory_xray_toml="PRESENT"),
+                         dict(expected, real_project_mode_resolution="PASS"),
+                         dict(expected, runner_changes_cwd_to_case_directory=True)):
+            with self.assertRaises(ValueError):
+                audit.compare_required(expected, observed)
 
     def test_json_unicode_scalar_and_octet_duties_do_not_accept_erased_strings(self):
         expected = self.regression_library_expected("1002_json_string")
@@ -260,7 +367,7 @@ class PreparationChecks(unittest.TestCase):
         row = next(r for r in bad["cases"] if r["case_id"].endswith("/1101_regex_engine.xr"))
         row.pop("original_named_test_obligation")
         with self.assertRaisesRegex(ValueError, "named source obligations"):
-            audit.validate_runner_routes(bad, self.mapping)
+            self.validate_runner_routes(bad)
 
     def test_regression_library_banner_or_partial_report_cannot_be_all_tests(self):
         for name in ("1100_regex", "1101_regex_engine", "1120_regex_re2_compat", "1180_base64_basic"):
@@ -361,7 +468,7 @@ class PreparationChecks(unittest.TestCase):
                     if r["id"] == "library_review_" + name)
 
     def test_all_original_differential_inputs_have_explicit_case_records(self):
-        counts = audit.validate_runner_routes(self.runner_routes, self.mapping)
+        counts = self.validate_runner_routes(self.runner_routes)
         self.assertEqual(counts["unreviewed_differential_inputs"], 0)
 
     def test_base64_property_corpus_cannot_drop_lengths_or_wrong_error_channels(self):
@@ -429,7 +536,7 @@ class PreparationChecks(unittest.TestCase):
         row = next(r for r in bad["cases"] if r["case_id"].endswith("/csv_pure_module_direct.xr"))
         row.pop("target_source_port")
         with self.assertRaisesRegex(ValueError, "requires its frozen source port"):
-            audit.validate_runner_routes(bad, self.mapping)
+            self.validate_runner_routes(bad)
 
     def test_multipart_rejected_append_and_temporary_cleanup_remain_required(self):
         expected = self.library_review_expected("http_formdata_pure_direct")
@@ -483,7 +590,7 @@ class PreparationChecks(unittest.TestCase):
             else:
                 row["target_source_port"]["differential_input_obligation"]["arguments"] = []
             with self.assertRaisesRegex(ValueError, "arguments/stdin context"):
-                audit.validate_runner_routes(bad, self.mapping)
+                self.validate_runner_routes(bad)
 
     def test_process_complete_argument_observation_cannot_have_empty_arguments(self):
         expected = self.provider_review_expected("process_schema_shared_core")
@@ -687,14 +794,14 @@ class PreparationChecks(unittest.TestCase):
         row = next(r for r in bad["cases"] if r["case_id"].endswith("1206_generic_functions.xr"))
         row.pop("original_named_test_obligation")
         with self.assertRaisesRegex(ValueError, "falsely qualified discovery"):
-            audit.validate_runner_routes(bad, self.mapping)
+            self.validate_runner_routes(bad)
 
     def test_generic_equal_migration_cannot_keep_future_instance_proof(self):
         bad = copy.deepcopy(self.runner_routes)
         row = next(r for r in bad["cases"] if r["case_id"].endswith("1437_generic_method_param_contract.xr"))
         row["target_disposition"]["kind"] = "INSTANCE_ONLY_EQUAL_PROOF"
         with self.assertRaisesRegex(ValueError, "required disposition"):
-            audit.validate_runner_routes(bad, self.mapping)
+            self.validate_runner_routes(bad)
 
     def test_generic_method_storage_domain_is_not_narrowed_by_one_equal_method(self):
         source = (audit.HERE / "fixtures/method_owned_equal_constraint/root.xr").read_text(encoding="utf-8")
@@ -767,7 +874,7 @@ class PreparationChecks(unittest.TestCase):
             else:
                 row["target_source_port"]["companion_inputs"][0]["lf_sha256"] = "0" * 64
             with self.subTest(change=change), self.assertRaisesRegex(ValueError, "companion"):
-                audit.validate_runner_routes(bad, self.mapping)
+                self.validate_runner_routes(bad)
 
     def test_pending_view_member_replacement_is_not_an_executable_port(self):
         bad = copy.deepcopy(self.oracles)
@@ -809,10 +916,10 @@ class PreparationChecks(unittest.TestCase):
             row = next(r for r in bad["cases"] if len(r["original_runner_entries"]) == 2)
             row["original_runner_entries"] = [e for e in row["original_runner_entries"] if e["suite"] != suite]
             with self.subTest(suite=suite), self.assertRaisesRegex(ValueError, "original runner entry"):
-                audit.validate_runner_routes(bad, self.mapping)
+                self.validate_runner_routes(bad)
 
     def test_unique_program_counts_do_not_replace_entry_responsibilities(self):
-        counts = audit.validate_runner_routes(self.runner_routes, self.mapping)
+        counts = self.validate_runner_routes(self.runner_routes)
         self.assertEqual(counts["reviewed_dual_runner_inputs"], 66)
         self.assertEqual(counts["reviewed_runner_entry_links"], counts["reviewed_runner_inputs"] + 66)
 
@@ -829,14 +936,14 @@ class PreparationChecks(unittest.TestCase):
             else:
                 row["original_differential_obligation"].pop(field)
             with self.subTest(field=field), self.assertRaisesRegex(ValueError, "stdin bytes"):
-                audit.validate_runner_routes(bad, self.mapping)
+                self.validate_runner_routes(bad)
 
     def test_coroutine_textual_tests_cannot_be_removed_from_test_obligation(self):
         bad = copy.deepcopy(self.runner_routes)
         row = next(r for r in bad["cases"] if r["case_id"].endswith("1164_channel_recv_raw_match_nullable_payload.xr"))
         row.pop("original_named_test_obligation")
         with self.assertRaisesRegex(ValueError, "falsely qualified discovery"):
-            audit.validate_runner_routes(bad, self.mapping)
+            self.validate_runner_routes(bad)
 
     def test_sticky_array_result_cannot_keep_already_taken_target(self):
         bad = copy.deepcopy(self.runner_routes)
@@ -844,7 +951,7 @@ class PreparationChecks(unittest.TestCase):
         self.assertEqual(row["original_rejection_oracle"]["assertions"][0]["code"], "E0356")
         row["target_disposition"]["kind"] = "REJECTION_FOR_ALREADY_TAKEN"
         with self.assertRaisesRegex(ValueError, "required disposition"):
-            audit.validate_runner_routes(bad, self.mapping)
+            self.validate_runner_routes(bad)
 
     def test_sticky_result_copies_cannot_alias_or_consume_terminal(self):
         expected = next(r["expected"] for r in self.oracles["cases"] if r["id"] == "task_array_sticky_independent_copies")
@@ -899,28 +1006,28 @@ class PreparationChecks(unittest.TestCase):
             else:
                 row["original_named_test_obligation"]["execution"] = change
             with self.subTest(change=change), self.assertRaisesRegex(ValueError, "falsely qualified discovery"):
-                audit.validate_runner_routes(bad, self.mapping)
+                self.validate_runner_routes(bad)
 
     def test_target_named_test_migration_must_cover_every_original_identity(self):
         bad = copy.deepcopy(self.runner_routes)
         row = next(r for r in bad["cases"] if "named_test_migration" in r)
         row["named_test_migration"]["mapping"].pop(next(iter(row["named_test_migration"]["mapping"])))
         with self.assertRaisesRegex(ValueError, "omitted"):
-            audit.validate_runner_routes(bad, self.mapping)
+            self.validate_runner_routes(bad)
 
     def test_partial_reverse_program_cannot_replace_the_thirteen_test_suite(self):
         bad = copy.deepcopy(self.runner_routes)
         row = next(r for r in bad["cases"] if "partial_target_program" in r)
         row["partial_target_program"]["complete_file_replacement"] = True
         with self.assertRaisesRegex(ValueError, "remaining original tests"):
-            audit.validate_runner_routes(bad, self.mapping)
+            self.validate_runner_routes(bad)
 
     def test_partial_reverse_program_cannot_delete_stringbuilder_obligations(self):
         bad = copy.deepcopy(self.runner_routes)
         row = next(r for r in bad["cases"] if "partial_target_program" in r)
         row["partial_target_program"]["remaining_original_tests"] = []
         with self.assertRaisesRegex(ValueError, "remaining original tests"):
-            audit.validate_runner_routes(bad, self.mapping)
+            self.validate_runner_routes(bad)
 
     def test_returned_array_is_not_a_shared_mutable_receiver(self):
         expected = next(r["expected"] for r in self.oracles["cases"] if r["id"] == "array_return_logical_copy")
@@ -945,7 +1052,7 @@ class PreparationChecks(unittest.TestCase):
             self.assertTrue(lines[declaration["marker_line"] - 1].strip().startswith("@test"))
 
     def test_complete_original_rejections_remain_bound_even_with_missing_oracle(self):
-        counts = audit.validate_runner_routes(self.runner_routes, self.mapping)
+        counts = self.validate_runner_routes(self.runner_routes)
         self.assertEqual(counts["reviewed_rejection_cases"], 891)
         self.assertEqual(counts["unreviewed_rejection_inputs"], 0)
         self.assertEqual(counts["reviewed_missing_rejection_oracles"], 1)
@@ -1001,23 +1108,22 @@ class PreparationChecks(unittest.TestCase):
         row = next(r for r in bad["cases"] if r["case_id"].endswith("/span_array_literal_escape.xr"))
         row["target_disposition"] = {"kind": "POSITIVE_LOCAL_VIEW_TUPLE_AFTER_FROZEN_TASK313_PORT", "owner_package": "P10", "qualification": "NOT_RUN", "reason": "invalid container exemption"}
         with self.assertRaisesRegex(ValueError, "required disposition"):
-            audit.validate_runner_routes(bad, self.mapping)
+            self.validate_runner_routes(bad)
 
     def test_imported_diagnostics_cannot_omit_companion_inputs(self):
         for identity in audit.IMPORTED_ORACLE_INPUTS:
             with self.subTest(identity=identity):
-                bad = copy.deepcopy(self.runner_routes)
-                row = next(r for r in bad["cases"] if r["case_id"] == identity)
+                bad, row = self.mutated_runner_route(identity)
                 del row["original_imported_inputs"]
                 with self.assertRaisesRegex(ValueError, "required companion inputs"):
-                    audit.validate_runner_routes(bad, self.mapping)
+                    self.validate_runner_routes(bad)
 
     def test_imported_effect_diagnostic_cannot_bind_changed_companion(self):
         bad = copy.deepcopy(self.runner_routes)
         row = next(r for r in bad["cases"] if "original_imported_inputs" in r)
         row["original_imported_inputs"][0]["lf_sha256"] = "0" * 64
         with self.assertRaisesRegex(ValueError, "companion changed"):
-            audit.validate_runner_routes(bad, self.mapping)
+            self.validate_runner_routes(bad)
 
     def test_oracle_cannot_execute_a_different_unbound_source(self):
         bad = copy.deepcopy(self.oracles)
@@ -1061,18 +1167,17 @@ class PreparationChecks(unittest.TestCase):
     def test_frozen_transitions_cannot_fall_back_to_original_rejection(self):
         for identity in audit.FROZEN_TARGETS:
             with self.subTest(identity=identity):
-                bad = copy.deepcopy(self.runner_routes)
-                row = next(r for r in bad["cases"] if r["case_id"] == identity)
+                bad, row = self.mutated_runner_route(identity)
                 del row["target_disposition"]
                 with self.assertRaisesRegex(ValueError, "required disposition"):
-                    audit.validate_runner_routes(bad, self.mapping)
+                    self.validate_runner_routes(bad)
 
     def test_read_class_positive_requires_the_ported_source(self):
         bad = copy.deepcopy(self.runner_routes)
         row = next(r for r in bad["cases"] if r["case_id"].endswith("/007_in_instance_mutating_method.xr"))
         del row["target_source_port"]
         with self.assertRaisesRegex(ValueError, "requires its frozen source port"):
-            audit.validate_runner_routes(bad, self.mapping)
+            self.validate_runner_routes(bad)
 
     def test_read_struct_cannot_inherit_read_class_mutation_permission(self):
         bad = copy.deepcopy(self.runner_routes)
@@ -1080,14 +1185,14 @@ class PreparationChecks(unittest.TestCase):
         row["target_disposition"] = {"kind": "POSITIVE_AFTER_FROZEN_CLASS_SURFACE_PORT",
                                      "owner_package": "P10", "qualification": "NOT_RUN", "reason": "invalid class-only permission"}
         with self.assertRaisesRegex(ValueError, "required disposition"):
-            audit.validate_runner_routes(bad, self.mapping)
+            self.validate_runner_routes(bad)
 
     def test_incomplete_enum_witness_is_not_an_implemented_positive(self):
         bad = copy.deepcopy(self.runner_routes)
         row = next(r for r in bad["cases"] if r["case_id"].endswith("/020_enum_implements_rejected.xr"))
         row["target_disposition"]["kind"] = "POSITIVE_AFTER_FROZEN_CLASS_SURFACE_PORT"
         with self.assertRaisesRegex(ValueError, "required disposition"):
-            audit.validate_runner_routes(bad, self.mapping)
+            self.validate_runner_routes(bad)
 
     def test_generator_abandonment_cannot_omit_or_duplicate_cleanup(self):
         expected = next(r["expected"] for r in self.oracles["cases"] if r["id"] == "generator_break_cleanup_once")
@@ -1119,14 +1224,14 @@ class PreparationChecks(unittest.TestCase):
         row = next(r for r in bad["cases"] if "original_regression_obligation" in r)
         row["original_regression_obligation"]["expected_exit"] = 1
         with self.assertRaisesRegex(ValueError, "regression positive"):
-            audit.validate_runner_routes(bad, self.mapping)
+            self.validate_runner_routes(bad)
 
     def test_build_only_cannot_claim_test_discovery(self):
         bad = copy.deepcopy(self.runner_routes)
         row = next(r for r in bad["cases"] if "original_regression_obligation" in r)
         row["original_regression_obligation"]["test_discovery"] = "PASS"
         with self.assertRaisesRegex(ValueError, "test discovery"):
-            audit.validate_runner_routes(bad, self.mapping)
+            self.validate_runner_routes(bad)
 
     def test_class_source_port_preserves_named_tests_and_frozen_surface(self):
         row = next(r for r in self.runner_routes["cases"] if "target_source_port" in r)
@@ -1144,7 +1249,7 @@ class PreparationChecks(unittest.TestCase):
         row = next(r for r in bad["cases"] if "target_source_port" in r)
         row["target_source_port"]["qualification"] = "PASS"
         with self.assertRaisesRegex(ValueError, "incorrectly qualified"):
-            audit.validate_runner_routes(bad, self.mapping)
+            self.validate_runner_routes(bad)
 
     def test_empty_test_report_cannot_satisfy_the_class_cleanup_oracle(self):
         expected = next(r["expected"] for r in self.oracles["cases"] if r["id"] == "class_cleanup_ordinary_methods")
@@ -1163,13 +1268,13 @@ class PreparationChecks(unittest.TestCase):
         row = next(r for r in bad["cases"] if "target_disposition" in r)
         row["target_disposition"]["qualification"] = "PASS"
         with self.assertRaisesRegex(ValueError, "cannot publish qualification"):
-            audit.validate_runner_routes(bad, self.mapping)
+            self.validate_runner_routes(bad)
 
     def test_unknown_task_responsibility_is_not_a_known_family(self):
         bad = copy.deepcopy(self.runner_routes)
         bad["cases"][0]["primary_family"] = "task318:Q99"
         with self.assertRaisesRegex(ValueError, "unknown family"):
-            audit.validate_runner_routes(bad, self.mapping)
+            self.validate_runner_routes(bad)
 
     def test_imported_program_companion_is_part_of_oracle_identity(self):
         bad = copy.deepcopy(self.oracles)
@@ -1195,40 +1300,40 @@ class PreparationChecks(unittest.TestCase):
             audit.compare_required(expected, {"exit_code": 1, "stdout_utf8": "", "stderr_utf8": "comptime expression must be evaluable"})
 
     def test_explicit_runner_routes_keep_the_original_inputs_and_oracles(self):
-        audit.validate_runner_routes(self.runner_routes, self.mapping)
+        self.validate_runner_routes(self.runner_routes)
 
     def test_runner_source_change_requires_semantic_review(self):
         bad = copy.deepcopy(self.runner_routes)
         bad["cases"][0]["source_lf_sha256"] = "0" * 64
         with self.assertRaisesRegex(ValueError, "source changed"):
-            audit.validate_runner_routes(bad, self.mapping)
+            self.validate_runner_routes(bad)
 
     def test_runtime_trap_cannot_replace_compile_entry(self):
         bad = copy.deepcopy(self.runner_routes)
         bad["cases"][0]["original_runner_entries"][0]["entry"] = "run"
         with self.assertRaisesRegex(ValueError, "runner entry"):
-            audit.validate_runner_routes(bad, self.mapping)
+            self.validate_runner_routes(bad)
 
     def test_wrong_diagnostic_location_is_not_preserved_oracle(self):
         bad = copy.deepcopy(self.runner_routes)
         row = next(r for r in bad["cases"] if r.get("original_rejection_oracle", {}).get("state") == "PRESENT")
         row["original_rejection_oracle"]["assertions"][0]["where"]["col"] += 1
         with self.assertRaisesRegex(ValueError, "position, code or text"):
-            audit.validate_runner_routes(bad, self.mapping)
+            self.validate_runner_routes(bad)
 
     def test_position_gap_annotation_cannot_be_removed_to_pass(self):
         bad = copy.deepcopy(self.runner_routes)
         row = next(r for r in bad["cases"] if any(a["misplaced"] for a in r.get("original_rejection_oracle", {}).get("assertions") or []))
         next(a for a in row["original_rejection_oracle"]["assertions"] if a["misplaced"])["misplaced"] = None
         with self.assertRaisesRegex(ValueError, "position, code or text"):
-            audit.validate_runner_routes(bad, self.mapping)
+            self.validate_runner_routes(bad)
 
     def test_missing_expected_file_stays_an_open_gap(self):
         bad = copy.deepcopy(self.runner_routes)
         row = next(r for r in bad["cases"] if r.get("original_rejection_oracle", {}).get("state") == "MISSING")
         row["original_rejection_oracle"]["assertions"] = []
         with self.assertRaisesRegex(ValueError, "cannot be fabricated"):
-            audit.validate_runner_routes(bad, self.mapping)
+            self.validate_runner_routes(bad)
 
     def test_sibling_reader_snapshot_is_rejected_even_for_equal_backends(self):
         expected = next(r["expected"] for r in self.oracles["cases"] if r["id"] == "sibling_closures_share_mutable_cell")

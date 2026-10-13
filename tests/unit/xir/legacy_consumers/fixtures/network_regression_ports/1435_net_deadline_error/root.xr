@@ -1,0 +1,114 @@
+// 1435_net_deadline_error.xr
+// TCP deadlines and lastError / lastErrno diagnostics.
+//
+// accept and the byte reads keep in-band null / negative results; the
+// reason is queryable per handle: a deadline elapse reports
+// NetError.Timeout, a closed handle reports NetError.Closed, and a clean
+// shutdown never fabricates an error.
+
+import net
+import { NetError, NetListener } from net
+import time
+
+fn tryListen(backlog: i64) -> NetListener? {
+    try {
+        return net.listen(0, backlog)
+    } catch (e: NetError) {
+        return null
+    }
+}
+
+fn acceptSlowWrite(lst: NetListener) {
+    var conn = net.accept(lst)
+    if (conn != null) {
+        defer { net.close(conn!) }
+        time.sleep(100)
+        // "late"
+        net.writeBytes(conn!, Array<u8>([108, 97, 116, 101]))
+        net.close(conn!)
+    }
+}
+
+fn acceptAndClose(lst: NetListener) {
+    var conn = net.accept(lst)
+    if (conn != null) {
+        defer { net.close(conn!) }
+        net.close(conn!)
+    }
+}
+
+@test
+fn test_accept_deadline_timeout() {
+    const maybeLst = tryListen(8)
+    assert(maybeLst != null)
+    const lst = maybeLst!
+    defer { net.close(lst) }
+    var deadline = time.monotonic() + 20
+    assert(net.setAcceptDeadline(lst, deadline))
+
+    var conn = net.accept(lst)
+    assert(conn == null)
+    assertEqual(net.lastError(lst), NetError.Timeout)
+    assertEqual(net.lastErrno(lst), 0)
+
+    net.close(lst)
+}
+
+@test
+fn test_accept_closed_reports_closed() {
+    // The other half of the accept null contract: a closed listener
+    // reports NetError.Closed, distinct from a deadline elapse.
+    const maybeLst = tryListen(8)
+    assert(maybeLst != null)
+    const lst = maybeLst!
+    defer { net.close(lst) }
+    net.close(lst)
+
+    var conn = net.accept(lst)
+    assert(conn == null)
+    assertEqual(net.lastError(lst), NetError.Closed)
+}
+
+@test
+fn test_read_deadline_timeout() {
+    const maybeLst = tryListen(8)
+    assert(maybeLst != null)
+    const lst = maybeLst!
+    defer { net.close(lst) }
+    var port = net.port(lst)
+    go acceptSlowWrite(lst)
+
+    var c = net.dial("127.0.0.1", port)
+    defer { net.close(c) }
+    assert(!net.isTLS(c))
+    assert(net.setReadDeadline(c, time.monotonic() + 20))
+
+    // readBytes returns null for both EOF and error; a deadline elapse is
+    // the error case, so lastError must say Timeout.
+    var data = net.readBytes(c)
+    assert(data == null)
+    assertEqual(net.lastError(c), NetError.Timeout)
+    assertEqual(net.lastErrno(c), 0)
+
+    net.close(c)
+    net.close(lst)
+}
+
+@test
+fn test_closed_handle_error() {
+    const maybeLst = tryListen(8)
+    assert(maybeLst != null)
+    const lst = maybeLst!
+    defer { net.close(lst) }
+    var port = net.port(lst)
+    go acceptAndClose(lst)
+
+    var c = net.dial("127.0.0.1", port)
+    defer { net.close(c) }
+    net.close(c)
+
+    assertEqual(net.writeBytes(c, Array<u8>([120])), -1)
+    assertEqual(net.lastError(c), NetError.Closed)
+
+    net.close(lst)
+}

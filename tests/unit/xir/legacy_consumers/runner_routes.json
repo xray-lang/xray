@@ -121401,6 +121401,3048 @@
         "qualification": "NOT_RUN",
         "reason": "Task319 init on full Node class with explicit nonmatching v:i64,l:string params. Keep every original typed container/capture/chain/root/record and full pressure. Nested ParentRecord children mutation follows writable-place value semantics; no snapshot alias restoration or claim of generational/collector implementation."
       }
+    },
+    {
+      "case_id": "tests/regression/10_stdlib/1430_net_basic.xr",
+      "source_lf_sha256": "87349d7619a9ab1fe7a0e4bb7e8a8b402b5c566d8b894673aed90add86042c82",
+      "primary_family": "builtin-method-native-provider-call",
+      "secondary_families": [
+        "typed-error-throw-try-catch",
+        "test-entry-assertion-async",
+        "defer-cleanup-resource-lifetime",
+        "module-graph-import-export-init",
+        "array-slice-fixed-array-range-iteration",
+        "ownership-read-ref-move-copy-drop",
+        "coroutine-go-await-task",
+        "channel-select-scope-cancel"
+      ],
+      "tasks": [
+        "313",
+        "314",
+        "315",
+        "316",
+        "317",
+        "318",
+        "319",
+        "320",
+        "322"
+      ],
+      "producer_packages": [
+        "P02",
+        "P06",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P12",
+        "P13",
+        "P14",
+        "P17",
+        "P18"
+      ],
+      "semantic_basis": "Complete original network/protocol/project review preserves every named body, original full byte/framing/counter/wait/context dimension and both normal/typed/error responsibilities. Setup/provider skips, API names, banners, simulated records, elapsed-only timing and self-roundtrip do not qualify actual execution.",
+      "original_runner_entries": [
+        {
+          "suite": "regression",
+          "entry": "test"
+        }
+      ],
+      "new_entry_status": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "replacement_qualification": "OPEN",
+      "original_stdout_oracle": {
+        "path": "tests/regression/10_stdlib/1430_net_basic.xr.expected",
+        "state": "MISSING",
+        "lf_sha256": null
+      },
+      "original_regression_obligation": {
+        "entry": "test",
+        "expected_exit": 0,
+        "test_discovery": "NOT_RUN"
+      },
+      "original_named_test_obligation": {
+        "state": "REVIEWED_TEXTUAL_DECLARATIONS_NOT_RUNTIME_DISCOVERY",
+        "declarations": [
+          {
+            "name": "test_lookup_localhost",
+            "marker_line": 15,
+            "source_segment_lf_sha256": "542e7821c2c485a0dd25e64d617b09a5835c3494c43a37cb2ffa8136ed95c63d"
+          },
+          {
+            "name": "test_lookup_invalid_host",
+            "marker_line": 24,
+            "source_segment_lf_sha256": "941fbb3f64aeb6d7afc83dc2d334aed63f05c52bb2d20845d7b69fee74aa7964"
+          },
+          {
+            "name": "test_resolve_matches_lookup_head",
+            "marker_line": 34,
+            "source_segment_lf_sha256": "ea482f76f6ceac166e2afc6ac4e7a7931db076bbfa87ea0e1fd1c3cdb4c5a3eb"
+          },
+          {
+            "name": "test_net_module_exists",
+            "marker_line": 47,
+            "source_segment_lf_sha256": "03a0c3b9c6400e6333c153ddebdd91187dec3e85fcb63cfbe75e571088b97637"
+          },
+          {
+            "name": "test_net_dial_exists",
+            "marker_line": 52,
+            "source_segment_lf_sha256": "5ce49d07aaff82419a920b47bfc88dac86850ad05eddb18ce4b2ea9f95908cf2"
+          },
+          {
+            "name": "test_net_resolve_exists",
+            "marker_line": 57,
+            "source_segment_lf_sha256": "63d434d72b26aa3485727fefa5bcd9a7cd9380cb2a759a08d30e31a0195f428b"
+          },
+          {
+            "name": "test_lookup_ipv6_localhost",
+            "marker_line": 66,
+            "source_segment_lf_sha256": "bfa3cb1d57ae5c1bb1a530f244b1e6e4e77d640bb353ba1780cbb00cec1989fc"
+          },
+          {
+            "name": "test_lookup_returns_valid_addresses",
+            "marker_line": 74,
+            "source_segment_lf_sha256": "6ea7fcecbc169b5d769dfabd975082643de9b3721031b0f14f3ea0836b5096a8"
+          }
+        ],
+        "execution": "NOT_RUN"
+      },
+      "target_contract_review": "REQUIRED; actual published canonical handle/Sendable/view/error/protocol/driver/context/platform interfaces and full applicable resource/wait/drain/physical/FI gates remainOPEN. No guessed provider ABI or skipped capability PASS."
+    },
+    {
+      "case_id": "tests/regression/10_stdlib/1431_net_extended.xr",
+      "source_lf_sha256": "c3680dadb9b36871791f8ee5a55f944297051cd7562944871c87a7046fa14617",
+      "primary_family": "builtin-method-native-provider-call",
+      "secondary_families": [
+        "typed-error-throw-try-catch",
+        "test-entry-assertion-async",
+        "defer-cleanup-resource-lifetime",
+        "module-graph-import-export-init",
+        "array-slice-fixed-array-range-iteration",
+        "ownership-read-ref-move-copy-drop",
+        "coroutine-go-await-task",
+        "channel-select-scope-cancel"
+      ],
+      "tasks": [
+        "313",
+        "314",
+        "315",
+        "316",
+        "317",
+        "318",
+        "319",
+        "320",
+        "322"
+      ],
+      "producer_packages": [
+        "P02",
+        "P06",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P12",
+        "P13",
+        "P14",
+        "P17",
+        "P18"
+      ],
+      "semantic_basis": "Complete original network/protocol/project review preserves every named body, original full byte/framing/counter/wait/context dimension and both normal/typed/error responsibilities. Setup/provider skips, API names, banners, simulated records, elapsed-only timing and self-roundtrip do not qualify actual execution.",
+      "original_runner_entries": [
+        {
+          "suite": "regression",
+          "entry": "test"
+        }
+      ],
+      "new_entry_status": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "replacement_qualification": "OPEN",
+      "original_stdout_oracle": {
+        "path": "tests/regression/10_stdlib/1431_net_extended.xr.expected",
+        "state": "MISSING",
+        "lf_sha256": null
+      },
+      "original_regression_obligation": {
+        "entry": "test",
+        "expected_exit": 0,
+        "test_discovery": "NOT_RUN"
+      },
+      "original_named_test_obligation": {
+        "state": "REVIEWED_TEXTUAL_DECLARATIONS_NOT_RUNTIME_DISCOVERY",
+        "declarations": [
+          {
+            "name": "test_net_core_apis",
+            "marker_line": 7,
+            "source_segment_lf_sha256": "549365e5460927cd0093803ed1defaa63daa71dc279be4d80acc2e930081010f"
+          },
+          {
+            "name": "test_net_tls_apis",
+            "marker_line": 34,
+            "source_segment_lf_sha256": "958fa323e2611c4d0ae88e45732e3ee5f08c3c5f4c4c2f7a0fb4b81cd1a06aeb"
+          },
+          {
+            "name": "test_net_udp_apis",
+            "marker_line": 43,
+            "source_segment_lf_sha256": "a75e8f5ea30906987a16bec70ac1f09ceb891db6049adb3bd500fcd3860a630d"
+          },
+          {
+            "name": "test_net_multicast_rejects_unicast_group",
+            "marker_line": 52,
+            "source_segment_lf_sha256": "1b693b6b33bfe18fb7e51162a719b52bd922f8c7560fbc33ac6cf72cf3eb4c78"
+          },
+          {
+            "name": "test_net_multicast_rejects_malformed_groups",
+            "marker_line": 75,
+            "source_segment_lf_sha256": "f1f26e253fa525ce52dd3792f9eecb5e74100c73bee01d35390fdb71a86429e5"
+          },
+          {
+            "name": "test_net_multicast_bind",
+            "marker_line": 88,
+            "source_segment_lf_sha256": "fb8d6e06653a215063ac484437afee4bf0064c7b3e2513088dc955491169dabd"
+          },
+          {
+            "name": "test_lookup_consistent",
+            "marker_line": 97,
+            "source_segment_lf_sha256": "b96ea881493b76b8aecc13f85dc1572b17443c55c872de6467a57cba69102603"
+          },
+          {
+            "name": "test_lookup_type",
+            "marker_line": 108,
+            "source_segment_lf_sha256": "c21c5bd72ad022d9086d10b1bc9b515ed203035d0c490473a685017853d41985"
+          }
+        ],
+        "execution": "NOT_RUN"
+      },
+      "target_contract_review": "REQUIRED; actual published canonical handle/Sendable/view/error/protocol/driver/context/platform interfaces and full applicable resource/wait/drain/physical/FI gates remainOPEN. No guessed provider ABI or skipped capability PASS."
+    },
+    {
+      "case_id": "tests/regression/10_stdlib/1432_net_typed_handle.xr",
+      "source_lf_sha256": "1f1ba63a73d56d20020e0b688f2e4d3cd7672059d96f6bf0c3928483bc754fb0",
+      "primary_family": "builtin-method-native-provider-call",
+      "secondary_families": [
+        "typed-error-throw-try-catch",
+        "test-entry-assertion-async",
+        "defer-cleanup-resource-lifetime",
+        "module-graph-import-export-init",
+        "array-slice-fixed-array-range-iteration",
+        "ownership-read-ref-move-copy-drop",
+        "coroutine-go-await-task",
+        "channel-select-scope-cancel"
+      ],
+      "tasks": [
+        "313",
+        "314",
+        "315",
+        "316",
+        "317",
+        "318",
+        "319",
+        "320",
+        "322"
+      ],
+      "producer_packages": [
+        "P02",
+        "P06",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P12",
+        "P13",
+        "P14",
+        "P17",
+        "P18"
+      ],
+      "semantic_basis": "Complete original network/protocol/project review preserves every named body, original full byte/framing/counter/wait/context dimension and both normal/typed/error responsibilities. Setup/provider skips, API names, banners, simulated records, elapsed-only timing and self-roundtrip do not qualify actual execution.",
+      "original_runner_entries": [
+        {
+          "suite": "regression",
+          "entry": "test"
+        }
+      ],
+      "new_entry_status": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "replacement_qualification": "OPEN",
+      "original_stdout_oracle": {
+        "path": "tests/regression/10_stdlib/1432_net_typed_handle.xr.expected",
+        "state": "MISSING",
+        "lf_sha256": null
+      },
+      "original_regression_obligation": {
+        "entry": "test",
+        "expected_exit": 0,
+        "test_discovery": "NOT_RUN"
+      },
+      "original_named_test_obligation": {
+        "state": "REVIEWED_TEXTUAL_DECLARATIONS_NOT_RUNTIME_DISCOVERY",
+        "declarations": [
+          {
+            "name": "test_listener_operations",
+            "marker_line": 22,
+            "source_segment_lf_sha256": "7cb5a3646e9ff7999fac0e1ce567963e5c716cee7f9b6248f0b1c2f913499812"
+          },
+          {
+            "name": "test_module_operations_are_consistent",
+            "marker_line": 43,
+            "source_segment_lf_sha256": "8410b17e477f989e37b7673ae1464f39fa5a800ef24bf8a5c600c5ff7eba7c8c"
+          },
+          {
+            "name": "test_operations_via_inference",
+            "marker_line": 59,
+            "source_segment_lf_sha256": "a6a467cab8b2103eeeb2ed212d6042dfe5d952e89108362a96449bdde4276a8a"
+          },
+          {
+            "name": "test_explicit_typed_listener",
+            "marker_line": 80,
+            "source_segment_lf_sha256": "29344e33d399818ffbd5b59f7024c18548cf6edf591927ad320ea0a84634b354"
+          }
+        ],
+        "execution": "NOT_RUN"
+      },
+      "target_contract_review": "REQUIRED; actual published canonical handle/Sendable/view/error/protocol/driver/context/platform interfaces and full applicable resource/wait/drain/physical/FI gates remainOPEN. No guessed provider ABI or skipped capability PASS.",
+      "target_source_port": {
+        "fixture": "tests/unit/xir/legacy_consumers/fixtures/network_regression_ports/1432_net_typed_handle/root.xr",
+        "lf_sha256": "d08f3e6d89f4aed1704677bcebf2aeb5e0da898c9a22a4f2eb9b021aaf786bde",
+        "owner_package": "P13",
+        "qualification": "NOT_RUN",
+        "frozen_basis": [
+          "Preserve every original named positive/byte/half-close/deadline/TLS responsibility and exact dimensions. Task313 ordinary class handle parameters/calls retire move; actual setup/TLS assertion replaces skip-toPASS. Add scope/idempotent closes without erasing normal closes. Actual declared Sendable/identity/wait/stream fragmentation/jobdrain/provider/FI/physical contracts remain open."
+        ]
+      },
+      "named_test_migration": {
+        "state": "PREPARED_NOT_EXECUTED",
+        "original_tests_removed": false,
+        "mapping": {
+          "test_listener_operations": "test_listener_operations",
+          "test_module_operations_are_consistent": "test_module_operations_are_consistent",
+          "test_operations_via_inference": "test_operations_via_inference",
+          "test_explicit_typed_listener": "test_explicit_typed_listener"
+        }
+      },
+      "target_disposition": {
+        "kind": "POSITIVE_COMPLETE_NETWORK_OR_PROTOCOL_AFTER_FROZEN_PORT",
+        "owner_package": "P13",
+        "qualification": "NOT_RUN",
+        "reason": "Preserve every original named positive/byte/half-close/deadline/TLS responsibility and exact dimensions. Task313 ordinary class handle parameters/calls retire move; actual setup/TLS assertion replaces skip-toPASS. Add scope/idempotent closes without erasing normal closes. Actual declared Sendable/identity/wait/stream fragmentation/jobdrain/provider/FI/physical contracts remain open."
+      }
+    },
+    {
+      "case_id": "tests/regression/10_stdlib/1433_net_loopback.xr",
+      "source_lf_sha256": "9a1f4d0d42e45061d13c00a888af47d59db12535d62131b1b0085d937943a302",
+      "primary_family": "builtin-method-native-provider-call",
+      "secondary_families": [
+        "typed-error-throw-try-catch",
+        "test-entry-assertion-async",
+        "defer-cleanup-resource-lifetime",
+        "module-graph-import-export-init",
+        "array-slice-fixed-array-range-iteration",
+        "ownership-read-ref-move-copy-drop",
+        "coroutine-go-await-task",
+        "channel-select-scope-cancel"
+      ],
+      "tasks": [
+        "313",
+        "314",
+        "315",
+        "316",
+        "317",
+        "318",
+        "319",
+        "320",
+        "322"
+      ],
+      "producer_packages": [
+        "P02",
+        "P06",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P12",
+        "P13",
+        "P14",
+        "P17",
+        "P18"
+      ],
+      "semantic_basis": "Complete original network/protocol/project review preserves every named body, original full byte/framing/counter/wait/context dimension and both normal/typed/error responsibilities. Setup/provider skips, API names, banners, simulated records, elapsed-only timing and self-roundtrip do not qualify actual execution.",
+      "original_runner_entries": [
+        {
+          "suite": "regression",
+          "entry": "test"
+        }
+      ],
+      "new_entry_status": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "replacement_qualification": "OPEN",
+      "original_stdout_oracle": {
+        "path": "tests/regression/10_stdlib/1433_net_loopback.xr.expected",
+        "state": "MISSING",
+        "lf_sha256": null
+      },
+      "original_regression_obligation": {
+        "entry": "test",
+        "expected_exit": 0,
+        "test_discovery": "NOT_RUN"
+      },
+      "original_named_test_obligation": {
+        "state": "REVIEWED_TEXTUAL_DECLARATIONS_NOT_RUNTIME_DISCOVERY",
+        "declarations": [
+          {
+            "name": "test_loopback_echo",
+            "marker_line": 44,
+            "source_segment_lf_sha256": "f9cacb128d3fc2c9554c7119c187998a743ae441131d54eb9976a7c5a9264b8f"
+          },
+          {
+            "name": "test_loopback_binary_high_bytes",
+            "marker_line": 76,
+            "source_segment_lf_sha256": "431f4870adb50de303282a64f7eb286d93ac3bab3c74cf07904088571835e3cd"
+          },
+          {
+            "name": "test_native_copy_self_loopback",
+            "marker_line": 105,
+            "source_segment_lf_sha256": "61ffda0961565448f7d3e9b51b9512020e0253011f535e73aade387a07062c4a"
+          },
+          {
+            "name": "test_native_copy_loopback",
+            "marker_line": 130,
+            "source_segment_lf_sha256": "d190a50e48766f10dbfab1a3a69baced9a02a21c41d1e1fa75214c61a11908d5"
+          }
+        ],
+        "execution": "NOT_RUN"
+      },
+      "target_contract_review": "REQUIRED; actual published canonical handle/Sendable/view/error/protocol/driver/context/platform interfaces and full applicable resource/wait/drain/physical/FI gates remainOPEN. No guessed provider ABI or skipped capability PASS.",
+      "target_source_port": {
+        "fixture": "tests/unit/xir/legacy_consumers/fixtures/network_regression_ports/1433_net_loopback/root.xr",
+        "lf_sha256": "4928680434c1c16e0324d8f995e999d47c431de28c0bdd9d4aaa38c025ab7474",
+        "owner_package": "P10",
+        "qualification": "NOT_RUN",
+        "frozen_basis": [
+          "Preserve every original named positive/byte/half-close/deadline/TLS responsibility and exact dimensions. Task313 ordinary class handle parameters/calls retire move; actual setup/TLS assertion replaces skip-toPASS. Add scope/idempotent closes without erasing normal closes. Actual declared Sendable/identity/wait/stream fragmentation/jobdrain/provider/FI/physical contracts remain open."
+        ]
+      },
+      "named_test_migration": {
+        "state": "PREPARED_NOT_EXECUTED",
+        "original_tests_removed": false,
+        "mapping": {
+          "test_loopback_echo": "test_loopback_echo",
+          "test_loopback_binary_high_bytes": "test_loopback_binary_high_bytes",
+          "test_native_copy_self_loopback": "test_native_copy_self_loopback",
+          "test_native_copy_loopback": "test_native_copy_loopback"
+        }
+      },
+      "target_disposition": {
+        "kind": "POSITIVE_COMPLETE_NETWORK_OR_PROTOCOL_AFTER_FROZEN_PORT",
+        "owner_package": "P10",
+        "qualification": "NOT_RUN",
+        "reason": "Preserve every original named positive/byte/half-close/deadline/TLS responsibility and exact dimensions. Task313 ordinary class handle parameters/calls retire move; actual setup/TLS assertion replaces skip-toPASS. Add scope/idempotent closes without erasing normal closes. Actual declared Sendable/identity/wait/stream fragmentation/jobdrain/provider/FI/physical contracts remain open."
+      }
+    },
+    {
+      "case_id": "tests/regression/10_stdlib/1434_net_byte_array_loopback.xr",
+      "source_lf_sha256": "2f2d1a42af5b4b6dd395b395d5b510f2021dd2a4b232c5eb3fcaf095db333a70",
+      "primary_family": "builtin-method-native-provider-call",
+      "secondary_families": [
+        "typed-error-throw-try-catch",
+        "test-entry-assertion-async",
+        "defer-cleanup-resource-lifetime",
+        "module-graph-import-export-init",
+        "array-slice-fixed-array-range-iteration",
+        "ownership-read-ref-move-copy-drop",
+        "coroutine-go-await-task",
+        "channel-select-scope-cancel"
+      ],
+      "tasks": [
+        "313",
+        "314",
+        "315",
+        "316",
+        "317",
+        "318",
+        "319",
+        "320",
+        "322"
+      ],
+      "producer_packages": [
+        "P02",
+        "P06",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P12",
+        "P13",
+        "P14",
+        "P17",
+        "P18"
+      ],
+      "semantic_basis": "Complete original network/protocol/project review preserves every named body, original full byte/framing/counter/wait/context dimension and both normal/typed/error responsibilities. Setup/provider skips, API names, banners, simulated records, elapsed-only timing and self-roundtrip do not qualify actual execution.",
+      "original_runner_entries": [
+        {
+          "suite": "regression",
+          "entry": "test"
+        }
+      ],
+      "new_entry_status": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "replacement_qualification": "OPEN",
+      "original_stdout_oracle": {
+        "path": "tests/regression/10_stdlib/1434_net_byte_array_loopback.xr.expected",
+        "state": "MISSING",
+        "lf_sha256": null
+      },
+      "original_regression_obligation": {
+        "entry": "test",
+        "expected_exit": 0,
+        "test_discovery": "NOT_RUN"
+      },
+      "original_named_test_obligation": {
+        "state": "REVIEWED_TEXTUAL_DECLARATIONS_NOT_RUNTIME_DISCOVERY",
+        "declarations": [
+          {
+            "name": "test_byte_array_echo_roundtrip",
+            "marker_line": 45,
+            "source_segment_lf_sha256": "d8cf6262783cab298c8277369ea92b53165a8530ddab33a1998b1f8a4cfa4248"
+          },
+          {
+            "name": "test_read_into_maxlen_controls_length",
+            "marker_line": 71,
+            "source_segment_lf_sha256": "d4b51e240c7d0cc575bf9fff9c528a8e5277d0fc61412bbecdec5fabf697d49e"
+          }
+        ],
+        "execution": "NOT_RUN"
+      },
+      "target_contract_review": "REQUIRED; actual published canonical handle/Sendable/view/error/protocol/driver/context/platform interfaces and full applicable resource/wait/drain/physical/FI gates remainOPEN. No guessed provider ABI or skipped capability PASS.",
+      "target_source_port": {
+        "fixture": "tests/unit/xir/legacy_consumers/fixtures/network_regression_ports/1434_net_byte_array_loopback/root.xr",
+        "lf_sha256": "2ec036d577859986be110a69f126930c6b683f7f749dded01990557295a96477",
+        "owner_package": "P10",
+        "qualification": "NOT_RUN",
+        "frozen_basis": [
+          "Preserve every original named positive/byte/half-close/deadline/TLS responsibility and exact dimensions. Task313 ordinary class handle parameters/calls retire move; actual setup/TLS assertion replaces skip-toPASS. Add scope/idempotent closes without erasing normal closes. Actual declared Sendable/identity/wait/stream fragmentation/jobdrain/provider/FI/physical contracts remain open."
+        ]
+      },
+      "named_test_migration": {
+        "state": "PREPARED_NOT_EXECUTED",
+        "original_tests_removed": false,
+        "mapping": {
+          "test_byte_array_echo_roundtrip": "test_byte_array_echo_roundtrip",
+          "test_read_into_maxlen_controls_length": "test_read_into_maxlen_controls_length"
+        }
+      },
+      "target_disposition": {
+        "kind": "POSITIVE_COMPLETE_NETWORK_OR_PROTOCOL_AFTER_FROZEN_PORT",
+        "owner_package": "P10",
+        "qualification": "NOT_RUN",
+        "reason": "Preserve every original named positive/byte/half-close/deadline/TLS responsibility and exact dimensions. Task313 ordinary class handle parameters/calls retire move; actual setup/TLS assertion replaces skip-toPASS. Add scope/idempotent closes without erasing normal closes. Actual declared Sendable/identity/wait/stream fragmentation/jobdrain/provider/FI/physical contracts remain open."
+      }
+    },
+    {
+      "case_id": "tests/regression/10_stdlib/1435_net_deadline_error.xr",
+      "source_lf_sha256": "b71d815c67db84ff6428fca41a75499ba74cd97d658b7d009c893a1e70dcc0a0",
+      "primary_family": "builtin-method-native-provider-call",
+      "secondary_families": [
+        "typed-error-throw-try-catch",
+        "test-entry-assertion-async",
+        "defer-cleanup-resource-lifetime",
+        "module-graph-import-export-init",
+        "array-slice-fixed-array-range-iteration",
+        "ownership-read-ref-move-copy-drop",
+        "coroutine-go-await-task",
+        "channel-select-scope-cancel"
+      ],
+      "tasks": [
+        "313",
+        "314",
+        "315",
+        "316",
+        "317",
+        "318",
+        "319",
+        "320",
+        "322"
+      ],
+      "producer_packages": [
+        "P02",
+        "P06",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P12",
+        "P13",
+        "P14",
+        "P17",
+        "P18"
+      ],
+      "semantic_basis": "Complete original network/protocol/project review preserves every named body, original full byte/framing/counter/wait/context dimension and both normal/typed/error responsibilities. Setup/provider skips, API names, banners, simulated records, elapsed-only timing and self-roundtrip do not qualify actual execution.",
+      "original_runner_entries": [
+        {
+          "suite": "regression",
+          "entry": "test"
+        }
+      ],
+      "new_entry_status": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "replacement_qualification": "OPEN",
+      "original_stdout_oracle": {
+        "path": "tests/regression/10_stdlib/1435_net_deadline_error.xr.expected",
+        "state": "MISSING",
+        "lf_sha256": null
+      },
+      "original_regression_obligation": {
+        "entry": "test",
+        "expected_exit": 0,
+        "test_discovery": "NOT_RUN"
+      },
+      "original_named_test_obligation": {
+        "state": "REVIEWED_TEXTUAL_DECLARATIONS_NOT_RUNTIME_DISCOVERY",
+        "declarations": [
+          {
+            "name": "test_accept_deadline_timeout",
+            "marker_line": 38,
+            "source_segment_lf_sha256": "64c4ffcd75aee7bb9e5ed8ba36b32acf4273b74478d82615daf216fb618977e0"
+          },
+          {
+            "name": "test_accept_closed_reports_closed",
+            "marker_line": 54,
+            "source_segment_lf_sha256": "95d3d72b269015cb8e030d282fa08e33ecce47551d24f1d5ae01c570d84ed82d"
+          },
+          {
+            "name": "test_read_deadline_timeout",
+            "marker_line": 68,
+            "source_segment_lf_sha256": "da8c842ac2d70906e57965b79a019e6b604b2d29c5e3270025d4321ff936b7e4"
+          },
+          {
+            "name": "test_closed_handle_error",
+            "marker_line": 91,
+            "source_segment_lf_sha256": "30a48f3bd26327ffc44bad94146ec9c58c48e292d545b99c602a279efc74731b"
+          }
+        ],
+        "execution": "NOT_RUN"
+      },
+      "target_contract_review": "REQUIRED; actual published canonical handle/Sendable/view/error/protocol/driver/context/platform interfaces and full applicable resource/wait/drain/physical/FI gates remainOPEN. No guessed provider ABI or skipped capability PASS.",
+      "target_source_port": {
+        "fixture": "tests/unit/xir/legacy_consumers/fixtures/network_regression_ports/1435_net_deadline_error/root.xr",
+        "lf_sha256": "3557c8a2cfe75c4eed500ab6b35879ef4bc1d294f8f45ff0e7b6de3cedd0c1bb",
+        "owner_package": "P13",
+        "qualification": "NOT_RUN",
+        "frozen_basis": [
+          "Preserve every original named positive/byte/half-close/deadline/TLS responsibility and exact dimensions. Task313 ordinary class handle parameters/calls retire move; actual setup/TLS assertion replaces skip-toPASS. Add scope/idempotent closes without erasing normal closes. Actual declared Sendable/identity/wait/stream fragmentation/jobdrain/provider/FI/physical contracts remain open."
+        ]
+      },
+      "named_test_migration": {
+        "state": "PREPARED_NOT_EXECUTED",
+        "original_tests_removed": false,
+        "mapping": {
+          "test_accept_deadline_timeout": "test_accept_deadline_timeout",
+          "test_accept_closed_reports_closed": "test_accept_closed_reports_closed",
+          "test_read_deadline_timeout": "test_read_deadline_timeout",
+          "test_closed_handle_error": "test_closed_handle_error"
+        }
+      },
+      "target_disposition": {
+        "kind": "POSITIVE_COMPLETE_NETWORK_OR_PROTOCOL_AFTER_FROZEN_PORT",
+        "owner_package": "P13",
+        "qualification": "NOT_RUN",
+        "reason": "Preserve every original named positive/byte/half-close/deadline/TLS responsibility and exact dimensions. Task313 ordinary class handle parameters/calls retire move; actual setup/TLS assertion replaces skip-toPASS. Add scope/idempotent closes without erasing normal closes. Actual declared Sendable/identity/wait/stream fragmentation/jobdrain/provider/FI/physical contracts remain open."
+      }
+    },
+    {
+      "case_id": "tests/regression/10_stdlib/1436_net_halfclose_bidi.xr",
+      "source_lf_sha256": "ae88075b1658c332fc929857997d47a7d4f050e74930345b2140f64e895f2635",
+      "primary_family": "builtin-method-native-provider-call",
+      "secondary_families": [
+        "typed-error-throw-try-catch",
+        "test-entry-assertion-async",
+        "defer-cleanup-resource-lifetime",
+        "module-graph-import-export-init",
+        "array-slice-fixed-array-range-iteration",
+        "ownership-read-ref-move-copy-drop",
+        "coroutine-go-await-task",
+        "channel-select-scope-cancel"
+      ],
+      "tasks": [
+        "313",
+        "314",
+        "315",
+        "316",
+        "317",
+        "318",
+        "319",
+        "320",
+        "322"
+      ],
+      "producer_packages": [
+        "P02",
+        "P06",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P12",
+        "P13",
+        "P14",
+        "P17",
+        "P18"
+      ],
+      "semantic_basis": "Complete original network/protocol/project review preserves every named body, original full byte/framing/counter/wait/context dimension and both normal/typed/error responsibilities. Setup/provider skips, API names, banners, simulated records, elapsed-only timing and self-roundtrip do not qualify actual execution.",
+      "original_runner_entries": [
+        {
+          "suite": "regression",
+          "entry": "test"
+        }
+      ],
+      "new_entry_status": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "replacement_qualification": "OPEN",
+      "original_stdout_oracle": {
+        "path": "tests/regression/10_stdlib/1436_net_halfclose_bidi.xr.expected",
+        "state": "MISSING",
+        "lf_sha256": null
+      },
+      "original_regression_obligation": {
+        "entry": "test",
+        "expected_exit": 0,
+        "test_discovery": "NOT_RUN"
+      },
+      "original_named_test_obligation": {
+        "state": "REVIEWED_TEXTUAL_DECLARATIONS_NOT_RUNTIME_DISCOVERY",
+        "declarations": [
+          {
+            "name": "test_shutdown_write_allows_response",
+            "marker_line": 55,
+            "source_segment_lf_sha256": "96cafd0e3d7fd1585843b791b3b9facd8ddbd116c51ec0dff535807551a5e3d5"
+          },
+          {
+            "name": "test_copy_bidirectional_proxy_echo",
+            "marker_line": 81,
+            "source_segment_lf_sha256": "61b833f56c80c64f28283cf9b61bf364c675b1faa886b25c8dd6ccfc21c02062"
+          }
+        ],
+        "execution": "NOT_RUN"
+      },
+      "target_contract_review": "REQUIRED; actual published canonical handle/Sendable/view/error/protocol/driver/context/platform interfaces and full applicable resource/wait/drain/physical/FI gates remainOPEN. No guessed provider ABI or skipped capability PASS.",
+      "target_source_port": {
+        "fixture": "tests/unit/xir/legacy_consumers/fixtures/network_regression_ports/1436_net_halfclose_bidi/root.xr",
+        "lf_sha256": "d154aeb7711911a09f4fa6cf611ec4294df4f84aaf8a66e3a73620477cad9422",
+        "owner_package": "P13",
+        "qualification": "NOT_RUN",
+        "frozen_basis": [
+          "Preserve every original named positive/byte/half-close/deadline/TLS responsibility and exact dimensions. Task313 ordinary class handle parameters/calls retire move; actual setup/TLS assertion replaces skip-toPASS. Add scope/idempotent closes without erasing normal closes. Actual declared Sendable/identity/wait/stream fragmentation/jobdrain/provider/FI/physical contracts remain open."
+        ]
+      },
+      "named_test_migration": {
+        "state": "PREPARED_NOT_EXECUTED",
+        "original_tests_removed": false,
+        "mapping": {
+          "test_shutdown_write_allows_response": "test_shutdown_write_allows_response",
+          "test_copy_bidirectional_proxy_echo": "test_copy_bidirectional_proxy_echo"
+        }
+      },
+      "target_disposition": {
+        "kind": "POSITIVE_COMPLETE_NETWORK_OR_PROTOCOL_AFTER_FROZEN_PORT",
+        "owner_package": "P13",
+        "qualification": "NOT_RUN",
+        "reason": "Preserve every original named positive/byte/half-close/deadline/TLS responsibility and exact dimensions. Task313 ordinary class handle parameters/calls retire move; actual setup/TLS assertion replaces skip-toPASS. Add scope/idempotent closes without erasing normal closes. Actual declared Sendable/identity/wait/stream fragmentation/jobdrain/provider/FI/physical contracts remain open."
+      }
+    },
+    {
+      "case_id": "tests/regression/10_stdlib/1437_net_tls_timeout.xr",
+      "source_lf_sha256": "d6a161790e2e4fa378d81263135c5fb962f3a4ffca8ac08373f1e11cbd47ad4e",
+      "primary_family": "builtin-method-native-provider-call",
+      "secondary_families": [
+        "typed-error-throw-try-catch",
+        "test-entry-assertion-async",
+        "defer-cleanup-resource-lifetime",
+        "module-graph-import-export-init",
+        "array-slice-fixed-array-range-iteration",
+        "ownership-read-ref-move-copy-drop",
+        "coroutine-go-await-task",
+        "channel-select-scope-cancel"
+      ],
+      "tasks": [
+        "313",
+        "314",
+        "315",
+        "316",
+        "317",
+        "318",
+        "319",
+        "320",
+        "322"
+      ],
+      "producer_packages": [
+        "P02",
+        "P06",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P12",
+        "P13",
+        "P14",
+        "P17",
+        "P18"
+      ],
+      "semantic_basis": "Complete original network/protocol/project review preserves every named body, original full byte/framing/counter/wait/context dimension and both normal/typed/error responsibilities. Setup/provider skips, API names, banners, simulated records, elapsed-only timing and self-roundtrip do not qualify actual execution.",
+      "original_runner_entries": [
+        {
+          "suite": "regression",
+          "entry": "test"
+        }
+      ],
+      "new_entry_status": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "replacement_qualification": "OPEN",
+      "original_stdout_oracle": {
+        "path": "tests/regression/10_stdlib/1437_net_tls_timeout.xr.expected",
+        "state": "MISSING",
+        "lf_sha256": null
+      },
+      "original_regression_obligation": {
+        "entry": "test",
+        "expected_exit": 0,
+        "test_discovery": "NOT_RUN"
+      },
+      "original_named_test_obligation": {
+        "state": "REVIEWED_TEXTUAL_DECLARATIONS_NOT_RUNTIME_DISCOVERY",
+        "declarations": [
+          {
+            "name": "test_dial_tls_handshake_timeout",
+            "marker_line": 26,
+            "source_segment_lf_sha256": "a3cbe1f33110f7e303861d76fc94ec8aea61d9e8651540f33b48a9344e6f4e72"
+          },
+          {
+            "name": "test_upgrade_tls_handshake_timeout",
+            "marker_line": 56,
+            "source_segment_lf_sha256": "8c2b362559d415cb4bed829447897bb3fd9a589713bb5718b8a0ee837544827e"
+          }
+        ],
+        "execution": "NOT_RUN"
+      },
+      "target_contract_review": "REQUIRED; actual published canonical handle/Sendable/view/error/protocol/driver/context/platform interfaces and full applicable resource/wait/drain/physical/FI gates remainOPEN. No guessed provider ABI or skipped capability PASS.",
+      "target_source_port": {
+        "fixture": "tests/unit/xir/legacy_consumers/fixtures/network_regression_ports/1437_net_tls_timeout/root.xr",
+        "lf_sha256": "1bdfc2a7b76119713228248b084dfc2e463b1e3c399941afe624ad7367780ae4",
+        "owner_package": "P13",
+        "qualification": "NOT_RUN",
+        "frozen_basis": [
+          "Preserve every original named positive/byte/half-close/deadline/TLS responsibility and exact dimensions. Task313 ordinary class handle parameters/calls retire move; actual setup/TLS assertion replaces skip-toPASS. Add scope/idempotent closes without erasing normal closes. Actual declared Sendable/identity/wait/stream fragmentation/jobdrain/provider/FI/physical contracts remain open."
+        ]
+      },
+      "named_test_migration": {
+        "state": "PREPARED_NOT_EXECUTED",
+        "original_tests_removed": false,
+        "mapping": {
+          "test_dial_tls_handshake_timeout": "test_dial_tls_handshake_timeout",
+          "test_upgrade_tls_handshake_timeout": "test_upgrade_tls_handshake_timeout"
+        }
+      },
+      "target_disposition": {
+        "kind": "POSITIVE_COMPLETE_NETWORK_OR_PROTOCOL_AFTER_FROZEN_PORT",
+        "owner_package": "P13",
+        "qualification": "NOT_RUN",
+        "reason": "Preserve every original named positive/byte/half-close/deadline/TLS responsibility and exact dimensions. Task313 ordinary class handle parameters/calls retire move; actual setup/TLS assertion replaces skip-toPASS. Add scope/idempotent closes without erasing normal closes. Actual declared Sendable/identity/wait/stream fragmentation/jobdrain/provider/FI/physical contracts remain open."
+      }
+    },
+    {
+      "case_id": "tests/regression/10_stdlib/1438_ws_self_connect.xr",
+      "source_lf_sha256": "586d515476b9736269a0d77245c1376937ef0d7544a1da8f7b7a352b26ed6174",
+      "primary_family": "builtin-method-native-provider-call",
+      "secondary_families": [
+        "typed-error-throw-try-catch",
+        "test-entry-assertion-async",
+        "defer-cleanup-resource-lifetime",
+        "module-graph-import-export-init",
+        "array-slice-fixed-array-range-iteration",
+        "ownership-read-ref-move-copy-drop",
+        "coroutine-go-await-task",
+        "channel-select-scope-cancel"
+      ],
+      "tasks": [
+        "313",
+        "314",
+        "315",
+        "316",
+        "317",
+        "318",
+        "319",
+        "320",
+        "322"
+      ],
+      "producer_packages": [
+        "P02",
+        "P06",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P12",
+        "P13",
+        "P14",
+        "P17",
+        "P18"
+      ],
+      "semantic_basis": "Complete original network/protocol/project review preserves every named body, original full byte/framing/counter/wait/context dimension and both normal/typed/error responsibilities. Setup/provider skips, API names, banners, simulated records, elapsed-only timing and self-roundtrip do not qualify actual execution.",
+      "original_runner_entries": [
+        {
+          "suite": "regression",
+          "entry": "test"
+        }
+      ],
+      "new_entry_status": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "replacement_qualification": "OPEN",
+      "original_stdout_oracle": {
+        "path": "tests/regression/10_stdlib/1438_ws_self_connect.xr.expected",
+        "state": "MISSING",
+        "lf_sha256": null
+      },
+      "original_regression_obligation": {
+        "entry": "test",
+        "expected_exit": 0,
+        "test_discovery": "NOT_RUN"
+      },
+      "original_named_test_obligation": {
+        "state": "REVIEWED_TEXTUAL_DECLARATIONS_NOT_RUNTIME_DISCOVERY",
+        "declarations": [
+          {
+            "name": "test_ws_self_connect",
+            "marker_line": 50,
+            "source_segment_lf_sha256": "ef53a749353ad31d802ca62755bdbd42b61ffd0da1264d6b5343e749c36b1f3c"
+          }
+        ],
+        "execution": "NOT_RUN"
+      },
+      "target_contract_review": "REQUIRED; actual published canonical handle/Sendable/view/error/protocol/driver/context/platform interfaces and full applicable resource/wait/drain/physical/FI gates remainOPEN. No guessed provider ABI or skipped capability PASS.",
+      "target_source_port": {
+        "fixture": "tests/unit/xir/legacy_consumers/fixtures/network_regression_ports/1438_ws_self_connect/root.xr",
+        "lf_sha256": "ce11e06725162b82d4af8879a9cba49893f4adc9518d4fe8ce10545e8c830ac1",
+        "owner_package": "P10",
+        "qualification": "NOT_RUN",
+        "frozen_basis": [
+          "Task313 ordinary WsConn callback replaces ref-class marker, with all original first-local passed/failed and short-circuit phi shapes untouched. Keep1+20+3x5=36 messages,5000ms recv and300ms startup; setup/error no silentPASS and running stop/conn close cleanup added. Actual readiness race, Sendable/service termination/wait/provider and fullFI remain open."
+        ]
+      },
+      "named_test_migration": {
+        "state": "PREPARED_NOT_EXECUTED",
+        "original_tests_removed": false,
+        "mapping": {
+          "test_ws_self_connect": "test_ws_self_connect"
+        }
+      },
+      "target_disposition": {
+        "kind": "POSITIVE_COMPLETE_NETWORK_OR_PROTOCOL_AFTER_FROZEN_PORT",
+        "owner_package": "P10",
+        "qualification": "NOT_RUN",
+        "reason": "Task313 ordinary WsConn callback replaces ref-class marker, with all original first-local passed/failed and short-circuit phi shapes untouched. Keep1+20+3x5=36 messages,5000ms recv and300ms startup; setup/error no silentPASS and running stop/conn close cleanup added. Actual readiness race, Sendable/service termination/wait/provider and fullFI remain open."
+      }
+    },
+    {
+      "case_id": "tests/regression/10_stdlib/1439_net_alpn.xr",
+      "source_lf_sha256": "97c76e1d679aa99e2cd3b6f214dc57d6204be6cf9b5a60abe4c33db0ba00f76e",
+      "primary_family": "builtin-method-native-provider-call",
+      "secondary_families": [
+        "typed-error-throw-try-catch",
+        "test-entry-assertion-async",
+        "defer-cleanup-resource-lifetime",
+        "module-graph-import-export-init",
+        "array-slice-fixed-array-range-iteration",
+        "ownership-read-ref-move-copy-drop",
+        "coroutine-go-await-task",
+        "channel-select-scope-cancel"
+      ],
+      "tasks": [
+        "313",
+        "314",
+        "315",
+        "316",
+        "317",
+        "318",
+        "319",
+        "320",
+        "322"
+      ],
+      "producer_packages": [
+        "P02",
+        "P06",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P12",
+        "P13",
+        "P14",
+        "P17",
+        "P18"
+      ],
+      "semantic_basis": "Complete original network/protocol/project review preserves every named body, original full byte/framing/counter/wait/context dimension and both normal/typed/error responsibilities. Setup/provider skips, API names, banners, simulated records, elapsed-only timing and self-roundtrip do not qualify actual execution.",
+      "original_runner_entries": [
+        {
+          "suite": "regression",
+          "entry": "test"
+        }
+      ],
+      "new_entry_status": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "replacement_qualification": "OPEN",
+      "original_stdout_oracle": {
+        "path": "tests/regression/10_stdlib/1439_net_alpn.xr.expected",
+        "state": "MISSING",
+        "lf_sha256": null
+      },
+      "original_regression_obligation": {
+        "entry": "test",
+        "expected_exit": 0,
+        "test_discovery": "NOT_RUN"
+      },
+      "original_named_test_obligation": {
+        "state": "REVIEWED_TEXTUAL_DECLARATIONS_NOT_RUNTIME_DISCOVERY",
+        "declarations": [
+          {
+            "name": "test_alpn_protocol_length_boundaries",
+            "marker_line": 45,
+            "source_segment_lf_sha256": "bc1243973713fc561e7f6f25e7c5fc6f2008b71d82f0c6676c1ef3bb6734f1c2"
+          },
+          {
+            "name": "test_alpn_total_wire_length_boundary",
+            "marker_line": 73,
+            "source_segment_lf_sha256": "bf5a2f5a72740607107d4298d2472fd95f73692a997232e9043bdee54cab7389"
+          },
+          {
+            "name": "test_negotiated_protocol_is_null_without_tls_session",
+            "marker_line": 80,
+            "source_segment_lf_sha256": "c979e78050ce857296074ef159dc33386db7184ba4292448d35d5ff7e86a54e2"
+          }
+        ],
+        "execution": "NOT_RUN"
+      },
+      "target_contract_review": "REQUIRED; actual published canonical handle/Sendable/view/error/protocol/driver/context/platform interfaces and full applicable resource/wait/drain/physical/FI gates remainOPEN. No guessed provider ABI or skipped capability PASS."
+    },
+    {
+      "case_id": "tests/regression/10_stdlib/1500_http_url.xr",
+      "source_lf_sha256": "b55787c71532e800f3f4d919cee05ef676cde0bb4d5f2db513c30fb378343005",
+      "primary_family": "builtin-method-native-provider-call",
+      "secondary_families": [
+        "typed-error-throw-try-catch",
+        "test-entry-assertion-async",
+        "defer-cleanup-resource-lifetime",
+        "module-graph-import-export-init",
+        "array-slice-fixed-array-range-iteration",
+        "ownership-read-ref-move-copy-drop",
+        "coroutine-go-await-task",
+        "channel-select-scope-cancel"
+      ],
+      "tasks": [
+        "313",
+        "314",
+        "315",
+        "316",
+        "317",
+        "318",
+        "319",
+        "320",
+        "322"
+      ],
+      "producer_packages": [
+        "P02",
+        "P06",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P12",
+        "P13",
+        "P14",
+        "P17",
+        "P18"
+      ],
+      "semantic_basis": "Complete original network/protocol/project review preserves every named body, original full byte/framing/counter/wait/context dimension and both normal/typed/error responsibilities. Setup/provider skips, API names, banners, simulated records, elapsed-only timing and self-roundtrip do not qualify actual execution.",
+      "original_runner_entries": [
+        {
+          "suite": "regression",
+          "entry": "test"
+        }
+      ],
+      "new_entry_status": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "replacement_qualification": "OPEN",
+      "original_stdout_oracle": {
+        "path": "tests/regression/10_stdlib/1500_http_url.xr.expected",
+        "state": "MISSING",
+        "lf_sha256": null
+      },
+      "original_regression_obligation": {
+        "entry": "test",
+        "expected_exit": 0,
+        "test_discovery": "NOT_RUN"
+      },
+      "original_named_test_obligation": {
+        "state": "REVIEWED_TEXTUAL_DECLARATIONS_NOT_RUNTIME_DISCOVERY",
+        "declarations": [
+          {
+            "name": "test_url_encode_space",
+            "marker_line": 5,
+            "source_segment_lf_sha256": "d4ecc2a59078add1b6d67a052e7b3d44e92ded7f7a87de5d2adefe23868835c5"
+          },
+          {
+            "name": "test_url_encode_unicode",
+            "marker_line": 10,
+            "source_segment_lf_sha256": "581f2a23dc690973a9d11a20e81159fdab8a79ab965fe18e179de4aa9081ca26"
+          },
+          {
+            "name": "test_url_encode_plus",
+            "marker_line": 15,
+            "source_segment_lf_sha256": "acffbd889f5603ff92deb399842a5318a0fc64554dc5ed423249b41418673302"
+          },
+          {
+            "name": "test_url_decode_space",
+            "marker_line": 20,
+            "source_segment_lf_sha256": "ffe970c5621a722eae2286a474b6cafda76c46d352f21068d558f059606de9ad"
+          },
+          {
+            "name": "test_url_decode_unicode",
+            "marker_line": 25,
+            "source_segment_lf_sha256": "908742a922b4b0b321335638e91a5e7050c0eeae0bc257742d7051811de90dd3"
+          },
+          {
+            "name": "test_url_roundtrip_special",
+            "marker_line": 30,
+            "source_segment_lf_sha256": "402f9144253154b779cf84006dda2b01ac76e185a1d8530c5e2c3420a2a08b25"
+          },
+          {
+            "name": "test_url_encode_empty",
+            "marker_line": 37,
+            "source_segment_lf_sha256": "a1190b88a64d290665922141f8491e86a399815ca77b04dcf83a7c4673716f52"
+          },
+          {
+            "name": "test_url_encode_pure_ascii",
+            "marker_line": 43,
+            "source_segment_lf_sha256": "035922d511e4791b5ca1594e957b6b8a6cef2103f8c9e85bb50b8c7c6bf2977b"
+          }
+        ],
+        "execution": "NOT_RUN"
+      },
+      "target_contract_review": "REQUIRED; actual published canonical handle/Sendable/view/error/protocol/driver/context/platform interfaces and full applicable resource/wait/drain/physical/FI gates remainOPEN. No guessed provider ABI or skipped capability PASS."
+    },
+    {
+      "case_id": "tests/regression/10_stdlib/1501_http_client_basic.xr",
+      "source_lf_sha256": "25d121639d38d796d6e94d01ed2ede2597e61f6327f926c9ca4fd09d81522aeb",
+      "primary_family": "builtin-method-native-provider-call",
+      "secondary_families": [
+        "typed-error-throw-try-catch",
+        "test-entry-assertion-async",
+        "defer-cleanup-resource-lifetime",
+        "module-graph-import-export-init",
+        "array-slice-fixed-array-range-iteration",
+        "ownership-read-ref-move-copy-drop",
+        "coroutine-go-await-task",
+        "channel-select-scope-cancel"
+      ],
+      "tasks": [
+        "313",
+        "314",
+        "315",
+        "316",
+        "317",
+        "318",
+        "319",
+        "320",
+        "322"
+      ],
+      "producer_packages": [
+        "P02",
+        "P06",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P12",
+        "P13",
+        "P14",
+        "P17",
+        "P18"
+      ],
+      "semantic_basis": "Complete original network/protocol/project review preserves every named body, original full byte/framing/counter/wait/context dimension and both normal/typed/error responsibilities. Setup/provider skips, API names, banners, simulated records, elapsed-only timing and self-roundtrip do not qualify actual execution.",
+      "original_runner_entries": [
+        {
+          "suite": "regression",
+          "entry": "test"
+        }
+      ],
+      "new_entry_status": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "replacement_qualification": "OPEN",
+      "original_stdout_oracle": {
+        "path": "tests/regression/10_stdlib/1501_http_client_basic.xr.expected",
+        "state": "MISSING",
+        "lf_sha256": null
+      },
+      "original_regression_obligation": {
+        "entry": "test",
+        "expected_exit": 0,
+        "test_discovery": "NOT_RUN"
+      },
+      "original_named_test_obligation": {
+        "state": "REVIEWED_TEXTUAL_DECLARATIONS_NOT_RUNTIME_DISCOVERY",
+        "declarations": [
+          {
+            "name": "test_http_client_apis_exist",
+            "marker_line": 5,
+            "source_segment_lf_sha256": "e0098013e206e7da516db76686b968a40fd09b4e654fe8050149c7ceb7af4d17"
+          },
+          {
+            "name": "test_http_server_apis_exist",
+            "marker_line": 10,
+            "source_segment_lf_sha256": "f8132152cc89a953d04d396d18f0a38044d74943b59ad80668a01026978bd92e"
+          }
+        ],
+        "execution": "NOT_RUN"
+      },
+      "target_contract_review": "REQUIRED; actual published canonical handle/Sendable/view/error/protocol/driver/context/platform interfaces and full applicable resource/wait/drain/physical/FI gates remainOPEN. No guessed provider ABI or skipped capability PASS."
+    },
+    {
+      "case_id": "tests/regression/10_stdlib/1502_http_request_options.xr",
+      "source_lf_sha256": "a65892a1bb9cc9a03854e12232261a36d77de71036342f575dbc97b9bd8aa0f2",
+      "primary_family": "builtin-method-native-provider-call",
+      "secondary_families": [
+        "typed-error-throw-try-catch",
+        "test-entry-assertion-async",
+        "defer-cleanup-resource-lifetime",
+        "module-graph-import-export-init",
+        "array-slice-fixed-array-range-iteration",
+        "ownership-read-ref-move-copy-drop",
+        "coroutine-go-await-task",
+        "channel-select-scope-cancel"
+      ],
+      "tasks": [
+        "313",
+        "314",
+        "315",
+        "316",
+        "317",
+        "318",
+        "319",
+        "320",
+        "322"
+      ],
+      "producer_packages": [
+        "P02",
+        "P06",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P12",
+        "P13",
+        "P14",
+        "P17",
+        "P18"
+      ],
+      "semantic_basis": "Complete original network/protocol/project review preserves every named body, original full byte/framing/counter/wait/context dimension and both normal/typed/error responsibilities. Setup/provider skips, API names, banners, simulated records, elapsed-only timing and self-roundtrip do not qualify actual execution.",
+      "original_runner_entries": [
+        {
+          "suite": "regression",
+          "entry": "test"
+        }
+      ],
+      "new_entry_status": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "replacement_qualification": "OPEN",
+      "original_stdout_oracle": {
+        "path": "tests/regression/10_stdlib/1502_http_request_options.xr.expected",
+        "state": "MISSING",
+        "lf_sha256": null
+      },
+      "original_regression_obligation": {
+        "entry": "test",
+        "expected_exit": 0,
+        "test_discovery": "NOT_RUN"
+      },
+      "original_named_test_obligation": {
+        "state": "REVIEWED_TEXTUAL_DECLARATIONS_NOT_RUNTIME_DISCOVERY",
+        "declarations": [
+          {
+            "name": "test_request_options_object",
+            "marker_line": 130,
+            "source_segment_lf_sha256": "bca0a92b2b83b18f1d4178ecbb476aaff752e53d7bef0ca5864dff67818f531d"
+          },
+          {
+            "name": "test_request_api_exists",
+            "marker_line": 149,
+            "source_segment_lf_sha256": "3efcde3247a7646559c615511099602dcb1149713a94b30bd44d34d0151a3213"
+          },
+          {
+            "name": "test_request_rejects_unsupported_scheme",
+            "marker_line": 163,
+            "source_segment_lf_sha256": "0bbf88ad088e0943b46505cadc54768dade586557c1050543d5e3546551fdc6e"
+          },
+          {
+            "name": "test_request_rejects_invalid_explicit_port",
+            "marker_line": 168,
+            "source_segment_lf_sha256": "465046593f5052c408ac0c1e94a3a2140769772cb45bafb1ce6bbd495e5e2c65"
+          },
+          {
+            "name": "test_request_rejects_url_userinfo",
+            "marker_line": 174,
+            "source_segment_lf_sha256": "51c31ca64594c43d9a4bba6a8a021a1dbcfa4f6a67146f118fd39bcfdf24c11f"
+          },
+          {
+            "name": "test_request_preserves_custom_method_token",
+            "marker_line": 179,
+            "source_segment_lf_sha256": "01f28f51cce8386769491325a13d764b29e6ef399c7af268238716b084615eb3"
+          },
+          {
+            "name": "test_request_defaults_identity_accept_encoding",
+            "marker_line": 197,
+            "source_segment_lf_sha256": "ec2082f0b615d2028879743f45cba3f1b067ff65110545c3dc577e3936ff2d18"
+          },
+          {
+            "name": "test_request_ignores_no_body_status_payload",
+            "marker_line": 215,
+            "source_segment_lf_sha256": "7164e1d994b70a694488c1f97630a74d535c2dc40eebbc9a304022b41dc2a751"
+          },
+          {
+            "name": "test_request_preserves_non_utf8_response_body",
+            "marker_line": 234,
+            "source_segment_lf_sha256": "7848a8fbcce46b88d56bfda546b5c6e183fdfc2fe3639a6b840d0935b48e10c9"
+          },
+          {
+            "name": "test_request_preserves_non_utf8_chunked_body",
+            "marker_line": 239,
+            "source_segment_lf_sha256": "e6457cd89f6269e7d070dce0c4b6507c64797956a5a6c87e20c42d50111e1c0a"
+          },
+          {
+            "name": "test_request_preserves_non_utf8_close_delimited_body",
+            "marker_line": 244,
+            "source_segment_lf_sha256": "9384e6aa3345a30a2cca5752eaf193371c861404c23dc11009872aff35beb35f"
+          },
+          {
+            "name": "test_request_body_is_written_as_bytes",
+            "marker_line": 249,
+            "source_segment_lf_sha256": "188854cd93a56aaa2802132ce2cc605c77915a77fd7a9a4913c256fc588681dc"
+          }
+        ],
+        "execution": "NOT_RUN"
+      },
+      "target_contract_review": "REQUIRED; actual published canonical handle/Sendable/view/error/protocol/driver/context/platform interfaces and full applicable resource/wait/drain/physical/FI gates remainOPEN. No guessed provider ABI or skipped capability PASS.",
+      "target_source_port": {
+        "fixture": "tests/unit/xir/legacy_consumers/fixtures/network_regression_ports/1502_http_request_options/root.xr",
+        "lf_sha256": "593c1a310ab12f6f9d58b547f25ab44b151df0f075c5d666f7220c8f78cbba7f",
+        "owner_package": "P13",
+        "qualification": "NOT_RUN",
+        "frozen_basis": [
+          "Published fromUtf8 is nonOptional while bytes/options fields remain legitimateOptional. Preserve all original options/method/URL rejection, threebinarybody framings and request captures, add scopecleanup and actualbody xr observation. No setupskip-toPASS; actual fragmented headers/body/waits and declaration-owned HTTP errors/provider/physical/FI remain open."
+        ]
+      },
+      "named_test_migration": {
+        "state": "PREPARED_NOT_EXECUTED",
+        "original_tests_removed": false,
+        "mapping": {
+          "test_request_options_object": "test_request_options_object",
+          "test_request_api_exists": "test_request_api_exists",
+          "test_request_rejects_unsupported_scheme": "test_request_rejects_unsupported_scheme",
+          "test_request_rejects_invalid_explicit_port": "test_request_rejects_invalid_explicit_port",
+          "test_request_rejects_url_userinfo": "test_request_rejects_url_userinfo",
+          "test_request_preserves_custom_method_token": "test_request_preserves_custom_method_token",
+          "test_request_defaults_identity_accept_encoding": "test_request_defaults_identity_accept_encoding",
+          "test_request_ignores_no_body_status_payload": "test_request_ignores_no_body_status_payload",
+          "test_request_preserves_non_utf8_response_body": "test_request_preserves_non_utf8_response_body",
+          "test_request_preserves_non_utf8_chunked_body": "test_request_preserves_non_utf8_chunked_body",
+          "test_request_preserves_non_utf8_close_delimited_body": "test_request_preserves_non_utf8_close_delimited_body",
+          "test_request_body_is_written_as_bytes": "test_request_body_is_written_as_bytes"
+        }
+      },
+      "target_disposition": {
+        "kind": "POSITIVE_COMPLETE_NETWORK_OR_PROTOCOL_AFTER_FROZEN_PORT",
+        "owner_package": "P13",
+        "qualification": "NOT_RUN",
+        "reason": "Published fromUtf8 is nonOptional while bytes/options fields remain legitimateOptional. Preserve all original options/method/URL rejection, threebinarybody framings and request captures, add scopecleanup and actualbody xr observation. No setupskip-toPASS; actual fragmented headers/body/waits and declaration-owned HTTP errors/provider/physical/FI remain open."
+      }
+    },
+    {
+      "case_id": "tests/regression/10_stdlib/1503_http_status_codes.xr",
+      "source_lf_sha256": "37564118e45a41d263e36301a3e17c0e6f758acb6084b9f64f9b057bf568661f",
+      "primary_family": "builtin-method-native-provider-call",
+      "secondary_families": [
+        "typed-error-throw-try-catch",
+        "test-entry-assertion-async",
+        "defer-cleanup-resource-lifetime",
+        "module-graph-import-export-init",
+        "array-slice-fixed-array-range-iteration",
+        "ownership-read-ref-move-copy-drop",
+        "coroutine-go-await-task",
+        "channel-select-scope-cancel"
+      ],
+      "tasks": [
+        "313",
+        "314",
+        "315",
+        "316",
+        "317",
+        "318",
+        "319",
+        "320",
+        "322"
+      ],
+      "producer_packages": [
+        "P02",
+        "P06",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P12",
+        "P13",
+        "P14",
+        "P17",
+        "P18"
+      ],
+      "semantic_basis": "Complete original network/protocol/project review preserves every named body, original full byte/framing/counter/wait/context dimension and both normal/typed/error responsibilities. Setup/provider skips, API names, banners, simulated records, elapsed-only timing and self-roundtrip do not qualify actual execution.",
+      "original_runner_entries": [
+        {
+          "suite": "regression",
+          "entry": "test"
+        }
+      ],
+      "new_entry_status": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "replacement_qualification": "OPEN",
+      "original_stdout_oracle": {
+        "path": "tests/regression/10_stdlib/1503_http_status_codes.xr.expected",
+        "state": "MISSING",
+        "lf_sha256": null
+      },
+      "original_regression_obligation": {
+        "entry": "test",
+        "expected_exit": 0,
+        "test_discovery": "NOT_RUN"
+      },
+      "original_named_test_obligation": {
+        "state": "REVIEWED_TEXTUAL_DECLARATIONS_NOT_RUNTIME_DISCOVERY",
+        "declarations": [
+          {
+            "name": "test_2xx_success",
+            "marker_line": 10,
+            "source_segment_lf_sha256": "963f406448dd3978297f590ebecd7847be1f5fa9b482ba019149034b3432e4e8"
+          },
+          {
+            "name": "test_3xx_redirect",
+            "marker_line": 19,
+            "source_segment_lf_sha256": "d21e8cd718c7587ce9c989a54be229a5277e5409a4f4883d080a82376b1fbd52"
+          },
+          {
+            "name": "test_4xx_client_error",
+            "marker_line": 29,
+            "source_segment_lf_sha256": "ee6317e73aea8f93b273058ca49e1cf6a79fae11892622371a849a7fcd40b005"
+          },
+          {
+            "name": "test_5xx_server_error",
+            "marker_line": 40,
+            "source_segment_lf_sha256": "233b5a6d9e6e89b5b9cf112061ed5ab23330df360800ba4401eece7d96176fc0"
+          }
+        ],
+        "execution": "NOT_RUN"
+      },
+      "target_contract_review": "REQUIRED; actual published canonical handle/Sendable/view/error/protocol/driver/context/platform interfaces and full applicable resource/wait/drain/physical/FI gates remainOPEN. No guessed provider ABI or skipped capability PASS."
+    },
+    {
+      "case_id": "tests/regression/10_stdlib/1504_http_https.xr",
+      "source_lf_sha256": "f0547150df061d9fb1c06cba0284d7ddab307ea61f8c6dce061b92f7d0b4c6e1",
+      "primary_family": "builtin-method-native-provider-call",
+      "secondary_families": [
+        "typed-error-throw-try-catch",
+        "test-entry-assertion-async",
+        "defer-cleanup-resource-lifetime",
+        "module-graph-import-export-init",
+        "array-slice-fixed-array-range-iteration",
+        "ownership-read-ref-move-copy-drop",
+        "coroutine-go-await-task",
+        "channel-select-scope-cancel"
+      ],
+      "tasks": [
+        "313",
+        "314",
+        "315",
+        "316",
+        "317",
+        "318",
+        "319",
+        "320",
+        "322"
+      ],
+      "producer_packages": [
+        "P02",
+        "P06",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P12",
+        "P13",
+        "P14",
+        "P17",
+        "P18"
+      ],
+      "semantic_basis": "Complete original network/protocol/project review preserves every named body, original full byte/framing/counter/wait/context dimension and both normal/typed/error responsibilities. Setup/provider skips, API names, banners, simulated records, elapsed-only timing and self-roundtrip do not qualify actual execution.",
+      "original_runner_entries": [
+        {
+          "suite": "regression",
+          "entry": "test"
+        }
+      ],
+      "new_entry_status": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "replacement_qualification": "OPEN",
+      "original_stdout_oracle": {
+        "path": "tests/regression/10_stdlib/1504_http_https.xr.expected",
+        "state": "MISSING",
+        "lf_sha256": null
+      },
+      "original_regression_obligation": {
+        "entry": "test",
+        "expected_exit": 0,
+        "test_discovery": "NOT_RUN"
+      },
+      "original_named_test_obligation": {
+        "state": "REVIEWED_TEXTUAL_DECLARATIONS_NOT_RUNTIME_DISCOVERY",
+        "declarations": [
+          {
+            "name": "test_protocol_detection",
+            "marker_line": 13,
+            "source_segment_lf_sha256": "8914982304af55cd0fb1463b096b888017a9ba73aea1d559b05edbcf81dab7e4"
+          },
+          {
+            "name": "test_default_ports",
+            "marker_line": 21,
+            "source_segment_lf_sha256": "b833e7ad88fd19971529f22870f3f1f297d32f229de40328ddf27b54fb3d9a97"
+          }
+        ],
+        "execution": "NOT_RUN"
+      },
+      "target_contract_review": "REQUIRED; actual published canonical handle/Sendable/view/error/protocol/driver/context/platform interfaces and full applicable resource/wait/drain/physical/FI gates remainOPEN. No guessed provider ABI or skipped capability PASS."
+    },
+    {
+      "case_id": "tests/regression/10_stdlib/1505_http_response_body.xr",
+      "source_lf_sha256": "99a006ad014c6318a088e9068cf828073955615d63bf67e9a3e7e8330f528d01",
+      "primary_family": "builtin-method-native-provider-call",
+      "secondary_families": [
+        "typed-error-throw-try-catch",
+        "test-entry-assertion-async",
+        "defer-cleanup-resource-lifetime",
+        "module-graph-import-export-init",
+        "array-slice-fixed-array-range-iteration",
+        "ownership-read-ref-move-copy-drop",
+        "coroutine-go-await-task",
+        "channel-select-scope-cancel"
+      ],
+      "tasks": [
+        "313",
+        "314",
+        "315",
+        "316",
+        "317",
+        "318",
+        "319",
+        "320",
+        "322"
+      ],
+      "producer_packages": [
+        "P02",
+        "P06",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P12",
+        "P13",
+        "P14",
+        "P17",
+        "P18"
+      ],
+      "semantic_basis": "Complete original network/protocol/project review preserves every named body, original full byte/framing/counter/wait/context dimension and both normal/typed/error responsibilities. Setup/provider skips, API names, banners, simulated records, elapsed-only timing and self-roundtrip do not qualify actual execution.",
+      "original_runner_entries": [
+        {
+          "suite": "regression",
+          "entry": "test"
+        }
+      ],
+      "new_entry_status": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "replacement_qualification": "OPEN",
+      "original_stdout_oracle": {
+        "path": "tests/regression/10_stdlib/1505_http_response_body.xr.expected",
+        "state": "MISSING",
+        "lf_sha256": null
+      },
+      "original_regression_obligation": {
+        "entry": "test",
+        "expected_exit": 0,
+        "test_discovery": "NOT_RUN"
+      },
+      "original_named_test_obligation": {
+        "state": "REVIEWED_TEXTUAL_DECLARATIONS_NOT_RUNTIME_DISCOVERY",
+        "declarations": [
+          {
+            "name": "test_text_response",
+            "marker_line": 5,
+            "source_segment_lf_sha256": "25e81c92bab8dffb59186dea8ede5809359a0abaf870804b7fb40d3dc60e01e1"
+          },
+          {
+            "name": "test_json_response",
+            "marker_line": 12,
+            "source_segment_lf_sha256": "74a4fb23dbe6866a9219ee111f13202191cba3f5aec20eb9f4f6bf69c2040f61"
+          },
+          {
+            "name": "test_html_response",
+            "marker_line": 19,
+            "source_segment_lf_sha256": "c368239ad1d084c067ae5e2488ae82aba56dc43a0435007dcdedb054353eef8b"
+          },
+          {
+            "name": "test_empty_response",
+            "marker_line": 25,
+            "source_segment_lf_sha256": "7d36f4711555d72f53d5628768ef6473aaa6b6c88bbdb9a26a6e28cb808cdf1a"
+          },
+          {
+            "name": "test_large_body",
+            "marker_line": 32,
+            "source_segment_lf_sha256": "0d189ac4c8399f6b5e7f747486ed79a26aeda8589e76bbbed979ed3282a661ba"
+          }
+        ],
+        "execution": "NOT_RUN"
+      },
+      "target_contract_review": "REQUIRED; actual published canonical handle/Sendable/view/error/protocol/driver/context/platform interfaces and full applicable resource/wait/drain/physical/FI gates remainOPEN. No guessed provider ABI or skipped capability PASS."
+    },
+    {
+      "case_id": "tests/regression/10_stdlib/1506_http_pure_helpers.xr",
+      "source_lf_sha256": "122da3cc8846e6b0c663d6d6c47b2591ddcfc4c0e996d6aedb68fb17e39429fd",
+      "primary_family": "builtin-method-native-provider-call",
+      "secondary_families": [
+        "typed-error-throw-try-catch",
+        "test-entry-assertion-async",
+        "defer-cleanup-resource-lifetime",
+        "module-graph-import-export-init",
+        "array-slice-fixed-array-range-iteration",
+        "ownership-read-ref-move-copy-drop",
+        "coroutine-go-await-task",
+        "channel-select-scope-cancel"
+      ],
+      "tasks": [
+        "313",
+        "314",
+        "315",
+        "316",
+        "317",
+        "318",
+        "319",
+        "320",
+        "322"
+      ],
+      "producer_packages": [
+        "P02",
+        "P06",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P12",
+        "P13",
+        "P14",
+        "P17",
+        "P18"
+      ],
+      "semantic_basis": "Complete original network/protocol/project review preserves every named body, original full byte/framing/counter/wait/context dimension and both normal/typed/error responsibilities. Setup/provider skips, API names, banners, simulated records, elapsed-only timing and self-roundtrip do not qualify actual execution.",
+      "original_runner_entries": [
+        {
+          "suite": "regression",
+          "entry": "test"
+        }
+      ],
+      "new_entry_status": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "replacement_qualification": "OPEN",
+      "original_stdout_oracle": {
+        "path": "tests/regression/10_stdlib/1506_http_pure_helpers.xr.expected",
+        "state": "MISSING",
+        "lf_sha256": null
+      },
+      "original_regression_obligation": {
+        "entry": "test",
+        "expected_exit": 0,
+        "test_discovery": "NOT_RUN"
+      },
+      "original_named_test_obligation": {
+        "state": "REVIEWED_TEXTUAL_DECLARATIONS_NOT_RUNTIME_DISCOVERY",
+        "declarations": [
+          {
+            "name": "test_url_encode_namespace",
+            "marker_line": 12,
+            "source_segment_lf_sha256": "392397c7cec65a015a2fc7a7fb3108498e93c90d1854fb778087adf9cce58b8e"
+          },
+          {
+            "name": "test_url_decode_named_import",
+            "marker_line": 17,
+            "source_segment_lf_sha256": "6aecfd382f3d6ca8d0b0f501bee72841fc9e3d5f9705846a80ac08133047c5ac"
+          },
+          {
+            "name": "test_response_text",
+            "marker_line": 22,
+            "source_segment_lf_sha256": "3d60798d38acaad0f1530e96f4f746c15e7d0dcfc1d0e7bed894a26a23d90d1b"
+          },
+          {
+            "name": "test_response_json",
+            "marker_line": 31,
+            "source_segment_lf_sha256": "7cbb347d56cabd03978e372e6f08b4e654a50e37da23814e59703fd2c40d52cb"
+          },
+          {
+            "name": "test_response_unicode_byte_length",
+            "marker_line": 43,
+            "source_segment_lf_sha256": "054951c8eaaa48e04b43ab554e1f320ba7ea0279e32c1ae05392c2a03ba920e9"
+          },
+          {
+            "name": "test_response_empty_body",
+            "marker_line": 50,
+            "source_segment_lf_sha256": "8568b5d6a75de5eb346d5ed3e656aee0c01171058aca88164fdbdd4e5d4747bd"
+          },
+          {
+            "name": "test_response_text_custom_headers",
+            "marker_line": 58,
+            "source_segment_lf_sha256": "914f9e2cac5af736ad1f1ed3ed5281c04d12080fc7dcd14b02128214fa3a6acf"
+          },
+          {
+            "name": "test_response_text_rejects_framing_headers",
+            "marker_line": 68,
+            "source_segment_lf_sha256": "366d66af0610f0dcf41cf41ee8a61efd917d878d8c4ed936be265dc202a262a7"
+          },
+          {
+            "name": "test_response_text_rejects_injection",
+            "marker_line": 75,
+            "source_segment_lf_sha256": "d8777c6a4e8afcb8977e4ae6f75ae97df53dd5984e3b23386a80b75343e706f2"
+          }
+        ],
+        "execution": "NOT_RUN"
+      },
+      "target_contract_review": "REQUIRED; actual published canonical handle/Sendable/view/error/protocol/driver/context/platform interfaces and full applicable resource/wait/drain/physical/FI gates remainOPEN. No guessed provider ABI or skipped capability PASS."
+    },
+    {
+      "case_id": "tests/regression/10_stdlib/1506_http_redirect.xr",
+      "source_lf_sha256": "b56dc25a5f4006231a6bc38a7d55e35e9e89340282122028973550218a17914a",
+      "primary_family": "builtin-method-native-provider-call",
+      "secondary_families": [
+        "typed-error-throw-try-catch",
+        "test-entry-assertion-async",
+        "defer-cleanup-resource-lifetime",
+        "module-graph-import-export-init",
+        "array-slice-fixed-array-range-iteration",
+        "ownership-read-ref-move-copy-drop",
+        "coroutine-go-await-task",
+        "channel-select-scope-cancel"
+      ],
+      "tasks": [
+        "313",
+        "314",
+        "315",
+        "316",
+        "317",
+        "318",
+        "319",
+        "320",
+        "322"
+      ],
+      "producer_packages": [
+        "P02",
+        "P06",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P12",
+        "P13",
+        "P14",
+        "P17",
+        "P18"
+      ],
+      "semantic_basis": "Complete original network/protocol/project review preserves every named body, original full byte/framing/counter/wait/context dimension and both normal/typed/error responsibilities. Setup/provider skips, API names, banners, simulated records, elapsed-only timing and self-roundtrip do not qualify actual execution.",
+      "original_runner_entries": [
+        {
+          "suite": "regression",
+          "entry": "test"
+        }
+      ],
+      "new_entry_status": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "replacement_qualification": "OPEN",
+      "original_stdout_oracle": {
+        "path": "tests/regression/10_stdlib/1506_http_redirect.xr.expected",
+        "state": "MISSING",
+        "lf_sha256": null
+      },
+      "original_regression_obligation": {
+        "entry": "test",
+        "expected_exit": 0,
+        "test_discovery": "NOT_RUN"
+      },
+      "original_named_test_obligation": {
+        "state": "REVIEWED_TEXTUAL_DECLARATIONS_NOT_RUNTIME_DISCOVERY",
+        "declarations": [
+          {
+            "name": "test_redirect_codes",
+            "marker_line": 9,
+            "source_segment_lf_sha256": "c57a67da485db3493dab6ca2ab88ad95cf9908133b91f9c970ac2ba63fcedbde"
+          },
+          {
+            "name": "test_permanent_vs_temporary",
+            "marker_line": 19,
+            "source_segment_lf_sha256": "2ca5ef3324d50432d9b3b5c89c6eaf9d1ebed732872342b61058cb06ddeafd0d"
+          },
+          {
+            "name": "test_location_header",
+            "marker_line": 29,
+            "source_segment_lf_sha256": "0da8aa59c74193b824cdd355e85677aae2ef554d16330fb3eb867091e1864c3e"
+          },
+          {
+            "name": "test_resolve_redirect",
+            "marker_line": 35,
+            "source_segment_lf_sha256": "db3b3b0c778433ec2363f3f538551c351804dabedc091f24deaceddd3ccf3d10"
+          }
+        ],
+        "execution": "NOT_RUN"
+      },
+      "target_contract_review": "REQUIRED; actual published canonical handle/Sendable/view/error/protocol/driver/context/platform interfaces and full applicable resource/wait/drain/physical/FI gates remainOPEN. No guessed provider ABI or skipped capability PASS."
+    },
+    {
+      "case_id": "tests/regression/10_stdlib/1507_http_formdata_pure.xr",
+      "source_lf_sha256": "86e4d882e5233f3c20da6f4b6e59c1cd55580b10ec1677f705584e17e06cf3bb",
+      "primary_family": "builtin-method-native-provider-call",
+      "secondary_families": [
+        "typed-error-throw-try-catch",
+        "test-entry-assertion-async",
+        "defer-cleanup-resource-lifetime",
+        "module-graph-import-export-init",
+        "array-slice-fixed-array-range-iteration",
+        "ownership-read-ref-move-copy-drop",
+        "coroutine-go-await-task",
+        "channel-select-scope-cancel"
+      ],
+      "tasks": [
+        "313",
+        "314",
+        "315",
+        "316",
+        "317",
+        "318",
+        "319",
+        "320",
+        "322"
+      ],
+      "producer_packages": [
+        "P02",
+        "P06",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P12",
+        "P13",
+        "P14",
+        "P17",
+        "P18"
+      ],
+      "semantic_basis": "Complete original network/protocol/project review preserves every named body, original full byte/framing/counter/wait/context dimension and both normal/typed/error responsibilities. Setup/provider skips, API names, banners, simulated records, elapsed-only timing and self-roundtrip do not qualify actual execution.",
+      "original_runner_entries": [
+        {
+          "suite": "regression",
+          "entry": "test"
+        }
+      ],
+      "new_entry_status": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "replacement_qualification": "OPEN",
+      "original_stdout_oracle": {
+        "path": "tests/regression/10_stdlib/1507_http_formdata_pure.xr.expected",
+        "state": "MISSING",
+        "lf_sha256": null
+      },
+      "original_regression_obligation": {
+        "entry": "test",
+        "expected_exit": 0,
+        "test_discovery": "NOT_RUN"
+      },
+      "original_named_test_obligation": {
+        "state": "REVIEWED_TEXTUAL_DECLARATIONS_NOT_RUNTIME_DISCOVERY",
+        "declarations": [
+          {
+            "name": "test_formdata_text_build",
+            "marker_line": 8,
+            "source_segment_lf_sha256": "a1e249020bc44a07d9460f3807bc84fe9a3ff8d5d5287786652ee4317bedbf78"
+          },
+          {
+            "name": "test_formdata_file_build",
+            "marker_line": 20,
+            "source_segment_lf_sha256": "df487a572005aa62588a8aba278a563cb68ae8e04fd3b3cdd40b08acca9d5172"
+          },
+          {
+            "name": "test_formdata_limits",
+            "marker_line": 35,
+            "source_segment_lf_sha256": "ce5ed07c642fccd157483f31e955d4c8e9578fdc77d80e7cf7c159016b22ba0a"
+          },
+          {
+            "name": "test_formdata_file_limit",
+            "marker_line": 46,
+            "source_segment_lf_sha256": "7f710e12a968abd5040b9440b42f25e332d3d69ebe9b9da77de092feb5ae4ed1"
+          }
+        ],
+        "execution": "NOT_RUN"
+      },
+      "target_contract_review": "REQUIRED; actual published canonical handle/Sendable/view/error/protocol/driver/context/platform interfaces and full applicable resource/wait/drain/physical/FI gates remainOPEN. No guessed provider ABI or skipped capability PASS.",
+      "target_source_port": {
+        "fixture": "tests/unit/xir/legacy_consumers/fixtures/network_regression_ports/1507_http_formdata_pure/root.xr",
+        "lf_sha256": "3777f9f9c1c6038570f5ff379c0756c7e284c5afea8bb4bbb81f88ffab8b2119",
+        "owner_package": "P13",
+        "qualification": "NOT_RUN",
+        "frozen_basis": [
+          "Preserve four original text/file/3-bytequota/zero-unlimited multipart tests; real temp directory registered forcleanup immediately, including failure paths. Exact content/size and actual IO/physical/FI qualification remain required."
+        ]
+      },
+      "named_test_migration": {
+        "state": "PREPARED_NOT_EXECUTED",
+        "original_tests_removed": false,
+        "mapping": {
+          "test_formdata_text_build": "test_formdata_text_build",
+          "test_formdata_file_build": "test_formdata_file_build",
+          "test_formdata_limits": "test_formdata_limits",
+          "test_formdata_file_limit": "test_formdata_file_limit"
+        }
+      },
+      "target_disposition": {
+        "kind": "POSITIVE_COMPLETE_NETWORK_OR_PROTOCOL_AFTER_FROZEN_PORT",
+        "owner_package": "P13",
+        "qualification": "NOT_RUN",
+        "reason": "Preserve four original text/file/3-bytequota/zero-unlimited multipart tests; real temp directory registered forcleanup immediately, including failure paths. Exact content/size and actual IO/physical/FI qualification remain required."
+      }
+    },
+    {
+      "case_id": "tests/regression/10_stdlib/1508_http_headers.xr",
+      "source_lf_sha256": "4d1006db2d691697dd5aa9c5d7c5bcf9408221cf061ddd31eeaa7c0bc8d1450c",
+      "primary_family": "builtin-method-native-provider-call",
+      "secondary_families": [
+        "typed-error-throw-try-catch",
+        "test-entry-assertion-async",
+        "defer-cleanup-resource-lifetime",
+        "module-graph-import-export-init",
+        "array-slice-fixed-array-range-iteration",
+        "ownership-read-ref-move-copy-drop",
+        "coroutine-go-await-task",
+        "channel-select-scope-cancel"
+      ],
+      "tasks": [
+        "313",
+        "314",
+        "315",
+        "316",
+        "317",
+        "318",
+        "319",
+        "320",
+        "322"
+      ],
+      "producer_packages": [
+        "P02",
+        "P06",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P12",
+        "P13",
+        "P14",
+        "P17",
+        "P18"
+      ],
+      "semantic_basis": "Complete original network/protocol/project review preserves every named body, original full byte/framing/counter/wait/context dimension and both normal/typed/error responsibilities. Setup/provider skips, API names, banners, simulated records, elapsed-only timing and self-roundtrip do not qualify actual execution.",
+      "original_runner_entries": [
+        {
+          "suite": "regression",
+          "entry": "test"
+        }
+      ],
+      "new_entry_status": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "replacement_qualification": "OPEN",
+      "original_stdout_oracle": {
+        "path": "tests/regression/10_stdlib/1508_http_headers.xr.expected",
+        "state": "MISSING",
+        "lf_sha256": null
+      },
+      "original_regression_obligation": {
+        "entry": "test",
+        "expected_exit": 0,
+        "test_discovery": "NOT_RUN"
+      },
+      "original_named_test_obligation": {
+        "state": "REVIEWED_TEXTUAL_DECLARATIONS_NOT_RUNTIME_DISCOVERY",
+        "declarations": [
+          {
+            "name": "test_request_headers",
+            "marker_line": 5,
+            "source_segment_lf_sha256": "0217c8b406ff32175be7b2deb80e79e2fb6f8293dea3a2bd44f53a21dcc62a7b"
+          },
+          {
+            "name": "test_common_headers",
+            "marker_line": 16,
+            "source_segment_lf_sha256": "bffe62e23ba813f216a6c0082cd81e57a2bfd237a9ca4ef5bcd7e1c843ae8b1d"
+          },
+          {
+            "name": "test_empty_headers",
+            "marker_line": 25,
+            "source_segment_lf_sha256": "fadcd66e945339dd8cef4761363fdac29e27be23b65eb31cbcc04d32fcd6d31c"
+          },
+          {
+            "name": "test_multi_value_header_split",
+            "marker_line": 31,
+            "source_segment_lf_sha256": "e7588a7d07c28e03ed625e9ff399b31f7d42f5ae4e112cc45a4758db85dd5e62"
+          }
+        ],
+        "execution": "NOT_RUN"
+      },
+      "target_contract_review": "REQUIRED; actual published canonical handle/Sendable/view/error/protocol/driver/context/platform interfaces and full applicable resource/wait/drain/physical/FI gates remainOPEN. No guessed provider ABI or skipped capability PASS."
+    },
+    {
+      "case_id": "tests/regression/10_stdlib/1509_ws_pure_protocol.xr",
+      "source_lf_sha256": "9e5e0e1b4562afaf0b58e86bb7ec7f898df47862fe7fdaca0ee816df9235abb2",
+      "primary_family": "builtin-method-native-provider-call",
+      "secondary_families": [
+        "typed-error-throw-try-catch",
+        "test-entry-assertion-async",
+        "defer-cleanup-resource-lifetime",
+        "module-graph-import-export-init",
+        "array-slice-fixed-array-range-iteration",
+        "ownership-read-ref-move-copy-drop",
+        "coroutine-go-await-task",
+        "channel-select-scope-cancel"
+      ],
+      "tasks": [
+        "313",
+        "314",
+        "315",
+        "316",
+        "317",
+        "318",
+        "319",
+        "320",
+        "322"
+      ],
+      "producer_packages": [
+        "P02",
+        "P06",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P12",
+        "P13",
+        "P14",
+        "P17",
+        "P18"
+      ],
+      "semantic_basis": "Complete original network/protocol/project review preserves every named body, original full byte/framing/counter/wait/context dimension and both normal/typed/error responsibilities. Setup/provider skips, API names, banners, simulated records, elapsed-only timing and self-roundtrip do not qualify actual execution.",
+      "original_runner_entries": [
+        {
+          "suite": "regression",
+          "entry": "test"
+        }
+      ],
+      "new_entry_status": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "replacement_qualification": "OPEN",
+      "original_stdout_oracle": {
+        "path": "tests/regression/10_stdlib/1509_ws_pure_protocol.xr.expected",
+        "state": "MISSING",
+        "lf_sha256": null
+      },
+      "original_regression_obligation": {
+        "entry": "test",
+        "expected_exit": 0,
+        "test_discovery": "NOT_RUN"
+      },
+      "original_named_test_obligation": {
+        "state": "REVIEWED_TEXTUAL_DECLARATIONS_NOT_RUNTIME_DISCOVERY",
+        "declarations": [
+          {
+            "name": "test_accept_key_and_upgrade_response",
+            "marker_line": 70,
+            "source_segment_lf_sha256": "c373c1072de8908aba1a45c2ee9511848c1dbf4970ec9c8ed86199ce3398e279"
+          },
+          {
+            "name": "test_upgrade_request_and_protocol_pick",
+            "marker_line": 82,
+            "source_segment_lf_sha256": "0cb8e0ac200b1a3b8d7d0dd87bbbace38aaf931757536f4840e88e502254df35"
+          },
+          {
+            "name": "test_connect_rejects_invalid_urls_before_network",
+            "marker_line": 101,
+            "source_segment_lf_sha256": "bd27421bf10cb3306fd338e327f052ab051b1ca10334d9f3f4a86718e5c59f3e"
+          },
+          {
+            "name": "test_connect_rejects_missing_upgrade_response_header",
+            "marker_line": 125,
+            "source_segment_lf_sha256": "b2badd8cf1e419eb4527f1a15d3fcfab0bd5eaecee0484bc1c2a02b9ce0c742c"
+          },
+          {
+            "name": "test_serve_rejects_missing_connection_upgrade_header",
+            "marker_line": 138,
+            "source_segment_lf_sha256": "389a9f38e84f91e6df1356eab00985f0ffb91fa1d4bb051aad176d6ff321f3e7"
+          },
+          {
+            "name": "test_mask_payload_and_unmasked_frame",
+            "marker_line": 168,
+            "source_segment_lf_sha256": "c215a34ca8c12c2ad4dab13e61c9e54ec8949bc8d717db37ce9bcfbb981f46de"
+          },
+          {
+            "name": "test_close_payload_decodes_utf8_reason",
+            "marker_line": 192,
+            "source_segment_lf_sha256": "2b1b52e1977c2edbb4dc2eb512d29cef959667f5aa886d15db7b2dfc751a4587"
+          }
+        ],
+        "execution": "NOT_RUN"
+      },
+      "target_contract_review": "REQUIRED; actual published canonical handle/Sendable/view/error/protocol/driver/context/platform interfaces and full applicable resource/wait/drain/physical/FI gates remainOPEN. No guessed provider ABI or skipped capability PASS.",
+      "target_source_port": {
+        "fixture": "tests/unit/xir/legacy_consumers/fixtures/network_regression_ports/1509_ws_pure_protocol/root.xr",
+        "lf_sha256": "13d7c0307eaeaa39ee4db08601eeb99b3c27e12ae18f682214eedd3a8152fdcf",
+        "owner_package": "P13",
+        "qualification": "NOT_RUN",
+        "frozen_basis": [
+          "Keep complete seven protocol/realbadupgrade tests, mask/frame/strictUTF8/invalidURL values. Ordinary classcallback/root-running cleanup and explicit successful controlledsetup replace skip-toPASS, not interface or socket simulation. Fixed9191/startup100ms race, declared errors and actual close/waits/queue/provider still pending."
+        ]
+      },
+      "named_test_migration": {
+        "state": "PREPARED_NOT_EXECUTED",
+        "original_tests_removed": false,
+        "mapping": {
+          "test_accept_key_and_upgrade_response": "test_accept_key_and_upgrade_response",
+          "test_upgrade_request_and_protocol_pick": "test_upgrade_request_and_protocol_pick",
+          "test_connect_rejects_invalid_urls_before_network": "test_connect_rejects_invalid_urls_before_network",
+          "test_connect_rejects_missing_upgrade_response_header": "test_connect_rejects_missing_upgrade_response_header",
+          "test_serve_rejects_missing_connection_upgrade_header": "test_serve_rejects_missing_connection_upgrade_header",
+          "test_mask_payload_and_unmasked_frame": "test_mask_payload_and_unmasked_frame",
+          "test_close_payload_decodes_utf8_reason": "test_close_payload_decodes_utf8_reason"
+        }
+      },
+      "target_disposition": {
+        "kind": "POSITIVE_COMPLETE_NETWORK_OR_PROTOCOL_AFTER_FROZEN_PORT",
+        "owner_package": "P13",
+        "qualification": "NOT_RUN",
+        "reason": "Keep complete seven protocol/realbadupgrade tests, mask/frame/strictUTF8/invalidURL values. Ordinary classcallback/root-running cleanup and explicit successful controlledsetup replace skip-toPASS, not interface or socket simulation. Fixed9191/startup100ms race, declared errors and actual close/waits/queue/provider still pending."
+      }
+    },
+    {
+      "case_id": "tests/regression/10_stdlib/1510_cluster_typed_control.xr",
+      "source_lf_sha256": "1e1f51d8a9cf9282e156e29d4764eef60dc1b0c10f8ba3957eead6482a3cb589",
+      "primary_family": "builtin-method-native-provider-call",
+      "secondary_families": [
+        "typed-error-throw-try-catch",
+        "test-entry-assertion-async",
+        "defer-cleanup-resource-lifetime",
+        "module-graph-import-export-init",
+        "array-slice-fixed-array-range-iteration",
+        "ownership-read-ref-move-copy-drop",
+        "coroutine-go-await-task",
+        "channel-select-scope-cancel"
+      ],
+      "tasks": [
+        "313",
+        "314",
+        "315",
+        "316",
+        "317",
+        "318",
+        "319",
+        "320",
+        "322"
+      ],
+      "producer_packages": [
+        "P02",
+        "P06",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P12",
+        "P13",
+        "P14",
+        "P17",
+        "P18"
+      ],
+      "semantic_basis": "Complete original network/protocol/project review preserves every named body, original full byte/framing/counter/wait/context dimension and both normal/typed/error responsibilities. Setup/provider skips, API names, banners, simulated records, elapsed-only timing and self-roundtrip do not qualify actual execution.",
+      "original_runner_entries": [
+        {
+          "suite": "regression",
+          "entry": "test"
+        }
+      ],
+      "new_entry_status": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "replacement_qualification": "OPEN",
+      "original_stdout_oracle": {
+        "path": "tests/regression/10_stdlib/1510_cluster_typed_control.xr.expected",
+        "state": "MISSING",
+        "lf_sha256": null
+      },
+      "original_regression_obligation": {
+        "entry": "test",
+        "expected_exit": 0,
+        "test_discovery": "NOT_RUN"
+      },
+      "original_named_test_obligation": {
+        "state": "REVIEWED_TEXTUAL_DECLARATIONS_NOT_RUNTIME_DISCOVERY",
+        "declarations": [
+          {
+            "name": "test_xray_owned_discovery_protocol_and_admission",
+            "marker_line": 4,
+            "source_segment_lf_sha256": "9c479c4c2867f2871d90886d4e2b90b9db74ff3e0adf2c48188ee65dc6750bc6"
+          },
+          {
+            "name": "test_xray_owned_admission_policy",
+            "marker_line": 43,
+            "source_segment_lf_sha256": "ddcda28b7d627aa55d4f6ccf5dc6af14208f3aad8876b3fe9a5982bcfd72e1ee"
+          },
+          {
+            "name": "test_xray_owned_health_and_tombstone_policy",
+            "marker_line": 92,
+            "source_segment_lf_sha256": "fea369f7b5a7cd8133d4f81073e71ad2d5deded390e0288582d74f7eef102425"
+          },
+          {
+            "name": "test_typed_start_and_info",
+            "marker_line": 119,
+            "source_segment_lf_sha256": "2755013f157319f5637534ce9f269499ebcb5b30262bc51804b364624454b2de"
+          }
+        ],
+        "execution": "NOT_RUN"
+      },
+      "target_contract_review": "REQUIRED; actual published canonical handle/Sendable/view/error/protocol/driver/context/platform interfaces and full applicable resource/wait/drain/physical/FI gates remainOPEN. No guessed provider ABI or skipped capability PASS."
+    },
+    {
+      "case_id": "tests/regression/10_stdlib/1510_http2_client.xr",
+      "source_lf_sha256": "b81db3beca064ff6eb0299e901fb75acadc3b2bdb4b317e5bd932e52bb39a452",
+      "primary_family": "builtin-method-native-provider-call",
+      "secondary_families": [
+        "typed-error-throw-try-catch",
+        "test-entry-assertion-async",
+        "defer-cleanup-resource-lifetime",
+        "module-graph-import-export-init",
+        "array-slice-fixed-array-range-iteration",
+        "ownership-read-ref-move-copy-drop",
+        "coroutine-go-await-task",
+        "channel-select-scope-cancel"
+      ],
+      "tasks": [
+        "313",
+        "314",
+        "315",
+        "316",
+        "317",
+        "318",
+        "319",
+        "320",
+        "322"
+      ],
+      "producer_packages": [
+        "P02",
+        "P06",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P12",
+        "P13",
+        "P14",
+        "P17",
+        "P18"
+      ],
+      "semantic_basis": "Complete original network/protocol/project review preserves every named body, original full byte/framing/counter/wait/context dimension and both normal/typed/error responsibilities. Setup/provider skips, API names, banners, simulated records, elapsed-only timing and self-roundtrip do not qualify actual execution.",
+      "original_runner_entries": [
+        {
+          "suite": "regression",
+          "entry": "test"
+        }
+      ],
+      "new_entry_status": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "replacement_qualification": "OPEN",
+      "original_stdout_oracle": {
+        "path": "tests/regression/10_stdlib/1510_http2_client.xr.expected",
+        "state": "MISSING",
+        "lf_sha256": null
+      },
+      "original_regression_obligation": {
+        "entry": "test",
+        "expected_exit": 0,
+        "test_discovery": "NOT_RUN"
+      },
+      "original_named_test_obligation": {
+        "state": "REVIEWED_TEXTUAL_DECLARATIONS_NOT_RUNTIME_DISCOVERY",
+        "declarations": [
+          {
+            "name": "test_h2_uses_unified_request_api",
+            "marker_line": 6,
+            "source_segment_lf_sha256": "0848d3100dd54e68e99697bcc3b587940ec76e9a93c2fd5b588dac07e0ac6321"
+          },
+          {
+            "name": "test_h2_options_object",
+            "marker_line": 11,
+            "source_segment_lf_sha256": "52645b024dcc11fd65de7e73488622853a1f69fcc89c061408d7b2f31916683d"
+          },
+          {
+            "name": "test_h2_request_rejects_invalid_method_and_headers",
+            "marker_line": 44,
+            "source_segment_lf_sha256": "2101a8b760a93c74f655885d6d3f8a391a630cdc86bb45869458ef404185fd69"
+          },
+          {
+            "name": "test_h2_request_rejects_http1_connection_headers",
+            "marker_line": 67,
+            "source_segment_lf_sha256": "5abb8a9eb67ef9964e508709e94faa1885c06270a1fd6ddb290f5186503c422a"
+          }
+        ],
+        "execution": "NOT_RUN"
+      },
+      "target_contract_review": "REQUIRED; actual published canonical handle/Sendable/view/error/protocol/driver/context/platform interfaces and full applicable resource/wait/drain/physical/FI gates remainOPEN. No guessed provider ABI or skipped capability PASS."
+    },
+    {
+      "case_id": "tests/regression/10_stdlib/1511_cluster_opaque_transport.xr",
+      "source_lf_sha256": "bf96625dd44ed72e36e334a88aed5a38a7f4e1d3013e87a4fc161d5d0b97086c",
+      "primary_family": "builtin-method-native-provider-call",
+      "secondary_families": [
+        "typed-error-throw-try-catch",
+        "test-entry-assertion-async",
+        "defer-cleanup-resource-lifetime",
+        "module-graph-import-export-init",
+        "array-slice-fixed-array-range-iteration",
+        "ownership-read-ref-move-copy-drop",
+        "coroutine-go-await-task",
+        "channel-select-scope-cancel"
+      ],
+      "tasks": [
+        "313",
+        "314",
+        "315",
+        "316",
+        "317",
+        "318",
+        "319",
+        "320",
+        "322"
+      ],
+      "producer_packages": [
+        "P02",
+        "P06",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P12",
+        "P13",
+        "P14",
+        "P17",
+        "P18"
+      ],
+      "semantic_basis": "Complete original network/protocol/project review preserves every named body, original full byte/framing/counter/wait/context dimension and both normal/typed/error responsibilities. Setup/provider skips, API names, banners, simulated records, elapsed-only timing and self-roundtrip do not qualify actual execution.",
+      "original_runner_entries": [
+        {
+          "suite": "regression",
+          "entry": "test"
+        }
+      ],
+      "new_entry_status": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "replacement_qualification": "OPEN",
+      "original_stdout_oracle": {
+        "path": "tests/regression/10_stdlib/1511_cluster_opaque_transport.xr.expected",
+        "state": "MISSING",
+        "lf_sha256": null
+      },
+      "original_regression_obligation": {
+        "entry": "test",
+        "expected_exit": 0,
+        "test_discovery": "NOT_RUN"
+      },
+      "original_named_test_obligation": {
+        "state": "REVIEWED_TEXTUAL_DECLARATIONS_NOT_RUNTIME_DISCOVERY",
+        "declarations": [
+          {
+            "name": "test_cluster_transports_only_opaque_envelopes",
+            "marker_line": 31,
+            "source_segment_lf_sha256": "fe4fa17e659e742702eb4c4f3b857c93d5bb905cabcc9d938cc2ee1a61526992"
+          }
+        ],
+        "execution": "NOT_RUN"
+      },
+      "target_contract_review": "REQUIRED; actual published canonical handle/Sendable/view/error/protocol/driver/context/platform interfaces and full applicable resource/wait/drain/physical/FI gates remainOPEN. No guessed provider ABI or skipped capability PASS."
+    },
+    {
+      "case_id": "tests/regression/10_stdlib/1512_http2_protocol.xr",
+      "source_lf_sha256": "a16cd7326e199bfbf3b56f61df13d74da4fca31435041a543fdffa5fbdc216f8",
+      "primary_family": "builtin-method-native-provider-call",
+      "secondary_families": [
+        "typed-error-throw-try-catch",
+        "test-entry-assertion-async",
+        "defer-cleanup-resource-lifetime",
+        "module-graph-import-export-init",
+        "array-slice-fixed-array-range-iteration",
+        "ownership-read-ref-move-copy-drop",
+        "coroutine-go-await-task",
+        "channel-select-scope-cancel"
+      ],
+      "tasks": [
+        "313",
+        "314",
+        "315",
+        "316",
+        "317",
+        "318",
+        "319",
+        "320",
+        "322"
+      ],
+      "producer_packages": [
+        "P02",
+        "P06",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P12",
+        "P13",
+        "P14",
+        "P17",
+        "P18"
+      ],
+      "semantic_basis": "Complete original network/protocol/project review preserves every named body, original full byte/framing/counter/wait/context dimension and both normal/typed/error responsibilities. Setup/provider skips, API names, banners, simulated records, elapsed-only timing and self-roundtrip do not qualify actual execution.",
+      "original_runner_entries": [
+        {
+          "suite": "regression",
+          "entry": "test"
+        }
+      ],
+      "new_entry_status": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "replacement_qualification": "OPEN",
+      "original_stdout_oracle": {
+        "path": "tests/regression/10_stdlib/1512_http2_protocol.xr.expected",
+        "state": "MISSING",
+        "lf_sha256": null
+      },
+      "original_regression_obligation": {
+        "entry": "test",
+        "expected_exit": 0,
+        "test_discovery": "NOT_RUN"
+      },
+      "original_named_test_obligation": {
+        "state": "REVIEWED_TEXTUAL_DECLARATIONS_NOT_RUNTIME_DISCOVERY",
+        "declarations": [
+          {
+            "name": "test_hpack_rfc7541_c_4_1_first_request",
+            "marker_line": 43,
+            "source_segment_lf_sha256": "d7fcdac951c695eb4a05767754902f2389ccd4ce0394b09582d3c9a200097aa5"
+          },
+          {
+            "name": "test_hpack_rfc7541_c_4_2_reuses_dynamic_entry",
+            "marker_line": 59,
+            "source_segment_lf_sha256": "e30743927a53c414751b953b2488b74b89d83f05716ed3395bbae9c05924ffad"
+          },
+          {
+            "name": "test_hpack_rfc7541_c_4_3_custom_header",
+            "marker_line": 73,
+            "source_segment_lf_sha256": "d4ca97a3cdbc86b99ef5ba92365e1f348ed31fe8816e78126123133963c7124c"
+          },
+          {
+            "name": "test_hpack_rfc7541_c_6_1_response",
+            "marker_line": 86,
+            "source_segment_lf_sha256": "e458d095d261a3369d403ac397b03b81832db4099d37d420fc9d624ee8fd25ec"
+          },
+          {
+            "name": "test_hpack_rfc7541_c_6_3_gzip",
+            "marker_line": 104,
+            "source_segment_lf_sha256": "23cf3abd2ba9edbf9c961daff23c537f9d16aa286feaebe27408777c4572976f"
+          },
+          {
+            "name": "test_huffman_rejects_invalid_padding",
+            "marker_line": 116,
+            "source_segment_lf_sha256": "fa916439cb1c84a71c8a0b09c6005c825ca4493b70931ccb691a879d061a0f5b"
+          },
+          {
+            "name": "test_huffman_rejects_explicit_eos",
+            "marker_line": 124,
+            "source_segment_lf_sha256": "25183bb21d0bb588827dffeb284b18dfb177abfb8094dd797e33e4149706cae5"
+          },
+          {
+            "name": "test_hpack_rejects_index_zero",
+            "marker_line": 131,
+            "source_segment_lf_sha256": "26d4e28e27c347f2aec9b3487563d0fa083081c4ab83dc810e14d8c5014faeaa"
+          },
+          {
+            "name": "test_hpack_rejects_out_of_range_index",
+            "marker_line": 136,
+            "source_segment_lf_sha256": "54af4085033b56113365843dd4bbd5645aa1c3ca1c2d11182cbc764d63e1796b"
+          },
+          {
+            "name": "test_hpack_rejects_oversized_table_size_update",
+            "marker_line": 142,
+            "source_segment_lf_sha256": "8c7bf9f16197dddd32844094705c304b46ebee650a751ba80a8f47a89dbf0119"
+          },
+          {
+            "name": "test_hpack_encodes_static_entries_as_single_bytes",
+            "marker_line": 151,
+            "source_segment_lf_sha256": "b1913ceb90eedb30c37e032256951f302c43b46a91071ed3d188524ba95c0cba"
+          },
+          {
+            "name": "test_hpack_encodes_huffman_when_shorter",
+            "marker_line": 161,
+            "source_segment_lf_sha256": "d19211254914b28e6d692ec80f3153f57bc98283b8583b83e1fe10c61141840c"
+          },
+          {
+            "name": "test_hpack_lowercases_header_names",
+            "marker_line": 172,
+            "source_segment_lf_sha256": "fd12a4ca627e72200dab1bbff6ef9ee06d9359be38fe1dd93c885df4d3e5612b"
+          },
+          {
+            "name": "test_hpack_round_trips_a_full_request",
+            "marker_line": 184,
+            "source_segment_lf_sha256": "61e670fd89eabe09581998e95ed8a2bd1b7ef20400d009ab9ef72597074d3c54"
+          },
+          {
+            "name": "test_frame_header_round_trip",
+            "marker_line": 202,
+            "source_segment_lf_sha256": "c7b3aed5452e6eb9b2e8987c58b2e115e30dd459009ab9acc6634783a76d83b9"
+          },
+          {
+            "name": "test_frame_header_clears_the_reserved_bit",
+            "marker_line": 215,
+            "source_segment_lf_sha256": "a25237e96b9cbcc761af0617ebdadec605d66ab7b21c53b4321d6903116196df"
+          },
+          {
+            "name": "test_frame_header_needs_nine_bytes",
+            "marker_line": 225,
+            "source_segment_lf_sha256": "b8c52f6245cbfda0bd09cd5127ae1a40e67fa32450401239775d8737ee0b12fe"
+          },
+          {
+            "name": "test_frame_header_refuses_oversized_length",
+            "marker_line": 230,
+            "source_segment_lf_sha256": "9d9f2368793c7edea324392e1539afa61d4fcf5f949c01329b28d573fb700107"
+          },
+          {
+            "name": "test_validate_accepts_current_client_frames",
+            "marker_line": 244,
+            "source_segment_lf_sha256": "783c903e0967f5bfe9f1102e9e87e06287f2addbb6b4e2e20281f787c1b2ebc3"
+          },
+          {
+            "name": "test_validate_rejects_stream_zero_on_stream_frames",
+            "marker_line": 254,
+            "source_segment_lf_sha256": "ea79b776cbd6443d46fa2f98e7d562b18a5811f48356606d0c5346cd40c8176c"
+          },
+          {
+            "name": "test_validate_rejects_unjoined_header_block",
+            "marker_line": 261,
+            "source_segment_lf_sha256": "08caf8750b70245602ef66a6f733e89db80fd79d5fdc1fda649fc32bf8bfbe9b"
+          },
+          {
+            "name": "test_validate_rejects_control_frame_shape_errors",
+            "marker_line": 266,
+            "source_segment_lf_sha256": "64b9feb9a7b191b49685cae30667749c152d45aa610705eb956cfe7c274d8e77"
+          },
+          {
+            "name": "test_validate_rejects_unsupported_header_block_frames",
+            "marker_line": 280,
+            "source_segment_lf_sha256": "8028672b4c479fbd59e6c91a81baac30d39adf0ff839d52042c7b945879e321b"
+          },
+          {
+            "name": "test_settings_applies_valid_values",
+            "marker_line": 299,
+            "source_segment_lf_sha256": "8da40f45188c715df49a6867d8d59d68989df1d59f0b9e1b4396d8c125ac4fc5"
+          },
+          {
+            "name": "test_settings_rejects_partial_entry",
+            "marker_line": 310,
+            "source_segment_lf_sha256": "a6c910adad3f9c55f644ac6139e5f10a01876bf1024181b675c73d5ae4f654c3"
+          },
+          {
+            "name": "test_settings_rejects_invalid_max_frame_without_mutation",
+            "marker_line": 318,
+            "source_segment_lf_sha256": "97a15123a1817e53e8c79170de92cc3d8851f78964fe2958fbab3523b445e601"
+          },
+          {
+            "name": "test_settings_rejects_window_overflow_without_mutation",
+            "marker_line": 327,
+            "source_segment_lf_sha256": "e341b6e2b46c4c882c0b6cd6e41f54e69a754f822011b18e4a963a79028b5fd3"
+          },
+          {
+            "name": "test_settings_rejects_invalid_enable_push_without_mutation",
+            "marker_line": 337,
+            "source_segment_lf_sha256": "d56d029e9e76333dcddd58a65118fd788d850cb9f4ee9cabe192f8562facf363"
+          },
+          {
+            "name": "test_settings_leaves_earlier_entries_untouched_when_a_later_one_is_invalid",
+            "marker_line": 346,
+            "source_segment_lf_sha256": "794f1c2c76435219d1c3a1823cfa8f1241aec223c939f1e9d6aa2a8f74f53da0"
+          },
+          {
+            "name": "test_encodes_control_frames",
+            "marker_line": 361,
+            "source_segment_lf_sha256": "84fb203a9b39dd592dd06ae4e492e021002206d58e4b09c8e050739dbb4838c6"
+          },
+          {
+            "name": "test_client_settings_frame_shape",
+            "marker_line": 370,
+            "source_segment_lf_sha256": "fe963844043852343de9ec58d139c8882f860db49b6bb748a7f367c4a359f273"
+          },
+          {
+            "name": "test_rejects_non_token_method",
+            "marker_line": 417,
+            "source_segment_lf_sha256": "5f7445a3d972aa2f9e214e8e93505ab9587404c05938f9de0ae522c79c44ddfa"
+          },
+          {
+            "name": "test_rejects_connection_specific_headers",
+            "marker_line": 430,
+            "source_segment_lf_sha256": "0f48b940b9fa9d53e83136fc2cd7571e7bc24a7560b87b100b0ca8e39ced8eca"
+          },
+          {
+            "name": "test_te_is_allowed_only_for_trailers",
+            "marker_line": 443,
+            "source_segment_lf_sha256": "6e0736f25885a43caf339056210b9e57aee8af45ea409a2d7e9881f0d33cb6f6"
+          },
+          {
+            "name": "test_rejects_pseudo_headers_from_callers",
+            "marker_line": 455,
+            "source_segment_lf_sha256": "b8998d32fcbf5bd0863a4980da50db82f0c375808516fa0da057868d34d5f888"
+          },
+          {
+            "name": "test_rejects_header_injection",
+            "marker_line": 462,
+            "source_segment_lf_sha256": "fefd8f02b5582ab02d973ea03c6f1b3e008b72b84527206d0b776d4849e9fecb"
+          },
+          {
+            "name": "test_rejects_mismatched_header_arrays",
+            "marker_line": 469,
+            "source_segment_lf_sha256": "7296293565a8fefe6802f9842160d9466e3a1c97eecae7f5b507f3537be48c01"
+          },
+          {
+            "name": "test_rejects_more_than_28_headers",
+            "marker_line": 479,
+            "source_segment_lf_sha256": "f4a19a1eaea3803cccc906f5b3fcc789ff291325febbd47ad0ab1d49b9f5f983"
+          },
+          {
+            "name": "test_rejects_non_https_urls",
+            "marker_line": 495,
+            "source_segment_lf_sha256": "fcf782b7a01fb562b62b56f9672bd8a38448c2755d60da25a0e175cabd9436cc"
+          },
+          {
+            "name": "test_rejects_url_with_userinfo",
+            "marker_line": 500,
+            "source_segment_lf_sha256": "61626811ce1760e703499500223938ee2ac65b940f87836bc9488665230e5f67"
+          },
+          {
+            "name": "test_rejects_non_positive_timeout",
+            "marker_line": 505,
+            "source_segment_lf_sha256": "73591c6e4863da374df1dd486328479140d87fe1d1ea4862bb0b89c4ef45dafd"
+          }
+        ],
+        "execution": "NOT_RUN"
+      },
+      "target_contract_review": "REQUIRED; actual published canonical handle/Sendable/view/error/protocol/driver/context/platform interfaces and full applicable resource/wait/drain/physical/FI gates remainOPEN. No guessed provider ABI or skipped capability PASS.",
+      "target_source_port": {
+        "fixture": "tests/unit/xir/legacy_consumers/fixtures/network_regression_ports/1512_http2_protocol/root.xr",
+        "lf_sha256": "c55474309c53cd4a8ce02f232605771d066eead7205788f5b364a5ed7e1cdc78",
+        "owner_package": "P13",
+        "qualification": "NOT_RUN",
+        "frozen_basis": [
+          "Retired StringBuilder hex helper becomes owned ASCII byte Array+published nonOptional fromUtf8, preserving fullcase/helper bodies and every HPACK/frame/settings/error/admission path. 28-header positive nowactuallytestsadmission helper beyondlen28; distinguishProtocolError from laternetwork/TLS failure, actualprovider/ownership/currentcontract remains required.",
+          "Settings is a class, so task313 target free-function parameter/call use ordinary identity, retiring class ref marker; preserve valid ref Array<byte> for actual value mutation. Published library declaration must complete this cutover before product qualification."
+        ]
+      },
+      "named_test_migration": {
+        "state": "PREPARED_NOT_EXECUTED",
+        "original_tests_removed": false,
+        "mapping": {
+          "test_hpack_rfc7541_c_4_1_first_request": "test_hpack_rfc7541_c_4_1_first_request",
+          "test_hpack_rfc7541_c_4_2_reuses_dynamic_entry": "test_hpack_rfc7541_c_4_2_reuses_dynamic_entry",
+          "test_hpack_rfc7541_c_4_3_custom_header": "test_hpack_rfc7541_c_4_3_custom_header",
+          "test_hpack_rfc7541_c_6_1_response": "test_hpack_rfc7541_c_6_1_response",
+          "test_hpack_rfc7541_c_6_3_gzip": "test_hpack_rfc7541_c_6_3_gzip",
+          "test_huffman_rejects_invalid_padding": "test_huffman_rejects_invalid_padding",
+          "test_huffman_rejects_explicit_eos": "test_huffman_rejects_explicit_eos",
+          "test_hpack_rejects_index_zero": "test_hpack_rejects_index_zero",
+          "test_hpack_rejects_out_of_range_index": "test_hpack_rejects_out_of_range_index",
+          "test_hpack_rejects_oversized_table_size_update": "test_hpack_rejects_oversized_table_size_update",
+          "test_hpack_encodes_static_entries_as_single_bytes": "test_hpack_encodes_static_entries_as_single_bytes",
+          "test_hpack_encodes_huffman_when_shorter": "test_hpack_encodes_huffman_when_shorter",
+          "test_hpack_lowercases_header_names": "test_hpack_lowercases_header_names",
+          "test_hpack_round_trips_a_full_request": "test_hpack_round_trips_a_full_request",
+          "test_frame_header_round_trip": "test_frame_header_round_trip",
+          "test_frame_header_clears_the_reserved_bit": "test_frame_header_clears_the_reserved_bit",
+          "test_frame_header_needs_nine_bytes": "test_frame_header_needs_nine_bytes",
+          "test_frame_header_refuses_oversized_length": "test_frame_header_refuses_oversized_length",
+          "test_validate_accepts_current_client_frames": "test_validate_accepts_current_client_frames",
+          "test_validate_rejects_stream_zero_on_stream_frames": "test_validate_rejects_stream_zero_on_stream_frames",
+          "test_validate_rejects_unjoined_header_block": "test_validate_rejects_unjoined_header_block",
+          "test_validate_rejects_control_frame_shape_errors": "test_validate_rejects_control_frame_shape_errors",
+          "test_validate_rejects_unsupported_header_block_frames": "test_validate_rejects_unsupported_header_block_frames",
+          "test_settings_applies_valid_values": "test_settings_applies_valid_values",
+          "test_settings_rejects_partial_entry": "test_settings_rejects_partial_entry",
+          "test_settings_rejects_invalid_max_frame_without_mutation": "test_settings_rejects_invalid_max_frame_without_mutation",
+          "test_settings_rejects_window_overflow_without_mutation": "test_settings_rejects_window_overflow_without_mutation",
+          "test_settings_rejects_invalid_enable_push_without_mutation": "test_settings_rejects_invalid_enable_push_without_mutation",
+          "test_settings_leaves_earlier_entries_untouched_when_a_later_one_is_invalid": "test_settings_leaves_earlier_entries_untouched_when_a_later_one_is_invalid",
+          "test_encodes_control_frames": "test_encodes_control_frames",
+          "test_client_settings_frame_shape": "test_client_settings_frame_shape",
+          "test_rejects_non_token_method": "test_rejects_non_token_method",
+          "test_rejects_connection_specific_headers": "test_rejects_connection_specific_headers",
+          "test_te_is_allowed_only_for_trailers": "test_te_is_allowed_only_for_trailers",
+          "test_rejects_pseudo_headers_from_callers": "test_rejects_pseudo_headers_from_callers",
+          "test_rejects_header_injection": "test_rejects_header_injection",
+          "test_rejects_mismatched_header_arrays": "test_rejects_mismatched_header_arrays",
+          "test_rejects_more_than_28_headers": "test_rejects_more_than_28_headers",
+          "test_rejects_non_https_urls": "test_rejects_non_https_urls",
+          "test_rejects_url_with_userinfo": "test_rejects_url_with_userinfo",
+          "test_rejects_non_positive_timeout": "test_rejects_non_positive_timeout"
+        }
+      },
+      "target_disposition": {
+        "kind": "POSITIVE_COMPLETE_NETWORK_OR_PROTOCOL_AFTER_FROZEN_PORT",
+        "owner_package": "P13",
+        "qualification": "NOT_RUN",
+        "reason": "Retired StringBuilder hex helper becomes owned ASCII byte Array+published nonOptional fromUtf8, preserving fullcase/helper bodies and every HPACK/frame/settings/error/admission path. 28-header positive nowactuallytestsadmission helper beyondlen28; distinguishProtocolError from laternetwork/TLS failure, actualprovider/ownership/currentcontract remains required."
+      }
+    },
+    {
+      "case_id": "tests/regression/10_stdlib/1520_websocket.xr",
+      "source_lf_sha256": "0ac87aa3e88ce757c2446fa4266d82bff20c2ca13d622fcff183050628e8a86b",
+      "primary_family": "builtin-method-native-provider-call",
+      "secondary_families": [
+        "typed-error-throw-try-catch",
+        "test-entry-assertion-async",
+        "defer-cleanup-resource-lifetime",
+        "module-graph-import-export-init",
+        "array-slice-fixed-array-range-iteration",
+        "ownership-read-ref-move-copy-drop",
+        "coroutine-go-await-task",
+        "channel-select-scope-cancel"
+      ],
+      "tasks": [
+        "313",
+        "314",
+        "315",
+        "316",
+        "317",
+        "318",
+        "319",
+        "320",
+        "322"
+      ],
+      "producer_packages": [
+        "P02",
+        "P06",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P12",
+        "P13",
+        "P14",
+        "P17",
+        "P18"
+      ],
+      "semantic_basis": "Complete original network/protocol/project review preserves every named body, original full byte/framing/counter/wait/context dimension and both normal/typed/error responsibilities. Setup/provider skips, API names, banners, simulated records, elapsed-only timing and self-roundtrip do not qualify actual execution.",
+      "original_runner_entries": [
+        {
+          "suite": "regression",
+          "entry": "test"
+        }
+      ],
+      "new_entry_status": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "replacement_qualification": "OPEN",
+      "original_stdout_oracle": {
+        "path": "tests/regression/10_stdlib/1520_websocket.xr.expected",
+        "state": "MISSING",
+        "lf_sha256": null
+      },
+      "original_regression_obligation": {
+        "entry": "test",
+        "expected_exit": 0,
+        "test_discovery": "NOT_RUN"
+      },
+      "original_named_test_obligation": {
+        "state": "REVIEWED_TEXTUAL_DECLARATIONS_NOT_RUNTIME_DISCOVERY",
+        "declarations": [
+          {
+            "name": "test_ws_apis_exist",
+            "marker_line": 5,
+            "source_segment_lf_sha256": "a65434ea958406946de93f07bb8fcdcfb6265999db96cc931ec2509c1758c07c"
+          },
+          {
+            "name": "test_ws_url_format",
+            "marker_line": 15,
+            "source_segment_lf_sha256": "c5fa8dcb9a097f4867cdc023e3109281a6101885ac8379cd03ce5e19fdaa473c"
+          },
+          {
+            "name": "test_ws_message_types",
+            "marker_line": 26,
+            "source_segment_lf_sha256": "57fe498b7411c599c98ab0a9d78a3f3197345ab06972e77550a812dffafa03a9"
+          }
+        ],
+        "execution": "NOT_RUN"
+      },
+      "target_contract_review": "REQUIRED; actual published canonical handle/Sendable/view/error/protocol/driver/context/platform interfaces and full applicable resource/wait/drain/physical/FI gates remainOPEN. No guessed provider ABI or skipped capability PASS."
+    },
+    {
+      "case_id": "tests/regression/10_stdlib/1540_http_url_edge.xr",
+      "source_lf_sha256": "bdf45a00f4fe308682784242b23b75dac3cdf256a85d3faf2127b7ffc02671ed",
+      "primary_family": "builtin-method-native-provider-call",
+      "secondary_families": [
+        "typed-error-throw-try-catch",
+        "test-entry-assertion-async",
+        "defer-cleanup-resource-lifetime",
+        "module-graph-import-export-init",
+        "array-slice-fixed-array-range-iteration",
+        "ownership-read-ref-move-copy-drop",
+        "coroutine-go-await-task",
+        "channel-select-scope-cancel"
+      ],
+      "tasks": [
+        "313",
+        "314",
+        "315",
+        "316",
+        "317",
+        "318",
+        "319",
+        "320",
+        "322"
+      ],
+      "producer_packages": [
+        "P02",
+        "P06",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P12",
+        "P13",
+        "P14",
+        "P17",
+        "P18"
+      ],
+      "semantic_basis": "Complete original network/protocol/project review preserves every named body, original full byte/framing/counter/wait/context dimension and both normal/typed/error responsibilities. Setup/provider skips, API names, banners, simulated records, elapsed-only timing and self-roundtrip do not qualify actual execution.",
+      "original_runner_entries": [
+        {
+          "suite": "regression",
+          "entry": "test"
+        }
+      ],
+      "new_entry_status": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "replacement_qualification": "OPEN",
+      "original_stdout_oracle": {
+        "path": "tests/regression/10_stdlib/1540_http_url_edge.xr.expected",
+        "state": "MISSING",
+        "lf_sha256": null
+      },
+      "original_regression_obligation": {
+        "entry": "test",
+        "expected_exit": 0,
+        "test_discovery": "NOT_RUN"
+      },
+      "original_named_test_obligation": {
+        "state": "REVIEWED_TEXTUAL_DECLARATIONS_NOT_RUNTIME_DISCOVERY",
+        "declarations": [
+          {
+            "name": "test_url_encode_decode_roundtrip",
+            "marker_line": 7,
+            "source_segment_lf_sha256": "2c6b25e4721424d5bd1a7c22f60b32d2950d0d69da4540c8660f51191227f6f0"
+          },
+          {
+            "name": "test_url_encode_special",
+            "marker_line": 17,
+            "source_segment_lf_sha256": "5100ea8047f3722b39e918b273bd70644e8a846fe980f3686571ba1619f43026"
+          },
+          {
+            "name": "test_url_encode_symbols",
+            "marker_line": 25,
+            "source_segment_lf_sha256": "bb9bfb13e46203506e3892cfd01417de56f8021eabca60265ed7e257f97342f7"
+          },
+          {
+            "name": "test_url_encode_chinese",
+            "marker_line": 35,
+            "source_segment_lf_sha256": "594a2c2c4ca9f2fbbc49102806e3aba94d9e003c76167fce58efcebe9e16e91b"
+          },
+          {
+            "name": "test_url_encode_ascii_passthrough",
+            "marker_line": 46,
+            "source_segment_lf_sha256": "3c3c1bc7d84465a36f49e97b186a630c08b2c2be49fefd67e9c9be0f92945fb0"
+          },
+          {
+            "name": "test_url_encode_empty",
+            "marker_line": 55,
+            "source_segment_lf_sha256": "c7b9a586d576a5f5623d676b4f3fd162d7fea4d7db8e94a6001e7506123f929a"
+          },
+          {
+            "name": "test_url_decode_empty",
+            "marker_line": 61,
+            "source_segment_lf_sha256": "23ba45429a8b1bccffa251ca3290a36e342773ef3f07440dfd7a6eb22ec91ad4"
+          },
+          {
+            "name": "test_url_encode_space",
+            "marker_line": 69,
+            "source_segment_lf_sha256": "ed2baef80b75d8728e7ccf79e88c38ca65961c9ac59360af4bec19e490228cd9"
+          },
+          {
+            "name": "test_url_decode_percent",
+            "marker_line": 77,
+            "source_segment_lf_sha256": "a2d75007ad73d26a408e686a829869cc074a911144feaacf4d22289db4aecb3d"
+          },
+          {
+            "name": "test_url_encode_long",
+            "marker_line": 85,
+            "source_segment_lf_sha256": "b3e130bba8b83b10da820140948f85134e0b23591abb6d23116bfacdcb26e041"
+          }
+        ],
+        "execution": "NOT_RUN"
+      },
+      "target_contract_review": "REQUIRED; actual published canonical handle/Sendable/view/error/protocol/driver/context/platform interfaces and full applicable resource/wait/drain/physical/FI gates remainOPEN. No guessed provider ABI or skipped capability PASS."
+    },
+    {
+      "case_id": "tests/regression/10_stdlib/crash_min.xr",
+      "source_lf_sha256": "a33dc4abf5da2d600f94d2fbbc25f822587bb1b0bd6d2cb9346594820c2f938e",
+      "primary_family": "builtin-method-native-provider-call",
+      "secondary_families": [
+        "typed-error-throw-try-catch",
+        "test-entry-assertion-async",
+        "defer-cleanup-resource-lifetime",
+        "module-graph-import-export-init",
+        "array-slice-fixed-array-range-iteration",
+        "ownership-read-ref-move-copy-drop",
+        "coroutine-go-await-task",
+        "channel-select-scope-cancel"
+      ],
+      "tasks": [
+        "313",
+        "314",
+        "315",
+        "316",
+        "317",
+        "318",
+        "319",
+        "320",
+        "322"
+      ],
+      "producer_packages": [
+        "P02",
+        "P06",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P12",
+        "P13",
+        "P14",
+        "P17",
+        "P18"
+      ],
+      "semantic_basis": "Complete original network/protocol/project review preserves every named body, original full byte/framing/counter/wait/context dimension and both normal/typed/error responsibilities. Setup/provider skips, API names, banners, simulated records, elapsed-only timing and self-roundtrip do not qualify actual execution.",
+      "original_runner_entries": [
+        {
+          "suite": "regression",
+          "entry": "test"
+        }
+      ],
+      "new_entry_status": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "replacement_qualification": "OPEN",
+      "original_stdout_oracle": {
+        "path": "tests/regression/10_stdlib/crash_min.xr.expected",
+        "state": "MISSING",
+        "lf_sha256": null
+      },
+      "original_regression_obligation": {
+        "entry": "test",
+        "expected_exit": 0,
+        "test_discovery": "NOT_RUN"
+      },
+      "original_named_test_obligation": {
+        "state": "REVIEWED_TEXTUAL_DECLARATIONS_NOT_RUNTIME_DISCOVERY",
+        "declarations": [
+          {
+            "name": "test_crash_min",
+            "marker_line": 10,
+            "source_segment_lf_sha256": "e9ebb4197b0ca0581385e3882a7bc82c7b7d5c52a7d434b9c3f590a3b3381512"
+          }
+        ],
+        "execution": "NOT_RUN"
+      },
+      "target_contract_review": "REQUIRED; actual published canonical handle/Sendable/view/error/protocol/driver/context/platform interfaces and full applicable resource/wait/drain/physical/FI gates remainOPEN. No guessed provider ABI or skipped capability PASS.",
+      "target_source_port": {
+        "fixture": "tests/unit/xir/legacy_consumers/fixtures/network_regression_ports/crash_min/root.xr",
+        "lf_sha256": "2a8f72ba4f7ecd6174c96078bc3085366d126973e6f4a4d03792b29c4516ad3b",
+        "owner_package": "P10",
+        "qualification": "NOT_RUN",
+        "frozen_basis": [
+          "Task319 contextual init with explicit v:i64 retained; preserve all200 class constructions and original one namedtest. Unused b and success banner do notprove200 executed allocations/initialization or physical cleanup underoptimization."
+        ]
+      },
+      "named_test_migration": {
+        "state": "PREPARED_NOT_EXECUTED",
+        "original_tests_removed": false,
+        "mapping": {
+          "test_crash_min": "test_crash_min"
+        }
+      },
+      "target_disposition": {
+        "kind": "POSITIVE_COMPLETE_NETWORK_OR_PROTOCOL_AFTER_FROZEN_PORT",
+        "owner_package": "P10",
+        "qualification": "NOT_RUN",
+        "reason": "Task319 contextual init with explicit v:i64 retained; preserve all200 class constructions and original one namedtest. Unused b and success banner do notprove200 executed allocations/initialization or physical cleanup underoptimization."
+      }
+    },
+    {
+      "case_id": "tests/regression/15_project/1500_project_mode_detect.xr",
+      "source_lf_sha256": "9367536e8acdbcc2cf05b4c6dc6e0af296fea6039fc73af557ab9b8e85a19987",
+      "primary_family": "builtin-method-native-provider-call",
+      "secondary_families": [
+        "typed-error-throw-try-catch",
+        "test-entry-assertion-async",
+        "defer-cleanup-resource-lifetime",
+        "module-graph-import-export-init",
+        "array-slice-fixed-array-range-iteration",
+        "ownership-read-ref-move-copy-drop",
+        "coroutine-go-await-task",
+        "channel-select-scope-cancel"
+      ],
+      "tasks": [
+        "313",
+        "314",
+        "315",
+        "316",
+        "317",
+        "318",
+        "319",
+        "320",
+        "322"
+      ],
+      "producer_packages": [
+        "P02",
+        "P06",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P12",
+        "P13",
+        "P14",
+        "P17",
+        "P18"
+      ],
+      "semantic_basis": "Complete original network/protocol/project review preserves every named body, original full byte/framing/counter/wait/context dimension and both normal/typed/error responsibilities. Setup/provider skips, API names, banners, simulated records, elapsed-only timing and self-roundtrip do not qualify actual execution.",
+      "original_runner_entries": [
+        {
+          "suite": "regression",
+          "entry": "test"
+        }
+      ],
+      "new_entry_status": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "replacement_qualification": "OPEN",
+      "original_stdout_oracle": {
+        "path": "tests/regression/15_project/1500_project_mode_detect.xr.expected",
+        "state": "MISSING",
+        "lf_sha256": null
+      },
+      "original_regression_obligation": {
+        "entry": "test",
+        "expected_exit": 0,
+        "test_discovery": "NOT_RUN"
+      },
+      "original_named_test_obligation": {
+        "state": "REVIEWED_TEXTUAL_DECLARATIONS_NOT_RUNTIME_DISCOVERY",
+        "declarations": [
+          {
+            "name": "test_project_mode_detect",
+            "marker_line": 6,
+            "source_segment_lf_sha256": "9be16f69e3edf14823bb1b40e52959d9fdcabdb8734154ad5e34d0d24a7d008f"
+          }
+        ],
+        "execution": "NOT_RUN"
+      },
+      "target_contract_review": "REQUIRED; actual published canonical handle/Sendable/view/error/protocol/driver/context/platform interfaces and full applicable resource/wait/drain/physical/FI gates remainOPEN. No guessed provider ABI or skipped capability PASS."
     }
   ],
   "boundaries": [

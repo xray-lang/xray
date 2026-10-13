@@ -1,0 +1,125 @@
+// 1436_net_halfclose_bidi.xr
+// TCP half-close and copyBidirectional.
+
+import net
+import { NetConn, NetError, NetListener } from net
+
+fn tryListen(backlog: i64) -> NetListener? {
+    try {
+        return net.listen(0, backlog)
+    } catch (e: NetError) {
+        return null
+    }
+}
+
+fn serveReadUntilEof(c: NetConn) {
+    defer { net.close(c) }
+    var total = 0
+    while (true) {
+        var data = net.readBytes(c)
+        if (data == null) {
+            break
+        }
+        total = total + len(data!)
+    }
+    if (total == 4) {
+        // "done"
+        net.writeBytes(c, Array<u8>([100, 111, 110, 101]))
+    } else {
+        // "bad"
+        net.writeBytes(c, Array<u8>([98, 97, 100]))
+    }
+    net.close(c)
+}
+
+fn acceptReadUntilEof(lst: NetListener) {
+    var c = net.accept(lst)!
+    go serveReadUntilEof(c)
+}
+
+fn serveUpstreamEcho(lst: NetListener) {
+    var c = net.accept(lst)!
+    defer { net.close(c) }
+    net.copy(c, c)
+    net.close(c)
+}
+
+fn serveProxyOnce(lst: NetListener, upstreamPort: i64) {
+    var client = net.accept(lst)!
+    defer { net.close(client) }
+    var upstream = net.dial("127.0.0.1", upstreamPort)
+    defer { net.close(upstream) }
+    var stats = net.copyBidirectional(client, upstream)
+    assert(stats.aToB >= 4)
+    assert(stats.bToA >= 4)
+    net.close(client)
+    net.close(upstream)
+}
+
+@test
+fn test_shutdown_write_allows_response() {
+    var maybeLst = tryListen(8)
+    assert(maybeLst != null)
+    var lst = maybeLst!
+    defer { net.close(lst) }
+    var port = net.port(lst)
+    go acceptReadUntilEof(lst)
+
+    var c = net.dial("127.0.0.1", port)
+    defer { net.close(c) }
+    // "body"
+    assertEqual(net.writeBytes(c, Array<u8>([98, 111, 100, 121])), 4)
+    assert(net.shutdownWrite(c))
+
+    var resp = Array<u8>(8)
+    var n = net.readInto(c, ref resp)
+    assertEqual(n, 4)
+    // "done"
+    assertEqual(resp[0], 100)
+    assertEqual(resp[1], 111)
+    assertEqual(resp[2], 110)
+    assertEqual(resp[3], 101)
+
+    net.close(c)
+    net.close(lst)
+}
+
+@test
+fn test_copy_bidirectional_proxy_echo() {
+    var maybeUpstreamLst = tryListen(8)
+    assert(maybeUpstreamLst != null)
+    var upstreamLst = maybeUpstreamLst!
+    defer { net.close(upstreamLst) }
+    var upstreamPort = net.port(upstreamLst)
+    go serveUpstreamEcho(upstreamLst)
+
+    var maybeProxyLst = tryListen(8)
+    assert(maybeProxyLst != null)
+    var proxyLst = maybeProxyLst!
+    defer { net.close(proxyLst) }
+    var proxyPort = net.port(proxyLst)
+    go serveProxyOnce(proxyLst, upstreamPort)
+
+    var c = net.dial("127.0.0.1", proxyPort)
+    defer { net.close(c) }
+    // "ping"
+    assertEqual(net.writeBytes(c, Array<u8>([112, 105, 110, 103])), 4)
+    var resp = Array<u8>(8)
+    var n = net.readInto(c, ref resp)
+    assertEqual(n, 4)
+    assertEqual(resp[0], 112)
+    assertEqual(resp[1], 105)
+    assertEqual(resp[2], 110)
+    assertEqual(resp[3], 103)
+    assert(net.shutdownWrite(c))
+
+    // Clean EOF after the proxy drains: readBytes returns null and
+    // lastError stays null, so EOF is distinguishable from an error.
+    var eof = net.readBytes(c)
+    assert(eof == null)
+    assert(net.lastError(c) == null)
+
+    net.close(c)
+    net.close(proxyLst)
+    net.close(upstreamLst)
+}

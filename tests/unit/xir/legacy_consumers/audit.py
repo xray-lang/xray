@@ -213,6 +213,20 @@ FROZEN_TARGETS['tests/regression/10_stdlib/1203_log_async.xr'] = ('POSITIVE_COMP
 
 FROZEN_TARGETS['tests/regression/10_stdlib/1206_runtime_enhanced.xr'] = ('POSITIVE_COMPLETE_CONSUMER_CLEANUP_OR_CONTENT_PORT', 'P07')
 
+REGRESSION_LIBRARY_REVIEW += ('tests/regression/10_stdlib/1430_net_basic.xr', 'tests/regression/10_stdlib/1431_net_extended.xr', 'tests/regression/10_stdlib/1432_net_typed_handle.xr', 'tests/regression/10_stdlib/1433_net_loopback.xr', 'tests/regression/10_stdlib/1434_net_byte_array_loopback.xr', 'tests/regression/10_stdlib/1435_net_deadline_error.xr', 'tests/regression/10_stdlib/1436_net_halfclose_bidi.xr', 'tests/regression/10_stdlib/1437_net_tls_timeout.xr', 'tests/regression/10_stdlib/1438_ws_self_connect.xr', 'tests/regression/10_stdlib/1439_net_alpn.xr', 'tests/regression/10_stdlib/1500_http_url.xr', 'tests/regression/10_stdlib/1501_http_client_basic.xr', 'tests/regression/10_stdlib/1502_http_request_options.xr', 'tests/regression/10_stdlib/1503_http_status_codes.xr', 'tests/regression/10_stdlib/1504_http_https.xr', 'tests/regression/10_stdlib/1505_http_response_body.xr', 'tests/regression/10_stdlib/1506_http_pure_helpers.xr', 'tests/regression/10_stdlib/1506_http_redirect.xr', 'tests/regression/10_stdlib/1507_http_formdata_pure.xr', 'tests/regression/10_stdlib/1508_http_headers.xr', 'tests/regression/10_stdlib/1509_ws_pure_protocol.xr', 'tests/regression/10_stdlib/1510_cluster_typed_control.xr', 'tests/regression/10_stdlib/1510_http2_client.xr', 'tests/regression/10_stdlib/1511_cluster_opaque_transport.xr', 'tests/regression/10_stdlib/1512_http2_protocol.xr', 'tests/regression/10_stdlib/1520_websocket.xr', 'tests/regression/10_stdlib/1540_http_url_edge.xr', 'tests/regression/10_stdlib/crash_min.xr', 'tests/regression/15_project/1500_project_mode_detect.xr')
+FROZEN_TARGETS['tests/regression/10_stdlib/1432_net_typed_handle.xr'] = ('POSITIVE_COMPLETE_NETWORK_OR_PROTOCOL_AFTER_FROZEN_PORT', 'P13')
+FROZEN_TARGETS['tests/regression/10_stdlib/1433_net_loopback.xr'] = ('POSITIVE_COMPLETE_NETWORK_OR_PROTOCOL_AFTER_FROZEN_PORT', 'P10')
+FROZEN_TARGETS['tests/regression/10_stdlib/1434_net_byte_array_loopback.xr'] = ('POSITIVE_COMPLETE_NETWORK_OR_PROTOCOL_AFTER_FROZEN_PORT', 'P10')
+FROZEN_TARGETS['tests/regression/10_stdlib/1435_net_deadline_error.xr'] = ('POSITIVE_COMPLETE_NETWORK_OR_PROTOCOL_AFTER_FROZEN_PORT', 'P13')
+FROZEN_TARGETS['tests/regression/10_stdlib/1436_net_halfclose_bidi.xr'] = ('POSITIVE_COMPLETE_NETWORK_OR_PROTOCOL_AFTER_FROZEN_PORT', 'P13')
+FROZEN_TARGETS['tests/regression/10_stdlib/1437_net_tls_timeout.xr'] = ('POSITIVE_COMPLETE_NETWORK_OR_PROTOCOL_AFTER_FROZEN_PORT', 'P13')
+FROZEN_TARGETS['tests/regression/10_stdlib/1438_ws_self_connect.xr'] = ('POSITIVE_COMPLETE_NETWORK_OR_PROTOCOL_AFTER_FROZEN_PORT', 'P10')
+FROZEN_TARGETS['tests/regression/10_stdlib/1502_http_request_options.xr'] = ('POSITIVE_COMPLETE_NETWORK_OR_PROTOCOL_AFTER_FROZEN_PORT', 'P13')
+FROZEN_TARGETS['tests/regression/10_stdlib/1507_http_formdata_pure.xr'] = ('POSITIVE_COMPLETE_NETWORK_OR_PROTOCOL_AFTER_FROZEN_PORT', 'P13')
+FROZEN_TARGETS['tests/regression/10_stdlib/1509_ws_pure_protocol.xr'] = ('POSITIVE_COMPLETE_NETWORK_OR_PROTOCOL_AFTER_FROZEN_PORT', 'P13')
+FROZEN_TARGETS['tests/regression/10_stdlib/1512_http2_protocol.xr'] = ('POSITIVE_COMPLETE_NETWORK_OR_PROTOCOL_AFTER_FROZEN_PORT', 'P13')
+FROZEN_TARGETS['tests/regression/10_stdlib/crash_min.xr'] = ('POSITIVE_COMPLETE_NETWORK_OR_PROTOCOL_AFTER_FROZEN_PORT', 'P10')
+
 def load_module(name: str, relative: str):
     spec = importlib.util.spec_from_file_location(name, ROOT / relative)
     module = importlib.util.module_from_spec(spec)
@@ -386,7 +400,8 @@ def validate_runner_routes(data: dict, responsibilities: dict, actual_entries: d
         reviewed_named_scope = identity.startswith(("tests/regression/08_mem/", "tests/regression/08_oop/",
                                                     "tests/regression/09_advanced/", "tests/regression/10_stdlib/",
                                                     "tests/regression/11_coroutine/",
-                                                    "tests/regression/12_type_checking/", "tests/regression/13_types/"))
+                                                    "tests/regression/12_type_checking/", "tests/regression/13_types/",
+                                                    "tests/regression/15_project/"))
         if named is not None or (reviewed_named_scope and regression and regression["entry"] == "test"):
             if (not named or named["state"] != "REVIEWED_TEXTUAL_DECLARATIONS_NOT_RUNTIME_DISCOVERY"
                     or named["execution"] != "NOT_RUN"
@@ -471,6 +486,8 @@ def validate_runner_routes(data: dict, responsibilities: dict, actual_entries: d
             "reviewed_regression_inputs": sum(any(e["suite"] == "regression" for e in r["original_runner_entries"]) for r in rows),
             "prepared_target_source_ports": sum("target_source_port" in r for r in rows),
             "reviewed_named_test_files": sum("original_named_test_obligation" in r for r in rows),
+            "unreviewed_named_regression_test_files": sum(r.get("original_regression_obligation", {}).get("entry") == "test"
+                and "original_named_test_obligation" not in r for r in rows),
             "reviewed_textual_test_declarations": sum(len(r.get("original_named_test_obligation", {}).get("declarations", [])) for r in rows),
             "prepared_partial_target_programs": sum("partial_target_program" in r for r in rows),
             "reviewed_frozen_target_transitions": sum("target_disposition" in r for r in rows),
@@ -504,6 +521,11 @@ def compare_required(expected: dict, observed: dict) -> None:
         if key not in observed:
             raise ValueError(f"independent observation mismatch: {key}")
         compare(value, observed[key], key)
+
+
+def require_full_explicit_runner_coverage(counts: dict) -> None:
+    if counts["unreviewed_runner_inputs"] or counts["unreviewed_runner_entry_links"]:
+        raise ValueError("complete explicit routing lost original discovered inputs or entries")
 
 
 def validate_oracles(data: dict) -> dict:
@@ -665,6 +687,7 @@ def snapshot() -> dict:
               "runner_rows_without_reviewed_primary_family": sum(r["primary_family"] == "UNMAPPED" for r in regression + differential + negative)}
     counts.update(routing_counts)
     counts.update(runner_routing_counts)
+    require_full_explicit_runner_coverage(runner_routing_counts)
     counts["prepared_independent_oracles"] = validate_oracles(read_json(HERE / "oracles.json"))["oracle_cases"]
     return {"scope": "PREPARATION_ONLY_NO_PRODUCT_QUALIFICATION", "summary": counts,
             "source_identity": {"seed": "e16797c62636f1d138583ead18d234c86a3cde6e",
@@ -707,6 +730,7 @@ def main() -> None:
     else:
         result.update(validate_runner_routes(read_json(HERE / "runner_routes.json"),
                                              read_json(HERE / "responsibilities.json")))
+        require_full_explicit_runner_coverage(result)
         print(json.dumps(result, sort_keys=True))
 
 

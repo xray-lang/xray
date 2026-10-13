@@ -186,3 +186,12 @@ strategy. Whole directory refusal conflicts with the seed best-effort removal
 contract; Windows literal-backslash filesystem and JSON query/Equal/range/error
 replacements remain explicit unresolved duties, not skipped execution or fake
 platform success. All actual backend/provider/FI/physical gates stay OPEN.
+
+Every original runner input and entry is now explicitly routed. Check/snapshot
+gates reject an omitted input even when historical anchors still match it.
+This is not full named semantic review:129 early regression test files still
+need complete per-name obligations, which are counted separately. Network
+drafts preserve all real setup, byte/framing/timeout/half-close/child lifetime
+duties; listener or TLS skips never qualify provider capability. RFC HPACK and
+BE control-frame answers are independently computed, while opaque Buffer/view
+transport and actual project context remain unpublished replacement duties.
