@@ -16,12 +16,12 @@ change a product interface, or authorize deletion of an old test.
   The class cleanup target fixture uses ordinary methods and contextual init,
   retains both named tests and adds during-call guard checks. It has not compiled
   on a product producer; its real test discovery/execution remains required.
-- `runner_routes.json` binds 874 explicitly reviewed FFI/JSON/generic/nullable/cleanup/
+- `runner_routes.json` binds 1248 explicitly reviewed FFI/JSON/generic/nullable/cleanup/
   generator/numeric/closure/module/call/ownership/control/comptime and regression inputs to their original source and expectation hashes,
   compiler positions/codes/text and actual runner entries. Future files are not
   automatically assigned by a directory wildcard. Missing expectations and
-  diagnostic position gaps remain explicit. Eleven imported diagnostics bind
-  their complete XR/XRD companion inputs; an earlier import-authority failure
+  diagnostic position gaps remain explicit. Sixteen imported diagnostics bind
+  their eighteen complete XR/XRD companion links; an earlier import-authority failure
   cannot satisfy the requested callback effect, method or parameter-mode error.
   Existing Task318 Q12 names the
   frozen comptime/protocol scope without changing the 27 historical families.
@@ -35,7 +35,13 @@ change a product interface, or authorize deletion of an old test.
   Reviewed syntax/stdlib inputs preserve removed spellings, typed public options
   and constrained parallel boundaries. Old C-union syntax needs an extern union
   port before it can prove the field/method/generic restriction.
-- `oracles.json` records thirty-eight independent output/result/rejection expectations.
+  All 891 original rejection inputs now have reviewed primary responsibility;
+  one missing oracle and all original diagnostic gaps remain unresolved.
+  Eighteen new type-source ports separate value copying/class identity, exact
+  same-family numeric union members and the allowed local Tuple view wrapper.
+  Readonly Slice writes and ordinary collection view storage remain rejected.
+  Prior class ports explicitly type non-field init parameter v as i64.
+- `oracles.json` records fifty-six independent output/result/rejection expectations.
   Preserved original literals remain byte-for-byte inputs. Target source ports
   are separately named and hashed; they do not overwrite historical originals.
   New Atomic fixtures separately require legal direct-var rebinding and

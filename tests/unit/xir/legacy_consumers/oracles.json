@@ -781,7 +781,7 @@
       "inputs": [
         {
           "path": "tests/unit/xir/legacy_consumers/fixtures/read_class_direct_mutation/root.xr",
-          "lf_sha256": "f7d1f072dacc55d16b894da013d986aa5294425348610bb28c531b02b7d6f2bd",
+          "lf_sha256": "6a84dd663605c84dec898d3660e7254c9977c3d0a93c8aed2c6183f9e4b72614",
           "role": "target_source"
         },
         {
@@ -819,7 +819,7 @@
       "inputs": [
         {
           "path": "tests/unit/xir/legacy_consumers/fixtures/read_class_indirect_mutation/root.xr",
-          "lf_sha256": "ae62916f14c1a71d6f82445c0d407d928c31889cf8167baea529e52bec819999",
+          "lf_sha256": "f1b6e807d5fb32fc6cdb6035899192c16faa7520b43ec184e56008838121f200",
           "role": "target_source"
         },
         {
@@ -857,7 +857,7 @@
       "inputs": [
         {
           "path": "tests/unit/xir/legacy_consumers/fixtures/read_class_inherited_mutation/root.xr",
-          "lf_sha256": "4ad7bc97730cf60409eb26ec2692545039a0f88fdb464dbfb50e83f251c87fc7",
+          "lf_sha256": "2f45cef38ed8d6918937102eff83be19aa5794cbcfb2893eb56568d7e5fc146c",
           "role": "target_source"
         },
         {
@@ -1348,6 +1348,698 @@
       "remaining_qualification": [
         "Bind the actual owned fixed producer diagnostic/cause to illegalRead -> module state. The normalized expected binding is an independent semantic observation, not a new public API.",
         "Prove the companion legitimate direct-var/explicit-parameter program succeeds; do not qualify by a blanket Atomic binding ban. Retain affected compiler FI/resource/physical/no-partial-product and safety checks."
+      ]
+    },
+    {
+      "id": "type_value_024_struct_dynamic_container_field",
+      "inputs": [
+        {
+          "path": "tests/unit/xir/legacy_consumers/fixtures/type_value_ports/024_struct_dynamic_container_field.xr",
+          "lf_sha256": "f35a833b85643699f980b15f080766e1a0b40f8bbf2c220cf012740b1065c019",
+          "role": "target_source"
+        },
+        {
+          "path": "tests/compile_errors/type/024_struct_dynamic_container_field.xr",
+          "lf_sha256": "c85909129545c43071be5a20ed71de4b55afb02fe6894b84526e54e4386d36eb",
+          "role": "historical_source_reference"
+        }
+      ],
+      "execution_source": "tests/unit/xir/legacy_consumers/fixtures/type_value_ports/024_struct_dynamic_container_field.xr",
+      "expected": {
+        "exit_code": 0,
+        "stdout_utf8": "0\n",
+        "stderr_utf8": ""
+      },
+      "rationale": "Owned Array fields are legitimate value aggregate storage; the empty array is contextualized by Bag.data and the actual main prints length0.",
+      "packages": [
+        "P07",
+        "P09",
+        "P10"
+      ],
+      "legacy_case": null,
+      "status": "PREPARED_NOT_EXECUTED",
+      "execution": {
+        "vm": "NOT_RUN",
+        "native": "NOT_RUN"
+      },
+      "new_entry": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "remaining_qualification": [
+        "Compile and execute the inspected source port on fixed ready producers; the original obsolete rejection must not become target qualification.",
+        "Fresh VM/native each satisfy the independent logical copy/identity output plus all affected FI/resource/owner lifetime/physical/safety/provider checks."
+      ]
+    },
+    {
+      "id": "type_value_084_const_object_field_store_rejected",
+      "inputs": [
+        {
+          "path": "tests/unit/xir/legacy_consumers/fixtures/type_value_ports/084_const_object_field_store_rejected.xr",
+          "lf_sha256": "d59bd226ce9c42b4a771891611a296d9f1d95d171ae1407121cb806a46af59ec",
+          "role": "target_source"
+        },
+        {
+          "path": "tests/compile_errors/type/084_const_object_field_store_rejected.xr",
+          "lf_sha256": "ec8970a95c4a8c40c4c1172d7deff3ec5b1c80436f904637060d2e72a77f040f",
+          "role": "historical_source_reference"
+        }
+      ],
+      "execution_source": "tests/unit/xir/legacy_consumers/fixtures/type_value_ports/084_const_object_field_store_rejected.xr",
+      "expected": {
+        "exit_code": 0,
+        "stdout_utf8": "2\n",
+        "stderr_utf8": ""
+      },
+      "rationale": "Const class binding preserves the mutable object identity; writing its non-const field changes value1 to2.",
+      "packages": [
+        "P07",
+        "P09",
+        "P10"
+      ],
+      "legacy_case": null,
+      "status": "PREPARED_NOT_EXECUTED",
+      "execution": {
+        "vm": "NOT_RUN",
+        "native": "NOT_RUN"
+      },
+      "new_entry": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "remaining_qualification": [
+        "Compile and execute the inspected source port on fixed ready producers; the original obsolete rejection must not become target qualification.",
+        "Fresh VM/native each satisfy the independent logical copy/identity output plus all affected FI/resource/owner lifetime/physical/safety/provider checks."
+      ]
+    },
+    {
+      "id": "type_value_085_const_array_alias_mutating_method",
+      "inputs": [
+        {
+          "path": "tests/unit/xir/legacy_consumers/fixtures/type_value_ports/085_const_array_alias_mutating_method.xr",
+          "lf_sha256": "c6953d4db859f337ea969aa03949606e44a1861ed9820f6e7b46ab8bce28a108",
+          "role": "target_source"
+        },
+        {
+          "path": "tests/compile_errors/type/085_const_array_alias_mutating_method.xr",
+          "lf_sha256": "a6326fa84eaa534a018ef5787ed88786c3565f128815aad5a46513ad13a878fb",
+          "role": "historical_source_reference"
+        }
+      ],
+      "execution_source": "tests/unit/xir/legacy_consumers/fixtures/type_value_ports/085_const_array_alias_mutating_method.xr",
+      "expected": {
+        "exit_code": 0,
+        "stdout_utf8": "0\n1\n",
+        "stderr_utf8": ""
+      },
+      "rationale": "The mutable Array copy receives one element while the original const value remains empty.",
+      "packages": [
+        "P07",
+        "P09",
+        "P10"
+      ],
+      "legacy_case": null,
+      "status": "PREPARED_NOT_EXECUTED",
+      "execution": {
+        "vm": "NOT_RUN",
+        "native": "NOT_RUN"
+      },
+      "new_entry": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "remaining_qualification": [
+        "Compile and execute the inspected source port on fixed ready producers; the original obsolete rejection must not become target qualification.",
+        "Fresh VM/native each satisfy the independent logical copy/identity output plus all affected FI/resource/owner lifetime/physical/safety/provider checks."
+      ]
+    },
+    {
+      "id": "type_value_086_const_map_alias_index_store_rejected",
+      "inputs": [
+        {
+          "path": "tests/unit/xir/legacy_consumers/fixtures/type_value_ports/086_const_map_alias_index_store_rejected.xr",
+          "lf_sha256": "4ec0c081c2d958073190af3198a33984ee6a6bc9869174195af42b1ba8e7c09b",
+          "role": "target_source"
+        },
+        {
+          "path": "tests/compile_errors/type/086_const_map_alias_index_store_rejected.xr",
+          "lf_sha256": "63f088f636a459f846fb0b75a3bd1205fba40a8fdecad14f0b4a1f76d2876014",
+          "role": "historical_source_reference"
+        }
+      ],
+      "execution_source": "tests/unit/xir/legacy_consumers/fixtures/type_value_ports/086_const_map_alias_index_store_rejected.xr",
+      "expected": {
+        "exit_code": 0,
+        "stdout_utf8": "1\n2\n",
+        "stderr_utf8": ""
+      },
+      "rationale": "The mutable Map copy adds b while the original const Map retains only a.",
+      "packages": [
+        "P07",
+        "P09",
+        "P10",
+        "P11",
+        "P12",
+        "P13"
+      ],
+      "legacy_case": null,
+      "status": "PREPARED_NOT_EXECUTED",
+      "execution": {
+        "vm": "NOT_RUN",
+        "native": "NOT_RUN"
+      },
+      "new_entry": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "remaining_qualification": [
+        "Compile and execute the inspected source port on fixed ready producers; the original obsolete rejection must not become target qualification.",
+        "Fresh VM/native each satisfy the independent logical copy/identity output plus all affected FI/resource/owner lifetime/physical/safety/provider checks."
+      ]
+    },
+    {
+      "id": "type_value_087_const_object_alias_field_store_rejected",
+      "inputs": [
+        {
+          "path": "tests/unit/xir/legacy_consumers/fixtures/type_value_ports/087_const_object_alias_field_store_rejected.xr",
+          "lf_sha256": "8c59ff02dcb9de0c89c139a8883836d2fb1079a8ea784c7cd6a9f0637a615bc4",
+          "role": "target_source"
+        },
+        {
+          "path": "tests/compile_errors/type/087_const_object_alias_field_store_rejected.xr",
+          "lf_sha256": "1d4e26f8b594cf28b3dfa421372eaf6dd3dad2c4009393a86f7821bcddd4dea9",
+          "role": "historical_source_reference"
+        }
+      ],
+      "execution_source": "tests/unit/xir/legacy_consumers/fixtures/type_value_ports/087_const_object_alias_field_store_rejected.xr",
+      "expected": {
+        "exit_code": 0,
+        "stdout_utf8": "2\n2\n",
+        "stderr_utf8": ""
+      },
+      "rationale": "Class copies retain the same identity, so mutation through c is also visible through b.",
+      "packages": [
+        "P07",
+        "P09",
+        "P10"
+      ],
+      "legacy_case": null,
+      "status": "PREPARED_NOT_EXECUTED",
+      "execution": {
+        "vm": "NOT_RUN",
+        "native": "NOT_RUN"
+      },
+      "new_entry": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "remaining_qualification": [
+        "Compile and execute the inspected source port on fixed ready producers; the original obsolete rejection must not become target qualification.",
+        "Fresh VM/native each satisfy the independent logical copy/identity output plus all affected FI/resource/owner lifetime/physical/safety/provider checks."
+      ]
+    },
+    {
+      "id": "type_value_088_const_array_mutable_alias_init_rejected",
+      "inputs": [
+        {
+          "path": "tests/unit/xir/legacy_consumers/fixtures/type_value_ports/088_const_array_mutable_alias_init_rejected.xr",
+          "lf_sha256": "7291c96389038c98c628fdbd0cd83dd5a4a5a4fe605731573f2041ee58a9f83e",
+          "role": "target_source"
+        },
+        {
+          "path": "tests/compile_errors/type/088_const_array_mutable_alias_init_rejected.xr",
+          "lf_sha256": "e2e27c6d815e0bb06212e346658e850f38eacf0a7d4290af6fb327c0a191a386",
+          "role": "historical_source_reference"
+        }
+      ],
+      "execution_source": "tests/unit/xir/legacy_consumers/fixtures/type_value_ports/088_const_array_mutable_alias_init_rejected.xr",
+      "expected": {
+        "exit_code": 0,
+        "stdout_utf8": "1\n9\n",
+        "stderr_utf8": ""
+      },
+      "rationale": "Implicit value copy to a const snapshot is legitimate; later mutable source update must not modify the old logical array.",
+      "packages": [
+        "P07",
+        "P09",
+        "P10"
+      ],
+      "legacy_case": null,
+      "status": "PREPARED_NOT_EXECUTED",
+      "execution": {
+        "vm": "NOT_RUN",
+        "native": "NOT_RUN"
+      },
+      "new_entry": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "remaining_qualification": [
+        "Compile and execute the inspected source port on fixed ready producers; the original obsolete rejection must not become target qualification.",
+        "Fresh VM/native each satisfy the independent logical copy/identity output plus all affected FI/resource/owner lifetime/physical/safety/provider checks."
+      ]
+    },
+    {
+      "id": "type_value_089_const_map_mutable_alias_init_rejected",
+      "inputs": [
+        {
+          "path": "tests/unit/xir/legacy_consumers/fixtures/type_value_ports/089_const_map_mutable_alias_init_rejected.xr",
+          "lf_sha256": "080cf6107419f989fb0f0a298f9847640eb8aee40d403b40bf91820882bb2ad1",
+          "role": "target_source"
+        },
+        {
+          "path": "tests/compile_errors/type/089_const_map_mutable_alias_init_rejected.xr",
+          "lf_sha256": "9f8f2af18802808492ec6143f4e6db3775dc7e4d070813ff17cb1686db78774b",
+          "role": "historical_source_reference"
+        }
+      ],
+      "execution_source": "tests/unit/xir/legacy_consumers/fixtures/type_value_ports/089_const_map_mutable_alias_init_rejected.xr",
+      "expected": {
+        "exit_code": 0,
+        "stdout_utf8": "1\n9\n",
+        "stderr_utf8": ""
+      },
+      "rationale": "Implicit Map value copy to const preserves the old entry while mutable source update becomes9.",
+      "packages": [
+        "P07",
+        "P09",
+        "P10",
+        "P11",
+        "P12",
+        "P13"
+      ],
+      "legacy_case": null,
+      "status": "PREPARED_NOT_EXECUTED",
+      "execution": {
+        "vm": "NOT_RUN",
+        "native": "NOT_RUN"
+      },
+      "new_entry": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "remaining_qualification": [
+        "Compile and execute the inspected source port on fixed ready producers; the original obsolete rejection must not become target qualification.",
+        "Fresh VM/native each satisfy the independent logical copy/identity output plus all affected FI/resource/owner lifetime/physical/safety/provider checks."
+      ]
+    },
+    {
+      "id": "type_value_090_const_object_mutable_alias_init_rejected",
+      "inputs": [
+        {
+          "path": "tests/unit/xir/legacy_consumers/fixtures/type_value_ports/090_const_object_mutable_alias_init_rejected.xr",
+          "lf_sha256": "35af31016f9679e812aa49972804bfd8c21c935b34b818b9f691d6698dc7414c",
+          "role": "target_source"
+        },
+        {
+          "path": "tests/compile_errors/type/090_const_object_mutable_alias_init_rejected.xr",
+          "lf_sha256": "2eb6562ae5afe6c7e31a5288d71b646f35afacab80f126507c9da42901e9dbb6",
+          "role": "historical_source_reference"
+        }
+      ],
+      "execution_source": "tests/unit/xir/legacy_consumers/fixtures/type_value_ports/090_const_object_mutable_alias_init_rejected.xr",
+      "expected": {
+        "exit_code": 0,
+        "stdout_utf8": "9\n9\n",
+        "stderr_utf8": ""
+      },
+      "rationale": "A const class binding is a second reference to the same object, not a deep value snapshot.",
+      "packages": [
+        "P07",
+        "P09",
+        "P10"
+      ],
+      "legacy_case": null,
+      "status": "PREPARED_NOT_EXECUTED",
+      "execution": {
+        "vm": "NOT_RUN",
+        "native": "NOT_RUN"
+      },
+      "new_entry": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "remaining_qualification": [
+        "Compile and execute the inspected source port on fixed ready producers; the original obsolete rejection must not become target qualification.",
+        "Fresh VM/native each satisfy the independent logical copy/identity output plus all affected FI/resource/owner lifetime/physical/safety/provider checks."
+      ]
+    },
+    {
+      "id": "type_value_099_shared_object_field_store_rejected",
+      "inputs": [
+        {
+          "path": "tests/unit/xir/legacy_consumers/fixtures/type_value_ports/099_shared_object_field_store_rejected.xr",
+          "lf_sha256": "d59bd226ce9c42b4a771891611a296d9f1d95d171ae1407121cb806a46af59ec",
+          "role": "target_source"
+        },
+        {
+          "path": "tests/compile_errors/type/099_shared_object_field_store_rejected.xr",
+          "lf_sha256": "ec8970a95c4a8c40c4c1172d7deff3ec5b1c80436f904637060d2e72a77f040f",
+          "role": "historical_source_reference"
+        }
+      ],
+      "execution_source": "tests/unit/xir/legacy_consumers/fixtures/type_value_ports/099_shared_object_field_store_rejected.xr",
+      "expected": {
+        "exit_code": 0,
+        "stdout_utf8": "2\n",
+        "stderr_utf8": ""
+      },
+      "rationale": "Const fixes the class binding and does not prohibit modifying its ordinary field.",
+      "packages": [
+        "P07",
+        "P09",
+        "P10"
+      ],
+      "legacy_case": null,
+      "status": "PREPARED_NOT_EXECUTED",
+      "execution": {
+        "vm": "NOT_RUN",
+        "native": "NOT_RUN"
+      },
+      "new_entry": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "remaining_qualification": [
+        "Compile and execute the inspected source port on fixed ready producers; the original obsolete rejection must not become target qualification.",
+        "Fresh VM/native each satisfy the independent logical copy/identity output plus all affected FI/resource/owner lifetime/physical/safety/provider checks."
+      ]
+    },
+    {
+      "id": "type_value_100_shared_object_compound_field_store_rejected",
+      "inputs": [
+        {
+          "path": "tests/unit/xir/legacy_consumers/fixtures/type_value_ports/100_shared_object_compound_field_store_rejected.xr",
+          "lf_sha256": "8bfc747b41e4fb17c82efc8032b84632516ac9e764c67ce03ee3ec135a2c08f9",
+          "role": "target_source"
+        },
+        {
+          "path": "tests/compile_errors/type/100_shared_object_compound_field_store_rejected.xr",
+          "lf_sha256": "345996648dd1e0861ab8b7cecbc26a217ce9df248d27157558a01854d32b6a95",
+          "role": "historical_source_reference"
+        }
+      ],
+      "execution_source": "tests/unit/xir/legacy_consumers/fixtures/type_value_ports/100_shared_object_compound_field_store_rejected.xr",
+      "expected": {
+        "exit_code": 0,
+        "stdout_utf8": "2\n",
+        "stderr_utf8": ""
+      },
+      "rationale": "Compound update through a const class reference increments the shared object from1 to2.",
+      "packages": [
+        "P07",
+        "P09",
+        "P10"
+      ],
+      "legacy_case": null,
+      "status": "PREPARED_NOT_EXECUTED",
+      "execution": {
+        "vm": "NOT_RUN",
+        "native": "NOT_RUN"
+      },
+      "new_entry": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "remaining_qualification": [
+        "Compile and execute the inspected source port on fixed ready producers; the original obsolete rejection must not become target qualification.",
+        "Fresh VM/native each satisfy the independent logical copy/identity output plus all affected FI/resource/owner lifetime/physical/safety/provider checks."
+      ]
+    },
+    {
+      "id": "type_value_105_shared_member_array_alias_index_store_rejected",
+      "inputs": [
+        {
+          "path": "tests/unit/xir/legacy_consumers/fixtures/type_value_ports/105_shared_member_array_alias_index_store_rejected.xr",
+          "lf_sha256": "7c0c4598aa5574ad190d379ba3ba6efd74cc7512e04a25e8e2687503490058b8",
+          "role": "target_source"
+        },
+        {
+          "path": "tests/compile_errors/type/105_shared_member_array_alias_index_store_rejected.xr",
+          "lf_sha256": "0c234ad9e931f7d0bebe358798a3c4dbf868c1ea102c11fd63107f190de9bd8e",
+          "role": "historical_source_reference"
+        }
+      ],
+      "execution_source": "tests/unit/xir/legacy_consumers/fixtures/type_value_ports/105_shared_member_array_alias_index_store_rejected.xr",
+      "expected": {
+        "exit_code": 0,
+        "stdout_utf8": "0\n1\n",
+        "stderr_utf8": ""
+      },
+      "rationale": "Reading an Array field produces an owned logical value copy; its mutation does not alter the original class field value.",
+      "packages": [
+        "P07",
+        "P08",
+        "P09",
+        "P10"
+      ],
+      "legacy_case": null,
+      "status": "PREPARED_NOT_EXECUTED",
+      "execution": {
+        "vm": "NOT_RUN",
+        "native": "NOT_RUN"
+      },
+      "new_entry": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "remaining_qualification": [
+        "Compile and execute the inspected source port on fixed ready producers; the original obsolete rejection must not become target qualification.",
+        "Fresh VM/native each satisfy the independent logical copy/identity output plus all affected FI/resource/owner lifetime/physical/safety/provider checks."
+      ]
+    },
+    {
+      "id": "type_value_106_shared_member_array_alias_mutating_method_rejected",
+      "inputs": [
+        {
+          "path": "tests/unit/xir/legacy_consumers/fixtures/type_value_ports/106_shared_member_array_alias_mutating_method_rejected.xr",
+          "lf_sha256": "599ff8db7581144f1b9df95fc8e5a25697c220b6c51da0941309370bd6a72aed",
+          "role": "target_source"
+        },
+        {
+          "path": "tests/compile_errors/type/106_shared_member_array_alias_mutating_method_rejected.xr",
+          "lf_sha256": "1566f5282cdeedb058c09d777968b3a7fd68c29f33090caaf2305a7a6902fadd",
+          "role": "historical_source_reference"
+        }
+      ],
+      "execution_source": "tests/unit/xir/legacy_consumers/fixtures/type_value_ports/106_shared_member_array_alias_mutating_method_rejected.xr",
+      "expected": {
+        "exit_code": 0,
+        "stdout_utf8": "1\n2\n",
+        "stderr_utf8": ""
+      },
+      "rationale": "Mutating the copied Array grows only that copy, while the class field retains length1.",
+      "packages": [
+        "P07",
+        "P08",
+        "P09",
+        "P10"
+      ],
+      "legacy_case": null,
+      "status": "PREPARED_NOT_EXECUTED",
+      "execution": {
+        "vm": "NOT_RUN",
+        "native": "NOT_RUN"
+      },
+      "new_entry": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "remaining_qualification": [
+        "Compile and execute the inspected source port on fixed ready producers; the original obsolete rejection must not become target qualification.",
+        "Fresh VM/native each satisfy the independent logical copy/identity output plus all affected FI/resource/owner lifetime/physical/safety/provider checks."
+      ]
+    },
+    {
+      "id": "type_value_109_shared_member_array_alias_mutating_param_rejected",
+      "inputs": [
+        {
+          "path": "tests/unit/xir/legacy_consumers/fixtures/type_value_ports/109_shared_member_array_alias_mutating_param_rejected.xr",
+          "lf_sha256": "215b393ecde0a96b5fc565306caf87d1726460c9639f71d084a7a172494cdeac",
+          "role": "target_source"
+        },
+        {
+          "path": "tests/compile_errors/type/109_shared_member_array_alias_mutating_param_rejected.xr",
+          "lf_sha256": "89a572cda33f7aaf054b01d3436867523b2c16b7dd571ef9dedcf1ebd612da31",
+          "role": "historical_source_reference"
+        }
+      ],
+      "execution_source": "tests/unit/xir/legacy_consumers/fixtures/type_value_ports/109_shared_member_array_alias_mutating_param_rejected.xr",
+      "expected": {
+        "exit_code": 0,
+        "stdout_utf8": "1\n2\n",
+        "stderr_utf8": ""
+      },
+      "rationale": "The local Array field copy is a mutable place for ref appendOne; the class field stays length1 and the local copy grows to2.",
+      "packages": [
+        "P07",
+        "P08",
+        "P09",
+        "P10"
+      ],
+      "legacy_case": null,
+      "status": "PREPARED_NOT_EXECUTED",
+      "execution": {
+        "vm": "NOT_RUN",
+        "native": "NOT_RUN"
+      },
+      "new_entry": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "remaining_qualification": [
+        "Compile and execute the inspected source port on fixed ready producers; the original obsolete rejection must not become target qualification.",
+        "Fresh VM/native each satisfy the independent logical copy/identity output plus all affected FI/resource/owner lifetime/physical/safety/provider checks."
+      ]
+    },
+    {
+      "id": "type_value_118_shared_derived_closure_capture_mutation_rejected",
+      "inputs": [
+        {
+          "path": "tests/unit/xir/legacy_consumers/fixtures/type_value_ports/118_shared_derived_closure_capture_mutation_rejected.xr",
+          "lf_sha256": "fb4f469d38d7de6bd0c76bc286ddb5b59481764a7b38771dd7b3405a7f1042e3",
+          "role": "target_source"
+        },
+        {
+          "path": "tests/compile_errors/type/118_shared_derived_closure_capture_mutation_rejected.xr",
+          "lf_sha256": "11e4913de997686927a49be4a3779ec07e4c063e0236c3e0a84dc6f120507558",
+          "role": "historical_source_reference"
+        }
+      ],
+      "execution_source": "tests/unit/xir/legacy_consumers/fixtures/type_value_ports/118_shared_derived_closure_capture_mutation_rejected.xr",
+      "expected": {
+        "exit_code": 0,
+        "stdout_utf8": "5\n9\n",
+        "stderr_utf8": ""
+      },
+      "rationale": "The ordinary closure shares the mutable local cell containing an independent Array copy; its update becomes9 without modifying the class field value5.",
+      "packages": [
+        "P02",
+        "P07",
+        "P08",
+        "P09",
+        "P10"
+      ],
+      "legacy_case": null,
+      "status": "PREPARED_NOT_EXECUTED",
+      "execution": {
+        "vm": "NOT_RUN",
+        "native": "NOT_RUN"
+      },
+      "new_entry": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "remaining_qualification": [
+        "Compile and execute the inspected source port on fixed ready producers; the original obsolete rejection must not become target qualification.",
+        "Fresh VM/native each satisfy the independent logical copy/identity output plus all affected FI/resource/owner lifetime/physical/safety/provider checks."
+      ]
+    },
+    {
+      "id": "type_value_union_indiscriminable_int_members",
+      "inputs": [
+        {
+          "path": "tests/unit/xir/legacy_consumers/fixtures/type_value_ports/union_indiscriminable_int_members.xr",
+          "lf_sha256": "9ef7e0847a8d95616570451af1375bfcb43b9ace73aaece89db6683d594ebd29",
+          "role": "target_exact_member_source"
+        },
+        {
+          "path": "tests/compile_errors/type/union_indiscriminable_int_members.xr",
+          "lf_sha256": "488d5db7069d3a5e993c2803977b66104d96e541024956bf1b6e52968498d031",
+          "role": "historical_source_reference"
+        }
+      ],
+      "execution_source": "tests/unit/xir/legacy_consumers/fixtures/type_value_ports/union_indiscriminable_int_members.xr",
+      "expected": {
+        "exit_code": 0,
+        "stdout_utf8": "true\nfalse\nfalse\ntrue\n",
+        "stderr_utf8": ""
+      },
+      "rationale": "Tagged same-family union declarations are legal. Exact member injection and reassignment must preserve nominal alias canonicalization and runtime tag, rather than choosing by numeric representability. The original ambiguous injection is separately reviewed.",
+      "packages": [
+        "P09",
+        "P10"
+      ],
+      "legacy_case": null,
+      "status": "PREPARED_NOT_EXECUTED",
+      "execution": {
+        "vm": "NOT_RUN",
+        "native": "NOT_RUN"
+      },
+      "new_entry": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "remaining_qualification": [
+        "Compile and run exact member identity on fresh fixed Source/Program interfaces; preserve original ambiguous-input review and do not use old E0390 as target success.",
+        "VM/native independently satisfy tags and all affected FI/resource/lifetime/safety/portable C gates."
+      ]
+    },
+    {
+      "id": "type_value_union_indiscriminable_float_members",
+      "inputs": [
+        {
+          "path": "tests/unit/xir/legacy_consumers/fixtures/type_value_ports/union_indiscriminable_float_members.xr",
+          "lf_sha256": "fe084e126cbe2df41bdc5b216d6bb00869b832696bebf4c04565574fb03a20f4",
+          "role": "target_exact_member_source"
+        },
+        {
+          "path": "tests/compile_errors/type/union_indiscriminable_float_members.xr",
+          "lf_sha256": "9ef31c617f244901d92b200cb6a08c38aafa8772c8fb3570c5ffc86d8cc23feb",
+          "role": "historical_source_reference"
+        }
+      ],
+      "execution_source": "tests/unit/xir/legacy_consumers/fixtures/type_value_ports/union_indiscriminable_float_members.xr",
+      "expected": {
+        "exit_code": 0,
+        "stdout_utf8": "true\nfalse\nfalse\ntrue\n",
+        "stderr_utf8": ""
+      },
+      "rationale": "Tagged same-family union declarations are legal. Exact member injection and reassignment must preserve nominal alias canonicalization and runtime tag, rather than choosing by numeric representability. The original ambiguous injection is separately reviewed.",
+      "packages": [
+        "P09",
+        "P10"
+      ],
+      "legacy_case": null,
+      "status": "PREPARED_NOT_EXECUTED",
+      "execution": {
+        "vm": "NOT_RUN",
+        "native": "NOT_RUN"
+      },
+      "new_entry": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "remaining_qualification": [
+        "Compile and run exact member identity on fresh fixed Source/Program interfaces; preserve original ambiguous-input review and do not use old E0390 as target success.",
+        "VM/native independently satisfy tags and all affected FI/resource/lifetime/safety/portable C gates."
+      ]
+    },
+    {
+      "id": "type_value_union_indiscriminable_via_alias",
+      "inputs": [
+        {
+          "path": "tests/unit/xir/legacy_consumers/fixtures/type_value_ports/union_indiscriminable_via_alias.xr",
+          "lf_sha256": "7325c8926ce8d39221de58dcdbb0c1776ebec482671695e42366257f0799ab4a",
+          "role": "target_exact_member_source"
+        },
+        {
+          "path": "tests/compile_errors/type/union_indiscriminable_via_alias.xr",
+          "lf_sha256": "dbfa6955e7f88f9d229a4405d7c1b74f2680245f5b9ceb32401c9f1acc254e2e",
+          "role": "historical_source_reference"
+        }
+      ],
+      "execution_source": "tests/unit/xir/legacy_consumers/fixtures/type_value_ports/union_indiscriminable_via_alias.xr",
+      "expected": {
+        "exit_code": 0,
+        "stdout_utf8": "true\nfalse\nfalse\ntrue\n",
+        "stderr_utf8": ""
+      },
+      "rationale": "Tagged same-family union declarations are legal. Exact member injection and reassignment must preserve nominal alias canonicalization and runtime tag, rather than choosing by numeric representability. The original ambiguous injection is separately reviewed.",
+      "packages": [
+        "P09",
+        "P10"
+      ],
+      "legacy_case": null,
+      "status": "PREPARED_NOT_EXECUTED",
+      "execution": {
+        "vm": "NOT_RUN",
+        "native": "NOT_RUN"
+      },
+      "new_entry": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "remaining_qualification": [
+        "Compile and run exact member identity on fresh fixed Source/Program interfaces; preserve original ambiguous-input review and do not use old E0390 as target success.",
+        "VM/native independently satisfy tags and all affected FI/resource/lifetime/safety/portable C gates."
+      ]
+    },
+    {
+      "id": "type_value_local_view_tuple",
+      "inputs": [
+        {
+          "path": "tests/unit/xir/legacy_consumers/fixtures/type_value_ports/span_tuple_literal_escape.xr",
+          "lf_sha256": "59824e00df7eb963a563ca1831786f104fad1b41d3aabe53dc8e6585fa62c39a",
+          "role": "target_source"
+        },
+        {
+          "path": "tests/compile_errors/type/span_tuple_literal_escape.xr",
+          "lf_sha256": "59824e00df7eb963a563ca1831786f104fad1b41d3aabe53dc8e6585fa62c39a",
+          "role": "historical_source_reference"
+        }
+      ],
+      "execution_source": "tests/unit/xir/legacy_consumers/fixtures/type_value_ports/span_tuple_literal_escape.xr",
+      "expected": {
+        "exit_code": 0,
+        "stdout_utf8": "1\n",
+        "stderr_utf8": ""
+      },
+      "rationale": "Task313 explicitly allows local Tuple/Optional wrappers containing views. This local tuple stays in its owner scope and does not escape, so accessing its ordinary scalar field prints1; collection/class/go/general generic storage remains illegal.",
+      "packages": [
+        "P07",
+        "P09",
+        "P10"
+      ],
+      "legacy_case": null,
+      "status": "PREPARED_NOT_EXECUTED",
+      "execution": {
+        "vm": "NOT_RUN",
+        "native": "NOT_RUN"
+      },
+      "new_entry": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "remaining_qualification": [
+        "Preserve local view owner/borrow in the Tuple wrapper through the actual Source/Checked/Lowered chain and both backends; no illicit scope escape or general container exemption.",
+        "Run complete affected owner/lifetime/physical/FI/resource/safety gates; printing1 alone does not qualify borrow preservation."
       ]
     }
   ]

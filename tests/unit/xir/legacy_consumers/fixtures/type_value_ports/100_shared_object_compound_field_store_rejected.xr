@@ -1,0 +1,11 @@
+class Counter {
+    value: i64
+
+    init(v: i64) {
+        this.value = v
+    }
+}
+
+const counter = Counter(1)
+counter.value += 1
+print(counter.value)

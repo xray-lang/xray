@@ -1,0 +1,5 @@
+var xs = [1, 2]
+const frozen = xs
+xs[0] = 9
+print(frozen[0])
+print(xs[0])

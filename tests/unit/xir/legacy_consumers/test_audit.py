@@ -14,6 +14,65 @@ class PreparationChecks(unittest.TestCase):
         cls.runner_routes = audit.read_json(audit.HERE / "runner_routes.json")
         cls.legacy = audit.read_json(audit.ROOT / "tests/unit/xir/product_consumers/legacy_responsibilities.json")
 
+    def test_complete_original_rejections_remain_bound_even_with_missing_oracle(self):
+        counts = audit.validate_runner_routes(self.runner_routes, self.mapping)
+        self.assertEqual(counts["reviewed_rejection_cases"], 891)
+        self.assertEqual(counts["unreviewed_rejection_inputs"], 0)
+        self.assertEqual(counts["reviewed_missing_rejection_oracles"], 1)
+
+    def test_prior_class_ports_have_explicit_non_field_init_parameter_types(self):
+        for identity in ("read_class_direct_mutation", "read_class_indirect_mutation", "read_class_inherited_mutation"):
+            source = (audit.HERE / "fixtures" / identity / "root.xr").read_text(encoding="utf-8")
+            self.assertIn("init(v: i64)", source)
+            self.assertNotIn("init(v)", source)
+
+    def test_type_value_port_cannot_use_the_original_retired_constructor_surface(self):
+        for name in ("084_const_object_field_store_rejected.xr", "087_const_object_alias_field_store_rejected.xr",
+                     "090_const_object_mutable_alias_init_rejected.xr", "099_shared_object_field_store_rejected.xr",
+                     "100_shared_object_compound_field_store_rejected.xr"):
+            source = (audit.HERE / "fixtures/type_value_ports" / name).read_text(encoding="utf-8")
+            self.assertIn("init(v: i64)", source)
+            self.assertNotIn("constructor(", source)
+
+    def test_const_value_copy_mutation_cannot_change_the_prior_array_or_map(self):
+        for name, wrong in (("085_const_array_alias_mutating_method", "1\n1\n"),
+                            ("086_const_map_alias_index_store_rejected", "2\n2\n"),
+                            ("088_const_array_mutable_alias_init_rejected", "9\n9\n"),
+                            ("089_const_map_mutable_alias_init_rejected", "9\n9\n")):
+            expected = next(r["expected"] for r in self.oracles["cases"] if r["id"] == "type_value_" + name)
+            with self.subTest(name=name), self.assertRaises(ValueError):
+                audit.compare_required(expected, dict(expected, stdout_utf8=wrong))
+
+    def test_class_identity_copy_cannot_be_a_deep_snapshot(self):
+        for name, wrong in (("087_const_object_alias_field_store_rejected", "1\n2\n"),
+                            ("090_const_object_mutable_alias_init_rejected", "1\n9\n")):
+            expected = next(r["expected"] for r in self.oracles["cases"] if r["id"] == "type_value_" + name)
+            with self.subTest(name=name), self.assertRaises(ValueError):
+                audit.compare_required(expected, dict(expected, stdout_utf8=wrong))
+
+    def test_class_array_field_projection_copy_cannot_mutate_the_field(self):
+        for name, wrong in (("105_shared_member_array_alias_index_store_rejected", "1\n1\n"),
+                            ("106_shared_member_array_alias_mutating_method_rejected", "2\n2\n"),
+                            ("118_shared_derived_closure_capture_mutation_rejected", "9\n9\n")):
+            expected = next(r["expected"] for r in self.oracles["cases"] if r["id"] == "type_value_" + name)
+            with self.subTest(name=name), self.assertRaises(ValueError):
+                audit.compare_required(expected, dict(expected, stdout_utf8=wrong))
+
+    def test_same_family_union_tag_is_not_numeric_representability(self):
+        for name in ("union_indiscriminable_int_members", "union_indiscriminable_float_members", "union_indiscriminable_via_alias"):
+            expected = next(r["expected"] for r in self.oracles["cases"] if r["id"] == "type_value_" + name)
+            with self.subTest(name=name), self.assertRaises(ValueError):
+                audit.compare_required(expected, dict(expected, stdout_utf8="true\ntrue\ntrue\ntrue\n"))
+
+    def test_local_tuple_view_exception_does_not_open_array_view_storage(self):
+        row = next(r for r in self.runner_routes["cases"] if r["case_id"].endswith("/span_tuple_literal_escape.xr"))
+        self.assertEqual(row["target_disposition"]["kind"], "POSITIVE_LOCAL_VIEW_TUPLE_AFTER_FROZEN_TASK313_PORT")
+        bad = copy.deepcopy(self.runner_routes)
+        row = next(r for r in bad["cases"] if r["case_id"].endswith("/span_array_literal_escape.xr"))
+        row["target_disposition"] = {"kind": "POSITIVE_LOCAL_VIEW_TUPLE_AFTER_FROZEN_TASK313_PORT", "owner_package": "P10", "qualification": "NOT_RUN", "reason": "invalid container exemption"}
+        with self.assertRaisesRegex(ValueError, "required disposition"):
+            audit.validate_runner_routes(bad, self.mapping)
+
     def test_imported_diagnostics_cannot_omit_companion_inputs(self):
         for identity in audit.IMPORTED_ORACLE_INPUTS:
             with self.subTest(identity=identity):

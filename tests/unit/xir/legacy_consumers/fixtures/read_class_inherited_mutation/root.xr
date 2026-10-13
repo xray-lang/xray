@@ -1,7 +1,7 @@
 class CounterBase {
     value: i64
 
-    init(v) {
+    init(v: i64) {
         this.value = v
     }
 
@@ -11,7 +11,7 @@ class CounterBase {
 }
 
 class CounterChild extends CounterBase {
-    init(v) {
+    init(v: i64) {
         super(v)
     }
 

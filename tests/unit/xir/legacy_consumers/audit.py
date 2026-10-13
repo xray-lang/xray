@@ -33,6 +33,19 @@ for name in ("generator_await_rejected.xr", "generator_coro_yield_rejected.xr",
 FROZEN_TARGETS["tests/compile_errors/oop/020_enum_implements_rejected.xr"] = ("REJECTION_FOR_MISSING_INTERFACE_REQUIREMENT", "P10")
 
 
+for name in ("024_struct_dynamic_container_field.xr", "084_const_object_field_store_rejected.xr",
+             "085_const_array_alias_mutating_method.xr", "086_const_map_alias_index_store_rejected.xr",
+             "087_const_object_alias_field_store_rejected.xr", "088_const_array_mutable_alias_init_rejected.xr",
+             "089_const_map_mutable_alias_init_rejected.xr", "090_const_object_mutable_alias_init_rejected.xr",
+             "099_shared_object_field_store_rejected.xr", "100_shared_object_compound_field_store_rejected.xr",
+             "105_shared_member_array_alias_index_store_rejected.xr", "106_shared_member_array_alias_mutating_method_rejected.xr",
+             "109_shared_member_array_alias_mutating_param_rejected.xr", "118_shared_derived_closure_capture_mutation_rejected.xr"):
+    FROZEN_TARGETS["tests/compile_errors/type/" + name] = ("POSITIVE_VALUE_OR_IDENTITY_AFTER_FROZEN_TASK313_PORT", "P10")
+for name in ("union_indiscriminable_int_members.xr", "union_indiscriminable_float_members.xr", "union_indiscriminable_via_alias.xr"):
+    FROZEN_TARGETS["tests/compile_errors/type/" + name] = ("POSITIVE_EXACT_UNION_MEMBER_AFTER_FROZEN_TASK319_PORT", "P10")
+FROZEN_TARGETS["tests/compile_errors/type/span_tuple_literal_escape.xr"] = ("POSITIVE_LOCAL_VIEW_TUPLE_AFTER_FROZEN_TASK313_PORT", "P10")
+
+
 # The demanded imported diagnostics depend on these complete companion inputs.
 IMPORTED_ORACLE_INPUTS = {}
 for name in ("156_imported_ref_call_requires_marker.xr", "158_imported_const_function_value_ref_call_requires_marker.xr"):
@@ -49,6 +62,17 @@ for name in ("parallel_callback_selective_xrd_unknown_effect_rejected.xr",
              "parallel_callback_xrd_handle_method_unknown_effect_rejected.xr",
              "parallel_callback_xrd_unknown_effect_rejected.xr"):
     IMPORTED_ORACLE_INPUTS["tests/compile_errors/stdlib/" + name] = ("tests/compile_errors/stdlib/parallel_unknown_effect_native.xrd",)
+
+
+for name in ("113_shared_derived_imported_function_value_mutating_param_rejected.xr",
+             "114_shared_derived_namespace_function_value_mutating_param_rejected.xr"):
+    IMPORTED_ORACLE_INPUTS["tests/compile_errors/type/" + name] = ("tests/fixtures/shared_mutation_lib.xr",)
+IMPORTED_ORACLE_INPUTS["tests/compile_errors/type/115_shared_derived_reexported_function_value_mutating_param_rejected.xr"] = (
+    "tests/fixtures/shared_mutation_reexport.xr", "tests/fixtures/shared_mutation_lib.xr")
+IMPORTED_ORACLE_INPUTS["tests/compile_errors/type/116_shared_derived_star_reexported_function_value_mutating_param_rejected.xr"] = (
+    "tests/fixtures/shared_mutation_reexport_all.xr", "tests/fixtures/shared_mutation_lib.xr")
+IMPORTED_ORACLE_INPUTS["tests/compile_errors/type/slice_active_view_cross_module_relocation.xr"] = (
+    "tests/fixtures/slice/_slice_memory_effect_lib.xr",)
 
 
 def load_module(name: str, relative: str):
@@ -203,8 +227,8 @@ def validate_runner_routes(data: dict, responsibilities: dict, actual_entries: d
                     or disposition["owner_package"] not in row["producer_packages"]
                     or disposition["qualification"] != "NOT_RUN" or not disposition.get("reason")):
                 raise ValueError("planned frozen migration cannot publish qualification or change its required disposition")
-            if target[0] == "POSITIVE_AFTER_FROZEN_CLASS_SURFACE_PORT" and not port:
-                raise ValueError("planned read-class migration requires its frozen source port")
+            if (target[0] == "POSITIVE_AFTER_FROZEN_CLASS_SURFACE_PORT" or target[0].endswith("_PORT")) and not port:
+                raise ValueError("planned frozen migration requires its frozen source port")
         if "original_rejection_oracle" in row:
             oracle = row["original_rejection_oracle"]
             path, kind = errors.expected_path_for(source)
@@ -231,6 +255,8 @@ def validate_runner_routes(data: dict, responsibilities: dict, actual_entries: d
             "reviewed_frozen_target_transitions": sum("target_disposition" in r for r in rows),
             "reviewed_imported_companion_links": sum(len(r.get("original_imported_inputs", [])) for r in rows),
             "reviewed_rejection_cases": sum("original_rejection_oracle" in r for r in rows),
+            "unreviewed_rejection_inputs": len({p for p, e in actual_entries.items()
+                if any(i["suite"] == "compile_errors" for i in e)} - set(ids)),
             "reviewed_rejection_oracles": sum(r.get("original_rejection_oracle", {}).get("state") == "PRESENT" for r in rows),
             "reviewed_missing_rejection_oracles": sum(r.get("original_rejection_oracle", {}).get("state") == "MISSING" for r in rows)}
 
