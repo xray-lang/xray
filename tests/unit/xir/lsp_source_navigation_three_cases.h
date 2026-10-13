@@ -42,25 +42,28 @@ static void lsp_three_locations(const XrJsonValue *output, const char *root_uri,
     CHECK(seen == (include_declaration ? 15u : 7u));
 }
 
-static XrXirStatus lsp_three_once(const char *root, XrCompileResourceLimits limits,
-    XrCompileResourceStats *stats) {
-    XrXirCompileContext context = {0}; XrCompilerSession *session = NULL;
-    XlspSourceSnapshot *snapshots[3] = {0}; XrJsonValue *output = NULL;
-    XrCompileResourceStatus made = xr_compile_resources_new(&limits, &context.resources);
+typedef struct LspThreeOwner {
+    XrXirCompileContext context;
+    XlspSourceSnapshot *snapshots[3];
+    char root_uri[XR_TEST_PATH_MAX], library_uri[XR_TEST_PATH_MAX], extra_uri[XR_TEST_PATH_MAX];
+} LspThreeOwner;
+
+static XrXirStatus lsp_three_prepare(const char *root, XrCompileResourceLimits limits, LspThreeOwner *owner) {
+    *owner = (LspThreeOwner){0}; XrCompilerSession *session = NULL;
+    XrCompileResourceStatus made = xr_compile_resources_new(&limits, &owner->context.resources);
     if (made != XR_COMPILE_RESOURCE_OK)
         return made == XR_COMPILE_RESOURCE_BUDGET ? XR_XIR_BUDGET : XR_XIR_OUT_OF_MEMORY;
-    context.limits = xr_xir_compile_default_limits();
-    XrCompilerSessionStatus created = xr_compile_session_new(context.resources, &session);
+    owner->context.limits = xr_xir_compile_default_limits();
+    XrCompilerSessionStatus created = xr_compile_session_new(owner->context.resources, &session);
     XrXirStatus status = created == XR_COMPILER_SESSION_OK ? XR_XIR_OK :
         created == XR_COMPILER_SESSION_BUDGET ? XR_XIR_BUDGET : XR_XIR_OUT_OF_MEMORY;
-    char root_uri[XR_TEST_PATH_MAX], library_uri[XR_TEST_PATH_MAX], extra_uri[XR_TEST_PATH_MAX];
-    lsp_uri(root_uri, sizeof(root_uri), root, "root.xr");
-    lsp_uri(library_uri, sizeof(library_uri), root, "lib.xr");
-    lsp_uri(extra_uri, sizeof(extra_uri), root, "extra.xr");
+    lsp_uri(owner->root_uri, sizeof(owner->root_uri), root, "root.xr");
+    lsp_uri(owner->library_uri, sizeof(owner->library_uri), root, "lib.xr");
+    lsp_uri(owner->extra_uri, sizeof(owner->extra_uri), root, "extra.xr");
     char input_uris[3][XR_TEST_PATH_MAX];
-    memcpy(input_uris[0], root_uri, strlen(root_uri) + 1);
-    memcpy(input_uris[1], library_uri, strlen(library_uri) + 1);
-    memcpy(input_uris[2], extra_uri, strlen(extra_uri) + 1);
+    memcpy(input_uris[0], owner->root_uri, strlen(owner->root_uri) + 1);
+    memcpy(input_uris[1], owner->library_uri, strlen(owner->library_uri) + 1);
+    memcpy(input_uris[2], owner->extra_uri, strlen(owner->extra_uri) + 1);
     char root_text[sizeof(source_root_text)], library_text[sizeof(source_library_text)];
     char extra_text[sizeof(lsp_three_extra_text)];
     memcpy(root_text, source_root_text, sizeof(root_text));
@@ -73,33 +76,83 @@ static XrXirStatus lsp_three_once(const char *root, XrCompileResourceLimits limi
     XrModuleIdentityAuthority authorities[3] = {
         {XR_MODULE_IDENTITY_SCRIPT, NULL, root}, {XR_MODULE_IDENTITY_SCRIPT, NULL, root},
         {XR_MODULE_IDENTITY_SCRIPT, NULL, root}};
-    XrXirSourceRequest request = {session, NULL, &authorities[0], &context, NULL, NULL, XR_XIR_PROGRAM, NULL};
+    XrXirSourceRequest request = {session, NULL, &authorities[0], &owner->context, NULL, NULL, XR_XIR_PROGRAM, NULL};
     for (size_t i = 0; i < 3 && status == XR_XIR_OK; ++i)
         status = xlsp_source_snapshot_build_authorities(&request, documents, authorities, 3, i,
-            &snapshots[i], NULL, NULL);
+            &owner->snapshots[i], NULL, NULL);
     memset(root_text, '?', sizeof(root_text)); memset(library_text, '?', sizeof(library_text));
     memset(extra_text, '?', sizeof(extra_text)); memset(input_uris, '?', sizeof(input_uris));
     memset(documents, 0, sizeof(documents)); memset(&request, 0, sizeof(request));
     xr_compile_session_free(session);
     /* Only an observation pin and immutable queries retain the original ledger. */
-    CHECK(xr_compile_resources_retain(context.resources) == XR_COMPILE_RESOURCE_OK);
-    xr_compile_resources_release(context.resources);
-    for (unsigned include = 0; include < 2 && status == XR_XIR_OK; ++include) {
-        status = xlsp_source_navigation_many_json(context.resources, snapshots, 3,
-            library_uri, strlen(library_uri), (XrLspPosition){0,20}, 1, include != 0, &output);
-        if (status != XR_XIR_OK) {CHECK(!output); break;}
+    CHECK(xr_compile_resources_retain(owner->context.resources) == XR_COMPILE_RESOURCE_OK);
+    xr_compile_resources_release(owner->context.resources);
+    return status;
+}
+
+static void lsp_three_drop(LspThreeOwner *owner) {
+    for (size_t i = 0; i < 3; ++i) xlsp_source_snapshot_free(owner->snapshots[i]);
+    if (owner->context.resources) xr_compile_resources_release(owner->context.resources);
+    owner->context.resources = NULL; lsp_zero();
+}
+
+static XrXirStatus lsp_three_query(LspThreeOwner *owner, XrJsonValue **output) {
+    CHECK(output && !*output);
+    for (unsigned include = 0; include < 2; ++include) {
+        XrXirStatus status = xlsp_source_navigation_many_json(owner->context.resources, owner->snapshots, 3,
+            owner->library_uri, strlen(owner->library_uri), (XrLspPosition){0,20}, 1, include != 0, output);
+        if (status != XR_XIR_OK) {CHECK(!*output); return status;}
         if (!include) {
-            lsp_three_locations(output, root_uri, library_uri, extra_uri, false);
-            xjson_free(output); output = NULL;
+            lsp_three_locations(*output, owner->root_uri, owner->library_uri, owner->extra_uri, false);
+            xjson_free(*output); *output = NULL;
         }
     }
-    if (stats) CHECK(xr_compile_resources_stats(context.resources, stats) == XR_COMPILE_RESOURCE_OK);
-    for (size_t i = 0; i < 3; ++i) xlsp_source_snapshot_free(snapshots[i]);
-    xr_compile_resources_release(context.resources); lsp_zero();
+    return XR_XIR_OK;
+}
+
+static XrXirStatus lsp_three_once(const char *root, XrCompileResourceLimits limits,
+    XrCompileResourceStats *stats) {
+    LspThreeOwner owner = {0}; XrJsonValue *output = NULL;
+    XrXirStatus status = lsp_three_prepare(root, limits, &owner);
+    if (status == XR_XIR_OK) status = lsp_three_query(&owner, &output);
+    if (stats && owner.context.resources)
+        CHECK(xr_compile_resources_stats(owner.context.resources, stats) == XR_COMPILE_RESOURCE_OK);
+    lsp_three_drop(&owner);
     /* The complete JSON result remains readable after every Source owner dies. */
-    if (output) lsp_three_locations(output, root_uri, library_uri, extra_uri, true);
+    if (output) lsp_three_locations(output, owner.root_uri, owner.library_uri, owner.extra_uri, true);
     xjson_free(output); CHECK(!lsp_json_live && !lsp_json_bytes);
     return status;
+}
+
+static size_t lsp_three_json_faults(const char *root) {
+    LspThreeOwner owner = {0};
+    CHECK(lsp_three_prepare(root, lsp_limits(), &owner) == XR_XIR_OK);
+    size_t live = source_fixture_compile_live, bytes = source_fixture_compile_bytes;
+    XrCompileResourceStats prior = {0};
+    CHECK(xr_compile_resources_stats(owner.context.resources, &prior) == XR_COMPILE_RESOURCE_OK);
+    size_t sites = 0;
+    /* Every JSON attempt consumes the same immutable input and original ledger.
+     * Failed temporary locations are reclaimed without resetting billed work. */
+    for (size_t probe = 0; probe <= sites; ++probe) {
+        lsp_json_calls = 0; lsp_json_fail = probe ? probe - 1 : SIZE_MAX; lsp_json_injected = false;
+        XrJsonValue *output = NULL; XrXirStatus status = lsp_three_query(&owner, &output);
+        if (!probe) {
+            CHECK(status == XR_XIR_OK); sites = lsp_json_calls; CHECK(sites);
+            lsp_three_locations(output, owner.root_uri, owner.library_uri, owner.extra_uri, true);
+        } else CHECK(status == XR_XIR_OUT_OF_MEMORY && lsp_json_injected && lsp_json_calls == probe && !output);
+        xjson_free(output); CHECK(!lsp_json_live && !lsp_json_bytes);
+        CHECK(source_fixture_compile_live == live && source_fixture_compile_bytes == bytes);
+        XrCompileResourceStats next = {0};
+        CHECK(xr_compile_resources_stats(owner.context.resources, &next) == XR_COMPILE_RESOURCE_OK);
+        CHECK(next.live_bytes == prior.live_bytes && next.work >= prior.work && next.allocated_bytes >= prior.allocated_bytes);
+        prior = next;
+    }
+    lsp_json_fail = SIZE_MAX; lsp_json_injected = false;
+    XrJsonValue *escaped = NULL; CHECK(lsp_three_query(&owner, &escaped) == XR_XIR_OK);
+    lsp_three_drop(&owner);
+    lsp_three_locations(escaped, owner.root_uri, owner.library_uri, owner.extra_uri, true);
+    xjson_free(escaped); CHECK(!lsp_json_live && !lsp_json_bytes);
+    return sites;
 }
 
 static void lsp_navigation_three_cases(const char *root) {
@@ -121,15 +174,7 @@ static void lsp_navigation_three_cases(const char *root) {
         CHECK(*bound && *bound < UINT64_MAX); *bound = (uint64_t)((int64_t)*bound + delta);
         CHECK(lsp_three_once(root, limits, NULL) == (delta < 0 ? XR_XIR_BUDGET : XR_XIR_OK)); lsp_zero();
     }
-    size_t json_sites = 0;
-    for (size_t probe = 0; probe <= json_sites; ++probe) {
-        lsp_json_calls = 0; lsp_json_fail = probe ? probe - 1 : SIZE_MAX; lsp_json_injected = false;
-        XrXirStatus status = lsp_three_once(root, lsp_limits(), NULL);
-        if (!probe) {CHECK(status == XR_XIR_OK); json_sites = lsp_json_calls; CHECK(json_sites);}
-        else CHECK(status == XR_XIR_OUT_OF_MEMORY && lsp_json_injected && lsp_json_calls == probe);
-        lsp_zero();
-    }
-    lsp_json_fail = SIZE_MAX; lsp_json_injected = false;
+    size_t json_sites = lsp_three_json_faults(root);
     printf("LSP three-document reference union Source sites=%zu JSON sites=%zu; exact 3/4 locations; three axes; producer death; physical=0/0\n",
         source_sites, json_sites);
 }
