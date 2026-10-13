@@ -69,6 +69,8 @@ static XrXirStatus cleanup_mixed_build(const XrXirCompileContext *context,unsign
     }
     if(status!=XR_XIR_OK){CHECK(!*output);cleanup_mixed_free(owner);}return status;
 }
+#include "xir_mixed_lifecycle_cases.h"
+
 static void cleanup_source_mixed(bool native_cleanup,unsigned fatal_mode) {
     XrXirCompileContext context=cleanup_source_context((XrCompileResourceLimits){67108864,8388608,128000000});
     XrCompileResourceStats baseline=cleanup_source_stats(&context);XrXirProgram *program=NULL;
@@ -84,7 +86,13 @@ static void cleanup_source_mixed(bool native_cleanup,unsigned fatal_mode) {
     cleanup_source_owner_free(&context,baseline);
 }
 int main(int argc,char **argv) {
-    CHECK(argc==1 || (argc==4 && !strcmp(argv[1],"--fatal")));
+    CHECK(argc==1 || (argc==4 && !strcmp(argv[1],"--fatal")) ||
+        (argc==3 && !strcmp(argv[1],"--lifecycle")));
+    if(argc==3) {
+        CHECK(!strcmp(argv[2],"0") || !strcmp(argv[2],"1"));
+        mixed_lifecycle_case((unsigned)atoi(argv[2]));
+        return 0;
+    }
     if(argc==4) {
         unsigned mode=(unsigned)atoi(argv[2]);CHECK(mode<4);
         cleanup_source_mixed(atoi(argv[3])!=0,mode);
