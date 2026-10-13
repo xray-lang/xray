@@ -1,0 +1,196 @@
+// 0310_comparison.xr
+// 作者：xingleixu@gmail.com
+// 测试：比较运算符
+
+import math
+
+// ===== 等于 =====
+
+@test
+fn test_eq_integers() {
+    assertEqual(5 == 5, true)
+    assertEqual(5 == 6, false)
+    assertEqual(0 == 0, true)
+    assertEqual(-1 == -1, true)
+}
+
+@test
+fn test_eq_floats() {
+    assertEqual(3.14 == 3.14, true)
+    assertEqual(3.14 == 3.15, false)
+}
+
+@test
+fn test_eq_strings() {
+    assertEqual("hello" == "hello", true)
+    assertEqual("hello" == "world", false)
+    assertEqual("" == "", true)
+}
+
+@test
+fn test_eq_bool() {
+    assertEqual(true == true, true)
+    assertEqual(false == false, true)
+    assertEqual(true == false, false)
+}
+
+@test
+fn test_eq_null() {
+    var left: i64? = null
+    var right: i64? = null
+    assertEqual(left == right, true)
+    var x: i64? = null
+    assertEqual(x == null, true)
+}
+
+// ===== 不等于 =====
+
+@test
+fn test_ne_integers() {
+    assertEqual(5 != 6, true)
+    assertEqual(5 != 5, false)
+}
+
+@test
+fn test_ne_strings() {
+    assertEqual("a" != "b", true)
+    assertEqual("a" != "a", false)
+}
+
+@test
+fn test_ne_mixed() {
+    var one: i64? = 1
+    var text: string? = ""
+    assertEqual(one != null, true)
+    assertEqual(text != null, true)
+}
+
+// ===== 小于 =====
+
+@test
+fn test_lt_integers() {
+    assertEqual(3 < 5, true)
+    assertEqual(5 < 5, false)
+    assertEqual(5 < 3, false)
+    assertEqual(-5 < 0, true)
+}
+
+@test
+fn test_lt_floats() {
+    assertEqual(3.14 < 3.15, true)
+    assertEqual(3.14 < 3.14, false)
+}
+
+@test
+fn test_lt_strings() {
+    assertEqual("a" < "b", true)
+    assertEqual("abc" < "abd", true)
+    assertEqual("b" < "a", false)
+}
+
+// ===== 小于等于 =====
+
+@test
+fn test_le_integers() {
+    assertEqual(3 <= 5, true)
+    assertEqual(5 <= 5, true)
+    assertEqual(6 <= 5, false)
+}
+
+@test
+fn test_le_floats() {
+    assertEqual(3.14 <= 3.14, true)
+    assertEqual(3.14 <= 3.15, true)
+}
+
+// ===== 大于 =====
+
+@test
+fn test_gt_integers() {
+    assertEqual(5 > 3, true)
+    assertEqual(5 > 5, false)
+    assertEqual(3 > 5, false)
+    assertEqual(0 > -5, true)
+}
+
+@test
+fn test_gt_floats() {
+    assertEqual(3.15 > 3.14, true)
+    assertEqual(3.14 > 3.14, false)
+}
+
+@test
+fn test_gt_strings() {
+    assertEqual("b" > "a", true)
+    assertEqual("a" > "b", false)
+}
+
+// ===== 大于等于 =====
+
+@test
+fn test_ge_integers() {
+    assertEqual(5 >= 3, true)
+    assertEqual(5 >= 5, true)
+    assertEqual(3 >= 5, false)
+}
+
+@test
+fn test_ge_floats() {
+    assertEqual(3.14 >= 3.14, true)
+    assertEqual(3.15 >= 3.14, true)
+}
+
+// ===== 边界条件 =====
+
+@test
+fn test_compare_with_zero() {
+    assertEqual(0 == 0, true)
+    assertEqual(0 < 1, true)
+    assertEqual(0 > -1, true)
+    assertEqual(-0.0 == 0.0, true)
+}
+
+@test
+fn test_chain_comparison() {
+    var x = 5
+    assertEqual(3 < x && x < 10, true)
+    assertEqual(0 <= x && x <= 10, true)
+}
+
+fn rt_numeric_lt(a: i64 | f64, b: i64 | f64) -> bool {
+    return a < b
+}
+
+fn rt_numeric_le(a: i64 | f64, b: i64 | f64) -> bool {
+    return a <= b
+}
+
+fn rt_numeric_eq(a: i64 | f64, b: i64 | f64) -> bool {
+    return a == b
+}
+
+@test
+fn test_runtime_float_comparison_jit() {
+    for (var i = 0; i < 260; i++) {
+        assertEqual(rt_numeric_lt(1.25, 2.5), true)
+        assertEqual(rt_numeric_lt(2.5, 1.25), false)
+        assertEqual(rt_numeric_le(2.5, 2.5), true)
+        assertEqual(rt_numeric_le(3.5, 2.5), false)
+        assertEqual(rt_numeric_eq(2.5, 2.5), true)
+        assertEqual(rt_numeric_eq(2.5, 2.75), false)
+    }
+}
+
+@test
+fn test_float_nan_comparison() {
+    assertEqual(math.NAN == math.NAN, false)
+    assertEqual(math.NAN != math.NAN, true)
+    assertEqual(math.NAN < 1.0, false)
+    assertEqual(math.NAN <= 1.0, false)
+
+    for (var i = 0; i < 260; i++) {
+        assertEqual(rt_numeric_eq(math.NAN, math.NAN), false)
+        assertEqual(rt_numeric_lt(math.NAN, 1.0), false)
+        assertEqual(rt_numeric_le(math.NAN, 1.0), false)
+    }
+}

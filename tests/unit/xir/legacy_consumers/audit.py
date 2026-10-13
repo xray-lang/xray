@@ -227,6 +227,25 @@ FROZEN_TARGETS['tests/regression/10_stdlib/1509_ws_pure_protocol.xr'] = ('POSITI
 FROZEN_TARGETS['tests/regression/10_stdlib/1512_http2_protocol.xr'] = ('POSITIVE_COMPLETE_NETWORK_OR_PROTOCOL_AFTER_FROZEN_PORT', 'P13')
 FROZEN_TARGETS['tests/regression/10_stdlib/crash_min.xr'] = ('POSITIVE_COMPLETE_NETWORK_OR_PROTOCOL_AFTER_FROZEN_PORT', 'P10')
 
+CORE_NAMED_REVIEW = ('tests/regression/01_basic/0125_trailing_comma.xr', 'tests/regression/01_basic/0126_implicit_language_core.xr', 'tests/regression/01_literals/0100_int_basic.xr', 'tests/regression/01_literals/0101_int_boundary.xr', 'tests/regression/01_literals/0110_float_basic.xr', 'tests/regression/01_literals/0120_string_basic.xr', 'tests/regression/01_literals/0130_bool_null.xr', 'tests/regression/01_literals/0140_special_values.xr', 'tests/regression/01_literals/0150_bigint_basic.xr', 'tests/regression/02_variables/0011_zero_value_init.xr', 'tests/regression/02_variables/0200_var_const.xr', 'tests/regression/02_variables/0210_scope.xr', 'tests/regression/02_variables/0210_unknown_identifier.xr', 'tests/regression/02_variables/0211_public_identifier.xr', 'tests/regression/02_variables/0220_destructure.xr', 'tests/regression/02_variables/0221_map_destructure.xr', 'tests/regression/02_variables/0230_type_annotation.xr', 'tests/regression/03_operators/0006_as_numeric_cast.xr', 'tests/regression/03_operators/0300_arithmetic.xr', 'tests/regression/03_operators/0301_int64_overflow.xr', 'tests/regression/03_operators/0302_int64_native.xr', 'tests/regression/03_operators/0302_uint64_print_compare.xr', 'tests/regression/03_operators/0302_unsigned_to_string.xr', 'tests/regression/03_operators/0304_fixed_width_wrapping.xr', 'tests/regression/03_operators/0310_comparison.xr', 'tests/regression/03_operators/0320_logical.xr', 'tests/regression/03_operators/0330_bitwise.xr', 'tests/regression/03_operators/0331_shift_mod64.xr', 'tests/regression/03_operators/0332_int_bits_methods.xr', 'tests/regression/03_operators/0340_compound_assign.xr', 'tests/regression/03_operators/0350_ternary_nullish.xr', 'tests/regression/03_operators/0360_bigint_arithmetic.xr', 'tests/regression/03_operators/0361_bigint_methods.xr', 'tests/regression/03_operators/0362_bigint_comparison.xr', 'tests/regression/03_operators/0365_precedence.xr', 'tests/regression/03_operators/0370_range.xr', 'tests/regression/03_operators/0371_range_methods.xr', 'tests/regression/03_operators/0372_range_inclusive.xr', 'tests/regression/03_operators/0373_range_value_for_in.xr', 'tests/regression/03_operators/0380_optional_chain.xr', 'tests/regression/03_operators/0381_optional_call.xr', 'tests/regression/03_operators/0395_inc_dec_bnot.xr', 'tests/regression/03_operators/0396_bnot_owner_edges.xr', 'tests/regression/03_operators/0397_numeric_neg_owner_edges.xr')
+FROZEN_TARGETS['tests/regression/01_basic/0125_trailing_comma.xr'] = ('POSITIVE_COMPLETE_CORE_AFTER_FROZEN_PORT', 'P10')
+FROZEN_TARGETS['tests/regression/02_variables/0011_zero_value_init.xr'] = ('POSITIVE_COMPLETE_CORE_AFTER_FROZEN_PORT', 'P10')
+FROZEN_TARGETS['tests/regression/02_variables/0230_type_annotation.xr'] = ('POSITIVE_COMPLETE_CORE_AFTER_FROZEN_PORT', 'P10')
+FROZEN_TARGETS['tests/regression/03_operators/0373_range_value_for_in.xr'] = ('POSITIVE_COMPLETE_CORE_AFTER_FROZEN_PORT', 'P10')
+FROZEN_TARGETS['tests/regression/03_operators/0340_compound_assign.xr'] = ('POSITIVE_COMPLETE_CORE_AFTER_FROZEN_PORT', 'P10')
+FROZEN_TARGETS['tests/regression/01_literals/0100_int_basic.xr'] = ('POSITIVE_COMPLETE_CORE_AFTER_FROZEN_PORT', 'P10')
+FROZEN_TARGETS['tests/regression/01_literals/0110_float_basic.xr'] = ('POSITIVE_COMPLETE_CORE_AFTER_FROZEN_PORT', 'P10')
+FROZEN_TARGETS['tests/regression/01_literals/0150_bigint_basic.xr'] = ('POSITIVE_COMPLETE_CORE_AFTER_FROZEN_PORT', 'P10')
+FROZEN_TARGETS['tests/regression/01_literals/0130_bool_null.xr'] = ('POSITIVE_COMPLETE_CORE_AFTER_FROZEN_PORT', 'P10')
+FROZEN_TARGETS['tests/regression/01_literals/0140_special_values.xr'] = ('POSITIVE_COMPLETE_CORE_AFTER_FROZEN_PORT', 'P10')
+FROZEN_TARGETS['tests/regression/02_variables/0200_var_const.xr'] = ('POSITIVE_COMPLETE_CORE_AFTER_FROZEN_PORT', 'P10')
+FROZEN_TARGETS['tests/regression/03_operators/0006_as_numeric_cast.xr'] = ('POSITIVE_COMPLETE_CORE_AFTER_FROZEN_PORT', 'P09')
+FROZEN_TARGETS['tests/regression/03_operators/0310_comparison.xr'] = ('POSITIVE_COMPLETE_CORE_AFTER_FROZEN_PORT', 'P09')
+
+FROZEN_TARGETS['tests/regression/03_operators/0302_uint64_print_compare.xr'] = ('POSITIVE_COMPLETE_CORE_AFTER_FROZEN_PORT', 'P09')
+
+FROZEN_TARGETS['tests/regression/03_operators/0362_bigint_comparison.xr'] = ('POSITIVE_COMPLETE_CORE_AFTER_FROZEN_PORT', 'P09')
+
 def load_module(name: str, relative: str):
     spec = importlib.util.spec_from_file_location(name, ROOT / relative)
     module = importlib.util.module_from_spec(spec)
@@ -397,7 +416,7 @@ def validate_runner_routes(data: dict, responsibilities: dict, actual_entries: d
                     or regression["expected_exit"] != 0 or regression["test_discovery"] != "NOT_RUN"):
                 raise ValueError("original regression positive/test discovery obligation changed")
         named = row.get("original_named_test_obligation")
-        reviewed_named_scope = identity.startswith(("tests/regression/08_mem/", "tests/regression/08_oop/",
+        reviewed_named_scope = identity in CORE_NAMED_REVIEW or identity.startswith(("tests/regression/08_mem/", "tests/regression/08_oop/",
                                                     "tests/regression/09_advanced/", "tests/regression/10_stdlib/",
                                                     "tests/regression/11_coroutine/",
                                                     "tests/regression/12_type_checking/", "tests/regression/13_types/",
@@ -559,10 +578,12 @@ def validate_oracles(data: dict) -> dict:
         if not row["remaining_qualification"]:
             raise ValueError("preparation must retain the full qualification gap")
     reviewed = {r["case_id"]: r for r in read_json(HERE / "runner_routes.json")["cases"]
-                if r["case_id"] in REGRESSION_LIBRARY_REVIEW}
+                if r["case_id"] in REGRESSION_LIBRARY_REVIEW or r["case_id"] in CORE_NAMED_REVIEW}
     by_id = {r["id"]: r for r in data["cases"]}
-    for identity in REGRESSION_LIBRARY_REVIEW:
-        oracle_id = "regression_library_review_" + Path(identity).stem
+    obligations = [(identity, "regression_library_review_") for identity in REGRESSION_LIBRARY_REVIEW]
+    obligations += [(identity, "regression_core_review_") for identity in CORE_NAMED_REVIEW]
+    for identity, prefix in obligations:
+        oracle_id = prefix + Path(identity).stem
         route = reviewed.get(identity)
         row = by_id.get(oracle_id)
         if not route or not row:
@@ -572,6 +593,12 @@ def validate_oracles(data: dict) -> dict:
         if (row["expected"].get("required_test_names") != names
                 or row["expected"].get("all_required_tests_passed") is not True):
             raise ValueError("reviewed library oracle lost full named test execution obligations")
+        if identity in CORE_NAMED_REVIEW:
+            observations = row["expected"].get("per_test_observations", {})
+            if (set(observations) != set(names)
+                    or any(type(v) is not dict or set(v) != {"values"}
+                           or type(v["values"]) is not list or not v["values"] for v in observations.values())):
+                raise ValueError("reviewed core oracle lost a per-test independent obligation")
         mandatory_inputs = {identity} | {i["path"] for i in route.get("original_imported_inputs", [])}
         mandatory_inputs |= {i["path"] for i in route.get("target_source_port", {}).get("companion_inputs", [])}
         if not mandatory_inputs <= {i["path"] for i in row["inputs"]}:
