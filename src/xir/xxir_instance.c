@@ -164,8 +164,10 @@ static XrXirValueStatus admit_function_binding(void *context, const XrXirFunctio
 }
 static XrXirValueAdmission instance_candidate_admission(XrXirInstance *instance) {
     XR_CHECK(instance && instance_owner_current(instance), "instance internal owner requires its current domain");
+    const XrXirDomainBudgetStats budget = xr_xir_domain_budget_stats(instance->domain);
+    XR_CHECK(budget.bound && budget.work <= budget.work_limit, "instance admission uses its live work ledger");
     return (XrXirValueAdmission) {instance->program->arena, instance->domain,
-        admit_function_binding, instance, instance->config.poll_limit, instance->config.metadata_limit};
+        admit_function_binding, instance, budget.work_limit - budget.work, instance->config.metadata_limit};
 }
 static XrXirCallStatus admit_instance_value(XrXirValueAdmission *admission,
                                            const XrXirValue *value, XrXirType type) {
