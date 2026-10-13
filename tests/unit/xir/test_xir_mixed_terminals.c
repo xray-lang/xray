@@ -19,6 +19,11 @@
 #include "xir_runtime_allocations.h"
 XR_DATA const XrXirProgramSpec terminal_fixture_program;
 XR_DATA const uint32_t terminal_fixture_functions[4];
+typedef enum TerminalBackend {
+    TERMINAL_MIXED_VM_ROOT, TERMINAL_MIXED_NATIVE_ROOT,
+    TERMINAL_VM, TERMINAL_NATIVE
+} TerminalBackend;
+static const char *terminal_backend_names[] = {"0", "1", "vm", "native"};
 typedef struct TerminalCode {
     XrXirProgram *vm;
     XrXirCallEntry *entries;
@@ -30,7 +35,7 @@ static void terminal_code_free(void *pointer) {
     xr_compile_resources_free(owner->entries); xr_compile_resources_free(owner);
     ++terminal_code_releases;
 }
-static XrXirProgram *terminal_program(unsigned root_native) {
+static XrXirProgram *terminal_program(TerminalBackend backend) {
     const XrXirCompileContext context = *effects_source_owner(UINT64_C(64)*1024*1024, UINT64_C(128000000));
     XrXirArtifact *checked = NULL, *lowered = NULL;
     CHECK(xr_xir_compile_checked_read(&context, terminal_fixture_program.proof.bytes,
@@ -48,10 +53,15 @@ static XrXirProgram *terminal_program(unsigned root_native) {
     unsigned vm = 0, native = 0;
     for (uint32_t f = 0; f < module->function_count; ++f) {
         bool root = module->declarations->functions[f].module == module->declarations->root_module;
-        owner->entries[f] = root == (root_native != 0) ? terminal_fixture_program.entries[f] : owner->vm->entries[f];
-        if (root == (root_native != 0)) ++native; else ++vm;
+        bool use_native = backend == TERMINAL_NATIVE || (backend < TERMINAL_VM &&
+            root == (backend == TERMINAL_MIXED_NATIVE_ROOT));
+        CHECK(terminal_fixture_program.entries[f].resume != owner->vm->entries[f].resume);
+        owner->entries[f] = use_native ? terminal_fixture_program.entries[f] : owner->vm->entries[f];
+        if (use_native) ++native; else ++vm;
     }
-    CHECK(vm && native);
+    if (backend == TERMINAL_VM) CHECK(vm == module->function_count && !native);
+    else if (backend == TERMINAL_NATIVE) CHECK(native == module->function_count && !vm);
+    else CHECK(vm && native);
     XrXirProgramSpec spec = terminal_fixture_program;
     spec.entries = owner->entries; spec.types = module->types; spec.declarations = module->declarations;
     spec.proof = proof; spec.code = (XrXirCodeLease){owner,terminal_code_free};
@@ -128,10 +138,13 @@ static void terminal_retained(XrXirCallResult retained[3]) {
     for (unsigned i = 0; i < 3; ++i) xr_xir_call_result_drop(&retained[i]);
 }
 int main(int argc, char **argv) {
-    CHECK(argc == 2 && (!strcmp(argv[1], "0") || !strcmp(argv[1], "1")));
-    const unsigned root_native = (unsigned)atoi(argv[1]);
+    CHECK(argc == 2);
+    unsigned selected = 0;
+    while (selected < 4 && strcmp(argv[1], terminal_backend_names[selected])) ++selected;
+    CHECK(selected < 4);
+    const TerminalBackend backend = (TerminalBackend)selected;
     CHECK(!runtime_live && !runtime_bytes);
-    XrXirProgram *program = terminal_program(root_native);
+    XrXirProgram *program = terminal_program(backend);
     XrXirInstance *instances[7] = {0}; TerminalTrace traces[7] = {0};
     XrXirCallResult retained[3] = {{0}};
     for (unsigned i = 0; i < 7; ++i) {
@@ -161,6 +174,6 @@ int main(int argc, char **argv) {
     terminal_retained(retained);
     CHECK(!runtime_live && !runtime_bytes);
     effects_source_owners_free();
-    printf("Mixed terminals rootNative=%u return/throw/panic and three cancels, inner/outer cleanup, callback trace=40/41/42/41 result42, late events rejected, retained payloads, physical=0/0\n", root_native);
+    printf("Terminal paths backend=%s return/throw/panic and three cancels, inner/outer cleanup, callback trace=40/41/42/41 result42, late events rejected, retained payloads, physical=0/0\n", terminal_backend_names[backend]);
     return 0;
 }

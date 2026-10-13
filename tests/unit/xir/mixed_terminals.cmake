@@ -25,3 +25,8 @@ foreach(root_native IN ITEMS 0 1)
     set_tests_properties(test_xir_mixed_terminals_${root_native} PROPERTIES
         TIMEOUT 120 RUN_SERIAL TRUE COST 1 LABELS "unit;xir;mixed;execution;ownership;instance;abi;generated-c;lifecycle")
 endforeach()
+foreach(terminal_backend IN ITEMS vm native)
+    add_test(NAME test_xir_mixed_terminals_${terminal_backend} COMMAND test_xir_mixed_terminals ${terminal_backend})
+    set_tests_properties(test_xir_mixed_terminals_${terminal_backend} PROPERTIES
+        TIMEOUT 120 RUN_SERIAL TRUE COST 1 LABELS "unit;xir;mixed;execution;ownership;instance;abi;generated-c;lifecycle;${terminal_backend}")
+endforeach()
