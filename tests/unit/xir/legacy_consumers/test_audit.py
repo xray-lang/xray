@@ -14,6 +14,68 @@ class PreparationChecks(unittest.TestCase):
         cls.runner_routes = audit.read_json(audit.HERE / "runner_routes.json")
         cls.legacy = audit.read_json(audit.ROOT / "tests/unit/xir/product_consumers/legacy_responsibilities.json")
 
+    def test_nested_observations_keep_exact_numeric_and_boolean_types(self):
+        expected = {"bytes": [0, 1], "outcome": {"value": 1, "valid": True}}
+        audit.compare_required(expected, {"bytes": [0, 1], "outcome": {"value": 1, "valid": True, "detail": "extra"}})
+        for observed in ({"bytes": [False, True], "outcome": {"value": 1, "valid": True}},
+                         {"bytes": [0, 1], "outcome": {"value": True, "valid": True}},
+                         {"bytes": [0, 1], "outcome": {"value": 1, "valid": 1}},
+                         {"bytes": [0.0, 1], "outcome": {"value": 1, "valid": True}}):
+            with self.assertRaises(ValueError):
+                audit.compare_required(expected, observed)
+
+    def test_nested_observations_cannot_lose_fields_or_reorder_values(self):
+        expected = {"events": [{"kind": "store", "value": 1}, {"kind": "load", "value": 2}]}
+        for events in ([{"kind": "store"}, {"kind": "load", "value": 2}],
+                       list(reversed(expected["events"])), expected["events"][:-1]):
+            with self.assertRaises(ValueError):
+                audit.compare_required(expected, {"events": events})
+
+    def test_target_borrow_return_helper_cannot_be_dropped_or_stale(self):
+        for change in ("drop", "stale"):
+            bad = copy.deepcopy(self.runner_routes)
+            row = next(r for r in bad["cases"] if r["case_id"].endswith("slice_borrow_return_cross_module.xr"))
+            if change == "drop":
+                row["target_source_port"]["companion_inputs"] = []
+            else:
+                row["target_source_port"]["companion_inputs"][0]["lf_sha256"] = "0" * 64
+            with self.subTest(change=change), self.assertRaisesRegex(ValueError, "companion"):
+                audit.validate_runner_routes(bad, self.mapping)
+
+    def test_pending_view_member_replacement_is_not_an_executable_port(self):
+        bad = copy.deepcopy(self.oracles)
+        row = next(r for r in bad["cases"] if r["id"] == "byte_explicit_endian_float_observations")
+        row["execution_source"] = row["inputs"][0]["path"]
+        with self.assertRaisesRegex(ValueError, "cannot pose as an executable"):
+            audit.validate_oracles(bad)
+
+    def test_negative_array_ranges_cannot_be_clamped_into_success(self):
+        for identity in ("array_negative_capacity_resize_no_publication", "array_typed_fill_strict_bounds_and_return_copy"):
+            expected = next(r["expected"] for r in self.oracles["cases"] if r["id"] == identity)
+            for backend in ("vm", "native"):
+                with self.subTest(identity=identity, backend=backend), self.assertRaises(ValueError):
+                    audit.compare_required(expected, dict(expected, stdout_utf8=expected["stdout_utf8"].replace("422\n", "0\n")))
+
+    def test_view_materialization_keeps_an_independent_owned_result(self):
+        expected = next(r["expected"] for r in self.oracles["cases"] if r["id"] == "view_shared_then_exclusive_then_owned_copy")
+        with self.assertRaises(ValueError):
+            audit.compare_required(expected, dict(expected, stdout_utf8="21\n31\n22\n32\n"))
+
+    def test_assignment_selectors_must_precede_rhs_and_execute_once(self):
+        expected = next(r["expected"] for r in self.oracles["cases"] if r["id"] == "evaluation_order_e5_e6_assignment_order")
+        for output in (expected["stdout_utf8"].replace("index\nvalue\n", "value\nindex\n"),
+                       expected["stdout_utf8"].replace("receiver\ndelta\n", "receiver\nreceiver\ndelta\n")):
+            with self.assertRaises(ValueError):
+                audit.compare_required(expected, dict(expected, stdout_utf8=output))
+
+    def test_required_byte_observations_cannot_accept_boolean_aliases(self):
+        expected = next(r["expected"] for r in self.oracles["cases"] if r["id"] == "byte_explicit_endian_float_observations")
+        wrong = copy.deepcopy(expected)
+        wrong["printed_bytes"][0] = False
+        for backend in ("vm", "native"):
+            with self.subTest(backend=backend), self.assertRaises(ValueError):
+                audit.compare_required(expected, wrong)
+
     def test_dual_entry_input_cannot_lose_either_original_entry(self):
         for suite in ("regression", "differential"):
             bad = copy.deepcopy(self.runner_routes)

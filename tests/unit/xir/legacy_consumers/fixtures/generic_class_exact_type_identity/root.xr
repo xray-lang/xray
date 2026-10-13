@@ -1,0 +1,22 @@
+// Runtime type tests against generic instances resolve through the
+// monomorphized class binding (Box$i64). A generic target the program never
+// instantiates folds to false. Replaces the former compile_errors case that
+// pinned the old lowering failure.
+class Box<T> {
+    value: T
+    init(v: T) { this.value = v }
+}
+
+class Plain { n: i64  init() { this.n = 1 } }
+
+fn f(x: Box<i64> | i64) -> bool { return x is Box<i64> }
+
+fn main() {
+    print(f(42))
+    print(f(Box<i64>(1)))
+    var a = Box<i64>(7)
+    print(a is Box<i64>)
+    print(a is Box<string>)
+    print(Plain() is Plain)
+}
+main()

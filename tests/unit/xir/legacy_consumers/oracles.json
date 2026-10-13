@@ -2998,6 +2998,1099 @@
         "Independently verify VM and actual generated-C native against required observations; complete affected FI/resource/lifetime/cancel/late-wake/physical/safety/provider gates remain required.",
         "Normalized semantic fields are test observations, not invented CLI/ABI/public diagnostic spellings. Existing timers, full loops and budgets must remain bounded and unreduced."
       ]
+    },
+    {
+      "id": "evaluation_order_e1_e3_binary_operand_order",
+      "inputs": [
+        {
+          "path": "tests/diff/cases/semantics/evaluation_order/e1_e3_binary_operand_order.xr",
+          "lf_sha256": "001d132b0d322f780c0ae9d33c369a3bfcb90e3cd29cd1cb19a1e81991f8a9cc",
+          "role": "preserved_source"
+        },
+        {
+          "path": "spec/source/sections/004-3-expressions.md",
+          "lf_sha256": "3aeabb14d154ef235fe51c665a7d367c2e51dc2c6f5261a9e0b194b228a9b945",
+          "role": "frozen_spec"
+        }
+      ],
+      "expected": {
+        "exit_code": 0,
+        "stdout_utf8": "-- flat --\nL\nR\n3\n-- nested --\nouter-l\ninner-l\ninner-r\n7\n-- both sides nested --\nll\nlr\nrl\nrr\n1\n-- comparison chain --\ncmp-l\ncmp-r\ntrue\n"
+      },
+      "rationale": "Manually follow E1-E10 source sequencing: callee/receiver before arguments, selectors before RHS, compound selector once, short-circuit only the selected operand/branch, literal/map/spread/interpolation and match/range/slice order. Exact body arithmetic and every printed marker are independently derived, not copied from backend agreement.",
+      "packages": [
+        "P02",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P13",
+        "P14"
+      ],
+      "legacy_case": null,
+      "status": "PREPARED_NOT_EXECUTED",
+      "execution": {
+        "vm": "NOT_RUN",
+        "native": "NOT_RUN"
+      },
+      "new_entry": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "remaining_qualification": [
+        "Fresh published Source/Program entry and each backend independently satisfy required observations; no preparation/source markers/build-only qualification.",
+        "Complete affected FI, resource/live/requested/work, ownership/lifetime/NLL/borrow/cancel/physical/safety and generated-C/provider gates; preserve original inputs and limits.",
+        "Normalized fields are semantic observations, not guessed public ABI/CLI diagnostics; library/view/Hashable/Iterable replacements must bind actual published declarations."
+      ],
+      "execution_source": "tests/diff/cases/semantics/evaluation_order/e1_e3_binary_operand_order.xr"
+    },
+    {
+      "id": "evaluation_order_e2_call_argument_order",
+      "inputs": [
+        {
+          "path": "tests/diff/cases/semantics/evaluation_order/e2_call_argument_order.xr",
+          "lf_sha256": "9ddf05c2f537ad3c2d316d018b5251170221c30efc97a4a19807dbbd77344c18",
+          "role": "preserved_source"
+        },
+        {
+          "path": "tests/unit/xir/legacy_consumers/fixtures/callee_receiver_argument_order/root.xr",
+          "lf_sha256": "8eb42e721caf97d3bbef7b52320a181b78be9361382e2bf82b769a3dd4f13624",
+          "role": "target_source"
+        },
+        {
+          "path": "spec/source/sections/004-3-expressions.md",
+          "lf_sha256": "3aeabb14d154ef235fe51c665a7d367c2e51dc2c6f5261a9e0b194b228a9b945",
+          "role": "frozen_spec"
+        }
+      ],
+      "expected": {
+        "exit_code": 0,
+        "stdout_utf8": "-- plain args --\na1\na2\na3\n6\n-- callee before args --\ncallee\na1\na2\n3\n-- receiver before args --\nreceiver\narg\n15\n-- nested call args --\na1\nn1\nn2\na3\n10\n-- default arg --\nexplicit\n100\n"
+      },
+      "rationale": "Manually follow E1-E10 source sequencing: callee/receiver before arguments, selectors before RHS, compound selector once, short-circuit only the selected operand/branch, literal/map/spread/interpolation and match/range/slice order. Exact body arithmetic and every printed marker are independently derived, not copied from backend agreement.",
+      "packages": [
+        "P02",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P13",
+        "P14"
+      ],
+      "legacy_case": null,
+      "status": "PREPARED_NOT_EXECUTED",
+      "execution": {
+        "vm": "NOT_RUN",
+        "native": "NOT_RUN"
+      },
+      "new_entry": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "remaining_qualification": [
+        "Fresh published Source/Program entry and each backend independently satisfy required observations; no preparation/source markers/build-only qualification.",
+        "Complete affected FI, resource/live/requested/work, ownership/lifetime/NLL/borrow/cancel/physical/safety and generated-C/provider gates; preserve original inputs and limits.",
+        "Normalized fields are semantic observations, not guessed public ABI/CLI diagnostics; library/view/Hashable/Iterable replacements must bind actual published declarations."
+      ],
+      "execution_source": "tests/unit/xir/legacy_consumers/fixtures/callee_receiver_argument_order/root.xr"
+    },
+    {
+      "id": "evaluation_order_e4_short_circuit_points",
+      "inputs": [
+        {
+          "path": "tests/diff/cases/semantics/evaluation_order/e4_short_circuit_points.xr",
+          "lf_sha256": "e75d01e4310cf7f2ce5b51b96dc808fc982cb64f4d956569c2369c67642848ce",
+          "role": "preserved_source"
+        },
+        {
+          "path": "spec/source/sections/004-3-expressions.md",
+          "lf_sha256": "3aeabb14d154ef235fe51c665a7d367c2e51dc2c6f5261a9e0b194b228a9b945",
+          "role": "frozen_spec"
+        }
+      ],
+      "expected": {
+        "exit_code": 0,
+        "stdout_utf8": "-- && skips right --\nand-l\nfalse\n-- && evaluates right --\nand-l\nand-r\nfalse\n-- || skips right --\nor-l\ntrue\n-- ?? skips right --\nnc-l\nset\n-- ?? evaluates right --\nnc-l\nnc-r\nfallback\n-- ternary picks one branch --\ncond\nthen\n1\n-- bitwise ops do NOT short circuit --\nbit-l\nbit-r\n0\n"
+      },
+      "rationale": "Manually follow E1-E10 source sequencing: callee/receiver before arguments, selectors before RHS, compound selector once, short-circuit only the selected operand/branch, literal/map/spread/interpolation and match/range/slice order. Exact body arithmetic and every printed marker are independently derived, not copied from backend agreement.",
+      "packages": [
+        "P02",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P13",
+        "P14"
+      ],
+      "legacy_case": null,
+      "status": "PREPARED_NOT_EXECUTED",
+      "execution": {
+        "vm": "NOT_RUN",
+        "native": "NOT_RUN"
+      },
+      "new_entry": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "remaining_qualification": [
+        "Fresh published Source/Program entry and each backend independently satisfy required observations; no preparation/source markers/build-only qualification.",
+        "Complete affected FI, resource/live/requested/work, ownership/lifetime/NLL/borrow/cancel/physical/safety and generated-C/provider gates; preserve original inputs and limits.",
+        "Normalized fields are semantic observations, not guessed public ABI/CLI diagnostics; library/view/Hashable/Iterable replacements must bind actual published declarations."
+      ],
+      "execution_source": "tests/diff/cases/semantics/evaluation_order/e4_short_circuit_points.xr"
+    },
+    {
+      "id": "evaluation_order_e5_e6_assignment_order",
+      "inputs": [
+        {
+          "path": "tests/diff/cases/semantics/evaluation_order/e5_e6_assignment_order.xr",
+          "lf_sha256": "070ae9f6eeea5a492c58f7840da5b5dd73a01903617e8754c747e607456b35de",
+          "role": "preserved_source"
+        },
+        {
+          "path": "tests/unit/xir/legacy_consumers/fixtures/assignment_named_array_place/root.xr",
+          "lf_sha256": "f3ea3964dfefea830f3efe77308af93d715ee193e94de71ed8744011e353d3c0",
+          "role": "target_source"
+        },
+        {
+          "path": "spec/source/sections/004-3-expressions.md",
+          "lf_sha256": "3aeabb14d154ef235fe51c665a7d367c2e51dc2c6f5261a9e0b194b228a9b945",
+          "role": "frozen_spec"
+        }
+      ],
+      "expected": {
+        "exit_code": 0,
+        "stdout_utf8": "-- index assign: index then value --\nindex\nvalue\n5\n-- complex array expression --\narrexpr\nindex\nvalue\n-- member assign --\nvalue\n3\n-- compound, simple receiver --\ndelta\n7\n-- compound, complex receiver evaluated once --\nreceiver\ndelta\n-- increment is compound assignment --\n0\n-- chained assignment is right associative --\nchain\n9\n9\n"
+      },
+      "rationale": "Manually follow E1-E10 source sequencing: callee/receiver before arguments, selectors before RHS, compound selector once, short-circuit only the selected operand/branch, literal/map/spread/interpolation and match/range/slice order. Exact body arithmetic and every printed marker are independently derived, not copied from backend agreement.",
+      "packages": [
+        "P02",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P13",
+        "P14"
+      ],
+      "legacy_case": null,
+      "status": "PREPARED_NOT_EXECUTED",
+      "execution": {
+        "vm": "NOT_RUN",
+        "native": "NOT_RUN"
+      },
+      "new_entry": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "remaining_qualification": [
+        "Fresh published Source/Program entry and each backend independently satisfy required observations; no preparation/source markers/build-only qualification.",
+        "Complete affected FI, resource/live/requested/work, ownership/lifetime/NLL/borrow/cancel/physical/safety and generated-C/provider gates; preserve original inputs and limits.",
+        "Normalized fields are semantic observations, not guessed public ABI/CLI diagnostics; library/view/Hashable/Iterable replacements must bind actual published declarations."
+      ],
+      "execution_source": "tests/unit/xir/legacy_consumers/fixtures/assignment_named_array_place/root.xr"
+    },
+    {
+      "id": "evaluation_order_e7_literal_element_order",
+      "inputs": [
+        {
+          "path": "tests/diff/cases/semantics/evaluation_order/e7_literal_element_order.xr",
+          "lf_sha256": "ab97e587b7844dd3ef4de35e1472977619a48a1916d98464caa71209d975a507",
+          "role": "preserved_source"
+        },
+        {
+          "path": "spec/source/sections/004-3-expressions.md",
+          "lf_sha256": "3aeabb14d154ef235fe51c665a7d367c2e51dc2c6f5261a9e0b194b228a9b945",
+          "role": "frozen_spec"
+        }
+      ],
+      "expected": {
+        "exit_code": 0,
+        "stdout_utf8": "-- array --\ne1\ne2\ne3\n3\n-- set --\ns1\ns2\n2\n-- map: key before value --\nk1\nv1\nk2\nv2\n2\n-- object literal --\no1\no2\n1\n-- tuple --\nt1\nt2\n1\n-- spread in place --\nhead\np1\np2\n6\n-- nested literal --\nn1\nn2\nn3\n2\n"
+      },
+      "rationale": "Manually follow E1-E10 source sequencing: callee/receiver before arguments, selectors before RHS, compound selector once, short-circuit only the selected operand/branch, literal/map/spread/interpolation and match/range/slice order. Exact body arithmetic and every printed marker are independently derived, not copied from backend agreement.",
+      "packages": [
+        "P02",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P13",
+        "P14"
+      ],
+      "legacy_case": null,
+      "status": "PREPARED_NOT_EXECUTED",
+      "execution": {
+        "vm": "NOT_RUN",
+        "native": "NOT_RUN"
+      },
+      "new_entry": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "remaining_qualification": [
+        "Fresh published Source/Program entry and each backend independently satisfy required observations; no preparation/source markers/build-only qualification.",
+        "Complete affected FI, resource/live/requested/work, ownership/lifetime/NLL/borrow/cancel/physical/safety and generated-C/provider gates; preserve original inputs and limits.",
+        "Normalized fields are semantic observations, not guessed public ABI/CLI diagnostics; library/view/Hashable/Iterable replacements must bind actual published declarations."
+      ],
+      "execution_source": "tests/diff/cases/semantics/evaluation_order/e7_literal_element_order.xr"
+    },
+    {
+      "id": "evaluation_order_e8_interpolation_order",
+      "inputs": [
+        {
+          "path": "tests/diff/cases/semantics/evaluation_order/e8_interpolation_order.xr",
+          "lf_sha256": "7c6e747c719347e6f3e0b90ff481a39f44dbd8caa8c2f46e45dde818d12f6b72",
+          "role": "preserved_source"
+        },
+        {
+          "path": "spec/source/sections/004-3-expressions.md",
+          "lf_sha256": "3aeabb14d154ef235fe51c665a7d367c2e51dc2c6f5261a9e0b194b228a9b945",
+          "role": "frozen_spec"
+        }
+      ],
+      "expected": {
+        "exit_code": 0,
+        "stdout_utf8": "-- two fragments --\nfrag1\nfrag2\nx-y\n-- inline fragments --\ninline1\ninline2\np/q\n-- expression fragments --\nnum1\nnum2\nsum=3\n"
+      },
+      "rationale": "Manually follow E1-E10 source sequencing: callee/receiver before arguments, selectors before RHS, compound selector once, short-circuit only the selected operand/branch, literal/map/spread/interpolation and match/range/slice order. Exact body arithmetic and every printed marker are independently derived, not copied from backend agreement.",
+      "packages": [
+        "P02",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P13",
+        "P14"
+      ],
+      "legacy_case": null,
+      "status": "PREPARED_NOT_EXECUTED",
+      "execution": {
+        "vm": "NOT_RUN",
+        "native": "NOT_RUN"
+      },
+      "new_entry": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "remaining_qualification": [
+        "Fresh published Source/Program entry and each backend independently satisfy required observations; no preparation/source markers/build-only qualification.",
+        "Complete affected FI, resource/live/requested/work, ownership/lifetime/NLL/borrow/cancel/physical/safety and generated-C/provider gates; preserve original inputs and limits.",
+        "Normalized fields are semantic observations, not guessed public ABI/CLI diagnostics; library/view/Hashable/Iterable replacements must bind actual published declarations."
+      ],
+      "execution_source": "tests/diff/cases/semantics/evaluation_order/e8_interpolation_order.xr"
+    },
+    {
+      "id": "evaluation_order_e9_e10_match_slice_range",
+      "inputs": [
+        {
+          "path": "tests/diff/cases/semantics/evaluation_order/e9_e10_match_slice_range.xr",
+          "lf_sha256": "42f8849c298c182990f734c6a5f597f72774b94b5248ee786f27f9fb625c1c48",
+          "role": "preserved_source"
+        },
+        {
+          "path": "spec/source/sections/004-3-expressions.md",
+          "lf_sha256": "3aeabb14d154ef235fe51c665a7d367c2e51dc2c6f5261a9e0b194b228a9b945",
+          "role": "frozen_spec"
+        }
+      ],
+      "expected": {
+        "exit_code": 0,
+        "stdout_utf8": "-- match scrutinee once --\nscrutinee\ntwo\n-- guard runs only for a matching pattern --\nscrutinee\nguard-1\nguard-2\none-fallback\n-- range endpoints --\nlo\nhi\n3\n-- slice bounds --\nslice-lo\nslice-hi\n2\n"
+      },
+      "rationale": "Manually follow E1-E10 source sequencing: callee/receiver before arguments, selectors before RHS, compound selector once, short-circuit only the selected operand/branch, literal/map/spread/interpolation and match/range/slice order. Exact body arithmetic and every printed marker are independently derived, not copied from backend agreement.",
+      "packages": [
+        "P02",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P13",
+        "P14"
+      ],
+      "legacy_case": null,
+      "status": "PREPARED_NOT_EXECUTED",
+      "execution": {
+        "vm": "NOT_RUN",
+        "native": "NOT_RUN"
+      },
+      "new_entry": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "remaining_qualification": [
+        "Fresh published Source/Program entry and each backend independently satisfy required observations; no preparation/source markers/build-only qualification.",
+        "Complete affected FI, resource/live/requested/work, ownership/lifetime/NLL/borrow/cancel/physical/safety and generated-C/provider gates; preserve original inputs and limits.",
+        "Normalized fields are semantic observations, not guessed public ABI/CLI diagnostics; library/view/Hashable/Iterable replacements must bind actual published declarations."
+      ],
+      "execution_source": "tests/diff/cases/semantics/evaluation_order/e9_e10_match_slice_range.xr"
+    },
+    {
+      "id": "view_shared_then_exclusive_then_owned_copy",
+      "inputs": [
+        {
+          "path": "tests/diff/cases/semantics/slice/array_expression_view.xr",
+          "lf_sha256": "bdb0b1b5e544b76184b16f6e2a859bc044ffad42aa9f4694015a85f064029198",
+          "role": "preserved_source"
+        },
+        {
+          "path": "tests/unit/xir/legacy_consumers/fixtures/explicit_read_and_mutable_view/root.xr",
+          "lf_sha256": "c945520f65120a36de44b6016774ab9c4ae6153f175aa5a2a69c45f232d9a308",
+          "role": "target_source"
+        },
+        {
+          "path": "spec/source/sections/003-2-type-system.md",
+          "lf_sha256": "f4e970b0cc728c19f65a4d1b2a13cd0e572431dcac3f6f20cd06d23046ebea8a",
+          "role": "frozen_spec"
+        }
+      ],
+      "expected": {
+        "exit_code": 0,
+        "stdout_utf8": "21\n31\n21\n31\n"
+      },
+      "rationale": "End shared view after print21, exclusive store31 before owner read, then copy(view) materializes [21,31]. Owner22 and independent owned32 leave the other values unchanged.",
+      "packages": [
+        "P02",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P13",
+        "P14"
+      ],
+      "legacy_case": null,
+      "status": "PREPARED_NOT_EXECUTED",
+      "execution": {
+        "vm": "NOT_RUN",
+        "native": "NOT_RUN"
+      },
+      "new_entry": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "remaining_qualification": [
+        "Fresh published Source/Program entry and each backend independently satisfy required observations; no preparation/source markers/build-only qualification.",
+        "Complete affected FI, resource/live/requested/work, ownership/lifetime/NLL/borrow/cancel/physical/safety and generated-C/provider gates; preserve original inputs and limits.",
+        "Normalized fields are semantic observations, not guessed public ABI/CLI diagnostics; library/view/Hashable/Iterable replacements must bind actual published declarations."
+      ],
+      "execution_source": "tests/unit/xir/legacy_consumers/fixtures/explicit_read_and_mutable_view/root.xr"
+    },
+    {
+      "id": "mutable_view_ordinary_callee_reborrow",
+      "inputs": [
+        {
+          "path": "tests/diff/cases/semantics/slice/ref_range_place.xr",
+          "lf_sha256": "4a2268d17fb2f2dc3089fe9325e9e61e0ab035cfdb9c72fa1e42fca47f5f59f0",
+          "role": "preserved_source"
+        },
+        {
+          "path": "tests/unit/xir/legacy_consumers/fixtures/mutable_view_callee_reborrow/root.xr",
+          "lf_sha256": "fef622010b44b55d8f3905b1818950af43aa7035d849df05ed77d145b909d403",
+          "role": "target_source"
+        },
+        {
+          "path": "spec/source/sections/003-2-type-system.md",
+          "lf_sha256": "f4e970b0cc728c19f65a4d1b2a13cd0e572431dcac3f6f20cd06d23046ebea8a",
+          "role": "frozen_spec"
+        }
+      ],
+      "expected": {
+        "exit_code": 0,
+        "stdout_utf8": "55\n"
+      },
+      "rationale": "Explicit exclusive view lets ordinary callee write20/30; last use ends before owner sum1+20+30+4=55. ref binding cannot make readonly Slice mutable.",
+      "packages": [
+        "P02",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P13",
+        "P14"
+      ],
+      "legacy_case": null,
+      "status": "PREPARED_NOT_EXECUTED",
+      "execution": {
+        "vm": "NOT_RUN",
+        "native": "NOT_RUN"
+      },
+      "new_entry": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "remaining_qualification": [
+        "Fresh published Source/Program entry and each backend independently satisfy required observations; no preparation/source markers/build-only qualification.",
+        "Complete affected FI, resource/live/requested/work, ownership/lifetime/NLL/borrow/cancel/physical/safety and generated-C/provider gates; preserve original inputs and limits.",
+        "Normalized fields are semantic observations, not guessed public ABI/CLI diagnostics; library/view/Hashable/Iterable replacements must bind actual published declarations."
+      ],
+      "execution_source": "tests/unit/xir/legacy_consumers/fixtures/mutable_view_callee_reborrow/root.xr"
+    },
+    {
+      "id": "view_factory_saves_only_owned_scalars",
+      "inputs": [
+        {
+          "path": "tests/diff/cases/semantics/slice/slice_arg_to_tagged_factory.xr",
+          "lf_sha256": "e3ad48687f27e4b120b87b1ecc04b1b16a70c5ca3ad032a2c4a2019ca8cb167b",
+          "role": "preserved_source"
+        },
+        {
+          "path": "tests/unit/xir/legacy_consumers/fixtures/slice_scalar_snapshot_factory/root.xr",
+          "lf_sha256": "134dde9995ce0dfea75787c7a87223ef4bd699b9313162e84e1bc0e2db8f4052",
+          "role": "target_source"
+        },
+        {
+          "path": "spec/source/sections/003-2-type-system.md",
+          "lf_sha256": "f4e970b0cc728c19f65a4d1b2a13cd0e572431dcac3f6f20cd06d23046ebea8a",
+          "role": "frozen_spec"
+        }
+      ],
+      "expected": {
+        "exit_code": 0,
+        "stdout_utf8": "size=3 first=17\n"
+      },
+      "rationale": "Snapshot saves length and first byte into a new class, not the input borrow; all owned allocation statements remain.",
+      "packages": [
+        "P02",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P13",
+        "P14"
+      ],
+      "legacy_case": null,
+      "status": "PREPARED_NOT_EXECUTED",
+      "execution": {
+        "vm": "NOT_RUN",
+        "native": "NOT_RUN"
+      },
+      "new_entry": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "remaining_qualification": [
+        "Fresh published Source/Program entry and each backend independently satisfy required observations; no preparation/source markers/build-only qualification.",
+        "Complete affected FI, resource/live/requested/work, ownership/lifetime/NLL/borrow/cancel/physical/safety and generated-C/provider gates; preserve original inputs and limits.",
+        "Normalized fields are semantic observations, not guessed public ABI/CLI diagnostics; library/view/Hashable/Iterable replacements must bind actual published declarations."
+      ],
+      "execution_source": "tests/unit/xir/legacy_consumers/fixtures/slice_scalar_snapshot_factory/root.xr"
+    },
+    {
+      "id": "view_unique_source_function_and_interface",
+      "inputs": [
+        {
+          "path": "tests/diff/cases/semantics/slice/slice_borrow_return_contracts.xr",
+          "lf_sha256": "aeb66cd7fc717927c98688b210585dde407b00ea2a4638f6242d4a720bb86c78",
+          "role": "preserved_source"
+        },
+        {
+          "path": "tests/unit/xir/legacy_consumers/fixtures/slice_unique_signature_source/root.xr",
+          "lf_sha256": "9c4515b16794aab280f12c6ecffd3daca33dd30a639275eac1543e694d7fa02b",
+          "role": "target_source"
+        },
+        {
+          "path": "spec/source/sections/003-2-type-system.md",
+          "lf_sha256": "f4e970b0cc728c19f65a4d1b2a13cd0e572431dcac3f6f20cd06d23046ebea8a",
+          "role": "frozen_spec"
+        }
+      ],
+      "expected": {
+        "exit_code": 0,
+        "stdout_utf8": "20\n30\n"
+      },
+      "rationale": "Function value removes first byte, interface removes two. Each signature has one view input; callable/interface public metadata must retain that source without retired from annotations.",
+      "packages": [
+        "P02",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P13",
+        "P14"
+      ],
+      "legacy_case": null,
+      "status": "PREPARED_NOT_EXECUTED",
+      "execution": {
+        "vm": "NOT_RUN",
+        "native": "NOT_RUN"
+      },
+      "new_entry": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "remaining_qualification": [
+        "Fresh published Source/Program entry and each backend independently satisfy required observations; no preparation/source markers/build-only qualification.",
+        "Complete affected FI, resource/live/requested/work, ownership/lifetime/NLL/borrow/cancel/physical/safety and generated-C/provider gates; preserve original inputs and limits.",
+        "Normalized fields are semantic observations, not guessed public ABI/CLI diagnostics; library/view/Hashable/Iterable replacements must bind actual published declarations."
+      ],
+      "execution_source": "tests/unit/xir/legacy_consumers/fixtures/slice_unique_signature_source/root.xr"
+    },
+    {
+      "id": "view_unique_source_cross_module",
+      "inputs": [
+        {
+          "path": "tests/diff/cases/semantics/slice/slice_borrow_return_cross_module.xr",
+          "lf_sha256": "37490f3184e1dd9d8dd3b894b18d278e066fb138cb433ad3b01b262f50176b52",
+          "role": "preserved_source"
+        },
+        {
+          "path": "tests/unit/xir/legacy_consumers/fixtures/slice_borrow_cross_module/root.xr",
+          "lf_sha256": "37490f3184e1dd9d8dd3b894b18d278e066fb138cb433ad3b01b262f50176b52",
+          "role": "target_source"
+        },
+        {
+          "path": "spec/source/sections/003-2-type-system.md",
+          "lf_sha256": "f4e970b0cc728c19f65a4d1b2a13cd0e572431dcac3f6f20cd06d23046ebea8a",
+          "role": "frozen_spec"
+        },
+        {
+          "path": "tests/diff/cases/semantics/slice/_borrow_return_lib.xr",
+          "lf_sha256": "17bda57d4ea434ab3e4f2e2359f32dce2d5d08196dab888d3a92583d1983265a",
+          "role": "preserved_source"
+        },
+        {
+          "path": "tests/unit/xir/legacy_consumers/fixtures/slice_unique_export_source/root.xr",
+          "lf_sha256": "e9b5a02cd9c58dcc590008956ae40611c84f545ba8d154e9840cfa6869b84c83",
+          "role": "target_source"
+        },
+        {
+          "path": "tests/unit/xir/legacy_consumers/fixtures/slice_borrow_cross_module/_borrow_return_lib.xr",
+          "lf_sha256": "e9b5a02cd9c58dcc590008956ae40611c84f545ba8d154e9840cfa6869b84c83",
+          "role": "target_source"
+        }
+      ],
+      "expected": {
+        "exit_code": 0,
+        "stdout_utf8": "2\n7\n"
+      },
+      "rationale": "Imported helper removes two bytes from [5,6,7,8]; both export signature and owner lifetime remain required.",
+      "packages": [
+        "P02",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P13",
+        "P14"
+      ],
+      "legacy_case": null,
+      "status": "PREPARED_NOT_EXECUTED",
+      "execution": {
+        "vm": "NOT_RUN",
+        "native": "NOT_RUN"
+      },
+      "new_entry": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "remaining_qualification": [
+        "Fresh published Source/Program entry and each backend independently satisfy required observations; no preparation/source markers/build-only qualification.",
+        "Complete affected FI, resource/live/requested/work, ownership/lifetime/NLL/borrow/cancel/physical/safety and generated-C/provider gates; preserve original inputs and limits.",
+        "Normalized fields are semantic observations, not guessed public ABI/CLI diagnostics; library/view/Hashable/Iterable replacements must bind actual published declarations."
+      ],
+      "execution_source": "tests/unit/xir/legacy_consumers/fixtures/slice_borrow_cross_module/root.xr"
+    },
+    {
+      "id": "generic_class_exact_instance_type",
+      "inputs": [
+        {
+          "path": "tests/diff/cases/semantics/type/is_generic_instance_target.xr",
+          "lf_sha256": "e5f71e3b0326e1c09f6c7f6caec8986883b0057225e1db06fafb5ffc059a2aa2",
+          "role": "preserved_source"
+        },
+        {
+          "path": "tests/unit/xir/legacy_consumers/fixtures/generic_class_exact_type_identity/root.xr",
+          "lf_sha256": "c89d249e8e2222ad0787e57de6009d5c4ceb75f8bb1264012bdd44ee1eba06c9",
+          "role": "target_source"
+        },
+        {
+          "path": "spec/source/sections/004-3-expressions.md",
+          "lf_sha256": "3aeabb14d154ef235fe51c665a7d367c2e51dc2c6f5261a9e0b194b228a9b945",
+          "role": "frozen_spec"
+        }
+      ],
+      "expected": {
+        "exit_code": 0,
+        "stdout_utf8": "false\ntrue\ntrue\nfalse\ntrue\n"
+      },
+      "rationale": "Box<i64> is exact and distinct from Box<string>, i64 and Plain; port only contextual init, keeping all nominal checks.",
+      "packages": [
+        "P02",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P13",
+        "P14"
+      ],
+      "legacy_case": null,
+      "status": "PREPARED_NOT_EXECUTED",
+      "execution": {
+        "vm": "NOT_RUN",
+        "native": "NOT_RUN"
+      },
+      "new_entry": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "remaining_qualification": [
+        "Fresh published Source/Program entry and each backend independently satisfy required observations; no preparation/source markers/build-only qualification.",
+        "Complete affected FI, resource/live/requested/work, ownership/lifetime/NLL/borrow/cancel/physical/safety and generated-C/provider gates; preserve original inputs and limits.",
+        "Normalized fields are semantic observations, not guessed public ABI/CLI diagnostics; library/view/Hashable/Iterable replacements must bind actual published declarations."
+      ],
+      "execution_source": "tests/unit/xir/legacy_consumers/fixtures/generic_class_exact_type_identity/root.xr"
+    },
+    {
+      "id": "stored_range_preserves_all_loop_paths",
+      "inputs": [
+        {
+          "path": "tests/diff/cases/semantics/range_value_for_in.xr",
+          "lf_sha256": "5c403f7c7e2752e63b0c856da4989427783832df9834b7be2c6d5e5f37217a1f",
+          "role": "preserved_source"
+        },
+        {
+          "path": "tests/unit/xir/legacy_consumers/fixtures/range_stored_and_inline_values/root.xr",
+          "lf_sha256": "debff2f4826f9fd864b73bd500b1d4db90259471284b36431f8dd3c7521a581d",
+          "role": "target_source"
+        },
+        {
+          "path": "spec/source/sections/004-3-expressions.md",
+          "lf_sha256": "3aeabb14d154ef235fe51c665a7d367c2e51dc2c6f5261a9e0b194b228a9b945",
+          "role": "frozen_spec"
+        }
+      ],
+      "expected": {
+        "exit_code": 0,
+        "stdout_utf8": "2..9\n7\n35\ntrue\n[1, 2, 3]\n0\n10\n10\n9\n24\n[0, 1, 3, 4]\n[0, 1, 3, 4]\n1\n1\n"
+      },
+      "rationale": "Preserve all stored/inline/nested/break/continue and INT64_MAX singleton paths; half-open2..9 sums35, nested0..3+10..12 sums24 and both max singleton loops terminate once.",
+      "packages": [
+        "P02",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P13",
+        "P14"
+      ],
+      "legacy_case": null,
+      "status": "PREPARED_NOT_EXECUTED",
+      "execution": {
+        "vm": "NOT_RUN",
+        "native": "NOT_RUN"
+      },
+      "new_entry": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "remaining_qualification": [
+        "Fresh published Source/Program entry and each backend independently satisfy required observations; no preparation/source markers/build-only qualification.",
+        "Complete affected FI, resource/live/requested/work, ownership/lifetime/NLL/borrow/cancel/physical/safety and generated-C/provider gates; preserve original inputs and limits.",
+        "Normalized fields are semantic observations, not guessed public ABI/CLI diagnostics; library/view/Hashable/Iterable replacements must bind actual published declarations."
+      ],
+      "execution_source": "tests/unit/xir/legacy_consumers/fixtures/range_stored_and_inline_values/root.xr"
+    },
+    {
+      "id": "array_negative_capacity_resize_no_publication",
+      "inputs": [
+        {
+          "path": "tests/diff/cases/semantics/collections/array_resize_reserve_shared_core.xr",
+          "lf_sha256": "838a5f86bc59dcc9d39bee72bd84cb31407fc448eed1462c43e97a3474bc32cd",
+          "role": "preserved_source"
+        },
+        {
+          "path": "tests/unit/xir/legacy_consumers/fixtures/array_strict_capacity_and_resize/root.xr",
+          "lf_sha256": "ea4f14e9cd69e7046d94392ce1aa827e3afbf354b3f425da219784265595063b",
+          "role": "target_source"
+        },
+        {
+          "path": "spec/source/sections/015-14-built-in-type-methods.md",
+          "lf_sha256": "69b5b9b01844c0d02405decdac260e10fc9f23fe8b51d230e189e1f0802e9d8a",
+          "role": "frozen_spec"
+        }
+      ],
+      "expected": {
+        "exit_code": 0,
+        "stdout_utf8": "422\n3\n5\n9\n9\n422\n5\n2\ntrue\n4\n11\n11\n3\n20\n40\n5\n422\n3\n4\ntrue\ntrue\n"
+      },
+      "rationale": "Each negative reserve/resize prints E0422 and preserves prior length3/5/3. Normal growth/defaults and view remain. A successful reserve return mutated77 cannot change receiver4, and the earlier alias keeps its old capacity; only lower bounds are asserted.",
+      "packages": [
+        "P02",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P13",
+        "P14"
+      ],
+      "legacy_case": null,
+      "status": "PREPARED_NOT_EXECUTED",
+      "execution": {
+        "vm": "NOT_RUN",
+        "native": "NOT_RUN"
+      },
+      "new_entry": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "remaining_qualification": [
+        "Fresh published Source/Program entry and each backend independently satisfy required observations; no preparation/source markers/build-only qualification.",
+        "Complete affected FI, resource/live/requested/work, ownership/lifetime/NLL/borrow/cancel/physical/safety and generated-C/provider gates; preserve original inputs and limits.",
+        "Normalized fields are semantic observations, not guessed public ABI/CLI diagnostics; library/view/Hashable/Iterable replacements must bind actual published declarations."
+      ],
+      "execution_source": "tests/unit/xir/legacy_consumers/fixtures/array_strict_capacity_and_resize/root.xr"
+    },
+    {
+      "id": "array_typed_fill_strict_bounds_and_return_copy",
+      "inputs": [
+        {
+          "path": "tests/diff/cases/semantics/collections/array_typed_fill_storage_shared_core.xr",
+          "lf_sha256": "1d0503ddbe55b44add119e132d508ad0d57c44dffb5497e939989489c2e816f6",
+          "role": "preserved_source"
+        },
+        {
+          "path": "tests/unit/xir/legacy_consumers/fixtures/array_strict_typed_fill/root.xr",
+          "lf_sha256": "b095c342b77001bae1ad530cab9103039eb4d8424a8809f36867a308c5923425",
+          "role": "target_source"
+        },
+        {
+          "path": "spec/source/sections/015-14-built-in-type-methods.md",
+          "lf_sha256": "69b5b9b01844c0d02405decdac260e10fc9f23fe8b51d230e189e1f0802e9d8a",
+          "role": "frozen_spec"
+        }
+      ],
+      "expected": {
+        "exit_code": 0,
+        "stdout_utf8": "5\n1\n1\n1\n7\n7\n7\n9\n9\n4\nfalse\nfalse\ntrue\ntrue\ntrue\ntrue\n4\n3\n3\n255\n255\n422\n3\n3\n255\n255\n2\n44\n"
+      },
+      "rationale": "Retain full i64/bool/u8 initialization/fill/growth. Negative interval refuses E0422 leaving old bytes3/3/255/255. Later valid fill returns a logical copy: receiver2 and returned44 remain independent.",
+      "packages": [
+        "P02",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P13",
+        "P14"
+      ],
+      "legacy_case": null,
+      "status": "PREPARED_NOT_EXECUTED",
+      "execution": {
+        "vm": "NOT_RUN",
+        "native": "NOT_RUN"
+      },
+      "new_entry": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "remaining_qualification": [
+        "Fresh published Source/Program entry and each backend independently satisfy required observations; no preparation/source markers/build-only qualification.",
+        "Complete affected FI, resource/live/requested/work, ownership/lifetime/NLL/borrow/cancel/physical/safety and generated-C/provider gates; preserve original inputs and limits.",
+        "Normalized fields are semantic observations, not guessed public ABI/CLI diagnostics; library/view/Hashable/Iterable replacements must bind actual published declarations."
+      ],
+      "execution_source": "tests/unit/xir/legacy_consumers/fixtures/array_strict_typed_fill/root.xr"
+    },
+    {
+      "id": "spread_array_and_record_value_isolation",
+      "inputs": [
+        {
+          "path": "tests/diff/cases/spread/array_object_spread.xr",
+          "lf_sha256": "864214e7f639ad0218c1c5866611c560735957e107f4418ad552b8140661aeb0",
+          "role": "preserved_source"
+        },
+        {
+          "path": "tests/unit/xir/legacy_consumers/fixtures/spread_value_copy_isolation/root.xr",
+          "lf_sha256": "c5a4009693858f318d8bbcc5555c362344d73ba6230e73da36a8a0ef47353736",
+          "role": "target_source"
+        },
+        {
+          "path": "spec/source/sections/004-3-expressions.md",
+          "lf_sha256": "3aeabb14d154ef235fe51c665a7d367c2e51dc2c6f5261a9e0b194b228a9b945",
+          "role": "frozen_spec"
+        }
+      ],
+      "expected": {
+        "exit_code": 0,
+        "stdout_utf8": "[0, 1, 2, 3]\n[1, 2, 3, 99]\n[1, 2, 3, 42, 4, 5]\n6\n[1, 2, 3]\n3\n[4, 5]\n[1, 2, 3, 7]\n[\"x\", \"y\", \"mid\", \"z\"]\n[1, 2, 3]\n3\n1 2 3\n1 20\n1 7 8\n1 11\n100 200\n1 2\n1\n77\n1\n2\n"
+      },
+      "rationale": "All original head/tail/middle/empty/nested/string and record override outputs remain. Source/target post-writes prove logical copy isolation; none of the spread results aliases source ordinary values.",
+      "packages": [
+        "P02",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P13",
+        "P14"
+      ],
+      "legacy_case": null,
+      "status": "PREPARED_NOT_EXECUTED",
+      "execution": {
+        "vm": "NOT_RUN",
+        "native": "NOT_RUN"
+      },
+      "new_entry": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "remaining_qualification": [
+        "Fresh published Source/Program entry and each backend independently satisfy required observations; no preparation/source markers/build-only qualification.",
+        "Complete affected FI, resource/live/requested/work, ownership/lifetime/NLL/borrow/cancel/physical/safety and generated-C/provider gates; preserve original inputs and limits.",
+        "Normalized fields are semantic observations, not guessed public ABI/CLI diagnostics; library/view/Hashable/Iterable replacements must bind actual published declarations."
+      ],
+      "execution_source": "tests/unit/xir/legacy_consumers/fixtures/spread_value_copy_isolation/root.xr"
+    },
+    {
+      "id": "array_spread_operands_once_and_owned_copy",
+      "inputs": [
+        {
+          "path": "tests/diff/cases/spread/array_spread_eval_order.xr",
+          "lf_sha256": "a69b9d8e3b221d3ea184ad3a1b0e5012630c3fbcdb9b974979d481a736d4aad9",
+          "role": "preserved_source"
+        },
+        {
+          "path": "tests/unit/xir/legacy_consumers/fixtures/array_spread_order_and_copy/root.xr",
+          "lf_sha256": "653b7f51fe2a83a64b00c894f024b79281a47bb91527a4456d96b5e59a9da03b",
+          "role": "target_source"
+        },
+        {
+          "path": "spec/source/sections/004-3-expressions.md",
+          "lf_sha256": "3aeabb14d154ef235fe51c665a7d367c2e51dc2c6f5261a9e0b194b228a9b945",
+          "role": "frozen_spec"
+        }
+      ],
+      "expected": {
+        "exit_code": 0,
+        "stdout_utf8": "1234\n[10, 11, 2, 30, 31, 4]\n6\n5\n[7, 8, 5, 7, 8]\n[7, 8]\n2\n7\n"
+      },
+      "rationale": "Operand marks1234/5 appear once in source order. Repeated source spread is independent; result99 leaves base7.",
+      "packages": [
+        "P02",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P13",
+        "P14"
+      ],
+      "legacy_case": null,
+      "status": "PREPARED_NOT_EXECUTED",
+      "execution": {
+        "vm": "NOT_RUN",
+        "native": "NOT_RUN"
+      },
+      "new_entry": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "remaining_qualification": [
+        "Fresh published Source/Program entry and each backend independently satisfy required observations; no preparation/source markers/build-only qualification.",
+        "Complete affected FI, resource/live/requested/work, ownership/lifetime/NLL/borrow/cancel/physical/safety and generated-C/provider gates; preserve original inputs and limits.",
+        "Normalized fields are semantic observations, not guessed public ABI/CLI diagnostics; library/view/Hashable/Iterable replacements must bind actual published declarations."
+      ],
+      "execution_source": "tests/unit/xir/legacy_consumers/fixtures/array_spread_order_and_copy/root.xr"
+    },
+    {
+      "id": "record_spread_order_override_and_copy",
+      "inputs": [
+        {
+          "path": "tests/diff/cases/spread/object_spread_eval_order.xr",
+          "lf_sha256": "7de2c57d484b76b81261951f2e729db7acb1bf20dcca13fa0d12da558a2839b4",
+          "role": "preserved_source"
+        },
+        {
+          "path": "tests/unit/xir/legacy_consumers/fixtures/object_spread_order_and_copy/root.xr",
+          "lf_sha256": "bede5ca6c9a2c2142ada76c8637018708e1d9fb5ed59934ec8a57bd86d4881b8",
+          "role": "target_source"
+        },
+        {
+          "path": "spec/source/sections/004-3-expressions.md",
+          "lf_sha256": "3aeabb14d154ef235fe51c665a7d367c2e51dc2c6f5261a9e0b194b228a9b945",
+          "role": "frozen_spec"
+        }
+      ],
+      "expected": {
+        "exit_code": 0,
+        "stdout_utf8": "1234\n30\n31\n4\n56\n1\n6\n789\n8\n200\n9\n30\n6\n"
+      },
+      "rationale": "Later spread/field override follows source order1234/56/789. Changing chained.x99 leaves merged.x30 and overridden.y6.",
+      "packages": [
+        "P02",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P13",
+        "P14"
+      ],
+      "legacy_case": null,
+      "status": "PREPARED_NOT_EXECUTED",
+      "execution": {
+        "vm": "NOT_RUN",
+        "native": "NOT_RUN"
+      },
+      "new_entry": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "remaining_qualification": [
+        "Fresh published Source/Program entry and each backend independently satisfy required observations; no preparation/source markers/build-only qualification.",
+        "Complete affected FI, resource/live/requested/work, ownership/lifetime/NLL/borrow/cancel/physical/safety and generated-C/provider gates; preserve original inputs and limits.",
+        "Normalized fields are semantic observations, not guessed public ABI/CLI diagnostics; library/view/Hashable/Iterable replacements must bind actual published declarations."
+      ],
+      "execution_source": "tests/unit/xir/legacy_consumers/fixtures/object_spread_order_and_copy/root.xr"
+    },
+    {
+      "id": "nested_struct_updates_keep_prior_values",
+      "inputs": [
+        {
+          "path": "tests/diff/cases/semantics/aggregate_update_nested_snapshot.xr",
+          "lf_sha256": "f52695bac6e78820cdeed46a04f942ff071940c0a2a525b713b5c518001d6611",
+          "role": "preserved_source"
+        },
+        {
+          "path": "spec/source/sections/003-2-type-system.md",
+          "lf_sha256": "f4e970b0cc728c19f65a4d1b2a13cd0e572431dcac3f6f20cd06d23046ebea8a",
+          "role": "frozen_spec"
+        }
+      ],
+      "expected": {
+        "exit_code": 0,
+        "stdout_utf8": "10\n20\n10\n25\n60\n67\n"
+      },
+      "rationale": "Both struct copies are values: before remains10/20, after10/25; nested before sum60, after x17 sum67. No class identity boundary occurs.",
+      "packages": [
+        "P02",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P13",
+        "P14"
+      ],
+      "legacy_case": null,
+      "status": "PREPARED_NOT_EXECUTED",
+      "execution": {
+        "vm": "NOT_RUN",
+        "native": "NOT_RUN"
+      },
+      "new_entry": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "remaining_qualification": [
+        "Fresh published Source/Program entry and each backend independently satisfy required observations; no preparation/source markers/build-only qualification.",
+        "Complete affected FI, resource/live/requested/work, ownership/lifetime/NLL/borrow/cancel/physical/safety and generated-C/provider gates; preserve original inputs and limits.",
+        "Normalized fields are semantic observations, not guessed public ABI/CLI diagnostics; library/view/Hashable/Iterable replacements must bind actual published declarations."
+      ],
+      "execution_source": "tests/diff/cases/semantics/aggregate_update_nested_snapshot.xr"
+    },
+    {
+      "id": "byte_explicit_endian_integer_observations",
+      "inputs": [
+        {
+          "path": "tests/diff/cases/semantics/collections/byte_slice_load_store_endian_shared_core.xr",
+          "lf_sha256": "f0bf016f7ea22f8a9464ec5d77e6338d6e9cdc00b173c4f5e6174c478b3ccec7",
+          "role": "preserved_source"
+        },
+        {
+          "path": "spec/source/sections/003-2-type-system.md",
+          "lf_sha256": "f4e970b0cc728c19f65a4d1b2a13cd0e572431dcac3f6f20cd06d23046ebea8a",
+          "role": "frozen_spec"
+        }
+      ],
+      "expected": {
+        "printed_bytes": [
+          52,
+          18,
+          18,
+          52,
+          1,
+          4
+        ],
+        "loaded_words": [
+          4660,
+          4660,
+          16909060
+        ],
+        "default_endian_roundtrip": 2569
+      },
+      "rationale": "Explicit LE/BE encoding of0x1234 and0x01020304 determines every printed byte. Native/default endian is only checked by same-value roundtrip, without inventing target byte order. The old Slice member API is invalid in the target. No executable target source is prepared; require explicit mutable access, nonoverlapping lifetime scopes and the actual published library entry before any execution claim.",
+      "packages": [
+        "P02",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P13",
+        "P14"
+      ],
+      "legacy_case": null,
+      "status": "PREPARED_NOT_EXECUTED",
+      "execution": {
+        "vm": "NOT_RUN",
+        "native": "NOT_RUN"
+      },
+      "new_entry": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "remaining_qualification": [
+        "Fresh published Source/Program entry and each backend independently satisfy required observations; no preparation/source markers/build-only qualification.",
+        "Complete affected FI, resource/live/requested/work, ownership/lifetime/NLL/borrow/cancel/physical/safety and generated-C/provider gates; preserve original inputs and limits.",
+        "Normalized fields are semantic observations, not guessed public ABI/CLI diagnostics; library/view/Hashable/Iterable replacements must bind actual published declarations."
+      ],
+      "target_source_status": "PENDING_PUBLISHED_DECLARATION_OWNED_LIBRARY_REPLACEMENT",
+      "obligation_scope": "SEMANTIC_DUTY_PRESERVED_TARGET_SOURCE_NOT_PREPARED"
+    },
+    {
+      "id": "byte_explicit_endian_float_observations",
+      "inputs": [
+        {
+          "path": "tests/diff/cases/semantics/collections/byte_slice_float_load_store_shared_core.xr",
+          "lf_sha256": "b050a62c73acba153e72a1b785d08947acab61140f10e7b496ca1246daf5e009",
+          "role": "preserved_source"
+        },
+        {
+          "path": "spec/source/sections/003-2-type-system.md",
+          "lf_sha256": "f4e970b0cc728c19f65a4d1b2a13cd0e572431dcac3f6f20cd06d23046ebea8a",
+          "role": "frozen_spec"
+        }
+      ],
+      "expected": {
+        "printed_bytes": [
+          0,
+          0,
+          192,
+          63,
+          192,
+          32,
+          0,
+          0,
+          2,
+          192
+        ],
+        "loaded_floats": [
+          1.5,
+          -2.5,
+          -2.25
+        ]
+      },
+      "rationale": "IEEE binary32 1.5 LE and -2.5 BE, binary64 -2.25 LE give exact bytes; signed exponent/mantissa observations must survive the declaration-owned replacement. The old Slice member API is invalid in the target. No executable target source is prepared; require explicit mutable access, nonoverlapping lifetime scopes and the actual published library entry before any execution claim.",
+      "packages": [
+        "P02",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P13",
+        "P14"
+      ],
+      "legacy_case": null,
+      "status": "PREPARED_NOT_EXECUTED",
+      "execution": {
+        "vm": "NOT_RUN",
+        "native": "NOT_RUN"
+      },
+      "new_entry": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "remaining_qualification": [
+        "Fresh published Source/Program entry and each backend independently satisfy required observations; no preparation/source markers/build-only qualification.",
+        "Complete affected FI, resource/live/requested/work, ownership/lifetime/NLL/borrow/cancel/physical/safety and generated-C/provider gates; preserve original inputs and limits.",
+        "Normalized fields are semantic observations, not guessed public ABI/CLI diagnostics; library/view/Hashable/Iterable replacements must bind actual published declarations."
+      ],
+      "target_source_status": "PENDING_PUBLISHED_DECLARATION_OWNED_LIBRARY_REPLACEMENT",
+      "obligation_scope": "SEMANTIC_DUTY_PRESERVED_TARGET_SOURCE_NOT_PREPARED"
+    },
+    {
+      "id": "byte_signed_and_unsigned_same_storage",
+      "inputs": [
+        {
+          "path": "tests/diff/cases/semantics/collections/byte_slice_signed_load_store_shared_core.xr",
+          "lf_sha256": "166159df2170574962c1314221480e715e97563d6b3d49f2909f1e07bfbd53e9",
+          "role": "preserved_source"
+        },
+        {
+          "path": "spec/source/sections/003-2-type-system.md",
+          "lf_sha256": "f4e970b0cc728c19f65a4d1b2a13cd0e572431dcac3f6f20cd06d23046ebea8a",
+          "role": "frozen_spec"
+        }
+      ],
+      "expected": {
+        "printed_bytes": [
+          254,
+          255,
+          255,
+          253
+        ],
+        "loaded_signed_values": [
+          -2,
+          -3,
+          -12345678,
+          -16909060,
+          -1
+        ],
+        "unsigned_first_word": 65534
+      },
+      "rationale": "Two-complement signed loads preserve all five widths/endianness and reinterpret the same first LE word as unsigned65534; bool is not a byte or numeric result. The old Slice member API is invalid in the target. No executable target source is prepared; require explicit mutable access, nonoverlapping lifetime scopes and the actual published library entry before any execution claim.",
+      "packages": [
+        "P02",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P13",
+        "P14"
+      ],
+      "legacy_case": null,
+      "status": "PREPARED_NOT_EXECUTED",
+      "execution": {
+        "vm": "NOT_RUN",
+        "native": "NOT_RUN"
+      },
+      "new_entry": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "remaining_qualification": [
+        "Fresh published Source/Program entry and each backend independently satisfy required observations; no preparation/source markers/build-only qualification.",
+        "Complete affected FI, resource/live/requested/work, ownership/lifetime/NLL/borrow/cancel/physical/safety and generated-C/provider gates; preserve original inputs and limits.",
+        "Normalized fields are semantic observations, not guessed public ABI/CLI diagnostics; library/view/Hashable/Iterable replacements must bind actual published declarations."
+      ],
+      "target_source_status": "PENDING_PUBLISHED_DECLARATION_OWNED_LIBRARY_REPLACEMENT",
+      "obligation_scope": "SEMANTIC_DUTY_PRESERVED_TARGET_SOURCE_NOT_PREPARED"
     }
   ]
 }

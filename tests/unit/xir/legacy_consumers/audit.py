@@ -50,6 +50,15 @@ FROZEN_TARGETS["tests/diff/cases/semantics/coro/task_transfer_already_taken.xr"]
     "POSITIVE_STICKY_TASK_RESULT_AFTER_FROZEN_TASK316_PORT", "P08")
 FROZEN_TARGETS["tests/diff/cases/semantics/coro/task_transfer_return_native_class.xr"] = (
     "REJECT_NONSENDABLE_TASK_RESULT_AFTER_FROZEN_TASK313_PORT", "P10")
+for name in ("array_resize_reserve_shared_core.xr", "array_typed_fill_storage_shared_core.xr"):
+    FROZEN_TARGETS["tests/diff/cases/semantics/collections/" + name] = (
+        "POSITIVE_STRICT_ARRAY_RANGE_AFTER_FROZEN_TASK313_PORT", "P09")
+for name in ("array_expression_view.xr", "ref_range_place.xr", "slice_borrow_return_contracts.xr",
+             "slice_borrow_return_cross_module.xr", "_borrow_return_lib.xr"):
+    FROZEN_TARGETS["tests/diff/cases/semantics/slice/" + name] = (
+        "POSITIVE_EXPLICIT_VIEW_PERMISSION_AFTER_FROZEN_TASK313_PORT", "P10")
+FROZEN_TARGETS["tests/diff/cases/semantics/evaluation_order/e5_e6_assignment_order.xr"] = (
+    "POSITIVE_WRITABLE_ARRAY_PLACE_AFTER_FROZEN_TASK313_PORT", "P10")
 
 
 # The demanded imported diagnostics depend on these complete companion inputs.
@@ -86,6 +95,14 @@ for name, companion in (
 ):
     IMPORTED_ORACLE_INPUTS["tests/regression/11_coroutine/" + name] = (
         "tests/regression/11_coroutine/" + companion,)
+IMPORTED_ORACLE_INPUTS["tests/diff/cases/semantics/collections/array_fill_ref_cross_module.xr"] = (
+    "tests/diff/cases/semantics/collections/_array_fill_ref_lib.xr",)
+IMPORTED_ORACLE_INPUTS["tests/diff/cases/semantics/slice/slice_borrow_return_cross_module.xr"] = (
+    "tests/diff/cases/semantics/slice/_borrow_return_lib.xr",)
+TARGET_PORT_IMPORTS = {
+    "tests/diff/cases/semantics/slice/slice_borrow_return_cross_module.xr": (
+        "tests/unit/xir/legacy_consumers/fixtures/slice_borrow_cross_module/_borrow_return_lib.xr",)
+}
 
 
 def load_module(name: str, relative: str):
@@ -264,6 +281,12 @@ def validate_runner_routes(data: dict, responsibilities: dict, actual_entries: d
             if (port["qualification"] != "NOT_RUN" or port["owner_package"] not in row["producer_packages"]
                     or not path.is_file() or file_record(path)["lf_sha256"] != port["lf_sha256"]):
                 raise ValueError("planned source port changed or incorrectly qualified")
+            companions = port.get("companion_inputs", [])
+            if tuple(i["path"] for i in companions) != TARGET_PORT_IMPORTS.get(identity, ()):
+                raise ValueError("target source port lost its required companion inputs")
+            for item in companions:
+                if file_record(ROOT / item["path"]).get("lf_sha256") != item["lf_sha256"]:
+                    raise ValueError("target source port companion changed")
         migration = row.get("named_test_migration")
         if migration:
             original_names = [d["name"] for d in named["declarations"]] if named else []
@@ -332,10 +355,27 @@ def validate_runner_routes(data: dict, responsibilities: dict, actual_entries: d
 
 
 def compare_required(expected: dict, observed: dict) -> None:
-    """Compare one observation to its independent oracle, never to another backend."""
+    """Compare required fields recursively, keeping bool distinct from numeric data."""
+    def compare(value, actual, path):
+        if type(value) is not type(actual):
+            raise ValueError(f"independent observation mismatch: {path}")
+        if isinstance(value, dict):
+            for key, field in value.items():
+                if key not in actual:
+                    raise ValueError(f"independent observation mismatch: {path}.{key}")
+                compare(field, actual[key], f"{path}.{key}")
+        elif isinstance(value, list):
+            if len(value) != len(actual):
+                raise ValueError(f"independent observation mismatch: {path}")
+            for index, field in enumerate(value):
+                compare(field, actual[index], f"{path}[{index}]")
+        elif actual != value:
+            raise ValueError(f"independent observation mismatch: {path}")
+
     for key, value in expected.items():
-        if key not in observed or type(observed[key]) is not type(value) or observed[key] != value:
+        if key not in observed:
             raise ValueError(f"independent observation mismatch: {key}")
+        compare(value, observed[key], key)
 
 
 def validate_oracles(data: dict) -> dict:
@@ -360,6 +400,9 @@ def validate_oracles(data: dict) -> dict:
         execution_source = row.get("execution_source")
         if execution_source and execution_source not in {i["path"] for i in row["inputs"]}:
             raise ValueError("oracle execution source is not an owned input")
+        if row.get("target_source_status") == "PENDING_PUBLISHED_DECLARATION_OWNED_LIBRARY_REPLACEMENT":
+            if execution_source or row.get("obligation_scope") != "SEMANTIC_DUTY_PRESERVED_TARGET_SOURCE_NOT_PREPARED":
+                raise ValueError("pending library replacement cannot pose as an executable target source")
         for backend in ("vm", "native"):
             if row["execution"][backend] != "NOT_RUN":
                 raise ValueError("fixture preparation is not execution evidence")

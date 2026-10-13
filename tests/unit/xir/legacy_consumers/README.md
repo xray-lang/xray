@@ -16,12 +16,12 @@ change a product interface, or authorize deletion of an old test.
   The class cleanup target fixture uses ordinary methods and contextual init,
   retains both named tests and adds during-call guard checks. It has not compiled
   on a product producer; its real test discovery/execution remains required.
-- `runner_routes.json` binds 1432 explicitly reviewed FFI/JSON/generic/nullable/cleanup/
+- `runner_routes.json` binds 1539 explicitly reviewed FFI/JSON/generic/nullable/cleanup/
   generator/numeric/closure/module/call/ownership/control/comptime and regression inputs to their original source and expectation hashes,
   compiler positions/codes/text and actual runner entries. Future files are not
   automatically assigned by a directory wildcard. Missing expectations and
-  diagnostic position gaps remain explicit. Nineteen reviewed imported inputs bind
-  their twenty-one complete XR/XRD companion links; an earlier import-authority failure
+  diagnostic position gaps remain explicit. Twenty-one reviewed imported inputs bind
+  their twenty-three complete XR/XRD companion links; an earlier import-authority failure
   cannot satisfy the requested callback effect, method or parameter-mode error.
   Existing Task318 Q12 names the
   frozen comptime/protocol scope without changing the 27 historical families.
@@ -64,7 +64,18 @@ change a product interface, or authorize deletion of an old test.
   repeated-await rejection is retained as evidence and marked for positive
   sticky-result migration. Closed and Timeout cannot share a success sentinel,
   and cancellation completion must follow cleanup exactly once.
-- `oracles.json` records eighty independent output/result/rejection expectations.
+  The collection/view/order review adds 107 differential inputs, giving 1605
+  reviewed entry links and 432 bound differential input contexts. Fifteen complete
+  selected source ports retain strict negative reserve/resize/fill rejection with
+  unchanged receivers, explicit MutSlice reborrows, unique view-return signatures,
+  all original sequencing/range/type observations and spread value-copy isolation.
+  The imported view-return target binds its complete transformed helper as well
+  as the historical original. All 51 source ports are still unexecuted.
+  Frozen Slice/MutSlice values have no member methods. Three byte/endian oracles
+  preserve semantic data only, without an executable replacement source; type
+  renaming cannot restore old load/store/window/compare methods. Unknown library
+  entries and unsafe overlapping loans remain unresolved producer obligations.
+- `oracles.json` records 103 independent output/result/rejection expectations.
   Preserved original literals remain byte-for-byte inputs. Target source ports
   are separately named and hashed; they do not overwrite historical originals.
   New Atomic fixtures separately require legal direct-var rebinding and
@@ -78,7 +89,8 @@ change a product interface, or authorize deletion of an old test.
   explicitly. Counts overlap and are never a completion percentage.
 - `compare_required` checks a single observation against the independent expected
   fields. It is preparation infrastructure, not a product execution driver. The
-  tests include identical-but-wrong backends, absent versus empty output, exact
+  checks recurse through nested arrays/records, keeping numeric and boolean types
+  distinct. The tests include identical-but-wrong backends, absent versus empty output, exact
   cleanup order, missing requirements and a runtime failure posing as a compile
   rejection. Printed cleanup does not prove physical resource reclamation.
 
