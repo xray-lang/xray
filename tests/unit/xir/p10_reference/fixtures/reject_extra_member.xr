@@ -1,0 +1,2 @@
+interface Measure { measure()->i64 }
+fn unused<T:Measure>(value:T)->i64{return value.extra()}
