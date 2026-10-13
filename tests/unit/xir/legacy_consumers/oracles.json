@@ -775,6 +775,367 @@
         "The actual current test runner must discover and execute both named test bodies; no source stripping, guessed entry adapter or compatibility method alias.",
         "Run fresh VM/native and complete affected lifetime/resource/FI/safety qualification; this target fixture has only been prepared and inspected."
       ]
+    },
+    {
+      "id": "read_class_direct_mutation",
+      "inputs": [
+        {
+          "path": "tests/unit/xir/legacy_consumers/fixtures/read_class_direct_mutation/root.xr",
+          "lf_sha256": "f7d1f072dacc55d16b894da013d986aa5294425348610bb28c531b02b7d6f2bd",
+          "role": "target_source"
+        },
+        {
+          "path": "tests/compile_errors/ownership/007_in_instance_mutating_method.xr",
+          "lf_sha256": "bd16efcd232a22c5759e92a4f046a4a8a347fffb02b7fbcd1e658c9b04366a0c",
+          "role": "historical_source_reference"
+        }
+      ],
+      "execution_source": "tests/unit/xir/legacy_consumers/fixtures/read_class_direct_mutation/root.xr",
+      "expected": {
+        "exit_code": 0,
+        "stdout_utf8": "2\n",
+        "stderr_utf8": ""
+      },
+      "rationale": "Counter starts at 1; direct, indirect or inherited ordinary class method adds exactly 1 through a read class parameter. The caller must observe 2, not a copied or frozen object.",
+      "packages": [
+        "P07",
+        "P09",
+        "P10"
+      ],
+      "legacy_case": null,
+      "status": "PREPARED_NOT_EXECUTED",
+      "execution": {
+        "vm": "NOT_RUN",
+        "native": "NOT_RUN"
+      },
+      "new_entry": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "remaining_qualification": [
+        "Compile the preserved or explicitly ported source through the accepted fixed Source/Program interface. The old rejection is historical evidence, not target qualification.",
+        "Each fresh backend must satisfy this independent expectation; complete affected ownership, cancellation, resource, physical release, FI, sanitizer and provider gates."
+      ]
+    },
+    {
+      "id": "read_class_indirect_mutation",
+      "inputs": [
+        {
+          "path": "tests/unit/xir/legacy_consumers/fixtures/read_class_indirect_mutation/root.xr",
+          "lf_sha256": "ae62916f14c1a71d6f82445c0d407d928c31889cf8167baea529e52bec819999",
+          "role": "target_source"
+        },
+        {
+          "path": "tests/compile_errors/ownership/008_in_instance_indirect_mutating_method.xr",
+          "lf_sha256": "5949de989fba7d13ca498c98e62c844c9b5c91a4a3e3cd1c65d65aa2806b5328",
+          "role": "historical_source_reference"
+        }
+      ],
+      "execution_source": "tests/unit/xir/legacy_consumers/fixtures/read_class_indirect_mutation/root.xr",
+      "expected": {
+        "exit_code": 0,
+        "stdout_utf8": "2\n",
+        "stderr_utf8": ""
+      },
+      "rationale": "Counter starts at 1; direct, indirect or inherited ordinary class method adds exactly 1 through a read class parameter. The caller must observe 2, not a copied or frozen object.",
+      "packages": [
+        "P07",
+        "P09",
+        "P10"
+      ],
+      "legacy_case": null,
+      "status": "PREPARED_NOT_EXECUTED",
+      "execution": {
+        "vm": "NOT_RUN",
+        "native": "NOT_RUN"
+      },
+      "new_entry": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "remaining_qualification": [
+        "Compile the preserved or explicitly ported source through the accepted fixed Source/Program interface. The old rejection is historical evidence, not target qualification.",
+        "Each fresh backend must satisfy this independent expectation; complete affected ownership, cancellation, resource, physical release, FI, sanitizer and provider gates."
+      ]
+    },
+    {
+      "id": "read_class_inherited_mutation",
+      "inputs": [
+        {
+          "path": "tests/unit/xir/legacy_consumers/fixtures/read_class_inherited_mutation/root.xr",
+          "lf_sha256": "4ad7bc97730cf60409eb26ec2692545039a0f88fdb464dbfb50e83f251c87fc7",
+          "role": "target_source"
+        },
+        {
+          "path": "tests/compile_errors/ownership/009_in_instance_inherited_mutating_method.xr",
+          "lf_sha256": "123b92766474ca6b7f662e6258fc2b5c1484b71bc5e48e722d5bded4ae5454d2",
+          "role": "historical_source_reference"
+        }
+      ],
+      "execution_source": "tests/unit/xir/legacy_consumers/fixtures/read_class_inherited_mutation/root.xr",
+      "expected": {
+        "exit_code": 0,
+        "stdout_utf8": "2\n",
+        "stderr_utf8": ""
+      },
+      "rationale": "Counter starts at 1; direct, indirect or inherited ordinary class method adds exactly 1 through a read class parameter. The caller must observe 2, not a copied or frozen object.",
+      "packages": [
+        "P07",
+        "P09",
+        "P10"
+      ],
+      "legacy_case": null,
+      "status": "PREPARED_NOT_EXECUTED",
+      "execution": {
+        "vm": "NOT_RUN",
+        "native": "NOT_RUN"
+      },
+      "new_entry": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "remaining_qualification": [
+        "Compile the preserved or explicitly ported source through the accepted fixed Source/Program interface. The old rejection is historical evidence, not target qualification.",
+        "Each fresh backend must satisfy this independent expectation; complete affected ownership, cancellation, resource, physical release, FI, sanitizer and provider gates."
+      ]
+    },
+    {
+      "id": "generator_await_preserves_stream",
+      "inputs": [
+        {
+          "path": "tests/compile_errors/concurrency/generator_await_rejected.xr",
+          "lf_sha256": "a02d337a98f04d8da1246ccc87c84db5647c4813f8c89f7317bdd3345f265f7c",
+          "role": "preserved_source"
+        }
+      ],
+      "execution_source": "tests/compile_errors/concurrency/generator_await_rejected.xr",
+      "expected": {
+        "exit_code": 0,
+        "stdout_utf8": "7\n2\n",
+        "stderr_utf8": ""
+      },
+      "rationale": "Await the worker result 7, then yield 2; scheduler completion cannot discard the remaining stream.",
+      "packages": [
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P13"
+      ],
+      "legacy_case": null,
+      "status": "PREPARED_NOT_EXECUTED",
+      "execution": {
+        "vm": "NOT_RUN",
+        "native": "NOT_RUN"
+      },
+      "new_entry": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "remaining_qualification": [
+        "Compile the preserved or explicitly ported source through the accepted fixed Source/Program interface. The old rejection is historical evidence, not target qualification.",
+        "Each fresh backend must satisfy this independent expectation; complete affected ownership, cancellation, resource, physical release, FI, sanitizer and provider gates."
+      ]
+    },
+    {
+      "id": "generator_scheduler_yield_is_not_value",
+      "inputs": [
+        {
+          "path": "tests/compile_errors/concurrency/generator_coro_yield_rejected.xr",
+          "lf_sha256": "1987e2d723c43992a5f74aa8991989e5c0e07a00191d11be18792cf980411d18",
+          "role": "preserved_source"
+        }
+      ],
+      "execution_source": "tests/compile_errors/concurrency/generator_coro_yield_rejected.xr",
+      "expected": {
+        "exit_code": 0,
+        "stdout_utf8": "1\n2\n",
+        "stderr_utf8": ""
+      },
+      "rationale": "Scheduling yield is not a value yield. It neither inserts null nor exhausts the stream.",
+      "packages": [
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P13"
+      ],
+      "legacy_case": null,
+      "status": "PREPARED_NOT_EXECUTED",
+      "execution": {
+        "vm": "NOT_RUN",
+        "native": "NOT_RUN"
+      },
+      "new_entry": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "remaining_qualification": [
+        "Compile the preserved or explicitly ported source through the accepted fixed Source/Program interface. The old rejection is historical evidence, not target qualification.",
+        "Each fresh backend must satisfy this independent expectation; complete affected ownership, cancellation, resource, physical release, FI, sanitizer and provider gates."
+      ]
+    },
+    {
+      "id": "generator_break_cleanup_once",
+      "inputs": [
+        {
+          "path": "tests/compile_errors/concurrency/generator_defer_rejected.xr",
+          "lf_sha256": "990eebbce6848f92b9c681536b55c482f45492865617cd077d9792c6eb8e4463",
+          "role": "preserved_source"
+        }
+      ],
+      "execution_source": "tests/compile_errors/concurrency/generator_defer_rejected.xr",
+      "expected": {
+        "exit_code": 0,
+        "stdout_utf8": "1\ncleanup\n",
+        "stderr_utf8": ""
+      },
+      "rationale": "First yielded value is 1. Consumer break abandons the iterator and runs its registered cleanup once, before scope completion; value 2 must never print.",
+      "packages": [
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P13"
+      ],
+      "legacy_case": null,
+      "status": "PREPARED_NOT_EXECUTED",
+      "execution": {
+        "vm": "NOT_RUN",
+        "native": "NOT_RUN"
+      },
+      "new_entry": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "remaining_qualification": [
+        "Compile the preserved or explicitly ported source through the accepted fixed Source/Program interface. The old rejection is historical evidence, not target qualification.",
+        "Each fresh backend must satisfy this independent expectation; complete affected ownership, cancellation, resource, physical release, FI, sanitizer and provider gates."
+      ]
+    },
+    {
+      "id": "generator_indirect_resumable_call",
+      "inputs": [
+        {
+          "path": "tests/compile_errors/concurrency/generator_dynamic_call_rejected.xr",
+          "lf_sha256": "141f49d7ada6d7327943685c7980c8a4774c2847925079573a80e8234a1d1f44",
+          "role": "preserved_source"
+        }
+      ],
+      "execution_source": "tests/compile_errors/concurrency/generator_dynamic_call_rejected.xr",
+      "expected": {
+        "exit_code": 0,
+        "stdout_utf8": "1\n",
+        "stderr_utf8": ""
+      },
+      "rationale": "The original noncapturing function argument returns 1. Unknown ordinary function targets use the resumable ABI; uncertainty about scheduling alone cannot reject the call.",
+      "packages": [
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P13"
+      ],
+      "legacy_case": null,
+      "status": "PREPARED_NOT_EXECUTED",
+      "execution": {
+        "vm": "NOT_RUN",
+        "native": "NOT_RUN"
+      },
+      "new_entry": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "remaining_qualification": [
+        "Compile the preserved or explicitly ported source through the accepted fixed Source/Program interface. The old rejection is historical evidence, not target qualification.",
+        "Each fresh backend must satisfy this independent expectation; complete affected ownership, cancellation, resource, physical release, FI, sanitizer and provider gates."
+      ]
+    },
+    {
+      "id": "generator_scope_join_preserves_stream",
+      "inputs": [
+        {
+          "path": "tests/compile_errors/concurrency/generator_scope_rejected.xr",
+          "lf_sha256": "8094c002569ed9ec093c65302f8df45b3897816601018c6be7f5f2ec3dd7d4da",
+          "role": "preserved_source"
+        }
+      ],
+      "execution_source": "tests/compile_errors/concurrency/generator_scope_rejected.xr",
+      "expected": {
+        "exit_code": 0,
+        "stdout_utf8": "1\n",
+        "stderr_utf8": ""
+      },
+      "rationale": "The child completes and scope joins before yielding 1; waiting is not stream exhaustion.",
+      "packages": [
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P13"
+      ],
+      "legacy_case": null,
+      "status": "PREPARED_NOT_EXECUTED",
+      "execution": {
+        "vm": "NOT_RUN",
+        "native": "NOT_RUN"
+      },
+      "new_entry": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "remaining_qualification": [
+        "Compile the preserved or explicitly ported source through the accepted fixed Source/Program interface. The old rejection is historical evidence, not target qualification.",
+        "Each fresh backend must satisfy this independent expectation; complete affected ownership, cancellation, resource, physical release, FI, sanitizer and provider gates."
+      ]
+    },
+    {
+      "id": "generator_transitive_await_preserves_stream",
+      "inputs": [
+        {
+          "path": "tests/compile_errors/concurrency/generator_transitive_suspend_rejected.xr",
+          "lf_sha256": "6677001037ec0e9d8cb4030204d3e2532a919d502b073d528f5a934554be5ae5",
+          "role": "preserved_source"
+        }
+      ],
+      "execution_source": "tests/compile_errors/concurrency/generator_transitive_suspend_rejected.xr",
+      "expected": {
+        "exit_code": 0,
+        "stdout_utf8": "7\n",
+        "stderr_utf8": ""
+      },
+      "rationale": "The helper awaits a worker returning 7. The generator yields that result exactly once after resumption.",
+      "packages": [
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P13"
+      ],
+      "legacy_case": null,
+      "status": "PREPARED_NOT_EXECUTED",
+      "execution": {
+        "vm": "NOT_RUN",
+        "native": "NOT_RUN"
+      },
+      "new_entry": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "remaining_qualification": [
+        "Compile the preserved or explicitly ported source through the accepted fixed Source/Program interface. The old rejection is historical evidence, not target qualification.",
+        "Each fresh backend must satisfy this independent expectation; complete affected ownership, cancellation, resource, physical release, FI, sanitizer and provider gates."
+      ]
+    },
+    {
+      "id": "enum_explicit_interface_witness",
+      "inputs": [
+        {
+          "path": "tests/unit/xir/legacy_consumers/fixtures/enum_explicit_interface_witness/root.xr",
+          "lf_sha256": "87347d3670c5301148b59476880bffc06322cdbcd7263a2102a9d3b16ab67119",
+          "role": "target_positive_sibling"
+        },
+        {
+          "path": "tests/compile_errors/oop/020_enum_implements_rejected.xr",
+          "lf_sha256": "79b73cff7d8306ce39eb5254a1cab92441d04af10ccbf7a9b90e1552b90caffc",
+          "role": "historical_incomplete_implementation"
+        }
+      ],
+      "execution_source": "tests/unit/xir/legacy_consumers/fixtures/enum_explicit_interface_witness/root.xr",
+      "expected": {
+        "exit_code": 0,
+        "stdout_utf8": "color\ncolor\n",
+        "stderr_utf8": ""
+      },
+      "rationale": "Both enum values call the explicitly implemented Named.label through a constrained generic witness. The incomplete original Color still must reject for its missing label, not because it is an enum.",
+      "packages": [
+        "P09",
+        "P10"
+      ],
+      "legacy_case": null,
+      "status": "PREPARED_NOT_EXECUTED",
+      "execution": {
+        "vm": "NOT_RUN",
+        "native": "NOT_RUN"
+      },
+      "new_entry": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "remaining_qualification": [
+        "Compile the preserved or explicitly ported source through the accepted fixed Source/Program interface. The old rejection is historical evidence, not target qualification.",
+        "Each fresh backend must satisfy this independent expectation; complete affected ownership, cancellation, resource, physical release, FI, sanitizer and provider gates."
+      ]
     }
   ]
 }

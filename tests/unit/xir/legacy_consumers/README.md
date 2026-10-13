@@ -16,7 +16,7 @@ change a product interface, or authorize deletion of an old test.
   The class cleanup target fixture uses ordinary methods and contextual init,
   retains both named tests and adds during-call guard checks. It has not compiled
   on a product producer; its real test discovery/execution remains required.
-- `runner_routes.json` binds 508 explicitly reviewed FFI/JSON/generic/nullable/cleanup/
+- `runner_routes.json` binds 673 explicitly reviewed FFI/JSON/generic/nullable/cleanup/
   generator/numeric/closure/module/call/ownership/control/comptime and regression inputs to their original source and expectation hashes,
   compiler positions/codes/text and actual runner entries. Future files are not
   automatically assigned by a directory wildcard. Missing expectations and
@@ -24,8 +24,14 @@ change a product interface, or authorize deletion of an old test.
   frozen comptime/protocol scope without changing the 27 historical families.
   Five old no-call rejection cases are explicitly marked for required positive
   Task320 migration; the original rejection records remain historical evidence.
-- `oracles.json` records twenty-three independent output/result/rejection expectations.
-  Inputs under `fixtures/` retain complete original source literals byte for byte.
+  Three read-class cases require ordinary method/init source ports. Six old
+  generator prohibitions become positive resumable/wait/cleanup obligations.
+  The incomplete enum implementation still rejects for missing its interface
+  method, paired with a separate implemented witness. Read structs/generic
+  receiver obligations and the unresolved cycle strategy stay distinct.
+- `oracles.json` records thirty-three independent output/result/rejection expectations.
+  Preserved original literals remain byte-for-byte inputs. Target source ports
+  are separately named and hashed; they do not overwrite historical originals.
   They have no invented new entry adapters. The StringBuilder input still requires
   a reviewed semantic migration to its replacement; it is not an API to restore.
 - `audit.py snapshot` calls the existing runners' actual discovery and expectation

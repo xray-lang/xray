@@ -14,6 +14,62 @@ class PreparationChecks(unittest.TestCase):
         cls.runner_routes = audit.read_json(audit.HERE / "runner_routes.json")
         cls.legacy = audit.read_json(audit.ROOT / "tests/unit/xir/product_consumers/legacy_responsibilities.json")
 
+    def test_frozen_transitions_cannot_fall_back_to_original_rejection(self):
+        for identity in audit.FROZEN_TARGETS:
+            with self.subTest(identity=identity):
+                bad = copy.deepcopy(self.runner_routes)
+                row = next(r for r in bad["cases"] if r["case_id"] == identity)
+                del row["target_disposition"]
+                with self.assertRaisesRegex(ValueError, "required disposition"):
+                    audit.validate_runner_routes(bad, self.mapping)
+
+    def test_read_class_positive_requires_the_ported_source(self):
+        bad = copy.deepcopy(self.runner_routes)
+        row = next(r for r in bad["cases"] if r["case_id"].endswith("/007_in_instance_mutating_method.xr"))
+        del row["target_source_port"]
+        with self.assertRaisesRegex(ValueError, "requires its frozen source port"):
+            audit.validate_runner_routes(bad, self.mapping)
+
+    def test_read_struct_cannot_inherit_read_class_mutation_permission(self):
+        bad = copy.deepcopy(self.runner_routes)
+        row = next(r for r in bad["cases"] if r["case_id"].endswith("/read_struct_mutating_receiver.xr"))
+        row["target_disposition"] = {"kind": "POSITIVE_AFTER_FROZEN_CLASS_SURFACE_PORT",
+                                     "owner_package": "P10", "qualification": "NOT_RUN", "reason": "invalid class-only permission"}
+        with self.assertRaisesRegex(ValueError, "required disposition"):
+            audit.validate_runner_routes(bad, self.mapping)
+
+    def test_incomplete_enum_witness_is_not_an_implemented_positive(self):
+        bad = copy.deepcopy(self.runner_routes)
+        row = next(r for r in bad["cases"] if r["case_id"].endswith("/020_enum_implements_rejected.xr"))
+        row["target_disposition"]["kind"] = "POSITIVE_AFTER_FROZEN_CLASS_SURFACE_PORT"
+        with self.assertRaisesRegex(ValueError, "required disposition"):
+            audit.validate_runner_routes(bad, self.mapping)
+
+    def test_generator_abandonment_cannot_omit_or_duplicate_cleanup(self):
+        expected = next(r["expected"] for r in self.oracles["cases"] if r["id"] == "generator_break_cleanup_once")
+        for output in ("1\n", "1\n2\ncleanup\n", "1\ncleanup\ncleanup\n"):
+            with self.subTest(output=output), self.assertRaises(ValueError):
+                audit.compare_required(expected, dict(expected, stdout_utf8=output))
+
+    def test_generator_wait_cannot_be_null_or_exhaustion(self):
+        for identity, outputs in (("generator_await_preserves_stream", ("7\n", "null\n7\n2\n")),
+                                  ("generator_scheduler_yield_is_not_value", ("1\nnull\n2\n", "1\n"))):
+            expected = next(r["expected"] for r in self.oracles["cases"] if r["id"] == identity)
+            for output in outputs:
+                with self.subTest(identity=identity, output=output), self.assertRaises(ValueError):
+                    audit.compare_required(expected, dict(expected, stdout_utf8=output))
+
+    def test_class_parameter_mutation_cannot_be_a_value_snapshot(self):
+        for identity in ("read_class_direct_mutation", "read_class_indirect_mutation", "read_class_inherited_mutation"):
+            expected = next(r["expected"] for r in self.oracles["cases"] if r["id"] == identity)
+            with self.subTest(identity=identity), self.assertRaises(ValueError):
+                audit.compare_required(expected, dict(expected, stdout_utf8="1\n"))
+
+    def test_enum_witness_must_execute_both_generic_calls(self):
+        expected = next(r["expected"] for r in self.oracles["cases"] if r["id"] == "enum_explicit_interface_witness")
+        with self.assertRaises(ValueError):
+            audit.compare_required(expected, dict(expected, stdout_utf8="color\n"))
+
     def test_regression_positive_cannot_become_arbitrary_rejection(self):
         bad = copy.deepcopy(self.runner_routes)
         row = next(r for r in bad["cases"] if "original_regression_obligation" in r)

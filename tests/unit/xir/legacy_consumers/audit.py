@@ -17,6 +17,22 @@ HERE = Path(__file__).resolve().parent
 ROOT = HERE.parents[3]
 
 
+# Explicit reviewed transitions prevent old negative oracles becoming target truth.
+FROZEN_TARGETS = {}
+for name in ("001_comptime_non_const_call.xr", "012_comptime_fixed_array_element_call.xr",
+             "014_comptime_struct_field_call.xr", "016_comptime_member_access_call.xr",
+             "028_comptime_block_return_call.xr"):
+    FROZEN_TARGETS["tests/compile_errors/binding/" + name] = ("POSITIVE_REQUIRED_BY_FROZEN_TASK320", "P11")
+for name in ("007_in_instance_mutating_method.xr", "008_in_instance_indirect_mutating_method.xr",
+             "009_in_instance_inherited_mutating_method.xr"):
+    FROZEN_TARGETS["tests/compile_errors/ownership/" + name] = ("POSITIVE_AFTER_FROZEN_CLASS_SURFACE_PORT", "P10")
+for name in ("generator_await_rejected.xr", "generator_coro_yield_rejected.xr",
+             "generator_defer_rejected.xr", "generator_dynamic_call_rejected.xr",
+             "generator_scope_rejected.xr", "generator_transitive_suspend_rejected.xr"):
+    FROZEN_TARGETS["tests/compile_errors/concurrency/" + name] = ("POSITIVE_REQUIRED_BY_FROZEN_TASK316", "P08")
+FROZEN_TARGETS["tests/compile_errors/oop/020_enum_implements_rejected.xr"] = ("REJECTION_FOR_MISSING_INTERFACE_REQUIREMENT", "P10")
+
+
 def load_module(name: str, relative: str):
     spec = importlib.util.spec_from_file_location(name, ROOT / relative)
     module = importlib.util.module_from_spec(spec)
@@ -155,9 +171,14 @@ def validate_runner_routes(data: dict, responsibilities: dict, actual_entries: d
                     or not path.is_file() or file_record(path)["lf_sha256"] != port["lf_sha256"]):
                 raise ValueError("planned source port changed or incorrectly qualified")
         disposition = row.get("target_disposition")
-        if disposition and (disposition["kind"] != "POSITIVE_REQUIRED_BY_FROZEN_TASK320"
-                            or disposition["owner_package"] != "P11" or disposition["qualification"] != "NOT_RUN"):
-            raise ValueError("planned comptime migration cannot publish qualification")
+        target = FROZEN_TARGETS.get(identity)
+        if target is not None or disposition is not None:
+            if (not disposition or target != (disposition["kind"], disposition["owner_package"])
+                    or disposition["owner_package"] not in row["producer_packages"]
+                    or disposition["qualification"] != "NOT_RUN" or not disposition.get("reason")):
+                raise ValueError("planned frozen migration cannot publish qualification or change its required disposition")
+            if target[0] == "POSITIVE_AFTER_FROZEN_CLASS_SURFACE_PORT" and not port:
+                raise ValueError("planned read-class migration requires its frozen source port")
         if "original_rejection_oracle" in row:
             oracle = row["original_rejection_oracle"]
             path, kind = errors.expected_path_for(source)
@@ -181,6 +202,7 @@ def validate_runner_routes(data: dict, responsibilities: dict, actual_entries: d
             "reviewed_runner_entry_links": sum(len(r["original_runner_entries"]) for r in rows),
             "reviewed_regression_inputs": sum(any(e["suite"] == "regression" for e in r["original_runner_entries"]) for r in rows),
             "prepared_target_source_ports": sum("target_source_port" in r for r in rows),
+            "reviewed_frozen_target_transitions": sum("target_disposition" in r for r in rows),
             "reviewed_rejection_cases": sum("original_rejection_oracle" in r for r in rows),
             "reviewed_rejection_oracles": sum(r.get("original_rejection_oracle", {}).get("state") == "PRESENT" for r in rows),
             "reviewed_missing_rejection_oracles": sum(r.get("original_rejection_oracle", {}).get("state") == "MISSING" for r in rows)}
