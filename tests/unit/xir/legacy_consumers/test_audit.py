@@ -14,6 +14,65 @@ class PreparationChecks(unittest.TestCase):
         cls.runner_routes = audit.read_json(audit.HERE / "runner_routes.json")
         cls.legacy = audit.read_json(audit.ROOT / "tests/unit/xir/product_consumers/legacy_responsibilities.json")
 
+    def test_type_positive_named_manifest_cannot_be_omitted(self):
+        bad = copy.deepcopy(self.runner_routes)
+        row = next(r for r in bad["cases"] if r["case_id"].endswith("1206_generic_functions.xr"))
+        row.pop("original_named_test_obligation")
+        with self.assertRaisesRegex(ValueError, "falsely qualified discovery"):
+            audit.validate_runner_routes(bad, self.mapping)
+
+    def test_generic_equal_migration_cannot_keep_future_instance_proof(self):
+        bad = copy.deepcopy(self.runner_routes)
+        row = next(r for r in bad["cases"] if r["case_id"].endswith("1437_generic_method_param_contract.xr"))
+        row["target_disposition"]["kind"] = "INSTANCE_ONLY_EQUAL_PROOF"
+        with self.assertRaisesRegex(ValueError, "required disposition"):
+            audit.validate_runner_routes(bad, self.mapping)
+
+    def test_generic_method_storage_domain_is_not_narrowed_by_one_equal_method(self):
+        source = (audit.HERE / "fixtures/method_owned_equal_constraint/root.xr").read_text(encoding="utf-8")
+        self.assertIn("class Box<T>", source)
+        self.assertIn("touch(value: ref T) where T: Equal", source)
+        self.assertNotIn("class Box<T: Equal>", source)
+
+    def test_read_retained_array_copies_cannot_alias_source_after_return_or_store(self):
+        for prefix in ("1454", "1455", "1456", "1457", "1458", "1459", "1460", "1461", "1462", "1463", "1466", "1467", "1468", "1469", "1470"):
+            expected = next(r["expected"] for r in self.oracles["cases"] if r["id"].startswith("read_retention_" + prefix))
+            lines = expected["stdout_utf8"].splitlines()
+            first = lines.index("1")
+            lines[first] = "9"
+            for backend in ("vm", "native"):
+                with self.subTest(prefix=prefix, backend=backend), self.assertRaises(ValueError):
+                    audit.compare_required(expected, dict(expected, stdout_utf8="\n".join(lines) + "\n"))
+
+    def test_read_captured_lengths_do_not_follow_caller_growth(self):
+        for prefix, wrong in (("1464", "3\n4\n4\n"), ("1465", "4\n5\n5\n")):
+            expected = next(r["expected"] for r in self.oracles["cases"] if r["id"].startswith("read_retention_" + prefix))
+            with self.subTest(prefix=prefix), self.assertRaises(ValueError):
+                audit.compare_required(expected, dict(expected, stdout_utf8=wrong))
+
+    def test_native_provider_early_return_cannot_qualify_execution(self):
+        expected = next(r["expected"] for r in self.oracles["cases"] if r["id"] == "native_type_net_test_cannot_succeed_by_early_return")
+        for observed in ({"exit_code": 0, "all_required_tests_passed": True},
+                         dict(expected, normal_listener_and_connection_observed=False),
+                         dict(expected, accepted_connections=0), dict(expected, provider_skip_accepted=True)):
+            with self.assertRaises(ValueError):
+                audit.compare_required(expected, observed)
+
+    def test_json_extracted_map_must_be_a_named_independent_value(self):
+        source = (audit.HERE / "fixtures/json_as_object_logical_value/root.xr").read_text(encoding="utf-8")
+        self.assertIn("var extracted = obj!", source)
+        self.assertIn('JSON.get<i64>(value, ["z"]), null', source)
+        self.assertIn("value = extracted", source)
+        self.assertNotIn("obj!.set", source)
+
+    def test_full_generic_function_port_keeps_all_twenty_six_original_tests(self):
+        row = next(r for r in self.runner_routes["cases"] if r["case_id"].endswith("1206_generic_functions.xr"))
+        self.assertEqual(len(row["original_named_test_obligation"]["declarations"]), 26)
+        self.assertEqual(len(row["named_test_migration"]["mapping"]), 26)
+        expected = next(r["expected"] for r in self.oracles["cases"] if r["id"] == "generic_functions_require_equal_at_definition")
+        with self.assertRaises(ValueError):
+            audit.compare_required(expected, dict(expected, required_test_names=expected["required_test_names"][:-1]))
+
     def test_nested_observations_keep_exact_numeric_and_boolean_types(self):
         expected = {"bytes": [0, 1], "outcome": {"value": 1, "valid": True}}
         audit.compare_required(expected, {"bytes": [0, 1], "outcome": {"value": 1, "valid": True, "detail": "extra"}})

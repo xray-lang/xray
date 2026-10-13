@@ -1,0 +1,20 @@
+class Holder {
+    items: Array<i64>
+
+    init() {
+        this.items = [1, 2]
+    }
+}
+
+fn leak(holder: Holder) -> Array<i64> {
+    return holder.items
+}
+
+var holder = Holder()
+var leaked = leak(holder)
+print(len(leaked))
+
+holder.items[0] = 9
+print(leaked[0])
+leaked[1] = 7
+print(holder.items[1])

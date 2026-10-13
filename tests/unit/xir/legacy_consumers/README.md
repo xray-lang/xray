@@ -16,12 +16,12 @@ change a product interface, or authorize deletion of an old test.
   The class cleanup target fixture uses ordinary methods and contextual init,
   retains both named tests and adds during-call guard checks. It has not compiled
   on a product producer; its real test discovery/execution remains required.
-- `runner_routes.json` binds 1539 explicitly reviewed FFI/JSON/generic/nullable/cleanup/
+- `runner_routes.json` binds 1647 explicitly reviewed FFI/JSON/generic/nullable/cleanup/
   generator/numeric/closure/module/call/ownership/control/comptime and regression inputs to their original source and expectation hashes,
   compiler positions/codes/text and actual runner entries. Future files are not
   automatically assigned by a directory wildcard. Missing expectations and
-  diagnostic position gaps remain explicit. Twenty-one reviewed imported inputs bind
-  their twenty-three complete XR/XRD companion links; an earlier import-authority failure
+  diagnostic position gaps remain explicit. Twenty-two reviewed imported inputs bind
+  their twenty-four complete XR/XRD companion links; an earlier import-authority failure
   cannot satisfy the requested callback effect, method or parameter-mode error.
   Existing Task318 Q12 names the
   frozen comptime/protocol scope without changing the 27 historical families.
@@ -75,7 +75,20 @@ change a product interface, or authorize deletion of an old test.
   preserve semantic data only, without an executable replacement source; type
   renaming cannot restore old load/store/window/compare methods. Unknown library
   entries and unsafe overlapping loans remain unresolved producer obligations.
-- `oracles.json` records 103 independent output/result/rejection expectations.
+  The type-positive review adds all 108 selected regression inputs, with 89
+  test files/429 new textual declarations and nineteen original run entries.
+  Totals are 1713 entry links and 231 files/916 textual declarations. Thirty
+  selected complete source drafts preserve all named identities and original
+  program chains, including seventeen READ Array return/store/capture programs.
+  Retained values stay independent after source writes and caller growth.
+  Other drafts declare equality at the function or specific method, retire
+  move-Array, require explicit mutable fixed-array views and actual ref writeback.
+  The JSON extraction draft mutates a named logical Map and explicitly rebinds
+  the original JSON.Value. Type-query, generic proof, reflection/opaque TypeId
+  and protocol gaps still require published owners. There are 81 unexecuted
+  source drafts, plus the earlier partial reverse program. A loopback oracle
+  rejects native-type qualification from an early successful return.
+- `oracles.json` records 138 independent output/result/rejection expectations.
   Preserved original literals remain byte-for-byte inputs. Target source ports
   are separately named and hashed; they do not overwrite historical originals.
   New Atomic fixtures separately require legal direct-var rebinding and

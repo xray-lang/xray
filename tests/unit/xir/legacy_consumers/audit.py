@@ -59,6 +59,20 @@ for name in ("array_expression_view.xr", "ref_range_place.xr", "slice_borrow_ret
         "POSITIVE_EXPLICIT_VIEW_PERMISSION_AFTER_FROZEN_TASK313_PORT", "P10")
 FROZEN_TARGETS["tests/diff/cases/semantics/evaluation_order/e5_e6_assignment_order.xr"] = (
     "POSITIVE_WRITABLE_ARRAY_PLACE_AFTER_FROZEN_TASK313_PORT", "P10")
+for path in (
+    "tests/regression/12_type_checking/1206_generic_functions.xr",
+    "tests/regression/13_types/1437_generic_method_param_contract.xr",
+):
+    FROZEN_TARGETS[path] = ("POSITIVE_DEFINED_EQUAL_PROOF_AFTER_FROZEN_TASK313_PORT", "P10")
+for path in (
+    "tests/regression/12_type_checking/1223_generic_channel.xr",
+    "tests/regression/13_types/1433_param_mode_move_source_action.xr",
+    "tests/regression/13_types/1453_closure_contextual_param_mode_writeback.xr",
+    "tests/regression/13_types/1314_json_instance_methods.xr",
+):
+    FROZEN_TARGETS[path] = ("POSITIVE_LOGICAL_VALUE_TRANSFER_AFTER_FROZEN_TASK313_PORT", "P10")
+FROZEN_TARGETS["tests/regression/13_types/1407_fixed_array_repeat_value_lanes_and_borrow.xr"] = (
+    "POSITIVE_EXCLUSIVE_FIXED_ARRAY_VIEW_AFTER_FROZEN_TASK313_PORT", "P10")
 
 
 # The demanded imported diagnostics depend on these complete companion inputs.
@@ -99,6 +113,8 @@ IMPORTED_ORACLE_INPUTS["tests/diff/cases/semantics/collections/array_fill_ref_cr
     "tests/diff/cases/semantics/collections/_array_fill_ref_lib.xr",)
 IMPORTED_ORACLE_INPUTS["tests/diff/cases/semantics/slice/slice_borrow_return_cross_module.xr"] = (
     "tests/diff/cases/semantics/slice/_borrow_return_lib.xr",)
+IMPORTED_ORACLE_INPUTS["tests/regression/13_types/1436_param_mode_imported_contracts.xr"] = (
+    "tests/fixtures/param_mode_import_lib.xr",)
 TARGET_PORT_IMPORTS = {
     "tests/diff/cases/semantics/slice/slice_borrow_return_cross_module.xr": (
         "tests/unit/xir/legacy_consumers/fixtures/slice_borrow_cross_module/_borrow_return_lib.xr",)
@@ -269,7 +285,8 @@ def validate_runner_routes(data: dict, responsibilities: dict, actual_entries: d
                 raise ValueError("original regression positive/test discovery obligation changed")
         named = row.get("original_named_test_obligation")
         reviewed_named_scope = identity.startswith(("tests/regression/08_mem/", "tests/regression/08_oop/",
-                                                    "tests/regression/09_advanced/", "tests/regression/11_coroutine/"))
+                                                    "tests/regression/09_advanced/", "tests/regression/11_coroutine/",
+                                                    "tests/regression/12_type_checking/", "tests/regression/13_types/"))
         if named is not None or (reviewed_named_scope and regression and regression["entry"] == "test"):
             if (not named or named["state"] != "REVIEWED_TEXTUAL_DECLARATIONS_NOT_RUNTIME_DISCOVERY"
                     or named["execution"] != "NOT_RUN"

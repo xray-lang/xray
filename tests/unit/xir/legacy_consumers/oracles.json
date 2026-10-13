@@ -4094,6 +4094,1949 @@
       ],
       "target_source_status": "PENDING_PUBLISHED_DECLARATION_OWNED_LIBRARY_REPLACEMENT",
       "obligation_scope": "SEMANTIC_DUTY_PRESERVED_TARGET_SOURCE_NOT_PREPARED"
+    },
+    {
+      "id": "full_class_type_tests_ordinary_methods",
+      "inputs": [
+        {
+          "path": "tests/regression/12_type_checking/1204_class_type.xr",
+          "lf_sha256": "24032f7ac8601661e3780667f1018d11dcd1b5c9246319bf17e588feaabd2a61",
+          "role": "preserved_source"
+        },
+        {
+          "path": "tests/unit/xir/legacy_consumers/fixtures/type_class_full_ordinary_methods/root.xr",
+          "lf_sha256": "81a8c9a301da3677cf2311456e63dad579fe884c7419e8176b903b816946a5f1",
+          "role": "target_source"
+        },
+        {
+          "path": "spec/source/sections/010-9-generics.md",
+          "lf_sha256": "30e64282857276fec788c81ee7467fc3b936814db26e6c5e5d902afffe6cc404",
+          "role": "frozen_spec"
+        },
+        {
+          "path": "spec/source/sections/003-2-type-system.md",
+          "lf_sha256": "f4e970b0cc728c19f65a4d1b2a13cd0e572431dcac3f6f20cd06d23046ebea8a",
+          "role": "frozen_spec"
+        }
+      ],
+      "expected": {
+        "exit_code": 0,
+        "required_test_names": [
+          "test_class_instance_type",
+          "test_class_field_access",
+          "test_class_method_call",
+          "test_class_method_return_type",
+          "test_inheritance_type",
+          "test_inheritance_field",
+          "test_inheritance_method",
+          "test_polymorphism",
+          "test_array_literal_contextual_supertype",
+          "test_static_field",
+          "test_static_method",
+          "test_box_int",
+          "test_box_second_instance",
+          "test_box_mutation",
+          "test_is_operator_class",
+          "test_is_operator_primitives",
+          "test_different_classes"
+        ],
+        "all_required_tests_passed": true
+      },
+      "rationale": "All original class/inheritance/static/box/nominal tests remain: Point5, Dog override, contextual Array<Animal>, root counter states, independent boxes and geometry. Root/static state is not worker-safe by inference.",
+      "packages": [
+        "P02",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P11",
+        "P12",
+        "P13",
+        "P14"
+      ],
+      "legacy_case": null,
+      "status": "PREPARED_NOT_EXECUTED",
+      "execution": {
+        "vm": "NOT_RUN",
+        "native": "NOT_RUN"
+      },
+      "new_entry": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "remaining_qualification": [
+        "Actual fresh published Source/Program test/run entry and real named report; declaration text, printing success or empty run is not body execution.",
+        "Independently satisfy VM/native observations and full affected FI/resource/live/requested/work/borrow/owner lifetime/cancel/physical/safety/generated-C/provider gates; preserve original stress, all assertions and P20 mixed scope.",
+        "Bind unresolved identity/query/opaque TypeId/generic proof/Iterable/derive/StringBuilder/JSON/provider declarations and metadata to their actual owners; no guessed alias or arbitrary compile rejection."
+      ],
+      "execution_source": "tests/unit/xir/legacy_consumers/fixtures/type_class_full_ordinary_methods/root.xr",
+      "execution_entry": "test"
+    },
+    {
+      "id": "type_query_tuple_uses_ordered_field_types",
+      "inputs": [
+        {
+          "path": "tests/regression/12_type_checking/1205_typeof_operator.xr",
+          "lf_sha256": "713a95b004c9438904047ba81fb61aa2b6a38e933bf4b1a0fede37a66e745dd8",
+          "role": "preserved_source"
+        },
+        {
+          "path": "tests/unit/xir/legacy_consumers/fixtures/type_query_tuple_field_identity/root.xr",
+          "lf_sha256": "e4d7c67e21b2132da28138fca1aae8573925fcba17f70e3be6c2e2bf83951339",
+          "role": "target_source"
+        },
+        {
+          "path": "spec/source/sections/010-9-generics.md",
+          "lf_sha256": "30e64282857276fec788c81ee7467fc3b936814db26e6c5e5d902afffe6cc404",
+          "role": "frozen_spec"
+        },
+        {
+          "path": "spec/source/sections/003-2-type-system.md",
+          "lf_sha256": "f4e970b0cc728c19f65a4d1b2a13cd0e572431dcac3f6f20cd06d23046ebea8a",
+          "role": "frozen_spec"
+        }
+      ],
+      "expected": {
+        "exit_code": 0,
+        "required_test_names": [
+          "test_typeof_int",
+          "test_typeof_float",
+          "test_typeof_string",
+          "test_typeof_bool",
+          "test_typeof_null",
+          "test_typeof_array",
+          "test_typeof_map",
+          "test_typeof_set",
+          "test_typeof_function",
+          "test_typeof_arrow",
+          "test_typeof_closure",
+          "test_typeof_class_instance",
+          "test_typeof_subclass_instance",
+          "test_typeof_conditional",
+          "test_typeof_switch",
+          "test_typeof_after_assignment",
+          "test_typeof_expression_result",
+          "test_typeof_empty_array",
+          "test_typeof_empty_map",
+          "test_typeof_empty_set",
+          "test_typeof_bytes",
+          "test_typeof_regex",
+          "test_typeof_json_object",
+          "test_typeof_nested_json",
+          "test_typeof_tuple2",
+          "test_typeof_tuple3",
+          "test_is_tuple",
+          "test_typeof_enum"
+        ],
+        "all_required_tests_passed": true
+      },
+      "rationale": "Full original query tests remain. Tuple(i64,string) has a disjoint N-6 intersection with Tuple(f64,bool), so same arity alone cannot imply type compatibility; nominal constructor syntax is ported, while exact query metadata still needs published owners.",
+      "packages": [
+        "P02",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P11",
+        "P12",
+        "P13",
+        "P14"
+      ],
+      "legacy_case": null,
+      "status": "PREPARED_NOT_EXECUTED",
+      "execution": {
+        "vm": "NOT_RUN",
+        "native": "NOT_RUN"
+      },
+      "new_entry": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "remaining_qualification": [
+        "Actual fresh published Source/Program test/run entry and real named report; declaration text, printing success or empty run is not body execution.",
+        "Independently satisfy VM/native observations and full affected FI/resource/live/requested/work/borrow/owner lifetime/cancel/physical/safety/generated-C/provider gates; preserve original stress, all assertions and P20 mixed scope.",
+        "Bind unresolved identity/query/opaque TypeId/generic proof/Iterable/derive/StringBuilder/JSON/provider declarations and metadata to their actual owners; no guessed alias or arbitrary compile rejection."
+      ],
+      "execution_source": "tests/unit/xir/legacy_consumers/fixtures/type_query_tuple_field_identity/root.xr",
+      "execution_entry": "test"
+    },
+    {
+      "id": "generic_functions_require_equal_at_definition",
+      "inputs": [
+        {
+          "path": "tests/regression/12_type_checking/1206_generic_functions.xr",
+          "lf_sha256": "f0c0587b1ff3b7dff8fcf6879677b00ce7adcf100928913d3b7f9f88c8469be6",
+          "role": "preserved_source"
+        },
+        {
+          "path": "tests/unit/xir/legacy_consumers/fixtures/generic_equal_and_logical_reads/root.xr",
+          "lf_sha256": "13ebb5cb5a5ed0ddd30a6f632a31792b5b2f674a49805ee8894e9ac6e534db95",
+          "role": "target_source"
+        },
+        {
+          "path": "spec/source/sections/010-9-generics.md",
+          "lf_sha256": "30e64282857276fec788c81ee7467fc3b936814db26e6c5e5d902afffe6cc404",
+          "role": "frozen_spec"
+        },
+        {
+          "path": "spec/source/sections/003-2-type-system.md",
+          "lf_sha256": "f4e970b0cc728c19f65a4d1b2a13cd0e572431dcac3f6f20cd06d23046ebea8a",
+          "role": "frozen_spec"
+        }
+      ],
+      "expected": {
+        "exit_code": 0,
+        "required_test_names": [
+          "test_identity_int",
+          "test_identity_string",
+          "test_identity_float",
+          "test_identity_bool",
+          "test_identity_array",
+          "test_pair_creation",
+          "test_swap_types",
+          "test_triple_params",
+          "test_array_first",
+          "test_array_last",
+          "test_array_swap_elements",
+          "test_array_contains",
+          "test_array_find_index",
+          "test_wrap_in_array",
+          "test_repeat_value",
+          "test_generic_apply",
+          "test_generic_transform",
+          "test_safe_get",
+          "test_find_element",
+          "test_nested_generic_calls",
+          "test_chained_generic_operations",
+          "test_generic_with_map",
+          "test_generic_merge_arrays",
+          "test_infer_from_return_usage",
+          "test_infer_from_array_literal",
+          "test_generic_with_default"
+        ],
+        "all_required_tests_passed": true
+      },
+      "rationale": "All26 tests retain scalar/Array identity, pair/swap, first/last, swapElements, contains/findIndex with declared Equal, callback transform/find/defaults, nested calls and Map get exact outer unwrap. No future concrete argument supplies a missing equality proof.",
+      "packages": [
+        "P02",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P11",
+        "P12",
+        "P13",
+        "P14"
+      ],
+      "legacy_case": null,
+      "status": "PREPARED_NOT_EXECUTED",
+      "execution": {
+        "vm": "NOT_RUN",
+        "native": "NOT_RUN"
+      },
+      "new_entry": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "remaining_qualification": [
+        "Actual fresh published Source/Program test/run entry and real named report; declaration text, printing success or empty run is not body execution.",
+        "Independently satisfy VM/native observations and full affected FI/resource/live/requested/work/borrow/owner lifetime/cancel/physical/safety/generated-C/provider gates; preserve original stress, all assertions and P20 mixed scope.",
+        "Bind unresolved identity/query/opaque TypeId/generic proof/Iterable/derive/StringBuilder/JSON/provider declarations and metadata to their actual owners; no guessed alias or arbitrary compile rejection."
+      ],
+      "execution_source": "tests/unit/xir/legacy_consumers/fixtures/generic_equal_and_logical_reads/root.xr",
+      "execution_entry": "test"
+    },
+    {
+      "id": "generic_channel_retains_logical_values",
+      "inputs": [
+        {
+          "path": "tests/regression/12_type_checking/1223_generic_channel.xr",
+          "lf_sha256": "ba3d6a11654c0f0c9cda1287a1651b8e4147c869c62d627c5f3c1a9c2939aabe",
+          "role": "preserved_source"
+        },
+        {
+          "path": "tests/unit/xir/legacy_consumers/fixtures/generic_channel_logical_payloads/root.xr",
+          "lf_sha256": "05a459ceecafeed4674f8be7d7e9af503e0092abf3ff079a05876d2b24891dad",
+          "role": "target_source"
+        },
+        {
+          "path": "spec/source/sections/010-9-generics.md",
+          "lf_sha256": "30e64282857276fec788c81ee7467fc3b936814db26e6c5e5d902afffe6cc404",
+          "role": "frozen_spec"
+        },
+        {
+          "path": "spec/source/sections/003-2-type-system.md",
+          "lf_sha256": "f4e970b0cc728c19f65a4d1b2a13cd0e572431dcac3f6f20cd06d23046ebea8a",
+          "role": "frozen_spec"
+        }
+      ],
+      "expected": {
+        "exit_code": 0,
+        "required_test_names": [
+          "test_generic_channel"
+        ],
+        "all_required_tests_passed": true
+      },
+      "rationale": "All scalar/string/FIFO/Array/empty/full/nullable obligations remain. First source changed99 still sends1; received Array push7 leaves source length3. Old stdout ok sidecar is preserved but does not prove this named body executed.",
+      "packages": [
+        "P02",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P11",
+        "P12",
+        "P13",
+        "P14"
+      ],
+      "legacy_case": null,
+      "status": "PREPARED_NOT_EXECUTED",
+      "execution": {
+        "vm": "NOT_RUN",
+        "native": "NOT_RUN"
+      },
+      "new_entry": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "remaining_qualification": [
+        "Actual fresh published Source/Program test/run entry and real named report; declaration text, printing success or empty run is not body execution.",
+        "Independently satisfy VM/native observations and full affected FI/resource/live/requested/work/borrow/owner lifetime/cancel/physical/safety/generated-C/provider gates; preserve original stress, all assertions and P20 mixed scope.",
+        "Bind unresolved identity/query/opaque TypeId/generic proof/Iterable/derive/StringBuilder/JSON/provider declarations and metadata to their actual owners; no guessed alias or arbitrary compile rejection."
+      ],
+      "execution_source": "tests/unit/xir/legacy_consumers/fixtures/generic_channel_logical_payloads/root.xr",
+      "execution_entry": "test"
+    },
+    {
+      "id": "json_as_object_is_value_and_explicit_rebind",
+      "inputs": [
+        {
+          "path": "tests/regression/13_types/1314_json_instance_methods.xr",
+          "lf_sha256": "f9bcd5b6553b61910cba63f0004b4e68c51342799b94a63a4feafcf7d2d5c046",
+          "role": "preserved_source"
+        },
+        {
+          "path": "tests/unit/xir/legacy_consumers/fixtures/json_as_object_logical_value/root.xr",
+          "lf_sha256": "052d32d15228e3b0df4b640b795c94e0b502aaa22075a2d518455d03a054d3c7",
+          "role": "target_source"
+        },
+        {
+          "path": "spec/source/sections/010-9-generics.md",
+          "lf_sha256": "30e64282857276fec788c81ee7467fc3b936814db26e6c5e5d902afffe6cc404",
+          "role": "frozen_spec"
+        },
+        {
+          "path": "spec/source/sections/003-2-type-system.md",
+          "lf_sha256": "f4e970b0cc728c19f65a4d1b2a13cd0e572431dcac3f6f20cd06d23046ebea8a",
+          "role": "frozen_spec"
+        }
+      ],
+      "expected": {
+        "exit_code": 0,
+        "required_test_names": [
+          "test_as_object_map_value_copy_and_rebind",
+          "test_as_object_rejects_non_object"
+        ],
+        "all_required_tests_passed": true
+      },
+      "rationale": "Both original tests remain. Extracted Map receives z3; original JSON.Value still lacks z until explicit rebind, after which z3 is visible. Scalar asObject still yields absence.",
+      "packages": [
+        "P02",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P11",
+        "P12",
+        "P13",
+        "P14"
+      ],
+      "legacy_case": null,
+      "status": "PREPARED_NOT_EXECUTED",
+      "execution": {
+        "vm": "NOT_RUN",
+        "native": "NOT_RUN"
+      },
+      "new_entry": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "remaining_qualification": [
+        "Actual fresh published Source/Program test/run entry and real named report; declaration text, printing success or empty run is not body execution.",
+        "Independently satisfy VM/native observations and full affected FI/resource/live/requested/work/borrow/owner lifetime/cancel/physical/safety/generated-C/provider gates; preserve original stress, all assertions and P20 mixed scope.",
+        "Bind unresolved identity/query/opaque TypeId/generic proof/Iterable/derive/StringBuilder/JSON/provider declarations and metadata to their actual owners; no guessed alias or arbitrary compile rejection."
+      ],
+      "execution_source": "tests/unit/xir/legacy_consumers/fixtures/json_as_object_logical_value/root.xr",
+      "execution_entry": "test"
+    },
+    {
+      "id": "fixed_array_full_lanes_mutable_view",
+      "inputs": [
+        {
+          "path": "tests/regression/13_types/1407_fixed_array_repeat_value_lanes_and_borrow.xr",
+          "lf_sha256": "d9e84f4d14971b99e86631d57eb05f96f37da3fbf8bb654b6857f782c44c2d2f",
+          "role": "preserved_source"
+        },
+        {
+          "path": "tests/unit/xir/legacy_consumers/fixtures/fixed_array_explicit_mutable_borrow/root.xr",
+          "lf_sha256": "7dce9041c4cf5e9b372f6811d2b6a9527d22c56e375547a91a38cc1c0188a939",
+          "role": "target_source"
+        },
+        {
+          "path": "spec/source/sections/010-9-generics.md",
+          "lf_sha256": "30e64282857276fec788c81ee7467fc3b936814db26e6c5e5d902afffe6cc404",
+          "role": "frozen_spec"
+        },
+        {
+          "path": "spec/source/sections/003-2-type-system.md",
+          "lf_sha256": "f4e970b0cc728c19f65a4d1b2a13cd0e572431dcac3f6f20cd06d23046ebea8a",
+          "role": "frozen_spec"
+        }
+      ],
+      "expected": {
+        "exit_code": 0,
+        "required_test_names": [
+          "test_fixed_array_repeat_nested_value_lanes_and_borrowing"
+        ],
+        "all_required_tests_passed": true
+      },
+      "rationale": "All fixed/nested/value/string/struct/Array/Holder lanes remain; explicit MutSlice stores99 then its last use ends before owner read, ordinary READ sum3 and REF slot42 remain.",
+      "packages": [
+        "P02",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P11",
+        "P12",
+        "P13",
+        "P14"
+      ],
+      "legacy_case": null,
+      "status": "PREPARED_NOT_EXECUTED",
+      "execution": {
+        "vm": "NOT_RUN",
+        "native": "NOT_RUN"
+      },
+      "new_entry": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "remaining_qualification": [
+        "Actual fresh published Source/Program test/run entry and real named report; declaration text, printing success or empty run is not body execution.",
+        "Independently satisfy VM/native observations and full affected FI/resource/live/requested/work/borrow/owner lifetime/cancel/physical/safety/generated-C/provider gates; preserve original stress, all assertions and P20 mixed scope.",
+        "Bind unresolved identity/query/opaque TypeId/generic proof/Iterable/derive/StringBuilder/JSON/provider declarations and metadata to their actual owners; no guessed alias or arbitrary compile rejection."
+      ],
+      "execution_source": "tests/unit/xir/legacy_consumers/fixtures/fixed_array_explicit_mutable_borrow/root.xr",
+      "execution_entry": "test"
+    },
+    {
+      "id": "contextual_ref_closures_must_write_back",
+      "inputs": [
+        {
+          "path": "tests/regression/13_types/1431_closure_contextual_param_modes.xr",
+          "lf_sha256": "14f35a1c6d92aaf12c8652c2ad8856fdc0397753cc604f6c615d3a8dd29401f6",
+          "role": "preserved_source"
+        },
+        {
+          "path": "tests/unit/xir/legacy_consumers/fixtures/contextual_ref_closure_writeback/root.xr",
+          "lf_sha256": "9caa81f10900ea988939ac8367c1a5bc8793a2329f5421a324bd45b1e8782d94",
+          "role": "target_source"
+        },
+        {
+          "path": "spec/source/sections/010-9-generics.md",
+          "lf_sha256": "30e64282857276fec788c81ee7467fc3b936814db26e6c5e5d902afffe6cc404",
+          "role": "frozen_spec"
+        },
+        {
+          "path": "spec/source/sections/003-2-type-system.md",
+          "lf_sha256": "f4e970b0cc728c19f65a4d1b2a13cd0e572431dcac3f6f20cd06d23046ebea8a",
+          "role": "frozen_spec"
+        }
+      ],
+      "expected": {
+        "exit_code": 0,
+        "required_test_names": [
+          "test_closure_contextual_ref_out_modes"
+        ],
+        "all_required_tests_passed": true
+      },
+      "rationale": "Bump returns2 and caller2; fill returns7 and caller42. Return-only success cannot satisfy reference semantics.",
+      "packages": [
+        "P02",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P11",
+        "P12",
+        "P13",
+        "P14"
+      ],
+      "legacy_case": null,
+      "status": "PREPARED_NOT_EXECUTED",
+      "execution": {
+        "vm": "NOT_RUN",
+        "native": "NOT_RUN"
+      },
+      "new_entry": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "remaining_qualification": [
+        "Actual fresh published Source/Program test/run entry and real named report; declaration text, printing success or empty run is not body execution.",
+        "Independently satisfy VM/native observations and full affected FI/resource/live/requested/work/borrow/owner lifetime/cancel/physical/safety/generated-C/provider gates; preserve original stress, all assertions and P20 mixed scope.",
+        "Bind unresolved identity/query/opaque TypeId/generic proof/Iterable/derive/StringBuilder/JSON/provider declarations and metadata to their actual owners; no guessed alias or arbitrary compile rejection."
+      ],
+      "execution_source": "tests/unit/xir/legacy_consumers/fixtures/contextual_ref_closure_writeback/root.xr",
+      "execution_entry": "test"
+    },
+    {
+      "id": "nonoverlapping_ref_places_write_values",
+      "inputs": [
+        {
+          "path": "tests/regression/13_types/1422_param_mode_nonoverlap_projection_alias.xr",
+          "lf_sha256": "98e0f16671c3ea994834d1b33899c04f4dc39d47a9e4ed17b10d92638e27c0e4",
+          "role": "preserved_source"
+        },
+        {
+          "path": "tests/unit/xir/legacy_consumers/fixtures/nonoverlap_ref_projection_writeback/root.xr",
+          "lf_sha256": "625f900471068ce9ccca8eb7660e5014e5bbf3ff76286b629ec48ff5bbe9c7ba",
+          "role": "target_source"
+        },
+        {
+          "path": "spec/source/sections/010-9-generics.md",
+          "lf_sha256": "30e64282857276fec788c81ee7467fc3b936814db26e6c5e5d902afffe6cc404",
+          "role": "frozen_spec"
+        },
+        {
+          "path": "spec/source/sections/003-2-type-system.md",
+          "lf_sha256": "f4e970b0cc728c19f65a4d1b2a13cd0e572431dcac3f6f20cd06d23046ebea8a",
+          "role": "frozen_spec"
+        }
+      ],
+      "expected": {
+        "exit_code": 0,
+        "required_test_names": [
+          "test_member_nonoverlap_compile_surface",
+          "test_index_nonoverlap_compile_surface"
+        ],
+        "all_required_tests_passed": true
+      },
+      "rationale": "Both original compile-surface bodies now assert actual pair3/7 and Array2/7, preserving read snapshot and disjoint ref selectors instead of just accepting a call.",
+      "packages": [
+        "P02",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P11",
+        "P12",
+        "P13",
+        "P14"
+      ],
+      "legacy_case": null,
+      "status": "PREPARED_NOT_EXECUTED",
+      "execution": {
+        "vm": "NOT_RUN",
+        "native": "NOT_RUN"
+      },
+      "new_entry": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "remaining_qualification": [
+        "Actual fresh published Source/Program test/run entry and real named report; declaration text, printing success or empty run is not body execution.",
+        "Independently satisfy VM/native observations and full affected FI/resource/live/requested/work/borrow/owner lifetime/cancel/physical/safety/generated-C/provider gates; preserve original stress, all assertions and P20 mixed scope.",
+        "Bind unresolved identity/query/opaque TypeId/generic proof/Iterable/derive/StringBuilder/JSON/provider declarations and metadata to their actual owners; no guessed alias or arbitrary compile rejection."
+      ],
+      "execution_source": "tests/unit/xir/legacy_consumers/fixtures/nonoverlap_ref_projection_writeback/root.xr",
+      "execution_entry": "test"
+    },
+    {
+      "id": "copyable_array_inputs_do_not_consume_bindings",
+      "inputs": [
+        {
+          "path": "tests/regression/13_types/1433_param_mode_move_source_action.xr",
+          "lf_sha256": "04bfd3cbed2cff51e3d30a093b3713028c1be7af0578df7de53507e73f23a87e",
+          "role": "preserved_source"
+        },
+        {
+          "path": "tests/unit/xir/legacy_consumers/fixtures/copyable_array_parameter_is_read_value/root.xr",
+          "lf_sha256": "07b08129494f6a775fb02a64d7c2ed921fc8f4c0cdcc853caa3933a7438d2165",
+          "role": "target_source"
+        },
+        {
+          "path": "spec/source/sections/010-9-generics.md",
+          "lf_sha256": "30e64282857276fec788c81ee7467fc3b936814db26e6c5e5d902afffe6cc404",
+          "role": "frozen_spec"
+        },
+        {
+          "path": "spec/source/sections/003-2-type-system.md",
+          "lf_sha256": "f4e970b0cc728c19f65a4d1b2a13cd0e572431dcac3f6f20cd06d23046ebea8a",
+          "role": "frozen_spec"
+        }
+      ],
+      "expected": {
+        "exit_code": 0,
+        "required_test_names": [
+          "test_read_formal_preserves_values_and_accepts_fresh_owners"
+        ],
+        "all_required_tests_passed": true
+      },
+      "rationale": "Original lengths2/3/4 and usable xs/ys remain under declared READ copy semantics; noncopyable consuming-resource obligations stay separate.",
+      "packages": [
+        "P02",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P11",
+        "P12",
+        "P13",
+        "P14"
+      ],
+      "legacy_case": null,
+      "status": "PREPARED_NOT_EXECUTED",
+      "execution": {
+        "vm": "NOT_RUN",
+        "native": "NOT_RUN"
+      },
+      "new_entry": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "remaining_qualification": [
+        "Actual fresh published Source/Program test/run entry and real named report; declaration text, printing success or empty run is not body execution.",
+        "Independently satisfy VM/native observations and full affected FI/resource/live/requested/work/borrow/owner lifetime/cancel/physical/safety/generated-C/provider gates; preserve original stress, all assertions and P20 mixed scope.",
+        "Bind unresolved identity/query/opaque TypeId/generic proof/Iterable/derive/StringBuilder/JSON/provider declarations and metadata to their actual owners; no guessed alias or arbitrary compile rejection."
+      ],
+      "execution_source": "tests/unit/xir/legacy_consumers/fixtures/copyable_array_parameter_is_read_value/root.xr",
+      "execution_entry": "test"
+    },
+    {
+      "id": "ordinary_class_receiver_and_array_mutation",
+      "inputs": [
+        {
+          "path": "tests/regression/13_types/1434_param_mode_receiver_mutation_boundary.xr",
+          "lf_sha256": "b3e6c177139c293355ee4f9d3fa745ccdc1728600889ca2b66909df6ff71994e",
+          "role": "preserved_source"
+        },
+        {
+          "path": "tests/unit/xir/legacy_consumers/fixtures/ordinary_class_mutation_and_array_place/root.xr",
+          "lf_sha256": "d8325d16e4aa2f19ccea2d8dea88363cf4a432ed88c76ef750b802e2985c40d3",
+          "role": "target_source"
+        },
+        {
+          "path": "spec/source/sections/010-9-generics.md",
+          "lf_sha256": "30e64282857276fec788c81ee7467fc3b936814db26e6c5e5d902afffe6cc404",
+          "role": "frozen_spec"
+        },
+        {
+          "path": "spec/source/sections/003-2-type-system.md",
+          "lf_sha256": "f4e970b0cc728c19f65a4d1b2a13cd0e572431dcac3f6f20cd06d23046ebea8a",
+          "role": "frozen_spec"
+        }
+      ],
+      "expected": {
+        "exit_code": 0,
+        "required_test_names": [
+          "test_receiver_mutation_does_not_need_ref_marker"
+        ],
+        "all_required_tests_passed": true
+      },
+      "rationale": "Counter identity changes1->2 and Array grows[1,2,3]; class no ref receiver, Array still requires writable place. init(v:i64) has a non-field parameter and cannot infer v from value.",
+      "packages": [
+        "P02",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P11",
+        "P12",
+        "P13",
+        "P14"
+      ],
+      "legacy_case": null,
+      "status": "PREPARED_NOT_EXECUTED",
+      "execution": {
+        "vm": "NOT_RUN",
+        "native": "NOT_RUN"
+      },
+      "new_entry": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "remaining_qualification": [
+        "Actual fresh published Source/Program test/run entry and real named report; declaration text, printing success or empty run is not body execution.",
+        "Independently satisfy VM/native observations and full affected FI/resource/live/requested/work/borrow/owner lifetime/cancel/physical/safety/generated-C/provider gates; preserve original stress, all assertions and P20 mixed scope.",
+        "Bind unresolved identity/query/opaque TypeId/generic proof/Iterable/derive/StringBuilder/JSON/provider declarations and metadata to their actual owners; no guessed alias or arbitrary compile rejection."
+      ],
+      "execution_source": "tests/unit/xir/legacy_consumers/fixtures/ordinary_class_mutation_and_array_place/root.xr",
+      "execution_entry": "test"
+    },
+    {
+      "id": "generic_method_equal_is_method_owned",
+      "inputs": [
+        {
+          "path": "tests/regression/13_types/1437_generic_method_param_contract.xr",
+          "lf_sha256": "8d377754cce82944e27d99d610f1a8bc9156f835a55904498319630722f6dd3d",
+          "role": "preserved_source"
+        },
+        {
+          "path": "tests/unit/xir/legacy_consumers/fixtures/method_owned_equal_constraint/root.xr",
+          "lf_sha256": "207dc79c05fbce3b028018ec9b8d3bd0c77249f7ca73a7f115d0ff6d6194a6cf",
+          "role": "target_source"
+        },
+        {
+          "path": "spec/source/sections/010-9-generics.md",
+          "lf_sha256": "30e64282857276fec788c81ee7467fc3b936814db26e6c5e5d902afffe6cc404",
+          "role": "frozen_spec"
+        },
+        {
+          "path": "spec/source/sections/003-2-type-system.md",
+          "lf_sha256": "f4e970b0cc728c19f65a4d1b2a13cd0e572431dcac3f6f20cd06d23046ebea8a",
+          "role": "frozen_spec"
+        }
+      ],
+      "expected": {
+        "exit_code": 0,
+        "required_test_names": [
+          "test_generic_method_keeps_ref_contract"
+        ],
+        "all_required_tests_passed": true
+      },
+      "rationale": "Only touch declares T:Equal, while storage-only Box<T> keeps its full type domain; explicit ref value7 and stored7 comparison remain.",
+      "packages": [
+        "P02",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P11",
+        "P12",
+        "P13",
+        "P14"
+      ],
+      "legacy_case": null,
+      "status": "PREPARED_NOT_EXECUTED",
+      "execution": {
+        "vm": "NOT_RUN",
+        "native": "NOT_RUN"
+      },
+      "new_entry": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "remaining_qualification": [
+        "Actual fresh published Source/Program test/run entry and real named report; declaration text, printing success or empty run is not body execution.",
+        "Independently satisfy VM/native observations and full affected FI/resource/live/requested/work/borrow/owner lifetime/cancel/physical/safety/generated-C/provider gates; preserve original stress, all assertions and P20 mixed scope.",
+        "Bind unresolved identity/query/opaque TypeId/generic proof/Iterable/derive/StringBuilder/JSON/provider declarations and metadata to their actual owners; no guessed alias or arbitrary compile rejection."
+      ],
+      "execution_source": "tests/unit/xir/legacy_consumers/fixtures/method_owned_equal_constraint/root.xr",
+      "execution_entry": "test"
+    },
+    {
+      "id": "closure_read_ref_and_array_value_modes",
+      "inputs": [
+        {
+          "path": "tests/regression/13_types/1453_closure_contextual_param_mode_writeback.xr",
+          "lf_sha256": "265647be162b23c3a179abc48b2f836d4a0b78f095111fdb7ca9f367ce6abf6a",
+          "role": "preserved_source"
+        },
+        {
+          "path": "tests/unit/xir/legacy_consumers/fixtures/closure_read_ref_and_array_values/root.xr",
+          "lf_sha256": "9bbbadaec7b0f8367d48ac1bb36210885cedabdebc63353c161f3c65c78d3cd7",
+          "role": "target_source"
+        },
+        {
+          "path": "spec/source/sections/010-9-generics.md",
+          "lf_sha256": "30e64282857276fec788c81ee7467fc3b936814db26e6c5e5d902afffe6cc404",
+          "role": "frozen_spec"
+        },
+        {
+          "path": "spec/source/sections/003-2-type-system.md",
+          "lf_sha256": "f4e970b0cc728c19f65a4d1b2a13cd0e572431dcac3f6f20cd06d23046ebea8a",
+          "role": "frozen_spec"
+        }
+      ],
+      "expected": {
+        "exit_code": 0,
+        "required_test_names": [
+          "test_contextual_read_closure_reads_value",
+          "test_contextual_ref_closure_writes_back",
+          "test_contextual_read_closure_preserves_array"
+        ],
+        "all_required_tests_passed": true
+      },
+      "rationale": "Three original bodies remain: READ result105 keeps caller5, REF returns/stores2, Array result3 keeps source binding usable and growable to4.",
+      "packages": [
+        "P02",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P11",
+        "P12",
+        "P13",
+        "P14"
+      ],
+      "legacy_case": null,
+      "status": "PREPARED_NOT_EXECUTED",
+      "execution": {
+        "vm": "NOT_RUN",
+        "native": "NOT_RUN"
+      },
+      "new_entry": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "remaining_qualification": [
+        "Actual fresh published Source/Program test/run entry and real named report; declaration text, printing success or empty run is not body execution.",
+        "Independently satisfy VM/native observations and full affected FI/resource/live/requested/work/borrow/owner lifetime/cancel/physical/safety/generated-C/provider gates; preserve original stress, all assertions and P20 mixed scope.",
+        "Bind unresolved identity/query/opaque TypeId/generic proof/Iterable/derive/StringBuilder/JSON/provider declarations and metadata to their actual owners; no guessed alias or arbitrary compile rejection."
+      ],
+      "execution_source": "tests/unit/xir/legacy_consumers/fixtures/closure_read_ref_and_array_values/root.xr",
+      "execution_entry": "test"
+    },
+    {
+      "id": "comptime_block_control_preserves_every_assertion",
+      "inputs": [
+        {
+          "path": "tests/regression/13_types/1411_comptime_block_assert.xr",
+          "lf_sha256": "56abd6adf56726356b76b2e8adcd077b232ea779624ea2cc69c0417b51833bf0",
+          "role": "preserved_source"
+        },
+        {
+          "path": "tests/unit/xir/legacy_consumers/fixtures/comptime_block_with_declared_point/root.xr",
+          "lf_sha256": "8518ed6434cca2eb5c8233a9b7b945829b3c13e6f78a2d34acd2cc27406c0833",
+          "role": "target_source"
+        },
+        {
+          "path": "spec/source/sections/010-9-generics.md",
+          "lf_sha256": "30e64282857276fec788c81ee7467fc3b936814db26e6c5e5d902afffe6cc404",
+          "role": "frozen_spec"
+        },
+        {
+          "path": "spec/source/sections/003-2-type-system.md",
+          "lf_sha256": "f4e970b0cc728c19f65a4d1b2a13cd0e572431dcac3f6f20cd06d23046ebea8a",
+          "role": "frozen_spec"
+        }
+      ],
+      "expected": {
+        "exit_code": 0,
+        "required_test_names": [
+          "test_comptime_block_erased"
+        ],
+        "all_required_tests_passed": true
+      },
+      "rationale": "Declare intended Point i64 fields, retain every original compile assertion and all selected/unselected, compound, while/for/labeled/for-in control. Static missing source declaration is preserved as a fixture issue, not an observed product regression.",
+      "packages": [
+        "P02",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P11",
+        "P12",
+        "P13",
+        "P14"
+      ],
+      "legacy_case": null,
+      "status": "PREPARED_NOT_EXECUTED",
+      "execution": {
+        "vm": "NOT_RUN",
+        "native": "NOT_RUN"
+      },
+      "new_entry": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "remaining_qualification": [
+        "Actual fresh published Source/Program test/run entry and real named report; declaration text, printing success or empty run is not body execution.",
+        "Independently satisfy VM/native observations and full affected FI/resource/live/requested/work/borrow/owner lifetime/cancel/physical/safety/generated-C/provider gates; preserve original stress, all assertions and P20 mixed scope.",
+        "Bind unresolved identity/query/opaque TypeId/generic proof/Iterable/derive/StringBuilder/JSON/provider declarations and metadata to their actual owners; no guessed alias or arbitrary compile rejection."
+      ],
+      "execution_source": "tests/unit/xir/legacy_consumers/fixtures/comptime_block_with_declared_point/root.xr",
+      "execution_entry": "test"
+    },
+    {
+      "id": "read_retention_1454_read_param_return_alias",
+      "inputs": [
+        {
+          "path": "tests/regression/13_types/1454_read_param_return_alias.xr",
+          "lf_sha256": "3db700337f940329adf9031070a73ae48a09429e7636ab43c4396b4d84e2c458",
+          "role": "preserved_source"
+        },
+        {
+          "path": "tests/unit/xir/legacy_consumers/fixtures/read_value_retention_1454/root.xr",
+          "lf_sha256": "84cec6fe42668b8bb406b40149d4524635977a6ef46c57463319b475b05e8229",
+          "role": "target_source"
+        },
+        {
+          "path": "spec/source/sections/003-2-type-system.md",
+          "lf_sha256": "f4e970b0cc728c19f65a4d1b2a13cd0e572431dcac3f6f20cd06d23046ebea8a",
+          "role": "frozen_spec"
+        }
+      ],
+      "expected": {
+        "exit_code": 0,
+        "stdout_utf8": "2\n1\n2\n"
+      },
+      "rationale": "Full original function/holder/Array/Map/local alias/forward/method/closure chain is preserved. Source9 does not change retained1; retained7 does not change source2, or captured original length survives caller growth. These outputs prove value semantics only, not physical owner release.",
+      "packages": [
+        "P02",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P11",
+        "P12",
+        "P13",
+        "P14"
+      ],
+      "legacy_case": null,
+      "status": "PREPARED_NOT_EXECUTED",
+      "execution": {
+        "vm": "NOT_RUN",
+        "native": "NOT_RUN"
+      },
+      "new_entry": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "remaining_qualification": [
+        "Actual fresh published Source/Program test/run entry and real named report; declaration text, printing success or empty run is not body execution.",
+        "Independently satisfy VM/native observations and full affected FI/resource/live/requested/work/borrow/owner lifetime/cancel/physical/safety/generated-C/provider gates; preserve original stress, all assertions and P20 mixed scope.",
+        "Bind unresolved identity/query/opaque TypeId/generic proof/Iterable/derive/StringBuilder/JSON/provider declarations and metadata to their actual owners; no guessed alias or arbitrary compile rejection."
+      ],
+      "execution_source": "tests/unit/xir/legacy_consumers/fixtures/read_value_retention_1454/root.xr",
+      "execution_entry": "run"
+    },
+    {
+      "id": "read_retention_1455_read_param_field_projection_return_alias",
+      "inputs": [
+        {
+          "path": "tests/regression/13_types/1455_read_param_field_projection_return_alias.xr",
+          "lf_sha256": "80520ebba8935e6241d2dfc78e5ed697eb9d337830b0f81ac94460fc58746273",
+          "role": "preserved_source"
+        },
+        {
+          "path": "tests/unit/xir/legacy_consumers/fixtures/read_value_retention_1455/root.xr",
+          "lf_sha256": "1400fbaed074bd51ea1c0aca2d59672fcc64d85cb7265f5b1ce5115b7762a1c8",
+          "role": "target_source"
+        },
+        {
+          "path": "spec/source/sections/003-2-type-system.md",
+          "lf_sha256": "f4e970b0cc728c19f65a4d1b2a13cd0e572431dcac3f6f20cd06d23046ebea8a",
+          "role": "frozen_spec"
+        }
+      ],
+      "expected": {
+        "exit_code": 0,
+        "stdout_utf8": "2\n1\n2\n"
+      },
+      "rationale": "Full original function/holder/Array/Map/local alias/forward/method/closure chain is preserved. Source9 does not change retained1; retained7 does not change source2, or captured original length survives caller growth. These outputs prove value semantics only, not physical owner release.",
+      "packages": [
+        "P02",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P11",
+        "P12",
+        "P13",
+        "P14"
+      ],
+      "legacy_case": null,
+      "status": "PREPARED_NOT_EXECUTED",
+      "execution": {
+        "vm": "NOT_RUN",
+        "native": "NOT_RUN"
+      },
+      "new_entry": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "remaining_qualification": [
+        "Actual fresh published Source/Program test/run entry and real named report; declaration text, printing success or empty run is not body execution.",
+        "Independently satisfy VM/native observations and full affected FI/resource/live/requested/work/borrow/owner lifetime/cancel/physical/safety/generated-C/provider gates; preserve original stress, all assertions and P20 mixed scope.",
+        "Bind unresolved identity/query/opaque TypeId/generic proof/Iterable/derive/StringBuilder/JSON/provider declarations and metadata to their actual owners; no guessed alias or arbitrary compile rejection."
+      ],
+      "execution_source": "tests/unit/xir/legacy_consumers/fixtures/read_value_retention_1455/root.xr",
+      "execution_entry": "run"
+    },
+    {
+      "id": "read_retention_1456_read_param_field_store_local_alias",
+      "inputs": [
+        {
+          "path": "tests/regression/13_types/1456_read_param_field_store_local_alias.xr",
+          "lf_sha256": "8bd04ab6edbb1c9702ad1395c2f8ab99380d1282554c1cc57487304bfb931a61",
+          "role": "preserved_source"
+        },
+        {
+          "path": "tests/unit/xir/legacy_consumers/fixtures/read_value_retention_1456/root.xr",
+          "lf_sha256": "7178b6bb095bd2295ee02ec97e76cb1533b5fedd1b37c0fd3e74b2e351970cfe",
+          "role": "target_source"
+        },
+        {
+          "path": "spec/source/sections/003-2-type-system.md",
+          "lf_sha256": "f4e970b0cc728c19f65a4d1b2a13cd0e572431dcac3f6f20cd06d23046ebea8a",
+          "role": "frozen_spec"
+        }
+      ],
+      "expected": {
+        "exit_code": 0,
+        "stdout_utf8": "1\n2\n2\n"
+      },
+      "rationale": "Full original function/holder/Array/Map/local alias/forward/method/closure chain is preserved. Source9 does not change retained1; retained7 does not change source2, or captured original length survives caller growth. These outputs prove value semantics only, not physical owner release.",
+      "packages": [
+        "P02",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P11",
+        "P12",
+        "P13",
+        "P14"
+      ],
+      "legacy_case": null,
+      "status": "PREPARED_NOT_EXECUTED",
+      "execution": {
+        "vm": "NOT_RUN",
+        "native": "NOT_RUN"
+      },
+      "new_entry": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "remaining_qualification": [
+        "Actual fresh published Source/Program test/run entry and real named report; declaration text, printing success or empty run is not body execution.",
+        "Independently satisfy VM/native observations and full affected FI/resource/live/requested/work/borrow/owner lifetime/cancel/physical/safety/generated-C/provider gates; preserve original stress, all assertions and P20 mixed scope.",
+        "Bind unresolved identity/query/opaque TypeId/generic proof/Iterable/derive/StringBuilder/JSON/provider declarations and metadata to their actual owners; no guessed alias or arbitrary compile rejection."
+      ],
+      "execution_source": "tests/unit/xir/legacy_consumers/fixtures/read_value_retention_1456/root.xr",
+      "execution_entry": "run"
+    },
+    {
+      "id": "read_retention_1457_read_param_index_store_local_alias",
+      "inputs": [
+        {
+          "path": "tests/regression/13_types/1457_read_param_index_store_local_alias.xr",
+          "lf_sha256": "cc9bfe3007b7855086a3c6a49f4c7d76cc7b294bcdbe7c00b2db67eba85ffc51",
+          "role": "preserved_source"
+        },
+        {
+          "path": "tests/unit/xir/legacy_consumers/fixtures/read_value_retention_1457/root.xr",
+          "lf_sha256": "c51c79839079f144c79e792273bee165215fb0de017acfed93e31af31708a92d",
+          "role": "target_source"
+        },
+        {
+          "path": "spec/source/sections/003-2-type-system.md",
+          "lf_sha256": "f4e970b0cc728c19f65a4d1b2a13cd0e572431dcac3f6f20cd06d23046ebea8a",
+          "role": "frozen_spec"
+        }
+      ],
+      "expected": {
+        "exit_code": 0,
+        "stdout_utf8": "1\n2\n2\n"
+      },
+      "rationale": "Full original function/holder/Array/Map/local alias/forward/method/closure chain is preserved. Source9 does not change retained1; retained7 does not change source2, or captured original length survives caller growth. These outputs prove value semantics only, not physical owner release.",
+      "packages": [
+        "P02",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P11",
+        "P12",
+        "P13",
+        "P14"
+      ],
+      "legacy_case": null,
+      "status": "PREPARED_NOT_EXECUTED",
+      "execution": {
+        "vm": "NOT_RUN",
+        "native": "NOT_RUN"
+      },
+      "new_entry": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "remaining_qualification": [
+        "Actual fresh published Source/Program test/run entry and real named report; declaration text, printing success or empty run is not body execution.",
+        "Independently satisfy VM/native observations and full affected FI/resource/live/requested/work/borrow/owner lifetime/cancel/physical/safety/generated-C/provider gates; preserve original stress, all assertions and P20 mixed scope.",
+        "Bind unresolved identity/query/opaque TypeId/generic proof/Iterable/derive/StringBuilder/JSON/provider declarations and metadata to their actual owners; no guessed alias or arbitrary compile rejection."
+      ],
+      "execution_source": "tests/unit/xir/legacy_consumers/fixtures/read_value_retention_1457/root.xr",
+      "execution_entry": "run"
+    },
+    {
+      "id": "read_retention_1458_read_param_array_store_local_alias",
+      "inputs": [
+        {
+          "path": "tests/regression/13_types/1458_read_param_array_store_local_alias.xr",
+          "lf_sha256": "c65e602e420112e15a7667c2b27c1581a9108b5ee1057d715813c65bd18452b7",
+          "role": "preserved_source"
+        },
+        {
+          "path": "tests/unit/xir/legacy_consumers/fixtures/read_value_retention_1458/root.xr",
+          "lf_sha256": "2a1d94f346c6aace23e7e573e6bd4d926ffdcd82eb63b7a89dd78afcf00fa1af",
+          "role": "target_source"
+        },
+        {
+          "path": "spec/source/sections/003-2-type-system.md",
+          "lf_sha256": "f4e970b0cc728c19f65a4d1b2a13cd0e572431dcac3f6f20cd06d23046ebea8a",
+          "role": "frozen_spec"
+        }
+      ],
+      "expected": {
+        "exit_code": 0,
+        "stdout_utf8": "1\n2\n2\n"
+      },
+      "rationale": "Full original function/holder/Array/Map/local alias/forward/method/closure chain is preserved. Source9 does not change retained1; retained7 does not change source2, or captured original length survives caller growth. These outputs prove value semantics only, not physical owner release.",
+      "packages": [
+        "P02",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P11",
+        "P12",
+        "P13",
+        "P14"
+      ],
+      "legacy_case": null,
+      "status": "PREPARED_NOT_EXECUTED",
+      "execution": {
+        "vm": "NOT_RUN",
+        "native": "NOT_RUN"
+      },
+      "new_entry": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "remaining_qualification": [
+        "Actual fresh published Source/Program test/run entry and real named report; declaration text, printing success or empty run is not body execution.",
+        "Independently satisfy VM/native observations and full affected FI/resource/live/requested/work/borrow/owner lifetime/cancel/physical/safety/generated-C/provider gates; preserve original stress, all assertions and P20 mixed scope.",
+        "Bind unresolved identity/query/opaque TypeId/generic proof/Iterable/derive/StringBuilder/JSON/provider declarations and metadata to their actual owners; no guessed alias or arbitrary compile rejection."
+      ],
+      "execution_source": "tests/unit/xir/legacy_consumers/fixtures/read_value_retention_1458/root.xr",
+      "execution_entry": "run"
+    },
+    {
+      "id": "read_retention_1459_read_param_map_store_local_alias",
+      "inputs": [
+        {
+          "path": "tests/regression/13_types/1459_read_param_map_store_local_alias.xr",
+          "lf_sha256": "966bb7bb51fc8191dd5a81f24a62ee8569fdaa5e5ab52db2d1061789ea986caa",
+          "role": "preserved_source"
+        },
+        {
+          "path": "tests/unit/xir/legacy_consumers/fixtures/read_value_retention_1459/root.xr",
+          "lf_sha256": "cd82bb2073bce5d13daec5d8c530f7f09beb0364fe9199bbc14ea55f0206e2b0",
+          "role": "target_source"
+        },
+        {
+          "path": "spec/source/sections/003-2-type-system.md",
+          "lf_sha256": "f4e970b0cc728c19f65a4d1b2a13cd0e572431dcac3f6f20cd06d23046ebea8a",
+          "role": "frozen_spec"
+        }
+      ],
+      "expected": {
+        "exit_code": 0,
+        "stdout_utf8": "1\n2\n3\n"
+      },
+      "rationale": "Full original function/holder/Array/Map/local alias/forward/method/closure chain is preserved. Source9 does not change retained1; retained7 does not change source2, or captured original length survives caller growth. These outputs prove value semantics only, not physical owner release.",
+      "packages": [
+        "P02",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P11",
+        "P12",
+        "P13",
+        "P14"
+      ],
+      "legacy_case": null,
+      "status": "PREPARED_NOT_EXECUTED",
+      "execution": {
+        "vm": "NOT_RUN",
+        "native": "NOT_RUN"
+      },
+      "new_entry": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "remaining_qualification": [
+        "Actual fresh published Source/Program test/run entry and real named report; declaration text, printing success or empty run is not body execution.",
+        "Independently satisfy VM/native observations and full affected FI/resource/live/requested/work/borrow/owner lifetime/cancel/physical/safety/generated-C/provider gates; preserve original stress, all assertions and P20 mixed scope.",
+        "Bind unresolved identity/query/opaque TypeId/generic proof/Iterable/derive/StringBuilder/JSON/provider declarations and metadata to their actual owners; no guessed alias or arbitrary compile rejection."
+      ],
+      "execution_source": "tests/unit/xir/legacy_consumers/fixtures/read_value_retention_1459/root.xr",
+      "execution_entry": "run"
+    },
+    {
+      "id": "read_retention_1460_read_param_local_alias_return",
+      "inputs": [
+        {
+          "path": "tests/regression/13_types/1460_read_param_local_alias_return.xr",
+          "lf_sha256": "c2b78cd7182b0011d34d9c8676b72187c655e44957fdf2e87ea4fba330e6e99b",
+          "role": "preserved_source"
+        },
+        {
+          "path": "tests/unit/xir/legacy_consumers/fixtures/read_value_retention_1460/root.xr",
+          "lf_sha256": "fb738555b42cde46b46983fd4988c83f8774cbe430e949d2ebf18ab756f900a1",
+          "role": "target_source"
+        },
+        {
+          "path": "spec/source/sections/003-2-type-system.md",
+          "lf_sha256": "f4e970b0cc728c19f65a4d1b2a13cd0e572431dcac3f6f20cd06d23046ebea8a",
+          "role": "frozen_spec"
+        }
+      ],
+      "expected": {
+        "exit_code": 0,
+        "stdout_utf8": "2\n1\n2\n"
+      },
+      "rationale": "Full original function/holder/Array/Map/local alias/forward/method/closure chain is preserved. Source9 does not change retained1; retained7 does not change source2, or captured original length survives caller growth. These outputs prove value semantics only, not physical owner release.",
+      "packages": [
+        "P02",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P11",
+        "P12",
+        "P13",
+        "P14"
+      ],
+      "legacy_case": null,
+      "status": "PREPARED_NOT_EXECUTED",
+      "execution": {
+        "vm": "NOT_RUN",
+        "native": "NOT_RUN"
+      },
+      "new_entry": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "remaining_qualification": [
+        "Actual fresh published Source/Program test/run entry and real named report; declaration text, printing success or empty run is not body execution.",
+        "Independently satisfy VM/native observations and full affected FI/resource/live/requested/work/borrow/owner lifetime/cancel/physical/safety/generated-C/provider gates; preserve original stress, all assertions and P20 mixed scope.",
+        "Bind unresolved identity/query/opaque TypeId/generic proof/Iterable/derive/StringBuilder/JSON/provider declarations and metadata to their actual owners; no guessed alias or arbitrary compile rejection."
+      ],
+      "execution_source": "tests/unit/xir/legacy_consumers/fixtures/read_value_retention_1460/root.xr",
+      "execution_entry": "run"
+    },
+    {
+      "id": "read_retention_1461_read_param_local_alias_field_store",
+      "inputs": [
+        {
+          "path": "tests/regression/13_types/1461_read_param_local_alias_field_store.xr",
+          "lf_sha256": "5eab54c4dc671e7bc8ada9b5614ca13d1676bb1c4057c5d92a18105e01855b42",
+          "role": "preserved_source"
+        },
+        {
+          "path": "tests/unit/xir/legacy_consumers/fixtures/read_value_retention_1461/root.xr",
+          "lf_sha256": "6cd20987a819bbecbf5b0649f1693b8f3d822de7fb236f987906497d63b6d745",
+          "role": "target_source"
+        },
+        {
+          "path": "spec/source/sections/003-2-type-system.md",
+          "lf_sha256": "f4e970b0cc728c19f65a4d1b2a13cd0e572431dcac3f6f20cd06d23046ebea8a",
+          "role": "frozen_spec"
+        }
+      ],
+      "expected": {
+        "exit_code": 0,
+        "stdout_utf8": "1\n2\n2\n"
+      },
+      "rationale": "Full original function/holder/Array/Map/local alias/forward/method/closure chain is preserved. Source9 does not change retained1; retained7 does not change source2, or captured original length survives caller growth. These outputs prove value semantics only, not physical owner release.",
+      "packages": [
+        "P02",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P11",
+        "P12",
+        "P13",
+        "P14"
+      ],
+      "legacy_case": null,
+      "status": "PREPARED_NOT_EXECUTED",
+      "execution": {
+        "vm": "NOT_RUN",
+        "native": "NOT_RUN"
+      },
+      "new_entry": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "remaining_qualification": [
+        "Actual fresh published Source/Program test/run entry and real named report; declaration text, printing success or empty run is not body execution.",
+        "Independently satisfy VM/native observations and full affected FI/resource/live/requested/work/borrow/owner lifetime/cancel/physical/safety/generated-C/provider gates; preserve original stress, all assertions and P20 mixed scope.",
+        "Bind unresolved identity/query/opaque TypeId/generic proof/Iterable/derive/StringBuilder/JSON/provider declarations and metadata to their actual owners; no guessed alias or arbitrary compile rejection."
+      ],
+      "execution_source": "tests/unit/xir/legacy_consumers/fixtures/read_value_retention_1461/root.xr",
+      "execution_entry": "run"
+    },
+    {
+      "id": "read_retention_1462_read_param_local_alias_array_store",
+      "inputs": [
+        {
+          "path": "tests/regression/13_types/1462_read_param_local_alias_array_store.xr",
+          "lf_sha256": "5a022f8d523565ec366997985843531d22c33288b8679d66a49bb79d38148edc",
+          "role": "preserved_source"
+        },
+        {
+          "path": "tests/unit/xir/legacy_consumers/fixtures/read_value_retention_1462/root.xr",
+          "lf_sha256": "fe7557db972103537c134a4d2095897bed46573948caff3b923b3e7e26e3dd75",
+          "role": "target_source"
+        },
+        {
+          "path": "spec/source/sections/003-2-type-system.md",
+          "lf_sha256": "f4e970b0cc728c19f65a4d1b2a13cd0e572431dcac3f6f20cd06d23046ebea8a",
+          "role": "frozen_spec"
+        }
+      ],
+      "expected": {
+        "exit_code": 0,
+        "stdout_utf8": "1\n2\n2\n"
+      },
+      "rationale": "Full original function/holder/Array/Map/local alias/forward/method/closure chain is preserved. Source9 does not change retained1; retained7 does not change source2, or captured original length survives caller growth. These outputs prove value semantics only, not physical owner release.",
+      "packages": [
+        "P02",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P11",
+        "P12",
+        "P13",
+        "P14"
+      ],
+      "legacy_case": null,
+      "status": "PREPARED_NOT_EXECUTED",
+      "execution": {
+        "vm": "NOT_RUN",
+        "native": "NOT_RUN"
+      },
+      "new_entry": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "remaining_qualification": [
+        "Actual fresh published Source/Program test/run entry and real named report; declaration text, printing success or empty run is not body execution.",
+        "Independently satisfy VM/native observations and full affected FI/resource/live/requested/work/borrow/owner lifetime/cancel/physical/safety/generated-C/provider gates; preserve original stress, all assertions and P20 mixed scope.",
+        "Bind unresolved identity/query/opaque TypeId/generic proof/Iterable/derive/StringBuilder/JSON/provider declarations and metadata to their actual owners; no guessed alias or arbitrary compile rejection."
+      ],
+      "execution_source": "tests/unit/xir/legacy_consumers/fixtures/read_value_retention_1462/root.xr",
+      "execution_entry": "run"
+    },
+    {
+      "id": "read_retention_1463_read_param_reassigned_alias_array_store",
+      "inputs": [
+        {
+          "path": "tests/regression/13_types/1463_read_param_reassigned_alias_array_store.xr",
+          "lf_sha256": "43a3e134038f9b13b295d5735794341d48a1f6a1132a32bec47a97e63aa74990",
+          "role": "preserved_source"
+        },
+        {
+          "path": "tests/unit/xir/legacy_consumers/fixtures/read_value_retention_1463/root.xr",
+          "lf_sha256": "b63c4765a2f5d503d1d89166a7080f1c38519d57d2b0ca0717f9d3a6d8748d0d",
+          "role": "target_source"
+        },
+        {
+          "path": "spec/source/sections/003-2-type-system.md",
+          "lf_sha256": "f4e970b0cc728c19f65a4d1b2a13cd0e572431dcac3f6f20cd06d23046ebea8a",
+          "role": "frozen_spec"
+        }
+      ],
+      "expected": {
+        "exit_code": 0,
+        "stdout_utf8": "1\n2\n2\n"
+      },
+      "rationale": "Full original function/holder/Array/Map/local alias/forward/method/closure chain is preserved. Source9 does not change retained1; retained7 does not change source2, or captured original length survives caller growth. These outputs prove value semantics only, not physical owner release.",
+      "packages": [
+        "P02",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P11",
+        "P12",
+        "P13",
+        "P14"
+      ],
+      "legacy_case": null,
+      "status": "PREPARED_NOT_EXECUTED",
+      "execution": {
+        "vm": "NOT_RUN",
+        "native": "NOT_RUN"
+      },
+      "new_entry": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "remaining_qualification": [
+        "Actual fresh published Source/Program test/run entry and real named report; declaration text, printing success or empty run is not body execution.",
+        "Independently satisfy VM/native observations and full affected FI/resource/live/requested/work/borrow/owner lifetime/cancel/physical/safety/generated-C/provider gates; preserve original stress, all assertions and P20 mixed scope.",
+        "Bind unresolved identity/query/opaque TypeId/generic proof/Iterable/derive/StringBuilder/JSON/provider declarations and metadata to their actual owners; no guessed alias or arbitrary compile rejection."
+      ],
+      "execution_source": "tests/unit/xir/legacy_consumers/fixtures/read_value_retention_1463/root.xr",
+      "execution_entry": "run"
+    },
+    {
+      "id": "read_retention_1464_read_param_returned_closure_local_retain",
+      "inputs": [
+        {
+          "path": "tests/regression/13_types/1464_read_param_returned_closure_local_retain.xr",
+          "lf_sha256": "5dadb562f1c823e3facd30535d554bb343c447a81ce79d3066999eb761dc53df",
+          "role": "preserved_source"
+        },
+        {
+          "path": "tests/unit/xir/legacy_consumers/fixtures/read_value_retention_1464/root.xr",
+          "lf_sha256": "1ef7bf4695a2bce9ad7cd142a0b17e403b943bd6f3e4c05158e7f5a5157ba450",
+          "role": "target_source"
+        },
+        {
+          "path": "spec/source/sections/003-2-type-system.md",
+          "lf_sha256": "f4e970b0cc728c19f65a4d1b2a13cd0e572431dcac3f6f20cd06d23046ebea8a",
+          "role": "frozen_spec"
+        }
+      ],
+      "expected": {
+        "exit_code": 0,
+        "stdout_utf8": "3\n3\n4\n"
+      },
+      "rationale": "Full original function/holder/Array/Map/local alias/forward/method/closure chain is preserved. Source9 does not change retained1; retained7 does not change source2, or captured original length survives caller growth. These outputs prove value semantics only, not physical owner release.",
+      "packages": [
+        "P02",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P11",
+        "P12",
+        "P13",
+        "P14"
+      ],
+      "legacy_case": null,
+      "status": "PREPARED_NOT_EXECUTED",
+      "execution": {
+        "vm": "NOT_RUN",
+        "native": "NOT_RUN"
+      },
+      "new_entry": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "remaining_qualification": [
+        "Actual fresh published Source/Program test/run entry and real named report; declaration text, printing success or empty run is not body execution.",
+        "Independently satisfy VM/native observations and full affected FI/resource/live/requested/work/borrow/owner lifetime/cancel/physical/safety/generated-C/provider gates; preserve original stress, all assertions and P20 mixed scope.",
+        "Bind unresolved identity/query/opaque TypeId/generic proof/Iterable/derive/StringBuilder/JSON/provider declarations and metadata to their actual owners; no guessed alias or arbitrary compile rejection."
+      ],
+      "execution_source": "tests/unit/xir/legacy_consumers/fixtures/read_value_retention_1464/root.xr",
+      "execution_entry": "run"
+    },
+    {
+      "id": "read_retention_1465_read_param_stored_closure_local_retain",
+      "inputs": [
+        {
+          "path": "tests/regression/13_types/1465_read_param_stored_closure_local_retain.xr",
+          "lf_sha256": "a4e5256193a2a82f1ec4afb5d74cb942672901b455611882a7c572993569249d",
+          "role": "preserved_source"
+        },
+        {
+          "path": "tests/unit/xir/legacy_consumers/fixtures/read_value_retention_1465/root.xr",
+          "lf_sha256": "94a30b0657d7379b773db4a13501ec8c3c484b562c609e0e4a19eb0415932f90",
+          "role": "target_source"
+        },
+        {
+          "path": "spec/source/sections/003-2-type-system.md",
+          "lf_sha256": "f4e970b0cc728c19f65a4d1b2a13cd0e572431dcac3f6f20cd06d23046ebea8a",
+          "role": "frozen_spec"
+        }
+      ],
+      "expected": {
+        "exit_code": 0,
+        "stdout_utf8": "4\n4\n5\n"
+      },
+      "rationale": "Full original function/holder/Array/Map/local alias/forward/method/closure chain is preserved. Source9 does not change retained1; retained7 does not change source2, or captured original length survives caller growth. These outputs prove value semantics only, not physical owner release.",
+      "packages": [
+        "P02",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P11",
+        "P12",
+        "P13",
+        "P14"
+      ],
+      "legacy_case": null,
+      "status": "PREPARED_NOT_EXECUTED",
+      "execution": {
+        "vm": "NOT_RUN",
+        "native": "NOT_RUN"
+      },
+      "new_entry": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "remaining_qualification": [
+        "Actual fresh published Source/Program test/run entry and real named report; declaration text, printing success or empty run is not body execution.",
+        "Independently satisfy VM/native observations and full affected FI/resource/live/requested/work/borrow/owner lifetime/cancel/physical/safety/generated-C/provider gates; preserve original stress, all assertions and P20 mixed scope.",
+        "Bind unresolved identity/query/opaque TypeId/generic proof/Iterable/derive/StringBuilder/JSON/provider declarations and metadata to their actual owners; no guessed alias or arbitrary compile rejection."
+      ],
+      "execution_source": "tests/unit/xir/legacy_consumers/fixtures/read_value_retention_1465/root.xr",
+      "execution_entry": "run"
+    },
+    {
+      "id": "read_retention_1466_read_param_forwarded_local_retain",
+      "inputs": [
+        {
+          "path": "tests/regression/13_types/1466_read_param_forwarded_local_retain.xr",
+          "lf_sha256": "6d04359eebb4ec4924846784ebdd484cdbdc27830933666d54bc52c931517fe3",
+          "role": "preserved_source"
+        },
+        {
+          "path": "tests/unit/xir/legacy_consumers/fixtures/read_value_retention_1466/root.xr",
+          "lf_sha256": "6efe7391e2ec03ec3c4fc739393745412297d89d196f751038b1e546b63907d6",
+          "role": "target_source"
+        },
+        {
+          "path": "spec/source/sections/003-2-type-system.md",
+          "lf_sha256": "f4e970b0cc728c19f65a4d1b2a13cd0e572431dcac3f6f20cd06d23046ebea8a",
+          "role": "frozen_spec"
+        }
+      ],
+      "expected": {
+        "exit_code": 0,
+        "stdout_utf8": "1\n2\n2\n"
+      },
+      "rationale": "Full original function/holder/Array/Map/local alias/forward/method/closure chain is preserved. Source9 does not change retained1; retained7 does not change source2, or captured original length survives caller growth. These outputs prove value semantics only, not physical owner release.",
+      "packages": [
+        "P02",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P11",
+        "P12",
+        "P13",
+        "P14"
+      ],
+      "legacy_case": null,
+      "status": "PREPARED_NOT_EXECUTED",
+      "execution": {
+        "vm": "NOT_RUN",
+        "native": "NOT_RUN"
+      },
+      "new_entry": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "remaining_qualification": [
+        "Actual fresh published Source/Program test/run entry and real named report; declaration text, printing success or empty run is not body execution.",
+        "Independently satisfy VM/native observations and full affected FI/resource/live/requested/work/borrow/owner lifetime/cancel/physical/safety/generated-C/provider gates; preserve original stress, all assertions and P20 mixed scope.",
+        "Bind unresolved identity/query/opaque TypeId/generic proof/Iterable/derive/StringBuilder/JSON/provider declarations and metadata to their actual owners; no guessed alias or arbitrary compile rejection."
+      ],
+      "execution_source": "tests/unit/xir/legacy_consumers/fixtures/read_value_retention_1466/root.xr",
+      "execution_entry": "run"
+    },
+    {
+      "id": "read_retention_1467_read_param_method_local_retain",
+      "inputs": [
+        {
+          "path": "tests/regression/13_types/1467_read_param_method_local_retain.xr",
+          "lf_sha256": "a73bdd6b035ec5020893f80581585cd4a406609f188885078f2c711556bfaede",
+          "role": "preserved_source"
+        },
+        {
+          "path": "tests/unit/xir/legacy_consumers/fixtures/read_value_retention_1467/root.xr",
+          "lf_sha256": "748ffcdd942098aac1c035b8dd8f2a4bf680fcc3d288aff4d8dc43611867e4a1",
+          "role": "target_source"
+        },
+        {
+          "path": "spec/source/sections/003-2-type-system.md",
+          "lf_sha256": "f4e970b0cc728c19f65a4d1b2a13cd0e572431dcac3f6f20cd06d23046ebea8a",
+          "role": "frozen_spec"
+        }
+      ],
+      "expected": {
+        "exit_code": 0,
+        "stdout_utf8": "1\n2\n3\n"
+      },
+      "rationale": "Full original function/holder/Array/Map/local alias/forward/method/closure chain is preserved. Source9 does not change retained1; retained7 does not change source2, or captured original length survives caller growth. These outputs prove value semantics only, not physical owner release.",
+      "packages": [
+        "P02",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P11",
+        "P12",
+        "P13",
+        "P14"
+      ],
+      "legacy_case": null,
+      "status": "PREPARED_NOT_EXECUTED",
+      "execution": {
+        "vm": "NOT_RUN",
+        "native": "NOT_RUN"
+      },
+      "new_entry": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "remaining_qualification": [
+        "Actual fresh published Source/Program test/run entry and real named report; declaration text, printing success or empty run is not body execution.",
+        "Independently satisfy VM/native observations and full affected FI/resource/live/requested/work/borrow/owner lifetime/cancel/physical/safety/generated-C/provider gates; preserve original stress, all assertions and P20 mixed scope.",
+        "Bind unresolved identity/query/opaque TypeId/generic proof/Iterable/derive/StringBuilder/JSON/provider declarations and metadata to their actual owners; no guessed alias or arbitrary compile rejection."
+      ],
+      "execution_source": "tests/unit/xir/legacy_consumers/fixtures/read_value_retention_1467/root.xr",
+      "execution_entry": "run"
+    },
+    {
+      "id": "read_retention_1468_read_param_forward_chain_local_retain",
+      "inputs": [
+        {
+          "path": "tests/regression/13_types/1468_read_param_forward_chain_local_retain.xr",
+          "lf_sha256": "2c3ee6a9f4a4a5bbf33ffd2373823699caed20df8f49fee7037e2fb104162163",
+          "role": "preserved_source"
+        },
+        {
+          "path": "tests/unit/xir/legacy_consumers/fixtures/read_value_retention_1468/root.xr",
+          "lf_sha256": "5fa987cd2389e9482cc8dc3a61c8948b54b7fd6e2666304504e463c8cf271f9c",
+          "role": "target_source"
+        },
+        {
+          "path": "spec/source/sections/003-2-type-system.md",
+          "lf_sha256": "f4e970b0cc728c19f65a4d1b2a13cd0e572431dcac3f6f20cd06d23046ebea8a",
+          "role": "frozen_spec"
+        }
+      ],
+      "expected": {
+        "exit_code": 0,
+        "stdout_utf8": "1\n2\n2\n"
+      },
+      "rationale": "Full original function/holder/Array/Map/local alias/forward/method/closure chain is preserved. Source9 does not change retained1; retained7 does not change source2, or captured original length survives caller growth. These outputs prove value semantics only, not physical owner release.",
+      "packages": [
+        "P02",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P11",
+        "P12",
+        "P13",
+        "P14"
+      ],
+      "legacy_case": null,
+      "status": "PREPARED_NOT_EXECUTED",
+      "execution": {
+        "vm": "NOT_RUN",
+        "native": "NOT_RUN"
+      },
+      "new_entry": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "remaining_qualification": [
+        "Actual fresh published Source/Program test/run entry and real named report; declaration text, printing success or empty run is not body execution.",
+        "Independently satisfy VM/native observations and full affected FI/resource/live/requested/work/borrow/owner lifetime/cancel/physical/safety/generated-C/provider gates; preserve original stress, all assertions and P20 mixed scope.",
+        "Bind unresolved identity/query/opaque TypeId/generic proof/Iterable/derive/StringBuilder/JSON/provider declarations and metadata to their actual owners; no guessed alias or arbitrary compile rejection."
+      ],
+      "execution_source": "tests/unit/xir/legacy_consumers/fixtures/read_value_retention_1468/root.xr",
+      "execution_entry": "run"
+    },
+    {
+      "id": "read_retention_1469_read_param_method_chain_local_retain",
+      "inputs": [
+        {
+          "path": "tests/regression/13_types/1469_read_param_method_chain_local_retain.xr",
+          "lf_sha256": "d0c494437d781ed95538055ec5f8bcb321d44d9efb0a91929be09ff5711382bf",
+          "role": "preserved_source"
+        },
+        {
+          "path": "tests/unit/xir/legacy_consumers/fixtures/read_value_retention_1469/root.xr",
+          "lf_sha256": "32073c956a5a55e625bb0da75990650d84fc11c1bd20cd39b22e5e0737dbeda7",
+          "role": "target_source"
+        },
+        {
+          "path": "spec/source/sections/003-2-type-system.md",
+          "lf_sha256": "f4e970b0cc728c19f65a4d1b2a13cd0e572431dcac3f6f20cd06d23046ebea8a",
+          "role": "frozen_spec"
+        }
+      ],
+      "expected": {
+        "exit_code": 0,
+        "stdout_utf8": "1\n2\n2\n"
+      },
+      "rationale": "Full original function/holder/Array/Map/local alias/forward/method/closure chain is preserved. Source9 does not change retained1; retained7 does not change source2, or captured original length survives caller growth. These outputs prove value semantics only, not physical owner release.",
+      "packages": [
+        "P02",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P11",
+        "P12",
+        "P13",
+        "P14"
+      ],
+      "legacy_case": null,
+      "status": "PREPARED_NOT_EXECUTED",
+      "execution": {
+        "vm": "NOT_RUN",
+        "native": "NOT_RUN"
+      },
+      "new_entry": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "remaining_qualification": [
+        "Actual fresh published Source/Program test/run entry and real named report; declaration text, printing success or empty run is not body execution.",
+        "Independently satisfy VM/native observations and full affected FI/resource/live/requested/work/borrow/owner lifetime/cancel/physical/safety/generated-C/provider gates; preserve original stress, all assertions and P20 mixed scope.",
+        "Bind unresolved identity/query/opaque TypeId/generic proof/Iterable/derive/StringBuilder/JSON/provider declarations and metadata to their actual owners; no guessed alias or arbitrary compile rejection."
+      ],
+      "execution_source": "tests/unit/xir/legacy_consumers/fixtures/read_value_retention_1469/root.xr",
+      "execution_entry": "run"
+    },
+    {
+      "id": "read_retention_1470_read_param_function_method_local_retain",
+      "inputs": [
+        {
+          "path": "tests/regression/13_types/1470_read_param_function_method_local_retain.xr",
+          "lf_sha256": "65963a56e5048c03342da6cf0cb820dec104963ab0456e1d6fdff57df093ecf7",
+          "role": "preserved_source"
+        },
+        {
+          "path": "tests/unit/xir/legacy_consumers/fixtures/read_value_retention_1470/root.xr",
+          "lf_sha256": "566e9ca1c7ebb7aadd0ef1c0d04d28674b4df8363fc0afd0ae43cd03d8bc5db0",
+          "role": "target_source"
+        },
+        {
+          "path": "spec/source/sections/003-2-type-system.md",
+          "lf_sha256": "f4e970b0cc728c19f65a4d1b2a13cd0e572431dcac3f6f20cd06d23046ebea8a",
+          "role": "frozen_spec"
+        }
+      ],
+      "expected": {
+        "exit_code": 0,
+        "stdout_utf8": "1\n2\n2\n"
+      },
+      "rationale": "Full original function/holder/Array/Map/local alias/forward/method/closure chain is preserved. Source9 does not change retained1; retained7 does not change source2, or captured original length survives caller growth. These outputs prove value semantics only, not physical owner release.",
+      "packages": [
+        "P02",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P11",
+        "P12",
+        "P13",
+        "P14"
+      ],
+      "legacy_case": null,
+      "status": "PREPARED_NOT_EXECUTED",
+      "execution": {
+        "vm": "NOT_RUN",
+        "native": "NOT_RUN"
+      },
+      "new_entry": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "remaining_qualification": [
+        "Actual fresh published Source/Program test/run entry and real named report; declaration text, printing success or empty run is not body execution.",
+        "Independently satisfy VM/native observations and full affected FI/resource/live/requested/work/borrow/owner lifetime/cancel/physical/safety/generated-C/provider gates; preserve original stress, all assertions and P20 mixed scope.",
+        "Bind unresolved identity/query/opaque TypeId/generic proof/Iterable/derive/StringBuilder/JSON/provider declarations and metadata to their actual owners; no guessed alias or arbitrary compile rejection."
+      ],
+      "execution_source": "tests/unit/xir/legacy_consumers/fixtures/read_value_retention_1470/root.xr",
+      "execution_entry": "run"
+    },
+    {
+      "id": "generic_struct_nested_value_annotations",
+      "inputs": [
+        {
+          "path": "tests/regression/12_type_checking/1235_generic_value_struct_annotation.xr",
+          "lf_sha256": "1664d6506ba1628c7d60e5f43bbe3d154c384078e60da0d6efe42ceb3e12ebf0",
+          "role": "preserved_source"
+        },
+        {
+          "path": "spec/source/sections/010-9-generics.md",
+          "lf_sha256": "30e64282857276fec788c81ee7467fc3b936814db26e6c5e5d902afffe6cc404",
+          "role": "frozen_spec"
+        },
+        {
+          "path": "spec/source/sections/003-2-type-system.md",
+          "lf_sha256": "f4e970b0cc728c19f65a4d1b2a13cd0e572431dcac3f6f20cd06d23046ebea8a",
+          "role": "frozen_spec"
+        }
+      ],
+      "expected": {
+        "exit_code": 0,
+        "required_test_names": [
+          "test_var_annotation",
+          "test_param_annotation",
+          "test_return_annotation",
+          "test_struct_field_annotation"
+        ],
+        "all_required_tests_passed": true
+      },
+      "rationale": "All four typed annotations/parameter/return/Holder tests retain41/99/5 and nested copy original41 versus changed100.",
+      "packages": [
+        "P02",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P11",
+        "P12",
+        "P13",
+        "P14"
+      ],
+      "legacy_case": null,
+      "status": "PREPARED_NOT_EXECUTED",
+      "execution": {
+        "vm": "NOT_RUN",
+        "native": "NOT_RUN"
+      },
+      "new_entry": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "remaining_qualification": [
+        "Actual fresh published Source/Program test/run entry and real named report; declaration text, printing success or empty run is not body execution.",
+        "Independently satisfy VM/native observations and full affected FI/resource/live/requested/work/borrow/owner lifetime/cancel/physical/safety/generated-C/provider gates; preserve original stress, all assertions and P20 mixed scope.",
+        "Bind unresolved identity/query/opaque TypeId/generic proof/Iterable/derive/StringBuilder/JSON/provider declarations and metadata to their actual owners; no guessed alias or arbitrary compile rejection."
+      ],
+      "execution_source": "tests/regression/12_type_checking/1235_generic_value_struct_annotation.xr",
+      "execution_entry": "test"
+    },
+    {
+      "id": "comptime_tuple_all_original_tests",
+      "inputs": [
+        {
+          "path": "tests/regression/13_types/1415_comptime_tuple_value.xr",
+          "lf_sha256": "c9a4057d9d6b808dd947937a1b53a7207142ad638e1f42c03b38d0a01a6b0cb1",
+          "role": "preserved_source"
+        },
+        {
+          "path": "spec/source/sections/010-9-generics.md",
+          "lf_sha256": "30e64282857276fec788c81ee7467fc3b936814db26e6c5e5d902afffe6cc404",
+          "role": "frozen_spec"
+        },
+        {
+          "path": "spec/source/sections/003-2-type-system.md",
+          "lf_sha256": "f4e970b0cc728c19f65a4d1b2a13cd0e572431dcac3f6f20cd06d23046ebea8a",
+          "role": "frozen_spec"
+        }
+      ],
+      "expected": {
+        "exit_code": 0,
+        "required_test_names": [
+          "test_comptime_tuple_value",
+          "test_comptime_tuple_const_cache",
+          "test_comptime_nested_tuple_value",
+          "test_comptime_tuple_spread_value"
+        ],
+        "all_required_tests_passed": true
+      },
+      "rationale": "All four CTFE Tuple tests retain1/hi/true, cached4/items, nested1/2/3/4 and six-field spread0/1/2/3/4/4 with ordered fields and exact values.",
+      "packages": [
+        "P02",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P11",
+        "P12",
+        "P13",
+        "P14"
+      ],
+      "legacy_case": null,
+      "status": "PREPARED_NOT_EXECUTED",
+      "execution": {
+        "vm": "NOT_RUN",
+        "native": "NOT_RUN"
+      },
+      "new_entry": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "remaining_qualification": [
+        "Actual fresh published Source/Program test/run entry and real named report; declaration text, printing success or empty run is not body execution.",
+        "Independently satisfy VM/native observations and full affected FI/resource/live/requested/work/borrow/owner lifetime/cancel/physical/safety/generated-C/provider gates; preserve original stress, all assertions and P20 mixed scope.",
+        "Bind unresolved identity/query/opaque TypeId/generic proof/Iterable/derive/StringBuilder/JSON/provider declarations and metadata to their actual owners; no guessed alias or arbitrary compile rejection."
+      ],
+      "execution_source": "tests/regression/13_types/1415_comptime_tuple_value.xr",
+      "execution_entry": "test"
+    },
+    {
+      "id": "comptime_fixed_byte_blob_original_tests",
+      "inputs": [
+        {
+          "path": "tests/regression/13_types/1452_comptime_fixed_byte_blob.xr",
+          "lf_sha256": "7c368b23e19b2406a3c65e8c3ab803d5415f3ed86cae812fd5361c36c55919fc",
+          "role": "preserved_source"
+        },
+        {
+          "path": "spec/source/sections/010-9-generics.md",
+          "lf_sha256": "30e64282857276fec788c81ee7467fc3b936814db26e6c5e5d902afffe6cc404",
+          "role": "frozen_spec"
+        },
+        {
+          "path": "spec/source/sections/003-2-type-system.md",
+          "lf_sha256": "f4e970b0cc728c19f65a4d1b2a13cd0e572431dcac3f6f20cd06d23046ebea8a",
+          "role": "frozen_spec"
+        }
+      ],
+      "expected": {
+        "exit_code": 0,
+        "required_test_names": [
+          "test_comptime_fixed_byte_blob_materialization"
+        ],
+        "all_required_tests_passed": true
+      },
+      "rationale": "All six original compile_assert duties retain0/65/255, blob equality/inequality and index+byte sum323; the named materialization preserves exact [u8;3] bytes. No NUL truncation or ordinal substitute.",
+      "packages": [
+        "P02",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P11",
+        "P12",
+        "P13",
+        "P14"
+      ],
+      "legacy_case": null,
+      "status": "PREPARED_NOT_EXECUTED",
+      "execution": {
+        "vm": "NOT_RUN",
+        "native": "NOT_RUN"
+      },
+      "new_entry": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "remaining_qualification": [
+        "Actual fresh published Source/Program test/run entry and real named report; declaration text, printing success or empty run is not body execution.",
+        "Independently satisfy VM/native observations and full affected FI/resource/live/requested/work/borrow/owner lifetime/cancel/physical/safety/generated-C/provider gates; preserve original stress, all assertions and P20 mixed scope.",
+        "Bind unresolved identity/query/opaque TypeId/generic proof/Iterable/derive/StringBuilder/JSON/provider declarations and metadata to their actual owners; no guessed alias or arbitrary compile rejection."
+      ],
+      "execution_source": "tests/regression/13_types/1452_comptime_fixed_byte_blob.xr",
+      "execution_entry": "test"
+    },
+    {
+      "id": "imported_ref_function_values_keep_writeback",
+      "inputs": [
+        {
+          "path": "tests/regression/13_types/1436_param_mode_imported_contracts.xr",
+          "lf_sha256": "a56a0f1706985637b80e2f397fb805c8ba6f96afb8fac86903c0e6c183da7250",
+          "role": "preserved_source"
+        },
+        {
+          "path": "tests/fixtures/param_mode_import_lib.xr",
+          "lf_sha256": "f2073cb61ea6d9128f415e06a97861ffa5c617fb7cae262d040afa60c8637cd3",
+          "role": "preserved_source"
+        },
+        {
+          "path": "spec/source/sections/010-9-generics.md",
+          "lf_sha256": "30e64282857276fec788c81ee7467fc3b936814db26e6c5e5d902afffe6cc404",
+          "role": "frozen_spec"
+        }
+      ],
+      "expected": {
+        "exit_code": 0,
+        "required_test_names": [
+          "test_selective_import_ref_out_contracts",
+          "test_namespace_import_ref_out_contracts",
+          "test_exported_const_function_value_ref_out_contracts"
+        ],
+        "all_required_tests_passed": true
+      },
+      "rationale": "All selective/namespace/const function-value ref contracts retain caller2/4/6/7 and filled9/11; complete export companion is bound, not just import syntax.",
+      "packages": [
+        "P02",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P11",
+        "P12",
+        "P13",
+        "P14"
+      ],
+      "legacy_case": null,
+      "status": "PREPARED_NOT_EXECUTED",
+      "execution": {
+        "vm": "NOT_RUN",
+        "native": "NOT_RUN"
+      },
+      "new_entry": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "remaining_qualification": [
+        "Actual fresh published Source/Program test/run entry and real named report; declaration text, printing success or empty run is not body execution.",
+        "Independently satisfy VM/native observations and full affected FI/resource/live/requested/work/borrow/owner lifetime/cancel/physical/safety/generated-C/provider gates; preserve original stress, all assertions and P20 mixed scope.",
+        "Bind unresolved identity/query/opaque TypeId/generic proof/Iterable/derive/StringBuilder/JSON/provider declarations and metadata to their actual owners; no guessed alias or arbitrary compile rejection."
+      ],
+      "execution_source": "tests/regression/13_types/1436_param_mode_imported_contracts.xr",
+      "execution_entry": "test"
+    },
+    {
+      "id": "native_type_net_test_cannot_succeed_by_early_return",
+      "inputs": [
+        {
+          "path": "tests/regression/12_type_checking/1302_is_builtin_native_class.xr",
+          "lf_sha256": "992a732f97be8fc278d9a18283d0a9867ac9a08400df940043a75c1aaa04ef1b",
+          "role": "preserved_source"
+        },
+        {
+          "path": "spec/source/sections/003-2-type-system.md",
+          "lf_sha256": "f4e970b0cc728c19f65a4d1b2a13cd0e572431dcac3f6f20cd06d23046ebea8a",
+          "role": "frozen_spec"
+        }
+      ],
+      "expected": {
+        "normal_listener_and_connection_observed": true,
+        "accepted_connections": 1,
+        "provider_skip_accepted": false
+      },
+      "rationale": "Original listen-null early return can pass without any listener/connection observation. Native identity duty needs actual successful loopback/accept and exact type/cast observations after published Net/provider and StringBuilder replacement; unsupported/failure cannot be counted as execution.",
+      "packages": [
+        "P02",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P11",
+        "P12",
+        "P13",
+        "P14",
+        "P17"
+      ],
+      "legacy_case": null,
+      "status": "PREPARED_NOT_EXECUTED",
+      "execution": {
+        "vm": "NOT_RUN",
+        "native": "NOT_RUN"
+      },
+      "new_entry": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "remaining_qualification": [
+        "Actual fresh published Source/Program test/run entry and real named report; declaration text, printing success or empty run is not body execution.",
+        "Independently satisfy VM/native observations and full affected FI/resource/live/requested/work/borrow/owner lifetime/cancel/physical/safety/generated-C/provider gates; preserve original stress, all assertions and P20 mixed scope.",
+        "Bind unresolved identity/query/opaque TypeId/generic proof/Iterable/derive/StringBuilder/JSON/provider declarations and metadata to their actual owners; no guessed alias or arbitrary compile rejection."
+      ],
+      "target_source_status": "PENDING_PUBLISHED_DECLARATION_OWNED_LIBRARY_REPLACEMENT",
+      "obligation_scope": "SEMANTIC_DUTY_PRESERVED_TARGET_SOURCE_NOT_PREPARED"
     }
   ]
 }
