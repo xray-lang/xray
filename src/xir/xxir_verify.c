@@ -442,12 +442,9 @@ static XrXirStatus graph_allocate(Graph *graph, const XrXirFunction *function,
         xr_compile_resources_free(context->graph_storage);
         context->graph_storage = NULL; context->graph_capacity = 0;
         XrXirStatus status = XR_XIR_OK;
-        context->graph_storage = xir_compile_calloc(&context->remaining, 1, (size_t)bytes, &status);
+        context->graph_storage = xir_compile_alloc(&context->remaining, (size_t)bytes, &status);
         if (!context->graph_storage) return status;
         context->graph_capacity = (size_t)bytes;
-    } else {
-        if (!xir_compile_work(&context->remaining, bytes)) return XR_XIR_BUDGET;
-        memset(context->graph_storage, 0, (size_t)bytes);
     }
     graph->storage = context->graph_storage;
     graph->dominators = graph->storage;
@@ -459,6 +456,15 @@ static XrXirStatus graph_allocate(Graph *graph, const XrXirFunction *function,
     graph->predecessor = graph->fault_head + blocks;
     graph->next = graph->predecessor + blocks * 3;
     graph->reachable = (uint8_t *) (graph->next + blocks * 3);
+    /* Only these bytes are read before current graph construction writes them.
+     * Every owner, edge, nonentry dominator and meet row is assigned in full.
+     * The entry queue slot and all words of its dominator row start afresh. */
+    uint64_t initialization = blocks + (uint64_t)graph->words * sizeof(*graph->dominators) +
+        sizeof(*graph->queue);
+    if (!xir_compile_work(&context->remaining, initialization)) return XR_XIR_BUDGET;
+    memset(graph->reachable, 0, (size_t)blocks);
+    memset(graph->dominators, 0, (size_t)graph->words * sizeof(*graph->dominators));
+    graph->queue[0] = 0;
     return XR_XIR_OK;
 }
 

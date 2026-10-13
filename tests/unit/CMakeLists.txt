@@ -4543,3 +4543,5 @@ include("${CMAKE_CURRENT_LIST_DIR}/xir/product_consumers/source_typed_library_re
 include(${CMAKE_CURRENT_SOURCE_DIR}/xir/stdlib_catalog.cmake)
 
 include("${CMAKE_CURRENT_LIST_DIR}/xir/owned_instruction_inventory.cmake")
+
+include("${CMAKE_CURRENT_LIST_DIR}/xir/cfg_storage.cmake")
