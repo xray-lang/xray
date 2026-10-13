@@ -40,10 +40,10 @@ class PreparationChecks(unittest.TestCase):
 
     def test_core_named_manifest_and_per_test_values_cannot_be_omitted(self):
         counts = self.validate_runner_routes(self.runner_routes)
-        self.assertEqual(counts['unreviewed_named_regression_test_files'], 27)
+        self.assertEqual(counts['unreviewed_named_regression_test_files'], 0)
         rows = [r for r in self.oracles['cases'] if r['id'].startswith('regression_core_review_')]
-        self.assertEqual(len(rows), 102)
-        self.assertEqual(sum(len(r['expected']['per_test_observations']) for r in rows), 1121)
+        self.assertEqual(len(rows), 130)
+        self.assertEqual(sum(len(r['expected']['per_test_observations']) for r in rows), 1242)
         bad = copy.deepcopy(self.oracles)
         row = next(r for r in bad['cases'] if r['id'] == 'regression_core_review_0301_int64_overflow')
         row['expected']['per_test_observations'].pop('test_div_min_neg_one_in_loop')
@@ -357,6 +357,125 @@ class PreparationChecks(unittest.TestCase):
         with self.assertRaisesRegex(ValueError,'cannot pose as an executable'):
             audit.validate_oracles(bad)
 
+    def test_enum_error_cannot_be_panic_or_skip_throw_cleanup(self):
+        expected = self.core_expected('0830_throw_catch_value_return')
+        for wrong in (dict(expected, error_channel='PANIC'),
+                      dict(expected, defer_on_throw_complete=False)):
+            with self.assertRaises(ValueError):
+                audit.compare_required(expected, wrong)
+        wrong = copy.deepcopy(expected)
+        wrong['per_test_observations']['defer_runs_on_throw']['values'] = [True, False]
+        with self.assertRaises(ValueError):
+            audit.compare_required(expected, wrong)
+
+    def test_successful_local_openfile_body_does_not_prove_failure_or_filesystem(self):
+        expected = self.core_expected('0840_enum_throw')
+        with self.assertRaises(ValueError):
+            audit.compare_required(expected, dict(expected, readConfig_failure_or_real_file_io_proven=True))
+
+    def test_owned_slice_copy_must_keep_all_growth_and_source_independence(self):
+        expected = self.core_expected('1403_slice_grow_lifetime')
+        for wrong in (dict(expected, retained_growth_dimensions=[4,64,3]),
+                      dict(expected, copied_snapshot_independent=False),
+                      dict(expected, actual_heap_realloc_or_physical_release='PASS')):
+            with self.assertRaises(ValueError):
+                audit.compare_required(expected, wrong)
+        wrong = copy.deepcopy(expected)
+        wrong['per_test_observations']['test_byte_array_copy_survives_source_grow']['values'][-3] = 99
+        with self.assertRaises(ValueError):
+            audit.compare_required(expected, wrong)
+
+    def test_exclusive_view_overlap_or_escaping_slice_cannot_replace_owned_capture(self):
+        expected = self.core_expected('1405_span_static_surface')
+        with self.assertRaises(ValueError):
+            audit.compare_required(expected, dict(expected, overlapping_exclusive_views_or_owner_access_under_live_borrow=True))
+        expected = self.core_expected('1408_span_closure_owner_capture')
+        with self.assertRaises(ValueError):
+            audit.compare_required(expected, dict(expected, capture='ESCAPING_SLICE'))
+
+    def test_local_field_array_copy_cannot_deepfreeze_class_or_alias_its_field(self):
+        expected = self.core_expected('1410_shared_provenance_rebind_reset')
+        for key in ('ordinary_local_field_array_copy_writable', 'class_field_unchanged'):
+            with self.assertRaises(ValueError):
+                audit.compare_required(expected, dict(expected, **{key:False}))
+
+    def test_readonly_reexport_cannot_drop_transitive_defining_module(self):
+        identity = 'tests/regression/14_typed_array/1414_shared_provenance_reexported_readonly_function_value_param.xr'
+        bad, row = self.mutated_runner_route(identity)
+        row['original_imported_inputs'].pop()
+        with self.assertRaisesRegex(ValueError, 'required companion inputs'):
+            self.validate_runner_routes(bad)
+        expected = self.core_expected('1414_shared_provenance_reexported_readonly_function_value_param')
+        with self.assertRaises(ValueError):
+            audit.compare_required(expected, dict(expected, unused_imported_mutator_definition_cannot_be_skipped=False))
+
+    def test_user_copy_and_renamed_callee_require_same_definition_owned_view_relation(self):
+        for name in ('1420_view_return_through_user_copy', '1421_view_return_through_renamed_callee'):
+            expected = self.core_expected(name)
+            with self.assertRaises(ValueError):
+                audit.compare_required(expected, dict(expected, callee_from_definition_identity_not_name_or_arity=False))
+
+    def test_nullable_last_field_cannot_flatten_optional_chain_result(self):
+        expected = self.core_expected('1602_optional_chain_shortcircuit')
+        for wrong in (dict(expected, last_nullable_field_layers=1),
+                      dict(expected, implicit_optional_flattening=True)):
+            with self.assertRaises(ValueError):
+                audit.compare_required(expected, wrong)
+        wrong = copy.deepcopy(expected)
+        wrong['per_test_observations']['test_chain_last_link_may_be_nullable']['values'] = [{'state':'Some','value':'tagged'}]
+        with self.assertRaises(ValueError):
+            audit.compare_required(expected, wrong)
+
+    def test_unpublished_byte_query_or_chain_replacements_cannot_claim_execution_source(self):
+        for name in ('1402_byte_array_intrinsics', '1416_byte_receiver_effect_matrix',
+                     '1601_narrowing_facts', '1602_optional_chain_shortcircuit'):
+            bad = copy.deepcopy(self.oracles)
+            row = next(r for r in bad['cases'] if r['id']=='regression_core_review_'+name)
+            row['execution_source'] = row['inputs'][0]['path']
+            with self.assertRaisesRegex(ValueError, 'cannot pose as an executable'):
+                audit.validate_oracles(bad)
+
+    def test_loop_zero_entry_and_continue_write_cannot_use_stale_fact(self):
+        for name, test, values in (
+                ('1604_for_in_loop_header','test_for_in_empty_collection_keeps_pre_loop_value',['gone']),
+                ('1604_for_in_loop_header','test_for_in_body_write_guarded_after_loop',['x']),
+                ('1604_loop_control_early_exit','test_n10_continue_write_reaches_header',[3,1])):
+            expected = self.core_expected(name)
+            wrong = copy.deepcopy(expected)
+            wrong['per_test_observations'][test]['values'] = values
+            with self.assertRaises(ValueError):
+                audit.compare_required(expected, wrong)
+
+    def test_full_return_suite_cannot_shrink_back_to_three_reverse_duties(self):
+        expected = self.core_expected('0804_self_returning_method_rc')
+        self.assertEqual(len(expected['required_test_names']), 13)
+        wrong = copy.deepcopy(expected)
+        wrong['required_test_names'] = wrong['required_test_names'][:3]
+        with self.assertRaises(ValueError):
+            audit.compare_required(expected, wrong)
+        bad = copy.deepcopy(self.oracles)
+        row = next(r for r in bad['cases'] if r['id']=='regression_core_review_0804_self_returning_method_rc')
+        row['expected']['per_test_observations'].pop('test_stringbuilder_clear_escapes_receiver_death')
+        with self.assertRaisesRegex(ValueError, 'per-test independent obligation'):
+            audit.validate_oracles(bad)
+
+    def test_full_return_suite_cannot_restore_builder_alias_or_temporary_ref_chain(self):
+        expected = self.core_expected('0804_self_returning_method_rc')
+        for wrong in (dict(expected, returned_array_and_receiver_logically_independent=False),
+                      dict(expected, retired_builder_api_restored=True),
+                      dict(expected, chained_ref_call_uses_writable_intermediate=False),
+                      dict(expected, old_owned_text_survives_clear=False),
+                      dict(expected, retained_loop_iterations=2)):
+            with self.assertRaises(ValueError):
+                audit.compare_required(expected, wrong)
+
+    def test_full_return_draft_cannot_qualify_unpublished_compare_capacity_or_set(self):
+        bad = copy.deepcopy(self.oracles)
+        row = next(r for r in bad['cases'] if r['id']=='regression_core_review_0804_self_returning_method_rc')
+        row['execution_source'] = row['inputs'][1]['path']
+        with self.assertRaisesRegex(ValueError, 'cannot pose as an executable'):
+            audit.validate_oracles(bad)
+
     def mutated_runner_route(self, identity):
         # Preserve the complete input set, copying only the row under mutation.
         # Check that row first so a negative control fails before rereading all
@@ -366,12 +485,12 @@ class PreparationChecks(unittest.TestCase):
         data["cases"] = [row] + [r for r in self.runner_routes["cases"] if r["case_id"] != identity]
         return data, row
 
-    def test_complete_explicit_discovery_still_exposes_named_semantic_review_gap(self):
+    def test_complete_explicit_discovery_and_named_review_preserve_input_denominator(self):
         counts = self.validate_runner_routes(self.runner_routes)
         audit.require_full_explicit_runner_coverage(counts)
         self.assertEqual(counts["unreviewed_runner_inputs"], 0)
         self.assertEqual(counts["unreviewed_runner_entry_links"], 0)
-        self.assertEqual(counts["unreviewed_named_regression_test_files"], 27)
+        self.assertEqual(counts["unreviewed_named_regression_test_files"], 0)
         bad = copy.deepcopy(self.runner_routes)
         bad["cases"] = [r for r in bad["cases"] if not r["case_id"].endswith("/1500_project_mode_detect.xr")]
         counts = self.validate_runner_routes(bad)

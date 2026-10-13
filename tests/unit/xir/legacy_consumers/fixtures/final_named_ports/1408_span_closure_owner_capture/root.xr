@@ -1,0 +1,15 @@
+@test
+fn test_closure_captures_owner_and_uses_local_span() {
+    fn make_reader(owner: Array<i64>) -> fn() -> i64 {
+        return fn() -> i64 {
+            var view: Slice<i64> = owner[0:2]
+            return len(view) + view[0]
+        }
+    }
+
+    var values = [5, 6, 7]
+    var read = make_reader(values)
+    assertEqual(read(), 7)
+    values[0] = 99
+    assertEqual(read(), 7)
+}

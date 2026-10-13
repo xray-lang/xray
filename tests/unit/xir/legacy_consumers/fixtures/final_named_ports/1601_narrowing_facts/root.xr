@@ -1,0 +1,341 @@
+// 1601_narrowing_facts.xr
+// Conformance: LANGUAGE_SPEC §2.13 narrowing rules N-4, N-5, N-6, N-7, N-8.
+// Every test names the rule it pins.
+
+// ===== N-4: fact table =====
+
+@test
+fn test_n4_null_inequality() {
+    var a: string? = "abc"
+    if (a != null) {
+        assertEqual(len(a), 3)
+    } else {
+        assert(false)
+    }
+}
+
+@test
+fn test_n4_null_equality_else() {
+    var a: string? = "abcd"
+    if (a == null) {
+        assert(false)
+    } else {
+        assertEqual(len(a), 4)
+    }
+}
+
+@test
+fn test_n4_null_literal_on_left() {
+    var a: string? = "xy"
+    if (null != a) {
+        assertEqual(len(a), 2)
+    }
+}
+
+@test
+fn test_n4_explicit_presence() {
+    var a: string? = "hello"
+    if (a != null) {
+        assertEqual(len(a), 5)
+    }
+}
+
+@test
+fn test_n4_negation_of_group() {
+    var a: string? = "hey"
+    if (!(a == null)) {
+        assertEqual(len(a), 3)
+    }
+}
+
+@test
+fn test_n4_double_negation() {
+    var a: string? = "hey"
+    if (!!(a != null)) {
+        assertEqual(len(a), 3)
+    }
+}
+
+@test
+fn test_n4_grouping_is_transparent() {
+    var a: string? = "abcd"
+    if ((a != null)) {
+        assertEqual(len(a), 4)
+    }
+}
+
+@test
+fn test_n4_typeof_equality() {
+    var v: i64 | string = 7
+    if (typeOf(v) == Type.i64) {
+        assertEqual(v + 1, 8)
+    } else {
+        assert(false)
+    }
+}
+
+// ===== N-5: short-circuit inheritance =====
+
+@test
+fn test_n5_and_inherits_left_fact() {
+    var a: string? = "abc"
+    assertEqual(a != null && len(a) == 3, true)
+}
+
+@test
+fn test_n5_or_inherits_negated_left_fact() {
+    var a: string? = null
+    assertEqual(a == null || len(a) == 3, true)
+}
+
+@test
+fn test_n5_and_chain_of_three() {
+    var a: string? = "abc"
+    var b: string? = "de"
+    assertEqual(a != null && b != null && len(a) + len(b) == 5, true)
+}
+
+// ===== N-6: `is` narrows both directions =====
+
+@test
+fn test_n6_is_primitive_true_branch() {
+    var v: i64 | string = "hello"
+    if (v is string) {
+        assertEqual(len(v), 5)
+    } else {
+        assert(false)
+    }
+}
+
+@test
+fn test_n6_is_primitive_false_branch() {
+    var v: i64 | string = "hello"
+    if (v is i64) {
+        assert(false)
+    } else {
+        assertEqual(len(v), 5)
+    }
+}
+
+@test
+fn test_n6_is_negated() {
+    var v: i64 | string = "abcd"
+    if (!(v is i64)) {
+        assertEqual(len(v), 4)
+    } else {
+        assert(false)
+    }
+}
+
+@test
+fn test_n6_is_nullable_receiver() {
+    var a: string? = "abc"
+    if (a is string) {
+        assertEqual(len(a), 3)
+    } else {
+        assert(false)
+    }
+}
+
+@test
+fn test_n6_is_null_is_a_null_check() {
+    var a: string? = "abc"
+    if (a is null) {
+        assert(false)
+    } else {
+        assertEqual(len(a), 3)
+    }
+}
+
+class N6Animal {
+    name: string
+    init(name: string) { this.name = name }
+}
+
+class N6Dog extends N6Animal {
+    breed: string
+    init(name: string, breed: string) {
+        super(name)
+        this.breed = breed
+    }
+}
+
+fn n6_describe(a: N6Animal) -> string {
+    if (a is N6Dog) {
+        return a.breed
+    }
+    return a.name
+}
+
+@test
+fn test_n6_is_downcasts_to_subclass() {
+    assertEqual(n6_describe(N6Dog("rex", "husky")), "husky")
+    assertEqual(n6_describe(N6Animal("cat")), "cat")
+}
+
+// ===== N-11.1: every function body owns its flow graph =====
+
+class N11Holder {
+    name: string?
+    init(name: string?) { this.name = name }
+
+    // A method whose body ends in `return` must not leave the next method
+    // analyzing under an unreachable flow.
+    first() -> i64 { return 1 }
+
+    show() -> i64 {
+        var local = this.name
+        if (local != null) {
+            return len(local)
+        }
+        return 0
+    }
+}
+
+@test
+fn test_n11_1_narrowing_works_inside_methods() {
+    assertEqual(N11Holder("abcd").show(), 4)
+    assertEqual(N11Holder(null).show(), 0)
+}
+
+// ===== N-7: where facts apply =====
+
+@test
+fn test_n7_ternary_arms() {
+    var a: string? = "abcde"
+    assertEqual(a != null ? len(a) : 0, 5)
+    var b: string? = null
+    assertEqual(b != null ? len(b) : -1, -1)
+}
+
+@test
+fn test_n7_while_condition() {
+    var cur: string? = "abc"
+    var seen = 0
+    while (cur != null) {
+        seen = seen + len(cur)
+        cur = null
+    }
+    assertEqual(seen, 3)
+}
+
+@test
+fn test_n7_for_condition() {
+    var a: string? = "ab"
+    var total = 0
+    for (var i = 0; i < 3 && a != null; i++) {
+        total = total + len(a)
+    }
+    assertEqual(total, 6)
+}
+
+@test
+fn test_n7_assert_builtin_injects_fact() {
+    var a: string? = "abcd"
+    assert(a != null)
+    assertEqual(len(a), 4)
+}
+
+@test
+fn test_n7_assert_injects_fact() {
+    var a: string? = "ab"
+    assert(a != null)
+    assertEqual(len(a), 2)
+}
+
+@test
+fn test_n7_assert_negated_condition_injects_fact() {
+    var a: string? = "abc"
+    assert(!(a == null))
+    assertEqual(len(a), 3)
+}
+
+// ===== N-8: early exit =====
+
+fn n8_len_or_zero(s: string?) -> i64 {
+    if (s == null) { return 0 }
+    return len(s)
+}
+
+@test
+fn test_n8_early_return() {
+    assertEqual(n8_len_or_zero("abc"), 3)
+    assertEqual(n8_len_or_zero(null), 0)
+}
+
+fn n8_first_len(items: Array<string?>) -> i64 {
+    var total = 0
+    for (item in items) {
+        if (item == null) { continue }
+        total = total + len(item)
+    }
+    return total
+}
+
+@test
+fn test_n8_continue_narrows_rest_of_body() {
+    assertEqual(n8_first_len(["ab", null, "cde"]), 5)
+}
+
+// ===== N-11: invalidation =====
+
+@test
+fn test_n11_reassignment_renarrows() {
+    var a: string? = "abc"
+    if (a != null) {
+        assertEqual(len(a), 3)
+        a = "de"
+        assertEqual(len(a), 2)
+    }
+}
+
+@test
+fn test_n11_call_does_not_invalidate() {
+    var a: string? = "abc"
+    if (a != null) {
+        noop()
+        assertEqual(len(a), 3)
+    }
+}
+
+fn noop() {
+    var unused = 1
+    assertEqual(unused, 1)
+}
+
+// ===== N-12: null-unsafe uses and their exceptions =====
+
+@test
+fn test_n12_string_concatenation_accepts_null() {
+    // §2.5 defines a null operand of string concatenation as "null", so the
+    // N-12 arithmetic rule does not apply to it.
+    var missing: string? = null
+    assertEqual("value: " + missing, "value: null")
+    // A null operand keeps rendering as "null" further along a chain, but only
+    // where the operand is a string?. Mixed-operand concatenation was rejected
+    // outright, so bool and a bare null literal no longer join a string here.
+    var absent: string? = null
+    assertEqual("a" + string(1) + absent, "a1null")
+}
+
+@test
+fn test_n12_equality_with_null_is_allowed() {
+    var a: string? = null
+    assertEqual(a == null, true)
+    assertEqual(a != null, false)
+}
+
+// ===== N-13: unwrapping =====
+
+@test
+fn test_n13_force_unwrap() {
+    var a: string? = "abc"
+    var s: string = a!
+    assertEqual(len(s), 3)
+}
+
+@test
+fn test_n13_coalesce() {
+    var a: string? = null
+    assertEqual(a ?? "fallback", "fallback")
+}

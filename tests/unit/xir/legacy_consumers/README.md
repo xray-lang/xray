@@ -189,8 +189,8 @@ platform success. All actual backend/provider/FI/physical gates stay OPEN.
 
 Every original runner input and entry is now explicitly routed. Check/snapshot
 gates reject an omitted input even when historical anchors still match it.
-This is not full named semantic review:27 early regression test files still
-need complete per-name obligations, which are counted separately. Network
+Every483 named regression input now has its complete textual declaration
+manifest; actual runtime discovery and qualification remain NOT_RUN. Network
 drafts preserve all real setup, byte/framing/timeout/half-close/child lifetime
 duties; listener or TLS skips never qualify provider capability. RFC HPACK and
 BE control-frame answers are independently computed, while opaque Buffer/view
@@ -218,3 +218,14 @@ scalar/octet/malformed-input and500-element/workerdimensions are independent.
 Historical64-byte/buffer/pool/JIT labels grant no implementation provenance,
 and claimed200-job pressure is recorded separately from original100-job body.
 ActualcanonicalJSON/Key/Compare/callback/formatter replacement remains OPEN.
+
+Error/byte/narrowing review binds the final27 files and108 per-test duties.
+Readonly Slice and exclusive MutSlice, full64+4096 growth, owned Array capture,
+module/reexport declaration identity and loop zero-entry/backedge facts remain
+exact. Frozen Optional decisions preserve a nullable last field as two layers;
+the older baseline spec flattening sentence is a pending synchronization duty.
+The complete13-test retained-result draft also prepares the10 duties absent
+from the supplementary reverse program, using owned UTF-8 text and logical
+Array result independence. Sort/Compare, capacity, Set and multi-point optional
+chain/query/imported-definition replacements remain abstract. Full named
+preparation never proves actual execution, physical release or product readiness.

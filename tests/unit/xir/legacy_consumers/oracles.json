@@ -2323,7 +2323,7 @@
         "stdout_utf8": "3\n3\n1\n4\n3\n3\n1\n3\n9\n60\n",
         "stderr_utf8": ""
       },
-      "rationale": "Returned reverse value survives local receiver death. Receiver push grows only a to4; returned result keeps3 and [3,2,1]. Writing result0=9 leaves a0=3. The original 20-iteration reverse sum remains60. This covers three selected original obligations and keeps ten other original tests, including StringBuilder, pending.",
+      "rationale": "Supplementary three-duty reverse program retains its original independent stdout; the new full13-duty named draft prepares remaining obligations but stays abstract until published product interfaces and full qualification.",
       "packages": [
         "P07",
         "P09",
@@ -2338,7 +2338,7 @@
       },
       "new_entry": "PENDING_FIXED_PRODUCT_DELIVERY",
       "remaining_qualification": [
-        "Not a complete replacement of the thirteen-test legacy file: finish the ten remaining original obligations and real registration, including governed StringBuilder replacement.",
+        "Supplementary three-duty program is never complete13-test qualification; full named draft and per-test duties now prepared separately, pending producer interfaces and actual driver.",
         "Fresh independent VM/native, complete affected FI/resource/lifetime/physical/cancellation/safety/provider gates; logical copy observations do not claim backing or memory release."
       ],
       "obligation_scope": "SELECTED_ORIGINAL_OBLIGATIONS_NOT_FULL_FILE_REPLACEMENT"
@@ -49534,6 +49534,3072 @@
       ],
       "execution_source": "tests/regression/07_strings/0790_string_repeat.xr",
       "execution_entry": "test"
+    },
+    {
+      "id": "regression_core_review_0830_throw_catch_value_return",
+      "inputs": [
+        {
+          "path": "tests/regression/08_error_handling/0830_throw_catch_value_return.xr",
+          "lf_sha256": "863d631fe3dbafa536e2d962468f283b298b31b228b081ba6616401bd1a55f1f",
+          "role": "preserved_source"
+        },
+        {
+          "path": "spec/source/sections/003-2-type-system.md",
+          "lf_sha256": "f4e970b0cc728c19f65a4d1b2a13cd0e572431dcac3f6f20cd06d23046ebea8a",
+          "role": "baseline_spec_pending_frozen_target_sync"
+        },
+        {
+          "path": "spec/source/sections/004-3-expressions.md",
+          "lf_sha256": "3aeabb14d154ef235fe51c665a7d367c2e51dc2c6f5261a9e0b194b228a9b945",
+          "role": "baseline_spec_pending_frozen_target_sync"
+        },
+        {
+          "path": "spec/source/sections/006-5-declarations.md",
+          "lf_sha256": "56fa3d36bc0c5ee38b7c52dafbe26d7b8b0a45a6909c14a8626a9bba515cc4a7",
+          "role": "baseline_spec_pending_frozen_target_sync"
+        },
+        {
+          "path": "spec/source/sections/009-8-error-handling.md",
+          "lf_sha256": "569cafb786430df363674f97f6073e908d76b4a3484f3fb26239b0895342507e",
+          "role": "baseline_spec_pending_frozen_target_sync"
+        },
+        {
+          "path": "spec/source/sections/015-14-built-in-type-methods.md",
+          "lf_sha256": "69b5b9b01844c0d02405decdac260e10fc9f23fe8b51d230e189e1f0802e9d8a",
+          "role": "baseline_spec_pending_frozen_target_sync"
+        }
+      ],
+      "expected": {
+        "exit_code": 0,
+        "required_test_names": [
+          "basic_throw_catch",
+          "catch_on_error",
+          "typed_catch",
+          "auto_propagation",
+          "nested_try_catch",
+          "catch_preserves_error_value",
+          "defer_runs_on_throw",
+          "multi_catch_typed"
+        ],
+        "all_required_tests_passed": true,
+        "per_test_observations": {
+          "basic_throw_catch": {
+            "values": [
+              5
+            ]
+          },
+          "catch_on_error": {
+            "values": [
+              -1
+            ]
+          },
+          "typed_catch": {
+            "values": [
+              "math error"
+            ]
+          },
+          "auto_propagation": {
+            "values": [
+              -99
+            ]
+          },
+          "nested_try_catch": {
+            "values": [
+              44
+            ]
+          },
+          "catch_preserves_error_value": {
+            "values": [
+              "not found: empty key"
+            ]
+          },
+          "defer_runs_on_throw": {
+            "values": [
+              true,
+              true
+            ]
+          },
+          "multi_catch_typed": {
+            "values": [
+              -1,
+              -2,
+              5
+            ]
+          }
+        },
+        "complete_original_named_bodies_preserved": true,
+        "textual_names_are_not_runtime_discovery": true,
+        "history_comments_are_not_backend_provenance": true,
+        "error_channel": "ORDINARY_DECLARATION_OWNED_ENUM_NOT_PANIC",
+        "catch_binding": "READONLY_ERROR_IDENTITY_PRESERVED",
+        "defer_on_throw_complete": true
+      },
+      "rationale": "All8 error/success/payload/typed-catch/defer bodies retained. Typed enum errors and catch binding identity are distinct from panic; exact caught/cleaned true needed, propagation must skip later statements.",
+      "packages": [
+        "P02",
+        "P07",
+        "P08",
+        "P10"
+      ],
+      "legacy_case": null,
+      "status": "PREPARED_NOT_EXECUTED",
+      "execution": {
+        "vm": "NOT_RUN",
+        "native": "NOT_RUN"
+      },
+      "new_entry": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "remaining_qualification": [
+        "Fresh actual test discovery and qualified independent driver must observe every value/error/effect/cleanup; textual names and Python models are not product execution.",
+        "Actual complete fixed producer interfaces, definition-owned target replacements and product registration remain OPEN.",
+        "Full applicable VM/native/FI/lifetime/borrow/cancellation/resource/physical/safety/generated-C/provider/platform gates remain required; original budgets and P20 mixed directions preserved."
+      ],
+      "execution_source": "tests/regression/08_error_handling/0830_throw_catch_value_return.xr",
+      "execution_entry": "test"
+    },
+    {
+      "id": "regression_core_review_0831_cross_module_error",
+      "inputs": [
+        {
+          "path": "tests/regression/08_error_handling/0831_cross_module_error.xr",
+          "lf_sha256": "cac7d0a060694b0488aea1f0e2023bae7ee01468ded96cdb070656b9f6efe46e",
+          "role": "preserved_source"
+        },
+        {
+          "path": "tests/regression/08_error_handling/modules/error_source.xr",
+          "lf_sha256": "3ab3b0782760177a5016fdedd310d32b1b29c699fa021bc83f463d2516aad353",
+          "role": "preserved_imported_companion"
+        },
+        {
+          "path": "spec/source/sections/003-2-type-system.md",
+          "lf_sha256": "f4e970b0cc728c19f65a4d1b2a13cd0e572431dcac3f6f20cd06d23046ebea8a",
+          "role": "baseline_spec_pending_frozen_target_sync"
+        },
+        {
+          "path": "spec/source/sections/004-3-expressions.md",
+          "lf_sha256": "3aeabb14d154ef235fe51c665a7d367c2e51dc2c6f5261a9e0b194b228a9b945",
+          "role": "baseline_spec_pending_frozen_target_sync"
+        },
+        {
+          "path": "spec/source/sections/006-5-declarations.md",
+          "lf_sha256": "56fa3d36bc0c5ee38b7c52dafbe26d7b8b0a45a6909c14a8626a9bba515cc4a7",
+          "role": "baseline_spec_pending_frozen_target_sync"
+        },
+        {
+          "path": "spec/source/sections/009-8-error-handling.md",
+          "lf_sha256": "569cafb786430df363674f97f6073e908d76b4a3484f3fb26239b0895342507e",
+          "role": "baseline_spec_pending_frozen_target_sync"
+        },
+        {
+          "path": "spec/source/sections/015-14-built-in-type-methods.md",
+          "lf_sha256": "69b5b9b01844c0d02405decdac260e10fc9f23fe8b51d230e189e1f0802e9d8a",
+          "role": "baseline_spec_pending_frozen_target_sync"
+        }
+      ],
+      "expected": {
+        "exit_code": 0,
+        "required_test_names": [
+          "catch_error_from_imported_module",
+          "success_from_imported_module",
+          "catch_cross_module_with_match",
+          "auto_propagation_cross_module",
+          "multiple_cross_module_calls"
+        ],
+        "all_required_tests_passed": true,
+        "per_test_observations": {
+          "catch_error_from_imported_module": {
+            "values": [
+              -1
+            ]
+          },
+          "success_from_imported_module": {
+            "values": [
+              5
+            ]
+          },
+          "catch_cross_module_with_match": {
+            "values": [
+              "validation error"
+            ]
+          },
+          "auto_propagation_cross_module": {
+            "values": [
+              -99
+            ]
+          },
+          "multiple_cross_module_calls": {
+            "values": [
+              10
+            ]
+          }
+        },
+        "complete_original_named_bodies_preserved": true,
+        "textual_names_are_not_runtime_discovery": true,
+        "history_comments_are_not_backend_provenance": true,
+        "error_channel": "ORDINARY_DECLARATION_OWNED_ENUM_NOT_PANIC",
+        "catch_binding": "READONLY_ERROR_IDENTITY_PRESERVED"
+      },
+      "rationale": "All5 bodies and actual complete imported enum/error helper bound. The test named match uses a generic catch marker, no match body; module error declaration identity and real channel remain required.",
+      "packages": [
+        "P02",
+        "P07",
+        "P08",
+        "P10"
+      ],
+      "legacy_case": null,
+      "status": "PREPARED_NOT_EXECUTED",
+      "execution": {
+        "vm": "NOT_RUN",
+        "native": "NOT_RUN"
+      },
+      "new_entry": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "remaining_qualification": [
+        "Fresh actual test discovery and qualified independent driver must observe every value/error/effect/cleanup; textual names and Python models are not product execution.",
+        "Actual complete fixed producer interfaces, definition-owned target replacements and product registration remain OPEN.",
+        "Full applicable VM/native/FI/lifetime/borrow/cancellation/resource/physical/safety/generated-C/provider/platform gates remain required; original budgets and P20 mixed directions preserved."
+      ],
+      "execution_source": "tests/regression/08_error_handling/0831_cross_module_error.xr",
+      "execution_entry": "test"
+    },
+    {
+      "id": "regression_core_review_0840_enum_throw",
+      "inputs": [
+        {
+          "path": "tests/regression/08_error_handling/0840_enum_throw.xr",
+          "lf_sha256": "b8f9acbf1e008e720099d88f259ab99c414a14d3a3494afbf4edcdefcc03c03c",
+          "role": "preserved_source"
+        },
+        {
+          "path": "spec/source/sections/003-2-type-system.md",
+          "lf_sha256": "f4e970b0cc728c19f65a4d1b2a13cd0e572431dcac3f6f20cd06d23046ebea8a",
+          "role": "baseline_spec_pending_frozen_target_sync"
+        },
+        {
+          "path": "spec/source/sections/004-3-expressions.md",
+          "lf_sha256": "3aeabb14d154ef235fe51c665a7d367c2e51dc2c6f5261a9e0b194b228a9b945",
+          "role": "baseline_spec_pending_frozen_target_sync"
+        },
+        {
+          "path": "spec/source/sections/006-5-declarations.md",
+          "lf_sha256": "56fa3d36bc0c5ee38b7c52dafbe26d7b8b0a45a6909c14a8626a9bba515cc4a7",
+          "role": "baseline_spec_pending_frozen_target_sync"
+        },
+        {
+          "path": "spec/source/sections/009-8-error-handling.md",
+          "lf_sha256": "569cafb786430df363674f97f6073e908d76b4a3484f3fb26239b0895342507e",
+          "role": "baseline_spec_pending_frozen_target_sync"
+        },
+        {
+          "path": "spec/source/sections/015-14-built-in-type-methods.md",
+          "lf_sha256": "69b5b9b01844c0d02405decdac260e10fc9f23fe8b51d230e189e1f0802e9d8a",
+          "role": "baseline_spec_pending_frozen_target_sync"
+        }
+      ],
+      "expected": {
+        "exit_code": 0,
+        "required_test_names": [
+          "enum_throw_happy_path",
+          "enum_throw_caught",
+          "enum_throw_propagation",
+          "enum_throw_multiple_types"
+        ],
+        "all_required_tests_passed": true,
+        "per_test_observations": {
+          "enum_throw_happy_path": {
+            "values": [
+              42
+            ]
+          },
+          "enum_throw_caught": {
+            "values": [
+              "caught"
+            ]
+          },
+          "enum_throw_propagation": {
+            "values": [
+              "content"
+            ]
+          },
+          "enum_throw_multiple_types": {
+            "values": [
+              "ok",
+              "parse_error"
+            ]
+          }
+        },
+        "complete_original_named_bodies_preserved": true,
+        "textual_names_are_not_runtime_discovery": true,
+        "history_comments_are_not_backend_provenance": true,
+        "error_channel": "ORDINARY_DECLARATION_OWNED_ENUM_NOT_PANIC",
+        "catch_binding": "READONLY_ERROR_IDENTITY_PRESERVED",
+        "readConfig_failure_or_real_file_io_proven": false
+      },
+      "rationale": "All4 bodies retained. readConfig calls local openFile(config.txt) and succeeds; name propagation does not prove failure propagation or real filesystem I/O. riskyOp original body tests modes2/0, not1.",
+      "packages": [
+        "P02",
+        "P07",
+        "P08",
+        "P10"
+      ],
+      "legacy_case": null,
+      "status": "PREPARED_NOT_EXECUTED",
+      "execution": {
+        "vm": "NOT_RUN",
+        "native": "NOT_RUN"
+      },
+      "new_entry": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "remaining_qualification": [
+        "Fresh actual test discovery and qualified independent driver must observe every value/error/effect/cleanup; textual names and Python models are not product execution.",
+        "Actual complete fixed producer interfaces, definition-owned target replacements and product registration remain OPEN.",
+        "Full applicable VM/native/FI/lifetime/borrow/cancellation/resource/physical/safety/generated-C/provider/platform gates remain required; original budgets and P20 mixed directions preserved."
+      ],
+      "execution_source": "tests/regression/08_error_handling/0840_enum_throw.xr",
+      "execution_entry": "test"
+    },
+    {
+      "id": "regression_core_review_1400_byte_array_basic",
+      "inputs": [
+        {
+          "path": "tests/regression/14_typed_array/1400_byte_array_basic.xr",
+          "lf_sha256": "1c12efc309f1d390ce60972a292ee6d58a2d6c8f7871a821f399768006c1ed8d",
+          "role": "preserved_source"
+        },
+        {
+          "path": "tests/unit/xir/legacy_consumers/fixtures/final_named_ports/1400_byte_array_basic/root.xr",
+          "lf_sha256": "16e5f7e39829a19112da0a2fd8cf4b76521f5d252a77926a1e4b43cc10473ce2",
+          "role": "complete_selected_source_draft"
+        },
+        {
+          "path": "spec/source/sections/003-2-type-system.md",
+          "lf_sha256": "f4e970b0cc728c19f65a4d1b2a13cd0e572431dcac3f6f20cd06d23046ebea8a",
+          "role": "baseline_spec_pending_frozen_target_sync"
+        },
+        {
+          "path": "spec/source/sections/004-3-expressions.md",
+          "lf_sha256": "3aeabb14d154ef235fe51c665a7d367c2e51dc2c6f5261a9e0b194b228a9b945",
+          "role": "baseline_spec_pending_frozen_target_sync"
+        },
+        {
+          "path": "spec/source/sections/006-5-declarations.md",
+          "lf_sha256": "56fa3d36bc0c5ee38b7c52dafbe26d7b8b0a45a6909c14a8626a9bba515cc4a7",
+          "role": "baseline_spec_pending_frozen_target_sync"
+        },
+        {
+          "path": "spec/source/sections/009-8-error-handling.md",
+          "lf_sha256": "569cafb786430df363674f97f6073e908d76b4a3484f3fb26239b0895342507e",
+          "role": "baseline_spec_pending_frozen_target_sync"
+        },
+        {
+          "path": "spec/source/sections/015-14-built-in-type-methods.md",
+          "lf_sha256": "69b5b9b01844c0d02405decdac260e10fc9f23fe8b51d230e189e1f0802e9d8a",
+          "role": "baseline_spec_pending_frozen_target_sync"
+        }
+      ],
+      "expected": {
+        "exit_code": 0,
+        "required_test_names": [
+          "test_byte_array_basic"
+        ],
+        "all_required_tests_passed": true,
+        "per_test_observations": {
+          "test_byte_array_basic": {
+            "values": [
+              0,
+              5,
+              0,
+              255,
+              255,
+              255,
+              5,
+              65,
+              66,
+              67,
+              3,
+              88,
+              89,
+              90,
+              "Array<byte> basic tests passed!",
+              [],
+              [
+                0,
+                0,
+                0,
+                0,
+                0
+              ],
+              [
+                255,
+                255,
+                255
+              ],
+              [
+                72,
+                101,
+                108,
+                108,
+                111
+              ],
+              [
+                65,
+                66,
+                67
+              ],
+              [
+                88,
+                89,
+                90
+              ]
+            ]
+          }
+        },
+        "complete_original_named_bodies_preserved": true,
+        "textual_names_are_not_runtime_discovery": true,
+        "history_comments_are_not_backend_provenance": true
+      },
+      "rationale": "Complete original named bodies and exact independent values preserved; actual declaration-owned driver and full product qualification remain OPEN.",
+      "packages": [
+        "P09",
+        "P10"
+      ],
+      "legacy_case": null,
+      "status": "PREPARED_NOT_EXECUTED",
+      "execution": {
+        "vm": "NOT_RUN",
+        "native": "NOT_RUN"
+      },
+      "new_entry": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "remaining_qualification": [
+        "Fresh actual test discovery and qualified independent driver must observe every value/error/effect/cleanup; textual names and Python models are not product execution.",
+        "Actual complete fixed producer interfaces, definition-owned target replacements and product registration remain OPEN.",
+        "Full applicable VM/native/FI/lifetime/borrow/cancellation/resource/physical/safety/generated-C/provider/platform gates remain required; original budgets and P20 mixed directions preserved."
+      ],
+      "execution_source": "tests/unit/xir/legacy_consumers/fixtures/final_named_ports/1400_byte_array_basic/root.xr",
+      "execution_entry": "test"
+    },
+    {
+      "id": "regression_core_review_1401_byte_array_slice",
+      "inputs": [
+        {
+          "path": "tests/regression/14_typed_array/1401_byte_array_slice.xr",
+          "lf_sha256": "5be3d8e5d53e592f1ba0ce3a4802a358ece1d817c518f41e4e7a50e6d81c82bf",
+          "role": "preserved_source"
+        },
+        {
+          "path": "tests/unit/xir/legacy_consumers/fixtures/final_named_ports/1401_byte_array_slice/root.xr",
+          "lf_sha256": "0db11a5102abfda3444442effb20924dbb88b84b4120ec492bbfec9e6830701f",
+          "role": "complete_selected_source_draft"
+        },
+        {
+          "path": "spec/source/sections/003-2-type-system.md",
+          "lf_sha256": "f4e970b0cc728c19f65a4d1b2a13cd0e572431dcac3f6f20cd06d23046ebea8a",
+          "role": "baseline_spec_pending_frozen_target_sync"
+        },
+        {
+          "path": "spec/source/sections/004-3-expressions.md",
+          "lf_sha256": "3aeabb14d154ef235fe51c665a7d367c2e51dc2c6f5261a9e0b194b228a9b945",
+          "role": "baseline_spec_pending_frozen_target_sync"
+        },
+        {
+          "path": "spec/source/sections/006-5-declarations.md",
+          "lf_sha256": "56fa3d36bc0c5ee38b7c52dafbe26d7b8b0a45a6909c14a8626a9bba515cc4a7",
+          "role": "baseline_spec_pending_frozen_target_sync"
+        },
+        {
+          "path": "spec/source/sections/009-8-error-handling.md",
+          "lf_sha256": "569cafb786430df363674f97f6073e908d76b4a3484f3fb26239b0895342507e",
+          "role": "baseline_spec_pending_frozen_target_sync"
+        },
+        {
+          "path": "spec/source/sections/015-14-built-in-type-methods.md",
+          "lf_sha256": "69b5b9b01844c0d02405decdac260e10fc9f23fe8b51d230e189e1f0802e9d8a",
+          "role": "baseline_spec_pending_frozen_target_sync"
+        }
+      ],
+      "expected": {
+        "exit_code": 0,
+        "required_test_names": [
+          "test_byte_array_slice"
+        ],
+        "all_required_tests_passed": true,
+        "per_test_observations": {
+          "test_byte_array_slice": {
+            "values": [
+              5,
+              3,
+              20,
+              30,
+              40,
+              3,
+              3,
+              5,
+              0,
+              3,
+              2,
+              4,
+              99,
+              "Array<byte> slice tests passed!"
+            ]
+          }
+        },
+        "complete_original_named_bodies_preserved": true,
+        "textual_names_are_not_runtime_discovery": true,
+        "history_comments_are_not_backend_provenance": true
+      },
+      "rationale": "Complete original named bodies and exact independent values preserved; actual declaration-owned driver and full product qualification remain OPEN.",
+      "packages": [
+        "P09",
+        "P10"
+      ],
+      "legacy_case": null,
+      "status": "PREPARED_NOT_EXECUTED",
+      "execution": {
+        "vm": "NOT_RUN",
+        "native": "NOT_RUN"
+      },
+      "new_entry": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "remaining_qualification": [
+        "Fresh actual test discovery and qualified independent driver must observe every value/error/effect/cleanup; textual names and Python models are not product execution.",
+        "Actual complete fixed producer interfaces, definition-owned target replacements and product registration remain OPEN.",
+        "Full applicable VM/native/FI/lifetime/borrow/cancellation/resource/physical/safety/generated-C/provider/platform gates remain required; original budgets and P20 mixed directions preserved."
+      ],
+      "execution_source": "tests/unit/xir/legacy_consumers/fixtures/final_named_ports/1401_byte_array_slice/root.xr",
+      "execution_entry": "test"
+    },
+    {
+      "id": "regression_core_review_1402_byte_array_intrinsics",
+      "inputs": [
+        {
+          "path": "tests/regression/14_typed_array/1402_byte_array_intrinsics.xr",
+          "lf_sha256": "df60e1831a05a80f0408d48710376cf2355fcfec337e432601d474109fa1484a",
+          "role": "preserved_source"
+        },
+        {
+          "path": "tests/unit/xir/legacy_consumers/fixtures/final_named_ports/1402_byte_array_intrinsics/root.xr",
+          "lf_sha256": "8316e1f0d0cfbf3f3aa026e6d6dbc8ee34e1743ab69ed955b55363ddb9d9b637",
+          "role": "complete_selected_source_draft"
+        },
+        {
+          "path": "spec/source/sections/003-2-type-system.md",
+          "lf_sha256": "f4e970b0cc728c19f65a4d1b2a13cd0e572431dcac3f6f20cd06d23046ebea8a",
+          "role": "baseline_spec_pending_frozen_target_sync"
+        },
+        {
+          "path": "spec/source/sections/004-3-expressions.md",
+          "lf_sha256": "3aeabb14d154ef235fe51c665a7d367c2e51dc2c6f5261a9e0b194b228a9b945",
+          "role": "baseline_spec_pending_frozen_target_sync"
+        },
+        {
+          "path": "spec/source/sections/006-5-declarations.md",
+          "lf_sha256": "56fa3d36bc0c5ee38b7c52dafbe26d7b8b0a45a6909c14a8626a9bba515cc4a7",
+          "role": "baseline_spec_pending_frozen_target_sync"
+        },
+        {
+          "path": "spec/source/sections/009-8-error-handling.md",
+          "lf_sha256": "569cafb786430df363674f97f6073e908d76b4a3484f3fb26239b0895342507e",
+          "role": "baseline_spec_pending_frozen_target_sync"
+        },
+        {
+          "path": "spec/source/sections/015-14-built-in-type-methods.md",
+          "lf_sha256": "69b5b9b01844c0d02405decdac260e10fc9f23fe8b51d230e189e1f0802e9d8a",
+          "role": "baseline_spec_pending_frozen_target_sync"
+        }
+      ],
+      "expected": {
+        "exit_code": 0,
+        "required_test_names": [
+          "test_byte_array_intrinsics_and_capacity",
+          "test_array_filled_constructor_and_integer_wrap"
+        ],
+        "all_required_tests_passed": true,
+        "per_test_observations": {
+          "test_byte_array_intrinsics_and_capacity": {
+            "values": [
+              67305985,
+              578437695752307201,
+              0,
+              6,
+              [
+                2,
+                3,
+                4
+              ],
+              3,
+              [
+                65,
+                66,
+                67,
+                65,
+                66,
+                67,
+                65,
+                66,
+                67
+              ],
+              [
+                1,
+                255,
+                255,
+                7,
+                7,
+                1
+              ],
+              1,
+              -1,
+              true,
+              false,
+              422,
+              [
+                1,
+                255,
+                255,
+                7,
+                7,
+                1
+              ]
+            ]
+          },
+          "test_array_filled_constructor_and_integer_wrap": {
+            "values": [
+              [
+                9,
+                9,
+                9,
+                9
+              ],
+              4,
+              0,
+              0,
+              0
+            ]
+          }
+        },
+        "complete_original_named_bodies_preserved": true,
+        "textual_names_are_not_runtime_discovery": true,
+        "history_comments_are_not_backend_provenance": true,
+        "fill_negative_channel": "PANIC_EXECUTE_E0422",
+        "failed_fill_receiver_unchanged": true,
+        "declaration_owned_replacement": "PENDING_PUBLISHED_REPLACEMENT"
+      },
+      "rationale": "All2 bodies preserve endian loads, capacity6/9, append3/repeat9, strict fill snapshot, u32/u8 wraps0. Slice.load and Endian canonical owned replacement unpublished; do not invent free API.",
+      "packages": [
+        "P09",
+        "P10"
+      ],
+      "legacy_case": null,
+      "status": "PREPARED_NOT_EXECUTED",
+      "execution": {
+        "vm": "NOT_RUN",
+        "native": "NOT_RUN"
+      },
+      "new_entry": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "remaining_qualification": [
+        "Fresh actual test discovery and qualified independent driver must observe every value/error/effect/cleanup; textual names and Python models are not product execution.",
+        "Actual complete fixed producer interfaces, definition-owned target replacements and product registration remain OPEN.",
+        "Full applicable VM/native/FI/lifetime/borrow/cancellation/resource/physical/safety/generated-C/provider/platform gates remain required; original budgets and P20 mixed directions preserved."
+      ],
+      "target_source_status": "PENDING_PUBLISHED_DECLARATION_OWNED_LIBRARY_REPLACEMENT",
+      "obligation_scope": "SEMANTIC_DUTY_PRESERVED_TARGET_SOURCE_NOT_PREPARED"
+    },
+    {
+      "id": "regression_core_review_1403_slice_grow_lifetime",
+      "inputs": [
+        {
+          "path": "tests/regression/14_typed_array/1403_slice_grow_lifetime.xr",
+          "lf_sha256": "d448c26ca33f46ac56e782f96c9a9c294b398fe8dbd1d16060576ead2436ae5a",
+          "role": "preserved_source"
+        },
+        {
+          "path": "tests/unit/xir/legacy_consumers/fixtures/final_named_ports/1403_slice_grow_lifetime/root.xr",
+          "lf_sha256": "1986dbb60ca9086a58bec4c316419d0e9b31814299fbfe287a47259fbebddfe4",
+          "role": "complete_selected_source_draft"
+        },
+        {
+          "path": "spec/source/sections/003-2-type-system.md",
+          "lf_sha256": "f4e970b0cc728c19f65a4d1b2a13cd0e572431dcac3f6f20cd06d23046ebea8a",
+          "role": "baseline_spec_pending_frozen_target_sync"
+        },
+        {
+          "path": "spec/source/sections/004-3-expressions.md",
+          "lf_sha256": "3aeabb14d154ef235fe51c665a7d367c2e51dc2c6f5261a9e0b194b228a9b945",
+          "role": "baseline_spec_pending_frozen_target_sync"
+        },
+        {
+          "path": "spec/source/sections/006-5-declarations.md",
+          "lf_sha256": "56fa3d36bc0c5ee38b7c52dafbe26d7b8b0a45a6909c14a8626a9bba515cc4a7",
+          "role": "baseline_spec_pending_frozen_target_sync"
+        },
+        {
+          "path": "spec/source/sections/009-8-error-handling.md",
+          "lf_sha256": "569cafb786430df363674f97f6073e908d76b4a3484f3fb26239b0895342507e",
+          "role": "baseline_spec_pending_frozen_target_sync"
+        },
+        {
+          "path": "spec/source/sections/015-14-built-in-type-methods.md",
+          "lf_sha256": "69b5b9b01844c0d02405decdac260e10fc9f23fe8b51d230e189e1f0802e9d8a",
+          "role": "baseline_spec_pending_frozen_target_sync"
+        }
+      ],
+      "expected": {
+        "exit_code": 0,
+        "required_test_names": [
+          "test_byte_array_copy_survives_source_grow",
+          "test_typed_int_copy_survives_source_grow",
+          "test_any_object_copy_survives_source_grow"
+        ],
+        "all_required_tests_passed": true,
+        "per_test_observations": {
+          "test_byte_array_copy_survives_source_grow": {
+            "values": [
+              2,
+              4,
+              2,
+              4,
+              99,
+              "bytes copy survived grow",
+              3,
+              4164,
+              [
+                2,
+                99,
+                4
+              ]
+            ]
+          },
+          "test_typed_int_copy_survives_source_grow": {
+            "values": [
+              20,
+              30,
+              40,
+              20,
+              30,
+              40,
+              999,
+              "typed int copy survived grow",
+              30,
+              4164,
+              [
+                20,
+                999,
+                40
+              ]
+            ]
+          },
+          "test_any_object_copy_survives_source_grow": {
+            "values": [
+              "b",
+              "c",
+              "d",
+              "b",
+              "c",
+              "d",
+              "any object copy survived grow",
+              4164,
+              [
+                "b",
+                "c",
+                "d"
+              ]
+            ]
+          }
+        },
+        "complete_original_named_bodies_preserved": true,
+        "textual_names_are_not_runtime_discovery": true,
+        "history_comments_are_not_backend_provenance": true,
+        "retained_growth_dimensions": [
+          64,
+          4096,
+          3
+        ],
+        "copied_snapshot_independent": true,
+        "actual_heap_realloc_or_physical_release": "OPEN"
+      },
+      "rationale": "All3 full64+4096 growth bodies and copy(view) retained; independent snapshot/source contents checked. Actual heap spill/realloc/ANY buffer/physical release not granted by comments or outputs.",
+      "packages": [
+        "P09",
+        "P10"
+      ],
+      "legacy_case": null,
+      "status": "PREPARED_NOT_EXECUTED",
+      "execution": {
+        "vm": "NOT_RUN",
+        "native": "NOT_RUN"
+      },
+      "new_entry": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "remaining_qualification": [
+        "Fresh actual test discovery and qualified independent driver must observe every value/error/effect/cleanup; textual names and Python models are not product execution.",
+        "Actual complete fixed producer interfaces, definition-owned target replacements and product registration remain OPEN.",
+        "Full applicable VM/native/FI/lifetime/borrow/cancellation/resource/physical/safety/generated-C/provider/platform gates remain required; original budgets and P20 mixed directions preserved."
+      ],
+      "execution_source": "tests/unit/xir/legacy_consumers/fixtures/final_named_ports/1403_slice_grow_lifetime/root.xr",
+      "execution_entry": "test"
+    },
+    {
+      "id": "regression_core_review_1405_span_static_surface",
+      "inputs": [
+        {
+          "path": "tests/regression/14_typed_array/1405_span_static_surface.xr",
+          "lf_sha256": "845a813270dfb4d103da005a28b4c689e37c37a834a2a5e1a075fd514488a2ce",
+          "role": "preserved_source"
+        },
+        {
+          "path": "tests/unit/xir/legacy_consumers/fixtures/final_named_ports/1405_span_static_surface/root.xr",
+          "lf_sha256": "28a0ead22e46c46d2e733a8822fd43f7dfd088c019b6dd4f88a2bc38e398fde4",
+          "role": "complete_selected_source_draft"
+        },
+        {
+          "path": "spec/source/sections/003-2-type-system.md",
+          "lf_sha256": "f4e970b0cc728c19f65a4d1b2a13cd0e572431dcac3f6f20cd06d23046ebea8a",
+          "role": "baseline_spec_pending_frozen_target_sync"
+        },
+        {
+          "path": "spec/source/sections/004-3-expressions.md",
+          "lf_sha256": "3aeabb14d154ef235fe51c665a7d367c2e51dc2c6f5261a9e0b194b228a9b945",
+          "role": "baseline_spec_pending_frozen_target_sync"
+        },
+        {
+          "path": "spec/source/sections/006-5-declarations.md",
+          "lf_sha256": "56fa3d36bc0c5ee38b7c52dafbe26d7b8b0a45a6909c14a8626a9bba515cc4a7",
+          "role": "baseline_spec_pending_frozen_target_sync"
+        },
+        {
+          "path": "spec/source/sections/009-8-error-handling.md",
+          "lf_sha256": "569cafb786430df363674f97f6073e908d76b4a3484f3fb26239b0895342507e",
+          "role": "baseline_spec_pending_frozen_target_sync"
+        },
+        {
+          "path": "spec/source/sections/015-14-built-in-type-methods.md",
+          "lf_sha256": "69b5b9b01844c0d02405decdac260e10fc9f23fe8b51d230e189e1f0802e9d8a",
+          "role": "baseline_spec_pending_frozen_target_sync"
+        }
+      ],
+      "expected": {
+        "exit_code": 0,
+        "required_test_names": [
+          "test_span_static_surface",
+          "test_byte_slice_alias",
+          "test_string_byte_slice_view"
+        ],
+        "all_required_tests_passed": true,
+        "per_test_observations": {
+          "test_span_static_surface": {
+            "values": [
+              3,
+              3,
+              20,
+              99,
+              4,
+              99,
+              11,
+              2,
+              99,
+              159,
+              "span static surface passed"
+            ]
+          },
+          "test_byte_slice_alias": {
+            "values": [
+              2,
+              2,
+              "byte slice alias passed"
+            ]
+          },
+          "test_string_byte_slice_view": {
+            "values": [
+              4,
+              4,
+              65,
+              66,
+              2,
+              66,
+              67,
+              "string bytes view passed"
+            ]
+          }
+        },
+        "complete_original_named_bodies_preserved": true,
+        "textual_names_are_not_runtime_discovery": true,
+        "history_comments_are_not_backend_provenance": true,
+        "overlapping_exclusive_views_or_owner_access_under_live_borrow": false
+      },
+      "rationale": "All3 full bodies and duplicate len observations retained; exclusive views arranged after last uses, nested readonly reborrow ends before iteration. Index0 whole update reordered outside earlier slice to retain values.",
+      "packages": [
+        "P09",
+        "P10"
+      ],
+      "legacy_case": null,
+      "status": "PREPARED_NOT_EXECUTED",
+      "execution": {
+        "vm": "NOT_RUN",
+        "native": "NOT_RUN"
+      },
+      "new_entry": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "remaining_qualification": [
+        "Fresh actual test discovery and qualified independent driver must observe every value/error/effect/cleanup; textual names and Python models are not product execution.",
+        "Actual complete fixed producer interfaces, definition-owned target replacements and product registration remain OPEN.",
+        "Full applicable VM/native/FI/lifetime/borrow/cancellation/resource/physical/safety/generated-C/provider/platform gates remain required; original budgets and P20 mixed directions preserved."
+      ],
+      "execution_source": "tests/unit/xir/legacy_consumers/fixtures/final_named_ports/1405_span_static_surface/root.xr",
+      "execution_entry": "test"
+    },
+    {
+      "id": "regression_core_review_1408_span_closure_owner_capture",
+      "inputs": [
+        {
+          "path": "tests/regression/14_typed_array/1408_span_closure_owner_capture.xr",
+          "lf_sha256": "6a2e59420a116a1b25b6b3e67eda92dfcbb7557b33d7bf5d95ef00ac86f02139",
+          "role": "preserved_source"
+        },
+        {
+          "path": "tests/unit/xir/legacy_consumers/fixtures/final_named_ports/1408_span_closure_owner_capture/root.xr",
+          "lf_sha256": "f5ae99ee0cc03fa358a7411dc885a09756d90cb415c6bf478a5c938841573f17",
+          "role": "complete_selected_source_draft"
+        },
+        {
+          "path": "spec/source/sections/003-2-type-system.md",
+          "lf_sha256": "f4e970b0cc728c19f65a4d1b2a13cd0e572431dcac3f6f20cd06d23046ebea8a",
+          "role": "baseline_spec_pending_frozen_target_sync"
+        },
+        {
+          "path": "spec/source/sections/004-3-expressions.md",
+          "lf_sha256": "3aeabb14d154ef235fe51c665a7d367c2e51dc2c6f5261a9e0b194b228a9b945",
+          "role": "baseline_spec_pending_frozen_target_sync"
+        },
+        {
+          "path": "spec/source/sections/006-5-declarations.md",
+          "lf_sha256": "56fa3d36bc0c5ee38b7c52dafbe26d7b8b0a45a6909c14a8626a9bba515cc4a7",
+          "role": "baseline_spec_pending_frozen_target_sync"
+        },
+        {
+          "path": "spec/source/sections/009-8-error-handling.md",
+          "lf_sha256": "569cafb786430df363674f97f6073e908d76b4a3484f3fb26239b0895342507e",
+          "role": "baseline_spec_pending_frozen_target_sync"
+        },
+        {
+          "path": "spec/source/sections/015-14-built-in-type-methods.md",
+          "lf_sha256": "69b5b9b01844c0d02405decdac260e10fc9f23fe8b51d230e189e1f0802e9d8a",
+          "role": "baseline_spec_pending_frozen_target_sync"
+        }
+      ],
+      "expected": {
+        "exit_code": 0,
+        "required_test_names": [
+          "test_closure_captures_owner_and_uses_local_span"
+        ],
+        "all_required_tests_passed": true,
+        "per_test_observations": {
+          "test_closure_captures_owner_and_uses_local_span": {
+            "values": [
+              7,
+              99,
+              7
+            ]
+          }
+        },
+        "complete_original_named_bodies_preserved": true,
+        "textual_names_are_not_runtime_discovery": true,
+        "history_comments_are_not_backend_provenance": true,
+        "capture": "OWNED_ARRAY_WITH_LOCAL_VIEW_NOT_ESCAPING_SLICE"
+      },
+      "rationale": "Complete original named bodies and exact independent values preserved; actual declaration-owned driver and full product qualification remain OPEN.",
+      "packages": [
+        "P02",
+        "P07",
+        "P08",
+        "P09",
+        "P10"
+      ],
+      "legacy_case": null,
+      "status": "PREPARED_NOT_EXECUTED",
+      "execution": {
+        "vm": "NOT_RUN",
+        "native": "NOT_RUN"
+      },
+      "new_entry": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "remaining_qualification": [
+        "Fresh actual test discovery and qualified independent driver must observe every value/error/effect/cleanup; textual names and Python models are not product execution.",
+        "Actual complete fixed producer interfaces, definition-owned target replacements and product registration remain OPEN.",
+        "Full applicable VM/native/FI/lifetime/borrow/cancellation/resource/physical/safety/generated-C/provider/platform gates remain required; original budgets and P20 mixed directions preserved."
+      ],
+      "execution_source": "tests/unit/xir/legacy_consumers/fixtures/final_named_ports/1408_span_closure_owner_capture/root.xr",
+      "execution_entry": "test"
+    },
+    {
+      "id": "regression_core_review_1409_byte_u8_canonical_identity",
+      "inputs": [
+        {
+          "path": "tests/regression/14_typed_array/1409_byte_u8_canonical_identity.xr",
+          "lf_sha256": "bfca3a570b9ffa0d1ff3f0b375617814c6792ed9ec18abd5374bd717dde1bd9b",
+          "role": "preserved_source"
+        },
+        {
+          "path": "spec/source/sections/003-2-type-system.md",
+          "lf_sha256": "f4e970b0cc728c19f65a4d1b2a13cd0e572431dcac3f6f20cd06d23046ebea8a",
+          "role": "baseline_spec_pending_frozen_target_sync"
+        },
+        {
+          "path": "spec/source/sections/004-3-expressions.md",
+          "lf_sha256": "3aeabb14d154ef235fe51c665a7d367c2e51dc2c6f5261a9e0b194b228a9b945",
+          "role": "baseline_spec_pending_frozen_target_sync"
+        },
+        {
+          "path": "spec/source/sections/006-5-declarations.md",
+          "lf_sha256": "56fa3d36bc0c5ee38b7c52dafbe26d7b8b0a45a6909c14a8626a9bba515cc4a7",
+          "role": "baseline_spec_pending_frozen_target_sync"
+        },
+        {
+          "path": "spec/source/sections/009-8-error-handling.md",
+          "lf_sha256": "569cafb786430df363674f97f6073e908d76b4a3484f3fb26239b0895342507e",
+          "role": "baseline_spec_pending_frozen_target_sync"
+        },
+        {
+          "path": "spec/source/sections/015-14-built-in-type-methods.md",
+          "lf_sha256": "69b5b9b01844c0d02405decdac260e10fc9f23fe8b51d230e189e1f0802e9d8a",
+          "role": "baseline_spec_pending_frozen_target_sync"
+        }
+      ],
+      "expected": {
+        "exit_code": 0,
+        "required_test_names": [
+          "test_byte_u8_scalar_and_container_identity",
+          "test_byte_u8_slice_and_method_identity"
+        ],
+        "all_required_tests_passed": true,
+        "per_test_observations": {
+          "test_byte_u8_scalar_and_container_identity": {
+            "values": [
+              250,
+              250,
+              250,
+              4,
+              2,
+              6,
+              1
+            ]
+          },
+          "test_byte_u8_slice_and_method_identity": {
+            "values": [
+              90,
+              30,
+              60,
+              20,
+              [
+                1,
+                40,
+                50
+              ],
+              3,
+              50,
+              [
+                2,
+                20,
+                30,
+                20,
+                30
+              ],
+              3,
+              20,
+              5,
+              20,
+              30
+            ]
+          }
+        },
+        "complete_original_named_bodies_preserved": true,
+        "textual_names_are_not_runtime_discovery": true,
+        "history_comments_are_not_backend_provenance": true
+      },
+      "rationale": "Complete original named bodies and exact independent values preserved; actual declaration-owned driver and full product qualification remain OPEN.",
+      "packages": [
+        "P09",
+        "P10"
+      ],
+      "legacy_case": null,
+      "status": "PREPARED_NOT_EXECUTED",
+      "execution": {
+        "vm": "NOT_RUN",
+        "native": "NOT_RUN"
+      },
+      "new_entry": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "remaining_qualification": [
+        "Fresh actual test discovery and qualified independent driver must observe every value/error/effect/cleanup; textual names and Python models are not product execution.",
+        "Actual complete fixed producer interfaces, definition-owned target replacements and product registration remain OPEN.",
+        "Full applicable VM/native/FI/lifetime/borrow/cancellation/resource/physical/safety/generated-C/provider/platform gates remain required; original budgets and P20 mixed directions preserved."
+      ],
+      "execution_source": "tests/regression/14_typed_array/1409_byte_u8_canonical_identity.xr",
+      "execution_entry": "test"
+    },
+    {
+      "id": "regression_core_review_1410_shared_provenance_rebind_reset",
+      "inputs": [
+        {
+          "path": "tests/regression/14_typed_array/1410_shared_provenance_rebind_reset.xr",
+          "lf_sha256": "b8ca267969c600de165eb427aaa2206a85da6249dfdbaa3f34657bb39032c476",
+          "role": "preserved_source"
+        },
+        {
+          "path": "tests/unit/xir/legacy_consumers/fixtures/final_named_ports/1410_shared_provenance_rebind_reset/root.xr",
+          "lf_sha256": "08c8567aaaa728e5ca01c8159b19bbe6cafaab166dac6be466041613e0f12afb",
+          "role": "complete_selected_source_draft"
+        },
+        {
+          "path": "spec/source/sections/003-2-type-system.md",
+          "lf_sha256": "f4e970b0cc728c19f65a4d1b2a13cd0e572431dcac3f6f20cd06d23046ebea8a",
+          "role": "baseline_spec_pending_frozen_target_sync"
+        },
+        {
+          "path": "spec/source/sections/004-3-expressions.md",
+          "lf_sha256": "3aeabb14d154ef235fe51c665a7d367c2e51dc2c6f5261a9e0b194b228a9b945",
+          "role": "baseline_spec_pending_frozen_target_sync"
+        },
+        {
+          "path": "spec/source/sections/006-5-declarations.md",
+          "lf_sha256": "56fa3d36bc0c5ee38b7c52dafbe26d7b8b0a45a6909c14a8626a9bba515cc4a7",
+          "role": "baseline_spec_pending_frozen_target_sync"
+        },
+        {
+          "path": "spec/source/sections/009-8-error-handling.md",
+          "lf_sha256": "569cafb786430df363674f97f6073e908d76b4a3484f3fb26239b0895342507e",
+          "role": "baseline_spec_pending_frozen_target_sync"
+        },
+        {
+          "path": "spec/source/sections/015-14-built-in-type-methods.md",
+          "lf_sha256": "69b5b9b01844c0d02405decdac260e10fc9f23fe8b51d230e189e1f0802e9d8a",
+          "role": "baseline_spec_pending_frozen_target_sync"
+        }
+      ],
+      "expected": {
+        "exit_code": 0,
+        "required_test_names": [
+          "test_shared_provenance_rebind_reset"
+        ],
+        "all_required_tests_passed": true,
+        "per_test_observations": {
+          "test_shared_provenance_rebind_reset": {
+            "values": [
+              3,
+              0,
+              7,
+              0
+            ]
+          }
+        },
+        "complete_original_named_bodies_preserved": true,
+        "textual_names_are_not_runtime_discovery": true,
+        "history_comments_are_not_backend_provenance": true,
+        "ordinary_local_field_array_copy_writable": true,
+        "class_field_unchanged": true
+      },
+      "rationale": "Complete original named bodies and exact independent values preserved; actual declaration-owned driver and full product qualification remain OPEN.",
+      "packages": [
+        "P07",
+        "P09",
+        "P10"
+      ],
+      "legacy_case": null,
+      "status": "PREPARED_NOT_EXECUTED",
+      "execution": {
+        "vm": "NOT_RUN",
+        "native": "NOT_RUN"
+      },
+      "new_entry": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "remaining_qualification": [
+        "Fresh actual test discovery and qualified independent driver must observe every value/error/effect/cleanup; textual names and Python models are not product execution.",
+        "Actual complete fixed producer interfaces, definition-owned target replacements and product registration remain OPEN.",
+        "Full applicable VM/native/FI/lifetime/borrow/cancellation/resource/physical/safety/generated-C/provider/platform gates remain required; original budgets and P20 mixed directions preserved."
+      ],
+      "execution_source": "tests/unit/xir/legacy_consumers/fixtures/final_named_ports/1410_shared_provenance_rebind_reset/root.xr",
+      "execution_entry": "test"
+    },
+    {
+      "id": "regression_core_review_1411_shared_provenance_readonly_param",
+      "inputs": [
+        {
+          "path": "tests/regression/14_typed_array/1411_shared_provenance_readonly_param.xr",
+          "lf_sha256": "f413ead8a3accfe74fbe6be35376ccc44356b4b48bf2ce593d02170ad11a2e03",
+          "role": "preserved_source"
+        },
+        {
+          "path": "spec/source/sections/003-2-type-system.md",
+          "lf_sha256": "f4e970b0cc728c19f65a4d1b2a13cd0e572431dcac3f6f20cd06d23046ebea8a",
+          "role": "baseline_spec_pending_frozen_target_sync"
+        },
+        {
+          "path": "spec/source/sections/004-3-expressions.md",
+          "lf_sha256": "3aeabb14d154ef235fe51c665a7d367c2e51dc2c6f5261a9e0b194b228a9b945",
+          "role": "baseline_spec_pending_frozen_target_sync"
+        },
+        {
+          "path": "spec/source/sections/006-5-declarations.md",
+          "lf_sha256": "56fa3d36bc0c5ee38b7c52dafbe26d7b8b0a45a6909c14a8626a9bba515cc4a7",
+          "role": "baseline_spec_pending_frozen_target_sync"
+        },
+        {
+          "path": "spec/source/sections/009-8-error-handling.md",
+          "lf_sha256": "569cafb786430df363674f97f6073e908d76b4a3484f3fb26239b0895342507e",
+          "role": "baseline_spec_pending_frozen_target_sync"
+        },
+        {
+          "path": "spec/source/sections/015-14-built-in-type-methods.md",
+          "lf_sha256": "69b5b9b01844c0d02405decdac260e10fc9f23fe8b51d230e189e1f0802e9d8a",
+          "role": "baseline_spec_pending_frozen_target_sync"
+        }
+      ],
+      "expected": {
+        "exit_code": 0,
+        "required_test_names": [
+          "test_shared_provenance_readonly_param"
+        ],
+        "all_required_tests_passed": true,
+        "per_test_observations": {
+          "test_shared_provenance_readonly_param": {
+            "values": [
+              6
+            ]
+          }
+        },
+        "complete_original_named_bodies_preserved": true,
+        "textual_names_are_not_runtime_discovery": true,
+        "history_comments_are_not_backend_provenance": true,
+        "read_effect_from_actual_declaration_identity": true
+      },
+      "rationale": "Complete original named bodies and exact independent values preserved; actual declaration-owned driver and full product qualification remain OPEN.",
+      "packages": [
+        "P07",
+        "P09",
+        "P10"
+      ],
+      "legacy_case": null,
+      "status": "PREPARED_NOT_EXECUTED",
+      "execution": {
+        "vm": "NOT_RUN",
+        "native": "NOT_RUN"
+      },
+      "new_entry": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "remaining_qualification": [
+        "Fresh actual test discovery and qualified independent driver must observe every value/error/effect/cleanup; textual names and Python models are not product execution.",
+        "Actual complete fixed producer interfaces, definition-owned target replacements and product registration remain OPEN.",
+        "Full applicable VM/native/FI/lifetime/borrow/cancellation/resource/physical/safety/generated-C/provider/platform gates remain required; original budgets and P20 mixed directions preserved."
+      ],
+      "execution_source": "tests/regression/14_typed_array/1411_shared_provenance_readonly_param.xr",
+      "execution_entry": "test"
+    },
+    {
+      "id": "regression_core_review_1412_shared_provenance_readonly_function_value_param",
+      "inputs": [
+        {
+          "path": "tests/regression/14_typed_array/1412_shared_provenance_readonly_function_value_param.xr",
+          "lf_sha256": "4c9c6d67398408e9e2dca8f7c12b7055a681a4969292095a6aaf7aa21283a07b",
+          "role": "preserved_source"
+        },
+        {
+          "path": "spec/source/sections/003-2-type-system.md",
+          "lf_sha256": "f4e970b0cc728c19f65a4d1b2a13cd0e572431dcac3f6f20cd06d23046ebea8a",
+          "role": "baseline_spec_pending_frozen_target_sync"
+        },
+        {
+          "path": "spec/source/sections/004-3-expressions.md",
+          "lf_sha256": "3aeabb14d154ef235fe51c665a7d367c2e51dc2c6f5261a9e0b194b228a9b945",
+          "role": "baseline_spec_pending_frozen_target_sync"
+        },
+        {
+          "path": "spec/source/sections/006-5-declarations.md",
+          "lf_sha256": "56fa3d36bc0c5ee38b7c52dafbe26d7b8b0a45a6909c14a8626a9bba515cc4a7",
+          "role": "baseline_spec_pending_frozen_target_sync"
+        },
+        {
+          "path": "spec/source/sections/009-8-error-handling.md",
+          "lf_sha256": "569cafb786430df363674f97f6073e908d76b4a3484f3fb26239b0895342507e",
+          "role": "baseline_spec_pending_frozen_target_sync"
+        },
+        {
+          "path": "spec/source/sections/015-14-built-in-type-methods.md",
+          "lf_sha256": "69b5b9b01844c0d02405decdac260e10fc9f23fe8b51d230e189e1f0802e9d8a",
+          "role": "baseline_spec_pending_frozen_target_sync"
+        }
+      ],
+      "expected": {
+        "exit_code": 0,
+        "required_test_names": [
+          "test_shared_provenance_readonly_function_value_param"
+        ],
+        "all_required_tests_passed": true,
+        "per_test_observations": {
+          "test_shared_provenance_readonly_function_value_param": {
+            "values": [
+              7
+            ]
+          }
+        },
+        "complete_original_named_bodies_preserved": true,
+        "textual_names_are_not_runtime_discovery": true,
+        "history_comments_are_not_backend_provenance": true,
+        "read_effect_from_actual_declaration_identity": true
+      },
+      "rationale": "Complete original named bodies and exact independent values preserved; actual declaration-owned driver and full product qualification remain OPEN.",
+      "packages": [
+        "P02",
+        "P07",
+        "P08",
+        "P09",
+        "P10"
+      ],
+      "legacy_case": null,
+      "status": "PREPARED_NOT_EXECUTED",
+      "execution": {
+        "vm": "NOT_RUN",
+        "native": "NOT_RUN"
+      },
+      "new_entry": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "remaining_qualification": [
+        "Fresh actual test discovery and qualified independent driver must observe every value/error/effect/cleanup; textual names and Python models are not product execution.",
+        "Actual complete fixed producer interfaces, definition-owned target replacements and product registration remain OPEN.",
+        "Full applicable VM/native/FI/lifetime/borrow/cancellation/resource/physical/safety/generated-C/provider/platform gates remain required; original budgets and P20 mixed directions preserved."
+      ],
+      "execution_source": "tests/regression/14_typed_array/1412_shared_provenance_readonly_function_value_param.xr",
+      "execution_entry": "test"
+    },
+    {
+      "id": "regression_core_review_1413_shared_provenance_imported_readonly_function_value_param",
+      "inputs": [
+        {
+          "path": "tests/regression/14_typed_array/1413_shared_provenance_imported_readonly_function_value_param.xr",
+          "lf_sha256": "bfb7ab20829edd694ff815d01e386b7eace8870501c8b112c6e1e969cc5e55ab",
+          "role": "preserved_source"
+        },
+        {
+          "path": "tests/fixtures/shared_mutation_lib.xr",
+          "lf_sha256": "d0f4bcff682f8d1755dcffdd215818ec905f1bac733d4b6f78e5ed2384def03c",
+          "role": "preserved_imported_companion"
+        },
+        {
+          "path": "spec/source/sections/003-2-type-system.md",
+          "lf_sha256": "f4e970b0cc728c19f65a4d1b2a13cd0e572431dcac3f6f20cd06d23046ebea8a",
+          "role": "baseline_spec_pending_frozen_target_sync"
+        },
+        {
+          "path": "spec/source/sections/004-3-expressions.md",
+          "lf_sha256": "3aeabb14d154ef235fe51c665a7d367c2e51dc2c6f5261a9e0b194b228a9b945",
+          "role": "baseline_spec_pending_frozen_target_sync"
+        },
+        {
+          "path": "spec/source/sections/006-5-declarations.md",
+          "lf_sha256": "56fa3d36bc0c5ee38b7c52dafbe26d7b8b0a45a6909c14a8626a9bba515cc4a7",
+          "role": "baseline_spec_pending_frozen_target_sync"
+        },
+        {
+          "path": "spec/source/sections/009-8-error-handling.md",
+          "lf_sha256": "569cafb786430df363674f97f6073e908d76b4a3484f3fb26239b0895342507e",
+          "role": "baseline_spec_pending_frozen_target_sync"
+        },
+        {
+          "path": "spec/source/sections/015-14-built-in-type-methods.md",
+          "lf_sha256": "69b5b9b01844c0d02405decdac260e10fc9f23fe8b51d230e189e1f0802e9d8a",
+          "role": "baseline_spec_pending_frozen_target_sync"
+        }
+      ],
+      "expected": {
+        "exit_code": 0,
+        "required_test_names": [
+          "test_shared_provenance_imported_readonly_function_value_param",
+          "test_shared_provenance_namespace_readonly_function_value_param"
+        ],
+        "all_required_tests_passed": true,
+        "per_test_observations": {
+          "test_shared_provenance_imported_readonly_function_value_param": {
+            "values": [
+              7
+            ]
+          },
+          "test_shared_provenance_namespace_readonly_function_value_param": {
+            "values": [
+              9
+            ]
+          }
+        },
+        "complete_original_named_bodies_preserved": true,
+        "textual_names_are_not_runtime_discovery": true,
+        "history_comments_are_not_backend_provenance": true,
+        "read_effect_from_actual_declaration_identity": true,
+        "unused_imported_mutator_definition_cannot_be_skipped": true,
+        "declaration_owned_replacement": "PENDING_PUBLISHED_REPLACEMENT"
+      },
+      "rationale": "Direct import and namespace callable READ signature use same real declaration. Complete helper also contains retired ref Slice mutator; definition checking cannot ignore unused bad body. Actual legal companion interface remains abstract.",
+      "packages": [
+        "P02",
+        "P07",
+        "P08",
+        "P09",
+        "P10"
+      ],
+      "legacy_case": null,
+      "status": "PREPARED_NOT_EXECUTED",
+      "execution": {
+        "vm": "NOT_RUN",
+        "native": "NOT_RUN"
+      },
+      "new_entry": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "remaining_qualification": [
+        "Fresh actual test discovery and qualified independent driver must observe every value/error/effect/cleanup; textual names and Python models are not product execution.",
+        "Actual complete fixed producer interfaces, definition-owned target replacements and product registration remain OPEN.",
+        "Full applicable VM/native/FI/lifetime/borrow/cancellation/resource/physical/safety/generated-C/provider/platform gates remain required; original budgets and P20 mixed directions preserved."
+      ],
+      "target_source_status": "PENDING_PUBLISHED_DECLARATION_OWNED_LIBRARY_REPLACEMENT",
+      "obligation_scope": "SEMANTIC_DUTY_PRESERVED_TARGET_SOURCE_NOT_PREPARED"
+    },
+    {
+      "id": "regression_core_review_1414_shared_provenance_reexported_readonly_function_value_param",
+      "inputs": [
+        {
+          "path": "tests/regression/14_typed_array/1414_shared_provenance_reexported_readonly_function_value_param.xr",
+          "lf_sha256": "67defeb9cc733b3b3290e00cde488c522083adbc30e89be6795a058681e7d367",
+          "role": "preserved_source"
+        },
+        {
+          "path": "tests/fixtures/shared_mutation_reexport.xr",
+          "lf_sha256": "a5a986fadbd8624634b5f758c48ba035fe24d87a86b5cf9b5f539d0198242f06",
+          "role": "preserved_imported_companion"
+        },
+        {
+          "path": "tests/fixtures/shared_mutation_reexport_all.xr",
+          "lf_sha256": "4b809496949366c7579dcdbbe5e9b411bde08d9c58647bee2bd62fe800548de0",
+          "role": "preserved_imported_companion"
+        },
+        {
+          "path": "tests/fixtures/shared_mutation_lib.xr",
+          "lf_sha256": "d0f4bcff682f8d1755dcffdd215818ec905f1bac733d4b6f78e5ed2384def03c",
+          "role": "preserved_imported_companion"
+        },
+        {
+          "path": "spec/source/sections/003-2-type-system.md",
+          "lf_sha256": "f4e970b0cc728c19f65a4d1b2a13cd0e572431dcac3f6f20cd06d23046ebea8a",
+          "role": "baseline_spec_pending_frozen_target_sync"
+        },
+        {
+          "path": "spec/source/sections/004-3-expressions.md",
+          "lf_sha256": "3aeabb14d154ef235fe51c665a7d367c2e51dc2c6f5261a9e0b194b228a9b945",
+          "role": "baseline_spec_pending_frozen_target_sync"
+        },
+        {
+          "path": "spec/source/sections/006-5-declarations.md",
+          "lf_sha256": "56fa3d36bc0c5ee38b7c52dafbe26d7b8b0a45a6909c14a8626a9bba515cc4a7",
+          "role": "baseline_spec_pending_frozen_target_sync"
+        },
+        {
+          "path": "spec/source/sections/009-8-error-handling.md",
+          "lf_sha256": "569cafb786430df363674f97f6073e908d76b4a3484f3fb26239b0895342507e",
+          "role": "baseline_spec_pending_frozen_target_sync"
+        },
+        {
+          "path": "spec/source/sections/015-14-built-in-type-methods.md",
+          "lf_sha256": "69b5b9b01844c0d02405decdac260e10fc9f23fe8b51d230e189e1f0802e9d8a",
+          "role": "baseline_spec_pending_frozen_target_sync"
+        }
+      ],
+      "expected": {
+        "exit_code": 0,
+        "required_test_names": [
+          "test_shared_provenance_reexported_readonly_function_value_param",
+          "test_shared_provenance_star_reexported_readonly_function_value_param"
+        ],
+        "all_required_tests_passed": true,
+        "per_test_observations": {
+          "test_shared_provenance_reexported_readonly_function_value_param": {
+            "values": [
+              7
+            ]
+          },
+          "test_shared_provenance_star_reexported_readonly_function_value_param": {
+            "values": [
+              9
+            ]
+          }
+        },
+        "complete_original_named_bodies_preserved": true,
+        "textual_names_are_not_runtime_discovery": true,
+        "history_comments_are_not_backend_provenance": true,
+        "read_effect_from_actual_declaration_identity": true,
+        "unused_imported_mutator_definition_cannot_be_skipped": true,
+        "declaration_owned_replacement": "PENDING_PUBLISHED_REPLACEMENT"
+      },
+      "rationale": "Selective and star reexports plus transitive defining helper bound in full; reexports do not change callback identity/mode. Retired unused mutator must be resolved by producer, no import skipping.",
+      "packages": [
+        "P02",
+        "P07",
+        "P08",
+        "P09",
+        "P10"
+      ],
+      "legacy_case": null,
+      "status": "PREPARED_NOT_EXECUTED",
+      "execution": {
+        "vm": "NOT_RUN",
+        "native": "NOT_RUN"
+      },
+      "new_entry": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "remaining_qualification": [
+        "Fresh actual test discovery and qualified independent driver must observe every value/error/effect/cleanup; textual names and Python models are not product execution.",
+        "Actual complete fixed producer interfaces, definition-owned target replacements and product registration remain OPEN.",
+        "Full applicable VM/native/FI/lifetime/borrow/cancellation/resource/physical/safety/generated-C/provider/platform gates remain required; original budgets and P20 mixed directions preserved."
+      ],
+      "target_source_status": "PENDING_PUBLISHED_DECLARATION_OWNED_LIBRARY_REPLACEMENT",
+      "obligation_scope": "SEMANTIC_DUTY_PRESERVED_TARGET_SOURCE_NOT_PREPARED"
+    },
+    {
+      "id": "regression_core_review_1415_shared_provenance_returned_readonly_function_value_param",
+      "inputs": [
+        {
+          "path": "tests/regression/14_typed_array/1415_shared_provenance_returned_readonly_function_value_param.xr",
+          "lf_sha256": "43ab24894fdcecc8e79b6f58064e5df3e65e9fdfce861db703aea81f06671142",
+          "role": "preserved_source"
+        },
+        {
+          "path": "spec/source/sections/003-2-type-system.md",
+          "lf_sha256": "f4e970b0cc728c19f65a4d1b2a13cd0e572431dcac3f6f20cd06d23046ebea8a",
+          "role": "baseline_spec_pending_frozen_target_sync"
+        },
+        {
+          "path": "spec/source/sections/004-3-expressions.md",
+          "lf_sha256": "3aeabb14d154ef235fe51c665a7d367c2e51dc2c6f5261a9e0b194b228a9b945",
+          "role": "baseline_spec_pending_frozen_target_sync"
+        },
+        {
+          "path": "spec/source/sections/006-5-declarations.md",
+          "lf_sha256": "56fa3d36bc0c5ee38b7c52dafbe26d7b8b0a45a6909c14a8626a9bba515cc4a7",
+          "role": "baseline_spec_pending_frozen_target_sync"
+        },
+        {
+          "path": "spec/source/sections/009-8-error-handling.md",
+          "lf_sha256": "569cafb786430df363674f97f6073e908d76b4a3484f3fb26239b0895342507e",
+          "role": "baseline_spec_pending_frozen_target_sync"
+        },
+        {
+          "path": "spec/source/sections/015-14-built-in-type-methods.md",
+          "lf_sha256": "69b5b9b01844c0d02405decdac260e10fc9f23fe8b51d230e189e1f0802e9d8a",
+          "role": "baseline_spec_pending_frozen_target_sync"
+        }
+      ],
+      "expected": {
+        "exit_code": 0,
+        "required_test_names": [
+          "test_shared_provenance_returned_readonly_function_value_param"
+        ],
+        "all_required_tests_passed": true,
+        "per_test_observations": {
+          "test_shared_provenance_returned_readonly_function_value_param": {
+            "values": [
+              7
+            ]
+          }
+        },
+        "complete_original_named_bodies_preserved": true,
+        "textual_names_are_not_runtime_discovery": true,
+        "history_comments_are_not_backend_provenance": true,
+        "read_effect_from_actual_declaration_identity": true
+      },
+      "rationale": "Complete original named bodies and exact independent values preserved; actual declaration-owned driver and full product qualification remain OPEN.",
+      "packages": [
+        "P02",
+        "P07",
+        "P08",
+        "P09",
+        "P10"
+      ],
+      "legacy_case": null,
+      "status": "PREPARED_NOT_EXECUTED",
+      "execution": {
+        "vm": "NOT_RUN",
+        "native": "NOT_RUN"
+      },
+      "new_entry": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "remaining_qualification": [
+        "Fresh actual test discovery and qualified independent driver must observe every value/error/effect/cleanup; textual names and Python models are not product execution.",
+        "Actual complete fixed producer interfaces, definition-owned target replacements and product registration remain OPEN.",
+        "Full applicable VM/native/FI/lifetime/borrow/cancellation/resource/physical/safety/generated-C/provider/platform gates remain required; original budgets and P20 mixed directions preserved."
+      ],
+      "execution_source": "tests/regression/14_typed_array/1415_shared_provenance_returned_readonly_function_value_param.xr",
+      "execution_entry": "test"
+    },
+    {
+      "id": "regression_core_review_1416_byte_receiver_effect_matrix",
+      "inputs": [
+        {
+          "path": "tests/regression/14_typed_array/1416_byte_receiver_effect_matrix.xr",
+          "lf_sha256": "9480d44111cb807db8fe0fdb1f3b5bf48916d879b343e4fd886e73a0e62057d7",
+          "role": "preserved_source"
+        },
+        {
+          "path": "tests/unit/xir/legacy_consumers/fixtures/final_named_ports/1416_byte_receiver_effect_matrix/root.xr",
+          "lf_sha256": "1e5330016cf36f093c11051907c8982b4de79f28b9390d4a4f98fa90d61ba3e5",
+          "role": "complete_selected_source_draft"
+        },
+        {
+          "path": "spec/source/sections/003-2-type-system.md",
+          "lf_sha256": "f4e970b0cc728c19f65a4d1b2a13cd0e572431dcac3f6f20cd06d23046ebea8a",
+          "role": "baseline_spec_pending_frozen_target_sync"
+        },
+        {
+          "path": "spec/source/sections/004-3-expressions.md",
+          "lf_sha256": "3aeabb14d154ef235fe51c665a7d367c2e51dc2c6f5261a9e0b194b228a9b945",
+          "role": "baseline_spec_pending_frozen_target_sync"
+        },
+        {
+          "path": "spec/source/sections/006-5-declarations.md",
+          "lf_sha256": "56fa3d36bc0c5ee38b7c52dafbe26d7b8b0a45a6909c14a8626a9bba515cc4a7",
+          "role": "baseline_spec_pending_frozen_target_sync"
+        },
+        {
+          "path": "spec/source/sections/009-8-error-handling.md",
+          "lf_sha256": "569cafb786430df363674f97f6073e908d76b4a3484f3fb26239b0895342507e",
+          "role": "baseline_spec_pending_frozen_target_sync"
+        },
+        {
+          "path": "spec/source/sections/015-14-built-in-type-methods.md",
+          "lf_sha256": "69b5b9b01844c0d02405decdac260e10fc9f23fe8b51d230e189e1f0802e9d8a",
+          "role": "baseline_spec_pending_frozen_target_sync"
+        }
+      ],
+      "expected": {
+        "exit_code": 0,
+        "required_test_names": [
+          "test_byte_receiver_effect_matrix_var_owned_const_shared"
+        ],
+        "all_required_tests_passed": true,
+        "per_test_observations": {
+          "test_byte_receiver_effect_matrix_var_owned_const_shared": {
+            "values": [
+              5,
+              1,
+              1,
+              2,
+              [
+                1,
+                9,
+                9,
+                1,
+                2
+              ],
+              9,
+              9,
+              4,
+              2,
+              3,
+              2,
+              3,
+              3,
+              513,
+              3,
+              1,
+              770
+            ]
+          }
+        },
+        "complete_original_named_bodies_preserved": true,
+        "textual_names_are_not_runtime_discovery": true,
+        "history_comments_are_not_backend_provenance": true,
+        "view_has_owner_fill_member": false,
+        "unqualified_copy_array_restored": false,
+        "declaration_owned_replacement": "PENDING_PUBLISHED_REPLACEMENT"
+      },
+      "rationale": "All original append/repeat/read/endian observations retained; MutSlice indexed writes and logical const Array copy replace illegal member fill and copy(array). Actual load/Endian provider remains abstract.",
+      "packages": [
+        "P07",
+        "P09",
+        "P10"
+      ],
+      "legacy_case": null,
+      "status": "PREPARED_NOT_EXECUTED",
+      "execution": {
+        "vm": "NOT_RUN",
+        "native": "NOT_RUN"
+      },
+      "new_entry": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "remaining_qualification": [
+        "Fresh actual test discovery and qualified independent driver must observe every value/error/effect/cleanup; textual names and Python models are not product execution.",
+        "Actual complete fixed producer interfaces, definition-owned target replacements and product registration remain OPEN.",
+        "Full applicable VM/native/FI/lifetime/borrow/cancellation/resource/physical/safety/generated-C/provider/platform gates remain required; original budgets and P20 mixed directions preserved."
+      ],
+      "target_source_status": "PENDING_PUBLISHED_DECLARATION_OWNED_LIBRARY_REPLACEMENT",
+      "obligation_scope": "SEMANTIC_DUTY_PRESERVED_TARGET_SOURCE_NOT_PREPARED"
+    },
+    {
+      "id": "regression_core_review_1417_for_in_slice_borrow_nll",
+      "inputs": [
+        {
+          "path": "tests/regression/14_typed_array/1417_for_in_slice_borrow_nll.xr",
+          "lf_sha256": "6013756722cfce95e6855193f80356f5b6ca40d08eb6a42a426386ac2a59ee51",
+          "role": "preserved_source"
+        },
+        {
+          "path": "spec/source/sections/003-2-type-system.md",
+          "lf_sha256": "f4e970b0cc728c19f65a4d1b2a13cd0e572431dcac3f6f20cd06d23046ebea8a",
+          "role": "baseline_spec_pending_frozen_target_sync"
+        },
+        {
+          "path": "spec/source/sections/004-3-expressions.md",
+          "lf_sha256": "3aeabb14d154ef235fe51c665a7d367c2e51dc2c6f5261a9e0b194b228a9b945",
+          "role": "baseline_spec_pending_frozen_target_sync"
+        },
+        {
+          "path": "spec/source/sections/006-5-declarations.md",
+          "lf_sha256": "56fa3d36bc0c5ee38b7c52dafbe26d7b8b0a45a6909c14a8626a9bba515cc4a7",
+          "role": "baseline_spec_pending_frozen_target_sync"
+        },
+        {
+          "path": "spec/source/sections/009-8-error-handling.md",
+          "lf_sha256": "569cafb786430df363674f97f6073e908d76b4a3484f3fb26239b0895342507e",
+          "role": "baseline_spec_pending_frozen_target_sync"
+        },
+        {
+          "path": "spec/source/sections/015-14-built-in-type-methods.md",
+          "lf_sha256": "69b5b9b01844c0d02405decdac260e10fc9f23fe8b51d230e189e1f0802e9d8a",
+          "role": "baseline_spec_pending_frozen_target_sync"
+        }
+      ],
+      "expected": {
+        "exit_code": 0,
+        "required_test_names": [
+          "test_for_in_local_slice_borrow_ends_before_owner_grow"
+        ],
+        "all_required_tests_passed": true,
+        "per_test_observations": {
+          "test_for_in_local_slice_borrow_ends_before_owner_grow": {
+            "values": [
+              [
+                1,
+                3,
+                5
+              ],
+              [
+                2,
+                4,
+                6
+              ],
+              [
+                1,
+                2,
+                1,
+                2,
+                1,
+                2
+              ],
+              6
+            ]
+          }
+        },
+        "complete_original_named_bodies_preserved": true,
+        "textual_names_are_not_runtime_discovery": true,
+        "history_comments_are_not_backend_provenance": true,
+        "borrow_ends_at_last_use_before_each_owner_growth": true
+      },
+      "rationale": "Complete original named bodies and exact independent values preserved; actual declaration-owned driver and full product qualification remain OPEN.",
+      "packages": [
+        "P07",
+        "P09",
+        "P10"
+      ],
+      "legacy_case": null,
+      "status": "PREPARED_NOT_EXECUTED",
+      "execution": {
+        "vm": "NOT_RUN",
+        "native": "NOT_RUN"
+      },
+      "new_entry": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "remaining_qualification": [
+        "Fresh actual test discovery and qualified independent driver must observe every value/error/effect/cleanup; textual names and Python models are not product execution.",
+        "Actual complete fixed producer interfaces, definition-owned target replacements and product registration remain OPEN.",
+        "Full applicable VM/native/FI/lifetime/borrow/cancellation/resource/physical/safety/generated-C/provider/platform gates remain required; original budgets and P20 mixed directions preserved."
+      ],
+      "execution_source": "tests/regression/14_typed_array/1417_for_in_slice_borrow_nll.xr",
+      "execution_entry": "test"
+    },
+    {
+      "id": "regression_core_review_1418_shared_provenance_readonly_closure_capture",
+      "inputs": [
+        {
+          "path": "tests/regression/14_typed_array/1418_shared_provenance_readonly_closure_capture.xr",
+          "lf_sha256": "53c57afe564f3713fee37ea9e3a8c3d07b4be4422e8b74c57c1e8b7393f38bf5",
+          "role": "preserved_source"
+        },
+        {
+          "path": "spec/source/sections/003-2-type-system.md",
+          "lf_sha256": "f4e970b0cc728c19f65a4d1b2a13cd0e572431dcac3f6f20cd06d23046ebea8a",
+          "role": "baseline_spec_pending_frozen_target_sync"
+        },
+        {
+          "path": "spec/source/sections/004-3-expressions.md",
+          "lf_sha256": "3aeabb14d154ef235fe51c665a7d367c2e51dc2c6f5261a9e0b194b228a9b945",
+          "role": "baseline_spec_pending_frozen_target_sync"
+        },
+        {
+          "path": "spec/source/sections/006-5-declarations.md",
+          "lf_sha256": "56fa3d36bc0c5ee38b7c52dafbe26d7b8b0a45a6909c14a8626a9bba515cc4a7",
+          "role": "baseline_spec_pending_frozen_target_sync"
+        },
+        {
+          "path": "spec/source/sections/009-8-error-handling.md",
+          "lf_sha256": "569cafb786430df363674f97f6073e908d76b4a3484f3fb26239b0895342507e",
+          "role": "baseline_spec_pending_frozen_target_sync"
+        },
+        {
+          "path": "spec/source/sections/015-14-built-in-type-methods.md",
+          "lf_sha256": "69b5b9b01844c0d02405decdac260e10fc9f23fe8b51d230e189e1f0802e9d8a",
+          "role": "baseline_spec_pending_frozen_target_sync"
+        }
+      ],
+      "expected": {
+        "exit_code": 0,
+        "required_test_names": [
+          "test_shared_provenance_readonly_closure_capture"
+        ],
+        "all_required_tests_passed": true,
+        "per_test_observations": {
+          "test_shared_provenance_readonly_closure_capture": {
+            "values": [
+              7
+            ]
+          }
+        },
+        "complete_original_named_bodies_preserved": true,
+        "textual_names_are_not_runtime_discovery": true,
+        "history_comments_are_not_backend_provenance": true,
+        "read_effect_from_actual_declaration_identity": true
+      },
+      "rationale": "Complete original named bodies and exact independent values preserved; actual declaration-owned driver and full product qualification remain OPEN.",
+      "packages": [
+        "P02",
+        "P07",
+        "P08",
+        "P09",
+        "P10"
+      ],
+      "legacy_case": null,
+      "status": "PREPARED_NOT_EXECUTED",
+      "execution": {
+        "vm": "NOT_RUN",
+        "native": "NOT_RUN"
+      },
+      "new_entry": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "remaining_qualification": [
+        "Fresh actual test discovery and qualified independent driver must observe every value/error/effect/cleanup; textual names and Python models are not product execution.",
+        "Actual complete fixed producer interfaces, definition-owned target replacements and product registration remain OPEN.",
+        "Full applicable VM/native/FI/lifetime/borrow/cancellation/resource/physical/safety/generated-C/provider/platform gates remain required; original budgets and P20 mixed directions preserved."
+      ],
+      "execution_source": "tests/regression/14_typed_array/1418_shared_provenance_readonly_closure_capture.xr",
+      "execution_entry": "test"
+    },
+    {
+      "id": "regression_core_review_1419_inline_range_slice_arg",
+      "inputs": [
+        {
+          "path": "tests/regression/14_typed_array/1419_inline_range_slice_arg.xr",
+          "lf_sha256": "317561cc4fed1d41d6606f5434ebc6f74377787bd8ec3c309f754e5dfaf3cac0",
+          "role": "preserved_source"
+        },
+        {
+          "path": "spec/source/sections/003-2-type-system.md",
+          "lf_sha256": "f4e970b0cc728c19f65a4d1b2a13cd0e572431dcac3f6f20cd06d23046ebea8a",
+          "role": "baseline_spec_pending_frozen_target_sync"
+        },
+        {
+          "path": "spec/source/sections/004-3-expressions.md",
+          "lf_sha256": "3aeabb14d154ef235fe51c665a7d367c2e51dc2c6f5261a9e0b194b228a9b945",
+          "role": "baseline_spec_pending_frozen_target_sync"
+        },
+        {
+          "path": "spec/source/sections/006-5-declarations.md",
+          "lf_sha256": "56fa3d36bc0c5ee38b7c52dafbe26d7b8b0a45a6909c14a8626a9bba515cc4a7",
+          "role": "baseline_spec_pending_frozen_target_sync"
+        },
+        {
+          "path": "spec/source/sections/009-8-error-handling.md",
+          "lf_sha256": "569cafb786430df363674f97f6073e908d76b4a3484f3fb26239b0895342507e",
+          "role": "baseline_spec_pending_frozen_target_sync"
+        },
+        {
+          "path": "spec/source/sections/015-14-built-in-type-methods.md",
+          "lf_sha256": "69b5b9b01844c0d02405decdac260e10fc9f23fe8b51d230e189e1f0802e9d8a",
+          "role": "baseline_spec_pending_frozen_target_sync"
+        }
+      ],
+      "expected": {
+        "exit_code": 0,
+        "required_test_names": [
+          "test_inline_bounded_range_slice_native_method_arg",
+          "test_inline_range_slice_arg_in_if",
+          "test_inline_range_slice_arg_in_while",
+          "test_inline_range_slice_user_fn_arg_unaffected"
+        ],
+        "all_required_tests_passed": true,
+        "per_test_observations": {
+          "test_inline_bounded_range_slice_native_method_arg": {
+            "values": [
+              "hi",
+              "hi!",
+              "AB"
+            ]
+          },
+          "test_inline_range_slice_arg_in_if": {
+            "values": [
+              "hi"
+            ]
+          },
+          "test_inline_range_slice_arg_in_while": {
+            "values": [
+              "h",
+              "hi",
+              "hi!"
+            ]
+          },
+          "test_inline_range_slice_user_fn_arg_unaffected": {
+            "values": [
+              5
+            ]
+          }
+        },
+        "complete_original_named_bodies_preserved": true,
+        "textual_names_are_not_runtime_discovery": true,
+        "history_comments_are_not_backend_provenance": true,
+        "slice_type_from_checked_parameter_not_opcode_guess": true
+      },
+      "rationale": "All4 actual printed bodies require hi/hi!/AB, hi, h/hi/hi!,5. Parameter-owned Slice context, no unresolved node/opcode recovery authorization from old comment.",
+      "packages": [
+        "P09",
+        "P10"
+      ],
+      "legacy_case": null,
+      "status": "PREPARED_NOT_EXECUTED",
+      "execution": {
+        "vm": "NOT_RUN",
+        "native": "NOT_RUN"
+      },
+      "new_entry": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "remaining_qualification": [
+        "Fresh actual test discovery and qualified independent driver must observe every value/error/effect/cleanup; textual names and Python models are not product execution.",
+        "Actual complete fixed producer interfaces, definition-owned target replacements and product registration remain OPEN.",
+        "Full applicable VM/native/FI/lifetime/borrow/cancellation/resource/physical/safety/generated-C/provider/platform gates remain required; original budgets and P20 mixed directions preserved."
+      ],
+      "execution_source": "tests/regression/14_typed_array/1419_inline_range_slice_arg.xr",
+      "execution_entry": "test"
+    },
+    {
+      "id": "regression_core_review_1420_view_return_through_user_copy",
+      "inputs": [
+        {
+          "path": "tests/regression/14_typed_array/1420_view_return_through_user_copy.xr",
+          "lf_sha256": "aae8efbca4247fc41d5a7e4e2d5a22d1e271030ed35196ed2dd80659aec5f5b9",
+          "role": "preserved_source"
+        },
+        {
+          "path": "tests/unit/xir/legacy_consumers/fixtures/final_named_ports/1420_view_return_through_user_copy/root.xr",
+          "lf_sha256": "c9d46a040fd46f7f86d82fb8eecd7a665695b9866d895cd1cdc26b699197ddd7",
+          "role": "complete_selected_source_draft"
+        },
+        {
+          "path": "spec/source/sections/003-2-type-system.md",
+          "lf_sha256": "f4e970b0cc728c19f65a4d1b2a13cd0e572431dcac3f6f20cd06d23046ebea8a",
+          "role": "baseline_spec_pending_frozen_target_sync"
+        },
+        {
+          "path": "spec/source/sections/004-3-expressions.md",
+          "lf_sha256": "3aeabb14d154ef235fe51c665a7d367c2e51dc2c6f5261a9e0b194b228a9b945",
+          "role": "baseline_spec_pending_frozen_target_sync"
+        },
+        {
+          "path": "spec/source/sections/006-5-declarations.md",
+          "lf_sha256": "56fa3d36bc0c5ee38b7c52dafbe26d7b8b0a45a6909c14a8626a9bba515cc4a7",
+          "role": "baseline_spec_pending_frozen_target_sync"
+        },
+        {
+          "path": "spec/source/sections/009-8-error-handling.md",
+          "lf_sha256": "569cafb786430df363674f97f6073e908d76b4a3484f3fb26239b0895342507e",
+          "role": "baseline_spec_pending_frozen_target_sync"
+        },
+        {
+          "path": "spec/source/sections/015-14-built-in-type-methods.md",
+          "lf_sha256": "69b5b9b01844c0d02405decdac260e10fc9f23fe8b51d230e189e1f0802e9d8a",
+          "role": "baseline_spec_pending_frozen_target_sync"
+        }
+      ],
+      "expected": {
+        "exit_code": 0,
+        "required_test_names": [
+          "test_view_return_provenance_survives_user_copy"
+        ],
+        "all_required_tests_passed": true,
+        "per_test_observations": {
+          "test_view_return_provenance_survives_user_copy": {
+            "values": [
+              2,
+              3,
+              2
+            ]
+          }
+        },
+        "complete_original_named_bodies_preserved": true,
+        "textual_names_are_not_runtime_discovery": true,
+        "history_comments_are_not_backend_provenance": true,
+        "callee_from_definition_identity_not_name_or_arity": true,
+        "return_view_root": "UNIQUE_EXPLICIT_VIEW_PARAMETER"
+      },
+      "rationale": "Complete original named bodies and exact independent values preserved; actual declaration-owned driver and full product qualification remain OPEN.",
+      "packages": [
+        "P07",
+        "P09",
+        "P10"
+      ],
+      "legacy_case": null,
+      "status": "PREPARED_NOT_EXECUTED",
+      "execution": {
+        "vm": "NOT_RUN",
+        "native": "NOT_RUN"
+      },
+      "new_entry": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "remaining_qualification": [
+        "Fresh actual test discovery and qualified independent driver must observe every value/error/effect/cleanup; textual names and Python models are not product execution.",
+        "Actual complete fixed producer interfaces, definition-owned target replacements and product registration remain OPEN.",
+        "Full applicable VM/native/FI/lifetime/borrow/cancellation/resource/physical/safety/generated-C/provider/platform gates remain required; original budgets and P20 mixed directions preserved."
+      ],
+      "execution_source": "tests/unit/xir/legacy_consumers/fixtures/final_named_ports/1420_view_return_through_user_copy/root.xr",
+      "execution_entry": "test"
+    },
+    {
+      "id": "regression_core_review_1421_view_return_through_renamed_callee",
+      "inputs": [
+        {
+          "path": "tests/regression/14_typed_array/1421_view_return_through_renamed_callee.xr",
+          "lf_sha256": "59862f306f4f610b45714401b19f13ef20c5e46c42096e5cfc662e9b7445de44",
+          "role": "preserved_source"
+        },
+        {
+          "path": "tests/unit/xir/legacy_consumers/fixtures/final_named_ports/1421_view_return_through_renamed_callee/root.xr",
+          "lf_sha256": "c2d3a4edd04ad951560e96767d4bbc4c6aa72958afbce35427c33a64f006d520",
+          "role": "complete_selected_source_draft"
+        },
+        {
+          "path": "spec/source/sections/003-2-type-system.md",
+          "lf_sha256": "f4e970b0cc728c19f65a4d1b2a13cd0e572431dcac3f6f20cd06d23046ebea8a",
+          "role": "baseline_spec_pending_frozen_target_sync"
+        },
+        {
+          "path": "spec/source/sections/004-3-expressions.md",
+          "lf_sha256": "3aeabb14d154ef235fe51c665a7d367c2e51dc2c6f5261a9e0b194b228a9b945",
+          "role": "baseline_spec_pending_frozen_target_sync"
+        },
+        {
+          "path": "spec/source/sections/006-5-declarations.md",
+          "lf_sha256": "56fa3d36bc0c5ee38b7c52dafbe26d7b8b0a45a6909c14a8626a9bba515cc4a7",
+          "role": "baseline_spec_pending_frozen_target_sync"
+        },
+        {
+          "path": "spec/source/sections/009-8-error-handling.md",
+          "lf_sha256": "569cafb786430df363674f97f6073e908d76b4a3484f3fb26239b0895342507e",
+          "role": "baseline_spec_pending_frozen_target_sync"
+        },
+        {
+          "path": "spec/source/sections/015-14-built-in-type-methods.md",
+          "lf_sha256": "69b5b9b01844c0d02405decdac260e10fc9f23fe8b51d230e189e1f0802e9d8a",
+          "role": "baseline_spec_pending_frozen_target_sync"
+        }
+      ],
+      "expected": {
+        "exit_code": 0,
+        "required_test_names": [
+          "test_view_return_provenance_survives_named_callee"
+        ],
+        "all_required_tests_passed": true,
+        "per_test_observations": {
+          "test_view_return_provenance_survives_named_callee": {
+            "values": [
+              2,
+              3,
+              2
+            ]
+          }
+        },
+        "complete_original_named_bodies_preserved": true,
+        "textual_names_are_not_runtime_discovery": true,
+        "history_comments_are_not_backend_provenance": true,
+        "callee_from_definition_identity_not_name_or_arity": true,
+        "return_view_root": "UNIQUE_EXPLICIT_VIEW_PARAMETER"
+      },
+      "rationale": "Complete original named bodies and exact independent values preserved; actual declaration-owned driver and full product qualification remain OPEN.",
+      "packages": [
+        "P07",
+        "P09",
+        "P10"
+      ],
+      "legacy_case": null,
+      "status": "PREPARED_NOT_EXECUTED",
+      "execution": {
+        "vm": "NOT_RUN",
+        "native": "NOT_RUN"
+      },
+      "new_entry": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "remaining_qualification": [
+        "Fresh actual test discovery and qualified independent driver must observe every value/error/effect/cleanup; textual names and Python models are not product execution.",
+        "Actual complete fixed producer interfaces, definition-owned target replacements and product registration remain OPEN.",
+        "Full applicable VM/native/FI/lifetime/borrow/cancellation/resource/physical/safety/generated-C/provider/platform gates remain required; original budgets and P20 mixed directions preserved."
+      ],
+      "execution_source": "tests/unit/xir/legacy_consumers/fixtures/final_named_ports/1421_view_return_through_renamed_callee/root.xr",
+      "execution_entry": "test"
+    },
+    {
+      "id": "regression_core_review_1601_narrowing_facts",
+      "inputs": [
+        {
+          "path": "tests/regression/16_narrowing/1601_narrowing_facts.xr",
+          "lf_sha256": "d9d68011cb4a9a0f2523aa148309d8c844194e4e30a060e643c2bd4d4d52cbc1",
+          "role": "preserved_source"
+        },
+        {
+          "path": "tests/unit/xir/legacy_consumers/fixtures/final_named_ports/1601_narrowing_facts/root.xr",
+          "lf_sha256": "aa3f573a50e48fa2026705d5d621c8c70b20aab5258938dda9897be09b8b6715",
+          "role": "complete_selected_source_draft"
+        },
+        {
+          "path": "spec/source/sections/003-2-type-system.md",
+          "lf_sha256": "f4e970b0cc728c19f65a4d1b2a13cd0e572431dcac3f6f20cd06d23046ebea8a",
+          "role": "baseline_spec_pending_frozen_target_sync"
+        },
+        {
+          "path": "spec/source/sections/004-3-expressions.md",
+          "lf_sha256": "3aeabb14d154ef235fe51c665a7d367c2e51dc2c6f5261a9e0b194b228a9b945",
+          "role": "baseline_spec_pending_frozen_target_sync"
+        },
+        {
+          "path": "spec/source/sections/006-5-declarations.md",
+          "lf_sha256": "56fa3d36bc0c5ee38b7c52dafbe26d7b8b0a45a6909c14a8626a9bba515cc4a7",
+          "role": "baseline_spec_pending_frozen_target_sync"
+        },
+        {
+          "path": "spec/source/sections/009-8-error-handling.md",
+          "lf_sha256": "569cafb786430df363674f97f6073e908d76b4a3484f3fb26239b0895342507e",
+          "role": "baseline_spec_pending_frozen_target_sync"
+        },
+        {
+          "path": "spec/source/sections/015-14-built-in-type-methods.md",
+          "lf_sha256": "69b5b9b01844c0d02405decdac260e10fc9f23fe8b51d230e189e1f0802e9d8a",
+          "role": "baseline_spec_pending_frozen_target_sync"
+        }
+      ],
+      "expected": {
+        "exit_code": 0,
+        "required_test_names": [
+          "test_n4_null_inequality",
+          "test_n4_null_equality_else",
+          "test_n4_null_literal_on_left",
+          "test_n4_explicit_presence",
+          "test_n4_negation_of_group",
+          "test_n4_double_negation",
+          "test_n4_grouping_is_transparent",
+          "test_n4_typeof_equality",
+          "test_n5_and_inherits_left_fact",
+          "test_n5_or_inherits_negated_left_fact",
+          "test_n5_and_chain_of_three",
+          "test_n6_is_primitive_true_branch",
+          "test_n6_is_primitive_false_branch",
+          "test_n6_is_negated",
+          "test_n6_is_nullable_receiver",
+          "test_n6_is_null_is_a_null_check",
+          "test_n6_is_downcasts_to_subclass",
+          "test_n11_1_narrowing_works_inside_methods",
+          "test_n7_ternary_arms",
+          "test_n7_while_condition",
+          "test_n7_for_condition",
+          "test_n7_assert_builtin_injects_fact",
+          "test_n7_assert_injects_fact",
+          "test_n7_assert_negated_condition_injects_fact",
+          "test_n8_early_return",
+          "test_n8_continue_narrows_rest_of_body",
+          "test_n11_reassignment_renarrows",
+          "test_n11_call_does_not_invalidate",
+          "test_n12_string_concatenation_accepts_null",
+          "test_n12_equality_with_null_is_allowed",
+          "test_n13_force_unwrap",
+          "test_n13_coalesce"
+        ],
+        "all_required_tests_passed": true,
+        "per_test_observations": {
+          "test_n4_null_inequality": {
+            "values": [
+              3
+            ]
+          },
+          "test_n4_null_equality_else": {
+            "values": [
+              4
+            ]
+          },
+          "test_n4_null_literal_on_left": {
+            "values": [
+              2
+            ]
+          },
+          "test_n4_explicit_presence": {
+            "values": [
+              5
+            ]
+          },
+          "test_n4_negation_of_group": {
+            "values": [
+              3
+            ]
+          },
+          "test_n4_double_negation": {
+            "values": [
+              3
+            ]
+          },
+          "test_n4_grouping_is_transparent": {
+            "values": [
+              4
+            ]
+          },
+          "test_n4_typeof_equality": {
+            "values": [
+              8
+            ]
+          },
+          "test_n5_and_inherits_left_fact": {
+            "values": [
+              true
+            ]
+          },
+          "test_n5_or_inherits_negated_left_fact": {
+            "values": [
+              true
+            ]
+          },
+          "test_n5_and_chain_of_three": {
+            "values": [
+              true
+            ]
+          },
+          "test_n6_is_primitive_true_branch": {
+            "values": [
+              5
+            ]
+          },
+          "test_n6_is_primitive_false_branch": {
+            "values": [
+              5
+            ]
+          },
+          "test_n6_is_negated": {
+            "values": [
+              4
+            ]
+          },
+          "test_n6_is_nullable_receiver": {
+            "values": [
+              3
+            ]
+          },
+          "test_n6_is_null_is_a_null_check": {
+            "values": [
+              3
+            ]
+          },
+          "test_n6_is_downcasts_to_subclass": {
+            "values": [
+              "husky",
+              "cat"
+            ]
+          },
+          "test_n11_1_narrowing_works_inside_methods": {
+            "values": [
+              4,
+              0
+            ]
+          },
+          "test_n7_ternary_arms": {
+            "values": [
+              5,
+              -1
+            ]
+          },
+          "test_n7_while_condition": {
+            "values": [
+              3
+            ]
+          },
+          "test_n7_for_condition": {
+            "values": [
+              6
+            ]
+          },
+          "test_n7_assert_builtin_injects_fact": {
+            "values": [
+              4
+            ]
+          },
+          "test_n7_assert_injects_fact": {
+            "values": [
+              2
+            ]
+          },
+          "test_n7_assert_negated_condition_injects_fact": {
+            "values": [
+              3
+            ]
+          },
+          "test_n8_early_return": {
+            "values": [
+              3,
+              0
+            ]
+          },
+          "test_n8_continue_narrows_rest_of_body": {
+            "values": [
+              5
+            ]
+          },
+          "test_n11_reassignment_renarrows": {
+            "values": [
+              3,
+              2
+            ]
+          },
+          "test_n11_call_does_not_invalidate": {
+            "values": [
+              3
+            ]
+          },
+          "test_n12_string_concatenation_accepts_null": {
+            "values": [
+              "value: null",
+              "a1null"
+            ]
+          },
+          "test_n12_equality_with_null_is_allowed": {
+            "values": [
+              true,
+              false
+            ]
+          },
+          "test_n13_force_unwrap": {
+            "values": [
+              3
+            ]
+          },
+          "test_n13_coalesce": {
+            "values": [
+              "fallback"
+            ]
+          }
+        },
+        "complete_original_named_bodies_preserved": true,
+        "textual_names_are_not_runtime_discovery": true,
+        "history_comments_are_not_backend_provenance": true,
+        "canonical_type_query_replacement": "PENDING_PUBLISHED_QUERY_NOT_TYPE_ENUM_ALIAS",
+        "fact_binding_generation_and_function_scope_required": true,
+        "declaration_owned_replacement": "PENDING_PUBLISHED_REPLACEMENT"
+      },
+      "rationale": "All32 bodies, exact null/union/subclass/short-circuit/method/loop facts preserved. Init draft ready; typeOf/Type.i64 cannot restore old Type enum and canonical type query replacement remains unpublished.",
+      "packages": [
+        "P09",
+        "P10"
+      ],
+      "legacy_case": null,
+      "status": "PREPARED_NOT_EXECUTED",
+      "execution": {
+        "vm": "NOT_RUN",
+        "native": "NOT_RUN"
+      },
+      "new_entry": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "remaining_qualification": [
+        "Fresh actual test discovery and qualified independent driver must observe every value/error/effect/cleanup; textual names and Python models are not product execution.",
+        "Actual complete fixed producer interfaces, definition-owned target replacements and product registration remain OPEN.",
+        "Full applicable VM/native/FI/lifetime/borrow/cancellation/resource/physical/safety/generated-C/provider/platform gates remain required; original budgets and P20 mixed directions preserved."
+      ],
+      "target_source_status": "PENDING_PUBLISHED_DECLARATION_OWNED_LIBRARY_REPLACEMENT",
+      "obligation_scope": "SEMANTIC_DUTY_PRESERVED_TARGET_SOURCE_NOT_PREPARED"
+    },
+    {
+      "id": "regression_core_review_1602_optional_chain_shortcircuit",
+      "inputs": [
+        {
+          "path": "tests/regression/16_narrowing/1602_optional_chain_shortcircuit.xr",
+          "lf_sha256": "af678b2960bdca541ca4820b1c0b1b2c2d336d549784899c8cce10798de64e46",
+          "role": "preserved_source"
+        },
+        {
+          "path": "tests/unit/xir/legacy_consumers/fixtures/final_named_ports/1602_optional_chain_shortcircuit/root.xr",
+          "lf_sha256": "f147f4e2a70c578e059907bf6d874a228a7bafc968df1b210c9b2e68184c469c",
+          "role": "complete_selected_source_draft"
+        },
+        {
+          "path": "spec/source/sections/003-2-type-system.md",
+          "lf_sha256": "f4e970b0cc728c19f65a4d1b2a13cd0e572431dcac3f6f20cd06d23046ebea8a",
+          "role": "baseline_spec_pending_frozen_target_sync"
+        },
+        {
+          "path": "spec/source/sections/004-3-expressions.md",
+          "lf_sha256": "3aeabb14d154ef235fe51c665a7d367c2e51dc2c6f5261a9e0b194b228a9b945",
+          "role": "baseline_spec_pending_frozen_target_sync"
+        },
+        {
+          "path": "spec/source/sections/006-5-declarations.md",
+          "lf_sha256": "56fa3d36bc0c5ee38b7c52dafbe26d7b8b0a45a6909c14a8626a9bba515cc4a7",
+          "role": "baseline_spec_pending_frozen_target_sync"
+        },
+        {
+          "path": "spec/source/sections/009-8-error-handling.md",
+          "lf_sha256": "569cafb786430df363674f97f6073e908d76b4a3484f3fb26239b0895342507e",
+          "role": "baseline_spec_pending_frozen_target_sync"
+        },
+        {
+          "path": "spec/source/sections/015-14-built-in-type-methods.md",
+          "lf_sha256": "69b5b9b01844c0d02405decdac260e10fc9f23fe8b51d230e189e1f0802e9d8a",
+          "role": "baseline_spec_pending_frozen_target_sync"
+        }
+      ],
+      "expected": {
+        "exit_code": 0,
+        "required_test_names": [
+          "test_chain_reaches_value",
+          "test_chain_short_circuits_on_null_prefix",
+          "test_chain_method_call_reaches_value",
+          "test_chain_method_call_short_circuits",
+          "test_chain_last_link_may_be_nullable",
+          "test_explicit_link_for_nullable_member",
+          "test_optional_index_chain",
+          "test_grouping_ends_the_chain",
+          "test_chain_result_feeds_coalesce"
+        ],
+        "all_required_tests_passed": true,
+        "per_test_observations": {
+          "test_chain_reaches_value": {
+            "values": [
+              {
+                "state": "Some",
+                "value": 21
+              }
+            ]
+          },
+          "test_chain_short_circuits_on_null_prefix": {
+            "values": [
+              {
+                "state": "None"
+              }
+            ]
+          },
+          "test_chain_method_call_reaches_value": {
+            "values": [
+              {
+                "state": "Some",
+                "value": 42
+              }
+            ]
+          },
+          "test_chain_method_call_short_circuits": {
+            "values": [
+              {
+                "state": "None"
+              }
+            ]
+          },
+          "test_chain_last_link_may_be_nullable": {
+            "values": [
+              {
+                "state": "Some",
+                "value": {
+                  "state": "Some",
+                  "value": "tagged"
+                }
+              }
+            ]
+          },
+          "test_explicit_link_for_nullable_member": {
+            "values": [
+              {
+                "observed_short_circuit": "nullable_member_absent",
+                "complete_checked_result_type": "PENDING_PUBLISHED_READ_PLAN"
+              }
+            ]
+          },
+          "test_optional_index_chain": {
+            "values": [
+              {
+                "state": "Some",
+                "value": 3
+              },
+              {
+                "state": "None"
+              }
+            ]
+          },
+          "test_grouping_ends_the_chain": {
+            "values": [
+              21
+            ]
+          },
+          "test_chain_result_feeds_coalesce": {
+            "values": [
+              -1
+            ]
+          }
+        },
+        "complete_original_named_bodies_preserved": true,
+        "textual_names_are_not_runtime_discovery": true,
+        "history_comments_are_not_backend_provenance": true,
+        "last_nullable_field_layers": 2,
+        "implicit_optional_flattening": false,
+        "every_later_postfix_skipped_after_absent_prefix": true,
+        "multi_short_circuit_read_plan": "PENDING_PUBLISHED_TYPED_RESULT",
+        "declaration_owned_replacement": "PENDING_PUBLISHED_REPLACEMENT"
+      },
+      "rationale": "All9 bodies preserve whole-chain skipped postfix evaluation, grouped chain end, typed Optional and last nullable field nested Some(Some(tagged)). Baseline spec still says flatten; frozen Task319 decision forbids it. Multi-point result read plan must be published before qualification.",
+      "packages": [
+        "P09",
+        "P10"
+      ],
+      "legacy_case": null,
+      "status": "PREPARED_NOT_EXECUTED",
+      "execution": {
+        "vm": "NOT_RUN",
+        "native": "NOT_RUN"
+      },
+      "new_entry": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "remaining_qualification": [
+        "Fresh actual test discovery and qualified independent driver must observe every value/error/effect/cleanup; textual names and Python models are not product execution.",
+        "Actual complete fixed producer interfaces, definition-owned target replacements and product registration remain OPEN.",
+        "Full applicable VM/native/FI/lifetime/borrow/cancellation/resource/physical/safety/generated-C/provider/platform gates remain required; original budgets and P20 mixed directions preserved."
+      ],
+      "target_source_status": "PENDING_PUBLISHED_DECLARATION_OWNED_LIBRARY_REPLACEMENT",
+      "obligation_scope": "SEMANTIC_DUTY_PRESERVED_TARGET_SOURCE_NOT_PREPARED"
+    },
+    {
+      "id": "regression_core_review_1603_narrowing_joins",
+      "inputs": [
+        {
+          "path": "tests/regression/16_narrowing/1603_narrowing_joins.xr",
+          "lf_sha256": "7f1fbbdfbae37da308f1cdc38016af4e5fefdd09a96030546f996abf2333f9c9",
+          "role": "preserved_source"
+        },
+        {
+          "path": "spec/source/sections/003-2-type-system.md",
+          "lf_sha256": "f4e970b0cc728c19f65a4d1b2a13cd0e572431dcac3f6f20cd06d23046ebea8a",
+          "role": "baseline_spec_pending_frozen_target_sync"
+        },
+        {
+          "path": "spec/source/sections/004-3-expressions.md",
+          "lf_sha256": "3aeabb14d154ef235fe51c665a7d367c2e51dc2c6f5261a9e0b194b228a9b945",
+          "role": "baseline_spec_pending_frozen_target_sync"
+        },
+        {
+          "path": "spec/source/sections/006-5-declarations.md",
+          "lf_sha256": "56fa3d36bc0c5ee38b7c52dafbe26d7b8b0a45a6909c14a8626a9bba515cc4a7",
+          "role": "baseline_spec_pending_frozen_target_sync"
+        },
+        {
+          "path": "spec/source/sections/009-8-error-handling.md",
+          "lf_sha256": "569cafb786430df363674f97f6073e908d76b4a3484f3fb26239b0895342507e",
+          "role": "baseline_spec_pending_frozen_target_sync"
+        },
+        {
+          "path": "spec/source/sections/015-14-built-in-type-methods.md",
+          "lf_sha256": "69b5b9b01844c0d02405decdac260e10fc9f23fe8b51d230e189e1f0802e9d8a",
+          "role": "baseline_spec_pending_frozen_target_sync"
+        }
+      ],
+      "expected": {
+        "exit_code": 0,
+        "required_test_names": [
+          "test_n9_join_of_two_assigned_paths",
+          "test_n9_join_keeps_null_when_one_path_may_be_null",
+          "test_n9_unreachable_path_is_absorbed",
+          "test_n9_nested_joins",
+          "test_n10_narrowing_holds_each_iteration",
+          "test_n10_reassignment_in_body_rejoins",
+          "test_n10_narrowing_before_loop_survives_read_only_body",
+          "test_n10_narrowing_before_while_survives_read_only_body",
+          "test_n10_condition_false_fact_after_loop"
+        ],
+        "all_required_tests_passed": true,
+        "per_test_observations": {
+          "test_n9_join_of_two_assigned_paths": {
+            "values": [
+              3
+            ]
+          },
+          "test_n9_join_keeps_null_when_one_path_may_be_null": {
+            "values": [
+              "fallback"
+            ]
+          },
+          "test_n9_unreachable_path_is_absorbed": {
+            "values": [
+              3
+            ]
+          },
+          "test_n9_nested_joins": {
+            "values": [
+              4,
+              -1,
+              2,
+              -2
+            ]
+          },
+          "test_n10_narrowing_holds_each_iteration": {
+            "values": [
+              3
+            ]
+          },
+          "test_n10_reassignment_in_body_rejoins": {
+            "values": [
+              8
+            ]
+          },
+          "test_n10_narrowing_before_loop_survives_read_only_body": {
+            "values": [
+              9
+            ]
+          },
+          "test_n10_narrowing_before_while_survives_read_only_body": {
+            "values": [
+              4
+            ]
+          },
+          "test_n10_condition_false_fact_after_loop": {
+            "values": [
+              null
+            ]
+          }
+        },
+        "complete_original_named_bodies_preserved": true,
+        "textual_names_are_not_runtime_discovery": true,
+        "history_comments_are_not_backend_provenance": true,
+        "entry_backedge_jump_and_generation_facts_required": true
+      },
+      "rationale": "All9 complete branch and loop joins retained; zero-entry/backedge/read-only paths distinct, exact 3/8/9/4 and final None. No stale flow facts from earlier generation.",
+      "packages": [
+        "P09",
+        "P10"
+      ],
+      "legacy_case": null,
+      "status": "PREPARED_NOT_EXECUTED",
+      "execution": {
+        "vm": "NOT_RUN",
+        "native": "NOT_RUN"
+      },
+      "new_entry": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "remaining_qualification": [
+        "Fresh actual test discovery and qualified independent driver must observe every value/error/effect/cleanup; textual names and Python models are not product execution.",
+        "Actual complete fixed producer interfaces, definition-owned target replacements and product registration remain OPEN.",
+        "Full applicable VM/native/FI/lifetime/borrow/cancellation/resource/physical/safety/generated-C/provider/platform gates remain required; original budgets and P20 mixed directions preserved."
+      ],
+      "execution_source": "tests/regression/16_narrowing/1603_narrowing_joins.xr",
+      "execution_entry": "test"
+    },
+    {
+      "id": "regression_core_review_1604_for_in_loop_header",
+      "inputs": [
+        {
+          "path": "tests/regression/16_narrowing/1604_for_in_loop_header.xr",
+          "lf_sha256": "dbd64728a1c503496d35aab097fbfc17dfa76519b8b2cfae08fa1473605ae699",
+          "role": "preserved_source"
+        },
+        {
+          "path": "spec/source/sections/003-2-type-system.md",
+          "lf_sha256": "f4e970b0cc728c19f65a4d1b2a13cd0e572431dcac3f6f20cd06d23046ebea8a",
+          "role": "baseline_spec_pending_frozen_target_sync"
+        },
+        {
+          "path": "spec/source/sections/004-3-expressions.md",
+          "lf_sha256": "3aeabb14d154ef235fe51c665a7d367c2e51dc2c6f5261a9e0b194b228a9b945",
+          "role": "baseline_spec_pending_frozen_target_sync"
+        },
+        {
+          "path": "spec/source/sections/006-5-declarations.md",
+          "lf_sha256": "56fa3d36bc0c5ee38b7c52dafbe26d7b8b0a45a6909c14a8626a9bba515cc4a7",
+          "role": "baseline_spec_pending_frozen_target_sync"
+        },
+        {
+          "path": "spec/source/sections/009-8-error-handling.md",
+          "lf_sha256": "569cafb786430df363674f97f6073e908d76b4a3484f3fb26239b0895342507e",
+          "role": "baseline_spec_pending_frozen_target_sync"
+        },
+        {
+          "path": "spec/source/sections/015-14-built-in-type-methods.md",
+          "lf_sha256": "69b5b9b01844c0d02405decdac260e10fc9f23fe8b51d230e189e1f0802e9d8a",
+          "role": "baseline_spec_pending_frozen_target_sync"
+        }
+      ],
+      "expected": {
+        "exit_code": 0,
+        "required_test_names": [
+          "test_for_in_readonly_body_keeps_pre_loop_narrowing",
+          "test_for_in_empty_collection_keeps_pre_loop_value",
+          "test_for_in_body_write_rejoins_at_header",
+          "test_for_in_body_write_guarded_after_loop"
+        ],
+        "all_required_tests_passed": true,
+        "per_test_observations": {
+          "test_for_in_readonly_body_keeps_pre_loop_narrowing": {
+            "values": [
+              9
+            ]
+          },
+          "test_for_in_empty_collection_keeps_pre_loop_value": {
+            "values": [
+              "seed"
+            ]
+          },
+          "test_for_in_body_write_rejoins_at_header": {
+            "values": [
+              "x"
+            ]
+          },
+          "test_for_in_body_write_guarded_after_loop": {
+            "values": [
+              "empty"
+            ]
+          }
+        },
+        "complete_original_named_bodies_preserved": true,
+        "textual_names_are_not_runtime_discovery": true,
+        "history_comments_are_not_backend_provenance": true,
+        "entry_backedge_jump_and_generation_facts_required": true
+      },
+      "rationale": "All4 complete read-only/empty/nonempty/guarded for-in bodies; entry edge retains seed/None, body writes join at header without claiming nonempty statically.",
+      "packages": [
+        "P09",
+        "P10"
+      ],
+      "legacy_case": null,
+      "status": "PREPARED_NOT_EXECUTED",
+      "execution": {
+        "vm": "NOT_RUN",
+        "native": "NOT_RUN"
+      },
+      "new_entry": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "remaining_qualification": [
+        "Fresh actual test discovery and qualified independent driver must observe every value/error/effect/cleanup; textual names and Python models are not product execution.",
+        "Actual complete fixed producer interfaces, definition-owned target replacements and product registration remain OPEN.",
+        "Full applicable VM/native/FI/lifetime/borrow/cancellation/resource/physical/safety/generated-C/provider/platform gates remain required; original budgets and P20 mixed directions preserved."
+      ],
+      "execution_source": "tests/regression/16_narrowing/1604_for_in_loop_header.xr",
+      "execution_entry": "test"
+    },
+    {
+      "id": "regression_core_review_1604_loop_control_early_exit",
+      "inputs": [
+        {
+          "path": "tests/regression/16_narrowing/1604_loop_control_early_exit.xr",
+          "lf_sha256": "6870c302f3aba6f9ff4c8615b40d366497e4f473be8b960967073b26b771a08e",
+          "role": "preserved_source"
+        },
+        {
+          "path": "spec/source/sections/003-2-type-system.md",
+          "lf_sha256": "f4e970b0cc728c19f65a4d1b2a13cd0e572431dcac3f6f20cd06d23046ebea8a",
+          "role": "baseline_spec_pending_frozen_target_sync"
+        },
+        {
+          "path": "spec/source/sections/004-3-expressions.md",
+          "lf_sha256": "3aeabb14d154ef235fe51c665a7d367c2e51dc2c6f5261a9e0b194b228a9b945",
+          "role": "baseline_spec_pending_frozen_target_sync"
+        },
+        {
+          "path": "spec/source/sections/006-5-declarations.md",
+          "lf_sha256": "56fa3d36bc0c5ee38b7c52dafbe26d7b8b0a45a6909c14a8626a9bba515cc4a7",
+          "role": "baseline_spec_pending_frozen_target_sync"
+        },
+        {
+          "path": "spec/source/sections/009-8-error-handling.md",
+          "lf_sha256": "569cafb786430df363674f97f6073e908d76b4a3484f3fb26239b0895342507e",
+          "role": "baseline_spec_pending_frozen_target_sync"
+        },
+        {
+          "path": "spec/source/sections/015-14-built-in-type-methods.md",
+          "lf_sha256": "69b5b9b01844c0d02405decdac260e10fc9f23fe8b51d230e189e1f0802e9d8a",
+          "role": "baseline_spec_pending_frozen_target_sync"
+        }
+      ],
+      "expected": {
+        "exit_code": 0,
+        "required_test_names": [
+          "test_n8_continue_for_in",
+          "test_n8_continue_while",
+          "test_n8_continue_classic_for",
+          "test_n8_break_for_in",
+          "test_n8_continue_null_check",
+          "test_n8_labeled_continue",
+          "test_n10_continue_write_reaches_header"
+        ],
+        "all_required_tests_passed": true,
+        "per_test_observations": {
+          "test_n8_continue_for_in": {
+            "values": [
+              "a",
+              ""
+            ]
+          },
+          "test_n8_continue_while": {
+            "values": [
+              5
+            ]
+          },
+          "test_n8_continue_classic_for": {
+            "values": [
+              3
+            ]
+          },
+          "test_n8_break_for_in": {
+            "values": [
+              3
+            ]
+          },
+          "test_n8_continue_null_check": {
+            "values": [
+              3
+            ]
+          },
+          "test_n8_labeled_continue": {
+            "values": [
+              2
+            ]
+          },
+          "test_n10_continue_write_reaches_header": {
+            "values": [
+              2,
+              0
+            ]
+          }
+        },
+        "complete_original_named_bodies_preserved": true,
+        "textual_names_are_not_runtime_discovery": true,
+        "history_comments_are_not_backend_provenance": true,
+        "entry_backedge_jump_and_generation_facts_required": true
+      },
+      "rationale": "All7 helpers/cases retain continue/break/labeled outer targets, typed fallthrough and jump-path write to loop header. drain rounds2/0 independent.",
+      "packages": [
+        "P09",
+        "P10"
+      ],
+      "legacy_case": null,
+      "status": "PREPARED_NOT_EXECUTED",
+      "execution": {
+        "vm": "NOT_RUN",
+        "native": "NOT_RUN"
+      },
+      "new_entry": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "remaining_qualification": [
+        "Fresh actual test discovery and qualified independent driver must observe every value/error/effect/cleanup; textual names and Python models are not product execution.",
+        "Actual complete fixed producer interfaces, definition-owned target replacements and product registration remain OPEN.",
+        "Full applicable VM/native/FI/lifetime/borrow/cancellation/resource/physical/safety/generated-C/provider/platform gates remain required; original budgets and P20 mixed directions preserved."
+      ],
+      "execution_source": "tests/regression/16_narrowing/1604_loop_control_early_exit.xr",
+      "execution_entry": "test"
+    },
+    {
+      "id": "regression_core_review_0804_self_returning_method_rc",
+      "inputs": [
+        {
+          "path": "tests/regression/08_mem/0804_self_returning_method_rc.xr",
+          "lf_sha256": "e35f3139cfbeba09b46c106bad455deb6cc5f3b2e29956cc82cdbfe7b5bdf796",
+          "role": "complete_preserved_source"
+        },
+        {
+          "path": "tests/unit/xir/legacy_consumers/fixtures/final_named_ports/0804_self_returning_method_rc/root.xr",
+          "lf_sha256": "d678461d64d67ab6ed9460a443ccb2648cf19c0a07b08adbfc18ea9b0c607078",
+          "role": "complete_selected_source_draft"
+        }
+      ],
+      "expected": {
+        "exit_code": 0,
+        "required_test_names": [
+          "test_reverse_escapes_receiver_death",
+          "test_sort_escapes_receiver_death",
+          "test_fill_escapes_receiver_death",
+          "test_reserve_escapes_receiver_death",
+          "test_resize_escapes_receiver_death",
+          "test_stringbuilder_append_escapes_receiver_death",
+          "test_stringbuilder_clear_escapes_receiver_death",
+          "test_optional_chain_merge",
+          "test_optional_chain_null_receiver",
+          "test_chained_self_returns",
+          "test_returned_array_is_logically_independent",
+          "test_self_return_in_loop",
+          "test_set_union_result_is_independent"
+        ],
+        "all_required_tests_passed": true,
+        "per_test_observations": {
+          "test_reverse_escapes_receiver_death": {
+            "values": [
+              [
+                3,
+                2,
+                1
+              ],
+              3,
+              3,
+              2,
+              1
+            ]
+          },
+          "test_sort_escapes_receiver_death": {
+            "values": [
+              [
+                1,
+                2,
+                3
+              ],
+              3,
+              1,
+              3
+            ]
+          },
+          "test_fill_escapes_receiver_death": {
+            "values": [
+              [
+                7,
+                7,
+                7
+              ],
+              3,
+              7,
+              7
+            ]
+          },
+          "test_reserve_escapes_receiver_death": {
+            "values": [
+              [
+                4,
+                5
+              ],
+              2,
+              4,
+              5
+            ]
+          },
+          "test_resize_escapes_receiver_death": {
+            "values": [
+              [
+                4,
+                5,
+                9,
+                9
+              ],
+              4,
+              4,
+              9
+            ]
+          },
+          "test_stringbuilder_append_escapes_receiver_death": {
+            "values": [
+              "xy",
+              2
+            ]
+          },
+          "test_stringbuilder_clear_escapes_receiver_death": {
+            "values": [
+              "dropped",
+              "",
+              ""
+            ]
+          },
+          "test_optional_chain_merge": {
+            "values": [
+              {
+                "state": "Some",
+                "value": [
+                  3,
+                  2,
+                  1
+                ]
+              },
+              3,
+              3
+            ]
+          },
+          "test_optional_chain_null_receiver": {
+            "values": [
+              {
+                "state": "None"
+              },
+              true
+            ]
+          },
+          "test_chained_self_returns": {
+            "values": [
+              [
+                3,
+                2,
+                1
+              ],
+              3,
+              3,
+              1
+            ]
+          },
+          "test_returned_array_is_logically_independent": {
+            "values": [
+              4,
+              4,
+              3,
+              [
+                3,
+                2,
+                1
+              ],
+              3,
+              9
+            ]
+          },
+          "test_self_return_in_loop": {
+            "values": [
+              20,
+              60
+            ]
+          },
+          "test_set_union_result_is_independent": {
+            "values": [
+              2,
+              false,
+              {
+                "members": [
+                  1,
+                  2
+                ],
+                "order": "NOT_REQUIRED"
+              }
+            ]
+          }
+        },
+        "complete_original_named_bodies_preserved": true,
+        "original_alias_assertion_retired": true,
+        "returned_array_and_receiver_logically_independent": true,
+        "chained_ref_call_uses_writable_intermediate": true,
+        "retired_builder_api_restored": false,
+        "owned_text_result_survives_local_accumulator": true,
+        "old_owned_text_survives_clear": true,
+        "retained_loop_iterations": 20,
+        "sort_capacity_and_set_definition_proofs": "PENDING_PUBLISHED_INTERFACES",
+        "actual_physical_release_or_fi": "OPEN"
+      },
+      "rationale": "All13 original named obligations preserved, including10 omitted by earlier supplementary reverse program. Owned text replacement, independent Array result, optional absent/present merge, writable chained ref call and20-loop sum60 independently specified. Pending Compare/reserve/Set declarations keep whole target abstract; contents never prove physical release.",
+      "packages": [
+        "P02",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P13",
+        "P14"
+      ],
+      "legacy_case": null,
+      "status": "PREPARED_NOT_EXECUTED",
+      "execution": {
+        "vm": "NOT_RUN",
+        "native": "NOT_RUN"
+      },
+      "new_entry": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "remaining_qualification": [
+        "Receive complete fixed producer interfaces and exact definition-owned sort/Compare, reserve, Set union and full owned-text admission; actual complete test discovery and driver registration.",
+        "Fresh independent VM/native and full affected FI/resource/lifetime/borrow/cancellation/physical/safety/generated-C/provider/platform gates, unchanged original budgets."
+      ],
+      "target_source_status": "PENDING_PUBLISHED_DECLARATION_OWNED_LIBRARY_REPLACEMENT",
+      "obligation_scope": "SEMANTIC_DUTY_PRESERVED_TARGET_SOURCE_NOT_PREPARED"
     }
   ]
 }

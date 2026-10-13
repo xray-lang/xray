@@ -281,6 +281,26 @@ FROZEN_TARGETS['tests/regression/07_strings/0751_threshold_branch.xr'] = ('POSIT
 FROZEN_TARGETS['tests/regression/07_strings/0770_string_pool_concurrent_property.xr'] = ('POSITIVE_COMPLETE_COLLECTION_STRING_AFTER_FROZEN_PORT', 'P13')
 FROZEN_TARGETS['tests/regression/07_strings/0780_chr_function.xr'] = ('POSITIVE_COMPLETE_COLLECTION_STRING_AFTER_FROZEN_PORT', 'P13')
 
+CORE_NAMED_REVIEW += ('tests/regression/08_error_handling/0830_throw_catch_value_return.xr', 'tests/regression/08_error_handling/0831_cross_module_error.xr', 'tests/regression/08_error_handling/0840_enum_throw.xr', 'tests/regression/14_typed_array/1400_byte_array_basic.xr', 'tests/regression/14_typed_array/1401_byte_array_slice.xr', 'tests/regression/14_typed_array/1402_byte_array_intrinsics.xr', 'tests/regression/14_typed_array/1403_slice_grow_lifetime.xr', 'tests/regression/14_typed_array/1405_span_static_surface.xr', 'tests/regression/14_typed_array/1408_span_closure_owner_capture.xr', 'tests/regression/14_typed_array/1409_byte_u8_canonical_identity.xr', 'tests/regression/14_typed_array/1410_shared_provenance_rebind_reset.xr', 'tests/regression/14_typed_array/1411_shared_provenance_readonly_param.xr', 'tests/regression/14_typed_array/1412_shared_provenance_readonly_function_value_param.xr', 'tests/regression/14_typed_array/1413_shared_provenance_imported_readonly_function_value_param.xr', 'tests/regression/14_typed_array/1414_shared_provenance_reexported_readonly_function_value_param.xr', 'tests/regression/14_typed_array/1415_shared_provenance_returned_readonly_function_value_param.xr', 'tests/regression/14_typed_array/1416_byte_receiver_effect_matrix.xr', 'tests/regression/14_typed_array/1417_for_in_slice_borrow_nll.xr', 'tests/regression/14_typed_array/1418_shared_provenance_readonly_closure_capture.xr', 'tests/regression/14_typed_array/1419_inline_range_slice_arg.xr', 'tests/regression/14_typed_array/1420_view_return_through_user_copy.xr', 'tests/regression/14_typed_array/1421_view_return_through_renamed_callee.xr', 'tests/regression/16_narrowing/1601_narrowing_facts.xr', 'tests/regression/16_narrowing/1602_optional_chain_shortcircuit.xr', 'tests/regression/16_narrowing/1603_narrowing_joins.xr', 'tests/regression/16_narrowing/1604_for_in_loop_header.xr', 'tests/regression/16_narrowing/1604_loop_control_early_exit.xr')
+IMPORTED_ORACLE_INPUTS['tests/regression/08_error_handling/0831_cross_module_error.xr'] = ('tests/regression/08_error_handling/modules/error_source.xr',)
+IMPORTED_ORACLE_INPUTS['tests/regression/14_typed_array/1413_shared_provenance_imported_readonly_function_value_param.xr'] = ('tests/fixtures/shared_mutation_lib.xr',)
+IMPORTED_ORACLE_INPUTS['tests/regression/14_typed_array/1414_shared_provenance_reexported_readonly_function_value_param.xr'] = ('tests/fixtures/shared_mutation_reexport.xr', 'tests/fixtures/shared_mutation_reexport_all.xr', 'tests/fixtures/shared_mutation_lib.xr')
+FROZEN_TARGETS['tests/regression/14_typed_array/1400_byte_array_basic.xr'] = ('POSITIVE_COMPLETE_ERROR_BYTE_NARROWING_AFTER_FROZEN_PORT', 'P10')
+FROZEN_TARGETS['tests/regression/14_typed_array/1401_byte_array_slice.xr'] = ('POSITIVE_COMPLETE_ERROR_BYTE_NARROWING_AFTER_FROZEN_PORT', 'P10')
+FROZEN_TARGETS['tests/regression/14_typed_array/1402_byte_array_intrinsics.xr'] = ('POSITIVE_COMPLETE_ERROR_BYTE_NARROWING_AFTER_FROZEN_PORT', 'P10')
+FROZEN_TARGETS['tests/regression/14_typed_array/1403_slice_grow_lifetime.xr'] = ('POSITIVE_COMPLETE_ERROR_BYTE_NARROWING_AFTER_FROZEN_PORT', 'P10')
+FROZEN_TARGETS['tests/regression/14_typed_array/1405_span_static_surface.xr'] = ('POSITIVE_COMPLETE_ERROR_BYTE_NARROWING_AFTER_FROZEN_PORT', 'P10')
+FROZEN_TARGETS['tests/regression/14_typed_array/1408_span_closure_owner_capture.xr'] = ('POSITIVE_COMPLETE_ERROR_BYTE_NARROWING_AFTER_FROZEN_PORT', 'P10')
+FROZEN_TARGETS['tests/regression/14_typed_array/1410_shared_provenance_rebind_reset.xr'] = ('POSITIVE_COMPLETE_ERROR_BYTE_NARROWING_AFTER_FROZEN_PORT', 'P10')
+FROZEN_TARGETS['tests/regression/14_typed_array/1416_byte_receiver_effect_matrix.xr'] = ('POSITIVE_COMPLETE_ERROR_BYTE_NARROWING_AFTER_FROZEN_PORT', 'P10')
+FROZEN_TARGETS['tests/regression/14_typed_array/1420_view_return_through_user_copy.xr'] = ('POSITIVE_COMPLETE_ERROR_BYTE_NARROWING_AFTER_FROZEN_PORT', 'P10')
+FROZEN_TARGETS['tests/regression/14_typed_array/1421_view_return_through_renamed_callee.xr'] = ('POSITIVE_COMPLETE_ERROR_BYTE_NARROWING_AFTER_FROZEN_PORT', 'P10')
+FROZEN_TARGETS['tests/regression/16_narrowing/1601_narrowing_facts.xr'] = ('POSITIVE_COMPLETE_ERROR_BYTE_NARROWING_AFTER_FROZEN_PORT', 'P10')
+FROZEN_TARGETS['tests/regression/16_narrowing/1602_optional_chain_shortcircuit.xr'] = ('POSITIVE_COMPLETE_ERROR_BYTE_NARROWING_AFTER_FROZEN_PORT', 'P10')
+
+CORE_NAMED_REVIEW += ('tests/regression/08_mem/0804_self_returning_method_rc.xr',)
+FROZEN_TARGETS['tests/regression/08_mem/0804_self_returning_method_rc.xr'] = ('POSITIVE_COMPLETE_RETURN_LIFETIME_AFTER_FROZEN_PORT', 'P10')
+
 def load_module(name: str, relative: str):
     spec = importlib.util.spec_from_file_location(name, ROOT / relative)
     module = importlib.util.module_from_spec(spec)
