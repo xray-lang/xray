@@ -1,0 +1,8 @@
+var state = Atomic<i64>(1)
+
+fn illegalRead() -> i64 {
+    return state.load(Ordering.SeqCst)
+}
+
+var task = go illegalRead()
+print(await task)

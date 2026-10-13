@@ -16,11 +16,14 @@ change a product interface, or authorize deletion of an old test.
   The class cleanup target fixture uses ordinary methods and contextual init,
   retains both named tests and adds during-call guard checks. It has not compiled
   on a product producer; its real test discovery/execution remains required.
-- `runner_routes.json` binds 673 explicitly reviewed FFI/JSON/generic/nullable/cleanup/
+- `runner_routes.json` binds 874 explicitly reviewed FFI/JSON/generic/nullable/cleanup/
   generator/numeric/closure/module/call/ownership/control/comptime and regression inputs to their original source and expectation hashes,
   compiler positions/codes/text and actual runner entries. Future files are not
   automatically assigned by a directory wildcard. Missing expectations and
-  diagnostic position gaps remain explicit. Existing Task318 Q12 names the
+  diagnostic position gaps remain explicit. Eleven imported diagnostics bind
+  their complete XR/XRD companion inputs; an earlier import-authority failure
+  cannot satisfy the requested callback effect, method or parameter-mode error.
+  Existing Task318 Q12 names the
   frozen comptime/protocol scope without changing the 27 historical families.
   Five old no-call rejection cases are explicitly marked for required positive
   Task320 migration; the original rejection records remain historical evidence.
@@ -29,10 +32,16 @@ change a product interface, or authorize deletion of an old test.
   The incomplete enum implementation still rejects for missing its interface
   method, paired with a separate implemented witness. Read structs/generic
   receiver obligations and the unresolved cycle strategy stay distinct.
-- `oracles.json` records thirty-three independent output/result/rejection expectations.
+  Reviewed syntax/stdlib inputs preserve removed spellings, typed public options
+  and constrained parallel boundaries. Old C-union syntax needs an extern union
+  port before it can prove the field/method/generic restriction.
+- `oracles.json` records thirty-eight independent output/result/rejection expectations.
   Preserved original literals remain byte-for-byte inputs. Target source ports
   are separately named and hashed; they do not overwrite historical originals.
-  They have no invented new entry adapters. The StringBuilder input still requires
+  New Atomic fixtures separately require legal direct-var rebinding and
+  explicit child parameter transfer, and reject worker reads of the concrete
+  module slot. They are not product-compiled or wired to a new entry adapter.
+  The StringBuilder input still requires
   a reviewed semantic migration to its replacement; it is not an API to restore.
 - `audit.py snapshot` calls the existing runners' actual discovery and expectation
   parsers and checks the entire existing source-consumer inventory. It preserves

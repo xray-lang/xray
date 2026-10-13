@@ -1,0 +1,20 @@
+var state = Atomic<i64>(1)
+
+fn addOne(handle: Atomic<i64>) -> i64 {
+    return handle.fetchAdd(1, Ordering.SeqCst)
+}
+
+fn run() {
+    const original = state
+    state = Atomic<i64>(30)
+    const handle = state
+    const task = go addOne(handle)
+    print(await task)
+    print(state.load(Ordering.SeqCst))
+    print(original.load(Ordering.SeqCst))
+    original.store(2, Ordering.SeqCst)
+    print(original.load(Ordering.SeqCst))
+    print(state.load(Ordering.SeqCst))
+}
+
+run()

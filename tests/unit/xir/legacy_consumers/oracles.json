@@ -1136,6 +1136,219 @@
         "Compile the preserved or explicitly ported source through the accepted fixed Source/Program interface. The old rejection is historical evidence, not target qualification.",
         "Each fresh backend must satisfy this independent expectation; complete affected ownership, cancellation, resource, physical release, FI, sanitizer and provider gates."
       ]
+    },
+    {
+      "id": "quoted_literal_family_bytes_and_newlines",
+      "inputs": [
+        {
+          "path": "tests/diff/cases/semantics/string/quoted_literals_variable_block.xr",
+          "lf_sha256": "70cd8bbb93ef95c955304dffaa1dcbaad819a02b253b384f909ab828f049e339",
+          "role": "preserved_source"
+        },
+        {
+          "path": "spec/source/sections/002-1-lexical-structure.md",
+          "lf_sha256": "b8c472d095dff9139e79f407988806c620f7c3e3549f3bb04a3a44b4032504e5",
+          "role": "frozen_literal_rules"
+        }
+      ],
+      "execution_source": "tests/diff/cases/semantics/string/quoted_literals_variable_block.xr",
+      "expected": {
+        "exit_code": 0,
+        "stdout_utf8": "hello \"Xray\"\n\nXray\\n\"\"\"\n3\n65\n0\n66\n3\n92\n3\n0\n3\n0\n",
+        "stderr_utf8": ""
+      },
+      "rationale": "Structural opener/closer newlines are removed. The deliberate blank body line survives as one payload newline. Raw string still interpolates Xray but retains backslash-n and quotes. Escaped bytes contain A/NUL/B; raw bytes keep the backslash; c/cr append exactly one terminator.",
+      "packages": [
+        "P09",
+        "P10",
+        "P13"
+      ],
+      "legacy_case": null,
+      "status": "PREPARED_NOT_EXECUTED",
+      "execution": {
+        "vm": "NOT_RUN",
+        "native": "NOT_RUN"
+      },
+      "new_entry": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "remaining_qualification": [
+        "Use the real fixed Source/Program entry with fresh accepted producers; no guessed adapter, compatibility spelling or restored native-cache route.",
+        "Each backend must satisfy the independent result and complete applicable compiler/runtime FI/resource/lifetime/cancellation/physical/sanitizer/provider gates."
+      ]
+    },
+    {
+      "id": "parallel_library_owned_default_options",
+      "inputs": [
+        {
+          "path": "tests/diff/cases/semantics/stdlib/parallel_default_options.xr",
+          "lf_sha256": "705f89906a478521471a148cf2cec941aafe659719f2a0e2bad13fac7743f7e9",
+          "role": "preserved_source"
+        },
+        {
+          "path": "tests/diff/cases/semantics/stdlib/parallel_default_options.xr.expected",
+          "lf_sha256": "c9b49b98f33dc98a3a9437868d30434bed5f1f29aa996a238f226521d433275f",
+          "role": "original_independent_stdout"
+        }
+      ],
+      "execution_source": "tests/diff/cases/semantics/stdlib/parallel_default_options.xr",
+      "expected": {
+        "exit_code": 0,
+        "stdout_utf8": "10\n4\n9\n3\n13\n20\n",
+        "stderr_utf8": ""
+      },
+      "rationale": "Summing 0..5 yields 10; map squares four values ending 9; mapInto 1..4 yields length3 ending13; reduce adds initial10 to sum10. Defaults belong to the imported library and are needed even without caller-side Options import.",
+      "packages": [
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P13",
+        "P17"
+      ],
+      "legacy_case": null,
+      "status": "PREPARED_NOT_EXECUTED",
+      "execution": {
+        "vm": "NOT_RUN",
+        "native": "NOT_RUN"
+      },
+      "new_entry": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "remaining_qualification": [
+        "Use the real fixed Source/Program entry with fresh accepted producers; no guessed adapter, compatibility spelling or restored native-cache route.",
+        "Each backend must satisfy the independent result and complete applicable compiler/runtime FI/resource/lifetime/cancellation/physical/sanitizer/provider gates."
+      ]
+    },
+    {
+      "id": "atomic_original_named_tests",
+      "inputs": [
+        {
+          "path": "tests/regression/09_advanced/0914_atomic_basic.xr",
+          "lf_sha256": "2cd1cb74e4d1e007396df1a43d16ed9f5bbdafef038ae1354968800cd45a1b28",
+          "role": "preserved_source"
+        }
+      ],
+      "execution_source": "tests/regression/09_advanced/0914_atomic_basic.xr",
+      "expected": {
+        "exit_code": 0,
+        "required_test_names": [
+          "test_atomic_int_load_store",
+          "test_atomic_int_add_sub",
+          "test_atomic_int_fetch_add_sub",
+          "test_atomic_int_swap",
+          "test_atomic_int_compare_exchange_success",
+          "test_atomic_int_compare_exchange_failure",
+          "test_atomic_bool_load_store",
+          "test_atomic_bool_toggle",
+          "test_atomic_float_load_store",
+          "test_atomic_float_add_sub",
+          "test_atomic_to_string",
+          "test_atomic_ordering_enum"
+        ],
+        "all_required_tests_passed": true
+      },
+      "rationale": "Preserve every original named body and operation assertion. Fetch/swap return the previous value; compareExchange returns previous+success; bool toggle returns previous; f64 operations retain exact literals and permitted Ordering. An empty report or missing body cannot qualify.",
+      "packages": [
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P13",
+        "P14",
+        "P18"
+      ],
+      "legacy_case": null,
+      "status": "PREPARED_NOT_EXECUTED",
+      "execution": {
+        "vm": "NOT_RUN",
+        "native": "NOT_RUN"
+      },
+      "new_entry": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "remaining_qualification": [
+        "Use the real fixed Source/Program entry with fresh accepted producers; no guessed adapter, compatibility spelling or restored native-cache route.",
+        "Each backend must satisfy the independent result and complete applicable compiler/runtime FI/resource/lifetime/cancellation/physical/sanitizer/provider gates."
+      ]
+    },
+    {
+      "id": "atomic_var_handle_root_parameter",
+      "inputs": [
+        {
+          "path": "tests/unit/xir/legacy_consumers/fixtures/atomic_var_handle_root_parameter/root.xr",
+          "lf_sha256": "5c7482353427d110faa9992d3134c5b549e345a36ad0d13b9d66287e7727eef7",
+          "role": "target_source"
+        },
+        {
+          "path": "stdlib/types/atomic.xr",
+          "lf_sha256": "4da0e8355fdbb9e22a2cc5552f234d171b389302ce29698a19399ec40b2f67e4",
+          "role": "governed_public_declaration"
+        }
+      ],
+      "execution_source": "tests/unit/xir/legacy_consumers/fixtures/atomic_var_handle_root_parameter/root.xr",
+      "expected": {
+        "exit_code": 0,
+        "stdout_utf8": "30\n31\n1\n2\n31\n",
+        "stderr_utf8": ""
+      },
+      "rationale": "Frozen R11 allows direct var Atomic bindings/rebinding. The root reads a qualified handle and passes it as a normal child parameter; fetchAdd returns30 and increments the new identity to31. The retained old handle stays1 then2, independently of the rebound slot.",
+      "packages": [
+        "P02",
+        "P06",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P13",
+        "P18"
+      ],
+      "legacy_case": null,
+      "status": "PREPARED_NOT_EXECUTED",
+      "execution": {
+        "vm": "NOT_RUN",
+        "native": "NOT_RUN"
+      },
+      "new_entry": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "remaining_qualification": [
+        "Use the real fixed Source/Program entry with fresh accepted producers; no guessed adapter, compatibility spelling or restored native-cache route.",
+        "Each backend must satisfy the independent result and complete applicable compiler/runtime FI/resource/lifetime/cancellation/physical/sanitizer/provider gates."
+      ]
+    },
+    {
+      "id": "atomic_var_worker_direct_rejection",
+      "inputs": [
+        {
+          "path": "tests/unit/xir/legacy_consumers/fixtures/atomic_var_worker_direct_rejection/root.xr",
+          "lf_sha256": "c8056dc5c673bd01cc987748daeeea54e4b2c1f69676f8ccd674f825b8a08422",
+          "role": "target_rejection_source"
+        },
+        {
+          "path": "stdlib/types/atomic.xr",
+          "lf_sha256": "4da0e8355fdbb9e22a2cc5552f234d171b389302ce29698a19399ec40b2f67e4",
+          "role": "governed_public_declaration"
+        }
+      ],
+      "execution_source": "tests/unit/xir/legacy_consumers/fixtures/atomic_var_worker_direct_rejection/root.xr",
+      "expected": {
+        "diagnostic_stage": "CHECK",
+        "product_published": false,
+        "rejected_root_binding": "state"
+      },
+      "rationale": "The direct var binding itself is legitimate. The worker target illegalRead directly reads module slot state, requiring ROOT. Reject for that concrete owner/call path before publishing a Program; an Atomic type/var-ban or runtime trap is not the required rejection.",
+      "packages": [
+        "P02",
+        "P06",
+        "P08",
+        "P10",
+        "P13",
+        "P18"
+      ],
+      "legacy_case": null,
+      "status": "PREPARED_NOT_EXECUTED",
+      "execution": {
+        "vm": "NOT_RUN",
+        "native": "NOT_RUN"
+      },
+      "new_entry": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "remaining_qualification": [
+        "Bind the actual owned fixed producer diagnostic/cause to illegalRead -> module state. The normalized expected binding is an independent semantic observation, not a new public API.",
+        "Prove the companion legitimate direct-var/explicit-parameter program succeeds; do not qualify by a blanket Atomic binding ban. Retain affected compiler FI/resource/physical/no-partial-product and safety checks."
+      ]
     }
   ]
 }

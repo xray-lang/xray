@@ -14,6 +14,61 @@ class PreparationChecks(unittest.TestCase):
         cls.runner_routes = audit.read_json(audit.HERE / "runner_routes.json")
         cls.legacy = audit.read_json(audit.ROOT / "tests/unit/xir/product_consumers/legacy_responsibilities.json")
 
+    def test_imported_diagnostics_cannot_omit_companion_inputs(self):
+        for identity in audit.IMPORTED_ORACLE_INPUTS:
+            with self.subTest(identity=identity):
+                bad = copy.deepcopy(self.runner_routes)
+                row = next(r for r in bad["cases"] if r["case_id"] == identity)
+                del row["original_imported_inputs"]
+                with self.assertRaisesRegex(ValueError, "required companion inputs"):
+                    audit.validate_runner_routes(bad, self.mapping)
+
+    def test_imported_effect_diagnostic_cannot_bind_changed_companion(self):
+        bad = copy.deepcopy(self.runner_routes)
+        row = next(r for r in bad["cases"] if "original_imported_inputs" in r)
+        row["original_imported_inputs"][0]["lf_sha256"] = "0" * 64
+        with self.assertRaisesRegex(ValueError, "companion changed"):
+            audit.validate_runner_routes(bad, self.mapping)
+
+    def test_oracle_cannot_execute_a_different_unbound_source(self):
+        bad = copy.deepcopy(self.oracles)
+        row = next(r for r in bad["cases"] if r["id"] == "atomic_var_handle_root_parameter")
+        row["execution_source"] = "tests/diff/cases/basic/arith.xr"
+        with self.assertRaisesRegex(ValueError, "execution source"):
+            audit.validate_oracles(bad)
+
+    def test_raw_string_interpolates_but_raw_byte_backslash_survives(self):
+        expected = next(r["expected"] for r in self.oracles["cases"] if r["id"] == "quoted_literal_family_bytes_and_newlines")
+        for output in (expected["stdout_utf8"].replace("Xray\\n", "${name}\\n"),
+                       expected["stdout_utf8"].replace("hello \"Xray\"\n\n", "hello \"Xray\"\n"),
+                       expected["stdout_utf8"].replace("\n92\n", "\n10\n")):
+            with self.subTest(output=output), self.assertRaises(ValueError):
+                audit.compare_required(expected, dict(expected, stdout_utf8=output))
+
+    def test_parallel_defaults_must_execute_all_original_operations(self):
+        expected = next(r["expected"] for r in self.oracles["cases"] if r["id"] == "parallel_library_owned_default_options")
+        with self.assertRaises(ValueError):
+            audit.compare_required(expected, dict(expected, stdout_utf8="10\n4\n9\n3\n13\n"))
+
+    def test_atomic_named_test_report_cannot_be_empty_or_partial(self):
+        expected = next(r["expected"] for r in self.oracles["cases"] if r["id"] == "atomic_original_named_tests")
+        for names in ([], expected["required_test_names"][:-1]):
+            with self.subTest(names=names), self.assertRaises(ValueError):
+                audit.compare_required(expected, dict(expected, required_test_names=names))
+
+    def test_atomic_var_rebinding_cannot_overwrite_the_old_identity(self):
+        expected = next(r["expected"] for r in self.oracles["cases"] if r["id"] == "atomic_var_handle_root_parameter")
+        with self.assertRaises(ValueError):
+            audit.compare_required(expected, dict(expected, stdout_utf8="30\n31\n31\n2\n2\n"))
+
+    def test_atomic_worker_rejection_requires_the_concrete_root_binding(self):
+        expected = next(r["expected"] for r in self.oracles["cases"] if r["id"] == "atomic_var_worker_direct_rejection")
+        for observed in ({"diagnostic_stage": "CHECK", "product_published": False},
+                         dict(expected, rejected_root_binding="Atomic var binding"),
+                         dict(expected, diagnostic_stage="RUNTIME", product_published=True)):
+            with self.subTest(observed=observed), self.assertRaises(ValueError):
+                audit.compare_required(expected, observed)
+
     def test_frozen_transitions_cannot_fall_back_to_original_rejection(self):
         for identity in audit.FROZEN_TARGETS:
             with self.subTest(identity=identity):

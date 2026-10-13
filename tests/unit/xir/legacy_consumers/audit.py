@@ -33,6 +33,24 @@ for name in ("generator_await_rejected.xr", "generator_coro_yield_rejected.xr",
 FROZEN_TARGETS["tests/compile_errors/oop/020_enum_implements_rejected.xr"] = ("REJECTION_FOR_MISSING_INTERFACE_REQUIREMENT", "P10")
 
 
+# The demanded imported diagnostics depend on these complete companion inputs.
+IMPORTED_ORACLE_INPUTS = {}
+for name in ("156_imported_ref_call_requires_marker.xr", "158_imported_const_function_value_ref_call_requires_marker.xr"):
+    IMPORTED_ORACLE_INPUTS["tests/compile_errors/ownership/" + name] = ("tests/fixtures/param_mode_import_lib.xr",)
+for name in ("sys_thread_spawn_imported_function_value_suspendable_rejected.xr",
+             "sys_thread_spawn_imported_suspendable_call_rejected.xr",
+             "sys_thread_spawn_namespace_suspendable_call_rejected.xr"):
+    IMPORTED_ORACLE_INPUTS["tests/compile_errors/concurrency/" + name] = ("tests/fixtures/thread_spawn_suspendable_lib.xr",)
+for name in ("parallel_callback_imported_function_value_suspendable_rejected.xr",
+             "parallel_callback_imported_suspendable_call_rejected.xr",
+             "parallel_callback_namespace_suspendable_call_rejected.xr"):
+    IMPORTED_ORACLE_INPUTS["tests/compile_errors/stdlib/" + name] = ("tests/fixtures/thread_spawn_suspendable_lib.xr",)
+for name in ("parallel_callback_selective_xrd_unknown_effect_rejected.xr",
+             "parallel_callback_xrd_handle_method_unknown_effect_rejected.xr",
+             "parallel_callback_xrd_unknown_effect_rejected.xr"):
+    IMPORTED_ORACLE_INPUTS["tests/compile_errors/stdlib/" + name] = ("tests/compile_errors/stdlib/parallel_unknown_effect_native.xrd",)
+
+
 def load_module(name: str, relative: str):
     spec = importlib.util.spec_from_file_location(name, ROOT / relative)
     module = importlib.util.module_from_spec(spec)
@@ -158,6 +176,14 @@ def validate_runner_routes(data: dict, responsibilities: dict, actual_entries: d
             raise ValueError("runner routing cannot grant product qualification")
         if not row["semantic_basis"]:
             raise ValueError("runner routing lacks reviewed semantic evidence")
+        imported = row.get("original_imported_inputs", [])
+        required_imports = IMPORTED_ORACLE_INPUTS.get(identity, ())
+        if required_imports and tuple(i["path"] for i in imported) != required_imports:
+            raise ValueError("reviewed imported oracle lost its required companion inputs")
+        for item in imported:
+            actual = file_record(ROOT / item["path"])
+            if item != {"path": actual["path"], "state": actual["state"], "lf_sha256": actual.get("lf_sha256")}:
+                raise ValueError("reviewed imported oracle companion changed")
         regression = row.get("original_regression_obligation")
         if regression:
             entries = [e["entry"] for e in actual_entries[identity] if e["suite"] == "regression"]
@@ -203,6 +229,7 @@ def validate_runner_routes(data: dict, responsibilities: dict, actual_entries: d
             "reviewed_regression_inputs": sum(any(e["suite"] == "regression" for e in r["original_runner_entries"]) for r in rows),
             "prepared_target_source_ports": sum("target_source_port" in r for r in rows),
             "reviewed_frozen_target_transitions": sum("target_disposition" in r for r in rows),
+            "reviewed_imported_companion_links": sum(len(r.get("original_imported_inputs", [])) for r in rows),
             "reviewed_rejection_cases": sum("original_rejection_oracle" in r for r in rows),
             "reviewed_rejection_oracles": sum(r.get("original_rejection_oracle", {}).get("state") == "PRESENT" for r in rows),
             "reviewed_missing_rejection_oracles": sum(r.get("original_rejection_oracle", {}).get("state") == "MISSING" for r in rows)}
@@ -234,6 +261,9 @@ def validate_oracles(data: dict) -> dict:
                 original = legacy.static_strings(source[start:end])[item["original_literal"]]
                 if path.read_bytes().replace(b"\r\n", b"\n") != original:
                     raise ValueError(f"original positive program changed: {row['id']}")
+        execution_source = row.get("execution_source")
+        if execution_source and execution_source not in {i["path"] for i in row["inputs"]}:
+            raise ValueError("oracle execution source is not an owned input")
         for backend in ("vm", "native"):
             if row["execution"][backend] != "NOT_RUN":
                 raise ValueError("fixture preparation is not execution evidence")
