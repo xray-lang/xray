@@ -1,0 +1,22 @@
+export enum TerminalFault { Failed { message:string } }
+export fn returned()->string {
+    defer { print(11) }
+    Coro.yield()
+    return "held"
+}
+export fn thrown()->i64 {
+    defer { print(21) }
+    Coro.yield()
+    throw TerminalFault.Failed { message:"held-error" }
+}
+export fn panicked()->i64 {
+    defer { print(31) }
+    Coro.yield()
+    return 1/0
+}
+export fn crossed(f:fn()->i64)->i64 {
+    print(40)
+    const first = f()
+    print(42)
+    return first + f()
+}
