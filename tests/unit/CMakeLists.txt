@@ -3925,6 +3925,8 @@ endif()
 # ============================================================================
 
 if(XR_BUILD_MCP)
+    include(mcp/knowledge.cmake)
+
     add_executable(test_mcp_transport
         mcp/test_mcp_transport.c
         ${CMAKE_SOURCE_DIR}/src/app/mcp/xmcp_transport_stdio.c
@@ -3979,7 +3981,6 @@ if(XR_BUILD_MCP)
         resources
         resource_templates
         prompts
-        knowledge
         dispatch
     )
     foreach(group IN LISTS XR_MCP_PROTOCOL_TEST_GROUPS)
