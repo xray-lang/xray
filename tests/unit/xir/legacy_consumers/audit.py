@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import collections
 import dataclasses
+import functools
 import hashlib
 import importlib.util
 import json
@@ -133,8 +134,15 @@ def sha(data: bytes) -> str:
     return hashlib.sha256(data).hexdigest()
 
 
+@functools.lru_cache(maxsize=16384)
+def _relative_path(path: Path, root: Path) -> str:
+    # Only cache immutable lexical path conversion. Never cache file contents,
+    # existence or hashes; every audit must see current source and sidecar bytes.
+    return path.relative_to(root).as_posix()
+
+
 def relative(path: Path) -> str:
-    return path.relative_to(ROOT).as_posix()
+    return _relative_path(path, ROOT)
 
 
 def file_record(path: Path) -> dict:

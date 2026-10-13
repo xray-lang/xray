@@ -1,5 +1,7 @@
 """Negative controls for legacy denominator and independent-observation checks."""
 import copy
+import tempfile
+from pathlib import Path
 import unittest
 
 import audit
@@ -13,6 +15,127 @@ class PreparationChecks(unittest.TestCase):
         cls.routes = audit.read_json(audit.HERE / "consumer_routes.json")
         cls.runner_routes = audit.read_json(audit.HERE / "runner_routes.json")
         cls.legacy = audit.read_json(audit.ROOT / "tests/unit/xir/product_consumers/legacy_responsibilities.json")
+
+    def test_path_conversion_cache_does_not_accept_a_neighbor_repository(self):
+        allowed = audit.ROOT / "tests" / "unit" / "xir" / "legacy_consumers" / "audit.py"
+        self.assertEqual(audit.relative(allowed), "tests/unit/xir/legacy_consumers/audit.py")
+        self.assertEqual(audit.relative(allowed), "tests/unit/xir/legacy_consumers/audit.py")
+        neighbor = audit.ROOT.parent / (audit.ROOT.name + "-other") / "audit.py"
+        for _ in range(2):
+            with self.assertRaises(ValueError):
+                audit.relative(neighbor)
+
+    def test_cached_path_conversion_still_reads_changed_fixture_contents(self):
+        with tempfile.TemporaryDirectory(dir=audit.HERE) as directory:
+            source = Path(directory) / "fresh.xr"
+            source.write_text("print(1)\n", encoding="utf-8")
+            record = audit.file_record(source)
+            row = copy.deepcopy(self.oracles["cases"][0])
+            row["legacy_case"] = None
+            row["expected"] = {"exit_code": 0, "stdout_utf8": "1\n"}
+            row["inputs"] = [{"path": record["path"], "lf_sha256": record["lf_sha256"], "role": "target_source"}]
+            row["execution_source"] = record["path"]
+            data = {"cases": [row]}
+            audit.validate_oracles(data)
+            source.write_text("print(2)\n", encoding="utf-8")
+            with self.assertRaisesRegex(ValueError, "oracle input changed"):
+                audit.validate_oracles(data)
+            source.unlink()
+            self.assertEqual(audit.file_record(source)["state"], "MISSING")
+
+    def execution_review_expected(self, name):
+        return next(r["expected"] for r in self.oracles["cases"]
+                    if r["id"] == "execution_review_" + name)
+
+    def test_optimized_loop_exit_cannot_trust_the_header_bound(self):
+        expected = self.execution_review_expected("known_loop_exit_dropped_by_full_pipeline")
+        for backend in ("vm", "native"):
+            with self.subTest(backend=backend), self.assertRaises(ValueError):
+                audit.compare_required(expected, dict(expected, stdout_utf8="4950\n100\n"))
+
+    def test_optimized_continue_filter_cannot_be_dropped_by_both_backends(self):
+        expected = self.execution_review_expected("known_continue_filter_dropped_by_full_pipeline")
+        for backend in ("vm", "native"):
+            with self.subTest(backend=backend), self.assertRaises(ValueError):
+                audit.compare_required(expected, dict(expected, stdout_utf8="45\n"))
+
+    def test_loop_latch_zero_trip_and_select_effects_remain_observable(self):
+        for name, wrong in (("pass_loop_rotate_guarded_body", "0\n1\n45\n"),
+                            ("continue_labeled_outer", "3\n3\n"),
+                            ("pass_ifconv_select_shape", "9\n9\n100\n200\n\n1\n100\n200\n")):
+            expected = self.execution_review_expected(name)
+            with self.subTest(name=name), self.assertRaises(ValueError):
+                audit.compare_required(expected, dict(expected, stdout_utf8=wrong))
+
+    def test_large_positive_dimensions_cannot_be_shrunk_while_retaining_answer(self):
+        for name, field, wrong in (("reg_pressure_over_254", "parameters_and_arguments", 255),
+                                   ("upval_capture_over_254", "parameters_and_arguments", 255),
+                                   ("var_count", "locals", 299),
+                                   ("string_parts_over_64", "parts_per_construction", 64)):
+            expected = self.execution_review_expected(name)
+            observed = dict(expected)
+            observed[field] = wrong
+            with self.subTest(name=name), self.assertRaises(ValueError):
+                audit.compare_required(expected, observed)
+
+    def test_float_relation_does_not_copy_the_wrong_f32_comment(self):
+        expected = self.execution_review_expected("relation_owner")
+        lines = expected["stdout_utf8"].splitlines()
+        self.assertEqual(lines[43], "true")
+        lines[43] = "false"
+        with self.assertRaises(ValueError):
+            audit.compare_required(expected, dict(expected, stdout_utf8="\n".join(lines) + "\n"))
+
+    def test_absent_callee_and_explicit_default_values_skip_side_effects(self):
+        for name, wrong in (("optional_call", "42\n1\n-1\n101\n4.5\n102\n"),
+                            ("default_evaluated_per_call", "1\n2\n99\n4\n4\n"),
+                            ("explicit_null_does_not_use_default", "true\ntrue\ntrue\nlocal\nlocal\nremote\nJohn Unknown\nJohn Doe\n")):
+            expected = self.execution_review_expected(name)
+            with self.subTest(name=name), self.assertRaises(ValueError):
+                audit.compare_required(expected, dict(expected, stdout_utf8=wrong))
+
+    def test_bound_method_retains_receiver_and_does_not_reevaluate_it(self):
+        expected = self.execution_review_expected("method_as_value")
+        for wrong in ("7\n7\n12\n12\n20\n1\n12\n2\n", "7\n7\n12\n12\n0\n1\n12\n1\n"):
+            with self.assertRaises(ValueError):
+                audit.compare_required(expected, dict(expected, stdout_utf8=wrong))
+
+    def test_receiver_cleanup_occurs_after_result_materialization(self):
+        expected = self.execution_review_expected("class_native_receiver_as_value")
+        with self.assertRaises(ValueError):
+            audit.compare_required(expected, dict(expected, stdout_utf8="1\n101\n201\n201\n348\n"))
+
+    def test_formatter_fatal_cannot_publish_prefix_or_pose_as_compile_failure(self):
+        expected = self.execution_review_expected("print_group_atomic_on_fatal")
+        for observed in (dict(expected, stdout_utf8="-- before --\nhead middle "),
+                         dict(expected, failure_phase="CHECK"),
+                         dict(expected, failure_domain="SUCCESS"),
+                         dict(expected, unreachable_executed=True)):
+            with self.assertRaises(ValueError):
+                audit.compare_required(expected, observed)
+
+    def test_print_zero_and_empty_positions_keep_exact_bytes(self):
+        for name, wrong in (("print_zero_args", ""),
+                            ("print_zero_and_value", "a\n"),
+                            ("print_separator_exact", "x\n\na\nb\na 1 true\np q r s\na b c\n1 2\n")):
+            expected = self.execution_review_expected(name)
+            with self.subTest(name=name), self.assertRaises(ValueError):
+                audit.compare_required(expected, dict(expected, stdout_utf8=wrong))
+
+    def test_field_and_read_parameter_values_do_not_alias_the_caller(self):
+        for name, wrong in (("class_native_ref_field_ownership", "6\n30\n6\n6\n99\n99\n88\n88\n88\n"),
+                            ("repr_c_struct_aggregate_param", "42\n45\n37\n37\n26\n9\n")):
+            expected = self.execution_review_expected(name)
+            with self.subTest(name=name), self.assertRaises(ValueError):
+                audit.compare_required(expected, dict(expected, stdout_utf8=wrong))
+
+    def test_unit_null_and_raw_store_replacements_cannot_claim_execution_sources(self):
+        for name in ("known_empty_call_result_is_null", "tbaa_raw_pointer_store_kills_array_load"):
+            bad = copy.deepcopy(self.oracles)
+            row = next(r for r in bad["cases"] if r["id"] == "execution_review_" + name)
+            row["execution_source"] = row["inputs"][0]["path"]
+            with self.subTest(name=name), self.assertRaisesRegex(ValueError, "executable target source"):
+                audit.validate_oracles(bad)
 
     def test_type_positive_named_manifest_cannot_be_omitted(self):
         bad = copy.deepcopy(self.runner_routes)

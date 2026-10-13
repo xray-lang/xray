@@ -1,0 +1,88 @@
+// P19 complete selected source preparation; product qualification NOT_RUN.
+// Monomorphized generic instances must be accepted wherever a *declaration*
+// annotates a member with the pre-mono generic spelling. The mono pass rewrites
+// `Box<int>` annotations to `Box$i64`; before this guard the rewrite skipped
+// field declarations, enum payloads and struct bodies entirely, and the class
+// info collected by the first analysis pass kept the stale `Box<int>` type for
+// constructor/method parameters. Both defects passed `xray check` and only
+// failed in the post-mono analysis pass, so `check` was green while `run` and
+// `build` were red.
+//
+// Shapes guarded here:
+//   1. class field annotated with a generic instance
+//   2. constructor parameter annotated with a generic instance
+//   3. method parameter annotated with a generic instance
+//   4. enum payload annotated with a generic class instance
+//   5. enum payload annotated with a generic struct instance
+//   6. struct field annotated with a generic struct instance
+//   7. recursive enum indirected through a generic class node
+
+class Box<T> {
+    value: T
+    init(value: T) { this.value = value }
+    get() -> T { return this.value }
+}
+
+struct Pt<T> {
+    x: T
+    y: T
+}
+
+// 1 + 2 + 3
+class Holder {
+    boxed: Box<i64>
+    init(boxed: Box<i64>) { this.boxed = boxed }
+    combine(other: Box<i64>) -> i64 { return this.boxed.get() + other.get() }
+}
+
+var holder = Holder(Box<i64>(40))
+print(holder.boxed.get())
+print(holder.combine(Box<i64>(2)))
+
+// 4 + 5
+enum Shape {
+    Empty,
+    Boxed { b: Box<i64> },
+    Point { p: Pt<i64> },
+}
+
+fn shapeValue(s: Shape) -> i64 {
+    return match (s) {
+        Shape.Empty -> 0,
+        Shape.Boxed { b } -> b.get(),
+        Shape.Point { p } -> p.x + p.y,
+    }
+}
+
+print(shapeValue(Shape.Boxed { b: Box<i64>(7) }))
+print(shapeValue(Shape.Point { p: Pt<i64>{x: 20, y: 22} }))
+print(shapeValue(Shape.Empty))
+
+// 6
+struct Line {
+    a: Pt<i64>
+    b: Pt<i64>
+}
+
+var line = Line{a: Pt<i64>{x: 1, y: 2}, b: Pt<i64>{x: 3, y: 4}}
+print(line.a.x + line.b.y)
+
+// 7 — the spec-documented alternative to a hand-written wrapper class per
+// recursive type: a generic node reused for every recursive payload.
+enum Expr {
+    Num { v: i64 },
+    Add { l: Box<Expr>, r: Box<Expr> },
+    Mul { l: Box<Expr>, r: Box<Expr> },
+}
+
+fn eval(e: Expr) -> i64 {
+    return match (e) {
+        Expr.Num { v } -> v,
+        Expr.Add { l, r } -> eval(l.get()) + eval(r.get()),
+        Expr.Mul { l, r } -> eval(l.get()) * eval(r.get()),
+    }
+}
+
+// (2 + 5) * 6
+var ast = Expr.Mul { l: Box<Expr>(Expr.Add { l: Box<Expr>(Expr.Num { v: 2 }), r: Box<Expr>(Expr.Num { v: 5 }) }), r: Box<Expr>(Expr.Num { v: 6 }) }
+print(eval(ast))

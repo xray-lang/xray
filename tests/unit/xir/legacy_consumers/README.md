@@ -132,3 +132,14 @@ consumer driver and production registration. Fresh VM and real generated-C nativ
 observations must each satisfy the oracles, with separate full applicable ownership,
 FI, resource, cancellation, physical cleanup and safety evidence. Until then every
 product result remains `NOT_RUN` and every capability remains `OPEN`.
+
+
+Reviewed execution duties preserve the complete original large-positive inputs,
+optimized loop exits/latches, default and optional-call effects, class identities,
+READ aggregate values, UTF-8 and exact output publication. Selected complete source
+ports remain uncompiled preparation. Absolute observations reject identical wrong
+backends, reduced input dimensions, partial print publication, missing receiver
+retention and value aliases. Empty call results are Unit rather than null; the old
+reflection assertions, raw-pointer clobber case and target-dependent union byte
+layout require actual published replacement declarations before execution. Historical
+implementation comments in copied fixtures are context, not current product claims.
