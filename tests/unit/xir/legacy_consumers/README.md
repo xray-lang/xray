@@ -169,3 +169,11 @@ bounds and owned string chunks joined through the declared API. Generic definiti
 proofs, enum metadata and native SIMD profiles remain explicit pending duties.
 Every oracle demands the actual test entry and all named bodies; a run-only banner
 or reduced property/warmup/lifetime dimensions cannot qualify the replacement.
+
+Format/crypto/calendar review preserves whole typed corpora and strengthens weak
+shape-only cases with exact content, retained original pressure plus actual>64KB
+payloads, all padding boundaries and independent complete AES/HMAC wire vectors.
+YAML block-scalar independent expectations follow1.2.2 chomping, including absent
+physical final LF; the seed source discrepancy remains a producer qualification
+gap, not an observed product failure. Exact values do not establish entropy,
+constant-time, real timezone/IO/provider provenance or physical resource release.

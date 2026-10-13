@@ -1,0 +1,112 @@
+// 1421_datetime_format.xr
+// Test: datetime formatting (dot-syntax API)
+
+import datetime
+
+// ============================================================
+// Part 1: Basic formatting
+// ============================================================
+
+@test
+fn test_format_full() {
+    var dt = datetime.create(2024, 6, 15, 14, 30, 45)
+    var formatted = dt.format("YYYY-MM-DD HH:mm:ss")
+    assertEqual(formatted, "2024-06-15 14:30:45")
+}
+
+@test
+fn test_format_date_only() {
+    var dt = datetime.create(2024, 6, 15, 14, 30, 45)
+    var formatted = dt.format("YYYY-MM-DD")
+    assertEqual(formatted, "2024-06-15")
+}
+
+@test
+fn test_format_time_only() {
+    var dt = datetime.create(2024, 6, 15, 14, 30, 45)
+    var formatted = dt.format("HH:mm:ss")
+    assertEqual(formatted, "14:30:45")
+}
+
+@test
+fn test_format_compact() {
+    var dt = datetime.create(2024, 6, 15)
+    var formatted = dt.format("YYYYMMDD")
+    assertEqual(formatted, "20240615")
+}
+
+@test
+fn test_format_short_time() {
+    var dt = datetime.create(2024, 6, 15, 14, 30, 45)
+    var formatted = dt.format("HH:mm")
+    assertEqual(formatted, "14:30")
+}
+
+// ============================================================
+// Part 2: Edge cases
+// ============================================================
+
+@test
+fn test_format_new_year() {
+    var dt = datetime.create(2024, 1, 1, 0, 0, 0)
+    var formatted = dt.format("YYYY-MM-DD HH:mm:ss")
+    assertEqual(formatted, "2024-01-01 00:00:00")
+}
+
+@test
+fn test_format_year_end() {
+    var dt = datetime.create(2024, 12, 31, 23, 59, 59)
+    var formatted = dt.format("YYYY-MM-DD HH:mm:ss")
+    assertEqual(formatted, "2024-12-31 23:59:59")
+}
+
+@test
+fn test_format_single_digit_month() {
+    var dt = datetime.create(2024, 3, 5)
+    var formatted = dt.format("YYYY-MM-DD")
+    assertEqual(formatted, "2024-03-05")
+}
+
+@test
+fn test_format_midnight() {
+    var dt = datetime.create(2024, 6, 15, 0, 0, 0)
+    var formatted = dt.format("HH:mm:ss")
+    assertEqual(formatted, "00:00:00")
+}
+
+@test
+fn test_format_noon() {
+    var dt = datetime.create(2024, 6, 15, 12, 0, 0)
+    var formatted = dt.format("HH:mm:ss")
+    assertEqual(formatted, "12:00:00")
+}
+
+// ============================================================
+// Part 3: Current time formatting
+// ============================================================
+
+@test
+fn test_format_now() {
+    var dt = datetime.now()
+    var formatted = dt.format("YYYY-MM-DD")
+    assertEqual(len(formatted), 10)
+}
+
+@test
+fn test_format_now_full() {
+    var dt = datetime.now()
+    var formatted = dt.format("YYYY-MM-DD HH:mm:ss")
+    assertEqual(len(formatted), 19)
+}
+
+// ============================================================
+// Part 4: toISOString
+// ============================================================
+
+@test
+fn test_to_iso_string_utc() {
+    var dt = datetime.fromTimestamp(1718438400)
+    var iso = dt.toISOString()
+    assert(len(iso) > 20)
+    assertEqual(iso, "2024-06-15T08:00:00.000Z")
+}

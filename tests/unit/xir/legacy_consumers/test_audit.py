@@ -16,6 +16,128 @@ class PreparationChecks(unittest.TestCase):
         cls.runner_routes = audit.read_json(audit.HERE / "runner_routes.json")
         cls.legacy = audit.read_json(audit.ROOT / "tests/unit/xir/product_consumers/legacy_responsibilities.json")
 
+    def test_compression_retains_original_and_real_large_payloads_and_all_levels(self):
+        expected = self.regression_library_expected("1301_compress")
+        for observed in (dict(expected, original_large_iterations=[50,50]),
+                         dict(expected, target_additional_large_bytes=[22500,18500]),
+                         dict(expected, all_compression_levels=[0,9]),
+                         dict(expected, partial_decompression_published=True)):
+            with self.assertRaises(ValueError):
+                audit.compare_required(expected, observed)
+
+    def test_yaml_block_content_and_multidocument_result_are_not_nonempty_smoke(self):
+        expected = self.regression_library_expected("1304_yaml_advanced")
+        for field, value in (("literal", "line one\nline two\nline three\n"),
+                             ("literal_keep", "hello\nworld\n\n\n\n"),
+                             ("folded", "line one\nline two\nline three")):
+            observed = copy.deepcopy(expected)
+            observed["block_scalar_exact_values"][field] = value
+            with self.assertRaises(ValueError):
+                audit.compare_required(expected, observed)
+        with self.assertRaises(ValueError):
+            audit.compare_required(expected, dict(expected, multi_documents=[{"first":1}]))
+
+    def test_toml_literal_unicode_and_nan_cannot_be_wrong_nonempty_values(self):
+        expected = self.regression_library_expected("1307_toml_advanced")
+        for observed in (dict(expected, multiline_literal="different"),
+                         dict(expected, unicode_heart="X"),
+                         dict(expected, float_classes=["positive_infinity","negative_infinity","zero"])):
+            with self.assertRaises(ValueError):
+                audit.compare_required(expected, observed)
+
+    def test_csv_report_partial_recovery_is_distinct_from_strict_refusal(self):
+        expected = self.regression_library_expected("1305_csv_basic")
+        for observed in (dict(expected, unterminated_partial_row=[]),
+                         dict(expected, unterminated_report_diagnostics=0),
+                         dict(expected, exact_delimiter_rune=44),
+                         dict(expected, mixed_linebreak_metadata="lf")):
+            with self.assertRaises(ValueError):
+                audit.compare_required(expected, observed)
+
+    def test_xml_node_kinds_entities_and_diagnostic_channels_cannot_be_flattened(self):
+        expected = self.regression_library_expected("1309_xml_advanced")
+        for observed in (dict(expected, preserved_cdata={"kind":"text","content":"<not-xml>&"}),
+                         dict(expected, unicode_entity_text=""),
+                         dict(expected, unknown_entity_kind="SyntaxError"),
+                         dict(expected, mixed_child_kinds=["text","text","text"])):
+            with self.assertRaises(ValueError):
+                audit.compare_required(expected, observed)
+
+    def test_crypto_known_digest_content_cannot_be_length_only_success(self):
+        expected = self.regression_library_expected("1400_crypto_hash")
+        observed = copy.deepcopy(expected)
+        observed["hash_vectors"]["sha256"]["hello"] = "0" * 64
+        with self.assertRaises(ValueError):
+            audit.compare_required(expected, observed)
+        expected = self.regression_library_expected("1403_crypto_sha512")
+        observed = copy.deepcopy(expected)
+        observed["hmac_sha512_vectors"][0]["hex"] = "0" * 128
+        with self.assertRaises(ValueError):
+            audit.compare_required(expected, observed)
+
+    def test_aead_fixed_vectors_and_padding_matrix_cannot_drop_content_or_dimensions(self):
+        expected = self.regression_library_expected("1406_crypto_aead")
+        for observed in (dict(expected, reference_wire_vectors=expected["reference_wire_vectors"][:1]),
+                         dict(expected, padding_lengths_tested=list(range(16))),
+                         dict(expected, plaintext_padding_each=[0]*34)):
+            with self.assertRaises(ValueError):
+                audit.compare_required(expected, observed)
+        observed = copy.deepcopy(expected)
+        observed["reference_wire_vectors"][0]["tag_hex"] = "0"*64
+        with self.assertRaises(ValueError):
+            audit.compare_required(expected, observed)
+
+    def test_aead_authentication_covers_iv_and_precedes_plaintext_publication(self):
+        expected = self.regression_library_expected("1406_crypto_aead")
+        for observed in (dict(expected, iv_is_authenticated=False),
+                         dict(expected, tag_checked_before_decrypt_or_plaintext_publication=False),
+                         dict(expected, truncated_length_channel="PANIC"),
+                         dict(expected, all_three_tamper_regions_refused=False)):
+            with self.assertRaises(ValueError):
+                audit.compare_required(expected, observed)
+
+    def test_random_uuid_hex_shape_is_not_entropy_or_generic_uuid_version(self):
+        expected = self.regression_library_expected("1402_crypto_random")
+        for observed in (dict(expected, lowercase_hex_only=False),
+                         dict(expected, uuid_version_nibble="1"),
+                         dict(expected, uuid_variant_nibbles=["0","1","2","3"]),
+                         dict(expected, uuid_loop_calls=3),
+                         dict(expected, shape_and_distinctness_establish_entropy=True)):
+            with self.assertRaises(ValueError):
+                audit.compare_required(expected, observed)
+
+    def test_aes_unicode_body_and_authenticated_wire_overhead_cannot_be_omitted(self):
+        expected = self.regression_library_expected("1404_crypto_aes")
+        for observed in (dict(expected, target_additional_unicode_plaintext="Hello World!"),
+                         dict(expected, target_unicode_utf8_bytes=3),
+                         dict(expected, test_text_wire_hex_length=64),
+                         dict(expected, tag_bytes=0)):
+            with self.assertRaises(ValueError):
+                audit.compare_required(expected, observed)
+
+    def test_query_snapshot_and_percent_form_semantics_are_independent(self):
+        expected = self.regression_library_expected("1411_url_parse")
+        for observed in (dict(expected, snapshot_after_set_before_write="a=9"),
+                         dict(expected, query_value_after_returned_snapshot_write="7"),
+                         dict(expected, query_invalid_percent_offset=8),
+                         dict(expected, query_duplicate_values=["3"])):
+            with self.assertRaises(ValueError):
+                audit.compare_required(expected, observed)
+        expected = self.regression_library_expected("1410_url_encode")
+        with self.assertRaises(ValueError):
+            audit.compare_required(expected, dict(expected, percent_decode_plus_is_literal="hello world"))
+
+    def test_calendar_iso_epoch_preservation_and_month_clamp_do_not_accept_shape_only(self):
+        expected = self.regression_library_expected("1421_datetime_format")
+        with self.assertRaises(ValueError):
+            audit.compare_required(expected, dict(expected, fixed_timestamp_iso="2024-06-15T00:00:00.000Z"))
+        expected = self.regression_library_expected("1422_datetime_calc")
+        for observed in (dict(expected, utc_local_preserve_epoch_and_ms=False),
+                         dict(expected, month_add_target=[2024,3,2]),
+                         dict(expected, month_add_source_after_call=[2024,2,29])):
+            with self.assertRaises(ValueError):
+                audit.compare_required(expected, observed)
+
     def test_regression_library_cannot_remove_a_whole_oracle_record(self):
         bad = copy.deepcopy(self.oracles)
         bad["cases"] = [r for r in bad["cases"] if r["id"] != "regression_library_review_1300_encoding"]

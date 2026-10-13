@@ -1,0 +1,201 @@
+// 1422_datetime_calc.xr
+// Test: datetime arithmetic, comparison, timezone (dot-syntax API)
+
+import datetime
+
+// ============================================================
+// Part 1: Date addition
+// ============================================================
+
+@test
+fn test_add_days() {
+    var dt = datetime.create(2024, 6, 15, 12, 0, 0)
+    var result = dt.add(10, "days")
+    assertEqual(result.day, 25)
+}
+
+@test
+fn test_add_hours() {
+    var dt = datetime.create(2024, 6, 15, 12, 0, 0)
+    var result = dt.add(5, "hours")
+    assertEqual(result.hour, 17)
+}
+
+@test
+fn test_add_minutes() {
+    var dt = datetime.create(2024, 6, 15, 12, 0, 0)
+    var result = dt.add(30, "minutes")
+    assertEqual(result.minute, 30)
+}
+
+@test
+fn test_add_seconds() {
+    var dt = datetime.create(2024, 6, 15, 12, 0, 0)
+    var result = dt.add(45, "seconds")
+    assertEqual(result.second, 45)
+}
+
+// ============================================================
+// Part 2: Date subtraction (negative)
+// ============================================================
+
+@test
+fn test_subtract_days() {
+    var dt = datetime.create(2024, 6, 15, 12, 0, 0)
+    var result = dt.add(-5, "days")
+    assertEqual(result.day, 10)
+}
+
+@test
+fn test_subtract_hours() {
+    var dt = datetime.create(2024, 6, 15, 12, 0, 0)
+    var result = dt.add(-2, "hours")
+    assertEqual(result.hour, 10)
+}
+
+// ============================================================
+// Part 3: Date diff
+// ============================================================
+
+@test
+fn test_diff_one_day_seconds() {
+    var dt1 = datetime.create(2024, 6, 15, 12, 0, 0)
+    var dt2 = datetime.create(2024, 6, 16, 12, 0, 0)
+    var diff = dt1.diff(dt2, "seconds")
+    assertEqual(diff, -86400)
+}
+
+@test
+fn test_diff_one_day_minutes() {
+    var dt1 = datetime.create(2024, 6, 15, 12, 0, 0)
+    var dt2 = datetime.create(2024, 6, 16, 12, 0, 0)
+    var diff = dt1.diff(dt2, "minutes")
+    assertEqual(diff, -1440)
+}
+
+@test
+fn test_diff_one_day_hours() {
+    var dt1 = datetime.create(2024, 6, 15, 12, 0, 0)
+    var dt2 = datetime.create(2024, 6, 16, 12, 0, 0)
+    var diff = dt1.diff(dt2, "hours")
+    assertEqual(diff, -24)
+}
+
+@test
+fn test_diff_reverse() {
+    var dt1 = datetime.create(2024, 6, 16, 12, 0, 0)
+    var dt2 = datetime.create(2024, 6, 15, 12, 0, 0)
+    var diff = dt1.diff(dt2, "hours")
+    assertEqual(diff, 24)
+}
+
+// ============================================================
+// Part 4: Weekday
+// ============================================================
+
+@test
+fn test_weekday_range() {
+    var dt = datetime.create(2024, 6, 15)
+    var wd = dt.weekday
+    assert(wd >= 0 && wd <= 6)
+}
+
+@test
+fn test_weekday_now() {
+    var dt = datetime.now()
+    var wd = dt.weekday
+    assert(wd >= 0 && wd <= 6)
+}
+
+// ============================================================
+// Part 5: Timezone
+// ============================================================
+
+@test
+fn test_offset_reasonable() {
+    var offset = datetime.offset()
+    assert(offset >= -720 && offset <= 840)
+}
+
+@test
+fn test_to_utc() {
+    var local = datetime.now()
+    var utc = local.toUTC()
+    assert(utc.year >= 2024)
+    assertEqual(utc.timestamp, local.timestamp)
+    assertEqual(utc.millisecond, local.millisecond)
+}
+
+@test
+fn test_to_local() {
+    var utc = datetime.utc()
+    var local = utc.toLocal()
+    assert(local.year >= 2024)
+    assertEqual(local.timestamp, utc.timestamp)
+    assertEqual(local.millisecond, utc.millisecond)
+}
+
+// ============================================================
+// Part 6: Comparison (new feature)
+// ============================================================
+
+@test
+fn test_is_before() {
+    var dt1 = datetime.create(2024, 1, 1)
+    var dt2 = datetime.create(2024, 12, 31)
+    assert(dt1.isBefore(dt2))
+    assert(!dt2.isBefore(dt1))
+}
+
+@test
+fn test_is_after() {
+    var dt1 = datetime.create(2024, 12, 31)
+    var dt2 = datetime.create(2024, 1, 1)
+    assert(dt1.isAfter(dt2))
+    assert(!dt2.isAfter(dt1))
+}
+
+@test
+fn test_equals() {
+    var dt1 = datetime.create(2024, 6, 15, 12, 0, 0)
+    var dt2 = datetime.create(2024, 6, 15, 12, 0, 0)
+    assert(dt1.equals(dt2))
+}
+
+// ============================================================
+// Part 7: Utility (new features)
+// ============================================================
+
+@test
+fn test_is_leap_year() {
+    var dt2024 = datetime.create(2024, 1, 1)
+    assert(dt2024.isLeapYear())
+    var dt2023 = datetime.create(2023, 1, 1)
+    assert(!dt2023.isLeapYear())
+}
+
+@test
+fn test_days_in_month() {
+    var feb_leap = datetime.create(2024, 2, 1)
+    assertEqual(feb_leap.daysInMonth(), 29)
+    var feb_normal = datetime.create(2023, 2, 1)
+    assertEqual(feb_normal.daysInMonth(), 28)
+    var jan = datetime.create(2024, 1, 1)
+    assertEqual(jan.daysInMonth(), 31)
+}
+
+// ============================================================
+// Part 8: Month add with day clamping (bug fix)
+// ============================================================
+
+@test
+fn test_add_months_clamp() {
+    // Jan 31 + 1 month should be Feb 28/29, not March
+    var dt = datetime.create(2024, 1, 31)
+    var result = dt.add(1, "months")
+    assertEqual(result.month, 2)
+    assertEqual(result.day, 29)  // 2024 is leap year
+    assertEqual(result.year, 2024)
+    assertEqual(dt.month, 1)
+    assertEqual(dt.day, 31)
+}

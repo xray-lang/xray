@@ -114134,6 +114134,3371 @@
         "qualification": "NOT_RUN",
         "reason": "Published string.fromUtf8 returns non-Optional string and throws Utf8Error. Remove only the obsolete unwrap and preserve all complete normal/error tests and original 1000-character stress."
       }
+    },
+    {
+      "case_id": "tests/regression/10_stdlib/1301_compress.xr",
+      "source_lf_sha256": "38fce08fb70aa566833cdf40c21c1990cbc1af7cbb7107827e0dc584190082ea",
+      "primary_family": "builtin-method-native-provider-call",
+      "secondary_families": [
+        "typed-error-throw-try-catch",
+        "defer-cleanup-resource-lifetime",
+        "test-entry-assertion-async",
+        "array-slice-fixed-array-range-iteration",
+        "string-rune-interpolation",
+        "module-graph-import-export-init",
+        "ownership-read-ref-move-copy-drop"
+      ],
+      "tasks": [
+        "313",
+        "314",
+        "315",
+        "316",
+        "317",
+        "318",
+        "319",
+        "320",
+        "322"
+      ],
+      "producer_packages": [
+        "P02",
+        "P06",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P12",
+        "P13",
+        "P14",
+        "P17"
+      ],
+      "semantic_basis": "Complete original format/crypto/URL/calendar source review preserves every named test, helper and normal/error path. Independent known answers, full stress and semantic content are required separately from shape, self-roundtrip and actual provider/entropy/constant-time/physical qualification.",
+      "original_runner_entries": [
+        {
+          "suite": "regression",
+          "entry": "test"
+        }
+      ],
+      "new_entry_status": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "replacement_qualification": "OPEN",
+      "original_stdout_oracle": {
+        "path": "tests/regression/10_stdlib/1301_compress.xr.expected",
+        "state": "MISSING",
+        "lf_sha256": null
+      },
+      "original_regression_obligation": {
+        "entry": "test",
+        "expected_exit": 0,
+        "test_discovery": "NOT_RUN"
+      },
+      "original_named_test_obligation": {
+        "state": "REVIEWED_TEXTUAL_DECLARATIONS_NOT_RUNTIME_DISCOVERY",
+        "declarations": [
+          {
+            "name": "test_crc32",
+            "marker_line": 16,
+            "source_segment_lf_sha256": "8506feb70e6607ed770d1bd9c25b66f4a91e03c3ab207bf2502d9ad98c9783e3"
+          },
+          {
+            "name": "test_crc32_deterministic",
+            "marker_line": 23,
+            "source_segment_lf_sha256": "e6afa2a54a8cd841644f583789ae248672408c2f74ae6ab306f01f336d521970"
+          },
+          {
+            "name": "test_adler32",
+            "marker_line": 33,
+            "source_segment_lf_sha256": "658f123439afc7871156f74e9957f427149164e5175e5b5013231ebc23613341"
+          },
+          {
+            "name": "test_gzip_roundtrip",
+            "marker_line": 42,
+            "source_segment_lf_sha256": "3bf7c88438abdfbdc33e17118fac01d801bda8a14d2e3c761de6763cd8ca8ecb"
+          },
+          {
+            "name": "test_is_gzip",
+            "marker_line": 50,
+            "source_segment_lf_sha256": "13db7d588148fa014b9d09adeb90bf7451e0f8ceb1f2f66d2b3002f1a615343a"
+          },
+          {
+            "name": "test_deflate_inflate",
+            "marker_line": 60,
+            "source_segment_lf_sha256": "3a039ee1fc5a5f3ccb87df5ed5f2a34457023c87674fc9035e1e7cc88435275f"
+          },
+          {
+            "name": "test_zlib_roundtrip",
+            "marker_line": 70,
+            "source_segment_lf_sha256": "436884d5d7c8054b29df0e0e2a8d25d7a301ae2bc99094c6a89ddf162ec5101f"
+          },
+          {
+            "name": "test_crc32_known_value",
+            "marker_line": 81,
+            "source_segment_lf_sha256": "96e1736afe98487ba249841f742b39ac28b37ef0e45c4ed0dfc3e9d7385b4d61"
+          },
+          {
+            "name": "test_crc32_empty",
+            "marker_line": 89,
+            "source_segment_lf_sha256": "20f95ec1c21160b209b9175955c1f7b6a32340537c4f16a075e09dde644cb8cf"
+          },
+          {
+            "name": "test_adler32_known_value",
+            "marker_line": 98,
+            "source_segment_lf_sha256": "1f493e6fd9a90a73ab693ce03074f1eb5d76fd2de9b2e3d826b402163ae4dd8c"
+          },
+          {
+            "name": "test_adler32_empty",
+            "marker_line": 106,
+            "source_segment_lf_sha256": "4d1a23c10e1f86d1759ec63ab1adc819ac20b7abf71a5aa0683157357724f439"
+          },
+          {
+            "name": "test_gzip_empty",
+            "marker_line": 115,
+            "source_segment_lf_sha256": "30d6d285275d321a4a9620fedba277e82dbab096df75e5ed97a00cf3abaeaa99"
+          },
+          {
+            "name": "test_deflate_empty",
+            "marker_line": 123,
+            "source_segment_lf_sha256": "d81882aa661eea0bf1617283f6fe26d72ba74849f6b71353a495162686e1d326"
+          },
+          {
+            "name": "test_zlib_empty",
+            "marker_line": 131,
+            "source_segment_lf_sha256": "aa333a584cd6c5dbb374710cd73f3f0b7d0b8489c8087dde0e2e04125a88ae2c"
+          },
+          {
+            "name": "test_gzip_large_data",
+            "marker_line": 141,
+            "source_segment_lf_sha256": "8d241fd7c2fdd1e5b3d2427a6036920fd0d45414b0089ba7eca550ba0a84f8d4"
+          },
+          {
+            "name": "test_deflate_large_data",
+            "marker_line": 153,
+            "source_segment_lf_sha256": "321fef0e54de55dfd65fd94730b548341076bce33c41bd92cd8f451bfa8bf1cb"
+          },
+          {
+            "name": "test_gzip_level_zero",
+            "marker_line": 166,
+            "source_segment_lf_sha256": "800a003841e731a2479a93c18f95f10001f959ca25b5f881097342b92ef50088"
+          },
+          {
+            "name": "test_gzip_all_levels",
+            "marker_line": 174,
+            "source_segment_lf_sha256": "8764e744d842421f0251e678260dd0b0f8ae4887fe587939fb97389d133f6a50"
+          },
+          {
+            "name": "test_deflate_all_levels",
+            "marker_line": 184,
+            "source_segment_lf_sha256": "9e4055b9370022682a8c07f705eb7323f65048c4c3dd1bf14e0cb18fe9b9349f"
+          },
+          {
+            "name": "test_zlib_all_levels",
+            "marker_line": 194,
+            "source_segment_lf_sha256": "f70699cbf9e220ca8192165fa23c00a7da0bff3aec82597f05b2f7c81f61d9fb"
+          },
+          {
+            "name": "test_levels_outside_the_range_are_clamped",
+            "marker_line": 207,
+            "source_segment_lf_sha256": "2f48d31299a15a100b853e6ec5bade7d221f758ef3d6d22a31b789a07b232dee"
+          },
+          {
+            "name": "test_is_gzip_invalid",
+            "marker_line": 218,
+            "source_segment_lf_sha256": "f7ce8b2980f64200bb3e26b60d628a76b43cd3e27dbaf6b5af358d096c837dbd"
+          },
+          {
+            "name": "test_is_zlib_invalid",
+            "marker_line": 228,
+            "source_segment_lf_sha256": "13ad7ae416f4b0d98888ad71a6fa4986a10f3534c4bf6dfef3d58ec4cd6e867c"
+          },
+          {
+            "name": "test_decompression_refuses_malformed_input",
+            "marker_line": 240,
+            "source_segment_lf_sha256": "965c02b4c078fe311f49e0d6d910b326704971b603164ebd33e177297c7bb802"
+          },
+          {
+            "name": "test_truncated_payload_is_refused",
+            "marker_line": 262,
+            "source_segment_lf_sha256": "316418e7540a316ff28540a497e2c327f768c9fb22edcae5b325ec88fa08c0e2"
+          },
+          {
+            "name": "test_gzip_repeated_pattern",
+            "marker_line": 278,
+            "source_segment_lf_sha256": "2161dbf6d6d56129a02d0ea0012de337cdcea18d77e57c4b66ca5cf66c5a14c7"
+          }
+        ],
+        "execution": "NOT_RUN"
+      },
+      "target_contract_review": "REQUIRED; whole typed declarations and original error/content/protocol duties remain positive, without compatibility aliases or guessed ABI/provider behavior. Preserve source-review gaps separately from any real product failure.",
+      "target_source_port": {
+        "fixture": "tests/unit/xir/legacy_consumers/fixtures/format_regression_ports/1301_compress/root.xr",
+        "lf_sha256": "aea4098cdfbac78944fe97944bd9aefb12ce647f0ae4739e364e6df47e83052e",
+        "owner_package": "P13",
+        "qualification": "NOT_RUN",
+        "frozen_basis": [
+          "Published fromUtf8 is nonOptional. Preserve full original500/500/1000 loops and every0..9 level/42/-7/empty/error path; original supposed>64KB payloads are22500/18500bytes, so add actual67500/74000byte cases without shrinking or replacing originals. Real codec/FI/resource/provider qualification remains open."
+        ]
+      },
+      "named_test_migration": {
+        "state": "PREPARED_NOT_EXECUTED",
+        "original_tests_removed": false,
+        "mapping": {
+          "test_crc32": "test_crc32",
+          "test_crc32_deterministic": "test_crc32_deterministic",
+          "test_adler32": "test_adler32",
+          "test_gzip_roundtrip": "test_gzip_roundtrip",
+          "test_is_gzip": "test_is_gzip",
+          "test_deflate_inflate": "test_deflate_inflate",
+          "test_zlib_roundtrip": "test_zlib_roundtrip",
+          "test_crc32_known_value": "test_crc32_known_value",
+          "test_crc32_empty": "test_crc32_empty",
+          "test_adler32_known_value": "test_adler32_known_value",
+          "test_adler32_empty": "test_adler32_empty",
+          "test_gzip_empty": "test_gzip_empty",
+          "test_deflate_empty": "test_deflate_empty",
+          "test_zlib_empty": "test_zlib_empty",
+          "test_gzip_large_data": "test_gzip_large_data",
+          "test_deflate_large_data": "test_deflate_large_data",
+          "test_gzip_level_zero": "test_gzip_level_zero",
+          "test_gzip_all_levels": "test_gzip_all_levels",
+          "test_deflate_all_levels": "test_deflate_all_levels",
+          "test_zlib_all_levels": "test_zlib_all_levels",
+          "test_levels_outside_the_range_are_clamped": "test_levels_outside_the_range_are_clamped",
+          "test_is_gzip_invalid": "test_is_gzip_invalid",
+          "test_is_zlib_invalid": "test_is_zlib_invalid",
+          "test_decompression_refuses_malformed_input": "test_decompression_refuses_malformed_input",
+          "test_truncated_payload_is_refused": "test_truncated_payload_is_refused",
+          "test_gzip_repeated_pattern": "test_gzip_repeated_pattern"
+        }
+      },
+      "target_disposition": {
+        "kind": "POSITIVE_FULL_LIBRARY_CONTENT_AFTER_DECLARED_PORT",
+        "owner_package": "P13",
+        "qualification": "NOT_RUN",
+        "reason": "Published fromUtf8 is nonOptional. Preserve full original500/500/1000 loops and every0..9 level/42/-7/empty/error path; original supposed>64KB payloads are22500/18500bytes, so add actual67500/74000byte cases without shrinking or replacing originals. Real codec/FI/resource/provider qualification remains open."
+      }
+    },
+    {
+      "case_id": "tests/regression/10_stdlib/1302_yaml_basic.xr",
+      "source_lf_sha256": "859efa195a1d2df0b6b197e79be867801ce627b4568e06dbcc9425ddb41bdc63",
+      "primary_family": "builtin-method-native-provider-call",
+      "secondary_families": [
+        "typed-error-throw-try-catch",
+        "defer-cleanup-resource-lifetime",
+        "test-entry-assertion-async",
+        "array-slice-fixed-array-range-iteration",
+        "string-rune-interpolation",
+        "module-graph-import-export-init",
+        "ownership-read-ref-move-copy-drop"
+      ],
+      "tasks": [
+        "313",
+        "314",
+        "315",
+        "316",
+        "317",
+        "318",
+        "319",
+        "320",
+        "322"
+      ],
+      "producer_packages": [
+        "P02",
+        "P06",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P12",
+        "P13",
+        "P14",
+        "P17"
+      ],
+      "semantic_basis": "Complete original format/crypto/URL/calendar source review preserves every named test, helper and normal/error path. Independent known answers, full stress and semantic content are required separately from shape, self-roundtrip and actual provider/entropy/constant-time/physical qualification.",
+      "original_runner_entries": [
+        {
+          "suite": "regression",
+          "entry": "test"
+        }
+      ],
+      "new_entry_status": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "replacement_qualification": "OPEN",
+      "original_stdout_oracle": {
+        "path": "tests/regression/10_stdlib/1302_yaml_basic.xr.expected",
+        "state": "MISSING",
+        "lf_sha256": null
+      },
+      "original_regression_obligation": {
+        "entry": "test",
+        "expected_exit": 0,
+        "test_discovery": "NOT_RUN"
+      },
+      "original_named_test_obligation": {
+        "state": "REVIEWED_TEXTUAL_DECLARATIONS_NOT_RUNTIME_DISCOVERY",
+        "declarations": [
+          {
+            "name": "test_parse_basic",
+            "marker_line": 15,
+            "source_segment_lf_sha256": "adb91a4c022695ebed62025ebbf35a7f98eaec856846557e683b366a6893bfd3"
+          },
+          {
+            "name": "test_parse_nested",
+            "marker_line": 26,
+            "source_segment_lf_sha256": "812d98bd624074836d4042c1e1de62da41e63630e1568ec0c08f6d913a294879"
+          },
+          {
+            "name": "test_parse_flow_sequence",
+            "marker_line": 37,
+            "source_segment_lf_sha256": "ca290e052ad67f5c74403748b051e49e37af53126d43b0573dec87b4e2893a53"
+          },
+          {
+            "name": "test_parse_flow_mapping",
+            "marker_line": 48,
+            "source_segment_lf_sha256": "1876b0432f65832a41373297a14206511b848a2bf38bc7afdc4f3409461f12fe"
+          },
+          {
+            "name": "test_parse_quoted_strings",
+            "marker_line": 59,
+            "source_segment_lf_sha256": "01f4bc153698072c1d97acdccc12e07e3935088a14c52b79655293f87d4c5290"
+          },
+          {
+            "name": "test_stringify",
+            "marker_line": 69,
+            "source_segment_lf_sha256": "df4c3bbcc96991b0cf1e4b2c65af577aac912008f97da853a17ebf06ed7e54b0"
+          }
+        ],
+        "execution": "NOT_RUN"
+      },
+      "target_contract_review": "REQUIRED; whole typed declarations and original error/content/protocol duties remain positive, without compatibility aliases or guessed ABI/provider behavior. Preserve source-review gaps separately from any real product failure.",
+      "target_source_port": {
+        "fixture": "tests/unit/xir/legacy_consumers/fixtures/format_regression_ports/1302_yaml_basic/root.xr",
+        "lf_sha256": "c9090339c18d1a479aff5728c31f79dc14fc5b76eb1c1e9037bbb6e7d368b970",
+        "owner_package": "P13",
+        "qualification": "NOT_RUN",
+        "frozen_basis": [
+          "Keep all original typed ADT parse/build/ref calls; strengthen stringify value observation to xray/1 beyond nonempty output. Independent YAML values still need actual VM/native/provider and value/lifetime interfaces."
+        ]
+      },
+      "named_test_migration": {
+        "state": "PREPARED_NOT_EXECUTED",
+        "original_tests_removed": false,
+        "mapping": {
+          "test_parse_basic": "test_parse_basic",
+          "test_parse_nested": "test_parse_nested",
+          "test_parse_flow_sequence": "test_parse_flow_sequence",
+          "test_parse_flow_mapping": "test_parse_flow_mapping",
+          "test_parse_quoted_strings": "test_parse_quoted_strings",
+          "test_stringify": "test_stringify"
+        }
+      },
+      "target_disposition": {
+        "kind": "POSITIVE_FULL_LIBRARY_CONTENT_AFTER_DECLARED_PORT",
+        "owner_package": "P13",
+        "qualification": "NOT_RUN",
+        "reason": "Keep all original typed ADT parse/build/ref calls; strengthen stringify value observation to xray/1 beyond nonempty output. Independent YAML values still need actual VM/native/provider and value/lifetime interfaces."
+      }
+    },
+    {
+      "case_id": "tests/regression/10_stdlib/1303_yaml_nested_flow.xr",
+      "source_lf_sha256": "ef2e53fdcc0365274506415b1bea8aeae030be120a8fe992f3e8e3f53eb9a5fa",
+      "primary_family": "builtin-method-native-provider-call",
+      "secondary_families": [
+        "typed-error-throw-try-catch",
+        "defer-cleanup-resource-lifetime",
+        "test-entry-assertion-async",
+        "array-slice-fixed-array-range-iteration",
+        "string-rune-interpolation",
+        "module-graph-import-export-init",
+        "ownership-read-ref-move-copy-drop"
+      ],
+      "tasks": [
+        "313",
+        "314",
+        "315",
+        "316",
+        "317",
+        "318",
+        "319",
+        "320",
+        "322"
+      ],
+      "producer_packages": [
+        "P02",
+        "P06",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P12",
+        "P13",
+        "P14",
+        "P17"
+      ],
+      "semantic_basis": "Complete original format/crypto/URL/calendar source review preserves every named test, helper and normal/error path. Independent known answers, full stress and semantic content are required separately from shape, self-roundtrip and actual provider/entropy/constant-time/physical qualification.",
+      "original_runner_entries": [
+        {
+          "suite": "regression",
+          "entry": "test"
+        }
+      ],
+      "new_entry_status": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "replacement_qualification": "OPEN",
+      "original_stdout_oracle": {
+        "path": "tests/regression/10_stdlib/1303_yaml_nested_flow.xr.expected",
+        "state": "MISSING",
+        "lf_sha256": null
+      },
+      "original_regression_obligation": {
+        "entry": "test",
+        "expected_exit": 0,
+        "test_discovery": "NOT_RUN"
+      },
+      "original_named_test_obligation": {
+        "state": "REVIEWED_TEXTUAL_DECLARATIONS_NOT_RUNTIME_DISCOVERY",
+        "declarations": [
+          {
+            "name": "test_nested_flow_mapping",
+            "marker_line": 21,
+            "source_segment_lf_sha256": "a08391dabcd3be52bb21626c55a59cd6c513aa61515d6c174d4cf472106f9977"
+          },
+          {
+            "name": "test_flow_sequence_in_flow_mapping",
+            "marker_line": 34,
+            "source_segment_lf_sha256": "8ceac39cac5ffb4ec3d24a5e34c26b057fdfa1d5167d16404f1bde2aedb34a5f"
+          },
+          {
+            "name": "test_flow_mapping_in_flow_sequence",
+            "marker_line": 48,
+            "source_segment_lf_sha256": "13c78b31c780f837e586261341c25e6570661b0fbe92c1a821373618920a96b1"
+          },
+          {
+            "name": "test_nested_flow_sequence",
+            "marker_line": 63,
+            "source_segment_lf_sha256": "91b90e97fc86128cc692ef3fad9906026f42109c208016a63452f842bb90dbf0"
+          },
+          {
+            "name": "test_multiple_flow_mappings",
+            "marker_line": 76,
+            "source_segment_lf_sha256": "68699f6497618842c3728058efe9b22eb75affefeadad79cdb65b93c93e7bba4"
+          },
+          {
+            "name": "test_flow_mapping_mixed_values",
+            "marker_line": 87,
+            "source_segment_lf_sha256": "be6401780a8fe5befe75507c5d6068bc6443e8a94444c99f036c718fffbbf0c9"
+          },
+          {
+            "name": "test_empty_flow_structures",
+            "marker_line": 100,
+            "source_segment_lf_sha256": "139834f5bbf14298a8d97b3a0187a88f597c8d738ce211dc6a9b57d226370d83"
+          },
+          {
+            "name": "test_deep_nested_flow",
+            "marker_line": 112,
+            "source_segment_lf_sha256": "79329f21c3cfa882214790c99023981c8fe924541c52fbebc925e3a0f796dcdf"
+          },
+          {
+            "name": "test_flow_mapping_quoted_keys",
+            "marker_line": 121,
+            "source_segment_lf_sha256": "4d950f235cca3275eefea0a33fbf0c602db999ddcd979ba802f6f17931f0b16d"
+          },
+          {
+            "name": "test_complex_yaml_config",
+            "marker_line": 132,
+            "source_segment_lf_sha256": "973bc0e156484d79732f6f8d7793fd7fedac3060aac3c283a48fa54f2cc5e838"
+          },
+          {
+            "name": "test_flow_in_block_sequence",
+            "marker_line": 152,
+            "source_segment_lf_sha256": "78d7ea21273f2138e4dbfb82eefe4979c3eab776a142e399eb1e93f6c6995e68"
+          },
+          {
+            "name": "test_block_sequence_nested_mappings",
+            "marker_line": 167,
+            "source_segment_lf_sha256": "6762339d1221565b019d0885ec7557a70288ed635bd9dc137598678606d3e8fe"
+          },
+          {
+            "name": "test_block_sequence_three_items",
+            "marker_line": 180,
+            "source_segment_lf_sha256": "36c5b4d41589b4d0f1b3b855c570cd6fcfe42794283c55747ecee0803bf77717"
+          },
+          {
+            "name": "test_block_sequence_mixed_items",
+            "marker_line": 194,
+            "source_segment_lf_sha256": "f617f46258f11dd7b18a05d4fe7be0f5b072ef5aec3ad7c1f70864ead6aa67f0"
+          },
+          {
+            "name": "test_deep_block_nesting",
+            "marker_line": 207,
+            "source_segment_lf_sha256": "b0a32365304f523035ff30a512f8e88e3aa1be24796c5fc8dcfcdda1215f2bab"
+          },
+          {
+            "name": "test_block_mapping_with_multiple_sequences",
+            "marker_line": 216,
+            "source_segment_lf_sha256": "b4664f836e35681b19701fdc6aec2f3f43b7fea7e4a44b1ed50b4ef2eedd58b5"
+          },
+          {
+            "name": "test_docker_compose_like",
+            "marker_line": 228,
+            "source_segment_lf_sha256": "3a698eb8bfbf02ba6ba588e836918425d9d2887c7ba272114e8ba5f6e1cc2dfb"
+          },
+          {
+            "name": "test_yaml_special_values",
+            "marker_line": 244,
+            "source_segment_lf_sha256": "1a8bb62b1654ca8a71a9395b2b85a9c7b77234211ed11b8e24ab43f007631010"
+          }
+        ],
+        "execution": "NOT_RUN"
+      },
+      "target_contract_review": "REQUIRED; whole typed declarations and original error/content/protocol duties remain positive, without compatibility aliases or guessed ABI/provider behavior. Preserve source-review gaps separately from any real product failure."
+    },
+    {
+      "case_id": "tests/regression/10_stdlib/1304_yaml_advanced.xr",
+      "source_lf_sha256": "6f862c331c5277b30713577bc0b7560c91b8cad75e8d3e336b22f7873135353c",
+      "primary_family": "builtin-method-native-provider-call",
+      "secondary_families": [
+        "typed-error-throw-try-catch",
+        "defer-cleanup-resource-lifetime",
+        "test-entry-assertion-async",
+        "array-slice-fixed-array-range-iteration",
+        "string-rune-interpolation",
+        "module-graph-import-export-init",
+        "ownership-read-ref-move-copy-drop"
+      ],
+      "tasks": [
+        "313",
+        "314",
+        "315",
+        "316",
+        "317",
+        "318",
+        "319",
+        "320",
+        "322"
+      ],
+      "producer_packages": [
+        "P02",
+        "P06",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P12",
+        "P13",
+        "P14",
+        "P17"
+      ],
+      "semantic_basis": "Complete original format/crypto/URL/calendar source review preserves every named test, helper and normal/error path. Independent known answers, full stress and semantic content are required separately from shape, self-roundtrip and actual provider/entropy/constant-time/physical qualification.",
+      "original_runner_entries": [
+        {
+          "suite": "regression",
+          "entry": "test"
+        }
+      ],
+      "new_entry_status": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "replacement_qualification": "OPEN",
+      "original_stdout_oracle": {
+        "path": "tests/regression/10_stdlib/1304_yaml_advanced.xr.expected",
+        "state": "MISSING",
+        "lf_sha256": null
+      },
+      "original_regression_obligation": {
+        "entry": "test",
+        "expected_exit": 0,
+        "test_discovery": "NOT_RUN"
+      },
+      "original_named_test_obligation": {
+        "state": "REVIEWED_TEXTUAL_DECLARATIONS_NOT_RUNTIME_DISCOVERY",
+        "declarations": [
+          {
+            "name": "test_anchor_alias",
+            "marker_line": 18,
+            "source_segment_lf_sha256": "fe1326942ea7bf705e4ff7f21929c8eb9374def16e183792b2a74ab560066f12"
+          },
+          {
+            "name": "test_anchor_alias_number",
+            "marker_line": 27,
+            "source_segment_lf_sha256": "bda7234a044d6199e9555cf5a5bb89ec2cbdf52021201b1fb7377daf3ce567f8"
+          },
+          {
+            "name": "test_literal_block",
+            "marker_line": 37,
+            "source_segment_lf_sha256": "8b92b7d61afbae50f4d5c2354d3280c4c8e3b2599592f460dca6d14096844e7f"
+          },
+          {
+            "name": "test_literal_block_strip",
+            "marker_line": 47,
+            "source_segment_lf_sha256": "04747773e5bfe917adf9716f1e236b9ec228ee93789bde4015891bb4797049f4"
+          },
+          {
+            "name": "test_literal_block_keep",
+            "marker_line": 57,
+            "source_segment_lf_sha256": "b6c9279d48d2dd37add3858ed0063e4976a95d59f0d81a92a8544785a6859021"
+          },
+          {
+            "name": "test_folded_block",
+            "marker_line": 68,
+            "source_segment_lf_sha256": "3f19c6376ff44540c88eb30b05fbe17d2abc373364f5117bbaefb5d3eadb78f3"
+          },
+          {
+            "name": "test_folded_block_strip",
+            "marker_line": 78,
+            "source_segment_lf_sha256": "fd7fed2ebc4ec569dbbc69a5e35b78deea0f16dcad7d89e2489d9512ccba429a"
+          },
+          {
+            "name": "test_parse_all",
+            "marker_line": 89,
+            "source_segment_lf_sha256": "a288150b7968c58da12be08b64fb10aa29da9d75613763122f8f1904c323af1e"
+          },
+          {
+            "name": "test_parse_all_single",
+            "marker_line": 98,
+            "source_segment_lf_sha256": "fb0f02aa70109ddf4f263c126fdc359ec182241776f7f10b010986448b53ed7d"
+          },
+          {
+            "name": "test_hex_numbers",
+            "marker_line": 110,
+            "source_segment_lf_sha256": "4eb2c7b902a1de98a117b3111660fac03c6dca44b06fdaec71f7467366903248"
+          },
+          {
+            "name": "test_hex_number_upper",
+            "marker_line": 117,
+            "source_segment_lf_sha256": "9955c5170b578290e58148d4ee07cdaae03c6466a5b41f7490028976fec2534d"
+          },
+          {
+            "name": "test_octal_numbers",
+            "marker_line": 124,
+            "source_segment_lf_sha256": "519dfffcd9615e2cca983101f613d78c162610d73d8c9b6df89b6be59bf6b012"
+          },
+          {
+            "name": "test_string_not_hex",
+            "marker_line": 133,
+            "source_segment_lf_sha256": "44f222f476886c2af82e4e7b84216baf530d7b6f9051904761cdb5139a3c98b6"
+          },
+          {
+            "name": "test_string_abcdef",
+            "marker_line": 141,
+            "source_segment_lf_sha256": "ba4e2d70bd3f703f1e499639d784266269d3c66c10a5438fd02bfc2854a90b92"
+          },
+          {
+            "name": "test_infinity",
+            "marker_line": 150,
+            "source_segment_lf_sha256": "d2cfb0711e3fde3f99e1b747b85dd516e0dae962501d5c0f08ed9f00738a0676"
+          },
+          {
+            "name": "test_nan",
+            "marker_line": 158,
+            "source_segment_lf_sha256": "95bb108c777233ce30a3f384f221946124a925bd04e43ad81544cb270605ce5a"
+          },
+          {
+            "name": "test_tilde_null",
+            "marker_line": 169,
+            "source_segment_lf_sha256": "f3cc74a54af63aa75ad40c4da82a29cbc7ad28a5a9d0ad8505193f526718c387"
+          },
+          {
+            "name": "test_empty_value",
+            "marker_line": 178,
+            "source_segment_lf_sha256": "56c1bda7086565c03da02d9d887c81e4c78bad790565a0ab2cbb5eaf2639d3f5"
+          },
+          {
+            "name": "test_unicode_escape",
+            "marker_line": 187,
+            "source_segment_lf_sha256": "fba55224bc5069a9c00eee41e2248914fbb0d9b56680e2b307b94f1655e0b7ad"
+          },
+          {
+            "name": "test_unicode_escape_multibyte",
+            "marker_line": 194,
+            "source_segment_lf_sha256": "34df3c1a946a2b595b77f4dcc1fdbe374f772a876a9055615ce1c2fd627ffbfd"
+          },
+          {
+            "name": "test_escape_sequences",
+            "marker_line": 204,
+            "source_segment_lf_sha256": "81be7475c98a9d27571bb37999e8b88df09cd94688860b4f4a7366c7a2d3d7a2"
+          },
+          {
+            "name": "test_stringify_value",
+            "marker_line": 214,
+            "source_segment_lf_sha256": "0831cd6548be1db371267934ef864381618fbd8cd384c919e6610e2326f60001"
+          },
+          {
+            "name": "test_stringify_nested_value",
+            "marker_line": 229,
+            "source_segment_lf_sha256": "5c64c18e0eeb93120b28116c80df99078aa4652c9145a584fd8518d62366d301"
+          },
+          {
+            "name": "test_stringify_value_roundtrip",
+            "marker_line": 244,
+            "source_segment_lf_sha256": "73c4fe92d4c076f7b683bcb6507cd0b4dde09cae90bf1dd029e8c947cd09904d"
+          },
+          {
+            "name": "test_stringify_mapping",
+            "marker_line": 261,
+            "source_segment_lf_sha256": "307e7184e18cf0c5f742d20c508efd9db058a84a639b745a63d9090c6649fb63"
+          },
+          {
+            "name": "test_empty_input",
+            "marker_line": 272,
+            "source_segment_lf_sha256": "bfe076d432c13f96de68bd1aada960ba43eb2e1c4822ccaae334929bd57ddeaf"
+          },
+          {
+            "name": "test_whitespace_only",
+            "marker_line": 278,
+            "source_segment_lf_sha256": "b06d1ddccf79b44cd85044c1f7eb739c102008b3bdd799b7062dbefdfa3db2b2"
+          },
+          {
+            "name": "test_comment_only",
+            "marker_line": 284,
+            "source_segment_lf_sha256": "dbd656cd041e62084bf86cc888706836b89be99fed7c0b59ffe19146c115455a"
+          },
+          {
+            "name": "test_inline_comments",
+            "marker_line": 294,
+            "source_segment_lf_sha256": "bf21848506765b7cdc72d75e76fec1d496695aa8502d4fd64984a7b662af24c0"
+          },
+          {
+            "name": "test_negative_numbers",
+            "marker_line": 304,
+            "source_segment_lf_sha256": "9182f96d633a60e3bd9408c16aec387b4e90f0d92e2223a6878e82ff75d728eb"
+          },
+          {
+            "name": "test_flow_quoted_keys",
+            "marker_line": 314,
+            "source_segment_lf_sha256": "ca280e48c8baced16d90bed023162ad15f186cd85c055f4278686e8f26ee76a7"
+          }
+        ],
+        "execution": "NOT_RUN"
+      },
+      "target_contract_review": "REQUIRED; whole typed declarations and original error/content/protocol duties remain positive, without compatibility aliases or guessed ABI/provider behavior. Preserve source-review gaps separately from any real product failure.",
+      "target_source_port": {
+        "fixture": "tests/unit/xir/legacy_consumers/fixtures/format_regression_ports/1304_yaml_advanced/root.xr",
+        "lf_sha256": "5ead0b870aff241442438e34f007b2a363e115bb7f8bc61fc948a5057cd5667d",
+        "owner_package": "P13",
+        "qualification": "NOT_RUN",
+        "frozen_basis": [
+          "Preserve every original named body and add exact scalar/multidocument observations. Independent YAML1.2.2 chomping: no physical final LF stays absent; keep retains the existing three LF. Seed parseBlockScalar unconditionally appendsLF and may add one extra with split terminal empties; this is a static target-contract gap, no observed product failure. Actual producer repair/qualification remains open."
+        ]
+      },
+      "named_test_migration": {
+        "state": "PREPARED_NOT_EXECUTED",
+        "original_tests_removed": false,
+        "mapping": {
+          "test_anchor_alias": "test_anchor_alias",
+          "test_anchor_alias_number": "test_anchor_alias_number",
+          "test_literal_block": "test_literal_block",
+          "test_literal_block_strip": "test_literal_block_strip",
+          "test_literal_block_keep": "test_literal_block_keep",
+          "test_folded_block": "test_folded_block",
+          "test_folded_block_strip": "test_folded_block_strip",
+          "test_parse_all": "test_parse_all",
+          "test_parse_all_single": "test_parse_all_single",
+          "test_hex_numbers": "test_hex_numbers",
+          "test_hex_number_upper": "test_hex_number_upper",
+          "test_octal_numbers": "test_octal_numbers",
+          "test_string_not_hex": "test_string_not_hex",
+          "test_string_abcdef": "test_string_abcdef",
+          "test_infinity": "test_infinity",
+          "test_nan": "test_nan",
+          "test_tilde_null": "test_tilde_null",
+          "test_empty_value": "test_empty_value",
+          "test_unicode_escape": "test_unicode_escape",
+          "test_unicode_escape_multibyte": "test_unicode_escape_multibyte",
+          "test_escape_sequences": "test_escape_sequences",
+          "test_stringify_value": "test_stringify_value",
+          "test_stringify_nested_value": "test_stringify_nested_value",
+          "test_stringify_value_roundtrip": "test_stringify_value_roundtrip",
+          "test_stringify_mapping": "test_stringify_mapping",
+          "test_empty_input": "test_empty_input",
+          "test_whitespace_only": "test_whitespace_only",
+          "test_comment_only": "test_comment_only",
+          "test_inline_comments": "test_inline_comments",
+          "test_negative_numbers": "test_negative_numbers",
+          "test_flow_quoted_keys": "test_flow_quoted_keys"
+        }
+      },
+      "target_disposition": {
+        "kind": "POSITIVE_FULL_LIBRARY_CONTENT_AFTER_DECLARED_PORT",
+        "owner_package": "P13",
+        "qualification": "NOT_RUN",
+        "reason": "Preserve every original named body and add exact scalar/multidocument observations. Independent YAML1.2.2 chomping: no physical final LF stays absent; keep retains the existing three LF. Seed parseBlockScalar unconditionally appendsLF and may add one extra with split terminal empties; this is a static target-contract gap, no observed product failure. Actual producer repair/qualification remains open."
+      }
+    },
+    {
+      "case_id": "tests/regression/10_stdlib/1305_csv_basic.xr",
+      "source_lf_sha256": "fd97999ae1e69928d2e9f83c6a3a792643702848fca57cb66c1e824f6bcae178",
+      "primary_family": "builtin-method-native-provider-call",
+      "secondary_families": [
+        "typed-error-throw-try-catch",
+        "defer-cleanup-resource-lifetime",
+        "test-entry-assertion-async",
+        "array-slice-fixed-array-range-iteration",
+        "string-rune-interpolation",
+        "module-graph-import-export-init",
+        "ownership-read-ref-move-copy-drop"
+      ],
+      "tasks": [
+        "313",
+        "314",
+        "315",
+        "316",
+        "317",
+        "318",
+        "319",
+        "320",
+        "322"
+      ],
+      "producer_packages": [
+        "P02",
+        "P06",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P12",
+        "P13",
+        "P14",
+        "P17"
+      ],
+      "semantic_basis": "Complete original format/crypto/URL/calendar source review preserves every named test, helper and normal/error path. Independent known answers, full stress and semantic content are required separately from shape, self-roundtrip and actual provider/entropy/constant-time/physical qualification.",
+      "original_runner_entries": [
+        {
+          "suite": "regression",
+          "entry": "test"
+        }
+      ],
+      "new_entry_status": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "replacement_qualification": "OPEN",
+      "original_stdout_oracle": {
+        "path": "tests/regression/10_stdlib/1305_csv_basic.xr.expected",
+        "state": "MISSING",
+        "lf_sha256": null
+      },
+      "original_regression_obligation": {
+        "entry": "test",
+        "expected_exit": 0,
+        "test_discovery": "NOT_RUN"
+      },
+      "original_named_test_obligation": {
+        "state": "REVIEWED_TEXTUAL_DECLARATIONS_NOT_RUNTIME_DISCOVERY",
+        "declarations": [
+          {
+            "name": "test_parse_basic",
+            "marker_line": 13,
+            "source_segment_lf_sha256": "6e0f29c3ed5ad65520dddd69a60a1155fd957c9a8e7f498faba614c8643832da"
+          },
+          {
+            "name": "test_header_modes",
+            "marker_line": 22,
+            "source_segment_lf_sha256": "b90ca9e9ea7eb41ef3882c280456bdaebafcc77a8a80efca7f7fb2c16d5e7da8"
+          },
+          {
+            "name": "test_parse_quoted_and_escaped",
+            "marker_line": 38,
+            "source_segment_lf_sha256": "a1bd22fa75f443682b753776cd28c19418c2ad9015b440a70718a45e50ac3866"
+          },
+          {
+            "name": "test_parse_report_and_strict_error",
+            "marker_line": 45,
+            "source_segment_lf_sha256": "c6658535e3f4f6a31d9258683c915be5be5648c49c2aa06313486f4751d9e191"
+          },
+          {
+            "name": "test_exact_and_auto_delimiters",
+            "marker_line": 66,
+            "source_segment_lf_sha256": "c9f441a3f7c9fcb2dcaf05acc44df27aafcb9652d316c7a42e9ebb9359ea4140"
+          },
+          {
+            "name": "test_parse_options",
+            "marker_line": 79,
+            "source_segment_lf_sha256": "a3ef69563d444119fc12be2163eebed0a3f530dcd49372085b38af718e66161e"
+          },
+          {
+            "name": "test_comment_quoting_empty_fields_and_crlf",
+            "marker_line": 91,
+            "source_segment_lf_sha256": "04956ddfe18900a43f2fd49cf62cdfb8d34433fa37c2795f7af0294e2af5a662"
+          },
+          {
+            "name": "test_stringify_roundtrip",
+            "marker_line": 103,
+            "source_segment_lf_sha256": "5b2cab20f6a52a36de0e7a4254f8162786c60588047b2575b31c401a3abbb58a"
+          },
+          {
+            "name": "test_unterminated_quote_preserves_partial_row",
+            "marker_line": 121,
+            "source_segment_lf_sha256": "ec221c4b75973273db64da0d725895ea916764d42738d532c87acf05602b3637"
+          },
+          {
+            "name": "test_limits",
+            "marker_line": 130,
+            "source_segment_lf_sha256": "8b52e3ba32bcd69cad9b1273941b6da5f4d17d77805091fe0b92e312d8342dd8"
+          },
+          {
+            "name": "test_mixed_linebreak_metadata",
+            "marker_line": 146,
+            "source_segment_lf_sha256": "b017baafb6c84fe85ca32d82c8d6beb61efaf2d60ffc9d7a7a89a1dbfaddd322"
+          }
+        ],
+        "execution": "NOT_RUN"
+      },
+      "target_contract_review": "REQUIRED; whole typed declarations and original error/content/protocol duties remain positive, without compatibility aliases or guessed ABI/provider behavior. Preserve source-review gaps separately from any real product failure.",
+      "target_source_port": {
+        "fixture": "tests/unit/xir/legacy_consumers/fixtures/format_regression_ports/1305_csv_basic/root.xr",
+        "lf_sha256": "726238604c23b7b364608034c1806a05377cf295ffc183bf82d2c3276e78ebcf",
+        "owner_package": "P13",
+        "qualification": "NOT_RUN",
+        "frozen_basis": [
+          "Actual CsvDelimiter.Exact declares required delimiter:rune. Bind explicit tab and retain every original strict/report/partial row/options/header/CRLF/quote/limit path. parseReport partial publication is intentional and differs from strict parse."
+        ]
+      },
+      "named_test_migration": {
+        "state": "PREPARED_NOT_EXECUTED",
+        "original_tests_removed": false,
+        "mapping": {
+          "test_parse_basic": "test_parse_basic",
+          "test_header_modes": "test_header_modes",
+          "test_parse_quoted_and_escaped": "test_parse_quoted_and_escaped",
+          "test_parse_report_and_strict_error": "test_parse_report_and_strict_error",
+          "test_exact_and_auto_delimiters": "test_exact_and_auto_delimiters",
+          "test_parse_options": "test_parse_options",
+          "test_comment_quoting_empty_fields_and_crlf": "test_comment_quoting_empty_fields_and_crlf",
+          "test_stringify_roundtrip": "test_stringify_roundtrip",
+          "test_unterminated_quote_preserves_partial_row": "test_unterminated_quote_preserves_partial_row",
+          "test_limits": "test_limits",
+          "test_mixed_linebreak_metadata": "test_mixed_linebreak_metadata"
+        }
+      },
+      "target_disposition": {
+        "kind": "POSITIVE_FULL_LIBRARY_CONTENT_AFTER_DECLARED_PORT",
+        "owner_package": "P13",
+        "qualification": "NOT_RUN",
+        "reason": "Actual CsvDelimiter.Exact declares required delimiter:rune. Bind explicit tab and retain every original strict/report/partial row/options/header/CRLF/quote/limit path. parseReport partial publication is intentional and differs from strict parse."
+      }
+    },
+    {
+      "case_id": "tests/regression/10_stdlib/1306_toml_basic.xr",
+      "source_lf_sha256": "c0716d531109874222e730625bc8695b77b68762f39dde9c07965af8c8341635",
+      "primary_family": "builtin-method-native-provider-call",
+      "secondary_families": [
+        "typed-error-throw-try-catch",
+        "defer-cleanup-resource-lifetime",
+        "test-entry-assertion-async",
+        "array-slice-fixed-array-range-iteration",
+        "string-rune-interpolation",
+        "module-graph-import-export-init",
+        "ownership-read-ref-move-copy-drop"
+      ],
+      "tasks": [
+        "313",
+        "314",
+        "315",
+        "316",
+        "317",
+        "318",
+        "319",
+        "320",
+        "322"
+      ],
+      "producer_packages": [
+        "P02",
+        "P06",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P12",
+        "P13",
+        "P14",
+        "P17"
+      ],
+      "semantic_basis": "Complete original format/crypto/URL/calendar source review preserves every named test, helper and normal/error path. Independent known answers, full stress and semantic content are required separately from shape, self-roundtrip and actual provider/entropy/constant-time/physical qualification.",
+      "original_runner_entries": [
+        {
+          "suite": "regression",
+          "entry": "test"
+        }
+      ],
+      "new_entry_status": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "replacement_qualification": "OPEN",
+      "original_stdout_oracle": {
+        "path": "tests/regression/10_stdlib/1306_toml_basic.xr.expected",
+        "state": "MISSING",
+        "lf_sha256": null
+      },
+      "original_regression_obligation": {
+        "entry": "test",
+        "expected_exit": 0,
+        "test_discovery": "NOT_RUN"
+      },
+      "original_named_test_obligation": {
+        "state": "REVIEWED_TEXTUAL_DECLARATIONS_NOT_RUNTIME_DISCOVERY",
+        "declarations": [
+          {
+            "name": "test_parse_basic",
+            "marker_line": 28,
+            "source_segment_lf_sha256": "28f01bb12228adfa1d7634736d0d3f8f94dab4babf2d0d8c70120a6eb4f6535a"
+          },
+          {
+            "name": "test_parse_table",
+            "marker_line": 39,
+            "source_segment_lf_sha256": "a64fe1bf1cba0cb9bf8f735b93db9cc2df8c8c356511a4d2d40f29a2f8f14ef7"
+          },
+          {
+            "name": "test_parse_array",
+            "marker_line": 50,
+            "source_segment_lf_sha256": "f68df0b16f2d5df0ba51ac8fa046e07217d647078d38c92f4973a0e671385179"
+          },
+          {
+            "name": "test_parse_inline_table",
+            "marker_line": 61,
+            "source_segment_lf_sha256": "de79da3f98ad2dc4ebc0daaf87b146eb9a2462cb455f5dd0f15f7985734c525e"
+          },
+          {
+            "name": "test_parse_number_formats",
+            "marker_line": 70,
+            "source_segment_lf_sha256": "3b3483e78ce56947060b205574b9fcfe44105a02ba2180967aeec70cd04d50ab"
+          },
+          {
+            "name": "test_stringify",
+            "marker_line": 81,
+            "source_segment_lf_sha256": "df996e07a01e24f5f12d5bf540dd86e498ff75ce08c07749d6f5ca6996db5fe9"
+          },
+          {
+            "name": "test_parse_nested_table",
+            "marker_line": 92,
+            "source_segment_lf_sha256": "cda1f6f0b737ac6d4e70ec3e1a8f0e9a37415c93f4619b020084f14f5c0a632b"
+          }
+        ],
+        "execution": "NOT_RUN"
+      },
+      "target_contract_review": "REQUIRED; whole typed declarations and original error/content/protocol duties remain positive, without compatibility aliases or guessed ABI/provider behavior. Preserve source-review gaps separately from any real product failure."
+    },
+    {
+      "case_id": "tests/regression/10_stdlib/1307_toml_advanced.xr",
+      "source_lf_sha256": "95ca756c7bf1528c32b81be0b4fb2f6c42e682d23c72b3a02bd3520ed41517dd",
+      "primary_family": "builtin-method-native-provider-call",
+      "secondary_families": [
+        "typed-error-throw-try-catch",
+        "defer-cleanup-resource-lifetime",
+        "test-entry-assertion-async",
+        "array-slice-fixed-array-range-iteration",
+        "string-rune-interpolation",
+        "module-graph-import-export-init",
+        "ownership-read-ref-move-copy-drop"
+      ],
+      "tasks": [
+        "313",
+        "314",
+        "315",
+        "316",
+        "317",
+        "318",
+        "319",
+        "320",
+        "322"
+      ],
+      "producer_packages": [
+        "P02",
+        "P06",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P12",
+        "P13",
+        "P14",
+        "P17"
+      ],
+      "semantic_basis": "Complete original format/crypto/URL/calendar source review preserves every named test, helper and normal/error path. Independent known answers, full stress and semantic content are required separately from shape, self-roundtrip and actual provider/entropy/constant-time/physical qualification.",
+      "original_runner_entries": [
+        {
+          "suite": "regression",
+          "entry": "test"
+        }
+      ],
+      "new_entry_status": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "replacement_qualification": "OPEN",
+      "original_stdout_oracle": {
+        "path": "tests/regression/10_stdlib/1307_toml_advanced.xr.expected",
+        "state": "MISSING",
+        "lf_sha256": null
+      },
+      "original_regression_obligation": {
+        "entry": "test",
+        "expected_exit": 0,
+        "test_discovery": "NOT_RUN"
+      },
+      "original_named_test_obligation": {
+        "state": "REVIEWED_TEXTUAL_DECLARATIONS_NOT_RUNTIME_DISCOVERY",
+        "declarations": [
+          {
+            "name": "test_multiline_basic_string",
+            "marker_line": 46,
+            "source_segment_lf_sha256": "8fdcab7a8b53551271c4a9b8cebb6f75841b8949ede7dae59bc5a3e393711749"
+          },
+          {
+            "name": "test_literal_strings",
+            "marker_line": 52,
+            "source_segment_lf_sha256": "bbaac6a7f1c8c225443e3ce8c2ef2da46862ca48f8a6e43ede5191cf4c0efe52"
+          },
+          {
+            "name": "test_array_of_tables",
+            "marker_line": 59,
+            "source_segment_lf_sha256": "8c6b8a54c1b8f8c9e8cf33c57e1149e6b5f6b5d8d55ec1224738f41733ec84f6"
+          },
+          {
+            "name": "test_escape_and_unicode_sequences",
+            "marker_line": 68,
+            "source_segment_lf_sha256": "03a40d31cc82f0f3d4a6bd8791266105233a98ba65c15c0aa7f449b39f7be853"
+          },
+          {
+            "name": "test_dotted_keys",
+            "marker_line": 75,
+            "source_segment_lf_sha256": "938674c58e2b73ed356882b51a6cb4ee8e2b23b307e3f63513b640684cbf96eb"
+          },
+          {
+            "name": "test_inline_table_dotted_keys",
+            "marker_line": 83,
+            "source_segment_lf_sha256": "c8d9d81db7f5de4d9d4da0b5ce9d7c362bc77d58af48612f007349c0f6ea2c5f"
+          },
+          {
+            "name": "test_special_floats_and_negative_numbers",
+            "marker_line": 91,
+            "source_segment_lf_sha256": "67034a9b402d3e688dc0af786194ea389276c0087a8a630ab4b495b6fd181eec"
+          },
+          {
+            "name": "test_float_decimal_point",
+            "marker_line": 100,
+            "source_segment_lf_sha256": "8b50a4edff7b85af54f32f95854d0d3c10ba94f3bc41d6df7cbd2753836f539f"
+          },
+          {
+            "name": "test_stringify_roundtrip",
+            "marker_line": 110,
+            "source_segment_lf_sha256": "892d8f5798a4f0e032b19271702d6d02773fbd2e931b2168309e7d8d174c19be"
+          },
+          {
+            "name": "test_stringify_nested_roundtrip",
+            "marker_line": 119,
+            "source_segment_lf_sha256": "0d30178a150e7ad0c3dab93d1650d036744d43a97127cd362cf88f404ed222cd"
+          },
+          {
+            "name": "test_parse_report",
+            "marker_line": 128,
+            "source_segment_lf_sha256": "38de37132a8765ce7212456d0c5cd7922d2b161750bdd4840af473c95a2d0675"
+          },
+          {
+            "name": "test_duplicate_key_report",
+            "marker_line": 137,
+            "source_segment_lf_sha256": "90db45ae4ed844c68a9f213d5d7e0a2c067381f684edcb12934870536ea706ca"
+          },
+          {
+            "name": "test_syntax_error_report",
+            "marker_line": 148,
+            "source_segment_lf_sha256": "8f8e73d477e779b12993bb03575b91eb57d3ab676741262b2ea7b33432508212"
+          },
+          {
+            "name": "test_empty_input",
+            "marker_line": 155,
+            "source_segment_lf_sha256": "e9fd5f3c2cfb9ec178227627eda5c02ab0e1560fcdcc44d78a1a93467d2c56be"
+          },
+          {
+            "name": "test_comments_and_bool_end",
+            "marker_line": 161,
+            "source_segment_lf_sha256": "4438e3bb0af2c7e17d2b9290dad806fc9883b56743608297e3aa58d2677ea5bf"
+          },
+          {
+            "name": "test_datetime",
+            "marker_line": 168,
+            "source_segment_lf_sha256": "4f5851772d0fc627e90edd6cf900078d1261dda17476ce0e091dfca088e44cde"
+          },
+          {
+            "name": "test_datetime_space",
+            "marker_line": 174,
+            "source_segment_lf_sha256": "b72bb192f2aa42642e272511e196981259b44fd9df64e0a255b8cccb07cc75ab"
+          },
+          {
+            "name": "test_underscore_numbers",
+            "marker_line": 180,
+            "source_segment_lf_sha256": "cc795bb3920bd6ffd710ef482b1449ecf58a4cd78a61e646cd73d4aa2a40b514"
+          }
+        ],
+        "execution": "NOT_RUN"
+      },
+      "target_contract_review": "REQUIRED; whole typed declarations and original error/content/protocol duties remain positive, without compatibility aliases or guessed ABI/provider behavior. Preserve source-review gaps separately from any real product failure.",
+      "target_source_port": {
+        "fixture": "tests/unit/xir/legacy_consumers/fixtures/format_regression_ports/1307_toml_advanced/root.xr",
+        "lf_sha256": "e18849cc7f4208c9ccf8a27ad6e10cf79626ff4035cbd00dff2e06a6c44ffc30",
+        "owner_package": "P13",
+        "qualification": "NOT_RUN",
+        "frozen_basis": [
+          "Keep full typed TOML builders/ref paths and diagnostics/datetime/float duties; strengthen weak literal and Unicode strings to exact content and actually observe NaN. No arbitrary generic proof or error string guessed."
+        ]
+      },
+      "named_test_migration": {
+        "state": "PREPARED_NOT_EXECUTED",
+        "original_tests_removed": false,
+        "mapping": {
+          "test_multiline_basic_string": "test_multiline_basic_string",
+          "test_literal_strings": "test_literal_strings",
+          "test_array_of_tables": "test_array_of_tables",
+          "test_escape_and_unicode_sequences": "test_escape_and_unicode_sequences",
+          "test_dotted_keys": "test_dotted_keys",
+          "test_inline_table_dotted_keys": "test_inline_table_dotted_keys",
+          "test_special_floats_and_negative_numbers": "test_special_floats_and_negative_numbers",
+          "test_float_decimal_point": "test_float_decimal_point",
+          "test_stringify_roundtrip": "test_stringify_roundtrip",
+          "test_stringify_nested_roundtrip": "test_stringify_nested_roundtrip",
+          "test_parse_report": "test_parse_report",
+          "test_duplicate_key_report": "test_duplicate_key_report",
+          "test_syntax_error_report": "test_syntax_error_report",
+          "test_empty_input": "test_empty_input",
+          "test_comments_and_bool_end": "test_comments_and_bool_end",
+          "test_datetime": "test_datetime",
+          "test_datetime_space": "test_datetime_space",
+          "test_underscore_numbers": "test_underscore_numbers"
+        }
+      },
+      "target_disposition": {
+        "kind": "POSITIVE_FULL_LIBRARY_CONTENT_AFTER_DECLARED_PORT",
+        "owner_package": "P13",
+        "qualification": "NOT_RUN",
+        "reason": "Keep full typed TOML builders/ref paths and diagnostics/datetime/float duties; strengthen weak literal and Unicode strings to exact content and actually observe NaN. No arbitrary generic proof or error string guessed."
+      }
+    },
+    {
+      "case_id": "tests/regression/10_stdlib/1308_xml_basic.xr",
+      "source_lf_sha256": "58f6c8e822047c9056a50edb2c5aec25ac9218b046d111202c6bd8766fc7392a",
+      "primary_family": "builtin-method-native-provider-call",
+      "secondary_families": [
+        "typed-error-throw-try-catch",
+        "defer-cleanup-resource-lifetime",
+        "test-entry-assertion-async",
+        "array-slice-fixed-array-range-iteration",
+        "string-rune-interpolation",
+        "module-graph-import-export-init",
+        "ownership-read-ref-move-copy-drop"
+      ],
+      "tasks": [
+        "313",
+        "314",
+        "315",
+        "316",
+        "317",
+        "318",
+        "319",
+        "320",
+        "322"
+      ],
+      "producer_packages": [
+        "P02",
+        "P06",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P12",
+        "P13",
+        "P14",
+        "P17"
+      ],
+      "semantic_basis": "Complete original format/crypto/URL/calendar source review preserves every named test, helper and normal/error path. Independent known answers, full stress and semantic content are required separately from shape, self-roundtrip and actual provider/entropy/constant-time/physical qualification.",
+      "original_runner_entries": [
+        {
+          "suite": "regression",
+          "entry": "test"
+        }
+      ],
+      "new_entry_status": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "replacement_qualification": "OPEN",
+      "original_stdout_oracle": {
+        "path": "tests/regression/10_stdlib/1308_xml_basic.xr.expected",
+        "state": "MISSING",
+        "lf_sha256": null
+      },
+      "original_regression_obligation": {
+        "entry": "test",
+        "expected_exit": 0,
+        "test_discovery": "NOT_RUN"
+      },
+      "original_named_test_obligation": {
+        "state": "REVIEWED_TEXTUAL_DECLARATIONS_NOT_RUNTIME_DISCOVERY",
+        "declarations": [
+          {
+            "name": "test_parse_basic",
+            "marker_line": 8,
+            "source_segment_lf_sha256": "0c450686dc43fbd8b70f10b004db9df605b65aad0d73e2c081809925ebe613e7"
+          },
+          {
+            "name": "test_parse_children",
+            "marker_line": 14,
+            "source_segment_lf_sha256": "17a9bdfc73e5e7c0db2afd55d79c2d1b229872a85ca66ecce157c45aac9d20d2"
+          },
+          {
+            "name": "test_parse_text",
+            "marker_line": 22,
+            "source_segment_lf_sha256": "1493684d404d02b85fbac8bf3229c14c2b560af542864081d45cd0810da7277f"
+          },
+          {
+            "name": "test_parse_attrs",
+            "marker_line": 31,
+            "source_segment_lf_sha256": "349ff6bac6675c9942dd2549c377ea4e76beb4d39c63b1afcf686804d60a14a5"
+          },
+          {
+            "name": "test_parse_deep_nesting",
+            "marker_line": 40,
+            "source_segment_lf_sha256": "1fb480ea4c6861d0d8c795c50d0ab52baf86bd0b5ab744ee6681a07581c1523b"
+          },
+          {
+            "name": "test_parse_multiple_children",
+            "marker_line": 52,
+            "source_segment_lf_sha256": "265b17044fc615e4c18d1f40c711c4a0af00903eb7ea2922e5dc4b324693aa6a"
+          },
+          {
+            "name": "test_create_element",
+            "marker_line": 60,
+            "source_segment_lf_sha256": "28b3ee43c27b5de81c1819a6bb886c61a807baf8fda0ee2b71c5cfb17889ea20"
+          },
+          {
+            "name": "test_parse_empty_element",
+            "marker_line": 68,
+            "source_segment_lf_sha256": "622562c35194a94ca8d83267bde90490af353d42c31f4217e7ad51d31c299555"
+          },
+          {
+            "name": "test_parse_preserve_comments",
+            "marker_line": 77,
+            "source_segment_lf_sha256": "8acb0e11669da867d5e1689772fd8546530e001810e7437b41e3cde542bd7bc8"
+          },
+          {
+            "name": "test_stringify_compact",
+            "marker_line": 86,
+            "source_segment_lf_sha256": "9994a8b6812cfa4d8e3c693dee7e5f011d84b4e0dd8f971c490a7070f82de754"
+          }
+        ],
+        "execution": "NOT_RUN"
+      },
+      "target_contract_review": "REQUIRED; whole typed declarations and original error/content/protocol duties remain positive, without compatibility aliases or guessed ABI/provider behavior. Preserve source-review gaps separately from any real product failure."
+    },
+    {
+      "case_id": "tests/regression/10_stdlib/1309_xml_advanced.xr",
+      "source_lf_sha256": "01a6eccc9d9969161fb76cabf3d25d69f023bcbaa7a714cdb568f239f0e77e7d",
+      "primary_family": "builtin-method-native-provider-call",
+      "secondary_families": [
+        "typed-error-throw-try-catch",
+        "defer-cleanup-resource-lifetime",
+        "test-entry-assertion-async",
+        "array-slice-fixed-array-range-iteration",
+        "string-rune-interpolation",
+        "module-graph-import-export-init",
+        "ownership-read-ref-move-copy-drop"
+      ],
+      "tasks": [
+        "313",
+        "314",
+        "315",
+        "316",
+        "317",
+        "318",
+        "319",
+        "320",
+        "322"
+      ],
+      "producer_packages": [
+        "P02",
+        "P06",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P12",
+        "P13",
+        "P14",
+        "P17"
+      ],
+      "semantic_basis": "Complete original format/crypto/URL/calendar source review preserves every named test, helper and normal/error path. Independent known answers, full stress and semantic content are required separately from shape, self-roundtrip and actual provider/entropy/constant-time/physical qualification.",
+      "original_runner_entries": [
+        {
+          "suite": "regression",
+          "entry": "test"
+        }
+      ],
+      "new_entry_status": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "replacement_qualification": "OPEN",
+      "original_stdout_oracle": {
+        "path": "tests/regression/10_stdlib/1309_xml_advanced.xr.expected",
+        "state": "MISSING",
+        "lf_sha256": null
+      },
+      "original_regression_obligation": {
+        "entry": "test",
+        "expected_exit": 0,
+        "test_discovery": "NOT_RUN"
+      },
+      "original_named_test_obligation": {
+        "state": "REVIEWED_TEXTUAL_DECLARATIONS_NOT_RUNTIME_DISCOVERY",
+        "declarations": [
+          {
+            "name": "test_entity_decode_named",
+            "marker_line": 19,
+            "source_segment_lf_sha256": "35628ba4ce6055afdf5aca68cb015ae795c4a830987d5f52fd02062773f4bded"
+          },
+          {
+            "name": "test_entity_decode_numeric_decimal",
+            "marker_line": 25,
+            "source_segment_lf_sha256": "57b8fc5aa650321794c6929bff842d8d06dcda520f7c833b6cd2940c46fc2cf2"
+          },
+          {
+            "name": "test_entity_decode_numeric_hex",
+            "marker_line": 31,
+            "source_segment_lf_sha256": "638dfd0e6e2e66d95ebac36e184e6cc1b9bd095372a764f06cbd0a6bba58f9eb"
+          },
+          {
+            "name": "test_entity_decode_unicode",
+            "marker_line": 37,
+            "source_segment_lf_sha256": "71390a3426ef3c51dfc1df144995773fd8e62a59223a3e8cfb20c5441ebc2540"
+          },
+          {
+            "name": "test_attr_entity_decode",
+            "marker_line": 46,
+            "source_segment_lf_sha256": "79481e3eea67dd967449fbf5aa74e4b60eedcd50d3e07b0dda107c88b335d2ad"
+          },
+          {
+            "name": "test_cdata_preserve",
+            "marker_line": 54,
+            "source_segment_lf_sha256": "145500156fc2d91c0f75d308be708c170f6306a6d27d79da63e1ec686bd6edae"
+          },
+          {
+            "name": "test_cdata_as_text",
+            "marker_line": 62,
+            "source_segment_lf_sha256": "53c99d1ab878cc8fb63fefad439e5e72269505fceb93a05d1966b044ba4a5b68"
+          },
+          {
+            "name": "test_self_closing_with_attrs",
+            "marker_line": 73,
+            "source_segment_lf_sha256": "9372ff3f5116b3a413c3f564b2a8a52689119d3f9dd01d2635e77daf9aef50d4"
+          },
+          {
+            "name": "test_skip_processing_instruction",
+            "marker_line": 85,
+            "source_segment_lf_sha256": "38a9702e3146e7f767842a8c4405f7ee018b54899e08ba219b0cdbcfffdb222b"
+          },
+          {
+            "name": "test_create_element_with_attrs",
+            "marker_line": 93,
+            "source_segment_lf_sha256": "957e1cf427ca4ddf1a08f5aef0eca19b7a3cb93266312b0345963b1f94d44d50"
+          },
+          {
+            "name": "test_create_text_node",
+            "marker_line": 108,
+            "source_segment_lf_sha256": "1fe79e54a51e9247b29591d5063c1fb9c3f0c229127139950ff785ba8ddf4b3e"
+          },
+          {
+            "name": "test_create_comment_node",
+            "marker_line": 115,
+            "source_segment_lf_sha256": "12d84c24f4f0f3e1724d4c02977677e194f1bb0e0e945a89008deccc10e49c9f"
+          },
+          {
+            "name": "test_create_cdata_node",
+            "marker_line": 122,
+            "source_segment_lf_sha256": "c257897e38d561f2ca3d6f6ea1f3143e68da9be56e63bc2661aad60442681685"
+          },
+          {
+            "name": "test_create_document",
+            "marker_line": 131,
+            "source_segment_lf_sha256": "f95a44b5283228890903926b615ed2328ec3f4d45f9827f33f3ccb2383483911"
+          },
+          {
+            "name": "test_stringify_roundtrip",
+            "marker_line": 139,
+            "source_segment_lf_sha256": "e122855e86319192f14ef6a7f32f45d0044edd059fbbf6f71f16196b4c2f8041"
+          },
+          {
+            "name": "test_parse_report_valid",
+            "marker_line": 153,
+            "source_segment_lf_sha256": "176dda55ebc2afedb6afb1e35394172175db981fed08acf9ff9fa89ecae35ca2"
+          },
+          {
+            "name": "test_parse_report_unknown_entity",
+            "marker_line": 161,
+            "source_segment_lf_sha256": "53ff22f7fd79683449fddddfe35005cbf8d57dfda570d0107ed46458107b9f0b"
+          },
+          {
+            "name": "test_parse_throws_on_no_root",
+            "marker_line": 171,
+            "source_segment_lf_sha256": "3f6cf33151bd66640d2a347172ed8804db89fc50ece15a5b5f087c78c94d9a3c"
+          },
+          {
+            "name": "test_whitespace_stripped_by_default",
+            "marker_line": 184,
+            "source_segment_lf_sha256": "8bc66d25bbe580679fbf5b661ab9354c56a16523db12faf6d24f9f28efd6f4ff"
+          },
+          {
+            "name": "test_whitespace_preserved",
+            "marker_line": 191,
+            "source_segment_lf_sha256": "2e3bd0defc9651881b80388a01535b0a9f0cfe8c17eeef3ad8428897134dd39b"
+          },
+          {
+            "name": "test_skip_doctype",
+            "marker_line": 201,
+            "source_segment_lf_sha256": "7154f2effb206247369f13e9fda151b9dc138f75d1d36fd4f3cf27012cf799a7"
+          },
+          {
+            "name": "test_skip_doctype_with_internal_subset",
+            "marker_line": 207,
+            "source_segment_lf_sha256": "f9e4015b70b900c9e736682a194e3f07b3242076992cbf97807e73b535ecbdd9"
+          },
+          {
+            "name": "test_stringify_escapes_text",
+            "marker_line": 216,
+            "source_segment_lf_sha256": "02dc7337997f6be0eba4557ec457e8d81c466b8b7ec6c1bf4bb0136587326536"
+          },
+          {
+            "name": "test_mixed_content",
+            "marker_line": 225,
+            "source_segment_lf_sha256": "8cce6575e207a909e6e6842e208ec86cd73d2d71360ffe6ca8d176cfe64a6bef"
+          }
+        ],
+        "execution": "NOT_RUN"
+      },
+      "target_contract_review": "REQUIRED; whole typed declarations and original error/content/protocol duties remain positive, without compatibility aliases or guessed ABI/provider behavior. Preserve source-review gaps separately from any real product failure."
+    },
+    {
+      "case_id": "tests/regression/10_stdlib/1400_crypto_hash.xr",
+      "source_lf_sha256": "5509c3d277a83bf0fcc0d28374157a799e52ddcbc293796a08fa8f6e0263074a",
+      "primary_family": "builtin-method-native-provider-call",
+      "secondary_families": [
+        "typed-error-throw-try-catch",
+        "defer-cleanup-resource-lifetime",
+        "test-entry-assertion-async",
+        "array-slice-fixed-array-range-iteration",
+        "string-rune-interpolation",
+        "module-graph-import-export-init",
+        "ownership-read-ref-move-copy-drop"
+      ],
+      "tasks": [
+        "313",
+        "314",
+        "315",
+        "316",
+        "317",
+        "318",
+        "319",
+        "320",
+        "322"
+      ],
+      "producer_packages": [
+        "P02",
+        "P06",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P12",
+        "P13",
+        "P14",
+        "P17"
+      ],
+      "semantic_basis": "Complete original format/crypto/URL/calendar source review preserves every named test, helper and normal/error path. Independent known answers, full stress and semantic content are required separately from shape, self-roundtrip and actual provider/entropy/constant-time/physical qualification.",
+      "original_runner_entries": [
+        {
+          "suite": "regression",
+          "entry": "test"
+        }
+      ],
+      "new_entry_status": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "replacement_qualification": "OPEN",
+      "original_stdout_oracle": {
+        "path": "tests/regression/10_stdlib/1400_crypto_hash.xr.expected",
+        "state": "MISSING",
+        "lf_sha256": null
+      },
+      "original_regression_obligation": {
+        "entry": "test",
+        "expected_exit": 0,
+        "test_discovery": "NOT_RUN"
+      },
+      "original_named_test_obligation": {
+        "state": "REVIEWED_TEXTUAL_DECLARATIONS_NOT_RUNTIME_DISCOVERY",
+        "declarations": [
+          {
+            "name": "test_md5_empty_string",
+            "marker_line": 16,
+            "source_segment_lf_sha256": "878af666f38ff68fda6603ab264fa36ea606162bc9e5a0e0029cb3f0a9635c2e"
+          },
+          {
+            "name": "test_md5_hello",
+            "marker_line": 23,
+            "source_segment_lf_sha256": "c93032a527522baddcc213d22a2f39ab7fab9eccd2548473300e541a5fe0ef25"
+          },
+          {
+            "name": "test_md5_hello_world",
+            "marker_line": 30,
+            "source_segment_lf_sha256": "aee2b19e14cd96ff343fe18b23f119340c2edc78cf57082ab6f31af535b75337"
+          },
+          {
+            "name": "test_md5_numbers",
+            "marker_line": 37,
+            "source_segment_lf_sha256": "ad23ea6b20817b51d85f8e5ad228d592639d78bc14c2f01588d8146e86e080c5"
+          },
+          {
+            "name": "test_md5_long_string",
+            "marker_line": 44,
+            "source_segment_lf_sha256": "5c38500f3c3879081301bfd8e27ede484176f5c723114ca7e215d161cebbd856"
+          },
+          {
+            "name": "test_sha1_empty_string",
+            "marker_line": 55,
+            "source_segment_lf_sha256": "c7159a6f5a56f25b5380c654b61d30583c11045cc75d483a4f0d02084188efe7"
+          },
+          {
+            "name": "test_sha1_hello",
+            "marker_line": 62,
+            "source_segment_lf_sha256": "8852cda0f1a64741700c9672b698caadeb6a40c8409731edd881ac5019606e30"
+          },
+          {
+            "name": "test_sha1_hello_world",
+            "marker_line": 69,
+            "source_segment_lf_sha256": "f1645c8c7af12ad9de8e47b1787ed48f8d1acd28cb2454e0d589244cc772b2c4"
+          },
+          {
+            "name": "test_sha1_long_string",
+            "marker_line": 76,
+            "source_segment_lf_sha256": "8562906311c9cf54d77f329e6d5376ffe925f373c6aea8336b2342c824412f6d"
+          },
+          {
+            "name": "test_sha256_empty_string",
+            "marker_line": 87,
+            "source_segment_lf_sha256": "a5d251881c7ae27f37f3712e22043470499e01293e388abd1592f40e07c9904b"
+          },
+          {
+            "name": "test_sha256_hello",
+            "marker_line": 94,
+            "source_segment_lf_sha256": "6cb5943325656c9d6d098ec983f6f35410135ad5e90c111320e50e36fb2b06ef"
+          },
+          {
+            "name": "test_sha256_hello_world",
+            "marker_line": 101,
+            "source_segment_lf_sha256": "71cc2793301b080d2497ecfe425e9ead06d3e412c00177dce091c7af272ed45e"
+          },
+          {
+            "name": "test_sha256_long_string",
+            "marker_line": 108,
+            "source_segment_lf_sha256": "3b1411c51d1720bc74e52e5342a261358af6dbdbf7f7313a2d32014fea1ce5f3"
+          },
+          {
+            "name": "test_hash_lengths",
+            "marker_line": 119,
+            "source_segment_lf_sha256": "de28eb13f820161baab0f877ba860c38831bff6b41f002ac739ea3d002ecd1ff"
+          }
+        ],
+        "execution": "NOT_RUN"
+      },
+      "target_contract_review": "REQUIRED; whole typed declarations and original error/content/protocol duties remain positive, without compatibility aliases or guessed ABI/provider behavior. Preserve source-review gaps separately from any real product failure."
+    },
+    {
+      "case_id": "tests/regression/10_stdlib/1401_crypto_hmac.xr",
+      "source_lf_sha256": "f38f6d6dd7656313eb0b0f6d5f50143ffbe4e0c6776e20674082b6e392d4b4e6",
+      "primary_family": "builtin-method-native-provider-call",
+      "secondary_families": [
+        "typed-error-throw-try-catch",
+        "defer-cleanup-resource-lifetime",
+        "test-entry-assertion-async",
+        "array-slice-fixed-array-range-iteration",
+        "string-rune-interpolation",
+        "module-graph-import-export-init",
+        "ownership-read-ref-move-copy-drop"
+      ],
+      "tasks": [
+        "313",
+        "314",
+        "315",
+        "316",
+        "317",
+        "318",
+        "319",
+        "320",
+        "322"
+      ],
+      "producer_packages": [
+        "P02",
+        "P06",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P12",
+        "P13",
+        "P14",
+        "P17"
+      ],
+      "semantic_basis": "Complete original format/crypto/URL/calendar source review preserves every named test, helper and normal/error path. Independent known answers, full stress and semantic content are required separately from shape, self-roundtrip and actual provider/entropy/constant-time/physical qualification.",
+      "original_runner_entries": [
+        {
+          "suite": "regression",
+          "entry": "test"
+        }
+      ],
+      "new_entry_status": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "replacement_qualification": "OPEN",
+      "original_stdout_oracle": {
+        "path": "tests/regression/10_stdlib/1401_crypto_hmac.xr.expected",
+        "state": "MISSING",
+        "lf_sha256": null
+      },
+      "original_regression_obligation": {
+        "entry": "test",
+        "expected_exit": 0,
+        "test_discovery": "NOT_RUN"
+      },
+      "original_named_test_obligation": {
+        "state": "REVIEWED_TEXTUAL_DECLARATIONS_NOT_RUNTIME_DISCOVERY",
+        "declarations": [
+          {
+            "name": "test_hmac_sha256_basic",
+            "marker_line": 16,
+            "source_segment_lf_sha256": "dc50058875da637ec2cdb82f6f32993259e40ba12ab97b16cb91ddacf7c3f107"
+          },
+          {
+            "name": "test_hmac_sha256_empty_message",
+            "marker_line": 23,
+            "source_segment_lf_sha256": "90e3c7ef7c287e72614ff1473e9deda8c6798a4610be6320d1e78e52a659b12b"
+          },
+          {
+            "name": "test_hmac_sha256_complex_key",
+            "marker_line": 30,
+            "source_segment_lf_sha256": "ce3c35bec763a3616fa073103027048b6513b957bee709bc027604c003ca68a6"
+          },
+          {
+            "name": "test_hmac_sha256_rfc4231_jefe_vector",
+            "marker_line": 37,
+            "source_segment_lf_sha256": "da294ea0391a5388741210b9fde112582202997397c0f4d37307e803c8b18381"
+          },
+          {
+            "name": "test_hmac_sha256_long_data",
+            "marker_line": 43,
+            "source_segment_lf_sha256": "b1e8b01b4c2b3d13f4131901a16f578d403c53afe92043a84aa45f7132900ddd"
+          },
+          {
+            "name": "test_hmac_sha1_basic",
+            "marker_line": 54,
+            "source_segment_lf_sha256": "1121866d1407fc6289950732167054b148c4a252496226361d3caa4e71d8bf30"
+          },
+          {
+            "name": "test_hmac_sha1_empty_message",
+            "marker_line": 61,
+            "source_segment_lf_sha256": "3783304ea600f65e6312a5b79421406880600801b14690c54d249ab980660c23"
+          },
+          {
+            "name": "test_hmac_sha1_length",
+            "marker_line": 68,
+            "source_segment_lf_sha256": "04f2014ff9e0e80d5818052d84a410751fbe77e9a4c4605cd30d96ce1e97ba00"
+          },
+          {
+            "name": "test_hmac_md5_basic",
+            "marker_line": 79,
+            "source_segment_lf_sha256": "dda16d9de7f95dab6bfe8733682529f9363f24c88ab36f62cefdec9a42b36cdb"
+          },
+          {
+            "name": "test_hmac_md5_empty_message",
+            "marker_line": 86,
+            "source_segment_lf_sha256": "121f8b73b02d446b8db4d6cbddc0ec76e235a38c363fd6339e8e71016484195e"
+          },
+          {
+            "name": "test_hmac_md5_length",
+            "marker_line": 93,
+            "source_segment_lf_sha256": "42511138e9911393e7f48e2096b4584d8a08cd6675feb9e22512b4a4405775cd"
+          },
+          {
+            "name": "test_hmac_unsupported_algorithm_returns_null",
+            "marker_line": 100,
+            "source_segment_lf_sha256": "23aed5a2e1d273619ff51f566554a18e864fe7c29644d926ffbc538e4e83fed5"
+          }
+        ],
+        "execution": "NOT_RUN"
+      },
+      "target_contract_review": "REQUIRED; whole typed declarations and original error/content/protocol duties remain positive, without compatibility aliases or guessed ABI/provider behavior. Preserve source-review gaps separately from any real product failure.",
+      "target_source_port": {
+        "fixture": "tests/unit/xir/legacy_consumers/fixtures/format_regression_ports/1401_crypto_hmac/root.xr",
+        "lf_sha256": "feebef9822e3cd351edc86cda3b043dd687c8c72725498ae2b70b18339a6185d",
+        "owner_package": "P13",
+        "qualification": "NOT_RUN",
+        "frozen_basis": [
+          "Keep all complete original normal/Optional unsupported algorithm cases. Strengthen length-only HMAC cases with independently calculated exact stdlib HMAC known answers, without removing valid Optional unwraps or claiming constant-time/provider execution."
+        ]
+      },
+      "named_test_migration": {
+        "state": "PREPARED_NOT_EXECUTED",
+        "original_tests_removed": false,
+        "mapping": {
+          "test_hmac_sha256_basic": "test_hmac_sha256_basic",
+          "test_hmac_sha256_empty_message": "test_hmac_sha256_empty_message",
+          "test_hmac_sha256_complex_key": "test_hmac_sha256_complex_key",
+          "test_hmac_sha256_rfc4231_jefe_vector": "test_hmac_sha256_rfc4231_jefe_vector",
+          "test_hmac_sha256_long_data": "test_hmac_sha256_long_data",
+          "test_hmac_sha1_basic": "test_hmac_sha1_basic",
+          "test_hmac_sha1_empty_message": "test_hmac_sha1_empty_message",
+          "test_hmac_sha1_length": "test_hmac_sha1_length",
+          "test_hmac_md5_basic": "test_hmac_md5_basic",
+          "test_hmac_md5_empty_message": "test_hmac_md5_empty_message",
+          "test_hmac_md5_length": "test_hmac_md5_length",
+          "test_hmac_unsupported_algorithm_returns_null": "test_hmac_unsupported_algorithm_returns_null"
+        }
+      },
+      "target_disposition": {
+        "kind": "POSITIVE_FULL_LIBRARY_CONTENT_AFTER_DECLARED_PORT",
+        "owner_package": "P13",
+        "qualification": "NOT_RUN",
+        "reason": "Keep all complete original normal/Optional unsupported algorithm cases. Strengthen length-only HMAC cases with independently calculated exact stdlib HMAC known answers, without removing valid Optional unwraps or claiming constant-time/provider execution."
+      }
+    },
+    {
+      "case_id": "tests/regression/10_stdlib/1402_crypto_random.xr",
+      "source_lf_sha256": "16f9a61b3c57fb5f1532769fe0226c52f0c476c3fec6457f182ea142364c2740",
+      "primary_family": "builtin-method-native-provider-call",
+      "secondary_families": [
+        "typed-error-throw-try-catch",
+        "defer-cleanup-resource-lifetime",
+        "test-entry-assertion-async",
+        "array-slice-fixed-array-range-iteration",
+        "string-rune-interpolation",
+        "module-graph-import-export-init",
+        "ownership-read-ref-move-copy-drop"
+      ],
+      "tasks": [
+        "313",
+        "314",
+        "315",
+        "316",
+        "317",
+        "318",
+        "319",
+        "320",
+        "322"
+      ],
+      "producer_packages": [
+        "P02",
+        "P06",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P12",
+        "P13",
+        "P14",
+        "P17"
+      ],
+      "semantic_basis": "Complete original format/crypto/URL/calendar source review preserves every named test, helper and normal/error path. Independent known answers, full stress and semantic content are required separately from shape, self-roundtrip and actual provider/entropy/constant-time/physical qualification.",
+      "original_runner_entries": [
+        {
+          "suite": "regression",
+          "entry": "test"
+        }
+      ],
+      "new_entry_status": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "replacement_qualification": "OPEN",
+      "original_stdout_oracle": {
+        "path": "tests/regression/10_stdlib/1402_crypto_random.xr.expected",
+        "state": "MISSING",
+        "lf_sha256": null
+      },
+      "original_regression_obligation": {
+        "entry": "test",
+        "expected_exit": 0,
+        "test_discovery": "NOT_RUN"
+      },
+      "original_named_test_obligation": {
+        "state": "REVIEWED_TEXTUAL_DECLARATIONS_NOT_RUNTIME_DISCOVERY",
+        "declarations": [
+          {
+            "name": "test_random_bytes_length_8",
+            "marker_line": 15,
+            "source_segment_lf_sha256": "abf8b36e8a4e03e379d1e015ca5a1706717359b93bec05c80f9e592e79953403"
+          },
+          {
+            "name": "test_random_bytes_length_16",
+            "marker_line": 22,
+            "source_segment_lf_sha256": "a27846a4e205eac1b64e626c0e7330c5174e193436b015f78e67ebea0f85d468"
+          },
+          {
+            "name": "test_random_bytes_length_32",
+            "marker_line": 29,
+            "source_segment_lf_sha256": "e818b638250dbd3e3d4d008ab97e24f31600fcf61af3b271bec9082d76e9d615"
+          },
+          {
+            "name": "test_random_bytes_uniqueness",
+            "marker_line": 36,
+            "source_segment_lf_sha256": "9251a176d5bf1e9aa067f9a68afafaf3a47544dea6e149b9707f67e926e39c97"
+          },
+          {
+            "name": "test_random_bytes_hex_format",
+            "marker_line": 44,
+            "source_segment_lf_sha256": "5fb4b141652e0bc4479bb0e24e27dea8dc99ba9ce7c560d0aec001b7e6919675"
+          },
+          {
+            "name": "test_uuid_length",
+            "marker_line": 56,
+            "source_segment_lf_sha256": "23248fe733c9f985009ed1c54ead9e893ca8090f9466a5c1bc57f9337fea85d2"
+          },
+          {
+            "name": "test_uuid_format",
+            "marker_line": 63,
+            "source_segment_lf_sha256": "7fa5beb7e6de8bb21e4aae57057bbddb4b500167c4111e7e1224d0c60677cfef"
+          },
+          {
+            "name": "test_uuid_parts_length",
+            "marker_line": 71,
+            "source_segment_lf_sha256": "cb518c84c1f998f80471745cf5954ce158f148c9711ea93e626bf443d9f89b0f"
+          },
+          {
+            "name": "test_uuid_uniqueness",
+            "marker_line": 83,
+            "source_segment_lf_sha256": "c74f6b5336635fea56037160187c761907e72aec9f21f74b4c519a814fa6d249"
+          },
+          {
+            "name": "test_uuid_multiple_uniqueness",
+            "marker_line": 91,
+            "source_segment_lf_sha256": "10713f7ff848ad187fcc66964a0ee90dbb9f1b3fff4571597ae51a54bdeeeda7"
+          }
+        ],
+        "execution": "NOT_RUN"
+      },
+      "target_contract_review": "REQUIRED; whole typed declarations and original error/content/protocol duties remain positive, without compatibility aliases or guessed ABI/provider behavior. Preserve source-review gaps separately from any real product failure.",
+      "target_source_port": {
+        "fixture": "tests/unit/xir/legacy_consumers/fixtures/format_regression_ports/1402_crypto_random/root.xr",
+        "lf_sha256": "a1ba7151f7bbe7483d6d46fb2f8c78d164f5f89866b05142feb5d428303d1269",
+        "owner_package": "P13",
+        "qualification": "NOT_RUN",
+        "frozen_basis": [
+          "Preserve all original random lengths/pairwise and ten UUID calls; actually check lowercase hex plus UUID version4/variant10 bits. Shapes and distinct outputs do not establish entropy/health/backend provenance or absence of fallback."
+        ]
+      },
+      "named_test_migration": {
+        "state": "PREPARED_NOT_EXECUTED",
+        "original_tests_removed": false,
+        "mapping": {
+          "test_random_bytes_length_8": "test_random_bytes_length_8",
+          "test_random_bytes_length_16": "test_random_bytes_length_16",
+          "test_random_bytes_length_32": "test_random_bytes_length_32",
+          "test_random_bytes_uniqueness": "test_random_bytes_uniqueness",
+          "test_random_bytes_hex_format": "test_random_bytes_hex_format",
+          "test_uuid_length": "test_uuid_length",
+          "test_uuid_format": "test_uuid_format",
+          "test_uuid_parts_length": "test_uuid_parts_length",
+          "test_uuid_uniqueness": "test_uuid_uniqueness",
+          "test_uuid_multiple_uniqueness": "test_uuid_multiple_uniqueness"
+        }
+      },
+      "target_disposition": {
+        "kind": "POSITIVE_FULL_LIBRARY_CONTENT_AFTER_DECLARED_PORT",
+        "owner_package": "P13",
+        "qualification": "NOT_RUN",
+        "reason": "Preserve all original random lengths/pairwise and ten UUID calls; actually check lowercase hex plus UUID version4/variant10 bits. Shapes and distinct outputs do not establish entropy/health/backend provenance or absence of fallback."
+      }
+    },
+    {
+      "case_id": "tests/regression/10_stdlib/1403_crypto_sha512.xr",
+      "source_lf_sha256": "f68514a69cd5e5e6c7943ac6218a418a5c1d4fabb70f2ccb1e52f6b29aa95323",
+      "primary_family": "builtin-method-native-provider-call",
+      "secondary_families": [
+        "typed-error-throw-try-catch",
+        "defer-cleanup-resource-lifetime",
+        "test-entry-assertion-async",
+        "array-slice-fixed-array-range-iteration",
+        "string-rune-interpolation",
+        "module-graph-import-export-init",
+        "ownership-read-ref-move-copy-drop"
+      ],
+      "tasks": [
+        "313",
+        "314",
+        "315",
+        "316",
+        "317",
+        "318",
+        "319",
+        "320",
+        "322"
+      ],
+      "producer_packages": [
+        "P02",
+        "P06",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P12",
+        "P13",
+        "P14",
+        "P17"
+      ],
+      "semantic_basis": "Complete original format/crypto/URL/calendar source review preserves every named test, helper and normal/error path. Independent known answers, full stress and semantic content are required separately from shape, self-roundtrip and actual provider/entropy/constant-time/physical qualification.",
+      "original_runner_entries": [
+        {
+          "suite": "regression",
+          "entry": "test"
+        }
+      ],
+      "new_entry_status": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "replacement_qualification": "OPEN",
+      "original_stdout_oracle": {
+        "path": "tests/regression/10_stdlib/1403_crypto_sha512.xr.expected",
+        "state": "MISSING",
+        "lf_sha256": null
+      },
+      "original_regression_obligation": {
+        "entry": "test",
+        "expected_exit": 0,
+        "test_discovery": "NOT_RUN"
+      },
+      "original_named_test_obligation": {
+        "state": "REVIEWED_TEXTUAL_DECLARATIONS_NOT_RUNTIME_DISCOVERY",
+        "declarations": [
+          {
+            "name": "test_sha512_empty_string",
+            "marker_line": 14,
+            "source_segment_lf_sha256": "569305857b63f16ed075b86dd82f97ea0366d01237eb7d979961ed07a91288be"
+          },
+          {
+            "name": "test_sha512_hello",
+            "marker_line": 20,
+            "source_segment_lf_sha256": "2cec387c1eb0ec1b7d03cbaac0b64e6dfa2e225d3f4cd227fe2c540fbbe82276"
+          },
+          {
+            "name": "test_sha512_hello_world",
+            "marker_line": 26,
+            "source_segment_lf_sha256": "7f0e455c91bfb0a50198caf65bcef707953d1828755e4e71e5850241ca129888"
+          },
+          {
+            "name": "test_sha512_length",
+            "marker_line": 32,
+            "source_segment_lf_sha256": "65abed01ecdacbdec3b96fee60fa0e09ebb4ba8340409e4fe72dac3736289593"
+          },
+          {
+            "name": "test_sha512_long_string",
+            "marker_line": 38,
+            "source_segment_lf_sha256": "1f26106374d4400c8668a3c800a9657e582e16ed8d36081988e51bbf830678aa"
+          },
+          {
+            "name": "test_hmac_sha512_basic",
+            "marker_line": 48,
+            "source_segment_lf_sha256": "2f3f3735dbbd93829d53fa48e4879087e24e8c1bf5cc277a8d1209520c3ae433"
+          },
+          {
+            "name": "test_hmac_sha512_empty_message",
+            "marker_line": 55,
+            "source_segment_lf_sha256": "cbfdb5e02b85fd6333e460f0362d24667125b8fb1ea95c5ecf1c5fdc0ee0ddd5"
+          },
+          {
+            "name": "test_hmac_sha512_known_vector",
+            "marker_line": 61,
+            "source_segment_lf_sha256": "b53b16732fb4a6d7f510f80b4976916452299046a4f0f37294d588876d437977"
+          }
+        ],
+        "execution": "NOT_RUN"
+      },
+      "target_contract_review": "REQUIRED; whole typed declarations and original error/content/protocol duties remain positive, without compatibility aliases or guessed ABI/provider behavior. Preserve source-review gaps separately from any real product failure.",
+      "target_source_port": {
+        "fixture": "tests/unit/xir/legacy_consumers/fixtures/format_regression_ports/1403_crypto_sha512/root.xr",
+        "lf_sha256": "c4f4c6ca06513faf849e59a404a82367294c26088e39b1dde420009b0f54c30c",
+        "owner_package": "P13",
+        "qualification": "NOT_RUN",
+        "frozen_basis": [
+          "Keep all complete original normal/Optional unsupported algorithm cases. Strengthen length-only HMAC cases with independently calculated exact stdlib HMAC known answers, without removing valid Optional unwraps or claiming constant-time/provider execution."
+        ]
+      },
+      "named_test_migration": {
+        "state": "PREPARED_NOT_EXECUTED",
+        "original_tests_removed": false,
+        "mapping": {
+          "test_sha512_empty_string": "test_sha512_empty_string",
+          "test_sha512_hello": "test_sha512_hello",
+          "test_sha512_hello_world": "test_sha512_hello_world",
+          "test_sha512_length": "test_sha512_length",
+          "test_sha512_long_string": "test_sha512_long_string",
+          "test_hmac_sha512_basic": "test_hmac_sha512_basic",
+          "test_hmac_sha512_empty_message": "test_hmac_sha512_empty_message",
+          "test_hmac_sha512_known_vector": "test_hmac_sha512_known_vector"
+        }
+      },
+      "target_disposition": {
+        "kind": "POSITIVE_FULL_LIBRARY_CONTENT_AFTER_DECLARED_PORT",
+        "owner_package": "P13",
+        "qualification": "NOT_RUN",
+        "reason": "Keep all complete original normal/Optional unsupported algorithm cases. Strengthen length-only HMAC cases with independently calculated exact stdlib HMAC known answers, without removing valid Optional unwraps or claiming constant-time/provider execution."
+      }
+    },
+    {
+      "case_id": "tests/regression/10_stdlib/1404_crypto_aes.xr",
+      "source_lf_sha256": "d26d00ec1169db20e7e33314ccf8dd3a5c11c865e7b740e3dc7ef2888bb9c24a",
+      "primary_family": "builtin-method-native-provider-call",
+      "secondary_families": [
+        "typed-error-throw-try-catch",
+        "defer-cleanup-resource-lifetime",
+        "test-entry-assertion-async",
+        "array-slice-fixed-array-range-iteration",
+        "string-rune-interpolation",
+        "module-graph-import-export-init",
+        "ownership-read-ref-move-copy-drop"
+      ],
+      "tasks": [
+        "313",
+        "314",
+        "315",
+        "316",
+        "317",
+        "318",
+        "319",
+        "320",
+        "322"
+      ],
+      "producer_packages": [
+        "P02",
+        "P06",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P12",
+        "P13",
+        "P14",
+        "P17"
+      ],
+      "semantic_basis": "Complete original format/crypto/URL/calendar source review preserves every named test, helper and normal/error path. Independent known answers, full stress and semantic content are required separately from shape, self-roundtrip and actual provider/entropy/constant-time/physical qualification.",
+      "original_runner_entries": [
+        {
+          "suite": "regression",
+          "entry": "test"
+        }
+      ],
+      "new_entry_status": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "replacement_qualification": "OPEN",
+      "original_stdout_oracle": {
+        "path": "tests/regression/10_stdlib/1404_crypto_aes.xr.expected",
+        "state": "MISSING",
+        "lf_sha256": null
+      },
+      "original_regression_obligation": {
+        "entry": "test",
+        "expected_exit": 0,
+        "test_discovery": "NOT_RUN"
+      },
+      "original_named_test_obligation": {
+        "state": "REVIEWED_TEXTUAL_DECLARATIONS_NOT_RUNTIME_DISCOVERY",
+        "declarations": [
+          {
+            "name": "test_encrypt_decrypt_basic",
+            "marker_line": 16,
+            "source_segment_lf_sha256": "c4f3f3da745ab1065211c8aa2004aeacc1a8285a748eb05686add97896cc4dc7"
+          },
+          {
+            "name": "test_encrypt_decrypt_empty",
+            "marker_line": 25,
+            "source_segment_lf_sha256": "89482fd08a9fa9bdf8b92f046b6da9749d21ddb51e349d8959a243359dfb409c"
+          },
+          {
+            "name": "test_encrypt_decrypt_long_text",
+            "marker_line": 34,
+            "source_segment_lf_sha256": "270cf1e97cef967fe727024fdb91df031bc9cbd880a1d349ebf7fd119753d409"
+          },
+          {
+            "name": "test_encrypt_output_is_hex",
+            "marker_line": 43,
+            "source_segment_lf_sha256": "94934504550916421a477ed6a679193d6958be0df0a5cf87238e67f4c8b5a84c"
+          },
+          {
+            "name": "test_encrypt_different_each_time",
+            "marker_line": 52,
+            "source_segment_lf_sha256": "1f9c2a4db98dac6fc6ca57ebc99dee8f3e71e1c329fb7c9a303fa6ca08d9fe1d"
+          },
+          {
+            "name": "test_decrypt_wrong_key",
+            "marker_line": 60,
+            "source_segment_lf_sha256": "6866d2eac2aad20883a8d5aa7fd492702bce1a0c8a7f08adc4f8a215a8d963e0"
+          },
+          {
+            "name": "test_encrypt_decrypt_exactly_16_bytes",
+            "marker_line": 68,
+            "source_segment_lf_sha256": "a33f383b17bb4b34487ff7bdfa46b935b6d909a10ca5a1def768d4809bdaa6d6"
+          },
+          {
+            "name": "test_encrypt_decrypt_unicode",
+            "marker_line": 78,
+            "source_segment_lf_sha256": "bf663953293a043743d03856fcc10fca2b92fa450a9702a1e4ebb6f3008643e9"
+          }
+        ],
+        "execution": "NOT_RUN"
+      },
+      "target_contract_review": "REQUIRED; whole typed declarations and original error/content/protocol duties remain positive, without compatibility aliases or guessed ABI/provider behavior. Preserve source-review gaps separately from any real product failure.",
+      "target_source_port": {
+        "fixture": "tests/unit/xir/legacy_consumers/fixtures/format_regression_ports/1404_crypto_aes/root.xr",
+        "lf_sha256": "61193a58bf5c58a48024adee7c942df51440e6b1977c997e7061846e0956bcb2",
+        "owner_package": "P13",
+        "qualification": "NOT_RUN",
+        "frozen_basis": [
+          "Preserve all8 original bodies. Current declared encrypt-then-MAC wire includes16-byte IV+at least16-byte PKCS7 ciphertext+32-byte tag, so test text wire is128hex. Old unicode test usesASCII; add real10-byte UTF8 content. Wrong-key null must follow actual authentication-before-decrypt, not padding-only inference; entropy/constant-time/provider gates remain separate."
+        ]
+      },
+      "named_test_migration": {
+        "state": "PREPARED_NOT_EXECUTED",
+        "original_tests_removed": false,
+        "mapping": {
+          "test_encrypt_decrypt_basic": "test_encrypt_decrypt_basic",
+          "test_encrypt_decrypt_empty": "test_encrypt_decrypt_empty",
+          "test_encrypt_decrypt_long_text": "test_encrypt_decrypt_long_text",
+          "test_encrypt_output_is_hex": "test_encrypt_output_is_hex",
+          "test_encrypt_different_each_time": "test_encrypt_different_each_time",
+          "test_decrypt_wrong_key": "test_decrypt_wrong_key",
+          "test_encrypt_decrypt_exactly_16_bytes": "test_encrypt_decrypt_exactly_16_bytes",
+          "test_encrypt_decrypt_unicode": "test_encrypt_decrypt_unicode"
+        }
+      },
+      "target_disposition": {
+        "kind": "POSITIVE_FULL_LIBRARY_CONTENT_AFTER_DECLARED_PORT",
+        "owner_package": "P13",
+        "qualification": "NOT_RUN",
+        "reason": "Preserve all8 original bodies. Current declared encrypt-then-MAC wire includes16-byte IV+at least16-byte PKCS7 ciphertext+32-byte tag, so test text wire is128hex. Old unicode test usesASCII; add real10-byte UTF8 content. Wrong-key null must follow actual authentication-before-decrypt, not padding-only inference; entropy/constant-time/provider gates remain separate."
+      }
+    },
+    {
+      "case_id": "tests/regression/10_stdlib/1405_crypto_utils.xr",
+      "source_lf_sha256": "f896bcf95b3d92627f0ca399c6cf343896d2f4527013833882d1d0acd678ce24",
+      "primary_family": "builtin-method-native-provider-call",
+      "secondary_families": [
+        "typed-error-throw-try-catch",
+        "defer-cleanup-resource-lifetime",
+        "test-entry-assertion-async",
+        "array-slice-fixed-array-range-iteration",
+        "string-rune-interpolation",
+        "module-graph-import-export-init",
+        "ownership-read-ref-move-copy-drop"
+      ],
+      "tasks": [
+        "313",
+        "314",
+        "315",
+        "316",
+        "317",
+        "318",
+        "319",
+        "320",
+        "322"
+      ],
+      "producer_packages": [
+        "P02",
+        "P06",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P12",
+        "P13",
+        "P14",
+        "P17"
+      ],
+      "semantic_basis": "Complete original format/crypto/URL/calendar source review preserves every named test, helper and normal/error path. Independent known answers, full stress and semantic content are required separately from shape, self-roundtrip and actual provider/entropy/constant-time/physical qualification.",
+      "original_runner_entries": [
+        {
+          "suite": "regression",
+          "entry": "test"
+        }
+      ],
+      "new_entry_status": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "replacement_qualification": "OPEN",
+      "original_stdout_oracle": {
+        "path": "tests/regression/10_stdlib/1405_crypto_utils.xr.expected",
+        "state": "MISSING",
+        "lf_sha256": null
+      },
+      "original_regression_obligation": {
+        "entry": "test",
+        "expected_exit": 0,
+        "test_discovery": "NOT_RUN"
+      },
+      "original_named_test_obligation": {
+        "state": "REVIEWED_TEXTUAL_DECLARATIONS_NOT_RUNTIME_DISCOVERY",
+        "declarations": [
+          {
+            "name": "test_timing_safe_equal_same",
+            "marker_line": 14,
+            "source_segment_lf_sha256": "9aeb7e3a370ee5266dc695aecd8a1fb56d031593976ec3f90ee988119d3de003"
+          },
+          {
+            "name": "test_timing_safe_equal_different",
+            "marker_line": 19,
+            "source_segment_lf_sha256": "0734d5b0f4b2431a16c6308d187c63fa7cb156e1b19ed2affecd980a96bba0c6"
+          },
+          {
+            "name": "test_timing_safe_equal_different_length",
+            "marker_line": 24,
+            "source_segment_lf_sha256": "2bbbaef2804d2e5522b69ca8231ec7be8bbf579670081ac51bb8c118e9cf6db8"
+          },
+          {
+            "name": "test_timing_safe_equal_empty",
+            "marker_line": 29,
+            "source_segment_lf_sha256": "271b9ae95eadb42434dcf0a41b26a75b237b9e5bf6cb00f2fb659bd1c6b1e451"
+          },
+          {
+            "name": "test_timing_safe_equal_hmac_verify",
+            "marker_line": 34,
+            "source_segment_lf_sha256": "f35a8aa91072abd575d092b6fcbe6af243ae5787b8b9f599206478890738802b"
+          },
+          {
+            "name": "test_timing_safe_equal_hmac_mismatch",
+            "marker_line": 42,
+            "source_segment_lf_sha256": "1aaef572c1d25a4cacb9374f804555e8e85720b75dd0c074eb8a37077a76d683"
+          },
+          {
+            "name": "test_all_hash_lengths",
+            "marker_line": 53,
+            "source_segment_lf_sha256": "4a03a20d48ffd0ed606f7cc1d29615fe83f2dd110ba70dd27aec11c50b0383ae"
+          },
+          {
+            "name": "test_all_hmac_lengths",
+            "marker_line": 61,
+            "source_segment_lf_sha256": "7f82c6e463e1cf7f658b926e215a31f6256f754e1cf3244fa222f6de0fc5e7ba"
+          }
+        ],
+        "execution": "NOT_RUN"
+      },
+      "target_contract_review": "REQUIRED; whole typed declarations and original error/content/protocol duties remain positive, without compatibility aliases or guessed ABI/provider behavior. Preserve source-review gaps separately from any real product failure."
+    },
+    {
+      "case_id": "tests/regression/10_stdlib/1406_crypto_aead.xr",
+      "source_lf_sha256": "1ea09c47131eacd23998755bd85f6f001be8f9a4b2c428a4c242edd0ca6a8b4e",
+      "primary_family": "builtin-method-native-provider-call",
+      "secondary_families": [
+        "typed-error-throw-try-catch",
+        "defer-cleanup-resource-lifetime",
+        "test-entry-assertion-async",
+        "array-slice-fixed-array-range-iteration",
+        "string-rune-interpolation",
+        "module-graph-import-export-init",
+        "ownership-read-ref-move-copy-drop"
+      ],
+      "tasks": [
+        "313",
+        "314",
+        "315",
+        "316",
+        "317",
+        "318",
+        "319",
+        "320",
+        "322"
+      ],
+      "producer_packages": [
+        "P02",
+        "P06",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P12",
+        "P13",
+        "P14",
+        "P17"
+      ],
+      "semantic_basis": "Complete original format/crypto/URL/calendar source review preserves every named test, helper and normal/error path. Independent known answers, full stress and semantic content are required separately from shape, self-roundtrip and actual provider/entropy/constant-time/physical qualification.",
+      "original_runner_entries": [
+        {
+          "suite": "regression",
+          "entry": "test"
+        }
+      ],
+      "new_entry_status": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "replacement_qualification": "OPEN",
+      "original_stdout_oracle": {
+        "path": "tests/regression/10_stdlib/1406_crypto_aead.xr.expected",
+        "state": "MISSING",
+        "lf_sha256": null
+      },
+      "original_regression_obligation": {
+        "entry": "test",
+        "expected_exit": 0,
+        "test_discovery": "NOT_RUN"
+      },
+      "original_named_test_obligation": {
+        "state": "REVIEWED_TEXTUAL_DECLARATIONS_NOT_RUNTIME_DISCOVERY",
+        "declarations": [
+          {
+            "name": "test_reference_wire_forms_decrypt_to_their_plaintext",
+            "marker_line": 19,
+            "source_segment_lf_sha256": "cfe1f1ffc8d4e8a7bdd80097a04a618263298803166a5e1bc2be9bbf12fc0983"
+          },
+          {
+            "name": "test_every_padding_length_round_trips",
+            "marker_line": 37,
+            "source_segment_lf_sha256": "9b882ab08f4d63286cd1d26c586f91189bcd1e0cc92feb0a048d829b6ea81207"
+          },
+          {
+            "name": "test_a_different_key_does_not_authenticate",
+            "marker_line": 48,
+            "source_segment_lf_sha256": "0c69a4693b1995580be25d948f3ed9908ac1c541726998a138db2cd71169b745"
+          },
+          {
+            "name": "test_two_encryptions_of_one_plaintext_differ",
+            "marker_line": 54,
+            "source_segment_lf_sha256": "0fb889f736ead8c5ff458cf7094f7d2b2fed58066735df223a69346a454bcd88"
+          },
+          {
+            "name": "test_tampering_anywhere_is_refused",
+            "marker_line": 61,
+            "source_segment_lf_sha256": "20489e47acec2b89667a75d2d0a2337cae14dd18b7cdfab7537f6449fac33dbc"
+          },
+          {
+            "name": "test_a_wire_form_of_the_wrong_length_is_a_typed_error",
+            "marker_line": 71,
+            "source_segment_lf_sha256": "e2aa65b4d972cd360fff332a1d8d567a8a68b3dd5b6b5cb667b2a73640ca0d52"
+          },
+          {
+            "name": "test_a_non_hex_wire_form_answers_null",
+            "marker_line": 83,
+            "source_segment_lf_sha256": "0aadecaa9d75dfecb5b2ba583d21e8d3f78ea8080e045a26f1725eb7baba14d2"
+          }
+        ],
+        "execution": "NOT_RUN"
+      },
+      "target_contract_review": "REQUIRED; whole typed declarations and original error/content/protocol duties remain positive, without compatibility aliases or guessed ABI/provider behavior. Preserve source-review gaps separately from any real product failure."
+    },
+    {
+      "case_id": "tests/regression/10_stdlib/1410_url_encode.xr",
+      "source_lf_sha256": "b49885896113e2130a0cdaf3d0a5c6f166af9af14592be6973aec333334e41b1",
+      "primary_family": "builtin-method-native-provider-call",
+      "secondary_families": [
+        "typed-error-throw-try-catch",
+        "defer-cleanup-resource-lifetime",
+        "test-entry-assertion-async",
+        "array-slice-fixed-array-range-iteration",
+        "string-rune-interpolation",
+        "module-graph-import-export-init",
+        "ownership-read-ref-move-copy-drop"
+      ],
+      "tasks": [
+        "313",
+        "314",
+        "315",
+        "316",
+        "317",
+        "318",
+        "319",
+        "320",
+        "322"
+      ],
+      "producer_packages": [
+        "P02",
+        "P06",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P12",
+        "P13",
+        "P14",
+        "P17"
+      ],
+      "semantic_basis": "Complete original format/crypto/URL/calendar source review preserves every named test, helper and normal/error path. Independent known answers, full stress and semantic content are required separately from shape, self-roundtrip and actual provider/entropy/constant-time/physical qualification.",
+      "original_runner_entries": [
+        {
+          "suite": "regression",
+          "entry": "test"
+        }
+      ],
+      "new_entry_status": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "replacement_qualification": "OPEN",
+      "original_stdout_oracle": {
+        "path": "tests/regression/10_stdlib/1410_url_encode.xr.expected",
+        "state": "MISSING",
+        "lf_sha256": null
+      },
+      "original_regression_obligation": {
+        "entry": "test",
+        "expected_exit": 0,
+        "test_discovery": "NOT_RUN"
+      },
+      "original_named_test_obligation": {
+        "state": "REVIEWED_TEXTUAL_DECLARATIONS_NOT_RUNTIME_DISCOVERY",
+        "declarations": [
+          {
+            "name": "test_encode_no_change",
+            "marker_line": 10,
+            "source_segment_lf_sha256": "1d794d4801375f0f01fc0c6b579dc82d22405b77d5dabaf3c1a4a3aad571e464"
+          },
+          {
+            "name": "test_encode_space",
+            "marker_line": 17,
+            "source_segment_lf_sha256": "954ac7e5b12b71345133df640a8f7e3362fb6beac1c46a8844cc1881e8ab23d3"
+          },
+          {
+            "name": "test_encode_special_chars",
+            "marker_line": 24,
+            "source_segment_lf_sha256": "39896a09fff50061601537fae0ffb1cf73ce5f6bf27955f0512481eb7cf163b8"
+          },
+          {
+            "name": "test_encode_chinese",
+            "marker_line": 31,
+            "source_segment_lf_sha256": "8a712a158dc327ab506c15a0e8f792c1c4decf575606277574e574ef13da3906"
+          },
+          {
+            "name": "test_encode_mixed",
+            "marker_line": 38,
+            "source_segment_lf_sha256": "e8ef8782023b9dc25f8fcf27772989730176b1aa8fe01ade3ea833bf205c8654"
+          },
+          {
+            "name": "test_encode_reserved_chars",
+            "marker_line": 45,
+            "source_segment_lf_sha256": "3cb0822193636c03410ef386611f1862b104c51698042eb4620fc45c4dd8ecd2"
+          },
+          {
+            "name": "test_encode_percent",
+            "marker_line": 52,
+            "source_segment_lf_sha256": "6d4175b759e8b393c3beef4ff22f68d94acf2944fa0faa3393e535bcf58adaeb"
+          },
+          {
+            "name": "test_decode_no_change",
+            "marker_line": 63,
+            "source_segment_lf_sha256": "e6f0a81b4174d3120fcaeb83eccd701a4d67df576d18f83becbab487254574f2"
+          },
+          {
+            "name": "test_decode_percent_20",
+            "marker_line": 70,
+            "source_segment_lf_sha256": "70c35bddc1e5483a9db4b9937e6ddf1a8a85d39ed9ef61b33c970ecb01cf7449"
+          },
+          {
+            "name": "test_decode_plus_sign",
+            "marker_line": 77,
+            "source_segment_lf_sha256": "548234e4c2a8c7eb58c3820e80fd835aeba6c73289ae26af0b999d7cf9b54bb4"
+          },
+          {
+            "name": "test_decode_special_chars",
+            "marker_line": 84,
+            "source_segment_lf_sha256": "0fbc4cf36cfadcc79c02a9d356eef09a13c8c04a1b70446c66cd9b4d9b28dff4"
+          },
+          {
+            "name": "test_decode_chinese",
+            "marker_line": 91,
+            "source_segment_lf_sha256": "4e9da7fde87df893c0720029a1bb20a1a0fcb1dbd3bbe3d7c677d529acb5596d"
+          },
+          {
+            "name": "test_decode_mixed_case",
+            "marker_line": 98,
+            "source_segment_lf_sha256": "da78190bf10f7342742e5062bc7ade32c17517360eb0bbecd2947b69fa4f606a"
+          },
+          {
+            "name": "test_roundtrip_simple",
+            "marker_line": 111,
+            "source_segment_lf_sha256": "e1d7bda9d7c24fc9ce2c6dbbe0349b6aacb203d1ca8c8eef8b136ea03d3f8ec3"
+          },
+          {
+            "name": "test_roundtrip_special",
+            "marker_line": 120,
+            "source_segment_lf_sha256": "5dc53c559ec9035cb1df8288139137ef7c2a51aace8a4dd68abfb30fe902cb52"
+          },
+          {
+            "name": "test_roundtrip_unicode",
+            "marker_line": 129,
+            "source_segment_lf_sha256": "b74bb9cf61b1c404a18f70de0c9e7b7aec0499b7725a1a6ffe2c8d87dc778e20"
+          }
+        ],
+        "execution": "NOT_RUN"
+      },
+      "target_contract_review": "REQUIRED; whole typed declarations and original error/content/protocol duties remain positive, without compatibility aliases or guessed ABI/provider behavior. Preserve source-review gaps separately from any real product failure."
+    },
+    {
+      "case_id": "tests/regression/10_stdlib/1411_url_parse.xr",
+      "source_lf_sha256": "f92d71d4556f3adbfa202a2591c8db4ad3533f33e2c3eaa7e51cd92aecd8cbc9",
+      "primary_family": "builtin-method-native-provider-call",
+      "secondary_families": [
+        "typed-error-throw-try-catch",
+        "defer-cleanup-resource-lifetime",
+        "test-entry-assertion-async",
+        "array-slice-fixed-array-range-iteration",
+        "string-rune-interpolation",
+        "module-graph-import-export-init",
+        "ownership-read-ref-move-copy-drop"
+      ],
+      "tasks": [
+        "313",
+        "314",
+        "315",
+        "316",
+        "317",
+        "318",
+        "319",
+        "320",
+        "322"
+      ],
+      "producer_packages": [
+        "P02",
+        "P06",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P12",
+        "P13",
+        "P14",
+        "P17"
+      ],
+      "semantic_basis": "Complete original format/crypto/URL/calendar source review preserves every named test, helper and normal/error path. Independent known answers, full stress and semantic content are required separately from shape, self-roundtrip and actual provider/entropy/constant-time/physical qualification.",
+      "original_runner_entries": [
+        {
+          "suite": "regression",
+          "entry": "test"
+        }
+      ],
+      "new_entry_status": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "replacement_qualification": "OPEN",
+      "original_stdout_oracle": {
+        "path": "tests/regression/10_stdlib/1411_url_parse.xr.expected",
+        "state": "MISSING",
+        "lf_sha256": null
+      },
+      "original_regression_obligation": {
+        "entry": "test",
+        "expected_exit": 0,
+        "test_discovery": "NOT_RUN"
+      },
+      "original_named_test_obligation": {
+        "state": "REVIEWED_TEXTUAL_DECLARATIONS_NOT_RUNTIME_DISCOVERY",
+        "declarations": [
+          {
+            "name": "test_parse_full_url",
+            "marker_line": 12,
+            "source_segment_lf_sha256": "1df4801c18e5788d0c8f89a8ebeb7124a83423efd9074951306cb6f9c06b3af5"
+          },
+          {
+            "name": "test_parse_http_url",
+            "marker_line": 25,
+            "source_segment_lf_sha256": "e609ad284b19899093912e91c8ab1f738fe48adbcf5656c010787e4b9904efff"
+          },
+          {
+            "name": "test_parse_with_query",
+            "marker_line": 34,
+            "source_segment_lf_sha256": "9b5c48918ec0eaba8f1bb3ae7434f6a07a18a9373cfd1eabc5422b182bc44e53"
+          },
+          {
+            "name": "test_parse_localhost",
+            "marker_line": 41,
+            "source_segment_lf_sha256": "6055d403a83024d5c5fe8b478be06473d1877b8bcb626d28b7dde80811119f29"
+          },
+          {
+            "name": "test_parse_ip_with_port",
+            "marker_line": 48,
+            "source_segment_lf_sha256": "cadea5846bebe4ef5dc00727766cb1a59a5b96818a66ace7f0a0075c25204e5e"
+          },
+          {
+            "name": "test_parse_no_path",
+            "marker_line": 56,
+            "source_segment_lf_sha256": "85ff87ee2647fae17986ffa85f580e43aa6928bb14dbb4c912c585fa825ceeb6"
+          },
+          {
+            "name": "test_parse_hash_only",
+            "marker_line": 63,
+            "source_segment_lf_sha256": "9403baced18c1762582568c7249298c59a0e4bf2002b6d6e7200a68643b2742e"
+          },
+          {
+            "name": "test_parse_query_only",
+            "marker_line": 69,
+            "source_segment_lf_sha256": "4a379478e59c4e0dcc4c7f0ff95443adf3d937674812bb220a263cfa0b09ad60"
+          },
+          {
+            "name": "test_parse_userinfo",
+            "marker_line": 79,
+            "source_segment_lf_sha256": "ab30584fd8a3aec8a7578a85498098d502bf0f49d83578ab77b49a21aebcb07a"
+          },
+          {
+            "name": "test_parse_username_only",
+            "marker_line": 89,
+            "source_segment_lf_sha256": "a41c3e0a924e1fa996532a946ab5509e848792af63164d922c21c206dc56d5ac"
+          },
+          {
+            "name": "test_parse_ipv6",
+            "marker_line": 101,
+            "source_segment_lf_sha256": "26a5b677a6ed58a228f62ef4a907381dd88ed5917df93cb3e82070346dcd480c"
+          },
+          {
+            "name": "test_parse_ipv6_no_port",
+            "marker_line": 109,
+            "source_segment_lf_sha256": "efbc9017e2e58f1f1bc951f3ddc45b35475c8b5c2c7e39a60fa33022a1d0ef0d"
+          },
+          {
+            "name": "test_format_roundtrip",
+            "marker_line": 120,
+            "source_segment_lf_sha256": "fc98e3375dc05a41af2627c777143f64892339fd3cc4c0ffbd68f4abc0a0855e"
+          },
+          {
+            "name": "test_format_with_userinfo",
+            "marker_line": 128,
+            "source_segment_lf_sha256": "6e07277a2022f1c28d04ce3543512491985e0ef8b2ff49df33193c8db304d69a"
+          },
+          {
+            "name": "test_parse_query",
+            "marker_line": 140,
+            "source_segment_lf_sha256": "c1464622318465db147ea9dccac40ff5deefe53c9e6c648cbcf2ab062f411f55"
+          },
+          {
+            "name": "test_parse_query_with_leading_question",
+            "marker_line": 147,
+            "source_segment_lf_sha256": "df3f1e0cbab11576f6ee090353e5362cdaea13654202675216e05b148f7b3c5c"
+          },
+          {
+            "name": "test_parse_query_encoded",
+            "marker_line": 154,
+            "source_segment_lf_sha256": "7ef54a65fd5c222727301bb3d5e1cf00ede0853a00c5e9d3af5a3b191f3585e1"
+          },
+          {
+            "name": "test_parse_query_empty_flag_and_empty_pairs",
+            "marker_line": 161,
+            "source_segment_lf_sha256": "c4ebd106d52b7b8bb48d427325b4d9186944fc985c117cdd4a1b79c14826bb8e"
+          },
+          {
+            "name": "test_query_encode",
+            "marker_line": 170,
+            "source_segment_lf_sha256": "a8638d9b8ec8bc12c4a7dfb45067236a88850aa7ad1a7d03efe4a9a522dae802"
+          },
+          {
+            "name": "test_query_encode_form_values",
+            "marker_line": 176,
+            "source_segment_lf_sha256": "40c0fc9a0f71049efae047a7970cbbea2114ab4953dfa43e9c705e76f352cdab"
+          },
+          {
+            "name": "test_query_preserves_duplicates_and_set_position",
+            "marker_line": 182,
+            "source_segment_lf_sha256": "b64a4e851d816ad5d838cec91fa42a5c49815d6171e8f641aabba4b15e4f454a"
+          },
+          {
+            "name": "test_query_invalid_percent_is_typed_error",
+            "marker_line": 198,
+            "source_segment_lf_sha256": "a227f6b96eeb55738d96e06a1b4ffff612bdf496dc1c0d01702f767cfe7c530d"
+          },
+          {
+            "name": "test_encode_form_space",
+            "marker_line": 215,
+            "source_segment_lf_sha256": "45b4881f241b68d07c74ad781d61051333a071aff08711a198cebea2d31074d7"
+          },
+          {
+            "name": "test_decode_form_plus",
+            "marker_line": 220,
+            "source_segment_lf_sha256": "6590248fc18b3ade7e3c742b12829887fcc462e26e963e640dd09f3f5266e6de"
+          },
+          {
+            "name": "test_encode_decode_consistency",
+            "marker_line": 225,
+            "source_segment_lf_sha256": "9900f54924f079820ff51f9b57a08e0609d40755212ced016cf807daa1065396"
+          },
+          {
+            "name": "test_resolve_absolute_path",
+            "marker_line": 237,
+            "source_segment_lf_sha256": "fc163d946418b742692250f78fe7970cce78fa98fa42f80db69795d3d91a2f2c"
+          },
+          {
+            "name": "test_resolve_relative_path",
+            "marker_line": 243,
+            "source_segment_lf_sha256": "f5c15c28a244713b4a25f7ab56713a8f47a622081e2c24fb76a78ea615a6c545"
+          },
+          {
+            "name": "test_resolve_absolute_url",
+            "marker_line": 249,
+            "source_segment_lf_sha256": "c2db96d70566e103258b5eda121423eddd3cb05e1acf09c5fc971a6d6237ee27"
+          },
+          {
+            "name": "test_resolve_query_only_replaces_base_query",
+            "marker_line": 255,
+            "source_segment_lf_sha256": "8742918b96ea0e8cba86359bdfde79d297eb49b8b62892cdae7d4551d6e51700"
+          },
+          {
+            "name": "test_resolve_fragment_only_preserves_base_query",
+            "marker_line": 261,
+            "source_segment_lf_sha256": "6f12ee4618fd2ced916b73c13d54a7c3f85c6fb944aafc299880f9a99f26b455"
+          },
+          {
+            "name": "test_resolve_network_path_keeps_base_scheme",
+            "marker_line": 267,
+            "source_segment_lf_sha256": "4559c58d657a10984a4f225ca343ccdd5e05b4d02ad775bd83e8e7e9b97680f3"
+          },
+          {
+            "name": "test_resolve_dot_segments",
+            "marker_line": 273,
+            "source_segment_lf_sha256": "a21cc6bb7cd0eaf8c8cac521f0aa32d4e5c44bf11593d9e0e915f6d4b09dc177"
+          },
+          {
+            "name": "test_join_paths",
+            "marker_line": 283,
+            "source_segment_lf_sha256": "1640fee99f63f17879bd4e62cea92258d68abbeaac8a6e56ce463c7b9b746bb8"
+          },
+          {
+            "name": "test_join_trailing_slash",
+            "marker_line": 289,
+            "source_segment_lf_sha256": "9d7e5a21eed9d420a3a66b30b92423cb899f0fc7815f452b4decdc2dd0f22233"
+          },
+          {
+            "name": "test_join_skips_empty_segments",
+            "marker_line": 295,
+            "source_segment_lf_sha256": "9768894789ad10a4994e3c4dfd0ca9c2cb5a0abee64a29bc41f109b464a95b4c"
+          },
+          {
+            "name": "test_join_single",
+            "marker_line": 301,
+            "source_segment_lf_sha256": "38556c93974121c50523a19facef141fe521d71333eb2dafcf4c3862fc49be9a"
+          }
+        ],
+        "execution": "NOT_RUN"
+      },
+      "target_contract_review": "REQUIRED; whole typed declarations and original error/content/protocol duties remain positive, without compatibility aliases or guessed ABI/provider behavior. Preserve source-review gaps separately from any real product failure.",
+      "target_source_port": {
+        "fixture": "tests/unit/xir/legacy_consumers/fixtures/format_regression_ports/1411_url_parse/root.xr",
+        "lf_sha256": "476bd5128e314a6ec90d66374f535b5fcaa8559efe8baf84b400d8045e71ae32",
+        "owner_package": "P13",
+        "qualification": "NOT_RUN",
+        "frozen_basis": [
+          "Preserve all original URI/query/order/duplicates/error cases; entries returns an owned Array of readonly Tuple values. Replace whole Array elements to prove logical snapshots stay independent; never write readonly Tuple.N or pretend to mutate QueryParams through a value result."
+        ]
+      },
+      "named_test_migration": {
+        "state": "PREPARED_NOT_EXECUTED",
+        "original_tests_removed": false,
+        "mapping": {
+          "test_parse_full_url": "test_parse_full_url",
+          "test_parse_http_url": "test_parse_http_url",
+          "test_parse_with_query": "test_parse_with_query",
+          "test_parse_localhost": "test_parse_localhost",
+          "test_parse_ip_with_port": "test_parse_ip_with_port",
+          "test_parse_no_path": "test_parse_no_path",
+          "test_parse_hash_only": "test_parse_hash_only",
+          "test_parse_query_only": "test_parse_query_only",
+          "test_parse_userinfo": "test_parse_userinfo",
+          "test_parse_username_only": "test_parse_username_only",
+          "test_parse_ipv6": "test_parse_ipv6",
+          "test_parse_ipv6_no_port": "test_parse_ipv6_no_port",
+          "test_format_roundtrip": "test_format_roundtrip",
+          "test_format_with_userinfo": "test_format_with_userinfo",
+          "test_parse_query": "test_parse_query",
+          "test_parse_query_with_leading_question": "test_parse_query_with_leading_question",
+          "test_parse_query_encoded": "test_parse_query_encoded",
+          "test_parse_query_empty_flag_and_empty_pairs": "test_parse_query_empty_flag_and_empty_pairs",
+          "test_query_encode": "test_query_encode",
+          "test_query_encode_form_values": "test_query_encode_form_values",
+          "test_query_preserves_duplicates_and_set_position": "test_query_preserves_duplicates_and_set_position",
+          "test_query_invalid_percent_is_typed_error": "test_query_invalid_percent_is_typed_error",
+          "test_encode_form_space": "test_encode_form_space",
+          "test_decode_form_plus": "test_decode_form_plus",
+          "test_encode_decode_consistency": "test_encode_decode_consistency",
+          "test_resolve_absolute_path": "test_resolve_absolute_path",
+          "test_resolve_relative_path": "test_resolve_relative_path",
+          "test_resolve_absolute_url": "test_resolve_absolute_url",
+          "test_resolve_query_only_replaces_base_query": "test_resolve_query_only_replaces_base_query",
+          "test_resolve_fragment_only_preserves_base_query": "test_resolve_fragment_only_preserves_base_query",
+          "test_resolve_network_path_keeps_base_scheme": "test_resolve_network_path_keeps_base_scheme",
+          "test_resolve_dot_segments": "test_resolve_dot_segments",
+          "test_join_paths": "test_join_paths",
+          "test_join_trailing_slash": "test_join_trailing_slash",
+          "test_join_skips_empty_segments": "test_join_skips_empty_segments",
+          "test_join_single": "test_join_single"
+        }
+      },
+      "target_disposition": {
+        "kind": "POSITIVE_FULL_LIBRARY_CONTENT_AFTER_DECLARED_PORT",
+        "owner_package": "P13",
+        "qualification": "NOT_RUN",
+        "reason": "Preserve all original URI/query/order/duplicates/error cases; entries returns an owned Array of readonly Tuple values. Replace whole Array elements to prove logical snapshots stay independent; never write readonly Tuple.N or pretend to mutate QueryParams through a value result."
+      }
+    },
+    {
+      "case_id": "tests/regression/10_stdlib/1420_datetime_basic.xr",
+      "source_lf_sha256": "7f7c1fa1a7b46f859dc216199f8924b219d98ebf7a55eb2715949cdb20c568be",
+      "primary_family": "builtin-method-native-provider-call",
+      "secondary_families": [
+        "typed-error-throw-try-catch",
+        "defer-cleanup-resource-lifetime",
+        "test-entry-assertion-async",
+        "array-slice-fixed-array-range-iteration",
+        "string-rune-interpolation",
+        "module-graph-import-export-init",
+        "ownership-read-ref-move-copy-drop"
+      ],
+      "tasks": [
+        "313",
+        "314",
+        "315",
+        "316",
+        "317",
+        "318",
+        "319",
+        "320",
+        "322"
+      ],
+      "producer_packages": [
+        "P02",
+        "P06",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P12",
+        "P13",
+        "P14",
+        "P17"
+      ],
+      "semantic_basis": "Complete original format/crypto/URL/calendar source review preserves every named test, helper and normal/error path. Independent known answers, full stress and semantic content are required separately from shape, self-roundtrip and actual provider/entropy/constant-time/physical qualification.",
+      "original_runner_entries": [
+        {
+          "suite": "regression",
+          "entry": "test"
+        }
+      ],
+      "new_entry_status": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "replacement_qualification": "OPEN",
+      "original_stdout_oracle": {
+        "path": "tests/regression/10_stdlib/1420_datetime_basic.xr.expected",
+        "state": "MISSING",
+        "lf_sha256": null
+      },
+      "original_regression_obligation": {
+        "entry": "test",
+        "expected_exit": 0,
+        "test_discovery": "NOT_RUN"
+      },
+      "original_named_test_obligation": {
+        "state": "REVIEWED_TEXTUAL_DECLARATIONS_NOT_RUNTIME_DISCOVERY",
+        "declarations": [
+          {
+            "name": "test_create_full_date",
+            "marker_line": 10,
+            "source_segment_lf_sha256": "d9ba110e9dd50696c2a0dc44049a293ddd6da808353883d8cb0237f4d6d994e2"
+          },
+          {
+            "name": "test_create_unix_epoch",
+            "marker_line": 21,
+            "source_segment_lf_sha256": "32372b7c0f2171175b3741c8e96a60f23ddb213b0e88638172dc092c329b3422"
+          },
+          {
+            "name": "test_create_year_only",
+            "marker_line": 29,
+            "source_segment_lf_sha256": "b4f8861e2f4db8267493704af04ca8b6584b9f72aa2a92e892fdbb1d6561a646"
+          },
+          {
+            "name": "test_create_year_month",
+            "marker_line": 37,
+            "source_segment_lf_sha256": "db913f4479bf79c92e62b322cf664c0040568f7b444b6ebf0c822e8699422d48"
+          },
+          {
+            "name": "test_from_timestamp_zero",
+            "marker_line": 49,
+            "source_segment_lf_sha256": "449b9de3a77d95ee735d679e87664d91e86a198b39102346ee5f61a3f8c7484d"
+          },
+          {
+            "name": "test_from_timestamp_billion",
+            "marker_line": 55,
+            "source_segment_lf_sha256": "a3e41d4f8a6fc7da55327a14bc660d7bf18ea55fe68f597b444ebcb1485cdb23"
+          },
+          {
+            "name": "test_from_timestamp_recent",
+            "marker_line": 63,
+            "source_segment_lf_sha256": "2c2c305f1eca9598cc604788b0c6fc50defa04b9048a5342f93eb54e942c33d9"
+          },
+          {
+            "name": "test_timestamp_positive",
+            "marker_line": 73,
+            "source_segment_lf_sha256": "036635d76a5c330ddc84bf2d45bc8cc05f6df27000e9c69d63687e06c142e2b6"
+          },
+          {
+            "name": "test_timestamp_roundtrip",
+            "marker_line": 80,
+            "source_segment_lf_sha256": "bf8ff27f23ad92b96c4c2f4494a338dd7f15965d95cf7cd65cb064692f1072a7"
+          },
+          {
+            "name": "test_now_returns_valid_date",
+            "marker_line": 92,
+            "source_segment_lf_sha256": "216268101ed024b42b0d812eb4605d4407442dfeb43de7f4c7b01bdb50082907"
+          },
+          {
+            "name": "test_utc_returns_valid_date",
+            "marker_line": 98,
+            "source_segment_lf_sha256": "131ded0b2747b1a4e00844d3a234b0afb76a8ed365a97d7e2afeaa1d09e0c9cc"
+          },
+          {
+            "name": "test_now_timestamp_positive",
+            "marker_line": 104,
+            "source_segment_lf_sha256": "c3d1bc6ef88833b941b483f5791c518662522c2ad8f5d61440b4c7297d8dd000"
+          },
+          {
+            "name": "test_millisecond_default_zero",
+            "marker_line": 115,
+            "source_segment_lf_sha256": "67e3311160001d52fddc2efe2398f4d04973908bbcaa8d66a1723e9974d3c4d6"
+          },
+          {
+            "name": "test_from_timestamp_ms",
+            "marker_line": 121,
+            "source_segment_lf_sha256": "efa87614077bc6e2084067ef6752dd6015d8f53c582af7fbddeb93087c11e5c8"
+          }
+        ],
+        "execution": "NOT_RUN"
+      },
+      "target_contract_review": "REQUIRED; whole typed declarations and original error/content/protocol duties remain positive, without compatibility aliases or guessed ABI/provider behavior. Preserve source-review gaps separately from any real product failure."
+    },
+    {
+      "case_id": "tests/regression/10_stdlib/1421_datetime_format.xr",
+      "source_lf_sha256": "9cb455635c594d0e96c3176636606d0f0d3f9790c664f46c0f884e674c57f5ab",
+      "primary_family": "builtin-method-native-provider-call",
+      "secondary_families": [
+        "typed-error-throw-try-catch",
+        "defer-cleanup-resource-lifetime",
+        "test-entry-assertion-async",
+        "array-slice-fixed-array-range-iteration",
+        "string-rune-interpolation",
+        "module-graph-import-export-init",
+        "ownership-read-ref-move-copy-drop"
+      ],
+      "tasks": [
+        "313",
+        "314",
+        "315",
+        "316",
+        "317",
+        "318",
+        "319",
+        "320",
+        "322"
+      ],
+      "producer_packages": [
+        "P02",
+        "P06",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P12",
+        "P13",
+        "P14",
+        "P17"
+      ],
+      "semantic_basis": "Complete original format/crypto/URL/calendar source review preserves every named test, helper and normal/error path. Independent known answers, full stress and semantic content are required separately from shape, self-roundtrip and actual provider/entropy/constant-time/physical qualification.",
+      "original_runner_entries": [
+        {
+          "suite": "regression",
+          "entry": "test"
+        }
+      ],
+      "new_entry_status": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "replacement_qualification": "OPEN",
+      "original_stdout_oracle": {
+        "path": "tests/regression/10_stdlib/1421_datetime_format.xr.expected",
+        "state": "MISSING",
+        "lf_sha256": null
+      },
+      "original_regression_obligation": {
+        "entry": "test",
+        "expected_exit": 0,
+        "test_discovery": "NOT_RUN"
+      },
+      "original_named_test_obligation": {
+        "state": "REVIEWED_TEXTUAL_DECLARATIONS_NOT_RUNTIME_DISCOVERY",
+        "declarations": [
+          {
+            "name": "test_format_full",
+            "marker_line": 10,
+            "source_segment_lf_sha256": "e5ab9cd9a743b0dcc4049b4b3ed932e5e44d1e47ee9c31025c76bee4685382e3"
+          },
+          {
+            "name": "test_format_date_only",
+            "marker_line": 17,
+            "source_segment_lf_sha256": "27710e4de306d6ee28ceb8b0b24548031949d0a1ea21ae90be9aa1e9429f1124"
+          },
+          {
+            "name": "test_format_time_only",
+            "marker_line": 24,
+            "source_segment_lf_sha256": "1a414fc0ee3028433e1712c0024f1e654e0f9fc0a091204f55b67e6a981324aa"
+          },
+          {
+            "name": "test_format_compact",
+            "marker_line": 31,
+            "source_segment_lf_sha256": "3b71d2179fcb127b56c7ad9f56d0bc62de4fef53ca93771babe7732d92e2f8ce"
+          },
+          {
+            "name": "test_format_short_time",
+            "marker_line": 38,
+            "source_segment_lf_sha256": "7d1a1b7e18f0b30386283d35c1b17ab79e6b61da205ed8642dfe50cbf14ec5c4"
+          },
+          {
+            "name": "test_format_new_year",
+            "marker_line": 49,
+            "source_segment_lf_sha256": "2ac55baeb563c9606cabaaab90841199b1bcfccdd9188c1ad7dce452265c59f4"
+          },
+          {
+            "name": "test_format_year_end",
+            "marker_line": 56,
+            "source_segment_lf_sha256": "6d2da874d2063699e65cf5c12121655c9ff94ad2d3273e7e312c783ebb3d23b9"
+          },
+          {
+            "name": "test_format_single_digit_month",
+            "marker_line": 63,
+            "source_segment_lf_sha256": "6c09ec642b8bbb716df6991346d51379efba7ea255283e3e94aea05d01420545"
+          },
+          {
+            "name": "test_format_midnight",
+            "marker_line": 70,
+            "source_segment_lf_sha256": "3eed962c78a5da26474c19752dd6609498918918f5638351721ca56ea2fa4f4a"
+          },
+          {
+            "name": "test_format_noon",
+            "marker_line": 77,
+            "source_segment_lf_sha256": "45e6a73bbdec9a2f752e97a0b243efe52d7d887d628662ae031c0b48fd14464e"
+          },
+          {
+            "name": "test_format_now",
+            "marker_line": 88,
+            "source_segment_lf_sha256": "a3a0d2363a0b58f729682bbf8382aa53a457f173aaeb268eeeccf1f1f2533a91"
+          },
+          {
+            "name": "test_format_now_full",
+            "marker_line": 95,
+            "source_segment_lf_sha256": "63d660824ceeb7b5ef40f223da4291b3a5813c133b0f36c3c63dc7fac82c4af1"
+          },
+          {
+            "name": "test_to_iso_string_utc",
+            "marker_line": 106,
+            "source_segment_lf_sha256": "5de4664e908259eaba1935b174c2cf91292e779eaf5cc4aab439f7ee6ed23073"
+          }
+        ],
+        "execution": "NOT_RUN"
+      },
+      "target_contract_review": "REQUIRED; whole typed declarations and original error/content/protocol duties remain positive, without compatibility aliases or guessed ABI/provider behavior. Preserve source-review gaps separately from any real product failure.",
+      "target_source_port": {
+        "fixture": "tests/unit/xir/legacy_consumers/fixtures/format_regression_ports/1421_datetime_format/root.xr",
+        "lf_sha256": "3da553e5777680059934c9c260751a8a2e80cbb5c16185b4be5fa93680368638",
+        "owner_package": "P13",
+        "qualification": "NOT_RUN",
+        "frozen_basis": [
+          "Preserve all formatting/clock tests; independently convert timestamp1718438400 UTC to exact ISO content instead of length-only success. Actual localOffset/time provider remains open."
+        ]
+      },
+      "named_test_migration": {
+        "state": "PREPARED_NOT_EXECUTED",
+        "original_tests_removed": false,
+        "mapping": {
+          "test_format_full": "test_format_full",
+          "test_format_date_only": "test_format_date_only",
+          "test_format_time_only": "test_format_time_only",
+          "test_format_compact": "test_format_compact",
+          "test_format_short_time": "test_format_short_time",
+          "test_format_new_year": "test_format_new_year",
+          "test_format_year_end": "test_format_year_end",
+          "test_format_single_digit_month": "test_format_single_digit_month",
+          "test_format_midnight": "test_format_midnight",
+          "test_format_noon": "test_format_noon",
+          "test_format_now": "test_format_now",
+          "test_format_now_full": "test_format_now_full",
+          "test_to_iso_string_utc": "test_to_iso_string_utc"
+        }
+      },
+      "target_disposition": {
+        "kind": "POSITIVE_FULL_LIBRARY_CONTENT_AFTER_DECLARED_PORT",
+        "owner_package": "P13",
+        "qualification": "NOT_RUN",
+        "reason": "Preserve all formatting/clock tests; independently convert timestamp1718438400 UTC to exact ISO content instead of length-only success. Actual localOffset/time provider remains open."
+      }
+    },
+    {
+      "case_id": "tests/regression/10_stdlib/1422_datetime_calc.xr",
+      "source_lf_sha256": "15ba4bb9f41c39de8a05e5c612e405b1284e92999339117d96ad10a9a4b2650c",
+      "primary_family": "builtin-method-native-provider-call",
+      "secondary_families": [
+        "typed-error-throw-try-catch",
+        "defer-cleanup-resource-lifetime",
+        "test-entry-assertion-async",
+        "array-slice-fixed-array-range-iteration",
+        "string-rune-interpolation",
+        "module-graph-import-export-init",
+        "ownership-read-ref-move-copy-drop"
+      ],
+      "tasks": [
+        "313",
+        "314",
+        "315",
+        "316",
+        "317",
+        "318",
+        "319",
+        "320",
+        "322"
+      ],
+      "producer_packages": [
+        "P02",
+        "P06",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P12",
+        "P13",
+        "P14",
+        "P17"
+      ],
+      "semantic_basis": "Complete original format/crypto/URL/calendar source review preserves every named test, helper and normal/error path. Independent known answers, full stress and semantic content are required separately from shape, self-roundtrip and actual provider/entropy/constant-time/physical qualification.",
+      "original_runner_entries": [
+        {
+          "suite": "regression",
+          "entry": "test"
+        }
+      ],
+      "new_entry_status": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "replacement_qualification": "OPEN",
+      "original_stdout_oracle": {
+        "path": "tests/regression/10_stdlib/1422_datetime_calc.xr.expected",
+        "state": "MISSING",
+        "lf_sha256": null
+      },
+      "original_regression_obligation": {
+        "entry": "test",
+        "expected_exit": 0,
+        "test_discovery": "NOT_RUN"
+      },
+      "original_named_test_obligation": {
+        "state": "REVIEWED_TEXTUAL_DECLARATIONS_NOT_RUNTIME_DISCOVERY",
+        "declarations": [
+          {
+            "name": "test_add_days",
+            "marker_line": 10,
+            "source_segment_lf_sha256": "d6f5f0b9b4aaacd4020267d61faa701398cb48e5aaa1cc78bf0e4a6a12531122"
+          },
+          {
+            "name": "test_add_hours",
+            "marker_line": 17,
+            "source_segment_lf_sha256": "dcf8f6167cc46c981af36cef986f66243ff124be9e9db8aada0a6fc2c46802bb"
+          },
+          {
+            "name": "test_add_minutes",
+            "marker_line": 24,
+            "source_segment_lf_sha256": "646a81c87f40a2c708081f57bd3050e76d98f61318c2717d1498d39040fa8364"
+          },
+          {
+            "name": "test_add_seconds",
+            "marker_line": 31,
+            "source_segment_lf_sha256": "ddde6936a7bfdf33ac1858016a0fbe58151add19ec0943991d9ff1dcd81f74af"
+          },
+          {
+            "name": "test_subtract_days",
+            "marker_line": 42,
+            "source_segment_lf_sha256": "14f1fd7b57eab305be4d1c73fbbfeee38c251f966d75422690d9615b1d616e8a"
+          },
+          {
+            "name": "test_subtract_hours",
+            "marker_line": 49,
+            "source_segment_lf_sha256": "04b5578676e4de0de4f5b335892427eb92119ac6faeeca9b0df69e0b1e5f917d"
+          },
+          {
+            "name": "test_diff_one_day_seconds",
+            "marker_line": 60,
+            "source_segment_lf_sha256": "ff21b37d8b2288547f3e359a23bae653656b24b0cf119bf7004c10090a05822e"
+          },
+          {
+            "name": "test_diff_one_day_minutes",
+            "marker_line": 68,
+            "source_segment_lf_sha256": "bc6cc9727f662a776cb38d534516faf286570360e47a8b26d30a73bd0ca93e6c"
+          },
+          {
+            "name": "test_diff_one_day_hours",
+            "marker_line": 76,
+            "source_segment_lf_sha256": "545f21bb4c6bb67aa80a41f5b49e1f55af79599d1322e92927190a145e6ffdf0"
+          },
+          {
+            "name": "test_diff_reverse",
+            "marker_line": 84,
+            "source_segment_lf_sha256": "6acc3d39a7c1843ff4b6d7ec5252d3228f683e2eec58baf3409edadb2a28732a"
+          },
+          {
+            "name": "test_weekday_range",
+            "marker_line": 96,
+            "source_segment_lf_sha256": "af47045c8bca106bd7ad0aee34651b9fee8672950afbe1c861068eb94737e8b0"
+          },
+          {
+            "name": "test_weekday_now",
+            "marker_line": 103,
+            "source_segment_lf_sha256": "46b734b30847791b8e75a0c04a7696b9b3dc646e8aedeb787b775920ef9d7afe"
+          },
+          {
+            "name": "test_offset_reasonable",
+            "marker_line": 114,
+            "source_segment_lf_sha256": "5999e7fa7f498a1c5be20acfffcc025dead5bf305a4663729f3863496d8c95c9"
+          },
+          {
+            "name": "test_to_utc",
+            "marker_line": 120,
+            "source_segment_lf_sha256": "734dd64baaf1614af203f1b6af0f79bab63a1559a0b0471c1791f25441ba581a"
+          },
+          {
+            "name": "test_to_local",
+            "marker_line": 127,
+            "source_segment_lf_sha256": "105fe57f492df16a2b1e99afb12dd38827bd1fa665d40bd0988294b7b4dcd87a"
+          },
+          {
+            "name": "test_is_before",
+            "marker_line": 138,
+            "source_segment_lf_sha256": "5e8ffff68a284c1da3292b080ac76b6715b874d4ef04d536ef263d5d00c5ddae"
+          },
+          {
+            "name": "test_is_after",
+            "marker_line": 146,
+            "source_segment_lf_sha256": "2e5dad2c80a599bb76b68971567ee2f5dff900841f801a7919891c3f8ecfa59b"
+          },
+          {
+            "name": "test_equals",
+            "marker_line": 154,
+            "source_segment_lf_sha256": "f0bea3103c8ecf807ea3e9b60f8c83941c8b1d1ebb5ff91dcfac66b7d2e64d51"
+          },
+          {
+            "name": "test_is_leap_year",
+            "marker_line": 165,
+            "source_segment_lf_sha256": "20d760a7a0ddcddf6472e788bf79050dd4eb6ffcf8e9c2567542e17af630a6aa"
+          },
+          {
+            "name": "test_days_in_month",
+            "marker_line": 173,
+            "source_segment_lf_sha256": "402f51d27edb5871cea2962c13b6e802ee30061f7c9aeb3291fd6601f5429574"
+          },
+          {
+            "name": "test_add_months_clamp",
+            "marker_line": 187,
+            "source_segment_lf_sha256": "5de347ca1418f86bf9f8443fb0ddeb7f98a553f44dce07ee4d5f67600466c7f0"
+          }
+        ],
+        "execution": "NOT_RUN"
+      },
+      "target_contract_review": "REQUIRED; whole typed declarations and original error/content/protocol duties remain positive, without compatibility aliases or guessed ABI/provider behavior. Preserve source-review gaps separately from any real product failure.",
+      "target_source_port": {
+        "fixture": "tests/unit/xir/legacy_consumers/fixtures/format_regression_ports/1422_datetime_calc/root.xr",
+        "lf_sha256": "eddeb099678e3c26183a40a79d0bf1396d311d117f8c857666698c05309613a5",
+        "owner_package": "P13",
+        "qualification": "NOT_RUN",
+        "frozen_basis": [
+          "Preserve complete civil arithmetic/diff/leap/day/zone tests. Month clamp produces2024Feb29 while originalJan31 remains unchanged; toUTC/toLocal preserve epoch timestamp and millisecond. Actual timezone/DST provider profiles are separate, no frozen host offset assumed."
+        ]
+      },
+      "named_test_migration": {
+        "state": "PREPARED_NOT_EXECUTED",
+        "original_tests_removed": false,
+        "mapping": {
+          "test_add_days": "test_add_days",
+          "test_add_hours": "test_add_hours",
+          "test_add_minutes": "test_add_minutes",
+          "test_add_seconds": "test_add_seconds",
+          "test_subtract_days": "test_subtract_days",
+          "test_subtract_hours": "test_subtract_hours",
+          "test_diff_one_day_seconds": "test_diff_one_day_seconds",
+          "test_diff_one_day_minutes": "test_diff_one_day_minutes",
+          "test_diff_one_day_hours": "test_diff_one_day_hours",
+          "test_diff_reverse": "test_diff_reverse",
+          "test_weekday_range": "test_weekday_range",
+          "test_weekday_now": "test_weekday_now",
+          "test_offset_reasonable": "test_offset_reasonable",
+          "test_to_utc": "test_to_utc",
+          "test_to_local": "test_to_local",
+          "test_is_before": "test_is_before",
+          "test_is_after": "test_is_after",
+          "test_equals": "test_equals",
+          "test_is_leap_year": "test_is_leap_year",
+          "test_days_in_month": "test_days_in_month",
+          "test_add_months_clamp": "test_add_months_clamp"
+        }
+      },
+      "target_disposition": {
+        "kind": "POSITIVE_FULL_LIBRARY_CONTENT_AFTER_DECLARED_PORT",
+        "owner_package": "P13",
+        "qualification": "NOT_RUN",
+        "reason": "Preserve complete civil arithmetic/diff/leap/day/zone tests. Month clamp produces2024Feb29 while originalJan31 remains unchanged; toUTC/toLocal preserve epoch timestamp and millisecond. Actual timezone/DST provider profiles are separate, no frozen host offset assumed."
+      }
     }
   ],
   "boundaries": [
