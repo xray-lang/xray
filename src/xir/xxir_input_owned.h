@@ -16,6 +16,12 @@
 #include <limits.h>
 
 typedef struct XirOwnedInputFunction XirOwnedInputFunction;
+/* A synchronous physical borrow requires the caller's live strong owner.
+ * It conveys no opcode, type, CFG or semantic admission result. */
+typedef struct XirInputInstructionSpan {
+    const XrXirInstruction *rows;
+    uint32_t count;
+} XirInputInstructionSpan;
 typedef struct XirInputFunctionHead {
     const char *name;
     uint32_t name_length;
@@ -37,6 +43,8 @@ typedef struct XirInputWork {
     const void *owner;
     bool (*consume)(const void *,uint64_t);
 } XirInputWork;
+XR_FUNC XrXirStatus xir_input_function_instruction_span(const XirInputWork *,
+    const XirOwnedInputFunction *,XirInputInstructionSpan *);
 /* These bounds describe physical reads, never semantic or execution admission.
  * The query pays for fixed metadata and finite integer-width arithmetic. */
 typedef struct XirInputReadCosts {

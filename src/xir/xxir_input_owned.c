@@ -45,6 +45,14 @@ XR_FUNC XrCompileResources *xir_input_function_resources(const XirOwnedInputFunc
 static bool input_work(const XirInputWork *work,uint64_t units) {
     return work&&work->owner&&work->consume&&work->consume(work->owner,units);
 }
+XR_FUNC XrXirStatus xir_input_function_instruction_span(const XirInputWork *work,
+    const XirOwnedInputFunction *input,XirInputInstructionSpan *output) {
+    if(!input_function_storage_extent(input)||!output)return XR_XIR_BAD_STRUCTURE;
+    if(!input_work(work,4+sizeof(*output)))return XR_XIR_BUDGET;
+    if(!input_function_storage_extent(input))return XR_XIR_BAD_STRUCTURE;
+    *output=(XirInputInstructionSpan){input->instructions,input->head.instruction_count};
+    return XR_XIR_OK;
+}
 static bool input_compile_consume(const void *owner,uint64_t units) {
     return xir_compile_work((const XrXirCompileContext *)owner,units);
 }

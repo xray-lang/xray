@@ -66,6 +66,9 @@ static void inventory_equal(const XrXirCompileContext *context,const XirOwnedInp
     const XrXirInstruction *expected) {
     XirInputWork work={context,inventory_consume};
     CHECK(xir_input_function_shape(&work,input)==XR_XIR_OK);
+    XirInputInstructionSpan span={0};
+    CHECK(xir_input_function_instruction_span(&work,input,&span)==XR_XIR_OK);
+    CHECK(span.rows==input->instructions&&span.count==INVENTORY_ROWS);
     for(uint32_t i=0;i<INVENTORY_ROWS;++i) {
         XrXirInstruction stack,copy;const XrXirInstruction *row=NULL;
         CHECK(xir_input_instruction_ref(&work,input,i,&stack,&row)==XR_XIR_OK);
@@ -74,6 +77,7 @@ static void inventory_equal(const XrXirCompileContext *context,const XirOwnedInp
         for(uint32_t field=0;field<XIR_INPUT_WORDS;++field) {
             CHECK(xir_input_instruction_word(row,field)==xir_input_instruction_word(&expected[i],field));
             CHECK(xir_input_instruction_word(&copy,field)==xir_input_instruction_word(&expected[i],field));
+            CHECK(xir_input_instruction_word(&span.rows[i],field)==xir_input_instruction_word(&expected[i],field));
         }
         XirInputInstructionShape shape={0};XrXirType type=XR_XIR_UNIT;
         CHECK(xir_input_instruction_shape(&work,input,i,&shape)==XR_XIR_OK);
@@ -96,6 +100,20 @@ static void inventory_reads(const XrXirCompileContext *context,XirOwnedInputFunc
     XirInputWork work={context,inventory_consume};XirInputReadCosts costs={0};
     CHECK(xir_input_function_read_costs(&work,input,&costs)==XR_XIR_OK);
     CHECK(costs.instructions==INVENTORY_ROWS&&costs.row==4+sizeof(const XrXirInstruction *));
+    uint64_t span_units=4+sizeof(XirInputInstructionSpan);
+    for(unsigned minus=0;minus<2;++minus) {
+        InventoryDebit budget={span_units-minus,0,NULL};XirInputWork span_work={&budget,inventory_debit};
+        XirInputInstructionSpan output={NULL,UINT32_MAX};
+        CHECK(xir_input_function_instruction_span(&span_work,input,&output)==(minus?XR_XIR_BUDGET:XR_XIR_OK));
+        CHECK(minus?(!output.rows&&output.count==UINT32_MAX):
+            (output.rows==input->instructions&&output.count==INVENTORY_ROWS));
+        CHECK(budget.spent==(minus?0:span_units));
+    }
+    InventoryDebit poisoned={span_units,0,input};XirInputWork span_work={&poisoned,inventory_debit};
+    XirInputInstructionSpan unchanged={NULL,UINT32_MAX};
+    CHECK(xir_input_function_instruction_span(&span_work,input,&unchanged)==XR_XIR_BAD_STRUCTURE);
+    CHECK(!unchanged.rows&&unchanged.count==UINT32_MAX);
+    --input->head.instruction_count;
     for(unsigned minus=0;minus<2;++minus) {
         InventoryDebit debit={costs.row-minus,0,NULL};XirInputWork reading={&debit,inventory_debit};
         XrXirInstruction stack;const XrXirInstruction *sentinel=input->instructions,*row=sentinel;
