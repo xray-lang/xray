@@ -308,8 +308,8 @@ set_tests_properties(test_xir_stages PROPERTIES LABELS "unit;xir;metadata;owners
 add_executable(test_xir_allocations xir/test_xir_allocations.c
     ${CMAKE_SOURCE_DIR}/src/aot/xi_cgen_verify_output.c
     ${CMAKE_SOURCE_DIR}/src/shared/xnative_declaration.c)
+target_link_libraries(test_xir_allocations PRIVATE xray_xir_scalar)
 target_include_directories(test_xir_allocations PRIVATE ${CMAKE_SOURCE_DIR}/src)
-target_link_libraries(test_xir_allocations PRIVATE xray_xir_native_cache)
 if(MSVC)
     target_compile_options(test_xir_allocations PRIVATE /W4 /WX)
 else()
@@ -371,7 +371,7 @@ add_executable(test_xir_native xir/test_xir_native.c ${XIR_SCALAR_GENERATED})
 target_link_libraries(test_xir_native PRIVATE xray_xir_scalar)
 # Complete panic outcomes keep message ownership independent of result values.
 add_executable(test_xir_panic_carrier xir/test_xir_panic_carrier.c xir/xir_legacy_call_provider.c)
-target_link_libraries(test_xir_panic_carrier PRIVATE xray_xir)
+target_link_libraries(test_xir_panic_carrier PRIVATE xray_xir xray_xir_scalar)
 # These implementations are included under the runtime allocation macros,
 # never compiled as additional uncounted translation units.
 set_property(SOURCE xir/test_xir_panic_carrier.c APPEND PROPERTY OBJECT_DEPENDS
@@ -4388,14 +4388,14 @@ include("${CMAKE_CURRENT_LIST_DIR}/xir/task_unit_native.cmake")
 
 include("${CMAKE_CURRENT_LIST_DIR}/xir/library_generics.cmake")
 
-include("${CMAKE_CURRENT_LIST_DIR}/xir/native_cache.cmake")
+include("${CMAKE_CURRENT_LIST_DIR}/xir/stdlib_vm.cmake")
 
-include("${CMAKE_CURRENT_LIST_DIR}/xir/source_product_cache.cmake")
+include("${CMAKE_CURRENT_LIST_DIR}/xir/source_product_vm.cmake")
 
-include("${CMAKE_CURRENT_LIST_DIR}/xir/native_cache_resources.cmake")
+include("${CMAKE_CURRENT_LIST_DIR}/xir/stdlib_resources.cmake")
 
 include("${PROJECT_SOURCE_DIR}/tests/cli/xir_public_cli_product.cmake")
-include("${CMAKE_CURRENT_LIST_DIR}/xir/native_cache_preparation.cmake")
+include("${CMAKE_CURRENT_LIST_DIR}/xir/stdlib_preparation.cmake")
 include("${CMAKE_CURRENT_LIST_DIR}/xir/task_outcome_copy_controls.cmake")
 
 include("${CMAKE_CURRENT_LIST_DIR}/xir/range_check.cmake")
