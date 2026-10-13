@@ -11,7 +11,60 @@ class PreparationChecks(unittest.TestCase):
         cls.mapping = audit.read_json(audit.HERE / "responsibilities.json")
         cls.oracles = audit.read_json(audit.HERE / "oracles.json")
         cls.routes = audit.read_json(audit.HERE / "consumer_routes.json")
+        cls.runner_routes = audit.read_json(audit.HERE / "runner_routes.json")
         cls.legacy = audit.read_json(audit.ROOT / "tests/unit/xir/product_consumers/legacy_responsibilities.json")
+
+    def test_explicit_runner_routes_keep_the_original_inputs_and_oracles(self):
+        audit.validate_runner_routes(self.runner_routes, self.mapping)
+
+    def test_runner_source_change_requires_semantic_review(self):
+        bad = copy.deepcopy(self.runner_routes)
+        bad["cases"][0]["source_lf_sha256"] = "0" * 64
+        with self.assertRaisesRegex(ValueError, "source changed"):
+            audit.validate_runner_routes(bad, self.mapping)
+
+    def test_runtime_trap_cannot_replace_compile_entry(self):
+        bad = copy.deepcopy(self.runner_routes)
+        bad["cases"][0]["original_runner_entries"][0]["entry"] = "run"
+        with self.assertRaisesRegex(ValueError, "runner entry"):
+            audit.validate_runner_routes(bad, self.mapping)
+
+    def test_wrong_diagnostic_location_is_not_preserved_oracle(self):
+        bad = copy.deepcopy(self.runner_routes)
+        row = next(r for r in bad["cases"] if r.get("original_rejection_oracle", {}).get("state") == "PRESENT")
+        row["original_rejection_oracle"]["assertions"][0]["where"]["col"] += 1
+        with self.assertRaisesRegex(ValueError, "position, code or text"):
+            audit.validate_runner_routes(bad, self.mapping)
+
+    def test_position_gap_annotation_cannot_be_removed_to_pass(self):
+        bad = copy.deepcopy(self.runner_routes)
+        row = next(r for r in bad["cases"] if any(a["misplaced"] for a in r.get("original_rejection_oracle", {}).get("assertions") or []))
+        next(a for a in row["original_rejection_oracle"]["assertions"] if a["misplaced"])["misplaced"] = None
+        with self.assertRaisesRegex(ValueError, "position, code or text"):
+            audit.validate_runner_routes(bad, self.mapping)
+
+    def test_missing_expected_file_stays_an_open_gap(self):
+        bad = copy.deepcopy(self.runner_routes)
+        row = next(r for r in bad["cases"] if r.get("original_rejection_oracle", {}).get("state") == "MISSING")
+        row["original_rejection_oracle"]["assertions"] = []
+        with self.assertRaisesRegex(ValueError, "cannot be fabricated"):
+            audit.validate_runner_routes(bad, self.mapping)
+
+    def test_sibling_reader_snapshot_is_rejected_even_for_equal_backends(self):
+        expected = next(r["expected"] for r in self.oracles["cases"] if r["id"] == "sibling_closures_share_mutable_cell")
+        for backend in ("vm", "native"):
+            with self.subTest(backend=backend), self.assertRaises(ValueError):
+                audit.compare_required(expected, dict(expected, stdout_utf8="1\n2\n0\n101\n100\n11\n22\n10\n"))
+
+    def test_cleanup_escape_is_not_a_successful_caught_panic(self):
+        expected = next(r["expected"] for r in self.oracles["cases"] if r["id"] == "cleanup_panic_escape_terminates")
+        with self.assertRaises(ValueError):
+            audit.compare_required(expected, dict(expected, exit_code=0, stdout_utf8="body-ran\nouter-handler-must-not-run\n"))
+
+    def test_generator_error_cannot_be_reported_as_exhaustion(self):
+        expected = next(r["expected"] for r in self.oracles["cases"] if r["id"] == "generator_error_is_not_exhaustion")
+        with self.assertRaises(ValueError):
+            audit.compare_required(expected, dict(expected, stdout_utf8="direct 1\ndirect-panic 432\nlooped 1\n"))
 
     def test_source_routes_preserve_all_original_responsibilities(self):
         audit.validate_routes(self.routes, self.legacy, self.mapping)

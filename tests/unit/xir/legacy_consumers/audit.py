@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import collections
+import dataclasses
 import hashlib
 import importlib.util
 import json
@@ -105,6 +106,67 @@ def validate_routes(data: dict, legacy: dict, responsibilities: dict) -> dict:
             "other_function_routes": sum(len(r["functions"]) for r in data["other_files"])}
 
 
+def validate_runner_routes(data: dict, responsibilities: dict, actual_entries: dict | None = None) -> dict:
+    """Bind explicit reviewed routes to original source, oracle and runner entry."""
+    if data["status"] != "REVIEWED_ROUTING_NOT_QUALIFICATION":
+        raise ValueError("runner routing cannot qualify execution")
+    families = {r["id"] for r in responsibilities["capabilities"]}
+    packages = {"P02"} | {f"P{i:02}" for i in range(6, 19)}
+    rows = data["cases"]
+    ids = [r["case_id"] for r in rows]
+    if not rows or len(ids) != len(set(ids)):
+        raise ValueError("empty or duplicate reviewed runner inputs")
+    errors = load_module("runner_route_expectations", "tests/compile_errors/run_compile_error_tests.py")
+    if actual_entries is None:
+        reg = load_module("runner_route_regression", "scripts/run_regression_tests.py")
+        diff = load_module("runner_route_differential", "tests/diff/run_backend_diff.py")
+        actual_entries = collections.defaultdict(list)
+        for path in reg.collect_cases():
+            actual_entries[relative(path)].append({"suite": "regression", "entry": "test" if reg.is_test_module(path) else "run"})
+        for path in diff.collect_cases("", str(diff.SCRIPT_DIR / "coro_regression_cases.txt")):
+            actual_entries[relative(path)].append({"suite": "differential", "entry": "run"})
+        for path in errors.collect_cases():
+            actual_entries[relative(path)].append({"suite": "compile_errors", "entry": "implicit_compile"})
+    for row in rows:
+        identity = row["case_id"]
+        source = ROOT / identity
+        if identity not in actual_entries or row["original_runner_entries"] != actual_entries[identity]:
+            raise ValueError("reviewed input changed its original runner entry")
+        if not source.is_file() or file_record(source)["lf_sha256"] != row["source_lf_sha256"]:
+            raise ValueError("reviewed runner source changed")
+        if (row["primary_family"] not in families or not set(row["secondary_families"]) <= families
+                or not row["producer_packages"] or not set(row["producer_packages"]) <= packages):
+            raise ValueError("runner routing has an unknown family or producer")
+        if row["replacement_qualification"] != "OPEN" or row["new_entry_status"] != "PENDING_FIXED_PRODUCT_DELIVERY":
+            raise ValueError("runner routing cannot grant product qualification")
+        if not row["semantic_basis"]:
+            raise ValueError("runner routing lacks reviewed semantic evidence")
+        if "original_rejection_oracle" in row:
+            oracle = row["original_rejection_oracle"]
+            path, kind = errors.expected_path_for(source)
+            if oracle["path"] != relative(path) or oracle["kind"] != kind:
+                raise ValueError("rejection oracle changed expectation kind")
+            if path.is_file():
+                assertions = [dataclasses.asdict(a) for a in errors.parse_expected(path)]
+                if (oracle["state"] != "PRESENT" or oracle["lf_sha256"] != file_record(path)["lf_sha256"]
+                        or oracle["assertions"] != assertions):
+                    raise ValueError("rejection oracle lost original position, code or text")
+            elif oracle["state"] != "MISSING" or oracle["assertions"] is not None or oracle["lf_sha256"] is not None:
+                raise ValueError("missing rejection oracle cannot be fabricated")
+        else:
+            oracle = row["original_stdout_oracle"]
+            path = Path(str(source) + ".expected")
+            state = "PRESENT" if path.is_file() else "MISSING"
+            digest = file_record(path).get("lf_sha256")
+            if oracle != {"path": relative(path), "state": state, "lf_sha256": digest}:
+                raise ValueError("runner stdout oracle changed")
+    return {"reviewed_runner_inputs": len(rows),
+            "reviewed_runner_entry_links": sum(len(r["original_runner_entries"]) for r in rows),
+            "reviewed_rejection_cases": sum("original_rejection_oracle" in r for r in rows),
+            "reviewed_rejection_oracles": sum(r.get("original_rejection_oracle", {}).get("state") == "PRESENT" for r in rows),
+            "reviewed_missing_rejection_oracles": sum(r.get("original_rejection_oracle", {}).get("state") == "MISSING" for r in rows)}
+
+
 def compare_required(expected: dict, observed: dict) -> None:
     """Compare one observation to its independent oracle, never to another backend."""
     for key, value in expected.items():
@@ -159,12 +221,17 @@ def snapshot() -> dict:
         for path in family["original_anchors"]:
             anchors[path].append(family["id"])
 
+    reviewed_runner_routes = read_json(HERE / "runner_routes.json")
+    explicit_routes = {row["case_id"]: row for row in reviewed_runner_routes["cases"]}
+
     def case_base(path: Path, entry: str) -> dict:
         key = relative(path)
         families = anchors[key]
+        route = explicit_routes.get(key)
         return {"case_id": key, "entry": entry, "input": file_record(path),
-                "primary_family": families[0] if len(families) == 1 else "UNMAPPED",
-                "reviewed_anchor_families": families, "execution": "NOT_RUN"}
+                "primary_family": route["primary_family"] if route else families[0] if len(families) == 1 else "UNMAPPED",
+                "reviewed_anchor_families": families, "execution": "NOT_RUN",
+                "explicit_reviewed_route": route}
 
     regression = []
     for path in reg.collect_cases():
@@ -197,6 +264,11 @@ def snapshot() -> dict:
         except (errors.ExpectedFormatError, OSError) as exc:
             row.update(expectation_parse="FAILED", expectation_error=str(exc).replace(str(ROOT), "<repository>"))
         negative.append(row)
+    actual_entries = collections.defaultdict(list)
+    for suite, rows in (("regression", regression), ("differential", differential), ("compile_errors", negative)):
+        for row in rows:
+            actual_entries[row["case_id"]].append({"suite": suite, "entry": row["entry"]})
+    runner_routing_counts = validate_runner_routes(reviewed_runner_routes, responsibilities, actual_entries)
     routing = read_json(HERE / "consumer_routes.json")
     routing_counts = validate_routes(routing, legacy, responsibilities)
     source_routes = {row["case_id"]: row for row in routing["source_cases"]}
@@ -232,6 +304,8 @@ def snapshot() -> dict:
               "execution_files": len(extra), "allocation_scenarios": legacy["source_allocation_scenarios"]["count"],
               "runner_rows_without_reviewed_primary_family": sum(r["primary_family"] == "UNMAPPED" for r in regression + differential + negative)}
     counts.update(routing_counts)
+    counts.update(runner_routing_counts)
+    counts["prepared_independent_oracles"] = validate_oracles(read_json(HERE / "oracles.json"))["oracle_cases"]
     return {"scope": "PREPARATION_ONLY_NO_PRODUCT_QUALIFICATION", "summary": counts,
             "source_identity": {"seed": "e16797c62636f1d138583ead18d234c86a3cde6e",
                                 "head": subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=ROOT, text=True).strip(),
@@ -271,6 +345,8 @@ def main() -> None:
             args.output.write_text(json.dumps(result, ensure_ascii=False, indent=2) + "\n", encoding="utf-8", newline="\n")
         print(json.dumps(result["summary"], sort_keys=True))
     else:
+        result.update(validate_runner_routes(read_json(HERE / "runner_routes.json"),
+                                             read_json(HERE / "responsibilities.json")))
         print(json.dumps(result, sort_keys=True))
 
 

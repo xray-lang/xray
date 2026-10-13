@@ -13,7 +13,12 @@ change a product interface, or authorize deletion of an old test.
   all 160 indexed function bodies, including seven helper files with no counted
   test functions. Native harness success exits stay separate from language results;
   all replacement qualification and new-entry mappings remain OPEN.
-- `oracles.json` records seven independent output/result/rejection expectations.
+- `runner_routes.json` binds 195 explicitly reviewed FFI/JSON/generic/nullable/cleanup/
+  generator/numeric/closure inputs to their original source and expectation hashes,
+  compiler positions/codes/text and actual runner entries. Future files are not
+  automatically assigned by a directory wildcard. Missing expectations and
+  diagnostic position gaps remain explicit.
+- `oracles.json` records twelve independent output/result/rejection expectations.
   Inputs under `fixtures/` retain complete original source literals byte for byte.
   They have no invented new entry adapters. The StringBuilder input still requires
   a reviewed semantic migration to its replacement; it is not an API to restore.

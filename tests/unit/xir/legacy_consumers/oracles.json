@@ -238,6 +238,172 @@
         "All applicable producer lifetime, complete FI, exact resource budgets, cancellation, physical release and sanitizer gates.",
         "These are existing Source diagnostic expectations, not a guessed future CLI or ABI. Rebind only after a published fixed producer; preserve owned diagnostic and physical-zero failure checks."
       ]
+    },
+    {
+      "id": "cleanup_conditional_early_return",
+      "inputs": [
+        {
+          "path": "tests/diff/cases/semantics/cleanup/defer_conditional_early_return.xr",
+          "lf_sha256": "59c21c7838b9111f5c475e42a774985a48d28dafec703115745854c812162cbb"
+        }
+      ],
+      "expected": {
+        "exit_code": 0,
+        "stdout_utf8": "neg-branch\nalways\nneg\n--\nzero-branch\nalways\nzero\n--\npos-branch\nalways\npos\ndone\n",
+        "stderr_utf8": ""
+      },
+      "rationale": "Each taken branch registers only its own cleanup. The branch cleanup runs before the function-root cleanup and the returned string is printed after both; untaken branches stay silent.",
+      "packages": [
+        "P07",
+        "P08"
+      ],
+      "legacy_case": null,
+      "status": "PREPARED_NOT_EXECUTED",
+      "execution": {
+        "vm": "NOT_RUN",
+        "native": "NOT_RUN"
+      },
+      "new_entry": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "remaining_qualification": [
+        "Fresh product execution on ready fixed producer interfaces must independently satisfy these observations.",
+        "Retain complete producer/Instance/Call ownership, applicable FI/resource/cancellation and physical release checks; printed events do not qualify physical cleanup.",
+        "P20 owns mixed qualification; this independent normal/error oracle does not replace its tests."
+      ]
+    },
+    {
+      "id": "cleanup_panic_escape_terminates",
+      "inputs": [
+        {
+          "path": "tests/diff/cases/semantics/cleanup/defer_panic_escapes_body.xr",
+          "lf_sha256": "53dc86e7ce1e82b23722bd04c0d2bcf17e9fb5a50043dfaf9cbf055cb9f48b2a"
+        },
+        {
+          "path": "spec/source/sections/009-8-error-handling.md",
+          "lf_sha256": "569cafb786430df363674f97f6073e908d76b4a3484f3fb26239b0895342507e"
+        },
+        {
+          "path": "spec/source/sections/019-18-error-codes.md",
+          "lf_sha256": "2c4416085d5d38f37fb0e434d863cba1ff5d5758d44efb29402fa5158282d9ad"
+        }
+      ],
+      "expected": {
+        "exit_code": 70,
+        "stdout_utf8": "body-ran\n",
+        "diagnostic_code": "E0443"
+      },
+      "rationale": "The body prints once, then division-by-zero panic escapes its deferred cleanup. Normative D3 terminates with E0443/status 70; the outer panic handler and following statement cannot run.",
+      "packages": [
+        "P07",
+        "P08"
+      ],
+      "legacy_case": null,
+      "status": "PREPARED_NOT_EXECUTED",
+      "execution": {
+        "vm": "NOT_RUN",
+        "native": "NOT_RUN"
+      },
+      "new_entry": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "remaining_qualification": [
+        "Fresh product execution on ready fixed producer interfaces must independently satisfy these observations.",
+        "Retain complete producer/Instance/Call ownership, applicable FI/resource/cancellation and physical release checks; printed events do not qualify physical cleanup.",
+        "P20 owns mixed qualification; this independent normal/error oracle does not replace its tests."
+      ]
+    },
+    {
+      "id": "generator_owned_array_yields",
+      "inputs": [
+        {
+          "path": "tests/diff/cases/semantics/generator/heap_value_yield.xr",
+          "lf_sha256": "e8af04c4cf7f0d90903b0678487819f77b23b77dcf5cf8f10852afce101cb39c"
+        }
+      ],
+      "expected": {
+        "exit_code": 0,
+        "stdout_utf8": "1:2\n3:4\n5:6\n",
+        "stderr_utf8": ""
+      },
+      "rationale": "Three pulls expose the literal array, the moved local array and a copied source array in declaration order. Each element is read after it crosses the producer/consumer boundary.",
+      "packages": [
+        "P08",
+        "P09"
+      ],
+      "legacy_case": null,
+      "status": "PREPARED_NOT_EXECUTED",
+      "execution": {
+        "vm": "NOT_RUN",
+        "native": "NOT_RUN"
+      },
+      "new_entry": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "remaining_qualification": [
+        "Fresh product execution on ready fixed producer interfaces must independently satisfy these observations.",
+        "Retain complete producer/Instance/Call ownership, applicable FI/resource/cancellation and physical release checks; printed events do not qualify physical cleanup.",
+        "P20 owns mixed qualification; this independent normal/error oracle does not replace its tests."
+      ]
+    },
+    {
+      "id": "generator_error_is_not_exhaustion",
+      "inputs": [
+        {
+          "path": "tests/diff/cases/semantics/generator/iterator_error_beats_exhaustion.xr",
+          "lf_sha256": "09b39624f6a3ba80013d34639e471060f2d88446f296462d36ada09123d0089e"
+        }
+      ],
+      "expected": {
+        "exit_code": 0,
+        "stdout_utf8": "direct 1\ndirect-caught boom\nlooped 1\nlooped-caught boom\n",
+        "stderr_utf8": ""
+      },
+      "rationale": "Both independent generator frames first yield 1 and then throw GenErr.Msg(boom). Direct next and hasNext/next must preserve that typed producer error; no exhausted-iterator panic or unreachable print is permitted.",
+      "packages": [
+        "P08",
+        "P09",
+        "P10"
+      ],
+      "legacy_case": null,
+      "status": "PREPARED_NOT_EXECUTED",
+      "execution": {
+        "vm": "NOT_RUN",
+        "native": "NOT_RUN"
+      },
+      "new_entry": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "remaining_qualification": [
+        "Fresh product execution on ready fixed producer interfaces must independently satisfy these observations.",
+        "Retain complete producer/Instance/Call ownership, applicable FI/resource/cancellation and physical release checks; printed events do not qualify physical cleanup.",
+        "P20 owns mixed qualification; this independent normal/error oracle does not replace its tests."
+      ]
+    },
+    {
+      "id": "sibling_closures_share_mutable_cell",
+      "inputs": [
+        {
+          "path": "tests/diff/cases/semantics/closure/shared_mutable_capture_cell.xr",
+          "lf_sha256": "dc37fbd57224856fb6fd083a15a31d00017812debfeb4ad9982795863cb33b72"
+        }
+      ],
+      "expected": {
+        "exit_code": 0,
+        "stdout_utf8": "1\n2\n2\n101\n101\n11\n22\n22\n",
+        "stderr_utf8": ""
+      },
+      "rationale": "The first pair shares 0->1->2. A reader created before the writer observes 100->101. The third group shares 10->11->22 across two writers and one reader. Capturing snapshots would be wrong even if both backends agree.",
+      "packages": [
+        "P02",
+        "P07",
+        "P08",
+        "P10"
+      ],
+      "legacy_case": null,
+      "status": "PREPARED_NOT_EXECUTED",
+      "execution": {
+        "vm": "NOT_RUN",
+        "native": "NOT_RUN"
+      },
+      "new_entry": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "remaining_qualification": [
+        "Fresh product execution on ready fixed producer interfaces must independently satisfy these observations.",
+        "Retain complete producer/Instance/Call ownership, applicable FI/resource/cancellation and physical release checks; printed events do not qualify physical cleanup.",
+        "P20 owns mixed qualification; this independent normal/error oracle does not replace its tests."
+      ]
     }
   ]
 }
