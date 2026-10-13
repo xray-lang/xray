@@ -3934,7 +3934,6 @@ if(XR_BUILD_MCP)
         ${CMAKE_SOURCE_DIR}/src/app/mcp
         ${CMAKE_SOURCE_DIR}/src/base
     )
-    target_link_libraries(test_mcp_transport PRIVATE xray_core)
     add_test(NAME test_mcp_transport COMMAND test_mcp_transport)
 
     add_executable(test_mcp_protocol
