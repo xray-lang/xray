@@ -16,6 +16,104 @@ class PreparationChecks(unittest.TestCase):
         cls.runner_routes = audit.read_json(audit.HERE / "runner_routes.json")
         cls.legacy = audit.read_json(audit.ROOT / "tests/unit/xir/product_consumers/legacy_responsibilities.json")
 
+    def provider_review_expected(self, name):
+        return next(r["expected"] for r in self.oracles["cases"]
+                    if r["id"] == "provider_review_" + name)
+
+    def test_historical_anchor_does_not_remove_the_explicit_review_gap(self):
+        identities = ("tests/diff/cases/basic/arith.xr", "tests/diff/cases/basic/loops.xr")
+        source_rows = [next(r for r in self.runner_routes["cases"] if r["case_id"] == p) for p in identities]
+        small = copy.deepcopy(self.runner_routes)
+        small["cases"] = [source_rows[0]]
+        actual = {r["case_id"]: r["original_runner_entries"] for r in source_rows}
+        counts = audit.validate_runner_routes(small, self.mapping, actual)
+        self.assertEqual(counts["unreviewed_runner_inputs"], 1)
+        self.assertEqual(counts["unreviewed_runner_entry_links"], 1)
+        self.assertEqual(counts["unreviewed_differential_inputs"], 1)
+
+    def test_process_target_cannot_drop_or_change_the_argument_context(self):
+        for missing in (True, False):
+            bad = copy.deepcopy(self.runner_routes)
+            row = next(r for r in bad["cases"] if r["case_id"].endswith("/process_schema_shared_core.xr"))
+            if missing:
+                row["target_source_port"].pop("differential_input_obligation")
+            else:
+                row["target_source_port"]["differential_input_obligation"]["arguments"] = []
+            with self.assertRaisesRegex(ValueError, "arguments/stdin context"):
+                audit.validate_runner_routes(bad, self.mapping)
+
+    def test_process_complete_argument_observation_cannot_have_empty_arguments(self):
+        expected = self.provider_review_expected("process_schema_shared_core")
+        for args in ([], ["alpha"]):
+            with self.assertRaises(ValueError):
+                audit.compare_required(expected, dict(expected, arguments=args))
+
+    def test_stdin_crlf_bytes_cannot_be_normalized_or_replaced_by_eof(self):
+        expected = self.provider_review_expected("io_read_stdin_shared_core")
+        for observed in (dict(expected, stdout_utf8="17\ntrue\ntrue\ntrue\n"),
+                         dict(expected, stdin_hex=""),
+                         dict(expected, stdin_hex="616c7068610a626574610a6f6d6567610a")):
+            with self.assertRaises(ValueError):
+                audit.compare_required(expected, observed)
+
+    def test_provider_true_fallback_cannot_qualify_symlink_effects(self):
+        expected = self.provider_review_expected("io_path_result_shared_core")
+        for observed in ({"exit_code": 0, "stdout_utf8": "true\ntrue\n"},
+                         dict(expected, fake_true_fallback_accepted=True),
+                         dict(expected, symlink_creation_observed=False)):
+            with self.assertRaises(ValueError):
+                audit.compare_required(expected, observed)
+
+    def test_bidirectional_count_and_first_byte_cannot_hide_payload_corruption(self):
+        expected = self.provider_review_expected("net_copy_bidirectional_transfer")
+        for field in ("left_to_right_bytes", "right_to_left_bytes"):
+            observed = copy.deepcopy(expected)
+            observed[field][1] = 0
+            with self.assertRaises(ValueError):
+                audit.compare_required(expected, observed)
+
+    def test_cancel_output_does_not_prove_provider_wait_or_drain(self):
+        expected = self.provider_review_expected("net_copy_bidirectional_cancel")
+        for field in ("provider_wait_registered", "cancel_wakes_provider_wait", "provider_jobs_drained", "owned_handles_released"):
+            observed = dict(expected)
+            observed[field] = False
+            with self.assertRaises(ValueError):
+                audit.compare_required(expected, observed)
+
+    def test_physical_shell_reuse_cannot_be_inferred_from_clean_local_values(self):
+        expected = self.provider_review_expected("coro_typed_local_shell_reuse")
+        with self.assertRaises(ValueError):
+            audit.compare_required(expected, dict(expected, physical_shell_reuse_observed=False))
+
+    def test_full_parallel_fault_dimensions_and_recovery_cannot_be_reduced(self):
+        expected = self.provider_review_expected("parallel_plan_map_cleanup_after_panic")
+        for observed in (dict(expected, dispatch_sizes=[16, 16]),
+                         dict(expected, fault_indices=[8, 8]),
+                         dict(expected, subsequent_completed_items=[4, 0]),
+                         dict(expected, dispatch_leases_released=False),
+                         dict(expected, failure_channel="TYPED_ERROR")):
+            with self.assertRaises(ValueError):
+                audit.compare_required(expected, observed)
+
+    def test_os_thread_results_cannot_be_qualified_by_coroutine_substitution(self):
+        expected = self.provider_review_expected("sys_thread_os_primitives_cross_thread")
+        with self.assertRaises(ValueError):
+            audit.compare_required(expected, dict(expected, actual_os_threads_observed=False))
+
+    def test_native_vector_banner_cannot_skip_widths_or_mutable_store_contract(self):
+        expected = self.provider_review_expected("simd_portable_integer_vectors")
+        for observed in ({"exit_code": 0, "stdout_utf8": "OK simd portable integer vectors\n"},
+                         dict(expected, fixed_vector_width_bits=[128]),
+                         dict(expected, explicit_mutable_store_view_required=False),
+                         dict(expected, acceleration_claim_from_tautology_accepted=True)):
+            with self.assertRaises(ValueError):
+                audit.compare_required(expected, observed)
+
+    def test_recursive_initializer_stack_overflow_is_not_the_guard_error(self):
+        expected = self.provider_review_expected("sys_threadlocal_recursive_init")
+        with self.assertRaises(ValueError):
+            audit.compare_required(expected, dict(expected, stack_overflow_accepted=True))
+
     def test_path_conversion_cache_does_not_accept_a_neighbor_repository(self):
         allowed = audit.ROOT / "tests" / "unit" / "xir" / "legacy_consumers" / "audit.py"
         self.assertEqual(audit.relative(allowed), "tests/unit/xir/legacy_consumers/audit.py")

@@ -1,0 +1,30 @@
+// P19 complete selected source preparation; product qualification NOT_RUN.
+// anchor: sys-threadlocal-init-throw-retry
+// A failed lazy initializer must not leave a pending per-thread slot behind;
+// the next get() on the same OS thread should retry initialization.
+
+import sys
+
+enum InitErr {
+    Failed
+}
+
+const fail = Atomic<bool>(true)
+const calls = Atomic<i64>(0)
+const local = sys.ThreadLocal<i64>(fn() -> i64 {
+    calls.fetchAdd(1)
+    if (fail.load()) {
+        throw InitErr.Failed
+    }
+    return 42
+})
+
+try {
+    print(local.get())
+} catch (e) {
+    print("failed")
+}
+
+fail.store(false)
+print(local.get())
+print(calls.load())

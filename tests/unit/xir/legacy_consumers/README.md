@@ -143,3 +143,12 @@ retention and value aliases. Empty call results are Unit rather than null; the o
 reflection assertions, raw-pointer clobber case and target-dependent union byte
 layout require actual published replacement declarations before execution. Historical
 implementation comments in copied fixtures are context, not current product claims.
+
+
+Explicit review gaps are counted from the actual runner input/entry sets. Historical
+anchor matching remains evidence about a family, never a substitute for a complete
+case record. Selected process arguments and original binary stdin bytes are bound
+separately; CRLF bytes are not normalized away. Provider effect duties distinguish
+real symlink/socket/thread/descriptor/wait/recycle activity from fake true branches,
+markers, counts or clean output. Full parallel, SIMD and OS-thread dimensions stay
+required; published replacements and all applicable safety gates are still OPEN.

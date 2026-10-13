@@ -76,6 +76,10 @@ FROZEN_TARGETS["tests/regression/13_types/1407_fixed_array_repeat_value_lanes_an
     "POSITIVE_EXCLUSIVE_FIXED_ARRAY_VIEW_AFTER_FROZEN_TASK313_PORT", "P10")
 
 
+FROZEN_TARGETS["tests/diff/cases/semantics/slice/slice_single_source_return.xr"] = (
+    "POSITIVE_EXPLICIT_VIEW_PERMISSION_AFTER_FROZEN_TASK313_PORT", "P10")
+
+
 # The demanded imported diagnostics depend on these complete companion inputs.
 IMPORTED_ORACLE_INPUTS = {}
 for name in ("156_imported_ref_call_requires_marker.xr", "158_imported_const_function_value_ref_call_requires_marker.xr"):
@@ -116,6 +120,13 @@ IMPORTED_ORACLE_INPUTS["tests/diff/cases/semantics/slice/slice_borrow_return_cro
     "tests/diff/cases/semantics/slice/_borrow_return_lib.xr",)
 IMPORTED_ORACLE_INPUTS["tests/regression/13_types/1436_param_mode_imported_contracts.xr"] = (
     "tests/fixtures/param_mode_import_lib.xr",)
+IMPORTED_ORACLE_INPUTS["tests/diff/cases/semantics/stdlib/simd_intrinsic_identity_alias.xr"] = (
+    "tests/diff/cases/semantics/stdlib/_simd_intrinsic_reexport.xr",)
+
+TARGET_PORT_ARGUMENTS = {
+    "tests/diff/cases/semantics/stdlib/process_schema_shared_core.xr": ["alpha", "beta"],
+}
+
 TARGET_PORT_IMPORTS = {
     "tests/diff/cases/semantics/slice/slice_borrow_return_cross_module.xr": (
         "tests/unit/xir/legacy_consumers/fixtures/slice_borrow_cross_module/_borrow_return_lib.xr",)
@@ -312,6 +323,12 @@ def validate_runner_routes(data: dict, responsibilities: dict, actual_entries: d
             for item in companions:
                 if file_record(ROOT / item["path"]).get("lf_sha256") != item["lf_sha256"]:
                     raise ValueError("target source port companion changed")
+        target_arguments = TARGET_PORT_ARGUMENTS.get(identity)
+        if target_arguments is not None:
+            if not port or port.get("differential_input_obligation") != differential_input_obligation(path, diff):
+                raise ValueError("target program lost its required arguments/stdin context")
+            if port["differential_input_obligation"]["arguments"] != target_arguments:
+                raise ValueError("target program lost its required explicit argument values")
         migration = row.get("named_test_migration")
         if migration:
             original_names = [d["name"] for d in named["declarations"]] if named else []
@@ -361,7 +378,12 @@ def validate_runner_routes(data: dict, responsibilities: dict, actual_entries: d
             digest = file_record(path).get("lf_sha256")
             if oracle != {"path": relative(path), "state": state, "lf_sha256": digest}:
                 raise ValueError("runner stdout oracle changed")
-    return {"reviewed_runner_inputs": len(rows),
+    missing = set(actual_entries) - set(ids)
+    return {"unreviewed_runner_inputs": len(missing),
+            "unreviewed_runner_entry_links": sum(len(actual_entries[p]) for p in missing),
+            "unreviewed_regression_inputs": sum(any(e["suite"] == "regression" for e in actual_entries[p]) for p in missing),
+            "unreviewed_differential_inputs": sum(any(e["suite"] == "differential" for e in actual_entries[p]) for p in missing),
+            "reviewed_runner_inputs": len(rows),
             "reviewed_runner_entry_links": sum(len(r["original_runner_entries"]) for r in rows),
             "reviewed_dual_runner_inputs": sum(len(r["original_runner_entries"]) > 1 for r in rows),
             "reviewed_differential_input_obligations": sum("original_differential_obligation" in r for r in rows),
