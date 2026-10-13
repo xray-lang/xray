@@ -1,0 +1,66 @@
+// 0680_deep_eq_cyclic.xr
+// Test: deep equality across many shared sub-objects.
+// Regression: previously the cycle-detection visited list was capped at
+// 64 (a, b) pairs, which produced false negatives on structures with
+// many shared sub-arrays. The visited set is now an unbounded hash set.
+@test
+fn deep_eq_many_shared_arrays() {
+    // Build two parallel arrays where each element is itself a fresh
+    // 3-element array. Use 200 elements -- well beyond the old 64-pair
+    // cap -- so deep_compare must visit > 64 distinct (a, b) pairs.
+    var a: Array<Array<i64>> = []
+    var b: Array<Array<i64>> = []
+    for (var i = 0; i < 200; i++) {
+        a.push([i, i + 1, i + 2])
+        b.push([i, i + 1, i + 2])
+    }
+    assert(a == b, "200-deep parallel arrays must compare equal")
+
+    // Mutate one cell deep in the structure -- equality must flip.
+    a[150][1] = -1
+    assert(a != b, "single inner mutation must break equality")
+}
+
+@test
+fn deep_eq_nested_maps() {
+    // Same idea for maps: 100 keys, each holding a small array.
+    var m1: Map<string, Array<i64>> = #{}
+    var m2: Map<string, Array<i64>> = #{}
+    for (var k = 0; k < 100; k++) {
+        var key = "k" + k.toString()
+        m1.set(key, [k, k * 2])
+        m2.set(key, [k, k * 2])
+    }
+    assert(m1 == m2, "100-entry parallel maps must compare equal")
+
+    var inner = m2.get("k50")!
+    inner[0] = 999
+    m2.set("k50", inner)
+    assert(m1 != m2, "value mutation must break map equality")
+}
+
+@test
+fn deep_eq_self_referential_json() {
+    var a: JSON.Object = JSON.parseObject("{}")
+    var b: JSON.Object = JSON.parseObject("{}")
+    a.set("self", JSON.value(a))
+    b.set("self", JSON.value(b))
+    assert(a == b, "isomorphic JSON.Object self cycles must compare equal")
+
+    a["value"] = 1
+    b["value"] = 2
+    assert(a != b, "cycle guard must still compare ordinary fields")
+}
+
+@test
+fn deep_eq_mutually_referential_json() {
+    var a1: JSON.Object = JSON.parseObject("{}")
+    var a2: JSON.Object = JSON.parseObject("{}")
+    var b1: JSON.Object = JSON.parseObject("{}")
+    var b2: JSON.Object = JSON.parseObject("{}")
+    a1.set("next", JSON.value(a2))
+    a2.set("next", JSON.value(a1))
+    b1.set("next", JSON.value(b2))
+    b2.set("next", JSON.value(b1))
+    assert(a1 == b1, "isomorphic mutual JSON.Object cycles must compare equal")
+}

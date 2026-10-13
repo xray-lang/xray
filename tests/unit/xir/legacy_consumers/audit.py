@@ -264,6 +264,23 @@ FROZEN_TARGETS['tests/regression/04_control_flow/0420_for.xr'] = ('POSITIVE_COMP
 
 FROZEN_TARGETS['tests/regression/05_functions/0511_self_recursive_iterator.xr'] = ('POSITIVE_COMPLETE_CONTROL_FUNCTION_AFTER_FROZEN_PORT', 'P10')
 
+CORE_NAMED_REVIEW += ('tests/regression/06_collections/0600_array.xr', 'tests/regression/06_collections/0610_array_functional.xr', 'tests/regression/06_collections/0615_array_callback_signature.xr', 'tests/regression/06_collections/0620_map.xr', 'tests/regression/06_collections/0630_set.xr', 'tests/regression/06_collections/0640_array_methods.xr', 'tests/regression/06_collections/0650_array_index_set_strict.xr', 'tests/regression/06_collections/0650_nested_higher_order.xr', 'tests/regression/06_collections/0651_nested_higher_order_combo.xr', 'tests/regression/06_collections/0655_object_literal.xr', 'tests/regression/06_collections/0660_jit_store_field_types.xr', 'tests/regression/06_collections/0661_json_object_field_boundary.xr', 'tests/regression/06_collections/0670_slice_syntax.xr', 'tests/regression/06_collections/0680_deep_eq_cyclic.xr', 'tests/regression/06_collections/0681_ref_container_write.xr', 'tests/regression/06_collections/0690_user_hashable_key.xr', 'tests/regression/07_strings/0700_string_basic.xr', 'tests/regression/07_strings/0710_template_string.xr', 'tests/regression/07_strings/0720_stringbuilder.xr', 'tests/regression/07_strings/0730_unicode.xr', 'tests/regression/07_strings/0732_utf8_conversion.xr', 'tests/regression/07_strings/0733_string_bytes_receiver_nll.xr', 'tests/regression/07_strings/0734_unicode_escape.xr', 'tests/regression/07_strings/0740_context_auto_select.xr', 'tests/regression/07_strings/0741_context_buffer_isolation.xr', 'tests/regression/07_strings/0750_short_string_concat.xr', 'tests/regression/07_strings/0751_threshold_branch.xr', 'tests/regression/07_strings/0760_concurrent_concat_property.xr', 'tests/regression/07_strings/0770_string_pool_concurrent_property.xr', 'tests/regression/07_strings/0780_chr_function.xr', 'tests/regression/07_strings/0790_string_repeat.xr')
+FROZEN_TARGETS['tests/regression/06_collections/0600_array.xr'] = ('POSITIVE_COMPLETE_COLLECTION_STRING_AFTER_FROZEN_PORT', 'P13')
+FROZEN_TARGETS['tests/regression/06_collections/0610_array_functional.xr'] = ('POSITIVE_COMPLETE_COLLECTION_STRING_AFTER_FROZEN_PORT', 'P13')
+FROZEN_TARGETS['tests/regression/06_collections/0620_map.xr'] = ('POSITIVE_COMPLETE_COLLECTION_STRING_AFTER_FROZEN_PORT', 'P13')
+FROZEN_TARGETS['tests/regression/06_collections/0630_set.xr'] = ('POSITIVE_COMPLETE_COLLECTION_STRING_AFTER_FROZEN_PORT', 'P13')
+FROZEN_TARGETS['tests/regression/06_collections/0640_array_methods.xr'] = ('POSITIVE_COMPLETE_COLLECTION_STRING_AFTER_FROZEN_PORT', 'P13')
+FROZEN_TARGETS['tests/regression/06_collections/0650_nested_higher_order.xr'] = ('POSITIVE_COMPLETE_COLLECTION_STRING_AFTER_FROZEN_PORT', 'P13')
+FROZEN_TARGETS['tests/regression/06_collections/0651_nested_higher_order_combo.xr'] = ('POSITIVE_COMPLETE_COLLECTION_STRING_AFTER_FROZEN_PORT', 'P13')
+FROZEN_TARGETS['tests/regression/06_collections/0655_object_literal.xr'] = ('POSITIVE_COMPLETE_COLLECTION_STRING_AFTER_FROZEN_PORT', 'P13')
+FROZEN_TARGETS['tests/regression/06_collections/0670_slice_syntax.xr'] = ('POSITIVE_COMPLETE_COLLECTION_STRING_AFTER_FROZEN_PORT', 'P13')
+FROZEN_TARGETS['tests/regression/06_collections/0680_deep_eq_cyclic.xr'] = ('POSITIVE_COMPLETE_COLLECTION_STRING_AFTER_FROZEN_PORT', 'P13')
+FROZEN_TARGETS['tests/regression/07_strings/0710_template_string.xr'] = ('POSITIVE_COMPLETE_COLLECTION_STRING_AFTER_FROZEN_PORT', 'P13')
+FROZEN_TARGETS['tests/regression/07_strings/0720_stringbuilder.xr'] = ('POSITIVE_COMPLETE_COLLECTION_STRING_AFTER_FROZEN_PORT', 'P13')
+FROZEN_TARGETS['tests/regression/07_strings/0751_threshold_branch.xr'] = ('POSITIVE_COMPLETE_COLLECTION_STRING_AFTER_FROZEN_PORT', 'P13')
+FROZEN_TARGETS['tests/regression/07_strings/0770_string_pool_concurrent_property.xr'] = ('POSITIVE_COMPLETE_COLLECTION_STRING_AFTER_FROZEN_PORT', 'P13')
+FROZEN_TARGETS['tests/regression/07_strings/0780_chr_function.xr'] = ('POSITIVE_COMPLETE_COLLECTION_STRING_AFTER_FROZEN_PORT', 'P13')
+
 def load_module(name: str, relative: str):
     spec = importlib.util.spec_from_file_location(name, ROOT / relative)
     module = importlib.util.module_from_spec(spec)

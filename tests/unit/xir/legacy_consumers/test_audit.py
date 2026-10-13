@@ -40,10 +40,10 @@ class PreparationChecks(unittest.TestCase):
 
     def test_core_named_manifest_and_per_test_values_cannot_be_omitted(self):
         counts = self.validate_runner_routes(self.runner_routes)
-        self.assertEqual(counts['unreviewed_named_regression_test_files'], 58)
+        self.assertEqual(counts['unreviewed_named_regression_test_files'], 27)
         rows = [r for r in self.oracles['cases'] if r['id'].startswith('regression_core_review_')]
-        self.assertEqual(len(rows), 71)
-        self.assertEqual(sum(len(r['expected']['per_test_observations']) for r in rows), 761)
+        self.assertEqual(len(rows), 102)
+        self.assertEqual(sum(len(r['expected']['per_test_observations']) for r in rows), 1121)
         bad = copy.deepcopy(self.oracles)
         row = next(r for r in bad['cases'] if r['id'] == 'regression_core_review_0301_int64_overflow')
         row['expected']['per_test_observations'].pop('test_div_min_neg_one_in_loop')
@@ -251,6 +251,112 @@ class PreparationChecks(unittest.TestCase):
         with self.assertRaisesRegex(ValueError,'cannot pose as an executable'):
             audit.validate_oracles(bad)
 
+    def test_collection_payload_writeback_and_seed_copy_cannot_be_legacy_alias(self):
+        expected = self.core_expected('0651_nested_higher_order_combo')
+        for key in ('map_get_payload_mutation_written_back','chunk_append_uses_nested_writable_projection','seed_values_unchanged'):
+            with self.assertRaises(ValueError):
+                audit.compare_required(expected,dict(expected,**{key:False}))
+        row = next(r for r in self.runner_routes['cases'] if r['case_id'].endswith('/0651_nested_higher_order_combo.xr'))
+        source = (audit.ROOT/row['target_source_port']['fixture']).read_text(encoding='utf-8')
+        self.assertIn('next.set(e.group, items)',source)
+        self.assertIn('next[lastIndex].push(val)',source)
+        self.assertNotIn('copy(acc)',source)
+
+    def test_collection_stress_sum_and_all500_inputs_cannot_be_smoke(self):
+        expected = self.core_expected('0651_nested_higher_order_combo')
+        self.assertEqual(expected['exact_stress_sum'],13847013)
+        for wrong in (dict(expected,retained_stress_input=50),dict(expected,exact_stress_sum=10000001)):
+            with self.assertRaises(ValueError):
+                audit.compare_required(expected,wrong)
+
+    def test_fill_cannot_inherit_slice_clamp_or_publish_failed_receiver(self):
+        expected = self.core_expected('0640_array_methods')
+        for wrong in (dict(expected,fill_negative_and_reversed_channel='PASS_NOOP'),
+                      dict(expected,fill_failure_keeps_prior_complete_receiver=False),
+                      dict(expected,readonly_view_write_or_owner_mutation_under_active_borrow=True)):
+            with self.assertRaises(ValueError):
+                audit.compare_required(expected,wrong)
+        row = next(r for r in self.runner_routes['cases'] if r['case_id'].endswith('/0640_array_methods.xr'))
+        source = (audit.ROOT/row['target_source_port']['fixture']).read_text(encoding='utf-8')
+        self.assertIn('var s: MutSlice<i64>',source)
+        self.assertIn('catch panic (p: PanicInfo)',source)
+        self.assertEqual(source.count('assertEqual(arr, beforeInvalid)'),2)
+
+    def test_mixed_map_present_none_and_missing_key_cannot_be_flattened(self):
+        expected = self.core_expected('0620_map')
+        with self.assertRaises(ValueError):
+            audit.compare_required(expected,dict(expected,present_null_distinct_from_absent_key=False))
+        with self.assertRaises(ValueError):
+            audit.compare_required(expected,dict(expected,typed_union_optional_layers_preserved=False))
+
+    def test_owned_utf8_builder_replacement_keeps_snapshot_and_full_append_pressure(self):
+        expected = self.core_expected('0720_stringbuilder')
+        for wrong in (dict(expected,retired_builder_api_restored=True),
+                      dict(expected,owned_utf8_append_iterations=10),
+                      dict(expected,old_owned_snapshot_survives_clear_reuse=False)):
+            with self.assertRaises(ValueError):
+                audit.compare_required(expected,wrong)
+        row = next(r for r in self.runner_routes['cases'] if r['case_id'].endswith('/0720_stringbuilder.xr'))
+        source = (audit.ROOT/row['target_source_port']['fixture']).read_text(encoding='utf-8')
+        self.assertNotIn('StringBuilder()',source)
+        self.assertIn('output: ref Array<u8>',source)
+        self.assertIn('assertEqual(firstSnapshot, "first")',source)
+
+    def test_lossy_utf8_malformed_subparts_and_byte_ranges_cannot_be_empty(self):
+        expected = self.core_expected('0732_utf8_conversion')
+        wrong = copy.deepcopy(expected)
+        wrong['independent_lossy_results'][3] = 'A€�B'
+        with self.assertRaises(ValueError):
+            audit.compare_required(expected,wrong)
+        for wrong in (dict(expected,raw_lossy_inputs=[[255]]),
+                      dict(expected,typed_utf8_failure_channel='PANIC'),
+                      dict(expected,strict_byte_range_invalid_samples=[[0,7]])):
+            with self.assertRaises(ValueError):
+                audit.compare_required(expected,wrong)
+
+    def test_scalar_and_octet_counts_cannot_use_utf16_or_grant_chr_none(self):
+        expected = self.core_expected('0730_unicode')
+        wrong = copy.deepcopy(expected)
+        wrong['per_test_observations']['test_length_emoji']['values'] = [2,6]
+        with self.assertRaises(ValueError):
+            audit.compare_required(expected,wrong)
+        expected = self.core_expected('0780_chr_function')
+        with self.assertRaises(ValueError):
+            audit.compare_required(expected,dict(expected,invalid_scalar_channel='NONE'))
+
+    def test_full_concurrent_content_cannot_be_only_its_length_or_threshold_label(self):
+        expected = self.core_expected('0751_threshold_branch')
+        for wrong in (dict(expected,concurrent_job_returns_actual_owned_content=False),
+                      dict(expected,retained_dimensions=[1,1,1,1,1,1]),
+                      dict(expected,actual_worker_buffer_pool_path='PASS')):
+            with self.assertRaises(ValueError):
+                audit.compare_required(expected,wrong)
+        wrong = copy.deepcopy(expected)
+        wrong['per_test_observations']['test_concurrent_threshold_boundary']['values'][0][0] = 'a'*63
+        with self.assertRaises(ValueError):
+            audit.compare_required(expected,wrong)
+
+    def test_claimed200_pressure_is_distinct_from_original100_body(self):
+        expected = self.core_expected('0770_string_pool_concurrent_property')
+        self.assertEqual(expected['original_last_actual_jobs'],100)
+        self.assertEqual(expected['planned_last_actual_jobs'],200)
+        with self.assertRaises(ValueError):
+            audit.compare_required(expected,dict(expected,planned_last_actual_jobs=100))
+        self.assertEqual(len(expected['per_test_observations']['test_property_concurrent_stress_200']['values'][0]),200)
+
+    def test_json_cycles_custom_hash_and_sort_labels_do_not_grant_builtin_proof(self):
+        for name,key in (('0690_user_hashable_key','canonical_key_witness'),
+                         ('0680_deep_eq_cyclic','canonical_recursive_json_equal'),
+                         ('0640_array_methods','sort_compare_qualification')):
+            expected = self.core_expected(name)
+            with self.assertRaises(ValueError):
+                audit.compare_required(expected,dict(expected,**{key:'PASS'}))
+        bad = copy.deepcopy(self.oracles)
+        row = next(r for r in bad['cases'] if r['id']=='regression_core_review_0690_user_hashable_key')
+        row['execution_source'] = row['inputs'][0]['path']
+        with self.assertRaisesRegex(ValueError,'cannot pose as an executable'):
+            audit.validate_oracles(bad)
+
     def mutated_runner_route(self, identity):
         # Preserve the complete input set, copying only the row under mutation.
         # Check that row first so a negative control fails before rereading all
@@ -265,7 +371,7 @@ class PreparationChecks(unittest.TestCase):
         audit.require_full_explicit_runner_coverage(counts)
         self.assertEqual(counts["unreviewed_runner_inputs"], 0)
         self.assertEqual(counts["unreviewed_runner_entry_links"], 0)
-        self.assertEqual(counts["unreviewed_named_regression_test_files"], 58)
+        self.assertEqual(counts["unreviewed_named_regression_test_files"], 27)
         bad = copy.deepcopy(self.runner_routes)
         bad["cases"] = [r for r in bad["cases"] if not r["case_id"].endswith("/1500_project_mode_detect.xr")]
         counts = self.validate_runner_routes(bad)

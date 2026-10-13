@@ -25617,13 +25617,172 @@
         "state": "MISSING",
         "lf_sha256": null
       },
-      "independent_oracle_gap": "Retain and execute the complete original assertion bodies under the original entry. Author missing byte/event/cleanup expectations; build-only or cross-backend equality does not prove test execution.",
+      "independent_oracle_gap": "Full original named bodies and independent data/content/dimension obligations prepared; actual declaration-owned driver/backend/lifetime/FI/provider qualification remains OPEN.",
       "target_contract_review": "REQUIRED: port superseded surface according to frozen Task313/319/317 decisions while retaining original valid behavior.",
       "original_regression_obligation": {
         "expected_exit": 0,
         "entry": "test",
         "test_discovery": "NOT_RUN",
         "source_assertions": "The complete source file is hash-bound; no regex assertion/test count is claimed."
+      },
+      "original_named_test_obligation": {
+        "state": "REVIEWED_TEXTUAL_DECLARATIONS_NOT_RUNTIME_DISCOVERY",
+        "execution": "NOT_RUN",
+        "declarations": [
+          {
+            "name": "test_array_literal",
+            "marker_line": 5,
+            "source_segment_lf_sha256": "7dad3d65667f0e5498fe27433e5efd4b67d9e5e18a8d4bc90af00ffb9e707eed"
+          },
+          {
+            "name": "test_empty_array",
+            "marker_line": 14,
+            "source_segment_lf_sha256": "04ec1c2e467dc567c3859dbb1c4c8c2d4ce309a0b5368d7a22ebdd256157833a"
+          },
+          {
+            "name": "test_single_element",
+            "marker_line": 21,
+            "source_segment_lf_sha256": "373d865f688d90a329ae134f07a4addddb9050af908a5978b6886aa952b683c5"
+          },
+          {
+            "name": "test_mixed_types",
+            "marker_line": 28,
+            "source_segment_lf_sha256": "cb8afded329036d56da6062c241704331aa805608cf946b834421a45c8be9bcf"
+          },
+          {
+            "name": "test_nested_array",
+            "marker_line": 39,
+            "source_segment_lf_sha256": "5bb2160d97bf8c2f4ae194fb4b663dad0e564e446d43e4b9cb03ed21854e9f6a"
+          },
+          {
+            "name": "test_index_access",
+            "marker_line": 49,
+            "source_segment_lf_sha256": "50a41f7d60ccf481d56d7aa5d8686e15f4403f955105d2eeeab1abbac4747a45"
+          },
+          {
+            "name": "test_out_of_bounds",
+            "marker_line": 57,
+            "source_segment_lf_sha256": "1805b586db3f74b0adac7f75ac44e718c3190a536a82e8a7741f244cfd545c72"
+          },
+          {
+            "name": "test_dynamic_index",
+            "marker_line": 79,
+            "source_segment_lf_sha256": "16c581db4ed995c1ccb283aef4a54fb3a0240a7bbda892b4117ed2af0a182012"
+          },
+          {
+            "name": "test_index_assignment",
+            "marker_line": 88,
+            "source_segment_lf_sha256": "ad8385dcf9db344117b88ec42b539072b899e0c17fe5fe706640c5dc218063aa"
+          },
+          {
+            "name": "test_push",
+            "marker_line": 99,
+            "source_segment_lf_sha256": "550ec1d67c7b3affbee53f1151ec3ad6a03d55d10c02f30e4873757e1acfb38d"
+          },
+          {
+            "name": "test_pop",
+            "marker_line": 110,
+            "source_segment_lf_sha256": "04bb1194aabb37b9ccac7d2b45e35aa81be08d30cd320c3a95d03911070d2104"
+          },
+          {
+            "name": "test_pop_empty",
+            "marker_line": 121,
+            "source_segment_lf_sha256": "00b5d1e1a2090a2bd2c0aa2ed80bdc1961b8d0cb1ae577c7b72c726ca366c090"
+          },
+          {
+            "name": "test_shift",
+            "marker_line": 130,
+            "source_segment_lf_sha256": "b055ec0358d58ff4f70e6f5d5071820e1bc40ac0e54d562998c51346475ab1fb"
+          },
+          {
+            "name": "test_unshift",
+            "marker_line": 139,
+            "source_segment_lf_sha256": "27d02fc826d8ea6c03abb1586642b829c88cc1c709827d90f631895a0f9b478f"
+          },
+          {
+            "name": "test_shift_empty",
+            "marker_line": 147,
+            "source_segment_lf_sha256": "3265fd35d0fbd22d4ce2b31a9b514b7bafbdf7323f27017a3af25701c0da7ffb"
+          },
+          {
+            "name": "test_indexOf",
+            "marker_line": 155,
+            "source_segment_lf_sha256": "3756fc4b331940b9e57446921d1b87ea7094f840f3e2fdbd6d6f59edcf175b2e"
+          },
+          {
+            "name": "test_contains",
+            "marker_line": 164,
+            "source_segment_lf_sha256": "0618631e4ecb38ceb87173c4eb2f5dc0ba34f0bdaee9c5cfebd16ac2ebdf7fe2"
+          },
+          {
+            "name": "test_join",
+            "marker_line": 172,
+            "source_segment_lf_sha256": "0911c8fef7588f14d9a8d50678ec26fbc7e92947fa18cd72196a2efd8e1f6b9a"
+          },
+          {
+            "name": "test_reverse",
+            "marker_line": 180,
+            "source_segment_lf_sha256": "5f78b8f15c913972587936055f155eba080a3642d1666558fabfdc720a5c1d19"
+          },
+          {
+            "name": "test_clear",
+            "marker_line": 188,
+            "source_segment_lf_sha256": "2f49eb26416326a9876777ae0a2ec20a3e613061bcd81b0748152ad0cdd72fdb"
+          },
+          {
+            "name": "test_large_array",
+            "marker_line": 197,
+            "source_segment_lf_sha256": "b04d1fbd7afd03de337e5eb07d91c69d1a96eba95bc2e66f388507b21282b17e"
+          },
+          {
+            "name": "test_array_of_arrays",
+            "marker_line": 208,
+            "source_segment_lf_sha256": "8e127290d2ba81e63f99235cb09b407d215bd74b998dffefa9dd80f93be99d41"
+          }
+        ]
+      },
+      "target_source_port": {
+        "fixture": "tests/unit/xir/legacy_consumers/fixtures/collection_string_ports/0600_array/root.xr",
+        "lf_sha256": "c32347c36f26f321c4bc1a033aaccfbc537dc0915dd5736b11821929f2adb8db",
+        "owner_package": "P13",
+        "qualification": "NOT_RUN",
+        "frozen_basis": [
+          "Concrete Union then one Optional widening preserves all5 mixed values without inventing Optional from bareNull or erased cross-domain comparisons. All22 original Array/100element/panic/pop/shift/index/join/reverse duties remain."
+        ]
+      },
+      "named_test_migration": {
+        "state": "PREPARED_NOT_EXECUTED",
+        "original_tests_removed": false,
+        "mapping": {
+          "test_array_literal": "test_array_literal",
+          "test_empty_array": "test_empty_array",
+          "test_single_element": "test_single_element",
+          "test_mixed_types": "test_mixed_types",
+          "test_nested_array": "test_nested_array",
+          "test_index_access": "test_index_access",
+          "test_out_of_bounds": "test_out_of_bounds",
+          "test_dynamic_index": "test_dynamic_index",
+          "test_index_assignment": "test_index_assignment",
+          "test_push": "test_push",
+          "test_pop": "test_pop",
+          "test_pop_empty": "test_pop_empty",
+          "test_shift": "test_shift",
+          "test_unshift": "test_unshift",
+          "test_shift_empty": "test_shift_empty",
+          "test_indexOf": "test_indexOf",
+          "test_contains": "test_contains",
+          "test_join": "test_join",
+          "test_reverse": "test_reverse",
+          "test_clear": "test_clear",
+          "test_large_array": "test_large_array",
+          "test_array_of_arrays": "test_array_of_arrays"
+        }
+      },
+      "target_disposition": {
+        "kind": "POSITIVE_COMPLETE_COLLECTION_STRING_AFTER_FROZEN_PORT",
+        "owner_package": "P13",
+        "qualification": "NOT_RUN",
+        "reason": "Concrete Union then one Optional widening preserves all5 mixed values without inventing Optional from bareNull or erased cross-domain comparisons. All22 original Array/100element/panic/pop/shift/index/join/reverse duties remain."
       }
     },
     {
@@ -25655,13 +25814,166 @@
         "state": "MISSING",
         "lf_sha256": null
       },
-      "independent_oracle_gap": "Retain and execute the complete original assertion bodies under the original entry. Author missing byte/event/cleanup expectations; build-only or cross-backend equality does not prove test execution.",
+      "independent_oracle_gap": "Full original named bodies and independent data/content/dimension obligations prepared; actual declaration-owned driver/backend/lifetime/FI/provider qualification remains OPEN.",
       "target_contract_review": "REQUIRED: port superseded surface according to frozen Task313/319/317 decisions while retaining original valid behavior.",
       "original_regression_obligation": {
         "expected_exit": 0,
         "entry": "test",
         "test_discovery": "NOT_RUN",
         "source_assertions": "The complete source file is hash-bound; no regex assertion/test count is claimed."
+      },
+      "original_named_test_obligation": {
+        "state": "REVIEWED_TEXTUAL_DECLARATIONS_NOT_RUNTIME_DISCOVERY",
+        "execution": "NOT_RUN",
+        "declarations": [
+          {
+            "name": "test_map_basic",
+            "marker_line": 5,
+            "source_segment_lf_sha256": "5ea77edb8d8df19580bead731360b22e666ec7a9f1d41843d22cd0508855e449"
+          },
+          {
+            "name": "test_map_empty",
+            "marker_line": 16,
+            "source_segment_lf_sha256": "209fb3b4dd4abf76ec46562fd2b63ff72786a771bdd5625a933b9f2ab34d60df"
+          },
+          {
+            "name": "test_map_to_different_type",
+            "marker_line": 25,
+            "source_segment_lf_sha256": "39906d4c7fe9923660e9cde993b733a110476c86e93e33327b5a1c027050fec9"
+          },
+          {
+            "name": "test_filter_basic",
+            "marker_line": 37,
+            "source_segment_lf_sha256": "006b7109a512ae787cd47c074310590a97706eab3fe876aaaf971d8cb61f3a47"
+          },
+          {
+            "name": "test_filter_none",
+            "marker_line": 49,
+            "source_segment_lf_sha256": "520d83b4fab47d16b9d83f4fb5a7e39a881eae20312e72de0881bc3a6a7675df"
+          },
+          {
+            "name": "test_filter_all",
+            "marker_line": 58,
+            "source_segment_lf_sha256": "0e912ad5ac51d132689c392dd0d6ad14a11a4e8485384fe03ea50170ccee4268"
+          },
+          {
+            "name": "test_filter_empty",
+            "marker_line": 67,
+            "source_segment_lf_sha256": "064fe1b63a3b64b397f7f71a3d59fb09456972519301e1076055ab8f5568d095"
+          },
+          {
+            "name": "test_reduce_sum",
+            "marker_line": 77,
+            "source_segment_lf_sha256": "0a564e31f32cd65dc442d592007b1569e707ebde8aef20542ede43504b134e95"
+          },
+          {
+            "name": "test_reduce_product",
+            "marker_line": 86,
+            "source_segment_lf_sha256": "ae34b8aa177158f71ce570bb79e502573058d7c83ef607c249be9c6a036f2ebb"
+          },
+          {
+            "name": "test_reduce_max",
+            "marker_line": 95,
+            "source_segment_lf_sha256": "363394bf85334a27d674e570167c6472576f0980cca2611705e8bdd7b6fdb7fa"
+          },
+          {
+            "name": "test_reduce_min",
+            "marker_line": 104,
+            "source_segment_lf_sha256": "50d446191f6fce9b183ca5a7b10827cd07879ad8692cc0acac011ca33202a24e"
+          },
+          {
+            "name": "test_reduce_empty",
+            "marker_line": 113,
+            "source_segment_lf_sha256": "d5cfc5f0363f55c5b1588482a8a3a2eaf64aed959fc64f5227cf21e16a3efa7e"
+          },
+          {
+            "name": "test_reduce_single",
+            "marker_line": 122,
+            "source_segment_lf_sha256": "2bbc815c66c4695d806fec549fb52022cb5d48899828085cb6df9a39a344b32c"
+          },
+          {
+            "name": "test_foreach_basic",
+            "marker_line": 132,
+            "source_segment_lf_sha256": "8be98113f0112b3c77e1cc74dee26c702411a3a67cf08cec14f570f61b162aa8"
+          },
+          {
+            "name": "test_foreach_empty",
+            "marker_line": 142,
+            "source_segment_lf_sha256": "ab4b3eb969cf29ae2fab1d61a7ea361b468b6735ab30795ec8d2d7cb7e0c4629"
+          },
+          {
+            "name": "test_chain_map_filter",
+            "marker_line": 153,
+            "source_segment_lf_sha256": "db880db446c5fc319066f3e8c671133c366397bcae39eeb661b4e01accbfda04"
+          },
+          {
+            "name": "test_chain_filter_map",
+            "marker_line": 166,
+            "source_segment_lf_sha256": "29d39432775e267574f930f157b46ba048517e7e073b40efa468d5867c414dde"
+          },
+          {
+            "name": "test_chain_map_filter_reduce",
+            "marker_line": 180,
+            "source_segment_lf_sha256": "f7a3059d4766417119d743c7f49a3c38959e1b8c20c0ed29a01c7c48719819be"
+          },
+          {
+            "name": "test_sum_of_squares",
+            "marker_line": 195,
+            "source_segment_lf_sha256": "64521c88b2c46cfd9a7ae251aa6933d2fc3448d081fcdbb9e14ecef7a8580c03"
+          },
+          {
+            "name": "test_count_matches",
+            "marker_line": 206,
+            "source_segment_lf_sha256": "bfd015612b1851ddca10edcb9dd2d6f05c784c699443c4c75a1e39a3c761901b"
+          },
+          {
+            "name": "test_flatten_single_level",
+            "marker_line": 215,
+            "source_segment_lf_sha256": "86c242c413f6c4ad464f4c19fdaead0b77aef1fd9e6ef3c2892116f036226884"
+          }
+        ]
+      },
+      "target_source_port": {
+        "fixture": "tests/unit/xir/legacy_consumers/fixtures/collection_string_ports/0610_array_functional/root.xr",
+        "lf_sha256": "a7926cd267677c06f9d70235b2fcf1c4b9b5e5c8aefcfd59a1ac1b77238fc203",
+        "owner_package": "P13",
+        "qualification": "NOT_RUN",
+        "frozen_basis": [
+          "All21 fullfunctional bodies retained; independentcomplete payload checks supplement endpoints, no callback-arity/dispatch shortcut orsourcealias granted."
+        ]
+      },
+      "named_test_migration": {
+        "state": "PREPARED_NOT_EXECUTED",
+        "original_tests_removed": false,
+        "mapping": {
+          "test_map_basic": "test_map_basic",
+          "test_map_empty": "test_map_empty",
+          "test_map_to_different_type": "test_map_to_different_type",
+          "test_filter_basic": "test_filter_basic",
+          "test_filter_none": "test_filter_none",
+          "test_filter_all": "test_filter_all",
+          "test_filter_empty": "test_filter_empty",
+          "test_reduce_sum": "test_reduce_sum",
+          "test_reduce_product": "test_reduce_product",
+          "test_reduce_max": "test_reduce_max",
+          "test_reduce_min": "test_reduce_min",
+          "test_reduce_empty": "test_reduce_empty",
+          "test_reduce_single": "test_reduce_single",
+          "test_foreach_basic": "test_foreach_basic",
+          "test_foreach_empty": "test_foreach_empty",
+          "test_chain_map_filter": "test_chain_map_filter",
+          "test_chain_filter_map": "test_chain_filter_map",
+          "test_chain_map_filter_reduce": "test_chain_map_filter_reduce",
+          "test_sum_of_squares": "test_sum_of_squares",
+          "test_count_matches": "test_count_matches",
+          "test_flatten_single_level": "test_flatten_single_level"
+        }
+      },
+      "target_disposition": {
+        "kind": "POSITIVE_COMPLETE_COLLECTION_STRING_AFTER_FROZEN_PORT",
+        "owner_package": "P13",
+        "qualification": "NOT_RUN",
+        "reason": "All21 fullfunctional bodies retained; independentcomplete payload checks supplement endpoints, no callback-arity/dispatch shortcut orsourcealias granted."
       }
     },
     {
@@ -25698,13 +26010,59 @@
         "state": "MISSING",
         "lf_sha256": null
       },
-      "independent_oracle_gap": "Retain and execute the complete original assertion bodies under the original entry. Author missing byte/event/cleanup expectations; build-only or cross-backend equality does not prove test execution.",
+      "independent_oracle_gap": "Full original named bodies and independent data/content/dimension obligations prepared; actual declaration-owned driver/backend/lifetime/FI/provider qualification remains OPEN.",
       "target_contract_review": "REQUIRED: port superseded surface according to frozen Task313/319/317 decisions while retaining original valid behavior.",
       "original_regression_obligation": {
         "expected_exit": 0,
         "entry": "test",
         "test_discovery": "NOT_RUN",
         "source_assertions": "The complete source file is hash-bound; no regex assertion/test count is claimed."
+      },
+      "original_named_test_obligation": {
+        "state": "REVIEWED_TEXTUAL_DECLARATIONS_NOT_RUNTIME_DISCOVERY",
+        "execution": "NOT_RUN",
+        "declarations": [
+          {
+            "name": "test_reduce_returns_accumulated_int",
+            "marker_line": 16,
+            "source_segment_lf_sha256": "322127da5af7a0814c170c24dc57cc106e83c5eb2be9810b9a55392fe97a08d7"
+          },
+          {
+            "name": "test_reduce_initial_value_used",
+            "marker_line": 23,
+            "source_segment_lf_sha256": "576a8b10b8189cce5e80ba755b5b4d296ba9a9f2979bfe8541091795b817f3f8"
+          },
+          {
+            "name": "test_reduce_typed_lambda_in_variable",
+            "marker_line": 30,
+            "source_segment_lf_sha256": "8a5e444d7ae66840569db40d56fdcb01307d8f35dd42ff0897b347f88663ff7d"
+          },
+          {
+            "name": "test_map_single_arg_callback",
+            "marker_line": 41,
+            "source_segment_lf_sha256": "5800a54a39cac39f4f3f53434df1937952e847ea0e22d2794ff1810b9141b41f"
+          },
+          {
+            "name": "test_filter_single_arg_callback",
+            "marker_line": 50,
+            "source_segment_lf_sha256": "360a48adba578ec8cbbf31b73c586e763b204b6d7804bf1a1000ce9a715b353c"
+          },
+          {
+            "name": "test_every_some_single_arg",
+            "marker_line": 59,
+            "source_segment_lf_sha256": "bf0acb84ae890edf32fd19b42a6906182bcaaa72eb1535c21e4c230a80287133"
+          },
+          {
+            "name": "test_reduce_chain_with_typed_acc",
+            "marker_line": 71,
+            "source_segment_lf_sha256": "30dc46aa15459065ea39959772e72946ad5d0c132df776d856696e3b7e27a2b2"
+          },
+          {
+            "name": "test_map_foreach_callback",
+            "marker_line": 88,
+            "source_segment_lf_sha256": "637d012ee5e730013a17ba1ec5abe8f578c6cb8de8f88fa9029f18e982ceb359"
+          }
+        ]
       }
     },
     {
@@ -25740,13 +26098,166 @@
         "state": "MISSING",
         "lf_sha256": null
       },
-      "independent_oracle_gap": "Retain and execute the complete original assertion bodies under the original entry. Author missing byte/event/cleanup expectations; build-only or cross-backend equality does not prove test execution.",
+      "independent_oracle_gap": "Full original named bodies and independent data/content/dimension obligations prepared; actual declaration-owned driver/backend/lifetime/FI/provider qualification remains OPEN.",
       "target_contract_review": "REQUIRED: port superseded surface according to frozen Task313/319/317 decisions while retaining original valid behavior.",
       "original_regression_obligation": {
         "expected_exit": 0,
         "entry": "test",
         "test_discovery": "NOT_RUN",
         "source_assertions": "The complete source file is hash-bound; no regex assertion/test count is claimed."
+      },
+      "original_named_test_obligation": {
+        "state": "REVIEWED_TEXTUAL_DECLARATIONS_NOT_RUNTIME_DISCOVERY",
+        "execution": "NOT_RUN",
+        "declarations": [
+          {
+            "name": "test_map_literal",
+            "marker_line": 5,
+            "source_segment_lf_sha256": "b27a08fe0ce83f9e7f8689e4fd31454a3f7ae6278e5ab57146b34f53ccc59ab5"
+          },
+          {
+            "name": "test_empty_map",
+            "marker_line": 11,
+            "source_segment_lf_sha256": "428ff4d0a7e734899bdbdc63cd4c794fabf99c2f60fbc9916b72f002d2441c4b"
+          },
+          {
+            "name": "test_single_entry",
+            "marker_line": 17,
+            "source_segment_lf_sha256": "23a9404b8f49f8488287be7d90a79170866f7a4f8e6cf7140b1d7f0c74cc9e42"
+          },
+          {
+            "name": "test_get_basic",
+            "marker_line": 24,
+            "source_segment_lf_sha256": "1de21fde8fcd3abc69025c6a989b9cbfda651be62c78ff01ae736c833aba7399"
+          },
+          {
+            "name": "test_get_missing",
+            "marker_line": 31,
+            "source_segment_lf_sha256": "f1709ebe474863dc626ed8f94aa3052bfc0c16ca0ad5dc33ab713df8ab06dae0"
+          },
+          {
+            "name": "test_bracket_access",
+            "marker_line": 37,
+            "source_segment_lf_sha256": "c60521979cf5e38c4422fe4439b38735b212646f84950d413eb29e2d1f37a9d7"
+          },
+          {
+            "name": "test_set_new",
+            "marker_line": 45,
+            "source_segment_lf_sha256": "520e52b37a070729cc83a253ae6ee7fae17dbf3a4d240c59549daf72cdb011f6"
+          },
+          {
+            "name": "test_set_overwrite",
+            "marker_line": 53,
+            "source_segment_lf_sha256": "7fb88aa2c9df2329da1d061b6e3b5e9a8489c1fce6ecdee46b41ba3e695a66d2"
+          },
+          {
+            "name": "test_bracket_assign",
+            "marker_line": 61,
+            "source_segment_lf_sha256": "9c8d7c93f94ca6a5b47f39a1415419d6a8b8bc21125a0785ffe85fba11c69d4f"
+          },
+          {
+            "name": "test_has_key",
+            "marker_line": 69,
+            "source_segment_lf_sha256": "7b12dd5675d752ce606f5f859ee70b43289e7d63b18f75711f16d979f21bbddb"
+          },
+          {
+            "name": "test_delete",
+            "marker_line": 77,
+            "source_segment_lf_sha256": "2a23a91e2758ade8a88e53d14da851088bbcab8ad7085cfbbd490dd4d91e0fc8"
+          },
+          {
+            "name": "test_delete_missing",
+            "marker_line": 87,
+            "source_segment_lf_sha256": "b89749f847a86e9f0774aaea1d263697c7c126aefa5df873eb0fbd196d657f8e"
+          },
+          {
+            "name": "test_iterate_values",
+            "marker_line": 96,
+            "source_segment_lf_sha256": "f124b42091c618879f07fa19db77f7a53668a7fbca3b2cc0ef7597a6a3e8010d"
+          },
+          {
+            "name": "test_collect_keys",
+            "marker_line": 106,
+            "source_segment_lf_sha256": "be5b5539bc5ad5740fb656b0080049ab73e9d27b7807dce9b7325772bb30bee5"
+          },
+          {
+            "name": "test_keys",
+            "marker_line": 117,
+            "source_segment_lf_sha256": "0327482695ba202198950aa16af28d1ac81c8ca57caa226735b9b5e33688a952"
+          },
+          {
+            "name": "test_values",
+            "marker_line": 124,
+            "source_segment_lf_sha256": "187e84c025713dacc7a67470a153580a7f9ae1b8ecf1bcfe05ed0e8530ab9303"
+          },
+          {
+            "name": "test_clear",
+            "marker_line": 132,
+            "source_segment_lf_sha256": "d830bc10b1886845619e7ceeeb971516878302ecad0342a4a5c81a630dca3f30"
+          },
+          {
+            "name": "test_string_keys",
+            "marker_line": 140,
+            "source_segment_lf_sha256": "05e90d4dc68a302b5f8a0388d36557fa0c33b33b5da80b0bf5ee41244b20ad91"
+          },
+          {
+            "name": "test_mixed_value_types",
+            "marker_line": 146,
+            "source_segment_lf_sha256": "bb6fb0b40da283ee83a1a09c7b8d2424363b741b38511e65d512a16b1e94c14b"
+          },
+          {
+            "name": "test_many_entries",
+            "marker_line": 156,
+            "source_segment_lf_sha256": "ce30c34b1014c01187f7624d4666397116f4164a872214d25e0988b6600a3b76"
+          },
+          {
+            "name": "test_overwrite_many_times",
+            "marker_line": 166,
+            "source_segment_lf_sha256": "8a1ad54098cf94732dae808363fd165f02709af56d7d928d768051b3bbe72cbb"
+          }
+        ]
+      },
+      "target_source_port": {
+        "fixture": "tests/unit/xir/legacy_consumers/fixtures/collection_string_ports/0620_map/root.xr",
+        "lf_sha256": "d952367736e22f5059f2b05f3c2e0f016fa8738d6c711d8d3faa07c84d47cf51",
+        "owner_package": "P13",
+        "qualification": "NOT_RUN",
+        "frozen_basis": [
+          "Exact typed member projections andMap<Union?> preserve outerSome(innerNone) versus missing lookup; no blanket erased equality orOptionalflattening. All21 bodies/100entries/10overwrites andactualMap insertion responsibility preserved."
+        ]
+      },
+      "named_test_migration": {
+        "state": "PREPARED_NOT_EXECUTED",
+        "original_tests_removed": false,
+        "mapping": {
+          "test_map_literal": "test_map_literal",
+          "test_empty_map": "test_empty_map",
+          "test_single_entry": "test_single_entry",
+          "test_get_basic": "test_get_basic",
+          "test_get_missing": "test_get_missing",
+          "test_bracket_access": "test_bracket_access",
+          "test_set_new": "test_set_new",
+          "test_set_overwrite": "test_set_overwrite",
+          "test_bracket_assign": "test_bracket_assign",
+          "test_has_key": "test_has_key",
+          "test_delete": "test_delete",
+          "test_delete_missing": "test_delete_missing",
+          "test_iterate_values": "test_iterate_values",
+          "test_collect_keys": "test_collect_keys",
+          "test_keys": "test_keys",
+          "test_values": "test_values",
+          "test_clear": "test_clear",
+          "test_string_keys": "test_string_keys",
+          "test_mixed_value_types": "test_mixed_value_types",
+          "test_many_entries": "test_many_entries",
+          "test_overwrite_many_times": "test_overwrite_many_times"
+        }
+      },
+      "target_disposition": {
+        "kind": "POSITIVE_COMPLETE_COLLECTION_STRING_AFTER_FROZEN_PORT",
+        "owner_package": "P13",
+        "qualification": "NOT_RUN",
+        "reason": "Exact typed member projections andMap<Union?> preserve outerSome(innerNone) versus missing lookup; no blanket erased equality orOptionalflattening. All21 bodies/100entries/10overwrites andactualMap insertion responsibility preserved."
       }
     },
     {
@@ -25782,13 +26293,142 @@
         "state": "MISSING",
         "lf_sha256": null
       },
-      "independent_oracle_gap": "Retain and execute the complete original assertion bodies under the original entry. Author missing byte/event/cleanup expectations; build-only or cross-backend equality does not prove test execution.",
+      "independent_oracle_gap": "Full original named bodies and independent data/content/dimension obligations prepared; actual declaration-owned driver/backend/lifetime/FI/provider qualification remains OPEN.",
       "target_contract_review": "REQUIRED: port superseded surface according to frozen Task313/319/317 decisions while retaining original valid behavior.",
       "original_regression_obligation": {
         "expected_exit": 0,
         "entry": "test",
         "test_discovery": "NOT_RUN",
         "source_assertions": "The complete source file is hash-bound; no regex assertion/test count is claimed."
+      },
+      "original_named_test_obligation": {
+        "state": "REVIEWED_TEXTUAL_DECLARATIONS_NOT_RUNTIME_DISCOVERY",
+        "execution": "NOT_RUN",
+        "declarations": [
+          {
+            "name": "test_set_literal",
+            "marker_line": 5,
+            "source_segment_lf_sha256": "c36401acbf364bfc8204392fdfa7b63d88462baf5edd509501bebcf56bc1413e"
+          },
+          {
+            "name": "test_empty_set",
+            "marker_line": 11,
+            "source_segment_lf_sha256": "eb6c22b42b085b72ac1dfeb94a50d6129ec09eecc0b74864af444454c481670e"
+          },
+          {
+            "name": "test_single_element",
+            "marker_line": 17,
+            "source_segment_lf_sha256": "5b492facd74fbc0c583ca4ca0eca6d6854f2a84fc0b6d3d0a6cff44c7670a24f"
+          },
+          {
+            "name": "test_set_dedup",
+            "marker_line": 23,
+            "source_segment_lf_sha256": "d7a45807444aec24c3caa58d9474f5b352be52b3977888cb191610714ea54982"
+          },
+          {
+            "name": "test_add_new",
+            "marker_line": 30,
+            "source_segment_lf_sha256": "936834416ae504f51a879a206bfad659806c2a2cb364d442a001b264b52bff67"
+          },
+          {
+            "name": "test_add_duplicate",
+            "marker_line": 39,
+            "source_segment_lf_sha256": "9bd51d999b686833350ae1e14638b10b39be51823dfb98add571b25298e36260"
+          },
+          {
+            "name": "test_has",
+            "marker_line": 48,
+            "source_segment_lf_sha256": "d004fca8fde53cafaa6e7586afbb6b80f0484fe1d6bc1ab90ed74da30bd3ec39"
+          },
+          {
+            "name": "test_has_empty",
+            "marker_line": 55,
+            "source_segment_lf_sha256": "953afa3f1d40f84c0e4922be918d6f40156b4c4f57028ecbe64dbc401b9c4060"
+          },
+          {
+            "name": "test_delete",
+            "marker_line": 62,
+            "source_segment_lf_sha256": "4e42858aa4a015c519a8c4cd3583f4da550bdf7df370be6cebe8a6612f723dfd"
+          },
+          {
+            "name": "test_delete_missing",
+            "marker_line": 72,
+            "source_segment_lf_sha256": "dba2838bef6041b182627b36ad47e4b2567c08907f740131445c4f9f64c6fd06"
+          },
+          {
+            "name": "test_iterate",
+            "marker_line": 81,
+            "source_segment_lf_sha256": "23c1795788325dabafbc2d39e6ecad39cd9b841991f34219611085669f4d5976"
+          },
+          {
+            "name": "test_iterate_empty",
+            "marker_line": 91,
+            "source_segment_lf_sha256": "3d0c35d414ba7d6c6d6ee7b845cf2d04e68ef8e8da6f2dbd91e91af04277e0df"
+          },
+          {
+            "name": "test_clear",
+            "marker_line": 102,
+            "source_segment_lf_sha256": "9f220d9bef86a759779dd058ffc56f72f7573d92bcb2603dcb4d5d8d4c0b012d"
+          },
+          {
+            "name": "test_string_elements",
+            "marker_line": 110,
+            "source_segment_lf_sha256": "fc4fcc7a85bb8bd4611b8436b0738248c708bf70c78f07c53f0939d0eb879a95"
+          },
+          {
+            "name": "test_to_array",
+            "marker_line": 119,
+            "source_segment_lf_sha256": "ae0b3fc4b4c049a8b9865f41b2808fb8e0663f8ad150bd0c60f769864e2b62ea"
+          },
+          {
+            "name": "test_many_elements",
+            "marker_line": 127,
+            "source_segment_lf_sha256": "347be31655145963fbc8193c498d6fd5a7f38a526710b8198136fb269e80cdf7"
+          },
+          {
+            "name": "test_add_and_delete",
+            "marker_line": 137,
+            "source_segment_lf_sha256": "010953995147be7f9335fb8792a6ea11d286704b30ccedc1609fe62e4779da02"
+          }
+        ]
+      },
+      "target_source_port": {
+        "fixture": "tests/unit/xir/legacy_consumers/fixtures/collection_string_ports/0630_set/root.xr",
+        "lf_sha256": "def91cda29fc68700bef3e57f61ddaeb058f5e721abaae089ce79d9a69af20bc",
+        "owner_package": "P13",
+        "qualification": "NOT_RUN",
+        "frozen_basis": [
+          "All17 Set bodies preserved withall100 memberships ratherthanonepoint/length-only pressure. Ordering/key equivalence needsactualdeclownedproof, notEqual orhash name."
+        ]
+      },
+      "named_test_migration": {
+        "state": "PREPARED_NOT_EXECUTED",
+        "original_tests_removed": false,
+        "mapping": {
+          "test_set_literal": "test_set_literal",
+          "test_empty_set": "test_empty_set",
+          "test_single_element": "test_single_element",
+          "test_set_dedup": "test_set_dedup",
+          "test_add_new": "test_add_new",
+          "test_add_duplicate": "test_add_duplicate",
+          "test_has": "test_has",
+          "test_has_empty": "test_has_empty",
+          "test_delete": "test_delete",
+          "test_delete_missing": "test_delete_missing",
+          "test_iterate": "test_iterate",
+          "test_iterate_empty": "test_iterate_empty",
+          "test_clear": "test_clear",
+          "test_string_elements": "test_string_elements",
+          "test_to_array": "test_to_array",
+          "test_many_elements": "test_many_elements",
+          "test_add_and_delete": "test_add_and_delete"
+        }
+      },
+      "target_disposition": {
+        "kind": "POSITIVE_COMPLETE_COLLECTION_STRING_AFTER_FROZEN_PORT",
+        "owner_package": "P13",
+        "qualification": "NOT_RUN",
+        "reason": "All17 Set bodies preserved withall100 memberships ratherthanonepoint/length-only pressure. Ordering/key equivalence needsactualdeclownedproof, notEqual orhash name."
       }
     },
     {
@@ -25820,13 +26460,166 @@
         "state": "MISSING",
         "lf_sha256": null
       },
-      "independent_oracle_gap": "Retain and execute the complete original assertion bodies under the original entry. Author missing byte/event/cleanup expectations; build-only or cross-backend equality does not prove test execution.",
+      "independent_oracle_gap": "Full original named bodies and independent data/content/dimension obligations prepared; actual declaration-owned driver/backend/lifetime/FI/provider qualification remains OPEN.",
       "target_contract_review": "REQUIRED: port superseded surface according to frozen Task313/319/317 decisions while retaining original valid behavior.",
       "original_regression_obligation": {
         "expected_exit": 0,
         "entry": "test",
         "test_discovery": "NOT_RUN",
         "source_assertions": "The complete source file is hash-bound; no regex assertion/test count is claimed."
+      },
+      "original_named_test_obligation": {
+        "state": "REVIEWED_TEXTUAL_DECLARATIONS_NOT_RUNTIME_DISCOVERY",
+        "execution": "NOT_RUN",
+        "declarations": [
+          {
+            "name": "test_slice_basic",
+            "marker_line": 5,
+            "source_segment_lf_sha256": "095f6ba740039eb7c458e882d8cecb3f4d61bcc8cefbea10fa31c22f64f8d78b"
+          },
+          {
+            "name": "test_slice_from_start",
+            "marker_line": 14,
+            "source_segment_lf_sha256": "3b81bc26d065276b0aa14691feca415a709a90890cd085d62e9546b4bf599702"
+          },
+          {
+            "name": "test_slice_to_end",
+            "marker_line": 22,
+            "source_segment_lf_sha256": "429a4fdfa3987dea748804ca018d39b44f3a4cc9f0ab8a9ee0819469566e27f0"
+          },
+          {
+            "name": "test_slice_negative_bounds",
+            "marker_line": 30,
+            "source_segment_lf_sha256": "1aba5270fb120d4fe4f5551e9e3e1129c97facc87d76d484d472a20fbaeff18f"
+          },
+          {
+            "name": "test_slice_is_view",
+            "marker_line": 41,
+            "source_segment_lf_sha256": "4ead081db602cc5ffdd4aa098eff63af75d6d981523f4649bdafa9ddce25db39"
+          },
+          {
+            "name": "test_slice_copy_is_independent",
+            "marker_line": 51,
+            "source_segment_lf_sha256": "4024dd8bc37e15f3ac39315e7a56701379a3629ce48224df7ff4cdaa5904caf0"
+          },
+          {
+            "name": "test_concat_arrays",
+            "marker_line": 62,
+            "source_segment_lf_sha256": "40d1f8f145b3368cb6f696eef8cd639a5dffdcf14a189c59663448a1c632b356"
+          },
+          {
+            "name": "test_concat_variadic_arrays",
+            "marker_line": 72,
+            "source_segment_lf_sha256": "a25afe7369383b6d06db29f3a165cd9d481fe6d69f9285b884249f507326dedc"
+          },
+          {
+            "name": "test_find_element",
+            "marker_line": 87,
+            "source_segment_lf_sha256": "d7437d5918b9297483522ae8e1ca6d51d811905b5eaef87f1cac3c0304231dbd"
+          },
+          {
+            "name": "test_find_not_found",
+            "marker_line": 96,
+            "source_segment_lf_sha256": "440da3a3f20513c962a336d5b5e008defe6d56eb26a8b5895bf938df65783f9f"
+          },
+          {
+            "name": "test_find_index",
+            "marker_line": 106,
+            "source_segment_lf_sha256": "7e4db9288c9f62b6d744419f74aa227cb9850b349bda26dbe3dd0ad1dff1c8d7"
+          },
+          {
+            "name": "test_find_index_not_found",
+            "marker_line": 115,
+            "source_segment_lf_sha256": "53dc746867075dd9c586d40859a400008dde44c34213efc84e0dc7ce057dd69c"
+          },
+          {
+            "name": "test_index_of_and_contains",
+            "marker_line": 124,
+            "source_segment_lf_sha256": "2baf97415f9db1f3b65fe3a29cda4ba0e0be941d1091285efde48d6dab0da106"
+          },
+          {
+            "name": "test_every_true",
+            "marker_line": 134,
+            "source_segment_lf_sha256": "c36b97a37c4720b119d9d5ffe1966f76723d92754f2731721d6e3784abbd6345"
+          },
+          {
+            "name": "test_every_false",
+            "marker_line": 143,
+            "source_segment_lf_sha256": "9841d22b509a89bb302273be57c5e61fd1167acbbeb0261aa983f281761b143a"
+          },
+          {
+            "name": "test_some_true",
+            "marker_line": 153,
+            "source_segment_lf_sha256": "2aa502bccea87f55655eaf9f4223573004706159125934db166079403fb4cd81"
+          },
+          {
+            "name": "test_some_false",
+            "marker_line": 162,
+            "source_segment_lf_sha256": "c4dbf86310c37fec69bc71daec9d03d236797bb62c2de07a37b469d2d0bf27f5"
+          },
+          {
+            "name": "test_fill",
+            "marker_line": 172,
+            "source_segment_lf_sha256": "3980ac429234614e37e416a645bbb06baf6a67654087aa78bbba5ce4481bce38"
+          },
+          {
+            "name": "test_fill_range_and_negative_bounds",
+            "marker_line": 180,
+            "source_segment_lf_sha256": "b616849b2e8c16e81111875808f71557361a78a311f05aa77b48ba9feb1952c5"
+          },
+          {
+            "name": "test_sort_numbers",
+            "marker_line": 206,
+            "source_segment_lf_sha256": "4093ff9661ec7a90655caa1e5b63b5e8fd941f4e5f2f3d16ea836fe641bf20e7"
+          },
+          {
+            "name": "test_sort_strings",
+            "marker_line": 215,
+            "source_segment_lf_sha256": "e98a2334c085a8b694d035a29ac18b16d2732268a0887877a9c33f39c3686913"
+          }
+        ]
+      },
+      "target_source_port": {
+        "fixture": "tests/unit/xir/legacy_consumers/fixtures/collection_string_ports/0640_array_methods/root.xr",
+        "lf_sha256": "9a2e190e3fbd463d8dd41ba0b9739a6b4982cd7972eec36c0e1ec45aad218891",
+        "owner_package": "P13",
+        "qualification": "NOT_RUN",
+        "frozen_basis": [
+          "ExclusiveMutSlice replacesillegal readonlyview writes/owner mutation underliveborrow, ownerreads afterlastviewuse. Arrayfill strictpositivebounds preserve legacy normalizedvalues via3:5; negative/reversed actualE0422panic withunchangedfullreceiver nowrequired. Slice normalization doesnotgrantfillclamp; sort Compare/provenance qualification remainsOPEN."
+        ]
+      },
+      "named_test_migration": {
+        "state": "PREPARED_NOT_EXECUTED",
+        "original_tests_removed": false,
+        "mapping": {
+          "test_slice_basic": "test_slice_basic",
+          "test_slice_from_start": "test_slice_from_start",
+          "test_slice_to_end": "test_slice_to_end",
+          "test_slice_negative_bounds": "test_slice_negative_bounds",
+          "test_slice_is_view": "test_slice_is_view",
+          "test_slice_copy_is_independent": "test_slice_copy_is_independent",
+          "test_concat_arrays": "test_concat_arrays",
+          "test_concat_variadic_arrays": "test_concat_variadic_arrays",
+          "test_find_element": "test_find_element",
+          "test_find_not_found": "test_find_not_found",
+          "test_find_index": "test_find_index",
+          "test_find_index_not_found": "test_find_index_not_found",
+          "test_index_of_and_contains": "test_index_of_and_contains",
+          "test_every_true": "test_every_true",
+          "test_every_false": "test_every_false",
+          "test_some_true": "test_some_true",
+          "test_some_false": "test_some_false",
+          "test_fill": "test_fill",
+          "test_fill_range_and_negative_bounds": "test_fill_strict_range_and_normalized_values",
+          "test_sort_numbers": "test_sort_numbers",
+          "test_sort_strings": "test_sort_strings"
+        }
+      },
+      "target_disposition": {
+        "kind": "POSITIVE_COMPLETE_COLLECTION_STRING_AFTER_FROZEN_PORT",
+        "owner_package": "P13",
+        "qualification": "NOT_RUN",
+        "reason": "ExclusiveMutSlice replacesillegal readonlyview writes/owner mutation underliveborrow, ownerreads afterlastviewuse. Arrayfill strictpositivebounds preserve legacy normalizedvalues via3:5; negative/reversed actualE0422panic withunchangedfullreceiver nowrequired. Slice normalization doesnotgrantfillclamp; sort Compare/provenance qualification remainsOPEN."
       }
     },
     {
@@ -25858,13 +26651,24 @@
         "state": "MISSING",
         "lf_sha256": null
       },
-      "independent_oracle_gap": "Retain and execute the complete original assertion bodies under the original entry. Author missing byte/event/cleanup expectations; build-only or cross-backend equality does not prove test execution.",
+      "independent_oracle_gap": "Full original named bodies and independent data/content/dimension obligations prepared; actual declaration-owned driver/backend/lifetime/FI/provider qualification remains OPEN.",
       "target_contract_review": "REQUIRED: port superseded surface according to frozen Task313/319/317 decisions while retaining original valid behavior.",
       "original_regression_obligation": {
         "expected_exit": 0,
         "entry": "test",
         "test_discovery": "NOT_RUN",
         "source_assertions": "The complete source file is hash-bound; no regex assertion/test count is claimed."
+      },
+      "original_named_test_obligation": {
+        "state": "REVIEWED_TEXTUAL_DECLARATIONS_NOT_RUNTIME_DISCOVERY",
+        "execution": "NOT_RUN",
+        "declarations": [
+          {
+            "name": "test_index_set_strict",
+            "marker_line": 17,
+            "source_segment_lf_sha256": "2c8d3e5b2b0955fc3d0737652356a11a1c3a856cd5e9378ff9dd9c5f8d4f5a97"
+          }
+        ]
       }
     },
     {
@@ -25901,13 +26705,238 @@
         "state": "MISSING",
         "lf_sha256": null
       },
-      "independent_oracle_gap": "Retain and execute the complete original assertion bodies under the original entry. Author missing byte/event/cleanup expectations; build-only or cross-backend equality does not prove test execution.",
+      "independent_oracle_gap": "Full original named bodies and independent data/content/dimension obligations prepared; actual declaration-owned driver/backend/lifetime/FI/provider qualification remains OPEN.",
       "target_contract_review": "REQUIRED: port superseded surface according to frozen Task313/319/317 decisions while retaining original valid behavior.",
       "original_regression_obligation": {
         "expected_exit": 0,
         "entry": "test",
         "test_discovery": "NOT_RUN",
         "source_assertions": "The complete source file is hash-bound; no regex assertion/test count is claimed."
+      },
+      "original_named_test_obligation": {
+        "state": "REVIEWED_TEXTUAL_DECLARATIONS_NOT_RUNTIME_DISCOVERY",
+        "execution": "NOT_RUN",
+        "declarations": [
+          {
+            "name": "test_triple_chain_map",
+            "marker_line": 5,
+            "source_segment_lf_sha256": "5f953220d117acac75a060815df9457b23f0d8b8ad805b986b47b36c87d6cf1e"
+          },
+          {
+            "name": "test_quad_chain_mixed",
+            "marker_line": 21,
+            "source_segment_lf_sha256": "2ea9819c4dd9c54f1849fef5f205fec2890662e5dbdb2f13c5dad116e029a5ac"
+          },
+          {
+            "name": "test_five_level_chain",
+            "marker_line": 39,
+            "source_segment_lf_sha256": "ff3a8f605d9d4acbca2b6b57cfddfd6e4b59fa56be36ae7f83c253bf8f72810b"
+          },
+          {
+            "name": "test_map_over_nested_array",
+            "marker_line": 58,
+            "source_segment_lf_sha256": "2643e351040c9814fb2e4d48ec6388389e98283b48265e1b0ea0f4551cb33a49"
+          },
+          {
+            "name": "test_filter_then_map_nested",
+            "marker_line": 72,
+            "source_segment_lf_sha256": "88543aaf1aed0d878c136210ffb66030fb688b9d3b5ad43902501a7787f88ad9"
+          },
+          {
+            "name": "test_triple_nested_map",
+            "marker_line": 89,
+            "source_segment_lf_sha256": "52023d5e58ebeedf793019afedb7cd102b0c57a60a9d64e4470e76eafc97554a"
+          },
+          {
+            "name": "test_nested_reduce",
+            "marker_line": 104,
+            "source_segment_lf_sha256": "4e69a81c92818631b842e784f09b5fffc6651d295bb7d7f60cd82d870c6a9968"
+          },
+          {
+            "name": "test_flatten_with_reduce",
+            "marker_line": 122,
+            "source_segment_lf_sha256": "31708aaa81e9790221a490dbae02843edc74528c89fc5484d5e72f39241fde21"
+          },
+          {
+            "name": "test_map_to_objects_then_filter",
+            "marker_line": 135,
+            "source_segment_lf_sha256": "fe9730f15b9c2c76c0322b9e31759b017b87fe5e52a16c7e7e89587c11560f9f"
+          },
+          {
+            "name": "test_chain_with_type_change",
+            "marker_line": 149,
+            "source_segment_lf_sha256": "4213f75c13ae6e2c26ccccde4bd021896b2e22742a4f75eb181a1aed6c4fe1d3"
+          },
+          {
+            "name": "test_reduce_to_map",
+            "marker_line": 165,
+            "source_segment_lf_sha256": "b94ccedc45667efc13f51844e70ae29362e82012c2549e98de3c07367eeb4f44"
+          },
+          {
+            "name": "test_map_with_closure_capture",
+            "marker_line": 180,
+            "source_segment_lf_sha256": "5c4fb8b1616ad0b532c28565e09d002d97a6f6bfa98bbcb117c5e512d4e74296"
+          },
+          {
+            "name": "test_nested_closure_capture",
+            "marker_line": 191,
+            "source_segment_lf_sha256": "1eec8b6e04ae07b9e12e6ce894ecee27605abd04b1064b194304428aedab95dd"
+          },
+          {
+            "name": "test_filter_with_external_predicate",
+            "marker_line": 205,
+            "source_segment_lf_sha256": "31c671c8eb3f94f8e4a4665bb1e43920e01bb90620cb4eb969cf41e97c96f848"
+          },
+          {
+            "name": "test_parallel_operations_then_combine",
+            "marker_line": 218,
+            "source_segment_lf_sha256": "d67b65835e8b7882a24bdc69adbcb9e96b814d72b85a3c7b97602155f314ed34"
+          },
+          {
+            "name": "test_zip_with_reduce",
+            "marker_line": 236,
+            "source_segment_lf_sha256": "f93ca1caea995672aab4ec382ce4d5c3e266cb81b42a68cca3ad84160b1e4b09"
+          },
+          {
+            "name": "test_every_with_nested_check",
+            "marker_line": 248,
+            "source_segment_lf_sha256": "fcdbbbae439a47bf86277c72e1f019cfd94b41bd39a726c42984f81fb48eb42c"
+          },
+          {
+            "name": "test_some_with_nested_check",
+            "marker_line": 265,
+            "source_segment_lf_sha256": "d5d7d2e7a6eb76d7980a4e5a29e4cc1595d97f0994281b34bd96e69c7a168fcb"
+          },
+          {
+            "name": "test_find_with_complex_predicate",
+            "marker_line": 276,
+            "source_segment_lf_sha256": "07a278cecee6e6ffa5631e860a52bd2c97869c2efdf2bf30833e8e33a308bbbe"
+          },
+          {
+            "name": "test_compose_transformations",
+            "marker_line": 288,
+            "source_segment_lf_sha256": "2125e570faeb3f4679fe4558213407a48afcc965c29950653838bbf7278519ed"
+          },
+          {
+            "name": "test_pipeline_of_operations",
+            "marker_line": 315,
+            "source_segment_lf_sha256": "71eb8292c0a19fec0f74ec5209a0595098a7d42f612a39aec34994c3b5c6e6c8"
+          },
+          {
+            "name": "test_chain_with_empty_intermediate",
+            "marker_line": 341,
+            "source_segment_lf_sha256": "aebad26cb499800cfe2b5e14d3969583ddfba821d0327cbdbed0decd24b1f90f"
+          },
+          {
+            "name": "test_chain_with_single_element",
+            "marker_line": 354,
+            "source_segment_lf_sha256": "c61461e035b096c369aa5c02eff1e1d922af8b5d63172978deeccc0738011896"
+          },
+          {
+            "name": "test_nested_foreach",
+            "marker_line": 369,
+            "source_segment_lf_sha256": "2f11ddc0b04715bb09eb8ef32801fe84adbf89c95915e710bc978ab20172c461"
+          },
+          {
+            "name": "test_foreach_with_index_simulation",
+            "marker_line": 381,
+            "source_segment_lf_sha256": "5a30c56922354a1e6ff09f9513455aa5493a1c3305c71db1889b3d8411d35717"
+          },
+          {
+            "name": "test_group_by_simulation",
+            "marker_line": 396,
+            "source_segment_lf_sha256": "0535017985233b3971eaf2f6bdbb313e4c5091fd12a101db16fc3b76389591ce"
+          },
+          {
+            "name": "test_unique_via_reduce",
+            "marker_line": 410,
+            "source_segment_lf_sha256": "643e76046923b4f1c893f4f14220a65e6891ec36ad0238be1e5fbc5aeb0f356a"
+          },
+          {
+            "name": "test_count_by_reduce",
+            "marker_line": 426,
+            "source_segment_lf_sha256": "1202b0fd14a396906c210932af16cb48b6d78868047bac9ba3f1dce5e5ce1833"
+          },
+          {
+            "name": "test_mixed_return_types",
+            "marker_line": 441,
+            "source_segment_lf_sha256": "3ec0ee8a5bf24e9d3da451bd116e7a1f1b252f02c1df97468690e690be23cb4e"
+          },
+          {
+            "name": "test_boolean_chain",
+            "marker_line": 455,
+            "source_segment_lf_sha256": "c284e5da6160100170ca3c629e3d85fffe6aa2c71fb51b3be6c08f7e083b38d3"
+          },
+          {
+            "name": "test_complex_data_pipeline",
+            "marker_line": 469,
+            "source_segment_lf_sha256": "1ed1490a9bcaf3e505f043fd4f903ff00e14d50e562a35450996b525e2b8539d"
+          },
+          {
+            "name": "test_matrix_operations",
+            "marker_line": 488,
+            "source_segment_lf_sha256": "54898076285f2d1413a3dc08531553198b8607f37f9c9519d0af05433d633b98"
+          },
+          {
+            "name": "test_findIndex_chain",
+            "marker_line": 504,
+            "source_segment_lf_sha256": "901150fcef56cfd77c437d12360063079be2b4f8a1653fccce0860a22d94bb42"
+          }
+        ]
+      },
+      "target_source_port": {
+        "fixture": "tests/unit/xir/legacy_consumers/fixtures/collection_string_ports/0650_nested_higher_order/root.xr",
+        "lf_sha256": "5cd711e8d07955376c9fcc5e65c4888e7711b318f0ee05d4d461b9b29b83b4a2",
+        "owner_package": "P13",
+        "qualification": "NOT_RUN",
+        "frozen_basis": [
+          "All33 originalnestedoperations retained. Ordinarylocal=READacc makes writablelogicalMapcopy; retiredunqualifiedcopy(map) removed. Bothreduceseeds independentlyassertemptyafterwrites; no aliases/dualpaths."
+        ]
+      },
+      "named_test_migration": {
+        "state": "PREPARED_NOT_EXECUTED",
+        "original_tests_removed": false,
+        "mapping": {
+          "test_triple_chain_map": "test_triple_chain_map",
+          "test_quad_chain_mixed": "test_quad_chain_mixed",
+          "test_five_level_chain": "test_five_level_chain",
+          "test_map_over_nested_array": "test_map_over_nested_array",
+          "test_filter_then_map_nested": "test_filter_then_map_nested",
+          "test_triple_nested_map": "test_triple_nested_map",
+          "test_nested_reduce": "test_nested_reduce",
+          "test_flatten_with_reduce": "test_flatten_with_reduce",
+          "test_map_to_objects_then_filter": "test_map_to_objects_then_filter",
+          "test_chain_with_type_change": "test_chain_with_type_change",
+          "test_reduce_to_map": "test_reduce_to_map",
+          "test_map_with_closure_capture": "test_map_with_closure_capture",
+          "test_nested_closure_capture": "test_nested_closure_capture",
+          "test_filter_with_external_predicate": "test_filter_with_external_predicate",
+          "test_parallel_operations_then_combine": "test_parallel_operations_then_combine",
+          "test_zip_with_reduce": "test_zip_with_reduce",
+          "test_every_with_nested_check": "test_every_with_nested_check",
+          "test_some_with_nested_check": "test_some_with_nested_check",
+          "test_find_with_complex_predicate": "test_find_with_complex_predicate",
+          "test_compose_transformations": "test_compose_transformations",
+          "test_pipeline_of_operations": "test_pipeline_of_operations",
+          "test_chain_with_empty_intermediate": "test_chain_with_empty_intermediate",
+          "test_chain_with_single_element": "test_chain_with_single_element",
+          "test_nested_foreach": "test_nested_foreach",
+          "test_foreach_with_index_simulation": "test_foreach_with_index_simulation",
+          "test_group_by_simulation": "test_group_by_simulation",
+          "test_unique_via_reduce": "test_unique_via_reduce",
+          "test_count_by_reduce": "test_count_by_reduce",
+          "test_mixed_return_types": "test_mixed_return_types",
+          "test_boolean_chain": "test_boolean_chain",
+          "test_complex_data_pipeline": "test_complex_data_pipeline",
+          "test_matrix_operations": "test_matrix_operations",
+          "test_findIndex_chain": "test_findIndex_chain"
+        }
+      },
+      "target_disposition": {
+        "kind": "POSITIVE_COMPLETE_COLLECTION_STRING_AFTER_FROZEN_PORT",
+        "owner_package": "P13",
+        "qualification": "NOT_RUN",
+        "reason": "All33 originalnestedoperations retained. Ordinarylocal=READacc makes writablelogicalMapcopy; retiredunqualifiedcopy(map) removed. Bothreduceseeds independentlyassertemptyafterwrites; no aliases/dualpaths."
       }
     },
     {
@@ -25944,13 +26973,172 @@
         "state": "MISSING",
         "lf_sha256": null
       },
-      "independent_oracle_gap": "Retain and execute the complete original assertion bodies under the original entry. Author missing byte/event/cleanup expectations; build-only or cross-backend equality does not prove test execution.",
+      "independent_oracle_gap": "Full original named bodies and independent data/content/dimension obligations prepared; actual declaration-owned driver/backend/lifetime/FI/provider qualification remains OPEN.",
       "target_contract_review": "REQUIRED: port superseded surface according to frozen Task313/319/317 decisions while retaining original valid behavior.",
       "original_regression_obligation": {
         "expected_exit": 0,
         "entry": "test",
         "test_discovery": "NOT_RUN",
         "source_assertions": "The complete source file is hash-bound; no regex assertion/test count is claimed."
+      },
+      "original_named_test_obligation": {
+        "state": "REVIEWED_TEXTUAL_DECLARATIONS_NOT_RUNTIME_DISCOVERY",
+        "execution": "NOT_RUN",
+        "declarations": [
+          {
+            "name": "test_reduce_nested_findIndex",
+            "marker_line": 8,
+            "source_segment_lf_sha256": "768e2d680d95ec657612ca955a24b6c3519c21c91f8a449f2ce1f06cf0131f20"
+          },
+          {
+            "name": "test_findIndex_with_nested_reduce",
+            "marker_line": 20,
+            "source_segment_lf_sha256": "77a093027d88744771ed9149cb4207231835391cba8c58b2575d6f94e768023a"
+          },
+          {
+            "name": "test_findIndex_with_nested_every",
+            "marker_line": 30,
+            "source_segment_lf_sha256": "d428f74f6d1017401ae6acd10095a31485fca544500c65a0dc29335deda9ad5e"
+          },
+          {
+            "name": "test_map_then_reduce_nested",
+            "marker_line": 48,
+            "source_segment_lf_sha256": "65ac3200cb8999bd69702e1b6328d81b85860a39e30787dfee8d03db8035db64"
+          },
+          {
+            "name": "test_filter_map_reduce_pipeline",
+            "marker_line": 73,
+            "source_segment_lf_sha256": "923fed8ce4980f7b37f0f1338aba57e156e81c7e3246bf7a77943879161b9ec2"
+          },
+          {
+            "name": "test_nested_map_with_filter",
+            "marker_line": 92,
+            "source_segment_lf_sha256": "0bb7d8b99853405adf144d27e61481515bda821ded26b5f703cf10a0601b378b"
+          },
+          {
+            "name": "test_nested_forEach_with_accumulation",
+            "marker_line": 107,
+            "source_segment_lf_sha256": "260b7dbad7ae3cb5d6df058c693e301072181e3ea63e7f25656ff98f31b1c067"
+          },
+          {
+            "name": "test_some_with_nested_some",
+            "marker_line": 124,
+            "source_segment_lf_sha256": "d90ee46109d3bfc3cb4229b4f51fcebca6ba2b8878b49f0aa52af4abd845da7b"
+          },
+          {
+            "name": "test_every_with_nested_filter",
+            "marker_line": 134,
+            "source_segment_lf_sha256": "3377aa0978df0c02a8c7a471ab9083117416fbc672a457fcce1ed066106900d2"
+          },
+          {
+            "name": "test_reduce_build_nested_map",
+            "marker_line": 147,
+            "source_segment_lf_sha256": "2be460bd14353f96243f322e6bcf1b60a4e6a25edda3db3cd6fb6079c3e5102d"
+          },
+          {
+            "name": "test_higher_order_with_for_loop",
+            "marker_line": 175,
+            "source_segment_lf_sha256": "d6578705c2e79b4eb40049603ef90f3857bb1ed36a25a91422e12b46fc9d4d80"
+          },
+          {
+            "name": "test_map_findIndex_reduce_combo",
+            "marker_line": 191,
+            "source_segment_lf_sha256": "6d51f12ba27544ab2c173ba45b9271bb3f32d8b452138b0e87a2da2911a476a8"
+          },
+          {
+            "name": "test_findIndex_inline_reduce",
+            "marker_line": 213,
+            "source_segment_lf_sha256": "f963c4b8aff603ba8b65af7eefdd99df1810e87847078986cfcbcd0c21b08b1c"
+          },
+          {
+            "name": "test_four_level_nesting",
+            "marker_line": 229,
+            "source_segment_lf_sha256": "318f97933fcaf594478779f5c0f0d7d1b5734c72fda99aa1ffd97d51b01d2b5b"
+          },
+          {
+            "name": "test_map_reduce_findIndex_chain",
+            "marker_line": 244,
+            "source_segment_lf_sha256": "425138e67f39399d304527e298a0cb0c2bce68febd0c415ac956838ccd0b6edd"
+          },
+          {
+            "name": "test_multi_method_chain",
+            "marker_line": 260,
+            "source_segment_lf_sha256": "0705c4b4f79618690eaf276c7ffe767e01d60354cb51a7735b4fd725885c6b81"
+          },
+          {
+            "name": "test_nested_some_with_map",
+            "marker_line": 279,
+            "source_segment_lf_sha256": "01198ec29d37c20650576198cdd42efe7a1aa57795a4e018be39d24110c1a64b"
+          },
+          {
+            "name": "test_reduce_builds_grouped_arrays",
+            "marker_line": 293,
+            "source_segment_lf_sha256": "8d6614e2f5bed7ec0277f4f92327cec838d67bc10f5ea96dae6c215e89c50c72"
+          },
+          {
+            "name": "test_interleaved_in_loop",
+            "marker_line": 317,
+            "source_segment_lf_sha256": "22b3729e3f046be63047099952fdfe6e9cd5eed80fbce22357bf3d388f5682db"
+          },
+          {
+            "name": "test_five_level_deep",
+            "marker_line": 343,
+            "source_segment_lf_sha256": "a19f832088bc0dc553a7976fe771b5fa85fa6723996a6788b208b7a975dfc08c"
+          },
+          {
+            "name": "test_stress_large_chain",
+            "marker_line": 362,
+            "source_segment_lf_sha256": "78b19f5f0d1f3dc8048b5f2e477db4cfb8d173252f70164a0d50ccbd8ed85dc4"
+          },
+          {
+            "name": "test_forEach_with_index_accumulator",
+            "marker_line": 379,
+            "source_segment_lf_sha256": "fad94b7c5fcefe70fbc03f53d6369de9c72cbaaeb49bc6ef6b7e645cd007c3a0"
+          }
+        ]
+      },
+      "target_source_port": {
+        "fixture": "tests/unit/xir/legacy_consumers/fixtures/collection_string_ports/0651_nested_higher_order_combo/root.xr",
+        "lf_sha256": "3eb2d36db9408e217fa5a21a295f8aa0b5a88d9bb8c1b1ed3fe3086c585f0f54",
+        "owner_package": "P13",
+        "qualification": "NOT_RUN",
+        "frozen_basis": [
+          "All22 originalnestedbodies and500-inputchain pressure retained. DetachedMap-getArray payload mutatedthenwrittenback; chunk changes useactualnestedwritableplace, notlocalArrayalias. OrdinaryREADacc copy andunchangedseeds/fullchunks required, nocopy(map/array)compatibilityintrinsic."
+        ]
+      },
+      "named_test_migration": {
+        "state": "PREPARED_NOT_EXECUTED",
+        "original_tests_removed": false,
+        "mapping": {
+          "test_reduce_nested_findIndex": "test_reduce_nested_findIndex",
+          "test_findIndex_with_nested_reduce": "test_findIndex_with_nested_reduce",
+          "test_findIndex_with_nested_every": "test_findIndex_with_nested_every",
+          "test_map_then_reduce_nested": "test_map_then_reduce_nested",
+          "test_filter_map_reduce_pipeline": "test_filter_map_reduce_pipeline",
+          "test_nested_map_with_filter": "test_nested_map_with_filter",
+          "test_nested_forEach_with_accumulation": "test_nested_forEach_with_accumulation",
+          "test_some_with_nested_some": "test_some_with_nested_some",
+          "test_every_with_nested_filter": "test_every_with_nested_filter",
+          "test_reduce_build_nested_map": "test_reduce_build_nested_map",
+          "test_higher_order_with_for_loop": "test_higher_order_with_for_loop",
+          "test_map_findIndex_reduce_combo": "test_map_findIndex_reduce_combo",
+          "test_findIndex_inline_reduce": "test_findIndex_inline_reduce",
+          "test_four_level_nesting": "test_four_level_nesting",
+          "test_map_reduce_findIndex_chain": "test_map_reduce_findIndex_chain",
+          "test_multi_method_chain": "test_multi_method_chain",
+          "test_nested_some_with_map": "test_nested_some_with_map",
+          "test_reduce_builds_grouped_arrays": "test_reduce_builds_grouped_arrays",
+          "test_interleaved_in_loop": "test_interleaved_in_loop",
+          "test_five_level_deep": "test_five_level_deep",
+          "test_stress_large_chain": "test_stress_large_chain",
+          "test_forEach_with_index_accumulator": "test_forEach_with_index_accumulator"
+        }
+      },
+      "target_disposition": {
+        "kind": "POSITIVE_COMPLETE_COLLECTION_STRING_AFTER_FROZEN_PORT",
+        "owner_package": "P13",
+        "qualification": "NOT_RUN",
+        "reason": "All22 originalnestedbodies and500-inputchain pressure retained. DetachedMap-getArray payload mutatedthenwrittenback; chunk changes useactualnestedwritableplace, notlocalArrayalias. OrdinaryREADacc copy andunchangedseeds/fullchunks required, nocopy(map/array)compatibilityintrinsic."
       }
     },
     {
@@ -25986,13 +27174,112 @@
         "state": "MISSING",
         "lf_sha256": null
       },
-      "independent_oracle_gap": "Retain and execute the complete original assertion bodies under the original entry. Author missing byte/event/cleanup expectations; build-only or cross-backend equality does not prove test execution.",
+      "independent_oracle_gap": "Full original named bodies and independent data/content/dimension obligations prepared; actual declaration-owned driver/backend/lifetime/FI/provider qualification remains OPEN.",
       "target_contract_review": "REQUIRED: port superseded surface according to frozen Task313/319/317 decisions while retaining original valid behavior.",
       "original_regression_obligation": {
         "expected_exit": 0,
         "entry": "test",
         "test_discovery": "NOT_RUN",
         "source_assertions": "The complete source file is hash-bound; no regex assertion/test count is claimed."
+      },
+      "original_named_test_obligation": {
+        "state": "REVIEWED_TEXTUAL_DECLARATIONS_NOT_RUNTIME_DISCOVERY",
+        "execution": "NOT_RUN",
+        "declarations": [
+          {
+            "name": "test_basic_object",
+            "marker_line": 5,
+            "source_segment_lf_sha256": "ea997fbc027fc5b1149fab218519985a5401dc2e872de2bdeafe3807fa2589c5"
+          },
+          {
+            "name": "test_object_field_modify",
+            "marker_line": 12,
+            "source_segment_lf_sha256": "d7f465ad2602b1d2935aad94a7a35bae8740273d89a7727d8e9140c375dad854"
+          },
+          {
+            "name": "test_multi_field_object",
+            "marker_line": 22,
+            "source_segment_lf_sha256": "73a002f6f3025ba9dbaf69aa1ed500ada9802167b802eff3de9b3f750282bffa"
+          },
+          {
+            "name": "test_object_field_update",
+            "marker_line": 30,
+            "source_segment_lf_sha256": "51545cf4f41eb7a9e6ce660aa67eceaf2c4a0b3f6df2717f58d135ca03d3d5d0"
+          },
+          {
+            "name": "test_nested_object",
+            "marker_line": 38,
+            "source_segment_lf_sha256": "5e416dc51f3a9d56217ef11f3c51e2db281e4d4edd63258ccc33e0e345c56332"
+          },
+          {
+            "name": "test_nested_object_modify",
+            "marker_line": 47,
+            "source_segment_lf_sha256": "711875648b0b97a5a386399aabcc39193cc4b4617dde0df140bdc20c6fececae"
+          },
+          {
+            "name": "test_single_field_object",
+            "marker_line": 57,
+            "source_segment_lf_sha256": "79c7c6a189d557ea33733431b30b1df11edd1bd0ba0478de5b2f3f33ba734341"
+          },
+          {
+            "name": "test_mixed_types",
+            "marker_line": 66,
+            "source_segment_lf_sha256": "eec82b11dd0dc4d21f8969239dad3ecea61e861e905cebf3207954f54c23c4f8"
+          },
+          {
+            "name": "test_object_as_param",
+            "marker_line": 77,
+            "source_segment_lf_sha256": "8023d0125481a57dfaa9e2c4f403991ece363e485f1d5796f732515dd0ed2a77"
+          },
+          {
+            "name": "test_object_as_return",
+            "marker_line": 87,
+            "source_segment_lf_sha256": "c41da183fd364ffc35b88e5688ec97e5af56718bc5fe3626e2608570477cd70b"
+          },
+          {
+            "name": "test_object_array",
+            "marker_line": 98,
+            "source_segment_lf_sha256": "ec9b86a3aea1be0558116425734635b494cd5ae9fc6685bc10d7a9dd7066e77a"
+          },
+          {
+            "name": "test_object_field_shorthand",
+            "marker_line": 106,
+            "source_segment_lf_sha256": "9298aa5c24e74918c603330b3403a0101d0e07a2d9223272328ebe66b7724a58"
+          }
+        ]
+      },
+      "target_source_port": {
+        "fixture": "tests/unit/xir/legacy_consumers/fixtures/collection_string_ports/0655_object_literal/root.xr",
+        "lf_sha256": "cdceeb14934c65e0373ce3c87fd1f59909aa9aa6fae6fbbaf07d149aa1401670",
+        "owner_package": "P13",
+        "qualification": "NOT_RUN",
+        "frozen_basis": [
+          "All12 structuralrecord bodies retained; exactnullablefield context replacesbareNull withconcreteNone. Values copylogically, noJSON/dynamicfield orclassidentity alias."
+        ]
+      },
+      "named_test_migration": {
+        "state": "PREPARED_NOT_EXECUTED",
+        "original_tests_removed": false,
+        "mapping": {
+          "test_basic_object": "test_basic_object",
+          "test_object_field_modify": "test_object_field_modify",
+          "test_multi_field_object": "test_multi_field_object",
+          "test_object_field_update": "test_object_field_update",
+          "test_nested_object": "test_nested_object",
+          "test_nested_object_modify": "test_nested_object_modify",
+          "test_single_field_object": "test_single_field_object",
+          "test_mixed_types": "test_mixed_types",
+          "test_object_as_param": "test_object_as_param",
+          "test_object_as_return": "test_object_as_return",
+          "test_object_array": "test_object_array",
+          "test_object_field_shorthand": "test_object_field_shorthand"
+        }
+      },
+      "target_disposition": {
+        "kind": "POSITIVE_COMPLETE_COLLECTION_STRING_AFTER_FROZEN_PORT",
+        "owner_package": "P13",
+        "qualification": "NOT_RUN",
+        "reason": "All12 structuralrecord bodies retained; exactnullablefield context replacesbareNull withconcreteNone. Values copylogically, noJSON/dynamicfield orclassidentity alias."
       }
     },
     {
@@ -26028,13 +27315,29 @@
         "state": "MISSING",
         "lf_sha256": null
       },
-      "independent_oracle_gap": "Retain and execute the complete original assertion bodies under the original entry. Author missing byte/event/cleanup expectations; build-only or cross-backend equality does not prove test execution.",
+      "independent_oracle_gap": "Full original named bodies and independent data/content/dimension obligations prepared; actual declaration-owned driver/backend/lifetime/FI/provider qualification remains OPEN.",
       "target_contract_review": "REQUIRED: port superseded surface according to frozen Task313/319/317 decisions while retaining original valid behavior.",
       "original_regression_obligation": {
         "expected_exit": 0,
         "entry": "test",
         "test_discovery": "NOT_RUN",
         "source_assertions": "The complete source file is hash-bound; no regex assertion/test count is claimed."
+      },
+      "original_named_test_obligation": {
+        "state": "REVIEWED_TEXTUAL_DECLARATIONS_NOT_RUNTIME_DISCOVERY",
+        "execution": "NOT_RUN",
+        "declarations": [
+          {
+            "name": "test_scalar_kind_transitions",
+            "marker_line": 3,
+            "source_segment_lf_sha256": "1e7e2f881b90ea8635518540bb4aa97688988f572b87a168c99325cda47f60ab"
+          },
+          {
+            "name": "test_nested_composite_store",
+            "marker_line": 18,
+            "source_segment_lf_sha256": "66f2721e6ea2e8d757ebf1d9e7bee20ca01042218af4983971e4b38b2c988f00"
+          }
+        ]
       }
     },
     {
@@ -26070,13 +27373,29 @@
         "state": "MISSING",
         "lf_sha256": null
       },
-      "independent_oracle_gap": "Retain and execute the complete original assertion bodies under the original entry. Author missing byte/event/cleanup expectations; build-only or cross-backend equality does not prove test execution.",
+      "independent_oracle_gap": "Full original named bodies and independent data/content/dimension obligations prepared; actual declaration-owned driver/backend/lifetime/FI/provider qualification remains OPEN.",
       "target_contract_review": "REQUIRED: port superseded surface according to frozen Task313/319/317 decisions while retaining original valid behavior.",
       "original_regression_obligation": {
         "expected_exit": 0,
         "entry": "test",
         "test_discovery": "NOT_RUN",
         "source_assertions": "The complete source file is hash-bound; no regex assertion/test count is claimed."
+      },
+      "original_named_test_obligation": {
+        "state": "REVIEWED_TEXTUAL_DECLARATIONS_NOT_RUNTIME_DISCOVERY",
+        "execution": "NOT_RUN",
+        "declarations": [
+          {
+            "name": "test_static_object_hot_updates",
+            "marker_line": 11,
+            "source_segment_lf_sha256": "3dfd53da2be48cbb0847b3018db2aa4d14a02c567e748a5ecb35575b65252222"
+          },
+          {
+            "name": "test_dynamic_json_path_chain",
+            "marker_line": 20,
+            "source_segment_lf_sha256": "3022f1457dac36ce70bc506d09bec3d3809713bb356ee9d7665305119758acc6"
+          }
+        ]
       }
     },
     {
@@ -26108,13 +27427,46 @@
         "state": "MISSING",
         "lf_sha256": null
       },
-      "independent_oracle_gap": "Retain and execute the complete original assertion bodies under the original entry. Author missing byte/event/cleanup expectations; build-only or cross-backend equality does not prove test execution.",
+      "independent_oracle_gap": "Full original named bodies and independent data/content/dimension obligations prepared; actual declaration-owned driver/backend/lifetime/FI/provider qualification remains OPEN.",
       "target_contract_review": "REQUIRED: port superseded surface according to frozen Task313/319/317 decisions while retaining original valid behavior.",
       "original_regression_obligation": {
         "expected_exit": 0,
         "entry": "test",
         "test_discovery": "NOT_RUN",
         "source_assertions": "The complete source file is hash-bound; no regex assertion/test count is claimed."
+      },
+      "original_named_test_obligation": {
+        "state": "REVIEWED_TEXTUAL_DECLARATIONS_NOT_RUNTIME_DISCOVERY",
+        "execution": "NOT_RUN",
+        "declarations": [
+          {
+            "name": "test_slice_syntax",
+            "marker_line": 6,
+            "source_segment_lf_sha256": "020a06170133df7645e38f14f9625f445cbc82bef85354d50c22cb9958546ab6"
+          }
+        ]
+      },
+      "target_source_port": {
+        "fixture": "tests/unit/xir/legacy_consumers/fixtures/collection_string_ports/0670_slice_syntax/root.xr",
+        "lf_sha256": "d0c71b7fe300b4c3b2cec1d724e379212db53bdd8677d77f77b5e6e011cf100a",
+        "owner_package": "P13",
+        "qualification": "NOT_RUN",
+        "frozen_basis": [
+          "All5slicecontents andlastwrite30 preserved; onlyexclusiveMutSlice maywrite, earlierreadonlyviews endatlastprint beforeitsborrow. ActualSliceformatter/ownedStringable replacement remainsOPEN; phantomHello/World expectcomments are not actualbody output."
+        ]
+      },
+      "named_test_migration": {
+        "state": "PREPARED_NOT_EXECUTED",
+        "original_tests_removed": false,
+        "mapping": {
+          "test_slice_syntax": "test_slice_syntax"
+        }
+      },
+      "target_disposition": {
+        "kind": "POSITIVE_COMPLETE_COLLECTION_STRING_AFTER_FROZEN_PORT",
+        "owner_package": "P13",
+        "qualification": "NOT_RUN",
+        "reason": "All5slicecontents andlastwrite30 preserved; onlyexclusiveMutSlice maywrite, earlierreadonlyviews endatlastprint beforeitsborrow. ActualSliceformatter/ownedStringable replacement remainsOPEN; phantomHello/World expectcomments are not actualbody output."
       }
     },
     {
@@ -26150,13 +27502,64 @@
         "state": "MISSING",
         "lf_sha256": null
       },
-      "independent_oracle_gap": "Retain and execute the complete original assertion bodies under the original entry. Author missing byte/event/cleanup expectations; build-only or cross-backend equality does not prove test execution.",
+      "independent_oracle_gap": "Full original named bodies and independent data/content/dimension obligations prepared; actual declaration-owned driver/backend/lifetime/FI/provider qualification remains OPEN.",
       "target_contract_review": "REQUIRED: port superseded surface according to frozen Task313/319/317 decisions while retaining original valid behavior.",
       "original_regression_obligation": {
         "expected_exit": 0,
         "entry": "test",
         "test_discovery": "NOT_RUN",
         "source_assertions": "The complete source file is hash-bound; no regex assertion/test count is claimed."
+      },
+      "original_named_test_obligation": {
+        "state": "REVIEWED_TEXTUAL_DECLARATIONS_NOT_RUNTIME_DISCOVERY",
+        "execution": "NOT_RUN",
+        "declarations": [
+          {
+            "name": "deep_eq_many_shared_arrays",
+            "marker_line": 6,
+            "source_segment_lf_sha256": "07eaf40d890e513ef278db6afdc61afdcb15350026f97195d53009d94a74ea0f"
+          },
+          {
+            "name": "deep_eq_nested_maps",
+            "marker_line": 24,
+            "source_segment_lf_sha256": "cda742d9381df02fe45a0d85268ebeff4e3325ff7762721407ce94d14d931671"
+          },
+          {
+            "name": "deep_eq_self_referential_json",
+            "marker_line": 41,
+            "source_segment_lf_sha256": "0849e371a5c0809594a7779b73a0623c2e7ea6fd72801bcd7f6af5e86acbc4f1"
+          },
+          {
+            "name": "deep_eq_mutually_referential_json",
+            "marker_line": 54,
+            "source_segment_lf_sha256": "11273e1cfa63713ebf7cffda2bde8b05bc21d93b498a7d01f4273ae8690de610"
+          }
+        ]
+      },
+      "target_source_port": {
+        "fixture": "tests/unit/xir/legacy_consumers/fixtures/collection_string_ports/0680_deep_eq_cyclic/root.xr",
+        "lf_sha256": "1a75c87777b7d8cd4593d31170868f7dd4844a9e8b0e3097a030114be1f12fb7",
+        "owner_package": "P13",
+        "qualification": "NOT_RUN",
+        "frozen_basis": [
+          "Preserveall200×3 Array and100-keyMapdimensions; getArray logicalcopy mutatedandexplicitlysetback. ActualJSONcycles/canonicalEqual replacement remainsabstract, noindiscriminatedeepEq oralias restoration."
+        ]
+      },
+      "named_test_migration": {
+        "state": "PREPARED_NOT_EXECUTED",
+        "original_tests_removed": false,
+        "mapping": {
+          "deep_eq_many_shared_arrays": "deep_eq_many_shared_arrays",
+          "deep_eq_nested_maps": "deep_eq_nested_maps",
+          "deep_eq_self_referential_json": "deep_eq_self_referential_json",
+          "deep_eq_mutually_referential_json": "deep_eq_mutually_referential_json"
+        }
+      },
+      "target_disposition": {
+        "kind": "POSITIVE_COMPLETE_COLLECTION_STRING_AFTER_FROZEN_PORT",
+        "owner_package": "P13",
+        "qualification": "NOT_RUN",
+        "reason": "Preserveall200×3 Array and100-keyMapdimensions; getArray logicalcopy mutatedandexplicitlysetback. ActualJSONcycles/canonicalEqual replacement remainsabstract, noindiscriminatedeepEq oralias restoration."
       }
     },
     {
@@ -26188,13 +27591,54 @@
         "state": "MISSING",
         "lf_sha256": null
       },
-      "independent_oracle_gap": "Retain and execute the complete original assertion bodies under the original entry. Author missing byte/event/cleanup expectations; build-only or cross-backend equality does not prove test execution.",
+      "independent_oracle_gap": "Full original named bodies and independent data/content/dimension obligations prepared; actual declaration-owned driver/backend/lifetime/FI/provider qualification remains OPEN.",
       "target_contract_review": "REQUIRED: port superseded surface according to frozen Task313/319/317 decisions while retaining original valid behavior.",
       "original_regression_obligation": {
         "expected_exit": 0,
         "entry": "test",
         "test_discovery": "NOT_RUN",
         "source_assertions": "The complete source file is hash-bound; no regex assertion/test count is claimed."
+      },
+      "original_named_test_obligation": {
+        "state": "REVIEWED_TEXTUAL_DECLARATIONS_NOT_RUNTIME_DISCOVERY",
+        "execution": "NOT_RUN",
+        "declarations": [
+          {
+            "name": "test_array_push_json_objects",
+            "marker_line": 6,
+            "source_segment_lf_sha256": "0bca9527383a8ab0ee19093c26ce081a4acd45fdfff622447947b92fb1c526a7"
+          },
+          {
+            "name": "test_array_push_strings",
+            "marker_line": 17,
+            "source_segment_lf_sha256": "d9146c53affdda5196aac01d356628093fe2a23e9622ea44c0f75f6bd4603907"
+          },
+          {
+            "name": "test_array_push_mixed_types",
+            "marker_line": 28,
+            "source_segment_lf_sha256": "2cd3b734074e2df230e7badbe5526fb50f4479dbdd46b87d70fd7727c06fce77"
+          },
+          {
+            "name": "test_array_set_overwrites",
+            "marker_line": 44,
+            "source_segment_lf_sha256": "5871e4f89482007e4770cb20bfb1c6b451e2ea820a0679b318c7a59aa0093f05"
+          },
+          {
+            "name": "test_nested_array_push",
+            "marker_line": 57,
+            "source_segment_lf_sha256": "8fe99bce880a5cf267779de9fa078939e5ca2c313e4bc47bb14465f8294d8663"
+          },
+          {
+            "name": "test_array_self_assignment_keeps_element_alive",
+            "marker_line": 77,
+            "source_segment_lf_sha256": "b3ee048b679b130821388923b50149be1d581456ac204505fa0da923f1755d1b"
+          },
+          {
+            "name": "test_returned_array_element_survives_replacement",
+            "marker_line": 84,
+            "source_segment_lf_sha256": "216a643ca12c5a448aa95a40a5850d8f8146a2efb24e239b8ed4ad02cd75d5ab"
+          }
+        ]
       }
     },
     {
@@ -26230,13 +27674,44 @@
         "state": "MISSING",
         "lf_sha256": null
       },
-      "independent_oracle_gap": "Retain and execute the complete original assertion bodies under the original entry. Author missing byte/event/cleanup expectations; build-only or cross-backend equality does not prove test execution.",
+      "independent_oracle_gap": "Full original named bodies and independent data/content/dimension obligations prepared; actual declaration-owned driver/backend/lifetime/FI/provider qualification remains OPEN.",
       "target_contract_review": "REQUIRED: port superseded surface according to frozen Task313/319/317 decisions while retaining original valid behavior.",
       "original_regression_obligation": {
         "expected_exit": 0,
         "entry": "test",
         "test_discovery": "NOT_RUN",
         "source_assertions": "The complete source file is hash-bound; no regex assertion/test count is claimed."
+      },
+      "original_named_test_obligation": {
+        "state": "REVIEWED_TEXTUAL_DECLARATIONS_NOT_RUNTIME_DISCOVERY",
+        "execution": "NOT_RUN",
+        "declarations": [
+          {
+            "name": "test_map_lookup_by_value",
+            "marker_line": 24,
+            "source_segment_lf_sha256": "92efeddd95d3dbe6818a000e6b1e0be2510c822fdbc6bc8ebbc394aed5f8fcd6"
+          },
+          {
+            "name": "test_map_overwrite_and_distinct_keys",
+            "marker_line": 36,
+            "source_segment_lf_sha256": "79ebd1d987aef95e4d2736995db42714341db45eec0ff80865dcad48c2f34e2b"
+          },
+          {
+            "name": "test_map_delete_by_value",
+            "marker_line": 47,
+            "source_segment_lf_sha256": "fa80dd5218faf1e6a5369675a32a5e568df3f191b87d698968c196a90874fc90"
+          },
+          {
+            "name": "test_set_dedup_by_value",
+            "marker_line": 58,
+            "source_segment_lf_sha256": "c42ee4e75dda00cd153ad7096b73331ba76fa78927fb317ec7050b9f8db1a9b4"
+          },
+          {
+            "name": "test_primitive_keys_unaffected",
+            "marker_line": 69,
+            "source_segment_lf_sha256": "95fb607032f10cf073f0547bd42eb9ce930fb831587808f3ec747781ed4319e7"
+          }
+        ]
       }
     },
     {
@@ -26266,13 +27741,164 @@
         "state": "MISSING",
         "lf_sha256": null
       },
-      "independent_oracle_gap": "Retain and execute the complete original assertion bodies under the original entry. Author missing byte/event/cleanup expectations; build-only or cross-backend equality does not prove test execution.",
+      "independent_oracle_gap": "Full original named bodies and independent data/content/dimension obligations prepared; actual declaration-owned driver/backend/lifetime/FI/provider qualification remains OPEN.",
       "target_contract_review": "REQUIRED: port superseded surface according to frozen Task313/319/317 decisions while retaining original valid behavior.",
       "original_regression_obligation": {
         "expected_exit": 0,
         "entry": "test",
         "test_discovery": "NOT_RUN",
         "source_assertions": "The complete source file is hash-bound; no regex assertion/test count is claimed."
+      },
+      "original_named_test_obligation": {
+        "state": "REVIEWED_TEXTUAL_DECLARATIONS_NOT_RUNTIME_DISCOVERY",
+        "execution": "NOT_RUN",
+        "declarations": [
+          {
+            "name": "test_length",
+            "marker_line": 9,
+            "source_segment_lf_sha256": "dff8276a62994783b157e427084deaa9f836e5a05c20f8705a2e9f9250b0a669"
+          },
+          {
+            "name": "test_concat",
+            "marker_line": 19,
+            "source_segment_lf_sha256": "3808293298cc5cfb3ef458660291a5f34f7399fc41adc6707b6c24af83b2539e"
+          },
+          {
+            "name": "test_concat_with_numbers",
+            "marker_line": 26,
+            "source_segment_lf_sha256": "7bc8f0e7ab2ccedbbe262be5888761a162b201d7874a33ba3f655f841a7759b0"
+          },
+          {
+            "name": "test_rune_nth",
+            "marker_line": 34,
+            "source_segment_lf_sha256": "d318c03c07f911570249bcbf474bd4fcc833aa67cc6ea0ae5851a8c8bf15973e"
+          },
+          {
+            "name": "test_substring",
+            "marker_line": 43,
+            "source_segment_lf_sha256": "38d61fb5dd4646ad26653b280c155778b2cae643abbb2c427b4c393ee66e9fc1"
+          },
+          {
+            "name": "test_substring_full",
+            "marker_line": 51,
+            "source_segment_lf_sha256": "4f4cd90293546f11b39c681d4b9aba9d594e716c73b1823f2a276da44264d396"
+          },
+          {
+            "name": "test_substring_empty",
+            "marker_line": 57,
+            "source_segment_lf_sha256": "97071dc7c8d24545dfcfc32f704f2aab7acad7c1677981fd4aaf7a9122ad605b"
+          },
+          {
+            "name": "test_substring_bounds",
+            "marker_line": 64,
+            "source_segment_lf_sha256": "eb1db4cc7c5d2c355afa0432a39e1fee949b0d543b7ae1800492b9e29f70b147"
+          },
+          {
+            "name": "test_indexOf",
+            "marker_line": 74,
+            "source_segment_lf_sha256": "aa26ec3d9608bea0ceec76461bcede21447c9ed529045e50620472c1c4b390da"
+          },
+          {
+            "name": "test_indexOf_empty",
+            "marker_line": 83,
+            "source_segment_lf_sha256": "50301eee1cca9541ed15e1bef60cd14aae9528390170ffc38967d521e3116a28"
+          },
+          {
+            "name": "test_contains",
+            "marker_line": 91,
+            "source_segment_lf_sha256": "aa0ccb33a2b53cf887de72afdc6fa278429d456fb419392b6509c3daf9fb3b7b"
+          },
+          {
+            "name": "test_startsWith",
+            "marker_line": 101,
+            "source_segment_lf_sha256": "713403f44786858129c32843a271794a7884fcc3e37891f5e4ca197b113d76da"
+          },
+          {
+            "name": "test_endsWith",
+            "marker_line": 109,
+            "source_segment_lf_sha256": "333d651af5cbc5403d29855d2570cc6ee8f24ee213b20b5f3601d03322cc8c04"
+          },
+          {
+            "name": "test_trim",
+            "marker_line": 119,
+            "source_segment_lf_sha256": "dc4ffd3258f5d8c38c7a0d53e2d4098c4698bbf65b60e1a3b04240be894e65de"
+          },
+          {
+            "name": "test_trim_tabs_newlines",
+            "marker_line": 127,
+            "source_segment_lf_sha256": "1cb24dd742614b540c62df2f7528e20c30fde1a03f1d5f68b83e9e45c35c2f6a"
+          },
+          {
+            "name": "test_pad",
+            "marker_line": 134,
+            "source_segment_lf_sha256": "d200668545eb93d0fa4b697f88d506722016c5be50c49c86072b096ad707e4e4"
+          },
+          {
+            "name": "test_toInt",
+            "marker_line": 147,
+            "source_segment_lf_sha256": "b69ea85e4b14e72f71698a18ca4717f844cdc965da363e30b8b17183bbe86794"
+          },
+          {
+            "name": "test_toFloat",
+            "marker_line": 156,
+            "source_segment_lf_sha256": "58c3a403e2bb747e0003ec0ab3da7b491e9e498b078f94a96b58586bc0322656"
+          },
+          {
+            "name": "test_split",
+            "marker_line": 167,
+            "source_segment_lf_sha256": "1ca06b6741058aa5c30b58119df0c24c4af281dc703c60883f444d1f094016a1"
+          },
+          {
+            "name": "test_split_spaces",
+            "marker_line": 191,
+            "source_segment_lf_sha256": "f315bdec01e55df4bc26111c77b3517e011e00287d1e1bf774afe621470cb4b3"
+          },
+          {
+            "name": "test_split_no_delimiter",
+            "marker_line": 198,
+            "source_segment_lf_sha256": "2bc5a1fc4d4ddcf6f804b09294fa34bc962a837c3075a7ebcea331f78d18010f"
+          },
+          {
+            "name": "test_toUpperCase",
+            "marker_line": 208,
+            "source_segment_lf_sha256": "54ef9cdcf49f4349830a0a9bc144b24f4f4070cfdd21d22f2f26b1830bedaf13"
+          },
+          {
+            "name": "test_toLowerCase",
+            "marker_line": 216,
+            "source_segment_lf_sha256": "a45bf6ed512f88a5bfedde763389ece56f45f91e6c62c1537e8ad37ff44b6cf2"
+          },
+          {
+            "name": "test_replace",
+            "marker_line": 226,
+            "source_segment_lf_sha256": "cb185d253f40ef3b16038ba32cbab7fc97873176a0e26b17f033197deca87dfa"
+          },
+          {
+            "name": "test_replace_all",
+            "marker_line": 236,
+            "source_segment_lf_sha256": "087a0f34d588790b3ab645b3f0eafb8601ebc9c672182e6db2ec3c456f23a22e"
+          },
+          {
+            "name": "test_repeat",
+            "marker_line": 247,
+            "source_segment_lf_sha256": "20bae765819f765f2887eb0275b9129f8f2051ca2a16b0d362e781d366000741"
+          },
+          {
+            "name": "test_comparison",
+            "marker_line": 260,
+            "source_segment_lf_sha256": "efe682467bff09b8a0ffbd4934d8e4544af46af84cd5c6d4ff7716c411b39b3b"
+          },
+          {
+            "name": "test_empty_string_operations",
+            "marker_line": 271,
+            "source_segment_lf_sha256": "8f913176ed270d6809a489b6b3acc1f46f4f3357d4b5031d401e832df6b54bfe"
+          },
+          {
+            "name": "test_long_string",
+            "marker_line": 280,
+            "source_segment_lf_sha256": "33a63951c80daad638d54d69e778781c982420c59e8b8e2f919c9857c7704c08"
+          }
+        ]
       }
     },
     {
@@ -26302,13 +27928,136 @@
         "state": "MISSING",
         "lf_sha256": null
       },
-      "independent_oracle_gap": "Retain and execute the complete original assertion bodies under the original entry. Author missing byte/event/cleanup expectations; build-only or cross-backend equality does not prove test execution.",
+      "independent_oracle_gap": "Full original named bodies and independent data/content/dimension obligations prepared; actual declaration-owned driver/backend/lifetime/FI/provider qualification remains OPEN.",
       "target_contract_review": "REQUIRED: port superseded surface according to frozen Task313/319/317 decisions while retaining original valid behavior.",
       "original_regression_obligation": {
         "expected_exit": 0,
         "entry": "test",
         "test_discovery": "NOT_RUN",
         "source_assertions": "The complete source file is hash-bound; no regex assertion/test count is claimed."
+      },
+      "original_named_test_obligation": {
+        "state": "REVIEWED_TEXTUAL_DECLARATIONS_NOT_RUNTIME_DISCOVERY",
+        "execution": "NOT_RUN",
+        "declarations": [
+          {
+            "name": "test_basic_interpolation",
+            "marker_line": 9,
+            "source_segment_lf_sha256": "eafb59d6adeedd009aa0de056c6aeada5fefda8ebd2a3b717083253269dd6012"
+          },
+          {
+            "name": "test_number_interpolation",
+            "marker_line": 16,
+            "source_segment_lf_sha256": "d00da6dcbf0cb56293c80661cb8d4a5a6d59110fb4aa3f391c7ed333e2d28aa9"
+          },
+          {
+            "name": "test_expression_interpolation",
+            "marker_line": 25,
+            "source_segment_lf_sha256": "6928ae40ab21692895e3c5cf32bed5c6bd3bc431b0bcb3e13dc26e9ba243149e"
+          },
+          {
+            "name": "test_method_call_interpolation",
+            "marker_line": 33,
+            "source_segment_lf_sha256": "c4c4131e0d36d4c6e345270ec7ee029cfc2e836ae51f93604f79935d717d924f"
+          },
+          {
+            "name": "test_multi_variable",
+            "marker_line": 42,
+            "source_segment_lf_sha256": "be02595acc8a7e1dc34b81914bb31085e1a57a92a8c6acdd4bf5811678645719"
+          },
+          {
+            "name": "test_nested_quotes",
+            "marker_line": 53,
+            "source_segment_lf_sha256": "3c4da49cf48c498c49413d45c3f3916758a4ad2c2c575201034dae30665e5e51"
+          },
+          {
+            "name": "test_same_quote_in_interpolation",
+            "marker_line": 60,
+            "source_segment_lf_sha256": "e3886ec0a3bd38fdafc4925b3cf5861dfe7e23b674f30090d815a1096bb3ce07"
+          },
+          {
+            "name": "test_same_quote_with_inner_brace",
+            "marker_line": 66,
+            "source_segment_lf_sha256": "e7a2f476cd3cc3c8333890e9fb6775c943e7aec6b4154310cd29a324ed70c4bb"
+          },
+          {
+            "name": "test_same_quote_map_index",
+            "marker_line": 72,
+            "source_segment_lf_sha256": "80ad639339997f509d6205ed86aacf40952ed356395215a480ec9587dbba3944"
+          },
+          {
+            "name": "test_nested_template_in_interpolation",
+            "marker_line": 79,
+            "source_segment_lf_sha256": "25fbc12cd694bd12fdaeaae4b5b9d1c2a2cdcf512091403d50e0ffb6f1171b8e"
+          },
+          {
+            "name": "test_single_quote_literal_in_interpolation",
+            "marker_line": 86,
+            "source_segment_lf_sha256": "ac32e475ce1cc36a59e62fa716be9167781433023f913e13a0fe95361b285efd"
+          },
+          {
+            "name": "test_empty_template",
+            "marker_line": 96,
+            "source_segment_lf_sha256": "072386ffacfa2785f2370c3064d47b356d0737f2be084733b611c07af678f477"
+          },
+          {
+            "name": "test_no_interpolation",
+            "marker_line": 102,
+            "source_segment_lf_sha256": "78c256e08307ab6f94e139f4c26670cc21c8064741fc5e134ac240404554986e"
+          },
+          {
+            "name": "test_bool_interpolation",
+            "marker_line": 110,
+            "source_segment_lf_sha256": "6522864f39de433769eb504e6418e8dbce5152e21c7806bb312239dc52f78e63"
+          },
+          {
+            "name": "test_null_interpolation",
+            "marker_line": 117,
+            "source_segment_lf_sha256": "2adf157f3da36475328be89e908cb0d876fc6dea2e7fc6e46f71d1ae193072db"
+          },
+          {
+            "name": "test_multiline",
+            "marker_line": 126,
+            "source_segment_lf_sha256": "003f3cc7824b74e78ddae17d08f6a42d09dc578ab7b3024d619f5eeb1c873164"
+          }
+        ]
+      },
+      "target_source_port": {
+        "fixture": "tests/unit/xir/legacy_consumers/fixtures/collection_string_ports/0710_template_string/root.xr",
+        "lf_sha256": "f40ccc1f19f68d9d020eb9acad42e92da035aa551afac2ce1ee643dcef4d1d56",
+        "owner_package": "P13",
+        "qualification": "NOT_RUN",
+        "frozen_basis": [
+          "All16 fulltemplate/quotes/innerbrace/Mapindex/nested/rawmultiline duties retained. ConcreteOptionalNone formatsnull, notuncontextualizedNull sentinel orflattening."
+        ]
+      },
+      "named_test_migration": {
+        "state": "PREPARED_NOT_EXECUTED",
+        "original_tests_removed": false,
+        "mapping": {
+          "test_basic_interpolation": "test_basic_interpolation",
+          "test_number_interpolation": "test_number_interpolation",
+          "test_expression_interpolation": "test_expression_interpolation",
+          "test_method_call_interpolation": "test_method_call_interpolation",
+          "test_multi_variable": "test_multi_variable",
+          "test_nested_quotes": "test_nested_quotes",
+          "test_same_quote_in_interpolation": "test_same_quote_in_interpolation",
+          "test_same_quote_with_inner_brace": "test_same_quote_with_inner_brace",
+          "test_same_quote_map_index": "test_same_quote_map_index",
+          "test_nested_template_in_interpolation": "test_nested_template_in_interpolation",
+          "test_single_quote_literal_in_interpolation": "test_single_quote_literal_in_interpolation",
+          "test_empty_template": "test_empty_template",
+          "test_no_interpolation": "test_no_interpolation",
+          "test_bool_interpolation": "test_bool_interpolation",
+          "test_null_interpolation": "test_null_interpolation",
+          "test_multiline": "test_multiline"
+        }
+      },
+      "target_disposition": {
+        "kind": "POSITIVE_COMPLETE_COLLECTION_STRING_AFTER_FROZEN_PORT",
+        "owner_package": "P13",
+        "qualification": "NOT_RUN",
+        "reason": "All16 fulltemplate/quotes/innerbrace/Mapindex/nested/rawmultiline duties retained. ConcreteOptionalNone formatsnull, notuncontextualizedNull sentinel orflattening."
       }
     },
     {
@@ -26338,7 +28087,7 @@
         "state": "MISSING",
         "lf_sha256": null
       },
-      "independent_oracle_gap": "Retain and execute the complete original assertion bodies under the original entry. Author missing byte/event/cleanup expectations; build-only or cross-backend equality does not prove test execution.",
+      "independent_oracle_gap": "Full original named bodies and independent data/content/dimension obligations prepared; actual declaration-owned driver/backend/lifetime/FI/provider qualification remains OPEN.",
       "target_contract_review": "REQUIRED: port superseded surface according to frozen Task313/319/317 decisions while retaining original valid behavior.",
       "original_regression_obligation": {
         "expected_exit": 0,
@@ -26346,7 +28095,106 @@
         "test_discovery": "NOT_RUN",
         "source_assertions": "The complete source file is hash-bound; no regex assertion/test count is claimed."
       },
-      "semantic_migration_note": "P09/P13 must deliver the frozen replacement and atomic public StringBuilder removal; these original string/snapshot assertions cannot be discarded or satisfied by restoring the API."
+      "semantic_migration_note": "P09/P13 must deliver the frozen replacement and atomic public StringBuilder removal; these original string/snapshot assertions cannot be discarded or satisfied by restoring the API.",
+      "original_named_test_obligation": {
+        "state": "REVIEWED_TEXTUAL_DECLARATIONS_NOT_RUNTIME_DISCOVERY",
+        "execution": "NOT_RUN",
+        "declarations": [
+          {
+            "name": "test_basic_append",
+            "marker_line": 7,
+            "source_segment_lf_sha256": "d8062de24d07b66324f6e411d2b5ceacd1ddd0396cdcd06fa98728270153e77f"
+          },
+          {
+            "name": "test_chain_append",
+            "marker_line": 16,
+            "source_segment_lf_sha256": "d672af1ebb2f0f3ec5895ff1456444d44614a61866d43d8dcf54baaa9a07e27f"
+          },
+          {
+            "name": "test_append_int",
+            "marker_line": 25,
+            "source_segment_lf_sha256": "61ef6e7d7da0150de5108092adab0ecd650c617133acd362c0bc7b0a1c3360c5"
+          },
+          {
+            "name": "test_append_float",
+            "marker_line": 33,
+            "source_segment_lf_sha256": "849b09f2ea99f72e6b990d41ec485abf52e68ea9fbddf2dfc29784520ad854a4"
+          },
+          {
+            "name": "test_mixed_types",
+            "marker_line": 42,
+            "source_segment_lf_sha256": "5fb713ce29840ed04f4797dfa9065aa5199515d0ed5f2ddd4bb992b0f53a6258"
+          },
+          {
+            "name": "test_append_char",
+            "marker_line": 53,
+            "source_segment_lf_sha256": "65bf750f0ab0ae8f855efc5e5e247ab8411d0e47e2c34c16a6e5ffe55730a50c"
+          },
+          {
+            "name": "test_loop_append",
+            "marker_line": 65,
+            "source_segment_lf_sha256": "7e41892a37a642ade7e8d360fe1d1162edb5e7a69ef9278c7f642e8053ae1ace"
+          },
+          {
+            "name": "test_loop_numbers",
+            "marker_line": 74,
+            "source_segment_lf_sha256": "a31957cde514a4babaec5df2719a4a9368f4a8a84a37460b230cd8891d5d5069"
+          },
+          {
+            "name": "test_clear",
+            "marker_line": 88,
+            "source_segment_lf_sha256": "ac83ad995c92c6b5966d6017b290aec4bb59b21ffc50003dc22d230edd197b2d"
+          },
+          {
+            "name": "test_clear_then_reuse",
+            "marker_line": 97,
+            "source_segment_lf_sha256": "33bed27fb9f2aceb3271f3dfb3aac981f95dfcbe615305bd6d98b8083f2c1c18"
+          },
+          {
+            "name": "test_empty",
+            "marker_line": 109,
+            "source_segment_lf_sha256": "7bde3c006714b1f74371e859601a5b92f88b161fd0e48cecb78514496c95b6af"
+          },
+          {
+            "name": "test_large_append",
+            "marker_line": 117,
+            "source_segment_lf_sha256": "9468448f2562be7f261444b946341f89ae0702eee4c4ffe89250bef67c8939d7"
+          }
+        ]
+      },
+      "target_source_port": {
+        "fixture": "tests/unit/xir/legacy_consumers/fixtures/collection_string_ports/0720_stringbuilder/root.xr",
+        "lf_sha256": "9aba165d29e1fbc49af84054054891e7e60deb7fcdd71b5d7d2afb3a9e3e4c39",
+        "owner_package": "P13",
+        "qualification": "NOT_RUN",
+        "frozen_basis": [
+          "All12 originalappend/types/runes/clear/reuse/100append duties preserved withownedUTF8 Array andpublishedfromUtf8 string result; noStringBuilder alias/shim. Explicitstring formatting andownedfirstSnapshot retainedafterclear/reuse; actualallocation/work/lifetime/FI proofrequired."
+        ]
+      },
+      "named_test_migration": {
+        "state": "PREPARED_NOT_EXECUTED",
+        "original_tests_removed": false,
+        "mapping": {
+          "test_basic_append": "test_basic_append",
+          "test_chain_append": "test_chain_append",
+          "test_append_int": "test_append_int",
+          "test_append_float": "test_append_float",
+          "test_mixed_types": "test_mixed_types",
+          "test_append_char": "test_append_char",
+          "test_loop_append": "test_loop_append",
+          "test_loop_numbers": "test_loop_numbers",
+          "test_clear": "test_clear",
+          "test_clear_then_reuse": "test_clear_then_reuse",
+          "test_empty": "test_empty",
+          "test_large_append": "test_large_append"
+        }
+      },
+      "target_disposition": {
+        "kind": "POSITIVE_COMPLETE_COLLECTION_STRING_AFTER_FROZEN_PORT",
+        "owner_package": "P13",
+        "qualification": "NOT_RUN",
+        "reason": "All12 originalappend/types/runes/clear/reuse/100append duties preserved withownedUTF8 Array andpublishedfromUtf8 string result; noStringBuilder alias/shim. Explicitstring formatting andownedfirstSnapshot retainedafterclear/reuse; actualallocation/work/lifetime/FI proofrequired."
+      }
     },
     {
       "case_id": "tests/regression/07_strings/0730_unicode.xr",
@@ -26375,13 +28223,154 @@
         "state": "MISSING",
         "lf_sha256": null
       },
-      "independent_oracle_gap": "Retain and execute the complete original assertion bodies under the original entry. Author missing byte/event/cleanup expectations; build-only or cross-backend equality does not prove test execution.",
+      "independent_oracle_gap": "Full original named bodies and independent data/content/dimension obligations prepared; actual declaration-owned driver/backend/lifetime/FI/provider qualification remains OPEN.",
       "target_contract_review": "REQUIRED: port superseded surface according to frozen Task313/319/317 decisions while retaining original valid behavior.",
       "original_regression_obligation": {
         "expected_exit": 0,
         "entry": "test",
         "test_discovery": "NOT_RUN",
         "source_assertions": "The complete source file is hash-bound; no regex assertion/test count is claimed."
+      },
+      "original_named_test_obligation": {
+        "state": "REVIEWED_TEXTUAL_DECLARATIONS_NOT_RUNTIME_DISCOVERY",
+        "execution": "NOT_RUN",
+        "declarations": [
+          {
+            "name": "test_length_ascii",
+            "marker_line": 9,
+            "source_segment_lf_sha256": "5cde0701936fb8ac93391ce7b1d34afa57ea9835df266cd4b0c319d43dcacbdf"
+          },
+          {
+            "name": "test_length_chinese",
+            "marker_line": 16,
+            "source_segment_lf_sha256": "8443523192450d16ea265f14f2e5b6de79ba6441004fc8cea50e7691ef86a5c2"
+          },
+          {
+            "name": "test_length_emoji",
+            "marker_line": 23,
+            "source_segment_lf_sha256": "8f4f548751aadbe328c105e2e91222a4d33e2f6d5dd65ccf1ce34ed678295870"
+          },
+          {
+            "name": "test_length_mixed",
+            "marker_line": 29,
+            "source_segment_lf_sha256": "0378cc16d24d131aec57cc0efa2673b4e79fb62a69f6d66a29399b09ef3a45c5"
+          },
+          {
+            "name": "test_byteLength_ascii",
+            "marker_line": 38,
+            "source_segment_lf_sha256": "f27dd1d6ba4997035050f41589bcaa61c122501404a47fec495df6856ae9e53a"
+          },
+          {
+            "name": "test_byteLength_chinese",
+            "marker_line": 44,
+            "source_segment_lf_sha256": "f1d24e762d7ac505f5b23aa9db67ea05535411911a6e3d51fa809011ebc3aa90"
+          },
+          {
+            "name": "test_byteLength_emoji",
+            "marker_line": 50,
+            "source_segment_lf_sha256": "a27428f902067c7dda81bd438625e6d32a47a3ea7eefedd05cd45c2fac64ae4e"
+          },
+          {
+            "name": "test_byteLength_mixed",
+            "marker_line": 56,
+            "source_segment_lf_sha256": "298519ef60da115fa909df0c3513494d448f5efa6156c578cfd5683b86d39ef2"
+          },
+          {
+            "name": "test_index_ascii",
+            "marker_line": 63,
+            "source_segment_lf_sha256": "16c8d3b95e9371db50ad6f3a5fdf1500ba7851de80d1d46f4199be896b0a2683"
+          },
+          {
+            "name": "test_index_chinese",
+            "marker_line": 71,
+            "source_segment_lf_sha256": "ac7f008163c2426443fb5bf9e8c9dcbf95da53ffc46dc09e0664abd84e466043"
+          },
+          {
+            "name": "test_index_emoji",
+            "marker_line": 79,
+            "source_segment_lf_sha256": "8a90b10bbc5be02c621ce2ecd90a8edb4af567bee94ab734d57ba7080af12681"
+          },
+          {
+            "name": "test_index_mixed",
+            "marker_line": 87,
+            "source_segment_lf_sha256": "ea418f0773670294b5b318bff113a52662e7df3b175d67903c756dd507343502"
+          },
+          {
+            "name": "test_rune_nth_ascii",
+            "marker_line": 98,
+            "source_segment_lf_sha256": "2101e2dbb4305a38225fee11c3641ebcec86479c3d705d5d4d9a388c3e1e5421"
+          },
+          {
+            "name": "test_rune_nth_chinese",
+            "marker_line": 104,
+            "source_segment_lf_sha256": "c0315b659f37da16ffa8f28f658c09b5c363d3e86ebe85c739f0f1dd22a167b5"
+          },
+          {
+            "name": "test_rune_nth_emoji",
+            "marker_line": 110,
+            "source_segment_lf_sha256": "50c9aa409dfe4dc69d1cb5a56b70d4a23847e18d735a9d0547974fceea74d1d1"
+          },
+          {
+            "name": "test_codePointAt_ascii",
+            "marker_line": 118,
+            "source_segment_lf_sha256": "400cc4e7bf918857b2ef44418735e4504e8b84665aa328a0e600230c6bcd2980"
+          },
+          {
+            "name": "test_codePointAt_chinese",
+            "marker_line": 126,
+            "source_segment_lf_sha256": "1215347df84cdbaa866f72b1a5880161935380dd8dd4a5d269c706da05a1918a"
+          },
+          {
+            "name": "test_codePointAt_emoji",
+            "marker_line": 133,
+            "source_segment_lf_sha256": "e7895fe7a51409f23936e59720426ec60dc1b82bf33eb3a1c6e9f4ba2906d994"
+          },
+          {
+            "name": "test_iterate_mixed",
+            "marker_line": 141,
+            "source_segment_lf_sha256": "9995fb31fd9321e448871e1581baf71e509f8d322c22dd0062f0c510c835cde0"
+          },
+          {
+            "name": "test_compare_chinese",
+            "marker_line": 155,
+            "source_segment_lf_sha256": "f5d2fc1b0c3907eab5c9b2cf11d994c739cdececa8ca7029469e74e16c2b4cfe"
+          },
+          {
+            "name": "test_compare_emoji",
+            "marker_line": 161,
+            "source_segment_lf_sha256": "2816199b7ac9f3a0b102c75f579bc72d362e901a4dce4e82edf0eb0aab48409b"
+          },
+          {
+            "name": "test_concat_mixed",
+            "marker_line": 169,
+            "source_segment_lf_sha256": "58d7fc56e427ce3bf31c39cb227d06a2f9a64c89715a73f38febaaadfdbcc087"
+          },
+          {
+            "name": "test_concat_emoji",
+            "marker_line": 176,
+            "source_segment_lf_sha256": "13b9711ebee5171cef30a06190fd612b21d8b11705e5d88da43fdbe3559196e5"
+          },
+          {
+            "name": "test_reverse_unicode",
+            "marker_line": 185,
+            "source_segment_lf_sha256": "dd69cfa66d4aa7e43f7c31abe22a56ee4f7a2210a6b7e82c5ff943e0e272ff61"
+          },
+          {
+            "name": "test_charLength",
+            "marker_line": 193,
+            "source_segment_lf_sha256": "28388ff3b9ca60394e7e919f2b21205e76123ad2115dbbc05040a0439c37d032"
+          },
+          {
+            "name": "test_substring_ascii",
+            "marker_line": 202,
+            "source_segment_lf_sha256": "c34cad24f6f4a86e93a14fd43a926309c302ce1e9baf5a7203a3aad7fc3b0861"
+          },
+          {
+            "name": "test_substring_chinese",
+            "marker_line": 208,
+            "source_segment_lf_sha256": "2def9e4c013bf14bfd24b7fe4264c68f13b4ac5160d767b04184747d07e4289d"
+          }
+        ]
       }
     },
     {
@@ -26447,13 +28436,24 @@
         "state": "MISSING",
         "lf_sha256": null
       },
-      "independent_oracle_gap": "Retain and execute the complete original assertion bodies under the original entry. Author missing byte/event/cleanup expectations; build-only or cross-backend equality does not prove test execution.",
+      "independent_oracle_gap": "Full original named bodies and independent data/content/dimension obligations prepared; actual declaration-owned driver/backend/lifetime/FI/provider qualification remains OPEN.",
       "target_contract_review": "REQUIRED: port superseded surface according to frozen Task313/319/317 decisions while retaining original valid behavior.",
       "original_regression_obligation": {
         "expected_exit": 0,
         "entry": "test",
         "test_discovery": "NOT_RUN",
         "source_assertions": "The complete source file is hash-bound; no regex assertion/test count is claimed."
+      },
+      "original_named_test_obligation": {
+        "state": "REVIEWED_TEXTUAL_DECLARATIONS_NOT_RUNTIME_DISCOVERY",
+        "execution": "NOT_RUN",
+        "declarations": [
+          {
+            "name": "test_utf8_conversion_surface",
+            "marker_line": 19,
+            "source_segment_lf_sha256": "8d46ccc03c497e520f39f43e293fbdf872a1219d47b81259e4a90a589b6e3340"
+          }
+        ]
       }
     },
     {
@@ -26483,13 +28483,24 @@
         "state": "MISSING",
         "lf_sha256": null
       },
-      "independent_oracle_gap": "Retain and execute the complete original assertion bodies under the original entry. Author missing byte/event/cleanup expectations; build-only or cross-backend equality does not prove test execution.",
+      "independent_oracle_gap": "Full original named bodies and independent data/content/dimension obligations prepared; actual declaration-owned driver/backend/lifetime/FI/provider qualification remains OPEN.",
       "target_contract_review": "REQUIRED: port superseded surface according to frozen Task313/319/317 decisions while retaining original valid behavior.",
       "original_regression_obligation": {
         "expected_exit": 0,
         "entry": "test",
         "test_discovery": "NOT_RUN",
         "source_assertions": "The complete source file is hash-bound; no regex assertion/test count is claimed."
+      },
+      "original_named_test_obligation": {
+        "state": "REVIEWED_TEXTUAL_DECLARATIONS_NOT_RUNTIME_DISCOVERY",
+        "execution": "NOT_RUN",
+        "declarations": [
+          {
+            "name": "test_string_bytes_receiver_borrow_ends_after_last_use",
+            "marker_line": 1,
+            "source_segment_lf_sha256": "193408e10dd2dfec7a5fd93f2e16493eaf7b7cd7dcd5fb38cb2a45edc990a220"
+          }
+        ]
       }
     },
     {
@@ -26519,13 +28530,74 @@
         "state": "MISSING",
         "lf_sha256": null
       },
-      "independent_oracle_gap": "Retain and execute the complete original assertion bodies under the original entry. Author missing byte/event/cleanup expectations; build-only or cross-backend equality does not prove test execution.",
+      "independent_oracle_gap": "Full original named bodies and independent data/content/dimension obligations prepared; actual declaration-owned driver/backend/lifetime/FI/provider qualification remains OPEN.",
       "target_contract_review": "REQUIRED: port superseded surface according to frozen Task313/319/317 decisions while retaining original valid behavior.",
       "original_regression_obligation": {
         "expected_exit": 0,
         "entry": "test",
         "test_discovery": "NOT_RUN",
         "source_assertions": "The complete source file is hash-bound; no regex assertion/test count is claimed."
+      },
+      "original_named_test_obligation": {
+        "state": "REVIEWED_TEXTUAL_DECLARATIONS_NOT_RUNTIME_DISCOVERY",
+        "execution": "NOT_RUN",
+        "declarations": [
+          {
+            "name": "test_braced_ascii",
+            "marker_line": 9,
+            "source_segment_lf_sha256": "1a343a77cf97512ff2d9615e8064f2f00b74f96b807db8fe2b52e93d72c3076b"
+          },
+          {
+            "name": "test_braced_cjk",
+            "marker_line": 16,
+            "source_segment_lf_sha256": "626b8398c1b5e87d71c9d3c560e9fa818ed0350f541e379f2b6266f9bd79b17f"
+          },
+          {
+            "name": "test_braced_emoji",
+            "marker_line": 24,
+            "source_segment_lf_sha256": "5ca9deb142f0ba022913aea23ad05dc5d01edac6d90d207ccc7f36cf9ce304b4"
+          },
+          {
+            "name": "test_braced_max_codepoint",
+            "marker_line": 32,
+            "source_segment_lf_sha256": "29088b4cde4566af15f7a5ccb61270b4821e6540f04fa7809e62c4c465cf4144"
+          },
+          {
+            "name": "test_braced_leading_zeros",
+            "marker_line": 39,
+            "source_segment_lf_sha256": "fe292a0659df7f1835e26e8caec711db1224af2af0d2cd9a0383f61f3a7151a7"
+          },
+          {
+            "name": "test_four_digit_form",
+            "marker_line": 47,
+            "source_segment_lf_sha256": "87620658610bb746ecc61efd67a6f0cc327b4e49030a36d2d386bc6423694a57"
+          },
+          {
+            "name": "test_string_rune_consistency",
+            "marker_line": 57,
+            "source_segment_lf_sha256": "8c04c15bc12dc0806284e51a0b19dde62b700e3649222ecfbcc982020084450a"
+          },
+          {
+            "name": "test_template_string_unicode",
+            "marker_line": 66,
+            "source_segment_lf_sha256": "fe03832562df5185ecbd2b22af3eb4af866801229499e69614faa1d919c89b7d"
+          },
+          {
+            "name": "test_template_string_hex_escape",
+            "marker_line": 74,
+            "source_segment_lf_sha256": "dd78b3ec30e934daf7b9865c94b3d5da041467af26d0339fb289497462ef5c09"
+          },
+          {
+            "name": "test_mixed_text",
+            "marker_line": 84,
+            "source_segment_lf_sha256": "006d3ad79970080d71504a1144b2df16e77c6aecaf909e0b281e8e15fa28faa2"
+          },
+          {
+            "name": "test_raw_string_untouched",
+            "marker_line": 93,
+            "source_segment_lf_sha256": "1875c7caeb8ba9b581008bda8271ac691765da76d3f9ed45682d131ad104df17"
+          }
+        ]
       }
     },
     {
@@ -26557,13 +28629,59 @@
         "state": "MISSING",
         "lf_sha256": null
       },
-      "independent_oracle_gap": "Retain and execute the complete original assertion bodies under the original entry. Author missing byte/event/cleanup expectations; build-only or cross-backend equality does not prove test execution.",
+      "independent_oracle_gap": "Full original named bodies and independent data/content/dimension obligations prepared; actual declaration-owned driver/backend/lifetime/FI/provider qualification remains OPEN.",
       "target_contract_review": "REQUIRED: port superseded surface according to frozen Task313/319/317 decisions while retaining original valid behavior.",
       "original_regression_obligation": {
         "expected_exit": 0,
         "entry": "test",
         "test_discovery": "NOT_RUN",
         "source_assertions": "The complete source file is hash-bound; no regex assertion/test count is claimed."
+      },
+      "original_named_test_obligation": {
+        "state": "REVIEWED_TEXTUAL_DECLARATIONS_NOT_RUNTIME_DISCOVERY",
+        "execution": "NOT_RUN",
+        "declarations": [
+          {
+            "name": "test_single_thread_context",
+            "marker_line": 26,
+            "source_segment_lf_sha256": "9a33bc7c94679856b27ec9b35326884cf77b7a674d81239681f4e5c536347a77"
+          },
+          {
+            "name": "test_single_thread_long_concat",
+            "marker_line": 42,
+            "source_segment_lf_sha256": "118e45b2388640a6e03612ce7ea36dcc3100bff32309c8d8d599eb726e72c82d"
+          },
+          {
+            "name": "test_multicore_context_isolation",
+            "marker_line": 56,
+            "source_segment_lf_sha256": "28be2879ac99d6ffbfde29303deb98508f5ceb636fa5cbb53e7ce5a6bfce96b7"
+          },
+          {
+            "name": "test_multicore_concurrent_long_concat",
+            "marker_line": 83,
+            "source_segment_lf_sha256": "ec3c02779ab931e58bd6f0c40a99f78a1502b643c14997ecafbcdc532561607b"
+          },
+          {
+            "name": "test_context_switch_correctness",
+            "marker_line": 113,
+            "source_segment_lf_sha256": "ac5a471a851dd63c6419c82090f80cde91755617f0807b73bfcdadea393a5027"
+          },
+          {
+            "name": "test_nested_coro_context",
+            "marker_line": 135,
+            "source_segment_lf_sha256": "9fab60f7633cc9b5acbfbbe8c059c89c30def2258d1ae07df1f13a0fdc5076b4"
+          },
+          {
+            "name": "test_property_concurrent_concat_correctness",
+            "marker_line": 147,
+            "source_segment_lf_sha256": "b14460dbe6cd0bbfe545538ff158d2caf34b711dfdeb9bd6ca29d904b92de119"
+          },
+          {
+            "name": "test_property_buffer_reuse_safety",
+            "marker_line": 186,
+            "source_segment_lf_sha256": "c58b9a9f2afaffb2a95585f3579e01f15f85fe0544b5e8b4941494789b108363"
+          }
+        ]
       }
     },
     {
@@ -26595,13 +28713,59 @@
         "state": "MISSING",
         "lf_sha256": null
       },
-      "independent_oracle_gap": "Retain and execute the complete original assertion bodies under the original entry. Author missing byte/event/cleanup expectations; build-only or cross-backend equality does not prove test execution.",
+      "independent_oracle_gap": "Full original named bodies and independent data/content/dimension obligations prepared; actual declaration-owned driver/backend/lifetime/FI/provider qualification remains OPEN.",
       "target_contract_review": "REQUIRED: port superseded surface according to frozen Task313/319/317 decisions while retaining original valid behavior.",
       "original_regression_obligation": {
         "expected_exit": 0,
         "entry": "test",
         "test_discovery": "NOT_RUN",
         "source_assertions": "The complete source file is hash-bound; no regex assertion/test count is claimed."
+      },
+      "original_named_test_obligation": {
+        "state": "REVIEWED_TEXTUAL_DECLARATIONS_NOT_RUNTIME_DISCOVERY",
+        "execution": "NOT_RUN",
+        "declarations": [
+          {
+            "name": "test_concurrent_concat_isolation",
+            "marker_line": 16,
+            "source_segment_lf_sha256": "6f5f363f2845e70edb8ac9c13101b90ff1638d2301fb34f476968ab97cd6ecd8"
+          },
+          {
+            "name": "test_long_string_isolation",
+            "marker_line": 47,
+            "source_segment_lf_sha256": "e048f78cd7d40738f346c299a99180f63cad5cfecd3aebaa68f18e88b16012e1"
+          },
+          {
+            "name": "test_interleaved_concat_isolation",
+            "marker_line": 81,
+            "source_segment_lf_sha256": "4e9ed28ed7f019fa771466c1466bf67786f76c33ea005db78cd8ae932849488d"
+          },
+          {
+            "name": "test_buffer_content_no_leak",
+            "marker_line": 117,
+            "source_segment_lf_sha256": "22ef136ed2ea27b418faa102ca81ad673ac9a31eb1fa7ae853f97a80d7b4ca84"
+          },
+          {
+            "name": "test_main_thread_coro_isolation",
+            "marker_line": 161,
+            "source_segment_lf_sha256": "b9111d775d6067e7181ce7146f7f57be2d1f3275d4982105a3b1bf4df180b968"
+          },
+          {
+            "name": "test_high_concurrency_isolation",
+            "marker_line": 191,
+            "source_segment_lf_sha256": "f3a95d664aaa688a3e4dbbc3e86abf11e8229fd1935b5f529734c73062ea61ec"
+          },
+          {
+            "name": "test_mixed_length_isolation",
+            "marker_line": 232,
+            "source_segment_lf_sha256": "93d7c21db3dc2719c6a13ff93fe3a12c3af66ac38622d7dc2d64f1db2fdf45a3"
+          },
+          {
+            "name": "test_property_random_isolation",
+            "marker_line": 269,
+            "source_segment_lf_sha256": "52a405e409151eaae8faeb4291bf3883a56da26d2354c29c2fe1a9626faea043"
+          }
+        ]
       }
     },
     {
@@ -26631,13 +28795,119 @@
         "state": "MISSING",
         "lf_sha256": null
       },
-      "independent_oracle_gap": "Retain and execute the complete original assertion bodies under the original entry. Author missing byte/event/cleanup expectations; build-only or cross-backend equality does not prove test execution.",
+      "independent_oracle_gap": "Full original named bodies and independent data/content/dimension obligations prepared; actual declaration-owned driver/backend/lifetime/FI/provider qualification remains OPEN.",
       "target_contract_review": "REQUIRED: port superseded surface according to frozen Task313/319/317 decisions while retaining original valid behavior.",
       "original_regression_obligation": {
         "expected_exit": 0,
         "entry": "test",
         "test_discovery": "NOT_RUN",
         "source_assertions": "The complete source file is hash-bound; no regex assertion/test count is claimed."
+      },
+      "original_named_test_obligation": {
+        "state": "REVIEWED_TEXTUAL_DECLARATIONS_NOT_RUNTIME_DISCOVERY",
+        "execution": "NOT_RUN",
+        "declarations": [
+          {
+            "name": "test_short_concat_basic",
+            "marker_line": 17,
+            "source_segment_lf_sha256": "16a918fac6f8afe7e18c5e52b0928d5f58a61b9ace6c23e81cd62fce97f46ebb"
+          },
+          {
+            "name": "test_short_concat_empty",
+            "marker_line": 29,
+            "source_segment_lf_sha256": "93d87bf91abece7dafa8746484d62d27b2c7d23b047020f99b5e486185767ba4"
+          },
+          {
+            "name": "test_short_concat_single_char",
+            "marker_line": 37,
+            "source_segment_lf_sha256": "960a68abb354bec5dded6f20a5d4f493cbe6ff3be05bd5b21493226f820b0e90"
+          },
+          {
+            "name": "test_short_concat_boundary_62",
+            "marker_line": 44,
+            "source_segment_lf_sha256": "79dfe7e810880086b8893a6519889047af30ca0047cd7f2945a1d1e1b454c493"
+          },
+          {
+            "name": "test_short_concat_boundary_63",
+            "marker_line": 55,
+            "source_segment_lf_sha256": "bb8f5ebd99c6623e6224623f8bac091be794bb149d75e172f1fa4b1a0f36ef99"
+          },
+          {
+            "name": "test_long_concat_boundary_64",
+            "marker_line": 68,
+            "source_segment_lf_sha256": "9beda18efb78f4cb2421ed3c4e9f05cba61237424c297d8b95fd2e88b634839e"
+          },
+          {
+            "name": "test_long_concat_boundary_65",
+            "marker_line": 79,
+            "source_segment_lf_sha256": "8bc3a064cad02a72668f861414b89f4b78876e1f1a48f9072c614d342176d820"
+          },
+          {
+            "name": "test_long_concat_large",
+            "marker_line": 90,
+            "source_segment_lf_sha256": "4ad3e8dbfa8d4b66c268c0ac8c58324eed472c9ae4511bcbe4433a4897cc1c97"
+          },
+          {
+            "name": "test_property_concat_correctness_short",
+            "marker_line": 105,
+            "source_segment_lf_sha256": "54eb6f2b58966a76a7e45a05e459df3235bf86cfd08e381b243e7871f4c4f7df"
+          },
+          {
+            "name": "test_property_concat_correctness_long",
+            "marker_line": 140,
+            "source_segment_lf_sha256": "7606d864c75af73b2627364226e65521f8aae00115b86f42c2cfc6569cf0808f"
+          },
+          {
+            "name": "test_property_concat_consistency",
+            "marker_line": 166,
+            "source_segment_lf_sha256": "52072d1077db6f8df66af03911f693695ae9fc530969e88484524eb76c7c6464"
+          },
+          {
+            "name": "test_chained_concat_short",
+            "marker_line": 194,
+            "source_segment_lf_sha256": "4933b1c86c4f65b30aa44dd67ddfdb9bbb1afc99c959534a3f4a428ea7d712e6"
+          },
+          {
+            "name": "test_chained_concat_mixed",
+            "marker_line": 201,
+            "source_segment_lf_sha256": "e85a59d548c38bac1d684fac0246c65286b9e4beefcf12e840facd0b1ed746f0"
+          },
+          {
+            "name": "test_concat_with_special_chars",
+            "marker_line": 215,
+            "source_segment_lf_sha256": "9305fb55b4c5a9a1913b22fe8a89e3c98a17bbe0d82bd3e5a232c195168a336b"
+          },
+          {
+            "name": "test_concat_with_unicode",
+            "marker_line": 224,
+            "source_segment_lf_sha256": "0a13f172077e8f9b38a8dfeee8252c8d92dcf3973c2ae61b51964bcca3a91e17"
+          },
+          {
+            "name": "test_loop_concat_short",
+            "marker_line": 235,
+            "source_segment_lf_sha256": "45be7d0833996adc9cf25b2d3ac7d03f69b34429acadb291054718f4ae01018b"
+          },
+          {
+            "name": "test_loop_concat_crossing_threshold",
+            "marker_line": 246,
+            "source_segment_lf_sha256": "873f81f0f0c6215e7676bfde0542b5d7f31612c973625a8979fb778dbf61e08a"
+          },
+          {
+            "name": "test_concurrent_short_concat",
+            "marker_line": 259,
+            "source_segment_lf_sha256": "578e001122b55d54f110c61d60e8cf8308efaa5dddc9541ce4022007e71cc77d"
+          },
+          {
+            "name": "test_concurrent_long_concat",
+            "marker_line": 281,
+            "source_segment_lf_sha256": "9675830bba772b2e407e2007a4f85d7ea9b3cc7a2345a14564e478fedf49c02d"
+          },
+          {
+            "name": "test_concurrent_mixed_concat",
+            "marker_line": 306,
+            "source_segment_lf_sha256": "537925b408ab8c5536d1631c08740fd82fb16969303606b902750090f591e6ae"
+          }
+        ]
       }
     },
     {
@@ -26667,13 +28937,112 @@
         "state": "MISSING",
         "lf_sha256": null
       },
-      "independent_oracle_gap": "Retain and execute the complete original assertion bodies under the original entry. Author missing byte/event/cleanup expectations; build-only or cross-backend equality does not prove test execution.",
+      "independent_oracle_gap": "Full original named bodies and independent data/content/dimension obligations prepared; actual declaration-owned driver/backend/lifetime/FI/provider qualification remains OPEN.",
       "target_contract_review": "REQUIRED: port superseded surface according to frozen Task313/319/317 decisions while retaining original valid behavior.",
       "original_regression_obligation": {
         "expected_exit": 0,
         "entry": "test",
         "test_discovery": "NOT_RUN",
         "source_assertions": "The complete source file is hash-bound; no regex assertion/test count is claimed."
+      },
+      "original_named_test_obligation": {
+        "state": "REVIEWED_TEXTUAL_DECLARATIONS_NOT_RUNTIME_DISCOVERY",
+        "execution": "NOT_RUN",
+        "declarations": [
+          {
+            "name": "test_threshold_boundary_exact_63",
+            "marker_line": 17,
+            "source_segment_lf_sha256": "47f660b09f7cf19b554c6f2110a2f26040e5ecc5b9aaafd16aa4b36a57ab2580"
+          },
+          {
+            "name": "test_threshold_boundary_exact_64",
+            "marker_line": 32,
+            "source_segment_lf_sha256": "cb9e8cd91213b640009294be7f86c565d78bc5e5ddd57dd447e2a5d71ffed8b6"
+          },
+          {
+            "name": "test_threshold_boundary_exact_65",
+            "marker_line": 47,
+            "source_segment_lf_sha256": "a0edb6038e5fc2225b9c50ff772978aef23acfc61d4dd251ba7591a5cba75856"
+          },
+          {
+            "name": "test_property_threshold_branch_below",
+            "marker_line": 64,
+            "source_segment_lf_sha256": "5937aad93a5a0db9903752f03a111cbbec3e9072e87ed06b193120ad456f66d9"
+          },
+          {
+            "name": "test_property_threshold_branch_at_and_above",
+            "marker_line": 111,
+            "source_segment_lf_sha256": "a6df5992835e38933c8a148428094a82474231b3283539b2c8a74abfc254a275"
+          },
+          {
+            "name": "test_threshold_continuity",
+            "marker_line": 159,
+            "source_segment_lf_sha256": "e6ddd135b15ef3d58e9270b2069548b3aa34a5ec22c8db0a7fa3eacf515c5067"
+          },
+          {
+            "name": "test_threshold_with_varied_content_below",
+            "marker_line": 193,
+            "source_segment_lf_sha256": "41b32521ac4700f50ad81468510ec434004275a66a35eda5fb521d6d4c35635b"
+          },
+          {
+            "name": "test_threshold_with_varied_content_above",
+            "marker_line": 216,
+            "source_segment_lf_sha256": "d645fddbf189c0f6467ea48d4a66eabc3dd0f006a91f29d930d8c299f7c792a8"
+          },
+          {
+            "name": "test_concurrent_threshold_boundary",
+            "marker_line": 240,
+            "source_segment_lf_sha256": "fc773a9b7c2009707682e93efeb605f36fb61a1474a5d1116d1e0a0f2bc9c1c4"
+          },
+          {
+            "name": "test_threshold_empty_strings",
+            "marker_line": 280,
+            "source_segment_lf_sha256": "dd447461cb168ebc8cb7a0384f144957d168651e838bf7019f5469155c4b085f"
+          },
+          {
+            "name": "test_threshold_one_empty",
+            "marker_line": 291,
+            "source_segment_lf_sha256": "e2023958dcda28c2fe49c3224edf0ddc77be2e9f8f38fa6dd28d78700f651193"
+          },
+          {
+            "name": "test_threshold_single_char",
+            "marker_line": 308,
+            "source_segment_lf_sha256": "07e02fdd05c3ca6a3f86192e3a5362a0fc6aee52b9123c358897c14aca252187"
+          }
+        ]
+      },
+      "target_source_port": {
+        "fixture": "tests/unit/xir/legacy_consumers/fixtures/collection_string_ports/0751_threshold_branch/root.xr",
+        "lf_sha256": "a226f67ed1fb1504d55bf166cd985a6531a67f9b8426f1aa432812c77549e6f6",
+        "owner_package": "P13",
+        "qualification": "NOT_RUN",
+        "frozen_basis": [
+          "All12 originalboundary/14below/13above/55continuity/25varied/sixjobs retained. Jobsnowreturnownedcontent andoldlengthobservation plusexactcontent ischecked; threshold64/stack/buffer path remainshistoricalnotprovenbycorrectvalues."
+        ]
+      },
+      "named_test_migration": {
+        "state": "PREPARED_NOT_EXECUTED",
+        "original_tests_removed": false,
+        "mapping": {
+          "test_threshold_boundary_exact_63": "test_threshold_boundary_exact_63",
+          "test_threshold_boundary_exact_64": "test_threshold_boundary_exact_64",
+          "test_threshold_boundary_exact_65": "test_threshold_boundary_exact_65",
+          "test_property_threshold_branch_below": "test_property_threshold_branch_below",
+          "test_property_threshold_branch_at_and_above": "test_property_threshold_branch_at_and_above",
+          "test_threshold_continuity": "test_threshold_continuity",
+          "test_threshold_with_varied_content_below": "test_threshold_with_varied_content_below",
+          "test_threshold_with_varied_content_above": "test_threshold_with_varied_content_above",
+          "test_concurrent_threshold_boundary": "test_concurrent_threshold_boundary",
+          "test_threshold_empty_strings": "test_threshold_empty_strings",
+          "test_threshold_one_empty": "test_threshold_one_empty",
+          "test_threshold_single_char": "test_threshold_single_char"
+        }
+      },
+      "target_disposition": {
+        "kind": "POSITIVE_COMPLETE_COLLECTION_STRING_AFTER_FROZEN_PORT",
+        "owner_package": "P13",
+        "qualification": "NOT_RUN",
+        "reason": "All12 originalboundary/14below/13above/55continuity/25varied/sixjobs retained. Jobsnowreturnownedcontent andoldlengthobservation plusexactcontent ischecked; threshold64/stack/buffer path remainshistoricalnotprovenbycorrectvalues."
       }
     },
     {
@@ -26705,13 +29074,49 @@
         "state": "MISSING",
         "lf_sha256": null
       },
-      "independent_oracle_gap": "Retain and execute the complete original assertion bodies under the original entry. Author missing byte/event/cleanup expectations; build-only or cross-backend equality does not prove test execution.",
+      "independent_oracle_gap": "Full original named bodies and independent data/content/dimension obligations prepared; actual declaration-owned driver/backend/lifetime/FI/provider qualification remains OPEN.",
       "target_contract_review": "REQUIRED: port superseded surface according to frozen Task313/319/317 decisions while retaining original valid behavior.",
       "original_regression_obligation": {
         "expected_exit": 0,
         "entry": "test",
         "test_discovery": "NOT_RUN",
         "source_assertions": "The complete source file is hash-bound; no regex assertion/test count is claimed."
+      },
+      "original_named_test_obligation": {
+        "state": "REVIEWED_TEXTUAL_DECLARATIONS_NOT_RUNTIME_DISCOVERY",
+        "execution": "NOT_RUN",
+        "declarations": [
+          {
+            "name": "test_property_concurrent_concat_short",
+            "marker_line": 17,
+            "source_segment_lf_sha256": "346be504782b1b5efc94041b8ecbf2f7e870d1b8a65ec17cd33a43c10f25c192"
+          },
+          {
+            "name": "test_property_concurrent_concat_long",
+            "marker_line": 45,
+            "source_segment_lf_sha256": "92ef983f730ee5707f704753c40e7d83a5b59ba193461427a562bc3f6d3429bc"
+          },
+          {
+            "name": "test_property_concurrent_concat_mixed",
+            "marker_line": 76,
+            "source_segment_lf_sha256": "8217d9ddfb0ec34015d67f34e6ec58a425462d0de35d51c048ec63d3587d6878"
+          },
+          {
+            "name": "test_property_concurrent_concat_isolation",
+            "marker_line": 110,
+            "source_segment_lf_sha256": "a0656c0fa8a4e6be5b1c60734b7f164dc053148b5676eb0490251ad1643eec50"
+          },
+          {
+            "name": "test_property_concurrent_concat_threshold_boundary",
+            "marker_line": 149,
+            "source_segment_lf_sha256": "67ef786f8951afe2e61aa9e297b5df4c5dcfb88f5696b7d15ddf7d83db724e2f"
+          },
+          {
+            "name": "test_property_concurrent_concat_correctness",
+            "marker_line": 181,
+            "source_segment_lf_sha256": "9756434fc216dfdf5c8f0381f1bb7cb4ebca46b58160578432dfd91492c39360"
+          }
+        ]
       }
     },
     {
@@ -26743,13 +29148,88 @@
         "state": "MISSING",
         "lf_sha256": null
       },
-      "independent_oracle_gap": "Retain and execute the complete original assertion bodies under the original entry. Author missing byte/event/cleanup expectations; build-only or cross-backend equality does not prove test execution.",
+      "independent_oracle_gap": "Full original named bodies and independent data/content/dimension obligations prepared; actual declaration-owned driver/backend/lifetime/FI/provider qualification remains OPEN.",
       "target_contract_review": "REQUIRED: port superseded surface according to frozen Task313/319/317 decisions while retaining original valid behavior.",
       "original_regression_obligation": {
         "expected_exit": 0,
         "entry": "test",
         "test_discovery": "NOT_RUN",
         "source_assertions": "The complete source file is hash-bound; no regex assertion/test count is claimed."
+      },
+      "original_named_test_obligation": {
+        "state": "REVIEWED_TEXTUAL_DECLARATIONS_NOT_RUNTIME_DISCOVERY",
+        "execution": "NOT_RUN",
+        "declarations": [
+          {
+            "name": "test_property_concurrent_intern_safety",
+            "marker_line": 18,
+            "source_segment_lf_sha256": "ccee9e6688a4058dd7dcdfb04c0670be4368be3b2de645b8a1ed004ee2b8c992"
+          },
+          {
+            "name": "test_property_concurrent_global_pool_readonly",
+            "marker_line": 52,
+            "source_segment_lf_sha256": "4dbfb0f7cfef6ac4c362a2dbcaa065aeb01a4e1ad3d6494a92f07eee35d45ece"
+          },
+          {
+            "name": "test_property_concurrent_local_pool_isolation",
+            "marker_line": 79,
+            "source_segment_lf_sha256": "94ac2aca0d0fc4e0e4e838ef8bb92428cbbbfce11d6e2f1dde6ae7617388b9f9"
+          },
+          {
+            "name": "test_property_concurrent_long_string_no_intern",
+            "marker_line": 111,
+            "source_segment_lf_sha256": "f85864d9a9f0f9edf447e0bd18ec26e873c13674eb0abe50f097e4dbcd14858b"
+          },
+          {
+            "name": "test_property_concurrent_mixed_operations",
+            "marker_line": 145,
+            "source_segment_lf_sha256": "eea82c78d3a5b85cad0a602635ae739d21a0b6e613f5ad51f60f3aa9d672b17c"
+          },
+          {
+            "name": "test_property_concurrent_string_compare",
+            "marker_line": 181,
+            "source_segment_lf_sha256": "dda4284665ee83fcc71915827b3d80d72a5b8e67f60907f96a791ed89b83928b"
+          },
+          {
+            "name": "test_property_concurrent_intern_consistency",
+            "marker_line": 216,
+            "source_segment_lf_sha256": "aad44fe3a89e3dad015a72374f73ae0c7024fb88c01ebbe3f5ea7402ff358125"
+          },
+          {
+            "name": "test_property_concurrent_stress_200",
+            "marker_line": 246,
+            "source_segment_lf_sha256": "4cd9cc65e784e1c76b233b9ff4c721dabbfa7d93d53ec0daaca82266d4b692d1"
+          }
+        ]
+      },
+      "target_source_port": {
+        "fixture": "tests/unit/xir/legacy_consumers/fixtures/collection_string_ports/0770_string_pool_concurrent_property/root.xr",
+        "lf_sha256": "880bd19c246bfeddf605a9c9a67eaeef8c546b59b063a6ff77f6cfe74ebc0d74",
+        "owner_package": "P13",
+        "qualification": "NOT_RUN",
+        "frozen_basis": [
+          "All8 originalpositivecontent cases retained. Lastname/commentclaimed200 jobs butoriginalbodyused100; plannedtargetrestores200 while preservingallseven50-job cases. Nointerning/globalpool/localpool/address/OSworker provenance grantedbybooleans."
+        ]
+      },
+      "named_test_migration": {
+        "state": "PREPARED_NOT_EXECUTED",
+        "original_tests_removed": false,
+        "mapping": {
+          "test_property_concurrent_intern_safety": "test_property_concurrent_intern_safety",
+          "test_property_concurrent_global_pool_readonly": "test_property_concurrent_global_pool_readonly",
+          "test_property_concurrent_local_pool_isolation": "test_property_concurrent_local_pool_isolation",
+          "test_property_concurrent_long_string_no_intern": "test_property_concurrent_long_string_no_intern",
+          "test_property_concurrent_mixed_operations": "test_property_concurrent_mixed_operations",
+          "test_property_concurrent_string_compare": "test_property_concurrent_string_compare",
+          "test_property_concurrent_intern_consistency": "test_property_concurrent_intern_consistency",
+          "test_property_concurrent_stress_200": "test_property_concurrent_stress_200"
+        }
+      },
+      "target_disposition": {
+        "kind": "POSITIVE_COMPLETE_COLLECTION_STRING_AFTER_FROZEN_PORT",
+        "owner_package": "P13",
+        "qualification": "NOT_RUN",
+        "reason": "All8 originalpositivecontent cases retained. Lastname/commentclaimed200 jobs butoriginalbodyused100; plannedtargetrestores200 while preservingallseven50-job cases. Nointerning/globalpool/localpool/address/OSworker provenance grantedbybooleans."
       }
     },
     {
@@ -26779,13 +29259,46 @@
         "state": "MISSING",
         "lf_sha256": null
       },
-      "independent_oracle_gap": "Retain and execute the complete original assertion bodies under the original entry. Author missing byte/event/cleanup expectations; build-only or cross-backend equality does not prove test execution.",
+      "independent_oracle_gap": "Full original named bodies and independent data/content/dimension obligations prepared; actual declaration-owned driver/backend/lifetime/FI/provider qualification remains OPEN.",
       "target_contract_review": "REQUIRED: port superseded surface according to frozen Task313/319/317 decisions while retaining original valid behavior.",
       "original_regression_obligation": {
         "expected_exit": 0,
         "entry": "test",
         "test_discovery": "NOT_RUN",
         "source_assertions": "The complete source file is hash-bound; no regex assertion/test count is claimed."
+      },
+      "original_named_test_obligation": {
+        "state": "REVIEWED_TEXTUAL_DECLARATIONS_NOT_RUNTIME_DISCOVERY",
+        "execution": "NOT_RUN",
+        "declarations": [
+          {
+            "name": "test_chr_function",
+            "marker_line": 5,
+            "source_segment_lf_sha256": "0055449e2def01d55b1d1cc65c4e13681e6e79acfe5e5aae8e1224b7ff7de78f"
+          }
+        ]
+      },
+      "target_source_port": {
+        "fixture": "tests/unit/xir/legacy_consumers/fixtures/collection_string_ports/0780_chr_function/root.xr",
+        "lf_sha256": "3c0ebb559303001207a0b3701c12f782f9754e29c0e269243123634e2f53c290",
+        "owner_package": "P13",
+        "qualification": "NOT_RUN",
+        "frozen_basis": [
+          "PreserveallASCII/2-3-4byte/codepointboundaries/roundtrips. Retiredchr/Null-debug checksbecomerune(value)+fromRune andactualfive invalidscalar E0422runtimepanic checks inparameterizedhelper, notliteralcompile-rejection orNullable sentinel."
+        ]
+      },
+      "named_test_migration": {
+        "state": "PREPARED_NOT_EXECUTED",
+        "original_tests_removed": false,
+        "mapping": {
+          "test_chr_function": "test_chr_function"
+        }
+      },
+      "target_disposition": {
+        "kind": "POSITIVE_COMPLETE_COLLECTION_STRING_AFTER_FROZEN_PORT",
+        "owner_package": "P13",
+        "qualification": "NOT_RUN",
+        "reason": "PreserveallASCII/2-3-4byte/codepointboundaries/roundtrips. Retiredchr/Null-debug checksbecomerune(value)+fromRune andactualfive invalidscalar E0422runtimepanic checks inparameterizedhelper, notliteralcompile-rejection orNullable sentinel."
       }
     },
     {
@@ -26815,13 +29328,24 @@
         "state": "MISSING",
         "lf_sha256": null
       },
-      "independent_oracle_gap": "Retain and execute the complete original assertion bodies under the original entry. Author missing byte/event/cleanup expectations; build-only or cross-backend equality does not prove test execution.",
+      "independent_oracle_gap": "Full original named bodies and independent data/content/dimension obligations prepared; actual declaration-owned driver/backend/lifetime/FI/provider qualification remains OPEN.",
       "target_contract_review": "REQUIRED: port superseded surface according to frozen Task313/319/317 decisions while retaining original valid behavior.",
       "original_regression_obligation": {
         "expected_exit": 0,
         "entry": "test",
         "test_discovery": "NOT_RUN",
         "source_assertions": "The complete source file is hash-bound; no regex assertion/test count is claimed."
+      },
+      "original_named_test_obligation": {
+        "state": "REVIEWED_TEXTUAL_DECLARATIONS_NOT_RUNTIME_DISCOVERY",
+        "execution": "NOT_RUN",
+        "declarations": [
+          {
+            "name": "test_string_repeat",
+            "marker_line": 8,
+            "source_segment_lf_sha256": "f2534d51bf01cc084b8e6c6804e63392980cd860d3d8a3a18e9c9147b4dfaf9e"
+          }
+        ]
       }
     },
     {

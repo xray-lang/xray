@@ -189,7 +189,7 @@ platform success. All actual backend/provider/FI/physical gates stay OPEN.
 
 Every original runner input and entry is now explicitly routed. Check/snapshot
 gates reject an omitted input even when historical anchors still match it.
-This is not full named semantic review:58 early regression test files still
+This is not full named semantic review:27 early regression test files still
 need complete per-name obligations, which are counted separately. Network
 drafts preserve all real setup, byte/framing/timeout/half-close/child lifetime
 duties; listener or TLS skips never qualify provider capability. RFC HPACK and
@@ -210,3 +210,11 @@ stay separate; direct/indirect callees observe held state before cleanup.
 Owned callback captures register their cycle break before allocation-sensitive
 assignments; actual FI/physical/frame/TCO and canonical Iterator/JSON proof
 remain unqualified. Function values never inherit item hoisting or defaults.
+
+Collection/string review retains all360 new named duties, exactnestedpayloads,
+logicalget/copy/writeback, strictfill failure atomicity andexclusiveview/NLL
+semantics. OwnedUTF8accumulation replaces retiredbuilder calls; allUnicode
+scalar/octet/malformed-input and500-element/workerdimensions are independent.
+Historical64-byte/buffer/pool/JIT labels grant no implementation provenance,
+and claimed200-job pressure is recorded separately from original100-job body.
+ActualcanonicalJSON/Key/Compare/callback/formatter replacement remains OPEN.

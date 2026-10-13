@@ -1,0 +1,182 @@
+// 0620_map.xr
+// 作者：xingleixu@gmail.com
+// 测试：Map 集合
+// ===== 创建 =====
+@test
+fn test_map_literal() {
+    var m = #{"a": 1, "b": 2, "c": 3}
+    assertEqual(len(m), 3)
+}
+
+@test
+fn test_empty_map() {
+    var m: Map<string, i64> = #{}
+    assertEqual(len(m), 0)
+}
+
+@test
+fn test_single_entry() {
+    var m = #{"key": "value"}
+    assertEqual(len(m), 1)
+}
+
+// ===== 获取 =====
+@test
+fn test_get_basic() {
+    var m = #{"name": "Alice", "age": 30}
+    assertEqual(m.get("name")! as string, "Alice")
+    assertEqual(m.get("age")! as i64, 30)
+}
+
+@test
+fn test_get_missing() {
+    var m = #{"a": 1}
+    assertEqual(m.get("b"), null)
+}
+
+@test
+fn test_bracket_access() {
+    var m = #{"x": 10, "y": 20}
+    assertEqual(m["x"], 10)
+    assertEqual(m["y"], 20)
+}
+
+// ===== 设置 =====
+@test
+fn test_set_new() {
+    var m: Map<string, string> = #{}
+    m.set("key", "value")
+    assertEqual(m.get("key"), "value")
+    assertEqual(len(m), 1)
+}
+
+@test
+fn test_set_overwrite() {
+    var m = #{"key": "old"}
+    m.set("key", "new")
+    assertEqual(m.get("key"), "new")
+    assertEqual(len(m), 1)
+}
+
+@test
+fn test_bracket_assign() {
+    var m: Map<string, i64> = #{}
+    m["x"] = 100
+    assertEqual(m["x"], 100)
+}
+
+// ===== 检查 =====
+@test
+fn test_has_key() {
+    var m = #{"a": 1, "b": 2}
+    assertEqual(m.containsKey("a"), true)
+    assertEqual(m.containsKey("c"), false)
+}
+
+// ===== 删除 =====
+@test
+fn test_delete() {
+    var m = #{"a": 1, "b": 2, "c": 3}
+    m.delete("b")
+    assertEqual(len(m), 2)
+    assertEqual(m.containsKey("b"), false)
+    assertEqual(m.containsKey("a"), true)
+    assertEqual(m.containsKey("c"), true)
+}
+
+@test
+fn test_delete_missing() {
+    var m = #{"a": 1}
+    m.delete("b")
+    // 不存在的键
+    assertEqual(len(m), 1)
+}
+
+// ===== 遍历 =====
+@test
+fn test_iterate_values() {
+    var m = #{"a": 1, "b": 2, "c": 3}
+    var sum = 0
+    for (k, v in m) {
+        sum += v
+    }
+    assertEqual(sum, 6)
+}
+
+@test
+fn test_collect_keys() {
+    var m = #{"x": 10, "y": 20, "z": 30}
+    var keys: Array<string> = []
+    for (k, v in m) {
+        keys.push(k)
+    }
+    assertEqual(len(keys), 3)
+}
+
+// ===== keys/values =====
+@test
+fn test_keys() {
+    var m = #{"a": 1, "b": 2}
+    var keys = m.keys()
+    assertEqual(len(keys), 2)
+}
+
+@test
+fn test_values() {
+    var m = #{"a": 1, "b": 2}
+    var values = m.values()
+    assertEqual(len(values), 2)
+}
+
+// ===== 清空 =====
+@test
+fn test_clear() {
+    var m = #{"a": 1, "b": 2, "c": 3}
+    m.clear()
+    assertEqual(len(m), 0)
+}
+
+// ===== 不同类型的键值 =====
+@test
+fn test_string_keys() {
+    var m = #{"hello": 1, "world": 2}
+    assertEqual(m.get("hello"), 1)
+}
+
+@test
+fn test_mixed_value_types() {
+    type MixedMapValue = i64 | string | bool
+    var integer: MixedMapValue = 42
+    var text: MixedMapValue = "hello"
+    var flag: MixedMapValue = true
+    var m: Map<string, MixedMapValue?> = #{"int": integer, "str": text, "bool": flag, "null": null}
+    assertEqual(m.get("int")!! as i64, 42)
+    assertEqual(m.get("str")!! as string, "hello")
+    assertEqual(m.get("bool")!! as bool, true)
+    var presentNull = m.get("null")
+    assert(presentNull != null)
+    assert(presentNull! == null)
+    assert(m.get("missing") == null)
+    assert(!m.containsKey("missing"))
+}
+
+// ===== 边界条件 =====
+@test
+fn test_many_entries() {
+    var m: Map<string, i64> = #{}
+    for (var i = 0; i < 100; i++) {
+        m.set("key" + i.toString(), i)
+    }
+    assertEqual(len(m), 100)
+    assertEqual(m.get("key50"), 50)
+}
+
+@test
+fn test_overwrite_many_times() {
+    var m = #{"x": 0}
+    for (var i = 0; i < 10; i++) {
+        m.set("x", i)
+    }
+    assertEqual(m.get("x"), 9)
+    assertEqual(len(m), 1)
+}
