@@ -182,5 +182,15 @@
       ]
     }
   ],
-  "completion_caveat": "These fixtures are preparation only, have not been parsed or run by a fresh Xray executable, and are not registered as passing CTest gates. A real DAP driver, registration, full entry coverage, mixed callbacks, resource/FI and sanitizer qualification remain required."
+  "completion_caveat": "These source fixtures have passed fresh reference syntax/check/ordinary execution against the published development baseline. DAP breakpoints, stepping, inspection, mutation, mixed callbacks, resource/FI and sanitizer qualification of the full consumer remain required. They are not yet registered as DAP end-to-end gates.",
+  "reference_source_validation": {
+    "published_baseline_commit": "e16797c62636f1d138583ead18d234c86a3cde6e",
+    "fixture_input_commit": "14d5bced309ec0b5ab7333e2949e75dfab00bb9b",
+    "configuration": "Windows x86-64 MSVC Release / Ninja / XRAY_STDLIB_VM_FASTPATHS=OFF",
+    "syntax_checks": 5,
+    "semantic_checks": 5,
+    "ordinary_execution_expectations": 5,
+    "result": "PASS",
+    "dap_sessions": "NOT_RUN"
+  }
 }
