@@ -432,6 +432,7 @@ target_include_directories(test_xir_value_allocations PRIVATE ${CMAKE_SOURCE_DIR
 target_link_libraries(test_xir_value_allocations PRIVATE xray_xir_scalar)
 # Owned close/copy tests use the production thread wrapper and join every handle.
 target_include_directories(test_xir_value_allocations PRIVATE ${CMAKE_SOURCE_DIR}/src/base)
+target_include_directories(test_xir_array_grow_budget PRIVATE ${CMAKE_SOURCE_DIR}/src/base)
 if(WIN32)
     target_sources(test_xir_value_allocations PRIVATE ${CMAKE_SOURCE_DIR}/src/os/win/thread_win.c)
     target_sources(test_xir_array_grow_budget PRIVATE ${CMAKE_SOURCE_DIR}/src/os/win/thread_win.c)
