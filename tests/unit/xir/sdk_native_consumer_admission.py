@@ -40,7 +40,7 @@ def main():
     compiled = run('generator-build', [args.compiler, '/nologo', '/std:c11', '/utf-8',
         '/W4', '/WX', '/MD', str(source), '/Fo'+str(work/'generator_fault.obj'),
         '/Fe'+str(generator)])
-    assert compiled.returncode == 0, compiled.stderr.decode('utf-8', errors='replace')
+    assert compiled.returncode == 0, (compiled.stdout+compiled.stderr).decode('utf-8', errors='replace')
     sys.path.insert(0, str(root/'scripts'))
     from derive_xir_sdk_abi import prepare
     prepare(work/'independent-abi')
