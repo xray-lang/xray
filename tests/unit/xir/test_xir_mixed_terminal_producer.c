@@ -54,16 +54,16 @@ int main(int argc, char **argv) {
     CHECK(xr_xir_compile_lower(closed, &target, &lowered, NULL) == XR_XIR_OK);
     xr_xir_compile_artifact_free(closed);
     const XrXirModule *module = xr_xir_compile_artifact_module(lowered);
-    const char *names[] = {"returned","thrown","panicked","crossed"};
-    uint32_t entries[4];
-    for (unsigned i = 0; i < 4; ++i) entries[i] = terminal_entry(module, names[i]);
+    const char *names[] = {"returned","thrown","panicked","crossed","escaped"};
+    uint32_t entries[5];
+    for (unsigned i = 0; i < 5; ++i) entries[i] = terminal_entry(module, names[i]);
     XrXirCSource source = {0};
     CHECK(xr_xir_compile_emit_c(lowered, "terminal_fixture", 4194304, &source) == XR_XIR_OK);
     CHECK(source.text && !strstr(source.text, "({") && !strstr(source.text, "xr_xir_vm"));
     FILE *file = fopen(argv[1], "wb"); CHECK(file);
     CHECK(fwrite(source.text, 1, source.length, file) == source.length);
-    CHECK(fprintf(file, "\nconst uint32_t terminal_fixture_functions[4] = {%uu,%uu,%uu,%uu};\n",
-        entries[0], entries[1], entries[2], entries[3]) > 0);
+    CHECK(fprintf(file, "\nconst uint32_t terminal_fixture_functions[5] = {%uu,%uu,%uu,%uu,%uu};\n",
+        entries[0], entries[1], entries[2], entries[3], entries[4]) > 0);
     CHECK(fclose(file) == 0);
     xr_xir_compile_c_source_free(&source); xr_xir_compile_artifact_free(lowered);
     effects_source_owners_free();

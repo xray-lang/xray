@@ -18,7 +18,7 @@
 #include "xir_effect_execution_owner.h"
 #include "xir_runtime_allocations.h"
 XR_DATA const XrXirProgramSpec terminal_fixture_program;
-XR_DATA const uint32_t terminal_fixture_functions[4];
+XR_DATA const uint32_t terminal_fixture_functions[5];
 typedef enum TerminalBackend {
     TERMINAL_MIXED_VM_ROOT, TERMINAL_MIXED_NATIVE_ROOT,
     TERMINAL_VM, TERMINAL_NATIVE
@@ -137,6 +137,53 @@ static void terminal_retained(XrXirCallResult retained[3]) {
         !memcmp(message.message, "division by zero", message.message_len));
     for (unsigned i = 0; i < 3; ++i) xr_xir_call_result_drop(&retained[i]);
 }
+static void terminal_closure(TerminalBackend backend) {
+    const unsigned released = terminal_code_releases;
+    XrXirProgram *program = terminal_program(backend);
+    XrXirInstanceConfig config;
+    CHECK(xr_xir_instance_config_init(&config, sizeof(config)) == XR_XIR_CALL_READY);
+    XrXirInstance *origin = NULL, *peer = NULL;
+    CHECK(xr_xir_instance_new(program, &config, &origin) == XR_XIR_CALL_READY);
+    CHECK(xr_xir_instance_new(program, &config, &peer) == XR_XIR_CALL_READY);
+    xr_xir_compile_program_drop(program);
+    CHECK(xr_xir_instance_start(origin, terminal_fixture_functions[4], NULL, 0) == XR_XIR_CALL_READY);
+    CHECK(xr_xir_instance_poll_bounded(origin, UINT64_MAX).outcome.status == XR_XIR_CALL_RETURNED);
+    XrXirValue function = {0}, alias = {0}, late_alias = {0};
+    CHECK(xr_xir_instance_take_result(origin, &function) == XR_XIR_CALL_RETURNED);
+    const XrXirFunctionBinding *binding = xr_xir_function_binding(&function);
+    CHECK(binding && binding->capture_count == 1);
+    terminal_text(&binding->captures[0], "captured");
+    CHECK(xr_xir_value_copy(&function, &alias) == XR_XIR_VALUE_OK);
+    const size_t blocks = runtime_live, bytes = runtime_bytes;
+    CHECK(xr_xir_instance_start_function(peer, &function, NULL, 0) == XR_XIR_CALL_BAD_ARGUMENT);
+    CHECK(xr_xir_instance_state(peer) == XR_XIR_INSTANCE_NEW && runtime_live == blocks && runtime_bytes == bytes);
+    for (unsigned i = 0; i < 2; ++i) {
+        CHECK(xr_xir_instance_start_function(origin, i ? &alias : &function, NULL, 0) == XR_XIR_CALL_READY);
+        CHECK(xr_xir_instance_poll_bounded(origin, UINT64_MAX).outcome.status == XR_XIR_CALL_RETURNED);
+        XrXirValue result = {0};
+        CHECK(xr_xir_instance_take_result(origin, &result) == XR_XIR_CALL_RETURNED);
+        terminal_text(&result, "captured"); xr_xir_value_drop(&result);
+    }
+    CHECK(xr_xir_instance_stop(origin) == XR_XIR_CALL_READY);
+    CHECK(xr_xir_instance_start_function(origin, &function, NULL, 0) == XR_XIR_CALL_BAD_STATE);
+    CHECK(xr_xir_instance_start_function(peer, &function, NULL, 0) == XR_XIR_CALL_BAD_ARGUMENT);
+    CHECK(xr_xir_instance_state(peer) == XR_XIR_INSTANCE_NEW);
+    CHECK(xr_xir_instance_free(origin) == XR_XIR_CALL_READY);
+    CHECK(xr_xir_instance_free(peer) == XR_XIR_CALL_READY);
+    CHECK(terminal_code_releases == released && runtime_live && runtime_bytes);
+    CHECK(xr_xir_value_valid(&function) && xr_xir_value_valid(&alias));
+    CHECK(xr_xir_value_copy(&alias, &late_alias) == XR_XIR_VALUE_OK);
+    binding = xr_xir_function_binding(&late_alias);
+    CHECK(binding && binding->capture_count == 1);
+    terminal_text(&binding->captures[0], "captured");
+    xr_xir_value_drop(&function); xr_xir_value_drop(&alias);
+    CHECK(terminal_code_releases == released && xr_xir_value_valid(&late_alias));
+    binding = xr_xir_function_binding(&late_alias);
+    CHECK(binding && binding->capture_count == 1);
+    terminal_text(&binding->captures[0], "captured");
+    xr_xir_value_drop(&late_alias);
+    CHECK(terminal_code_releases == released + 1 && !runtime_live && !runtime_bytes);
+}
 int main(int argc, char **argv) {
     CHECK(argc == 2);
     unsigned selected = 0;
@@ -173,7 +220,8 @@ int main(int argc, char **argv) {
     CHECK(runtime_live && runtime_bytes);
     terminal_retained(retained);
     CHECK(!runtime_live && !runtime_bytes);
+    terminal_closure(backend);
     effects_source_owners_free();
-    printf("Terminal paths backend=%s return/throw/panic and three cancels, inner/outer cleanup, callback trace=40/41/42/41 result42, late events rejected, retained payloads, physical=0/0\n", terminal_backend_names[backend]);
+    printf("Terminal paths backend=%s return/throw/panic and three cancels, inner/outer cleanup, callback trace=40/41/42/41 result42, late events rejected, retained payloads, closure captured/read/copied after instances, revoked/cross-instance rejected, final code lease released once, physical=0/0\n", terminal_backend_names[backend]);
     return 0;
 }
