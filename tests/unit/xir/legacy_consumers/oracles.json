@@ -2041,6 +2041,305 @@
         "Preserve local view owner/borrow in the Tuple wrapper through the actual Source/Checked/Lowered chain and both backends; no illicit scope escape or general container exemption.",
         "Run complete affected owner/lifetime/physical/FI/resource/safety gates; printing1 alone does not qualify borrow preservation."
       ]
+    },
+    {
+      "id": "class_basic_original_named_tests",
+      "inputs": [
+        {
+          "path": "tests/unit/xir/legacy_consumers/fixtures/class_basic_ordinary_methods/root.xr",
+          "lf_sha256": "521c9a3bd89cbfe5ca19924a91599b6317540dba16d67c35aedb62a8753a2350",
+          "role": "target_source"
+        },
+        {
+          "path": "tests/regression/08_oop/0800_class_basic.xr",
+          "lf_sha256": "0128e3def7cbad6df5b2f1754010d0eee9408a09b9b03f10291c55daa14cd6df",
+          "role": "historical_source_reference"
+        }
+      ],
+      "execution_source": "tests/unit/xir/legacy_consumers/fixtures/class_basic_ordinary_methods/root.xr",
+      "expected": {
+        "exit_code": 0,
+        "required_test_names": [
+          "test_class_instantiation",
+          "test_class_method",
+          "test_method_modifies_state",
+          "test_multiple_instances",
+          "test_method_chaining",
+          "test_default_values",
+          "test_field_read",
+          "test_field_write",
+          "test_multi_param_methods"
+        ],
+        "all_required_tests_passed": true
+      },
+      "rationale": "All nine original named tests retain instantiation/field values, independent instances, 2 then1 counter state, custom class Builder chain hello world, defaults and exact method results. The local Builder is ordinary user code, not the removed StringBuilder.",
+      "packages": [
+        "P07",
+        "P09",
+        "P10",
+        "P13",
+        "P14"
+      ],
+      "legacy_case": null,
+      "status": "PREPARED_NOT_EXECUTED",
+      "execution": {
+        "vm": "NOT_RUN",
+        "native": "NOT_RUN"
+      },
+      "new_entry": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "remaining_qualification": [
+        "Use the real fresh accepted Source/Program test/run entry and actual test report; declaration text and building a module are not execution.",
+        "Independently verify VM/native plus complete affected FI/resource/borrow/owner lifetime/physical/safety/provider gates; old heap counters do not replace physical admission/release evidence."
+      ]
+    },
+    {
+      "id": "class_capture_cell_reassign_named_tests",
+      "inputs": [
+        {
+          "path": "tests/unit/xir/legacy_consumers/fixtures/class_capture_cell_reassign/root.xr",
+          "lf_sha256": "9ccbbf9f87a84821563f75892a4451b0e88723a7bfdb11354b143faf8fa79062",
+          "role": "target_source"
+        },
+        {
+          "path": "tests/regression/08_mem/0805_closure_capture_cell_reassign.xr",
+          "lf_sha256": "9de92fe7506f7cc13803690558e413bc185b2f6239c7d3c73c1594706389c2c4",
+          "role": "historical_source_reference"
+        }
+      ],
+      "execution_source": "tests/unit/xir/legacy_consumers/fixtures/class_capture_cell_reassign/root.xr",
+      "expected": {
+        "exit_code": 0,
+        "required_test_names": [
+          "test_hoisted_closure_capture_survives_instance_def",
+          "test_multiple_instance_captures_stay_distinct",
+          "test_reassign_after_capture_visible_in_closure",
+          "test_closure_write_visible_to_enclosing_frame",
+          "test_repeated_closure_writes_through_cell",
+          "test_captured_instance_retained_by_container",
+          "test_cell_created_at_capture_register",
+          "test_int_capture_roundtrip"
+        ],
+        "all_required_tests_passed": true
+      },
+      "rationale": "All eight original tests retain actual call-produced class references, distinct capture cells, repeated updates visible in both directions, container-retained child11 and scalar capture7. Init(tag) is declaration-owned by the matching i64 field, and no old register-based shortcut is restored.",
+      "packages": [
+        "P07",
+        "P09",
+        "P10",
+        "P14"
+      ],
+      "legacy_case": null,
+      "status": "PREPARED_NOT_EXECUTED",
+      "execution": {
+        "vm": "NOT_RUN",
+        "native": "NOT_RUN"
+      },
+      "new_entry": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "remaining_qualification": [
+        "Use the real fresh accepted Source/Program test/run entry and actual test report; declaration text and building a module are not execution.",
+        "Independently verify VM/native plus complete affected FI/resource/borrow/owner lifetime/physical/safety/provider gates; old heap counters do not replace physical admission/release evidence."
+      ]
+    },
+    {
+      "id": "root_weak_promotion_preserves_live_targets",
+      "inputs": [
+        {
+          "path": "tests/unit/xir/legacy_consumers/fixtures/root_weak_promotion/root.xr",
+          "lf_sha256": "180195f12f4966d8793af925d1f58cf934ab85cdb791f1eeb99c27cc2cb8389f",
+          "role": "target_source"
+        },
+        {
+          "path": "tests/regression/08_mem/0807_root_exec_heap_parity.xr",
+          "lf_sha256": "8722bca55dc4f0b99cc025fff0b3355051c210d7df16f280c8155a4e21e5bfb7",
+          "role": "historical_source_reference"
+        }
+      ],
+      "execution_source": "tests/unit/xir/legacy_consumers/fixtures/root_weak_promotion/root.xr",
+      "expected": {
+        "exit_code": 0,
+        "stdout_utf8": "ok\n",
+        "stderr_utf8": ""
+      },
+      "rationale": "At root and in an ordinary called function, live target tags7/11 remain visible through weak promotion while their strong references are used. Root Array/Map assertions and no-runtime-import input shape are preserved; print ok is semantic evidence only, never a physical heap counter.",
+      "packages": [
+        "P07",
+        "P09",
+        "P10",
+        "P13",
+        "P18"
+      ],
+      "legacy_case": null,
+      "status": "PREPARED_NOT_EXECUTED",
+      "execution": {
+        "vm": "NOT_RUN",
+        "native": "NOT_RUN"
+      },
+      "new_entry": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "remaining_qualification": [
+        "Use the real fresh accepted Source/Program test/run entry and actual test report; declaration text and building a module are not execution.",
+        "Independently verify VM/native plus complete affected FI/resource/borrow/owner lifetime/physical/safety/provider gates; old heap counters do not replace physical admission/release evidence."
+      ]
+    },
+    {
+      "id": "record_nullable_array_value_copy_named_tests",
+      "inputs": [
+        {
+          "path": "tests/unit/xir/legacy_consumers/fixtures/record_nullable_array_value_copy/root.xr",
+          "lf_sha256": "c61bfb2c066004efdd800c96bb809bb75d5aae0a4a60b7999d3e4885969192f9",
+          "role": "target_source"
+        },
+        {
+          "path": "tests/regression/08_oop/0904_struct_default_array_return.xr",
+          "lf_sha256": "c89e52a01b88615973c61a1afd12440bdb5eb70164fd764350e859befadc0e1d",
+          "role": "historical_source_reference"
+        }
+      ],
+      "execution_source": "tests/unit/xir/legacy_consumers/fixtures/record_nullable_array_value_copy/root.xr",
+      "expected": {
+        "exit_code": 0,
+        "required_test_names": [
+          "test_struct_default_array_return",
+          "test_structural_object_nullable_array_return_and_copy",
+          "test_structural_object_assignment_keeps_independent_value",
+          "test_structural_nested_assignment_preserves_independent_values"
+        ],
+        "all_required_tests_passed": true
+      },
+      "rationale": "All four original test obligations remain: defaults and nominal array fields; 32 repeated nullable Frame empty=-1/original84/local snapshot49; assignment mutation leaves original84 and independent43; nested child/wire reads are separate copies, so both outer Frames stay84, child49 and only local wire99. Two names explicitly migrate the retired alias/deep-copy wording.",
+      "packages": [
+        "P07",
+        "P09",
+        "P10",
+        "P13",
+        "P14"
+      ],
+      "legacy_case": null,
+      "status": "PREPARED_NOT_EXECUTED",
+      "execution": {
+        "vm": "NOT_RUN",
+        "native": "NOT_RUN"
+      },
+      "new_entry": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "remaining_qualification": [
+        "Use the real fresh accepted Source/Program test/run entry and actual test report; declaration text and building a module are not execution.",
+        "Independently verify VM/native plus complete affected FI/resource/borrow/owner lifetime/physical/safety/provider gates; old heap counters do not replace physical admission/release evidence."
+      ]
+    },
+    {
+      "id": "struct_fixed_array_original_named_test",
+      "inputs": [
+        {
+          "path": "tests/regression/08_oop/0906_struct_fixed_array_copy.xr",
+          "lf_sha256": "cce60de8844d0d99da5d34f5cfed03ecf193021f396b6ecb7d960a331de5462f",
+          "role": "preserved_source"
+        }
+      ],
+      "execution_source": "tests/regression/08_oop/0906_struct_fixed_array_copy.xr",
+      "expected": {
+        "exit_code": 0,
+        "required_test_names": [
+          "test_struct_fixed_array_copy_is_value_copy"
+        ],
+        "all_required_tests_passed": true
+      },
+      "rationale": "Copied Buf fixed-array writes99/77 must leave the original elements1/3 intact. The original single named test must execute, not merely appear in source text.",
+      "packages": [
+        "P07",
+        "P09",
+        "P10",
+        "P14"
+      ],
+      "legacy_case": null,
+      "status": "PREPARED_NOT_EXECUTED",
+      "execution": {
+        "vm": "NOT_RUN",
+        "native": "NOT_RUN"
+      },
+      "new_entry": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "remaining_qualification": [
+        "Use the real fresh accepted Source/Program test/run entry and actual test report; declaration text and building a module are not execution.",
+        "Independently verify VM/native plus complete affected FI/resource/borrow/owner lifetime/physical/safety/provider gates; old heap counters do not replace physical admission/release evidence."
+      ]
+    },
+    {
+      "id": "typed_enum_filter_original_named_tests",
+      "inputs": [
+        {
+          "path": "tests/regression/09_advanced/0956_enum_typed_catch.xr",
+          "lf_sha256": "ee2f4b886e3acf01bcac5adf19dd42a4b873195d34fe21ffb22a65cbea885acf",
+          "role": "preserved_source"
+        }
+      ],
+      "execution_source": "tests/regression/09_advanced/0956_enum_typed_catch.xr",
+      "expected": {
+        "exit_code": 0,
+        "required_test_names": [
+          "test_typed_enum_catch_first",
+          "test_typed_enum_catch_second",
+          "test_typed_enum_no_throw",
+          "test_typed_enum_then_catchall_match",
+          "test_typed_enum_then_catchall_fallthrough"
+        ],
+        "all_required_tests_passed": true
+      },
+      "rationale": "All five original tests require first NetErr filter, second DiskErr filter, successful none path, typed match before catchall and DiskErr fallthrough to other; no typed error/panic channel confusion.",
+      "packages": [
+        "P08",
+        "P09",
+        "P10",
+        "P14"
+      ],
+      "legacy_case": null,
+      "status": "PREPARED_NOT_EXECUTED",
+      "execution": {
+        "vm": "NOT_RUN",
+        "native": "NOT_RUN"
+      },
+      "new_entry": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "remaining_qualification": [
+        "Use the real fresh accepted Source/Program test/run entry and actual test report; declaration text and building a module are not execution.",
+        "Independently verify VM/native plus complete affected FI/resource/borrow/owner lifetime/physical/safety/provider gates; old heap counters do not replace physical admission/release evidence."
+      ]
+    },
+    {
+      "id": "array_return_logical_copy",
+      "inputs": [
+        {
+          "path": "tests/unit/xir/legacy_consumers/fixtures/array_return_logical_copy/root.xr",
+          "lf_sha256": "81898fc70330a5950212272cc7a2b1902e90239244b555661a24934668f921b8",
+          "role": "additional_partial_target_program"
+        },
+        {
+          "path": "tests/regression/08_mem/0804_self_returning_method_rc.xr",
+          "lf_sha256": "e35f3139cfbeba09b46c106bad455deb6cc5f3b2e29956cc82cdbfe7b5bdf796",
+          "role": "complete_historical_suite_reference"
+        }
+      ],
+      "execution_source": "tests/unit/xir/legacy_consumers/fixtures/array_return_logical_copy/root.xr",
+      "expected": {
+        "exit_code": 0,
+        "stdout_utf8": "3\n3\n1\n4\n3\n3\n1\n3\n9\n60\n",
+        "stderr_utf8": ""
+      },
+      "rationale": "Returned reverse value survives local receiver death. Receiver push grows only a to4; returned result keeps3 and [3,2,1]. Writing result0=9 leaves a0=3. The original 20-iteration reverse sum remains60. This covers three selected original obligations and keeps ten other original tests, including StringBuilder, pending.",
+      "packages": [
+        "P07",
+        "P09",
+        "P10",
+        "P13"
+      ],
+      "legacy_case": null,
+      "status": "PREPARED_NOT_EXECUTED",
+      "execution": {
+        "vm": "NOT_RUN",
+        "native": "NOT_RUN"
+      },
+      "new_entry": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "remaining_qualification": [
+        "Not a complete replacement of the thirteen-test legacy file: finish the ten remaining original obligations and real registration, including governed StringBuilder replacement.",
+        "Fresh independent VM/native, complete affected FI/resource/lifetime/physical/cancellation/safety/provider gates; logical copy observations do not claim backing or memory release."
+      ],
+      "obligation_scope": "SELECTED_ORIGINAL_OBLIGATIONS_NOT_FULL_FILE_REPLACEMENT"
     }
   ]
 }

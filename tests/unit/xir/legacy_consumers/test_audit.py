@@ -14,6 +14,60 @@ class PreparationChecks(unittest.TestCase):
         cls.runner_routes = audit.read_json(audit.HERE / "runner_routes.json")
         cls.legacy = audit.read_json(audit.ROOT / "tests/unit/xir/product_consumers/legacy_responsibilities.json")
 
+    def test_named_source_obligations_cannot_be_dropped_or_marked_discovered(self):
+        for change in ("drop", "PASS"):
+            bad = copy.deepcopy(self.runner_routes)
+            row = next(r for r in bad["cases"] if "original_named_test_obligation" in r)
+            if change == "drop":
+                row["original_named_test_obligation"]["declarations"].pop()
+            else:
+                row["original_named_test_obligation"]["execution"] = change
+            with self.subTest(change=change), self.assertRaisesRegex(ValueError, "falsely qualified discovery"):
+                audit.validate_runner_routes(bad, self.mapping)
+
+    def test_target_named_test_migration_must_cover_every_original_identity(self):
+        bad = copy.deepcopy(self.runner_routes)
+        row = next(r for r in bad["cases"] if "named_test_migration" in r)
+        row["named_test_migration"]["mapping"].pop(next(iter(row["named_test_migration"]["mapping"])))
+        with self.assertRaisesRegex(ValueError, "omitted"):
+            audit.validate_runner_routes(bad, self.mapping)
+
+    def test_partial_reverse_program_cannot_replace_the_thirteen_test_suite(self):
+        bad = copy.deepcopy(self.runner_routes)
+        row = next(r for r in bad["cases"] if "partial_target_program" in r)
+        row["partial_target_program"]["complete_file_replacement"] = True
+        with self.assertRaisesRegex(ValueError, "remaining original tests"):
+            audit.validate_runner_routes(bad, self.mapping)
+
+    def test_partial_reverse_program_cannot_delete_stringbuilder_obligations(self):
+        bad = copy.deepcopy(self.runner_routes)
+        row = next(r for r in bad["cases"] if "partial_target_program" in r)
+        row["partial_target_program"]["remaining_original_tests"] = []
+        with self.assertRaisesRegex(ValueError, "remaining original tests"):
+            audit.validate_runner_routes(bad, self.mapping)
+
+    def test_returned_array_is_not_a_shared_mutable_receiver(self):
+        expected = next(r["expected"] for r in self.oracles["cases"] if r["id"] == "array_return_logical_copy")
+        with self.assertRaises(ValueError):
+            audit.compare_required(expected, dict(expected, stdout_utf8="3\n3\n1\n4\n4\n3\n1\n9\n9\n60\n"))
+
+    def test_nested_record_port_retires_shared_child_writes_without_losing_tests(self):
+        source = (audit.HERE / "fixtures/record_nullable_array_value_copy/root.xr").read_text(encoding="utf-8")
+        self.assertIn("while (i < 32)", source)
+        self.assertIn("assert(frame_total(original) == 84)", source)
+        self.assertIn("assert(frame_total(independent.frame) == 84)", source)
+        self.assertIn("assert(frame_total(child) == 49)", source)
+        self.assertNotIn("copy(original)", source)
+        expected = next(r["expected"] for r in self.oracles["cases"] if r["id"] == "record_nullable_array_value_copy_named_tests")
+        with self.assertRaises(ValueError):
+            audit.compare_required(expected, dict(expected, required_test_names=expected["required_test_names"][:-1]))
+
+    def test_literal_marker_coordinates_reference_actual_attribute_lines(self):
+        row = next(r for r in self.runner_routes["cases"] if "original_named_test_obligation" in r)
+        lines = (audit.ROOT / row["case_id"]).read_text(encoding="utf-8").splitlines()
+        for declaration in row["original_named_test_obligation"]["declarations"]:
+            self.assertTrue(lines[declaration["marker_line"] - 1].strip().startswith("@test"))
+
     def test_complete_original_rejections_remain_bound_even_with_missing_oracle(self):
         counts = audit.validate_runner_routes(self.runner_routes, self.mapping)
         self.assertEqual(counts["reviewed_rejection_cases"], 891)

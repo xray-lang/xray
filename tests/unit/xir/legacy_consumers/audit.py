@@ -164,6 +164,16 @@ def validate_routes(data: dict, legacy: dict, responsibilities: dict) -> dict:
             "other_function_routes": sum(len(r["functions"]) for r in data["other_files"])}
 
 
+def textual_test_declarations(text: str) -> list[dict]:
+    """Preserve reviewed marker segments; this is not parser/runtime discovery."""
+    import re
+    hits = list(re.finditer(r"(?m)^[ \t]*@test[ \t\r\n]+fn[ \t]+([A-Za-z_]\w*)[ \t]*\(", text))
+    return [{"name": m.group(1), "marker_line": text.count("\n", 0, m.start()) + 1,
+             "source_segment_lf_sha256": sha(text[m.start():hits[i + 1].start() if i + 1 < len(hits) else len(text)]
+                                             .replace("\r\n", "\n").encode("utf-8"))}
+            for i, m in enumerate(hits)]
+
+
 def validate_runner_routes(data: dict, responsibilities: dict, actual_entries: dict | None = None) -> dict:
     """Bind explicit reviewed routes to original source, oracle and runner entry."""
     if data["status"] != "REVIEWED_ROUTING_NOT_QUALIFICATION":
@@ -214,12 +224,41 @@ def validate_runner_routes(data: dict, responsibilities: dict, actual_entries: d
             if (entries != [regression["entry"]] or type(regression["expected_exit"]) is not int
                     or regression["expected_exit"] != 0 or regression["test_discovery"] != "NOT_RUN"):
                 raise ValueError("original regression positive/test discovery obligation changed")
+        named = row.get("original_named_test_obligation")
+        reviewed_named_scope = identity.startswith(("tests/regression/08_mem/", "tests/regression/08_oop/",
+                                                    "tests/regression/09_advanced/"))
+        if named is not None or (reviewed_named_scope and regression and regression["entry"] == "test"):
+            if (not named or named["state"] != "REVIEWED_TEXTUAL_DECLARATIONS_NOT_RUNTIME_DISCOVERY"
+                    or named["execution"] != "NOT_RUN"
+                    or named["declarations"] != textual_test_declarations(source.read_text(encoding="utf-8"))):
+                raise ValueError("named source obligations changed or falsely qualified discovery")
         port = row.get("target_source_port")
         if port:
             path = ROOT / port["fixture"]
             if (port["qualification"] != "NOT_RUN" or port["owner_package"] != "P10"
                     or not path.is_file() or file_record(path)["lf_sha256"] != port["lf_sha256"]):
                 raise ValueError("planned source port changed or incorrectly qualified")
+        migration = row.get("named_test_migration")
+        if migration:
+            original_names = [d["name"] for d in named["declarations"]] if named else []
+            targets = list(migration["mapping"].values())
+            if (not port or not original_names or set(migration["mapping"]) != set(original_names)
+                    or len(targets) != len(set(targets)) or migration["state"] != "PREPARED_NOT_EXECUTED"
+                    or migration["original_tests_removed"] is not False
+                    or targets != [d["name"] for d in textual_test_declarations((ROOT / port["fixture"]).read_text(encoding="utf-8"))]):
+                raise ValueError("named target migration omitted or requalified an original test")
+        partial = row.get("partial_target_program")
+        if partial:
+            actual = file_record(ROOT / partial["fixture"])
+            names = [d["name"] for d in named["declarations"]] if named else []
+            covered, remaining = partial["covered_original_tests"], partial["remaining_original_tests"]
+            if (not names or not covered or len(covered) != len(set(covered))
+                    or len(remaining) != len(set(remaining)) or set(covered) & set(remaining)
+                    or set(covered) | set(remaining) != set(names)
+                    or partial["complete_file_replacement"] is not False or partial["qualification"] != "NOT_RUN"
+                    or partial["owner_package"] not in row["producer_packages"]
+                    or actual.get("lf_sha256") != partial["lf_sha256"]):
+                raise ValueError("partial target program changed or hid remaining original tests")
         disposition = row.get("target_disposition")
         target = FROZEN_TARGETS.get(identity)
         if target is not None or disposition is not None:
@@ -252,6 +291,9 @@ def validate_runner_routes(data: dict, responsibilities: dict, actual_entries: d
             "reviewed_runner_entry_links": sum(len(r["original_runner_entries"]) for r in rows),
             "reviewed_regression_inputs": sum(any(e["suite"] == "regression" for e in r["original_runner_entries"]) for r in rows),
             "prepared_target_source_ports": sum("target_source_port" in r for r in rows),
+            "reviewed_named_test_files": sum("original_named_test_obligation" in r for r in rows),
+            "reviewed_textual_test_declarations": sum(len(r.get("original_named_test_obligation", {}).get("declarations", [])) for r in rows),
+            "prepared_partial_target_programs": sum("partial_target_program" in r for r in rows),
             "reviewed_frozen_target_transitions": sum("target_disposition" in r for r in rows),
             "reviewed_imported_companion_links": sum(len(r.get("original_imported_inputs", [])) for r in rows),
             "reviewed_rejection_cases": sum("original_rejection_oracle" in r for r in rows),

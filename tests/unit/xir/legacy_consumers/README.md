@@ -16,7 +16,7 @@ change a product interface, or authorize deletion of an old test.
   The class cleanup target fixture uses ordinary methods and contextual init,
   retains both named tests and adds during-call guard checks. It has not compiled
   on a product producer; its real test discovery/execution remains required.
-- `runner_routes.json` binds 1248 explicitly reviewed FFI/JSON/generic/nullable/cleanup/
+- `runner_routes.json` binds 1318 explicitly reviewed FFI/JSON/generic/nullable/cleanup/
   generator/numeric/closure/module/call/ownership/control/comptime and regression inputs to their original source and expectation hashes,
   compiler positions/codes/text and actual runner entries. Future files are not
   automatically assigned by a directory wildcard. Missing expectations and
@@ -41,7 +41,15 @@ change a product interface, or authorize deletion of an old test.
   same-family numeric union members and the allowed local Tuple view wrapper.
   Readonly Slice writes and ordinary collection view storage remain rejected.
   Prior class ports explicitly type non-field init parameter v as i64.
-- `oracles.json` records fifty-six independent output/result/rejection expectations.
+  Seventy reviewed memory/OOP/advanced regression files retain their original
+  positive entry; with the previously reviewed Atomic file, 69 files bind 387
+  textual test marker segments. Those numbers
+  are declaration obligations, never a runtime discovery/execution count.
+  Four target sources preserve the complete selected files; three map every
+  original named identity, including two record-copy test renames. An additional reverse program covers only three
+  of thirteen original self-return tests and cannot delete the other ten or
+  restore StringBuilder. Its partial status is enforced by negative controls.
+- `oracles.json` records sixty-three independent output/result/rejection expectations.
   Preserved original literals remain byte-for-byte inputs. Target source ports
   are separately named and hashed; they do not overwrite historical originals.
   New Atomic fixtures separately require legal direct-var rebinding and

@@ -1,0 +1,111 @@
+// Test: struct field defaults, Array element, and return value
+// Expected: defaults work, array stores structs, return preserves value
+
+struct Config {
+    width: i64 = 800
+    height: i64 = 600
+    title: string = "untitled"
+}
+struct Point {
+    x: f64
+    y: f64
+}
+fn make_point(x: f64, y: f64) -> Point {
+    return Point{x: x, y: y}
+}
+
+type Frame = {
+    wire: Array<i64>?
+    status: i64
+}
+
+fn take_frame(present: bool) -> Frame {
+    if (present) {
+        return {wire: [17, 25], status: 42}
+    }
+    return {wire: null, status: -1}
+}
+
+fn frame_total(frame: Frame) -> i64 {
+    var wire = frame.wire
+    if (wire != null) {
+        return wire[0] + wire[1] + frame.status
+    }
+    return frame.status
+}
+
+@test
+fn test_struct_default_array_return() {
+
+    // === Field default values ===
+    var c = Config{}
+    assert(c.width == 800)
+    assert(c.height == 600)
+    assert(c.title == "untitled")
+
+    // === Partial override ===
+    var c2 = Config{width: 1920, height: 1080}
+    assert(c2.width == 1920)
+    assert(c2.height == 1080)
+    assert(c2.title == "untitled")
+
+    // === Struct as return value ===
+
+
+    var p = make_point(3.0, 4.0)
+    assert(p.x == 3.0)
+    assert(p.y == 4.0)
+
+    // === Struct in Array ===
+    var points = [Point{x: 1.0, y: 2.0}, Point{x: 3.0, y: 4.0}]
+    assert(len(points) == 2)
+    assert(points[0].x == 1.0)
+    assert(points[1].y == 4.0)
+
+    // === Array element copy independence ===
+    var p2 = points[0]
+    p2.x = 99.0
+    assert(points[0].x == 1.0)
+}
+
+@test
+fn test_structural_object_nullable_array_return_and_copy() {
+    var i = 0
+    while (i < 32) {
+        var empty = take_frame(false)
+        var original = take_frame(true)
+        var snapshot = original
+        snapshot.status = 7
+        assert(frame_total(empty) == -1)
+        assert(frame_total(original) == 84)
+        assert(frame_total(snapshot) == 49)
+        i += 1
+    }
+}
+
+@test
+fn test_structural_object_assignment_keeps_independent_value() {
+    var original = take_frame(true)
+    var alias = original
+    alias.status = 7
+    assert(frame_total(original) == 84)
+    var independent = original
+    independent.status = 1
+    assert(frame_total(original) == 84)
+    assert(frame_total(independent) == 43)
+}
+
+@test
+fn test_structural_nested_assignment_preserves_independent_values() {
+    var original = {frame: take_frame(true)}
+    var independent = original
+    var child = independent.frame
+    child.status = 7
+    var wire = child.wire
+    if (wire != null) { wire[0] = 99 }
+    assert(frame_total(original.frame) == 84)
+    assert(frame_total(independent.frame) == 84)
+    assert(frame_total(child) == 49)
+    assert(wire != null)
+    assert(wire![0] == 99)
+}
