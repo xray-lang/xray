@@ -1,0 +1,17 @@
+add_executable(test_xir_p11_ctfe_reference "${CMAKE_CURRENT_LIST_DIR}/test_ctfe_reference.c")
+target_link_libraries(test_xir_p11_ctfe_reference PRIVATE xray_xir_source xray_xir_vm)
+target_compile_definitions(test_xir_p11_ctfe_reference PRIVATE
+    XR_CTFE_REFERENCE_FIXTURES="${CMAKE_CURRENT_LIST_DIR}/fixtures")
+set_target_properties(test_xir_p11_ctfe_reference PROPERTIES C_STANDARD 11 C_STANDARD_REQUIRED YES C_EXTENSIONS NO)
+if(MSVC)
+    target_compile_options(test_xir_p11_ctfe_reference PRIVATE /utf-8 /W4 /WX)
+else()
+    target_compile_options(test_xir_p11_ctfe_reference PRIVATE -Wall -Wextra -Werror)
+endif()
+foreach(name IN ITEMS factorial mutual_parity frame_state unreachable_function_io reachable_branch_io mutual_depth mutual_depth_direct)
+    add_test(NAME test_xir_p11_ctfe_reference_${name} COMMAND test_xir_p11_ctfe_reference ${name})
+    set_tests_properties(test_xir_p11_ctfe_reference_${name} PROPERTIES
+        TIMEOUT 30 LABELS "unit;xir;ctfe;reference;ownership")
+endforeach()
+xray_stage_windows_asan_runtime("${CMAKE_CURRENT_BINARY_DIR}")
+xray_prepend_windows_asan_runtime_to_directory_tests()
