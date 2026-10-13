@@ -216,6 +216,7 @@ static void lsp_rejections(const char *root) {
 }
 #include "lsp_source_json_cases.h"
 #include "lsp_source_navigation_many_cases.h"
+#include "lsp_source_navigation_three_cases.h"
 #include "lsp_source_syntax_cases.h"
 #include "lsp_source_buffer_cases.h"
 #include "lsp_source_hover_cases.h"
@@ -225,7 +226,7 @@ static void lsp_rejections(const char *root) {
 int main(void) {
     char directory[XR_TEST_PATH_MAX]="lsp-source-query-XXXXXX",root[XR_TEST_PATH_MAX];
     CHECK(xr_test_mkdtemp(directory) && xr_test_realpath_buf(directory,root,sizeof(root)));
-    lsp_comptime_cases(root); lsp_versions(root); lsp_rejections(root); lsp_failure_matrix(root); lsp_json_cases(root); lsp_navigation_many_cases(root); lsp_syntax_cases(root); lsp_buffer_cases(); lsp_hover_cases(root); lsp_outline_cases(root); lsp_semantic_cases(root); lsp_roles_cases(root); CHECK(xr_test_rmdir(directory) == 0);
+    lsp_comptime_cases(root); lsp_versions(root); lsp_rejections(root); lsp_failure_matrix(root); lsp_json_cases(root); lsp_navigation_many_cases(root); lsp_navigation_three_cases(root); lsp_syntax_cases(root); lsp_buffer_cases(); lsp_hover_cases(root); lsp_outline_cases(root); lsp_semantic_cases(root); lsp_roles_cases(root); CHECK(xr_test_rmdir(directory) == 0);
     puts("LSP unsaved two-document navigation, same-Session versions, Unicode, producer death passed");
     return 0;
 }
