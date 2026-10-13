@@ -236,7 +236,7 @@ def snapshot() -> dict:
             "source_identity": {"seed": "e16797c62636f1d138583ead18d234c86a3cde6e",
                                 "head": subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=ROOT, text=True).strip(),
                                 "working_tree": subprocess.check_output(["git", "status", "--porcelain", "--untracked-files=all"], cwd=ROOT, text=True).splitlines(),
-                                "p00_received": False},
+                                "baseline_acceptance": "See fixed delivery receipt; preparation checks do not qualify dependencies"},
             "regression": regression, "regression_auxiliary": auxiliary,
             "differential": differential, "compile_errors": negative,
             "source_responsibilities": sources, "other_consumers": legacy["other_consumer_files"],
