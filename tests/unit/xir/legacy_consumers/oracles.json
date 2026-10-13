@@ -404,6 +404,245 @@
         "Retain complete producer/Instance/Call ownership, applicable FI/resource/cancellation and physical release checks; printed events do not qualify physical cleanup.",
         "P20 owns mixed qualification; this independent normal/error oracle does not replace its tests."
       ]
+    },
+    {
+      "id": "module_diamond_initializes_once",
+      "inputs": [
+        {
+          "path": "tests/diff/cases/semantics/modules/cleanup_init_import_once.xr",
+          "lf_sha256": "bedf4d16b994c017cef89f369913583324864af850cad2e369ed10e1a4a94b0d"
+        },
+        {
+          "path": "tests/diff/cases/semantics/modules/_cleanup_init_left.xr",
+          "lf_sha256": "81c5ef11dfda963979172f0c7971f5eca47587f9f720803567cbdd14091a6218"
+        },
+        {
+          "path": "tests/diff/cases/semantics/modules/_cleanup_init_right.xr",
+          "lf_sha256": "bfb8a3744b5f5d7ae3e3dca1510d5ea381a51df999a3993e225d127db05ebe91"
+        },
+        {
+          "path": "tests/diff/cases/semantics/modules/_cleanup_init.xr",
+          "lf_sha256": "5e36e1239dd0b4fa597cf233421cda46205ab86b4427dc76b8f48178f2809132"
+        }
+      ],
+      "expected": {
+        "exit_code": 0,
+        "stdout_utf8": "dependency body\ndependency cleanup\n41\n42\n",
+        "stderr_utf8": ""
+      },
+      "rationale": "Both import paths share the same dependency. Its body and cleanup run once before importer observations; left adds 1 to 40 and right adds 2. A second initialization or delayed cleanup would change the trace.",
+      "packages": [
+        "P06",
+        "P07",
+        "P08",
+        "P10"
+      ],
+      "legacy_case": null,
+      "status": "PREPARED_NOT_EXECUTED",
+      "execution": {
+        "vm": "NOT_RUN",
+        "native": "NOT_RUN"
+      },
+      "new_entry": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "remaining_qualification": [
+        "Bind the complete original program and companions to actual current Source/Program consumers after fixed producer interfaces are ready.",
+        "Each VM and actual generated-C native observation must satisfy this independent result; complete affected FI/resource/lifetime/ownership/safety qualification remains required.",
+        "For comptime cases, preserve the old rejection as historical evidence and perform the positive atomic migration under Task320; do not restore no-call restrictions or change legal programs to arbitrary rejection."
+      ]
+    },
+    {
+      "id": "cross_module_owned_string_and_calls",
+      "inputs": [
+        {
+          "path": "tests/diff/cases/semantics/modules/multimod_calls.xr",
+          "lf_sha256": "0b90f516cb932dd33409ecb7212052fa647b5f6fa18cca01125d914f0ead423d"
+        },
+        {
+          "path": "tests/diff/cases/semantics/modules/_mathlib.xr",
+          "lf_sha256": "8fb911c87cd346988f0954e0453f9232b8296c24d899503e8b5badc00f33bd04"
+        }
+      ],
+      "expected": {
+        "exit_code": 0,
+        "stdout_utf8": "43\nfrom-lib\n12\n",
+        "stderr_utf8": ""
+      },
+      "rationale": "The dependency returns triple(14)=42 and add(42,1)=43; its owned string is from-lib; the nested final calls compute (1+2)+(3*3)=12. Both source files are part of the exact input.",
+      "packages": [
+        "P08",
+        "P09",
+        "P10"
+      ],
+      "legacy_case": null,
+      "status": "PREPARED_NOT_EXECUTED",
+      "execution": {
+        "vm": "NOT_RUN",
+        "native": "NOT_RUN"
+      },
+      "new_entry": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "remaining_qualification": [
+        "Bind the complete original program and companions to actual current Source/Program consumers after fixed producer interfaces are ready.",
+        "Each VM and actual generated-C native observation must satisfy this independent result; complete affected FI/resource/lifetime/ownership/safety qualification remains required.",
+        "For comptime cases, preserve the old rejection as historical evidence and perform the positive atomic migration under Task320; do not restore no-call restrictions or change legal programs to arbitrary rejection."
+      ]
+    },
+    {
+      "id": "ref_write_preserves_prior_scalar_copy",
+      "inputs": [
+        {
+          "path": "tests/diff/cases/semantics/ownership/ref_param_write_invalidates_prior_copy.xr",
+          "lf_sha256": "d93c4afc08a48862ed476f5b43514b56d9a2bbe1896ef11d2850af525155b502"
+        }
+      ],
+      "expected": {
+        "exit_code": 0,
+        "stdout_utf8": "2\n-1\n5\n7\n7\n",
+        "stderr_utf8": ""
+      },
+      "rationale": "Reading zero at offset 2 returns the saved pre-ref offset 2; reading 9 at offset 0 returns -1. The separately saved counter remains 5 while two ref writes make the returned and current counters 7.",
+      "packages": [
+        "P09",
+        "P10"
+      ],
+      "legacy_case": null,
+      "status": "PREPARED_NOT_EXECUTED",
+      "execution": {
+        "vm": "NOT_RUN",
+        "native": "NOT_RUN"
+      },
+      "new_entry": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "remaining_qualification": [
+        "Bind the complete original program and companions to actual current Source/Program consumers after fixed producer interfaces are ready.",
+        "Each VM and actual generated-C native observation must satisfy this independent result; complete affected FI/resource/lifetime/ownership/safety qualification remains required.",
+        "For comptime cases, preserve the old rejection as historical evidence and perform the positive atomic migration under Task320; do not restore no-call restrictions or change legal programs to arbitrary rejection."
+      ]
+    },
+    {
+      "id": "nullable_presence_is_not_truthiness",
+      "inputs": [
+        {
+          "path": "tests/diff/cases/semantics/condition/nullable_presence.xr",
+          "lf_sha256": "3324780eda3a57193ce3d51b7c672bf1cf405d73886eece79ae90c9aec7e0646"
+        }
+      ],
+      "expected": {
+        "exit_code": 0,
+        "stdout_utf8": "absent\nempty-but-present\nzero-but-present\nabsent4\n",
+        "stderr_utf8": ""
+      },
+      "rationale": "Presence tests distinguish null from a present empty string or present zero; nullable presence is not boolean conversion of the payload.",
+      "packages": [
+        "P09",
+        "P10"
+      ],
+      "legacy_case": null,
+      "status": "PREPARED_NOT_EXECUTED",
+      "execution": {
+        "vm": "NOT_RUN",
+        "native": "NOT_RUN"
+      },
+      "new_entry": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "remaining_qualification": [
+        "Bind the complete original program and companions to actual current Source/Program consumers after fixed producer interfaces are ready.",
+        "Each VM and actual generated-C native observation must satisfy this independent result; complete affected FI/resource/lifetime/ownership/safety qualification remains required.",
+        "For comptime cases, preserve the old rejection as historical evidence and perform the positive atomic migration under Task320; do not restore no-call restrictions or change legal programs to arbitrary rejection."
+      ]
+    },
+    {
+      "id": "ctfe_closed_ordinary_call_positive",
+      "inputs": [
+        {
+          "path": "tests/compile_errors/binding/001_comptime_non_const_call.xr",
+          "lf_sha256": "84c0cee48196cb7f1669c8cf249e09175bf007a96cfa1585b6433a43e3a46eb8"
+        }
+      ],
+      "expected": {
+        "exit_code": 0,
+        "stdout_utf8": "1\n",
+        "stderr_utf8": ""
+      },
+      "rationale": "Task320 permits an admitted closed ordinary function in explicit comptime. readSize returns the integer 1 without root state, I/O or scheduling; preserving a blanket no-call rejection would shrink the frozen target.",
+      "packages": [
+        "P09",
+        "P10",
+        "P11"
+      ],
+      "legacy_case": null,
+      "status": "PREPARED_NOT_EXECUTED",
+      "execution": {
+        "vm": "NOT_RUN",
+        "native": "NOT_RUN"
+      },
+      "new_entry": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "remaining_qualification": [
+        "Bind the complete original program and companions to actual current Source/Program consumers after fixed producer interfaces are ready.",
+        "Each VM and actual generated-C native observation must satisfy this independent result; complete affected FI/resource/lifetime/ownership/safety qualification remains required.",
+        "For comptime cases, preserve the old rejection as historical evidence and perform the positive atomic migration under Task320; do not restore no-call restrictions or change legal programs to arbitrary rejection."
+      ]
+    },
+    {
+      "id": "ctfe_fixed_array_call_positive",
+      "inputs": [
+        {
+          "path": "tests/compile_errors/binding/012_comptime_fixed_array_element_call.xr",
+          "lf_sha256": "e80eb6102b5eaa50ab3a2a461ed5db0a3712394f32dd4b5f768ef2de1b372eda"
+        }
+      ],
+      "expected": {
+        "exit_code": 0,
+        "stdout_utf8": "1\n",
+        "stderr_utf8": ""
+      },
+      "rationale": "The closed pure function returns 2, yielding the compile-time fixed array [1,2]. Printing index zero must yield 1 after successful bounded CTFE; the original old rejection remains historical, not the new oracle.",
+      "packages": [
+        "P09",
+        "P10",
+        "P11"
+      ],
+      "legacy_case": null,
+      "status": "PREPARED_NOT_EXECUTED",
+      "execution": {
+        "vm": "NOT_RUN",
+        "native": "NOT_RUN"
+      },
+      "new_entry": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "remaining_qualification": [
+        "Bind the complete original program and companions to actual current Source/Program consumers after fixed producer interfaces are ready.",
+        "Each VM and actual generated-C native observation must satisfy this independent result; complete affected FI/resource/lifetime/ownership/safety qualification remains required.",
+        "For comptime cases, preserve the old rejection as historical evidence and perform the positive atomic migration under Task320; do not restore no-call restrictions or change legal programs to arbitrary rejection."
+      ]
+    },
+    {
+      "id": "ctfe_struct_field_call_positive",
+      "inputs": [
+        {
+          "path": "tests/compile_errors/binding/014_comptime_struct_field_call.xr",
+          "lf_sha256": "f686948a7e0db6035a780d100fdbd9e0e218e98c231ea5438e7338605d206d7e"
+        }
+      ],
+      "expected": {
+        "exit_code": 0,
+        "stdout_utf8": "1\n",
+        "stderr_utf8": ""
+      },
+      "rationale": "The closed pure call initializes the y field to 2 and x remains 1. Complete bounded aggregate CTFE must accept the original program and the runtime observation of p.x is 1.",
+      "packages": [
+        "P09",
+        "P10",
+        "P11"
+      ],
+      "legacy_case": null,
+      "status": "PREPARED_NOT_EXECUTED",
+      "execution": {
+        "vm": "NOT_RUN",
+        "native": "NOT_RUN"
+      },
+      "new_entry": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "remaining_qualification": [
+        "Bind the complete original program and companions to actual current Source/Program consumers after fixed producer interfaces are ready.",
+        "Each VM and actual generated-C native observation must satisfy this independent result; complete affected FI/resource/lifetime/ownership/safety qualification remains required.",
+        "For comptime cases, preserve the old rejection as historical evidence and perform the positive atomic migration under Task320; do not restore no-call restrictions or change legal programs to arbitrary rejection."
+      ]
     }
   ]
 }

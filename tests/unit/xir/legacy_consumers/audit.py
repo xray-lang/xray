@@ -110,7 +110,8 @@ def validate_runner_routes(data: dict, responsibilities: dict, actual_entries: d
     """Bind explicit reviewed routes to original source, oracle and runner entry."""
     if data["status"] != "REVIEWED_ROUTING_NOT_QUALIFICATION":
         raise ValueError("runner routing cannot qualify execution")
-    families = {r["id"] for r in responsibilities["capabilities"]}
+    families = ({r["id"] for r in responsibilities["capabilities"]}
+                | {"task318:" + r["id"] for r in responsibilities["task318_families"]})
     packages = {"P02"} | {f"P{i:02}" for i in range(6, 19)}
     rows = data["cases"]
     ids = [r["case_id"] for r in rows]
@@ -141,6 +142,10 @@ def validate_runner_routes(data: dict, responsibilities: dict, actual_entries: d
             raise ValueError("runner routing cannot grant product qualification")
         if not row["semantic_basis"]:
             raise ValueError("runner routing lacks reviewed semantic evidence")
+        disposition = row.get("target_disposition")
+        if disposition and (disposition["kind"] != "POSITIVE_REQUIRED_BY_FROZEN_TASK320"
+                            or disposition["owner_package"] != "P11" or disposition["qualification"] != "NOT_RUN"):
+            raise ValueError("planned comptime migration cannot publish qualification")
         if "original_rejection_oracle" in row:
             oracle = row["original_rejection_oracle"]
             path, kind = errors.expected_path_for(source)

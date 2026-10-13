@@ -14,6 +14,49 @@ class PreparationChecks(unittest.TestCase):
         cls.runner_routes = audit.read_json(audit.HERE / "runner_routes.json")
         cls.legacy = audit.read_json(audit.ROOT / "tests/unit/xir/product_consumers/legacy_responsibilities.json")
 
+    def test_comptime_routes_reference_existing_frozen_responsibility(self):
+        row = next(r for r in self.runner_routes["cases"] if r["case_id"].endswith("/001_comptime_non_const_call.xr"))
+        self.assertEqual(row["primary_family"], "task318:Q12")
+        self.assertEqual(row["target_disposition"]["kind"], "POSITIVE_REQUIRED_BY_FROZEN_TASK320")
+        self.assertIn("P11", row["producer_packages"])
+        self.assertEqual(row["original_rejection_oracle"]["state"], "PRESENT")
+
+    def test_planned_ctfe_positive_is_not_execution_qualification(self):
+        bad = copy.deepcopy(self.runner_routes)
+        row = next(r for r in bad["cases"] if "target_disposition" in r)
+        row["target_disposition"]["qualification"] = "PASS"
+        with self.assertRaisesRegex(ValueError, "cannot publish qualification"):
+            audit.validate_runner_routes(bad, self.mapping)
+
+    def test_unknown_task_responsibility_is_not_a_known_family(self):
+        bad = copy.deepcopy(self.runner_routes)
+        bad["cases"][0]["primary_family"] = "task318:Q99"
+        with self.assertRaisesRegex(ValueError, "unknown family"):
+            audit.validate_runner_routes(bad, self.mapping)
+
+    def test_imported_program_companion_is_part_of_oracle_identity(self):
+        bad = copy.deepcopy(self.oracles)
+        row = next(r for r in bad["cases"] if r["id"] == "module_diamond_initializes_once")
+        row["inputs"][-1]["lf_sha256"] = "0" * 64
+        with self.assertRaisesRegex(ValueError, "oracle input changed"):
+            audit.validate_oracles(bad)
+
+    def test_shared_dependency_cannot_initialize_twice(self):
+        expected = next(r["expected"] for r in self.oracles["cases"] if r["id"] == "module_diamond_initializes_once")
+        wrong = dict(expected, stdout_utf8="dependency body\ndependency cleanup\ndependency body\ndependency cleanup\n41\n42\n")
+        with self.assertRaises(ValueError):
+            audit.compare_required(expected, wrong)
+
+    def test_ref_write_cannot_change_the_saved_prior_value(self):
+        expected = next(r["expected"] for r in self.oracles["cases"] if r["id"] == "ref_write_preserves_prior_scalar_copy")
+        with self.assertRaises(ValueError):
+            audit.compare_required(expected, dict(expected, stdout_utf8="3\n-1\n7\n7\n7\n"))
+
+    def test_old_no_call_rejection_cannot_satisfy_target_ctfe_positive(self):
+        expected = next(r["expected"] for r in self.oracles["cases"] if r["id"] == "ctfe_closed_ordinary_call_positive")
+        with self.assertRaises(ValueError):
+            audit.compare_required(expected, {"exit_code": 1, "stdout_utf8": "", "stderr_utf8": "comptime expression must be evaluable"})
+
     def test_explicit_runner_routes_keep_the_original_inputs_and_oracles(self):
         audit.validate_runner_routes(self.runner_routes, self.mapping)
 
