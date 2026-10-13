@@ -134,10 +134,13 @@ static XrXirValueStatus class_publication_prepare_route(const XrXirValue *values
     uint32_t count, XrXirValueAdmission *admission, const XirObject *borrow_owner,
     XrXirClassPublication *output) {
     if (!class_publication_empty(output) || !admission_domain_current(admission) ||
-        !admission || !admission->domain || !admission->arena || (count && !values))
+        !admission || !admission->domain || (count && !values))
         return XR_XIR_VALUE_BAD_ARGUMENT;
+    /* Builtin-only programs have no type arena. Constructed roots still
+     * require their actual arena before any work or publication is charged. */
     for (uint32_t i = 0; i < count; ++i)
-        if (!xr_xir_value_valid(&values[i])) return XR_XIR_VALUE_BAD_ARGUMENT;
+        if ((!admission->arena && values[i].type >= XR_XIR_CONSTRUCTED_TYPE_BASE) ||
+            !xr_xir_value_valid(&values[i])) return XR_XIR_VALUE_BAD_ARGUMENT;
     XrXirClassPublication publication = {.admission = admission, .operation = true};
     if (borrow_owner) {
         if (borrow_owner->kind != XIR_OBJECT_CLASS || !class_allocation_valid(borrow_owner) ||

@@ -520,6 +520,9 @@ add_test(NAME test_xir_source_product_linked COMMAND ${XRAY_PYTHON}
     ${CMAKE_CURRENT_SOURCE_DIR}/xir/test_xir_source_product.py
     $<TARGET_FILE:test_xir_source_product_linked> ${CMAKE_SOURCE_DIR}/stdlib)
 set_tests_properties(test_xir_source_product_linked PROPERTIES LABELS "unit;xir;ownership;abi;execution" TIMEOUT 60)
+add_test(NAME test_xir_source_product_identity_oracle COMMAND ${XRAY_PYTHON}
+    ${CMAKE_CURRENT_SOURCE_DIR}/xir/derive_source_product_identity.py)
+set_tests_properties(test_xir_source_product_identity_oracle PROPERTIES LABELS "unit;xir;abi;ownership" TIMEOUT 30)
 set(XIR_SOURCE_OWNER_FIXTURE "${CMAKE_SOURCE_DIR}/tests/fixtures/xir_compile_owner")
 set(XIR_SOURCE_OWNER_NATIVE "${CMAKE_CURRENT_BINARY_DIR}/xir-source-owner-native.c")
 add_custom_command(OUTPUT "${XIR_SOURCE_OWNER_NATIVE}"
