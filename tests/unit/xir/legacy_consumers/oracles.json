@@ -1,0 +1,243 @@
+{
+  "schema": 1,
+  "scope": "Independent semantic expectations and preserved original inputs; no execution claim.",
+  "cases": [
+    {
+      "id": "array_error_invoke",
+      "inputs": [
+        {
+          "path": "tests/unit/xir/legacy_consumers/fixtures/array_error_invoke/original.xr",
+          "lf_sha256": "0bd440025866dfa982cfc61e65405a2f1369324b30516b8ab1ed2c6339d6ea16",
+          "original_literal": "source"
+        }
+      ],
+      "expected": {
+        "return_i64": 42,
+        "stdout_utf8": "",
+        "stderr_utf8": ""
+      },
+      "rationale": "make(32) yields length 32; make(-2) throws before allocation and the typed catch adds 10, so answer is 42. A rejection is a failure of this positive obligation.",
+      "packages": [
+        "P09",
+        "P10",
+        "P13"
+      ],
+      "legacy_case": "source_owner_array_error_invoke",
+      "status": "PREPARED_NOT_EXECUTED",
+      "execution": {
+        "vm": "NOT_RUN",
+        "native": "NOT_RUN"
+      },
+      "new_entry": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "remaining_qualification": [
+        "Fresh Source/Checked/Program execution on published dependencies; this file is not a product runner.",
+        "Independent VM and actual generated-C native observations; P20 owns mixed execution qualification.",
+        "All applicable producer lifetime, complete FI, exact resource budgets, cancellation, physical release and sanitizer gates."
+      ]
+    },
+    {
+      "id": "prelude_enum_catch",
+      "inputs": [
+        {
+          "path": "tests/unit/xir/legacy_consumers/fixtures/prelude_enum_catch/original.xr",
+          "lf_sha256": "9ce635befc1ba9ae4ef062e5d5795bb8fa24efe3b550568d7cc7b49af4ea80f7",
+          "original_literal": "source"
+        },
+        {
+          "path": "tests/unit/xir/legacy_consumers/fixtures/prelude_enum_catch/library.xr",
+          "lf_sha256": "ab221356e64f7ef6b646ded064c82825afb9fdf15dd02d136be643a94380bce7",
+          "original_literal": "library_source"
+        }
+      ],
+      "expected": {
+        "return_i64": 42,
+        "stdout_utf8": "",
+        "stderr_utf8": ""
+      },
+      "rationale": "The imported CryptoError catch assigns 20; the local catch of the same declaration adds 22. Both catches must execute and result is 42.",
+      "packages": [
+        "P10",
+        "P12",
+        "P13"
+      ],
+      "legacy_case": "source_owner_prelude_enum_catch_preserves_declaration_identity",
+      "status": "PREPARED_NOT_EXECUTED",
+      "execution": {
+        "vm": "NOT_RUN",
+        "native": "NOT_RUN"
+      },
+      "new_entry": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "remaining_qualification": [
+        "Fresh Source/Checked/Program execution on published dependencies; this file is not a product runner.",
+        "Independent VM and actual generated-C native observations; P20 owns mixed execution qualification.",
+        "All applicable producer lifetime, complete FI, exact resource budgets, cancellation, physical release and sanitizer gates.",
+        "Governed prelude identity and detached imported declaration closure remain required."
+      ]
+    },
+    {
+      "id": "string_builder_snapshot",
+      "inputs": [
+        {
+          "path": "tests/unit/xir/legacy_consumers/fixtures/string_builder_snapshot/original.xr",
+          "lf_sha256": "b00bf926577b5282c46087b37ffbeac4ff43ad5e02fc102883420e5abc6a2973",
+          "original_literal": "source"
+        }
+      ],
+      "expected": {
+        "return_i64": 42,
+        "stdout_utf8": "",
+        "stderr_utf8": ""
+      },
+      "rationale": "The original assertions require empty, A42true1.5, new, preserved old snapshot, xxx, and two independently returned owned strings before returning 42.",
+      "packages": [
+        "P09",
+        "P13"
+      ],
+      "legacy_case": "source_owner_string_builder_snapshot",
+      "status": "PREPARED_NOT_EXECUTED",
+      "execution": {
+        "vm": "NOT_RUN",
+        "native": "NOT_RUN"
+      },
+      "new_entry": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "remaining_qualification": [
+        "Fresh Source/Checked/Program execution on published dependencies; this file is not a product runner.",
+        "Independent VM and actual generated-C native observations; P20 owns mixed execution qualification.",
+        "All applicable producer lifetime, complete FI, exact resource budgets, cancellation, physical release and sanitizer gates.",
+        "Original spelling is preserved as a migration input. The required StringBuilder replacement/removal needs a separately reviewed semantic port; do not restore the retired API to pass this fixture."
+      ]
+    },
+    {
+      "id": "text_program",
+      "inputs": [
+        {
+          "path": "tests/unit/xir/product_consumers/fixtures/text_program/root.xr",
+          "lf_sha256": "b3615737744acf066c4ef57068dc08dd57df337012ca2871701acb77c28360d7"
+        }
+      ],
+      "expected": {
+        "return_i64": 7,
+        "stdout_utf8": "hello, world\nanswer=42 true x\ncode 3 xxx yes no\n",
+        "stderr_utf8": ""
+      },
+      "rationale": "greet concatenates hello, world; describe produces answer=42; lexicographic a<h sets 1, empty equality adds 2, three loop iterations produce xxx, the final equality adds 4. The output occurs before that last addition.",
+      "packages": [
+        "P09",
+        "P10",
+        "P13"
+      ],
+      "legacy_case": "source_owner_text_program_is_exact_across_private_executors",
+      "status": "PREPARED_NOT_EXECUTED",
+      "execution": {
+        "vm": "NOT_RUN",
+        "native": "NOT_RUN"
+      },
+      "new_entry": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "remaining_qualification": [
+        "Fresh Source/Checked/Program execution on published dependencies; this file is not a product runner.",
+        "Independent VM and actual generated-C native observations; P20 owns mixed execution qualification.",
+        "All applicable producer lifetime, complete FI, exact resource budgets, cancellation, physical release and sanitizer gates."
+      ]
+    },
+    {
+      "id": "cleanup_lifo",
+      "inputs": [
+        {
+          "path": "tests/diff/cases/semantics/cleanup/resource_release_order.xr",
+          "lf_sha256": "a106c05e71f9f03f392dd122506cc113e56fb77d2c0e0481b991748c2211bc15"
+        }
+      ],
+      "expected": {
+        "exit_code": 0,
+        "stdout_utf8": "open A\nopen B\nopen C\nwork\nclose C\nclose B\nclose A\ndone\n",
+        "stderr_utf8": ""
+      },
+      "rationale": "Resources open in source order A, B, C; deferred close calls run in reverse registration order C, B, A before done. This output proves logical close ordering only, not physical memory reclamation.",
+      "packages": [
+        "P07",
+        "P08",
+        "P09"
+      ],
+      "legacy_case": null,
+      "status": "PREPARED_NOT_EXECUTED",
+      "execution": {
+        "vm": "NOT_RUN",
+        "native": "NOT_RUN"
+      },
+      "new_entry": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "remaining_qualification": [
+        "Fresh Source/Checked/Program execution on published dependencies; this file is not a product runner.",
+        "Independent VM and actual generated-C native observations; P20 owns mixed execution qualification.",
+        "All applicable producer lifetime, complete FI, exact resource budgets, cancellation, physical release and sanitizer gates.",
+        "Retain separate allocation/blocks/bytes and provider release observations; printed close calls cannot prove physical cleanup."
+      ]
+    },
+    {
+      "id": "bare_nullable",
+      "inputs": [
+        {
+          "path": "tests/unit/xir/product_consumers/fixtures/bare_nullable/main.xr",
+          "lf_sha256": "f646347acc7d2c421f3f68e585f38dcd7535e97d4cb8652de6f12e10768a15e1"
+        }
+      ],
+      "expected": {
+        "diagnostic_stage": "CHECK",
+        "status": "XR_XIR_BAD_TYPE",
+        "message": "if requires bool",
+        "line": 1,
+        "product_published": false
+      },
+      "rationale": "An i64? is not bool; the condition is illegal independently of which value probe receives.",
+      "packages": [
+        "P10"
+      ],
+      "legacy_case": null,
+      "status": "PREPARED_NOT_EXECUTED",
+      "execution": {
+        "vm": "NOT_RUN",
+        "native": "NOT_RUN"
+      },
+      "new_entry": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "remaining_qualification": [
+        "Fresh Source/Checked/Program execution on published dependencies; this file is not a product runner.",
+        "Independent VM and actual generated-C native observations; P20 owns mixed execution qualification.",
+        "All applicable producer lifetime, complete FI, exact resource budgets, cancellation, physical release and sanitizer gates.",
+        "These are existing Source diagnostic expectations, not a guessed future CLI or ABI. Rebind only after a published fixed producer; preserve owned diagnostic and physical-zero failure checks."
+      ]
+    },
+    {
+      "id": "missing_name",
+      "inputs": [
+        {
+          "path": "tests/unit/xir/product_consumers/fixtures/missing_name/main.xr",
+          "lf_sha256": "9f18e6111b1f759a8b7d4099b765479367defe4a8d264eab972ef73796a520ce"
+        }
+      ],
+      "expected": {
+        "diagnostic_stage": "CHECK",
+        "status": "XR_XIR_BAD_VALUE",
+        "message": "name is not an initialized value",
+        "line": 1,
+        "product_published": false,
+        "column": 29
+      },
+      "rationale": "No declaration initializes missing; the return expression must be rejected before any product is published.",
+      "packages": [
+        "P10"
+      ],
+      "legacy_case": null,
+      "status": "PREPARED_NOT_EXECUTED",
+      "execution": {
+        "vm": "NOT_RUN",
+        "native": "NOT_RUN"
+      },
+      "new_entry": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "remaining_qualification": [
+        "Fresh Source/Checked/Program execution on published dependencies; this file is not a product runner.",
+        "Independent VM and actual generated-C native observations; P20 owns mixed execution qualification.",
+        "All applicable producer lifetime, complete FI, exact resource budgets, cancellation, physical release and sanitizer gates.",
+        "These are existing Source diagnostic expectations, not a guessed future CLI or ABI. Rebind only after a published fixed producer; preserve owned diagnostic and physical-zero failure checks."
+      ]
+    }
+  ]
+}

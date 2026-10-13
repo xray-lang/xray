@@ -1,0 +1,1177 @@
+{
+  "schema": 1,
+  "scope": "PREPARATION_ONLY_NO_PRODUCT_QUALIFICATION",
+  "historical_27_source": {
+    "commit": "c3ac6b5284bb3e793154efdcf07ea385fe2117c4",
+    "path": "contracts/canonical-program/capability-denominator.json",
+    "sha256": "6d0a117d5acc68bb2c624feff6e65904c66b2f8427053f94c5e502714c4f2583",
+    "note": "Historical capability names and observations only. Retired governance, states and exclusions are not restored."
+  },
+  "capabilities": [
+    {
+      "id": "scalar-integer-bool-control",
+      "tasks": [
+        "313",
+        "314",
+        "319"
+      ],
+      "packages": [
+        "P09",
+        "P10"
+      ],
+      "original_anchors": [
+        "tests/diff/cases/basic/arith.xr",
+        "tests/diff/cases/basic/loops.xr"
+      ],
+      "observations": [
+        "value",
+        "stdout",
+        "diagnostic"
+      ],
+      "status": "OPEN",
+      "new_entry": "PENDING_FIXED_PRODUCT_DELIVERY"
+    },
+    {
+      "id": "floating-point-and-fixed-width-numeric",
+      "tasks": [
+        "313",
+        "317"
+      ],
+      "packages": [
+        "P09"
+      ],
+      "original_anchors": [
+        "tests/diff/cases/semantics/float_fmt/ieee_arithmetic.xr",
+        "tests/diff/cases/semantics/types/fixed_width_type_tests.xr"
+      ],
+      "observations": [
+        "value",
+        "stdout",
+        "panic",
+        "diagnostic"
+      ],
+      "status": "OPEN",
+      "new_entry": "PENDING_FIXED_PRODUCT_DELIVERY"
+    },
+    {
+      "id": "string-rune-interpolation",
+      "tasks": [
+        "317",
+        "319"
+      ],
+      "packages": [
+        "P09",
+        "P13"
+      ],
+      "original_anchors": [
+        "tests/diff/cases/basic/strings.xr",
+        "tests/diff/cases/semantics/string/interpolation_display_shapes.xr"
+      ],
+      "observations": [
+        "value",
+        "stdout",
+        "panic",
+        "cleanup"
+      ],
+      "status": "OPEN",
+      "new_entry": "PENDING_FIXED_PRODUCT_DELIVERY"
+    },
+    {
+      "id": "nullable-union-cast-and-narrowing",
+      "tasks": [
+        "313",
+        "319"
+      ],
+      "packages": [
+        "P09",
+        "P10"
+      ],
+      "original_anchors": [
+        "tests/diff/cases/semantics/nullable_scalar_target.xr",
+        "tests/diff/cases/semantics/narrowing/narrowed_types_reach_codegen.xr"
+      ],
+      "observations": [
+        "value",
+        "panic",
+        "diagnostic"
+      ],
+      "status": "OPEN",
+      "new_entry": "PENDING_FIXED_PRODUCT_DELIVERY"
+    },
+    {
+      "id": "array-slice-fixed-array-range-iteration",
+      "tasks": [
+        "313",
+        "317",
+        "319"
+      ],
+      "packages": [
+        "P09",
+        "P10"
+      ],
+      "original_anchors": [
+        "tests/diff/cases/basic/arrays.xr",
+        "tests/diff/cases/semantics/collections/range_iterator_shared_core.xr",
+        "tests/diff/cases/semantics/slice/slice_single_source_return.xr"
+      ],
+      "observations": [
+        "value",
+        "panic",
+        "cleanup",
+        "diagnostic"
+      ],
+      "status": "OPEN",
+      "new_entry": "PENDING_FIXED_PRODUCT_DELIVERY"
+    },
+    {
+      "id": "map-set-object-json",
+      "tasks": [
+        "317",
+        "319",
+        "320"
+      ],
+      "packages": [
+        "P09",
+        "P12",
+        "P13"
+      ],
+      "original_anchors": [
+        "tests/diff/cases/semantics/collections/map_set_derived_key_fields.xr",
+        "tests/diff/cases/semantics/json/object_json_codec_bridge.xr"
+      ],
+      "observations": [
+        "value",
+        "panic",
+        "cleanup",
+        "diagnostic"
+      ],
+      "status": "OPEN",
+      "new_entry": "PENDING_FIXED_PRODUCT_DELIVERY"
+    },
+    {
+      "id": "tuple-struct-value-aggregate",
+      "tasks": [
+        "313",
+        "319"
+      ],
+      "packages": [
+        "P09",
+        "P10"
+      ],
+      "original_anchors": [
+        "tests/diff/cases/match/struct_destructure.xr",
+        "tests/diff/cases/semantics/value_struct_param_copy.xr"
+      ],
+      "observations": [
+        "value",
+        "cleanup",
+        "diagnostic"
+      ],
+      "status": "OPEN",
+      "new_entry": "PENDING_FIXED_PRODUCT_DELIVERY"
+    },
+    {
+      "id": "enum-variant-pattern",
+      "tasks": [
+        "313",
+        "319"
+      ],
+      "packages": [
+        "P09",
+        "P10"
+      ],
+      "original_anchors": [
+        "tests/diff/cases/match/adt_enum_payload_tostring.xr",
+        "tests/diff/cases/semantics/unit_enum_return_value.xr"
+      ],
+      "observations": [
+        "value",
+        "panic",
+        "diagnostic"
+      ],
+      "status": "OPEN",
+      "new_entry": "PENDING_FIXED_PRODUCT_DELIVERY"
+    },
+    {
+      "id": "class-construction-field-static-instance",
+      "tasks": [
+        "313",
+        "319"
+      ],
+      "packages": [
+        "P09",
+        "P10"
+      ],
+      "original_anchors": [
+        "tests/diff/cases/semantics/final_class_instance_method_call.xr",
+        "tests/compile_errors/oop/019_class_literal_unknown_field.xr"
+      ],
+      "observations": [
+        "value",
+        "panic",
+        "cleanup",
+        "diagnostic"
+      ],
+      "status": "OPEN",
+      "new_entry": "PENDING_FIXED_PRODUCT_DELIVERY"
+    },
+    {
+      "id": "interface-existential-witness",
+      "tasks": [
+        "313",
+        "319",
+        "320"
+      ],
+      "packages": [
+        "P10",
+        "P12"
+      ],
+      "original_anchors": [
+        "tests/diff/cases/semantics/generic_iterable_constraint.xr",
+        "tests/diff/cases/semantics/collections/for_in_interface_iterator.xr",
+        "tests/unit/program/test_xr_program_source_build.c"
+      ],
+      "observations": [
+        "value",
+        "cleanup",
+        "diagnostic"
+      ],
+      "status": "OPEN",
+      "new_entry": "PENDING_FIXED_PRODUCT_DELIVERY"
+    },
+    {
+      "id": "module-graph-import-export-init",
+      "tasks": [
+        "314",
+        "315",
+        "322"
+      ],
+      "packages": [
+        "P02",
+        "P06",
+        "P07",
+        "P13"
+      ],
+      "original_anchors": [
+        "tests/vm/source_multimodule_session.xr",
+        "tests/vm/bytecode_build_multimodule.xr",
+        "tests/compile_errors/module/circular_dependency.xr"
+      ],
+      "observations": [
+        "value",
+        "stdout",
+        "cleanup",
+        "diagnostic"
+      ],
+      "status": "OPEN",
+      "new_entry": "PENDING_FIXED_PRODUCT_DELIVERY"
+    },
+    {
+      "id": "direct-imported-static-instance-call",
+      "tasks": [
+        "313",
+        "314",
+        "316"
+      ],
+      "packages": [
+        "P08",
+        "P10"
+      ],
+      "original_anchors": [
+        "tests/diff/cases/semantics/functions/string_result_direct_call.xr",
+        "tests/diff/cases/semantics/stdlib/sys_thread_const_function_value.xr"
+      ],
+      "observations": [
+        "value",
+        "typed-error",
+        "panic",
+        "cleanup",
+        "diagnostic"
+      ],
+      "status": "OPEN",
+      "new_entry": "PENDING_FIXED_PRODUCT_DELIVERY"
+    },
+    {
+      "id": "callable-closure-capture",
+      "tasks": [
+        "313",
+        "316",
+        "322"
+      ],
+      "packages": [
+        "P02",
+        "P07",
+        "P08",
+        "P10"
+      ],
+      "original_anchors": [
+        "tests/diff/cases/semantics/functions/higher_order_closures.xr",
+        "tests/diff/cases/semantics/closure/nested_closure_transitive_capture.xr"
+      ],
+      "observations": [
+        "value",
+        "cleanup",
+        "diagnostic"
+      ],
+      "status": "OPEN",
+      "new_entry": "PENDING_FIXED_PRODUCT_DELIVERY"
+    },
+    {
+      "id": "generic-monomorphization",
+      "tasks": [
+        "313",
+        "314",
+        "320"
+      ],
+      "packages": [
+        "P10",
+        "P11"
+      ],
+      "original_anchors": [
+        "tests/diff/cases/semantics/generic_container_type_args.xr",
+        "tests/diff/cases/semantics/value_struct_generic_literal.xr",
+        "tests/compile_errors/generics/005_mono_depth_budget.xr",
+        "tests/compile_errors/generics/e0388_mono_breadth_budget.xr",
+        "tests/cli/run_canonical_source_route_tests.py",
+        "tests/unit/program/test_xr_program_source_build.c"
+      ],
+      "observations": [
+        "value",
+        "cleanup",
+        "diagnostic"
+      ],
+      "status": "OPEN",
+      "new_entry": "PENDING_FIXED_PRODUCT_DELIVERY"
+    },
+    {
+      "id": "ownership-read-ref-move-copy-drop",
+      "tasks": [
+        "313",
+        "315",
+        "319"
+      ],
+      "packages": [
+        "P07",
+        "P09",
+        "P10"
+      ],
+      "original_anchors": [
+        "tests/diff/cases/semantics/ownership/converged_capability_positive.xr",
+        "tests/diff/cases/semantics/ownership/copy_deep_independent.xr",
+        "tests/fixtures/task284_ownership_negative/ref_suspend.xr"
+      ],
+      "observations": [
+        "value",
+        "typed-error",
+        "panic",
+        "cleanup",
+        "diagnostic"
+      ],
+      "status": "OPEN",
+      "new_entry": "PENDING_FIXED_PRODUCT_DELIVERY"
+    },
+    {
+      "id": "typed-error-throw-try-catch",
+      "tasks": [
+        "313",
+        "314",
+        "316"
+      ],
+      "packages": [
+        "P02",
+        "P08",
+        "P10"
+      ],
+      "original_anchors": [
+        "tests/diff/cases/semantics/exception/try_catch.xr",
+        "tests/diff/cases/semantics/exception/uncaught_top_level_error.xr"
+      ],
+      "observations": [
+        "typed-error",
+        "stdout",
+        "cleanup",
+        "diagnostic"
+      ],
+      "status": "OPEN",
+      "new_entry": "PENDING_FIXED_PRODUCT_DELIVERY"
+    },
+    {
+      "id": "panic-trap-catch",
+      "tasks": [
+        "314",
+        "315",
+        "316"
+      ],
+      "packages": [
+        "P07",
+        "P08"
+      ],
+      "original_anchors": [
+        "tests/diff/cases/semantics/exception/catch_panic.xr",
+        "tests/diff/cases/semantics/exception/panic_exception_shape.xr"
+      ],
+      "observations": [
+        "panic",
+        "stdout",
+        "cleanup",
+        "diagnostic"
+      ],
+      "status": "OPEN",
+      "new_entry": "PENDING_FIXED_PRODUCT_DELIVERY"
+    },
+    {
+      "id": "defer-cleanup-resource-lifetime",
+      "tasks": [
+        "313",
+        "315",
+        "316"
+      ],
+      "packages": [
+        "P07",
+        "P08",
+        "P09"
+      ],
+      "original_anchors": [
+        "tests/diff/cases/semantics/cleanup/resource_release_order.xr",
+        "tests/diff/cases/semantics/cleanup/defer_async_await.xr",
+        "tests/diff/cases/semantics/cleanup/defer_panic_unwind.xr"
+      ],
+      "observations": [
+        "typed-error",
+        "panic",
+        "cleanup",
+        "provider-effect",
+        "diagnostic"
+      ],
+      "status": "OPEN",
+      "new_entry": "PENDING_FIXED_PRODUCT_DELIVERY"
+    },
+    {
+      "id": "generator-value-yield",
+      "tasks": [
+        "316"
+      ],
+      "packages": [
+        "P08"
+      ],
+      "original_anchors": [
+        "tests/diff/cases/semantics/generator/value_yield.xr",
+        "tests/diff/cases/semantics/generator/early_stop.xr"
+      ],
+      "observations": [
+        "value",
+        "typed-error",
+        "cleanup",
+        "allowed-trace",
+        "diagnostic"
+      ],
+      "status": "OPEN",
+      "new_entry": "PENDING_FIXED_PRODUCT_DELIVERY"
+    },
+    {
+      "id": "coroutine-go-await-task",
+      "tasks": [
+        "316",
+        "317",
+        "322"
+      ],
+      "packages": [
+        "P02",
+        "P08",
+        "P13"
+      ],
+      "original_anchors": [
+        "tests/concurrency_litmus/mp_task_await.xr",
+        "tests/diff/cases/semantics/cleanup/defer_coroutine.xr"
+      ],
+      "observations": [
+        "value",
+        "typed-error",
+        "panic",
+        "cleanup",
+        "provider-effect",
+        "allowed-trace",
+        "diagnostic"
+      ],
+      "status": "OPEN",
+      "new_entry": "PENDING_FIXED_PRODUCT_DELIVERY"
+    },
+    {
+      "id": "channel-select-scope-cancel",
+      "tasks": [
+        "316",
+        "317"
+      ],
+      "packages": [
+        "P08",
+        "P09",
+        "P13"
+      ],
+      "original_anchors": [
+        "tests/concurrency_litmus/mp_channel.xr",
+        "tests/diff/cases/liveness/cancel_responsive_blocking.xr",
+        "tests/diff/cases/limits/select_cases_over_32.xr"
+      ],
+      "observations": [
+        "value",
+        "typed-error",
+        "panic",
+        "cleanup",
+        "provider-effect",
+        "allowed-trace",
+        "diagnostic"
+      ],
+      "status": "OPEN",
+      "new_entry": "PENDING_FIXED_PRODUCT_DELIVERY"
+    },
+    {
+      "id": "atomic-sync-memory-model",
+      "tasks": [
+        "313",
+        "317",
+        "322"
+      ],
+      "packages": [
+        "P02",
+        "P09",
+        "P13"
+      ],
+      "original_anchors": [
+        "tests/concurrency_litmus/mp_atomic_flag.xr",
+        "tests/coroutine_safety/12_atomic_counter.xr"
+      ],
+      "observations": [
+        "value",
+        "panic",
+        "cleanup",
+        "provider-effect",
+        "allowed-trace",
+        "diagnostic"
+      ],
+      "status": "OPEN",
+      "new_entry": "PENDING_FIXED_PRODUCT_DELIVERY"
+    },
+    {
+      "id": "builtin-method-native-provider-call",
+      "tasks": [
+        "314",
+        "317"
+      ],
+      "packages": [
+        "P13",
+        "P17"
+      ],
+      "original_anchors": [
+        "tests/builtin_probes/array.xr",
+        "tests/builtin_probes/task.xr",
+        "tests/diff/cases/semantics/stdlib/net_byte_io_direct.xr"
+      ],
+      "observations": [
+        "value",
+        "typed-error",
+        "panic",
+        "cleanup",
+        "provider-effect",
+        "allowed-trace",
+        "diagnostic"
+      ],
+      "status": "OPEN",
+      "new_entry": "PENDING_FIXED_PRODUCT_DELIVERY"
+    },
+    {
+      "id": "ffi-c-boundary-and-callback",
+      "tasks": [
+        "314",
+        "316",
+        "317"
+      ],
+      "packages": [
+        "P08",
+        "P17"
+      ],
+      "original_anchors": [
+        "tests/ffi/run_c_export_smoke.py",
+        "tests/ffi/run_extern_layout_probe.py",
+        "tests/compile_errors/ffi/001_extern_call_requires_unsafe.xr"
+      ],
+      "observations": [
+        "value",
+        "typed-error",
+        "panic",
+        "cleanup",
+        "provider-effect",
+        "diagnostic"
+      ],
+      "status": "OPEN",
+      "new_entry": "PENDING_FIXED_PRODUCT_DELIVERY"
+    },
+    {
+      "id": "target-profile-query",
+      "tasks": [
+        "314",
+        "317",
+        "318"
+      ],
+      "packages": [
+        "P06",
+        "P17"
+      ],
+      "original_anchors": [
+        "tests/unit/ir/test_xi_pipeline.c",
+        "tests/unit/plan/test_target_profile.c"
+      ],
+      "observations": [
+        "value",
+        "diagnostic"
+      ],
+      "status": "OPEN",
+      "new_entry": "PENDING_FIXED_PRODUCT_DELIVERY"
+    },
+    {
+      "id": "regex-literal-and-runtime-semantics",
+      "tasks": [
+        "317",
+        "319",
+        "320"
+      ],
+      "packages": [
+        "P12",
+        "P13"
+      ],
+      "original_anchors": [
+        "tests/builtin_probes/regex.xr",
+        "tests/diff/cases/semantics/stdlib/regex_escape_direct.xr"
+      ],
+      "observations": [
+        "value",
+        "panic",
+        "cleanup",
+        "diagnostic"
+      ],
+      "status": "OPEN",
+      "new_entry": "PENDING_FIXED_PRODUCT_DELIVERY"
+    },
+    {
+      "id": "test-entry-assertion-async",
+      "tasks": [
+        "314",
+        "318"
+      ],
+      "packages": [
+        "P14"
+      ],
+      "original_anchors": [
+        "tests/test_harness/single_pass.xr",
+        "tests/test_harness/mixed_pass_fail.xr"
+      ],
+      "observations": [
+        "value",
+        "stdout",
+        "typed-error",
+        "panic",
+        "cleanup",
+        "provider-effect",
+        "allowed-trace",
+        "diagnostic"
+      ],
+      "status": "OPEN",
+      "new_entry": "PENDING_FIXED_PRODUCT_DELIVERY"
+    }
+  ],
+  "task308_obligations": [
+    {
+      "id": "C01",
+      "responsibility": "1. 初始化闭包、模块槽、首次初始化、实例隔离、并发进入、失败粘滞、逆序清理、结果所有权",
+      "tasks": "314 / 315 / 322 / 318",
+      "oracle_requirement": "不可变 image 与可变 instance 分离；同一模块实例状态由 VM/native 共用；全生命周期与真实释放独立测试",
+      "packages": [
+        "P02",
+        "P06",
+        "P07",
+        "P08",
+        "P09"
+      ],
+      "status": "OPEN"
+    },
+    {
+      "id": "C02",
+      "responsibility": "2. 多模块状态、字符串、typed output 完整程序",
+      "tasks": "314 首闭环，317 扩展，318 完整资格",
+      "oracle_requirement": "两端分别与固定预期比较；相同 target/profile；多个实例、失败与销毁路径不能仅由正常输出代替",
+      "packages": [
+        "P09",
+        "P10",
+        "P13",
+        "P14"
+      ],
+      "status": "OPEN"
+    },
+    {
+      "id": "C03",
+      "responsibility": "3. 普通/协程/调度/yield/go 统一，稳定模块接口",
+      "tasks": "313 / 316 / 322 / 318",
+      "oracle_requirement": "默认可恢复 ABI；局部 effect 优化；no_suspend 公开承诺进入合同；生成器与任务存活期及取消协议明确",
+      "packages": [
+        "P02",
+        "P08",
+        "P10"
+      ],
+      "status": "OPEN"
+    },
+    {
+      "id": "C04",
+      "responsibility": "4. 声明决定 a.finish() 消费、消费后使用/借用/清理",
+      "tasks": "313 / 319 / 318",
+      "oracle_requirement": "按新目标收窄：struct/enum ref，noncopyable struct/enum move；class 无 ref/move 方法。直接调用由已解析声明判断，move 转移析构责任",
+      "packages": [
+        "P09",
+        "P10"
+      ],
+      "status": "OPEN"
+    },
+    {
+      "id": "C05",
+      "responsibility": "5. bool 条件、显式 override、struct/class 合同",
+      "tasks": "313 / 317 / 319 / 318",
+      "oracle_requirement": "bool/override 要求保留；struct 按值复制且可含集合/class，值语义到 class 边界停止；不把这一调整描述为旧“纯值”已验收",
+      "packages": [
+        "P09",
+        "P10"
+      ],
+      "status": "OPEN"
+    },
+    {
+      "id": "C06",
+      "responsibility": "6. 函数类型、嵌套 callable 与声明冻结",
+      "tasks": "313 / 322；316 消费 ABI",
+      "oracle_requirement": "模式匹配、ref 不变、返回所有权/借用来源、sendable、接收者绑定和公开效应承诺先冻结；没有猜测性适配",
+      "packages": [
+        "P02",
+        "P08",
+        "P10"
+      ],
+      "status": "OPEN"
+    },
+    {
+      "id": "C07",
+      "responsibility": "7. 数值/容器/其他核心能力共用 typed runtime",
+      "tasks": "317 / 319 / 320 / 318",
+      "oracle_requirement": "通过同一前端与 XIR；按功能族维护独立预期与内存/ABI用例；普通库功能不逐项新增核心语义路径",
+      "packages": [
+        "P09",
+        "P10",
+        "P11",
+        "P12",
+        "P13"
+      ],
+      "status": "OPEN"
+    },
+    {
+      "id": "C08",
+      "responsibility": "8. 最后消费者迁移后删除旧链/格式/依赖，同步、提交并 push",
+      "tasks": "318，所有实施批次",
+      "oracle_requirement": "消费者和保护职责清单逐项迁移，旧证据按治理退役；默认适用完整验证通过才终切；提交/push 完成可核查",
+      "packages": [
+        "P14",
+        "P15",
+        "P16",
+        "P17",
+        "P18",
+        "P21"
+      ],
+      "status": "OPEN"
+    }
+  ],
+  "task318_families": [
+    {
+      "id": "Q01",
+      "responsibility": "标量/转换",
+      "oracle_requirement": "宽度、符号、溢出、浮点边界、rune/byte、比较/打印",
+      "packages": [
+        "P09",
+        "P10"
+      ],
+      "status": "OPEN"
+    },
+    {
+      "id": "Q02",
+      "responsibility": "聚合/和类型",
+      "oracle_requirement": "struct/tuple/记录、enum/union、嵌套 Optional、字段/分支/调用组合",
+      "packages": [
+        "P09",
+        "P10"
+      ],
+      "status": "OPEN"
+    },
+    {
+      "id": "Q03",
+      "responsibility": "值所有权",
+      "oracle_requirement": "CoW、copy/move、非复制类型、class 身份边界、析构/部分初始化",
+      "packages": [
+        "P07",
+        "P09"
+      ],
+      "status": "OPEN"
+    },
+    {
+      "id": "Q04",
+      "responsibility": "借用/独占",
+      "oracle_requirement": "ref、视图来源/返回、字段与嵌套容器访问、跨挂起、冲突拒绝",
+      "packages": [
+        "P07",
+        "P09",
+        "P10"
+      ],
+      "status": "OPEN"
+    },
+    {
+      "id": "Q05",
+      "responsibility": "声明与条件",
+      "oracle_requirement": "strict bool、显式override、声明驱动ref/move接收者、函数签名兼容的正负例",
+      "packages": [
+        "P10"
+      ],
+      "status": "OPEN"
+    },
+    {
+      "id": "Q06",
+      "responsibility": "callable/泛型",
+      "oracle_requirement": "direct/indirect/witness、闭包捕获、用户类型实例化、跨模块返回",
+      "packages": [
+        "P02",
+        "P08",
+        "P10"
+      ],
+      "status": "OPEN"
+    },
+    {
+      "id": "Q07",
+      "responsibility": "模块/image/实例",
+      "oracle_requirement": "完整导入闭包、初始化一次、失败缓存、双实例隔离与资源归属",
+      "packages": [
+        "P06",
+        "P07",
+        "P13"
+      ],
+      "status": "OPEN"
+    },
+    {
+      "id": "Q08",
+      "responsibility": "根执行权限/库状态",
+      "oracle_requirement": "322 R01–R18；私有库var根流正例、直接/传递/间接/高阶worker拒例、效果unknown/伪造/缓存依赖、真实宿主/回调身份、两实例/OOM/取消/physical释放",
+      "packages": [
+        "P02",
+        "P07",
+        "P08",
+        "P13"
+      ],
+      "status": "OPEN"
+    },
+    {
+      "id": "Q09",
+      "responsibility": "错误/退出",
+      "oracle_requirement": "返回、语言错误、panic、取消、OOM、provider 失败、清理再失败",
+      "packages": [
+        "P07",
+        "P08",
+        "P09"
+      ],
+      "status": "OPEN"
+    },
+    {
+      "id": "Q10",
+      "responsibility": "协程/生成器",
+      "oracle_requirement": "递归/间接调用、挂起恢复、提前放弃、defer、等待/关闭/取消竞态",
+      "packages": [
+        "P08"
+      ],
+      "status": "OPEN"
+    },
+    {
+      "id": "Q11",
+      "responsibility": "stdlib/provider",
+      "oracle_requirement": "317 每个库族、typed ABI、能力拒绝、native 与模板分发",
+      "packages": [
+        "P09",
+        "P13",
+        "P17"
+      ],
+      "status": "OPEN"
+    },
+    {
+      "id": "Q12",
+      "responsibility": "comptime/协议",
+      "oracle_requirement": "319/320 已纳入目标的反射、纯函数、派生、预算和非法操作",
+      "packages": [
+        "P10",
+        "P11",
+        "P12"
+      ],
+      "status": "OPEN"
+    },
+    {
+      "id": "Q13",
+      "responsibility": "产品入口",
+      "oracle_requirement": "check/run/test/build/verify、模块产物读写、嵌入结果/释放、诊断与工具服务",
+      "packages": [
+        "P14",
+        "P15",
+        "P16",
+        "P17",
+        "P18"
+      ],
+      "status": "OPEN"
+    },
+    {
+      "id": "Q14",
+      "responsibility": "目标/资源",
+      "oracle_requirement": "hosted/freestanding 适用能力、目标 ABI、无堆合同、实际物理释放",
+      "packages": [
+        "P06",
+        "P07",
+        "P17"
+      ],
+      "status": "OPEN"
+    }
+  ],
+  "task322_requirements": [
+    {
+      "id": "R01",
+      "input": "两模块私有计数库，根流连调；两个Instance交错",
+      "oracle_requirement": "各自得到1、2，互不串状态",
+      "packages": [
+        "P02",
+        "P07",
+        "P13"
+      ],
+      "status": "OPEN"
+    },
+    {
+      "id": "R02",
+      "input": "GO直接/多层/跨模块/互递归访问var，含仅仅读取",
+      "oracle_requirement": "编译拒绝，原因路径落到真实槽",
+      "packages": [
+        "P02",
+        "P08",
+        "P13"
+      ],
+      "status": "OPEN"
+    },
+    {
+      "id": "R03",
+      "input": "同一库含状态函数和纯函数；只GO纯函数",
+      "oracle_requirement": "允许，不能按“整个库含var”污染全部函数",
+      "packages": [
+        "P02",
+        "P08",
+        "P13"
+      ],
+      "status": "OPEN"
+    },
+    {
+      "id": "R04",
+      "input": "`go pure(readRoot())`，以及把此表达式放进worker",
+      "oracle_requirement": "前者允许根流准备快照，后者拒绝调用方的root读取",
+      "packages": [
+        "P02",
+        "P08",
+        "P13"
+      ],
+      "status": "OPEN"
+    },
+    {
+      "id": "R05",
+      "input": "worker内局部var、局部可变对象和同步cell闭包",
+      "oracle_requirement": "允许；没有发生跨流传递",
+      "packages": [
+        "P07",
+        "P08",
+        "P09"
+      ],
+      "status": "OPEN"
+    },
+    {
+      "id": "R06",
+      "input": "外部var闭包经const别名、传参、返回、聚合包装进入GO",
+      "oracle_requirement": "捕获/Sendable拒绝，不能误判为普通局部使用",
+      "packages": [
+        "P07",
+        "P08",
+        "P09"
+      ],
+      "status": "OPEN"
+    },
+    {
+      "id": "R07",
+      "input": "无捕获函数访问模块var，经函数值/COPY/PHI/容器取出调用",
+      "oracle_requirement": "不丢REQUIRED；涉及unknown时保守拒绝worker",
+      "packages": [
+        "P02",
+        "P08",
+        "P10"
+      ],
+      "status": "OPEN"
+    },
+    {
+      "id": "R08",
+      "input": "`apply` 同流回调的纯实参与root实参，含模板/静态见证",
+      "oracle_requirement": "同一定义正确代入效果；纯worker通过、root worker拒绝",
+      "packages": [
+        "P02",
+        "P10"
+      ],
+      "status": "OPEN"
+    },
+    {
+      "id": "R09",
+      "input": "高阶函数保存/返回callback，或转交GO/native异流回调",
+      "oracle_requirement": "效果/Sendable/escape各自保留；不能套用仅同流调用摘要",
+      "packages": [
+        "P02",
+        "P08",
+        "P10"
+      ],
+      "status": "OPEN"
+    },
+    {
+      "id": "R10",
+      "input": "default、构造、转换、defer/deinit里访问var",
+      "oracle_requirement": "相应执行上下文承接root要求；无隐式绕过",
+      "packages": [
+        "P02",
+        "P07",
+        "P10"
+      ],
+      "status": "OPEN"
+    },
+    {
+      "id": "R11",
+      "input": "const Atomic与var Atomic绑定；根流取句柄后传参",
+      "oracle_requirement": "const合格共享允许；worker直接读var拒绝；显式传合格句柄允许",
+      "packages": [
+        "P02",
+        "P09",
+        "P13"
+      ],
+      "status": "OPEN"
+    },
+    {
+      "id": "R12",
+      "input": "库非Sendable const、export var、私有越权、未发布槽",
+      "oracle_requirement": "原规则仍拒绝，不被本任务放宽",
+      "packages": [
+        "P10",
+        "P13"
+      ],
+      "status": "OPEN"
+    },
+    {
+      "id": "R13",
+      "input": "Library无entry、包重读、链接与producer先销毁",
+      "oracle_requirement": "权限和owned元数据仍准确，库不伪造运行入口",
+      "packages": [
+        "P06",
+        "P13"
+      ],
+      "status": "OPEN"
+    },
+    {
+      "id": "R14",
+      "input": "篡改NONE摘要/漏调用边/错效果变量/旧包和旧native对象",
+      "oracle_requirement": "验证或链接拒绝；不会执行callback或发布半Program",
+      "packages": [
+        "P02",
+        "P06",
+        "P17"
+      ],
+      "status": "OPEN"
+    },
+    {
+      "id": "R15",
+      "input": "helper变更使导出效果增强，缓存复用及321替换",
+      "oracle_requirement": "依赖失效/重查或拒绝替换；不能静默沿用安全结论",
+      "packages": [
+        "P02",
+        "P06",
+        "P13"
+      ],
+      "status": "OPEN"
+    },
+    {
+      "id": "R16",
+      "input": "主流挂起恢复、worker、sys.Thread/parallel/宿主/CFn入口",
+      "oracle_requirement": "只给真实授权身份权限；尚未实施入口保持拒绝且NOT_RUN",
+      "packages": [
+        "P07",
+        "P08",
+        "P17"
+      ],
+      "status": "OPEN"
+    },
+    {
+      "id": "R17",
+      "input": "初始化部分失败/取消、stop/drain、外逃结果与析构",
+      "oracle_requirement": "粘滞/清理/保活遵循315/316，physical bytes/blocks回基线",
+      "packages": [
+        "P07",
+        "P08",
+        "P09"
+      ],
+      "status": "OPEN"
+    },
+    {
+      "id": "R18",
+      "input": "顺序重排、递归深链、预算/OOM、不同优化级别",
+      "oracle_requirement": "结论稳定；typed失败不放行、不遗留证明owner；不递归耗尽宿主栈",
+      "packages": [
+        "P02",
+        "P06",
+        "P07"
+      ],
+      "status": "OPEN"
+    }
+  ],
+  "docs_sources": [
+    {
+      "path": "tasks/312-xir-value-semantics-rebuild-roadmap-cn.md",
+      "lf_sha256": "333775f51007a2dc14e00c6572cfd357429bf0c0a56ce0b5900766930fa790e5"
+    },
+    {
+      "path": "tasks/318-xir-qualification-atomic-cutover-and-removal-cn.md",
+      "lf_sha256": "70bf8b0a0800cc2bee38398b2c8b12385f4b7e84024832768fc09ad959ddd71f"
+    },
+    {
+      "path": "tasks/322-inferred-root-execution-effects-and-library-state-cn.md",
+      "lf_sha256": "d7953869a5c3400e6c30c1f208c1664fe2828e420e23e66124cba28ccc865fec"
+    }
+  ],
+  "final_dependencies": [
+    "P00",
+    "P02",
+    "P06",
+    "P07",
+    "P08",
+    "P09",
+    "P10",
+    "P11",
+    "P12",
+    "P13",
+    "P14",
+    "P15",
+    "P16",
+    "P17",
+    "P18"
+  ],
+  "platforms": {
+    "windows": "NOT_RUN",
+    "linux": "NOT_RUN",
+    "macos": "NOT_RUN",
+    "windows_tsan": "UNSUPPORTED"
+  },
+  "boundaries": [
+    "No product implementation, shared P01 allocation/Instance tests or P20 mixed oracle changes.",
+    "All runner cases without an explicit reviewed primary family remain UNMAPPED.",
+    "Original positive programs remain positive obligations, never arbitrary rejection expectations.",
+    "R15 keeps dependency invalidation; optional Task321 replacement is not made a new core requirement."
+  ]
+}

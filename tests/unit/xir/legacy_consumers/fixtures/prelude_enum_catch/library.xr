@@ -1,0 +1,1 @@
+export fn fail() -> i64 { throw CryptoError.InvalidLength }
