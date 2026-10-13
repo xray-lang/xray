@@ -738,7 +738,7 @@
       "inputs": [
         {
           "path": "tests/unit/xir/legacy_consumers/fixtures/class_cleanup_ordinary_methods/root.xr",
-          "lf_sha256": "80058e11ffef775d77a7ea8e2699a1eb6ace30c1d95b22e0d1901208b64354de",
+          "lf_sha256": "aaf07702d5808bd5318f1e90d3a6f8b06e65e2b0e004d243101506ba55689722",
           "role": "target_source"
         },
         {
@@ -754,7 +754,9 @@
           "defer_runs_after_a_returned_parameter_call",
           "defer_runs_after_a_returned_indirect_call"
         ],
-        "all_required_tests_passed": true
+        "all_required_tests_passed": true,
+        "indirect_callee_observes_held_before_cleanup": true,
+        "owned_callback_capture_cycle_has_scoped_break": true
       },
       "rationale": "Both original tests require callback result a/b and held=false after each call. The target source uses frozen ordinary class methods and init; direct callbacks require held=true during the call. A build-only success or a report missing either test cannot satisfy the oracle.",
       "packages": [
@@ -37639,6 +37641,3939 @@
         "Fresh actual VM/native plus full affected FI/resource/lifetime/borrow/cancel/physical/safety/generated-C/provider/platform gates remain required; retain all200/260/300 loops and P20 bidirectional mixed responsibilities."
       ],
       "execution_source": "tests/regression/03_operators/0397_numeric_neg_owner_edges.xr",
+      "execution_entry": "test"
+    },
+    {
+      "id": "regression_core_review_0400_if",
+      "inputs": [
+        {
+          "path": "tests/regression/04_control_flow/0400_if.xr",
+          "lf_sha256": "7ff8f926efab34ee7241270af6a5fb8a7f87d941a3dcb7487a23e9e4cf0b7c49",
+          "role": "preserved_source"
+        },
+        {
+          "path": "spec/source/sections/003-2-type-system.md",
+          "lf_sha256": "f4e970b0cc728c19f65a4d1b2a13cd0e572431dcac3f6f20cd06d23046ebea8a",
+          "role": "frozen_spec"
+        },
+        {
+          "path": "spec/source/sections/004-3-expressions.md",
+          "lf_sha256": "3aeabb14d154ef235fe51c665a7d367c2e51dc2c6f5261a9e0b194b228a9b945",
+          "role": "frozen_spec"
+        },
+        {
+          "path": "spec/source/sections/006-5-declarations.md",
+          "lf_sha256": "56fa3d36bc0c5ee38b7c52dafbe26d7b8b0a45a6909c14a8626a9bba515cc4a7",
+          "role": "frozen_spec"
+        },
+        {
+          "path": "spec/source/sections/009-8-error-handling.md",
+          "lf_sha256": "569cafb786430df363674f97f6073e908d76b4a3484f3fb26239b0895342507e",
+          "role": "frozen_spec"
+        },
+        {
+          "path": "spec/source/sections/011-10-concurrency-and-coroutines.md",
+          "lf_sha256": "75424eb2e981feaa5a24430abdc1a5853c9b87a3adc360cb68588e07da09f264",
+          "role": "frozen_spec"
+        }
+      ],
+      "expected": {
+        "exit_code": 0,
+        "required_test_names": [
+          "test_if_true",
+          "test_if_false",
+          "test_if_expression",
+          "test_if_else_true",
+          "test_if_else_false",
+          "test_if_else_expression",
+          "test_elseif_first",
+          "test_elseif_second",
+          "test_elseif_else",
+          "test_multiple_elseif",
+          "test_nested_if",
+          "test_deep_nested",
+          "test_explicit_bool_condition",
+          "test_nullable_presence_condition",
+          "test_and_condition",
+          "test_or_condition",
+          "test_not_condition",
+          "test_empty_if_body",
+          "test_if_only_once"
+        ],
+        "all_required_tests_passed": true,
+        "per_test_observations": {
+          "test_if_true": {
+            "values": [
+              1
+            ]
+          },
+          "test_if_false": {
+            "values": [
+              0
+            ]
+          },
+          "test_if_expression": {
+            "values": [
+              1
+            ]
+          },
+          "test_if_else_true": {
+            "values": [
+              "yes"
+            ]
+          },
+          "test_if_else_false": {
+            "values": [
+              "no"
+            ]
+          },
+          "test_if_else_expression": {
+            "values": [
+              "small"
+            ]
+          },
+          "test_elseif_first": {
+            "values": [
+              "one"
+            ]
+          },
+          "test_elseif_second": {
+            "values": [
+              "two"
+            ]
+          },
+          "test_elseif_else": {
+            "values": [
+              "other"
+            ]
+          },
+          "test_multiple_elseif": {
+            "values": [
+              "C"
+            ]
+          },
+          "test_nested_if": {
+            "values": [
+              "x>0, y>5"
+            ]
+          },
+          "test_deep_nested": {
+            "values": [
+              6
+            ]
+          },
+          "test_explicit_bool_condition": {
+            "values": [
+              "yes",
+              "no"
+            ]
+          },
+          "test_nullable_presence_condition": {
+            "values": [
+              "absent",
+              "present"
+            ]
+          },
+          "test_and_condition": {
+            "values": [
+              true
+            ]
+          },
+          "test_or_condition": {
+            "values": [
+              true
+            ]
+          },
+          "test_not_condition": {
+            "values": [
+              1
+            ]
+          },
+          "test_empty_if_body": {
+            "values": [
+              10
+            ]
+          },
+          "test_if_only_once": {
+            "values": [
+              2
+            ]
+          }
+        },
+        "complete_original_named_bodies_preserved": true,
+        "textual_names_are_not_runtime_discovery": true,
+        "history_comments_are_not_backend_provenance": true
+      },
+      "rationale": "Full originalbody/per-testvalues independentlyreviewed frombranch/arithmetic/recurrence/scope rules. Preserveeverycondition,state transition andeffect; actualcanonicalinterfaces/driverandallfullgates remainOPEN.",
+      "packages": [
+        "P09",
+        "P10"
+      ],
+      "legacy_case": null,
+      "status": "PREPARED_NOT_EXECUTED",
+      "execution": {
+        "vm": "NOT_RUN",
+        "native": "NOT_RUN"
+      },
+      "new_entry": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "remaining_qualification": [
+        "Fresh full actualtestentry/discovery andqualifieddriver mustindependently verifyeverymappedbody/value, sourceorder/context andeffects; no build/banner/equal-wrongresult grantsqualification.",
+        "Actualcanonicalcallable/capture/frame/default/error/Iterator/Equal/record/formatter/ROOTproof andtargetprovider interfacesremainOPEN; no guessedAPI, alias orlegacycompatibilitypath.",
+        "FullactualVM/native/FI/resource/lifetime/borrow/cancel/physical/safety/generated-C/provider/platformgates remainrequired. Keepall100/500/1000/10000/100000 pressure andP20mixeddirections."
+      ],
+      "execution_source": "tests/regression/04_control_flow/0400_if.xr",
+      "execution_entry": "test"
+    },
+    {
+      "id": "regression_core_review_0410_while",
+      "inputs": [
+        {
+          "path": "tests/regression/04_control_flow/0410_while.xr",
+          "lf_sha256": "c72faed8f017e67460675714e3ede1a2b281dfd8ecda1cf2e136cd87ccbae3c9",
+          "role": "preserved_source"
+        },
+        {
+          "path": "tests/unit/xir/legacy_consumers/fixtures/control_function_ports/0410_while/root.xr",
+          "lf_sha256": "c0d65e1b57adb4230fb2969e083a4711b076bc7eea00752b60cd98532b5e2729",
+          "role": "complete_selected_source_draft"
+        },
+        {
+          "path": "spec/source/sections/003-2-type-system.md",
+          "lf_sha256": "f4e970b0cc728c19f65a4d1b2a13cd0e572431dcac3f6f20cd06d23046ebea8a",
+          "role": "frozen_spec"
+        },
+        {
+          "path": "spec/source/sections/004-3-expressions.md",
+          "lf_sha256": "3aeabb14d154ef235fe51c665a7d367c2e51dc2c6f5261a9e0b194b228a9b945",
+          "role": "frozen_spec"
+        },
+        {
+          "path": "spec/source/sections/006-5-declarations.md",
+          "lf_sha256": "56fa3d36bc0c5ee38b7c52dafbe26d7b8b0a45a6909c14a8626a9bba515cc4a7",
+          "role": "frozen_spec"
+        },
+        {
+          "path": "spec/source/sections/009-8-error-handling.md",
+          "lf_sha256": "569cafb786430df363674f97f6073e908d76b4a3484f3fb26239b0895342507e",
+          "role": "frozen_spec"
+        },
+        {
+          "path": "spec/source/sections/011-10-concurrency-and-coroutines.md",
+          "lf_sha256": "75424eb2e981feaa5a24430abdc1a5853c9b87a3adc360cb68588e07da09f264",
+          "role": "frozen_spec"
+        }
+      ],
+      "expected": {
+        "exit_code": 0,
+        "required_test_names": [
+          "test_while_count_up",
+          "test_while_count_down",
+          "test_while_never_run",
+          "test_while_once",
+          "test_while_condition_becomes_false",
+          "test_while_break",
+          "test_while_break_early",
+          "test_while_continue",
+          "test_while_continue_and_break",
+          "test_while_nested",
+          "test_while_nested_break",
+          "test_while_and_condition",
+          "test_while_or_condition",
+          "test_while_find",
+          "test_while_accumulate"
+        ],
+        "all_required_tests_passed": true,
+        "per_test_observations": {
+          "test_while_count_up": {
+            "values": [
+              10,
+              5
+            ]
+          },
+          "test_while_count_down": {
+            "values": [
+              15,
+              0
+            ]
+          },
+          "test_while_never_run": {
+            "values": [
+              0
+            ]
+          },
+          "test_while_once": {
+            "values": [
+              1
+            ]
+          },
+          "test_while_condition_becomes_false": {
+            "values": [
+              10
+            ]
+          },
+          "test_while_break": {
+            "values": [
+              5
+            ]
+          },
+          "test_while_break_early": {
+            "values": [
+              15
+            ]
+          },
+          "test_while_continue": {
+            "values": [
+              25
+            ]
+          },
+          "test_while_continue_and_break": {
+            "values": [
+              [
+                1,
+                3,
+                5,
+                7
+              ],
+              4
+            ]
+          },
+          "test_while_nested": {
+            "values": [
+              9
+            ]
+          },
+          "test_while_nested_break": {
+            "values": [
+              9
+            ]
+          },
+          "test_while_and_condition": {
+            "values": [
+              5
+            ]
+          },
+          "test_while_or_condition": {
+            "values": [
+              5
+            ]
+          },
+          "test_while_find": {
+            "values": [
+              true,
+              3
+            ]
+          },
+          "test_while_accumulate": {
+            "values": [
+              15
+            ]
+          }
+        },
+        "complete_original_named_bodies_preserved": true,
+        "textual_names_are_not_runtime_discovery": true,
+        "history_comments_are_not_backend_provenance": true
+      },
+      "rationale": "All15 full bodies retain pre/post increment,zero trip,earlybreak15/continue25, combinedfilteredsequence1/3/5/7 andnestedbreak onlyinner9. Owned draft addsfullarraycontent assertion; no fullrange substitution or bannerqualification.",
+      "packages": [
+        "P09",
+        "P10"
+      ],
+      "legacy_case": null,
+      "status": "PREPARED_NOT_EXECUTED",
+      "execution": {
+        "vm": "NOT_RUN",
+        "native": "NOT_RUN"
+      },
+      "new_entry": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "remaining_qualification": [
+        "Fresh full actualtestentry/discovery andqualifieddriver mustindependently verifyeverymappedbody/value, sourceorder/context andeffects; no build/banner/equal-wrongresult grantsqualification.",
+        "Actualcanonicalcallable/capture/frame/default/error/Iterator/Equal/record/formatter/ROOTproof andtargetprovider interfacesremainOPEN; no guessedAPI, alias orlegacycompatibilitypath.",
+        "FullactualVM/native/FI/resource/lifetime/borrow/cancel/physical/safety/generated-C/provider/platformgates remainrequired. Keepall100/500/1000/10000/100000 pressure andP20mixeddirections."
+      ],
+      "execution_source": "tests/unit/xir/legacy_consumers/fixtures/control_function_ports/0410_while/root.xr",
+      "execution_entry": "test"
+    },
+    {
+      "id": "regression_core_review_0413_null_unwrap",
+      "inputs": [
+        {
+          "path": "tests/regression/04_control_flow/0413_null_unwrap.xr",
+          "lf_sha256": "feb1fef07d2aff1381edadf53fccaa01e2d6c87d940069897b67de43bab7de2e",
+          "role": "preserved_source"
+        },
+        {
+          "path": "tests/unit/xir/legacy_consumers/fixtures/control_function_ports/0413_null_unwrap/root.xr",
+          "lf_sha256": "a86cbcbe65846063f55173c9bd2e658bdc6006fa9a6bf103bd3fd2b66e3ec0d0",
+          "role": "complete_selected_source_draft"
+        },
+        {
+          "path": "spec/source/sections/003-2-type-system.md",
+          "lf_sha256": "f4e970b0cc728c19f65a4d1b2a13cd0e572431dcac3f6f20cd06d23046ebea8a",
+          "role": "frozen_spec"
+        },
+        {
+          "path": "spec/source/sections/004-3-expressions.md",
+          "lf_sha256": "3aeabb14d154ef235fe51c665a7d367c2e51dc2c6f5261a9e0b194b228a9b945",
+          "role": "frozen_spec"
+        },
+        {
+          "path": "spec/source/sections/006-5-declarations.md",
+          "lf_sha256": "56fa3d36bc0c5ee38b7c52dafbe26d7b8b0a45a6909c14a8626a9bba515cc4a7",
+          "role": "frozen_spec"
+        },
+        {
+          "path": "spec/source/sections/009-8-error-handling.md",
+          "lf_sha256": "569cafb786430df363674f97f6073e908d76b4a3484f3fb26239b0895342507e",
+          "role": "frozen_spec"
+        },
+        {
+          "path": "spec/source/sections/011-10-concurrency-and-coroutines.md",
+          "lf_sha256": "75424eb2e981feaa5a24430abdc1a5853c9b87a3adc360cb68588e07da09f264",
+          "role": "frozen_spec"
+        }
+      ],
+      "expected": {
+        "exit_code": 0,
+        "required_test_names": [
+          "test_null_unwrap_throws_413",
+          "test_non_null_unwrap_succeeds"
+        ],
+        "all_required_tests_passed": true,
+        "per_test_observations": {
+          "test_null_unwrap_throws_413": {
+            "values": [
+              "PANIC",
+              413,
+              "unwrap",
+              true
+            ]
+          },
+          "test_non_null_unwrap_succeeds": {
+            "values": [
+              42
+            ]
+          }
+        },
+        "complete_original_named_bodies_preserved": true,
+        "textual_names_are_not_runtime_discovery": true,
+        "history_comments_are_not_backend_provenance": true,
+        "null_unwrap_channel": "PANIC_EXECUTE_NOT_ORDINARY_ERROR_OR_COMPILE_REJECTION"
+      },
+      "rationale": "Null unwrap is actualEXECUTE panicE0413/code413 withunwrapmessage, caught readonlyPanicInfo, notordinaryenumerror,compile rejection orfalse/null coercion. Full2-bodydraft usescatchpanic; nonNullunwrap42 unchanged.",
+      "packages": [
+        "P02",
+        "P08",
+        "P09",
+        "P10"
+      ],
+      "legacy_case": null,
+      "status": "PREPARED_NOT_EXECUTED",
+      "execution": {
+        "vm": "NOT_RUN",
+        "native": "NOT_RUN"
+      },
+      "new_entry": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "remaining_qualification": [
+        "Fresh full actualtestentry/discovery andqualifieddriver mustindependently verifyeverymappedbody/value, sourceorder/context andeffects; no build/banner/equal-wrongresult grantsqualification.",
+        "Actualcanonicalcallable/capture/frame/default/error/Iterator/Equal/record/formatter/ROOTproof andtargetprovider interfacesremainOPEN; no guessedAPI, alias orlegacycompatibilitypath.",
+        "FullactualVM/native/FI/resource/lifetime/borrow/cancel/physical/safety/generated-C/provider/platformgates remainrequired. Keepall100/500/1000/10000/100000 pressure andP20mixeddirections."
+      ],
+      "execution_source": "tests/unit/xir/legacy_consumers/fixtures/control_function_ports/0413_null_unwrap/root.xr",
+      "execution_entry": "test"
+    },
+    {
+      "id": "regression_core_review_0420_for",
+      "inputs": [
+        {
+          "path": "tests/regression/04_control_flow/0420_for.xr",
+          "lf_sha256": "b3c5b109120e1ad6ea8d63967eaab4a8e727b30018bda6ead0983b199f74cffc",
+          "role": "preserved_source"
+        },
+        {
+          "path": "tests/unit/xir/legacy_consumers/fixtures/control_function_ports/0420_for/root.xr",
+          "lf_sha256": "30b127d13f4227347e74a72c513622337418bd2683e284fcb74c320abdf9d483",
+          "role": "complete_selected_source_draft"
+        },
+        {
+          "path": "spec/source/sections/003-2-type-system.md",
+          "lf_sha256": "f4e970b0cc728c19f65a4d1b2a13cd0e572431dcac3f6f20cd06d23046ebea8a",
+          "role": "frozen_spec"
+        },
+        {
+          "path": "spec/source/sections/004-3-expressions.md",
+          "lf_sha256": "3aeabb14d154ef235fe51c665a7d367c2e51dc2c6f5261a9e0b194b228a9b945",
+          "role": "frozen_spec"
+        },
+        {
+          "path": "spec/source/sections/006-5-declarations.md",
+          "lf_sha256": "56fa3d36bc0c5ee38b7c52dafbe26d7b8b0a45a6909c14a8626a9bba515cc4a7",
+          "role": "frozen_spec"
+        },
+        {
+          "path": "spec/source/sections/009-8-error-handling.md",
+          "lf_sha256": "569cafb786430df363674f97f6073e908d76b4a3484f3fb26239b0895342507e",
+          "role": "frozen_spec"
+        },
+        {
+          "path": "spec/source/sections/011-10-concurrency-and-coroutines.md",
+          "lf_sha256": "75424eb2e981feaa5a24430abdc1a5853c9b87a3adc360cb68588e07da09f264",
+          "role": "frozen_spec"
+        }
+      ],
+      "expected": {
+        "exit_code": 0,
+        "required_test_names": [
+          "test_for_count_up",
+          "test_for_count_down",
+          "test_for_start_from_one",
+          "test_for_step_two",
+          "test_for_step_three",
+          "test_for_never_run",
+          "test_for_once",
+          "test_for_break",
+          "test_for_break_early",
+          "test_for_continue",
+          "test_for_continue_first",
+          "test_for_nested",
+          "test_for_multiplication_table",
+          "test_for_nested_break",
+          "test_for_outer_variable",
+          "test_for_collect",
+          "test_for_expression_init"
+        ],
+        "all_required_tests_passed": true,
+        "per_test_observations": {
+          "test_for_count_up": {
+            "values": [
+              10
+            ]
+          },
+          "test_for_count_down": {
+            "values": [
+              15
+            ]
+          },
+          "test_for_start_from_one": {
+            "values": [
+              15
+            ]
+          },
+          "test_for_step_two": {
+            "values": [
+              20
+            ]
+          },
+          "test_for_step_three": {
+            "values": [
+              [
+                0,
+                3,
+                6,
+                9
+              ],
+              4
+            ]
+          },
+          "test_for_never_run": {
+            "values": [
+              0
+            ]
+          },
+          "test_for_once": {
+            "values": [
+              1
+            ]
+          },
+          "test_for_break": {
+            "values": [
+              4
+            ]
+          },
+          "test_for_break_early": {
+            "values": [
+              15
+            ]
+          },
+          "test_for_continue": {
+            "values": [
+              25
+            ]
+          },
+          "test_for_continue_first": {
+            "values": [
+              [
+                1,
+                2,
+                3,
+                4
+              ],
+              4
+            ]
+          },
+          "test_for_nested": {
+            "values": [
+              9
+            ]
+          },
+          "test_for_multiplication_table": {
+            "values": [
+              36
+            ]
+          },
+          "test_for_nested_break": {
+            "values": [
+              15
+            ]
+          },
+          "test_for_outer_variable": {
+            "values": [
+              103
+            ]
+          },
+          "test_for_collect": {
+            "values": [
+              [
+                0,
+                1,
+                4,
+                9,
+                16
+              ],
+              5,
+              0,
+              16
+            ]
+          },
+          "test_for_expression_init": {
+            "values": [
+              18
+            ]
+          }
+        },
+        "complete_original_named_bodies_preserved": true,
+        "textual_names_are_not_runtime_discovery": true,
+        "history_comments_are_not_backend_provenance": true
+      },
+      "rationale": "All17 complete cfor shapes retainstep2sum20/step3sequence0/3/6/9, zero-trip,break4/15, continue25, increment/latch semantics,nestedbreak15 andsquares0/1/4/9/16. Fullcontent supplementslength/endpoint-only assertions.",
+      "packages": [
+        "P09",
+        "P10"
+      ],
+      "legacy_case": null,
+      "status": "PREPARED_NOT_EXECUTED",
+      "execution": {
+        "vm": "NOT_RUN",
+        "native": "NOT_RUN"
+      },
+      "new_entry": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "remaining_qualification": [
+        "Fresh full actualtestentry/discovery andqualifieddriver mustindependently verifyeverymappedbody/value, sourceorder/context andeffects; no build/banner/equal-wrongresult grantsqualification.",
+        "Actualcanonicalcallable/capture/frame/default/error/Iterator/Equal/record/formatter/ROOTproof andtargetprovider interfacesremainOPEN; no guessedAPI, alias orlegacycompatibilitypath.",
+        "FullactualVM/native/FI/resource/lifetime/borrow/cancel/physical/safety/generated-C/provider/platformgates remainrequired. Keepall100/500/1000/10000/100000 pressure andP20mixeddirections."
+      ],
+      "execution_source": "tests/unit/xir/legacy_consumers/fixtures/control_function_ports/0420_for/root.xr",
+      "execution_entry": "test"
+    },
+    {
+      "id": "regression_core_review_0430_for_in",
+      "inputs": [
+        {
+          "path": "tests/regression/04_control_flow/0430_for_in.xr",
+          "lf_sha256": "d0a40d1ca5955336a2b3f5a7b5b2f8151f380a509ce85813ceb14451d1a9e920",
+          "role": "preserved_source"
+        },
+        {
+          "path": "spec/source/sections/003-2-type-system.md",
+          "lf_sha256": "f4e970b0cc728c19f65a4d1b2a13cd0e572431dcac3f6f20cd06d23046ebea8a",
+          "role": "frozen_spec"
+        },
+        {
+          "path": "spec/source/sections/004-3-expressions.md",
+          "lf_sha256": "3aeabb14d154ef235fe51c665a7d367c2e51dc2c6f5261a9e0b194b228a9b945",
+          "role": "frozen_spec"
+        },
+        {
+          "path": "spec/source/sections/006-5-declarations.md",
+          "lf_sha256": "56fa3d36bc0c5ee38b7c52dafbe26d7b8b0a45a6909c14a8626a9bba515cc4a7",
+          "role": "frozen_spec"
+        },
+        {
+          "path": "spec/source/sections/009-8-error-handling.md",
+          "lf_sha256": "569cafb786430df363674f97f6073e908d76b4a3484f3fb26239b0895342507e",
+          "role": "frozen_spec"
+        },
+        {
+          "path": "spec/source/sections/011-10-concurrency-and-coroutines.md",
+          "lf_sha256": "75424eb2e981feaa5a24430abdc1a5853c9b87a3adc360cb68588e07da09f264",
+          "role": "frozen_spec"
+        }
+      ],
+      "expected": {
+        "exit_code": 0,
+        "required_test_names": [
+          "test_for_in_array",
+          "test_for_in_empty_array",
+          "test_for_in_single",
+          "test_for_in_strings",
+          "test_for_in_range",
+          "test_for_in_range_start",
+          "test_for_in_range_empty",
+          "test_for_in_range_one",
+          "test_for_in_map",
+          "test_for_in_map_keys",
+          "test_for_in_empty_map",
+          "test_for_in_map_single_var_yields_key",
+          "test_for_in_json_single_var_yields_key",
+          "test_iterator_array_manual",
+          "test_iterator_string_manual",
+          "test_iterator_map_manual_yields_keys",
+          "test_entries_iterator_yields_tuples",
+          "test_for_in_array_index_elem",
+          "test_for_in_array_index_sum",
+          "test_for_in_array_index_empty",
+          "test_for_in_array_entries_method",
+          "test_for_in_string_index_char",
+          "test_for_in_string_index_unicode",
+          "test_for_in_string_indexed",
+          "test_for_in_break",
+          "test_for_in_continue",
+          "test_for_in_nested_array",
+          "test_for_in_nested_range",
+          "test_for_in_collect",
+          "test_for_in_filter",
+          "test_for_in_transform"
+        ],
+        "all_required_tests_passed": true,
+        "per_test_observations": {
+          "test_for_in_array": {
+            "values": [
+              15
+            ]
+          },
+          "test_for_in_empty_array": {
+            "values": [
+              0
+            ]
+          },
+          "test_for_in_single": {
+            "values": [
+              42
+            ]
+          },
+          "test_for_in_strings": {
+            "values": [
+              "abc"
+            ]
+          },
+          "test_for_in_range": {
+            "values": [
+              10
+            ]
+          },
+          "test_for_in_range_start": {
+            "values": [
+              12
+            ]
+          },
+          "test_for_in_range_empty": {
+            "values": [
+              0
+            ]
+          },
+          "test_for_in_range_one": {
+            "values": [
+              1
+            ]
+          },
+          "test_for_in_map": {
+            "values": [
+              6
+            ]
+          },
+          "test_for_in_map_keys": {
+            "values": [
+              [
+                "x",
+                "y"
+              ],
+              2
+            ]
+          },
+          "test_for_in_empty_map": {
+            "values": [
+              0
+            ]
+          },
+          "test_for_in_map_single_var_yields_key": {
+            "values": [
+              "abc"
+            ]
+          },
+          "test_for_in_json_single_var_yields_key": {
+            "values": [
+              [
+                "x",
+                "y",
+                "z"
+              ],
+              3
+            ]
+          },
+          "test_iterator_array_manual": {
+            "values": [
+              [
+                10,
+                20,
+                30
+              ],
+              60
+            ]
+          },
+          "test_iterator_string_manual": {
+            "values": [
+              "abc"
+            ]
+          },
+          "test_iterator_map_manual_yields_keys": {
+            "values": [
+              "ab"
+            ]
+          },
+          "test_entries_iterator_yields_tuples": {
+            "values": [
+              "0=10;1=20;"
+            ]
+          },
+          "test_for_in_array_index_elem": {
+            "values": [
+              "0:x;1:y;2:z;"
+            ]
+          },
+          "test_for_in_array_index_sum": {
+            "values": [
+              6,
+              100
+            ]
+          },
+          "test_for_in_array_index_empty": {
+            "values": [
+              0
+            ]
+          },
+          "test_for_in_array_entries_method": {
+            "values": [
+              "0=100,1=200,2=300,"
+            ]
+          },
+          "test_for_in_string_index_char": {
+            "values": [
+              "0:a;1:b;2:c;"
+            ]
+          },
+          "test_for_in_string_index_unicode": {
+            "values": [
+              2,
+              1
+            ]
+          },
+          "test_for_in_string_indexed": {
+            "values": [
+              "0-h|1-i|"
+            ]
+          },
+          "test_for_in_break": {
+            "values": [
+              6
+            ]
+          },
+          "test_for_in_continue": {
+            "values": [
+              9
+            ]
+          },
+          "test_for_in_nested_array": {
+            "values": [
+              21
+            ]
+          },
+          "test_for_in_nested_range": {
+            "values": [
+              9
+            ]
+          },
+          "test_for_in_collect": {
+            "values": [
+              [
+                1,
+                4,
+                9,
+                16
+              ],
+              4,
+              1,
+              16
+            ]
+          },
+          "test_for_in_filter": {
+            "values": [
+              [
+                2,
+                4,
+                6
+              ],
+              3
+            ]
+          },
+          "test_for_in_transform": {
+            "values": [
+              [
+                "ALICE",
+                "BOB",
+                "CHARLIE"
+              ]
+            ]
+          }
+        },
+        "complete_original_named_bodies_preserved": true,
+        "textual_names_are_not_runtime_discovery": true,
+        "history_comments_are_not_backend_provenance": true,
+        "canonical_iterator_or_json_replacement": "PENDING_PUBLISHED_DECLARATION_OWNED_REPLACEMENT"
+      },
+      "rationale": "All31 complete originalArray/range/Map/JSON/rune/manualiterator/pairedentries/filter/transform bodies remain, exactinsertionorder strings,Unicode scalar indexlast1 andcompletepayloads. Actualsealed/declaration-ownedIterator/manualhasNext-next/pairedproof andJSON.Object replacement areunpublished; no method-name orloopcounter grantsqualification.",
+      "packages": [
+        "P08",
+        "P09",
+        "P10"
+      ],
+      "legacy_case": null,
+      "status": "PREPARED_NOT_EXECUTED",
+      "execution": {
+        "vm": "NOT_RUN",
+        "native": "NOT_RUN"
+      },
+      "new_entry": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "remaining_qualification": [
+        "Fresh full actualtestentry/discovery andqualifieddriver mustindependently verifyeverymappedbody/value, sourceorder/context andeffects; no build/banner/equal-wrongresult grantsqualification.",
+        "Actualcanonicalcallable/capture/frame/default/error/Iterator/Equal/record/formatter/ROOTproof andtargetprovider interfacesremainOPEN; no guessedAPI, alias orlegacycompatibilitypath.",
+        "FullactualVM/native/FI/resource/lifetime/borrow/cancel/physical/safety/generated-C/provider/platformgates remainrequired. Keepall100/500/1000/10000/100000 pressure andP20mixeddirections."
+      ],
+      "target_source_status": "PENDING_PUBLISHED_DECLARATION_OWNED_LIBRARY_REPLACEMENT",
+      "obligation_scope": "SEMANTIC_DUTY_PRESERVED_TARGET_SOURCE_NOT_PREPARED"
+    },
+    {
+      "id": "regression_core_review_0431_for_in_try_scope",
+      "inputs": [
+        {
+          "path": "tests/regression/04_control_flow/0431_for_in_try_scope.xr",
+          "lf_sha256": "ffdd56f97126174d4406b128259183f4472e86c1d22a682f06a57a368d45df2d",
+          "role": "preserved_source"
+        },
+        {
+          "path": "spec/source/sections/003-2-type-system.md",
+          "lf_sha256": "f4e970b0cc728c19f65a4d1b2a13cd0e572431dcac3f6f20cd06d23046ebea8a",
+          "role": "frozen_spec"
+        },
+        {
+          "path": "spec/source/sections/004-3-expressions.md",
+          "lf_sha256": "3aeabb14d154ef235fe51c665a7d367c2e51dc2c6f5261a9e0b194b228a9b945",
+          "role": "frozen_spec"
+        },
+        {
+          "path": "spec/source/sections/006-5-declarations.md",
+          "lf_sha256": "56fa3d36bc0c5ee38b7c52dafbe26d7b8b0a45a6909c14a8626a9bba515cc4a7",
+          "role": "frozen_spec"
+        },
+        {
+          "path": "spec/source/sections/009-8-error-handling.md",
+          "lf_sha256": "569cafb786430df363674f97f6073e908d76b4a3484f3fb26239b0895342507e",
+          "role": "frozen_spec"
+        },
+        {
+          "path": "spec/source/sections/011-10-concurrency-and-coroutines.md",
+          "lf_sha256": "75424eb2e981feaa5a24430abdc1a5853c9b87a3adc360cb68588e07da09f264",
+          "role": "frozen_spec"
+        }
+      ],
+      "expected": {
+        "exit_code": 0,
+        "required_test_names": [
+          "test_array_for_in_variable_visible_inside_try",
+          "test_generator_for_in_variable_visible_inside_try"
+        ],
+        "all_required_tests_passed": true,
+        "per_test_observations": {
+          "test_array_for_in_variable_visible_inside_try": {
+            "values": [
+              6
+            ]
+          },
+          "test_generator_for_in_variable_visible_inside_try": {
+            "values": [
+              [
+                0,
+                1,
+                2,
+                3
+              ],
+              6
+            ]
+          }
+        },
+        "complete_original_named_bodies_preserved": true,
+        "textual_names_are_not_runtime_discovery": true,
+        "history_comments_are_not_backend_provenance": true,
+        "canonical_iterator_or_json_replacement": "PENDING_PUBLISHED_DECLARATION_OWNED_REPLACEMENT"
+      },
+      "rationale": "BothArraytry-scope andgeneratortry-scope preservevisibleiterationbinding,sum6 andgenerator0..4 fullsequence. Actualownedgenerator/Iterator declaration andtypederror/effect integration unpublished; no compatiblelegacyprotocol invented.",
+      "packages": [
+        "P08",
+        "P09",
+        "P10"
+      ],
+      "legacy_case": null,
+      "status": "PREPARED_NOT_EXECUTED",
+      "execution": {
+        "vm": "NOT_RUN",
+        "native": "NOT_RUN"
+      },
+      "new_entry": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "remaining_qualification": [
+        "Fresh full actualtestentry/discovery andqualifieddriver mustindependently verifyeverymappedbody/value, sourceorder/context andeffects; no build/banner/equal-wrongresult grantsqualification.",
+        "Actualcanonicalcallable/capture/frame/default/error/Iterator/Equal/record/formatter/ROOTproof andtargetprovider interfacesremainOPEN; no guessedAPI, alias orlegacycompatibilitypath.",
+        "FullactualVM/native/FI/resource/lifetime/borrow/cancel/physical/safety/generated-C/provider/platformgates remainrequired. Keepall100/500/1000/10000/100000 pressure andP20mixeddirections."
+      ],
+      "target_source_status": "PENDING_PUBLISHED_DECLARATION_OWNED_LIBRARY_REPLACEMENT",
+      "obligation_scope": "SEMANTIC_DUTY_PRESERVED_TARGET_SOURCE_NOT_PREPARED"
+    },
+    {
+      "id": "regression_core_review_0440_match",
+      "inputs": [
+        {
+          "path": "tests/regression/04_control_flow/0440_match.xr",
+          "lf_sha256": "1a86e60abffa74b8c883559a043fc49644fba6f5a7d5b269f892186922becf45",
+          "role": "preserved_source"
+        },
+        {
+          "path": "spec/source/sections/003-2-type-system.md",
+          "lf_sha256": "f4e970b0cc728c19f65a4d1b2a13cd0e572431dcac3f6f20cd06d23046ebea8a",
+          "role": "frozen_spec"
+        },
+        {
+          "path": "spec/source/sections/004-3-expressions.md",
+          "lf_sha256": "3aeabb14d154ef235fe51c665a7d367c2e51dc2c6f5261a9e0b194b228a9b945",
+          "role": "frozen_spec"
+        },
+        {
+          "path": "spec/source/sections/006-5-declarations.md",
+          "lf_sha256": "56fa3d36bc0c5ee38b7c52dafbe26d7b8b0a45a6909c14a8626a9bba515cc4a7",
+          "role": "frozen_spec"
+        },
+        {
+          "path": "spec/source/sections/009-8-error-handling.md",
+          "lf_sha256": "569cafb786430df363674f97f6073e908d76b4a3484f3fb26239b0895342507e",
+          "role": "frozen_spec"
+        },
+        {
+          "path": "spec/source/sections/011-10-concurrency-and-coroutines.md",
+          "lf_sha256": "75424eb2e981feaa5a24430abdc1a5853c9b87a3adc360cb68588e07da09f264",
+          "role": "frozen_spec"
+        }
+      ],
+      "expected": {
+        "exit_code": 0,
+        "required_test_names": [
+          "test_match_literal_int",
+          "test_match_literal_string",
+          "test_match_default",
+          "test_match_range",
+          "test_match_range_boundary",
+          "test_match_multi_value",
+          "test_match_multi_number",
+          "test_match_guard",
+          "test_match_guard_complex",
+          "test_match_enum",
+          "test_match_nested",
+          "test_match_expression_result",
+          "test_match_in_function",
+          "test_match_first_wins",
+          "test_match_all_guards_fail",
+          "test_match_no_branch_throws",
+          "test_match_block_arm_return"
+        ],
+        "all_required_tests_passed": true,
+        "per_test_observations": {
+          "test_match_literal_int": {
+            "values": [
+              "two"
+            ]
+          },
+          "test_match_literal_string": {
+            "values": [
+              1
+            ]
+          },
+          "test_match_default": {
+            "values": [
+              "default"
+            ]
+          },
+          "test_match_range": {
+            "values": [
+              "B"
+            ]
+          },
+          "test_match_range_boundary": {
+            "values": [
+              "10 to 19"
+            ]
+          },
+          "test_match_multi_value": {
+            "values": [
+              "weekend"
+            ]
+          },
+          "test_match_multi_number": {
+            "values": [
+              "odd"
+            ]
+          },
+          "test_match_guard": {
+            "values": [
+              "medium"
+            ]
+          },
+          "test_match_guard_complex": {
+            "values": [
+              "even and big"
+            ]
+          },
+          "test_match_enum": {
+            "values": [
+              "green"
+            ]
+          },
+          "test_match_nested": {
+            "values": [
+              "x>0, y>5"
+            ]
+          },
+          "test_match_expression_result": {
+            "values": [
+              12
+            ]
+          },
+          "test_match_in_function": {
+            "values": [
+              "zero",
+              "positive",
+              "negative"
+            ]
+          },
+          "test_match_first_wins": {
+            "values": [
+              "first"
+            ]
+          },
+          "test_match_all_guards_fail": {
+            "values": [
+              "middle"
+            ]
+          },
+          "test_match_no_branch_throws": {
+            "values": [
+              "PANIC",
+              442,
+              "non-exhaustive",
+              true
+            ]
+          },
+          "test_match_block_arm_return": {
+            "values": [
+              "one",
+              "other"
+            ]
+          }
+        },
+        "complete_original_named_bodies_preserved": true,
+        "textual_names_are_not_runtime_discovery": true,
+        "history_comments_are_not_backend_provenance": true,
+        "non_exhaustive_match_channel": "PANIC_EXECUTE_E0442_NOT_ORDINARY_ERROR_OR_COMPILE_REJECTION"
+      },
+      "rationale": "All17 match literal/halfopen boundary10,source-order first-wins,guards,typedColor andblockreturn duties preserved. Missingarm mustpanicEXECUTEE0442/code442 withnon-exhaustivemessage; ordinaryerror/compile-only orsuccess iswrong. Enumidentity isactualdeclaration-owned, notordinalmagic.",
+      "packages": [
+        "P09",
+        "P10"
+      ],
+      "legacy_case": null,
+      "status": "PREPARED_NOT_EXECUTED",
+      "execution": {
+        "vm": "NOT_RUN",
+        "native": "NOT_RUN"
+      },
+      "new_entry": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "remaining_qualification": [
+        "Fresh full actualtestentry/discovery andqualifieddriver mustindependently verifyeverymappedbody/value, sourceorder/context andeffects; no build/banner/equal-wrongresult grantsqualification.",
+        "Actualcanonicalcallable/capture/frame/default/error/Iterator/Equal/record/formatter/ROOTproof andtargetprovider interfacesremainOPEN; no guessedAPI, alias orlegacycompatibilitypath.",
+        "FullactualVM/native/FI/resource/lifetime/borrow/cancel/physical/safety/generated-C/provider/platformgates remainrequired. Keepall100/500/1000/10000/100000 pressure andP20mixeddirections."
+      ],
+      "execution_source": "tests/regression/04_control_flow/0440_match.xr",
+      "execution_entry": "test"
+    },
+    {
+      "id": "regression_core_review_0441_match_tuple",
+      "inputs": [
+        {
+          "path": "tests/regression/04_control_flow/0441_match_tuple.xr",
+          "lf_sha256": "61f96218684fc677030d8f34e0e2f8d1707170f2d96893d0b1f216f29b72e4d2",
+          "role": "preserved_source"
+        },
+        {
+          "path": "spec/source/sections/003-2-type-system.md",
+          "lf_sha256": "f4e970b0cc728c19f65a4d1b2a13cd0e572431dcac3f6f20cd06d23046ebea8a",
+          "role": "frozen_spec"
+        },
+        {
+          "path": "spec/source/sections/004-3-expressions.md",
+          "lf_sha256": "3aeabb14d154ef235fe51c665a7d367c2e51dc2c6f5261a9e0b194b228a9b945",
+          "role": "frozen_spec"
+        },
+        {
+          "path": "spec/source/sections/006-5-declarations.md",
+          "lf_sha256": "56fa3d36bc0c5ee38b7c52dafbe26d7b8b0a45a6909c14a8626a9bba515cc4a7",
+          "role": "frozen_spec"
+        },
+        {
+          "path": "spec/source/sections/009-8-error-handling.md",
+          "lf_sha256": "569cafb786430df363674f97f6073e908d76b4a3484f3fb26239b0895342507e",
+          "role": "frozen_spec"
+        },
+        {
+          "path": "spec/source/sections/011-10-concurrency-and-coroutines.md",
+          "lf_sha256": "75424eb2e981feaa5a24430abdc1a5853c9b87a3adc360cb68588e07da09f264",
+          "role": "frozen_spec"
+        }
+      ],
+      "expected": {
+        "exit_code": 0,
+        "required_test_names": [
+          "test_match_tuple_all_literal",
+          "test_match_tuple_wildcard_slot",
+          "test_match_tuple_binding",
+          "test_match_tuple_binding_with_guard",
+          "test_match_tuple_nested",
+          "test_match_tuple_full_destructure",
+          "test_match_tuple_heterogeneous"
+        ],
+        "all_required_tests_passed": true,
+        "per_test_observations": {
+          "test_match_tuple_all_literal": {
+            "values": [
+              "origin"
+            ]
+          },
+          "test_match_tuple_wildcard_slot": {
+            "values": [
+              "origin",
+              "y-axis",
+              "x-axis",
+              "general"
+            ]
+          },
+          "test_match_tuple_binding": {
+            "values": [
+              0,
+              42
+            ]
+          },
+          "test_match_tuple_binding_with_guard": {
+            "values": [
+              "diagonal",
+              "anti-diagonal",
+              "general"
+            ]
+          },
+          "test_match_tuple_nested": {
+            "values": [
+              -1,
+              42
+            ]
+          },
+          "test_match_tuple_full_destructure": {
+            "values": [
+              6
+            ]
+          },
+          "test_match_tuple_heterogeneous": {
+            "values": [
+              "zero with anything",
+              "anything with key",
+              "positive number",
+              "fallback"
+            ]
+          }
+        },
+        "complete_original_named_bodies_preserved": true,
+        "textual_names_are_not_runtime_discovery": true,
+        "history_comments_are_not_backend_provenance": true
+      },
+      "rationale": "All7 complete literal/wildcard/binding/nested/heterogeneous patterns preservetop-downpriority,including(5,key)beforeguard andfull6sum. No flattening/tuplefield mutation/ducktyped proof.",
+      "packages": [
+        "P09",
+        "P10"
+      ],
+      "legacy_case": null,
+      "status": "PREPARED_NOT_EXECUTED",
+      "execution": {
+        "vm": "NOT_RUN",
+        "native": "NOT_RUN"
+      },
+      "new_entry": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "remaining_qualification": [
+        "Fresh full actualtestentry/discovery andqualifieddriver mustindependently verifyeverymappedbody/value, sourceorder/context andeffects; no build/banner/equal-wrongresult grantsqualification.",
+        "Actualcanonicalcallable/capture/frame/default/error/Iterator/Equal/record/formatter/ROOTproof andtargetprovider interfacesremainOPEN; no guessedAPI, alias orlegacycompatibilitypath.",
+        "FullactualVM/native/FI/resource/lifetime/borrow/cancel/physical/safety/generated-C/provider/platformgates remainrequired. Keepall100/500/1000/10000/100000 pressure andP20mixeddirections."
+      ],
+      "execution_source": "tests/regression/04_control_flow/0441_match_tuple.xr",
+      "execution_entry": "test"
+    },
+    {
+      "id": "regression_core_review_0442_match_struct_destructure",
+      "inputs": [
+        {
+          "path": "tests/regression/04_control_flow/0442_match_struct_destructure.xr",
+          "lf_sha256": "926c3e4f59ece0ddba7dc8ca7a2300a0442bc2fbec9cc4aa7e0ffe44c45320c5",
+          "role": "preserved_source"
+        },
+        {
+          "path": "spec/source/sections/003-2-type-system.md",
+          "lf_sha256": "f4e970b0cc728c19f65a4d1b2a13cd0e572431dcac3f6f20cd06d23046ebea8a",
+          "role": "frozen_spec"
+        },
+        {
+          "path": "spec/source/sections/004-3-expressions.md",
+          "lf_sha256": "3aeabb14d154ef235fe51c665a7d367c2e51dc2c6f5261a9e0b194b228a9b945",
+          "role": "frozen_spec"
+        },
+        {
+          "path": "spec/source/sections/006-5-declarations.md",
+          "lf_sha256": "56fa3d36bc0c5ee38b7c52dafbe26d7b8b0a45a6909c14a8626a9bba515cc4a7",
+          "role": "frozen_spec"
+        },
+        {
+          "path": "spec/source/sections/009-8-error-handling.md",
+          "lf_sha256": "569cafb786430df363674f97f6073e908d76b4a3484f3fb26239b0895342507e",
+          "role": "frozen_spec"
+        },
+        {
+          "path": "spec/source/sections/011-10-concurrency-and-coroutines.md",
+          "lf_sha256": "75424eb2e981feaa5a24430abdc1a5853c9b87a3adc360cb68588e07da09f264",
+          "role": "frozen_spec"
+        }
+      ],
+      "expected": {
+        "exit_code": 0,
+        "required_test_names": [
+          "test_match_object_shorthand",
+          "test_match_object_rename",
+          "test_match_object_refutable_field",
+          "test_match_array_rest",
+          "test_match_array_length_select",
+          "test_match_array_empty_rest",
+          "test_match_array_wildcards",
+          "test_match_array_guard"
+        ],
+        "all_required_tests_passed": true,
+        "per_test_observations": {
+          "test_match_object_shorthand": {
+            "values": [
+              7
+            ]
+          },
+          "test_match_object_rename": {
+            "values": [
+              "Bob:5"
+            ]
+          },
+          "test_match_object_refutable_field": {
+            "values": [
+              "two:go"
+            ]
+          },
+          "test_match_array_rest": {
+            "values": [
+              10,
+              [
+                20,
+                30
+              ],
+              2
+            ]
+          },
+          "test_match_array_length_select": {
+            "values": [
+              12
+            ]
+          },
+          "test_match_array_empty_rest": {
+            "values": [
+              99,
+              [],
+              0
+            ]
+          },
+          "test_match_array_wildcards": {
+            "values": [
+              8
+            ]
+          },
+          "test_match_array_guard": {
+            "values": [
+              "small:11"
+            ]
+          }
+        },
+        "complete_original_named_bodies_preserved": true,
+        "textual_names_are_not_runtime_discovery": true,
+        "history_comments_are_not_backend_provenance": true
+      },
+      "rationale": "All8 objectrename/refutable-field/Array length/wildcard/guard/restpattern bodies preserved withrest20/30 andemptytail. Actualrestowned/view/READpermission qualification needsdefinition-ownedproof; nocontainer/viewpermission frombody guessing.",
+      "packages": [
+        "P09",
+        "P10"
+      ],
+      "legacy_case": null,
+      "status": "PREPARED_NOT_EXECUTED",
+      "execution": {
+        "vm": "NOT_RUN",
+        "native": "NOT_RUN"
+      },
+      "new_entry": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "remaining_qualification": [
+        "Fresh full actualtestentry/discovery andqualifieddriver mustindependently verifyeverymappedbody/value, sourceorder/context andeffects; no build/banner/equal-wrongresult grantsqualification.",
+        "Actualcanonicalcallable/capture/frame/default/error/Iterator/Equal/record/formatter/ROOTproof andtargetprovider interfacesremainOPEN; no guessedAPI, alias orlegacycompatibilitypath.",
+        "FullactualVM/native/FI/resource/lifetime/borrow/cancel/physical/safety/generated-C/provider/platformgates remainrequired. Keepall100/500/1000/10000/100000 pressure andP20mixeddirections."
+      ],
+      "execution_source": "tests/regression/04_control_flow/0442_match_struct_destructure.xr",
+      "execution_entry": "test"
+    },
+    {
+      "id": "regression_core_review_0445_is_type_pattern",
+      "inputs": [
+        {
+          "path": "tests/regression/04_control_flow/0445_is_type_pattern.xr",
+          "lf_sha256": "5715a2336a30fb21ba3427d3fc87037847453bc7b85609936a702e6d5d70cfcc",
+          "role": "preserved_source"
+        },
+        {
+          "path": "tests/unit/xir/legacy_consumers/fixtures/control_function_ports/0445_is_type_pattern/root.xr",
+          "lf_sha256": "958bfe15023196de8ec3e0865c4701ae6d2fe54e257adc9e78cc8effb0f2ede8",
+          "role": "complete_selected_source_draft"
+        },
+        {
+          "path": "spec/source/sections/003-2-type-system.md",
+          "lf_sha256": "f4e970b0cc728c19f65a4d1b2a13cd0e572431dcac3f6f20cd06d23046ebea8a",
+          "role": "frozen_spec"
+        },
+        {
+          "path": "spec/source/sections/004-3-expressions.md",
+          "lf_sha256": "3aeabb14d154ef235fe51c665a7d367c2e51dc2c6f5261a9e0b194b228a9b945",
+          "role": "frozen_spec"
+        },
+        {
+          "path": "spec/source/sections/006-5-declarations.md",
+          "lf_sha256": "56fa3d36bc0c5ee38b7c52dafbe26d7b8b0a45a6909c14a8626a9bba515cc4a7",
+          "role": "frozen_spec"
+        },
+        {
+          "path": "spec/source/sections/009-8-error-handling.md",
+          "lf_sha256": "569cafb786430df363674f97f6073e908d76b4a3484f3fb26239b0895342507e",
+          "role": "frozen_spec"
+        },
+        {
+          "path": "spec/source/sections/011-10-concurrency-and-coroutines.md",
+          "lf_sha256": "75424eb2e981feaa5a24430abdc1a5853c9b87a3adc360cb68588e07da09f264",
+          "role": "frozen_spec"
+        }
+      ],
+      "expected": {
+        "exit_code": 0,
+        "required_test_names": [
+          "test_is_pattern_no_binding",
+          "test_is_pattern_with_binding",
+          "test_is_pattern_three_arms",
+          "test_is_pattern_with_wildcard_fallback"
+        ],
+        "all_required_tests_passed": true,
+        "per_test_observations": {
+          "test_is_pattern_no_binding": {
+            "values": [
+              "integer",
+              "text"
+            ]
+          },
+          "test_is_pattern_with_binding": {
+            "values": [
+              "int:42",
+              "str:hi"
+            ]
+          },
+          "test_is_pattern_three_arms": {
+            "values": [
+              1,
+              2,
+              3
+            ]
+          },
+          "test_is_pattern_with_wildcard_fallback": {
+            "values": [
+              "i",
+              "other",
+              "other"
+            ]
+          }
+        },
+        "complete_original_named_bodies_preserved": true,
+        "textual_names_are_not_runtime_discovery": true,
+        "history_comments_are_not_backend_provenance": true
+      },
+      "rationale": "All4 exactunion member/binding/wildcard cases retained;i64 formatting usesstring(n), notinvalidas-string. Actualtypedbinding/exhaustiveness/Equal/member identity remainsrequired.",
+      "packages": [
+        "P09",
+        "P10"
+      ],
+      "legacy_case": null,
+      "status": "PREPARED_NOT_EXECUTED",
+      "execution": {
+        "vm": "NOT_RUN",
+        "native": "NOT_RUN"
+      },
+      "new_entry": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "remaining_qualification": [
+        "Fresh full actualtestentry/discovery andqualifieddriver mustindependently verifyeverymappedbody/value, sourceorder/context andeffects; no build/banner/equal-wrongresult grantsqualification.",
+        "Actualcanonicalcallable/capture/frame/default/error/Iterator/Equal/record/formatter/ROOTproof andtargetprovider interfacesremainOPEN; no guessedAPI, alias orlegacycompatibilitypath.",
+        "FullactualVM/native/FI/resource/lifetime/borrow/cancel/physical/safety/generated-C/provider/platformgates remainrequired. Keepall100/500/1000/10000/100000 pressure andP20mixeddirections."
+      ],
+      "execution_source": "tests/unit/xir/legacy_consumers/fixtures/control_function_ports/0445_is_type_pattern/root.xr",
+      "execution_entry": "test"
+    },
+    {
+      "id": "regression_core_review_0450_break_continue",
+      "inputs": [
+        {
+          "path": "tests/regression/04_control_flow/0450_break_continue.xr",
+          "lf_sha256": "b12e3cf5970463357d488884017d5aeee98da57ec20671b2497c207d7e726375",
+          "role": "preserved_source"
+        },
+        {
+          "path": "spec/source/sections/003-2-type-system.md",
+          "lf_sha256": "f4e970b0cc728c19f65a4d1b2a13cd0e572431dcac3f6f20cd06d23046ebea8a",
+          "role": "frozen_spec"
+        },
+        {
+          "path": "spec/source/sections/004-3-expressions.md",
+          "lf_sha256": "3aeabb14d154ef235fe51c665a7d367c2e51dc2c6f5261a9e0b194b228a9b945",
+          "role": "frozen_spec"
+        },
+        {
+          "path": "spec/source/sections/006-5-declarations.md",
+          "lf_sha256": "56fa3d36bc0c5ee38b7c52dafbe26d7b8b0a45a6909c14a8626a9bba515cc4a7",
+          "role": "frozen_spec"
+        },
+        {
+          "path": "spec/source/sections/009-8-error-handling.md",
+          "lf_sha256": "569cafb786430df363674f97f6073e908d76b4a3484f3fb26239b0895342507e",
+          "role": "frozen_spec"
+        },
+        {
+          "path": "spec/source/sections/011-10-concurrency-and-coroutines.md",
+          "lf_sha256": "75424eb2e981feaa5a24430abdc1a5853c9b87a3adc360cb68588e07da09f264",
+          "role": "frozen_spec"
+        }
+      ],
+      "expected": {
+        "exit_code": 0,
+        "required_test_names": [
+          "test_while_break",
+          "test_while_continue",
+          "test_for_break",
+          "test_for_continue",
+          "test_nested_break",
+          "test_conditional_break",
+          "test_conditional_continue",
+          "test_code_after_break",
+          "test_immediate_break"
+        ],
+        "all_required_tests_passed": true,
+        "per_test_observations": {
+          "test_while_break": {
+            "values": [
+              10,
+              5
+            ]
+          },
+          "test_while_continue": {
+            "values": [
+              25
+            ]
+          },
+          "test_for_break": {
+            "values": [
+              10
+            ]
+          },
+          "test_for_continue": {
+            "values": [
+              25
+            ]
+          },
+          "test_nested_break": {
+            "values": [
+              10
+            ]
+          },
+          "test_conditional_break": {
+            "values": [
+              6
+            ]
+          },
+          "test_conditional_continue": {
+            "values": [
+              9
+            ]
+          },
+          "test_code_after_break": {
+            "values": [
+              false
+            ]
+          },
+          "test_immediate_break": {
+            "values": [
+              1
+            ]
+          }
+        },
+        "complete_original_named_bodies_preserved": true,
+        "textual_names_are_not_runtime_discovery": true,
+        "history_comments_are_not_backend_provenance": true
+      },
+      "rationale": "Full originalbody/per-testvalues independentlyreviewed frombranch/arithmetic/recurrence/scope rules. Preserveeverycondition,state transition andeffect; actualcanonicalinterfaces/driverandallfullgates remainOPEN.",
+      "packages": [
+        "P09",
+        "P10"
+      ],
+      "legacy_case": null,
+      "status": "PREPARED_NOT_EXECUTED",
+      "execution": {
+        "vm": "NOT_RUN",
+        "native": "NOT_RUN"
+      },
+      "new_entry": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "remaining_qualification": [
+        "Fresh full actualtestentry/discovery andqualifieddriver mustindependently verifyeverymappedbody/value, sourceorder/context andeffects; no build/banner/equal-wrongresult grantsqualification.",
+        "Actualcanonicalcallable/capture/frame/default/error/Iterator/Equal/record/formatter/ROOTproof andtargetprovider interfacesremainOPEN; no guessedAPI, alias orlegacycompatibilitypath.",
+        "FullactualVM/native/FI/resource/lifetime/borrow/cancel/physical/safety/generated-C/provider/platformgates remainrequired. Keepall100/500/1000/10000/100000 pressure andP20mixeddirections."
+      ],
+      "execution_source": "tests/regression/04_control_flow/0450_break_continue.xr",
+      "execution_entry": "test"
+    },
+    {
+      "id": "regression_core_review_0451_labeled_break_continue",
+      "inputs": [
+        {
+          "path": "tests/regression/04_control_flow/0451_labeled_break_continue.xr",
+          "lf_sha256": "441163d5cde8ebe95c18b49339810f84c97c1af9bca1d7ad259dbf06a1979877",
+          "role": "preserved_source"
+        },
+        {
+          "path": "spec/source/sections/003-2-type-system.md",
+          "lf_sha256": "f4e970b0cc728c19f65a4d1b2a13cd0e572431dcac3f6f20cd06d23046ebea8a",
+          "role": "frozen_spec"
+        },
+        {
+          "path": "spec/source/sections/004-3-expressions.md",
+          "lf_sha256": "3aeabb14d154ef235fe51c665a7d367c2e51dc2c6f5261a9e0b194b228a9b945",
+          "role": "frozen_spec"
+        },
+        {
+          "path": "spec/source/sections/006-5-declarations.md",
+          "lf_sha256": "56fa3d36bc0c5ee38b7c52dafbe26d7b8b0a45a6909c14a8626a9bba515cc4a7",
+          "role": "frozen_spec"
+        },
+        {
+          "path": "spec/source/sections/009-8-error-handling.md",
+          "lf_sha256": "569cafb786430df363674f97f6073e908d76b4a3484f3fb26239b0895342507e",
+          "role": "frozen_spec"
+        },
+        {
+          "path": "spec/source/sections/011-10-concurrency-and-coroutines.md",
+          "lf_sha256": "75424eb2e981feaa5a24430abdc1a5853c9b87a3adc360cb68588e07da09f264",
+          "role": "frozen_spec"
+        }
+      ],
+      "expected": {
+        "exit_code": 0,
+        "required_test_names": [
+          "test_labeled_break_exits_named_for_in",
+          "test_labeled_continue_targets_named_for_in",
+          "test_labeled_continue_targets_traditional_for_increment",
+          "test_labeled_while_break_and_continue"
+        ],
+        "all_required_tests_passed": true,
+        "per_test_observations": {
+          "test_labeled_break_exits_named_for_in": {
+            "values": [
+              "00,01,02,03,10,11,12,13,20,"
+            ]
+          },
+          "test_labeled_continue_targets_named_for_in": {
+            "values": [
+              "00,10,20,"
+            ]
+          },
+          "test_labeled_continue_targets_traditional_for_increment": {
+            "values": [
+              8
+            ]
+          },
+          "test_labeled_while_break_and_continue": {
+            "values": [
+              2
+            ]
+          }
+        },
+        "complete_original_named_bodies_preserved": true,
+        "textual_names_are_not_runtime_discovery": true,
+        "history_comments_are_not_backend_provenance": true,
+        "named_outer_cfor_increment_reached_after_continue": true
+      },
+      "rationale": "All4 preserveexactnamedloop targets. Breaktrace stopsbefore21, labeledcontinuetrace00/10/20 bypassesunreachabletail,cfor outerincrement yields8,andwhile twoincrementsthenbreak yields2. Inner-onlybreak/continue orwronglatch cannotpasssamebanner.",
+      "packages": [
+        "P09",
+        "P10"
+      ],
+      "legacy_case": null,
+      "status": "PREPARED_NOT_EXECUTED",
+      "execution": {
+        "vm": "NOT_RUN",
+        "native": "NOT_RUN"
+      },
+      "new_entry": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "remaining_qualification": [
+        "Fresh full actualtestentry/discovery andqualifieddriver mustindependently verifyeverymappedbody/value, sourceorder/context andeffects; no build/banner/equal-wrongresult grantsqualification.",
+        "Actualcanonicalcallable/capture/frame/default/error/Iterator/Equal/record/formatter/ROOTproof andtargetprovider interfacesremainOPEN; no guessedAPI, alias orlegacycompatibilitypath.",
+        "FullactualVM/native/FI/resource/lifetime/borrow/cancel/physical/safety/generated-C/provider/platformgates remainrequired. Keepall100/500/1000/10000/100000 pressure andP20mixeddirections."
+      ],
+      "execution_source": "tests/regression/04_control_flow/0451_labeled_break_continue.xr",
+      "execution_entry": "test"
+    },
+    {
+      "id": "regression_core_review_0460_early_return",
+      "inputs": [
+        {
+          "path": "tests/regression/04_control_flow/0460_early_return.xr",
+          "lf_sha256": "2ff89069a0b0f3032050fecac36a335bb847cb82a462698c1cdf2bfbc0129172",
+          "role": "preserved_source"
+        },
+        {
+          "path": "spec/source/sections/003-2-type-system.md",
+          "lf_sha256": "f4e970b0cc728c19f65a4d1b2a13cd0e572431dcac3f6f20cd06d23046ebea8a",
+          "role": "frozen_spec"
+        },
+        {
+          "path": "spec/source/sections/004-3-expressions.md",
+          "lf_sha256": "3aeabb14d154ef235fe51c665a7d367c2e51dc2c6f5261a9e0b194b228a9b945",
+          "role": "frozen_spec"
+        },
+        {
+          "path": "spec/source/sections/006-5-declarations.md",
+          "lf_sha256": "56fa3d36bc0c5ee38b7c52dafbe26d7b8b0a45a6909c14a8626a9bba515cc4a7",
+          "role": "frozen_spec"
+        },
+        {
+          "path": "spec/source/sections/009-8-error-handling.md",
+          "lf_sha256": "569cafb786430df363674f97f6073e908d76b4a3484f3fb26239b0895342507e",
+          "role": "frozen_spec"
+        },
+        {
+          "path": "spec/source/sections/011-10-concurrency-and-coroutines.md",
+          "lf_sha256": "75424eb2e981feaa5a24430abdc1a5853c9b87a3adc360cb68588e07da09f264",
+          "role": "frozen_spec"
+        }
+      ],
+      "expected": {
+        "exit_code": 0,
+        "required_test_names": [
+          "test_early_return",
+          "test_guard_clause",
+          "test_multiple_guards",
+          "test_nested_return",
+          "test_recursive_return",
+          "test_void_return"
+        ],
+        "all_required_tests_passed": true,
+        "per_test_observations": {
+          "test_early_return": {
+            "values": [
+              3,
+              -1
+            ]
+          },
+          "test_guard_clause": {
+            "values": [
+              5,
+              null
+            ]
+          },
+          "test_multiple_guards": {
+            "values": [
+              "negative",
+              "zero",
+              "small",
+              "medium",
+              "large"
+            ]
+          },
+          "test_nested_return": {
+            "values": [
+              true,
+              0,
+              3
+            ]
+          },
+          "test_recursive_return": {
+            "values": [
+              2,
+              -1
+            ]
+          },
+          "test_void_return": {
+            "values": [
+              false,
+              true
+            ]
+          }
+        },
+        "complete_original_named_bodies_preserved": true,
+        "textual_names_are_not_runtime_discovery": true,
+        "history_comments_are_not_backend_provenance": true
+      },
+      "rationale": "Full originalbody/per-testvalues independentlyreviewed frombranch/arithmetic/recurrence/scope rules. Preserveeverycondition,state transition andeffect; actualcanonicalinterfaces/driverandallfullgates remainOPEN.",
+      "packages": [
+        "P09",
+        "P10"
+      ],
+      "legacy_case": null,
+      "status": "PREPARED_NOT_EXECUTED",
+      "execution": {
+        "vm": "NOT_RUN",
+        "native": "NOT_RUN"
+      },
+      "new_entry": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "remaining_qualification": [
+        "Fresh full actualtestentry/discovery andqualifieddriver mustindependently verifyeverymappedbody/value, sourceorder/context andeffects; no build/banner/equal-wrongresult grantsqualification.",
+        "Actualcanonicalcallable/capture/frame/default/error/Iterator/Equal/record/formatter/ROOTproof andtargetprovider interfacesremainOPEN; no guessedAPI, alias orlegacycompatibilitypath.",
+        "FullactualVM/native/FI/resource/lifetime/borrow/cancel/physical/safety/generated-C/provider/platformgates remainrequired. Keepall100/500/1000/10000/100000 pressure andP20mixeddirections."
+      ],
+      "execution_source": "tests/regression/04_control_flow/0460_early_return.xr",
+      "execution_entry": "test"
+    },
+    {
+      "id": "regression_core_review_0500_basic",
+      "inputs": [
+        {
+          "path": "tests/regression/05_functions/0500_basic.xr",
+          "lf_sha256": "6e045950bea4900950d525a9be25eab2f265492480edbcd2167fa7fdd5e84fab",
+          "role": "preserved_source"
+        },
+        {
+          "path": "tests/unit/xir/legacy_consumers/fixtures/control_function_ports/0500_basic/root.xr",
+          "lf_sha256": "16ecc4f0cc057502a15e97fa257a4167b643bb84e22b66447932724f483786c6",
+          "role": "complete_selected_source_draft"
+        },
+        {
+          "path": "spec/source/sections/003-2-type-system.md",
+          "lf_sha256": "f4e970b0cc728c19f65a4d1b2a13cd0e572431dcac3f6f20cd06d23046ebea8a",
+          "role": "frozen_spec"
+        },
+        {
+          "path": "spec/source/sections/004-3-expressions.md",
+          "lf_sha256": "3aeabb14d154ef235fe51c665a7d367c2e51dc2c6f5261a9e0b194b228a9b945",
+          "role": "frozen_spec"
+        },
+        {
+          "path": "spec/source/sections/006-5-declarations.md",
+          "lf_sha256": "56fa3d36bc0c5ee38b7c52dafbe26d7b8b0a45a6909c14a8626a9bba515cc4a7",
+          "role": "frozen_spec"
+        },
+        {
+          "path": "spec/source/sections/009-8-error-handling.md",
+          "lf_sha256": "569cafb786430df363674f97f6073e908d76b4a3484f3fb26239b0895342507e",
+          "role": "frozen_spec"
+        },
+        {
+          "path": "spec/source/sections/011-10-concurrency-and-coroutines.md",
+          "lf_sha256": "75424eb2e981feaa5a24430abdc1a5853c9b87a3adc360cb68588e07da09f264",
+          "role": "frozen_spec"
+        }
+      ],
+      "expected": {
+        "exit_code": 0,
+        "required_test_names": [
+          "test_simple_function",
+          "test_function_no_return",
+          "test_single_param",
+          "test_multiple_params",
+          "test_many_params",
+          "test_return_int",
+          "test_return_float",
+          "test_return_string",
+          "test_return_bool",
+          "test_return_null",
+          "test_return_array",
+          "test_early_return",
+          "test_multiple_returns",
+          "test_local_variables",
+          "test_shadow_outer",
+          "test_call_in_expression",
+          "test_nested_call",
+          "test_call_as_argument",
+          "test_function_as_condition",
+          "test_empty_function",
+          "test_return_only"
+        ],
+        "all_required_tests_passed": true,
+        "per_test_observations": {
+          "test_simple_function": {
+            "values": [
+              "hello"
+            ]
+          },
+          "test_function_no_return": {
+            "values": [
+              42
+            ]
+          },
+          "test_single_param": {
+            "values": [
+              10
+            ]
+          },
+          "test_multiple_params": {
+            "values": [
+              8
+            ]
+          },
+          "test_many_params": {
+            "values": [
+              15
+            ]
+          },
+          "test_return_int": {
+            "values": [
+              42
+            ]
+          },
+          "test_return_float": {
+            "values": [
+              3.14
+            ]
+          },
+          "test_return_string": {
+            "values": [
+              "hello"
+            ]
+          },
+          "test_return_bool": {
+            "values": [
+              true
+            ]
+          },
+          "test_return_null": {
+            "values": [
+              null
+            ]
+          },
+          "test_return_array": {
+            "values": [
+              [
+                1,
+                2,
+                3
+              ],
+              3
+            ]
+          },
+          "test_early_return": {
+            "values": [
+              "big",
+              "small"
+            ]
+          },
+          "test_multiple_returns": {
+            "values": [
+              "negative",
+              "zero",
+              "positive"
+            ]
+          },
+          "test_local_variables": {
+            "values": [
+              20
+            ]
+          },
+          "test_shadow_outer": {
+            "values": [
+              10,
+              100
+            ]
+          },
+          "test_call_in_expression": {
+            "values": [
+              16
+            ]
+          },
+          "test_nested_call": {
+            "values": [
+              12
+            ]
+          },
+          "test_call_as_argument": {
+            "values": [
+              10
+            ]
+          },
+          "test_function_as_condition": {
+            "values": [
+              "yes"
+            ]
+          },
+          "test_empty_function": {
+            "values": [
+              "UNIT_FROM_TYPED_VALUE"
+            ]
+          },
+          "test_return_only": {
+            "values": [
+              "UNIT_FROM_TYPED_VALUE"
+            ]
+          }
+        },
+        "complete_original_named_bodies_preserved": true,
+        "textual_names_are_not_runtime_discovery": true,
+        "history_comments_are_not_backend_provenance": true,
+        "unit_observation": "EXACT_TYPED_UNIT_VALUE_NOT_NULL_OR_DEBUG_LABEL"
+      },
+      "rationale": "All21 complete basicfunctions/5params/returnscalar/Optional/Array/earlyreturn/callbackstate retained. LasttwoUnitduties nowuseexacttypedUnit values andEqualinstead oferasedtypeNamedebuglabel; Unit isnotNull sentinel.",
+      "packages": [
+        "P08",
+        "P09",
+        "P10"
+      ],
+      "legacy_case": null,
+      "status": "PREPARED_NOT_EXECUTED",
+      "execution": {
+        "vm": "NOT_RUN",
+        "native": "NOT_RUN"
+      },
+      "new_entry": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "remaining_qualification": [
+        "Fresh full actualtestentry/discovery andqualifieddriver mustindependently verifyeverymappedbody/value, sourceorder/context andeffects; no build/banner/equal-wrongresult grantsqualification.",
+        "Actualcanonicalcallable/capture/frame/default/error/Iterator/Equal/record/formatter/ROOTproof andtargetprovider interfacesremainOPEN; no guessedAPI, alias orlegacycompatibilitypath.",
+        "FullactualVM/native/FI/resource/lifetime/borrow/cancel/physical/safety/generated-C/provider/platformgates remainrequired. Keepall100/500/1000/10000/100000 pressure andP20mixeddirections."
+      ],
+      "execution_source": "tests/unit/xir/legacy_consumers/fixtures/control_function_ports/0500_basic/root.xr",
+      "execution_entry": "test"
+    },
+    {
+      "id": "regression_core_review_0510_recursion",
+      "inputs": [
+        {
+          "path": "tests/regression/05_functions/0510_recursion.xr",
+          "lf_sha256": "c628506d70d8932a10a195f9cb626b92a55b76f6c57c88579f4291400e057a94",
+          "role": "preserved_source"
+        },
+        {
+          "path": "spec/source/sections/003-2-type-system.md",
+          "lf_sha256": "f4e970b0cc728c19f65a4d1b2a13cd0e572431dcac3f6f20cd06d23046ebea8a",
+          "role": "frozen_spec"
+        },
+        {
+          "path": "spec/source/sections/004-3-expressions.md",
+          "lf_sha256": "3aeabb14d154ef235fe51c665a7d367c2e51dc2c6f5261a9e0b194b228a9b945",
+          "role": "frozen_spec"
+        },
+        {
+          "path": "spec/source/sections/006-5-declarations.md",
+          "lf_sha256": "56fa3d36bc0c5ee38b7c52dafbe26d7b8b0a45a6909c14a8626a9bba515cc4a7",
+          "role": "frozen_spec"
+        },
+        {
+          "path": "spec/source/sections/009-8-error-handling.md",
+          "lf_sha256": "569cafb786430df363674f97f6073e908d76b4a3484f3fb26239b0895342507e",
+          "role": "frozen_spec"
+        },
+        {
+          "path": "spec/source/sections/011-10-concurrency-and-coroutines.md",
+          "lf_sha256": "75424eb2e981feaa5a24430abdc1a5853c9b87a3adc360cb68588e07da09f264",
+          "role": "frozen_spec"
+        }
+      ],
+      "expected": {
+        "exit_code": 0,
+        "required_test_names": [
+          "test_factorial",
+          "test_fibonacci",
+          "test_sum_to",
+          "test_gcd",
+          "test_power",
+          "test_array_sum",
+          "test_count_down",
+          "test_binary_search",
+          "test_mutual_recursion",
+          "test_deep_recursion"
+        ],
+        "all_required_tests_passed": true,
+        "per_test_observations": {
+          "test_factorial": {
+            "values": [
+              1,
+              1,
+              120,
+              720
+            ]
+          },
+          "test_fibonacci": {
+            "values": [
+              0,
+              1,
+              1,
+              5,
+              55
+            ]
+          },
+          "test_sum_to": {
+            "values": [
+              0,
+              1,
+              15,
+              55
+            ]
+          },
+          "test_gcd": {
+            "values": [
+              6,
+              25,
+              1,
+              12
+            ]
+          },
+          "test_power": {
+            "values": [
+              1,
+              2,
+              1024,
+              81
+            ]
+          },
+          "test_array_sum": {
+            "values": [
+              15,
+              0,
+              42
+            ]
+          },
+          "test_count_down": {
+            "values": [
+              [
+                5,
+                4,
+                3,
+                2,
+                1
+              ],
+              5,
+              5,
+              1
+            ]
+          },
+          "test_binary_search": {
+            "values": [
+              3,
+              0,
+              6,
+              -1
+            ]
+          },
+          "test_mutual_recursion": {
+            "values": [
+              true,
+              true,
+              false,
+              true,
+              false
+            ]
+          },
+          "test_deep_recursion": {
+            "values": [
+              100,
+              500
+            ]
+          }
+        },
+        "complete_original_named_bodies_preserved": true,
+        "textual_names_are_not_runtime_discovery": true,
+        "history_comments_are_not_backend_provenance": true,
+        "retained_depth_inputs": [
+          100,
+          500
+        ]
+      },
+      "rationale": "All10 retainnon-tail factorial/fib/math/Array recursion,binarysearch edgeindices,mutualparity and100/500depth. Independentmath notcompileroutput; returnedvalues do notproveactualcallcount/frame/physicalrelease.",
+      "packages": [
+        "P08",
+        "P09",
+        "P10"
+      ],
+      "legacy_case": null,
+      "status": "PREPARED_NOT_EXECUTED",
+      "execution": {
+        "vm": "NOT_RUN",
+        "native": "NOT_RUN"
+      },
+      "new_entry": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "remaining_qualification": [
+        "Fresh full actualtestentry/discovery andqualifieddriver mustindependently verifyeverymappedbody/value, sourceorder/context andeffects; no build/banner/equal-wrongresult grantsqualification.",
+        "Actualcanonicalcallable/capture/frame/default/error/Iterator/Equal/record/formatter/ROOTproof andtargetprovider interfacesremainOPEN; no guessedAPI, alias orlegacycompatibilitypath.",
+        "FullactualVM/native/FI/resource/lifetime/borrow/cancel/physical/safety/generated-C/provider/platformgates remainrequired. Keepall100/500/1000/10000/100000 pressure andP20mixeddirections."
+      ],
+      "execution_source": "tests/regression/05_functions/0510_recursion.xr",
+      "execution_entry": "test"
+    },
+    {
+      "id": "regression_core_review_0511_self_recursive_iterator",
+      "inputs": [
+        {
+          "path": "tests/regression/05_functions/0511_self_recursive_iterator.xr",
+          "lf_sha256": "1a25f32752cf7d234295c26d3aefa4daf5411b487604e82a98096da0e02ffcb9",
+          "role": "preserved_source"
+        },
+        {
+          "path": "tests/unit/xir/legacy_consumers/fixtures/control_function_ports/0511_self_recursive_iterator/root.xr",
+          "lf_sha256": "7e5e23fc8a724668c342e166b69ace82eafa658b0d5f084164ea5369dc006fe4",
+          "role": "complete_selected_source_draft"
+        },
+        {
+          "path": "spec/source/sections/003-2-type-system.md",
+          "lf_sha256": "f4e970b0cc728c19f65a4d1b2a13cd0e572431dcac3f6f20cd06d23046ebea8a",
+          "role": "frozen_spec"
+        },
+        {
+          "path": "spec/source/sections/004-3-expressions.md",
+          "lf_sha256": "3aeabb14d154ef235fe51c665a7d367c2e51dc2c6f5261a9e0b194b228a9b945",
+          "role": "frozen_spec"
+        },
+        {
+          "path": "spec/source/sections/006-5-declarations.md",
+          "lf_sha256": "56fa3d36bc0c5ee38b7c52dafbe26d7b8b0a45a6909c14a8626a9bba515cc4a7",
+          "role": "frozen_spec"
+        },
+        {
+          "path": "spec/source/sections/009-8-error-handling.md",
+          "lf_sha256": "569cafb786430df363674f97f6073e908d76b4a3484f3fb26239b0895342507e",
+          "role": "frozen_spec"
+        },
+        {
+          "path": "spec/source/sections/011-10-concurrency-and-coroutines.md",
+          "lf_sha256": "75424eb2e981feaa5a24430abdc1a5853c9b87a3adc360cb68588e07da09f264",
+          "role": "frozen_spec"
+        }
+      ],
+      "expected": {
+        "exit_code": 0,
+        "required_test_names": [
+          "test_recursive_sum_with_forin",
+          "test_recursive_flatten",
+          "test_recursive_fibonacci",
+          "test_recursive_with_array_iteration",
+          "test_mutual_recursion_with_loop"
+        ],
+        "all_required_tests_passed": true,
+        "per_test_observations": {
+          "test_recursive_sum_with_forin": {
+            "values": [
+              55
+            ]
+          },
+          "test_recursive_flatten": {
+            "values": [
+              [
+                1,
+                2,
+                3,
+                4,
+                5,
+                6
+              ],
+              6,
+              1,
+              6
+            ]
+          },
+          "test_recursive_fibonacci": {
+            "values": [
+              0,
+              1,
+              55,
+              610
+            ]
+          },
+          "test_recursive_with_array_iteration": {
+            "values": [
+              3,
+              9
+            ]
+          },
+          "test_mutual_recursion_with_loop": {
+            "values": [
+              5
+            ]
+          }
+        },
+        "complete_original_named_bodies_preserved": true,
+        "textual_names_are_not_runtime_discovery": true,
+        "history_comments_are_not_backend_provenance": true
+      },
+      "rationale": "All5 retainactualrecursivesum55/fib610/nestedrecursion3/9/mutualparityloop5. Functionnamedrecursive_flatten onlycontainsnestedfor loops; fullownedcontent1..6assert added, no claimofrecursion orcurrentPhi/taildetection implementation fromcomment.",
+      "packages": [
+        "P08",
+        "P09",
+        "P10"
+      ],
+      "legacy_case": null,
+      "status": "PREPARED_NOT_EXECUTED",
+      "execution": {
+        "vm": "NOT_RUN",
+        "native": "NOT_RUN"
+      },
+      "new_entry": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "remaining_qualification": [
+        "Fresh full actualtestentry/discovery andqualifieddriver mustindependently verifyeverymappedbody/value, sourceorder/context andeffects; no build/banner/equal-wrongresult grantsqualification.",
+        "Actualcanonicalcallable/capture/frame/default/error/Iterator/Equal/record/formatter/ROOTproof andtargetprovider interfacesremainOPEN; no guessedAPI, alias orlegacycompatibilitypath.",
+        "FullactualVM/native/FI/resource/lifetime/borrow/cancel/physical/safety/generated-C/provider/platformgates remainrequired. Keepall100/500/1000/10000/100000 pressure andP20mixeddirections."
+      ],
+      "execution_source": "tests/unit/xir/legacy_consumers/fixtures/control_function_ports/0511_self_recursive_iterator/root.xr",
+      "execution_entry": "test"
+    },
+    {
+      "id": "regression_core_review_0511_tail_recursion",
+      "inputs": [
+        {
+          "path": "tests/regression/05_functions/0511_tail_recursion.xr",
+          "lf_sha256": "b397be62cfdf4c00585875acd5516b01ff0c60c3d933dc1a68099eca3943a25a",
+          "role": "preserved_source"
+        },
+        {
+          "path": "tests/unit/xir/legacy_consumers/fixtures/control_function_ports/0511_tail_recursion/root.xr",
+          "lf_sha256": "b3e82546b21775c67ab5fb43dffee19de261ad36c8a52b1a35b3dd35c88f7916",
+          "role": "complete_selected_source_draft"
+        },
+        {
+          "path": "spec/source/sections/003-2-type-system.md",
+          "lf_sha256": "f4e970b0cc728c19f65a4d1b2a13cd0e572431dcac3f6f20cd06d23046ebea8a",
+          "role": "frozen_spec"
+        },
+        {
+          "path": "spec/source/sections/004-3-expressions.md",
+          "lf_sha256": "3aeabb14d154ef235fe51c665a7d367c2e51dc2c6f5261a9e0b194b228a9b945",
+          "role": "frozen_spec"
+        },
+        {
+          "path": "spec/source/sections/006-5-declarations.md",
+          "lf_sha256": "56fa3d36bc0c5ee38b7c52dafbe26d7b8b0a45a6909c14a8626a9bba515cc4a7",
+          "role": "frozen_spec"
+        },
+        {
+          "path": "spec/source/sections/009-8-error-handling.md",
+          "lf_sha256": "569cafb786430df363674f97f6073e908d76b4a3484f3fb26239b0895342507e",
+          "role": "frozen_spec"
+        },
+        {
+          "path": "spec/source/sections/011-10-concurrency-and-coroutines.md",
+          "lf_sha256": "75424eb2e981feaa5a24430abdc1a5853c9b87a3adc360cb68588e07da09f264",
+          "role": "frozen_spec"
+        }
+      ],
+      "expected": {
+        "exit_code": 0,
+        "required_test_names": [
+          "test_fib_tail",
+          "test_swap_params",
+          "test_gcd_tail",
+          "test_factorial_tail",
+          "test_deep_tail_recursion",
+          "test_sum_tail",
+          "test_non_tail_recursion",
+          "test_single_param",
+          "test_is_even_tail",
+          "test_non_recursive_tailcall",
+          "test_mutual_tail_recursion",
+          "test_non_tail_regular_call",
+          "test_method_tail_recursion",
+          "test_method_cross_tail",
+          "test_static_tail_recursion",
+          "test_deep_method_tail_recursion"
+        ],
+        "all_required_tests_passed": true,
+        "per_test_observations": {
+          "test_fib_tail": {
+            "values": [
+              0,
+              1,
+              1,
+              5,
+              55,
+              6765,
+              1836311903
+            ]
+          },
+          "test_swap_params": {
+            "values": [
+              1,
+              2,
+              1,
+              1,
+              2
+            ]
+          },
+          "test_gcd_tail": {
+            "values": [
+              6,
+              25,
+              1,
+              5,
+              12
+            ]
+          },
+          "test_factorial_tail": {
+            "values": [
+              1,
+              1,
+              120,
+              3628800
+            ]
+          },
+          "test_deep_tail_recursion": {
+            "values": [
+              100000,
+              0
+            ]
+          },
+          "test_sum_tail": {
+            "values": [
+              0,
+              55,
+              5050,
+              500500
+            ]
+          },
+          "test_non_tail_recursion": {
+            "values": [
+              0,
+              1,
+              55,
+              6765
+            ]
+          },
+          "test_single_param": {
+            "values": [
+              0,
+              1,
+              8
+            ]
+          },
+          "test_is_even_tail": {
+            "values": [
+              true,
+              false,
+              true,
+              false,
+              true
+            ]
+          },
+          "test_non_recursive_tailcall": {
+            "values": [
+              7,
+              12,
+              0
+            ]
+          },
+          "test_mutual_tail_recursion": {
+            "values": [
+              true,
+              false,
+              true,
+              true,
+              false
+            ]
+          },
+          "test_non_tail_regular_call": {
+            "values": [
+              14,
+              0
+            ]
+          },
+          "test_method_tail_recursion": {
+            "values": [
+              55,
+              55
+            ]
+          },
+          "test_method_cross_tail": {
+            "values": [
+              false,
+              true,
+              false,
+              true,
+              6
+            ]
+          },
+          "test_static_tail_recursion": {
+            "values": [
+              3628800.0,
+              1.0,
+              "done"
+            ]
+          },
+          "test_deep_method_tail_recursion": {
+            "values": [
+              100000,
+              100000
+            ]
+          }
+        },
+        "complete_original_named_bodies_preserved": true,
+        "textual_names_are_not_runtime_discovery": true,
+        "history_comments_are_not_backend_provenance": true,
+        "retained_deep_inputs": [
+          100000,
+          100000,
+          10000
+        ],
+        "actual_tco_frame_stack_proof": "OPEN_NOT_ESTABLISHED_BY_SOURCE_NAME_OR_RESULT",
+        "swap_inputs": [
+          0,
+          1,
+          2,
+          100,
+          101
+        ]
+      },
+      "rationale": "All16 retain100000 free/methodinput,10000parity,swap100/101 andallmethodcrosscalls/stateSteps6. Contextualinit/ordinaryclassreceiversretireoldsuface; realTCO/constantstack/contification/nativeprovenance cannotbe inferredfromoldopcode/JITcomments orreturn0. Fullresource/FI/safety proofpending.",
+      "packages": [
+        "P08",
+        "P09",
+        "P10"
+      ],
+      "legacy_case": null,
+      "status": "PREPARED_NOT_EXECUTED",
+      "execution": {
+        "vm": "NOT_RUN",
+        "native": "NOT_RUN"
+      },
+      "new_entry": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "remaining_qualification": [
+        "Fresh full actualtestentry/discovery andqualifieddriver mustindependently verifyeverymappedbody/value, sourceorder/context andeffects; no build/banner/equal-wrongresult grantsqualification.",
+        "Actualcanonicalcallable/capture/frame/default/error/Iterator/Equal/record/formatter/ROOTproof andtargetprovider interfacesremainOPEN; no guessedAPI, alias orlegacycompatibilitypath.",
+        "FullactualVM/native/FI/resource/lifetime/borrow/cancel/physical/safety/generated-C/provider/platformgates remainrequired. Keepall100/500/1000/10000/100000 pressure andP20mixeddirections."
+      ],
+      "execution_source": "tests/unit/xir/legacy_consumers/fixtures/control_function_ports/0511_tail_recursion/root.xr",
+      "execution_entry": "test"
+    },
+    {
+      "id": "regression_core_review_0512_defer_around_return_call",
+      "inputs": [
+        {
+          "path": "tests/regression/05_functions/0512_defer_around_return_call.xr",
+          "lf_sha256": "f7d49f36813b416992f424586d0c0b981c0410ca633ea87c73693b8204929d26",
+          "role": "preserved_source"
+        },
+        {
+          "path": "tests/unit/xir/legacy_consumers/fixtures/class_cleanup_ordinary_methods/root.xr",
+          "lf_sha256": "aaf07702d5808bd5318f1e90d3a6f8b06e65e2b0e004d243101506ba55689722",
+          "role": "complete_selected_source_draft"
+        },
+        {
+          "path": "spec/source/sections/003-2-type-system.md",
+          "lf_sha256": "f4e970b0cc728c19f65a4d1b2a13cd0e572431dcac3f6f20cd06d23046ebea8a",
+          "role": "frozen_spec"
+        },
+        {
+          "path": "spec/source/sections/004-3-expressions.md",
+          "lf_sha256": "3aeabb14d154ef235fe51c665a7d367c2e51dc2c6f5261a9e0b194b228a9b945",
+          "role": "frozen_spec"
+        },
+        {
+          "path": "spec/source/sections/006-5-declarations.md",
+          "lf_sha256": "56fa3d36bc0c5ee38b7c52dafbe26d7b8b0a45a6909c14a8626a9bba515cc4a7",
+          "role": "frozen_spec"
+        },
+        {
+          "path": "spec/source/sections/009-8-error-handling.md",
+          "lf_sha256": "569cafb786430df363674f97f6073e908d76b4a3484f3fb26239b0895342507e",
+          "role": "frozen_spec"
+        },
+        {
+          "path": "spec/source/sections/011-10-concurrency-and-coroutines.md",
+          "lf_sha256": "75424eb2e981feaa5a24430abdc1a5853c9b87a3adc360cb68588e07da09f264",
+          "role": "frozen_spec"
+        }
+      ],
+      "expected": {
+        "exit_code": 0,
+        "required_test_names": [
+          "defer_runs_after_a_returned_parameter_call",
+          "defer_runs_after_a_returned_indirect_call"
+        ],
+        "all_required_tests_passed": true,
+        "per_test_observations": {
+          "defer_runs_after_a_returned_parameter_call": {
+            "values": [
+              true,
+              "a",
+              false,
+              true,
+              "b",
+              false
+            ]
+          },
+          "defer_runs_after_a_returned_indirect_call": {
+            "values": [
+              true,
+              "a",
+              false,
+              true,
+              "b",
+              false
+            ]
+          }
+        },
+        "complete_original_named_bodies_preserved": true,
+        "textual_names_are_not_runtime_discovery": true,
+        "history_comments_are_not_backend_provenance": true,
+        "callee_held_until_return": true,
+        "indirect_callee_held_until_return": true,
+        "cleanup_after_actual_callee": true,
+        "indirect_owned_capture_cycle_has_scoped_break": true,
+        "actual_cycle_physical_release": "OPEN_NOT_PROVEN_BY_CLEAR_COUNTER",
+        "scoped_break_registered_before_first_capture_assignment": true
+      },
+      "rationale": "Fullboth2 originalnamedbodies/foura-bcalls retained. Directandindirectcallbackeachobservesheldtruebeforedefer,andfalseafterreturn; catchesearlycleanup thatoldindirectafter-onlychecks couldmiss. Ownedindirectcallbacks captureGate; deferArrayclearbreakstheownedcycle onnormal/failureexit, notcurrentphysicalreleaseproof.",
+      "packages": [
+        "P02",
+        "P07",
+        "P08",
+        "P09",
+        "P10"
+      ],
+      "legacy_case": null,
+      "status": "PREPARED_NOT_EXECUTED",
+      "execution": {
+        "vm": "NOT_RUN",
+        "native": "NOT_RUN"
+      },
+      "new_entry": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "remaining_qualification": [
+        "Fresh full actualtestentry/discovery andqualifieddriver mustindependently verifyeverymappedbody/value, sourceorder/context andeffects; no build/banner/equal-wrongresult grantsqualification.",
+        "Actualcanonicalcallable/capture/frame/default/error/Iterator/Equal/record/formatter/ROOTproof andtargetprovider interfacesremainOPEN; no guessedAPI, alias orlegacycompatibilitypath.",
+        "FullactualVM/native/FI/resource/lifetime/borrow/cancel/physical/safety/generated-C/provider/platformgates remainrequired. Keepall100/500/1000/10000/100000 pressure andP20mixeddirections."
+      ],
+      "execution_source": "tests/unit/xir/legacy_consumers/fixtures/class_cleanup_ordinary_methods/root.xr",
+      "execution_entry": "test"
+    },
+    {
+      "id": "regression_core_review_0520_closure",
+      "inputs": [
+        {
+          "path": "tests/regression/05_functions/0520_closure.xr",
+          "lf_sha256": "c37641050c998ab3285892befc9ad1f1eb18e53df80074ddbc89172c6a03edc3",
+          "role": "preserved_source"
+        },
+        {
+          "path": "spec/source/sections/003-2-type-system.md",
+          "lf_sha256": "f4e970b0cc728c19f65a4d1b2a13cd0e572431dcac3f6f20cd06d23046ebea8a",
+          "role": "frozen_spec"
+        },
+        {
+          "path": "spec/source/sections/004-3-expressions.md",
+          "lf_sha256": "3aeabb14d154ef235fe51c665a7d367c2e51dc2c6f5261a9e0b194b228a9b945",
+          "role": "frozen_spec"
+        },
+        {
+          "path": "spec/source/sections/006-5-declarations.md",
+          "lf_sha256": "56fa3d36bc0c5ee38b7c52dafbe26d7b8b0a45a6909c14a8626a9bba515cc4a7",
+          "role": "frozen_spec"
+        },
+        {
+          "path": "spec/source/sections/009-8-error-handling.md",
+          "lf_sha256": "569cafb786430df363674f97f6073e908d76b4a3484f3fb26239b0895342507e",
+          "role": "frozen_spec"
+        },
+        {
+          "path": "spec/source/sections/011-10-concurrency-and-coroutines.md",
+          "lf_sha256": "75424eb2e981feaa5a24430abdc1a5853c9b87a3adc360cb68588e07da09f264",
+          "role": "frozen_spec"
+        }
+      ],
+      "expected": {
+        "exit_code": 0,
+        "required_test_names": [
+          "test_closure_basic",
+          "test_closure_multiple_instances",
+          "test_capture_param",
+          "test_capture_multiple_params",
+          "test_modify_outer",
+          "test_accumulator",
+          "test_nested_closure",
+          "test_deeply_nested",
+          "test_multiplier_factory",
+          "test_greeting_factory",
+          "test_closure_captures_value",
+          "test_closure_no_capture",
+          "test_closure_capture_const"
+        ],
+        "all_required_tests_passed": true,
+        "per_test_observations": {
+          "test_closure_basic": {
+            "values": [
+              1,
+              2,
+              3
+            ]
+          },
+          "test_closure_multiple_instances": {
+            "values": [
+              1,
+              2,
+              1,
+              3,
+              2
+            ]
+          },
+          "test_capture_param": {
+            "values": [
+              8,
+              13,
+              16
+            ]
+          },
+          "test_capture_multiple_params": {
+            "values": [
+              false,
+              true,
+              true,
+              true,
+              false
+            ]
+          },
+          "test_modify_outer": {
+            "values": [
+              10,
+              20
+            ]
+          },
+          "test_accumulator": {
+            "values": [
+              5,
+              15,
+              18
+            ]
+          },
+          "test_nested_closure": {
+            "values": [
+              6
+            ]
+          },
+          "test_deeply_nested": {
+            "values": [
+              10
+            ]
+          },
+          "test_multiplier_factory": {
+            "values": [
+              10,
+              15
+            ]
+          },
+          "test_greeting_factory": {
+            "values": [
+              "Hello, Alice!",
+              "Hi, Bob!"
+            ]
+          },
+          "test_closure_captures_value": {
+            "values": [
+              0,
+              1,
+              2
+            ]
+          },
+          "test_closure_no_capture": {
+            "values": [
+              42
+            ]
+          },
+          "test_closure_capture_const": {
+            "values": [
+              100
+            ]
+          }
+        },
+        "complete_original_named_bodies_preserved": true,
+        "textual_names_are_not_runtime_discovery": true,
+        "history_comments_are_not_backend_provenance": true,
+        "fresh_loop_bindings_values": [
+          0,
+          1,
+          2
+        ]
+      },
+      "rationale": "All13 factories/independentmutablecells/READparams/transitiveclosure/currying/threefreshloopbindings/const/no-capture duties exact. Ordinarysameflowcapture/localmutation doesnotgrantworkerSendable orROOTaccess, norphysicalframeescape/releasequalification.",
+      "packages": [
+        "P02",
+        "P07",
+        "P08",
+        "P09",
+        "P10"
+      ],
+      "legacy_case": null,
+      "status": "PREPARED_NOT_EXECUTED",
+      "execution": {
+        "vm": "NOT_RUN",
+        "native": "NOT_RUN"
+      },
+      "new_entry": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "remaining_qualification": [
+        "Fresh full actualtestentry/discovery andqualifieddriver mustindependently verifyeverymappedbody/value, sourceorder/context andeffects; no build/banner/equal-wrongresult grantsqualification.",
+        "Actualcanonicalcallable/capture/frame/default/error/Iterator/Equal/record/formatter/ROOTproof andtargetprovider interfacesremainOPEN; no guessedAPI, alias orlegacycompatibilitypath.",
+        "FullactualVM/native/FI/resource/lifetime/borrow/cancel/physical/safety/generated-C/provider/platformgates remainrequired. Keepall100/500/1000/10000/100000 pressure andP20mixeddirections."
+      ],
+      "execution_source": "tests/regression/05_functions/0520_closure.xr",
+      "execution_entry": "test"
+    },
+    {
+      "id": "regression_core_review_0521_cell_upval",
+      "inputs": [
+        {
+          "path": "tests/regression/05_functions/0521_cell_upval.xr",
+          "lf_sha256": "a790f3e8496a75b33b2ae734e543a61ea9b679d8103f4b7d801987d9a6b761d2",
+          "role": "preserved_source"
+        },
+        {
+          "path": "spec/source/sections/003-2-type-system.md",
+          "lf_sha256": "f4e970b0cc728c19f65a4d1b2a13cd0e572431dcac3f6f20cd06d23046ebea8a",
+          "role": "frozen_spec"
+        },
+        {
+          "path": "spec/source/sections/004-3-expressions.md",
+          "lf_sha256": "3aeabb14d154ef235fe51c665a7d367c2e51dc2c6f5261a9e0b194b228a9b945",
+          "role": "frozen_spec"
+        },
+        {
+          "path": "spec/source/sections/006-5-declarations.md",
+          "lf_sha256": "56fa3d36bc0c5ee38b7c52dafbe26d7b8b0a45a6909c14a8626a9bba515cc4a7",
+          "role": "frozen_spec"
+        },
+        {
+          "path": "spec/source/sections/009-8-error-handling.md",
+          "lf_sha256": "569cafb786430df363674f97f6073e908d76b4a3484f3fb26239b0895342507e",
+          "role": "frozen_spec"
+        },
+        {
+          "path": "spec/source/sections/011-10-concurrency-and-coroutines.md",
+          "lf_sha256": "75424eb2e981feaa5a24430abdc1a5853c9b87a3adc360cb68588e07da09f264",
+          "role": "frozen_spec"
+        }
+      ],
+      "expected": {
+        "exit_code": 0,
+        "required_test_names": [
+          "test_cell_counter_basic",
+          "test_two_cells",
+          "test_transitive_capture",
+          "test_const_capture",
+          "test_cell_shared_by_closures",
+          "test_cell_hot_loop",
+          "test_cell_string_value",
+          "test_cell_float_value",
+          "test_many_instances"
+        ],
+        "all_required_tests_passed": true,
+        "per_test_observations": {
+          "test_cell_counter_basic": {
+            "values": [
+              1,
+              2,
+              3
+            ]
+          },
+          "test_two_cells": {
+            "values": [
+              1,
+              99,
+              2,
+              98
+            ]
+          },
+          "test_transitive_capture": {
+            "values": [
+              15,
+              20
+            ]
+          },
+          "test_const_capture": {
+            "values": [
+              103,
+              130
+            ]
+          },
+          "test_cell_shared_by_closures": {
+            "values": [
+              3,
+              2
+            ]
+          },
+          "test_cell_hot_loop": {
+            "values": [
+              100,
+              5050
+            ]
+          },
+          "test_cell_string_value": {
+            "values": [
+              "a",
+              "ab",
+              "abc"
+            ]
+          },
+          "test_cell_float_value": {
+            "values": [
+              1.5,
+              4.0
+            ]
+          },
+          "test_many_instances": {
+            "values": [
+              [
+                1,
+                1,
+                1,
+                1,
+                1,
+                1,
+                1,
+                1,
+                1,
+                1
+              ],
+              2,
+              3,
+              2
+            ]
+          }
+        },
+        "complete_original_named_bodies_preserved": true,
+        "textual_names_are_not_runtime_discovery": true,
+        "history_comments_are_not_backend_provenance": true,
+        "retained_independent_instances": 10,
+        "retained_additions": 100,
+        "allocation_or_jit_provenance": "NOT_GRANTED_BY_LEGACY_LABELS"
+      },
+      "rationale": "All9 keeptwoindependentcells1/99/2/98,transitive15/20,shared3/2,100adds5050,stringsa/ab/abc,f641.5/4 and10independentclosureinstances. OldOP_CELL/JITbump-pointer labelsarenotcurrentbackend/allocationproof.",
+      "packages": [
+        "P02",
+        "P07",
+        "P08",
+        "P09",
+        "P10"
+      ],
+      "legacy_case": null,
+      "status": "PREPARED_NOT_EXECUTED",
+      "execution": {
+        "vm": "NOT_RUN",
+        "native": "NOT_RUN"
+      },
+      "new_entry": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "remaining_qualification": [
+        "Fresh full actualtestentry/discovery andqualifieddriver mustindependently verifyeverymappedbody/value, sourceorder/context andeffects; no build/banner/equal-wrongresult grantsqualification.",
+        "Actualcanonicalcallable/capture/frame/default/error/Iterator/Equal/record/formatter/ROOTproof andtargetprovider interfacesremainOPEN; no guessedAPI, alias orlegacycompatibilitypath.",
+        "FullactualVM/native/FI/resource/lifetime/borrow/cancel/physical/safety/generated-C/provider/platformgates remainrequired. Keepall100/500/1000/10000/100000 pressure andP20mixeddirections."
+      ],
+      "execution_source": "tests/regression/05_functions/0521_cell_upval.xr",
+      "execution_entry": "test"
+    },
+    {
+      "id": "regression_core_review_0530_arrow",
+      "inputs": [
+        {
+          "path": "tests/regression/05_functions/0530_arrow.xr",
+          "lf_sha256": "4eedfea7e14fca57788c27ffc2c9fa90baa8d406344d1d53a8c22ed0bf6816b9",
+          "role": "preserved_source"
+        },
+        {
+          "path": "tests/unit/xir/legacy_consumers/fixtures/control_function_ports/0530_arrow/root.xr",
+          "lf_sha256": "d6d007b46b6f8452632f8ee33dcbf78f314dd01b1af5878470836fbc57c47a03",
+          "role": "complete_selected_source_draft"
+        },
+        {
+          "path": "spec/source/sections/003-2-type-system.md",
+          "lf_sha256": "f4e970b0cc728c19f65a4d1b2a13cd0e572431dcac3f6f20cd06d23046ebea8a",
+          "role": "frozen_spec"
+        },
+        {
+          "path": "spec/source/sections/004-3-expressions.md",
+          "lf_sha256": "3aeabb14d154ef235fe51c665a7d367c2e51dc2c6f5261a9e0b194b228a9b945",
+          "role": "frozen_spec"
+        },
+        {
+          "path": "spec/source/sections/006-5-declarations.md",
+          "lf_sha256": "56fa3d36bc0c5ee38b7c52dafbe26d7b8b0a45a6909c14a8626a9bba515cc4a7",
+          "role": "frozen_spec"
+        },
+        {
+          "path": "spec/source/sections/009-8-error-handling.md",
+          "lf_sha256": "569cafb786430df363674f97f6073e908d76b4a3484f3fb26239b0895342507e",
+          "role": "frozen_spec"
+        },
+        {
+          "path": "spec/source/sections/011-10-concurrency-and-coroutines.md",
+          "lf_sha256": "75424eb2e981feaa5a24430abdc1a5853c9b87a3adc360cb68588e07da09f264",
+          "role": "frozen_spec"
+        }
+      ],
+      "expected": {
+        "exit_code": 0,
+        "required_test_names": [
+          "test_arrow_basic",
+          "test_arrow_single_param",
+          "test_arrow_no_params",
+          "test_recursive_function_item_block",
+          "test_arrow_block_multiple_statements",
+          "test_arrow_map",
+          "test_arrow_filter",
+          "test_arrow_reduce",
+          "test_arrow_chained",
+          "test_arrow_closure",
+          "test_arrow_capture_param",
+          "test_arrow_return_arrow",
+          "test_arrow_curried",
+          "test_arrow_foreach",
+          "test_arrow_immediate_call",
+          "test_arrow_as_method_arg"
+        ],
+        "all_required_tests_passed": true,
+        "per_test_observations": {
+          "test_arrow_basic": {
+            "values": [
+              8
+            ]
+          },
+          "test_arrow_single_param": {
+            "values": [
+              10
+            ]
+          },
+          "test_arrow_no_params": {
+            "values": [
+              "hello"
+            ]
+          },
+          "test_recursive_function_item_block": {
+            "values": [
+              120
+            ]
+          },
+          "test_arrow_block_multiple_statements": {
+            "values": [
+              20
+            ]
+          },
+          "test_arrow_map": {
+            "values": [
+              [
+                2,
+                4,
+                6,
+                8,
+                10
+              ]
+            ]
+          },
+          "test_arrow_filter": {
+            "values": [
+              [
+                2,
+                4,
+                6
+              ],
+              3,
+              2,
+              6
+            ]
+          },
+          "test_arrow_reduce": {
+            "values": [
+              15
+            ]
+          },
+          "test_arrow_chained": {
+            "values": [
+              18
+            ]
+          },
+          "test_arrow_closure": {
+            "values": [
+              15,
+              30
+            ]
+          },
+          "test_arrow_capture_param": {
+            "values": [
+              10,
+              15
+            ]
+          },
+          "test_arrow_return_arrow": {
+            "values": [
+              8,
+              13
+            ]
+          },
+          "test_arrow_curried": {
+            "values": [
+              6
+            ]
+          },
+          "test_arrow_foreach": {
+            "values": [
+              6
+            ]
+          },
+          "test_arrow_immediate_call": {
+            "values": [
+              10
+            ]
+          },
+          "test_arrow_as_method_arg": {
+            "values": [
+              15
+            ]
+          }
+        },
+        "complete_original_named_bodies_preserved": true,
+        "textual_names_are_not_runtime_discovery": true,
+        "history_comments_are_not_backend_provenance": true
+      },
+      "rationale": "All16 block/expression/contextualcallback/curry/factory duties preserved. Recursiveinitializer selfreference becomesexplicitfnitem withnamedmapping; immutableclosure ordinarybindings replaceunqualifiedcopy(callable). Noalias,forwardmutablefunctionvalueuse orguessedCopyableAPI.",
+      "packages": [
+        "P02",
+        "P07",
+        "P08",
+        "P09",
+        "P10"
+      ],
+      "legacy_case": null,
+      "status": "PREPARED_NOT_EXECUTED",
+      "execution": {
+        "vm": "NOT_RUN",
+        "native": "NOT_RUN"
+      },
+      "new_entry": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "remaining_qualification": [
+        "Fresh full actualtestentry/discovery andqualifieddriver mustindependently verifyeverymappedbody/value, sourceorder/context andeffects; no build/banner/equal-wrongresult grantsqualification.",
+        "Actualcanonicalcallable/capture/frame/default/error/Iterator/Equal/record/formatter/ROOTproof andtargetprovider interfacesremainOPEN; no guessedAPI, alias orlegacycompatibilitypath.",
+        "FullactualVM/native/FI/resource/lifetime/borrow/cancel/physical/safety/generated-C/provider/platformgates remainrequired. Keepall100/500/1000/10000/100000 pressure andP20mixeddirections."
+      ],
+      "execution_source": "tests/unit/xir/legacy_consumers/fixtures/control_function_ports/0530_arrow/root.xr",
+      "execution_entry": "test"
+    },
+    {
+      "id": "regression_core_review_0531_bare_lambda",
+      "inputs": [
+        {
+          "path": "tests/regression/05_functions/0531_bare_lambda.xr",
+          "lf_sha256": "7e604663ce825e9704c1c1af7b29e9b4fa3d0a5ca67fb64cd295a97062a4fa74",
+          "role": "preserved_source"
+        },
+        {
+          "path": "spec/source/sections/003-2-type-system.md",
+          "lf_sha256": "f4e970b0cc728c19f65a4d1b2a13cd0e572431dcac3f6f20cd06d23046ebea8a",
+          "role": "frozen_spec"
+        },
+        {
+          "path": "spec/source/sections/004-3-expressions.md",
+          "lf_sha256": "3aeabb14d154ef235fe51c665a7d367c2e51dc2c6f5261a9e0b194b228a9b945",
+          "role": "frozen_spec"
+        },
+        {
+          "path": "spec/source/sections/006-5-declarations.md",
+          "lf_sha256": "56fa3d36bc0c5ee38b7c52dafbe26d7b8b0a45a6909c14a8626a9bba515cc4a7",
+          "role": "frozen_spec"
+        },
+        {
+          "path": "spec/source/sections/009-8-error-handling.md",
+          "lf_sha256": "569cafb786430df363674f97f6073e908d76b4a3484f3fb26239b0895342507e",
+          "role": "frozen_spec"
+        },
+        {
+          "path": "spec/source/sections/011-10-concurrency-and-coroutines.md",
+          "lf_sha256": "75424eb2e981feaa5a24430abdc1a5853c9b87a3adc360cb68588e07da09f264",
+          "role": "frozen_spec"
+        }
+      ],
+      "expected": {
+        "exit_code": 0,
+        "required_test_names": [
+          "test_bare_lambda_map",
+          "test_bare_lambda_filter",
+          "test_bare_lambda_find",
+          "test_bare_lambda_every_some",
+          "test_bare_lambda_chain",
+          "test_bare_lambda_block_body",
+          "test_bare_lambda_closure",
+          "test_bare_lambda_fn_arg",
+          "test_bare_lambda_foreach",
+          "test_bare_lambda_string_map"
+        ],
+        "all_required_tests_passed": true,
+        "per_test_observations": {
+          "test_bare_lambda_map": {
+            "values": [
+              [
+                2,
+                4,
+                6,
+                8,
+                10
+              ]
+            ]
+          },
+          "test_bare_lambda_filter": {
+            "values": [
+              [
+                2,
+                4,
+                6
+              ],
+              3,
+              2,
+              6
+            ]
+          },
+          "test_bare_lambda_find": {
+            "values": [
+              30
+            ]
+          },
+          "test_bare_lambda_every_some": {
+            "values": [
+              true,
+              true,
+              false
+            ]
+          },
+          "test_bare_lambda_chain": {
+            "values": [
+              [
+                30,
+                40,
+                50
+              ]
+            ]
+          },
+          "test_bare_lambda_block_body": {
+            "values": [
+              [
+                3,
+                5,
+                7
+              ]
+            ]
+          },
+          "test_bare_lambda_closure": {
+            "values": [
+              [
+                3,
+                6,
+                9
+              ]
+            ]
+          },
+          "test_bare_lambda_fn_arg": {
+            "values": [
+              20
+            ]
+          },
+          "test_bare_lambda_foreach": {
+            "values": [
+              60
+            ]
+          },
+          "test_bare_lambda_string_map": {
+            "values": [
+              [
+                5,
+                5
+              ]
+            ]
+          }
+        },
+        "complete_original_named_bodies_preserved": true,
+        "textual_names_are_not_runtime_discovery": true,
+        "history_comments_are_not_backend_provenance": true
+      },
+      "rationale": "Full originalbody/per-testvalues independentlyreviewed frombranch/arithmetic/recurrence/scope rules. Preserveeverycondition,state transition andeffect; actualcanonicalinterfaces/driverandallfullgates remainOPEN.",
+      "packages": [
+        "P02",
+        "P07",
+        "P08",
+        "P09",
+        "P10"
+      ],
+      "legacy_case": null,
+      "status": "PREPARED_NOT_EXECUTED",
+      "execution": {
+        "vm": "NOT_RUN",
+        "native": "NOT_RUN"
+      },
+      "new_entry": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "remaining_qualification": [
+        "Fresh full actualtestentry/discovery andqualifieddriver mustindependently verifyeverymappedbody/value, sourceorder/context andeffects; no build/banner/equal-wrongresult grantsqualification.",
+        "Actualcanonicalcallable/capture/frame/default/error/Iterator/Equal/record/formatter/ROOTproof andtargetprovider interfacesremainOPEN; no guessedAPI, alias orlegacycompatibilitypath.",
+        "FullactualVM/native/FI/resource/lifetime/borrow/cancel/physical/safety/generated-C/provider/platformgates remainrequired. Keepall100/500/1000/10000/100000 pressure andP20mixeddirections."
+      ],
+      "execution_source": "tests/regression/05_functions/0531_bare_lambda.xr",
+      "execution_entry": "test"
+    },
+    {
+      "id": "regression_core_review_0540_higher_order",
+      "inputs": [
+        {
+          "path": "tests/regression/05_functions/0540_higher_order.xr",
+          "lf_sha256": "0cf170fd5ae58710d0a9226cb3e9938116ca24abc7c9f46f94793112fcbf2cf9",
+          "role": "preserved_source"
+        },
+        {
+          "path": "tests/unit/xir/legacy_consumers/fixtures/control_function_ports/0540_higher_order/root.xr",
+          "lf_sha256": "177654035d71d806ad1b92507da81510a0d52202cc4e32f9ac8cd414c4ce995a",
+          "role": "complete_selected_source_draft"
+        },
+        {
+          "path": "spec/source/sections/003-2-type-system.md",
+          "lf_sha256": "f4e970b0cc728c19f65a4d1b2a13cd0e572431dcac3f6f20cd06d23046ebea8a",
+          "role": "frozen_spec"
+        },
+        {
+          "path": "spec/source/sections/004-3-expressions.md",
+          "lf_sha256": "3aeabb14d154ef235fe51c665a7d367c2e51dc2c6f5261a9e0b194b228a9b945",
+          "role": "frozen_spec"
+        },
+        {
+          "path": "spec/source/sections/006-5-declarations.md",
+          "lf_sha256": "56fa3d36bc0c5ee38b7c52dafbe26d7b8b0a45a6909c14a8626a9bba515cc4a7",
+          "role": "frozen_spec"
+        },
+        {
+          "path": "spec/source/sections/009-8-error-handling.md",
+          "lf_sha256": "569cafb786430df363674f97f6073e908d76b4a3484f3fb26239b0895342507e",
+          "role": "frozen_spec"
+        },
+        {
+          "path": "spec/source/sections/011-10-concurrency-and-coroutines.md",
+          "lf_sha256": "75424eb2e981feaa5a24430abdc1a5853c9b87a3adc360cb68588e07da09f264",
+          "role": "frozen_spec"
+        }
+      ],
+      "expected": {
+        "exit_code": 0,
+        "required_test_names": [
+          "test_function_as_param",
+          "test_binary_function_param",
+          "test_function_factory",
+          "test_compose",
+          "test_partial",
+          "test_callback",
+          "test_custom_map",
+          "test_custom_filter",
+          "test_custom_reduce",
+          "test_pipe",
+          "test_identity_function",
+          "test_constant_function"
+        ],
+        "all_required_tests_passed": true,
+        "per_test_observations": {
+          "test_function_as_param": {
+            "values": [
+              10,
+              25
+            ]
+          },
+          "test_binary_function_param": {
+            "values": [
+              8,
+              15
+            ]
+          },
+          "test_function_factory": {
+            "values": [
+              "Hello, Alice!",
+              "Hi, Bob!"
+            ]
+          },
+          "test_compose": {
+            "values": [
+              11,
+              12
+            ]
+          },
+          "test_partial": {
+            "values": [
+              8,
+              15
+            ]
+          },
+          "test_callback": {
+            "values": [
+              42
+            ]
+          },
+          "test_custom_map": {
+            "values": [
+              [
+                2,
+                4,
+                6
+              ]
+            ]
+          },
+          "test_custom_filter": {
+            "values": [
+              [
+                2,
+                4,
+                6
+              ],
+              3,
+              2
+            ]
+          },
+          "test_custom_reduce": {
+            "values": [
+              10,
+              24
+            ]
+          },
+          "test_pipe": {
+            "values": [
+              400
+            ]
+          },
+          "test_identity_function": {
+            "values": [
+              42,
+              "hello",
+              null,
+              true,
+              0
+            ]
+          },
+          "test_constant_function": {
+            "values": [
+              42,
+              42
+            ]
+          }
+        },
+        "complete_original_named_bodies_preserved": true,
+        "textual_names_are_not_runtime_discovery": true,
+        "history_comments_are_not_backend_provenance": true,
+        "typed_optional_identity_none_and_some_zero_required": true,
+        "processAsync_is_only_synchronous_body": true
+      },
+      "rationale": "All12 preserveactualcompose11versus12,partial8/15,map/filterfullresults,reduce10/24,pipe400 andfactorylifetime. TypedgenericOptionalNone/Somezero closesoldskipcomment; callbacknamedprocessAsync isonlysynchronousbody andnotactualasync execution.",
+      "packages": [
+        "P02",
+        "P07",
+        "P08",
+        "P09",
+        "P10"
+      ],
+      "legacy_case": null,
+      "status": "PREPARED_NOT_EXECUTED",
+      "execution": {
+        "vm": "NOT_RUN",
+        "native": "NOT_RUN"
+      },
+      "new_entry": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "remaining_qualification": [
+        "Fresh full actualtestentry/discovery andqualifieddriver mustindependently verifyeverymappedbody/value, sourceorder/context andeffects; no build/banner/equal-wrongresult grantsqualification.",
+        "Actualcanonicalcallable/capture/frame/default/error/Iterator/Equal/record/formatter/ROOTproof andtargetprovider interfacesremainOPEN; no guessedAPI, alias orlegacycompatibilitypath.",
+        "FullactualVM/native/FI/resource/lifetime/borrow/cancel/physical/safety/generated-C/provider/platformgates remainrequired. Keepall100/500/1000/10000/100000 pressure andP20mixeddirections."
+      ],
+      "execution_source": "tests/unit/xir/legacy_consumers/fixtures/control_function_ports/0540_higher_order/root.xr",
+      "execution_entry": "test"
+    },
+    {
+      "id": "regression_core_review_0560_method_chaining",
+      "inputs": [
+        {
+          "path": "tests/regression/05_functions/0560_method_chaining.xr",
+          "lf_sha256": "7f7da63b96c372b82bb2ed9dc146deedb918f8418850e5fa577d936962af98db",
+          "role": "preserved_source"
+        },
+        {
+          "path": "tests/unit/xir/legacy_consumers/fixtures/control_function_ports/0560_method_chaining/root.xr",
+          "lf_sha256": "fd150eb94ef37bd490b8f9d6f219c40c8cd2deef5a8bc4160d138353f506ad94",
+          "role": "complete_selected_source_draft"
+        },
+        {
+          "path": "spec/source/sections/003-2-type-system.md",
+          "lf_sha256": "f4e970b0cc728c19f65a4d1b2a13cd0e572431dcac3f6f20cd06d23046ebea8a",
+          "role": "frozen_spec"
+        },
+        {
+          "path": "spec/source/sections/004-3-expressions.md",
+          "lf_sha256": "3aeabb14d154ef235fe51c665a7d367c2e51dc2c6f5261a9e0b194b228a9b945",
+          "role": "frozen_spec"
+        },
+        {
+          "path": "spec/source/sections/006-5-declarations.md",
+          "lf_sha256": "56fa3d36bc0c5ee38b7c52dafbe26d7b8b0a45a6909c14a8626a9bba515cc4a7",
+          "role": "frozen_spec"
+        },
+        {
+          "path": "spec/source/sections/009-8-error-handling.md",
+          "lf_sha256": "569cafb786430df363674f97f6073e908d76b4a3484f3fb26239b0895342507e",
+          "role": "frozen_spec"
+        },
+        {
+          "path": "spec/source/sections/011-10-concurrency-and-coroutines.md",
+          "lf_sha256": "75424eb2e981feaa5a24430abdc1a5853c9b87a3adc360cb68588e07da09f264",
+          "role": "frozen_spec"
+        }
+      ],
+      "expected": {
+        "exit_code": 0,
+        "required_test_names": [
+          "test_array_filter_map",
+          "test_array_map_filter",
+          "test_string_chain",
+          "test_string_split",
+          "test_builder_chain",
+          "test_multiple_chain",
+          "test_array_complex_chain"
+        ],
+        "all_required_tests_passed": true,
+        "per_test_observations": {
+          "test_array_filter_map": {
+            "values": [
+              [
+                4,
+                8,
+                12
+              ],
+              3
+            ]
+          },
+          "test_array_map_filter": {
+            "values": [
+              [
+                6,
+                8,
+                10
+              ],
+              3
+            ]
+          },
+          "test_string_chain": {
+            "values": [
+              "hello world"
+            ]
+          },
+          "test_string_split": {
+            "values": [
+              [
+                "a",
+                "b",
+                "c"
+              ],
+              3
+            ]
+          },
+          "test_builder_chain": {
+            "values": [
+              "Hello World",
+              "Hello World"
+            ]
+          },
+          "test_multiple_chain": {
+            "values": [
+              "abc"
+            ]
+          },
+          "test_array_complex_chain": {
+            "values": [
+              30
+            ]
+          }
+        },
+        "complete_original_named_bodies_preserved": true,
+        "textual_names_are_not_runtime_discovery": true,
+        "history_comments_are_not_backend_provenance": true,
+        "join_coverage": "NOT_GRANTED_ORIGINAL_BODY_SPLITS_ONLY"
+      },
+      "rationale": "All7 completeArray/text/userBuilder chains remain; ordinaryclassidentity/fluentreturnthis observesaliasHelloWorld. Splitallthreecontentasserted; oldsplit_joinbodyneverjoins, namedmappingkeepssplitdutywithoutgrantingjoin. UserBuilder notretiredstdlibStringBuilder.",
+      "packages": [
+        "P02",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P13"
+      ],
+      "legacy_case": null,
+      "status": "PREPARED_NOT_EXECUTED",
+      "execution": {
+        "vm": "NOT_RUN",
+        "native": "NOT_RUN"
+      },
+      "new_entry": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "remaining_qualification": [
+        "Fresh full actualtestentry/discovery andqualifieddriver mustindependently verifyeverymappedbody/value, sourceorder/context andeffects; no build/banner/equal-wrongresult grantsqualification.",
+        "Actualcanonicalcallable/capture/frame/default/error/Iterator/Equal/record/formatter/ROOTproof andtargetprovider interfacesremainOPEN; no guessedAPI, alias orlegacycompatibilitypath.",
+        "FullactualVM/native/FI/resource/lifetime/borrow/cancel/physical/safety/generated-C/provider/platformgates remainrequired. Keepall100/500/1000/10000/100000 pressure andP20mixeddirections."
+      ],
+      "execution_source": "tests/unit/xir/legacy_consumers/fixtures/control_function_ports/0560_method_chaining/root.xr",
+      "execution_entry": "test"
+    },
+    {
+      "id": "regression_core_review_0570_hoisting",
+      "inputs": [
+        {
+          "path": "tests/regression/05_functions/0570_hoisting.xr",
+          "lf_sha256": "6c9130c4f14d431a90da024b8b46cf79aa381c9402269541c6d6b05102a5dfb1",
+          "role": "preserved_source"
+        },
+        {
+          "path": "tests/unit/xir/legacy_consumers/fixtures/control_function_ports/0570_hoisting/root.xr",
+          "lf_sha256": "f2a2ca20986b4f84cd645bdadabebd4f9fbbeaad15d6abbb62acf91a4f9ad591",
+          "role": "complete_selected_source_draft"
+        },
+        {
+          "path": "spec/source/sections/003-2-type-system.md",
+          "lf_sha256": "f4e970b0cc728c19f65a4d1b2a13cd0e572431dcac3f6f20cd06d23046ebea8a",
+          "role": "frozen_spec"
+        },
+        {
+          "path": "spec/source/sections/004-3-expressions.md",
+          "lf_sha256": "3aeabb14d154ef235fe51c665a7d367c2e51dc2c6f5261a9e0b194b228a9b945",
+          "role": "frozen_spec"
+        },
+        {
+          "path": "spec/source/sections/006-5-declarations.md",
+          "lf_sha256": "56fa3d36bc0c5ee38b7c52dafbe26d7b8b0a45a6909c14a8626a9bba515cc4a7",
+          "role": "frozen_spec"
+        },
+        {
+          "path": "spec/source/sections/009-8-error-handling.md",
+          "lf_sha256": "569cafb786430df363674f97f6073e908d76b4a3484f3fb26239b0895342507e",
+          "role": "frozen_spec"
+        },
+        {
+          "path": "spec/source/sections/011-10-concurrency-and-coroutines.md",
+          "lf_sha256": "75424eb2e981feaa5a24430abdc1a5853c9b87a3adc360cb68588e07da09f264",
+          "role": "frozen_spec"
+        }
+      ],
+      "expected": {
+        "exit_code": 0,
+        "required_test_names": [
+          "test_call_before_definition",
+          "test_mutual_recursion",
+          "test_fn_before_class",
+          "test_class_method_uses_later_fn",
+          "test_definition_before_call",
+          "test_fn_captures_variable",
+          "test_block_call_before_definition",
+          "test_block_closure_capture_with_hoisting",
+          "test_block_mutual_recursion"
+        ],
+        "all_required_tests_passed": true,
+        "per_test_observations": {
+          "test_call_before_definition": {
+            "values": [
+              30
+            ]
+          },
+          "test_mutual_recursion": {
+            "values": [
+              true,
+              false,
+              true,
+              false
+            ]
+          },
+          "test_fn_before_class": {
+            "values": [
+              "Rex"
+            ]
+          },
+          "test_class_method_uses_later_fn": {
+            "values": [
+              "[hello]"
+            ]
+          },
+          "test_definition_before_call": {
+            "values": [
+              12
+            ]
+          },
+          "test_fn_captures_variable": {
+            "values": [
+              50
+            ]
+          },
+          "test_block_call_before_definition": {
+            "values": [
+              "hello world"
+            ]
+          },
+          "test_block_closure_capture_with_hoisting": {
+            "values": [
+              20
+            ]
+          },
+          "test_block_mutual_recursion": {
+            "values": [
+              true,
+              false
+            ]
+          }
+        },
+        "complete_original_named_bodies_preserved": true,
+        "textual_names_are_not_runtime_discovery": true,
+        "history_comments_are_not_backend_provenance": true,
+        "module_var_factor_effect": "ROOT_NORMAL_FLOW_ONLY_NOT_WORKER_AUTHORITY"
+      },
+      "rationale": "All9 completeforwardfunction/class/block/mutualrecursion/capturebodies preserved withinit. Modulevarfactor10 islegalROOTnormalflowread; noimplicitpure/worker-safeclassification. Functionitemsarehoisted,valuesarenotpreinitialized.",
+      "packages": [
+        "P08",
+        "P09",
+        "P10"
+      ],
+      "legacy_case": null,
+      "status": "PREPARED_NOT_EXECUTED",
+      "execution": {
+        "vm": "NOT_RUN",
+        "native": "NOT_RUN"
+      },
+      "new_entry": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "remaining_qualification": [
+        "Fresh full actualtestentry/discovery andqualifieddriver mustindependently verifyeverymappedbody/value, sourceorder/context andeffects; no build/banner/equal-wrongresult grantsqualification.",
+        "Actualcanonicalcallable/capture/frame/default/error/Iterator/Equal/record/formatter/ROOTproof andtargetprovider interfacesremainOPEN; no guessedAPI, alias orlegacycompatibilitypath.",
+        "FullactualVM/native/FI/resource/lifetime/borrow/cancel/physical/safety/generated-C/provider/platformgates remainrequired. Keepall100/500/1000/10000/100000 pressure andP20mixeddirections."
+      ],
+      "execution_source": "tests/unit/xir/legacy_consumers/fixtures/control_function_ports/0570_hoisting/root.xr",
+      "execution_entry": "test"
+    },
+    {
+      "id": "regression_core_review_0580_default_params",
+      "inputs": [
+        {
+          "path": "tests/regression/05_functions/0580_default_params.xr",
+          "lf_sha256": "c549c838e656f93cbbf96f80acace7a6dbf1f3a062396fa00acfbf1c3a98f8c4",
+          "role": "preserved_source"
+        },
+        {
+          "path": "tests/unit/xir/legacy_consumers/fixtures/control_function_ports/0580_default_params/root.xr",
+          "lf_sha256": "41f854bc8d6c1bae3b086ff6ecee0d812ad9d5db02929250c7ed3dc52d5904fa",
+          "role": "complete_selected_source_draft"
+        },
+        {
+          "path": "spec/source/sections/003-2-type-system.md",
+          "lf_sha256": "f4e970b0cc728c19f65a4d1b2a13cd0e572431dcac3f6f20cd06d23046ebea8a",
+          "role": "frozen_spec"
+        },
+        {
+          "path": "spec/source/sections/004-3-expressions.md",
+          "lf_sha256": "3aeabb14d154ef235fe51c665a7d367c2e51dc2c6f5261a9e0b194b228a9b945",
+          "role": "frozen_spec"
+        },
+        {
+          "path": "spec/source/sections/006-5-declarations.md",
+          "lf_sha256": "56fa3d36bc0c5ee38b7c52dafbe26d7b8b0a45a6909c14a8626a9bba515cc4a7",
+          "role": "frozen_spec"
+        },
+        {
+          "path": "spec/source/sections/009-8-error-handling.md",
+          "lf_sha256": "569cafb786430df363674f97f6073e908d76b4a3484f3fb26239b0895342507e",
+          "role": "frozen_spec"
+        },
+        {
+          "path": "spec/source/sections/011-10-concurrency-and-coroutines.md",
+          "lf_sha256": "75424eb2e981feaa5a24430abdc1a5853c9b87a3adc360cb68588e07da09f264",
+          "role": "frozen_spec"
+        }
+      ],
+      "expected": {
+        "exit_code": 0,
+        "required_test_names": [
+          "test_default_params"
+        ],
+        "all_required_tests_passed": true,
+        "per_test_observations": {
+          "test_default_params": {
+            "values": [
+              "Hello, World",
+              "Hello, Alice",
+              111,
+              103,
+              6,
+              [
+                0,
+                0
+              ],
+              [
+                5,
+                0
+              ],
+              [
+                5,
+                10
+              ],
+              "John Unknown",
+              "John Doe"
+            ]
+          }
+        },
+        "complete_original_named_bodies_preserved": true,
+        "textual_names_are_not_runtime_discovery": true,
+        "history_comments_are_not_backend_provenance": true,
+        "body_stdout_utf8": "Hello, World\nHello, Alice\n111\n103\n6\n0 0\n5 0\n5 10\nJohn Unknown\nJohn Doe\n",
+        "original_body_calls_preserved_exactly_once": true
+      },
+      "rationale": "Onecompletebodykeepsall10exactstdoutlines,everyoriginalcallexactlyonce. Ownedbindings/purevalueassertionsreplaceprint-onlysmoke; omissiondefaults applyonlydirectnamedcalls, explicitargsdo nottriggerdefaults, callableindirectarity isnotrelaxed.",
+      "packages": [
+        "P08",
+        "P09",
+        "P10"
+      ],
+      "legacy_case": null,
+      "status": "PREPARED_NOT_EXECUTED",
+      "execution": {
+        "vm": "NOT_RUN",
+        "native": "NOT_RUN"
+      },
+      "new_entry": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "remaining_qualification": [
+        "Fresh full actualtestentry/discovery andqualifieddriver mustindependently verifyeverymappedbody/value, sourceorder/context andeffects; no build/banner/equal-wrongresult grantsqualification.",
+        "Actualcanonicalcallable/capture/frame/default/error/Iterator/Equal/record/formatter/ROOTproof andtargetprovider interfacesremainOPEN; no guessedAPI, alias orlegacycompatibilitypath.",
+        "FullactualVM/native/FI/resource/lifetime/borrow/cancel/physical/safety/generated-C/provider/platformgates remainrequired. Keepall100/500/1000/10000/100000 pressure andP20mixeddirections."
+      ],
+      "execution_source": "tests/unit/xir/legacy_consumers/fixtures/control_function_ports/0580_default_params/root.xr",
+      "execution_entry": "test"
+    },
+    {
+      "id": "regression_core_review_0581_function_item_value_binding",
+      "inputs": [
+        {
+          "path": "tests/regression/05_functions/0581_function_item_value_binding.xr",
+          "lf_sha256": "37867d162330f40608430da48b07453dceb0d7f16abafee2834930f2abd38422",
+          "role": "preserved_source"
+        },
+        {
+          "path": "spec/source/sections/003-2-type-system.md",
+          "lf_sha256": "f4e970b0cc728c19f65a4d1b2a13cd0e572431dcac3f6f20cd06d23046ebea8a",
+          "role": "frozen_spec"
+        },
+        {
+          "path": "spec/source/sections/004-3-expressions.md",
+          "lf_sha256": "3aeabb14d154ef235fe51c665a7d367c2e51dc2c6f5261a9e0b194b228a9b945",
+          "role": "frozen_spec"
+        },
+        {
+          "path": "spec/source/sections/006-5-declarations.md",
+          "lf_sha256": "56fa3d36bc0c5ee38b7c52dafbe26d7b8b0a45a6909c14a8626a9bba515cc4a7",
+          "role": "frozen_spec"
+        },
+        {
+          "path": "spec/source/sections/009-8-error-handling.md",
+          "lf_sha256": "569cafb786430df363674f97f6073e908d76b4a3484f3fb26239b0895342507e",
+          "role": "frozen_spec"
+        },
+        {
+          "path": "spec/source/sections/011-10-concurrency-and-coroutines.md",
+          "lf_sha256": "75424eb2e981feaa5a24430abdc1a5853c9b87a3adc360cb68588e07da09f264",
+          "role": "frozen_spec"
+        }
+      ],
+      "expected": {
+        "exit_code": 0,
+        "required_test_names": [
+          "test_function_item_hoists_before_definition",
+          "test_const_function_value_call_after_binding",
+          "test_var_function_value_can_rebind",
+          "test_function_item_recursion"
+        ],
+        "all_required_tests_passed": true,
+        "per_test_observations": {
+          "test_function_item_hoists_before_definition": {
+            "values": [
+              42
+            ]
+          },
+          "test_const_function_value_call_after_binding": {
+            "values": [
+              42
+            ]
+          },
+          "test_var_function_value_can_rebind": {
+            "values": [
+              11,
+              42
+            ]
+          },
+          "test_function_item_recursion": {
+            "values": [
+              120
+            ]
+          }
+        },
+        "complete_original_named_bodies_preserved": true,
+        "textual_names_are_not_runtime_discovery": true,
+        "history_comments_are_not_backend_provenance": true,
+        "only_function_items_are_hoisted": true
+      },
+      "rationale": "All4 retainforwardfnitem42,initializedconstcallable42,varcallable11thenrebound42,recursiveitem120. No hoisting/preinitializing functionvalues or freezingmutablecallablebinding.",
+      "packages": [
+        "P02",
+        "P07",
+        "P08",
+        "P09",
+        "P10"
+      ],
+      "legacy_case": null,
+      "status": "PREPARED_NOT_EXECUTED",
+      "execution": {
+        "vm": "NOT_RUN",
+        "native": "NOT_RUN"
+      },
+      "new_entry": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "remaining_qualification": [
+        "Fresh full actualtestentry/discovery andqualifieddriver mustindependently verifyeverymappedbody/value, sourceorder/context andeffects; no build/banner/equal-wrongresult grantsqualification.",
+        "Actualcanonicalcallable/capture/frame/default/error/Iterator/Equal/record/formatter/ROOTproof andtargetprovider interfacesremainOPEN; no guessedAPI, alias orlegacycompatibilitypath.",
+        "FullactualVM/native/FI/resource/lifetime/borrow/cancel/physical/safety/generated-C/provider/platformgates remainrequired. Keepall100/500/1000/10000/100000 pressure andP20mixeddirections."
+      ],
+      "execution_source": "tests/regression/05_functions/0581_function_item_value_binding.xr",
       "execution_entry": "test"
     }
   ]

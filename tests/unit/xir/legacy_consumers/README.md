@@ -189,7 +189,7 @@ platform success. All actual backend/provider/FI/physical gates stay OPEN.
 
 Every original runner input and entry is now explicitly routed. Check/snapshot
 gates reject an omitted input even when historical anchors still match it.
-This is not full named semantic review:85 early regression test files still
+This is not full named semantic review:58 early regression test files still
 need complete per-name obligations, which are counted separately. Network
 drafts preserve all real setup, byte/framing/timeout/half-close/child lifetime
 duties; listener or TLS skips never qualify provider capability. RFC HPACK and
@@ -202,3 +202,11 @@ NaN loops, unsigned digits, actual radix spellings and outer Some(inner None)
 remain exact. Decimal-only float separator labels grant no lexical coverage;
 unpublished canonical queries and nested Optional/reverse replacement duties
 remain abstract. No prepared source or comparison qualifies product execution.
+
+Control/function review preserves all276 newly bound named bodies and values,
+including labeled targets/latches,100000-depth inputs, independent capture
+cells, full returned payloads and exact default stdout. Panic and enum errors
+stay separate; direct/indirect callees observe held state before cleanup.
+Owned callback captures register their cycle break before allocation-sensitive
+assignments; actual FI/physical/frame/TCO and canonical Iterator/JSON proof
+remain unqualified. Function values never inherit item hoisting or defaults.

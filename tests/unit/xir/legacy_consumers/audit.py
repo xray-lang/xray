@@ -246,6 +246,24 @@ FROZEN_TARGETS['tests/regression/03_operators/0302_uint64_print_compare.xr'] = (
 
 FROZEN_TARGETS['tests/regression/03_operators/0362_bigint_comparison.xr'] = ('POSITIVE_COMPLETE_CORE_AFTER_FROZEN_PORT', 'P09')
 
+CORE_NAMED_REVIEW += ('tests/regression/04_control_flow/0400_if.xr', 'tests/regression/04_control_flow/0410_while.xr', 'tests/regression/04_control_flow/0413_null_unwrap.xr', 'tests/regression/04_control_flow/0420_for.xr', 'tests/regression/04_control_flow/0430_for_in.xr', 'tests/regression/04_control_flow/0431_for_in_try_scope.xr', 'tests/regression/04_control_flow/0440_match.xr', 'tests/regression/04_control_flow/0441_match_tuple.xr', 'tests/regression/04_control_flow/0442_match_struct_destructure.xr', 'tests/regression/04_control_flow/0445_is_type_pattern.xr', 'tests/regression/04_control_flow/0450_break_continue.xr', 'tests/regression/04_control_flow/0451_labeled_break_continue.xr', 'tests/regression/04_control_flow/0460_early_return.xr', 'tests/regression/05_functions/0500_basic.xr', 'tests/regression/05_functions/0510_recursion.xr', 'tests/regression/05_functions/0511_self_recursive_iterator.xr', 'tests/regression/05_functions/0511_tail_recursion.xr', 'tests/regression/05_functions/0512_defer_around_return_call.xr', 'tests/regression/05_functions/0520_closure.xr', 'tests/regression/05_functions/0521_cell_upval.xr', 'tests/regression/05_functions/0530_arrow.xr', 'tests/regression/05_functions/0531_bare_lambda.xr', 'tests/regression/05_functions/0540_higher_order.xr', 'tests/regression/05_functions/0560_method_chaining.xr', 'tests/regression/05_functions/0570_hoisting.xr', 'tests/regression/05_functions/0580_default_params.xr', 'tests/regression/05_functions/0581_function_item_value_binding.xr')
+FROZEN_TARGETS['tests/regression/04_control_flow/0413_null_unwrap.xr'] = ('POSITIVE_COMPLETE_CONTROL_FUNCTION_AFTER_FROZEN_PORT', 'P10')
+FROZEN_TARGETS['tests/regression/04_control_flow/0445_is_type_pattern.xr'] = ('POSITIVE_COMPLETE_CONTROL_FUNCTION_AFTER_FROZEN_PORT', 'P10')
+FROZEN_TARGETS['tests/regression/05_functions/0500_basic.xr'] = ('POSITIVE_COMPLETE_CONTROL_FUNCTION_AFTER_FROZEN_PORT', 'P10')
+FROZEN_TARGETS['tests/regression/05_functions/0511_tail_recursion.xr'] = ('POSITIVE_COMPLETE_CONTROL_FUNCTION_AFTER_FROZEN_PORT', 'P10')
+FROZEN_TARGETS['tests/regression/05_functions/0530_arrow.xr'] = ('POSITIVE_COMPLETE_CONTROL_FUNCTION_AFTER_FROZEN_PORT', 'P10')
+FROZEN_TARGETS['tests/regression/05_functions/0540_higher_order.xr'] = ('POSITIVE_COMPLETE_CONTROL_FUNCTION_AFTER_FROZEN_PORT', 'P10')
+FROZEN_TARGETS['tests/regression/05_functions/0560_method_chaining.xr'] = ('POSITIVE_COMPLETE_CONTROL_FUNCTION_AFTER_FROZEN_PORT', 'P10')
+FROZEN_TARGETS['tests/regression/05_functions/0570_hoisting.xr'] = ('POSITIVE_COMPLETE_CONTROL_FUNCTION_AFTER_FROZEN_PORT', 'P10')
+FROZEN_TARGETS['tests/regression/05_functions/0580_default_params.xr'] = ('POSITIVE_COMPLETE_CONTROL_FUNCTION_AFTER_FROZEN_PORT', 'P10')
+FROZEN_TARGETS['tests/regression/05_functions/0512_defer_around_return_call.xr'] = ('POSITIVE_COMPLETE_CONTROL_FUNCTION_AFTER_FROZEN_PORT', 'P10')
+
+FROZEN_TARGETS['tests/regression/04_control_flow/0410_while.xr'] = ('POSITIVE_COMPLETE_CONTROL_FUNCTION_AFTER_FROZEN_PORT', 'P10')
+
+FROZEN_TARGETS['tests/regression/04_control_flow/0420_for.xr'] = ('POSITIVE_COMPLETE_CONTROL_FUNCTION_AFTER_FROZEN_PORT', 'P10')
+
+FROZEN_TARGETS['tests/regression/05_functions/0511_self_recursive_iterator.xr'] = ('POSITIVE_COMPLETE_CONTROL_FUNCTION_AFTER_FROZEN_PORT', 'P10')
+
 def load_module(name: str, relative: str):
     spec = importlib.util.spec_from_file_location(name, ROOT / relative)
     module = importlib.util.module_from_spec(spec)

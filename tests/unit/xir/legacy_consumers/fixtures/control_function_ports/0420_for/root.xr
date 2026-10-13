@@ -1,0 +1,200 @@
+// 0420_for.xr
+// 作者：xingleixu@gmail.com
+// 测试：for 循环
+
+// ===== 基础 for =====
+
+@test
+fn test_for_count_up() {
+    var sum = 0
+    for (var i = 0; i < 5; i++) {
+        sum += i
+    }
+    assertEqual(sum, 10)  // 0+1+2+3+4
+}
+
+@test
+fn test_for_count_down() {
+    var sum = 0
+    for (var i = 5; i > 0; i--) {
+        sum += i
+    }
+    assertEqual(sum, 15)  // 5+4+3+2+1
+}
+
+@test
+fn test_for_start_from_one() {
+    var sum = 0
+    for (var i = 1; i <= 5; i++) {
+        sum += i
+    }
+    assertEqual(sum, 15)  // 1+2+3+4+5
+}
+
+// ===== 步进 =====
+
+@test
+fn test_for_step_two() {
+    var sum = 0
+    for (var i = 0; i < 10; i += 2) {
+        sum += i
+    }
+    assertEqual(sum, 20)  // 0+2+4+6+8
+}
+
+@test
+fn test_for_step_three() {
+    var result: Array<i64> = []
+    for (var i = 0; i < 10; i += 3) {
+        result.push(i)
+    }
+    assertEqual(len(result), 4)  // [0,3,6,9]
+    assertEqual(result, [0, 3, 6, 9])
+}
+
+// ===== 边界条件 =====
+
+@test
+fn test_for_never_run() {
+    var count = 0
+    for (var i = 10; i < 0; i++) {
+        count++
+    }
+    assertEqual(count, 0)
+}
+
+@test
+fn test_for_once() {
+    var count = 0
+    for (var i = 0; i < 1; i++) {
+        count++
+    }
+    assertEqual(count, 1)
+}
+
+// ===== break =====
+
+@test
+fn test_for_break() {
+    var last = 0
+    for (var i = 0; i < 10; i++) {
+        if (i == 5) {
+            break
+        }
+        last = i
+    }
+    assertEqual(last, 4)
+}
+
+@test
+fn test_for_break_early() {
+    var sum = 0
+    for (var i = 0; i < 100; i++) {
+        sum += i
+        if (sum > 10) {
+            break
+        }
+    }
+    assertEqual(sum, 15)  // 0+1+2+3+4+5
+}
+
+// ===== continue =====
+
+@test
+fn test_for_continue() {
+    var sum = 0
+    for (var i = 0; i < 10; i++) {
+        if (i % 2 == 0) {
+            continue
+        }
+        sum += i
+    }
+    assertEqual(sum, 25)  // 1+3+5+7+9
+}
+
+@test
+fn test_for_continue_first() {
+    var result: Array<i64> = []
+    for (var i = 0; i < 5; i++) {
+        if (i == 0) {
+            continue
+        }
+        result.push(i)
+    }
+    assertEqual(len(result), 4)
+    assertEqual(result, [1, 2, 3, 4])
+}
+
+// ===== 嵌套 for =====
+
+@test
+fn test_for_nested() {
+    var total = 0
+    for (var i = 0; i < 3; i++) {
+        for (var j = 0; j < 3; j++) {
+            total++
+        }
+    }
+    assertEqual(total, 9)
+}
+
+@test
+fn test_for_multiplication_table() {
+    var sum = 0
+    for (var i = 1; i <= 3; i++) {
+        for (var j = 1; j <= 3; j++) {
+            sum += i * j
+        }
+    }
+    // (1+2+3) + (2+4+6) + (3+6+9) = 6+12+18 = 36
+    assertEqual(sum, 36)
+}
+
+@test
+fn test_for_nested_break() {
+    var count = 0
+    for (var i = 0; i < 5; i++) {
+        for (var j = 0; j < 5; j++) {
+            count++
+            if (j == 2) {
+                break  // 只跳出内层
+            }
+        }
+    }
+    assertEqual(count, 15)  // 5 * 3
+}
+
+// ===== 外层变量访问 =====
+
+@test
+fn test_for_outer_variable() {
+    var x = 100
+    for (var i = 0; i < 3; i++) {
+        x += i
+    }
+    assertEqual(x, 103)  // 100+0+1+2
+}
+
+@test
+fn test_for_collect() {
+    var result: Array<i64> = []
+    for (var i = 0; i < 5; i++) {
+        result.push(i * i)
+    }
+    assertEqual(len(result), 5)
+    assertEqual(result[0], 0)
+    assertEqual(result[4], 16)
+    assertEqual(result, [0, 1, 4, 9, 16])
+}
+
+// ===== 特殊用法 =====
+
+@test
+fn test_for_expression_init() {
+    var start = 5
+    var sum = 0
+    for (var i = start; i < start + 3; i++) {
+        sum += i
+    }
+    assertEqual(sum, 18)  // 5+6+7
+}

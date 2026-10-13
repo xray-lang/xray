@@ -40,10 +40,10 @@ class PreparationChecks(unittest.TestCase):
 
     def test_core_named_manifest_and_per_test_values_cannot_be_omitted(self):
         counts = self.validate_runner_routes(self.runner_routes)
-        self.assertEqual(counts['unreviewed_named_regression_test_files'], 85)
+        self.assertEqual(counts['unreviewed_named_regression_test_files'], 58)
         rows = [r for r in self.oracles['cases'] if r['id'].startswith('regression_core_review_')]
-        self.assertEqual(len(rows), 44)
-        self.assertEqual(sum(len(r['expected']['per_test_observations']) for r in rows), 485)
+        self.assertEqual(len(rows), 71)
+        self.assertEqual(sum(len(r['expected']['per_test_observations']) for r in rows), 761)
         bad = copy.deepcopy(self.oracles)
         row = next(r for r in bad['cases'] if r['id'] == 'regression_core_review_0301_int64_overflow')
         row['expected']['per_test_observations'].pop('test_div_min_neg_one_in_loop')
@@ -153,6 +153,104 @@ class PreparationChecks(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'cannot pose as an executable'):
             audit.validate_oracles(bad)
 
+    def test_control_named_values_and_full_projected_sequences_remain_required(self):
+        expected = self.core_expected('0410_while')
+        wrong = copy.deepcopy(expected)
+        wrong['per_test_observations']['test_while_continue_and_break']['values'][0] = [1,3,5,9]
+        with self.assertRaises(ValueError):
+            audit.compare_required(expected, wrong)
+        bad, row = self.mutated_runner_route('tests/regression/04_control_flow/0451_labeled_break_continue.xr')
+        del row['original_named_test_obligation']
+        with self.assertRaisesRegex(ValueError, 'named source obligations'):
+            self.validate_runner_routes(bad)
+
+    def test_panic_faults_cannot_be_ordinary_errors_or_compile_only_rejections(self):
+        for name,key in (('0413_null_unwrap','null_unwrap_channel'),('0440_match','non_exhaustive_match_channel')):
+            expected = self.core_expected(name)
+            for channel in ('ORDINARY_ERROR','COMPILE_REJECTION','PASS'):
+                with self.assertRaises(ValueError):
+                    audit.compare_required(expected, dict(expected, **{key:channel}))
+
+    def test_labeled_continue_must_reach_correct_outer_increment_and_trace(self):
+        expected = self.core_expected('0451_labeled_break_continue')
+        for name,wrong_values in (('test_labeled_break_exits_named_for_in',['00,01,10,11,20,21,']),
+                                  ('test_labeled_continue_targets_named_for_in',['00,01,10,11,20,21,']),
+                                  ('test_labeled_continue_targets_traditional_for_increment',[4])):
+            wrong = copy.deepcopy(expected)
+            wrong['per_test_observations'][name]['values'] = wrong_values
+            with self.assertRaises(ValueError):
+                audit.compare_required(expected, wrong)
+
+    def test_deep_tail_input_or_result_does_not_establish_physical_tco(self):
+        expected = self.core_expected('0511_tail_recursion')
+        for wrong in (dict(expected, retained_deep_inputs=[100,100,100]),
+                      dict(expected, actual_tco_frame_stack_proof='PASS')):
+            with self.assertRaises(ValueError):
+                audit.compare_required(expected, wrong)
+        expected = self.core_expected('0510_recursion')
+        with self.assertRaises(ValueError):
+            audit.compare_required(expected, dict(expected, retained_depth_inputs=[10,50]))
+
+    def test_indirect_callee_observes_held_before_cleanup_and_capture_allocation(self):
+        expected = self.core_expected('0512_defer_around_return_call')
+        for key in ('indirect_callee_held_until_return','cleanup_after_actual_callee',
+                    'indirect_owned_capture_cycle_has_scoped_break',
+                    'scoped_break_registered_before_first_capture_assignment'):
+            with self.assertRaises(ValueError):
+                audit.compare_required(expected, dict(expected, **{key:False}))
+        row = next(r for r in self.runner_routes['cases'] if r['case_id'].endswith('/0512_defer_around_return_call.xr'))
+        source = (audit.ROOT/row['target_source_port']['fixture']).read_text(encoding='utf-8')
+        self.assertEqual(source.count('assertEqual(g.held, true)'),4)
+        self.assertLess(source.index('defer { g.handlers.clear() }'),source.index('g.handlers[0] = fn'))
+
+    def test_shared_or_independent_closure_cells_cannot_be_replaced_by_one_counter(self):
+        expected = self.core_expected('0521_cell_upval')
+        wrong = copy.deepcopy(expected)
+        wrong['per_test_observations']['test_two_cells']['values'] = [1,2,3,4]
+        with self.assertRaises(ValueError):
+            audit.compare_required(expected, wrong)
+        for wrong in (dict(expected, retained_independent_instances=1),dict(expected, retained_additions=10)):
+            with self.assertRaises(ValueError):
+                audit.compare_required(expected, wrong)
+        expected = self.core_expected('0520_closure')
+        with self.assertRaises(ValueError):
+            audit.compare_required(expected, dict(expected, fresh_loop_bindings_values=[3,3,3]))
+
+    def test_function_unit_is_not_null_or_an_erased_debug_name(self):
+        expected = self.core_expected('0500_basic')
+        for value in (None,'()'):
+            wrong = copy.deepcopy(expected)
+            wrong['per_test_observations']['test_empty_function']['values'] = [value]
+            with self.assertRaises(ValueError):
+                audit.compare_required(expected, wrong)
+
+    def test_default_stdout_and_original_single_call_duties_cannot_be_smoke(self):
+        expected = self.core_expected('0580_default_params')
+        for wrong in (dict(expected, body_stdout_utf8='Hello, World\n'),
+                      dict(expected, original_body_calls_preserved_exactly_once=False)):
+            with self.assertRaises(ValueError):
+                audit.compare_required(expected, wrong)
+        row = next(r for r in self.runner_routes['cases'] if r['case_id'].endswith('/0580_default_params.xr'))
+        source = (audit.ROOT/row['target_source_port']['fixture']).read_text(encoding='utf-8')
+        self.assertEqual(source.count('= add(1)'),1)
+        self.assertEqual(source.count('= formatName("John")'),1)
+
+    def test_fn_items_generic_optional_and_synchronous_callback_are_distinct(self):
+        expected = self.core_expected('0581_function_item_value_binding')
+        with self.assertRaises(ValueError):
+            audit.compare_required(expected, dict(expected, only_function_items_are_hoisted=False))
+        expected = self.core_expected('0540_higher_order')
+        for key in ('typed_optional_identity_none_and_some_zero_required','processAsync_is_only_synchronous_body'):
+            with self.assertRaises(ValueError):
+                audit.compare_required(expected, dict(expected, **{key:False}))
+
+    def test_unpublished_generator_iterator_cannot_pose_as_qualified_execution_source(self):
+        bad = copy.deepcopy(self.oracles)
+        row = next(r for r in bad['cases'] if r['id']=='regression_core_review_0431_for_in_try_scope')
+        row['execution_source'] = row['inputs'][0]['path']
+        with self.assertRaisesRegex(ValueError,'cannot pose as an executable'):
+            audit.validate_oracles(bad)
+
     def mutated_runner_route(self, identity):
         # Preserve the complete input set, copying only the row under mutation.
         # Check that row first so a negative control fails before rereading all
@@ -167,7 +265,7 @@ class PreparationChecks(unittest.TestCase):
         audit.require_full_explicit_runner_coverage(counts)
         self.assertEqual(counts["unreviewed_runner_inputs"], 0)
         self.assertEqual(counts["unreviewed_runner_entry_links"], 0)
-        self.assertEqual(counts["unreviewed_named_regression_test_files"], 85)
+        self.assertEqual(counts["unreviewed_named_regression_test_files"], 58)
         bad = copy.deepcopy(self.runner_routes)
         bad["cases"] = [r for r in bad["cases"] if not r["case_id"].endswith("/1500_project_mode_detect.xr")]
         counts = self.validate_runner_routes(bad)
@@ -1361,7 +1459,7 @@ class PreparationChecks(unittest.TestCase):
         self.assertNotIn("ref useHandler", source)
         for name in ("defer_runs_after_a_returned_parameter_call", "defer_runs_after_a_returned_indirect_call"):
             self.assertIn("@test fn " + name, source)
-        self.assertEqual(source.count("assertEqual(g.held, true)"), 2)
+        self.assertEqual(source.count("assertEqual(g.held, true)"), 4)
 
     def test_target_source_port_is_not_a_qualified_product(self):
         bad = copy.deepcopy(self.runner_routes)
