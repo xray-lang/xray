@@ -15,6 +15,7 @@
 #include "xir/xxir_checked.h"
 #include "xir/xxir_generic.h"
 #include "xir/xxir_vm.h"
+#include "xir/xxir_emit_c.h"
 #include "toolchain/xcompiler_session.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -57,7 +58,7 @@ static void execute_answer(XrXirProgram *program, uint32_t entry, int64_t expect
     }
 }
 
-static void accept_packet(SourceFixtureOwner *owner, XrXirSourceResult *source, XrCompilerSession *session, int64_t expected) {
+static void accept_packet(SourceFixtureOwner *owner, XrXirSourceResult *source, XrCompilerSession *session, int64_t expected, const char *output) {
     XrXirCheckedPacket packet = {0};
     CHECK(xr_xir_compile_checked_write(source->checked, &packet, NULL) == XR_XIR_OK);
     /* No source arena, AST or session may supply the reconstructed consumer. */
@@ -72,13 +73,22 @@ static void accept_packet(SourceFixtureOwner *owner, XrXirSourceResult *source, 
     const XrXirTarget target = {XR_XIR_ARCH_X86_64, XR_XIR_VALUE_ABI_VERSION};
     CHECK(xr_xir_compile_lower(specialized, &target, &lowered, &diagnostic) == XR_XIR_OK && lowered);
     xr_xir_compile_artifact_free(specialized);
+    if (output) {
+        XrXirCSource emitted = {0};
+        CHECK(xr_xir_compile_emit_c(lowered, "language_reference", 1048576, &emitted) == XR_XIR_OK);
+        CHECK(emitted.text && emitted.length && emitted.length < 1048576);
+        FILE *file = fopen(output, "wb");
+        CHECK(file && fwrite(emitted.text, 1, emitted.length, file) == emitted.length && !fclose(file));
+        xr_xir_compile_c_source_free(&emitted);
+    }
     uint32_t entry = answer_entry(lowered); XrXirProgram *program = NULL;
     CHECK(xr_xir_compile_vm_program_take(&lowered, &program) == XR_XIR_OK && !lowered);
     execute_answer(program, entry, expected);
 }
 
 int main(int argc, char **argv) {
-    CHECK((argc == 4 && !strcmp(argv[1], "--accept")) || (argc == 5 && !strcmp(argv[1], "--reject")));
+    CHECK((argc == 4 && !strcmp(argv[1], "--accept")) ||
+          (argc == 5 && (!strcmp(argv[1], "--reject") || !strcmp(argv[1], "--emit"))));
     char path[1024]; int length = snprintf(path, sizeof(path), "%s/%s.xr", XR_LANGUAGE_FIXTURES, argv[2]);
     CHECK(length > 0 && (size_t)length < sizeof(path));
     SourceFixtureOwner owner = {0}; source_fixture_owner_new(&owner);
@@ -99,7 +109,7 @@ int main(int argc, char **argv) {
         xr_xir_compile_source_result_free(&result); xr_compile_session_free(session);
     } else {
         CHECK(status == XR_XIR_OK && result.checked && result.snapshot);
-        accept_packet(&owner, &result, session, expected);
+        accept_packet(&owner, &result, session, expected, !strcmp(argv[1], "--emit") ? argv[4] : NULL);
     }
     source_fixture_owner_free(&owner);
     printf("%s independent expectation passed; compiler ledger restored\n", argv[2]); return 0;
