@@ -3,5 +3,10 @@ export fn returned()->string { defer { print(10) }; return callee.returned() }
 export fn thrown()->i64 { defer { print(20) }; return callee.thrown() }
 export fn panicked()->i64 { defer { print(30) }; return callee.panicked() }
 fn callback()->i64 { print(41); return 21 }
-export fn crossed()->i64 { return callee.crossed(callback) }
+export fn crossed()->i64 {
+    print(39)
+    const value = callee.crossed(callback)
+    print(43)
+    return value
+}
 export fn escaped()->fn()->string { return callee.escaped("captured") }

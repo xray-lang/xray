@@ -69,15 +69,22 @@ static XrXirProgram *terminal_program(TerminalBackend backend) {
     CHECK(xr_xir_compile_program_seal(&context, &spec, &program) == XR_XIR_OK && program);
     return program;
 }
-typedef struct TerminalTrace { unsigned kind, count; } TerminalTrace;
+typedef struct TerminalTrace {
+    unsigned kind, count, root_bodies, callee_bodies, callback_bodies;
+} TerminalTrace;
 static XrXirOutputStatus terminal_output(void *pointer, const XrXirOutputGroup *group) {
     TerminalTrace *trace = pointer;
-    CHECK(trace->kind < 4 && trace->count < (trace->kind == 3 ? 4u : 2u));
-    const int64_t crossed[] = {40,41,42,41};
+    CHECK(trace->kind < 4 && trace->count < (trace->kind == 3 ? 6u : 2u));
+    const int64_t crossed[] = {39,40,41,42,41,43};
     const int64_t expected = trace->kind == 3 ? crossed[trace->count] :
         (int64_t)(trace->kind + 1) * 10 + (trace->count ? 0 : 1);
     CHECK(group->count == 1 && group->line && group->stream == XR_XIR_STDOUT);
     CHECK(group->values[0].type == XR_XIR_I64 && group->values[0].payload == expected);
+    if (trace->kind == 3) {
+        if (expected == 39) ++trace->root_bodies;
+        else if (expected == 40) ++trace->callee_bodies;
+        else if (expected == 41) ++trace->callback_bodies;
+    }
     ++trace->count;
     return XR_XIR_OUTPUT_OK;
 }
@@ -184,6 +191,34 @@ static void terminal_closure(TerminalBackend backend) {
     xr_xir_value_drop(&late_alias);
     CHECK(terminal_code_releases == released + 1 && !runtime_live && !runtime_bytes);
 }
+static void terminal_crossed_pair(XrXirInstance *instances[2], TerminalTrace traces[2]) {
+    for (unsigned round = 0; round < 2; ++round) {
+        for (unsigned i = 0; i < 2; ++i) {
+            traces[i].count = 0;
+            CHECK(xr_xir_instance_start(instances[i], terminal_fixture_functions[3], NULL, 0) == XR_XIR_CALL_READY);
+        }
+        bool done[2] = {false, false}; unsigned polls = 0;
+        while (!done[0] || !done[1]) {
+            for (unsigned i = 0; i < 2; ++i) {
+                if (done[i]) continue;
+                TerminalTrace peer = traces[1-i];
+                XrXirCallStatus status = xr_xir_instance_poll_bounded(instances[i], 1).outcome.status;
+                CHECK(++polls < 4096);
+                CHECK(!memcmp(&peer, &traces[1-i], sizeof(peer)));
+                CHECK(status == XR_XIR_CALL_READY || status == XR_XIR_CALL_RETURNED);
+                done[i] = status == XR_XIR_CALL_RETURNED;
+            }
+        }
+        for (unsigned i = 0; i < 2; ++i) {
+            CHECK(traces[i].count == 6 && traces[i].root_bodies == round + 1);
+            CHECK(traces[i].callee_bodies == round + 1 && traces[i].callback_bodies == 2 * (round + 1));
+            XrXirValue crossed = {0};
+            CHECK(xr_xir_instance_take_result(instances[i], &crossed) == XR_XIR_CALL_RETURNED);
+            CHECK(crossed.type == XR_XIR_I64 && crossed.payload == 42);
+            xr_xir_value_drop(&crossed);
+        }
+    }
+}
 int main(int argc, char **argv) {
     CHECK(argc == 2);
     unsigned selected = 0;
@@ -192,12 +227,12 @@ int main(int argc, char **argv) {
     const TerminalBackend backend = (TerminalBackend)selected;
     CHECK(!runtime_live && !runtime_bytes);
     XrXirProgram *program = terminal_program(backend);
-    XrXirInstance *instances[7] = {0}; TerminalTrace traces[7] = {0};
+    XrXirInstance *instances[8] = {0}; TerminalTrace traces[8] = {0};
     XrXirCallResult retained[3] = {{0}};
-    for (unsigned i = 0; i < 7; ++i) {
+    for (unsigned i = 0; i < 8; ++i) {
         XrXirInstanceConfig config;
         CHECK(xr_xir_instance_config_init(&config, sizeof(config)) == XR_XIR_CALL_READY);
-        traces[i].kind = i == 6 ? 3 : i % 3;
+        traces[i].kind = i >= 6 ? 3 : i % 3;
         config.output = (XrXirOutputProvider){XR_XIR_CALL_ABI_VERSION,0,terminal_output,&traces[i]};
         CHECK(xr_xir_instance_new(program, &config, &instances[i]) == XR_XIR_CALL_READY);
     }
@@ -207,21 +242,16 @@ int main(int argc, char **argv) {
         terminal_drive(instances[i], i % 3, i >= 3, &traces[i], &retained[i % 3]);
         CHECK(xr_xir_instance_free(instances[i]) == XR_XIR_CALL_READY);
         CHECK(!terminal_code_releases);
-        for (unsigned peer = i + 1; peer < 7; ++peer) CHECK(!traces[peer].count);
+        for (unsigned peer = i + 1; peer < 8; ++peer) CHECK(!traces[peer].count);
     }
-    CHECK(xr_xir_instance_start(instances[6], terminal_fixture_functions[3], NULL, 0) == XR_XIR_CALL_READY);
-    CHECK(xr_xir_instance_poll_bounded(instances[6], UINT64_MAX).outcome.status == XR_XIR_CALL_RETURNED);
-    CHECK(traces[6].count == 4);
-    XrXirValue crossed = {0};
-    CHECK(xr_xir_instance_take_result(instances[6], &crossed) == XR_XIR_CALL_RETURNED);
-    CHECK(crossed.type == XR_XIR_I64 && crossed.payload == 42);
-    xr_xir_value_drop(&crossed);
-    CHECK(xr_xir_instance_free(instances[6]) == XR_XIR_CALL_READY && terminal_code_releases == 1);
+    terminal_crossed_pair(&instances[6], &traces[6]);
+    CHECK(xr_xir_instance_free(instances[6]) == XR_XIR_CALL_READY && !terminal_code_releases);
+    CHECK(xr_xir_instance_free(instances[7]) == XR_XIR_CALL_READY && terminal_code_releases == 1);
     CHECK(runtime_live && runtime_bytes);
     terminal_retained(retained);
     CHECK(!runtime_live && !runtime_bytes);
     terminal_closure(backend);
     effects_source_owners_free();
-    printf("Terminal paths backend=%s return/throw/panic and three cancels, inner/outer cleanup, callback trace=40/41/42/41 result42, late events rejected, retained payloads, closure captured/read/copied after instances, revoked/cross-instance rejected, final code lease released once, physical=0/0\n", terminal_backend_names[backend]);
+    printf("Terminal paths backend=%s return/throw/panic and three cancels, inner/outer cleanup, crossed pair two rounds trace=39/40/41/42/41/43 result42 source bodies=1/1/2 per activation, peer unchanged, late events rejected, retained payloads, closure captured/read/copied after instances, revoked/cross-instance rejected, final code lease released once, physical=0/0\n", terminal_backend_names[backend]);
     return 0;
 }
