@@ -10,6 +10,47 @@ class PreparationChecks(unittest.TestCase):
     def setUpClass(cls):
         cls.mapping = audit.read_json(audit.HERE / "responsibilities.json")
         cls.oracles = audit.read_json(audit.HERE / "oracles.json")
+        cls.routes = audit.read_json(audit.HERE / "consumer_routes.json")
+        cls.legacy = audit.read_json(audit.ROOT / "tests/unit/xir/product_consumers/legacy_responsibilities.json")
+
+    def test_source_routes_preserve_all_original_responsibilities(self):
+        audit.validate_routes(self.routes, self.legacy, self.mapping)
+
+    def test_route_does_not_reassign_production_to_independent_validation(self):
+        bad = copy.deepcopy(self.routes)
+        bad["source_cases"][0]["producer_packages"] = ["P20"]
+        with self.assertRaises(ValueError):
+            audit.validate_routes(bad, self.legacy, self.mapping)
+
+    def test_source_route_omission_is_rejected(self):
+        bad = copy.deepcopy(self.routes)
+        bad["source_cases"].pop()
+        with self.assertRaisesRegex(ValueError, "responsibility set"):
+            audit.validate_routes(bad, self.legacy, self.mapping)
+
+    def test_route_cannot_borrow_another_cases_assertion_body(self):
+        bad = copy.deepcopy(self.routes)
+        bad["source_cases"][0]["body_lf_sha256"] = bad["source_cases"][1]["body_lf_sha256"]
+        with self.assertRaisesRegex(ValueError, "assertion body"):
+            audit.validate_routes(bad, self.legacy, self.mapping)
+
+    def test_harness_exit_is_not_the_language_result(self):
+        row = next(r for r in self.routes["source_cases"] if r["case_id"] ==
+                   "source_owner_runs_each_dense_coroutine_state_across_private_executors")
+        self.assertEqual(row["original_native_harness_expectation"]["expected_exit"], 227)
+        self.assertEqual(row["existing_projection"]["expected_i64"], 42)
+        bad = copy.deepcopy(self.routes)
+        target = next(r for r in bad["source_cases"] if r["case_id"] == row["case_id"])
+        target["original_native_harness_expectation"]["expected_exit"] = 42
+        with self.assertRaisesRegex(ValueError, "harness expectation"):
+            audit.validate_routes(bad, self.legacy, self.mapping)
+
+    def test_helper_file_without_counted_tests_is_not_removable(self):
+        bad = copy.deepcopy(self.routes)
+        helper = next(r for r in bad["other_files"] if not r["functions"])
+        bad["other_files"].remove(helper)
+        with self.assertRaisesRegex(ValueError, "helper owner"):
+            audit.validate_routes(bad, self.legacy, self.mapping)
 
     def test_complete_mapping(self):
         audit.validate_responsibilities(self.mapping)

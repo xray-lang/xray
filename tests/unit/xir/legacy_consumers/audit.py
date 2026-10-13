@@ -66,6 +66,45 @@ def validate_responsibilities(data: dict) -> None:
         raise ValueError("root-effect requirement set changed")
 
 
+def validate_routes(data: dict, legacy: dict, responsibilities: dict) -> dict:
+    """Preserve the full original responsibility set while assigning producers."""
+    families = {row["id"] for row in responsibilities["capabilities"]}
+    packages = {"P02"} | {f"P{i:02}" for i in range(6, 19)}
+    if data["status"] != "ROUTED_NOT_QUALIFIED":
+        raise ValueError("routing cannot publish product qualification")
+    originals = {row["name"]: row for row in legacy["source"]}
+    rows = data["source_cases"]
+    identities = [row["case_id"] for row in rows]
+    if len(set(identities)) != len(rows) or set(identities) != set(originals):
+        raise ValueError("source routing changed the original responsibility set")
+    for row in rows:
+        original = originals[row["case_id"]]
+        if row["primary_family"] not in families or not row["producer_packages"] or not set(row["producer_packages"]) <= packages:
+            raise ValueError("source routing has no known family or producer")
+        if row["body_lf_sha256"] != original["body_lf_sha256"] or row["legacy_path"] != original["legacy_path"]:
+            raise ValueError("source routing detached its original assertion body")
+        if row["original_native_harness_expectation"] != original["original_fixture"]:
+            raise ValueError("native harness expectation changed during routing")
+        if row["existing_projection"] != original.get("initial_projection"):
+            raise ValueError("source projection changed during routing")
+        if row["replacement_qualification"] != "OPEN" or row["new_entry_status"] != "PENDING_FIXED_PRODUCT_DELIVERY":
+            raise ValueError("routing cannot grant replacement qualification")
+    paths = [row["path"] for row in data["other_files"]]
+    originals_by_path = legacy["other_consumer_files"]
+    if len(set(paths)) != len(paths) or set(paths) != set(originals_by_path):
+        raise ValueError("other-file routing omitted a function or helper owner")
+    for row in data["other_files"]:
+        original = originals_by_path[row["path"]]
+        functions = [{"name": f["name"], "body_lf_sha256": f["body_lf_sha256"]} for f in original["functions"]]
+        if row["lf_sha256"] != original["lf_sha256"] or row["functions"] != functions:
+            raise ValueError("other-file routing changed original function obligations")
+        if (not row["producer_packages"] or not set(row["producer_packages"]) <= packages
+                or row["replacement_qualification"] != "OPEN" or row["assertion_mapping"] != "OPEN"):
+            raise ValueError("other-file routing is unowned or incorrectly qualified")
+    return {"source_routes": len(rows), "other_file_routes": len(paths),
+            "other_function_routes": sum(len(r["functions"]) for r in data["other_files"])}
+
+
 def compare_required(expected: dict, observed: dict) -> None:
     """Compare one observation to its independent oracle, never to another backend."""
     for key, value in expected.items():
@@ -158,6 +197,9 @@ def snapshot() -> dict:
         except (errors.ExpectedFormatError, OSError) as exc:
             row.update(expectation_parse="FAILED", expectation_error=str(exc).replace(str(ROOT), "<repository>"))
         negative.append(row)
+    routing = read_json(HERE / "consumer_routes.json")
+    routing_counts = validate_routes(routing, legacy, responsibilities)
+    source_routes = {row["case_id"]: row for row in routing["source_cases"]}
     sources = []
     for row in legacy["source"]:
         sources.append({"case_id": row["name"], "legacy_path": row["legacy_path"],
@@ -165,7 +207,11 @@ def snapshot() -> dict:
                         "projection": row.get("initial_projection"),
                         "candidate_gates": row.get("candidate_replacement_gates", []),
                         "responsibility_detail": "tests/unit/xir/product_consumers/legacy_responsibilities.json#" + row["name"],
-                        "execution": "NOT_RUN", "status": "OPEN"})
+                        "execution": "NOT_RUN", "status": "OPEN",
+                        "primary_family": source_routes[row["name"]]["primary_family"],
+                        "producer_packages": source_routes[row["name"]]["producer_packages"],
+                        "tasks": source_routes[row["name"]]["tasks"],
+                        "new_entry_status": source_routes[row["name"]]["new_entry_status"]})
     extra = []
     for path in sorted((ROOT / "tests/unit/execution").glob("*.c")):
         extra.append({"input": file_record(path), "tasks": ["315", "316", "318", "322"],
@@ -185,6 +231,7 @@ def snapshot() -> dict:
               "other_consumer_functions": sum(len(r["functions"]) for r in legacy["other_consumer_files"].values()),
               "execution_files": len(extra), "allocation_scenarios": legacy["source_allocation_scenarios"]["count"],
               "runner_rows_without_reviewed_primary_family": sum(r["primary_family"] == "UNMAPPED" for r in regression + differential + negative)}
+    counts.update(routing_counts)
     return {"scope": "PREPARATION_ONLY_NO_PRODUCT_QUALIFICATION", "summary": counts,
             "source_identity": {"seed": "e16797c62636f1d138583ead18d234c86a3cde6e",
                                 "head": subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=ROOT, text=True).strip(),
@@ -194,7 +241,7 @@ def snapshot() -> dict:
             "differential": differential, "compile_errors": negative,
             "source_responsibilities": sources, "other_consumers": legacy["other_consumer_files"],
             "source_allocation_scenarios": legacy["source_allocation_scenarios"],
-            "execution_responsibilities": extra,
+            "execution_responsibilities": extra, "other_consumer_routes": routing["other_files"],
             "registered_corpus": {"gate": "regression_corpus", "runner": "scripts/check_regression_corpus.py",
                                   "entry": "xray test tests/regression --jobs <registered_jobs> --quiet --report <report>",
                                   "runner_default_timeout_seconds": 900, "ctest_timeout_expression": "600 * XR_TEST_TIMEOUT_SCALE",
@@ -214,6 +261,9 @@ def main() -> None:
     args = parser.parse_args()
     validate_responsibilities(read_json(HERE / "responsibilities.json"))
     result = validate_oracles(read_json(HERE / "oracles.json"))
+    result.update(validate_routes(read_json(HERE / "consumer_routes.json"),
+                                  read_json(ROOT / "tests/unit/xir/product_consumers/legacy_responsibilities.json"),
+                                  read_json(HERE / "responsibilities.json")))
     if args.action == "snapshot":
         result = snapshot()
         if args.output:

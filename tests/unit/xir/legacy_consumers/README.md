@@ -8,6 +8,11 @@ change a product interface, or authorize deletion of an old test.
   goals, 14 qualification families and 18 root-effect requirements to their owning
   tasks and packages. Historical names come from a fixed Git object; retired
   contracts governance, layer states and exclusions are not reinstated.
+- `consumer_routes.json` assigns an explicit primary family and producer packages
+  to all 108 original Source responsibilities. It preserves 26 other files and
+  all 160 indexed function bodies, including seven helper files with no counted
+  test functions. Native harness success exits stay separate from language results;
+  all replacement qualification and new-entry mappings remain OPEN.
 - `oracles.json` records seven independent output/result/rejection expectations.
   Inputs under `fixtures/` retain complete original source literals byte for byte.
   They have no invented new entry adapters. The StringBuilder input still requires
