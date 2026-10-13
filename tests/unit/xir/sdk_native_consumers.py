@@ -39,10 +39,14 @@ def main():
     parser.add_argument('--provider',choices=('msvc','clang','zig'),required=True)
     parser.add_argument('--original-generator')
     args=parser.parse_args();root=Path(__file__).resolve().parents[3];bundle=Path(args.bundle)
+    manifest=json.loads((bundle/'sdk_manifest.json').read_text(encoding='utf-8'))
+    assert manifest['crt']==2, 'Native SDK consumer requires MD CRT'
+    expected_ready=['READY',str(manifest['value_abi']),str(manifest['crt']),str(len(manifest['files']))]
     lease=subprocess.Popen([args.lease,str(bundle),str(bundle/'sdk_manifest.json')],
                            stdin=subprocess.PIPE,stdout=subprocess.PIPE,stderr=subprocess.PIPE,text=True,encoding='utf-8')
     try:
-        ready=lease.stdout.readline().strip().split();assert ready[0]=='READY' and ready[1:3]==['22','2'],ready
+        # Check admitted transport facts; the independent ABI probe below remains mandatory.
+        ready=lease.stdout.readline().strip().split();assert ready==expected_ready,ready
         sdk=Path(lease.stdout.readline().strip());libraries=[lease.stdout.readline().strip() for _ in range(5)]
         assert sdk.is_dir() and all(Path(name).is_file() for name in libraries)
         with tempfile.TemporaryDirectory(prefix='xir-sdk-native-') as temporary:
