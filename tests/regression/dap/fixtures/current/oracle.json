@@ -1,0 +1,186 @@
+{
+  "purpose": "Independent source and semantic expectations for current-pipeline DAP migration; not a runtime test result or a new runtime interface.",
+  "status": "PREPARED_NOT_EXECUTED",
+  "seed_commit": "e16797c62636f1d138583ead18d234c86a3cde6e",
+  "required_fixed_inputs": [
+    "P00",
+    "P06",
+    "P08",
+    "P09"
+  ],
+  "stop_convention": "Each DAP_STOP marks an executable source line. Expected locals are immediately before that statement. Resolve markers from source instead of hard-coding line numbers.",
+  "output_convention": "Expected stdout is decoded payload bytes, independent of the number of DAP output events; embedded NUL must survive framing.",
+  "cases": [
+    {
+      "id": "stack-and-step",
+      "source": "call_stack.xr",
+      "stdout_utf8": "44\n",
+      "stops": [
+        {
+          "marker": "outer_call",
+          "function": "outer",
+          "locals": {
+            "value": 19,
+            "input": 20
+          }
+        },
+        {
+          "marker": "inner_update",
+          "function": "inner",
+          "locals": {
+            "value": 20,
+            "doubled": 40,
+            "label": "inner"
+          },
+          "caller": {
+            "function": "outer",
+            "locals": {
+              "value": 19,
+              "input": 20
+            }
+          }
+        },
+        {
+          "marker": "inner_return",
+          "function": "inner",
+          "locals": {
+            "value": 20,
+            "doubled": 41,
+            "label": "inner"
+          }
+        },
+        {
+          "marker": "outer_return",
+          "function": "outer",
+          "locals": {
+            "value": 19,
+            "input": 20,
+            "result": 41
+          }
+        }
+      ],
+      "checks": [
+        "Break on inner_update and inspect both frames with distinct value locals.",
+        "At outer_call, stepIn reaches inner; next crosses inner without stopping inside it; stepOut from inner resumes outer_return. Use separate fresh sessions.",
+        "At inner_update, evaluate doubled + 2 returns 42, leaves doubled at 40, and normal output remains 44.",
+        "At inner_update, set mutable doubled to 99; the following update makes it 100 and final stdout is 103\\n. A fresh session without setVariable remains 44\\n.",
+        "Reject unknown names, stale frames and invalid variable references without changing state or locals.",
+        "Display only published mixed-runtime boundaries; preserve the same result for VM-to-native-to-VM and native-to-VM-to-native. No arbitrary native source-step promise."
+      ]
+    },
+    {
+      "id": "owned-values",
+      "source": "owned_values.xr",
+      "stdout_utf8": "42\n20\nowned\u0000value\n",
+      "stops": [
+        {
+          "marker": "owned_values",
+          "function": "inspect",
+          "locals": {
+            "values": [
+              10,
+              42,
+              30
+            ],
+            "snapshot": [
+              10,
+              20,
+              30
+            ],
+            "title": "owned\u0000value"
+          }
+        }
+      ],
+      "checks": [
+        "Expand the current array and snapshot independently; inspection must not mutate either.",
+        "A retained inspect result has an explicit lifetime; release all owned copies and reference handles on resume, cancellation and disconnect.",
+        "An old variablesReference cannot resolve to an unrelated object after resume or restart.",
+        "Reject writes to immutable snapshot/title; type-incompatible mutable writes leave the old value intact.",
+        "Cancel while paused and prove physical allocator baseline after final owner and code-lease release."
+      ]
+    },
+    {
+      "id": "conditional-and-hit",
+      "source": "conditional_hits.xr",
+      "stdout_utf8": "6\n",
+      "stops": [
+        {
+          "marker": "loop_body",
+          "function": "accumulate",
+          "visits": [
+            {
+              "index": 0,
+              "sum": 0
+            },
+            {
+              "index": 1,
+              "sum": 0
+            },
+            {
+              "index": 2,
+              "sum": 1
+            },
+            {
+              "index": 3,
+              "sum": 3
+            }
+          ]
+        },
+        {
+          "marker": "loop_return",
+          "function": "accumulate",
+          "locals": {
+            "sum": 6
+          }
+        }
+      ],
+      "checks": [
+        "Condition index == 2 stops once with sum 1.",
+        "Hit condition 3 stops on the third encounter with index 2 and sum 1.",
+        "Logpoint index={index},sum={sum} produces the four fixed pairs without stopped events.",
+        "Replacing the file breakpoint set removes previous conditions and hit counters.",
+        "Pause/continue/cancel must use a bounded execution fixture from the published hook tests; do not make this short loop a timing race."
+      ]
+    },
+    {
+      "id": "caught-exception",
+      "source": "caught_error.xr",
+      "stdout_utf8": "caught\n",
+      "stops": [
+        {
+          "marker": "caught_throw",
+          "function": "fail",
+          "exception": "DapFailure.Expected"
+        },
+        {
+          "marker": "caught_handler",
+          "exception": "DapFailure.Expected"
+        }
+      ],
+      "checks": [
+        "With caught exceptions enabled, stop at the throw and expose the exception before continuing to the handler.",
+        "With only uncaught enabled, this handled language error does not stop at throw.",
+        "Exception value remains owned until inspection completes; cancellation and formatting OOM release it.",
+        "Preserve language error versus panic, cancellation, resource and host-service distinctions; the latter are not caught language exceptions."
+      ]
+    },
+    {
+      "id": "uncaught-exception",
+      "source": "uncaught_error.xr",
+      "stdout_utf8": "",
+      "stops": [
+        {
+          "marker": "uncaught_throw",
+          "function": "fail",
+          "exception": "DapFailure.Expected"
+        }
+      ],
+      "checks": [
+        "With uncaught enabled, expose DapFailure.Expected; after continue report unsuccessful execution and exactly one session termination.",
+        "Never print unreachable; preserve exception ownership and final physical baseline.",
+        "Compare error category and source span, not an invented numeric exit code or provider-specific formatting."
+      ]
+    }
+  ],
+  "completion_caveat": "These fixtures are preparation only, have not been parsed or run by a fresh Xray executable, and are not registered as passing CTest gates. A real DAP driver, registration, full entry coverage, mixed callbacks, resource/FI and sanitizer qualification remain required."
+}
