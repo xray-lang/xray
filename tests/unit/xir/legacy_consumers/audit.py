@@ -44,6 +44,12 @@ for name in ("024_struct_dynamic_container_field.xr", "084_const_object_field_st
 for name in ("union_indiscriminable_int_members.xr", "union_indiscriminable_float_members.xr", "union_indiscriminable_via_alias.xr"):
     FROZEN_TARGETS["tests/compile_errors/type/" + name] = ("POSITIVE_EXACT_UNION_MEMBER_AFTER_FROZEN_TASK319_PORT", "P10")
 FROZEN_TARGETS["tests/compile_errors/type/span_tuple_literal_escape.xr"] = ("POSITIVE_LOCAL_VIEW_TUPLE_AFTER_FROZEN_TASK313_PORT", "P10")
+FROZEN_TARGETS["tests/compile_errors/ownership/080_transfer_task_second_await_rejected.xr"] = (
+    "POSITIVE_STICKY_TASK_RESULT_REQUIRED_BY_FROZEN_TASK316", "P08")
+FROZEN_TARGETS["tests/diff/cases/semantics/coro/task_transfer_already_taken.xr"] = (
+    "POSITIVE_STICKY_TASK_RESULT_AFTER_FROZEN_TASK316_PORT", "P08")
+FROZEN_TARGETS["tests/diff/cases/semantics/coro/task_transfer_return_native_class.xr"] = (
+    "REJECT_NONSENDABLE_TASK_RESULT_AFTER_FROZEN_TASK313_PORT", "P10")
 
 
 # The demanded imported diagnostics depend on these complete companion inputs.
@@ -73,6 +79,13 @@ IMPORTED_ORACLE_INPUTS["tests/compile_errors/type/116_shared_derived_star_reexpo
     "tests/fixtures/shared_mutation_reexport_all.xr", "tests/fixtures/shared_mutation_lib.xr")
 IMPORTED_ORACLE_INPUTS["tests/compile_errors/type/slice_active_view_cross_module_relocation.xr"] = (
     "tests/fixtures/slice/_slice_memory_effect_lib.xr",)
+for name, companion in (
+    ("1149_module_call_stack_grow.xr", "modules/big_stack.xr"),
+    ("1170_value_tag_is_the_type_answer.xr", "_value_tag_lib.xr"),
+    ("1172_module_readonly_capture.xr", "modules/module_readonly_capture.xr"),
+):
+    IMPORTED_ORACLE_INPUTS["tests/regression/11_coroutine/" + name] = (
+        "tests/regression/11_coroutine/" + companion,)
 
 
 def load_module(name: str, relative: str):
@@ -174,6 +187,13 @@ def textual_test_declarations(text: str) -> list[dict]:
             for i, m in enumerate(hits)]
 
 
+def differential_input_obligation(source: Path, runner) -> dict:
+    """Preserve parsed arguments and exact stdin bytes, including absent sidecars."""
+    return {"arguments": runner.read_args(source), "stdin_hex": runner.read_stdin(source).hex(),
+            "arguments_sidecar": file_record(source.with_suffix(".args")),
+            "stdin_sidecar": file_record(source.with_suffix(".stdin")), "execution": "NOT_RUN"}
+
+
 def validate_runner_routes(data: dict, responsibilities: dict, actual_entries: dict | None = None) -> dict:
     """Bind explicit reviewed routes to original source, oracle and runner entry."""
     if data["status"] != "REVIEWED_ROUTING_NOT_QUALIFICATION":
@@ -186,9 +206,9 @@ def validate_runner_routes(data: dict, responsibilities: dict, actual_entries: d
     if not rows or len(ids) != len(set(ids)):
         raise ValueError("empty or duplicate reviewed runner inputs")
     errors = load_module("runner_route_expectations", "tests/compile_errors/run_compile_error_tests.py")
+    diff = load_module("runner_route_differential", "tests/diff/run_backend_diff.py")
     if actual_entries is None:
         reg = load_module("runner_route_regression", "scripts/run_regression_tests.py")
-        diff = load_module("runner_route_differential", "tests/diff/run_backend_diff.py")
         actual_entries = collections.defaultdict(list)
         for path in reg.collect_cases():
             actual_entries[relative(path)].append({"suite": "regression", "entry": "test" if reg.is_test_module(path) else "run"})
@@ -210,6 +230,12 @@ def validate_runner_routes(data: dict, responsibilities: dict, actual_entries: d
             raise ValueError("runner routing cannot grant product qualification")
         if not row["semantic_basis"]:
             raise ValueError("runner routing lacks reviewed semantic evidence")
+        differential = row.get("original_differential_obligation")
+        if any(e["suite"] == "differential" for e in actual_entries[identity]):
+            if differential != differential_input_obligation(source, diff):
+                raise ValueError("differential input lost arguments, stdin bytes or sidecar identity")
+        elif differential is not None:
+            raise ValueError("differential input obligation has no original runner entry")
         imported = row.get("original_imported_inputs", [])
         required_imports = IMPORTED_ORACLE_INPUTS.get(identity, ())
         if required_imports and tuple(i["path"] for i in imported) != required_imports:
@@ -226,7 +252,7 @@ def validate_runner_routes(data: dict, responsibilities: dict, actual_entries: d
                 raise ValueError("original regression positive/test discovery obligation changed")
         named = row.get("original_named_test_obligation")
         reviewed_named_scope = identity.startswith(("tests/regression/08_mem/", "tests/regression/08_oop/",
-                                                    "tests/regression/09_advanced/"))
+                                                    "tests/regression/09_advanced/", "tests/regression/11_coroutine/"))
         if named is not None or (reviewed_named_scope and regression and regression["entry"] == "test"):
             if (not named or named["state"] != "REVIEWED_TEXTUAL_DECLARATIONS_NOT_RUNTIME_DISCOVERY"
                     or named["execution"] != "NOT_RUN"
@@ -235,7 +261,7 @@ def validate_runner_routes(data: dict, responsibilities: dict, actual_entries: d
         port = row.get("target_source_port")
         if port:
             path = ROOT / port["fixture"]
-            if (port["qualification"] != "NOT_RUN" or port["owner_package"] != "P10"
+            if (port["qualification"] != "NOT_RUN" or port["owner_package"] not in row["producer_packages"]
                     or not path.is_file() or file_record(path)["lf_sha256"] != port["lf_sha256"]):
                 raise ValueError("planned source port changed or incorrectly qualified")
         migration = row.get("named_test_migration")
@@ -289,6 +315,8 @@ def validate_runner_routes(data: dict, responsibilities: dict, actual_entries: d
                 raise ValueError("runner stdout oracle changed")
     return {"reviewed_runner_inputs": len(rows),
             "reviewed_runner_entry_links": sum(len(r["original_runner_entries"]) for r in rows),
+            "reviewed_dual_runner_inputs": sum(len(r["original_runner_entries"]) > 1 for r in rows),
+            "reviewed_differential_input_obligations": sum("original_differential_obligation" in r for r in rows),
             "reviewed_regression_inputs": sum(any(e["suite"] == "regression" for e in r["original_runner_entries"]) for r in rows),
             "prepared_target_source_ports": sum("target_source_port" in r for r in rows),
             "reviewed_named_test_files": sum("original_named_test_obligation" in r for r in rows),

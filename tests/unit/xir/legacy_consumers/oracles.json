@@ -2340,6 +2340,664 @@
         "Fresh independent VM/native, complete affected FI/resource/lifetime/physical/cancellation/safety/provider gates; logical copy observations do not claim backing or memory release."
       ],
       "obligation_scope": "SELECTED_ORIGINAL_OBLIGATIONS_NOT_FULL_FILE_REPLACEMENT"
+    },
+    {
+      "id": "task_array_repeated_await_original_positive",
+      "inputs": [
+        {
+          "path": "tests/compile_errors/ownership/080_transfer_task_second_await_rejected.xr",
+          "lf_sha256": "19827f2d6067ec38f63a2496902f67aa409abdd62debf015bed0e1d7f7f092e4",
+          "role": "preserved_source"
+        }
+      ],
+      "execution_source": "tests/compile_errors/ownership/080_transfer_task_second_await_rejected.xr",
+      "expected": {
+        "exit_code": 0,
+        "stdout_utf8": "3\n3\n"
+      },
+      "rationale": "The complete Array result is copyable and Sendable. Both plain awaits must return length 3; the original consumption diagnostic is preserved historical evidence, superseded by sticky terminal semantics.",
+      "packages": [
+        "P08",
+        "P09",
+        "P10"
+      ],
+      "legacy_case": null,
+      "status": "PREPARED_NOT_EXECUTED",
+      "execution": {
+        "vm": "NOT_RUN",
+        "native": "NOT_RUN"
+      },
+      "new_entry": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "remaining_qualification": [
+        "Use published fixed producer Source/Program and actual fresh run/test report; textual declarations and build success are not execution.",
+        "Independently verify VM and actual generated-C native against required observations; complete affected FI/resource/lifetime/cancel/late-wake/physical/safety/provider gates remain required.",
+        "Normalized semantic fields are test observations, not invented CLI/ABI/public diagnostic spellings. Existing timers, full loops and budgets must remain bounded and unreduced."
+      ]
+    },
+    {
+      "id": "task_array_sticky_independent_copies",
+      "inputs": [
+        {
+          "path": "tests/diff/cases/semantics/coro/task_transfer_already_taken.xr",
+          "lf_sha256": "077d37f05f55622d745155a67c13c51ed8a4cc4a2797274c2b54533f882320cf",
+          "role": "preserved_source"
+        },
+        {
+          "path": "tests/unit/xir/legacy_consumers/fixtures/sticky_task_array_result/root.xr",
+          "lf_sha256": "8506aeedb035f4d25c253ba1962e19a31ee862e0f4191f5540d380b64e234af6",
+          "role": "owned_target_source"
+        }
+      ],
+      "execution_source": "tests/unit/xir/legacy_consumers/fixtures/sticky_task_array_result/root.xr",
+      "expected": {
+        "exit_code": 0,
+        "stdout_utf8": "3\n3\n1\n9\n1\n1\n2\n"
+      },
+      "rationale": "Both awaitResult observations succeed. Mutating one later plain-await Array to 9 must leave the other and the retained terminal result at [1,2,3]; no AlreadyTaken, mutable alias or result loss.",
+      "packages": [
+        "P08",
+        "P09",
+        "P13"
+      ],
+      "legacy_case": null,
+      "status": "PREPARED_NOT_EXECUTED",
+      "execution": {
+        "vm": "NOT_RUN",
+        "native": "NOT_RUN"
+      },
+      "new_entry": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "remaining_qualification": [
+        "Use published fixed producer Source/Program and actual fresh run/test report; textual declarations and build success are not execution.",
+        "Independently verify VM and actual generated-C native against required observations; complete affected FI/resource/lifetime/cancel/late-wake/physical/safety/provider gates remain required.",
+        "Normalized semantic fields are test observations, not invented CLI/ABI/public diagnostic spellings. Existing timers, full loops and budgets must remain bounded and unreduced."
+      ]
+    },
+    {
+      "id": "task_mutable_class_result_rejected",
+      "inputs": [
+        {
+          "path": "tests/diff/cases/semantics/coro/task_transfer_return_native_class.xr",
+          "lf_sha256": "611501418bd038c62e6cfe164416ded7d4e1c5c6c27bfbe44090454f507785ce",
+          "role": "preserved_source"
+        },
+        {
+          "path": "tests/unit/xir/legacy_consumers/fixtures/task_nonsendable_class_result/root.xr",
+          "lf_sha256": "68952e6c3b9d277b1e6fcb47c5f98e0657638f89fdcc00bdb0843d1c7b2549f7",
+          "role": "owned_target_source"
+        }
+      ],
+      "execution_source": "tests/unit/xir/legacy_consumers/fixtures/task_nonsendable_class_result/root.xr",
+      "expected": {
+        "diagnostic_stage": "CHECK",
+        "diagnostic_reason": "NONSENDABLE_TASK_RESULT",
+        "result_type": "Box",
+        "product_published": false
+      },
+      "rationale": "After only the retired constructor surface is ported, ordinary mutable Box remains non-Sendable. The actual Task result-type boundary must reject before product publication; a missing method/unsupported syntax or runtime failure is not this diagnostic.",
+      "packages": [
+        "P08",
+        "P10",
+        "P13"
+      ],
+      "legacy_case": null,
+      "status": "PREPARED_NOT_EXECUTED",
+      "execution": {
+        "vm": "NOT_RUN",
+        "native": "NOT_RUN"
+      },
+      "new_entry": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "remaining_qualification": [
+        "Use published fixed producer Source/Program and actual fresh run/test report; textual declarations and build success are not execution.",
+        "Independently verify VM and actual generated-C native against required observations; complete affected FI/resource/lifetime/cancel/late-wake/physical/safety/provider gates remain required.",
+        "Normalized semantic fields are test observations, not invented CLI/ABI/public diagnostic spellings. Existing timers, full loops and budgets must remain bounded and unreduced."
+      ]
+    },
+    {
+      "id": "channel_close_fanout_distinguishes_timeout",
+      "inputs": [
+        {
+          "path": "tests/regression/11_coroutine/1155_channel_close_timeout_fanout.xr",
+          "lf_sha256": "c15c09543cd1fb97e2cdc35bc36e2ba73a3f44f3e3ec14d7ad8c24977a4c1271",
+          "role": "preserved_source"
+        },
+        {
+          "path": "tests/unit/xir/legacy_consumers/fixtures/channel_close_distinct_from_timeout/root.xr",
+          "lf_sha256": "d4f4cc3938f5fc876bf352eec4d854549fbd08bdf6f681724b36219438303f46",
+          "role": "owned_target_source"
+        }
+      ],
+      "execution_source": "tests/unit/xir/legacy_consumers/fixtures/channel_close_distinct_from_timeout/root.xr",
+      "expected": {
+        "exit_code": 0,
+        "required_test_names": [
+          "test_channel_close_wakes_timed_recv_fanout"
+        ],
+        "all_required_tests_passed": true
+      },
+      "rationale": "All 64 timed receivers must observe Closed, not Timeout. Original 16 yields/2000 ms and full completion count remain; the ready handshake alone does not prove real wait registration or physical cleanup.",
+      "packages": [
+        "P08",
+        "P09",
+        "P10",
+        "P13",
+        "P14"
+      ],
+      "legacy_case": null,
+      "status": "PREPARED_NOT_EXECUTED",
+      "execution": {
+        "vm": "NOT_RUN",
+        "native": "NOT_RUN"
+      },
+      "new_entry": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "remaining_qualification": [
+        "Use published fixed producer Source/Program and actual fresh run/test report; textual declarations and build success are not execution.",
+        "Independently verify VM and actual generated-C native against required observations; complete affected FI/resource/lifetime/cancel/late-wake/physical/safety/provider gates remain required.",
+        "Normalized semantic fields are test observations, not invented CLI/ABI/public diagnostic spellings. Existing timers, full loops and budgets must remain bounded and unreduced."
+      ],
+      "execution_entry": "test"
+    },
+    {
+      "id": "channel_map_twenty_thousand_logical_sends",
+      "inputs": [
+        {
+          "path": "tests/regression/11_coroutine/1166_channel_map_deep_copy_stress.xr",
+          "lf_sha256": "18380493799fc52aac015153c997f5dee397092e925cb9fab17ff18b10de3444",
+          "role": "preserved_source"
+        },
+        {
+          "path": "tests/unit/xir/legacy_consumers/fixtures/channel_map_value_copy_stress/root.xr",
+          "lf_sha256": "ad40dcedf6b987e6341c93cc5dd7c078a3676e7d86830b0ec1de56614d74b4b2",
+          "role": "owned_target_source"
+        }
+      ],
+      "execution_source": "tests/unit/xir/legacy_consumers/fixtures/channel_map_value_copy_stress/root.xr",
+      "expected": {
+        "exit_code": 0,
+        "required_test_names": [
+          "test_channel_map_value_copy_stress"
+        ],
+        "all_required_tests_passed": true
+      },
+      "rationale": "All 4 x 5000 sends yield two-element owned Map payloads, sum 40000 and completion count 20000. Worker counts are const; every original iteration remains, and ordinary send needs no deep-copy call.",
+      "packages": [
+        "P08",
+        "P09",
+        "P10",
+        "P13",
+        "P14"
+      ],
+      "legacy_case": null,
+      "status": "PREPARED_NOT_EXECUTED",
+      "execution": {
+        "vm": "NOT_RUN",
+        "native": "NOT_RUN"
+      },
+      "new_entry": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "remaining_qualification": [
+        "Use published fixed producer Source/Program and actual fresh run/test report; textual declarations and build success are not execution.",
+        "Independently verify VM and actual generated-C native against required observations; complete affected FI/resource/lifetime/cancel/late-wake/physical/safety/provider gates remain required.",
+        "Normalized semantic fields are test observations, not invented CLI/ABI/public diagnostic spellings. Existing timers, full loops and budgets must remain bounded and unreduced."
+      ],
+      "execution_entry": "test"
+    },
+    {
+      "id": "channel_array_five_value_send_responsibilities",
+      "inputs": [
+        {
+          "path": "tests/regression/11_coroutine/1167_channel_explicit_transfer.xr",
+          "lf_sha256": "cb4717b562b6a32c87949a110840374e738fbeae700089e67f2e610416acfd03",
+          "role": "preserved_source"
+        },
+        {
+          "path": "tests/unit/xir/legacy_consumers/fixtures/channel_array_logical_values/root.xr",
+          "lf_sha256": "63f7a4ae316538c30cb49b4ac4874726c7e24df32c057e9dde994e2684decaec",
+          "role": "owned_target_source"
+        }
+      ],
+      "execution_source": "tests/unit/xir/legacy_consumers/fixtures/channel_array_logical_values/root.xr",
+      "expected": {
+        "exit_code": 0,
+        "required_test_names": [
+          "test_channel_send_value_preserves_source",
+          "test_channel_try_send_value_preserves_source",
+          "test_channel_send_timeout_value_preserves_source",
+          "test_channel_send_value_preserves_source_after_send",
+          "test_channel_send_helper_value_preserves_source"
+        ],
+        "all_required_tests_passed": true
+      },
+      "rationale": "All five original test responsibilities remain: send, trySend, zero-timeout send and two former move/helper cases. Source length stays 3 after mutation while sent [10,11] and [12,13] remain length 2; no consumed Array binding.",
+      "packages": [
+        "P08",
+        "P09",
+        "P10",
+        "P13",
+        "P14"
+      ],
+      "legacy_case": null,
+      "status": "PREPARED_NOT_EXECUTED",
+      "execution": {
+        "vm": "NOT_RUN",
+        "native": "NOT_RUN"
+      },
+      "new_entry": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "remaining_qualification": [
+        "Use published fixed producer Source/Program and actual fresh run/test report; textual declarations and build success are not execution.",
+        "Independently verify VM and actual generated-C native against required observations; complete affected FI/resource/lifetime/cancel/late-wake/physical/safety/provider gates remain required.",
+        "Normalized semantic fields are test observations, not invented CLI/ABI/public diagnostic spellings. Existing timers, full loops and budgets must remain bounded and unreduced."
+      ],
+      "execution_entry": "test"
+    },
+    {
+      "id": "select_send_owned_array_values",
+      "inputs": [
+        {
+          "path": "tests/diff/cases/semantics/coro/select_send_transfer.xr",
+          "lf_sha256": "bcb3ec6eebc8d7a0b5abc3d3c4d2202f236e2359c21f19607a5922effe2d809e",
+          "role": "preserved_source"
+        },
+        {
+          "path": "tests/unit/xir/legacy_consumers/fixtures/select_array_logical_values/root.xr",
+          "lf_sha256": "d3d4be651049c60dfc16f4bbc4d71717b6a0c5bc73b6340b95b883dd1af20952",
+          "role": "owned_target_source"
+        }
+      ],
+      "execution_source": "tests/unit/xir/legacy_consumers/fixtures/select_array_logical_values/root.xr",
+      "expected": {
+        "exit_code": 0,
+        "stdout_utf8": "first sent\nsecond sent\nscalar sent\n1\n4\n7\n99\n"
+      },
+      "rationale": "FIFO selected sends preserve [1,2,3], [4,5,6], and scalar 7; changing original a to 99 cannot alter the first payload. All original branches and observations remain.",
+      "packages": [
+        "P08",
+        "P09",
+        "P13"
+      ],
+      "legacy_case": null,
+      "status": "PREPARED_NOT_EXECUTED",
+      "execution": {
+        "vm": "NOT_RUN",
+        "native": "NOT_RUN"
+      },
+      "new_entry": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "remaining_qualification": [
+        "Use published fixed producer Source/Program and actual fresh run/test report; textual declarations and build success are not execution.",
+        "Independently verify VM and actual generated-C native against required observations; complete affected FI/resource/lifetime/cancel/late-wake/physical/safety/provider gates remain required.",
+        "Normalized semantic fields are test observations, not invented CLI/ABI/public diagnostic spellings. Existing timers, full loops and budgets must remain bounded and unreduced."
+      ]
+    },
+    {
+      "id": "barrier_compose_ordinary_identity_methods",
+      "inputs": [
+        {
+          "path": "tests/diff/cases/semantics/concurrency/barrier_compose.xr",
+          "lf_sha256": "fc03a553aa45efafc21fde991d80122dde193f48f247844ccf0c0b86b9f11fd4",
+          "role": "preserved_source"
+        },
+        {
+          "path": "tests/unit/xir/legacy_consumers/fixtures/barrier_compose_ordinary_methods/root.xr",
+          "lf_sha256": "38d7b48c9caacbba9cf53171f24751a9289895b2600fcd760d9a360c95eac224",
+          "role": "owned_target_source"
+        }
+      ],
+      "execution_source": "tests/unit/xir/legacy_consumers/fixtures/barrier_compose_ordinary_methods/root.xr",
+      "expected": {
+        "exit_code": 0,
+        "stdout_utf8": "true\n"
+      },
+      "rationale": "Full original composition remains with contextual init and ordinary class methods. Guarded identity mutation/callback return and original cleanup are preserved; the fixed output follows each original statement, not backend agreement.",
+      "packages": [
+        "P09",
+        "P10",
+        "P13"
+      ],
+      "legacy_case": null,
+      "status": "PREPARED_NOT_EXECUTED",
+      "execution": {
+        "vm": "NOT_RUN",
+        "native": "NOT_RUN"
+      },
+      "new_entry": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "remaining_qualification": [
+        "Use published fixed producer Source/Program and actual fresh run/test report; textual declarations and build success are not execution.",
+        "Independently verify VM and actual generated-C native against required observations; complete affected FI/resource/lifetime/cancel/late-wake/physical/safety/provider gates remain required.",
+        "Normalized semantic fields are test observations, not invented CLI/ABI/public diagnostic spellings. Existing timers, full loops and budgets must remain bounded and unreduced."
+      ]
+    },
+    {
+      "id": "mutex_generic_compose_ordinary_identity_methods",
+      "inputs": [
+        {
+          "path": "tests/diff/cases/semantics/concurrency/mutex_generic_compose.xr",
+          "lf_sha256": "87fb040b8ce2066ac1c5f36ab92f7cbc647e2187dbf231b849728231b4f18c92",
+          "role": "preserved_source"
+        },
+        {
+          "path": "tests/unit/xir/legacy_consumers/fixtures/mutex_generic_compose_ordinary_methods/root.xr",
+          "lf_sha256": "51f3bcc1764d28e0830cca7021225e2d9ce3c3b7a18a3ddab409fa71b988ca0e",
+          "role": "owned_target_source"
+        }
+      ],
+      "execution_source": "tests/unit/xir/legacy_consumers/fixtures/mutex_generic_compose_ordinary_methods/root.xr",
+      "expected": {
+        "exit_code": 0,
+        "stdout_utf8": "20\n15\n15\nab\nab!\n"
+      },
+      "rationale": "Full original composition remains with contextual init and ordinary class methods. Guarded identity mutation/callback return and original cleanup are preserved; the fixed output follows each original statement, not backend agreement.",
+      "packages": [
+        "P09",
+        "P10",
+        "P13"
+      ],
+      "legacy_case": null,
+      "status": "PREPARED_NOT_EXECUTED",
+      "execution": {
+        "vm": "NOT_RUN",
+        "native": "NOT_RUN"
+      },
+      "new_entry": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "remaining_qualification": [
+        "Use published fixed producer Source/Program and actual fresh run/test report; textual declarations and build success are not execution.",
+        "Independently verify VM and actual generated-C native against required observations; complete affected FI/resource/lifetime/cancel/late-wake/physical/safety/provider gates remain required.",
+        "Normalized semantic fields are test observations, not invented CLI/ABI/public diagnostic spellings. Existing timers, full loops and budgets must remain bounded and unreduced."
+      ]
+    },
+    {
+      "id": "once_compose_ordinary_identity_methods",
+      "inputs": [
+        {
+          "path": "tests/diff/cases/semantics/concurrency/once_compose.xr",
+          "lf_sha256": "2fca95f94f9d55904cbc6b9efd6dc8c1f14999ce022cd366dffc3d34a65de53a",
+          "role": "preserved_source"
+        },
+        {
+          "path": "tests/unit/xir/legacy_consumers/fixtures/once_compose_ordinary_methods/root.xr",
+          "lf_sha256": "691be289614a60200b20afbaf1d8cdfa2fc2eb82b6ba208e878de2d0bb92ff7f",
+          "role": "owned_target_source"
+        }
+      ],
+      "execution_source": "tests/unit/xir/legacy_consumers/fixtures/once_compose_ordinary_methods/root.xr",
+      "expected": {
+        "exit_code": 0,
+        "stdout_utf8": "1\n"
+      },
+      "rationale": "Full original composition remains with contextual init and ordinary class methods. Guarded identity mutation/callback return and original cleanup are preserved; the fixed output follows each original statement, not backend agreement.",
+      "packages": [
+        "P09",
+        "P10",
+        "P13"
+      ],
+      "legacy_case": null,
+      "status": "PREPARED_NOT_EXECUTED",
+      "execution": {
+        "vm": "NOT_RUN",
+        "native": "NOT_RUN"
+      },
+      "new_entry": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "remaining_qualification": [
+        "Use published fixed producer Source/Program and actual fresh run/test report; textual declarations and build success are not execution.",
+        "Independently verify VM and actual generated-C native against required observations; complete affected FI/resource/lifetime/cancel/late-wake/physical/safety/provider gates remain required.",
+        "Normalized semantic fields are test observations, not invented CLI/ABI/public diagnostic spellings. Existing timers, full loops and budgets must remain bounded and unreduced."
+      ]
+    },
+    {
+      "id": "rwlock_generic_compose_ordinary_identity_methods",
+      "inputs": [
+        {
+          "path": "tests/diff/cases/semantics/concurrency/rwlock_generic_compose.xr",
+          "lf_sha256": "c5be2177e5a7934d037e98172199a7898e3ce662dc11b6ffc66e5a44bcbe5a6a",
+          "role": "preserved_source"
+        },
+        {
+          "path": "tests/unit/xir/legacy_consumers/fixtures/rwlock_generic_compose_ordinary_methods/root.xr",
+          "lf_sha256": "4ad967e6eb374d3327b7c95bc5f2643283817de82f7e5d8b451fdc79cf83c471",
+          "role": "owned_target_source"
+        }
+      ],
+      "execution_source": "tests/unit/xir/legacy_consumers/fixtures/rwlock_generic_compose_ordinary_methods/root.xr",
+      "expected": {
+        "exit_code": 0,
+        "stdout_utf8": "101\n200\n150\n200\n"
+      },
+      "rationale": "Full original composition remains with contextual init and ordinary class methods. Guarded identity mutation/callback return and original cleanup are preserved; the fixed output follows each original statement, not backend agreement.",
+      "packages": [
+        "P09",
+        "P10",
+        "P13"
+      ],
+      "legacy_case": null,
+      "status": "PREPARED_NOT_EXECUTED",
+      "execution": {
+        "vm": "NOT_RUN",
+        "native": "NOT_RUN"
+      },
+      "new_entry": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "remaining_qualification": [
+        "Use published fixed producer Source/Program and actual fresh run/test report; textual declarations and build success are not execution.",
+        "Independently verify VM and actual generated-C native against required observations; complete affected FI/resource/lifetime/cancel/late-wake/physical/safety/provider gates remain required.",
+        "Normalized semantic fields are test observations, not invented CLI/ABI/public diagnostic spellings. Existing timers, full loops and budgets must remain bounded and unreduced."
+      ]
+    },
+    {
+      "id": "task_cancel_publishes_after_cleanup",
+      "inputs": [
+        {
+          "path": "tests/diff/cases/semantics/coro/defer_runs_on_cancel.xr",
+          "lf_sha256": "aa3ace9cc2508597dd4f5b19ea797496d10f92778654073a5730502454fac64a",
+          "role": "preserved_source"
+        }
+      ],
+      "execution_source": "tests/diff/cases/semantics/coro/defer_runs_on_cancel.xr",
+      "expected": {
+        "exit_code": 0,
+        "stdout_utf8": "defer: cleanup ran\ncancelled\n"
+      },
+      "rationale": "The started channel signal follows defer registration. Cancellation must run the cleanup exactly once before awaitResult publishes Cancelled, preserving the 100000000 bound and yield cadence; no arbitrary timing/order golden.",
+      "packages": [
+        "P07",
+        "P08",
+        "P13"
+      ],
+      "legacy_case": null,
+      "status": "PREPARED_NOT_EXECUTED",
+      "execution": {
+        "vm": "NOT_RUN",
+        "native": "NOT_RUN"
+      },
+      "new_entry": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "remaining_qualification": [
+        "Use published fixed producer Source/Program and actual fresh run/test report; textual declarations and build success are not execution.",
+        "Independently verify VM and actual generated-C native against required observations; complete affected FI/resource/lifetime/cancel/late-wake/physical/safety/provider gates remain required.",
+        "Normalized semantic fields are test observations, not invented CLI/ABI/public diagnostic spellings. Existing timers, full loops and budgets must remain bounded and unreduced."
+      ]
+    },
+    {
+      "id": "channel_zero_null_are_ready_values",
+      "inputs": [
+        {
+          "path": "tests/regression/11_coroutine/1164_channel_recv_raw_match_nullable_payload.xr",
+          "lf_sha256": "24fa703263a109406f89b0846dbb118952fe76c9f0a5c0fbeb54a99d9fb02e1e",
+          "role": "preserved_source"
+        }
+      ],
+      "execution_source": "tests/regression/11_coroutine/1164_channel_recv_raw_match_nullable_payload.xr",
+      "expected": {
+        "exit_code": 0,
+        "required_test_names": [
+          "test_recv_match_keeps_payload_status",
+          "test_select_keeps_null_payload_ready"
+        ],
+        "all_required_tests_passed": true
+      },
+      "rationale": "Both original tests distinguish successful Value(0), Value(null), Closed and ready null select; falsey payloads cannot mean no event.",
+      "packages": [
+        "P08",
+        "P09",
+        "P10",
+        "P13",
+        "P14"
+      ],
+      "legacy_case": null,
+      "status": "PREPARED_NOT_EXECUTED",
+      "execution": {
+        "vm": "NOT_RUN",
+        "native": "NOT_RUN"
+      },
+      "new_entry": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "remaining_qualification": [
+        "Use published fixed producer Source/Program and actual fresh run/test report; textual declarations and build success are not execution.",
+        "Independently verify VM and actual generated-C native against required observations; complete affected FI/resource/lifetime/cancel/late-wake/physical/safety/provider gates remain required.",
+        "Normalized semantic fields are test observations, not invented CLI/ABI/public diagnostic spellings. Existing timers, full loops and budgets must remain bounded and unreduced."
+      ],
+      "execution_entry": "test"
+    },
+    {
+      "id": "1161_multiple_task_awaiters_independent_results",
+      "inputs": [
+        {
+          "path": "tests/regression/11_coroutine/1161_multiple_task_awaiters.xr",
+          "lf_sha256": "206e61534f1d4e81446f353e24f024345daa62be78b8b584209312e5e81e8b3e",
+          "role": "preserved_source"
+        }
+      ],
+      "execution_source": "tests/regression/11_coroutine/1161_multiple_task_awaiters.xr",
+      "expected": {
+        "exit_code": 0,
+        "required_test_names": [
+          "test_multiple_task_awaiters"
+        ],
+        "all_required_tests_passed": true,
+        "test_body_stdout_utf8": "314\ndone\n"
+      },
+      "rationale": "Each waiter must receive the same retained Task value (7 or 9) once; report sum is independent of arrival order. This is stdout from the named test body, not a claim that the original run entry invokes it.",
+      "packages": [
+        "P08",
+        "P13",
+        "P14"
+      ],
+      "legacy_case": null,
+      "status": "PREPARED_NOT_EXECUTED",
+      "execution": {
+        "vm": "NOT_RUN",
+        "native": "NOT_RUN"
+      },
+      "new_entry": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "remaining_qualification": [
+        "Use published fixed producer Source/Program and actual fresh run/test report; textual declarations and build success are not execution.",
+        "Independently verify VM and actual generated-C native against required observations; complete affected FI/resource/lifetime/cancel/late-wake/physical/safety/provider gates remain required.",
+        "Normalized semantic fields are test observations, not invented CLI/ABI/public diagnostic spellings. Existing timers, full loops and budgets must remain bounded and unreduced."
+      ],
+      "execution_entry": "test"
+    },
+    {
+      "id": "1162_overlapping_await_any_waiters_independent_results",
+      "inputs": [
+        {
+          "path": "tests/regression/11_coroutine/1162_overlapping_await_any_waiters.xr",
+          "lf_sha256": "6d640ddb1fc97917916b234399f8328b29b39664d295e2905f343802d7a1f131",
+          "role": "preserved_source"
+        }
+      ],
+      "execution_source": "tests/regression/11_coroutine/1162_overlapping_await_any_waiters.xr",
+      "expected": {
+        "exit_code": 0,
+        "required_test_names": [
+          "test_overlapping_await_any_waiters"
+        ],
+        "all_required_tests_passed": true,
+        "test_body_stdout_utf8": "318\ndone\n"
+      },
+      "rationale": "Each waiter must receive the same retained Task value (7 or 9) once; report sum is independent of arrival order. This is stdout from the named test body, not a claim that the original run entry invokes it.",
+      "packages": [
+        "P08",
+        "P13",
+        "P14"
+      ],
+      "legacy_case": null,
+      "status": "PREPARED_NOT_EXECUTED",
+      "execution": {
+        "vm": "NOT_RUN",
+        "native": "NOT_RUN"
+      },
+      "new_entry": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "remaining_qualification": [
+        "Use published fixed producer Source/Program and actual fresh run/test report; textual declarations and build success are not execution.",
+        "Independently verify VM and actual generated-C native against required observations; complete affected FI/resource/lifetime/cancel/late-wake/physical/safety/provider gates remain required.",
+        "Normalized semantic fields are test observations, not invented CLI/ABI/public diagnostic spellings. Existing timers, full loops and budgets must remain bounded and unreduced."
+      ],
+      "execution_entry": "test"
+    },
+    {
+      "id": "suspend_try_preserves_exit_categories",
+      "inputs": [
+        {
+          "path": "tests/regression/11_coroutine/1176_suspend_try_continuations.xr",
+          "lf_sha256": "612f7c2ab2e3a39a59dbeb13042f5fba486ce27811d372d0e084c68cabe1d1db",
+          "role": "preserved_source"
+        }
+      ],
+      "execution_source": "tests/regression/11_coroutine/1176_suspend_try_continuations.xr",
+      "expected": {
+        "exit_code": 0,
+        "required_test_names": [
+          "test_suspend_try_continuations"
+        ],
+        "all_required_tests_passed": true
+      },
+      "rationale": "Resumed normal/typed-error/panic helpers must return 41/42/43; blocked Task cancellation must be Cancelled and cannot be caught as panic 99. Actual error marker/interface admission still needs producer review.",
+      "packages": [
+        "P08",
+        "P09",
+        "P10",
+        "P13",
+        "P14"
+      ],
+      "legacy_case": null,
+      "status": "PREPARED_NOT_EXECUTED",
+      "execution": {
+        "vm": "NOT_RUN",
+        "native": "NOT_RUN"
+      },
+      "new_entry": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "remaining_qualification": [
+        "Use published fixed producer Source/Program and actual fresh run/test report; textual declarations and build success are not execution.",
+        "Independently verify VM and actual generated-C native against required observations; complete affected FI/resource/lifetime/cancel/late-wake/physical/safety/provider gates remain required.",
+        "Normalized semantic fields are test observations, not invented CLI/ABI/public diagnostic spellings. Existing timers, full loops and budgets must remain bounded and unreduced."
+      ],
+      "execution_entry": "test"
+    },
+    {
+      "id": "channel_nonblocking_fifo_independent_stdout",
+      "inputs": [
+        {
+          "path": "tests/diff/cases/semantics/coro/channel_nonblocking_prelude_enums.xr",
+          "lf_sha256": "3e893d6f8028ac22953da610e60ab7c6467a5a35333e8653f81d98510c969673",
+          "role": "preserved_source"
+        }
+      ],
+      "execution_source": "tests/diff/cases/semantics/coro/channel_nonblocking_prelude_enums.xr",
+      "expected": {
+        "exit_code": 0,
+        "stdout_utf8": "true\ntrue\nfalse\n7\n9\nfalse\n"
+      },
+      "rationale": "Capacity two accepts 7 and 9 then rejects 11; receive preserves FIFO and empty state. Missing old stdout sidecar is not an empty output oracle.",
+      "packages": [
+        "P08",
+        "P09",
+        "P13"
+      ],
+      "legacy_case": null,
+      "status": "PREPARED_NOT_EXECUTED",
+      "execution": {
+        "vm": "NOT_RUN",
+        "native": "NOT_RUN"
+      },
+      "new_entry": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "remaining_qualification": [
+        "Use published fixed producer Source/Program and actual fresh run/test report; textual declarations and build success are not execution.",
+        "Independently verify VM and actual generated-C native against required observations; complete affected FI/resource/lifetime/cancel/late-wake/physical/safety/provider gates remain required.",
+        "Normalized semantic fields are test observations, not invented CLI/ABI/public diagnostic spellings. Existing timers, full loops and budgets must remain bounded and unreduced."
+      ]
     }
   ]
 }

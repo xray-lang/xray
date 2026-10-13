@@ -16,12 +16,12 @@ change a product interface, or authorize deletion of an old test.
   The class cleanup target fixture uses ordinary methods and contextual init,
   retains both named tests and adds during-call guard checks. It has not compiled
   on a product producer; its real test discovery/execution remains required.
-- `runner_routes.json` binds 1318 explicitly reviewed FFI/JSON/generic/nullable/cleanup/
+- `runner_routes.json` binds 1432 explicitly reviewed FFI/JSON/generic/nullable/cleanup/
   generator/numeric/closure/module/call/ownership/control/comptime and regression inputs to their original source and expectation hashes,
   compiler positions/codes/text and actual runner entries. Future files are not
   automatically assigned by a directory wildcard. Missing expectations and
-  diagnostic position gaps remain explicit. Sixteen imported diagnostics bind
-  their eighteen complete XR/XRD companion links; an earlier import-authority failure
+  diagnostic position gaps remain explicit. Nineteen reviewed imported inputs bind
+  their twenty-one complete XR/XRD companion links; an earlier import-authority failure
   cannot satisfy the requested callback effect, method or parameter-mode error.
   Existing Task318 Q12 names the
   frozen comptime/protocol scope without changing the 27 historical families.
@@ -49,7 +49,22 @@ change a product interface, or authorize deletion of an old test.
   original named identity, including two record-copy test renames. An additional reverse program covers only three
   of thirteen original self-return tests and cannot delete the other ten or
   restore StringBuilder. Its partial status is enforced by negative controls.
-- `oracles.json` records sixty-three independent output/result/rejection expectations.
+  The coroutine review adds 114 unique programs and 180 entry links; 66 have
+  both regression and differential entries. The reviewed set now has 1498 entry
+  links, distinct from 1432 unique inputs. All 325 reviewed differential inputs
+  bind parsed arguments, exact stdin bytes and present/missing sidecar identities.
+  All currently reviewed argument/stdin streams are empty; that is checked, not
+  assumed for future files. With coroutine tests, 142 files preserve 487 textual
+  declarations, still without claiming actual runtime discovery.
+  Ten additional complete target sources preserve sticky Array results, five
+  Channel send responsibilities, select payload isolation, 64 close waiters,
+  all 4 x 5000 Map sends and four ordinary class synchronization compositions.
+  The mutable-class Task result port instead requires the specific Sendable
+  rejection after contextual init; it is not a positive capability. The old
+  repeated-await rejection is retained as evidence and marked for positive
+  sticky-result migration. Closed and Timeout cannot share a success sentinel,
+  and cancellation completion must follow cleanup exactly once.
+- `oracles.json` records eighty independent output/result/rejection expectations.
   Preserved original literals remain byte-for-byte inputs. Target source ports
   are separately named and hashed; they do not overwrite historical originals.
   New Atomic fixtures separately require legal direct-var rebinding and

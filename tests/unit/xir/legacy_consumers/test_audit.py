@@ -14,6 +14,93 @@ class PreparationChecks(unittest.TestCase):
         cls.runner_routes = audit.read_json(audit.HERE / "runner_routes.json")
         cls.legacy = audit.read_json(audit.ROOT / "tests/unit/xir/product_consumers/legacy_responsibilities.json")
 
+    def test_dual_entry_input_cannot_lose_either_original_entry(self):
+        for suite in ("regression", "differential"):
+            bad = copy.deepcopy(self.runner_routes)
+            row = next(r for r in bad["cases"] if len(r["original_runner_entries"]) == 2)
+            row["original_runner_entries"] = [e for e in row["original_runner_entries"] if e["suite"] != suite]
+            with self.subTest(suite=suite), self.assertRaisesRegex(ValueError, "original runner entry"):
+                audit.validate_runner_routes(bad, self.mapping)
+
+    def test_unique_program_counts_do_not_replace_entry_responsibilities(self):
+        counts = audit.validate_runner_routes(self.runner_routes, self.mapping)
+        self.assertEqual(counts["reviewed_dual_runner_inputs"], 66)
+        self.assertEqual(counts["reviewed_runner_entry_links"], counts["reviewed_runner_inputs"] + 66)
+
+    def test_differential_arguments_and_exact_stdin_cannot_be_lost(self):
+        for field in ("arguments", "stdin_hex", "stdin_sidecar", "arguments_sidecar", "execution"):
+            bad = copy.deepcopy(self.runner_routes)
+            row = next(r for r in bad["cases"] if "original_differential_obligation" in r)
+            if field == "arguments":
+                row["original_differential_obligation"][field] = ["unreviewed-argument"]
+            elif field == "stdin_hex":
+                row["original_differential_obligation"][field] = "00"
+            elif field == "execution":
+                row["original_differential_obligation"][field] = "PASS"
+            else:
+                row["original_differential_obligation"].pop(field)
+            with self.subTest(field=field), self.assertRaisesRegex(ValueError, "stdin bytes"):
+                audit.validate_runner_routes(bad, self.mapping)
+
+    def test_coroutine_textual_tests_cannot_be_removed_from_test_obligation(self):
+        bad = copy.deepcopy(self.runner_routes)
+        row = next(r for r in bad["cases"] if r["case_id"].endswith("1164_channel_recv_raw_match_nullable_payload.xr"))
+        row.pop("original_named_test_obligation")
+        with self.assertRaisesRegex(ValueError, "falsely qualified discovery"):
+            audit.validate_runner_routes(bad, self.mapping)
+
+    def test_sticky_array_result_cannot_keep_already_taken_target(self):
+        bad = copy.deepcopy(self.runner_routes)
+        row = next(r for r in bad["cases"] if r["case_id"].endswith("080_transfer_task_second_await_rejected.xr"))
+        self.assertEqual(row["original_rejection_oracle"]["assertions"][0]["code"], "E0356")
+        row["target_disposition"]["kind"] = "REJECTION_FOR_ALREADY_TAKEN"
+        with self.assertRaisesRegex(ValueError, "required disposition"):
+            audit.validate_runner_routes(bad, self.mapping)
+
+    def test_sticky_result_copies_cannot_alias_or_consume_terminal(self):
+        expected = next(r["expected"] for r in self.oracles["cases"] if r["id"] == "task_array_sticky_independent_copies")
+        for output in ("3\nAlreadyTaken\n", "3\n3\n9\n9\n9\n9\n2\n"):
+            for backend in ("vm", "native"):
+                with self.subTest(backend=backend, output=output), self.assertRaises(ValueError):
+                    audit.compare_required(expected, dict(expected, stdout_utf8=output))
+
+    def test_mutable_class_task_result_is_not_sendable_by_const_or_identity(self):
+        expected = next(r["expected"] for r in self.oracles["cases"] if r["id"] == "task_mutable_class_result_rejected")
+        for observed in (dict(expected, diagnostic_reason="UNSUPPORTED_SYNTAX"),
+                         dict(expected, product_published=True), {"exit_code": 0, "stdout_utf8": "42\n"}):
+            with self.assertRaises(ValueError):
+                audit.compare_required(expected, observed)
+
+    def test_closed_waiters_cannot_be_counted_from_timeout_or_closed_report_channel(self):
+        source = (audit.HERE / "fixtures/channel_close_distinct_from_timeout/root.xr").read_text(encoding="utf-8")
+        self.assertIn("const waiter_count = 64", source)
+        self.assertIn("Recv.Closed -> done.send(-1)", source)
+        self.assertIn("Recv.Timeout -> done.send(-2)", source)
+        self.assertIn("_ -> -1000001", source)
+        self.assertNotIn("_ -> done.send(-1)", source)
+
+    def test_map_stress_keeps_all_sends_without_worker_module_var_read(self):
+        source = (audit.HERE / "fixtures/channel_map_value_copy_stress/root.xr").read_text(encoding="utf-8")
+        self.assertIn("const PRODUCERS = 4", source)
+        self.assertIn("const SENDS_PER_PRODUCER = 5000", source)
+        self.assertIn("maps.send(m)", source)
+        self.assertIn("assertEqual(sum, total * 2)", source)
+        self.assertIn("assertEqual(completed, total)", source)
+        self.assertNotIn("copy(m)", source)
+
+    def test_cancel_terminal_must_follow_exactly_one_cleanup(self):
+        expected = next(r["expected"] for r in self.oracles["cases"] if r["id"] == "task_cancel_publishes_after_cleanup")
+        for output in ("cancelled\ndefer: cleanup ran\n", "defer: cleanup ran\ndefer: cleanup ran\ncancelled\n"):
+            with self.assertRaises(ValueError):
+                audit.compare_required(expected, dict(expected, stdout_utf8=output))
+
+    def test_overlapping_waiters_have_distinct_required_results(self):
+        for identity, wrong in (("1161_multiple_task_awaiters", "318\ndone\n"),
+                                ("1162_overlapping_await_any_waiters", "314\ndone\n")):
+            expected = next(r["expected"] for r in self.oracles["cases"] if r["id"] == identity + "_independent_results")
+            with self.subTest(identity=identity), self.assertRaises(ValueError):
+                audit.compare_required(expected, dict(expected, test_body_stdout_utf8=wrong))
+
     def test_named_source_obligations_cannot_be_dropped_or_marked_discovered(self):
         for change in ("drop", "PASS"):
             bad = copy.deepcopy(self.runner_routes)
