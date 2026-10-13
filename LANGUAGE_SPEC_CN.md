@@ -7339,6 +7339,8 @@ Checked与Program、值和调用边界使用§17.6的现行版本，不接受先
 
 函数值可以保存一组有序的按值捕获。FUNCTION_REF 的操作数范围是捕获值；目标函数的参数前缀逐项匹配捕获类型，剩余参数和返回匹配公开函数签名。显式泛型替换、值角色、支配、可见性和初始化限制全部在 Checked 验证，特化后复验；捕获不授予额外调用权限。
 
+已闭合的按值叶 Function 捕获须验证其真实 Program producer、目标、声明类型及完整 captures，不能仅凭 NONE 广告或地址取得准入。运行期以原 FUNCTION_REF 捕获操作数的已拥有声明上界验证捕获前缀，并与封存执行节点的完整实参行逐字相符。无环境的具体叶函数不继承外层 closure 的无关环境列；symbolic 或有环境的 producer 保留完整关系并继续普通精确验证。其它 constructed 捕获、Function 跨 GO 的 Sendable、NO_SUSPEND、私有可见性及资源责任不因这一有限能力解除。
+
 捕获环境在构造时取得每个值的逻辑副本，失败不发布部分函数值；复制函数值共享不可变环境。string 保持值语义，Atomic 保持同步身份，函数捕获保留原有执行准入。环境不得保存调用方帧指针。最后一个函数引用释放全部捕获及代码租约；嵌套环境清理不得随捕获深度递归消耗宿主栈，也不得为清理再次分配。
 
 间接调用仍发布同一可恢复 CALL action，携带借用的函数值；唯一帧驱动器把环境前缀和显式实参复制到新帧。在新帧完成拥有前，调用方帧继续保活环境；挂起、抛出、取消和返回沿用统一清理。宿主函数调用入口同样保留捕获和实参，再释放前次结果。实例 stop/free 撤销执行准入，但外逃环境和值仍可读取、复制和释放。
@@ -7533,17 +7535,17 @@ Checked22/57、Value16和Program26保持各自实际合同；输出接口迁移�
 
 准入验收须含private generic helper、两个库binder0/function0、反转输入顺序及改变接收ordinal、显式/推断/转发、新用户类型、未使用坏定义和private外部调用拒绝，销毁producer后的VM/独立packet/真native及双Instance与owned结果。保留原library/string/output门及全部新真实OOM、三轴exact/minus1、取消、物理释放和适用安全。此有限族不宣称完整库状态/依赖、native缓存配对、安装分发或全产品完成。
 
-### 17.37 Checked standard library publication and ordinary execution
+### 17.37 Checked 标准库出版与普通执行
 
-The standard library supplies one Checked XIR semantic input, including declarations, generic definitions, private implementation closure, module initialization, effects and ownership facts. The current published family is io/output; this does not qualify the remaining library families. Library templates are verified input rather than executable Program authority. Catalog admission verifies the complete Checked body, its canonical module identity and dependencies under the caller's cumulative resource ledger. Byte digests never replace semantic verification. Catalog ownership survives input/source destruction and copies physical roots. Missing or malformed advertised input rejects without a source fallback.
+标准库只提供一份 Checked XIR 语义输入，包含声明、泛型定义、私有实现闭包、模块初始化、效果和所有权事实。当前出版族为 io/output，不代表其余标准库族已获资格。库模板是经过验证的输入，不是可执行 Program 授权。Catalog 在调用方累计资源账本下验证完整 Checked body、规范模块身份和依赖；字节摘要不能代替语义复验。Catalog 深拥有物理根，输入和 Source 生产者销毁后仍有效。缺失或畸形的 advertised 输入拒绝，不回退到 Source。
 
-The Checked producer performs Source checking and Checked encoding without CGen, native compilation, object inventory or a runtime SDK dependency. Building the producer executable still needs the supported host C toolchain. Embedded immutable Checked bytes and their own component manifest contain no machine-code callbacks. CLI, LSP, VM and AOT obtain library input from this same Catalog independently of native code. VM specializes, reverifies and lowers reachable instances before ordinary immutable Program sealing. VM binding does not look up or replace standard library functions with cached native entries and needs no C compiler at execution time. AOT compiles library and user XIR together through the ordinary C backend.
+Checked producer 只进行 Source 检查与 Checked 编码，不依赖 CGen、native 编译、object 清单或 runtime SDK；构建 producer 可执行文件本身仍需要支持的宿主 C 工具链。嵌入的不可变 Checked 字节和独立组件 manifest 不包含机器码回调。CLI、LSP、VM、AOT 独立于 native 代码取得同一 Catalog 输入。VM 对可达实例特化、复验、Lower 后按普通不可变 Program seal 接收，不查找或替换标准库函数为 cached native entries，执行期不需要 C 编译器。AOT 将库与用户 XIR 共同交给普通 C backend 编译。
 
-Standard library native registries, matching factories, cache leases, paired build identities, object/C mirrors and cache-specific sealing APIs are removed. No compatibility flag, empty cache or second execution path remains. Ordinary native functions, bidirectional VM/native mixed execution, shared Value/Call/Program/Instance, resumable ABI, CGen, necessary platform hosts and the independently verified runtime SDK remain. Actual SDK target/profile/ABI and generated native code admission retain their own rejection boundaries.
+删除标准库 native registry、matching factory、cache lease、配对 build identity、object/C 镜像及缓存专用 seal API；不保留兼容 flag、空缓存或第二执行路径。普通 native 函数、双向 VM/native mixed、共同 Value/Call/Program/Instance、可恢复 ABI、CGen、必要平台 host 和独立验证的 runtime SDK 保留。SDK 的实际 target/profile/ABI 及生成 native 代码准入仍有各自拒绝边界。
 
-Core publication installs only the Checked component and its exact module/length/digest manifest. The SDK component verifies its own target, ABI, source and archive manifest independently; SDK-only installation needs no standard library pair. Components and canonical relative paths reject before publication, and failed verification preserves any previously published manifest. Real Core/SDK/full installs, relocation, source-free VM/AOT, user-created generic types and missing/corrupt components require independent tests. Complete library delivery is separate from removal of the cache for the currently supported family.
+Core 只安装 Checked 组件及精确 module/length/digest manifest。SDK 组件独立验证 target、ABI、Source 和 archive manifest；SDK-only 安装不要求标准库配对。组件及规范相对路径在出版前拒绝畸形输入；验证失败保全已有 manifest。真实 Core/SDK/full 安装、搬移、无源码 VM/AOT、用户新泛型类型及缺失/损坏组件需要独立测试。完整标准库交付与删除当前已支持族的缓存是不同完成责任。
 
-Preserve the independent seven stdout bytes out\0 followed by U+4E2D, four stderr bytes err! and empty; two Instances, four provider outcomes, imported leaves and user wrappers, same-spelling user declarations, producer death, escaped Function/result lifetimes and physical release. Retire only cache match/lease/object-pair assertions. Every actual preparation and bind/seal allocation failure, exact/minus1 resource axis, retry without ledger refill, failure-preserving take and zero-allocation cleanup remains covered on the ordinary paths. W1–W4, portable C11, applicable provider/sanitizer gates and all existing generic/library/output obligations remain.
+保留独立输出预期：stdout 为 out\0 后接 U+4E2D 的七个字节，stderr 为 err! 四个字节及空输入；保留两 Instance、四种 provider 结果、导入 leaf 与用户 wrapper、同名用户声明、producer death、escaped Function/result 寿命和物理释放。只退役 cache match/lease/object-pair 断言。每个实际 preparation、bind/seal 分配故障，资源三轴 exact/minus1、不补账本的 retry、失败保全 take 和零分配 cleanup 仍由普通路径覆盖。W1–W4、可移植 C11、适用 provider/sanitizer 门及既有 generic/library/output 责任全部保留。
 
 ### 17.38 共同根执行流事实与原因查询
 
