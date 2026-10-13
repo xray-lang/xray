@@ -1,0 +1,48 @@
+// P19 complete selected source preparation; product qualification NOT_RUN.
+import http
+import { formData } from http
+import io
+import path
+
+fn main() -> path.Path {
+    // Pure-Xray HTTP multipart/form-data builder.
+
+
+    var form = formData()
+    print(form.boundary.startsWith("----XrayFormBoundary"))
+    print(form.append("name", "Xray"))
+    var built = form.build()
+    print(built.contentType.startsWith("multipart/form-data; boundary=----XrayFormBoundary"))
+    print(built.body.contains("Content-Disposition: form-data; name=\"name\"\r\n\r\n"))
+    print(built.body.contains("\r\n\r\nXray\r\n"))
+    print(built.body.endsWith("--\r\n"))
+
+    var dir = io.tempDir()!
+    defer { io.removeAll(dir) }
+    var uploadPath = path.join(dir, path.from("upload.txt"))
+    print(io.writeFile(uploadPath, "file-data"))
+    var fileForm = http.formData()
+    print(fileForm.appendFile("upload", uploadPath))
+    var fileBuilt = fileForm.build()
+    print(fileBuilt.body.contains("name=\"upload\"; filename=\"upload.txt\""))
+    print(fileBuilt.body.contains("Content-Type: text/plain\r\n\r\n"))
+    print(fileBuilt.body.contains("\r\n\r\nfile-data\r\n"))
+
+    var limited = formData(3, 3)
+    print(limited.append("field", "abcd"))
+    print(limited.totalSize)
+    var unlimited = formData(0, 0)
+    print(unlimited.append("field", "abcd"))
+    print(unlimited.totalSize)
+
+    var bigPath = path.join(dir, path.from("big.bin"))
+    print(io.writeFile(bigPath, "abcd"))
+    var fileLimited = formData(0, 3)
+    print(fileLimited.appendFile("file", bigPath))
+    print(fileLimited.totalSize)
+
+    return dir
+}
+
+var cleanedDirectory = main()
+print(!io.exists(cleanedDirectory))

@@ -1,0 +1,12 @@
+// P19 complete selected source preparation; product qualification NOT_RUN.
+import { HttpError, HttpVersion } from http
+
+fn rejectVersion() {
+    throw HttpError.UnsupportedVersion { version: HttpVersion.Http2 }
+}
+
+try {
+    rejectVersion()
+} catch (HttpError.UnsupportedVersion { version }) {
+    print(version.name)
+}

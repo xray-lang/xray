@@ -152,3 +152,12 @@ separately; CRLF bytes are not normalized away. Provider effect duties distingui
 real symlink/socket/thread/descriptor/wait/recycle activity from fake true branches,
 markers, counts or clean output. Full parallel, SIMD and OS-thread dimensions stay
 required; published replacements and all applicable safety gates are still OPEN.
+
+
+The reviewed differential set is now explicit in full. Library duties preserve
+complete byte/property corpora, typed errors, nested payloads, HTTP UTF-8 framing,
+protocol vectors, lexical path semantics and actual provider boundaries. Selected
+full drafts follow declared non-Optional UTF-8 results, required CSV rune payloads
+and typed catch bindings while retaining original sources. Known hash/CRC/HMAC and
+wire answers are independently calculated; output equality never grants entropy,
+constant-time, authentication, connection or physical cleanup qualification.

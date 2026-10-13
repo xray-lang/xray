@@ -105500,6 +105500,3248 @@
         "execution": "NOT_RUN"
       },
       "target_contract_review": "REQUIRED; preserve full original effects, dimensions, callbacks and platforms. Bootstrap intrinsic/readonly-write/erased type/ROOT capture/fake provider verdict remain unqualified."
+    },
+    {
+      "case_id": "tests/diff/cases/semantics/stdlib/base64_isvalid_direct.xr",
+      "source_lf_sha256": "f71587cd56793f404dd402462ef45a68ccd6a6d0af1a52ce7a4dec7fccff3a6f",
+      "primary_family": "array-slice-fixed-array-range-iteration",
+      "secondary_families": [
+        "ownership-read-ref-move-copy-drop",
+        "direct-imported-static-instance-call",
+        "module-graph-import-export-init",
+        "typed-error-throw-try-catch",
+        "string-rune-interpolation",
+        "ffi-c-boundary-and-callback"
+      ],
+      "tasks": [
+        "313",
+        "314",
+        "315",
+        "316",
+        "317",
+        "318",
+        "319",
+        "322"
+      ],
+      "producer_packages": [
+        "P02",
+        "P06",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P12",
+        "P13",
+        "P14",
+        "P17"
+      ],
+      "semantic_basis": "Preserve all reviewed original typed values/calls, complete normal/error/byte/framing/container responsibilities and actual publication/cleanup boundaries. Native shadows, build-only or matchingwrongoutputs do not qualify the real declaration-owned library entry.",
+      "original_runner_entries": [
+        {
+          "suite": "differential",
+          "entry": "run"
+        }
+      ],
+      "new_entry_status": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "replacement_qualification": "OPEN",
+      "original_stdout_oracle": {
+        "path": "tests/diff/cases/semantics/stdlib/base64_isvalid_direct.xr.expected",
+        "state": "MISSING",
+        "lf_sha256": null
+      },
+      "original_differential_obligation": {
+        "arguments": [],
+        "stdin_hex": "",
+        "arguments_sidecar": {
+          "path": "tests/diff/cases/semantics/stdlib/base64_isvalid_direct.args",
+          "state": "MISSING"
+        },
+        "stdin_sidecar": {
+          "path": "tests/diff/cases/semantics/stdlib/base64_isvalid_direct.stdin",
+          "state": "MISSING"
+        },
+        "execution": "NOT_RUN"
+      },
+      "target_contract_review": "REQUIRED; exact declaration-owned interfaces, types, payloads, budgets, scopes, platform and provider gates remainOPEN. Preserve wholeoriginal positive/error responsibility without retired shims or arbitraryfailure.",
+      "target_source_port": {
+        "fixture": "tests/unit/xir/legacy_consumers/fixtures/library_ports/base64_isvalid_direct/root.xr",
+        "lf_sha256": "6b96b72d17073a3fbf660f1246a2e66ced4ade7121712eb69af02ea400949022",
+        "owner_package": "P10",
+        "qualification": "NOT_RUN",
+        "frozen_basis": [
+          "ActualdeclarednonOptionalUTF8string/typedCsvdelimiter/patternpayloadtype",
+          "Completeoriginalsourcebodies and runtime/error/IOduties retained",
+          "Actualpublishedlibrary/provider/formatter/StringBuilderreplacements and fullqualification stillrequired"
+        ]
+      },
+      "target_disposition": {
+        "kind": "POSITIVE_NONOPTIONAL_UTF8_DECLARATION_AFTER_FROZEN_PORT",
+        "owner_package": "P10",
+        "qualification": "NOT_RUN",
+        "reason": "string.fromUtf8 explicitlyreturnsnonOptionalstring; complete source port removesinvalid! andretains typedUtf8Error ratherthan nullablefailure."
+      }
+    },
+    {
+      "case_id": "tests/diff/cases/semantics/stdlib/base64_module.xr",
+      "source_lf_sha256": "676250555ef22aaa697987b364d2dbec8e339ea01839bbefdaccd8566deb29f4",
+      "primary_family": "array-slice-fixed-array-range-iteration",
+      "secondary_families": [
+        "ownership-read-ref-move-copy-drop",
+        "direct-imported-static-instance-call",
+        "module-graph-import-export-init",
+        "typed-error-throw-try-catch",
+        "string-rune-interpolation",
+        "ffi-c-boundary-and-callback"
+      ],
+      "tasks": [
+        "313",
+        "314",
+        "315",
+        "316",
+        "317",
+        "318",
+        "319",
+        "322"
+      ],
+      "producer_packages": [
+        "P02",
+        "P06",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P12",
+        "P13",
+        "P14",
+        "P17"
+      ],
+      "semantic_basis": "Preserve all reviewed original typed values/calls, complete normal/error/byte/framing/container responsibilities and actual publication/cleanup boundaries. Native shadows, build-only or matchingwrongoutputs do not qualify the real declaration-owned library entry.",
+      "original_runner_entries": [
+        {
+          "suite": "differential",
+          "entry": "run"
+        }
+      ],
+      "new_entry_status": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "replacement_qualification": "OPEN",
+      "original_stdout_oracle": {
+        "path": "tests/diff/cases/semantics/stdlib/base64_module.xr.expected",
+        "state": "MISSING",
+        "lf_sha256": null
+      },
+      "original_differential_obligation": {
+        "arguments": [],
+        "stdin_hex": "",
+        "arguments_sidecar": {
+          "path": "tests/diff/cases/semantics/stdlib/base64_module.args",
+          "state": "MISSING"
+        },
+        "stdin_sidecar": {
+          "path": "tests/diff/cases/semantics/stdlib/base64_module.stdin",
+          "state": "MISSING"
+        },
+        "execution": "NOT_RUN"
+      },
+      "target_contract_review": "REQUIRED; exact declaration-owned interfaces, types, payloads, budgets, scopes, platform and provider gates remainOPEN. Preserve wholeoriginal positive/error responsibility without retired shims or arbitraryfailure.",
+      "target_source_port": {
+        "fixture": "tests/unit/xir/legacy_consumers/fixtures/library_ports/base64_module/root.xr",
+        "lf_sha256": "5e685f3d1d41d07602884562aff3b87dd6b0d1dc9bc2809afee03201f6bd93b7",
+        "owner_package": "P10",
+        "qualification": "NOT_RUN",
+        "frozen_basis": [
+          "ActualdeclarednonOptionalUTF8string/typedCsvdelimiter/patternpayloadtype",
+          "Completeoriginalsourcebodies and runtime/error/IOduties retained",
+          "Actualpublishedlibrary/provider/formatter/StringBuilderreplacements and fullqualification stillrequired"
+        ]
+      },
+      "target_disposition": {
+        "kind": "POSITIVE_NONOPTIONAL_UTF8_DECLARATION_AFTER_FROZEN_PORT",
+        "owner_package": "P10",
+        "qualification": "NOT_RUN",
+        "reason": "string.fromUtf8 explicitlyreturnsnonOptionalstring; complete source port removesinvalid! andretains typedUtf8Error ratherthan nullablefailure."
+      }
+    },
+    {
+      "case_id": "tests/diff/cases/semantics/stdlib/base64_property_direct.xr",
+      "source_lf_sha256": "975ea67f43138f189e3a381276d87576cf446579273c596347bf1df3635ea79c",
+      "primary_family": "array-slice-fixed-array-range-iteration",
+      "secondary_families": [
+        "ownership-read-ref-move-copy-drop",
+        "direct-imported-static-instance-call",
+        "module-graph-import-export-init",
+        "typed-error-throw-try-catch",
+        "string-rune-interpolation",
+        "ffi-c-boundary-and-callback"
+      ],
+      "tasks": [
+        "313",
+        "314",
+        "315",
+        "316",
+        "317",
+        "318",
+        "319",
+        "322"
+      ],
+      "producer_packages": [
+        "P02",
+        "P06",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P12",
+        "P13",
+        "P14",
+        "P17"
+      ],
+      "semantic_basis": "Keep all256 singleton aggregate544432900 and97 lengths0..96 for both alphabets; exact padding/trailing-bit error payloads, never shrink property corpus.",
+      "original_runner_entries": [
+        {
+          "suite": "differential",
+          "entry": "run"
+        }
+      ],
+      "new_entry_status": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "replacement_qualification": "OPEN",
+      "original_stdout_oracle": {
+        "path": "tests/diff/cases/semantics/stdlib/base64_property_direct.xr.expected",
+        "state": "MISSING",
+        "lf_sha256": null
+      },
+      "original_differential_obligation": {
+        "arguments": [],
+        "stdin_hex": "",
+        "arguments_sidecar": {
+          "path": "tests/diff/cases/semantics/stdlib/base64_property_direct.args",
+          "state": "MISSING"
+        },
+        "stdin_sidecar": {
+          "path": "tests/diff/cases/semantics/stdlib/base64_property_direct.stdin",
+          "state": "MISSING"
+        },
+        "execution": "NOT_RUN"
+      },
+      "target_contract_review": "REQUIRED; exact declaration-owned interfaces, types, payloads, budgets, scopes, platform and provider gates remainOPEN. Preserve wholeoriginal positive/error responsibility without retired shims or arbitraryfailure."
+    },
+    {
+      "case_id": "tests/diff/cases/semantics/stdlib/cluster_protocol_pure_direct.xr",
+      "source_lf_sha256": "dc2b39b816c872e0167e52128c41722b3951bcfa13023875113c095a6d49e52a",
+      "primary_family": "enum-variant-pattern",
+      "secondary_families": [
+        "ownership-read-ref-move-copy-drop",
+        "direct-imported-static-instance-call",
+        "module-graph-import-export-init",
+        "typed-error-throw-try-catch",
+        "map-set-object-json",
+        "string-rune-interpolation",
+        "generic-monomorphization"
+      ],
+      "tasks": [
+        "313",
+        "314",
+        "315",
+        "316",
+        "317",
+        "318",
+        "319",
+        "322"
+      ],
+      "producer_packages": [
+        "P02",
+        "P06",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P12",
+        "P13",
+        "P14",
+        "P17"
+      ],
+      "semantic_basis": "Preserve all reviewed original typed values/calls, complete normal/error/byte/framing/container responsibilities and actual publication/cleanup boundaries. Native shadows, build-only or matchingwrongoutputs do not qualify the real declaration-owned library entry.",
+      "original_runner_entries": [
+        {
+          "suite": "differential",
+          "entry": "run"
+        }
+      ],
+      "new_entry_status": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "replacement_qualification": "OPEN",
+      "original_stdout_oracle": {
+        "path": "tests/diff/cases/semantics/stdlib/cluster_protocol_pure_direct.xr.expected",
+        "state": "MISSING",
+        "lf_sha256": null
+      },
+      "original_differential_obligation": {
+        "arguments": [],
+        "stdin_hex": "",
+        "arguments_sidecar": {
+          "path": "tests/diff/cases/semantics/stdlib/cluster_protocol_pure_direct.args",
+          "state": "MISSING"
+        },
+        "stdin_sidecar": {
+          "path": "tests/diff/cases/semantics/stdlib/cluster_protocol_pure_direct.stdin",
+          "state": "MISSING"
+        },
+        "execution": "NOT_RUN"
+      },
+      "target_contract_review": "REQUIRED; exact declaration-owned interfaces, types, payloads, budgets, scopes, platform and provider gates remainOPEN. Preserve wholeoriginal positive/error responsibility without retired shims or arbitraryfailure."
+    },
+    {
+      "case_id": "tests/diff/cases/semantics/stdlib/cluster_typed_control_surface.xr",
+      "source_lf_sha256": "c726d5e2775db521e06274dc6bf7ed86a4ec3489b9489da4ff0215965ae6fca2",
+      "primary_family": "enum-variant-pattern",
+      "secondary_families": [
+        "ownership-read-ref-move-copy-drop",
+        "direct-imported-static-instance-call",
+        "module-graph-import-export-init",
+        "typed-error-throw-try-catch",
+        "map-set-object-json",
+        "string-rune-interpolation",
+        "generic-monomorphization"
+      ],
+      "tasks": [
+        "313",
+        "314",
+        "315",
+        "316",
+        "317",
+        "318",
+        "319",
+        "322"
+      ],
+      "producer_packages": [
+        "P02",
+        "P06",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P12",
+        "P13",
+        "P14",
+        "P17"
+      ],
+      "semantic_basis": "Four nullOptionalarguments and acceptstrue only exercise declarationadmission, no controlledcluster instance/transport/handshake behavior.",
+      "original_runner_entries": [
+        {
+          "suite": "differential",
+          "entry": "run"
+        }
+      ],
+      "new_entry_status": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "replacement_qualification": "OPEN",
+      "original_stdout_oracle": {
+        "path": "tests/diff/cases/semantics/stdlib/cluster_typed_control_surface.xr.expected",
+        "state": "PRESENT",
+        "lf_sha256": "a17fcf0a2f50e2d495e4f90ce263410edc183add6c62699a2facbccf60410f74"
+      },
+      "original_differential_obligation": {
+        "arguments": [],
+        "stdin_hex": "",
+        "arguments_sidecar": {
+          "path": "tests/diff/cases/semantics/stdlib/cluster_typed_control_surface.args",
+          "state": "MISSING"
+        },
+        "stdin_sidecar": {
+          "path": "tests/diff/cases/semantics/stdlib/cluster_typed_control_surface.stdin",
+          "state": "MISSING"
+        },
+        "execution": "NOT_RUN"
+      },
+      "target_contract_review": "REQUIRED; exact declaration-owned interfaces, types, payloads, budgets, scopes, platform and provider gates remainOPEN. Preserve wholeoriginal positive/error responsibility without retired shims or arbitraryfailure."
+    },
+    {
+      "case_id": "tests/diff/cases/semantics/stdlib/cluster_wire_protocol_pure_direct.xr",
+      "source_lf_sha256": "1987c57a4d5d4b8ed398e61a3b98544fe200c5b81665671e4af3e7a2f2fe154b",
+      "primary_family": "enum-variant-pattern",
+      "secondary_families": [
+        "ownership-read-ref-move-copy-drop",
+        "direct-imported-static-instance-call",
+        "module-graph-import-export-init",
+        "typed-error-throw-try-catch",
+        "map-set-object-json",
+        "string-rune-interpolation",
+        "generic-monomorphization"
+      ],
+      "tasks": [
+        "313",
+        "314",
+        "315",
+        "316",
+        "317",
+        "318",
+        "319",
+        "322"
+      ],
+      "producer_packages": [
+        "P02",
+        "P06",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P12",
+        "P13",
+        "P14",
+        "P17"
+      ],
+      "semantic_basis": "Retain all complete BE-length frame/payload bytes, retiredkind09,64byteenvelope,nonce16/proof32 andPhi-window120records. HMACbyteanswer is independent of native shadow; transportexecution stillunqualified.",
+      "original_runner_entries": [
+        {
+          "suite": "differential",
+          "entry": "run"
+        }
+      ],
+      "new_entry_status": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "replacement_qualification": "OPEN",
+      "original_stdout_oracle": {
+        "path": "tests/diff/cases/semantics/stdlib/cluster_wire_protocol_pure_direct.xr.expected",
+        "state": "MISSING",
+        "lf_sha256": null
+      },
+      "original_differential_obligation": {
+        "arguments": [],
+        "stdin_hex": "",
+        "arguments_sidecar": {
+          "path": "tests/diff/cases/semantics/stdlib/cluster_wire_protocol_pure_direct.args",
+          "state": "MISSING"
+        },
+        "stdin_sidecar": {
+          "path": "tests/diff/cases/semantics/stdlib/cluster_wire_protocol_pure_direct.stdin",
+          "state": "MISSING"
+        },
+        "execution": "NOT_RUN"
+      },
+      "target_contract_review": "REQUIRED; exact declaration-owned interfaces, types, payloads, budgets, scopes, platform and provider gates remainOPEN. Preserve wholeoriginal positive/error responsibility without retired shims or arbitraryfailure."
+    },
+    {
+      "case_id": "tests/diff/cases/semantics/stdlib/compress_checksum_direct.xr",
+      "source_lf_sha256": "82e1c04a20e99751fd6f94c7fe269a2c6d552b773968c6e7d07d3a4adf17c36f",
+      "primary_family": "array-slice-fixed-array-range-iteration",
+      "secondary_families": [
+        "ownership-read-ref-move-copy-drop",
+        "direct-imported-static-instance-call",
+        "module-graph-import-export-init",
+        "typed-error-throw-try-catch",
+        "string-rune-interpolation",
+        "ffi-c-boundary-and-callback"
+      ],
+      "tasks": [
+        "313",
+        "314",
+        "315",
+        "316",
+        "317",
+        "318",
+        "319",
+        "322"
+      ],
+      "producer_packages": [
+        "P02",
+        "P06",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P12",
+        "P13",
+        "P14",
+        "P17"
+      ],
+      "semantic_basis": "Preserve all reviewed original typed values/calls, complete normal/error/byte/framing/container responsibilities and actual publication/cleanup boundaries. Native shadows, build-only or matchingwrongoutputs do not qualify the real declaration-owned library entry.",
+      "original_runner_entries": [
+        {
+          "suite": "differential",
+          "entry": "run"
+        }
+      ],
+      "new_entry_status": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "replacement_qualification": "OPEN",
+      "original_stdout_oracle": {
+        "path": "tests/diff/cases/semantics/stdlib/compress_checksum_direct.xr.expected",
+        "state": "MISSING",
+        "lf_sha256": null
+      },
+      "original_differential_obligation": {
+        "arguments": [],
+        "stdin_hex": "",
+        "arguments_sidecar": {
+          "path": "tests/diff/cases/semantics/stdlib/compress_checksum_direct.args",
+          "state": "MISSING"
+        },
+        "stdin_sidecar": {
+          "path": "tests/diff/cases/semantics/stdlib/compress_checksum_direct.stdin",
+          "state": "MISSING"
+        },
+        "execution": "NOT_RUN"
+      },
+      "target_contract_review": "REQUIRED; exact declaration-owned interfaces, types, payloads, budgets, scopes, platform and provider gates remainOPEN. Preserve wholeoriginal positive/error responsibility without retired shims or arbitraryfailure."
+    },
+    {
+      "case_id": "tests/diff/cases/semantics/stdlib/compress_roundtrip_direct.xr",
+      "source_lf_sha256": "c886d6b8bb79a38a4b170aefe1385c7b679eb8444b335615dc7b96549f8808c8",
+      "primary_family": "array-slice-fixed-array-range-iteration",
+      "secondary_families": [
+        "ownership-read-ref-move-copy-drop",
+        "direct-imported-static-instance-call",
+        "module-graph-import-export-init",
+        "typed-error-throw-try-catch",
+        "string-rune-interpolation",
+        "ffi-c-boundary-and-callback"
+      ],
+      "tasks": [
+        "313",
+        "314",
+        "315",
+        "316",
+        "317",
+        "318",
+        "319",
+        "322"
+      ],
+      "producer_packages": [
+        "P02",
+        "P06",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P12",
+        "P13",
+        "P14",
+        "P17"
+      ],
+      "semantic_basis": "Keep gzip/deflate/zlib omitted/0/9/42/-7options and exactInvalidDatachannels. Publishedclamping/defaultpolicy must be reviewed; no inventednegative/highlevel rejection or providerPASS.",
+      "original_runner_entries": [
+        {
+          "suite": "differential",
+          "entry": "run"
+        }
+      ],
+      "new_entry_status": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "replacement_qualification": "OPEN",
+      "original_stdout_oracle": {
+        "path": "tests/diff/cases/semantics/stdlib/compress_roundtrip_direct.xr.expected",
+        "state": "MISSING",
+        "lf_sha256": null
+      },
+      "original_differential_obligation": {
+        "arguments": [],
+        "stdin_hex": "",
+        "arguments_sidecar": {
+          "path": "tests/diff/cases/semantics/stdlib/compress_roundtrip_direct.args",
+          "state": "MISSING"
+        },
+        "stdin_sidecar": {
+          "path": "tests/diff/cases/semantics/stdlib/compress_roundtrip_direct.stdin",
+          "state": "MISSING"
+        },
+        "execution": "NOT_RUN"
+      },
+      "target_contract_review": "REQUIRED; exact declaration-owned interfaces, types, payloads, budgets, scopes, platform and provider gates remainOPEN. Preserve wholeoriginal positive/error responsibility without retired shims or arbitraryfailure.",
+      "target_source_port": {
+        "fixture": "tests/unit/xir/legacy_consumers/fixtures/library_ports/compress_roundtrip_direct/root.xr",
+        "lf_sha256": "4b32e6c2053703d6a96b547d04301e1376059bc92bfa32d2a58cbfb8610f9046",
+        "owner_package": "P10",
+        "qualification": "NOT_RUN",
+        "frozen_basis": [
+          "ActualdeclarednonOptionalUTF8string/typedCsvdelimiter/patternpayloadtype",
+          "Completeoriginalsourcebodies and runtime/error/IOduties retained",
+          "Actualpublishedlibrary/provider/formatter/StringBuilderreplacements and fullqualification stillrequired"
+        ]
+      },
+      "target_disposition": {
+        "kind": "POSITIVE_NONOPTIONAL_UTF8_DECLARATION_AFTER_FROZEN_PORT",
+        "owner_package": "P10",
+        "qualification": "NOT_RUN",
+        "reason": "string.fromUtf8 explicitlyreturnsnonOptionalstring; complete source port removesinvalid! andretains typedUtf8Error ratherthan nullablefailure."
+      }
+    },
+    {
+      "case_id": "tests/diff/cases/semantics/stdlib/compress_truncated_direct.xr",
+      "source_lf_sha256": "2b5b6f3f3427358b105a4f96f7ace76950275bf806a322808211c3529f904f21",
+      "primary_family": "array-slice-fixed-array-range-iteration",
+      "secondary_families": [
+        "ownership-read-ref-move-copy-drop",
+        "direct-imported-static-instance-call",
+        "module-graph-import-export-init",
+        "typed-error-throw-try-catch",
+        "string-rune-interpolation",
+        "ffi-c-boundary-and-callback"
+      ],
+      "tasks": [
+        "313",
+        "314",
+        "315",
+        "316",
+        "317",
+        "318",
+        "319",
+        "322"
+      ],
+      "producer_packages": [
+        "P02",
+        "P06",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P12",
+        "P13",
+        "P14",
+        "P17"
+      ],
+      "semantic_basis": "All three byte-truncatedpayload families require structuredCompressionError.InvalidData, not anycompile/recover/panic failure.",
+      "original_runner_entries": [
+        {
+          "suite": "differential",
+          "entry": "run"
+        }
+      ],
+      "new_entry_status": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "replacement_qualification": "OPEN",
+      "original_stdout_oracle": {
+        "path": "tests/diff/cases/semantics/stdlib/compress_truncated_direct.xr.expected",
+        "state": "MISSING",
+        "lf_sha256": null
+      },
+      "original_differential_obligation": {
+        "arguments": [],
+        "stdin_hex": "",
+        "arguments_sidecar": {
+          "path": "tests/diff/cases/semantics/stdlib/compress_truncated_direct.args",
+          "state": "MISSING"
+        },
+        "stdin_sidecar": {
+          "path": "tests/diff/cases/semantics/stdlib/compress_truncated_direct.stdin",
+          "state": "MISSING"
+        },
+        "execution": "NOT_RUN"
+      },
+      "target_contract_review": "REQUIRED; exact declaration-owned interfaces, types, payloads, budgets, scopes, platform and provider gates remainOPEN. Preserve wholeoriginal positive/error responsibility without retired shims or arbitraryfailure."
+    },
+    {
+      "case_id": "tests/diff/cases/semantics/stdlib/crypto_random_system_direct.xr",
+      "source_lf_sha256": "6319e875870f460cf312e04a2813bf4c721727162752db95018ad7197b77b33c",
+      "primary_family": "array-slice-fixed-array-range-iteration",
+      "secondary_families": [
+        "ownership-read-ref-move-copy-drop",
+        "direct-imported-static-instance-call",
+        "module-graph-import-export-init",
+        "typed-error-throw-try-catch",
+        "string-rune-interpolation",
+        "ffi-c-boundary-and-callback"
+      ],
+      "tasks": [
+        "313",
+        "314",
+        "315",
+        "316",
+        "317",
+        "318",
+        "319",
+        "322"
+      ],
+      "producer_packages": [
+        "P02",
+        "P06",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P12",
+        "P13",
+        "P14",
+        "P17"
+      ],
+      "semantic_basis": "Legacy randomBytes returnshextext with2Nchars; UUID shape/version/variant is not entropy provenance. Actualpublicdeclarations/provider required.",
+      "original_runner_entries": [
+        {
+          "suite": "differential",
+          "entry": "run"
+        }
+      ],
+      "new_entry_status": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "replacement_qualification": "OPEN",
+      "original_stdout_oracle": {
+        "path": "tests/diff/cases/semantics/stdlib/crypto_random_system_direct.xr.expected",
+        "state": "MISSING",
+        "lf_sha256": null
+      },
+      "original_differential_obligation": {
+        "arguments": [],
+        "stdin_hex": "",
+        "arguments_sidecar": {
+          "path": "tests/diff/cases/semantics/stdlib/crypto_random_system_direct.args",
+          "state": "MISSING"
+        },
+        "stdin_sidecar": {
+          "path": "tests/diff/cases/semantics/stdlib/crypto_random_system_direct.stdin",
+          "state": "MISSING"
+        },
+        "execution": "NOT_RUN"
+      },
+      "target_contract_review": "REQUIRED; exact declaration-owned interfaces, types, payloads, budgets, scopes, platform and provider gates remainOPEN. Preserve wholeoriginal positive/error responsibility without retired shims or arbitraryfailure."
+    },
+    {
+      "case_id": "tests/diff/cases/semantics/stdlib/crypto_timing_safe_equal_direct.xr",
+      "source_lf_sha256": "92c90b37090a22a746c4837c35df06a15765d434d536cbf569f74c53b5aa0c05",
+      "primary_family": "array-slice-fixed-array-range-iteration",
+      "secondary_families": [
+        "ownership-read-ref-move-copy-drop",
+        "direct-imported-static-instance-call",
+        "module-graph-import-export-init",
+        "typed-error-throw-try-catch",
+        "string-rune-interpolation",
+        "ffi-c-boundary-and-callback"
+      ],
+      "tasks": [
+        "313",
+        "314",
+        "315",
+        "316",
+        "317",
+        "318",
+        "319",
+        "322"
+      ],
+      "producer_packages": [
+        "P02",
+        "P06",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P12",
+        "P13",
+        "P14",
+        "P17"
+      ],
+      "semantic_basis": "Keep full encryption/error/hash/HMAC duties; equal/unequal outputs do not prove constanttime, authentication or realentropy. Underlyingcryptoprovider/property qualification separate.",
+      "original_runner_entries": [
+        {
+          "suite": "differential",
+          "entry": "run"
+        }
+      ],
+      "new_entry_status": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "replacement_qualification": "OPEN",
+      "original_stdout_oracle": {
+        "path": "tests/diff/cases/semantics/stdlib/crypto_timing_safe_equal_direct.xr.expected",
+        "state": "MISSING",
+        "lf_sha256": null
+      },
+      "original_differential_obligation": {
+        "arguments": [],
+        "stdin_hex": "",
+        "arguments_sidecar": {
+          "path": "tests/diff/cases/semantics/stdlib/crypto_timing_safe_equal_direct.args",
+          "state": "MISSING"
+        },
+        "stdin_sidecar": {
+          "path": "tests/diff/cases/semantics/stdlib/crypto_timing_safe_equal_direct.stdin",
+          "state": "MISSING"
+        },
+        "execution": "NOT_RUN"
+      },
+      "target_contract_review": "REQUIRED; exact declaration-owned interfaces, types, payloads, budgets, scopes, platform and provider gates remainOPEN. Preserve wholeoriginal positive/error responsibility without retired shims or arbitraryfailure."
+    },
+    {
+      "case_id": "tests/diff/cases/semantics/stdlib/csv_pure_module_direct.xr",
+      "source_lf_sha256": "d669b89d2e9ba351c5afdc0e1d9903611a037949f852e7cd8d7828fb68396791",
+      "primary_family": "map-set-object-json",
+      "secondary_families": [
+        "ownership-read-ref-move-copy-drop",
+        "direct-imported-static-instance-call",
+        "module-graph-import-export-init",
+        "typed-error-throw-try-catch",
+        "enum-variant-pattern",
+        "string-rune-interpolation",
+        "generic-monomorphization"
+      ],
+      "tasks": [
+        "313",
+        "314",
+        "315",
+        "316",
+        "317",
+        "318",
+        "319",
+        "322"
+      ],
+      "producer_packages": [
+        "P02",
+        "P06",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P12",
+        "P13",
+        "P14",
+        "P17"
+      ],
+      "semantic_basis": "Original CsvDelimiter.Exact{} misses declared delimiter:rune. Full draft explicitly supplies tab; retain complete typed document/report/mismatch/quoting/comment/columnlimit duties, no product compile failure observed.",
+      "original_runner_entries": [
+        {
+          "suite": "differential",
+          "entry": "run"
+        }
+      ],
+      "new_entry_status": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "replacement_qualification": "OPEN",
+      "original_stdout_oracle": {
+        "path": "tests/diff/cases/semantics/stdlib/csv_pure_module_direct.xr.expected",
+        "state": "MISSING",
+        "lf_sha256": null
+      },
+      "original_differential_obligation": {
+        "arguments": [],
+        "stdin_hex": "",
+        "arguments_sidecar": {
+          "path": "tests/diff/cases/semantics/stdlib/csv_pure_module_direct.args",
+          "state": "MISSING"
+        },
+        "stdin_sidecar": {
+          "path": "tests/diff/cases/semantics/stdlib/csv_pure_module_direct.stdin",
+          "state": "MISSING"
+        },
+        "execution": "NOT_RUN"
+      },
+      "target_contract_review": "REQUIRED; exact declaration-owned interfaces, types, payloads, budgets, scopes, platform and provider gates remainOPEN. Preserve wholeoriginal positive/error responsibility without retired shims or arbitraryfailure.",
+      "target_source_port": {
+        "fixture": "tests/unit/xir/legacy_consumers/fixtures/library_ports/csv_pure_module_direct/root.xr",
+        "lf_sha256": "8fdd1078d42cd67daca62d57773603ad117f39e1af6581d563f0abbd2639f1ae",
+        "owner_package": "P10",
+        "qualification": "NOT_RUN",
+        "frozen_basis": [
+          "ActualdeclarednonOptionalUTF8string/typedCsvdelimiter/patternpayloadtype",
+          "Completeoriginalsourcebodies and runtime/error/IOduties retained",
+          "Actualpublishedlibrary/provider/formatter/StringBuilderreplacements and fullqualification stillrequired"
+        ]
+      },
+      "target_disposition": {
+        "kind": "POSITIVE_EXACT_DECLARED_CSV_PAYLOAD_AFTER_FROZEN_PORT",
+        "owner_package": "P10",
+        "qualification": "NOT_RUN",
+        "reason": "Exactdelimiter requiresrune; originalempty{} becomes explicit delimiter tab9, fullotherCSV dutiesretained."
+      }
+    },
+    {
+      "case_id": "tests/diff/cases/semantics/stdlib/datetime_core_direct.xr",
+      "source_lf_sha256": "6e08d89f3daf3e8105f98616db0219dfd4f476768ff6d782c5c93d31c5175c4e",
+      "primary_family": "floating-point-and-fixed-width-numeric",
+      "secondary_families": [
+        "ownership-read-ref-move-copy-drop",
+        "direct-imported-static-instance-call",
+        "module-graph-import-export-init",
+        "typed-error-throw-try-catch",
+        "nullable-union-cast-and-narrowing",
+        "string-rune-interpolation"
+      ],
+      "tasks": [
+        "313",
+        "314",
+        "315",
+        "316",
+        "317",
+        "318",
+        "319",
+        "322"
+      ],
+      "producer_packages": [
+        "P02",
+        "P06",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P12",
+        "P13",
+        "P14",
+        "P17"
+      ],
+      "semantic_basis": "Preserve all reviewed original typed values/calls, complete normal/error/byte/framing/container responsibilities and actual publication/cleanup boundaries. Native shadows, build-only or matchingwrongoutputs do not qualify the real declaration-owned library entry.",
+      "original_runner_entries": [
+        {
+          "suite": "differential",
+          "entry": "run"
+        }
+      ],
+      "new_entry_status": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "replacement_qualification": "OPEN",
+      "original_stdout_oracle": {
+        "path": "tests/diff/cases/semantics/stdlib/datetime_core_direct.xr.expected",
+        "state": "MISSING",
+        "lf_sha256": null
+      },
+      "original_differential_obligation": {
+        "arguments": [],
+        "stdin_hex": "",
+        "arguments_sidecar": {
+          "path": "tests/diff/cases/semantics/stdlib/datetime_core_direct.args",
+          "state": "MISSING"
+        },
+        "stdin_sidecar": {
+          "path": "tests/diff/cases/semantics/stdlib/datetime_core_direct.stdin",
+          "state": "MISSING"
+        },
+        "execution": "NOT_RUN"
+      },
+      "target_contract_review": "REQUIRED; exact declaration-owned interfaces, types, payloads, budgets, scopes, platform and provider gates remainOPEN. Preserve wholeoriginal positive/error responsibility without retired shims or arbitraryfailure."
+    },
+    {
+      "case_id": "tests/diff/cases/semantics/stdlib/datetime_int_arg_shared_core.xr",
+      "source_lf_sha256": "51b3d2b77485aa7ee9f34bc89ff22e173bab4104a6fa3896144acd43009e5a28",
+      "primary_family": "floating-point-and-fixed-width-numeric",
+      "secondary_families": [
+        "ownership-read-ref-move-copy-drop",
+        "direct-imported-static-instance-call",
+        "module-graph-import-export-init",
+        "typed-error-throw-try-catch",
+        "nullable-union-cast-and-narrowing",
+        "string-rune-interpolation"
+      ],
+      "tasks": [
+        "313",
+        "314",
+        "315",
+        "316",
+        "317",
+        "318",
+        "319",
+        "322"
+      ],
+      "producer_packages": [
+        "P02",
+        "P06",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P12",
+        "P13",
+        "P14",
+        "P17"
+      ],
+      "semantic_basis": "JSON float/bool/null extraction into typed integer parameters may fail before datetime kernels. Do not freeze coercion/truncation or confuse JSON error with constructor arithmetic coverage.",
+      "original_runner_entries": [
+        {
+          "suite": "differential",
+          "entry": "run"
+        }
+      ],
+      "new_entry_status": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "replacement_qualification": "OPEN",
+      "original_stdout_oracle": {
+        "path": "tests/diff/cases/semantics/stdlib/datetime_int_arg_shared_core.xr.expected",
+        "state": "MISSING",
+        "lf_sha256": null
+      },
+      "original_differential_obligation": {
+        "arguments": [],
+        "stdin_hex": "",
+        "arguments_sidecar": {
+          "path": "tests/diff/cases/semantics/stdlib/datetime_int_arg_shared_core.args",
+          "state": "MISSING"
+        },
+        "stdin_sidecar": {
+          "path": "tests/diff/cases/semantics/stdlib/datetime_int_arg_shared_core.stdin",
+          "state": "MISSING"
+        },
+        "execution": "NOT_RUN"
+      },
+      "target_contract_review": "REQUIRED; exact declaration-owned interfaces, types, payloads, budgets, scopes, platform and provider gates remainOPEN. Preserve wholeoriginal positive/error responsibility without retired shims or arbitraryfailure."
+    },
+    {
+      "case_id": "tests/diff/cases/semantics/stdlib/datetime_offset_system_direct.xr",
+      "source_lf_sha256": "3c101428c24c856ebd125816094102692a1ee850f22edc349e9e7c9fe8450581",
+      "primary_family": "floating-point-and-fixed-width-numeric",
+      "secondary_families": [
+        "ownership-read-ref-move-copy-drop",
+        "direct-imported-static-instance-call",
+        "module-graph-import-export-init",
+        "typed-error-throw-try-catch",
+        "nullable-union-cast-and-narrowing",
+        "string-rune-interpolation"
+      ],
+      "tasks": [
+        "313",
+        "314",
+        "315",
+        "316",
+        "317",
+        "318",
+        "319",
+        "322"
+      ],
+      "producer_packages": [
+        "P02",
+        "P06",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P12",
+        "P13",
+        "P14",
+        "P17"
+      ],
+      "semantic_basis": "Preserve all reviewed original typed values/calls, complete normal/error/byte/framing/container responsibilities and actual publication/cleanup boundaries. Native shadows, build-only or matchingwrongoutputs do not qualify the real declaration-owned library entry.",
+      "original_runner_entries": [
+        {
+          "suite": "differential",
+          "entry": "run"
+        }
+      ],
+      "new_entry_status": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "replacement_qualification": "OPEN",
+      "original_stdout_oracle": {
+        "path": "tests/diff/cases/semantics/stdlib/datetime_offset_system_direct.xr.expected",
+        "state": "MISSING",
+        "lf_sha256": null
+      },
+      "original_differential_obligation": {
+        "arguments": [],
+        "stdin_hex": "",
+        "arguments_sidecar": {
+          "path": "tests/diff/cases/semantics/stdlib/datetime_offset_system_direct.args",
+          "state": "MISSING"
+        },
+        "stdin_sidecar": {
+          "path": "tests/diff/cases/semantics/stdlib/datetime_offset_system_direct.stdin",
+          "state": "MISSING"
+        },
+        "execution": "NOT_RUN"
+      },
+      "target_contract_review": "REQUIRED; exact declaration-owned interfaces, types, payloads, budgets, scopes, platform and provider gates remainOPEN. Preserve wholeoriginal positive/error responsibility without retired shims or arbitraryfailure."
+    },
+    {
+      "case_id": "tests/diff/cases/semantics/stdlib/encoding_core_direct.xr",
+      "source_lf_sha256": "9452a7f5b11714b649a83642f018a9fe4141b0ab9d7bee0eace7e247b618aa84",
+      "primary_family": "array-slice-fixed-array-range-iteration",
+      "secondary_families": [
+        "ownership-read-ref-move-copy-drop",
+        "direct-imported-static-instance-call",
+        "module-graph-import-export-init",
+        "typed-error-throw-try-catch",
+        "string-rune-interpolation",
+        "ffi-c-boundary-and-callback"
+      ],
+      "tasks": [
+        "313",
+        "314",
+        "315",
+        "316",
+        "317",
+        "318",
+        "319",
+        "322"
+      ],
+      "producer_packages": [
+        "P02",
+        "P06",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P12",
+        "P13",
+        "P14",
+        "P17"
+      ],
+      "semantic_basis": "Preserve all reviewed original typed values/calls, complete normal/error/byte/framing/container responsibilities and actual publication/cleanup boundaries. Native shadows, build-only or matchingwrongoutputs do not qualify the real declaration-owned library entry.",
+      "original_runner_entries": [
+        {
+          "suite": "differential",
+          "entry": "run"
+        }
+      ],
+      "new_entry_status": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "replacement_qualification": "OPEN",
+      "original_stdout_oracle": {
+        "path": "tests/diff/cases/semantics/stdlib/encoding_core_direct.xr.expected",
+        "state": "MISSING",
+        "lf_sha256": null
+      },
+      "original_differential_obligation": {
+        "arguments": [],
+        "stdin_hex": "",
+        "arguments_sidecar": {
+          "path": "tests/diff/cases/semantics/stdlib/encoding_core_direct.args",
+          "state": "MISSING"
+        },
+        "stdin_sidecar": {
+          "path": "tests/diff/cases/semantics/stdlib/encoding_core_direct.stdin",
+          "state": "MISSING"
+        },
+        "execution": "NOT_RUN"
+      },
+      "target_contract_review": "REQUIRED; exact declaration-owned interfaces, types, payloads, budgets, scopes, platform and provider gates remainOPEN. Preserve wholeoriginal positive/error responsibility without retired shims or arbitraryfailure.",
+      "target_source_port": {
+        "fixture": "tests/unit/xir/legacy_consumers/fixtures/library_ports/encoding_core_direct/root.xr",
+        "lf_sha256": "295536adef4b3f0e50e427ce6f562e26045aa7d0431655327b6aa933caa164e0",
+        "owner_package": "P10",
+        "qualification": "NOT_RUN",
+        "frozen_basis": [
+          "ActualdeclarednonOptionalUTF8string/typedCsvdelimiter/patternpayloadtype",
+          "Completeoriginalsourcebodies and runtime/error/IOduties retained",
+          "Actualpublishedlibrary/provider/formatter/StringBuilderreplacements and fullqualification stillrequired"
+        ]
+      },
+      "target_disposition": {
+        "kind": "POSITIVE_NONOPTIONAL_UTF8_DECLARATION_AFTER_FROZEN_PORT",
+        "owner_package": "P10",
+        "qualification": "NOT_RUN",
+        "reason": "string.fromUtf8 explicitlyreturnsnonOptionalstring; complete source port removesinvalid! andretains typedUtf8Error ratherthan nullablefailure."
+      }
+    },
+    {
+      "case_id": "tests/diff/cases/semantics/stdlib/encoding_module.xr",
+      "source_lf_sha256": "ad30ffe3f3d93e9cc3f8b1ed09871a5ce0b158832b5c7f994234753f26eadf10",
+      "primary_family": "array-slice-fixed-array-range-iteration",
+      "secondary_families": [
+        "ownership-read-ref-move-copy-drop",
+        "direct-imported-static-instance-call",
+        "module-graph-import-export-init",
+        "typed-error-throw-try-catch",
+        "string-rune-interpolation",
+        "ffi-c-boundary-and-callback"
+      ],
+      "tasks": [
+        "313",
+        "314",
+        "315",
+        "316",
+        "317",
+        "318",
+        "319",
+        "322"
+      ],
+      "producer_packages": [
+        "P02",
+        "P06",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P12",
+        "P13",
+        "P14",
+        "P17"
+      ],
+      "semantic_basis": "Preserve all reviewed original typed values/calls, complete normal/error/byte/framing/container responsibilities and actual publication/cleanup boundaries. Native shadows, build-only or matchingwrongoutputs do not qualify the real declaration-owned library entry.",
+      "original_runner_entries": [
+        {
+          "suite": "differential",
+          "entry": "run"
+        }
+      ],
+      "new_entry_status": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "replacement_qualification": "OPEN",
+      "original_stdout_oracle": {
+        "path": "tests/diff/cases/semantics/stdlib/encoding_module.xr.expected",
+        "state": "MISSING",
+        "lf_sha256": null
+      },
+      "original_differential_obligation": {
+        "arguments": [],
+        "stdin_hex": "",
+        "arguments_sidecar": {
+          "path": "tests/diff/cases/semantics/stdlib/encoding_module.args",
+          "state": "MISSING"
+        },
+        "stdin_sidecar": {
+          "path": "tests/diff/cases/semantics/stdlib/encoding_module.stdin",
+          "state": "MISSING"
+        },
+        "execution": "NOT_RUN"
+      },
+      "target_contract_review": "REQUIRED; exact declaration-owned interfaces, types, payloads, budgets, scopes, platform and provider gates remainOPEN. Preserve wholeoriginal positive/error responsibility without retired shims or arbitraryfailure.",
+      "target_source_port": {
+        "fixture": "tests/unit/xir/legacy_consumers/fixtures/library_ports/encoding_module/root.xr",
+        "lf_sha256": "1aba03cf82d86ad4a6e5bd3c9b902b5621898969aaedab828468e473599e7d28",
+        "owner_package": "P10",
+        "qualification": "NOT_RUN",
+        "frozen_basis": [
+          "ActualdeclarednonOptionalUTF8string/typedCsvdelimiter/patternpayloadtype",
+          "Completeoriginalsourcebodies and runtime/error/IOduties retained",
+          "Actualpublishedlibrary/provider/formatter/StringBuilderreplacements and fullqualification stillrequired"
+        ]
+      },
+      "target_disposition": {
+        "kind": "POSITIVE_NONOPTIONAL_UTF8_DECLARATION_AFTER_FROZEN_PORT",
+        "owner_package": "P10",
+        "qualification": "NOT_RUN",
+        "reason": "string.fromUtf8 explicitlyreturnsnonOptionalstring; complete source port removesinvalid! andretains typedUtf8Error ratherthan nullablefailure."
+      }
+    },
+    {
+      "case_id": "tests/diff/cases/semantics/stdlib/encoding_property_direct.xr",
+      "source_lf_sha256": "e908f6ba1459e16523840ad57bec86e247c1e7c375b3b3a0f87c5ea5d5eebc17",
+      "primary_family": "array-slice-fixed-array-range-iteration",
+      "secondary_families": [
+        "ownership-read-ref-move-copy-drop",
+        "direct-imported-static-instance-call",
+        "module-graph-import-export-init",
+        "typed-error-throw-try-catch",
+        "string-rune-interpolation",
+        "ffi-c-boundary-and-callback"
+      ],
+      "tasks": [
+        "313",
+        "314",
+        "315",
+        "316",
+        "317",
+        "318",
+        "319",
+        "322"
+      ],
+      "producer_packages": [
+        "P02",
+        "P06",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P12",
+        "P13",
+        "P14",
+        "P17"
+      ],
+      "semantic_basis": "Keep all256byte hex/singleUTF8 and1920 validtwo-byte pairs,97generatedlengths, nonBMP surrogatepairs and erroroffsets. Boolean summaries do not prove exhaustive execution.",
+      "original_runner_entries": [
+        {
+          "suite": "differential",
+          "entry": "run"
+        }
+      ],
+      "new_entry_status": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "replacement_qualification": "OPEN",
+      "original_stdout_oracle": {
+        "path": "tests/diff/cases/semantics/stdlib/encoding_property_direct.xr.expected",
+        "state": "MISSING",
+        "lf_sha256": null
+      },
+      "original_differential_obligation": {
+        "arguments": [],
+        "stdin_hex": "",
+        "arguments_sidecar": {
+          "path": "tests/diff/cases/semantics/stdlib/encoding_property_direct.args",
+          "state": "MISSING"
+        },
+        "stdin_sidecar": {
+          "path": "tests/diff/cases/semantics/stdlib/encoding_property_direct.stdin",
+          "state": "MISSING"
+        },
+        "execution": "NOT_RUN"
+      },
+      "target_contract_review": "REQUIRED; exact declaration-owned interfaces, types, payloads, budgets, scopes, platform and provider gates remainOPEN. Preserve wholeoriginal positive/error responsibility without retired shims or arbitraryfailure."
+    },
+    {
+      "case_id": "tests/diff/cases/semantics/stdlib/exact_scalar_parse_contract.xr",
+      "source_lf_sha256": "864ef945cd751bce976393ade2d0ea213a00eff66f1e217d64a777b23d588cc7",
+      "primary_family": "floating-point-and-fixed-width-numeric",
+      "secondary_families": [
+        "ownership-read-ref-move-copy-drop",
+        "direct-imported-static-instance-call",
+        "module-graph-import-export-init",
+        "typed-error-throw-try-catch",
+        "nullable-union-cast-and-narrowing",
+        "string-rune-interpolation"
+      ],
+      "tasks": [
+        "313",
+        "314",
+        "315",
+        "316",
+        "317",
+        "318",
+        "319",
+        "322"
+      ],
+      "producer_packages": [
+        "P02",
+        "P06",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P12",
+        "P13",
+        "P14",
+        "P17"
+      ],
+      "semantic_basis": "Preserve all reviewed original typed values/calls, complete normal/error/byte/framing/container responsibilities and actual publication/cleanup boundaries. Native shadows, build-only or matchingwrongoutputs do not qualify the real declaration-owned library entry.",
+      "original_runner_entries": [
+        {
+          "suite": "differential",
+          "entry": "run"
+        }
+      ],
+      "new_entry_status": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "replacement_qualification": "OPEN",
+      "original_stdout_oracle": {
+        "path": "tests/diff/cases/semantics/stdlib/exact_scalar_parse_contract.xr.expected",
+        "state": "MISSING",
+        "lf_sha256": null
+      },
+      "original_differential_obligation": {
+        "arguments": [],
+        "stdin_hex": "",
+        "arguments_sidecar": {
+          "path": "tests/diff/cases/semantics/stdlib/exact_scalar_parse_contract.args",
+          "state": "MISSING"
+        },
+        "stdin_sidecar": {
+          "path": "tests/diff/cases/semantics/stdlib/exact_scalar_parse_contract.stdin",
+          "state": "MISSING"
+        },
+        "execution": "NOT_RUN"
+      },
+      "target_contract_review": "REQUIRED; exact declaration-owned interfaces, types, payloads, budgets, scopes, platform and provider gates remainOPEN. Preserve wholeoriginal positive/error responsibility without retired shims or arbitraryfailure."
+    },
+    {
+      "case_id": "tests/diff/cases/semantics/stdlib/http2_surface_direct.xr",
+      "source_lf_sha256": "c596a9ab813f92daf550a66a2abbaa7ff03abbe40dc8a6c559e8a24a7ac14337",
+      "primary_family": "enum-variant-pattern",
+      "secondary_families": [
+        "ownership-read-ref-move-copy-drop",
+        "direct-imported-static-instance-call",
+        "module-graph-import-export-init",
+        "typed-error-throw-try-catch",
+        "map-set-object-json",
+        "string-rune-interpolation",
+        "generic-monomorphization"
+      ],
+      "tasks": [
+        "313",
+        "314",
+        "315",
+        "316",
+        "317",
+        "318",
+        "319",
+        "322"
+      ],
+      "producer_packages": [
+        "P02",
+        "P06",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P12",
+        "P13",
+        "P14",
+        "P17"
+      ],
+      "semantic_basis": "booltypename checks declaration only; supportedvalue intentionallyplatformdependent, not fullHTTP2/provider readiness.",
+      "original_runner_entries": [
+        {
+          "suite": "differential",
+          "entry": "run"
+        }
+      ],
+      "new_entry_status": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "replacement_qualification": "OPEN",
+      "original_stdout_oracle": {
+        "path": "tests/diff/cases/semantics/stdlib/http2_surface_direct.xr.expected",
+        "state": "MISSING",
+        "lf_sha256": null
+      },
+      "original_differential_obligation": {
+        "arguments": [],
+        "stdin_hex": "",
+        "arguments_sidecar": {
+          "path": "tests/diff/cases/semantics/stdlib/http2_surface_direct.args",
+          "state": "MISSING"
+        },
+        "stdin_sidecar": {
+          "path": "tests/diff/cases/semantics/stdlib/http2_surface_direct.stdin",
+          "state": "MISSING"
+        },
+        "execution": "NOT_RUN"
+      },
+      "target_contract_review": "REQUIRED; exact declaration-owned interfaces, types, payloads, budgets, scopes, platform and provider gates remainOPEN. Preserve wholeoriginal positive/error responsibility without retired shims or arbitraryfailure."
+    },
+    {
+      "case_id": "tests/diff/cases/semantics/stdlib/http_chunked_body_pure_direct.xr",
+      "source_lf_sha256": "930940d138f6f249e32823b4836ae297bfb2a096104446e036344918d62d997d",
+      "primary_family": "enum-variant-pattern",
+      "secondary_families": [
+        "ownership-read-ref-move-copy-drop",
+        "direct-imported-static-instance-call",
+        "module-graph-import-export-init",
+        "typed-error-throw-try-catch",
+        "map-set-object-json",
+        "string-rune-interpolation",
+        "generic-monomorphization"
+      ],
+      "tasks": [
+        "313",
+        "314",
+        "315",
+        "316",
+        "317",
+        "318",
+        "319",
+        "322"
+      ],
+      "producer_packages": [
+        "P02",
+        "P06",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P12",
+        "P13",
+        "P14",
+        "P17"
+      ],
+      "semantic_basis": "Preserve all reviewed original typed values/calls, complete normal/error/byte/framing/container responsibilities and actual publication/cleanup boundaries. Native shadows, build-only or matchingwrongoutputs do not qualify the real declaration-owned library entry.",
+      "original_runner_entries": [
+        {
+          "suite": "differential",
+          "entry": "run"
+        }
+      ],
+      "new_entry_status": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "replacement_qualification": "OPEN",
+      "original_stdout_oracle": {
+        "path": "tests/diff/cases/semantics/stdlib/http_chunked_body_pure_direct.xr.expected",
+        "state": "MISSING",
+        "lf_sha256": null
+      },
+      "original_differential_obligation": {
+        "arguments": [],
+        "stdin_hex": "",
+        "arguments_sidecar": {
+          "path": "tests/diff/cases/semantics/stdlib/http_chunked_body_pure_direct.args",
+          "state": "MISSING"
+        },
+        "stdin_sidecar": {
+          "path": "tests/diff/cases/semantics/stdlib/http_chunked_body_pure_direct.stdin",
+          "state": "MISSING"
+        },
+        "execution": "NOT_RUN"
+      },
+      "target_contract_review": "REQUIRED; exact declaration-owned interfaces, types, payloads, budgets, scopes, platform and provider gates remainOPEN. Preserve wholeoriginal positive/error responsibility without retired shims or arbitraryfailure."
+    },
+    {
+      "case_id": "tests/diff/cases/semantics/stdlib/http_cookie_pure_direct.xr",
+      "source_lf_sha256": "937c723f50148bfcfd9f95dff920707468dc0f649b2806eec005a402de62cd4d",
+      "primary_family": "enum-variant-pattern",
+      "secondary_families": [
+        "ownership-read-ref-move-copy-drop",
+        "direct-imported-static-instance-call",
+        "module-graph-import-export-init",
+        "typed-error-throw-try-catch",
+        "map-set-object-json",
+        "string-rune-interpolation",
+        "generic-monomorphization"
+      ],
+      "tasks": [
+        "313",
+        "314",
+        "315",
+        "316",
+        "317",
+        "318",
+        "319",
+        "322"
+      ],
+      "producer_packages": [
+        "P02",
+        "P06",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P12",
+        "P13",
+        "P14",
+        "P17"
+      ],
+      "semantic_basis": "Preserve all reviewed original typed values/calls, complete normal/error/byte/framing/container responsibilities and actual publication/cleanup boundaries. Native shadows, build-only or matchingwrongoutputs do not qualify the real declaration-owned library entry.",
+      "original_runner_entries": [
+        {
+          "suite": "differential",
+          "entry": "run"
+        }
+      ],
+      "new_entry_status": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "replacement_qualification": "OPEN",
+      "original_stdout_oracle": {
+        "path": "tests/diff/cases/semantics/stdlib/http_cookie_pure_direct.xr.expected",
+        "state": "MISSING",
+        "lf_sha256": null
+      },
+      "original_differential_obligation": {
+        "arguments": [],
+        "stdin_hex": "",
+        "arguments_sidecar": {
+          "path": "tests/diff/cases/semantics/stdlib/http_cookie_pure_direct.args",
+          "state": "MISSING"
+        },
+        "stdin_sidecar": {
+          "path": "tests/diff/cases/semantics/stdlib/http_cookie_pure_direct.stdin",
+          "state": "MISSING"
+        },
+        "execution": "NOT_RUN"
+      },
+      "target_contract_review": "REQUIRED; exact declaration-owned interfaces, types, payloads, budgets, scopes, platform and provider gates remainOPEN. Preserve wholeoriginal positive/error responsibility without retired shims or arbitraryfailure."
+    },
+    {
+      "case_id": "tests/diff/cases/semantics/stdlib/http_error_nested_enum_payload_direct.xr",
+      "source_lf_sha256": "6f6c3987b12b6c72279e4a7a771425d53ad57e16a1ca55f7a46d85ceed97b431",
+      "primary_family": "enum-variant-pattern",
+      "secondary_families": [
+        "ownership-read-ref-move-copy-drop",
+        "direct-imported-static-instance-call",
+        "module-graph-import-export-init",
+        "typed-error-throw-try-catch",
+        "map-set-object-json",
+        "string-rune-interpolation",
+        "generic-monomorphization"
+      ],
+      "tasks": [
+        "313",
+        "314",
+        "315",
+        "316",
+        "317",
+        "318",
+        "319",
+        "322"
+      ],
+      "producer_packages": [
+        "P02",
+        "P06",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P12",
+        "P13",
+        "P14",
+        "P17"
+      ],
+      "semantic_basis": "Declared UnsupportedVersion.version is nonOptional HttpVersion; readonly pattern binder retains same static type. Full draft removes spurious! only, preserves exacttyped enum payload; realcatch/query qualification stillpending.",
+      "original_runner_entries": [
+        {
+          "suite": "differential",
+          "entry": "run"
+        }
+      ],
+      "new_entry_status": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "replacement_qualification": "OPEN",
+      "original_stdout_oracle": {
+        "path": "tests/diff/cases/semantics/stdlib/http_error_nested_enum_payload_direct.xr.expected",
+        "state": "PRESENT",
+        "lf_sha256": "10e5a37def773b5531384dd80ef2e499dbc3ec2410e3805765bc57bb97017ced"
+      },
+      "original_differential_obligation": {
+        "arguments": [],
+        "stdin_hex": "",
+        "arguments_sidecar": {
+          "path": "tests/diff/cases/semantics/stdlib/http_error_nested_enum_payload_direct.args",
+          "state": "MISSING"
+        },
+        "stdin_sidecar": {
+          "path": "tests/diff/cases/semantics/stdlib/http_error_nested_enum_payload_direct.stdin",
+          "state": "MISSING"
+        },
+        "execution": "NOT_RUN"
+      },
+      "target_contract_review": "REQUIRED; exact declaration-owned interfaces, types, payloads, budgets, scopes, platform and provider gates remainOPEN. Preserve wholeoriginal positive/error responsibility without retired shims or arbitraryfailure.",
+      "target_source_port": {
+        "fixture": "tests/unit/xir/legacy_consumers/fixtures/library_ports/http_error_nested_enum_payload_direct/root.xr",
+        "lf_sha256": "50f6ce3efe9f4cd6d04ebc3eeb53a4a53f9971645272bb1be745254272fe5227",
+        "owner_package": "P10",
+        "qualification": "NOT_RUN",
+        "frozen_basis": [
+          "ActualdeclarednonOptionalUTF8string/typedCsvdelimiter/patternpayloadtype",
+          "Completeoriginalsourcebodies and runtime/error/IOduties retained",
+          "Actualpublishedlibrary/provider/formatter/StringBuilderreplacements and fullqualification stillrequired"
+        ]
+      },
+      "target_disposition": {
+        "kind": "POSITIVE_EXACT_TYPED_ERROR_PAYLOAD_AFTER_FROZEN_PORT",
+        "owner_package": "P10",
+        "qualification": "NOT_RUN",
+        "reason": "Patternbindingversion is declaredHttpVersion, notOptional; remove! only, no lostvariant/errorpayload."
+      }
+    },
+    {
+      "case_id": "tests/diff/cases/semantics/stdlib/http_formdata_pure_direct.xr",
+      "source_lf_sha256": "4d00ac8a4e993aaf77c4c596f9b445481304a02a54746dd3320a037bcbf7d36f",
+      "primary_family": "enum-variant-pattern",
+      "secondary_families": [
+        "ownership-read-ref-move-copy-drop",
+        "direct-imported-static-instance-call",
+        "module-graph-import-export-init",
+        "typed-error-throw-try-catch",
+        "map-set-object-json",
+        "string-rune-interpolation",
+        "generic-monomorphization"
+      ],
+      "tasks": [
+        "313",
+        "314",
+        "315",
+        "316",
+        "317",
+        "318",
+        "319",
+        "322"
+      ],
+      "producer_packages": [
+        "P02",
+        "P06",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P12",
+        "P13",
+        "P14",
+        "P17"
+      ],
+      "semantic_basis": "Fullmultipart/tempfile/limitbody retained in main; deferredtemporary-tree cleanup installed afterdirectorycreation, then caller verifiesabsence afterfunction returns. Sourceoriginalomitscleanup; realprovider/allFI/physicalgates remainOPEN.",
+      "original_runner_entries": [
+        {
+          "suite": "differential",
+          "entry": "run"
+        }
+      ],
+      "new_entry_status": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "replacement_qualification": "OPEN",
+      "original_stdout_oracle": {
+        "path": "tests/diff/cases/semantics/stdlib/http_formdata_pure_direct.xr.expected",
+        "state": "MISSING",
+        "lf_sha256": null
+      },
+      "original_differential_obligation": {
+        "arguments": [],
+        "stdin_hex": "",
+        "arguments_sidecar": {
+          "path": "tests/diff/cases/semantics/stdlib/http_formdata_pure_direct.args",
+          "state": "MISSING"
+        },
+        "stdin_sidecar": {
+          "path": "tests/diff/cases/semantics/stdlib/http_formdata_pure_direct.stdin",
+          "state": "MISSING"
+        },
+        "execution": "NOT_RUN"
+      },
+      "target_contract_review": "REQUIRED; exact declaration-owned interfaces, types, payloads, budgets, scopes, platform and provider gates remainOPEN. Preserve wholeoriginal positive/error responsibility without retired shims or arbitraryfailure.",
+      "target_source_port": {
+        "fixture": "tests/unit/xir/legacy_consumers/fixtures/library_ports/http_formdata_pure_direct/root.xr",
+        "lf_sha256": "a56d0a52d66de6de4e045315cec21a28c5b4165e78675037f9aeb8201ef97c86",
+        "owner_package": "P10",
+        "qualification": "NOT_RUN",
+        "frozen_basis": [
+          "ActualdeclarednonOptionalUTF8string/typedCsvdelimiter/patternpayloadtype",
+          "Completeoriginalsourcebodies and runtime/error/IOduties retained",
+          "Actualpublishedlibrary/provider/formatter/StringBuilderreplacements and fullqualification stillrequired"
+        ]
+      }
+    },
+    {
+      "case_id": "tests/diff/cases/semantics/stdlib/http_headers_typed_direct.xr",
+      "source_lf_sha256": "0fe447c6b745844d25b9c35a8fe3191c10d3dcb0c5f0566a32d3840c97312afc",
+      "primary_family": "enum-variant-pattern",
+      "secondary_families": [
+        "ownership-read-ref-move-copy-drop",
+        "direct-imported-static-instance-call",
+        "module-graph-import-export-init",
+        "typed-error-throw-try-catch",
+        "map-set-object-json",
+        "string-rune-interpolation",
+        "generic-monomorphization"
+      ],
+      "tasks": [
+        "313",
+        "314",
+        "315",
+        "316",
+        "317",
+        "318",
+        "319",
+        "322"
+      ],
+      "producer_packages": [
+        "P02",
+        "P06",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P12",
+        "P13",
+        "P14",
+        "P17"
+      ],
+      "semantic_basis": "Preserve all reviewed original typed values/calls, complete normal/error/byte/framing/container responsibilities and actual publication/cleanup boundaries. Native shadows, build-only or matchingwrongoutputs do not qualify the real declaration-owned library entry.",
+      "original_runner_entries": [
+        {
+          "suite": "differential",
+          "entry": "run"
+        }
+      ],
+      "new_entry_status": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "replacement_qualification": "OPEN",
+      "original_stdout_oracle": {
+        "path": "tests/diff/cases/semantics/stdlib/http_headers_typed_direct.xr.expected",
+        "state": "MISSING",
+        "lf_sha256": null
+      },
+      "original_differential_obligation": {
+        "arguments": [],
+        "stdin_hex": "",
+        "arguments_sidecar": {
+          "path": "tests/diff/cases/semantics/stdlib/http_headers_typed_direct.args",
+          "state": "MISSING"
+        },
+        "stdin_sidecar": {
+          "path": "tests/diff/cases/semantics/stdlib/http_headers_typed_direct.stdin",
+          "state": "MISSING"
+        },
+        "execution": "NOT_RUN"
+      },
+      "target_contract_review": "REQUIRED; exact declaration-owned interfaces, types, payloads, budgets, scopes, platform and provider gates remainOPEN. Preserve wholeoriginal positive/error responsibility without retired shims or arbitraryfailure."
+    },
+    {
+      "case_id": "tests/diff/cases/semantics/stdlib/http_pure_helpers_direct.xr",
+      "source_lf_sha256": "02a4d6f8bce23707d13a18ada2877c03e72888aad91c23b05fa0ddca8a772293",
+      "primary_family": "enum-variant-pattern",
+      "secondary_families": [
+        "ownership-read-ref-move-copy-drop",
+        "direct-imported-static-instance-call",
+        "module-graph-import-export-init",
+        "typed-error-throw-try-catch",
+        "map-set-object-json",
+        "string-rune-interpolation",
+        "generic-monomorphization"
+      ],
+      "tasks": [
+        "313",
+        "314",
+        "315",
+        "316",
+        "317",
+        "318",
+        "319",
+        "322"
+      ],
+      "producer_packages": [
+        "P02",
+        "P06",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P12",
+        "P13",
+        "P14",
+        "P17"
+      ],
+      "semantic_basis": "Preserve all reviewed original typed values/calls, complete normal/error/byte/framing/container responsibilities and actual publication/cleanup boundaries. Native shadows, build-only or matchingwrongoutputs do not qualify the real declaration-owned library entry.",
+      "original_runner_entries": [
+        {
+          "suite": "differential",
+          "entry": "run"
+        }
+      ],
+      "new_entry_status": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "replacement_qualification": "OPEN",
+      "original_stdout_oracle": {
+        "path": "tests/diff/cases/semantics/stdlib/http_pure_helpers_direct.xr.expected",
+        "state": "MISSING",
+        "lf_sha256": null
+      },
+      "original_differential_obligation": {
+        "arguments": [],
+        "stdin_hex": "",
+        "arguments_sidecar": {
+          "path": "tests/diff/cases/semantics/stdlib/http_pure_helpers_direct.args",
+          "state": "MISSING"
+        },
+        "stdin_sidecar": {
+          "path": "tests/diff/cases/semantics/stdlib/http_pure_helpers_direct.stdin",
+          "state": "MISSING"
+        },
+        "execution": "NOT_RUN"
+      },
+      "target_contract_review": "REQUIRED; exact declaration-owned interfaces, types, payloads, budgets, scopes, platform and provider gates remainOPEN. Preserve wholeoriginal positive/error responsibility without retired shims or arbitraryfailure."
+    },
+    {
+      "case_id": "tests/diff/cases/semantics/stdlib/http_redirect_status_direct.xr",
+      "source_lf_sha256": "4eb8952a3666d6c7287e4dc46238e5c282fa06746b78ae47afa5df58fb780eac",
+      "primary_family": "enum-variant-pattern",
+      "secondary_families": [
+        "ownership-read-ref-move-copy-drop",
+        "direct-imported-static-instance-call",
+        "module-graph-import-export-init",
+        "typed-error-throw-try-catch",
+        "map-set-object-json",
+        "string-rune-interpolation",
+        "generic-monomorphization"
+      ],
+      "tasks": [
+        "313",
+        "314",
+        "315",
+        "316",
+        "317",
+        "318",
+        "319",
+        "322"
+      ],
+      "producer_packages": [
+        "P02",
+        "P06",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P12",
+        "P13",
+        "P14",
+        "P17"
+      ],
+      "semantic_basis": "Preserve all reviewed original typed values/calls, complete normal/error/byte/framing/container responsibilities and actual publication/cleanup boundaries. Native shadows, build-only or matchingwrongoutputs do not qualify the real declaration-owned library entry.",
+      "original_runner_entries": [
+        {
+          "suite": "differential",
+          "entry": "run"
+        }
+      ],
+      "new_entry_status": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "replacement_qualification": "OPEN",
+      "original_stdout_oracle": {
+        "path": "tests/diff/cases/semantics/stdlib/http_redirect_status_direct.xr.expected",
+        "state": "MISSING",
+        "lf_sha256": null
+      },
+      "original_differential_obligation": {
+        "arguments": [],
+        "stdin_hex": "",
+        "arguments_sidecar": {
+          "path": "tests/diff/cases/semantics/stdlib/http_redirect_status_direct.args",
+          "state": "MISSING"
+        },
+        "stdin_sidecar": {
+          "path": "tests/diff/cases/semantics/stdlib/http_redirect_status_direct.stdin",
+          "state": "MISSING"
+        },
+        "execution": "NOT_RUN"
+      },
+      "target_contract_review": "REQUIRED; exact declaration-owned interfaces, types, payloads, budgets, scopes, platform and provider gates remainOPEN. Preserve wholeoriginal positive/error responsibility without retired shims or arbitraryfailure."
+    },
+    {
+      "case_id": "tests/diff/cases/semantics/stdlib/http_request_head_pure_direct.xr",
+      "source_lf_sha256": "769bdd23f1ee2be8ef4ec4331f13bbc54faabd4e8c5789e94ebc0b78e9a20fd9",
+      "primary_family": "enum-variant-pattern",
+      "secondary_families": [
+        "ownership-read-ref-move-copy-drop",
+        "direct-imported-static-instance-call",
+        "module-graph-import-export-init",
+        "typed-error-throw-try-catch",
+        "map-set-object-json",
+        "string-rune-interpolation",
+        "generic-monomorphization"
+      ],
+      "tasks": [
+        "313",
+        "314",
+        "315",
+        "316",
+        "317",
+        "318",
+        "319",
+        "322"
+      ],
+      "producer_packages": [
+        "P02",
+        "P06",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P12",
+        "P13",
+        "P14",
+        "P17"
+      ],
+      "semantic_basis": "Preserve all reviewed original typed values/calls, complete normal/error/byte/framing/container responsibilities and actual publication/cleanup boundaries. Native shadows, build-only or matchingwrongoutputs do not qualify the real declaration-owned library entry.",
+      "original_runner_entries": [
+        {
+          "suite": "differential",
+          "entry": "run"
+        }
+      ],
+      "new_entry_status": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "replacement_qualification": "OPEN",
+      "original_stdout_oracle": {
+        "path": "tests/diff/cases/semantics/stdlib/http_request_head_pure_direct.xr.expected",
+        "state": "MISSING",
+        "lf_sha256": null
+      },
+      "original_differential_obligation": {
+        "arguments": [],
+        "stdin_hex": "",
+        "arguments_sidecar": {
+          "path": "tests/diff/cases/semantics/stdlib/http_request_head_pure_direct.args",
+          "state": "MISSING"
+        },
+        "stdin_sidecar": {
+          "path": "tests/diff/cases/semantics/stdlib/http_request_head_pure_direct.stdin",
+          "state": "MISSING"
+        },
+        "execution": "NOT_RUN"
+      },
+      "target_contract_review": "REQUIRED; exact declaration-owned interfaces, types, payloads, budgets, scopes, platform and provider gates remainOPEN. Preserve wholeoriginal positive/error responsibility without retired shims or arbitraryfailure."
+    },
+    {
+      "case_id": "tests/diff/cases/semantics/stdlib/http_request_message_pure_direct.xr",
+      "source_lf_sha256": "03e1eded9726fc4ccfe476ade0a8a191c9988cc60a49203501b2955873d50048",
+      "primary_family": "enum-variant-pattern",
+      "secondary_families": [
+        "ownership-read-ref-move-copy-drop",
+        "direct-imported-static-instance-call",
+        "module-graph-import-export-init",
+        "typed-error-throw-try-catch",
+        "map-set-object-json",
+        "string-rune-interpolation",
+        "generic-monomorphization"
+      ],
+      "tasks": [
+        "313",
+        "314",
+        "315",
+        "316",
+        "317",
+        "318",
+        "319",
+        "322"
+      ],
+      "producer_packages": [
+        "P02",
+        "P06",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P12",
+        "P13",
+        "P14",
+        "P17"
+      ],
+      "semantic_basis": "Byteexactconsumed/body/tail,duplicateheader/trailers,UTF8 boundaries,limits andCL/TEconflicts all remain; scalarlength cannot substitute bodybytecount.",
+      "original_runner_entries": [
+        {
+          "suite": "differential",
+          "entry": "run"
+        }
+      ],
+      "new_entry_status": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "replacement_qualification": "OPEN",
+      "original_stdout_oracle": {
+        "path": "tests/diff/cases/semantics/stdlib/http_request_message_pure_direct.xr.expected",
+        "state": "MISSING",
+        "lf_sha256": null
+      },
+      "original_differential_obligation": {
+        "arguments": [],
+        "stdin_hex": "",
+        "arguments_sidecar": {
+          "path": "tests/diff/cases/semantics/stdlib/http_request_message_pure_direct.args",
+          "state": "MISSING"
+        },
+        "stdin_sidecar": {
+          "path": "tests/diff/cases/semantics/stdlib/http_request_message_pure_direct.stdin",
+          "state": "MISSING"
+        },
+        "execution": "NOT_RUN"
+      },
+      "target_contract_review": "REQUIRED; exact declaration-owned interfaces, types, payloads, budgets, scopes, platform and provider gates remainOPEN. Preserve wholeoriginal positive/error responsibility without retired shims or arbitraryfailure."
+    },
+    {
+      "case_id": "tests/diff/cases/semantics/stdlib/http_request_text_pure_direct.xr",
+      "source_lf_sha256": "174c52527b158e2f23e393c6acab0a3525cc6e3dd094ef3415559f5f8c3ac4a5",
+      "primary_family": "enum-variant-pattern",
+      "secondary_families": [
+        "ownership-read-ref-move-copy-drop",
+        "direct-imported-static-instance-call",
+        "module-graph-import-export-init",
+        "typed-error-throw-try-catch",
+        "map-set-object-json",
+        "string-rune-interpolation",
+        "generic-monomorphization"
+      ],
+      "tasks": [
+        "313",
+        "314",
+        "315",
+        "316",
+        "317",
+        "318",
+        "319",
+        "322"
+      ],
+      "producer_packages": [
+        "P02",
+        "P06",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P12",
+        "P13",
+        "P14",
+        "P17"
+      ],
+      "semantic_basis": "Preserve all reviewed original typed values/calls, complete normal/error/byte/framing/container responsibilities and actual publication/cleanup boundaries. Native shadows, build-only or matchingwrongoutputs do not qualify the real declaration-owned library entry.",
+      "original_runner_entries": [
+        {
+          "suite": "differential",
+          "entry": "run"
+        }
+      ],
+      "new_entry_status": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "replacement_qualification": "OPEN",
+      "original_stdout_oracle": {
+        "path": "tests/diff/cases/semantics/stdlib/http_request_text_pure_direct.xr.expected",
+        "state": "MISSING",
+        "lf_sha256": null
+      },
+      "original_differential_obligation": {
+        "arguments": [],
+        "stdin_hex": "",
+        "arguments_sidecar": {
+          "path": "tests/diff/cases/semantics/stdlib/http_request_text_pure_direct.args",
+          "state": "MISSING"
+        },
+        "stdin_sidecar": {
+          "path": "tests/diff/cases/semantics/stdlib/http_request_text_pure_direct.stdin",
+          "state": "MISSING"
+        },
+        "execution": "NOT_RUN"
+      },
+      "target_contract_review": "REQUIRED; exact declaration-owned interfaces, types, payloads, budgets, scopes, platform and provider gates remainOPEN. Preserve wholeoriginal positive/error responsibility without retired shims or arbitraryfailure."
+    },
+    {
+      "case_id": "tests/diff/cases/semantics/stdlib/http_response_head_pure_direct.xr",
+      "source_lf_sha256": "894a63916ae5a99fd55c56ab80b40fd039da11df205889c5a9a6b3b0aef655d6",
+      "primary_family": "enum-variant-pattern",
+      "secondary_families": [
+        "ownership-read-ref-move-copy-drop",
+        "direct-imported-static-instance-call",
+        "module-graph-import-export-init",
+        "typed-error-throw-try-catch",
+        "map-set-object-json",
+        "string-rune-interpolation",
+        "generic-monomorphization"
+      ],
+      "tasks": [
+        "313",
+        "314",
+        "315",
+        "316",
+        "317",
+        "318",
+        "319",
+        "322"
+      ],
+      "producer_packages": [
+        "P02",
+        "P06",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P12",
+        "P13",
+        "P14",
+        "P17"
+      ],
+      "semantic_basis": "Preserve all reviewed original typed values/calls, complete normal/error/byte/framing/container responsibilities and actual publication/cleanup boundaries. Native shadows, build-only or matchingwrongoutputs do not qualify the real declaration-owned library entry.",
+      "original_runner_entries": [
+        {
+          "suite": "differential",
+          "entry": "run"
+        }
+      ],
+      "new_entry_status": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "replacement_qualification": "OPEN",
+      "original_stdout_oracle": {
+        "path": "tests/diff/cases/semantics/stdlib/http_response_head_pure_direct.xr.expected",
+        "state": "MISSING",
+        "lf_sha256": null
+      },
+      "original_differential_obligation": {
+        "arguments": [],
+        "stdin_hex": "",
+        "arguments_sidecar": {
+          "path": "tests/diff/cases/semantics/stdlib/http_response_head_pure_direct.args",
+          "state": "MISSING"
+        },
+        "stdin_sidecar": {
+          "path": "tests/diff/cases/semantics/stdlib/http_response_head_pure_direct.stdin",
+          "state": "MISSING"
+        },
+        "execution": "NOT_RUN"
+      },
+      "target_contract_review": "REQUIRED; exact declaration-owned interfaces, types, payloads, budgets, scopes, platform and provider gates remainOPEN. Preserve wholeoriginal positive/error responsibility without retired shims or arbitraryfailure."
+    },
+    {
+      "case_id": "tests/diff/cases/semantics/stdlib/http_response_text_pure_direct.xr",
+      "source_lf_sha256": "062d43d33695ff6da537fe42af78c2ad83c4ef4c367580e037edf4a3b4c0835b",
+      "primary_family": "enum-variant-pattern",
+      "secondary_families": [
+        "ownership-read-ref-move-copy-drop",
+        "direct-imported-static-instance-call",
+        "module-graph-import-export-init",
+        "typed-error-throw-try-catch",
+        "map-set-object-json",
+        "string-rune-interpolation",
+        "generic-monomorphization"
+      ],
+      "tasks": [
+        "313",
+        "314",
+        "315",
+        "316",
+        "317",
+        "318",
+        "319",
+        "322"
+      ],
+      "producer_packages": [
+        "P02",
+        "P06",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P12",
+        "P13",
+        "P14",
+        "P17"
+      ],
+      "semantic_basis": "All fixed/chunked/close/no-body/UTF8framing and malformedconflicts retained; in-memoryclose-delimitedparse is not liveconnectionclose proof.",
+      "original_runner_entries": [
+        {
+          "suite": "differential",
+          "entry": "run"
+        }
+      ],
+      "new_entry_status": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "replacement_qualification": "OPEN",
+      "original_stdout_oracle": {
+        "path": "tests/diff/cases/semantics/stdlib/http_response_text_pure_direct.xr.expected",
+        "state": "MISSING",
+        "lf_sha256": null
+      },
+      "original_differential_obligation": {
+        "arguments": [],
+        "stdin_hex": "",
+        "arguments_sidecar": {
+          "path": "tests/diff/cases/semantics/stdlib/http_response_text_pure_direct.args",
+          "state": "MISSING"
+        },
+        "stdin_sidecar": {
+          "path": "tests/diff/cases/semantics/stdlib/http_response_text_pure_direct.stdin",
+          "state": "MISSING"
+        },
+        "execution": "NOT_RUN"
+      },
+      "target_contract_review": "REQUIRED; exact declaration-owned interfaces, types, payloads, budgets, scopes, platform and provider gates remainOPEN. Preserve wholeoriginal positive/error responsibility without retired shims or arbitraryfailure."
+    },
+    {
+      "case_id": "tests/diff/cases/semantics/stdlib/http_router_pure_direct.xr",
+      "source_lf_sha256": "0e07b3dc87f6d8510b7b45e507a1837bd99d3a6e9553503a98f36cb3aa8f8929",
+      "primary_family": "enum-variant-pattern",
+      "secondary_families": [
+        "ownership-read-ref-move-copy-drop",
+        "direct-imported-static-instance-call",
+        "module-graph-import-export-init",
+        "typed-error-throw-try-catch",
+        "map-set-object-json",
+        "string-rune-interpolation",
+        "generic-monomorphization"
+      ],
+      "tasks": [
+        "313",
+        "314",
+        "315",
+        "316",
+        "317",
+        "318",
+        "319",
+        "322"
+      ],
+      "producer_packages": [
+        "P02",
+        "P06",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P12",
+        "P13",
+        "P14",
+        "P17"
+      ],
+      "semantic_basis": "Preserve all reviewed original typed values/calls, complete normal/error/byte/framing/container responsibilities and actual publication/cleanup boundaries. Native shadows, build-only or matchingwrongoutputs do not qualify the real declaration-owned library entry.",
+      "original_runner_entries": [
+        {
+          "suite": "differential",
+          "entry": "run"
+        }
+      ],
+      "new_entry_status": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "replacement_qualification": "OPEN",
+      "original_stdout_oracle": {
+        "path": "tests/diff/cases/semantics/stdlib/http_router_pure_direct.xr.expected",
+        "state": "MISSING",
+        "lf_sha256": null
+      },
+      "original_differential_obligation": {
+        "arguments": [],
+        "stdin_hex": "",
+        "arguments_sidecar": {
+          "path": "tests/diff/cases/semantics/stdlib/http_router_pure_direct.args",
+          "state": "MISSING"
+        },
+        "stdin_sidecar": {
+          "path": "tests/diff/cases/semantics/stdlib/http_router_pure_direct.stdin",
+          "state": "MISSING"
+        },
+        "execution": "NOT_RUN"
+      },
+      "target_contract_review": "REQUIRED; exact declaration-owned interfaces, types, payloads, budgets, scopes, platform and provider gates remainOPEN. Preserve wholeoriginal positive/error responsibility without retired shims or arbitraryfailure."
+    },
+    {
+      "case_id": "tests/diff/cases/semantics/stdlib/http_typed_request_surface.xr",
+      "source_lf_sha256": "e05a61c4b4c55a3a7a8f045c31334bf45c71ed765bb9878e0c593174422df780",
+      "primary_family": "enum-variant-pattern",
+      "secondary_families": [
+        "ownership-read-ref-move-copy-drop",
+        "direct-imported-static-instance-call",
+        "module-graph-import-export-init",
+        "typed-error-throw-try-catch",
+        "map-set-object-json",
+        "string-rune-interpolation",
+        "generic-monomorphization"
+      ],
+      "tasks": [
+        "313",
+        "314",
+        "315",
+        "316",
+        "317",
+        "318",
+        "319",
+        "322"
+      ],
+      "producer_packages": [
+        "P02",
+        "P06",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P12",
+        "P13",
+        "P14",
+        "P17"
+      ],
+      "semantic_basis": "Preserve all reviewed original typed values/calls, complete normal/error/byte/framing/container responsibilities and actual publication/cleanup boundaries. Native shadows, build-only or matchingwrongoutputs do not qualify the real declaration-owned library entry.",
+      "original_runner_entries": [
+        {
+          "suite": "differential",
+          "entry": "run"
+        }
+      ],
+      "new_entry_status": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "replacement_qualification": "OPEN",
+      "original_stdout_oracle": {
+        "path": "tests/diff/cases/semantics/stdlib/http_typed_request_surface.xr.expected",
+        "state": "PRESENT",
+        "lf_sha256": "94c9f5622c14f61e799ad5baaf7d34a8281204ed1b5bc2e6a37424373203f115"
+      },
+      "original_differential_obligation": {
+        "arguments": [],
+        "stdin_hex": "",
+        "arguments_sidecar": {
+          "path": "tests/diff/cases/semantics/stdlib/http_typed_request_surface.args",
+          "state": "MISSING"
+        },
+        "stdin_sidecar": {
+          "path": "tests/diff/cases/semantics/stdlib/http_typed_request_surface.stdin",
+          "state": "MISSING"
+        },
+        "execution": "NOT_RUN"
+      },
+      "target_contract_review": "REQUIRED; exact declaration-owned interfaces, types, payloads, budgets, scopes, platform and provider gates remainOPEN. Preserve wholeoriginal positive/error responsibility without retired shims or arbitraryfailure."
+    },
+    {
+      "case_id": "tests/diff/cases/semantics/stdlib/path_isabsolute.xr",
+      "source_lf_sha256": "955a2699221ba7c5f6af4611b254601a355d3e7d78ed2f3e0998dad4ca139719",
+      "primary_family": "string-rune-interpolation",
+      "secondary_families": [
+        "ownership-read-ref-move-copy-drop",
+        "direct-imported-static-instance-call",
+        "module-graph-import-export-init",
+        "typed-error-throw-try-catch",
+        "class-construction-field-static-instance"
+      ],
+      "tasks": [
+        "313",
+        "314",
+        "315",
+        "316",
+        "317",
+        "318",
+        "319",
+        "322"
+      ],
+      "producer_packages": [
+        "P02",
+        "P06",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P12",
+        "P13",
+        "P14",
+        "P17"
+      ],
+      "semantic_basis": "Preserve all reviewed original typed values/calls, complete normal/error/byte/framing/container responsibilities and actual publication/cleanup boundaries. Native shadows, build-only or matchingwrongoutputs do not qualify the real declaration-owned library entry.",
+      "original_runner_entries": [
+        {
+          "suite": "differential",
+          "entry": "run"
+        }
+      ],
+      "new_entry_status": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "replacement_qualification": "OPEN",
+      "original_stdout_oracle": {
+        "path": "tests/diff/cases/semantics/stdlib/path_isabsolute.xr.expected",
+        "state": "MISSING",
+        "lf_sha256": null
+      },
+      "original_differential_obligation": {
+        "arguments": [],
+        "stdin_hex": "",
+        "arguments_sidecar": {
+          "path": "tests/diff/cases/semantics/stdlib/path_isabsolute.args",
+          "state": "MISSING"
+        },
+        "stdin_sidecar": {
+          "path": "tests/diff/cases/semantics/stdlib/path_isabsolute.stdin",
+          "state": "MISSING"
+        },
+        "execution": "NOT_RUN"
+      },
+      "target_contract_review": "REQUIRED; exact declaration-owned interfaces, types, payloads, budgets, scopes, platform and provider gates remainOPEN. Preserve wholeoriginal positive/error responsibility without retired shims or arbitraryfailure."
+    },
+    {
+      "case_id": "tests/diff/cases/semantics/stdlib/path_module.xr",
+      "source_lf_sha256": "785acb9f0e7a42410b8916a0c18008d82c6cb9bbd25ff6182ab5b74f05ebc6b6",
+      "primary_family": "string-rune-interpolation",
+      "secondary_families": [
+        "ownership-read-ref-move-copy-drop",
+        "direct-imported-static-instance-call",
+        "module-graph-import-export-init",
+        "typed-error-throw-try-catch",
+        "class-construction-field-static-instance"
+      ],
+      "tasks": [
+        "313",
+        "314",
+        "315",
+        "316",
+        "317",
+        "318",
+        "319",
+        "322"
+      ],
+      "producer_packages": [
+        "P02",
+        "P06",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P12",
+        "P13",
+        "P14",
+        "P17"
+      ],
+      "semantic_basis": "Canonicalpath module explicitlypurePOSIXstrings, separators/lastabsolute reset. Windowsdrive/backslash semantics are outofscope of thispublishedsurface, not silently promised by crossplatform host.",
+      "original_runner_entries": [
+        {
+          "suite": "differential",
+          "entry": "run"
+        }
+      ],
+      "new_entry_status": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "replacement_qualification": "OPEN",
+      "original_stdout_oracle": {
+        "path": "tests/diff/cases/semantics/stdlib/path_module.xr.expected",
+        "state": "MISSING",
+        "lf_sha256": null
+      },
+      "original_differential_obligation": {
+        "arguments": [],
+        "stdin_hex": "",
+        "arguments_sidecar": {
+          "path": "tests/diff/cases/semantics/stdlib/path_module.args",
+          "state": "MISSING"
+        },
+        "stdin_sidecar": {
+          "path": "tests/diff/cases/semantics/stdlib/path_module.stdin",
+          "state": "MISSING"
+        },
+        "execution": "NOT_RUN"
+      },
+      "target_contract_review": "REQUIRED; exact declaration-owned interfaces, types, payloads, budgets, scopes, platform and provider gates remainOPEN. Preserve wholeoriginal positive/error responsibility without retired shims or arbitraryfailure."
+    },
+    {
+      "case_id": "tests/diff/cases/semantics/stdlib/path_parse_schema_shared_core.xr",
+      "source_lf_sha256": "43b243c2e9701c037fbe1f7f477666c689ab154ce7b028e4a02727ad9a4e0029",
+      "primary_family": "string-rune-interpolation",
+      "secondary_families": [
+        "ownership-read-ref-move-copy-drop",
+        "direct-imported-static-instance-call",
+        "module-graph-import-export-init",
+        "typed-error-throw-try-catch",
+        "class-construction-field-static-instance"
+      ],
+      "tasks": [
+        "313",
+        "314",
+        "315",
+        "316",
+        "317",
+        "318",
+        "319",
+        "322"
+      ],
+      "producer_packages": [
+        "P02",
+        "P06",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P12",
+        "P13",
+        "P14",
+        "P17"
+      ],
+      "semantic_basis": "Preserve all reviewed original typed values/calls, complete normal/error/byte/framing/container responsibilities and actual publication/cleanup boundaries. Native shadows, build-only or matchingwrongoutputs do not qualify the real declaration-owned library entry.",
+      "original_runner_entries": [
+        {
+          "suite": "differential",
+          "entry": "run"
+        }
+      ],
+      "new_entry_status": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "replacement_qualification": "OPEN",
+      "original_stdout_oracle": {
+        "path": "tests/diff/cases/semantics/stdlib/path_parse_schema_shared_core.xr.expected",
+        "state": "MISSING",
+        "lf_sha256": null
+      },
+      "original_differential_obligation": {
+        "arguments": [],
+        "stdin_hex": "",
+        "arguments_sidecar": {
+          "path": "tests/diff/cases/semantics/stdlib/path_parse_schema_shared_core.args",
+          "state": "MISSING"
+        },
+        "stdin_sidecar": {
+          "path": "tests/diff/cases/semantics/stdlib/path_parse_schema_shared_core.stdin",
+          "state": "MISSING"
+        },
+        "execution": "NOT_RUN"
+      },
+      "target_contract_review": "REQUIRED; exact declaration-owned interfaces, types, payloads, budgets, scopes, platform and provider gates remainOPEN. Preserve wholeoriginal positive/error responsibility without retired shims or arbitraryfailure."
+    },
+    {
+      "case_id": "tests/diff/cases/semantics/stdlib/path_string_ops.xr",
+      "source_lf_sha256": "daecb9f8ca5a32e311b89c91991e718dcbb6334758d2b61d105a42a991ba4bbc",
+      "primary_family": "string-rune-interpolation",
+      "secondary_families": [
+        "ownership-read-ref-move-copy-drop",
+        "direct-imported-static-instance-call",
+        "module-graph-import-export-init",
+        "typed-error-throw-try-catch",
+        "class-construction-field-static-instance"
+      ],
+      "tasks": [
+        "313",
+        "314",
+        "315",
+        "316",
+        "317",
+        "318",
+        "319",
+        "322"
+      ],
+      "producer_packages": [
+        "P02",
+        "P06",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P12",
+        "P13",
+        "P14",
+        "P17"
+      ],
+      "semantic_basis": "Preserve every dirname/basename/dotfile/normalize/component-relative/join/reset/resolve/parse-format observation under declaredPOSIX lexical contract.",
+      "original_runner_entries": [
+        {
+          "suite": "differential",
+          "entry": "run"
+        }
+      ],
+      "new_entry_status": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "replacement_qualification": "OPEN",
+      "original_stdout_oracle": {
+        "path": "tests/diff/cases/semantics/stdlib/path_string_ops.xr.expected",
+        "state": "MISSING",
+        "lf_sha256": null
+      },
+      "original_differential_obligation": {
+        "arguments": [],
+        "stdin_hex": "",
+        "arguments_sidecar": {
+          "path": "tests/diff/cases/semantics/stdlib/path_string_ops.args",
+          "state": "MISSING"
+        },
+        "stdin_sidecar": {
+          "path": "tests/diff/cases/semantics/stdlib/path_string_ops.stdin",
+          "state": "MISSING"
+        },
+        "execution": "NOT_RUN"
+      },
+      "target_contract_review": "REQUIRED; exact declaration-owned interfaces, types, payloads, budgets, scopes, platform and provider gates remainOPEN. Preserve wholeoriginal positive/error responsibility without retired shims or arbitraryfailure."
+    },
+    {
+      "case_id": "tests/diff/cases/semantics/stdlib/probe_module_shapes.xr",
+      "source_lf_sha256": "986013deb761f1abdb8cf4d4c796745d9f28ff65752a7ddddc779aace02a08f3",
+      "primary_family": "module-graph-import-export-init",
+      "secondary_families": [
+        "ownership-read-ref-move-copy-drop",
+        "direct-imported-static-instance-call",
+        "typed-error-throw-try-catch",
+        "callable-closure-capture",
+        "class-construction-field-static-instance",
+        "generic-monomorphization",
+        "defer-cleanup-resource-lifetime"
+      ],
+      "tasks": [
+        "313",
+        "314",
+        "315",
+        "316",
+        "317",
+        "318",
+        "319",
+        "322"
+      ],
+      "producer_packages": [
+        "P02",
+        "P06",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P12",
+        "P13",
+        "P14",
+        "P17"
+      ],
+      "semantic_basis": "Bind complete original _probe module source, all exportedconstants/functions/variadic/callback/defer/classes/static/generic/Arraycomposition duties. Oldbootstrap comments do not grant completeP13entry qualification.",
+      "original_runner_entries": [
+        {
+          "suite": "differential",
+          "entry": "run"
+        }
+      ],
+      "new_entry_status": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "replacement_qualification": "OPEN",
+      "original_stdout_oracle": {
+        "path": "tests/diff/cases/semantics/stdlib/probe_module_shapes.xr.expected",
+        "state": "MISSING",
+        "lf_sha256": null
+      },
+      "original_differential_obligation": {
+        "arguments": [],
+        "stdin_hex": "",
+        "arguments_sidecar": {
+          "path": "tests/diff/cases/semantics/stdlib/probe_module_shapes.args",
+          "state": "MISSING"
+        },
+        "stdin_sidecar": {
+          "path": "tests/diff/cases/semantics/stdlib/probe_module_shapes.stdin",
+          "state": "MISSING"
+        },
+        "execution": "NOT_RUN"
+      },
+      "target_contract_review": "REQUIRED; exact declaration-owned interfaces, types, payloads, budgets, scopes, platform and provider gates remainOPEN. Preserve wholeoriginal positive/error responsibility without retired shims or arbitraryfailure.",
+      "original_imported_inputs": [
+        {
+          "path": "stdlib/_probe/_probe.xr",
+          "state": "PRESENT",
+          "lf_sha256": "d649ff512cef7ac5b647c098c5b5312df7805cade08df8ebc980c0b6fd1b6fc9"
+        }
+      ]
+    },
+    {
+      "case_id": "tests/diff/cases/semantics/stdlib/range_generic_format_shared_core.xr",
+      "source_lf_sha256": "e5158bb5e02b01838232a52bdcb02be190ce73ed90a3dbe53de44772631bb45f",
+      "primary_family": "string-rune-interpolation",
+      "secondary_families": [
+        "ownership-read-ref-move-copy-drop",
+        "direct-imported-static-instance-call",
+        "module-graph-import-export-init",
+        "typed-error-throw-try-catch",
+        "class-construction-field-static-instance"
+      ],
+      "tasks": [
+        "313",
+        "314",
+        "315",
+        "316",
+        "317",
+        "318",
+        "319",
+        "322"
+      ],
+      "producer_packages": [
+        "P02",
+        "P06",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P12",
+        "P13",
+        "P14",
+        "P17"
+      ],
+      "semantic_basis": "Preserve all reviewed original typed values/calls, complete normal/error/byte/framing/container responsibilities and actual publication/cleanup boundaries. Native shadows, build-only or matchingwrongoutputs do not qualify the real declaration-owned library entry.",
+      "original_runner_entries": [
+        {
+          "suite": "differential",
+          "entry": "run"
+        }
+      ],
+      "new_entry_status": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "replacement_qualification": "OPEN",
+      "original_stdout_oracle": {
+        "path": "tests/diff/cases/semantics/stdlib/range_generic_format_shared_core.xr.expected",
+        "state": "MISSING",
+        "lf_sha256": null
+      },
+      "original_differential_obligation": {
+        "arguments": [],
+        "stdin_hex": "",
+        "arguments_sidecar": {
+          "path": "tests/diff/cases/semantics/stdlib/range_generic_format_shared_core.args",
+          "state": "MISSING"
+        },
+        "stdin_sidecar": {
+          "path": "tests/diff/cases/semantics/stdlib/range_generic_format_shared_core.stdin",
+          "state": "MISSING"
+        },
+        "execution": "NOT_RUN"
+      },
+      "target_contract_review": "REQUIRED; exact declaration-owned interfaces, types, payloads, budgets, scopes, platform and provider gates remainOPEN. Preserve wholeoriginal positive/error responsibility without retired shims or arbitraryfailure."
+    },
+    {
+      "case_id": "tests/diff/cases/semantics/stdlib/regex_escape_direct.xr",
+      "source_lf_sha256": "246877597bc20d853e306a7e9c069552fe1501d04243c889ffbfb7681d4b8747",
+      "primary_family": "regex-literal-and-runtime-semantics",
+      "secondary_families": [
+        "ownership-read-ref-move-copy-drop",
+        "direct-imported-static-instance-call",
+        "module-graph-import-export-init",
+        "typed-error-throw-try-catch",
+        "string-rune-interpolation"
+      ],
+      "tasks": [
+        "313",
+        "314",
+        "315",
+        "316",
+        "317",
+        "318",
+        "319",
+        "322"
+      ],
+      "producer_packages": [
+        "P02",
+        "P06",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P12",
+        "P13",
+        "P14",
+        "P17"
+      ],
+      "semantic_basis": "Last historicalanchor-only input now explicit. Full escape/flags/capturepositions/4294967296indices/limits/replace/split contract retained; do not truncatewideindices or equatebackendsasoracle.",
+      "original_runner_entries": [
+        {
+          "suite": "differential",
+          "entry": "run"
+        }
+      ],
+      "new_entry_status": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "replacement_qualification": "OPEN",
+      "original_stdout_oracle": {
+        "path": "tests/diff/cases/semantics/stdlib/regex_escape_direct.xr.expected",
+        "state": "PRESENT",
+        "lf_sha256": "e2ae179fd5ad9595dcfcc7b22afe8053e41d8172b5fb73624fff9e71d80b8f47"
+      },
+      "original_differential_obligation": {
+        "arguments": [],
+        "stdin_hex": "",
+        "arguments_sidecar": {
+          "path": "tests/diff/cases/semantics/stdlib/regex_escape_direct.args",
+          "state": "MISSING"
+        },
+        "stdin_sidecar": {
+          "path": "tests/diff/cases/semantics/stdlib/regex_escape_direct.stdin",
+          "state": "MISSING"
+        },
+        "execution": "NOT_RUN"
+      },
+      "target_contract_review": "REQUIRED; exact declaration-owned interfaces, types, payloads, budgets, scopes, platform and provider gates remainOPEN. Preserve wholeoriginal positive/error responsibility without retired shims or arbitraryfailure."
+    },
+    {
+      "case_id": "tests/diff/cases/semantics/stdlib/text_contract_direct.xr",
+      "source_lf_sha256": "2565b16a7a3402c0976c7962b96e743658353fc2e3f594d00cb1eb6100508b1b",
+      "primary_family": "string-rune-interpolation",
+      "secondary_families": [
+        "ownership-read-ref-move-copy-drop",
+        "direct-imported-static-instance-call",
+        "module-graph-import-export-init",
+        "typed-error-throw-try-catch",
+        "class-construction-field-static-instance"
+      ],
+      "tasks": [
+        "313",
+        "314",
+        "315",
+        "316",
+        "317",
+        "318",
+        "319",
+        "322"
+      ],
+      "producer_packages": [
+        "P02",
+        "P06",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P12",
+        "P13",
+        "P14",
+        "P17"
+      ],
+      "semantic_basis": "Preserve all reviewed original typed values/calls, complete normal/error/byte/framing/container responsibilities and actual publication/cleanup boundaries. Native shadows, build-only or matchingwrongoutputs do not qualify the real declaration-owned library entry.",
+      "original_runner_entries": [
+        {
+          "suite": "differential",
+          "entry": "run"
+        }
+      ],
+      "new_entry_status": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "replacement_qualification": "OPEN",
+      "original_stdout_oracle": {
+        "path": "tests/diff/cases/semantics/stdlib/text_contract_direct.xr.expected",
+        "state": "MISSING",
+        "lf_sha256": null
+      },
+      "original_differential_obligation": {
+        "arguments": [],
+        "stdin_hex": "",
+        "arguments_sidecar": {
+          "path": "tests/diff/cases/semantics/stdlib/text_contract_direct.args",
+          "state": "MISSING"
+        },
+        "stdin_sidecar": {
+          "path": "tests/diff/cases/semantics/stdlib/text_contract_direct.stdin",
+          "state": "MISSING"
+        },
+        "execution": "NOT_RUN"
+      },
+      "target_contract_review": "REQUIRED; exact declaration-owned interfaces, types, payloads, budgets, scopes, platform and provider gates remainOPEN. Preserve wholeoriginal positive/error responsibility without retired shims or arbitraryfailure."
+    },
+    {
+      "case_id": "tests/diff/cases/semantics/stdlib/toml_pure_module_direct.xr",
+      "source_lf_sha256": "31fa1eb79f86e7c822d4ad0f630d7fd3f86ecfe1df538426aee8f4b4608ba3e2",
+      "primary_family": "map-set-object-json",
+      "secondary_families": [
+        "ownership-read-ref-move-copy-drop",
+        "direct-imported-static-instance-call",
+        "module-graph-import-export-init",
+        "typed-error-throw-try-catch",
+        "enum-variant-pattern",
+        "string-rune-interpolation",
+        "generic-monomorphization"
+      ],
+      "tasks": [
+        "313",
+        "314",
+        "315",
+        "316",
+        "317",
+        "318",
+        "319",
+        "322"
+      ],
+      "producer_packages": [
+        "P02",
+        "P06",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P12",
+        "P13",
+        "P14",
+        "P17"
+      ],
+      "semantic_basis": "Preserve all reviewed original typed values/calls, complete normal/error/byte/framing/container responsibilities and actual publication/cleanup boundaries. Native shadows, build-only or matchingwrongoutputs do not qualify the real declaration-owned library entry.",
+      "original_runner_entries": [
+        {
+          "suite": "differential",
+          "entry": "run"
+        }
+      ],
+      "new_entry_status": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "replacement_qualification": "OPEN",
+      "original_stdout_oracle": {
+        "path": "tests/diff/cases/semantics/stdlib/toml_pure_module_direct.xr.expected",
+        "state": "MISSING",
+        "lf_sha256": null
+      },
+      "original_differential_obligation": {
+        "arguments": [],
+        "stdin_hex": "",
+        "arguments_sidecar": {
+          "path": "tests/diff/cases/semantics/stdlib/toml_pure_module_direct.args",
+          "state": "MISSING"
+        },
+        "stdin_sidecar": {
+          "path": "tests/diff/cases/semantics/stdlib/toml_pure_module_direct.stdin",
+          "state": "MISSING"
+        },
+        "execution": "NOT_RUN"
+      },
+      "target_contract_review": "REQUIRED; exact declaration-owned interfaces, types, payloads, budgets, scopes, platform and provider gates remainOPEN. Preserve wholeoriginal positive/error responsibility without retired shims or arbitraryfailure."
+    },
+    {
+      "case_id": "tests/diff/cases/semantics/stdlib/url_core_direct.xr",
+      "source_lf_sha256": "c9fa2bafd6d1d7037964c55c93d237ed29d7c2912d26b1ce5ea21f717d34f527",
+      "primary_family": "string-rune-interpolation",
+      "secondary_families": [
+        "ownership-read-ref-move-copy-drop",
+        "direct-imported-static-instance-call",
+        "module-graph-import-export-init",
+        "typed-error-throw-try-catch",
+        "class-construction-field-static-instance"
+      ],
+      "tasks": [
+        "313",
+        "314",
+        "315",
+        "316",
+        "317",
+        "318",
+        "319",
+        "322"
+      ],
+      "producer_packages": [
+        "P02",
+        "P06",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P12",
+        "P13",
+        "P14",
+        "P17"
+      ],
+      "semantic_basis": "Preserve all reviewed original typed values/calls, complete normal/error/byte/framing/container responsibilities and actual publication/cleanup boundaries. Native shadows, build-only or matchingwrongoutputs do not qualify the real declaration-owned library entry.",
+      "original_runner_entries": [
+        {
+          "suite": "differential",
+          "entry": "run"
+        }
+      ],
+      "new_entry_status": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "replacement_qualification": "OPEN",
+      "original_stdout_oracle": {
+        "path": "tests/diff/cases/semantics/stdlib/url_core_direct.xr.expected",
+        "state": "MISSING",
+        "lf_sha256": null
+      },
+      "original_differential_obligation": {
+        "arguments": [],
+        "stdin_hex": "",
+        "arguments_sidecar": {
+          "path": "tests/diff/cases/semantics/stdlib/url_core_direct.args",
+          "state": "MISSING"
+        },
+        "stdin_sidecar": {
+          "path": "tests/diff/cases/semantics/stdlib/url_core_direct.stdin",
+          "state": "MISSING"
+        },
+        "execution": "NOT_RUN"
+      },
+      "target_contract_review": "REQUIRED; exact declaration-owned interfaces, types, payloads, budgets, scopes, platform and provider gates remainOPEN. Preserve wholeoriginal positive/error responsibility without retired shims or arbitraryfailure."
+    },
+    {
+      "case_id": "tests/diff/cases/semantics/stdlib/ws_close_code_fastpath_direct.xr",
+      "source_lf_sha256": "80a0bed7184c5924b4102ce49900b38d61e4587cd29e1e1c646e64ef47e5ab82",
+      "primary_family": "enum-variant-pattern",
+      "secondary_families": [
+        "ownership-read-ref-move-copy-drop",
+        "direct-imported-static-instance-call",
+        "module-graph-import-export-init",
+        "typed-error-throw-try-catch",
+        "map-set-object-json",
+        "string-rune-interpolation",
+        "generic-monomorphization"
+      ],
+      "tasks": [
+        "313",
+        "314",
+        "315",
+        "316",
+        "317",
+        "318",
+        "319",
+        "322"
+      ],
+      "producer_packages": [
+        "P02",
+        "P06",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P12",
+        "P13",
+        "P14",
+        "P17"
+      ],
+      "semantic_basis": "Preserve all reviewed original typed values/calls, complete normal/error/byte/framing/container responsibilities and actual publication/cleanup boundaries. Native shadows, build-only or matchingwrongoutputs do not qualify the real declaration-owned library entry.",
+      "original_runner_entries": [
+        {
+          "suite": "differential",
+          "entry": "run"
+        }
+      ],
+      "new_entry_status": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "replacement_qualification": "OPEN",
+      "original_stdout_oracle": {
+        "path": "tests/diff/cases/semantics/stdlib/ws_close_code_fastpath_direct.xr.expected",
+        "state": "MISSING",
+        "lf_sha256": null
+      },
+      "original_differential_obligation": {
+        "arguments": [],
+        "stdin_hex": "",
+        "arguments_sidecar": {
+          "path": "tests/diff/cases/semantics/stdlib/ws_close_code_fastpath_direct.args",
+          "state": "MISSING"
+        },
+        "stdin_sidecar": {
+          "path": "tests/diff/cases/semantics/stdlib/ws_close_code_fastpath_direct.stdin",
+          "state": "MISSING"
+        },
+        "execution": "NOT_RUN"
+      },
+      "target_contract_review": "REQUIRED; exact declaration-owned interfaces, types, payloads, budgets, scopes, platform and provider gates remainOPEN. Preserve wholeoriginal positive/error responsibility without retired shims or arbitraryfailure."
+    },
+    {
+      "case_id": "tests/diff/cases/semantics/stdlib/ws_connect_options_type_surface.xr",
+      "source_lf_sha256": "28e04325af0ecb133e45d9e2ade938f74e050b13ead9f1ab9400ebcdd13ca27d",
+      "primary_family": "enum-variant-pattern",
+      "secondary_families": [
+        "ownership-read-ref-move-copy-drop",
+        "direct-imported-static-instance-call",
+        "module-graph-import-export-init",
+        "typed-error-throw-try-catch",
+        "map-set-object-json",
+        "string-rune-interpolation",
+        "generic-monomorphization"
+      ],
+      "tasks": [
+        "313",
+        "314",
+        "315",
+        "316",
+        "317",
+        "318",
+        "319",
+        "322"
+      ],
+      "producer_packages": [
+        "P02",
+        "P06",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P12",
+        "P13",
+        "P14",
+        "P17"
+      ],
+      "semantic_basis": "AcceptingnullWsConnectOptions proves neitherconstructedoptions nor WebSocket connection/provider capability.",
+      "original_runner_entries": [
+        {
+          "suite": "differential",
+          "entry": "run"
+        }
+      ],
+      "new_entry_status": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "replacement_qualification": "OPEN",
+      "original_stdout_oracle": {
+        "path": "tests/diff/cases/semantics/stdlib/ws_connect_options_type_surface.xr.expected",
+        "state": "PRESENT",
+        "lf_sha256": "a17fcf0a2f50e2d495e4f90ce263410edc183add6c62699a2facbccf60410f74"
+      },
+      "original_differential_obligation": {
+        "arguments": [],
+        "stdin_hex": "",
+        "arguments_sidecar": {
+          "path": "tests/diff/cases/semantics/stdlib/ws_connect_options_type_surface.args",
+          "state": "MISSING"
+        },
+        "stdin_sidecar": {
+          "path": "tests/diff/cases/semantics/stdlib/ws_connect_options_type_surface.stdin",
+          "state": "MISSING"
+        },
+        "execution": "NOT_RUN"
+      },
+      "target_contract_review": "REQUIRED; exact declaration-owned interfaces, types, payloads, budgets, scopes, platform and provider gates remainOPEN. Preserve wholeoriginal positive/error responsibility without retired shims or arbitraryfailure."
+    },
+    {
+      "case_id": "tests/diff/cases/semantics/stdlib/ws_pure_protocol_direct.xr",
+      "source_lf_sha256": "84a83b5ddb62ff454e6f4c13ec5ae29c6aeb5d06372b326a68ea40ed7d040759",
+      "primary_family": "enum-variant-pattern",
+      "secondary_families": [
+        "ownership-read-ref-move-copy-drop",
+        "direct-imported-static-instance-call",
+        "module-graph-import-export-init",
+        "typed-error-throw-try-catch",
+        "map-set-object-json",
+        "string-rune-interpolation",
+        "generic-monomorphization"
+      ],
+      "tasks": [
+        "313",
+        "314",
+        "315",
+        "316",
+        "317",
+        "318",
+        "319",
+        "322"
+      ],
+      "producer_packages": [
+        "P02",
+        "P06",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P12",
+        "P13",
+        "P14",
+        "P17"
+      ],
+      "semantic_basis": "Preserve all reviewed original typed values/calls, complete normal/error/byte/framing/container responsibilities and actual publication/cleanup boundaries. Native shadows, build-only or matchingwrongoutputs do not qualify the real declaration-owned library entry.",
+      "original_runner_entries": [
+        {
+          "suite": "differential",
+          "entry": "run"
+        }
+      ],
+      "new_entry_status": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "replacement_qualification": "OPEN",
+      "original_stdout_oracle": {
+        "path": "tests/diff/cases/semantics/stdlib/ws_pure_protocol_direct.xr.expected",
+        "state": "MISSING",
+        "lf_sha256": null
+      },
+      "original_differential_obligation": {
+        "arguments": [],
+        "stdin_hex": "",
+        "arguments_sidecar": {
+          "path": "tests/diff/cases/semantics/stdlib/ws_pure_protocol_direct.args",
+          "state": "MISSING"
+        },
+        "stdin_sidecar": {
+          "path": "tests/diff/cases/semantics/stdlib/ws_pure_protocol_direct.stdin",
+          "state": "MISSING"
+        },
+        "execution": "NOT_RUN"
+      },
+      "target_contract_review": "REQUIRED; exact declaration-owned interfaces, types, payloads, budgets, scopes, platform and provider gates remainOPEN. Preserve wholeoriginal positive/error responsibility without retired shims or arbitraryfailure."
+    },
+    {
+      "case_id": "tests/diff/cases/semantics/stdlib/xml_pure_module_direct.xr",
+      "source_lf_sha256": "eae16fdff59aa1a8ae6827a8c451a95e97ca9df332246d8f0451610d81778b9a",
+      "primary_family": "map-set-object-json",
+      "secondary_families": [
+        "ownership-read-ref-move-copy-drop",
+        "direct-imported-static-instance-call",
+        "module-graph-import-export-init",
+        "typed-error-throw-try-catch",
+        "enum-variant-pattern",
+        "string-rune-interpolation",
+        "generic-monomorphization"
+      ],
+      "tasks": [
+        "313",
+        "314",
+        "315",
+        "316",
+        "317",
+        "318",
+        "319",
+        "322"
+      ],
+      "producer_packages": [
+        "P02",
+        "P06",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P12",
+        "P13",
+        "P14",
+        "P17"
+      ],
+      "semantic_basis": "Preserve all reviewed original typed values/calls, complete normal/error/byte/framing/container responsibilities and actual publication/cleanup boundaries. Native shadows, build-only or matchingwrongoutputs do not qualify the real declaration-owned library entry.",
+      "original_runner_entries": [
+        {
+          "suite": "differential",
+          "entry": "run"
+        }
+      ],
+      "new_entry_status": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "replacement_qualification": "OPEN",
+      "original_stdout_oracle": {
+        "path": "tests/diff/cases/semantics/stdlib/xml_pure_module_direct.xr.expected",
+        "state": "MISSING",
+        "lf_sha256": null
+      },
+      "original_differential_obligation": {
+        "arguments": [],
+        "stdin_hex": "",
+        "arguments_sidecar": {
+          "path": "tests/diff/cases/semantics/stdlib/xml_pure_module_direct.args",
+          "state": "MISSING"
+        },
+        "stdin_sidecar": {
+          "path": "tests/diff/cases/semantics/stdlib/xml_pure_module_direct.stdin",
+          "state": "MISSING"
+        },
+        "execution": "NOT_RUN"
+      },
+      "target_contract_review": "REQUIRED; exact declaration-owned interfaces, types, payloads, budgets, scopes, platform and provider gates remainOPEN. Preserve wholeoriginal positive/error responsibility without retired shims or arbitraryfailure."
+    },
+    {
+      "case_id": "tests/diff/cases/semantics/stdlib/yaml_pure_module_direct.xr",
+      "source_lf_sha256": "7a2a7c5f23bad79826647420ffe7fac19f6675853a18cab131dfb0d2e3f2ddfe",
+      "primary_family": "map-set-object-json",
+      "secondary_families": [
+        "ownership-read-ref-move-copy-drop",
+        "direct-imported-static-instance-call",
+        "module-graph-import-export-init",
+        "typed-error-throw-try-catch",
+        "enum-variant-pattern",
+        "string-rune-interpolation",
+        "generic-monomorphization"
+      ],
+      "tasks": [
+        "313",
+        "314",
+        "315",
+        "316",
+        "317",
+        "318",
+        "319",
+        "322"
+      ],
+      "producer_packages": [
+        "P02",
+        "P06",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P12",
+        "P13",
+        "P14",
+        "P17"
+      ],
+      "semantic_basis": "Preserve all reviewed original typed values/calls, complete normal/error/byte/framing/container responsibilities and actual publication/cleanup boundaries. Native shadows, build-only or matchingwrongoutputs do not qualify the real declaration-owned library entry.",
+      "original_runner_entries": [
+        {
+          "suite": "differential",
+          "entry": "run"
+        }
+      ],
+      "new_entry_status": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "replacement_qualification": "OPEN",
+      "original_stdout_oracle": {
+        "path": "tests/diff/cases/semantics/stdlib/yaml_pure_module_direct.xr.expected",
+        "state": "MISSING",
+        "lf_sha256": null
+      },
+      "original_differential_obligation": {
+        "arguments": [],
+        "stdin_hex": "",
+        "arguments_sidecar": {
+          "path": "tests/diff/cases/semantics/stdlib/yaml_pure_module_direct.args",
+          "state": "MISSING"
+        },
+        "stdin_sidecar": {
+          "path": "tests/diff/cases/semantics/stdlib/yaml_pure_module_direct.stdin",
+          "state": "MISSING"
+        },
+        "execution": "NOT_RUN"
+      },
+      "target_contract_review": "REQUIRED; exact declaration-owned interfaces, types, payloads, budgets, scopes, platform and provider gates remainOPEN. Preserve wholeoriginal positive/error responsibility without retired shims or arbitraryfailure."
     }
   ],
   "boundaries": [

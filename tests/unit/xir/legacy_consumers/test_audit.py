@@ -16,6 +16,109 @@ class PreparationChecks(unittest.TestCase):
         cls.runner_routes = audit.read_json(audit.HERE / "runner_routes.json")
         cls.legacy = audit.read_json(audit.ROOT / "tests/unit/xir/product_consumers/legacy_responsibilities.json")
 
+    def library_review_expected(self, name):
+        return next(r["expected"] for r in self.oracles["cases"]
+                    if r["id"] == "library_review_" + name)
+
+    def test_all_original_differential_inputs_have_explicit_case_records(self):
+        counts = audit.validate_runner_routes(self.runner_routes, self.mapping)
+        self.assertEqual(counts["unreviewed_differential_inputs"], 0)
+
+    def test_base64_property_corpus_cannot_drop_lengths_or_wrong_error_channels(self):
+        expected = self.library_review_expected("base64_property_direct")
+        for observed in (dict(expected, singleton_count=16), dict(expected, generated_lengths=list(range(96))),
+                         dict(expected, alphabet_roundtrip_counts=[97, 0]),
+                         dict(expected, stdout_utf8="true\ntrue\n0\n0\n0\n0\n0\n")):
+            with self.assertRaises(ValueError):
+                audit.compare_required(expected, observed)
+
+    def test_utf8_utf16_full_property_dimensions_and_offsets_cannot_be_approximated(self):
+        expected = self.library_review_expected("encoding_property_direct")
+        for observed in (dict(expected, single_byte_utf8_cases=128),
+                         dict(expected, valid_two_byte_utf8_pairs=64),
+                         dict(expected, utf16_le_hex="41003dd800de"),
+                         dict(expected, stdout_utf8=expected["stdout_utf8"].replace("4002", "4000"))):
+            with self.assertRaises(ValueError):
+                audit.compare_required(expected, observed)
+
+    def test_cluster_whole_wire_bytes_and_retired_kind_cannot_be_collapsed(self):
+        expected = self.library_review_expected("cluster_wire_protocol_pure_direct")
+        for field in ("transport_frame", "request_frame", "ack_frame", "done_frame", "heartbeat_frame"):
+            observed = copy.deepcopy(expected)
+            observed[field][-1] ^= 1
+            with self.assertRaises(ValueError):
+                audit.compare_required(expected, observed)
+        with self.assertRaises(ValueError):
+            audit.compare_required(expected, dict(expected, retired_kind_09_rejected=False))
+
+    def test_cluster_phi_window_and_handshake_proof_do_not_accept_reduced_duties(self):
+        expected = self.library_review_expected("cluster_wire_protocol_pure_direct")
+        for observed in (dict(expected, phi_window_sample_count=16),
+                         dict(expected, envelope_length=8),
+                         dict(expected, handshake_proof=expected["handshake_proof"][:-1])):
+            with self.assertRaises(ValueError):
+                audit.compare_required(expected, observed)
+
+    def test_http_body_consumption_counts_bytes_instead_of_unicode_scalars(self):
+        for name in ("http_request_message_pure_direct", "http_response_text_pure_direct"):
+            expected = self.library_review_expected(name)
+            for observed in (dict(expected, unicode_body_bytes=2),
+                             dict(expected, unicode_consumed_bytes=expected["unicode_consumed_bytes"] - 1)):
+                with self.assertRaises(ValueError):
+                    audit.compare_required(expected, observed)
+
+    def test_http_conflicting_framing_and_injection_cannot_publish_messages(self):
+        expected = self.library_review_expected("http_pure_helpers_direct")
+        for field in ("conflicting_content_length_rejected", "transfer_encoding_override_rejected", "header_and_content_type_injection_rejected"):
+            observed = dict(expected)
+            observed[field] = False
+            with self.assertRaises(ValueError):
+                audit.compare_required(expected, observed)
+
+    def test_websocket_mask_length_and_utf8_control_checks_remain_exact(self):
+        expected = self.library_review_expected("ws_pure_protocol_direct")
+        for observed in (dict(expected, masked_bytes=[1, 2, 3, 4, 5]),
+                         dict(expected, length300_header=[130, 126, 44, 1]),
+                         dict(expected, invalid_utf8_close_rejected=False),
+                         dict(expected, oversized_control_frame_rejected=False)):
+            with self.assertRaises(ValueError):
+                audit.compare_required(expected, observed)
+
+    def test_csv_missing_delimiter_cannot_fall_back_to_original_source(self):
+        bad = copy.deepcopy(self.runner_routes)
+        row = next(r for r in bad["cases"] if r["case_id"].endswith("/csv_pure_module_direct.xr"))
+        row.pop("target_source_port")
+        with self.assertRaisesRegex(ValueError, "requires its frozen source port"):
+            audit.validate_runner_routes(bad, self.mapping)
+
+    def test_multipart_rejected_append_and_temporary_cleanup_remain_required(self):
+        expected = self.library_review_expected("http_formdata_pure_direct")
+        for observed in (dict(expected, limit_rejected_field_total_size=4),
+                         dict(expected, limit_rejected_file_total_size=4),
+                         dict(expected, temporary_directory_removed=False),
+                         dict(expected, failure_path_cleanup_registered=False)):
+            with self.assertRaises(ValueError):
+                audit.compare_required(expected, observed)
+
+    def test_cipher_verdicts_do_not_prove_authentication_or_entropy(self):
+        expected = self.library_review_expected("crypto_timing_safe_equal_direct")
+        with self.assertRaises(ValueError):
+            audit.compare_required(expected, dict(expected, authentication_claim_from_padding_absence_accepted=True))
+        entropy = self.library_review_expected("crypto_random_system_direct")
+        with self.assertRaises(ValueError):
+            audit.compare_required(entropy, dict(entropy, actual_entropy_provider_qualified=False))
+
+    def test_datetime_negative_milliseconds_do_not_truncate_toward_zero(self):
+        expected = self.library_review_expected("datetime_core_direct")
+        with self.assertRaises(ValueError):
+            audit.compare_required(expected, dict(expected, negative_ms_timestamp_and_remainder=[[0, -1], [-1, -1]]))
+
+    def test_url_port_does_not_borrow_the_cluster_integer_payload_type(self):
+        expected = self.library_review_expected("url_core_direct")
+        self.assertEqual(expected["parsed_port"], "8080")
+        with self.assertRaises(ValueError):
+            audit.compare_required(expected, dict(expected, parsed_port=8080))
+
     def provider_review_expected(self, name):
         return next(r["expected"] for r in self.oracles["cases"]
                     if r["id"] == "provider_review_" + name)

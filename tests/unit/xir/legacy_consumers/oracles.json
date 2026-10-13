@@ -15227,6 +15227,3624 @@
       ],
       "target_source_status": "PENDING_PUBLISHED_DECLARATION_OWNED_LIBRARY_REPLACEMENT",
       "obligation_scope": "SEMANTIC_DUTY_PRESERVED_TARGET_SOURCE_NOT_PREPARED"
+    },
+    {
+      "id": "library_review_base64_property_direct",
+      "inputs": [
+        {
+          "path": "tests/diff/cases/semantics/stdlib/base64_property_direct.xr",
+          "lf_sha256": "975ea67f43138f189e3a381276d87576cf446579273c596347bf1df3635ea79c",
+          "role": "preserved_source"
+        },
+        {
+          "path": "spec/source/sections/003-2-type-system.md",
+          "lf_sha256": "f4e970b0cc728c19f65a4d1b2a13cd0e572431dcac3f6f20cd06d23046ebea8a",
+          "role": "frozen_spec"
+        },
+        {
+          "path": "spec/source/sections/009-8-error-handling.md",
+          "lf_sha256": "569cafb786430df363674f97f6073e908d76b4a3484f3fb26239b0895342507e",
+          "role": "frozen_spec"
+        }
+      ],
+      "expected": {
+        "exit_code": 0,
+        "stdout_utf8": "true\ntrue\n1001\n2000\n3001\n4001\n3002\n",
+        "singleton_count": 256,
+        "aggregate": 544432900,
+        "generated_lengths": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10,
+          11,
+          12,
+          13,
+          14,
+          15,
+          16,
+          17,
+          18,
+          19,
+          20,
+          21,
+          22,
+          23,
+          24,
+          25,
+          26,
+          27,
+          28,
+          29,
+          30,
+          31,
+          32,
+          33,
+          34,
+          35,
+          36,
+          37,
+          38,
+          39,
+          40,
+          41,
+          42,
+          43,
+          44,
+          45,
+          46,
+          47,
+          48,
+          49,
+          50,
+          51,
+          52,
+          53,
+          54,
+          55,
+          56,
+          57,
+          58,
+          59,
+          60,
+          61,
+          62,
+          63,
+          64,
+          65,
+          66,
+          67,
+          68,
+          69,
+          70,
+          71,
+          72,
+          73,
+          74,
+          75,
+          76,
+          77,
+          78,
+          79,
+          80,
+          81,
+          82,
+          83,
+          84,
+          85,
+          86,
+          87,
+          88,
+          89,
+          90,
+          91,
+          92,
+          93,
+          94,
+          95,
+          96
+        ],
+        "alphabet_roundtrip_counts": [
+          97,
+          97
+        ]
+      },
+      "rationale": "RFC-style6bit packing independently yields all256 singleton strings and257-fold544432900. Full0..96generated length corpus for standard and unpadded URL-safe alphabets remains. Typed errors use original declared length/byte/padding/trailing-bit offsets; no arbitrary compile/panic failure.",
+      "packages": [
+        "P02",
+        "P06",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P12",
+        "P13",
+        "P14",
+        "P17"
+      ],
+      "legacy_case": null,
+      "status": "PREPARED_NOT_EXECUTED",
+      "execution": {
+        "vm": "NOT_RUN",
+        "native": "NOT_RUN"
+      },
+      "new_entry": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "remaining_qualification": [
+        "Fresh actual Source/Program/driver entries independently satisfy VM/native observations, original contexts and real effects. Neither anchors/builds/banners nor equal wrong results qualify execution.",
+        "Bind actual declaration-owned module/protocol/generic/Equal/formatter/view/provider/lifecycle contracts and target/platform profiles; no guessed ABI/API/diagnostic field or compatibility shim.",
+        "Full affected FI/resource/live/requested/work/borrow/lifetime/cancel/physical/safety/generated-C/provider gates; original dimensions and P20 bidirectional mixed scope remain."
+      ],
+      "execution_source": "tests/diff/cases/semantics/stdlib/base64_property_direct.xr",
+      "execution_entry": "run"
+    },
+    {
+      "id": "library_review_base64_module",
+      "inputs": [
+        {
+          "path": "tests/diff/cases/semantics/stdlib/base64_module.xr",
+          "lf_sha256": "676250555ef22aaa697987b364d2dbec8e339ea01839bbefdaccd8566deb29f4",
+          "role": "preserved_source"
+        },
+        {
+          "path": "tests/unit/xir/legacy_consumers/fixtures/library_ports/base64_module/root.xr",
+          "lf_sha256": "5e685f3d1d41d07602884562aff3b87dd6b0d1dc9bc2809afee03201f6bd93b7",
+          "role": "target_source"
+        },
+        {
+          "path": "stdlib/types/string.xr",
+          "lf_sha256": "d96647703f5db2df7b3c54d0422d47b75fbb65aadf5047894bca2825e068da57",
+          "role": "reviewed_declaration_or_context"
+        },
+        {
+          "path": "spec/source/sections/003-2-type-system.md",
+          "lf_sha256": "f4e970b0cc728c19f65a4d1b2a13cd0e572431dcac3f6f20cd06d23046ebea8a",
+          "role": "frozen_spec"
+        },
+        {
+          "path": "spec/source/sections/009-8-error-handling.md",
+          "lf_sha256": "569cafb786430df363674f97f6073e908d76b4a3484f3fb26239b0895342507e",
+          "role": "frozen_spec"
+        }
+      ],
+      "expected": {
+        "exit_code": 0,
+        "stdout_utf8": "SGVsbG8sIFdvcmxkIQ==\nHello, World!\nQQ==\nQUI=\nQUJD\n\ntrue\n5L2g5aW95LiW55WM\n你好世界\nc3ViamVjdHM_X2Q\ntest +/= data\ntrue\ntrue\nfalse\nfalse\ntrue\ntrue\n3\n72\n101\n108\nSGVs\n"
+      },
+      "rationale": "Complete module body retains empty/UTF8/URLsafe/padding/typederror and rawHel bytes. IndependentPython6bit encoding supplies normalbytes; full draft removes obsolete unwrap of declared nonOptionalUTF8 result.",
+      "packages": [
+        "P02",
+        "P06",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P12",
+        "P13",
+        "P14",
+        "P17"
+      ],
+      "legacy_case": null,
+      "status": "PREPARED_NOT_EXECUTED",
+      "execution": {
+        "vm": "NOT_RUN",
+        "native": "NOT_RUN"
+      },
+      "new_entry": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "remaining_qualification": [
+        "Fresh actual Source/Program/driver entries independently satisfy VM/native observations, original contexts and real effects. Neither anchors/builds/banners nor equal wrong results qualify execution.",
+        "Bind actual declaration-owned module/protocol/generic/Equal/formatter/view/provider/lifecycle contracts and target/platform profiles; no guessed ABI/API/diagnostic field or compatibility shim.",
+        "Full affected FI/resource/live/requested/work/borrow/lifetime/cancel/physical/safety/generated-C/provider gates; original dimensions and P20 bidirectional mixed scope remain."
+      ],
+      "execution_source": "tests/unit/xir/legacy_consumers/fixtures/library_ports/base64_module/root.xr",
+      "execution_entry": "run"
+    },
+    {
+      "id": "library_review_base64_isvalid_direct",
+      "inputs": [
+        {
+          "path": "tests/diff/cases/semantics/stdlib/base64_isvalid_direct.xr",
+          "lf_sha256": "f71587cd56793f404dd402462ef45a68ccd6a6d0af1a52ce7a4dec7fccff3a6f",
+          "role": "preserved_source"
+        },
+        {
+          "path": "tests/unit/xir/legacy_consumers/fixtures/library_ports/base64_isvalid_direct/root.xr",
+          "lf_sha256": "6b96b72d17073a3fbf660f1246a2e66ced4ade7121712eb69af02ea400949022",
+          "role": "target_source"
+        },
+        {
+          "path": "stdlib/types/string.xr",
+          "lf_sha256": "d96647703f5db2df7b3c54d0422d47b75fbb65aadf5047894bca2825e068da57",
+          "role": "reviewed_declaration_or_context"
+        },
+        {
+          "path": "spec/source/sections/003-2-type-system.md",
+          "lf_sha256": "f4e970b0cc728c19f65a4d1b2a13cd0e572431dcac3f6f20cd06d23046ebea8a",
+          "role": "frozen_spec"
+        },
+        {
+          "path": "spec/source/sections/009-8-error-handling.md",
+          "lf_sha256": "569cafb786430df363674f97f6073e908d76b4a3484f3fb26239b0895342507e",
+          "role": "frozen_spec"
+        }
+      ],
+      "expected": {
+        "exit_code": 0,
+        "stdout_utf8": "SGVsbG8sIFdvcmxkIQ==\nHello, World!\n\n\nQQ==\nQUI=\nQUJD\ndGVzdCBkYXRhIHdpdGggc3BlY2lhbCBjaGFyczogKy89\ntest data with special chars: +/=\ntrue\ntrue\nAH//AYA=\n5\n0\n127\n255\n1\n128\n\ntrue\ntrue\ntrue\ntrue\ntrue\nfalse\nfalse\ntrue\ntrue\nfalse\nfalse\nfalse\nfalse\ntrue\n"
+      },
+      "rationale": "All default/Optional/Forbidden padding and Standard/UrlSafe alphabets remain distinct; nonASCII sourceUTF8 uses strictfromUtf8 string result. Binary0/127/255/1/128 independently encodesAH//AYA=.",
+      "packages": [
+        "P02",
+        "P06",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P12",
+        "P13",
+        "P14",
+        "P17"
+      ],
+      "legacy_case": null,
+      "status": "PREPARED_NOT_EXECUTED",
+      "execution": {
+        "vm": "NOT_RUN",
+        "native": "NOT_RUN"
+      },
+      "new_entry": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "remaining_qualification": [
+        "Fresh actual Source/Program/driver entries independently satisfy VM/native observations, original contexts and real effects. Neither anchors/builds/banners nor equal wrong results qualify execution.",
+        "Bind actual declaration-owned module/protocol/generic/Equal/formatter/view/provider/lifecycle contracts and target/platform profiles; no guessed ABI/API/diagnostic field or compatibility shim.",
+        "Full affected FI/resource/live/requested/work/borrow/lifetime/cancel/physical/safety/generated-C/provider gates; original dimensions and P20 bidirectional mixed scope remain."
+      ],
+      "execution_source": "tests/unit/xir/legacy_consumers/fixtures/library_ports/base64_isvalid_direct/root.xr",
+      "execution_entry": "run"
+    },
+    {
+      "id": "library_review_encoding_property_direct",
+      "inputs": [
+        {
+          "path": "tests/diff/cases/semantics/stdlib/encoding_property_direct.xr",
+          "lf_sha256": "e908f6ba1459e16523840ad57bec86e247c1e7c375b3b3a0f87c5ea5d5eebc17",
+          "role": "preserved_source"
+        },
+        {
+          "path": "spec/source/sections/003-2-type-system.md",
+          "lf_sha256": "f4e970b0cc728c19f65a4d1b2a13cd0e572431dcac3f6f20cd06d23046ebea8a",
+          "role": "frozen_spec"
+        },
+        {
+          "path": "spec/source/sections/009-8-error-handling.md",
+          "lf_sha256": "569cafb786430df363674f97f6073e908d76b4a3484f3fb26239b0895342507e",
+          "role": "frozen_spec"
+        }
+      ],
+      "expected": {
+        "exit_code": 0,
+        "stdout_utf8": "true\ntrue\ntrue\ntrue\n10\ntrue\ntrue\n1003\n2001\n1001\n2000\n3000\n4002\n",
+        "all_bytes_hex": "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f202122232425262728292a2b2c2d2e2f303132333435363738393a3b3c3d3e3f404142434445464748494a4b4c4d4e4f505152535455565758595a5b5c5d5e5f606162636465666768696a6b6c6d6e6f707172737475767778797a7b7c7d7e7f808182838485868788898a8b8c8d8e8f909192939495969798999a9b9c9d9e9fa0a1a2a3a4a5a6a7a8a9aaabacadaeafb0b1b2b3b4b5b6b7b8b9babbbcbdbebfc0c1c2c3c4c5c6c7c8c9cacbcccdcecfd0d1d2d3d4d5d6d7d8d9dadbdcdddedfe0e1e2e3e4e5e6e7e8e9eaebecedeeeff0f1f2f3f4f5f6f7f8f9fafbfcfdfeff",
+        "single_byte_utf8_cases": 256,
+        "valid_two_byte_utf8_pairs": 1920,
+        "generated_lengths": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10,
+          11,
+          12,
+          13,
+          14,
+          15,
+          16,
+          17,
+          18,
+          19,
+          20,
+          21,
+          22,
+          23,
+          24,
+          25,
+          26,
+          27,
+          28,
+          29,
+          30,
+          31,
+          32,
+          33,
+          34,
+          35,
+          36,
+          37,
+          38,
+          39,
+          40,
+          41,
+          42,
+          43,
+          44,
+          45,
+          46,
+          47,
+          48,
+          49,
+          50,
+          51,
+          52,
+          53,
+          54,
+          55,
+          56,
+          57,
+          58,
+          59,
+          60,
+          61,
+          62,
+          63,
+          64,
+          65,
+          66,
+          67,
+          68,
+          69,
+          70,
+          71,
+          72,
+          73,
+          74,
+          75,
+          76,
+          77,
+          78,
+          79,
+          80,
+          81,
+          82,
+          83,
+          84,
+          85,
+          86,
+          87,
+          88,
+          89,
+          90,
+          91,
+          92,
+          93,
+          94,
+          95,
+          96
+        ],
+        "utf16_le_hex": "41003dd800de34d81edd",
+        "utf16_be_hex": "0041d83dde00d834dd1e"
+      },
+      "rationale": "All256octets hex/single-byte validity and30x64two-byte sequences remain; A😀𝄞 uses oneBMP plus two surrogatepairs,10bytes. InvalidLowSurrogate points to invalidsecondunit offset2; low/missing startoffset0. Fulloriginal corpus not reduced.",
+      "packages": [
+        "P02",
+        "P06",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P12",
+        "P13",
+        "P14",
+        "P17"
+      ],
+      "legacy_case": null,
+      "status": "PREPARED_NOT_EXECUTED",
+      "execution": {
+        "vm": "NOT_RUN",
+        "native": "NOT_RUN"
+      },
+      "new_entry": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "remaining_qualification": [
+        "Fresh actual Source/Program/driver entries independently satisfy VM/native observations, original contexts and real effects. Neither anchors/builds/banners nor equal wrong results qualify execution.",
+        "Bind actual declaration-owned module/protocol/generic/Equal/formatter/view/provider/lifecycle contracts and target/platform profiles; no guessed ABI/API/diagnostic field or compatibility shim.",
+        "Full affected FI/resource/live/requested/work/borrow/lifetime/cancel/physical/safety/generated-C/provider gates; original dimensions and P20 bidirectional mixed scope remain."
+      ],
+      "execution_source": "tests/diff/cases/semantics/stdlib/encoding_property_direct.xr",
+      "execution_entry": "run"
+    },
+    {
+      "id": "library_review_encoding_module",
+      "inputs": [
+        {
+          "path": "tests/diff/cases/semantics/stdlib/encoding_module.xr",
+          "lf_sha256": "ad30ffe3f3d93e9cc3f8b1ed09871a5ce0b158832b5c7f994234753f26eadf10",
+          "role": "preserved_source"
+        },
+        {
+          "path": "tests/unit/xir/legacy_consumers/fixtures/library_ports/encoding_module/root.xr",
+          "lf_sha256": "1aba03cf82d86ad4a6e5bd3c9b902b5621898969aaedab828468e473599e7d28",
+          "role": "target_source"
+        },
+        {
+          "path": "stdlib/types/string.xr",
+          "lf_sha256": "d96647703f5db2df7b3c54d0422d47b75fbb65aadf5047894bca2825e068da57",
+          "role": "reviewed_declaration_or_context"
+        },
+        {
+          "path": "spec/source/sections/003-2-type-system.md",
+          "lf_sha256": "f4e970b0cc728c19f65a4d1b2a13cd0e572431dcac3f6f20cd06d23046ebea8a",
+          "role": "frozen_spec"
+        },
+        {
+          "path": "spec/source/sections/009-8-error-handling.md",
+          "lf_sha256": "569cafb786430df363674f97f6073e908d76b4a3484f3fb26239b0895342507e",
+          "role": "frozen_spec"
+        }
+      ],
+      "expected": {
+        "exit_code": 0,
+        "stdout_utf8": "48656c6c6f\nHello\ntrue\nfalse\nfalse\ntrue\n5\n72\n111\ntrue\nfalse\ntrue\ntrue\n4\n65\n0\nAB\n0\n65\nAB\n你好世界\n\ntrue\n"
+      },
+      "rationale": "IndependentASCIIhex/UTF8overlongC080 rejection and explicitLE/BEABbytes retained; nonOptionalfromUtf8 unwrapremoved only.",
+      "packages": [
+        "P02",
+        "P06",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P12",
+        "P13",
+        "P14",
+        "P17"
+      ],
+      "legacy_case": null,
+      "status": "PREPARED_NOT_EXECUTED",
+      "execution": {
+        "vm": "NOT_RUN",
+        "native": "NOT_RUN"
+      },
+      "new_entry": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "remaining_qualification": [
+        "Fresh actual Source/Program/driver entries independently satisfy VM/native observations, original contexts and real effects. Neither anchors/builds/banners nor equal wrong results qualify execution.",
+        "Bind actual declaration-owned module/protocol/generic/Equal/formatter/view/provider/lifecycle contracts and target/platform profiles; no guessed ABI/API/diagnostic field or compatibility shim.",
+        "Full affected FI/resource/live/requested/work/borrow/lifetime/cancel/physical/safety/generated-C/provider gates; original dimensions and P20 bidirectional mixed scope remain."
+      ],
+      "execution_source": "tests/unit/xir/legacy_consumers/fixtures/library_ports/encoding_module/root.xr",
+      "execution_entry": "run"
+    },
+    {
+      "id": "library_review_encoding_core_direct",
+      "inputs": [
+        {
+          "path": "tests/diff/cases/semantics/stdlib/encoding_core_direct.xr",
+          "lf_sha256": "9452a7f5b11714b649a83642f018a9fe4141b0ab9d7bee0eace7e247b618aa84",
+          "role": "preserved_source"
+        },
+        {
+          "path": "tests/unit/xir/legacy_consumers/fixtures/library_ports/encoding_core_direct/root.xr",
+          "lf_sha256": "295536adef4b3f0e50e427ce6f562e26045aa7d0431655327b6aa933caa164e0",
+          "role": "target_source"
+        },
+        {
+          "path": "stdlib/types/string.xr",
+          "lf_sha256": "d96647703f5db2df7b3c54d0422d47b75fbb65aadf5047894bca2825e068da57",
+          "role": "reviewed_declaration_or_context"
+        },
+        {
+          "path": "spec/source/sections/003-2-type-system.md",
+          "lf_sha256": "f4e970b0cc728c19f65a4d1b2a13cd0e572431dcac3f6f20cd06d23046ebea8a",
+          "role": "frozen_spec"
+        },
+        {
+          "path": "spec/source/sections/009-8-error-handling.md",
+          "lf_sha256": "569cafb786430df363674f97f6073e908d76b4a3484f3fb26239b0895342507e",
+          "role": "frozen_spec"
+        }
+      ],
+      "expected": {
+        "exit_code": 0,
+        "stdout_utf8": "48656c6c6f\n09\n5\n72\n101\n108\n108\n111\nHello\ntrue\ntrue\n0\ntrue\ntrue\nfalse\nfalse\ntrue\ntrue\ntrue\ntrue\nfalse\ntrue\ntrue\n4\n65\n0\n66\n0\nAB\n4\n0\n65\n0\n66\nAB\nAB\nA\nfalse\ntrue\n"
+      },
+      "rationale": "AllUTF8/Hex/errors,LE/BE and BOM options retained. consumeBomfalse keepsU+FEFF beforeA, so equalityA isfalse; oddlength throws actualUtf16Error. FullnonOptionalUTF8port preserves bytes.",
+      "packages": [
+        "P02",
+        "P06",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P12",
+        "P13",
+        "P14",
+        "P17"
+      ],
+      "legacy_case": null,
+      "status": "PREPARED_NOT_EXECUTED",
+      "execution": {
+        "vm": "NOT_RUN",
+        "native": "NOT_RUN"
+      },
+      "new_entry": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "remaining_qualification": [
+        "Fresh actual Source/Program/driver entries independently satisfy VM/native observations, original contexts and real effects. Neither anchors/builds/banners nor equal wrong results qualify execution.",
+        "Bind actual declaration-owned module/protocol/generic/Equal/formatter/view/provider/lifecycle contracts and target/platform profiles; no guessed ABI/API/diagnostic field or compatibility shim.",
+        "Full affected FI/resource/live/requested/work/borrow/lifetime/cancel/physical/safety/generated-C/provider gates; original dimensions and P20 bidirectional mixed scope remain."
+      ],
+      "execution_source": "tests/unit/xir/legacy_consumers/fixtures/library_ports/encoding_core_direct/root.xr",
+      "execution_entry": "run"
+    },
+    {
+      "id": "library_review_compress_checksum_direct",
+      "inputs": [
+        {
+          "path": "tests/diff/cases/semantics/stdlib/compress_checksum_direct.xr",
+          "lf_sha256": "82e1c04a20e99751fd6f94c7fe269a2c6d552b773968c6e7d07d3a4adf17c36f",
+          "role": "preserved_source"
+        },
+        {
+          "path": "spec/source/sections/003-2-type-system.md",
+          "lf_sha256": "f4e970b0cc728c19f65a4d1b2a13cd0e572431dcac3f6f20cd06d23046ebea8a",
+          "role": "frozen_spec"
+        },
+        {
+          "path": "spec/source/sections/009-8-error-handling.md",
+          "lf_sha256": "569cafb786430df363674f97f6073e908d76b4a3484f3fb26239b0895342507e",
+          "role": "frozen_spec"
+        }
+      ],
+      "expected": {
+        "exit_code": 0,
+        "stdout_utf8": "3421780262\n0\n4157704578\n222957957\n300286872\n1\n93061621\n436929629\n"
+      },
+      "rationale": "IndependentCRC32/Adler32 knownanswers, includingempty0/1 and123456789CBF43926; complete borrowed inputs preserved, not cross-backend equality.",
+      "packages": [
+        "P02",
+        "P06",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P12",
+        "P13",
+        "P14",
+        "P17"
+      ],
+      "legacy_case": null,
+      "status": "PREPARED_NOT_EXECUTED",
+      "execution": {
+        "vm": "NOT_RUN",
+        "native": "NOT_RUN"
+      },
+      "new_entry": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "remaining_qualification": [
+        "Fresh actual Source/Program/driver entries independently satisfy VM/native observations, original contexts and real effects. Neither anchors/builds/banners nor equal wrong results qualify execution.",
+        "Bind actual declaration-owned module/protocol/generic/Equal/formatter/view/provider/lifecycle contracts and target/platform profiles; no guessed ABI/API/diagnostic field or compatibility shim.",
+        "Full affected FI/resource/live/requested/work/borrow/lifetime/cancel/physical/safety/generated-C/provider gates; original dimensions and P20 bidirectional mixed scope remain."
+      ],
+      "execution_source": "tests/diff/cases/semantics/stdlib/compress_checksum_direct.xr",
+      "execution_entry": "run"
+    },
+    {
+      "id": "library_review_compress_roundtrip_direct",
+      "inputs": [
+        {
+          "path": "tests/diff/cases/semantics/stdlib/compress_roundtrip_direct.xr",
+          "lf_sha256": "c886d6b8bb79a38a4b170aefe1385c7b679eb8444b335615dc7b96549f8808c8",
+          "role": "preserved_source"
+        },
+        {
+          "path": "tests/unit/xir/legacy_consumers/fixtures/library_ports/compress_roundtrip_direct/root.xr",
+          "lf_sha256": "4b32e6c2053703d6a96b547d04301e1376059bc92bfa32d2a58cbfb8610f9046",
+          "role": "target_source"
+        },
+        {
+          "path": "stdlib/types/string.xr",
+          "lf_sha256": "d96647703f5db2df7b3c54d0422d47b75fbb65aadf5047894bca2825e068da57",
+          "role": "reviewed_declaration_or_context"
+        },
+        {
+          "path": "spec/source/sections/003-2-type-system.md",
+          "lf_sha256": "f4e970b0cc728c19f65a4d1b2a13cd0e572431dcac3f6f20cd06d23046ebea8a",
+          "role": "frozen_spec"
+        },
+        {
+          "path": "spec/source/sections/009-8-error-handling.md",
+          "lf_sha256": "569cafb786430df363674f97f6073e908d76b4a3484f3fb26239b0895342507e",
+          "role": "frozen_spec"
+        }
+      ],
+      "expected": {
+        "exit_code": 0,
+        "stdout_utf8": "true\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\nfalse\nfalse\ntrue\ntrue\ntrue\n",
+        "format_families": [
+          "gzip",
+          "deflate",
+          "zlib"
+        ],
+        "original_level_arguments": [
+          0,
+          42,
+          9,
+          -7
+        ],
+        "decoded_text": "Hello, World! This is a test string for compression.",
+        "wrong_data_error": "CompressionError.InvalidData"
+      },
+      "rationale": "All original default/0/9/high42/negative-7 calls preserved under current declaration-policy review. Only payload roundtrip, no bit-identical compressed stream guessed; wronginputs must fail actualtypedInvalidData, not anyfailure. NonOptionalUTF8unwrapremoved.",
+      "packages": [
+        "P02",
+        "P06",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P12",
+        "P13",
+        "P14",
+        "P17"
+      ],
+      "legacy_case": null,
+      "status": "PREPARED_NOT_EXECUTED",
+      "execution": {
+        "vm": "NOT_RUN",
+        "native": "NOT_RUN"
+      },
+      "new_entry": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "remaining_qualification": [
+        "Fresh actual Source/Program/driver entries independently satisfy VM/native observations, original contexts and real effects. Neither anchors/builds/banners nor equal wrong results qualify execution.",
+        "Bind actual declaration-owned module/protocol/generic/Equal/formatter/view/provider/lifecycle contracts and target/platform profiles; no guessed ABI/API/diagnostic field or compatibility shim.",
+        "Full affected FI/resource/live/requested/work/borrow/lifetime/cancel/physical/safety/generated-C/provider gates; original dimensions and P20 bidirectional mixed scope remain."
+      ],
+      "execution_source": "tests/unit/xir/legacy_consumers/fixtures/library_ports/compress_roundtrip_direct/root.xr",
+      "execution_entry": "run"
+    },
+    {
+      "id": "library_review_compress_truncated_direct",
+      "inputs": [
+        {
+          "path": "tests/diff/cases/semantics/stdlib/compress_truncated_direct.xr",
+          "lf_sha256": "2b5b6f3f3427358b105a4f96f7ace76950275bf806a322808211c3529f904f21",
+          "role": "preserved_source"
+        },
+        {
+          "path": "spec/source/sections/003-2-type-system.md",
+          "lf_sha256": "f4e970b0cc728c19f65a4d1b2a13cd0e572431dcac3f6f20cd06d23046ebea8a",
+          "role": "frozen_spec"
+        },
+        {
+          "path": "spec/source/sections/009-8-error-handling.md",
+          "lf_sha256": "569cafb786430df363674f97f6073e908d76b4a3484f3fb26239b0895342507e",
+          "role": "frozen_spec"
+        }
+      ],
+      "expected": {
+        "exit_code": 0,
+        "stdout_utf8": "true\ntrue\ntrue\ntrue\ntrue\ntrue\n",
+        "tested_formats": [
+          "gzip",
+          "deflate",
+          "zlib"
+        ],
+        "truncation_byte_length": 1,
+        "failure_channel": "TYPED_ERROR",
+        "error_variant": "CompressionError.InvalidData"
+      },
+      "rationale": "Allthreebyte-level1-byte truncated payloads must reach declaredInvalidData, with normal compression admitted; arbitrarycompile/panic/error not sufficient.",
+      "packages": [
+        "P02",
+        "P06",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P12",
+        "P13",
+        "P14",
+        "P17"
+      ],
+      "legacy_case": null,
+      "status": "PREPARED_NOT_EXECUTED",
+      "execution": {
+        "vm": "NOT_RUN",
+        "native": "NOT_RUN"
+      },
+      "new_entry": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "remaining_qualification": [
+        "Fresh actual Source/Program/driver entries independently satisfy VM/native observations, original contexts and real effects. Neither anchors/builds/banners nor equal wrong results qualify execution.",
+        "Bind actual declaration-owned module/protocol/generic/Equal/formatter/view/provider/lifecycle contracts and target/platform profiles; no guessed ABI/API/diagnostic field or compatibility shim.",
+        "Full affected FI/resource/live/requested/work/borrow/lifetime/cancel/physical/safety/generated-C/provider gates; original dimensions and P20 bidirectional mixed scope remain."
+      ],
+      "execution_source": "tests/diff/cases/semantics/stdlib/compress_truncated_direct.xr",
+      "execution_entry": "run"
+    },
+    {
+      "id": "library_review_crypto_random_system_direct",
+      "inputs": [
+        {
+          "path": "tests/diff/cases/semantics/stdlib/crypto_random_system_direct.xr",
+          "lf_sha256": "6319e875870f460cf312e04a2813bf4c721727162752db95018ad7197b77b33c",
+          "role": "preserved_source"
+        },
+        {
+          "path": "spec/source/sections/003-2-type-system.md",
+          "lf_sha256": "f4e970b0cc728c19f65a4d1b2a13cd0e572431dcac3f6f20cd06d23046ebea8a",
+          "role": "frozen_spec"
+        },
+        {
+          "path": "spec/source/sections/009-8-error-handling.md",
+          "lf_sha256": "569cafb786430df363674f97f6073e908d76b4a3484f3fb26239b0895342507e",
+          "role": "frozen_spec"
+        }
+      ],
+      "expected": {
+        "hex_lengths": [
+          16,
+          32
+        ],
+        "requested_entropy_bytes": [
+          8,
+          16
+        ],
+        "uuid_length": 36,
+        "uuid_part_lengths": [
+          8,
+          4,
+          4,
+          4,
+          12
+        ],
+        "uuid_version": 4,
+        "uuid_variant_high_bits": 2,
+        "actual_entropy_provider_qualified": true
+      },
+      "rationale": "Legacy publicrandomBytes returnshextext2N, and UUID4shape/variant must match. Shape alone proves no entropy quality/provider invocation; actualplatformprovider qualification mandatory.",
+      "packages": [
+        "P02",
+        "P06",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P12",
+        "P13",
+        "P14",
+        "P17"
+      ],
+      "legacy_case": null,
+      "status": "PREPARED_NOT_EXECUTED",
+      "execution": {
+        "vm": "NOT_RUN",
+        "native": "NOT_RUN"
+      },
+      "new_entry": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "remaining_qualification": [
+        "Fresh actual Source/Program/driver entries independently satisfy VM/native observations, original contexts and real effects. Neither anchors/builds/banners nor equal wrong results qualify execution.",
+        "Bind actual declaration-owned module/protocol/generic/Equal/formatter/view/provider/lifecycle contracts and target/platform profiles; no guessed ABI/API/diagnostic field or compatibility shim.",
+        "Full affected FI/resource/live/requested/work/borrow/lifetime/cancel/physical/safety/generated-C/provider gates; original dimensions and P20 bidirectional mixed scope remain."
+      ],
+      "target_source_status": "PENDING_PUBLISHED_DECLARATION_OWNED_LIBRARY_REPLACEMENT",
+      "obligation_scope": "SEMANTIC_DUTY_PRESERVED_TARGET_SOURCE_NOT_PREPARED"
+    },
+    {
+      "id": "library_review_crypto_timing_safe_equal_direct",
+      "inputs": [
+        {
+          "path": "tests/diff/cases/semantics/stdlib/crypto_timing_safe_equal_direct.xr",
+          "lf_sha256": "92c90b37090a22a746c4837c35df06a15765d434d536cbf569f74c53b5aa0c05",
+          "role": "preserved_source"
+        },
+        {
+          "path": "spec/source/sections/003-2-type-system.md",
+          "lf_sha256": "f4e970b0cc728c19f65a4d1b2a13cd0e572431dcac3f6f20cd06d23046ebea8a",
+          "role": "frozen_spec"
+        },
+        {
+          "path": "spec/source/sections/009-8-error-handling.md",
+          "lf_sha256": "569cafb786430df363674f97f6073e908d76b4a3484f3fb26239b0895342507e",
+          "role": "frozen_spec"
+        }
+      ],
+      "expected": {
+        "equality_verdicts": [
+          true,
+          false,
+          false,
+          true,
+          true,
+          false,
+          false
+        ],
+        "hash_abc": {
+          "md5": "900150983cd24fb0d6963f7d28e17f72",
+          "sha1": "a9993e364706816aba3e25717850c26c9cd0d89d",
+          "sha256": "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad",
+          "sha512": "ddaf35a193617abacc417349ae20413112e6fa4e89a97ea20a9eeee64b55d39a2192992a274fc1a836ba3c23a3feebbd454d4423643ce80e2a9ac94fa54ca49f"
+        },
+        "hmac_key_data": {
+          "md5": "9d5c73ef85594d34ec4438b7c97e51d8",
+          "sha1": "104152c5bfdca07bc633eebd46199f0255c9f49d",
+          "sha256": "5031fe3d989c6d1537a013fa6e739da23463fdaec3b70137d828e36ace221bd0",
+          "sha512": "3c5953a18f7303ec653ba170ae334fafa08e3846f2efe317b87efce82376253cb52a8c31ddcde5a3a2eee183c2b34cb91f85e64ddbc325f7692b199473579c58"
+        },
+        "hmac_jefe": "5bdcc146bf60754e6a042426089575c75a003f089d2739839dec58b964ec3843",
+        "unsupported_sha224_returns_absent": true,
+        "full_original_encrypt_decrypt_duties_required": true,
+        "constant_time_proof_required": true,
+        "authentication_claim_from_padding_absence_accepted": false
+      },
+      "rationale": "Independenthash/HMAC vectors are computed with standardhashlib/HMAC; completecipher roundtrips/wrongkey duty retained. Verdicts/cipherlength do not proveconstanttime/authentication/entropy; no securityclaim fromnullablewrong-key output.",
+      "packages": [
+        "P02",
+        "P06",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P12",
+        "P13",
+        "P14",
+        "P17"
+      ],
+      "legacy_case": null,
+      "status": "PREPARED_NOT_EXECUTED",
+      "execution": {
+        "vm": "NOT_RUN",
+        "native": "NOT_RUN"
+      },
+      "new_entry": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "remaining_qualification": [
+        "Fresh actual Source/Program/driver entries independently satisfy VM/native observations, original contexts and real effects. Neither anchors/builds/banners nor equal wrong results qualify execution.",
+        "Bind actual declaration-owned module/protocol/generic/Equal/formatter/view/provider/lifecycle contracts and target/platform profiles; no guessed ABI/API/diagnostic field or compatibility shim.",
+        "Full affected FI/resource/live/requested/work/borrow/lifetime/cancel/physical/safety/generated-C/provider gates; original dimensions and P20 bidirectional mixed scope remain."
+      ],
+      "target_source_status": "PENDING_PUBLISHED_DECLARATION_OWNED_LIBRARY_REPLACEMENT",
+      "obligation_scope": "SEMANTIC_DUTY_PRESERVED_TARGET_SOURCE_NOT_PREPARED"
+    },
+    {
+      "id": "library_review_text_contract_direct",
+      "inputs": [
+        {
+          "path": "tests/diff/cases/semantics/stdlib/text_contract_direct.xr",
+          "lf_sha256": "2565b16a7a3402c0976c7962b96e743658353fc2e3f594d00cb1eb6100508b1b",
+          "role": "preserved_source"
+        },
+        {
+          "path": "spec/source/sections/003-2-type-system.md",
+          "lf_sha256": "f4e970b0cc728c19f65a4d1b2a13cd0e572431dcac3f6f20cd06d23046ebea8a",
+          "role": "frozen_spec"
+        },
+        {
+          "path": "spec/source/sections/009-8-error-handling.md",
+          "lf_sha256": "569cafb786430df363674f97f6073e908d76b4a3484f3fb26239b0895342507e",
+          "role": "frozen_spec"
+        }
+      ],
+      "expected": {
+        "exit_code": 0,
+        "stdout_utf8": "hello\nWORLD\nhi\nleft\nright\n007\n700\ncba\n"
+      },
+      "rationale": "ASCIIcase/trim, exactpadding and rune reversal derived independently; alloriginalcall placements retained.",
+      "packages": [
+        "P02",
+        "P06",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P12",
+        "P13",
+        "P14",
+        "P17"
+      ],
+      "legacy_case": null,
+      "status": "PREPARED_NOT_EXECUTED",
+      "execution": {
+        "vm": "NOT_RUN",
+        "native": "NOT_RUN"
+      },
+      "new_entry": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "remaining_qualification": [
+        "Fresh actual Source/Program/driver entries independently satisfy VM/native observations, original contexts and real effects. Neither anchors/builds/banners nor equal wrong results qualify execution.",
+        "Bind actual declaration-owned module/protocol/generic/Equal/formatter/view/provider/lifecycle contracts and target/platform profiles; no guessed ABI/API/diagnostic field or compatibility shim.",
+        "Full affected FI/resource/live/requested/work/borrow/lifetime/cancel/physical/safety/generated-C/provider gates; original dimensions and P20 bidirectional mixed scope remain."
+      ],
+      "execution_source": "tests/diff/cases/semantics/stdlib/text_contract_direct.xr",
+      "execution_entry": "run"
+    },
+    {
+      "id": "library_review_exact_scalar_parse_contract",
+      "inputs": [
+        {
+          "path": "tests/diff/cases/semantics/stdlib/exact_scalar_parse_contract.xr",
+          "lf_sha256": "864ef945cd751bce976393ade2d0ea213a00eff66f1e217d64a777b23d588cc7",
+          "role": "preserved_source"
+        },
+        {
+          "path": "spec/source/sections/003-2-type-system.md",
+          "lf_sha256": "f4e970b0cc728c19f65a4d1b2a13cd0e572431dcac3f6f20cd06d23046ebea8a",
+          "role": "frozen_spec"
+        },
+        {
+          "path": "spec/source/sections/009-8-error-handling.md",
+          "lf_sha256": "569cafb786430df363674f97f6073e908d76b4a3484f3fb26239b0895342507e",
+          "role": "frozen_spec"
+        }
+      ],
+      "expected": {
+        "exit_code": 0,
+        "stdout_utf8": "42\n-7\n-1\n3.5\n-1.0\n9223372036854775807\n-9223372036854775808\ntrue\ntrue\n0.5\n1.0\ntrue\ntrue\ntrue\ntrue\n"
+      },
+      "rationale": "Complete integerlimits and exactfull-input decimal parse preserved. Halfway1+2^-53 rounds ties-to-even1; overflowingI64/missingexponent/trailingtail returnsNone, never legacyprefixparse.",
+      "packages": [
+        "P02",
+        "P06",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P12",
+        "P13",
+        "P14",
+        "P17"
+      ],
+      "legacy_case": null,
+      "status": "PREPARED_NOT_EXECUTED",
+      "execution": {
+        "vm": "NOT_RUN",
+        "native": "NOT_RUN"
+      },
+      "new_entry": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "remaining_qualification": [
+        "Fresh actual Source/Program/driver entries independently satisfy VM/native observations, original contexts and real effects. Neither anchors/builds/banners nor equal wrong results qualify execution.",
+        "Bind actual declaration-owned module/protocol/generic/Equal/formatter/view/provider/lifecycle contracts and target/platform profiles; no guessed ABI/API/diagnostic field or compatibility shim.",
+        "Full affected FI/resource/live/requested/work/borrow/lifetime/cancel/physical/safety/generated-C/provider gates; original dimensions and P20 bidirectional mixed scope remain."
+      ],
+      "execution_source": "tests/diff/cases/semantics/stdlib/exact_scalar_parse_contract.xr",
+      "execution_entry": "run"
+    },
+    {
+      "id": "library_review_datetime_core_direct",
+      "inputs": [
+        {
+          "path": "tests/diff/cases/semantics/stdlib/datetime_core_direct.xr",
+          "lf_sha256": "6e08d89f3daf3e8105f98616db0219dfd4f476768ff6d782c5c93d31c5175c4e",
+          "role": "preserved_source"
+        },
+        {
+          "path": "spec/source/sections/003-2-type-system.md",
+          "lf_sha256": "f4e970b0cc728c19f65a4d1b2a13cd0e572431dcac3f6f20cd06d23046ebea8a",
+          "role": "frozen_spec"
+        },
+        {
+          "path": "spec/source/sections/009-8-error-handling.md",
+          "lf_sha256": "569cafb786430df363674f97f6073e908d76b4a3484f3fb26239b0895342507e",
+          "role": "frozen_spec"
+        }
+      ],
+      "expected": {
+        "utc_iso": "2024-02-29T23:45:06.000Z",
+        "utc_timestamp": 1709250306,
+        "epoch_iso": "1970-01-01T00:00:00.000Z",
+        "negative_ms_timestamp_and_remainder": [
+          [
+            -1,
+            999
+          ],
+          [
+            -2,
+            999
+          ]
+        ],
+        "next_day": [
+          2024,
+          3,
+          1
+        ],
+        "month_clamp": [
+          2024,
+          2,
+          29
+        ],
+        "second_difference": -86400,
+        "hour_difference": -24,
+        "leap_year": true,
+        "days_in_month": 29,
+        "zone_conversion_preserves_timestamp": true,
+        "all_original_fields_formats_and_parse_calls_required": true
+      },
+      "rationale": "CalendarUTC/leapday independently derived; floor division of-1/-1001ms yields(-1,999)/(-2,999), monthJan31 clampsFeb29. Actual DateTime methods/format/copy/zoneprovider remain unqualified; all original output responsibilities retained.",
+      "packages": [
+        "P02",
+        "P06",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P12",
+        "P13",
+        "P14",
+        "P17"
+      ],
+      "legacy_case": null,
+      "status": "PREPARED_NOT_EXECUTED",
+      "execution": {
+        "vm": "NOT_RUN",
+        "native": "NOT_RUN"
+      },
+      "new_entry": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "remaining_qualification": [
+        "Fresh actual Source/Program/driver entries independently satisfy VM/native observations, original contexts and real effects. Neither anchors/builds/banners nor equal wrong results qualify execution.",
+        "Bind actual declaration-owned module/protocol/generic/Equal/formatter/view/provider/lifecycle contracts and target/platform profiles; no guessed ABI/API/diagnostic field or compatibility shim.",
+        "Full affected FI/resource/live/requested/work/borrow/lifetime/cancel/physical/safety/generated-C/provider gates; original dimensions and P20 bidirectional mixed scope remain."
+      ],
+      "target_source_status": "PENDING_PUBLISHED_DECLARATION_OWNED_LIBRARY_REPLACEMENT",
+      "obligation_scope": "SEMANTIC_DUTY_PRESERVED_TARGET_SOURCE_NOT_PREPARED"
+    },
+    {
+      "id": "library_review_datetime_int_arg_shared_core",
+      "inputs": [
+        {
+          "path": "tests/diff/cases/semantics/stdlib/datetime_int_arg_shared_core.xr",
+          "lf_sha256": "51b3d2b77485aa7ee9f34bc89ff22e173bab4104a6fa3896144acd43009e5a28",
+          "role": "preserved_source"
+        },
+        {
+          "path": "spec/source/sections/003-2-type-system.md",
+          "lf_sha256": "f4e970b0cc728c19f65a4d1b2a13cd0e572431dcac3f6f20cd06d23046ebea8a",
+          "role": "frozen_spec"
+        },
+        {
+          "path": "spec/source/sections/009-8-error-handling.md",
+          "lf_sha256": "569cafb786430df363674f97f6073e908d76b4a3484f3fb26239b0895342507e",
+          "role": "frozen_spec"
+        }
+      ],
+      "expected": {
+        "json_extraction_wrong_kinds": [
+          "FLOAT",
+          "BOOL",
+          "NULL"
+        ],
+        "declared_integer_parameter_admission_required": true,
+        "silent_wrong_kind_integer_coercion_accepted": false,
+        "datetime_kernel_coverage_from_extraction_failure_accepted": false
+      },
+      "rationale": "typed JSON.require can fail beforeDateTime arithmetic. Originalwrongkind/coercion source remains; future valid targets must use explicitintent/admittedintegerparameters and separatelytest wrongtypes, no inventedtruncation success.",
+      "packages": [
+        "P02",
+        "P06",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P12",
+        "P13",
+        "P14",
+        "P17"
+      ],
+      "legacy_case": null,
+      "status": "PREPARED_NOT_EXECUTED",
+      "execution": {
+        "vm": "NOT_RUN",
+        "native": "NOT_RUN"
+      },
+      "new_entry": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "remaining_qualification": [
+        "Fresh actual Source/Program/driver entries independently satisfy VM/native observations, original contexts and real effects. Neither anchors/builds/banners nor equal wrong results qualify execution.",
+        "Bind actual declaration-owned module/protocol/generic/Equal/formatter/view/provider/lifecycle contracts and target/platform profiles; no guessed ABI/API/diagnostic field or compatibility shim.",
+        "Full affected FI/resource/live/requested/work/borrow/lifetime/cancel/physical/safety/generated-C/provider gates; original dimensions and P20 bidirectional mixed scope remain."
+      ],
+      "target_source_status": "PENDING_PUBLISHED_DECLARATION_OWNED_LIBRARY_REPLACEMENT",
+      "obligation_scope": "SEMANTIC_DUTY_PRESERVED_TARGET_SOURCE_NOT_PREPARED"
+    },
+    {
+      "id": "library_review_datetime_offset_system_direct",
+      "inputs": [
+        {
+          "path": "tests/diff/cases/semantics/stdlib/datetime_offset_system_direct.xr",
+          "lf_sha256": "3c101428c24c856ebd125816094102692a1ee850f22edc349e9e7c9fe8450581",
+          "role": "preserved_source"
+        },
+        {
+          "path": "spec/source/sections/003-2-type-system.md",
+          "lf_sha256": "f4e970b0cc728c19f65a4d1b2a13cd0e572431dcac3f6f20cd06d23046ebea8a",
+          "role": "frozen_spec"
+        },
+        {
+          "path": "spec/source/sections/009-8-error-handling.md",
+          "lf_sha256": "569cafb786430df363674f97f6073e908d76b4a3484f3fb26239b0895342507e",
+          "role": "frozen_spec"
+        }
+      ],
+      "expected": {
+        "offset_minutes_minimum": -1440,
+        "offset_minutes_maximum": 1440,
+        "actual_offset_provider_invoked": true
+      },
+      "rationale": "Offset is a realplatform query, bounds alone are weak. Do not freeze particularhost timezone or give unsupportedproviderPASS.",
+      "packages": [
+        "P02",
+        "P06",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P12",
+        "P13",
+        "P14",
+        "P17"
+      ],
+      "legacy_case": null,
+      "status": "PREPARED_NOT_EXECUTED",
+      "execution": {
+        "vm": "NOT_RUN",
+        "native": "NOT_RUN"
+      },
+      "new_entry": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "remaining_qualification": [
+        "Fresh actual Source/Program/driver entries independently satisfy VM/native observations, original contexts and real effects. Neither anchors/builds/banners nor equal wrong results qualify execution.",
+        "Bind actual declaration-owned module/protocol/generic/Equal/formatter/view/provider/lifecycle contracts and target/platform profiles; no guessed ABI/API/diagnostic field or compatibility shim.",
+        "Full affected FI/resource/live/requested/work/borrow/lifetime/cancel/physical/safety/generated-C/provider gates; original dimensions and P20 bidirectional mixed scope remain."
+      ],
+      "target_source_status": "PENDING_PUBLISHED_DECLARATION_OWNED_LIBRARY_REPLACEMENT",
+      "obligation_scope": "SEMANTIC_DUTY_PRESERVED_TARGET_SOURCE_NOT_PREPARED"
+    },
+    {
+      "id": "library_review_range_generic_format_shared_core",
+      "inputs": [
+        {
+          "path": "tests/diff/cases/semantics/stdlib/range_generic_format_shared_core.xr",
+          "lf_sha256": "e5158bb5e02b01838232a52bdcb02be190ce73ed90a3dbe53de44772631bb45f",
+          "role": "preserved_source"
+        },
+        {
+          "path": "spec/source/sections/003-2-type-system.md",
+          "lf_sha256": "f4e970b0cc728c19f65a4d1b2a13cd0e572431dcac3f6f20cd06d23046ebea8a",
+          "role": "frozen_spec"
+        },
+        {
+          "path": "spec/source/sections/009-8-error-handling.md",
+          "lf_sha256": "569cafb786430df363674f97f6073e908d76b4a3484f3fb26239b0895342507e",
+          "role": "frozen_spec"
+        }
+      ],
+      "expected": {
+        "exit_code": 0,
+        "stdout_utf8": "2..9\nleft=2..9\n2..9=right\nempty=5..5\n"
+      },
+      "rationale": "StoredhalfopenRange exactendpoints format atstring conversion/bothconcatdirections, includingempty5..5.",
+      "packages": [
+        "P02",
+        "P06",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P12",
+        "P13",
+        "P14",
+        "P17"
+      ],
+      "legacy_case": null,
+      "status": "PREPARED_NOT_EXECUTED",
+      "execution": {
+        "vm": "NOT_RUN",
+        "native": "NOT_RUN"
+      },
+      "new_entry": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "remaining_qualification": [
+        "Fresh actual Source/Program/driver entries independently satisfy VM/native observations, original contexts and real effects. Neither anchors/builds/banners nor equal wrong results qualify execution.",
+        "Bind actual declaration-owned module/protocol/generic/Equal/formatter/view/provider/lifecycle contracts and target/platform profiles; no guessed ABI/API/diagnostic field or compatibility shim.",
+        "Full affected FI/resource/live/requested/work/borrow/lifetime/cancel/physical/safety/generated-C/provider gates; original dimensions and P20 bidirectional mixed scope remain."
+      ],
+      "execution_source": "tests/diff/cases/semantics/stdlib/range_generic_format_shared_core.xr",
+      "execution_entry": "run"
+    },
+    {
+      "id": "library_review_probe_module_shapes",
+      "inputs": [
+        {
+          "path": "tests/diff/cases/semantics/stdlib/probe_module_shapes.xr",
+          "lf_sha256": "986013deb761f1abdb8cf4d4c796745d9f28ff65752a7ddddc779aace02a08f3",
+          "role": "preserved_source"
+        },
+        {
+          "path": "stdlib/_probe/_probe.xr",
+          "lf_sha256": "d649ff512cef7ac5b647c098c5b5312df7805cade08df8ebc980c0b6fd1b6fc9",
+          "role": "reviewed_declaration_or_context"
+        },
+        {
+          "path": "spec/source/sections/003-2-type-system.md",
+          "lf_sha256": "f4e970b0cc728c19f65a4d1b2a13cd0e572431dcac3f6f20cd06d23046ebea8a",
+          "role": "frozen_spec"
+        },
+        {
+          "path": "spec/source/sections/009-8-error-handling.md",
+          "lf_sha256": "569cafb786430df363674f97f6073e908d76b4a3484f3fb26239b0895342507e",
+          "role": "frozen_spec"
+        }
+      ],
+      "expected": {
+        "exit_code": 0,
+        "stdout_utf8": "148\n148\n7\na|b\n0\n6\n60\n13\n15\n27\n18\nn:5\nm:9\ntag:s:3\n42\na:1|tag:b:2\na:1|tag:b:2\n"
+      },
+      "rationale": "All publicexports and fulloriginal _probe companion preserved. Deferbase5→6→13, callback10+5/20+7/6*3, static/class/generic/Arraycomposition values independently derived; not bootstrap/native-shadow qualification.",
+      "packages": [
+        "P02",
+        "P06",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P12",
+        "P13",
+        "P14",
+        "P17"
+      ],
+      "legacy_case": null,
+      "status": "PREPARED_NOT_EXECUTED",
+      "execution": {
+        "vm": "NOT_RUN",
+        "native": "NOT_RUN"
+      },
+      "new_entry": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "remaining_qualification": [
+        "Fresh actual Source/Program/driver entries independently satisfy VM/native observations, original contexts and real effects. Neither anchors/builds/banners nor equal wrong results qualify execution.",
+        "Bind actual declaration-owned module/protocol/generic/Equal/formatter/view/provider/lifecycle contracts and target/platform profiles; no guessed ABI/API/diagnostic field or compatibility shim.",
+        "Full affected FI/resource/live/requested/work/borrow/lifetime/cancel/physical/safety/generated-C/provider gates; original dimensions and P20 bidirectional mixed scope remain."
+      ],
+      "execution_source": "tests/diff/cases/semantics/stdlib/probe_module_shapes.xr",
+      "execution_entry": "run"
+    },
+    {
+      "id": "library_review_cluster_wire_protocol_pure_direct",
+      "inputs": [
+        {
+          "path": "tests/diff/cases/semantics/stdlib/cluster_wire_protocol_pure_direct.xr",
+          "lf_sha256": "1987c57a4d5d4b8ed398e61a3b98544fe200c5b81665671e4af3e7a2f2fe154b",
+          "role": "preserved_source"
+        },
+        {
+          "path": "stdlib/cluster/cluster.xr",
+          "lf_sha256": "261d9bfa90edd2391689d2a855d469659091b489d0abd62d999a9b88325181f1",
+          "role": "reviewed_declaration_or_context"
+        },
+        {
+          "path": "spec/source/sections/003-2-type-system.md",
+          "lf_sha256": "f4e970b0cc728c19f65a4d1b2a13cd0e572431dcac3f6f20cd06d23046ebea8a",
+          "role": "frozen_spec"
+        },
+        {
+          "path": "spec/source/sections/009-8-error-handling.md",
+          "lf_sha256": "569cafb786430df363674f97f6073e908d76b4a3484f3fb26239b0895342507e",
+          "role": "frozen_spec"
+        }
+      ],
+      "expected": {
+        "raw_frame": [
+          0,
+          0,
+          0,
+          4,
+          4,
+          170,
+          187,
+          204
+        ],
+        "transport_frame": [
+          0,
+          0,
+          0,
+          80,
+          7,
+          3,
+          13,
+          98,
+          101,
+          110,
+          99,
+          104,
+          46,
+          112,
+          97,
+          121,
+          108,
+          111,
+          97,
+          100,
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10,
+          11,
+          12,
+          13,
+          14,
+          15,
+          16,
+          17,
+          18,
+          19,
+          20,
+          21,
+          22,
+          23,
+          24,
+          25,
+          26,
+          27,
+          28,
+          29,
+          30,
+          31,
+          32,
+          33,
+          34,
+          35,
+          36,
+          37,
+          38,
+          39,
+          40,
+          41,
+          42,
+          43,
+          44,
+          45,
+          46,
+          47,
+          48,
+          49,
+          50,
+          51,
+          52,
+          53,
+          54,
+          55,
+          56,
+          57,
+          58,
+          59,
+          60,
+          61,
+          62,
+          63
+        ],
+        "request_frame": [
+          0,
+          0,
+          0,
+          33,
+          1,
+          6,
+          10,
+          110,
+          111,
+          100,
+          101,
+          45,
+          97,
+          108,
+          112,
+          104,
+          97,
+          16,
+          17,
+          18,
+          19,
+          20,
+          21,
+          22,
+          23,
+          24,
+          25,
+          26,
+          27,
+          28,
+          29,
+          30,
+          31,
+          1,
+          2,
+          3,
+          4
+        ],
+        "ack_frame": [
+          0,
+          0,
+          0,
+          64,
+          2,
+          6,
+          9,
+          110,
+          111,
+          100,
+          101,
+          45,
+          98,
+          101,
+          116,
+          97,
+          32,
+          33,
+          34,
+          35,
+          36,
+          37,
+          38,
+          39,
+          40,
+          41,
+          42,
+          43,
+          44,
+          45,
+          46,
+          47,
+          128,
+          129,
+          130,
+          131,
+          132,
+          133,
+          134,
+          135,
+          136,
+          137,
+          138,
+          139,
+          140,
+          141,
+          142,
+          143,
+          144,
+          145,
+          146,
+          147,
+          148,
+          149,
+          150,
+          151,
+          152,
+          153,
+          154,
+          155,
+          156,
+          157,
+          158,
+          159,
+          10,
+          11,
+          12,
+          13
+        ],
+        "done_frame": [
+          0,
+          0,
+          0,
+          33,
+          3,
+          192,
+          193,
+          194,
+          195,
+          196,
+          197,
+          198,
+          199,
+          200,
+          201,
+          202,
+          203,
+          204,
+          205,
+          206,
+          207,
+          208,
+          209,
+          210,
+          211,
+          212,
+          213,
+          214,
+          215,
+          216,
+          217,
+          218,
+          219,
+          220,
+          221,
+          222,
+          223
+        ],
+        "heartbeat_frame": [
+          0,
+          0,
+          0,
+          9,
+          5,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8
+        ],
+        "monitor_frame": [
+          0,
+          0,
+          0,
+          14,
+          8,
+          12,
+          119,
+          111,
+          114,
+          107,
+          101,
+          114,
+          46,
+          97,
+          108,
+          112,
+          104,
+          97
+        ],
+        "exit_frame": [
+          0,
+          0,
+          0,
+          21,
+          10,
+          12,
+          119,
+          111,
+          114,
+          107,
+          101,
+          114,
+          46,
+          97,
+          108,
+          112,
+          104,
+          97,
+          6,
+          110,
+          111,
+          114,
+          109,
+          97,
+          108
+        ],
+        "handshake_proof": [
+          222,
+          177,
+          211,
+          78,
+          112,
+          65,
+          67,
+          174,
+          167,
+          103,
+          211,
+          72,
+          30,
+          103,
+          148,
+          119,
+          237,
+          216,
+          38,
+          11,
+          128,
+          19,
+          186,
+          9,
+          95,
+          142,
+          114,
+          104,
+          110,
+          215,
+          15,
+          176
+        ],
+        "retired_kind_09_rejected": true,
+        "nonce_length": 16,
+        "proof_length": 32,
+        "envelope_length": 64,
+        "phi_sample_count_after_initial_records": 2,
+        "phi_window_sample_count": 100,
+        "phi_write_index_after_120_records": 22,
+        "heartbeat_policy_verdicts": [
+          false,
+          true,
+          true,
+          false
+        ],
+        "all_original_decode_and_bad_length_checks_required": true
+      },
+      "rationale": "IndependentBEframe lengths/kinds andeverypayloadbyte derivefrom declaredcluster wireformat; HMAC-SHA256(secret,nonce) computedseparately. Wholeminimum/torn/retired09/vector and120recordPhi-window tests remain; no realtransport/canonicalconstanttimeprovider claim.",
+      "packages": [
+        "P02",
+        "P06",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P12",
+        "P13",
+        "P14",
+        "P17"
+      ],
+      "legacy_case": null,
+      "status": "PREPARED_NOT_EXECUTED",
+      "execution": {
+        "vm": "NOT_RUN",
+        "native": "NOT_RUN"
+      },
+      "new_entry": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "remaining_qualification": [
+        "Fresh actual Source/Program/driver entries independently satisfy VM/native observations, original contexts and real effects. Neither anchors/builds/banners nor equal wrong results qualify execution.",
+        "Bind actual declaration-owned module/protocol/generic/Equal/formatter/view/provider/lifecycle contracts and target/platform profiles; no guessed ABI/API/diagnostic field or compatibility shim.",
+        "Full affected FI/resource/live/requested/work/borrow/lifetime/cancel/physical/safety/generated-C/provider gates; original dimensions and P20 bidirectional mixed scope remain."
+      ],
+      "target_source_status": "PENDING_PUBLISHED_DECLARATION_OWNED_LIBRARY_REPLACEMENT",
+      "obligation_scope": "SEMANTIC_DUTY_PRESERVED_TARGET_SOURCE_NOT_PREPARED"
+    },
+    {
+      "id": "library_review_cluster_protocol_pure_direct",
+      "inputs": [
+        {
+          "path": "tests/diff/cases/semantics/stdlib/cluster_protocol_pure_direct.xr",
+          "lf_sha256": "dc2b39b816c872e0167e52128c41722b3951bcfa13023875113c095a6d49e52a",
+          "role": "preserved_source"
+        },
+        {
+          "path": "stdlib/cluster/cluster.xr",
+          "lf_sha256": "261d9bfa90edd2391689d2a855d469659091b489d0abd62d999a9b88325181f1",
+          "role": "reviewed_declaration_or_context"
+        },
+        {
+          "path": "spec/source/sections/003-2-type-system.md",
+          "lf_sha256": "f4e970b0cc728c19f65a4d1b2a13cd0e572431dcac3f6f20cd06d23046ebea8a",
+          "role": "frozen_spec"
+        },
+        {
+          "path": "spec/source/sections/009-8-error-handling.md",
+          "lf_sha256": "569cafb786430df363674f97f6073e908d76b4a3484f3fb26239b0895342507e",
+          "role": "frozen_spec"
+        }
+      ],
+      "expected": {
+        "exit_code": 0,
+        "stdout_utf8": "6\n3\ntrue\nfalse\nfalse\n127.0.0.1\n9000\n::1\n9001\nmissing:missing-port\nport:0\nport:not-a-port\nhost:::1\ntrue\nfalse\ntrue\ntrue\nfalse\nfalse\ntrue\nfalse\ntrue\nfalse\ntrue\nfalse\ntrue\nfalse\ntrue\n"
+      },
+      "rationale": "Declaredversion6/hop3,IPv4/IPv6addresses and full topicwildcard semantics retained. BareIPv6withoutbrackets is invalidhost; *matchesonecomponent and>requirespositive suffix. Realclustertransport remains distinct. Declared InvalidHost payload is rawhost::1 after separatingport9000, not entireaddress.",
+      "packages": [
+        "P02",
+        "P06",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P12",
+        "P13",
+        "P14",
+        "P17"
+      ],
+      "legacy_case": null,
+      "status": "PREPARED_NOT_EXECUTED",
+      "execution": {
+        "vm": "NOT_RUN",
+        "native": "NOT_RUN"
+      },
+      "new_entry": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "remaining_qualification": [
+        "Fresh actual Source/Program/driver entries independently satisfy VM/native observations, original contexts and real effects. Neither anchors/builds/banners nor equal wrong results qualify execution.",
+        "Bind actual declaration-owned module/protocol/generic/Equal/formatter/view/provider/lifecycle contracts and target/platform profiles; no guessed ABI/API/diagnostic field or compatibility shim.",
+        "Full affected FI/resource/live/requested/work/borrow/lifetime/cancel/physical/safety/generated-C/provider gates; original dimensions and P20 bidirectional mixed scope remain."
+      ],
+      "execution_source": "tests/diff/cases/semantics/stdlib/cluster_protocol_pure_direct.xr",
+      "execution_entry": "run"
+    },
+    {
+      "id": "library_review_cluster_typed_control_surface",
+      "inputs": [
+        {
+          "path": "tests/diff/cases/semantics/stdlib/cluster_typed_control_surface.xr",
+          "lf_sha256": "c726d5e2775db521e06274dc6bf7ed86a4ec3489b9489da4ff0215965ae6fca2",
+          "role": "preserved_source"
+        },
+        {
+          "path": "spec/source/sections/003-2-type-system.md",
+          "lf_sha256": "f4e970b0cc728c19f65a4d1b2a13cd0e572431dcac3f6f20cd06d23046ebea8a",
+          "role": "frozen_spec"
+        },
+        {
+          "path": "spec/source/sections/009-8-error-handling.md",
+          "lf_sha256": "569cafb786430df363674f97f6073e908d76b4a3484f3fb26239b0895342507e",
+          "role": "frozen_spec"
+        }
+      ],
+      "expected": {
+        "declared_optional_types": [
+          "ClusterConfig",
+          "ClusterInfo",
+          "ClusterNodeInfo",
+          "ClusterTlsOptions"
+        ],
+        "accepted_absent_arguments": 4,
+        "full_declared_type_admission_required": true,
+        "cluster_execution_claim_from_null_only_case_accepted": false
+      },
+      "rationale": "Four nullvalues andliteraltrue checkdeclaration surface only. No instance/transport/handshake/controloperation is executed.",
+      "packages": [
+        "P02",
+        "P06",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P12",
+        "P13",
+        "P14",
+        "P17"
+      ],
+      "legacy_case": null,
+      "status": "PREPARED_NOT_EXECUTED",
+      "execution": {
+        "vm": "NOT_RUN",
+        "native": "NOT_RUN"
+      },
+      "new_entry": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "remaining_qualification": [
+        "Fresh actual Source/Program/driver entries independently satisfy VM/native observations, original contexts and real effects. Neither anchors/builds/banners nor equal wrong results qualify execution.",
+        "Bind actual declaration-owned module/protocol/generic/Equal/formatter/view/provider/lifecycle contracts and target/platform profiles; no guessed ABI/API/diagnostic field or compatibility shim.",
+        "Full affected FI/resource/live/requested/work/borrow/lifetime/cancel/physical/safety/generated-C/provider gates; original dimensions and P20 bidirectional mixed scope remain."
+      ],
+      "target_source_status": "PENDING_PUBLISHED_DECLARATION_OWNED_LIBRARY_REPLACEMENT",
+      "obligation_scope": "SEMANTIC_DUTY_PRESERVED_TARGET_SOURCE_NOT_PREPARED"
+    },
+    {
+      "id": "library_review_http2_surface_direct",
+      "inputs": [
+        {
+          "path": "tests/diff/cases/semantics/stdlib/http2_surface_direct.xr",
+          "lf_sha256": "c596a9ab813f92daf550a66a2abbaa7ff03abbe40dc8a6c559e8a24a7ac14337",
+          "role": "preserved_source"
+        },
+        {
+          "path": "spec/source/sections/003-2-type-system.md",
+          "lf_sha256": "f4e970b0cc728c19f65a4d1b2a13cd0e572431dcac3f6f20cd06d23046ebea8a",
+          "role": "frozen_spec"
+        },
+        {
+          "path": "spec/source/sections/009-8-error-handling.md",
+          "lf_sha256": "569cafb786430df363674f97f6073e908d76b4a3484f3fb26239b0895342507e",
+          "role": "frozen_spec"
+        }
+      ],
+      "expected": {
+        "declared_supported_return_type": "bool",
+        "actual_availability_value_not_frozen": true,
+        "http2_session_claim_from_type_query_accepted": false
+      },
+      "rationale": "Sourceintentionallyqueriesreturntypeonly. Platformavailability mayvary; neitherbooltypename nor buildqualifiesactualHTTP2/provider session.",
+      "packages": [
+        "P02",
+        "P06",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P12",
+        "P13",
+        "P14",
+        "P17"
+      ],
+      "legacy_case": null,
+      "status": "PREPARED_NOT_EXECUTED",
+      "execution": {
+        "vm": "NOT_RUN",
+        "native": "NOT_RUN"
+      },
+      "new_entry": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "remaining_qualification": [
+        "Fresh actual Source/Program/driver entries independently satisfy VM/native observations, original contexts and real effects. Neither anchors/builds/banners nor equal wrong results qualify execution.",
+        "Bind actual declaration-owned module/protocol/generic/Equal/formatter/view/provider/lifecycle contracts and target/platform profiles; no guessed ABI/API/diagnostic field or compatibility shim.",
+        "Full affected FI/resource/live/requested/work/borrow/lifetime/cancel/physical/safety/generated-C/provider gates; original dimensions and P20 bidirectional mixed scope remain."
+      ],
+      "target_source_status": "PENDING_PUBLISHED_DECLARATION_OWNED_LIBRARY_REPLACEMENT",
+      "obligation_scope": "SEMANTIC_DUTY_PRESERVED_TARGET_SOURCE_NOT_PREPARED"
+    },
+    {
+      "id": "library_review_ws_connect_options_type_surface",
+      "inputs": [
+        {
+          "path": "tests/diff/cases/semantics/stdlib/ws_connect_options_type_surface.xr",
+          "lf_sha256": "28e04325af0ecb133e45d9e2ade938f74e050b13ead9f1ab9400ebcdd13ca27d",
+          "role": "preserved_source"
+        },
+        {
+          "path": "spec/source/sections/003-2-type-system.md",
+          "lf_sha256": "f4e970b0cc728c19f65a4d1b2a13cd0e572431dcac3f6f20cd06d23046ebea8a",
+          "role": "frozen_spec"
+        },
+        {
+          "path": "spec/source/sections/009-8-error-handling.md",
+          "lf_sha256": "569cafb786430df363674f97f6073e908d76b4a3484f3fb26239b0895342507e",
+          "role": "frozen_spec"
+        }
+      ],
+      "expected": {
+        "declared_type": "WsConnectOptions",
+        "absent_optional_argument_accepted": true,
+        "connection_claim_from_null_only_case_accepted": false
+      },
+      "rationale": "Acceptsnullonly, noactualoptionsinstance/connection. Bindrealdeclaredfield/type/lifecycle onceproducerpublished.",
+      "packages": [
+        "P02",
+        "P06",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P12",
+        "P13",
+        "P14",
+        "P17"
+      ],
+      "legacy_case": null,
+      "status": "PREPARED_NOT_EXECUTED",
+      "execution": {
+        "vm": "NOT_RUN",
+        "native": "NOT_RUN"
+      },
+      "new_entry": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "remaining_qualification": [
+        "Fresh actual Source/Program/driver entries independently satisfy VM/native observations, original contexts and real effects. Neither anchors/builds/banners nor equal wrong results qualify execution.",
+        "Bind actual declaration-owned module/protocol/generic/Equal/formatter/view/provider/lifecycle contracts and target/platform profiles; no guessed ABI/API/diagnostic field or compatibility shim.",
+        "Full affected FI/resource/live/requested/work/borrow/lifetime/cancel/physical/safety/generated-C/provider gates; original dimensions and P20 bidirectional mixed scope remain."
+      ],
+      "target_source_status": "PENDING_PUBLISHED_DECLARATION_OWNED_LIBRARY_REPLACEMENT",
+      "obligation_scope": "SEMANTIC_DUTY_PRESERVED_TARGET_SOURCE_NOT_PREPARED"
+    },
+    {
+      "id": "library_review_http_error_nested_enum_payload_direct",
+      "inputs": [
+        {
+          "path": "tests/diff/cases/semantics/stdlib/http_error_nested_enum_payload_direct.xr",
+          "lf_sha256": "6f6c3987b12b6c72279e4a7a771425d53ad57e16a1ca55f7a46d85ceed97b431",
+          "role": "preserved_source"
+        },
+        {
+          "path": "tests/unit/xir/legacy_consumers/fixtures/library_ports/http_error_nested_enum_payload_direct/root.xr",
+          "lf_sha256": "50f6ce3efe9f4cd6d04ebc3eeb53a4a53f9971645272bb1be745254272fe5227",
+          "role": "target_source"
+        },
+        {
+          "path": "stdlib/http/http.xr",
+          "lf_sha256": "1afd544faf927d1196788a87353bd1127b51a3928ffd2b39be388e58cbbadda0",
+          "role": "reviewed_declaration_or_context"
+        },
+        {
+          "path": "spec/source/sections/003-2-type-system.md",
+          "lf_sha256": "f4e970b0cc728c19f65a4d1b2a13cd0e572431dcac3f6f20cd06d23046ebea8a",
+          "role": "frozen_spec"
+        },
+        {
+          "path": "spec/source/sections/009-8-error-handling.md",
+          "lf_sha256": "569cafb786430df363674f97f6073e908d76b4a3484f3fb26239b0895342507e",
+          "role": "frozen_spec"
+        }
+      ],
+      "expected": {
+        "exit_code": 0,
+        "stdout_utf8": "Http2\n"
+      },
+      "rationale": "Exacttyped UnsupportedVersion fieldversion:HttpVersion surviveserrorchannel/patternbinding, which isreadonly butnonOptional; full draft removes obsolete! without changing payload identity.",
+      "packages": [
+        "P02",
+        "P06",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P12",
+        "P13",
+        "P14",
+        "P17"
+      ],
+      "legacy_case": null,
+      "status": "PREPARED_NOT_EXECUTED",
+      "execution": {
+        "vm": "NOT_RUN",
+        "native": "NOT_RUN"
+      },
+      "new_entry": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "remaining_qualification": [
+        "Fresh actual Source/Program/driver entries independently satisfy VM/native observations, original contexts and real effects. Neither anchors/builds/banners nor equal wrong results qualify execution.",
+        "Bind actual declaration-owned module/protocol/generic/Equal/formatter/view/provider/lifecycle contracts and target/platform profiles; no guessed ABI/API/diagnostic field or compatibility shim.",
+        "Full affected FI/resource/live/requested/work/borrow/lifetime/cancel/physical/safety/generated-C/provider gates; original dimensions and P20 bidirectional mixed scope remain."
+      ],
+      "execution_source": "tests/unit/xir/legacy_consumers/fixtures/library_ports/http_error_nested_enum_payload_direct/root.xr",
+      "execution_entry": "run"
+    },
+    {
+      "id": "library_review_csv_pure_module_direct",
+      "inputs": [
+        {
+          "path": "tests/diff/cases/semantics/stdlib/csv_pure_module_direct.xr",
+          "lf_sha256": "d669b89d2e9ba351c5afdc0e1d9903611a037949f852e7cd8d7828fb68396791",
+          "role": "preserved_source"
+        },
+        {
+          "path": "tests/unit/xir/legacy_consumers/fixtures/library_ports/csv_pure_module_direct/root.xr",
+          "lf_sha256": "8fdd1078d42cd67daca62d57773603ad117f39e1af6581d563f0abbd2639f1ae",
+          "role": "target_source"
+        },
+        {
+          "path": "stdlib/csv/csv.xr",
+          "lf_sha256": "3c1479bb3a82e93c5b9a0341b984b80fd986aa7db94a4557f47b50d34112861c",
+          "role": "reviewed_declaration_or_context"
+        },
+        {
+          "path": "spec/source/sections/003-2-type-system.md",
+          "lf_sha256": "f4e970b0cc728c19f65a4d1b2a13cd0e572431dcac3f6f20cd06d23046ebea8a",
+          "role": "frozen_spec"
+        },
+        {
+          "path": "spec/source/sections/009-8-error-handling.md",
+          "lf_sha256": "569cafb786430df363674f97f6073e908d76b4a3484f3fb26239b0895342507e",
+          "role": "frozen_spec"
+        }
+      ],
+      "expected": {
+        "headers": [
+          "name",
+          "age"
+        ],
+        "rows": [
+          [
+            "Alice",
+            "30"
+          ],
+          [
+            "Bob",
+            "25"
+          ]
+        ],
+        "mismatch_kind": "CsvErrorKind.FieldCountMismatch",
+        "mismatch_line": 3,
+        "mismatch_record": 2,
+        "explicit_delimiter_codepoint": 9,
+        "auto_semicolon_last_value": "3",
+        "tsv_last_value": "5",
+        "quoted_roundtrip_last_value": "quote \" me",
+        "quoted_comment_value": "# value",
+        "comment_records_remaining": 2,
+        "column_limit_error": "CsvError.ColumnLimitExceeded",
+        "column_limit": 1,
+        "all_original_diagnostics_positions_required": true
+      },
+      "rationale": "Completeoriginaldocument/report/mismatch/autosemicolon/tab/quotedCSV/comment/limit duties retained. Exact{} lacksrequiredrune; fulltargetsuppliestab9. CSVrecord/linebasis followsoriginaldeclaredzero-basedrecord/one-basedline surface; actualdiagnosticmessage/column/bytepositions stillqualified separately.",
+      "packages": [
+        "P02",
+        "P06",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P12",
+        "P13",
+        "P14",
+        "P17"
+      ],
+      "legacy_case": null,
+      "status": "PREPARED_NOT_EXECUTED",
+      "execution": {
+        "vm": "NOT_RUN",
+        "native": "NOT_RUN"
+      },
+      "new_entry": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "remaining_qualification": [
+        "Fresh actual Source/Program/driver entries independently satisfy VM/native observations, original contexts and real effects. Neither anchors/builds/banners nor equal wrong results qualify execution.",
+        "Bind actual declaration-owned module/protocol/generic/Equal/formatter/view/provider/lifecycle contracts and target/platform profiles; no guessed ABI/API/diagnostic field or compatibility shim.",
+        "Full affected FI/resource/live/requested/work/borrow/lifetime/cancel/physical/safety/generated-C/provider gates; original dimensions and P20 bidirectional mixed scope remain."
+      ],
+      "execution_source": "tests/unit/xir/legacy_consumers/fixtures/library_ports/csv_pure_module_direct/root.xr",
+      "execution_entry": "run"
+    },
+    {
+      "id": "library_review_http_formdata_pure_direct",
+      "inputs": [
+        {
+          "path": "tests/diff/cases/semantics/stdlib/http_formdata_pure_direct.xr",
+          "lf_sha256": "4d00ac8a4e993aaf77c4c596f9b445481304a02a54746dd3320a037bcbf7d36f",
+          "role": "preserved_source"
+        },
+        {
+          "path": "tests/unit/xir/legacy_consumers/fixtures/library_ports/http_formdata_pure_direct/root.xr",
+          "lf_sha256": "a56d0a52d66de6de4e045315cec21a28c5b4165e78675037f9aeb8201ef97c86",
+          "role": "target_source"
+        },
+        {
+          "path": "spec/source/sections/003-2-type-system.md",
+          "lf_sha256": "f4e970b0cc728c19f65a4d1b2a13cd0e572431dcac3f6f20cd06d23046ebea8a",
+          "role": "frozen_spec"
+        },
+        {
+          "path": "spec/source/sections/009-8-error-handling.md",
+          "lf_sha256": "569cafb786430df363674f97f6073e908d76b4a3484f3fb26239b0895342507e",
+          "role": "frozen_spec"
+        }
+      ],
+      "expected": {
+        "normal_field_name": "name",
+        "normal_field_value": "Xray",
+        "boundary_prefix": "----XrayFormBoundary",
+        "file_name": "upload.txt",
+        "file_content": "file-data",
+        "file_content_type": "text/plain",
+        "limit_rejected_field_total_size": 0,
+        "unlimited_field_total_size": 4,
+        "limit_rejected_file_total_size": 0,
+        "temporary_directory_removed": true,
+        "complete_multipart_framing_required": true,
+        "failure_path_cleanup_registered": true
+      },
+      "rationale": "Completeoriginalmultipartnormal/file/3-bytequotas/zero-unlimitedbody wrappedinmain returningPath; deferremoveAll is installed aftertempDircreation andcaller verifiesabsenceafterreturn. Normalfinalcleanupcannotcoverearlyfailurebyitself; actualfault/cleanup/providerqualification remainsrequired.",
+      "packages": [
+        "P02",
+        "P06",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P12",
+        "P13",
+        "P14",
+        "P17"
+      ],
+      "legacy_case": null,
+      "status": "PREPARED_NOT_EXECUTED",
+      "execution": {
+        "vm": "NOT_RUN",
+        "native": "NOT_RUN"
+      },
+      "new_entry": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "remaining_qualification": [
+        "Fresh actual Source/Program/driver entries independently satisfy VM/native observations, original contexts and real effects. Neither anchors/builds/banners nor equal wrong results qualify execution.",
+        "Bind actual declaration-owned module/protocol/generic/Equal/formatter/view/provider/lifecycle contracts and target/platform profiles; no guessed ABI/API/diagnostic field or compatibility shim.",
+        "Full affected FI/resource/live/requested/work/borrow/lifetime/cancel/physical/safety/generated-C/provider gates; original dimensions and P20 bidirectional mixed scope remain."
+      ],
+      "execution_source": "tests/unit/xir/legacy_consumers/fixtures/library_ports/http_formdata_pure_direct/root.xr",
+      "execution_entry": "run"
+    },
+    {
+      "id": "library_review_http_headers_typed_direct",
+      "inputs": [
+        {
+          "path": "tests/diff/cases/semantics/stdlib/http_headers_typed_direct.xr",
+          "lf_sha256": "0fe447c6b745844d25b9c35a8fe3191c10d3dcb0c5f0566a32d3840c97312afc",
+          "role": "preserved_source"
+        },
+        {
+          "path": "spec/source/sections/003-2-type-system.md",
+          "lf_sha256": "f4e970b0cc728c19f65a4d1b2a13cd0e572431dcac3f6f20cd06d23046ebea8a",
+          "role": "frozen_spec"
+        },
+        {
+          "path": "spec/source/sections/009-8-error-handling.md",
+          "lf_sha256": "569cafb786430df363674f97f6073e908d76b4a3484f3fb26239b0895342507e",
+          "role": "frozen_spec"
+        }
+      ],
+      "expected": {
+        "initial_set_cookie_values": [
+          "a=1",
+          "b=2"
+        ],
+        "initial_entry_count": 3,
+        "replacement_set_cookie_values": [
+          "c=3"
+        ],
+        "case_insensitive_lookup_required": true,
+        "duplicate_order_preserved": true
+      },
+      "rationale": "Headernamecase folds independently ofstoredoriginalspelling; addretainsbothcookies/order, set replacesallmatches. Completecallerprogram retained; actualpublicfield/method/Arraycopy contracts stillpending.",
+      "packages": [
+        "P02",
+        "P06",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P12",
+        "P13",
+        "P14",
+        "P17"
+      ],
+      "legacy_case": null,
+      "status": "PREPARED_NOT_EXECUTED",
+      "execution": {
+        "vm": "NOT_RUN",
+        "native": "NOT_RUN"
+      },
+      "new_entry": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "remaining_qualification": [
+        "Fresh actual Source/Program/driver entries independently satisfy VM/native observations, original contexts and real effects. Neither anchors/builds/banners nor equal wrong results qualify execution.",
+        "Bind actual declaration-owned module/protocol/generic/Equal/formatter/view/provider/lifecycle contracts and target/platform profiles; no guessed ABI/API/diagnostic field or compatibility shim.",
+        "Full affected FI/resource/live/requested/work/borrow/lifetime/cancel/physical/safety/generated-C/provider gates; original dimensions and P20 bidirectional mixed scope remain."
+      ],
+      "execution_source": "tests/diff/cases/semantics/stdlib/http_headers_typed_direct.xr",
+      "execution_entry": "run"
+    },
+    {
+      "id": "library_review_http_chunked_body_pure_direct",
+      "inputs": [
+        {
+          "path": "tests/diff/cases/semantics/stdlib/http_chunked_body_pure_direct.xr",
+          "lf_sha256": "930940d138f6f249e32823b4836ae297bfb2a096104446e036344918d62d997d",
+          "role": "preserved_source"
+        },
+        {
+          "path": "spec/source/sections/003-2-type-system.md",
+          "lf_sha256": "f4e970b0cc728c19f65a4d1b2a13cd0e572431dcac3f6f20cd06d23046ebea8a",
+          "role": "frozen_spec"
+        },
+        {
+          "path": "spec/source/sections/009-8-error-handling.md",
+          "lf_sha256": "569cafb786430df363674f97f6073e908d76b4a3484f3fb26239b0895342507e",
+          "role": "frozen_spec"
+        }
+      ],
+      "expected": {
+        "decoded_body": "Wikipedia",
+        "consumed_bytes": 77,
+        "remaining_text": "ignored",
+        "expires": "soon",
+        "duplicate_x_trailers": [
+          "one",
+          "two"
+        ],
+        "empty_chunked_consumed_bytes": 5,
+        "bad_chunk_hex_rejected": true,
+        "short_chunk_rejected": true,
+        "bare_lf_chunk_separator_rejected": true,
+        "folded_trailer_rejected": true,
+        "trailer_limit_rejected": true,
+        "body_byte_limit_rejected": true
+      },
+      "rationale": "Independenthex4+5 chunks giveWikipedia andexactbyteprefix consumption; extensiondoesnotaffectlength, duplicateorder preserved. Allmalformedseparator/hex/short/limitoriginal calls remain; no smugglingacceptance viaCL/TEcollapse.",
+      "packages": [
+        "P02",
+        "P06",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P12",
+        "P13",
+        "P14",
+        "P17"
+      ],
+      "legacy_case": null,
+      "status": "PREPARED_NOT_EXECUTED",
+      "execution": {
+        "vm": "NOT_RUN",
+        "native": "NOT_RUN"
+      },
+      "new_entry": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "remaining_qualification": [
+        "Fresh actual Source/Program/driver entries independently satisfy VM/native observations, original contexts and real effects. Neither anchors/builds/banners nor equal wrong results qualify execution.",
+        "Bind actual declaration-owned module/protocol/generic/Equal/formatter/view/provider/lifecycle contracts and target/platform profiles; no guessed ABI/API/diagnostic field or compatibility shim.",
+        "Full affected FI/resource/live/requested/work/borrow/lifetime/cancel/physical/safety/generated-C/provider gates; original dimensions and P20 bidirectional mixed scope remain."
+      ],
+      "execution_source": "tests/diff/cases/semantics/stdlib/http_chunked_body_pure_direct.xr",
+      "execution_entry": "run"
+    },
+    {
+      "id": "library_review_http_request_message_pure_direct",
+      "inputs": [
+        {
+          "path": "tests/diff/cases/semantics/stdlib/http_request_message_pure_direct.xr",
+          "lf_sha256": "03e1eded9726fc4ccfe476ade0a8a191c9988cc60a49203501b2955873d50048",
+          "role": "preserved_source"
+        },
+        {
+          "path": "spec/source/sections/003-2-type-system.md",
+          "lf_sha256": "f4e970b0cc728c19f65a4d1b2a13cd0e572431dcac3f6f20cd06d23046ebea8a",
+          "role": "frozen_spec"
+        },
+        {
+          "path": "spec/source/sections/009-8-error-handling.md",
+          "lf_sha256": "569cafb786430df363674f97f6073e908d76b4a3484f3fb26239b0895342507e",
+          "role": "frozen_spec"
+        }
+      ],
+      "expected": {
+        "fixed_body": "hello",
+        "fixed_consumed_bytes": 63,
+        "fixed_remaining_text": "extra",
+        "chunked_body": "Wikipedia",
+        "chunked_consumed_bytes": 108,
+        "duplicate_checksums": [
+          "ok",
+          "newer"
+        ],
+        "no_body_consumed_bytes": 41,
+        "unicode_body": "éx",
+        "unicode_body_bytes": 3,
+        "unicode_consumed_bytes": 45,
+        "unicode_chunk_body": "é",
+        "unicode_chunk_bytes": 2,
+        "all_original_cl_te_conflict_and_malformed_checks_required": true
+      },
+      "rationale": "Allconsumedpositions independentlycountUTF8bytesofexactknownprefixes. éxis2scalars/3bytes; one-bytecutinsideéinvalid. Duplicate/trailing/CL-TE/gzipchain/short/limitsource duties fullretained.",
+      "packages": [
+        "P02",
+        "P06",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P12",
+        "P13",
+        "P14",
+        "P17"
+      ],
+      "legacy_case": null,
+      "status": "PREPARED_NOT_EXECUTED",
+      "execution": {
+        "vm": "NOT_RUN",
+        "native": "NOT_RUN"
+      },
+      "new_entry": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "remaining_qualification": [
+        "Fresh actual Source/Program/driver entries independently satisfy VM/native observations, original contexts and real effects. Neither anchors/builds/banners nor equal wrong results qualify execution.",
+        "Bind actual declaration-owned module/protocol/generic/Equal/formatter/view/provider/lifecycle contracts and target/platform profiles; no guessed ABI/API/diagnostic field or compatibility shim.",
+        "Full affected FI/resource/live/requested/work/borrow/lifetime/cancel/physical/safety/generated-C/provider gates; original dimensions and P20 bidirectional mixed scope remain."
+      ],
+      "execution_source": "tests/diff/cases/semantics/stdlib/http_request_message_pure_direct.xr",
+      "execution_entry": "run"
+    },
+    {
+      "id": "library_review_http_response_text_pure_direct",
+      "inputs": [
+        {
+          "path": "tests/diff/cases/semantics/stdlib/http_response_text_pure_direct.xr",
+          "lf_sha256": "062d43d33695ff6da537fe42af78c2ad83c4ef4c367580e037edf4a3b4c0835b",
+          "role": "preserved_source"
+        },
+        {
+          "path": "spec/source/sections/003-2-type-system.md",
+          "lf_sha256": "f4e970b0cc728c19f65a4d1b2a13cd0e572431dcac3f6f20cd06d23046ebea8a",
+          "role": "frozen_spec"
+        },
+        {
+          "path": "spec/source/sections/009-8-error-handling.md",
+          "lf_sha256": "569cafb786430df363674f97f6073e908d76b4a3484f3fb26239b0895342507e",
+          "role": "frozen_spec"
+        }
+      ],
+      "expected": {
+        "fixed_status": 200,
+        "fixed_body": "hello",
+        "fixed_consumed_bytes": 57,
+        "fixed_remaining_text": "extra",
+        "chunked_body": "Wikipedia",
+        "chunked_consumed_bytes": 102,
+        "duplicate_checksums": [
+          "ok",
+          "newer"
+        ],
+        "close_delimited_body": "until-close",
+        "close_consumed_bytes": 30,
+        "unicode_body": "éx",
+        "unicode_body_bytes": 3,
+        "unicode_consumed_bytes": 41,
+        "no_body_consumed_bytes": 27,
+        "all_original_cl_te_conflict_and_malformed_checks_required": true
+      },
+      "rationale": "Independentbyteprefixmodel coversfixed/chunked/close/no-body. UTF8éxconsumes3bytes;closegivenbufferparse doesnotqualifynetworkEOF. Alloriginalconflict/incomplete/chain/limitcalls preserved.",
+      "packages": [
+        "P02",
+        "P06",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P12",
+        "P13",
+        "P14",
+        "P17"
+      ],
+      "legacy_case": null,
+      "status": "PREPARED_NOT_EXECUTED",
+      "execution": {
+        "vm": "NOT_RUN",
+        "native": "NOT_RUN"
+      },
+      "new_entry": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "remaining_qualification": [
+        "Fresh actual Source/Program/driver entries independently satisfy VM/native observations, original contexts and real effects. Neither anchors/builds/banners nor equal wrong results qualify execution.",
+        "Bind actual declaration-owned module/protocol/generic/Equal/formatter/view/provider/lifecycle contracts and target/platform profiles; no guessed ABI/API/diagnostic field or compatibility shim.",
+        "Full affected FI/resource/live/requested/work/borrow/lifetime/cancel/physical/safety/generated-C/provider gates; original dimensions and P20 bidirectional mixed scope remain."
+      ],
+      "execution_source": "tests/diff/cases/semantics/stdlib/http_response_text_pure_direct.xr",
+      "execution_entry": "run"
+    },
+    {
+      "id": "library_review_http_request_head_pure_direct",
+      "inputs": [
+        {
+          "path": "tests/diff/cases/semantics/stdlib/http_request_head_pure_direct.xr",
+          "lf_sha256": "769bdd23f1ee2be8ef4ec4331f13bbc54faabd4e8c5789e94ebc0b78e9a20fd9",
+          "role": "preserved_source"
+        },
+        {
+          "path": "spec/source/sections/003-2-type-system.md",
+          "lf_sha256": "f4e970b0cc728c19f65a4d1b2a13cd0e572431dcac3f6f20cd06d23046ebea8a",
+          "role": "frozen_spec"
+        },
+        {
+          "path": "spec/source/sections/009-8-error-handling.md",
+          "lf_sha256": "569cafb786430df363674f97f6073e908d76b4a3484f3fb26239b0895342507e",
+          "role": "frozen_spec"
+        }
+      ],
+      "expected": {
+        "method": "POST",
+        "request_target": "/submit?q=1",
+        "host": "example.com",
+        "duplicate_x_trace_values": [
+          "one",
+          "two"
+        ],
+        "chunked": true,
+        "remaining_chunk_text": "4\r\ndata\r\n0\r\n\r\n",
+        "http_1_0_explicit_keep_alive": true,
+        "bad_method_target_version_name_rejected": true,
+        "conflicting_content_length_rejected": true,
+        "content_length_and_transfer_encoding_rejected": true,
+        "unsupported_transfer_chain_rejected": true,
+        "header_limit_rejected": true
+      },
+      "rationale": "Completeoriginalheadfields/framing/duplicate/absolute/1.0keepalive cases preserved; methodcase canonicalizesPOST. BadCL/TE/smugglingforms mustfailbeforebodypublication, not produce partialstate.",
+      "packages": [
+        "P02",
+        "P06",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P12",
+        "P13",
+        "P14",
+        "P17"
+      ],
+      "legacy_case": null,
+      "status": "PREPARED_NOT_EXECUTED",
+      "execution": {
+        "vm": "NOT_RUN",
+        "native": "NOT_RUN"
+      },
+      "new_entry": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "remaining_qualification": [
+        "Fresh actual Source/Program/driver entries independently satisfy VM/native observations, original contexts and real effects. Neither anchors/builds/banners nor equal wrong results qualify execution.",
+        "Bind actual declaration-owned module/protocol/generic/Equal/formatter/view/provider/lifecycle contracts and target/platform profiles; no guessed ABI/API/diagnostic field or compatibility shim.",
+        "Full affected FI/resource/live/requested/work/borrow/lifetime/cancel/physical/safety/generated-C/provider gates; original dimensions and P20 bidirectional mixed scope remain."
+      ],
+      "execution_source": "tests/diff/cases/semantics/stdlib/http_request_head_pure_direct.xr",
+      "execution_entry": "run"
+    },
+    {
+      "id": "library_review_http_response_head_pure_direct",
+      "inputs": [
+        {
+          "path": "tests/diff/cases/semantics/stdlib/http_response_head_pure_direct.xr",
+          "lf_sha256": "894a63916ae5a99fd55c56ab80b40fd039da11df205889c5a9a6b3b0aef655d6",
+          "role": "preserved_source"
+        },
+        {
+          "path": "spec/source/sections/003-2-type-system.md",
+          "lf_sha256": "f4e970b0cc728c19f65a4d1b2a13cd0e572431dcac3f6f20cd06d23046ebea8a",
+          "role": "frozen_spec"
+        },
+        {
+          "path": "spec/source/sections/009-8-error-handling.md",
+          "lf_sha256": "569cafb786430df363674f97f6073e908d76b4a3484f3fb26239b0895342507e",
+          "role": "frozen_spec"
+        }
+      ],
+      "expected": {
+        "status": 302,
+        "reason": "Found",
+        "content_length": 5,
+        "chunked": false,
+        "keep_alive": false,
+        "location": "/next?q=1",
+        "duplicate_set_cookies": [
+          "a=1",
+          "b=2"
+        ],
+        "relative_redirect": "https://a.test/next",
+        "redirect_303_method": "GET",
+        "redirect_303_drop_body": true,
+        "cross_origin_redirect_strip_sensitive": true,
+        "same_default_origin_preserves_sensitive": true,
+        "conflicting_framing_rejected": true
+      },
+      "rationale": "Relative../nextresolvesfromdir/page;303dropsPOSTbodyandusesGET;httpdefaultport80sameoriginpreservescredentials, crosshttp→https/b.teststrips. Everymalformedhead/chain/limitcall retained.",
+      "packages": [
+        "P02",
+        "P06",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P12",
+        "P13",
+        "P14",
+        "P17"
+      ],
+      "legacy_case": null,
+      "status": "PREPARED_NOT_EXECUTED",
+      "execution": {
+        "vm": "NOT_RUN",
+        "native": "NOT_RUN"
+      },
+      "new_entry": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "remaining_qualification": [
+        "Fresh actual Source/Program/driver entries independently satisfy VM/native observations, original contexts and real effects. Neither anchors/builds/banners nor equal wrong results qualify execution.",
+        "Bind actual declaration-owned module/protocol/generic/Equal/formatter/view/provider/lifecycle contracts and target/platform profiles; no guessed ABI/API/diagnostic field or compatibility shim.",
+        "Full affected FI/resource/live/requested/work/borrow/lifetime/cancel/physical/safety/generated-C/provider gates; original dimensions and P20 bidirectional mixed scope remain."
+      ],
+      "execution_source": "tests/diff/cases/semantics/stdlib/http_response_head_pure_direct.xr",
+      "execution_entry": "run"
+    },
+    {
+      "id": "library_review_http_request_text_pure_direct",
+      "inputs": [
+        {
+          "path": "tests/diff/cases/semantics/stdlib/http_request_text_pure_direct.xr",
+          "lf_sha256": "174c52527b158e2f23e393c6acab0a3525cc6e3dd094ef3415559f5f8c3ac4a5",
+          "role": "preserved_source"
+        },
+        {
+          "path": "spec/source/sections/003-2-type-system.md",
+          "lf_sha256": "f4e970b0cc728c19f65a4d1b2a13cd0e572431dcac3f6f20cd06d23046ebea8a",
+          "role": "frozen_spec"
+        },
+        {
+          "path": "spec/source/sections/009-8-error-handling.md",
+          "lf_sha256": "569cafb786430df363674f97f6073e908d76b4a3484f3fb26239b0895342507e",
+          "role": "frozen_spec"
+        }
+      ],
+      "expected": {
+        "basic_request_line": "GET /api?q=1 HTTP/1.1",
+        "post_body": "hello",
+        "explicit_host": "override.test",
+        "explicit_accept_encoding_preserved": true,
+        "implicit_compression_header_not_added_when_explicit": true,
+        "authorization_removed_when_requested": true,
+        "proxy_authorization_removed_when_requested": true,
+        "unrelated_accept_preserved": true,
+        "invalid_target_and_host_rejected": true,
+        "header_injection_rejected": true
+      },
+      "rationale": "Completebuildercases retaintypedheaders/host/defaults/body andsensitive-stripflag. Pureconstruction is not actualdispatch; badtarget/host/CRLFmustnotpublishrequest.",
+      "packages": [
+        "P02",
+        "P06",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P12",
+        "P13",
+        "P14",
+        "P17"
+      ],
+      "legacy_case": null,
+      "status": "PREPARED_NOT_EXECUTED",
+      "execution": {
+        "vm": "NOT_RUN",
+        "native": "NOT_RUN"
+      },
+      "new_entry": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "remaining_qualification": [
+        "Fresh actual Source/Program/driver entries independently satisfy VM/native observations, original contexts and real effects. Neither anchors/builds/banners nor equal wrong results qualify execution.",
+        "Bind actual declaration-owned module/protocol/generic/Equal/formatter/view/provider/lifecycle contracts and target/platform profiles; no guessed ABI/API/diagnostic field or compatibility shim.",
+        "Full affected FI/resource/live/requested/work/borrow/lifetime/cancel/physical/safety/generated-C/provider gates; original dimensions and P20 bidirectional mixed scope remain."
+      ],
+      "execution_source": "tests/diff/cases/semantics/stdlib/http_request_text_pure_direct.xr",
+      "execution_entry": "run"
+    },
+    {
+      "id": "library_review_http_pure_helpers_direct",
+      "inputs": [
+        {
+          "path": "tests/diff/cases/semantics/stdlib/http_pure_helpers_direct.xr",
+          "lf_sha256": "02a4d6f8bce23707d13a18ada2877c03e72888aad91c23b05fa0ddca8a772293",
+          "role": "preserved_source"
+        },
+        {
+          "path": "spec/source/sections/003-2-type-system.md",
+          "lf_sha256": "f4e970b0cc728c19f65a4d1b2a13cd0e572431dcac3f6f20cd06d23046ebea8a",
+          "role": "frozen_spec"
+        },
+        {
+          "path": "spec/source/sections/009-8-error-handling.md",
+          "lf_sha256": "569cafb786430df363674f97f6073e908d76b4a3484f3fb26239b0895342507e",
+          "role": "frozen_spec"
+        }
+      ],
+      "expected": {
+        "normal_text_body": "hello",
+        "unicode_body": "é",
+        "unicode_content_length": 2,
+        "json_body": "{\"error\":\"no\"}",
+        "json_content_length": 14,
+        "no_content_status": 204,
+        "no_content_length": 0,
+        "custom_status": 201,
+        "custom_body": "created",
+        "custom_connection_close": true,
+        "conflicting_content_length_rejected": true,
+        "transfer_encoding_override_rejected": true,
+        "header_and_content_type_injection_rejected": true
+      },
+      "rationale": "IndependentUTF8é=2bytes andcompactJSON14bytes; fullnormal/custom/emptyheaders andURLhelpers retained. Conflictinglength/TE/CRLFinjectionfailbeforepublishingresponse. Noactualnetwork/provider claim.",
+      "packages": [
+        "P02",
+        "P06",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P12",
+        "P13",
+        "P14",
+        "P17"
+      ],
+      "legacy_case": null,
+      "status": "PREPARED_NOT_EXECUTED",
+      "execution": {
+        "vm": "NOT_RUN",
+        "native": "NOT_RUN"
+      },
+      "new_entry": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "remaining_qualification": [
+        "Fresh actual Source/Program/driver entries independently satisfy VM/native observations, original contexts and real effects. Neither anchors/builds/banners nor equal wrong results qualify execution.",
+        "Bind actual declaration-owned module/protocol/generic/Equal/formatter/view/provider/lifecycle contracts and target/platform profiles; no guessed ABI/API/diagnostic field or compatibility shim.",
+        "Full affected FI/resource/live/requested/work/borrow/lifetime/cancel/physical/safety/generated-C/provider gates; original dimensions and P20 bidirectional mixed scope remain."
+      ],
+      "execution_source": "tests/diff/cases/semantics/stdlib/http_pure_helpers_direct.xr",
+      "execution_entry": "run"
+    },
+    {
+      "id": "library_review_http_redirect_status_direct",
+      "inputs": [
+        {
+          "path": "tests/diff/cases/semantics/stdlib/http_redirect_status_direct.xr",
+          "lf_sha256": "4eb8952a3666d6c7287e4dc46238e5c282fa06746b78ae47afa5df58fb780eac",
+          "role": "preserved_source"
+        },
+        {
+          "path": "spec/source/sections/003-2-type-system.md",
+          "lf_sha256": "f4e970b0cc728c19f65a4d1b2a13cd0e572431dcac3f6f20cd06d23046ebea8a",
+          "role": "frozen_spec"
+        },
+        {
+          "path": "spec/source/sections/009-8-error-handling.md",
+          "lf_sha256": "569cafb786430df363674f97f6073e908d76b4a3484f3fb26239b0895342507e",
+          "role": "frozen_spec"
+        }
+      ],
+      "expected": {
+        "exit_code": 0,
+        "stdout_utf8": "false\ntrue\ntrue\ntrue\nfalse\ntrue\ntrue\nfalse\n"
+      },
+      "rationale": "Exactacceptedredirectset301,302,303,307,308;300/304/309notredirect for thisdeclaredhelper.",
+      "packages": [
+        "P02",
+        "P06",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P12",
+        "P13",
+        "P14",
+        "P17"
+      ],
+      "legacy_case": null,
+      "status": "PREPARED_NOT_EXECUTED",
+      "execution": {
+        "vm": "NOT_RUN",
+        "native": "NOT_RUN"
+      },
+      "new_entry": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "remaining_qualification": [
+        "Fresh actual Source/Program/driver entries independently satisfy VM/native observations, original contexts and real effects. Neither anchors/builds/banners nor equal wrong results qualify execution.",
+        "Bind actual declaration-owned module/protocol/generic/Equal/formatter/view/provider/lifecycle contracts and target/platform profiles; no guessed ABI/API/diagnostic field or compatibility shim.",
+        "Full affected FI/resource/live/requested/work/borrow/lifetime/cancel/physical/safety/generated-C/provider gates; original dimensions and P20 bidirectional mixed scope remain."
+      ],
+      "execution_source": "tests/diff/cases/semantics/stdlib/http_redirect_status_direct.xr",
+      "execution_entry": "run"
+    },
+    {
+      "id": "library_review_http_cookie_pure_direct",
+      "inputs": [
+        {
+          "path": "tests/diff/cases/semantics/stdlib/http_cookie_pure_direct.xr",
+          "lf_sha256": "937c723f50148bfcfd9f95dff920707468dc0f649b2806eec005a402de62cd4d",
+          "role": "preserved_source"
+        },
+        {
+          "path": "spec/source/sections/003-2-type-system.md",
+          "lf_sha256": "f4e970b0cc728c19f65a4d1b2a13cd0e572431dcac3f6f20cd06d23046ebea8a",
+          "role": "frozen_spec"
+        },
+        {
+          "path": "spec/source/sections/009-8-error-handling.md",
+          "lf_sha256": "569cafb786430df363674f97f6073e908d76b4a3484f3fb26239b0895342507e",
+          "role": "frozen_spec"
+        }
+      ],
+      "expected": {
+        "session_name": "session",
+        "session_value": "abc123",
+        "default_path": "/account",
+        "host_only": true,
+        "secure_token_same_site": "None",
+        "insecure_same_site_none_rejected": true,
+        "foreign_domain_rejected": true,
+        "old_expires_timestamp": 784111777,
+        "initial_count": 2,
+        "replacement_session_value": "def",
+        "expired_cookie_not_added": true,
+        "max_age_zero_deletes": true,
+        "domain_clear_final_count": 0,
+        "all_original_secure_domain_path_match_cases_required": true
+      },
+      "rationale": "Completejar/path/domain/security/expiry/replacement/deletion cases retained; GMT1994-11-06timestampindependentcalendarvalue. Purecookiepolicy not networksecure-transport proof.",
+      "packages": [
+        "P02",
+        "P06",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P12",
+        "P13",
+        "P14",
+        "P17"
+      ],
+      "legacy_case": null,
+      "status": "PREPARED_NOT_EXECUTED",
+      "execution": {
+        "vm": "NOT_RUN",
+        "native": "NOT_RUN"
+      },
+      "new_entry": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "remaining_qualification": [
+        "Fresh actual Source/Program/driver entries independently satisfy VM/native observations, original contexts and real effects. Neither anchors/builds/banners nor equal wrong results qualify execution.",
+        "Bind actual declaration-owned module/protocol/generic/Equal/formatter/view/provider/lifecycle contracts and target/platform profiles; no guessed ABI/API/diagnostic field or compatibility shim.",
+        "Full affected FI/resource/live/requested/work/borrow/lifetime/cancel/physical/safety/generated-C/provider gates; original dimensions and P20 bidirectional mixed scope remain."
+      ],
+      "execution_source": "tests/diff/cases/semantics/stdlib/http_cookie_pure_direct.xr",
+      "execution_entry": "run"
+    },
+    {
+      "id": "library_review_http_router_pure_direct",
+      "inputs": [
+        {
+          "path": "tests/diff/cases/semantics/stdlib/http_router_pure_direct.xr",
+          "lf_sha256": "0e07b3dc87f6d8510b7b45e507a1837bd99d3a6e9553503a98f36cb3aa8f8929",
+          "role": "preserved_source"
+        },
+        {
+          "path": "spec/source/sections/003-2-type-system.md",
+          "lf_sha256": "f4e970b0cc728c19f65a4d1b2a13cd0e572431dcac3f6f20cd06d23046ebea8a",
+          "role": "frozen_spec"
+        },
+        {
+          "path": "spec/source/sections/009-8-error-handling.md",
+          "lf_sha256": "569cafb786430df363674f97f6073e908d76b4a3484f3fb26239b0895342507e",
+          "role": "frozen_spec"
+        }
+      ],
+      "expected": {
+        "user_route_value": "user",
+        "user_id": "42",
+        "exact_route_value": "me",
+        "exact_route_has_no_id": true,
+        "post_route_value": "post-user",
+        "wildcard_path": "a/b/c.txt",
+        "root_route_value": "root",
+        "wrong_method_absent": true,
+        "malformed_route_rejected": true,
+        "replacement_route_value": "replacement",
+        "second_router_value_plus_one": 2,
+        "second_router_tail": "a/b"
+      },
+      "rationale": "Exactstatic/users/mebeatspriorparameterroute; queryexcludedfrompath. FullgenericRouter<string/i64>,malformed/wildcard/replacementandmethoddistinctions preserved.",
+      "packages": [
+        "P02",
+        "P06",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P12",
+        "P13",
+        "P14",
+        "P17"
+      ],
+      "legacy_case": null,
+      "status": "PREPARED_NOT_EXECUTED",
+      "execution": {
+        "vm": "NOT_RUN",
+        "native": "NOT_RUN"
+      },
+      "new_entry": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "remaining_qualification": [
+        "Fresh actual Source/Program/driver entries independently satisfy VM/native observations, original contexts and real effects. Neither anchors/builds/banners nor equal wrong results qualify execution.",
+        "Bind actual declaration-owned module/protocol/generic/Equal/formatter/view/provider/lifecycle contracts and target/platform profiles; no guessed ABI/API/diagnostic field or compatibility shim.",
+        "Full affected FI/resource/live/requested/work/borrow/lifetime/cancel/physical/safety/generated-C/provider gates; original dimensions and P20 bidirectional mixed scope remain."
+      ],
+      "execution_source": "tests/diff/cases/semantics/stdlib/http_router_pure_direct.xr",
+      "execution_entry": "run"
+    },
+    {
+      "id": "library_review_http_typed_request_surface",
+      "inputs": [
+        {
+          "path": "tests/diff/cases/semantics/stdlib/http_typed_request_surface.xr",
+          "lf_sha256": "e05a61c4b4c55a3a7a8f045c31334bf45c71ed765bb9878e0c593174422df780",
+          "role": "preserved_source"
+        },
+        {
+          "path": "spec/source/sections/003-2-type-system.md",
+          "lf_sha256": "f4e970b0cc728c19f65a4d1b2a13cd0e572431dcac3f6f20cd06d23046ebea8a",
+          "role": "frozen_spec"
+        },
+        {
+          "path": "spec/source/sections/009-8-error-handling.md",
+          "lf_sha256": "569cafb786430df363674f97f6073e908d76b4a3484f3fb26239b0895342507e",
+          "role": "frozen_spec"
+        }
+      ],
+      "expected": {
+        "exit_code": 0,
+        "stdout_utf8": "true\nGET\nPROPFIND\ntrue\ntrue\ntrue\nhello\n201\n{\"ok\":true}\napplication/json; charset=utf-8\nHttp2\n"
+      },
+      "rationale": "Completeactualoptions/method/typedresponse/status/contenttype/JSON/enumdisplaybody retained. OrdinaryJSONlogicalvalue and publishedfield/formatteridentity stillrequirequalification.",
+      "packages": [
+        "P02",
+        "P06",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P12",
+        "P13",
+        "P14",
+        "P17"
+      ],
+      "legacy_case": null,
+      "status": "PREPARED_NOT_EXECUTED",
+      "execution": {
+        "vm": "NOT_RUN",
+        "native": "NOT_RUN"
+      },
+      "new_entry": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "remaining_qualification": [
+        "Fresh actual Source/Program/driver entries independently satisfy VM/native observations, original contexts and real effects. Neither anchors/builds/banners nor equal wrong results qualify execution.",
+        "Bind actual declaration-owned module/protocol/generic/Equal/formatter/view/provider/lifecycle contracts and target/platform profiles; no guessed ABI/API/diagnostic field or compatibility shim.",
+        "Full affected FI/resource/live/requested/work/borrow/lifetime/cancel/physical/safety/generated-C/provider gates; original dimensions and P20 bidirectional mixed scope remain."
+      ],
+      "execution_source": "tests/diff/cases/semantics/stdlib/http_typed_request_surface.xr",
+      "execution_entry": "run"
+    },
+    {
+      "id": "library_review_ws_pure_protocol_direct",
+      "inputs": [
+        {
+          "path": "tests/diff/cases/semantics/stdlib/ws_pure_protocol_direct.xr",
+          "lf_sha256": "84a83b5ddb62ff454e6f4c13ec5ae29c6aeb5d06372b326a68ea40ed7d040759",
+          "role": "preserved_source"
+        },
+        {
+          "path": "spec/source/sections/003-2-type-system.md",
+          "lf_sha256": "f4e970b0cc728c19f65a4d1b2a13cd0e572431dcac3f6f20cd06d23046ebea8a",
+          "role": "frozen_spec"
+        },
+        {
+          "path": "spec/source/sections/009-8-error-handling.md",
+          "lf_sha256": "569cafb786430df363674f97f6073e908d76b4a3484f3fb26239b0895342507e",
+          "role": "frozen_spec"
+        }
+      ],
+      "expected": {
+        "accept_key": "s3pPLMBiTxaQ9kYGzzhZRbK+xOo=",
+        "selected_protocol": "chat",
+        "fallback_protocol": "superchat",
+        "origin": "https://app.example",
+        "wss_default_port": 443,
+        "ws_ipv6_port": 8080,
+        "close_code": 1000,
+        "close_reason": "OK",
+        "masked_bytes": [
+          0,
+          3,
+          2,
+          5,
+          4
+        ],
+        "hi_frame": [
+          129,
+          2,
+          72,
+          105
+        ],
+        "length126_header": [
+          130,
+          126,
+          0,
+          126
+        ],
+        "length300_header": [
+          130,
+          126,
+          1,
+          44
+        ],
+        "length300_payload_tail": 90,
+        "parsed_masked_payload": "Hi",
+        "partial_tail_payload": "A",
+        "partial_tail_consumed_bytes": 3,
+        "reserved_or_nonminimal_lengths_rejected": true,
+        "invalid_utf8_close_rejected": true,
+        "oversized_control_frame_rejected": true,
+        "all_original_upgrade_origin_extension_url_checks_required": true
+      },
+      "rationale": "IndependentlySHA1+Base64acceptkeyandXORmask deriveknownanswers; full126/300payloads,nativeBEextendedlengthandtailprefix retained. InvalidcloseUTF8/nonminimal/reserved/fragmentedcontrol checks mandatory; pureprotocol cannotqualifyactualWebSocketconnection/TLS/deflateprovider.",
+      "packages": [
+        "P02",
+        "P06",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P12",
+        "P13",
+        "P14",
+        "P17"
+      ],
+      "legacy_case": null,
+      "status": "PREPARED_NOT_EXECUTED",
+      "execution": {
+        "vm": "NOT_RUN",
+        "native": "NOT_RUN"
+      },
+      "new_entry": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "remaining_qualification": [
+        "Fresh actual Source/Program/driver entries independently satisfy VM/native observations, original contexts and real effects. Neither anchors/builds/banners nor equal wrong results qualify execution.",
+        "Bind actual declaration-owned module/protocol/generic/Equal/formatter/view/provider/lifecycle contracts and target/platform profiles; no guessed ABI/API/diagnostic field or compatibility shim.",
+        "Full affected FI/resource/live/requested/work/borrow/lifetime/cancel/physical/safety/generated-C/provider gates; original dimensions and P20 bidirectional mixed scope remain."
+      ],
+      "execution_source": "tests/diff/cases/semantics/stdlib/ws_pure_protocol_direct.xr",
+      "execution_entry": "run"
+    },
+    {
+      "id": "library_review_ws_close_code_fastpath_direct",
+      "inputs": [
+        {
+          "path": "tests/diff/cases/semantics/stdlib/ws_close_code_fastpath_direct.xr",
+          "lf_sha256": "80a0bed7184c5924b4102ce49900b38d61e4587cd29e1e1c646e64ef47e5ab82",
+          "role": "preserved_source"
+        },
+        {
+          "path": "spec/source/sections/003-2-type-system.md",
+          "lf_sha256": "f4e970b0cc728c19f65a4d1b2a13cd0e572431dcac3f6f20cd06d23046ebea8a",
+          "role": "frozen_spec"
+        },
+        {
+          "path": "spec/source/sections/009-8-error-handling.md",
+          "lf_sha256": "569cafb786430df363674f97f6073e908d76b4a3484f3fb26239b0895342507e",
+          "role": "frozen_spec"
+        }
+      ],
+      "expected": {
+        "exit_code": 0,
+        "stdout_utf8": "false\ntrue\nfalse\ntrue\ntrue\ntrue\nfalse\ntrue\ntrue\nfalse\n"
+      },
+      "rationale": "Declaredclosecodes allow1000/1007/1011/1012 and3000..4999;999/1004/2999/5000rejected. No32bittruncation ornetworkclaim.",
+      "packages": [
+        "P02",
+        "P06",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P12",
+        "P13",
+        "P14",
+        "P17"
+      ],
+      "legacy_case": null,
+      "status": "PREPARED_NOT_EXECUTED",
+      "execution": {
+        "vm": "NOT_RUN",
+        "native": "NOT_RUN"
+      },
+      "new_entry": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "remaining_qualification": [
+        "Fresh actual Source/Program/driver entries independently satisfy VM/native observations, original contexts and real effects. Neither anchors/builds/banners nor equal wrong results qualify execution.",
+        "Bind actual declaration-owned module/protocol/generic/Equal/formatter/view/provider/lifecycle contracts and target/platform profiles; no guessed ABI/API/diagnostic field or compatibility shim.",
+        "Full affected FI/resource/live/requested/work/borrow/lifetime/cancel/physical/safety/generated-C/provider gates; original dimensions and P20 bidirectional mixed scope remain."
+      ],
+      "execution_source": "tests/diff/cases/semantics/stdlib/ws_close_code_fastpath_direct.xr",
+      "execution_entry": "run"
+    },
+    {
+      "id": "library_review_path_isabsolute",
+      "inputs": [
+        {
+          "path": "tests/diff/cases/semantics/stdlib/path_isabsolute.xr",
+          "lf_sha256": "955a2699221ba7c5f6af4611b254601a355d3e7d78ed2f3e0998dad4ca139719",
+          "role": "preserved_source"
+        },
+        {
+          "path": "stdlib/path/path.xr",
+          "lf_sha256": "3178e6ced1696118f90be788f14daf6a60a060362788200a6748b425d606744f",
+          "role": "reviewed_declaration_or_context"
+        },
+        {
+          "path": "spec/source/sections/003-2-type-system.md",
+          "lf_sha256": "f4e970b0cc728c19f65a4d1b2a13cd0e572431dcac3f6f20cd06d23046ebea8a",
+          "role": "frozen_spec"
+        },
+        {
+          "path": "spec/source/sections/009-8-error-handling.md",
+          "lf_sha256": "569cafb786430df363674f97f6073e908d76b4a3484f3fb26239b0895342507e",
+          "role": "frozen_spec"
+        }
+      ],
+      "expected": {
+        "exit_code": 0,
+        "stdout_utf8": "true\nfalse\ntrue\nfalse\nabs\nrel\n"
+      },
+      "rationale": "PublishedpathmoduleusesPOSIXleading/lexicalrule onallhosts; this is notWindowsdrive/backslash filesystemcoverage.",
+      "packages": [
+        "P02",
+        "P06",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P12",
+        "P13",
+        "P14",
+        "P17"
+      ],
+      "legacy_case": null,
+      "status": "PREPARED_NOT_EXECUTED",
+      "execution": {
+        "vm": "NOT_RUN",
+        "native": "NOT_RUN"
+      },
+      "new_entry": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "remaining_qualification": [
+        "Fresh actual Source/Program/driver entries independently satisfy VM/native observations, original contexts and real effects. Neither anchors/builds/banners nor equal wrong results qualify execution.",
+        "Bind actual declaration-owned module/protocol/generic/Equal/formatter/view/provider/lifecycle contracts and target/platform profiles; no guessed ABI/API/diagnostic field or compatibility shim.",
+        "Full affected FI/resource/live/requested/work/borrow/lifetime/cancel/physical/safety/generated-C/provider gates; original dimensions and P20 bidirectional mixed scope remain."
+      ],
+      "execution_source": "tests/diff/cases/semantics/stdlib/path_isabsolute.xr",
+      "execution_entry": "run"
+    },
+    {
+      "id": "library_review_path_module",
+      "inputs": [
+        {
+          "path": "tests/diff/cases/semantics/stdlib/path_module.xr",
+          "lf_sha256": "785acb9f0e7a42410b8916a0c18008d82c6cb9bbd25ff6182ab5b74f05ebc6b6",
+          "role": "preserved_source"
+        },
+        {
+          "path": "stdlib/path/path.xr",
+          "lf_sha256": "3178e6ced1696118f90be788f14daf6a60a060362788200a6748b425d606744f",
+          "role": "reviewed_declaration_or_context"
+        },
+        {
+          "path": "spec/source/sections/003-2-type-system.md",
+          "lf_sha256": "f4e970b0cc728c19f65a4d1b2a13cd0e572431dcac3f6f20cd06d23046ebea8a",
+          "role": "frozen_spec"
+        },
+        {
+          "path": "spec/source/sections/009-8-error-handling.md",
+          "lf_sha256": "569cafb786430df363674f97f6073e908d76b4a3484f3fb26239b0895342507e",
+          "role": "frozen_spec"
+        }
+      ],
+      "expected": {
+        "exit_code": 0,
+        "stdout_utf8": "/\n:\nfoo/bar/baz\n/usr/local/bin\nfoo/bar\n/usr/local/bin\n.\nfile.txt\n.gz\n\n/usr/bin/xray\nbaz\ntrue\nfalse\n../lib\n../../x/y\n/bar/baz\n/var\n/\n/home/user\nfile.txt\nfile\n.txt\n/home/user/file.txt\n"
+      },
+      "rationale": "FullpublishedPOSIX lexicalPath/PathInfo body retained; lastabsolutecomponent resetsjoin/resolve, dotfile hasnoextension. Bindactualpublishedmoduleinsteadofhostpathsubstitution.",
+      "packages": [
+        "P02",
+        "P06",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P12",
+        "P13",
+        "P14",
+        "P17"
+      ],
+      "legacy_case": null,
+      "status": "PREPARED_NOT_EXECUTED",
+      "execution": {
+        "vm": "NOT_RUN",
+        "native": "NOT_RUN"
+      },
+      "new_entry": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "remaining_qualification": [
+        "Fresh actual Source/Program/driver entries independently satisfy VM/native observations, original contexts and real effects. Neither anchors/builds/banners nor equal wrong results qualify execution.",
+        "Bind actual declaration-owned module/protocol/generic/Equal/formatter/view/provider/lifecycle contracts and target/platform profiles; no guessed ABI/API/diagnostic field or compatibility shim.",
+        "Full affected FI/resource/live/requested/work/borrow/lifetime/cancel/physical/safety/generated-C/provider gates; original dimensions and P20 bidirectional mixed scope remain."
+      ],
+      "execution_source": "tests/diff/cases/semantics/stdlib/path_module.xr",
+      "execution_entry": "run"
+    },
+    {
+      "id": "library_review_path_parse_schema_shared_core",
+      "inputs": [
+        {
+          "path": "tests/diff/cases/semantics/stdlib/path_parse_schema_shared_core.xr",
+          "lf_sha256": "43b243c2e9701c037fbe1f7f477666c689ab154ce7b028e4a02727ad9a4e0029",
+          "role": "preserved_source"
+        },
+        {
+          "path": "spec/source/sections/003-2-type-system.md",
+          "lf_sha256": "f4e970b0cc728c19f65a4d1b2a13cd0e572431dcac3f6f20cd06d23046ebea8a",
+          "role": "frozen_spec"
+        },
+        {
+          "path": "spec/source/sections/009-8-error-handling.md",
+          "lf_sha256": "569cafb786430df363674f97f6073e908d76b4a3484f3fb26239b0895342507e",
+          "role": "frozen_spec"
+        }
+      ],
+      "expected": {
+        "exit_code": 0,
+        "stdout_utf8": "/\n/home/user\nfile.txt\nfile\n.txt\n/home/user/file.txt\ntrue\nlogs\narchive.tar.gz\narchive.tar\n.gz\n"
+      },
+      "rationale": "FullstructuredPathInfo retainsroot/dir/base/name/ext fieldmeaning, noMap/schemaordinals ornative shadow. LexicalPOSIXpolicy isexplicit.",
+      "packages": [
+        "P02",
+        "P06",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P12",
+        "P13",
+        "P14",
+        "P17"
+      ],
+      "legacy_case": null,
+      "status": "PREPARED_NOT_EXECUTED",
+      "execution": {
+        "vm": "NOT_RUN",
+        "native": "NOT_RUN"
+      },
+      "new_entry": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "remaining_qualification": [
+        "Fresh actual Source/Program/driver entries independently satisfy VM/native observations, original contexts and real effects. Neither anchors/builds/banners nor equal wrong results qualify execution.",
+        "Bind actual declaration-owned module/protocol/generic/Equal/formatter/view/provider/lifecycle contracts and target/platform profiles; no guessed ABI/API/diagnostic field or compatibility shim.",
+        "Full affected FI/resource/live/requested/work/borrow/lifetime/cancel/physical/safety/generated-C/provider gates; original dimensions and P20 bidirectional mixed scope remain."
+      ],
+      "execution_source": "tests/diff/cases/semantics/stdlib/path_parse_schema_shared_core.xr",
+      "execution_entry": "run"
+    },
+    {
+      "id": "library_review_path_string_ops",
+      "inputs": [
+        {
+          "path": "tests/diff/cases/semantics/stdlib/path_string_ops.xr",
+          "lf_sha256": "daecb9f8ca5a32e311b89c91991e718dcbb6334758d2b61d105a42a991ba4bbc",
+          "role": "preserved_source"
+        },
+        {
+          "path": "stdlib/path/path.xr",
+          "lf_sha256": "3178e6ced1696118f90be788f14daf6a60a060362788200a6748b425d606744f",
+          "role": "reviewed_declaration_or_context"
+        },
+        {
+          "path": "spec/source/sections/003-2-type-system.md",
+          "lf_sha256": "f4e970b0cc728c19f65a4d1b2a13cd0e572431dcac3f6f20cd06d23046ebea8a",
+          "role": "frozen_spec"
+        },
+        {
+          "path": "spec/source/sections/009-8-error-handling.md",
+          "lf_sha256": "569cafb786430df363674f97f6073e908d76b4a3484f3fb26239b0895342507e",
+          "role": "frozen_spec"
+        }
+      ],
+      "expected": {
+        "separator": "/",
+        "delimiter": ":",
+        "dirname_results": [
+          "/usr/local",
+          "foo",
+          "/",
+          ".",
+          "/a"
+        ],
+        "basename_results": [
+          "bin",
+          "bar.txt",
+          "b",
+          "solo"
+        ],
+        "extension_results": [
+          ".txt",
+          ".gz",
+          "",
+          ""
+        ],
+        "normalized_results": [
+          "/usr/bin/xray",
+          "/usr/local/bin",
+          "baz",
+          "/foo",
+          ".",
+          "."
+        ],
+        "relative_results": [
+          "../lib",
+          "",
+          "../foobar",
+          "bin",
+          "..",
+          "../../x/y",
+          "../qux/zap"
+        ],
+        "joined_results": [
+          "foo/bar",
+          "foo/bar/baz",
+          "/usr/local/bin",
+          "foo/bar",
+          "/bar/baz",
+          "/x",
+          "",
+          "x"
+        ],
+        "resolved_results": [
+          "/foo/bar",
+          "/bar/baz",
+          "/var",
+          "/"
+        ],
+        "trailing_file_parts": [
+          "foo.txt",
+          "foo",
+          ".txt"
+        ],
+        "final_file_parts": [
+          "/srv/data",
+          "report.csv",
+          ".csv",
+          "/srv/data/report.csv",
+          "report.csv"
+        ],
+        "all_original_parse_and_format_calls_required": true
+      },
+      "rationale": "Everyliteralpath/component operation independentlyderivedunderpublishedPOSIX stringalgorithm. Componentboundary/foo vs/foobar gives../foobar; neverrecoverprefixbarbystringtruncation. RealWindowsfilesystem semantics notinferred.",
+      "packages": [
+        "P02",
+        "P06",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P12",
+        "P13",
+        "P14",
+        "P17"
+      ],
+      "legacy_case": null,
+      "status": "PREPARED_NOT_EXECUTED",
+      "execution": {
+        "vm": "NOT_RUN",
+        "native": "NOT_RUN"
+      },
+      "new_entry": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "remaining_qualification": [
+        "Fresh actual Source/Program/driver entries independently satisfy VM/native observations, original contexts and real effects. Neither anchors/builds/banners nor equal wrong results qualify execution.",
+        "Bind actual declaration-owned module/protocol/generic/Equal/formatter/view/provider/lifecycle contracts and target/platform profiles; no guessed ABI/API/diagnostic field or compatibility shim.",
+        "Full affected FI/resource/live/requested/work/borrow/lifetime/cancel/physical/safety/generated-C/provider gates; original dimensions and P20 bidirectional mixed scope remain."
+      ],
+      "execution_source": "tests/diff/cases/semantics/stdlib/path_string_ops.xr",
+      "execution_entry": "run"
+    },
+    {
+      "id": "library_review_url_core_direct",
+      "inputs": [
+        {
+          "path": "tests/diff/cases/semantics/stdlib/url_core_direct.xr",
+          "lf_sha256": "c9fa2bafd6d1d7037964c55c93d237ed29d7c2912d26b1ce5ea21f717d34f527",
+          "role": "preserved_source"
+        },
+        {
+          "path": "spec/source/sections/003-2-type-system.md",
+          "lf_sha256": "f4e970b0cc728c19f65a4d1b2a13cd0e572431dcac3f6f20cd06d23046ebea8a",
+          "role": "frozen_spec"
+        },
+        {
+          "path": "spec/source/sections/009-8-error-handling.md",
+          "lf_sha256": "569cafb786430df363674f97f6073e908d76b4a3484f3fb26239b0895342507e",
+          "role": "frozen_spec"
+        }
+      ],
+      "expected": {
+        "encoded_utf8": "hello%20%E4%B8%96%E7%95%8C%21",
+        "decoded_utf8": "hello 世界!",
+        "form_encoded": "a+b%2Bc",
+        "form_decoded": "a b+c",
+        "parsed_hostname": "example.com",
+        "parsed_port": "8080",
+        "parsed_path": "/path",
+        "parsed_query": "?q=1",
+        "parsed_fragment": "#top",
+        "parsed_origin": "https://example.com:8080",
+        "normal_query_values": [
+          "hello world",
+          "a&b"
+        ],
+        "empty_query_values": [
+          "",
+          "",
+          "hello world",
+          "skip"
+        ],
+        "relative_resolution": "https://example.com/a/b/d.html",
+        "query_resolution": "https://example.com/a/b/c?new=2",
+        "fragment_resolution": "https://example.com/a/b/c?old=1#frag",
+        "network_path_resolution": "https://cdn.example.com/lib.js",
+        "dot_resolution": "https://example.com/a/d/e",
+        "joined_path": "/api/v1/users",
+        "malformed_percent_requires_exact_typed_error": true,
+        "all_original_parse_format_userinfo_query_encode_calls_required": true
+      },
+      "rationale": "UTF8percentoctets andform+/%2B independentlyderivefrombytes. Allqueryempty/flag/emptykey/userinfo/formatingandrelativecases retained; malformedpercent mustactualUrlError, notsilentreplacement ornetworkfailure. URLparts.port is the declaredstring8080; clusterEndpoint.port is separatelyinteger, not an erased commonrepresentation.",
+      "packages": [
+        "P02",
+        "P06",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P12",
+        "P13",
+        "P14",
+        "P17"
+      ],
+      "legacy_case": null,
+      "status": "PREPARED_NOT_EXECUTED",
+      "execution": {
+        "vm": "NOT_RUN",
+        "native": "NOT_RUN"
+      },
+      "new_entry": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "remaining_qualification": [
+        "Fresh actual Source/Program/driver entries independently satisfy VM/native observations, original contexts and real effects. Neither anchors/builds/banners nor equal wrong results qualify execution.",
+        "Bind actual declaration-owned module/protocol/generic/Equal/formatter/view/provider/lifecycle contracts and target/platform profiles; no guessed ABI/API/diagnostic field or compatibility shim.",
+        "Full affected FI/resource/live/requested/work/borrow/lifetime/cancel/physical/safety/generated-C/provider gates; original dimensions and P20 bidirectional mixed scope remain."
+      ],
+      "execution_source": "tests/diff/cases/semantics/stdlib/url_core_direct.xr",
+      "execution_entry": "run"
+    },
+    {
+      "id": "library_review_xml_pure_module_direct",
+      "inputs": [
+        {
+          "path": "tests/diff/cases/semantics/stdlib/xml_pure_module_direct.xr",
+          "lf_sha256": "eae16fdff59aa1a8ae6827a8c451a95e97ca9df332246d8f0451610d81778b9a",
+          "role": "preserved_source"
+        },
+        {
+          "path": "spec/source/sections/003-2-type-system.md",
+          "lf_sha256": "f4e970b0cc728c19f65a4d1b2a13cd0e572431dcac3f6f20cd06d23046ebea8a",
+          "role": "frozen_spec"
+        },
+        {
+          "path": "spec/source/sections/009-8-error-handling.md",
+          "lf_sha256": "569cafb786430df363674f97f6073e908d76b4a3484f3fb26239b0895342507e",
+          "role": "frozen_spec"
+        }
+      ],
+      "expected": {
+        "root_name": "root",
+        "root_id": "7",
+        "default_namespace": "urn:x",
+        "child_count": 2,
+        "first_text": "A&B",
+        "second_kind": "cdata",
+        "cdata_content": "<raw>",
+        "cdata_as_text_kind": "text",
+        "cdata_as_text": "plain",
+        "comment_child_count": 2,
+        "first_comment_kind": "comment",
+        "clean_report_root": "ok",
+        "clean_report_diagnostic_count": 0,
+        "constructed_name": "entry",
+        "constructed_id": "42",
+        "constructed_text": "body",
+        "standalone_text": "<hello>&",
+        "roundtrip_markup": "<msg>Hello&lt;World</msg>",
+        "constructed_markup": "<entry id=\"42\">body</entry>"
+      },
+      "rationale": "Completeoriginalnamespace/entity/CDATA/comment/report/typedname/attribute/constructor/escapingduties remain. Parse→stringify usesexactknowncharacters; notgenericXML/networkcapability proof.",
+      "packages": [
+        "P02",
+        "P06",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P12",
+        "P13",
+        "P14",
+        "P17"
+      ],
+      "legacy_case": null,
+      "status": "PREPARED_NOT_EXECUTED",
+      "execution": {
+        "vm": "NOT_RUN",
+        "native": "NOT_RUN"
+      },
+      "new_entry": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "remaining_qualification": [
+        "Fresh actual Source/Program/driver entries independently satisfy VM/native observations, original contexts and real effects. Neither anchors/builds/banners nor equal wrong results qualify execution.",
+        "Bind actual declaration-owned module/protocol/generic/Equal/formatter/view/provider/lifecycle contracts and target/platform profiles; no guessed ABI/API/diagnostic field or compatibility shim.",
+        "Full affected FI/resource/live/requested/work/borrow/lifetime/cancel/physical/safety/generated-C/provider gates; original dimensions and P20 bidirectional mixed scope remain."
+      ],
+      "execution_source": "tests/diff/cases/semantics/stdlib/xml_pure_module_direct.xr",
+      "execution_entry": "run"
+    },
+    {
+      "id": "library_review_yaml_pure_module_direct",
+      "inputs": [
+        {
+          "path": "tests/diff/cases/semantics/stdlib/yaml_pure_module_direct.xr",
+          "lf_sha256": "7a2a7c5f23bad79826647420ffe7fac19f6675853a18cab131dfb0d2e3f2ddfe",
+          "role": "preserved_source"
+        },
+        {
+          "path": "spec/source/sections/003-2-type-system.md",
+          "lf_sha256": "f4e970b0cc728c19f65a4d1b2a13cd0e572431dcac3f6f20cd06d23046ebea8a",
+          "role": "frozen_spec"
+        },
+        {
+          "path": "spec/source/sections/009-8-error-handling.md",
+          "lf_sha256": "569cafb786430df363674f97f6073e908d76b4a3484f3fb26239b0895342507e",
+          "role": "frozen_spec"
+        }
+      ],
+      "expected": {
+        "app_name": "xray",
+        "second_port": 443,
+        "max_limit": 100,
+        "item_count": 2,
+        "first_status": "done",
+        "second_id": 2,
+        "doc_kind": "map",
+        "ports_kind": "seq",
+        "app_key_order": [
+          "name",
+          "ports",
+          "limits"
+        ],
+        "anchor_and_alias_values": [
+          "hello",
+          "hello"
+        ],
+        "stripped_block_has_line": true,
+        "stripped_block_final_newline": false,
+        "multi_document_count": 2,
+        "multi_document_values": [
+          1,
+          2
+        ],
+        "strict_name": "Alice",
+        "report_diagnostic_count": 0,
+        "serialized_roundtrip_values": [
+          "xray",
+          1,
+          false
+        ]
+      },
+      "rationale": "FulltypedYAMLmapping/sequence/anchor/alias/chomping/multi-document/strict/report/refsnapshotroundtrip retained. AliaslanguagebelongsYAMLpayload, notretiredcompilercompatibilityshim; physicalgraph/serializer/provider stillqualifiedseparately.",
+      "packages": [
+        "P02",
+        "P06",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P12",
+        "P13",
+        "P14",
+        "P17"
+      ],
+      "legacy_case": null,
+      "status": "PREPARED_NOT_EXECUTED",
+      "execution": {
+        "vm": "NOT_RUN",
+        "native": "NOT_RUN"
+      },
+      "new_entry": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "remaining_qualification": [
+        "Fresh actual Source/Program/driver entries independently satisfy VM/native observations, original contexts and real effects. Neither anchors/builds/banners nor equal wrong results qualify execution.",
+        "Bind actual declaration-owned module/protocol/generic/Equal/formatter/view/provider/lifecycle contracts and target/platform profiles; no guessed ABI/API/diagnostic field or compatibility shim.",
+        "Full affected FI/resource/live/requested/work/borrow/lifetime/cancel/physical/safety/generated-C/provider gates; original dimensions and P20 bidirectional mixed scope remain."
+      ],
+      "execution_source": "tests/diff/cases/semantics/stdlib/yaml_pure_module_direct.xr",
+      "execution_entry": "run"
+    },
+    {
+      "id": "library_review_toml_pure_module_direct",
+      "inputs": [
+        {
+          "path": "tests/diff/cases/semantics/stdlib/toml_pure_module_direct.xr",
+          "lf_sha256": "31fa1eb79f86e7c822d4ad0f630d7fd3f86ecfe1df538426aee8f4b4608ba3e2",
+          "role": "preserved_source"
+        },
+        {
+          "path": "spec/source/sections/003-2-type-system.md",
+          "lf_sha256": "f4e970b0cc728c19f65a4d1b2a13cd0e572431dcac3f6f20cd06d23046ebea8a",
+          "role": "frozen_spec"
+        },
+        {
+          "path": "spec/source/sections/009-8-error-handling.md",
+          "lf_sha256": "569cafb786430df363674f97f6073e908d76b4a3484f3fb26239b0895342507e",
+          "role": "frozen_spec"
+        }
+      ],
+      "expected": {
+        "basic_values": [
+          "xray",
+          2,
+          true
+        ],
+        "dotted_fields": [
+          "apple",
+          "red"
+        ],
+        "array_table_count": 2,
+        "second_product_name": "Nail",
+        "duplicate_key_kind": "TomlErrorKind.DuplicateKey",
+        "duplicate_key_line": 2,
+        "first_duplicate_value_retained": "Alice",
+        "syntax_report_kind": "TomlErrorKind.SyntaxError",
+        "clean_error_count": 0,
+        "serialized_roundtrip_values": [
+          "xray",
+          1,
+          true
+        ],
+        "all_original_diagnostic_text_and_type_queries_required": true
+      },
+      "rationale": "FullTOMLtypes/dottedfields/arraytables/recovery/duplicate/syntaxreport/ref-table-set/serialize remain. Originaldiagnosticmessage/typeName byteanswers mustbindactualdeclaredfamily; do notguesspublicerrorstrings.",
+      "packages": [
+        "P02",
+        "P06",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P12",
+        "P13",
+        "P14",
+        "P17"
+      ],
+      "legacy_case": null,
+      "status": "PREPARED_NOT_EXECUTED",
+      "execution": {
+        "vm": "NOT_RUN",
+        "native": "NOT_RUN"
+      },
+      "new_entry": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "remaining_qualification": [
+        "Fresh actual Source/Program/driver entries independently satisfy VM/native observations, original contexts and real effects. Neither anchors/builds/banners nor equal wrong results qualify execution.",
+        "Bind actual declaration-owned module/protocol/generic/Equal/formatter/view/provider/lifecycle contracts and target/platform profiles; no guessed ABI/API/diagnostic field or compatibility shim.",
+        "Full affected FI/resource/live/requested/work/borrow/lifetime/cancel/physical/safety/generated-C/provider gates; original dimensions and P20 bidirectional mixed scope remain."
+      ],
+      "execution_source": "tests/diff/cases/semantics/stdlib/toml_pure_module_direct.xr",
+      "execution_entry": "run"
+    },
+    {
+      "id": "library_review_regex_escape_direct",
+      "inputs": [
+        {
+          "path": "tests/diff/cases/semantics/stdlib/regex_escape_direct.xr",
+          "lf_sha256": "246877597bc20d853e306a7e9c069552fe1501d04243c889ffbfb7681d4b8747",
+          "role": "preserved_source"
+        },
+        {
+          "path": "spec/source/sections/003-2-type-system.md",
+          "lf_sha256": "f4e970b0cc728c19f65a4d1b2a13cd0e572431dcac3f6f20cd06d23046ebea8a",
+          "role": "frozen_spec"
+        },
+        {
+          "path": "spec/source/sections/009-8-error-handling.md",
+          "lf_sha256": "569cafb786430df363674f97f6073e908d76b4a3484f3fb26239b0895342507e",
+          "role": "frozen_spec"
+        }
+      ],
+      "expected": {
+        "exit_code": 0,
+        "stdout_utf8": "a\\.b\\*c\\?\n\\[x\\]\\(y\\)\\{z\\}\\|\\^\\$\\\\\nplain\n\nx\\+y\nhello/world\ntrue\nfalse\ntrue\ntrue\nfalse\n3\n1\ntrue\n2\nabc123\nabc\n123\ntrue\ntrue\nabc123\n0\n6\n3\nabc123\nabc\n123\ntrue\ntrue\nabc123\n0\n6\nabc\ntrue\n2\nabc123\n0\n123\nxyz456\n7\n1\nabc123\n2\n0\n0\naN b22 c333\naN bN cN\n123-abc xyz\nabc\n3\na\nb\nc\n2\na\nb, c\n"
+      },
+      "rationale": "Allescape/metacharacter/flags/count/find/capture0..2/bytepositions/fullmatch/4294967296index&limit/first-vs-allreplacement/$2-$1/limitedsplit values manuallyderived. Wideindexdoesnotwrapto0; missingcaptureNone, splitlimit2 retainsb,c suffix.",
+      "packages": [
+        "P02",
+        "P06",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P12",
+        "P13",
+        "P14",
+        "P17"
+      ],
+      "legacy_case": null,
+      "status": "PREPARED_NOT_EXECUTED",
+      "execution": {
+        "vm": "NOT_RUN",
+        "native": "NOT_RUN"
+      },
+      "new_entry": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "remaining_qualification": [
+        "Fresh actual Source/Program/driver entries independently satisfy VM/native observations, original contexts and real effects. Neither anchors/builds/banners nor equal wrong results qualify execution.",
+        "Bind actual declaration-owned module/protocol/generic/Equal/formatter/view/provider/lifecycle contracts and target/platform profiles; no guessed ABI/API/diagnostic field or compatibility shim.",
+        "Full affected FI/resource/live/requested/work/borrow/lifetime/cancel/physical/safety/generated-C/provider gates; original dimensions and P20 bidirectional mixed scope remain."
+      ],
+      "execution_source": "tests/diff/cases/semantics/stdlib/regex_escape_direct.xr",
+      "execution_entry": "run"
     }
   ]
 }

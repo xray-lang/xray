@@ -80,6 +80,14 @@ FROZEN_TARGETS["tests/diff/cases/semantics/slice/slice_single_source_return.xr"]
     "POSITIVE_EXPLICIT_VIEW_PERMISSION_AFTER_FROZEN_TASK313_PORT", "P10")
 
 
+for name in ("base64_isvalid_direct", "base64_module", "encoding_core_direct", "encoding_module", "compress_roundtrip_direct"):
+    FROZEN_TARGETS["tests/diff/cases/semantics/stdlib/" + name + ".xr"] = (
+        "POSITIVE_NONOPTIONAL_UTF8_DECLARATION_AFTER_FROZEN_PORT", "P10")
+FROZEN_TARGETS["tests/diff/cases/semantics/stdlib/csv_pure_module_direct.xr"] = (
+    "POSITIVE_EXACT_DECLARED_CSV_PAYLOAD_AFTER_FROZEN_PORT", "P10")
+FROZEN_TARGETS["tests/diff/cases/semantics/stdlib/http_error_nested_enum_payload_direct.xr"] = (
+    "POSITIVE_EXACT_TYPED_ERROR_PAYLOAD_AFTER_FROZEN_PORT", "P10")
+
 # The demanded imported diagnostics depend on these complete companion inputs.
 IMPORTED_ORACLE_INPUTS = {}
 for name in ("156_imported_ref_call_requires_marker.xr", "158_imported_const_function_value_ref_call_requires_marker.xr"):
@@ -122,6 +130,9 @@ IMPORTED_ORACLE_INPUTS["tests/regression/13_types/1436_param_mode_imported_contr
     "tests/fixtures/param_mode_import_lib.xr",)
 IMPORTED_ORACLE_INPUTS["tests/diff/cases/semantics/stdlib/simd_intrinsic_identity_alias.xr"] = (
     "tests/diff/cases/semantics/stdlib/_simd_intrinsic_reexport.xr",)
+
+IMPORTED_ORACLE_INPUTS["tests/diff/cases/semantics/stdlib/probe_module_shapes.xr"] = (
+    "stdlib/_probe/_probe.xr",)
 
 TARGET_PORT_ARGUMENTS = {
     "tests/diff/cases/semantics/stdlib/process_schema_shared_core.xr": ["alpha", "beta"],
