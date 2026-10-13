@@ -14,6 +14,43 @@ class PreparationChecks(unittest.TestCase):
         cls.runner_routes = audit.read_json(audit.HERE / "runner_routes.json")
         cls.legacy = audit.read_json(audit.ROOT / "tests/unit/xir/product_consumers/legacy_responsibilities.json")
 
+    def test_regression_positive_cannot_become_arbitrary_rejection(self):
+        bad = copy.deepcopy(self.runner_routes)
+        row = next(r for r in bad["cases"] if "original_regression_obligation" in r)
+        row["original_regression_obligation"]["expected_exit"] = 1
+        with self.assertRaisesRegex(ValueError, "regression positive"):
+            audit.validate_runner_routes(bad, self.mapping)
+
+    def test_build_only_cannot_claim_test_discovery(self):
+        bad = copy.deepcopy(self.runner_routes)
+        row = next(r for r in bad["cases"] if "original_regression_obligation" in r)
+        row["original_regression_obligation"]["test_discovery"] = "PASS"
+        with self.assertRaisesRegex(ValueError, "test discovery"):
+            audit.validate_runner_routes(bad, self.mapping)
+
+    def test_class_source_port_preserves_named_tests_and_frozen_surface(self):
+        row = next(r for r in self.runner_routes["cases"] if "target_source_port" in r)
+        source = (audit.ROOT / row["target_source_port"]["fixture"]).read_text(encoding="utf-8")
+        self.assertIn("init()", source)
+        self.assertNotIn("constructor()", source)
+        self.assertNotIn("ref useWith", source)
+        self.assertNotIn("ref useHandler", source)
+        for name in ("defer_runs_after_a_returned_parameter_call", "defer_runs_after_a_returned_indirect_call"):
+            self.assertIn("@test fn " + name, source)
+        self.assertEqual(source.count("assertEqual(g.held, true)"), 2)
+
+    def test_target_source_port_is_not_a_qualified_product(self):
+        bad = copy.deepcopy(self.runner_routes)
+        row = next(r for r in bad["cases"] if "target_source_port" in r)
+        row["target_source_port"]["qualification"] = "PASS"
+        with self.assertRaisesRegex(ValueError, "incorrectly qualified"):
+            audit.validate_runner_routes(bad, self.mapping)
+
+    def test_empty_test_report_cannot_satisfy_the_class_cleanup_oracle(self):
+        expected = next(r["expected"] for r in self.oracles["cases"] if r["id"] == "class_cleanup_ordinary_methods")
+        with self.assertRaises(ValueError):
+            audit.compare_required(expected, {"exit_code": 0, "required_test_names": [], "all_required_tests_passed": True})
+
     def test_comptime_routes_reference_existing_frozen_responsibility(self):
         row = next(r for r in self.runner_routes["cases"] if r["case_id"].endswith("/001_comptime_non_const_call.xr"))
         self.assertEqual(row["primary_family"], "task318:Q12")

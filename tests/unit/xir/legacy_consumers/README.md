@@ -13,15 +13,18 @@ change a product interface, or authorize deletion of an old test.
   all 160 indexed function bodies, including seven helper files with no counted
   test functions. Native harness success exits stay separate from language results;
   all replacement qualification and new-entry mappings remain OPEN.
-- `runner_routes.json` binds 374 explicitly reviewed FFI/JSON/generic/nullable/cleanup/
-  generator/numeric/closure/module/call/ownership/control/comptime inputs to their original source and expectation hashes,
+  The class cleanup target fixture uses ordinary methods and contextual init,
+  retains both named tests and adds during-call guard checks. It has not compiled
+  on a product producer; its real test discovery/execution remains required.
+- `runner_routes.json` binds 508 explicitly reviewed FFI/JSON/generic/nullable/cleanup/
+  generator/numeric/closure/module/call/ownership/control/comptime and regression inputs to their original source and expectation hashes,
   compiler positions/codes/text and actual runner entries. Future files are not
   automatically assigned by a directory wildcard. Missing expectations and
   diagnostic position gaps remain explicit. Existing Task318 Q12 names the
   frozen comptime/protocol scope without changing the 27 historical families.
   Five old no-call rejection cases are explicitly marked for required positive
   Task320 migration; the original rejection records remain historical evidence.
-- `oracles.json` records nineteen independent output/result/rejection expectations.
+- `oracles.json` records twenty-three independent output/result/rejection expectations.
   Inputs under `fixtures/` retain complete original source literals byte for byte.
   They have no invented new entry adapters. The StringBuilder input still requires
   a reviewed semantic migration to its replacement; it is not an API to restore.

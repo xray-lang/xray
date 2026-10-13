@@ -643,6 +643,138 @@
         "Each VM and actual generated-C native observation must satisfy this independent result; complete affected FI/resource/lifetime/ownership/safety qualification remains required.",
         "For comptime cases, preserve the old rejection as historical evidence and perform the positive atomic migration under Task320; do not restore no-call restrictions or change legal programs to arbitrary rejection."
       ]
+    },
+    {
+      "id": "retired_builtin_names_are_user_names",
+      "inputs": [
+        {
+          "path": "tests/regression/05_functions/0582_removed_builtin_names_reusable.xr",
+          "lf_sha256": "037941a5256838f24279cf536a83ccbbaa84af5dde8bc386343addc97b849c49"
+        }
+      ],
+      "expected": {
+        "exit_code": 0,
+        "stdout_utf8": "true\nfalse\n",
+        "stderr_utf8": ""
+      },
+      "rationale": "The user-declared likely and unlikely functions return their bool arguments; removed builtin names remain usable ordinary identifiers.",
+      "packages": [
+        "P10"
+      ],
+      "legacy_case": null,
+      "status": "PREPARED_NOT_EXECUTED",
+      "execution": {
+        "vm": "NOT_RUN",
+        "native": "NOT_RUN"
+      },
+      "new_entry": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "remaining_qualification": [
+        "Execute the original run entry on fresh accepted current Source/Program consumers after fixed producer interfaces are ready.",
+        "Each backend must satisfy this independent expectation; retain complete applicable compiler/runtime FI/resource/ownership/lifetime/safety gates."
+      ]
+    },
+    {
+      "id": "retired_scalar_names_are_user_names",
+      "inputs": [
+        {
+          "path": "tests/regression/05_functions/0583_retired_scalar_names_reusable.xr",
+          "lf_sha256": "82da11cbc34e1cbfe7144807bdfa42af192f24866cea1c4931169e62ad39fa2b"
+        }
+      ],
+      "expected": {
+        "exit_code": 0,
+        "stdout_utf8": "42\n7\n3.5\n",
+        "stderr_utf8": ""
+      },
+      "rationale": "User-declared int adds 1 to 41, byte returns u8 7 and float returns f64 3.5. The names are ordinary user declarations, not compatibility aliases for removed scalar types.",
+      "packages": [
+        "P09",
+        "P10"
+      ],
+      "legacy_case": null,
+      "status": "PREPARED_NOT_EXECUTED",
+      "execution": {
+        "vm": "NOT_RUN",
+        "native": "NOT_RUN"
+      },
+      "new_entry": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "remaining_qualification": [
+        "Execute the original run entry on fresh accepted current Source/Program consumers after fixed producer interfaces are ready.",
+        "Each backend must satisfy this independent expectation; retain complete applicable compiler/runtime FI/resource/ownership/lifetime/safety gates."
+      ]
+    },
+    {
+      "id": "typed_rune_slice_preserves_element_kind",
+      "inputs": [
+        {
+          "path": "tests/regression/14_typed_array/1473_slice_rune_pod_after_tid_renumber.xr",
+          "lf_sha256": "0bca04f5082a7d21d263b8e3da4690461fb426d469b38e027d7dacbcf7e3cfb8"
+        }
+      ],
+      "expected": {
+        "exit_code": 0,
+        "stdout_utf8": "zzz\nzqq\ntrue\n0\n",
+        "stderr_utf8": ""
+      },
+      "rationale": "Filling three rune elements with z then the [1:3] window with q yields zzz/zqq. Boolean slice fill yields true and three u16 zero elements sum to 0; exact typed element kind must survive IDs/layout changes.",
+      "packages": [
+        "P09",
+        "P10"
+      ],
+      "legacy_case": null,
+      "status": "PREPARED_NOT_EXECUTED",
+      "execution": {
+        "vm": "NOT_RUN",
+        "native": "NOT_RUN"
+      },
+      "new_entry": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "remaining_qualification": [
+        "Execute the original run entry on fresh accepted current Source/Program consumers after fixed producer interfaces are ready.",
+        "Each backend must satisfy this independent expectation; retain complete applicable compiler/runtime FI/resource/ownership/lifetime/safety gates."
+      ]
+    },
+    {
+      "id": "class_cleanup_ordinary_methods",
+      "inputs": [
+        {
+          "path": "tests/unit/xir/legacy_consumers/fixtures/class_cleanup_ordinary_methods/root.xr",
+          "lf_sha256": "80058e11ffef775d77a7ea8e2699a1eb6ace30c1d95b22e0d1901208b64354de",
+          "role": "target_source"
+        },
+        {
+          "path": "tests/regression/05_functions/0512_defer_around_return_call.xr",
+          "lf_sha256": "f7d49f36813b416992f424586d0c0b981c0410ca633ea87c73693b8204929d26",
+          "role": "historical_source_reference"
+        }
+      ],
+      "execution_source": "tests/unit/xir/legacy_consumers/fixtures/class_cleanup_ordinary_methods/root.xr",
+      "expected": {
+        "exit_code": 0,
+        "required_test_names": [
+          "defer_runs_after_a_returned_parameter_call",
+          "defer_runs_after_a_returned_indirect_call"
+        ],
+        "all_required_tests_passed": true
+      },
+      "rationale": "Both original tests require callback result a/b and held=false after each call. The target source uses frozen ordinary class methods and init; direct callbacks require held=true during the call. A build-only success or a report missing either test cannot satisfy the oracle.",
+      "packages": [
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P14"
+      ],
+      "legacy_case": null,
+      "status": "PREPARED_NOT_EXECUTED",
+      "execution": {
+        "vm": "NOT_RUN",
+        "native": "NOT_RUN"
+      },
+      "new_entry": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "remaining_qualification": [
+        "The actual current test runner must discover and execute both named test bodies; no source stripping, guessed entry adapter or compatibility method alias.",
+        "Run fresh VM/native and complete affected lifetime/resource/FI/safety qualification; this target fixture has only been prepared and inspected."
+      ]
     }
   ]
 }

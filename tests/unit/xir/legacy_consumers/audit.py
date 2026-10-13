@@ -142,6 +142,18 @@ def validate_runner_routes(data: dict, responsibilities: dict, actual_entries: d
             raise ValueError("runner routing cannot grant product qualification")
         if not row["semantic_basis"]:
             raise ValueError("runner routing lacks reviewed semantic evidence")
+        regression = row.get("original_regression_obligation")
+        if regression:
+            entries = [e["entry"] for e in actual_entries[identity] if e["suite"] == "regression"]
+            if (entries != [regression["entry"]] or type(regression["expected_exit"]) is not int
+                    or regression["expected_exit"] != 0 or regression["test_discovery"] != "NOT_RUN"):
+                raise ValueError("original regression positive/test discovery obligation changed")
+        port = row.get("target_source_port")
+        if port:
+            path = ROOT / port["fixture"]
+            if (port["qualification"] != "NOT_RUN" or port["owner_package"] != "P10"
+                    or not path.is_file() or file_record(path)["lf_sha256"] != port["lf_sha256"]):
+                raise ValueError("planned source port changed or incorrectly qualified")
         disposition = row.get("target_disposition")
         if disposition and (disposition["kind"] != "POSITIVE_REQUIRED_BY_FROZEN_TASK320"
                             or disposition["owner_package"] != "P11" or disposition["qualification"] != "NOT_RUN"):
@@ -167,6 +179,8 @@ def validate_runner_routes(data: dict, responsibilities: dict, actual_entries: d
                 raise ValueError("runner stdout oracle changed")
     return {"reviewed_runner_inputs": len(rows),
             "reviewed_runner_entry_links": sum(len(r["original_runner_entries"]) for r in rows),
+            "reviewed_regression_inputs": sum(any(e["suite"] == "regression" for e in r["original_runner_entries"]) for r in rows),
+            "prepared_target_source_ports": sum("target_source_port" in r for r in rows),
             "reviewed_rejection_cases": sum("original_rejection_oracle" in r for r in rows),
             "reviewed_rejection_oracles": sum(r.get("original_rejection_oracle", {}).get("state") == "PRESENT" for r in rows),
             "reviewed_missing_rejection_oracles": sum(r.get("original_rejection_oracle", {}).get("state") == "MISSING" for r in rows)}
