@@ -1,0 +1,6 @@
+export fn p09Answer() -> i64 {
+    var values: Array<i64> = [2, 3]
+    var sum = 0
+    for (item in values) { sum += item; values.push(9) }
+    return sum * 10 + len(values)
+}

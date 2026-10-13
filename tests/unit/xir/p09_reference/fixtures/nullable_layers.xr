@@ -1,0 +1,9 @@
+fn layer<T>(value: T) -> T? { return value }
+fn none<T>() -> T? { return null }
+export fn p09Answer() -> i64 {
+    const absent: i64?? = none<i64?>()
+    const inner: i64?? = layer<i64?>(none<i64>())
+    const present: i64?? = layer<i64?>(layer<i64>(7))
+    if (absent == null && inner != null && inner! == null && present!! == 7) { return 107 }
+    return 0
+}
