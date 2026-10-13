@@ -161,3 +161,11 @@ full drafts follow declared non-Optional UTF-8 results, required CSV rune payloa
 and typed catch bindings while retaining original sources. Known hash/CRC/HMAC and
 wire answers are independently calculated; output equality never grants entropy,
 constant-time, authentication, connection or physical cleanup qualification.
+
+Reviewed standard-library regression records preserve every named source segment
+and its whole direct/transitive imported module closure. Full selected drafts use
+contextual class init, logical Array/channel/return copies, actual timer elapsed
+bounds and owned string chunks joined through the declared API. Generic definition
+proofs, enum metadata and native SIMD profiles remain explicit pending duties.
+Every oracle demands the actual test entry and all named bodies; a run-only banner
+or reduced property/warmup/lifetime dimensions cannot qualify the replacement.

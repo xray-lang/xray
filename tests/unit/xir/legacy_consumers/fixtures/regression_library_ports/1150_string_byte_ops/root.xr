@@ -1,0 +1,97 @@
+import text
+
+// 1150_string_byte_ops.xr - String byte-level operations
+
+// ===== byte view indexing =====
+
+@test
+fn test_byte_at() {
+    var s = "ACGT"
+    assertEqual(s.bytes()[0], 65)
+    assertEqual(s.bytes()[1], 67)
+    assertEqual(s.bytes()[2], 71)
+    assertEqual(s.bytes()[3], 84)
+}
+
+@test
+fn test_byte_at_out_of_bounds() {
+    var s = "ACGT"
+    assertPanics(fn() { assertEqual(s.bytes()[4], 0) })
+    assertPanics(fn() { assertEqual(s.bytes()[-1], 0) })
+}
+
+// ===== raw octets (binary I/O) =====
+// bytes() exposes the unsigned UTF-8 octets 0..255 directly.
+
+@test
+fn test_byte_at_ord_high_bytes() {
+    // "é" = 0xC3 0xA9, "€" = 0xE2 0x82 0xAC in UTF-8
+    var s = "é€"
+    assertEqual(len(s.bytes()), 5)
+    assertEqual(s.bytes()[0], 195)  // 0xC3
+    assertEqual(s.bytes()[1], 169)  // 0xA9
+    assertEqual(s.bytes()[2], 226)  // 0xE2
+    assertEqual(s.bytes()[3], 130)  // 0x82
+    assertEqual(s.bytes()[4], 172)  // 0xAC
+}
+
+@test
+fn test_byte_at_ord_ascii_matches_octet() {
+    var s = "ACGT"
+    assertEqual(s.bytes()[0], 65)
+    assertEqual(s.bytes()[3], 84)
+}
+
+// ===== reverse (ASCII data only — Unicode reverse is rune-aware) =====
+
+@test
+fn test_reverse_ascii() {
+    assertEqual(text.reverseRunes("ACGT"), "TGCA")
+    assertEqual(text.reverseRunes("Hello"), "olleH")
+    assertEqual(text.reverseRunes(""), "")
+    assertEqual(text.reverseRunes("A"), "A")
+}
+
+// ===== byte vs rune consistency for ASCII =====
+
+@test
+fn test_byte_at_equals_char_at_ascii() {
+    var dna = "ACGTACGTACGT"
+    var i = 0
+    while (i < len(dna.bytes())) {
+        assertEqual((dna.runes().nth(i).toUInt32() as i64), (dna.bytes()[i] as i64))
+        i = i + 1
+    }
+}
+
+
+// ===== DNA reverse complement =====
+
+var COMP = #{"A": "T", "T": "A", "C": "G", "G": "C"}
+
+fn reverseComplement(seq: string) -> string {
+    var reversed = text.reverseRunes(seq)
+    var parts: Array<string> = []
+    var j = 0
+    var byteCount = len(seq.bytes())
+    while (j < byteCount) {
+        // j < len keeps this rune access in bounds.
+        var c = reversed.runes().nth(j).toString()
+        var comp = COMP.get(c)
+        if (comp != null) {
+            parts.push(comp)
+        } else {
+            parts.push(c)
+        }
+        j = j + 1
+    }
+    return string.join(parts)
+}
+
+@test
+fn test_reverse_complement() {
+    assertEqual(reverseComplement("ACGT"), "ACGT")
+    assertEqual(reverseComplement("AAAA"), "TTTT")
+    assertEqual(reverseComplement("CCCC"), "GGGG")
+    assertEqual(reverseComplement("AACG"), "CGTT")
+}

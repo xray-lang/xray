@@ -144,6 +144,42 @@ TARGET_PORT_IMPORTS = {
 }
 
 
+# Complete reviewed regression module closures and frozen full source drafts.
+IMPORTED_ORACLE_INPUTS['tests/regression/10_stdlib/1031_module_scope.xr'] = ('tests/regression/10_stdlib/modules/mod_a.xr', 'tests/regression/10_stdlib/modules/mod_b.xr')
+IMPORTED_ORACLE_INPUTS['tests/regression/10_stdlib/1032_reexport.xr'] = ('tests/regression/10_stdlib/reexport_test/index.xr', 'tests/regression/10_stdlib/reexport_test/user.xr', 'tests/regression/10_stdlib/reexport_test/product.xr')
+IMPORTED_ORACLE_INPUTS['tests/regression/10_stdlib/1033_selective_import_nested.xr'] = ('tests/regression/10_stdlib/modules/sel_lib.xr',)
+IMPORTED_ORACLE_INPUTS['tests/regression/10_stdlib/1034_cross_module_typed.xr'] = ('tests/regression/10_stdlib/modules/typed_lib.xr',)
+IMPORTED_ORACLE_INPUTS['tests/regression/10_stdlib/1035_cross_module_shared_method.xr'] = ('tests/regression/10_stdlib/modules/shared_class_lib.xr',)
+IMPORTED_ORACLE_INPUTS['tests/regression/10_stdlib/1035_namespace_import_typed.xr'] = ('tests/regression/10_stdlib/modules/typed_lib.xr',)
+IMPORTED_ORACLE_INPUTS['tests/regression/10_stdlib/1036_cross_module_generic_enum.xr'] = ('tests/regression/10_stdlib/modules/generic_result_lib.xr',)
+IMPORTED_ORACLE_INPUTS['tests/regression/10_stdlib/1036_module_regex_init.xr'] = ('tests/regression/10_stdlib/modules/regex_compile_mod.xr',)
+IMPORTED_ORACLE_INPUTS['tests/regression/10_stdlib/1037_cross_module_owned_transfer_summary.xr'] = ('tests/fixtures/owned_transfer_lib.xr',)
+IMPORTED_ORACLE_INPUTS['tests/regression/10_stdlib/1038_cross_module_return_ownership_summary.xr'] = ('tests/fixtures/return_ownership_lib.xr',)
+IMPORTED_ORACLE_INPUTS['tests/regression/10_stdlib/1039_cross_module_generic_annotation.xr'] = ('tests/regression/10_stdlib/modules/generic_box_lib.xr',)
+IMPORTED_ORACLE_INPUTS['tests/regression/10_stdlib/1040_selective_import_generic_return.xr'] = ('tests/regression/10_stdlib/modules/generic_box_lib.xr',)
+IMPORTED_ORACLE_INPUTS['tests/regression/10_stdlib/1041_imported_instance_field_substitution.xr'] = ('tests/regression/10_stdlib/modules/generic_box_lib.xr',)
+TARGET_PORT_IMPORTS['tests/regression/10_stdlib/1033_selective_import_nested.xr'] = ('tests/unit/xir/legacy_consumers/fixtures/regression_library_ports/1033_selective_import_nested/modules/sel_lib.xr',)
+TARGET_PORT_IMPORTS['tests/regression/10_stdlib/1034_cross_module_typed.xr'] = ('tests/unit/xir/legacy_consumers/fixtures/regression_library_ports/1034_cross_module_typed/modules/typed_lib.xr',)
+TARGET_PORT_IMPORTS['tests/regression/10_stdlib/1035_namespace_import_typed.xr'] = ('tests/unit/xir/legacy_consumers/fixtures/regression_library_ports/1035_namespace_import_typed/modules/typed_lib.xr',)
+TARGET_PORT_IMPORTS['tests/regression/10_stdlib/1035_cross_module_shared_method.xr'] = ('tests/unit/xir/legacy_consumers/fixtures/regression_library_ports/1035_cross_module_shared_method/modules/shared_class_lib.xr',)
+TARGET_PORT_IMPORTS['tests/regression/10_stdlib/1037_cross_module_owned_transfer_summary.xr'] = ('tests/unit/xir/legacy_consumers/fixtures/regression_library_ports/1037_cross_module_owned_transfer_summary/owned_transfer_lib.xr',)
+TARGET_PORT_IMPORTS['tests/regression/10_stdlib/1038_cross_module_return_ownership_summary.xr'] = ('tests/unit/xir/legacy_consumers/fixtures/regression_library_ports/1038_cross_module_return_ownership_summary/return_ownership_lib.xr',)
+FROZEN_TARGETS['tests/regression/10_stdlib/1033_selective_import_nested.xr'] = ('POSITIVE_DECLARATION_OWNED_LIBRARY_AFTER_FROZEN_PORT', 'P10')
+FROZEN_TARGETS['tests/regression/10_stdlib/1034_cross_module_typed.xr'] = ('POSITIVE_DECLARATION_OWNED_LIBRARY_AFTER_FROZEN_PORT', 'P10')
+FROZEN_TARGETS['tests/regression/10_stdlib/1035_namespace_import_typed.xr'] = ('POSITIVE_DECLARATION_OWNED_LIBRARY_AFTER_FROZEN_PORT', 'P10')
+FROZEN_TARGETS['tests/regression/10_stdlib/1035_cross_module_shared_method.xr'] = ('POSITIVE_DECLARATION_OWNED_LIBRARY_AFTER_FROZEN_PORT', 'P10')
+FROZEN_TARGETS['tests/regression/10_stdlib/1037_cross_module_owned_transfer_summary.xr'] = ('POSITIVE_LOGICAL_VALUE_TRANSFER_AFTER_FROZEN_TASK313_PORT', 'P10')
+FROZEN_TARGETS['tests/regression/10_stdlib/1038_cross_module_return_ownership_summary.xr'] = ('POSITIVE_LOGICAL_VALUE_TRANSFER_AFTER_FROZEN_TASK313_PORT', 'P10')
+FROZEN_TARGETS['tests/regression/10_stdlib/1150_string_byte_ops.xr'] = ('POSITIVE_DECLARATION_OWNED_LIBRARY_AFTER_FROZEN_PORT', 'P13')
+FROZEN_TARGETS['tests/regression/10_stdlib/1180_base64_basic.xr'] = ('POSITIVE_DECLARATION_OWNED_LIBRARY_AFTER_FROZEN_PORT', 'P10')
+FROZEN_TARGETS['tests/regression/10_stdlib/1300_encoding.xr'] = ('POSITIVE_DECLARATION_OWNED_LIBRARY_AFTER_FROZEN_PORT', 'P10')
+
+
+FROZEN_TARGETS['tests/regression/10_stdlib/1010_time.xr'] = ('POSITIVE_REAL_TIMER_ELAPSED_AFTER_DECLARED_PORT', 'P13')
+FROZEN_TARGETS['tests/regression/10_stdlib/1011_time_edge.xr'] = ('POSITIVE_REAL_TIMER_ELAPSED_AFTER_DECLARED_PORT', 'P13')
+
+REGRESSION_LIBRARY_REVIEW = ('tests/regression/10_stdlib/1010_json_serialize_types.xr', 'tests/regression/10_stdlib/1010_time.xr', 'tests/regression/10_stdlib/1011_time_edge.xr', 'tests/regression/10_stdlib/1020_math.xr', 'tests/regression/10_stdlib/1021_math_advanced.xr', 'tests/regression/10_stdlib/1022_math_type_preserve.xr', 'tests/regression/10_stdlib/1023_math_new_functions.xr', 'tests/regression/10_stdlib/1030_module_import.xr', 'tests/regression/10_stdlib/1031_module_scope.xr', 'tests/regression/10_stdlib/1032_reexport.xr', 'tests/regression/10_stdlib/1033_selective_import_nested.xr', 'tests/regression/10_stdlib/1034_cross_module_typed.xr', 'tests/regression/10_stdlib/1035_cross_module_shared_method.xr', 'tests/regression/10_stdlib/1035_import_scope_reject.xr', 'tests/regression/10_stdlib/1035_namespace_import_typed.xr', 'tests/regression/10_stdlib/1036_cross_module_generic_enum.xr', 'tests/regression/10_stdlib/1036_module_regex_init.xr', 'tests/regression/10_stdlib/1037_cross_module_owned_transfer_summary.xr', 'tests/regression/10_stdlib/1038_cross_module_return_ownership_summary.xr', 'tests/regression/10_stdlib/1039_cross_module_generic_annotation.xr', 'tests/regression/10_stdlib/1040_selective_import_generic_return.xr', 'tests/regression/10_stdlib/1041_imported_instance_field_substitution.xr', 'tests/regression/10_stdlib/1060_simd_intrinsic_same_name.xr', 'tests/regression/10_stdlib/1061_simd_runtime_selected_vm.xr', 'tests/regression/10_stdlib/1100_regex.xr', 'tests/regression/10_stdlib/1101_regex_engine.xr', 'tests/regression/10_stdlib/1110_regex_unicode.xr', 'tests/regression/10_stdlib/1115_regex_advanced.xr', 'tests/regression/10_stdlib/1120_regex_re2_compat.xr', 'tests/regression/10_stdlib/1121_regex_jit_inline_call_args.xr', 'tests/regression/10_stdlib/1122_regex_jit_dynamic_null_index.xr', 'tests/regression/10_stdlib/1130_regex_literal.xr', 'tests/regression/10_stdlib/1131_regex_source_field_ownership.xr', 'tests/regression/10_stdlib/1150_string_byte_ops.xr', 'tests/regression/10_stdlib/1151_string_translate.xr', 'tests/regression/10_stdlib/1152_string_slice.xr', 'tests/regression/10_stdlib/1170_path_basic.xr', 'tests/regression/10_stdlib/1180_base64_basic.xr', 'tests/regression/10_stdlib/1181_binary_codec_properties.xr', 'tests/regression/10_stdlib/1300_encoding.xr')
+
 def load_module(name: str, relative: str):
     spec = importlib.util.spec_from_file_location(name, ROOT / relative)
     module = importlib.util.module_from_spec(spec)
@@ -315,7 +351,8 @@ def validate_runner_routes(data: dict, responsibilities: dict, actual_entries: d
                 raise ValueError("original regression positive/test discovery obligation changed")
         named = row.get("original_named_test_obligation")
         reviewed_named_scope = identity.startswith(("tests/regression/08_mem/", "tests/regression/08_oop/",
-                                                    "tests/regression/09_advanced/", "tests/regression/11_coroutine/",
+                                                    "tests/regression/09_advanced/", "tests/regression/10_stdlib/",
+                                                    "tests/regression/11_coroutine/",
                                                     "tests/regression/12_type_checking/", "tests/regression/13_types/"))
         if named is not None or (reviewed_named_scope and regression and regression["entry"] == "test"):
             if (not named or named["state"] != "REVIEWED_TEXTUAL_DECLARATIONS_NOT_RUNTIME_DISCOVERY"
@@ -466,6 +503,28 @@ def validate_oracles(data: dict) -> dict:
                 raise ValueError("fixture preparation is not execution evidence")
         if not row["remaining_qualification"]:
             raise ValueError("preparation must retain the full qualification gap")
+    reviewed = {r["case_id"]: r for r in read_json(HERE / "runner_routes.json")["cases"]
+                if r["case_id"] in REGRESSION_LIBRARY_REVIEW}
+    by_id = {r["id"]: r for r in data["cases"]}
+    for identity in REGRESSION_LIBRARY_REVIEW:
+        oracle_id = "regression_library_review_" + Path(identity).stem
+        route = reviewed.get(identity)
+        row = by_id.get(oracle_id)
+        if not route or not row:
+            raise ValueError("reviewed library oracle lost a complete original input")
+        names = list(route.get("named_test_migration", {}).get("mapping", {}).values()) or [
+            d["name"] for d in route["original_named_test_obligation"]["declarations"]]
+        if (row["expected"].get("required_test_names") != names
+                or row["expected"].get("all_required_tests_passed") is not True):
+            raise ValueError("reviewed library oracle lost full named test execution obligations")
+        mandatory_inputs = {identity} | {i["path"] for i in route.get("original_imported_inputs", [])}
+        mandatory_inputs |= {i["path"] for i in route.get("target_source_port", {}).get("companion_inputs", [])}
+        if not mandatory_inputs <= {i["path"] for i in row["inputs"]}:
+            raise ValueError("reviewed library oracle lost complete source or imported companion")
+        if row.get("target_source_status") != "PENDING_PUBLISHED_DECLARATION_OWNED_LIBRARY_REPLACEMENT":
+            target = route.get("target_source_port", {}).get("fixture", identity)
+            if row.get("execution_source") != target or row.get("execution_entry") != "test":
+                raise ValueError("reviewed library oracle must use full actual test entry")
     return {"oracle_cases": len(ids), "product_execution": "NOT_RUN"}
 
 

@@ -16,6 +16,117 @@ class PreparationChecks(unittest.TestCase):
         cls.runner_routes = audit.read_json(audit.HERE / "runner_routes.json")
         cls.legacy = audit.read_json(audit.ROOT / "tests/unit/xir/product_consumers/legacy_responsibilities.json")
 
+    def test_regression_library_cannot_remove_a_whole_oracle_record(self):
+        bad = copy.deepcopy(self.oracles)
+        bad["cases"] = [r for r in bad["cases"] if r["id"] != "regression_library_review_1300_encoding"]
+        with self.assertRaisesRegex(ValueError, "lost a complete original input"):
+            audit.validate_oracles(bad)
+
+    def regression_library_expected(self, name):
+        return next(r["expected"] for r in self.oracles["cases"]
+                    if r["id"] == "regression_library_review_" + name)
+
+    def test_regression_library_cannot_omit_original_named_bodies(self):
+        bad = copy.deepcopy(self.runner_routes)
+        row = next(r for r in bad["cases"] if r["case_id"].endswith("/1101_regex_engine.xr"))
+        row.pop("original_named_test_obligation")
+        with self.assertRaisesRegex(ValueError, "named source obligations"):
+            audit.validate_runner_routes(bad, self.mapping)
+
+    def test_regression_library_banner_or_partial_report_cannot_be_all_tests(self):
+        for name in ("1100_regex", "1101_regex_engine", "1120_regex_re2_compat", "1180_base64_basic"):
+            expected = self.regression_library_expected(name)
+            with self.assertRaises(ValueError):
+                audit.compare_required(expected, dict(expected, required_test_names=expected["required_test_names"][:-1]))
+
+    def test_regression_library_oracle_cannot_drop_source_or_companion(self):
+        bad = copy.deepcopy(self.oracles)
+        row = next(r for r in bad["cases"] if r["id"] == "regression_library_review_1032_reexport")
+        row["inputs"] = [i for i in row["inputs"] if not i["path"].endswith("/product.xr")]
+        with self.assertRaisesRegex(ValueError, "lost complete source or imported companion"):
+            audit.validate_oracles(bad)
+
+    def test_regression_library_oracle_cannot_run_only_root(self):
+        bad = copy.deepcopy(self.oracles)
+        row = next(r for r in bad["cases"] if r["id"] == "regression_library_review_1131_regex_source_field_ownership")
+        row["execution_entry"] = "run"
+        with self.assertRaisesRegex(ValueError, "full actual test entry"):
+            audit.validate_oracles(bad)
+
+    def test_imported_array_send_and_return_copies_cannot_alias(self):
+        expected = self.regression_library_expected("1037_cross_module_owned_transfer_summary")
+        with self.assertRaises(ValueError):
+            audit.compare_required(expected, dict(expected, received_first_after_source_write=[901, 902]))
+        expected = self.regression_library_expected("1038_cross_module_return_ownership_summary")
+        for observed in (dict(expected, logical_return_independent=False),
+                         dict(expected, copy_after_owner_write_offset=1),
+                         dict(expected, return_loop_iterations=[100,100,100,50])):
+            with self.assertRaises(ValueError):
+                audit.compare_required(expected, observed)
+
+    def test_regex_engine_custom_decisions_cannot_be_replaced_by_external_defaults(self):
+        expected = self.regression_library_expected("1101_regex_engine")
+        for observed in (dict(expected, leftmost_longest_a_or_ab="a"),
+                         dict(expected, class_backslash_d_matches_digit_5=True),
+                         dict(expected, dollar_accepts_final_newline_without_multiline=True),
+                         dict(expected, comma_split_count=256),
+                         dict(expected, offset_anchor_at_start2=0)):
+            with self.assertRaises(ValueError):
+                audit.compare_required(expected, observed)
+
+    def test_regex_warmup_and_retained_source_pressure_cannot_be_smoke(self):
+        expected = self.regression_library_expected("1122_regex_jit_dynamic_null_index")
+        with self.assertRaises(ValueError):
+            audit.compare_required(expected, dict(expected, warmup_iterations=1))
+        expected = self.regression_library_expected("1131_regex_source_field_ownership")
+        for observed in (dict(expected, churn_rounds_each=8),
+                         dict(expected, strings_per_churn_round=4),
+                         dict(expected, construct_read_drop_rounds=20),
+                         dict(expected, returned_match_groups=["target77","target", "7"])):
+            with self.assertRaises(ValueError):
+                audit.compare_required(expected, observed)
+
+    def test_regression_binary_property_lengths_differ_from_differential_corpus(self):
+        expected = self.regression_library_expected("1181_binary_codec_properties")
+        for observed in (dict(expected, generated_lengths=list(range(97))),
+                         dict(expected, base64_alphabet_roundtrip_counts=[97,97]),
+                         dict(expected, single_byte_utf8_cases=128),
+                         dict(expected, valid_two_byte_utf8_pairs=64)):
+            with self.assertRaises(ValueError):
+                audit.compare_required(expected, observed)
+
+    def test_true_simd_selection_or_xor_cannot_replace_vm_or_user_declaration(self):
+        expected = self.regression_library_expected("1060_simd_intrinsic_same_name")
+        with self.assertRaises(ValueError):
+            audit.compare_required(expected, dict(expected, ordinary_user_U32x4_bitXor=1))
+        expected = self.regression_library_expected("1061_simd_runtime_selected_vm")
+        with self.assertRaises(ValueError):
+            audit.compare_required(expected, dict(expected, vm_runtime_selected=True))
+
+    def test_sleep_non_decreasing_clock_does_not_qualify_real_delay(self):
+        expected = self.regression_library_expected("1010_time")
+        with self.assertRaises(ValueError):
+            audit.compare_required(expected, dict(expected, sleep_elapsed_lower_bounds_ms=[0]))
+        expected = self.regression_library_expected("1011_time_edge")
+        with self.assertRaises(ValueError):
+            audit.compare_required(expected, dict(expected, sleep_requests_ms=[10,0,0]))
+
+    def test_math_round_and_declared_numeric_types_cannot_use_erased_shape(self):
+        expected = self.regression_library_expected("1022_math_type_preserve")
+        for observed in (dict(expected, abs_min_max_clamp_type="i64"),
+                         dict(expected, negative_round_half_away_from_zero=[-3,-3])):
+            with self.assertRaises(ValueError):
+                audit.compare_required(expected, observed)
+
+    def test_retired_string_builder_replacement_keeps_whole_ascii_helper(self):
+        row = next(r for r in self.runner_routes["cases"] if r["case_id"].endswith("/1150_string_byte_ops.xr"))
+        source = (audit.ROOT / row["target_source_port"]["fixture"]).read_text(encoding="utf-8")
+        self.assertNotIn("StringBuilder", source)
+        self.assertIn("return string.join(parts)", source)
+        self.assertIn("parts.push(comp)", source)
+        self.assertIn("parts.push(c)", source)
+        self.assertEqual(len(row["named_test_migration"]["mapping"]), 7)
+
     def library_review_expected(self, name):
         return next(r["expected"] for r in self.oracles["cases"]
                     if r["id"] == "library_review_" + name)
@@ -236,13 +347,17 @@ class PreparationChecks(unittest.TestCase):
             row["expected"] = {"exit_code": 0, "stdout_utf8": "1\n"}
             row["inputs"] = [{"path": record["path"], "lf_sha256": record["lf_sha256"], "role": "target_source"}]
             row["execution_source"] = record["path"]
-            data = {"cases": [row]}
+            row["id"] = "path_cache_freshness_probe"
+            data = copy.deepcopy(self.oracles)
+            data["cases"].append(row)
             audit.validate_oracles(data)
             source.write_text("print(2)\n", encoding="utf-8")
             with self.assertRaisesRegex(ValueError, "oracle input changed"):
                 audit.validate_oracles(data)
             source.unlink()
             self.assertEqual(audit.file_record(source)["state"], "MISSING")
+            with self.assertRaisesRegex(ValueError, "oracle input changed"):
+                audit.validate_oracles(data)
 
     def execution_review_expected(self, name):
         return next(r["expected"] for r in self.oracles["cases"]
