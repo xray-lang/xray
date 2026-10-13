@@ -177,3 +177,12 @@ YAML block-scalar independent expectations follow1.2.2 chomping, including absen
 physical final LF; the seed source discrepancy remains a producer qualification
 gap, not an observed product failure. Exact values do not establish entropy,
 constant-time, real timezone/IO/provider provenance or physical resource release.
+
+JSON/system/runtime duties preserve complete primitive/Unicode/large numeric
+corpora, raw invalid UTF8 bytes, actual parent-temp and environment cleanup,
+full memory pressure and ordered buffered log delivery. Source-location markers
+and historical collector/JIT comments never qualify real callsites or current
+strategy. Whole directory refusal conflicts with the seed best-effort removal
+contract; Windows literal-backslash filesystem and JSON query/Equal/range/error
+replacements remain explicit unresolved duties, not skipped execution or fake
+platform success. All actual backend/provider/FI/physical gates stay OPEN.

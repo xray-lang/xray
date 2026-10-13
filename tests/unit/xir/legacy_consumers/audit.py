@@ -194,6 +194,25 @@ FROZEN_TARGETS['tests/regression/10_stdlib/1411_url_parse.xr'] = ('POSITIVE_FULL
 FROZEN_TARGETS['tests/regression/10_stdlib/1421_datetime_format.xr'] = ('POSITIVE_FULL_LIBRARY_CONTENT_AFTER_DECLARED_PORT', 'P13')
 FROZEN_TARGETS['tests/regression/10_stdlib/1422_datetime_calc.xr'] = ('POSITIVE_FULL_LIBRARY_CONTENT_AFTER_DECLARED_PORT', 'P13')
 
+REGRESSION_LIBRARY_REVIEW += ('tests/regression/10_stdlib/1000_json.xr', 'tests/regression/10_stdlib/1001_json_cjson_compat.xr', 'tests/regression/10_stdlib/1002_json_string.xr', 'tests/regression/10_stdlib/1003_json_error.xr', 'tests/regression/10_stdlib/1004_json_nested.xr', 'tests/regression/10_stdlib/1005_json_special.xr', 'tests/regression/10_stdlib/1006_json_roundtrip.xr', 'tests/regression/10_stdlib/1007_json_fuzz.xr', 'tests/regression/10_stdlib/1008_json_yaml_fuzz.xr', 'tests/regression/10_stdlib/1009_json_number.xr', 'tests/regression/10_stdlib/1160_os_basic.xr', 'tests/regression/10_stdlib/1161_os_extended.xr', 'tests/regression/10_stdlib/1162_os_home.xr', 'tests/regression/10_stdlib/1190_io_basic.xr', 'tests/regression/10_stdlib/1191_io_edge.xr', 'tests/regression/10_stdlib/1192_io_extended.xr', 'tests/regression/10_stdlib/1193_io_invalid_utf8.xr', 'tests/regression/10_stdlib/1193_io_read_dir_recursive.xr', 'tests/regression/10_stdlib/1194_io_mkdirp.xr', 'tests/regression/10_stdlib/1195_io_remove_all.xr', 'tests/regression/10_stdlib/1196_io_touch.xr', 'tests/regression/10_stdlib/1197_io_temp.xr', 'tests/regression/10_stdlib/1198_io_invalid_utf8.xr', 'tests/regression/10_stdlib/1199_time_units.xr', 'tests/regression/10_stdlib/1200_log_basic.xr', 'tests/regression/10_stdlib/1200_runtime_info.xr', 'tests/regression/10_stdlib/1201_log_child.xr', 'tests/regression/10_stdlib/1202_log_source.xr', 'tests/regression/10_stdlib/1203_log_async.xr', 'tests/regression/10_stdlib/1204_runtime.xr', 'tests/regression/10_stdlib/1205_runtime_alloc_pressure.xr', 'tests/regression/10_stdlib/1206_runtime_enhanced.xr', 'tests/regression/10_stdlib/1207_runtime_stress.xr')
+FROZEN_TARGETS['tests/regression/10_stdlib/1162_os_home.xr'] = ('POSITIVE_COMPLETE_CONSUMER_CLEANUP_OR_CONTENT_PORT', 'P13')
+FROZEN_TARGETS['tests/regression/10_stdlib/1197_io_temp.xr'] = ('POSITIVE_COMPLETE_CONSUMER_CLEANUP_OR_CONTENT_PORT', 'P13')
+FROZEN_TARGETS['tests/regression/10_stdlib/1161_os_extended.xr'] = ('POSITIVE_COMPLETE_CONSUMER_CLEANUP_OR_CONTENT_PORT', 'P13')
+FROZEN_TARGETS['tests/regression/10_stdlib/1190_io_basic.xr'] = ('POSITIVE_COMPLETE_CONSUMER_CLEANUP_OR_CONTENT_PORT', 'P13')
+FROZEN_TARGETS['tests/regression/10_stdlib/1191_io_edge.xr'] = ('POSITIVE_COMPLETE_CONSUMER_CLEANUP_OR_CONTENT_PORT', 'P13')
+FROZEN_TARGETS['tests/regression/10_stdlib/1192_io_extended.xr'] = ('POSITIVE_COMPLETE_CONSUMER_CLEANUP_OR_CONTENT_PORT', 'P13')
+FROZEN_TARGETS['tests/regression/10_stdlib/1193_io_invalid_utf8.xr'] = ('POSITIVE_COMPLETE_CONSUMER_CLEANUP_OR_CONTENT_PORT', 'P13')
+FROZEN_TARGETS['tests/regression/10_stdlib/1198_io_invalid_utf8.xr'] = ('POSITIVE_COMPLETE_CONSUMER_CLEANUP_OR_CONTENT_PORT', 'P13')
+FROZEN_TARGETS['tests/regression/10_stdlib/1193_io_read_dir_recursive.xr'] = ('POSITIVE_COMPLETE_CONSUMER_CLEANUP_OR_CONTENT_PORT', 'P13')
+FROZEN_TARGETS['tests/regression/10_stdlib/1195_io_remove_all.xr'] = ('POSITIVE_COMPLETE_CONSUMER_CLEANUP_OR_CONTENT_PORT', 'P13')
+FROZEN_TARGETS['tests/regression/10_stdlib/1194_io_mkdirp.xr'] = ('POSITIVE_COMPLETE_CONSUMER_CLEANUP_OR_CONTENT_PORT', 'P13')
+FROZEN_TARGETS['tests/regression/10_stdlib/1196_io_touch.xr'] = ('POSITIVE_COMPLETE_CONSUMER_CLEANUP_OR_CONTENT_PORT', 'P13')
+FROZEN_TARGETS['tests/regression/10_stdlib/1205_runtime_alloc_pressure.xr'] = ('POSITIVE_COMPLETE_CONSUMER_CLEANUP_OR_CONTENT_PORT', 'P10')
+FROZEN_TARGETS['tests/regression/10_stdlib/1207_runtime_stress.xr'] = ('POSITIVE_COMPLETE_CONSUMER_CLEANUP_OR_CONTENT_PORT', 'P10')
+FROZEN_TARGETS['tests/regression/10_stdlib/1203_log_async.xr'] = ('POSITIVE_COMPLETE_CONSUMER_CLEANUP_OR_CONTENT_PORT', 'P13')
+
+FROZEN_TARGETS['tests/regression/10_stdlib/1206_runtime_enhanced.xr'] = ('POSITIVE_COMPLETE_CONSUMER_CLEANUP_OR_CONTENT_PORT', 'P07')
+
 def load_module(name: str, relative: str):
     spec = importlib.util.spec_from_file_location(name, ROOT / relative)
     module = importlib.util.module_from_spec(spec)

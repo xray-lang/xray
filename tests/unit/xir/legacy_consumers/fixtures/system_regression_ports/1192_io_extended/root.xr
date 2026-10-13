@@ -1,0 +1,107 @@
+// Test io module extended functionality
+
+import io
+import os
+import path
+
+@test
+fn test_basic_file_ops() {
+    var tmp = io.tempFile()!
+    defer { io.remove(tmp) }
+    assert(io.exists(tmp))
+    io.writeFile(tmp, "hello\nworld\ntest")
+    assertEqual(io.readFile(tmp) ?? "", "hello\nworld\ntest")
+    var lines = io.readLines(tmp)
+    assertEqual(lines[0], "hello")
+    assertEqual(lines[1], "world")
+    io.remove(tmp)
+}
+
+@test
+fn test_file_info() {
+    var tmp = io.tempFile()!
+    defer { io.remove(tmp) }
+    io.writeFile(tmp, "test content")
+    var st = io.stat(tmp)
+    assert(st != null)
+    assertEqual(st!.size, 12)
+    assertEqual(st!.isFile, true)
+    assert(io.isFile(tmp))
+    assert(!io.isDir(tmp))
+    io.remove(tmp)
+}
+
+@test
+fn test_directory_ops() {
+    var tmpDir = io.tempDir()!
+    defer { io.removeAll(tmpDir) }
+    assert(io.isDir(tmpDir))
+    var nested = path.join(tmpDir, path.from("a/b/c"))
+    io.mkdirp(nested)
+    assert(io.isDir(nested))
+    io.writeFile(path.join(tmpDir, path.from("file1.txt")), "file1")
+    var entries = io.readDir(tmpDir)!
+    assert(len(entries) >= 1)
+    var allFiles = io.readDirRecursive(tmpDir)!
+    assert(len(allFiles) >= 1)
+    io.removeAll(tmpDir)
+    assert(!io.exists(tmpDir))
+}
+
+@test
+fn test_copy_and_move() {
+    var src = io.tempFile()!
+    defer { io.remove(src) }
+    io.writeFile(src, "copy test")
+    var dst = path.from(src.toString() + ".copy")
+    defer { io.remove(dst) }
+    io.copyFile(src, dst)
+    assert(io.exists(dst))
+    assertEqual(io.readFile(dst) ?? "", "copy test")
+    var moved = path.from(src.toString() + ".moved")
+    defer { io.remove(moved) }
+    io.rename(dst, moved)
+    assert(!io.exists(dst))
+    assert(io.exists(moved))
+    io.remove(src)
+    io.remove(moved)
+}
+
+@test
+fn test_touch_and_chmod() {
+    var tmp = io.tempFile()!
+    defer { io.remove(tmp) }
+    io.remove(tmp)
+    io.touch(tmp)
+    assert(io.exists(tmp))
+    assertEqual(io.fileSize(tmp), 0)
+    io.chmod(tmp, 420)
+    var st = io.stat(tmp)
+    // Windows does not support Unix file permissions; skip mode check
+    if (os.platform() != "windows") {
+        assertEqual(st!.mode, 420)
+    }
+    io.remove(tmp)
+}
+
+@test
+fn test_realpath() {
+    var cwd = io.cwd()
+    var resolved = io.realpath(path.from("."))!
+    assertEqual(resolved.toString(), cwd.toString())
+}
+
+@test
+fn test_chdir() {
+    var original = io.cwd()
+    defer { io.chdir(original) }
+    var tmpDir = io.tempDir()!
+    defer { io.removeAll(tmpDir) }
+    var tmpDirReal = io.realpath(tmpDir)!
+    io.chdir(tmpDir)
+    assertEqual(io.cwd().toString(), tmpDirReal.toString())
+    io.chdir(original)
+    io.removeAll(tmpDir)
+}
+
+print("All io extended tests passed")

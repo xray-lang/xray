@@ -1,0 +1,138 @@
+// Test block reclamation under allocation pressure.
+//
+// Reclamation is reference counting alone (task 247): there is no round to
+// trigger and no collector to pause, so what these cases assert is stronger
+// than before — a live object and its children stay intact across heavy churn
+// with no "we only just collected" excuse available.
+
+import runtime
+
+type InnerRecord = { key: string, idx: i64 }
+type NestedContainer = {
+    map: InnerRecord,
+    arr: Array<i64>,
+    name: string,
+}
+type PhaseRecord = { id: i64, data: string }
+type CycleRecord = { cycle: i64, idx: i64 }
+
+class ChainNode {
+    value: i64
+    next: ChainNode?
+
+    init(value: i64) {
+        this.value = value
+        this.next = null
+    }
+}
+
+// --- Test 1: Nested objects survive collection and block reclaim ---
+// Parent objects keep their children live throughout the reclaim pass.
+@test
+fn test_nested_object_survival() {
+    var containers: Array<NestedContainer> = []
+    for (var i = 0; i < 200; i++) {
+        var inner_map: InnerRecord = { key: "value_" + string(i), idx: i }
+        var inner_arr = [i, i * 2, i * 3]
+        containers.push({ map: inner_map,
+            arr: inner_arr,
+            name: "container_" + string(i) })
+    }
+
+
+    // Verify all nested data is intact
+    for (var i = 0; i < 200; i++) {
+        var c = containers[i]
+        assertEqual(c.map.idx, i)
+        assertEqual(c.arr[1], i * 2)
+        assertEqual(c.name, "container_" + string(i))
+    }
+}
+
+// --- Test 2: Interleaved allocation phases ---
+// Create objects, then create more. The new objects must not land on top of
+// old live ones.
+@test
+fn test_alloc_interleaved_phases() {
+    var phase1: Array<PhaseRecord> = []
+    for (var i = 0; i < 100; i++) {
+        phase1.push({ id: i, data: "phase1_" + string(i) })
+    }
+
+
+    var phase2: Array<PhaseRecord> = []
+    for (var i = 0; i < 100; i++) {
+        phase2.push({ id: i + 100, data: "phase2_" + string(i) })
+    }
+
+
+    // Verify both phases intact
+    for (var i = 0; i < 100; i++) {
+        assertEqual(phase1[i].id, i)
+        assertEqual(phase2[i].id, i + 100)
+    }
+}
+
+// --- Test 3: Deep reference chains ---
+// Build a linked-list-like structure. The entire live chain must survive.
+@test
+fn test_deep_reference_chain() {
+    var head = ChainNode(0)
+    var current = head
+    for (var i = 1; i < 50; i++) {
+        var node = ChainNode(i)
+        current.next = node
+        current = node
+    }
+
+
+    // Walk the chain and verify
+    current = head
+    for (var count = 0; count < 50; count++) {
+        assertEqual(current.value, count)
+        if (count < 49) {
+            current = current.next!
+        }
+    }
+}
+
+// --- Test 4: High churn with live roots ---
+// Rapidly create and discard temp objects while keeping a live set.
+// Exercises hole scanning after the dead temporaries are reclaimed.
+@test
+fn test_high_churn_with_live_roots() {
+    var live: Array<string> = []
+    for (var i = 0; i < 50; i++) {
+        live.push("persistent_" + string(i))
+    }
+
+    for (var round = 0; round < 20; round++) {
+        var temp: Array<Array<i64>> = []
+        for (var j = 0; j < 200; j++) {
+            temp.push([j, j + 1, j + 2])
+        }
+        // temp goes out of scope
+    }
+
+
+    // Live roots must survive all the churn
+    for (var i = 0; i < 50; i++) {
+        assertEqual(live[i], "persistent_" + string(i))
+    }
+}
+
+// --- Test 5: Repeated allocate-and-discard rounds ---
+@test
+fn test_repeated_alloc_rounds() {
+    for (var cycle = 0; cycle < 10; cycle++) {
+        var data: Array<CycleRecord> = []
+        for (var i = 0; i < 100; i++) {
+            data.push({ cycle: cycle, idx: i })
+        }
+        // Verify last batch
+        assertEqual(data[99].cycle, cycle)
+        assertEqual(data[99].idx, 99)
+    }
+}
+
+print("All allocation pressure tests passed")

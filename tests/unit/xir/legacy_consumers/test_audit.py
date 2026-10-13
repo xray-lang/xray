@@ -16,6 +16,113 @@ class PreparationChecks(unittest.TestCase):
         cls.runner_routes = audit.read_json(audit.HERE / "runner_routes.json")
         cls.legacy = audit.read_json(audit.ROOT / "tests/unit/xir/product_consumers/legacy_responsibilities.json")
 
+    def test_json_unicode_scalar_and_octet_duties_do_not_accept_erased_strings(self):
+        expected = self.regression_library_expected("1002_json_string")
+        for observed in (dict(expected, emoji_scalar_counts=[4,4,12]),
+                         dict(expected, unicode_escape_values=expected["unicode_escape_values"][:-1]),
+                         dict(expected, control_escape_values=["hello"]*10)):
+            with self.assertRaises(ValueError):
+                audit.compare_required(expected, observed)
+
+    def test_json_numeric_independent_integer_and_binary64_answers_keep_precision(self):
+        expected = self.regression_library_expected("1009_json_number")
+        observed = copy.deepcopy(expected)
+        observed["exact_integer_vectors"]["72057594037927935"] = 72057594037927936
+        with self.assertRaises(ValueError):
+            audit.compare_required(expected, observed)
+        observed = copy.deepcopy(expected)
+        observed["independent_ieee_f64_bits"]["-0.0"] = "0000000000000000"
+        with self.assertRaises(ValueError):
+            audit.compare_required(expected, observed)
+
+    def test_json_complete_depth_large_array_and_key_pressure_cannot_be_smoke(self):
+        expected = self.regression_library_expected("1007_json_fuzz")
+        for observed in (dict(expected, deep_array_depth=2),
+                         dict(expected, large_array_count=20),
+                         dict(expected, many_key_count=5),
+                         dict(expected, bool_null_values=[1,0,None,1,None,0])):
+            with self.assertRaises(ValueError):
+                audit.compare_required(expected, observed)
+
+    def test_unpublished_json_query_cannot_pose_as_a_qualified_executable_target(self):
+        bad = copy.deepcopy(self.oracles)
+        row = next(r for r in bad["cases"] if r["id"] == "regression_library_review_1000_json")
+        row["execution_source"] = row["inputs"][0]["path"]
+        with self.assertRaisesRegex(ValueError, "cannot pose as an executable"):
+            audit.validate_oracles(bad)
+
+    def test_absent_environment_variable_and_owned_temp_cleanup_must_be_restored(self):
+        expected = self.regression_library_expected("1162_os_home")
+        with self.assertRaises(ValueError):
+            audit.compare_required(expected, dict(expected, previously_absent_home_restored_to_absent=False))
+        expected = self.regression_library_expected("1197_io_temp")
+        for observed in (dict(expected, absent_TMPDIR_restored_to_absent=False),
+                         dict(expected, all_acquired_temp_paths_have_failure_cleanup=False)):
+            with self.assertRaises(ValueError):
+                audit.compare_required(expected, observed)
+
+    def test_owned_tree_parent_cleanup_precedes_child_creation_in_complete_draft(self):
+        row = next(r for r in self.runner_routes["cases"] if r["case_id"].endswith("/1193_io_read_dir_recursive.xr"))
+        source = (audit.ROOT / row["target_source_port"]["fixture"]).read_text(encoding="utf-8")
+        self.assertIn('var parent = io.tempDir()!\n    defer { io.removeAll(parent) }\n    var root = tree(parent, "rdr_tree")', source)
+        self.assertIn('fn tree(parent: Path, name: string)', source)
+        self.assertNotIn('path.join(io.tempDir()!', source)
+
+    def test_deep_refusal_retains_pressure_without_claiming_unpublished_atomic_policy(self):
+        expected = self.regression_library_expected("1195_io_remove_all")
+        for observed in (dict(expected, deep_levels=7),
+                         dict(expected, whole_refusal_without_partial_deletion=True),
+                         dict(expected, deep_cleanup_descending_level_order=list(range(70)))):
+            with self.assertRaises(ValueError):
+                audit.compare_required(expected, observed)
+
+    def test_invalid_utf8_raw_bytes_and_actual_null_cannot_be_empty_or_partial(self):
+        for name in ("1193_io_invalid_utf8", "1198_io_invalid_utf8"):
+            expected = self.regression_library_expected(name)
+            for observed in (dict(expected, invalid_decoded_result=""),
+                             dict(expected, invalid_raw_bytes=[255]),
+                             dict(expected, invalid_null_payload_string_forbidden=False)):
+                with self.assertRaises(ValueError):
+                    audit.compare_required(expected, observed)
+
+    def test_log_source_boolean_or_literal_marker_is_not_actual_callsite(self):
+        expected = self.regression_library_expected("1202_log_source")
+        for observed in (dict(expected, json_source_is_real_file_and_line_not_boolean_true=False),
+                         dict(expected, text_source_is_real_location_not_literal_marker=False)):
+            with self.assertRaises(ValueError):
+                audit.compare_required(expected, observed)
+
+    def test_buffered_logging_publishes_after_marker_then_flush_in_order(self):
+        expected = self.regression_library_expected("1203_log_async")
+        wrong = expected["body_publication_sequence"][1:4]+["before-flush"]+expected["body_publication_sequence"][4:]
+        for observed in (dict(expected, body_publication_sequence=wrong),
+                         dict(expected, queue_mode_implies_os_worker_offload=True),
+                         dict(expected, flush_drains_and_releases_owned_queue_values=False)):
+            with self.assertRaises(ValueError):
+                audit.compare_required(expected, observed)
+
+    def test_runtime_pressure_and_retained_payload_reads_cannot_be_counters_only(self):
+        expected = self.regression_library_expected("1207_runtime_stress")
+        for observed in (dict(expected, retained_strings=50),
+                         dict(expected, retained_batch_cycles=[19]),
+                         dict(expected, class_churn_nodes=5),
+                         dict(expected, child_append_rounds=1),
+                         dict(expected, collector_generational_strategy_qualified=True)):
+            with self.assertRaises(ValueError):
+                audit.compare_required(expected, observed)
+        expected = self.regression_library_expected("1206_runtime_enhanced")
+        with self.assertRaises(ValueError):
+            audit.compare_required(expected, dict(expected, post_sample_payload_values=[]))
+
+    def test_windows_real_byte_fixture_is_not_printf_skip_or_fabricated_exit_zero(self):
+        expected = self.regression_library_expected("1161_os_extended")
+        observed = copy.deepcopy(expected)
+        observed["byte_command_windows"]["exit_code"] = 0
+        with self.assertRaises(ValueError):
+            audit.compare_required(expected, observed)
+        with self.assertRaises(ValueError):
+            audit.compare_required(expected, dict(expected, captured_stdout="123456789"))
+
     def test_compression_retains_original_and_real_large_payloads_and_all_levels(self):
         expected = self.regression_library_expected("1301_compress")
         for observed in (dict(expected, original_large_iterations=[50,50]),

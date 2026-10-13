@@ -117499,6 +117499,3908 @@
         "qualification": "NOT_RUN",
         "reason": "Preserve complete civil arithmetic/diff/leap/day/zone tests. Month clamp produces2024Feb29 while originalJan31 remains unchanged; toUTC/toLocal preserve epoch timestamp and millisecond. Actual timezone/DST provider profiles are separate, no frozen host offset assumed."
       }
+    },
+    {
+      "case_id": "tests/regression/10_stdlib/1000_json.xr",
+      "source_lf_sha256": "f0d369613f234998929cc567e756b936f1758a6c5173d1e78197d4d02a6c2c8d",
+      "primary_family": "map-set-object-json",
+      "secondary_families": [
+        "typed-error-throw-try-catch",
+        "panic-trap-catch",
+        "test-entry-assertion-async",
+        "array-slice-fixed-array-range-iteration",
+        "string-rune-interpolation",
+        "ownership-read-ref-move-copy-drop",
+        "module-graph-import-export-init"
+      ],
+      "tasks": [
+        "313",
+        "314",
+        "315",
+        "316",
+        "317",
+        "318",
+        "319",
+        "320",
+        "322"
+      ],
+      "producer_packages": [
+        "P02",
+        "P06",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P12",
+        "P13",
+        "P14",
+        "P17"
+      ],
+      "semantic_basis": "Complete original JSON/system/runtime source review preserves all named bodies, full pressure and all actual normal/error/context/provider duties. Legacy counters/comments/shapes/markers do not qualify collection strategy, actual source locations, atomic filesystem policy or Windows/POSIX provider behavior.",
+      "original_runner_entries": [
+        {
+          "suite": "regression",
+          "entry": "test"
+        }
+      ],
+      "new_entry_status": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "replacement_qualification": "OPEN",
+      "original_stdout_oracle": {
+        "path": "tests/regression/10_stdlib/1000_json.xr.expected",
+        "state": "MISSING",
+        "lf_sha256": null
+      },
+      "original_regression_obligation": {
+        "entry": "test",
+        "expected_exit": 0,
+        "test_discovery": "NOT_RUN"
+      },
+      "original_named_test_obligation": {
+        "state": "REVIEWED_TEXTUAL_DECLARATIONS_NOT_RUNTIME_DISCOVERY",
+        "declarations": [
+          {
+            "name": "test_parse_primitives",
+            "marker_line": 3,
+            "source_segment_lf_sha256": "db3e8c657806c41ef24951f772d4cb2eea4aad11620a60d017954f7d22231f73"
+          },
+          {
+            "name": "test_parse_collections",
+            "marker_line": 12,
+            "source_segment_lf_sha256": "4342c28aa3e27dc8765dccdc5984ff82aad8a5f4cea1ac742d22049addad4fe7"
+          },
+          {
+            "name": "test_stringify_structural_object",
+            "marker_line": 23,
+            "source_segment_lf_sha256": "7d795f60e1d9c97360fdf00abb6a8265b505fc21f0a7bd5706e36a917fb7ac08"
+          },
+          {
+            "name": "test_is_valid",
+            "marker_line": 29,
+            "source_segment_lf_sha256": "b48e8c1c7daaa0dd40816444db45933e5437ee8dda0edc5b2267dad1002e14d9"
+          }
+        ],
+        "execution": "NOT_RUN"
+      },
+      "target_contract_review": "REQUIRED; preserve exact syntax/type/value/error responsibility and real effects, bind published family/query/error/provider/policy contracts, no guessed ABI, opaque identity, skip-to-PASS or compatibility aliases."
+    },
+    {
+      "case_id": "tests/regression/10_stdlib/1001_json_cjson_compat.xr",
+      "source_lf_sha256": "d0a970e2542ef79fdbfdb5f5bd30a0a7f95daf115665244d5476fae91ea7f6a4",
+      "primary_family": "map-set-object-json",
+      "secondary_families": [
+        "typed-error-throw-try-catch",
+        "panic-trap-catch",
+        "test-entry-assertion-async",
+        "array-slice-fixed-array-range-iteration",
+        "string-rune-interpolation",
+        "ownership-read-ref-move-copy-drop",
+        "module-graph-import-export-init"
+      ],
+      "tasks": [
+        "313",
+        "314",
+        "315",
+        "316",
+        "317",
+        "318",
+        "319",
+        "320",
+        "322"
+      ],
+      "producer_packages": [
+        "P02",
+        "P06",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P12",
+        "P13",
+        "P14",
+        "P17"
+      ],
+      "semantic_basis": "Complete original JSON/system/runtime source review preserves all named bodies, full pressure and all actual normal/error/context/provider duties. Legacy counters/comments/shapes/markers do not qualify collection strategy, actual source locations, atomic filesystem policy or Windows/POSIX provider behavior.",
+      "original_runner_entries": [
+        {
+          "suite": "regression",
+          "entry": "test"
+        }
+      ],
+      "new_entry_status": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "replacement_qualification": "OPEN",
+      "original_stdout_oracle": {
+        "path": "tests/regression/10_stdlib/1001_json_cjson_compat.xr.expected",
+        "state": "MISSING",
+        "lf_sha256": null
+      },
+      "original_regression_obligation": {
+        "entry": "test",
+        "expected_exit": 0,
+        "test_discovery": "NOT_RUN"
+      },
+      "original_named_test_obligation": {
+        "state": "REVIEWED_TEXTUAL_DECLARATIONS_NOT_RUNTIME_DISCOVERY",
+        "declarations": [
+          {
+            "name": "test_strict_grammar_matrix",
+            "marker_line": 3,
+            "source_segment_lf_sha256": "6a14580c7d2183412f26e37239aa513c5b19ed913bb5715a6e8eafb82d46efeb"
+          },
+          {
+            "name": "test_nested_document",
+            "marker_line": 18,
+            "source_segment_lf_sha256": "72ca6688353245bc2b7820f2ac901bfa8d7044dc2637ca686f90cb976c819687"
+          },
+          {
+            "name": "test_unicode_and_number_roundtrip",
+            "marker_line": 27,
+            "source_segment_lf_sha256": "1812b3edc8018652c0880b92c55168788973d547653406b72c6f1edff48c39bc"
+          }
+        ],
+        "execution": "NOT_RUN"
+      },
+      "target_contract_review": "REQUIRED; preserve exact syntax/type/value/error responsibility and real effects, bind published family/query/error/provider/policy contracts, no guessed ABI, opaque identity, skip-to-PASS or compatibility aliases."
+    },
+    {
+      "case_id": "tests/regression/10_stdlib/1002_json_string.xr",
+      "source_lf_sha256": "1105d4bae806b86ce5d39d11dfc48a3b1b9249aa7f87f105e495d3470ede590f",
+      "primary_family": "map-set-object-json",
+      "secondary_families": [
+        "typed-error-throw-try-catch",
+        "panic-trap-catch",
+        "test-entry-assertion-async",
+        "array-slice-fixed-array-range-iteration",
+        "string-rune-interpolation",
+        "ownership-read-ref-move-copy-drop",
+        "module-graph-import-export-init"
+      ],
+      "tasks": [
+        "313",
+        "314",
+        "315",
+        "316",
+        "317",
+        "318",
+        "319",
+        "320",
+        "322"
+      ],
+      "producer_packages": [
+        "P02",
+        "P06",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P12",
+        "P13",
+        "P14",
+        "P17"
+      ],
+      "semantic_basis": "Complete original JSON/system/runtime source review preserves all named bodies, full pressure and all actual normal/error/context/provider duties. Legacy counters/comments/shapes/markers do not qualify collection strategy, actual source locations, atomic filesystem policy or Windows/POSIX provider behavior.",
+      "original_runner_entries": [
+        {
+          "suite": "regression",
+          "entry": "test"
+        }
+      ],
+      "new_entry_status": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "replacement_qualification": "OPEN",
+      "original_stdout_oracle": {
+        "path": "tests/regression/10_stdlib/1002_json_string.xr.expected",
+        "state": "MISSING",
+        "lf_sha256": null
+      },
+      "original_regression_obligation": {
+        "entry": "test",
+        "expected_exit": 0,
+        "test_discovery": "NOT_RUN"
+      },
+      "original_named_test_obligation": {
+        "state": "REVIEWED_TEXTUAL_DECLARATIONS_NOT_RUNTIME_DISCOVERY",
+        "declarations": [
+          {
+            "name": "test_empty_string",
+            "marker_line": 10,
+            "source_segment_lf_sha256": "acd7a680bffca3d905ec8d2669fae2a8374c65975ab46bdd8f7fe34ce8a1633f"
+          },
+          {
+            "name": "test_simple_string",
+            "marker_line": 17,
+            "source_segment_lf_sha256": "82c4cb6f49f33ef2943407f22fb1547c56c0d6c9e168509aff39fcdea9ad2ffc"
+          },
+          {
+            "name": "test_string_with_spaces",
+            "marker_line": 24,
+            "source_segment_lf_sha256": "79ac3a3701a324f06f6bd361f6f3efe9bca2a5c91a229fe5ebcf456c2487121d"
+          },
+          {
+            "name": "test_single_character_string",
+            "marker_line": 32,
+            "source_segment_lf_sha256": "d173aacca07e3b847f897057487daf141953c6af9571d26ec9d6a6f0f8c4fdbe"
+          },
+          {
+            "name": "test_escape_quote",
+            "marker_line": 42,
+            "source_segment_lf_sha256": "760d41a5904ff7bbbe67b84111bee5470e948e48b1382645f71902f668aa7705"
+          },
+          {
+            "name": "test_escape_backslash",
+            "marker_line": 49,
+            "source_segment_lf_sha256": "14f5b7cba35314c80dfb3d2f714a5cb6de78c927ee6f6170ea48577dbfa57aa0"
+          },
+          {
+            "name": "test_escape_slash",
+            "marker_line": 56,
+            "source_segment_lf_sha256": "ef9f24169177da12faae94f982798988eeaf55ee6236306ccd22668a11b2094b"
+          },
+          {
+            "name": "test_escape_newline",
+            "marker_line": 63,
+            "source_segment_lf_sha256": "4d44b98e8e6de6abc57d32ed8fb31220c07c59ed38cd51a4dc032bb1eb3e4794"
+          },
+          {
+            "name": "test_escape_tab",
+            "marker_line": 70,
+            "source_segment_lf_sha256": "35fc696105ddc0b8c402f99e6a2d0a1a18d5e670776e753738b084b8ecfa1451"
+          },
+          {
+            "name": "test_escape_carriage_return",
+            "marker_line": 77,
+            "source_segment_lf_sha256": "d3270ce704fb36fd82f388eff9db06d168bf995d0a9b5fad1cf1bbfa6b0153d6"
+          },
+          {
+            "name": "test_escape_backspace",
+            "marker_line": 84,
+            "source_segment_lf_sha256": "4a4dd48f9ef35759af9783900fe93ab780b2f34bda75f91d7215924609a671a8"
+          },
+          {
+            "name": "test_escape_formfeed",
+            "marker_line": 91,
+            "source_segment_lf_sha256": "4b13f534c8a755ef42013db9fbb838c59c6d40624930f1bf2a10f08b0548f8c3"
+          },
+          {
+            "name": "test_multiple_escapes",
+            "marker_line": 98,
+            "source_segment_lf_sha256": "c73af4adf3522eb006476b5b90f5a45c06af6765e1e744504f6d1b5dc4c19704"
+          },
+          {
+            "name": "test_consecutive_escapes",
+            "marker_line": 106,
+            "source_segment_lf_sha256": "ea33a968d61e3a1d2d1661f73085ad2930851b80a7fbba6e0bde8d92f85faba9"
+          },
+          {
+            "name": "test_unicode_escape_basic",
+            "marker_line": 116,
+            "source_segment_lf_sha256": "5dcad8b446190d122adb55701933cd2d6696fda49727c7c6a87ededf9260549d"
+          },
+          {
+            "name": "test_unicode_escape_space",
+            "marker_line": 123,
+            "source_segment_lf_sha256": "210fb4db020c87c75e553071188f7b03d00e1a97ebf081f7cd8a5be4d448eff3"
+          },
+          {
+            "name": "test_unicode_escape_chinese",
+            "marker_line": 130,
+            "source_segment_lf_sha256": "da06f75e077ab24a3669364c9d4d33b6b8e6f0a21d17bd320fed34440ada2bd2"
+          },
+          {
+            "name": "test_unicode_escape_emoji_bmp",
+            "marker_line": 137,
+            "source_segment_lf_sha256": "4b308299d8eb71cae286960677c179619f32d23536abb2c3b5548cfae62b58f4"
+          },
+          {
+            "name": "test_unicode_escape_mixed",
+            "marker_line": 144,
+            "source_segment_lf_sha256": "5fc029dfb3347bfe551e01bce10af10cefd86411b25a04ed89b9b99954621d82"
+          },
+          {
+            "name": "test_unicode_lowercase",
+            "marker_line": 151,
+            "source_segment_lf_sha256": "bdab7c50d64baffd4510be2818cbf9c9631e6c8605547e9985d2c4ac11370284"
+          },
+          {
+            "name": "test_unicode_uppercase",
+            "marker_line": 158,
+            "source_segment_lf_sha256": "3f072015e009d2b72f79a91a47e7cd9ad2c2f656a7b3a8a8d3736aa70f8ef7ee"
+          },
+          {
+            "name": "test_surrogate_pair_emoji",
+            "marker_line": 167,
+            "source_segment_lf_sha256": "f9f40eb7c819697ea69af53f1561568f5ab5178bf67637b81e93309c29ab4f59"
+          },
+          {
+            "name": "test_surrogate_pair_another_emoji",
+            "marker_line": 174,
+            "source_segment_lf_sha256": "15143e8fde4ded2fd5a528ab97d917248fc7936567f75a6bd25e689f4d3651be"
+          },
+          {
+            "name": "test_direct_chinese",
+            "marker_line": 183,
+            "source_segment_lf_sha256": "e52c964acac3c477ec58266880432ff4871f1e69e333d9f9d79d3104e01519ff"
+          },
+          {
+            "name": "test_direct_japanese",
+            "marker_line": 190,
+            "source_segment_lf_sha256": "ff3b4afa19e7e108a189deb650d5b3e3f853afee04aade0852d6ec405b9a86ad"
+          },
+          {
+            "name": "test_direct_korean",
+            "marker_line": 196,
+            "source_segment_lf_sha256": "a308b0185253c02815e7f035feb52a0973283a3e7367e4d31741f68bc97da143"
+          },
+          {
+            "name": "test_direct_emoji",
+            "marker_line": 202,
+            "source_segment_lf_sha256": "e7d18519e8d4fefa0c112ccac024c308c5694a51fb5cb49077ee054b06f1d2de"
+          },
+          {
+            "name": "test_mixed_unicode_ascii",
+            "marker_line": 208,
+            "source_segment_lf_sha256": "314d20e9ec806b1ff1840fa58d84859466e57425b84513b65094a4fa33240431"
+          },
+          {
+            "name": "test_string_with_numbers",
+            "marker_line": 218,
+            "source_segment_lf_sha256": "5db88941201a0b4ceb15c0cd62db60ba250fc9aa9ecd96c0b37ff8c9eab4f1e0"
+          },
+          {
+            "name": "test_string_with_keywords",
+            "marker_line": 225,
+            "source_segment_lf_sha256": "98f98d183dba3b41d1888674a0d3843c4f242bfea1abebc0ffb28afa8dc5cfe0"
+          },
+          {
+            "name": "test_string_with_json_chars",
+            "marker_line": 233,
+            "source_segment_lf_sha256": "21b5b6899772d22704775853f8e03831a49a1557b1c773e51717a6c3308f1560"
+          },
+          {
+            "name": "test_string_array",
+            "marker_line": 243,
+            "source_segment_lf_sha256": "59bb63b34f2b0f5ece416c57f3ad752f82d758f91e371468542d177ed06a91b0"
+          },
+          {
+            "name": "test_mixed_string_array",
+            "marker_line": 252,
+            "source_segment_lf_sha256": "29e7c0c49d031e4853f6b9c70c7304edaa7974872b6dac40613f3cc73948ed50"
+          },
+          {
+            "name": "test_string_object_keys",
+            "marker_line": 262,
+            "source_segment_lf_sha256": "d0bf5b73a4e572694579a77c4d645620ac2d2e8c52c3206d5255dbb8f9b9f500"
+          },
+          {
+            "name": "test_unicode_object_keys",
+            "marker_line": 269,
+            "source_segment_lf_sha256": "85acb509090555dd57aa8f0297af8f7101b4b9e46c92f69f9f906b23f7d76869"
+          },
+          {
+            "name": "test_stringify_escape_quote",
+            "marker_line": 281,
+            "source_segment_lf_sha256": "24553396e186e021ab979a4c7201961ab87320dcf0b3049634a16070e808f687"
+          },
+          {
+            "name": "test_stringify_escape_backslash",
+            "marker_line": 288,
+            "source_segment_lf_sha256": "6764a3ce711ef038f5835becbcbe5c37636c4a548ad2b160403eb8fa5aea2b61"
+          },
+          {
+            "name": "test_stringify_escape_newline",
+            "marker_line": 295,
+            "source_segment_lf_sha256": "1f9c2bbe2568a5d699b2fdf89c002c761ba5651c9c08a58129a8486d5acabd36"
+          },
+          {
+            "name": "test_stringify_unicode",
+            "marker_line": 302,
+            "source_segment_lf_sha256": "34d2f23f9c10aa5dd83103fa62def1a7be06d9a2aea97764b49a851ff20fd856"
+          }
+        ],
+        "execution": "NOT_RUN"
+      },
+      "target_contract_review": "REQUIRED; preserve exact syntax/type/value/error responsibility and real effects, bind published family/query/error/provider/policy contracts, no guessed ABI, opaque identity, skip-to-PASS or compatibility aliases."
+    },
+    {
+      "case_id": "tests/regression/10_stdlib/1003_json_error.xr",
+      "source_lf_sha256": "47eb89bb122e3c300d5f6d640119a258d333f43557480a1176f628caa4c7eea9",
+      "primary_family": "map-set-object-json",
+      "secondary_families": [
+        "typed-error-throw-try-catch",
+        "panic-trap-catch",
+        "test-entry-assertion-async",
+        "array-slice-fixed-array-range-iteration",
+        "string-rune-interpolation",
+        "ownership-read-ref-move-copy-drop",
+        "module-graph-import-export-init"
+      ],
+      "tasks": [
+        "313",
+        "314",
+        "315",
+        "316",
+        "317",
+        "318",
+        "319",
+        "320",
+        "322"
+      ],
+      "producer_packages": [
+        "P02",
+        "P06",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P12",
+        "P13",
+        "P14",
+        "P17"
+      ],
+      "semantic_basis": "Complete original JSON/system/runtime source review preserves all named bodies, full pressure and all actual normal/error/context/provider duties. Legacy counters/comments/shapes/markers do not qualify collection strategy, actual source locations, atomic filesystem policy or Windows/POSIX provider behavior.",
+      "original_runner_entries": [
+        {
+          "suite": "regression",
+          "entry": "test"
+        }
+      ],
+      "new_entry_status": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "replacement_qualification": "OPEN",
+      "original_stdout_oracle": {
+        "path": "tests/regression/10_stdlib/1003_json_error.xr.expected",
+        "state": "MISSING",
+        "lf_sha256": null
+      },
+      "original_regression_obligation": {
+        "entry": "test",
+        "expected_exit": 0,
+        "test_discovery": "NOT_RUN"
+      },
+      "original_named_test_obligation": {
+        "state": "REVIEWED_TEXTUAL_DECLARATIONS_NOT_RUNTIME_DISCOVERY",
+        "declarations": [
+          {
+            "name": "test_invalid_documents",
+            "marker_line": 3,
+            "source_segment_lf_sha256": "6b3883a1f63f93a769e90608c88488f9c907a473d8aa49768f91c476e113e2c0"
+          },
+          {
+            "name": "test_parse_value_throws_on_error",
+            "marker_line": 12,
+            "source_segment_lf_sha256": "78e904349d23255fe076abd1d6bc84d51b6ace14f0893378a2bfaaaaa0021f3d"
+          },
+          {
+            "name": "test_valid_whitespace",
+            "marker_line": 24,
+            "source_segment_lf_sha256": "6096bd91c8c53389cf9670c1e6cd54e11fb66e75fcf3798eec9718dec97f70fb"
+          }
+        ],
+        "execution": "NOT_RUN"
+      },
+      "target_contract_review": "REQUIRED; preserve exact syntax/type/value/error responsibility and real effects, bind published family/query/error/provider/policy contracts, no guessed ABI, opaque identity, skip-to-PASS or compatibility aliases."
+    },
+    {
+      "case_id": "tests/regression/10_stdlib/1004_json_nested.xr",
+      "source_lf_sha256": "af167ff5f25cc11b831f008a8e29eccf6f48d20fc771f6aa3fed81268d5b76a5",
+      "primary_family": "map-set-object-json",
+      "secondary_families": [
+        "typed-error-throw-try-catch",
+        "panic-trap-catch",
+        "test-entry-assertion-async",
+        "array-slice-fixed-array-range-iteration",
+        "string-rune-interpolation",
+        "ownership-read-ref-move-copy-drop",
+        "module-graph-import-export-init"
+      ],
+      "tasks": [
+        "313",
+        "314",
+        "315",
+        "316",
+        "317",
+        "318",
+        "319",
+        "320",
+        "322"
+      ],
+      "producer_packages": [
+        "P02",
+        "P06",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P12",
+        "P13",
+        "P14",
+        "P17"
+      ],
+      "semantic_basis": "Complete original JSON/system/runtime source review preserves all named bodies, full pressure and all actual normal/error/context/provider duties. Legacy counters/comments/shapes/markers do not qualify collection strategy, actual source locations, atomic filesystem policy or Windows/POSIX provider behavior.",
+      "original_runner_entries": [
+        {
+          "suite": "regression",
+          "entry": "test"
+        }
+      ],
+      "new_entry_status": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "replacement_qualification": "OPEN",
+      "original_stdout_oracle": {
+        "path": "tests/regression/10_stdlib/1004_json_nested.xr.expected",
+        "state": "MISSING",
+        "lf_sha256": null
+      },
+      "original_regression_obligation": {
+        "entry": "test",
+        "expected_exit": 0,
+        "test_discovery": "NOT_RUN"
+      },
+      "original_named_test_obligation": {
+        "state": "REVIEWED_TEXTUAL_DECLARATIONS_NOT_RUNTIME_DISCOVERY",
+        "declarations": [
+          {
+            "name": "test_nested_array_2_levels",
+            "marker_line": 10,
+            "source_segment_lf_sha256": "64bf27b18208b2d55f5834ba8f7436f0984f2b3bd40f93661409a278969cf324"
+          },
+          {
+            "name": "test_nested_array_3_levels",
+            "marker_line": 20,
+            "source_segment_lf_sha256": "87d0f11551e7bca593cc33743725989e0ddfdb86c8f5b2435963370a701c1b02"
+          },
+          {
+            "name": "test_nested_array_deep",
+            "marker_line": 29,
+            "source_segment_lf_sha256": "fbc48d0deea79ef0fc5e9d4b07e1f5d2a62c1a257cb02cc83b271de16c6c9590"
+          },
+          {
+            "name": "test_nested_empty_arrays",
+            "marker_line": 36,
+            "source_segment_lf_sha256": "f2928f93b7d8b1cb7e76726cd38115f54a958059f0809b2184fc87a855b86a15"
+          },
+          {
+            "name": "test_nested_object_2_levels",
+            "marker_line": 48,
+            "source_segment_lf_sha256": "4b25b0eb192c0cd1c5f68ca9699dcebb4cff0ccce2649cdfacb18a4593c5d587"
+          },
+          {
+            "name": "test_nested_object_3_levels",
+            "marker_line": 55,
+            "source_segment_lf_sha256": "dd88f6411fa5ed599f8078e45e6d072c31772ddf4c8b5c3d3129befe6430ada6"
+          },
+          {
+            "name": "test_nested_object_deep",
+            "marker_line": 61,
+            "source_segment_lf_sha256": "41355e1722b0f52eac08ea38bd05aa4f43b85a71724605aef63078d6cf287475"
+          },
+          {
+            "name": "test_nested_empty_objects",
+            "marker_line": 68,
+            "source_segment_lf_sha256": "d6b265fa836fc8037c8c7d08462868ce88531fc5a8d4e14b2d2eefe05519652b"
+          },
+          {
+            "name": "test_object_with_arrays",
+            "marker_line": 77,
+            "source_segment_lf_sha256": "fac9a5ba54a293dfca5cf682ae1589cb384a27f1ebe616b0d29ffe8874d96252"
+          },
+          {
+            "name": "test_array_with_objects",
+            "marker_line": 85,
+            "source_segment_lf_sha256": "89972cd9c1e89b3f29e6fbc8d4956d268f9496ad2dd68302242fa31a482d606c"
+          },
+          {
+            "name": "test_complex_mixed",
+            "marker_line": 94,
+            "source_segment_lf_sha256": "5ca23144fcb9163018e3b8f906c1942ced6220e597483ecb178570950cf8c9ef"
+          },
+          {
+            "name": "test_object_many_keys",
+            "marker_line": 106,
+            "source_segment_lf_sha256": "0b880d30aa782e2e0868cc21080723044953383688e2010e2873ba1d4f3cecba"
+          },
+          {
+            "name": "test_object_long_keys",
+            "marker_line": 114,
+            "source_segment_lf_sha256": "82cac4bc79c3e75ab27034fcdec044b9aa6c631d8c9915c89a56fd91b5843c81"
+          },
+          {
+            "name": "test_large_array",
+            "marker_line": 123,
+            "source_segment_lf_sha256": "a6ce68d682f51f0d6c9ed207ec98196c8f71e5ea9ba9a5202afa74835bf8e7a8"
+          },
+          {
+            "name": "test_user_profile",
+            "marker_line": 146,
+            "source_segment_lf_sha256": "1b3ad1afea486891f03ccc8f66ee9c440fbfc8f15c2db178a8686859ad82433f"
+          },
+          {
+            "name": "test_api_response",
+            "marker_line": 158,
+            "source_segment_lf_sha256": "fd03907632874a0bd31a351cd44e5ef2f17efb98fb439c91da28264fe06deb42"
+          },
+          {
+            "name": "test_geojson_like",
+            "marker_line": 170,
+            "source_segment_lf_sha256": "33422045a3f8276c6d6a11b1059b9910ee7acf1faeba698034a952467aafb23f"
+          },
+          {
+            "name": "test_config_file",
+            "marker_line": 180,
+            "source_segment_lf_sha256": "5c1c8b1412b4866065f2338f274d2af9a57bf01a5f212f4de537ec3b8f28a43d"
+          },
+          {
+            "name": "test_single_element_array",
+            "marker_line": 193,
+            "source_segment_lf_sha256": "9dc121cef61dc68fce53f2570ab86b32d779895120321608aadcbad29c62a032"
+          },
+          {
+            "name": "test_single_key_object",
+            "marker_line": 200,
+            "source_segment_lf_sha256": "625137f3524db1b4221626ac9ece8ba22a9602064521bfb876d3d09a78d4c2a8"
+          },
+          {
+            "name": "test_mixed_types_array",
+            "marker_line": 206,
+            "source_segment_lf_sha256": "88dc2a98dcfc16a6646fc238684000daa047450bd41fc0de0ba5301e60eba37e"
+          },
+          {
+            "name": "test_null_values_in_object",
+            "marker_line": 219,
+            "source_segment_lf_sha256": "795599a2379899bc06e81448023bbf491b6a756fa3d5bcfacef190383861c37a"
+          },
+          {
+            "name": "test_boolean_values_in_object",
+            "marker_line": 227,
+            "source_segment_lf_sha256": "fcee0d0eb74af850f56bcd99641e98688ca24dff1ad7a5e4103c3f4b5c721d2e"
+          },
+          {
+            "name": "test_stringify_nested_array",
+            "marker_line": 236,
+            "source_segment_lf_sha256": "0bc1fa1311eb806c3b12b2b74d51997ce2b0f074bcf796911f6240c4468ffd8d"
+          },
+          {
+            "name": "test_stringify_nested_object",
+            "marker_line": 245,
+            "source_segment_lf_sha256": "b6bbabe9a773c6b060693e03a2e3e0d932638276799855fc1539bb7a796d0993"
+          },
+          {
+            "name": "test_stringify_complex",
+            "marker_line": 253,
+            "source_segment_lf_sha256": "b42c81e7853628f6f2a806497eeca6d753b72bed4cdfecf445a231683efebb91"
+          }
+        ],
+        "execution": "NOT_RUN"
+      },
+      "target_contract_review": "REQUIRED; preserve exact syntax/type/value/error responsibility and real effects, bind published family/query/error/provider/policy contracts, no guessed ABI, opaque identity, skip-to-PASS or compatibility aliases."
+    },
+    {
+      "case_id": "tests/regression/10_stdlib/1005_json_special.xr",
+      "source_lf_sha256": "90f819eecc6fe2eb4edffd0fef39fd36e44ce5c358f1d6be607e86c42b02f4b2",
+      "primary_family": "map-set-object-json",
+      "secondary_families": [
+        "typed-error-throw-try-catch",
+        "panic-trap-catch",
+        "test-entry-assertion-async",
+        "array-slice-fixed-array-range-iteration",
+        "string-rune-interpolation",
+        "ownership-read-ref-move-copy-drop",
+        "module-graph-import-export-init"
+      ],
+      "tasks": [
+        "313",
+        "314",
+        "315",
+        "316",
+        "317",
+        "318",
+        "319",
+        "320",
+        "322"
+      ],
+      "producer_packages": [
+        "P02",
+        "P06",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P12",
+        "P13",
+        "P14",
+        "P17"
+      ],
+      "semantic_basis": "Complete original JSON/system/runtime source review preserves all named bodies, full pressure and all actual normal/error/context/provider duties. Legacy counters/comments/shapes/markers do not qualify collection strategy, actual source locations, atomic filesystem policy or Windows/POSIX provider behavior.",
+      "original_runner_entries": [
+        {
+          "suite": "regression",
+          "entry": "test"
+        }
+      ],
+      "new_entry_status": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "replacement_qualification": "OPEN",
+      "original_stdout_oracle": {
+        "path": "tests/regression/10_stdlib/1005_json_special.xr.expected",
+        "state": "MISSING",
+        "lf_sha256": null
+      },
+      "original_regression_obligation": {
+        "entry": "test",
+        "expected_exit": 0,
+        "test_discovery": "NOT_RUN"
+      },
+      "original_named_test_obligation": {
+        "state": "REVIEWED_TEXTUAL_DECLARATIONS_NOT_RUNTIME_DISCOVERY",
+        "declarations": [
+          {
+            "name": "test_string_escaping",
+            "marker_line": 3,
+            "source_segment_lf_sha256": "9700bebdcf080395afe40484c5587a881c88205661141ad1c7ffcbf2fd0b468b"
+          },
+          {
+            "name": "test_object_keys_and_values",
+            "marker_line": 9,
+            "source_segment_lf_sha256": "05b67602824ea9086666f4973104a583c8e5c13b7875450dece3eea83f14655e"
+          },
+          {
+            "name": "test_empty_collections",
+            "marker_line": 20,
+            "source_segment_lf_sha256": "cb7d81462095637695bac4fd0ceddafbd15747bddd41c01cf0d24c05a659c405"
+          }
+        ],
+        "execution": "NOT_RUN"
+      },
+      "target_contract_review": "REQUIRED; preserve exact syntax/type/value/error responsibility and real effects, bind published family/query/error/provider/policy contracts, no guessed ABI, opaque identity, skip-to-PASS or compatibility aliases."
+    },
+    {
+      "case_id": "tests/regression/10_stdlib/1006_json_roundtrip.xr",
+      "source_lf_sha256": "94c5b93e02075f0d96831441f6428d021f76341d0cb27fbba1da8b2eeaab644c",
+      "primary_family": "map-set-object-json",
+      "secondary_families": [
+        "typed-error-throw-try-catch",
+        "panic-trap-catch",
+        "test-entry-assertion-async",
+        "array-slice-fixed-array-range-iteration",
+        "string-rune-interpolation",
+        "ownership-read-ref-move-copy-drop",
+        "module-graph-import-export-init"
+      ],
+      "tasks": [
+        "313",
+        "314",
+        "315",
+        "316",
+        "317",
+        "318",
+        "319",
+        "320",
+        "322"
+      ],
+      "producer_packages": [
+        "P02",
+        "P06",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P12",
+        "P13",
+        "P14",
+        "P17"
+      ],
+      "semantic_basis": "Complete original JSON/system/runtime source review preserves all named bodies, full pressure and all actual normal/error/context/provider duties. Legacy counters/comments/shapes/markers do not qualify collection strategy, actual source locations, atomic filesystem policy or Windows/POSIX provider behavior.",
+      "original_runner_entries": [
+        {
+          "suite": "regression",
+          "entry": "test"
+        }
+      ],
+      "new_entry_status": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "replacement_qualification": "OPEN",
+      "original_stdout_oracle": {
+        "path": "tests/regression/10_stdlib/1006_json_roundtrip.xr.expected",
+        "state": "MISSING",
+        "lf_sha256": null
+      },
+      "original_regression_obligation": {
+        "entry": "test",
+        "expected_exit": 0,
+        "test_discovery": "NOT_RUN"
+      },
+      "original_named_test_obligation": {
+        "state": "REVIEWED_TEXTUAL_DECLARATIONS_NOT_RUNTIME_DISCOVERY",
+        "declarations": [
+          {
+            "name": "test_primitive_roundtrip",
+            "marker_line": 3,
+            "source_segment_lf_sha256": "229ef3436a1593c8c5dc4df5da76889e973f8fe43c1b3733a4f82b83202bc988"
+          },
+          {
+            "name": "test_nested_roundtrip",
+            "marker_line": 13,
+            "source_segment_lf_sha256": "27aab6cf1250d8836ae34fb4d88c3971daaa08bd5b09f75c9cb727267670053d"
+          },
+          {
+            "name": "test_parsed_value_stability",
+            "marker_line": 29,
+            "source_segment_lf_sha256": "f5282bdb4a01b101b66a58e274bb075bc06f98ae0eb1c41097bbc7aaf7216a60"
+          }
+        ],
+        "execution": "NOT_RUN"
+      },
+      "target_contract_review": "REQUIRED; preserve exact syntax/type/value/error responsibility and real effects, bind published family/query/error/provider/policy contracts, no guessed ABI, opaque identity, skip-to-PASS or compatibility aliases."
+    },
+    {
+      "case_id": "tests/regression/10_stdlib/1007_json_fuzz.xr",
+      "source_lf_sha256": "c864acc31a0a5a0dc5669d7544daaf7359f2523a88de56bac0ad5a247a487730",
+      "primary_family": "map-set-object-json",
+      "secondary_families": [
+        "typed-error-throw-try-catch",
+        "panic-trap-catch",
+        "test-entry-assertion-async",
+        "array-slice-fixed-array-range-iteration",
+        "string-rune-interpolation",
+        "ownership-read-ref-move-copy-drop",
+        "module-graph-import-export-init"
+      ],
+      "tasks": [
+        "313",
+        "314",
+        "315",
+        "316",
+        "317",
+        "318",
+        "319",
+        "320",
+        "322"
+      ],
+      "producer_packages": [
+        "P02",
+        "P06",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P12",
+        "P13",
+        "P14",
+        "P17"
+      ],
+      "semantic_basis": "Complete original JSON/system/runtime source review preserves all named bodies, full pressure and all actual normal/error/context/provider duties. Legacy counters/comments/shapes/markers do not qualify collection strategy, actual source locations, atomic filesystem policy or Windows/POSIX provider behavior.",
+      "original_runner_entries": [
+        {
+          "suite": "regression",
+          "entry": "test"
+        }
+      ],
+      "new_entry_status": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "replacement_qualification": "OPEN",
+      "original_stdout_oracle": {
+        "path": "tests/regression/10_stdlib/1007_json_fuzz.xr.expected",
+        "state": "MISSING",
+        "lf_sha256": null
+      },
+      "original_regression_obligation": {
+        "entry": "test",
+        "expected_exit": 0,
+        "test_discovery": "NOT_RUN"
+      },
+      "original_named_test_obligation": {
+        "state": "REVIEWED_TEXTUAL_DECLARATIONS_NOT_RUNTIME_DISCOVERY",
+        "declarations": [
+          {
+            "name": "test_deep_nested_arrays",
+            "marker_line": 9,
+            "source_segment_lf_sha256": "2c06d6ac41f5e853f7d8114ad504337cb3ae7aff439e43b92ffb2d728ee4bfb4"
+          },
+          {
+            "name": "test_deep_nested_objects",
+            "marker_line": 16,
+            "source_segment_lf_sha256": "09a75f02d7308b783a43399a2bb992cf24f90e41a2a78c2a0e83390b5d6babcc"
+          },
+          {
+            "name": "test_alternating_array_object_nesting",
+            "marker_line": 23,
+            "source_segment_lf_sha256": "483912168786b2ab6b66716a805c4594dae13e8c07a806f0fa876f385dcc7b13"
+          },
+          {
+            "name": "test_empty_object",
+            "marker_line": 35,
+            "source_segment_lf_sha256": "8f875cfff35fbd981edc032b6741fc6c4ff6d47d69784b39e94f854eaf27c9bf"
+          },
+          {
+            "name": "test_empty_array",
+            "marker_line": 41,
+            "source_segment_lf_sha256": "2f175b7792ff16ebdac8b9e47d8a4e4588860a0fc93e67881ea1652bf8b18e3f"
+          },
+          {
+            "name": "test_nested_empties",
+            "marker_line": 47,
+            "source_segment_lf_sha256": "0b083c05c54bc03eeb03e87002fcafb35f2b7ce09a9efaa052deacbce0e9f0e7"
+          },
+          {
+            "name": "test_escaped_characters",
+            "marker_line": 58,
+            "source_segment_lf_sha256": "b3c7af286234e8612117101043610cfcba8542ff58cfcf7f35e4df6681789cb8"
+          },
+          {
+            "name": "test_empty_string_value",
+            "marker_line": 65,
+            "source_segment_lf_sha256": "7760e60224f1c1ebf2519526fe31105e9bd56b189de4df46b7eed998eac2e7b6"
+          },
+          {
+            "name": "test_string_with_special_chars",
+            "marker_line": 72,
+            "source_segment_lf_sha256": "831d9e1b716c6ccd991e10b2e13c2e26186740aeeac171420b0abe0fa95edae3"
+          },
+          {
+            "name": "test_zero_values",
+            "marker_line": 81,
+            "source_segment_lf_sha256": "165b589c5ccc2737a721035ceedd5bd046d86d8be5cf1724f90c7a135286927e"
+          },
+          {
+            "name": "test_large_integers",
+            "marker_line": 89,
+            "source_segment_lf_sha256": "5edff514cacdf59b1718bcd02594d14296862dd0df7a0426fcae774a234e7040"
+          },
+          {
+            "name": "test_float_precision",
+            "marker_line": 97,
+            "source_segment_lf_sha256": "ba9ce0a347cdb3ac996f630772941a5f78d6fa72c941e4444efa1959ede327d6"
+          },
+          {
+            "name": "test_scientific_notation",
+            "marker_line": 106,
+            "source_segment_lf_sha256": "8feec9ad5af8282e84b763cbe77f7d9f2f17f8a40b49a9a70cfb87c05ee308bf"
+          },
+          {
+            "name": "test_boolean_and_null_array",
+            "marker_line": 117,
+            "source_segment_lf_sha256": "e80ac7cfbb1e080ec1618edb87f87608e8de7867f313b5fac8e8b2618c2c7e3d"
+          },
+          {
+            "name": "test_extra_whitespace",
+            "marker_line": 132,
+            "source_segment_lf_sha256": "095197c85cd56fb0ceb91297891a8f5315199b8233ce583675b158fb5bdbb8ab"
+          },
+          {
+            "name": "test_newlines_in_json",
+            "marker_line": 141,
+            "source_segment_lf_sha256": "8d614789d4363a80cfdeb866c8b5f97e781b3705fd06fddbb0bd4e3d9911f7c2"
+          },
+          {
+            "name": "test_large_array_200",
+            "marker_line": 151,
+            "source_segment_lf_sha256": "bf6765859cd052f9273e0b832bc4f607ed40258f4f67da7350096286f38b301d"
+          },
+          {
+            "name": "test_many_keys_object",
+            "marker_line": 167,
+            "source_segment_lf_sha256": "9dfaa96c27b95256fc859fd7765379fc02d4cf39b6d10cc720c69c8551c00baa"
+          },
+          {
+            "name": "test_roundtrip_nested",
+            "marker_line": 182,
+            "source_segment_lf_sha256": "f254364a7bfad2c643369758b0a93f81edf831047aac1f55e1fba5952a17d099"
+          },
+          {
+            "name": "test_roundtrip_array_of_objects",
+            "marker_line": 199,
+            "source_segment_lf_sha256": "513b93438e4fea9bc8c6dddcb54bd530f5635474f3a196b68f6dc965fac2f484"
+          },
+          {
+            "name": "test_heterogeneous_array",
+            "marker_line": 216,
+            "source_segment_lf_sha256": "4599bc60016cb98d28f17b22274890eb7cd471a73d7a91988ddb3f9e5959e6b2"
+          },
+          {
+            "name": "test_parse_single_string",
+            "marker_line": 232,
+            "source_segment_lf_sha256": "ad0ef6a76e6d1114412edb8d38bc5208da0ee4d5df849052cc81238d71aeabb5"
+          },
+          {
+            "name": "test_parse_single_number",
+            "marker_line": 239,
+            "source_segment_lf_sha256": "cdcff609f1634b0819457a550b8ab81791d881ee9583f896f5fa6e6068088d07"
+          },
+          {
+            "name": "test_parse_single_boolean",
+            "marker_line": 245,
+            "source_segment_lf_sha256": "540544d5d9e05454968c80cb1d7ba7226583719153b5bc9071d30f81646b7f69"
+          },
+          {
+            "name": "test_parse_single_null",
+            "marker_line": 251,
+            "source_segment_lf_sha256": "31d49a4fe895b26cd62a62440fbbf717ef8c900b0c7ed0ddc2445e6e26105c4d"
+          }
+        ],
+        "execution": "NOT_RUN"
+      },
+      "target_contract_review": "REQUIRED; preserve exact syntax/type/value/error responsibility and real effects, bind published family/query/error/provider/policy contracts, no guessed ABI, opaque identity, skip-to-PASS or compatibility aliases."
+    },
+    {
+      "case_id": "tests/regression/10_stdlib/1008_json_yaml_fuzz.xr",
+      "source_lf_sha256": "0a107c9e5d35f2798fd0be7827459e10b53567e6839eb2af5647d6ad71eb9877",
+      "primary_family": "map-set-object-json",
+      "secondary_families": [
+        "typed-error-throw-try-catch",
+        "panic-trap-catch",
+        "test-entry-assertion-async",
+        "array-slice-fixed-array-range-iteration",
+        "string-rune-interpolation",
+        "ownership-read-ref-move-copy-drop",
+        "module-graph-import-export-init"
+      ],
+      "tasks": [
+        "313",
+        "314",
+        "315",
+        "316",
+        "317",
+        "318",
+        "319",
+        "320",
+        "322"
+      ],
+      "producer_packages": [
+        "P02",
+        "P06",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P12",
+        "P13",
+        "P14",
+        "P17"
+      ],
+      "semantic_basis": "Complete original JSON/system/runtime source review preserves all named bodies, full pressure and all actual normal/error/context/provider duties. Legacy counters/comments/shapes/markers do not qualify collection strategy, actual source locations, atomic filesystem policy or Windows/POSIX provider behavior.",
+      "original_runner_entries": [
+        {
+          "suite": "regression",
+          "entry": "test"
+        }
+      ],
+      "new_entry_status": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "replacement_qualification": "OPEN",
+      "original_stdout_oracle": {
+        "path": "tests/regression/10_stdlib/1008_json_yaml_fuzz.xr.expected",
+        "state": "MISSING",
+        "lf_sha256": null
+      },
+      "original_regression_obligation": {
+        "entry": "test",
+        "expected_exit": 0,
+        "test_discovery": "NOT_RUN"
+      },
+      "original_named_test_obligation": {
+        "state": "REVIEWED_TEXTUAL_DECLARATIONS_NOT_RUNTIME_DISCOVERY",
+        "declarations": [
+          {
+            "name": "test_json_nested_paths",
+            "marker_line": 10,
+            "source_segment_lf_sha256": "d4abbad1c440ab2e165c50fdfc8807f8d0249fd4f66c370118d7f7ee0aa6ebb8"
+          },
+          {
+            "name": "test_json_wide_objects",
+            "marker_line": 25,
+            "source_segment_lf_sha256": "01e2dd6b91cc8aed321cd4545a76010baaeddfbe069f6f99269f73c736b64738"
+          },
+          {
+            "name": "test_yaml_typed_roundtrip",
+            "marker_line": 34,
+            "source_segment_lf_sha256": "b4906b581d3b06c8e11c00be424687000538f1f0ecae4a7931badfeca25c07ed"
+          }
+        ],
+        "execution": "NOT_RUN"
+      },
+      "target_contract_review": "REQUIRED; preserve exact syntax/type/value/error responsibility and real effects, bind published family/query/error/provider/policy contracts, no guessed ABI, opaque identity, skip-to-PASS or compatibility aliases."
+    },
+    {
+      "case_id": "tests/regression/10_stdlib/1009_json_number.xr",
+      "source_lf_sha256": "c2422ec30aeeb32c600cb72ce531425df5e8ea6f9ef459cef5b8aed92387fbde",
+      "primary_family": "map-set-object-json",
+      "secondary_families": [
+        "typed-error-throw-try-catch",
+        "panic-trap-catch",
+        "test-entry-assertion-async",
+        "array-slice-fixed-array-range-iteration",
+        "string-rune-interpolation",
+        "ownership-read-ref-move-copy-drop",
+        "module-graph-import-export-init"
+      ],
+      "tasks": [
+        "313",
+        "314",
+        "315",
+        "316",
+        "317",
+        "318",
+        "319",
+        "320",
+        "322"
+      ],
+      "producer_packages": [
+        "P02",
+        "P06",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P12",
+        "P13",
+        "P14",
+        "P17"
+      ],
+      "semantic_basis": "Complete original JSON/system/runtime source review preserves all named bodies, full pressure and all actual normal/error/context/provider duties. Legacy counters/comments/shapes/markers do not qualify collection strategy, actual source locations, atomic filesystem policy or Windows/POSIX provider behavior.",
+      "original_runner_entries": [
+        {
+          "suite": "regression",
+          "entry": "test"
+        }
+      ],
+      "new_entry_status": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "replacement_qualification": "OPEN",
+      "original_stdout_oracle": {
+        "path": "tests/regression/10_stdlib/1009_json_number.xr.expected",
+        "state": "MISSING",
+        "lf_sha256": null
+      },
+      "original_regression_obligation": {
+        "entry": "test",
+        "expected_exit": 0,
+        "test_discovery": "NOT_RUN"
+      },
+      "original_named_test_obligation": {
+        "state": "REVIEWED_TEXTUAL_DECLARATIONS_NOT_RUNTIME_DISCOVERY",
+        "declarations": [
+          {
+            "name": "test_small_integers",
+            "marker_line": 10,
+            "source_segment_lf_sha256": "ced02a417033e81660b134c83a429aefc778deb4f19fbeb60ffc6e331194c57e"
+          },
+          {
+            "name": "test_integer_boundaries",
+            "marker_line": 28,
+            "source_segment_lf_sha256": "93660b7c0ad76bcc5dcdd1bb8507be411f780a3152cceae84c8f3660ef388dc1"
+          },
+          {
+            "name": "test_large_integers",
+            "marker_line": 39,
+            "source_segment_lf_sha256": "69bc62298554f8c39850d01ee73e8c596b1d148dea8e9d015591f5ac8e34ada4"
+          },
+          {
+            "name": "test_simple_floats",
+            "marker_line": 53,
+            "source_segment_lf_sha256": "50da5ea5a155ded4f55cc7f2b576bb0481a7918909735d9a201d166ac890ba67"
+          },
+          {
+            "name": "test_float_precision",
+            "marker_line": 62,
+            "source_segment_lf_sha256": "4a5f9e9bc2d17515dd4e015dc70778d7b0d503523829fda36206afa029e2550b"
+          },
+          {
+            "name": "test_negative_zero",
+            "marker_line": 72,
+            "source_segment_lf_sha256": "bf63c44556a8c7343ec30552d8e727bf4854265fe1bb8648ee23553016f0a8c8"
+          },
+          {
+            "name": "test_scientific_notation_positive_exp",
+            "marker_line": 81,
+            "source_segment_lf_sha256": "82bd2012a7de030392c29e6c0afd07b3f08c02e0056751ea455faad6cabe2497"
+          },
+          {
+            "name": "test_scientific_notation_negative_exp",
+            "marker_line": 90,
+            "source_segment_lf_sha256": "73893a1e94636713c808e641c709231af9e60d712b8164ed7ed7db9a201f0b65"
+          },
+          {
+            "name": "test_scientific_notation_uppercase",
+            "marker_line": 99,
+            "source_segment_lf_sha256": "c2f632f4044cc74a2da1103090e48c01d8d7c2c9048577fbc498d5b48c50b389"
+          },
+          {
+            "name": "test_scientific_notation_with_plus",
+            "marker_line": 107,
+            "source_segment_lf_sha256": "ab4a10127b31919ff411a045849952b82b4fce8295d4d7156c6e44ca01add215"
+          },
+          {
+            "name": "test_scientific_notation_complex",
+            "marker_line": 115,
+            "source_segment_lf_sha256": "8ca553fc7f691afbc292bbaa5c9cd328d35d110b579cd159991aaacd0053ccb6"
+          },
+          {
+            "name": "test_very_small_floats",
+            "marker_line": 126,
+            "source_segment_lf_sha256": "e3be9fa548ef62ead21493bc812a3ed2628304817f6c6cfe049159b001c99cec"
+          },
+          {
+            "name": "test_very_large_floats",
+            "marker_line": 134,
+            "source_segment_lf_sha256": "805a1871d922b006accd4cc1a2e0b12d1a3c7cde324eeae7cf50e92918bd0f35"
+          },
+          {
+            "name": "test_max_precision_integers",
+            "marker_line": 142,
+            "source_segment_lf_sha256": "ac4336f45c65f88c74d254e93c77a711a8b9e24f85bfaf6de147bbd180afdf9e"
+          },
+          {
+            "name": "test_leading_zeros_in_fraction",
+            "marker_line": 152,
+            "source_segment_lf_sha256": "611fc5dd784f4da742dc11c3f54717e2646718316e570c3dab95d1794d8f8f3f"
+          },
+          {
+            "name": "test_trailing_zeros",
+            "marker_line": 160,
+            "source_segment_lf_sha256": "732bcd28547658b5adb024bcb4beec06483a8c9ef43e509df4f446157c593b72"
+          },
+          {
+            "name": "test_nines_pattern",
+            "marker_line": 168,
+            "source_segment_lf_sha256": "12deffaa22b0a0767e2256dea9a2270f49b17b96ccfbfcb1db15f9b372e7c565"
+          },
+          {
+            "name": "test_numbers_in_array",
+            "marker_line": 186,
+            "source_segment_lf_sha256": "bb310b690b94a904beaf763e9f1a8aaf87fcc518d0ed5495c569c7d166c140b9"
+          },
+          {
+            "name": "test_numbers_in_object",
+            "marker_line": 199,
+            "source_segment_lf_sha256": "93f73bde092e68fd667500dfc3cb928b7a095c717cb2b378c129564a7deb53e9"
+          },
+          {
+            "name": "test_overflow_to_infinity",
+            "marker_line": 210,
+            "source_segment_lf_sha256": "5a9b8af647d2d88f0e255a8662e704e6199b358465be24e95cea99bebec30da5"
+          },
+          {
+            "name": "test_underflow_to_zero",
+            "marker_line": 217,
+            "source_segment_lf_sha256": "bf6f5ffdc9b7537e817301ae4797dceea8ff09366b652807a4634e80333eb23c"
+          }
+        ],
+        "execution": "NOT_RUN"
+      },
+      "target_contract_review": "REQUIRED; preserve exact syntax/type/value/error responsibility and real effects, bind published family/query/error/provider/policy contracts, no guessed ABI, opaque identity, skip-to-PASS or compatibility aliases."
+    },
+    {
+      "case_id": "tests/regression/10_stdlib/1160_os_basic.xr",
+      "source_lf_sha256": "639c5bdea1b0b288618255a3284eff7a64826e5f9fcd3a2cb62909020e1b57e0",
+      "primary_family": "builtin-method-native-provider-call",
+      "secondary_families": [
+        "typed-error-throw-try-catch",
+        "panic-trap-catch",
+        "test-entry-assertion-async",
+        "array-slice-fixed-array-range-iteration",
+        "string-rune-interpolation",
+        "ownership-read-ref-move-copy-drop",
+        "module-graph-import-export-init"
+      ],
+      "tasks": [
+        "313",
+        "314",
+        "315",
+        "316",
+        "317",
+        "318",
+        "319",
+        "320",
+        "322"
+      ],
+      "producer_packages": [
+        "P02",
+        "P06",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P12",
+        "P13",
+        "P14",
+        "P17"
+      ],
+      "semantic_basis": "Complete original JSON/system/runtime source review preserves all named bodies, full pressure and all actual normal/error/context/provider duties. Legacy counters/comments/shapes/markers do not qualify collection strategy, actual source locations, atomic filesystem policy or Windows/POSIX provider behavior.",
+      "original_runner_entries": [
+        {
+          "suite": "regression",
+          "entry": "test"
+        }
+      ],
+      "new_entry_status": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "replacement_qualification": "OPEN",
+      "original_stdout_oracle": {
+        "path": "tests/regression/10_stdlib/1160_os_basic.xr.expected",
+        "state": "MISSING",
+        "lf_sha256": null
+      },
+      "original_regression_obligation": {
+        "entry": "test",
+        "expected_exit": 0,
+        "test_discovery": "NOT_RUN"
+      },
+      "original_named_test_obligation": {
+        "state": "REVIEWED_TEXTUAL_DECLARATIONS_NOT_RUNTIME_DISCOVERY",
+        "declarations": [
+          {
+            "name": "test_platform",
+            "marker_line": 9,
+            "source_segment_lf_sha256": "561a872081bceaae8dd35eddd5b513a51174e144d0b8ba38cb3020ed21dd70e8"
+          },
+          {
+            "name": "test_arch",
+            "marker_line": 15,
+            "source_segment_lf_sha256": "475c80b8e3aa3cce19cd4d573fab64e5e73d4f05f3570de5fa28ce39056977ee"
+          },
+          {
+            "name": "test_sep",
+            "marker_line": 21,
+            "source_segment_lf_sha256": "7173dfd81e8cbadb2ca94d9efbf86832e9484c9f09d14de7fb57ab5c51211c47"
+          },
+          {
+            "name": "test_eol",
+            "marker_line": 27,
+            "source_segment_lf_sha256": "5ff441a8f119f649bac5ba0e66cfc2dba3fb4cb709953d5449bbc1e07e8f052e"
+          },
+          {
+            "name": "test_getenv_path",
+            "marker_line": 35,
+            "source_segment_lf_sha256": "8ed017d66f6010d30b27f0349b57c9442626ca9d1f3794e27c367d9bc08355b3"
+          },
+          {
+            "name": "test_getenv_nonexistent",
+            "marker_line": 42,
+            "source_segment_lf_sha256": "bc915259f0225d58f9a6872a004819d6fc24e0f27186dd97514c4ab580e3fdd6"
+          },
+          {
+            "name": "test_setenv_getenv",
+            "marker_line": 48,
+            "source_segment_lf_sha256": "e0edeca9e895e05dc1016712b5d53ddc4a10a529b06d697741f42e7e9e509f34"
+          },
+          {
+            "name": "test_setenv_overwrite",
+            "marker_line": 60,
+            "source_segment_lf_sha256": "3b60d3cb3e211aabc290e78f5a2c970f29f214ce184d7a5237d9ea6b428165bb"
+          },
+          {
+            "name": "test_environ",
+            "marker_line": 71,
+            "source_segment_lf_sha256": "6b099863c881651f34ce73d1bbb8136dd1c5547ddb168dc51af1084f449a6c5c"
+          },
+          {
+            "name": "test_getpid",
+            "marker_line": 87,
+            "source_segment_lf_sha256": "c38696ffd8b38a558fedc8d9ec0080c55733f4d1e83d738150b69d5fbbd80588"
+          },
+          {
+            "name": "test_getcwd",
+            "marker_line": 93,
+            "source_segment_lf_sha256": "622c37612b7a0e95b304e5f7e772b0691b36f5f856ffa88b8126cd18ca9a8f09"
+          },
+          {
+            "name": "test_hostname",
+            "marker_line": 99,
+            "source_segment_lf_sha256": "4f8c511c7012cbb4e6d59cb63cd80a75a9ace3ae40d89db3db5e11610221be1b"
+          },
+          {
+            "name": "test_tmpdir",
+            "marker_line": 105,
+            "source_segment_lf_sha256": "5e5d36a40714a6534e609fd3eb6386528131bef47d2c24dbbe7441847354abd0"
+          },
+          {
+            "name": "test_tmpdir_skips_empty_env_candidate",
+            "marker_line": 111,
+            "source_segment_lf_sha256": "224c64134fcded5a3b637dda65fe593716d4d3404cb7b6299bd2a473461384ca"
+          },
+          {
+            "name": "test_chdir",
+            "marker_line": 142,
+            "source_segment_lf_sha256": "db24e6c54ecf7b9e5c795c12cea485e5f3637f4b424872f44622d2e4a4481fd2"
+          }
+        ],
+        "execution": "NOT_RUN"
+      },
+      "target_contract_review": "REQUIRED; preserve exact syntax/type/value/error responsibility and real effects, bind published family/query/error/provider/policy contracts, no guessed ABI, opaque identity, skip-to-PASS or compatibility aliases."
+    },
+    {
+      "case_id": "tests/regression/10_stdlib/1161_os_extended.xr",
+      "source_lf_sha256": "3ffe5d724ea66f062fc24385bdee4efac1c4bd2cbf370139c9f390b87aeeb264",
+      "primary_family": "builtin-method-native-provider-call",
+      "secondary_families": [
+        "typed-error-throw-try-catch",
+        "panic-trap-catch",
+        "test-entry-assertion-async",
+        "array-slice-fixed-array-range-iteration",
+        "string-rune-interpolation",
+        "ownership-read-ref-move-copy-drop",
+        "module-graph-import-export-init"
+      ],
+      "tasks": [
+        "313",
+        "314",
+        "315",
+        "316",
+        "317",
+        "318",
+        "319",
+        "320",
+        "322"
+      ],
+      "producer_packages": [
+        "P02",
+        "P06",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P12",
+        "P13",
+        "P14",
+        "P17"
+      ],
+      "semantic_basis": "Complete original JSON/system/runtime source review preserves all named bodies, full pressure and all actual normal/error/context/provider duties. Legacy counters/comments/shapes/markers do not qualify collection strategy, actual source locations, atomic filesystem policy or Windows/POSIX provider behavior.",
+      "original_runner_entries": [
+        {
+          "suite": "regression",
+          "entry": "test"
+        }
+      ],
+      "new_entry_status": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "replacement_qualification": "OPEN",
+      "original_stdout_oracle": {
+        "path": "tests/regression/10_stdlib/1161_os_extended.xr.expected",
+        "state": "MISSING",
+        "lf_sha256": null
+      },
+      "original_regression_obligation": {
+        "entry": "test",
+        "expected_exit": 0,
+        "test_discovery": "NOT_RUN"
+      },
+      "original_named_test_obligation": {
+        "state": "REVIEWED_TEXTUAL_DECLARATIONS_NOT_RUNTIME_DISCOVERY",
+        "declarations": [
+          {
+            "name": "test_username",
+            "marker_line": 10,
+            "source_segment_lf_sha256": "ff0c0fa68d1b5a3801202b7272fba81079508fff2adfc349947f6d02e29385b4"
+          },
+          {
+            "name": "test_homedir",
+            "marker_line": 17,
+            "source_segment_lf_sha256": "02f677c0901cd193a87ca3b263d0d6f2be680d7f980044392f9a8c755d4d7a9b"
+          },
+          {
+            "name": "test_homedir_skips_empty_home_env",
+            "marker_line": 24,
+            "source_segment_lf_sha256": "7d9ab3368915228331879bede326c2ecd55545f9183abcb880f07c63df51eea4"
+          },
+          {
+            "name": "test_uid",
+            "marker_line": 40,
+            "source_segment_lf_sha256": "cdde99ba7144ac571595382ef85d0d27383cb9f27343e4dc0f843708ddc6c172"
+          },
+          {
+            "name": "test_gid",
+            "marker_line": 46,
+            "source_segment_lf_sha256": "fb18507cb5faf0a7d7d35936a505e55836ab02a9edbfed65cac323af8bf0d723"
+          },
+          {
+            "name": "test_cpuCount",
+            "marker_line": 54,
+            "source_segment_lf_sha256": "c67775eafda42b1e368a779755f837b0044df028c0704477728f178b61a85834"
+          },
+          {
+            "name": "test_totalMemory",
+            "marker_line": 60,
+            "source_segment_lf_sha256": "2c5003554f192c129965ed3cb31417bfb748b32eead9c6a3c787b684274f03ca"
+          },
+          {
+            "name": "test_freeMemory",
+            "marker_line": 67,
+            "source_segment_lf_sha256": "4d5cdeac6ea3b6856c538d91963940d88b2455fed3c6c6fe4e500695082f6cee"
+          },
+          {
+            "name": "test_uptime",
+            "marker_line": 73,
+            "source_segment_lf_sha256": "31279a45eaec3654d31bcad9581e62717e9c9dfbf21ecaef3200b62b3a0300cf"
+          },
+          {
+            "name": "test_loadavg",
+            "marker_line": 80,
+            "source_segment_lf_sha256": "aed4d7b0b79dc968313a3f851042112e068729470f28287f5edf82a8de0bb3f2"
+          },
+          {
+            "name": "test_ppid",
+            "marker_line": 92,
+            "source_segment_lf_sha256": "a379e63ac1fa21f053eb0f6abcaf8ec85a2df0460f09146dece979c15a9c657e"
+          },
+          {
+            "name": "test_clock",
+            "marker_line": 98,
+            "source_segment_lf_sha256": "553eec9520d367aa61eeb1b3899b537cdf477712599c34c792ea15529401e17a"
+          },
+          {
+            "name": "test_exec_echo",
+            "marker_line": 106,
+            "source_segment_lf_sha256": "9ea647eb6bec5404549da1ab5248b96f11073e3486c7f6236b22ad927b2d9119"
+          },
+          {
+            "name": "test_exec_stderr",
+            "marker_line": 116,
+            "source_segment_lf_sha256": "a246676fd0aabacca662e5fe2ae2eb962807fe259cca1b4a57c100d3a0cea594"
+          },
+          {
+            "name": "test_exec_exit_code",
+            "marker_line": 125,
+            "source_segment_lf_sha256": "612b52d8d6d7386a890bc4271207aff8fdb4e755c5018828db5e01284297d04b"
+          },
+          {
+            "name": "test_exec_command_output",
+            "marker_line": 132,
+            "source_segment_lf_sha256": "4809a648f85e4e9d1ea6d2988308b98c5dd0955479c8b841792c0e17f032bc60"
+          },
+          {
+            "name": "test_exec_byte_capture_limits",
+            "marker_line": 146,
+            "source_segment_lf_sha256": "3bc399b1197badaf688e90e426f17df14833b4df21964f59c7f52fd4ee05eae6"
+          },
+          {
+            "name": "test_setenv_return_value",
+            "marker_line": 158,
+            "source_segment_lf_sha256": "99656a2b8341f3d5f927617021bde72d6e1b229421528b714c520f112650a17c"
+          },
+          {
+            "name": "test_unsetenv_return_value",
+            "marker_line": 165,
+            "source_segment_lf_sha256": "9c7103fc6c2a96ed8168452865415a3b177d2527739c00dac2baed628fa7f077"
+          },
+          {
+            "name": "test_chdir_invalid_path",
+            "marker_line": 172,
+            "source_segment_lf_sha256": "39b2f14ed0c7eeeed8becf03cb2098b39d8c2cb4beef9c34f0a60fc95883b9ea"
+          }
+        ],
+        "execution": "NOT_RUN"
+      },
+      "target_contract_review": "REQUIRED; preserve exact syntax/type/value/error responsibility and real effects, bind published family/query/error/provider/policy contracts, no guessed ABI, opaque identity, skip-to-PASS or compatibility aliases.",
+      "target_source_port": {
+        "fixture": "tests/unit/xir/legacy_consumers/fixtures/system_regression_ports/1161_os_extended/root.xr",
+        "lf_sha256": "d3aafe5ed9ccf4b62d74fb692593cb5cf9818350d1058814b0f5d10114b2f60c",
+        "owner_package": "P13",
+        "qualification": "NOT_RUN",
+        "frozen_basis": [
+          "Preserve full output/exit42/capture4/0 and system queries. Explicit Windows echo CRLF and literal no-newline byte command replace unavailable printf context, not fake provider success. Independent cmd model emits9ASCIIbytes and exits1 onNUL EOF; original capture test has no command-exit0 assertion. Actual Xray process/provider/lease/drain qualification remains required."
+        ]
+      },
+      "named_test_migration": {
+        "state": "PREPARED_NOT_EXECUTED",
+        "original_tests_removed": false,
+        "mapping": {
+          "test_username": "test_username",
+          "test_homedir": "test_homedir",
+          "test_homedir_skips_empty_home_env": "test_homedir_skips_empty_home_env",
+          "test_uid": "test_uid",
+          "test_gid": "test_gid",
+          "test_cpuCount": "test_cpuCount",
+          "test_totalMemory": "test_totalMemory",
+          "test_freeMemory": "test_freeMemory",
+          "test_uptime": "test_uptime",
+          "test_loadavg": "test_loadavg",
+          "test_ppid": "test_ppid",
+          "test_clock": "test_clock",
+          "test_exec_echo": "test_exec_echo",
+          "test_exec_stderr": "test_exec_stderr",
+          "test_exec_exit_code": "test_exec_exit_code",
+          "test_exec_command_output": "test_exec_command_output",
+          "test_exec_byte_capture_limits": "test_exec_byte_capture_limits",
+          "test_setenv_return_value": "test_setenv_return_value",
+          "test_unsetenv_return_value": "test_unsetenv_return_value",
+          "test_chdir_invalid_path": "test_chdir_invalid_path"
+        }
+      },
+      "target_disposition": {
+        "kind": "POSITIVE_COMPLETE_CONSUMER_CLEANUP_OR_CONTENT_PORT",
+        "owner_package": "P13",
+        "qualification": "NOT_RUN",
+        "reason": "Preserve full output/exit42/capture4/0 and system queries. Explicit Windows echo CRLF and literal no-newline byte command replace unavailable printf context, not fake provider success. Independent cmd model emits9ASCIIbytes and exits1 onNUL EOF; original capture test has no command-exit0 assertion. Actual Xray process/provider/lease/drain qualification remains required."
+      }
+    },
+    {
+      "case_id": "tests/regression/10_stdlib/1162_os_home.xr",
+      "source_lf_sha256": "8b71db058c0edc26d318361df39ba23a804e06852aee80f418af7c866f4b13ab",
+      "primary_family": "builtin-method-native-provider-call",
+      "secondary_families": [
+        "typed-error-throw-try-catch",
+        "panic-trap-catch",
+        "test-entry-assertion-async",
+        "array-slice-fixed-array-range-iteration",
+        "string-rune-interpolation",
+        "ownership-read-ref-move-copy-drop",
+        "module-graph-import-export-init"
+      ],
+      "tasks": [
+        "313",
+        "314",
+        "315",
+        "316",
+        "317",
+        "318",
+        "319",
+        "320",
+        "322"
+      ],
+      "producer_packages": [
+        "P02",
+        "P06",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P12",
+        "P13",
+        "P14",
+        "P17"
+      ],
+      "semantic_basis": "Complete original JSON/system/runtime source review preserves all named bodies, full pressure and all actual normal/error/context/provider duties. Legacy counters/comments/shapes/markers do not qualify collection strategy, actual source locations, atomic filesystem policy or Windows/POSIX provider behavior.",
+      "original_runner_entries": [
+        {
+          "suite": "regression",
+          "entry": "test"
+        }
+      ],
+      "new_entry_status": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "replacement_qualification": "OPEN",
+      "original_stdout_oracle": {
+        "path": "tests/regression/10_stdlib/1162_os_home.xr.expected",
+        "state": "MISSING",
+        "lf_sha256": null
+      },
+      "original_regression_obligation": {
+        "entry": "test",
+        "expected_exit": 0,
+        "test_discovery": "NOT_RUN"
+      },
+      "original_named_test_obligation": {
+        "state": "REVIEWED_TEXTUAL_DECLARATIONS_NOT_RUNTIME_DISCOVERY",
+        "declarations": [
+          {
+            "name": "test_environment_wins_over_the_host_record",
+            "marker_line": 7,
+            "source_segment_lf_sha256": "dd9bfd8f866ebb4ea6ed48a734634401a5712b530368ae02bdbfe062e02976a8"
+          },
+          {
+            "name": "test_an_empty_value_is_not_an_answer",
+            "marker_line": 15,
+            "source_segment_lf_sha256": "429ecba9b709baa98c1a7725d5356d9a65fa2851e81ac9fa678cb457df2e0634"
+          },
+          {
+            "name": "test_answers_something_in_a_normal_environment",
+            "marker_line": 25,
+            "source_segment_lf_sha256": "3a864b58340a87e6422e471a8e80e371e7c9d26ff0291cea87dbcbcda5a96b20"
+          }
+        ],
+        "execution": "NOT_RUN"
+      },
+      "target_contract_review": "REQUIRED; preserve exact syntax/type/value/error responsibility and real effects, bind published family/query/error/provider/policy contracts, no guessed ABI, opaque identity, skip-to-PASS or compatibility aliases.",
+      "target_source_port": {
+        "fixture": "tests/unit/xir/legacy_consumers/fixtures/system_regression_ports/1162_os_home/root.xr",
+        "lf_sha256": "2720ce74ce025bd0e0a3aa5b192cddd32fbde61c18cf37eec9613556b1eee895",
+        "owner_package": "P13",
+        "qualification": "NOT_RUN",
+        "frozen_basis": [
+          "Preserve every original env/fallback/temp assertion and register restoration immediately after saving previous value, including previously absent variable. Restore via actual published setenv/unsetenv; no PowerShell HOME variable is repurposed. Provider/FI/process-scope qualification remains open."
+        ]
+      },
+      "named_test_migration": {
+        "state": "PREPARED_NOT_EXECUTED",
+        "original_tests_removed": false,
+        "mapping": {
+          "test_environment_wins_over_the_host_record": "test_environment_wins_over_the_host_record",
+          "test_an_empty_value_is_not_an_answer": "test_an_empty_value_is_not_an_answer",
+          "test_answers_something_in_a_normal_environment": "test_answers_something_in_a_normal_environment"
+        }
+      },
+      "target_disposition": {
+        "kind": "POSITIVE_COMPLETE_CONSUMER_CLEANUP_OR_CONTENT_PORT",
+        "owner_package": "P13",
+        "qualification": "NOT_RUN",
+        "reason": "Preserve every original env/fallback/temp assertion and register restoration immediately after saving previous value, including previously absent variable. Restore via actual published setenv/unsetenv; no PowerShell HOME variable is repurposed. Provider/FI/process-scope qualification remains open."
+      }
+    },
+    {
+      "case_id": "tests/regression/10_stdlib/1190_io_basic.xr",
+      "source_lf_sha256": "831954a88faa0d058804adac1b2acf9da0265db2074f9ea31a21eab8a330bf9e",
+      "primary_family": "builtin-method-native-provider-call",
+      "secondary_families": [
+        "typed-error-throw-try-catch",
+        "panic-trap-catch",
+        "test-entry-assertion-async",
+        "array-slice-fixed-array-range-iteration",
+        "string-rune-interpolation",
+        "ownership-read-ref-move-copy-drop",
+        "module-graph-import-export-init"
+      ],
+      "tasks": [
+        "313",
+        "314",
+        "315",
+        "316",
+        "317",
+        "318",
+        "319",
+        "320",
+        "322"
+      ],
+      "producer_packages": [
+        "P02",
+        "P06",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P12",
+        "P13",
+        "P14",
+        "P17"
+      ],
+      "semantic_basis": "Complete original JSON/system/runtime source review preserves all named bodies, full pressure and all actual normal/error/context/provider duties. Legacy counters/comments/shapes/markers do not qualify collection strategy, actual source locations, atomic filesystem policy or Windows/POSIX provider behavior.",
+      "original_runner_entries": [
+        {
+          "suite": "regression",
+          "entry": "test"
+        }
+      ],
+      "new_entry_status": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "replacement_qualification": "OPEN",
+      "original_stdout_oracle": {
+        "path": "tests/regression/10_stdlib/1190_io_basic.xr.expected",
+        "state": "MISSING",
+        "lf_sha256": null
+      },
+      "original_regression_obligation": {
+        "entry": "test",
+        "expected_exit": 0,
+        "test_discovery": "NOT_RUN"
+      },
+      "original_named_test_obligation": {
+        "state": "REVIEWED_TEXTUAL_DECLARATIONS_NOT_RUNTIME_DISCOVERY",
+        "declarations": [
+          {
+            "name": "test_temp_file",
+            "marker_line": 8,
+            "source_segment_lf_sha256": "b3b4e9fe66e723498d61bc03d39511fa56ac2dc541cb794f7bbf2c8d39bc31c3"
+          },
+          {
+            "name": "test_write_read_file",
+            "marker_line": 15,
+            "source_segment_lf_sha256": "029f190db71038fb7bc9afc690610e9d0fc47e32cc68468b65bc601a31325a22"
+          },
+          {
+            "name": "test_read_lines",
+            "marker_line": 24,
+            "source_segment_lf_sha256": "7fdf1e6b3471e78d03dbdf97cafd7f7ce6dbdc808a8240662d19cb52638d086b"
+          },
+          {
+            "name": "test_append_file",
+            "marker_line": 35,
+            "source_segment_lf_sha256": "c05d00a055d8961e129fa7a8de53b074d4bb6e876672bef2af868443faa13fde"
+          },
+          {
+            "name": "test_file_stat",
+            "marker_line": 47,
+            "source_segment_lf_sha256": "8589948cccf047c75deb70d7e221f64a162695caca01fa05e928cdeae72c27eb"
+          },
+          {
+            "name": "test_is_file",
+            "marker_line": 58,
+            "source_segment_lf_sha256": "3adf2e9a53156da678ba8a58667cabb8c2900c639ffc1dd743e0fa6b9e782341"
+          },
+          {
+            "name": "test_file_size",
+            "marker_line": 67,
+            "source_segment_lf_sha256": "c1a5b5319d2bdedfcdba0d661026e17ca2759e852a900981d1ef695ac8ec4f22"
+          },
+          {
+            "name": "test_mkdir_and_isdir",
+            "marker_line": 77,
+            "source_segment_lf_sha256": "98f00674900ef8baf2591f705642b8e581932949cd377e6ed5ad481bf2cd8424"
+          },
+          {
+            "name": "test_mkdirp",
+            "marker_line": 84,
+            "source_segment_lf_sha256": "1579e9e4245efba7de265edf71186f91c8303f1c1e55c165fa1cf1db75fd4169"
+          },
+          {
+            "name": "test_read_dir",
+            "marker_line": 93,
+            "source_segment_lf_sha256": "ac72906b4a137609145ed950454022731f75a1b2416ed650ac8887695e736399"
+          },
+          {
+            "name": "test_copy_file",
+            "marker_line": 107,
+            "source_segment_lf_sha256": "edb2875845f7cec452d8d28869c9adffa5d2ea6cdb2b3303b4a858e5872fe52f"
+          },
+          {
+            "name": "test_rename",
+            "marker_line": 119,
+            "source_segment_lf_sha256": "3b57d0d01f644bcafc831b4f8951f66ea7a311d7f2d793ce462bd8770fd97be7"
+          },
+          {
+            "name": "test_touch",
+            "marker_line": 133,
+            "source_segment_lf_sha256": "cc24651749f433527dacf05426002fd491ae94a019e17449228e33d1a26aaba3"
+          },
+          {
+            "name": "test_cwd",
+            "marker_line": 145,
+            "source_segment_lf_sha256": "cb452135fe99a8c4a9609edf51db7a0f19747d33238b417a7301f4c1189a0a60"
+          },
+          {
+            "name": "test_realpath",
+            "marker_line": 151,
+            "source_segment_lf_sha256": "b209548e106dda89723534130bdb6b912985ae4209077f46be26404ac2c07df8"
+          },
+          {
+            "name": "test_remove_all",
+            "marker_line": 160,
+            "source_segment_lf_sha256": "cc77a9b5af8a3eb5454f650054b3831d76e692bf2db546f7b53fc95bc91d9f5b"
+          }
+        ],
+        "execution": "NOT_RUN"
+      },
+      "target_contract_review": "REQUIRED; preserve exact syntax/type/value/error responsibility and real effects, bind published family/query/error/provider/policy contracts, no guessed ABI, opaque identity, skip-to-PASS or compatibility aliases.",
+      "target_source_port": {
+        "fixture": "tests/unit/xir/legacy_consumers/fixtures/system_regression_ports/1190_io_basic/root.xr",
+        "lf_sha256": "342ef16831b2a2ea7085d9968442b0ab67cc4a413fbc7eee8d2557f69f665940",
+        "owner_package": "P13",
+        "qualification": "NOT_RUN",
+        "frozen_basis": [
+          "Preserve every original file/byte/line/stat/directory/copy/rename/normal cleanup assertion and add owned temp/destination/cwd deferred cleanup for failure paths. Invalid UTF8 retains actualnull rather than null-payload string and full7rawbytes, both separate original filenames preserved. Real physical/provider/FI cleanup still requires execution."
+        ]
+      },
+      "named_test_migration": {
+        "state": "PREPARED_NOT_EXECUTED",
+        "original_tests_removed": false,
+        "mapping": {
+          "test_temp_file": "test_temp_file",
+          "test_write_read_file": "test_write_read_file",
+          "test_read_lines": "test_read_lines",
+          "test_append_file": "test_append_file",
+          "test_file_stat": "test_file_stat",
+          "test_is_file": "test_is_file",
+          "test_file_size": "test_file_size",
+          "test_mkdir_and_isdir": "test_mkdir_and_isdir",
+          "test_mkdirp": "test_mkdirp",
+          "test_read_dir": "test_read_dir",
+          "test_copy_file": "test_copy_file",
+          "test_rename": "test_rename",
+          "test_touch": "test_touch",
+          "test_cwd": "test_cwd",
+          "test_realpath": "test_realpath",
+          "test_remove_all": "test_remove_all"
+        }
+      },
+      "target_disposition": {
+        "kind": "POSITIVE_COMPLETE_CONSUMER_CLEANUP_OR_CONTENT_PORT",
+        "owner_package": "P13",
+        "qualification": "NOT_RUN",
+        "reason": "Preserve every original file/byte/line/stat/directory/copy/rename/normal cleanup assertion and add owned temp/destination/cwd deferred cleanup for failure paths. Invalid UTF8 retains actualnull rather than null-payload string and full7rawbytes, both separate original filenames preserved. Real physical/provider/FI cleanup still requires execution."
+      }
+    },
+    {
+      "case_id": "tests/regression/10_stdlib/1191_io_edge.xr",
+      "source_lf_sha256": "7152a2da6e15e44a8138afea5b1fc114caf7cbd1188be4d8e9d86a61d8534f79",
+      "primary_family": "builtin-method-native-provider-call",
+      "secondary_families": [
+        "typed-error-throw-try-catch",
+        "panic-trap-catch",
+        "test-entry-assertion-async",
+        "array-slice-fixed-array-range-iteration",
+        "string-rune-interpolation",
+        "ownership-read-ref-move-copy-drop",
+        "module-graph-import-export-init"
+      ],
+      "tasks": [
+        "313",
+        "314",
+        "315",
+        "316",
+        "317",
+        "318",
+        "319",
+        "320",
+        "322"
+      ],
+      "producer_packages": [
+        "P02",
+        "P06",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P12",
+        "P13",
+        "P14",
+        "P17"
+      ],
+      "semantic_basis": "Complete original JSON/system/runtime source review preserves all named bodies, full pressure and all actual normal/error/context/provider duties. Legacy counters/comments/shapes/markers do not qualify collection strategy, actual source locations, atomic filesystem policy or Windows/POSIX provider behavior.",
+      "original_runner_entries": [
+        {
+          "suite": "regression",
+          "entry": "test"
+        }
+      ],
+      "new_entry_status": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "replacement_qualification": "OPEN",
+      "original_stdout_oracle": {
+        "path": "tests/regression/10_stdlib/1191_io_edge.xr.expected",
+        "state": "MISSING",
+        "lf_sha256": null
+      },
+      "original_regression_obligation": {
+        "entry": "test",
+        "expected_exit": 0,
+        "test_discovery": "NOT_RUN"
+      },
+      "original_named_test_obligation": {
+        "state": "REVIEWED_TEXTUAL_DECLARATIONS_NOT_RUNTIME_DISCOVERY",
+        "declarations": [
+          {
+            "name": "test_read_nonexistent",
+            "marker_line": 8,
+            "source_segment_lf_sha256": "8f7fefccc7817dfb3cd78080513564790785d38040147939b7d951c3da50b0db"
+          },
+          {
+            "name": "test_exists_nonexistent",
+            "marker_line": 14,
+            "source_segment_lf_sha256": "5ef177feb0755f356276d9a7069824c959b5bab7060430daea462f1bc5a7e3d6"
+          },
+          {
+            "name": "test_is_file_nonexistent",
+            "marker_line": 19,
+            "source_segment_lf_sha256": "d174b52affbcce3865ed82eeec895ef2528b80f96b460d243d3e772f440ae4d3"
+          },
+          {
+            "name": "test_is_dir_nonexistent",
+            "marker_line": 24,
+            "source_segment_lf_sha256": "0fe506d7905718c80be314b1102cfd922d02540e2529f3dd8dfba68e56a5772d"
+          },
+          {
+            "name": "test_write_empty",
+            "marker_line": 31,
+            "source_segment_lf_sha256": "bfcee49717506e5062d09b28e59d11c33cb69ec812e5ef4ec383b4a82ffc8852"
+          },
+          {
+            "name": "test_overwrite_file",
+            "marker_line": 43,
+            "source_segment_lf_sha256": "8ac2e985dc8cba591ea968a95e01f1a4dcb2a79d7d71b388a5e4bdf72c6275bd"
+          },
+          {
+            "name": "test_large_write_read",
+            "marker_line": 55,
+            "source_segment_lf_sha256": "081dbbf810bf504f05357f15e94ac748e828703e0adcfc0e2a87a0ac688797ce"
+          },
+          {
+            "name": "test_read_dir_recursive",
+            "marker_line": 70,
+            "source_segment_lf_sha256": "31f7b5b4edeb549030e0669349249ef3aefc50d1bcdb5006027b8ee45de743f7"
+          },
+          {
+            "name": "test_mkdirp_existing_and_trailing_slashes",
+            "marker_line": 84,
+            "source_segment_lf_sha256": "44de67c79a15b53185c042d54d829cc6c2383b5280a5a6fb4b03671f7bce2998"
+          },
+          {
+            "name": "test_remove_nonexistent",
+            "marker_line": 97,
+            "source_segment_lf_sha256": "b2a0dc6fbac506ab948bd198292d7317dce0d4bccea075bbcace09949464cf33"
+          },
+          {
+            "name": "test_read_lines_empty",
+            "marker_line": 105,
+            "source_segment_lf_sha256": "ee45a5527229f76f254e74afe13603bb9075d91e0fd1c9d389e2d9297355cb95"
+          },
+          {
+            "name": "test_read_lines_single",
+            "marker_line": 116,
+            "source_segment_lf_sha256": "1a53bbf9a3919771897cf68da0e759ed87601541fb7f05cdba1ab0cb1892e215"
+          },
+          {
+            "name": "test_read_lines_trailing_newline",
+            "marker_line": 128,
+            "source_segment_lf_sha256": "060f0f80bae043c16ca28c6760e6511a4e2368a063bf1d48a21e91b97958ad37"
+          },
+          {
+            "name": "test_read_lines_middle_empty_and_crlf",
+            "marker_line": 140,
+            "source_segment_lf_sha256": "619f8396ffcd6819a5eb89b4bffb2b8c1dbcfb74f72315feb935b304ab6fd95f"
+          }
+        ],
+        "execution": "NOT_RUN"
+      },
+      "target_contract_review": "REQUIRED; preserve exact syntax/type/value/error responsibility and real effects, bind published family/query/error/provider/policy contracts, no guessed ABI, opaque identity, skip-to-PASS or compatibility aliases.",
+      "target_source_port": {
+        "fixture": "tests/unit/xir/legacy_consumers/fixtures/system_regression_ports/1191_io_edge/root.xr",
+        "lf_sha256": "25b5851d63a54d711cc3a4d7bc76828d7642f287c6ae4fa320caac96414eac7f",
+        "owner_package": "P13",
+        "qualification": "NOT_RUN",
+        "frozen_basis": [
+          "Preserve every original file/byte/line/stat/directory/copy/rename/normal cleanup assertion and add owned temp/destination/cwd deferred cleanup for failure paths. Invalid UTF8 retains actualnull rather than null-payload string and full7rawbytes, both separate original filenames preserved. Real physical/provider/FI cleanup still requires execution."
+        ]
+      },
+      "named_test_migration": {
+        "state": "PREPARED_NOT_EXECUTED",
+        "original_tests_removed": false,
+        "mapping": {
+          "test_read_nonexistent": "test_read_nonexistent",
+          "test_exists_nonexistent": "test_exists_nonexistent",
+          "test_is_file_nonexistent": "test_is_file_nonexistent",
+          "test_is_dir_nonexistent": "test_is_dir_nonexistent",
+          "test_write_empty": "test_write_empty",
+          "test_overwrite_file": "test_overwrite_file",
+          "test_large_write_read": "test_large_write_read",
+          "test_read_dir_recursive": "test_read_dir_recursive",
+          "test_mkdirp_existing_and_trailing_slashes": "test_mkdirp_existing_and_trailing_slashes",
+          "test_remove_nonexistent": "test_remove_nonexistent",
+          "test_read_lines_empty": "test_read_lines_empty",
+          "test_read_lines_single": "test_read_lines_single",
+          "test_read_lines_trailing_newline": "test_read_lines_trailing_newline",
+          "test_read_lines_middle_empty_and_crlf": "test_read_lines_middle_empty_and_crlf"
+        }
+      },
+      "target_disposition": {
+        "kind": "POSITIVE_COMPLETE_CONSUMER_CLEANUP_OR_CONTENT_PORT",
+        "owner_package": "P13",
+        "qualification": "NOT_RUN",
+        "reason": "Preserve every original file/byte/line/stat/directory/copy/rename/normal cleanup assertion and add owned temp/destination/cwd deferred cleanup for failure paths. Invalid UTF8 retains actualnull rather than null-payload string and full7rawbytes, both separate original filenames preserved. Real physical/provider/FI cleanup still requires execution."
+      }
+    },
+    {
+      "case_id": "tests/regression/10_stdlib/1192_io_extended.xr",
+      "source_lf_sha256": "d40ed9c06d78af71a22e7f4918258fcfa0109f5bdfadb31ad4c5dde2f7311005",
+      "primary_family": "builtin-method-native-provider-call",
+      "secondary_families": [
+        "typed-error-throw-try-catch",
+        "panic-trap-catch",
+        "test-entry-assertion-async",
+        "array-slice-fixed-array-range-iteration",
+        "string-rune-interpolation",
+        "ownership-read-ref-move-copy-drop",
+        "module-graph-import-export-init"
+      ],
+      "tasks": [
+        "313",
+        "314",
+        "315",
+        "316",
+        "317",
+        "318",
+        "319",
+        "320",
+        "322"
+      ],
+      "producer_packages": [
+        "P02",
+        "P06",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P12",
+        "P13",
+        "P14",
+        "P17"
+      ],
+      "semantic_basis": "Complete original JSON/system/runtime source review preserves all named bodies, full pressure and all actual normal/error/context/provider duties. Legacy counters/comments/shapes/markers do not qualify collection strategy, actual source locations, atomic filesystem policy or Windows/POSIX provider behavior.",
+      "original_runner_entries": [
+        {
+          "suite": "regression",
+          "entry": "test"
+        }
+      ],
+      "new_entry_status": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "replacement_qualification": "OPEN",
+      "original_stdout_oracle": {
+        "path": "tests/regression/10_stdlib/1192_io_extended.xr.expected",
+        "state": "MISSING",
+        "lf_sha256": null
+      },
+      "original_regression_obligation": {
+        "entry": "test",
+        "expected_exit": 0,
+        "test_discovery": "NOT_RUN"
+      },
+      "original_named_test_obligation": {
+        "state": "REVIEWED_TEXTUAL_DECLARATIONS_NOT_RUNTIME_DISCOVERY",
+        "declarations": [
+          {
+            "name": "test_basic_file_ops",
+            "marker_line": 7,
+            "source_segment_lf_sha256": "b3c533dd488baa6c3634646e9a4d0eee5d980a918e1a942c386cfca7b6138ce5"
+          },
+          {
+            "name": "test_file_info",
+            "marker_line": 19,
+            "source_segment_lf_sha256": "7fd2fe6e1cf2f150a048170cab4f6d005feddea0af3fbf967b4ea981021cb36b"
+          },
+          {
+            "name": "test_directory_ops",
+            "marker_line": 32,
+            "source_segment_lf_sha256": "7a612df26f40164ff5d79c2a32dc9bb54a27684d999f45bcafa8a3f08eed082f"
+          },
+          {
+            "name": "test_copy_and_move",
+            "marker_line": 48,
+            "source_segment_lf_sha256": "6f7438f06cc01d6664418f96f520f88e66638ffb1b90c393bd4dcb91477639db"
+          },
+          {
+            "name": "test_touch_and_chmod",
+            "marker_line": 64,
+            "source_segment_lf_sha256": "d1a2cad3ac42ecca52fcc54e2ed1361cefeeb1a71b4e15bffc82352ac3f8bdb6"
+          },
+          {
+            "name": "test_realpath",
+            "marker_line": 80,
+            "source_segment_lf_sha256": "016991409e89ad59042f38f6aa5402937919eee6f975450080fbeb523be050d6"
+          },
+          {
+            "name": "test_chdir",
+            "marker_line": 87,
+            "source_segment_lf_sha256": "8429806f2af110a591dacb368b4ad5a65ee4c5aec4e448b011a716a7730c4e3b"
+          }
+        ],
+        "execution": "NOT_RUN"
+      },
+      "target_contract_review": "REQUIRED; preserve exact syntax/type/value/error responsibility and real effects, bind published family/query/error/provider/policy contracts, no guessed ABI, opaque identity, skip-to-PASS or compatibility aliases.",
+      "target_source_port": {
+        "fixture": "tests/unit/xir/legacy_consumers/fixtures/system_regression_ports/1192_io_extended/root.xr",
+        "lf_sha256": "f05170c8e0d7462a010fa397b98fcb72d0326f443504bcf29a0e38e995b08f72",
+        "owner_package": "P13",
+        "qualification": "NOT_RUN",
+        "frozen_basis": [
+          "Preserve every original file/byte/line/stat/directory/copy/rename/normal cleanup assertion and add owned temp/destination/cwd deferred cleanup for failure paths. Invalid UTF8 retains actualnull rather than null-payload string and full7rawbytes, both separate original filenames preserved. Real physical/provider/FI cleanup still requires execution."
+        ]
+      },
+      "named_test_migration": {
+        "state": "PREPARED_NOT_EXECUTED",
+        "original_tests_removed": false,
+        "mapping": {
+          "test_basic_file_ops": "test_basic_file_ops",
+          "test_file_info": "test_file_info",
+          "test_directory_ops": "test_directory_ops",
+          "test_copy_and_move": "test_copy_and_move",
+          "test_touch_and_chmod": "test_touch_and_chmod",
+          "test_realpath": "test_realpath",
+          "test_chdir": "test_chdir"
+        }
+      },
+      "target_disposition": {
+        "kind": "POSITIVE_COMPLETE_CONSUMER_CLEANUP_OR_CONTENT_PORT",
+        "owner_package": "P13",
+        "qualification": "NOT_RUN",
+        "reason": "Preserve every original file/byte/line/stat/directory/copy/rename/normal cleanup assertion and add owned temp/destination/cwd deferred cleanup for failure paths. Invalid UTF8 retains actualnull rather than null-payload string and full7rawbytes, both separate original filenames preserved. Real physical/provider/FI cleanup still requires execution."
+      }
+    },
+    {
+      "case_id": "tests/regression/10_stdlib/1193_io_invalid_utf8.xr",
+      "source_lf_sha256": "e39acbb15ff9db56c886c16b23005e325626ee1effcc2940b2c966052116fbe4",
+      "primary_family": "builtin-method-native-provider-call",
+      "secondary_families": [
+        "typed-error-throw-try-catch",
+        "panic-trap-catch",
+        "test-entry-assertion-async",
+        "array-slice-fixed-array-range-iteration",
+        "string-rune-interpolation",
+        "ownership-read-ref-move-copy-drop",
+        "module-graph-import-export-init"
+      ],
+      "tasks": [
+        "313",
+        "314",
+        "315",
+        "316",
+        "317",
+        "318",
+        "319",
+        "320",
+        "322"
+      ],
+      "producer_packages": [
+        "P02",
+        "P06",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P12",
+        "P13",
+        "P14",
+        "P17"
+      ],
+      "semantic_basis": "Complete original JSON/system/runtime source review preserves all named bodies, full pressure and all actual normal/error/context/provider duties. Legacy counters/comments/shapes/markers do not qualify collection strategy, actual source locations, atomic filesystem policy or Windows/POSIX provider behavior.",
+      "original_runner_entries": [
+        {
+          "suite": "regression",
+          "entry": "test"
+        }
+      ],
+      "new_entry_status": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "replacement_qualification": "OPEN",
+      "original_stdout_oracle": {
+        "path": "tests/regression/10_stdlib/1193_io_invalid_utf8.xr.expected",
+        "state": "MISSING",
+        "lf_sha256": null
+      },
+      "original_regression_obligation": {
+        "entry": "test",
+        "expected_exit": 0,
+        "test_discovery": "NOT_RUN"
+      },
+      "original_named_test_obligation": {
+        "state": "REVIEWED_TEXTUAL_DECLARATIONS_NOT_RUNTIME_DISCOVERY",
+        "declarations": [
+          {
+            "name": "test_read_file_rejects_invalid_utf8",
+            "marker_line": 21,
+            "source_segment_lf_sha256": "8ec1012d8e64e9b4489f1da83816c42adc8cbd173a1b7b382ab14ca5a111db20"
+          },
+          {
+            "name": "test_read_file_bytes_still_returns_the_raw_bytes",
+            "marker_line": 32,
+            "source_segment_lf_sha256": "23b996044146cc793d111b6f5d5c8776a5bae4cfcef6725a22555d48e85e1e1f"
+          },
+          {
+            "name": "test_valid_utf8_is_unaffected",
+            "marker_line": 43,
+            "source_segment_lf_sha256": "f0c18a0b50d090bda8328d57df4ebab7831bc35b939427229ca7ee8827d19fc4"
+          }
+        ],
+        "execution": "NOT_RUN"
+      },
+      "target_contract_review": "REQUIRED; preserve exact syntax/type/value/error responsibility and real effects, bind published family/query/error/provider/policy contracts, no guessed ABI, opaque identity, skip-to-PASS or compatibility aliases.",
+      "target_source_port": {
+        "fixture": "tests/unit/xir/legacy_consumers/fixtures/system_regression_ports/1193_io_invalid_utf8/root.xr",
+        "lf_sha256": "984afde079548aa9705d24b0bfe35e8110a652e8677284f533c55f1a65a36a69",
+        "owner_package": "P13",
+        "qualification": "NOT_RUN",
+        "frozen_basis": [
+          "Preserve every original file/byte/line/stat/directory/copy/rename/normal cleanup assertion and add owned temp/destination/cwd deferred cleanup for failure paths. Invalid UTF8 retains actualnull rather than null-payload string and full7rawbytes, both separate original filenames preserved. Real physical/provider/FI cleanup still requires execution."
+        ]
+      },
+      "named_test_migration": {
+        "state": "PREPARED_NOT_EXECUTED",
+        "original_tests_removed": false,
+        "mapping": {
+          "test_read_file_rejects_invalid_utf8": "test_read_file_rejects_invalid_utf8",
+          "test_read_file_bytes_still_returns_the_raw_bytes": "test_read_file_bytes_still_returns_the_raw_bytes",
+          "test_valid_utf8_is_unaffected": "test_valid_utf8_is_unaffected"
+        }
+      },
+      "target_disposition": {
+        "kind": "POSITIVE_COMPLETE_CONSUMER_CLEANUP_OR_CONTENT_PORT",
+        "owner_package": "P13",
+        "qualification": "NOT_RUN",
+        "reason": "Preserve every original file/byte/line/stat/directory/copy/rename/normal cleanup assertion and add owned temp/destination/cwd deferred cleanup for failure paths. Invalid UTF8 retains actualnull rather than null-payload string and full7rawbytes, both separate original filenames preserved. Real physical/provider/FI cleanup still requires execution."
+      }
+    },
+    {
+      "case_id": "tests/regression/10_stdlib/1193_io_read_dir_recursive.xr",
+      "source_lf_sha256": "e3b208aad21c13ad8b4e4ab42ede19dce1dc36564b1078326fd7794e7f20d392",
+      "primary_family": "builtin-method-native-provider-call",
+      "secondary_families": [
+        "typed-error-throw-try-catch",
+        "panic-trap-catch",
+        "test-entry-assertion-async",
+        "array-slice-fixed-array-range-iteration",
+        "string-rune-interpolation",
+        "ownership-read-ref-move-copy-drop",
+        "module-graph-import-export-init"
+      ],
+      "tasks": [
+        "313",
+        "314",
+        "315",
+        "316",
+        "317",
+        "318",
+        "319",
+        "320",
+        "322"
+      ],
+      "producer_packages": [
+        "P02",
+        "P06",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P12",
+        "P13",
+        "P14",
+        "P17"
+      ],
+      "semantic_basis": "Complete original JSON/system/runtime source review preserves all named bodies, full pressure and all actual normal/error/context/provider duties. Legacy counters/comments/shapes/markers do not qualify collection strategy, actual source locations, atomic filesystem policy or Windows/POSIX provider behavior.",
+      "original_runner_entries": [
+        {
+          "suite": "regression",
+          "entry": "test"
+        }
+      ],
+      "new_entry_status": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "replacement_qualification": "OPEN",
+      "original_stdout_oracle": {
+        "path": "tests/regression/10_stdlib/1193_io_read_dir_recursive.xr.expected",
+        "state": "MISSING",
+        "lf_sha256": null
+      },
+      "original_regression_obligation": {
+        "entry": "test",
+        "expected_exit": 0,
+        "test_discovery": "NOT_RUN"
+      },
+      "original_named_test_obligation": {
+        "state": "REVIEWED_TEXTUAL_DECLARATIONS_NOT_RUNTIME_DISCOVERY",
+        "declarations": [
+          {
+            "name": "test_lists_every_level_relative_to_the_root",
+            "marker_line": 25,
+            "source_segment_lf_sha256": "283e516fb8c1826cb7672c980c0eaa5ec99224cdbb11ba70407e02bbea3b19b2"
+          },
+          {
+            "name": "test_a_symlinked_directory_is_listed_but_not_entered",
+            "marker_line": 39,
+            "source_segment_lf_sha256": "b7ebc0b0eec60666c96cf4568f7423eeedf7aa38ba95745a6a6959c375139420"
+          },
+          {
+            "name": "test_a_path_that_is_not_a_directory_answers_null",
+            "marker_line": 63,
+            "source_segment_lf_sha256": "57b249f9a1d4d3dfcdfe05db931962fe4784d6c25df03ab716adc1ee0a6ee112"
+          }
+        ],
+        "execution": "NOT_RUN"
+      },
+      "target_contract_review": "REQUIRED; preserve exact syntax/type/value/error responsibility and real effects, bind published family/query/error/provider/policy contracts, no guessed ABI, opaque identity, skip-to-PASS or compatibility aliases.",
+      "target_source_port": {
+        "fixture": "tests/unit/xir/legacy_consumers/fixtures/system_regression_ports/1193_io_read_dir_recursive/root.xr",
+        "lf_sha256": "215efb23d80092640baf55b09518a6f85dfd9a745cd985df9e20f56b0e638dc5",
+        "owner_package": "P13",
+        "qualification": "NOT_RUN",
+        "frozen_basis": [
+          "Keep full relative/no-follow/symlink/depth responsibilities and all named bodies. Caller owns actual parent tempDir and registers cleanup before helper creates child tree. Original70-level refusal test now cleans deepest-to-root afterward without reducing pressure. Whole refusal versus published best-effort deletion is an unresolved policy conflict, never silently frozen as atomic deletion."
+        ]
+      },
+      "named_test_migration": {
+        "state": "PREPARED_NOT_EXECUTED",
+        "original_tests_removed": false,
+        "mapping": {
+          "test_lists_every_level_relative_to_the_root": "test_lists_every_level_relative_to_the_root",
+          "test_a_symlinked_directory_is_listed_but_not_entered": "test_a_symlinked_directory_is_listed_but_not_entered",
+          "test_a_path_that_is_not_a_directory_answers_null": "test_a_path_that_is_not_a_directory_answers_null"
+        }
+      },
+      "target_disposition": {
+        "kind": "POSITIVE_COMPLETE_CONSUMER_CLEANUP_OR_CONTENT_PORT",
+        "owner_package": "P13",
+        "qualification": "NOT_RUN",
+        "reason": "Keep full relative/no-follow/symlink/depth responsibilities and all named bodies. Caller owns actual parent tempDir and registers cleanup before helper creates child tree. Original70-level refusal test now cleans deepest-to-root afterward without reducing pressure. Whole refusal versus published best-effort deletion is an unresolved policy conflict, never silently frozen as atomic deletion."
+      }
+    },
+    {
+      "case_id": "tests/regression/10_stdlib/1194_io_mkdirp.xr",
+      "source_lf_sha256": "f776cad5600965504813335248dd63fd5581395643e54720c8ac9fdf93b477b5",
+      "primary_family": "builtin-method-native-provider-call",
+      "secondary_families": [
+        "typed-error-throw-try-catch",
+        "panic-trap-catch",
+        "test-entry-assertion-async",
+        "array-slice-fixed-array-range-iteration",
+        "string-rune-interpolation",
+        "ownership-read-ref-move-copy-drop",
+        "module-graph-import-export-init"
+      ],
+      "tasks": [
+        "313",
+        "314",
+        "315",
+        "316",
+        "317",
+        "318",
+        "319",
+        "320",
+        "322"
+      ],
+      "producer_packages": [
+        "P02",
+        "P06",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P12",
+        "P13",
+        "P14",
+        "P17"
+      ],
+      "semantic_basis": "Complete original JSON/system/runtime source review preserves all named bodies, full pressure and all actual normal/error/context/provider duties. Legacy counters/comments/shapes/markers do not qualify collection strategy, actual source locations, atomic filesystem policy or Windows/POSIX provider behavior.",
+      "original_runner_entries": [
+        {
+          "suite": "regression",
+          "entry": "test"
+        }
+      ],
+      "new_entry_status": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "replacement_qualification": "OPEN",
+      "original_stdout_oracle": {
+        "path": "tests/regression/10_stdlib/1194_io_mkdirp.xr.expected",
+        "state": "MISSING",
+        "lf_sha256": null
+      },
+      "original_regression_obligation": {
+        "entry": "test",
+        "expected_exit": 0,
+        "test_discovery": "NOT_RUN"
+      },
+      "original_named_test_obligation": {
+        "state": "REVIEWED_TEXTUAL_DECLARATIONS_NOT_RUNTIME_DISCOVERY",
+        "declarations": [
+          {
+            "name": "test_empty_path_is_rejected",
+            "marker_line": 14,
+            "source_segment_lf_sha256": "71185f784e6cf18a00c590628547cdee7a9d966577ac6df82b3960c133b163f0"
+          },
+          {
+            "name": "test_creates_every_missing_level",
+            "marker_line": 19,
+            "source_segment_lf_sha256": "7101ebcd2b37ed5ad2445bf4c1fba2f47d0e30bbeb2dce8db4949fcceb763855"
+          },
+          {
+            "name": "test_existing_directory_succeeds",
+            "marker_line": 30,
+            "source_segment_lf_sha256": "20590b199e9096cf82bc9d4c6c9087cb75a2a60c3e5c41565764809074248eef"
+          },
+          {
+            "name": "test_trailing_and_repeated_separators",
+            "marker_line": 38,
+            "source_segment_lf_sha256": "ca703c95a282726a3da617027669a5714c7748994fe20f4bdd5efb6aa56ec274"
+          },
+          {
+            "name": "test_root_path_succeeds",
+            "marker_line": 46,
+            "source_segment_lf_sha256": "cc42de602be002b73ae7b0947040ec6e68cd1e24af2bff2d1917ef292b68b97b"
+          },
+          {
+            "name": "test_backslash_is_a_filename_byte_not_a_separator",
+            "marker_line": 51,
+            "source_segment_lf_sha256": "6fa7acfe0a798bf4364abd9cc628099591012253c1e7fc73dea782ece78e8c32"
+          },
+          {
+            "name": "test_fails_when_an_intermediate_level_is_a_file",
+            "marker_line": 62,
+            "source_segment_lf_sha256": "6238ffd35f8705be8ba3fdc6e3d67909d25d9f6298b7a97d5490dcf37810a12b"
+          }
+        ],
+        "execution": "NOT_RUN"
+      },
+      "target_contract_review": "REQUIRED; preserve exact syntax/type/value/error responsibility and real effects, bind published family/query/error/provider/policy contracts, no guessed ABI, opaque identity, skip-to-PASS or compatibility aliases.",
+      "target_source_port": {
+        "fixture": "tests/unit/xir/legacy_consumers/fixtures/system_regression_ports/1194_io_mkdirp/root.xr",
+        "lf_sha256": "de0eac3e0dedaca4e0056d25d50e69b0e1a893fb8713a34a1c198c4f613df721",
+        "owner_package": "P13",
+        "qualification": "NOT_RUN",
+        "frozen_basis": [
+          "Keep all original mkdirp/touch semantics and true temp parent ownership/failure cleanup. POSIX literal backslash filename responsibility remains unresolved for Windows native filesystem; no blanket skip or portability claim. Touch content/nontruncate/directory/missing-parent responsibilities remain real provider effects."
+        ]
+      },
+      "named_test_migration": {
+        "state": "PREPARED_NOT_EXECUTED",
+        "original_tests_removed": false,
+        "mapping": {
+          "test_empty_path_is_rejected": "test_empty_path_is_rejected",
+          "test_creates_every_missing_level": "test_creates_every_missing_level",
+          "test_existing_directory_succeeds": "test_existing_directory_succeeds",
+          "test_trailing_and_repeated_separators": "test_trailing_and_repeated_separators",
+          "test_root_path_succeeds": "test_root_path_succeeds",
+          "test_backslash_is_a_filename_byte_not_a_separator": "test_backslash_is_a_filename_byte_not_a_separator",
+          "test_fails_when_an_intermediate_level_is_a_file": "test_fails_when_an_intermediate_level_is_a_file"
+        }
+      },
+      "target_disposition": {
+        "kind": "POSITIVE_COMPLETE_CONSUMER_CLEANUP_OR_CONTENT_PORT",
+        "owner_package": "P13",
+        "qualification": "NOT_RUN",
+        "reason": "Keep all original mkdirp/touch semantics and true temp parent ownership/failure cleanup. POSIX literal backslash filename responsibility remains unresolved for Windows native filesystem; no blanket skip or portability claim. Touch content/nontruncate/directory/missing-parent responsibilities remain real provider effects."
+      }
+    },
+    {
+      "case_id": "tests/regression/10_stdlib/1195_io_remove_all.xr",
+      "source_lf_sha256": "2ec0647931785fe50b8be9a1bbc1a6a1fb2abf63120aff658fd9bca083b1c94f",
+      "primary_family": "builtin-method-native-provider-call",
+      "secondary_families": [
+        "typed-error-throw-try-catch",
+        "panic-trap-catch",
+        "test-entry-assertion-async",
+        "array-slice-fixed-array-range-iteration",
+        "string-rune-interpolation",
+        "ownership-read-ref-move-copy-drop",
+        "module-graph-import-export-init"
+      ],
+      "tasks": [
+        "313",
+        "314",
+        "315",
+        "316",
+        "317",
+        "318",
+        "319",
+        "320",
+        "322"
+      ],
+      "producer_packages": [
+        "P02",
+        "P06",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P12",
+        "P13",
+        "P14",
+        "P17"
+      ],
+      "semantic_basis": "Complete original JSON/system/runtime source review preserves all named bodies, full pressure and all actual normal/error/context/provider duties. Legacy counters/comments/shapes/markers do not qualify collection strategy, actual source locations, atomic filesystem policy or Windows/POSIX provider behavior.",
+      "original_runner_entries": [
+        {
+          "suite": "regression",
+          "entry": "test"
+        }
+      ],
+      "new_entry_status": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "replacement_qualification": "OPEN",
+      "original_stdout_oracle": {
+        "path": "tests/regression/10_stdlib/1195_io_remove_all.xr.expected",
+        "state": "MISSING",
+        "lf_sha256": null
+      },
+      "original_regression_obligation": {
+        "entry": "test",
+        "expected_exit": 0,
+        "test_discovery": "NOT_RUN"
+      },
+      "original_named_test_obligation": {
+        "state": "REVIEWED_TEXTUAL_DECLARATIONS_NOT_RUNTIME_DISCOVERY",
+        "declarations": [
+          {
+            "name": "test_removes_a_whole_tree",
+            "marker_line": 19,
+            "source_segment_lf_sha256": "91dd2e9116e1703c1d60163715e4a98af6d29620f8cd02b88d72fbf1db9f1a1e"
+          },
+          {
+            "name": "test_removes_a_single_file",
+            "marker_line": 26,
+            "source_segment_lf_sha256": "c2833bc05a09f411d55e20b2c108f3c8f489c1795703f57916f19add5a64192e"
+          },
+          {
+            "name": "test_missing_path_is_reported_as_failure",
+            "marker_line": 34,
+            "source_segment_lf_sha256": "e783b931c8299cfd95755210192630668eb7fd9cada50fb4bd8a8acf42679bc7"
+          },
+          {
+            "name": "test_a_symlink_is_removed_without_following_it",
+            "marker_line": 40,
+            "source_segment_lf_sha256": "e794c72a1cedf84637223e14908b0e64e5b71ad06247014ac41c55d76955d18e"
+          },
+          {
+            "name": "test_a_tree_deeper_than_the_ceiling_is_refused_whole",
+            "marker_line": 57,
+            "source_segment_lf_sha256": "0410bfe8fca49e8c0ce9fd18ad4de5f9033c9698e45c081c12bdd24a38e892aa"
+          }
+        ],
+        "execution": "NOT_RUN"
+      },
+      "target_contract_review": "REQUIRED; preserve exact syntax/type/value/error responsibility and real effects, bind published family/query/error/provider/policy contracts, no guessed ABI, opaque identity, skip-to-PASS or compatibility aliases.",
+      "target_source_port": {
+        "fixture": "tests/unit/xir/legacy_consumers/fixtures/system_regression_ports/1195_io_remove_all/root.xr",
+        "lf_sha256": "d05a17dd27864d4c7f8cbd8386a1115afb5d1b0df36f51fa571596005337be62",
+        "owner_package": "P13",
+        "qualification": "NOT_RUN",
+        "frozen_basis": [
+          "Keep full relative/no-follow/symlink/depth responsibilities and all named bodies. Caller owns actual parent tempDir and registers cleanup before helper creates child tree. Original70-level refusal test now cleans deepest-to-root afterward without reducing pressure. Whole refusal versus published best-effort deletion is an unresolved policy conflict, never silently frozen as atomic deletion."
+        ]
+      },
+      "named_test_migration": {
+        "state": "PREPARED_NOT_EXECUTED",
+        "original_tests_removed": false,
+        "mapping": {
+          "test_removes_a_whole_tree": "test_removes_a_whole_tree",
+          "test_removes_a_single_file": "test_removes_a_single_file",
+          "test_missing_path_is_reported_as_failure": "test_missing_path_is_reported_as_failure",
+          "test_a_symlink_is_removed_without_following_it": "test_a_symlink_is_removed_without_following_it",
+          "test_a_tree_deeper_than_the_ceiling_is_refused_whole": "test_a_tree_deeper_than_the_ceiling_is_refused_whole"
+        }
+      },
+      "target_disposition": {
+        "kind": "POSITIVE_COMPLETE_CONSUMER_CLEANUP_OR_CONTENT_PORT",
+        "owner_package": "P13",
+        "qualification": "NOT_RUN",
+        "reason": "Keep full relative/no-follow/symlink/depth responsibilities and all named bodies. Caller owns actual parent tempDir and registers cleanup before helper creates child tree. Original70-level refusal test now cleans deepest-to-root afterward without reducing pressure. Whole refusal versus published best-effort deletion is an unresolved policy conflict, never silently frozen as atomic deletion."
+      }
+    },
+    {
+      "case_id": "tests/regression/10_stdlib/1196_io_touch.xr",
+      "source_lf_sha256": "85e0ac34e6e524d7f0f18a6aa60181549ed6a5e34e168c18e86c98934e2842fb",
+      "primary_family": "builtin-method-native-provider-call",
+      "secondary_families": [
+        "typed-error-throw-try-catch",
+        "panic-trap-catch",
+        "test-entry-assertion-async",
+        "array-slice-fixed-array-range-iteration",
+        "string-rune-interpolation",
+        "ownership-read-ref-move-copy-drop",
+        "module-graph-import-export-init"
+      ],
+      "tasks": [
+        "313",
+        "314",
+        "315",
+        "316",
+        "317",
+        "318",
+        "319",
+        "320",
+        "322"
+      ],
+      "producer_packages": [
+        "P02",
+        "P06",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P12",
+        "P13",
+        "P14",
+        "P17"
+      ],
+      "semantic_basis": "Complete original JSON/system/runtime source review preserves all named bodies, full pressure and all actual normal/error/context/provider duties. Legacy counters/comments/shapes/markers do not qualify collection strategy, actual source locations, atomic filesystem policy or Windows/POSIX provider behavior.",
+      "original_runner_entries": [
+        {
+          "suite": "regression",
+          "entry": "test"
+        }
+      ],
+      "new_entry_status": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "replacement_qualification": "OPEN",
+      "original_stdout_oracle": {
+        "path": "tests/regression/10_stdlib/1196_io_touch.xr.expected",
+        "state": "MISSING",
+        "lf_sha256": null
+      },
+      "original_regression_obligation": {
+        "entry": "test",
+        "expected_exit": 0,
+        "test_discovery": "NOT_RUN"
+      },
+      "original_named_test_obligation": {
+        "state": "REVIEWED_TEXTUAL_DECLARATIONS_NOT_RUNTIME_DISCOVERY",
+        "declarations": [
+          {
+            "name": "test_creates_a_missing_file_empty",
+            "marker_line": 13,
+            "source_segment_lf_sha256": "8e091b5e8063f5f7c03a4bab69aedd39269d9617bf594e12e41a1bc81156eee8"
+          },
+          {
+            "name": "test_does_not_truncate_an_existing_file",
+            "marker_line": 23,
+            "source_segment_lf_sha256": "f7f45c63b5917e1770358a58972177909af69a77c69b924b9f884ac0a27620b9"
+          },
+          {
+            "name": "test_succeeds_on_a_directory",
+            "marker_line": 33,
+            "source_segment_lf_sha256": "90381914b3325b7b4d97d79c7ef1383a85017908c07177cd2513fd89ee8dce27"
+          },
+          {
+            "name": "test_fails_when_the_parent_is_missing",
+            "marker_line": 43,
+            "source_segment_lf_sha256": "0e068b864231259237989f633eac9f9eaffad3debf83f2c1d354bca4c84417f6"
+          }
+        ],
+        "execution": "NOT_RUN"
+      },
+      "target_contract_review": "REQUIRED; preserve exact syntax/type/value/error responsibility and real effects, bind published family/query/error/provider/policy contracts, no guessed ABI, opaque identity, skip-to-PASS or compatibility aliases.",
+      "target_source_port": {
+        "fixture": "tests/unit/xir/legacy_consumers/fixtures/system_regression_ports/1196_io_touch/root.xr",
+        "lf_sha256": "827c9956a633abf369c9f4458288cf42c8a919faeb098d89a70766495a5e2030",
+        "owner_package": "P13",
+        "qualification": "NOT_RUN",
+        "frozen_basis": [
+          "Keep all original mkdirp/touch semantics and true temp parent ownership/failure cleanup. POSIX literal backslash filename responsibility remains unresolved for Windows native filesystem; no blanket skip or portability claim. Touch content/nontruncate/directory/missing-parent responsibilities remain real provider effects."
+        ]
+      },
+      "named_test_migration": {
+        "state": "PREPARED_NOT_EXECUTED",
+        "original_tests_removed": false,
+        "mapping": {
+          "test_creates_a_missing_file_empty": "test_creates_a_missing_file_empty",
+          "test_does_not_truncate_an_existing_file": "test_does_not_truncate_an_existing_file",
+          "test_succeeds_on_a_directory": "test_succeeds_on_a_directory",
+          "test_fails_when_the_parent_is_missing": "test_fails_when_the_parent_is_missing"
+        }
+      },
+      "target_disposition": {
+        "kind": "POSITIVE_COMPLETE_CONSUMER_CLEANUP_OR_CONTENT_PORT",
+        "owner_package": "P13",
+        "qualification": "NOT_RUN",
+        "reason": "Keep all original mkdirp/touch semantics and true temp parent ownership/failure cleanup. POSIX literal backslash filename responsibility remains unresolved for Windows native filesystem; no blanket skip or portability claim. Touch content/nontruncate/directory/missing-parent responsibilities remain real provider effects."
+      }
+    },
+    {
+      "case_id": "tests/regression/10_stdlib/1197_io_temp.xr",
+      "source_lf_sha256": "57bd65596c5eb80c12514b53be97c918ffb126c33e21ddf7ee0008e0b56d8e35",
+      "primary_family": "builtin-method-native-provider-call",
+      "secondary_families": [
+        "typed-error-throw-try-catch",
+        "panic-trap-catch",
+        "test-entry-assertion-async",
+        "array-slice-fixed-array-range-iteration",
+        "string-rune-interpolation",
+        "ownership-read-ref-move-copy-drop",
+        "module-graph-import-export-init"
+      ],
+      "tasks": [
+        "313",
+        "314",
+        "315",
+        "316",
+        "317",
+        "318",
+        "319",
+        "320",
+        "322"
+      ],
+      "producer_packages": [
+        "P02",
+        "P06",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P12",
+        "P13",
+        "P14",
+        "P17"
+      ],
+      "semantic_basis": "Complete original JSON/system/runtime source review preserves all named bodies, full pressure and all actual normal/error/context/provider duties. Legacy counters/comments/shapes/markers do not qualify collection strategy, actual source locations, atomic filesystem policy or Windows/POSIX provider behavior.",
+      "original_runner_entries": [
+        {
+          "suite": "regression",
+          "entry": "test"
+        }
+      ],
+      "new_entry_status": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "replacement_qualification": "OPEN",
+      "original_stdout_oracle": {
+        "path": "tests/regression/10_stdlib/1197_io_temp.xr.expected",
+        "state": "MISSING",
+        "lf_sha256": null
+      },
+      "original_regression_obligation": {
+        "entry": "test",
+        "expected_exit": 0,
+        "test_discovery": "NOT_RUN"
+      },
+      "original_named_test_obligation": {
+        "state": "REVIEWED_TEXTUAL_DECLARATIONS_NOT_RUNTIME_DISCOVERY",
+        "declarations": [
+          {
+            "name": "test_temp_dir_is_created_and_is_a_directory",
+            "marker_line": 17,
+            "source_segment_lf_sha256": "c9fc28b9057a0603440066dad339b5bf112253d38e622dd7283777e59fc9b53d"
+          },
+          {
+            "name": "test_temp_file_is_created_and_is_a_file",
+            "marker_line": 25,
+            "source_segment_lf_sha256": "1616e39093f2611bb162b3f8daeb89bcf09cff2aa8daf1d53cac95ab16c33d22"
+          },
+          {
+            "name": "test_a_trailing_separator_in_the_root_is_not_doubled",
+            "marker_line": 33,
+            "source_segment_lf_sha256": "658baf0b7d188217bf51f3e58bdfe04a159d220f916d61d039d003892bb2e4c3"
+          },
+          {
+            "name": "test_the_root_comes_from_the_environment",
+            "marker_line": 44,
+            "source_segment_lf_sha256": "59e66cc3577d44cced46b762c51203f86ae0b461462ed5c348735328a8957d72"
+          },
+          {
+            "name": "test_two_calls_do_not_collide",
+            "marker_line": 59,
+            "source_segment_lf_sha256": "0b77332ef0f29bf2aa04d083d140f2497b07ed1b0bf775328a9e51d5b192d6ae"
+          }
+        ],
+        "execution": "NOT_RUN"
+      },
+      "target_contract_review": "REQUIRED; preserve exact syntax/type/value/error responsibility and real effects, bind published family/query/error/provider/policy contracts, no guessed ABI, opaque identity, skip-to-PASS or compatibility aliases.",
+      "target_source_port": {
+        "fixture": "tests/unit/xir/legacy_consumers/fixtures/system_regression_ports/1197_io_temp/root.xr",
+        "lf_sha256": "e37ead808cc2d0a048040e5f12faeb690a95b39e207b83055a1b2621788b81af",
+        "owner_package": "P13",
+        "qualification": "NOT_RUN",
+        "frozen_basis": [
+          "Preserve every original env/fallback/temp assertion and register restoration immediately after saving previous value, including previously absent variable. Restore via actual published setenv/unsetenv; no PowerShell HOME variable is repurposed. Provider/FI/process-scope qualification remains open."
+        ]
+      },
+      "named_test_migration": {
+        "state": "PREPARED_NOT_EXECUTED",
+        "original_tests_removed": false,
+        "mapping": {
+          "test_temp_dir_is_created_and_is_a_directory": "test_temp_dir_is_created_and_is_a_directory",
+          "test_temp_file_is_created_and_is_a_file": "test_temp_file_is_created_and_is_a_file",
+          "test_a_trailing_separator_in_the_root_is_not_doubled": "test_a_trailing_separator_in_the_root_is_not_doubled",
+          "test_the_root_comes_from_the_environment": "test_the_root_comes_from_the_environment",
+          "test_two_calls_do_not_collide": "test_two_calls_do_not_collide"
+        }
+      },
+      "target_disposition": {
+        "kind": "POSITIVE_COMPLETE_CONSUMER_CLEANUP_OR_CONTENT_PORT",
+        "owner_package": "P13",
+        "qualification": "NOT_RUN",
+        "reason": "Preserve every original env/fallback/temp assertion and register restoration immediately after saving previous value, including previously absent variable. Restore via actual published setenv/unsetenv; no PowerShell HOME variable is repurposed. Provider/FI/process-scope qualification remains open."
+      }
+    },
+    {
+      "case_id": "tests/regression/10_stdlib/1198_io_invalid_utf8.xr",
+      "source_lf_sha256": "e39acbb15ff9db56c886c16b23005e325626ee1effcc2940b2c966052116fbe4",
+      "primary_family": "builtin-method-native-provider-call",
+      "secondary_families": [
+        "typed-error-throw-try-catch",
+        "panic-trap-catch",
+        "test-entry-assertion-async",
+        "array-slice-fixed-array-range-iteration",
+        "string-rune-interpolation",
+        "ownership-read-ref-move-copy-drop",
+        "module-graph-import-export-init"
+      ],
+      "tasks": [
+        "313",
+        "314",
+        "315",
+        "316",
+        "317",
+        "318",
+        "319",
+        "320",
+        "322"
+      ],
+      "producer_packages": [
+        "P02",
+        "P06",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P12",
+        "P13",
+        "P14",
+        "P17"
+      ],
+      "semantic_basis": "Complete original JSON/system/runtime source review preserves all named bodies, full pressure and all actual normal/error/context/provider duties. Legacy counters/comments/shapes/markers do not qualify collection strategy, actual source locations, atomic filesystem policy or Windows/POSIX provider behavior.",
+      "original_runner_entries": [
+        {
+          "suite": "regression",
+          "entry": "test"
+        }
+      ],
+      "new_entry_status": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "replacement_qualification": "OPEN",
+      "original_stdout_oracle": {
+        "path": "tests/regression/10_stdlib/1198_io_invalid_utf8.xr.expected",
+        "state": "MISSING",
+        "lf_sha256": null
+      },
+      "original_regression_obligation": {
+        "entry": "test",
+        "expected_exit": 0,
+        "test_discovery": "NOT_RUN"
+      },
+      "original_named_test_obligation": {
+        "state": "REVIEWED_TEXTUAL_DECLARATIONS_NOT_RUNTIME_DISCOVERY",
+        "declarations": [
+          {
+            "name": "test_read_file_rejects_invalid_utf8",
+            "marker_line": 21,
+            "source_segment_lf_sha256": "8ec1012d8e64e9b4489f1da83816c42adc8cbd173a1b7b382ab14ca5a111db20"
+          },
+          {
+            "name": "test_read_file_bytes_still_returns_the_raw_bytes",
+            "marker_line": 32,
+            "source_segment_lf_sha256": "23b996044146cc793d111b6f5d5c8776a5bae4cfcef6725a22555d48e85e1e1f"
+          },
+          {
+            "name": "test_valid_utf8_is_unaffected",
+            "marker_line": 43,
+            "source_segment_lf_sha256": "f0c18a0b50d090bda8328d57df4ebab7831bc35b939427229ca7ee8827d19fc4"
+          }
+        ],
+        "execution": "NOT_RUN"
+      },
+      "target_contract_review": "REQUIRED; preserve exact syntax/type/value/error responsibility and real effects, bind published family/query/error/provider/policy contracts, no guessed ABI, opaque identity, skip-to-PASS or compatibility aliases.",
+      "target_source_port": {
+        "fixture": "tests/unit/xir/legacy_consumers/fixtures/system_regression_ports/1198_io_invalid_utf8/root.xr",
+        "lf_sha256": "984afde079548aa9705d24b0bfe35e8110a652e8677284f533c55f1a65a36a69",
+        "owner_package": "P13",
+        "qualification": "NOT_RUN",
+        "frozen_basis": [
+          "Preserve every original file/byte/line/stat/directory/copy/rename/normal cleanup assertion and add owned temp/destination/cwd deferred cleanup for failure paths. Invalid UTF8 retains actualnull rather than null-payload string and full7rawbytes, both separate original filenames preserved. Real physical/provider/FI cleanup still requires execution."
+        ]
+      },
+      "named_test_migration": {
+        "state": "PREPARED_NOT_EXECUTED",
+        "original_tests_removed": false,
+        "mapping": {
+          "test_read_file_rejects_invalid_utf8": "test_read_file_rejects_invalid_utf8",
+          "test_read_file_bytes_still_returns_the_raw_bytes": "test_read_file_bytes_still_returns_the_raw_bytes",
+          "test_valid_utf8_is_unaffected": "test_valid_utf8_is_unaffected"
+        }
+      },
+      "target_disposition": {
+        "kind": "POSITIVE_COMPLETE_CONSUMER_CLEANUP_OR_CONTENT_PORT",
+        "owner_package": "P13",
+        "qualification": "NOT_RUN",
+        "reason": "Preserve every original file/byte/line/stat/directory/copy/rename/normal cleanup assertion and add owned temp/destination/cwd deferred cleanup for failure paths. Invalid UTF8 retains actualnull rather than null-payload string and full7rawbytes, both separate original filenames preserved. Real physical/provider/FI cleanup still requires execution."
+      }
+    },
+    {
+      "case_id": "tests/regression/10_stdlib/1199_time_units.xr",
+      "source_lf_sha256": "0af26bbeed35dfa62badc36bf9d30c522249f8ab7823f6fd3eac1a03f27da5b8",
+      "primary_family": "builtin-method-native-provider-call",
+      "secondary_families": [
+        "typed-error-throw-try-catch",
+        "panic-trap-catch",
+        "test-entry-assertion-async",
+        "array-slice-fixed-array-range-iteration",
+        "string-rune-interpolation",
+        "ownership-read-ref-move-copy-drop",
+        "module-graph-import-export-init"
+      ],
+      "tasks": [
+        "313",
+        "314",
+        "315",
+        "316",
+        "317",
+        "318",
+        "319",
+        "320",
+        "322"
+      ],
+      "producer_packages": [
+        "P02",
+        "P06",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P12",
+        "P13",
+        "P14",
+        "P17"
+      ],
+      "semantic_basis": "Complete original JSON/system/runtime source review preserves all named bodies, full pressure and all actual normal/error/context/provider duties. Legacy counters/comments/shapes/markers do not qualify collection strategy, actual source locations, atomic filesystem policy or Windows/POSIX provider behavior.",
+      "original_runner_entries": [
+        {
+          "suite": "regression",
+          "entry": "test"
+        }
+      ],
+      "new_entry_status": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "replacement_qualification": "OPEN",
+      "original_stdout_oracle": {
+        "path": "tests/regression/10_stdlib/1199_time_units.xr.expected",
+        "state": "MISSING",
+        "lf_sha256": null
+      },
+      "original_regression_obligation": {
+        "entry": "test",
+        "expected_exit": 0,
+        "test_discovery": "NOT_RUN"
+      },
+      "original_named_test_obligation": {
+        "state": "REVIEWED_TEXTUAL_DECLARATIONS_NOT_RUNTIME_DISCOVERY",
+        "declarations": [
+          {
+            "name": "test_wall_clock_is_in_milliseconds",
+            "marker_line": 8,
+            "source_segment_lf_sha256": "debf1d0751c8dce847c6563c51d96712a379c32828f68cbf7ad0f78767c4f780"
+          },
+          {
+            "name": "test_monotonic_micros_and_nanos_share_one_clock",
+            "marker_line": 17,
+            "source_segment_lf_sha256": "5ffba799c47a901953c89a5491d43424ce1b9157d3759533c703dfed18789399"
+          },
+          {
+            "name": "test_monotonic_never_goes_backwards",
+            "marker_line": 28,
+            "source_segment_lf_sha256": "1660ee61873950b75888d0b280470db0017834a1c84132e23eb83772b3ac8706"
+          },
+          {
+            "name": "test_cpu_clock_is_nonnegative_and_advances_monotonically",
+            "marker_line": 35,
+            "source_segment_lf_sha256": "aac1507549ad1122ac61e4065cb4e34e523f8f792bd0955cf91c71585557f4f5"
+          },
+          {
+            "name": "test_local_offset_is_local_offset_at_now",
+            "marker_line": 46,
+            "source_segment_lf_sha256": "64374b173e44d5a8d0a8d33d6c9b45c2f2ca9746eb37bf68f4f7043a8e2bc346"
+          },
+          {
+            "name": "test_offset_is_in_minutes_and_within_the_utc_range",
+            "marker_line": 53,
+            "source_segment_lf_sha256": "bfde6efafff54aceb197c7c65037223f0546f806556d1e3a138b2a06d291401a"
+          }
+        ],
+        "execution": "NOT_RUN"
+      },
+      "target_contract_review": "REQUIRED; preserve exact syntax/type/value/error responsibility and real effects, bind published family/query/error/provider/policy contracts, no guessed ABI, opaque identity, skip-to-PASS or compatibility aliases."
+    },
+    {
+      "case_id": "tests/regression/10_stdlib/1200_log_basic.xr",
+      "source_lf_sha256": "161fbeb7abb39500b8fee336b71d5bf898973fd491ed586e91cd341fbd7257c2",
+      "primary_family": "builtin-method-native-provider-call",
+      "secondary_families": [
+        "typed-error-throw-try-catch",
+        "panic-trap-catch",
+        "test-entry-assertion-async",
+        "array-slice-fixed-array-range-iteration",
+        "string-rune-interpolation",
+        "ownership-read-ref-move-copy-drop",
+        "module-graph-import-export-init"
+      ],
+      "tasks": [
+        "313",
+        "314",
+        "315",
+        "316",
+        "317",
+        "318",
+        "319",
+        "320",
+        "322"
+      ],
+      "producer_packages": [
+        "P02",
+        "P06",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P12",
+        "P13",
+        "P14",
+        "P17"
+      ],
+      "semantic_basis": "Complete original JSON/system/runtime source review preserves all named bodies, full pressure and all actual normal/error/context/provider duties. Legacy counters/comments/shapes/markers do not qualify collection strategy, actual source locations, atomic filesystem policy or Windows/POSIX provider behavior.",
+      "original_runner_entries": [
+        {
+          "suite": "regression",
+          "entry": "test"
+        }
+      ],
+      "new_entry_status": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "replacement_qualification": "OPEN",
+      "original_stdout_oracle": {
+        "path": "tests/regression/10_stdlib/1200_log_basic.xr.expected",
+        "state": "MISSING",
+        "lf_sha256": null
+      },
+      "original_regression_obligation": {
+        "entry": "test",
+        "expected_exit": 0,
+        "test_discovery": "NOT_RUN"
+      },
+      "original_named_test_obligation": {
+        "state": "REVIEWED_TEXTUAL_DECLARATIONS_NOT_RUNTIME_DISCOVERY",
+        "declarations": [
+          {
+            "name": "test_log_level_ordering",
+            "marker_line": 8,
+            "source_segment_lf_sha256": "7d5076542b2cad496f37e434585e920576b6d8fd6f85728c317ebfe063641b94"
+          },
+          {
+            "name": "test_is_enabled_default",
+            "marker_line": 17,
+            "source_segment_lf_sha256": "9c832d19bed542ec3c2e81bc44c64984c49bfe9417bb0d3e6c42e5d30e2f23e4"
+          },
+          {
+            "name": "test_set_level",
+            "marker_line": 25,
+            "source_segment_lf_sha256": "3c5feee9487a5cb95fb3be04c94ad68f7403ae5eaa7319436fbf003f53cfbb37"
+          },
+          {
+            "name": "test_log_functions",
+            "marker_line": 36,
+            "source_segment_lf_sha256": "6c07f54fde2cae77fd1be14deb89913b513aa485910b0091e75bff6aa151190e"
+          },
+          {
+            "name": "test_log_with_attrs",
+            "marker_line": 46,
+            "source_segment_lf_sha256": "1f3fe990430af94f6835d6a0fc90c9c2d4df1479bdfe40d8529b2b8d8c6663bd"
+          },
+          {
+            "name": "test_log_json_format",
+            "marker_line": 53,
+            "source_segment_lf_sha256": "d5c09d54f6ffeb8adfe90613baa8999840da37a043a69fe58fbec6c800660816"
+          }
+        ],
+        "execution": "NOT_RUN"
+      },
+      "target_contract_review": "REQUIRED; preserve exact syntax/type/value/error responsibility and real effects, bind published family/query/error/provider/policy contracts, no guessed ABI, opaque identity, skip-to-PASS or compatibility aliases."
+    },
+    {
+      "case_id": "tests/regression/10_stdlib/1200_runtime_info.xr",
+      "source_lf_sha256": "35a08ebe83c815b993d2a3bb5d57cb3a8530c80946e81456b26df78bfbf65429",
+      "primary_family": "defer-cleanup-resource-lifetime",
+      "secondary_families": [
+        "typed-error-throw-try-catch",
+        "panic-trap-catch",
+        "test-entry-assertion-async",
+        "array-slice-fixed-array-range-iteration",
+        "string-rune-interpolation",
+        "ownership-read-ref-move-copy-drop",
+        "module-graph-import-export-init"
+      ],
+      "tasks": [
+        "313",
+        "314",
+        "315",
+        "316",
+        "317",
+        "318",
+        "319",
+        "320",
+        "322"
+      ],
+      "producer_packages": [
+        "P02",
+        "P06",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P12",
+        "P13",
+        "P14",
+        "P17"
+      ],
+      "semantic_basis": "Complete original JSON/system/runtime source review preserves all named bodies, full pressure and all actual normal/error/context/provider duties. Legacy counters/comments/shapes/markers do not qualify collection strategy, actual source locations, atomic filesystem policy or Windows/POSIX provider behavior.",
+      "original_runner_entries": [
+        {
+          "suite": "regression",
+          "entry": "test"
+        }
+      ],
+      "new_entry_status": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "replacement_qualification": "OPEN",
+      "original_stdout_oracle": {
+        "path": "tests/regression/10_stdlib/1200_runtime_info.xr.expected",
+        "state": "MISSING",
+        "lf_sha256": null
+      },
+      "original_regression_obligation": {
+        "entry": "test",
+        "expected_exit": 0,
+        "test_discovery": "NOT_RUN"
+      },
+      "original_named_test_obligation": {
+        "state": "REVIEWED_TEXTUAL_DECLARATIONS_NOT_RUNTIME_DISCOVERY",
+        "declarations": [
+          {
+            "name": "test_kilobytes_are_the_bytes_scaled",
+            "marker_line": 7,
+            "source_segment_lf_sha256": "5d08f27ba761803a4c7bc9f8c6d63a47085f35be685fd440bc67af93fb96ddd6"
+          },
+          {
+            "name": "test_a_snapshot_reports_a_live_domain",
+            "marker_line": 13,
+            "source_segment_lf_sha256": "4471116a9dacb03adf352adc215bd810eeb7d90152de338d5ef9b4f88174cf1c"
+          },
+          {
+            "name": "test_scalar_readings_agree_with_the_snapshot",
+            "marker_line": 21,
+            "source_segment_lf_sha256": "e3c27b200d8d1775bc14c4ad55f72934bab7b76bb43e27cf1394a26f9a7e4399"
+          },
+          {
+            "name": "test_process_wide_counters_are_nonnegative",
+            "marker_line": 34,
+            "source_segment_lf_sha256": "4cf2620c1df2bb51e08759213ffc6628646b381ded73afa2cf6dbf574adff324"
+          }
+        ],
+        "execution": "NOT_RUN"
+      },
+      "target_contract_review": "REQUIRED; preserve exact syntax/type/value/error responsibility and real effects, bind published family/query/error/provider/policy contracts, no guessed ABI, opaque identity, skip-to-PASS or compatibility aliases."
+    },
+    {
+      "case_id": "tests/regression/10_stdlib/1201_log_child.xr",
+      "source_lf_sha256": "f6a9d540ae0f255ae8f04da96dd17323cdd2461008a01cf19666a0da4268e3fe",
+      "primary_family": "builtin-method-native-provider-call",
+      "secondary_families": [
+        "typed-error-throw-try-catch",
+        "panic-trap-catch",
+        "test-entry-assertion-async",
+        "array-slice-fixed-array-range-iteration",
+        "string-rune-interpolation",
+        "ownership-read-ref-move-copy-drop",
+        "module-graph-import-export-init"
+      ],
+      "tasks": [
+        "313",
+        "314",
+        "315",
+        "316",
+        "317",
+        "318",
+        "319",
+        "320",
+        "322"
+      ],
+      "producer_packages": [
+        "P02",
+        "P06",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P12",
+        "P13",
+        "P14",
+        "P17"
+      ],
+      "semantic_basis": "Complete original JSON/system/runtime source review preserves all named bodies, full pressure and all actual normal/error/context/provider duties. Legacy counters/comments/shapes/markers do not qualify collection strategy, actual source locations, atomic filesystem policy or Windows/POSIX provider behavior.",
+      "original_runner_entries": [
+        {
+          "suite": "regression",
+          "entry": "test"
+        }
+      ],
+      "new_entry_status": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "replacement_qualification": "OPEN",
+      "original_stdout_oracle": {
+        "path": "tests/regression/10_stdlib/1201_log_child.xr.expected",
+        "state": "MISSING",
+        "lf_sha256": null
+      },
+      "original_regression_obligation": {
+        "entry": "test",
+        "expected_exit": 0,
+        "test_discovery": "NOT_RUN"
+      },
+      "original_named_test_obligation": {
+        "state": "REVIEWED_TEXTUAL_DECLARATIONS_NOT_RUNTIME_DISCOVERY",
+        "declarations": [
+          {
+            "name": "test_child_logger_creation",
+            "marker_line": 6,
+            "source_segment_lf_sha256": "94d0e677543d9cae9de7c302474be6f879cb3af2534f3170f087f3cff5cd5ac8"
+          },
+          {
+            "name": "test_child_logger_methods",
+            "marker_line": 13,
+            "source_segment_lf_sha256": "29a11f4b9898e3fe4454bec879ca6e27efa8b863e891e83dd7fc0cd36c80f5d0"
+          },
+          {
+            "name": "test_nested_child_logger",
+            "marker_line": 26,
+            "source_segment_lf_sha256": "30732136884641ce1006bdc72b73d5e3718b998d9b0175c6fdfba7181827397a"
+          }
+        ],
+        "execution": "NOT_RUN"
+      },
+      "target_contract_review": "REQUIRED; preserve exact syntax/type/value/error responsibility and real effects, bind published family/query/error/provider/policy contracts, no guessed ABI, opaque identity, skip-to-PASS or compatibility aliases."
+    },
+    {
+      "case_id": "tests/regression/10_stdlib/1202_log_source.xr",
+      "source_lf_sha256": "45e8ecfe28ae57837a4f7b5c8c6b6e77f32a148823e8407cf46da6ba1375e4bc",
+      "primary_family": "builtin-method-native-provider-call",
+      "secondary_families": [
+        "typed-error-throw-try-catch",
+        "panic-trap-catch",
+        "test-entry-assertion-async",
+        "array-slice-fixed-array-range-iteration",
+        "string-rune-interpolation",
+        "ownership-read-ref-move-copy-drop",
+        "module-graph-import-export-init"
+      ],
+      "tasks": [
+        "313",
+        "314",
+        "315",
+        "316",
+        "317",
+        "318",
+        "319",
+        "320",
+        "322"
+      ],
+      "producer_packages": [
+        "P02",
+        "P06",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P12",
+        "P13",
+        "P14",
+        "P17"
+      ],
+      "semantic_basis": "Complete original JSON/system/runtime source review preserves all named bodies, full pressure and all actual normal/error/context/provider duties. Legacy counters/comments/shapes/markers do not qualify collection strategy, actual source locations, atomic filesystem policy or Windows/POSIX provider behavior.",
+      "original_runner_entries": [
+        {
+          "suite": "regression",
+          "entry": "test"
+        }
+      ],
+      "new_entry_status": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "replacement_qualification": "OPEN",
+      "original_stdout_oracle": {
+        "path": "tests/regression/10_stdlib/1202_log_source.xr.expected",
+        "state": "MISSING",
+        "lf_sha256": null
+      },
+      "original_regression_obligation": {
+        "entry": "test",
+        "expected_exit": 0,
+        "test_discovery": "NOT_RUN"
+      },
+      "original_named_test_obligation": {
+        "state": "REVIEWED_TEXTUAL_DECLARATIONS_NOT_RUNTIME_DISCOVERY",
+        "declarations": [
+          {
+            "name": "test_enable_source",
+            "marker_line": 6,
+            "source_segment_lf_sha256": "6346b82cacb2799fae1ceebbac2f9bb2a4824ef7f95d09351e68e4ee86d74d4f"
+          },
+          {
+            "name": "test_source_with_json_format",
+            "marker_line": 16,
+            "source_segment_lf_sha256": "68bdd46553ce2938406936121eb042d87bdc9a484fdbcd6f56d61c2f087f60d6"
+          }
+        ],
+        "execution": "NOT_RUN"
+      },
+      "target_contract_review": "REQUIRED; preserve exact syntax/type/value/error responsibility and real effects, bind published family/query/error/provider/policy contracts, no guessed ABI, opaque identity, skip-to-PASS or compatibility aliases."
+    },
+    {
+      "case_id": "tests/regression/10_stdlib/1203_log_async.xr",
+      "source_lf_sha256": "e2bcdf562c9cfa85893b9874a4e8d7d34e08d3548c10080c84bd4e34b5efeb88",
+      "primary_family": "builtin-method-native-provider-call",
+      "secondary_families": [
+        "typed-error-throw-try-catch",
+        "panic-trap-catch",
+        "test-entry-assertion-async",
+        "array-slice-fixed-array-range-iteration",
+        "string-rune-interpolation",
+        "ownership-read-ref-move-copy-drop",
+        "module-graph-import-export-init"
+      ],
+      "tasks": [
+        "313",
+        "314",
+        "315",
+        "316",
+        "317",
+        "318",
+        "319",
+        "320",
+        "322"
+      ],
+      "producer_packages": [
+        "P02",
+        "P06",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P12",
+        "P13",
+        "P14",
+        "P17"
+      ],
+      "semantic_basis": "Complete original JSON/system/runtime source review preserves all named bodies, full pressure and all actual normal/error/context/provider duties. Legacy counters/comments/shapes/markers do not qualify collection strategy, actual source locations, atomic filesystem policy or Windows/POSIX provider behavior.",
+      "original_runner_entries": [
+        {
+          "suite": "regression",
+          "entry": "test"
+        }
+      ],
+      "new_entry_status": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "replacement_qualification": "OPEN",
+      "original_stdout_oracle": {
+        "path": "tests/regression/10_stdlib/1203_log_async.xr.expected",
+        "state": "MISSING",
+        "lf_sha256": null
+      },
+      "original_regression_obligation": {
+        "entry": "test",
+        "expected_exit": 0,
+        "test_discovery": "NOT_RUN"
+      },
+      "original_named_test_obligation": {
+        "state": "REVIEWED_TEXTUAL_DECLARATIONS_NOT_RUNTIME_DISCOVERY",
+        "declarations": [
+          {
+            "name": "test_async_mode",
+            "marker_line": 6,
+            "source_segment_lf_sha256": "560e4180b69f8d6ba40906a042a98cac945c126e40c73658fdc8887729d61085"
+          }
+        ],
+        "execution": "NOT_RUN"
+      },
+      "target_contract_review": "REQUIRED; preserve exact syntax/type/value/error responsibility and real effects, bind published family/query/error/provider/policy contracts, no guessed ABI, opaque identity, skip-to-PASS or compatibility aliases.",
+      "target_source_port": {
+        "fixture": "tests/unit/xir/legacy_consumers/fixtures/system_regression_ports/1203_log_async/root.xr",
+        "lf_sha256": "7e4be56fc97c22531c9e415e4962105ff547b90d328c9467c339082825b28ff0",
+        "owner_package": "P13",
+        "qualification": "NOT_RUN",
+        "frozen_basis": [
+          "Keep complete original async-mode body and add publication-order markers. Actual declared mode buffers to a bounded queue and flushes in order; it does not by itself establish an OS worker/offload. Product stdout/body capture, queue/drain/physical/provider and StringBuilder replacement remain open."
+        ]
+      },
+      "named_test_migration": {
+        "state": "PREPARED_NOT_EXECUTED",
+        "original_tests_removed": false,
+        "mapping": {
+          "test_async_mode": "test_async_mode"
+        }
+      },
+      "target_disposition": {
+        "kind": "POSITIVE_COMPLETE_CONSUMER_CLEANUP_OR_CONTENT_PORT",
+        "owner_package": "P13",
+        "qualification": "NOT_RUN",
+        "reason": "Keep complete original async-mode body and add publication-order markers. Actual declared mode buffers to a bounded queue and flushes in order; it does not by itself establish an OS worker/offload. Product stdout/body capture, queue/drain/physical/provider and StringBuilder replacement remain open."
+      }
+    },
+    {
+      "case_id": "tests/regression/10_stdlib/1204_runtime.xr",
+      "source_lf_sha256": "3af9186e8d6b65bf8d0ae7077dd73cae4b8a2d85b0c43bbe670f21d083cb88a0",
+      "primary_family": "defer-cleanup-resource-lifetime",
+      "secondary_families": [
+        "typed-error-throw-try-catch",
+        "panic-trap-catch",
+        "test-entry-assertion-async",
+        "array-slice-fixed-array-range-iteration",
+        "string-rune-interpolation",
+        "ownership-read-ref-move-copy-drop",
+        "module-graph-import-export-init"
+      ],
+      "tasks": [
+        "313",
+        "314",
+        "315",
+        "316",
+        "317",
+        "318",
+        "319",
+        "320",
+        "322"
+      ],
+      "producer_packages": [
+        "P02",
+        "P06",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P12",
+        "P13",
+        "P14",
+        "P17"
+      ],
+      "semantic_basis": "Complete original JSON/system/runtime source review preserves all named bodies, full pressure and all actual normal/error/context/provider duties. Legacy counters/comments/shapes/markers do not qualify collection strategy, actual source locations, atomic filesystem policy or Windows/POSIX provider behavior.",
+      "original_runner_entries": [
+        {
+          "suite": "regression",
+          "entry": "test"
+        }
+      ],
+      "new_entry_status": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "replacement_qualification": "OPEN",
+      "original_stdout_oracle": {
+        "path": "tests/regression/10_stdlib/1204_runtime.xr.expected",
+        "state": "MISSING",
+        "lf_sha256": null
+      },
+      "original_regression_obligation": {
+        "entry": "test",
+        "expected_exit": 0,
+        "test_discovery": "NOT_RUN"
+      },
+      "original_named_test_obligation": {
+        "state": "REVIEWED_TEXTUAL_DECLARATIONS_NOT_RUNTIME_DISCOVERY",
+        "declarations": [
+          {
+            "name": "test_mem_live_bytes",
+            "marker_line": 6,
+            "source_segment_lf_sha256": "fd5bafe26c9dfad685792ebf8d782774a12ee9a7dd520b99501e298051d14cb2"
+          },
+          {
+            "name": "test_mem_live_objects",
+            "marker_line": 13,
+            "source_segment_lf_sha256": "bb36f34f41cd6d58584015142d9eb70db84b29206636e238b2c692e37d34db3b"
+          },
+          {
+            "name": "test_alloc_increases_memory",
+            "marker_line": 20,
+            "source_segment_lf_sha256": "8a5b27c3f15451a24eed7e51c0f55bed7278f2c9687736129b294f9ca4341b37"
+          }
+        ],
+        "execution": "NOT_RUN"
+      },
+      "target_contract_review": "REQUIRED; preserve exact syntax/type/value/error responsibility and real effects, bind published family/query/error/provider/policy contracts, no guessed ABI, opaque identity, skip-to-PASS or compatibility aliases."
+    },
+    {
+      "case_id": "tests/regression/10_stdlib/1205_runtime_alloc_pressure.xr",
+      "source_lf_sha256": "6943e2a4d7d7eadd6c8f13717a2f2afe22f3a71076c03ad97a6c2a5c4b3aba7c",
+      "primary_family": "defer-cleanup-resource-lifetime",
+      "secondary_families": [
+        "typed-error-throw-try-catch",
+        "panic-trap-catch",
+        "test-entry-assertion-async",
+        "array-slice-fixed-array-range-iteration",
+        "string-rune-interpolation",
+        "ownership-read-ref-move-copy-drop",
+        "module-graph-import-export-init"
+      ],
+      "tasks": [
+        "313",
+        "314",
+        "315",
+        "316",
+        "317",
+        "318",
+        "319",
+        "320",
+        "322"
+      ],
+      "producer_packages": [
+        "P02",
+        "P06",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P12",
+        "P13",
+        "P14",
+        "P17"
+      ],
+      "semantic_basis": "Complete original JSON/system/runtime source review preserves all named bodies, full pressure and all actual normal/error/context/provider duties. Legacy counters/comments/shapes/markers do not qualify collection strategy, actual source locations, atomic filesystem policy or Windows/POSIX provider behavior.",
+      "original_runner_entries": [
+        {
+          "suite": "regression",
+          "entry": "test"
+        }
+      ],
+      "new_entry_status": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "replacement_qualification": "OPEN",
+      "original_stdout_oracle": {
+        "path": "tests/regression/10_stdlib/1205_runtime_alloc_pressure.xr.expected",
+        "state": "MISSING",
+        "lf_sha256": null
+      },
+      "original_regression_obligation": {
+        "entry": "test",
+        "expected_exit": 0,
+        "test_discovery": "NOT_RUN"
+      },
+      "original_named_test_obligation": {
+        "state": "REVIEWED_TEXTUAL_DECLARATIONS_NOT_RUNTIME_DISCOVERY",
+        "declarations": [
+          {
+            "name": "test_nested_object_survival",
+            "marker_line": 31,
+            "source_segment_lf_sha256": "014ed5421bcee9c0c496917165a80cf9e372590642e1f8d7af05b14bdc7b055c"
+          },
+          {
+            "name": "test_alloc_interleaved_phases",
+            "marker_line": 55,
+            "source_segment_lf_sha256": "83be885b7449da323816ba763d93adccbf8bec9c4f30992c8868d01da170167e"
+          },
+          {
+            "name": "test_deep_reference_chain",
+            "marker_line": 78,
+            "source_segment_lf_sha256": "4c3c309b6e7fa7d68069588d933efe5af73d9f934a74d560c30491a38185c0ee"
+          },
+          {
+            "name": "test_high_churn_with_live_roots",
+            "marker_line": 102,
+            "source_segment_lf_sha256": "06ca2a01fe664e48d254eb04b76c733015bb8f27d988cdff03892987d697bcf3"
+          },
+          {
+            "name": "test_repeated_alloc_rounds",
+            "marker_line": 125,
+            "source_segment_lf_sha256": "f1394a3a254faa944ae1220ff19b9b53fd7e7c79e553705286a6a3669fd8e808"
+          }
+        ],
+        "execution": "NOT_RUN"
+      },
+      "target_contract_review": "REQUIRED; preserve exact syntax/type/value/error responsibility and real effects, bind published family/query/error/provider/policy contracts, no guessed ABI, opaque identity, skip-to-PASS or compatibility aliases.",
+      "target_source_port": {
+        "fixture": "tests/unit/xir/legacy_consumers/fixtures/system_regression_ports/1205_runtime_alloc_pressure/root.xr",
+        "lf_sha256": "65fe57c6f3b891f1dfc59f9cf00fcc7f1ceb641ea52300bc85ed2b2769be3ef9",
+        "owner_package": "P10",
+        "qualification": "NOT_RUN",
+        "frozen_basis": [
+          "Task319 contextual class init and nonOptional receiver access; preserve full200 nested records,100+100 phases,50-node chain,50roots/20x200churn and10x100 rounds. Old RC/collection implementation comments and counters do not settle current Task315 cycle/physical strategy."
+        ]
+      },
+      "named_test_migration": {
+        "state": "PREPARED_NOT_EXECUTED",
+        "original_tests_removed": false,
+        "mapping": {
+          "test_nested_object_survival": "test_nested_object_survival",
+          "test_alloc_interleaved_phases": "test_alloc_interleaved_phases",
+          "test_deep_reference_chain": "test_deep_reference_chain",
+          "test_high_churn_with_live_roots": "test_high_churn_with_live_roots",
+          "test_repeated_alloc_rounds": "test_repeated_alloc_rounds"
+        }
+      },
+      "target_disposition": {
+        "kind": "POSITIVE_COMPLETE_CONSUMER_CLEANUP_OR_CONTENT_PORT",
+        "owner_package": "P10",
+        "qualification": "NOT_RUN",
+        "reason": "Task319 contextual class init and nonOptional receiver access; preserve full200 nested records,100+100 phases,50-node chain,50roots/20x200churn and10x100 rounds. Old RC/collection implementation comments and counters do not settle current Task315 cycle/physical strategy."
+      }
+    },
+    {
+      "case_id": "tests/regression/10_stdlib/1206_runtime_enhanced.xr",
+      "source_lf_sha256": "f4e9d85ca09f6ea2c80d7217c9c6c77596a2c97b242dd5bfe739d898e463ffbd",
+      "primary_family": "defer-cleanup-resource-lifetime",
+      "secondary_families": [
+        "typed-error-throw-try-catch",
+        "panic-trap-catch",
+        "test-entry-assertion-async",
+        "array-slice-fixed-array-range-iteration",
+        "string-rune-interpolation",
+        "ownership-read-ref-move-copy-drop",
+        "module-graph-import-export-init"
+      ],
+      "tasks": [
+        "313",
+        "314",
+        "315",
+        "316",
+        "317",
+        "318",
+        "319",
+        "320",
+        "322"
+      ],
+      "producer_packages": [
+        "P02",
+        "P06",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P12",
+        "P13",
+        "P14",
+        "P17"
+      ],
+      "semantic_basis": "Complete original JSON/system/runtime source review preserves all named bodies, full pressure and all actual normal/error/context/provider duties. Legacy counters/comments/shapes/markers do not qualify collection strategy, actual source locations, atomic filesystem policy or Windows/POSIX provider behavior.",
+      "original_runner_entries": [
+        {
+          "suite": "regression",
+          "entry": "test"
+        }
+      ],
+      "new_entry_status": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "replacement_qualification": "OPEN",
+      "original_stdout_oracle": {
+        "path": "tests/regression/10_stdlib/1206_runtime_enhanced.xr.expected",
+        "state": "MISSING",
+        "lf_sha256": null
+      },
+      "original_regression_obligation": {
+        "entry": "test",
+        "expected_exit": 0,
+        "test_discovery": "NOT_RUN"
+      },
+      "original_named_test_obligation": {
+        "state": "REVIEWED_TEXTUAL_DECLARATIONS_NOT_RUNTIME_DISCOVERY",
+        "declarations": [
+          {
+            "name": "test_mem_info_keys",
+            "marker_line": 44,
+            "source_segment_lf_sha256": "c0fd01af5674df67a31d6f68eeebb05eda91fa00a38263d1d1d6a167083df917"
+          },
+          {
+            "name": "test_mem_live_bytes_decreases_after_collect",
+            "marker_line": 57,
+            "source_segment_lf_sha256": "84c31d2810a8438c3eb68a4808f96652afb36a12c18dc271069da865b2668456"
+          },
+          {
+            "name": "test_mem_live_objects_tracks_alloc",
+            "marker_line": 76,
+            "source_segment_lf_sha256": "cdc3f07822057bfdbe3f11263fb56ad6128b47883899f065c80d5203c783b5e6"
+          }
+        ],
+        "execution": "NOT_RUN"
+      },
+      "target_contract_review": "REQUIRED; preserve exact syntax/type/value/error responsibility and real effects, bind published family/query/error/provider/policy contracts, no guessed ABI, opaque identity, skip-to-PASS or compatibility aliases.",
+      "target_source_port": {
+        "fixture": "tests/unit/xir/legacy_consumers/fixtures/system_regression_ports/1206_runtime_enhanced/root.xr",
+        "lf_sha256": "752f3a5539602e485ee37ea54a42e257d488cbcc905f9c2b98ec106ef230f604",
+        "owner_package": "P07",
+        "qualification": "NOT_RUN",
+        "frozen_basis": [
+          "Keep original200-garbage and10retained counter bodies; add actualpost-samplecontent reads for all10 JSONpayloads. Original len-only use doesnot prove inner payload liveness underoptimization; counters/oldJITburnin are not physical or currentstrategy qualification."
+        ]
+      },
+      "named_test_migration": {
+        "state": "PREPARED_NOT_EXECUTED",
+        "original_tests_removed": false,
+        "mapping": {
+          "test_mem_info_keys": "test_mem_info_keys",
+          "test_mem_live_bytes_decreases_after_collect": "test_mem_live_bytes_decreases_after_collect",
+          "test_mem_live_objects_tracks_alloc": "test_mem_live_objects_tracks_alloc"
+        }
+      },
+      "target_disposition": {
+        "kind": "POSITIVE_COMPLETE_CONSUMER_CLEANUP_OR_CONTENT_PORT",
+        "owner_package": "P07",
+        "qualification": "NOT_RUN",
+        "reason": "Keep original200-garbage and10retained counter bodies; add actualpost-samplecontent reads for all10 JSONpayloads. Original len-only use doesnot prove inner payload liveness underoptimization; counters/oldJITburnin are not physical or currentstrategy qualification."
+      }
+    },
+    {
+      "case_id": "tests/regression/10_stdlib/1207_runtime_stress.xr",
+      "source_lf_sha256": "e36320c7f5a1eda20471c5a9e1c297dfca2ae6e3c605132f2addec9accd1187d",
+      "primary_family": "defer-cleanup-resource-lifetime",
+      "secondary_families": [
+        "typed-error-throw-try-catch",
+        "panic-trap-catch",
+        "test-entry-assertion-async",
+        "array-slice-fixed-array-range-iteration",
+        "string-rune-interpolation",
+        "ownership-read-ref-move-copy-drop",
+        "module-graph-import-export-init"
+      ],
+      "tasks": [
+        "313",
+        "314",
+        "315",
+        "316",
+        "317",
+        "318",
+        "319",
+        "320",
+        "322"
+      ],
+      "producer_packages": [
+        "P02",
+        "P06",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P12",
+        "P13",
+        "P14",
+        "P17"
+      ],
+      "semantic_basis": "Complete original JSON/system/runtime source review preserves all named bodies, full pressure and all actual normal/error/context/provider duties. Legacy counters/comments/shapes/markers do not qualify collection strategy, actual source locations, atomic filesystem policy or Windows/POSIX provider behavior.",
+      "original_runner_entries": [
+        {
+          "suite": "regression",
+          "entry": "test"
+        }
+      ],
+      "new_entry_status": "PENDING_FIXED_PRODUCT_DELIVERY",
+      "replacement_qualification": "OPEN",
+      "original_stdout_oracle": {
+        "path": "tests/regression/10_stdlib/1207_runtime_stress.xr.expected",
+        "state": "MISSING",
+        "lf_sha256": null
+      },
+      "original_regression_obligation": {
+        "entry": "test",
+        "expected_exit": 0,
+        "test_discovery": "NOT_RUN"
+      },
+      "original_named_test_obligation": {
+        "state": "REVIEWED_TEXTUAL_DECLARATIONS_NOT_RUNTIME_DISCOVERY",
+        "declarations": [
+          {
+            "name": "test_string_pool_survival",
+            "marker_line": 17,
+            "source_segment_lf_sha256": "42e0f9cdccd4ed847289c827b452f89cdbb2ed2b8dd2963ddc09759703d844f8"
+          },
+          {
+            "name": "test_nested_string_key_survival",
+            "marker_line": 41,
+            "source_segment_lf_sha256": "ee3ac623122f0c01cd85556b9cb8cb4bd27a8a658e5b4d7221ff94ed1fff4b2e"
+          },
+          {
+            "name": "test_closure_upvalue_gc",
+            "marker_line": 64,
+            "source_segment_lf_sha256": "8dd22b5f30781fe35dface43716a5b971ae5042981d2488ba96d5782920f4b84"
+          },
+          {
+            "name": "test_rapid_alloc_collect",
+            "marker_line": 90,
+            "source_segment_lf_sha256": "59c5a1c4fba5fa699fd74d91a21cdf64e82d5b3b276a5eb56b476030c555602e"
+          },
+          {
+            "name": "test_mixed_container_gc",
+            "marker_line": 117,
+            "source_segment_lf_sha256": "29d41c59d487dbec368173539f2103bcdc3d4bc341dea68bf6c1adc81fefe041"
+          },
+          {
+            "name": "test_generational_cross_reference",
+            "marker_line": 149,
+            "source_segment_lf_sha256": "59973ccffad6be52a63369ee742a48ce2d36d142f1f452bb9125912322e0338c"
+          },
+          {
+            "name": "test_string_concat_churn",
+            "marker_line": 181,
+            "source_segment_lf_sha256": "1032640658ada00a631fee37d4b362f42c6a4c230456af7fa3be9c840e0f4341"
+          },
+          {
+            "name": "test_instance_field_gc",
+            "marker_line": 203,
+            "source_segment_lf_sha256": "2dea1eaf8c82d8e9bcc8a8b520603b2f3e6e0ee94ad6b3f56387bd40248cad4c"
+          }
+        ],
+        "execution": "NOT_RUN"
+      },
+      "target_contract_review": "REQUIRED; preserve exact syntax/type/value/error responsibility and real effects, bind published family/query/error/provider/policy contracts, no guessed ABI, opaque identity, skip-to-PASS or compatibility aliases.",
+      "target_source_port": {
+        "fixture": "tests/unit/xir/legacy_consumers/fixtures/system_regression_ports/1207_runtime_stress/root.xr",
+        "lf_sha256": "68615786f3b1e8b230d6576ef5928623d3b16c4b571364721142c583008d38aa",
+        "owner_package": "P10",
+        "qualification": "NOT_RUN",
+        "frozen_basis": [
+          "Task319 init on full Node class with explicit nonmatching v:i64,l:string params. Keep every original typed container/capture/chain/root/record and full pressure. Nested ParentRecord children mutation follows writable-place value semantics; no snapshot alias restoration or claim of generational/collector implementation."
+        ]
+      },
+      "named_test_migration": {
+        "state": "PREPARED_NOT_EXECUTED",
+        "original_tests_removed": false,
+        "mapping": {
+          "test_string_pool_survival": "test_string_pool_survival",
+          "test_nested_string_key_survival": "test_nested_string_key_survival",
+          "test_closure_upvalue_gc": "test_closure_upvalue_gc",
+          "test_rapid_alloc_collect": "test_rapid_alloc_collect",
+          "test_mixed_container_gc": "test_mixed_container_gc",
+          "test_generational_cross_reference": "test_generational_cross_reference",
+          "test_string_concat_churn": "test_string_concat_churn",
+          "test_instance_field_gc": "test_instance_field_gc"
+        }
+      },
+      "target_disposition": {
+        "kind": "POSITIVE_COMPLETE_CONSUMER_CLEANUP_OR_CONTENT_PORT",
+        "owner_package": "P10",
+        "qualification": "NOT_RUN",
+        "reason": "Task319 init on full Node class with explicit nonmatching v:i64,l:string params. Keep every original typed container/capture/chain/root/record and full pressure. Nested ParentRecord children mutation follows writable-place value semantics; no snapshot alias restoration or claim of generational/collector implementation."
+      }
     }
   ],
   "boundaries": [

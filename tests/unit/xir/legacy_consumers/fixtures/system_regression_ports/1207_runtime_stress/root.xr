@@ -1,0 +1,242 @@
+// Memory stress tests: cover all historical bug patterns and audit findings
+// Pattern A: cross-subsystem liveness disagreement (string pool, alloc_marks)
+// Pattern B: incremental/generational time window issues
+// Pattern C: special paths skipping common logic (large objects, JIT alloc)
+
+import runtime
+
+type NamedValue = { val: i64, name: string }
+type BatchRecord = { c: i64, i: i64, s: string }
+type NestedValue = { nested: i64 }
+type MixedRecord = { arr: Array<i64 | string>, map_key: string }
+type ParentRecord = { id: i64, children: Array<string> }
+
+// --- Test 1: String pool survival under memory pressure ---
+// Bug #4 pattern: interned strings must survive heavy allocation churn
+// Exercises: global string pool ACCESSED flag + markobject path
+@test
+fn test_string_pool_survival() {
+    var strings: Array<string> = []
+    for (var i = 0; i < 500; i++) {
+        strings.push("interned_str_" + string(i))
+    }
+
+    // Multiple cycle-collection rounds to trigger string pool sweep
+    for (var cycle = 0; cycle < 5; cycle++) {
+        // Create garbage between cycles
+        for (var j = 0; j < 100; j++) {
+            var tmp = "temp_garbage_" + string(j) + "_" + string(cycle)
+        }
+    }
+
+    // All original strings must survive
+    for (var i = 0; i < 500; i++) {
+        assertEqual(strings[i], "interned_str_" + string(i))
+    }
+}
+
+// --- Test 2: Deep nested objects with string keys ---
+// Bug #4 + #2 pattern: string keys inside maps inside arrays
+// Exercises: traverse_map marking string keys + ACCESSED flag
+@test
+fn test_nested_string_key_survival() {
+    var data: Array<NamedValue> = []
+    for (var i = 0; i < 200; i++) {
+        var m: NamedValue = { val: i * 3, name: "field_" + string(i) }
+        data.push(m)
+    }
+
+
+    // Create churn to stress hole scanning
+    for (var j = 0; j < 500; j++) {
+        var tmp = [j, j + 1, j + 2]
+    }
+
+
+    for (var i = 0; i < 200; i++) {
+        assertEqual(data[i].val, i * 3)
+        assertEqual(data[i].name, "field_" + string(i))
+    }
+}
+
+// --- Test 3: Closure upvalue survival ---
+// Exercises: traverse_closure + upvalue marking
+@test
+fn test_closure_upvalue_gc() {
+    var closures: Array<fn() -> string> = []
+    for (var i = 0; i < 100; i++) {
+        var captured = "captured_" + string(i)
+        var arr = [i, i * 2]
+        closures.push(fn() {
+            return captured + "_" + string(arr[1])
+        })
+    }
+
+
+    // Create garbage to push GC
+    for (var j = 0; j < 300; j++) {
+        var tmp = { garbage: j }
+    }
+
+
+    for (var i = 0; i < 100; i++) {
+        assertEqual(closures[i](), "captured_" + string(i) + "_" + string(i * 2))
+    }
+}
+
+// --- Test 4: Rapid alloc-collect cycles ---
+// Bug #1 pattern: allocations interleaved with cycle collector must not overwrite each other
+// Exercises: live-object preservation across cycle collection and block reclaim
+@test
+fn test_rapid_alloc_collect() {
+    var survivors: Array<Array<BatchRecord>> = []
+    for (var cycle = 0; cycle < 20; cycle++) {
+        var batch: Array<BatchRecord> = []
+        for (var i = 0; i < 50; i++) {
+            batch.push({ c: cycle, i: i, s: "v" + string(cycle) + "_" + string(i) })
+        }
+        // Keep last batch alive
+        if (cycle >= 15) {
+            survivors.push(batch)
+        }
+    }
+
+    // Verify surviving batches
+    for (var si = 0; si < len(survivors); si++) {
+        var batch = survivors[si]
+        var expected_cycle = 15 + si
+        for (var i = 0; i < 50; i++) {
+            assertEqual(batch[i].c, expected_cycle)
+            assertEqual(batch[i].i, i)
+        }
+    }
+}
+
+// --- Test 5: Mixed container types under GC ---
+// Exercises: traverse completeness for Array, Map, Set, and structural objects
+@test
+fn test_mixed_container_gc() {
+    var arr: Array<Array<i64 | string>> = []
+    var map: Map<string, NestedValue> = Map()
+    var data: Array<MixedRecord> = []
+
+    for (var i = 0; i < 100; i++) {
+        arr.push([i, "a" + string(i)])
+        map["k" + string(i)] = { nested: i }
+        var item_arr = [arr[i][0], arr[i][1]]
+        data.push({ arr: item_arr, map_key: "k" + string(i) })
+    }
+
+
+    // Create garbage
+    for (var j = 0; j < 500; j++) {
+        var tmp = [j, j]
+    }
+
+
+    // Verify all containers intact
+    for (var i = 0; i < 100; i++) {
+        assert(arr[i][0] == i)
+        assert(arr[i][1] == "a" + string(i))
+        assertEqual(map["k" + string(i)].nested, i)
+        assert(data[i].arr[0] == i)
+    }
+}
+
+// --- Test 6: Long-lived + short-lived mix (generational pattern) ---
+// Bug #3 pattern: old generation objects referencing young objects
+// Exercises: remembered set / write barrier
+@test
+fn test_generational_cross_reference() {
+    // Create long-lived container
+    var long_lived: Array<ParentRecord> = []
+    for (var i = 0; i < 50; i++) {
+        long_lived.push({ id: i, children: [] })
+    }
+
+
+    // Now add young objects as children of old objects
+    for (var round = 0; round < 10; round++) {
+        for (var i = 0; i < 50; i++) {
+            long_lived[i].children.push("round_" + string(round))
+        }
+
+        // Create garbage between rounds
+        for (var j = 0; j < 100; j++) {
+            var tmp = { temp: j }
+        }
+
+    }
+
+    // Verify all children survived
+    for (var i = 0; i < 50; i++) {
+        assertEqual(len(long_lived[i].children), 10)
+        assertEqual(long_lived[i].children[0], "round_0")
+        assertEqual(long_lived[i].children[9], "round_9")
+    }
+}
+
+// --- Test 7: String concatenation churn ---
+// Heavy string allocation: tests interned string pool under extreme pressure
+@test
+fn test_string_concat_churn() {
+    var results: Array<string> = []
+    for (var i = 0; i < 100; i++) {
+        var s = ""
+        for (var j = 0; j < 10; j++) {
+            s = s + string(j)
+        }
+        results.push(s)
+
+        if (i % 20 == 0) {
+        }
+    }
+
+    var expected = "0123456789"
+    for (var i = 0; i < 100; i++) {
+        assertEqual(results[i], expected)
+    }
+}
+
+// --- Test 8: Class instance field GC ---
+// Exercises: traverse_instance marking all fields
+@test
+fn test_instance_field_gc() {
+    class Node {
+        value: i64
+        label: string
+        children: Array<Node>
+
+        init(v: i64, l: string) {
+            this.value = v
+            this.label = l
+            this.children = []
+        }
+    }
+
+    var nodes: Array<Node> = []
+    for (var i = 0; i < 100; i++) {
+        var n = Node(i, "node_" + string(i))
+        if (i > 0) {
+            nodes[i - 1].children.push(n)
+        }
+        nodes.push(n)
+    }
+
+
+    // Garbage storm
+    for (var j = 0; j < 500; j++) {
+        var tmp = Node(j + 1000, "garbage")
+    }
+
+
+    // Verify
+    for (var i = 0; i < 100; i++) {
+        assertEqual(nodes[i].value, i)
+        assertEqual(nodes[i].label, "node_" + string(i))
+    }
+    assertEqual(len(nodes[0].children), 1)
+    assertEqual(nodes[0].children[0].value, 1)
+}
+
+print("All memory stress tests passed")
