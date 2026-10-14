@@ -52,9 +52,21 @@ static uint64_t objects_reference(XdapAdapter *adapter,uint64_t frame,uint64_t e
     request(adapter,message);XrJsonValue *reply=last_response("scopes",true);
     uint64_t scope=(uint64_t)xjson_get_int(xjson_array_get(xjson_get_array(xjson_get_object(reply,"body"),"scopes"),0),"variablesReference");xjson_free(reply);
     reply=objects_variables(adapter,scope);XrJsonValue *variables=xjson_get_array(xjson_get_object(reply,"body"),"variables");uint64_t handle=0;
+    if (frame==adapter->frames[0].handle) {
+        CHECK(!strcmp(xjson_get_string(xjson_array_get(variables,1),"type"),"Choice"));
+        CHECK(!strcmp(xjson_get_string(xjson_array_get(variables,2),"type"),"i64?"));
+        CHECK(!strcmp(xjson_get_string(xjson_array_get(variables,3),"type"),"i64"));
+    }
+    if (frame==adapter->frames[1].handle) {
+        bool callable=false;
+        for (int i=0;i<xjson_array_len(variables);++i) if (!strcmp(xjson_get_string(xjson_array_get(variables,i),"type"),"function")) callable=true;
+        CHECK(callable);
+    }
     for (int i=0;i<xjson_array_len(variables);++i) {
         XrJsonValue *value=xjson_array_get(variables,i);
-        if ((uint64_t)xjson_get_int(value,"namedVariables")==expected) { handle=(uint64_t)xjson_get_int(value,"variablesReference");break; }
+        if ((uint64_t)xjson_get_int(value,"namedVariables")==expected) {
+            CHECK(!strcmp(xjson_get_string(value,"type"),"Vault"));handle=(uint64_t)xjson_get_int(value,"variablesReference");break;
+        }
     }
     xjson_free(reply);CHECK(handle);return handle;
 }
@@ -105,7 +117,10 @@ int main(int argc,char **argv) {
     XrCompileResources *ledger=NULL;XrXirDomain *domain=NULL;XrCompileResourceStats baseline={0};
     XdapAdapter *adapter=objects_setup(&ledger,&domain,&baseline);
     request(adapter,"{\"seq\":4,\"type\":\"request\",\"command\":\"configurationDone\"}");
-    CHECK(xdap_adapter_step(adapter,1000)==XR_XIR_OK && event_count("stopped")==1);
+    XrXirStatus stepped=xdap_adapter_step(adapter,1000);
+    if (stepped!=XR_XIR_OK || event_count("stopped")!=1)
+        fprintf(stderr,"Object debug start: status=%u outcome=%u terminal=%d stopped=%u\n",(unsigned)stepped,(unsigned)adapter->outcome.status,(int)adapter->terminal,event_count("stopped"));
+    CHECK(stepped==XR_XIR_OK && event_count("stopped")==1);
     request(adapter,"{\"seq\":5,\"type\":\"request\",\"command\":\"stackTrace\",\"arguments\":{\"threadId\":1}}");
     XrJsonValue *reply=last_response("stackTrace",true);XrJsonValue *frames=xjson_get_array(xjson_get_object(reply,"body"),"stackFrames");CHECK(xjson_array_len(frames)>=3);
     uint64_t frame_ids[3];for (uint32_t i=0;i<3;++i) frame_ids[i]=(uint64_t)xjson_get_int(xjson_array_get(frames,i),"id");xjson_free(reply);
@@ -120,6 +135,8 @@ int main(int argc,char **argv) {
         CHECK(!strcmp(xjson_get_string(xjson_array_get(variables,0),"name"),"visible"));
         CHECK(!strcmp(xjson_get_string(xjson_array_get(variables,0),"value"),"11"));
         if (j==1) { CHECK(!strcmp(xjson_get_string(xjson_array_get(variables,1),"name"),"secret"));CHECK(!strcmp(xjson_get_string(xjson_array_get(variables,2),"name"),"seal")); }
+        CHECK(!strcmp(xjson_get_string(xjson_array_get(variables,j==1 ? 3 : 1),"type"),"Array<Parcel>"));
+        CHECK(!strcmp(xjson_get_string(xjson_array_get(variables,j==1 ? 4 : 2),"type"),"Parcel"));
         uint64_t nested=(uint64_t)xjson_get_int(xjson_array_get(variables,j==1 ? 3 : 1),"variablesReference");xjson_free(reply);CHECK(nested);
         reply=objects_variables(adapter,nested);variables=xjson_get_array(xjson_get_object(reply,"body"),"variables");CHECK(xjson_array_len(variables)==1);
         uint64_t parcel=(uint64_t)xjson_get_int(xjson_array_get(variables,0),"variablesReference");xjson_free(reply);CHECK(parcel);
@@ -130,6 +147,9 @@ int main(int argc,char **argv) {
     XrXirValue escaped={0};CHECK(xr_xir_value_copy(&refs[1]->value,&escaped)==XR_XIR_VALUE_OK);bool allowed=true;
     CHECK(xr_xir_vm_debug_snapshot_member(snapshot,0,&escaped,1,&allowed)==XR_XIR_VALUE_OK && !allowed);
     CHECK(xr_xir_vm_debug_snapshot_member(snapshot,1,&escaped,1,&allowed)==XR_XIR_VALUE_OK && allowed);
+    CHECK(xr_xir_vm_debug_snapshot_type_visible(snapshot,0,&escaped,(XrXirType)escaped.type,&allowed)==XR_XIR_VALUE_OK && allowed);
+    CHECK(xr_xir_vm_debug_snapshot_type_visible(snapshot,UINT32_MAX,&escaped,(XrXirType)escaped.type,&allowed)==XR_XIR_VALUE_BAD_ARGUMENT && allowed);
+    CHECK(xr_xir_vm_debug_snapshot_type_visible(snapshot,1,&escaped,XR_XIR_I64,&allowed)==XR_XIR_VALUE_UNSUPPORTED && allowed);
     CHECK(xr_xir_vm_debug_snapshot_member(snapshot,UINT32_MAX,&escaped,1,&allowed)==XR_XIR_VALUE_BAD_ARGUMENT && allowed);
     CHECK(xr_xir_vm_debug_snapshot_member(snapshot,1,&escaped,UINT32_MAX,&allowed)==XR_XIR_VALUE_BOUNDS && allowed);
     XrXirValue foreign={0};CHECK(xr_xir_string_new(domain,"foreign",7,&foreign)==XR_XIR_VALUE_OK);
@@ -138,6 +158,7 @@ int main(int argc,char **argv) {
     CHECK(xdap_adapter_free(adapter)==XR_XIR_CALL_READY);adapter=NULL;
     CHECK(xr_xir_vm_debug_snapshot_member(snapshot,1,&escaped,1,&allowed)==XR_XIR_VALUE_OK && allowed);
     XdapValueView view={&escaped,domain,snapshot,1};XrXirValue secret={0};const char *name=NULL;size_t length=0;
+    XdapTypeText type={0};CHECK(xdap_value_type_text(&view,&type)==XR_XIR_VALUE_OK && type.length==5 && !memcmp(type.bytes,"Vault",5));
     CHECK(xdap_value_child(&view,1,&secret,&name,&length)==XR_XIR_VALUE_OK && length==6 && !memcmp(name,"secret",6));
     CHECK(secret.type==XR_XIR_I64 && secret.payload==22);xr_xir_value_drop(&secret);xr_xir_value_drop(&escaped);xr_xir_vm_debug_snapshot_drop(snapshot);
     CHECK(!xr_xir_domain_budget_stats(domain).metadata_live);xr_xir_domain_drop(domain);

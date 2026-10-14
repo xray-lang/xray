@@ -114,4 +114,8 @@ XR_FUNC XrXirValueStatus xr_xir_vm_debug_snapshot_exception(const XrXirVmDebugSn
  * loan or Instance authority and survives Program/Instance disposal. */
 XR_FUNC XrXirValueStatus xr_xir_vm_debug_snapshot_member(const XrXirVmDebugSnapshot *,
     uint32_t frame,const XrXirValue *,uint32_t field,bool *allowed);
+/* A nested nominal type name is visible only in the captured caller's scope.
+ * The owning value must match the retained frame arena; no field is read. */
+XR_FUNC XrXirValueStatus xr_xir_vm_debug_snapshot_type_visible(const XrXirVmDebugSnapshot *,
+    uint32_t frame,const XrXirValue *,XrXirType,bool *allowed);
 #endif // XXIR_VM_DEBUG_H

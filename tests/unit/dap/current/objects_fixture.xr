@@ -1,4 +1,5 @@
 struct Parcel { label:string; code:i64 }
+enum Choice { Value { value:i64 }, Empty }
 class Vault {
     visible:i64
     private secret:i64
@@ -12,8 +13,11 @@ class Vault {
         this.nested = [Parcel{label:"owned", code:44}]
         this.parcel = Parcel{label:"inline", code:55}
     }
-    static inspect(vault:Vault)->i64 { return leaf(vault) }
+    static inspect(vault:Vault)->i64 {
+        const callback = fn()->i64 { return 77 }
+        return leaf(vault,Choice.Value{value:66},null,callback())
+    }
 }
-fn leaf(vault:Vault)->i64 { return vault.visible }
+fn leaf(vault:Vault,choice:Choice,nothing:i64?,marker:i64)->i64 { return vault.visible }
 fn outside(vault:Vault)->i64 { return Vault.inspect(vault) }
 print(outside(Vault(11,22,33)))

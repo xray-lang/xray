@@ -619,3 +619,13 @@ XR_FUNC XrXirValueStatus xr_xir_vm_debug_snapshot_member(const XrXirVmDebugSnaps
         (!(identity->fields[field].flags & (XR_XIR_FIELD_PRIVATE|XR_XIR_FIELD_PROTECTED)) || scope->nominal_owner==declaration+1);
     return XR_XIR_VALUE_OK;
 }
+XR_FUNC XrXirValueStatus xr_xir_vm_debug_snapshot_type_visible(const XrXirVmDebugSnapshot *snapshot,
+    uint32_t frame,const XrXirValue *value,XrXirType type,bool *allowed) {
+    if (!snapshot_valid(snapshot) || frame>=snapshot->count || !allowed || !xr_xir_value_valid(value)) return XR_XIR_VALUE_BAD_ARGUMENT;
+    const SnapshotFrame *scope=&snapshot->frames[frame];
+    if (!scope->read_arena || xr_xir_value_arena(value)!=scope->read_arena) return XR_XIR_VALUE_BAD_ARGUMENT;
+    if (!xr_xir_domain_work(snapshot->domain,1)) return XR_XIR_VALUE_LIMIT;
+    const XrXirTypeNode *node=xr_xir_type_node(xr_xir_compile_type_arena_types(scope->read_arena),type);
+    if (!node || node->kind!=XR_XIR_TYPE_NOMINAL || node->nominal.declaration>=scope->nominal_count) return XR_XIR_VALUE_UNSUPPORTED;
+    *allowed=scope->nominal_visible[node->nominal.declaration]!=0;return XR_XIR_VALUE_OK;
+}

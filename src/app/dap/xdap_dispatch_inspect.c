@@ -83,15 +83,6 @@ static XrXirStatus inspect_scopes(XdapAdapter *s,const XdapRequest *r) {
     xdap_json_unsigned(&body,s->frames[frame].scope);XDAP_TEXT(&body,",\"expensive\":false}]}");
     return inspect_finish(s,r,&body);
 }
-static const char *inspect_type(XrXirType type) {
-    switch (type) {
-    case XR_XIR_UNIT:return "unit";case XR_XIR_BOOL:return "bool";case XR_XIR_STRING:return "string";
-    case XR_XIR_I8:return "i8";case XR_XIR_I16:return "i16";case XR_XIR_I32:return "i32";case XR_XIR_I64:return "i64";
-    case XR_XIR_U8:return "u8";case XR_XIR_U16:return "u16";case XR_XIR_U32:return "u32";case XR_XIR_U64:return "u64";
-    case XR_XIR_F32:return "f32";case XR_XIR_F64:return "f64";case XR_XIR_RUNE:return "Rune";
-    case XR_XIR_ERROR:return "Error";default:return "owned";
-    }
-}
 static bool inspect_value(XdapJsonWriter *body,const XrXirValue *value) {
     if (value->type==XR_XIR_UNIT) return xdap_json_quote(body,"()",2);
     if (value->type==XR_XIR_STRING) {
@@ -122,8 +113,12 @@ static bool inspect_variable(XdapAdapter *s,XdapJsonWriter *body,const char *nam
     if (status!=XR_XIR_OK) { body->status=status;return false; }
     XDAP_TEXT(body,"{\"name\":");xdap_json_quote(body,name,length);XDAP_TEXT(body,",\"value\":");
     if (!inspect_value(body,value) && body->status==XR_XIR_OK) body->status=XR_XIR_BAD_STRUCTURE;
-    if (s->variable_types) { const char *type=inspect_type((XrXirType)value->type);
-        XDAP_TEXT(body,",\"type\":");xdap_json_quote(body,type,strlen(type)); }
+    if (s->variable_types) {
+        XdapValueView view={value,s->config.observer_metadata,s->snapshot,frame};XdapTypeText type={0};
+        XrXirValueStatus formatted=xdap_value_type_text(&view,&type);
+        if (formatted!=XR_XIR_VALUE_OK) { body->status=formatted==XR_XIR_VALUE_LIMIT ? XR_XIR_BUDGET : XR_XIR_BAD_STRUCTURE;return false; }
+        XDAP_TEXT(body,",\"type\":");xdap_json_quote(body,type.bytes,type.length);
+    }
     XDAP_TEXT(body,",\"variablesReference\":");xdap_json_unsigned(body,handle);
     if (shape.children) { XDAP_TEXT(body,",");
         const char *key=shape.indexed ? "indexedVariables" : "namedVariables";

@@ -10,6 +10,7 @@
 #include "test_dispatch.c"
 #undef main
 #include "app/dap/xdap_dispatch_internal.h"
+#include "base/xcompile_state.h"
 static const char attach_request[]="{\"seq\":9,\"type\":\"request\",\"command\":\"attach\",\"arguments\":{\"program\":\"" XR_DAP_FIXTURE "\",\"args\":[],\"cwd\":\"\",\"env\":{}}}";
 static XrXirStatus attach_write(void *context,const char *bytes,size_t length) {
     Capture *out=context;CHECK(out->count<128 && length<sizeof(out->messages[0].bytes));
@@ -37,7 +38,20 @@ static XdapAdapter *attach_setup(XrCompileResources **resources,XrXirDomain **do
     XdapAdapter *adapter=NULL;CHECK(xdap_adapter_new(&compiler,&config,&adapter)==XR_XIR_OK && !compiler);
     capture.adapter=adapter;capture.reentry=true;return adapter;
 }
-static void attach_reply(const char *command,bool success) { XrJsonValue *reply=last_response(command,success);xjson_free(reply); }
+static size_t attach_fault_point=SIZE_MAX;
+static size_t attach_sticky_prefixes,attach_retry_prefixes;
+static void attach_reply(const char *command,bool success) {
+    for (uint32_t i=capture.count;i;--i) {
+        Message *message=&capture.messages[i-1];XrJsonValue *reply=xjson_parse(message->bytes,message->size);CHECK(reply);
+        if (!strcmp(xjson_get_string(reply,"type"),"response") && !strcmp(xjson_get_string(reply,"command"),command)) {
+            if (xjson_get_bool(reply,"success")!=success)
+                fprintf(stderr,"Attach fault point %zu: expected success=%d, response=%s\n",attach_fault_point,(int)success,message->bytes);
+            CHECK(xjson_get_bool(reply,"success")==success);xjson_free(reply);return;
+        }
+        xjson_free(reply);
+    }
+    CHECK(false);
+}
 static void attach_dispose(XdapAdapter *adapter,XrCompileResources *ledger,XrXirDomain *domain,XrCompileResourceStats baseline) {
     CHECK(xdap_adapter_free(adapter)==XR_XIR_CALL_READY);CHECK(!xr_xir_domain_budget_stats(domain).metadata_live);xr_xir_domain_drop(domain);
     XrCompileResourceStats after={0};CHECK(xr_compile_resources_stats(ledger,&after)==XR_COMPILE_RESOURCE_OK);
@@ -92,6 +106,7 @@ static void attach_behavior(void) {
     attach_dispose(adapter,ledger,domain,baseline);puts("Hosted Source attach/configure/stop/owned value/resume/restart/cancel, rejected host options and physical 0/0: PASS");
 }
 static size_t attach_failure(size_t point) {
+    attach_fault_point=point;
     XrCompileResources *ledger=NULL;XrXirDomain *domain=NULL;XrCompileResourceStats baseline={0};
     XdapAdapter *adapter=attach_setup(&ledger,&domain,&baseline);
     request(adapter,"{\"seq\":1,\"type\":\"request\",\"command\":\"initialize\"}");
@@ -106,7 +121,16 @@ static size_t attach_failure(size_t point) {
         CHECK(status==XR_XIR_OUT_OF_MEMORY || status==XR_XIR_OK);
         if (status==XR_XIR_OK) attach_reply("attach",false);
         CHECK(xr_xir_domain_budget_stats(domain).metadata_live==domain_before.metadata_live);
-        request(adapter,attach_request);attach_reply("attach",true);CHECK(adapter->launch);
+        XrSourceCompiler *compiler=adapter->compiler;XrCompileState *state=xr_source_compiler_state(compiler);
+        XrCompileResourceStatus fatal=xr_compile_state_status(state);request(adapter,attach_request);
+        CHECK(adapter->compiler==compiler && xr_source_compiler_resources(compiler)==ledger && xr_source_compiler_state(compiler)==state);
+        if (fatal==XR_COMPILE_RESOURCE_OK) {
+            attach_reply("attach",true);CHECK(adapter->launch);++attach_retry_prefixes;
+        } else {
+            CHECK(fatal==XR_COMPILE_RESOURCE_OUT_OF_MEMORY);attach_reply("attach",false);
+            CHECK(!adapter->launch && !adapter->configured && !adapter->running && !adapter->snapshot);
+            CHECK(xr_compile_state_status(state)==fatal);++attach_sticky_prefixes;
+        }
     }
     XrCompileResourceStats after={0};CHECK(xr_compile_resources_stats(ledger,&after)==XR_COMPILE_RESOURCE_OK);
     CHECK(after.allocated_bytes>=before.allocated_bytes && after.work>=before.work);
@@ -116,5 +140,7 @@ int main(int argc,char **argv) {
     xr_test_suppress_dialogs();bool resources=argc==2 && !strcmp(argv[1],"--resources");CHECK(argc==1 || resources);
     attach_behavior();size_t sites=attach_failure(SIZE_MAX);CHECK(sites);
     if (resources) for (size_t i=0;i<sites;++i) attach_failure(i);
-    printf("Hosted attach: %zu allocation sites, injection=%s, same compiler/Domain retry and physical 0/0\n",sites,resources ? "ALL" : "NOT_RUN");return 0;
+    if (resources) CHECK(attach_retry_prefixes && attach_sticky_prefixes && attach_retry_prefixes+attach_sticky_prefixes==sites);
+    printf("Hosted attach: %zu allocation sites, injection=%s, recoverable=%zu, sticky=%zu; original compiler/Domain and physical 0/0\n",
+        sites,resources ? "ALL" : "NOT_RUN",attach_retry_prefixes,attach_sticky_prefixes);return 0;
 }

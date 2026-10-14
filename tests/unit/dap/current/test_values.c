@@ -43,6 +43,21 @@ static void values_request(XdapAdapter *adapter,uint32_t seq,uint64_t handle,uin
         "{\"seq\":%u,\"type\":\"request\",\"command\":\"variables\",\"arguments\":{\"variablesReference\":%llu,\"start\":%llu,\"count\":%llu}}",
         seq,(unsigned long long)handle,(unsigned long long)start,(unsigned long long)count);request(adapter,message);
 }
+static void values_type_budget(XrXirDomain *domain) {
+    const XrXirType scalar[]={XR_XIR_UNIT,XR_XIR_BOOL,XR_XIR_I8,XR_XIR_I16,XR_XIR_I32,XR_XIR_I64,
+        XR_XIR_U8,XR_XIR_U16,XR_XIR_U32,XR_XIR_U64,XR_XIR_F32,XR_XIR_F64,XR_XIR_RUNE};
+    const char *names[]={"()","bool","i8","i16","i32","i64","u8","u16","u32","u64","f32","f64","rune"};
+    for (uint32_t i=0;i<sizeof(scalar)/sizeof(scalar[0]);++i) {
+        XrXirValue value={(uint32_t)scalar[i],0,0};XdapValueView view={&value,domain,NULL,0};XdapTypeText text={0};
+        CHECK(xdap_value_type_text(&view,&text)==XR_XIR_VALUE_OK && text.length==strlen(names[i]) && !memcmp(text.bytes,names[i],text.length));
+    }
+    XrXirDomainBudgetControls limits={1048576,1048576,1,1048576,1048576};XrXirDomain *limited=NULL;
+    CHECK(xr_xir_domain_new_budgeted(1048576,&limits,&limited)==XR_XIR_VALUE_OK);
+    XrXirValue value={0};XdapValueView view={&value,limited,NULL,0};XdapTypeText output;
+    memset(&output,0x5a,sizeof(output));XdapTypeText before=output;
+    CHECK(xdap_value_type_text(&view,&output)==XR_XIR_VALUE_LIMIT && !memcmp(&output,&before,sizeof(output)));
+    CHECK(xdap_value_type_text(&view,&output)==XR_XIR_VALUE_LIMIT && !memcmp(&output,&before,sizeof(output)));xr_xir_domain_drop(limited);
+}
 int main(int argc,char **argv) {
     bool resources=argc==2 && !strcmp(argv[1],"--resources");CHECK(argc==1 || resources);
     xr_test_suppress_dialogs();XrXirCompileContext context={0};XrCompileResourceLimits limits={67108864,8388608,128000000};
@@ -53,6 +68,7 @@ int main(int argc,char **argv) {
     CHECK(xr_source_compiler_new(&source,&compiler,&diagnostic)==XR_SOURCE_COMPILE_OK);xr_source_compile_diagnostic_free(&diagnostic);
     XrXirDomain *domain=NULL;XrXirDomainBudgetControls budget={1048576,1048576,128000000,1048576,1048576};
     CHECK(xr_xir_domain_new_budgeted(1048576,&budget,&domain)==XR_XIR_VALUE_OK);
+    values_type_budget(domain);
     XdapAdapterConfig config={.observer_metadata=domain,.write=capture_message,.context=&capture,.message_limit=16384};
     CHECK(xr_xir_instance_config_init(&config.instance,sizeof(config.instance))==XR_XIR_CALL_READY);
     config.instance.metadata_limit=config.instance.value_limit=config.instance.call_limit=1048576;
@@ -73,6 +89,8 @@ int main(int argc,char **argv) {
     uint64_t scope=(uint64_t)xjson_get_int(xjson_array_get(xjson_get_array(xjson_get_object(reply,"body"),"scopes"),0),"variablesReference");xjson_free(reply);
     values_request(adapter,7,scope,0,0);reply=last_response("variables",true);
     XrJsonValue *variables=xjson_get_array(xjson_get_object(reply,"body"),"variables");CHECK(xjson_array_len(variables)==5);
+    const char *types[]={"Array<Array<i64>>","string","(i64, string)","i64?","Array<Parcel>"};
+    for (int i=0;i<5;++i) CHECK(!strcmp(xjson_get_string(xjson_array_get(variables,i),"type"),types[i]));
     uint64_t matrix=(uint64_t)xjson_get_int(xjson_array_get(variables,0),"variablesReference");
     CHECK(matrix && xjson_get_int(xjson_array_get(variables,0),"indexedVariables")==2);
     uint64_t pair=(uint64_t)xjson_get_int(xjson_array_get(variables,2),"variablesReference");
