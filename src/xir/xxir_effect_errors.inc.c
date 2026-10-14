@@ -850,7 +850,8 @@ static XrXirStatus error_function(ErrorFlow *flow, uint32_t f) {
     flow->values = flow->function->parameter_count + flow->function->instruction_count;
     uint64_t words = flow->effects->words, rows = (uint64_t)flow->function->block_count + 3;
     uint64_t minimum_extra = (uint64_t)flow->values * 2 * sizeof(uint32_t) +
-        (uint64_t)flow->function->block_count * (1+sizeof(uint32_t));
+        flow->function->block_count + (flow->function->block_count>1?
+            (uint64_t)flow->function->block_count*sizeof(uint32_t):0);
     /* At least one writable words row and a separate zero vector are required
      * even when no SSA value can carry error facts. Reject resource-impossible
      * metadata before reading it, without charging a fictitious allocation. */
@@ -899,11 +900,14 @@ static XrXirStatus error_function(ErrorFlow *flow, uint32_t f) {
     if (extra > SIZE_MAX - zero_bytes ||
         stride > (SIZE_MAX - zero_bytes - extra) / sizeof(uint64_t) / rows) { status = XR_XIR_BUDGET;goto membership_done; }
     uint64_t bytes = stride * rows * sizeof(uint64_t) + zero_bytes + extra;
-    if (bytes>SIZE_MAX-3) { status=XR_XIR_BUDGET;goto membership_done; }
-    uint64_t queue_offset=(bytes+3)&~UINT64_C(3);
-    uint64_t queue_bytes=(uint64_t)flow->function->block_count*sizeof(uint32_t);
-    if (queue_bytes>SIZE_MAX-queue_offset) { status=XR_XIR_BUDGET;goto membership_done; }
-    bytes=queue_offset+queue_bytes;
+    uint64_t queue_offset=bytes,queue_bytes=flow->function->block_count>1?
+        (uint64_t)flow->function->block_count*sizeof(uint32_t):0;
+    if (queue_bytes) {
+        if (bytes>SIZE_MAX-3) { status=XR_XIR_BUDGET;goto membership_done; }
+        queue_offset=(bytes+3)&~UINT64_C(3);
+        if (queue_bytes>SIZE_MAX-queue_offset) { status=XR_XIR_BUDGET;goto membership_done; }
+        bytes=queue_offset+queue_bytes;
+    }
     if (!xir_compile_work(flow->remaining, stride * rows + words + flow->values + flow->function->block_count))
         { status = XR_XIR_BUDGET;goto membership_done; }
     flow->stride = (size_t)stride;
@@ -921,7 +925,7 @@ static XrXirStatus error_function(ErrorFlow *flow, uint32_t f) {
             flow->cell_types=(ErrorCellType *)(flow->cells+flow->cell_count);
         }
         flow->reachable = (uint8_t *)(flow->cells + flow->cell_count)+(size_t)cell_bytes;
-        flow->queue=(uint32_t *)(flow->storage+(size_t)queue_offset);
+        flow->queue=queue_bytes?(uint32_t *)(flow->storage+(size_t)queue_offset):NULL;
         /* Charge the temporary byte scan and all map, inverse and Cell writes. */
         if (!xir_compile_work(flow->remaining, (uint64_t)flow->values * 2 + flow->active_count + flow->cell_count))
             { status = XR_XIR_BUDGET;goto membership_done; }

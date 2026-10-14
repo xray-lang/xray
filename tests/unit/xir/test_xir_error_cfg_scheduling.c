@@ -120,6 +120,8 @@ static XrXirStatus sg_whole(const XrXirCompileContext *context,SgFixture *f,uint
             CHECK(xr_xir_effects_error(effects,1,(XrXirType)EE_ENUM,a)==present);
         }
     }
+    if(status!=XR_XIR_OK && status!=XR_XIR_BUDGET && status!=XR_XIR_OUT_OF_MEMORY)
+        fprintf(stderr,"graph status%u diagnostic%u f%u b%u i%u\n",(unsigned)status,(unsigned)diagnostic.reason,diagnostic.function,diagnostic.block,diagnostic.instruction);
     xr_xir_compile_effects_free(effects);xr_xir_compile_artifact_free(checked);return status;
 }
 static void sg_run(uint32_t blocks,unsigned kind,unsigned order,uint32_t width) {
@@ -147,6 +149,40 @@ static void sg_rejection(void) {
     CHECK(xir_fixture_check(&context,&fixture.base.module,&checked,&diagnostic)==XR_XIR_BAD_TYPE && !checked);
     sg_fixture(&fixture,&graph,0,2);CHECK(sg_whole(&context,&fixture,1,2)==XR_XIR_OK);
     pc_release(&context,baseline);puts("precise target/type rejection and same-owner recovery PASS");
+}
+static void sg_singleton(void) {
+    for(unsigned cycle=0;cycle<2;++cycle) {
+        SgGraph graph;memset(&graph,0xff,sizeof(graph));graph.count=1;
+        if(cycle){graph.edges[0][0]=0;graph.edges[0][1]=0;}
+        else graph.throws[0]=1;
+        SgFixture fixture;sg_fixture(&fixture,&graph,0,65);
+        XrXirCompileContext context=pc_owner(pc_caps());uint64_t baseline=pc_stats(&context).live_bytes;
+        if(cycle) {
+            XrXirArtifact *checked=NULL;XrXirDiagnostic diagnostic={0};
+            CHECK(xir_fixture_check(&context,&fixture.base.module,&checked,&diagnostic)==XR_XIR_BAD_STRUCTURE && !checked);
+            CHECK(diagnostic.function==1 && diagnostic.block==0 && diagnostic.instruction==2);
+            graph.edges[0][0]=graph.edges[0][1]=SG_NONE;graph.throws[0]=1;
+            sg_fixture(&fixture,&graph,0,65);
+        }
+        CHECK(sg_whole(&context,&fixture,sg_expected(&graph),65)==XR_XIR_OK);
+        fixture.base.module.stage=XR_XIR_CHECKED;
+        ErrorFlow flow={0};flow.remaining=&context;
+        XrXirEffects effects={0};effects.count=fixture.base.module.function_count;
+        EffectTerms terms={0};terms.remaining=&context;terms.types=fixture.base.types;
+        flow.body=effect_body_raw_request(&context,&fixture.base.module);flow.effects=&effects;flow.terms=&terms;
+        CHECK(effect_errors_seed(&flow.body.domain,&effects,&context)==XR_XIR_OK);
+        CHECK(error_function(&flow,1)==XR_XIR_OK && !flow.queue && !flow.pending && !flow.scheduling);
+        flow.scheduling=true;flow.reachable[0]=ERROR_BLOCK_REACHABLE;
+        CHECK(error_cfg_enqueue(&flow,0)==XR_XIR_OK && (flow.reachable[0]&ERROR_BLOCK_PENDING));
+        CHECK(error_cfg_enqueue(&flow,0)==XR_XIR_OK && !flow.pending && !flow.queue);
+        flow.reachable[0]&=(uint8_t)~ERROR_BLOCK_PENDING;
+        CHECK(error_cfg_enqueue(&flow,0)==XR_XIR_OK && (flow.reachable[0]&ERROR_BLOCK_PENDING));
+        flow.scheduling=false;
+        error_storage_free(&flow);effect_terms_free(&terms);
+        xr_compile_resources_free(effects.errors);xr_compile_resources_free(effects.atoms);
+        pc_release(&context,baseline);
+    }
+    puts("singleton throw/no queue, duplicate/reschedule and precise entry-backedge rejection PASS");
 }
 static void sg_fresh_widths(void) {
     SgFixture fixture;SgGraph graph;sg_graph(&graph,6,2);
@@ -215,7 +251,7 @@ int main(int argc,char **argv) {
         for(unsigned kind=0;kind<3;++kind)for(unsigned order=0;order<3;++order)sg_run(6,kind,order,2);
         static const uint32_t widths[]={61,62,63,64,65,127,128,129,130};
         for(unsigned i=0;i<sizeof(widths)/sizeof(*widths);++i)sg_run(6,2,2,widths[i]);
-        sg_rejection();sg_fresh_widths();
+        sg_rejection();sg_singleton();sg_fresh_widths();
     }
     CHECK(!live && !live_bytes);puts("independent reachable throw sets and canonical permutations PASS");return 0;
 }
