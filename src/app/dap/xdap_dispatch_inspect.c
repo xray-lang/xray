@@ -102,18 +102,88 @@ static bool inspect_value(XdapJsonWriter *body,const XrXirValue *value) {
     /* An owned handle is observed as opaque until its typed child projection is admitted. */
     return xdap_json_quote(body,"<owned value>",13);
 }
+static XrXirStatus inspect_reference(XdapAdapter *s,const XrXirValue *value,uint32_t *handle,XdapValueShape *shape) {
+    XrXirValueStatus status=xdap_value_shape(value,s->config.observer_metadata,shape);
+    if (status!=XR_XIR_VALUE_OK) return status==XR_XIR_VALUE_OOM ? XR_XIR_OUT_OF_MEMORY :
+        status==XR_XIR_VALUE_LIMIT || status==XR_XIR_VALUE_REFCOUNT_LIMIT ? XR_XIR_BUDGET : XR_XIR_BAD_STRUCTURE;
+    *handle=0;if (!shape->children) return XR_XIR_OK;
+    for (uint32_t i=0;i<s->value_count;++i) {
+        const XdapValueRef *ref=&s->values[i];
+        if (ref->value.type==value->type && ref->value.payload==value->payload) { *handle=ref->handle;return XR_XIR_OK; }
+    }
+    if (s->value_count==128 || s->next_handle==INT32_MAX) return XR_XIR_BUDGET;
+    XdapValueRef *ref=&s->values[s->value_count];status=xr_xir_value_copy(value,&ref->value);
+    if (status!=XR_XIR_VALUE_OK) return status==XR_XIR_VALUE_OOM ? XR_XIR_OUT_OF_MEMORY : XR_XIR_BUDGET;
+    ref->handle=s->next_handle++;ref->shape=*shape;++s->value_count;*handle=ref->handle;return XR_XIR_OK;
+}
+static bool inspect_variable(XdapAdapter *s,XdapJsonWriter *body,const char *name,size_t length,const XrXirValue *value) {
+    uint32_t handle=0;XdapValueShape shape={0};XrXirStatus status=inspect_reference(s,value,&handle,&shape);
+    if (status!=XR_XIR_OK) { body->status=status;return false; }
+    XDAP_TEXT(body,"{\"name\":");xdap_json_quote(body,name,length);XDAP_TEXT(body,",\"value\":");
+    if (!inspect_value(body,value) && body->status==XR_XIR_OK) body->status=XR_XIR_BAD_STRUCTURE;
+    if (s->variable_types) { const char *type=inspect_type((XrXirType)value->type);
+        XDAP_TEXT(body,",\"type\":");xdap_json_quote(body,type,strlen(type)); }
+    XDAP_TEXT(body,",\"variablesReference\":");xdap_json_unsigned(body,handle);
+    if (shape.children) { XDAP_TEXT(body,",");
+        const char *key=shape.indexed ? "indexedVariables" : "namedVariables";
+        xdap_json_quote(body,key,strlen(key));XDAP_TEXT(body,":");xdap_json_unsigned(body,shape.children); }
+    XDAP_TEXT(body,"}");return body->status==XR_XIR_OK;
+}
+static void inspect_rollback_values(XdapAdapter *s,uint32_t before) {
+    while (s->value_count>before) {
+        XdapValueRef *ref=&s->values[--s->value_count];xr_xir_value_drop(&ref->value);*ref=(XdapValueRef){0};
+    }
+}
+static XrXirStatus inspect_children(XdapAdapter *s,const XdapRequest *r,const XdapValueRef *ref,uint64_t start,uint64_t count) {
+    uint32_t before=s->value_count;XdapJsonWriter body=xdap_json_writer(s->resources,s->config.message_limit);
+    XDAP_TEXT(&body,"{\"variables\":[");uint32_t shown=0;
+    uint64_t available=start<ref->shape.children ? ref->shape.children-start : 0;
+    if (count && available>count) available=count;
+    if (available>256) { xdap_json_writer_free(&body);return xdap_dispatch_response(s,r,false,NULL,"Request a bounded child page"); }
+    for (uint64_t i=0;i<available;++i) {
+        XrXirValue value={0};const char *name=NULL;size_t length=0;
+        XrXirValueStatus status=xdap_value_child(&ref->value,s->config.observer_metadata,start+i,&value,&name,&length);
+        if (status!=XR_XIR_VALUE_OK) {
+            if (status==XR_XIR_VALUE_BAD_ARGUMENT || status==XR_XIR_VALUE_UNSUPPORTED || status==XR_XIR_VALUE_BOUNDS) {
+                xdap_json_writer_free(&body);inspect_rollback_values(s,before);
+                return xdap_dispatch_response(s,r,false,NULL,"Typed child observation is unavailable");
+            }
+            body.status=status==XR_XIR_VALUE_OOM ? XR_XIR_OUT_OF_MEMORY : XR_XIR_BUDGET;break;
+        }
+        char index[32];if (!name) { int bytes=snprintf(index,sizeof(index),"[%llu]",(unsigned long long)(start+i));name=index;length=(size_t)bytes; }
+        if (shown++) XDAP_TEXT(&body,",");bool emitted=inspect_variable(s,&body,name,length,&value);xr_xir_value_drop(&value);
+        if (!emitted) break;
+    }
+    XDAP_TEXT(&body,"]}");XrXirStatus status=inspect_finish(s,r,&body);
+    if (status!=XR_XIR_OK) inspect_rollback_values(s,before);return status;
+}
 static XrXirStatus inspect_variables(XdapAdapter *s,const XdapRequest *r) {
     uint64_t handle=0,start=0,count=0;XrXirStatus status=xdap_dispatch_number(r,"variablesReference",0,&handle);
     if (status==XR_XIR_OK && s->variable_paging) status=xdap_dispatch_number(r,"start",0,&start);
     if (status==XR_XIR_OK && s->variable_paging) status=xdap_dispatch_number(r,"count",0,&count);
     if (status!=XR_XIR_OK) return status;
+    uint32_t filter=0;bool indexed=false,named=false;status=xdap_dispatch_argument(r,"filter",&filter);
+    if (status==XR_XIR_OK && filter) status=xdap_json_equal(&r->document,filter,"indexed",&indexed);
+    if (status==XR_XIR_OK && filter && !indexed) status=xdap_json_equal(&r->document,filter,"named",&named);
+    if (status!=XR_XIR_OK) return status;
+    if (filter && !indexed && !named) return xdap_dispatch_response(s,r,false,NULL,"Invalid child filter");
+    for (uint32_t i=0;i<s->value_count;++i) {
+        if (s->values[i].handle!=handle || !s->snapshot) continue;
+        if ((named && s->values[i].shape.indexed) || (indexed && !s->values[i].shape.indexed))
+            return inspect_children(s,r,&s->values[i],s->values[i].shape.children,0);
+        return inspect_children(s,r,&s->values[i],start,count);
+    }
     uint32_t frame=inspect_frame(s,handle,true);
     if (!s->snapshot || frame==UINT32_MAX) return xdap_dispatch_response(s,r,false,NULL,"Invalid or retired variable reference");
+    if (indexed) {
+        XdapJsonWriter body=xdap_json_writer(s->resources,s->config.message_limit);XDAP_TEXT(&body,"{\"variables\":[]}");
+        return inspect_finish(s,r,&body);
+    }
     XrXirVmDebugFrameInfo info={0};XrXirValue function_name={0};
     if (xr_xir_vm_debug_snapshot_frame(s->snapshot,frame,&info,&function_name)!=XR_XIR_VALUE_OK) return XR_XIR_BUDGET;
     xr_xir_value_drop(&function_name);
     XdapJsonWriter body=xdap_json_writer(s->resources,s->config.message_limit);XDAP_TEXT(&body,"{\"variables\":[");
-    uint32_t ordinal=0,shown=0;
+    uint32_t ordinal=0,shown=0,before=s->value_count;
     for (uint32_t value_id=0;value_id<info.value_count;++value_id) {
         XrXirValue value={0};XrXirValueStatus copied=xr_xir_vm_debug_snapshot_value(s->snapshot,frame,value_id,&value);
         if (copied==XR_XIR_VALUE_BAD_ARGUMENT) continue;
@@ -123,14 +193,11 @@ static XrXirStatus inspect_variables(XdapAdapter *s,const XdapRequest *r) {
         if (copied==XR_XIR_VALUE_OK) { xr_xir_value_drop(&value);value=cell; }
         else if (copied!=XR_XIR_VALUE_UNSUPPORTED) { xr_xir_value_drop(&value);body.status=XR_XIR_BUDGET;break; }
         char name[32];int name_length=snprintf(name,sizeof(name),"%%v%u",value_id);
-        if (shown++) XDAP_TEXT(&body,",");XDAP_TEXT(&body,"{\"name\":");
-        xdap_json_quote(&body,name,(size_t)name_length);XDAP_TEXT(&body,",\"value\":");
-        if (!inspect_value(&body,&value) && body.status==XR_XIR_OK) body.status=XR_XIR_BAD_STRUCTURE;
-        if (s->variable_types) { const char *type=inspect_type((XrXirType)value.type);
-            XDAP_TEXT(&body,",\"type\":");xdap_json_quote(&body,type,strlen(type)); }
-        XDAP_TEXT(&body,",\"variablesReference\":0}");xr_xir_value_drop(&value);
+        if (shown++) XDAP_TEXT(&body,",");bool emitted=inspect_variable(s,&body,name,(size_t)name_length,&value);xr_xir_value_drop(&value);
+        if (!emitted) break;
     }
-    XDAP_TEXT(&body,"]}");return inspect_finish(s,r,&body);
+    XDAP_TEXT(&body,"]}");status=inspect_finish(s,r,&body);
+    if (status!=XR_XIR_OK) inspect_rollback_values(s,before);return status;
 }
 static XrXirStatus inspect_function_breakpoints(XdapAdapter *s,const XdapRequest *r) {
     if (!s->launch || s->running || s->terminal) return xdap_dispatch_response(s,r,false,NULL,"No configurable program");

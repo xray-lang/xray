@@ -1,0 +1,6 @@
+struct Parcel { label:string; code:i64 }
+fn leaf(values:Array<Array<i64>>, text:string, pair:(i64,string), optional:i64?, parcel:Array<Parcel>)->i64 {
+    return values[0][0]
+}
+const optional:i64? = 7
+print(leaf([[11,12],[21,22]], "owned\0value", (31,"pair"), optional, [Parcel{label:"box",code:41}]))

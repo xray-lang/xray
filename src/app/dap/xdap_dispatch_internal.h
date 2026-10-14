@@ -10,7 +10,9 @@
 #define XDAP_DISPATCH_INTERNAL_H
 #include "xdap_dispatch.h"
 #include "../../xir/xxir_output.h"
+#include "xdap_value.h"
 typedef struct XdapStopFrame { uint32_t handle, scope; } XdapStopFrame;
+typedef struct XdapValueRef { uint32_t handle;XrXirValue value;XdapValueShape shape; } XdapValueRef;
 struct XdapAdapter {
     XrSourceCompiler *compiler;
     XrCompileResources *resources;
@@ -20,6 +22,8 @@ struct XdapAdapter {
     XrXirVmDebugSnapshot *snapshot;
     XrXirCallResult outcome;
     XdapStopFrame frames[64];
+    XdapValueRef values[128];
+    uint32_t value_count;
     char *function_breakpoints[32];
     uint32_t function_breakpoint_count;
     uint32_t depth, next_handle, seq;
