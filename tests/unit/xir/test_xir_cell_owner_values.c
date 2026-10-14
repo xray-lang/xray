@@ -20,6 +20,27 @@
 #include "xir_value_compile_owner.h"
 #include "cell_owner_value_physical.h"
 
+static void prepared_loan_denials(const XrXirValue *cell, const XrXirValue *alias,
+    const XrXirCellAuthority *parent, XrXirValueAdmission *admission) {
+    XrXirValue output = {0}, replacement = {XR_XIR_I64,0,13};
+    XrXirCellLoan competing = {0};
+    XrXirValuePlace place = {0};
+    XrXirCellPublication publication = {parent->activation,admission->domain,4};
+    XrXirDomainBudgetStats before = xr_xir_domain_budget_stats(admission->domain);
+    CHECK(!xr_xir_cell_unborrowed(cell));
+    CHECK(xr_xir_cell_read(alias,&output) == XR_XIR_VALUE_BAD_ARGUMENT && !output.type);
+    CHECK(xr_xir_cell_write(alias,&replacement,admission) == XR_XIR_VALUE_BAD_ARGUMENT);
+    CHECK(xr_xir_cell_authorized_read(alias,parent,&output) == XR_XIR_VALUE_BAD_ARGUMENT && !output.type);
+    CHECK(xr_xir_cell_authorized_write(alias,parent,&replacement,admission) == XR_XIR_VALUE_BAD_ARGUMENT);
+    CHECK(xr_xir_cell_authorized_place(alias,parent,admission,&place) == XR_XIR_VALUE_BAD_ARGUMENT && !place.payload);
+    CHECK(xr_xir_cell_loan_prepare(alias,parent,&competing) == XR_XIR_VALUE_BAD_ARGUMENT && !competing.cell);
+    CHECK(xr_xir_cell_publication_prepare(alias,&publication) == XR_XIR_VALUE_BAD_ARGUMENT);
+    XrXirDomainBudgetStats after = xr_xir_domain_budget_stats(admission->domain);
+    CHECK(after.work == before.work && after.requested_bytes == before.requested_bytes &&
+        after.metadata_live == before.metadata_live &&
+        after.call_live == before.call_live);
+}
+
 static void cell_owner_values(void) {
     XrXirTypeNode nodes[] = {{.kind=XR_XIR_TYPE_CELL,.element=XR_XIR_UNIT},
         {.kind=XR_XIR_TYPE_CELL,.element=XR_XIR_I64}};
@@ -54,6 +75,13 @@ static void cell_owner_values(void) {
     XrXirCellAuthority wrong = parent; wrong.epoch = 2;
     XrXirCellLoan parent_loan = {0}, child_loan = {0};
     CHECK(xr_xir_cell_loan_prepare(&cell,NULL,&parent_loan) == XR_XIR_VALUE_OK);
+    prepared_loan_denials(&cell,&alias,&parent,&admission);
+    xr_xir_cell_loan_abort(&parent_loan);
+    CHECK(xr_xir_cell_unborrowed(&cell) && !parent_loan.cell);
+    CHECK(xr_xir_cell_read(&alias,&output) == XR_XIR_VALUE_OK && output.payload == 7);
+    xr_xir_value_drop(&output);
+    CHECK(xr_xir_cell_loan_prepare(&cell,NULL,&parent_loan) == XR_XIR_VALUE_OK);
+    prepared_loan_denials(&cell,&alias,&parent,&admission);
     xr_xir_cell_loan_commit(&cell,&parent_loan,&parent);
     CHECK(!xr_xir_cell_unborrowed(&cell));
     CHECK(xr_xir_cell_read(&alias,&output) == XR_XIR_VALUE_BAD_ARGUMENT && !output.type);
@@ -61,6 +89,13 @@ static void cell_owner_values(void) {
     CHECK(xr_xir_cell_authorized_read(&alias,&wrong,&output) == XR_XIR_VALUE_BAD_ARGUMENT && !output.type);
     CHECK(xr_xir_cell_loan_prepare(&alias,&wrong,&child_loan) == XR_XIR_VALUE_BAD_ARGUMENT);
     CHECK(xr_xir_cell_loan_prepare(&alias,&parent,&child_loan) == XR_XIR_VALUE_OK);
+    prepared_loan_denials(&cell,&alias,&parent,&admission);
+    xr_xir_cell_loan_abort(&child_loan);
+    CHECK(!child_loan.cell);
+    CHECK(xr_xir_cell_authorized_read(&cell,&parent,&output) == XR_XIR_VALUE_OK && output.payload == 7);
+    xr_xir_value_drop(&output);
+    CHECK(xr_xir_cell_loan_prepare(&alias,&parent,&child_loan) == XR_XIR_VALUE_OK);
+    prepared_loan_denials(&cell,&alias,&parent,&admission);
     xr_xir_cell_loan_commit(&alias,&child_loan,&child);
     CHECK(xr_xir_cell_authorized_read(&cell,&parent,&output) == XR_XIR_VALUE_BAD_ARGUMENT);
     CHECK(xr_xir_cell_authorized_write(&cell,&child,&replacement,&admission) == XR_XIR_VALUE_OK);
