@@ -137,11 +137,19 @@ def main() -> int:
             if case.get('stderr_required_utf8'):
                 expected.pop('stderr_hex')
                 expected['stderr_required_utf8'] = case['stderr_required_utf8']
+            if oracle.get('model'):
+                computed = oracle['expected']
+                if (expected['stdout_hex'] != computed['stdout_utf8'].encode('utf-8').hex()
+                        or expected.get('stderr_hex') != computed['stderr_utf8'].encode('utf-8').hex()
+                        or expected['exit_code'] != computed['exit_code']):
+                    raise ValueError('manifest differs from the independent arithmetic model')
             row = {'id':case['id'],'oracle_id':case['oracle_id'],'source':case['source'],
                    'source_lf_sha256':case['source_lf_sha256'],
                    'entry_sha256':sha(target.read_bytes()),'entry_adapter_suffix':suffix,
                    'owners':case['owners'],'expected':expected,'routes':{},
                    'remaining_gates':case['remaining_gates']}
+            if oracle.get('model'):
+                row['independent_arithmetic_model'] = oracle['model']
             if case.get('independent_observations'):
                 observations = case['independent_observations']
                 observed_source = ROOT/observations['selected_complete_source']
