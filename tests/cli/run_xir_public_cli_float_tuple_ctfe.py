@@ -30,6 +30,8 @@ def main():
                 'export fn echo<T>(value:T)->(T,()){return (value,())}\n'
                 'export fn coordinates()->(f32,f32){return (1.5,2.5)}\n')
         (output/'future-numbers.xr').write_text(module,encoding='utf-8')
+        (output/'scope-a.xr').write_text('fn label()->string{return "A\\0é"}\nexport fn a<T>(value:T)->(T,string){return (value,label())}\n',encoding='utf-8')
+        (output/'scope-b.xr').write_text('fn label()->string{return "B\\0中"}\nexport fn b<T>(value:T)->(T,string){return (value,label())}\n',encoding='utf-8')
         prefix='import {trunc,down,up,rounded,positive,notnumber,ieee,constants,nested,echo,coordinates} from "./future-numbers"\n'
         numbers=[0.0,-0.0,0.49999999999999994,0.5,0.5000000000000001,-0.49999999999999994,-0.5,-0.5000000000000001,
                  1.5,-1.5,2.5,-2.5,4503599627370495.5,4503599627370496.0,4503599627370497.0,
@@ -48,7 +50,10 @@ def main():
                 'const text=comptime echo<string>("a\\0b")\nprint(text.0)\n'
                 'const point=comptime coordinates()\nprint(point.0,point.1)\n')
         tuple_answer=b'2 3 5 7 7532\n'+b'7 '+ 'é😀\0\n'.encode()+b'a\0b\n1.5 2.5\n'
-        cases=[('floating',floating,bytes(answer)),('tuples',tuples,tuple_answer)]
+        scopes=('import {a} from "./scope-a"\nimport {b} from "./scope-b"\n'
+                'const x=comptime a<i8>(7)\nconst y=comptime b<i8>(9)\nprint(x.0,x.1)\nprint(y.0,y.1)\n')
+        scope_answer=b'7 A\0'+ 'é\n'.encode()+b'9 B\0'+'中\n'.encode()
+        cases=[('floating',floating,bytes(answer)),('tuples',tuples,tuple_answer),('scopes',scopes,scope_answer)]
         def invoke(name,executable,arguments,environment):
             argv=[str(executable),*arguments]
             result=policy.run(name,argv,environment) if environment is hidden else subprocess.run(argv,cwd=root,env=environment,capture_output=True,timeout=60)
@@ -71,13 +76,15 @@ def main():
             assert (result.returncode,result.stdout,result.stderr)==(0,expected,b''),result
         negative=[('range',prefix+'print(comptime trunc(1.0/0.0))\n',b'comptime value range violation'),
                   ('numeric-text','fn text(x:f64)->string{return x.toString()}\nprint(comptime text(1.5))\n',b'admitted deterministic scalar direct-call closure'),
-                  ('io','fn forbidden()->f64{print(1);return 1.5}\nprint(comptime forbidden())\n',b'admitted deterministic scalar direct-call closure')]
+                  ('io','fn forbidden()->f64{print(1);return 1.5}\nprint(comptime forbidden())\n',b'admitted deterministic scalar direct-call closure'),
+                  ('private-import','import {label} from "./scope-a"\nprint(label())\n',b'import requires an exported declaration')]
         for name,text,message in negative:
             entry=output/(name+'.xr');entry.write_text(text,encoding='utf-8');result=invoke(name,binary,['run',str(entry)],hidden)
             assert result.returncode==1 and not result.stdout and message in result.stderr,result
         (output/'summary.json').write_text(json.dumps(dict(status='FLOAT_TUPLE_CTFE_IMPORT_PASS',commands=len(records),
             binary64_rational_cases=20,float_method_calls=120,IEEE_nan_infinity_positive_zero=True,
             owning_Tuple_cases=4,Tuple_logical_output_max_bytes=8,private_Tuple_Cell=True,Tuple_generic_echo=True,
+            duplicate_private_helper_names_isolated=True,duplicate_generic_parameter_names_isolated=True,private_import_refused=True,
             source_absent_and_poisoned=True,Windows_absolute_child_denial=policy.control,
             numeric_TO_STRING_ctfe=False,user_class_CTFE=False,authorized_derivation=False,complete_standard_library=False),indent=2)+'\n',encoding='utf-8')
         print('Float/Tuple CTFE: exact rational Float methods, IEEE and owned nested/generic table literals PASS');return 0
