@@ -6784,6 +6784,126 @@
         "Complete actual named discovery and independent VM/native scalar observations; no assertions-only qualification.",
         "Original non-scalar observations, exact runtime/compiler FI, resource bounds, cancellation, ownership, physical and sanitizer/provider matrix remain separately required."
       ]
+    },
+    {
+      "id": "independent_scalar_add_overflow",
+      "oracle_id": "independent_scalar_add_overflow",
+      "source": "tests/diff/cases/semantics/int_wrap/add_overflow.xr",
+      "source_lf_sha256": "ed20b85dcc45d5295ec01ed8f2f2939a8bb80579316d0f9760bc56df78fcec5c",
+      "source_context": "original_absolute",
+      "entry": "run",
+      "stdout_utf8": "-9223372036854775808\n9223372036854775807\n-2\n",
+      "stderr_utf8": "",
+      "expected_exit_code": 0,
+      "arguments": [],
+      "stdin_hex": "",
+      "companions": [],
+      "owners": [
+        "P09",
+        "P10",
+        "P13"
+      ],
+      "independent_arithmetic_model": "Arbitrary-precision modulo and signed interpretation; no Xray execution output is read.",
+      "remaining_gates": [
+        "Actual independent VM/generated-C/native original entry.",
+        "Complete compiler/runtime FI, exact budgets, cancellation, lifetime, physical release and sanitizer/provider matrix."
+      ]
+    },
+    {
+      "id": "independent_scalar_int_as_truncation",
+      "oracle_id": "independent_scalar_int_as_truncation",
+      "source": "tests/diff/cases/semantics/int_wrap/int_as_truncation.xr",
+      "source_lf_sha256": "3c9f5a384eb028823560132c5fd934f19ad61fb181e7165dcec629f3a631b64d",
+      "source_context": "original_absolute",
+      "entry": "run",
+      "stdout_utf8": "1\n1\n255\n255\n-2147483648\n1\n",
+      "stderr_utf8": "",
+      "expected_exit_code": 0,
+      "arguments": [],
+      "stdin_hex": "",
+      "companions": [],
+      "owners": [
+        "P09",
+        "P10",
+        "P13"
+      ],
+      "independent_arithmetic_model": "Arbitrary-precision modulo and signed interpretation; no Xray execution output is read.",
+      "remaining_gates": [
+        "Actual independent VM/generated-C/native original entry.",
+        "Complete compiler/runtime FI, exact budgets, cancellation, lifetime, physical release and sanitizer/provider matrix."
+      ]
+    },
+    {
+      "id": "independent_scalar_narrow_arith_wrap",
+      "oracle_id": "independent_scalar_narrow_arith_wrap",
+      "source": "tests/diff/cases/semantics/int_wrap/narrow_arith_wrap.xr",
+      "source_lf_sha256": "37e67685dccae436b0c4860c56f49702079945f29c14ead78e57455fbfc364f0",
+      "source_context": "original_absolute",
+      "entry": "run",
+      "stdout_utf8": "-128\n127\n-120\n120\n0\n255\n32\n-32768\n32767\n-15536\n15536\n0\n65535\n41984\n24464\n-32642\n32640\n705032704\n4294967295\n1410065408\n-2147483648\n2147483647\n1410065408\n0\n64\n",
+      "stderr_utf8": "",
+      "expected_exit_code": 0,
+      "arguments": [],
+      "stdin_hex": "",
+      "companions": [],
+      "owners": [
+        "P09",
+        "P10",
+        "P13"
+      ],
+      "independent_arithmetic_model": "Arbitrary-precision modulo and signed interpretation; no Xray execution output is read.",
+      "remaining_gates": [
+        "Actual independent VM/generated-C/native original entry.",
+        "Complete compiler/runtime FI, exact budgets, cancellation, lifetime, physical release and sanitizer/provider matrix."
+      ]
+    },
+    {
+      "id": "independent_scalar_uint64_large_literals",
+      "oracle_id": "independent_scalar_uint64_large_literals",
+      "source": "tests/diff/cases/semantics/int_wrap/uint64_large_literals.xr",
+      "source_lf_sha256": "ef86b0eff3f3fb81242cacc7b3235883affb5bfa297094ef84d354a8b96761c5",
+      "source_context": "original_absolute",
+      "entry": "run",
+      "stdout_utf8": "11400714785074694791\n18446744073709551615\n9223372036854775808\n18446744073709551615\n9223372036854775808\n18446744073709551615\n-9223372036854775808\n",
+      "stderr_utf8": "",
+      "expected_exit_code": 0,
+      "arguments": [],
+      "stdin_hex": "",
+      "companions": [],
+      "owners": [
+        "P09",
+        "P10",
+        "P13"
+      ],
+      "independent_arithmetic_model": "Arbitrary-precision modulo and signed interpretation; no Xray execution output is read.",
+      "remaining_gates": [
+        "Actual independent VM/generated-C/native original entry.",
+        "Complete compiler/runtime FI, exact budgets, cancellation, lifetime, physical release and sanitizer/provider matrix."
+      ]
+    },
+    {
+      "id": "independent_scalar_uint64_shift_logical",
+      "oracle_id": "independent_scalar_uint64_shift_logical",
+      "source": "tests/diff/cases/semantics/int_wrap/uint64_shift_logical.xr",
+      "source_lf_sha256": "0a744bf8e524a8c40a0a4f31c627d9dace08657ba276a1b050e1a78fc017391e",
+      "source_context": "original_absolute",
+      "entry": "run",
+      "stdout_utf8": "9223372036854775808\n4611686018427387904\n1\n9223372036854775808\n4611686018427387904\n1\n2147483647\n1\n13740831969934771102\n-4\n-4\n1\n1\n2\n",
+      "stderr_utf8": "",
+      "expected_exit_code": 0,
+      "arguments": [],
+      "stdin_hex": "",
+      "companions": [],
+      "owners": [
+        "P09",
+        "P10",
+        "P13"
+      ],
+      "independent_arithmetic_model": "Arbitrary-precision modulo and signed interpretation; no Xray execution output is read.",
+      "remaining_gates": [
+        "Actual independent VM/generated-C/native original entry.",
+        "Complete compiler/runtime FI, exact budgets, cancellation, lifetime, physical release and sanitizer/provider matrix."
+      ]
     }
   ]
 }

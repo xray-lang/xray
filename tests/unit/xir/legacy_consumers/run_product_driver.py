@@ -11,6 +11,8 @@ import subprocess
 import tempfile
 import time
 
+import independent_scalar_models
+
 HERE = Path(__file__).resolve().parent
 ROOT = HERE.parents[3]
 
@@ -34,6 +36,10 @@ def main() -> int:
     manifest = json.loads(manifest_bytes)
     oracle_bytes = (HERE/'oracles.json').read_bytes()
     oracles = {row['id']:row for row in json.loads(oracle_bytes)['cases']}
+    for row in independent_scalar_models.expected_rows():
+        if row['id'] in oracles:
+            raise ValueError('independent scalar oracle identity collides with a preserved oracle')
+        oracles[row['id']] = row
     cases = manifest['cases']
     if args.case:
         if len(args.case) != len(set(args.case)) or set(args.case)-{row['id'] for row in cases}:
@@ -50,6 +56,8 @@ def main() -> int:
             'scope':'ACTUAL_PUBLIC_CLI_CONSUMERS_NOT_FULL_PRODUCT_QUALIFICATION',
             'binary':str(binary), 'binary_sha256':binary_digest, 'version':version,
             'manifest_sha256':sha(manifest_bytes), 'oracles_sha256':sha(oracle_bytes), 'selected_cases':len(cases),
+            'independent_scalar_model_sha256':sha((HERE/'independent_scalar_models.py').read_bytes()),
+            'independent_scalar_bindings_sha256':sha((HERE/'independent_scalar_bindings.json').read_bytes()),
             'evidence_directory':str(output),
             'cases':results, 'commands':records,
             'full_fi_lifetime_physical_sanitizer':'NOT_RUN', 'production_release':False,

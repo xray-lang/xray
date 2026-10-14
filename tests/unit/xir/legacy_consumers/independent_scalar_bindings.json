@@ -1,0 +1,35 @@
+{
+  "schema": 1,
+  "inputs": [
+    {
+      "path": "tests/diff/cases/semantics/int_wrap/add_overflow.xr",
+      "lf_sha256": "ed20b85dcc45d5295ec01ed8f2f2939a8bb80579316d0f9760bc56df78fcec5c"
+    },
+    {
+      "path": "tests/diff/cases/semantics/int_wrap/int_as_truncation.xr",
+      "lf_sha256": "3c9f5a384eb028823560132c5fd934f19ad61fb181e7165dcec629f3a631b64d"
+    },
+    {
+      "path": "tests/diff/cases/semantics/int_wrap/narrow_arith_wrap.xr",
+      "lf_sha256": "37e67685dccae436b0c4860c56f49702079945f29c14ead78e57455fbfc364f0"
+    },
+    {
+      "path": "tests/diff/cases/semantics/int_wrap/uint64_large_literals.xr",
+      "lf_sha256": "ef86b0eff3f3fb81242cacc7b3235883affb5bfa297094ef84d354a8b96761c5"
+    },
+    {
+      "path": "tests/diff/cases/semantics/int_wrap/uint64_shift_logical.xr",
+      "lf_sha256": "0a744bf8e524a8c40a0a4f31c627d9dace08657ba276a1b050e1a78fc017391e"
+    },
+    {
+      "path": "spec/source/sections/003-2-type-system.md",
+      "lf_sha256": "f4e970b0cc728c19f65a4d1b2a13cd0e572431dcac3f6f20cd06d23046ebea8a"
+    },
+    {
+      "path": "spec/source/sections/004-3-expressions.md",
+      "lf_sha256": "3aeabb14d154ef235fe51c665a7d367c2e51dc2c6f5261a9e0b194b228a9b945"
+    }
+  ],
+  "semantic_basis": "Same-sign mixed integer operands use the wider operand type; operations wrap there before any return widening. Explicit casts truncate modulo the target width. Unsigned right shifts zero extend.",
+  "original_comments": "The two historical mix comments in narrow_arith_wrap describe the earlier widening rule. Preserve original source, apply the current frozen arithmetic definition, and report this transition explicitly."
+}
