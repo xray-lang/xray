@@ -432,6 +432,27 @@
         "Actual complete fixed producer interfaces, definition-owned target replacements and product registration remain OPEN.",
         "Full applicable VM/native/FI/lifetime/borrow/cancellation/resource/physical/safety/generated-C/provider/platform gates remain required; original budgets and P20 mixed directions preserved."
       ]
+    },
+    {
+      "id": "string_builder_snapshot_owned_text",
+      "oracle_id": "string_builder_snapshot",
+      "source": "tests/unit/xir/legacy_consumers/fixtures/string_accumulation_snapshot/root.xr",
+      "source_lf_sha256": "b42ab5f5970e233de4179c7bc345afc311848e0b7941260bed87742c32984dbd",
+      "entry": "function",
+      "stdout_utf8": "42\n",
+      "companions": [],
+      "owners": [
+        "P09",
+        "P13"
+      ],
+      "remaining_gates": [
+        "Fresh Source/Checked/Program execution on published dependencies; this file is not a product runner.",
+        "Independent VM and actual generated-C native observations; P20 owns mixed execution qualification.",
+        "All applicable producer lifetime, complete FI, exact resource budgets, cancellation, physical release and sanitizer gates.",
+        "Original spelling is preserved as a migration input. The required StringBuilder replacement/removal needs a separately reviewed semantic port; do not restore the retired API to pass this fixture."
+      ],
+      "migration_basis": "Complete original empty/append scalar order/saved snapshot/reset/reuse/three iterations/two owned return calls retained with current immutable string concatenation and formatting; no builder alias. Physical allocation/release is separate and unqualified.",
+      "retained_original_source": "tests/unit/xir/legacy_consumers/fixtures/string_builder_snapshot/original.xr"
     }
   ]
 }
