@@ -93,7 +93,7 @@ static bool function_case_run(bool cancel) {
     XrXirProgram *program = NULL;
     XrXirInstance *instance = NULL, *other = NULL;
     XrXirValue function = {0}, result = {0}, second = {0}, copy = {0};
-    bool success = false;
+    bool success = false;XrXirCallStatus released_expected=XR_XIR_CALL_READY;
     XrXirStatus sealed = function_case_seal(&releases, &program);
     if (sealed != XR_XIR_OK) { CHECK(sealed == XR_XIR_OUT_OF_MEMORY && !program && !releases); return false; }
     XrXirInstanceConfig config; CHECK(xr_xir_instance_config_init(&config, sizeof(config)) == XR_XIR_CALL_READY);
@@ -104,6 +104,7 @@ static bool function_case_run(bool cancel) {
     status = xr_xir_instance_start(instance, 2, NULL, 0);
     if (status != XR_XIR_CALL_READY) goto failed;
     status = xr_xir_instance_poll_bounded(instance, UINT64_MAX).outcome.status;
+    if(status==XR_XIR_CALL_OOM || status==XR_XIR_CALL_LIMIT) released_expected=status;
     if (status != XR_XIR_CALL_RETURNED) goto failed;
     CHECK(xr_xir_instance_take_result(instance, &function) == XR_XIR_CALL_RETURNED);
     CHECK(xr_xir_function_binding(&function) && xr_xir_function_binding(&function)->entry == 3);
@@ -113,20 +114,29 @@ static bool function_case_run(bool cancel) {
     status = xr_xir_instance_start_function(instance, &function, NULL, 0);
     if (status != XR_XIR_CALL_READY) goto failed;
     XrXirInstanceResult wait = xr_xir_instance_poll_bounded(instance, UINT64_MAX);
+    if(wait.outcome.status==XR_XIR_CALL_OOM || wait.outcome.status==XR_XIR_CALL_LIMIT) {
+        status=released_expected=wait.outcome.status;goto failed;
+    }
     CHECK(wait.outcome.status == XR_XIR_CALL_SUSPENDED);
     CHECK(xr_xir_instance_resume(instance, wait.epoch, wait.outcome.wake) == XR_XIR_CALL_READY);
-    CHECK(xr_xir_instance_poll_bounded(instance, UINT64_MAX).outcome.status == XR_XIR_CALL_RETURNED);
+    status=xr_xir_instance_poll_bounded(instance,UINT64_MAX).outcome.status;
+    if(status==XR_XIR_CALL_OOM || status==XR_XIR_CALL_LIMIT) { released_expected=status;goto failed; }
+    CHECK(status==XR_XIR_CALL_RETURNED);
     CHECK(xr_xir_instance_take_result(instance, &result) == XR_XIR_CALL_RETURNED);
     status = xr_xir_instance_start(instance, 4, &function, 1);
     if (status != XR_XIR_CALL_READY) goto failed;
     wait = xr_xir_instance_poll_bounded(instance, UINT64_MAX);
+    if(wait.outcome.status==XR_XIR_CALL_OOM || wait.outcome.status==XR_XIR_CALL_LIMIT)
+        released_expected=wait.outcome.status;
     if (wait.outcome.status != XR_XIR_CALL_SUSPENDED) { status = wait.outcome.status; goto failed; }
     if (cancel) {
         CHECK(xr_xir_instance_stop(instance) == XR_XIR_CALL_READY);
         CHECK(xr_xir_instance_poll_bounded(instance, UINT64_MAX).outcome.status == XR_XIR_CALL_CANCELLED);
     } else {
         CHECK(xr_xir_instance_resume(instance, wait.epoch, wait.outcome.wake) == XR_XIR_CALL_READY);
-        CHECK(xr_xir_instance_poll_bounded(instance, UINT64_MAX).outcome.status == XR_XIR_CALL_RETURNED);
+        status=xr_xir_instance_poll_bounded(instance,UINT64_MAX).outcome.status;
+        if(status==XR_XIR_CALL_OOM || status==XR_XIR_CALL_LIMIT) { released_expected=status;goto failed; }
+        CHECK(status==XR_XIR_CALL_RETURNED);
         CHECK(xr_xir_instance_take_result(instance, &second) == XR_XIR_CALL_RETURNED);
     }
     CHECK(xr_xir_instance_stop(instance) == XR_XIR_CALL_READY);
@@ -136,7 +146,7 @@ static bool function_case_run(bool cancel) {
  failed:
     CHECK(status == XR_XIR_CALL_OOM || status == XR_XIR_CALL_LIMIT);
  finish:
-    CHECK(xr_xir_instance_free(instance) == XR_XIR_CALL_READY);
+    CHECK(xr_xir_instance_free(instance)==released_expected);
     xr_xir_compile_program_drop(program);
     if (function.type) {
         CHECK(!releases && xr_xir_value_copy(&function, &copy) == XR_XIR_VALUE_OK);

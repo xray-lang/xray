@@ -308,8 +308,8 @@ set_tests_properties(test_xir_stages PROPERTIES LABELS "unit;xir;metadata;owners
 add_executable(test_xir_allocations xir/test_xir_allocations.c
     ${CMAKE_SOURCE_DIR}/src/aot/xi_cgen_verify_output.c
     ${CMAKE_SOURCE_DIR}/src/shared/xnative_declaration.c)
+target_link_libraries(test_xir_allocations PRIVATE xray_xir_scalar)
 target_include_directories(test_xir_allocations PRIVATE ${CMAKE_SOURCE_DIR}/src)
-target_link_libraries(test_xir_allocations PRIVATE xray_xir_native_cache)
 if(MSVC)
     target_compile_options(test_xir_allocations PRIVATE /W4 /WX)
 else()
@@ -371,7 +371,7 @@ add_executable(test_xir_native xir/test_xir_native.c ${XIR_SCALAR_GENERATED})
 target_link_libraries(test_xir_native PRIVATE xray_xir_scalar)
 # Complete panic outcomes keep message ownership independent of result values.
 add_executable(test_xir_panic_carrier xir/test_xir_panic_carrier.c xir/xir_legacy_call_provider.c)
-target_link_libraries(test_xir_panic_carrier PRIVATE xray_xir)
+target_link_libraries(test_xir_panic_carrier PRIVATE xray_xir xray_xir_scalar)
 # These implementations are included under the runtime allocation macros,
 # never compiled as additional uncounted translation units.
 set_property(SOURCE xir/test_xir_panic_carrier.c APPEND PROPERTY OBJECT_DEPENDS
@@ -432,12 +432,16 @@ target_include_directories(test_xir_value_allocations PRIVATE ${CMAKE_SOURCE_DIR
 target_link_libraries(test_xir_value_allocations PRIVATE xray_xir_scalar)
 # Owned close/copy tests use the production thread wrapper and join every handle.
 target_include_directories(test_xir_value_allocations PRIVATE ${CMAKE_SOURCE_DIR}/src/base)
+target_include_directories(test_xir_array_grow_budget PRIVATE ${CMAKE_SOURCE_DIR}/src/base)
 if(WIN32)
     target_sources(test_xir_value_allocations PRIVATE ${CMAKE_SOURCE_DIR}/src/os/win/thread_win.c)
+    target_sources(test_xir_array_grow_budget PRIVATE ${CMAKE_SOURCE_DIR}/src/os/win/thread_win.c)
 else()
     target_sources(test_xir_value_allocations PRIVATE ${CMAKE_SOURCE_DIR}/src/os/unix/thread_unix.c)
+    target_sources(test_xir_array_grow_budget PRIVATE ${CMAKE_SOURCE_DIR}/src/os/unix/thread_unix.c)
     find_package(Threads REQUIRED)
     target_link_libraries(test_xir_value_allocations PRIVATE Threads::Threads)
+    target_link_libraries(test_xir_array_grow_budget PRIVATE Threads::Threads)
 endif()
 add_executable(test_xir_emit_strings xir/test_xir_emit_strings.c)
 target_link_libraries(test_xir_emit_strings PRIVATE xray_xir_cgen)
@@ -516,6 +520,9 @@ add_test(NAME test_xir_source_product_linked COMMAND ${XRAY_PYTHON}
     ${CMAKE_CURRENT_SOURCE_DIR}/xir/test_xir_source_product.py
     $<TARGET_FILE:test_xir_source_product_linked> ${CMAKE_SOURCE_DIR}/stdlib)
 set_tests_properties(test_xir_source_product_linked PROPERTIES LABELS "unit;xir;ownership;abi;execution" TIMEOUT 60)
+add_test(NAME test_xir_source_product_identity_oracle COMMAND ${XRAY_PYTHON}
+    ${CMAKE_CURRENT_SOURCE_DIR}/xir/derive_source_product_identity.py)
+set_tests_properties(test_xir_source_product_identity_oracle PROPERTIES LABELS "unit;xir;abi;ownership" TIMEOUT 30)
 set(XIR_SOURCE_OWNER_FIXTURE "${CMAKE_SOURCE_DIR}/tests/fixtures/xir_compile_owner")
 set(XIR_SOURCE_OWNER_NATIVE "${CMAKE_CURRENT_BINARY_DIR}/xir-source-owner-native.c")
 add_custom_command(OUTPUT "${XIR_SOURCE_OWNER_NATIVE}"
@@ -4388,14 +4395,14 @@ include("${CMAKE_CURRENT_LIST_DIR}/xir/task_unit_native.cmake")
 
 include("${CMAKE_CURRENT_LIST_DIR}/xir/library_generics.cmake")
 
-include("${CMAKE_CURRENT_LIST_DIR}/xir/native_cache.cmake")
+include("${CMAKE_CURRENT_LIST_DIR}/xir/stdlib_vm.cmake")
 
-include("${CMAKE_CURRENT_LIST_DIR}/xir/source_product_cache.cmake")
+include("${CMAKE_CURRENT_LIST_DIR}/xir/source_product_vm.cmake")
 
-include("${CMAKE_CURRENT_LIST_DIR}/xir/native_cache_resources.cmake")
+include("${CMAKE_CURRENT_LIST_DIR}/xir/stdlib_resources.cmake")
 
 include("${PROJECT_SOURCE_DIR}/tests/cli/xir_public_cli_product.cmake")
-include("${CMAKE_CURRENT_LIST_DIR}/xir/native_cache_preparation.cmake")
+include("${CMAKE_CURRENT_LIST_DIR}/xir/stdlib_preparation.cmake")
 include("${CMAKE_CURRENT_LIST_DIR}/xir/task_outcome_copy_controls.cmake")
 
 include("${CMAKE_CURRENT_LIST_DIR}/xir/range_check.cmake")
@@ -4524,6 +4531,8 @@ add_test(NAME test_xir_cell_provenance COMMAND test_xir_cell_provenance)
 set_tests_properties(test_xir_cell_provenance PROPERTIES LABELS "xir;ownership" TIMEOUT 120)
 
 include("${CMAKE_CURRENT_LIST_DIR}/xir/root_conditional.cmake")
+include("${CMAKE_CURRENT_LIST_DIR}/xir/effect_final_retirement.cmake")
+include("${CMAKE_CURRENT_LIST_DIR}/xir/effect_ordinary_environment.cmake")
 
 include(xir/cell_owner_source.cmake)
 
@@ -4550,3 +4559,5 @@ include("${CMAKE_CURRENT_LIST_DIR}/xir/cfg_storage.cmake")
 include("${CMAKE_CURRENT_LIST_DIR}/xir/instance_domain_fuel.cmake")
 include("${CMAKE_CURRENT_LIST_DIR}/xir/specialize_key_controls.cmake")
 include("${CMAKE_CURRENT_LIST_DIR}/xir/error_cfg_scheduling.cmake")
+
+add_subdirectory(xir/p10_reference)

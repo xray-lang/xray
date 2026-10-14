@@ -13,11 +13,12 @@
 #define XIR_INSTANCE_ADMISSION_CASES_H
 
 static void admission_case_setup(unsigned *releases, XrXirProgram **program,
-                                 XrXirInstance **instance, XrXirValue *function) {
+                                 XrXirInstance **instance, XrXirValue *function,uint64_t work_limit) {
     fail_at = SIZE_MAX;
     CHECK(!live);
     CHECK(function_case_seal(releases, program) == XR_XIR_OK);
     XrXirInstanceConfig config; CHECK(xr_xir_instance_config_init(&config, sizeof(config)) == XR_XIR_CALL_READY);
+    if(work_limit) { CHECK(work_limit<=config.work_limit);config.work_limit=work_limit; }
     CHECK(xr_xir_instance_new(*program, &config, instance) == XR_XIR_CALL_READY);
     CHECK(xr_xir_instance_start(*instance, 2, NULL, 0) == XR_XIR_CALL_READY);
     CHECK(xr_xir_instance_poll_bounded(*instance, UINT64_MAX).outcome.status == XR_XIR_CALL_RETURNED);
@@ -41,7 +42,7 @@ static void admission_gate_owner_case(void) {
     XrXirProgram *program = NULL;
     XrXirInstance *instance = NULL;
     XrXirValue function = {0};
-    admission_case_setup(&releases, &program, &instance, &function);
+    admission_case_setup(&releases, &program, &instance, &function,0);
     XirFunction *object = (XirFunction *) object_pointer(&function);
     XrXirFunctionBinding original = object->binding;
     FunctionGate forged;
@@ -77,22 +78,29 @@ static void admission_gate_owner_case(void) {
     admission_case_dispose(&releases, program, instance, &function);
 }
 
-static void admission_replacement_budget_case(void) {
+static void admission_replacement_work_case(void) {
     unsigned releases = 0;
     XrXirProgram *program = NULL;
     XrXirInstance *instance = NULL;
     XrXirValue function = {0};
-    admission_case_setup(&releases, &program, &instance, &function);
-    uint64_t epoch = instance->epoch, original_limit = instance->config.poll_limit;
+    admission_case_setup(&releases,&program,&instance,&function,0);
+    XrXirDomainBudgetStats setup=xr_xir_domain_budget_stats(instance->domain);
+    CHECK(setup.bound && setup.work<=setup.work_limit && setup.work_limit-setup.work>=3);
+    admission_case_dispose(&releases,program,instance,&function);
+    releases=0;program=NULL;instance=NULL;function=(XrXirValue){0};
+    admission_case_setup(&releases,&program,&instance,&function,setup.work+3);
+    XrXirDomainBudgetStats before_work=xr_xir_domain_budget_stats(instance->domain);
+    CHECK(before_work.work==setup.work && before_work.work_limit==setup.work+3);
+    uint64_t epoch = instance->epoch;
     XrXirCall *previous_call = instance->call;
     uint32_t requested = instance->requested;
     size_t baseline = live;
     uint32_t references = atomic_load(&object_pointer(&function)->references);
     XrXirCallAccounting before[2] = {instance->accounting[0], instance->accounting[1]};
-    /* One function admission costs one value plus its capture-prefix/signature
-     * scan. The replacement has no work left for its own boundary validation. */
-    instance->config.poll_limit = 3;
+    /* The original three-unit value probe cannot replace the live cumulative
+     * ledger. A new replacement also needs its complete execution boundary. */
     XrXirValueAdmission admission = instance_candidate_admission(instance);
+    CHECK(admission.work==3);
     CHECK(xr_xir_value_admit(&function, (XrXirType) function.type, &admission) == XR_XIR_VALUE_OK);
     CHECK(!admission.work);
     CHECK(xr_xir_instance_start(instance, 4, &function, 1) == XR_XIR_CALL_LIMIT);
@@ -100,7 +108,25 @@ static void admission_replacement_budget_case(void) {
     CHECK(xr_xir_instance_state(instance) == XR_XIR_INSTANCE_READY && live == baseline);
     CHECK(atomic_load(&object_pointer(&function)->references) == references);
     CHECK(!memcmp(before, instance->accounting, sizeof(before)));
-    instance->config.poll_limit = original_limit;
+    XrXirDomainBudgetStats failed=xr_xir_domain_budget_stats(instance->domain);
+    CHECK(failed.work>=before_work.work && failed.work<=failed.work_limit &&
+        failed.work_limit==before_work.work_limit);
+    CHECK(xr_xir_instance_start(instance,4,&function,1)==XR_XIR_CALL_LIMIT);
+    CHECK(instance->call==previous_call && instance->epoch==epoch && instance->requested==requested && live==baseline);
+    CHECK(!memcmp(before,instance->accounting,sizeof(before)));
+    XrXirDomainBudgetStats retried=xr_xir_domain_budget_stats(instance->domain);
+    CHECK(retried.work>=failed.work && retried.work<=retried.work_limit && retried.work_limit==failed.work_limit);
+    XrXirValue result={0};
+    CHECK(xr_xir_instance_take_result(instance,&result)==XR_XIR_CALL_RETURNED && result.payload==17);
+    xr_xir_value_drop(&result);admission_case_dispose(&releases,program,instance,&function);
+}
+
+static void admission_replacement_budget_case(void) {
+    unsigned releases=0;XrXirProgram *program=NULL;XrXirInstance *instance=NULL;XrXirValue function={0};
+    admission_case_setup(&releases,&program,&instance,&function,0);
+    uint64_t epoch=instance->epoch;XrXirCall *previous_call=instance->call;uint32_t requested=instance->requested;
+    size_t baseline=live;uint32_t references=atomic_load(&object_pointer(&function)->references);
+    XrXirCallAccounting before[2]={instance->accounting[0],instance->accounting[1]};
     /* Argument capture and the candidate's copied table succeed; its first
      * physical frame segment allocation then fails. The completed call stays. */
     size_t failed_segment = allocation_calls + 2;
@@ -148,6 +174,7 @@ static void admission_replacement_budget_case(void) {
 
 static void instance_admission_cases(void) {
     admission_gate_owner_case();
+    admission_replacement_work_case();
     admission_replacement_budget_case();
     puts("Instance admission: forged gate rejected; failed replacement preserves result and epoch; zero live blocks");
 }
