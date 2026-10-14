@@ -31,6 +31,29 @@ typedef struct CtfeReferenceCase {
 } CtfeReferenceCase;
 
 static const CtfeReferenceCase reference_cases[] = {
+    {"tuple_generic", XR_XIR_UNIT, 3, XR_XIR_OK, NULL, 0},
+    {"tuple_export", XR_XIR_UNIT, 3, XR_XIR_OK, NULL, 0},
+    {"tuple_nested", XR_XIR_UNIT, 4, XR_XIR_OK, NULL, 0},
+    {"tuple_units", XR_XIR_UNIT, 0, XR_XIR_OK, NULL, 0},
+    {"tuple_cell", XR_XIR_UNIT, 3, XR_XIR_OK, NULL, 0},
+    {"tuple_phi", XR_XIR_UNIT, 3, XR_XIR_OK, NULL, 0},
+    {"tuple_internal", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"tuple_oversize", XR_XIR_UNIT, 0, XR_XIR_BUDGET, NULL, 1},
+    {"tuple_io", XR_XIR_UNIT, 0, XR_XIR_BAD_TYPE, "admitted deterministic", 2},
+    {"string_order", XR_XIR_BOOL, 1, XR_XIR_OK, NULL, 0},
+    {"string_methods", XR_XIR_BOOL, 1, XR_XIR_OK, NULL, 0},
+    {"string_search", XR_XIR_I64, 1220, XR_XIR_OK, NULL, 0},
+    {"string_search_empty", XR_XIR_BOOL, 1, XR_XIR_OK, NULL, 0},
+    {"string_read_direct", XR_XIR_UNIT, 0, XR_XIR_OK, NULL, 0},
+    {"string_bounds_negative", XR_XIR_UNIT, 0, XR_XIR_BAD_TYPE, "comptime value range violation", 2},
+    {"string_bounds_end", XR_XIR_UNIT, 0, XR_XIR_BAD_TYPE, "comptime value range violation", 2},
+    {"string_read_io", XR_XIR_UNIT, 0, XR_XIR_BAD_TYPE, "admitted deterministic scalar direct-call closure", 2},
+    {"string_export", XR_XIR_STRING, 4, XR_XIR_OK, NULL, 0},
+    {"string_empty", XR_XIR_STRING, 0, XR_XIR_OK, NULL, 0},
+    {"string_nul", XR_XIR_STRING, 3, XR_XIR_OK, NULL, 0},
+    {"string_cell", XR_XIR_STRING, 4, XR_XIR_OK, NULL, 0},
+    {"string_predicate", XR_XIR_BOOL, 1, XR_XIR_OK, NULL, 0},
+    {"string_overflow", XR_XIR_UNIT, 0, XR_XIR_BUDGET, NULL, 1},
     {"cell_rune", XR_XIR_RUNE, 128512, XR_XIR_OK, NULL, 0},
     {"cell_loop", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
     {"cell_recursion", XR_XIR_I64, 720, XR_XIR_OK, NULL, 0},
@@ -389,6 +412,81 @@ static void reference_cell_leaf(const XrXirCompileContext *context,XrXirSourceRe
     fprintf(stderr,"CTFE real Cell leaf NEW/READ/WRITE; evaluator FI=%zu same-owner retry; step/division failure clears owned frame; physical0 after last owner\n",sites);
 }
 
+static void reference_string(const XrXirCompileContext *context,XrXirSourceResult *source,
+    const CtfeReferenceCase *selected) {
+    const char *expected=!strcmp(selected->name,"string_nul")?"a\0b":
+        !strcmp(selected->name,"string_empty")?"":"abcd";
+    size_t length=(size_t)selected->value;
+    const XrXirModule *module=xr_xir_compile_artifact_module(source->checked);
+    const XrXirFunction *body=&module->functions[reference_run_function(module)];bool literal=false;
+    for (uint32_t i=0;i<body->instruction_count;++i) {
+        const XrXirInstruction *op=&body->instructions[i];
+        CHECK(op->op!=XR_XIR_CALL && op->op!=XR_XIR_CALL_INDIRECT && op->op!=XR_XIR_FUNCTION_REF);
+        if (op->op==XR_XIR_CONST_STRING) {
+            CHECK(op->immediate>=0 && (uint64_t)op->immediate<module->declarations->literal_count);
+            const XrXirLiteral *text=&module->declarations->literals[op->immediate];
+            if (text->length==length && (!length || !memcmp(text->bytes,expected,length))) literal=true;
+        }
+    }
+    CHECK(literal);
+    uint8_t identity[32]={0};XrXirArtifact *lowered=reference_lower(context,source,identity);
+    XrXirCtfeRequest request={.artifact=lowered,.function=reference_run_function(xr_xir_compile_artifact_module(lowered)),
+        .target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION},
+        .limits={XR_XIR_CTFE_MAX_STEPS,XR_XIR_CTFE_MAX_FRAME_BYTES,(uint64_t)length}};
+    memcpy(request.checked_identity,identity,sizeof(identity));XrXirValue output={0};
+    XrCompileResourceStats baseline=reference_stats(context);
+    size_t start=source_fixture_compile_attempts;
+    CHECK(xr_xir_compile_ctfe_leaf(&request,&output)==XR_XIR_CTFE_OK);
+    size_t sites=source_fixture_compile_attempts-start;CHECK(sites>0);
+    const char *bytes=NULL;size_t actual=SIZE_MAX;
+    CHECK(xr_xir_string_view(&output,&bytes,&actual) && actual==length && (!length || !memcmp(bytes,expected,length)));
+    xr_xir_value_drop(&output);CHECK(reference_stats(context).live_bytes==baseline.live_bytes);
+    for (size_t f=0;f<sites;++f) {
+        source_fixture_compile_injected=false;source_fixture_compile_fail_at=source_fixture_compile_attempts+f;
+        CHECK(xr_xir_compile_ctfe_leaf(&request,&output)==XR_XIR_CTFE_OUT_OF_MEMORY);
+        CHECK(source_fixture_compile_injected && !output.type && !output.reserved && !output.payload);
+        CHECK(reference_stats(context).live_bytes==baseline.live_bytes);
+        source_fixture_compile_fail_at=SIZE_MAX;
+        CHECK(xr_xir_compile_ctfe_leaf(&request,&output)==XR_XIR_CTFE_OK);xr_xir_value_drop(&output);
+        CHECK(reference_stats(context).live_bytes==baseline.live_bytes);
+    }
+    if (length) {
+        request.limits.output_bytes=length-1;
+        CHECK(xr_xir_compile_ctfe_leaf(&request,&output)==XR_XIR_CTFE_OUTPUT_LIMIT);
+        CHECK(!output.type && !output.reserved && !output.payload && reference_stats(context).live_bytes==baseline.live_bytes);
+    }
+    request.limits.output_bytes=length;
+    CHECK(xr_xir_compile_ctfe_leaf(&request,&output)==XR_XIR_CTFE_OK);
+    xr_xir_compile_artifact_free(lowered);
+    CHECK(xr_xir_string_view(&output,&bytes,&actual) && actual==length && (!length || !memcmp(bytes,expected,length)));
+    xr_xir_value_drop(&output);
+    fprintf(stderr,"CTFE string export logical bytes=%zu exact/minus-one; evaluator FI=%zu same-owner retry; value survives Artifact; physical0 after last owner\n",length,sites);
+}
+
+static void reference_string_late_owner(void) {
+    XrXirCompileContext context={0};
+    CHECK(xr_compile_resources_new(&reference_limits,&context.resources)==XR_COMPILE_RESOURCE_OK);
+    context.limits=xr_xir_compile_default_limits();XrXirSourceResult source={0};XrXirSourceDiagnostic diagnostic={0};
+    CHECK(reference_source(&context,"string_export",&source,&diagnostic)==XR_XIR_OK);
+    uint8_t identity[32]={0};XrXirArtifact *lowered=reference_lower(&context,&source,identity);
+    XrXirCtfeCallRequest request={.evaluation={.artifact=lowered,
+        .function=reference_run_function(xr_xir_compile_artifact_module(lowered)),
+        .target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION},
+        .limits={XR_XIR_CTFE_MAX_STEPS,XR_XIR_CTFE_MAX_FRAME_BYTES,4}},.call_depth=XR_XIR_CTFE_MAX_CALL_DEPTH};
+    memcpy(request.evaluation.checked_identity,identity,sizeof(identity));XrXirValue value={0};
+    CHECK(xr_xir_compile_ctfe_calls(&request,&value)==XR_XIR_CTFE_OK);
+    xr_xir_compile_artifact_free(lowered);xr_compile_resources_release(context.resources);context.resources=NULL;
+    const char *bytes=NULL;size_t length=0;
+    CHECK(xr_xir_string_view(&value,&bytes,&length) && length==4 && !memcmp(bytes,"abcd",4));
+    size_t calls=source_fixture_compile_attempts;source_fixture_compile_fail_at=calls;
+    xr_xir_value_drop(&value);source_fixture_compile_fail_at=SIZE_MAX;
+    CHECK(source_fixture_compile_attempts==calls && !source_fixture_compile_live && !source_fixture_compile_bytes);
+    fprintf(stderr,"CTFE String remains readable after Source/Artifact/ledger caller death; final drop no allocation physical0\n");
+}
+
+#include "xir_ctfe_string_read_cases.h"
+#include "xir_ctfe_tuple_cases.h"
+
 int main(int argc, char **argv) {
     CHECK(argc == 2);
     const CtfeReferenceCase *selected = NULL;
@@ -407,7 +505,10 @@ int main(int argc, char **argv) {
         selected->name, (unsigned)status, diagnostic.line, diagnostic.column, diagnostic.message);
     CHECK(status == selected->status);
     if (status == XR_XIR_OK) {
-        if (!strcmp(selected->name, "cell_leaf")) reference_cell_leaf(&context,&source);
+        if (!strncmp(selected->name,"tuple_",6) && selected->type==XR_XIR_UNIT) reference_tuple(&context,&source,selected);
+        else if (selected->type==XR_XIR_STRING) reference_string(&context,&source,selected);
+        else if (!strcmp(selected->name, "string_read_direct")) reference_string_read_direct(&context,&source);
+        else if (!strcmp(selected->name, "cell_leaf")) reference_cell_leaf(&context,&source);
         else if (!strcmp(selected->name, "rune_direct")) reference_rune_direct(&context,&source);
         else if (!strcmp(selected->name, "unit_direct")) reference_unit_direct(&context,&source);
         else if (!strcmp(selected->name, "leaf_locals")) reference_leaf_locals(&context, &source);
@@ -429,6 +530,8 @@ int main(int argc, char **argv) {
         spent.peak_bytes <= reference_limits.live_bytes && spent.work <= reference_limits.work);
     xr_compile_resources_release(context.resources);
     CHECK(!source_fixture_compile_live && !source_fixture_compile_bytes);
+    if (!strcmp(selected->name,"string_export")) reference_string_late_owner();
+    if (!strcmp(selected->name,"tuple_export")) reference_tuple_late_owner();
     fprintf(stderr, "CTFE reference %s: status=%u expected=%lld allocated=%llu peak=%llu work=%llu physical=0/0\n",
         selected->name, (unsigned)status, (long long)selected->value,
         (unsigned long long)spent.allocated_bytes, (unsigned long long)spent.peak_bytes,

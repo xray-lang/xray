@@ -16,6 +16,7 @@ struct SourceComptimeSite {
     uint32_t module,owner,declaration,helper;
     SourceExpectedType expected;
     XrXirValue value;
+    uint32_t result_arity;
 };
 typedef struct SourceComptimeScope {
     uint32_t function,module,depth,alternatives;
@@ -39,14 +40,8 @@ static void source_comptime_restore(SourceContext *ctx,const SourceComptimeScope
     ctx->effect_argument=scope->argument;ctx->loop=scope->loop;ctx->type_scope=scope->types;
     ctx->returned=scope->returned;
 }
-static bool source_comptime_result_type(XrXirType type) {
-    return type==XR_XIR_UNIT || type==XR_XIR_BOOL || type==XR_XIR_RUNE || xr_xir_type_is_integer(type);
-}
-static bool source_comptime_result_value(const XrXirValue *value) {
-    return value && (value->type==XR_XIR_UNIT ? (!value->reserved && !value->payload) :
-        source_comptime_result_type((XrXirType)value->type) &&
-        xr_xir_value_argument(value,NULL,(XrXirType)value->type));
-}
+#include "xxir_source_comptime_tuple.inc.c"
+
 static bool source_comptime_body(SourceContext *ctx,AstNode *child,SourceExpectedType expected) {
     SourceValue value={0};
     if (!child) return source_fail(ctx,NULL,XR_XIR_BAD_STRUCTURE,"comptime has no expression");
@@ -63,10 +58,11 @@ static bool source_comptime_body(SourceContext *ctx,AstNode *child,SourceExpecte
         if (tail) child=child->as.block.statements[count-1]->as.expr_stmt;
         else { value=(SourceValue){0,XR_XIR_UNIT};unit_block=true; }
     }
-    if (expected.present && !source_comptime_result_type(expected.type)) expected=(SourceExpectedType){0};
+    if (expected.present && !source_comptime_result_type(ctx,child,expected.type)) expected=(SourceExpectedType){0};
+    if (ctx->diagnostic.status!=XR_XIR_OK) return false;
     if (!unit_block && !source_plan_expression(ctx,child,expected,&value)) return false;
-    if (!source_comptime_result_type(value.type))
-        return source_fail(ctx,child,XR_XIR_BAD_TYPE,"comptime result must be a bool, integer, Rune or Unit in this execution domain");
+    if (!source_comptime_result_type(ctx,child,value.type))
+        return source_fail(ctx,child,XR_XIR_BAD_TYPE,"comptime result must be a closed primitive, String, Unit or immutable Tuple in this execution domain");
     if (!source_work_units(ctx,child,sizeof(value.type)+sizeof(ctx->returned))) return false;
     ctx->functions[ctx->function].result=value.type;
     if (!source_recipe_record(ctx,(XrXirInstruction){XR_XIR_RETURN,XR_XIR_UNIT,{value.type==XR_XIR_UNIT?0:value.id,0},{0},0,{0}},NULL)) return false;
@@ -113,8 +109,8 @@ static bool source_comptime_expression(SourceContext *ctx,AstNode *node,SourceEx
             return source_fail(ctx,node,XR_XIR_BAD_STRUCTURE,"comptime occurrence was lowered twice");
     }
     SourceComptimeSite *site=source_alloc(ctx,1,sizeof(*site));
-    if (!site || !source_work_units(ctx,node,sizeof(*site)+sizeof(ctx->comptime_sites)+sizeof(ctx->comptime_count))) return false;
-    *site=(SourceComptimeSite){ctx->comptime_sites,node,module,owner,declaration,helper,expected,{0}};
+    if (!site || !source_work_units(ctx,node,sizeof(*site)+sizeof(ctx->comptime_sites)+sizeof(ctx->comptime_count)+2)) return false;
+    *site=(SourceComptimeSite){ctx->comptime_sites,node,module,owner,declaration,helper,expected,{0},0};
     ctx->comptime_sites=site;++ctx->comptime_count;
     if (!ctx->comptime_input)
         return source_recipe_record(ctx,(XrXirInstruction){XR_XIR_CALL,ctx->functions[helper].result,{0},{0},helper,{0}},value);
@@ -127,14 +123,25 @@ static bool source_comptime_expression(SourceContext *ctx,AstNode *node,SourceEx
             matched=original;
         }
     }
-    if (!matched || matched->value.type!=(uint32_t)ctx->functions[helper].result ||
-        !source_comptime_result_type((XrXirType)matched->value.type) ||
-        !source_comptime_result_value(&matched->value))
-        return source_fail(ctx,node,XR_XIR_BAD_STRUCTURE,"comptime occurrence or canonical result changed");
-    if (!source_work_units(ctx,node,sizeof(site->value)+sizeof(ctx->comptime_matched))) return false;
-    site->value=matched->value;++ctx->comptime_matched;
-    if (site->value.type==XR_XIR_UNIT) { *value=(SourceValue){0,XR_XIR_UNIT};return true; }
-    XrXirOp op=site->value.type==XR_XIR_BOOL?XR_XIR_CONST_BOOL:
-        site->value.type==XR_XIR_RUNE?XR_XIR_CONST_RUNE:XR_XIR_CONST_INT;
-    return source_recipe_record(ctx,(XrXirInstruction){op,(XrXirType)site->value.type,{0},{0},site->value.payload,{0}},value);
+    if (!matched || !source_comptime_result_value(ctx,node,&matched->value,matched->result_arity))
+        return source_fail(ctx,node,ctx->diagnostic.status==XR_XIR_OK?XR_XIR_BAD_STRUCTURE:ctx->diagnostic.status,"comptime occurrence or canonical result changed");
+    const XrXirTypeArena *arena=NULL;
+    if (matched->result_arity) {
+        if (!source_work_units(ctx,node,(uint64_t)matched->result_arity*16)) return false;
+        arena=xr_xir_value_arena(&matched->value);
+    }
+    if (!source_comptime_type_matches(ctx,node,xr_xir_compile_type_arena_types(arena),
+        (XrXirType)matched->value.type,ctx->functions[helper].result))
+        return source_fail(ctx,node,ctx->diagnostic.status==XR_XIR_OK?XR_XIR_BAD_STRUCTURE:ctx->diagnostic.status,"comptime occurrence changed its result type");
+    if (!source_work_units(ctx,node,sizeof(site->value)+sizeof(site->result_arity)+sizeof(ctx->comptime_matched))) return false;
+    site->result_arity=matched->result_arity;
+    if (matched->value.type==XR_XIR_STRING || matched->result_arity) {
+        if (!source_work_units(ctx,node,(uint64_t)matched->result_arity*16)) return false;
+        XrXirValueStatus copied=xr_xir_value_copy(&matched->value,&site->value);
+        if (copied!=XR_XIR_VALUE_OK) return source_fail(ctx,node,
+            copied==XR_XIR_VALUE_LIMIT || copied==XR_XIR_VALUE_REFCOUNT_LIMIT?XR_XIR_BUDGET:XR_XIR_BAD_STRUCTURE,
+            "comptime result receiving failed");
+    } else site->value=matched->value;
+    ++ctx->comptime_matched;
+    return source_comptime_constant(ctx,node,&site->value,ctx->functions[helper].result,value);
 }
