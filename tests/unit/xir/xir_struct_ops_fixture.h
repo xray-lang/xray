@@ -19,6 +19,7 @@ static XrXirArtifact *struct_ops_checked(const XrXirCompileContext *context, uns
     /* This constructor belongs to a concrete declaration, with no parent binder. */
     nominal.declarations[0].constraints = NULL;
     nominal.declarations[0].parameter_count = 0;
+    nominal.declarations[0].flags = XR_XIR_NOMINAL_MODULE_LITERAL;
     nominal.fields[0].type = XR_XIR_I64;
     nominal.declarations[1] = (XrXirNominalDeclaration) {{"alpha",5},{"Empty",5},1,NULL,0,NULL,0, XR_XIR_NOMINAL_STRUCT, NULL, 0, 0, {0}};
     XrXirTypeNode nodes[] = {
