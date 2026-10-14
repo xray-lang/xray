@@ -172,6 +172,38 @@
     {
       "path": "tests/regression/03_operators/0396_bnot_owner_edges.xr",
       "lf_sha256": "18e60f411957d88afcb86dcfb2c36b0e6d14cf26f608ae143cf05558a3c25d72"
+    },
+    {
+      "path": "tests/unit/xir/legacy_consumers/fixtures/regression_library_ports/1010_time/root.xr",
+      "lf_sha256": "44e12f13ac616adf864877092324af178cfe79ea3879e584453e4426066f2efb"
+    },
+    {
+      "path": "tests/regression/10_stdlib/1010_time.xr",
+      "lf_sha256": "5e7595b349ae0012ff44fe34f2e70b0c45d0fd61412404610c1120c63aea2bae"
+    },
+    {
+      "path": "tests/unit/xir/legacy_consumers/fixtures/regression_library_ports/1011_time_edge/root.xr",
+      "lf_sha256": "4b7cc123f9d9363bde0fd125540ef6d3fd94edb5cff688c674ef32f4ab7635bd"
+    },
+    {
+      "path": "tests/regression/10_stdlib/1011_time_edge.xr",
+      "lf_sha256": "27c9942ead3addc25014142d5b7170304193d89b788e0282533bfcb14175f518"
+    },
+    {
+      "path": "tests/regression/10_stdlib/1030_module_import.xr",
+      "lf_sha256": "04d48f43195d7f37c00a76eca91f8a1d123d8489e412f31f57c2b2aa53c7988e"
+    },
+    {
+      "path": "tests/regression/10_stdlib/1035_import_scope_reject.xr",
+      "lf_sha256": "e1f5e52dec733318655fda3c88f4ff65eb159002ebbee79ab677e3af020757d3"
+    },
+    {
+      "path": "tests/regression/10_stdlib/1199_time_units.xr",
+      "lf_sha256": "0af26bbeed35dfa62badc36bf9d30c522249f8ab7823f6fd3eac1a03f27da5b8"
+    },
+    {
+      "path": "tests/regression/03_operators/0302_uint64_print_compare.xr",
+      "lf_sha256": "3d1bff78dbe7f17563604f03c3b90c8be901f2fddf10760074861384fd13185e"
     }
   ],
   "cases": [
@@ -1272,6 +1304,232 @@
         }
       },
       "model_scope": "Original callable/guard/strict Array/rebind/unary scalar and authentic panic code projections. Code413/430 come from original source contracts, not a private ordinal."
+    },
+    {
+      "id": "clock_original_1010_time_observed",
+      "expected": {
+        "exit_code": 0,
+        "required_test_names": [
+          "test_time_now",
+          "test_time_clock",
+          "test_time_monotonic",
+          "test_time_sleep"
+        ],
+        "per_test_observations": {
+          "test_time_now": {
+            "values": [
+              true,
+              true
+            ]
+          },
+          "test_time_clock": {
+            "values": [
+              true
+            ]
+          },
+          "test_time_monotonic": {
+            "values": [
+              true
+            ]
+          },
+          "test_time_sleep": {
+            "values": [
+              true,
+              true
+            ]
+          }
+        }
+      },
+      "model_scope": "Original positive epoch, monotonic, exact sleep-duration and unit/offset predicates. Each current clock is read once in original order; actual full200000 sum is independent math. No sampled timestamp or provider/platform substitution."
+    },
+    {
+      "id": "clock_original_1011_time_edge_observed",
+      "expected": {
+        "exit_code": 0,
+        "required_test_names": [
+          "test_monotonic_ordering",
+          "test_now_returns_milliseconds",
+          "test_now_advances",
+          "test_clock_non_negative",
+          "test_sleep_zero",
+          "test_sleep_small"
+        ],
+        "per_test_observations": {
+          "test_monotonic_ordering": {
+            "values": [
+              true,
+              true
+            ]
+          },
+          "test_now_returns_milliseconds": {
+            "values": [
+              true
+            ]
+          },
+          "test_now_advances": {
+            "values": [
+              true
+            ]
+          },
+          "test_clock_non_negative": {
+            "values": [
+              true
+            ]
+          },
+          "test_sleep_zero": {
+            "values": [
+              true
+            ]
+          },
+          "test_sleep_small": {
+            "values": [
+              true,
+              true
+            ]
+          }
+        }
+      },
+      "model_scope": "Original positive epoch, monotonic, exact sleep-duration and unit/offset predicates. Each current clock is read once in original order; actual full200000 sum is independent math. No sampled timestamp or provider/platform substitution."
+    },
+    {
+      "id": "clock_original_1030_module_import_observed",
+      "expected": {
+        "exit_code": 0,
+        "required_test_names": [
+          "test_time_now",
+          "test_time_clock",
+          "test_time_milliseconds",
+          "test_time_monotonic",
+          "test_module_method_call"
+        ],
+        "per_test_observations": {
+          "test_time_now": {
+            "values": [
+              true
+            ]
+          },
+          "test_time_clock": {
+            "values": [
+              true
+            ]
+          },
+          "test_time_milliseconds": {
+            "values": [
+              true
+            ]
+          },
+          "test_time_monotonic": {
+            "values": [
+              true
+            ]
+          },
+          "test_module_method_call": {
+            "values": [
+              true
+            ]
+          }
+        }
+      },
+      "model_scope": "Original positive epoch, monotonic, exact sleep-duration and unit/offset predicates. Each current clock is read once in original order; actual full200000 sum is independent math. No sampled timestamp or provider/platform substitution."
+    },
+    {
+      "id": "clock_original_1035_import_scope_reject_observed",
+      "expected": {
+        "exit_code": 0,
+        "required_test_names": [
+          "test_top_level_import_works",
+          "test_import_accessible_in_nested_fn"
+        ],
+        "per_test_observations": {
+          "test_top_level_import_works": {
+            "values": [
+              true
+            ]
+          },
+          "test_import_accessible_in_nested_fn": {
+            "values": [
+              true
+            ]
+          }
+        }
+      },
+      "model_scope": "Original positive epoch, monotonic, exact sleep-duration and unit/offset predicates. Each current clock is read once in original order; actual full200000 sum is independent math. No sampled timestamp or provider/platform substitution."
+    },
+    {
+      "id": "clock_original_1199_time_units_observed",
+      "expected": {
+        "exit_code": 0,
+        "required_test_names": [
+          "test_wall_clock_is_in_milliseconds",
+          "test_monotonic_micros_and_nanos_share_one_clock",
+          "test_monotonic_never_goes_backwards",
+          "test_cpu_clock_is_nonnegative_and_advances_monotonically",
+          "test_local_offset_is_local_offset_at_now",
+          "test_offset_is_in_minutes_and_within_the_utc_range"
+        ],
+        "per_test_observations": {
+          "test_wall_clock_is_in_milliseconds": {
+            "values": [
+              true,
+              true
+            ]
+          },
+          "test_monotonic_micros_and_nanos_share_one_clock": {
+            "values": [
+              true,
+              true
+            ]
+          },
+          "test_monotonic_never_goes_backwards": {
+            "values": [
+              true
+            ]
+          },
+          "test_cpu_clock_is_nonnegative_and_advances_monotonically": {
+            "values": [
+              true,
+              19999900000,
+              true,
+              true
+            ]
+          },
+          "test_local_offset_is_local_offset_at_now": {
+            "values": [
+              true
+            ]
+          },
+          "test_offset_is_in_minutes_and_within_the_utc_range": {
+            "values": [
+              true
+            ]
+          }
+        }
+      },
+      "model_scope": "Original positive epoch, monotonic, exact sleep-duration and unit/offset predicates. Each current clock is read once in original order; actual full200000 sum is independent math. No sampled timestamp or provider/platform substitution."
+    },
+    {
+      "id": "structured_original_0302_uint64_print_compare_observed",
+      "expected": {
+        "exit_code": 0,
+        "required_test_names": [
+          "test_uint64_unsigned_format_and_compare"
+        ],
+        "per_test_observations": {
+          "test_uint64_unsigned_format_and_compare": {
+            "values": [
+              "9223372036854775808",
+              "9223372036854775808",
+              "u=9223372036854775808:18446744073709551615",
+              true,
+              true,
+              true,
+              true,
+              false
+            ]
+          }
+        }
+      },
+      "model_scope": "Unsigned high-bit/all-ones full decimal and order computed from arbitrary-precision integers; original multiline assertion remains."
     }
   ],
   "independence": "Expected constants come from the original frozen assertions and mathematical method bodies, never current Xray output."
