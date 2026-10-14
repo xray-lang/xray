@@ -33,6 +33,9 @@ static bool ctfe_storage_instruction(const XrXirModule *module,const XrXirFuncti
     if (op->op==XR_XIR_CELL_READ || op->op==XR_XIR_CELL_WRITE || op->op==XR_XIR_CELL_LOCAL_WRITE)
         return ctfe_cell_type(module->types,xr_xir_operand_type(body,op->args[0]));
     if (ctfe_scalar_type(op->type) || op->type==XR_XIR_UNIT) return true;
+    if (op->type==XR_XIR_STRING) return op->op==XR_XIR_CONST_STRING || op->op==XR_XIR_CONCAT_STRING ||
+        op->op==XR_XIR_CALL || op->op==XR_XIR_PHI || op->op==XR_XIR_LOCAL_UNINIT ||
+        op->op==XR_XIR_OWNED_LOCAL_NEW || op->op==XR_XIR_OWNED_LOCAL_READ || op->op==XR_XIR_OWNED_RETAIN;
     return (op->op==XR_XIR_CELL_NEW || op->op==XR_XIR_LOCAL_UNINIT || op->op==XR_XIR_PHI) &&
         ctfe_cell_type(module->types,op->type);
 }
@@ -85,7 +88,11 @@ static XrXirCtfeStatus ctfe_cell_step(ScalarRun *run,uint32_t *cursor,CtfeOwnedS
     if (status!=XR_XIR_VALUE_OK) { xr_xir_value_drop(&result);return ctfe_value_status(status); }
     if (create) xr_xir_owned_slot_move(run->frame,
         run->layout->offsets[local?op->args[0]:destination],&result);
-    else if (op->op==XR_XIR_CELL_READ && op->type!=XR_XIR_UNIT)
-        xr_xir_scalar_store(run->frame,run->layout->offsets[destination],result.payload);
+    else if (op->op==XR_XIR_CELL_READ && op->type!=XR_XIR_UNIT) {
+        if (op->type==XR_XIR_STRING) xr_xir_owned_slot_move(run->frame,run->layout->offsets[destination],&result);
+        else xr_xir_scalar_store(run->frame,run->layout->offsets[destination],result.payload);
+    }
     xr_xir_value_drop(&result);++*cursor;return XR_XIR_CTFE_OK;
 }
+
+#include "xxir_ctfe_string.inc.c"

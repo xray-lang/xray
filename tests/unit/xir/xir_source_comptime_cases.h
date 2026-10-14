@@ -105,6 +105,33 @@ static void source_comptime_test_occupied(void) {
     CHECK(source_comptime_test_stats(&context).live_bytes==baseline.live_bytes);
     xr_compile_resources_release(context.resources);CHECK(!source_fixture_compile_live && !source_fixture_compile_bytes);
 }
+static void source_comptime_test_string_result(const char *text) {
+    XrXirCompileContext context={0};
+    CHECK(xr_compile_resources_new(&source_comptime_test_limits,&context.resources)==XR_COMPILE_RESOURCE_OK);
+    context.limits=xr_xir_compile_default_limits();XrCompileResourceStats baseline=source_comptime_test_stats(&context);
+    XrXirSourceResult source={0};XrXirSourceDiagnostic diagnostic={0};
+    CHECK(source_comptime_test_build(&context,text,&source,&diagnostic)==XR_XIR_OK);
+    CHECK(source.checked && source.snapshot && xr_xir_compile_artifact_verify(source.checked,NULL)==XR_XIR_OK);
+    XrXirCheckedPacket packet={0};XrXirArtifact *received=NULL,*closed=NULL,*lowered=NULL;
+    CHECK(xr_xir_compile_checked_write(source.checked,&packet,NULL)==XR_XIR_OK);xr_xir_compile_source_result_free(&source);
+    CHECK(xr_xir_compile_checked_read(&context,packet.bytes,packet.length,&received,NULL)==XR_XIR_OK);
+    memset(packet.bytes,0xa5,packet.length);xr_xir_compile_checked_packet_free(&packet);
+    CHECK(xr_xir_compile_specialize(received,&closed,NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(received);
+    CHECK(xr_xir_compile_checked_write(closed,&packet,NULL)==XR_XIR_OK);
+    uint8_t identity[32]={0};CHECK(xr_compile_resources_work(context.resources,packet.length)==XR_COMPILE_RESOURCE_OK);
+    xr_sha256(packet.bytes,packet.length,identity);xr_xir_compile_checked_packet_free(&packet);
+    const XrXirTarget target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};
+    CHECK(xr_xir_compile_lower(closed,&target,&lowered,NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(closed);
+    XrXirCtfeCallRequest request={.evaluation={.artifact=lowered,
+        .function=source_comptime_test_function(xr_xir_compile_artifact_module(lowered),"run"),.target=target,
+        .limits={XR_XIR_CTFE_MAX_STEPS,XR_XIR_CTFE_MAX_FRAME_BYTES,7}},.call_depth=XR_XIR_CTFE_MAX_CALL_DEPTH};
+    memcpy(request.evaluation.checked_identity,identity,sizeof(identity));XrXirValue result={0};
+    CHECK(xr_xir_compile_ctfe_calls(&request,&result)==XR_XIR_CTFE_OK);xr_xir_compile_artifact_free(lowered);
+    const char *bytes=NULL;size_t length=0;
+    CHECK(xr_xir_string_view(&result,&bytes,&length) && length==7 && !memcmp(bytes,"managed",7));
+    xr_xir_value_drop(&result);CHECK(source_comptime_test_stats(&context).live_bytes==baseline.live_bytes);
+    xr_compile_resources_release(context.resources);CHECK(!source_fixture_compile_live && !source_fixture_compile_bytes);
+}
 static void source_comptime_test_rejections(void) {
     source_comptime_test_refuse("fn io()->i64 { print(1); return 1 }\nexport fn run()->i64 { return comptime io() }\n",XR_XIR_BAD_TYPE);
     source_comptime_test_refuse("var n=1\nfn state()->i64 { return n }\nexport fn run()->i64 { return comptime state() }\n",XR_XIR_BAD_TYPE);
@@ -117,7 +144,7 @@ static void source_comptime_test_rejections(void) {
     source_comptime_test_refuse("fn divide()->i64 { return 41/0 }\nexport fn run()->i64 { return comptime divide() }\n",XR_XIR_BAD_TYPE);
     source_comptime_test_refuse("fn deferred()->i64 { defer { print(1) }; return 1 }\nexport fn run()->i64 { return comptime deferred() }\n",XR_XIR_BAD_TYPE);
     source_comptime_test_refuse("export fn run()->i64 { return comptime true }\n",XR_XIR_BAD_TYPE);
-    source_comptime_test_refuse("export fn run()->string { return comptime \"managed\" }\n",XR_XIR_BAD_TYPE);
+    source_comptime_test_string_result("export fn run()->string { return comptime \"managed\" }\n");
     source_comptime_test_occupied();
 }
 #endif // XIR_SOURCE_COMPTIME_CASES_H

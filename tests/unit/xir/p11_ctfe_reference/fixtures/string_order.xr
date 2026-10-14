@@ -1,0 +1,2 @@
+fn answer()->bool { return "a"<"aa" && "aa"<="aa" && "b">"a" && "a">="a" && "a\0b"<"a\0c" && "z"<"é" }
+export fn run()->bool { return comptime answer() }
