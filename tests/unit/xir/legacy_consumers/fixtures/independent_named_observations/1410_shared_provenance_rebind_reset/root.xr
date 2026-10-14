@@ -1,0 +1,22 @@
+// Preserve all original callable/nullable/Array/unary bodies; capture each actual call and fault projection once.
+class Box {
+    items: Array<i64> = Array<i64>(1, 0)
+}
+
+@test
+fn test_shared_provenance_rebind_reset() {
+    const box = Box()
+    var items = box.items
+    items[0] = 3
+    var p19CallableValue0 = box.items[0]
+    assertEqual(p19CallableValue0, 0)
+    print(p19CallableValue0)
+    items = Array<i64>(1, 0)
+    items[0] = 7
+    var p19CallableValue1 = items[0]
+    assertEqual(p19CallableValue1, 7)
+    print(p19CallableValue1)
+    var p19CallableValue2 = box.items[0]
+    assertEqual(p19CallableValue2, 0)
+    print(p19CallableValue2)
+}

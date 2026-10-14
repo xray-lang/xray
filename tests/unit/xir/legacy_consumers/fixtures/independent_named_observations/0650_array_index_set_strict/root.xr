@@ -1,0 +1,57 @@
+// Preserve all original callable/nullable/Array/unary bodies; capture each actual call and fault projection once.
+// Array index assignment is strict and identical on VM and AOT:
+//   - in-bounds assignment overwrites the element,
+//   - assignment at exactly length is out of bounds (push() is the append API),
+//   - negative indexes never wrap from the end (that is slice-only).
+// Every out-of-range assignment raises E0430 (array index out of range).
+
+fn set_at(xs: ref Array<i64>, i: i64, v: i64) -> i64 {
+    // Returns the panic code on out-of-range assignment, or -1 on success.
+    try {
+        xs[i] = v
+        return -1
+    } catch panic (p) {
+        return p.code
+    }
+}
+
+@test
+fn test_index_set_strict() {
+    // In-bounds assignment overwrites.
+    var a = [1, 2, 3]
+    a[0] = 10
+    a[2] = 30
+    var p19CallableValue0 = a[0]
+    assertEqual(p19CallableValue0, 10)
+    print(p19CallableValue0)
+    var p19CallableValue1 = a[2]
+    assertEqual(p19CallableValue1, 30)
+    print(p19CallableValue1)
+    var p19CallableValue2 = len(a)
+    assertEqual(p19CallableValue2, 3)
+    print(p19CallableValue2)
+
+    // Assignment at exactly length is out of bounds (no append).
+    var p19CallableValue3 = set_at(ref a, 3, 9)
+    assertEqual(p19CallableValue3, 430)
+    print(p19CallableValue3)
+    var p19CallableValue4 = len(a)
+    assertEqual(p19CallableValue4, 3)
+    print(p19CallableValue4)
+
+    // Beyond length is out of bounds (no sparse growth).
+    var p19CallableValue5 = set_at(ref a, 10, 9)
+    assertEqual(p19CallableValue5, 430)
+    print(p19CallableValue5)
+    var p19CallableValue6 = len(a)
+    assertEqual(p19CallableValue6, 3)
+    print(p19CallableValue6)
+
+    // Negative index does not wrap from the end.
+    var p19CallableValue7 = set_at(ref a, -1, 9)
+    assertEqual(p19CallableValue7, 430)
+    print(p19CallableValue7)
+    var p19CallableValue8 = a[2]
+    assertEqual(p19CallableValue8, 30)
+    print(p19CallableValue8)
+}

@@ -14576,6 +14576,388 @@
         "Actual complete discovery and independent VM/C/native declared-module/user declaration results.",
         "Full generic definition checks, SIMD hardware/provider authority and original full FI/resources/lifetime/cancel/physical/safety matrices remain open."
       ]
+    },
+    {
+      "id": "structured_original_1230_function_type_annotation_observed",
+      "oracle_id": "structured_original_1230_function_type_annotation_observed",
+      "source": "tests/unit/xir/legacy_consumers/fixtures/independent_named_observations/1230_function_type_annotation/root.xr",
+      "source_lf_sha256": "2f299e77e403c5162c7ee6226fdd1a874ddeabd8efc0fa33900d507c5b963912",
+      "entry": "test",
+      "stdout_utf8": "10\n6\n42\n7\n12\nvalue: 42\n15\n5\n12\n21\n15\n6\n3\ntrue\n0\nfalse\n",
+      "stderr_utf8": "",
+      "companions": [],
+      "owners": [
+        "P02",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P11",
+        "P12",
+        "P13",
+        "P14"
+      ],
+      "independent_observations": {
+        "original_case": "tests/regression/12_type_checking/1230_function_type_annotation.xr",
+        "selected_complete_source": "tests/regression/12_type_checking/1230_function_type_annotation.xr",
+        "selected_source_lf_sha256": "394a7b93d46b45a39fa46d52a66e76662e15d960646c622cac025539885b7ba4",
+        "method": "All original signatures, lambda bodies, live values, seven unary operands and original calls remain. Each actual expression is evaluated once at the assertion, then externally observed; unreachable assertfalse is retained.",
+        "values": [
+          {
+            "test": "test_fn_type_basic",
+            "expression": "result",
+            "expected": 10,
+            "projection": null
+          },
+          {
+            "test": "test_fn_type_void",
+            "expression": "count",
+            "expected": 6,
+            "projection": null
+          },
+          {
+            "test": "test_fn_type_no_params",
+            "expression": "result",
+            "expected": 42,
+            "projection": null
+          },
+          {
+            "test": "test_fn_type_multi_params",
+            "expression": "combine(3, 4, (a, b) -> a + b)",
+            "expected": 7,
+            "projection": null
+          },
+          {
+            "test": "test_fn_type_multi_params",
+            "expression": "combine(3, 4, (a, b) -> a * b)",
+            "expected": 12,
+            "projection": null
+          },
+          {
+            "test": "test_fn_type_string_return",
+            "expression": "result",
+            "expected": "value: 42",
+            "projection": null
+          },
+          {
+            "test": "test_fn_type_higher_order",
+            "expression": "add5(10)",
+            "expected": 15,
+            "projection": null
+          },
+          {
+            "test": "test_fn_type_higher_order",
+            "expression": "add5(0)",
+            "expected": 5,
+            "projection": null
+          },
+          {
+            "test": "test_fn_type_nested",
+            "expression": "applyTwice(3, (n) -> n * 2)",
+            "expected": 12,
+            "projection": null
+          },
+          {
+            "test": "test_fn_type_nested",
+            "expression": "applyTwice(1, (n) -> n + 10)",
+            "expected": 21,
+            "projection": null
+          },
+          {
+            "test": "test_fn_type_variable",
+            "expression": "f(5)",
+            "expected": 15,
+            "projection": null
+          },
+          {
+            "test": "test_fn_type_optional",
+            "expression": "maybeApply(5, (n) -> n + 1)",
+            "expected": 6,
+            "projection": null
+          },
+          {
+            "test": "test_tuple_type_unchanged",
+            "expression": "result",
+            "expected": 3,
+            "projection": null
+          },
+          {
+            "test": "test_tuple_type_unchanged",
+            "expression": "ok",
+            "expected": true,
+            "projection": null
+          },
+          {
+            "test": "test_tuple_type_unchanged",
+            "expression": "result2",
+            "expected": 0,
+            "projection": null
+          },
+          {
+            "test": "test_tuple_type_unchanged",
+            "expression": "ok2",
+            "expected": false,
+            "projection": null
+          }
+        ]
+      },
+      "remaining_gates": [
+        "Whole actual named discovery and independent VM/C/native values and code/message predicates.",
+        "The optional-function label contains no actual optional function type; do not grant one.",
+        "Complete original FI/resources/borrow/lifetime/cancel/physical/Final/B0/sanitizer/provider matrices remain open."
+      ]
+    },
+    {
+      "id": "structured_original_0650_array_index_set_strict_observed",
+      "oracle_id": "structured_original_0650_array_index_set_strict_observed",
+      "source": "tests/unit/xir/legacy_consumers/fixtures/independent_named_observations/0650_array_index_set_strict/root.xr",
+      "source_lf_sha256": "6db38435414f7ea6c13064e764557bba19beb6286908c51eea32d15e7c254fba",
+      "entry": "test",
+      "stdout_utf8": "10\n30\n3\n430\n3\n430\n3\n430\n30\n",
+      "stderr_utf8": "",
+      "companions": [],
+      "owners": [
+        "P09",
+        "P10",
+        "P13"
+      ],
+      "independent_observations": {
+        "original_case": "tests/regression/06_collections/0650_array_index_set_strict.xr",
+        "selected_complete_source": "tests/regression/06_collections/0650_array_index_set_strict.xr",
+        "selected_source_lf_sha256": "f3fe7cefdf15dc9611b9c6420383259821dd745f3701073b3347ba463b55f0b6",
+        "method": "All original signatures, lambda bodies, live values, seven unary operands and original calls remain. Each actual expression is evaluated once at the assertion, then externally observed; unreachable assertfalse is retained.",
+        "values": [
+          {
+            "test": "test_index_set_strict",
+            "expression": "a[0]",
+            "expected": 10,
+            "projection": null
+          },
+          {
+            "test": "test_index_set_strict",
+            "expression": "a[2]",
+            "expected": 30,
+            "projection": null
+          },
+          {
+            "test": "test_index_set_strict",
+            "expression": "len(a)",
+            "expected": 3,
+            "projection": null
+          },
+          {
+            "test": "test_index_set_strict",
+            "expression": "set_at(ref a, 3, 9)",
+            "expected": 430,
+            "projection": null
+          },
+          {
+            "test": "test_index_set_strict",
+            "expression": "len(a)",
+            "expected": 3,
+            "projection": null
+          },
+          {
+            "test": "test_index_set_strict",
+            "expression": "set_at(ref a, 10, 9)",
+            "expected": 430,
+            "projection": null
+          },
+          {
+            "test": "test_index_set_strict",
+            "expression": "len(a)",
+            "expected": 3,
+            "projection": null
+          },
+          {
+            "test": "test_index_set_strict",
+            "expression": "set_at(ref a, -1, 9)",
+            "expected": 430,
+            "projection": null
+          },
+          {
+            "test": "test_index_set_strict",
+            "expression": "a[2]",
+            "expected": 30,
+            "projection": null
+          }
+        ]
+      },
+      "remaining_gates": [
+        "Whole actual named discovery and independent VM/C/native values and code/message predicates.",
+        "The optional-function label contains no actual optional function type; do not grant one.",
+        "Complete original FI/resources/borrow/lifetime/cancel/physical/Final/B0/sanitizer/provider matrices remain open."
+      ]
+    },
+    {
+      "id": "structured_original_1410_shared_provenance_rebind_reset_observed",
+      "oracle_id": "structured_original_1410_shared_provenance_rebind_reset_observed",
+      "source": "tests/unit/xir/legacy_consumers/fixtures/independent_named_observations/1410_shared_provenance_rebind_reset/root.xr",
+      "source_lf_sha256": "2d9d773a87379e9776b38a735f2e2e6a3bf90b3689dc34f6159ee66cd4584cc4",
+      "entry": "test",
+      "stdout_utf8": "0\n7\n0\n",
+      "stderr_utf8": "",
+      "companions": [],
+      "owners": [
+        "P07",
+        "P09",
+        "P10"
+      ],
+      "independent_observations": {
+        "original_case": "tests/regression/14_typed_array/1410_shared_provenance_rebind_reset.xr",
+        "selected_complete_source": "tests/unit/xir/legacy_consumers/fixtures/final_named_ports/1410_shared_provenance_rebind_reset/root.xr",
+        "selected_source_lf_sha256": "08c8567aaaa728e5ca01c8159b19bbe6cafaab166dac6be466041613e0f12afb",
+        "method": "All original signatures, lambda bodies, live values, seven unary operands and original calls remain. Each actual expression is evaluated once at the assertion, then externally observed; unreachable assertfalse is retained.",
+        "values": [
+          {
+            "test": "test_shared_provenance_rebind_reset",
+            "expression": "box.items[0]",
+            "expected": 0,
+            "projection": null
+          },
+          {
+            "test": "test_shared_provenance_rebind_reset",
+            "expression": "items[0]",
+            "expected": 7,
+            "projection": null
+          },
+          {
+            "test": "test_shared_provenance_rebind_reset",
+            "expression": "box.items[0]",
+            "expected": 0,
+            "projection": null
+          }
+        ]
+      },
+      "remaining_gates": [
+        "Whole actual named discovery and independent VM/C/native values and code/message predicates.",
+        "The optional-function label contains no actual optional function type; do not grant one.",
+        "Complete original FI/resources/borrow/lifetime/cancel/physical/Final/B0/sanitizer/provider matrices remain open."
+      ]
+    },
+    {
+      "id": "structured_original_0413_null_unwrap_observed",
+      "oracle_id": "structured_original_0413_null_unwrap_observed",
+      "source": "tests/unit/xir/legacy_consumers/fixtures/independent_named_observations/0413_null_unwrap/root.xr",
+      "source_lf_sha256": "84f5570027757e8f3b2bd5755dab54be7024befa2752d65dd5985f6ccf261faf",
+      "entry": "test",
+      "stdout_utf8": "413\ntrue\ntrue\n42\n",
+      "stderr_utf8": "",
+      "companions": [],
+      "owners": [
+        "P02",
+        "P08",
+        "P09",
+        "P10"
+      ],
+      "independent_observations": {
+        "original_case": "tests/regression/04_control_flow/0413_null_unwrap.xr",
+        "selected_complete_source": "tests/unit/xir/legacy_consumers/fixtures/control_function_ports/0413_null_unwrap/root.xr",
+        "selected_source_lf_sha256": "a86cbcbe65846063f55173c9bd2e658bdc6006fa9a6bf103bd3fd2b66e3ec0d0",
+        "method": "All original signatures, lambda bodies, live values, seven unary operands and original calls remain. Each actual expression is evaluated once at the assertion, then externally observed; unreachable assertfalse is retained.",
+        "values": [
+          {
+            "test": "test_null_unwrap_throws_413",
+            "expression": "e.code",
+            "expected": 413,
+            "projection": null
+          },
+          {
+            "test": "test_null_unwrap_throws_413",
+            "expression": "e.message.contains(\"unwrap\")",
+            "expected": true,
+            "projection": null
+          },
+          {
+            "test": "test_null_unwrap_throws_413",
+            "expression": "caught",
+            "expected": true,
+            "projection": null
+          },
+          {
+            "test": "test_non_null_unwrap_succeeds",
+            "expression": "y!",
+            "expected": 42,
+            "projection": null
+          }
+        ]
+      },
+      "remaining_gates": [
+        "Whole actual named discovery and independent VM/C/native values and code/message predicates.",
+        "The optional-function label contains no actual optional function type; do not grant one.",
+        "Complete original FI/resources/borrow/lifetime/cancel/physical/Final/B0/sanitizer/provider matrices remain open."
+      ]
+    },
+    {
+      "id": "structured_original_0396_bnot_owner_edges_observed",
+      "oracle_id": "structured_original_0396_bnot_owner_edges_observed",
+      "source": "tests/unit/xir/legacy_consumers/fixtures/independent_named_observations/0396_bnot_owner_edges/root.xr",
+      "source_lf_sha256": "a0b1ba69e9a691e3a5d12d3c9e74f5f04213b476367a2391c459698c0009d7d5",
+      "entry": "test",
+      "stdout_utf8": "-1\n-2\n0\n-9223372036854775808\n9223372036854775807\n7\n0\n1\n-1\n42\n-42\n9223372036854775807\n-9223372036854775808\n",
+      "stderr_utf8": "",
+      "companions": [],
+      "owners": [
+        "P09",
+        "P10"
+      ],
+      "independent_observations": {
+        "original_case": "tests/regression/03_operators/0396_bnot_owner_edges.xr",
+        "selected_complete_source": "tests/regression/03_operators/0396_bnot_owner_edges.xr",
+        "selected_source_lf_sha256": "18e60f411957d88afcb86dcfb2c36b0e6d14cf26f608ae143cf05558a3c25d72",
+        "method": "All original signatures, lambda bodies, live values, seven unary operands and original calls remain. Each actual expression is evaluated once at the assertion, then externally observed; unreachable assertfalse is retained.",
+        "values": [
+          {
+            "test": "test_bnot_owner_signed_64_bit_edges",
+            "expression": "~0",
+            "expected": -1,
+            "projection": null
+          },
+          {
+            "test": "test_bnot_owner_signed_64_bit_edges",
+            "expression": "~1",
+            "expected": -2,
+            "projection": null
+          },
+          {
+            "test": "test_bnot_owner_signed_64_bit_edges",
+            "expression": "~(-1)",
+            "expected": 0,
+            "projection": null
+          },
+          {
+            "test": "test_bnot_owner_signed_64_bit_edges",
+            "expression": "~9223372036854775807",
+            "expected": -9223372036854775808,
+            "projection": null
+          },
+          {
+            "test": "test_bnot_owner_signed_64_bit_edges",
+            "expression": "~(-9223372036854775807 - 1)",
+            "expected": 9223372036854775807,
+            "projection": null
+          },
+          {
+            "test": "test_bnot_owner_is_involutive",
+            "expression": "~~value within the original seven-element loop",
+            "expected": [
+              0,
+              1,
+              -1,
+              42,
+              -42,
+              9223372036854775807,
+              -9223372036854775808
+            ],
+            "projection": "array_elements"
+          }
+        ]
+      },
+      "remaining_gates": [
+        "Whole actual named discovery and independent VM/C/native values and code/message predicates.",
+        "The optional-function label contains no actual optional function type; do not grant one.",
+        "Complete original FI/resources/borrow/lifetime/cancel/physical/Final/B0/sanitizer/provider matrices remain open."
+      ]
     }
   ]
 }

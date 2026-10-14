@@ -144,6 +144,34 @@
     {
       "path": "tests/regression/10_stdlib/1060_simd_intrinsic_same_name.xr",
       "lf_sha256": "09d6b6da979d2a5a7e395af7d7cca4cee689c9ffaa0be407a67352fa58882a9f"
+    },
+    {
+      "path": "tests/regression/12_type_checking/1230_function_type_annotation.xr",
+      "lf_sha256": "394a7b93d46b45a39fa46d52a66e76662e15d960646c622cac025539885b7ba4"
+    },
+    {
+      "path": "tests/regression/06_collections/0650_array_index_set_strict.xr",
+      "lf_sha256": "f3fe7cefdf15dc9611b9c6420383259821dd745f3701073b3347ba463b55f0b6"
+    },
+    {
+      "path": "tests/regression/14_typed_array/1410_shared_provenance_rebind_reset.xr",
+      "lf_sha256": "b8ca267969c600de165eb427aaa2206a85da6249dfdbaa3f34657bb39032c476"
+    },
+    {
+      "path": "tests/unit/xir/legacy_consumers/fixtures/final_named_ports/1410_shared_provenance_rebind_reset/root.xr",
+      "lf_sha256": "08c8567aaaa728e5ca01c8159b19bbe6cafaab166dac6be466041613e0f12afb"
+    },
+    {
+      "path": "tests/unit/xir/legacy_consumers/fixtures/control_function_ports/0413_null_unwrap/root.xr",
+      "lf_sha256": "a86cbcbe65846063f55173c9bd2e658bdc6006fa9a6bf103bd3fd2b66e3ec0d0"
+    },
+    {
+      "path": "tests/regression/04_control_flow/0413_null_unwrap.xr",
+      "lf_sha256": "feb1fef07d2aff1381edadf53fccaa01e2d6c87d940069897b67de43bab7de2e"
+    },
+    {
+      "path": "tests/regression/03_operators/0396_bnot_owner_edges.xr",
+      "lf_sha256": "18e60f411957d88afcb86dcfb2c36b0e6d14cf26f608ae143cf05558a3c25d72"
     }
   ],
   "cases": [
@@ -1063,6 +1091,187 @@
         }
       },
       "model_scope": "Original declared-module generic field/call/return and user U32x4 method semantics; value5 must be addition2+3, not a guessed builtin XOR1."
+    },
+    {
+      "id": "structured_original_1230_function_type_annotation_observed",
+      "expected": {
+        "exit_code": 0,
+        "required_test_names": [
+          "test_fn_type_basic",
+          "test_fn_type_void",
+          "test_fn_type_no_params",
+          "test_fn_type_multi_params",
+          "test_fn_type_string_return",
+          "test_fn_type_higher_order",
+          "test_fn_type_nested",
+          "test_fn_type_variable",
+          "test_fn_type_optional",
+          "test_tuple_type_unchanged"
+        ],
+        "per_test_observations": {
+          "test_fn_type_basic": {
+            "values": [
+              10
+            ]
+          },
+          "test_fn_type_void": {
+            "values": [
+              6
+            ]
+          },
+          "test_fn_type_no_params": {
+            "values": [
+              42
+            ]
+          },
+          "test_fn_type_multi_params": {
+            "values": [
+              7,
+              12
+            ]
+          },
+          "test_fn_type_string_return": {
+            "values": [
+              "value: 42"
+            ]
+          },
+          "test_fn_type_higher_order": {
+            "values": [
+              15,
+              5
+            ]
+          },
+          "test_fn_type_nested": {
+            "values": [
+              12,
+              21
+            ]
+          },
+          "test_fn_type_variable": {
+            "values": [
+              15
+            ]
+          },
+          "test_fn_type_optional": {
+            "values": [
+              6
+            ]
+          },
+          "test_tuple_type_unchanged": {
+            "values": [
+              3,
+              true,
+              0,
+              false
+            ]
+          }
+        }
+      },
+      "model_scope": "Original callable/guard/strict Array/rebind/unary scalar and authentic panic code projections. Code413/430 come from original source contracts, not a private ordinal."
+    },
+    {
+      "id": "structured_original_0650_array_index_set_strict_observed",
+      "expected": {
+        "exit_code": 0,
+        "required_test_names": [
+          "test_index_set_strict"
+        ],
+        "per_test_observations": {
+          "test_index_set_strict": {
+            "values": [
+              10,
+              30,
+              3,
+              430,
+              3,
+              430,
+              3,
+              430,
+              30
+            ]
+          }
+        }
+      },
+      "model_scope": "Original callable/guard/strict Array/rebind/unary scalar and authentic panic code projections. Code413/430 come from original source contracts, not a private ordinal."
+    },
+    {
+      "id": "structured_original_1410_shared_provenance_rebind_reset_observed",
+      "expected": {
+        "exit_code": 0,
+        "required_test_names": [
+          "test_shared_provenance_rebind_reset"
+        ],
+        "per_test_observations": {
+          "test_shared_provenance_rebind_reset": {
+            "values": [
+              0,
+              7,
+              0
+            ]
+          }
+        }
+      },
+      "model_scope": "Original callable/guard/strict Array/rebind/unary scalar and authentic panic code projections. Code413/430 come from original source contracts, not a private ordinal."
+    },
+    {
+      "id": "structured_original_0413_null_unwrap_observed",
+      "expected": {
+        "exit_code": 0,
+        "required_test_names": [
+          "test_null_unwrap_throws_413",
+          "test_non_null_unwrap_succeeds"
+        ],
+        "per_test_observations": {
+          "test_null_unwrap_throws_413": {
+            "values": [
+              413,
+              true,
+              true
+            ]
+          },
+          "test_non_null_unwrap_succeeds": {
+            "values": [
+              42
+            ]
+          }
+        }
+      },
+      "model_scope": "Original callable/guard/strict Array/rebind/unary scalar and authentic panic code projections. Code413/430 come from original source contracts, not a private ordinal."
+    },
+    {
+      "id": "structured_original_0396_bnot_owner_edges_observed",
+      "expected": {
+        "exit_code": 0,
+        "required_test_names": [
+          "test_bnot_owner_signed_64_bit_edges",
+          "test_bnot_owner_is_involutive"
+        ],
+        "per_test_observations": {
+          "test_bnot_owner_signed_64_bit_edges": {
+            "values": [
+              -1,
+              -2,
+              0,
+              -9223372036854775808,
+              9223372036854775807
+            ]
+          },
+          "test_bnot_owner_is_involutive": {
+            "values": [
+              [
+                0,
+                1,
+                -1,
+                42,
+                -42,
+                9223372036854775807,
+                -9223372036854775808
+              ]
+            ]
+          }
+        }
+      },
+      "model_scope": "Original callable/guard/strict Array/rebind/unary scalar and authentic panic code projections. Code413/430 come from original source contracts, not a private ordinal."
     }
   ],
   "independence": "Expected constants come from the original frozen assertions and mathematical method bodies, never current Xray output."
