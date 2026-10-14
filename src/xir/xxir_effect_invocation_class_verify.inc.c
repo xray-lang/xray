@@ -125,7 +125,7 @@ static XrXirStatus effect_invocation_class_verify_read(EffectInvocationWorkspace
     for (uint32_t n=0;status==XR_XIR_OK && n<owner->final.count;++n) {
         if (!xir_compile_work(owner->work,4)) { status=XR_XIR_BUDGET;break; }
         const EffectInvocationNode *node=&owner->final.nodes[n];
-        if (!node->expanded || node->queued || node->body>=request->domain.function_count ||
+        if (node->body>=request->domain.function_count ||
             node->class_count!=owner->final.physical->functions[node->body].classes) {
             status=XR_XIR_BAD_STRUCTURE;break;
         }

@@ -64,6 +64,7 @@ static void fixture(Fixture *f) {
     memset(f, 0, sizeof(*f)); memcpy(f->name, "Measure", 8); memcpy(f->method, "get", 4);
     f->parameter = (XrXirType)XR_XIR_TYPE_PARAMETER_BASE; f->concrete = XR_XIR_I64;
     f->signature.kind = XR_XIR_TYPE_CALLABLE; f->signature.result = f->parameter; f->signature.parameter_span = 1;
+    f->signature.flags = XR_XIR_CALLABLE_ROOT_NONE;
     f->types = (XrXirTypes){&f->signature, 1, NULL, NULL};
     f->member = (XrXirInterfaceMethod){{f->method, 3}, (XrXirType)XR_XIR_CONSTRUCTED_TYPE_BASE, 0,0,NULL};
     f->parents[0] = (XrXirInterfaceApplication){0, &f->parameter, 1};
@@ -290,7 +291,16 @@ static void checked_owner_outlives_producer(void) {
     puts("Checked interface owner survives producer release and poisoned inputs; physical delta=0/0");
 }
 
-int main(void) {
+int main(int argc, char **argv) {
+    if (argc == 2 && !strcmp(argv[1],"--callable-admission")) {
+        type_inference_callable_mode_admission_case();
+        Fixture declared; fixture(&declared); declared.types.interfaces = &declared.table;
+        XrXirCompileContext context = interface_context_default();
+        CHECK(xr_xir_compile_types_structure_verify(&context, &declared.types) == XR_XIR_OK);
+        stage_contexts_free(); CHECK(!interface_live);
+        return 0;
+    }
+    CHECK(argc == 1);
     type_inference_cases();
     implementation_semantic_cases(); generic_method_proof_cases(); generic_method_authority_cases();
     interface_closure_cases();

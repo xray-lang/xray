@@ -191,6 +191,7 @@ static XrXirStatus allocation_refinement_check(const XrXirCompileContext *contex
 #undef xr_xir_compile_check_refined_v2
 #undef xr_compile_module_resolver_resolve
 #include "xir_source_allocation_context.h"
+#include "xir_source_text_storage_cases.h"
 #include "xir_source_allocation_shards.h"
 #include "xir_nominal_fixture.h"
 static void snapshot_nominal_allocations(void) {
@@ -584,6 +585,9 @@ static void allocation_effect_observer_control(void) {
     puts("Fixed 96-row diagnostic pages retain 113 callers and exact accepted/rejected fees; physical0");
 }
 int main(int argc,char **argv) {
+    if (argc==2 && !strcmp(argv[1],"--text-storage-control")) {
+        source_text_storage_cases(); return 0;
+    }
     if (argc==2 && !strcmp(argv[1],"--private-storage-control")) {
         source_call_storage_cases();source_region_output_cases();source_plan_context_cases();
         source_plan_conversion_budget_cases();

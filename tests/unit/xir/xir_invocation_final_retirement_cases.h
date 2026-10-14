@@ -15,7 +15,7 @@ static void invocation_final_retirement_literals(void) {
     for (uint32_t mode=0;mode<4;++mode) {
         RootParameterMark physical=rp_mark();XrXirCompileContext context=rp_owner(rp_caps());
         uint64_t baseline=rp_stats(&context).live_bytes;
-        CHECK(conditional_invocation_core(&context,mode,true)==XR_XIR_OK);
+        CHECK(conditional_invocation_core(&context,mode,true,false)==XR_XIR_OK);
         CHECK(!rp_release_observer);
         rp_owner_free(&context,baseline);rp_balanced(physical);
     }

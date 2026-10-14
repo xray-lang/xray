@@ -1,0 +1,7 @@
+final class C<T> {
+    x: i64
+    init(x: i64) { this.x = x }
+    get() -> i64 { return this.x }
+}
+fn mustSend<T:Sendable>(x:T) {}
+export fn referenceAnswer() -> i64 { mustSend<C<string>>(C<string>(41)); return 41 }
