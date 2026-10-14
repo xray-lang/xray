@@ -347,7 +347,11 @@ static void conditional_generation_publication_controls(const XrXirCompileContex
     CHECK(output && output->count==certificate->final->summary.count);
     for (uint32_t f=0;f<output->count;++f) for (uint32_t domain=0;domain<4;++domain) {
         XrXirRootEffectWitness expected={0};bool symbolic=false;
-        CHECK(effect_invocation_public_selected(context,certificate,f,domain,&expected,&symbolic)==XR_XIR_OK);
+        uint32_t atom=UINT32_MAX;XrXirRootEffectWitness selected={0};
+        CHECK(effect_invocation_projection_select(context,certificate,f,domain,&atom,&selected)==XR_XIR_OK);
+        CHECK(xir_compile_work(context,sizeof(EffectInvocationProjectedCause)));
+        const EffectInvocationProjectedCause projection={atom,&selected};
+        CHECK(effect_invocation_public_transform(context,certificate,f,&projection,&expected,&symbolic)==XR_XIR_OK);
         CHECK(effect_invocation_witness_equal(&expected,&output->witnesses[(size_t)domain*output->count+f]));
     }
     uint32_t mask=UINT32_C(0x87654321);
@@ -467,7 +471,11 @@ static void conditional_generation_paired_matches(const XrXirCompileContext *con
             CHECK(actual->terms[t].kind==expected->terms[t].kind && actual->terms[t].index==expected->terms[t].index);
         for (uint32_t domain=0;domain<4;++domain) {
             XrXirRootEffectWitness witness={0};bool symbolic=false;
-            CHECK(effect_invocation_public_selected(context,certificate,f,domain,&witness,&symbolic)==XR_XIR_OK &&
+            uint32_t atom=UINT32_MAX;XrXirRootEffectWitness selected={0};
+            CHECK(effect_invocation_projection_select(context,certificate,f,domain,&atom,&selected)==XR_XIR_OK);
+            CHECK(xir_compile_work(context,sizeof(EffectInvocationProjectedCause)));
+            const EffectInvocationProjectedCause projection={atom,&selected};
+            CHECK(effect_invocation_public_transform(context,certificate,f,&projection,&witness,&symbolic)==XR_XIR_OK &&
                 effect_invocation_witness_equal(&witness,&publication->witnesses[(size_t)domain*publication->count+f]));
         }
     }

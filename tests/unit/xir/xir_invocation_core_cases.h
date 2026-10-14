@@ -112,6 +112,48 @@ static void invocation_final_initializer_erasure(const XrXirCompileContext *work
     CHECK(effect_invocation_publication_match(work,certificate,summary)==XR_XIR_OK);
 }
 
+static EffectInvocationCertificate *invocation_trace_callback_target;
+static uint32_t invocation_trace_callback_count;
+static void invocation_trace_allocation_erase(void *memory) {
+    CHECK(memory && invocation_trace_callback_target);
+    rp_allocation_observer=NULL;++invocation_trace_callback_count;
+    EffectInvocationCertificate *certificate=invocation_trace_callback_target;
+    EffectFinalFunctions *summary=&certificate->final->summary;
+    EffectInvocationNode *node=&certificate->final->nodes[certificate->final->roots[3]];
+    node->intrinsic_mask=node->local_mask=0;
+    for (uint32_t a=0;a<node->cause_count*2;++a) node->causes[a]=(EffectInvocationCause){
+        .next=UINT32_MAX,.edge=UINT32_MAX,.distance=UINT32_MAX};
+    summary->facts[3]=(XrXirRootEffects){0};summary->functions[3].formula.constant_mask=0;
+    for (uint32_t d=0;d<4;++d) summary->witnesses[(size_t)d*summary->count+3]=(XrXirRootEffectWitness){0};
+}
+
+/* A real output allocation erases every receiving ROOT copy. Fresh length
+ * proof must refuse before writing beyond the allocation's original extent. */
+static void invocation_final_trace_callback(const XrXirCompileContext *work,
+    EffectInvocationCertificate *certificate) {
+    EffectFinalFunctions *summary=&certificate->final->summary;
+    EffectInvocationNode *node=&certificate->final->nodes[certificate->final->roots[3]];
+    EffectInvocationNode saved=*node;EffectInvocationCause causes[6];
+    CHECK(node->cause_count==3);memcpy(causes,node->causes,sizeof(causes));
+    XrXirRootEffects facts=summary->facts[3];uint32_t constant=summary->functions[3].formula.constant_mask;
+    XrXirRootEffectWitness witnesses[4];
+    for (uint32_t d=0;d<4;++d) witnesses[d]=summary->witnesses[(size_t)d*summary->count+3];
+    RootParameterMark retained=rp_mark();XrCompileResourceStats before=rp_stats(work);
+    invocation_trace_callback_target=certificate;invocation_trace_callback_count=0;
+    rp_allocation_observer=invocation_trace_allocation_erase;XrXirRootCauseTrace *output=NULL;
+    CHECK(effect_invocation_public_trace(work,certificate,summary->count,3,&facts,&output)==XR_XIR_BAD_STRUCTURE &&
+        !output && !rp_allocation_observer && invocation_trace_callback_count==1);
+    invocation_trace_callback_target=NULL;rp_balanced(retained);
+    XrCompileResourceStats paid=rp_stats(work);CHECK(paid.work>before.work && paid.allocated_bytes>before.allocated_bytes);
+    *node=saved;memcpy(node->causes,causes,sizeof(causes));
+    summary->facts[3]=facts;summary->functions[3].formula.constant_mask=constant;
+    for (uint32_t d=0;d<4;++d) summary->witnesses[(size_t)d*summary->count+3]=witnesses[d];
+    CHECK(effect_invocation_public_trace(work,certificate,summary->count,3,&facts,&output)==XR_XIR_OK && output);
+    CHECK(output->counts[0]==1 && !output->counts[1] && output->facts.requires_root);
+    CHECK(rp_stats(work).allocated_bytes>paid.allocated_bytes && rp_stats(work).work>paid.work);
+    xr_xir_compile_root_cause_trace_free(output);rp_balanced(retained);
+}
+
 static XrXirStatus conditional_invocation_core(const XrXirCompileContext *context,uint32_t mode,bool oracle) {
     if (mode>=4) return XR_XIR_BAD_STRUCTURE;
     RootParameterBindingFixture fixture;rp_binding_fixture(&fixture,context,(mode&1)!=0);
@@ -157,6 +199,7 @@ static XrXirStatus conditional_invocation_core(const XrXirCompileContext *contex
     effect_invocation_bounds_free(bounds);xr_xir_compile_artifact_free(checked);checked=NULL;
     memset(&fixture,0,sizeof(fixture));memset(recursive,0,sizeof(recursive));
     EffectInvocationCauseTrace *trace=NULL;
+    XrXirRootCauseTrace *public_trace=NULL,*root_trace=NULL;
     if (status==XR_XIR_OK) {
         uint32_t caller_mask=UINT32_MAX,formal_mask=UINT32_MAX,edge_mask=UINT32_MAX;
         status=effect_invocation_certificate_node_mask(context,certificate,certificate->final->roots[0],&caller_mask);
@@ -164,8 +207,13 @@ static XrXirStatus conditional_invocation_core(const XrXirCompileContext *contex
             certificate->final->roots[1],&formal_mask);
         if (status==XR_XIR_OK) status=effect_invocation_certificate_edge_mask(context,certificate,0,2,1,&edge_mask);
         if (status==XR_XIR_OK) status=effect_invocation_certificate_trace(context,certificate,1,&trace);
+        if (status==XR_XIR_OK) status=effect_invocation_public_trace(context,certificate,
+            certificate->final->summary.count,1,&certificate->final->summary.facts[1],&public_trace);
+        if (status==XR_XIR_OK) status=effect_invocation_public_trace(context,certificate,
+            certificate->final->summary.count,3,&certificate->final->summary.facts[3],&root_trace);
         if (status==XR_XIR_OK && oracle) {
             invocation_final_initializer_erasure(context,certificate);
+            invocation_final_trace_callback(context,certificate);
             EffectInvocationFinal damaged=*certificate->final;
             damaged.physical=NULL;EffectInvocationWorkspace refused={0};size_t admission_attempts=rp_attempts;
             XrCompileResourceStats before=rp_stats(context);
@@ -183,6 +231,12 @@ static XrXirStatus conditional_invocation_core(const XrXirCompileContext *contex
             CHECK(trace && !trace->counts[0] && trace->counts[1]==1 &&
                 trace->steps[0].function==1 && trace->steps[0].witness.cause==XR_XIR_ROOT_CAUSE_PARAMETER &&
                 !trace->steps[0].witness.distance && trace->steps[0].witness.slot==0);
+            CHECK(public_trace && !public_trace->counts[0] && public_trace->counts[1]==1 &&
+                public_trace->facts.unresolved && effect_root_trace_storage(public_trace)[0].cause==XR_XIR_ROOT_CAUSE_PARAMETER &&
+                effect_root_trace_storage(public_trace)[0].function==1 && effect_root_trace_storage(public_trace)[0].slot==0);
+            CHECK(root_trace && root_trace->counts[0]==1 && !root_trace->counts[1] && root_trace->facts.requires_root &&
+                effect_root_trace_storage(root_trace)[0].function==3 &&
+                effect_root_trace_storage(root_trace)[0].cause==XR_XIR_ROOT_CAUSE_INITIALIZER);
             size_t attempts=rp_attempts;EffectInvocationCertificate *occupied=certificate;
             EffectInvocationDriverInput empty={.work=context};
             CHECK(effect_invocation_derive(&empty,&occupied,NULL,&receiving)==XR_XIR_BAD_STRUCTURE &&
@@ -206,5 +260,6 @@ static XrXirStatus conditional_invocation_core(const XrXirCompileContext *contex
     effect_invocation_certificate_free(certificate);
     if (status==XR_XIR_OK && oracle) CHECK(trace && trace->counts[1]==1 &&
         trace->facts.unresolved && trace->steps[0].witness.cause==XR_XIR_ROOT_CAUSE_PARAMETER);
+    xr_xir_compile_root_cause_trace_free(public_trace);xr_xir_compile_root_cause_trace_free(root_trace);
     effect_invocation_trace_free(trace);return status;
 }

@@ -24,6 +24,7 @@ static RootParameterAllocation rp_blocks[8192];
 static size_t rp_live, rp_live_bytes, rp_attempts, rp_fail_at = SIZE_MAX;
 static bool rp_injected;
 static void (*rp_release_observer)(void *memory);
+static void (*rp_allocation_observer)(void *memory);
 
 static inline RootParameterMark rp_mark(void) { return (RootParameterMark){rp_live,rp_live_bytes}; }
 static inline void rp_balanced(RootParameterMark mark) {
@@ -36,6 +37,7 @@ static void *rp_malloc(size_t bytes) {
         CHECK(rp_live < 8192 && bytes <= SIZE_MAX - rp_live_bytes);
         rp_blocks[rp_live++] = (RootParameterAllocation){memory,bytes};
         rp_live_bytes += bytes;
+        if (rp_allocation_observer) rp_allocation_observer(memory);
     }
     return memory;
 }
