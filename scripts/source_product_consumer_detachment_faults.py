@@ -36,23 +36,30 @@ def main() -> None:
     run = args.evidence / (datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ-") + uuid.uuid4().hex[:8])
     run.mkdir(parents=True, exist_ok=False)
     sources = sorted((FIXTURES / args.case).glob("*.xr"))
-    if len(sources) != 1 or sources[0].name != "root.xr" or sources[0].is_symlink():
-        raise ValueError("the admitted detachment fixture must own one regular root source")
-    source_bytes = sources[0].read_bytes()
+    paired = args.case in ("cross_module_coroutine", "cross_module_static_coroutine")
+    expected_names = {"root.xr", "library.xr"} if paired else {"root.xr"}
+    if ({source.name for source in sources} != expected_names or
+            any(source.is_symlink() or not source.is_file() for source in sources)):
+        raise ValueError("the admitted detachment fixture must own its complete regular source set")
+    source_bytes = {source.name: source.read_bytes() for source in sources}
+    source_digests = {str(source): digest(source) for source in sources}
     private_roots = []
     for index in range(args.jobs):
         owned = scratch / (args.case + "-fault-" + uuid.uuid4().hex)
         owned.mkdir(exist_ok=False)
         if owned.resolve().parent != scratch:
             raise ValueError("private replay directory escaped its owner")
-        (owned / "root.xr").write_bytes(source_bytes)
-        if digest(owned / "root.xr") != digest(sources[0]):
-            raise ValueError("private replay bytes differ from the exact fixture")
+        for source in sources:
+            target = owned / source.name
+            target.write_bytes(source_bytes[source.name])
+            if digest(target) != source_digests[str(source)]:
+                raise ValueError("private replay bytes differ from the exact fixture")
         private_roots.append(owned)
     before = inputs(binary)
     write(run / "inputs-before.json", before)
-    write(run / "private-inputs.json", {"source":str(sources[0]), "sha256":digest(sources[0]),
+    write(run / "private-inputs.json", {"sources":source_digests,
                                       "private_roots":[str(path) for path in private_roots],
+                                      "private_source_names":sorted(source_bytes),
                                       "preparation":"Finite replay ledger released before each observed operation"})
     started = time.monotonic()
 
@@ -77,7 +84,9 @@ def main() -> None:
                   "log_sha256":digest(log), "ordinals":[int(value) for value in ORDINAL.findall(output)],
                   "fault_statuses":[[int(value) for value in row] for row in FAULT.findall(output)],
                   "summaries":SUMMARY.findall(output),
-                  "source_remaining":(private_roots[index]/"root.xr").exists()}
+                  "source_remaining":any((private_roots[index]/name).exists() for name in source_bytes),
+                  "remaining_private_sources":[name for name in source_bytes
+                                               if (private_roots[index]/name).exists()]}
         write(run / f"shard-{index}.json", result)
         return result
 
