@@ -1,0 +1,3 @@
+var value:Array<i64>=[10,20]
+fn worker()->Array<i64>{return value}
+export fn main()->i64{const task=go worker();return 7}
