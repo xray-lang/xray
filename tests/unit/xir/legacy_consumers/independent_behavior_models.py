@@ -145,6 +145,51 @@ def observations() -> dict[str, tuple[list, str]]:
             'The complete original module only declares helpers; its standalone run has no calls or output. '
             'The sole module-level DEFAULT_LIMIT in its helper is the pure literal192. '
             'No exported helper body, importer, inheritance, generic, coroutine, borrow or resource qualification is granted.')
+    view_owner = [7]
+    first_view_length, first_view_value = len(view_owner), view_owner[0]
+    view_owner.append(9)
+    models['collections/span_active_borrow_scope_shared_core'] = (
+        [first_view_length, first_view_value, len(view_owner), view_owner[1]],
+        'The complete original byte view is last read before the owner appends9. '
+        'Both original byte values and both lengths remain; no post-append view read is added.')
+    byte_owner = 'ABCD'.encode('utf-8')
+    byte_window = byte_owner[1:3]
+    byte_snapshot = list(byte_window)
+    models['slice/string_byte_slice_view'] = (
+        [len(byte_owner), byte_owner[0], byte_owner[1], len(byte_window),
+         byte_window[0], byte_window[1], byte_snapshot[0]],
+        'The complete original ASCII byte owner, two-byte window and owned copy yield '
+        'all seven original outputs; UTF-8 byte values are computed independently.')
+    apply = lambda fn, value: fn(value)
+    apply_twice = lambda fn, value: fn(fn(value))
+    mapped = [apply(lambda value: value * value, value) for value in [1, 2, 3]]
+    cell = 10
+    mapped_cell = apply(lambda value: value + 100, cell)
+    cell = apply(lambda value: value * 2, cell)
+    models['functions/higher_order_closures'] = (
+        [apply(lambda value: value * 3, 10), apply_twice(lambda value: value + 1, 5),
+         apply(lambda value: 'n=' + str(value), 7)] + mapped + [mapped_cell, cell, cell],
+        'All original free higher-order calls, the complete mapInt loop, generic Cell map, '
+        'ref update and final receiver field retain every original call and all nine outputs.')
+    sum_ints = lambda *values: sum(values)
+    sum_floats = lambda *values: sum(values, 0.0)
+    count_true = lambda *values: sum(bool(value) for value in values)
+    join_strings = lambda sep, *values: sep.join(values)
+    wrap_sum = lambda base, left, right: base + sum_ints(left, right, base)
+    models['functions/vararg_functions'] = (
+        [sum_ints(), sum_ints(7), sum_ints(1, 2, 3, 4, 5), sum_floats(),
+         sum_floats(1.5, 2.5, 3.0), count_true(True, False, True, True, False),
+         join_strings('-'), join_strings('-', 'only'), join_strings(', ', 'a', 'b', 'c'),
+         wrap_sum(10, 1, 2)],
+        'The complete original zero/one/many argument, f64, bool and string loops and '
+        'nested forwarding produce all ten outputs, including the empty join line and '
+        'canonical0.0/7.0. Rest admission failures remain positive migration gaps.')
+    first_match = lambda value: 'int: ' + str(value) if type(value) is int else 'a string'
+    second_match = lambda value: ('i' if type(value) is int else 's') + str(value)
+    models['condition/match_is_arms_no_separator'] = (
+        [first_match(42), first_match('hello'), second_match(7), second_match('x')],
+        'Both complete original consecutive type-pattern matches select their i64/string '
+        'arms for all four calls, preserving interpolation and the exact spaces.')
     return models
 
 

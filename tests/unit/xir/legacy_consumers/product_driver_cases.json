@@ -18815,6 +18815,147 @@
         "preserved": "All source other than this one binding RHS, all elements, original append and all three outputs",
         "original_spelling_qualification": "OPEN"
       }
+    },
+    {
+      "id": "independent_behavior_collections_span_active_borrow_scope_shared_core",
+      "oracle_id": "independent_behavior_collections_span_active_borrow_scope_shared_core",
+      "source": "tests/diff/cases/semantics/collections/span_active_borrow_scope_shared_core.xr",
+      "source_lf_sha256": "0d4d32f1ad5d7668969f6730f0f073de5a80fec26f71333b04152e8ae4e3ddd2",
+      "entry": "run",
+      "source_context": "original_absolute",
+      "stdout_utf8": "1\n7\n2\n9\n",
+      "stderr_utf8": "",
+      "expected_exit_code": 0,
+      "arguments": [],
+      "stdin_hex": "",
+      "companions": [],
+      "owners": [
+        "P02",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P12",
+        "P13",
+        "P14"
+      ],
+      "independent_execution_model": "The complete original byte view is last read before the owner appends9. Both original byte values and both lengths remain; no post-append view read is added.",
+      "independent_observation_count": 4,
+      "remaining_gates": [
+        "Complete original positive syntax/type/value-operation admission remains OPEN until actual execution passes.",
+        "All original exact compiler/native/runtime FI,resource bounds,cancel,lifetime/physical and safety/provider gates remain OPEN."
+      ],
+      "first_execution_evidence": "recovery21-complete-original-view-summary.json"
+    },
+    {
+      "id": "independent_behavior_slice_string_byte_slice_view",
+      "oracle_id": "independent_behavior_slice_string_byte_slice_view",
+      "source": "tests/diff/cases/semantics/slice/string_byte_slice_view.xr",
+      "source_lf_sha256": "305af8ac6a4c351040ae69ad981561a80864ac04a76081748175407518f215d8",
+      "entry": "run",
+      "source_context": "original_absolute",
+      "stdout_utf8": "4\n65\n66\n2\n66\n67\n66\n",
+      "stderr_utf8": "",
+      "expected_exit_code": 0,
+      "arguments": [],
+      "stdin_hex": "",
+      "companions": [],
+      "owners": [
+        "P02",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P12",
+        "P13",
+        "P14",
+        "P17"
+      ],
+      "independent_execution_model": "The complete original ASCII byte owner, two-byte window and owned copy yield all seven original outputs; UTF-8 byte values are computed independently.",
+      "independent_observation_count": 7,
+      "remaining_gates": [
+        "Complete original positive syntax/type/value-operation admission remains OPEN until actual execution passes.",
+        "All original exact compiler/native/runtime FI,resource bounds,cancel,lifetime/physical and safety/provider gates remain OPEN."
+      ],
+      "first_execution_evidence": "recovery21-complete-original-view-summary.json"
+    },
+    {
+      "id": "independent_behavior_functions_higher_order_closures",
+      "oracle_id": "independent_behavior_functions_higher_order_closures",
+      "source": "tests/diff/cases/semantics/functions/higher_order_closures.xr",
+      "source_lf_sha256": "ed88a13484b40e2773ebde5f830cb3f1009b61a9351b4bbe6928b8e5f917c9f3",
+      "entry": "run",
+      "source_context": "original_absolute",
+      "stdout_utf8": "30\n7\nn=7\n1\n4\n9\n110\n20\n20\n",
+      "stderr_utf8": "",
+      "expected_exit_code": 0,
+      "arguments": [],
+      "stdin_hex": "",
+      "companions": [],
+      "owners": [
+        "P02",
+        "P07",
+        "P08",
+        "P10"
+      ],
+      "independent_execution_model": "All original free higher-order calls, the complete mapInt loop, generic Cell map, ref update and final receiver field retain every original call and all nine outputs.",
+      "independent_observation_count": 9,
+      "remaining_gates": [
+        "Complete original positive syntax/type/value-operation admission remains OPEN until actual execution passes.",
+        "All original exact compiler/native/runtime FI,resource bounds,cancel,lifetime/physical and safety/provider gates remain OPEN."
+      ],
+      "first_execution_evidence": "recovery22-complete-original-function-summary.json"
+    },
+    {
+      "id": "independent_behavior_functions_vararg_functions",
+      "oracle_id": "independent_behavior_functions_vararg_functions",
+      "source": "tests/diff/cases/semantics/functions/vararg_functions.xr",
+      "source_lf_sha256": "ed5f9c8e56ece46677b2072ade29e281bb63f904bec72d2125128660096209d4",
+      "entry": "run",
+      "source_context": "original_absolute",
+      "stdout_utf8": "0\n7\n15\n0.0\n7.0\n3\n\nonly\na, b, c\n23\n",
+      "stderr_utf8": "",
+      "expected_exit_code": 0,
+      "arguments": [],
+      "stdin_hex": "",
+      "companions": [],
+      "owners": [
+        "P08",
+        "P09",
+        "P10"
+      ],
+      "independent_execution_model": "The complete original zero/one/many argument, f64, bool and string loops and nested forwarding produce all ten outputs, including the empty join line and canonical0.0/7.0. Rest admission failures remain positive migration gaps.",
+      "independent_observation_count": 10,
+      "remaining_gates": [
+        "Complete original positive syntax/type/value-operation admission remains OPEN until actual execution passes.",
+        "All original exact compiler/native/runtime FI,resource bounds,cancel,lifetime/physical and safety/provider gates remain OPEN."
+      ],
+      "first_execution_evidence": "recovery22-complete-original-function-summary.json"
+    },
+    {
+      "id": "independent_behavior_condition_match_is_arms_no_separator",
+      "oracle_id": "independent_behavior_condition_match_is_arms_no_separator",
+      "source": "tests/diff/cases/semantics/condition/match_is_arms_no_separator.xr",
+      "source_lf_sha256": "c0bcf3d2d3441a324f4f553465e07adfcb9cabbff6cc9abb28e8069165d13e06",
+      "entry": "run",
+      "source_context": "original_absolute",
+      "stdout_utf8": "int: 42\na string\ni7\nsx\n",
+      "stderr_utf8": "",
+      "expected_exit_code": 0,
+      "arguments": [],
+      "stdin_hex": "",
+      "companions": [],
+      "owners": [
+        "P09",
+        "P10"
+      ],
+      "independent_execution_model": "Both complete original consecutive type-pattern matches select their i64/string arms for all four calls, preserving interpolation and the exact spaces.",
+      "independent_observation_count": 4,
+      "remaining_gates": [
+        "Complete original positive syntax/type/value-operation admission remains OPEN until actual execution passes.",
+        "All original exact compiler/native/runtime FI,resource bounds,cancel,lifetime/physical and safety/provider gates remain OPEN."
+      ],
+      "first_execution_evidence": "recovery22-complete-original-function-summary.json"
     }
   ]
 }

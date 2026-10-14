@@ -62,7 +62,12 @@
     "ownership/shared_copy_to_shared": "tests/diff/cases/semantics/ownership/shared_copy_to_shared.xr",
     "int_wrap/fixed_array_uint64_lane": "tests/diff/cases/semantics/int_wrap/fixed_array_uint64_lane.xr",
     "slice/string_byte_slice_receiver_nll": "tests/diff/cases/semantics/slice/string_byte_slice_receiver_nll.xr",
-    "observed/array_logical_const_copy": "tests/unit/xir/legacy_consumers/fixtures/array_logical_const_copy/root.xr"
+    "observed/array_logical_const_copy": "tests/unit/xir/legacy_consumers/fixtures/array_logical_const_copy/root.xr",
+    "collections/span_active_borrow_scope_shared_core": "tests/diff/cases/semantics/collections/span_active_borrow_scope_shared_core.xr",
+    "slice/string_byte_slice_view": "tests/diff/cases/semantics/slice/string_byte_slice_view.xr",
+    "functions/higher_order_closures": "tests/diff/cases/semantics/functions/higher_order_closures.xr",
+    "functions/vararg_functions": "tests/diff/cases/semantics/functions/vararg_functions.xr",
+    "condition/match_is_arms_no_separator": "tests/diff/cases/semantics/condition/match_is_arms_no_separator.xr"
   },
   "inputs": [
     {
@@ -356,6 +361,30 @@
     {
       "path": "tests/unit/xir/legacy_consumers/fixtures/array_logical_const_copy/root.xr",
       "lf_sha256": "372fb6ee06b4e4ecc74200b3ddf755d0efc563055041e85352aa92a74ef96dd6"
+    },
+    {
+      "path": "tests/diff/cases/semantics/collections/span_active_borrow_scope_shared_core.xr",
+      "lf_sha256": "0d4d32f1ad5d7668969f6730f0f073de5a80fec26f71333b04152e8ae4e3ddd2"
+    },
+    {
+      "path": "tests/diff/cases/semantics/slice/string_byte_slice_view.xr",
+      "lf_sha256": "305af8ac6a4c351040ae69ad981561a80864ac04a76081748175407518f215d8"
+    },
+    {
+      "path": "tests/diff/cases/semantics/functions/higher_order_closures.xr",
+      "lf_sha256": "ed88a13484b40e2773ebde5f830cb3f1009b61a9351b4bbe6928b8e5f917c9f3"
+    },
+    {
+      "path": "tests/diff/cases/semantics/functions/vararg_functions.xr",
+      "lf_sha256": "ed5f9c8e56ece46677b2072ade29e281bb63f904bec72d2125128660096209d4"
+    },
+    {
+      "path": "tests/diff/cases/semantics/condition/match_is_arms_no_separator.xr",
+      "lf_sha256": "c0bcf3d2d3441a324f4f553465e07adfcb9cabbff6cc9abb28e8069165d13e06"
+    },
+    {
+      "path": "src/xir/xxir_float_format.inc.c",
+      "lf_sha256": "84b274ea969dbd5a62a7b8b780d87cad905c20dff46c3f752662c1aab87ef457"
     }
   ],
   "scope": "Whole original run-entry byte observations only. Original helper definitions, named test entries, complete FI/resources/physical/provider qualification remain separate.",
