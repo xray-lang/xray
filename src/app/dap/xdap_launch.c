@@ -77,7 +77,7 @@ static XrXirStatus launch_modules(XdapLaunch *launch,const XrXirModule *module) 
         !view->modules) return XR_XIR_BAD_STRUCTURE;
     uint32_t count=declarations->module_count;
     if (!count) return XR_XIR_BAD_STRUCTURE;
-    if (count>SIZE_MAX/sizeof(*launch->modules)) return XR_XIR_BUDGET;
+    if (sizeof(*launch->modules)>SIZE_MAX/(size_t)count) return XR_XIR_BUDGET;
     launch->module_count=count;
     XrXirStatus status=launch_allocation(xr_compile_resources_calloc(launch->resources,count,
         sizeof(*launch->modules),(void **)&launch->modules));
