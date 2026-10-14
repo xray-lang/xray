@@ -65,7 +65,12 @@ static void analyze_cases(void) {
         CHECK(xjson_get_bool(r,"isError"));xjson_free(r);
     }
     r=analysis(good,sizeof(good)-1,"full");
-    CHECK(!xjson_get_bool(r,"isError"));xjson_free(r);physical_zero();
+    CHECK(!xjson_get_bool(r,"isError"));xjson_free(r);
+    XmcpServer server={0};XmcpCallContext context={0};
+    XrJsonValue *args=xjson_new_object();
+    xjson_object_set(args,"code",xjson_new_string_n(nul,sizeof(nul)-1));
+    r=xmcp_tool_xray_format(&server,&context,args);xjson_free(args);
+    CHECK(xjson_get_bool(r,"isError"));xjson_free(r);physical_zero();
 }
 static XrJsonValue *definition(const char *code,const char *symbol,const char *module_id) {
     XmcpServer server={0};XmcpCallContext context={0};

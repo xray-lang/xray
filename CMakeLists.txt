@@ -2566,10 +2566,9 @@ else()
     message(STATUS "Spec source not found — using committed generated files")
 endif()
 
-# MCP optional module. The tool surface runs the retired analyzer and VM, so
-# it is not linked into the public executable until it is migrated.
+# MCP consumes owned Source/Program/HostCall through one service library.
 if(XR_BUILD_MCP)
-    include(src/app/mcp/source_tools.cmake)
+    include(src/app/mcp/mcp.cmake)
     list(APPEND XRAY_CLI_INCLUDES ${CMAKE_CURRENT_SOURCE_DIR}/src/app/mcp)
 
     add_compile_definitions(XR_HAS_MCP=1)

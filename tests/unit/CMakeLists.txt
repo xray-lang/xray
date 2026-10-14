@@ -3947,33 +3947,9 @@ if(XR_BUILD_MCP)
     )
     add_test(NAME test_mcp_transport COMMAND test_mcp_transport)
 
-    add_executable(test_mcp_protocol
-        mcp/test_mcp_protocol.c
-        ${CMAKE_SOURCE_DIR}/src/app/mcp/xmcp_jsonrpc.c
-        ${CMAKE_SOURCE_DIR}/src/app/mcp/xmcp_protocol.c
-        ${CMAKE_SOURCE_DIR}/src/app/mcp/xmcp_registry.c
-        ${CMAKE_SOURCE_DIR}/src/app/mcp/xmcp_tools.c
-        ${CMAKE_SOURCE_DIR}/src/app/mcp/xmcp_tools_schema.c
-        ${CMAKE_SOURCE_DIR}/src/app/mcp/xmcp_tools_lang.c
-        ${CMAKE_SOURCE_DIR}/src/app/mcp/xmcp_source.c
-        ${CMAKE_SOURCE_DIR}/src/app/mcp/xmcp_tools_source_query.c
-        ${CMAKE_SOURCE_DIR}/src/app/mcp/xmcp_result.c
-        ${CMAKE_SOURCE_DIR}/src/app/mcp/xmcp_tools_run.c
-        ${CMAKE_SOURCE_DIR}/src/app/mcp/xmcp_tools_kb.c
-        ${CMAKE_SOURCE_DIR}/src/app/mcp/xmcp_resources.c
-        ${CMAKE_SOURCE_DIR}/src/app/mcp/xmcp_prompts.c
-        ${CMAKE_SOURCE_DIR}/src/app/mcp/xmcp_knowledge.c
-        ${CMAKE_SOURCE_DIR}/src/app/mcp/xmcp_knowledge_generated.c
-        ${CMAKE_SOURCE_DIR}/src/base/xjson.c
-        ${CMAKE_SOURCE_DIR}/src/base/xutf8.c
-    )
-    target_include_directories(test_mcp_protocol PRIVATE
-        ${XRAY_COMMON_INCLUDES}
-        ${CMAKE_SOURCE_DIR}/src/app/mcp
-        ${CMAKE_SOURCE_DIR}/src/base
-        ${CMAKE_SOURCE_DIR}/src/runtime/object
-    )
-    target_link_libraries(test_mcp_protocol PRIVATE xray_core xray_xir_source)
+    add_executable(test_mcp_protocol mcp/test_mcp_protocol.c)
+    target_link_libraries(test_mcp_protocol PRIVATE xray_mcp)
+    target_include_directories(test_mcp_protocol PRIVATE ${XRAY_COMMON_INCLUDES})
     set(XR_MCP_PROTOCOL_TEST_GROUPS
         core
         tools

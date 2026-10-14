@@ -162,6 +162,10 @@ XR_FUNC XrJsonValue *xmcp_schema_run_output(void) {
     schema_add_prop(p, "ok", "boolean", "True iff exitCode==0 and timedOut==false.");
     schema_add_prop(p, "exitCode", "integer", "Return value from source execution (0 on success).");
     schema_add_prop(p, "stdout", "string", "Captured print() output, truncated to outputLimit.");
+    schema_add_prop(p, "stderr", "string", "Captured error output and owned terminal diagnostics.");
+    schema_add_prop(p, "stderrTruncated", "boolean", "True when captured error output was clipped.");
+    schema_add_prop(p, "sourceStatus", "integer", "SourceProduct admission status.");
+    schema_add_prop(p, "runtimeStatus", "integer", "HostCall execution or cleanup status.");
     schema_add_prop(p, "timedOut", "boolean", "True if execution exceeded timeoutMs.");
     schema_add_prop(p, "truncated", "boolean", "True if stdout was clipped to outputLimit.");
     schema_add_prop(p, "outputBytes", "integer",

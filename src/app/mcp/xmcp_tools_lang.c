@@ -219,9 +219,12 @@ XR_FUNC XrJsonValue *xmcp_tool_xray_format(XmcpServer *server, const XmcpCallCon
     (void) ctx;
     (void) server;
 
-    const char *code = xjson_get_string(arguments, "code");
-    if (!code || code[0] == '\0')
+    XrJsonValue *input = xjson_get(arguments, "code");
+    if (!xjson_is_string(input) || !input->string_len)
         return xmcp_make_error_result("Error: 'code' must not be empty");
+    if (memchr(input->as.string, 0, input->string_len))
+        return xmcp_make_error_result("Error: Source contains a NUL byte");
+    const char *code = input->as.string;
 
     XrFmtConfig config = xfmt_default_config;
     int64_t indent = xjson_get_int_or(arguments, "indentSize", 0);
