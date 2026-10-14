@@ -7,15 +7,16 @@
  * xmcp_tools_run.c - Owned bounded execution for the opt-in MCP runner
  *
  * KEY CONCEPT:
- *   SourceProduct transfers genuine code to a HostCall. Output never reaches
- *   process descriptors, and a terminal result outlives every producer owner.
+ *   SourceProduct transfers genuine code to an owned Instance. Output never reaches
+ *   process descriptors. Whole-instance stop retires child waits before the
+ *   terminal outcome is copied and every producer owner is released.
  */
 #include "xmcp_json.h"
 #include "xmcp_tools_internal.h"
 #include "xmcp_server.h"
 #include "xmcp_run_source.h"
 #include "../../base/xmalloc.h"
-#include "../../execution/xr_xir_host_execution.h"
+#include "../../xir/xxir_program.h"
 #include "../../execution/xr_xir_host_cli.h"
 #include "../../execution/xr_xir_host_time.h"
 #include "../../xir/xxir_output.h"
@@ -63,10 +64,10 @@ static bool execution_stopped(const XmcpServer *server, uint64_t start, uint64_t
     if (server->shutdown) { execution->status = XR_XIR_CALL_CANCELLED; return true; }
     return false;
 }
-static XrXirCallStatus resume_wait(XrXirHostCall *call, XrXirInstanceResult observed,
+static XrXirCallStatus resume_wait(XrXirInstance *instance, XrXirInstanceResult observed,
     const XmcpServer *server, uint64_t start, uint64_t duration, RunExecution *execution) {
     XrXirWaitRequest request = {0}; XrXirHostWait wait = {0};
-    XrXirCallStatus status = xr_xir_host_call_wait_request(call, observed.epoch,
+    XrXirCallStatus status = xr_xir_instance_wait_request(instance, observed.epoch,
         observed.outcome.wake, &request);
     if (status != XR_XIR_CALL_READY) return status;
     XrXirHostWaitStatus waiting = xr_xir_host_wait_begin(&wait, &request);
@@ -75,45 +76,67 @@ static XrXirCallStatus resume_wait(XrXirHostCall *call, XrXirInstanceResult obse
         waiting = xr_xir_host_wait_poll(&wait, UINT64_C(1000000));
     }
     return waiting == XR_XIR_HOST_WAIT_DUE ?
-        xr_xir_host_call_resume(call, observed.epoch, observed.outcome.wake) : XR_XIR_CALL_HOST_ERROR;
+        xr_xir_instance_resume(instance, observed.epoch, observed.outcome.wake) : XR_XIR_CALL_HOST_ERROR;
+}
+static XrXirCallStatus run_copy_status(XrXirValueStatus status) {
+    switch (status) {
+    case XR_XIR_VALUE_OK: return XR_XIR_CALL_READY;
+    case XR_XIR_VALUE_OOM: return XR_XIR_CALL_OOM;
+    case XR_XIR_VALUE_LIMIT:
+    case XR_XIR_VALUE_REFCOUNT_LIMIT: return XR_XIR_CALL_LIMIT;
+    default: return XR_XIR_CALL_BAD_ARGUMENT;
+    }
 }
 static RunExecution execute_program(XrXirProgram *program, uint32_t entry, RunCapture *capture,
     const XmcpServer *server, uint64_t start, uint64_t duration) {
     RunExecution execution = {0};
-    if (execution_stopped(server, start, duration, &execution)) return execution;
     XrXirInstanceConfig config;
     execution.status = xr_xir_instance_config_init(&config, sizeof(config));
     if (execution.status != XR_XIR_CALL_READY) return execution;
     XrXirOutputSink sink = {XR_XIR_CALL_ABI_VERSION, 0, capture_write, capture, (size_t)config.value_limit};
     config.output = (XrXirOutputProvider){XR_XIR_CALL_ABI_VERSION, 0, xr_xir_output_render, &sink};
     xr_xir_host_time_provider(&config.time);
-    XrXirHostExecutionRequest request = {program, &config, entry, NULL, 0};
-    XrXirHostCall *call = NULL;
-    execution.status = xr_xir_host_call_begin(&request, &call);
-    if (execution.status != XR_XIR_CALL_READY) return execution;
-    XrXirInstanceResult observed = xr_xir_host_call_step_bounded(call, 256);
-    bool cancelling = false;
-    while (observed.outcome.status == XR_XIR_CALL_READY || observed.outcome.status == XR_XIR_CALL_SUSPENDED) {
-        if (!cancelling && execution_stopped(server, start, duration, &execution)) cancelling = true;
+    XrXirInstance *instance = NULL;
+    execution.status = xr_xir_instance_new(program, &config, &instance);
+    if (execution.status == XR_XIR_CALL_READY)
+        execution.status = xr_xir_instance_start(instance, entry, NULL, 0);
+    if (execution.status != XR_XIR_CALL_READY) {
+        XrXirCallStatus cleanup = xr_xir_instance_free(instance);
+        if (cleanup != XR_XIR_CALL_READY) execution.status = cleanup;
+        return execution;
+    }
+    /* A started owner can publish a real terminal cancellation even when
+     * compilation spent the deadline. Stop before polling any user code. */
+    XrXirInstanceResult observed = {0};
+    bool cancelling = execution_stopped(server, start, duration, &execution);
+    for (;;) {
+        if (cancelling) {
+            /* This request owns the entire instance; retire every child wait. */
+            XrXirCallStatus stopped = xr_xir_instance_stop(instance);
+            observed = xr_xir_instance_poll_bounded(instance, 256);
+            if (stopped != XR_XIR_CALL_READY &&
+                (observed.outcome.status == XR_XIR_CALL_READY ||
+                 observed.outcome.status == XR_XIR_CALL_SUSPENDED)) execution.status = stopped;
+            break;
+        }
+        observed = xr_xir_instance_poll_bounded(instance, 256);
+        if (observed.outcome.status != XR_XIR_CALL_READY && observed.outcome.status != XR_XIR_CALL_SUSPENDED) break;
+        cancelling = execution_stopped(server, start, duration, &execution);
         if (!cancelling && observed.outcome.status == XR_XIR_CALL_SUSPENDED) {
-            XrXirCallStatus resumed = resume_wait(call, observed, server, start, duration, &execution);
+            XrXirCallStatus resumed = resume_wait(instance, observed, server, start, duration, &execution);
             if (resumed != XR_XIR_CALL_READY) {
                 if (resumed != XR_XIR_CALL_CANCEL_REQUESTED) execution.status = resumed;
                 cancelling = true;
             }
         }
-        if (cancelling) {
-            XrXirCallStatus cancelled = xr_xir_host_call_request_cancel(call);
-            if (cancelled != XR_XIR_CALL_CANCEL_REQUESTED) { execution.status = cancelled; break; }
-            do observed = xr_xir_host_call_step_bounded(call, 256);
-            while (observed.outcome.status == XR_XIR_CALL_READY);
-            break;
-        }
-        observed = xr_xir_host_call_step_bounded(call, 256);
     }
-    XrXirCallStatus taken = xr_xir_host_call_take(call, &execution.owned);
+    XrXirCallStatus taken = XR_XIR_CALL_BAD_STATE;
+    if (observed.outcome.status != XR_XIR_CALL_READY && observed.outcome.status != XR_XIR_CALL_SUSPENDED) {
+        taken = run_copy_status(xr_xir_call_result_copy(&observed.outcome, &execution.owned));
+        if (taken == XR_XIR_CALL_READY) taken = execution.owned.status;
+    }
     if (execution.status == XR_XIR_CALL_READY) execution.status = taken;
-    XrXirCallStatus cleanup = xr_xir_host_call_drop(call);
+    XrXirCallStatus cleanup = xr_xir_instance_free(instance);
     if (cleanup != XR_XIR_CALL_READY) {
         xr_xir_call_result_drop(&execution.owned); execution.status = cleanup;
     }
