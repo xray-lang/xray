@@ -124,9 +124,9 @@ static void nominal_specialization_authority(XrXirSourceRequest *request, const 
             XrXirProvenance *proof = (XrXirProvenance *)closed->module.provenance;
             CHECK(proof && proof->source);
             closed->module.provenance = NULL;
-            CHECK(xr_xir_compile_artifact_verify(closed, NULL) == XR_XIR_BAD_TYPE);
+            CHECK(xr_xir_compile_artifact_verify(closed, NULL) == XR_XIR_BAD_STRUCTURE);
             XrXirCheckedPacket stripped = {0};
-            CHECK(xr_xir_compile_checked_write(closed, &stripped, NULL) == XR_XIR_BAD_TYPE && !stripped.bytes);
+            CHECK(xr_xir_compile_checked_write(closed, &stripped, NULL) == XR_XIR_BAD_STRUCTURE && !stripped.bytes);
             closed->module.provenance = proof;
             uint32_t instance = UINT32_MAX;
             for (uint32_t f = 0; f < closed->module.function_count; ++f)
@@ -220,6 +220,7 @@ static void member_reference_authority(XrXirSourceRequest *request, const char *
     XrXirSourceResult result = {0};
     CHECK(source_generic_check(request, &result, NULL) == XR_XIR_OK);
     XrXirModule *module = &result.checked->module;
+    CHECK(xr_xir_compile_artifact_verify(result.checked, NULL) == XR_XIR_OK);
     unsigned allowed = 0, denied = 0;
     for (uint32_t f = 0; f < module->function_count; ++f) {
         for (uint32_t i = 0; i < module->functions[f].instruction_count; ++i) {
@@ -230,10 +231,17 @@ static void member_reference_authority(XrXirSourceRequest *request, const char *
             id->nominal_owner = 1; id->exported = 0; id->member_access = XR_XIR_MEMBER_PRIVATE;
             id->method_kind = XR_XIR_MEMBER_HELPER;
             bool same_owner = module->declarations->functions[f].nominal_owner == 1;
-            CHECK(xr_xir_compile_artifact_verify(result.checked, NULL) ==
+            /* Ordinary admission checks lexical access; an already sealed
+             * Source artifact also requires its original physical metadata. */
+            CHECK(xr_xir_compile_structure_verify_v2(generic_source_context,
+                module, result.checked->construction, NULL) ==
                 (same_owner ? XR_XIR_OK : XR_XIR_BAD_STRUCTURE));
+            CHECK(xr_xir_compile_artifact_verify(result.checked, NULL) == XR_XIR_BAD_STRUCTURE);
+            XrXirCheckedPacket attacked = {0};
+            CHECK(xr_xir_compile_checked_write(result.checked, &attacked, NULL) == XR_XIR_BAD_STRUCTURE && !attacked.bytes);
             if (same_owner) ++allowed; else ++denied;
             *id = saved;
+            CHECK(xr_xir_compile_artifact_verify(result.checked, NULL) == XR_XIR_OK);
         }
     }
     CHECK(allowed == 1 && denied == 1);
