@@ -139,7 +139,8 @@ int main(void) {
     grow_rejection(requested, work, true);
     grow_exact(requested, work);
     grow_oom_retains_charge(requested, work);
-    CHECK(original_value_allocation_main() == 0);
+    char *arguments[] = {"array-grow-budget", NULL};
+    CHECK(original_value_allocation_main(1, arguments) == 0);
     puts("Array realloc exact/minus-one budgets, charged OOM retry, preserved contents and physical release PASS");
     return 0;
 }

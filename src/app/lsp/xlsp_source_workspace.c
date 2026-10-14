@@ -2,7 +2,7 @@
 #include "xlsp_source_workspace.h"
 #include "../cli/xcli_source_paths.h"
 #include "../cli/xcli_graph_authority.h"
-#include "../../xir/xxir_native_cache_internal.h"
+#include "../../xir/xxir_stdlib_internal.h"
 #include "../../xir/xxir_library_catalog.h"
 #include <string.h>
 struct XlspSourceWorkspace {
@@ -55,7 +55,7 @@ XrXirStatus xlsp_source_workspace_build(const XrXirCompileContext *context,
         goto done;
     }
     if(stage)*stage=3;
-    status=xir_native_cache_library_catalog_new(context,w->stdlib.path,&w->catalog);
+    status=xir_stdlib_library_catalog_new(context,w->stdlib.path,&w->catalog);
     if(status!=XR_XIR_OK)goto done;
     if(stage)*stage=4;
     XrTomlParseLimits limits=xr_cli_compile_default_manifest_limits();

@@ -123,7 +123,6 @@ static void *counted_realloc(void *pointer, size_t size) {
 #include "xir/xxir_program.c"
 #include "xir/xxir_instance.c"
 #include "xir/xxir_output.c"
-#include "xir/xxir_native_cache.c"
 
 #include "xir_allocation_compile_owner.h"
 #include "xir_string_fixture.h"

@@ -131,9 +131,11 @@ static XrXirCallStatus instance_once(PanicProgramFixture *f, size_t fault_index,
     XrXirCallStatus status = xr_xir_instance_new(program, &config, &instance);
     if (status == XR_XIR_CALL_READY) status = xr_xir_instance_start(instance, 1, NULL, 0);
     XrXirCallResult held = {0}, again = {0};
+    XrXirCallStatus release_expected=XR_XIR_CALL_READY;
     if (status == XR_XIR_CALL_READY) {
         XrXirCallResult result = xr_xir_instance_poll_bounded(instance, UINT64_MAX).outcome;
         status = result.status;
+        if(status==XR_XIR_CALL_OOM || status==XR_XIR_CALL_LIMIT)release_expected=status;
         CHECK(status == XR_XIR_CALL_ASSERTION || status == XR_XIR_CALL_OOM || status == XR_XIR_CALL_LIMIT);
         CHECK(xr_xir_instance_state(instance) == XR_XIR_INSTANCE_FAILED && result.value.type == XR_XIR_UNIT);
         size_t attempts = runtime_attempts;
@@ -150,7 +152,9 @@ static XrXirCallStatus instance_once(PanicProgramFixture *f, size_t fault_index,
             atomic_store(&object->references, references);
         }
     }
-    if (instance) CHECK(xr_xir_instance_free(instance) == XR_XIR_CALL_READY);
+    size_t release_attempts=runtime_attempts;
+    if (instance) CHECK(xr_xir_instance_free(instance) == release_expected);
+    CHECK(runtime_attempts==release_attempts);
     if (status == XR_XIR_CALL_ASSERTION) {
         expect_bytes(&held.panic.message, expected_bytes, sizeof(expected_bytes));
         expect_bytes(&again.panic.message, expected_bytes, sizeof(expected_bytes));
@@ -180,16 +184,23 @@ static XrXirCallStatus handler_once(PanicProgramFixture *f, size_t point, size_t
     XrXirInstance *instance = NULL;
     XrXirInstanceConfig config; CHECK(xr_xir_instance_config_init(&config, sizeof(config)) == XR_XIR_CALL_READY);
     XrXirCallStatus status = xr_xir_instance_new(program, &config, &instance);
+    XrXirCallStatus release_expected=XR_XIR_CALL_READY;
     if (status == XR_XIR_CALL_READY) status = xr_xir_instance_start(instance, 1, NULL, 0);
     if (status == XR_XIR_CALL_READY) {
         XrXirCallResult result = xr_xir_instance_poll_bounded(instance, UINT64_MAX).outcome;
         status = result.status;
+        if(status==XR_XIR_CALL_OOM || status==XR_XIR_CALL_LIMIT)release_expected=status;
         CHECK(xr_xir_call_result_valid(&result));
         if (status == XR_XIR_CALL_RETURNED) {
             CHECK(result.value.type == XR_XIR_I64 && result.value.payload == 7 && xr_xir_panic_empty(&result.panic));
         } else CHECK(status == XR_XIR_CALL_OOM || status == XR_XIR_CALL_LIMIT);
     }
-    if (instance) CHECK(xr_xir_instance_free(instance) == XR_XIR_CALL_READY);
+    if (instance) {
+        size_t release_attempts=runtime_attempts;
+        XrXirCallStatus released=xr_xir_instance_free(instance);
+        CHECK(released==release_expected);
+        CHECK(runtime_attempts==release_attempts);
+    }
     if (status == XR_XIR_CALL_RETURNED) expect_bytes(&f->caught_message, expected_bytes, sizeof(expected_bytes));
     xr_xir_value_drop(&f->caught_message);
     CHECK(runtime_live == baseline_count && runtime_bytes == baseline_bytes);
