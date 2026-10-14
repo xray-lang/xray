@@ -1,0 +1,11 @@
+// Observe the original scalar exactly once and retain every original test body.
+// 0211_public_identifier.xr
+// D13: `public` is no longer a reserved keyword; it can be used as an ordinary identifier.
+
+@test
+fn test_public_identifier_name() {
+    var public = 11
+    var p19Observed0 = public
+    assertEqual(p19Observed0, 11)
+    print(p19Observed0)
+}

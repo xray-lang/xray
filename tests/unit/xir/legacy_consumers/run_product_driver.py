@@ -134,6 +134,22 @@ def main() -> int:
                    'entry_sha256':sha(target.read_bytes()),'entry_adapter_suffix':suffix,
                    'owners':case['owners'],'expected':expected,'routes':{},
                    'remaining_gates':case['remaining_gates']}
+            if case.get('independent_observations'):
+                observations = case['independent_observations']
+                observed_source = ROOT/observations['selected_complete_source']
+                if sha(observed_source.read_bytes().replace(b'\r\n',b'\n')) != observations['selected_source_lf_sha256']:
+                    raise ValueError('original complete observation source changed')
+                names = oracle['expected']['required_test_names']
+                values = oracle['expected']['per_test_observations']
+                for name in names:
+                    actual = [z['expected'] for z in observations['values'] if z['test']==name]
+                    if actual != values[name]['values']:
+                        raise ValueError('observed values differ from the frozen independent model')
+                expected_bytes = ''.join((str(z['expected']).lower() if type(z['expected'])==bool
+                                         else str(z['expected']))+'\n' for z in observations['values']).encode('utf-8')
+                if expected_bytes.hex() != expected['stdout_hex']:
+                    raise ValueError('independent observation bytes changed')
+                row['independent_observations'] = observations
             results.append(row)
             arguments = case.get('arguments',[])
             stdin = bytes.fromhex(case.get('stdin_hex',''))

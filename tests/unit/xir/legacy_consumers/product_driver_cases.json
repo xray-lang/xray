@@ -6276,6 +6276,514 @@
         "Bind actual declaration-owned module/protocol/generic/Equal/formatter/view/provider/lifecycle contracts and target/platform profiles; no guessed ABI/API/diagnostic field or compatibility shim.",
         "Full affected FI/resource/live/requested/work/borrow/lifetime/cancel/physical/safety/generated-C/provider gates; original dimensions and P20 bidirectional mixed scope remain."
       ]
+    },
+    {
+      "id": "regression_core_review_0210_unknown_identifier_observed",
+      "oracle_id": "regression_core_review_0210_unknown_identifier",
+      "source": "tests/unit/xir/legacy_consumers/fixtures/independent_named_observations/0210_unknown_identifier/root.xr",
+      "source_lf_sha256": "c082f917cfe26e58b78f1cd2ce399f0cc4d2d77c78c22546cf03380c5403f4b0",
+      "entry": "test",
+      "stdout_utf8": "7\n",
+      "companions": [],
+      "owners": [
+        "P09",
+        "P10"
+      ],
+      "independent_observations": {
+        "original_case": "tests/regression/02_variables/0210_unknown_identifier.xr",
+        "selected_complete_source": "tests/regression/02_variables/0210_unknown_identifier.xr",
+        "selected_source_lf_sha256": "ef223e822468be894c06ced74df10110eab5699f25172195db2690e127c5c5ec",
+        "method": "Capture each scalar actual exactly once before its existing assertion, then print it; complete original bodies and all control-flow bounds retained.",
+        "values": [
+          {
+            "test": "test_unknown_identifier_name",
+            "expression": "unknown",
+            "expected": 7,
+            "original_line": 7
+          }
+        ]
+      },
+      "remaining_gates": [
+        "Complete actual named discovery and independent VM/native scalar observations; no assertions-only qualification.",
+        "Original non-scalar observations, exact runtime/compiler FI, resource bounds, cancellation, ownership, physical and sanitizer/provider matrix remain separately required."
+      ]
+    },
+    {
+      "id": "regression_core_review_0211_public_identifier_observed",
+      "oracle_id": "regression_core_review_0211_public_identifier",
+      "source": "tests/unit/xir/legacy_consumers/fixtures/independent_named_observations/0211_public_identifier/root.xr",
+      "source_lf_sha256": "6192504b93154957b58a87900dd2b034442cebbab73e648a034a0efbc4399a19",
+      "entry": "test",
+      "stdout_utf8": "11\n",
+      "companions": [],
+      "owners": [
+        "P09",
+        "P10"
+      ],
+      "independent_observations": {
+        "original_case": "tests/regression/02_variables/0211_public_identifier.xr",
+        "selected_complete_source": "tests/regression/02_variables/0211_public_identifier.xr",
+        "selected_source_lf_sha256": "ddad66c4ea0b1581590bfd75c533f8038b3eb7979fc72c968aee68338ef2597a",
+        "method": "Capture each scalar actual exactly once before its existing assertion, then print it; complete original bodies and all control-flow bounds retained.",
+        "values": [
+          {
+            "test": "test_public_identifier_name",
+            "expression": "public",
+            "expected": 11,
+            "original_line": 7
+          }
+        ]
+      },
+      "remaining_gates": [
+        "Complete actual named discovery and independent VM/native scalar observations; no assertions-only qualification.",
+        "Original non-scalar observations, exact runtime/compiler FI, resource bounds, cancellation, ownership, physical and sanitizer/provider matrix remain separately required."
+      ]
+    },
+    {
+      "id": "regression_core_review_0450_break_continue_observed",
+      "oracle_id": "regression_core_review_0450_break_continue",
+      "source": "tests/unit/xir/legacy_consumers/fixtures/independent_named_observations/0450_break_continue/root.xr",
+      "source_lf_sha256": "ecfd1877f6ff1906ee86a6e127759998b93a3df27eef7e42fe4fbf59dc4125e4",
+      "entry": "test",
+      "stdout_utf8": "10\n5\n25\n10\n25\n10\n6\n9\nfalse\n1\n",
+      "companions": [],
+      "owners": [
+        "P09",
+        "P10"
+      ],
+      "independent_observations": {
+        "original_case": "tests/regression/04_control_flow/0450_break_continue.xr",
+        "selected_complete_source": "tests/regression/04_control_flow/0450_break_continue.xr",
+        "selected_source_lf_sha256": "b12e3cf5970463357d488884017d5aeee98da57ec20671b2497c207d7e726375",
+        "method": "Capture each scalar actual exactly once before its existing assertion, then print it; complete original bodies and all control-flow bounds retained.",
+        "values": [
+          {
+            "test": "test_while_break",
+            "expression": "sum",
+            "expected": 10,
+            "original_line": 18
+          },
+          {
+            "test": "test_while_break",
+            "expression": "i",
+            "expected": 5,
+            "original_line": 19
+          },
+          {
+            "test": "test_while_continue",
+            "expression": "sum",
+            "expected": 25,
+            "original_line": 35
+          },
+          {
+            "test": "test_for_break",
+            "expression": "sum",
+            "expected": 10,
+            "original_line": 49
+          },
+          {
+            "test": "test_for_continue",
+            "expression": "sum",
+            "expected": 25,
+            "original_line": 63
+          },
+          {
+            "test": "test_nested_break",
+            "expression": "count",
+            "expected": 10,
+            "original_line": 79
+          },
+          {
+            "test": "test_conditional_break",
+            "expression": "sum",
+            "expected": 6,
+            "original_line": 94
+          },
+          {
+            "test": "test_conditional_continue",
+            "expression": "sum",
+            "expected": 9,
+            "original_line": 109
+          },
+          {
+            "test": "test_code_after_break",
+            "expression": "executed",
+            "expected": false,
+            "original_line": 121
+          },
+          {
+            "test": "test_immediate_break",
+            "expression": "count",
+            "expected": 1,
+            "original_line": 133
+          }
+        ]
+      },
+      "remaining_gates": [
+        "Complete actual named discovery and independent VM/native scalar observations; no assertions-only qualification.",
+        "Original non-scalar observations, exact runtime/compiler FI, resource bounds, cancellation, ownership, physical and sanitizer/provider matrix remain separately required."
+      ]
+    },
+    {
+      "id": "regression_core_review_0520_closure_observed",
+      "oracle_id": "regression_core_review_0520_closure",
+      "source": "tests/unit/xir/legacy_consumers/fixtures/independent_named_observations/0520_closure/root.xr",
+      "source_lf_sha256": "59604b99e11ff2b0b051a5437fd994d98f96b6ff4a7729aeffb4f84e1c409fcf",
+      "entry": "test",
+      "stdout_utf8": "1\n2\n3\n1\n2\n1\n3\n2\n8\n13\n16\nfalse\ntrue\ntrue\ntrue\nfalse\n10\n20\n5\n15\n18\n6\n10\n10\n15\nHello, Alice!\nHi, Bob!\n0\n1\n2\n42\n100\n",
+      "companions": [],
+      "owners": [
+        "P02",
+        "P07",
+        "P08",
+        "P09",
+        "P10"
+      ],
+      "independent_observations": {
+        "original_case": "tests/regression/05_functions/0520_closure.xr",
+        "selected_complete_source": "tests/regression/05_functions/0520_closure.xr",
+        "selected_source_lf_sha256": "c37641050c998ab3285892befc9ad1f1eb18e53df80074ddbc89172c6a03edc3",
+        "method": "Capture each scalar actual exactly once before its existing assertion, then print it; complete original bodies and all control-flow bounds retained.",
+        "values": [
+          {
+            "test": "test_closure_basic",
+            "expression": "counter()",
+            "expected": 1,
+            "original_line": 19
+          },
+          {
+            "test": "test_closure_basic",
+            "expression": "counter()",
+            "expected": 2,
+            "original_line": 20
+          },
+          {
+            "test": "test_closure_basic",
+            "expression": "counter()",
+            "expected": 3,
+            "original_line": 21
+          },
+          {
+            "test": "test_closure_multiple_instances",
+            "expression": "c1()",
+            "expected": 1,
+            "original_line": 38
+          },
+          {
+            "test": "test_closure_multiple_instances",
+            "expression": "c1()",
+            "expected": 2,
+            "original_line": 39
+          },
+          {
+            "test": "test_closure_multiple_instances",
+            "expression": "c2()",
+            "expected": 1,
+            "original_line": 40
+          },
+          {
+            "test": "test_closure_multiple_instances",
+            "expression": "c1()",
+            "expected": 3,
+            "original_line": 41
+          },
+          {
+            "test": "test_closure_multiple_instances",
+            "expression": "c2()",
+            "expected": 2,
+            "original_line": 42
+          },
+          {
+            "test": "test_capture_param",
+            "expression": "add5(3)",
+            "expected": 8,
+            "original_line": 59
+          },
+          {
+            "test": "test_capture_param",
+            "expression": "add10(3)",
+            "expected": 13,
+            "original_line": 60
+          },
+          {
+            "test": "test_capture_param",
+            "expression": "add5(add10(1))",
+            "expected": 16,
+            "original_line": 61
+          },
+          {
+            "test": "test_capture_multiple_params",
+            "expression": "inRange(3)",
+            "expected": false,
+            "original_line": 74
+          },
+          {
+            "test": "test_capture_multiple_params",
+            "expression": "inRange(5)",
+            "expected": true,
+            "original_line": 75
+          },
+          {
+            "test": "test_capture_multiple_params",
+            "expression": "inRange(7)",
+            "expected": true,
+            "original_line": 76
+          },
+          {
+            "test": "test_capture_multiple_params",
+            "expression": "inRange(10)",
+            "expected": true,
+            "original_line": 77
+          },
+          {
+            "test": "test_capture_multiple_params",
+            "expression": "inRange(12)",
+            "expected": false,
+            "original_line": 78
+          },
+          {
+            "test": "test_modify_outer",
+            "expression": "x",
+            "expected": 10,
+            "original_line": 91
+          },
+          {
+            "test": "test_modify_outer",
+            "expression": "x",
+            "expected": 20,
+            "original_line": 93
+          },
+          {
+            "test": "test_accumulator",
+            "expression": "acc(5)",
+            "expected": 5,
+            "original_line": 108
+          },
+          {
+            "test": "test_accumulator",
+            "expression": "acc(10)",
+            "expected": 15,
+            "original_line": 109
+          },
+          {
+            "test": "test_accumulator",
+            "expression": "acc(3)",
+            "expected": 18,
+            "original_line": 110
+          },
+          {
+            "test": "test_nested_closure",
+            "expression": "f(3)",
+            "expected": 6,
+            "original_line": 128
+          },
+          {
+            "test": "test_deeply_nested",
+            "expression": "result",
+            "expected": 10,
+            "original_line": 147
+          },
+          {
+            "test": "test_multiplier_factory",
+            "expression": "double(5)",
+            "expected": 10,
+            "original_line": 164
+          },
+          {
+            "test": "test_multiplier_factory",
+            "expression": "triple(5)",
+            "expected": 15,
+            "original_line": 165
+          },
+          {
+            "test": "test_greeting_factory",
+            "expression": "hello(\"Alice\")",
+            "expected": "Hello, Alice!",
+            "original_line": 180
+          },
+          {
+            "test": "test_greeting_factory",
+            "expression": "hi(\"Bob\")",
+            "expected": "Hi, Bob!",
+            "original_line": 181
+          },
+          {
+            "test": "test_closure_captures_value",
+            "expression": "funcs[0]()",
+            "expected": 0,
+            "original_line": 197
+          },
+          {
+            "test": "test_closure_captures_value",
+            "expression": "funcs[1]()",
+            "expected": 1,
+            "original_line": 198
+          },
+          {
+            "test": "test_closure_captures_value",
+            "expression": "funcs[2]()",
+            "expected": 2,
+            "original_line": 199
+          },
+          {
+            "test": "test_closure_no_capture",
+            "expression": "f()",
+            "expected": 42,
+            "original_line": 214
+          },
+          {
+            "test": "test_closure_capture_const",
+            "expression": "f()",
+            "expected": 100,
+            "original_line": 229
+          }
+        ]
+      },
+      "remaining_gates": [
+        "Complete actual named discovery and independent VM/native scalar observations; no assertions-only qualification.",
+        "Original non-scalar observations, exact runtime/compiler FI, resource bounds, cancellation, ownership, physical and sanitizer/provider matrix remain separately required."
+      ]
+    },
+    {
+      "id": "regression_core_review_0581_function_item_value_binding_observed",
+      "oracle_id": "regression_core_review_0581_function_item_value_binding",
+      "source": "tests/unit/xir/legacy_consumers/fixtures/independent_named_observations/0581_function_item_value_binding/root.xr",
+      "source_lf_sha256": "619e9c690a2e3b4d2650672b2fdef60813b3704c58453fa8fb7f71750f517a82",
+      "entry": "test",
+      "stdout_utf8": "42\n42\n11\n42\n120\n",
+      "companions": [],
+      "owners": [
+        "P02",
+        "P07",
+        "P08",
+        "P09",
+        "P10"
+      ],
+      "independent_observations": {
+        "original_case": "tests/regression/05_functions/0581_function_item_value_binding.xr",
+        "selected_complete_source": "tests/regression/05_functions/0581_function_item_value_binding.xr",
+        "selected_source_lf_sha256": "37867d162330f40608430da48b07453dceb0d7f16abafee2834930f2abd38422",
+        "method": "Capture each scalar actual exactly once before its existing assertion, then print it; complete original bodies and all control-flow bounds retained.",
+        "values": [
+          {
+            "test": "test_function_item_hoists_before_definition",
+            "expression": "item_later(41)",
+            "expected": 42,
+            "original_line": 3
+          },
+          {
+            "test": "test_const_function_value_call_after_binding",
+            "expression": "f(39)",
+            "expected": 42,
+            "original_line": 15
+          },
+          {
+            "test": "test_var_function_value_can_rebind",
+            "expression": "op(10)",
+            "expected": 11,
+            "original_line": 23
+          },
+          {
+            "test": "test_var_function_value_can_rebind",
+            "expression": "op(21)",
+            "expected": 42,
+            "original_line": 28
+          },
+          {
+            "test": "test_function_item_recursion",
+            "expression": "fact_item(5)",
+            "expected": 120,
+            "original_line": 38
+          }
+        ]
+      },
+      "remaining_gates": [
+        "Complete actual named discovery and independent VM/native scalar observations; no assertions-only qualification.",
+        "Original non-scalar observations, exact runtime/compiler FI, resource bounds, cancellation, ownership, physical and sanitizer/provider matrix remain separately required."
+      ]
+    },
+    {
+      "id": "regression_core_review_1418_shared_provenance_readonly_closure_capture_observed",
+      "oracle_id": "regression_core_review_1418_shared_provenance_readonly_closure_capture",
+      "source": "tests/unit/xir/legacy_consumers/fixtures/independent_named_observations/1418_shared_provenance_readonly_closure_capture/root.xr",
+      "source_lf_sha256": "f5fc44034b7a18ceeda2e53d853035f44eb673b8f1d1122a0d1037d48c7f19ed",
+      "entry": "test",
+      "stdout_utf8": "7\n",
+      "companions": [],
+      "owners": [
+        "P02",
+        "P07",
+        "P08",
+        "P09",
+        "P10"
+      ],
+      "independent_observations": {
+        "original_case": "tests/regression/14_typed_array/1418_shared_provenance_readonly_closure_capture.xr",
+        "selected_complete_source": "tests/regression/14_typed_array/1418_shared_provenance_readonly_closure_capture.xr",
+        "selected_source_lf_sha256": "53c57afe564f3713fee37ea9e3a8c3d07b4be4422e8b74c57c1e8b7393f38bf5",
+        "method": "Capture each scalar actual exactly once before its existing assertion, then print it; complete original bodies and all control-flow bounds retained.",
+        "values": [
+          {
+            "test": "test_shared_provenance_readonly_closure_capture",
+            "expression": "read()",
+            "expected": 7,
+            "original_line": 12
+          }
+        ]
+      },
+      "remaining_gates": [
+        "Complete actual named discovery and independent VM/native scalar observations; no assertions-only qualification.",
+        "Original non-scalar observations, exact runtime/compiler FI, resource bounds, cancellation, ownership, physical and sanitizer/provider matrix remain separately required."
+      ]
+    },
+    {
+      "id": "regression_core_review_1604_for_in_loop_header_observed",
+      "oracle_id": "regression_core_review_1604_for_in_loop_header",
+      "source": "tests/unit/xir/legacy_consumers/fixtures/independent_named_observations/1604_for_in_loop_header/root.xr",
+      "source_lf_sha256": "694d66ed4b24e5e3ec04ac45d57c3b09954f7969a4c8d98032ccd885928cc293",
+      "entry": "test",
+      "stdout_utf8": "9\nseed\nx\nempty\n",
+      "companions": [],
+      "owners": [
+        "P09",
+        "P10"
+      ],
+      "independent_observations": {
+        "original_case": "tests/regression/16_narrowing/1604_for_in_loop_header.xr",
+        "selected_complete_source": "tests/regression/16_narrowing/1604_for_in_loop_header.xr",
+        "selected_source_lf_sha256": "dbd64728a1c503496d35aab097fbfc17dfa76519b8b2cfae08fa1473605ae699",
+        "method": "Capture each scalar actual exactly once before its existing assertion, then print it; complete original bodies and all control-flow bounds retained.",
+        "values": [
+          {
+            "test": "test_for_in_readonly_body_keeps_pre_loop_narrowing",
+            "expression": "total",
+            "expected": 9,
+            "original_line": 19
+          },
+          {
+            "test": "test_for_in_empty_collection_keeps_pre_loop_value",
+            "expression": "s ?? \"gone\"",
+            "expected": "seed",
+            "original_line": 31
+          },
+          {
+            "test": "test_for_in_body_write_rejoins_at_header",
+            "expression": "s ?? \"empty\"",
+            "expected": "x",
+            "original_line": 43
+          },
+          {
+            "test": "test_for_in_body_write_guarded_after_loop",
+            "expression": "out",
+            "expected": "empty",
+            "original_line": 59
+          }
+        ]
+      },
+      "remaining_gates": [
+        "Complete actual named discovery and independent VM/native scalar observations; no assertions-only qualification.",
+        "Original non-scalar observations, exact runtime/compiler FI, resource bounds, cancellation, ownership, physical and sanitizer/provider matrix remain separately required."
+      ]
     }
   ]
 }

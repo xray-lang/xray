@@ -1,0 +1,11 @@
+// Observe the original scalar exactly once and retain every original test body.
+// 0210_unknown_identifier.xr
+// D16: `unknown` is no longer a reserved keyword; it can be used as an ordinary identifier.
+
+@test
+fn test_unknown_identifier_name() {
+    var unknown = 7
+    var p19Observed0 = unknown
+    assertEqual(p19Observed0, 7)
+    print(p19Observed0)
+}

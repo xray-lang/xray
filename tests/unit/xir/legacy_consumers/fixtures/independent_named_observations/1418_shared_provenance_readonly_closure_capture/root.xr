@@ -1,0 +1,16 @@
+// Observe the original scalar exactly once and retain every original test body.
+class SharedCaptureBox {
+    items: Array<i64> = Array<i64>(2, 5)
+}
+
+@test
+fn test_shared_provenance_readonly_closure_capture() {
+    const box = SharedCaptureBox()
+    var items = box.items
+    const read = fn() -> i64 {
+        return items[0] + len(items)
+    }
+    var p19Observed0 = read()
+    assertEqual(p19Observed0, 7)
+    print(p19Observed0)
+}
