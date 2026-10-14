@@ -126,11 +126,16 @@ def main():
         verify('verify-sdk-only', prefixes['sdk']/checked_relative, prefixes['sdk']/sdk_relative, sdk_only=True)
         program = output/'program'
         shutil.copytree(root/'tests/fixtures/xir_cli_product', program)
+        generic_fixture = root/'tests/fixtures/xir_installed_generic_initializers'
+        state = program/'state.xr'
+        state.write_text(state.read_text(encoding='utf-8')+'\n'+
+                         (generic_fixture/'types.xr').read_text(encoding='utf-8'), encoding='utf-8')
         source = program/'main.xr'
         source.write_text(source.read_text(encoding='utf-8') +
             '\nimport time as Clock\nconst initial=Clock.nanos()\nClock.sleep(1)\n'
             'print(Clock.nanos()-initial>=1000000)\n' +
-            (root/'tests/fixtures/xir_installed_library_methods/main.xr').read_text(encoding='utf-8'), encoding='utf-8')
+            (root/'tests/fixtures/xir_installed_library_methods/main.xr').read_text(encoding='utf-8')+
+            '\n'+(generic_fixture/'main.xr').read_text(encoding='utf-8'), encoding='utf-8')
         relocated = output/'relocated'
         assert prefixes['full'].resolve().is_relative_to(output) and relocated.resolve().is_relative_to(output)
         prefixes['full'].rename(relocated)
@@ -140,7 +145,8 @@ def main():
             b'1 63 0 72057594037927936 2 2\n'
             b'2.5 -2 -3 -2 -3 false -2.5 true false 65 A\n'
             b'A\0B A\0BA\0B true true true 2 5\n')
-        expected_stdout, expected_stderr = b'A\0B41 42 42 true true 1.5\ntrue\n'+library_stdout, b'E\0R'
+        generic_stdout = b'A\0\xe4\xb8\xad\xf0\x9f\x98\x80' b'0\n7 2 11 99\n'
+        expected_stdout, expected_stderr = b'A\0B41 42 42 true true 1.5\ntrue\n'+library_stdout+generic_stdout, b'E\0R'
         for name, prefix in (('core', prefixes['core']), ('relocated', relocated)):
             binary = prefix/'bin/xray.exe'
             version, errors = run(name+'-version', [binary, '--version', '--json'])

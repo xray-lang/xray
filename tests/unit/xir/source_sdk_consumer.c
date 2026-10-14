@@ -127,6 +127,35 @@ static void library_methods(const char *stdlib) {
     CHECK(out.length == sizeof(expected) - 1 && !memcmp(out.bytes, expected, sizeof(expected) - 1));
     xray_source_result_free(result);
 }
+static void generic_initializers(const char *stdlib) {
+    char source[] =
+        "import \"std/io/output\" as Lib\n"
+        "final class Packet<T> { value:T; tail:Array<T>;\n"
+        " init(value,tail:Array<T>=[]) { this.value=value; this.tail=tail } }\n"
+        "fn make<T>(value:T)->Packet<T> { return Packet<T>(value) }\n"
+        "fn tagged<T>(value:T,tail:Array<T>)->Packet<T> { return Packet<T>(value,tail) }\n"
+        "fn copied(packet:Packet<string>)->string { return packet.value.toString() }\n"
+        "fn number(packet:Packet<i64>)->i64 { return packet.value }\n"
+        "fn count<T>(packet:Packet<T>)->i64 { return len(packet.tail) }\n"
+        "fn first<T>(packet:Packet<T>)->T { return packet.tail[0] }\n"
+        "const text=make<string>(\"A\\0\xe4\xb8\xad\xf0\x9f\x98\x80\")\n"
+        "Lib.writeStdout(copied(text)); print(count<string>(text))\n"
+        "var original=[11,22]; const value=tagged<i64>(7,original); original[0]=99\n"
+        "print(number(value),count<i64>(value),first<i64>(value),original[0])\n";
+    const char expected[] = "A\0\xe4\xb8\xad\xf0\x9f\x98\x80" "0\n7 2 11 99\n";
+    XrSourceCompiler *compiler = compiler_new(stdlib);
+    XrSourceProgram *program = compile(compiler, source); xray_source_compiler_free(compiler);
+    Output out = {0}; XrSourceCallOptions options;
+    CHECK(xray_source_call_options_init(&options, sizeof(options)) == XR_SOURCE_OK);
+    options.write = capture; options.context = &out;
+    XrSourceResult *result = NULL;
+    CHECK(xray_source_execute(program, &options, &result, NULL) == XR_SOURCE_OK && result);
+    xray_source_program_free(program); XrSourceEvent event;
+    CHECK(xray_source_result_event(result, &event) == XR_SOURCE_OK && event.state == XR_SOURCE_RUN_RETURNED);
+    CHECK(out.length == sizeof(expected)-1 && !memcmp(out.bytes, expected, sizeof(expected)-1));
+    int64_t code = -1; CHECK(xray_source_result_i64(result, &code) == XR_SOURCE_OK && code == 0);
+    xray_source_result_free(result);
+}
 static void typed_tasks(const char *stdlib) {
     char source[] =
         "fn w_i8()->i8{return -128}\nfn w_i16()->i16{return -32768}\n"
@@ -204,6 +233,6 @@ static void timer_waits(const char *stdlib) {
     CHECK(out.length == 3 && !memcmp(out.bytes, "43\n", 3)); xray_source_result_free(result);
 }
 int main(int argc, char **argv) {
-    CHECK(argc == 2); checked_program(argv[1]); detached_cancellation(argv[1]); owned_panic(argv[1]); typed_tasks(argv[1]); timer_waits(argv[1]); library_methods(argv[1]);
+    CHECK(argc == 2); checked_program(argv[1]); detached_cancellation(argv[1]); owned_panic(argv[1]); typed_tasks(argv[1]); timer_waits(argv[1]); library_methods(argv[1]); generic_initializers(argv[1]);
     puts("Installed public Source SDK: Checked io/time, detached cancellation and owned panic PASS"); return 0;
 }

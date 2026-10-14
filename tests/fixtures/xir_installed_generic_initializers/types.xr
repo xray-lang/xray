@@ -1,0 +1,11 @@
+export final class InstalledPacket<T> {
+    value:T
+    tail:Array<T>
+    init(value,tail:Array<T>=[]) { this.value=value; this.tail=tail }
+}
+export fn sdk_packet_make<T>(value:T)->InstalledPacket<T> { return InstalledPacket<T>(value) }
+export fn sdk_packet_tagged<T>(value:T,tail:Array<T>)->InstalledPacket<T> { return InstalledPacket<T>(value,tail) }
+export fn sdk_packet_copy(packet:InstalledPacket<string>)->string { return packet.value.toString() }
+export fn sdk_packet_number(packet:InstalledPacket<i64>)->i64 { return packet.value }
+export fn sdk_packet_count<T>(packet:InstalledPacket<T>)->i64 { return len(packet.tail) }
+export fn sdk_packet_first<T>(packet:InstalledPacket<T>)->T { return packet.tail[0] }

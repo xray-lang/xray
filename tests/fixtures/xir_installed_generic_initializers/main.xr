@@ -1,0 +1,8 @@
+import {sdk_packet_make,sdk_packet_tagged,sdk_packet_copy,sdk_packet_number,sdk_packet_count,sdk_packet_first} from "./state"
+const sdk_packet_text=sdk_packet_make<string>("A\0中😀")
+Output.writeStdout(sdk_packet_copy(sdk_packet_text))
+print(sdk_packet_count<string>(sdk_packet_text))
+var sdk_packet_original=[11,22]
+const sdk_packet_value=sdk_packet_tagged<i64>(7,sdk_packet_original)
+sdk_packet_original[0]=99
+print(sdk_packet_number(sdk_packet_value),sdk_packet_count<i64>(sdk_packet_value),sdk_packet_first<i64>(sdk_packet_value),sdk_packet_original[0])
