@@ -242,6 +242,18 @@
     {
       "path": "spec/source/sections/018-17-compilation-pipeline.md",
       "lf_sha256": "e7e24ccd33afa46f68a9daa9368e5d947194c1044a447527dcda173b0ab28b23"
+    },
+    {
+      "path": "tests/regression/11_coroutine/1149_module_call_stack_grow.xr",
+      "lf_sha256": "b1deea660566ad74c64c29594657e775d282ccb77d48cc66812653d84e58533f"
+    },
+    {
+      "path": "tests/regression/11_coroutine/1151_inject_queue_spill.xr",
+      "lf_sha256": "ae419ce6243abfe696843fbba0c8b1ac600a59417c442b266e65222b93709182"
+    },
+    {
+      "path": "tests/regression/11_coroutine/modules/big_stack.xr",
+      "lf_sha256": "defeaa1c1f02cdca57347ac809a6bf430a492c769f3105553b13dfb2721046c2"
     }
   ],
   "scope": "Whole original run-entry byte observations only. Original helper definitions, named test entries, complete FI/resources/physical/provider qualification remain separate.",

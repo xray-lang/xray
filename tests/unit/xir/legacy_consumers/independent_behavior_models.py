@@ -109,3 +109,28 @@ def expected_rows() -> list[dict]:
                        'expected': {'exit_code': 0, 'stdout_utf8': stdout, 'stderr_utf8': ''},
                        'model': reason, 'observation_count': len(values)})
     return result
+
+
+def named_expected_rows() -> list[dict]:
+    # Thirty wide locals, sixteen middle locals and ten worker locals remain
+    # live in the original source. Their sums give 56*seed+1464 independently.
+    worker = lambda seed: sum(seed + k for k in range(10)) + (
+        sum(seed + 9 + k for k in range(16)) + sum(seed + 24 + k for k in range(30)))
+    first = [worker(0), worker(100), worker(200)]
+    cases = {
+        '1149_module_call_stack_grow': {
+            'test_invoke_grows_combined_slab': first + [first[1] - first[0], first[2] - first[1]],
+            'test_invoke_main_coro': [worker(0)],
+            'test_repeated_go_reuses_slab': [worker(i) for i in range(32)],
+        },
+        '1151_inject_queue_spill': {'test_inject_queue_spill_chain': [2048]},
+    }
+    rows = []
+    for name, models in cases.items():
+        stdout = ''.join(str(value) + '\n' for values in models.values() for value in values)
+        rows.append({'id': 'independent_behavior_named_' + name,
+                     'expected': {'exit_code': 0, 'stdout_utf8': stdout, 'stderr_utf8': '',
+                                  'required_test_names': list(models),
+                                  'per_test_observations': {name: {'values': values} for name, values in models.items()}},
+                     'model': 'Independent local-range sums and complete depth-2048 go/await recurrence; all original named bodies and 32 repeated tasks remain.'})
+    return rows

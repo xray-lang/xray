@@ -36,8 +36,12 @@ def main() -> int:
     manifest_bytes = (HERE/'product_driver_cases.json').read_bytes()
     manifest = json.loads(manifest_bytes)
     oracle_bytes = (HERE/'oracles.json').read_bytes()
+    model_paths = [HERE/name for name in ('independent_scalar_models.py', 'independent_scalar_bindings.json',
+                                         'independent_behavior_models.py', 'independent_behavior_bindings.json')]
+    model_digests = {path.name:sha(path.read_bytes()) for path in model_paths}
     oracles = {row['id']:row for row in json.loads(oracle_bytes)['cases']}
-    for row in independent_scalar_models.expected_rows() + independent_behavior_models.expected_rows():
+    for row in (independent_scalar_models.expected_rows() + independent_behavior_models.expected_rows()
+                + independent_behavior_models.named_expected_rows()):
         if row['id'] in oracles:
             raise ValueError('independent scalar oracle identity collides with a preserved oracle')
         oracles[row['id']] = row
@@ -57,10 +61,10 @@ def main() -> int:
             'scope':'ACTUAL_PUBLIC_CLI_CONSUMERS_NOT_FULL_PRODUCT_QUALIFICATION',
             'binary':str(binary), 'binary_sha256':binary_digest, 'version':version,
             'manifest_sha256':sha(manifest_bytes), 'oracles_sha256':sha(oracle_bytes), 'selected_cases':len(cases),
-            'independent_scalar_model_sha256':sha((HERE/'independent_scalar_models.py').read_bytes()),
-            'independent_scalar_bindings_sha256':sha((HERE/'independent_scalar_bindings.json').read_bytes()),
-            'independent_behavior_model_sha256':sha((HERE/'independent_behavior_models.py').read_bytes()),
-            'independent_behavior_bindings_sha256':sha((HERE/'independent_behavior_bindings.json').read_bytes()),
+            'independent_scalar_model_sha256':model_digests['independent_scalar_models.py'],
+            'independent_scalar_bindings_sha256':model_digests['independent_scalar_bindings.json'],
+            'independent_behavior_model_sha256':model_digests['independent_behavior_models.py'],
+            'independent_behavior_bindings_sha256':model_digests['independent_behavior_bindings.json'],
             'evidence_directory':str(output),
             'cases':results, 'commands':records,
             'full_fi_lifetime_physical_sanitizer':'NOT_RUN', 'production_release':False,
@@ -103,7 +107,7 @@ def main() -> int:
             raise ValueError('binary does not declare the required real product routes')
         for case in cases:
             oracle = oracles[case['oracle_id']]
-            evidence = output/case['id']
+            evidence = output/('case-'+sha(case['id'].encode('utf-8'))[:16])
             evidence.mkdir()
             original = ROOT/case['source']
             source_bytes = original.read_bytes()
@@ -229,6 +233,8 @@ def main() -> int:
             print(case['id']+': '+json.dumps(row['routes']), flush=True)
         if sha(binary.read_bytes()) != binary_digest:
             raise ValueError('public executable changed while consumers ran')
+        if any(sha(path.read_bytes()) != model_digests[path.name] for path in model_paths):
+            raise ValueError('independent model inputs changed while consumers ran')
         print('Evidence: '+str(output), flush=True)
         return 0 if all(row['status']=='PASS_SCOPED_CONSUMER' for row in results) else 1
     finally:

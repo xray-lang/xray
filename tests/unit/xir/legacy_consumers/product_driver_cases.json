@@ -8047,6 +8047,307 @@
         "Actual compiler/native/runtime full FI, exact allocated/live/work, cancellation, ownership/borrow/lifetime/physical/safety/provider gates with every original bound.",
         "No scheduling, separate-object ABI, cycle reclamation, provider or production claim from byte parity."
       ]
+    },
+    {
+      "id": "independent_behavior_named_1149_module_call_stack_grow",
+      "oracle_id": "independent_behavior_named_1149_module_call_stack_grow",
+      "source": "tests/unit/xir/legacy_consumers/fixtures/independent_named_observations/1149_module_call_stack_grow/root.xr",
+      "source_lf_sha256": "96cc3f0c1438bf9e6571e1c025d1d6da9cff441a7e4a38a0c5a3da4c0ccdd9fa",
+      "entry": "test",
+      "stdout_utf8": "1464\n7064\n12664\n5600\n5600\n1464\n1464\n1520\n1576\n1632\n1688\n1744\n1800\n1856\n1912\n1968\n2024\n2080\n2136\n2192\n2248\n2304\n2360\n2416\n2472\n2528\n2584\n2640\n2696\n2752\n2808\n2864\n2920\n2976\n3032\n3088\n3144\n3200\n",
+      "stderr_utf8": "",
+      "companions": [
+        {
+          "path": "tests/unit/xir/legacy_consumers/fixtures/independent_named_observations/1149_module_call_stack_grow/modules/big_stack.xr",
+          "lf_sha256": "defeaa1c1f02cdca57347ac809a6bf430a492c769f3105553b13dfb2721046c2"
+        }
+      ],
+      "owners": [
+        "P02",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P13",
+        "P14"
+      ],
+      "independent_observations": {
+        "original_case": "tests/regression/11_coroutine/1149_module_call_stack_grow.xr",
+        "selected_complete_source": "tests/regression/11_coroutine/1149_module_call_stack_grow.xr",
+        "selected_source_lf_sha256": "b1deea660566ad74c64c29594657e775d282ccb77d48cc66812653d84e58533f",
+        "method": "Insert observations after original assertions; scalar locals are read without repeating the original computation. All three/one original bodies, 30/16/10 live locals, 32 repeated tasks and depth2048 remain.",
+        "values": [
+          {
+            "test": "test_invoke_grows_combined_slab",
+            "expression": "r1",
+            "expected": 1464,
+            "sequence_index": 0
+          },
+          {
+            "test": "test_invoke_grows_combined_slab",
+            "expression": "r2",
+            "expected": 7064,
+            "sequence_index": 1
+          },
+          {
+            "test": "test_invoke_grows_combined_slab",
+            "expression": "r3",
+            "expected": 12664,
+            "sequence_index": 2
+          },
+          {
+            "test": "test_invoke_grows_combined_slab",
+            "expression": "d12",
+            "expected": 5600,
+            "sequence_index": 3
+          },
+          {
+            "test": "test_invoke_grows_combined_slab",
+            "expression": "d23",
+            "expected": 5600,
+            "sequence_index": 4
+          },
+          {
+            "test": "test_invoke_main_coro",
+            "expression": "r",
+            "expected": 1464,
+            "sequence_index": 0
+          },
+          {
+            "test": "test_repeated_go_reuses_slab",
+            "expression": "r",
+            "expected": 1464,
+            "sequence_index": 0
+          },
+          {
+            "test": "test_repeated_go_reuses_slab",
+            "expression": "r",
+            "expected": 1520,
+            "sequence_index": 1
+          },
+          {
+            "test": "test_repeated_go_reuses_slab",
+            "expression": "r",
+            "expected": 1576,
+            "sequence_index": 2
+          },
+          {
+            "test": "test_repeated_go_reuses_slab",
+            "expression": "r",
+            "expected": 1632,
+            "sequence_index": 3
+          },
+          {
+            "test": "test_repeated_go_reuses_slab",
+            "expression": "r",
+            "expected": 1688,
+            "sequence_index": 4
+          },
+          {
+            "test": "test_repeated_go_reuses_slab",
+            "expression": "r",
+            "expected": 1744,
+            "sequence_index": 5
+          },
+          {
+            "test": "test_repeated_go_reuses_slab",
+            "expression": "r",
+            "expected": 1800,
+            "sequence_index": 6
+          },
+          {
+            "test": "test_repeated_go_reuses_slab",
+            "expression": "r",
+            "expected": 1856,
+            "sequence_index": 7
+          },
+          {
+            "test": "test_repeated_go_reuses_slab",
+            "expression": "r",
+            "expected": 1912,
+            "sequence_index": 8
+          },
+          {
+            "test": "test_repeated_go_reuses_slab",
+            "expression": "r",
+            "expected": 1968,
+            "sequence_index": 9
+          },
+          {
+            "test": "test_repeated_go_reuses_slab",
+            "expression": "r",
+            "expected": 2024,
+            "sequence_index": 10
+          },
+          {
+            "test": "test_repeated_go_reuses_slab",
+            "expression": "r",
+            "expected": 2080,
+            "sequence_index": 11
+          },
+          {
+            "test": "test_repeated_go_reuses_slab",
+            "expression": "r",
+            "expected": 2136,
+            "sequence_index": 12
+          },
+          {
+            "test": "test_repeated_go_reuses_slab",
+            "expression": "r",
+            "expected": 2192,
+            "sequence_index": 13
+          },
+          {
+            "test": "test_repeated_go_reuses_slab",
+            "expression": "r",
+            "expected": 2248,
+            "sequence_index": 14
+          },
+          {
+            "test": "test_repeated_go_reuses_slab",
+            "expression": "r",
+            "expected": 2304,
+            "sequence_index": 15
+          },
+          {
+            "test": "test_repeated_go_reuses_slab",
+            "expression": "r",
+            "expected": 2360,
+            "sequence_index": 16
+          },
+          {
+            "test": "test_repeated_go_reuses_slab",
+            "expression": "r",
+            "expected": 2416,
+            "sequence_index": 17
+          },
+          {
+            "test": "test_repeated_go_reuses_slab",
+            "expression": "r",
+            "expected": 2472,
+            "sequence_index": 18
+          },
+          {
+            "test": "test_repeated_go_reuses_slab",
+            "expression": "r",
+            "expected": 2528,
+            "sequence_index": 19
+          },
+          {
+            "test": "test_repeated_go_reuses_slab",
+            "expression": "r",
+            "expected": 2584,
+            "sequence_index": 20
+          },
+          {
+            "test": "test_repeated_go_reuses_slab",
+            "expression": "r",
+            "expected": 2640,
+            "sequence_index": 21
+          },
+          {
+            "test": "test_repeated_go_reuses_slab",
+            "expression": "r",
+            "expected": 2696,
+            "sequence_index": 22
+          },
+          {
+            "test": "test_repeated_go_reuses_slab",
+            "expression": "r",
+            "expected": 2752,
+            "sequence_index": 23
+          },
+          {
+            "test": "test_repeated_go_reuses_slab",
+            "expression": "r",
+            "expected": 2808,
+            "sequence_index": 24
+          },
+          {
+            "test": "test_repeated_go_reuses_slab",
+            "expression": "r",
+            "expected": 2864,
+            "sequence_index": 25
+          },
+          {
+            "test": "test_repeated_go_reuses_slab",
+            "expression": "r",
+            "expected": 2920,
+            "sequence_index": 26
+          },
+          {
+            "test": "test_repeated_go_reuses_slab",
+            "expression": "r",
+            "expected": 2976,
+            "sequence_index": 27
+          },
+          {
+            "test": "test_repeated_go_reuses_slab",
+            "expression": "r",
+            "expected": 3032,
+            "sequence_index": 28
+          },
+          {
+            "test": "test_repeated_go_reuses_slab",
+            "expression": "r",
+            "expected": 3088,
+            "sequence_index": 29
+          },
+          {
+            "test": "test_repeated_go_reuses_slab",
+            "expression": "r",
+            "expected": 3144,
+            "sequence_index": 30
+          },
+          {
+            "test": "test_repeated_go_reuses_slab",
+            "expression": "r",
+            "expected": 3200,
+            "sequence_index": 31
+          }
+        ]
+      },
+      "remaining_gates": [
+        "Real complete named discovery and independent VM/native observations.",
+        "Complete per-consumer runtime/compiler/native FI, exact resources, cancellation, ownership/lifetime/physical and sanitizer/provider matrix."
+      ]
+    },
+    {
+      "id": "independent_behavior_named_1151_inject_queue_spill",
+      "oracle_id": "independent_behavior_named_1151_inject_queue_spill",
+      "source": "tests/unit/xir/legacy_consumers/fixtures/independent_named_observations/1151_inject_queue_spill/root.xr",
+      "source_lf_sha256": "112beecfb6a2f48edd1284b9145c467388ea9b2fd4596232086d31322ea010a2",
+      "entry": "test",
+      "stdout_utf8": "2048\n",
+      "stderr_utf8": "",
+      "companions": [],
+      "owners": [
+        "P02",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P13",
+        "P14"
+      ],
+      "independent_observations": {
+        "original_case": "tests/regression/11_coroutine/1151_inject_queue_spill.xr",
+        "selected_complete_source": "tests/regression/11_coroutine/1151_inject_queue_spill.xr",
+        "selected_source_lf_sha256": "ae419ce6243abfe696843fbba0c8b1ac600a59417c442b266e65222b93709182",
+        "method": "Insert observations after original assertions; scalar locals are read without repeating the original computation. All three/one original bodies, 30/16/10 live locals, 32 repeated tasks and depth2048 remain.",
+        "values": [
+          {
+            "test": "test_inject_queue_spill_chain",
+            "expression": "result",
+            "expected": 2048,
+            "sequence_index": 0
+          }
+        ]
+      },
+      "remaining_gates": [
+        "Real complete named discovery and independent VM/native observations.",
+        "Complete per-consumer runtime/compiler/native FI, exact resources, cancellation, ownership/lifetime/physical and sanitizer/provider matrix."
+      ]
     }
   ]
 }
