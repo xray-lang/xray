@@ -158,7 +158,9 @@ def main() -> int:
             if case['entry'] == 'test':
                 # Native projection invokes the same complete bodies in order;
                 # real CLI test discovery is checked independently before that.
-                report = evidence/'test-report.json'
+                # The report writer uses the Windows narrow FILE interface.
+                # Avoid repeating a long consumer identity in its absolute path.
+                report = output/(sha(case['id'].encode('utf-8'))[:16]+'-test-report.json')
                 run = invoke(case['id']+'-test', [str(binary),'test','--quiet','--jobs','1',
                                                 '--report',str(report),str(target)])
                 names = oracle['expected']['required_test_names']
