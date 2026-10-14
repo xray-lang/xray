@@ -74,8 +74,8 @@ static XrXirStatus conditional_invocation_runtime_direct(const XrXirCompileConte
             child.target==2 && child.parent==selected.node);
         if (mode==1) {
             const EffectInvocationCertificate *certificate=effects->invocations;
-            const EffectInvocationNode *node=&certificate->equations->nodes[selected.node];
-            uint32_t opaque=certificate->equations->site_count+
+            const EffectInvocationNode *node=&certificate->final->nodes[selected.node];
+            uint32_t opaque=certificate->final->site_count+
                 certificate->body->functions[node->root].parameter_count;
             CHECK(certificate->parameter_kinds[1][0]==XR_XIR_EFFECT_PARAMETER_FIXED &&
                 certificate->declared->functions[1].count &&

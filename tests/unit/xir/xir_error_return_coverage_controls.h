@@ -97,9 +97,9 @@ static void er_golden(const XrXirEffects *effects,unsigned mode) {
     CHECK(!xr_xir_effects_error(effects,1,(XrXirType)EE_ENUM,0));
     CHECK(xr_xir_effects_error(effects,1,(XrXirType)EE_ENUM,1)==(mode==1 || mode==2));
     CHECK(effects->task_errors[1]==(mode==3 || mode==5?XR_XIR_BAD_TYPE:XR_XIR_OK));
-    CHECK(effects->invocations && effects->invocations->equations);
-    const EffectInvocationOwner *owner=effects->invocations->equations;
-    CHECK(owner->producer_enabled && !owner->work && !owner->body.read.owner && !owner->graph);
+    CHECK(effects->invocations && effects->invocations->final);
+    const EffectInvocationFinal *owner=effects->invocations->final;
+    CHECK(owner->site_count);
     CHECK((owner->nodes[owner->roots[4]].return_coverage!=0)==(mode!=3 && mode!=5));
     /* Coverage must not erase the original opaque NONE advertisement. */
     CHECK(effects->contracts[1].formula.constant_mask==0);

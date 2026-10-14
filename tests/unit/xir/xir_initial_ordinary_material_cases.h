@@ -47,7 +47,7 @@ static XrXirStatus initial_ordinary_owner(const XrXirCompileContext *context,
         CHECK(dense->cells==initial->cells && dense->physical==initial->physical);
         forest=owner->forest;owner->forest=NULL;
         XrXirEffects *summary=&owner->dense->uses;
-        const EffectInvocationResult *borrowed=forest->invocations->result;
+        const EffectFinalFunctions *borrowed=(&forest->invocations->final->summary);
         CHECK(!summary->invocations && summary->result_borrow==borrowed &&
             summary->formula_terminals==borrowed->witnesses &&
             summary->constant_witnesses==borrowed->witnesses+(size_t)borrowed->count*2);
@@ -243,8 +243,8 @@ static void initial_ordinary_refresh_controls(void) {
     if (status!=XR_XIR_OK) fprintf(stderr,"INITIAL_REFRESH_EFFECTS status=%u\n",(unsigned)status);
     CHECK(status==XR_XIR_OK && effects);
     CHECK(effects->contexts && !effects->refinement &&
-        effects->result_borrow==effects->invocations->result &&
-        effects->contexts->dense->uses.result_borrow==effects->contexts->forest->invocations->result);
+        effects->result_borrow==(&effects->invocations->final->summary) &&
+        effects->contexts->dense->uses.result_borrow==(&effects->contexts->forest->invocations->final->summary));
     CHECK(effects->invocations && !effects->invocations->body->backbone);
     EffectInvocationCertificate *certificate=effects->invocations,saved_certificate=*certificate;
     EffectBodyMaterial *initial=certificate->body;uint32_t sites[2]={0};
@@ -272,8 +272,8 @@ static void initial_ordinary_refresh_controls(void) {
         XrXirStatus expected=restored?XR_XIR_OK:XR_XIR_BAD_STRUCTURE;
         CHECK(effect_body_source_match(&context,initial,&current)==expected);
         CHECK(xir_effects_context_refresh(&context,&current,effects)==XR_XIR_OK);
-        CHECK(effects->invocations==certificate && effects->result_borrow==certificate->result &&
-            effects->contexts->dense->uses.result_borrow==effects->contexts->forest->invocations->result &&
+        CHECK(effects->invocations==certificate && effects->result_borrow==(&certificate->final->summary) &&
+            effects->contexts->dense->uses.result_borrow==(&effects->contexts->forest->invocations->final->summary) &&
             !memcmp(certificate,&saved_certificate,sizeof(saved_certificate)) &&
             !memcmp(initial,&saved,sizeof(saved)) && !initial->backbone && !initial->overlay);
         EffectBodyMaterial *fresh=effects->contexts->ordinary->uses.generation;

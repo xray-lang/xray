@@ -1,0 +1,2 @@
+interface Mapper { map<U:Sendable>(value:U)->U }
+fn unused<T:Mapper,U>(receiver:T,value:U)->U{return receiver.map<U>(value)}

@@ -27,7 +27,7 @@
 typedef struct EffectContextOwner EffectContextOwner;
 typedef struct EffectRefinementBounds EffectRefinementBounds;
 typedef struct EffectInvocationCertificate EffectInvocationCertificate;
-typedef struct EffectInvocationResult EffectInvocationResult;
+typedef struct EffectFinalFunctions EffectFinalFunctions;
 typedef struct EffectInvocationDeclaredBounds EffectInvocationDeclaredBounds;
 typedef struct EffectOrdinaryContexts EffectOrdinaryContexts;
 static void effect_invocation_certificate_free(EffectInvocationCertificate *certificate);
@@ -63,7 +63,7 @@ struct XrXirEffects {
     EffectInvocationCertificate *invocations;
     /* Destruction provenance survives transfer of the certificate to a
      * forest. This borrowed storage identity grants no permission. */
-    const EffectInvocationResult *result_borrow;
+    const EffectFinalFunctions *result_borrow;
     /* Construction-only owner; seal transfers this same generation. */
     struct EffectBodyMaterial *generation;
 };

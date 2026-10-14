@@ -16,7 +16,7 @@ static XrXirStatus effect_runtime_work(const XirEffectRuntimeRead *read,uint64_t
 
 static XrXirStatus effect_runtime_basis(const EffectInvocationCertificate *certificate,
     uint32_t root,EffectInvocationBasis *output,const XirEffectRuntimeRead *read) {
-    const EffectInvocationOwner *owner=certificate->equations;
+    const EffectInvocationFinal *owner=certificate->final;
     if (root>=effect_body_count(certificate->body)) return XR_XIR_BAD_STRUCTURE;
     uint32_t p=certificate->body->functions[root].parameter_count;
     uint64_t fn_bits=(uint64_t)owner->site_count+p+3,cell_bits=(uint64_t)p+3;
@@ -34,8 +34,8 @@ static XrXirStatus effect_runtime_basis(const EffectInvocationCertificate *certi
  * A symbolic parameter, deferred frontier or true unknown keeps the gate shut. */
 static XrXirStatus effect_runtime_closed(const EffectInvocationCertificate *certificate,
     uint32_t selected,const XirEffectRuntimeRead *read) {
-    const EffectInvocationOwner *owner=certificate->equations;
-    if (selected>=owner->count || owner->pending) return XR_XIR_BAD_STRUCTURE;
+    const EffectInvocationFinal *owner=certificate->final;
+    if (selected>=owner->count) return XR_XIR_BAD_STRUCTURE;
     const EffectInvocationNode *node=&owner->nodes[selected];
     if (node->body>=effect_body_count(certificate->body) || node->root>=effect_body_count(certificate->body) ||
         !node->expanded || node->queued || !node->causes ||
@@ -57,7 +57,7 @@ static XrXirStatus effect_runtime_closed(const EffectInvocationCertificate *cert
 
 static XrXirStatus effect_runtime_parent(const EffectInvocationCertificate *certificate,
     const XirEffectInvocationRequest *request,uint32_t *output) {
-    const EffectInvocationOwner *owner=certificate->equations;
+    const EffectInvocationFinal *owner=certificate->final;
     if (request->caller>=effect_body_count(certificate->body) || !owner->roots || !owner->root_spaces)
         return XR_XIR_BAD_STRUCTURE;
     uint32_t parent=request->contextual?request->node:owner->roots[request->caller];
@@ -87,7 +87,7 @@ static XrXirStatus effect_runtime_original_none(const EffectInvocationCertificat
     const EffectInvocationDeclaredBounds *bounds=certificate->declared;
     uint32_t source_function=request->caller,source_instruction=request->instruction;
     if(parameter<request->captures) {
-        const EffectInvocationOwner *owner=certificate->equations;
+        const EffectInvocationFinal *owner=certificate->final;
         if(request->producer>=owner->site_count) return XR_XIR_BAD_STRUCTURE;
         const EffectInvocationSite *site=&owner->sites[request->producer];
         if(site->target!=request->target || site->captures!=request->captures ||
@@ -148,7 +148,7 @@ typedef struct EffectRuntimeFunctionRow {
  * or a smaller mask selected from one captured environment. */
 static XrXirStatus effect_runtime_function_word(const EffectInvocationCertificate *certificate,
     const EffectRuntimeFunctionRow *row,uint32_t word,uint64_t *output) {
-    const EffectInvocationOwner *owner=certificate->equations;
+    const EffectInvocationFinal *owner=certificate->final;
     const EffectInvocationSite *site=&owner->sites[row->producer];
     const EffectInvocationBasis *basis=row->basis;
     if (site->target>=effect_body_count(certificate->body) || site->binding>owner->binding_count ||
@@ -190,7 +190,7 @@ static XrXirStatus effect_runtime_class(const EffectInvocationCertificate *certi
     uint32_t parameter,uint32_t *output) {
     if (!output || !request->read.class_value || parameter<request->captures ||
         parameter>=request->count) return XR_XIR_BAD_TYPE;
-    const EffectInvocationOwner *owner=certificate->equations;
+    const EffectInvocationFinal *owner=certificate->final;
     uint32_t parent=request->contextual?request->node:owner->roots[request->caller];
     if (parent>=owner->count || owner->nodes[parent].body!=request->caller ||
         owner->nodes[parent].root!=node->root) return XR_XIR_BAD_STRUCTURE;
@@ -243,13 +243,13 @@ static XrXirStatus effect_runtime_inputs(const EffectInvocationCertificate *cert
     bool same=true;
     for (uint32_t p=0;p<node->parameter_count && status==XR_XIR_OK;++p) {
         bool callable=xr_xir_callable_signature(&certificate->terms.types,target->parameters[p])!=NULL;
-        uint32_t producer=UINT32_MAX,opaque=certificate->equations->site_count+basis.parameters;
+        uint32_t producer=UINT32_MAX,opaque=certificate->final->site_count+basis.parameters;
         bool original_none=false;
         if (callable) {
             if (!request->read.function) return XR_XIR_BAD_TYPE;
             status=request->read.function(request->read.owner,p,&producer);
             if (status!=XR_XIR_OK) return status;
-            const EffectInvocationOwner *owner=certificate->equations;
+            const EffectInvocationFinal *owner=certificate->final;
             if (producer>=owner->site_count) return XR_XIR_BAD_TYPE;
             const uint64_t *row=node->input+(size_t)p*basis.row_words;
             if (row[opaque/64]&(UINT64_C(1)<<(opaque%64))) {
@@ -303,9 +303,9 @@ XR_FUNC XrXirStatus xir_effects_execution_edge(const XrXirEffects *effects,
     if (!effects || !effects->invocations || !request || !request->read.work || !request->read.cell ||
         !output) return XR_XIR_BAD_STRUCTURE;
     const EffectInvocationCertificate *certificate=effects->invocations;
-    const EffectInvocationOwner *owner=certificate->equations;
+    const EffectInvocationFinal *owner=certificate->final;
     if (!effect_body_material_shape(certificate->body) ||
-        certificate->body->resources!=certificate->resources || !owner || owner->work || owner->graph || (!certificate->projection_atoms || !certificate->result) ||
+        certificate->body->resources!=certificate->resources || !owner || (!certificate->final) ||
         (owner->count && !owner->nodes) || (owner->edge_count && !owner->edges) ||
         (owner->site_count && !owner->sites) ||
         (effect_body_count(certificate->body) && !certificate->body->functions) ||
