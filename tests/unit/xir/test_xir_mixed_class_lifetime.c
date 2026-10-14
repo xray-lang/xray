@@ -68,7 +68,7 @@ static void class_lifetime_fields(const XrXirValue *value, XrXirValue *text) {
     const char *bytes = NULL; size_t length = 0;
     CHECK(xr_xir_string_view(text, &bytes, &length) && length == 10 && !memcmp(bytes, "held-class", 10));
 }
-int main(int argc, char **argv) {
+static int class_lifetime_normal_main(int argc, char **argv) {
     CHECK(argc == 2); unsigned backend = 0;
     while (backend < 4 && strcmp(argv[1], class_backends[backend])) ++backend;
     CHECK(backend < 4);
@@ -108,3 +108,6 @@ int main(int argc, char **argv) {
     printf("Class lifetime backend=%s two Instances two rounds, class40/held-class survives all executable owners, late alias and strings readable, code lease1 before data drop, physical0/0\n", class_backends[backend]);
     return 0;
 }
+#ifndef XR_CLASS_LIFETIME_RESOURCE_MAIN
+int main(int argc, char **argv) { return class_lifetime_normal_main(argc, argv); }
+#endif
