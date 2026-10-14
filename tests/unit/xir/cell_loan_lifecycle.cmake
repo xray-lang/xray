@@ -12,3 +12,5 @@ foreach(mode IN ITEMS normal fi axes prepare)
     set_tests_properties(test_xir_cell_loan_lifecycle_runtime_${mode} PROPERTIES
         LABELS "unit;xir;ownership;source;lifecycle;resources" TIMEOUT 120)
 endforeach()
+
+include(${CMAKE_CURRENT_LIST_DIR}/cell_lifecycle_native.cmake)
