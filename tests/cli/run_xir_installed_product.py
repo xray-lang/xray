@@ -105,12 +105,18 @@ def main():
         source = program/'main.xr'
         source.write_text(source.read_text(encoding='utf-8') +
             '\nimport time as Clock\nconst initial=Clock.nanos()\nClock.sleep(1)\n'
-            'print(Clock.nanos()-initial>=1000000)\n', encoding='utf-8')
+            'print(Clock.nanos()-initial>=1000000)\n' +
+            (root/'tests/fixtures/xir_installed_library_methods/main.xr').read_text(encoding='utf-8'), encoding='utf-8')
         relocated = output/'relocated'
         assert prefixes['full'].resolve().is_relative_to(output) and relocated.resolve().is_relative_to(output)
         prefixes['full'].rename(relocated)
         assert not prefixes['full'].exists()
-        expected_stdout, expected_stderr = b'A\0B41 42 42 true true 1.5\ntrue\n', b'E\0R'
+        library_stdout = (b'42 -42 -0x2a 7 -42 42.0\n'
+            b'true 9223372036854775807 -9223372036854775808 true\n'
+            b'1 63 0 72057594037927936 2 2\n'
+            b'2.5 -2 -3 -2 -3 false -2.5 true false 65 A\n'
+            b'A\0B A\0BA\0B true true true 2 5\n')
+        expected_stdout, expected_stderr = b'A\0B41 42 42 true true 1.5\ntrue\n'+library_stdout, b'E\0R'
         for name, prefix in (('core', prefixes['core']), ('relocated', relocated)):
             binary = prefix/'bin/xray.exe'
             version, errors = run(name+'-version', [binary, '--version', '--json'])
@@ -120,13 +126,20 @@ def main():
             time_source = prefix/'lib/xray/stdlib/time/time.xr'
             original = output_source.read_bytes()
             original_time = time_source.read_bytes()
+            type_sources = {prefix/('lib/xray/stdlib/types/'+name+'.xr'):
+                (prefix/('lib/xray/stdlib/types/'+name+'.xr')).read_bytes()
+                for name in ('i64', 'f64', 'bool', 'rune', 'string')}
             for scenario in ('source-absent', 'source-poisoned'):
                 if scenario == 'source-absent':
                     output_source.unlink()
                     time_source.unlink()
+                    for path in type_sources:
+                        path.unlink()
                 else:
                     output_source.write_bytes(b'invalid Xray; Checked input must own this declaration\n')
                     time_source.write_bytes(b'invalid time source; Checked input must own the clock closure\n')
+                    for path in type_sources:
+                        path.write_bytes(b'invalid native type source must not grant library operations\n')
                 out, err = run(name+'-'+scenario+'-vm', [binary, 'run', source])
                 assert (out, err) == (expected_stdout, expected_stderr)
                 generated = output/(name+'-'+scenario+'.c')
@@ -144,6 +157,8 @@ def main():
                 assert (prefix/checked_relative/'stdlib-manifest.json').read_bytes() == publication
             output_source.write_bytes(original)
             time_source.write_bytes(original_time)
+            for path, data in type_sources.items():
+                path.write_bytes(data)
             sentinel = output/(name+'-preserved.exe')
             sentinel.write_bytes(b'existing executable publication')
             invalid_env = dict(environment, XRAY_STDLIB_PATH=str(output/'missing-stdlib'))

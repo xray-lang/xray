@@ -1,0 +1,11 @@
+var library_integer:i64=-42
+print(library_integer.abs(),library_integer.toString(),library_integer.toHex(),library_integer.max(7),library_integer.min(7),42.toF64())
+var library_max:i64=9223372036854775807
+print(library_max.checkedAdd(1)==null,library_max.saturatingAdd(1),library_max.wrappingAdd(1),library_max.addOverflows(1))
+var library_bits:i64=1
+print(library_bits.popcount(),library_bits.leadingZeros(),library_bits.trailingZeros(),library_bits.byteswap(),library_bits.rotateLeft(65),library_bits.rotateRight(-1))
+var library_float:f64=-2.5
+print(library_float.abs(),library_float.toI64(),library_float.floor(),library_float.ceil(),library_float.round(),library_float.isNaN(),library_float.toString(),true.toString(),false.toString(),rune(65).toUInt32(),rune(65).toString())
+var library_text:string="A\0B"
+var library_repeated:string=library_text.repeat(2)
+print(library_text.toString(),library_repeated,library_repeated.contains("\0B"),library_repeated.startsWith("A"),library_repeated.endsWith("B"),library_repeated.indexOf("B"),library_repeated.lastIndexOf("B"))

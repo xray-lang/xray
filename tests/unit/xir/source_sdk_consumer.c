@@ -96,6 +96,37 @@ static void owned_panic(const char *stdlib) {
     CHECK(xray_source_result_bytes(result, &bytes, &length) == XR_SOURCE_OK);
     CHECK(length == 6 && !memcmp(bytes, "p\0\xe4\xb8\xad" "z", 6)); xray_source_result_free(result);
 }
+static void library_methods(const char *stdlib) {
+    char source[] =
+        "var library_integer:i64=-42\nprint(library_integer.abs(),library_integer.toString"
+        "(),library_integer.toHex(),library_integer.max(7),library_integer.min(7),42.toF6"
+        "4())\nvar library_max:i64=9223372036854775807\nprint(library_max.checkedAdd(1)==nu"
+        "ll,library_max.saturatingAdd(1),library_max.wrappingAdd(1),library_max.addOverfl"
+        "ows(1))\nvar library_bits:i64=1\nprint(library_bits.popcount(),library_bits.leadin"
+        "gZeros(),library_bits.trailingZeros(),library_bits.byteswap(),library_bits.rotat"
+        "eLeft(65),library_bits.rotateRight(-1))\nvar library_float:f64=-2.5\nprint(library"
+        "_float.abs(),library_float.toI64(),library_float.floor(),library_float.ceil(),li"
+        "brary_float.round(),library_float.isNaN(),library_float.toString(),true.toString"
+        "(),false.toString(),rune(65).toUInt32(),rune(65).toString())\nvar library_text:st"
+        "ring=\"A\\0B\"\nvar library_repeated:string=library_text.repeat(2)\nprint(library_tex"
+        "t.toString(),library_repeated,library_repeated.contains(\"\\0B\"),library_repeated."
+        "startsWith(\"A\"),library_repeated.endsWith(\"B\"),library_repeated.indexOf(\"B\"),lib"
+        "rary_repeated.lastIndexOf(\"B\"))\n";
+    const char expected[] =
+        "42 -42 -0x2a 7 -42 42.0\ntrue 9223372036854775807 -9223372036854775808 true\n1 63 "
+        "0 72057594037927936 2 2\n2.5 -2 -3 -2 -3 false -2.5 true false 65 A\nA\0B A\0BA\0B tr"
+        "ue true true 2 5\n";
+    XrSourceCompiler *compiler = compiler_new(stdlib);
+    XrSourceProgram *program = compile(compiler, source); xray_source_compiler_free(compiler);
+    Output out = {0}; XrSourceCallOptions options;
+    CHECK(xray_source_call_options_init(&options, sizeof(options)) == XR_SOURCE_OK);
+    options.write = capture; options.context = &out;
+    XrSourceResult *result = NULL; CHECK(xray_source_execute(program, &options, &result, NULL) == XR_SOURCE_OK && result);
+    xray_source_program_free(program); XrSourceEvent event;
+    CHECK(xray_source_result_event(result, &event) == XR_SOURCE_OK && event.state == XR_SOURCE_RUN_RETURNED);
+    CHECK(out.length == sizeof(expected) - 1 && !memcmp(out.bytes, expected, sizeof(expected) - 1));
+    xray_source_result_free(result);
+}
 static void typed_tasks(const char *stdlib) {
     char source[] =
         "fn w_i8()->i8{return -128}\nfn w_i16()->i16{return -32768}\n"
@@ -173,6 +204,6 @@ static void timer_waits(const char *stdlib) {
     CHECK(out.length == 3 && !memcmp(out.bytes, "43\n", 3)); xray_source_result_free(result);
 }
 int main(int argc, char **argv) {
-    CHECK(argc == 2); checked_program(argv[1]); detached_cancellation(argv[1]); owned_panic(argv[1]); typed_tasks(argv[1]); timer_waits(argv[1]);
+    CHECK(argc == 2); checked_program(argv[1]); detached_cancellation(argv[1]); owned_panic(argv[1]); typed_tasks(argv[1]); timer_waits(argv[1]); library_methods(argv[1]);
     puts("Installed public Source SDK: Checked io/time, detached cancellation and owned panic PASS"); return 0;
 }
