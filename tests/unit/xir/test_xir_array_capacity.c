@@ -87,7 +87,10 @@ int main(int argc,char **argv) {
     unsigned mode=argc>1?(unsigned)strtoul(argv[1],NULL,10):0;
     const char *emit=argc==3?argv[2]:NULL;
     CapacityCompile run=capacity_build(SIZE_MAX,capacity_limits(),mode,emit);
-    if(run.status!=XR_XIR_OK)fprintf(stderr,"capacity build status%u stage%u sites%zu\n",run.status,run.stage,run.sites);
+    if(run.status!=XR_XIR_OK)fprintf(stderr,
+        "capacity build status%u stage%u sites%zu allocated%llu peak%llu work%llu\n",
+        run.status,run.stage,run.sites,(unsigned long long)run.stats.allocated_bytes,
+        (unsigned long long)run.stats.peak_bytes,(unsigned long long)run.stats.work);
     CHECK(run.status==XR_XIR_OK);
     if(!emit){capacity_goldens(&run);if(!mode)capacity_vm_paths(&run);capacity_escape(&run);}
     printf("capacity baseline mode%u sites%zu allocated%llu peak%llu work%llu\n",mode,run.sites,
