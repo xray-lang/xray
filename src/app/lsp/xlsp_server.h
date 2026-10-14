@@ -32,7 +32,7 @@ typedef struct XrLspServer XrLspServer;
 typedef struct AstNode AstNode;
 typedef struct XaAnalyzer XaAnalyzer;
 typedef struct XrModuleGraph XrModuleGraph;
-typedef struct XrCliGraphAuthority XrCliGraphAuthority;
+typedef struct XrSourceAuthority XrSourceAuthority;
 
 // Document in the workspace
 struct XrLspDocument {
@@ -216,7 +216,7 @@ struct XrLspServer {
     // Exact module graph for the most recently parsed document.  The analyzer
     // borrows the graph; the authority must therefore remain alive with it.
     XrModuleGraph *module_graph;
-    XrCliGraphAuthority *module_graph_authority;
+    XrSourceAuthority *module_graph_authority;
 
     // Server state — the LSP lifecycle is a strict state machine:
     //   (pre-init) -> initialized -> shutdown_received -> exit_received

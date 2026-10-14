@@ -12,7 +12,7 @@
 #include "xlsp_source_workspace.h"
 #include "xlsp_source_syntax.h"
 #include <limits.h>
-#include "../cli/xcli_canonical_source.h"
+#include "../../api/xsource_compile.h"
 #include "xlsp_cycle_report.h"
 #include "xlsp_analysis.h"
 #include "xlsp_ast_utils.h"
@@ -438,7 +438,7 @@ static void document_commit_owner(XrLspDocument *doc,XlspSourceOpen *fresh) {
 XrLspDocument *xlsp_document_open(XrLspServer *server,const XlspSourceDocument *input) {
     if(!server||!server->doc_table||!input||!input->uri||!input->text||
         input->uri_length==SIZE_MAX)return NULL;
-    XrCompileResourceLimits limits=xr_cli_compile_default_resource_limits();
+    XrCompileResourceLimits limits=xr_source_compile_default_resource_limits();
     XrCompileResources *resources=NULL;XlspSourceOpen *fresh=NULL;XrLspDocument *doc=NULL;
     XlspDocumentInsertion insertion={0};
     XrCompileResourceStatus created=xr_compile_resources_new(&limits,&resources);
@@ -459,7 +459,7 @@ done:
 }
 XrXirStatus xlsp_document_apply_changes(XrLspDocument *doc,const XrJsonValue *changes,int version) {
     if(!doc||!doc->server||!doc->content||!doc->uri)return XR_XIR_BAD_STRUCTURE;
-    XrCompileResourceLimits limits=xr_cli_compile_default_resource_limits();
+    XrCompileResourceLimits limits=xr_source_compile_default_resource_limits();
     XrCompileResources *resources=NULL;XlspSourceBuffer *buffer=NULL;XlspSourceOpen *fresh=NULL;
     XrCompileResourceStatus created=xr_compile_resources_new(&limits,&resources);
     if(created!=XR_COMPILE_RESOURCE_OK)return created==XR_COMPILE_RESOURCE_BUDGET?XR_XIR_BUDGET:XR_XIR_OUT_OF_MEMORY;

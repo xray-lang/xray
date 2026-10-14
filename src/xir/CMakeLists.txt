@@ -76,7 +76,7 @@ include("${CMAKE_CURRENT_LIST_DIR}/stdlib_checked.cmake")
 
 # Server query owner uses the actual CLI stdlib/Catalog/authority kernel.
 add_library(xray_lsp_source_workspace STATIC ../app/lsp/xlsp_source_workspace.c)
-target_link_libraries(xray_lsp_source_workspace PUBLIC xray_lsp_source_query xray_cli_source)
+target_link_libraries(xray_lsp_source_workspace PUBLIC xray_lsp_source_query xray_source_compile)
 target_compile_features(xray_lsp_source_workspace PUBLIC c_std_11)
 if(MSVC)
     target_compile_options(xray_lsp_source_workspace PRIVATE /W4 /WX /utf-8)

@@ -7,7 +7,7 @@
  * xcmd_fmt.c - Owned syntax formatting and atomic file publication
  */
 #include "xcli.h"
-#include "xcli_canonical_source.h"
+#include "../../api/xsource_compile.h"
 #include "../../base/xfileio.h"
 #include "../../base/xio_policy.inc.h"
 #include "../../frontend/format/xfmt.h"
@@ -249,7 +249,7 @@ XR_FUNC int cmd_fmt(const XrCliInvocation *inv) {
 
 
     FmtWork work={0}; work.config=config; work.check_only=check_only; work.verbose=verbose;
-    XrCompileResourceLimits limits=xr_cli_compile_default_resource_limits();
+    XrCompileResourceLimits limits=xr_source_compile_default_resource_limits();
     XrCompileResourceStatus status=xr_compile_resources_new(&limits,&work.resources);
     if(!fmt_resource(&work,status,"request")) return work.result;
     work.policy=xr_compile_io_policy(work.resources);

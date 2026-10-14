@@ -66,6 +66,13 @@ typedef struct XrXirSourceProductDiagnostic {
  * any complete query snapshot retained after a later projection failure. */
 XR_FUNC XrXirStatus xr_xir_compile_source_product_build(const XrXirSourceProductRequest *request,
     XrXirSourceProduct **output,XrXirSourceProductDiagnostic *diagnostic);
+/* Explicit text has exactly the source_check_text authority/path contract.
+ * The buffer and all request fields are borrowed synchronously. No file is
+ * created or read for the entry. Successful products own the same Checked,
+ * specialization, Lowered, queries and transferable Program as file products.
+ * Failure preserves output and owns any published diagnostic path/snapshot. */
+XR_FUNC XrXirStatus xr_xir_compile_source_product_build_text(const XrXirSourceProductRequest *request,
+    const XrXirSourceText *text, XrXirSourceProduct **output, XrXirSourceProductDiagnostic *diagnostic);
 XR_FUNC void xr_xir_compile_source_product_free(XrXirSourceProduct *product);
 XR_FUNC void xr_xir_compile_source_product_diagnostic_free(XrXirSourceProductDiagnostic *diagnostic);
 /* Public execution admission reads the owner's authentic Program root and all
