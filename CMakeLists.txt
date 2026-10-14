@@ -2576,6 +2576,7 @@ endif()
 # MCP consumes owned Source/Program/HostCall through one service library.
 if(XR_BUILD_MCP)
     include(src/app/mcp/mcp.cmake)
+    list(APPEND XRAY_CLI_SOURCES ${XRAY_CLI_ROOT}/xcmd_mcp_server.c)
     list(APPEND XRAY_CLI_INCLUDES ${CMAKE_CURRENT_SOURCE_DIR}/src/app/mcp)
 
     add_compile_definitions(XR_HAS_MCP=1)
@@ -2640,6 +2641,10 @@ target_link_libraries(xray PRIVATE xray_source_compile xray_xir_runtime_host xra
 if(WIN32)
     target_link_libraries(xray PRIVATE xray_xir_native_admission xray_xir_local_toolchain
         xray_xir_publication xray_toolchain_dependencies)
+endif()
+
+if(XR_BUILD_MCP)
+    target_link_libraries(xray PRIVATE xray_mcp)
 endif()
 
 target_include_directories(xray PRIVATE ${XRAY_CLI_INCLUDES})

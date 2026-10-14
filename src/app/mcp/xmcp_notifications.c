@@ -9,6 +9,7 @@
  * KEY CONCEPT:
  *   Notifications use the server transport without any compiler or VM state.
  */
+#include "xmcp_json.h"
 #include "xmcp_protocol.h"
 #include "xmcp_server.h"
 #include "../../base/xjson.h"
@@ -18,22 +19,25 @@
 XR_FUNC void xmcp_send_notification(XmcpServer *server, const char *method, XrJsonValue *params) {
     XR_DCHECK(server != NULL, "xmcp_send_notification: NULL server");
     XR_DCHECK(method != NULL, "xmcp_send_notification: NULL method");
-    if (server->lifecycle_state != XMCP_LIFECYCLE_READY)
-        return;
+    if (server->lifecycle_state != XMCP_LIFECYCLE_READY) { xjson_free(params); return; }
 
     XrJsonValue *msg = xjson_new_object();
-    XJSON_SET_STRING(msg, "jsonrpc", "2.0");
-    XJSON_SET_STRING(msg, "method", method);
+    XMCP_JSON_STRING(msg, "jsonrpc", "2.0");
+    XMCP_JSON_STRING(msg, "method", method);
     if (params) {
-        xjson_object_set(msg, "params", params);
+        xmcp_json_set(msg, "params", params);
     }
 
+    msg = xmcp_json_finish(msg);
+    if (!msg) { server->failed = true; server->shutdown = 1; return; }
     size_t len = 0;
     char *json = xjson_stringify(msg, &len);
     if (json) {
-        xmcp_stdio_write_message(&server->transport, json, len);
+        if (!xmcp_stdio_write_message(&server->transport, json, len)) {
+            server->failed = true; server->shutdown = 1;
+        }
         xr_free(json);
-    }
+    } else { server->failed = true; server->shutdown = 1; }
     xjson_free(msg);
 }
 
@@ -45,8 +49,8 @@ XR_FUNC void xmcp_send_log_notification(XmcpServer *server, const char *level, c
         return;
 
     XrJsonValue *params = xjson_new_object();
-    XJSON_SET_STRING(params, "level", level);
-    xjson_object_set(params, "data", xjson_new_string(message));
+    XMCP_JSON_STRING(params, "level", level);
+    xmcp_json_set(params, "data", xjson_new_string(message));
     xmcp_send_notification(server, "notifications/message", params);
 }
 
@@ -59,10 +63,10 @@ XR_FUNC void xmcp_send_progress_notification(XmcpServer *server, const XrJsonVal
         return;
 
     XrJsonValue *params = xjson_new_object();
-    xjson_object_set(params, "progressToken", xjson_clone((XrJsonValue *)progress_token));
-    XJSON_SET_INT(params, "progress", progress);
+    xmcp_json_set(params, "progressToken", xmcp_json_clone((XrJsonValue *)progress_token));
+    XMCP_JSON_INT(params, "progress", progress);
     if (total > 0) {
-        XJSON_SET_INT(params, "total", total);
+        XMCP_JSON_INT(params, "total", total);
     }
     xmcp_send_notification(server, "notifications/progress", params);
 }

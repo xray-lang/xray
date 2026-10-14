@@ -50,6 +50,7 @@ typedef struct XmcpServer {
 
     /* Server lifecycle */
     XmcpLifecycleState lifecycle_state;
+    bool failed;
     volatile sig_atomic_t shutdown; /* signal-safe shutdown flag */
 } XmcpServer;
 

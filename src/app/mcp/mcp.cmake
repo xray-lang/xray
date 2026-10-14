@@ -2,6 +2,7 @@
 include_guard(GLOBAL)
 add_library(xray_mcp STATIC
     ${CMAKE_CURRENT_LIST_DIR}/xmcp_server.c
+    ${CMAKE_CURRENT_LIST_DIR}/xmcp_json.c
     ${CMAKE_CURRENT_LIST_DIR}/xmcp_jsonrpc.c
     ${CMAKE_CURRENT_LIST_DIR}/xmcp_protocol.c
     ${CMAKE_CURRENT_LIST_DIR}/xmcp_registry.c
@@ -22,7 +23,7 @@ add_library(xray_mcp STATIC
     ${CMAKE_CURRENT_LIST_DIR}/xmcp_knowledge_generated.c
     ${CMAKE_SOURCE_DIR}/src/base/xjson.c
 )
-target_link_libraries(xray_mcp PUBLIC xray_xir_source_product xray_xir_runtime_host xray_frontend_format)
+target_link_libraries(xray_mcp PUBLIC xray_source_compile xray_xir_runtime_host xray_frontend_format)
 target_include_directories(xray_mcp PUBLIC ${CMAKE_SOURCE_DIR}/src)
 target_compile_features(xray_mcp PUBLIC c_std_11)
 if(MSVC)

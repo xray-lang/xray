@@ -14,6 +14,7 @@
  *   structured result.
  */
 
+#include "xmcp_json.h"
 #include "xmcp_tools_internal.h"
 #include "xmcp_protocol.h"
 #include "xmcp_server.h"
@@ -47,14 +48,14 @@ static XrJsonValue *make_diagnostic(int line, int column, int end_line, int end_
     XR_DCHECK(source != NULL, "make_diagnostic: NULL source");
 
     XrJsonValue *diag = xjson_new_object();
-    XJSON_SET_INT(diag, "line", line);
-    XJSON_SET_INT(diag, "column", column);
-    XJSON_SET_INT(diag, "endLine", end_line);
-    XJSON_SET_INT(diag, "endColumn", end_column);
-    XJSON_SET_STRING(diag, "severity", severity);
-    XJSON_SET_INT(diag, "code", code);
-    XJSON_SET_STRING(diag, "message", message);
-    XJSON_SET_STRING(diag, "source", source);
+    XMCP_JSON_INT(diag, "line", line);
+    XMCP_JSON_INT(diag, "column", column);
+    XMCP_JSON_INT(diag, "endLine", end_line);
+    XMCP_JSON_INT(diag, "endColumn", end_column);
+    XMCP_JSON_STRING(diag, "severity", severity);
+    XMCP_JSON_INT(diag, "code", code);
+    XMCP_JSON_STRING(diag, "message", message);
+    XMCP_JSON_STRING(diag, "source", source);
     return diag;
 }
 
@@ -67,7 +68,7 @@ static XrJsonValue *make_parser_diagnostics(const ErrorCapture *cap, int *out_co
     XrJsonValue *diagnostics = xjson_new_array();
     int emitted = 0;
     for (int i = 0; i < cap->count && emitted < XMCP_TOOLS_MAX_CHECK_ERRORS; i++, emitted++) {
-        xjson_array_push(diagnostics, make_diagnostic(cap->lines[i], cap->columns[i],
+        xmcp_json_push(diagnostics, make_diagnostic(cap->lines[i], cap->columns[i],
                                                       cap->end_lines[i], cap->end_columns[i],
                                                       "error", 0, cap->messages[i], "parser"));
     }
@@ -80,16 +81,16 @@ static XrJsonValue *make_format_result_content(const char *formatted, bool chang
                                                bool use_tabs, bool ok, bool truncated,
                                                XrJsonValue *diagnostics) {
     XR_DCHECK(formatted != NULL, "make_format_result_content: NULL formatted");
-    XR_DCHECK(diagnostics != NULL, "make_format_result_content: NULL diagnostics");
+    if (!diagnostics) xmcp_json_fail();
     XrJsonValue *structured = xjson_new_object();
-    XJSON_SET_BOOL(structured, "ok", ok);
-    XJSON_SET_STRING(structured, "formattedCode", formatted);
-    XJSON_SET_BOOL(structured, "changed", changed);
-    XJSON_SET_INT(structured, "indentSize", indent_size);
-    XJSON_SET_BOOL(structured, "useTabs", use_tabs);
-    XJSON_SET_INT(structured, "diagnosticCount", xjson_array_len(diagnostics));
-    XJSON_SET_BOOL(structured, "truncated", truncated);
-    xjson_object_set(structured, "diagnostics", diagnostics);
+    XMCP_JSON_BOOL(structured, "ok", ok);
+    XMCP_JSON_STRING(structured, "formattedCode", formatted);
+    XMCP_JSON_BOOL(structured, "changed", changed);
+    XMCP_JSON_INT(structured, "indentSize", indent_size);
+    XMCP_JSON_BOOL(structured, "useTabs", use_tabs);
+    XMCP_JSON_INT(structured, "diagnosticCount", xjson_array_len(diagnostics));
+    XMCP_JSON_BOOL(structured, "truncated", truncated);
+    xmcp_json_set(structured, "diagnostics", diagnostics);
     return structured;
 }
 
@@ -108,11 +109,11 @@ static void analysis_error_callback(void *data, int line, int column, int end_li
 static XrJsonValue *analysis_result(const char *mode, bool ok, bool truncated, XrJsonValue *diagnostics) {
     int count = xjson_array_len(diagnostics);
     XrJsonValue *structured = xjson_new_object();
-    XJSON_SET_BOOL(structured, "ok", ok);
-    XJSON_SET_STRING(structured, "mode", mode);
-    XJSON_SET_INT(structured, "diagnosticCount", count);
-    XJSON_SET_BOOL(structured, "truncated", truncated);
-    xjson_object_set(structured, "diagnostics", diagnostics);
+    XMCP_JSON_BOOL(structured, "ok", ok);
+    XMCP_JSON_STRING(structured, "mode", mode);
+    XMCP_JSON_INT(structured, "diagnosticCount", count);
+    XMCP_JSON_BOOL(structured, "truncated", truncated);
+    xmcp_json_set(structured, "diagnostics", diagnostics);
     char text[128];
     snprintf(text, sizeof(text), ok ? "OK: no diagnostics found." : "Found %d diagnostic(s).", count);
     return xmcp_make_text_structured_result(text, structured, !ok);
@@ -120,7 +121,7 @@ static XrJsonValue *analysis_result(const char *mode, bool ok, bool truncated, X
 
 static void analysis_failure(XrJsonValue *items, int line, int column, int status,
     const char *message, const char *source) {
-    xjson_array_push(items, make_diagnostic(line, column, line, column, "error", status,
+    xmcp_json_push(items, make_diagnostic(line, column, line, column, "error", status,
         message && message[0] ? message : "Source checking failed", source));
 }
 
@@ -273,7 +274,7 @@ XR_FUNC XrJsonValue *xmcp_tool_xray_format(XmcpServer *server, const XmcpCallCon
     XrJsonValue *structured=make_format_result_content(output.text,changed,config.indent_size,
         config.use_tabs!=0,true,false,xjson_new_array());
     result=xmcp_make_text_result(output.text,false);
-    xjson_object_set(result,"structuredContent",structured);
+    xmcp_json_set(result,"structuredContent",structured);
 cleanup:
     xr_program_destroy(ast); xr_compile_session_free(session);
     xr_compile_resources_release(resources); xr_compile_format_output_free(&output);

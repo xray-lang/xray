@@ -13,7 +13,8 @@
 #include "xmcp_run_source.h"
 #include "../../frontend/parser/xparse.h"
 #include "../../frontend/parser/xast.h"
-#include "../../toolchain/xcompiler_session.h"
+#include "../../api/xsource_compiler.h"
+#include "../../api/xsource_paths.h"
 #include <stdio.h>
 #include <string.h>
 
@@ -109,23 +110,35 @@ XR_FUNC XrXirStatus xmcp_run_source_product(const XmcpSourceRequest *request,
         return XR_XIR_BAD_STRUCTURE;
     XrModuleIdentityAuthority authority = {XR_MODULE_IDENTITY_MEMORY, request->module_id, NULL};
     if (!xr_module_identity_authority_valid(&authority)) return XR_XIR_BAD_STRUCTURE;
-    XrCompilerSession *session = NULL;
-    XrCompilerSessionStatus opened = xr_compile_session_new(request->context->resources, &session);
-    XrXirStatus status = opened == XR_COMPILER_SESSION_OK ? XR_XIR_OK :
-        opened == XR_COMPILER_SESSION_BUDGET ? XR_XIR_BUDGET :
-        opened == XR_COMPILER_SESSION_OUT_OF_MEMORY ? XR_XIR_OUT_OF_MEMORY : XR_XIR_BAD_STRUCTURE;
-    if (status == XR_XIR_OK) status = import_preflight(request, session, diagnostic);
+    XrStdlibPath path = {0}; XrSourcePathsDiagnostic located = {0};
+    XrSourceCompileDiagnostic detail = {0}; XrSourceCompiler *compiler = NULL;
+    XrSourceCompileStatus built = xr_source_stdlib_path(request->context->resources, &path, &located);
+    if (built == XR_SOURCE_COMPILE_OK) {
+        XrSourceCompilerConfig config = {*request->context,
+            {XR_XIR_ARCH_X86_64, XR_XIR_VALUE_ABI_VERSION}, path.path,
+            xr_source_compile_default_manifest_limits()};
+        built = xr_source_compiler_new(&config, &compiler, &detail);
+    }
+    XrXirStatus status = built == XR_SOURCE_COMPILE_OK ? XR_XIR_OK :
+        built == XR_SOURCE_COMPILE_BUDGET ? XR_XIR_BUDGET :
+        built == XR_SOURCE_COMPILE_OUT_OF_MEMORY ? XR_XIR_OUT_OF_MEMORY : XR_XIR_IO;
+    if (status == XR_XIR_OK)
+        status = import_preflight(request, xr_source_compiler_session(compiler), diagnostic);
     XrXirSourceProduct *product = NULL;
     if (status == XR_XIR_OK) {
-        XrXirSourceProductRequest input = {{session, NULL, &authority, request->context,
-            NULL, NULL, XR_XIR_PROGRAM, NULL}, {XR_XIR_ARCH_X86_64, XR_XIR_VALUE_ABI_VERSION}};
-        XrXirSourceText text = {NULL, request->text, request->length};
-        status = xr_xir_compile_source_product_build_text(&input, &text, &product, diagnostic);
+        XrSourceCompilerText text = {NULL, request->module_id, request->text, request->length};
+        built = xr_source_compiler_build_text(compiler, &text, &product, &detail);
+        status = built == XR_SOURCE_COMPILE_OK ? XR_XIR_OK :
+            built == XR_SOURCE_COMPILE_BUDGET ? XR_XIR_BUDGET :
+            built == XR_SOURCE_COMPILE_OUT_OF_MEMORY ? XR_XIR_OUT_OF_MEMORY :
+            detail.source.status ? detail.source.status : XR_XIR_BAD_STRUCTURE;
+    }
+    if (diagnostic && (detail.source.snapshot || detail.source.source_path || detail.source.status)) {
+        *diagnostic = detail.source; memset(&detail.source, 0, sizeof(detail.source));
     }
     if (status == XR_XIR_OK) status = dependencies_admit(request, product, diagnostic);
-    if (status == XR_XIR_OK) status = xr_xir_compile_source_product_public_admit(product,
-        diagnostic ? &diagnostic->source : NULL);
-    xr_compile_session_free(session);
+    xr_source_compile_diagnostic_free(&detail);
+    xr_source_compiler_free(compiler); xr_source_stdlib_path_free(&path);
     if (status == XR_XIR_OK) *output = product;
     else {
         xr_xir_compile_source_product_free(product);

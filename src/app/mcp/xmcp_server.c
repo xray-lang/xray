@@ -14,6 +14,7 @@
  *   All diagnostic output goes to stderr (never stdout).
  */
 
+#include "xmcp_json.h"
 #include "xmcp_server.h"
 #include "xmcp_protocol.h"
 #include "xmcp_jsonrpc.h"
@@ -116,33 +117,35 @@ static void mcp_send_response(XmcpServer *s, XrJsonValue *id, XrJsonValue *resul
                               XrJsonValue *error) {
     XR_DCHECK(s != NULL, "mcp_send_response: NULL server");
     XrJsonValue *resp = xjson_new_object();
-    XJSON_SET_STRING(resp, "jsonrpc", "2.0");
+    XMCP_JSON_STRING(resp, "jsonrpc", "2.0");
 
     if (id) {
-        xjson_object_set(resp, "id", xjson_clone(id));
+        xmcp_json_set(resp, "id", xmcp_json_clone(id));
     } else {
-        XJSON_SET_NULL(resp, "id");
+        XMCP_JSON_NULL(resp, "id");
     }
 
     if (error) {
-        xjson_object_set(resp, "error", error);
+        xmcp_json_set(resp, "error", error);
     } else {
-        xjson_object_set(resp, "result", result ? result : xjson_new_object());
+        xmcp_json_set(resp, "result", result ? result : xjson_new_object());
     }
 
+    resp = xmcp_json_finish(resp);
+    if (!resp) { s->failed = true; s->shutdown = 1; return; }
     size_t len = 0;
     char *json = xjson_stringify(resp, &len);
     if (json) {
-        xmcp_stdio_write_message(&s->transport, json, len);
+        if (!xmcp_stdio_write_message(&s->transport, json, len)) { s->failed = true; s->shutdown = 1; }
         xr_free(json);
-    }
+    } else { s->failed = true; s->shutdown = 1; }
     xjson_free(resp);
 }
 
 static void mcp_send_error(XmcpServer *s, XrJsonValue *id, int code, const char *message) {
     XrJsonValue *err = xjson_new_object();
-    XJSON_SET_INT(err, "code", code);
-    XJSON_SET_STRING(err, "message", message);
+    XMCP_JSON_INT(err, "code", code);
+    XMCP_JSON_STRING(err, "message", message);
     mcp_send_response(s, id, NULL, err);
 }
 
@@ -405,9 +408,11 @@ XR_FUNC int xmcp_server_run(XmcpServer *s) {
         }
         if (status != XMCP_STDIO_READ_OK) {
             mcp_log(s, 0, "stdio read error");
+            s->failed = true;
             break;
         }
 
+        xmcp_json_begin();
         XrJsonValue *msg = xjson_parse(body, body_len);
         xr_free(body);
 
@@ -422,5 +427,5 @@ XR_FUNC int xmcp_server_run(XmcpServer *s) {
     }
 
     mcp_log(s, 2, "MCP server stopped");
-    return 0;
+    return s->failed ? 1 : 0;
 }

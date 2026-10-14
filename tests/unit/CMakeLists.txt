@@ -3983,6 +3983,10 @@ if(XR_BUILD_MCP)
             LABELS "unit;mcp-protocol;sharded"
         )
     endforeach()
+    foreach(group IN LISTS XR_MCP_PROTOCOL_TEST_GROUPS)
+        set_tests_properties(test_mcp_protocol_${group} PROPERTIES
+            ENVIRONMENT "XRAY_STDLIB_PATH=${CMAKE_SOURCE_DIR}/stdlib")
+    endforeach()
     add_test(NAME test_mcp_knowledge_generation
         COMMAND ${XRAY_PYTHON}
             ${CMAKE_SOURCE_DIR}/tests/mcp/test_knowledge_generation.py

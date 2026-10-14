@@ -10,6 +10,7 @@
  *   SourceProduct transfers genuine code to a HostCall. Output never reaches
  *   process descriptors, and a terminal result outlives every producer owner.
  */
+#include "xmcp_json.h"
 #include "xmcp_tools_internal.h"
 #include "xmcp_server.h"
 #include "xmcp_run_source.h"
@@ -121,22 +122,22 @@ static RunExecution execute_program(XrXirProgram *program, uint32_t entry, RunCa
 static XrJsonValue *run_result(bool ok, int exit_code, const RunCapture *capture,
     const RunExecution *execution, XrXirStatus source_status, const char *summary) {
     XrJsonValue *structured = xjson_new_object();
-    XJSON_SET_BOOL(structured, "ok", ok); XJSON_SET_INT(structured, "exitCode", exit_code);
+    XMCP_JSON_BOOL(structured, "ok", ok); XMCP_JSON_INT(structured, "exitCode", exit_code);
     const RunBytes *out = &capture->out, *error = &capture->error;
-    xjson_object_set(structured, "stdout", xjson_new_string_n(out->bytes ? out->bytes : "", out->used));
-    xjson_object_set(structured, "stderr", xjson_new_string_n(error->bytes ? error->bytes : "", error->used));
-    XJSON_SET_BOOL(structured, "timedOut", execution->timed_out);
-    XJSON_SET_BOOL(structured, "truncated", out->truncated);
-    XJSON_SET_BOOL(structured, "stderrTruncated", error->truncated);
-    XJSON_SET_INT(structured, "outputBytes", (int64_t)out->used);
-    XJSON_SET_INT(structured, "sourceStatus", source_status);
-    XJSON_SET_INT(structured, "runtimeStatus", execution->status);
+    xmcp_json_set(structured, "stdout", xjson_new_string_n(out->bytes ? out->bytes : "", out->used));
+    xmcp_json_set(structured, "stderr", xjson_new_string_n(error->bytes ? error->bytes : "", error->used));
+    XMCP_JSON_BOOL(structured, "timedOut", execution->timed_out);
+    XMCP_JSON_BOOL(structured, "truncated", out->truncated);
+    XMCP_JSON_BOOL(structured, "stderrTruncated", error->truncated);
+    XMCP_JSON_INT(structured, "outputBytes", (int64_t)out->used);
+    XMCP_JSON_INT(structured, "sourceStatus", source_status);
+    XMCP_JSON_INT(structured, "runtimeStatus", execution->status);
     XrJsonValue *result = xmcp_make_text_structured_result(summary, structured, !ok);
     if (ok && out->used) {
         XrJsonValue *item = xjson_array_get(xjson_get_array(result, "content"), 0);
-        xjson_object_set(item, "text", xjson_new_string_n(out->bytes, out->used));
+        xmcp_json_set(item, "text", xjson_new_string_n(out->bytes, out->used));
     }
-    return result;
+    return xmcp_json_finish(result);
 }
 XR_FUNC XrJsonValue *xmcp_tool_xray_run(XmcpServer *server, const XmcpCallContext *ctx,
     XrJsonValue *arguments) {
@@ -201,5 +202,5 @@ publish:;
     bool ok = status == XR_XIR_OK && execution.status == XR_XIR_CALL_RETURNED && !execution.timed_out;
     XrJsonValue *result = run_result(ok, ok ? 0 : -1, &capture, &execution, status, summary);
     xr_free(capture.out.bytes); xr_free(capture.error.bytes);
-    return result;
+    return xmcp_json_finish(result);
 }

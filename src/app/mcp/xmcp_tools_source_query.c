@@ -10,6 +10,7 @@
  *   Definition replies copy immutable checked facts before releasing their
  *   Source owner. Ambiguous names never select an arbitrary declaration.
  */
+#include "xmcp_json.h"
 #include "xmcp_tools_internal.h"
 #include "xmcp_source.h"
 #include <stdio.h>
@@ -17,10 +18,10 @@
 
 static XrJsonValue *source_definition_result(const char *symbol, const char *content, bool found) {
     XrJsonValue *s = xjson_new_object();
-    XJSON_SET_STRING(s, "symbol", symbol);
-    XJSON_SET_STRING(s, "kind", "source");
-    XJSON_SET_BOOL(s, "found", found);
-    XJSON_SET_STRING(s, "content", content);
+    XMCP_JSON_STRING(s, "symbol", symbol);
+    XMCP_JSON_STRING(s, "kind", "source");
+    XMCP_JSON_BOOL(s, "found", found);
+    XMCP_JSON_STRING(s, "content", content);
     return s;
 }
 
@@ -55,18 +56,18 @@ XR_FUNC XrJsonValue *xmcp_tool_source_definition(XrJsonValue *arguments) {
         "Source checking failed" : matches > 1 ? "Source symbol is ambiguous" :
         !found ? "Source symbol was not found" : selected->signature ? selected->signature : selected->name;
     XrJsonValue *s = source_definition_result(name->as.string, message, found);
-    XJSON_SET_BOOL(s, "complete", complete);
-    XJSON_SET_INT(s, "sourceStatus", status);
+    XMCP_JSON_BOOL(s, "complete", complete);
+    XMCP_JSON_INT(s, "sourceStatus", status);
     if (found) {
         const XrXirSourceSyntaxView *syntax = xr_xir_compile_source_snapshot_syntax(owner.result.snapshot);
         XrXirSourceRange range = selected->range;
         if (syntax && selected->id < syntax->declaration_count) range = syntax->declarations[selected->id].name;
-        XJSON_SET_INT(s, "line", range.line); XJSON_SET_INT(s, "column", range.column);
-        XJSON_SET_INT(s, "endLine", range.end_line); XJSON_SET_INT(s, "endColumn", range.end_column);
-        XJSON_SET_STRING(s, "moduleId", identity->as.string);
+        XMCP_JSON_INT(s, "line", range.line); XMCP_JSON_INT(s, "column", range.column);
+        XMCP_JSON_INT(s, "endLine", range.end_line); XMCP_JSON_INT(s, "endColumn", range.end_column);
+        XMCP_JSON_STRING(s, "moduleId", identity->as.string);
     }
     XrJsonValue *result = xmcp_make_text_structured_result(message, s, !complete || matches > 1);
     xmcp_source_free(&owner);
     xr_compile_resources_release(context.resources);
-    return result;
+    return xmcp_json_finish(result);
 }
