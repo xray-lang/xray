@@ -250,9 +250,10 @@ static XrXirStatus effect_invocation_local_result_match(const XrXirCompileContex
     return XR_XIR_OK;
 }
 
-/* Classification and proof read the same owned Input without an allocator
- * callback between rows. Stack values are consumed immediately; no expected
- * vector is freed after the last independent comparison. */
+/* A complete zero relation and its actual rows are checked in one uninterrupted
+ * Input read. A local-layout mismatch matters only when every Input row proves
+ * the relation empty; malformed Input and exhausted work always fail immediately.
+ * No callback can invalidate an earlier comparison or a temporary stack value. */
 static XrXirStatus effect_invocation_local_certificate_match(const XrXirCompileContext *work,
     const EffectInvocationCertificate *certificate,const EffectInvocationResult *result) {
     if (!xir_compile_context_valid(work) || !certificate ||
@@ -260,26 +261,25 @@ static XrXirStatus effect_invocation_local_certificate_match(const XrXirCompileC
         return XR_XIR_BAD_STRUCTURE;
     const EffectBodyMaterial *body=certificate->body;
     uint32_t count=effect_body_count(body);
+    EffectInvocationLocalRead read={work,body,0};
+    XrXirStatus proof=XR_XIR_OK;
     for (uint32_t f=0;f<count;++f) {
         EffectInvocationLocalInput input;bool empty=false;
-        XrXirStatus status=effect_invocation_local_input(work,body,f,&input,&empty);
-        if (status!=XR_XIR_OK || !empty) return status;
-    }
-    XrXirStatus status=effect_invocation_local_equations_shape(work,certificate->equations);
-    if (status==XR_XIR_OK)
-        status=effect_invocation_local_result_shape(work,certificate->equations,result);
-    EffectInvocationLocalRead read={work,body,0};
-    for (uint32_t f=0;f<count && status==XR_XIR_OK;++f) {
-        EffectInvocationLocalInput input;bool empty=false;
-        status=effect_invocation_local_head(work,body,f,&empty);
+        XrXirStatus status=effect_invocation_local_head(work,body,f,&empty);
         if (status==XR_XIR_OK && empty)
             status=effect_invocation_local_input_body(&read,f,&input,&empty);
-        if (status==XR_XIR_OK && !empty) status=XR_XIR_BAD_STRUCTURE;
-        if (status==XR_XIR_OK)
-            status=effect_invocation_local_node_match(work,certificate->equations,f,&input);
-        if (status==XR_XIR_OK) status=effect_invocation_local_result_row(work,result,f,&input);
+        if (status!=XR_XIR_OK || !empty) return status;
+        if (!f) {
+            proof=effect_invocation_local_equations_shape(work,certificate->equations);
+            if (proof==XR_XIR_OK)
+                proof=effect_invocation_local_result_shape(work,certificate->equations,result);
+        }
+        if (proof==XR_XIR_OK)
+            proof=effect_invocation_local_node_match(work,certificate->equations,f,&input);
+        if (proof==XR_XIR_OK) proof=effect_invocation_local_result_row(work,result,f,&input);
+        if (proof!=XR_XIR_OK && proof!=XR_XIR_BAD_STRUCTURE) return proof;
     }
-    return status;
+    return proof;
 }
 
 /* All failure paths keep both input owners and the occupied output intact.

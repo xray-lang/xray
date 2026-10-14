@@ -629,15 +629,6 @@ static XrXirStatus effect_invocation_local_input_body(EffectInvocationLocalRead 
         XR_XIR_OK:XR_XIR_BAD_STRUCTURE;
 }
 
-/* Later functions keep the same head-to-body order as the first one. */
-static XrXirStatus effect_invocation_local_input(const XrXirCompileContext *work,
-    const EffectBodyMaterial *body,uint32_t f,EffectInvocationLocalInput *output,bool *empty) {
-    XrXirStatus status=effect_invocation_local_head(work,body,f,empty);
-    if (status!=XR_XIR_OK || !*empty) return status;
-    EffectInvocationLocalRead read={work,body,0};
-    return effect_invocation_local_input_body(&read,f,output,empty);
-}
-
 /* A failed mathematical classification leaves the generating owner untouched.
  * No failed callback or malformed range is converted into the normal path. */
 static XrXirStatus effect_invocation_local_inputs(const XrXirCompileContext *work,
