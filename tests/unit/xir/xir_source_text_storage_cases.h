@@ -33,6 +33,13 @@ static void source_text_storage_cases(void) {
         context.owned_texts[occupied].hash,"a different value with the same supplied hash",&slot));
     CHECK(!context.owned_texts[slot].text && context.owned_text_count == 64);
 
+    source_owned_text_index_clear(&context);
+    CHECK(!context.owned_texts && !context.owned_text_count && !context.owned_text_capacity);
+    for (unsigned i = 0; i < 64; ++i) {
+        CHECK(snprintf(caller,sizeof(caller),"owned-word-%u",i) > 0 && !strcmp(saved[i],caller));
+        CHECK(!strcmp(source_owned_text(&context,caller),saved[i]));
+    }
+
     SourceOwnedTextEntry *original = context.owned_texts;
     uint32_t capacity = context.owned_text_capacity;
     source_fixture_compile_fail_at = source_fixture_compile_attempts; source_fixture_compile_injected = false;
@@ -45,6 +52,6 @@ static void source_text_storage_cases(void) {
     }
     allocation_private_close(&context);
     CHECK(!source_fixture_compile_live && !source_fixture_compile_bytes);
-    puts("Source text: owned caller bytes survive growth, repeated names allocate nothing, collisions stay distinct, failed growth preserves old storage; physical0");
+    puts("Source text: owned bytes survive caller mutation, index growth and retirement; hits allocate nothing, collisions stay distinct, failed growth preserves old storage; physical0");
 }
 #endif // XIR_SOURCE_TEXT_STORAGE_CASES_H

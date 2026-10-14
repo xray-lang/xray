@@ -44,6 +44,10 @@ static bool source_owned_text_grow(SourceContext *ctx) {
     ctx->owned_texts = table; ctx->owned_text_capacity = capacity;
     return true;
 }
+static void source_owned_text_index_clear(SourceContext *ctx) {
+    if (ctx->owned_texts) source_release_private(ctx->owned_texts);
+    ctx->owned_texts = NULL; ctx->owned_text_count = 0; ctx->owned_text_capacity = 0;
+}
 static const char *source_owned_text(SourceContext *ctx, const char *text) {
     size_t length;
     if (!source_text_length(ctx,NULL,text,&length) ||
