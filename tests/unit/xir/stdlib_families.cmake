@@ -21,6 +21,13 @@ set_tests_properties(test_xir_public_cli_scalar_methods PROPERTIES
     TIMEOUT 120 RUN_SERIAL TRUE PROCESSORS 1 WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
     LABELS "cli;xir;stdlib;native;execution;ownership;scalar")
 
+add_test(NAME test_xir_public_cli_rune_ctfe
+    COMMAND ${XRAY_PYTHON} ${PROJECT_SOURCE_DIR}/tests/cli/run_xir_public_cli_rune_ctfe.py
+        --binary $<TARGET_FILE:xray> --root ${PROJECT_SOURCE_DIR})
+set_tests_properties(test_xir_public_cli_rune_ctfe PROPERTIES
+    TIMEOUT 120 RUN_SERIAL TRUE PROCESSORS 1 WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
+    LABELS "cli;xir;stdlib;native;execution;ownership;rune;ctfe")
+
 add_executable(test_xir_scalar_methods_vm ${CMAKE_CURRENT_LIST_DIR}/test_xir_scalar_methods_vm.c)
 target_include_directories(test_xir_scalar_methods_vm PRIVATE ${XRAY_COMMON_INCLUDES})
 target_link_libraries(test_xir_scalar_methods_vm PRIVATE xray_xir_stdlib_catalog xray_xir_vm)
