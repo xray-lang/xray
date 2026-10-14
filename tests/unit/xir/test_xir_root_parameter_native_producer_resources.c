@@ -141,7 +141,11 @@ static XrXirStatus h1c_action(H1Compiler *c, unsigned p, const XrCompileResource
         CHECK(d->entry_function < m->function_count && d->entry_function != c->fixture.run &&
             !m->functions[d->entry_function].parameter_count && m->functions[d->entry_function].result == XR_XIR_I64);
         CHECK(d->slot_count == (c->oracle->root ? 1u : 0u));
-        if (d->slot_count) CHECK(d->slots[0].module == d->root_module && d->slots[0].mutable && d->slots[0].type == XR_XIR_I64);
+        if (d->slot_count) {
+            CHECK(d->slots[0].module == d->root_module && d->slots[0].mutable);
+            CHECK(xr_xir_type_is_cell(m->types, d->slots[0].type) &&
+                xr_xir_cell_element(m->types, d->slots[0].type) == XR_XIR_I64);
+        }
         c->fixture.entry = d->entry_function; c->fixture.module = d->root_module; c->fixture.slots = d->slot_count; break;
     }
     case H1C_SEAL:

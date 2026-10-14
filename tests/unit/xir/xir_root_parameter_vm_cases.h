@@ -12,6 +12,7 @@
 #ifndef XIR_ROOT_PARAMETER_VM_CASES_H
 #define XIR_ROOT_PARAMETER_VM_CASES_H
 #include "xir_root_parameter_oracles.h"
+#include "xir_root_parameter_slot_observer.h"
 
 typedef struct H1VmObservation {
     const RootParameterSourceOracle *oracle;
@@ -419,7 +420,7 @@ static void h1r_normal(H1Runtime *t, H1VmFixture fixture, const RootParameterSou
             &t->w[0].instance->budget != &t->w[1].instance->budget && t->w[0].instance->program == t->w[1].instance->program);
         if (p == H1R_ENTRY_TAKE) {
             CHECK(t->w[0].instance->function_gate != t->w[1].instance->function_gate);
-            if (fixture.slots) for (unsigned i = 0; i < 2; ++i) h1vm_value(&t->w[i].instance->slots[0], 9);
+            if (fixture.slots) for (unsigned i = 0; i < 2; ++i) h1vm_value(rps_slot_value(t->w[i].instance), 9);
         }
     }
     CHECK(!runtime_live && !runtime_bytes); instance_compile_zero();

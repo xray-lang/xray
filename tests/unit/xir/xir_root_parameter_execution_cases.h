@@ -12,6 +12,7 @@
 #ifndef XIR_ROOT_PARAMETER_EXECUTION_CASES_H
 #define XIR_ROOT_PARAMETER_EXECUTION_CASES_H
 #include "xir_root_parameter_oracles.h"
+#include "xir_root_parameter_slot_observer.h"
 
 typedef struct H1ExecObservation {
     const RootParameterSourceOracle *oracle;
@@ -208,7 +209,7 @@ static void h1exec_pair(const RootParameterSourceOracle *oracle, H1ExecFixture f
         xr_xir_value_drop(&entry[i]);
         CHECK(!entry[i].type && !entry[i].reserved && !entry[i].payload);
         CHECK(instances[i]->function_gate && o[i].published == fixture.slots);
-        if (fixture.slots) h1exec_value(&instances[i]->slots[0], 9);
+        if (fixture.slots) h1exec_value(rps_slot_value(instances[i]), 9);
         H1ExecLedger peer = h1exec_ledger(instances[1 - i]);
         H1ExecObservation peer_output = o[1 - i]; size_t begin = runtime_attempts;
         CHECK(xr_xir_instance_start(instances[i], fixture.run, NULL, 0) == XR_XIR_CALL_READY);

@@ -175,7 +175,11 @@ static XrXirStatus h1c_action(H1Compiler *c, unsigned p, const XrCompileResource
         CHECK(d->entry_function < m->function_count && d->entry_function != c->fixture.run &&
             !m->functions[d->entry_function].parameter_count && m->functions[d->entry_function].result == XR_XIR_I64);
         CHECK(d->slot_count == (c->oracle->root ? 1u : 0u));
-        if (d->slot_count) CHECK(d->slots[0].module == d->root_module && d->slots[0].mutable && d->slots[0].type == XR_XIR_I64);
+        if (d->slot_count) {
+            CHECK(d->slots[0].module == d->root_module && d->slots[0].mutable);
+            CHECK(xr_xir_type_is_cell(m->types, d->slots[0].type) &&
+                xr_xir_cell_element(m->types, d->slots[0].type) == XR_XIR_I64);
+        }
         c->fixture.entry = d->entry_function; c->fixture.module = d->root_module; c->fixture.slots = d->slot_count; break;
     }
     case H1C_SEAL:
@@ -276,7 +280,7 @@ static void h1vm_pair(const RootParameterSourceOracle *oracle, H1VmFixture fixtu
         xr_xir_value_drop(&entry[i]);
         CHECK(!entry[i].type && !entry[i].reserved && !entry[i].payload);
         CHECK(instances[i]->function_gate && o[i].published == fixture.slots);
-        if (fixture.slots) h1vm_value(&instances[i]->slots[0], 9);
+        if (fixture.slots) h1vm_value(rps_slot_value(instances[i]), 9);
         H1VmLedger peer = h1vm_ledger(instances[1 - i]);
         H1VmObservation peer_output = o[1 - i]; size_t begin = runtime_attempts;
         CHECK(xr_xir_instance_start(instances[i], fixture.run, NULL, 0) == XR_XIR_CALL_READY);
