@@ -1,0 +1,13 @@
+add_executable(test_xir_mixed_observation xir/test_xir_mixed_observation.c "${XIR_TERMINAL_GENERATED}")
+target_link_libraries(test_xir_mixed_observation PRIVATE xray_xir_vm xray_xir_scalar)
+set_target_properties(test_xir_mixed_observation PROPERTIES C_STANDARD 11 C_STANDARD_REQUIRED YES C_EXTENSIONS NO)
+if(MSVC)
+    target_compile_options(test_xir_mixed_observation PRIVATE /W4 /WX /utf-8)
+else()
+    target_compile_options(test_xir_mixed_observation PRIVATE -Wall -Wextra -Werror)
+endif()
+foreach(observation_backend IN ITEMS 0 1 vm native)
+    add_test(NAME test_xir_mixed_observation_${observation_backend} COMMAND test_xir_mixed_observation ${observation_backend})
+    set_tests_properties(test_xir_mixed_observation_${observation_backend} PROPERTIES TIMEOUT 120 RUN_SERIAL TRUE COST 1
+        LABELS "unit;xir;mixed;execution;ownership;instance;generated-c;observation")
+endforeach()

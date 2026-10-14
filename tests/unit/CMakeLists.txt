@@ -778,6 +778,7 @@ add_executable(test_xir_cleanup_mixed xir/test_xir_cleanup_mixed.c ${XIR_CLEANUP
 target_link_libraries(test_xir_cleanup_mixed PRIVATE xray_xir_vm)
 include(xir/mixed_lifecycle.cmake)
 include(xir/mixed_terminals.cmake)
+include(xir/mixed_observation.cmake)
 if(MSVC)
     foreach(cleanup_host IN ITEMS test_xir_cleanup_source test_xir_cleanup_native test_xir_cleanup_mixed)
         target_compile_options(${cleanup_host} PRIVATE /O2 /Ob2 /Oy-)
