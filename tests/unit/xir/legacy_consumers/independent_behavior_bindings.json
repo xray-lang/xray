@@ -61,7 +61,8 @@
     "object/object_static_index_get_set": "tests/diff/cases/semantics/object/object_static_index_get_set.xr",
     "ownership/shared_copy_to_shared": "tests/diff/cases/semantics/ownership/shared_copy_to_shared.xr",
     "int_wrap/fixed_array_uint64_lane": "tests/diff/cases/semantics/int_wrap/fixed_array_uint64_lane.xr",
-    "slice/string_byte_slice_receiver_nll": "tests/diff/cases/semantics/slice/string_byte_slice_receiver_nll.xr"
+    "slice/string_byte_slice_receiver_nll": "tests/diff/cases/semantics/slice/string_byte_slice_receiver_nll.xr",
+    "observed/array_logical_const_copy": "tests/unit/xir/legacy_consumers/fixtures/array_logical_const_copy/root.xr"
   },
   "inputs": [
     {
@@ -351,6 +352,10 @@
     {
       "path": "tests/diff/cases/semantics/slice/string_byte_slice_receiver_nll.xr",
       "lf_sha256": "3dff41d162190ec42b23f2adde719faadad5b2b180f0a39262ed05af554d4446"
+    },
+    {
+      "path": "tests/unit/xir/legacy_consumers/fixtures/array_logical_const_copy/root.xr",
+      "lf_sha256": "372fb6ee06b4e4ecc74200b3ddf755d0efc563055041e85352aa92a74ef96dd6"
     }
   ],
   "scope": "Whole original run-entry byte observations only. Original helper definitions, named test entries, complete FI/resources/physical/provider qualification remain separate.",

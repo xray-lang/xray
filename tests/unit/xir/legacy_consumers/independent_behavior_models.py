@@ -117,6 +117,11 @@ def observations() -> dict[str, tuple[list, str]]:
         'The original copy intent retains both elements in an independent logical Array value; '
         'appending to the mutable source changes only its length. The original public copy spelling '
         'still needs target-syntax admission and is never reclassified as an expected rejection.')
+    models['observed/array_logical_const_copy'] = (
+        [len(xs), len(ys), ys[0]],
+        'The complete original Array copy intent uses the admitted ordinary const binding instead of '
+        'the unresolved public copy spelling. Both original elements, the append and every output '
+        'remain; this replacement does not qualify the untouched original copy spelling.')
     acc = [11, 12, 13, 14]
     acc_sum = sum(acc)
     acc[2] = 99

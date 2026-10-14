@@ -18780,6 +18780,41 @@
         "All original exact compiler/native/runtime FI,resource bounds,cancel,lifetime/physical and safety/provider gates remain open.",
         "Whole original source and all operations retained; source spelling admission and any observed failure remain explicit target migration duties."
       ]
+    },
+    {
+      "id": "independent_behavior_observed_array_logical_const_copy",
+      "oracle_id": "independent_behavior_observed_array_logical_const_copy",
+      "source": "tests/unit/xir/legacy_consumers/fixtures/array_logical_const_copy/root.xr",
+      "source_lf_sha256": "372fb6ee06b4e4ecc74200b3ddf755d0efc563055041e85352aa92a74ef96dd6",
+      "entry": "run",
+      "source_context": "original_absolute",
+      "stdout_utf8": "3\n2\n1\n",
+      "stderr_utf8": "",
+      "expected_exit_code": 0,
+      "arguments": [],
+      "stdin_hex": "",
+      "companions": [],
+      "owners": [
+        "P07",
+        "P08",
+        "P09",
+        "P10"
+      ],
+      "independent_execution_model": "The complete original Array copy intent uses the admitted ordinary const binding instead of the unresolved public copy spelling. Both original elements, the append and every output remain; this replacement does not qualify the untouched original copy spelling.",
+      "independent_observation_count": 3,
+      "remaining_gates": [
+        "Original public copy spelling remains OPEN; target binding is its own complete semantic migration consumer.",
+        "Full compiler/runtime FI,exact resource boundaries,COW failure atomicity,borrow/lifetime/physical and full safety/provider gates remain OPEN."
+      ],
+      "original_case_id": "tests/diff/cases/semantics/ownership/shared_copy_to_shared.xr",
+      "original_source_lf_sha256": "236c6b6d2e1622e95f79ed340a3693007b95be45570a1d9a1562a39786c1aa5e",
+      "target_syntax_migration": {
+        "original": "const ys = copy(xs)",
+        "target": "const ys = xs",
+        "authority": "spec/source/sections/006-5-declarations.md ordinary Array logical copy binding",
+        "preserved": "All source other than this one binding RHS, all elements, original append and all three outputs",
+        "original_spelling_qualification": "OPEN"
+      }
     }
   ]
 }
