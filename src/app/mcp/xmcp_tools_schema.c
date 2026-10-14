@@ -256,6 +256,8 @@ XR_FUNC XrJsonValue *xmcp_schema_definition(void) {
     XrJsonValue *p = xjson_new_object();
     schema_add_prop(p, "symbol", "string",
                     "Symbol name to look up (e.g., 'http.Server', 'print', 'chan')");
+    schema_add_prop(p, "code", "string", "Optional source text for checked definition lookup");
+    schema_add_prop(p, "moduleId", "string", "Explicit memory-module identity required when code is supplied");
     xjson_object_set(s, "properties", p);
     XrJsonValue *r = xjson_new_array();
     xjson_array_push(r, xjson_new_string("symbol"));
@@ -272,7 +274,7 @@ XR_FUNC XrJsonValue *xmcp_schema_definition_output(void) {
     XJSON_SET_STRING(s, "type", "object");
     XrJsonValue *p = xjson_new_object();
     schema_add_prop(p, "symbol", "string", "Requested symbol");
-    schema_add_prop(p, "kind", "string", "Definition source: syntax, stdlib, or none");
+    schema_add_prop(p, "kind", "string", "Definition source: syntax, stdlib, source, or none");
     schema_add_prop(p, "found", "boolean", "True when a definition was found");
     schema_add_prop(p, "content", "string", "Definition content or not-found message");
     xjson_object_set(s, "properties", p);

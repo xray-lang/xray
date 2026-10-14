@@ -24,8 +24,6 @@
 #include "../../base/xmalloc.h"
 #include "../../base/xchecks.h"
 #include "../../base/xjson.h"
-#include "../../api/xisolate_profile.h"
-#include "xray_vm.h"
 #include <stdio.h>
 #include <string.h>
 #include <stdarg.h>
@@ -151,58 +149,6 @@ static void mcp_send_error(XmcpServer *s, XrJsonValue *id, int code, const char 
 /* --------------------------------------------------------------------------
  * Notification sending (public API)
  * -------------------------------------------------------------------------- */
-
-void xmcp_send_notification(XmcpServer *server, const char *method, XrJsonValue *params) {
-    XR_DCHECK(server != NULL, "xmcp_send_notification: NULL server");
-    XR_DCHECK(method != NULL, "xmcp_send_notification: NULL method");
-    if (server->lifecycle_state != XMCP_LIFECYCLE_READY)
-        return;
-
-    XrJsonValue *msg = xjson_new_object();
-    XJSON_SET_STRING(msg, "jsonrpc", "2.0");
-    XJSON_SET_STRING(msg, "method", method);
-    if (params) {
-        xjson_object_set(msg, "params", params);
-    }
-
-    size_t len = 0;
-    char *json = xjson_stringify(msg, &len);
-    if (json) {
-        xmcp_stdio_write_message(&server->transport, json, len);
-        xr_free(json);
-    }
-    xjson_free(msg);
-}
-
-void xmcp_send_log_notification(XmcpServer *server, const char *level, const char *message) {
-    XR_DCHECK(server != NULL, "xmcp_send_log_notification: NULL server");
-    XR_DCHECK(level != NULL, "xmcp_send_log_notification: NULL level");
-    XR_DCHECK(message != NULL, "xmcp_send_log_notification: NULL message");
-    if (server->lifecycle_state != XMCP_LIFECYCLE_READY)
-        return;
-
-    XrJsonValue *params = xjson_new_object();
-    XJSON_SET_STRING(params, "level", level);
-    xjson_object_set(params, "data", xjson_new_string(message));
-    xmcp_send_notification(server, "notifications/message", params);
-}
-
-void xmcp_send_progress_notification(XmcpServer *server, const XrJsonValue *progress_token,
-                                     int64_t progress, int64_t total) {
-    XR_DCHECK(server != NULL, "xmcp_send_progress_notification: NULL server");
-    if (!progress_token)
-        return;
-    if (server->lifecycle_state != XMCP_LIFECYCLE_READY)
-        return;
-
-    XrJsonValue *params = xjson_new_object();
-    xjson_object_set(params, "progressToken", xjson_clone(progress_token));
-    XJSON_SET_INT(params, "progress", progress);
-    if (total > 0) {
-        XJSON_SET_INT(params, "total", total);
-    }
-    xmcp_send_notification(server, "notifications/progress", params);
-}
 
 /* --------------------------------------------------------------------------
  * Method handlers (thin wrappers matching XmcpMethodHandler signature)
@@ -392,7 +338,7 @@ XR_FUNC void xmcp_server_options_default(XmcpServerOptions *options) {
     options->enable_runner = false;
 }
 
-XmcpServer *xmcp_server_new(const XmcpServerOptions *options) {
+XR_FUNC XmcpServer *xmcp_server_new(const XmcpServerOptions *options) {
     XR_DCHECK(options != NULL, "xmcp_server_new: NULL options");
 
     XmcpServer *s = xr_calloc(1, sizeof(XmcpServer));
@@ -409,15 +355,6 @@ XmcpServer *xmcp_server_new(const XmcpServerOptions *options) {
     /* Disable stdout buffering so responses reach the client immediately */
     setvbuf(stdout, NULL, _IONBF, 0);
 
-    /* Create analyzer isolate for MCP code analysis tools */
-    s->isolate = xr_isolate_profile_new(XR_ISOLATE_PROFILE_ANALYZE);
-    if (!s->isolate) {
-        mcp_log(s, 0, "failed to create isolate");
-        xmcp_stdio_destroy(&s->transport);
-        xr_free(s);
-        return NULL;
-    }
-
     /* Load knowledge base */
     s->knowledge = xmcp_knowledge_new();
     if (s->knowledge) {
@@ -432,22 +369,20 @@ XmcpServer *xmcp_server_new(const XmcpServerOptions *options) {
     return s;
 }
 
-void xmcp_server_free(XmcpServer *s) {
+XR_FUNC void xmcp_server_free(XmcpServer *s) {
     if (!s)
         return;
     if (g_mcp_server == s)
         g_mcp_server = NULL;
     if (s->knowledge)
         xmcp_knowledge_free(s->knowledge);
-    if (s->isolate)
-        xray_vm_delete(s->isolate);
     if (s->log_file)
         fclose(s->log_file);
     xmcp_stdio_destroy(&s->transport);
     xr_free(s);
 }
 
-int xmcp_server_run(XmcpServer *s) {
+XR_FUNC int xmcp_server_run(XmcpServer *s) {
     XR_DCHECK(s != NULL, "xmcp_server_run: NULL server");
 
     /* Install signal handlers for graceful shutdown */

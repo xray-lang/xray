@@ -2569,6 +2569,7 @@ endif()
 # MCP optional module. The tool surface runs the retired analyzer and VM, so
 # it is not linked into the public executable until it is migrated.
 if(XR_BUILD_MCP)
+    include(src/app/mcp/source_tools.cmake)
     list(APPEND XRAY_CLI_INCLUDES ${CMAKE_CURRENT_SOURCE_DIR}/src/app/mcp)
 
     add_compile_definitions(XR_HAS_MCP=1)

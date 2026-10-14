@@ -185,6 +185,7 @@ XR_FUNC XrJsonValue *xmcp_tool_xray_definition(XmcpServer *server, const XmcpCal
     const char *symbol = xjson_get_string(arguments, "symbol");
     if (!symbol || symbol[0] == '\0')
         return xmcp_make_error_result("Error: 'symbol' must not be empty");
+    if (xjson_get(arguments, "code")) return xmcp_tool_source_definition(arguments);
     if (!server->knowledge)
         return xmcp_make_error_result("Error: knowledge base is not available");
 

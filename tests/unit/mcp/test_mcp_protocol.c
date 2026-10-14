@@ -21,8 +21,6 @@
 #include "../../../src/app/mcp/xmcp_knowledge.h"
 #include "../../../src/base/xjson.h"
 #include "../../../src/base/xmalloc.h"
-#include "../../../src/toolchain/xcompiler_session.h"
-#include "../../../include/xray_vm.h"
 #include "../test_win_compat.h"
 
 /* Stubs for notification functions (implemented in xmcp_server.c, not linked
@@ -112,10 +110,6 @@ static XmcpServer test_server_with_runner(bool enable_runner) {
 
 static XmcpServer test_server(void) {
     return test_server_with_runner(false);
-}
-
-static XrCompilerSession *test_compiler_session(XrVMRuntime *isolate) {
-    return xr_compiler_session_current_for_isolate(isolate);
 }
 
 static void test_server_load_knowledge(XmcpServer *server) {
@@ -782,11 +776,6 @@ TEST(tools_call_format_schema_has_optional_params) {
 
 TEST(tools_call_format_returns_structured_content) {
     XmcpServer server = test_server();
-    XrVMConfig iso_params = {0};
-    server.isolate = xray_vm_new_full(&iso_params);
-    ASSERT_NOT_NULL(server.isolate);
-    XrCompilerSession *session = test_compiler_session(server.isolate);
-    ASSERT_NOT_NULL(session);
 
     XrJsonValue *params = xjson_new_object();
     XJSON_SET_STRING(params, "name", "xray_format");
@@ -814,16 +803,10 @@ TEST(tools_call_format_returns_structured_content) {
 
     xjson_free(params);
     xjson_free(result);
-    xray_vm_delete(server.isolate);
 }
 
 TEST(tools_call_format_syntax_errors_are_structured) {
     XmcpServer server = test_server();
-    XrVMConfig iso_params = {0};
-    server.isolate = xray_vm_new_full(&iso_params);
-    ASSERT_NOT_NULL(server.isolate);
-    XrCompilerSession *session = test_compiler_session(server.isolate);
-    ASSERT_NOT_NULL(session);
 
     XrJsonValue *params = xjson_new_object();
     XJSON_SET_STRING(params, "name", "xray_format");
@@ -847,7 +830,6 @@ TEST(tools_call_format_syntax_errors_are_structured) {
 
     xjson_free(params);
     xjson_free(result);
-    xray_vm_delete(server.isolate);
 }
 
 /* =========================================================================
@@ -888,9 +870,6 @@ TEST(tools_call_analyze_schema) {
 
 TEST(tools_call_analyze_returns_structured_diagnostics) {
     XmcpServer server = test_server();
-    XrVMConfig iso_params = {0};
-    server.isolate = xray_vm_new_full(&iso_params);
-    ASSERT_NOT_NULL(server.isolate);
 
     XrJsonValue *params = xjson_new_object();
     XJSON_SET_STRING(params, "name", "xray_analyze");
@@ -912,7 +891,6 @@ TEST(tools_call_analyze_returns_structured_diagnostics) {
 
     xjson_free(params);
     xjson_free(result);
-    xray_vm_delete(server.isolate);
 }
 
 /* =========================================================================

@@ -3933,6 +3933,7 @@ endif()
 
 if(XR_BUILD_MCP)
     include(mcp/knowledge.cmake)
+    include(mcp/source_tools.cmake)
 
     add_executable(test_mcp_transport
         mcp/test_mcp_transport.c
@@ -3953,6 +3954,9 @@ if(XR_BUILD_MCP)
         ${CMAKE_SOURCE_DIR}/src/app/mcp/xmcp_tools.c
         ${CMAKE_SOURCE_DIR}/src/app/mcp/xmcp_tools_schema.c
         ${CMAKE_SOURCE_DIR}/src/app/mcp/xmcp_tools_lang.c
+        ${CMAKE_SOURCE_DIR}/src/app/mcp/xmcp_source.c
+        ${CMAKE_SOURCE_DIR}/src/app/mcp/xmcp_tools_source_query.c
+        ${CMAKE_SOURCE_DIR}/src/app/mcp/xmcp_result.c
         ${CMAKE_SOURCE_DIR}/src/app/mcp/xmcp_tools_run.c
         ${CMAKE_SOURCE_DIR}/src/app/mcp/xmcp_tools_kb.c
         ${CMAKE_SOURCE_DIR}/src/app/mcp/xmcp_resources.c
@@ -3968,7 +3972,7 @@ if(XR_BUILD_MCP)
         ${CMAKE_SOURCE_DIR}/src/base
         ${CMAKE_SOURCE_DIR}/src/runtime/object
     )
-    target_link_libraries(test_mcp_protocol PRIVATE xray_core)
+    target_link_libraries(test_mcp_protocol PRIVATE xray_core xray_xir_source)
     set(XR_MCP_PROTOCOL_TEST_GROUPS
         core
         tools
