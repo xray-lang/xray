@@ -145,6 +145,13 @@ int main(int argc, char **argv) {
     const XrXirSourceRequest request = {session, path, &authority, &owner.context, XR_LANGUAGE_STDLIB, NULL, XR_XIR_PROGRAM, NULL};
     XrXirSourceResult result = {0}; XrXirSourceDiagnostic diagnostic = {0};
     XrXirStatus status = xr_xir_compile_source_check(&request, &result, &diagnostic, NULL);
+    if (status != XR_XIR_OK) {
+        XrCompileResourceStats failure = {0};
+        CHECK(xr_compile_resources_stats(owner.context.resources, &failure) == XR_COMPILE_RESOURCE_OK);
+        fprintf(stderr, "source failure ledger: work=%llu allocated=%llu peak=%llu live=%llu\n",
+            (unsigned long long)failure.work, (unsigned long long)failure.allocated_bytes,
+            (unsigned long long)failure.peak_bytes, (unsigned long long)failure.live_bytes);
+    }
     printf("%s source=%u location=%u:%d:%d message=%s\n", argv[2], (unsigned)status,
         diagnostic.module, diagnostic.line, diagnostic.column, diagnostic.message);
     char *end = NULL; int64_t expected = (int64_t)strtoll(argv[3], &end, 10);

@@ -52,6 +52,10 @@ else()
 endif()
 add_test(NAME test_xir_p10_initializer_resources COMMAND test_xir_p10_initializer_resources)
 set_tests_properties(test_xir_p10_initializer_resources PROPERTIES TIMEOUT 300 COST 40 RUN_SERIAL TRUE LABELS "unit;xir;p10;init;ownership;budget;allocation")
+add_test(NAME test_xir_p10_initializer_comptime_resources_baseline
+    COMMAND test_xir_p10_initializer_resources --comptime-baseline)
+set_tests_properties(test_xir_p10_initializer_comptime_resources_baseline PROPERTIES
+    TIMEOUT 30 LABELS "unit;xir;p10;init;ctfe;ownership;resource-control")
 target_link_libraries(test_xir_p10_initializer_surface PRIVATE xray_xir_source xray_frontend_format)
 set_target_properties(test_xir_p10_initializer_surface PROPERTIES C_STANDARD 11 C_STANDARD_REQUIRED YES C_EXTENSIONS NO)
 if(MSVC)
@@ -422,6 +426,42 @@ set_tests_properties(test_xir_p10_reference_reject_init_default_inference test_x
 foreach(case IN ITEMS reject_init_generic_default reject_init_unused_generic_default)
     add_test(NAME test_xir_p10_reference_${case} COMMAND test_xir_p10_reference --reject ${case} 3 "expression cannot satisfy its declared type")
     set_tests_properties(test_xir_p10_reference_${case} PROPERTIES TIMEOUT 30 LABELS "unit;xir;p10;reference;init;default;generic;reject")
+endforeach()
+foreach(case IN ITEMS init_comptime_array init_comptime_optional_tuple)
+    if(case STREQUAL "init_comptime_array")
+        set(expected 3867)
+    else()
+        set(expected 173)
+    endif()
+    add_test(NAME test_xir_p10_reference_${case} COMMAND test_xir_p10_reference --accept ${case} ${expected})
+    set_tests_properties(test_xir_p10_reference_${case} PROPERTIES
+        TIMEOUT 30 LABELS "unit;xir;p10;reference;init;ctfe;ownership")
+    set(generated "${CMAKE_CURRENT_BINARY_DIR}/generated_native/${case}.c")
+    add_custom_command(OUTPUT "${generated}"
+        COMMAND ${CMAKE_COMMAND} -E make_directory "${CMAKE_CURRENT_BINARY_DIR}/generated_native"
+        COMMAND $<TARGET_FILE:test_xir_p10_reference> --emit ${case} ${expected} "${generated}"
+        DEPENDS test_xir_p10_reference "${CMAKE_CURRENT_LIST_DIR}/fixtures/${case}.xr"
+        VERBATIM)
+    foreach(backend IN ITEMS native mixed)
+        set(target "test_xir_p10_reference_${backend}_${case}")
+        add_executable(${target} "${CMAKE_CURRENT_LIST_DIR}/test_language_native.c" "${generated}")
+        target_link_libraries(${target} PRIVATE xray_xir_vm)
+        set_target_properties(${target} PROPERTIES C_STANDARD 11 C_STANDARD_REQUIRED YES C_EXTENSIONS NO)
+        if(backend STREQUAL "mixed")
+            target_compile_definitions(${target} PRIVATE XR_LANGUAGE_MIXED=1)
+        else()
+            target_compile_definitions(${target} PRIVATE XR_LANGUAGE_MIXED=0)
+        endif()
+        if(MSVC)
+            target_compile_options(${target} PRIVATE /W4 /WX /utf-8)
+        else()
+            target_compile_options(${target} PRIVATE -Wall -Wextra -Werror)
+        endif()
+        list(APPEND reference_native_targets ${target})
+        add_test(NAME ${target} COMMAND ${target} ${expected})
+        set_tests_properties(${target} PROPERTIES
+            TIMEOUT 30 LABELS "unit;xir;p10;reference;init;ctfe;ownership;${backend}")
+    endforeach()
 endforeach()
 add_custom_target(xir_p10_native_references DEPENDS ${reference_native_targets})
 

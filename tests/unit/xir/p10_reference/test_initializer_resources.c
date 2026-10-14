@@ -44,10 +44,33 @@ static const char source[] =
     "fn init()->i64{return 7}\n"
     "struct Box{value:i64 init(value){this.value=value} get()->i64{return this.value}}\n"
     "export fn referenceAnswer()->i64{const init=3;return Box(41).get()+init}\n";
+static const char array_source[] =
+    "fn seed()->Array<i8>{var xs:Array<i8>=[7,11,13];return xs.reserve(8)}\n"
+    "struct Batch{items:Array<i8>=comptime seed();last:i8;init(last){this.last=last}}\n"
+    "struct Holder<T>{value:T;init(value){this.value=value}}\n"
+    "export fn referenceAnswer()->i64{const first=Batch(17);const second=Batch(19);"
+    "const held=Holder<Array<i8>>(first.items);var changed=held.value;changed.push(first.last);"
+    "return (changed[0] as i64)+(changed[1] as i64)+(changed[2] as i64)+(changed[3] as i64)"
+    "+(second.last as i64)+held.value.capacity*100+len(second.items)*1000}\n";
+static const char optional_tuple_source[] =
+    "fn layer<T>(value:T)->T?{return value}\n"
+    "fn identity<T>(value:T)->T{return value}\n"
+    "struct Cached{value:(i8,string)=comptime identity<(i8,string)>((7,\"a\\0b\"));"
+    "state:i8?" "?=comptime layer<i8?>(null);init(){}}\n"
+    "fn classify(value:i8?" "?)->i64{if(value==null){return 0};if(value==null){return 1};return 2}\n"
+    "export fn referenceAnswer()->i64{const cached=Cached();"
+    "return classify(cached.state)*100+(cached.value.0 as i64)*10+len(cached.value.1)}\n";
+typedef struct InitializerCase { const char *name, *text;size_t length; } InitializerCase;
+static const InitializerCase cases[] = {
+    {"ordinary",source,sizeof(source)-1},
+    {"comptime-array",array_source,sizeof(array_source)-1},
+    {"comptime-optional-tuple",optional_tuple_source,sizeof(optional_tuple_source)-1}
+};
 static const XrCompileResourceLimits limits = {
     UINT64_C(64)*1024*1024, UINT64_C(8)*1024*1024, UINT64_C(128000000)};
 
-static XrXirStatus pipeline(const XrCompileResourceLimits *bounds, XrCompileResourceStats *stats) {
+static XrXirStatus pipeline(const InitializerCase *fixture,
+    const XrCompileResourceLimits *bounds, XrCompileResourceStats *stats) {
     XrCompileResources *resources = NULL; XrCompilerSession *session = NULL;
     XrXirSourceResult result = {0}; XrXirSourceDiagnostic diagnostic = {0};
     XrCompileResourceStatus opened = xr_compile_resources_new(bounds, &resources);
@@ -64,7 +87,7 @@ static XrXirStatus pipeline(const XrCompileResourceLimits *bounds, XrCompileReso
     XrXirCompileContext context = {resources, xr_xir_compile_default_limits()};
     const XrModuleIdentityAuthority authority = {XR_MODULE_IDENTITY_MEMORY, "initializer-fi", NULL};
     const XrXirSourceRequest request = {session, NULL, &authority, &context, NULL, NULL, XR_XIR_PROGRAM, NULL};
-    const XrXirSourceText text = {NULL, source, sizeof(source)-1};
+    const XrXirSourceText text = {NULL, fixture->text, fixture->length};
     status = xr_xir_compile_source_check_text(&request, &text, &result, &diagnostic, NULL);
     CHECK(diagnostic.status == status);
     if (status == XR_XIR_OK) CHECK(result.checked && result.snapshot);
@@ -76,29 +99,36 @@ done:
     return status;
 }
 
-int main(void) {
+static void initializer_case(const InitializerCase *fixture, bool baseline) {
     XrCompileResourceStats normal = {0}, observed = {0};
-    CHECK(pipeline(&limits, &normal) == XR_XIR_OK);
+    attempts=0;fail_at=SIZE_MAX;
+    CHECK(pipeline(fixture,&limits, &normal) == XR_XIR_OK);
     size_t sites = attempts; CHECK(sites && sites < 20000);
-    printf("initializer source sites=%zu allocated=%llu peak=%llu work=%llu\n", sites,
+    printf("initializer %s source sites=%zu allocated=%llu peak=%llu work=%llu physical=0\n", fixture->name,sites,
         (unsigned long long)normal.allocated_bytes, (unsigned long long)normal.peak_bytes,
         (unsigned long long)normal.work);
+    if (baseline) return;
     for (size_t i = 0; i < sites; ++i) {
         attempts = 0; fail_at = i;
-        CHECK(pipeline(&limits, &observed) == XR_XIR_OUT_OF_MEMORY);
+        CHECK(pipeline(fixture,&limits, &observed) == XR_XIR_OUT_OF_MEMORY);
     }
     fail_at = SIZE_MAX;
     XrCompileResourceLimits exact = {normal.allocated_bytes, normal.peak_bytes, normal.work};
-    attempts = 0; CHECK(pipeline(&exact, &observed) == XR_XIR_OK);
+    attempts = 0; CHECK(pipeline(fixture,&exact, &observed) == XR_XIR_OK);
     CHECK(observed.allocated_bytes == normal.allocated_bytes && observed.peak_bytes == normal.peak_bytes && observed.work == normal.work);
     for (unsigned axis = 0; axis < 3; ++axis) {
         XrCompileResourceLimits short_limit = exact;
         if (!axis) --short_limit.allocated_bytes;
         else if (axis == 1) --short_limit.live_bytes;
         else --short_limit.work;
-        attempts = 0; CHECK(pipeline(&short_limit, &observed) == XR_XIR_BUDGET);
+        attempts = 0; CHECK(pipeline(fixture,&short_limit, &observed) == XR_XIR_BUDGET);
     }
     CHECK(!physical);
     puts("Initializer Source full physical FI, three exact/minus-one budgets and no partial publication passed");
+}
+int main(int argc,char **argv) {
+    bool baseline=argc==2 && !strcmp(argv[1],"--comptime-baseline");
+    CHECK(argc==1 || baseline);
+    for (size_t i=baseline?1:0;i<sizeof(cases)/sizeof(cases[0]);++i) initializer_case(&cases[i],baseline);
     return 0;
 }
