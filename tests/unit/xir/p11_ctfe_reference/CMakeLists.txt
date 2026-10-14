@@ -8,7 +8,7 @@ if(MSVC)
 else()
     target_compile_options(test_xir_p11_ctfe_reference PRIVATE -Wall -Wextra -Werror)
 endif()
-foreach(name IN ITEMS factorial mutual_parity frame_state unreachable_function_io reachable_branch_io mutual_depth mutual_depth_direct)
+foreach(name IN ITEMS factorial short_circuit logical_truth_table logical_skip_division logical_recursion leaf_locals mutual_parity frame_state unreachable_function_io reachable_short_circuit_io reachable_branch_io mutual_depth mutual_depth_direct)
     add_test(NAME test_xir_p11_ctfe_reference_${name} COMMAND test_xir_p11_ctfe_reference ${name})
     set_tests_properties(test_xir_p11_ctfe_reference_${name} PROPERTIES
         TIMEOUT 30 LABELS "unit;xir;ctfe;reference;ownership")

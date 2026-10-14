@@ -31,9 +31,16 @@ typedef struct CtfeReferenceCase {
 
 static const CtfeReferenceCase reference_cases[] = {
     {"factorial", XR_XIR_I64, 720, XR_XIR_OK, NULL, 0},
+    {"short_circuit", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"logical_truth_table", XR_XIR_I64, 232, XR_XIR_OK, NULL, 0},
+    {"logical_skip_division", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"logical_recursion", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"leaf_locals", XR_XIR_UNIT, 0, XR_XIR_OK, NULL, 0},
     {"mutual_parity", XR_XIR_BOOL, 0, XR_XIR_OK, NULL, 0},
     {"frame_state", XR_XIR_I64, 316, XR_XIR_OK, NULL, 0},
     {"unreachable_function_io", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"reachable_short_circuit_io", XR_XIR_UNIT, 0, XR_XIR_BAD_TYPE,
+        "admitted deterministic scalar direct-call closure", 3},
     {"reachable_branch_io", XR_XIR_UNIT, 0, XR_XIR_BAD_TYPE,
         "admitted deterministic scalar direct-call closure", 3},
     {"mutual_depth", XR_XIR_UNIT, 0, XR_XIR_BUDGET, NULL, 3},
@@ -163,6 +170,44 @@ static void reference_direct_depth(const XrXirCompileContext *context, XrXirSour
     fprintf(stderr, "CTFE mutual recursion explicit depth=3 rejected; Unit preserved; same finite ledger\n");
 }
 
+static void reference_leaf_locals(const XrXirCompileContext *context, XrXirSourceResult *source) {
+    uint8_t identity[32] = {0};
+    XrXirArtifact *lowered = reference_lower(context, source, identity);
+    const XrXirModule *module = xr_xir_compile_artifact_module(lowered);
+    uint32_t function = UINT32_MAX;
+    for (uint32_t f = 0; f < module->function_count; ++f) {
+        if (module->functions[f].name_length == 4 && !memcmp(module->functions[f].name, "both", 4)) {
+            CHECK(function == UINT32_MAX);
+            function = f;
+        }
+    }
+    CHECK(function != UINT32_MAX);
+    unsigned locals = 0;
+    const XrXirFunction *body = &module->functions[function];
+    for (uint32_t i = 0; i < body->instruction_count; ++i) {
+        XrXirOp op = body->instructions[i].op;
+        if (op == XR_XIR_SCALAR_LOCAL_NEW) locals |= 1;
+        if (op == XR_XIR_SCALAR_LOCAL_READ) locals |= 2;
+        if (op == XR_XIR_SCALAR_LOCAL_WRITE) locals |= 4;
+    }
+    CHECK(locals == 7);
+    XrXirValue arguments[2] = {{XR_XIR_BOOL, 0, 0}, {XR_XIR_BOOL, 0, 0}};
+    XrXirCtfeRequest request = {.artifact = lowered, .function = function,
+        .target = {XR_XIR_ARCH_X86_64, XR_XIR_VALUE_ABI_VERSION},
+        .arguments = arguments, .argument_count = 2,
+        .limits = {XR_XIR_CTFE_MAX_STEPS, XR_XIR_CTFE_MAX_FRAME_BYTES, XR_XIR_CTFE_MAX_OUTPUT_BYTES}};
+    memcpy(request.checked_identity, identity, sizeof(identity));
+    for (int a = 0; a < 2; ++a) for (int b = 0; b < 2; ++b) {
+        arguments[0].payload = a;
+        arguments[1].payload = b;
+        XrXirValue output = {0};
+        CHECK(xr_xir_compile_ctfe_leaf(&request, &output) == XR_XIR_CTFE_OK);
+        CHECK(output.type == XR_XIR_BOOL && !output.reserved && output.payload == (a && b));
+    }
+    xr_xir_compile_artifact_free(lowered);
+    fprintf(stderr, "CTFE actual scalar local NEW/READ/WRITE leaf truth table passed\n");
+}
+
 int main(int argc, char **argv) {
     CHECK(argc == 2);
     const CtfeReferenceCase *selected = NULL;
@@ -181,7 +226,8 @@ int main(int argc, char **argv) {
         selected->name, (unsigned)status, diagnostic.line, diagnostic.column, diagnostic.message);
     CHECK(status == selected->status);
     if (status == XR_XIR_OK) {
-        if (!strcmp(selected->name, "mutual_depth_direct")) reference_direct_depth(&context, &source);
+        if (!strcmp(selected->name, "leaf_locals")) reference_leaf_locals(&context, &source);
+        else if (!strcmp(selected->name, "mutual_depth_direct")) reference_direct_depth(&context, &source);
         else reference_accept(&context, &source, selected);
     }
     else {
