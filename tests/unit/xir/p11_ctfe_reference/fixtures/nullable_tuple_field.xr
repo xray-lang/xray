@@ -1,0 +1,1 @@
+export fn run()->i8? { return comptime { const a:i8?=7; const p:(i8?,())=(a,()); p.0 } }

@@ -44,3 +44,7 @@ set_tests_properties(test_xir_source_comptime_tuple_resources PROPERTIES
 add_test(NAME test_xir_source_comptime_float_resources COMMAND test_xir_source_comptime --float-resources)
 set_tests_properties(test_xir_source_comptime_float_resources PROPERTIES
     LABELS "unit;xir;source;ctfe;ownership;compiler-fault;resources;float" TIMEOUT 600 RUN_SERIAL TRUE)
+
+add_test(NAME test_xir_source_comptime_nullable_resources COMMAND test_xir_source_comptime --nullable-resources)
+set_tests_properties(test_xir_source_comptime_nullable_resources PROPERTIES
+    LABELS "unit;xir;source;ctfe;ownership;compiler-fault;resources;nullable" TIMEOUT 600 RUN_SERIAL TRUE)

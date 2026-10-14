@@ -62,7 +62,7 @@ static XrXirCtfeStatus ctfe_call_body_admit(const XrXirArtifact *artifact,uint32
         admitted=ctfe_tuple_instruction_admit(artifact,body,op);
         if (admitted!=XR_XIR_CTFE_OK) return admitted;
         bool unit=ctfe_unit_result(op->op) ||
-            ((op->op==XR_XIR_CALL || op->op==XR_XIR_CELL_READ || op->op==XR_XIR_TUPLE_FIELD) && op->type==XR_XIR_UNIT);
+            ((op->op==XR_XIR_CALL || op->op==XR_XIR_CELL_READ || op->op==XR_XIR_TUPLE_FIELD || op->op==XR_XIR_NULLABLE_UNWRAP) && op->type==XR_XIR_UNIT);
         if (!ctfe_storage_instruction(module,body,op) || (unit && op->type!=XR_XIR_UNIT) ||
             (!unit && op->type==XR_XIR_UNIT))
             return XR_XIR_CTFE_NOT_SUPPORTED;
@@ -77,7 +77,8 @@ static XrXirCtfeStatus ctfe_call_body_admit(const XrXirArtifact *artifact,uint32
         } else if (!ctfe_opcode_work(op->op,&ignored)) return XR_XIR_CTFE_NOT_SUPPORTED;
         if (op->op==XR_XIR_EQUAL) {
             if (!xir_compile_work(work,2)) return XR_XIR_CTFE_BUDGET;
-            if (!ctfe_parameter_type(xr_xir_operand_type(body,op->args[0]))) return XR_XIR_CTFE_NOT_SUPPORTED;
+            admitted=ctfe_equal_admit(artifact,xr_xir_operand_type(body,op->args[0]));
+            if (admitted!=XR_XIR_CTFE_OK) return admitted;
         }
         if (op->op==XR_XIR_CONVERT_NUMBER &&
             (!xr_xir_type_is_number(op->type) ||
@@ -148,7 +149,7 @@ static XrXirCtfeStatus ctfe_call_prepare(const XrXirCtfeCallRequest *request,boo
     if (input->argument_count!=body->parameter_count) return XR_XIR_CTFE_BAD_ARGUMENT;
     for (uint32_t a=0;a<input->argument_count;++a) {
         if (!xir_compile_work(work,1)) return XR_XIR_CTFE_BUDGET;
-        if (xr_xir_tuple_signature(artifact->module.types,body->parameters[a])) return XR_XIR_CTFE_NOT_SUPPORTED;
+        if (ctfe_composite_node(artifact->module.types,body->parameters[a])) return XR_XIR_CTFE_NOT_SUPPORTED;
         if (!xr_xir_value_argument(&input->arguments[a],NULL,body->parameters[a])) return XR_XIR_CTFE_BAD_ARGUMENT;
     }
     XrXirLayout storage={0};
@@ -287,6 +288,11 @@ static XrXirCtfeStatus ctfe_call_execute(CtfeCallExecution *execution,XrXirValue
         if (flow!=XR_XIR_CTFE_OK) return flow;
         if (ctfe_float_opcode(run,op)) {
             XrXirCtfeStatus status=ctfe_float_step(run,&frame->state.instruction);
+            if (status!=XR_XIR_CTFE_OK) return status;
+            continue;
+        }
+        if (ctfe_nullable_opcode(run,op)) {
+            XrXirCtfeStatus status=ctfe_nullable_step(run,&frame->state.instruction,&execution->owned);
             if (status!=XR_XIR_CTFE_OK) return status;
             continue;
         }

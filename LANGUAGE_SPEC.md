@@ -7800,6 +7800,16 @@ Each floating operation prepays 1024 work units on the original cumulative compi
 
 Logical f32 and f64 outputs occupy four and eight target bytes respectively; Tuple fields continue to sum target storage sizes. f32 inputs require zero high bits and canonical NaN encodings; f64 retains ordinary Value admission rules. Independent Source replay rechecks target canonical floating payloads, records ordinary CONST_FLOAT recipes and invokes the complete Checker. External Tuple, arbitrary Array/struct/enum, function-value and cleanup-path qualification is not granted by this admission.
 
+### 17.48 Compiler-owned Nullable variants and bounded constant receiving
+
+After complete Lowered reverification and entire reachable direct-call closure admission, Nullable wraps admitted primitive values, String, immutable Tuples and legal nested Nullable values. Type IDs still belong only to their actual immutable pool. Iterative family admission rejects cycles, illegal elements and Cell/function/resource authority. NULLABLE_NONE/SOME, IS_SOME and UNWRAP use authentic Value operations on the original compiler Domain to construct, observe or independently retain the active payload. Internal arguments/child returns, owned locals/parallel PHI, Tuple fields and private Cell<Nullable> preserve ownership. Unwrapping None returns the distinct NULL_UNWRAP status; Source reports a positioned compile error, preserving Unit output and releasing every frame.
+
+Logical export obtains discriminant bytes from the sole TypeArena storage layout and adds the recursively measured active Some payload. None has no payload cost. Inactive storage, alignment padding, pointers and ownership headers do not count. The current canonical Nullable tag occupies one byte: None<i64> uses one byte, Some<i8> two, while Some<i64> requires nine and exceeds the original output8 ceiling. Iterative export scratch retains the original frame quota and simultaneous old/new resize peak. Target scalar sizes, String UTF-8 lengths and zero-byte Unit Tuple fields remain unchanged.
+
+The complete finite type shape prepays original ledger work before each Value receiving operation; None does not evade type admission. Nullable equality admits only the Nullable chains and primitive/String leaves supported by the existing common Value equality owner. NaN, signed zero and complete NUL bytes retain that sole semantics. Fixed numeric work and active String scan spans pay the original cumulative ledger before comparison; overflow or an unpayable reserve returns BUDGET first. No second semantics interpreter, quota, refund or Instance/native fallback exists.
+
+Independent Source replay matches authentic type structure across owners, retains actual variant and field owners, and iteratively records ordinary NULLABLE_NONE/SOME and payload constant/TUPLE_NEW recipes before complete Checker and query publication. Original site/owner/expected coverage and every failed-prefix release remain. External Nullable and other composite arguments still require bounded cross-arena complete snapshot receiving and currently reject explicitly. Array/struct/enum, function-value and complete cleanup qualification are not granted by this family; original budgets and mandatory safety gates remain.
+
 ---
 
 ## 18. Error Codes

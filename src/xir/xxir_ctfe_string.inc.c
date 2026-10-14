@@ -39,7 +39,7 @@ static XrXirCtfeStatus ctfe_result_publish(ScalarRun *run,const XrXirValue *valu
         if ((uint64_t)length>maximum) return XR_XIR_CTFE_OUTPUT_LIMIT;
         return ctfe_value_status(xr_xir_value_copy(value,output));
     }
-    if (xr_xir_tuple_signature(run->module->types,type)) {
+    if (ctfe_composite_node(run->module->types,type)) {
         XrXirCtfeStatus status=ctfe_tuple_export_bytes(run,value,state,maximum);
         if (status!=XR_XIR_CTFE_OK) return status;
         return ctfe_value_status(xr_xir_value_copy(value,output));

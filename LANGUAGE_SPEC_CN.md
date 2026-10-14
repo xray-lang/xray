@@ -7637,6 +7637,16 @@ Source以实际类型结构跨owner匹配helper及重放结果，而非假定局
 
 f32和f64逻辑输出分别占四和八个目标字节，Tuple字段继续累加目标存储大小。f32输入必须没有高位且NaN编码规范；f64沿用普通Value接收规则。Source在独立重放中再次校验目标规范浮点payload，记录普通CONST_FLOAT配方并交完整Checker。外部Tuple、任意Array/struct/enum、函数值和cleanup路径资格仍未由此授予。
 
+### 17.48 编译域内Nullable活跃分支与有界常量接收
+
+完整Lowered重验和整个可达直接调用闭包接收后，Nullable可以包装已准入的基本值、String、不可变Tuple及合法嵌套Nullable。类型ID仍只属于实际不可变pool；迭代类型族接收拒绝环、非法element和带Cell/函数/资源权限的字段。NULLABLE_NONE/SOME、IS_SOME和UNWRAP调用真实Value操作，在原compiler Domain构造、观察或取得独立payload引用。内部参数/子返回、owned局部/并行PHI、Tuple字段和私有Cell<Nullable>保持完整拥有寿命。解包None返回独立NULL_UNWRAP状态，Source报告带位置的编译错误，失败保全Unit输出并释放所有帧。
+
+逻辑导出从唯一TypeArena storage layout取得判别字节数，加上Some活跃payload的递归逻辑大小；None没有payload费用，不计算inactive存储、对齐填充、指针或owner头。当前canonical Nullable tag为一字节：None<i64>占一字节、Some<i8>占两字节，Some<i64>需九字节并触发原output8上限。迭代导出scratch继续计入原frame额度及resize时新旧块峰值；目标标量大小、String UTF-8长度和Unit Tuple字段零字节规则不变。
+
+完整有限类型形状在每次Value接收前预付原ledger，活跃分支不能借None免掉型别准入。Nullable相等仅接既有共同Value相等支持的Nullable链及基本/String叶；规范NaN、有符号零和完整NUL字节沿用同一个语义owner。固定数值work和活跃String扫描跨度在比较前支付原累计ledger，溢出或无力支付先返回BUDGET。没有另建语义解释器、配额、退款或Instance/native回退。
+
+Source独立重放按真实跨owner类型结构匹配，持有真实分支和字段owner，迭代记录普通NULLABLE_NONE/SOME与payload常量/TUPLE_NEW配方，再交完整Checker和查询发布。原站点/owner/expected覆盖以及每个失败前缀释放保持。外部Nullable/其他复合参数仍需有界跨arena完整快照接收；当前明确拒绝。Array/struct/enum、函数值和cleanup完整资格不由本族授予，原所有预算与正式安全门继续生效。
+
 ---
 
 ## 18. 错误码 (Error Codes)

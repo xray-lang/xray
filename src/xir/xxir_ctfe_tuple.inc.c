@@ -11,9 +11,10 @@
  *   nested validation spans; iterative export retains no host frame pointers.
  */
 #include "xxir_tuple.h"
+#include "xxir_nullable.h"
 static XrXirCtfeStatus ctfe_validation_work(ScalarRun *run,CtfeOwnedState *state,XrXirType type) {
     if (xr_xir_type_is_cell(run->module->types,type)) type=xr_xir_cell_element(run->module->types,type);
-    if (!xr_xir_tuple_signature(run->module->types,type)) return XR_XIR_CTFE_OK;
+    if (!ctfe_composite_node(run->module->types,type)) return XR_XIR_CTFE_OK;
     uint32_t index=(uint32_t)type-XR_XIR_CONSTRUCTED_TYPE_BASE;
     if (!state->tuple_costs) {
         void *memory=NULL;
@@ -87,7 +88,19 @@ static XrXirCtfeStatus ctfe_tuple_export_bytes(ScalarRun *run,const XrXirValue *
     XrXirCtfeStatus status=XR_XIR_CTFE_OK;XrXirValue current=*value;bool current_owned=false;
     for (;;) {
         if (!scalar_compile_work(run,sizeof(CtfeTupleExportFrame)+4)) { status=XR_XIR_CTFE_BUDGET;break; }
-        const XrXirTypeNode *tuple=xr_xir_tuple_signature(run->module->types,(XrXirType)current.type);
+        const XrXirTypeNode *tuple=ctfe_composite_node(run->module->types,(XrXirType)current.type);
+        if (tuple && tuple->kind==XR_XIR_TYPE_NULLABLE) {
+            bool some=false;const XrXirValue *payload=NULL;
+            if (!xr_xir_nullable_view(&current,&some,&payload)) { status=XR_XIR_CTFE_BAD_ARTIFACT;break; }
+            const XrXirStorageLayout *layout=xr_xir_compile_type_arena_storage(state->arena,(XrXirType)current.type);
+            if (!layout || !layout->tag_bytes) { status=XR_XIR_CTFE_BAD_ARTIFACT;break; }
+            if (layout->tag_bytes>maximum-bytes) { status=XR_XIR_CTFE_OUTPUT_LIMIT;break; }
+            bytes+=layout->tag_bytes;
+            if (!some) {
+                if (current_owned) xr_xir_value_drop(&current);
+                current=(XrXirValue){0};current_owned=false;tuple=NULL;
+            }
+        }
         if (tuple) {
             if (depth==capacity) {
                 uint64_t next=capacity?(uint64_t)capacity*2:1;
@@ -117,15 +130,20 @@ static XrXirCtfeStatus ctfe_tuple_export_bytes(ScalarRun *run,const XrXirValue *
         }
         while (depth) {
             CtfeTupleExportFrame *frame=&stack[depth-1];
-            tuple=xr_xir_tuple_signature(run->module->types,(XrXirType)frame->value.type);
-            if (frame->next<tuple->parameter_count) break;
+            tuple=ctfe_composite_node(run->module->types,(XrXirType)frame->value.type);
+            if (frame->next<ctfe_composite_fields(tuple)) break;
             if (frame->owned) xr_xir_value_drop(&frame->value);--depth;
         }
         if (!depth) break;
         CtfeTupleExportFrame *frame=&stack[depth-1];
         status=ctfe_validation_work(run,state,(XrXirType)frame->value.type);
         if (status!=XR_XIR_CTFE_OK) break;
-        status=ctfe_value_status(xr_xir_tuple_get(&frame->value,frame->next++,&current));
+        tuple=ctfe_composite_node(run->module->types,(XrXirType)frame->value.type);
+        if (tuple->kind==XR_XIR_TYPE_NULLABLE) {
+            bool some=false;const XrXirValue *payload=NULL;
+            if (!xr_xir_nullable_view(&frame->value,&some,&payload) || !some || !payload) { status=XR_XIR_CTFE_BAD_ARTIFACT;break; }
+            status=ctfe_value_status(xr_xir_value_copy(payload,&current));++frame->next;
+        } else status=ctfe_value_status(xr_xir_tuple_get(&frame->value,frame->next++,&current));
         if (status!=XR_XIR_CTFE_OK) break;
         current_owned=true;
     }
