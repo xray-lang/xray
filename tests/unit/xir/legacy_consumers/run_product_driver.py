@@ -55,9 +55,9 @@ def main() -> int:
             'full_fi_lifetime_physical_sanitizer':'NOT_RUN', 'production_release':False,
         }, ensure_ascii=False, indent=2)+'\n', encoding='utf-8')
 
-    def invoke(label: str, argv: list[str], stdin: bytes = b'') -> dict:
+    def invoke(label: str, argv: list[str], stdin: bytes = b'', cwd: Path = ROOT) -> dict:
         started = time.monotonic()
-        process = subprocess.Popen(argv, cwd=ROOT, env=environment,
+        process = subprocess.Popen(argv, cwd=cwd, env=environment,
                                    stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         timed_out = False
         try:
@@ -68,7 +68,7 @@ def main() -> int:
             stdout, stderr = process.communicate()
         (output/(label+'.stdout')).write_bytes(stdout)
         (output/(label+'.stderr')).write_bytes(stderr)
-        row = {'label':label, 'argv':argv, 'pid':process.pid, 'exit_code':process.returncode,
+        row = {'label':label, 'argv':argv, 'cwd':str(cwd), 'pid':process.pid, 'exit_code':process.returncode,
                'timed_out':timed_out, 'seconds':time.monotonic()-started,
                'stdout_hex':stdout.hex(), 'stderr_hex':stderr.hex()}
         records.append(row)
@@ -110,13 +110,19 @@ def main() -> int:
                 path.parent.mkdir(parents=True, exist_ok=True)
                 path.write_bytes(data)
             source = source_bytes.decode('utf-8')
+            original_context = case.get('source_context') == 'original_absolute'
+            if original_context:
+                if case['entry'] != 'run' or case.get('replace_constructor_with_init'):
+                    raise ValueError('original context cannot overwrite or adapt a preserved source')
+                target = original
             if case.get('replace_constructor_with_init'):
                 source = source.replace('constructor(', 'init(')
             suffix = ''
             if case['entry'] == 'function':
                 value = oracle['expected']['return_i64']
                 suffix = f'\nvar observedResult = answer()\nassertEqual(observedResult, {value})\nprint(observedResult)\n'
-            target.write_text(source+suffix, encoding='utf-8', newline='\n')
+            if not original_context:
+                target.write_text(source+suffix, encoding='utf-8', newline='\n')
             expected = {'exit_code':case.get('expected_exit_code',0),
                         'stdout_hex':case['stdout_utf8'].encode('utf-8').hex(),
                         'stderr_hex':case.get('stderr_utf8','').encode('utf-8').hex()}
@@ -129,6 +135,10 @@ def main() -> int:
                    'owners':case['owners'],'expected':expected,'routes':{},
                    'remaining_gates':case['remaining_gates']}
             results.append(row)
+            arguments = case.get('arguments',[])
+            stdin = bytes.fromhex(case.get('stdin_hex',''))
+            workspace = evidence/'workspace'
+            workspace.mkdir()
             if case['entry'] == 'test':
                 # Native projection invokes the same complete bodies in order;
                 # real CLI test discovery is checked independently before that.
@@ -149,10 +159,11 @@ def main() -> int:
                 target.write_text(source+suffix, encoding='utf-8', newline='\n')
                 row['entry_adapter_suffix'] = suffix
                 row['entry_sha256'] = sha(target.read_bytes())
-            vm = invoke(case['id']+'-vm',[str(binary),'run',str(target)])
+            vm_argv = [str(binary),'run',str(target)] + (['--',*arguments] if arguments else [])
+            vm = invoke(case['id']+'-vm',vm_argv,stdin,workspace)
             row['routes']['vm'] = 'PASS' if matches(vm,expected) else 'FAIL_POSITIVE_CONSUMER'
             generated = evidence/'program.c'
-            emit = invoke(case['id']+'-emit',[str(binary),'build','--c-only',str(target),'-o',str(generated)])
+            emit = invoke(case['id']+'-emit',[str(binary),'build','--c-only',str(target),'-o',str(generated)],cwd=workspace)
             c = generated.read_bytes() if generated.is_file() else b''
             emit_message = ('Generated: '+str(generated)+'\n').encode('utf-8').hex()
             c_ok = (emit['exit_code']==0 and not emit['timed_out'] and emit['stdout_hex']==emit_message
@@ -165,12 +176,12 @@ def main() -> int:
             command = [str(binary),'build',str(target),'-o',str(native)]
             if args.compiler:
                 command += ['--cc',str(args.compiler.resolve(strict=True))]
-            built = invoke(case['id']+'-build',command)
+            built = invoke(case['id']+'-build',command,cwd=workspace)
             build_message = ('Built: '+str(native)+'\n').encode('utf-8').hex()
             if (built['exit_code']==0 and not built['timed_out'] and not built['stderr_hex']
                     and built['stdout_hex']==build_message and native.is_file()):
                 native_digest = sha(native.read_bytes())
-                result = invoke(case['id']+'-native',[str(native)])
+                result = invoke(case['id']+'-native',[str(native),*arguments],stdin,workspace)
                 row['routes']['native'] = 'PASS' if (matches(result,expected)
                     and sha(native.read_bytes())==native_digest) else 'FAIL_POSITIVE_CONSUMER'
                 row['native_sha256'] = native_digest
