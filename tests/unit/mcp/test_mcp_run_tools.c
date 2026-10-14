@@ -53,6 +53,7 @@ static void normal_cases(void) {
     expect_output("fn twice(n:i64)->i64 { return n*2 }\nprint(twice(21))\n", "42\n", 3, 0, false);
     expect_output("print(\"ABCDEFGHIJKLMNOPQRSTUVWXYZ\")\n", "ABCDEFGHIJ", 10, 10, true);
     expect_output("print(\"isolated\")\n", "isolated\n", 9, 0, false);
+    expect_output("import time\ntime.sleep(20)\nprint(\"after-timer\")\n", "after-timer\n", 12, 0, false);
     const char *blocked[] = {"net", "http", "io", "os", "process", "cluster", "ws", "path"};
     for (size_t i = 0; i < sizeof(blocked)/sizeof(blocked[0]); ++i) {
         char code[96]; snprintf(code, sizeof(code), "import %s\n", blocked[i]);
@@ -82,6 +83,11 @@ static void normal_cases(void) {
     const char loop[] = "var i = 0\nwhile (i == 0) { var x = 1 }\n";
     result = run(loop, sizeof(loop)-1, 50, 0); value = xjson_get_object(result, "structuredContent");
     CHECK(xjson_get_bool(result, "isError") && xjson_get_bool(value, "timedOut"));
+    xjson_free(result);
+    const char timer[] = "import time\ntime.sleep(1000)\nprint(\"too-late\")\n";
+    result = run(timer, sizeof(timer)-1, 50, 0); value = xjson_get_object(result, "structuredContent");
+    CHECK(xjson_get_bool(result, "isError") && xjson_get_bool(value, "timedOut"));
+    CHECK(xjson_get_int_or(value, "outputBytes", -1) == 0);
     xjson_free(result);
     expect_output("print(\"after-timeout\")\n", "after-timeout\n", 14, 0, false);
     puts("MCP owned run: normal, byte output, isolation, truncation, imports, panic, deadline and recovery PASS");
