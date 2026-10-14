@@ -11935,7 +11935,7 @@
       "id": "regression_core_review_0330_bitwise_complete_observed",
       "oracle_id": "regression_core_review_0330_bitwise",
       "source": "tests/unit/xir/legacy_consumers/fixtures/independent_named_observations/0330_bitwise/root.xr",
-      "source_lf_sha256": "845b161e7f7e087946910f1ae6d23849aae5a2cbfd5d4febdb979b035233b866",
+      "source_lf_sha256": "e932d6dcec1f903eec0145735ced19fd8d8b1f6ddc9411e1dba37122ac867d31",
       "entry": "test",
       "stdout_utf8": "8\n15\n8\n0\n0\n255\n14\n255\n14\n255\n255\n255\n6\n240\n6\n255\n255\n0\n3\n5\n-1\n0\n-256\ntrue\n8\n4\ntrue\nfalse\n4\n11\n8\n10\n1048576\n",
       "stderr_utf8": "",
@@ -11948,7 +11948,7 @@
         "original_case": "tests/regression/03_operators/0330_bitwise.xr",
         "selected_complete_source": "tests/regression/03_operators/0330_bitwise.xr",
         "selected_source_lf_sha256": "da44d6ca2b7171a77bb1ce1fadc8499a6dee0bcdc07dfc57838808232ef8c93a",
-        "method": "Original full bodies and all original assertions remain. Pure scalar expressions are printed after the assertions; actual sum, complement and shift values replace positive-only evidence. Float source uses the already reviewed complete target port, with separator lexical duty still OPEN.",
+        "method": "Original full bodies and all original assertions remain. Pure scalar expressions are printed after the assertions; actual sum, complement and shift values replace positive-only evidence. Float source uses the already reviewed complete target port, with separator lexical duty still OPEN. Toggle snapshots are observed immediately after each original assertion, before the next mutation.",
         "values": [
           {
             "test": "test_and_basic",

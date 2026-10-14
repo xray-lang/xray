@@ -165,9 +165,9 @@ fn test_toggle_bit() {
     var flags = 0b1010
     flags = flags ^ 0b0010  // 切换第 1 位
     assertEqual(flags, 0b1000)
+    print(flags)
     flags = flags ^ 0b0010  // 再次切换
     assertEqual(flags, 0b1010)
-    print(flags)
     print(flags)
 }
 
