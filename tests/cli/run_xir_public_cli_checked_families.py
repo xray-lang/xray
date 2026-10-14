@@ -7,6 +7,7 @@ import os
 import subprocess
 import tempfile
 from pathlib import Path
+from xir_no_child_process import NoChildProcess
 
 
 def main() -> int:
@@ -27,6 +28,7 @@ def main() -> int:
         output = Path(temporary.name).resolve()
     records = []
     try:
+        process_policy = NoChildProcess(root, output)
         stdlib = output / 'stdlib'
         (stdlib / 'io').mkdir(parents=True)
         poison = stdlib / 'io/output.xr'
@@ -71,10 +73,12 @@ def main() -> int:
 
         def invoke(name: str, executable: Path, arguments: list[str], environment: dict) -> subprocess.CompletedProcess:
             argv = [str(executable), *arguments]
-            result = subprocess.run(argv, cwd=root, env=environment, capture_output=True, timeout=60)
+            result = (process_policy.run(name, argv, environment) if environment is hidden else
+                      subprocess.run(argv, cwd=root, env=environment, capture_output=True, timeout=60))
             (output / (name + '.stdout')).write_bytes(result.stdout)
             (output / (name + '.stderr')).write_bytes(result.stderr)
             records.append(dict(name=name, argv=argv, exit_code=result.returncode,
+                                CLI_child_processes_denied=process_policy.supported and environment is hidden,
                                 stdout_sha256=hashlib.sha256(result.stdout).hexdigest(),
                                 stderr_sha256=hashlib.sha256(result.stderr).hexdigest()))
             (output / 'commands.json').write_text(json.dumps(records, indent=2)+'\n', encoding='utf-8')
@@ -116,6 +120,7 @@ def main() -> int:
         (output / 'summary.json').write_text(json.dumps(dict(
             status='CHECKED_OUTPUT_TIME_PRIVATE_CLOSURE_VM_NATIVE_PASS', commands=len(records),
             source_absent_and_poisoned=True, VM_C_provider_PATH_hidden=True,
+            Windows_absolute_child_denial=process_policy.control,
             new_user_type='User enum and imported UserBox<T> carrying an imported Shade enum',
             canonical_type_description_consumer='Generic enum toString/name/ordinal with Checked output',
             library_generic_templates=False,

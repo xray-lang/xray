@@ -2,6 +2,7 @@
 from __future__ import annotations
 import argparse,hashlib,json,os,subprocess,tempfile
 from pathlib import Path
+from xir_no_child_process import NoChildProcess
 
 def main():
     parser=argparse.ArgumentParser(description=__doc__)
@@ -12,6 +13,7 @@ def main():
     else:temporary=tempfile.TemporaryDirectory(prefix='string-ctfe-',dir=binary.parent);output=Path(temporary.name)
     records=[]
     try:
+        process_policy=NoChildProcess(root,output)
         stdlib=output/'stdlib';(stdlib/'types').mkdir(parents=True)
         poison=stdlib/'types/string.xr';poison.write_text('invalid string source must never supply CTFE semantics\n',encoding='utf-8')
         env=dict(os.environ,XRAY_STDLIB_PATH=str(stdlib),NO_COLOR='1');hidden=dict(env,PATH=str(output/'no-C-provider'))
@@ -37,9 +39,12 @@ def main():
             read_expected.extend(f'{word.find(pattern,start)} {word.rfind(pattern)} true\n'.encode())
         cases=[('owned',text,bytes(expected)),('reads',reads,bytes(read_expected))]
         def invoke(name,executable,arguments,environment):
-            result=subprocess.run([str(executable),*arguments],cwd=root,env=environment,capture_output=True,timeout=60)
+            argv=[str(executable),*arguments]
+            result=(process_policy.run(name,argv,environment) if environment is hidden else
+                    subprocess.run(argv,cwd=root,env=environment,capture_output=True,timeout=60))
             (output/(name+'.stdout')).write_bytes(result.stdout);(output/(name+'.stderr')).write_bytes(result.stderr)
-            records.append(dict(name=name,argv=[str(executable),*arguments],exit_code=result.returncode,
+            records.append(dict(name=name,argv=argv,exit_code=result.returncode,
+                CLI_child_processes_denied=process_policy.supported and environment is hidden,
                 stdout_sha256=hashlib.sha256(result.stdout).hexdigest(),stderr_sha256=hashlib.sha256(result.stderr).hexdigest()))
             (output/'commands.json').write_text(json.dumps(records,indent=2)+'\n',encoding='utf-8');return result
         for name,source_text,answer in cases:
@@ -64,6 +69,7 @@ def main():
         (output/'summary.json').write_text(json.dumps(dict(status='STRING_CTFE_IMPORT_PASS',commands=len(records),owning_cases=len(pairs),
             owned_direct_generic_nested_calls=len(pairs)*3,read_cases=len(queries),read_ctfe_calls=len(queries)*3,Unicode_NUL=True,
             source_poisoned_and_absent=True,VM_C_provider_PATH_hidden=True,user_generic_scalar_instantiation=True,
+            Windows_absolute_child_denial=process_policy.control,
             user_aggregate_ctfe=False,library_generic_templates=False,float_ctfe=False,complete_standard_library=False),indent=2)+'\n',encoding='utf-8')
         print('String CTFE: imported owning/generic/copy/repeat, Unicode/NUL searches and exact range refuses PASS');return 0
     finally:
