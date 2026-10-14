@@ -101,7 +101,11 @@ static int open_run(int argc,char **argv) {
             runtime_attempts=0;runtime_fail_at=probe?probe-1:SIZE_MAX;
             XrXirStatus status=open_once(argv[1],argv[2],mode,limits,probe?NULL:&stats);
             if(!probe){CHECK(status==XR_XIR_OK);sites=runtime_attempts;CHECK(sites);}
-            else CHECK(status==XR_XIR_OUT_OF_MEMORY&&runtime_attempts>=probe);
+            else {
+                if(status!=XR_XIR_OUT_OF_MEMORY||runtime_attempts<probe)
+                    fprintf(stderr,"LSP compiler fault mode=%u probe=%zu/%zu status=%u attempts=%zu\n",mode,probe,sites,(unsigned)status,runtime_attempts);
+                CHECK(status==XR_XIR_OUT_OF_MEMORY&&runtime_attempts>=probe);
+            }
             CHECK(!runtime_live&&!runtime_bytes);
         }
         runtime_fail_at=SIZE_MAX;

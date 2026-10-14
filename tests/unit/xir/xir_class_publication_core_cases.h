@@ -390,7 +390,37 @@ static void publication_cell_cases(ValueCompileOwner *compiler) {
     xr_xir_compile_type_arena_drop(arena);
     CHECK(value_compile_live == blocks && value_compile_bytes == bytes);
 }
+static void publication_core_builtin_only(XrXirTypeArena *arena) {
+    size_t blocks=cell_owner_live,bytes=cell_owner_bytes;
+    XrXirDomain *domain=NULL;CHECK(xr_xir_domain_new(65536,&domain)==XR_XIR_VALUE_OK);
+    XrXirValue text={0},object={0};CHECK(xr_xir_string_new(domain,"A\0B",3,&text)==XR_XIR_VALUE_OK);
+    publication_core_simple(arena,domain,&object);
+    XrXirValue values[]={{0},{XR_XIR_BOOL,0,1},{XR_XIR_I64,0,41},text};
+    XrXirValueAdmission admission={.domain=domain,.work=12,.scratch_bytes=0};
+    XrXirClassPublication publication={0};
+    uint64_t work=xr_xir_domain_budget_stats(domain).work;
+    CHECK(xr_xir_class_publication_prepare(&object,1,&admission,&publication)==XR_XIR_VALUE_BAD_ARGUMENT);
+    CHECK(class_publication_empty(&publication)&&admission.work==12&&
+        xr_xir_domain_budget_stats(domain).work==work&&!xr_xir_class_module_storage(&object));
+    values[1].payload=2;
+    CHECK(xr_xir_class_publication_prepare(values,4,&admission,&publication)==XR_XIR_VALUE_BAD_ARGUMENT);
+    CHECK(class_publication_empty(&publication)&&admission.work==12&&xr_xir_domain_budget_stats(domain).work==work);
+    values[1].payload=1;
+    admission.work=11;
+    CHECK(xr_xir_class_publication_prepare(values,4,&admission,&publication)==XR_XIR_VALUE_LIMIT);
+    CHECK(class_publication_empty(&publication));
+    admission.work=12;
+    size_t attempts=observation_runtime_fault.attempts;
+    CHECK(xr_xir_class_publication_prepare(values,4,&admission,&publication)==XR_XIR_VALUE_OK);
+    CHECK(!admission.work&&!publication.count&&!publication.values&&publication.operation);
+    xr_xir_class_publication_commit(&publication);xr_xir_class_publication_drop(&publication);
+    CHECK(class_publication_empty(&publication)&&observation_runtime_fault.attempts==attempts);
+    CHECK(text.type==XR_XIR_STRING&&xr_xir_value_valid(&text)&&!xr_xir_class_module_storage(&object));
+    xr_xir_value_drop(&object);xr_xir_value_drop(&text);xr_xir_domain_drop(domain);
+    CHECK(cell_owner_live==blocks&&cell_owner_bytes==bytes);
+}
 static void publication_core_cases(ValueCompileOwner *compiler, XrXirTypeArena *arena) {
+    publication_core_builtin_only(arena);
     publication_core_occupied(arena); publication_core_foreign(compiler, arena); publication_core_borrowed(arena);
     publication_core_limits(arena); publication_core_reservation(arena); publication_reservation_bounds(compiler);
     publication_core_cycle(compiler);

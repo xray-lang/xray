@@ -6,7 +6,8 @@
  *
  * test_xir_stdlib_catalog.c - Trusted Checked input ownership and real failures
  */
-#include "xir/xxir_native_cache_internal.h"
+#include "xir/xxir_stdlib_internal.h"
+#include "base/xsha256.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -29,24 +30,51 @@ static void catalog_release(XrXirCompileContext *context) {
     xr_compile_resources_release(context->resources); context->resources = NULL;
     CHECK(!effects_compile_live && !effects_compile_bytes);
 }
+static void catalog_rejections(const char *root) {
+    const XrCompileResourceLimits limits = {UINT64_C(64)*1024*1024,UINT64_C(8)*1024*1024,UINT64_C(128000000)};
+    XrXirCompileContext context = catalog_context(&limits);
+    XrCompileResourceStats initial = catalog_stats(&context);
+    uint8_t *bytes = NULL;
+    CHECK(xr_compile_resources_alloc(context.resources,xir_stdlib_output_checked_length,(void **)&bytes) == XR_COMPILE_RESOURCE_OK);
+    for (unsigned mode = 0; mode < 4; ++mode) {
+        memcpy(bytes,xir_stdlib_output_checked,xir_stdlib_output_checked_length);
+        XrXirLibraryModuleInput binding = {{XR_MODULE_IDENTITY_STDLIB,"io",root},"io/output.xr"};
+        XrXirLibraryInput input = {bytes,xir_stdlib_output_checked_length,{0},&binding,1};
+        memcpy(input.sha256,xir_stdlib_output_checked_sha256,32);
+        if (mode == 0) input.sha256[0] ^= 1;
+        else if (mode == 1) {
+            bytes[0] ^= 1;
+            xr_sha256(bytes,input.length,input.sha256);
+        } else if (mode == 2) binding.authority.namespace_id = "untrusted";
+        else input.module_count = 0;
+        XrXirLibraryCatalog *rejected = NULL;
+        CHECK(xr_xir_compile_library_catalog_new_v2(&context,&input,1,&rejected) == XR_XIR_BAD_STRUCTURE);
+        CHECK(!rejected);
+    }
+    xr_compile_resources_free(bytes);
+    CHECK(catalog_stats(&context).live_bytes == initial.live_bytes);
+    xr_compile_resources_release(context.resources);
+    CHECK(!effects_compile_live && !effects_compile_bytes);
+}
 int main(int argc, char **argv) {
     CHECK(argc == 2 && strlen(argv[1]) < 4096);
+    catalog_rejections(argv[1]);
     const XrCompileResourceLimits generous = {UINT64_C(64)*1024*1024,UINT64_C(8)*1024*1024,UINT64_C(128000000)};
     XrXirCompileContext context = catalog_context(&generous);
     XrXirLibraryCatalog *occupied = (XrXirLibraryCatalog *)(uintptr_t)17;
     XrCompileResourceStats before = catalog_stats(&context), after;
     catalog_initial_live = before.live_bytes;
     size_t attempts = effects_compile_attempts;
-    CHECK(xir_native_cache_library_catalog_new(&context,argv[1],&occupied) == XR_XIR_BAD_STRUCTURE);
+    CHECK(xir_stdlib_library_catalog_new(&context,argv[1],&occupied) == XR_XIR_BAD_STRUCTURE);
     CHECK(occupied == (XrXirLibraryCatalog *)(uintptr_t)17);
-    CHECK(xir_native_cache_library_catalog_new(&context,NULL,&occupied) == XR_XIR_BAD_STRUCTURE);
-    CHECK(xir_native_cache_library_catalog_new(NULL,argv[1],&occupied) == XR_XIR_BAD_STRUCTURE);
+    CHECK(xir_stdlib_library_catalog_new(&context,NULL,&occupied) == XR_XIR_BAD_STRUCTURE);
+    CHECK(xir_stdlib_library_catalog_new(NULL,argv[1],&occupied) == XR_XIR_BAD_STRUCTURE);
     after = catalog_stats(&context);
     CHECK(!memcmp(&before,&after,sizeof(before)) && attempts == effects_compile_attempts);
     XrXirLibraryCatalog *catalog = NULL;
     char root[4096]; memcpy(root,argv[1],strlen(argv[1])+1);
     attempts = effects_compile_attempts;
-    CHECK(xir_native_cache_library_catalog_new(&context,root,&catalog) == XR_XIR_OK);
+    CHECK(xir_stdlib_library_catalog_new(&context,root,&catalog) == XR_XIR_OK);
     size_t sites = effects_compile_attempts-attempts;
     XrCompileResourceStats measured = catalog_stats(&context);
     size_t count = 0;
@@ -78,7 +106,7 @@ int main(int argc, char **argv) {
     for (size_t site = 0; site < sites; ++site) {
         context = catalog_context(&generous); attempts = effects_compile_attempts;
         effects_compile_fail_at = attempts+site; effects_compile_injected = false;
-        CHECK(xir_native_cache_library_catalog_new(&context,argv[1],&catalog) == XR_XIR_OUT_OF_MEMORY);
+        CHECK(xir_stdlib_library_catalog_new(&context,argv[1],&catalog) == XR_XIR_OUT_OF_MEMORY);
         CHECK(!catalog && effects_compile_injected && effects_compile_attempts >= attempts+site+1);
         effects_compile_fail_at = SIZE_MAX;
         catalog_release(&context);
@@ -92,7 +120,7 @@ int main(int argc, char **argv) {
         else if (axis == 1) limits.live_bytes = bound;
         else limits.work = bound;
         context = catalog_context(&limits);
-        XrXirStatus status = xir_native_cache_library_catalog_new(&context,argv[1],&catalog);
+        XrXirStatus status = xir_stdlib_library_catalog_new(&context,argv[1],&catalog);
         CHECK(status == (minus ? XR_XIR_BUDGET : XR_XIR_OK));
         CHECK(minus ? !catalog : !!catalog);
         xr_xir_compile_library_catalog_free(catalog); catalog = NULL;

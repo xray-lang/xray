@@ -16,7 +16,7 @@
 #include "../../base/xio_policy.inc.h"
 #include "../../os/os_fs.h"
 #include "../../xir/xxir_library_catalog.h"
-#include "../../xir/xxir_native_cache_internal.h"
+#include "../../xir/xxir_stdlib_internal.h"
 
 XR_FUNC XrCompileResourceLimits xr_cli_compile_default_resource_limits(void) {
     return (XrCompileResourceLimits){UINT64_C(1) << 30, UINT64_C(256) << 20, UINT64_C(8) << 30};
@@ -142,7 +142,7 @@ XR_FUNC XrCliCompileSourceStatus xr_cli_compile_source_build(
     status = source_io_status(io.status);
     if (status == XR_CLI_COMPILE_SOURCE_OK && !libraries) {
         detail.stage = XR_CLI_COMPILE_SOURCE_LIBRARY;
-        status = source_xir_status(xir_native_cache_library_catalog_new(request->context,stdlib,&owned_catalog));
+        status = source_xir_status(xir_stdlib_library_catalog_new(request->context,stdlib,&owned_catalog));
         libraries = owned_catalog;
     }
     if (status == XR_CLI_COMPILE_SOURCE_OK) {
