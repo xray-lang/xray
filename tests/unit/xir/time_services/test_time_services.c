@@ -192,14 +192,16 @@ static void sleeping(const char *path, const char *stdlib) {
     XrXirInstance *instance = start(&fixture, &capture, &provider);
     XrXirInstanceResult first = run(instance);
     CHECK(first.outcome.status == XR_XIR_CALL_SUSPENDED && first.outcome.wake && !capture.length);
-    XrXirWaitRequest request = {7, 7, 7};
+    XrXirWaitRequest request = {7, 7, 7, &fixture, 71, 72};
     CHECK(xr_xir_instance_wait_request(instance, first.epoch + 1, first.outcome.wake, &request) == XR_XIR_CALL_BAD_STATE);
     CHECK(xr_xir_instance_wait_request(instance, first.epoch, first.outcome.wake + 1, &request) == XR_XIR_CALL_BAD_STATE);
     CHECK(request.kind == 7 && request.reserved == 7 && request.after_ms == 7);
+    CHECK(request.subject == &fixture && request.generation == 71 && request.ticket == 72);
     CHECK(xr_xir_instance_wait_request(NULL, first.epoch, first.outcome.wake, &request) == XR_XIR_CALL_BAD_ARGUMENT);
     CHECK(xr_xir_instance_wait_request(instance, first.epoch, first.outcome.wake, NULL) == XR_XIR_CALL_BAD_ARGUMENT);
     CHECK(xr_xir_instance_wait_request(instance, first.epoch, first.outcome.wake, &request) == XR_XIR_CALL_READY);
     CHECK(request.kind == XR_XIR_WAIT_TIMER_MS && !request.reserved && request.after_ms == 5);
+    CHECK(!request.subject && !request.generation && !request.ticket);
     /* Resuming is the host's decision; a stale or wrong token never resumes the program. */
     CHECK(xr_xir_instance_resume(instance, first.epoch, first.outcome.wake + 1) == XR_XIR_CALL_BAD_STATE);
     CHECK(xr_xir_instance_resume(instance, first.epoch, first.outcome.wake) == XR_XIR_CALL_READY);
@@ -226,17 +228,17 @@ static uint64_t now_ns(void) {
 }
 static void host_waits(void) {
     XrXirHostWait wait = {0};
-    XrXirWaitRequest bad[] = {{XR_XIR_WAIT_NONE, 0, 0}, {XR_XIR_WAIT_TIMER_MS, 0, 0},
-        {XR_XIR_WAIT_TIMER_MS, 0, XR_XIR_TIMER_MAX_MS + 1}, {XR_XIR_WAIT_TIMER_MS, 1, 5},
-        {XR_XIR_WAIT_YIELD, 0, 1}, {99, 0, 0}};
+    XrXirWaitRequest bad[] = {{XR_XIR_WAIT_NONE, 0, 0, NULL, 0, 0}, {XR_XIR_WAIT_TIMER_MS, 0, 0, NULL, 0, 0},
+        {XR_XIR_WAIT_TIMER_MS, 0, XR_XIR_TIMER_MAX_MS + 1, NULL, 0, 0}, {XR_XIR_WAIT_TIMER_MS, 1, 5, NULL, 0, 0},
+        {XR_XIR_WAIT_YIELD, 0, 1, NULL, 0, 0}, {99, 0, 0, NULL, 0, 0}};
     for (unsigned i = 0; i < sizeof(bad) / sizeof(bad[0]); ++i)
         CHECK(xr_xir_host_wait_begin(&wait, &bad[i]) == XR_XIR_HOST_WAIT_BAD_ARGUMENT && !wait.active);
     CHECK(xr_xir_host_wait_begin(NULL, &bad[1]) == XR_XIR_HOST_WAIT_BAD_ARGUMENT);
     CHECK(xr_xir_host_wait_poll(&wait, 0) == XR_XIR_HOST_WAIT_BAD_ARGUMENT);
-    XrXirWaitRequest yield = {XR_XIR_WAIT_YIELD, 0, 0};
+    XrXirWaitRequest yield = {XR_XIR_WAIT_YIELD, 0, 0, NULL, 0, 0};
     CHECK(xr_xir_host_wait_begin(&wait, &yield) == XR_XIR_HOST_WAIT_PENDING);
     CHECK(xr_xir_host_wait_poll(&wait, 0) == XR_XIR_HOST_WAIT_DUE);
-    XrXirWaitRequest timer = {XR_XIR_WAIT_TIMER_MS, 0, 20};
+    XrXirWaitRequest timer = {XR_XIR_WAIT_TIMER_MS, 0, 20, NULL, 0, 0};
     uint64_t started = now_ns();
     CHECK(xr_xir_host_wait_begin(&wait, &timer) == XR_XIR_HOST_WAIT_PENDING);
     CHECK(xr_xir_host_wait_poll(&wait, 0) == XR_XIR_HOST_WAIT_PENDING);
