@@ -15,6 +15,7 @@ enum { OBS_FUNCTIONS = 64, OBS_FRAMES = 64, OBS_INSTANCES = 2, OBS_ROLES = 3 };
 typedef struct ObservationFrame {
     XrXirCallEvent key;
     XrXirCallCodeKind code;
+    XrXirCallStatus leave;
     unsigned begins, ends, codes;
     bool dispatch, left;
 } ObservationFrame;
@@ -37,6 +38,7 @@ struct ObservationCode {
     ObservationRecord records[OBS_INSTANCES];
 };
 static ObservationCode *observation_code;
+static XrXirCallStatus observation_expected_fault;
 
 static bool observation_key(const XrXirCallEvent *a, const XrXirCallEvent *b) {
     return a->binding.owner == b->binding.owner && a->binding.activation == b->binding.activation &&
@@ -77,13 +79,15 @@ static void observation_event(void *pointer, const XrXirCallEvent *event) {
         CHECK(frame->dispatch || (!frame->begins && !frame->ends && frame->key.kind == XR_XIR_CALL_FRAME_PRESENT));
         CHECK(event->code == frame->code); frame->dispatch = false; ++frame->ends;
     } else if (event->kind == XR_XIR_CALL_FRAME_LEAVE) {
-        CHECK(!frame->dispatch && event->code == frame->code && event->status == XR_XIR_CALL_RETURNED);
+        CHECK(!frame->dispatch && event->code == frame->code);
+        CHECK(event->status == XR_XIR_CALL_RETURNED ||
+            (observation_expected_fault != XR_XIR_CALL_READY && event->status == observation_expected_fault));
         for (unsigned i = 0; i < record->count; ++i) {
             const ObservationFrame *child = &record->frames[i]; XrXirCallEvent parent_key = child->key;
             parent_key.frame = event->frame;
             if (child->key.parent == event->frame && observation_key(&parent_key, event)) CHECK(child->left);
         }
-        frame->left = true;
+        frame->left = true; frame->leave = event->status;
     }
     ++record->events;
 }
@@ -100,7 +104,12 @@ static XrXirAction observation_resume(XrXirCallView *view) {
     record->view = view; record->binding = true;
     XrXirCallView copy = *view;
     CHECK(xr_xir_call_observer_bind(&copy, &record->observer) == XR_XIR_CALL_BAD_STATE);
-    CHECK(xr_xir_call_observer_bind(view, &record->observer) == XR_XIR_CALL_READY);
+    XrXirCallStatus bound = xr_xir_call_observer_bind(view, &record->observer);
+    if (bound != XR_XIR_CALL_READY) {
+        CHECK(observation_expected_fault == XR_XIR_CALL_LIMIT && bound == XR_XIR_CALL_LIMIT && !record->events);
+        record->binding = false; record->view = NULL;
+        return xr_xir_call_fault(XR_XIR_RUN_FRAME_LIMIT);
+    }
     record->binding = false;
     if (!record->installed) { record->installed = true; ++record->installations; }
     XrXirAction action = record->code->original[entry](view);
@@ -199,7 +208,7 @@ static void observation_verify(ObservationRecord *record, TerminalBackend backen
     else if (backend == TERMINAL_NATIVE) CHECK(native && !vm);
     else CHECK(vm && native);
 }
-int main(int argc, char **argv) {
+static int observation_normal_main(int argc, char **argv) {
     CHECK(argc == 2); TerminalBackend backend = TERMINAL_MIXED_VM_ROOT;
     while (backend <= TERMINAL_NATIVE && strcmp(argv[1], terminal_backend_names[backend])) ++backend;
     CHECK(backend <= TERMINAL_NATIVE);
@@ -242,3 +251,6 @@ int main(int argc, char **argv) {
     printf("Observed Source backend=%s root/callee/callback frames=4/4/8, exact code kind, two Instances two rounds quantum1, fixed result42 and peer unchanged, code lease1, physical0/0\n", terminal_backend_names[backend]);
     return 0;
 }
+#ifndef XR_OBSERVATION_RESOURCE_MAIN
+int main(int argc, char **argv) { return observation_normal_main(argc, argv); }
+#endif
