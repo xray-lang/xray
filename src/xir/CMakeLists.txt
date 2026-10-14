@@ -65,7 +65,7 @@ foreach(target xray_xir xray_xir_admission xray_xir_declarations xray_xir_scalar
     endif()
 endforeach()
 
-include("${CMAKE_CURRENT_LIST_DIR}/native_cache_pair.cmake")
+include("${CMAKE_CURRENT_LIST_DIR}/stdlib_checked.cmake")
 
 # Server query owner uses the actual CLI stdlib/Catalog/authority kernel.
 add_library(xray_lsp_source_workspace STATIC ../app/lsp/xlsp_source_workspace.c)

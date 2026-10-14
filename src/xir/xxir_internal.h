@@ -37,6 +37,18 @@ XR_FUNC XrXirStatus xr_xir_compile_provenance_copy_source_effects(const XrXirCom
     const XrXirProvenance *source, const XrXirEffects *source_effects, XrXirProvenance **output);
 XR_FUNC XrXirStatus xir_effects_source_body_match(const XrXirCompileContext *context,
     const XrXirModule *source, const XrXirEffects *effects);
+/* Exact Lowered fields are compared without allocating or running callbacks.
+ * This supplies correspondence only; independent semantic proof remains required. */
+XR_FUNC XrXirStatus xir_effects_program_body_match(const XrXirCompileContext *context,
+    const XrXirModule *source, const XrXirEffects *effects);
+/* These borrows are compare-only metadata of the same owned semantic input;
+ * callers must compare every current field before publishing a Program. */
+XR_FUNC XrXirStatus xir_effects_program_metadata(const XrXirCompileContext *context,
+    const XrXirEffects *effects, const XrXirTypes **types, const XrXirDeclarations **declarations);
+XR_FUNC XrXirStatus xir_effects_program_signature_match(const XrXirCompileContext *context,
+    const XrXirEffects *effects, uint32_t function, const XrXirType *parameters,
+    uint32_t parameter_count, XrXirType result);
+
 /* Metadata shape cannot authorize substitutions; the common owner derives facts. */
 XR_FUNC XrXirStatus xir_effect_contract_shape_verify(const XrXirCompileContext *context,
     const XrXirModule *module);

@@ -22,6 +22,7 @@
 #include "xir_runtime_allocations.h"
 #include "xir/xxir_task.c"
 #include "xir_child_callable_permissions.h"
+#include "xir_child_callable_capture_auth.h"
 
 static CpWitness *cp_witness(const void *instance) {
     CHECK(cp_observed && instance);
@@ -121,6 +122,7 @@ static XrXirAction cp_resume(XrXirCallView *view) {
         if (function == XRCP_CHILD) cp_child_probes(view, w);
     }
     XrXirAction action = cp_observed->original[function].resume(view);
+    if(function==XRCP_CHILD&&action.kind==XR_XIR_ACTION_CALL)child_capture_auth_probes(view,&action);
     if (function == XRCP_ROOT && action.kind == XR_XIR_ACTION_AWAIT_TASK) ++w->await_actions;
     return action;
 }
@@ -243,7 +245,7 @@ static void cp_close(CpFixture *f) {
 
 int main(void) {
     setvbuf(stdout, NULL, _IONBF, 0);
-    CHECK(XR_XIR_CHECKED_CONTRACT == 70u && !runtime_live && !runtime_bytes);
+    CHECK(!runtime_live && !runtime_bytes);
     CpFixture fixture;
     cp_build(&fixture);
     cp_new_pair(&fixture);

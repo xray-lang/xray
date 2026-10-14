@@ -12,6 +12,33 @@
 #ifndef XIR_PROGRAM_CALL_PERMISSIONS_OBSERVER_H
 #define XIR_PROGRAM_CALL_PERMISSIONS_OBSERVER_H
 
+/* Read-only observation uses the real value implementation already included
+ * by the allocation harness. The actual allocation table bounds the Cell.
+ * No validator, admission or allocator runs inside this physical observer. */
+static const XrXirValue *pce_slot_value(const XrXirInstance *instance) {
+    const XrXirValue *handle=&instance->slots[0];
+    if (!instance->published[0]) {
+        CHECK(!handle->type && !handle->reserved && !handle->payload);
+        return handle;
+    }
+    CHECK(handle->type==(uint32_t)instance->program->declarations->slots[0].type && !handle->reserved);
+    const XirCell *cell=(const XirCell *)object_pointer(handle);
+    uintptr_t address=(uintptr_t)cell;
+    bool tracked=false;
+    for (size_t i=0;i<runtime_owned_capacity;++i) {
+        const RuntimeAllocationRecord *record=&runtime_owned[i];
+        uintptr_t base=(uintptr_t)record->pointer;
+        if (record->pointer && address>=base && address-base<=record->bytes &&
+            sizeof(*cell)<=record->bytes-(size_t)(address-base)) tracked=true;
+    }
+    CHECK(tracked);
+    CHECK(cell->object.kind==XIR_OBJECT_CELL && cell->object.domain==instance->domain &&
+        cell->object.arena==instance->program->arena && cell->object.type==(XrXirType)handle->type);
+    CHECK(cell->initialized && cell->module_storage && !cell->projection_count);
+    CHECK(cell->module_owner==instance && !cell->module_slot && !cell->borrow_top);
+    return &cell->value;
+}
+
 static PceWitness *pce_witness(const XrXirInstance *instance) {
     CHECK(pce_current && instance);
     for (unsigned i = 0; i < PCE_INSTANCES; ++i)
@@ -106,6 +133,7 @@ static XrXirAction pce_resume(XrXirCallView *view) {
         }
         w->before_call = pce_ledger(w);
         w->slot_before = w->instance->slots[0];
+        w->slot_value_before = *pce_slot_value(w->instance);
         w->boundary_captured = true;
         action.callee = f->target;
         printf("PCE_REQUEST instance=%u caller=%u target=%u original=%u actual_child=1 call=%p root_call=%p\n",

@@ -85,19 +85,32 @@ static XrXirStatus effect_runtime_parent(const EffectInvocationCertificate *cert
 static XrXirStatus effect_runtime_original_none(const EffectInvocationCertificate *certificate,
     const XirEffectInvocationRequest *request,uint32_t parameter,bool *output) {
     const EffectInvocationDeclaredBounds *bounds=certificate->declared;
-    const EffectBodyFunction *caller=&certificate->body->functions[request->caller];
+    uint32_t source_function=request->caller,source_instruction=request->instruction;
+    if(parameter<request->captures) {
+        const EffectInvocationOwner *owner=certificate->equations;
+        if(request->producer>=owner->site_count) return XR_XIR_BAD_STRUCTURE;
+        const EffectInvocationSite *site=&owner->sites[request->producer];
+        if(site->target!=request->target || site->captures!=request->captures ||
+            site->function>=effect_body_count(certificate->body)) return XR_XIR_BAD_STRUCTURE;
+        source_function=site->function;source_instruction=site->instruction;
+    }
+    const EffectBodyFunction *caller=&certificate->body->functions[source_function];
     EffectBodyRead read=effect_body_runtime_read(&request->read);XrXirInstruction decoded;
-    XrXirStatus decoded_status=effect_body_instruction_get(&read,caller,request->instruction,&decoded);
+    XrXirStatus decoded_status=effect_body_instruction_get(&read,caller,source_instruction,&decoded);
     if (decoded_status!=XR_XIR_OK) return decoded_status;
     const XrXirInstruction *op=&decoded;
     if (!bounds || bounds->resources!=certificate->resources ||
         bounds->count!=effect_body_count(certificate->body) || !bounds->functions ||
         !certificate->parameter_kinds || !certificate->parameter_kinds[request->target] ||
-        parameter>=request->count || parameter<request->captures || op->args[0]>caller->operand_count ||
+        parameter>=request->count || op->args[0]>caller->operand_count ||
         op->args[1]>caller->operand_count-op->args[0] || !caller->operands)
         return XR_XIR_BAD_STRUCTURE;
-    uint32_t actual=caller->operands[op->args[0]+parameter-request->captures];
-    const EffectInvocationFunctionBounds *source=&bounds->functions[request->caller];
+    uint32_t ordinal=parameter<request->captures?parameter:parameter-request->captures;
+    if(ordinal>=op->args[1] || (parameter<request->captures &&
+        (op->op!=XR_XIR_FUNCTION_REF || op->immediate!=(int64_t)request->target)))
+        return XR_XIR_BAD_STRUCTURE;
+    uint32_t actual=caller->operands[op->args[0]+ordinal];
+    const EffectInvocationFunctionBounds *source=&bounds->functions[source_function];
     const EffectInvocationFunctionBounds *target=&bounds->functions[request->target];
     if (actual>=source->values || parameter>=target->values || source->count>source->values ||
         target->count>target->values || (!!source->bounds!=!!source->count) ||
@@ -217,9 +230,9 @@ static XrXirStatus effect_runtime_class(const EffectInvocationCertificate *certi
     *output=fact.mask|(publication?EFFECT_CLASS_ROOT:0);return XR_XIR_OK;
 }
 
-/* This reader closes scalar and owned Cell prefixes with scoped REF suffixes.
- * Scalar captures have no relation columns; callable captures and other
- * constructed environments remain refused by the complete actual reader. */
+/* Scalar and owned Cell prefixes retain their ordinary checks. Callable
+ * captures use the original reference's declared bound and an authenticated
+ * actual producer; every complete row still matches exactly. */
 static XrXirStatus effect_runtime_inputs(const EffectInvocationCertificate *certificate,
     const XirEffectInvocationRequest *request,const EffectInvocationNode *node,bool *output) {
     const EffectBodyFunction *target=&certificate->body->functions[request->target];

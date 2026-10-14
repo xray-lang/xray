@@ -141,7 +141,6 @@ static void allocation_instance_metadata_free(XrXirDomain *domain,void *pointer,
 #include "xir_instance_retirement_probe.c"
 #undef XIR_INSTANCE_IMPLEMENTATION_PRESENT
 #include "xir/xxir_output.c"
-#include "xir/xxir_native_cache.c"
 
 #include "xir_allocation_compile_owner.h"
 #include "xir_string_fixture.h"
