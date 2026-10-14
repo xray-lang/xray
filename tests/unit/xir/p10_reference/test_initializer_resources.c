@@ -60,11 +60,19 @@ static const char optional_tuple_source[] =
     "fn classify(value:i8?" "?)->i64{if(value==null){return 0};if(value==null){return 1};return 2}\n"
     "export fn referenceAnswer()->i64{const cached=Cached();"
     "return classify(cached.state)*100+(cached.value.0 as i64)*10+len(cached.value.1)}\n";
+static const char field_place_source[] =
+    "struct Inner{items:Array<i64>}\n"
+    "struct Batch{inner:Inner=Inner{items:[7,11]};init(last:i64){this.inner.items.push(last);this.inner.items[0]=13}}\n"
+    "class ObjectBatch{items:Array<i64>=[17];init(last:i64){this.items.push(last)}}\n"
+    "struct Generic<T>{items:Array<T>;init(first:T,last:T){this.items=[first];this.items.push(last)}}\n"
+    "export fn referenceAnswer()->i64{const a=Batch(19);const b=Batch(23);const c=ObjectBatch(29);const g=Generic<i64>(31,37);"
+    "return a.inner.items[0]*10000+a.inner.items[1]*100+a.inner.items[2]+b.inner.items[2]+c.items[0]+c.items[1]+g.items[0]+g.items[1]}\n";
 typedef struct InitializerCase { const char *name, *text;size_t length; } InitializerCase;
 static const InitializerCase cases[] = {
     {"ordinary",source,sizeof(source)-1},
     {"comptime-array",array_source,sizeof(array_source)-1},
-    {"comptime-optional-tuple",optional_tuple_source,sizeof(optional_tuple_source)-1}
+    {"comptime-optional-tuple",optional_tuple_source,sizeof(optional_tuple_source)-1},
+    {"field-places",field_place_source,sizeof(field_place_source)-1}
 };
 static const XrCompileResourceLimits limits = {
     UINT64_C(64)*1024*1024, UINT64_C(8)*1024*1024, UINT64_C(128000000)};
@@ -130,9 +138,11 @@ static void initializer_case(const InitializerCase *fixture, bool baseline) {
 int main(int argc,char **argv) {
     bool baseline=argc==2 && !strcmp(argv[1],"--comptime-baseline");
     size_t first=0,last=1;
-    if (baseline) { first=1;last=sizeof(cases)/sizeof(cases[0]); }
+    if (baseline) { first=1;last=3; }
     else if (argc==2 && !strcmp(argv[1],"--comptime-array")) { first=1;last=2; }
     else if (argc==2 && !strcmp(argv[1],"--comptime-optional-tuple")) { first=2;last=3; }
+    else if (argc==2 && !strcmp(argv[1],"--field-places")) { first=3;last=4; }
+    else if (argc==2 && !strcmp(argv[1],"--field-places-baseline")) { first=3;last=4;baseline=true; }
     else CHECK(argc==1);
     for (size_t i=first;i<last;++i) initializer_case(&cases[i],baseline);
     return 0;

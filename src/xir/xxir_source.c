@@ -1097,6 +1097,7 @@ static bool source_array_recipe_call(SourceContext *ctx, AstNode *node, SourceAr
 #include "xxir_source_string.inc.c"
 static bool source_constructor_receiver(SourceContext *ctx, AstNode *node);
 static bool source_constructor_field(SourceContext *ctx, AstNode *node, const char *name, SourceValue *value, AstNode *incoming);
+static bool source_constructor_place(SourceContext *ctx, AstNode *member, SourceValue *place);
 #include "xxir_source_struct.inc.c"
 #include "xxir_source_path.inc.c"
 static bool source_literal_append(SourceContext *ctx, AstNode *node, const char *bytes,

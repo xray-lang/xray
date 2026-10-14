@@ -1,0 +1,5 @@
+struct Batch {
+    const items: Array<i64> = [1]
+    init() { this.items.push(7) }
+}
+export fn referenceAnswer() -> i64 { return len(Batch().items) }

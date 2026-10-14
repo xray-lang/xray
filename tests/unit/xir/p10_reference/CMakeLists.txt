@@ -63,6 +63,14 @@ add_test(NAME test_xir_p10_initializer_comptime_resources_baseline
     COMMAND test_xir_p10_initializer_resources --comptime-baseline)
 set_tests_properties(test_xir_p10_initializer_comptime_resources_baseline PROPERTIES
     TIMEOUT 30 LABELS "unit;xir;p10;init;ctfe;ownership;resource-control")
+add_test(NAME test_xir_p10_initializer_field_places_resources
+    COMMAND test_xir_p10_initializer_resources --field-places)
+set_tests_properties(test_xir_p10_initializer_field_places_resources PROPERTIES
+    TIMEOUT 300 COST 100 RUN_SERIAL TRUE LABELS "unit;xir;p10;init;ownership;budget;allocation")
+add_test(NAME test_xir_p10_initializer_field_places_baseline
+    COMMAND test_xir_p10_initializer_resources --field-places-baseline)
+set_tests_properties(test_xir_p10_initializer_field_places_baseline PROPERTIES
+    TIMEOUT 30 LABELS "unit;xir;p10;init;ownership;resource-control")
 target_link_libraries(test_xir_p10_initializer_surface PRIVATE xray_xir_source xray_frontend_format)
 set_target_properties(test_xir_p10_initializer_surface PROPERTIES C_STANDARD 11 C_STANDARD_REQUIRED YES C_EXTENSIONS NO)
 if(MSVC)
@@ -434,11 +442,13 @@ foreach(case IN ITEMS reject_init_generic_default reject_init_unused_generic_def
     add_test(NAME test_xir_p10_reference_${case} COMMAND test_xir_p10_reference --reject ${case} 3 "expression cannot satisfy its declared type")
     set_tests_properties(test_xir_p10_reference_${case} PROPERTIES TIMEOUT 30 LABELS "unit;xir;p10;reference;init;default;generic;reject")
 endforeach()
-foreach(case IN ITEMS init_comptime_array init_comptime_optional_tuple)
+foreach(case IN ITEMS init_comptime_array init_comptime_optional_tuple init_field_places)
     if(case STREQUAL "init_comptime_array")
         set(expected 3867)
-    else()
+    elseif(case STREQUAL "init_comptime_optional_tuple")
         set(expected 173)
+    else()
+        set(expected 131256)
     endif()
     add_test(NAME test_xir_p10_reference_${case} COMMAND test_xir_p10_reference --accept ${case} ${expected})
     set_tests_properties(test_xir_p10_reference_${case} PROPERTIES
@@ -470,6 +480,18 @@ foreach(case IN ITEMS init_comptime_array init_comptime_optional_tuple)
             TIMEOUT 30 LABELS "unit;xir;p10;reference;init;ctfe;ownership;${backend}")
     endforeach()
 endforeach()
+add_test(NAME test_xir_p10_reference_reject_init_field_place_uninitialized
+    COMMAND test_xir_p10_reference --reject-value reject_init_field_place_uninitialized 3 "read requires storage initialized on every incoming path")
+add_test(NAME test_xir_p10_reference_reject_init_field_place_const
+    COMMAND test_xir_p10_reference --reject reject_init_field_place_const 3 "field access is not permitted")
+add_test(NAME test_xir_p10_reference_reject_init_field_place_nested_const
+    COMMAND test_xir_p10_reference --reject reject_init_field_place_nested_const 4 "field access is not permitted")
+add_test(NAME test_xir_p10_reference_reject_init_field_place_ref
+    COMMAND test_xir_p10_reference --reject reject_init_field_place_ref 4 "ref argument requires a mutable stored binding")
+set_tests_properties(test_xir_p10_reference_reject_init_field_place_uninitialized
+    test_xir_p10_reference_reject_init_field_place_const test_xir_p10_reference_reject_init_field_place_nested_const
+    test_xir_p10_reference_reject_init_field_place_ref PROPERTIES
+    TIMEOUT 30 LABELS "unit;xir;p10;reference;init;ownership;reject")
 add_custom_target(xir_p10_native_references DEPENDS ${reference_native_targets})
 
 add_executable(test_xir_p10_initializer_lifecycle "${CMAKE_CURRENT_LIST_DIR}/test_initializer_lifecycle.c")

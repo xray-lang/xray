@@ -12,14 +12,33 @@
 typedef struct SourceConstructorScan {
     SourceContext *ctx;
     uint32_t depth;
-    bool cleanup, shared;
+    bool cleanup, shared, places;
 } SourceConstructorScan;
+static bool source_constructor_place_scan(SourceConstructorScan *scan, AstNode *node) {
+    AstNode *root = node->type == AST_CALL_EXPR ? node->as.call_expr.callee :
+        node->type == AST_INDEX_SET ? node->as.index_set.array :
+        node->type == AST_MEMBER_SET ? node->as.member_set.object :
+        node->type == AST_COMPOUND_ASSIGNMENT ? node->as.compound_assignment.object : NULL;
+    bool projected = false;
+    uint32_t depth = 0;
+    while (root && (root->type == AST_MEMBER_ACCESS || root->type == AST_INDEX_GET)) {
+        if (!source_work(scan->ctx, root)) return false;
+        if (++depth >= 128) return source_fail(scan->ctx, node, XR_XIR_BUDGET, "constructor place depth exhausted");
+        projected = true;
+        root = root->type == AST_MEMBER_ACCESS ? root->as.member_access.object : root->as.index_get.array;
+    }
+    if (projected && root && (root->type == AST_THIS_EXPR ||
+        (root->type == AST_VARIABLE && source_text_same(scan->ctx, root, root->as.variable.name, "this"))))
+        scan->places = true;
+    return scan->ctx->diagnostic.status == XR_XIR_OK;
+}
 static bool source_constructor_scan(AstNode *node, void *pointer) {
     SourceConstructorScan *scan = pointer;
     if (!node || scan->shared) return true;
     if (!source_work(scan->ctx, node)) return false;
     if (scan->depth == 128) return source_fail(scan->ctx, node, XR_XIR_BUDGET, "constructor capture depth exhausted");
     if (node->type == AST_FUNCTION_EXPR && !scan->cleanup) return true;
+    if (!source_constructor_place_scan(scan, node)) return false;
     if (scan->cleanup && (node->type == AST_THIS_EXPR ||
         (node->type == AST_VARIABLE && source_text_same(scan->ctx, node, node->as.variable.name, "this")))) {
         scan->shared = true; return true;
@@ -61,6 +80,21 @@ static bool source_constructor_read(SourceContext *ctx, AstNode *node, uint32_t 
     if (!xr_xir_type_is_cell(&ctx->types, value->type)) return true;
     return source_recipe_record(ctx, (XrXirInstruction){XR_XIR_CELL_READ, xr_xir_cell_element(&ctx->types, value->type),
         {value->id}, {0}, 0, {0}}, value);
+}
+/* The unfinished receiver has no object identity. Each mutable field owns its
+ * actual private Cell; projecting it reads the original initialization state. */
+static bool source_constructor_place(SourceContext *ctx, AstNode *member, SourceValue *place) {
+    if (!member || member->type != AST_MEMBER_ACCESS ||
+        !source_constructor_receiver(ctx, member->as.member_access.object))
+        return source_fail(ctx, member, XR_XIR_BAD_STRUCTURE, "constructor place has no direct field owner");
+    SourceName *self = visible_name(ctx, "this");
+    uint32_t field; XrXirType type; SourceValue storage;
+    if (!source_struct_field(ctx, member, self->type, member->as.member_access.name, 3, &field, &type) ||
+        !source_query_reference(ctx, member->as.member_access.object, self, self, XR_XIR_SOURCE_READ) ||
+        !source_constructor_storage(ctx, member, field, &storage)) return false;
+    if (!xr_xir_type_is_cell(&ctx->types, storage.type) || xr_xir_cell_element(&ctx->types, storage.type) != type)
+        return source_fail(ctx, member, XR_XIR_BAD_STRUCTURE, "constructor field has no stable mutable storage");
+    return source_recipe_record(ctx, (XrXirInstruction){XR_XIR_CELL_PLACE, type, {storage.id}, {0}, 0, {0}}, place);
 }
 static bool source_constructor_value(SourceContext *ctx, AstNode *node, SourceValue *value) {
     XrXirType type = visible_name(ctx, "this")->type;
@@ -223,11 +257,11 @@ static bool source_constructor_new(SourceContext *ctx, AstNode *node, SourceExpe
 static bool source_constructor_body(SourceContext *ctx) {
     SourceFunction *body = &ctx->bodies[ctx->function];
     MethodDeclNode *method = &body->node->as.method_decl;
-    SourceConstructorScan scan = {ctx, 0, false, false};
+    SourceConstructorScan scan = {ctx, 0, false, false, false};
     if (!source_constructor_scan(method->body, &scan)) return false;
     if (scan.shared && xr_xir_type_is_class(&ctx->types,ctx->functions[ctx->function].result))
         return source_fail(ctx,body->node,XR_XIR_BAD_TYPE,"class constructor cleanup cannot capture unpublished this");
-    body->constructor_shared = scan.shared;
+    body->constructor_shared = scan.shared || scan.places;
     uint32_t owner = ctx->identities[ctx->function].nominal_owner - 1;
     const XrXirNominalDeclaration *decl = &ctx->nominals.declarations[owner];
     body->constructor_places = decl->field_count ? source_alloc(ctx, decl->field_count, sizeof(*body->constructor_places)) : NULL;
