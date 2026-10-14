@@ -32,10 +32,14 @@ if(WIN32)
     add_test(NAME test_xir_runtime_sdk_manifest COMMAND ${XRAY_PYTHON}
         ${CMAKE_CURRENT_SOURCE_DIR}/xir/sdk_manifest_vectors.py
         --executable $<TARGET_FILE:test_xir_runtime_sdk> --bundle ${CMAKE_BINARY_DIR}/xir-runtime-sdk)
+    set(XIR_SDK_INSTALL_OPTIONS)
+    if(TARGET source-sdk-bundle)
+        list(APPEND XIR_SDK_INSTALL_OPTIONS --source-sdk)
+    endif()
     add_test(NAME test_xir_runtime_sdk_install COMMAND ${XRAY_PYTHON}
         ${CMAKE_CURRENT_SOURCE_DIR}/xir/sdk_install.py --build ${CMAKE_BINARY_DIR}
         --owner $<TARGET_FILE:test_xir_runtime_sdk>
-        --prefix "${CMAKE_BINARY_DIR}/tests/unit/sdk-install-current-case")
+        --prefix "${CMAKE_BINARY_DIR}/tests/unit/sdk-install-current-case" ${XIR_SDK_INSTALL_OPTIONS})
     add_test(NAME test_xir_runtime_sdk_wire_vector COMMAND ${XRAY_PYTHON}
         ${CMAKE_CURRENT_SOURCE_DIR}/xir/derive_sdk_identity.py)
     add_test(NAME test_xir_runtime_sdk_current_wire_vector COMMAND ${XRAY_PYTHON}
