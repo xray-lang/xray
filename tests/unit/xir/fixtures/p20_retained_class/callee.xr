@@ -1,0 +1,6 @@
+export final class Box {
+    private n: i64
+    private text: string
+    constructor(n: i64, text: string) { this.n = n; this.text = text }
+}
+export fn make(n: i64, text: string) -> Box { return Box(n, text) }
