@@ -64,6 +64,23 @@ static XrXirStatus conditional_classify(const XrXirCompileContext *context, uint
             resolved->family==1 && resolved->argument_count==1 && resolved->arguments[0]==(XrXirType)256);
         status=effect_ordinary_classify(context,&f.module,resolved,&contexts,&selected);
     }
+    if (status==XR_XIR_OK && oracle) {
+        contexts->terms.remaining=context;
+        uint32_t repeated=UINT32_MAX;
+        CHECK(effect_ordinary_intern(contexts,&f.module,resolved,resolved->function,&repeated)==XR_XIR_OK &&
+            repeated==selected);
+        uint32_t count=contexts->count;const XrXirType *arguments=contexts->nodes[selected].arguments;
+        XrCompileResourceStats before=rp_stats(context);
+        for (uint32_t repeat=0;repeat<8;++repeat) {
+            repeated=UINT32_MAX;
+            CHECK(effect_ordinary_intern(contexts,&f.module,resolved,resolved->function,&repeated)==XR_XIR_OK &&
+                repeated==selected && contexts->count==count && contexts->nodes[selected].arguments==arguments);
+        }
+        XrCompileResourceStats after=rp_stats(context);
+        CHECK(after.allocated_bytes==before.allocated_bytes && after.live_bytes==before.live_bytes &&
+            after.allocation_count==before.allocation_count && after.work>before.work);
+        contexts->terms.remaining=NULL;
+    }
     if (status==XR_XIR_OK) {
         /* A real caller edge supplies the precise actual while every original
          * declaration/advertisement remains untouched. Build the complete
@@ -1659,7 +1676,35 @@ static void conditional_axes(void) {
 
 #include "xir_invocation_final_retirement_cases.h"
 
+/* The original four classifiers keep their entire allocation denominator.
+ * Repeated interning controls run separately on genuine resolved inputs. */
+static void conditional_ordinary_environment_keys(void) {
+    for (uint32_t mode=0;mode<4;++mode) {
+        RootParameterMark physical=rp_mark();XrXirCompileContext context=rp_owner(rp_caps());
+        uint64_t baseline=rp_stats(&context).live_bytes;
+        CHECK(conditional_classify(&context,mode,true)==XR_XIR_OK);
+        rp_owner_free(&context,baseline);rp_balanced(physical);
+        size_t sites=0;XrCompileResourceStats single={0};
+        for (size_t pass=0;pass<=sites;++pass) {
+            physical=rp_mark();context=rp_owner(rp_caps());XrCompileResourceStats entry=rp_stats(&context);
+            RootParameterMark retained=rp_mark();XrCompileResources *identity=context.resources;
+            rp_attempts=0;rp_injected=false;rp_fail_at=pass?pass-1:SIZE_MAX;
+            XrXirStatus status=conditional_resource_case(&context,mode);rp_fail_at=SIZE_MAX;
+            if (!pass) { CHECK(status==XR_XIR_OK);sites=rp_attempts;single=rp_stats(&context); }
+            else CHECK(rp_injected && status==XR_XIR_OUT_OF_MEMORY);
+            ConditionalRetryTrial retry={.which=mode,.ordinal=pass?pass-1:SIZE_MAX,.sites=sites,
+                .resources=identity,.initial=entry,.single=single,.retained=retained,.first=status};
+            if (pass) conditional_retry_operation(&context,&retry);
+            rp_owner_free(&context,entry.live_bytes);rp_balanced(physical);
+        }
+        printf("ordinary environment mode%u complete allocation census %zu\n",mode,sites);
+    }
+}
+
 int main(int argc, char **argv) {
+    if (argc==2 && !strcmp(argv[1],"--ordinary-environment-keys")) {
+        conditional_ordinary_environment_keys();CHECK(!rp_live && !rp_live_bytes);return 0;
+    }
     if (argc==2 && !strcmp(argv[1],"--final-retirement")) {
         invocation_final_retirement_literals();invocation_final_retirement_resources();
         CHECK(!rp_live && !rp_live_bytes && !rp_release_observer);return 0;
