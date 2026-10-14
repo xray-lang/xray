@@ -90,7 +90,7 @@ static void hits_rejected_rules(void) {
     request(adapter,"{\"seq\":4,\"type\":\"request\",\"command\":\"configurationDone\"}");
     CHECK(xdap_adapter_step(adapter,1000)==XR_XIR_OK && adapter->snapshot);
     XrXirVmDebugSnapshot *snapshot=adapter->snapshot;uint64_t epoch=adapter->stop_epoch;
-    XrXirVmDebugRule invalid[]={adapter->function_rules[0],{{UINT32_MAX,0},XR_XIR_VM_DEBUG_HIT_ALWAYS,0}};
+    XrXirVmDebugRule invalid[]={adapter->function_rules[0],{.location={UINT32_MAX,0},.hit_kind=XR_XIR_VM_DEBUG_HIT_ALWAYS}};
     CHECK(xdap_current_rules_replace(adapter->launch->control,invalid,2)==XR_XIR_VALUE_BAD_ARGUMENT);
     invalid[1]=adapter->function_rules[0];invalid[1].hit_kind=XR_XIR_VM_DEBUG_HIT_MULTIPLE;invalid[1].hit_value=0;
     CHECK(xdap_current_rules_replace(adapter->launch->control,invalid,2)==XR_XIR_VALUE_BAD_ARGUMENT);
@@ -103,7 +103,7 @@ static void hits_parser(void) {
     XrCompileResourceStats baseline;XrCompileResources *owner=NULL;XrCompileResourceLimits limits={65536,65536,65536};
     CHECK(xr_compile_resources_new(&limits,&owner)==XR_COMPILE_RESOURCE_OK);CHECK(xr_compile_resources_stats(owner,&baseline)==XR_COMPILE_RESOURCE_OK);
     const char *bad[]={"%0","-1","18446744073709551616",">=3junk","===2","% 0","!3","\n3"};
-    for (uint32_t i=0;i<sizeof(bad)/sizeof(bad[0]);++i) { XrXirVmDebugRule rule={{7,8},XR_XIR_VM_DEBUG_HIT_EQUAL,99};
+    for (uint32_t i=0;i<sizeof(bad)/sizeof(bad[0]);++i) { XrXirVmDebugRule rule={.location={7,8},.hit_kind=XR_XIR_VM_DEBUG_HIT_EQUAL,.hit_value=99};
         CHECK(xdap_hit_parse(owner,bad[i],strlen(bad[i]),&rule)==XR_XIR_BAD_STRUCTURE);
         CHECK(rule.location.function==7 && rule.location.instruction==8 && rule.hit_kind==XR_XIR_VM_DEBUG_HIT_EQUAL && rule.hit_value==99); }
     XrXirVmDebugRule rule={0};const char max[]="18446744073709551615";
@@ -129,7 +129,10 @@ static size_t hits_failure(size_t point) {
     request(adapter,"{\"seq\":4,\"type\":\"request\",\"command\":\"configurationDone\"}");const int64_t expected[]={33};hits_drive(adapter,expected,1);
     hits_dispose(adapter,ledger,domain,baseline);return sites;
 }
-int main(int argc,char **argv) {
+#ifndef XDAP_HITS_MAIN
+#define XDAP_HITS_MAIN main
+#endif
+int XDAP_HITS_MAIN(int argc,char **argv) {
     xr_test_suppress_dialogs();bool resources=argc==2 && !strcmp(argv[1],"--resources");CHECK(argc==1 || resources);hits_parser();
     const int64_t ge[]={22,33,44},equal[]={33},multiple[]={22,44},greater[]={33,44},less[]={11,22},all[]={11,22,33,44};
     hits_case("2",ge,3,false);hits_case(" >= 2 ",ge,3,false);hits_case("==3",equal,1,false);hits_case("=3",equal,1,false);

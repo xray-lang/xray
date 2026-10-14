@@ -201,7 +201,7 @@ static XrXirStatus inspect_function_breakpoints(XdapAdapter *s,const XdapRequest
     uint32_t list=0;XrXirStatus status=xdap_dispatch_argument(r,"breakpoints",&list);if (status!=XR_XIR_OK) return status;
     if (!list || r->document.nodes[list].kind!=XDAP_JSON_ARRAY || r->document.nodes[list].count>32)
         return xdap_dispatch_response(s,r,false,NULL,"Invalid function breakpoint list");
-    XrXirVmDebugRule rules[32]={{0}};uint32_t location_count=0;
+    XrXirVmDebugRule rules[32]={{0}},saved[32]={{0}};uint32_t location_count=0,logical_count=0;
     bool verified[32]={0};uint32_t item_number=0;
     XdapJsonWriter body=xdap_json_writer(s->resources,s->config.message_limit);XDAP_TEXT(&body,"{\"breakpoints\":[");
     for (uint32_t item=r->document.nodes[list].first;item;item=r->document.nodes[item].next,++item_number) {
@@ -221,13 +221,16 @@ static XrXirStatus inspect_function_breakpoints(XdapAdapter *s,const XdapRequest
             if (status!=XR_XIR_OK) { xdap_json_writer_free(&body);
                 return status==XR_XIR_BAD_STRUCTURE ? xdap_dispatch_response(s,r,false,NULL,"Invalid hit count predicate") : status; }
         }
-        uint32_t match=UINT32_MAX,matches=0;
-        if (!condition || !r->document.nodes[condition].length) for (uint32_t f=0;f<s->launch->function_count;++f) {
-            bool equal=false;status=xdap_json_equal(&r->document,name,s->launch->functions[f].name,&equal);
-            if (status!=XR_XIR_OK) { xdap_json_writer_free(&body);return status; }
-            if (equal) { match=f;++matches; }
+        uint32_t matches=0;rule.group=logical_count+1;
+        if (!condition || !r->document.nodes[condition].length) {
+            XdapFunctionSelection selection={r->document.nodes[name].text,r->document.nodes[name].length,rule};
+            status=xdap_launch_function_rules(s->launch,&selection,rules+location_count,32-location_count,&matches);
+            if (status!=XR_XIR_OK && status!=XR_XIR_UNRESOLVED) { xdap_json_writer_free(&body);return status; }
+            if (status==XR_XIR_UNRESOLVED) matches=0;
         }
-        if (matches==1) { verified[item_number]=true;rule.location=(XrXirVmDebugLocation){match,0};rules[location_count++]=rule; }
+        if (matches) {
+            verified[item_number]=true;saved[logical_count++]=rules[location_count];location_count+=matches;
+        }
         if (item_number) XDAP_TEXT(&body,",");
         if (verified[item_number]) XDAP_TEXT(&body,"{\"verified\":true}");
         else XDAP_TEXT(&body,"{\"verified\":false,\"message\":\"Unknown, ambiguous, or conditional function breakpoint\"}");
@@ -235,8 +238,8 @@ static XrXirStatus inspect_function_breakpoints(XdapAdapter *s,const XdapRequest
     XDAP_TEXT(&body,"]}");
     if (body.status!=XR_XIR_OK) { status=body.status;xdap_json_writer_free(&body);return status; }
     char *names[32]={0};
-    for (uint32_t i=0;i<location_count;++i) {
-        const char *source=s->launch->functions[rules[i].location.function].name;size_t length=strlen(source);
+    for (uint32_t i=0;i<logical_count;++i) {
+        const char *source=s->launch->functions[saved[i].location.function].source_name;size_t length=strlen(source);
         XrCompileResourceStatus allocated=xr_compile_resources_alloc(s->resources,length+1,(void **)&names[i]);
         if (allocated!=XR_COMPILE_RESOURCE_OK || xr_compile_resources_work(s->resources,length+1)!=XR_COMPILE_RESOURCE_OK) {
             for (uint32_t j=0;j<=i;++j) xr_compile_resources_free(names[j]);xdap_json_writer_free(&body);
@@ -246,18 +249,18 @@ static XrXirStatus inspect_function_breakpoints(XdapAdapter *s,const XdapRequest
     }
     XdapJsonWriter response={0};status=xdap_dispatch_prepare_response(s,r,true,&body,NULL,&response);
     xdap_json_writer_free(&body);
-    if (status!=XR_XIR_OK) { for (uint32_t i=0;i<location_count;++i) xr_compile_resources_free(names[i]);return status; }
+    if (status!=XR_XIR_OK) { for (uint32_t i=0;i<logical_count;++i) xr_compile_resources_free(names[i]);return status; }
     XrXirValueStatus installed=xdap_current_rules_replace(s->launch->control,rules,location_count);
     if (installed!=XR_XIR_VALUE_OK) {
-        for (uint32_t i=0;i<location_count;++i) xr_compile_resources_free(names[i]);xdap_json_writer_free(&response);
+        for (uint32_t i=0;i<logical_count;++i) xr_compile_resources_free(names[i]);xdap_json_writer_free(&response);
         return xdap_dispatch_response(s,r,false,NULL,"Breakpoint admission failed");
     }
     for (uint32_t i=0;i<s->function_breakpoint_count;++i) xr_compile_resources_free(s->function_breakpoints[i]);
     memset(s->function_breakpoints,0,sizeof(s->function_breakpoints));
     memset(s->function_rules,0,sizeof(s->function_rules));
-    for (uint32_t i=0;i<location_count;++i) s->function_breakpoints[i]=names[i];
-    memcpy(s->function_rules,rules,(size_t)location_count*sizeof(*rules));
-    s->function_breakpoint_count=location_count;status=xdap_dispatch_send_prepared(s,&response);
+    for (uint32_t i=0;i<logical_count;++i) s->function_breakpoints[i]=names[i];
+    memcpy(s->function_rules,saved,(size_t)logical_count*sizeof(*saved));
+    s->function_breakpoint_count=logical_count;status=xdap_dispatch_send_prepared(s,&response);
     xdap_json_writer_free(&response);return status;
 }
 static XrXirStatus inspect_disassemble(XdapAdapter *s,const XdapRequest *r) {

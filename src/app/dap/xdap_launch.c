@@ -40,8 +40,10 @@ XR_FUNC XrXirCallStatus xdap_launch_free(XdapLaunch *launch) {
     XrXirCallStatus status=xdap_current_free(launch->control);
     if (status==XR_XIR_CALL_BUSY) return status;
     xr_xir_compile_source_product_free(launch->source);
-    if (launch->functions) for (uint32_t i=0;i<launch->function_count;++i)
+    if (launch->functions) for (uint32_t i=0;i<launch->function_count;++i) {
         xr_compile_resources_free(launch->functions[i].name);
+        xr_compile_resources_free(launch->functions[i].source_name);
+    }
     xr_compile_resources_free(launch->functions);xr_compile_resources_free(launch->instructions);
     xr_compile_resources_free(launch->absolute_file);
     xr_compile_resources_free(launch);return status;
@@ -65,6 +67,21 @@ static XrXirStatus launch_code(XdapLaunch *launch,const XrXirModule *module) {
     uint32_t first=0;
     for (uint32_t i=0;i<module->function_count;++i) {
         const XrXirFunction *source=&module->functions[i];XdapCodeFunction *target=&launch->functions[i];
+        const XrXirModule *origin_module=module;uint32_t origin=i;
+        const XrXirProvenance *provenance=module->provenance;
+        if (provenance && provenance->kind==XR_XIR_EVIDENCE_INSTANCE) {
+            const XrXirCompileContext *origin_context=xr_xir_compile_artifact_context(provenance->source);
+            if (!provenance->source || provenance->count!=module->function_count || !provenance->origins ||
+                !origin_context || origin_context->resources!=resources) return XR_XIR_BAD_STRUCTURE;
+            origin_module=xr_xir_compile_artifact_module(provenance->source);origin=provenance->origins[i].function;
+        } else if (provenance && provenance->kind!=XR_XIR_EVIDENCE_TEMPLATE) return XR_XIR_BAD_STRUCTURE;
+        if (!origin_module || origin>=origin_module->function_count) return XR_XIR_BAD_STRUCTURE;
+        const XrXirFunction *declaration=&origin_module->functions[origin];target->origin=origin;
+        status=launch_allocation(xr_compile_resources_alloc(resources,(size_t)declaration->name_length+1,(void **)&target->source_name));
+        if (status!=XR_XIR_OK) return status;
+        if (xr_compile_resources_work(resources,declaration->name_length+1)!=XR_COMPILE_RESOURCE_OK) return XR_XIR_BUDGET;
+        if (declaration->name_length) memcpy(target->source_name,declaration->name,declaration->name_length);
+        target->source_name[declaration->name_length]=0;
         target->first=first;target->instructions=source->instruction_count;target->parameters=source->parameter_count;
         target->values=source->parameter_count+source->instruction_count;
         status=launch_allocation(xr_compile_resources_alloc(resources,(size_t)source->name_length+1,(void **)&target->name));
@@ -76,6 +93,26 @@ static XrXirStatus launch_code(XdapLaunch *launch,const XrXirModule *module) {
         memcpy(launch->instructions+first,source->instructions,(size_t)bytes);first+=source->instruction_count;
     }
     return XR_XIR_OK;
+}
+XR_FUNC XrXirStatus xdap_launch_function_rules(const XdapLaunch *launch,const XdapFunctionSelection *selection,
+    XrXirVmDebugRule *output,uint32_t capacity,uint32_t *count) {
+    if (!launch || !selection || !selection->name || !count || (capacity && !output) || capacity>32) return XR_XIR_BAD_STRUCTURE;
+    uint32_t origin=UINT32_MAX,matches=0;XrXirVmDebugRule fresh[32]={{0}};
+    if (xr_compile_resources_work(launch->resources,sizeof(fresh))!=XR_COMPILE_RESOURCE_OK) return XR_XIR_BUDGET;
+    for (uint32_t f=0;f<launch->function_count;++f) {
+        const XdapCodeFunction *function=&launch->functions[f];
+        size_t length=strlen(function->source_name);
+        if (xr_compile_resources_work(launch->resources,selection->length+length+1)!=XR_COMPILE_RESOURCE_OK)
+            return XR_XIR_BUDGET;
+        if (selection->length!=length || memcmp(selection->name,function->source_name,length)) continue;
+        if (origin!=UINT32_MAX && origin!=function->origin) return XR_XIR_UNRESOLVED;
+        origin=function->origin;
+        if (matches==capacity) return XR_XIR_BUDGET;
+        fresh[matches]=selection->rule;fresh[matches++].location=(XrXirVmDebugLocation){f,0};
+    }
+    if (xr_compile_resources_work(launch->resources,(uint64_t)matches*sizeof(*output)+sizeof(*count))!=XR_COMPILE_RESOURCE_OK)
+        return XR_XIR_BUDGET;
+    if (matches) memcpy(output,fresh,(size_t)matches*sizeof(*output));*count=matches;return XR_XIR_OK;
 }
 XR_FUNC XrXirStatus xdap_launch_build(const XdapLaunchRequest *request,XdapLaunch **output,
     XrSourceCompileDiagnostic *diagnostic) {

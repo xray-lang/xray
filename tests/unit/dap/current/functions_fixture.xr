@@ -1,0 +1,10 @@
+fn record(value:i64,body:fn(i64)->i64)->i64 { return body(value) }
+class First { static ambiguous()->i64 { return 1 } }
+class Second { static ambiguous()->i64 { return 2 } }
+var seen:i64 = 0
+const pure = fn(value:i64)->i64 { return value }
+const effectful = fn(value:i64)->i64 { seen += 1; return value }
+print(record(11,pure))
+print(record(22,effectful))
+print(record(33,pure))
+print(record(44,effectful))

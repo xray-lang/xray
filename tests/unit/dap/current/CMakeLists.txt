@@ -1,3 +1,14 @@
+# Runtime fixtures are copied into this build tree before any queued test runs.
+set(XR_DAP_FIXTURE_DIR "${CMAKE_CURRENT_BINARY_DIR}/fixtures")
+file(MAKE_DIRECTORY "${XR_DAP_FIXTURE_DIR}")
+file(GLOB XR_DAP_CURRENT_FIXTURES CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/*.xr")
+file(GLOB XR_DAP_ORACLE_FIXTURES CONFIGURE_DEPENDS "${PROJECT_SOURCE_DIR}/tests/regression/dap/fixtures/current/*.xr")
+list(APPEND XR_DAP_CURRENT_FIXTURES ${XR_DAP_ORACLE_FIXTURES})
+foreach(XR_DAP_INPUT IN LISTS XR_DAP_CURRENT_FIXTURES)
+    get_filename_component(XR_DAP_INPUT_NAME "${XR_DAP_INPUT}" NAME)
+    configure_file("${XR_DAP_INPUT}" "${XR_DAP_FIXTURE_DIR}/${XR_DAP_INPUT_NAME}" COPYONLY)
+endforeach()
+
 add_executable(test_dap_current_debug test_current_debug.c)
 target_link_libraries(test_dap_current_debug PRIVATE xray_dap_current xray_xir_source)
 if(MSVC)
@@ -39,7 +50,7 @@ set_tests_properties(test_dap_launch PROPERTIES TIMEOUT 120 LABELS "dap;source;e
 
 add_executable(test_dap_dispatch test_dispatch.c ${PROJECT_SOURCE_DIR}/src/base/xjson.c ${PROJECT_SOURCE_DIR}/src/base/xutf8.c)
 target_link_libraries(test_dap_dispatch PRIVATE xray_dap_current)
-target_compile_definitions(test_dap_dispatch PRIVATE XR_DAP_STDLIB="${PROJECT_SOURCE_DIR}/stdlib" XR_DAP_FIXTURE="${CMAKE_CURRENT_SOURCE_DIR}/wire_fixture.xr")
+target_compile_definitions(test_dap_dispatch PRIVATE XR_DAP_STDLIB="${PROJECT_SOURCE_DIR}/stdlib" XR_DAP_FIXTURE="${XR_DAP_FIXTURE_DIR}/wire_fixture.xr")
 if(MSVC)
     target_compile_options(test_dap_dispatch PRIVATE /W4 /WX)
 else()
@@ -51,7 +62,7 @@ set_tests_properties(test_dap_dispatch PROPERTIES TIMEOUT 120 LABELS "dap;json;s
 add_executable(test_dap_wait test_wait.c ${PROJECT_SOURCE_DIR}/src/base/xjson.c ${PROJECT_SOURCE_DIR}/src/base/xutf8.c)
 target_link_libraries(test_dap_wait PRIVATE xray_dap_current)
 target_compile_definitions(test_dap_wait PRIVATE XR_DAP_STDLIB="${PROJECT_SOURCE_DIR}/stdlib"
-    XR_DAP_FIXTURE="${CMAKE_CURRENT_SOURCE_DIR}/wire_fixture.xr" XR_DAP_TIMER_FIXTURE="${CMAKE_CURRENT_SOURCE_DIR}/timer_fixture.xr")
+    XR_DAP_FIXTURE="${XR_DAP_FIXTURE_DIR}/wire_fixture.xr" XR_DAP_TIMER_FIXTURE="${XR_DAP_FIXTURE_DIR}/timer_fixture.xr")
 if(MSVC)
     target_compile_options(test_dap_wait PRIVATE /W4 /WX)
 else()
@@ -73,7 +84,7 @@ set_tests_properties(test_dap_stdio_owner test_dap_stdio_resources PROPERTIES TI
 
 add_executable(test_dap_dispatch_faults test_dispatch_faults.c ${PROJECT_SOURCE_DIR}/src/base/xjson.c ${PROJECT_SOURCE_DIR}/src/base/xutf8.c)
 target_link_libraries(test_dap_dispatch_faults PRIVATE xray_dap_current)
-target_compile_definitions(test_dap_dispatch_faults PRIVATE XR_DAP_STDLIB="${PROJECT_SOURCE_DIR}/stdlib" XR_DAP_FIXTURE="${CMAKE_CURRENT_SOURCE_DIR}/wire_fixture.xr")
+target_compile_definitions(test_dap_dispatch_faults PRIVATE XR_DAP_STDLIB="${PROJECT_SOURCE_DIR}/stdlib" XR_DAP_FIXTURE="${XR_DAP_FIXTURE_DIR}/wire_fixture.xr")
 if(MSVC)
     target_compile_options(test_dap_dispatch_faults PRIVATE /W4 /WX)
 else()
@@ -98,8 +109,8 @@ set_tests_properties(test_dap_mixed PROPERTIES TIMEOUT 120 LABELS "dap;mixed;tas
 
 add_executable(test_dap_values test_values.c ${PROJECT_SOURCE_DIR}/src/base/xjson.c ${PROJECT_SOURCE_DIR}/src/base/xutf8.c)
 target_link_libraries(test_dap_values PRIVATE xray_dap_current)
-target_compile_definitions(test_dap_values PRIVATE XR_DAP_STDLIB="${PROJECT_SOURCE_DIR}/stdlib" XR_DAP_FIXTURE="${CMAKE_CURRENT_SOURCE_DIR}/wire_fixture.xr"
-    XR_DAP_VALUES_FIXTURE="${CMAKE_CURRENT_SOURCE_DIR}/values_fixture.xr")
+target_compile_definitions(test_dap_values PRIVATE XR_DAP_STDLIB="${PROJECT_SOURCE_DIR}/stdlib" XR_DAP_FIXTURE="${XR_DAP_FIXTURE_DIR}/wire_fixture.xr"
+    XR_DAP_VALUES_FIXTURE="${XR_DAP_FIXTURE_DIR}/values_fixture.xr")
 if(MSVC)
     target_compile_options(test_dap_values PRIVATE /W4 /WX)
 else()
@@ -112,25 +123,25 @@ set_tests_properties(test_dap_values PROPERTIES TIMEOUT 120 LABELS "dap;values;j
 
 if(XR_BUILD_DAP)
     add_test(NAME dap_current_stdio COMMAND ${XRAY_PYTHON} ${CMAKE_CURRENT_SOURCE_DIR}/test_stdio.py
-        --xray $<TARGET_FILE:xray> --fixture ${CMAKE_CURRENT_SOURCE_DIR}/wire_fixture.xr)
+        --xray $<TARGET_FILE:xray> --fixture ${XR_DAP_FIXTURE_DIR}/wire_fixture.xr)
     set_tests_properties(dap_current_stdio PROPERTIES TIMEOUT 120 LABELS "dap;cli;stdio;execution;ownership")
     add_test(NAME dap_current_stdio_attach COMMAND ${XRAY_PYTHON} ${CMAKE_CURRENT_SOURCE_DIR}/test_stdio.py
-        --xray $<TARGET_FILE:xray> --fixture ${CMAKE_CURRENT_SOURCE_DIR}/wire_fixture.xr --start-request attach)
+        --xray $<TARGET_FILE:xray> --fixture ${XR_DAP_FIXTURE_DIR}/wire_fixture.xr --start-request attach)
     set_tests_properties(dap_current_stdio_attach PROPERTIES TIMEOUT 120 LABELS "dap;attach;cli;stdio;execution;ownership")
     add_test(NAME dap_current_tcp COMMAND ${XRAY_PYTHON} ${CMAKE_CURRENT_SOURCE_DIR}/test_stdio.py
-        --xray $<TARGET_FILE:xray> --fixture ${CMAKE_CURRENT_SOURCE_DIR}/wire_fixture.xr --transport tcp)
+        --xray $<TARGET_FILE:xray> --fixture ${XR_DAP_FIXTURE_DIR}/wire_fixture.xr --transport tcp)
     add_test(NAME dap_current_tcp_attach COMMAND ${XRAY_PYTHON} ${CMAKE_CURRENT_SOURCE_DIR}/test_stdio.py
-        --xray $<TARGET_FILE:xray> --fixture ${CMAKE_CURRENT_SOURCE_DIR}/wire_fixture.xr --transport tcp --start-request attach)
+        --xray $<TARGET_FILE:xray> --fixture ${XR_DAP_FIXTURE_DIR}/wire_fixture.xr --transport tcp --start-request attach)
     set_tests_properties(dap_current_tcp dap_current_tcp_attach PROPERTIES TIMEOUT 120 LABELS "dap;tcp;cli;execution;ownership")
 endif()
 
 add_executable(test_dap_exceptions test_exceptions.c ${PROJECT_SOURCE_DIR}/src/base/xjson.c ${PROJECT_SOURCE_DIR}/src/base/xutf8.c)
 target_link_libraries(test_dap_exceptions PRIVATE xray_dap_current)
 target_compile_definitions(test_dap_exceptions PRIVATE XR_DAP_STDLIB="${PROJECT_SOURCE_DIR}/stdlib"
-    XR_DAP_FIXTURE="${CMAKE_CURRENT_SOURCE_DIR}/wire_fixture.xr"
-    XR_DAP_CAUGHT_FIXTURE="${PROJECT_SOURCE_DIR}/tests/regression/dap/fixtures/current/caught_error.xr"
-    XR_DAP_UNCAUGHT_FIXTURE="${PROJECT_SOURCE_DIR}/tests/regression/dap/fixtures/current/uncaught_error.xr"
-    XR_DAP_PANIC_FIXTURE="${CMAKE_CURRENT_SOURCE_DIR}/panic_fixture.xr")
+    XR_DAP_FIXTURE="${XR_DAP_FIXTURE_DIR}/wire_fixture.xr"
+    XR_DAP_CAUGHT_FIXTURE="${XR_DAP_FIXTURE_DIR}/caught_error.xr"
+    XR_DAP_UNCAUGHT_FIXTURE="${XR_DAP_FIXTURE_DIR}/uncaught_error.xr"
+    XR_DAP_PANIC_FIXTURE="${XR_DAP_FIXTURE_DIR}/panic_fixture.xr")
 if(MSVC)
     target_compile_options(test_dap_exceptions PRIVATE /W4 /WX)
 else()
@@ -142,7 +153,7 @@ set_tests_properties(test_dap_exceptions test_dap_exceptions_resources PROPERTIE
 
 add_executable(test_dap_attach test_attach.c ${PROJECT_SOURCE_DIR}/src/base/xjson.c ${PROJECT_SOURCE_DIR}/src/base/xutf8.c)
 target_link_libraries(test_dap_attach PRIVATE xray_dap_current)
-target_compile_definitions(test_dap_attach PRIVATE XR_DAP_STDLIB="${PROJECT_SOURCE_DIR}/stdlib" XR_DAP_FIXTURE="${CMAKE_CURRENT_SOURCE_DIR}/wire_fixture.xr")
+target_compile_definitions(test_dap_attach PRIVATE XR_DAP_STDLIB="${PROJECT_SOURCE_DIR}/stdlib" XR_DAP_FIXTURE="${XR_DAP_FIXTURE_DIR}/wire_fixture.xr")
 if(MSVC)
     target_compile_options(test_dap_attach PRIVATE /W4 /WX)
 else()
@@ -166,8 +177,8 @@ set_tests_properties(test_dap_tcp test_dap_tcp_resources PROPERTIES TIMEOUT 120 
 
 add_executable(test_dap_hits test_hits.c ${PROJECT_SOURCE_DIR}/src/base/xjson.c ${PROJECT_SOURCE_DIR}/src/base/xutf8.c)
 target_link_libraries(test_dap_hits PRIVATE xray_dap_current)
-target_compile_definitions(test_dap_hits PRIVATE XR_DAP_STDLIB="${PROJECT_SOURCE_DIR}/stdlib" XR_DAP_FIXTURE="${CMAKE_CURRENT_SOURCE_DIR}/wire_fixture.xr"
-    XR_DAP_HITS_FIXTURE="${CMAKE_CURRENT_SOURCE_DIR}/hits_fixture.xr")
+target_compile_definitions(test_dap_hits PRIVATE XR_DAP_STDLIB="${PROJECT_SOURCE_DIR}/stdlib" XR_DAP_FIXTURE="${XR_DAP_FIXTURE_DIR}/wire_fixture.xr"
+    XR_DAP_HITS_FIXTURE="${XR_DAP_FIXTURE_DIR}/hits_fixture.xr")
 if(MSVC)
     target_compile_options(test_dap_hits PRIVATE /W4 /WX)
 else()
@@ -179,8 +190,8 @@ set_tests_properties(test_dap_hits test_dap_hits_resources PROPERTIES TIMEOUT 12
 
 add_executable(test_dap_objects test_objects.c ${PROJECT_SOURCE_DIR}/src/base/xjson.c ${PROJECT_SOURCE_DIR}/src/base/xutf8.c)
 target_link_libraries(test_dap_objects PRIVATE xray_dap_current)
-target_compile_definitions(test_dap_objects PRIVATE XR_DAP_STDLIB="${PROJECT_SOURCE_DIR}/stdlib" XR_DAP_FIXTURE="${CMAKE_CURRENT_SOURCE_DIR}/wire_fixture.xr"
-    XR_DAP_OBJECTS_FIXTURE="${CMAKE_CURRENT_SOURCE_DIR}/objects_fixture.xr")
+target_compile_definitions(test_dap_objects PRIVATE XR_DAP_STDLIB="${PROJECT_SOURCE_DIR}/stdlib" XR_DAP_FIXTURE="${XR_DAP_FIXTURE_DIR}/wire_fixture.xr"
+    XR_DAP_OBJECTS_FIXTURE="${XR_DAP_FIXTURE_DIR}/objects_fixture.xr")
 if(MSVC)
     target_compile_options(test_dap_objects PRIVATE /W4 /WX)
 else()
@@ -189,3 +200,16 @@ endif()
 add_test(NAME test_dap_objects COMMAND test_dap_objects)
 add_test(NAME test_dap_objects_resources COMMAND test_dap_objects --resources)
 set_tests_properties(test_dap_objects test_dap_objects_resources PROPERTIES TIMEOUT 120 LABELS "dap;objects;source;ownership;resources")
+
+add_executable(test_dap_functions test_functions.c ${PROJECT_SOURCE_DIR}/src/base/xjson.c ${PROJECT_SOURCE_DIR}/src/base/xutf8.c)
+target_link_libraries(test_dap_functions PRIVATE xray_dap_current)
+target_compile_definitions(test_dap_functions PRIVATE XR_DAP_STDLIB="${PROJECT_SOURCE_DIR}/stdlib" XR_DAP_FIXTURE="${XR_DAP_FIXTURE_DIR}/wire_fixture.xr"
+    XR_DAP_HITS_FIXTURE="${XR_DAP_FIXTURE_DIR}/functions_fixture.xr")
+if(MSVC)
+    target_compile_options(test_dap_functions PRIVATE /W4 /WX)
+else()
+    target_compile_options(test_dap_functions PRIVATE -Wall -Wextra -Werror)
+endif()
+add_test(NAME test_dap_functions COMMAND test_dap_functions)
+add_test(NAME test_dap_functions_resources COMMAND test_dap_functions --resources)
+set_tests_properties(test_dap_functions test_dap_functions_resources PROPERTIES TIMEOUT 120 LABELS "dap;functions;source;ownership;resources")

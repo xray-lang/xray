@@ -201,15 +201,10 @@ static XrXirStatus dispatch_restart(XdapAdapter *s,const XdapRequest *r) {
     xr_source_compile_diagnostic_free(&diagnostic);
     XrXirVmDebugRule rules[32]={{0}};uint32_t count=0;
     for (uint32_t i=0;i<s->function_breakpoint_count;++i) {
-        uint32_t found=UINT32_MAX,matches=0;
-        for (uint32_t f=0;f<candidate->function_count;++f) {
-            size_t bytes=strlen(candidate->functions[f].name)+strlen(s->function_breakpoints[i])+1;
-            if (xr_compile_resources_work(s->resources,bytes)!=XR_COMPILE_RESOURCE_OK) {
-                xdap_launch_free(candidate);return XR_XIR_BUDGET;
-            }
-            if (!strcmp(candidate->functions[f].name,s->function_breakpoints[i])) { found=f;++matches; }
-        }
-        if (matches==1) { rules[count]=s->function_rules[i];rules[count++].location=(XrXirVmDebugLocation){found,0}; }
+        XdapFunctionSelection selection={s->function_breakpoints[i],strlen(s->function_breakpoints[i]),s->function_rules[i]};
+        uint32_t matches=0;status=xdap_launch_function_rules(candidate,&selection,rules+count,32-count,&matches);
+        if (status!=XR_XIR_OK) { xdap_launch_free(candidate);return status; }
+        count+=matches;
     }
     if (xdap_current_rules_replace(candidate->control,rules,count)!=XR_XIR_VALUE_OK) {
         xdap_launch_free(candidate);return xdap_dispatch_response(s,r,false,NULL,"Restart breakpoint admission failed");

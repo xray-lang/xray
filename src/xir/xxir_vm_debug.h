@@ -26,6 +26,9 @@ typedef struct XrXirVmDebugRule {
     XrXirVmDebugLocation location;
     XrXirVmDebugHitKind hit_kind;
     uint64_t hit_value;
+    /* Zero counts this location independently; 1..32 share one logical hit
+     * counter across locations. A group's predicate must be identical. */
+    uint32_t group;
 } XrXirVmDebugRule;
 typedef enum XrXirVmDebugCode { XR_XIR_VM_DEBUG_PENDING,XR_XIR_VM_DEBUG_NATIVE,XR_XIR_VM_DEBUG_VM } XrXirVmDebugCode;
 
