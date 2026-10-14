@@ -8,7 +8,7 @@
  *
  * KEY CONCEPT: Governed member identities select ordinary verified arithmetic.
  */
-static uint32_t source_integer_query_find(SourceContext *ctx,
+static uint32_t source_primitive_query_find(SourceContext *ctx,
     XrXirSourceDeclarationKind kind, uint32_t parent, uint32_t identity) {
     for (uint32_t i = 0; i < ctx->query.declaration_count; ++i) {
         if (!source_work(ctx,NULL)) return 0;
@@ -18,9 +18,29 @@ static uint32_t source_integer_query_find(SourceContext *ctx,
     }
     return 0;
 }
-static uint32_t source_integer_declaration(SourceContext *ctx,
+static bool source_primitive_type(SourceContext *ctx,uint32_t identity,XrXirType *type) {
+    switch (identity) {
+    case XR_NATIVE_DECLARATION_INTEGER: *type=XR_XIR_I64;return true;
+    case XR_NATIVE_DECLARATION_FLOAT: *type=XR_XIR_F64;return true;
+    case XR_NATIVE_DECLARATION_BOOLEAN: *type=XR_XIR_BOOL;return true;
+    case XR_NATIVE_DECLARATION_RUNE: *type=XR_XIR_RUNE;return true;
+    default: return source_fail(ctx,NULL,XR_XIR_BAD_TYPE,"primitive declaration identity is not admitted");
+    }
+}
+static bool source_primitive_result_type(SourceContext *ctx,XrNativeTypeTerm term,XrXirType *type) {
+    switch (term) {
+    case XR_NATIVE_TERM_I64: *type=XR_XIR_I64;return true;
+    case XR_NATIVE_TERM_F64: *type=XR_XIR_F64;return true;
+    case XR_NATIVE_TERM_STRING: *type=XR_XIR_STRING;return true;
+    case XR_NATIVE_TERM_BOOL: *type=XR_XIR_BOOL;return true;
+    case XR_NATIVE_TERM_U32: *type=XR_XIR_U32;return true;
+    case XR_NATIVE_TERM_NULLABLE_I64: return source_nullable_type(ctx,XR_XIR_I64,type);
+    default: return source_fail(ctx,NULL,XR_XIR_BAD_TYPE,"primitive result has no admitted type contract");
+    }
+}
+static uint32_t source_primitive_declaration(SourceContext *ctx,
     const XrNativeTypeDeclaration *native) {
-    uint32_t declaration = source_integer_query_find(ctx,XR_XIR_SOURCE_TYPE,0,native->id);
+    uint32_t declaration = source_primitive_query_find(ctx,XR_XIR_SOURCE_TYPE,0,native->id);
     if (declaration || ctx->diagnostic.status != XR_XIR_OK) return declaration;
     if (!source_native_admit(ctx,native)) return 0;
     XrXirSourceQueryModule *modules = source_query_append(ctx,ctx->query.modules,
@@ -35,14 +55,16 @@ static uint32_t source_integer_declaration(SourceContext *ctx,
     if (!symbol.name || !source_query_declare(ctx,&symbol,XR_XIR_SOURCE_TYPE,0,range)) return 0;
     XrXirSourceDeclaration *row = (XrXirSourceDeclaration *)&ctx->query.declarations[symbol.declaration-1];
     row->native_identity = native->id; row->exported = true;
-    row->type = (XrXirSourceType){XR_XIR_I64,0,true};
+    XrXirType type;
+    if (!source_primitive_type(ctx,native->id,&type)) return 0;
+    row->type = (XrXirSourceType){type,0,true};
     return symbol.declaration;
 }
-static bool source_integer_member_reference(SourceContext *ctx, AstNode *node,
+static bool source_primitive_member_reference(SourceContext *ctx, AstNode *node,
     const XrNativeTypeDeclaration *native,const XrNativeMemberDeclaration *member) {
-    uint32_t parent = source_integer_declaration(ctx,native);
+    uint32_t parent = source_primitive_declaration(ctx,native);
     if (!parent) return false;
-    uint32_t declaration = source_integer_query_find(ctx,XR_XIR_SOURCE_MEMBER,parent,member->id);
+    uint32_t declaration = source_primitive_query_find(ctx,XR_XIR_SOURCE_MEMBER,parent,member->id);
     if (ctx->diagnostic.status != XR_XIR_OK) return false;
     if (!declaration) {
         SourceName symbol = {0}; symbol.name = source_owned_text(ctx,member->name);
@@ -59,10 +81,9 @@ static bool source_integer_member_reference(SourceContext *ctx, AstNode *node,
             parameters[p] = (XrXirSourceType){XR_XIR_I64,0,true};
         XrXirSourceDeclaration *row = (XrXirSourceDeclaration *)&ctx->query.declarations[declaration-1];
         row->native_identity = member->id; row->signature = signature;
-        row->type = (XrXirSourceType){member->result == XR_NATIVE_TERM_STRING ? XR_XIR_STRING :
-            member->result == XR_NATIVE_TERM_F64 ? XR_XIR_F64 : XR_XIR_I64,0,true}; row->exported = true;
-        if (member->result == XR_NATIVE_TERM_BOOL) row->type.type = XR_XIR_BOOL;
-        if (member->result == XR_NATIVE_TERM_NULLABLE_I64 && !source_nullable_type(ctx,XR_XIR_I64,&row->type.type)) return false;
+        XrXirType result;
+        if (!source_primitive_result_type(ctx,member->result,&result)) return false;
+        row->type = (XrXirSourceType){result,0,true}; row->exported = true;
         row->parameters = parameters; row->parameter_count = member->parameter_count;
     }
     return source_query_target_token_reference(ctx,node,declaration,XR_XIR_SOURCE_CALL);
@@ -261,7 +282,7 @@ static bool source_integer_call(SourceContext *ctx,AstNode *node,
         (!unary && member->parameters[0].type != XR_NATIVE_TERM_I64) ||
         call->type_arg_count || call->default_arg_count || call->arg_count != (unary ? 0 : 1))
         return source_fail(ctx,node,XR_XIR_BAD_TYPE,"integer operation requires its exact ordinary declaration");
-    if (!source_integer_member_reference(ctx,call->callee,native,member)) return false;
+    if (!source_primitive_member_reference(ctx,call->callee,native,member)) return false;
     if (absolute) return source_integer_abs(ctx,receiver,value);
     if (hex) return source_integer_hex(ctx,node,receiver,value);
     if (text) return source_recipe_record(ctx,(XrXirInstruction){XR_XIR_TO_STRING,XR_XIR_STRING,{receiver.id,0},{0},0,{0}},value);

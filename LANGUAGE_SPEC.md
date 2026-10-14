@@ -6349,6 +6349,8 @@ Checked Source admits integer methods by the fixed declaration identity in `stdl
 | `pow(exp)` | `(f64) -> f64` | power |
 | `isNaN()` | `() -> bool` | whether the value is IEEE NaN |
 
+Checked Source currently admits `abs`, `toString`, `toI64`, `floor`, `ceil`, `round` and `isNaN` through the fixed f64 declaration identity and its complete READ/signature/allocation/failure/ownership contracts, producing ordinary existing XIR. `abs` returns positive zero for either zero sign and canonicalizes NaNs through ordinary floating conversion/negation rules. `toI64` truncates toward zero; `floor/ceil` round toward negative/positive infinity; `round` chooses the nearest integer with ties away from zero, using an exact fractional-difference comparison rather than adding/subtracting 0.5 to the input. NaN, Infinity and inputs not convertible to i64 produce the common E0422 numeric-range panic, without invented values or typed Errors. Except for the existing f32 text conversion, these methods currently require an f64 receiver. `parse/tryParse/toFixed/sqrt/pow` retain five unadmitted declarations; the complete floating-method family is not qualified.
+
 ### 14.3 `BigInt` Methods
 
 | Method | Signature | Description |
@@ -6366,6 +6368,8 @@ Checked Source admits integer methods by the fixed declaration identity in `stdl
 |--|--|--|
 | `toString()` | `() -> string` | returns `"true"` or `"false"` |
 
+The bool text method is admitted by its fixed governed declaration and returns an independently owned string. The READ operation does not suspend and retains allocation, retain and resource failures.
+
 ### 14.4.1 `rune` Methods
 
 | Method | Signature | Description |
@@ -6378,6 +6382,8 @@ Checked Source admits integer methods by the fixed declaration identity in `stdl
 | `isWhitespace()` | `() -> bool` | whether the scalar is whitespace |
 
 `rune` is an independent primitive type and does not inherit integer methods; use `toUInt32()` explicitly when the code point is needed. `toUInt32()` / `i64(c)` return the complete code point without failure, allocation or suspension. `toString()` / `string(c)` produce owned UTF-8; U+0000 preserves one NUL byte with length one.
+
+Checked Source currently admits these two rune methods by their fixed governed declarations. `toUInt32` returns u32 and text retains allocation, retain and resource failures. The four Unicode classification declarations remain NONE and reject; an ASCII approximation does not establish Unicode classification.
 
 ### 14.5 `string` Methods
 

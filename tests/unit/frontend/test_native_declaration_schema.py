@@ -267,7 +267,7 @@ class NativeDeclarations(unittest.TestCase):
     def test_generation_preserves_unchanged_outputs(self):
         with tempfile.TemporaryDirectory(prefix='xray-native-generation-') as directory:
             root = Path(directory)
-            for relative in ['stdlib/types/array.xr', 'stdlib/types/string.xr', 'stdlib/types/atomic.xr', 'stdlib/types/coroutine.xr', 'stdlib/types/i64.xr', 'stdlib/prelude/builtin_symbols.def']:
+            for relative in ['stdlib/types/array.xr', 'stdlib/types/string.xr', 'stdlib/types/atomic.xr', 'stdlib/types/coroutine.xr', 'stdlib/types/i64.xr', 'stdlib/types/f64.xr', 'stdlib/types/bool.xr', 'stdlib/types/rune.xr', 'stdlib/prelude/builtin_symbols.def']:
                 target = root / relative
                 target.parent.mkdir(parents=True, exist_ok=True)
                 target.write_bytes((ROOT / relative).read_bytes())
@@ -307,6 +307,29 @@ class NativeDeclarations(unittest.TestCase):
                     self.assertEqual(target.stat().st_mtime_ns, expected[relative][1], relative)
                 else:
                     self.assertNotEqual(target.stat().st_mtime_ns, expected[relative][1], relative)
+
+    def test_scalar_complete_contracts_and_fail_closed_mutations(self):
+        for stem, identity, total, admitted in [('f64',7,12,7),('bool',8,1,1),('rune',9,6,2)]:
+            source = (ROOT / 'stdlib/types' / (stem+'.xr')).read_text(encoding='utf-8')
+            header, members = schema.parse_source(source, self.prelude)
+            self.assertEqual((identity,stem,''),header[:3])
+            self.assertEqual(total,len(members))
+            self.assertEqual(admitted,len([m for m in members if m.operation!='NONE']))
+            self.assertNotIn('xr_native_def_'+stem,embed.render(ROOT / 'stdlib/types'))
+        bad = [
+            ('f64','abs() -> f64','abs() -> i64'),
+            ('f64','FLOAT_TO_I64 allocation=no_heap failures=numeric_range','FLOAT_TO_I64 allocation=no_heap failures=none'),
+            ('f64','FLOAT_FLOOR allocation=no_heap','FLOAT_FLOOR allocation=may_heap'),
+            ('f64','FLOAT_IS_NAN','UNKNOWN_OPERATION'),
+            ('bool','toString() -> string','toString() -> bool'),
+            ('rune','toUInt32() -> u32','toUInt32() -> i64'),
+            ('rune','toString() -> string','ref toString() -> string'),
+        ]
+        for stem, before, after in bad:
+            source=(ROOT / 'stdlib/types' / (stem+'.xr')).read_text(encoding='utf-8')
+            self.assertIn(before,source)
+            with self.subTest(stem=stem,before=before), self.assertRaises(ValueError):
+                schema.parse_source(source.replace(before,after),self.prelude)
 
 
 if __name__ == '__main__':

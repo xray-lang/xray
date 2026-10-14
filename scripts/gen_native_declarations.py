@@ -143,6 +143,8 @@ def simple_term(term, binder):
         return 'NULLABLE_I64'
     if term == ('name', 'f64', ()):
         return 'F64'
+    if term == ('name', 'u32', ()):
+        return 'U32'
     if term == ('name', 'string', ()):
         return 'STRING'
     if term == ('name', 'bool', ()):
@@ -265,7 +267,7 @@ def parse_source(source, prelude):
             kind, name, binder = match.groups()
             binder = binder or ''
             identity = int(marks[0])
-            if (kind, identity, name, bool(binder)) not in (('struct', 1, 'Array', True), ('struct', 2, 'string', False), ('class', 6, 'i64', False)):
+            if (kind, identity, name, bool(binder)) not in (('struct', 1, 'Array', True), ('struct', 2, 'string', False), ('class', 6, 'i64', False), ('class', 7, 'f64', False), ('class', 8, 'bool', False), ('class', 9, 'rune', False)):
                 raise ValueError('native identity, value kind or generic arity mismatch')
             if identity == 1 and not re.search(r'XR_BUILTIN_PRELUDE_TYPE\("Array",\s*1,', prelude):
                 raise ValueError('native declaration has no exact one-parameter prelude binding')
@@ -321,6 +323,32 @@ def parse_source(source, prelude):
         pending, lowered = None, False
     if header is None or not closed or pending:
         raise ValueError('incomplete native declaration')
+    if header[0] in (7, 8, 9):
+        contracts = {
+            7: {'FLOAT_ABS': ('abs', '() -> f64', 'no_heap', 'none'),
+                'FLOAT_TO_STRING': ('toString', '() -> string', 'may_heap', 'allocation,retain,limit'),
+                'FLOAT_TO_I64': ('toI64', '() -> i64', 'no_heap', 'numeric_range'),
+                'FLOAT_FLOOR': ('floor', '() -> i64', 'no_heap', 'numeric_range'),
+                'FLOAT_CEIL': ('ceil', '() -> i64', 'no_heap', 'numeric_range'),
+                'FLOAT_ROUND': ('round', '() -> i64', 'no_heap', 'numeric_range'),
+                'FLOAT_IS_NAN': ('isNaN', '() -> bool', 'no_heap', 'none')},
+            8: {'BOOL_TO_STRING': ('toString', '() -> string', 'may_heap', 'allocation,retain,limit')},
+            9: {'RUNE_TO_U32': ('toUInt32', '() -> u32', 'no_heap', 'none'),
+                'RUNE_TO_STRING': ('toString', '() -> string', 'may_heap', 'allocation,retain,limit')},
+        }[header[0]]
+        used = set()
+        for member in members:
+            if member.operation == 'NONE':
+                continue
+            shape = (member.name, member.signature, member.allocation, member.failures)
+            if (shape != contracts.get(member.operation) or member.receiver != 'READ' or
+                    member.static or not member.method or member.lowered or member.ownership != 'owned' or
+                    member.operation in used):
+                raise ValueError('scalar operation disagrees with its complete declaration contract')
+            used.add(member.operation)
+        if used != set(contracts):
+            raise ValueError('scalar declaration omits an admitted recipe')
+        return header, members
     if header[0] == 6:
         contracts = {'INTEGER_ABS': ('abs', '() -> i64'),
                      'INTEGER_WRAPPING_ADD': ('wrappingAdd', '(other: i64) -> i64'),
@@ -396,7 +424,7 @@ def render_type(root, stem):
     prelude = (root / 'stdlib/prelude/builtin_symbols.def').read_text(encoding='utf-8')
     header, members = parse_source(source, prelude)
     identity, name, binder, line, column = header
-    if (stem, identity, name) not in (('array', 1, 'Array'), ('string', 2, 'string'), ('i64', 6, 'i64')):
+    if (stem, identity, name) not in (('array', 1, 'Array'), ('string', 2, 'string'), ('i64', 6, 'i64'), ('f64', 7, 'f64'), ('bool', 8, 'bool'), ('rune', 9, 'rune')):
         raise ValueError('native source path does not own this declaration identity')
     lines = []
     for index, member in enumerate(members):
@@ -621,7 +649,11 @@ def render(root):
     array_lines, header, members = render_type(root, "array")
     string_lines, _, _ = render_type(root, "string")
     integer_lines, _, _ = render_type(root, "i64")
-    lines += array_lines + string_lines + integer_lines + render_atomic_identities(root) + render_task_identity(root)
+    scalar_lines = []
+    for stem in ('f64', 'bool', 'rune'):
+        generated, _, _ = render_type(root, stem)
+        scalar_lines += generated
+    lines += array_lines + string_lines + integer_lines + scalar_lines + render_atomic_identities(root) + render_task_identity(root)
     binder = header[2]
     receiver = {}
     for operation in ('ARRAY_GET', 'ARRAY_SET', 'ARRAY_PUSH'):

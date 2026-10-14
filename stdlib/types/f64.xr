@@ -1,17 +1,25 @@
 // Built-in f64 type — implementation in src/runtime/value/xf64_methods.c
+// @native-type id=7
 class f64 {
     // @lowered
     static parse(text: string) -> f64
     // @lowered
     static tryParse(text: string) -> f64?
+    // @native-operation FLOAT_ABS allocation=no_heap failures=none ownership=owned
     abs() -> f64
+    // @native-operation FLOAT_TO_STRING allocation=may_heap failures=allocation,retain,limit ownership=owned
     toString() -> string
     toFixed(decimals?: i64) -> string
+    // @native-operation FLOAT_TO_I64 allocation=no_heap failures=numeric_range ownership=owned
     toI64() -> i64
+    // @native-operation FLOAT_FLOOR allocation=no_heap failures=numeric_range ownership=owned
     floor() -> i64
+    // @native-operation FLOAT_CEIL allocation=no_heap failures=numeric_range ownership=owned
     ceil() -> i64
+    // @native-operation FLOAT_ROUND allocation=no_heap failures=numeric_range ownership=owned
     round() -> i64
     sqrt() -> f64
     pow(exp: f64) -> f64
+    // @native-operation FLOAT_IS_NAN allocation=no_heap failures=none ownership=owned
     isNaN() -> bool
 }

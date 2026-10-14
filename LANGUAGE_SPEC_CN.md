@@ -6295,6 +6295,8 @@ Checked Source 的整数方法准入由 `stdlib/types/i64.xr` 的固定声明身
 | `pow(exp)` | `(f64) -> f64` | 幂运算 |
 | `isNaN()` | `() -> bool` | 是否为 IEEE NaN |
 
+当前 Checked Source 以固定 f64 声明身份及完整 READ/signature/allocation/failure/ownership 契约准入 `abs`、`toString`、`toI64`、`floor`、`ceil`、`round`、`isNaN`，并生成普通已有 XIR。`abs` 对零返回正零，NaN 结果遵循普通浮点转换/取反的 canonical 规则。`toI64` 向零截断；`floor/ceil` 向负/正无穷取整；`round` 最近取整且半值远离零，使用精确小数差比较而非给输入加减0.5。NaN、Infinity及无法转换为i64的输入沿共同数值转换发出E0422范围panic，不伪造值或 typed Error。除已有 f32 文本化外，这些准入方法当前要求 f64 接收者。`parse/tryParse/toFixed/sqrt/pow` 五项声明仍无 Checked 操作准入，完整浮点方法族未获资格。
+
 ### 14.3 `BigInt` 方法
 
 | 方法 | 签名 | 说明 |
@@ -6312,6 +6314,8 @@ Checked Source 的整数方法准入由 `stdlib/types/i64.xr` 的固定声明身
 |--|--|--|
 | `toString()` | `() -> string` | 返回 `"true"` 或 `"false"` |
 
+bool 文本方法由其固定治理声明准入，返回独立拥有的 string；接收者 READ、不挂起，保留分配/retain/资源失败。
+
 ### 14.4.1 `rune` 方法
 
 | 方法 | 签名 | 说明 |
@@ -6324,6 +6328,8 @@ Checked Source 的整数方法准入由 `stdlib/types/i64.xr` 的固定声明身
 | `isWhitespace()` | `() -> bool` | 是否为空白字符 |
 
 `rune` 是独立原始类型，不继承整数方法；需要码点时显式使用 `toUInt32()`。 `toUInt32()`／`i64(c)` 返回完整码点，不失败、不分配、不挂起；`toString()`／`string(c)` 产生拥有式 UTF-8，U+0000 保留长度为 1 的 NUL 字节。
+
+当前 Checked Source 的两个 rune 方法由固定治理声明准入；`toUInt32` 返回 u32，文本方法保留分配/retain/资源失败。四项 Unicode 分类声明继续 NONE 并拒绝，不将 ASCII 近似冒称 Unicode 分类。
 
 ### 14.5 `string` 方法
 
