@@ -92,9 +92,15 @@ static void open_json_cases(const char *root_uri,const char *lib_uri) {
         printf("LSP actual diagnostic JSON mode=%u sites=%zu, occupied/producer death, physical=0/0\n",mode,sites);
     }
 }
+#include "lsp_open_diagnostic_routing.h"
 static int open_run(int argc,char **argv) {
     (void)sdk_fixture_malloc;(void)sdk_fixture_free;(void)sdk_ledger;(void)sdk_unlimited;
-    CHECK(argc==3);XrCompileResourceLimits limits=xr_cli_compile_default_resource_limits();
+    CHECK(argc==3||argc==4);XrCompileResourceLimits limits=xr_cli_compile_default_resource_limits();
+    if(argc==4) {
+        bool faults=!strcmp(argv[3],"--diagnostic-routing-faults");
+        CHECK(faults||!strcmp(argv[3],"--diagnostic-routing"));
+        routing_run(argv[1],argv[2],faults);return 0;
+    }
     for(unsigned mode=0;mode<3;++mode) {
         size_t sites=0;XrCompileResourceStats stats={0};
         for(size_t probe=0;probe<=sites;++probe) {
@@ -117,7 +123,7 @@ static int open_run(int argc,char **argv) {
         }
         printf("LSP open mode=%u actual compiler sites=%zu, three axes, producer death, physical=0/0\n",mode,sites);
     }
-    open_json_cases(argv[1],argv[2]);return 0;
+    open_json_cases(argv[1],argv[2]);routing_run(argv[1],argv[2],false);return 0;
 }
 int wmain(int argc,wchar_t **wide) {
     XrWinPathStatus status;char **argv=xr_win_utf16_arguments(argc,wide,&status);CHECK(argv);

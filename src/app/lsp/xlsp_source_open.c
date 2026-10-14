@@ -11,6 +11,11 @@ struct XlspSourceOpen {
     XlspSourceWorkspace *workspace;
     XlspSourceWorkspaceFailure failure;
     XrXirStatus query_status;
+    char *diagnostic_uri;
+    size_t diagnostic_uri_length;
+    XlspSourceBuffer *diagnostic_buffer;
+    int diagnostic_version;
+    bool diagnostic_resolved;
 };
 static XrXirStatus open_status(XrCompileResourceStatus s) {
     return s==XR_COMPILE_RESOURCE_OK?XR_XIR_OK:s==XR_COMPILE_RESOURCE_BUDGET?XR_XIR_BUDGET:
@@ -20,6 +25,7 @@ void xlsp_source_open_free(XlspSourceOpen *o) {
     if(!o)return;
     xlsp_source_buffer_free(o->buffer);xlsp_source_syntax_free(o->syntax);
     xlsp_source_workspace_free(o->workspace);xlsp_source_workspace_failure_free(&o->failure);
+    xlsp_source_buffer_free(o->diagnostic_buffer);xr_compile_resources_free(o->diagnostic_uri);
     xr_compile_resources_free(o->uri);xr_compile_resources_free(o);
 }
 const char *xlsp_source_open_uri(const XlspSourceOpen *o){return o?o->uri:NULL;}
@@ -28,6 +34,47 @@ const XlspSourceWorkspaceFailure *xlsp_source_open_failure(const XlspSourceOpen 
 XlspSourceBuffer *xlsp_source_open_take_buffer(XlspSourceOpen *o){if(!o)return NULL;XlspSourceBuffer *p=o->buffer;o->buffer=NULL;return p;}
 XlspSyntaxSnapshot *xlsp_source_open_take_syntax(XlspSourceOpen *o){if(!o)return NULL;XlspSyntaxSnapshot *p=o->syntax;o->syntax=NULL;return p;}
 XlspSourceWorkspace *xlsp_source_open_take_workspace(XlspSourceOpen *o){if(!o)return NULL;XlspSourceWorkspace *p=o->workspace;o->workspace=NULL;return p;}
+static XrXirStatus open_path_equal(XrCompileResources *resources,const char *a,const char *b,bool *equal) {
+    *equal=false;
+    for(size_t i=0;;++i) {
+        XrXirStatus status=open_status(xr_compile_resources_work(resources,2));
+        if(status!=XR_XIR_OK)return status;
+        char first=a[i],second=b[i];
+#if defined(XR_OS_WINDOWS)
+        if(first=='\\')first='/';if(second=='\\')second='/';
+#endif
+        if(first!=second)return XR_XIR_OK;
+        if(!first){*equal=true;return XR_XIR_OK;}
+    }
+}
+static XrXirStatus open_capture_diagnostic(XlspSourceOpen *o,const XlspSourceDocument *documents,size_t count,size_t entry) {
+    if(!o->failure.present||!o->failure.path)return XR_XIR_OK;
+    for(size_t i=0;i<count;++i) {
+        bool equal=false;char *path=NULL;
+        XrXirStatus status=xlsp_source_uri_path(o->resources,documents[i].uri,documents[i].uri_length,&path);
+        if(status==XR_XIR_OK)status=open_path_equal(o->resources,path,o->failure.path,&equal);
+        xr_compile_resources_free(path);
+        if(status!=XR_XIR_OK)return status;
+        if(!equal)continue;
+        const XlspSourceDocument *input=&documents[i];
+        if(input->version<INT32_MIN||input->version>INT32_MAX||input->uri_length==SIZE_MAX)return XR_XIR_BAD_STRUCTURE;
+        o->diagnostic_version=(int)input->version;
+        if(i!=entry) {
+            o->diagnostic_uri_length=input->uri_length;
+            status=xlsp_source_buffer_new(o->resources,input->text,input->length,o->diagnostic_version,&o->diagnostic_buffer);
+            if(status!=XR_XIR_OK)return status;
+            status=open_status(xr_compile_resources_alloc(o->resources,input->uri_length+1,(void **)&o->diagnostic_uri));
+            if(status!=XR_XIR_OK)return status;
+            status=open_status(xr_compile_resources_work(o->resources,input->uri_length+1));
+            if(status!=XR_XIR_OK)return status;
+            memcpy(o->diagnostic_uri,input->uri,input->uri_length);o->diagnostic_uri[input->uri_length]=0;
+        }
+        o->diagnostic_resolved=true;break;
+    }
+    /* A closed dependency has no retained editor text. Keep its real failure,
+     * but never convert its byte positions against the entry's source. */
+    return XR_XIR_OK;
+}
 XrXirStatus xlsp_source_open_prepare(const XrXirCompileContext *context,const XlspSourceDocument *documents,size_t count,size_t entry,XlspSourceOpen **out) {
     if(!context||!context->resources||!documents||!count||entry>=count||!out||*out)return XR_XIR_BAD_STRUCTURE;
     const XlspSourceDocument *input=&documents[entry];
@@ -35,7 +82,7 @@ XrXirStatus xlsp_source_open_prepare(const XrXirCompileContext *context,const Xl
     XlspSourceOpen *o=NULL;XrCompilerSession *session=NULL;
     XrXirStatus status=open_status(xr_compile_resources_calloc(context->resources,1,sizeof(*o),(void **)&o));
     if(status!=XR_XIR_OK)return status;
-    o->resources=context->resources;o->uri_length=input->uri_length;
+    o->resources=context->resources;o->uri_length=input->uri_length;o->diagnostic_version=(int)input->version;
     status=xlsp_source_buffer_new(context->resources,input->text,input->length,(int)input->version,&o->buffer);
     if(status!=XR_XIR_OK)goto done;
     XrCompilerSessionStatus opened=xr_compile_session_new(context->resources,&session);
@@ -56,7 +103,8 @@ XrXirStatus xlsp_source_open_prepare(const XrXirCompileContext *context,const Xl
         bool language_status=status==XR_XIR_BAD_STRUCTURE||status==XR_XIR_BAD_TYPE||status==XR_XIR_BAD_VALUE||status==XR_XIR_UNRESOLVED||status==XR_XIR_UNSUPPORTED;
         if(!language_status||stage!=6||(!o->failure.present&&parsed!=XR_PARSE_RECOVERED))goto done;
         /* A genuine invalid editing state is owned, but no query is invented. */
-        status=XR_XIR_OK;
+        status=xlsp_source_syntax_diagnostics(o->syntax)?XR_XIR_OK:open_capture_diagnostic(o,documents,count,entry);
+        if(status!=XR_XIR_OK)goto done;
     }
     *out=o;o=NULL;
 done:
@@ -102,29 +150,36 @@ XrXirStatus xlsp_source_open_diagnostics_json(const XlspSourceOpen *o,const Xlsp
             if(status!=XR_XIR_OK)goto done;
         }
     } else if(o->query_status!=XR_XIR_OK) {
-        if(!o->failure.present){status=XR_XIR_UNRESOLVED;goto done;}
-        char *path=NULL;
-        status=xlsp_source_uri_path(o->resources,o->uri,o->uri_length,&path);
-        if(status!=XR_XIR_OK)goto done;
-        if(o->failure.path) {
-            size_t i=0;bool equal=true;
-            for(;;++i) {
-                if(xr_compile_resources_work(o->resources,2)!=XR_COMPILE_RESOURCE_OK){status=XR_XIR_BUDGET;break;}
-                char a=path[i],b=o->failure.path[i];
-#if defined(_WIN32)
-                if(a=='\\')a='/';if(b=='\\')b='/';
-#endif
-                if(a!=b){equal=false;break;}if(!a)break;
-            }
-            if(status==XR_XIR_OK&&!equal)status=XR_XIR_UNRESOLVED;
+        if(!o->failure.present||!o->diagnostic_resolved||o->failure.diagnostic.line<=0||o->failure.diagnostic.column<=0) {
+            status=XR_XIR_UNRESOLVED;goto done;
         }
-        xr_compile_resources_free(path);if(status!=XR_XIR_OK)goto done;
+        if(o->diagnostic_buffer) {
+            text=xlsp_source_buffer_text(o->diagnostic_buffer);length=xlsp_source_buffer_length(o->diagnostic_buffer);
+        }
         XrLspPosition point={0};
-        if(o->failure.diagnostic.line>0)status=xlsp_source_position(o->resources,text,length,o->failure.diagnostic.line,o->failure.diagnostic.column,&point);
+        status=xlsp_source_position(o->resources,text,length,o->failure.diagnostic.line,o->failure.diagnostic.column,&point);
         if(status==XR_XIR_OK)status=open_add_diagnostic(array,point,point,o->failure.diagnostic.message);
         if(status!=XR_XIR_OK)goto done;
     }
     *out=array;array=NULL;
 done:
     xjson_free(array);return status;
+}
+XR_FUNC XrXirStatus xlsp_source_open_diagnostics_params_json(const XlspSourceOpen *o,const XlspSourceBuffer *buffer,const XlspSyntaxSnapshot *syntax,XrJsonValue **out) {
+    if(!o||!buffer||!syntax||!out||*out)return XR_XIR_BAD_STRUCTURE;
+    bool imported=o->diagnostic_uri&&!xlsp_source_syntax_diagnostics(syntax);
+    XrXirStatus status=open_status(xr_compile_resources_work(o->resources,imported?o->diagnostic_uri_length:o->uri_length));
+    if(status==XR_XIR_OK)status=open_status(xr_compile_resources_work(o->resources,3*sizeof(XrJsonMember)+sizeof(XrJsonValue)));
+    if(status!=XR_XIR_OK)return status;
+    XrJsonValue *diagnostics=NULL;
+    status=xlsp_source_open_diagnostics_json(o,buffer,syntax,&diagnostics);
+    if(status!=XR_XIR_OK)return status;
+    XrJsonValue *params=xjson_new_object();
+    if(!params){xjson_free(diagnostics);return XR_XIR_OUT_OF_MEMORY;}
+    if(!open_member(params,"uri",xjson_new_string(imported?o->diagnostic_uri:o->uri))||
+        !open_member(params,"version",xjson_new_number(imported?o->diagnostic_version:xlsp_source_buffer_version(buffer)))) {
+        xjson_free(diagnostics);xjson_free(params);return XR_XIR_OUT_OF_MEMORY;
+    }
+    if(!open_member(params,"diagnostics",diagnostics)){xjson_free(params);return XR_XIR_OUT_OF_MEMORY;}
+    *out=params;return XR_XIR_OK;
 }

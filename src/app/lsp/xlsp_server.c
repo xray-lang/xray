@@ -916,19 +916,32 @@ static void handle_cancel_request(XrLspServer *server, XrJsonValue *params) {
 
 // Publish diagnostics for a document
 void xlsp_publish_diagnostics(XrLspServer *server, XrLspDocument *doc) {
-    XrJsonValue *diagnostics = xlsp_analyze_diagnostics(doc);
-    if(!diagnostics){lsp_log("Diagnostic rendering failed; no empty success published");return;}
+    if(!server||!doc)return;
+    XrJsonValue *params=NULL,*diagnostics=NULL;
+    XrLspDocument *target=doc;
+    if(doc->source_open) {
+        XrXirStatus status=xlsp_source_open_diagnostics_params_json(doc->source_open,doc->source_buffer,doc->syntax_snapshot,&params);
+        if(status!=XR_XIR_OK){lsp_log("Diagnostic rendering failed: status %u",(unsigned)status);return;}
+        target=xlsp_document_get(server,xjson_get_string(params,"uri"));
+        if(!target||target->version!=xjson_get_int(params,"version")) {
+            xjson_free(params);lsp_log("Diagnostic source was closed or replaced");return;
+        }
+        diagnostics=xjson_get_array(params,"diagnostics");
+    } else {
+        diagnostics=xlsp_analyze_diagnostics(doc);
+        if(!diagnostics){lsp_log("Diagnostic rendering failed; no empty success published");return;}
+        params=xjson_new_object();
+        if(!params){xjson_free(diagnostics);return;}
+        xjson_object_set(params,"uri",xjson_new_string(doc->uri));
+        xjson_object_set(params,"version",xjson_new_number(doc->version));
+        xjson_object_set(params,"diagnostics",diagnostics);
+    }
 
     /* Findings from a run of the program, not from this parse: the detector
      * writes them out, the editor reads them back. */
     xlsp_cycle_report_refresh(server);
-    xlsp_cycle_report_diagnostics(doc, diagnostics);
-    xlsp_contract_cycles_diagnostics(doc, diagnostics);
-
-    XrJsonValue *params = xjson_new_object();
-    xjson_object_set(params, "uri", xjson_new_string(doc->uri));
-    xjson_object_set(params, "version", xjson_new_number(doc->version));
-    xjson_object_set(params, "diagnostics", diagnostics);
+    xlsp_cycle_report_diagnostics(target, diagnostics);
+    xlsp_contract_cycles_diagnostics(target, diagnostics);
 
     xlsp_send_notification(server, "textDocument/publishDiagnostics", params);
 }

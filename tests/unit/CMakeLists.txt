@@ -4506,6 +4506,9 @@ if(WIN32)
     add_test(NAME test_lsp_source_open COMMAND ${XRAY_PYTHON} -X utf8
         ${CMAKE_CURRENT_SOURCE_DIR}/xir/test_lsp_source_open.py $<TARGET_FILE:test_lsp_source_open> ${PROJECT_SOURCE_DIR}/stdlib)
     set_tests_properties(test_lsp_source_open PROPERTIES TIMEOUT 300 COST 40 RUN_SERIAL TRUE LABELS "unit;lsp;ownership;metadata;allocation")
+    add_test(NAME test_lsp_source_diagnostic_routing COMMAND ${XRAY_PYTHON} -X utf8
+        ${CMAKE_CURRENT_SOURCE_DIR}/xir/test_lsp_source_open.py $<TARGET_FILE:test_lsp_source_open> ${PROJECT_SOURCE_DIR}/stdlib --diagnostic-routing-faults)
+    set_tests_properties(test_lsp_source_diagnostic_routing PROPERTIES TIMEOUT 300 COST 40 RUN_SERIAL TRUE LABELS "unit;lsp;ownership;metadata;allocation")
 endif()
 
 include("${CMAKE_CURRENT_SOURCE_DIR}/xir/source_dependencies.cmake")
