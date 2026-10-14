@@ -275,6 +275,14 @@ release:
     run.stats = stats(&run);
 done:
     run.attempts = instance_compile_attempts;
+    if (failure == SIZE_MAX && !instance_compile_injected && run.status != XR_XIR_OK)
+        fprintf(stderr,
+            "consumer baseline case=%s mode=%u status=%u allocated=%llu peak=%llu work=%llu "
+            "limits=%llu/%llu/%llu compiler-sites=%zu\n",
+            XR_CONSUMER_NAME, mode, run.status,
+            (unsigned long long)run.stats.allocated_bytes, (unsigned long long)run.stats.peak_bytes,
+            (unsigned long long)run.stats.work, (unsigned long long)limits.allocated_bytes,
+            (unsigned long long)limits.live_bytes, (unsigned long long)limits.work, run.attempts);
     instance_compile_fail_at = SIZE_MAX;
     return run;
 }
