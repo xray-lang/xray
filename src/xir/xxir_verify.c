@@ -887,7 +887,7 @@ static XrXirStatus graph_uses(const Graph *graph, const XrXirFunction *function,
             const XrXirTypeNode *task = xr_xir_type_node(context->module->types, expected);
             if (!task || task->kind != XR_XIR_TYPE_TASK) return XR_XIR_BAD_TYPE;
             XrXirType result = task->element;
-            if (context->module->stage == XR_XIR_LOWERED && !xr_xir_task_scalar_result_supported(result))
+            if (context->module->stage == XR_XIR_LOWERED && !xr_xir_task_result_supported(context->module->types, result))
                 return XR_XIR_UNSUPPORTED;
         }
         if (op->op == XR_XIR_NULLABLE_SOME)
