@@ -1,0 +1,15 @@
+export fn absolute(value:i64)->i64 { return value.abs() }
+export fn wrapped(value:i8,other:i64)->i8 { return value.wrappingAdd(other).wrappingSub(other).wrappingMul(other) }
+export fn extrema(value:i64,other:i64)->i64 { return value.min(other).max(other) }
+export fn overflow(value:i64,other:i64)->bool { return value.addOverflows(other) }
+export fn subOverflow(value:i64,other:i64)->bool { return value.subOverflows(other) }
+export fn mulOverflow(value:i64,other:i64)->bool { return value.mulOverflows(other) }
+export fn checked(value:i64,other:i64)->i64? { return value.checkedMul(other) }
+export fn checkedAdd(value:i64,other:i64)->i64? { return value.checkedAdd(other) }
+export fn checkedSub(value:i64,other:i64)->i64? { return value.checkedSub(other) }
+export fn saturated(value:i64,other:i64)->i64 { return value.saturatingMul(other) }
+export fn saturatedAdd(value:i64,other:i64)->i64 { return value.saturatingAdd(other) }
+export fn saturatedSub(value:i64,other:i64)->i64 { return value.saturatingSub(other) }
+export fn text(value:i64)->string { return value.toString() }
+export fn floating(value:i64)->f64 { return value.toF64() }
+export fn hexadecimal(value:i64)->string { return value.toHex() }

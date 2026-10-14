@@ -8,8 +8,8 @@ order: 015
 
 ## 14. 内置类型方法 (Built-in Type Methods)
 
-> 真值源：prelude / analyzer / runtime 中的内置类型注册与方法定义。
-> MCP knowledge 只消费生成后的 analyzer metadata，不独立维护内置类型方法签名。
+> 真值源：prelude、受治理声明及 analyzer / runtime 中的内置类型注册与方法定义。
+> MCP knowledge 消费源码 API 清单与生成 metadata，不独立维护内置类型方法签名。
 
 本节按主题汇总每种内置类型的方法、签名和行为。
 
@@ -35,6 +35,8 @@ order: 015
 | `rotateLeft(n)` / `rotateRight(n)` | `(i64) -> i64` | 循环移位（`n` 按模 64） |
 
 `abs()` 遵循整数环绕语义：`(-9223372036854775807 - 1).abs()` 返回自身。`toHex()` 对负数使用带符号前缀，例如 `-0x8000000000000000`。位运算与溢出谓词在 VM 与 AOT 中具有相同语义。
+
+Checked Source 的整数方法准入由 `stdlib/types/i64.xr` 的固定声明身份、完整签名、READ 接收者及生成的操作契约共同决定。当前准入 `abs`、`toString`、`toF64`、`toHex`、`min/max`、三项 `wrapping*`、三项 `checked*`、三项 `saturating*` 和三项溢出谓词。这些调用产生普通受验证 XIR，不查询标准库 native 缓存。`wrapping*` 在接收者的原整数位宽中运算，声明的 i64 参数先按该位宽归约；`toString` 保留原整数符号性。其余已准入方法当前要求 i64 接收者。`parse/tryParse`、`toBigInt`、`sqrt/pow` 保留声明但尚未具有 Checked Source 操作准入，调用时明确拒绝；这不是完整整数族资格。
 
 ### 14.2 `f64` 方法
 
@@ -388,8 +390,8 @@ print(len(empty))           // 0
 
 ## 14. Built-in Type Methods
 
-> Source of truth: prelude / analyzer / runtime built-in type registration and method definitions.
-> MCP knowledge only consumes the generated analyzer metadata; it does not maintain its own copy of built-in method signatures.
+> Source of truth: prelude, governed declarations and analyzer / runtime built-in type registration and method definitions.
+> MCP knowledge consumes the source API inventory and generated metadata; it does not maintain its own copy of built-in method signatures.
 
 This section summarizes the methods, signatures, and behavior of each built-in type by topic.
 
@@ -415,6 +417,8 @@ This section summarizes the methods, signatures, and behavior of each built-in t
 | `rotateLeft(n)` / `rotateRight(n)` | `(i64) -> i64` | bit rotation (`n` taken modulo 64) |
 
 `abs()` follows integer wrap semantics: `(-9223372036854775807 - 1).abs()` returns itself. `toHex()` keeps a sign prefix for negative values, for example `-0x8000000000000000`. Bit-manipulation methods and overflow predicates have the same semantics in VM and AOT builds.
+
+Checked Source admits integer methods by the fixed declaration identity in `stdlib/types/i64.xr`, the complete signature, the READ receiver and the generated operation contract. The admitted set currently comprises `abs`, `toString`, `toF64`, `toHex`, `min/max`, the three `wrapping*`, three `checked*`, three `saturating*` and three overflow predicates. These calls produce ordinary verified XIR without consulting a standard-library native cache. `wrapping*` operates in the receiver's original integer width after reducing the declared i64 argument to that width; `toString` preserves original integer signedness. Other admitted methods currently require an i64 receiver. `parse/tryParse`, `toBigInt` and `sqrt/pow` retain their declarations but have no Checked Source operation admission and explicitly reject. This does not qualify the complete integer family.
 
 ### 14.2 `f64` Methods
 

@@ -6306,8 +6306,8 @@ BigInt uses the `123n` literal or `i64.toBigInt()`; JSON uses `JSON.parse<T>` / 
 
 ## 14. Built-in Type Methods
 
-> Source of truth: prelude / analyzer / runtime built-in type registration and method definitions.
-> MCP knowledge only consumes the generated analyzer metadata; it does not maintain its own copy of built-in method signatures.
+> Source of truth: prelude, governed declarations and analyzer / runtime built-in type registration and method definitions.
+> MCP knowledge consumes the source API inventory and generated metadata; it does not maintain its own copy of built-in method signatures.
 
 This section summarizes the methods, signatures, and behavior of each built-in type by topic.
 
@@ -6333,6 +6333,8 @@ This section summarizes the methods, signatures, and behavior of each built-in t
 | `rotateLeft(n)` / `rotateRight(n)` | `(i64) -> i64` | bit rotation (`n` taken modulo 64) |
 
 `abs()` follows integer wrap semantics: `(-9223372036854775807 - 1).abs()` returns itself. `toHex()` keeps a sign prefix for negative values, for example `-0x8000000000000000`. Bit-manipulation methods and overflow predicates have the same semantics in VM and AOT builds.
+
+Checked Source admits integer methods by the fixed declaration identity in `stdlib/types/i64.xr`, the complete signature, the READ receiver and the generated operation contract. The admitted set currently comprises `abs`, `toString`, `toF64`, `toHex`, `min/max`, the three `wrapping*`, three `checked*`, three `saturating*` and three overflow predicates. These calls produce ordinary verified XIR without consulting a standard-library native cache. `wrapping*` operates in the receiver's original integer width after reducing the declared i64 argument to that width; `toString` preserves original integer signedness. Other admitted methods currently require an i64 receiver. `parse/tryParse`, `toBigInt` and `sqrt/pow` retain their declarations but have no Checked Source operation admission and explicitly reject. This does not qualify the complete integer family.
 
 ### 14.2 `f64` Methods
 

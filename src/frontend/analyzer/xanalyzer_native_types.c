@@ -384,6 +384,7 @@ static bool class_name_is_generated_plain_class(const char *name) {
 static XaBuiltinType native_builtin_types[XR_TID_COUNT];
 static XaBuiltinMember native_array_members[MAX_MEMBERS_PER_TYPE];
 static XaBuiltinMember native_string_members[MAX_MEMBERS_PER_TYPE];
+static XaBuiltinMember native_integer_members[MAX_MEMBERS_PER_TYPE];
 static XaBuiltinType compiler_builtin_json_namespace;
 static XaBuiltinType compiler_builtin_corolocal;
 static xr_once_t native_types_once = XR_ONCE_INITIALIZER;
@@ -511,6 +512,7 @@ static void load_native_value_declaration(uint32_t id, XrTypeId type, XaBuiltinM
             /* Scalar ownership carries no fresh-object provenance. */
             member->return_ownership = source->ownership == XR_NATIVE_RESULT_OWNERSHIP_OWNED &&
                 source->result != XR_NATIVE_TERM_BOOL && source->result != XR_NATIVE_TERM_I64 &&
+                source->result != XR_NATIVE_TERM_F64 && source->result != XR_NATIVE_TERM_NULLABLE_I64 &&
                 source->result != XR_NATIVE_TERM_UNIT ?
                 XA_BUILTIN_RETURN_FRESH : XA_BUILTIN_RETURN_UNKNOWN;
         }
@@ -528,6 +530,7 @@ static void xa_native_types_init_once(void) {
 #undef LOAD_NATIVE
     load_native_value_declaration(XR_NATIVE_DECLARATION_ARRAY, XR_TID_ARRAY, native_array_members);
     load_native_value_declaration(XR_NATIVE_DECLARATION_STRING, XR_TID_STRING, native_string_members);
+    load_native_value_declaration(XR_NATIVE_DECLARATION_INTEGER, XR_TID_I64, native_integer_members);
 
     /* Inject the few type members whose Xray schema is projected by the
      * stdlib metadata generator rather than indexed by XrTypeId. */

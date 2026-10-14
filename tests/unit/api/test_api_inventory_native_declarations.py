@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Keep native Array inventory complete and bound to compiler admission metadata."""
+"""Keep governed native inventory complete and bound to compiler admission metadata."""
 
 from __future__ import annotations
 
@@ -149,12 +149,41 @@ class NativeDeclarationInventoryTest(unittest.TestCase):
             inventory.collect_native_declaration(ROOT, string_path.with_name("imposter.xr"),
                 string_path.read_text(encoding="utf-8"), "stdlib", "string")
 
+    def test_integer_inventory_has_complete_governed_members(self) -> None:
+        path = ROOT / "stdlib/types/i64.xr"
+        source = path.read_text(encoding="utf-8")
+        header, members = declarations.parse_source(source, self.prelude)
+        entries = [entry for entry in inventory.collect_native_types(ROOT)
+                   if entry["namespace"] == "i64"]
+        declaration = next(entry for entry in entries if entry["kind"] == "type")
+        self.assertEqual((6, "i64", ""), header[:3])
+        self.assertEqual("class", declaration["declaration_kind"])
+        self.assertEqual(6, declaration["native_type_id"])
+        actual = {entry["name"]: entry for entry in entries if entry["kind"] != "type"}
+        self.assertEqual(23, len(actual))
+        self.assertEqual({member.name for member in members}, set(actual))
+        admitted = {entry["name"] for entry in actual.values() if entry["xir_admitted"]}
+        self.assertEqual(18, len(admitted))
+        self.assertEqual({"parse", "tryParse", "toBigInt", "sqrt", "pow"}, set(actual) - admitted)
+        for identity, member in enumerate(members, 1):
+            entry = actual[member.name]
+            self.assertEqual(6, entry["native_type_id"])
+            self.assertEqual(identity, entry["native_member_id"])
+            self.assertEqual("stdlib/types/i64.xr", entry["source"])
+            self.assertEqual(member.line, entry["line"])
+            self.assertEqual(member.column, entry["column"])
+            self.assertEqual(member.operation, entry["operation"])
+        with self.assertRaises(ValueError):
+            inventory.collect_native_declaration(ROOT, path.with_name("imposter.xr"),
+                source, "stdlib", "i64")
+
     def test_collector_uses_shared_parser_and_rejects_invalid_admission(self) -> None:
         with patch.object(declarations, "parse_source", wraps=declarations.parse_source) as parse:
             inventory.collect_native_types(ROOT)
-        self.assertEqual(parse.call_count, 2)
+        self.assertEqual(parse.call_count, 3)
         parse.assert_any_call(self.source, self.prelude)
         parse.assert_any_call((ROOT / "stdlib/types/string.xr").read_text(encoding="utf-8"), self.prelude)
+        parse.assert_any_call((ROOT / "stdlib/types/i64.xr").read_text(encoding="utf-8"), self.prelude)
         for source in (self.source.replace("struct Array", "class Array"),
                        self.source.replace("get(index: i64)", "get(index: i32)"),
                        self.source.replace("ARRAY_PUSH", "UNKNOWN_OP")):

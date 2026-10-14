@@ -9,7 +9,7 @@ import re
 
 
 TYPE_MARKER = re.compile(r'^\s*//\s*@native-type\s+id=([1-9][0-9]*)\s*$', re.M)
-OP_MARKER = re.compile(r'//\s*@native-operation\s+([A-Z_]+)\s+allocation=(no_heap|may_heap)\s+'
+OP_MARKER = re.compile(r'//\s*@native-operation\s+([A-Z_][A-Z_0-9]*)\s+allocation=(no_heap|may_heap)\s+'
                        r'failures=([a-z_,]+)\s+ownership=(owned|unit)\s*$')
 IDENT = re.compile(r'[A-Za-z_][A-Za-z0-9_]*')
 TOKENS = re.compile(r'\s*(\.\.\.|->|[A-Za-z_][A-Za-z0-9_]*|[<>()?,:])')
@@ -139,6 +139,10 @@ def simple_term(term, binder):
         return 'UNIT'
     if term == ('name', 'i64', ()):
         return 'I64'
+    if term == ('nullable', ('name', 'i64', ())):
+        return 'NULLABLE_I64'
+    if term == ('name', 'f64', ()):
+        return 'F64'
     if term == ('name', 'string', ()):
         return 'STRING'
     if term == ('name', 'bool', ()):
@@ -224,7 +228,7 @@ def parse_source(source, prelude):
     # Companion error enums are syntax-checked but grant no native operation authority.
     enum_pattern = re.compile(r'^enum\s+([A-Za-z_]\w*)\s*\{\s*([A-Za-z_]\w*(?:\s*,\s*[A-Za-z_]\w*)*)\s*\}', re.M)
     prefix = source[:TYPE_MARKER.search(source).start()]
-    if int(marks[0]) == 2:
+    if int(marks[0]) in (2, 6):
         seen = set()
         for enum in enum_pattern.finditer(prefix):
             if enum.group(1) in seen:
@@ -261,7 +265,7 @@ def parse_source(source, prelude):
             kind, name, binder = match.groups()
             binder = binder or ''
             identity = int(marks[0])
-            if kind != 'struct' or (identity, name, bool(binder)) not in ((1, 'Array', True), (2, 'string', False)):
+            if (kind, identity, name, bool(binder)) not in (('struct', 1, 'Array', True), ('struct', 2, 'string', False), ('class', 6, 'i64', False)):
                 raise ValueError('native identity, value kind or generic arity mismatch')
             if identity == 1 and not re.search(r'XR_BUILTIN_PRELUDE_TYPE\("Array",\s*1,', prelude):
                 raise ValueError('native declaration has no exact one-parameter prelude binding')
@@ -317,6 +321,35 @@ def parse_source(source, prelude):
         pending, lowered = None, False
     if header is None or not closed or pending:
         raise ValueError('incomplete native declaration')
+    if header[0] == 6:
+        contracts = {'INTEGER_ABS': ('abs', '() -> i64'),
+                     'INTEGER_WRAPPING_ADD': ('wrappingAdd', '(other: i64) -> i64'),
+                     'INTEGER_WRAPPING_SUB': ('wrappingSub', '(other: i64) -> i64'),
+                     'INTEGER_WRAPPING_MUL': ('wrappingMul', '(other: i64) -> i64'),
+                     'INTEGER_TO_STRING': ('toString', '() -> string'),
+                     'INTEGER_TO_HEX': ('toHex', '() -> string'),
+                     'INTEGER_TO_F64': ('toF64', '() -> f64'),
+                     'INTEGER_MIN': ('min', '(other: i64) -> i64'),
+                     'INTEGER_MAX': ('max', '(other: i64) -> i64')}
+        for base, kind in [('checked', 'CHECKED'), ('saturating', 'SATURATING')]:
+            for suffix, op in [('Add', 'ADD'), ('Sub', 'SUB'), ('Mul', 'MUL')]:
+                contracts['INTEGER_' + kind + '_' + op] = (base + suffix, '(other: i64) -> i64' + ('?' if base == 'checked' else ''))
+        for base, op in [('add', 'ADD'), ('sub', 'SUB'), ('mul', 'MUL')]:
+            contracts['INTEGER_' + op + '_OVERFLOWS'] = (base + 'Overflows', '(other: i64) -> bool')
+        used = set()
+        for member in members:
+            if member.operation == 'NONE':
+                continue
+            expected = contracts.get(member.operation)
+            if (expected != (member.name, member.signature) or member.receiver != 'READ' or
+                    member.static or not member.method or member.lowered or
+                    member.allocation != ('may_heap' if (member.operation in ('INTEGER_TO_STRING', 'INTEGER_TO_HEX') or member.operation.startswith('INTEGER_CHECKED_')) else 'no_heap') or
+                    member.failures != ('allocation,retain,limit' if (member.operation in ('INTEGER_TO_STRING', 'INTEGER_TO_HEX') or member.operation.startswith('INTEGER_CHECKED_')) else 'none') or member.ownership != 'owned'):
+                raise ValueError('integer operation disagrees with its complete declaration contract')
+            used.add(member.operation)
+        if used != set(contracts):
+            raise ValueError('integer declaration omits an admitted recipe')
+        return header, members
     recipes = array_recipe_contracts(header[2]) if header[0] == 1 else {}
     used = set()
     for member in members:
@@ -363,7 +396,7 @@ def render_type(root, stem):
     prelude = (root / 'stdlib/prelude/builtin_symbols.def').read_text(encoding='utf-8')
     header, members = parse_source(source, prelude)
     identity, name, binder, line, column = header
-    if (stem, identity, name) not in (('array', 1, 'Array'), ('string', 2, 'string')):
+    if (stem, identity, name) not in (('array', 1, 'Array'), ('string', 2, 'string'), ('i64', 6, 'i64')):
         raise ValueError('native source path does not own this declaration identity')
     lines = []
     for index, member in enumerate(members):
@@ -587,7 +620,8 @@ def render(root):
     lines = ['/* Generated by gen_native_declarations.py; do not edit. */']
     array_lines, header, members = render_type(root, "array")
     string_lines, _, _ = render_type(root, "string")
-    lines += array_lines + string_lines + render_atomic_identities(root) + render_task_identity(root)
+    integer_lines, _, _ = render_type(root, "i64")
+    lines += array_lines + string_lines + integer_lines + render_atomic_identities(root) + render_task_identity(root)
     binder = header[2]
     receiver = {}
     for operation in ('ARRAY_GET', 'ARRAY_SET', 'ARRAY_PUSH'):

@@ -27,9 +27,24 @@ class NativeDeclarations(unittest.TestCase):
         self.assertEqual(header[:3], (1, 'Array', 'T'))
         self.assertEqual(len(members), 32)
         self.assertEqual({m.operation for m in members if m.operation != 'NONE'},
-                         {'ARRAY_GET', 'ARRAY_SET', 'ARRAY_PUSH'} | set(schema.array_recipe_contracts('T')))
+                         {'ARRAY_GET', 'ARRAY_SET', 'ARRAY_PUSH', 'ARRAY_CAPACITY', 'ARRAY_WITH_CAPACITY', 'ARRAY_RESERVE'} | set(schema.array_recipe_contracts('T')))
         self.assertEqual(next(m for m in members if m.name == 'map').operation, 'ARRAY_MAP')
         self.assertNotIn('xr_native_def_array', embed.render(ROOT / 'stdlib/types'))
+
+    def test_integer_definition_and_recipe_rejections(self):
+        source = (ROOT / 'stdlib/types/i64.xr').read_text(encoding='utf-8')
+        header, members = schema.parse_source(source, self.prelude)
+        self.assertEqual(header[:3], (6, 'i64', ''))
+        executable = [m for m in members if m.operation != 'NONE']
+        self.assertEqual(len(executable), 18)
+        self.assertEqual(next(m for m in members if m.name == 'toBigInt').operation, 'NONE')
+        for changed in [source.replace('wrappingAdd(other: i64)', 'wrappingAdd(other: f64)'),
+                        source.replace('abs() -> i64', 'abs() -> f64'),
+                        source.replace('INTEGER_CHECKED_ADD allocation=may_heap', 'INTEGER_CHECKED_ADD allocation=no_heap'),
+                        source.replace('INTEGER_ABS allocation=no_heap failures=none', 'INTEGER_ABS allocation=no_heap failures=limit'),
+                        source.replace('// @native-type id=6', '// @native-type id=7')]:
+            with self.assertRaises(ValueError):
+                schema.parse_source(changed, self.prelude)
 
     def test_array_recipes_have_exact_symbolic_shapes(self):
         _, members = schema.parse_source(self.source, self.prelude)
@@ -74,8 +89,7 @@ class NativeDeclarations(unittest.TestCase):
         clear = next(member for member in members if member.name == 'clear')
         self.assertEqual((clear.receiver, clear.ownership, clear.result), ('REF', 'unit', ('tuple', ())))
         self.assertEqual({m.name for m in members if m.operation == 'NONE'},
-                         {'withCapacity', 'capacity', 'ptr', 'mutPtr',
-                          'reserve', 'concat', 'sort', 'fill', 'toString',
+                         {'ptr', 'mutPtr', 'sort', 'toString',
                           'iterator', 'entriesIterator'})
 
     def test_array_recipe_shape_permission_and_result_rejections(self):
@@ -253,7 +267,7 @@ class NativeDeclarations(unittest.TestCase):
     def test_generation_preserves_unchanged_outputs(self):
         with tempfile.TemporaryDirectory(prefix='xray-native-generation-') as directory:
             root = Path(directory)
-            for relative in ['stdlib/types/array.xr', 'stdlib/types/string.xr', 'stdlib/types/atomic.xr', 'stdlib/prelude/builtin_symbols.def']:
+            for relative in ['stdlib/types/array.xr', 'stdlib/types/string.xr', 'stdlib/types/atomic.xr', 'stdlib/types/coroutine.xr', 'stdlib/types/i64.xr', 'stdlib/prelude/builtin_symbols.def']:
                 target = root / relative
                 target.parent.mkdir(parents=True, exist_ok=True)
                 target.write_bytes((ROOT / relative).read_bytes())

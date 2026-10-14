@@ -992,13 +992,13 @@ def collect_native_declaration(root: Path, path: Path, text: str,
     prelude = (root / "stdlib/prelude/builtin_symbols.def").read_text(encoding="utf-8")
     header, members = gen_native_declarations.parse_source(text, prelude)
     identity, name, binder, line, column = header
-    owner = {1: ("Array", "array.xr"), 2: ("string", "string.xr")}.get(identity)
+    owner = {1: ("Array", "array.xr"), 2: ("string", "string.xr"), 6: ("i64", "i64.xr")}.get(identity)
     if not owner or name != owner[0] or path != root / "stdlib/types" / owner[1]:
         raise ValueError("native declaration identity does not belong to this source path")
     declaration = item(category="native-type", namespace=name, name=name, kind="type",
                        signature=f"{name}<{binder}>" if binder else name, source=rel(root, path), line=line,
                        doc_surface=doc_surface, doc_module=doc_module)
-    declaration.update(native_type_id=identity, declaration_kind="struct", column=column)
+    declaration.update(native_type_id=identity, declaration_kind="class" if identity == 6 else "struct", column=column)
     out = [declaration]
     for member_id, member in enumerate(members, 1):
         if member.method:
