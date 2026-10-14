@@ -63,6 +63,7 @@ typedef struct XirCell {
     XirObject object;
     XrXirValue value;
     XrXirCellLoan *borrow_top;
+    XrXirCellLoan *prepared_loan;
     const void *module_owner;
     uint32_t module_slot;
     bool initialized, module_storage;
@@ -1190,6 +1191,7 @@ static XrXirValueStatus xr_xir_cell_new_graph_operation(XrXirDomain *domain, XrX
     if (!cell) return status;
     cell->value = (XrXirValue) {0};
     cell->borrow_top = NULL;
+    cell->prepared_loan = NULL;
     cell->module_owner = NULL;
     cell->module_slot = UINT32_MAX;
     cell->initialized = false;
