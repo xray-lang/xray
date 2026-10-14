@@ -107,6 +107,7 @@ static void initializer_case(const InitializerCase *fixture, bool baseline) {
     printf("initializer %s source sites=%zu allocated=%llu peak=%llu work=%llu physical=0\n", fixture->name,sites,
         (unsigned long long)normal.allocated_bytes, (unsigned long long)normal.peak_bytes,
         (unsigned long long)normal.work);
+    fflush(stdout);
     if (baseline) return;
     for (size_t i = 0; i < sites; ++i) {
         attempts = 0; fail_at = i;
@@ -128,7 +129,11 @@ static void initializer_case(const InitializerCase *fixture, bool baseline) {
 }
 int main(int argc,char **argv) {
     bool baseline=argc==2 && !strcmp(argv[1],"--comptime-baseline");
-    CHECK(argc==1 || baseline);
-    for (size_t i=baseline?1:0;i<sizeof(cases)/sizeof(cases[0]);++i) initializer_case(&cases[i],baseline);
+    size_t first=0,last=1;
+    if (baseline) { first=1;last=sizeof(cases)/sizeof(cases[0]); }
+    else if (argc==2 && !strcmp(argv[1],"--comptime-array")) { first=1;last=2; }
+    else if (argc==2 && !strcmp(argv[1],"--comptime-optional-tuple")) { first=2;last=3; }
+    else CHECK(argc==1);
+    for (size_t i=first;i<last;++i) initializer_case(&cases[i],baseline);
     return 0;
 }

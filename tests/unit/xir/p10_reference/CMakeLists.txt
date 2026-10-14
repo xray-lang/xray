@@ -52,6 +52,13 @@ else()
 endif()
 add_test(NAME test_xir_p10_initializer_resources COMMAND test_xir_p10_initializer_resources)
 set_tests_properties(test_xir_p10_initializer_resources PROPERTIES TIMEOUT 300 COST 40 RUN_SERIAL TRUE LABELS "unit;xir;p10;init;ownership;budget;allocation")
+foreach(family IN ITEMS array optional-tuple)
+    string(REPLACE "-" "_" suffix "${family}")
+    add_test(NAME test_xir_p10_initializer_comptime_${suffix}_resources
+        COMMAND test_xir_p10_initializer_resources --comptime-${family})
+    set_tests_properties(test_xir_p10_initializer_comptime_${suffix}_resources PROPERTIES
+        TIMEOUT 300 COST 80 RUN_SERIAL TRUE LABELS "unit;xir;p10;init;ctfe;ownership;budget;allocation")
+endforeach()
 add_test(NAME test_xir_p10_initializer_comptime_resources_baseline
     COMMAND test_xir_p10_initializer_resources --comptime-baseline)
 set_tests_properties(test_xir_p10_initializer_comptime_resources_baseline PROPERTIES
