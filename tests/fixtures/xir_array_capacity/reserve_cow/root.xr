@@ -1,0 +1,17 @@
+import "./producer" as producer
+export fn main()->i64{return 0}
+export fn scenario()->i64{
+    var xs=Array<i64>.withCapacity(8)
+    xs.push(3);xs.push(4)
+    const old=xs
+    const cap=xs.capacity
+    var returned=producer.noGrowth(ref xs)
+    returned[0]=9;xs[1]=7
+    assert(old.capacity==cap&&returned.capacity==cap&&xs.capacity==cap)
+    return old[0]*1000+old[1]*100+xs[1]*10+returned[0]
+}
+export fn escaped()->Array<i64>{
+    var xs=Array<i64>.withCapacity(8)
+    xs.push(3);xs.push(4)
+    return producer.noGrowth(ref xs)
+}
