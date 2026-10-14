@@ -12940,6 +12940,487 @@
         "Actual complete body discovery and independent VM/generated-C/native scalar results.",
         "Original physical struct/Array ownership, compiler/native/runtime FI, exact budgets/cancel/lifetime and sanitizer/provider qualification remain open."
       ]
+    },
+    {
+      "id": "structured_original_0907_struct_multi_interface_observed",
+      "oracle_id": "structured_original_0907_struct_multi_interface_observed",
+      "source": "tests/unit/xir/legacy_consumers/fixtures/independent_named_observations/0907_struct_multi_interface/root.xr",
+      "source_lf_sha256": "378956fc7ee5862f7a175ebbc9b5f3d5bd33d3176f37662fd26596cc10e097c5",
+      "entry": "test",
+      "stdout_utf8": "Math: 95\nEnglish: 88\n95\n88\n95\n95\n50\n",
+      "stderr_utf8": "",
+      "companions": [],
+      "owners": [
+        "P07",
+        "P09",
+        "P10",
+        "P12",
+        "P14"
+      ],
+      "independent_observations": {
+        "original_case": "tests/regression/08_oop/0907_struct_multi_interface.xr",
+        "selected_complete_source": "tests/regression/08_oop/0907_struct_multi_interface.xr",
+        "selected_source_lf_sha256": "fc613741a757c264132aba8148454a3cb0f7fa3d45f8d5f08df0bd1e152238ef",
+        "method": "All original generic/interface declarations, constructors, nested values, explicit type annotations, calls and every named body remain. Each actual scalar is captured once at its original assertion boundary and compared with frozen literal results.",
+        "values": [
+          {
+            "test": "test_struct_multi_interface",
+            "expression": "a.toString()",
+            "expected": "Math: 95",
+            "projection": null
+          },
+          {
+            "test": "test_struct_multi_interface",
+            "expression": "b.toString()",
+            "expected": "English: 88",
+            "projection": null
+          },
+          {
+            "test": "test_struct_multi_interface",
+            "expression": "a.measure()",
+            "expected": 95,
+            "projection": null
+          },
+          {
+            "test": "test_struct_multi_interface",
+            "expression": "b.measure()",
+            "expected": 88,
+            "projection": null
+          },
+          {
+            "test": "test_struct_multi_interface",
+            "expression": "a.value",
+            "expected": 95,
+            "projection": null
+          },
+          {
+            "test": "test_struct_multi_interface",
+            "expression": "a.measure()",
+            "expected": 95,
+            "projection": null
+          },
+          {
+            "test": "test_struct_multi_interface",
+            "expression": "c.measure()",
+            "expected": 50,
+            "projection": null
+          }
+        ]
+      },
+      "remaining_gates": [
+        "Actual complete discovery and independent VM/C/native values.",
+        "Erased interface/higher-order dispatch and full generic definition/constraint checking remain separate.",
+        "Original complete compiler/native/runtime FI, exact budgets/cancel/lifetime/physical and sanitizer/provider matrix."
+      ]
+    },
+    {
+      "id": "structured_original_1235_generic_value_struct_annotation_observed",
+      "oracle_id": "structured_original_1235_generic_value_struct_annotation_observed",
+      "source": "tests/unit/xir/legacy_consumers/fixtures/independent_named_observations/1235_generic_value_struct_annotation/root.xr",
+      "source_lf_sha256": "e8d5b11464b362d3720c13e616ef04188f72b563017e1d00a78b0b3efb4f99c6",
+      "entry": "test",
+      "stdout_utf8": "41\n7\nhi\n99\n5\n41\n41\n41\n100\n",
+      "stderr_utf8": "",
+      "companions": [],
+      "owners": [
+        "P02",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P11",
+        "P12",
+        "P13",
+        "P14"
+      ],
+      "independent_observations": {
+        "original_case": "tests/regression/12_type_checking/1235_generic_value_struct_annotation.xr",
+        "selected_complete_source": "tests/regression/12_type_checking/1235_generic_value_struct_annotation.xr",
+        "selected_source_lf_sha256": "1664d6506ba1628c7d60e5f43bbe3d154c384078e60da0d6efe42ceb3e12ebf0",
+        "method": "All original generic/interface declarations, constructors, nested values, explicit type annotations, calls and every named body remain. Each actual scalar is captured once at its original assertion boundary and compared with frozen literal results.",
+        "values": [
+          {
+            "test": "test_var_annotation",
+            "expression": "p.value",
+            "expected": 41,
+            "projection": null
+          },
+          {
+            "test": "test_var_annotation",
+            "expression": "q.first",
+            "expected": 7,
+            "projection": null
+          },
+          {
+            "test": "test_var_annotation",
+            "expression": "q.second",
+            "expected": "hi",
+            "projection": null
+          },
+          {
+            "test": "test_param_annotation",
+            "expression": "take(p)",
+            "expected": 99,
+            "projection": null
+          },
+          {
+            "test": "test_param_annotation",
+            "expression": "take(Box<i64>{value: 5})",
+            "expected": 5,
+            "projection": null
+          },
+          {
+            "test": "test_return_annotation",
+            "expression": "p.value",
+            "expected": 41,
+            "projection": null
+          },
+          {
+            "test": "test_struct_field_annotation",
+            "expression": "h.b.value",
+            "expected": 41,
+            "projection": null
+          },
+          {
+            "test": "test_struct_field_annotation",
+            "expression": "h.b.value",
+            "expected": 41,
+            "projection": null
+          },
+          {
+            "test": "test_struct_field_annotation",
+            "expression": "h2.b.value",
+            "expected": 100,
+            "projection": null
+          }
+        ]
+      },
+      "remaining_gates": [
+        "Actual complete discovery and independent VM/C/native values.",
+        "Erased interface/higher-order dispatch and full generic definition/constraint checking remain separate.",
+        "Original complete compiler/native/runtime FI, exact budgets/cancel/lifetime/physical and sanitizer/provider matrix."
+      ]
+    },
+    {
+      "id": "structured_original_1221_generic_class_basic_observed",
+      "oracle_id": "structured_original_1221_generic_class_basic_observed",
+      "source": "tests/unit/xir/legacy_consumers/fixtures/independent_named_observations/1221_generic_class_basic/root.xr",
+      "source_lf_sha256": "788ec5bc982630e8eff9fae129ed5f404fdff2468fab79dc6d58cee09222c9c3",
+      "entry": "test",
+      "stdout_utf8": "42\n42\nhello\nhello\ntrue\nage\n30\n1\none\n100\n1\n2\n3\nx\n99\n",
+      "stderr_utf8": "",
+      "companions": [],
+      "owners": [
+        "P02",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P11",
+        "P12",
+        "P13",
+        "P14"
+      ],
+      "independent_observations": {
+        "original_case": "tests/regression/12_type_checking/1221_generic_class_basic.xr",
+        "selected_complete_source": "tests/regression/12_type_checking/1221_generic_class_basic.xr",
+        "selected_source_lf_sha256": "4858cacc68a4999c9ffc7fb8c0ac1d0e7d91918d3f3200bd8370a78826f818ff",
+        "method": "All original generic/interface declarations, constructors, nested values, explicit type annotations, calls and every named body remain. Each actual scalar is captured once at its original assertion boundary and compared with frozen literal results.",
+        "values": [
+          {
+            "test": "test_generic_class_basic",
+            "expression": "intBox.value",
+            "expected": 42,
+            "projection": null
+          },
+          {
+            "test": "test_generic_class_basic",
+            "expression": "intBox.get()",
+            "expected": 42,
+            "projection": null
+          },
+          {
+            "test": "test_generic_class_basic",
+            "expression": "strBox.value",
+            "expected": "hello",
+            "projection": null
+          },
+          {
+            "test": "test_generic_class_basic",
+            "expression": "strBox.get()",
+            "expected": "hello",
+            "projection": null
+          },
+          {
+            "test": "test_generic_class_basic",
+            "expression": "boolBox.value",
+            "expected": true,
+            "projection": null
+          },
+          {
+            "test": "test_generic_class_basic",
+            "expression": "p1.key",
+            "expected": "age",
+            "projection": null
+          },
+          {
+            "test": "test_generic_class_basic",
+            "expression": "p1.value",
+            "expected": 30,
+            "projection": null
+          },
+          {
+            "test": "test_generic_class_basic",
+            "expression": "p2.key",
+            "expected": 1,
+            "projection": null
+          },
+          {
+            "test": "test_generic_class_basic",
+            "expression": "p2.value",
+            "expected": "one",
+            "projection": null
+          },
+          {
+            "test": "test_generic_class_basic",
+            "expression": "outerBox.get().get()",
+            "expected": 100,
+            "projection": null
+          },
+          {
+            "test": "test_generic_class_basic",
+            "expression": "boxes[0].get()",
+            "expected": 1,
+            "projection": null
+          },
+          {
+            "test": "test_generic_class_basic",
+            "expression": "boxes[1].get()",
+            "expected": 2,
+            "projection": null
+          },
+          {
+            "test": "test_generic_class_basic",
+            "expression": "boxes[2].get()",
+            "expected": 3,
+            "projection": null
+          },
+          {
+            "test": "test_generic_class_basic",
+            "expression": "boxPair.get().key",
+            "expected": "x",
+            "projection": null
+          },
+          {
+            "test": "test_generic_class_basic",
+            "expression": "boxPair.get().value",
+            "expected": 99,
+            "projection": null
+          }
+        ]
+      },
+      "remaining_gates": [
+        "Actual complete discovery and independent VM/C/native values.",
+        "Erased interface/higher-order dispatch and full generic definition/constraint checking remain separate.",
+        "Original complete compiler/native/runtime FI, exact budgets/cancel/lifetime/physical and sanitizer/provider matrix."
+      ]
+    },
+    {
+      "id": "structured_original_1227_mono_class_e2e_observed",
+      "oracle_id": "structured_original_1227_mono_class_e2e_observed",
+      "source": "tests/unit/xir/legacy_consumers/fixtures/independent_named_observations/1227_mono_class_e2e/root.xr",
+      "source_lf_sha256": "09f7277d1280d2498c327a8135aafe83b8165488ff657ceb936bf88251e32e56",
+      "entry": "test",
+      "stdout_utf8": "42\n42\n3.14\n3.14\nhello\nhello\ntrue\nage\n30\n1\n2.5\n6\n100\n10\n20\n30\n",
+      "stderr_utf8": "",
+      "companions": [],
+      "owners": [
+        "P02",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P11",
+        "P12",
+        "P13",
+        "P14"
+      ],
+      "independent_observations": {
+        "original_case": "tests/regression/12_type_checking/1227_mono_class_e2e.xr",
+        "selected_complete_source": "tests/regression/12_type_checking/1227_mono_class_e2e.xr",
+        "selected_source_lf_sha256": "31dbf8139f48415297d9ce7e7abced1ccfac3c1b43c29c12f11a2ca469fdedf1",
+        "method": "All original generic/interface declarations, constructors, nested values, explicit type annotations, calls and every named body remain. Each actual scalar is captured once at its original assertion boundary and compared with frozen literal results.",
+        "values": [
+          {
+            "test": "test_mono_class_e2e",
+            "expression": "intBox.value",
+            "expected": 42,
+            "projection": null
+          },
+          {
+            "test": "test_mono_class_e2e",
+            "expression": "intBox.get()",
+            "expected": 42,
+            "projection": null
+          },
+          {
+            "test": "test_mono_class_e2e",
+            "expression": "floatBox.value",
+            "expected": 3.14,
+            "projection": null
+          },
+          {
+            "test": "test_mono_class_e2e",
+            "expression": "floatBox.get()",
+            "expected": 3.14,
+            "projection": null
+          },
+          {
+            "test": "test_mono_class_e2e",
+            "expression": "strBox.value",
+            "expected": "hello",
+            "projection": null
+          },
+          {
+            "test": "test_mono_class_e2e",
+            "expression": "strBox.get()",
+            "expected": "hello",
+            "projection": null
+          },
+          {
+            "test": "test_mono_class_e2e",
+            "expression": "boolBox.value",
+            "expected": true,
+            "projection": null
+          },
+          {
+            "test": "test_mono_class_e2e",
+            "expression": "p1.key",
+            "expected": "age",
+            "projection": null
+          },
+          {
+            "test": "test_mono_class_e2e",
+            "expression": "p1.val",
+            "expected": 30,
+            "projection": null
+          },
+          {
+            "test": "test_mono_class_e2e",
+            "expression": "p2.key",
+            "expected": 1,
+            "projection": null
+          },
+          {
+            "test": "test_mono_class_e2e",
+            "expression": "p2.val",
+            "expected": 2.5,
+            "projection": null
+          },
+          {
+            "test": "test_mono_class_e2e",
+            "expression": "a.get() + b.get() + c.get()",
+            "expected": 6,
+            "projection": null
+          },
+          {
+            "test": "test_mono_class_e2e",
+            "expression": "outer.get().get()",
+            "expected": 100,
+            "projection": null
+          },
+          {
+            "test": "test_mono_class_e2e",
+            "expression": "boxes[0].get()",
+            "expected": 10,
+            "projection": null
+          },
+          {
+            "test": "test_mono_class_e2e",
+            "expression": "boxes[1].get()",
+            "expected": 20,
+            "projection": null
+          },
+          {
+            "test": "test_mono_class_e2e",
+            "expression": "boxes[2].get()",
+            "expected": 30,
+            "projection": null
+          }
+        ]
+      },
+      "remaining_gates": [
+        "Actual complete discovery and independent VM/C/native values.",
+        "Erased interface/higher-order dispatch and full generic definition/constraint checking remain separate.",
+        "Original complete compiler/native/runtime FI, exact budgets/cancel/lifetime/physical and sanitizer/provider matrix."
+      ]
+    },
+    {
+      "id": "structured_original_0850_interface_observed",
+      "oracle_id": "structured_original_0850_interface_observed",
+      "source": "tests/unit/xir/legacy_consumers/fixtures/independent_named_observations/0850_interface/root.xr",
+      "source_lf_sha256": "59e44bc338ff4efe9804ba2b52c722cab441cd82c746b9bbee33c7ffdae51d93",
+      "entry": "test",
+      "stdout_utf8": "5.0\n12.0\n14.0\n6.0\n16.0\nHello, Alice\n",
+      "stderr_utf8": "",
+      "companions": [],
+      "owners": [
+        "P07",
+        "P09",
+        "P10",
+        "P11",
+        "P12",
+        "P14"
+      ],
+      "independent_observations": {
+        "original_case": "tests/regression/08_oop/0850_interface.xr",
+        "selected_complete_source": "tests/regression/08_oop/0850_interface.xr",
+        "selected_source_lf_sha256": "d75c4e320edd5f86edeab16beef2602b690b11b17b3e1b6d78bac6742690131d",
+        "method": "All original generic/interface declarations, constructors, nested values, explicit type annotations, calls and every named body remain. Each actual scalar is captured once at its original assertion boundary and compared with frozen literal results.",
+        "values": [
+          {
+            "test": "test_interface_implementation",
+            "expression": "circle.getRadius()",
+            "expected": 5.0,
+            "projection": null
+          },
+          {
+            "test": "test_multi_method_interface",
+            "expression": "rect.area()",
+            "expected": 12.0,
+            "projection": null
+          },
+          {
+            "test": "test_multi_method_interface",
+            "expression": "rect.perimeter()",
+            "expected": 14.0,
+            "projection": null
+          },
+          {
+            "test": "test_multiple_implementations",
+            "expression": "rect.area()",
+            "expected": 6.0,
+            "projection": null
+          },
+          {
+            "test": "test_multiple_implementations",
+            "expression": "square.area()",
+            "expected": 16.0,
+            "projection": null
+          },
+          {
+            "test": "test_interface_with_extra_methods",
+            "expression": "p.greet()",
+            "expected": "Hello, Alice",
+            "projection": null
+          }
+        ]
+      },
+      "remaining_gates": [
+        "Actual complete discovery and independent VM/C/native values.",
+        "Erased interface/higher-order dispatch and full generic definition/constraint checking remain separate.",
+        "Original complete compiler/native/runtime FI, exact budgets/cancel/lifetime/physical and sanitizer/provider matrix."
+      ]
     }
   ]
 }

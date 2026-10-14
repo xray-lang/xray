@@ -32,6 +32,26 @@
     {
       "path": "spec/source/sections/006-5-declarations.md",
       "lf_sha256": "56fa3d36bc0c5ee38b7c52dafbe26d7b8b0a45a6909c14a8626a9bba515cc4a7"
+    },
+    {
+      "path": "tests/regression/08_oop/0907_struct_multi_interface.xr",
+      "lf_sha256": "fc613741a757c264132aba8148454a3cb0f7fa3d45f8d5f08df0bd1e152238ef"
+    },
+    {
+      "path": "tests/regression/12_type_checking/1235_generic_value_struct_annotation.xr",
+      "lf_sha256": "1664d6506ba1628c7d60e5f43bbe3d154c384078e60da0d6efe42ceb3e12ebf0"
+    },
+    {
+      "path": "tests/regression/12_type_checking/1221_generic_class_basic.xr",
+      "lf_sha256": "4858cacc68a4999c9ffc7fb8c0ac1d0e7d91918d3f3200bd8370a78826f818ff"
+    },
+    {
+      "path": "tests/regression/12_type_checking/1227_mono_class_e2e.xr",
+      "lf_sha256": "31dbf8139f48415297d9ce7e7abced1ccfac3c1b43c29c12f11a2ca469fdedf1"
+    },
+    {
+      "path": "tests/regression/08_oop/0850_interface.xr",
+      "lf_sha256": "d75c4e320edd5f86edeab16beef2602b690b11b17b3e1b6d78bac6742690131d"
     }
   ],
   "cases": [
@@ -233,6 +253,169 @@
         }
       },
       "model_scope": "Original immutable literal field/method expectations, explicit copy independence and local mathematical pi constant; no output-derived oracle or private representation assumption."
+    },
+    {
+      "id": "structured_original_0907_struct_multi_interface_observed",
+      "expected": {
+        "exit_code": 0,
+        "required_test_names": [
+          "test_struct_multi_interface"
+        ],
+        "per_test_observations": {
+          "test_struct_multi_interface": {
+            "values": [
+              "Math: 95",
+              "English: 88",
+              95,
+              88,
+              95,
+              95,
+              50
+            ]
+          }
+        }
+      },
+      "model_scope": "Source-derived original literal constructor/field/method/copy results; direct implementation calls do not prove erased interface dispatch or complete generic definition checking."
+    },
+    {
+      "id": "structured_original_1235_generic_value_struct_annotation_observed",
+      "expected": {
+        "exit_code": 0,
+        "required_test_names": [
+          "test_var_annotation",
+          "test_param_annotation",
+          "test_return_annotation",
+          "test_struct_field_annotation"
+        ],
+        "per_test_observations": {
+          "test_var_annotation": {
+            "values": [
+              41,
+              7,
+              "hi"
+            ]
+          },
+          "test_param_annotation": {
+            "values": [
+              99,
+              5
+            ]
+          },
+          "test_return_annotation": {
+            "values": [
+              41
+            ]
+          },
+          "test_struct_field_annotation": {
+            "values": [
+              41,
+              41,
+              100
+            ]
+          }
+        }
+      },
+      "model_scope": "Source-derived original literal constructor/field/method/copy results; direct implementation calls do not prove erased interface dispatch or complete generic definition checking."
+    },
+    {
+      "id": "structured_original_1221_generic_class_basic_observed",
+      "expected": {
+        "exit_code": 0,
+        "required_test_names": [
+          "test_generic_class_basic"
+        ],
+        "per_test_observations": {
+          "test_generic_class_basic": {
+            "values": [
+              42,
+              42,
+              "hello",
+              "hello",
+              true,
+              "age",
+              30,
+              1,
+              "one",
+              100,
+              1,
+              2,
+              3,
+              "x",
+              99
+            ]
+          }
+        }
+      },
+      "model_scope": "Source-derived original literal constructor/field/method/copy results; direct implementation calls do not prove erased interface dispatch or complete generic definition checking."
+    },
+    {
+      "id": "structured_original_1227_mono_class_e2e_observed",
+      "expected": {
+        "exit_code": 0,
+        "required_test_names": [
+          "test_mono_class_e2e"
+        ],
+        "per_test_observations": {
+          "test_mono_class_e2e": {
+            "values": [
+              42,
+              42,
+              3.14,
+              3.14,
+              "hello",
+              "hello",
+              true,
+              "age",
+              30,
+              1,
+              2.5,
+              6,
+              100,
+              10,
+              20,
+              30
+            ]
+          }
+        }
+      },
+      "model_scope": "Source-derived original literal constructor/field/method/copy results; direct implementation calls do not prove erased interface dispatch or complete generic definition checking."
+    },
+    {
+      "id": "structured_original_0850_interface_observed",
+      "expected": {
+        "exit_code": 0,
+        "required_test_names": [
+          "test_interface_implementation",
+          "test_multi_method_interface",
+          "test_multiple_implementations",
+          "test_interface_with_extra_methods"
+        ],
+        "per_test_observations": {
+          "test_interface_implementation": {
+            "values": [
+              5.0
+            ]
+          },
+          "test_multi_method_interface": {
+            "values": [
+              12.0,
+              14.0
+            ]
+          },
+          "test_multiple_implementations": {
+            "values": [
+              6.0,
+              16.0
+            ]
+          },
+          "test_interface_with_extra_methods": {
+            "values": [
+              "Hello, Alice"
+            ]
+          }
+        }
+      },
+      "model_scope": "Source-derived original literal constructor/field/method/copy results; direct implementation calls do not prove erased interface dispatch or complete generic definition checking."
     }
   ],
   "independence": "Expected constants come from the original frozen assertions and mathematical method bodies, never current Xray output."

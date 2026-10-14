@@ -1,0 +1,108 @@
+// Preserve all original generic/interface declarations and complete bodies; observe each original scalar result once.
+// Test: Class monomorphization end-to-end
+// Expected: prints "ok"
+// Verifies that generic classes with explicit type args are
+// monomorphized correctly: cloned, type-substituted, injected, and new-exprs rewritten.
+
+// === Basic Box<T> class ===
+
+class Box<T> {
+    value: T
+    constructor(v: T) {
+        this.value = v
+    }
+    get() -> T {
+        return this.value
+    }
+}
+class Pair<K, V> {
+    key: K
+    val: V
+    constructor(k: K, v: V) {
+        this.key = k
+        this.val = v
+    }
+}
+
+@test
+fn test_mono_class_e2e() {
+
+    // Box<int>
+    var intBox = Box<i64>(42)
+    var p19GenericValue0 = intBox.value
+    assertEqual(p19GenericValue0, 42)
+    print(p19GenericValue0)
+    var p19GenericValue1 = intBox.get()
+    assertEqual(p19GenericValue1, 42)
+    print(p19GenericValue1)
+
+    // Box<float>
+    var floatBox = Box<f64>(3.14)
+    var p19GenericValue2 = floatBox.value
+    assertEqual(p19GenericValue2, 3.14)
+    print(p19GenericValue2)
+    var p19GenericValue3 = floatBox.get()
+    assertEqual(p19GenericValue3, 3.14)
+    print(p19GenericValue3)
+
+    // Box<string>
+    var strBox = Box<string>("hello")
+    var p19GenericValue4 = strBox.value
+    assertEqual(p19GenericValue4, "hello")
+    print(p19GenericValue4)
+    var p19GenericValue5 = strBox.get()
+    assertEqual(p19GenericValue5, "hello")
+    print(p19GenericValue5)
+
+    // Box<bool> — shares I64 rep with int (rep-dedup)
+    var boolBox = Box<bool>(true)
+    var p19GenericValue6 = boolBox.value
+    assertEqual(p19GenericValue6, true)
+    print(p19GenericValue6)
+
+    // === Multi-type-parameter class ===
+
+    var p1 = Pair<string, i64>("age", 30)
+    var p19GenericValue7 = p1.key
+    assertEqual(p19GenericValue7, "age")
+    print(p19GenericValue7)
+    var p19GenericValue8 = p1.val
+    assertEqual(p19GenericValue8, 30)
+    print(p19GenericValue8)
+
+    var p2 = Pair<i64, f64>(1, 2.5)
+    var p19GenericValue9 = p2.key
+    assertEqual(p19GenericValue9, 1)
+    print(p19GenericValue9)
+    var p19GenericValue10 = p2.val
+    assertEqual(p19GenericValue10, 2.5)
+    print(p19GenericValue10)
+
+    // === Multiple instances of same class ===
+    var a = Box<i64>(1)
+    var b = Box<i64>(2)
+    var c = Box<i64>(3)
+    var p19GenericValue11 = a.get() + b.get() + c.get()
+    assertEqual(p19GenericValue11, 6)
+    print(p19GenericValue11)
+
+    // === Nested generic class usage ===
+    var inner = Box<i64>(100)
+    var outer = Box<Box<i64>>(inner)
+    var p19GenericValue12 = outer.get().get()
+    assertEqual(p19GenericValue12, 100)
+    print(p19GenericValue12)
+
+    // === Array of generic class instances ===
+    var boxes = [Box<i64>(10), Box<i64>(20), Box<i64>(30)]
+    var p19GenericValue13 = boxes[0].get()
+    assertEqual(p19GenericValue13, 10)
+    print(p19GenericValue13)
+    var p19GenericValue14 = boxes[1].get()
+    assertEqual(p19GenericValue14, 20)
+    print(p19GenericValue14)
+    var p19GenericValue15 = boxes[2].get()
+    assertEqual(p19GenericValue15, 30)
+    print(p19GenericValue15)
+}
+
