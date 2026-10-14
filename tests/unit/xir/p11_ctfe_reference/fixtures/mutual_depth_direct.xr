@@ -1,0 +1,3 @@
+fn left()->i64 { return right() }
+fn right()->i64 { return left() }
+export fn run()->i64 { return left() }

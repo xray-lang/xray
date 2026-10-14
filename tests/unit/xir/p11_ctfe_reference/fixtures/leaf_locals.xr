@@ -1,0 +1,2 @@
+fn both(a:bool,b:bool)->bool { return a && b }
+export fn run()->i64 { return 42 }
