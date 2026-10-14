@@ -12,7 +12,7 @@ if(NOT IS_ABSOLUTE "${CLI_SOURCE_PRODUCTION_BUILD}")
 endif()
 set(CLI_SOURCE_LIBRARIES)
 foreach(item xir/xray_xir_source_product xir/xray_xir_source xir/xray_xir_vm
-             xir/xray_xir_native_cache xir/xray_xir_native_cache_catalog
+             xir/xray_xir_stdlib_catalog
              xir/xray_xir_scalar xir/xray_xir_cgen xir/xray_xir xir/xray_xir_admission
              xir/xray_xir_declarations xir/xray_compiler_parser base/xray_compile_resources)
     get_filename_component(name "${item}" NAME)
@@ -25,8 +25,8 @@ foreach(item xir/xray_xir_source_product xir/xray_xir_source xir/xray_xir_vm
     list(APPEND CLI_SOURCE_LIBRARIES cli_source_${name})
 endforeach()
 add_executable(test_cli_source_owner test_cli_source_owner.c
-    "${CLI_SOURCE_ROOT}/src/app/cli/xcli_canonical_source.c"
-    "${CLI_SOURCE_ROOT}/src/app/cli/xcli_graph_authority.c"
+    "${CLI_SOURCE_ROOT}/src/api/xsource_compile.c"
+    "${CLI_SOURCE_ROOT}/src/api/xsource_authority.c"
     "${CLI_SOURCE_ROOT}/src/module/xproject.c"
     "${CLI_SOURCE_ROOT}/src/module/xnative_package.c")
 target_include_directories(test_cli_source_owner PRIVATE "${CLI_SOURCE_ROOT}/src" "${CLI_SOURCE_ROOT}/include")

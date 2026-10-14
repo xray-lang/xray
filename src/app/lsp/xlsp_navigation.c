@@ -2,7 +2,7 @@
 #include "xlsp_navigation.h"
 #include "xlsp_server.h"
 #include "xlsp_source_workspace.h"
-#include "../cli/xcli_canonical_source.h"
+#include "../../api/xsource_compile.h"
 #include <string.h>
 #include <stdio.h>
 
@@ -24,7 +24,7 @@ static XrJsonValue *navigation_request(XrLspServer *server,XrLspDocument *doc,
     if(!server)return NULL;
     server->source_failure.stage=1;server->source_failure.status=XR_XIR_BAD_STRUCTURE;
     if(!doc||doc->server!=server||!server->doc_table||server->doc_table->doc_count<=0)return NULL;
-    XrCompileResourceLimits limits=xr_cli_compile_default_resource_limits();
+    XrCompileResourceLimits limits=xr_source_compile_default_resource_limits();
     XrCompileResources *resources=NULL;XlspSourceDocument *documents=NULL;
     XlspSourceWorkspace *fresh=NULL;XrJsonValue *result=NULL;XlspSourceTokens *tokens=NULL;
     XrCompileResourceStatus created=xr_compile_resources_new(&limits,&resources);

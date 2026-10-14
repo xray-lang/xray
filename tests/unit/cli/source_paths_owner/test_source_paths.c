@@ -6,7 +6,7 @@
  *
  * test_source_paths.c - Real process queries and source-path ownership gates
  */
-#include "app/cli/xcli_source_paths.h"
+#include "api/xsource_paths.h"
 #include "os/os_proc.h"
 #include <windows.h>
 #include <stdio.h>
@@ -23,37 +23,37 @@ static void expected_path(const char *actual, const char *expected) {
     for (size_t i = 0; actual[i]; ++i) CHECK(actual[i] == expected[i] ||
         ((actual[i] == '/' || actual[i] == '\\') && (expected[i] == '/' || expected[i] == '\\')));
 }
-static XrCliCompileSourceStatus run_paths(const char *entry, const XrCompileResourceLimits *limits,
+static XrSourceCompileStatus run_paths(const char *entry, const XrCompileResourceLimits *limits,
     size_t failure, XrCompileResourceStats *stats, const char *stdlib, unsigned origin) {
     reset(failure); XrCompileResources *r = NULL;
     XrCompileResourceStatus opened = xr_compile_resources_new(limits, &r);
     if (opened != XR_COMPILE_RESOURCE_OK) {
-        CHECK(!r && !live); return opened == XR_COMPILE_RESOURCE_BUDGET ? XR_CLI_COMPILE_SOURCE_BUDGET : XR_CLI_COMPILE_SOURCE_OUT_OF_MEMORY;
+        CHECK(!r && !live); return opened == XR_COMPILE_RESOURCE_BUDGET ? XR_SOURCE_COMPILE_BUDGET : XR_SOURCE_COMPILE_OUT_OF_MEMORY;
     }
-    XrCliSourcePaths paths = {0}; XrCliSourcePathsDiagnostic diagnostic = {0};
-    XrCliCompileSourceStatus status = xr_cli_compile_source_paths(r, entry, &paths, &diagnostic);
+    XrSourcePaths paths = {0}; XrSourcePathsDiagnostic diagnostic = {0};
+    XrSourceCompileStatus status = xr_source_paths(r, entry, &paths, &diagnostic);
     CHECK(status == diagnostic.status);
     CHECK(xr_compile_resources_stats(r, stats) == XR_COMPILE_RESOURCE_OK);
     CHECK(stats->allocated_bytes == total && stats->live_bytes == live && stats->peak_bytes == peak);
     xr_compile_resources_release(r);
-    if (status == XR_CLI_COMPILE_SOURCE_OK) {
+    if (status == XR_SOURCE_COMPILE_OK) {
         expected_path(paths.stdlib, stdlib); CHECK((unsigned)paths.stdlib_origin == origin);
         CHECK(paths.entry && paths.entry[0]);
     } else CHECK(!paths.entry && !paths.stdlib && !paths.stdlib_origin);
-    xr_cli_compile_source_paths_free(&paths); CHECK(!live);
+    xr_source_paths_free(&paths); CHECK(!live);
     return status;
 }
 static void path_matrix(const char *entry, const char *stdlib, unsigned origin) {
     XrCompileResourceStats baseline = {0}, stats = {0};
     record_edges = true; edge_count = 0;
-    CHECK(run_paths(entry, &public_limits, SIZE_MAX, &baseline, stdlib, origin) == XR_CLI_COMPILE_SOURCE_OK);
+    CHECK(run_paths(entry, &public_limits, SIZE_MAX, &baseline, stdlib, origin) == XR_SOURCE_COMPILE_OK);
     record_edges = false;
     size_t points = attempts, cuts = edge_count;
     for (size_t i = 0; i < points; ++i)
-        CHECK(run_paths(entry, &public_limits, i, &stats, stdlib, origin) == XR_CLI_COMPILE_SOURCE_OUT_OF_MEMORY);
+        CHECK(run_paths(entry, &public_limits, i, &stats, stdlib, origin) == XR_SOURCE_COMPILE_OUT_OF_MEMORY);
     for (size_t i = 0; i < cuts; ++i) {
         XrCompileResourceLimits limits = public_limits; limits.work = edges[i] - 1;
-        CHECK(run_paths(entry, &limits, SIZE_MAX, &stats, stdlib, origin) == XR_CLI_COMPILE_SOURCE_BUDGET);
+        CHECK(run_paths(entry, &limits, SIZE_MAX, &stats, stdlib, origin) == XR_SOURCE_COMPILE_BUDGET);
     }
     for (unsigned axis = 0; axis < 3; ++axis) for (unsigned minus = 0; minus < 2; ++minus) {
         XrCompileResourceLimits limits = public_limits;
@@ -61,7 +61,7 @@ static void path_matrix(const char *entry, const char *stdlib, unsigned origin) 
         if (axis == 1) limits.live_bytes = baseline.peak_bytes - minus;
         if (axis == 2) limits.work = baseline.work - minus;
         CHECK(run_paths(entry, &limits, SIZE_MAX, &stats, stdlib, origin) ==
-            (minus ? XR_CLI_COMPILE_SOURCE_BUDGET : XR_CLI_COMPILE_SOURCE_OK));
+            (minus ? XR_SOURCE_COMPILE_BUDGET : XR_SOURCE_COMPILE_OK));
     }
     printf("paths public defaults; %zu malloc %zu work cuts; total=%llu peak=%llu work=%llu exact/minus1 physical zero PASS\n",
         points, cuts, (unsigned long long)baseline.allocated_bytes, (unsigned long long)baseline.peak_bytes, (unsigned long long)baseline.work);
@@ -139,17 +139,17 @@ static void independent_query_work(void) {
 static void rejected_outputs(const char *entry) {
     reset(SIZE_MAX); XrCompileResources *r = NULL;
     CHECK(xr_compile_resources_new(&public_limits, &r) == XR_COMPILE_RESOURCE_OK);
-    XrCliSourcePaths canary = {(char *)(uintptr_t)1, (char *)(uintptr_t)2, XR_CLI_STDLIB_WORKING_DIRECTORY};
-    XrCliSourcePaths saved = canary; XrCliSourcePathsDiagnostic diagnostic = {0};
+    XrSourcePaths canary = {(char *)(uintptr_t)1, (char *)(uintptr_t)2, XR_STDLIB_WORKING_DIRECTORY};
+    XrSourcePaths saved = canary; XrSourcePathsDiagnostic diagnostic = {0};
     size_t before = attempts;
-    CHECK(xr_cli_compile_source_paths(r, entry, &canary, &diagnostic) == XR_CLI_COMPILE_SOURCE_BAD_ARGUMENT);
-    CHECK(!memcmp(&canary, &saved, sizeof(saved)) && attempts == before && diagnostic.stage == XR_CLI_SOURCE_PATH_INPUT);
-    XrCliStdlibPath selected={(char *)(uintptr_t)3,XR_CLI_STDLIB_WORKING_DIRECTORY};
-    CHECK(xr_cli_compile_stdlib_path(r,&selected,&diagnostic)==XR_CLI_COMPILE_SOURCE_BAD_ARGUMENT);
-    CHECK(selected.path==(char *)(uintptr_t)3&&selected.origin==XR_CLI_STDLIB_WORKING_DIRECTORY&&attempts==before);
-    XrCliSourcePaths empty = {0};
-    CHECK(xr_cli_compile_source_paths(r, "", &empty, &diagnostic) == XR_CLI_COMPILE_SOURCE_BAD_ARGUMENT);
-    CHECK(!empty.entry && !empty.stdlib && diagnostic.stage == XR_CLI_SOURCE_PATH_ENTRY);
+    CHECK(xr_source_paths(r, entry, &canary, &diagnostic) == XR_SOURCE_COMPILE_BAD_ARGUMENT);
+    CHECK(!memcmp(&canary, &saved, sizeof(saved)) && attempts == before && diagnostic.stage == XR_SOURCE_PATH_INPUT);
+    XrStdlibPath selected={(char *)(uintptr_t)3,XR_STDLIB_WORKING_DIRECTORY};
+    CHECK(xr_source_stdlib_path(r,&selected,&diagnostic)==XR_SOURCE_COMPILE_BAD_ARGUMENT);
+    CHECK(selected.path==(char *)(uintptr_t)3&&selected.origin==XR_STDLIB_WORKING_DIRECTORY&&attempts==before);
+    XrSourcePaths empty = {0};
+    CHECK(xr_source_paths(r, "", &empty, &diagnostic) == XR_SOURCE_COMPILE_BAD_ARGUMENT);
+    CHECK(!empty.entry && !empty.stdlib && diagnostic.stage == XR_SOURCE_PATH_ENTRY);
     xr_compile_resources_release(r); CHECK(!live);
 }
 int wmain(int argc, wchar_t **wide) {
@@ -164,10 +164,10 @@ int wmain(int argc, wchar_t **wide) {
     independent_query_work();
     rejected_outputs(argv[2]);
     unsigned origin = (unsigned)strtoul(argv[4], NULL, 10);
-    XrCliCompileSourceStatus expected = (XrCliCompileSourceStatus)strtoul(argv[5], NULL, 10);
+    XrSourceCompileStatus expected = (XrSourceCompileStatus)strtoul(argv[5], NULL, 10);
     XrCompileResourceStats stats = {0};
     CHECK(run_paths(argv[2], &public_limits, SIZE_MAX, &stats, argv[3], origin) == expected);
-    XrCliCompileSourceStatus selected_expected=(XrCliCompileSourceStatus)strtoul(argv[9],NULL,10);
+    XrSourceCompileStatus selected_expected=(XrSourceCompileStatus)strtoul(argv[9],NULL,10);
     CHECK(run_stdlib(&public_limits,SIZE_MAX,&stats,argv[8],origin)==selected_expected);
     if (!strcmp(argv[1], "matrix")) { path_matrix(argv[2], argv[3], origin); stdlib_matrix(argv[8],origin); }
     CHECK(handles() == baseline && !live);

@@ -1,6 +1,6 @@
 /* Copyright (c) 2026 Xinglei Xu. MIT License. */
 #include "app/lsp/xlsp_source_open.h"
-#include "app/cli/xcli_canonical_source.h"
+#include "api/xsource_compile.h"
 #include "base/xwindows_utf8.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -67,7 +67,7 @@ done:
 }
 static void open_json_cases(const char *root_uri,const char *lib_uri) {
     for(unsigned mode=1;mode<=2;++mode) {
-        XrCompileResourceLimits limits=xr_cli_compile_default_resource_limits();XrCompileResources *resources=sdk_ledger(&limits);
+        XrCompileResourceLimits limits=xr_source_compile_default_resource_limits();XrCompileResources *resources=sdk_ledger(&limits);
         XrXirCompileContext context={resources,xr_xir_compile_default_limits()};
         const char *text=mode==1?open_bad_syntax:open_bad_type;
         XlspSourceDocument inputs[2]={{root_uri,text,strlen(root_uri),strlen(text),1},{lib_uri,open_library,strlen(lib_uri),sizeof(open_library)-1,7}};
@@ -94,14 +94,18 @@ static void open_json_cases(const char *root_uri,const char *lib_uri) {
 }
 static int open_run(int argc,char **argv) {
     (void)sdk_fixture_malloc;(void)sdk_fixture_free;(void)sdk_ledger;(void)sdk_unlimited;
-    CHECK(argc==3);XrCompileResourceLimits limits=xr_cli_compile_default_resource_limits();
+    CHECK(argc==3);XrCompileResourceLimits limits=xr_source_compile_default_resource_limits();
     for(unsigned mode=0;mode<3;++mode) {
         size_t sites=0;XrCompileResourceStats stats={0};
         for(size_t probe=0;probe<=sites;++probe) {
             runtime_attempts=0;runtime_fail_at=probe?probe-1:SIZE_MAX;
             XrXirStatus status=open_once(argv[1],argv[2],mode,limits,probe?NULL:&stats);
             if(!probe){CHECK(status==XR_XIR_OK);sites=runtime_attempts;CHECK(sites);}
-            else CHECK(status==XR_XIR_OUT_OF_MEMORY&&runtime_attempts>=probe);
+            else {
+                if(status!=XR_XIR_OUT_OF_MEMORY||runtime_attempts<probe)
+                    fprintf(stderr,"LSP compiler fault mode=%u probe=%zu/%zu status=%u attempts=%zu\n",mode,probe,sites,(unsigned)status,runtime_attempts);
+                CHECK(status==XR_XIR_OUT_OF_MEMORY&&runtime_attempts>=probe);
+            }
             CHECK(!runtime_live&&!runtime_bytes);
         }
         runtime_fail_at=SIZE_MAX;

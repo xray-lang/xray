@@ -1,7 +1,7 @@
 /* Copyright (c) 2026 Xinglei Xu. MIT License. */
 #include "xlsp_folding.h"
 #include "xlsp_source_syntax.h"
-#include "../cli/xcli_canonical_source.h"
+#include "../../api/xsource_compile.h"
 #include <string.h>
 XrJsonValue *xlsp_handle_folding_range(XrLspServer *server,XrJsonValue *params) {
     if(!server)return NULL;
@@ -10,7 +10,7 @@ XrJsonValue *xlsp_handle_folding_range(XrLspServer *server,XrJsonValue *params) 
     if(!uri||uri->type!=XR_JSON_STRING||!uri->as.string||memchr(uri->as.string,0,uri->string_len))return NULL;
     XrLspDocument *doc=xlsp_document_get(server,uri->as.string);
     if(!doc||doc->server!=server||!doc->content)return NULL;
-    XrCompileResourceLimits limits=xr_cli_compile_default_resource_limits();
+    XrCompileResourceLimits limits=xr_source_compile_default_resource_limits();
     XrCompileResources *resources=NULL;XrCompilerSession *session=NULL;XlspSyntaxSnapshot *fresh=NULL;
     XrJsonValue *result=NULL;XrXirStatus status=XR_XIR_OK;
     XrCompileResourceStatus created=xr_compile_resources_new(&limits,&resources);

@@ -1,16 +1,16 @@
 /* Copyright (c) 2026 Xinglei Xu. MIT License. */
 #include "xlsp_source_workspace.h"
-#include "../cli/xcli_source_paths.h"
-#include "../cli/xcli_graph_authority.h"
-#include "../../xir/xxir_native_cache_internal.h"
+#include "../../api/xsource_paths.h"
+#include "../../api/xsource_authority.h"
+#include "../../xir/xxir_stdlib_internal.h"
 #include "../../xir/xxir_library_catalog.h"
 #include <string.h>
 struct XlspSourceWorkspace {
     XrXirCompileContext context;
     XrCompilerSession *session;
-    XrCliStdlibPath stdlib;
+    XrStdlibPath stdlib;
     XrXirLibraryCatalog *catalog;
-    XrCliGraphAuthority **authorities;
+    XrSourceAuthority **authorities;
     XlspSourceSnapshot **snapshots;
     size_t count;
 };
@@ -23,12 +23,12 @@ void xlsp_source_workspace_free(XlspSourceWorkspace *w) {
     if(!w)return;
     for(size_t i=0;i<w->count;++i) {
         if(w->snapshots)xlsp_source_snapshot_free(w->snapshots[i]);
-        if(w->authorities)xr_cli_compile_graph_authority_close(w->authorities[i]);
+        if(w->authorities)xr_source_authority_close(w->authorities[i]);
     }
     xr_compile_resources_free(w->snapshots);xr_compile_resources_free(w->authorities);
     xr_compile_session_free(w->session);
     xr_xir_compile_library_catalog_free(w->catalog);
-    xr_cli_compile_stdlib_path_free(&w->stdlib);
+    xr_source_stdlib_path_free(&w->stdlib);
     xr_compile_resources_free(w);
 }
 XrXirStatus xlsp_source_workspace_build(const XrXirCompileContext *context,
@@ -47,25 +47,25 @@ XrXirStatus xlsp_source_workspace_build(const XrXirCompileContext *context,
     status=workspace_resource(xr_compile_resources_calloc(context->resources,count,sizeof(*identities),(void **)&identities));
     if(status!=XR_XIR_OK)goto done;
     if(stage)*stage=2;
-    XrCliCompileSourceStatus selected=xr_cli_compile_stdlib_path(context->resources,&w->stdlib,NULL);
-    if(selected!=XR_CLI_COMPILE_SOURCE_OK) {
-        status=selected==XR_CLI_COMPILE_SOURCE_BUDGET?XR_XIR_BUDGET:
-            selected==XR_CLI_COMPILE_SOURCE_OUT_OF_MEMORY?XR_XIR_OUT_OF_MEMORY:
-            selected==XR_CLI_COMPILE_SOURCE_NOT_FOUND?XR_XIR_UNRESOLVED:XR_XIR_IO;
+    XrSourceCompileStatus selected=xr_source_stdlib_path(context->resources,&w->stdlib,NULL);
+    if(selected!=XR_SOURCE_COMPILE_OK) {
+        status=selected==XR_SOURCE_COMPILE_BUDGET?XR_XIR_BUDGET:
+            selected==XR_SOURCE_COMPILE_OUT_OF_MEMORY?XR_XIR_OUT_OF_MEMORY:
+            selected==XR_SOURCE_COMPILE_NOT_FOUND?XR_XIR_UNRESOLVED:XR_XIR_IO;
         goto done;
     }
     if(stage)*stage=3;
-    status=xir_native_cache_library_catalog_new(context,w->stdlib.path,&w->catalog);
+    status=xir_stdlib_library_catalog_new(context,w->stdlib.path,&w->catalog);
     if(status!=XR_XIR_OK)goto done;
     if(stage)*stage=4;
-    XrTomlParseLimits limits=xr_cli_compile_default_manifest_limits();
+    XrTomlParseLimits limits=xr_source_compile_default_manifest_limits();
     for(size_t i=0;i<count;++i) {
         status=workspace_resource(xr_compile_resources_work(context->resources,sizeof(documents[i])));
         if(status!=XR_XIR_OK)goto done;
         status=xlsp_source_uri_path(context->resources,documents[i].uri,documents[i].uri_length,&path);
         if(status!=XR_XIR_OK)goto done;
-        XrCliGraphEntryInput input={XR_CLI_GRAPH_ENTRY_TEXT,path,documents[i].text,documents[i].length};
-        XrManifestStatus admitted=xr_cli_compile_graph_authority_open_input(context,&input,w->catalog,&limits,&w->authorities[i],NULL);
+        XrSourceEntryInput input={XR_SOURCE_ENTRY_TEXT,path,documents[i].text,documents[i].length};
+        XrManifestStatus admitted=xr_source_authority_open_input(context,&input,w->catalog,&limits,&w->authorities[i],NULL);
         xr_compile_resources_free(path);path=NULL;
         if(admitted!=XR_MANIFEST_OK) {
             status=admitted==XR_MANIFEST_BUDGET?XR_XIR_BUDGET:
@@ -75,7 +75,7 @@ XrXirStatus xlsp_source_workspace_build(const XrXirCompileContext *context,
         }
         status=workspace_resource(xr_compile_resources_work(context->resources,sizeof(identities[i])));
         if(status!=XR_XIR_OK)goto done;
-        identities[i]=*xr_cli_compile_graph_authority_entry(w->authorities[i]);
+        identities[i]=*xr_source_authority_entry(w->authorities[i]);
     }
     if(stage)*stage=5;
     XrCompilerSessionStatus opened=xr_compile_session_new(context->resources,&w->session);
@@ -86,8 +86,8 @@ XrXirStatus xlsp_source_workspace_build(const XrXirCompileContext *context,
     }
     if(stage)*stage=6;
     for(size_t i=0;i<count;++i) {
-        XrXirSourceRequest request={w->session,xr_cli_compile_graph_authority_source_path(w->authorities[i]),
-            &identities[i],&w->context,w->stdlib.path,xr_cli_compile_graph_authority_lockfile(w->authorities[i]),
+        XrXirSourceRequest request={w->session,xr_source_authority_source_path(w->authorities[i]),
+            &identities[i],&w->context,w->stdlib.path,xr_source_authority_lockfile(w->authorities[i]),
             XR_XIR_PROGRAM,w->catalog};
         XrXirSourceDiagnostic diagnostic={0};char *failure_path=NULL;
         status=xlsp_source_snapshot_build_authorities(&request,documents,identities,count,i,&w->snapshots[i],&diagnostic,&failure_path);

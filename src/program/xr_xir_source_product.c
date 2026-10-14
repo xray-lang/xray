@@ -12,8 +12,6 @@
  */
 #include "xr_xir_source_product.h"
 #include "../xir/xxir_vm.h"
-#include "../xir/xxir_vm_internal.h"
-#include "../xir/xxir_native_cache_internal.h"
 #include "../xir/xxir_generic.h"
 #include "../xir/xxir_types.h"
 #include "../base/xsha256.h"
@@ -150,10 +148,11 @@ static XrXirStatus source_product_compare(const XrXirCompileContext *context,
     }
     return XR_XIR_OK;
 }
-XR_FUNC XrXirStatus xr_xir_compile_source_product_build(const XrXirSourceProductRequest *request,
-    XrXirSourceProduct **output,XrXirSourceProductDiagnostic *diagnostic) {
+static XrXirStatus source_product_build(const XrXirSourceProductRequest *request,
+    const XrXirSourceText *text, bool has_text, XrXirSourceProduct **output,
+    XrXirSourceProductDiagnostic *diagnostic) {
     if (!source_diagnostic_empty(diagnostic)) return XR_XIR_BAD_STRUCTURE;
-    if (!request || !output || *output ||
+    if (!request || (has_text && !text) || !output || *output ||
         !xir_compile_context_valid(request->source.context) ||
         request->source.linkage_kind!=XR_XIR_PROGRAM ||
         request->target.architecture!=XR_XIR_ARCH_X86_64 ||
@@ -163,8 +162,11 @@ XR_FUNC XrXirStatus xr_xir_compile_source_product_build(const XrXirSourceProduct
     if (diagnostic) memset(diagnostic,0,sizeof(*diagnostic));
     XrXirSourceResult source={0};XrXirArtifact *closed=NULL,*lowered=NULL;
     XrXirCheckedPacket source_packet={0},closed_packet={0};
-    XrXirStatus status=xr_xir_compile_source_check(&request->source,&source,
-        diagnostic ? &diagnostic->source : NULL, diagnostic ? &diagnostic->source_path : NULL);
+    XrXirStatus status = has_text ?
+        xr_xir_compile_source_check_text(&request->source, text, &source,
+            diagnostic ? &diagnostic->source : NULL, diagnostic ? &diagnostic->source_path : NULL) :
+        xr_xir_compile_source_check(&request->source, &source,
+            diagnostic ? &diagnostic->source : NULL, diagnostic ? &diagnostic->source_path : NULL);
     XrXirSourceProductStage stage=XR_XIR_SOURCE_PRODUCT_CHECK;
     if (status==XR_XIR_OK) {
         stage=XR_XIR_SOURCE_PRODUCT_SOURCE_PACKET;
@@ -220,6 +222,14 @@ XR_FUNC XrXirStatus xr_xir_compile_source_product_build(const XrXirSourceProduct
     xr_xir_compile_checked_packet_free(&source_packet);xr_xir_compile_checked_packet_free(&closed_packet);
     xr_xir_compile_source_result_free(&source);
     return source_product_reject(diagnostic,stage,status);
+}
+XR_FUNC XrXirStatus xr_xir_compile_source_product_build(const XrXirSourceProductRequest *request,
+    XrXirSourceProduct **output, XrXirSourceProductDiagnostic *diagnostic) {
+    return source_product_build(request, NULL, false, output, diagnostic);
+}
+XR_FUNC XrXirStatus xr_xir_compile_source_product_build_text(const XrXirSourceProductRequest *request,
+    const XrXirSourceText *text, XrXirSourceProduct **output, XrXirSourceProductDiagnostic *diagnostic) {
+    return source_product_build(request, text, true, output, diagnostic);
 }
 XR_FUNC void xr_xir_compile_source_product_free(XrXirSourceProduct *product) {
     if (!product) return;
@@ -346,35 +356,11 @@ XR_FUNC XrXirStatus xr_xir_compile_source_product_verify(const XrXirSourceProduc
     if (diagnostic) diagnostic->status=status;
     return status;
 }
-/* Selection only chooses a trusted factory. The common VM worker still verifies
- * the complete artifact and each advertised leaf before publishing code. */
-static XrXirStatus source_product_vm_cache(const XrXirArtifact *lowered,
-    XirNativeCache **output) {
-    static const char identity[] = "stdlib-module-v1:module=2:io:path=12:io/output.xr";
-    const XrXirCompileContext *context = xr_xir_compile_artifact_context(lowered);
-    const XrXirModule *module = xr_xir_compile_artifact_module(lowered);
-    if (!context || !module || !module->declarations) return XR_XIR_BAD_STRUCTURE;
-    const XrXirDeclarations *declarations = module->declarations;
-    for (uint32_t m = 0; m < declarations->module_count; ++m) {
-        if (!xir_compile_work(context, 1)) return XR_XIR_BUDGET;
-        const XrXirSourceModule *owner = &declarations->modules[m];
-        if (owner->name_length != sizeof(identity)-1) continue;
-        if (!xir_compile_work(context, sizeof(identity)-1)) return XR_XIR_BUDGET;
-        if (!memcmp(owner->name, identity, sizeof(identity)-1))
-            return xir_native_cache_open(context, output);
-    }
-    return XR_XIR_OK;
-}
 XR_FUNC XrXirStatus xr_xir_compile_source_product_vm_take(XrXirSourceProduct *product,
     XrXirProgram **output) {
     if (!product || !output || *output) return XR_XIR_BAD_STRUCTURE;
     if (!product->lowered) return XR_XIR_BAD_STAGE;
-    XirNativeCache *cache = NULL;
-    XrXirStatus status = source_product_vm_cache(product->lowered, &cache);
-    if (status == XR_XIR_OK)
-        status = xir_compile_vm_program_take_cached(&product->lowered, cache, output);
-    xir_native_cache_drop(cache);
-    return status;
+    return xr_xir_compile_vm_program_take(&product->lowered, output);
 }
 XR_FUNC XrXirStatus xr_xir_compile_source_product_emit(const XrXirSourceProduct *product,
     const char *prefix,size_t byte_limit,XrXirCSource *output) {

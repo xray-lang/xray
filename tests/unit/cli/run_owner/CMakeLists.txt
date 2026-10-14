@@ -13,10 +13,10 @@ foreach(directory RUN_SOURCE_BUILD)
         message(FATAL_ERROR "Set ${directory} to the actual fresh build directory")
     endif()
 endforeach()
-set(run_libraries "${RUN_SOURCE_BUILD}/xray_cli_source.lib"
+set(run_libraries "${RUN_SOURCE_BUILD}/xray_source_compile.lib"
     "${RUN_SOURCE_BUILD}/src/execution/xray_xir_runtime_host.lib"
     "${RUN_SOURCE_BUILD}/src/base/xray_compile_resources.lib")
-foreach(name xray_xir_source_product xray_xir_source xray_xir_vm xray_xir_cgen xray_xir xray_compiler_parser xray_xir_scalar xray_xir_admission xray_xir_declarations xray_xir_native_cache xray_xir_native_cache_catalog)
+foreach(name xray_xir_source_product xray_xir_source xray_xir_vm xray_xir_cgen xray_xir xray_compiler_parser xray_xir_scalar xray_xir_admission xray_xir_declarations xray_xir_stdlib_catalog)
     list(APPEND run_libraries "${RUN_SOURCE_BUILD}/src/xir/${name}.lib")
 endforeach()
 foreach(library IN LISTS run_libraries)

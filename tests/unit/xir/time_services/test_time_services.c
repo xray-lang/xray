@@ -9,7 +9,7 @@
  * Real Source programs import the standard time module, run on the VM with
  * scripted providers, and are checked against independently computed values.
  */
-#include "app/cli/xcli_canonical_source.h"
+#include "api/xsource_compile.h"
 #include "execution/xr_xir_host_time.h"
 #include "os/os_time.h"
 #include "xir/xxir_output.h"
@@ -64,21 +64,21 @@ static Fixture build(const char *entry_path, const char *stdlib) {
     Fixture fixture = {0};
     CHECK(xr_compile_resources_new(&limits, &fixture.resources) == XR_COMPILE_RESOURCE_OK);
     XrXirCompileContext context = {fixture.resources, xr_xir_compile_default_limits()};
-    XrCliCompileSourceRequest request = {&context, entry_path, stdlib, NULL,
-        xr_cli_compile_default_manifest_limits(), {XR_XIR_ARCH_X86_64, XR_XIR_VALUE_ABI_VERSION}};
+    XrSourceCompileRequest request = {&context, entry_path, stdlib, NULL,
+        xr_source_compile_default_manifest_limits(), {XR_XIR_ARCH_X86_64, XR_XIR_VALUE_ABI_VERSION}, NULL};
     XrXirSourceProduct *product = NULL;
-    XrCliCompileSourceDiagnostic diagnostic = {0};
-    XrCliCompileSourceStatus status = xr_cli_compile_source_build(&request, &product, &diagnostic);
-    if (status != XR_CLI_COMPILE_SOURCE_OK) {
+    XrSourceCompileDiagnostic diagnostic = {0};
+    XrSourceCompileStatus status = xr_source_compile_build(&request, &product, &diagnostic);
+    if (status != XR_SOURCE_COMPILE_OK) {
         char text[512];
-        xr_cli_compile_source_diagnostic_format(&diagnostic, text, sizeof(text));
+        xr_source_compile_diagnostic_format(&diagnostic, text, sizeof(text));
         fprintf(stderr, "build failed: %s\n", text);
     }
-    CHECK(status == XR_CLI_COMPILE_SOURCE_OK);
+    CHECK(status == XR_SOURCE_COMPILE_OK);
     fixture.entry = xr_xir_compile_source_product_facts(product)->entry;
     CHECK(xr_xir_compile_source_product_vm_take(product, &fixture.program) == XR_XIR_OK);
     xr_xir_compile_source_product_free(product);
-    xr_cli_compile_source_diagnostic_free(&diagnostic);
+    xr_source_compile_diagnostic_free(&diagnostic);
     return fixture;
 }
 static XrXirInstance *start(const Fixture *fixture, Capture *capture, const XrXirTimeProvider *provider) {

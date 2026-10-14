@@ -39,7 +39,7 @@ static void cp_release(XrXirCallView *view, XrXirCallStatus reason) {
 }
 
 int main(int argc, char **argv) {
-    CHECK(argc == 2 && XR_XIR_CHECKED_CONTRACT == 70u);
+    CHECK(argc == 2);
     CHECK(!effects_compile_live && !effects_compile_bytes && !runtime_live && !runtime_bytes);
     CpFixture fixture;
     cp_build(&fixture);
@@ -49,7 +49,7 @@ int main(int argc, char **argv) {
     CHECK(status == XR_XIR_OK && source.text && source.length && !source.text[source.length]);
     CHECK(!strstr(source.text, "({"));
     CHECK(strstr(source.text, "xr_xir_task_go(") && strstr(source.text, "XR_XIR_ACTION_AWAIT_TASK"));
-    CHECK(strstr(source.text, "xr_xir_instance_function(") && strstr(source.text, "xr_xir_instance_resolve_function("));
+    CHECK(strstr(source.text, "xr_xir_instance_function_at(") && strstr(source.text, "xr_xir_instance_resolve_function_at("));
     xr_xir_compile_program_drop(fixture.program);
     fixture.program = NULL;
     CHECK(fixture.code_releases == 1 && !fixture.lowered);

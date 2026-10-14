@@ -286,8 +286,11 @@ XR_FUNC XrModuleStatus xr_compile_module_resolver_resolve(XrModuleResolver *reso
     if (work.status == XR_MODULE_OK) *output = result;
     else {
         xr_compile_module_id_cleanup(&result);
-        if (work.status != XR_MODULE_BUDGET && work.status != XR_MODULE_OUT_OF_MEMORY)
-            module_error(resolver->resources,error,work.status == XR_MODULE_NOT_FOUND ? "module not found" : "module resolution failed");
+        if (work.status != XR_MODULE_BUDGET && work.status != XR_MODULE_OUT_OF_MEMORY) {
+            XrModuleStatus published = module_error(resolver->resources,error,
+                work.status == XR_MODULE_NOT_FOUND ? "module not found" : "module resolution failed");
+            if (published != XR_MODULE_OK) work.status = published;
+        }
     }
     return work.status;
 }

@@ -42,7 +42,7 @@
 #include "../../module/xmodule_identity.h"
 #include "../../module/xmodule_graph.h"
 #include "../../runtime/xisolate_api.h"
-#include "../cli/xcli_graph_authority.h"
+#include "../../api/xsource_authority.h"
 
 // AST formatter (lives in frontend/format).
 #include "../../frontend/format/xfmt.h"
@@ -346,7 +346,7 @@ static void lsp_rebuild_module_graph(XrLspServer *server, XrLspDocument *doc) {
     if (!entry_path || !entry_path[0])
         return;
 
-    XrCliGraphAuthority *authority = xr_malloc(sizeof(*authority));
+    XrSourceAuthority *authority = xr_malloc(sizeof(*authority));
     if (!authority)
         return;
 
