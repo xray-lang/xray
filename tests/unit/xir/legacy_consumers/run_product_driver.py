@@ -141,11 +141,9 @@ def main() -> int:
             source = source_bytes.decode('utf-8')
             original_context = case.get('source_context') == 'original_absolute'
             if original_context:
-                if case['entry'] != 'run' or case.get('replace_constructor_with_init'):
+                if case['entry'] != 'run':
                     raise ValueError('original context cannot overwrite or adapt a preserved source')
                 target = original
-            if case.get('replace_constructor_with_init'):
-                source = source.replace('constructor(', 'init(')
             suffix = ''
             if case['entry'] == 'function':
                 value = oracle['expected']['return_i64']

@@ -104,7 +104,8 @@
         "All applicable producer lifetime, complete FI, exact resource budgets, cancellation, physical release and sanitizer gates.",
         "Retain separate allocation/blocks/bytes and provider release observations; printed close calls cannot prove physical cleanup."
       ],
-      "replace_constructor_with_init": true
+      "source_context": "original_absolute",
+      "consumer_source_preservation": "Exact original declaration-owned constructor and complete cleanup body; no constructor spelling adapter."
     },
     {
       "id": "array_return_logical_copy",
