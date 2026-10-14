@@ -413,12 +413,92 @@ typedef struct EffectInvocationLocalInput {
     XrXirRootEffectWitness witnesses[2];
 } EffectInvocationLocalInput;
 
-static XrXirStatus effect_invocation_local_operation(const XrXirCompileContext *work,
-    const EffectBodyMaterial *body,uint32_t f,const XrXirInstruction *op,
-    bool *empty) {
+/* Expression children precede their parent. A fresh prefix induction proves
+ * each descriptor's exact parameter span without a heap callback. The cursor
+ * belongs only to this uninterrupted read and never certifies a later request. */
+typedef struct EffectInvocationLocalRead {
+    const XrXirCompileContext *work;
+    const EffectBodyMaterial *body;
+    uint32_t verified_types;
+} EffectInvocationLocalRead;
+
+static XrXirStatus effect_invocation_local_type_edge(EffectInvocationLocalRead *read,
+    XrXirType type,uint32_t earlier,uint32_t *span) {
+    if (!xir_compile_work(read->work,1)) return XR_XIR_BUDGET;
+    uint32_t id=(uint32_t)type;
+    if (id>=XR_XIR_TYPE_PARAMETER_BASE && id<XR_XIR_TYPE_PARAMETER_LIMIT) {
+        *span=id-XR_XIR_TYPE_PARAMETER_BASE+1;return XR_XIR_OK;
+    }
+    const XrXirTypeNode *node=xr_xir_type_node(read->body->domain.types,type);
+    if (node) {
+        if (id-XR_XIR_CONSTRUCTED_TYPE_BASE>=earlier) return XR_XIR_BAD_TYPE;
+        *span=node->parameter_span;return XR_XIR_OK;
+    }
+    if (type!=XR_XIR_UNIT && type!=XR_XIR_BOOL && type!=XR_XIR_RUNE &&
+        !xr_xir_type_is_number(type) && type!=XR_XIR_STRING && type!=XR_XIR_ERROR &&
+        type!=XR_XIR_PANIC_INFO) return XR_XIR_BAD_TYPE;
+    *span=0;return XR_XIR_OK;
+}
+
+static XrXirStatus effect_invocation_local_type(EffectInvocationLocalRead *read,XrXirType type) {
+    const XrXirTypes *types=read->body->domain.types;
+    const XrXirTypeNode *root=xr_xir_type_node(types,type);
+    if (!root) {
+        uint32_t span=0;
+        XrXirStatus status=effect_invocation_local_type_edge(read,type,0,&span);
+        return status!=XR_XIR_OK?status:(span?XR_XIR_BAD_TYPE:XR_XIR_OK);
+    }
+    uint32_t count=(uint32_t)type-XR_XIR_CONSTRUCTED_TYPE_BASE+1;
+    for (uint32_t i=read->verified_types;i<count;++i) {
+        if (!xir_compile_work(read->work,4)) return XR_XIR_BUDGET;
+        const XrXirTypeNode *node=&types->nodes[i];
+        const XrXirType *arguments=NULL;
+        uint32_t arity=0,span=0;
+        XrXirStatus status=XR_XIR_OK;
+        if (node->kind==XR_XIR_TYPE_NOMINAL) {
+            const XrXirNominalTable *table=types->nominals;
+            if (!table || node->nominal.declaration>=table->count ||
+                (node->nominal.argument_count && !node->nominal.arguments))
+                return XR_XIR_BAD_TYPE;
+            const XrXirNominalDeclaration *declaration=table->declarations?
+                &table->declarations[node->nominal.declaration]:NULL;
+            if (declaration && (declaration->parameter_count!=node->nominal.argument_count ||
+                (declaration->parameter_count && !declaration->constraints))) return XR_XIR_BAD_TYPE;
+            if (!declaration && !table->identities) return XR_XIR_BAD_TYPE;
+            arguments=node->nominal.arguments;arity=node->nominal.argument_count;
+        } else if (node->kind==XR_XIR_TYPE_ARRAY || node->kind==XR_XIR_TYPE_CELL ||
+            node->kind==XR_XIR_TYPE_NULLABLE || node->kind==XR_XIR_TYPE_ATOMIC ||
+            node->kind==XR_XIR_TYPE_TASK) {
+            status=effect_invocation_local_type_edge(read,node->element,i,&span);
+        } else if (node->kind==XR_XIR_TYPE_CALLABLE || node->kind==XR_XIR_TYPE_TUPLE) {
+            if (node->parameter_count && !node->parameters) return XR_XIR_BAD_STRUCTURE;
+            if (node->kind==XR_XIR_TYPE_CALLABLE)
+                status=effect_invocation_local_type_edge(read,node->result,i,&span);
+            for (uint32_t a=0;a<node->parameter_count && status==XR_XIR_OK;++a) {
+                uint32_t child=0;
+                status=effect_invocation_local_type_edge(read,node->parameters[a].type,i,&child);
+                if (child>span) span=child;
+            }
+        } else return XR_XIR_BAD_TYPE;
+        for (uint32_t a=0;a<arity && status==XR_XIR_OK;++a) {
+            uint32_t child=0;
+            status=effect_invocation_local_type_edge(read,arguments[a],i,&child);
+            if (child>span) span=child;
+        }
+        if (status!=XR_XIR_OK) return status;
+        if (node->parameter_span!=span) return XR_XIR_BAD_TYPE;
+        if (!xir_compile_work(read->work,sizeof(read->verified_types))) return XR_XIR_BUDGET;
+        read->verified_types=i+1;
+    }
+    return root->parameter_span?XR_XIR_BAD_TYPE:XR_XIR_OK;
+}
+
+static XrXirStatus effect_invocation_local_operation(EffectInvocationLocalRead *read,
+    uint32_t f,const XrXirInstruction *op,bool *empty) {
+    const XrXirCompileContext *work=read->work;const EffectBodyMaterial *body=read->body;
     if (!xir_compile_work(work,7)) return XR_XIR_BUDGET;
     if (op->op<=XR_XIR_INVALID || op->op>=XR_XIR_OP_COUNT) return XR_XIR_BAD_STRUCTURE;
-    XrXirStatus typed=xr_xir_compile_type_expression_shape(work,body->domain.types,op->type,0);
+    XrXirStatus typed=effect_invocation_local_type(read,op->type);
     if (typed!=XR_XIR_OK) return typed;
     uint32_t mask=effect_physical_opcode(op->op);
     if (xr_xir_callable_signature(body->domain.types,op->type) ||
@@ -448,9 +528,9 @@ static XrXirStatus effect_invocation_local_operation(const XrXirCompileContext *
     return XR_XIR_OK;
 }
 
-static XrXirStatus effect_invocation_local_run(const XrXirCompileContext *work,
-    const EffectBodyMaterial *body,uint32_t f,const EffectBodyRun *run,
-    EffectInvocationLocalInput *output,bool *empty) {
+static XrXirStatus effect_invocation_local_run(EffectInvocationLocalRead *read,
+    uint32_t f,const EffectBodyRun *run,EffectInvocationLocalInput *output,bool *empty) {
+    const XrXirCompileContext *work=read->work;const EffectBodyMaterial *body=read->body;
     if (!xir_compile_work(work,4+sizeof(uint32_t))) return XR_XIR_BUDGET;
     uint32_t semantic=UINT32_C(3);
     /* Slot reads consume the complete signed slot identity. Every other
@@ -464,11 +544,11 @@ static XrXirStatus effect_invocation_local_run(const XrXirCompileContext *work,
         XrXirInstruction storage;const XrXirInstruction *op=&run->base;
         XrXirStatus status=XR_XIR_OK;
         if (points>1) {
-            EffectBodyRead read=effect_body_compile_read(work);
-            status=effect_body_instruction_ref_value(&read,run,run->first+offset,&storage);
+            EffectBodyRead body_read=effect_body_compile_read(work);
+            status=effect_body_instruction_ref_value(&body_read,run,run->first+offset,&storage);
             op=&storage;
         }
-        if (status==XR_XIR_OK) status=effect_invocation_local_operation(work,body,f,op,empty);
+        if (status==XR_XIR_OK) status=effect_invocation_local_operation(read,f,op,empty);
         if (status!=XR_XIR_OK || !*empty) return status;
         if (op->op==XR_XIR_SLOT_LOAD && (!body->declarations || !body->declarations->slots ||
             op->immediate<0 || (uint64_t)op->immediate>=body->declarations->slot_count))
@@ -515,12 +595,13 @@ static XrXirStatus effect_invocation_local_head(const XrXirCompileContext *work,
 
 /* The same request consumes a structurally admitted head immediately.
  * No callback, retained verdict or permission flag separates its two parts. */
-static XrXirStatus effect_invocation_local_input_body(const XrXirCompileContext *work,
-    const EffectBodyMaterial *body,uint32_t f,EffectInvocationLocalInput *output,bool *empty) {
+static XrXirStatus effect_invocation_local_input_body(EffectInvocationLocalRead *read,
+    uint32_t f,EffectInvocationLocalInput *output,bool *empty) {
+    const XrXirCompileContext *work=read->work;const EffectBodyMaterial *body=read->body;
     const EffectBodyFunction *head=&body->functions[f];
     if (!xir_compile_work(work,sizeof(*output))) return XR_XIR_BUDGET;
     *output=(EffectInvocationLocalInput){0};
-    XrXirStatus typed=xr_xir_compile_type_expression_shape(work,body->domain.types,head->result,0);
+    XrXirStatus typed=effect_invocation_local_type(read,head->result);
     if (typed!=XR_XIR_OK) return typed;
     if (body->declarations) {
         const XrXirDeclarations *decls=body->declarations;
@@ -536,11 +617,11 @@ static XrXirStatus effect_invocation_local_input_body(const XrXirCompileContext 
         }
     }
     if (!xir_compile_work(work,sizeof(EffectBodyRead)+sizeof(EffectBodyRecordCursor))) return XR_XIR_BUDGET;
-    EffectBodyRead read=effect_body_compile_read(work);EffectBodyRecordCursor cursor={0,0,UINT32_MAX};
+    EffectBodyRead body_read=effect_body_compile_read(work);EffectBodyRecordCursor cursor={0,0,UINT32_MAX};
     for (uint32_t r=0;r<head->run_count;++r) {
         const EffectBodyRun *run=NULL;
-        XrXirStatus status=effect_body_range_ref(&read,head,&cursor,&run);
-        if (status==XR_XIR_OK) status=effect_invocation_local_run(work,body,f,run,output,empty);
+        XrXirStatus status=effect_body_range_ref(&body_read,head,&cursor,&run);
+        if (status==XR_XIR_OK) status=effect_invocation_local_run(read,f,run,output,empty);
         if (status!=XR_XIR_OK || !*empty) return status;
     }
     if (!xir_compile_work(work,2)) return XR_XIR_BUDGET;
@@ -553,7 +634,8 @@ static XrXirStatus effect_invocation_local_input(const XrXirCompileContext *work
     const EffectBodyMaterial *body,uint32_t f,EffectInvocationLocalInput *output,bool *empty) {
     XrXirStatus status=effect_invocation_local_head(work,body,f,empty);
     if (status!=XR_XIR_OK || !*empty) return status;
-    return effect_invocation_local_input_body(work,body,f,output,empty);
+    EffectInvocationLocalRead read={work,body,0};
+    return effect_invocation_local_input_body(&read,f,output,empty);
 }
 
 /* A failed mathematical classification leaves the generating owner untouched.
@@ -574,10 +656,13 @@ static XrXirStatus effect_invocation_local_inputs(const XrXirCompileContext *wor
     if (status!=XR_XIR_OK || !empty) return status;
     EffectInvocationLocalInput *inputs=xir_compile_alloc(work,(size_t)count*sizeof(*inputs),&status);
     if (!inputs) return status;
-    status=effect_invocation_local_input_body(work,body,0,&inputs[0],&empty);
+    EffectInvocationLocalRead read={work,body,0};
+    status=effect_invocation_local_input_body(&read,0,&inputs[0],&empty);
     if (status!=XR_XIR_OK || !empty) { xr_compile_resources_free(inputs);return status; }
     for (uint32_t f=1;f<count;++f) {
-        bool supported=false;status=effect_invocation_local_input(work,body,f,&inputs[f],&supported);
+        bool supported=false;status=effect_invocation_local_head(work,body,f,&supported);
+        if (status==XR_XIR_OK && supported)
+            status=effect_invocation_local_input_body(&read,f,&inputs[f],&supported);
         if (status!=XR_XIR_OK || !supported) { xr_compile_resources_free(inputs);return status; }
     }
     if (!xir_compile_work(work,sizeof(*output))) { xr_compile_resources_free(inputs);return XR_XIR_BUDGET; }
@@ -690,9 +775,9 @@ static XrXirStatus effect_invocation_local_node_match(const XrXirCompileContext 
     return XR_XIR_OK;
 }
 
-static XrXirStatus effect_invocation_local_equations_match(const XrXirCompileContext *work,
-    const EffectInvocationOwner *owner,const EffectInvocationLocalInput *inputs) {
-    if (!xir_compile_context_valid(work) || !owner || !inputs || !effect_body_material_shape(owner->material) ||
+static XrXirStatus effect_invocation_local_equations_shape(const XrXirCompileContext *work,
+    const EffectInvocationOwner *owner) {
+    if (!xir_compile_context_valid(work) || !owner || !effect_body_material_shape(owner->material) ||
         owner->material->resources!=work->resources || !owner->nodes || !owner->roots ||
         !owner->root_spaces || !owner->consumers) return XR_XIR_BAD_STRUCTURE;
     if (!xir_compile_work(work,18)) return XR_XIR_BUDGET;
@@ -703,6 +788,15 @@ static XrXirStatus effect_invocation_local_equations_match(const XrXirCompileCon
         owner->site_count || owner->binding_count || owner->sites || owner->deferred_count ||
         owner->deferred_capacity || owner->deferred_calls || owner->edge_count || owner->edge_capacity || owner->edges ||
         owner->edge_index_capacity || owner->edge_index) return XR_XIR_BAD_STRUCTURE;
+    return XR_XIR_OK;
+}
+
+static XrXirStatus effect_invocation_local_equations_match(const XrXirCompileContext *work,
+    const EffectInvocationOwner *owner,const EffectInvocationLocalInput *inputs) {
+    if (!inputs) return XR_XIR_BAD_STRUCTURE;
+    XrXirStatus shape=effect_invocation_local_equations_shape(work,owner);
+    if (shape!=XR_XIR_OK) return shape;
+    uint32_t count=effect_body_count(owner->material);
     for (uint32_t f=0;f<count;++f) {
         XrXirStatus status=effect_invocation_local_node_match(work,owner,f,&inputs[f]);
         if (status!=XR_XIR_OK) return status;
