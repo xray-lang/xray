@@ -1,0 +1,266 @@
+// Keep every original wide-integer body and assertion; observe arithmetic intermediates and explicit actual fault details.
+// 0302_int64_native.xr
+// Test: int64 native operations (no 48-bit limit) + division by zero
+//
+// All arithmetic uses native 64-bit instructions when typed as int.
+// These tests deliberately exercise >48-bit values and edge cases
+// to expose any hidden boxing/overflow issues in the compiler.
+
+// ===== Basic int64 arithmetic =====
+
+@test
+fn test_int64_add() {
+    var a: i64 = 100
+    var b: i64 = 200
+    var p19WideValue0 = a + b
+    assertEqual(p19WideValue0300)
+    print(p19WideValue0)
+}
+
+@test
+fn test_int64_sub() {
+    var a: i64 = 100
+    var b: i64 = 200
+    var p19WideValue1 = a - b
+    assertEqual(p19WideValue1-100)
+    print(p19WideValue1)
+}
+
+@test
+fn test_int64_mul() {
+    var a: i64 = 1000000
+    var b: i64 = 1000000
+    var p19WideValue2 = a * b
+    assertEqual(p19WideValue21000000000000)
+    print(p19WideValue2)
+}
+
+@test
+fn test_int64_div() {
+    var a: i64 = 100
+    var b: i64 = 3
+    var p19WideValue3 = a / b
+    assertEqual(p19WideValue333)
+    print(p19WideValue3)
+}
+
+@test
+fn test_int64_mod() {
+    var a: i64 = 100
+    var b: i64 = 3
+    var p19WideValue4 = a % b
+    assertEqual(p19WideValue41)
+    print(p19WideValue4)
+}
+
+@test
+fn test_int64_neg() {
+    var a: i64 = 42
+    var p19WideValue5 = -a
+    assertEqual(p19WideValue5-42)
+    print(p19WideValue5)
+}
+
+// ===== Beyond 48-bit: assertEqual with both I64 operands =====
+
+@test
+fn test_int64_beyond_48bit_add() {
+    var a: i64 = 140737488355327
+    var b: i64 = 1
+    var result: i64 = a + b
+    // Both sides are I64 — should use OP_EQ_I64, no boxing
+    print(result)
+    var p19WideValue7 = result - b
+    assertEqual(p19WideValue7a)
+    print(p19WideValue7)
+}
+
+@test
+fn test_int64_large_multiply_verify() {
+    var a: i64 = 1000000000
+    var b: i64 = 1000000000
+    var result: i64 = a * b
+    // Both sides are I64 — should use OP_EQ_I64
+    print(result)
+    var p19WideValue9 = result / a
+    assertEqual(p19WideValue9b)
+    print(p19WideValue9)
+}
+
+@test
+fn test_int64_negative_large() {
+    var a: i64 = -140737488355328
+    var b: i64 = -1
+    var result: i64 = a + b
+    print(result)
+    var p19WideValue11 = result + 1
+    assertEqual(p19WideValue11a)
+    print(p19WideValue11)
+}
+
+// ===== Beyond 48-bit: assertEqual with >48-bit literal =====
+// This tests whether assertEqual(I64_var, literal) correctly avoids boxing
+// when the literal exceeds 48-bit range.
+
+@test
+fn test_int64_large_literal_equality() {
+    var a: i64 = 140737488355327
+    var b: i64 = a + 1
+    // b = 140737488355328 (>48-bit), assertEqual second arg is I64 expr
+    var expected: i64 = 140737488355328
+    var p19WideValue12 = b
+    assertEqual(p19WideValue12expected)
+    print(p19WideValue12)
+}
+
+// ===== Beyond 48-bit: comparison in expression context =====
+// assert(result > a) where both are I64 — does it box?
+
+@test
+fn test_int64_comparison_expr() {
+    var a: i64 = 140737488355327
+    var b: i64 = 1
+    var result: i64 = a + b
+    // This tests if > comparison boxes I64 operands
+    var p19WideValue13 = result > a
+    assert(p19WideValue13)
+    print(p19WideValue13)
+}
+
+@test
+fn test_int64_comparison_expr_lt() {
+    var a: i64 = 140737488355327
+    var result: i64 = a + 1000
+    var p19WideValue14 = a < result
+    assert(p19WideValue14)
+    print(p19WideValue14)
+}
+
+@test
+fn test_int64_comparison_eq_expr() {
+    var a: i64 = 140737488355327
+    var b: i64 = a
+    var p19WideValue15 = a == b
+    assert(p19WideValue15)
+    print(p19WideValue15)
+}
+
+// ===== Division by zero =====
+
+@test
+fn test_int64_div_by_zero() {
+    var a: i64 = 42
+    var zero: i64 = 0
+    assertPanics(fn() { var r = a / zero })
+    // This is an additional pure fault-detail probe; the original assertPanics remains.
+    var p19Caught = false
+    try {
+        var p19Probe = a / zero
+        assert(false)
+    } catch panic (p: PanicInfo) {
+        p19Caught = true
+        print("PANIC")
+        print(p.message.contains("division") && p.message.contains("zero"))
+    }
+    assert(p19Caught)
+
+}
+
+@test
+fn test_int64_mod_by_zero() {
+    var a: i64 = 42
+    var zero: i64 = 0
+    assertPanics(fn() { var r = a % zero })
+    // This is an additional pure fault-detail probe; the original assertPanics remains.
+    var p19Caught = false
+    try {
+        var p19Probe = a % zero
+        assert(false)
+    } catch panic (p: PanicInfo) {
+        p19Caught = true
+        print("PANIC")
+        print(p.message.contains("modulo") && p.message.contains("zero"))
+    }
+    assert(p19Caught)
+
+}
+
+// ===== Bitwise operations =====
+
+@test
+fn test_int64_bitwise() {
+    var a: i64 = 0xFF00
+    var b: i64 = 0x0FF0
+    var p19WideValue20 = a & b
+    assertEqual(p19WideValue200x0F00)
+    print(p19WideValue20)
+    var p19WideValue21 = a | b
+    assertEqual(p19WideValue210xFFF0)
+    print(p19WideValue21)
+    var p19WideValue22 = a ^ b
+    assertEqual(p19WideValue220xF0F0)
+    print(p19WideValue22)
+}
+
+// ===== Shift operations beyond 48-bit =====
+
+@test
+fn test_int64_shift_large() {
+    var a: i64 = 1
+    var r47: i64 = a << 47
+    // 2^47 = 140737488355328, verify via shift back
+    print(r47)
+    var p19WideValue24 = r47 >> 47
+    assertEqual(p19WideValue241)
+    print(p19WideValue24)
+}
+
+@test
+fn test_int64_shift_62() {
+    var a: i64 = 1
+    var r62: i64 = a << 62
+    print(r62)
+    var p19WideValue26 = r62 >> 62
+    assertEqual(p19WideValue261)
+    print(p19WideValue26)
+}
+
+// ===== Compound assignment beyond 48-bit =====
+
+@test
+fn test_int64_compound_add_large() {
+    var x: i64 = 140737488355327
+    x += 1000
+    print(x)
+    var p19WideValue28 = x - 1000
+    assertEqual(p19WideValue28140737488355327)
+    print(p19WideValue28)
+}
+
+@test
+fn test_int64_compound_mul_large() {
+    var x: i64 = 1000000000
+    x *= 1000000000
+    print(x)
+    var p19WideValue30 = x / 1000000000
+    assertEqual(p19WideValue301000000000)
+    print(p19WideValue30)
+}
+
+// ===== typeof =====
+
+@test
+fn test_typeof_int64() {
+    var a: i64 = 42
+    var p19WideValue31 = typeName(a)
+    assertEqual(p19WideValue31"i64")
+    print(p19WideValue31)
+}
+
+@test
+fn test_typeof_float64() {
+    var a: f64 = 3.14
+    var p19WideValue32 = typeName(a)
+    assertEqual(p19WideValue32"f64")
+    print(p19WideValue32)
+}

@@ -204,6 +204,10 @@
     {
       "path": "tests/regression/03_operators/0302_uint64_print_compare.xr",
       "lf_sha256": "3d1bff78dbe7f17563604f03c3b90c8be901f2fddf10760074861384fd13185e"
+    },
+    {
+      "path": "tests/regression/03_operators/0302_int64_native.xr",
+      "lf_sha256": "a54da6faf72669401acc8cff0251d69c173e53c673bc3f77a43a227709650bf7"
     }
   ],
   "cases": [
@@ -1530,6 +1534,160 @@
         }
       },
       "model_scope": "Unsigned high-bit/all-ones full decimal and order computed from arbitrary-precision integers; original multiline assertion remains."
+    },
+    {
+      "id": "structured_original_0302_int64_native_observed",
+      "expected": {
+        "exit_code": 0,
+        "required_test_names": [
+          "test_int64_add",
+          "test_int64_sub",
+          "test_int64_mul",
+          "test_int64_div",
+          "test_int64_mod",
+          "test_int64_neg",
+          "test_int64_beyond_48bit_add",
+          "test_int64_large_multiply_verify",
+          "test_int64_negative_large",
+          "test_int64_large_literal_equality",
+          "test_int64_comparison_expr",
+          "test_int64_comparison_expr_lt",
+          "test_int64_comparison_eq_expr",
+          "test_int64_div_by_zero",
+          "test_int64_mod_by_zero",
+          "test_int64_bitwise",
+          "test_int64_shift_large",
+          "test_int64_shift_62",
+          "test_int64_compound_add_large",
+          "test_int64_compound_mul_large",
+          "test_typeof_int64",
+          "test_typeof_float64"
+        ],
+        "per_test_observations": {
+          "test_int64_add": {
+            "values": [
+              300
+            ]
+          },
+          "test_int64_sub": {
+            "values": [
+              -100
+            ]
+          },
+          "test_int64_mul": {
+            "values": [
+              1000000000000
+            ]
+          },
+          "test_int64_div": {
+            "values": [
+              33
+            ]
+          },
+          "test_int64_mod": {
+            "values": [
+              1
+            ]
+          },
+          "test_int64_neg": {
+            "values": [
+              -42
+            ]
+          },
+          "test_int64_beyond_48bit_add": {
+            "values": [
+              140737488355328,
+              140737488355327
+            ]
+          },
+          "test_int64_large_multiply_verify": {
+            "values": [
+              1000000000000000000,
+              1000000000
+            ]
+          },
+          "test_int64_negative_large": {
+            "values": [
+              -140737488355329,
+              -140737488355328
+            ]
+          },
+          "test_int64_large_literal_equality": {
+            "values": [
+              140737488355328
+            ]
+          },
+          "test_int64_comparison_expr": {
+            "values": [
+              true
+            ]
+          },
+          "test_int64_comparison_expr_lt": {
+            "values": [
+              true
+            ]
+          },
+          "test_int64_comparison_eq_expr": {
+            "values": [
+              true
+            ]
+          },
+          "test_int64_div_by_zero": {
+            "values": [
+              "PANIC",
+              true
+            ]
+          },
+          "test_int64_mod_by_zero": {
+            "values": [
+              "PANIC",
+              true
+            ]
+          },
+          "test_int64_bitwise": {
+            "values": [
+              3840,
+              65520,
+              61680
+            ]
+          },
+          "test_int64_shift_large": {
+            "values": [
+              140737488355328,
+              1
+            ]
+          },
+          "test_int64_shift_62": {
+            "values": [
+              4611686018427387904,
+              1
+            ]
+          },
+          "test_int64_compound_add_large": {
+            "values": [
+              140737488356327,
+              140737488355327
+            ]
+          },
+          "test_int64_compound_mul_large": {
+            "values": [
+              1000000000000000000,
+              1000000000
+            ]
+          },
+          "test_typeof_int64": {
+            "values": [
+              "i64"
+            ]
+          },
+          "test_typeof_float64": {
+            "values": [
+              "f64"
+            ]
+          }
+        }
+      },
+      "model_scope": "Original frozen mathematical wide-i64 values and real integer zero-divisor panic classification. Original assertPanics is preserved; an explicitly additional pure probe reads actual PanicInfo message predicates without guessing an ordinal."
     }
   ],
   "independence": "Expected constants come from the original frozen assertions and mathematical method bodies, never current Xray output."

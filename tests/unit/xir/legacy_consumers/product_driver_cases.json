@@ -15398,6 +15398,231 @@
       "remaining_gates": [
         "Full original FI/resources/lifetime/physical and safety/provider qualification remains open."
       ]
+    },
+    {
+      "id": "structured_original_0302_int64_native_observed",
+      "oracle_id": "structured_original_0302_int64_native_observed",
+      "source": "tests/unit/xir/legacy_consumers/fixtures/independent_named_observations/0302_int64_native/root.xr",
+      "source_lf_sha256": "9f1be2a95ffa11e6c3bf2d6cede6a63b21a23c8ed925a251dc8dbb0952ed8d73",
+      "entry": "test",
+      "stdout_utf8": "300\n-100\n1000000000000\n33\n1\n-42\n140737488355328\n140737488355327\n1000000000000000000\n1000000000\n-140737488355329\n-140737488355328\n140737488355328\ntrue\ntrue\ntrue\nPANIC\ntrue\nPANIC\ntrue\n3840\n65520\n61680\n140737488355328\n1\n4611686018427387904\n1\n140737488356327\n140737488355327\n1000000000000000000\n1000000000\ni64\nf64\n",
+      "stderr_utf8": "",
+      "companions": [],
+      "owners": [
+        "P09",
+        "P10"
+      ],
+      "independent_observations": {
+        "original_case": "tests/regression/03_operators/0302_int64_native.xr",
+        "selected_complete_source": "tests/regression/03_operators/0302_int64_native.xr",
+        "selected_source_lf_sha256": "a54da6faf72669401acc8cff0251d69c173e53c673bc3f77a43a227709650bf7",
+        "method": "All original22 bodies, scalar assertions and two original assertPanics calls remain. Arithmetic intermediate/shift/compound values are observed at original assertion positions. Two additional pure probes classify actual integer zero-divisor panic channels/messages; they are not presented as original call counts.",
+        "values": [
+          {
+            "test": "test_int64_add",
+            "expression": "a + b",
+            "expected": 300,
+            "projection": null
+          },
+          {
+            "test": "test_int64_sub",
+            "expression": "a - b",
+            "expected": -100,
+            "projection": null
+          },
+          {
+            "test": "test_int64_mul",
+            "expression": "a * b",
+            "expected": 1000000000000,
+            "projection": null
+          },
+          {
+            "test": "test_int64_div",
+            "expression": "a / b",
+            "expected": 33,
+            "projection": null
+          },
+          {
+            "test": "test_int64_mod",
+            "expression": "a % b",
+            "expected": 1,
+            "projection": null
+          },
+          {
+            "test": "test_int64_neg",
+            "expression": "-a",
+            "expected": -42,
+            "projection": null
+          },
+          {
+            "test": "test_int64_beyond_48bit_add",
+            "expression": "result",
+            "expected": 140737488355328,
+            "projection": null
+          },
+          {
+            "test": "test_int64_beyond_48bit_add",
+            "expression": "result - b",
+            "expected": 140737488355327,
+            "projection": null
+          },
+          {
+            "test": "test_int64_large_multiply_verify",
+            "expression": "result",
+            "expected": 1000000000000000000,
+            "projection": null
+          },
+          {
+            "test": "test_int64_large_multiply_verify",
+            "expression": "result / a",
+            "expected": 1000000000,
+            "projection": null
+          },
+          {
+            "test": "test_int64_negative_large",
+            "expression": "result",
+            "expected": -140737488355329,
+            "projection": null
+          },
+          {
+            "test": "test_int64_negative_large",
+            "expression": "result + 1",
+            "expected": -140737488355328,
+            "projection": null
+          },
+          {
+            "test": "test_int64_large_literal_equality",
+            "expression": "b",
+            "expected": 140737488355328,
+            "projection": null
+          },
+          {
+            "test": "test_int64_comparison_expr",
+            "expression": "result > a",
+            "expected": true,
+            "projection": null
+          },
+          {
+            "test": "test_int64_comparison_expr_lt",
+            "expression": "a < result",
+            "expected": true,
+            "projection": null
+          },
+          {
+            "test": "test_int64_comparison_eq_expr",
+            "expression": "a == b",
+            "expected": true,
+            "projection": null
+          },
+          {
+            "test": "test_int64_div_by_zero",
+            "expression": "actual explicit panic handler after the original assertPanics",
+            "expected": "PANIC",
+            "projection": null
+          },
+          {
+            "test": "test_int64_div_by_zero",
+            "expression": "p.message identifies integer division by zero",
+            "expected": true,
+            "projection": null
+          },
+          {
+            "test": "test_int64_mod_by_zero",
+            "expression": "actual explicit panic handler after the original assertPanics",
+            "expected": "PANIC",
+            "projection": null
+          },
+          {
+            "test": "test_int64_mod_by_zero",
+            "expression": "p.message identifies integer modulo by zero",
+            "expected": true,
+            "projection": null
+          },
+          {
+            "test": "test_int64_bitwise",
+            "expression": "a & b",
+            "expected": 3840,
+            "projection": null
+          },
+          {
+            "test": "test_int64_bitwise",
+            "expression": "a | b",
+            "expected": 65520,
+            "projection": null
+          },
+          {
+            "test": "test_int64_bitwise",
+            "expression": "a ^ b",
+            "expected": 61680,
+            "projection": null
+          },
+          {
+            "test": "test_int64_shift_large",
+            "expression": "r47",
+            "expected": 140737488355328,
+            "projection": null
+          },
+          {
+            "test": "test_int64_shift_large",
+            "expression": "r47 >> 47",
+            "expected": 1,
+            "projection": null
+          },
+          {
+            "test": "test_int64_shift_62",
+            "expression": "r62",
+            "expected": 4611686018427387904,
+            "projection": null
+          },
+          {
+            "test": "test_int64_shift_62",
+            "expression": "r62 >> 62",
+            "expected": 1,
+            "projection": null
+          },
+          {
+            "test": "test_int64_compound_add_large",
+            "expression": "x",
+            "expected": 140737488356327,
+            "projection": null
+          },
+          {
+            "test": "test_int64_compound_add_large",
+            "expression": "x - 1000",
+            "expected": 140737488355327,
+            "projection": null
+          },
+          {
+            "test": "test_int64_compound_mul_large",
+            "expression": "x",
+            "expected": 1000000000000000000,
+            "projection": null
+          },
+          {
+            "test": "test_int64_compound_mul_large",
+            "expression": "x / 1000000000",
+            "expected": 1000000000,
+            "projection": null
+          },
+          {
+            "test": "test_typeof_int64",
+            "expression": "typeName(a)",
+            "expected": "i64",
+            "projection": null
+          },
+          {
+            "test": "test_typeof_float64",
+            "expression": "typeName(a)",
+            "expected": "f64",
+            "projection": null
+          }
+        ]
+      },
+      "remaining_gates": [
+        "Actual complete discovery and independent VM/C/native wide-i64 and fault detail observations.",
+        "No boxing/instruction/optimization/native-width claim from numeric results or old comments.",
+        "All original full FI/resources/borrow/lifetime/cancel/physical/Final/B0/sanitizer/provider gates remain open."
+      ]
     }
   ]
 }
