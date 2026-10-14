@@ -1531,7 +1531,7 @@ static void conditional_new_literals(void) {
     for (uint32_t which=25;which<61;++which) {
         RootParameterMark physical=rp_mark();XrXirCompileContext context=rp_owner(rp_caps());
         uint64_t baseline=rp_stats(&context).live_bytes;
-        XrXirStatus status=which<29 ? conditional_invocation_core(&context,which-25,true) :
+        XrXirStatus status=which<29 ? conditional_invocation_core(&context,which-25,true,false) :
             which==29 ? conditional_invocation_rotation(&context,false,true) :
             which<32 ? conditional_invocation_deferred(&context,which-30,true) :
             which<34 ? conditional_invocation_lowered_context(&context,which-32,true) :
@@ -1593,7 +1593,7 @@ static XrXirStatus conditional_resource_case(const XrXirCompileContext *context,
         which==22 ? conditional_invocation_bounds(context,false) :
         which==23 ? conditional_invocation_refinement(context,false) :
         which==24 ? conditional_invocation_generic_bounds(context,false) :
-        which<29 ? conditional_invocation_core(context,which-25,false) :
+        which<29 ? conditional_invocation_core(context,which-25,false,false) :
         which==29 ? conditional_invocation_rotation(context,false,false) :
         which<32 ? conditional_invocation_deferred(context,which-30,false) :
         which<34 ? conditional_invocation_lowered_context(context,which-32,false) :
@@ -1610,7 +1610,8 @@ static XrXirStatus conditional_resource_case(const XrXirCompileContext *context,
 }
 
 static XrXirStatus conditional_retry_case(const XrXirCompileContext *context,uint32_t which) {
-    if (which>=100) return XR_XIR_BAD_STRUCTURE;
+    if (which>=104) return XR_XIR_BAD_STRUCTURE;
+    if (which>=100) return conditional_invocation_core(context,which-100,false,true);
     if (which>=97) return conditional_generation_case(context,which-97,false);
     if (which>=90) return conditional_class_cell_case(context,which-90,false);
     if (which>=87) return conditional_compact_case(context,which-87,false);
@@ -1676,6 +1677,45 @@ static void conditional_axes(void) {
 
 #include "xir_invocation_final_retirement_cases.h"
 
+static void conditional_nonroot_seed_resources(void) {
+    for (uint32_t which=100;which<104;++which) {
+        size_t sites=0;XrCompileResourceStats single={0};
+        for (size_t pass=0;pass<=sites;++pass) {
+            RootParameterMark physical=rp_mark();XrXirCompileContext context=rp_owner(rp_caps());
+            XrCompileResourceStats entry=rp_stats(&context);RootParameterMark retained=rp_mark();
+            XrCompileResources *identity=context.resources;
+            rp_attempts=0;rp_injected=false;rp_fail_at=pass?pass-1:SIZE_MAX;
+            XrXirStatus status=conditional_retry_case(&context,which);rp_fail_at=SIZE_MAX;
+            if (!pass) { CHECK(status==XR_XIR_OK);sites=rp_attempts;single=rp_stats(&context); }
+            else CHECK(rp_injected && status==XR_XIR_OUT_OF_MEMORY);
+            ConditionalRetryTrial retry={.which=which,.ordinal=pass?pass-1:SIZE_MAX,.sites=sites,
+                .resources=identity,.initial=entry,.single=single,.retained=retained,.first=status};
+            if (pass) conditional_retry_operation(&context,&retry);
+            rp_owner_free(&context,entry.live_bytes);rp_balanced(physical);
+        }
+        printf("nonroot primitive mode%u complete allocation census %zu\n",which-100,sites);
+        RootParameterMark physical=rp_mark();XrXirCompileContext context=rp_owner(rp_caps());
+        XrCompileResourceStats entry=rp_stats(&context);size_t attempts=rp_attempts;
+        CHECK(conditional_retry_case(&context,which)==XR_XIR_OK);
+        size_t measured=rp_attempts-attempts;XrCompileResourceStats census=rp_stats(&context);
+        rp_owner_free(&context,entry.live_bytes);rp_balanced(physical);
+        for (uint32_t axis=0;axis<3;++axis) for (uint32_t minus=0;minus<2;++minus) {
+            XrCompileResourceLimits caps=rp_caps();
+            if (!axis) caps.allocated_bytes=census.allocated_bytes-minus;
+            else if (axis==1) caps.live_bytes=census.peak_bytes-minus;
+            else caps.work=census.work-minus;
+            physical=rp_mark();context=rp_owner(caps);entry=rp_stats(&context);
+            RootParameterMark retained=rp_mark();XrCompileResources *identity=context.resources;
+            XrXirStatus status=conditional_retry_case(&context,which);
+            CHECK(status==(minus?XR_XIR_BUDGET:XR_XIR_OK));
+            ConditionalRetryTrial retry={.which=which,.ordinal=SIZE_MAX,.sites=measured,
+                .resources=identity,.initial=entry,.single=census,.retained=retained,.first=status};
+            conditional_retry_operation(&context,&retry);
+            rp_owner_free(&context,entry.live_bytes);rp_balanced(physical);
+        }
+    }
+}
+
 /* The original four classifiers keep their entire allocation denominator.
  * Repeated interning controls run separately on genuine resolved inputs. */
 static void conditional_ordinary_environment_keys(void) {
@@ -1702,6 +1742,18 @@ static void conditional_ordinary_environment_keys(void) {
 }
 
 int main(int argc, char **argv) {
+    if (argc==2 && !strcmp(argv[1],"--nonroot-input-seeds-resources")) {
+        conditional_nonroot_seed_resources();CHECK(!rp_live && !rp_live_bytes);return 0;
+    }
+    if (argc==2 && !strcmp(argv[1],"--nonroot-input-seeds-literals")) {
+        for (uint32_t mode=0;mode<4;++mode) {
+            RootParameterMark physical=rp_mark();XrXirCompileContext context=rp_owner(rp_caps());
+            uint64_t baseline=rp_stats(&context).live_bytes;
+            CHECK(conditional_invocation_core(&context,mode,true,true)==XR_XIR_OK);
+            rp_owner_free(&context,baseline);rp_balanced(physical);
+        }
+        CHECK(!rp_live && !rp_live_bytes && !rp_release_observer);return 0;
+    }
     if (argc==2 && !strcmp(argv[1],"--final-retirement-literals")) {
         invocation_final_retirement_literals();
         CHECK(!rp_live && !rp_live_bytes && !rp_release_observer);return 0;

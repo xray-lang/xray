@@ -75,19 +75,27 @@ static XrXirStatus effect_invocation_sites(EffectInvocationWorkspace *owner) {
     owner->final.sites=sites;owner->final.site_count=at;owner->final.binding_count=binding;return XR_XIR_OK;
 }
 
-static XrXirStatus effect_invocation_basis_parameters(const EffectInvocationWorkspace *owner,
+static XrXirStatus effect_invocation_basis_parameters_read(const XrXirCompileContext *work,
+    const EffectInvocationFinal *final,
     uint32_t parameters,EffectInvocationBasis *output) {
-    uint64_t fn_bits=(uint64_t)owner->final.site_count+parameters+3;
+    if (!xir_compile_context_valid(work) || !final || !output) return XR_XIR_BAD_STRUCTURE;
+    uint64_t fn_bits=(uint64_t)final->site_count+parameters+3;
     uint64_t cell_bits=(uint64_t)parameters+3;
     uint64_t origin_words=(fn_bits+63)/64,cell_words=(cell_bits+63)/64;
-    uint64_t fn_words=origin_words+(uint64_t)owner->final.binding_count*(origin_words+cell_words);
+    uint64_t fn_words=origin_words+(uint64_t)final->binding_count*(origin_words+cell_words);
     if (fn_bits>UINT32_MAX || cell_bits>UINT32_MAX ||
         fn_words>UINT32_MAX || cell_words>UINT32_MAX ||
         fn_words+cell_words>UINT32_MAX) return XR_XIR_BUDGET;
-    if (!xir_compile_work(owner->work,4)) return XR_XIR_BUDGET;
+    if (!xir_compile_work(work,4)) return XR_XIR_BUDGET;
     *output=(EffectInvocationBasis){parameters,(uint32_t)origin_words,(uint32_t)fn_words,
         (uint32_t)cell_words,(uint32_t)(fn_words+cell_words)};
     return XR_XIR_OK;
+}
+
+static XrXirStatus effect_invocation_basis_parameters(const EffectInvocationWorkspace *owner,
+    uint32_t parameters,EffectInvocationBasis *output) {
+    if (!owner) return XR_XIR_BAD_STRUCTURE;
+    return effect_invocation_basis_parameters_read(owner->work,&owner->final,parameters,output);
 }
 
 static XrXirStatus effect_invocation_basis(const EffectInvocationWorkspace *owner,

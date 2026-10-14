@@ -198,7 +198,7 @@ static XrXirStatus effect_source_certificate(const XrXirCompileContext *work,
     if (status==XR_XIR_OK) status=effect_invocation_producers_verify_read(&owner,&owner.body);
     if (status==XR_XIR_OK) status=effect_invocation_coverage_verify_read(&owner,&owner.body);
     if (status==XR_XIR_OK) status=effect_invocation_class_verify_read(&owner,&owner.body);
-    if (status==XR_XIR_OK) status=effect_invocation_closed(&owner);
+    if (status==XR_XIR_OK) status=effect_invocation_closed_read(work,certificate->final);
     if (status==XR_XIR_OK) status=effect_invocation_deferred_verify(&owner);
     if (status==XR_XIR_OK) status=effect_invocation_bind_bounds(&local,certificate->declared,owner.final.physical);
     if (status==XR_XIR_OK) status=effect_source_atoms(work,&local);

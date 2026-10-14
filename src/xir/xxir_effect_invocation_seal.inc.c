@@ -335,7 +335,23 @@ static XrXirStatus effect_invocation_input_seeds_match(const XrXirCompileContext
         if (status!=XR_XIR_OK) return status;
         uint32_t mask=(input.requires_root?XR_XIR_CALLABLE_ROOT_REQUIRED:0)|
             (input.unresolved?XR_XIR_CALLABLE_ROOT_UNRESOLVED:0);
-        if ((node->intrinsic_mask&mask)!=mask || (summary->functions[f].formula.constant_mask&mask)!=mask)
+        if ((node->intrinsic_mask&mask)!=mask || (node->local_mask&mask)!=mask ||
+            (summary->functions[f].formula.constant_mask&mask)!=mask)
+            return XR_XIR_BAD_STRUCTURE;
+    }
+    /* Each genuine environment executes the same body's primitive Input.
+     * An intact symbolic root cannot qualify a different erased call key. */
+    for (uint32_t n=0;n<final->count;++n) {
+        if (!xir_compile_work(work,4)) return XR_XIR_BUDGET;
+        const EffectInvocationNode *node=&final->nodes[n];
+        if (node->body>=count) return XR_XIR_BAD_STRUCTURE;
+        if (final->roots[node->body]==n) continue;
+        XrXirRootEffects input={0};
+        XrXirStatus status=effect_invocation_input_seed(work,certificate->body,node->body,&input);
+        if (status!=XR_XIR_OK) return status;
+        uint32_t mask=(input.requires_root?XR_XIR_CALLABLE_ROOT_REQUIRED:0)|
+            (input.unresolved?XR_XIR_CALLABLE_ROOT_UNRESOLVED:0);
+        if ((node->intrinsic_mask&mask)!=mask || (node->local_mask&mask)!=mask)
             return XR_XIR_BAD_STRUCTURE;
     }
     return XR_XIR_OK;
