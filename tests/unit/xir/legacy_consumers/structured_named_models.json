@@ -208,6 +208,54 @@
     {
       "path": "tests/regression/03_operators/0302_int64_native.xr",
       "lf_sha256": "a54da6faf72669401acc8cff0251d69c173e53c673bc3f77a43a227709650bf7"
+    },
+    {
+      "path": "tests/regression/02_variables/0011_zero_value_init.xr",
+      "lf_sha256": "3d3595cf5fa501aac4eb2236368735e865b513e43b47fafd25ed3a9928e9b21e"
+    },
+    {
+      "path": "tests/unit/xir/legacy_consumers/fixtures/early_core_ports/0011_zero_value_init/root.xr",
+      "lf_sha256": "3d3595cf5fa501aac4eb2236368735e865b513e43b47fafd25ed3a9928e9b21e"
+    },
+    {
+      "path": "tests/regression/08_mem/0805_closure_capture_cell_reassign.xr",
+      "lf_sha256": "9ccbbf9f87a84821563f75892a4451b0e88723a7bfdb11354b143faf8fa79062"
+    },
+    {
+      "path": "tests/unit/xir/legacy_consumers/fixtures/class_capture_cell_reassign/root.xr",
+      "lf_sha256": "9ccbbf9f87a84821563f75892a4451b0e88723a7bfdb11354b143faf8fa79062"
+    },
+    {
+      "path": "tests/regression/08_oop/0800_class_basic.xr",
+      "lf_sha256": "1f7af715200cba335489fae7b1632f80a0e04947d82c208ac2dbe471f65b17d7"
+    },
+    {
+      "path": "tests/unit/xir/legacy_consumers/fixtures/class_basic_ordinary_methods/root.xr",
+      "lf_sha256": "521c9a3bd89cbfe5ca19924a91599b6317540dba16d67c35aedb62a8753a2350"
+    },
+    {
+      "path": "tests/regression/13_types/1434_param_mode_receiver_mutation_boundary.xr",
+      "lf_sha256": "dff72e2abe0d1907936c9ca6832b134148d75554d1a27832f0bd2c33b34915ee"
+    },
+    {
+      "path": "tests/unit/xir/legacy_consumers/fixtures/ordinary_class_mutation_and_array_place/root.xr",
+      "lf_sha256": "d8325d16e4aa2f19ccea2d8dea88363cf4a432ed88c76ef750b802e2985c40d3"
+    },
+    {
+      "path": "tests/regression/13_types/1437_generic_method_param_contract.xr",
+      "lf_sha256": "22aa29e59bb58109c09b096ddb5a96c30f2e326446389788996cf80518ae93f3"
+    },
+    {
+      "path": "tests/unit/xir/legacy_consumers/fixtures/method_owned_equal_constraint/root.xr",
+      "lf_sha256": "207dc79c05fbce3b028018ec9b8d3bd0c77249f7ca73a7f115d0ff6d6194a6cf"
+    },
+    {
+      "path": "tests/regression/10_stdlib/crash_min.xr",
+      "lf_sha256": "98127f7c0c9720725bb2d811d63bec8a9b682e745dc62cb9be53243dae3bc90e"
+    },
+    {
+      "path": "tests/unit/xir/legacy_consumers/fixtures/network_regression_ports/crash_min/root.xr",
+      "lf_sha256": "2a8f72ba4f7ecd6174c96078bc3085366d126973e6f4a4d03792b29c4516ad3b"
     }
   ],
   "cases": [
@@ -1688,6 +1736,467 @@
         }
       },
       "model_scope": "Original frozen mathematical wide-i64 values and real integer zero-divisor panic classification. Original assertPanics is preserved; an explicitly additional pure probe reads actual PanicInfo message predicates without guessing an ordinal."
+    },
+    {
+      "id": "structured_supported_0011_zero_value_init_observed",
+      "expected": {
+        "exit_code": 0,
+        "required_test_names": [
+          "test_int_zero_value",
+          "test_float_zero_value",
+          "test_bool_zero_value",
+          "test_nullable_defaults_to_null",
+          "test_string_requires_initializer",
+          "test_struct_zero_value_init",
+          "test_class_field_initialized_in_both_branches"
+        ],
+        "per_test_observations": {
+          "test_int_zero_value": {
+            "values": [
+              0
+            ]
+          },
+          "test_float_zero_value": {
+            "values": [
+              0.0
+            ]
+          },
+          "test_bool_zero_value": {
+            "values": [
+              false
+            ]
+          },
+          "test_nullable_defaults_to_null": {
+            "values": [
+              null
+            ]
+          },
+          "test_string_requires_initializer": {
+            "values": [
+              ""
+            ]
+          },
+          "test_struct_zero_value_init": {
+            "values": [
+              0,
+              0,
+              7,
+              0,
+              0,
+              false
+            ]
+          },
+          "test_class_field_initialized_in_both_branches": {
+            "values": [
+              "yes",
+              "no"
+            ]
+          }
+        }
+      },
+      "model_scope": "Independent frozen source literals, initializer zero rules and complete original loop sequences; no captured Xray outputs."
+    },
+    {
+      "id": "structured_supported_0805_closure_capture_cell_reassign_observed",
+      "expected": {
+        "exit_code": 0,
+        "required_test_names": [
+          "test_hoisted_closure_capture_survives_instance_def",
+          "test_multiple_instance_captures_stay_distinct",
+          "test_reassign_after_capture_visible_in_closure",
+          "test_closure_write_visible_to_enclosing_frame",
+          "test_repeated_closure_writes_through_cell",
+          "test_captured_instance_retained_by_container",
+          "test_cell_created_at_capture_register",
+          "test_int_capture_roundtrip"
+        ],
+        "per_test_observations": {
+          "test_hoisted_closure_capture_survives_instance_def": {
+            "values": [
+              0
+            ]
+          },
+          "test_multiple_instance_captures_stay_distinct": {
+            "values": [
+              1,
+              2
+            ]
+          },
+          "test_reassign_after_capture_visible_in_closure": {
+            "values": [
+              3,
+              4,
+              4
+            ]
+          },
+          "test_closure_write_visible_to_enclosing_frame": {
+            "values": [
+              1,
+              2
+            ]
+          },
+          "test_repeated_closure_writes_through_cell": {
+            "values": [
+              1,
+              2,
+              3,
+              4,
+              5,
+              5
+            ]
+          },
+          "test_captured_instance_retained_by_container": {
+            "values": [
+              1,
+              11,
+              11
+            ]
+          },
+          "test_cell_created_at_capture_register": {
+            "values": [
+              2,
+              3
+            ]
+          },
+          "test_int_capture_roundtrip": {
+            "values": [
+              7
+            ]
+          }
+        }
+      },
+      "model_scope": "Independent frozen source literals, initializer zero rules and complete original loop sequences; no captured Xray outputs."
+    },
+    {
+      "id": "structured_supported_0800_class_basic_observed",
+      "expected": {
+        "exit_code": 0,
+        "required_test_names": [
+          "test_class_instantiation",
+          "test_class_method",
+          "test_method_modifies_state",
+          "test_multiple_instances",
+          "test_method_chaining",
+          "test_default_values",
+          "test_field_read",
+          "test_field_write",
+          "test_multi_param_methods"
+        ],
+        "per_test_observations": {
+          "test_class_instantiation": {
+            "values": [
+              3,
+              4
+            ]
+          },
+          "test_class_method": {
+            "values": [
+              "(5, 10)"
+            ]
+          },
+          "test_method_modifies_state": {
+            "values": [
+              0,
+              2,
+              1
+            ]
+          },
+          "test_multiple_instances": {
+            "values": [
+              2,
+              1
+            ]
+          },
+          "test_method_chaining": {
+            "values": [
+              "hello world"
+            ]
+          },
+          "test_default_values": {
+            "values": [
+              "default",
+              true
+            ]
+          },
+          "test_field_read": {
+            "values": [
+              "Alice",
+              30
+            ]
+          },
+          "test_field_write": {
+            "values": [
+              "Bob",
+              25
+            ]
+          },
+          "test_multi_param_methods": {
+            "values": [
+              8,
+              24
+            ]
+          }
+        }
+      },
+      "model_scope": "Independent frozen source literals, initializer zero rules and complete original loop sequences; no captured Xray outputs."
+    },
+    {
+      "id": "structured_supported_1434_param_mode_receiver_mutation_boundary_observed",
+      "expected": {
+        "exit_code": 0,
+        "required_test_names": [
+          "test_receiver_mutation_does_not_need_ref_marker"
+        ],
+        "per_test_observations": {
+          "test_receiver_mutation_does_not_need_ref_marker": {
+            "values": [
+              2,
+              3,
+              3,
+              [
+                1,
+                2,
+                3
+              ]
+            ]
+          }
+        }
+      },
+      "model_scope": "Independent frozen source literals, initializer zero rules and complete original loop sequences; no captured Xray outputs."
+    },
+    {
+      "id": "structured_supported_1437_generic_method_param_contract_observed",
+      "expected": {
+        "exit_code": 0,
+        "required_test_names": [
+          "test_generic_method_keeps_ref_contract"
+        ],
+        "per_test_observations": {
+          "test_generic_method_keeps_ref_contract": {
+            "values": [
+              7,
+              7
+            ]
+          }
+        }
+      },
+      "model_scope": "Independent frozen source literals, initializer zero rules and complete original loop sequences; no captured Xray outputs."
+    },
+    {
+      "id": "structured_supported_crash_min_observed",
+      "expected": {
+        "exit_code": 0,
+        "required_test_names": [
+          "test_crash_min"
+        ],
+        "per_test_observations": {
+          "test_crash_min": {
+            "values": [
+              0,
+              1,
+              2,
+              3,
+              4,
+              5,
+              6,
+              7,
+              8,
+              9,
+              10,
+              11,
+              12,
+              13,
+              14,
+              15,
+              16,
+              17,
+              18,
+              19,
+              20,
+              21,
+              22,
+              23,
+              24,
+              25,
+              26,
+              27,
+              28,
+              29,
+              30,
+              31,
+              32,
+              33,
+              34,
+              35,
+              36,
+              37,
+              38,
+              39,
+              40,
+              41,
+              42,
+              43,
+              44,
+              45,
+              46,
+              47,
+              48,
+              49,
+              50,
+              51,
+              52,
+              53,
+              54,
+              55,
+              56,
+              57,
+              58,
+              59,
+              60,
+              61,
+              62,
+              63,
+              64,
+              65,
+              66,
+              67,
+              68,
+              69,
+              70,
+              71,
+              72,
+              73,
+              74,
+              75,
+              76,
+              77,
+              78,
+              79,
+              80,
+              81,
+              82,
+              83,
+              84,
+              85,
+              86,
+              87,
+              88,
+              89,
+              90,
+              91,
+              92,
+              93,
+              94,
+              95,
+              96,
+              97,
+              98,
+              99,
+              100,
+              101,
+              102,
+              103,
+              104,
+              105,
+              106,
+              107,
+              108,
+              109,
+              110,
+              111,
+              112,
+              113,
+              114,
+              115,
+              116,
+              117,
+              118,
+              119,
+              120,
+              121,
+              122,
+              123,
+              124,
+              125,
+              126,
+              127,
+              128,
+              129,
+              130,
+              131,
+              132,
+              133,
+              134,
+              135,
+              136,
+              137,
+              138,
+              139,
+              140,
+              141,
+              142,
+              143,
+              144,
+              145,
+              146,
+              147,
+              148,
+              149,
+              150,
+              151,
+              152,
+              153,
+              154,
+              155,
+              156,
+              157,
+              158,
+              159,
+              160,
+              161,
+              162,
+              163,
+              164,
+              165,
+              166,
+              167,
+              168,
+              169,
+              170,
+              171,
+              172,
+              173,
+              174,
+              175,
+              176,
+              177,
+              178,
+              179,
+              180,
+              181,
+              182,
+              183,
+              184,
+              185,
+              186,
+              187,
+              188,
+              189,
+              190,
+              191,
+              192,
+              193,
+              194,
+              195,
+              196,
+              197,
+              198,
+              199
+            ]
+          }
+        }
+      },
+      "model_scope": "Independent frozen source literals, initializer zero rules and complete original loop sequences; no captured Xray outputs."
     }
   ],
   "independence": "Expected constants come from the original frozen assertions and mathematical method bodies, never current Xray output.",

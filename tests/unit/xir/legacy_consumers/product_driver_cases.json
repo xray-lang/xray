@@ -15663,6 +15663,1731 @@
         "Original panic channel/message/public E0442 only; no private ordinal or exhaustive-match compiler qualification.",
         "All original complete compiler/native/runtime FI,exact budgets,cancel,lifetime/physical and sanitizer/provider gates remain open."
       ]
+    },
+    {
+      "id": "structured_supported_0011_zero_value_init_observed",
+      "oracle_id": "structured_supported_0011_zero_value_init_observed",
+      "source": "tests/unit/xir/legacy_consumers/fixtures/independent_named_observations/0011_zero_value_init/root.xr",
+      "source_lf_sha256": "f332a646e6cba83d80e90dfda97b77584306795892cc01071b157802d079adc1",
+      "entry": "named_tests",
+      "stdout_utf8": "0\n0.0\nfalse\ntrue\n\n0\n0\n7\n0\n0\nfalse\nyes\nno\n",
+      "stderr_utf8": "",
+      "companions": [],
+      "owners": [
+        "P09",
+        "P10"
+      ],
+      "independent_observations": {
+        "original_case": "tests/regression/02_variables/0011_zero_value_init.xr",
+        "selected_complete_source": "tests/unit/xir/legacy_consumers/fixtures/early_core_ports/0011_zero_value_init/root.xr",
+        "selected_source_lf_sha256": "3d3595cf5fa501aac4eb2236368735e865b513e43b47fafd25ed3a9928e9b21e",
+        "method": "All original target declarations, bodies, calls/assertions and workload bounds remain. Scalar expressions evaluate once at original assertion boundaries; complete repeated observations derive from original loop bounds. Supplemental field/array observations do not grant FI/resource or physical qualification.",
+        "values": [
+          {
+            "test": "test_int_zero_value",
+            "expression": "a",
+            "expected": 0,
+            "projection": null
+          },
+          {
+            "test": "test_float_zero_value",
+            "expression": "b",
+            "expected": 0.0,
+            "projection": null
+          },
+          {
+            "test": "test_bool_zero_value",
+            "expression": "c",
+            "expected": false,
+            "projection": null
+          },
+          {
+            "test": "test_nullable_defaults_to_null",
+            "expression": "e",
+            "expected": null,
+            "projection": "is_null"
+          },
+          {
+            "test": "test_string_requires_initializer",
+            "expression": "d",
+            "expected": "",
+            "projection": null
+          },
+          {
+            "test": "test_struct_zero_value_init",
+            "expression": "p.x",
+            "expected": 0,
+            "projection": null
+          },
+          {
+            "test": "test_struct_zero_value_init",
+            "expression": "p.y",
+            "expected": 0,
+            "projection": null
+          },
+          {
+            "test": "test_struct_zero_value_init",
+            "expression": "p.x",
+            "expected": 7,
+            "projection": null
+          },
+          {
+            "test": "test_struct_zero_value_init",
+            "expression": "box.p.x",
+            "expected": 0,
+            "projection": null
+          },
+          {
+            "test": "test_struct_zero_value_init",
+            "expression": "box.p.y",
+            "expected": 0,
+            "projection": null
+          },
+          {
+            "test": "test_struct_zero_value_init",
+            "expression": "box.ok",
+            "expected": false,
+            "projection": null
+          },
+          {
+            "test": "test_class_field_initialized_in_both_branches",
+            "expression": "yes.name",
+            "expected": "yes",
+            "projection": null
+          },
+          {
+            "test": "test_class_field_initialized_in_both_branches",
+            "expression": "no.name",
+            "expected": "no",
+            "projection": null
+          }
+        ]
+      },
+      "remaining_gates": [
+        "Complete original FI/resources/cancel/borrow/lifetime/physical/safety/provider gates remain open.",
+        "No instruction/representation/specialization/network capability from old labels, assertion banners or scalar output."
+      ]
+    },
+    {
+      "id": "structured_supported_0805_closure_capture_cell_reassign_observed",
+      "oracle_id": "structured_supported_0805_closure_capture_cell_reassign_observed",
+      "source": "tests/unit/xir/legacy_consumers/fixtures/independent_named_observations/0805_closure_capture_cell_reassign/root.xr",
+      "source_lf_sha256": "67101cb4c9379c2a4ec57236181c918944bcb66eef6312d7f489d8ee05a99c41",
+      "entry": "named_tests",
+      "stdout_utf8": "0\n1\n2\n3\n4\n4\n1\n2\n1\n2\n3\n4\n5\n5\n1\n11\n11\n2\n3\n7\n",
+      "stderr_utf8": "",
+      "companions": [],
+      "owners": [
+        "P02",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P14"
+      ],
+      "independent_observations": {
+        "original_case": "tests/regression/08_mem/0805_closure_capture_cell_reassign.xr",
+        "selected_complete_source": "tests/unit/xir/legacy_consumers/fixtures/class_capture_cell_reassign/root.xr",
+        "selected_source_lf_sha256": "9ccbbf9f87a84821563f75892a4451b0e88723a7bfdb11354b143faf8fa79062",
+        "method": "All original target declarations, bodies, calls/assertions and workload bounds remain. Scalar expressions evaluate once at original assertion boundaries; complete repeated observations derive from original loop bounds. Supplemental field/array observations do not grant FI/resource or physical qualification.",
+        "values": [
+          {
+            "test": "test_hoisted_closure_capture_survives_instance_def",
+            "expression": "h.tag",
+            "expected": 0,
+            "projection": null
+          },
+          {
+            "test": "test_multiple_instance_captures_stay_distinct",
+            "expression": "a.tag",
+            "expected": 1,
+            "projection": null
+          },
+          {
+            "test": "test_multiple_instance_captures_stay_distinct",
+            "expression": "b.tag",
+            "expected": 2,
+            "projection": null
+          },
+          {
+            "test": "test_reassign_after_capture_visible_in_closure",
+            "expression": "read()",
+            "expected": 3,
+            "projection": null
+          },
+          {
+            "test": "test_reassign_after_capture_visible_in_closure",
+            "expression": "read()",
+            "expected": 4,
+            "projection": null
+          },
+          {
+            "test": "test_reassign_after_capture_visible_in_closure",
+            "expression": "h.tag",
+            "expected": 4,
+            "projection": null
+          },
+          {
+            "test": "test_closure_write_visible_to_enclosing_frame",
+            "expression": "h.tag",
+            "expected": 1,
+            "projection": null
+          },
+          {
+            "test": "test_closure_write_visible_to_enclosing_frame",
+            "expression": "h.tag",
+            "expected": 2,
+            "projection": null
+          },
+          {
+            "test": "test_repeated_closure_writes_through_cell",
+            "expression": "h.tag at original iteration 1",
+            "expected": 1,
+            "projection": null
+          },
+          {
+            "test": "test_repeated_closure_writes_through_cell",
+            "expression": "h.tag at original iteration 2",
+            "expected": 2,
+            "projection": null
+          },
+          {
+            "test": "test_repeated_closure_writes_through_cell",
+            "expression": "h.tag at original iteration 3",
+            "expected": 3,
+            "projection": null
+          },
+          {
+            "test": "test_repeated_closure_writes_through_cell",
+            "expression": "h.tag at original iteration 4",
+            "expected": 4,
+            "projection": null
+          },
+          {
+            "test": "test_repeated_closure_writes_through_cell",
+            "expression": "h.tag at original iteration 5",
+            "expected": 5,
+            "projection": null
+          },
+          {
+            "test": "test_repeated_closure_writes_through_cell",
+            "expression": "h.tag",
+            "expected": 5,
+            "projection": null
+          },
+          {
+            "test": "test_captured_instance_retained_by_container",
+            "expression": "len(p.children)",
+            "expected": 1,
+            "projection": null
+          },
+          {
+            "test": "test_captured_instance_retained_by_container",
+            "expression": "p.children[0].tag",
+            "expected": 11,
+            "projection": null
+          },
+          {
+            "test": "test_captured_instance_retained_by_container",
+            "expression": "h.tag",
+            "expected": 11,
+            "projection": null
+          },
+          {
+            "test": "test_cell_created_at_capture_register",
+            "expression": "h.tag",
+            "expected": 2,
+            "projection": null
+          },
+          {
+            "test": "test_cell_created_at_capture_register",
+            "expression": "h.tag",
+            "expected": 3,
+            "projection": null
+          },
+          {
+            "test": "test_int_capture_roundtrip",
+            "expression": "n",
+            "expected": 7,
+            "projection": null
+          }
+        ]
+      },
+      "remaining_gates": [
+        "Complete original FI/resources/cancel/borrow/lifetime/physical/safety/provider gates remain open.",
+        "No instruction/representation/specialization/network capability from old labels, assertion banners or scalar output."
+      ]
+    },
+    {
+      "id": "structured_supported_0800_class_basic_observed",
+      "oracle_id": "structured_supported_0800_class_basic_observed",
+      "source": "tests/unit/xir/legacy_consumers/fixtures/independent_named_observations/0800_class_basic/root.xr",
+      "source_lf_sha256": "94d8d2b0ae589b4ef144c3a783e755589569e50e924e28fdf8ef69648d922b1c",
+      "entry": "named_tests",
+      "stdout_utf8": "3\n4\n(5, 10)\n0\n2\n1\n2\n1\nhello world\ndefault\ntrue\nAlice\n30\nBob\n25\n8\n24\n",
+      "stderr_utf8": "",
+      "companions": [],
+      "owners": [
+        "P07",
+        "P09",
+        "P10",
+        "P14"
+      ],
+      "independent_observations": {
+        "original_case": "tests/regression/08_oop/0800_class_basic.xr",
+        "selected_complete_source": "tests/unit/xir/legacy_consumers/fixtures/class_basic_ordinary_methods/root.xr",
+        "selected_source_lf_sha256": "521c9a3bd89cbfe5ca19924a91599b6317540dba16d67c35aedb62a8753a2350",
+        "method": "All original target declarations, bodies, calls/assertions and workload bounds remain. Scalar expressions evaluate once at original assertion boundaries; complete repeated observations derive from original loop bounds. Supplemental field/array observations do not grant FI/resource or physical qualification.",
+        "values": [
+          {
+            "test": "test_class_instantiation",
+            "expression": "p.x",
+            "expected": 3,
+            "projection": null
+          },
+          {
+            "test": "test_class_instantiation",
+            "expression": "p.y",
+            "expected": 4,
+            "projection": null
+          },
+          {
+            "test": "test_class_method",
+            "expression": "p.toString()",
+            "expected": "(5, 10)",
+            "projection": null
+          },
+          {
+            "test": "test_method_modifies_state",
+            "expression": "c.getValue()",
+            "expected": 0,
+            "projection": null
+          },
+          {
+            "test": "test_method_modifies_state",
+            "expression": "c.getValue()",
+            "expected": 2,
+            "projection": null
+          },
+          {
+            "test": "test_method_modifies_state",
+            "expression": "c.getValue()",
+            "expected": 1,
+            "projection": null
+          },
+          {
+            "test": "test_multiple_instances",
+            "expression": "c1.getValue()",
+            "expected": 2,
+            "projection": null
+          },
+          {
+            "test": "test_multiple_instances",
+            "expression": "c2.getValue()",
+            "expected": 1,
+            "projection": null
+          },
+          {
+            "test": "test_method_chaining",
+            "expression": "result",
+            "expected": "hello world",
+            "projection": null
+          },
+          {
+            "test": "test_default_values",
+            "expression": "cfg.name",
+            "expected": "default",
+            "projection": null
+          },
+          {
+            "test": "test_default_values",
+            "expression": "cfg.enabled",
+            "expected": true,
+            "projection": null
+          },
+          {
+            "test": "test_field_read",
+            "expression": "p.name",
+            "expected": "Alice",
+            "projection": null
+          },
+          {
+            "test": "test_field_read",
+            "expression": "p.age",
+            "expected": 30,
+            "projection": null
+          },
+          {
+            "test": "test_field_write",
+            "expression": "p.name",
+            "expected": "Bob",
+            "projection": null
+          },
+          {
+            "test": "test_field_write",
+            "expression": "p.age",
+            "expected": 25,
+            "projection": null
+          },
+          {
+            "test": "test_multi_param_methods",
+            "expression": "calc.add(3, 5)",
+            "expected": 8,
+            "projection": null
+          },
+          {
+            "test": "test_multi_param_methods",
+            "expression": "calc.multiply(2, 3, 4)",
+            "expected": 24,
+            "projection": null
+          }
+        ]
+      },
+      "remaining_gates": [
+        "Complete original FI/resources/cancel/borrow/lifetime/physical/safety/provider gates remain open.",
+        "No instruction/representation/specialization/network capability from old labels, assertion banners or scalar output."
+      ]
+    },
+    {
+      "id": "structured_supported_1434_param_mode_receiver_mutation_boundary_observed",
+      "oracle_id": "structured_supported_1434_param_mode_receiver_mutation_boundary_observed",
+      "source": "tests/unit/xir/legacy_consumers/fixtures/independent_named_observations/1434_param_mode_receiver_mutation_boundary/root.xr",
+      "source_lf_sha256": "951bfccaedf9301e032e72a012ac11dbca6b81fea7de0c233f30dbd513c0ecf2",
+      "entry": "named_tests",
+      "stdout_utf8": "2\n3\n3\n3\n1\n2\n3\n",
+      "stderr_utf8": "",
+      "companions": [],
+      "owners": [
+        "P02",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P11",
+        "P12",
+        "P13",
+        "P14"
+      ],
+      "independent_observations": {
+        "original_case": "tests/regression/13_types/1434_param_mode_receiver_mutation_boundary.xr",
+        "selected_complete_source": "tests/unit/xir/legacy_consumers/fixtures/ordinary_class_mutation_and_array_place/root.xr",
+        "selected_source_lf_sha256": "d8325d16e4aa2f19ccea2d8dea88363cf4a432ed88c76ef750b802e2985c40d3",
+        "method": "All original target declarations, bodies, calls/assertions and workload bounds remain. Scalar expressions evaluate once at original assertion boundaries; complete repeated observations derive from original loop bounds. Supplemental field/array observations do not grant FI/resource or physical qualification.",
+        "values": [
+          {
+            "test": "test_receiver_mutation_does_not_need_ref_marker",
+            "expression": "counter.current()",
+            "expected": 2,
+            "projection": null
+          },
+          {
+            "test": "test_receiver_mutation_does_not_need_ref_marker",
+            "expression": "len(values)",
+            "expected": 3,
+            "projection": null
+          },
+          {
+            "test": "test_receiver_mutation_does_not_need_ref_marker",
+            "expression": "values[2]",
+            "expected": 3,
+            "projection": null
+          },
+          {
+            "test": "test_receiver_mutation_does_not_need_ref_marker",
+            "expression": "complete values sequence",
+            "expected": [
+              1,
+              2,
+              3
+            ],
+            "projection": "array_elements"
+          }
+        ]
+      },
+      "remaining_gates": [
+        "Complete original FI/resources/cancel/borrow/lifetime/physical/safety/provider gates remain open.",
+        "No instruction/representation/specialization/network capability from old labels, assertion banners or scalar output."
+      ]
+    },
+    {
+      "id": "structured_supported_1437_generic_method_param_contract_observed",
+      "oracle_id": "structured_supported_1437_generic_method_param_contract_observed",
+      "source": "tests/unit/xir/legacy_consumers/fixtures/independent_named_observations/1437_generic_method_param_contract/root.xr",
+      "source_lf_sha256": "914420274c981e49d87e1a631bb5f6552928dd02cf52a9e8ba7dda4d42e10835",
+      "entry": "named_tests",
+      "stdout_utf8": "7\n7\n",
+      "stderr_utf8": "",
+      "companions": [],
+      "owners": [
+        "P02",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P11",
+        "P12",
+        "P13",
+        "P14"
+      ],
+      "independent_observations": {
+        "original_case": "tests/regression/13_types/1437_generic_method_param_contract.xr",
+        "selected_complete_source": "tests/unit/xir/legacy_consumers/fixtures/method_owned_equal_constraint/root.xr",
+        "selected_source_lf_sha256": "207dc79c05fbce3b028018ec9b8d3bd0c77249f7ca73a7f115d0ff6d6194a6cf",
+        "method": "All original target declarations, bodies, calls/assertions and workload bounds remain. Scalar expressions evaluate once at original assertion boundaries; complete repeated observations derive from original loop bounds. Supplemental field/array observations do not grant FI/resource or physical qualification.",
+        "values": [
+          {
+            "test": "test_generic_method_keeps_ref_contract",
+            "expression": "value after original ref call",
+            "expected": 7,
+            "projection": null
+          },
+          {
+            "test": "test_generic_method_keeps_ref_contract",
+            "expression": "box.value",
+            "expected": 7,
+            "projection": null
+          }
+        ]
+      },
+      "remaining_gates": [
+        "Complete original FI/resources/cancel/borrow/lifetime/physical/safety/provider gates remain open.",
+        "No instruction/representation/specialization/network capability from old labels, assertion banners or scalar output."
+      ]
+    },
+    {
+      "id": "structured_supported_crash_min_observed",
+      "oracle_id": "structured_supported_crash_min_observed",
+      "source": "tests/unit/xir/legacy_consumers/fixtures/independent_named_observations/crash_min/root.xr",
+      "source_lf_sha256": "61dbad8917907bf60adc257f2bbde4cbd10782a9a0212d4e623db1ce96ef4568",
+      "entry": "named_tests",
+      "stdout_utf8": "0\n1\n2\n3\n4\n5\n6\n7\n8\n9\n10\n11\n12\n13\n14\n15\n16\n17\n18\n19\n20\n21\n22\n23\n24\n25\n26\n27\n28\n29\n30\n31\n32\n33\n34\n35\n36\n37\n38\n39\n40\n41\n42\n43\n44\n45\n46\n47\n48\n49\n50\n51\n52\n53\n54\n55\n56\n57\n58\n59\n60\n61\n62\n63\n64\n65\n66\n67\n68\n69\n70\n71\n72\n73\n74\n75\n76\n77\n78\n79\n80\n81\n82\n83\n84\n85\n86\n87\n88\n89\n90\n91\n92\n93\n94\n95\n96\n97\n98\n99\n100\n101\n102\n103\n104\n105\n106\n107\n108\n109\n110\n111\n112\n113\n114\n115\n116\n117\n118\n119\n120\n121\n122\n123\n124\n125\n126\n127\n128\n129\n130\n131\n132\n133\n134\n135\n136\n137\n138\n139\n140\n141\n142\n143\n144\n145\n146\n147\n148\n149\n150\n151\n152\n153\n154\n155\n156\n157\n158\n159\n160\n161\n162\n163\n164\n165\n166\n167\n168\n169\n170\n171\n172\n173\n174\n175\n176\n177\n178\n179\n180\n181\n182\n183\n184\n185\n186\n187\n188\n189\n190\n191\n192\n193\n194\n195\n196\n197\n198\n199\n",
+      "stderr_utf8": "",
+      "companions": [],
+      "owners": [
+        "P02",
+        "P06",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P12",
+        "P13",
+        "P14",
+        "P17",
+        "P18"
+      ],
+      "independent_observations": {
+        "original_case": "tests/regression/10_stdlib/crash_min.xr",
+        "selected_complete_source": "tests/unit/xir/legacy_consumers/fixtures/network_regression_ports/crash_min/root.xr",
+        "selected_source_lf_sha256": "2a8f72ba4f7ecd6174c96078bc3085366d126973e6f4a4d03792b29c4516ad3b",
+        "method": "All original target declarations, bodies, calls/assertions and workload bounds remain. Scalar expressions evaluate once at original assertion boundaries; complete repeated observations derive from original loop bounds. Supplemental field/array observations do not grant FI/resource or physical qualification.",
+        "values": [
+          {
+            "test": "test_crash_min",
+            "expression": "b.value at original iteration 0",
+            "expected": 0,
+            "projection": null
+          },
+          {
+            "test": "test_crash_min",
+            "expression": "b.value at original iteration 1",
+            "expected": 1,
+            "projection": null
+          },
+          {
+            "test": "test_crash_min",
+            "expression": "b.value at original iteration 2",
+            "expected": 2,
+            "projection": null
+          },
+          {
+            "test": "test_crash_min",
+            "expression": "b.value at original iteration 3",
+            "expected": 3,
+            "projection": null
+          },
+          {
+            "test": "test_crash_min",
+            "expression": "b.value at original iteration 4",
+            "expected": 4,
+            "projection": null
+          },
+          {
+            "test": "test_crash_min",
+            "expression": "b.value at original iteration 5",
+            "expected": 5,
+            "projection": null
+          },
+          {
+            "test": "test_crash_min",
+            "expression": "b.value at original iteration 6",
+            "expected": 6,
+            "projection": null
+          },
+          {
+            "test": "test_crash_min",
+            "expression": "b.value at original iteration 7",
+            "expected": 7,
+            "projection": null
+          },
+          {
+            "test": "test_crash_min",
+            "expression": "b.value at original iteration 8",
+            "expected": 8,
+            "projection": null
+          },
+          {
+            "test": "test_crash_min",
+            "expression": "b.value at original iteration 9",
+            "expected": 9,
+            "projection": null
+          },
+          {
+            "test": "test_crash_min",
+            "expression": "b.value at original iteration 10",
+            "expected": 10,
+            "projection": null
+          },
+          {
+            "test": "test_crash_min",
+            "expression": "b.value at original iteration 11",
+            "expected": 11,
+            "projection": null
+          },
+          {
+            "test": "test_crash_min",
+            "expression": "b.value at original iteration 12",
+            "expected": 12,
+            "projection": null
+          },
+          {
+            "test": "test_crash_min",
+            "expression": "b.value at original iteration 13",
+            "expected": 13,
+            "projection": null
+          },
+          {
+            "test": "test_crash_min",
+            "expression": "b.value at original iteration 14",
+            "expected": 14,
+            "projection": null
+          },
+          {
+            "test": "test_crash_min",
+            "expression": "b.value at original iteration 15",
+            "expected": 15,
+            "projection": null
+          },
+          {
+            "test": "test_crash_min",
+            "expression": "b.value at original iteration 16",
+            "expected": 16,
+            "projection": null
+          },
+          {
+            "test": "test_crash_min",
+            "expression": "b.value at original iteration 17",
+            "expected": 17,
+            "projection": null
+          },
+          {
+            "test": "test_crash_min",
+            "expression": "b.value at original iteration 18",
+            "expected": 18,
+            "projection": null
+          },
+          {
+            "test": "test_crash_min",
+            "expression": "b.value at original iteration 19",
+            "expected": 19,
+            "projection": null
+          },
+          {
+            "test": "test_crash_min",
+            "expression": "b.value at original iteration 20",
+            "expected": 20,
+            "projection": null
+          },
+          {
+            "test": "test_crash_min",
+            "expression": "b.value at original iteration 21",
+            "expected": 21,
+            "projection": null
+          },
+          {
+            "test": "test_crash_min",
+            "expression": "b.value at original iteration 22",
+            "expected": 22,
+            "projection": null
+          },
+          {
+            "test": "test_crash_min",
+            "expression": "b.value at original iteration 23",
+            "expected": 23,
+            "projection": null
+          },
+          {
+            "test": "test_crash_min",
+            "expression": "b.value at original iteration 24",
+            "expected": 24,
+            "projection": null
+          },
+          {
+            "test": "test_crash_min",
+            "expression": "b.value at original iteration 25",
+            "expected": 25,
+            "projection": null
+          },
+          {
+            "test": "test_crash_min",
+            "expression": "b.value at original iteration 26",
+            "expected": 26,
+            "projection": null
+          },
+          {
+            "test": "test_crash_min",
+            "expression": "b.value at original iteration 27",
+            "expected": 27,
+            "projection": null
+          },
+          {
+            "test": "test_crash_min",
+            "expression": "b.value at original iteration 28",
+            "expected": 28,
+            "projection": null
+          },
+          {
+            "test": "test_crash_min",
+            "expression": "b.value at original iteration 29",
+            "expected": 29,
+            "projection": null
+          },
+          {
+            "test": "test_crash_min",
+            "expression": "b.value at original iteration 30",
+            "expected": 30,
+            "projection": null
+          },
+          {
+            "test": "test_crash_min",
+            "expression": "b.value at original iteration 31",
+            "expected": 31,
+            "projection": null
+          },
+          {
+            "test": "test_crash_min",
+            "expression": "b.value at original iteration 32",
+            "expected": 32,
+            "projection": null
+          },
+          {
+            "test": "test_crash_min",
+            "expression": "b.value at original iteration 33",
+            "expected": 33,
+            "projection": null
+          },
+          {
+            "test": "test_crash_min",
+            "expression": "b.value at original iteration 34",
+            "expected": 34,
+            "projection": null
+          },
+          {
+            "test": "test_crash_min",
+            "expression": "b.value at original iteration 35",
+            "expected": 35,
+            "projection": null
+          },
+          {
+            "test": "test_crash_min",
+            "expression": "b.value at original iteration 36",
+            "expected": 36,
+            "projection": null
+          },
+          {
+            "test": "test_crash_min",
+            "expression": "b.value at original iteration 37",
+            "expected": 37,
+            "projection": null
+          },
+          {
+            "test": "test_crash_min",
+            "expression": "b.value at original iteration 38",
+            "expected": 38,
+            "projection": null
+          },
+          {
+            "test": "test_crash_min",
+            "expression": "b.value at original iteration 39",
+            "expected": 39,
+            "projection": null
+          },
+          {
+            "test": "test_crash_min",
+            "expression": "b.value at original iteration 40",
+            "expected": 40,
+            "projection": null
+          },
+          {
+            "test": "test_crash_min",
+            "expression": "b.value at original iteration 41",
+            "expected": 41,
+            "projection": null
+          },
+          {
+            "test": "test_crash_min",
+            "expression": "b.value at original iteration 42",
+            "expected": 42,
+            "projection": null
+          },
+          {
+            "test": "test_crash_min",
+            "expression": "b.value at original iteration 43",
+            "expected": 43,
+            "projection": null
+          },
+          {
+            "test": "test_crash_min",
+            "expression": "b.value at original iteration 44",
+            "expected": 44,
+            "projection": null
+          },
+          {
+            "test": "test_crash_min",
+            "expression": "b.value at original iteration 45",
+            "expected": 45,
+            "projection": null
+          },
+          {
+            "test": "test_crash_min",
+            "expression": "b.value at original iteration 46",
+            "expected": 46,
+            "projection": null
+          },
+          {
+            "test": "test_crash_min",
+            "expression": "b.value at original iteration 47",
+            "expected": 47,
+            "projection": null
+          },
+          {
+            "test": "test_crash_min",
+            "expression": "b.value at original iteration 48",
+            "expected": 48,
+            "projection": null
+          },
+          {
+            "test": "test_crash_min",
+            "expression": "b.value at original iteration 49",
+            "expected": 49,
+            "projection": null
+          },
+          {
+            "test": "test_crash_min",
+            "expression": "b.value at original iteration 50",
+            "expected": 50,
+            "projection": null
+          },
+          {
+            "test": "test_crash_min",
+            "expression": "b.value at original iteration 51",
+            "expected": 51,
+            "projection": null
+          },
+          {
+            "test": "test_crash_min",
+            "expression": "b.value at original iteration 52",
+            "expected": 52,
+            "projection": null
+          },
+          {
+            "test": "test_crash_min",
+            "expression": "b.value at original iteration 53",
+            "expected": 53,
+            "projection": null
+          },
+          {
+            "test": "test_crash_min",
+            "expression": "b.value at original iteration 54",
+            "expected": 54,
+            "projection": null
+          },
+          {
+            "test": "test_crash_min",
+            "expression": "b.value at original iteration 55",
+            "expected": 55,
+            "projection": null
+          },
+          {
+            "test": "test_crash_min",
+            "expression": "b.value at original iteration 56",
+            "expected": 56,
+            "projection": null
+          },
+          {
+            "test": "test_crash_min",
+            "expression": "b.value at original iteration 57",
+            "expected": 57,
+            "projection": null
+          },
+          {
+            "test": "test_crash_min",
+            "expression": "b.value at original iteration 58",
+            "expected": 58,
+            "projection": null
+          },
+          {
+            "test": "test_crash_min",
+            "expression": "b.value at original iteration 59",
+            "expected": 59,
+            "projection": null
+          },
+          {
+            "test": "test_crash_min",
+            "expression": "b.value at original iteration 60",
+            "expected": 60,
+            "projection": null
+          },
+          {
+            "test": "test_crash_min",
+            "expression": "b.value at original iteration 61",
+            "expected": 61,
+            "projection": null
+          },
+          {
+            "test": "test_crash_min",
+            "expression": "b.value at original iteration 62",
+            "expected": 62,
+            "projection": null
+          },
+          {
+            "test": "test_crash_min",
+            "expression": "b.value at original iteration 63",
+            "expected": 63,
+            "projection": null
+          },
+          {
+            "test": "test_crash_min",
+            "expression": "b.value at original iteration 64",
+            "expected": 64,
+            "projection": null
+          },
+          {
+            "test": "test_crash_min",
+            "expression": "b.value at original iteration 65",
+            "expected": 65,
+            "projection": null
+          },
+          {
+            "test": "test_crash_min",
+            "expression": "b.value at original iteration 66",
+            "expected": 66,
+            "projection": null
+          },
+          {
+            "test": "test_crash_min",
+            "expression": "b.value at original iteration 67",
+            "expected": 67,
+            "projection": null
+          },
+          {
+            "test": "test_crash_min",
+            "expression": "b.value at original iteration 68",
+            "expected": 68,
+            "projection": null
+          },
+          {
+            "test": "test_crash_min",
+            "expression": "b.value at original iteration 69",
+            "expected": 69,
+            "projection": null
+          },
+          {
+            "test": "test_crash_min",
+            "expression": "b.value at original iteration 70",
+            "expected": 70,
+            "projection": null
+          },
+          {
+            "test": "test_crash_min",
+            "expression": "b.value at original iteration 71",
+            "expected": 71,
+            "projection": null
+          },
+          {
+            "test": "test_crash_min",
+            "expression": "b.value at original iteration 72",
+            "expected": 72,
+            "projection": null
+          },
+          {
+            "test": "test_crash_min",
+            "expression": "b.value at original iteration 73",
+            "expected": 73,
+            "projection": null
+          },
+          {
+            "test": "test_crash_min",
+            "expression": "b.value at original iteration 74",
+            "expected": 74,
+            "projection": null
+          },
+          {
+            "test": "test_crash_min",
+            "expression": "b.value at original iteration 75",
+            "expected": 75,
+            "projection": null
+          },
+          {
+            "test": "test_crash_min",
+            "expression": "b.value at original iteration 76",
+            "expected": 76,
+            "projection": null
+          },
+          {
+            "test": "test_crash_min",
+            "expression": "b.value at original iteration 77",
+            "expected": 77,
+            "projection": null
+          },
+          {
+            "test": "test_crash_min",
+            "expression": "b.value at original iteration 78",
+            "expected": 78,
+            "projection": null
+          },
+          {
+            "test": "test_crash_min",
+            "expression": "b.value at original iteration 79",
+            "expected": 79,
+            "projection": null
+          },
+          {
+            "test": "test_crash_min",
+            "expression": "b.value at original iteration 80",
+            "expected": 80,
+            "projection": null
+          },
+          {
+            "test": "test_crash_min",
+            "expression": "b.value at original iteration 81",
+            "expected": 81,
+            "projection": null
+          },
+          {
+            "test": "test_crash_min",
+            "expression": "b.value at original iteration 82",
+            "expected": 82,
+            "projection": null
+          },
+          {
+            "test": "test_crash_min",
+            "expression": "b.value at original iteration 83",
+            "expected": 83,
+            "projection": null
+          },
+          {
+            "test": "test_crash_min",
+            "expression": "b.value at original iteration 84",
+            "expected": 84,
+            "projection": null
+          },
+          {
+            "test": "test_crash_min",
+            "expression": "b.value at original iteration 85",
+            "expected": 85,
+            "projection": null
+          },
+          {
+            "test": "test_crash_min",
+            "expression": "b.value at original iteration 86",
+            "expected": 86,
+            "projection": null
+          },
+          {
+            "test": "test_crash_min",
+            "expression": "b.value at original iteration 87",
+            "expected": 87,
+            "projection": null
+          },
+          {
+            "test": "test_crash_min",
+            "expression": "b.value at original iteration 88",
+            "expected": 88,
+            "projection": null
+          },
+          {
+            "test": "test_crash_min",
+            "expression": "b.value at original iteration 89",
+            "expected": 89,
+            "projection": null
+          },
+          {
+            "test": "test_crash_min",
+            "expression": "b.value at original iteration 90",
+            "expected": 90,
+            "projection": null
+          },
+          {
+            "test": "test_crash_min",
+            "expression": "b.value at original iteration 91",
+            "expected": 91,
+            "projection": null
+          },
+          {
+            "test": "test_crash_min",
+            "expression": "b.value at original iteration 92",
+            "expected": 92,
+            "projection": null
+          },
+          {
+            "test": "test_crash_min",
+            "expression": "b.value at original iteration 93",
+            "expected": 93,
+            "projection": null
+          },
+          {
+            "test": "test_crash_min",
+            "expression": "b.value at original iteration 94",
+            "expected": 94,
+            "projection": null
+          },
+          {
+            "test": "test_crash_min",
+            "expression": "b.value at original iteration 95",
+            "expected": 95,
+            "projection": null
+          },
+          {
+            "test": "test_crash_min",
+            "expression": "b.value at original iteration 96",
+            "expected": 96,
+            "projection": null
+          },
+          {
+            "test": "test_crash_min",
+            "expression": "b.value at original iteration 97",
+            "expected": 97,
+            "projection": null
+          },
+          {
+            "test": "test_crash_min",
+            "expression": "b.value at original iteration 98",
+            "expected": 98,
+            "projection": null
+          },
+          {
+            "test": "test_crash_min",
+            "expression": "b.value at original iteration 99",
+            "expected": 99,
+            "projection": null
+          },
+          {
+            "test": "test_crash_min",
+            "expression": "b.value at original iteration 100",
+            "expected": 100,
+            "projection": null
+          },
+          {
+            "test": "test_crash_min",
+            "expression": "b.value at original iteration 101",
+            "expected": 101,
+            "projection": null
+          },
+          {
+            "test": "test_crash_min",
+            "expression": "b.value at original iteration 102",
+            "expected": 102,
+            "projection": null
+          },
+          {
+            "test": "test_crash_min",
+            "expression": "b.value at original iteration 103",
+            "expected": 103,
+            "projection": null
+          },
+          {
+            "test": "test_crash_min",
+            "expression": "b.value at original iteration 104",
+            "expected": 104,
+            "projection": null
+          },
+          {
+            "test": "test_crash_min",
+            "expression": "b.value at original iteration 105",
+            "expected": 105,
+            "projection": null
+          },
+          {
+            "test": "test_crash_min",
+            "expression": "b.value at original iteration 106",
+            "expected": 106,
+            "projection": null
+          },
+          {
+            "test": "test_crash_min",
+            "expression": "b.value at original iteration 107",
+            "expected": 107,
+            "projection": null
+          },
+          {
+            "test": "test_crash_min",
+            "expression": "b.value at original iteration 108",
+            "expected": 108,
+            "projection": null
+          },
+          {
+            "test": "test_crash_min",
+            "expression": "b.value at original iteration 109",
+            "expected": 109,
+            "projection": null
+          },
+          {
+            "test": "test_crash_min",
+            "expression": "b.value at original iteration 110",
+            "expected": 110,
+            "projection": null
+          },
+          {
+            "test": "test_crash_min",
+            "expression": "b.value at original iteration 111",
+            "expected": 111,
+            "projection": null
+          },
+          {
+            "test": "test_crash_min",
+            "expression": "b.value at original iteration 112",
+            "expected": 112,
+            "projection": null
+          },
+          {
+            "test": "test_crash_min",
+            "expression": "b.value at original iteration 113",
+            "expected": 113,
+            "projection": null
+          },
+          {
+            "test": "test_crash_min",
+            "expression": "b.value at original iteration 114",
+            "expected": 114,
+            "projection": null
+          },
+          {
+            "test": "test_crash_min",
+            "expression": "b.value at original iteration 115",
+            "expected": 115,
+            "projection": null
+          },
+          {
+            "test": "test_crash_min",
+            "expression": "b.value at original iteration 116",
+            "expected": 116,
+            "projection": null
+          },
+          {
+            "test": "test_crash_min",
+            "expression": "b.value at original iteration 117",
+            "expected": 117,
+            "projection": null
+          },
+          {
+            "test": "test_crash_min",
+            "expression": "b.value at original iteration 118",
+            "expected": 118,
+            "projection": null
+          },
+          {
+            "test": "test_crash_min",
+            "expression": "b.value at original iteration 119",
+            "expected": 119,
+            "projection": null
+          },
+          {
+            "test": "test_crash_min",
+            "expression": "b.value at original iteration 120",
+            "expected": 120,
+            "projection": null
+          },
+          {
+            "test": "test_crash_min",
+            "expression": "b.value at original iteration 121",
+            "expected": 121,
+            "projection": null
+          },
+          {
+            "test": "test_crash_min",
+            "expression": "b.value at original iteration 122",
+            "expected": 122,
+            "projection": null
+          },
+          {
+            "test": "test_crash_min",
+            "expression": "b.value at original iteration 123",
+            "expected": 123,
+            "projection": null
+          },
+          {
+            "test": "test_crash_min",
+            "expression": "b.value at original iteration 124",
+            "expected": 124,
+            "projection": null
+          },
+          {
+            "test": "test_crash_min",
+            "expression": "b.value at original iteration 125",
+            "expected": 125,
+            "projection": null
+          },
+          {
+            "test": "test_crash_min",
+            "expression": "b.value at original iteration 126",
+            "expected": 126,
+            "projection": null
+          },
+          {
+            "test": "test_crash_min",
+            "expression": "b.value at original iteration 127",
+            "expected": 127,
+            "projection": null
+          },
+          {
+            "test": "test_crash_min",
+            "expression": "b.value at original iteration 128",
+            "expected": 128,
+            "projection": null
+          },
+          {
+            "test": "test_crash_min",
+            "expression": "b.value at original iteration 129",
+            "expected": 129,
+            "projection": null
+          },
+          {
+            "test": "test_crash_min",
+            "expression": "b.value at original iteration 130",
+            "expected": 130,
+            "projection": null
+          },
+          {
+            "test": "test_crash_min",
+            "expression": "b.value at original iteration 131",
+            "expected": 131,
+            "projection": null
+          },
+          {
+            "test": "test_crash_min",
+            "expression": "b.value at original iteration 132",
+            "expected": 132,
+            "projection": null
+          },
+          {
+            "test": "test_crash_min",
+            "expression": "b.value at original iteration 133",
+            "expected": 133,
+            "projection": null
+          },
+          {
+            "test": "test_crash_min",
+            "expression": "b.value at original iteration 134",
+            "expected": 134,
+            "projection": null
+          },
+          {
+            "test": "test_crash_min",
+            "expression": "b.value at original iteration 135",
+            "expected": 135,
+            "projection": null
+          },
+          {
+            "test": "test_crash_min",
+            "expression": "b.value at original iteration 136",
+            "expected": 136,
+            "projection": null
+          },
+          {
+            "test": "test_crash_min",
+            "expression": "b.value at original iteration 137",
+            "expected": 137,
+            "projection": null
+          },
+          {
+            "test": "test_crash_min",
+            "expression": "b.value at original iteration 138",
+            "expected": 138,
+            "projection": null
+          },
+          {
+            "test": "test_crash_min",
+            "expression": "b.value at original iteration 139",
+            "expected": 139,
+            "projection": null
+          },
+          {
+            "test": "test_crash_min",
+            "expression": "b.value at original iteration 140",
+            "expected": 140,
+            "projection": null
+          },
+          {
+            "test": "test_crash_min",
+            "expression": "b.value at original iteration 141",
+            "expected": 141,
+            "projection": null
+          },
+          {
+            "test": "test_crash_min",
+            "expression": "b.value at original iteration 142",
+            "expected": 142,
+            "projection": null
+          },
+          {
+            "test": "test_crash_min",
+            "expression": "b.value at original iteration 143",
+            "expected": 143,
+            "projection": null
+          },
+          {
+            "test": "test_crash_min",
+            "expression": "b.value at original iteration 144",
+            "expected": 144,
+            "projection": null
+          },
+          {
+            "test": "test_crash_min",
+            "expression": "b.value at original iteration 145",
+            "expected": 145,
+            "projection": null
+          },
+          {
+            "test": "test_crash_min",
+            "expression": "b.value at original iteration 146",
+            "expected": 146,
+            "projection": null
+          },
+          {
+            "test": "test_crash_min",
+            "expression": "b.value at original iteration 147",
+            "expected": 147,
+            "projection": null
+          },
+          {
+            "test": "test_crash_min",
+            "expression": "b.value at original iteration 148",
+            "expected": 148,
+            "projection": null
+          },
+          {
+            "test": "test_crash_min",
+            "expression": "b.value at original iteration 149",
+            "expected": 149,
+            "projection": null
+          },
+          {
+            "test": "test_crash_min",
+            "expression": "b.value at original iteration 150",
+            "expected": 150,
+            "projection": null
+          },
+          {
+            "test": "test_crash_min",
+            "expression": "b.value at original iteration 151",
+            "expected": 151,
+            "projection": null
+          },
+          {
+            "test": "test_crash_min",
+            "expression": "b.value at original iteration 152",
+            "expected": 152,
+            "projection": null
+          },
+          {
+            "test": "test_crash_min",
+            "expression": "b.value at original iteration 153",
+            "expected": 153,
+            "projection": null
+          },
+          {
+            "test": "test_crash_min",
+            "expression": "b.value at original iteration 154",
+            "expected": 154,
+            "projection": null
+          },
+          {
+            "test": "test_crash_min",
+            "expression": "b.value at original iteration 155",
+            "expected": 155,
+            "projection": null
+          },
+          {
+            "test": "test_crash_min",
+            "expression": "b.value at original iteration 156",
+            "expected": 156,
+            "projection": null
+          },
+          {
+            "test": "test_crash_min",
+            "expression": "b.value at original iteration 157",
+            "expected": 157,
+            "projection": null
+          },
+          {
+            "test": "test_crash_min",
+            "expression": "b.value at original iteration 158",
+            "expected": 158,
+            "projection": null
+          },
+          {
+            "test": "test_crash_min",
+            "expression": "b.value at original iteration 159",
+            "expected": 159,
+            "projection": null
+          },
+          {
+            "test": "test_crash_min",
+            "expression": "b.value at original iteration 160",
+            "expected": 160,
+            "projection": null
+          },
+          {
+            "test": "test_crash_min",
+            "expression": "b.value at original iteration 161",
+            "expected": 161,
+            "projection": null
+          },
+          {
+            "test": "test_crash_min",
+            "expression": "b.value at original iteration 162",
+            "expected": 162,
+            "projection": null
+          },
+          {
+            "test": "test_crash_min",
+            "expression": "b.value at original iteration 163",
+            "expected": 163,
+            "projection": null
+          },
+          {
+            "test": "test_crash_min",
+            "expression": "b.value at original iteration 164",
+            "expected": 164,
+            "projection": null
+          },
+          {
+            "test": "test_crash_min",
+            "expression": "b.value at original iteration 165",
+            "expected": 165,
+            "projection": null
+          },
+          {
+            "test": "test_crash_min",
+            "expression": "b.value at original iteration 166",
+            "expected": 166,
+            "projection": null
+          },
+          {
+            "test": "test_crash_min",
+            "expression": "b.value at original iteration 167",
+            "expected": 167,
+            "projection": null
+          },
+          {
+            "test": "test_crash_min",
+            "expression": "b.value at original iteration 168",
+            "expected": 168,
+            "projection": null
+          },
+          {
+            "test": "test_crash_min",
+            "expression": "b.value at original iteration 169",
+            "expected": 169,
+            "projection": null
+          },
+          {
+            "test": "test_crash_min",
+            "expression": "b.value at original iteration 170",
+            "expected": 170,
+            "projection": null
+          },
+          {
+            "test": "test_crash_min",
+            "expression": "b.value at original iteration 171",
+            "expected": 171,
+            "projection": null
+          },
+          {
+            "test": "test_crash_min",
+            "expression": "b.value at original iteration 172",
+            "expected": 172,
+            "projection": null
+          },
+          {
+            "test": "test_crash_min",
+            "expression": "b.value at original iteration 173",
+            "expected": 173,
+            "projection": null
+          },
+          {
+            "test": "test_crash_min",
+            "expression": "b.value at original iteration 174",
+            "expected": 174,
+            "projection": null
+          },
+          {
+            "test": "test_crash_min",
+            "expression": "b.value at original iteration 175",
+            "expected": 175,
+            "projection": null
+          },
+          {
+            "test": "test_crash_min",
+            "expression": "b.value at original iteration 176",
+            "expected": 176,
+            "projection": null
+          },
+          {
+            "test": "test_crash_min",
+            "expression": "b.value at original iteration 177",
+            "expected": 177,
+            "projection": null
+          },
+          {
+            "test": "test_crash_min",
+            "expression": "b.value at original iteration 178",
+            "expected": 178,
+            "projection": null
+          },
+          {
+            "test": "test_crash_min",
+            "expression": "b.value at original iteration 179",
+            "expected": 179,
+            "projection": null
+          },
+          {
+            "test": "test_crash_min",
+            "expression": "b.value at original iteration 180",
+            "expected": 180,
+            "projection": null
+          },
+          {
+            "test": "test_crash_min",
+            "expression": "b.value at original iteration 181",
+            "expected": 181,
+            "projection": null
+          },
+          {
+            "test": "test_crash_min",
+            "expression": "b.value at original iteration 182",
+            "expected": 182,
+            "projection": null
+          },
+          {
+            "test": "test_crash_min",
+            "expression": "b.value at original iteration 183",
+            "expected": 183,
+            "projection": null
+          },
+          {
+            "test": "test_crash_min",
+            "expression": "b.value at original iteration 184",
+            "expected": 184,
+            "projection": null
+          },
+          {
+            "test": "test_crash_min",
+            "expression": "b.value at original iteration 185",
+            "expected": 185,
+            "projection": null
+          },
+          {
+            "test": "test_crash_min",
+            "expression": "b.value at original iteration 186",
+            "expected": 186,
+            "projection": null
+          },
+          {
+            "test": "test_crash_min",
+            "expression": "b.value at original iteration 187",
+            "expected": 187,
+            "projection": null
+          },
+          {
+            "test": "test_crash_min",
+            "expression": "b.value at original iteration 188",
+            "expected": 188,
+            "projection": null
+          },
+          {
+            "test": "test_crash_min",
+            "expression": "b.value at original iteration 189",
+            "expected": 189,
+            "projection": null
+          },
+          {
+            "test": "test_crash_min",
+            "expression": "b.value at original iteration 190",
+            "expected": 190,
+            "projection": null
+          },
+          {
+            "test": "test_crash_min",
+            "expression": "b.value at original iteration 191",
+            "expected": 191,
+            "projection": null
+          },
+          {
+            "test": "test_crash_min",
+            "expression": "b.value at original iteration 192",
+            "expected": 192,
+            "projection": null
+          },
+          {
+            "test": "test_crash_min",
+            "expression": "b.value at original iteration 193",
+            "expected": 193,
+            "projection": null
+          },
+          {
+            "test": "test_crash_min",
+            "expression": "b.value at original iteration 194",
+            "expected": 194,
+            "projection": null
+          },
+          {
+            "test": "test_crash_min",
+            "expression": "b.value at original iteration 195",
+            "expected": 195,
+            "projection": null
+          },
+          {
+            "test": "test_crash_min",
+            "expression": "b.value at original iteration 196",
+            "expected": 196,
+            "projection": null
+          },
+          {
+            "test": "test_crash_min",
+            "expression": "b.value at original iteration 197",
+            "expected": 197,
+            "projection": null
+          },
+          {
+            "test": "test_crash_min",
+            "expression": "b.value at original iteration 198",
+            "expected": 198,
+            "projection": null
+          },
+          {
+            "test": "test_crash_min",
+            "expression": "b.value at original iteration 199",
+            "expected": 199,
+            "projection": null
+          }
+        ]
+      },
+      "remaining_gates": [
+        "Complete original FI/resources/cancel/borrow/lifetime/physical/safety/provider gates remain open.",
+        "No instruction/representation/specialization/network capability from old labels, assertion banners or scalar output."
+      ]
     }
   ]
 }
