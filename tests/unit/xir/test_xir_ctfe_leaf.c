@@ -130,8 +130,16 @@ static void ctfe_semantics(void) {
     division[0].payload = INT64_MIN; division[1].payload = -1;
     ctfe_expect(&fixture, ctfe_request(&fixture, "quotient", division, 2), XR_XIR_CTFE_OK, XR_XIR_I64, INT64_MIN);
     ctfe_expect(&fixture, ctfe_request(&fixture, "mutable", NULL, 0), XR_XIR_CTFE_OK, XR_XIR_I64, 2);
-    const char *rejected[] = {"caller", "owned", "io"};
-    for (uint32_t r = 0; r < 3; ++r) ctfe_expect(&fixture, ctfe_request(&fixture, rejected[r], NULL,
+    {
+        XrXirCtfeRequest owned=ctfe_request(&fixture,"owned",NULL,0);XrXirValue value={0};
+        XrCompileResourceStats baseline=ctfe_stats(&fixture);
+        CHECK(xr_xir_compile_ctfe_leaf(&owned,&value)==XR_XIR_CTFE_OK);
+        const char *bytes=NULL;size_t length=0;
+        CHECK(xr_xir_string_view(&value,&bytes,&length) && length==7 && !memcmp(bytes,"managed",7));
+        xr_xir_value_drop(&value);CHECK(ctfe_stats(&fixture).live_bytes==baseline.live_bytes);
+    }
+    const char *rejected[] = {"caller", "io"};
+    for (uint32_t r = 0; r < 2; ++r) ctfe_expect(&fixture, ctfe_request(&fixture, rejected[r], NULL,
         0), XR_XIR_CTFE_NOT_LEAF, XR_XIR_UNIT, 0);
     XrXirCtfeRequest request = ctfe_request(&fixture, "answer", NULL, 0);
     XrXirValue occupied = {XR_XIR_I64,77,99}, original = occupied;

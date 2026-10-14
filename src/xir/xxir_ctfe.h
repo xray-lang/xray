@@ -39,8 +39,8 @@ typedef struct XrXirCtfeRequest {
 } XrXirCtfeRequest;
 
 /* Borrowed input owners must remain live for this synchronous call. The selected
- * ordinary function must have bool/integer/Rune inputs, scalar or Unit results and
- * frame-owned scalar locals and private Cell<Unit/bool/integer/Rune> storage
+ * ordinary function must have bool/integer/Rune/String inputs, scalar or Unit results and
+ * frame-owned scalar locals and private Cell<Unit/bool/integer/Rune/String> storage
  * in a bounded admitted opcode graph. Local
  * writes produce Unit without a result slot. Every call repeats full artifact
  * verification on its original compiler ledger; root/effect flags never grant
@@ -57,7 +57,8 @@ XR_FUNC XrXirCtfeStatus xr_xir_compile_ctfe_leaf(const XrXirCtfeRequest *request
  * on a callee or refunded on return. Admission includes unused reachable body
  * operations and does not derive determinism from any ROOT/effect flags.
  * Borrowed inputs stay live during this synchronous call. All failures preserve
- * canonical Unit output. Owned exports and non-private managed values are separate
+ * canonical Unit output. String exports own their compiler storage and measure
+ * UTF-8 bytes; other owned exports and non-private managed values are separate
  * boundaries; this entry never invokes Instance, native code or a fallback. */
 typedef struct XrXirCtfeCallRequest {
     XrXirCtfeRequest evaluation;

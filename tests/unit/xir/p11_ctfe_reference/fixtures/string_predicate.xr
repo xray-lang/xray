@@ -1,0 +1,2 @@
+fn answer()->bool { return ("ab"+"cd")=="abcd" }
+export fn run()->bool { return comptime answer() }

@@ -1,0 +1,2 @@
+fn answer()->string { var s="ab"; s=s+"cd"; return s }
+export fn run()->string { return comptime answer() }

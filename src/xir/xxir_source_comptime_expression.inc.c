@@ -40,7 +40,7 @@ static void source_comptime_restore(SourceContext *ctx,const SourceComptimeScope
     ctx->returned=scope->returned;
 }
 static bool source_comptime_result_type(XrXirType type) {
-    return type==XR_XIR_UNIT || type==XR_XIR_BOOL || type==XR_XIR_RUNE || xr_xir_type_is_integer(type);
+    return type==XR_XIR_UNIT || type==XR_XIR_BOOL || type==XR_XIR_RUNE || type==XR_XIR_STRING || xr_xir_type_is_integer(type);
 }
 static bool source_comptime_result_value(const XrXirValue *value) {
     return value && (value->type==XR_XIR_UNIT ? (!value->reserved && !value->payload) :
@@ -66,7 +66,7 @@ static bool source_comptime_body(SourceContext *ctx,AstNode *child,SourceExpecte
     if (expected.present && !source_comptime_result_type(expected.type)) expected=(SourceExpectedType){0};
     if (!unit_block && !source_plan_expression(ctx,child,expected,&value)) return false;
     if (!source_comptime_result_type(value.type))
-        return source_fail(ctx,child,XR_XIR_BAD_TYPE,"comptime result must be a bool, integer, Rune or Unit in this execution domain");
+        return source_fail(ctx,child,XR_XIR_BAD_TYPE,"comptime result must be a bool, integer, Rune, string or Unit in this execution domain");
     if (!source_work_units(ctx,child,sizeof(value.type)+sizeof(ctx->returned))) return false;
     ctx->functions[ctx->function].result=value.type;
     if (!source_recipe_record(ctx,(XrXirInstruction){XR_XIR_RETURN,XR_XIR_UNIT,{value.type==XR_XIR_UNIT?0:value.id,0},{0},0,{0}},NULL)) return false;
@@ -113,7 +113,7 @@ static bool source_comptime_expression(SourceContext *ctx,AstNode *node,SourceEx
             return source_fail(ctx,node,XR_XIR_BAD_STRUCTURE,"comptime occurrence was lowered twice");
     }
     SourceComptimeSite *site=source_alloc(ctx,1,sizeof(*site));
-    if (!site || !source_work_units(ctx,node,sizeof(*site)+sizeof(ctx->comptime_sites)+sizeof(ctx->comptime_count))) return false;
+    if (!site || !source_work_units(ctx,node,sizeof(*site)+sizeof(ctx->comptime_sites)+sizeof(ctx->comptime_count)+2)) return false;
     *site=(SourceComptimeSite){ctx->comptime_sites,node,module,owner,declaration,helper,expected,{0}};
     ctx->comptime_sites=site;++ctx->comptime_count;
     if (!ctx->comptime_input)
@@ -132,8 +132,21 @@ static bool source_comptime_expression(SourceContext *ctx,AstNode *node,SourceEx
         !source_comptime_result_value(&matched->value))
         return source_fail(ctx,node,XR_XIR_BAD_STRUCTURE,"comptime occurrence or canonical result changed");
     if (!source_work_units(ctx,node,sizeof(site->value)+sizeof(ctx->comptime_matched))) return false;
-    site->value=matched->value;++ctx->comptime_matched;
+    if (matched->value.type==XR_XIR_STRING) {
+        XrXirValueStatus copied=xr_xir_value_copy(&matched->value,&site->value);
+        if (copied!=XR_XIR_VALUE_OK) return source_fail(ctx,node,
+            copied==XR_XIR_VALUE_LIMIT || copied==XR_XIR_VALUE_REFCOUNT_LIMIT?XR_XIR_BUDGET:XR_XIR_BAD_STRUCTURE,
+            "comptime result receiving failed");
+    } else site->value=matched->value;
+    ++ctx->comptime_matched;
     if (site->value.type==XR_XIR_UNIT) { *value=(SourceValue){0,XR_XIR_UNIT};return true; }
+    if (site->value.type==XR_XIR_STRING) {
+        const char *bytes=NULL;size_t length=0;
+        if (!xr_xir_string_view(&site->value,&bytes,&length)) return source_fail(ctx,node,XR_XIR_BAD_STRUCTURE,"comptime string is invalid");
+        char *owned=length?source_alloc(ctx,length,1):NULL;
+        if ((length && !owned) || !source_copy_bytes(ctx,node,owned,bytes,length)) return false;
+        return source_string_literal(ctx,node,owned,length,value);
+    }
     XrXirOp op=site->value.type==XR_XIR_BOOL?XR_XIR_CONST_BOOL:
         site->value.type==XR_XIR_RUNE?XR_XIR_CONST_RUNE:XR_XIR_CONST_INT;
     return source_recipe_record(ctx,(XrXirInstruction){op,(XrXirType)site->value.type,{0},{0},site->value.payload,{0}},value);

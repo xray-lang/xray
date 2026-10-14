@@ -41,6 +41,10 @@ static const char source_comptime_rune_text[]=
 static const char source_comptime_cell_text[]=
     "fn answer()->i64 { var i=0; var total=0; while (i<6) { total=total+7; i=i+1 }; return total }\n"
     "export fn run()->i64 { comptime { var u:()=(); u=() }; return comptime answer() }\n";
+static const char source_comptime_string_text[]=
+    "fn join(a:string,b:string)->string { return a+b }\n"
+    "fn answer()->i64 { return join(\"ab\",\"cd\")==\"abcd\" ? 42 : 0 }\n"
+    "export fn run()->i64 { comptime join(\"ab\",\"cd\"); return comptime answer() }\n";
 static const char *source_comptime_resource_text=source_comptime_test_text;
 static XrXirStatus source_comptime_test_resource_status(XrCompileResourceStatus status) {
     return status==XR_COMPILE_RESOURCE_OK?XR_XIR_OK:status==XR_COMPILE_RESOURCE_BUDGET?XR_XIR_BUDGET:
@@ -95,7 +99,7 @@ static void source_comptime_test_fold(const XrXirModule *module,int64_t expected
 #include "xir_source_comptime_cases.h"
 #include "xir_source_comptime_resources.h"
 int main(int argc,char **argv) {
-    if (argc==2 && (!strcmp(argv[1],"--resources") || !strcmp(argv[1],"--local-resources") || !strcmp(argv[1],"--unit-resources") || !strcmp(argv[1],"--rune-resources") || !strcmp(argv[1],"--cell-resources"))) {
+    if (argc==2 && (!strcmp(argv[1],"--resources") || !strcmp(argv[1],"--local-resources") || !strcmp(argv[1],"--unit-resources") || !strcmp(argv[1],"--rune-resources") || !strcmp(argv[1],"--cell-resources") || !strcmp(argv[1],"--string-resources"))) {
         if (!strcmp(argv[1],"--local-resources")) {
             source_comptime_resource_text=source_comptime_local_text;
             fprintf(stderr,"Source comptime scalar locals whole-producer resources\n");
@@ -111,6 +115,10 @@ int main(int argc,char **argv) {
         if (!strcmp(argv[1],"--cell-resources")) {
             source_comptime_resource_text=source_comptime_cell_text;
             fprintf(stderr,"Source comptime private Cell/Unit assignment/loop whole-producer resources\n");
+        }
+        if (!strcmp(argv[1],"--string-resources")) {
+            source_comptime_resource_text=source_comptime_string_text;
+            fprintf(stderr,"Source comptime owned String export/parameters/independent replay whole-producer resources\n");
         }
         source_comptime_test_resources();return 0;
     }
