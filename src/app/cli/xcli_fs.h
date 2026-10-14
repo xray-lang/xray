@@ -89,11 +89,6 @@ XR_FUNC int xr_cli_write_file_atomic(const char *path, const char *content);
 XR_FUNC bool xr_cli_file_exists(const char *path);
 XR_FUNC bool xr_cli_is_directory(const char *path);
 XR_FUNC bool xr_cli_is_xr_file(const char *filename);
-/* Nearest manifest ancestor of an absolute directory. NOT_FOUND is the only
- * normal absence result. Returned storage is released through the same policy. */
-XR_FUNC XrOsIoStatus xr_cli_find_project_root_owned(const XrOsIoPolicy *policy,
-    const char *absolute_start_directory, char **output);
-
 /* ========== Safe Parsing Helpers ========== */
 
 /* Parse integer string. Returns false on error. */

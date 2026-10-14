@@ -5,17 +5,16 @@
  * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
  * Licensed under the MIT License
  *
- * xcli_graph_authority.c - Exact source graph authority for CLI commands
+ * xsource_authority.c - Exact source graph authority for source consumers
  */
 
-#include "xcli_graph_authority.h"
-#include "xcli_fs.h"
-#include "../../base/xfileio.h"
-#include "../../base/xio_policy.inc.h"
-#include "../../os/os_fs.h"
-#include "../../xir/xxir_library_catalog.h"
+#include "xsource_authority.h"
+#include "../base/xfileio.h"
+#include "../base/xio_policy.inc.h"
+#include "../os/os_fs.h"
+#include "../xir/xxir_library_catalog.h"
 
-struct XrCliGraphAuthority {
+struct XrSourceAuthority {
     XrXirCompileContext context;
     XrProject *project;
     XrLockfile *lockfile;
@@ -55,7 +54,7 @@ static bool authority_equal(XrIoContext *io, const char *a, const char *b, bool 
         char x=*a++,y=*b++;if(x!=y||!x){*equal=x==y;return true;}
     }
 }
-XR_FUNC XrOsIoStatus xr_cli_find_project_root_owned(const XrOsIoPolicy *policy,
+XR_FUNC XrOsIoStatus xr_source_find_project_root(const XrOsIoPolicy *policy,
     const char *absolute_start_directory, char **output) {
     if(!io_policy_valid(policy)||!absolute_start_directory||!output||*output)return XR_OS_IO_BAD_ARGUMENT;
     XrIoContext io={policy,XR_OS_IO_OK};
@@ -187,7 +186,7 @@ static XrOsIoStatus authority_text_entry(XrIoContext *io, const char *entry,
     io_free(io,joined);io_free(io,canonical);io_free(io,directory);return io->status;
 }
 
-XR_FUNC void xr_cli_compile_graph_authority_close(XrCliGraphAuthority *authority) {
+XR_FUNC void xr_source_authority_close(XrSourceAuthority *authority) {
     if(!authority)return;
     xr_project_authority_free_owned(authority->project_authority);
     xr_lockfile_free_owned(authority->lockfile);xr_project_free_owned(authority->project);
@@ -195,23 +194,23 @@ XR_FUNC void xr_cli_compile_graph_authority_close(XrCliGraphAuthority *authority
     xr_compile_resources_free(authority->entry_path);
     xr_compile_resources_free(authority->script_root);xr_compile_resources_free(authority);
 }
-XR_FUNC XrManifestStatus xr_cli_compile_graph_authority_open_input(const XrXirCompileContext *context,
-    const XrCliGraphEntryInput *input, const XrXirLibraryCatalog *libraries, const XrTomlParseLimits *limits,
-    XrCliGraphAuthority **output, XrManifestDiagnostic *diagnostic) {
+XR_FUNC XrManifestStatus xr_source_authority_open_input(const XrXirCompileContext *context,
+    const XrSourceEntryInput *input, const XrXirLibraryCatalog *libraries, const XrTomlParseLimits *limits,
+    XrSourceAuthority **output, XrManifestDiagnostic *diagnostic) {
     if(!context||!context->resources||!input||!input->absolute_path||!limits||!output||*output ||
-        (input->kind != XR_CLI_GRAPH_ENTRY_FILE && input->kind != XR_CLI_GRAPH_ENTRY_TEXT) ||
-        (input->kind == XR_CLI_GRAPH_ENTRY_FILE && (input->text || input->length)) ||
-        (input->kind == XR_CLI_GRAPH_ENTRY_TEXT && !input->text)) return XR_MANIFEST_BAD_ARGUMENT;
+        (input->kind != XR_SOURCE_ENTRY_FILE && input->kind != XR_SOURCE_ENTRY_TEXT) ||
+        (input->kind == XR_SOURCE_ENTRY_FILE && (input->text || input->length)) ||
+        (input->kind == XR_SOURCE_ENTRY_TEXT && !input->text)) return XR_MANIFEST_BAD_ARGUMENT;
     if(libraries&&xr_xir_compile_library_catalog_context(libraries)->resources!=context->resources)return XR_MANIFEST_BAD_ARGUMENT;
     XrOsIoPolicy policy=xr_compile_io_policy(context->resources);XrIoContext io={&policy,XR_OS_IO_OK};
     if(!authority_absolute(&io,input->absolute_path))return io.status==XR_OS_IO_OK?XR_MANIFEST_BAD_ARGUMENT:authority_status(io.status);
-    XrCliGraphAuthority *authority=io_alloc(&io,sizeof(*authority));
+    XrSourceAuthority *authority=io_alloc(&io,sizeof(*authority));
     if(!authority)return authority_status(io.status);
     if(!io_clear(&io,authority,sizeof(*authority))){io_free(&io,authority);return authority_status(io.status);}
     authority->context=*context;authority->libraries=libraries;
     char *directory=NULL,*root=NULL,*lockpath=NULL,*identity=NULL,*logical=NULL;
     XrManifestStatus status=XR_MANIFEST_OK;
-    if (input->kind == XR_CLI_GRAPH_ENTRY_TEXT) {
+    if (input->kind == XR_SOURCE_ENTRY_TEXT) {
         io_status(&io,authority_text_entry(&io,input->absolute_path,&authority->entry_path,&directory));
     } else {
         io_status(&io,xr_file_probe_owned(&policy,input->absolute_path,true));
@@ -219,7 +218,7 @@ XR_FUNC XrManifestStatus xr_cli_compile_graph_authority_open_input(const XrXirCo
         if(io.status==XR_OS_IO_OK)io_status(&io,xr_path_dirname_owned(&policy,authority->entry_path,&directory));
     }
     if(io.status!=XR_OS_IO_OK) { status=authority_status(io.status); goto done; }
-    XrOsIoStatus find=xr_cli_find_project_root_owned(&policy,directory,&root);
+    XrOsIoStatus find=xr_source_find_project_root(&policy,directory,&root);
     status=authority_status(find);
     if(find==XR_OS_IO_OK) {
         status=xr_project_load_owned(&policy,root,limits,&authority->project,diagnostic);
@@ -240,12 +239,12 @@ XR_FUNC XrManifestStatus xr_cli_compile_graph_authority_open_input(const XrXirCo
         status=authority_status(io.status);
     }
     if(status==XR_MANIFEST_OK) {
-        const XrModuleIdentityAuthority *entry_authority=xr_cli_compile_graph_authority_entry(authority);
+        const XrModuleIdentityAuthority *entry_authority=xr_source_authority_entry(authority);
         XrModuleStatus module=xr_compile_module_identity_from_source(context->resources,entry_authority,
             authority->entry_path,&identity,&logical);
         status=module==XR_MODULE_OK?XR_MANIFEST_OK:module==XR_MODULE_BUDGET?XR_MANIFEST_BUDGET:
             module==XR_MODULE_OUT_OF_MEMORY?XR_MANIFEST_OUT_OF_MEMORY:XR_MANIFEST_INVALID;
-        if(status==XR_MANIFEST_OK && input->kind==XR_CLI_GRAPH_ENTRY_TEXT) {
+        if(status==XR_MANIFEST_OK && input->kind==XR_SOURCE_ENTRY_TEXT) {
             XrModuleOverlayInput entry={*entry_authority,logical,authority->entry_path,input->text,input->length};
             module=xr_compile_module_overlay_new(context->resources,&entry,1,&authority->overlay);
             status=module==XR_MODULE_OK?XR_MANIFEST_OK:module==XR_MODULE_BUDGET?XR_MANIFEST_BUDGET:
@@ -258,26 +257,26 @@ XR_FUNC XrManifestStatus xr_cli_compile_graph_authority_open_input(const XrXirCo
     }
 done:
     io_free(&io,identity);io_free(&io,logical);io_free(&io,lockpath);io_free(&io,root);io_free(&io,directory);
-    xr_cli_compile_graph_authority_close(authority);return status;
+    xr_source_authority_close(authority);return status;
 }
-XR_FUNC XrManifestStatus xr_cli_compile_graph_authority_open(const XrXirCompileContext *context,
+XR_FUNC XrManifestStatus xr_source_authority_open(const XrXirCompileContext *context,
     const char *entry, const XrXirLibraryCatalog *libraries, const XrTomlParseLimits *limits,
-    XrCliGraphAuthority **output, XrManifestDiagnostic *diagnostic) {
-    XrCliGraphEntryInput input={XR_CLI_GRAPH_ENTRY_FILE,entry,NULL,0};
-    return xr_cli_compile_graph_authority_open_input(context,&input,libraries,limits,output,diagnostic);
+    XrSourceAuthority **output, XrManifestDiagnostic *diagnostic) {
+    XrSourceEntryInput input={XR_SOURCE_ENTRY_FILE,entry,NULL,0};
+    return xr_source_authority_open_input(context,&input,libraries,limits,output,diagnostic);
 }
-XR_FUNC const char *xr_cli_compile_graph_authority_source_path(const XrCliGraphAuthority *authority) {
+XR_FUNC const char *xr_source_authority_source_path(const XrSourceAuthority *authority) {
     return authority?authority->entry_path:NULL;
 }
-XR_FUNC const XrModuleOverlayInput *xr_cli_compile_graph_authority_overlay(const XrCliGraphAuthority *authority) {
+XR_FUNC const XrModuleOverlayInput *xr_source_authority_overlay(const XrSourceAuthority *authority) {
     if(!authority || !authority->overlay)return NULL;
     size_t count=0;const XrModuleOverlayEntry *entries=xr_compile_module_overlay_entries(authority->overlay,&count);
     return count==1?&entries[0].source:NULL;
 }
-XR_FUNC const XrModuleIdentityAuthority *xr_cli_compile_graph_authority_entry(const XrCliGraphAuthority *authority) {
+XR_FUNC const XrModuleIdentityAuthority *xr_source_authority_entry(const XrSourceAuthority *authority) {
     return !authority?NULL:authority->project_authority?xr_project_authority_view(authority->project_authority):&authority->script_authority;
 }
-XR_FUNC const XrProject *xr_cli_compile_graph_authority_project(const XrCliGraphAuthority *authority) { return authority?authority->project:NULL; }
-XR_FUNC XrLockfile *xr_cli_compile_graph_authority_lockfile(const XrCliGraphAuthority *authority) { return authority?authority->lockfile:NULL; }
-XR_FUNC const XrXirLibraryCatalog *xr_cli_compile_graph_authority_catalog(const XrCliGraphAuthority *authority) { return authority?authority->libraries:NULL; }
-XR_FUNC const XrXirCompileContext *xr_cli_compile_graph_authority_context(const XrCliGraphAuthority *authority) { return authority?&authority->context:NULL; }
+XR_FUNC const XrProject *xr_source_authority_project(const XrSourceAuthority *authority) { return authority?authority->project:NULL; }
+XR_FUNC XrLockfile *xr_source_authority_lockfile(const XrSourceAuthority *authority) { return authority?authority->lockfile:NULL; }
+XR_FUNC const XrXirLibraryCatalog *xr_source_authority_catalog(const XrSourceAuthority *authority) { return authority?authority->libraries:NULL; }
+XR_FUNC const XrXirCompileContext *xr_source_authority_context(const XrSourceAuthority *authority) { return authority?&authority->context:NULL; }

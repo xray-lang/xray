@@ -7,7 +7,7 @@
  * run_owner_driver.c - Command input, Source admission and host consumer
  */
 #include "app/cli/xcli.h"
-#include "app/cli/xcli_source_paths.h"
+#include "api/xsource_paths.h"
 #include "execution/xr_xir_host_cli.h"
 #include "base/xwindows_utf8.h"
 #include <stdio.h>
@@ -34,16 +34,16 @@ static XrCompileResourceStatus observed_resources(const XrCompileResourceLimits 
     if(budget_failure)actual.work=1;
     return xr_compile_resources_new(&actual,output);
 }
-static XrCliCompileSourceStatus observed_paths(XrCompileResources *resources,const char *entry,
-    XrCliSourcePaths *output,XrCliSourcePathsDiagnostic *diagnostic) {
+static XrSourceCompileStatus observed_paths(XrCompileResources *resources,const char *entry,
+    XrSourcePaths *output,XrSourcePathsDiagnostic *diagnostic) {
     phase_allocations[1]=runtime_attempts;
-    return xr_cli_compile_source_paths(resources,entry,output,diagnostic);
+    return xr_source_paths(resources,entry,output,diagnostic);
 }
-static XrCliCompileSourceStatus observed_source(const XrCliCompileSourceRequest *request,
-    XrXirSourceProduct **output,XrCliCompileSourceDiagnostic *diagnostic) {
+static XrSourceCompileStatus observed_source(const XrSourceCompileRequest *request,
+    XrXirSourceProduct **output,XrSourceCompileDiagnostic *diagnostic) {
     phase_allocations[2]=runtime_attempts;
     CHECK(request->manifest_limits.input_bytes==1048576 && request->manifest_limits.depth==64);
-    return xr_cli_compile_source_build(request,output,diagnostic);
+    return xr_source_compile_build(request,output,diagnostic);
 }
 static XrXirStatus observed_take(XrXirSourceProduct *product,XrXirProgram **output) {
     phase_allocations[3]=runtime_attempts;
@@ -54,14 +54,14 @@ static int observed_program(XrXirProgram *program,uint32_t entry) {
     return xr_xir_host_program_main(program,entry);
 }
 #define xr_compile_resources_new observed_resources
-#define xr_cli_compile_source_paths observed_paths
-#define xr_cli_compile_source_build observed_source
+#define xr_source_paths observed_paths
+#define xr_source_compile_build observed_source
 #define xr_xir_compile_source_product_vm_take observed_take
 #define xr_xir_host_program_main observed_program
 #include "app/cli/xcmd_run.c"
 #undef xr_compile_resources_new
-#undef xr_cli_compile_source_paths
-#undef xr_cli_compile_source_build
+#undef xr_source_paths
+#undef xr_source_compile_build
 #undef xr_xir_compile_source_product_vm_take
 #undef xr_xir_host_program_main
 

@@ -1,6 +1,7 @@
 add_executable(test_api_source_product_text "${CMAKE_CURRENT_LIST_DIR}/source_product_text/test_source_product_text.c")
 target_link_libraries(test_api_source_product_text PRIVATE xray_xir_source_product xray_xir_runtime_host)
 target_include_directories(test_api_source_product_text PRIVATE "${PROJECT_SOURCE_DIR}/src" "${PROJECT_SOURCE_DIR}/tests/unit")
+target_compile_definitions(test_api_source_product_text PRIVATE XR_TEXT_FIXTURE_ROOT="${CMAKE_CURRENT_LIST_DIR}/source_product_text")
 set_target_properties(test_api_source_product_text PROPERTIES C_STANDARD 11 C_STANDARD_REQUIRED YES C_EXTENSIONS NO)
 if(MSVC)
     target_compile_options(test_api_source_product_text PRIVATE /W4 /WX /utf-8)

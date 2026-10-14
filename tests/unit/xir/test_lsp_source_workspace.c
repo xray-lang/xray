@@ -1,6 +1,6 @@
 /* Copyright (c) 2026 Xinglei Xu. MIT License. */
 #include "app/lsp/xlsp_source_workspace.h"
-#include "app/cli/xcli_canonical_source.h"
+#include "api/xsource_compile.h"
 #include "base/xwindows_utf8.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -40,7 +40,7 @@ static XrXirStatus once(const char *root_uri,const char *lib_uri,XrCompileResour
 }
 static int run(int argc,char **argv) {
     (void)sdk_fixture_malloc;(void)sdk_fixture_free;(void)sdk_ledger;(void)sdk_unlimited;
-    CHECK(argc==4);workspace_specifier=argv[3];XrCompileResourceLimits limits=xr_cli_compile_default_resource_limits();
+    CHECK(argc==4);workspace_specifier=argv[3];XrCompileResourceLimits limits=xr_source_compile_default_resource_limits();
     size_t sites=0;XrCompileResourceStats stats={0};
     for(size_t probe=0;probe<=sites;++probe) {
         runtime_attempts=0;runtime_fail_at=probe?probe-1:SIZE_MAX;

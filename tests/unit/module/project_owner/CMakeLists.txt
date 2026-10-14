@@ -10,15 +10,15 @@ get_filename_component(XR_ROOT "${CMAKE_CURRENT_LIST_DIR}/../../../.." ABSOLUTE)
 if(NOT TARGET xray_compile_resources)
   add_subdirectory("${XR_ROOT}/src/base" compiler-resources EXCLUDE_FROM_ALL)
 endif()
-if(NOT TARGET xray_cli_source AND NOT TARGET compile_owner_core)
+if(NOT TARGET xray_source_compile AND NOT TARGET compile_owner_core)
  add_subdirectory("${CMAKE_CURRENT_LIST_DIR}/../../xir/compile_owner" compile-core EXCLUDE_FROM_ALL)
 endif()
 add_executable(test_project_owner test_project_owner.c)
-if(TARGET xray_cli_source)
- target_link_libraries(test_project_owner PRIVATE xray_cli_source bcrypt)
+if(TARGET xray_source_compile)
+ target_link_libraries(test_project_owner PRIVATE xray_source_compile bcrypt)
 else()
 target_sources(test_project_owner PRIVATE
- "${XR_ROOT}/src/app/cli/xcli_graph_authority.c"
+ "${XR_ROOT}/src/api/xsource_authority.c"
  "${XR_ROOT}/src/module/xmodule_overlay.c"
  "${XR_ROOT}/src/module/xmodule_identity.c" "${XR_ROOT}/src/xir/xxir_library_catalog.c"
  "${XR_ROOT}/src/module/xproject.c" "${XR_ROOT}/src/module/xnative_package.c"
