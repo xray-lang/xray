@@ -4,6 +4,8 @@ import json
 import os
 from pathlib import Path
 import queue
+import re
+import socket
 import subprocess
 import threading
 import time
@@ -12,15 +14,46 @@ parser=argparse.ArgumentParser()
 parser.add_argument('--xray',type=Path,required=True)
 parser.add_argument('--fixture',type=Path,required=True)
 parser.add_argument('--start-request',choices=('launch','attach'),default='launch')
+parser.add_argument('--transport',choices=('stdio','tcp'),default='stdio')
 args=parser.parse_args()
+
+if args.transport=='tcp':
+    for flags in [('--stdio','--port','0'),('--port','65536'),('--port','4294967296'),('--port','-1')]:
+        rejected=subprocess.run([str(args.xray),'dap',*flags],input=b'',capture_output=True,timeout=20)
+        assert rejected.returncode==2 and not rejected.stdout,(flags,rejected.returncode,rejected.stdout,rejected.stderr)
 
 def wire(message):
     body=json.dumps(message,ensure_ascii=False,separators=(',',':')).encode('utf-8')
     return f'Content-Length: {len(body)}\r\n\r\n'.encode()+body
 
+class SocketInput:
+    def __init__(self,peer):self.peer=peer;self.closed=False
+    def write(self,data):self.peer.sendall(data);return len(data)
+    def flush(self):pass
+    def close(self):
+        if not self.closed:
+            self.closed=True
+            self.peer.shutdown(socket.SHUT_WR)
+
 class Client:
     def __init__(self):
-        self.process=subprocess.Popen([str(args.xray),'dap','--stdio'],stdin=subprocess.PIPE,stdout=subprocess.PIPE,stderr=subprocess.PIPE)
+        self.peer=None
+        mode=['--port','0'] if args.transport=='tcp' else ['--stdio']
+        self.process=subprocess.Popen([str(args.xray),'dap',*mode],stdin=subprocess.PIPE,stdout=subprocess.PIPE,stderr=subprocess.PIPE)
+        self.input=self.process.stdin;self.output=self.process.stdout
+        if args.transport=='tcp':
+            try:
+                notice=queue.Queue()
+                threading.Thread(target=lambda:notice.put(self.process.stderr.readline()),daemon=True).start()
+                line=notice.get(timeout=20);match=re.fullmatch(rb'DAP: listening on 127\.0\.0\.1:(\d+)\r?\n',line)
+                assert match,line
+                self.peer=socket.create_connection(('127.0.0.1',int(match[1])),timeout=20)
+                self.process.stdin.close()
+                self.input=SocketInput(self.peer);self.output=self.peer.makefile('rb',buffering=0)
+            except BaseException:
+                self.process.kill();self.process.wait(timeout=20)
+                if self.peer:self.peer.close()
+                raise
         self.messages=queue.Queue()
         self.seq=0
         self.events=[]
@@ -33,7 +66,7 @@ class Client:
             while True:
                 header=b''
                 while not header.endswith(b'\r\n\r\n'):
-                    byte=self.process.stdout.read(1)
+                    byte=self.output.read(1)
                     if not byte:
                         if header: raise AssertionError('truncated output header')
                         self.messages.put(None);return
@@ -42,7 +75,7 @@ class Client:
                 length=int(header.split(b':',1)[1].strip())
                 body=b''
                 while len(body)<length:
-                    part=self.process.stdout.read(length-len(body))
+                    part=self.output.read(length-len(body))
                     assert part,'truncated output body'
                     body+=part
                 self.messages.put(json.loads(body))
@@ -62,8 +95,8 @@ class Client:
         if arguments is not None:value['arguments']=arguments
         data=wire(value)
         if fragment:
-            for byte in data:self.process.stdin.write(bytes([byte]));self.process.stdin.flush()
-        else:self.process.stdin.write(data);self.process.stdin.flush()
+            for byte in data:self.input.write(bytes([byte]));self.input.flush()
+        else:self.input.write(data);self.input.flush()
         while True:
             reply=self.receive()
             if reply['type']=='response' and reply['request_seq']==self.seq:
@@ -76,11 +109,14 @@ class Client:
             item=self.receive()
             if item['type']=='event' and item['event']==name:self.events.remove(item);return item
     def close(self,expected=0):
-        if not self.process.stdin.closed:self.process.stdin.close()
+        if not self.input.closed:self.input.close()
         self.process.wait(timeout=20)
         stderr=self.process.stderr.read()
         assert self.process.returncode==expected,(self.process.returncode,stderr)
         self.reader.join(timeout=2)
+        if self.peer:
+            self.output.close();self.peer.close()
+            assert not self.process.stdout.read(),'TCP mode wrote protocol bytes to stdout'
 
 client=Client()
 assert client.send('initialize',{'supportsVariableType':True,'supportsVariablePaging':True},fragment=True)['success']
@@ -110,13 +146,13 @@ client.close()
 print(f'Real CLI/stdio Source {args.start_request}, fragmented framing, stop/inspect/output/disconnect: PASS')
 
 client=Client()
-client.process.stdin.write(wire({'seq':1,'type':'request','command':'initialize'}));client.process.stdin.flush();client.process.stdin.close()
+client.input.write(wire({'seq':1,'type':'request','command':'initialize'}));client.input.flush();client.input.close()
 reply=client.receive();assert reply['type']=='response' and reply['success']
 client.event('initialized');client.close()
 print('Buffered final frame delivered before peer EOF: PASS')
 
 client=Client()
-client.process.stdin.write(b'Content-Length: 100\r\n\r\n{}');client.process.stdin.close()
+client.input.write(b'Content-Length: 100\r\n\r\n{}');client.input.close()
 client.close(expected=1)
 print('Truncated input EOF rejected: PASS')
 
@@ -128,13 +164,13 @@ for header in [f'Content-Length: {length}junk\r\n\r\n',
                f'Content-Length: {length}\n\r\n\r\n',
                f'Content-Length: +{length}\r\n\r\n']:
     client=Client()
-    client.process.stdin.write(header.encode()+initialize);client.process.stdin.close()
+    client.input.write(header.encode()+initialize);client.input.close()
     client.close(expected=1)
     assert not client.replies
 print('Malformed, duplicate and embedded length headers rejected: PASS')
 
 client=Client()
-client.process.stdin.write(f'content-length:\t{length} \r\n\r\n'.encode()+initialize);client.process.stdin.close()
+client.input.write(f'content-length:\t{length} \r\n\r\n'.encode()+initialize);client.input.close()
 assert client.receive()['success'];client.event('initialized');client.close()
 print('Case-insensitive length header with optional whitespace: PASS')
 

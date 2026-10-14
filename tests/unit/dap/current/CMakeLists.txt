@@ -117,6 +117,11 @@ if(XR_BUILD_DAP)
     add_test(NAME dap_current_stdio_attach COMMAND ${XRAY_PYTHON} ${CMAKE_CURRENT_SOURCE_DIR}/test_stdio.py
         --xray $<TARGET_FILE:xray> --fixture ${CMAKE_CURRENT_SOURCE_DIR}/wire_fixture.xr --start-request attach)
     set_tests_properties(dap_current_stdio_attach PROPERTIES TIMEOUT 120 LABELS "dap;attach;cli;stdio;execution;ownership")
+    add_test(NAME dap_current_tcp COMMAND ${XRAY_PYTHON} ${CMAKE_CURRENT_SOURCE_DIR}/test_stdio.py
+        --xray $<TARGET_FILE:xray> --fixture ${CMAKE_CURRENT_SOURCE_DIR}/wire_fixture.xr --transport tcp)
+    add_test(NAME dap_current_tcp_attach COMMAND ${XRAY_PYTHON} ${CMAKE_CURRENT_SOURCE_DIR}/test_stdio.py
+        --xray $<TARGET_FILE:xray> --fixture ${CMAKE_CURRENT_SOURCE_DIR}/wire_fixture.xr --transport tcp --start-request attach)
+    set_tests_properties(dap_current_tcp dap_current_tcp_attach PROPERTIES TIMEOUT 120 LABELS "dap;tcp;cli;execution;ownership")
 endif()
 
 add_executable(test_dap_exceptions test_exceptions.c ${PROJECT_SOURCE_DIR}/src/base/xjson.c ${PROJECT_SOURCE_DIR}/src/base/xutf8.c)
@@ -147,3 +152,14 @@ add_test(NAME test_dap_attach COMMAND test_dap_attach)
 add_test(NAME test_dap_attach_resources COMMAND test_dap_attach --resources)
 set_tests_properties(test_dap_attach PROPERTIES TIMEOUT 120 LABELS "dap;attach;source;ownership;execution")
 set_tests_properties(test_dap_attach_resources PROPERTIES TIMEOUT 1800 COST 120 LABELS "dap;attach;source;ownership;resources;fault-injection")
+
+add_executable(test_dap_tcp test_tcp.c ${PROJECT_SOURCE_DIR}/src/base/xjson.c ${PROJECT_SOURCE_DIR}/src/base/xutf8.c)
+target_link_libraries(test_dap_tcp PRIVATE xray_dap_current)
+if(MSVC)
+    target_compile_options(test_dap_tcp PRIVATE /W4 /WX)
+else()
+    target_compile_options(test_dap_tcp PRIVATE -Wall -Wextra -Werror)
+endif()
+add_test(NAME test_dap_tcp COMMAND test_dap_tcp)
+add_test(NAME test_dap_tcp_resources COMMAND test_dap_tcp --resources)
+set_tests_properties(test_dap_tcp test_dap_tcp_resources PROPERTIES TIMEOUT 120 LABELS "dap;tcp;resources;ownership")
