@@ -1,0 +1,5 @@
+import "./type_private_lib" as lib
+fn leaf()->i64 {
+    try { return lib.raise() } catch(e) { throw e }
+}
+leaf()

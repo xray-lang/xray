@@ -45,14 +45,20 @@ static XrXirStatus dap_exception_info(XdapAdapter *s,const XdapRequest *r) {
             copied==XR_XIR_VALUE_OOM ? XR_XIR_OUT_OF_MEMORY : XR_XIR_BUDGET;
     XrXirEnumBorrow borrowed={0};copied=xr_xir_enum_borrow(&value,&borrowed);
     if (copied!=XR_XIR_VALUE_OK) { xr_xir_value_drop(&value);return XR_XIR_BAD_STRUCTURE; }
+    bool visible=false;copied=xr_xir_vm_debug_snapshot_type_visible(s->snapshot,0,&value,(XrXirType)value.type,&visible);
+    if (copied!=XR_XIR_VALUE_OK) { xr_xir_value_drop(&value);return copied==XR_XIR_VALUE_LIMIT ? XR_XIR_BUDGET : XR_XIR_BAD_STRUCTURE; }
     XdapJsonWriter identity=xdap_json_writer(s->resources,s->config.message_limit);
-    xdap_json_text(&identity,borrowed.name.bytes,borrowed.name.length);XDAP_TEXT(&identity,".");
-    xdap_json_text(&identity,borrowed.member.bytes,borrowed.member.length);
+    if (visible) {
+        xdap_json_text(&identity,borrowed.name.bytes,borrowed.name.length);XDAP_TEXT(&identity,".");
+        xdap_json_text(&identity,borrowed.member.bytes,borrowed.member.length);
+    } else XDAP_TEXT(&identity,"<private exception>");
     XdapJsonWriter body=xdap_json_writer(s->resources,s->config.message_limit);
     if (identity.status==XR_XIR_OK) {
         XDAP_TEXT(&body,"{\"exceptionId\":");xdap_json_quote(&body,identity.bytes,identity.length);
         XDAP_TEXT(&body,",\"breakMode\":\"always\",\"details\":{\"typeName\":");
-        xdap_json_quote(&body,borrowed.name.bytes,borrowed.name.length);XDAP_TEXT(&body,"}}");
+        if (visible) xdap_json_quote(&body,borrowed.name.bytes,borrowed.name.length);
+        else xdap_json_quote(&body,"<private type>",14);
+        XDAP_TEXT(&body,"}}");
         status=xdap_dispatch_response(s,r,true,&body,NULL);
     } else status=identity.status;
     xdap_json_writer_free(&body);xdap_json_writer_free(&identity);xr_xir_value_drop(&value);return status;

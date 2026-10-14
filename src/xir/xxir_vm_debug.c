@@ -469,10 +469,11 @@ static XrXirValueStatus capture(XrXirVmDebug *debug, XrXirCallView *view, const 
     if (throw_op) {
         uint32_t operand=throw_op->args[0];SnapshotFrame *frame=&snapshot->frames[0];
         if (operand>=frame->info.value_count || !frame->known[operand]) { status=XR_XIR_VALUE_BAD_ARGUMENT;goto fail; }
-        XrXirValue concrete=frame->values[operand];
-        if (concrete.type==XR_XIR_ERROR && !xr_xir_error_borrow(&frame->values[operand],&concrete)) {
+        XrXirValue concrete={0};
+        if (frame->values[operand].type==XR_XIR_ERROR && !xr_xir_error_borrow(&frame->values[operand],&concrete)) {
             status=XR_XIR_VALUE_BAD_ARGUMENT;goto fail;
         }
+        if (frame->values[operand].type!=XR_XIR_ERROR) concrete=frame->values[operand];
         if (!xr_xir_domain_work(debug->domain,1)) { status=XR_XIR_VALUE_LIMIT;goto fail; }
         status=xr_xir_value_copy(&concrete,&snapshot->exception);if (status!=XR_XIR_VALUE_OK) goto fail;
     }

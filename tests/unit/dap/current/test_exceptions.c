@@ -175,10 +175,73 @@ static void exception_panic(void) {
     CHECK(after.live_bytes==baseline.live_bytes);xr_compile_resources_release(ledger);CHECK(!runtime_live && !runtime_bytes);
     puts("Entry has no exception; real numeric panic stays outside language throw filter: PASS");
 }
+static XdapAdapter *exception_erased_setup(XrCompileResources **ledger,XrXirDomain **domain,XrCompileResourceStats *baseline) {
+    XdapAdapter *adapter=exception_setup(ledger,domain,baseline);
+    request(adapter,"{\"seq\":1,\"type\":\"request\",\"command\":\"initialize\"}");
+    request(adapter,"{\"seq\":2,\"type\":\"request\",\"command\":\"setExceptionBreakpoints\",\"arguments\":{\"filters\":[\"all\"]}}");
+    request(adapter,"{\"seq\":3,\"type\":\"request\",\"command\":\"launch\",\"arguments\":{\"program\":\"" XR_DAP_PRIVATE_FIXTURE "\"}}");
+    exception_reply("launch",true);request(adapter,"{\"seq\":4,\"type\":\"request\",\"command\":\"configurationDone\"}");
+    CHECK(xdap_adapter_step(adapter,1000)==XR_XIR_OK && event_count("stopped")==1);return adapter;
+}
+static void exception_erased_dispose(XdapAdapter *adapter,XrCompileResources *ledger,XrXirDomain *domain,XrCompileResourceStats baseline) {
+    XrXirCallStatus status=xdap_adapter_free(adapter);CHECK(status==XR_XIR_CALL_READY || status==XR_XIR_CALL_OOM);
+    CHECK(!xr_xir_domain_budget_stats(domain).metadata_live);xr_xir_domain_drop(domain);
+    XrCompileResourceStats after={0};CHECK(xr_compile_resources_stats(ledger,&after)==XR_COMPILE_RESOURCE_OK);
+    CHECK(after.live_bytes==baseline.live_bytes);xr_compile_resources_release(ledger);CHECK(!runtime_live && !runtime_bytes);
+}
+static size_t exception_erased_fault(size_t point) {
+    XrCompileResources *ledger=NULL;XrXirDomain *domain=NULL;XrCompileResourceStats baseline={0};
+    XdapAdapter *adapter=exception_erased_setup(&ledger,&domain,&baseline);
+    uint64_t epoch=adapter->stop_epoch;XrXirVmDebugSnapshot *old=adapter->snapshot;
+    CHECK(xdap_current_continue(adapter->launch->control,epoch,XR_XIR_VM_DEBUG_CONTINUE)==XR_XIR_VALUE_OK);
+    XrXirDomainBudgetStats before=xr_xir_domain_budget_stats(domain);size_t begin=runtime_attempts;
+    runtime_fail_at=point==SIZE_MAX ? SIZE_MAX : begin+point;XdapCurrentResult result={0};
+    CHECK(xdap_current_poll(adapter->launch->control,1000,&result)==XR_XIR_VALUE_OK);
+    size_t sites=runtime_attempts-begin;runtime_fail_at=SIZE_MAX;CHECK(point==SIZE_MAX || sites>point);
+    if (point==SIZE_MAX) CHECK(result.state==XDAP_CURRENT_STOPPED && result.debug_epoch>epoch && !result.outcome.value.type);
+    else CHECK(result.state==XDAP_CURRENT_ENDED && result.outcome.status==XR_XIR_CALL_OOM && !result.outcome.value.type);
+    CHECK(adapter->snapshot==old && adapter->stop_epoch==epoch);
+    XrXirValue owned={0};CHECK(xr_xir_vm_debug_snapshot_exception(old,&owned)==XR_XIR_VALUE_OK);xr_xir_value_drop(&owned);
+    XrXirDomainBudgetStats after=xr_xir_domain_budget_stats(domain);
+    CHECK(after.work>=before.work && after.requested_bytes>=before.requested_bytes);
+    xdap_current_result_drop(&result);exception_erased_dispose(adapter,ledger,domain,baseline);return sites;
+}
+static void exception_erased_case(bool resources) {
+    XrCompileResources *ledger=NULL;XrXirDomain *domain=NULL;XrCompileResourceStats baseline={0};
+    XdapAdapter *adapter=exception_erased_setup(&ledger,&domain,&baseline);
+    const char *names[]={"Hidden.Bad","<private exception>"},*types[]={"Hidden","<private type>"};
+    XrXirVmDebugSnapshot *escaped=NULL;XrXirValue concrete={0};
+    for (uint32_t i=0;i<2;++i) {
+        request(adapter,"{\"seq\":5,\"type\":\"request\",\"command\":\"exceptionInfo\",\"arguments\":{\"threadId\":1}}");
+        XrJsonValue *reply=last_response("exceptionInfo",true),*body=xjson_get_object(reply,"body");
+        CHECK(!strcmp(xjson_get_string(body,"exceptionId"),names[i]));
+        CHECK(!strcmp(xjson_get_string(xjson_get_object(body,"details"),"typeName"),types[i]));xjson_free(reply);
+        if (i) {
+            CHECK(xdap_current_snapshot(adapter->launch->control,&escaped)==XR_XIR_VALUE_OK);
+            CHECK(xr_xir_vm_debug_snapshot_exception(escaped,&concrete)==XR_XIR_VALUE_OK);
+            if (resources) exception_requests_fi(adapter);
+        }
+        request(adapter,"{\"seq\":6,\"type\":\"request\",\"command\":\"continue\",\"arguments\":{\"threadId\":1}}");
+        CHECK(xdap_adapter_step(adapter,1000)==XR_XIR_OK);
+    }
+    CHECK(adapter->terminal && adapter->outcome.status==XR_XIR_CALL_THROWN && event_count("stopped")==2);
+    CHECK(xdap_adapter_free(adapter)==XR_XIR_CALL_READY);XrXirEnumBorrow borrowed={0};
+    CHECK(xr_xir_enum_borrow(&concrete,&borrowed)==XR_XIR_VALUE_OK && borrowed.field_count==1);
+    CHECK(borrowed.fields[0].type==XR_XIR_I64 && borrowed.fields[0].payload==41);
+    XdapValueView view={&concrete,domain,escaped,0};XdapTypeText display={0};
+    CHECK(xdap_value_type_text(&view,&display)==XR_XIR_VALUE_OK && display.length==14 && !memcmp(display.bytes,"<private type>",14));
+    xr_xir_value_drop(&concrete);xr_xir_vm_debug_snapshot_drop(escaped);
+    CHECK(!xr_xir_domain_budget_stats(domain).metadata_live);xr_xir_domain_drop(domain);
+    XrCompileResourceStats after={0};CHECK(xr_compile_resources_stats(ledger,&after)==XR_COMPILE_RESOURCE_OK);
+    CHECK(after.live_bytes==baseline.live_bytes);xr_compile_resources_release(ledger);CHECK(!runtime_live && !runtime_bytes);
+    size_t sites=exception_erased_fault(SIZE_MAX);CHECK(sites);
+    if (resources) for (size_t i=0;i<sites;++i) exception_erased_fault(i);
+    printf("Erased Error rethrow: two real stops, caller private names, escaped concrete payload; %zu capture sites injection=%s\n",sites,resources ? "ALL" : "NOT_RUN");
+}
 int main(int argc,char **argv) {
     xr_test_suppress_dialogs();bool resources=argc==2 && !strcmp(argv[1],"--resources");CHECK(argc==1 || resources);
     exception_case(true,true,resources);exception_case(false,true,false);exception_case(true,false,false);exception_case(false,false,false);
-    exception_panic();
+    exception_panic();exception_erased_case(resources);
     size_t sites=exception_capture_fi(SIZE_MAX);CHECK(sites);
     if (resources) for (size_t i=0;i<sites;++i) exception_capture_fi(i);
     printf("Real throw execution and owned capture: %zu allocation sites, injection=%s\n",sites,resources ? "ALL" : "NOT_RUN");return 0;

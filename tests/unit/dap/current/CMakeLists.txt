@@ -138,6 +138,7 @@ endif()
 add_executable(test_dap_exceptions test_exceptions.c ${PROJECT_SOURCE_DIR}/src/base/xjson.c ${PROJECT_SOURCE_DIR}/src/base/xutf8.c)
 target_link_libraries(test_dap_exceptions PRIVATE xray_dap_current)
 target_compile_definitions(test_dap_exceptions PRIVATE XR_DAP_STDLIB="${PROJECT_SOURCE_DIR}/stdlib"
+    XR_DAP_PRIVATE_FIXTURE="${XR_DAP_FIXTURE_DIR}/type_private_main.xr"
     XR_DAP_FIXTURE="${XR_DAP_FIXTURE_DIR}/wire_fixture.xr"
     XR_DAP_CAUGHT_FIXTURE="${XR_DAP_FIXTURE_DIR}/caught_error.xr"
     XR_DAP_UNCAUGHT_FIXTURE="${XR_DAP_FIXTURE_DIR}/uncaught_error.xr"
@@ -213,3 +214,15 @@ endif()
 add_test(NAME test_dap_functions COMMAND test_dap_functions)
 add_test(NAME test_dap_functions_resources COMMAND test_dap_functions --resources)
 set_tests_properties(test_dap_functions test_dap_functions_resources PROPERTIES TIMEOUT 120 LABELS "dap;functions;source;ownership;resources")
+
+add_executable(test_dap_types test_types.c)
+target_link_libraries(test_dap_types PRIVATE xray_dap_current)
+target_compile_definitions(test_dap_types PRIVATE XR_DAP_STDLIB="${PROJECT_SOURCE_DIR}/stdlib"
+    XR_DAP_PRIVATE_FIXTURE="${XR_DAP_FIXTURE_DIR}/type_private_main.xr")
+if(MSVC)
+    target_compile_options(test_dap_types PRIVATE /W4 /WX)
+else()
+    target_compile_options(test_dap_types PRIVATE -Wall -Wextra -Werror)
+endif()
+add_test(NAME test_dap_types COMMAND test_dap_types)
+set_tests_properties(test_dap_types PROPERTIES TIMEOUT 120 LABELS "dap;types;source;ownership;resources")
