@@ -70,7 +70,7 @@ static void string_close(StringFixture *fixture) {
 static void string_case(bool cancel) {
     StringFixture fixture;string_open(&fixture);XdapAdapter *adapter=fixture.adapter;
     XrXirVmDebugSnapshot *snapshots[3]={0};XrXirValue values[3]={{0}};
-    const char *expected[]={"a\0","a\0\xce\xa9","a\0\xce\xa9" "7"};const size_t lengths[]={2,4,5};
+    const char *expected[]={"a\0","a\0\xce\xa9","a\0\xce\xa9\x37"};const size_t lengths[]={2,4,5};
     for (uint32_t i=0;i<3;++i) {
         CHECK(xdap_adapter_step(adapter,1000)==XR_XIR_OK && event_count("stopped")==i+1);
         CHECK(xdap_current_snapshot(adapter->launch->control,&snapshots[i])==XR_XIR_VALUE_OK);
