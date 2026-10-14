@@ -34,6 +34,9 @@ def main() -> int:
         (stdlib / 'time').mkdir()
         time_poison = stdlib / 'time/time.xr'
         time_poison.write_text('invalid clock source must not be parsed\n', encoding='utf-8')
+        (output / 'future-enum.xr').write_text(
+            'export enum UserBox<T>{Empty,Full{value:T}}\n'
+            'export enum Shade{Dark,Light}\n', encoding='utf-8')
         poison_digest = hashlib.sha256(poison.read_bytes()).hexdigest()
         env = dict(os.environ, XRAY_STDLIB_PATH=str(stdlib), NO_COLOR='1')
         hidden = dict(env, PATH=str(output / 'no-C-provider'))
@@ -56,6 +59,14 @@ def main() -> int:
              'print(last-first>=1000000,micro/1000<=milli,nextCpu>=cpu,Lib.now()>0,\n'
              'offset>=-1440 && offset<=1440,oldOffset>=-1440 && oldOffset<=1440)\n',
              b'true true true true true true\n'),
+            ('definition-descriptions', 'import "std/io/output" as Lib\n'
+             'import {UserBox,Shade} from "./future-enum"\n'
+             'fn emit<T>(value:UserBox<T>)->string { const label=value.toString(); Lib.writeStdout(label); return label }\n'
+             'print(emit<Shade>(UserBox<Shade>.Full{value:Shade.Light}))\n'
+             'print(emit<i64>(UserBox<i64>.Empty))\n'
+             'const value=UserBox<Shade>.Full{value:Shade.Dark}\n'
+             'print(value.name,value.ordinal)\n',
+             b'UserBox.FullUserBox.Full\nUserBox.EmptyUserBox.Empty\nFull 1\n'),
         ]
 
         def invoke(name: str, executable: Path, arguments: list[str], environment: dict) -> subprocess.CompletedProcess:
@@ -100,10 +111,14 @@ def main() -> int:
         assert (result.returncode, result.stdout, result.stderr) == (0, cases[0][2], b'')
         result = invoke('absent-clock-vm', binary, ['run', str(output / 'clocks.xr')], hidden)
         assert (result.returncode, result.stdout, result.stderr) == (0, cases[2][2], b'')
+        result = invoke('absent-description-vm', binary, ['run', str(output / 'definition-descriptions.xr')], hidden)
+        assert (result.returncode, result.stdout, result.stderr) == (0, cases[3][2], b'')
         (output / 'summary.json').write_text(json.dumps(dict(
             status='CHECKED_OUTPUT_TIME_PRIVATE_CLOSURE_VM_NATIVE_PASS', commands=len(records),
             source_absent_and_poisoned=True, VM_C_provider_PATH_hidden=True,
-            new_user_type='User enum in a user generic wrapper', library_generic_templates=False,
+            new_user_type='User enum and imported UserBox<T> carrying an imported Shade enum',
+            canonical_type_description_consumer='Generic enum toString/name/ordinal with Checked output',
+            library_generic_templates=False,
             complete_standard_library=False,
             full_resource_and_safety_qualification='OPEN', production_release=False), indent=2)+'\n', encoding='utf-8')
         print('Checked output/time: private closure, user generic values, all clock exports, no-source VM/native and rejection PASS')

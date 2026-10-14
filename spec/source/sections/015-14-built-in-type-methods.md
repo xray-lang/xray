@@ -8,8 +8,8 @@ order: 015
 
 ## 14. 内置类型方法 (Built-in Type Methods)
 
-> 真值源：prelude / analyzer / runtime 中的内置类型注册与方法定义。
-> MCP knowledge 只消费生成后的 analyzer metadata，不独立维护内置类型方法签名。
+> 真值源：prelude、受治理声明及 analyzer / runtime 中的内置类型注册与方法定义。
+> MCP knowledge 消费源码 API 清单与生成 metadata，不独立维护内置类型方法签名。
 
 本节按主题汇总每种内置类型的方法、签名和行为。
 
@@ -36,6 +36,8 @@ order: 015
 
 `abs()` 遵循整数环绕语义：`(-9223372036854775807 - 1).abs()` 返回自身。`toHex()` 对负数使用带符号前缀，例如 `-0x8000000000000000`。位运算与溢出谓词在 VM 与 AOT 中具有相同语义。
 
+Checked Source 的整数方法准入由 `stdlib/types/i64.xr` 的固定声明身份、完整签名、READ 接收者及生成的操作契约共同决定。当前准入 `abs`、`toString`、`toF64`、`toHex`、`min/max`、三项 `wrapping*`、三项 `checked*`、三项 `saturating*`、三项溢出谓词，以及六项位方法 `popcount/leadingZeros/trailingZeros/byteswap/rotateLeft/rotateRight`。这些调用产生普通受验证 XIR，不查询标准库 native 缓存。六项位方法要求 i64 接收者，按完整64位二补码位表示计算；两个零计数方法对零返回64；旋转量包括负数和i64端点，统一按模64处理。它们使用现有无符号整数中间值及普通位运算，无新增公共 opcode。`wrapping*` 在接收者的原整数位宽中运算，声明的 i64 参数先按该位宽归约；`toString` 保留原整数符号性。其余已准入方法当前要求 i64 接收者。`parse/tryParse`、`toBigInt`、`sqrt/pow` 保留声明但尚未具有 Checked Source 操作准入，调用时明确拒绝；这不是完整整数族资格。
+
 ### 14.2 `f64` 方法
 
 | 方法 | 签名 | 说明 |
@@ -48,6 +50,8 @@ order: 015
 | `sqrt()` | `() -> f64` | 平方根 |
 | `pow(exp)` | `(f64) -> f64` | 幂运算 |
 | `isNaN()` | `() -> bool` | 是否为 IEEE NaN |
+
+当前 Checked Source 以固定 f64 声明身份及完整 READ/signature/allocation/failure/ownership 契约准入 `abs`、`toString`、`toI64`、`floor`、`ceil`、`round`、`isNaN`，并生成普通已有 XIR。`abs` 对零返回正零，NaN 结果遵循普通浮点转换/取反的 canonical 规则。`toI64` 向零截断；`floor/ceil` 向负/正无穷取整；`round` 最近取整且半值远离零，使用精确小数差比较而非给输入加减0.5。NaN、Infinity及无法转换为i64的输入沿共同数值转换发出E0422范围panic，不伪造值或 typed Error。除已有 f32 文本化外，这些准入方法当前要求 f64 接收者。`parse/tryParse/toFixed/sqrt/pow` 五项声明仍无 Checked 操作准入，完整浮点方法族未获资格。
 
 ### 14.3 `BigInt` 方法
 
@@ -66,6 +70,8 @@ order: 015
 |--|--|--|
 | `toString()` | `() -> string` | 返回 `"true"` 或 `"false"` |
 
+bool 文本方法由其固定治理声明准入，返回独立拥有的 string；接收者 READ、不挂起，保留分配/retain/资源失败。
+
 ### 14.4.1 `rune` 方法
 
 | 方法 | 签名 | 说明 |
@@ -78,6 +84,8 @@ order: 015
 | `isWhitespace()` | `() -> bool` | 是否为空白字符 |
 
 `rune` 是独立原始类型，不继承整数方法；需要码点时显式使用 `toUInt32()`。 `toUInt32()`／`i64(c)` 返回完整码点，不失败、不分配、不挂起；`toString()`／`string(c)` 产生拥有式 UTF-8，U+0000 保留长度为 1 的 NUL 字节。
+
+当前 Checked Source 的两个 rune 方法由固定治理声明准入；`toUInt32` 返回 u32，文本方法保留分配/retain/资源失败。四项 Unicode 分类声明继续 NONE 并拒绝，不将 ASCII 近似冒称 Unicode 分类。
 
 ### 14.5 `string` 方法
 
@@ -99,6 +107,10 @@ order: 015
 | `repeat(n)` | 重复 |
 | `startsWith(s)` / `endsWith(s)` | 前缀/后缀判断 |
 | `toString()` | 返回自身 |
+
+Checked Source 的 `toString()` 与 `repeat(count:i64)` 由固定 string 声明身份、完整 READ 签名及操作契约准入。`toString` 通过普通 COPY 返回独立持有的同一字符串值，不分配，但保留可能失败。`repeat` 对非正次数返回空串，按完整 UTF-8 字节重复，保留非 BMP 与内嵌 NUL；接收者在次数实参之前各求值一次并保持值快照。它用已有 Cell、位运算及 CONCAT 生成至多64轮的普通XIR倍增循环；空接收者立即退出，不对最大次数做线性遍历，也不在最高有效位之后做多余倍增。分配、持有、字节/工作限制沿共同失败路径，不发明替代值。当前共七项string方法具有治理准入，其余声明、视图/迭代器和拥有型CTFE仍未获完整资格。
+
+接收编译Domain与String执行接口后，String参数/结果、COPY、CONCAT、私有String Cell和上述七方法可由同一有界CTFE路径执行，源消费者把拥有结果复制为独立字面值。Unicode/NUL搜索和比较支付原compiler ledger的保守工作上界，保留范围/资源错误、步数/深度/输出帽，不借VM/Instance或native执行冒充CTFE。这是当前开发准入，完整资源/全库资格仍须另证；f64与rune数值文本化的TO_STRING操作不因String拥有准入而自动开放。
 
 `len(s)` 读取已验证 UTF-8 的 Unicode scalar 计数并返回 i64，空串为 0，内嵌 NUL 计为一个 scalar。查询本身不分配；实参按普通表达式只求值一次，仍保留其求值、初始化和持有失败。`==`/`!=` 接受两个 string，按完整字节长度和内容比较，不依赖对象身份，不做大小写折叠或 Unicode 归一化；组合字符与预组合字符可以不相等。左右操作数按从左到右的值快照语义求值。普通无约束泛型不能借此获得字符串或 Lengthable 能力。
 
@@ -388,8 +400,8 @@ print(len(empty))           // 0
 
 ## 14. Built-in Type Methods
 
-> Source of truth: prelude / analyzer / runtime built-in type registration and method definitions.
-> MCP knowledge only consumes the generated analyzer metadata; it does not maintain its own copy of built-in method signatures.
+> Source of truth: prelude, governed declarations and analyzer / runtime built-in type registration and method definitions.
+> MCP knowledge consumes the source API inventory and generated metadata; it does not maintain its own copy of built-in method signatures.
 
 This section summarizes the methods, signatures, and behavior of each built-in type by topic.
 
@@ -416,6 +428,8 @@ This section summarizes the methods, signatures, and behavior of each built-in t
 
 `abs()` follows integer wrap semantics: `(-9223372036854775807 - 1).abs()` returns itself. `toHex()` keeps a sign prefix for negative values, for example `-0x8000000000000000`. Bit-manipulation methods and overflow predicates have the same semantics in VM and AOT builds.
 
+Checked Source admits integer methods by the fixed declaration identity in `stdlib/types/i64.xr`, the complete signature, the READ receiver and the generated operation contract. The admitted set currently comprises `abs`, `toString`, `toF64`, `toHex`, `min/max`, the three `wrapping*`, three `checked*`, three `saturating*`, three overflow predicates, and the six bit methods `popcount/leadingZeros/trailingZeros/byteswap/rotateLeft/rotateRight`. These calls produce ordinary verified XIR without consulting a standard-library native cache. The six bit methods require an i64 receiver and compute over its full 64-bit two's-complement representation. Both zero-count methods return 64 for zero; rotation counts, including negative values and i64 endpoints, use modulo 64. These recipes compose existing unsigned integer values and bit operations without new public opcodes. `wrapping*` operates in the receiver's original integer width after reducing the declared i64 argument to that width; `toString` preserves original integer signedness. Other admitted methods currently require an i64 receiver. `parse/tryParse`, `toBigInt` and `sqrt/pow` retain their declarations but have no Checked Source operation admission and explicitly reject. This does not qualify the complete integer family.
+
 ### 14.2 `f64` Methods
 
 | Method | Signature | Description |
@@ -428,6 +442,8 @@ This section summarizes the methods, signatures, and behavior of each built-in t
 | `sqrt()` | `() -> f64` | square root |
 | `pow(exp)` | `(f64) -> f64` | power |
 | `isNaN()` | `() -> bool` | whether the value is IEEE NaN |
+
+Checked Source currently admits `abs`, `toString`, `toI64`, `floor`, `ceil`, `round` and `isNaN` through the fixed f64 declaration identity and its complete READ/signature/allocation/failure/ownership contracts, producing ordinary existing XIR. `abs` returns positive zero for either zero sign and canonicalizes NaNs through ordinary floating conversion/negation rules. `toI64` truncates toward zero; `floor/ceil` round toward negative/positive infinity; `round` chooses the nearest integer with ties away from zero, using an exact fractional-difference comparison rather than adding/subtracting 0.5 to the input. NaN, Infinity and inputs not convertible to i64 produce the common E0422 numeric-range panic, without invented values or typed Errors. Except for the existing f32 text conversion, these methods currently require an f64 receiver. `parse/tryParse/toFixed/sqrt/pow` retain five unadmitted declarations; the complete floating-method family is not qualified.
 
 ### 14.3 `BigInt` Methods
 
@@ -446,6 +462,8 @@ This section summarizes the methods, signatures, and behavior of each built-in t
 |--|--|--|
 | `toString()` | `() -> string` | returns `"true"` or `"false"` |
 
+The bool text method is admitted by its fixed governed declaration and returns an independently owned string. The READ operation does not suspend and retains allocation, retain and resource failures.
+
 ### 14.4.1 `rune` Methods
 
 | Method | Signature | Description |
@@ -458,6 +476,8 @@ This section summarizes the methods, signatures, and behavior of each built-in t
 | `isWhitespace()` | `() -> bool` | whether the scalar is whitespace |
 
 `rune` is an independent primitive type and does not inherit integer methods; use `toUInt32()` explicitly when the code point is needed. `toUInt32()` / `i64(c)` return the complete code point without failure, allocation or suspension. `toString()` / `string(c)` produce owned UTF-8; U+0000 preserves one NUL byte with length one.
+
+Checked Source currently admits these two rune methods by their fixed governed declarations. `toUInt32` returns u32 and text retains allocation, retain and resource failures. The four Unicode classification declarations remain NONE and reject; an ASCII approximation does not establish Unicode classification.
 
 ### 14.5 `string` Methods
 
@@ -483,6 +503,10 @@ Both methods prepare a private owned candidate: reverse reverses the element ord
 | `repeat(n)` | repeat |
 | `startsWith(s)` / `endsWith(s)` | prefix/suffix check |
 | `toString()` | return self |
+
+Checked Source admits `toString()` and `repeat(count:i64)` through the fixed string declaration identity, exact READ signature and operation contract. `toString` uses ordinary COPY to return an independently retained owner of the same string value, without allocation but with possible retention failure. `repeat` returns an empty string for nonpositive counts and repeats complete UTF-8 bytes, preserving non-BMP scalars and embedded NUL. The receiver and count evaluate once, in that order, with value snapshots. Existing Cell, bit and CONCAT operations implement at most 64 doubling rounds. An empty receiver exits immediately even for the largest count; there is no unused doubling after the highest significant bit. Allocation, retention and byte/work limits follow common failure paths without invented values. Seven string methods currently have governed admission; remaining declarations, views/iterators and owning CTFE do not qualify as a complete family.
+
+With the compiler Domain and String execution interfaces received, String parameters/results, COPY, CONCAT, private String Cells and these seven methods can execute in the same bounded CTFE path. Source consumers copy owning results into independent literals. Unicode/NUL searches and comparisons prepay a conservative work bound on the original compiler ledger and preserve range/resource failures and step/depth/output limits. No VM, Instance or native execution substitutes for CTFE. This is development admission; complete resource and library qualification require separate evidence. String owning admission does not automatically admit the numeric TO_STRING operations for f64 or Rune.
 
 `len(s)` reads the cached Unicode scalar count of validated UTF-8 and returns i64; the empty string has length zero and embedded NUL counts as one scalar. The query itself does not allocate; its argument evaluates exactly once with ordinary evaluation, initialization and retention failures. `==`/`!=` require two strings and compare their full byte lengths and contents, independently of object identity, with no case folding or Unicode normalization. Combining and precomposed sequences can differ. Operands evaluate left to right as value snapshots. These operations grant no string or Lengthable capability to an unconstrained generic definition.
 

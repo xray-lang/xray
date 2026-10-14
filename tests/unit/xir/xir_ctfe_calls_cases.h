@@ -139,7 +139,13 @@ static void ctfe_calls_equal_cases(CtfeFixture *fixture) {
     ctfe_calls_expect(fixture,&request,XR_XIR_CTFE_OK,41);
     wide[1].payload=INT64_MAX;ctfe_calls_expect(fixture,&request,XR_XIR_CTFE_OK,0);
     request=ctfe_calls_request(fixture,"managed_equal",NULL,0);
-    ctfe_calls_expect(fixture,&request,XR_XIR_CTFE_NOT_SUPPORTED,0);
+    ctfe_calls_expect(fixture,&request,XR_XIR_CTFE_BAD_ARGUMENT,0);
+    XrXirDomain *domain=NULL;XrXirValue text={0};
+    CHECK(xr_xir_domain_new(4096,&domain)==XR_XIR_VALUE_OK);
+    CHECK(xr_xir_string_new(domain,"owned",5,&text)==XR_XIR_VALUE_OK);
+    request=ctfe_calls_request(fixture,"managed_equal",&text,1);
+    ctfe_calls_expect(fixture,&request,XR_XIR_CTFE_OK,41);
+    xr_xir_value_drop(&text);xr_xir_domain_drop(domain);
     bool retained=true;
     CHECK(xir_scalar_core_equal(XR_XIR_BOOL,2,0,&retained)==XR_XIR_RUN_BAD_ARGUMENT && retained);
     CHECK(xir_scalar_core_equal(XR_XIR_I8,128,0,&retained)==XR_XIR_RUN_BAD_ARGUMENT && retained);
@@ -162,7 +168,14 @@ static void ctfe_calls_semantics(void) {
     request=ctfe_calls_request(&fixture,"division",NULL,0);ctfe_calls_expect(&fixture,&request,XR_XIR_CTFE_DIVIDE_BY_ZERO,0);
     request=ctfe_calls_request(&fixture,"unsupported",NULL,0);ctfe_calls_expect(&fixture,&request,XR_XIR_CTFE_NOT_SUPPORTED,0);
     request=ctfe_calls_request(&fixture,"deferred",NULL,0);ctfe_calls_expect(&fixture,&request,XR_XIR_CTFE_NOT_SUPPORTED,0);
-    request=ctfe_calls_request(&fixture,"managed",NULL,0);ctfe_calls_expect(&fixture,&request,XR_XIR_CTFE_NOT_SUPPORTED,0);
+    request=ctfe_calls_request(&fixture,"managed",NULL,0);
+    {
+        XrXirValue text={0};XrCompileResourceStats before=ctfe_stats(&fixture);
+        CHECK(xr_xir_compile_ctfe_calls(&request,&text)==XR_XIR_CTFE_OK);
+        const char *bytes=NULL;size_t length=0;
+        CHECK(xr_xir_string_view(&text,&bytes,&length) && length==5 && !memcmp(bytes,"owned",5));
+        xr_xir_value_drop(&text);CHECK(ctfe_stats(&fixture).live_bytes==before.live_bytes);
+    }
     argument=(XrXirValue){XR_XIR_BOOL,0,1};request=ctfe_calls_request(&fixture,"choose",&argument,1);
     ctfe_calls_expect(&fixture,&request,XR_XIR_CTFE_OK,42);argument.payload=0;
     ctfe_calls_expect(&fixture,&request,XR_XIR_CTFE_OK,1);

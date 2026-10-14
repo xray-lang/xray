@@ -1,0 +1,3 @@
+fn fault()->bool { return 1/0==0 }
+fn choose()->i64 { return (!(false && fault()) && (true || fault())) ? 42 : 0 }
+export fn run()->i64 { return comptime choose() }

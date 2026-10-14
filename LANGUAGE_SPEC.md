@@ -6310,8 +6310,8 @@ BigInt uses the `123n` literal or `i64.toBigInt()`; JSON uses `JSON.parse<T>` / 
 
 ## 14. Built-in Type Methods
 
-> Source of truth: prelude / analyzer / runtime built-in type registration and method definitions.
-> MCP knowledge only consumes the generated analyzer metadata; it does not maintain its own copy of built-in method signatures.
+> Source of truth: prelude, governed declarations and analyzer / runtime built-in type registration and method definitions.
+> MCP knowledge consumes the source API inventory and generated metadata; it does not maintain its own copy of built-in method signatures.
 
 This section summarizes the methods, signatures, and behavior of each built-in type by topic.
 
@@ -6338,6 +6338,8 @@ This section summarizes the methods, signatures, and behavior of each built-in t
 
 `abs()` follows integer wrap semantics: `(-9223372036854775807 - 1).abs()` returns itself. `toHex()` keeps a sign prefix for negative values, for example `-0x8000000000000000`. Bit-manipulation methods and overflow predicates have the same semantics in VM and AOT builds.
 
+Checked Source admits integer methods by the fixed declaration identity in `stdlib/types/i64.xr`, the complete signature, the READ receiver and the generated operation contract. The admitted set currently comprises `abs`, `toString`, `toF64`, `toHex`, `min/max`, the three `wrapping*`, three `checked*`, three `saturating*`, three overflow predicates, and the six bit methods `popcount/leadingZeros/trailingZeros/byteswap/rotateLeft/rotateRight`. These calls produce ordinary verified XIR without consulting a standard-library native cache. The six bit methods require an i64 receiver and compute over its full 64-bit two's-complement representation. Both zero-count methods return 64 for zero; rotation counts, including negative values and i64 endpoints, use modulo 64. These recipes compose existing unsigned integer values and bit operations without new public opcodes. `wrapping*` operates in the receiver's original integer width after reducing the declared i64 argument to that width; `toString` preserves original integer signedness. Other admitted methods currently require an i64 receiver. `parse/tryParse`, `toBigInt` and `sqrt/pow` retain their declarations but have no Checked Source operation admission and explicitly reject. This does not qualify the complete integer family.
+
 ### 14.2 `f64` Methods
 
 | Method | Signature | Description |
@@ -6350,6 +6352,8 @@ This section summarizes the methods, signatures, and behavior of each built-in t
 | `sqrt()` | `() -> f64` | square root |
 | `pow(exp)` | `(f64) -> f64` | power |
 | `isNaN()` | `() -> bool` | whether the value is IEEE NaN |
+
+Checked Source currently admits `abs`, `toString`, `toI64`, `floor`, `ceil`, `round` and `isNaN` through the fixed f64 declaration identity and its complete READ/signature/allocation/failure/ownership contracts, producing ordinary existing XIR. `abs` returns positive zero for either zero sign and canonicalizes NaNs through ordinary floating conversion/negation rules. `toI64` truncates toward zero; `floor/ceil` round toward negative/positive infinity; `round` chooses the nearest integer with ties away from zero, using an exact fractional-difference comparison rather than adding/subtracting 0.5 to the input. NaN, Infinity and inputs not convertible to i64 produce the common E0422 numeric-range panic, without invented values or typed Errors. Except for the existing f32 text conversion, these methods currently require an f64 receiver. `parse/tryParse/toFixed/sqrt/pow` retain five unadmitted declarations; the complete floating-method family is not qualified.
 
 ### 14.3 `BigInt` Methods
 
@@ -6368,6 +6372,8 @@ This section summarizes the methods, signatures, and behavior of each built-in t
 |--|--|--|
 | `toString()` | `() -> string` | returns `"true"` or `"false"` |
 
+The bool text method is admitted by its fixed governed declaration and returns an independently owned string. The READ operation does not suspend and retains allocation, retain and resource failures.
+
 ### 14.4.1 `rune` Methods
 
 | Method | Signature | Description |
@@ -6380,6 +6386,8 @@ This section summarizes the methods, signatures, and behavior of each built-in t
 | `isWhitespace()` | `() -> bool` | whether the scalar is whitespace |
 
 `rune` is an independent primitive type and does not inherit integer methods; use `toUInt32()` explicitly when the code point is needed. `toUInt32()` / `i64(c)` return the complete code point without failure, allocation or suspension. `toString()` / `string(c)` produce owned UTF-8; U+0000 preserves one NUL byte with length one.
+
+Checked Source currently admits these two rune methods by their fixed governed declarations. `toUInt32` returns u32 and text retains allocation, retain and resource failures. The four Unicode classification declarations remain NONE and reject; an ASCII approximation does not establish Unicode classification.
 
 ### 14.5 `string` Methods
 
@@ -6405,6 +6413,10 @@ Both methods prepare a private owned candidate: reverse reverses the element ord
 | `repeat(n)` | repeat |
 | `startsWith(s)` / `endsWith(s)` | prefix/suffix check |
 | `toString()` | return self |
+
+Checked Source admits `toString()` and `repeat(count:i64)` through the fixed string declaration identity, exact READ signature and operation contract. `toString` uses ordinary COPY to return an independently retained owner of the same string value, without allocation but with possible retention failure. `repeat` returns an empty string for nonpositive counts and repeats complete UTF-8 bytes, preserving non-BMP scalars and embedded NUL. The receiver and count evaluate once, in that order, with value snapshots. Existing Cell, bit and CONCAT operations implement at most 64 doubling rounds. An empty receiver exits immediately even for the largest count; there is no unused doubling after the highest significant bit. Allocation, retention and byte/work limits follow common failure paths without invented values. Seven string methods currently have governed admission; remaining declarations, views/iterators and owning CTFE do not qualify as a complete family.
+
+With the compiler Domain and String execution interfaces received, String parameters/results, COPY, CONCAT, private String Cells and these seven methods can execute in the same bounded CTFE path. Source consumers copy owning results into independent literals. Unicode/NUL searches and comparisons prepay a conservative work bound on the original compiler ledger and preserve range/resource failures and step/depth/output limits. No VM, Instance or native execution substitutes for CTFE. This is development admission; complete resource and library qualification require separate evidence. String owning admission does not automatically admit the numeric TO_STRING operations for f64 or Rune.
 
 `len(s)` reads the cached Unicode scalar count of validated UTF-8 and returns i64; the empty string has length zero and embedded NUL counts as one scalar. The query itself does not allocate; its argument evaluates exactly once with ordinary evaluation, initialization and retention failures. `==`/`!=` require two strings and compare their full byte lengths and contents, independently of object identity, with no case folding or Unicode normalization. Combining and precomposed sequences can differ. Operands evaluate left to right as value snapshots. These operations grant no string or Lengthable capability to an unconstrained generic definition.
 
@@ -7749,6 +7761,56 @@ This flags meaning uses the sole Checked semantic70; schema25 retains its existi
 Prepared ordinary reference refinement records owned INFERRED/FIXED value identities before region recipes are released. Ordinary direct references and closure sites close against authentic targets on the existing effects owner. Explicit callable parameters, annotations, results and conversion contexts remain fixed upper bounds; equal provisional UNKNOWN identities do not erase a boundary. A private COPY preserves it and becomes the sole ordinary FUNCTION_WEAKEN when closed identities differ. Private structure/SSA/constraint/access preparation publishes no Checked. The common complete Checker verifies all effects and permissions on both construction memory and its independent owned copy before publishing only that copy.
 
 COPY/PHI/local Cell, closed captures, Nullable wrappers and readonly Tuple/Array construction and projection synchronize identities. Callable PHI and uniform Array inputs use the sole outer weakening relation; the two root facts close independently. Fixed composite nested identities cannot vary. Unsupported nested weakening, shared mutation, element updates or Nullable branch joins retain a conservative bound or reject; finite higher-order dependencies and container alias flow remain incomplete. NO_SUSPEND, GO borrow shapes, errors and Sendable obligations remain independent. Preparation, closure and query copying share the original finite ledger without wire, schema, semantic or public ABI additions. This implementation candidate still requires fresh builds and both configurations' resource and safety gates; it grants no runtime or VM/native execution qualification.
+
+### 17.39 Bounded CTFE scalar local storage and short circuiting
+
+Compiler execution receives completely reverified Lowered input. It admits the entire reachable direct-call closure of bool/integer ordinary functions before execution. SCALAR_LOCAL_NEW, SCALAR_LOCAL_READ and SCALAR_LOCAL_WRITE use the same scalar step and target frame offsets as the VM. A local write produces Unit and falls through; it is not a control-flow terminator. Actual frame accesses consume work. Existing steps, whole-stack depth/frame bytes, output bytes and cumulative compiler ledger limits remain; a callee does not reset them, failures refund no charges and preserve canonical Unit output.
+
+Source &&/|| preserve short-circuit semantics through this storage, the ordinary Checked→specialization reverification→Lowered CTFE pipeline, and an independent complete Source replay that checks ordinary constant recipes. An unexecuted pure arithmetic error may be skipped; reachable I/O in an unexecuted branch still rejects the entire closure. Root authority or effect=NONE grants no determinism.
+
+This section does not admit owned Cells produced by ordinary var, owned/path operations, aggregate/string exports, unknown function values or native/Instance execution. Each requires authentic type, lifetime and charging interfaces plus independent qualification; stack scalar storage does not establish those capabilities.
+
+### 17.40 Bounded CTFE CFG backedges and declaration identity receiving
+
+Leaf CTFE accepts scalar CFG backedges after full Lowered reverification. PHI values select the actual predecessor and copy in parallel through the shared scalar edge kernel. Execution shares the original steps/watchdog and compiler ledger: a backedge neither resets nor refunds charges, and a nonterminating loop rejects at its finite step limit while preserving canonical Unit output. Full receiving still checks PHI predecessors, targets, offsets and signatures; block ordinals do not prove termination.
+
+CTFE requires actual ordinary function declaration identity. Structurally valid Lowered input without a declarations/functions table grants no execution qualification; leaf and direct-call entries reject with NOT_LEAF and NOT_SUPPORTED respectively, preserving output and spent charges. Module initializers, nominal/cleanup owners, unsupported actual operations and reachable I/O retain individual rejection; root or effect flags grant no determinism. Leaf retains its no-CALL boundary; finite calls use the separate complete-closure receiving entry.
+
+### 17.41 Canonical CTFE Unit returns and ordinary Source replay
+
+Ordinary Unit-result functions without value parameters can enter actual CTFE closure admission. Their Unit RETURN preserves zero type/reserved/payload and has zero target logical output size. A Unit return has no SSA storage slot, so a child return must not write that slot; the caller retains scalar parameters and other live values. Unit is not admitted as an ordinary value argument, and receiving still repeats actual type and complete Lowered identity checks.
+
+Source receives Unit comptime results through the same bounded CTFE pipeline and independently replays ordinary Unit expressions, preserving site matching, coverage and canonical result verification. Empty blocks and blocks ending in ordinary statements produce Unit; owned local state continues to require the actual value-domain interface. A comptime block grants no nonlocal return from its enclosing function. I/O, nonterminating loops and unsupported actual operations retain closure or budget rejection, with failure outputs and the original compiler ledger preserved.
+
+### 17.42 Bounded CTFE Rune values and ordinary Source constants
+
+Rune joins bool/integer admission for actual scalar parameters, results, locals and direct-call closures. CONST_RUNE, INTEGER_TO_RUNE and RUNE_TO_INTEGER use the existing shared execution kernel. Rune equality validates both complete Unicode scalars and compares code points; it does not interpret Rune as an integer type or host character. Valid payloads are 0..0x10ffff excluding 0xd800..0xdfff. Invalid Rune arguments reject with BAD_ARGUMENT; out-of-range integer conversions reject with NUMERIC_RANGE, preserving canonical Unit output. CONVERT_NUMBER continues to admit only integer-to-integer conversion and grants no floating admission.
+
+Canonical target layout determines exported size: Rune occupies four bytes and output_bytes=3 rejects. Host carrier sizeof and UTF-8 length do not determine that budget. After actual Checked/specialization reverification/Lowered execution, Source independently replays an ordinary CONST_RUNE recipe with complete site, type, canonical-value and coverage checks. Nested comptime and ordinary Rune calls retain full closure admission. Existing steps/depth/frame/output ceilings, the sole cumulative compiler ledger, physical OOM and final-owner cleanup obligations remain. This family grants no managed aggregate, string, unknown function-value or runtime-fallback qualification.
+
+### 17.43 Private Cell execution on the compiler ledger and Unit tail assignment
+
+After admitting the entire actual call closure, CTFE allows frame-private Cell<Unit/bool/integer/Rune>. Ordinary var CELL_NEW/READ/WRITE, lazy CELL_LOCAL_WRITE and LOCAL_UNINIT use authentic existing Value operations. Type metadata is independently copied into a compiler TypeArena; value storage uses the original XrCompileResources-backed Domain. Allocation, copy, traversal and Domain work retain one cumulative ledger and physical FI. Local receiving fuel bounds one scalar check; it neither clones, resets nor refunds the compiler budget. Scalar entries without Cell operations create no such Domain/arena.
+
+Actual owned offsets are released on normal and child returns and on step, budget, OOM or arithmetic failure. Frame setup prepays its cleanup offset scans; release needs no remaining execution budget and allocates nothing. Each Cell access checks the same private Domain. Parameters and exports remain limited to canonical Unit/bool/integer/Rune results and ordinary scalar arguments; external Cells, ref loans, module state and arbitrary owned values are not admitted. Full type, predecessor/PHI, target, identity, signature, reachable-I/O, depth/steps/activation-byte and original output checks remain. Root/effect flags grant no purity, and no Instance/native/fallback runs.
+
+A Unit block's tail assignment may carry an ordinary expression's internal ID, but its helper Unit RETURN must use zero, creating no Unit SSA slot or forwarding that ID. Source independently replays the complete input, matches sites and canonical results and receives it through the ordinary Checker. Private Cell execution exports only actual scalar/Unit results. This family grants no Cell/aggregate/string export, function-value, cleanup-function or suspension qualification.
+
+### 17.44 Owning CTFE String exports and independent Source receiving
+
+String parameters, results and Cell<String> use authentic Value/TypeArena storage and the original compiler Domain. External String arguments first become independent full-UTF-8 snapshots on this compiler ledger. Internal calls use owned-slot retain/copy/move; normal, child and all failed exits release every slot. Constants, concatenation, owned local copies, rune-count length and equality retain existing Value semantics. Scanning/copy/comparison spans pay original cumulative work before execution, and Domain allocation/resize uses the same ledger. No Instance/native/AST fallback runs; root/effect flags grant no purity.
+
+String output size is its actual UTF-8 byte count, not a host pointer, carrier sizeof or rune count. Empty strings can export with output_bytes=0; exceeding the original eight-byte request ceiling rejects with OUTPUT_LIMIT and preserves Unit output. Publication first obtains an independent owned reference. Frame/Artifact/Source/ledger-caller death cannot dangle the result; final drop allocates nothing, refunds no cumulative fees and only decreases live bytes.
+
+Each original and replay Source site holds its own real result. Independent replay copies complete bytes into its ordinary literal/CONST_STRING recipe before complete Checker/query publication. Embedded NUL retains explicit length; unknown/duplicate/extra/type-mismatched sites still reject. Every partial result and second-construction/charging/publication failure releases its owners. Target/profile and original steps/depth/frame/output and compiler three-axis bounds remain; arbitrary aggregate/function-value/resource-handle exports are not granted.
+
+### 17.45 Bounded CTFE String comparison and readonly search
+
+CTFE admits String byte-order comparisons (<, <=, >, >=), contains, startsWith, endsWith, indexOf and lastIndexOf in the complete Lowered function closure. Existing Value operations determine semantics; no native, Instance or AST evaluation path is introduced. The indexOf start and both search results count Unicode scalars, as does String length. Comparison uses complete UTF-8 byte order and embedded NUL retains its explicit length. Empty patterns, missing-result -1 and start equal to scalar length retain ordinary runtime rules. A negative or excessive start returns NUMERIC_RANGE; Source reports a value range violation and preserves output.
+
+Variable scans prepay a conservative upper bound on the original cumulative compiler ledger before calling Value operations: comparison byte spans, each candidate byte's pattern comparison and loop bookkeeping, the search algorithm's skip-table initialization and pattern visits, and UTF-8 index-conversion scans. Every sum and product checks overflow. Unpayable or overflowing work rejects BUDGET before an unbounded host search. Empty patterns and established range errors require no scan. This prepayment creates no quota, refund or reset of the original 128M work, 64MiB allocated and 8MiB live limits.
+
+Inputs still become compiler Domain snapshots. Arithmetic-range, OOM, step and work failures release all frame owners and preserve caller Strings. Source retains two independent constructions, ordinary constant recipes, complete Checker and query publication. Reachable I/O still rejects even when a search condition leaves its branch unexecuted. This family grants no arbitrary aggregate, function-value, resource or cleanup-path admission.
 
 ---
 

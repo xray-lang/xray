@@ -6,7 +6,7 @@ import tempfile
 
 executable, source = map(pathlib.Path, sys.argv[1:3])
 mode = sys.argv[3]
-assert mode in ("measure", "faults")
+assert mode in ("measure", "faults", "profile")
 with tempfile.TemporaryDirectory(prefix="xir-library-preparation-") as temporary:
     root = pathlib.Path(temporary).resolve()
     text = (source/"tests/fixtures/xir_stdlib_output/root.xr").read_text(encoding="utf-8")

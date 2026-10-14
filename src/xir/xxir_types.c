@@ -440,5 +440,6 @@ XrXirType xr_xir_operand_type(const XrXirFunction *function, uint32_t value) {
 #include "xxir_type_context.inc.c"
 #include "xxir_nominal_native.inc.c"
 #include "xxir_nominal.inc.c"
+#include "xxir_type_description.inc.c"
 #include "xxir_nominal_identity.inc.c"
 #include "xxir_nominal_layout.inc.c"

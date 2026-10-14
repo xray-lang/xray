@@ -1,0 +1,6 @@
+export fn countBits(value:i64)->i64 { return value.popcount() }
+export fn leading(value:i64)->i64 { return value.leadingZeros() }
+export fn trailing(value:i64)->i64 { return value.trailingZeros() }
+export fn swapped(value:i64)->i64 { return value.byteswap() }
+export fn left(value:i64,n:i64)->i64 { return value.rotateLeft(n) }
+export fn right(value:i64,n:i64)->i64 { return value.rotateRight(n) }

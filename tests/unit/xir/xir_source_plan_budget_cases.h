@@ -100,7 +100,11 @@ static void source_plan_conversion_budget_cases(void) {
     XrXirCallableParameter parameters[]={{XR_XIR_I64,0},{XR_XIR_I64,0}};
     SourceValue values[]={{0,XR_XIR_I64},{1,XR_XIR_I64}};
     SourceCallConversions request={SOURCE_CALL_REQUIREMENT,{0},NULL,parameters,values,2,0};
+    XrXirType input_types[]={XR_XIR_I64,XR_XIR_I64};
+    XrXirFunction function={0};function.parameter_count=2;function.parameters=input_types;
+    SourceFunction body={0};
     SourceContext ctx={0};CHECK(allocation_private_context(&ctx,allocation_limits()));
+    ctx.functions=&function;ctx.bodies=&body;ctx.function_count=1;
     size_t start=source_fixture_compile_attempts;
     CHECK(source_call_conversions(&ctx,NULL,&request));
     XrCompileResourceStats fees={0};CHECK(xr_compile_resources_stats(ctx.compile.resources,&fees)==XR_COMPILE_RESOURCE_OK);
@@ -114,6 +118,8 @@ static void source_plan_conversion_budget_cases(void) {
         if(role==2)caps.allocated_bytes=sizeof(XrCompileResources)+sizeof(CompileAllocation)+scratch-1;
         if(role==3)caps.work=2;
         ctx=(SourceContext){0};CHECK(allocation_private_context(&ctx,caps));
+        body=(SourceFunction){0};ctx.functions=&function;ctx.bodies=&body;ctx.function_count=1;
+        input_types[0]=values[0].type;input_types[1]=values[1].type;
         start=source_fixture_compile_attempts;source_fixture_compile_fail_at=role==0?start:SIZE_MAX;
         source_fixture_compile_injected=false;
         CHECK(!source_call_conversions(&ctx,NULL,&request));
@@ -125,8 +131,8 @@ static void source_plan_conversion_budget_cases(void) {
     }
     source_fixture_compile_fail_at=SIZE_MAX;
     ctx=(SourceContext){0};CHECK(allocation_private_context(&ctx,allocation_limits()));
-    XrXirFunction function={0};function.parameter_count=2;SourceFunction body={0};
-    ctx.bodies=&body;ctx.functions=&function;ctx.remaining_blocks=1;ctx.remaining_instructions=1;
+    body=(SourceFunction){0};
+    ctx.bodies=&body;ctx.functions=&function;ctx.function_count=1;ctx.remaining_blocks=1;ctx.remaining_instructions=1;
     CHECK(source_call_conversions(&ctx,NULL,&request));
     CHECK(body.count==1 && body.recipes[0].instruction.op==XR_XIR_CONVERT_NUMBER);
     CHECK(body.recipes[0].owner==ctx.function && body.recipes[0].value==2);
@@ -134,8 +140,9 @@ static void source_plan_conversion_budget_cases(void) {
     CHECK(values[1].type==XR_XIR_I64 && values[1].id==2 && source_fixture_compile_live==3);
     allocation_private_close(&ctx);CHECK(!source_fixture_compile_live);
     ctx=(SourceContext){0};CHECK(allocation_private_context(&ctx,allocation_limits()));
-    body=(SourceFunction){0};ctx.bodies=&body;ctx.functions=&function;
+    body=(SourceFunction){0};ctx.bodies=&body;ctx.functions=&function;ctx.function_count=1;
     values[0]=(SourceValue){0,XR_XIR_I8};values[1]=(SourceValue){1,XR_XIR_I64};parameters[1].type=XR_XIR_I8;
+    input_types[0]=values[0].type;input_types[1]=values[1].type;
     CHECK(!source_call_conversions(&ctx,NULL,&request));
     CHECK(ctx.diagnostic.status==XR_XIR_BAD_TYPE);
     CHECK(!body.count && !values[0].id && values[1].id==1);

@@ -21,6 +21,7 @@ static bool source_comptime_failure(SourceContext *ctx,AstNode *node,XrXirCtfeSt
         status==XR_XIR_CTFE_OUT_OF_MEMORY?"comptime allocation failed":
         status==XR_XIR_CTFE_BUDGET?"comptime compiler ledger exhausted":
         status==XR_XIR_CTFE_DIVIDE_BY_ZERO?"comptime division by zero":
+        status==XR_XIR_CTFE_NUMERIC_RANGE?"comptime value range violation":
         "comptime requires an admitted deterministic scalar direct-call closure";
     return source_fail(ctx,node,mapped,message);
 }
@@ -54,7 +55,7 @@ static bool source_comptime_evaluate(SourceContext *ctx,const XrXirArtifact *che
         if (!source_work_units(ctx,NULL,packet.length)) status=XR_XIR_BUDGET;
         else xr_sha256(packet.bytes,packet.length,identity);
     }
-    /* Only fixed-width canonical bool/integer operations are supported. The
+    /* Only canonical Unit and fixed-width bool/integer/Rune operations are supported. The
      * actual supported layout profile is explicit, never inferred from host
      * sizeof; no reflection, floating or foreign-profile result is implied. */
     const XrXirTarget target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};
@@ -72,11 +73,11 @@ static bool source_comptime_evaluate(SourceContext *ctx,const XrXirArtifact *che
             .call_depth=XR_XIR_CTFE_MAX_CALL_DEPTH};
         memcpy(request.evaluation.checked_identity,identity,sizeof(identity));
         XrXirValue value={0};XrXirCtfeStatus evaluated=xr_xir_compile_ctfe_calls(&request,&value);
-        if (evaluated!=XR_XIR_CTFE_OK) { source_comptime_failure(ctx,site->syntax,evaluated);break; }
-        if (!source_comptime_scalar((XrXirType)value.type) || !xr_xir_value_argument(&value,NULL,(XrXirType)value.type)) {
-            source_fail(ctx,site->syntax,XR_XIR_BAD_STRUCTURE,"comptime returned a noncanonical scalar");break;
+        if (evaluated!=XR_XIR_CTFE_OK) { xr_xir_value_drop(&value);source_comptime_failure(ctx,site->syntax,evaluated);break; }
+        if (!source_comptime_result_type((XrXirType)value.type) || !source_comptime_result_value(&value)) {
+            xr_xir_value_drop(&value);source_fail(ctx,site->syntax,XR_XIR_BAD_STRUCTURE,"comptime returned a noncanonical value");break;
         }
-        if (!source_work_units(ctx,site->syntax,sizeof(value)+1)) break;
+        if (!source_work_units(ctx,site->syntax,sizeof(value)+1)) { xr_xir_value_drop(&value);break; }
         site->value=value;++count;
     }
     if (ctx->diagnostic.status==XR_XIR_OK && count!=ctx->comptime_count)
@@ -86,14 +87,18 @@ static bool source_comptime_evaluate(SourceContext *ctx,const XrXirArtifact *che
 }
 /* This destructor owns declaration/recipe data, never the borrowed input graph
  * or immutable manifest rows held by the original synchronous Source owner. */
+static void source_comptime_values_free(SourceContext *ctx) {
+    for (SourceComptimeSite *site=ctx->comptime_sites;site;site=site->next) xr_xir_value_drop(&site->value);
+}
 static void source_comptime_context_free(SourceContext *ctx) {
+    source_comptime_values_free(ctx);
     xr_xir_compile_construction_free(ctx->construction);
     while (ctx->memory) { SourceMemory *next=ctx->memory->next;xr_compile_resources_free(ctx->memory);ctx->memory=next; }
 }
 static void source_comptime_receive(SourceContext *ctx,XrXirSourceResult *output) {
     if (!ctx->comptime_count || ctx->diagnostic.status!=XR_XIR_OK) return;
-    if (!source_comptime_evaluate(ctx,output->checked)) { xr_xir_compile_source_result_free(output);return; }
-    if (!source_work_units(ctx,NULL,sizeof(SourceContext))) { xr_xir_compile_source_result_free(output);return; }
+    if (!source_comptime_evaluate(ctx,output->checked)) { xr_xir_compile_source_result_free(output);source_comptime_values_free(ctx);return; }
+    if (!source_work_units(ctx,NULL,sizeof(SourceContext))) { xr_xir_compile_source_result_free(output);source_comptime_values_free(ctx);return; }
     SourceContext received={0};received.compile=ctx->compile;received.graph=ctx->graph;received.linkage_kind=ctx->linkage_kind;
     received.manifests=ctx->manifests;received.prelude_module=ctx->prelude_module;received.core_factory=ctx->core_factory;
     received.remaining_blocks=ctx->remaining_blocks;received.remaining_instructions=ctx->remaining_instructions;
@@ -106,5 +111,5 @@ static void source_comptime_receive(SourceContext *ctx,XrXirSourceResult *output
     xr_xir_compile_source_result_free(output);
     if (received.diagnostic.status==XR_XIR_OK) *output=result;
     else { xr_xir_compile_source_result_free(&result);ctx->diagnostic=received.diagnostic;ctx->module=received.module; }
-    source_comptime_context_free(&received);
+    source_comptime_context_free(&received);source_comptime_values_free(ctx);
 }

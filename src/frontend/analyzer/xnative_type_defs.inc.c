@@ -4,15 +4,9 @@ static const char xr_native_def_atomic[] = "// Built-in Atomic<T> type; implemen
 
 static const char xr_native_def_bigint[] = "// Built-in BigInt type — implementation in src/runtime/object/xbigint_methods.c\nclass BigInt {\n    abs() -> BigInt\n    toString() -> string\n    sign() -> i64\n    isZero() -> bool\n    isNegative() -> bool\n    isPositive() -> bool\n    toI64() -> i64?\n    toF64() -> f64\n}\n";
 
-static const char xr_native_def_bool[] = "// Built-in bool type — implementation in src/runtime/value/xbool_methods.c\nclass bool {\n    toString() -> string\n}\n";
-
 static const char xr_native_def_channel[] = "// Built-in Channel<T> type — implementation in src/runtime/coro/xchannel_methods.c\n\nenum Recv<T> {\n    Value { value: T },\n    Empty,\n    Timeout,\n    Closed,\n}\n\nenum SendResult {\n    Sent,\n    Full,\n    Timeout,\n    Closed,\n}\nclass Channel<T> {\n    capacity: i64\n    isClosed: bool\n\n    send(value: T)\n    recv() -> Recv<T>\n    recvOr(default: T) -> T\n\n    trySend(value: T) -> SendResult\n    tryRecv() -> Recv<T>\n\n    sendTimeout(value: T, timeout: i64) -> SendResult\n    recvTimeout(timeout: i64) -> Recv<T>\n\n    close()\n}\n";
 
 static const char xr_native_def_coroutine[] = "// Built-in Task type (coroutine handle) — implementation in src/runtime/coro/\n\nenum TaskResult<T> {\n    Success { value: T },\n    Failed { error: Error },\n    Cancelled,\n    Timeout,\n    Pending,\n}\n\nenum TaskStatus {\n    Pending,\n    Running,\n    Success,\n    Failed,\n    Cancelled,\n}\nclass Task<T> {\n    done: bool\n    status: TaskStatus\n\n    ref cancel()\n    ref poll() -> TaskResult<T>\n    ref awaitResult() -> TaskResult<T>\n    ref awaitTimeout(timeout: i64) -> TaskResult<T>\n}\n";
-
-static const char xr_native_def_f64[] = "// Built-in f64 type — implementation in src/runtime/value/xf64_methods.c\nclass f64 {\n    // @lowered\n    static parse(text: string) -> f64\n    // @lowered\n    static tryParse(text: string) -> f64?\n    abs() -> f64\n    toString() -> string\n    toFixed(decimals?: i64) -> string\n    toI64() -> i64\n    floor() -> i64\n    ceil() -> i64\n    round() -> i64\n    sqrt() -> f64\n    pow(exp: f64) -> f64\n    isNaN() -> bool\n}\n";
-
-static const char xr_native_def_i64[] = "// Built-in i64 type — implementation in src/runtime/value/xi64_methods.c\nenum NumberParseError {\n    InvalidSyntax,\n    OutOfRange\n}\nclass i64 {\n    // @lowered\n    static parse(text: string) -> i64\n    // @lowered\n    static tryParse(text: string) -> i64?\n    abs() -> i64\n    toString() -> string\n    toBigInt() -> BigInt\n    toF64() -> f64\n    toHex() -> string\n    max(other: i64) -> i64\n    min(other: i64) -> i64\n    sqrt() -> f64\n    pow(exp: f64) -> f64\n    checkedAdd(other: i64) -> i64?\n    checkedSub(other: i64) -> i64?\n    checkedMul(other: i64) -> i64?\n    saturatingAdd(other: i64) -> i64\n    saturatingSub(other: i64) -> i64\n    saturatingMul(other: i64) -> i64\n    wrappingAdd(other: i64) -> i64\n    wrappingSub(other: i64) -> i64\n    wrappingMul(other: i64) -> i64\n    addOverflows(other: i64) -> bool\n    subOverflows(other: i64) -> bool\n    mulOverflows(other: i64) -> bool\n}\n";
 
 static const char xr_native_def_iterator[] = "// Built-in pull iterator handle. Generator-backed and collection-backed\n// implementations share this sealed native surface.\nclass Iterator<T> {\n    // @lowered\n    hasNext() -> bool\n    // @lowered\n    next() -> T\n    // @lowered\n    nth(index: i64) -> T\n    // An iterator is its own iterable; ownership is compiler-owned contract\n    // data rather than part of this signature-only source.\n    iterator() -> Iterator<T>\n    toString() -> string\n}\n";
 
@@ -21,8 +15,6 @@ static const char xr_native_def_json[] = "// Prelude JSON namespace — implemen
 static const char xr_native_def_map[] = "// Built-in Map<K, V> type — implementation in src/runtime/object/xmap_methods.c\nclass Map<K: Hashable, V> {\n    get(key: K) -> V?\n    ref set(key: K, value: V)\n    containsKey(key: K) -> bool\n    containsValue(value: V) -> bool\n    ref delete(key: K) -> bool\n    ref clear()\n    keys() -> Array<K>\n    values() -> Array<V>\n    entries() -> Array<(K, V)>\n    forEach(fn: fn(key: K, value: V)) -> ()\n    // Iteration protocol — iterator() yields each key K (used by\n    // single-variable `for (k in m)`); entriesIterator() yields each\n    // (key, value) tuple (used by `for (k, v in m)`).\n    iterator() -> Iterator<K>\n    entriesIterator() -> Iterator<(K, V)>\n    toString() -> string\n}\n";
 
 static const char xr_native_def_panic_info[] = "// Built-in PanicInfo class — the runtime panic diagnostic payload.\n//\n// PanicInfo belongs to the panic channel only: the VM/AOT runtime constructs it\n// on faults (out-of-bounds, division by zero, non-exhaustive match, etc.) and\n// `catch panic (p: PanicInfo)` reads its fields. Business errors are enum values\n// (`throw <enum>`), never PanicInfo. Field layout matches xclass_system.h\n// PANIC_INFO_FIELD_* indices and the XrClass built by\n// xr_register_panic_info_class in xclass_system.c; the constructor and toString\n// bodies are PRIMITIVE on the C side. This declaration exists for analyzer / LSP\n// awareness so the fields are visible from any module.\nclass PanicInfo {\n    message: string\n    stack: Array<string>\n    cause: PanicInfo?\n    code: i64\n    data: JSON.Value\n    constructor(message: string = \"\", cause: PanicInfo? = null)\n    toString() -> string\n}\n";
-
-static const char xr_native_def_rune[] = "// Built-in Unicode scalar type. A rune is always a valid Unicode scalar value.\nclass rune {\n    toUInt32() -> u32\n    toString() -> string\n    isLetter() -> bool\n    isNumber() -> bool\n    isAlphanumeric() -> bool\n    isWhitespace() -> bool\n}\n";
 
 static const char xr_native_def_set[] = "// Built-in Set<T> type — implementation in src/runtime/object/xset_methods.c\nclass Set<T: Hashable> {\n    ref add(value: T)\n    contains(value: T) -> bool\n    ref delete(value: T) -> bool\n    ref clear()\n    values() -> Array<T>\n    forEach(fn: fn(value: T)) -> ()\n    union(other: Set<T>) -> Set<T>\n    intersection(other: Set<T>) -> Set<T>\n    difference(other: Set<T>) -> Set<T>\n    symmetricDifference(other: Set<T>) -> Set<T>\n    isSubset(other: Set<T>) -> bool\n    isSuperset(other: Set<T>) -> bool\n    toArray() -> Array<T>\n    // Iteration protocol — yields each element T (used by for-in).\n    iterator() -> Iterator<T>\n    toString() -> string\n}\n";
 
@@ -33,16 +25,12 @@ static const char xr_native_def_thread[] = "// sys.Thread.spawn is compiler-defi
 #define XR_NATIVE_TYPE_DEFS(X) \
     X("atomic", xr_native_def_atomic) \
     X("bigint", xr_native_def_bigint) \
-    X("bool", xr_native_def_bool) \
     X("channel", xr_native_def_channel) \
     X("coroutine", xr_native_def_coroutine) \
-    X("f64", xr_native_def_f64) \
-    X("i64", xr_native_def_i64) \
     X("iterator", xr_native_def_iterator) \
     X("json", xr_native_def_json) \
     X("map", xr_native_def_map) \
     X("panic_info", xr_native_def_panic_info) \
-    X("rune", xr_native_def_rune) \
     X("set", xr_native_def_set) \
     X("stringbuilder", xr_native_def_stringbuilder) \
     X("thread", xr_native_def_thread)

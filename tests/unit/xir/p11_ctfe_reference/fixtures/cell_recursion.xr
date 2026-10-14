@@ -1,0 +1,2 @@
+fn fact(n:i64)->i64 { var local=n; return local==0 ? 1 : local*fact(local-1) }
+export fn run()->i64 { return comptime fact(6) }

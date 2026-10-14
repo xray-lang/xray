@@ -1068,7 +1068,13 @@ static bool source_array_recipe_call(SourceContext *ctx, AstNode *node, SourceAr
     const SourceValue *evaluated, SourceValue *value);
 #include "xxir_source_array.inc.c"
 #include "xxir_source_tuple.inc.c"
+static bool source_string_owned_call(SourceContext *ctx,AstNode *node,SourceValue receiver,
+    const XrNativeMemberDeclaration *member,SourceValue *value);
 #include "xxir_source_string.inc.c"
+static bool source_literal_append(SourceContext *ctx, AstNode *node, const char *bytes,
+    size_t length, uint32_t *literal);
+#include "xxir_source_integer_methods.inc.c"
+#include "xxir_source_scalar_methods.inc.c"
 static bool source_constructor_receiver(SourceContext *ctx, AstNode *node);
 static bool source_constructor_field(SourceContext *ctx, AstNode *node, const char *name, SourceValue *value, AstNode *incoming);
 #include "xxir_source_struct.inc.c"
@@ -1247,14 +1253,8 @@ static bool source_call(SourceContext *ctx, AstNode *node, SourceExpectedType re
                 return source_array_call(ctx, node, &receiver, value);
             if (xr_xir_type_is_atomic(&ctx->types,receiver.type))
                 return source_atomic_call(ctx,node,receiver,value);
-            if ((receiver.type == XR_XIR_BOOL || receiver.type == XR_XIR_RUNE || xr_xir_type_is_number(receiver.type)) &&
-                source_text_same(ctx, NULL, member->name, "toString")) {
-                if (call->arg_count || call->type_arg_count)
-                    return source_fail(ctx, node, XR_XIR_BAD_TYPE, "toString accepts no value or type arguments");
-                return source_text_conversion(ctx, node, receiver, value);
-            }
-            if (receiver.type == XR_XIR_RUNE && source_text_same(ctx,NULL,member->name,"toUInt32"))
-                return source_rune_codepoint(ctx,node,receiver,value);
+            if (xr_xir_type_is_integer(receiver.type)) return source_integer_call(ctx,node,receiver,value);
+            if (source_scalar_identity(receiver.type)) return source_scalar_call(ctx,node,receiver,value);
             if (receiver.type == XR_XIR_STRING) return source_string_call(ctx, node, receiver, value);
             if (xr_xir_type_is_enum(&ctx->types, receiver.type) && source_text_same(ctx, NULL, member->name, "toString")) {
                 if (call->arg_count || call->type_arg_count)
@@ -2841,6 +2841,7 @@ static bool source_closure(SourceContext *ctx, AstNode *node, SourceExpectedType
     return source_type_arguments(ctx, node, types, count, &op) && source_recipe_group(ctx, op, captures, scan.count, value);
 }
 #include "xxir_source_array_recipes.inc.c"
+#include "xxir_source_string_owned.inc.c"
 #include "xxir_source_core_panics.inc.c"
 #include "xxir_source_comptime_expression.inc.c"
 static bool build_bodies(SourceContext *ctx) {
@@ -2935,6 +2936,7 @@ static void source_query_publish(SourceContext *ctx, XrXirSourceResult *output) 
         if (output) xr_xir_compile_source_result_free(output);
         return;
     }
+    if (!source_array_query_types(ctx)) { xr_xir_compile_source_result_free(output); return; }
     ctx->query.complete = ctx->diagnostic.status == XR_XIR_OK;
     ctx->query.implementations = ctx->implementations_ready && ctx->implementations.count ? &ctx->implementations : NULL;
     ctx->query.diagnostic = ctx->diagnostic;

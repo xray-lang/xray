@@ -505,6 +505,10 @@ add_custom_command(
             ${CMAKE_SOURCE_DIR}/stdlib/types/array.xr
             ${CMAKE_SOURCE_DIR}/stdlib/types/string.xr
             ${CMAKE_SOURCE_DIR}/stdlib/types/atomic.xr
+            ${CMAKE_SOURCE_DIR}/stdlib/types/i64.xr
+            ${CMAKE_SOURCE_DIR}/stdlib/types/f64.xr
+            ${CMAKE_SOURCE_DIR}/stdlib/types/bool.xr
+            ${CMAKE_SOURCE_DIR}/stdlib/types/rune.xr
             ${CMAKE_SOURCE_DIR}/stdlib/prelude/builtin_symbols.def
     COMMENT "projecting governed native value declarations"
 )
