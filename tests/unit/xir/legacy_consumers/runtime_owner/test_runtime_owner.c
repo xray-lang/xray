@@ -11,6 +11,7 @@
  *   allocation cut preserves physical ownership and the original independent bytes.
  */
 #include "xray_source.h"
+#include <inttypes.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -72,6 +73,13 @@ static size_t execute(XrSourceProgram *program, Output *output, size_t point) {
     }
     size_t attempts = runtime_attempts;
     if (point == SIZE_MAX) {
+        if (status != XR_SOURCE_OK || !result || output->written != output->length)
+            fprintf(stderr, "normal baseline status=%u state=%u engine=%u result=%u output=%zu/%zu "
+                "limits metadata=%" PRIu64 " value=%" PRIu64 " call=%" PRIu64 " poll=%" PRIu64
+                " work=%" PRIu64 " depth=%u\n", (unsigned)status, (unsigned)event.state, event.engine_status,
+                (unsigned)(result != NULL), output->written, output->length, options.metadata_limit,
+                options.value_limit, options.call_limit, options.poll_limit,
+                options.work_limit, options.depth_limit);
         CHECK(status == XR_SOURCE_OK && result && output->written == output->length);
     } else {
         CHECK(attempts > point);
