@@ -4418,6 +4418,7 @@ target_include_directories(test_xir_array_capacity_core PRIVATE "${CMAKE_SOURCE_
 target_link_libraries(test_xir_array_capacity_core PRIVATE xray_xir_scalar)
 include("${CMAKE_CURRENT_LIST_DIR}/xir/p09_reserve_cow.cmake")
 include("${CMAKE_CURRENT_LIST_DIR}/xir/p09_compile_domain.cmake")
+include("${CMAKE_CURRENT_LIST_DIR}/xir/p09_return_copy.cmake")
 add_executable(test_xir_array_capacity_checked xir/test_xir_array_capacity_checked.c)
 target_link_libraries(test_xir_array_capacity_checked PRIVATE xray_xir)
 foreach(capacity_core_target test_xir_array_capacity_core test_xir_array_capacity_checked)
