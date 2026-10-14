@@ -13,6 +13,10 @@ def render(observation: dict) -> str:
         if value is None:
             raise ValueError('payload observation requires a frozen present value')
         projection = None
+    if projection == 'array_elements':
+        if type(value) is not list:
+            raise ValueError('array observation requires a frozen element sequence')
+        return '\n'.join([str(len(value)), *(render({'expected': element}) for element in value)])
     if projection is not None:
         raise ValueError('unknown semantic observation projection')
     if type(value) is bool:

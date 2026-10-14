@@ -10393,6 +10393,574 @@
         "Whole original body discovery and independent VM/generated-C/native observations.",
         "Exact original compiler/native/runtime FI, budgets, lifetime/borrow/cancellation/physical and full sanitizer/provider obligations."
       ]
+    },
+    {
+      "id": "regression_core_review_0610_array_functional_complete_observed",
+      "oracle_id": "regression_core_review_0610_array_functional",
+      "source": "tests/unit/xir/legacy_consumers/fixtures/independent_named_observations/0610_array_functional/root.xr",
+      "source_lf_sha256": "acdc3d6b86296d96455819bd3ff5d0d293362fb16734dc1c22f197a4d589f7f9",
+      "entry": "test",
+      "stdout_utf8": "5\n2\n4\n6\n8\n10\n5\n0\n1\n2\n3\n3\n2\n4\n6\n3\n0\n4\n2\n4\n6\n8\n4\n0\n15\n24\n9\n1\n0\n42\n6\n0\n3\n6\n8\n10\n3\n3\n4\n16\n36\n3\n60\n30\n2\napple\napricot\n2\n6\n1\n2\n3\n4\n5\n6\n6\n",
+      "stderr_utf8": "",
+      "companions": [],
+      "owners": [
+        "P09",
+        "P10",
+        "P13"
+      ],
+      "independent_observations": {
+        "original_case": "tests/regression/06_collections/0610_array_functional.xr",
+        "selected_complete_source": "tests/regression/06_collections/0610_array_functional.xr",
+        "selected_source_lf_sha256": "019e9d0fe4b2261e884e6ad20f9c2a83145dd154a37073e080bf47f20fac697b",
+        "method": "All original assertions, lambdas, operations and bodies remain. Frozen Array values use length-prefixed complete element observations; no array string representation or ordinal is guessed. Read-only extra every/some probes leave the original values unchanged.",
+        "values": [
+          {
+            "test": "test_map_basic",
+            "expression": "doubled",
+            "expected": [
+              2,
+              4,
+              6,
+              8,
+              10
+            ],
+            "projection": "array_elements"
+          },
+          {
+            "test": "test_map_basic",
+            "expression": "len(doubled)",
+            "expected": 5,
+            "projection": null
+          },
+          {
+            "test": "test_map_empty",
+            "expression": "result",
+            "expected": [],
+            "projection": "array_elements"
+          },
+          {
+            "test": "test_map_to_different_type",
+            "expression": "strs[0]",
+            "expected": "1",
+            "projection": null
+          },
+          {
+            "test": "test_map_to_different_type",
+            "expression": "strs[1]",
+            "expected": "2",
+            "projection": null
+          },
+          {
+            "test": "test_map_to_different_type",
+            "expression": "strs[2]",
+            "expected": "3",
+            "projection": null
+          },
+          {
+            "test": "test_filter_basic",
+            "expression": "evens",
+            "expected": [
+              2,
+              4,
+              6
+            ],
+            "projection": "array_elements"
+          },
+          {
+            "test": "test_filter_basic",
+            "expression": "len(evens)",
+            "expected": 3,
+            "projection": null
+          },
+          {
+            "test": "test_filter_none",
+            "expression": "evens",
+            "expected": [],
+            "projection": "array_elements"
+          },
+          {
+            "test": "test_filter_all",
+            "expression": "evens",
+            "expected": [
+              2,
+              4,
+              6,
+              8
+            ],
+            "projection": "array_elements"
+          },
+          {
+            "test": "test_filter_all",
+            "expression": "len(evens)",
+            "expected": 4,
+            "projection": null
+          },
+          {
+            "test": "test_filter_empty",
+            "expression": "result",
+            "expected": [],
+            "projection": "array_elements"
+          },
+          {
+            "test": "test_reduce_sum",
+            "expression": "sum",
+            "expected": 15,
+            "projection": null
+          },
+          {
+            "test": "test_reduce_product",
+            "expression": "product",
+            "expected": 24,
+            "projection": null
+          },
+          {
+            "test": "test_reduce_max",
+            "expression": "max",
+            "expected": 9,
+            "projection": null
+          },
+          {
+            "test": "test_reduce_min",
+            "expression": "min",
+            "expected": 1,
+            "projection": null
+          },
+          {
+            "test": "test_reduce_empty",
+            "expression": "sum",
+            "expected": 0,
+            "projection": null
+          },
+          {
+            "test": "test_reduce_single",
+            "expression": "sum",
+            "expected": 42,
+            "projection": null
+          },
+          {
+            "test": "test_foreach_basic",
+            "expression": "sum",
+            "expected": 6,
+            "projection": null
+          },
+          {
+            "test": "test_foreach_empty",
+            "expression": "count",
+            "expected": 0,
+            "projection": null
+          },
+          {
+            "test": "test_chain_map_filter",
+            "expression": "result",
+            "expected": [
+              6,
+              8,
+              10
+            ],
+            "projection": "array_elements"
+          },
+          {
+            "test": "test_chain_map_filter",
+            "expression": "len(result)",
+            "expected": 3,
+            "projection": null
+          },
+          {
+            "test": "test_chain_filter_map",
+            "expression": "result",
+            "expected": [
+              4,
+              16,
+              36
+            ],
+            "projection": "array_elements"
+          },
+          {
+            "test": "test_chain_filter_map",
+            "expression": "len(result)",
+            "expected": 3,
+            "projection": null
+          },
+          {
+            "test": "test_chain_map_filter_reduce",
+            "expression": "result",
+            "expected": 60,
+            "projection": null
+          },
+          {
+            "test": "test_sum_of_squares",
+            "expression": "sumOfSquares",
+            "expected": 30,
+            "projection": null
+          },
+          {
+            "test": "test_count_matches",
+            "expression": "startsWithA",
+            "expected": [
+              "apple",
+              "apricot"
+            ],
+            "projection": "array_elements"
+          },
+          {
+            "test": "test_count_matches",
+            "expression": "len(startsWithA)",
+            "expected": 2,
+            "projection": null
+          },
+          {
+            "test": "test_flatten_single_level",
+            "expression": "flat",
+            "expected": [
+              1,
+              2,
+              3,
+              4,
+              5,
+              6
+            ],
+            "projection": "array_elements"
+          },
+          {
+            "test": "test_flatten_single_level",
+            "expression": "len(flat)",
+            "expected": 6,
+            "projection": null
+          }
+        ]
+      },
+      "remaining_gates": [
+        "Actual complete CLI discovery and independent VM/C/native observations.",
+        "Exact original lifetime/resource/FI/cancellation/physical/safety/provider obligations; observations add read-only work and do not grant those gates."
+      ]
+    },
+    {
+      "id": "regression_core_review_0531_bare_lambda_complete_observed",
+      "oracle_id": "regression_core_review_0531_bare_lambda",
+      "source": "tests/unit/xir/legacy_consumers/fixtures/independent_named_observations/0531_bare_lambda/root.xr",
+      "source_lf_sha256": "bd6536e353d4c4836d0fd99896ad05567bfe9842956b0e52864aeb8080f07aff",
+      "entry": "test",
+      "stdout_utf8": "5\n2\n4\n6\n8\n10\n3\n2\n4\n6\n3\n2\n6\n30\ntrue\ntrue\nfalse\n3\n30\n40\n50\n3\n3\n5\n7\n3\n3\n6\n9\n20\n60\n2\n5\n5\n",
+      "stderr_utf8": "",
+      "companions": [],
+      "owners": [
+        "P02",
+        "P07",
+        "P08",
+        "P09",
+        "P10"
+      ],
+      "independent_observations": {
+        "original_case": "tests/regression/05_functions/0531_bare_lambda.xr",
+        "selected_complete_source": "tests/regression/05_functions/0531_bare_lambda.xr",
+        "selected_source_lf_sha256": "7e604663ce825e9704c1c1af7b29e9b4fa3d0a5ca67fb64cd295a97062a4fa74",
+        "method": "All original assertions, lambdas, operations and bodies remain. Frozen Array values use length-prefixed complete element observations; no array string representation or ordinal is guessed. Read-only extra every/some probes leave the original values unchanged.",
+        "values": [
+          {
+            "test": "test_bare_lambda_map",
+            "expression": "doubled",
+            "expected": [
+              2,
+              4,
+              6,
+              8,
+              10
+            ],
+            "projection": "array_elements"
+          },
+          {
+            "test": "test_bare_lambda_filter",
+            "expression": "evens",
+            "expected": [
+              2,
+              4,
+              6
+            ],
+            "projection": "array_elements"
+          },
+          {
+            "test": "test_bare_lambda_filter",
+            "expression": "len(evens)",
+            "expected": 3,
+            "projection": null
+          },
+          {
+            "test": "test_bare_lambda_filter",
+            "expression": "evens[0]",
+            "expected": 2,
+            "projection": null
+          },
+          {
+            "test": "test_bare_lambda_filter",
+            "expression": "evens[2]",
+            "expected": 6,
+            "projection": null
+          },
+          {
+            "test": "test_bare_lambda_find",
+            "expression": "found!",
+            "expected": 30,
+            "projection": "optional_payload"
+          },
+          {
+            "test": "test_bare_lambda_every_some",
+            "expression": "arr.every(x -> x % 2 == 0)",
+            "expected": true,
+            "projection": null
+          },
+          {
+            "test": "test_bare_lambda_every_some",
+            "expression": "arr.some(x -> x > 7)",
+            "expected": true,
+            "projection": null
+          },
+          {
+            "test": "test_bare_lambda_every_some",
+            "expression": "arr.some(x -> x > 10)",
+            "expected": false,
+            "projection": null
+          },
+          {
+            "test": "test_bare_lambda_chain",
+            "expression": "result",
+            "expected": [
+              30,
+              40,
+              50
+            ],
+            "projection": "array_elements"
+          },
+          {
+            "test": "test_bare_lambda_block_body",
+            "expression": "result",
+            "expected": [
+              3,
+              5,
+              7
+            ],
+            "projection": "array_elements"
+          },
+          {
+            "test": "test_bare_lambda_closure",
+            "expression": "scaled",
+            "expected": [
+              3,
+              6,
+              9
+            ],
+            "projection": "array_elements"
+          },
+          {
+            "test": "test_bare_lambda_fn_arg",
+            "expression": "result",
+            "expected": 20,
+            "projection": null
+          },
+          {
+            "test": "test_bare_lambda_foreach",
+            "expression": "sum",
+            "expected": 60,
+            "projection": null
+          },
+          {
+            "test": "test_bare_lambda_string_map",
+            "expression": "lengths",
+            "expected": [
+              5,
+              5
+            ],
+            "projection": "array_elements"
+          }
+        ]
+      },
+      "remaining_gates": [
+        "Actual complete CLI discovery and independent VM/C/native observations.",
+        "Exact original lifetime/resource/FI/cancellation/physical/safety/provider obligations; observations add read-only work and do not grant those gates."
+      ]
+    },
+    {
+      "id": "regression_core_review_0521_cell_upval_complete_observed",
+      "oracle_id": "regression_core_review_0521_cell_upval",
+      "source": "tests/unit/xir/legacy_consumers/fixtures/independent_named_observations/0521_cell_upval/root.xr",
+      "source_lf_sha256": "bd69937ea3a334b7e6ba738af146cc1dd52a8a1547b13b924c81c4e8612c2663",
+      "entry": "test",
+      "stdout_utf8": "1\n2\n3\n1\n99\n2\n98\n15\n20\n103\n130\n3\n2\n100\n5050\na\nab\nabc\n1.5\n4.0\n10\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n2\n3\n2\n",
+      "stderr_utf8": "",
+      "companions": [],
+      "owners": [
+        "P02",
+        "P07",
+        "P08",
+        "P09",
+        "P10"
+      ],
+      "independent_observations": {
+        "original_case": "tests/regression/05_functions/0521_cell_upval.xr",
+        "selected_complete_source": "tests/regression/05_functions/0521_cell_upval.xr",
+        "selected_source_lf_sha256": "a790f3e8496a75b33b2ae734e543a61ea9b679d8103f4b7d801987d9a6b761d2",
+        "method": "Stateful scalar calls are captured once in their original position. The original100 and10 iteration bounds remain, with actual iteration count100 and all ten independent first results observed.",
+        "values": [
+          {
+            "test": "test_cell_counter_basic",
+            "expression": "f()",
+            "expected": 1,
+            "projection": null
+          },
+          {
+            "test": "test_cell_counter_basic",
+            "expression": "f()",
+            "expected": 2,
+            "projection": null
+          },
+          {
+            "test": "test_cell_counter_basic",
+            "expression": "f()",
+            "expected": 3,
+            "projection": null
+          },
+          {
+            "test": "test_two_cells",
+            "expression": "f(true)",
+            "expected": 1,
+            "projection": null
+          },
+          {
+            "test": "test_two_cells",
+            "expression": "f(false)",
+            "expected": 99,
+            "projection": null
+          },
+          {
+            "test": "test_two_cells",
+            "expression": "f(true)",
+            "expected": 2,
+            "projection": null
+          },
+          {
+            "test": "test_two_cells",
+            "expression": "f(false)",
+            "expected": 98,
+            "projection": null
+          },
+          {
+            "test": "test_transitive_capture",
+            "expression": "f()",
+            "expected": 15,
+            "projection": null
+          },
+          {
+            "test": "test_transitive_capture",
+            "expression": "f()",
+            "expected": 20,
+            "projection": null
+          },
+          {
+            "test": "test_const_capture",
+            "expression": "f(1)",
+            "expected": 103,
+            "projection": null
+          },
+          {
+            "test": "test_const_capture",
+            "expression": "f(10)",
+            "expected": 130,
+            "projection": null
+          },
+          {
+            "test": "test_cell_shared_by_closures",
+            "expression": "get()",
+            "expected": 3,
+            "projection": null
+          },
+          {
+            "test": "test_cell_shared_by_closures",
+            "expression": "get()",
+            "expected": 2,
+            "projection": null
+          },
+          {
+            "test": "test_cell_hot_loop",
+            "expression": "p19Iterations",
+            "expected": 100,
+            "projection": null
+          },
+          {
+            "test": "test_cell_hot_loop",
+            "expression": "sum",
+            "expected": 5050,
+            "projection": null
+          },
+          {
+            "test": "test_cell_string_value",
+            "expression": "f(\"a\")",
+            "expected": "a",
+            "projection": null
+          },
+          {
+            "test": "test_cell_string_value",
+            "expression": "f(\"b\")",
+            "expected": "ab",
+            "projection": null
+          },
+          {
+            "test": "test_cell_string_value",
+            "expression": "f(\"c\")",
+            "expected": "abc",
+            "projection": null
+          },
+          {
+            "test": "test_cell_float_value",
+            "expression": "f(1.5)",
+            "expected": 1.5,
+            "projection": null
+          },
+          {
+            "test": "test_cell_float_value",
+            "expression": "f(2.5)",
+            "expected": 4.0,
+            "projection": null
+          },
+          {
+            "test": "test_many_instances",
+            "expression": "counters[i]() within the unchanged ten-iteration loop",
+            "expected": [
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1
+            ],
+            "projection": "array_elements"
+          },
+          {
+            "test": "test_many_instances",
+            "expression": "counters[0]()",
+            "expected": 2,
+            "projection": null
+          },
+          {
+            "test": "test_many_instances",
+            "expression": "counters[0]()",
+            "expected": 3,
+            "projection": null
+          },
+          {
+            "test": "test_many_instances",
+            "expression": "counters[5]()",
+            "expected": 2,
+            "projection": null
+          }
+        ]
+      },
+      "remaining_gates": [
+        "Complete actual body discovery and independent VM/C/native traces.",
+        "Full exact original FI/resources/lifetime/cancellation/physical/safety/provider qualification remains open."
+      ]
     }
   ]
 }
