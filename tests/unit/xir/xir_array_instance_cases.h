@@ -221,7 +221,7 @@ static void array_instance_cases(void) {
         CHECK(xr_xir_compile_program_seal(xr_xir_compile_artifact_context(proof), &spec, &program) == XR_XIR_OK);
         xr_xir_compile_artifact_free(proof); proof = NULL; native_fixture_owner_free(&compiler);
         XrXirInstanceConfig config; CHECK(xr_xir_instance_config_init(&config, sizeof(config)) == XR_XIR_CALL_READY);
-        if (mode) config.poll_limit = 64;
+        if (mode) config.work_limit = 64;
         CHECK(xr_xir_instance_new(program,&config,&instance) == XR_XIR_CALL_READY);
         xr_xir_compile_program_drop(program);
         CHECK(xr_xir_instance_start(instance,1,NULL,0) == XR_XIR_CALL_READY);
