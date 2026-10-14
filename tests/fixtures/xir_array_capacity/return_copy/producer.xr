@@ -1,0 +1,5 @@
+export fn buildReversed()->Array<i64>{
+    var a=[1,2,3]
+    return a.reverse()
+}
+export fn reverse(a:ref Array<i64>)->Array<i64>{return a.reverse()}
