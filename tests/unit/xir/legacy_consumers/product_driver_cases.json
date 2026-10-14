@@ -13421,6 +13421,432 @@
         "Erased interface/higher-order dispatch and full generic definition/constraint checking remain separate.",
         "Original complete compiler/native/runtime FI, exact budgets/cancel/lifetime/physical and sanitizer/provider matrix."
       ]
+    },
+    {
+      "id": "structured_original_1210_multi_return_observed",
+      "oracle_id": "structured_original_1210_multi_return_observed",
+      "source": "tests/unit/xir/legacy_consumers/fixtures/independent_named_observations/1210_multi_return/root.xr",
+      "source_lf_sha256": "fc102ceac65f7be02f72ecd84cf3fa62f4ee3240e06d02d7f9423d1d735bae2d",
+      "entry": "test",
+      "stdout_utf8": "all tuple return tests passed\n5\ntrue\n0\nfalse\n1\n5\n9\n1\n2\ntrue\n2.5\nfalse\n0.0\n",
+      "stderr_utf8": "",
+      "companions": [],
+      "owners": [
+        "P02",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P11",
+        "P12",
+        "P13",
+        "P14"
+      ],
+      "independent_observations": {
+        "original_case": "tests/regression/12_type_checking/1210_multi_return.xr",
+        "selected_complete_source": "tests/regression/12_type_checking/1210_multi_return.xr",
+        "selected_source_lf_sha256": "45c28b7fbf1538f582fc2d13e3a03206d1adb83d5efdf3ce79a86207712e40d1",
+        "method": "Retain every original tuple/generic/callable body and all top-level initialization. Capture each scalar at its original assertion position; guarded float quotient uses exact2.5, not only in-range true. Module-level original body invocation remains before actual named invocation.",
+        "values": [
+          {
+            "test": "test_tuple_return_basic",
+            "expression": "result",
+            "expected": 5,
+            "projection": null
+          },
+          {
+            "test": "test_tuple_return_basic",
+            "expression": "ok",
+            "expected": true,
+            "projection": null
+          },
+          {
+            "test": "test_tuple_return_basic",
+            "expression": "result2",
+            "expected": 0,
+            "projection": null
+          },
+          {
+            "test": "test_tuple_return_basic",
+            "expression": "ok2",
+            "expected": false,
+            "projection": null
+          },
+          {
+            "test": "test_triple_return",
+            "expression": "min_v",
+            "expected": 1,
+            "projection": null
+          },
+          {
+            "test": "test_triple_return",
+            "expression": "max_v",
+            "expected": 5,
+            "projection": null
+          },
+          {
+            "test": "test_triple_return",
+            "expression": "sum",
+            "expected": 9,
+            "projection": null
+          },
+          {
+            "test": "test_partial_capture",
+            "expression": "q.0",
+            "expected": 1,
+            "projection": null
+          },
+          {
+            "test": "test_partial_capture",
+            "expression": "q.1",
+            "expected": 2,
+            "projection": null
+          },
+          {
+            "test": "test_conditional_tuple_return",
+            "expression": "ok1",
+            "expected": true,
+            "projection": null
+          },
+          {
+            "test": "test_conditional_tuple_return",
+            "expression": "r1",
+            "expected": 2.5,
+            "projection": null
+          },
+          {
+            "test": "test_conditional_tuple_return",
+            "expression": "ok2",
+            "expected": false,
+            "projection": null
+          },
+          {
+            "test": "test_conditional_tuple_return",
+            "expression": "r2",
+            "expected": 0.0,
+            "projection": null
+          }
+        ],
+        "module_initialization_stdout_utf8": "all tuple return tests passed\n"
+      },
+      "remaining_gates": [
+        "Whole actual named discovery and independent VM/C/native values, including module initialization.",
+        "Generic physical instance count and full definition/constraint proof remain separate from40 equal return values.",
+        "All original exact FI/resources/lifetime/borrow/cancel/physical and sanitizer/provider qualification."
+      ]
+    },
+    {
+      "id": "structured_original_1220_generics_observed",
+      "oracle_id": "structured_original_1220_generics_observed",
+      "source": "tests/unit/xir/legacy_consumers/fixtures/independent_named_observations/1220_generics/root.xr",
+      "source_lf_sha256": "3eef2f7602d140e87cf2804646c2a490d0b72983209aa95f200e2c8f8a435eff",
+      "entry": "test",
+      "stdout_utf8": "42\nhello\nage\n30\n100\n1\n2\n",
+      "stderr_utf8": "",
+      "companions": [],
+      "owners": [
+        "P02",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P11",
+        "P12",
+        "P13",
+        "P14"
+      ],
+      "independent_observations": {
+        "original_case": "tests/regression/12_type_checking/1220_generics.xr",
+        "selected_complete_source": "tests/regression/12_type_checking/1220_generics.xr",
+        "selected_source_lf_sha256": "47b46576b44975e8c38182829587c763687b8aceb46a8e6d7fc91f3813547c4d",
+        "method": "Retain every original tuple/generic/callable body and all top-level initialization. Capture each scalar at its original assertion position; guarded float quotient uses exact2.5, not only in-range true. Module-level original body invocation remains before actual named invocation.",
+        "values": [
+          {
+            "test": "test_generics",
+            "expression": "intBox.get()",
+            "expected": 42,
+            "projection": null
+          },
+          {
+            "test": "test_generics",
+            "expression": "strBox.get()",
+            "expected": "hello",
+            "projection": null
+          },
+          {
+            "test": "test_generics",
+            "expression": "pair.key",
+            "expected": "age",
+            "projection": null
+          },
+          {
+            "test": "test_generics",
+            "expression": "pair.value",
+            "expected": 30,
+            "projection": null
+          },
+          {
+            "test": "test_generics",
+            "expression": "boxOfBox.get().get()",
+            "expected": 100,
+            "projection": null
+          },
+          {
+            "test": "test_generics",
+            "expression": "boxes[0].get()",
+            "expected": 1,
+            "projection": null
+          },
+          {
+            "test": "test_generics",
+            "expression": "boxes[1].get()",
+            "expected": 2,
+            "projection": null
+          }
+        ],
+        "module_initialization_stdout_utf8": ""
+      },
+      "remaining_gates": [
+        "Whole actual named discovery and independent VM/C/native values, including module initialization.",
+        "Generic physical instance count and full definition/constraint proof remain separate from40 equal return values.",
+        "All original exact FI/resources/lifetime/borrow/cancel/physical and sanitizer/provider qualification."
+      ]
+    },
+    {
+      "id": "structured_original_1320_tuple_basic_observed",
+      "oracle_id": "structured_original_1320_tuple_basic_observed",
+      "source": "tests/unit/xir/legacy_consumers/fixtures/independent_named_observations/1320_tuple_basic/root.xr",
+      "source_lf_sha256": "a17f07543da3d1efc4272e9eb741dcc7e037b9e8d604919c08cb2f8d3eb287fe",
+      "entry": "test",
+      "stdout_utf8": "1\n2\n3\n10\nhi\ntrue\n42\nhello\n7\nok\n7\nok\n1\n2\n3\n4\n99\n",
+      "stderr_utf8": "",
+      "companions": [],
+      "owners": [
+        "P02",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P11",
+        "P12",
+        "P13",
+        "P14"
+      ],
+      "independent_observations": {
+        "original_case": "tests/regression/13_types/1320_tuple_basic.xr",
+        "selected_complete_source": "tests/regression/13_types/1320_tuple_basic.xr",
+        "selected_source_lf_sha256": "1f0f1ebd8cc9a1ac4365874f12242cb3156d07d677524d5b44be21ee7125366b",
+        "method": "Retain every original tuple/generic/callable body and all top-level initialization. Capture each scalar at its original assertion position; guarded float quotient uses exact2.5, not only in-range true. Module-level original body invocation remains before actual named invocation.",
+        "values": [
+          {
+            "test": "test_tuple_literal_and_field",
+            "expression": "t.0",
+            "expected": 1,
+            "projection": null
+          },
+          {
+            "test": "test_tuple_literal_and_field",
+            "expression": "t.1",
+            "expected": 2,
+            "projection": null
+          },
+          {
+            "test": "test_tuple_literal_and_field",
+            "expression": "t.2",
+            "expected": 3,
+            "projection": null
+          },
+          {
+            "test": "test_tuple_heterogeneous",
+            "expression": "t.0",
+            "expected": 10,
+            "projection": null
+          },
+          {
+            "test": "test_tuple_heterogeneous",
+            "expression": "t.1",
+            "expected": "hi",
+            "projection": null
+          },
+          {
+            "test": "test_tuple_heterogeneous",
+            "expression": "t.2",
+            "expected": true,
+            "projection": null
+          },
+          {
+            "test": "test_tuple_destructure",
+            "expression": "a",
+            "expected": 42,
+            "projection": null
+          },
+          {
+            "test": "test_tuple_destructure",
+            "expression": "b",
+            "expected": "hello",
+            "projection": null
+          },
+          {
+            "test": "test_tuple_function_return_field_access",
+            "expression": "r.0",
+            "expected": 7,
+            "projection": null
+          },
+          {
+            "test": "test_tuple_function_return_field_access",
+            "expression": "r.1",
+            "expected": "ok",
+            "projection": null
+          },
+          {
+            "test": "test_tuple_function_return_destructure",
+            "expression": "n",
+            "expected": 7,
+            "projection": null
+          },
+          {
+            "test": "test_tuple_function_return_destructure",
+            "expression": "s",
+            "expected": "ok",
+            "projection": null
+          },
+          {
+            "test": "test_tuple_nested_field_access",
+            "expression": "t.0.0",
+            "expected": 1,
+            "projection": null
+          },
+          {
+            "test": "test_tuple_nested_field_access",
+            "expression": "t.0.1",
+            "expected": 2,
+            "projection": null
+          },
+          {
+            "test": "test_tuple_nested_field_access",
+            "expression": "t.1.0",
+            "expected": 3,
+            "projection": null
+          },
+          {
+            "test": "test_tuple_nested_field_access",
+            "expression": "t.1.1",
+            "expected": 4,
+            "projection": null
+          },
+          {
+            "test": "test_tuple_unary",
+            "expression": "t.0",
+            "expected": 99,
+            "projection": null
+          }
+        ],
+        "module_initialization_stdout_utf8": ""
+      },
+      "remaining_gates": [
+        "Whole actual named discovery and independent VM/C/native values, including module initialization.",
+        "Generic physical instance count and full definition/constraint proof remain separate from40 equal return values.",
+        "All original exact FI/resources/lifetime/borrow/cancel/physical and sanitizer/provider qualification."
+      ]
+    },
+    {
+      "id": "structured_original_0401_generic_instance_breadth_observed",
+      "oracle_id": "structured_original_0401_generic_instance_breadth_observed",
+      "source": "tests/unit/xir/legacy_consumers/fixtures/independent_named_observations/0401_generic_instance_breadth/root.xr",
+      "source_lf_sha256": "7339d09286e3b7344c17d645682e228623afaab97cfa6bc078e64df6dbc05bb5",
+      "entry": "test",
+      "stdout_utf8": "40\n",
+      "stderr_utf8": "",
+      "companions": [],
+      "owners": [
+        "P02",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P11",
+        "P12",
+        "P13",
+        "P14"
+      ],
+      "independent_observations": {
+        "original_case": "tests/regression/13_types/0401_generic_instance_breadth.xr",
+        "selected_complete_source": "tests/regression/13_types/0401_generic_instance_breadth.xr",
+        "selected_source_lf_sha256": "4fe6fd9447e113805516b8a484d26d58b0af3045339cef02bb338f1a54110cef",
+        "method": "Retain every original tuple/generic/callable body and all top-level initialization. Capture each scalar at its original assertion position; guarded float quotient uses exact2.5, not only in-range true. Module-level original body invocation remains before actual named invocation.",
+        "values": [
+          {
+            "test": "test_many_reference_instantiations",
+            "expression": "total",
+            "expected": 40,
+            "projection": null
+          }
+        ],
+        "module_initialization_stdout_utf8": ""
+      },
+      "remaining_gates": [
+        "Whole actual named discovery and independent VM/C/native values, including module initialization.",
+        "Generic physical instance count and full definition/constraint proof remain separate from40 equal return values.",
+        "All original exact FI/resources/lifetime/borrow/cancel/physical and sanitizer/provider qualification."
+      ]
+    },
+    {
+      "id": "structured_original_0960_error_set_not_in_type_observed",
+      "oracle_id": "structured_original_0960_error_set_not_in_type_observed",
+      "source": "tests/unit/xir/legacy_consumers/fixtures/independent_named_observations/0960_error_set_not_in_type/root.xr",
+      "source_lf_sha256": "e83c1a4f79aeaa239ea838442a81947f78d50677c14ba915011a10ff6748c442",
+      "entry": "test",
+      "stdout_utf8": "2\n11\n12\n6\n2\n11\n12\n6\n",
+      "stderr_utf8": "",
+      "companions": [],
+      "owners": [
+        "P02",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P13",
+        "P14",
+        "P18"
+      ],
+      "independent_observations": {
+        "original_case": "tests/regression/09_advanced/0960_error_set_not_in_type.xr",
+        "selected_complete_source": "tests/regression/09_advanced/0960_error_set_not_in_type.xr",
+        "selected_source_lf_sha256": "398446e4ef6e0ee61d1bd8394d73cf666560c0933325be91006b1caef18d003f",
+        "method": "Retain every original tuple/generic/callable body and all top-level initialization. Capture each scalar at its original assertion position; guarded float quotient uses exact2.5, not only in-range true. Module-level original body invocation remains before actual named invocation.",
+        "values": [
+          {
+            "test": "test_error_set_not_in_function_type",
+            "expression": "len(fns)",
+            "expected": 2,
+            "projection": null
+          },
+          {
+            "test": "test_error_set_not_in_function_type",
+            "expression": "fns[0](10)",
+            "expected": 11,
+            "projection": null
+          },
+          {
+            "test": "test_error_set_not_in_function_type",
+            "expression": "fns[1](10)",
+            "expected": 12,
+            "projection": null
+          },
+          {
+            "test": "test_error_set_not_in_function_type",
+            "expression": "call_first(fns, 5)",
+            "expected": 6,
+            "projection": null
+          }
+        ],
+        "module_initialization_stdout_utf8": "2\n11\n12\n6\n"
+      },
+      "remaining_gates": [
+        "Whole actual named discovery and independent VM/C/native values, including module initialization.",
+        "Generic physical instance count and full definition/constraint proof remain separate from40 equal return values.",
+        "All original exact FI/resources/lifetime/borrow/cancel/physical and sanitizer/provider qualification."
+      ]
     }
   ]
 }

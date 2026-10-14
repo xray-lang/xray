@@ -1,0 +1,64 @@
+// Preserve all original tuple/generic/function-value bodies and module initialization; observe actual scalar components once.
+// Test: Generic type annotations (compile-time checking)
+// Expected: All type checks pass, prints "ok"
+// Generic class definition
+
+class Box<T> {
+    value: T
+
+    constructor(v: T) {
+        this.value = v
+    }
+
+    get() -> T {
+        return this.value
+    }
+}
+class Pair<K, V> {
+    key: K
+    value: V
+
+    constructor(k: K, v: V) {
+        this.key = k
+        this.value = v
+    }
+}
+
+@test
+fn test_generics() {
+
+    // Generic class with two type parameters
+
+    // Test 1: Generic type annotation in variable declaration
+    var intBox: Box<i64> = Box<i64>(42)
+    var strBox: Box<string> = Box<string>("hello")
+    // Test 2: Access generic class members
+    var p19TupleValue0 = intBox.get()
+    assertEqual(p19TupleValue0, 42)
+    print(p19TupleValue0)
+    var p19TupleValue1 = strBox.get()
+    assertEqual(p19TupleValue1, "hello")
+    print(p19TupleValue1)
+    // Test 3: Pair with different types
+    var pair: Pair<string, i64> = Pair<string, i64>("age", 30)
+    var p19TupleValue2 = pair.key
+    assertEqual(p19TupleValue2, "age")
+    print(p19TupleValue2)
+    var p19TupleValue3 = pair.value
+    assertEqual(p19TupleValue3, 30)
+    print(p19TupleValue3)
+    // Test 4: Nested generic types
+    var boxOfBox: Box<Box<i64>> = Box<Box<i64>>(Box<i64>(100))
+    var p19TupleValue4 = boxOfBox.get().get()
+    assertEqual(p19TupleValue4, 100)
+    print(p19TupleValue4)
+    // Test 5: Array with generic element type
+    var boxes: Array<Box<i64>> = [Box<i64>(1), Box<i64>(2)]
+    var p19TupleValue5 = boxes[0].get()
+    assertEqual(p19TupleValue5, 1)
+    print(p19TupleValue5)
+    var p19TupleValue6 = boxes[1].get()
+    assertEqual(p19TupleValue6, 2)
+    print(p19TupleValue6)
+}
+

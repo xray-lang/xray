@@ -52,6 +52,26 @@
     {
       "path": "tests/regression/08_oop/0850_interface.xr",
       "lf_sha256": "d75c4e320edd5f86edeab16beef2602b690b11b17b3e1b6d78bac6742690131d"
+    },
+    {
+      "path": "tests/regression/12_type_checking/1210_multi_return.xr",
+      "lf_sha256": "45c28b7fbf1538f582fc2d13e3a03206d1adb83d5efdf3ce79a86207712e40d1"
+    },
+    {
+      "path": "tests/regression/12_type_checking/1220_generics.xr",
+      "lf_sha256": "47b46576b44975e8c38182829587c763687b8aceb46a8e6d7fc91f3813547c4d"
+    },
+    {
+      "path": "tests/regression/13_types/1320_tuple_basic.xr",
+      "lf_sha256": "1f0f1ebd8cc9a1ac4365874f12242cb3156d07d677524d5b44be21ee7125366b"
+    },
+    {
+      "path": "tests/regression/13_types/0401_generic_instance_breadth.xr",
+      "lf_sha256": "4fe6fd9447e113805516b8a484d26d58b0af3045339cef02bb338f1a54110cef"
+    },
+    {
+      "path": "tests/regression/09_advanced/0960_error_set_not_in_type.xr",
+      "lf_sha256": "398446e4ef6e0ee61d1bd8394d73cf666560c0933325be91006b1caef18d003f"
     }
   ],
   "cases": [
@@ -416,6 +436,178 @@
         }
       },
       "model_scope": "Source-derived original literal constructor/field/method/copy results; direct implementation calls do not prove erased interface dispatch or complete generic definition checking."
+    },
+    {
+      "id": "structured_original_1210_multi_return_observed",
+      "expected": {
+        "exit_code": 0,
+        "required_test_names": [
+          "test_tuple_return_basic",
+          "test_triple_return",
+          "test_partial_capture",
+          "test_conditional_tuple_return"
+        ],
+        "per_test_observations": {
+          "test_tuple_return_basic": {
+            "values": [
+              5,
+              true,
+              0,
+              false
+            ]
+          },
+          "test_triple_return": {
+            "values": [
+              1,
+              5,
+              9
+            ]
+          },
+          "test_partial_capture": {
+            "values": [
+              1,
+              2
+            ]
+          },
+          "test_conditional_tuple_return": {
+            "values": [
+              true,
+              2.5,
+              false,
+              0.0
+            ]
+          }
+        },
+        "module_initialization_stdout_utf8": "all tuple return tests passed\n"
+      },
+      "model_scope": "Original tuple scalar components, complete40 distinct generic source calls and matching higher-order signatures; module initialization remains and is independently observed, not double-counted as another named body."
+    },
+    {
+      "id": "structured_original_1220_generics_observed",
+      "expected": {
+        "exit_code": 0,
+        "required_test_names": [
+          "test_generics"
+        ],
+        "per_test_observations": {
+          "test_generics": {
+            "values": [
+              42,
+              "hello",
+              "age",
+              30,
+              100,
+              1,
+              2
+            ]
+          }
+        },
+        "module_initialization_stdout_utf8": ""
+      },
+      "model_scope": "Original tuple scalar components, complete40 distinct generic source calls and matching higher-order signatures; module initialization remains and is independently observed, not double-counted as another named body."
+    },
+    {
+      "id": "structured_original_1320_tuple_basic_observed",
+      "expected": {
+        "exit_code": 0,
+        "required_test_names": [
+          "test_tuple_literal_and_field",
+          "test_tuple_heterogeneous",
+          "test_tuple_destructure",
+          "test_tuple_function_return_field_access",
+          "test_tuple_function_return_destructure",
+          "test_tuple_nested_field_access",
+          "test_tuple_unary"
+        ],
+        "per_test_observations": {
+          "test_tuple_literal_and_field": {
+            "values": [
+              1,
+              2,
+              3
+            ]
+          },
+          "test_tuple_heterogeneous": {
+            "values": [
+              10,
+              "hi",
+              true
+            ]
+          },
+          "test_tuple_destructure": {
+            "values": [
+              42,
+              "hello"
+            ]
+          },
+          "test_tuple_function_return_field_access": {
+            "values": [
+              7,
+              "ok"
+            ]
+          },
+          "test_tuple_function_return_destructure": {
+            "values": [
+              7,
+              "ok"
+            ]
+          },
+          "test_tuple_nested_field_access": {
+            "values": [
+              1,
+              2,
+              3,
+              4
+            ]
+          },
+          "test_tuple_unary": {
+            "values": [
+              99
+            ]
+          }
+        },
+        "module_initialization_stdout_utf8": ""
+      },
+      "model_scope": "Original tuple scalar components, complete40 distinct generic source calls and matching higher-order signatures; module initialization remains and is independently observed, not double-counted as another named body."
+    },
+    {
+      "id": "structured_original_0401_generic_instance_breadth_observed",
+      "expected": {
+        "exit_code": 0,
+        "required_test_names": [
+          "test_many_reference_instantiations"
+        ],
+        "per_test_observations": {
+          "test_many_reference_instantiations": {
+            "values": [
+              40
+            ]
+          }
+        },
+        "module_initialization_stdout_utf8": ""
+      },
+      "model_scope": "Original tuple scalar components, complete40 distinct generic source calls and matching higher-order signatures; module initialization remains and is independently observed, not double-counted as another named body."
+    },
+    {
+      "id": "structured_original_0960_error_set_not_in_type_observed",
+      "expected": {
+        "exit_code": 0,
+        "required_test_names": [
+          "test_error_set_not_in_function_type"
+        ],
+        "per_test_observations": {
+          "test_error_set_not_in_function_type": {
+            "values": [
+              2,
+              11,
+              12,
+              6
+            ]
+          }
+        },
+        "module_initialization_stdout_utf8": "2\n11\n12\n6\n"
+      },
+      "model_scope": "Original tuple scalar components, complete40 distinct generic source calls and matching higher-order signatures; module initialization remains and is independently observed, not double-counted as another named body."
     }
   ],
   "independence": "Expected constants come from the original frozen assertions and mathematical method bodies, never current Xray output."

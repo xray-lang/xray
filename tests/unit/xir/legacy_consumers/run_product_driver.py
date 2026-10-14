@@ -184,8 +184,11 @@ def main() -> int:
                     actual = [z['expected'] for z in observations['values'] if z['test']==name]
                     if actual != values[name]['values']:
                         raise ValueError('observed values differ from the frozen independent model')
-                expected_bytes = ''.join(independent_observation_format.render(z)+'\n'
-                                         for z in observations['values']).encode('utf-8')
+                initialization = observations.get('module_initialization_stdout_utf8','')
+                if initialization != oracle['expected'].get('module_initialization_stdout_utf8',''):
+                    raise ValueError('original module initialization observations differ from their frozen model')
+                expected_bytes = (initialization + ''.join(independent_observation_format.render(z)+'\n'
+                                         for z in observations['values'])).encode('utf-8')
                 if expected_bytes.hex() != expected['stdout_hex']:
                     raise ValueError('independent observation bytes changed')
                 row['independent_observations'] = observations
