@@ -15,8 +15,10 @@ foreach(case normal census)
 endforeach()
 
 # Independently measured complete compiler frontiers for both real VM graphs.
-set(rb_expected_normal "454839;33661;3481828;1;280;123;157;401;122;300;122;122;122;122;122;122;122;330")
-set(rb_expected_failure "454839;33661;3481201;1;280;123;157;401;122;300;122;122;122;122;122;122;122;330")
+# Canonical Program publication retains layout and packet metadata and performs
+# final descriptor comparisons. Both graphs keep their original fault frontiers.
+set(rb_expected_normal "454887;33709;3485171;1;280;123;157;401;122;300;122;122;122;122;122;122;122;330")
+set(rb_expected_failure "454887;33709;3484544;1;280;123;157;401;122;300;122;122;122;122;122;122;122;330")
 foreach(case owner_oom check_oom write_oom read_oom specialize_oom reverify_oom
     lower_oom bind_oom seal_oom budget samequota_retry)
     add_test(NAME test_xir_root_identity_vm_compiler_resources_${case}
