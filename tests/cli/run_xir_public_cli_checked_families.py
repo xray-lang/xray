@@ -39,10 +39,26 @@ def main() -> int:
         (output / 'future-enum.xr').write_text(
             'export enum UserBox<T>{Empty,Full{value:T}}\n'
             'export enum Shade{Dark,Light}\n', encoding='utf-8')
+        (output / 'future-class.xr').write_text(
+            'export final class UserPacket<T> {\n'
+            ' value:T\n tail:Array<T>\n'
+            ' init(value,tail:Array<T>=[]) { this.value=value; this.tail=tail }\n}\n'
+            'export fn make<T>(value:T)->UserPacket<T> { return UserPacket<T>(value) }\n'
+            'export fn tagged<T>(value:T,tail:Array<T>)->UserPacket<T> { return UserPacket<T>(value,tail) }\n'
+            'export fn copied(packet:UserPacket<string>)->string { return packet.value.toString() }\n'
+            'export fn number(packet:UserPacket<i64>)->i64 { return packet.value }\n'
+            'export fn count<T>(packet:UserPacket<T>)->i64 { return len(packet.tail) }\n'
+            'export fn first<T>(packet:UserPacket<T>)->T { return packet.tail[0] }\n', encoding='utf-8')
         poison_digest = hashlib.sha256(poison.read_bytes()).hexdigest()
         env = dict(os.environ, XRAY_STDLIB_PATH=str(stdlib), NO_COLOR='1')
         hidden = dict(env, PATH=str(output / 'no-C-provider'))
         cases = [
+            ('generic-initializers', 'import "std/io/output" as Lib\n'
+             'import {make,tagged,copied,number,count,first} from "./future-class"\n'
+             'const text=make<string>("A\\0中😀")\nLib.writeStdout(copied(text))\nprint(count<string>(text))\n'
+             'var original=[11,22]\nconst value=tagged<i64>(7,original)\noriginal[0]=99\n'
+             'print(number(value),count<i64>(value),first<i64>(value),original[0])\n',
+             'A\0中😀0\n7 2 11 99\n'.encode('utf-8')),
             ('nominal', 'import "std/io/output" as Lib\nenum User { Ready, Done }\n'
              'fn emit<T>(value:T)->T { Lib.writeStdout("A\\0B"); return value }\n'
              'print(match(emit(User.Ready)){User.Ready->73,User.Done->0})\n'
@@ -111,17 +127,21 @@ def main() -> int:
         # Both absence and invalid source must consume the same Checked closure.
         poison.unlink()
         time_poison.unlink()
+        answers={name:answer for name,_,answer in cases}
         result = invoke('absent-vm', binary, ['run', str(output / 'nominal.xr')], hidden)
-        assert (result.returncode, result.stdout, result.stderr) == (0, cases[0][2], b'')
+        assert (result.returncode, result.stdout, result.stderr) == (0, answers['nominal'], b'')
         result = invoke('absent-clock-vm', binary, ['run', str(output / 'clocks.xr')], hidden)
-        assert (result.returncode, result.stdout, result.stderr) == (0, cases[2][2], b'')
+        assert (result.returncode, result.stdout, result.stderr) == (0, answers['clocks'], b'')
         result = invoke('absent-description-vm', binary, ['run', str(output / 'definition-descriptions.xr')], hidden)
-        assert (result.returncode, result.stdout, result.stderr) == (0, cases[3][2], b'')
+        assert (result.returncode, result.stdout, result.stderr) == (0, answers['definition-descriptions'], b'')
+        result = invoke('absent-initializers-vm', binary, ['run', str(output / 'generic-initializers.xr')], hidden)
+        assert (result.returncode,result.stdout,result.stderr)==(0,answers['generic-initializers'],b'')
         (output / 'summary.json').write_text(json.dumps(dict(
             status='CHECKED_OUTPUT_TIME_PRIVATE_CLOSURE_VM_NATIVE_PASS', commands=len(records),
             source_absent_and_poisoned=True, VM_C_provider_PATH_hidden=True,
             Windows_absolute_child_denial=process_policy.control,
-            new_user_type='User enum and imported UserBox<T> carrying an imported Shade enum',
+            new_user_type='User enum, UserBox<T>/Shade and UserPacket<T> with field-inferred init and Array<T> defaults',
+            owned_user_generic_initializer=True,retained_array_field_COW=True,user_aggregate_CTFE=False,
             canonical_type_description_consumer='Generic enum toString/name/ordinal with Checked output',
             library_generic_templates=False,
             complete_standard_library=False,
