@@ -67,6 +67,15 @@ if(WIN32)
             set_tests_properties(test_xir_runtime_sdk_${provider}_native
                 PROPERTIES LABELS "unit;xir;execution;ownership;sdk;abi;generated-c;portability"
                 RUN_SERIAL TRUE TIMEOUT 300 COST 30)
+            add_test(NAME test_xir_runtime_sdk_${provider}_host
+                COMMAND ${XRAY_PYTHON} -B ${CMAKE_CURRENT_LIST_DIR}/sdk_source_host_consumers.py
+                    --lease $<TARGET_FILE:test_xir_sdk_lease> --generator $<TARGET_FILE:test_xir_host_call_source>
+                    --bundle ${CMAKE_BINARY_DIR}/xir-runtime-sdk --compiler ${XIR_SDK_${upper}}
+                    --linker ${XIR_SDK_LINKER} --provider ${provider}
+                    --output ${CMAKE_CURRENT_BINARY_DIR}/sdk-source-host-evidence)
+            set_tests_properties(test_xir_runtime_sdk_${provider}_host PROPERTIES
+                LABELS "unit;xir;execution;ownership;sdk;abi;generated-c;portability;host"
+                RUN_SERIAL TRUE TIMEOUT 300 COST 30)
         endif()
     endforeach()
 endif()
