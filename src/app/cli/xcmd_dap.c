@@ -10,6 +10,7 @@
 #include "../dap/xdap_dispatch.h"
 #include "../dap/xdap_stdio.h"
 #include "../../api/xsource_paths.h"
+#include "../../execution/xr_xir_host_time.h"
 #include "../../xir/xxir_value_internal.h"
 #include <stdio.h>
 static int dap_loop(XdapAdapter *adapter,XdapStdio *io) {
@@ -23,6 +24,7 @@ static int dap_loop(XdapAdapter *adapter,XdapStdio *io) {
         } else if (eof) return 0;
         if (xdap_adapter_running(adapter)) {
             if (xdap_adapter_step(adapter,32)!=XR_XIR_OK) return 1;
+            if (xdap_adapter_waiting(adapter) && xdap_stdio_wait(io,10)!=XR_XIR_OK) return 1;
         } else if (!message && !xdap_adapter_closed(adapter)) {
             if (xdap_stdio_wait(io,10)!=XR_XIR_OK) return 1;
         }
@@ -49,6 +51,7 @@ XR_FUNC int cmd_dap(const XrCliInvocation *inv) {
     if (xdap_stdio_new(resources,1048576,&io)!=XR_XIR_OK) goto done;
     XdapAdapterConfig config={.observer_metadata=domain,.write=xdap_stdio_write,.context=io,.message_limit=1048576};
     if (xr_xir_instance_config_init(&config.instance,sizeof(config.instance))!=XR_XIR_CALL_READY) goto done;
+    xr_xir_host_time_provider(&config.instance.time);
     config.instance.metadata_limit=config.instance.value_limit=config.instance.call_limit=1048576;
     config.instance.requested_value_limit=config.instance.requested_call_limit=1048576;
     config.instance.work_limit=128000000;config.instance.poll_limit=10000;config.instance.depth_limit=64;

@@ -93,6 +93,7 @@ XR_FUNC XrXirStatus xdap_adapter_new(XrSourceCompiler **compiler,const XdapAdapt
     *compiler=NULL;*output=s;return XR_XIR_OK;
 }
 XR_FUNC bool xdap_adapter_running(const XdapAdapter *s) { return s && s->running && !s->closed; }
+XR_FUNC bool xdap_adapter_waiting(const XdapAdapter *s) { return s && s->wait_wake && s->running && !s->closed; }
 XR_FUNC bool xdap_adapter_closed(const XdapAdapter *s) { return !s || s->closed; }
 XR_FUNC XrXirCallStatus xdap_adapter_free(XdapAdapter *s) {
     if (!s) return XR_XIR_CALL_READY;
@@ -200,7 +201,7 @@ static XrXirStatus dispatch_restart(XdapAdapter *s,const XdapRequest *r) {
         s->terminal=true;s->running=false;return xdap_dispatch_response(s,r,false,NULL,"Previous execution cleanup failed");
     }
     xdap_dispatch_clear_stop(s);xr_xir_call_result_drop(&s->outcome);
-    s->launch=candidate;s->terminal=false;s->configured=true;s->running=true;
+    s->launch=candidate;s->terminal=false;s->configured=true;s->running=true;s->wait_wake=0;
     s->stop_reason=s->stop_entry ? "entry" : "function breakpoint";
     if (s->stop_entry) xdap_current_pause(candidate->control);
     status=xdap_dispatch_send_prepared(s,&response);xdap_json_writer_free(&response);return status;
@@ -245,7 +246,7 @@ static XrXirStatus dispatch_terminate(XdapAdapter *s,const XdapRequest *r,bool d
         XrXirCallStatus cancelled=xdap_current_cancel(s->launch->control);
         if (cancelled!=XR_XIR_CALL_CANCEL_REQUESTED && cancelled!=XR_XIR_CALL_BAD_STATE)
             return xdap_dispatch_response(s,r,false,NULL,"Cancellation rejected");
-        xdap_dispatch_clear_stop(s);s->running=true;
+        xdap_dispatch_clear_stop(s);s->running=true;s->wait_wake=0;
     }
     XrXirStatus status=xdap_dispatch_response(s,r,true,NULL,NULL);
     if (disconnect && status==XR_XIR_OK) s->closed=true;
@@ -267,10 +268,44 @@ XR_FUNC XrXirStatus xdap_adapter_request(XdapAdapter *s,const char *bytes,size_t
 done:
     xdap_json_document_free(&r.document);s->busy=false;return status;
 }
+static XrXirStatus dispatch_clock(XdapAdapter *s,uint64_t *output) {
+    if (xr_compile_resources_work(s->resources,1)!=XR_COMPILE_RESOURCE_OK) return XR_XIR_BUDGET;
+    const XrXirTimeProvider *time=&s->config.instance.time;int64_t now=-1;
+    if (!time->clock || time->clock(time->context,XR_XIR_CLOCK_MONOTONIC,&now)!=XR_XIR_TIME_OK || now<0) return XR_XIR_IO;
+    *output=(uint64_t)now;return XR_XIR_OK;
+}
+static XrXirStatus dispatch_wait_begin(XdapAdapter *s,const XdapCurrentResult *result) {
+    XrXirWaitRequest request={0};
+    if (xdap_current_wait_request(s->launch->control,result->instance_epoch,result->outcome.wake,&request)!=XR_XIR_CALL_READY)
+        return XR_XIR_BAD_STRUCTURE;
+    if (request.reserved || request.subject || request.generation || request.ticket) return XR_XIR_BAD_STRUCTURE;
+    uint64_t start=0,duration=0;XrXirStatus status=XR_XIR_OK;
+    if (request.kind==XR_XIR_WAIT_TIMER_MS) {
+        if (!request.after_ms || request.after_ms>XR_XIR_TIMER_MAX_MS) return XR_XIR_BAD_STRUCTURE;
+        status=dispatch_clock(s,&start);duration=request.after_ms*UINT64_C(1000000);
+    } else if (request.kind!=XR_XIR_WAIT_YIELD || request.after_ms) return XR_XIR_UNSUPPORTED;
+    if (status!=XR_XIR_OK) return status;
+    s->wait_epoch=result->instance_epoch;s->wait_wake=result->outcome.wake;
+    s->wait_start=start;s->wait_duration=duration;return XR_XIR_OK;
+}
+static XrXirStatus dispatch_wait_resume(XdapAdapter *s,bool *pending) {
+    *pending=false;
+    if (!s->wait_wake) return XR_XIR_OK;
+    if (s->wait_duration) {
+        uint64_t now=0;XrXirStatus status=dispatch_clock(s,&now);if (status!=XR_XIR_OK) return status;
+        if (now<s->wait_start) return XR_XIR_IO;
+        if (now-s->wait_start<s->wait_duration) { *pending=true;return XR_XIR_OK; }
+    }
+    if (xdap_current_resume(s->launch->control,s->wait_epoch,s->wait_wake)!=XR_XIR_CALL_READY) return XR_XIR_BAD_STRUCTURE;
+    s->wait_wake=0;return XR_XIR_OK;
+}
 XR_FUNC XrXirStatus xdap_adapter_step(XdapAdapter *s,uint64_t quantum) {
     if (!s || s->busy || !quantum) return XR_XIR_BAD_STRUCTURE;
     if (!s->running || s->closed || !s->launch) return XR_XIR_OK;
-    s->busy=true;XdapCurrentResult result={0};XrXirStatus status=dispatch_value(xdap_current_poll(s->launch->control,quantum,&result));
+    s->busy=true;XdapCurrentResult result={0};bool pending=false;
+    XrXirStatus status=dispatch_wait_resume(s,&pending);
+    if (status!=XR_XIR_OK || pending) goto done;
+    status=dispatch_value(xdap_current_poll(s->launch->control,quantum,&result));
     if (status!=XR_XIR_OK) goto done;
     if (result.state==XDAP_CURRENT_STOPPED) {
         status=dispatch_value(xdap_current_snapshot(s->launch->control,&s->snapshot));if (status!=XR_XIR_OK) goto done;
@@ -284,6 +319,8 @@ XR_FUNC XrXirStatus xdap_adapter_step(XdapAdapter *s,uint64_t quantum) {
         XDAP_TEXT(&body,"{\"reason\":");const char *reason=s->stop_reason ? s->stop_reason : "breakpoint";
         xdap_json_quote(&body,reason,strlen(reason));XDAP_TEXT(&body,",\"threadId\":1,\"allThreadsStopped\":true}");
         status=xdap_dispatch_event(s,"stopped",&body);xdap_json_writer_free(&body);
+    } else if (result.state==XDAP_CURRENT_WAITING) {
+        status=dispatch_wait_begin(s,&result);
     } else if (result.state==XDAP_CURRENT_ENDED) {
         s->running=false;s->terminal=true;xdap_dispatch_clear_stop(s);
         XrXirValueStatus copied=xr_xir_call_result_copy(&result.outcome,&s->outcome);

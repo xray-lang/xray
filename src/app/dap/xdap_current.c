@@ -81,6 +81,17 @@ XR_FUNC XrXirValueStatus xdap_current_continue(XdapCurrent *session, uint64_t ep
     return session && !session->driving && !session->ended ? xr_xir_vm_debug_continue(session->debug, epoch, mode) :
         XR_XIR_VALUE_BAD_ARGUMENT;
 }
+XR_FUNC XrXirCallStatus xdap_current_wait_request(XdapCurrent *session,uint64_t epoch,
+    uint64_t wake,XrXirWaitRequest *output) {
+    if (!session) return XR_XIR_CALL_BAD_ARGUMENT;
+    if (session->driving) return XR_XIR_CALL_BUSY;
+    return !session->ended ? xr_xir_instance_wait_request(session->instance,epoch,wake,output) : XR_XIR_CALL_BAD_STATE;
+}
+XR_FUNC XrXirCallStatus xdap_current_resume(XdapCurrent *session,uint64_t epoch,uint64_t wake) {
+    if (!session) return XR_XIR_CALL_BAD_ARGUMENT;
+    if (session->driving) return XR_XIR_CALL_BUSY;
+    return !session->ended ? xr_xir_instance_resume(session->instance,epoch,wake) : XR_XIR_CALL_BAD_STATE;
+}
 XR_FUNC void xdap_current_pause(XdapCurrent *session) {
     if (session && !session->ended) xr_xir_vm_debug_request_pause(session->debug);
 }

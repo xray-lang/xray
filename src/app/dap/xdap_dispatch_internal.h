@@ -24,6 +24,7 @@ struct XdapAdapter {
     uint32_t function_breakpoint_count;
     uint32_t depth, next_handle, seq;
     uint64_t stop_epoch;
+    uint64_t wait_epoch, wait_wake, wait_start, wait_duration;
     bool initialized, configured, running, closed, busy, terminal, stop_entry, variable_types, variable_paging;
     const char *stop_reason;
 };

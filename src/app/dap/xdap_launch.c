@@ -10,6 +10,13 @@
 #include "../../xir/xxir_internal.h"
 #include "../../xir/xxir_value_internal.h"
 #include <string.h>
+static void launch_diagnostic(XrSourceCompileDiagnostic *diagnostic,XrXirStatus status) {
+    if (status==XR_XIR_OK || diagnostic->status!=XR_SOURCE_COMPILE_OK) return;
+    diagnostic->status=status==XR_XIR_OUT_OF_MEMORY ? XR_SOURCE_COMPILE_OUT_OF_MEMORY :
+        status==XR_XIR_BUDGET ? XR_SOURCE_COMPILE_BUDGET : status==XR_XIR_UNSUPPORTED ? XR_SOURCE_COMPILE_UNSUPPORTED :
+        status==XR_XIR_IO ? XR_SOURCE_COMPILE_IO : XR_SOURCE_COMPILE_REJECTED;
+    diagnostic->stage=XR_SOURCE_COMPILE_PRODUCT;diagnostic->source.status=status;
+}
 static XrXirStatus launch_source_status(XrSourceCompileStatus status) {
     switch (status) {
     case XR_SOURCE_COMPILE_OK:return XR_XIR_OK;
@@ -79,7 +86,7 @@ XR_FUNC XrXirStatus xdap_launch_build(const XdapLaunchRequest *request,XdapLaunc
     if (!context) return XR_XIR_BAD_STRUCTURE;
     XdapLaunch *launch=NULL;XrXirArtifact *lowered=NULL;XrXirVmDebug *debug=NULL;XrXirProgram *program=NULL;
     XrXirStatus status=launch_allocation(xr_compile_resources_calloc(context->resources,1,sizeof(*launch),(void **)&launch));
-    if (status!=XR_XIR_OK) return status;
+    if (status!=XR_XIR_OK) { launch_diagnostic(diagnostic,status);return status; }
     launch->resources=context->resources;
     if (request->absolute_file) {
         size_t length=0;
@@ -115,6 +122,7 @@ XR_FUNC XrXirStatus xdap_launch_build(const XdapLaunchRequest *request,XdapLaunc
     status=launch_value_status(xdap_current_new(request->observer_metadata,&debug,program,&request->instance,&launch->control));
     if (status==XR_XIR_OK) { *output=launch;launch=NULL; }
 done:
+    launch_diagnostic(diagnostic,status);
     xr_xir_compile_program_drop(program);xr_xir_vm_debug_drop(debug);xr_xir_compile_artifact_free(lowered);
     xdap_launch_free(launch);return status;
 }

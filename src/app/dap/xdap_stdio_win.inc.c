@@ -7,10 +7,18 @@
  * xdap_stdio_win.inc.c - Windows pipe observation without socket fd conversion
  */
 #include <windows.h>
-#include <io.h>
-#include <fcntl.h>
+static HANDLE stdio_platform_handle(DWORD stream) {
+    HANDLE handle=GetStdHandle(stream);
+    return handle && handle!=INVALID_HANDLE_VALUE ? handle : INVALID_HANDLE_VALUE;
+}
+static XrXirStatus stdio_platform_open(void) {
+    HANDLE input=stdio_platform_handle(STD_INPUT_HANDLE),output=stdio_platform_handle(STD_OUTPUT_HANDLE);
+    if (input==INVALID_HANDLE_VALUE || output==INVALID_HANDLE_VALUE ||
+        GetFileType(input)==FILE_TYPE_UNKNOWN || GetFileType(output)==FILE_TYPE_UNKNOWN) return XR_XIR_IO;
+    DWORD kind=GetFileType(input);return kind==FILE_TYPE_PIPE || kind==FILE_TYPE_DISK ? XR_XIR_OK : XR_XIR_UNSUPPORTED;
+}
 static XrXirStatus stdio_platform_read(char *bytes,size_t capacity,size_t *length,bool *eof) {
-    HANDLE input=(HANDLE)_get_osfhandle(_fileno(stdin));
+    HANDLE input=stdio_platform_handle(STD_INPUT_HANDLE);
     if (input==INVALID_HANDLE_VALUE) return XR_XIR_IO;
     DWORD available=0,kind=GetFileType(input);
     if (kind==FILE_TYPE_PIPE) {
@@ -30,4 +38,13 @@ static XrXirStatus stdio_platform_read(char *bytes,size_t capacity,size_t *lengt
     *length=received;*eof=received==0;return XR_XIR_OK;
 }
 static XrXirStatus stdio_platform_wait(uint32_t milliseconds) { Sleep(milliseconds);return XR_XIR_OK; }
-static int stdio_platform_mode(int fd,int mode) { return _setmode(fd,mode); }
+/* Native writes preserve protocol bytes without changing a CRT text mode. */
+static XrXirStatus stdio_platform_write(const char *bytes,size_t length) {
+    HANDLE output=stdio_platform_handle(STD_OUTPUT_HANDLE);if (output==INVALID_HANDLE_VALUE) return XR_XIR_IO;
+    while (length) {
+        DWORD written=0;
+        if (!WriteFile(output,bytes,(DWORD)length,&written,NULL) || !written) return XR_XIR_IO;
+        bytes+=written;length-=written;
+    }
+    return XR_XIR_OK;
+}

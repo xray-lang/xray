@@ -28,6 +28,11 @@ XR_FUNC XrXirCallStatus xdap_current_start(XdapCurrent *session, uint32_t entry,
  * observer causes no further polls or target work until explicit continue. */
 XR_FUNC XrXirValueStatus xdap_current_poll(XdapCurrent *session, uint64_t quantum,
     XdapCurrentResult *output);
+/* Only an actual pending Instance suspension grants a host wait request.
+ * Epoch and wake are rechecked on resume; a debugger stop grants neither. */
+XR_FUNC XrXirCallStatus xdap_current_wait_request(XdapCurrent *,uint64_t epoch,
+    uint64_t wake,XrXirWaitRequest *);
+XR_FUNC XrXirCallStatus xdap_current_resume(XdapCurrent *,uint64_t epoch,uint64_t wake);
 XR_FUNC XrXirValueStatus xdap_current_continue(XdapCurrent *session, uint64_t epoch,
     XrXirVmDebugMode mode);
 XR_FUNC void xdap_current_pause(XdapCurrent *session);

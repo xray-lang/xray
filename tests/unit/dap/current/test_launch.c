@@ -14,8 +14,59 @@
 #define CHECK(c) do { if (!(c)) { fprintf(stderr,"FAIL %d: %s\n",__LINE__,#c);exit(1); } } while (0)
 #include "../../xir/xir_runtime_allocations.h"
 #include "base/xcompile_resources.c"
-int main(void) {
+#include "base/xcompile_state.h"
+static size_t launch_fault(size_t fail) {
+    XrCompileResources *resources=NULL;XrCompileResourceLimits limits={67108864,8388608,128000000};
+    CHECK(xr_compile_resources_new(&limits,&resources)==XR_COMPILE_RESOURCE_OK);
+    XrCompileResourceStats baseline={0};CHECK(xr_compile_resources_stats(resources,&baseline)==XR_COMPILE_RESOURCE_OK);
+    XrSourceCompilerConfig config={{resources,xr_xir_compile_default_limits()},
+        {XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION},XR_DAP_STDLIB,xr_source_compile_default_manifest_limits()};
+    XrSourceCompiler *compiler=NULL;XrSourceCompileDiagnostic diagnostic={0};
+    CHECK(xr_source_compiler_new(&config,&compiler,&diagnostic)==XR_SOURCE_COMPILE_OK);
+    xr_source_compile_diagnostic_free(&diagnostic);
+    XrXirDomain *domain=NULL;XrXirDomainBudgetControls budget={1048576,1048576,128000000,1048576,1048576};
+    CHECK(xr_xir_domain_new_budgeted(1048576,&budget,&domain)==XR_XIR_VALUE_OK);
+    const char text[]="fn leaf(value:i64)->string { return \"owned\\0value\" }\nleaf(20)\n";
+    XrSourceCompilerText input={NULL,"dap-launch-fault",text,sizeof(text)-1};
+    XdapLaunchRequest request={.compiler=compiler,.text=&input,.observer_metadata=domain};
+    CHECK(xr_xir_instance_config_init(&request.instance,sizeof(request.instance))==XR_XIR_CALL_READY);
+    request.instance.metadata_limit=request.instance.value_limit=request.instance.call_limit=1048576;
+    request.instance.requested_value_limit=request.instance.requested_call_limit=1048576;
+    request.instance.work_limit=128000000;request.instance.poll_limit=10000;request.instance.depth_limit=64;
+    XdapLaunch *launch=NULL;size_t begin=runtime_attempts;
+    runtime_fail_at=fail==SIZE_MAX ? SIZE_MAX : begin+fail;
+    XrXirStatus status=xdap_launch_build(&request,&launch,&diagnostic);
+    size_t sites=runtime_attempts-begin;runtime_fail_at=SIZE_MAX;
+    if (fail==SIZE_MAX) CHECK(status==XR_XIR_OK && launch);
+    else {
+        if (status!=XR_XIR_OUT_OF_MEMORY) fprintf(stderr,"launch fail=%zu status=%u diagnostic=%u\n",fail,status,diagnostic.status);
+        CHECK(status==XR_XIR_OUT_OF_MEMORY && !launch && sites>fail);
+        CHECK(diagnostic.status==XR_SOURCE_COMPILE_OUT_OF_MEMORY);
+        CHECK(!xr_xir_domain_budget_stats(domain).metadata_live);
+        XrCompileResourceStats spent={0};CHECK(xr_compile_resources_stats(resources,&spent)==XR_COMPILE_RESOURCE_OK);
+        bool sticky=xr_compile_state_status(xr_source_compiler_state(compiler))==XR_COMPILE_RESOURCE_OUT_OF_MEMORY;
+        xr_source_compile_diagnostic_free(&diagnostic);
+        status=xdap_launch_build(&request,&launch,&diagnostic);
+        CHECK(status==(sticky ? XR_XIR_OUT_OF_MEMORY : XR_XIR_OK));
+        CHECK(sticky ? !launch : launch!=NULL);
+        XrCompileResourceStats retry={0};CHECK(xr_compile_resources_stats(resources,&retry)==XR_COMPILE_RESOURCE_OK);
+        CHECK(retry.allocated_bytes>=spent.allocated_bytes && retry.work>=spent.work);
+    }
+    CHECK(xdap_launch_free(launch)==XR_XIR_CALL_READY);xr_source_compile_diagnostic_free(&diagnostic);
+    xr_source_compiler_free(compiler);CHECK(!xr_xir_domain_budget_stats(domain).metadata_live);xr_xir_domain_drop(domain);
+    XrCompileResourceStats after={0};CHECK(xr_compile_resources_stats(resources,&after)==XR_COMPILE_RESOURCE_OK);
+    CHECK(after.live_bytes==baseline.live_bytes);xr_compile_resources_release(resources);
+    CHECK(!runtime_live && !runtime_bytes);return sites;
+}
+int main(int argc,char **argv) {
     xr_test_suppress_dialogs();
+    if (argc==2 && !strcmp(argv[1],"--resources")) {
+        size_t sites=launch_fault(SIZE_MAX);CHECK(sites);
+        for (size_t i=0;i<sites;++i) launch_fault(i);
+        printf("Canonical launch full allocation faults=%zu; preserved output, diagnostic, original ledger retry and physical=0/0 PASS\n",sites);
+        return 0;
+    }
+    CHECK(argc==1);
     XrXirCompileContext context={0};XrCompileResourceLimits limits={67108864,8388608,128000000};
     CHECK(xr_compile_resources_new(&limits,&context.resources)==XR_COMPILE_RESOURCE_OK);
     context.limits=xr_xir_compile_default_limits();XrCompileResourceStats baseline={0};

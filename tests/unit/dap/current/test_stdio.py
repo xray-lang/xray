@@ -6,6 +6,7 @@ from pathlib import Path
 import queue
 import subprocess
 import threading
+import time
 
 parser=argparse.ArgumentParser()
 parser.add_argument('--xray',type=Path,required=True)
@@ -117,3 +118,45 @@ client=Client()
 client.process.stdin.write(b'Content-Length: 100\r\n\r\n{}');client.process.stdin.close()
 client.close(expected=1)
 print('Truncated input EOF rejected: PASS')
+
+initialize=json.dumps({'seq':1,'type':'request','command':'initialize'},separators=(',',':')).encode()
+length=len(initialize)
+for header in [f'Content-Length: {length}junk\r\n\r\n',
+               f'Content-Length: {length}\r\nContent-Length: {length}\r\n\r\n',
+               f'X-Content-Length: {length}\r\n\r\n',
+               f'Content-Length: {length}\n\r\n\r\n',
+               f'Content-Length: +{length}\r\n\r\n']:
+    client=Client()
+    client.process.stdin.write(header.encode()+initialize);client.process.stdin.close()
+    client.close(expected=1)
+    assert not client.replies
+print('Malformed, duplicate and embedded length headers rejected: PASS')
+
+client=Client()
+client.process.stdin.write(f'content-length:\t{length} \r\n\r\n'.encode()+initialize);client.process.stdin.close()
+assert client.receive()['success'];client.event('initialized');client.close()
+print('Case-insensitive length header with optional whitespace: PASS')
+
+timer=args.fixture.parent/'timer_fixture.xr'
+client=Client()
+assert client.send('initialize')['success'];client.event('initialized')
+assert client.send('launch',{'program':str(timer.resolve()).replace('\\','/')})['success']
+start=time.monotonic()
+assert client.send('configurationDone')['success']
+assert client.event('output')['body']['output']=='timer done\n'
+assert time.monotonic()-start>=0.10,'timer resumed before its duration'
+client.event('exited');client.event('terminated')
+assert client.send('disconnect')['success'];client.close()
+print('Real language timer resumes after elapsed duration: PASS')
+
+client=Client()
+assert client.send('initialize')['success'];client.event('initialized')
+assert client.send('launch',{'program':str((args.fixture.parent/'cancel_timer_fixture.xr').resolve()).replace('\\','/')})['success']
+assert client.send('configurationDone')['success']
+start=time.monotonic()
+assert client.send('terminate')['success']
+client.event('terminated')
+assert time.monotonic()-start<2,'cancellation waited for the five-second timer'
+assert all(item['event']!='output' for item in client.events)
+assert client.send('disconnect')['success'];client.close()
+print('Cancel remains responsive during a pending timer: PASS')

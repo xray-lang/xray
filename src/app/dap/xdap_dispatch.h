@@ -26,6 +26,8 @@ XR_FUNC XrXirStatus xdap_adapter_new(XrSourceCompiler **,const XdapAdapterConfig
 XR_FUNC XrXirStatus xdap_adapter_request(XdapAdapter *,const char *,size_t);
 XR_FUNC XrXirStatus xdap_adapter_step(XdapAdapter *,uint64_t quantum);
 XR_FUNC bool xdap_adapter_running(const XdapAdapter *);
+/* A pending timer remains responsive to requests and consumes no VM polls. */
+XR_FUNC bool xdap_adapter_waiting(const XdapAdapter *);
 XR_FUNC bool xdap_adapter_closed(const XdapAdapter *);
 XR_FUNC XrXirCallStatus xdap_adapter_free(XdapAdapter *);
 #endif // XDAP_DISPATCH_H
