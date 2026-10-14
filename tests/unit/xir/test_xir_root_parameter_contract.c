@@ -265,16 +265,21 @@ static void rp_constant_competition(bool slot_first) {
     RootParameterMark physical=rp_mark();XrXirCompileContext c=rp_owner(rp_caps());
     uint64_t live=rp_stats(&c).live_bytes;RootParameterBindingFixture f;
     rp_binding_fixture(&f,&c,false);f.nodes[0].flags=4;
-    XrXirInstruction apply[3]={
+    XrXirTypeNode nodes[3]={f.nodes[0],f.nodes[1],{.kind=XR_XIR_TYPE_CELL,.element=XR_XIR_I64}};
+    f.types.nodes=nodes;f.types.count=3;
+    XrXirInstruction apply[4]={
         {.op=XR_XIR_CALL_INDIRECT,.type=XR_XIR_I64,.immediate=0},
-        {.op=XR_XIR_SLOT_LOAD,.type=XR_XIR_I64}, {.op=XR_XIR_RETURN,.args={2,0}}};
+        {.op=XR_XIR_SLOT_LOAD,.type=(XrXirType)258},
+        {.op=XR_XIR_CELL_READ,.type=XR_XIR_I64,.args={slot_first?1u:2u,0}},
+        {.op=XR_XIR_RETURN,.args={3,0}}};
     if (slot_first) { XrXirInstruction swap=apply[0];apply[0]=apply[1];apply[1]=swap; }
-    XrXirBlock block={.count=3};XrXirSlot slot={0,XR_XIR_I64,1};
-    f.functions[1].instructions=apply;f.functions[1].instruction_count=3;f.functions[1].blocks=&block;
-    XrXirInstruction init[3]={
+    XrXirBlock block={.count=4};XrXirSlot slot={0,(XrXirType)258,1};
+    f.functions[1].instructions=apply;f.functions[1].instruction_count=4;f.functions[1].blocks=&block;
+    XrXirInstruction init[4]={
         {.op=XR_XIR_CONST_INT,.type=XR_XIR_I64,.immediate=9},
-        {.op=XR_XIR_SLOT_INIT,.args={0,0}}, {.op=XR_XIR_RETURN}};
-    f.functions[3].instructions=init;f.functions[3].instruction_count=3;f.functions[3].blocks=&block;
+        {.op=XR_XIR_CELL_NEW,.type=(XrXirType)258,.args={0,0}},
+        {.op=XR_XIR_SLOT_INIT,.args={1,0}}, {.op=XR_XIR_RETURN}};
+    f.functions[3].instructions=init;f.functions[3].instruction_count=4;f.functions[3].blocks=&block;
     f.declarations.slots=&slot;f.declarations.slot_count=1;
     f.contracts[0].formula.constant_mask=4;f.contracts[1].formula.constant_mask=4;
     XrXirArtifact *checked=NULL;XrXirEffects *effects=NULL;

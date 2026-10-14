@@ -21,8 +21,8 @@
 #include "xir/xxir_effects.c"
 
 typedef struct CaptureIndexFixture {
-    XrXirTypeNode nodes[2];XrXirTypes types;XrXirType parameter;
-    XrXirInstruction run[2],early_a[4],early_b[3],late[3],factory[3],reader[2],init[3];
+    XrXirTypeNode nodes[3];XrXirTypes types;XrXirType parameter;
+    XrXirInstruction run[2],early_a[4],early_b[3],late[3],factory[3],reader[3],init[4];
     XrXirBlock blocks[7];XrXirFunction functions[7];XrXirFunctionIdentity identities[7];
     uint32_t operands[2];XrXirSlot slot;XrXirSourceModule source;XrXirDeclarations declarations;
     XrXirEffectParameter parameters[3];XrXirRootTerm terms[3];
@@ -34,7 +34,8 @@ static void capture_index_fixture(CaptureIndexFixture *f) {
     memset(f,0,sizeof(*f));f->parameter=(XrXirType)256;
     f->nodes[0]=(XrXirTypeNode){.kind=XR_XIR_TYPE_CALLABLE,.result=XR_XIR_I64,.flags=XR_XIR_CALLABLE_ROOT_UNRESOLVED};
     f->nodes[1]=f->nodes[0];f->nodes[1].flags=XR_XIR_CALLABLE_ROOT_REQUIRED;
-    f->types=(XrXirTypes){.nodes=f->nodes,.count=2};
+    f->nodes[2]=(XrXirTypeNode){.kind=XR_XIR_TYPE_CELL,.element=XR_XIR_I64};
+    f->types=(XrXirTypes){.nodes=f->nodes,.count=3};
     f->run[0]=(XrXirInstruction){.op=XR_XIR_CALL,.type=XR_XIR_I64,.immediate=4};
     f->run[1]=(XrXirInstruction){.op=XR_XIR_RETURN,.args={0,0}};
     f->early_a[0]=(XrXirInstruction){.op=XR_XIR_FUNCTION_REF,.type=(XrXirType)256,.args={0,1},.immediate=3};
@@ -50,13 +51,15 @@ static void capture_index_fixture(CaptureIndexFixture *f) {
     f->factory[0]=(XrXirInstruction){.op=XR_XIR_FUNCTION_REF,.type=(XrXirType)257,.immediate=5};
     f->factory[1]=(XrXirInstruction){.op=XR_XIR_CONST_INT,.type=XR_XIR_I64,.immediate=37};
     f->factory[2]=(XrXirInstruction){.op=XR_XIR_RETURN,.args={1,0}};
-    f->reader[0]=(XrXirInstruction){.op=XR_XIR_SLOT_LOAD,.type=XR_XIR_I64};
-    f->reader[1]=(XrXirInstruction){.op=XR_XIR_RETURN,.args={0,0}};
+    f->reader[0]=(XrXirInstruction){.op=XR_XIR_SLOT_LOAD,.type=(XrXirType)258};
+    f->reader[1]=(XrXirInstruction){.op=XR_XIR_CELL_READ,.type=XR_XIR_I64,.args={0,0}};
+    f->reader[2]=(XrXirInstruction){.op=XR_XIR_RETURN,.args={1,0}};
     f->init[0]=(XrXirInstruction){.op=XR_XIR_CONST_INT,.type=XR_XIR_I64,.immediate=9};
-    f->init[1]=(XrXirInstruction){.op=XR_XIR_SLOT_INIT,.args={0,0}};
-    f->init[2]=(XrXirInstruction){.op=XR_XIR_RETURN};
+    f->init[1]=(XrXirInstruction){.op=XR_XIR_CELL_NEW,.type=(XrXirType)258,.args={0,0}};
+    f->init[2]=(XrXirInstruction){.op=XR_XIR_SLOT_INIT,.args={1,0}};
+    f->init[3]=(XrXirInstruction){.op=XR_XIR_RETURN};
     const char *names[]={"run","earlyA","earlyB","late","factory","reader","init"};
-    const uint32_t lengths[]={3,6,6,4,7,6,4},counts[]={2,4,3,3,3,2,3};
+    const uint32_t lengths[]={3,6,6,4,7,6,4},counts[]={2,4,3,3,3,3,4};
     XrXirInstruction *ops[]={f->run,f->early_a,f->early_b,f->late,f->factory,f->reader,f->init};
     for (uint32_t i=0;i<7;++i) {
         f->blocks[i]=(XrXirBlock){.count=counts[i]};
@@ -80,7 +83,7 @@ static void capture_index_fixture(CaptureIndexFixture *f) {
     for (uint32_t i=2;i<=4;++i) { f->contracts[i].values=&f->values[i];f->contracts[i].value_count=1; }
     f->contracts[5].formula.constant_mask=XR_XIR_CALLABLE_ROOT_REQUIRED;
     f->contracts[6].formula.constant_mask=XR_XIR_CALLABLE_ROOT_REQUIRED;
-    f->slot=(XrXirSlot){0,XR_XIR_I64,1};f->source=(XrXirSourceModule){"capture",7,NULL,0,6};
+    f->slot=(XrXirSlot){0,(XrXirType)258,1};f->source=(XrXirSourceModule){"capture",7,NULL,0,6};
     f->declarations=(XrXirDeclarations){.modules=&f->source,.module_count=1,.functions=f->identities,
         .slots=&f->slot,.slot_count=1,.entry_function=0};
     f->evidence=(XrXirProvenance){.kind=XR_XIR_EVIDENCE_TEMPLATE,.contracts=f->contracts,.contract_count=7};
