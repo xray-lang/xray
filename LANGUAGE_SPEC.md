@@ -7798,6 +7798,24 @@ Variable scans prepay a conservative upper bound on the original cumulative comp
 
 Inputs still become compiler Domain snapshots. Arithmetic-range, OOM, step and work failures release all frame owners and preserve caller Strings. Source retains two independent constructions, ordinary constant recipes, complete Checker and query publication. Reachable I/O still rejects even when a search condition leaves its branch unexecuted. This family grants no arbitrary aggregate, function-value, resource or cleanup-path admission.
 
+### 17.46 Immutable compiler Tuples and independent constant receiving
+
+CTFE receives completely reverified type pools and ordinary function closures. Iterative admission accepts Unit, bool, integer, Rune, String and immutable Tuples of these families. A type ID has meaning only in its actual owning descriptor pool. Cyclic descriptors, open types and fields carrying function, Cell or resource authority reject; root/effect flags grant no determinism. TUPLE_NEW constructs authentic Values from the complete ordered field vector. Unit fields retain their position without an SSA slot. TUPLE_FIELD, internal Tuple arguments/child returns, owned locals/parallel PHI and private Cell<Tuple> preserve real owned references on the same compiler Domain. External Tuple arguments still require bounded cross-arena receiving and currently reject fail closed.
+
+Descriptor DFS, summaries and every metadata allocation use the original ledger. Nested receiving prepays the complete expanded type shape; repeated field positions count each occurrence and data sharing refunds nothing. Overflow or unpayable work rejects BUDGET. Constructor argument vectors use complete arity in actual activation bytes. Traversal scratch uses the remaining original frame quota, including simultaneous old/new blocks during resize. Original steps65536, depth128, frame65536, output8, allocated64MiB, live8MiB and work128M remain without reset or refund.
+
+Tuple export size recursively sums target scalar storage sizes and actual String UTF-8 bytes in field order. Unit contributes zero; host pointers, ownership headers, type IDs, carrier sizeof and padding do not count. Exceeding the original request ceiling preserves Unit output. Publication first obtains independent ownership. The type arena, nested Tuples and String fields remain live after Source/Artifact/ledger-caller death. Final drop allocates nothing and refunds only live bytes.
+
+Source matches actual type structure across owners for helpers and replay results, without assuming equal local type IDs. Independent receiving uses iterative owning frames to record ordinary field constants and TUPLE_NEW recipes, followed by the complete Checker and query publication. Explicit NUL length, Unit positions, closed generics and original site/owner/expected coverage remain. Field, OOM, budget, construction and publication failures release all temporary results. This admission grants no complete Array/struct/enum, Tuple equality, function-value or cleanup-path qualification.
+
+### 17.47 Bounded CTFE floating bits and target constants
+
+After complete Lowered reverification and entire direct-call closure admission, CTFE permits f32/f64 arguments, results, ordinary locals, private Cells and immutable Tuple fields. CONST_FLOAT, negation, arithmetic, relations and concrete numeric conversions reuse the existing integer-only IEEE bit kernel. They depend on no host FPU, Instance, native or AST fallback. Subnormals, nearest-even rounding, canonical NaN, Infinity and signed zero retain ordinary execution semantics; floating division by zero produces IEEE results. Out-of-range, NaN and infinite floating-to-integer conversions return NUMERIC_RANGE and preserve Unit output.
+
+Each floating operation prepays 1024 work units on the original cumulative compiler ledger before entering a numeric API. This conservative fixed upper bound covers 64-bit decode/pack, normalization, product carry scans and long division; these loops depend only on fixed format widths. Prepayment creates no cloned quota, reset or refund; an unpayable reserve returns BUDGET first. Complete type, identity, CFG, reachable-I/O and original steps/depth/frame/output/allocated/live/work limits remain.
+
+Logical f32 and f64 outputs occupy four and eight target bytes respectively; Tuple fields continue to sum target storage sizes. f32 inputs require zero high bits and canonical NaN encodings; f64 retains ordinary Value admission rules. Independent Source replay rechecks target canonical floating payloads, records ordinary CONST_FLOAT recipes and invokes the complete Checker. External Tuple, arbitrary Array/struct/enum, function-value and cleanup-path qualification is not granted by this admission.
+
 ---
 
 ## 18. Error Codes

@@ -1,0 +1,8 @@
+fn add(a:f64,b:f64)->f64 { return a+b }
+fn divide(a:f64,b:f64)->f64 { return a/b }
+fn equal(a:f64,b:f64)->bool { return a==b }
+fn narrow(a:f64)->f32 { return a as f32 }
+fn integer(a:f64)->i64 { return a as i64 }
+fn integer_float(a:i64)->f64 { return a as f64 }
+fn exact(a:f32)->f32 { return a }
+export fn run() {}

@@ -1,0 +1,2 @@
+fn convert(x:f64)->i64 { return x as i64 }
+export fn run()->i64 { return comptime convert(-42.75) }

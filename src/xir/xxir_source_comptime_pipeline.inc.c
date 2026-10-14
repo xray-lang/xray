@@ -34,9 +34,10 @@ static bool source_comptime_helper(SourceContext *ctx,const XrXirArtifact *lower
         const XrXirFunction *body=&module->functions[f];
         if (module->declarations->functions[f].module!=site->module || body->name_length!=original->name_length ||
             !source_span_same(ctx,site->syntax,body->name,original->name,body->name_length)) continue;
-        if (found!=UINT32_MAX || body->parameter_count || body->result!=original->result ||
+        if (found!=UINT32_MAX || body->parameter_count ||
             module->declarations->functions[f].nominal_owner || module->declarations->functions[f].cleanup_owner)
             return source_fail(ctx,site->syntax,XR_XIR_BAD_STRUCTURE,"comptime helper changed its actual identity or signature");
+        if (!source_comptime_type_matches(ctx,site->syntax,module->types,body->result,original->result)) return false;
         found=f;
     }
     if (found==UINT32_MAX) return source_fail(ctx,site->syntax,XR_XIR_BAD_STRUCTURE,"comptime helper is absent after specialization");
@@ -74,8 +75,11 @@ static bool source_comptime_evaluate(SourceContext *ctx,const XrXirArtifact *che
         memcpy(request.evaluation.checked_identity,identity,sizeof(identity));
         XrXirValue value={0};XrXirCtfeStatus evaluated=xr_xir_compile_ctfe_calls(&request,&value);
         if (evaluated!=XR_XIR_CTFE_OK) { xr_xir_value_drop(&value);source_comptime_failure(ctx,site->syntax,evaluated);break; }
-        if (!source_comptime_result_type((XrXirType)value.type) || !source_comptime_result_value(&value)) {
-            xr_xir_value_drop(&value);source_fail(ctx,site->syntax,XR_XIR_BAD_STRUCTURE,"comptime returned a noncanonical value");break;
+        const XrXirModule *module=xr_xir_compile_artifact_module(lowered);
+        const XrXirTypeNode *tuple=xr_xir_tuple_signature(module->types,module->functions[f].result);
+        site->result_arity=tuple?tuple->parameter_count:0;
+        if (!source_comptime_result_value(ctx,site->syntax,&value,site->result_arity)) {
+            xr_xir_value_drop(&value);source_fail(ctx,site->syntax,ctx->diagnostic.status==XR_XIR_OK?XR_XIR_BAD_STRUCTURE:ctx->diagnostic.status,"comptime returned a noncanonical value");break;
         }
         if (!source_work_units(ctx,site->syntax,sizeof(value)+1)) { xr_xir_value_drop(&value);break; }
         site->value=value;++count;

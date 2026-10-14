@@ -1,0 +1,2 @@
+fn convert()->i64 { return (1.0/0.0) as i64 }
+export fn run()->i64 { return comptime convert() }
