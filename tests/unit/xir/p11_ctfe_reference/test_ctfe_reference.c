@@ -31,6 +31,14 @@ typedef struct CtfeReferenceCase {
 } CtfeReferenceCase;
 
 static const CtfeReferenceCase reference_cases[] = {
+    {"equal_array_work", XR_XIR_UNIT, 0, XR_XIR_BUDGET, NULL, 2},
+    {"equal_array_int", XR_XIR_BOOL, 1, XR_XIR_OK, NULL, 0},
+    {"equal_array_float", XR_XIR_BOOL, 1, XR_XIR_OK, NULL, 0},
+    {"equal_array_string", XR_XIR_BOOL, 1, XR_XIR_OK, NULL, 0},
+    {"equal_array_nested", XR_XIR_BOOL, 1, XR_XIR_OK, NULL, 0},
+    {"equal_array_nullable", XR_XIR_BOOL, 1, XR_XIR_OK, NULL, 0},
+    {"equal_nullable_array", XR_XIR_BOOL, 1, XR_XIR_OK, NULL, 0},
+    {"equal_array_direct", XR_XIR_UNIT, 0, XR_XIR_OK, NULL, 0},
     {"array_holder", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
     {"array_deep_gap", XR_XIR_UNIT, 0, XR_XIR_BAD_TYPE, "admitted closed value family", 1},
     {"array_repeat", XR_XIR_UNIT, 3, XR_XIR_OK, NULL, 0},
@@ -533,6 +541,7 @@ static void reference_string_late_owner(void) {
 #include "xir_ctfe_float_cases.h"
 #include "xir_ctfe_nullable_cases.h"
 #include "xir_ctfe_array_cases.h"
+#include "xir_ctfe_equal_cases.h"
 
 int main(int argc, char **argv) {
     CHECK(argc == 2);
@@ -552,7 +561,8 @@ int main(int argc, char **argv) {
         selected->name, (unsigned)status, diagnostic.line, diagnostic.column, diagnostic.message);
     CHECK(status == selected->status);
     if (status == XR_XIR_OK) {
-        if (!strncmp(selected->name,"array_",6) && selected->type==XR_XIR_UNIT) reference_array(&context,&source,selected);
+        if (!strcmp(selected->name,"equal_array_direct")) reference_owned_equal(&context,&source);
+        else if (!strncmp(selected->name,"array_",6) && selected->type==XR_XIR_UNIT) reference_array(&context,&source,selected);
         else if (!strcmp(selected->name,"nullable_direct")) reference_nullable_direct(&context,&source);
         else if (!strncmp(selected->name,"nullable_",9) && selected->type==XR_XIR_UNIT) reference_nullable(&context,&source,selected);
         else if (!strcmp(selected->name,"float_tuple")) reference_tuple(&context,&source,selected);
@@ -578,9 +588,10 @@ int main(int argc, char **argv) {
     XrCompileResourceStats spent = reference_stats(&context);
     CHECK(spent.live_bytes == before.live_bytes && spent.work >= before.work &&
         spent.allocated_bytes >= before.allocated_bytes);
-    if (!strcmp(selected->name,"nullable_work")) {
+    if ((!strcmp(selected->name,"nullable_work") || !strcmp(selected->name,"equal_array_work"))) {
         CHECK(spent.work>=reference_limits.work-UINT64_C(131072));
-        fprintf(stderr,"CTFE Nullable String comparison scan paid original ledger: work=%llu/128000000; failure releases every owner\n",(unsigned long long)spent.work);
+        fprintf(stderr,"CTFE %s String comparison scan paid original ledger: work=%llu/128000000; failure releases every owner\n",
+            !strcmp(selected->name,"nullable_work")?"Nullable":"Array",(unsigned long long)spent.work);
     }
     CHECK(spent.allocated_bytes <= reference_limits.allocated_bytes &&
         spent.peak_bytes <= reference_limits.live_bytes && spent.work <= reference_limits.work);

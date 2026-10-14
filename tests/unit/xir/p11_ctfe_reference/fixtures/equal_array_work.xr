@@ -1,0 +1,2 @@
+fn answer()->bool { var text="x"; var i=0; while(i<16){text=text+text;i=i+1};const a:Array<string>=[text];var count=0;while(count<2000){if(a!=a){return false};count=count+1};return true }
+export fn run()->bool { return comptime answer() }

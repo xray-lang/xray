@@ -83,7 +83,7 @@ static XrXirCtfeStatus ctfe_equal_admit(const XrXirArtifact *artifact,XrXirType 
         if (!xir_compile_work(&artifact->context,2)) return XR_XIR_CTFE_BUDGET;
         if (ctfe_parameter_type(type)) return XR_XIR_CTFE_OK;
         const XrXirTypeNode *node=xr_xir_type_node(artifact->module.types,type);
-        if (!node || node->kind!=XR_XIR_TYPE_NULLABLE) return XR_XIR_CTFE_NOT_SUPPORTED;
+        if (!node || (node->kind!=XR_XIR_TYPE_NULLABLE && node->kind!=XR_XIR_TYPE_ARRAY)) return XR_XIR_CTFE_NOT_SUPPORTED;
         type=node->element;
     }
 }

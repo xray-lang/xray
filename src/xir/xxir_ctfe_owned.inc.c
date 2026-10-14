@@ -120,3 +120,4 @@ static XrXirCtfeStatus ctfe_cell_step(ScalarRun *run,uint32_t *cursor,CtfeOwnedS
 #include "xxir_ctfe_tuple.inc.c"
 #include "xxir_ctfe_nullable.inc.c"
 #include "xxir_ctfe_array.inc.c"
+#include "xxir_ctfe_equal.inc.c"

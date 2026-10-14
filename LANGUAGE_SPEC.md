@@ -7822,6 +7822,14 @@ Logical export recursively sums active elements' target scalars, String bytes, N
 
 Authentic COW writes preserve prior snapshots. Negative length/capacity returns NUMERIC_RANGE; bounds errors return the appended compiler-only BOUNDS status. Source reports positioned compile errors, preserving Unit output and borrowed values. Foreign composite snapshots, elements with nested variable receiving, nominal/function/cleanup and mandatory shared/full safety qualifications remain part of the original objective; this limited development qualification proves no completion.
 
+### 17.50 Original-ledger prepayment for common Array/Nullable equality
+
+After complete Lowered, actual family and entire reachable closure admission, XR_EQUAL compares admitted Array/Nullable chains and the primitive/String leaves supported by common Value equality. Only existing xr_xir_value_equal determines the boolean. The prepayment walk adds no numeric, String or container comparison semantics. Shared backing or identical addresses do not prove reflexivity: a NaN Array remains unequal to itself, while signed zeros retain common IEEE equality. Capacity does not participate in content equality; NUL retains complete String length. Tuple/nominal or execution/resource-bearing equality still requires authentic owner support, never a guessed capability from a type name.
+
+An iterative owning pair walk charges before each header/type/child access. Shallow Array lengths and active Nullable variants bound later spans. Each authentic Array getter prepays its entire receiving span; complete String comparison bytes and fixed-width work for every floating leaf pay the original cumulative ledger before common comparison. Bounds are conservative; overflow or unpayable work returns BUDGET first, with no reset or refund. Length and None branches require no unused-payload scans. Actual comparison still calls the same Value semantics, without an unbounded host walker, Instance/native execution or AST fallback.
+
+The prepayment stack consumes the original remaining frame limit, including old/new resize blocks and simultaneous getter-admission scratch. It releases every stack and temporary reference before common comparison, whose Value scratch remains independently bounded. Physical OOM and work/step/frame failure preserve Unit output, original borrowed values and spent charges, while releasing all temporary/frame owners. This common path atomically replaces the old Nullable-specific equality branch. Source retains two constructions, independent ordinary BOOL constants and complete Checker/query publication. Original budgets, safety gates and the precise Value observation gap for deeper variable receiving remain; development qualification is not complete P11.
+
 ---
 
 ## 18. Error Codes

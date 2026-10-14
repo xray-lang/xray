@@ -289,11 +289,15 @@ static XrXirCtfeStatus ctfe_call_execute(CtfeCallExecution *execution,XrXirValue
             if (status!=XR_XIR_CTFE_OK) return status;
             continue;
         }
+        if (ctfe_owned_equal_opcode(run,op)) {
+            XrXirCtfeStatus status=ctfe_owned_equal_step(run,&frame->state.instruction,&execution->owned);
+            if (status!=XR_XIR_CTFE_OK) return status;continue;
+        }
         if (ctfe_array_opcode(op->op)) {
             XrXirCtfeStatus status=ctfe_array_step(run,&frame->state,&execution->owned);
             if (status!=XR_XIR_CTFE_OK) return status;continue;
         }
-        if (ctfe_nullable_opcode(run,op)) {
+        if (ctfe_nullable_opcode(op)) {
             XrXirCtfeStatus status=ctfe_nullable_step(run,&frame->state.instruction,&execution->owned);
             if (status!=XR_XIR_CTFE_OK) return status;
             continue;

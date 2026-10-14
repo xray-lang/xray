@@ -7659,6 +7659,14 @@ Array逻辑导出递归累加活跃元素的目标标量、String字节、Nullab
 
 真实COW修改保留旧快照。负长度/capacity返回NUMERIC_RANGE，索引越界返回追加的compiler-only BOUNDS状态；Source给带位置的编译错误。失败保全Unit输出及借用值。外部复合快照、有嵌套可变接收的元素、nominal/函数值/cleanup和正式共享/完整安全资格继续按原目标实施，不能从此有限开发资格推断完成。
 
+### 17.50 原账本预付的共同Array/Nullable相等
+
+在完整Lowered、实际类型族及整个可达调用闭包接收后，XR_EQUAL可比较已准入的Array/Nullable链与共同Value相等支持的基本/String叶。只由既有xr_xir_value_equal产生布尔结果；预付遍历不另写数值、String或容器相等规则。共享backing或地址相同不能证明自反性，NaN数组与自身仍不相等，正负零沿共同IEEE规则相等。capacity不参与内容相等，NUL保持完整String长度。Tuple/nominal或带执行/资源权限的比较族仍要求其真实owner支持，不能凭类型名字猜能力。
+
+迭代拥有的成对预付遍历在每次header/型别/child访问前收费。浅层Array长度和Nullable活跃分支限定后续跨度；每次真实Array getter之前付清其完整接收跨度，String完整比较字节和各浮点叶的固定宽度费用在共同比较前支付原累计ledger。上界保守，溢出/无力支付先BUDGET，所有费用不重置、不退款。长度或None分支不需要未访问payload扫描；实际比较仍调用同一Value语义。没有unbounded host walker、Instance/native执行或AST回退。
+
+预付stack使用原剩余frame限额，包括resize新旧块和getter接收scratch同时峰值；共同比较开始前释放该stack和所有临时引用，再独立约束共同Value scratch。任一物理OOM、work/step/frame失败都保全Unit输出、原借用值及累计收费，释放全部临时/帧owner。Nullable旧专用相等分支由此共同路径原子替换；Source仍两次构造、独立普通BOOL常量与完整Checker/query发布。原全部预算、安全门和更深变量接收的具体Value观察接口缺口继续生效，开发资格不等于完整P11。
+
 ---
 
 ## 18. 错误码 (Error Codes)
