@@ -13,7 +13,7 @@ static XrXirCallStatus instance_class_view(XrXirCallView *view,XrXirInstance **o
     XrXirValueAdmission *admission=xr_xir_call_admission(view);
     if (!admission || admission->function!=admit_function_binding) return XR_XIR_CALL_BAD_STATE;
     XrXirInstance *instance=admission->context;
-    if (!instance || instance!=view->instance) return XR_XIR_CALL_BAD_STATE;
+    if (!instance || instance_root(instance)!=view->instance) return XR_XIR_CALL_BAD_STATE;
     if (!instance_owner_current(instance)) return XR_XIR_CALL_BAD_ARGUMENT;
     if (admission->domain!=instance->domain || view_instance(view)!=instance ||
         admission->arena!=instance->program->arena) return XR_XIR_CALL_BAD_STATE;

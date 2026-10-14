@@ -26,7 +26,7 @@ static XrXirCellParameterRole instance_cell_role(void *context, uint32_t entry, 
 }
 static void initialization_release(XrXirCallView *view, XrXirCallStatus reason) {
     (void)reason;
-    XrXirInstance *instance = view->instance;
+    XrXirInstance *instance = instance_current(view->instance);
     XR_CHECK(instance_owner_current(instance), "initializer release requires its current domain");
     if (instance && view->activation == instance->call) xr_xir_value_drop(&instance->pending_function);
 }
