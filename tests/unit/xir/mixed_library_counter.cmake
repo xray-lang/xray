@@ -11,7 +11,9 @@ add_custom_command(OUTPUT "${XIR_LIBRARY_COUNTER_GENERATED}"
     VERBATIM)
 add_executable(test_xir_mixed_library_counter xir/test_xir_mixed_library_counter.c "${XIR_LIBRARY_COUNTER_GENERATED}")
 target_link_libraries(test_xir_mixed_library_counter PRIVATE xray_xir_vm xray_xir_scalar)
-foreach(counter_target IN ITEMS test_xir_mixed_library_producer test_xir_mixed_library_counter)
+add_executable(test_xir_mixed_library_resources xir/test_xir_mixed_library_resources.c "${XIR_LIBRARY_COUNTER_GENERATED}")
+target_link_libraries(test_xir_mixed_library_resources PRIVATE xray_xir_vm xray_xir_scalar)
+foreach(counter_target IN ITEMS test_xir_mixed_library_producer test_xir_mixed_library_counter test_xir_mixed_library_resources)
     set_target_properties(${counter_target} PROPERTIES C_STANDARD 11 C_STANDARD_REQUIRED YES C_EXTENSIONS NO)
     if(MSVC)
         target_compile_options(${counter_target} PRIVATE /W4 /WX /utf-8)
@@ -23,4 +25,10 @@ foreach(counter_backend IN ITEMS 0 1 vm native)
     add_test(NAME test_xir_mixed_library_counter_${counter_backend} COMMAND test_xir_mixed_library_counter ${counter_backend})
     set_tests_properties(test_xir_mixed_library_counter_${counter_backend} PROPERTIES TIMEOUT 120 RUN_SERIAL TRUE COST 1
         LABELS "unit;xir;mixed;execution;ownership;instance;generated-c;lifecycle;library;module-state")
+    foreach(counter_resource_mode IN ITEMS axes fi)
+        add_test(NAME test_xir_mixed_library_${counter_backend}_${counter_resource_mode}
+            COMMAND test_xir_mixed_library_resources ${counter_backend} ${counter_resource_mode})
+        set_tests_properties(test_xir_mixed_library_${counter_backend}_${counter_resource_mode} PROPERTIES TIMEOUT 120 RUN_SERIAL TRUE COST 1
+            LABELS "unit;xir;mixed;execution;ownership;instance;generated-c;lifecycle;library;module-state;${counter_resource_mode}")
+    endforeach()
 endforeach()

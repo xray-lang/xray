@@ -109,4 +109,6 @@ static int counter_normal_main(int argc, char **argv) {
     printf("Library counter backend=%s two Instances independently1/2, one real yield/activation, peer costs unchanged, code lease1, physical0/0\n", counter_backends[backend]);
     return 0;
 }
+#ifndef XR_LIBRARY_COUNTER_RESOURCE_MAIN
 int main(int argc, char **argv) { return counter_normal_main(argc, argv); }
+#endif
