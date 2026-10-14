@@ -406,9 +406,10 @@ TEST(type_to_string) {
 TEST(type_string_parser_uses_error_recovery_for_invalid_types) {
     XrType *const_slice = xa_builtin_parse_type_string(g_analyzer, " const Slice<u8> ");
     ASSERT(const_slice != NULL);
-    ASSERT(XR_TYPE_IS_SLICE(const_slice));
-    ASSERT(const_slice->is_const);
-    ASSERT(xr_type_is_exact_u8(const_slice->container.element_type));
+    ASSERT(XR_TYPE_IS_ERROR(const_slice));
+    XrType *slice = xa_builtin_parse_type_string(g_analyzer, " Slice<u8> ");
+    ASSERT(slice != NULL && XR_TYPE_IS_SLICE(slice));
+    ASSERT(xr_type_is_exact_u8(slice->container.element_type));
 
     XrType *unscoped_private_native_class =
         xa_builtin_parse_type_string(g_analyzer, "__BufferStorage");

@@ -202,7 +202,7 @@ export fn upgradeTLS(conn: NetConn, hostname: string, timeoutMs: i64 = _DEFAULT_
 export fn hasTLS() -> bool { return __hasTLS() }
 
 fn _containsZeroByte(value: string) -> bool {
-    var bytes: const Slice<u8> = value.bytes()
+    var bytes: Slice<u8> = value.bytes()
     for (var i = 0; i < len(bytes); i++) {
         if (bytes[i] == 0) { return true }
     }
@@ -214,7 +214,7 @@ fn _encodeAlpnProtocols(protocols: Array<string>?) -> Array<u8> {
     if (protocols == null) { return wire }
     var values = protocols!
     for (var i = 0; i < len(values); i++) {
-        var bytes: const Slice<u8> = values[i].bytes()
+        var bytes: Slice<u8> = values[i].bytes()
         if (len(bytes) == 0 || len(bytes) > _MAX_ALPN_PROTOCOL_BYTES ||
             len(wire) + len(bytes) + 1 > _MAX_ALPN_WIRE_BYTES) {
             throw NetError.Invalid

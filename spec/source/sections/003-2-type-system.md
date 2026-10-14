@@ -354,7 +354,7 @@ fn first(packet: Packet) -> u8 {
 
 切片使用显式目标视图类型。`array[start:end]` 或 `fixedArray[start:end]` 可形成共享视图；形成 `MutSlice<T>` 还要求 owner 是独占可写 place，并在视图产生前完成必要的 COW 分离。字符串字节视图 `str.bytes()` 是 `Slice<u8>`，不能用于修改字符串。
 
-`len(view)` 读取长度，`view[i]` 读取元素；只有 `MutSlice<T>` 允许 `view[i] = value`，写入对应 owner 的逻辑值。视图不提供成员方法或 `.length`。从 `const` owner 派生的视图只能只读；不得用尚未冻结的 type-position `const T` 重新定义可写视图。
+`len(view)` 读取长度，`view[i]` 读取元素；只有 `MutSlice<T>` 允许 `view[i] = value`，写入对应 owner 的逻辑值。视图不提供成员方法或 `.length`。从 `const` owner 派生的视图只能只读；类型位置不接受 `const T`；只读视图使用 `Slice<T>`，可写视图使用 `MutSlice<T>`。
 
 owner 必须是可证明存活的具名局部 place、参数或 receiver 字段路径，不能借用临时值。嵌套投影保护所属根及必要路径。class 字段借用须保活对象并动态检查独占；只有局部无冲突证明才可省去动态检查。
 
@@ -1032,7 +1032,7 @@ print(len(a))               // 4
 
 不可复制资源的消费转移持有权和最终析构责任，调用是否消费由声明的参数或 receiver 模式决定。对这类转移，`move x` 是可选的显式标记；源绑定成功消费后不可再用，未被所有路径重新初始化的循环再次消费也必须拒绝。只读与 `ref` 借用不消费持有权。被拒绝的操作不能把有效源状态错误地标为已消费。
 
-可复制类型（包括 Array）不能声明 `move` 参数或 receiver。可复制值是否另行允许独立的 `move x` 表达式、普通值 `copy(array)` 是否保留公开拼写，以及 type-position `const T` 的身份和转换，均不在本已冻结子集内，须在准入前单独确定。这些待定表面不阻塞普通 Array 复制；不得继承旧唯一根、堆逃逸终态或整个图深冻结规则作为默认答案。
+可复制类型（包括 Array）不能声明 `move` 参数或 receiver。通用 type-position `const T` 已删除，不产生类型身份或转换。可复制值是否另行允许独立的 `move x` 表达式、普通值 `copy(array)` 是否保留公开拼写，仍须在准入前单独确定。这些待定表面不阻塞普通 Array 复制；不得继承旧唯一根、堆逃逸终态或整个图深冻结规则作为默认答案。
 
 #### 2.14.6 struct 字段的复制与初始化
 
@@ -1456,7 +1456,7 @@ The old `[N]T` syntax is not part of the Xray language.
 
 Slicing uses an explicit target view type. `array[start:end]` and `fixedArray[start:end]` may form shared views. Forming a `MutSlice<T>` additionally requires an exclusively writable owner place and completion of any necessary COW detachment before publishing the view. The string byte view `str.bytes()` is a `Slice<u8>` and cannot mutate the string.
 
-`len(view)` reads the length and `view[i]` reads an element. Only `MutSlice<T>` permits `view[i] = value`, which updates the owner's logical value. Views have no member methods or `.length`. A view derived from a `const` owner is read-only; the unsettled type-position `const T` spelling must not redefine writable views.
+`len(view)` reads the length and `view[i]` reads an element. Only `MutSlice<T>` permits `view[i] = value`, which updates the owner's logical value. Views have no member methods or `.length`. A view derived from a `const` owner is read-only; type positions reject `const T`: read-only views use `Slice<T>` and writable views use `MutSlice<T>`.
 
 An owner must be a named local place, parameter, or receiver field path with a proven lifetime; a temporary cannot be borrowed. Nested projections protect their root and the necessary access path. Borrowing a class field must retain the object and check exclusive access dynamically. A local proof of no conflict may eliminate that dynamic check.
 
@@ -2150,7 +2150,7 @@ Ordinary closures capture outer `var` bindings through shared cells; `const` and
 
 Consumption of a noncopyable resource transfers ownership and final destruction responsibility. Whether a call consumes is determined by the declared parameter or receiver mode; `move x` optionally marks such a transfer explicitly. Successful consumption makes the source binding unusable. Consuming it again in a loop without reinitialization on every relevant path must be rejected. READ and `ref` borrows do not consume ownership. A rejected operation must not incorrectly mark a valid source as consumed.
 
-Copyable types, including Array, cannot declare `move` parameters or receivers. Whether a standalone `move x` expression is allowed for copyable values, whether ordinary `copy(array)` retains a public spelling, and the identity and conversions of type-position `const T` are outside this frozen subset and require separate decisions before admission. These open surfaces do not block ordinary Array copying. Old unique-root, terminal heap-escape, or whole-graph deep-freeze rules must not supply default answers.
+Copyable types, including Array, cannot declare `move` parameters or receivers. The general type-position `const T` form is removed and creates no type identity or conversion. Whether a standalone `move x` expression is allowed for copyable values and whether ordinary `copy(array)` retains a public spelling still require separate decisions before admission. These open surfaces do not block ordinary Array copying. Old unique-root, terminal heap-escape, or whole-graph deep-freeze rules must not supply default answers.
 
 #### 2.14.6 Struct-field copying and initialization
 

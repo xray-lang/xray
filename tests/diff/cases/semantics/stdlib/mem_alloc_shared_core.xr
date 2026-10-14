@@ -21,7 +21,7 @@ fn run() {
         print(pp[15])
     }
 {
-        var ro: const Slice<u8> = p.asBytes()
+        var ro: Slice<u8> = p.asBytes()
         print(len(ro))
         print(ro[0])
     }

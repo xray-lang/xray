@@ -59,7 +59,7 @@ fn test_cluster_transports_only_opaque_envelopes() {
     var payload = envelope(41)
     assert(cluster.send("service.echo", move payload) == ClusterDelivery.Accepted)
     var received: Buffer = receive_buffer(inbox)
-    var bytes: const Slice<u8> = received.asBytes()
+    var bytes: Slice<u8> = received.asBytes()
     assertEqual(len(bytes), 64)
     assertEqual(bytes[0], 41)
     assertEqual(bytes[63], 42)

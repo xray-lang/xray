@@ -8,7 +8,7 @@ fn callIt(f: fn(ref Slice<u8>), view: ref Slice<u8>) {
 
 fn main() {
     const bytes = Array<u8>(4, 0)
-    var view: const Slice<u8> = bytes[:]
+    var view: Slice<u8> = bytes[:]
     callIt(overwrite, ref view)
 }
 

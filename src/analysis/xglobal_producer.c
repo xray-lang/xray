@@ -1047,11 +1047,6 @@ static bool class_field_fill_type_facts(XgClassFieldSummary *row, const XrTypeRe
         return true;
     if (tref_contains_error(type, 0))
         return false;
-    if (type->kind == XR_TREF_CONST) {
-        bool ok = class_field_fill_type_facts(row, type->nchildren > 0 ? type->children[0] : NULL);
-        row->flags |= XG_CLASS_FIELD_CONST;
-        return ok;
-    }
     row->scalar_rep = type->scalar_rep;
     target = class_field_target_type(type);
     if (target && (target->kind == XR_TREF_NAMED || target->kind == XR_TREF_GENERIC) &&
@@ -6286,7 +6281,7 @@ static void body_add_json_codec_shape_test(XgBodyCollect *bc, const AstNode *nod
      * because nested casts share a start position. */
     const XrTypeRef *shape_target = target;
     while (shape_target &&
-           (shape_target->kind == XR_TREF_OPTIONAL || shape_target->kind == XR_TREF_CONST) &&
+           shape_target->kind == XR_TREF_OPTIONAL &&
            shape_target->nchildren == 1 && shape_target->children) {
         shape_target = shape_target->children[0];
     }

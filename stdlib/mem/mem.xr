@@ -52,7 +52,7 @@ export final class Buffer implements Lengthable {
 
     operator len() -> i64 { return __bufferLength(this._storage) }
 
-    asBytes() -> const Slice<u8> from this { return __bufferAsBytes(this._storage) }
+    asBytes() -> Slice<u8> from this { return __bufferAsBytes(this._storage) }
 
     // Writable access is deliberately composed with the module's existing
     // scoped intrinsic: withSliceMut(buffer.borrowPtr(), len(buffer),

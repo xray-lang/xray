@@ -949,7 +949,7 @@ The old `[N]T` syntax is not part of the Xray language.
 
 Slicing uses an explicit target view type. `array[start:end]` and `fixedArray[start:end]` may form shared views. Forming a `MutSlice<T>` additionally requires an exclusively writable owner place and completion of any necessary COW detachment before publishing the view. The string byte view `str.bytes()` is a `Slice<u8>` and cannot mutate the string.
 
-`len(view)` reads the length and `view[i]` reads an element. Only `MutSlice<T>` permits `view[i] = value`, which updates the owner's logical value. Views have no member methods or `.length`. A view derived from a `const` owner is read-only; the unsettled type-position `const T` spelling must not redefine writable views.
+`len(view)` reads the length and `view[i]` reads an element. Only `MutSlice<T>` permits `view[i] = value`, which updates the owner's logical value. Views have no member methods or `.length`. A view derived from a `const` owner is read-only; type positions reject `const T`: read-only views use `Slice<T>` and writable views use `MutSlice<T>`.
 
 An owner must be a named local place, parameter, or receiver field path with a proven lifetime; a temporary cannot be borrowed. Nested projections protect their root and the necessary access path. Borrowing a class field must retain the object and check exclusive access dynamically. A local proof of no conflict may eliminate that dynamic check.
 
@@ -1643,7 +1643,7 @@ Ordinary closures capture outer `var` bindings through shared cells; `const` and
 
 Consumption of a noncopyable resource transfers ownership and final destruction responsibility. Whether a call consumes is determined by the declared parameter or receiver mode; `move x` optionally marks such a transfer explicitly. Successful consumption makes the source binding unusable. Consuming it again in a loop without reinitialization on every relevant path must be rejected. READ and `ref` borrows do not consume ownership. A rejected operation must not incorrectly mark a valid source as consumed.
 
-Copyable types, including Array, cannot declare `move` parameters or receivers. Whether a standalone `move x` expression is allowed for copyable values, whether ordinary `copy(array)` retains a public spelling, and the identity and conversions of type-position `const T` are outside this frozen subset and require separate decisions before admission. These open surfaces do not block ordinary Array copying. Old unique-root, terminal heap-escape, or whole-graph deep-freeze rules must not supply default answers.
+Copyable types, including Array, cannot declare `move` parameters or receivers. The general type-position `const T` form is removed and creates no type identity or conversion. Whether a standalone `move x` expression is allowed for copyable values and whether ordinary `copy(array)` retains a public spelling still require separate decisions before admission. These open surfaces do not block ordinary Array copying. Old unique-root, terminal heap-escape, or whole-graph deep-freeze rules must not supply default answers.
 
 #### 2.14.6 Struct-field copying and initialization
 
@@ -2856,7 +2856,7 @@ print(snapshot[0])          // 1
 print(len(snapshot))        // 3
 ```
 
-This section freezes read-only binding and value-component permissions, not the distinct type identity, conversions, or permitted positions of type-position `const T`. That surface is outside this frozen subset and requires a separate decision before admission; old whole-graph deep-freeze rules must not be inherited. The public `copy(array)` spelling and standalone `move` expressions for copyable values are likewise not prerequisites for these binding rules; see §2.14.5.
+`const` modifies only bindings or fields. The general `const T` type form is removed: its old spelling in parameters, return types, aliases, field types, function types, tuples, unions, and generic arguments is a syntax error, with no type identity, implicit conversion, or compatibility alias. Read-only permissions follow value components and stop at class or synchronization identity boundaries; old whole-graph deep-freeze rules must not be inherited. The public `copy(array)` spelling and standalone `move` expressions for copyable values are likewise not prerequisites for these binding rules; see §2.14.5.
 
 These are language contracts. See §17 for current new XIR implementation qualification of complete declaration families; these examples do not claim implementation completion. Cross-execution sharing additionally requires the type and boundary contracts in §10.
 
@@ -7974,8 +7974,7 @@ Type ::= UnionType
 UnionType ::= IntersectionType ('|' IntersectionType)*
 IntersectionType ::= NullableType
 NullableType ::= PrimaryType '?'?
-PrimaryType ::= ConstType | FFIPointerType | CFunctionType | NamedType | FunctionType | TupleType | ObjectType
-ConstType ::= 'const' PrimaryType
+PrimaryType ::= FFIPointerType | CFunctionType | NamedType | FunctionType | TupleType | ObjectType
 FFIPointerType ::= ('Ptr' | 'MutPtr') '<' Type '>'
 CFunctionType ::= 'CFn' '<' FunctionType '>'
 NamedType   ::= QualifiedIdent TypeArgs?

@@ -65,7 +65,7 @@ print(snapshot[0])          // 1
 print(len(snapshot))        // 3
 ```
 
-本节冻结绑定与值语义部分的只读权限，不裁决 type-position `const T` 的独立类型身份、转换及全部可用位置；该表面不在本已冻结子集内，须在准入前另行确定，不能沿用旧的整个图深冻结规则。普通值 `copy(array)` 的公开拼写和可复制值的独立 `move` 表达式同样不作为上述绑定规则的前置条件，见 §2.14.5。
+`const` 只修饰绑定或字段。通用类型形式 `const T` 已删除：参数、返回类型、类型别名、字段类型、函数类型、元组、union 和泛型实参中的旧拼写均为语法错误，不产生类型身份、隐式转换或兼容别名。只读权限沿值语义部分传播，并在 class 或同步身份边界停止；不能沿用旧的整个图深冻结规则。普通值 `copy(array)` 的公开拼写和可复制值的独立 `move` 表达式同样不作为上述绑定规则的前置条件，见 §2.14.5。
 
 这些是语言合同；完整声明族的当前新 XIR 实现资格见 §17，不因本节示例而宣称实现完成。跨执行共享还须满足 §10 的类型与边界合同。
 
@@ -1325,7 +1325,7 @@ print(snapshot[0])          // 1
 print(len(snapshot))        // 3
 ```
 
-This section freezes read-only binding and value-component permissions, not the distinct type identity, conversions, or permitted positions of type-position `const T`. That surface is outside this frozen subset and requires a separate decision before admission; old whole-graph deep-freeze rules must not be inherited. The public `copy(array)` spelling and standalone `move` expressions for copyable values are likewise not prerequisites for these binding rules; see §2.14.5.
+`const` modifies only bindings or fields. The general `const T` type form is removed: its old spelling in parameters, return types, aliases, field types, function types, tuples, unions, and generic arguments is a syntax error, with no type identity, implicit conversion, or compatibility alias. Read-only permissions follow value components and stop at class or synchronization identity boundaries; old whole-graph deep-freeze rules must not be inherited. The public `copy(array)` spelling and standalone `move` expressions for copyable values are likewise not prerequisites for these binding rules; see §2.14.5.
 
 These are language contracts. See §17 for current new XIR implementation qualification of complete declaration families; these examples do not claim implementation completion. Cross-execution sharing additionally requires the type and boundary contracts in §10.
 

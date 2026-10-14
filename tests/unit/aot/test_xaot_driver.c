@@ -1913,7 +1913,7 @@ static void test_driver_hosted_export_keeps_callee_abi(void) {
                                          "    return clampLevel(level) + len(bytes)\n"
                                          "}\n"
                                          "export fn byteCount(text: string) -> i64 {\n"
-                                         "    var bytes: const Slice<u8> = text.bytes()\n"
+                                         "    var bytes: Slice<u8> = text.bytes()\n"
                                          "    return len(bytes)\n"
                                          "}\n"
                                          "export fn makeBytes() -> Array<u8> {\n"

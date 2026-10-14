@@ -972,13 +972,13 @@ TEST(mem_slice_is_caller_proven_nothrow_raw_view) {
 
 TEST(borrow_origin_set_expands_nested_call_roots) {
     XiFunc *root = lower_source(
-        "fn choose(left: Slice<u8>, right: Slice<u8>, useLeft: bool) -> const Slice<u8> "
+        "fn choose(left: Slice<u8>, right: Slice<u8>, useLeft: bool) -> Slice<u8> "
         "from right | left | right {\n"
         "  if (useLeft) { return left }\n"
         "  return right\n"
         "}\n"
-        "fn forward(value: Slice<u8>) -> const Slice<u8> from value { return value }\n"
-        "fn exercise(left: Slice<u8>, right: Slice<u8>) -> const Slice<u8> from left | right {\n"
+        "fn forward(value: Slice<u8>) -> Slice<u8> from value { return value }\n"
+        "fn exercise(left: Slice<u8>, right: Slice<u8>) -> Slice<u8> from left | right {\n"
         "  return forward(choose(left, right, true))\n"
         "}\n");
     TEST_REQUIRE(root != NULL, "BorrowOriginSet source should lower");

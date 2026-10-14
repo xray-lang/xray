@@ -120,7 +120,7 @@ static bool reject_removed_source_type_name(Parser *parser, const char *name) {
     if (xr_parser_compare_string(parser, name, "owned") == 0 || xr_parser_compare_string(parser, name, "shared") == 0) {
         char message[160];
         xr_parser_format(parser, message, sizeof(message),
-                 "'%s' type capability syntax was removed; use T or const T", name);
+                 "'%s' type capability syntax was removed; use T", name);
         report_removed_source_type_name(parser, message);
         return true;
     }
@@ -255,13 +255,6 @@ static XrTypeRef *clone_subst_type_ref(Parser *parser, const XrTypeRef *src,
                     if (!xr_parser_healthy(parser)) return NULL;
                 } while (0);
             return expand_generic_or_clone(parser, src->name ? src->name : "?", args, count);
-        }
-        case XR_TREF_CONST: {
-            XrTypeRef *inner = src->nchildren > 0 ? clone_subst_type_ref(parser, src->children[0],
-                                                                         subst_alias, type_args)
-                                                  : xr_tref_error(parser->compiler_session);
-            if (!xr_parser_healthy(parser)) return NULL;
-            return xr_tref_const(parser->compiler_session, inner);
         }
         case XR_TREF_OPTIONAL: {
             XrTypeRef *inner = src->nchildren > 0 ? clone_subst_type_ref(parser, src->children[0],
@@ -423,13 +416,6 @@ XR_FUNC XrTypeRef *xr_parse_type_annotation(Parser *parser) {
         } while (0);
         return xr_tref_error(parser->compiler_session);
     }
-    /* `const` is a contextual qualifier in every type position. */
-    if (xr_parser_match(parser, TK_CONST)) {
-        XrTypeRef *inner = xr_parse_type_annotation(parser);
-        if (!xr_parser_healthy(parser)) return NULL;
-        parser->recursion_depth--;
-        return xr_tref_const(parser->compiler_session, inner);
-    }
 
     XrTypeRef *result = parse_type_annotation_inner(parser);
     if (!xr_parser_healthy(parser)) return NULL;
@@ -463,18 +449,6 @@ static bool xr_parse_optional_param_mode(Parser *parser, bool allow_mode, XrPara
         return true;
     }
     return false;
-}
-
-static void xr_parse_reject_move_const_parameter(Parser *parser, XrParamMode mode,
-                                                 const XrTypeRef *type) {
-    if (!xr_parser_healthy(parser)) return;
-    if (mode != XR_PARAM_MOVE || !type || type->kind != XR_TREF_CONST)
-        return;
-    do {
-        xr_parser_error(parser,
-                    "MOVE parameter mode is not allowed with const capability; use READ const T");
-        if (!xr_parser_healthy(parser)) return;
-    } while (0);
 }
 
 static void xr_parse_reject_postfix_param_mode(Parser *parser) {
@@ -533,10 +507,6 @@ static bool parse_param_type_annotation_span(Parser *parser, bool allow_mode,
 
     XrTypeRef *type = xr_parse_type_annotation(parser);
     if (!xr_parser_healthy(parser)) return false;
-    do {
-        xr_parse_reject_move_const_parameter(parser, mode, type);
-        if (!xr_parser_healthy(parser)) return false;
-    } while (0);
     do {
         xr_parse_reject_postfix_param_mode(parser);
         if (!xr_parser_healthy(parser)) return false;
@@ -703,6 +673,17 @@ XR_FUNC XrParamNode *xr_parse_parameter(Parser *parser, uint32_t flags) {
 static XrTypeRef *parse_type_annotation_base(Parser *parser) {
     if (!xr_parser_healthy(parser)) return NULL;
     XR_DCHECK(parser != NULL, "parse_type_annotation_base: NULL parser");
+    if (xr_parser_match(parser, TK_CONST)) {
+        xr_parser_error_at_previous(parser,
+            "const type qualifier was removed; use const on bindings or fields");
+        if (!xr_parser_healthy(parser)) return NULL;
+        /* Consume the invalid type for ordinary syntax recovery; it never
+         * becomes a value type or a compatibility conversion. */
+        (void)xr_parse_type_annotation(parser);
+        if (!xr_parser_healthy(parser)) return NULL;
+        return xr_tref_error(parser->compiler_session);
+    }
+
 
     /* Fixed-length array type: [T; N] */
     if (xr_parser_check(parser, TK_LBRACKET)) {
@@ -1001,10 +982,6 @@ static XrTypeRef *parse_type_annotation_base(Parser *parser) {
             }
             do {
                 elems[count] = xr_parse_type_annotation(parser);
-                if (!xr_parser_healthy(parser)) return NULL;
-            } while (0);
-            do {
-                xr_parse_reject_move_const_parameter(parser, param_modes[count], elems[count]);
                 if (!xr_parser_healthy(parser)) return NULL;
             } while (0);
             count++;

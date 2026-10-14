@@ -672,7 +672,7 @@ static bool arc_span_view_borrow_flows_to_user(const XiValue *member, const XiVa
         single && single->source_operand == 0)
         return true;
     /* A declared view-return contract can root a Slice in a non-Slice owner.
-     * `Buffer.asBytes() -> const Slice<u8> from this` is the minimal shape:
+     * `Buffer.asBytes() -> Slice<u8> from this` is the minimal shape:
      * the receiver owns provider storage, while the returned value is only a
      * two-word view into that storage.  ViewEvidence is the lowering-sealed
      * authority for this relationship.  Consume it before requiring `member`

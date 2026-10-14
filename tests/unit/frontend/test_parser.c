@@ -445,26 +445,24 @@ TEST(parser_function_decl) {
     teardown();
 }
 
-TEST(parser_const_type_qualifier_is_canonical_in_every_position) {
+TEST(parser_const_type_qualifier_is_rejected_in_every_position) {
     setup();
-    AstNode *decl =
-        parse_first("fn inspect(value: const Array<const string>) -> const Array<i64> {\n"
-                    "  return value\n"
-                    "}");
-    ASSERT_EQ_INT(decl->type, AST_FUNCTION_DECL);
-    XrTypeRef *param = decl->as.function_decl.params[0]->type;
-    ASSERT_EQ_INT(param->kind, XR_TREF_CONST);
-    ASSERT_EQ_INT(param->children[0]->kind, XR_TREF_GENERIC);
-    ASSERT_EQ_INT(param->children[0]->children[0]->kind, XR_TREF_CONST);
-    ASSERT_EQ_INT(decl->as.function_decl.return_type->kind, XR_TREF_CONST);
-
-    char text[128];
-    xr_tref_to_string_buf(param, text, (int) sizeof(text));
-    ASSERT_STR_EQ(text, "const Array<const string>");
-
-    AstNode *idempotent = parse_first("var x: const const Array<i64>");
-    ASSERT_EQ_INT(idempotent->as.var_decl.type_annotation->kind, XR_TREF_CONST);
-    ASSERT_EQ_INT(idempotent->as.var_decl.type_annotation->children[0]->kind, XR_TREF_GENERIC);
+    const char *sources[] = {
+        "fn inspect(value: const Array<string>) {}",
+        "fn inspect(value: Array<const string>) {}",
+        "fn inspect()->const i64 {return 7}",
+        "var value: const const Array<i64>",
+        "type Alias = const i64",
+        "struct Box { value: const i64 }",
+    };
+    for (unsigned i = 0; i < sizeof(sources)/sizeof(sources[0]); ++i) {
+        AstNode *program = NULL;
+        ASSERT_EQ_INT(xr_compile_parse_with_trivia(X_session, sources[i], "const-type.xr", NULL, &program), XR_PARSE_SYNTAX);
+        ASSERT_NULL(program);
+    }
+    AstNode *decl = parse_first("fn inspect(value: Array<string>) -> Array<i64> { return [7] }");
+    ASSERT_EQ_INT(decl->as.function_decl.params[0]->type->kind, XR_TREF_GENERIC);
+    ASSERT_EQ_INT(decl->as.function_decl.return_type->kind, XR_TREF_GENERIC);
     teardown();
 }
 
@@ -699,7 +697,7 @@ TEST(parser_borrow_origin_sets_are_explicit_source_contracts) {
     setup();
 
     AstNode *function =
-        parse_first("fn choose(left: Slice<u8>, right: Slice<u8>) -> const Slice<u8> "
+        parse_first("fn choose(left: Slice<u8>, right: Slice<u8>) -> Slice<u8> "
                     "from right | left | right { return left }");
     FunctionDeclNode *decl = &function->as.function_decl;
     ASSERT_EQ_INT(decl->borrow_origin_syntax, XR_BORROW_ORIGIN_EXPLICIT_SET);
@@ -710,7 +708,7 @@ TEST(parser_borrow_origin_sets_are_explicit_source_contracts) {
     ASSERT_STR_EQ(decl->borrow_origins[2].name, "right");
 
     AstNode *owner = parse_first("class Owner {\n"
-                                 "  view(data: Slice<u8>) -> const Slice<u8> "
+                                 "  view(data: Slice<u8>) -> Slice<u8> "
                                  "from this | data { return data }\n"
                                  "}");
     MethodDeclNode *method = &owner->as.class_decl.methods[0]->as.method_decl;
@@ -721,7 +719,7 @@ TEST(parser_borrow_origin_sets_are_explicit_source_contracts) {
     ASSERT_STR_EQ(method->borrow_origins[1].name, "data");
 
     AstNode *interface = parse_first("interface ViewSource {\n"
-                                     "  view(data: Slice<u8>) -> const Slice<u8> "
+                                     "  view(data: Slice<u8>) -> Slice<u8> "
                                      "from data | this\n"
                                      "}");
     InterfaceMethodNode *required = &interface->as.interface_decl.methods[0]->as.interface_method;
@@ -731,7 +729,7 @@ TEST(parser_borrow_origin_sets_are_explicit_source_contracts) {
     ASSERT_EQ_INT(required->borrow_origins[1].kind, AST_BORROW_ORIGIN_RECEIVER);
 
     AstNode *alias =
-        parse_first("type Selector = fn(left: Slice<u8>, right: Slice<u8>) -> const Slice<u8> "
+        parse_first("type Selector = fn(left: Slice<u8>, right: Slice<u8>) -> Slice<u8> "
                     "from right | left");
     XrTypeRef *type = alias->as.type_alias.resolved_type;
     ASSERT_EQ_INT(type->kind, XR_TREF_FUNCTION);
@@ -741,7 +739,7 @@ TEST(parser_borrow_origin_sets_are_explicit_source_contracts) {
     ASSERT_EQ_INT(type->borrow_origin_count, 2);
     char text[256];
     xr_tref_to_string_buf(type, text, sizeof(text));
-    ASSERT_STR_EQ(text, "fn(left: Slice<u8>, right: Slice<u8>) -> const Slice<u8> from right | "
+    ASSERT_STR_EQ(text, "fn(left: Slice<u8>, right: Slice<u8>) -> Slice<u8> from right | "
                         "left");
 
     teardown();
@@ -1673,7 +1671,7 @@ int main(void) {
 
     // Functions
     RUN_TEST(parser_function_decl);
-    RUN_TEST(parser_const_type_qualifier_is_canonical_in_every_position);
+    RUN_TEST(parser_const_type_qualifier_is_rejected_in_every_position);
     RUN_TEST(parser_extern_block_flattens_typed_descriptors);
     RUN_TEST(parser_extern_block_rejects_layout_declarations);
     RUN_TEST(parser_parameter_modes_share_annotation_parser);
