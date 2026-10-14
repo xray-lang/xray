@@ -633,6 +633,29 @@
         "Actual canonical Equal/type-query/numeric/formatter/Optional/Range/source/context interfaces and full driver registration remain OPEN; no guessed ordinal, Null sentinel, mixed-domain coercion or compatibility surface.",
         "Fresh actual VM/native plus full affected FI/resource/lifetime/borrow/cancel/physical/safety/generated-C/provider/platform gates remain required; retain all200/260/300 loops and P20 bidirectional mixed responsibilities."
       ]
+    },
+    {
+      "id": "cleanup_panic_escape_terminates",
+      "oracle_id": "cleanup_panic_escape_terminates",
+      "source": "tests/diff/cases/semantics/cleanup/defer_panic_escapes_body.xr",
+      "source_lf_sha256": "53dc86e7ce1e82b23722bd04c0d2bcf17e9fb5a50043dfaf9cbf055cb9f48b2a",
+      "entry": "run",
+      "stdout_utf8": "body-ran\n",
+      "expected_exit_code": 70,
+      "stderr_required_utf8": [
+        "E0443:"
+      ],
+      "companions": [],
+      "owners": [
+        "P07",
+        "P08"
+      ],
+      "remaining_gates": [
+        "Fresh product execution on ready fixed producer interfaces must independently satisfy these observations.",
+        "Retain complete producer/Instance/Call ownership, applicable FI/resource/cancellation and physical release checks; printed events do not qualify physical cleanup.",
+        "P20 owns mixed qualification; this independent normal/error oracle does not replace its tests."
+      ],
+      "error_oracle_scope": "Independent original stdout,exit70 and E0443 code only; no whole stderr formatting claim. Outer catch and later print must never execute."
     }
   ]
 }

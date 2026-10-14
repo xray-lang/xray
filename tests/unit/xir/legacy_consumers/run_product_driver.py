@@ -76,8 +76,12 @@ def main() -> int:
         return row
 
     def matches(row: dict, expected: dict) -> bool:
-        return not row['timed_out'] and all(row[key] == expected[key]
-               for key in ('exit_code','stdout_hex','stderr_hex'))
+        if row['timed_out'] or any(row[key] != expected[key] for key in ('exit_code','stdout_hex')):
+            return False
+        if 'stderr_required_utf8' in expected:
+            stderr = bytes.fromhex(row['stderr_hex'])
+            return all(value.encode('utf-8') in stderr for value in expected['stderr_required_utf8'])
+        return row['stderr_hex'] == expected['stderr_hex']
 
     try:
         v = invoke('version',[str(binary),'--version','--json'])
@@ -113,8 +117,12 @@ def main() -> int:
                 value = oracle['expected']['return_i64']
                 suffix = f'\nvar observedResult = answer()\nassertEqual(observedResult, {value})\nprint(observedResult)\n'
             target.write_text(source+suffix, encoding='utf-8', newline='\n')
-            expected = {'exit_code':0,
-                        'stdout_hex':case['stdout_utf8'].encode('utf-8').hex(), 'stderr_hex':''}
+            expected = {'exit_code':case.get('expected_exit_code',0),
+                        'stdout_hex':case['stdout_utf8'].encode('utf-8').hex(),
+                        'stderr_hex':case.get('stderr_utf8','').encode('utf-8').hex()}
+            if case.get('stderr_required_utf8'):
+                expected.pop('stderr_hex')
+                expected['stderr_required_utf8'] = case['stderr_required_utf8']
             row = {'id':case['id'],'oracle_id':case['oracle_id'],'source':case['source'],
                    'source_lf_sha256':case['source_lf_sha256'],
                    'entry_sha256':sha(target.read_bytes()),'entry_adapter_suffix':suffix,
