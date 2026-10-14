@@ -14,6 +14,7 @@ import time
 import independent_scalar_models
 import independent_behavior_models
 import independent_observation_format
+import extended_named_models
 
 HERE = Path(__file__).resolve().parent
 ROOT = HERE.parents[3]
@@ -39,11 +40,12 @@ def main() -> int:
     oracle_bytes = (HERE/'oracles.json').read_bytes()
     model_paths = [HERE/name for name in ('independent_scalar_models.py', 'independent_scalar_bindings.json',
                                          'independent_behavior_models.py', 'independent_behavior_bindings.json',
-                                         'independent_observation_format.py')]
+                                         'independent_observation_format.py', 'extended_named_models.py',
+                                         'extended_named_bindings.json')]
     model_digests = {path.name:sha(path.read_bytes()) for path in model_paths}
     oracles = {row['id']:row for row in json.loads(oracle_bytes)['cases']}
     for row in (independent_scalar_models.expected_rows() + independent_behavior_models.expected_rows()
-                + independent_behavior_models.named_expected_rows()):
+                + independent_behavior_models.named_expected_rows() + extended_named_models.expected_rows()):
         if row['id'] in oracles:
             raise ValueError('independent scalar oracle identity collides with a preserved oracle')
         oracles[row['id']] = row
@@ -68,6 +70,8 @@ def main() -> int:
             'independent_behavior_model_sha256':model_digests['independent_behavior_models.py'],
             'independent_behavior_bindings_sha256':model_digests['independent_behavior_bindings.json'],
             'independent_observation_format_sha256':model_digests['independent_observation_format.py'],
+            'extended_named_model_sha256':model_digests['extended_named_models.py'],
+            'extended_named_bindings_sha256':model_digests['extended_named_bindings.json'],
             'evidence_directory':str(output),
             'cases':results, 'commands':records,
             'full_fi_lifetime_physical_sanitizer':'NOT_RUN', 'production_release':False,

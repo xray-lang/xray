@@ -1,0 +1,26 @@
+{
+  "schema": 1,
+  "inputs": [
+    {
+      "path": "tests/regression/09_advanced/0914_atomic_basic.xr",
+      "lf_sha256": "2cd1cb74e4d1e007396df1a43d16ed9f5bbdafef038ae1354968800cd45a1b28"
+    },
+    {
+      "path": "tests/regression/09_advanced/0956_enum_typed_catch.xr",
+      "lf_sha256": "ee2f4b886e3acf01bcac5adf19dd42a4b873195d34fe21ffb22a65cbea885acf"
+    },
+    {
+      "path": "spec/source/sections/003-2-type-system.md",
+      "lf_sha256": "f4e970b0cc728c19f65a4d1b2a13cd0e572431dcac3f6f20cd06d23046ebea8a"
+    },
+    {
+      "path": "spec/source/sections/009-8-error-handling.md",
+      "lf_sha256": "569cafb786430df363674f97f6073e908d76b4a3484f3fb26239b0895342507e"
+    },
+    {
+      "path": "spec/source/sections/011-10-concurrency-and-coroutines.md",
+      "lf_sha256": "27c232a9575d0d40e800ea5730e5d2b96e8f2e62e646731a3d9de2e0eea35aea"
+    }
+  ],
+  "reasoning": "Store/add/sub/fetch/swap/CAS/toggle values follow sequential state transitions. Typed catches select authentic NetErr/DiskErr identity and catch-all fallback; no enum ordinal is assumed."
+}

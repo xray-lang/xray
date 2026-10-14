@@ -11280,6 +11280,486 @@
         "Actual whole body discovery and independent VM/C/native semantic observations.",
         "Original exact FI/resources/lifetime/cancellation/physical and sanitizer/provider qualification remains open."
       ]
+    },
+    {
+      "id": "regression_core_review_0830_throw_catch_value_return_complete_observed",
+      "oracle_id": "regression_core_review_0830_throw_catch_value_return",
+      "source": "tests/unit/xir/legacy_consumers/fixtures/independent_named_observations/0830_throw_catch_value_return/root.xr",
+      "source_lf_sha256": "c673fd1840f5897f77ea65a497d23569278d48731d56e82f5ca30d6f63e09c27",
+      "entry": "test",
+      "stdout_utf8": "5\n-1\nmath error\n-99\n44\nnot found: empty key\ntrue\ntrue\n-1\n-2\n5\n",
+      "stderr_utf8": "",
+      "companions": [],
+      "owners": [
+        "P02",
+        "P07",
+        "P08",
+        "P10"
+      ],
+      "independent_observations": {
+        "original_case": "tests/regression/08_error_handling/0830_throw_catch_value_return.xr",
+        "selected_complete_source": "tests/regression/08_error_handling/0830_throw_catch_value_return.xr",
+        "selected_source_lf_sha256": "863d631fe3dbafa536e2d962468f283b298b31b228b081ba6616401bd1a55f1f",
+        "method": "Keep all original bodies/operations and real companions. Each actual expression, including stateful Atomic calls and throwing functions, is evaluated once before the original assertion and external scalar output.",
+        "values": [
+          {
+            "test": "basic_throw_catch",
+            "expression": "result",
+            "expected": 5,
+            "projection": null
+          },
+          {
+            "test": "catch_on_error",
+            "expression": "result",
+            "expected": -1,
+            "projection": null
+          },
+          {
+            "test": "typed_catch",
+            "expression": "msg",
+            "expected": "math error",
+            "projection": null
+          },
+          {
+            "test": "auto_propagation",
+            "expression": "result",
+            "expected": -99,
+            "projection": null
+          },
+          {
+            "test": "nested_try_catch",
+            "expression": "outer",
+            "expected": 44,
+            "projection": null
+          },
+          {
+            "test": "catch_preserves_error_value",
+            "expression": "msg",
+            "expected": "not found: empty key",
+            "projection": null
+          },
+          {
+            "test": "defer_runs_on_throw",
+            "expression": "caught",
+            "expected": true,
+            "projection": null
+          },
+          {
+            "test": "defer_runs_on_throw",
+            "expression": "cleaned",
+            "expected": true,
+            "projection": null
+          },
+          {
+            "test": "multi_catch_typed",
+            "expression": "r1",
+            "expected": -1,
+            "projection": null
+          },
+          {
+            "test": "multi_catch_typed",
+            "expression": "r2",
+            "expected": -2,
+            "projection": null
+          },
+          {
+            "test": "multi_catch_typed",
+            "expression": "r3",
+            "expected": 5,
+            "projection": null
+          }
+        ]
+      },
+      "remaining_gates": [
+        "Whole real CLI discovery and independent VM/generated-C/native values.",
+        "Parallel atomicity/memory ordering, compiler/native/runtime full FI, exact resources, lifetime/borrow/cancel/physical and sanitizer/provider gates remain separate."
+      ]
+    },
+    {
+      "id": "regression_core_review_0831_cross_module_error_complete_observed",
+      "oracle_id": "regression_core_review_0831_cross_module_error",
+      "source": "tests/unit/xir/legacy_consumers/fixtures/independent_named_observations/0831_cross_module_error/root.xr",
+      "source_lf_sha256": "ee7dd7dceeb6926d77c3d4a81f68e67237432aa621690b96e58ecb4f5bc49a04",
+      "entry": "test",
+      "stdout_utf8": "-1\n5\nvalidation error\n-99\n10\n",
+      "stderr_utf8": "",
+      "companions": [
+        {
+          "path": "tests/unit/xir/legacy_consumers/fixtures/independent_named_observations/0831_cross_module_error/modules/error_source.xr",
+          "lf_sha256": "3ab3b0782760177a5016fdedd310d32b1b29c699fa021bc83f463d2516aad353"
+        }
+      ],
+      "owners": [
+        "P02",
+        "P07",
+        "P08",
+        "P10"
+      ],
+      "independent_observations": {
+        "original_case": "tests/regression/08_error_handling/0831_cross_module_error.xr",
+        "selected_complete_source": "tests/regression/08_error_handling/0831_cross_module_error.xr",
+        "selected_source_lf_sha256": "cac7d0a060694b0488aea1f0e2023bae7ee01468ded96cdb070656b9f6efe46e",
+        "method": "Keep all original bodies/operations and real companions. Each actual expression, including stateful Atomic calls and throwing functions, is evaluated once before the original assertion and external scalar output.",
+        "values": [
+          {
+            "test": "catch_error_from_imported_module",
+            "expression": "result",
+            "expected": -1,
+            "projection": null
+          },
+          {
+            "test": "success_from_imported_module",
+            "expression": "result",
+            "expected": 5,
+            "projection": null
+          },
+          {
+            "test": "catch_cross_module_with_match",
+            "expression": "msg",
+            "expected": "validation error",
+            "projection": null
+          },
+          {
+            "test": "auto_propagation_cross_module",
+            "expression": "result",
+            "expected": -99,
+            "projection": null
+          },
+          {
+            "test": "multiple_cross_module_calls",
+            "expression": "sum",
+            "expected": 10,
+            "projection": null
+          }
+        ]
+      },
+      "remaining_gates": [
+        "Whole real CLI discovery and independent VM/generated-C/native values.",
+        "Parallel atomicity/memory ordering, compiler/native/runtime full FI, exact resources, lifetime/borrow/cancel/physical and sanitizer/provider gates remain separate."
+      ]
+    },
+    {
+      "id": "regression_core_review_0840_enum_throw_complete_observed",
+      "oracle_id": "regression_core_review_0840_enum_throw",
+      "source": "tests/unit/xir/legacy_consumers/fixtures/independent_named_observations/0840_enum_throw/root.xr",
+      "source_lf_sha256": "83edf395f9a2639b0ac83adf98b29da5a8d0da7853cb068e2dbf3682340e12b0",
+      "entry": "test",
+      "stdout_utf8": "42\ncaught\ncontent\nok\nparse_error\n",
+      "stderr_utf8": "",
+      "companions": [],
+      "owners": [
+        "P02",
+        "P07",
+        "P08",
+        "P10"
+      ],
+      "independent_observations": {
+        "original_case": "tests/regression/08_error_handling/0840_enum_throw.xr",
+        "selected_complete_source": "tests/regression/08_error_handling/0840_enum_throw.xr",
+        "selected_source_lf_sha256": "b8f9acbf1e008e720099d88f259ab99c414a14d3a3494afbf4edcdefcc03c03c",
+        "method": "Keep all original bodies/operations and real companions. Each actual expression, including stateful Atomic calls and throwing functions, is evaluated once before the original assertion and external scalar output.",
+        "values": [
+          {
+            "test": "enum_throw_happy_path",
+            "expression": "result",
+            "expected": 42,
+            "projection": null
+          },
+          {
+            "test": "enum_throw_caught",
+            "expression": "result",
+            "expected": "caught",
+            "projection": null
+          },
+          {
+            "test": "enum_throw_propagation",
+            "expression": "result",
+            "expected": "content",
+            "projection": null
+          },
+          {
+            "test": "enum_throw_multiple_types",
+            "expression": "r1",
+            "expected": "ok",
+            "projection": null
+          },
+          {
+            "test": "enum_throw_multiple_types",
+            "expression": "r2",
+            "expected": "parse_error",
+            "projection": null
+          }
+        ]
+      },
+      "remaining_gates": [
+        "Whole real CLI discovery and independent VM/generated-C/native values.",
+        "Parallel atomicity/memory ordering, compiler/native/runtime full FI, exact resources, lifetime/borrow/cancel/physical and sanitizer/provider gates remain separate."
+      ]
+    },
+    {
+      "id": "atomic_original_named_tests_complete_observed",
+      "oracle_id": "atomic_original_named_tests_observed",
+      "source": "tests/unit/xir/legacy_consumers/fixtures/independent_named_observations/0914_atomic_basic/root.xr",
+      "source_lf_sha256": "c41da563bd8e66abdcb9a63beeaa36116714294e4d33bf7dcb4089411f640601",
+      "entry": "test",
+      "stdout_utf8": "0\n42\n15\n12\n10\n15\n15\n12\n1\n99\n0\ntrue\n1\nfalse\n5\n5\nfalse\ntrue\nfalse\ntrue\ntrue\nfalse\n0.0\n3.14\n1.5\n1.25\n42\n1\n2\n",
+      "stderr_utf8": "",
+      "companions": [],
+      "owners": [
+        "P02",
+        "P09",
+        "P10",
+        "P13",
+        "P14"
+      ],
+      "independent_observations": {
+        "original_case": "tests/regression/09_advanced/0914_atomic_basic.xr",
+        "selected_complete_source": "tests/regression/09_advanced/0914_atomic_basic.xr",
+        "selected_source_lf_sha256": "2cd1cb74e4d1e007396df1a43d16ed9f5bbdafef038ae1354968800cd45a1b28",
+        "method": "Keep all original bodies/operations and real companions. Each actual expression, including stateful Atomic calls and throwing functions, is evaluated once before the original assertion and external scalar output.",
+        "values": [
+          {
+            "test": "test_atomic_int_load_store",
+            "expression": "a.load()",
+            "expected": 0,
+            "projection": null
+          },
+          {
+            "test": "test_atomic_int_load_store",
+            "expression": "a.load()",
+            "expected": 42,
+            "projection": null
+          },
+          {
+            "test": "test_atomic_int_add_sub",
+            "expression": "a.load()",
+            "expected": 15,
+            "projection": null
+          },
+          {
+            "test": "test_atomic_int_add_sub",
+            "expression": "a.load()",
+            "expected": 12,
+            "projection": null
+          },
+          {
+            "test": "test_atomic_int_fetch_add_sub",
+            "expression": "old1",
+            "expected": 10,
+            "projection": null
+          },
+          {
+            "test": "test_atomic_int_fetch_add_sub",
+            "expression": "a.load()",
+            "expected": 15,
+            "projection": null
+          },
+          {
+            "test": "test_atomic_int_fetch_add_sub",
+            "expression": "old2",
+            "expected": 15,
+            "projection": null
+          },
+          {
+            "test": "test_atomic_int_fetch_add_sub",
+            "expression": "a.load()",
+            "expected": 12,
+            "projection": null
+          },
+          {
+            "test": "test_atomic_int_swap",
+            "expression": "old",
+            "expected": 1,
+            "projection": null
+          },
+          {
+            "test": "test_atomic_int_swap",
+            "expression": "a.load()",
+            "expected": 99,
+            "projection": null
+          },
+          {
+            "test": "test_atomic_int_compare_exchange_success",
+            "expression": "prev",
+            "expected": 0,
+            "projection": null
+          },
+          {
+            "test": "test_atomic_int_compare_exchange_success",
+            "expression": "ok",
+            "expected": true,
+            "projection": null
+          },
+          {
+            "test": "test_atomic_int_compare_exchange_success",
+            "expression": "a.load()",
+            "expected": 1,
+            "projection": null
+          },
+          {
+            "test": "test_atomic_int_compare_exchange_failure",
+            "expression": "ok",
+            "expected": false,
+            "projection": null
+          },
+          {
+            "test": "test_atomic_int_compare_exchange_failure",
+            "expression": "prev",
+            "expected": 5,
+            "projection": null
+          },
+          {
+            "test": "test_atomic_int_compare_exchange_failure",
+            "expression": "a.load()",
+            "expected": 5,
+            "projection": null
+          },
+          {
+            "test": "test_atomic_bool_load_store",
+            "expression": "flag.load()",
+            "expected": false,
+            "projection": null
+          },
+          {
+            "test": "test_atomic_bool_load_store",
+            "expression": "flag.load()",
+            "expected": true,
+            "projection": null
+          },
+          {
+            "test": "test_atomic_bool_toggle",
+            "expression": "was",
+            "expected": false,
+            "projection": null
+          },
+          {
+            "test": "test_atomic_bool_toggle",
+            "expression": "flag.load()",
+            "expected": true,
+            "projection": null
+          },
+          {
+            "test": "test_atomic_bool_toggle",
+            "expression": "was2",
+            "expected": true,
+            "projection": null
+          },
+          {
+            "test": "test_atomic_bool_toggle",
+            "expression": "flag.load()",
+            "expected": false,
+            "projection": null
+          },
+          {
+            "test": "test_atomic_float_load_store",
+            "expression": "rate.load()",
+            "expected": 0.0,
+            "projection": null
+          },
+          {
+            "test": "test_atomic_float_load_store",
+            "expression": "rate.load()",
+            "expected": 3.14,
+            "projection": null
+          },
+          {
+            "test": "test_atomic_float_add_sub",
+            "expression": "rate.load()",
+            "expected": 1.5,
+            "projection": null
+          },
+          {
+            "test": "test_atomic_float_add_sub",
+            "expression": "rate.load()",
+            "expected": 1.25,
+            "projection": null
+          },
+          {
+            "test": "test_atomic_to_string",
+            "expression": "s",
+            "expected": "42",
+            "projection": null
+          },
+          {
+            "test": "test_atomic_ordering_enum",
+            "expression": "v",
+            "expected": 1,
+            "projection": null
+          },
+          {
+            "test": "test_atomic_ordering_enum",
+            "expression": "a.load(Ordering.SeqCst)",
+            "expected": 2,
+            "projection": null
+          }
+        ]
+      },
+      "remaining_gates": [
+        "Whole real CLI discovery and independent VM/generated-C/native values.",
+        "Parallel atomicity/memory ordering, compiler/native/runtime full FI, exact resources, lifetime/borrow/cancel/physical and sanitizer/provider gates remain separate."
+      ]
+    },
+    {
+      "id": "typed_enum_filter_original_named_tests_complete_observed",
+      "oracle_id": "typed_enum_filter_original_named_tests_observed",
+      "source": "tests/unit/xir/legacy_consumers/fixtures/independent_named_observations/0956_enum_typed_catch/root.xr",
+      "source_lf_sha256": "53f7521b1a4dccf132c96c018d8d6411aebf252f4bedc0c3037e3c396a75beae",
+      "entry": "test",
+      "stdout_utf8": "net\ndisk\nnone\nnet\nother\n",
+      "stderr_utf8": "",
+      "companions": [],
+      "owners": [
+        "P02",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P11",
+        "P13",
+        "P14"
+      ],
+      "independent_observations": {
+        "original_case": "tests/regression/09_advanced/0956_enum_typed_catch.xr",
+        "selected_complete_source": "tests/regression/09_advanced/0956_enum_typed_catch.xr",
+        "selected_source_lf_sha256": "ee2f4b886e3acf01bcac5adf19dd42a4b873195d34fe21ffb22a65cbea885acf",
+        "method": "Keep all original bodies/operations and real companions. Each actual expression, including stateful Atomic calls and throwing functions, is evaluated once before the original assertion and external scalar output.",
+        "values": [
+          {
+            "test": "test_typed_enum_catch_first",
+            "expression": "classify(0)",
+            "expected": "net",
+            "projection": null
+          },
+          {
+            "test": "test_typed_enum_catch_second",
+            "expression": "classify(1)",
+            "expected": "disk",
+            "projection": null
+          },
+          {
+            "test": "test_typed_enum_no_throw",
+            "expression": "classify(2)",
+            "expected": "none",
+            "projection": null
+          },
+          {
+            "test": "test_typed_enum_then_catchall_match",
+            "expression": "classify_with_default(0)",
+            "expected": "net",
+            "projection": null
+          },
+          {
+            "test": "test_typed_enum_then_catchall_fallthrough",
+            "expression": "classify_with_default(1)",
+            "expected": "other",
+            "projection": null
+          }
+        ]
+      },
+      "remaining_gates": [
+        "Whole real CLI discovery and independent VM/generated-C/native values.",
+        "Parallel atomicity/memory ordering, compiler/native/runtime full FI, exact resources, lifetime/borrow/cancel/physical and sanitizer/provider gates remain separate."
+      ]
     }
   ]
 }
