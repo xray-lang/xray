@@ -103,6 +103,34 @@ def observations() -> dict[str, tuple[list, str]]:
         loop_cleanup,
         'Each complete original loop iteration owns its nearest block cleanup. '
         'The current iteration prints before its deferred block or call, before the next iteration begins.')
+    user = {'name': 'Bob', 'age': 25}
+    user_before = user['name']
+    user['name'] = 'Ada'
+    models['object/object_static_index_get_set'] = (
+        [user_before, user['name']],
+        'The constant name index reads Bob, updates that same named field once, then member access reads Ada.')
+    xs = [1, 2]
+    ys = xs.copy()
+    xs.append(3)
+    models['ownership/shared_copy_to_shared'] = (
+        [len(xs), len(ys), ys[0]],
+        'The original copy intent retains both elements in an independent logical Array value; '
+        'appending to the mutable source changes only its length. The original public copy spelling '
+        'still needs target-syntax admission and is never reclassified as an expected rejection.')
+    acc = [11, 12, 13, 14]
+    acc_sum = sum(acc)
+    acc[2] = 99
+    models['int_wrap/fixed_array_uint64_lane'] = (
+        [acc_sum, acc[2], acc[1]],
+        'All four original u64 lanes contribute to50 before the third lane is replaced by99; '
+        'the original variable index1 then reads the unchanged12.')
+    text = 'hello'
+    view_length = len(text.encode('utf-8'))
+    text = 'bye'
+    models['slice/string_byte_slice_receiver_nll'] = (
+        [view_length, len(text)],
+        'The complete original byte view has five UTF-8 bytes and its last use ends before '
+        'the owner binding changes to the three-scalar bye string; no view is used after that change.')
     for helper in ('animals', 'borrowed_arg_lib', 'corolib', 'genbox', 'nested_class_field_lib',
                    'opts_a', 'opts_b', 'private_const_default', 'same_name_method_a',
                    'same_name_method_b', 'shapes', 'static_defaults',

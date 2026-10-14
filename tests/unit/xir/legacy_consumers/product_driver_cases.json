@@ -18669,6 +18669,117 @@
         "Original complete producer destruction,multiple Instances,suspend/cancel,exact resource limits,complete FI,physical release and native/mixed/provider/full safety qualification remain OPEN.",
         "Original native harness success exit remains distinct from language return; no claims from parity alone."
       ]
+    },
+    {
+      "id": "independent_behavior_object_object_static_index_get_set",
+      "oracle_id": "independent_behavior_object_object_static_index_get_set",
+      "source": "tests/diff/cases/semantics/object/object_static_index_get_set.xr",
+      "source_lf_sha256": "c4e841d7053fee6347ac24569f3ccb4db4a125cf7f4a0b9fdbe2ea7a78b55bb3",
+      "entry": "run",
+      "source_context": "original_absolute",
+      "stdout_utf8": "Bob\nAda\n",
+      "stderr_utf8": "",
+      "expected_exit_code": 0,
+      "arguments": [],
+      "stdin_hex": "",
+      "companions": [],
+      "owners": [
+        "P02",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P12",
+        "P13",
+        "P14"
+      ],
+      "independent_execution_model": "The constant name index reads Bob, updates that same named field once, then member access reads Ada.",
+      "independent_observation_count": 2,
+      "remaining_gates": [
+        "All original exact compiler/native/runtime FI,resource bounds,cancel,lifetime/physical and safety/provider gates remain open.",
+        "Whole original source and all operations retained; source spelling admission and any observed failure remain explicit target migration duties."
+      ]
+    },
+    {
+      "id": "independent_behavior_ownership_shared_copy_to_shared",
+      "oracle_id": "independent_behavior_ownership_shared_copy_to_shared",
+      "source": "tests/diff/cases/semantics/ownership/shared_copy_to_shared.xr",
+      "source_lf_sha256": "236c6b6d2e1622e95f79ed340a3693007b95be45570a1d9a1562a39786c1aa5e",
+      "entry": "run",
+      "source_context": "original_absolute",
+      "stdout_utf8": "3\n2\n1\n",
+      "stderr_utf8": "",
+      "expected_exit_code": 0,
+      "arguments": [],
+      "stdin_hex": "",
+      "companions": [],
+      "owners": [
+        "P07",
+        "P08",
+        "P09",
+        "P10"
+      ],
+      "independent_execution_model": "The original copy intent retains both elements in an independent logical Array value; appending to the mutable source changes only its length. The original public copy spelling still needs target-syntax admission and is never reclassified as an expected rejection.",
+      "independent_observation_count": 3,
+      "remaining_gates": [
+        "All original exact compiler/native/runtime FI,resource bounds,cancel,lifetime/physical and safety/provider gates remain open.",
+        "Whole original source and all operations retained; source spelling admission and any observed failure remain explicit target migration duties."
+      ]
+    },
+    {
+      "id": "independent_behavior_int_wrap_fixed_array_uint64_lane",
+      "oracle_id": "independent_behavior_int_wrap_fixed_array_uint64_lane",
+      "source": "tests/diff/cases/semantics/int_wrap/fixed_array_uint64_lane.xr",
+      "source_lf_sha256": "cbea930f40257ef088bec96d58b7565f5fdfee9c89dc16cd625e6e16c28b7886",
+      "entry": "run",
+      "source_context": "original_absolute",
+      "stdout_utf8": "50\n99\n12\n",
+      "stderr_utf8": "",
+      "expected_exit_code": 0,
+      "arguments": [],
+      "stdin_hex": "",
+      "companions": [],
+      "owners": [
+        "P09",
+        "P10"
+      ],
+      "independent_execution_model": "All four original u64 lanes contribute to50 before the third lane is replaced by99; the original variable index1 then reads the unchanged12.",
+      "independent_observation_count": 3,
+      "remaining_gates": [
+        "All original exact compiler/native/runtime FI,resource bounds,cancel,lifetime/physical and safety/provider gates remain open.",
+        "Whole original source and all operations retained; source spelling admission and any observed failure remain explicit target migration duties."
+      ]
+    },
+    {
+      "id": "independent_behavior_slice_string_byte_slice_receiver_nll",
+      "oracle_id": "independent_behavior_slice_string_byte_slice_receiver_nll",
+      "source": "tests/diff/cases/semantics/slice/string_byte_slice_receiver_nll.xr",
+      "source_lf_sha256": "3dff41d162190ec42b23f2adde719faadad5b2b180f0a39262ed05af554d4446",
+      "entry": "run",
+      "source_context": "original_absolute",
+      "stdout_utf8": "5\n3\n",
+      "stderr_utf8": "",
+      "expected_exit_code": 0,
+      "arguments": [],
+      "stdin_hex": "",
+      "companions": [],
+      "owners": [
+        "P02",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P12",
+        "P13",
+        "P14",
+        "P17"
+      ],
+      "independent_execution_model": "The complete original byte view has five UTF-8 bytes and its last use ends before the owner binding changes to the three-scalar bye string; no view is used after that change.",
+      "independent_observation_count": 2,
+      "remaining_gates": [
+        "All original exact compiler/native/runtime FI,resource bounds,cancel,lifetime/physical and safety/provider gates remain open.",
+        "Whole original source and all operations retained; source spelling admission and any observed failure remain explicit target migration duties."
+      ]
     }
   ]
 }

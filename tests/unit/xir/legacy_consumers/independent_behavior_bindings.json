@@ -57,7 +57,11 @@
     "helper/shapes": "tests/diff/cases/semantics/modules/_shapes.xr",
     "helper/static_defaults": "tests/diff/cases/semantics/modules/_static_defaults.xr",
     "helper/value_struct_return_release_lib": "tests/diff/cases/semantics/modules/_value_struct_return_release_lib.xr",
-    "helper/array_fill_ref_lib": "tests/diff/cases/semantics/collections/_array_fill_ref_lib.xr"
+    "helper/array_fill_ref_lib": "tests/diff/cases/semantics/collections/_array_fill_ref_lib.xr",
+    "object/object_static_index_get_set": "tests/diff/cases/semantics/object/object_static_index_get_set.xr",
+    "ownership/shared_copy_to_shared": "tests/diff/cases/semantics/ownership/shared_copy_to_shared.xr",
+    "int_wrap/fixed_array_uint64_lane": "tests/diff/cases/semantics/int_wrap/fixed_array_uint64_lane.xr",
+    "slice/string_byte_slice_receiver_nll": "tests/diff/cases/semantics/slice/string_byte_slice_receiver_nll.xr"
   },
   "inputs": [
     {
@@ -331,6 +335,22 @@
     {
       "path": "tests/diff/cases/semantics/collections/_array_fill_ref_lib.xr",
       "lf_sha256": "dba3bf1ee43bedfa5478ef7fac827ca7e52be0c3d840b2985d58d3ef197f1de0"
+    },
+    {
+      "path": "tests/diff/cases/semantics/object/object_static_index_get_set.xr",
+      "lf_sha256": "c4e841d7053fee6347ac24569f3ccb4db4a125cf7f4a0b9fdbe2ea7a78b55bb3"
+    },
+    {
+      "path": "tests/diff/cases/semantics/ownership/shared_copy_to_shared.xr",
+      "lf_sha256": "236c6b6d2e1622e95f79ed340a3693007b95be45570a1d9a1562a39786c1aa5e"
+    },
+    {
+      "path": "tests/diff/cases/semantics/int_wrap/fixed_array_uint64_lane.xr",
+      "lf_sha256": "cbea930f40257ef088bec96d58b7565f5fdfee9c89dc16cd625e6e16c28b7886"
+    },
+    {
+      "path": "tests/diff/cases/semantics/slice/string_byte_slice_receiver_nll.xr",
+      "lf_sha256": "3dff41d162190ec42b23f2adde719faadad5b2b180f0a39262ed05af554d4446"
     }
   ],
   "scope": "Whole original run-entry byte observations only. Original helper definitions, named test entries, complete FI/resources/physical/provider qualification remain separate.",
