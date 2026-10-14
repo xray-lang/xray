@@ -66,4 +66,3 @@ XR_FUNC void xmcp_send_progress_notification(XmcpServer *server, const XrJsonVal
     }
     xmcp_send_notification(server, "notifications/progress", params);
 }
-

@@ -47,4 +47,3 @@ XR_FUNC XrJsonValue *xmcp_make_text_structured_result(const char *text, XrJsonVa
     xjson_object_set(result, "structuredContent", structured);
     return result;
 }
-
