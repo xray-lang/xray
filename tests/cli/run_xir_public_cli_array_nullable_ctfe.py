@@ -14,8 +14,8 @@ def main():
     else:temporary=tempfile.TemporaryDirectory(prefix='array-nullable-ctfe-',dir=binary.parent);output=Path(temporary.name)
     records=[]
     try:
-        policy=NoChildProcess(root,output);stdlib=output/'stdlib';stdlib.mkdir()
-        poison=stdlib/'array.xr';poison.write_text('invalid library source must not implement compiler values\n',encoding='utf-8')
+        policy=NoChildProcess(root,output);stdlib=output/'stdlib';(stdlib/'types').mkdir(parents=True)
+        poison=stdlib/'types/Array.xr';poison.write_text('invalid library source must not implement compiler values\n',encoding='utf-8')
         env=dict(os.environ,XRAY_STDLIB_PATH=str(stdlib),NO_COLOR='1');hidden=dict(env,PATH=str(output/'no-C-provider'))
         module=('export fn cow()->(Array<i8>,Array<i8>){var xs:Array<i8>=[1,2];const old=xs;xs[0]=7;xs.push(3);return (xs,old)}\n'
                 'export fn room()->Array<i8>{return Array<i8>.withCapacity(7)}\n'
