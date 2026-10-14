@@ -360,9 +360,11 @@ XR_FUNC XmcpServer *xmcp_server_new(const XmcpServerOptions *options) {
 
     /* Load knowledge base */
     s->knowledge = xmcp_knowledge_new();
-    if (s->knowledge) {
-        xmcp_knowledge_load(s->knowledge);
+    if (!s->knowledge) {
+        xmcp_server_free(s);
+        return NULL;
     }
+    xmcp_knowledge_load(s->knowledge);
 
     XmcpRegistryOptions registry_options;
     xmcp_registry_options_default(&registry_options);

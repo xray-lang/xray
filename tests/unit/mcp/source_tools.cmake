@@ -38,3 +38,9 @@ set_tests_properties(test_mcp_json_faults PROPERTIES LABELS "unit;mcp;faults;own
 
 set_tests_properties(test_mcp_run_tools test_mcp_run_tools_resources test_mcp_json_faults
     test_mcp_service_transcript PROPERTIES ENVIRONMENT "XRAY_STDLIB_PATH=${CMAKE_SOURCE_DIR}/stdlib")
+
+add_executable(test_mcp_publication_faults ${CMAKE_CURRENT_LIST_DIR}/test_mcp_publication_faults.c)
+target_link_libraries(test_mcp_publication_faults PRIVATE xray_mcp_faults)
+add_test(NAME test_mcp_publication_faults COMMAND test_mcp_publication_faults)
+set_tests_properties(test_mcp_publication_faults PROPERTIES
+    LABELS "unit;mcp;faults;ownership;process" TIMEOUT 120 COST 1 RUN_SERIAL TRUE)
