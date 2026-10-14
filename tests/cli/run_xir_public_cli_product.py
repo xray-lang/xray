@@ -48,9 +48,14 @@ def main() -> int:
         temporary = tempfile.TemporaryDirectory(prefix='xir-public-cli-product-')
         evidence = Path(temporary.name).resolve()
     records: list[dict] = []
+    builtin_constants = evidence / 'builtin-constants.xr'
+    builtin_constants.write_text('import "std/io/output" as output\n'
+                                 'const accepted = output.writeStdout("A\\0B")\n'
+                                 'const errorAccepted = output.writeStderr("E\\0R")\n', encoding='utf-8')
     expected = (
         ('plain_go', root / 'tests/fixtures/xir_go_product/main.xr', b'A\0B\n21\n', b''),
         ('cached_state_go', fixtures / 'main.xr', b'A\0B41 42 42 true true 1.5\n', b'E\0R'),
+        ('builtin_constants', builtin_constants, b'A\0B', b'E\0R'),
     )
     stdlib = args.stdlib.resolve() if args.stdlib else root / 'stdlib'
     environment = dict(os.environ, XRAY_STDLIB_PATH=str(stdlib), NO_COLOR='1')

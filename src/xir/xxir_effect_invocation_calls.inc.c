@@ -59,6 +59,30 @@ typedef struct EffectInvocationActual {
     const uint64_t *closure;
 } EffectInvocationActual;
 
+/* A captured leaf has no environment columns. The enclosing closure's flat
+ * relation is not part of that leaf value. Symbolic or owning producers keep
+ * their complete relation and remain subject to the ordinary exact reader. */
+static XrXirStatus effect_invocation_captured_leaf(EffectInvocationFlow *flow,uint64_t *row) {
+    bool concrete=false;
+    for(uint32_t w=0;w<flow->basis.origin_words;++w) {
+        if(!xir_compile_work(flow->owner->work,1)) return XR_XIR_BUDGET;
+        uint64_t bits=row[w];
+        while(bits) {
+            if(!xir_compile_work(flow->owner->work,3)) return XR_XIR_BUDGET;
+            uint64_t producer=(uint64_t)w*64+(uint32_t)__builtin_ctzll(bits);
+            bits&=bits-1;
+            if(producer>=flow->owner->site_count || flow->owner->sites[producer].captures)
+                return XR_XIR_OK;
+            concrete=true;
+        }
+    }
+    if(!concrete) return XR_XIR_OK;
+    uint32_t words=flow->basis.fn_words-flow->basis.origin_words;
+    if(!xir_compile_work(flow->owner->work,(uint64_t)words*sizeof(*row))) return XR_XIR_BUDGET;
+    memset(row+flow->basis.origin_words,0,(size_t)words*sizeof(*row));
+    return XR_XIR_OK;
+}
+
 static XrXirStatus effect_invocation_arguments_read(EffectInvocationFlow *flow,
     const XrXirInstruction *op,const EffectInvocationActual *request,
     const EffectBodyFunctionHead *callee,uint64_t **output) {
@@ -117,7 +141,8 @@ static XrXirStatus effect_invocation_arguments_read(EffectInvocationFlow *flow,
                 memcpy(row,captured,(size_t)flow->basis.origin_words*sizeof(*row));
                 memcpy(row+flow->basis.origin_words,closure+flow->basis.origin_words,
                     (size_t)(flow->basis.fn_words-flow->basis.origin_words)*sizeof(*row));
-                status=effect_invocation_bound_row(flow,target,p,callee,row);
+                status=effect_invocation_captured_leaf(flow,row);
+                if(status==XR_XIR_OK) status=effect_invocation_bound_row(flow,target,p,callee,row);
             }
             if (xr_xir_type_is_class(flow->body.domain.types,expected))
                 status=effect_invocation_class_encode(flow,EFFECT_CLASS_KNOWN|EFFECT_CLASS_UNKNOWN,
