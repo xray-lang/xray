@@ -36,12 +36,18 @@ class NativeDeclarations(unittest.TestCase):
         header, members = schema.parse_source(source, self.prelude)
         self.assertEqual(header[:3], (6, 'i64', ''))
         executable = [m for m in members if m.operation != 'NONE']
-        self.assertEqual(len(executable), 18)
+        self.assertEqual(len(executable), 24)
         self.assertEqual(next(m for m in members if m.name == 'toBigInt').operation, 'NONE')
         for changed in [source.replace('wrappingAdd(other: i64)', 'wrappingAdd(other: f64)'),
                         source.replace('abs() -> i64', 'abs() -> f64'),
                         source.replace('INTEGER_CHECKED_ADD allocation=may_heap', 'INTEGER_CHECKED_ADD allocation=no_heap'),
                         source.replace('INTEGER_ABS allocation=no_heap failures=none', 'INTEGER_ABS allocation=no_heap failures=limit'),
+                        source.replace('popcount() -> i64', 'popcount() -> u64'),
+                        source.replace('leadingZeros() -> i64', 'leadingZeros(n: i64) -> i64'),
+                        source.replace('trailingZeros() -> i64', 'ref trailingZeros() -> i64'),
+                        source.replace('INTEGER_BYTESWAP allocation=no_heap', 'INTEGER_BYTESWAP allocation=may_heap'),
+                        source.replace('rotateLeft(n: i64)', 'rotateLeft(n: u64)'),
+                        source.replace('rotateRight(n: i64)', 'rotateRight(n?: i64)'),
                         source.replace('// @native-type id=6', '// @native-type id=7')]:
             with self.assertRaises(ValueError):
                 schema.parse_source(changed, self.prelude)

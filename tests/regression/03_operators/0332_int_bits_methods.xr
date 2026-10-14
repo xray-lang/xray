@@ -1,6 +1,6 @@
 // Test: integer bit-manipulation methods + signed-overflow predicates.
-// Bit methods lower to exact-width xi.bit.* operations; overflow predicates
-// retain the shared arithmetic semantics.
+// Governed bit methods compose ordinary exact-width integer operations;
+// overflow predicates retain the shared arithmetic semantics.
 
 @test
 fn test_int_bits() {

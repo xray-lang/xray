@@ -48,4 +48,16 @@ class i64 {
     subOverflows(other: i64) -> bool
     // @native-operation INTEGER_MUL_OVERFLOWS allocation=no_heap failures=none ownership=owned
     mulOverflows(other: i64) -> bool
+    // @native-operation INTEGER_POPCOUNT allocation=no_heap failures=none ownership=owned
+    popcount() -> i64
+    // @native-operation INTEGER_LEADING_ZEROS allocation=no_heap failures=none ownership=owned
+    leadingZeros() -> i64
+    // @native-operation INTEGER_TRAILING_ZEROS allocation=no_heap failures=none ownership=owned
+    trailingZeros() -> i64
+    // @native-operation INTEGER_BYTESWAP allocation=no_heap failures=none ownership=owned
+    byteswap() -> i64
+    // @native-operation INTEGER_ROTATE_LEFT allocation=no_heap failures=none ownership=owned
+    rotateLeft(n: i64) -> i64
+    // @native-operation INTEGER_ROTATE_RIGHT allocation=no_heap failures=none ownership=owned
+    rotateRight(n: i64) -> i64
 }

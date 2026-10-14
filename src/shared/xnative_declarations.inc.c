@@ -236,6 +236,12 @@ static const XrNativeParameter xr_native_i64_parameters_21[] = {
 static const XrNativeParameter xr_native_i64_parameters_22[] = {
     {"other", "i64", XR_NATIVE_TERM_I64, false, false},
 };
+static const XrNativeParameter xr_native_i64_parameters_27[] = {
+    {"n", "i64", XR_NATIVE_TERM_I64, false, false},
+};
+static const XrNativeParameter xr_native_i64_parameters_28[] = {
+    {"n", "i64", XR_NATIVE_TERM_I64, false, false},
+};
 static const XrNativeMemberDeclaration xr_native_i64_members[] = {
     {1, "parse", "(text: string) -> i64", "i64", 9, 12, XR_NATIVE_RECEIVER_READ, true, true, true, true, XR_NATIVE_OPERATION_NONE, XR_NATIVE_ALLOCATION_UNKNOWN, "", XR_NATIVE_RESULT_OWNERSHIP_UNKNOWN, xr_native_i64_parameters_0, 1, XR_NATIVE_TERM_I64},
     {2, "tryParse", "(text: string) -> i64?", "i64 ?", 11, 12, XR_NATIVE_RECEIVER_READ, true, true, true, true, XR_NATIVE_OPERATION_NONE, XR_NATIVE_ALLOCATION_UNKNOWN, "", XR_NATIVE_RESULT_OWNERSHIP_UNKNOWN, xr_native_i64_parameters_1, 1, XR_NATIVE_TERM_NULLABLE_I64},
@@ -260,11 +266,17 @@ static const XrNativeMemberDeclaration xr_native_i64_members[] = {
     {21, "addOverflows", "(other: i64) -> bool", "bool", 46, 5, XR_NATIVE_RECEIVER_READ, false, true, false, true, XR_NATIVE_OPERATION_INTEGER_ADD_OVERFLOWS, XR_NATIVE_ALLOCATION_NO_HEAP, "none", XR_NATIVE_RESULT_OWNERSHIP_OWNED, xr_native_i64_parameters_20, 1, XR_NATIVE_TERM_BOOL},
     {22, "subOverflows", "(other: i64) -> bool", "bool", 48, 5, XR_NATIVE_RECEIVER_READ, false, true, false, true, XR_NATIVE_OPERATION_INTEGER_SUB_OVERFLOWS, XR_NATIVE_ALLOCATION_NO_HEAP, "none", XR_NATIVE_RESULT_OWNERSHIP_OWNED, xr_native_i64_parameters_21, 1, XR_NATIVE_TERM_BOOL},
     {23, "mulOverflows", "(other: i64) -> bool", "bool", 50, 5, XR_NATIVE_RECEIVER_READ, false, true, false, true, XR_NATIVE_OPERATION_INTEGER_MUL_OVERFLOWS, XR_NATIVE_ALLOCATION_NO_HEAP, "none", XR_NATIVE_RESULT_OWNERSHIP_OWNED, xr_native_i64_parameters_22, 1, XR_NATIVE_TERM_BOOL},
+    {24, "popcount", "() -> i64", "i64", 52, 5, XR_NATIVE_RECEIVER_READ, false, true, false, true, XR_NATIVE_OPERATION_INTEGER_POPCOUNT, XR_NATIVE_ALLOCATION_NO_HEAP, "none", XR_NATIVE_RESULT_OWNERSHIP_OWNED, NULL, 0, XR_NATIVE_TERM_I64},
+    {25, "leadingZeros", "() -> i64", "i64", 54, 5, XR_NATIVE_RECEIVER_READ, false, true, false, true, XR_NATIVE_OPERATION_INTEGER_LEADING_ZEROS, XR_NATIVE_ALLOCATION_NO_HEAP, "none", XR_NATIVE_RESULT_OWNERSHIP_OWNED, NULL, 0, XR_NATIVE_TERM_I64},
+    {26, "trailingZeros", "() -> i64", "i64", 56, 5, XR_NATIVE_RECEIVER_READ, false, true, false, true, XR_NATIVE_OPERATION_INTEGER_TRAILING_ZEROS, XR_NATIVE_ALLOCATION_NO_HEAP, "none", XR_NATIVE_RESULT_OWNERSHIP_OWNED, NULL, 0, XR_NATIVE_TERM_I64},
+    {27, "byteswap", "() -> i64", "i64", 58, 5, XR_NATIVE_RECEIVER_READ, false, true, false, true, XR_NATIVE_OPERATION_INTEGER_BYTESWAP, XR_NATIVE_ALLOCATION_NO_HEAP, "none", XR_NATIVE_RESULT_OWNERSHIP_OWNED, NULL, 0, XR_NATIVE_TERM_I64},
+    {28, "rotateLeft", "(n: i64) -> i64", "i64", 60, 5, XR_NATIVE_RECEIVER_READ, false, true, false, true, XR_NATIVE_OPERATION_INTEGER_ROTATE_LEFT, XR_NATIVE_ALLOCATION_NO_HEAP, "none", XR_NATIVE_RESULT_OWNERSHIP_OWNED, xr_native_i64_parameters_27, 1, XR_NATIVE_TERM_I64},
+    {29, "rotateRight", "(n: i64) -> i64", "i64", 62, 5, XR_NATIVE_RECEIVER_READ, false, true, false, true, XR_NATIVE_OPERATION_INTEGER_ROTATE_RIGHT, XR_NATIVE_ALLOCATION_NO_HEAP, "none", XR_NATIVE_RESULT_OWNERSHIP_OWNED, xr_native_i64_parameters_28, 1, XR_NATIVE_TERM_I64},
 };
 static const XrNativeTypeDeclaration xr_native_i64 = {
     6, XR_NATIVE_DECLARATION_VALUE, "i64", "", 0,
-    "stdlib/types/i64.xr", "xray-native:prelude/i64", {{149, 119, 42, 91, 162, 138, 45, 103, 255, 99, 184, 246, 220, 113, 182, 185, 89, 217, 0, 195, 219, 59, 164, 202, 229, 0, 241, 165, 48, 77, 125, 206}},
-    7, 7, xr_native_i64_members, 23
+    "stdlib/types/i64.xr", "xray-native:prelude/i64", {{189, 69, 77, 134, 49, 219, 168, 131, 177, 214, 138, 89, 13, 220, 116, 70, 158, 112, 188, 63, 192, 162, 192, 83, 68, 85, 193, 167, 229, 10, 210, 146}},
+    7, 7, xr_native_i64_members, 29
 };
 
 static const XrNativeParameter xr_native_f64_parameters_0[] = {

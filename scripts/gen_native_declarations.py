@@ -358,7 +358,13 @@ def parse_source(source, prelude):
                      'INTEGER_TO_HEX': ('toHex', '() -> string'),
                      'INTEGER_TO_F64': ('toF64', '() -> f64'),
                      'INTEGER_MIN': ('min', '(other: i64) -> i64'),
-                     'INTEGER_MAX': ('max', '(other: i64) -> i64')}
+                     'INTEGER_MAX': ('max', '(other: i64) -> i64'),
+                     'INTEGER_POPCOUNT': ('popcount', '() -> i64'),
+                     'INTEGER_LEADING_ZEROS': ('leadingZeros', '() -> i64'),
+                     'INTEGER_TRAILING_ZEROS': ('trailingZeros', '() -> i64'),
+                     'INTEGER_BYTESWAP': ('byteswap', '() -> i64'),
+                     'INTEGER_ROTATE_LEFT': ('rotateLeft', '(n: i64) -> i64'),
+                     'INTEGER_ROTATE_RIGHT': ('rotateRight', '(n: i64) -> i64')}
         for base, kind in [('checked', 'CHECKED'), ('saturating', 'SATURATING')]:
             for suffix, op in [('Add', 'ADD'), ('Sub', 'SUB'), ('Mul', 'MUL')]:
                 contracts['INTEGER_' + kind + '_' + op] = (base + suffix, '(other: i64) -> i64' + ('?' if base == 'checked' else ''))
