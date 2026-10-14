@@ -1,0 +1,19 @@
+struct Parcel { label:string; code:i64 }
+class Vault {
+    visible:i64
+    private secret:i64
+    protected seal:i64
+    nested:Array<Parcel>
+    parcel:Parcel
+    constructor(visible:i64, secret:i64, seal:i64) {
+        this.visible = visible
+        this.secret = secret
+        this.seal = seal
+        this.nested = [Parcel{label:"owned", code:44}]
+        this.parcel = Parcel{label:"inline", code:55}
+    }
+    static inspect(vault:Vault)->i64 { return leaf(vault) }
+}
+fn leaf(vault:Vault)->i64 { return vault.visible }
+fn outside(vault:Vault)->i64 { return Vault.inspect(vault) }
+print(outside(Vault(11,22,33)))

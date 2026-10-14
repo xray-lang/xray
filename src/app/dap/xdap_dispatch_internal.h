@@ -12,7 +12,7 @@
 #include "../../xir/xxir_output.h"
 #include "xdap_value.h"
 typedef struct XdapStopFrame { uint32_t handle, scope; } XdapStopFrame;
-typedef struct XdapValueRef { uint32_t handle;XrXirValue value;XdapValueShape shape; } XdapValueRef;
+typedef struct XdapValueRef { uint32_t handle,frame;XrXirValue value;XdapValueShape shape; } XdapValueRef;
 struct XdapAdapter {
     XrSourceCompiler *compiler;
     XrCompileResources *resources;

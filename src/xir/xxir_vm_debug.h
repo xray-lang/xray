@@ -109,4 +109,9 @@ XR_FUNC XrXirValueStatus xr_xir_vm_debug_snapshot_cell_value(const XrXirVmDebugS
 /* Copies the concrete enum owned by a first-chance throw snapshot. Other stops
  * return UNSUPPORTED and preserve empty output. The copy may escape the stop. */
 XR_FUNC XrXirValueStatus xr_xir_vm_debug_snapshot_exception(const XrXirVmDebugSnapshot *, XrXirValue *);
+/* Read-only member permission from the captured authentic caller. The value
+ * must use that frame's retained arena. This grants no execution, mutable root,
+ * loan or Instance authority and survives Program/Instance disposal. */
+XR_FUNC XrXirValueStatus xr_xir_vm_debug_snapshot_member(const XrXirVmDebugSnapshot *,
+    uint32_t frame,const XrXirValue *,uint32_t field,bool *allowed);
 #endif // XXIR_VM_DEBUG_H

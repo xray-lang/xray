@@ -103,22 +103,22 @@ static bool inspect_value(XdapJsonWriter *body,const XrXirValue *value) {
     /* An owned handle is observed as opaque until its typed child projection is admitted. */
     return xdap_json_quote(body,"<owned value>",13);
 }
-static XrXirStatus inspect_reference(XdapAdapter *s,const XrXirValue *value,uint32_t *handle,XdapValueShape *shape) {
-    XrXirValueStatus status=xdap_value_shape(value,s->config.observer_metadata,shape);
+static XrXirStatus inspect_reference(XdapAdapter *s,const XrXirValue *value,uint32_t frame,uint32_t *handle,XdapValueShape *shape) {
+    XdapValueView view={value,s->config.observer_metadata,s->snapshot,frame};XrXirValueStatus status=xdap_value_shape(&view,shape);
     if (status!=XR_XIR_VALUE_OK) return status==XR_XIR_VALUE_OOM ? XR_XIR_OUT_OF_MEMORY :
         status==XR_XIR_VALUE_LIMIT || status==XR_XIR_VALUE_REFCOUNT_LIMIT ? XR_XIR_BUDGET : XR_XIR_BAD_STRUCTURE;
     *handle=0;if (!shape->children) return XR_XIR_OK;
     for (uint32_t i=0;i<s->value_count;++i) {
         const XdapValueRef *ref=&s->values[i];
-        if (ref->value.type==value->type && ref->value.payload==value->payload) { *handle=ref->handle;return XR_XIR_OK; }
+        if (ref->frame==frame && ref->value.type==value->type && ref->value.payload==value->payload) { *handle=ref->handle;return XR_XIR_OK; }
     }
     if (s->value_count==128 || s->next_handle==INT32_MAX) return XR_XIR_BUDGET;
     XdapValueRef *ref=&s->values[s->value_count];status=xr_xir_value_copy(value,&ref->value);
     if (status!=XR_XIR_VALUE_OK) return status==XR_XIR_VALUE_OOM ? XR_XIR_OUT_OF_MEMORY : XR_XIR_BUDGET;
-    ref->handle=s->next_handle++;ref->shape=*shape;++s->value_count;*handle=ref->handle;return XR_XIR_OK;
+    ref->handle=s->next_handle++;ref->frame=frame;ref->shape=*shape;++s->value_count;*handle=ref->handle;return XR_XIR_OK;
 }
-static bool inspect_variable(XdapAdapter *s,XdapJsonWriter *body,const char *name,size_t length,const XrXirValue *value) {
-    uint32_t handle=0;XdapValueShape shape={0};XrXirStatus status=inspect_reference(s,value,&handle,&shape);
+static bool inspect_variable(XdapAdapter *s,XdapJsonWriter *body,const char *name,size_t length,const XrXirValue *value,uint32_t frame) {
+    uint32_t handle=0;XdapValueShape shape={0};XrXirStatus status=inspect_reference(s,value,frame,&handle,&shape);
     if (status!=XR_XIR_OK) { body->status=status;return false; }
     XDAP_TEXT(body,"{\"name\":");xdap_json_quote(body,name,length);XDAP_TEXT(body,",\"value\":");
     if (!inspect_value(body,value) && body->status==XR_XIR_OK) body->status=XR_XIR_BAD_STRUCTURE;
@@ -143,7 +143,8 @@ static XrXirStatus inspect_children(XdapAdapter *s,const XdapRequest *r,const Xd
     if (available>256) { xdap_json_writer_free(&body);return xdap_dispatch_response(s,r,false,NULL,"Request a bounded child page"); }
     for (uint64_t i=0;i<available;++i) {
         XrXirValue value={0};const char *name=NULL;size_t length=0;
-        XrXirValueStatus status=xdap_value_child(&ref->value,s->config.observer_metadata,start+i,&value,&name,&length);
+        XdapValueView view={&ref->value,s->config.observer_metadata,s->snapshot,ref->frame};
+        XrXirValueStatus status=xdap_value_child(&view,start+i,&value,&name,&length);
         if (status!=XR_XIR_VALUE_OK) {
             if (status==XR_XIR_VALUE_BAD_ARGUMENT || status==XR_XIR_VALUE_UNSUPPORTED || status==XR_XIR_VALUE_BOUNDS) {
                 xdap_json_writer_free(&body);inspect_rollback_values(s,before);
@@ -152,7 +153,7 @@ static XrXirStatus inspect_children(XdapAdapter *s,const XdapRequest *r,const Xd
             body.status=status==XR_XIR_VALUE_OOM ? XR_XIR_OUT_OF_MEMORY : XR_XIR_BUDGET;break;
         }
         char index[32];if (!name) { int bytes=snprintf(index,sizeof(index),"[%llu]",(unsigned long long)(start+i));name=index;length=(size_t)bytes; }
-        if (shown++) XDAP_TEXT(&body,",");bool emitted=inspect_variable(s,&body,name,length,&value);xr_xir_value_drop(&value);
+        if (shown++) XDAP_TEXT(&body,",");bool emitted=inspect_variable(s,&body,name,length,&value,ref->frame);xr_xir_value_drop(&value);
         if (!emitted) break;
     }
     XDAP_TEXT(&body,"]}");XrXirStatus status=inspect_finish(s,r,&body);
@@ -194,7 +195,7 @@ static XrXirStatus inspect_variables(XdapAdapter *s,const XdapRequest *r) {
         if (copied==XR_XIR_VALUE_OK) { xr_xir_value_drop(&value);value=cell; }
         else if (copied!=XR_XIR_VALUE_UNSUPPORTED) { xr_xir_value_drop(&value);body.status=XR_XIR_BUDGET;break; }
         char name[32];int name_length=snprintf(name,sizeof(name),"%%v%u",value_id);
-        if (shown++) XDAP_TEXT(&body,",");bool emitted=inspect_variable(s,&body,name,(size_t)name_length,&value);xr_xir_value_drop(&value);
+        if (shown++) XDAP_TEXT(&body,",");bool emitted=inspect_variable(s,&body,name,(size_t)name_length,&value,frame);xr_xir_value_drop(&value);
         if (!emitted) break;
     }
     XDAP_TEXT(&body,"]}");status=inspect_finish(s,r,&body);

@@ -14,6 +14,7 @@
 #include "xxir_instance_value.h"
 #include "xxir_vm_debug_calls_internal.h"
 #include "xxir_error.h"
+#include "xxir_type_arena.h"
 #include <stdatomic.h>
 #include <string.h>
 
@@ -33,6 +34,9 @@ typedef struct SnapshotFrame {
     XrXirValue name;
     XrXirValue *values, *cell_values;
     unsigned char *known;
+    XrXirTypeArena *read_arena;
+    unsigned char *nominal_visible;
+    uint32_t nominal_count,nominal_owner;
 } SnapshotFrame;
 static const uint64_t debug_identity = UINT64_C(0x5852564d44424731);
 static const uint64_t snapshot_identity = UINT64_C(0x5852564d534e5031);
@@ -121,6 +125,8 @@ XR_FUNC void xr_xir_vm_debug_snapshot_drop(XrXirVmDebugSnapshot *snapshot) {
         if (frame->cell_values) for (uint32_t j = 0; j < frame->info.value_count; ++j)
             xr_xir_value_drop(&frame->cell_values[j]);
         xr_xir_value_drop(&frame->name);
+        xr_xir_compile_type_arena_drop(frame->read_arena);
+        debug_deallocate(domain,frame->nominal_visible,frame->nominal_count);
         debug_deallocate(domain, frame->values,
             (uint64_t)frame->info.value_count * sizeof(*frame->values));
         debug_deallocate(domain, frame->cell_values,
@@ -373,6 +379,27 @@ static bool snapshot_contains(const XrXirVmDebugSnapshot *snapshot,uint32_t coun
     for (uint32_t i=0;i<count;++i) if (snapshot->frames[i].info.id==id) return true;
     return false;
 }
+static XrXirValueStatus capture_read_scope(XrXirVmDebug *debug,uint32_t function,XrXirCallView *view,SnapshotFrame *frame) {
+    const XrXirModule *module=xr_xir_compile_artifact_module(debug->artifact);
+    uint32_t count=module->types && module->types->nominals ? module->types->nominals->count : 0;
+    if (!count) return XR_XIR_VALUE_OK;
+    if (!module->declarations || !module->declarations->functions || function>=module->function_count || !view->arena)
+        return XR_XIR_VALUE_BAD_ARGUMENT;
+    if (!xr_xir_domain_work(debug->domain,count)) return XR_XIR_VALUE_LIMIT;
+    XrXirValueStatus status;frame->nominal_visible=debug_allocate(debug->domain,count,&status);
+    if (!frame->nominal_visible) return status;
+    frame->nominal_count=count;frame->nominal_owner=module->declarations->functions[function].nominal_owner;
+    if (!xr_xir_compile_type_arena_retain((XrXirTypeArena *)view->arena)) return XR_XIR_VALUE_REFCOUNT_LIMIT;
+    frame->read_arena=(XrXirTypeArena *)view->arena;
+    const XrXirTypes *types=xr_xir_compile_type_arena_types(view->arena);
+    if (!types || !types->nominals || types->nominals->count!=count) return XR_XIR_VALUE_BAD_ARGUMENT;
+    for (uint32_t declaration=0;declaration<count;++declaration) {
+        XrXirStatus checked=xr_xir_compile_nominal_access(&debug->artifact->context,module,function,declaration,0,XR_XIR_NOMINAL_TYPE);
+        if (checked==XR_XIR_OK) frame->nominal_visible[declaration]=1;
+        else if (checked!=XR_XIR_BAD_TYPE) return checked==XR_XIR_BUDGET ? XR_XIR_VALUE_LIMIT : XR_XIR_VALUE_BAD_ARGUMENT;
+    }
+    return XR_XIR_VALUE_OK;
+}
 static XrXirValueStatus capture_frame(XrXirVmDebug *debug,const XirDebugCallFrame *call,
     XrXirCallView *view,XrXirVmDebugSnapshot *snapshot,uint32_t index) {
     SnapshotFrame *frame=&snapshot->frames[index];
@@ -387,6 +414,7 @@ static XrXirValueStatus capture_frame(XrXirVmDebug *debug,const XirDebugCallFram
             call->event.code==XR_XIR_CALL_CODE_NATIVE ? XR_XIR_VM_DEBUG_NATIVE : XR_XIR_VM_DEBUG_PENDING};
     XrXirValueStatus status=xr_xir_string_new(debug->domain,function->name ? function->name : "",function->name_length,&frame->name);
     if (status!=XR_XIR_VALUE_OK || !values) return status;
+    status=capture_read_scope(debug,call->event.entry,view,frame);if (status!=XR_XIR_VALUE_OK) return status;
     if (!xr_xir_domain_work(debug->domain,frame->info.value_count)) return XR_XIR_VALUE_LIMIT;
     return copy_frame_values(debug,live,view,frame);
 }
@@ -575,4 +603,19 @@ XR_FUNC XrXirValueStatus xr_xir_vm_debug_snapshot_exception(const XrXirVmDebugSn
     if (!snapshot->exception.type) return XR_XIR_VALUE_UNSUPPORTED;
     if (!xr_xir_domain_work(snapshot->domain,1)) return XR_XIR_VALUE_LIMIT;
     return xr_xir_value_copy(&snapshot->exception,output);
+}
+XR_FUNC XrXirValueStatus xr_xir_vm_debug_snapshot_member(const XrXirVmDebugSnapshot *snapshot,
+    uint32_t frame,const XrXirValue *value,uint32_t field,bool *allowed) {
+    if (!snapshot_valid(snapshot) || frame>=snapshot->count || !allowed || !xr_xir_value_valid(value)) return XR_XIR_VALUE_BAD_ARGUMENT;
+    const SnapshotFrame *scope=&snapshot->frames[frame];
+    if (!scope->read_arena || xr_xir_value_arena(value)!=scope->read_arena) return XR_XIR_VALUE_BAD_ARGUMENT;
+    if (!xr_xir_domain_work(snapshot->domain,1)) return XR_XIR_VALUE_LIMIT;
+    const XrXirTypes *types=xr_xir_compile_type_arena_types(scope->read_arena);
+    const XrXirTypeNode *node=xr_xir_type_node(types,(XrXirType)value->type);
+    if (!node || node->kind!=XR_XIR_TYPE_NOMINAL || node->nominal.declaration>=scope->nominal_count) return XR_XIR_VALUE_UNSUPPORTED;
+    uint32_t declaration=node->nominal.declaration;const XrXirNominalIdentity *identity=&types->nominals->identities[declaration];
+    if (field>=identity->field_count) return XR_XIR_VALUE_BOUNDS;
+    *allowed=scope->nominal_visible[declaration] &&
+        (!(identity->fields[field].flags & (XR_XIR_FIELD_PRIVATE|XR_XIR_FIELD_PROTECTED)) || scope->nominal_owner==declaration+1);
+    return XR_XIR_VALUE_OK;
 }

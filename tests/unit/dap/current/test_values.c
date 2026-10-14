@@ -11,15 +11,18 @@
 #undef main
 #include "app/dap/xdap_dispatch_internal.h"
 static void values_faults(XdapAdapter *adapter,uint64_t handle) {
-    const XrXirValue *parent=NULL;
-    for (uint32_t i=0;i<adapter->value_count;++i) if (adapter->values[i].handle==handle) parent=&adapter->values[i].value;
+    const XrXirValue *parent=NULL;uint32_t frame=UINT32_MAX;
+    for (uint32_t i=0;i<adapter->value_count;++i) if (adapter->values[i].handle==handle) {
+        parent=&adapter->values[i].value;frame=adapter->values[i].frame;
+    }
     CHECK(parent);XrXirDomain *domain=adapter->config.observer_metadata;size_t sites=0;
+    XdapValueView view={parent,domain,adapter->snapshot,frame};
     for (size_t point=0;!point || point<=sites;++point) {
         XrXirDomainBudgetStats before=xr_xir_domain_budget_stats(domain);
         XrXirDomainStats value_before=xr_xir_domain_stats(domain);
         size_t begin=runtime_attempts;runtime_fail_at=point ? begin+point-1 : SIZE_MAX;
         XrXirValue child={0};const char *name=(const char *)(uintptr_t)1;size_t length=777;
-        XrXirValueStatus status=xdap_value_child(parent,domain,0,&child,&name,&length);
+        XrXirValueStatus status=xdap_value_child(&view,0,&child,&name,&length);
         size_t count=runtime_attempts-begin;runtime_fail_at=SIZE_MAX;
         if (!point) { CHECK(status==XR_XIR_VALUE_OK);sites=count;CHECK(sites); }
         else {
@@ -27,7 +30,7 @@ static void values_faults(XdapAdapter *adapter,uint64_t handle) {
             CHECK(name==(const char *)(uintptr_t)1 && length==777);
             XrXirDomainBudgetStats failed=xr_xir_domain_budget_stats(domain);
             CHECK(failed.metadata_live==before.metadata_live && xr_xir_domain_stats(domain).live_bytes==value_before.live_bytes);
-            CHECK(xdap_value_child(parent,domain,0,&child,&name,&length)==XR_XIR_VALUE_OK);
+            CHECK(xdap_value_child(&view,0,&child,&name,&length)==XR_XIR_VALUE_OK);
         }
         xr_xir_value_drop(&child);XrXirDomainBudgetStats after=xr_xir_domain_budget_stats(domain);
         CHECK(after.metadata_live==before.metadata_live && xr_xir_domain_stats(domain).live_bytes==value_before.live_bytes);
