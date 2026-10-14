@@ -53,6 +53,8 @@ Checked Source 的整数方法准入由 `stdlib/types/i64.xr` 的固定声明身
 
 当前 Checked Source 以固定 f64 声明身份及完整 READ/signature/allocation/failure/ownership 契约准入 `abs`、`toString`、`toI64`、`floor`、`ceil`、`round`、`isNaN`，并生成普通已有 XIR。`abs` 对零返回正零，NaN 结果遵循普通浮点转换/取反的 canonical 规则。`toI64` 向零截断；`floor/ceil` 向负/正无穷取整；`round` 最近取整且半值远离零，使用精确小数差比较而非给输入加减0.5。NaN、Infinity及无法转换为i64的输入沿共同数值转换发出E0422范围panic，不伪造值或 typed Error。除已有 f32 文本化外，这些准入方法当前要求 f64 接收者。`parse/tryParse/toFixed/sqrt/pow` 五项声明仍无 Checked 操作准入，完整浮点方法族未获资格。
 
+接收编译器Float执行接口后，上述非文本化的六项f64方法可在原有界CTFE路径执行：既有整数IEEE内核决定位级结果，每条浮点操作先支付1024 work，不依赖宿主FPU、VM或native执行。数值转换越界保范围拒绝；普通用户模块/闭合泛型可调用这些治理方法。Tuple常量按真实字段逻辑字节接收（Unit为0），当前Source输出帽仍为8字节，不扩大到类/record或任意拥有图；完整资源/全族资格另证。数值TO_STRING及剩余五项方法仍不因Float/字符串执行接口而自动准入。
+
 ### 14.3 `BigInt` 方法
 
 | 方法 | 签名 | 说明 |
@@ -444,6 +446,8 @@ Checked Source admits integer methods by the fixed declaration identity in `stdl
 | `isNaN()` | `() -> bool` | whether the value is IEEE NaN |
 
 Checked Source currently admits `abs`, `toString`, `toI64`, `floor`, `ceil`, `round` and `isNaN` through the fixed f64 declaration identity and its complete READ/signature/allocation/failure/ownership contracts, producing ordinary existing XIR. `abs` returns positive zero for either zero sign and canonicalizes NaNs through ordinary floating conversion/negation rules. `toI64` truncates toward zero; `floor/ceil` round toward negative/positive infinity; `round` chooses the nearest integer with ties away from zero, using an exact fractional-difference comparison rather than adding/subtracting 0.5 to the input. NaN, Infinity and inputs not convertible to i64 produce the common E0422 numeric-range panic, without invented values or typed Errors. Except for the existing f32 text conversion, these methods currently require an f64 receiver. `parse/tryParse/toFixed/sqrt/pow` retain five unadmitted declarations; the complete floating-method family is not qualified.
+
+With the compiler Float execution interface received, the six admitted nontext f64 methods can execute through the original bounded CTFE path. The existing integer IEEE kernel determines bit results, and each floating operation prepays 1024 work without host FPU, VM or native execution. Numeric conversion range errors remain refusals; ordinary user modules and closed generic instances can call these governed methods. Tuple constants receive actual logical field bytes, with Unit contributing zero; Source retains its eight-byte output limit. This grants no class/record or arbitrary owning-graph admission, and complete resource/family qualification requires separate evidence. Numeric TO_STRING and the remaining five methods are not automatically admitted by Float or String execution support.
 
 ### 14.3 `BigInt` Methods
 

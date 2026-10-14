@@ -12,11 +12,14 @@
  */
 static XrXirCtfeStatus ctfe_argument_store(ScalarRun *run,uint32_t offset,
     const XrXirValue *value,CtfeOwnedState *state,bool snapshot) {
-    if (value->type!=XR_XIR_STRING) {
+    if (!xr_xir_type_is_owned(run->module->types,(XrXirType)value->type)) {
         xr_xir_scalar_store(run->frame,offset,value->payload);return XR_XIR_CTFE_OK;
     }
+    XrXirCtfeStatus validation=ctfe_validation_work(run,state,(XrXirType)value->type);
+    if (validation!=XR_XIR_CTFE_OK) return validation;
     if (!snapshot) return ctfe_value_status(xr_xir_owned_slot_copy(run->frame,offset,
-        state->arena,XR_XIR_STRING,value->payload));
+        state->arena,(XrXirType)value->type,value->payload));
+    if (value->type!=XR_XIR_STRING) return XR_XIR_CTFE_NOT_SUPPORTED;
     const char *bytes=NULL;size_t length=0;XrXirValue copy={0};
     if (!xr_xir_string_view(value,&bytes,&length)) return XR_XIR_CTFE_BAD_ARGUMENT;
     if (!scalar_compile_work(run,(uint64_t)length)) return XR_XIR_CTFE_BUDGET;
@@ -25,13 +28,20 @@ static XrXirCtfeStatus ctfe_argument_store(ScalarRun *run,uint32_t offset,
     xr_xir_value_drop(&copy);return status;
 }
 static XrXirCtfeStatus ctfe_result_publish(ScalarRun *run,const XrXirValue *value,
-    XrXirType type,uint64_t maximum,XrXirValue *output) {
-    if (!ctfe_result_value(value,type)) return XR_XIR_CTFE_BAD_ARTIFACT;
+    XrXirType type,uint64_t maximum,CtfeOwnedState *state,XrXirValue *output) {
+    XrXirCtfeStatus validation=ctfe_validation_work(run,state,type);
+    if (validation!=XR_XIR_CTFE_OK) return validation;
+    if (!ctfe_result_value(value,type,state->arena)) return XR_XIR_CTFE_BAD_ARTIFACT;
     if (type==XR_XIR_STRING) {
         const char *bytes=NULL;size_t length=0;
         if (!scalar_compile_work(run,2)) return XR_XIR_CTFE_BUDGET;
         if (!xr_xir_string_view(value,&bytes,&length)) return XR_XIR_CTFE_BAD_ARTIFACT;
         if ((uint64_t)length>maximum) return XR_XIR_CTFE_OUTPUT_LIMIT;
+        return ctfe_value_status(xr_xir_value_copy(value,output));
+    }
+    if (xr_xir_tuple_signature(run->module->types,type)) {
+        XrXirCtfeStatus status=ctfe_tuple_export_bytes(run,value,state,maximum);
+        if (status!=XR_XIR_CTFE_OK) return status;
         return ctfe_value_status(xr_xir_value_copy(value,output));
     }
     *output=*value;return XR_XIR_CTFE_OK;
@@ -54,6 +64,8 @@ static XrXirCtfeStatus ctfe_string_step(ScalarRun *run,uint32_t *cursor,CtfeOwne
         if (!scalar_compile_work(run,literal->length)) return XR_XIR_CTFE_BUDGET;
         status=xr_xir_string_new(state->domain,literal->bytes,literal->length,&result);
     } else if (op->op==XR_XIR_OWNED_LOCAL_NEW || op->op==XR_XIR_OWNED_LOCAL_READ || op->op==XR_XIR_OWNED_RETAIN) {
+        XrXirCtfeStatus validation=ctfe_validation_work(run,state,op->type);
+        if (validation!=XR_XIR_CTFE_OK) return validation;
         status=xr_xir_owned_slot_copy(run->frame,destination,state->arena,op->type,
             xr_xir_scalar_load(run->frame,run->layout->offsets[op->args[0]]));
     } else {

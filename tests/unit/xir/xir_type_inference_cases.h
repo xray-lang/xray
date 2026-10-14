@@ -295,7 +295,10 @@ static void type_inference_callable_mode_admission_case(void) {
     XrXirType p0 = (XrXirType)XR_XIR_TYPE_PARAMETER_BASE;
     XrXirCallableParameter formal = {p0,0}, actual = {XR_XIR_I64,0};
     XrXirTypeNode nodes[2] = {0};
-    for (uint32_t n = 0; n < 2; ++n) { nodes[n].kind = XR_XIR_TYPE_CALLABLE; nodes[n].parameter_count = 1; }
+    for (uint32_t n = 0; n < 2; ++n) {
+        nodes[n].kind = XR_XIR_TYPE_CALLABLE; nodes[n].parameter_count = 1;
+        nodes[n].flags = XR_XIR_CALLABLE_ROOT_NONE;
+    }
     nodes[0].parameters = &formal; nodes[0].result = p0; nodes[0].parameter_span = 1;
     nodes[1].parameters = &actual; nodes[1].result = XR_XIR_I64;
     XrXirTypes types = {nodes,2,NULL,NULL}; XrXirCompileContext budget = interface_context_default();
@@ -304,11 +307,34 @@ static void type_inference_callable_mode_admission_case(void) {
     InferenceTestBatch batch = {&types,NULL,0,1,0,&pair,1};
     XrXirType output = XR_XIR_BOOL; budget = interface_context_default();
     CHECK(inference_test_run(&batch,&budget,&output,1)==XR_XIR_OK && output==XR_XIR_I64);
-    /* Current callable descriptors admit READ (0) only. A different mode fails
-     * before inference; bypassing admission would violate this internal API. */
-    actual.mode = 1; budget = interface_context_default();
+    /* A REF parameter requires Cell storage. A scalar descriptor cannot
+     * acquire that storage merely by changing its parameter mode. */
+    actual.mode = XR_PARAM_REF; budget = interface_context_default();
+    CHECK(xr_xir_compile_types_structure_verify(&budget, &types)==XR_XIR_BAD_TYPE);
+    actual.mode = XR_PARAM_READ; nodes[1].flags = 0; budget = interface_context_default();
     CHECK(xr_xir_compile_types_structure_verify(&budget, &types)==XR_XIR_BAD_TYPE);
     CHECK(interface_live == stage_owner_count);
+
+    XrXirTypeNode ref_nodes[4] = {0};
+    ref_nodes[0].kind = ref_nodes[1].kind = XR_XIR_TYPE_CELL;
+    ref_nodes[0].element = p0; ref_nodes[0].parameter_span = 1;
+    ref_nodes[1].element = XR_XIR_I64;
+    XrXirCallableParameter ref_formal = {member_case_type(0),XR_PARAM_REF};
+    XrXirCallableParameter ref_actual = {member_case_type(1),XR_PARAM_REF};
+    for (uint32_t n = 2; n < 4; ++n) {
+        ref_nodes[n].kind = XR_XIR_TYPE_CALLABLE; ref_nodes[n].parameter_count = 1;
+        ref_nodes[n].flags = XR_XIR_CALLABLE_ROOT_NONE;
+    }
+    ref_nodes[2].parameters = &ref_formal; ref_nodes[2].result = p0; ref_nodes[2].parameter_span = 1;
+    ref_nodes[3].parameters = &ref_actual; ref_nodes[3].result = XR_XIR_I64;
+    XrXirTypes ref_types = {ref_nodes,4,NULL,NULL}; budget = interface_context_default();
+    CHECK(xr_xir_compile_types_structure_verify(&budget, &ref_types)==XR_XIR_OK);
+    XrXirInferencePair ref_pair = {member_case_type(2),member_case_type(3)};
+    InferenceTestBatch ref_batch = {&ref_types,NULL,0,1,0,&ref_pair,1};
+    output = XR_XIR_BOOL; budget = interface_context_default();
+    CHECK(inference_test_run(&ref_batch,&budget,&output,1)==XR_XIR_OK && output==XR_XIR_I64);
+    CHECK(interface_live == stage_owner_count);
+    puts("Callable admission: READ and Cell REF infer i64; bare REF and absent root bits rejected");
 }
 
 static void type_inference_cases(void) {

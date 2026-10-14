@@ -63,14 +63,14 @@ def main():
             assert (result.returncode,result.stdout,result.stderr)==(0,answer,b''),result
         for name,source_text,diagnostic in [('negative-start',prefix+'print(comptime search("a","",-1))\n',b'comptime value range violation'),
                                            ('past-end',prefix+'print(comptime search("é","",2))\n',b'comptime value range violation'),
-                                           ('float', 'fn rounded(value:f64)->i64 { return value.round() }\nprint(comptime rounded(1.5))\n',b'admitted deterministic scalar direct-call closure')]:
+                                           ('float-text', 'fn text(value:f64)->string { return value.toString() }\nprint(comptime text(1.5))\n',b'admitted deterministic scalar direct-call closure')]:
             entry=output/(name+'.xr');entry.write_text(source_text,encoding='utf-8');result=invoke(name,binary,['run',str(entry)],hidden)
             assert result.returncode==1 and not result.stdout and diagnostic in result.stderr,result
         (output/'summary.json').write_text(json.dumps(dict(status='STRING_CTFE_IMPORT_PASS',commands=len(records),owning_cases=len(pairs),
             owned_direct_generic_nested_calls=len(pairs)*3,read_cases=len(queries),read_ctfe_calls=len(queries)*3,Unicode_NUL=True,
             source_poisoned_and_absent=True,VM_C_provider_PATH_hidden=True,user_generic_scalar_instantiation=True,
             Windows_absolute_child_denial=process_policy.control,
-            user_aggregate_ctfe=False,library_generic_templates=False,float_ctfe=False,complete_standard_library=False),indent=2)+'\n',encoding='utf-8')
+            user_aggregate_ctfe=False,library_generic_templates=False,numeric_TO_STRING_ctfe=False,complete_standard_library=False),indent=2)+'\n',encoding='utf-8')
         print('String CTFE: imported owning/generic/copy/repeat, Unicode/NUL searches and exact range refuses PASS');return 0
     finally:
         if temporary:temporary.cleanup()

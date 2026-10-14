@@ -1,0 +1,2 @@
+fn answer()->f64 { var x:f64=0.0; var i=0; while (i<6) { x=x+1.5; i=i+1 }; return x }
+export fn run()->f64 { return comptime answer() }

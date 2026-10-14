@@ -47,6 +47,7 @@ static void source_construct(SourceContext *ctx, XrXirSourceResult *output) {
         source_implementations_bind(ctx) && build_bodies(ctx) && source_class_carriers(ctx) && source_effect_prepare(ctx) && source_construction_prepare(ctx) && source_query_seal_storage(ctx) && source_function_seal_storage(ctx)) {
         XrXirDeclarations declarations;
         XrXirModule built = source_module_view(ctx,&declarations);
+        source_owned_text_index_clear(ctx);
         ctx->locals=NULL;ctx->facts=NULL;ctx->epochs=NULL;
         source_vector_retired_free(ctx);
         XrXirDiagnostic location = {0};
@@ -88,4 +89,5 @@ static void source_construct(SourceContext *ctx, XrXirSourceResult *output) {
         }
     }
     source_vector_retired_free(ctx);
+    source_owned_text_index_clear(ctx);
 }

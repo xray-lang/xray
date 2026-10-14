@@ -6301,6 +6301,8 @@ Checked Source 的整数方法准入由 `stdlib/types/i64.xr` 的固定声明身
 
 当前 Checked Source 以固定 f64 声明身份及完整 READ/signature/allocation/failure/ownership 契约准入 `abs`、`toString`、`toI64`、`floor`、`ceil`、`round`、`isNaN`，并生成普通已有 XIR。`abs` 对零返回正零，NaN 结果遵循普通浮点转换/取反的 canonical 规则。`toI64` 向零截断；`floor/ceil` 向负/正无穷取整；`round` 最近取整且半值远离零，使用精确小数差比较而非给输入加减0.5。NaN、Infinity及无法转换为i64的输入沿共同数值转换发出E0422范围panic，不伪造值或 typed Error。除已有 f32 文本化外，这些准入方法当前要求 f64 接收者。`parse/tryParse/toFixed/sqrt/pow` 五项声明仍无 Checked 操作准入，完整浮点方法族未获资格。
 
+接收编译器Float执行接口后，上述非文本化的六项f64方法可在原有界CTFE路径执行：既有整数IEEE内核决定位级结果，每条浮点操作先支付1024 work，不依赖宿主FPU、VM或native执行。数值转换越界保范围拒绝；普通用户模块/闭合泛型可调用这些治理方法。Tuple常量按真实字段逻辑字节接收（Unit为0），当前Source输出帽仍为8字节，不扩大到类/record或任意拥有图；完整资源/全族资格另证。数值TO_STRING及剩余五项方法仍不因Float/字符串执行接口而自动准入。
+
 ### 14.3 `BigInt` 方法
 
 | 方法 | 签名 | 说明 |
@@ -7638,6 +7640,24 @@ CTFE准入完整Lowered函数闭包中的String字节序比较（<、<=、>、>=
 可变扫描在调用Value操作前从原累计compiler ledger预付保守上界：字节比较跨度、每个候选字节的模式比较和循环责任、实际搜索算法需要的skip表初始化及模式访问、索引换算的UTF-8扫描均计入。所有加乘检查溢出；无法支付或溢出拒绝BUDGET，不开展无界宿主搜索。空模式与已判定的范围错误无需扫描。该预付不是新额度，不退款、不重置原128M work及64MiB allocated/8MiB live限制。
 
 输入仍先复制到compiler Domain快照，异常、OOM、step或work拒绝释放全部帧拥有槽并保全调用者String。Source继续独立两次构造、普通常量recipe、完整Checker和查询发布；即使搜索条件使I/O分支不执行，实际可达闭包中的I/O仍拒绝。本族不授予任意聚合、函数值、资源或清理路径准入。
+
+### 17.46 编译域内的不可变Tuple与独立常量接收
+
+CTFE接收已经完整复验的类型池与普通函数闭包，迭代准入由Unit、bool、integer、Rune、String及这些类型组成的不可变Tuple。类型ID只在实际owner的描述池中有意义；循环描述、未闭合类型和含函数值/Cell/资源权限的字段拒绝，不从root或effect标志取得确定性。TUPLE_NEW按完整有序字段向量构造真实Value，Unit字段保留位置而无SSA槽；TUPLE_FIELD、内部Tuple参数/子返回、owned局部/并行PHI及私有Cell<Tuple>保持真实拥有引用和同compiler Domain。外部Tuple参数仍需有界跨arena接收接口，当前失败关闭拒绝。
+
+类型描述DFS、摘要与所有实际元数据分配进入原ledger。嵌套接收费用按完整展开的类型形状预付，重复字段位置逐次计数，数据共享不退费；加乘溢出或无力支付拒绝BUDGET。构造参数向量按完整arity占真实activation字节，遍历scratch使用原剩余frame额度并计入resize新旧块同时存活的峰值。steps65536、depth128、frame65536、output8及原64MiB allocated/8MiB live/128M work保持，不重置或退款。
+
+Tuple导出大小是按字段顺序递归相加的目标标量存储大小与String实际UTF-8字节，Unit贡献0；不计host指针、拥有头、type ID、carrier sizeof或填充。超原请求上限保全Unit输出。发布先取得独立拥有引用，类型arena、嵌套Tuple和String字段在Source/Artifact/ledger调用者死亡后仍有效；最后drop不分配，仅退live。
+
+Source以实际类型结构跨owner匹配helper及重放结果，而非假定局部type ID相同。独立接收以迭代拥有帧保存字段引用，将每个字段写成普通常量和TUPLE_NEW recipe，并完整Checker/查询发布。NUL完整长度、Unit字段位置、闭合泛型和原站点/owner/expected覆盖保持；字段失败、OOM、预算、构造与发布失败均释放全部临时结果。当前准入不授予任意Array/struct/enum、Tuple相等、函数值或cleanup路径完整资格。
+
+### 17.47 有界CTFE浮点位运算与目标常量
+
+完整Lowered重验与整个直接调用闭包接收后，CTFE允许f32/f64参数、结果、普通局部、私有Cell与不可变Tuple字段。CONST_FLOAT、负号、加减乘除、比较及具体数值转换复用现有仅整数实现的IEEE位运算，不依赖宿主FPU、Instance、native或AST回退。次正规数、最近偶数舍入、规范NaN、无穷和有符号零沿用普通执行语义；浮点除零产生IEEE结果。浮点转整数越界、NaN和无穷返回NUMERIC_RANGE，失败保持Unit输出。
+
+每条浮点操作在进入数值API前向原累计compiler ledger预付1024单位work。此保守固定上界覆盖64位格式的解码/打包、归一化、乘积进位扫描和长除法；这些循环只受固定格式位宽限制。预付不复制、重置或退还配额；未付清则先返回BUDGET。完整类型、身份、CFG、可达I/O及原steps/depth/frame/output/allocated/live/work上限继续生效。
+
+f32和f64逻辑输出分别占四和八个目标字节，Tuple字段继续累加目标存储大小。f32输入必须没有高位且NaN编码规范；f64沿用普通Value接收规则。Source在独立重放中再次校验目标规范浮点payload，记录普通CONST_FLOAT配方并交完整Checker。外部Tuple、任意Array/struct/enum、函数值和cleanup路径资格仍未由此授予。
 
 ---
 

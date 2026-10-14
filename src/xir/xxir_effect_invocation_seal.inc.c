@@ -335,7 +335,23 @@ static XrXirStatus effect_invocation_input_seeds_match(const XrXirCompileContext
         if (status!=XR_XIR_OK) return status;
         uint32_t mask=(input.requires_root?XR_XIR_CALLABLE_ROOT_REQUIRED:0)|
             (input.unresolved?XR_XIR_CALLABLE_ROOT_UNRESOLVED:0);
-        if ((node->intrinsic_mask&mask)!=mask || (summary->functions[f].formula.constant_mask&mask)!=mask)
+        if ((node->intrinsic_mask&mask)!=mask || (node->local_mask&mask)!=mask ||
+            (summary->functions[f].formula.constant_mask&mask)!=mask)
+            return XR_XIR_BAD_STRUCTURE;
+    }
+    /* Each genuine environment executes the same body's primitive Input.
+     * An intact symbolic root cannot qualify a different erased call key. */
+    for (uint32_t n=0;n<final->count;++n) {
+        if (!xir_compile_work(work,4)) return XR_XIR_BUDGET;
+        const EffectInvocationNode *node=&final->nodes[n];
+        if (node->body>=count) return XR_XIR_BAD_STRUCTURE;
+        if (final->roots[node->body]==n) continue;
+        XrXirRootEffects input={0};
+        XrXirStatus status=effect_invocation_input_seed(work,certificate->body,node->body,&input);
+        if (status!=XR_XIR_OK) return status;
+        uint32_t mask=(input.requires_root?XR_XIR_CALLABLE_ROOT_REQUIRED:0)|
+            (input.unresolved?XR_XIR_CALLABLE_ROOT_UNRESOLVED:0);
+        if ((node->intrinsic_mask&mask)!=mask || (node->local_mask&mask)!=mask)
             return XR_XIR_BAD_STRUCTURE;
     }
     return XR_XIR_OK;
@@ -360,11 +376,14 @@ static XrXirStatus effect_invocation_seal(const XrXirCompileContext *work,
     EffectInvocationLocalInput *local_inputs=NULL;
     if (status==XR_XIR_OK) status=effect_invocation_local_inputs(work,owner->final.material,&local_inputs);
     if (status==XR_XIR_OK && local_inputs) {
-        if (!owner->consumers || owner->pending || owner->front || owner->back ||
+        if (!owner->consumers || !owner->states || owner->pending || owner->front || owner->back ||
             owner->producer_enabled || owner->class_enabled || owner->edge_index || owner->edge_index_capacity)
             status=XR_XIR_BAD_STRUCTURE;
-        for (uint32_t f=0;status==XR_XIR_OK && f<owner->final.count;++f)
-            if (owner->consumers[f]!=UINT32_MAX) status=XR_XIR_BAD_STRUCTURE;
+        for (uint32_t f=0;status==XR_XIR_OK && f<owner->final.count;++f) {
+            if (!xir_compile_work(work,3)) status=XR_XIR_BUDGET;
+            else if (owner->consumers[f]!=UINT32_MAX || !owner->states[f].expanded || owner->states[f].queued)
+                status=XR_XIR_BAD_STRUCTURE;
+        }
         if (status==XR_XIR_OK) status=effect_invocation_local_equations_match(work,&owner->final,local_inputs);
         if (status==XR_XIR_OK) status=effect_invocation_local_result_match(work,&owner->final,local_inputs,result);
     } else if (status==XR_XIR_OK) {

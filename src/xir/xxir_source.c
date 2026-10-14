@@ -46,6 +46,7 @@
 #include "xxir_construction.h"
 
 typedef struct SourceMemory { struct SourceMemory *next; struct SourceMemory **previous; } SourceMemory;
+typedef struct SourceOwnedTextEntry { const char *text; uint64_t hash; } SourceOwnedTextEntry;
 typedef struct SourceManifest {
     struct SourceManifest *next;
     XrModuleIdentityAuthority authority;
@@ -205,6 +206,8 @@ typedef struct SourceContext {
     XrXirSourceDiagnostic diagnostic;
     SourceMemory *memory;
     SourceMemory *retired_vectors;
+    SourceOwnedTextEntry *owned_texts;
+    uint32_t owned_text_count, owned_text_capacity;
     XrXirConstruction *construction;
     SourceLibraryUnit *library_units;
     SourceRootQuery *root_queries;

@@ -9,12 +9,7 @@
  * KEY CONCEPT:
  *   Generated declaration identities grant authority only after lexical lookup.
  */
-static const char *source_owned_text(SourceContext *ctx, const char *text) {
-    size_t length;
-    if (!source_text_length(ctx,NULL,text,&length)) return NULL;
-    char *copy = source_alloc(ctx, length + 1, 1);
-    return copy && source_copy_bytes(ctx,NULL,copy,text,length+1) ? copy : NULL;
-}
+#include "xxir_source_text_storage.inc.c"
 static bool source_query_target_selected_reference(SourceContext *ctx, XrXirSourceRange range, XrXirSourceRange selection,
     uint32_t declaration, XrXirSourceAccess access) {
     XrXirSourceReference *records = source_query_append(ctx, ctx->query.references,

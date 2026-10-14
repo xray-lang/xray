@@ -48,6 +48,14 @@ static const char source_comptime_string_text[]=
 static const char source_comptime_string_read_text[]=
     "fn answer()->i64 { const t=\"abcabc\"; return t.contains(\"bc\") && t.startsWith(\"ab\") && t.endsWith(\"bc\") && \"a\"<\"b\" && t.indexOf(\"bc\",2)==4 && t.lastIndexOf(\"ab\")==3 ? 42 : 0 }\n"
     "export fn run()->i64 { return comptime answer() }\n";
+static const char source_comptime_tuple_text[]=
+    "fn make()->(i8,string,()) { var p:(i8,string,())=(1,\"a\",()); p=(7,\"ab\",()); return p }\n"
+    "fn answer()->i64 { const t=make(); return t.0==7 && t.1==\"ab\" ? 42 : 0 }\n"
+    "export fn run()->i64 { comptime ((),()); comptime make(); return comptime answer() }\n";
+static const char source_comptime_float_text[]=
+    "fn compute(x:f32)->f32 { return x/2.0 }\n"
+    "fn answer()->i64 { var x:f32=compute(3.5); return x==1.75 && (0.0/0.0)!=(0.0/0.0) ? 42 : 0 }\n"
+    "export fn run()->i64 { comptime compute(3.5); return comptime answer() }\n";
 static const char *source_comptime_resource_text=source_comptime_test_text;
 static XrXirStatus source_comptime_test_resource_status(XrCompileResourceStatus status) {
     return status==XR_COMPILE_RESOURCE_OK?XR_XIR_OK:status==XR_COMPILE_RESOURCE_BUDGET?XR_XIR_BUDGET:
@@ -102,7 +110,7 @@ static void source_comptime_test_fold(const XrXirModule *module,int64_t expected
 #include "xir_source_comptime_cases.h"
 #include "xir_source_comptime_resources.h"
 int main(int argc,char **argv) {
-    if (argc==2 && (!strcmp(argv[1],"--resources") || !strcmp(argv[1],"--local-resources") || !strcmp(argv[1],"--unit-resources") || !strcmp(argv[1],"--rune-resources") || !strcmp(argv[1],"--cell-resources") || !strcmp(argv[1],"--string-resources") || !strcmp(argv[1],"--string-read-resources"))) {
+    if (argc==2 && (!strcmp(argv[1],"--resources") || !strcmp(argv[1],"--local-resources") || !strcmp(argv[1],"--unit-resources") || !strcmp(argv[1],"--rune-resources") || !strcmp(argv[1],"--cell-resources") || !strcmp(argv[1],"--string-resources") || !strcmp(argv[1],"--string-read-resources") || !strcmp(argv[1],"--tuple-resources") || !strcmp(argv[1],"--float-resources"))) {
         if (!strcmp(argv[1],"--local-resources")) {
             source_comptime_resource_text=source_comptime_local_text;
             fprintf(stderr,"Source comptime scalar locals whole-producer resources\n");
@@ -126,6 +134,14 @@ int main(int argc,char **argv) {
         if (!strcmp(argv[1],"--string-read-resources")) {
             source_comptime_resource_text=source_comptime_string_read_text;
             fprintf(stderr,"Source comptime String comparison/search whole-producer resources\n");
+        }
+        if (!strcmp(argv[1],"--tuple-resources")) {
+            source_comptime_resource_text=source_comptime_tuple_text;
+            fprintf(stderr,"Source comptime Tuple/Unit/nested field/Cell independent recipe whole-producer resources\n");
+        }
+        if (!strcmp(argv[1],"--float-resources")) {
+            source_comptime_resource_text=source_comptime_float_text;
+            fprintf(stderr,"Source comptime binary Float/Cell/NaN/independent CONST_FLOAT whole-producer resources\n");
         }
         source_comptime_test_resources();return 0;
     }
