@@ -4565,3 +4565,4 @@ include("${CMAKE_CURRENT_LIST_DIR}/xir/cfg_storage.cmake")
 include("${CMAKE_CURRENT_LIST_DIR}/xir/instance_domain_fuel.cmake")
 
 include(${CMAKE_CURRENT_LIST_DIR}/xir/p09_string_place.cmake)
+include(${CMAKE_CURRENT_LIST_DIR}/xir/p09_graph_quiescence.cmake)
