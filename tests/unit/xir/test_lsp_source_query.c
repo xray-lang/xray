@@ -224,6 +224,7 @@ static void lsp_rejections(const char *root) {
 #include "lsp_source_semantic_cases.h"
 #include "lsp_source_roles_cases.h"
 int main(void) {
+    CHECK(setvbuf(stdout,NULL,_IONBF,0)==0);
     char directory[XR_TEST_PATH_MAX]="lsp-source-query-XXXXXX",root[XR_TEST_PATH_MAX];
     CHECK(xr_test_mkdtemp(directory) && xr_test_realpath_buf(directory,root,sizeof(root)));
     lsp_comptime_cases(root); lsp_versions(root); lsp_rejections(root); lsp_failure_matrix(root); lsp_json_cases(root); lsp_navigation_many_cases(root); lsp_navigation_three_cases(root); lsp_syntax_cases(root); lsp_buffer_cases(); lsp_hover_cases(root); lsp_outline_cases(root); lsp_semantic_cases(root); lsp_roles_cases(root); CHECK(xr_test_rmdir(directory) == 0);
