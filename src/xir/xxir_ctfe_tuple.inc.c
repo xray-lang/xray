@@ -39,7 +39,9 @@ static XrXirCtfeStatus ctfe_tuple_flow_work(ScalarRun *run,const XrXirInstructio
     if (op->op!=XR_XIR_JUMP && op->op!=XR_XIR_BRANCH) return XR_XIR_CTFE_OK;
     uint32_t edge=op->op==XR_XIR_BRANCH && !xr_xir_scalar_load(run->frame,run->layout->offsets[op->args[0]])?1u:0u;
     uint32_t first=run->function->blocks[op->targets[edge]].first;
-    for (uint32_t i=first;i<run->function->instruction_count && run->function->instructions[i].op==XR_XIR_PHI;++i) {
+    for (uint32_t i=first;i<run->function->instruction_count;++i) {
+        if (!scalar_compile_work(run,1)) return XR_XIR_CTFE_BUDGET;
+        if (run->function->instructions[i].op!=XR_XIR_PHI) break;
         XrXirCtfeStatus status=ctfe_validation_work(run,state,run->function->instructions[i].type);
         if (status!=XR_XIR_CTFE_OK) return status;
     }
