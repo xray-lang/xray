@@ -11760,6 +11760,400 @@
         "Whole real CLI discovery and independent VM/generated-C/native values.",
         "Parallel atomicity/memory ordering, compiler/native/runtime full FI, exact resources, lifetime/borrow/cancel/physical and sanitizer/provider gates remain separate."
       ]
+    },
+    {
+      "id": "regression_core_review_0110_float_basic_complete_observed",
+      "oracle_id": "regression_core_review_0110_float_basic",
+      "source": "tests/unit/xir/legacy_consumers/fixtures/independent_named_observations/0110_float_basic/root.xr",
+      "source_lf_sha256": "77539a3c4ae2b2e08cde5ed7ef051aaabff81809a19d984856a93103817c5e4e",
+      "entry": "test",
+      "stdout_utf8": "1.0\n3.14\n2.5\n0.0\n0.0\n-1.5\n-3.14\n-0.001\n1000.0\n150.0\n0.25\n1000000.0\n0.001\n0.05\n1000.5\n3.14159\n0.1\n0.01\n0.001\n0.5\n0.123\n0.30000000000000004\n0.29\n0.31\n",
+      "stderr_utf8": "",
+      "companions": [],
+      "owners": [
+        "P09",
+        "P10"
+      ],
+      "independent_observations": {
+        "original_case": "tests/regression/01_literals/0110_float_basic.xr",
+        "selected_complete_source": "tests/unit/xir/legacy_consumers/fixtures/early_core_ports/0110_float_basic/root.xr",
+        "selected_source_lf_sha256": "5c8beb4d38aa3f9daa01ae34172aa1153ab43e81ac9bb88338dd2fdc83a67fb7",
+        "method": "Original full bodies and all original assertions remain. Pure scalar expressions are printed after the assertions; actual sum, complement and shift values replace positive-only evidence. Float source uses the already reviewed complete target port, with separator lexical duty still OPEN.",
+        "values": [
+          {
+            "test": "test_simple_floats",
+            "expression": "1.0",
+            "expected": 1.0,
+            "projection": null
+          },
+          {
+            "test": "test_simple_floats",
+            "expression": "3.14",
+            "expected": 3.14,
+            "projection": null
+          },
+          {
+            "test": "test_simple_floats",
+            "expression": "2.5",
+            "expected": 2.5,
+            "projection": null
+          },
+          {
+            "test": "test_zero_float",
+            "expression": "0.0",
+            "expected": 0.0,
+            "projection": null
+          },
+          {
+            "test": "test_zero_float",
+            "expression": "x",
+            "expected": 0.0,
+            "projection": null
+          },
+          {
+            "test": "test_negative_floats",
+            "expression": "-1.5",
+            "expected": -1.5,
+            "projection": null
+          },
+          {
+            "test": "test_negative_floats",
+            "expression": "-3.14",
+            "expected": -3.14,
+            "projection": null
+          },
+          {
+            "test": "test_negative_floats",
+            "expression": "-0.001",
+            "expected": -0.001,
+            "projection": null
+          },
+          {
+            "test": "test_scientific_notation",
+            "expression": "1e3",
+            "expected": 1000.0,
+            "projection": null
+          },
+          {
+            "test": "test_scientific_notation",
+            "expression": "1.5e2",
+            "expected": 150.0,
+            "projection": null
+          },
+          {
+            "test": "test_scientific_notation",
+            "expression": "2.5e-1",
+            "expected": 0.25,
+            "projection": null
+          },
+          {
+            "test": "test_scientific_notation",
+            "expression": "1e+06",
+            "expected": 1000000.0,
+            "projection": null
+          },
+          {
+            "test": "test_scientific_negative_exponent",
+            "expression": "1e-3",
+            "expected": 0.001,
+            "projection": null
+          },
+          {
+            "test": "test_scientific_negative_exponent",
+            "expression": "5e-2",
+            "expected": 0.05,
+            "projection": null
+          },
+          {
+            "test": "test_float_decimal_values",
+            "expression": "1000.5",
+            "expected": 1000.5,
+            "projection": null
+          },
+          {
+            "test": "test_float_decimal_values",
+            "expression": "3.14159",
+            "expected": 3.14159,
+            "projection": null
+          },
+          {
+            "test": "test_small_decimals",
+            "expression": "0.1",
+            "expected": 0.1,
+            "projection": null
+          },
+          {
+            "test": "test_small_decimals",
+            "expression": "0.01",
+            "expected": 0.01,
+            "projection": null
+          },
+          {
+            "test": "test_small_decimals",
+            "expression": "0.001",
+            "expected": 0.001,
+            "projection": null
+          },
+          {
+            "test": "test_leading_zero",
+            "expression": "0.5",
+            "expected": 0.5,
+            "projection": null
+          },
+          {
+            "test": "test_leading_zero",
+            "expression": "0.123",
+            "expected": 0.123,
+            "projection": null
+          },
+          {
+            "test": "test_float_comparison",
+            "expression": "sum",
+            "expected": 0.30000000000000004,
+            "projection": null
+          },
+          {
+            "test": "test_float_comparison",
+            "expression": "0.29",
+            "expected": 0.29,
+            "projection": null
+          },
+          {
+            "test": "test_float_comparison",
+            "expression": "0.31",
+            "expected": 0.31,
+            "projection": null
+          }
+        ]
+      },
+      "remaining_gates": [
+        "Complete real discovery and independent VM/C/native numeric observations.",
+        "Original float-separator lexical gap, exact runtime/compiler/native FI, resources, lifetime/cancel/physical and safety/provider gates remain open."
+      ]
+    },
+    {
+      "id": "regression_core_review_0330_bitwise_complete_observed",
+      "oracle_id": "regression_core_review_0330_bitwise",
+      "source": "tests/unit/xir/legacy_consumers/fixtures/independent_named_observations/0330_bitwise/root.xr",
+      "source_lf_sha256": "845b161e7f7e087946910f1ae6d23849aae5a2cbfd5d4febdb979b035233b866",
+      "entry": "test",
+      "stdout_utf8": "8\n15\n8\n0\n0\n255\n14\n255\n14\n255\n255\n255\n6\n240\n6\n255\n255\n0\n3\n5\n-1\n0\n-256\ntrue\n8\n4\ntrue\nfalse\n4\n11\n8\n10\n1048576\n",
+      "stderr_utf8": "",
+      "companions": [],
+      "owners": [
+        "P09",
+        "P10"
+      ],
+      "independent_observations": {
+        "original_case": "tests/regression/03_operators/0330_bitwise.xr",
+        "selected_complete_source": "tests/regression/03_operators/0330_bitwise.xr",
+        "selected_source_lf_sha256": "da44d6ca2b7171a77bb1ce1fadc8499a6dee0bcdc07dfc57838808232ef8c93a",
+        "method": "Original full bodies and all original assertions remain. Pure scalar expressions are printed after the assertions; actual sum, complement and shift values replace positive-only evidence. Float source uses the already reviewed complete target port, with separator lexical duty still OPEN.",
+        "values": [
+          {
+            "test": "test_and_basic",
+            "expression": "0b1100 & 0b1010",
+            "expected": 8,
+            "projection": null
+          },
+          {
+            "test": "test_and_basic",
+            "expression": "0xFF & 0x0F",
+            "expected": 15,
+            "projection": null
+          },
+          {
+            "test": "test_and_basic",
+            "expression": "12 & 10",
+            "expected": 8,
+            "projection": null
+          },
+          {
+            "test": "test_and_zero",
+            "expression": "0xFF & 0",
+            "expected": 0,
+            "projection": null
+          },
+          {
+            "test": "test_and_zero",
+            "expression": "0 & 0xFF",
+            "expected": 0,
+            "projection": null
+          },
+          {
+            "test": "test_and_all_ones",
+            "expression": "0xFF & 0xFF",
+            "expected": 255,
+            "projection": null
+          },
+          {
+            "test": "test_or_basic",
+            "expression": "0b1100 | 0b1010",
+            "expected": 14,
+            "projection": null
+          },
+          {
+            "test": "test_or_basic",
+            "expression": "0xF0 | 0x0F",
+            "expected": 255,
+            "projection": null
+          },
+          {
+            "test": "test_or_basic",
+            "expression": "12 | 10",
+            "expected": 14,
+            "projection": null
+          },
+          {
+            "test": "test_or_zero",
+            "expression": "0xFF | 0",
+            "expected": 255,
+            "projection": null
+          },
+          {
+            "test": "test_or_zero",
+            "expression": "0 | 0xFF",
+            "expected": 255,
+            "projection": null
+          },
+          {
+            "test": "test_or_same",
+            "expression": "0xFF | 0xFF",
+            "expected": 255,
+            "projection": null
+          },
+          {
+            "test": "test_xor_basic",
+            "expression": "0b1100 ^ 0b1010",
+            "expected": 6,
+            "projection": null
+          },
+          {
+            "test": "test_xor_basic",
+            "expression": "0xFF ^ 0x0F",
+            "expected": 240,
+            "projection": null
+          },
+          {
+            "test": "test_xor_basic",
+            "expression": "12 ^ 10",
+            "expected": 6,
+            "projection": null
+          },
+          {
+            "test": "test_xor_zero",
+            "expression": "0xFF ^ 0",
+            "expected": 255,
+            "projection": null
+          },
+          {
+            "test": "test_xor_zero",
+            "expression": "0 ^ 0xFF",
+            "expected": 255,
+            "projection": null
+          },
+          {
+            "test": "test_xor_same",
+            "expression": "0xFF ^ 0xFF",
+            "expected": 0,
+            "projection": null
+          },
+          {
+            "test": "test_xor_swap",
+            "expression": "a",
+            "expected": 3,
+            "projection": null
+          },
+          {
+            "test": "test_xor_swap",
+            "expression": "b",
+            "expected": 5,
+            "projection": null
+          },
+          {
+            "test": "test_not_basic",
+            "expression": "~0",
+            "expected": -1,
+            "projection": null
+          },
+          {
+            "test": "test_not_basic",
+            "expression": "~(-1)",
+            "expected": 0,
+            "projection": null
+          },
+          {
+            "test": "test_not_byte",
+            "expression": "x",
+            "expected": -256,
+            "projection": null
+          },
+          {
+            "test": "test_not_byte",
+            "expression": "x < 0",
+            "expected": true,
+            "projection": null
+          },
+          {
+            "test": "test_shl_basic",
+            "expression": "result",
+            "expected": 8,
+            "projection": null
+          },
+          {
+            "test": "test_shr_basic",
+            "expression": "result",
+            "expected": 4,
+            "projection": null
+          },
+          {
+            "test": "test_check_bit",
+            "expression": "(flags & 0b0010) != 0",
+            "expected": true,
+            "projection": null
+          },
+          {
+            "test": "test_check_bit",
+            "expression": "(flags & 0b0001) != 0",
+            "expected": false,
+            "projection": null
+          },
+          {
+            "test": "test_set_bit",
+            "expression": "flags",
+            "expected": 4,
+            "projection": null
+          },
+          {
+            "test": "test_clear_bit",
+            "expression": "flags",
+            "expected": 11,
+            "projection": null
+          },
+          {
+            "test": "test_toggle_bit",
+            "expression": "flags",
+            "expected": 8,
+            "projection": null
+          },
+          {
+            "test": "test_toggle_bit",
+            "expression": "flags",
+            "expected": 10,
+            "projection": null
+          },
+          {
+            "test": "test_shift_large",
+            "expression": "result",
+            "expected": 1048576,
+            "projection": null
+          }
+        ]
+      },
+      "remaining_gates": [
+        "Complete real discovery and independent VM/C/native numeric observations.",
+        "Original float-separator lexical gap, exact runtime/compiler/native FI, resources, lifetime/cancel/physical and safety/provider gates remain open."
+      ]
     }
   ]
 }
