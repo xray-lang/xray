@@ -74,44 +74,36 @@ static XrXirStatus allocation_transition_verify(const XrXirCompileContext *conte
 #undef xr_xir_compile_verify_effects_v2
 #undef xr_xir_compile_effects_refine_verified
 typedef struct AllocationEffectWork {
-    const char *function;
     uint64_t work, calls, rejected;
 } AllocationEffectWork;
-static AllocationEffectWork allocation_effect_work_items[96];
-static size_t allocation_effect_work_count;
+static AllocationEffectWork allocation_effect_work_totals;
 static bool allocation_effect_work(const XrXirCompileContext *context,
                                    uint64_t fee, const char *function) {
     bool accepted = xir_compile_work(context, fee);
     if (!allocation_transition_observed) return accepted;
-    size_t index = 0;
-    while (index < allocation_effect_work_count &&
-           strcmp(allocation_effect_work_items[index].function, function)) ++index;
-    CHECK(index < sizeof(allocation_effect_work_items) / sizeof(allocation_effect_work_items[0]));
-    if (index == allocation_effect_work_count) {
-        allocation_effect_work_items[index].function = function;
-        ++allocation_effect_work_count;
-    }
-    AllocationEffectWork *item = &allocation_effect_work_items[index];
-    ++item->calls;
+    AllocationEffectWork *totals = &allocation_effect_work_totals;
+    CHECK(totals->calls != UINT64_MAX);
+    ++totals->calls;
     if (accepted) {
-        CHECK(fee <= UINT64_MAX - item->work);
-        item->work += fee;
+        CHECK(fee <= UINT64_MAX - totals->work);
+        totals->work += fee;
     } else {
-        CHECK(fee <= UINT64_MAX - item->rejected);
-        item->rejected += fee;
+        CHECK(fee <= UINT64_MAX - totals->rejected);
+        totals->rejected += fee;
+        fprintf(stderr, "Source effects rejected function=%s fee=%llu\n",
+            function, (unsigned long long)fee);
     }
     return accepted;
 }
 static void allocation_effect_work_report(void) {
-    for (size_t i = 0; i < allocation_effect_work_count; ++i) {
-        const AllocationEffectWork *item = &allocation_effect_work_items[i];
-        fprintf(stderr, "Source effects work function=%s calls=%llu admitted=%llu rejected=%llu\n",
-            item->function, (unsigned long long)item->calls,
-            (unsigned long long)item->work, (unsigned long long)item->rejected);
-    }
+    const AllocationEffectWork *totals = &allocation_effect_work_totals;
+    fprintf(stderr, "Source effects work calls=%llu admitted=%llu rejected=%llu\n",
+        (unsigned long long)totals->calls, (unsigned long long)totals->work,
+        (unsigned long long)totals->rejected);
 }
 /* Compile the canonical effects implementation and forward every real debit.
- * The bounded observations allocate no ledger bytes and alter no work charge. */
+ * Aggregate observations allocate no bytes, alter no charge, and impose no
+ * separate limit on the number of compiler functions taking part. */
 #define xir_compile_work(context, fee) allocation_effect_work((context), (fee), __func__)
 #include "xir/xxir_effects.c"
 #undef xir_compile_work
@@ -144,8 +136,7 @@ static XrXirStatus allocation_refinement_check(const XrXirCompileContext *contex
     bool prior = allocation_transition_observed;
     allocation_transition_observed = built->function_count > 300 && source_fixture_compile_fail_at == SIZE_MAX;
     if (allocation_transition_observed) {
-        memset(allocation_effect_work_items, 0, sizeof(allocation_effect_work_items));
-        allocation_effect_work_count = 0;
+        allocation_effect_work_totals = (AllocationEffectWork){0};
     }
     XrXirStatus status = xr_xir_compile_check_refined_v2(context, built, construction, &observed, output, diagnostic);
     if (allocation_transition_observed) allocation_effect_work_report();
