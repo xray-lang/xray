@@ -1,0 +1,3 @@
+fn pure<T>(value:T)->i64{return 7}
+fn worker()->i64{return pure(7)}
+export fn run()->i64{return await go worker()}
