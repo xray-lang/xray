@@ -41,7 +41,7 @@ def main() -> int:
     model_paths = [HERE/name for name in ('independent_scalar_models.py', 'independent_scalar_bindings.json',
                                          'independent_behavior_models.py', 'independent_behavior_bindings.json',
                                          'independent_observation_format.py', 'extended_named_models.py',
-                                         'extended_named_bindings.json')]
+                                         'extended_named_bindings.json', 'structured_named_models.json')]
     model_digests = {path.name:sha(path.read_bytes()) for path in model_paths}
     oracles = {row['id']:row for row in json.loads(oracle_bytes)['cases']}
     for row in (independent_scalar_models.expected_rows() + independent_behavior_models.expected_rows()
@@ -72,6 +72,7 @@ def main() -> int:
             'independent_observation_format_sha256':model_digests['independent_observation_format.py'],
             'extended_named_model_sha256':model_digests['extended_named_models.py'],
             'extended_named_bindings_sha256':model_digests['extended_named_bindings.json'],
+            'structured_named_models_sha256':model_digests['structured_named_models.json'],
             'evidence_directory':str(output),
             'cases':results, 'commands':records,
             'full_fi_lifetime_physical_sanitizer':'NOT_RUN', 'production_release':False,

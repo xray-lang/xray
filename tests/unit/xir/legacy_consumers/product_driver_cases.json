@@ -12154,6 +12154,792 @@
         "Complete real discovery and independent VM/C/native numeric observations.",
         "Original float-separator lexical gap, exact runtime/compiler/native FI, resources, lifetime/cancel/physical and safety/provider gates remain open."
       ]
+    },
+    {
+      "id": "struct_original_0895_struct_basic_observed",
+      "oracle_id": "struct_original_0895_struct_basic_observed",
+      "source": "tests/unit/xir/legacy_consumers/fixtures/independent_named_observations/0895_struct_basic/root.xr",
+      "source_lf_sha256": "a98aa1e792acf462a92472faa223654d8c82906ddb683b7b90aeda9af500f393",
+      "entry": "test",
+      "stdout_utf8": "3.0\n4.0\n25.0\n4.0\n6.0\n255\n0\n255\n5000.0\n3.14159\n3.14159\nPoint\n5\n0.0\n4.0\n8.0\n",
+      "stderr_utf8": "",
+      "companions": [],
+      "owners": [
+        "P07",
+        "P09",
+        "P10",
+        "P14"
+      ],
+      "independent_observations": {
+        "original_case": "tests/regression/08_oop/0895_struct_basic.xr",
+        "selected_complete_source": "tests/regression/08_oop/0895_struct_basic.xr",
+        "selected_source_lf_sha256": "a4a642eceac1abb741b6d530d68e43eab40f8224f82eaa648ca2a8dacb2b1b68",
+        "method": "Every original struct declaration, field, method, copy chain and five-point loop remains. Actual scalar expressions are captured once at each original assertion boundary, then compared with independent literal/mathematical expectations and printed.",
+        "values": [
+          {
+            "test": "test_struct_basic",
+            "expression": "p.x",
+            "expected": 3.0,
+            "projection": null
+          },
+          {
+            "test": "test_struct_basic",
+            "expression": "p.y",
+            "expected": 4.0,
+            "projection": null
+          },
+          {
+            "test": "test_struct_basic",
+            "expression": "a.magnitude_sq()",
+            "expected": 25.0,
+            "projection": null
+          },
+          {
+            "test": "test_struct_basic",
+            "expression": "c.x",
+            "expected": 4.0,
+            "projection": null
+          },
+          {
+            "test": "test_struct_basic",
+            "expression": "c.y",
+            "expected": 6.0,
+            "projection": null
+          },
+          {
+            "test": "test_struct_basic",
+            "expression": "red.r",
+            "expected": 255,
+            "projection": null
+          },
+          {
+            "test": "test_struct_basic",
+            "expression": "red.g",
+            "expected": 0,
+            "projection": null
+          },
+          {
+            "test": "test_struct_basic",
+            "expression": "red.a",
+            "expected": 255,
+            "projection": null
+          },
+          {
+            "test": "test_struct_basic",
+            "expression": "r.area()",
+            "expected": 5000.0,
+            "projection": null
+          },
+          {
+            "test": "test_struct_basic",
+            "expression": "MathHelper.pi()",
+            "expected": 3.14159,
+            "projection": null
+          },
+          {
+            "test": "test_struct_basic",
+            "expression": "MathHelper.pi()",
+            "expected": 3.14159,
+            "projection": null
+          },
+          {
+            "test": "test_struct_basic",
+            "expression": "typeName(p2)",
+            "expected": "Point",
+            "projection": null
+          },
+          {
+            "test": "test_struct_basic",
+            "expression": "len(points)",
+            "expected": 5,
+            "projection": null
+          },
+          {
+            "test": "test_struct_basic",
+            "expression": "points[0].x",
+            "expected": 0.0,
+            "projection": null
+          },
+          {
+            "test": "test_struct_basic",
+            "expression": "points[4].x",
+            "expected": 4.0,
+            "projection": null
+          },
+          {
+            "test": "test_struct_basic",
+            "expression": "points[4].y",
+            "expected": 8.0,
+            "projection": null
+          }
+        ]
+      },
+      "remaining_gates": [
+        "Actual complete body discovery and independent VM/generated-C/native scalar results.",
+        "Original physical struct/Array ownership, compiler/native/runtime FI, exact budgets/cancel/lifetime and sanitizer/provider qualification remain open."
+      ]
+    },
+    {
+      "id": "struct_original_0896_struct_literal_observed",
+      "oracle_id": "struct_original_0896_struct_literal_observed",
+      "source": "tests/unit/xir/legacy_consumers/fixtures/independent_named_observations/0896_struct_literal/root.xr",
+      "source_lf_sha256": "315b4edb7688b1f4a2b8d98dd5e4739b6ae6be433cb0657472e3e0e078216459",
+      "entry": "test",
+      "stdout_utf8": "3.0\n4.0\n11.0\n20.0\n25.0\n1.0\n4.0\n25.0\n5.0\n6.0\n5000.0\n0.0\n100.0\n255\n0\nPoint\nVec2\nRect\n",
+      "stderr_utf8": "",
+      "companions": [],
+      "owners": [
+        "P07",
+        "P09",
+        "P10",
+        "P14"
+      ],
+      "independent_observations": {
+        "original_case": "tests/regression/08_oop/0896_struct_literal.xr",
+        "selected_complete_source": "tests/regression/08_oop/0896_struct_literal.xr",
+        "selected_source_lf_sha256": "25e408738db57ef123c72fd45e9ffaf2133ffc69749e73644e3015f320801159",
+        "method": "Every original struct declaration, field, method, copy chain and five-point loop remains. Actual scalar expressions are captured once at each original assertion boundary, then compared with independent literal/mathematical expectations and printed.",
+        "values": [
+          {
+            "test": "test_struct_literal",
+            "expression": "p.x",
+            "expected": 3.0,
+            "projection": null
+          },
+          {
+            "test": "test_struct_literal",
+            "expression": "p.y",
+            "expected": 4.0,
+            "projection": null
+          },
+          {
+            "test": "test_struct_literal",
+            "expression": "p2.x",
+            "expected": 11.0,
+            "projection": null
+          },
+          {
+            "test": "test_struct_literal",
+            "expression": "p2.y",
+            "expected": 20.0,
+            "projection": null
+          },
+          {
+            "test": "test_struct_literal",
+            "expression": "distance(Point{x: 3.0, y: 4.0})",
+            "expected": 25.0,
+            "projection": null
+          },
+          {
+            "test": "test_struct_literal",
+            "expression": "points[0].x",
+            "expected": 1.0,
+            "projection": null
+          },
+          {
+            "test": "test_struct_literal",
+            "expression": "points[1].y",
+            "expected": 4.0,
+            "projection": null
+          },
+          {
+            "test": "test_struct_literal",
+            "expression": "v.mag_sq()",
+            "expected": 25.0,
+            "projection": null
+          },
+          {
+            "test": "test_struct_literal",
+            "expression": "p3.x",
+            "expected": 5.0,
+            "projection": null
+          },
+          {
+            "test": "test_struct_literal",
+            "expression": "p3.y",
+            "expected": 6.0,
+            "projection": null
+          },
+          {
+            "test": "test_struct_literal",
+            "expression": "r.area()",
+            "expected": 5000.0,
+            "projection": null
+          },
+          {
+            "test": "test_struct_literal",
+            "expression": "r.x",
+            "expected": 0.0,
+            "projection": null
+          },
+          {
+            "test": "test_struct_literal",
+            "expression": "r.w",
+            "expected": 100.0,
+            "projection": null
+          },
+          {
+            "test": "test_struct_literal",
+            "expression": "red.r",
+            "expected": 255,
+            "projection": null
+          },
+          {
+            "test": "test_struct_literal",
+            "expression": "red.g",
+            "expected": 0,
+            "projection": null
+          },
+          {
+            "test": "test_struct_literal",
+            "expression": "typeName(p)",
+            "expected": "Point",
+            "projection": null
+          },
+          {
+            "test": "test_struct_literal",
+            "expression": "typeName(v)",
+            "expected": "Vec2",
+            "projection": null
+          },
+          {
+            "test": "test_struct_literal",
+            "expression": "typeName(r)",
+            "expected": "Rect",
+            "projection": null
+          }
+        ]
+      },
+      "remaining_gates": [
+        "Actual complete body discovery and independent VM/generated-C/native scalar results.",
+        "Original physical struct/Array ownership, compiler/native/runtime FI, exact budgets/cancel/lifetime and sanitizer/provider qualification remain open."
+      ]
+    },
+    {
+      "id": "struct_original_0897_struct_value_semantics_observed",
+      "oracle_id": "struct_original_0897_struct_value_semantics_observed",
+      "source": "tests/unit/xir/legacy_consumers/fixtures/independent_named_observations/0897_struct_value_semantics/root.xr",
+      "source_lf_sha256": "0380e9e8133eb2dbea1daed408f92e75b271a90ff33a60ae6f944b6821535dd1",
+      "entry": "test",
+      "stdout_utf8": "1.0\n2.0\n99.0\n2.0\n10.0\n999.0\n5.0\n6.0\n42.0\n1.0\n2.0\n3.0\n255\n0\n0\n255\n128\n0\n25.0\n16.0\nPoint\nPoint\nVec2\nVec2\n",
+      "stderr_utf8": "",
+      "companions": [],
+      "owners": [
+        "P07",
+        "P09",
+        "P10",
+        "P14"
+      ],
+      "independent_observations": {
+        "original_case": "tests/regression/08_oop/0897_struct_value_semantics.xr",
+        "selected_complete_source": "tests/regression/08_oop/0897_struct_value_semantics.xr",
+        "selected_source_lf_sha256": "55bdd66352d67fc354fdece4f86586fe7b1ac6fc4604347d85aae118600a3b1c",
+        "method": "Every original struct declaration, field, method, copy chain and five-point loop remains. Actual scalar expressions are captured once at each original assertion boundary, then compared with independent literal/mathematical expectations and printed.",
+        "values": [
+          {
+            "test": "test_struct_value_semantics",
+            "expression": "a.x",
+            "expected": 1.0,
+            "projection": null
+          },
+          {
+            "test": "test_struct_value_semantics",
+            "expression": "a.y",
+            "expected": 2.0,
+            "projection": null
+          },
+          {
+            "test": "test_struct_value_semantics",
+            "expression": "b.x",
+            "expected": 99.0,
+            "projection": null
+          },
+          {
+            "test": "test_struct_value_semantics",
+            "expression": "b.y",
+            "expected": 2.0,
+            "projection": null
+          },
+          {
+            "test": "test_struct_value_semantics",
+            "expression": "c.x",
+            "expected": 10.0,
+            "projection": null
+          },
+          {
+            "test": "test_struct_value_semantics",
+            "expression": "d.x",
+            "expected": 999.0,
+            "projection": null
+          },
+          {
+            "test": "test_struct_value_semantics",
+            "expression": "e.x",
+            "expected": 5.0,
+            "projection": null
+          },
+          {
+            "test": "test_struct_value_semantics",
+            "expression": "e.y",
+            "expected": 6.0,
+            "projection": null
+          },
+          {
+            "test": "test_struct_value_semantics",
+            "expression": "src.x",
+            "expected": 42.0,
+            "projection": null
+          },
+          {
+            "test": "test_struct_value_semantics",
+            "expression": "c1.x",
+            "expected": 1.0,
+            "projection": null
+          },
+          {
+            "test": "test_struct_value_semantics",
+            "expression": "c2.x",
+            "expected": 2.0,
+            "projection": null
+          },
+          {
+            "test": "test_struct_value_semantics",
+            "expression": "c3.x",
+            "expected": 3.0,
+            "projection": null
+          },
+          {
+            "test": "test_struct_value_semantics",
+            "expression": "red.r",
+            "expected": 255,
+            "projection": null
+          },
+          {
+            "test": "test_struct_value_semantics",
+            "expression": "red.g",
+            "expected": 0,
+            "projection": null
+          },
+          {
+            "test": "test_struct_value_semantics",
+            "expression": "red.b",
+            "expected": 0,
+            "projection": null
+          },
+          {
+            "test": "test_struct_value_semantics",
+            "expression": "copy.r",
+            "expected": 255,
+            "projection": null
+          },
+          {
+            "test": "test_struct_value_semantics",
+            "expression": "copy.g",
+            "expected": 128,
+            "projection": null
+          },
+          {
+            "test": "test_struct_value_semantics",
+            "expression": "copy.b",
+            "expected": 0,
+            "projection": null
+          },
+          {
+            "test": "test_struct_value_semantics",
+            "expression": "v1.mag_sq()",
+            "expected": 25.0,
+            "projection": null
+          },
+          {
+            "test": "test_struct_value_semantics",
+            "expression": "v2.mag_sq()",
+            "expected": 16.0,
+            "projection": null
+          },
+          {
+            "test": "test_struct_value_semantics",
+            "expression": "typeName(a)",
+            "expected": "Point",
+            "projection": null
+          },
+          {
+            "test": "test_struct_value_semantics",
+            "expression": "typeName(b)",
+            "expected": "Point",
+            "projection": null
+          },
+          {
+            "test": "test_struct_value_semantics",
+            "expression": "typeName(v1)",
+            "expected": "Vec2",
+            "projection": null
+          },
+          {
+            "test": "test_struct_value_semantics",
+            "expression": "typeName(v2)",
+            "expected": "Vec2",
+            "projection": null
+          }
+        ]
+      },
+      "remaining_gates": [
+        "Actual complete body discovery and independent VM/generated-C/native scalar results.",
+        "Original physical struct/Array ownership, compiler/native/runtime FI, exact budgets/cancel/lifetime and sanitizer/provider qualification remain open."
+      ]
+    },
+    {
+      "id": "struct_original_0898_struct_comprehensive_observed",
+      "oracle_id": "struct_original_0898_struct_comprehensive_observed",
+      "source": "tests/unit/xir/legacy_consumers/fixtures/independent_named_observations/0898_struct_comprehensive/root.xr",
+      "source_lf_sha256": "5343bc974417bd8a850dcc77a876f32f1b4b7bffec6bdec06b10f82703a2a59c",
+      "entry": "test",
+      "stdout_utf8": "100.0\n200.0\n1.0\n4.0\n0.0\n5000.0\n5000.0\n10000.0\n255\n0\n255\n0\n0.0\n0.0\n0.0\n42.0\n10.0\n20.0\nPoint\nRect\nColor\n",
+      "stderr_utf8": "",
+      "companions": [],
+      "owners": [
+        "P07",
+        "P09",
+        "P10",
+        "P14"
+      ],
+      "independent_observations": {
+        "original_case": "tests/regression/08_oop/0898_struct_comprehensive.xr",
+        "selected_complete_source": "tests/regression/08_oop/0898_struct_comprehensive.xr",
+        "selected_source_lf_sha256": "96f50af5e0bd2b11914cc70dabf9025b3cd8c59d58b9eac59173946bf1da72a0",
+        "method": "Every original struct declaration, field, method, copy chain and five-point loop remains. Actual scalar expressions are captured once at each original assertion boundary, then compared with independent literal/mathematical expectations and printed.",
+        "values": [
+          {
+            "test": "test_struct_comprehensive",
+            "expression": "p1.x",
+            "expected": 100.0,
+            "projection": null
+          },
+          {
+            "test": "test_struct_comprehensive",
+            "expression": "p1.y",
+            "expected": 200.0,
+            "projection": null
+          },
+          {
+            "test": "test_struct_comprehensive",
+            "expression": "points[0].x",
+            "expected": 1.0,
+            "projection": null
+          },
+          {
+            "test": "test_struct_comprehensive",
+            "expression": "points[1].y",
+            "expected": 4.0,
+            "projection": null
+          },
+          {
+            "test": "test_struct_comprehensive",
+            "expression": "o2.x",
+            "expected": 0.0,
+            "projection": null
+          },
+          {
+            "test": "test_struct_comprehensive",
+            "expression": "r.area()",
+            "expected": 5000.0,
+            "projection": null
+          },
+          {
+            "test": "test_struct_comprehensive",
+            "expression": "r.area()",
+            "expected": 5000.0,
+            "projection": null
+          },
+          {
+            "test": "test_struct_comprehensive",
+            "expression": "r2.area()",
+            "expected": 10000.0,
+            "projection": null
+          },
+          {
+            "test": "test_struct_comprehensive",
+            "expression": "mix.r",
+            "expected": 255,
+            "projection": null
+          },
+          {
+            "test": "test_struct_comprehensive",
+            "expression": "mix.g",
+            "expected": 0,
+            "projection": null
+          },
+          {
+            "test": "test_struct_comprehensive",
+            "expression": "mix.b",
+            "expected": 255,
+            "projection": null
+          },
+          {
+            "test": "test_struct_comprehensive",
+            "expression": "red.b",
+            "expected": 0,
+            "projection": null
+          },
+          {
+            "test": "test_struct_comprehensive",
+            "expression": "base.x",
+            "expected": 0.0,
+            "projection": null
+          },
+          {
+            "test": "test_struct_comprehensive",
+            "expression": "a.x",
+            "expected": 0.0,
+            "projection": null
+          },
+          {
+            "test": "test_struct_comprehensive",
+            "expression": "b.x",
+            "expected": 0.0,
+            "projection": null
+          },
+          {
+            "test": "test_struct_comprehensive",
+            "expression": "c.x",
+            "expected": 42.0,
+            "projection": null
+          },
+          {
+            "test": "test_struct_comprehensive",
+            "expression": "p.x",
+            "expected": 10.0,
+            "projection": null
+          },
+          {
+            "test": "test_struct_comprehensive",
+            "expression": "p.y",
+            "expected": 20.0,
+            "projection": null
+          },
+          {
+            "test": "test_struct_comprehensive",
+            "expression": "typeName(p1)",
+            "expected": "Point",
+            "projection": null
+          },
+          {
+            "test": "test_struct_comprehensive",
+            "expression": "typeName(r)",
+            "expected": "Rect",
+            "projection": null
+          },
+          {
+            "test": "test_struct_comprehensive",
+            "expression": "typeName(red)",
+            "expected": "Color",
+            "projection": null
+          }
+        ]
+      },
+      "remaining_gates": [
+        "Actual complete body discovery and independent VM/generated-C/native scalar results.",
+        "Original physical struct/Array ownership, compiler/native/runtime FI, exact budgets/cancel/lifetime and sanitizer/provider qualification remain open."
+      ]
+    },
+    {
+      "id": "struct_original_0901_struct_nested_observed",
+      "oracle_id": "struct_original_0901_struct_nested_observed",
+      "source": "tests/unit/xir/legacy_consumers/fixtures/independent_named_observations/0901_struct_nested/root.xr",
+      "source_lf_sha256": "55a564da645b45996138ef1bee635346f8ea1038eb9e503b3f65db79d649ee9a",
+      "entry": "test",
+      "stdout_utf8": "0.0\n0.0\n100.0\n50.0\n5000.0\n0.0\n100.0\n10.0\n200.0\n5000.0\n10000.0\n",
+      "stderr_utf8": "",
+      "companions": [],
+      "owners": [
+        "P07",
+        "P09",
+        "P10",
+        "P14"
+      ],
+      "independent_observations": {
+        "original_case": "tests/regression/08_oop/0901_struct_nested.xr",
+        "selected_complete_source": "tests/regression/08_oop/0901_struct_nested.xr",
+        "selected_source_lf_sha256": "7fbeca9bf1efdd65100887a8db22782d428ebc4ad4107610c57d22b65ef2623b",
+        "method": "Every original struct declaration, field, method, copy chain and five-point loop remains. Actual scalar expressions are captured once at each original assertion boundary, then compared with independent literal/mathematical expectations and printed.",
+        "values": [
+          {
+            "test": "test_struct_nested",
+            "expression": "r.origin.x",
+            "expected": 0.0,
+            "projection": null
+          },
+          {
+            "test": "test_struct_nested",
+            "expression": "r.origin.y",
+            "expected": 0.0,
+            "projection": null
+          },
+          {
+            "test": "test_struct_nested",
+            "expression": "r.size.x",
+            "expected": 100.0,
+            "projection": null
+          },
+          {
+            "test": "test_struct_nested",
+            "expression": "r.size.y",
+            "expected": 50.0,
+            "projection": null
+          },
+          {
+            "test": "test_struct_nested",
+            "expression": "r.area()",
+            "expected": 5000.0,
+            "projection": null
+          },
+          {
+            "test": "test_struct_nested",
+            "expression": "r.origin.x",
+            "expected": 0.0,
+            "projection": null
+          },
+          {
+            "test": "test_struct_nested",
+            "expression": "r.size.x",
+            "expected": 100.0,
+            "projection": null
+          },
+          {
+            "test": "test_struct_nested",
+            "expression": "r2.origin.x",
+            "expected": 10.0,
+            "projection": null
+          },
+          {
+            "test": "test_struct_nested",
+            "expression": "r2.size.x",
+            "expected": 200.0,
+            "projection": null
+          },
+          {
+            "test": "test_struct_nested",
+            "expression": "r.area()",
+            "expected": 5000.0,
+            "projection": null
+          },
+          {
+            "test": "test_struct_nested",
+            "expression": "r2.area()",
+            "expected": 10000.0,
+            "projection": null
+          }
+        ]
+      },
+      "remaining_gates": [
+        "Actual complete body discovery and independent VM/generated-C/native scalar results.",
+        "Original physical struct/Array ownership, compiler/native/runtime FI, exact budgets/cancel/lifetime and sanitizer/provider qualification remain open."
+      ]
+    },
+    {
+      "id": "struct_original_0902_struct_static_getter_observed",
+      "oracle_id": "struct_original_0902_struct_static_getter_observed",
+      "source": "tests/unit/xir/legacy_consumers/fixtures/independent_named_observations/0902_struct_static_getter/root.xr",
+      "source_lf_sha256": "667bdf56aaa02f03513e67aba643db32fc737a415e200031cc6220c7578476c0",
+      "entry": "test",
+      "stdout_utf8": "255\n0\n0\n0\n255\n0\n0\n0\n255\nrgb(255,0,0)\nrgb(0,255,0)\n255\n128\n",
+      "stderr_utf8": "",
+      "companions": [],
+      "owners": [
+        "P07",
+        "P09",
+        "P10",
+        "P14"
+      ],
+      "independent_observations": {
+        "original_case": "tests/regression/08_oop/0902_struct_static_getter.xr",
+        "selected_complete_source": "tests/regression/08_oop/0902_struct_static_getter.xr",
+        "selected_source_lf_sha256": "a67c8519383bf39a28119ab054f1d78bdfa0d19e1fbd61af1c69b305367976de",
+        "method": "Every original struct declaration, field, method, copy chain and five-point loop remains. Actual scalar expressions are captured once at each original assertion boundary, then compared with independent literal/mathematical expectations and printed.",
+        "values": [
+          {
+            "test": "test_struct_static_getter",
+            "expression": "r.r",
+            "expected": 255,
+            "projection": null
+          },
+          {
+            "test": "test_struct_static_getter",
+            "expression": "r.g",
+            "expected": 0,
+            "projection": null
+          },
+          {
+            "test": "test_struct_static_getter",
+            "expression": "r.b",
+            "expected": 0,
+            "projection": null
+          },
+          {
+            "test": "test_struct_static_getter",
+            "expression": "g.r",
+            "expected": 0,
+            "projection": null
+          },
+          {
+            "test": "test_struct_static_getter",
+            "expression": "g.g",
+            "expected": 255,
+            "projection": null
+          },
+          {
+            "test": "test_struct_static_getter",
+            "expression": "g.b",
+            "expected": 0,
+            "projection": null
+          },
+          {
+            "test": "test_struct_static_getter",
+            "expression": "b.r",
+            "expected": 0,
+            "projection": null
+          },
+          {
+            "test": "test_struct_static_getter",
+            "expression": "b.g",
+            "expected": 0,
+            "projection": null
+          },
+          {
+            "test": "test_struct_static_getter",
+            "expression": "b.b",
+            "expected": 255,
+            "projection": null
+          },
+          {
+            "test": "test_struct_static_getter",
+            "expression": "r.hex()",
+            "expected": "rgb(255,0,0)",
+            "projection": null
+          },
+          {
+            "test": "test_struct_static_getter",
+            "expression": "g.hex()",
+            "expected": "rgb(0,255,0)",
+            "projection": null
+          },
+          {
+            "test": "test_struct_static_getter",
+            "expression": "r.r",
+            "expected": 255,
+            "projection": null
+          },
+          {
+            "test": "test_struct_static_getter",
+            "expression": "r2.r",
+            "expected": 128,
+            "projection": null
+          }
+        ]
+      },
+      "remaining_gates": [
+        "Actual complete body discovery and independent VM/generated-C/native scalar results.",
+        "Original physical struct/Array ownership, compiler/native/runtime FI, exact budgets/cancel/lifetime and sanitizer/provider qualification remain open."
+      ]
     }
   ]
 }

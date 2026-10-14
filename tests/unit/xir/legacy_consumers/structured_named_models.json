@@ -1,0 +1,239 @@
+{
+  "schema": 1,
+  "inputs": [
+    {
+      "path": "tests/regression/08_oop/0895_struct_basic.xr",
+      "lf_sha256": "a4a642eceac1abb741b6d530d68e43eab40f8224f82eaa648ca2a8dacb2b1b68"
+    },
+    {
+      "path": "tests/regression/08_oop/0896_struct_literal.xr",
+      "lf_sha256": "25e408738db57ef123c72fd45e9ffaf2133ffc69749e73644e3015f320801159"
+    },
+    {
+      "path": "tests/regression/08_oop/0897_struct_value_semantics.xr",
+      "lf_sha256": "55bdd66352d67fc354fdece4f86586fe7b1ac6fc4604347d85aae118600a3b1c"
+    },
+    {
+      "path": "tests/regression/08_oop/0898_struct_comprehensive.xr",
+      "lf_sha256": "96f50af5e0bd2b11914cc70dabf9025b3cd8c59d58b9eac59173946bf1da72a0"
+    },
+    {
+      "path": "tests/regression/08_oop/0901_struct_nested.xr",
+      "lf_sha256": "7fbeca9bf1efdd65100887a8db22782d428ebc4ad4107610c57d22b65ef2623b"
+    },
+    {
+      "path": "tests/regression/08_oop/0902_struct_static_getter.xr",
+      "lf_sha256": "a67c8519383bf39a28119ab054f1d78bdfa0d19e1fbd61af1c69b305367976de"
+    },
+    {
+      "path": "spec/source/sections/003-2-type-system.md",
+      "lf_sha256": "f4e970b0cc728c19f65a4d1b2a13cd0e572431dcac3f6f20cd06d23046ebea8a"
+    },
+    {
+      "path": "spec/source/sections/006-5-declarations.md",
+      "lf_sha256": "56fa3d36bc0c5ee38b7c52dafbe26d7b8b0a45a6909c14a8626a9bba515cc4a7"
+    }
+  ],
+  "cases": [
+    {
+      "id": "struct_original_0895_struct_basic_observed",
+      "expected": {
+        "exit_code": 0,
+        "required_test_names": [
+          "test_struct_basic"
+        ],
+        "per_test_observations": {
+          "test_struct_basic": {
+            "values": [
+              3.0,
+              4.0,
+              25.0,
+              4.0,
+              6.0,
+              255,
+              0,
+              255,
+              5000.0,
+              3.14159,
+              3.14159,
+              "Point",
+              5,
+              0.0,
+              4.0,
+              8.0
+            ]
+          }
+        }
+      },
+      "model_scope": "Original immutable literal field/method expectations, explicit copy independence and local mathematical pi constant; no output-derived oracle or private representation assumption."
+    },
+    {
+      "id": "struct_original_0896_struct_literal_observed",
+      "expected": {
+        "exit_code": 0,
+        "required_test_names": [
+          "test_struct_literal"
+        ],
+        "per_test_observations": {
+          "test_struct_literal": {
+            "values": [
+              3.0,
+              4.0,
+              11.0,
+              20.0,
+              25.0,
+              1.0,
+              4.0,
+              25.0,
+              5.0,
+              6.0,
+              5000.0,
+              0.0,
+              100.0,
+              255,
+              0,
+              "Point",
+              "Vec2",
+              "Rect"
+            ]
+          }
+        }
+      },
+      "model_scope": "Original immutable literal field/method expectations, explicit copy independence and local mathematical pi constant; no output-derived oracle or private representation assumption."
+    },
+    {
+      "id": "struct_original_0897_struct_value_semantics_observed",
+      "expected": {
+        "exit_code": 0,
+        "required_test_names": [
+          "test_struct_value_semantics"
+        ],
+        "per_test_observations": {
+          "test_struct_value_semantics": {
+            "values": [
+              1.0,
+              2.0,
+              99.0,
+              2.0,
+              10.0,
+              999.0,
+              5.0,
+              6.0,
+              42.0,
+              1.0,
+              2.0,
+              3.0,
+              255,
+              0,
+              0,
+              255,
+              128,
+              0,
+              25.0,
+              16.0,
+              "Point",
+              "Point",
+              "Vec2",
+              "Vec2"
+            ]
+          }
+        }
+      },
+      "model_scope": "Original immutable literal field/method expectations, explicit copy independence and local mathematical pi constant; no output-derived oracle or private representation assumption."
+    },
+    {
+      "id": "struct_original_0898_struct_comprehensive_observed",
+      "expected": {
+        "exit_code": 0,
+        "required_test_names": [
+          "test_struct_comprehensive"
+        ],
+        "per_test_observations": {
+          "test_struct_comprehensive": {
+            "values": [
+              100.0,
+              200.0,
+              1.0,
+              4.0,
+              0.0,
+              5000.0,
+              5000.0,
+              10000.0,
+              255,
+              0,
+              255,
+              0,
+              0.0,
+              0.0,
+              0.0,
+              42.0,
+              10.0,
+              20.0,
+              "Point",
+              "Rect",
+              "Color"
+            ]
+          }
+        }
+      },
+      "model_scope": "Original immutable literal field/method expectations, explicit copy independence and local mathematical pi constant; no output-derived oracle or private representation assumption."
+    },
+    {
+      "id": "struct_original_0901_struct_nested_observed",
+      "expected": {
+        "exit_code": 0,
+        "required_test_names": [
+          "test_struct_nested"
+        ],
+        "per_test_observations": {
+          "test_struct_nested": {
+            "values": [
+              0.0,
+              0.0,
+              100.0,
+              50.0,
+              5000.0,
+              0.0,
+              100.0,
+              10.0,
+              200.0,
+              5000.0,
+              10000.0
+            ]
+          }
+        }
+      },
+      "model_scope": "Original immutable literal field/method expectations, explicit copy independence and local mathematical pi constant; no output-derived oracle or private representation assumption."
+    },
+    {
+      "id": "struct_original_0902_struct_static_getter_observed",
+      "expected": {
+        "exit_code": 0,
+        "required_test_names": [
+          "test_struct_static_getter"
+        ],
+        "per_test_observations": {
+          "test_struct_static_getter": {
+            "values": [
+              255,
+              0,
+              0,
+              0,
+              255,
+              0,
+              0,
+              0,
+              255,
+              "rgb(255,0,0)",
+              "rgb(0,255,0)",
+              255,
+              128
+            ]
+          }
+        }
+      },
+      "model_scope": "Original immutable literal field/method expectations, explicit copy independence and local mathematical pi constant; no output-derived oracle or private representation assumption."
+    }
+  ],
+  "independence": "Expected constants come from the original frozen assertions and mathematical method bodies, never current Xray output."
+}

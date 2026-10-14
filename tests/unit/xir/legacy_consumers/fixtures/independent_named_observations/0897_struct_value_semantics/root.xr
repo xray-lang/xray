@@ -1,0 +1,134 @@
+// Preserve the complete original struct body and expose each scalar field/method result at its original assertion boundary.
+// Test: struct value semantics (copy-on-assign)
+// Expected: struct assignment creates independent copy
+
+struct Point {
+    x: f64
+    y: f64
+}
+struct Color {
+    r: i64
+    g: i64
+    b: i64
+}
+struct Vec2 {
+    x: f64
+    y: f64
+
+    mag_sq() -> f64 {
+        return this.x * this.x + this.y * this.y
+    }
+}
+
+@test
+fn test_struct_value_semantics() {
+
+    // === var b = a creates independent copy ===
+    var a = Point{x: 1.0, y: 2.0}
+    var b = a
+    b.x = 99.0
+    var p19StructValue0 = a.x
+    assert(p19StructValue0 == 1.0)
+    print(p19StructValue0)
+    var p19StructValue1 = a.y
+    assert(p19StructValue1 == 2.0)
+    print(p19StructValue1)
+    var p19StructValue2 = b.x
+    assert(p19StructValue2 == 99.0)
+    print(p19StructValue2)
+    var p19StructValue3 = b.y
+    assert(p19StructValue3 == 2.0)
+    print(p19StructValue3)
+
+    // === Reassignment also copies ===
+    var c = Point{x: 10.0, y: 20.0}
+    var d = Point{x: 0.0, y: 0.0}
+    d = c
+    d.x = 999.0
+    var p19StructValue4 = c.x
+    assert(p19StructValue4 == 10.0)
+    print(p19StructValue4)
+    var p19StructValue5 = d.x
+    assert(p19StructValue5 == 999.0)
+    print(p19StructValue5)
+
+    // === Struct literal assignment (fresh object, no extra copy) ===
+    var e = Point{x: 5.0, y: 6.0}
+    var p19StructValue6 = e.x
+    assert(p19StructValue6 == 5.0)
+    print(p19StructValue6)
+    var p19StructValue7 = e.y
+    assert(p19StructValue7 == 6.0)
+    print(p19StructValue7)
+
+    // === Multiple copies are independent ===
+    var src = Point{x: 42.0, y: 0.0}
+    var c1 = src
+    var c2 = src
+    var c3 = src
+    c1.x = 1.0
+    c2.x = 2.0
+    c3.x = 3.0
+    var p19StructValue8 = src.x
+    assert(p19StructValue8 == 42.0)
+    print(p19StructValue8)
+    var p19StructValue9 = c1.x
+    assert(p19StructValue9 == 1.0)
+    print(p19StructValue9)
+    var p19StructValue10 = c2.x
+    assert(p19StructValue10 == 2.0)
+    print(p19StructValue10)
+    var p19StructValue11 = c3.x
+    assert(p19StructValue11 == 3.0)
+    print(p19StructValue11)
+
+    // === Copy preserves all fields ===
+
+    var red = Color{r: 255, g: 0, b: 0}
+    var copy = red
+    copy.g = 128
+    var p19StructValue12 = red.r
+    assert(p19StructValue12 == 255)
+    print(p19StructValue12)
+    var p19StructValue13 = red.g
+    assert(p19StructValue13 == 0)
+    print(p19StructValue13)
+    var p19StructValue14 = red.b
+    assert(p19StructValue14 == 0)
+    print(p19StructValue14)
+    var p19StructValue15 = copy.r
+    assert(p19StructValue15 == 255)
+    print(p19StructValue15)
+    var p19StructValue16 = copy.g
+    assert(p19StructValue16 == 128)
+    print(p19StructValue16)
+    var p19StructValue17 = copy.b
+    assert(p19StructValue17 == 0)
+    print(p19StructValue17)
+
+    // === Struct with method - copy preserves methods ===
+
+    var v1 = Vec2{x: 3.0, y: 4.0}
+    var v2 = v1
+    v2.x = 0.0
+    var p19StructValue18 = v1.mag_sq()
+    assert(p19StructValue18 == 25.0)
+    print(p19StructValue18)
+    var p19StructValue19 = v2.mag_sq()
+    assert(p19StructValue19 == 16.0)
+    print(p19StructValue19)
+
+    // === Typename preserved after copy ===
+    var p19StructValue20 = typeName(a)
+    assert(p19StructValue20 == "Point")
+    print(p19StructValue20)
+    var p19StructValue21 = typeName(b)
+    assert(p19StructValue21 == "Point")
+    print(p19StructValue21)
+    var p19StructValue22 = typeName(v1)
+    assert(p19StructValue22 == "Vec2")
+    print(p19StructValue22)
+    var p19StructValue23 = typeName(v2)
+    assert(p19StructValue23 == "Vec2")
+    print(p19StructValue23)
+}

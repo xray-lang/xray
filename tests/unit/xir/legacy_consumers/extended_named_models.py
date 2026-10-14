@@ -35,7 +35,13 @@ def expected_rows() -> list[dict]:
             'test_typed_enum_then_catchall_fallthrough': ['other'],
         },
     }
-    return [{'id': name, 'expected': {'exit_code': 0, 'required_test_names': list(models),
+    rows = [{'id': name, 'expected': {'exit_code': 0, 'required_test_names': list(models),
                                      'per_test_observations': {key: {'values': values} for key, values in models.items()}},
              'model_scope': 'Source-derived transitions only; no memory-order, parallel atomicity, FI or safety qualification.'}
             for name, models in cases.items()]
+    structured = json.loads((HERE / 'structured_named_models.json').read_text(encoding='utf-8'))
+    for entry in structured['inputs']:
+        if hashlib.sha256((ROOT/entry['path']).read_bytes().replace(b'\r\n', b'\n')).hexdigest() != entry['lf_sha256']:
+            raise ValueError('structured named source or authority changed: ' + entry['path'])
+    rows.extend(structured['cases'])
+    return rows
