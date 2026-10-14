@@ -7744,6 +7744,40 @@ Prepared ordinary reference refinement records owned INFERRED/FIXED value identi
 
 COPY/PHI/local Cell, closed captures, Nullable wrappers and readonly Tuple/Array construction and projection synchronize identities. Callable PHI and uniform Array inputs use the sole outer weakening relation; the two root facts close independently. Fixed composite nested identities cannot vary. Unsupported nested weakening, shared mutation, element updates or Nullable branch joins retain a conservative bound or reject; finite higher-order dependencies and container alias flow remain incomplete. NO_SUSPEND, GO borrow shapes, errors and Sendable obligations remain independent. Preparation, closure and query copying share the original finite ledger without wire, schema, semantic or public ABI additions. This implementation candidate still requires fresh builds and both configurations' resource and safety gates; it grants no runtime or VM/native execution qualification.
 
+### 17.39 Bounded CTFE scalar local storage and short circuiting
+
+Compiler execution receives completely reverified Lowered input. It admits the entire reachable direct-call closure of bool/integer ordinary functions before execution. SCALAR_LOCAL_NEW, SCALAR_LOCAL_READ and SCALAR_LOCAL_WRITE use the same scalar step and target frame offsets as the VM. A local write produces Unit and falls through; it is not a control-flow terminator. Actual frame accesses consume work. Existing steps, whole-stack depth/frame bytes, output bytes and cumulative compiler ledger limits remain; a callee does not reset them, failures refund no charges and preserve canonical Unit output.
+
+Source &&/|| preserve short-circuit semantics through this storage, the ordinary Checked→specialization reverification→Lowered CTFE pipeline, and an independent complete Source replay that checks ordinary constant recipes. An unexecuted pure arithmetic error may be skipped; reachable I/O in an unexecuted branch still rejects the entire closure. Root authority or effect=NONE grants no determinism.
+
+This section does not admit owned Cells produced by ordinary var, owned/path operations, aggregate/string exports, unknown function values or native/Instance execution. Each requires authentic type, lifetime and charging interfaces plus independent qualification; stack scalar storage does not establish those capabilities.
+
+### 17.40 Bounded CTFE CFG backedges and declaration identity receiving
+
+Leaf CTFE accepts scalar CFG backedges after full Lowered reverification. PHI values select the actual predecessor and copy in parallel through the shared scalar edge kernel. Execution shares the original steps/watchdog and compiler ledger: a backedge neither resets nor refunds charges, and a nonterminating loop rejects at its finite step limit while preserving canonical Unit output. Full receiving still checks PHI predecessors, targets, offsets and signatures; block ordinals do not prove termination.
+
+CTFE requires actual ordinary function declaration identity. Structurally valid Lowered input without a declarations/functions table grants no execution qualification; leaf and direct-call entries reject with NOT_LEAF and NOT_SUPPORTED respectively, preserving output and spent charges. Module initializers, nominal/cleanup owners, unsupported actual operations and reachable I/O retain individual rejection; root or effect flags grant no determinism. Leaf retains its no-CALL boundary; finite calls use the separate complete-closure receiving entry.
+
+### 17.41 Canonical CTFE Unit returns and ordinary Source replay
+
+Ordinary Unit-result functions without value parameters can enter actual CTFE closure admission. Their Unit RETURN preserves zero type/reserved/payload and has zero target logical output size. A Unit return has no SSA storage slot, so a child return must not write that slot; the caller retains scalar parameters and other live values. Unit is not admitted as an ordinary value argument, and receiving still repeats actual type and complete Lowered identity checks.
+
+Source receives Unit comptime results through the same bounded CTFE pipeline and independently replays ordinary Unit expressions, preserving site matching, coverage and canonical result verification. Empty blocks and blocks ending in ordinary statements produce Unit; owned local state continues to require the actual value-domain interface. A comptime block grants no nonlocal return from its enclosing function. I/O, nonterminating loops and unsupported actual operations retain closure or budget rejection, with failure outputs and the original compiler ledger preserved.
+
+### 17.42 Bounded CTFE Rune values and ordinary Source constants
+
+Rune joins bool/integer admission for actual scalar parameters, results, locals and direct-call closures. CONST_RUNE, INTEGER_TO_RUNE and RUNE_TO_INTEGER use the existing shared execution kernel. Rune equality validates both complete Unicode scalars and compares code points; it does not interpret Rune as an integer type or host character. Valid payloads are 0..0x10ffff excluding 0xd800..0xdfff. Invalid Rune arguments reject with BAD_ARGUMENT; out-of-range integer conversions reject with NUMERIC_RANGE, preserving canonical Unit output. CONVERT_NUMBER continues to admit only integer-to-integer conversion and grants no floating admission.
+
+Canonical target layout determines exported size: Rune occupies four bytes and output_bytes=3 rejects. Host carrier sizeof and UTF-8 length do not determine that budget. After actual Checked/specialization reverification/Lowered execution, Source independently replays an ordinary CONST_RUNE recipe with complete site, type, canonical-value and coverage checks. Nested comptime and ordinary Rune calls retain full closure admission. Existing steps/depth/frame/output ceilings, the sole cumulative compiler ledger, physical OOM and final-owner cleanup obligations remain. This family grants no managed aggregate, string, unknown function-value or runtime-fallback qualification.
+
+### 17.43 Private Cell execution on the compiler ledger and Unit tail assignment
+
+After admitting the entire actual call closure, CTFE allows frame-private Cell<Unit/bool/integer/Rune>. Ordinary var CELL_NEW/READ/WRITE, lazy CELL_LOCAL_WRITE and LOCAL_UNINIT use authentic existing Value operations. Type metadata is independently copied into a compiler TypeArena; value storage uses the original XrCompileResources-backed Domain. Allocation, copy, traversal and Domain work retain one cumulative ledger and physical FI. Local receiving fuel bounds one scalar check; it neither clones, resets nor refunds the compiler budget. Scalar entries without Cell operations create no such Domain/arena.
+
+Actual owned offsets are released on normal and child returns and on step, budget, OOM or arithmetic failure. Frame setup prepays its cleanup offset scans; release needs no remaining execution budget and allocates nothing. Each Cell access checks the same private Domain. Parameters and exports remain limited to canonical Unit/bool/integer/Rune results and ordinary scalar arguments; external Cells, ref loans, module state and arbitrary owned values are not admitted. Full type, predecessor/PHI, target, identity, signature, reachable-I/O, depth/steps/activation-byte and original output checks remain. Root/effect flags grant no purity, and no Instance/native/fallback runs.
+
+A Unit block's tail assignment may carry an ordinary expression's internal ID, but its helper Unit RETURN must use zero, creating no Unit SSA slot or forwarding that ID. Source independently replays the complete input, matches sites and canonical results and receives it through the ordinary Checker. Private Cell execution exports only actual scalar/Unit results. This family grants no Cell/aggregate/string export, function-value, cleanup-function or suspension qualification.
+
 ---
 
 ## 18. Error Codes

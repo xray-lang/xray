@@ -21,10 +21,13 @@ static const XrNativeMemberDeclaration *source_array_member(SourceContext *ctx,
     }
     return member;
 }
-static XrXirSourceType source_array_schema_type(SourceContext *ctx, XrNativeTypeTerm term) {
+static XrXirSourceType source_array_schema_type(SourceContext *ctx, XrNativeTypeTerm term, bool display) {
     if (term == XR_NATIVE_TERM_ELEMENT)
         return (XrXirSourceType) {(XrXirType) XR_XIR_TYPE_PARAMETER_BASE, ctx->array_declaration, true};
     if (term == XR_NATIVE_TERM_ARRAY_ELEMENT) {
+        /* Query-only generic shapes must not enter the executable type pool
+         * before complete ordinary Built checking has finished. */
+        if (!display) return (XrXirSourceType){XR_XIR_UNIT, ctx->array_declaration, false};
         XrXirType array = XR_XIR_UNIT;
         if (!source_intern_type(ctx, (XrXirTypeNode) {.kind = XR_XIR_TYPE_ARRAY,
             .element = (XrXirType) XR_XIR_TYPE_PARAMETER_BASE}, &array)) return (XrXirSourceType) {0};
@@ -51,19 +54,45 @@ static bool source_array_member_reference(SourceContext *ctx, AstNode *node,
         if (member->parameter_count && !parameters) return false;
         for (uint32_t p = 0; p < member->parameter_count; ++p) {
             if (!source_work(ctx, node)) return false;
-            parameters[p] = source_array_schema_type(ctx, member->parameters[p].type);
+            parameters[p] = source_array_schema_type(ctx, member->parameters[p].type, false);
         }
         XrXirSourceDeclaration *record = (XrXirSourceDeclaration *) &ctx->query.declarations[symbol.declaration - 1];
         record->native_identity = member->id;
         record->signature = source_owned_text(ctx, member->signature);
         if (!record->signature) return false;
-        record->type = source_array_schema_type(ctx, member->result);
+        record->type = source_array_schema_type(ctx, member->result, false);
         record->parameters = parameters; record->parameter_count = member->parameter_count;
         record->exported = true; record->mutable = member->receiver == XR_NATIVE_RECEIVER_REF;
         record->generic_parent = ctx->array_declaration; record->generic_parent_count = 1;
     }
     return source_query_target_token_reference(ctx,node,
         ctx->array_members[operation], member->is_method ? XR_XIR_SOURCE_CALL : XR_XIR_SOURCE_READ);
+}
+/* The Checked owner is already independent. Materialize complete display
+ * schemas only for the separately owned query snapshot. No IR IDs are changed. */
+static bool source_array_query_types(SourceContext *ctx) {
+    if (!ctx->array_declaration) return true;
+    const XrNativeTypeDeclaration *array = xr_native_declaration_by_id(XR_NATIVE_DECLARATION_ARRAY);
+    for (uint32_t m = 0; m < array->member_count; ++m) {
+        if (!source_work(ctx, NULL)) return false;
+        const XrNativeMemberDeclaration *member = &array->members[m];
+        uint32_t operation = (uint32_t)member->operation;
+        if (!operation || operation >= sizeof(ctx->array_members) / sizeof(ctx->array_members[0]) ||
+            !ctx->array_members[operation]) continue;
+        XrXirSourceDeclaration *record = (XrXirSourceDeclaration *)&ctx->query.declarations[ctx->array_members[operation] - 1];
+        if (member->result == XR_NATIVE_TERM_ARRAY_ELEMENT) {
+            record->type = source_array_schema_type(ctx, member->result, true);
+            if (!record->type.known) return false;
+        }
+        for (uint32_t p = 0; p < member->parameter_count; ++p) {
+            if (!source_work(ctx, NULL)) return false;
+            if (member->parameters[p].type != XR_NATIVE_TERM_ARRAY_ELEMENT) continue;
+            XrXirSourceType *parameter = (XrXirSourceType *)&record->parameters[p];
+            *parameter = source_array_schema_type(ctx, member->parameters[p].type, true);
+            if (!parameter->known) return false;
+        }
+    }
+    return true;
 }
 static bool source_array_static_receiver(SourceContext *ctx, AstNode *node) {
     return node && node->type == AST_NEW_EXPR && node->as.new_expr.is_type_namespace &&

@@ -2933,6 +2933,7 @@ static void source_query_publish(SourceContext *ctx, XrXirSourceResult *output) 
         if (output) xr_xir_compile_source_result_free(output);
         return;
     }
+    if (!source_array_query_types(ctx)) { xr_xir_compile_source_result_free(output); return; }
     ctx->query.complete = ctx->diagnostic.status == XR_XIR_OK;
     ctx->query.implementations = ctx->implementations_ready && ctx->implementations.count ? &ctx->implementations : NULL;
     ctx->query.diagnostic = ctx->diagnostic;

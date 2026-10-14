@@ -1,0 +1,1 @@
+export fn run()->rune { return comptime rune(1114112) }

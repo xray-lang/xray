@@ -31,6 +31,7 @@ static const char ctfe_source[] =
     "export fn owned()->string { return \"managed\" }\n"
     "export fn io()->i64 { print(1); return 1 }\n"
     "export fn loop(flag:bool)->i64 { while(flag) {}; return 1 }\n";
+static bool ctfe_resource_loop,ctfe_resource_phi,ctfe_resource_no_declarations;
 static const XrCompileResourceLimits ctfe_owner_limits = {
     UINT64_C(64)*1024*1024, UINT64_C(8)*1024*1024, UINT64_C(128000000)};
 typedef struct CtfeFixture {
@@ -86,6 +87,12 @@ static XrXirCtfeRequest ctfe_request(const CtfeFixture *fixture, const char *nam
     }
     CHECK(request.function != UINT32_MAX); return request;
 }
+#include "xir_ctfe_loop_fixture.h"
+static XrXirCtfeRequest ctfe_resource_request(const CtfeFixture *fixture,XrXirValue *argument) {
+    *argument=(XrXirValue){XR_XIR_BOOL,0,0};
+    return ctfe_request(fixture,ctfe_resource_phi?"swap":ctfe_resource_loop?"loop":"answer",
+        ctfe_resource_loop?argument:NULL,ctfe_resource_loop?1:0);
+}
 #include "xir_ctfe_leaf_resources.h"
 static void ctfe_expect(CtfeFixture *fixture, XrXirCtfeRequest request,
     XrXirCtfeStatus expected, XrXirType type, int64_t payload) {
@@ -122,9 +129,10 @@ static void ctfe_semantics(void) {
         XR_XIR_CTFE_DIVIDE_BY_ZERO, XR_XIR_UNIT, 0);
     division[0].payload = INT64_MIN; division[1].payload = -1;
     ctfe_expect(&fixture, ctfe_request(&fixture, "quotient", division, 2), XR_XIR_CTFE_OK, XR_XIR_I64, INT64_MIN);
-    const char *rejected[] = {"caller", "mutable", "owned", "io", "loop"};
-    for (uint32_t r = 0; r < 5; ++r) ctfe_expect(&fixture, ctfe_request(&fixture, rejected[r], r == 4 ? args : NULL,
-        r == 4 ? 1 : 0), XR_XIR_CTFE_NOT_LEAF, XR_XIR_UNIT, 0);
+    ctfe_expect(&fixture, ctfe_request(&fixture, "mutable", NULL, 0), XR_XIR_CTFE_OK, XR_XIR_I64, 2);
+    const char *rejected[] = {"caller", "owned", "io"};
+    for (uint32_t r = 0; r < 3; ++r) ctfe_expect(&fixture, ctfe_request(&fixture, rejected[r], NULL,
+        0), XR_XIR_CTFE_NOT_LEAF, XR_XIR_UNIT, 0);
     XrXirCtfeRequest request = ctfe_request(&fixture, "answer", NULL, 0);
     XrXirValue occupied = {XR_XIR_I64,77,99}, original = occupied;
     XrCompileResourceStats before = ctfe_stats(&fixture);
@@ -179,9 +187,77 @@ static void ctfe_work_exhaustion(void) {
     CHECK(ctfe_stats(&fixture).work == stopped.work);
     ctfe_fixture_free(&fixture);
 }
+static void ctfe_declarationless(void) {
+    XrXirCompileContext context={0};CtfeFixture fixture={0};
+    CHECK(xr_compile_resources_new(&ctfe_owner_limits,&context.resources)==XR_COMPILE_RESOURCE_OK);
+    context.limits=xr_xir_compile_default_limits();ctfe_resource_no_declarations=true;
+    CHECK(ctfe_phi_build(&context,&fixture,NULL)==XR_XIR_OK);fixture.owns_resources=true;
+    CHECK(!xr_xir_compile_artifact_module(fixture.lowered)->declarations);
+    XrXirCtfeRequest request=ctfe_request(&fixture,"swap",NULL,0);
+    ctfe_expect(&fixture,request,XR_XIR_CTFE_NOT_LEAF,XR_XIR_UNIT,0);
+    XrXirCtfeCallRequest calls={request,XR_XIR_CTFE_MAX_CALL_DEPTH};XrXirValue output={0};
+    XrCompileResourceStats before=ctfe_stats(&fixture);
+    size_t blocks=source_fixture_compile_live,bytes=source_fixture_compile_bytes;
+    CHECK(xr_xir_compile_ctfe_calls(&calls,&output)==XR_XIR_CTFE_NOT_SUPPORTED);
+    CHECK(!output.type && !output.reserved && !output.payload);
+    CHECK(ctfe_stats(&fixture).live_bytes==before.live_bytes);
+    CHECK(source_fixture_compile_live==blocks && source_fixture_compile_bytes==bytes);
+    ctfe_fixture_free(&fixture);ctfe_resource_no_declarations=false;
+    fprintf(stderr,"CTFE verified Lowered without declaration authority rejects both leaf/call entry; Unit and live preserved; physical=0/0\n");
+}
+static void ctfe_loops(void) {
+    CtfeFixture fixture={0};ctfe_fixture_new(&fixture);
+    XrXirValue flag={XR_XIR_BOOL,0,0};
+    XrXirCtfeRequest request=ctfe_request(&fixture,"loop",&flag,1);
+    ctfe_expect(&fixture,request,XR_XIR_CTFE_OK,XR_XIR_I64,1);
+    flag.payload=1;
+    ctfe_expect(&fixture,request,XR_XIR_CTFE_STEP_LIMIT,XR_XIR_UNIT,0);
+    request.limits.steps=32;
+    ctfe_expect(&fixture,request,XR_XIR_CTFE_STEP_LIMIT,XR_XIR_UNIT,0);
+    ctfe_fixture_free(&fixture);
+    XrXirCompileContext context={0};
+    CHECK(xr_compile_resources_new(&ctfe_owner_limits,&context.resources)==XR_COMPILE_RESOURCE_OK);
+    context.limits=xr_xir_compile_default_limits();
+    CHECK(ctfe_phi_build(&context,&fixture,NULL)==XR_XIR_OK);fixture.owns_resources=true;
+    request=ctfe_request(&fixture,"swap",NULL,0);
+    ctfe_expect(&fixture,request,XR_XIR_CTFE_OK,XR_XIR_I64,21);
+    /* Four entry steps, four six-step headers, three two-step bodies and four exit steps. */
+    request.limits.steps=38;ctfe_expect(&fixture,request,XR_XIR_CTFE_OK,XR_XIR_I64,21);
+    request.limits.steps=37;ctfe_expect(&fixture,request,XR_XIR_CTFE_STEP_LIMIT,XR_XIR_UNIT,0);
+    request.limits.steps=XR_XIR_CTFE_MAX_STEPS;
+    XrXirInstruction *ops=(XrXirInstruction *)fixture.lowered->module.functions[request.function].instructions;
+    uint32_t saved=ops[11].targets[0];ops[11].targets[0]=99;
+    ctfe_expect(&fixture,request,XR_XIR_CTFE_BAD_ARTIFACT,XR_XIR_UNIT,0);ops[11].targets[0]=saved;
+    uint32_t *operands=(uint32_t *)fixture.lowered->module.functions[request.function].operands;
+    saved=operands[2];operands[2]=3;
+    ctfe_expect(&fixture,request,XR_XIR_CTFE_BAD_ARTIFACT,XR_XIR_UNIT,0);operands[2]=saved;
+    size_t start=source_fixture_compile_attempts;
+    ctfe_expect(&fixture,request,XR_XIR_CTFE_OK,XR_XIR_I64,21);
+    size_t sites=source_fixture_compile_attempts-start;CHECK(sites>0);
+    for (size_t site=0;site<sites;++site) {
+        source_fixture_compile_injected=false;
+        source_fixture_compile_fail_at=source_fixture_compile_attempts+site;
+        ctfe_expect(&fixture,request,XR_XIR_CTFE_OUT_OF_MEMORY,XR_XIR_UNIT,0);
+        CHECK(source_fixture_compile_injected);source_fixture_compile_fail_at=SIZE_MAX;
+        ctfe_expect(&fixture,request,XR_XIR_CTFE_OK,XR_XIR_I64,21);
+    }
+    ctfe_fixture_free(&fixture);
+    fprintf(stderr,"CTFE Source false-loop=1; infinite loop bounded at 65536/32; parallel PHI swap(3)=21; exact38/minus37; malformed target/predecessor; evaluator FI=%zu same-owner retry; physical=0/0\n",sites);
+}
 #include "xir_ctfe_calls_cases.h"
 #include "xir_ctfe_calls_resources.h"
 int main(int argc,char **argv) {
+    if (argc==2 && !strcmp(argv[1],"--declarationless")) { ctfe_declarationless();return 0; }
+    if (argc==2 && (!strcmp(argv[1],"--loops") || !strcmp(argv[1],"--loop-resources") || !strcmp(argv[1],"--phi-resources"))) {
+        if (!strcmp(argv[1],"--loops")) ctfe_loops();
+        else {
+            ctfe_resource_loop=!strcmp(argv[1],"--loop-resources");
+            ctfe_resource_phi=!strcmp(argv[1],"--phi-resources");
+            fprintf(stderr,"CTFE complete resources: %s\n",ctfe_resource_phi?"parallel PHI backedges":"Source scalar loop");
+            ctfe_whole_resources();
+        }
+        CHECK(!source_fixture_compile_live && !source_fixture_compile_bytes);return 0;
+    }
     if (argc==2 && (!strcmp(argv[1],"--calls") || !strcmp(argv[1],"--call-resources"))) {
         if (!strcmp(argv[1],"--calls")) ctfe_calls_semantics();
         else ctfe_calls_resources();

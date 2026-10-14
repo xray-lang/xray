@@ -49,7 +49,8 @@ static bool cell_access(const XirCell *cell, const XrXirCellAuthority *authority
     if (!cell || !cell->initialized) return false;
     XirObject *owner = cell_root_object(cell);
     XrXirCellLoan **top = cell_root_loans(owner);
-    if (!top || (owner->kind == XIR_OBJECT_CLASS &&
+    if (!top || (owner->kind == XIR_OBJECT_CELL && ((const XirCell *)owner)->prepared_loan) ||
+        (owner->kind == XIR_OBJECT_CLASS &&
         (class_origin_state((const XirClassObject *)owner) & XIR_CLASS_ORIGIN_PREPARED))) return false;
     if (*top) {
         const XirCell *scope = (*top)->scope;
@@ -64,7 +65,8 @@ XR_FUNC XrXirValueStatus xr_xir_cell_publication_prepare(const XrXirValue *value
     XirCell *cell = cell_owner(value);
     return cell && publication && publication->owner && publication->domain &&
         publication->slot != UINT32_MAX && cell->object.domain == publication->domain &&
-        !cell->projection_count && !cell->module_storage && !cell->borrow_top ? XR_XIR_VALUE_OK : XR_XIR_VALUE_BAD_ARGUMENT;
+        !cell->projection_count && !cell->module_storage && !cell->borrow_top &&
+        !cell->prepared_loan ? XR_XIR_VALUE_OK : XR_XIR_VALUE_BAD_ARGUMENT;
 }
 XR_FUNC void xr_xir_cell_publication_commit(const XrXirValue *value,
     const XrXirCellPublication *publication) {
@@ -94,7 +96,7 @@ XR_FUNC bool xr_xir_cell_same_owner(const XrXirValue *left, const XrXirValue *ri
 }
 XR_FUNC bool xr_xir_cell_unborrowed(const XrXirValue *value) {
     XirCell *cell = cell_owner(value);
-    return cell && !cell->projection_count && !cell->borrow_top;
+    return cell && !cell->projection_count && !cell->borrow_top && !cell->prepared_loan;
 }
 XR_FUNC bool xr_xir_cell_is_projection(const XrXirValue *value) {
     XirCell *cell = cell_owner(value);
@@ -115,6 +117,8 @@ XR_FUNC XrXirValueStatus xr_xir_cell_loan_prepare(const XrXirValue *value,
     XirObject *owner = cell_root_object(cell);
     XrXirCellLoan **top = cell_root_loans(owner);
     if (!top) return XR_XIR_VALUE_BAD_ARGUMENT;
+    XirCell *storage = owner->kind == XIR_OBJECT_CELL ? (XirCell *)owner : NULL;
+    if (storage && storage->prepared_loan) return XR_XIR_VALUE_BAD_ARGUMENT;
     XirClassObject *identity = owner->kind == XIR_OBJECT_CLASS ? (XirClassObject *)owner : NULL;
     if (identity && !class_origin_reserve(identity, true)) return XR_XIR_VALUE_BAD_ARGUMENT;
     bool allowed = !*top ? !cell->projection_count ||
@@ -127,6 +131,8 @@ XR_FUNC XrXirValueStatus xr_xir_cell_loan_prepare(const XrXirValue *value,
         return XR_XIR_VALUE_BAD_ARGUMENT;
     }
     *output = (XrXirCellLoan){owner, cell, *top, {0}};
+    /* Preparation excludes all aliases until this exact record commits or aborts. */
+    if (storage) storage->prepared_loan = output;
     return XR_XIR_VALUE_OK;
 }
 XR_FUNC void xr_xir_cell_loan_abort(XrXirCellLoan *loan) {
@@ -136,6 +142,11 @@ XR_FUNC void xr_xir_cell_loan_abort(XrXirCellLoan *loan) {
     XrXirCellLoan **top = cell_root_loans(owner);
     XR_CHECK(top && *top == loan->previous, "prepared loan preserves its exact original parent");
     if (owner->kind == XIR_OBJECT_CLASS) class_origin_cancel((XirClassObject *)owner);
+    else {
+        XirCell *storage = (XirCell *)owner;
+        XR_CHECK(storage->prepared_loan == loan, "Cell abort owns its exact exclusive reservation");
+        storage->prepared_loan = NULL;
+    }
     *loan = (XrXirCellLoan){0};
 }
 XR_FUNC void xr_xir_cell_loan_commit(const XrXirValue *value, XrXirCellLoan *loan,
@@ -150,10 +161,13 @@ XR_FUNC void xr_xir_cell_loan_commit(const XrXirValue *value, XrXirCellLoan *loa
     uint32_t state = owner->kind == XIR_OBJECT_CLASS ? class_origin_state((XirClassObject *)owner) : 0;
     XR_CHECK(owner->kind != XIR_OBJECT_CLASS || (state & XIR_CLASS_ORIGIN_PREPARED),
         "Class loan commit owns the actual exclusive reservation");
+    XR_CHECK(owner->kind != XIR_OBJECT_CELL || ((XirCell *)owner)->prepared_loan == loan,
+        "Cell loan commit owns its exact exclusive reservation");
     loan->authority = *authority; *top = loan;
     if (owner->kind == XIR_OBJECT_CLASS)
         atomic_store_explicit(&((XirClassObject *)owner)->publication_state,
             (state | XIR_CLASS_ORIGIN_BORROWED) & ~(uint32_t)XIR_CLASS_ORIGIN_PREPARED, memory_order_release);
+    else ((XirCell *)owner)->prepared_loan = NULL;
 }
 XR_FUNC void xr_xir_cell_loan_release(XrXirCellLoan *loan) {
     XR_CHECK(loan && loan->cell && cell_authority_valid(&loan->authority),
@@ -162,6 +176,8 @@ XR_FUNC void xr_xir_cell_loan_release(XrXirCellLoan *loan) {
     XirClassObject *identity = owner->kind == XIR_OBJECT_CLASS ? (XirClassObject *)owner : NULL;
     XR_CHECK(!identity || class_origin_reserve(identity, true),
         "live Class loan release cannot race a prepared child or publication");
+    XR_CHECK(identity || !((const XirCell *)owner)->prepared_loan,
+        "live Cell loan release cannot race a prepared child");
     XrXirCellLoan **top = cell_root_loans(owner);
     XR_CHECK(top && *top == loan, "cell loans restore their exact immediate parent");
     *top = loan->previous;

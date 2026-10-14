@@ -1,0 +1,6 @@
+export fn p09Answer() -> i64 {
+    var rows: Array<(string, i64)> = [("alpha", 3), ("beta", 5)]
+    const saved = rows
+    rows[0] = ("gamma", 11)
+    return saved[0].1 * 100 + rows[0].1 * 10 + len(saved[0].0)
+}
