@@ -398,5 +398,48 @@ add_test(NAME test_xir_p10_reference_reject_init_default_this COMMAND test_xir_p
 set_tests_properties(test_xir_p10_reference_reject_init_default_inference test_xir_p10_reference_reject_init_default_this PROPERTIES TIMEOUT 30 LABELS "unit;xir;p10;reference;init;default;reject")
 add_custom_target(xir_p10_native_references DEPENDS ${reference_native_targets})
 
+add_executable(test_xir_p10_initializer_lifecycle "${CMAKE_CURRENT_LIST_DIR}/test_initializer_lifecycle.c")
+target_link_libraries(test_xir_p10_initializer_lifecycle PRIVATE xray_xir_source xray_xir_vm)
+target_compile_definitions(test_xir_p10_initializer_lifecycle PRIVATE
+    XR_INIT_NATIVE=0
+    XR_LANGUAGE_FIXTURES="${CMAKE_CURRENT_LIST_DIR}/fixtures"
+    XR_LANGUAGE_STDLIB="${PROJECT_SOURCE_DIR}/stdlib")
+set_target_properties(test_xir_p10_initializer_lifecycle PROPERTIES C_STANDARD 11 C_STANDARD_REQUIRED YES C_EXTENSIONS NO)
+if(MSVC)
+    target_compile_options(test_xir_p10_initializer_lifecycle PRIVATE /W4 /WX /utf-8)
+else()
+    target_compile_options(test_xir_p10_initializer_lifecycle PRIVATE -Wall -Wextra -Werror)
+endif()
+add_test(NAME test_xir_p10_initializer_lifecycle COMMAND test_xir_p10_initializer_lifecycle)
+set_tests_properties(test_xir_p10_initializer_lifecycle PROPERTIES TIMEOUT 30 LABELS "unit;xir;p10;init;ownership;lifecycle")
+
+set(native_init_lifecycle "${CMAKE_CURRENT_BINARY_DIR}/generated_native/init_owned_fields.c")
+add_custom_command(OUTPUT "${native_init_lifecycle}"
+    COMMAND ${CMAKE_COMMAND} -E make_directory "${CMAKE_CURRENT_BINARY_DIR}/generated_native"
+    COMMAND $<TARGET_FILE:test_xir_p10_reference> --emit init_owned_fields 59 "${native_init_lifecycle}"
+    DEPENDS test_xir_p10_reference "${CMAKE_CURRENT_LIST_DIR}/fixtures/init_owned_fields.xr"
+    VERBATIM)
+foreach(mode IN ITEMS native mixed)
+    set(target "test_xir_p10_initializer_lifecycle_${mode}")
+    add_executable(${target} "${CMAKE_CURRENT_LIST_DIR}/test_initializer_lifecycle.c" "${native_init_lifecycle}")
+    target_link_libraries(${target} PRIVATE xray_xir_vm)
+    target_compile_definitions(${target} PRIVATE XR_INIT_NATIVE=1)
+    if(mode STREQUAL "mixed")
+        target_compile_definitions(${target} PRIVATE XR_INIT_MIXED=1)
+    else()
+        target_compile_definitions(${target} PRIVATE XR_INIT_MIXED=0)
+    endif()
+    set_target_properties(${target} PROPERTIES C_STANDARD 11 C_STANDARD_REQUIRED YES C_EXTENSIONS NO)
+    if(MSVC)
+        target_compile_options(${target} PRIVATE /W4 /WX /utf-8)
+    else()
+        target_compile_options(${target} PRIVATE -Wall -Wextra -Werror)
+    endif()
+    add_test(NAME ${target} COMMAND ${target})
+    set_tests_properties(${target} PROPERTIES TIMEOUT 30 LABELS "unit;xir;p10;init;ownership;lifecycle;${mode}")
+endforeach()
+add_custom_target(xir_p10_initializer_lifecycles DEPENDS test_xir_p10_initializer_lifecycle
+    test_xir_p10_initializer_lifecycle_native test_xir_p10_initializer_lifecycle_mixed)
+
 xray_stage_windows_asan_runtime("${CMAKE_CURRENT_BINARY_DIR}")
 xray_prepend_windows_asan_runtime_to_directory_tests()
