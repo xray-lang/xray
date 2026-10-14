@@ -101,9 +101,13 @@ static XrXirInstanceResult run(XrXirInstance *instance) {
     while (result.outcome.status == XR_XIR_CALL_READY);
     return result;
 }
-static void finish(Fixture *fixture, XrXirInstance *instance) {
-    CHECK(xr_xir_instance_free(instance) == XR_XIR_CALL_READY);
+static void finish(Fixture *fixture, XrXirInstance *instance, XrXirCallStatus expected) {
+    XrXirCallStatus released = xr_xir_instance_free(instance);
+    if (released != expected) fprintf(stderr, "time service release status=%u expected=%u\n", (unsigned)released, (unsigned)expected);
+    CHECK(released == expected);
     xr_xir_compile_program_drop(fixture->program);
+    XrCompileResourceStats stats;
+    CHECK(xr_compile_resources_stats(fixture->resources, &stats) == XR_COMPILE_RESOURCE_OK && !stats.live_bytes);
     xr_compile_resources_release(fixture->resources);
 }
 
@@ -119,7 +123,7 @@ static void clocks(const char *path, const char *stdlib) {
     /* nanos, micros and ms share the monotonic clock; wall ms and CPU ms scale their own readings. */
     CHECK(!strcmp(capture.text, "5123456789\n5123456\n5123\n1700000000123\n42\n7\n"));
     CHECK(script.clock_calls == 5 && script.offset_calls == 1);
-    finish(&fixture, instance);
+    finish(&fixture, instance, XR_XIR_CALL_READY);
     puts("scripted clocks, scaling and UTC offset PASS");
 }
 static void provider_failures(const char *clock_path, const char *offset_path, const char *stdlib) {
@@ -130,7 +134,7 @@ static void provider_failures(const char *clock_path, const char *offset_path, c
     XrXirInstanceResult result = run(instance);
     CHECK(result.outcome.status == XR_XIR_CALL_HOST_ERROR && !capture.length);
     CHECK(!xr_xir_call_panic_status(result.outcome.status) && xr_xir_call_result_valid(&result.outcome));
-    finish(&fixture, instance);
+    finish(&fixture, instance, XR_XIR_CALL_HOST_ERROR);
     /* Failed and out-of-contract readings are host errors; a negative nanosecond count is not a time. */
     for (unsigned mode = 0; mode < 2; ++mode) {
         Script script = {mode ? XR_XIR_TIME_RANGE : XR_XIR_TIME_FAILED, XR_XIR_TIME_OK, -1, 0, 1, 0, 0};
@@ -140,7 +144,7 @@ static void provider_failures(const char *clock_path, const char *offset_path, c
         instance = start(&fixture, &capture, &provider);
         result = run(instance);
         CHECK(result.outcome.status == XR_XIR_CALL_HOST_ERROR && !capture.length && script.clock_calls == 1);
-        finish(&fixture, instance);
+        finish(&fixture, instance, XR_XIR_CALL_HOST_ERROR);
     }
     {
         Script script = {XR_XIR_TIME_OK, XR_XIR_TIME_OK, -1, -1, -1, 0, 0};
@@ -150,7 +154,7 @@ static void provider_failures(const char *clock_path, const char *offset_path, c
         instance = start(&fixture, &capture, &provider);
         result = run(instance);
         CHECK(result.outcome.status == XR_XIR_CALL_HOST_ERROR && !capture.length);
-        finish(&fixture, instance);
+        finish(&fixture, instance, XR_XIR_CALL_HOST_ERROR);
     }
     /* An offset the platform cannot represent is the numeric-range language fault. */
     Script range = {XR_XIR_TIME_OK, XR_XIR_TIME_RANGE, 0, 0, 1, 0, 0};
@@ -162,7 +166,7 @@ static void provider_failures(const char *clock_path, const char *offset_path, c
     CHECK(result.outcome.status == XR_XIR_CALL_NUMERIC_RANGE && !capture.length && range.offset_calls == 1);
     CHECK(xr_xir_call_panic_status(result.outcome.status) && xr_xir_call_result_valid(&result.outcome));
     CHECK(result.outcome.panic.detail.code == 422);
-    finish(&fixture, instance);
+    finish(&fixture, instance, XR_XIR_CALL_READY);
     Script failed = {XR_XIR_TIME_OK, XR_XIR_TIME_FAILED, 0, 0, 1, 0, 0};
     provider.context = &failed;
     fixture = build(offset_path, stdlib);
@@ -170,7 +174,7 @@ static void provider_failures(const char *clock_path, const char *offset_path, c
     instance = start(&fixture, &capture, &provider);
     result = run(instance);
     CHECK(result.outcome.status == XR_XIR_CALL_HOST_ERROR);
-    finish(&fixture, instance);
+    finish(&fixture, instance, XR_XIR_CALL_HOST_ERROR);
     /* Providers must be absent or complete; a half-filled one is refused before any execution. */
     XrXirInstanceConfig config;
     CHECK(xr_xir_instance_config_init(&config, sizeof(config)) == XR_XIR_CALL_READY);
@@ -218,7 +222,7 @@ static void sleeping(const char *path, const char *stdlib) {
     XrXirInstanceResult drained = run(instance);
     CHECK(drained.outcome.status == XR_XIR_CALL_CANCELLED);
     CHECK(!strcmp(capture.text, "done\nagain\n"));
-    finish(&fixture, instance);
+    finish(&fixture, instance, XR_XIR_CALL_READY);
     puts("timer suspension, exact wait request, clamp, stale tokens and cancellation PASS");
 }
 static uint64_t now_ns(void) {
