@@ -17,6 +17,29 @@
 static const XrXirProvenance *rp_input(const RootParameterFixture *fixture, bool instance) {
     return instance ? &fixture->instance : &fixture->evidence;
 }
+/* A nested Source is an actual checked owner, including its construction and
+ * immutable facts. Preparation, receiving copy and cleanup spend one ledger. */
+static XrXirStatus rp_owned_source_copy(const XrXirCompileContext *context,
+    const RootParameterFixture *fixture, bool instance, XrXirProvenance **output) {
+    if (!instance) return xr_xir_compile_provenance_copy(context,&fixture->evidence,output);
+    if (!output || *output) return XR_XIR_BAD_STRUCTURE;
+    XrXirModule module=fixture->module;module.stage=XR_XIR_BUILT;
+    XrXirArtifact *source=NULL;
+    XrXirStatus status=xir_fixture_check(context,&module,&source,NULL);
+    if (status==XR_XIR_OK) {
+        CHECK(source && source->construction && source->source_facts &&
+            source->context.resources==context->resources);
+        XrXirProvenance input=fixture->instance;input.source=source;
+        status=xr_xir_compile_provenance_copy(context,&input,output);
+        if (status==XR_XIR_OK) {
+            CHECK(*output && (*output)->source && (*output)->source!=source &&
+                (*output)->source->construction!=source->construction &&
+                (*output)->source->context.resources==context->resources);
+        }
+    }
+    xr_xir_compile_artifact_free(source);
+    return status;
+}
 static void rp_literals(const XrXirProvenance *copy, bool instance) {
     const XrXirProvenance *definition = copy;
     if (instance) {
@@ -40,7 +63,7 @@ static void rp_lifetime(bool instance) {
     RootParameterFixture fixture;
     rp_fixture(&fixture,&context);
     XrXirProvenance *copy = NULL;
-    CHECK(xr_xir_compile_provenance_copy(&context,rp_input(&fixture,instance),&copy) == XR_XIR_OK);
+    CHECK(rp_owned_source_copy(&context,&fixture,instance,&copy) == XR_XIR_OK);
     CHECK(copy != rp_input(&fixture,instance));
     const XrXirProvenance *definition = instance ? copy->source->module.provenance : copy;
     CHECK(definition->contracts != &fixture.contract && definition->contracts[0].parameters != &fixture.effect_parameter &&
@@ -60,7 +83,7 @@ static void rp_faults(bool instance) {
     rp_fixture(&fixture,&normal);
     XrXirProvenance *copy = NULL;
     rp_attempts = 0;
-    CHECK(xr_xir_compile_provenance_copy(&normal,rp_input(&fixture,instance),&copy) == XR_XIR_OK);
+    CHECK(rp_owned_source_copy(&normal,&fixture,instance,&copy) == XR_XIR_OK);
     size_t sites = rp_attempts;
     CHECK(sites != 0);
     xr_xir_compile_provenance_free(copy);
@@ -71,12 +94,12 @@ static void rp_faults(bool instance) {
         rp_fixture(&fixture,&context);
         RootParameterMark mark = rp_mark();
         rp_attempts = 0; rp_fail_at = fault; rp_injected = false; copy = NULL;
-        CHECK(xr_xir_compile_provenance_copy(&context,rp_input(&fixture,instance),&copy) == XR_XIR_OUT_OF_MEMORY);
+        CHECK(rp_owned_source_copy(&context,&fixture,instance,&copy) == XR_XIR_OUT_OF_MEMORY);
         CHECK(rp_injected && !copy);
         rp_balanced(mark);
         XrCompileResourceStats failed = rp_stats(&context);
         rp_fail_at = SIZE_MAX;
-        CHECK(xr_xir_compile_provenance_copy(&context,rp_input(&fixture,instance),&copy) == XR_XIR_OK);
+        CHECK(rp_owned_source_copy(&context,&fixture,instance,&copy) == XR_XIR_OK);
         CHECK(rp_stats(&context).work >= failed.work && rp_stats(&context).allocated_bytes >= failed.allocated_bytes);
         rp_literals(copy,instance);
         xr_xir_compile_provenance_free(copy);
@@ -91,7 +114,7 @@ static void rp_owner_death(bool instance) {
     RootParameterFixture fixture;
     rp_fixture(&fixture,&context);
     XrXirProvenance *copy = NULL;
-    CHECK(xr_xir_compile_provenance_copy(&context,rp_input(&fixture,instance),&copy) == XR_XIR_OK);
+    CHECK(rp_owned_source_copy(&context,&fixture,instance,&copy) == XR_XIR_OK);
     memset(&fixture,0xa5,sizeof(fixture));
     xr_compile_resources_release(context.resources);
     memset(&context,0xa5,sizeof(context));
@@ -106,7 +129,7 @@ static void rp_axes(bool instance) {
     RootParameterFixture fixture;
     rp_fixture(&fixture,&normal);
     XrXirProvenance *copy = NULL;
-    CHECK(xr_xir_compile_provenance_copy(&normal,rp_input(&fixture,instance),&copy) == XR_XIR_OK);
+    CHECK(rp_owned_source_copy(&normal,&fixture,instance,&copy) == XR_XIR_OK);
     XrCompileResourceStats required = rp_stats(&normal);
     xr_xir_compile_provenance_free(copy);
     rp_owner_free(&normal,baseline);
@@ -119,7 +142,7 @@ static void rp_axes(bool instance) {
         baseline = rp_stats(&context).live_bytes;
         RootParameterMark mark = rp_mark();
         rp_fixture(&fixture,&context); copy = NULL;
-        CHECK(xr_xir_compile_provenance_copy(&context,rp_input(&fixture,instance),&copy) ==
+        CHECK(rp_owned_source_copy(&context,&fixture,instance,&copy) ==
             (shortfall ? XR_XIR_BUDGET : XR_XIR_OK));
         if (shortfall) CHECK(!copy);
         else rp_literals(copy,instance);
@@ -164,6 +187,22 @@ static void rp_early_failures(void) {
     rp_balanced(mark);
     rp_owner_free(&context,baseline);
     rp_balanced((RootParameterMark){0,0});
+}
+static void rp_missing_source_owners(void) {
+    for (unsigned construction=0;construction<2;++construction) for (unsigned occupied=0;occupied<2;++occupied) {
+        RootParameterMark physical=rp_mark();XrXirCompileContext context=rp_owner(rp_caps());
+        uint64_t baseline=rp_stats(&context).live_bytes;RootParameterFixture fixture;
+        rp_fixture(&fixture,&context);
+        if (construction) CHECK(xir_fixture_construction(&context,fixture.source.module.types,
+            &fixture.source.construction)==XR_XIR_OK && fixture.source.construction);
+        CHECK(!fixture.source.source_facts);
+        XrXirProvenance *sentinel=occupied?(XrXirProvenance *)(uintptr_t)1:NULL,*out=sentinel;
+        RootParameterMark mark=rp_mark();
+        CHECK(xr_xir_compile_provenance_copy(&context,&fixture.instance,&out)==XR_XIR_BAD_STRUCTURE && out==sentinel);
+        rp_balanced(mark);
+        xr_xir_compile_construction_free(fixture.source.construction);
+        rp_owner_free(&context,baseline);rp_balanced(physical);
+    }
 }
 
 static XrXirStatus rp_trace_pipeline(const XrXirCompileContext *c, XrXirRootCauseTrace **output) {
@@ -220,6 +259,7 @@ int main(void) {
     rp_faults(false); rp_faults(true);
     rp_axes(false); rp_axes(true);
     rp_early_failures();
+    rp_missing_source_owners();
     puts("owned parameter evidence resource gates passed");
     return 0;
 }
