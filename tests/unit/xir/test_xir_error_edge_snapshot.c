@@ -95,7 +95,7 @@ static void ee_private_begin(const XrXirCompileContext *c, EdgeFixture *f,
     EffectBodyRequest input=effect_body_raw_request(&context,&f->module);
     CHECK(effect_errors_seed(&input.domain,e,&context)==XR_XIR_OK);
     *terms=(EffectTerms){0};terms->remaining=flow->remaining;terms->types=f->types;
-    flow->source=&f->module;flow->body=effect_body_raw_request(flow->remaining,&f->module);
+    flow->body=effect_body_raw_request(flow->remaining,&f->module);
     flow->effects=e;flow->terms=terms;
 }
 static void ee_private_free(ErrorFlow *flow, EffectTerms *terms, XrXirEffects *e) {
