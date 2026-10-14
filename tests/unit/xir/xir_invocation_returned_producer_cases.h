@@ -311,8 +311,9 @@ static XrXirStatus invocation_returned_lowered(const XrXirCompileContext *contex
 
 /* Public analysis and an independently requested private seal both use the
  * real Checked owner. The private returned data does not authorize execution. */
+#include "xir_final_read_allocation_bounds.h"
 static XrXirStatus conditional_invocation_returned(const XrXirCompileContext *context,
-    uint32_t mode,bool oracle) {
+    uint32_t mode,bool oracle,bool read_extent) {
     if (mode>=8) return XR_XIR_BAD_STRUCTURE;
     InvocationReturnedFixture fixture;invocation_returned_fixture(&fixture,mode);
     XrXirArtifact *checked=NULL;XrXirEffects *published=NULL;XrXirDiagnostic diagnostic={0};
@@ -342,6 +343,7 @@ static XrXirStatus conditional_invocation_returned(const XrXirCompileContext *co
     effect_invocation_bounds_free(bounds);effect_graph_free(&graph);invocation_core_storage_free(&effects);
     if (status==XR_XIR_OK && mode>=5) status=invocation_returned_lowered(context,checked,oracle);
     xr_xir_compile_artifact_free(checked);checked=NULL;memset(&fixture,0,sizeof(fixture));
+    if (status==XR_XIR_OK && read_extent) final_read_allocation_bounds(context,certificate,published);
     if (status==XR_XIR_OK && oracle) {
         const EffectInvocationFinal *owned=certificate->final;
         CHECK(owned->material==certificate->body && owned->physical==certificate->body->physical &&
