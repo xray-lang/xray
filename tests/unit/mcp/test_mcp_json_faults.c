@@ -67,6 +67,25 @@ static XrJsonValue *parameters(unsigned kind) {
         if(kind==6){XrJsonValue *meta=xjson_new_object();XJSON_SET_STRING(meta,"progressToken","owned-token");xjson_object_set(p,"_meta",meta);}
     } else if(kind==8)XJSON_SET_STRING(p,"uri","xray://spec/cheatsheet");
     else if(kind==10){XJSON_SET_STRING(p,"name","code-review");XrJsonValue *a=xjson_new_object();XJSON_SET_STRING(a,"code","print(42)\n");xjson_object_set(p,"arguments",a);}
+    if(kind>=12 && kind<=18) {
+        XrJsonValue *args=xjson_new_object(); CHECK(args);
+        const char *tool=kind<=13?"xray_syntax_lookup":kind<=15?"xray_stdlib_search":"xray_definition";
+        XJSON_SET_STRING(p,"name",tool);
+        if(kind<=13)XJSON_SET_STRING(args,"topic",kind==12?"class":"__missing_syntax_topic__");
+        else if(kind<=15) {
+            XJSON_SET_STRING(args,"query",kind==14?"sleep":"__missing_stdlib_symbol__");
+            XJSON_SET_STRING(args,"module","time");
+        } else XJSON_SET_STRING(args,"symbol",kind==16?"enum":kind==17?"time.sleep":"__missing_module__.__missing_symbol__");
+        xjson_object_set(p,"arguments",args);
+    } else if(kind==19 || kind==20)XJSON_SET_STRING(p,"uri",kind==19?"xray://spec/topic/class":"xray://stdlib/time");
+    else if(kind>=21 && kind<=24) {
+        const char *name=kind==21?"explain-error":kind==22?"convert-to-xray":kind==23?"concurrency-pattern":"write-test";
+        const char *key=kind==21?"error":kind==23?"description":"code";
+        XJSON_SET_STRING(p,"name",name);XrJsonValue *args=xjson_new_object(); CHECK(args);
+        XJSON_SET_STRING(args,key,"print(42)\n");
+        if(kind==22)XJSON_SET_STRING(args,"sourceLanguage","Python");
+        xjson_object_set(p,"arguments",args);
+    }
     return p;
 }
 static XrJsonValue *invoke(unsigned kind,XmcpServer *server,XrJsonValue *p,XmcpRpcError *error) {
@@ -77,6 +96,9 @@ static XrJsonValue *invoke(unsigned kind,XmcpServer *server,XrJsonValue *p,XmcpR
     case 7:return xmcp_handle_resources_list(server,error);
     case 8:return xmcp_handle_resources_read(server,p,error);
     case 9:return xmcp_handle_prompts_list(server,error);
+    case 11:return xmcp_handle_resource_templates_list(server,error);
+    case 12:case 13:case 14:case 15:case 16:case 17:case 18:return xmcp_handle_tools_call(server,p,error);
+    case 19:case 20:return xmcp_handle_resources_read(server,p,error);
     default:return xmcp_handle_prompts_get(server,p,error);
     }
 }
@@ -92,7 +114,7 @@ static void complete_case(unsigned kind) {
         else {
             CHECK(injected);
             CHECK(!result || xjson_get_bool(result,"isError"));
-            if(result)CHECK(xjson_get_int_or(xjson_get_object(result,"structuredContent"),"sourceStatus",-1)==XR_XIR_OUT_OF_MEMORY);
+            if(result && kind<11)CHECK(xjson_get_int_or(xjson_get_object(result,"structuredContent"),"sourceStatus",-1)==XR_XIR_OUT_OF_MEMORY);
         }
         fail_at=SIZE_MAX;xjson_free(result);xjson_free(p);xmcp_server_free(server);
         CHECK(!live && !physical_bytes);
@@ -100,4 +122,25 @@ static void complete_case(unsigned kind) {
     }
     printf("MCP handler%u: %zu complete heap faults; no partial response; physical0\n",kind,sites);
 }
+#ifdef MCP_KNOWLEDGE_FAULTS
+static void syntax_fallback_one(void) {
+    xmcp_json_begin();XmcpServerOptions options;xmcp_server_options_default(&options);
+    XmcpServer *server=xmcp_server_new(&options);CHECK(server);
+    XrJsonValue *p=parameters(13);XmcpCallContext ctx={0};
+    attempts=0;injected=false;fail_at=0;
+    XrJsonValue *result=xmcp_tool_xray_syntax_lookup(server,&ctx,xjson_get_object(p,"arguments"));
+    bool partial=result && !xjson_get_bool(result,"isError");
+    CHECK(injected);
+    fail_at=SIZE_MAX;xjson_free(result);xjson_free(p);xmcp_server_free(server);
+    CHECK(!live && !physical_bytes);
+    printf("Syntax fallback allocator failure: published_success=%d; physical0\n",partial);
+    CHECK(!partial);
+}
+int main(int argc,char **argv) {
+    xr_test_suppress_dialogs();
+    if(argc==2 && !strcmp(argv[1],"--syntax-fallback-one")){syntax_fallback_one();return 0;}
+    for(unsigned kind=11;kind<25;++kind)complete_case(kind);return 0;
+}
+#else
 int main(void) { xr_test_suppress_dialogs();for(unsigned kind=0;kind<11;++kind)complete_case(kind);return 0; }
+#endif

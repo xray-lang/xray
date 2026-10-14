@@ -44,3 +44,10 @@ target_link_libraries(test_mcp_publication_faults PRIVATE xray_mcp_faults)
 add_test(NAME test_mcp_publication_faults COMMAND test_mcp_publication_faults)
 set_tests_properties(test_mcp_publication_faults PROPERTIES
     LABELS "unit;mcp;faults;ownership;process" TIMEOUT 120 COST 1 RUN_SERIAL TRUE)
+
+add_executable(test_mcp_knowledge_faults ${CMAKE_CURRENT_LIST_DIR}/test_mcp_json_faults.c)
+target_compile_definitions(test_mcp_knowledge_faults PRIVATE MCP_KNOWLEDGE_FAULTS=1)
+target_link_libraries(test_mcp_knowledge_faults PRIVATE xray_mcp_faults)
+add_test(NAME test_mcp_knowledge_faults COMMAND test_mcp_knowledge_faults)
+set_tests_properties(test_mcp_knowledge_faults PROPERTIES
+    LABELS "unit;mcp;faults;ownership;knowledge" TIMEOUT 120 COST 2 RUN_SERIAL TRUE)

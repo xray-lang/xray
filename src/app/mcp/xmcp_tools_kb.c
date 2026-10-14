@@ -108,6 +108,8 @@ XR_FUNC XrJsonValue *xmcp_tool_xray_syntax_lookup(XmcpServer *server, const Xmcp
     }
 
     char *available = xmcp_knowledge_list_topics(server->knowledge);
+    if (!available)
+        return xmcp_make_error_result("Error: syntax lookup failed");
     char msg[1024];
     snprintf(msg, sizeof(msg),
              "No syntax documentation found for topic \"%s\".\n\n"
