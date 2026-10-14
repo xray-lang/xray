@@ -31,6 +31,7 @@ struct XdapAdapter {
     uint64_t wait_epoch, wait_wake, wait_start, wait_duration;
     bool initialized, configured, running, closed, busy, terminal, stop_entry, variable_types, variable_paging;
     const char *stop_reason;
+    bool break_throw;
 };
 typedef struct XdapRequest {
     XdapJsonDocument document;
@@ -46,5 +47,6 @@ XR_FUNC XrXirStatus xdap_dispatch_event(XdapAdapter *,const char *,const XdapJso
 XR_FUNC XrXirStatus xdap_dispatch_argument(const XdapRequest *,const char *,uint32_t *);
 XR_FUNC XrXirStatus xdap_dispatch_number(const XdapRequest *,const char *,uint64_t,uint64_t *);
 XR_FUNC XrXirStatus xdap_dispatch_inspect(XdapAdapter *,const XdapRequest *,const char *);
+XR_FUNC XrXirStatus xdap_dispatch_exception(XdapAdapter *,const XdapRequest *,bool configure);
 XR_FUNC void xdap_dispatch_clear_stop(XdapAdapter *);
 #endif // XDAP_DISPATCH_INTERNAL_H

@@ -13,6 +13,7 @@
 #include "xxir_scalar_core.h"
 #include "xxir_instance_value.h"
 #include "xxir_vm_debug_calls_internal.h"
+#include "xxir_error.h"
 #include <stdatomic.h>
 #include <string.h>
 
@@ -40,6 +41,7 @@ struct XrXirVmDebugSnapshot {
     uint64_t stopped_thread;
     XrXirDomain *domain;
     SnapshotFrame *frames;
+    XrXirValue exception;
 };
 struct XrXirVmDebug {
     uint64_t identity;
@@ -54,7 +56,7 @@ struct XrXirVmDebug {
     DebugBreakpoint breakpoints[32];
     uint64_t epoch, skip_id, step_thread;
     uint32_t skip_instruction, step_depth;
-    bool skip_once, disabled, faulted;
+    bool skip_once, disabled, faulted, break_throw;
     _Atomic unsigned mode;
     _Atomic bool paused;
     XrXirVmDebugSnapshot *snapshot;
@@ -109,6 +111,7 @@ XR_FUNC void xr_xir_vm_debug_snapshot_drop(XrXirVmDebugSnapshot *snapshot) {
     XR_CHECK(snapshot_valid(snapshot), "invalid VM snapshot owner");
     if (!xr_xir_reference_release(&snapshot->references)) return;
     XrXirDomain *domain = snapshot->domain;
+    xr_xir_value_drop(&snapshot->exception);
     for (uint32_t i = 0; i < snapshot->count; ++i) {
         SnapshotFrame *frame = &snapshot->frames[i];
         if (frame->values) for (uint32_t j = 0; j < frame->info.value_count; ++j)
@@ -208,6 +211,12 @@ XR_FUNC XrXirValueStatus xr_xir_vm_debug_breakpoints_replace(XrXirVmDebug *debug
         fresh[i]=(DebugBreakpoint){locations[i].function,locations[i].instruction,true};
     }
     memcpy(debug->breakpoints,fresh,sizeof(fresh));return XR_XIR_VALUE_OK;
+}
+XR_FUNC XrXirValueStatus xr_xir_vm_debug_break_on_throw(XrXirVmDebug *debug, bool enabled) {
+    if (!debug_valid(debug) || !debug->artifact || debug->disabled ||
+        (debug->count && !xr_xir_vm_debug_paused(debug))) return XR_XIR_VALUE_BAD_ARGUMENT;
+    if (!xr_xir_domain_work(debug->domain, 1)) return XR_XIR_VALUE_LIMIT;
+    debug->break_throw=enabled;return XR_XIR_VALUE_OK;
 }
 XR_FUNC void xr_xir_vm_debug_request_pause(XrXirVmDebug *debug) {
     if (debug_valid(debug)) atomic_store_explicit(&debug->mode, XR_XIR_VM_DEBUG_PAUSE, memory_order_release);
@@ -350,7 +359,7 @@ static XrXirValueStatus capture_frame(XrXirVmDebug *debug,const XirDebugCallFram
     if (!xr_xir_domain_work(debug->domain,frame->info.value_count)) return XR_XIR_VALUE_LIMIT;
     return copy_frame_values(debug,live,view,frame);
 }
-static XrXirValueStatus capture(XrXirVmDebug *debug, XrXirCallView *view) {
+static XrXirValueStatus capture(XrXirVmDebug *debug, XrXirCallView *view, const XrXirInstruction *throw_op) {
     if (debug->epoch == UINT64_MAX) return XR_XIR_VALUE_LIMIT;
     const XirDebugCallFrame *current=xir_debug_calls_current(&debug->calls);
     if (!current) return XR_XIR_VALUE_BAD_ARGUMENT;
@@ -387,6 +396,16 @@ static XrXirValueStatus capture(XrXirVmDebug *debug, XrXirCallView *view) {
         if (!selected) { status=XR_XIR_VALUE_BAD_ARGUMENT;goto fail; }
         status=capture_frame(debug,selected,view,snapshot,at++);if (status!=XR_XIR_VALUE_OK) goto fail;
     }
+    if (throw_op) {
+        uint32_t operand=throw_op->args[0];SnapshotFrame *frame=&snapshot->frames[0];
+        if (operand>=frame->info.value_count || !frame->known[operand]) { status=XR_XIR_VALUE_BAD_ARGUMENT;goto fail; }
+        XrXirValue concrete=frame->values[operand];
+        if (concrete.type==XR_XIR_ERROR && !xr_xir_error_borrow(&frame->values[operand],&concrete)) {
+            status=XR_XIR_VALUE_BAD_ARGUMENT;goto fail;
+        }
+        if (!xr_xir_domain_work(debug->domain,1)) { status=XR_XIR_VALUE_LIMIT;goto fail; }
+        status=xr_xir_value_copy(&concrete,&snapshot->exception);if (status!=XR_XIR_VALUE_OK) goto fail;
+    }
     debug->snapshot = snapshot;
     ++debug->epoch;
     atomic_store_explicit(&debug->paused, true, memory_order_release);
@@ -419,9 +438,12 @@ XR_FUNC XrXirValueStatus xir_vm_debug_before(XrXirVmDebug *debug,
         return XR_XIR_VALUE_OK;
     }
     unsigned mode = atomic_load_explicit(&debug->mode, memory_order_acquire);
+    const XrXirModule *module=xr_xir_compile_artifact_module(debug->artifact);
+    const XrXirInstruction *op=&module->functions[point->binding->function].instructions[point->instruction];
+    bool throwing=debug->break_throw && op->op==XR_XIR_THROW;
     const XirDebugCallFrame *call=xir_debug_calls_current(&debug->calls);
     bool same=call->thread==debug->step_thread;
-    bool stop = mode == XR_XIR_VM_DEBUG_PAUSE || (same && (mode == XR_XIR_VM_DEBUG_STEP_IN ||
+    bool stop = throwing || mode == XR_XIR_VM_DEBUG_PAUSE || (same && (mode == XR_XIR_VM_DEBUG_STEP_IN ||
         (mode == XR_XIR_VM_DEBUG_STEP_OVER && call->event.depth <= debug->step_depth) ||
         (mode == XR_XIR_VM_DEBUG_STEP_OUT && call->event.depth < debug->step_depth)));
     for (unsigned i = 0; i < 32 && !stop; ++i)
@@ -429,7 +451,7 @@ XR_FUNC XrXirValueStatus xir_vm_debug_before(XrXirVmDebug *debug,
             debug->breakpoints[i].function == point->binding->function &&
             debug->breakpoints[i].instruction == point->instruction;
     if (!stop) return XR_XIR_VALUE_OK;
-    status = capture(debug, point->view);
+    status = capture(debug, point->view,throwing ? op : NULL);
     if (status == XR_XIR_VALUE_OK) *stopped = true;
     return status;
 }
@@ -513,4 +535,11 @@ XR_FUNC XrXirValueStatus xr_xir_vm_debug_snapshot_cell_value(const XrXirVmDebugS
     if (!(snapshot->frames[frame].known[value] & 2)) return XR_XIR_VALUE_UNSUPPORTED;
     if (!xr_xir_domain_work(snapshot->domain, 1)) return XR_XIR_VALUE_LIMIT;
     return xr_xir_value_copy(&snapshot->frames[frame].cell_values[value], output);
+}
+XR_FUNC XrXirValueStatus xr_xir_vm_debug_snapshot_exception(const XrXirVmDebugSnapshot *snapshot,XrXirValue *output) {
+    if (!snapshot_valid(snapshot) || !output || output->type || output->reserved || output->payload)
+        return XR_XIR_VALUE_BAD_ARGUMENT;
+    if (!snapshot->exception.type) return XR_XIR_VALUE_UNSUPPORTED;
+    if (!xr_xir_domain_work(snapshot->domain,1)) return XR_XIR_VALUE_LIMIT;
+    return xr_xir_value_copy(&snapshot->exception,output);
 }

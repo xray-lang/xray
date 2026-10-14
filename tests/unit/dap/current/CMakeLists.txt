@@ -115,3 +115,19 @@ if(XR_BUILD_DAP)
         --xray $<TARGET_FILE:xray> --fixture ${CMAKE_CURRENT_SOURCE_DIR}/wire_fixture.xr)
     set_tests_properties(dap_current_stdio PROPERTIES TIMEOUT 120 LABELS "dap;cli;stdio;execution;ownership")
 endif()
+
+add_executable(test_dap_exceptions test_exceptions.c ${PROJECT_SOURCE_DIR}/src/base/xjson.c ${PROJECT_SOURCE_DIR}/src/base/xutf8.c)
+target_link_libraries(test_dap_exceptions PRIVATE xray_dap_current)
+target_compile_definitions(test_dap_exceptions PRIVATE XR_DAP_STDLIB="${PROJECT_SOURCE_DIR}/stdlib"
+    XR_DAP_FIXTURE="${CMAKE_CURRENT_SOURCE_DIR}/wire_fixture.xr"
+    XR_DAP_CAUGHT_FIXTURE="${PROJECT_SOURCE_DIR}/tests/regression/dap/fixtures/current/caught_error.xr"
+    XR_DAP_UNCAUGHT_FIXTURE="${PROJECT_SOURCE_DIR}/tests/regression/dap/fixtures/current/uncaught_error.xr"
+    XR_DAP_PANIC_FIXTURE="${CMAKE_CURRENT_SOURCE_DIR}/panic_fixture.xr")
+if(MSVC)
+    target_compile_options(test_dap_exceptions PRIVATE /W4 /WX)
+else()
+    target_compile_options(test_dap_exceptions PRIVATE -Wall -Wextra -Werror)
+endif()
+add_test(NAME test_dap_exceptions COMMAND test_dap_exceptions)
+add_test(NAME test_dap_exceptions_resources COMMAND test_dap_exceptions --resources)
+set_tests_properties(test_dap_exceptions test_dap_exceptions_resources PROPERTIES TIMEOUT 120 LABELS "dap;exceptions;source;ownership;resources")

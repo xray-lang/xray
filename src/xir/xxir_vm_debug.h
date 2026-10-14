@@ -56,6 +56,9 @@ XR_FUNC XrXirValueStatus xr_xir_vm_debug_breakpoint(XrXirVmDebug *debug,
  * location and charging work. Failure preserves the previous set. */
 XR_FUNC XrXirValueStatus xr_xir_vm_debug_breakpoints_replace(XrXirVmDebug *,
     const XrXirVmDebugLocation *, uint32_t count);
+/* Stop before an observed VM language throw. This does not predict whether
+ * ordinary Call propagation will find a handler and does not intercept faults. */
+XR_FUNC XrXirValueStatus xr_xir_vm_debug_break_on_throw(XrXirVmDebug *, bool enabled);
 /* Pause requests may arrive from the control thread. The sole execution driver
  * polls one quantum at a time and stops polling while paused. No language
  * suspension or wake token is fabricated for a debugger stop. */
@@ -89,4 +92,7 @@ XR_FUNC XrXirValueStatus xr_xir_vm_debug_snapshot_value(const XrXirVmDebugSnapsh
  * be read at capture time, or a non-Cell operand, returns UNSUPPORTED. */
 XR_FUNC XrXirValueStatus xr_xir_vm_debug_snapshot_cell_value(const XrXirVmDebugSnapshot *snapshot,
     uint32_t frame, uint32_t value, XrXirValue *output);
+/* Copies the concrete enum owned by a first-chance throw snapshot. Other stops
+ * return UNSUPPORTED and preserve empty output. The copy may escape the stop. */
+XR_FUNC XrXirValueStatus xr_xir_vm_debug_snapshot_exception(const XrXirVmDebugSnapshot *, XrXirValue *);
 #endif // XXIR_VM_DEBUG_H

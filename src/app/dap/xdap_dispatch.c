@@ -138,7 +138,8 @@ static XrXirStatus dispatch_initialize(XdapAdapter *s,const XdapRequest *r) {
     XdapJsonWriter body=xdap_json_writer(s->resources,s->config.message_limit);
     XDAP_TEXT(&body,"{\"supportsConfigurationDoneRequest\":true,\"supportsFunctionBreakpoints\":true,"
         "\"supportsTerminateRequest\":true,\"supportsRestartRequest\":true,\"supportsSteppingGranularity\":true,\"supportsDisassembleRequest\":true,"
-        "\"supportsValueFormattingOptions\":false}");
+        "\"supportsValueFormattingOptions\":false,\"supportsExceptionInfoRequest\":true,"
+        "\"exceptionBreakpointFilters\":[{\"filter\":\"all\",\"label\":\"Language throws in observed VM\",\"default\":false}]}");
     XrXirStatus status=xdap_dispatch_response(s,r,true,&body,NULL);xdap_json_writer_free(&body);
     if (status==XR_XIR_OK) { s->initialized=true;status=xdap_dispatch_event(s,"initialized",NULL); }
     return status;
@@ -161,6 +162,9 @@ static XrXirStatus dispatch_launch(XdapAdapter *s,const XdapRequest *r) {
         return xdap_dispatch_response(s,r,false,NULL,message);
     }
     xr_source_compile_diagnostic_free(&diagnostic);
+    if (xdap_current_break_on_throw(launch->control,s->break_throw)!=XR_XIR_VALUE_OK) {
+        xdap_launch_free(launch);return xdap_dispatch_response(s,r,false,NULL,"Exception filter admission failed");
+    }
     status=xdap_dispatch_response(s,r,true,NULL,NULL);
     if (status!=XR_XIR_OK) { xdap_launch_free(launch);return status; }
     s->launch=launch;s->stop_entry=stop && r->document.nodes[stop].boolean;
@@ -192,6 +196,9 @@ static XrXirStatus dispatch_restart(XdapAdapter *s,const XdapRequest *r) {
     }
     if (xdap_current_breakpoints_replace(candidate->control,locations,count)!=XR_XIR_VALUE_OK) {
         xdap_launch_free(candidate);return xdap_dispatch_response(s,r,false,NULL,"Restart breakpoint admission failed");
+    }
+    if (xdap_current_break_on_throw(candidate->control,s->break_throw)!=XR_XIR_VALUE_OK) {
+        xdap_launch_free(candidate);return xdap_dispatch_response(s,r,false,NULL,"Restart exception filter admission failed");
     }
     XrXirCallStatus started=xdap_current_start(candidate->control,candidate->entry,NULL,0);
     if (started!=XR_XIR_CALL_READY) { xdap_launch_free(candidate);return xdap_dispatch_response(s,r,false,NULL,"Restart start rejected"); }
@@ -266,6 +273,8 @@ XR_FUNC XrXirStatus xdap_adapter_request(XdapAdapter *s,const char *bytes,size_t
     else if (!strcmp(command,"launch")) status=dispatch_launch(s,&r);
     else if (!strcmp(command,"configurationDone")) status=dispatch_start(s,&r);
     else if (!strcmp(command,"restart")) status=dispatch_restart(s,&r);
+    else if (!strcmp(command,"setExceptionBreakpoints") || !strcmp(command,"exceptionInfo"))
+        status=xdap_dispatch_exception(s,&r,!strcmp(command,"setExceptionBreakpoints"));
     else if (!strcmp(command,"continue") || !strcmp(command,"next") || !strcmp(command,"stepIn") ||
         !strcmp(command,"stepOut") || !strcmp(command,"pause")) status=dispatch_control(s,&r,command);
     else if (!strcmp(command,"disconnect") || !strcmp(command,"terminate")) status=dispatch_terminate(s,&r,!strcmp(command,"disconnect"));
@@ -320,8 +329,11 @@ XR_FUNC XrXirStatus xdap_adapter_step(XdapAdapter *s,uint64_t quantum) {
             s->frames[i].handle=s->next_handle++;s->frames[i].scope=s->next_handle++;
         }
         s->stop_epoch=result.debug_epoch;s->running=false;
+        XrXirValue exception={0};XrXirValueStatus observed=xr_xir_vm_debug_snapshot_exception(s->snapshot,&exception);
+        bool throwing=observed==XR_XIR_VALUE_OK;xr_xir_value_drop(&exception);
+        if (!throwing && observed!=XR_XIR_VALUE_UNSUPPORTED) { status=dispatch_value(observed);goto done; }
         XdapJsonWriter body=xdap_json_writer(s->resources,s->config.message_limit);
-        XDAP_TEXT(&body,"{\"reason\":");const char *reason=s->stop_reason ? s->stop_reason : "breakpoint";
+        XDAP_TEXT(&body,"{\"reason\":");const char *reason=throwing ? "exception" : s->stop_reason ? s->stop_reason : "breakpoint";
         xdap_json_quote(&body,reason,strlen(reason));XDAP_TEXT(&body,",\"threadId\":");
         xdap_json_unsigned(&body,xr_xir_vm_debug_snapshot_stopped_thread(s->snapshot));XDAP_TEXT(&body,",\"allThreadsStopped\":true}");
         status=xdap_dispatch_event(s,"stopped",&body);xdap_json_writer_free(&body);
