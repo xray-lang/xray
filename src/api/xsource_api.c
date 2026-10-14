@@ -111,11 +111,12 @@ static XrXirOutputStatus api_output(void *context,XrXirOutputStream stream,const
 XRAY_API XrSourceStatus xray_source_compiler_options_init(XrSourceCompilerOptions *options,size_t size) {
     if(!options || size!=sizeof(*options))return XR_SOURCE_BAD_ARGUMENT;
     XrCompileResourceLimits limits=xr_source_compile_default_resource_limits();
-    *options=(XrSourceCompilerOptions){XRAY_SOURCE_API_VERSION,sizeof(*options),limits.allocated_bytes,limits.live_bytes,limits.work,NULL};
+    *options=(XrSourceCompilerOptions){XRAY_SOURCE_API_VERSION,sizeof(*options),sizeof(XrSourceWait),limits.allocated_bytes,limits.live_bytes,limits.work,NULL};
     return XR_SOURCE_OK;
 }
 XRAY_API XrSourceStatus xray_source_compiler_new(const XrSourceCompilerOptions *options,XrSourceCompiler **output) {
-    if(!options || options->api_version!=XRAY_SOURCE_API_VERSION || options->struct_size!=sizeof(*options) || !output || *output)
+    if(!options || options->api_version!=XRAY_SOURCE_API_VERSION || options->struct_size!=sizeof(*options) ||
+        options->wait_size!=sizeof(XrSourceWait) || !output || *output)
         return XR_SOURCE_BAD_ARGUMENT;
     XrCompileResourceLimits limits={options->allocated_bytes,options->live_bytes,options->work};
     XrCompileResources *resources=NULL;
@@ -262,13 +263,20 @@ XRAY_API XrSourceStatus xray_source_call_resume(XrSourceCall *call,uint64_t epoc
     call->busy=true;XrXirCallStatus status=xr_xir_host_call_resume(call->host,epoch,wake);call->busy=false;
     if(status==XR_XIR_CALL_READY)call->observed=XR_XIR_CALL_READY;return api_call(status);
 }
-XRAY_API XrSourceStatus xray_source_call_wait_request(const XrSourceCall *call,uint64_t epoch,uint64_t wake,XrSourceWait *output) {
-    if(!call || !output)return XR_SOURCE_BAD_ARGUMENT;
+XRAY_API XrSourceStatus xray_source_call_wait_request(const XrSourceCall *call,uint64_t epoch,uint64_t wake,XrSourceWait *output,size_t size) {
+    if(!call || !output || size!=sizeof(*output))return XR_SOURCE_BAD_ARGUMENT;
     if(call->busy)return XR_SOURCE_BUSY;
     XrXirWaitRequest request={0};XrXirCallStatus status=xr_xir_host_call_wait_request(call->host,epoch,wake,&request);
     if(status!=XR_XIR_CALL_READY)return api_call(status);
-    XrSourceWaitKind kind=request.kind==XR_XIR_WAIT_YIELD?XR_SOURCE_WAIT_YIELD:request.kind==XR_XIR_WAIT_TIMER_MS?XR_SOURCE_WAIT_TIMER:XR_SOURCE_WAIT_TASK;
-    *output=(XrSourceWait){kind,request.after_ms};return XR_SOURCE_OK;
+    if(request.reserved)return XR_SOURCE_INVALID;
+    XrSourceWaitKind kind;
+    switch(request.kind) {
+    case XR_XIR_WAIT_YIELD:kind=XR_SOURCE_WAIT_YIELD;break;
+    case XR_XIR_WAIT_TIMER_MS:kind=XR_SOURCE_WAIT_TIMER;break;
+    case XR_XIR_WAIT_TASK:kind=XR_SOURCE_WAIT_TASK;break;
+    default:return XR_SOURCE_UNSUPPORTED;
+    }
+    *output=(XrSourceWait){kind,request.after_ms,request.subject,request.generation,request.ticket};return XR_SOURCE_OK;
 }
 XRAY_API XrSourceStatus xray_source_call_cancel(XrSourceCall *call) {
     if(!call)return XR_SOURCE_BAD_ARGUMENT;
