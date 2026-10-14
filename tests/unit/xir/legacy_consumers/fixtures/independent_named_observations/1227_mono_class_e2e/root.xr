@@ -8,7 +8,7 @@
 
 class Box<T> {
     value: T
-    constructor(v: T) {
+    init(v: T) {
         this.value = v
     }
     get() -> T {
@@ -18,7 +18,7 @@ class Box<T> {
 class Pair<K, V> {
     key: K
     val: V
-    constructor(k: K, v: V) {
+    init(k: K, v: V) {
         this.key = k
         this.val = v
     }

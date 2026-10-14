@@ -88,8 +88,8 @@
     {
       "id": "cleanup_lifo",
       "oracle_id": "cleanup_lifo",
-      "source": "tests/diff/cases/semantics/cleanup/resource_release_order.xr",
-      "source_lf_sha256": "a106c05e71f9f03f392dd122506cc113e56fb77d2c0e0481b991748c2211bc15",
+      "source": "tests/unit/xir/legacy_consumers/fixtures/regression_protocol_ports/resource_release_order/root.xr",
+      "source_lf_sha256": "234531432fa94480469dbe85e0278a7bc2bad866f8472fd2bf41907d300aab29",
       "entry": "run",
       "stdout_utf8": "open A\nopen B\nopen C\nwork\nclose C\nclose B\nclose A\ndone\n",
       "companions": [],
@@ -102,10 +102,15 @@
         "Fresh Source/Checked/Program execution on published dependencies; this file is not a product runner.",
         "Independent VM and actual generated-C native observations; P20 owns mixed execution qualification.",
         "All applicable producer lifetime, complete FI, exact resource budgets, cancellation, physical release and sanitizer gates.",
-        "Retain separate allocation/blocks/bytes and provider release observations; printed close calls cannot prove physical cleanup."
+        "Retain separate allocation/blocks/bytes and provider release observations; printed close calls cannot prove physical cleanup.",
+        "Final init-only migration requires fixed P10 contextual-init interface; original legacy constructor PASS is baseline evidence only."
       ],
-      "source_context": "original_absolute",
-      "consumer_source_preservation": "Exact original declaration-owned constructor and complete cleanup body; no constructor spelling adapter."
+      "frozen_target_transition": {
+        "original_source": "tests/diff/cases/semantics/cleanup/resource_release_order.xr",
+        "original_source_lf_sha256": "a106c05e71f9f03f392dd122506cc113e56fb77d2c0e0481b991748c2211bc15",
+        "target": "Task319 contextual init, typed name:string, Type(...) calls; no constructor alias or spelling adapter.",
+        "declared_changes": "Only constructor declaration keyword -> init. Original all fields,open/close/LIFO/print calls preserved."
+      }
     },
     {
       "id": "array_return_logical_copy",
@@ -13106,7 +13111,7 @@
       "id": "structured_original_1221_generic_class_basic_observed",
       "oracle_id": "structured_original_1221_generic_class_basic_observed",
       "source": "tests/unit/xir/legacy_consumers/fixtures/independent_named_observations/1221_generic_class_basic/root.xr",
-      "source_lf_sha256": "788ec5bc982630e8eff9fae129ed5f404fdff2468fab79dc6d58cee09222c9c3",
+      "source_lf_sha256": "220a3a3bdfa6b6ac4673ba82a190fdd6e544181844ab14558612e5a773f8eb38",
       "entry": "test",
       "stdout_utf8": "42\n42\nhello\nhello\ntrue\nage\n30\n1\none\n100\n1\n2\n3\nx\n99\n",
       "stderr_utf8": "",
@@ -13223,14 +13228,15 @@
       "remaining_gates": [
         "Actual complete discovery and independent VM/C/native values.",
         "Erased interface/higher-order dispatch and full generic definition/constraint checking remain separate.",
-        "Original complete compiler/native/runtime FI, exact budgets/cancel/lifetime/physical and sanitizer/provider matrix."
+        "Original complete compiler/native/runtime FI, exact budgets/cancel/lifetime/physical and sanitizer/provider matrix.",
+        "Task319 init-only target on fixed P10 product; earlier constructor-source PASS is historical baseline, not final migration qualification."
       ]
     },
     {
       "id": "structured_original_1227_mono_class_e2e_observed",
       "oracle_id": "structured_original_1227_mono_class_e2e_observed",
       "source": "tests/unit/xir/legacy_consumers/fixtures/independent_named_observations/1227_mono_class_e2e/root.xr",
-      "source_lf_sha256": "09f7277d1280d2498c327a8135aafe83b8165488ff657ceb936bf88251e32e56",
+      "source_lf_sha256": "c1169e51093cf1d1957b64a0e36d504218ce689011ad29113dfb051ba30003bb",
       "entry": "test",
       "stdout_utf8": "42\n42\n3.14\n3.14\nhello\nhello\ntrue\nage\n30\n1\n2.5\n6\n100\n10\n20\n30\n",
       "stderr_utf8": "",
@@ -13353,14 +13359,15 @@
       "remaining_gates": [
         "Actual complete discovery and independent VM/C/native values.",
         "Erased interface/higher-order dispatch and full generic definition/constraint checking remain separate.",
-        "Original complete compiler/native/runtime FI, exact budgets/cancel/lifetime/physical and sanitizer/provider matrix."
+        "Original complete compiler/native/runtime FI, exact budgets/cancel/lifetime/physical and sanitizer/provider matrix.",
+        "Task319 init-only target on fixed P10 product; earlier constructor-source PASS is historical baseline, not final migration qualification."
       ]
     },
     {
       "id": "structured_original_0850_interface_observed",
       "oracle_id": "structured_original_0850_interface_observed",
       "source": "tests/unit/xir/legacy_consumers/fixtures/independent_named_observations/0850_interface/root.xr",
-      "source_lf_sha256": "59e44bc338ff4efe9804ba2b52c722cab441cd82c746b9bbee33c7ffdae51d93",
+      "source_lf_sha256": "c8bc90a68699731a124bdb607466290479568e2be9c0c6387e6caa0c36ad7b93",
       "entry": "test",
       "stdout_utf8": "5.0\n12.0\n14.0\n6.0\n16.0\nHello, Alice\n",
       "stderr_utf8": "",
@@ -13420,7 +13427,8 @@
       "remaining_gates": [
         "Actual complete discovery and independent VM/C/native values.",
         "Erased interface/higher-order dispatch and full generic definition/constraint checking remain separate.",
-        "Original complete compiler/native/runtime FI, exact budgets/cancel/lifetime/physical and sanitizer/provider matrix."
+        "Original complete compiler/native/runtime FI, exact budgets/cancel/lifetime/physical and sanitizer/provider matrix.",
+        "Task319 init-only target on fixed P10 product; earlier constructor-source PASS is historical baseline, not final migration qualification."
       ]
     },
     {
@@ -13540,7 +13548,7 @@
       "id": "structured_original_1220_generics_observed",
       "oracle_id": "structured_original_1220_generics_observed",
       "source": "tests/unit/xir/legacy_consumers/fixtures/independent_named_observations/1220_generics/root.xr",
-      "source_lf_sha256": "3eef2f7602d140e87cf2804646c2a490d0b72983209aa95f200e2c8f8a435eff",
+      "source_lf_sha256": "414fb695a67da4d9b37e44d305d7f24396046405e6b879dc090db5a9b4624404",
       "entry": "test",
       "stdout_utf8": "42\nhello\nage\n30\n100\n1\n2\n",
       "stderr_utf8": "",
@@ -13610,7 +13618,8 @@
       "remaining_gates": [
         "Whole actual named discovery and independent VM/C/native values, including module initialization.",
         "Generic physical instance count and full definition/constraint proof remain separate from40 equal return values.",
-        "All original exact FI/resources/lifetime/borrow/cancel/physical and sanitizer/provider qualification."
+        "All original exact FI/resources/lifetime/borrow/cancel/physical and sanitizer/provider qualification.",
+        "Task319 init-only target on fixed P10 product; earlier constructor-source PASS is historical baseline, not final migration qualification."
       ]
     },
     {
@@ -13754,7 +13763,7 @@
       "id": "structured_original_0401_generic_instance_breadth_observed",
       "oracle_id": "structured_original_0401_generic_instance_breadth_observed",
       "source": "tests/unit/xir/legacy_consumers/fixtures/independent_named_observations/0401_generic_instance_breadth/root.xr",
-      "source_lf_sha256": "7339d09286e3b7344c17d645682e228623afaab97cfa6bc078e64df6dbc05bb5",
+      "source_lf_sha256": "d6a02782e5b8a18eb3ab88fb5511529d02476e675194472f007d38cdbd94690b",
       "entry": "test",
       "stdout_utf8": "40\n",
       "stderr_utf8": "",
@@ -13788,7 +13797,8 @@
       "remaining_gates": [
         "Whole actual named discovery and independent VM/C/native values, including module initialization.",
         "Generic physical instance count and full definition/constraint proof remain separate from40 equal return values.",
-        "All original exact FI/resources/lifetime/borrow/cancel/physical and sanitizer/provider qualification."
+        "All original exact FI/resources/lifetime/borrow/cancel/physical and sanitizer/provider qualification.",
+        "Task319 init-only target on fixed P10 product; earlier constructor-source PASS is historical baseline, not final migration qualification."
       ]
     },
     {
@@ -13853,7 +13863,7 @@
       "id": "structured_original_0915_ref_exclusivity_legal_boundaries_observed",
       "oracle_id": "structured_original_0915_ref_exclusivity_legal_boundaries_observed",
       "source": "tests/unit/xir/legacy_consumers/fixtures/independent_named_observations/0915_ref_exclusivity_legal_boundaries/root.xr",
-      "source_lf_sha256": "20affe4f85b9dcd5e679effb790a84bc6731aaad2d558dc6cc6855b8dac94ca0",
+      "source_lf_sha256": "d5a3bcac7fa82d290285db24fb9ebf28f6d367f1b163a4822709d604ad66916b",
       "entry": "test",
       "stdout_utf8": "3\n2\n1\n",
       "stderr_utf8": "",
@@ -13892,7 +13902,8 @@
       },
       "remaining_gates": [
         "Complete actual discovery and independent VM/C/native legal outcomes.",
-        "Negative borrow/exclusivity and original compiler/native/runtime FI, exact resource/lifetime/cancel/physical and sanitizer/provider matrix."
+        "Negative borrow/exclusivity and original compiler/native/runtime FI, exact resource/lifetime/cancel/physical and sanitizer/provider matrix.",
+        "Task319 init-only target on fixed P10 product; earlier constructor-source PASS is historical baseline, not final migration qualification."
       ]
     },
     {
@@ -14342,7 +14353,7 @@
       "companions": [
         {
           "path": "tests/unit/xir/legacy_consumers/fixtures/independent_named_observations/1039_cross_module_generic_annotation/modules/generic_box_lib.xr",
-          "lf_sha256": "3dcea9718fe82a5ff5564117eba7aed71c2a86eb008a8b8deef6124b684b99a1"
+          "lf_sha256": "dd7ae82e4c0ee77593c3df2f7d71020a73e3b16f1367edee632c24def8d289c2"
         }
       ],
       "owners": [
@@ -14403,7 +14414,8 @@
       },
       "remaining_gates": [
         "Actual complete discovery and independent VM/C/native declared-module/user declaration results.",
-        "Full generic definition checks, SIMD hardware/provider authority and original full FI/resources/lifetime/cancel/physical/safety matrices remain open."
+        "Full generic definition checks, SIMD hardware/provider authority and original full FI/resources/lifetime/cancel/physical/safety matrices remain open.",
+        "Task319 init-only target on fixed P10 product; earlier constructor-source PASS is historical baseline, not final migration qualification."
       ]
     },
     {
@@ -14417,7 +14429,7 @@
       "companions": [
         {
           "path": "tests/unit/xir/legacy_consumers/fixtures/independent_named_observations/1040_selective_import_generic_return/modules/generic_box_lib.xr",
-          "lf_sha256": "3dcea9718fe82a5ff5564117eba7aed71c2a86eb008a8b8deef6124b684b99a1"
+          "lf_sha256": "dd7ae82e4c0ee77593c3df2f7d71020a73e3b16f1367edee632c24def8d289c2"
         }
       ],
       "owners": [
@@ -14460,7 +14472,8 @@
       },
       "remaining_gates": [
         "Actual complete discovery and independent VM/C/native declared-module/user declaration results.",
-        "Full generic definition checks, SIMD hardware/provider authority and original full FI/resources/lifetime/cancel/physical/safety matrices remain open."
+        "Full generic definition checks, SIMD hardware/provider authority and original full FI/resources/lifetime/cancel/physical/safety matrices remain open.",
+        "Task319 init-only target on fixed P10 product; earlier constructor-source PASS is historical baseline, not final migration qualification."
       ]
     },
     {
@@ -14474,7 +14487,7 @@
       "companions": [
         {
           "path": "tests/unit/xir/legacy_consumers/fixtures/independent_named_observations/1041_imported_instance_field_substitution/modules/generic_box_lib.xr",
-          "lf_sha256": "3dcea9718fe82a5ff5564117eba7aed71c2a86eb008a8b8deef6124b684b99a1"
+          "lf_sha256": "dd7ae82e4c0ee77593c3df2f7d71020a73e3b16f1367edee632c24def8d289c2"
         }
       ],
       "owners": [
@@ -14535,7 +14548,8 @@
       },
       "remaining_gates": [
         "Actual complete discovery and independent VM/C/native declared-module/user declaration results.",
-        "Full generic definition checks, SIMD hardware/provider authority and original full FI/resources/lifetime/cancel/physical/safety matrices remain open."
+        "Full generic definition checks, SIMD hardware/provider authority and original full FI/resources/lifetime/cancel/physical/safety matrices remain open.",
+        "Task319 init-only target on fixed P10 product; earlier constructor-source PASS is historical baseline, not final migration qualification."
       ]
     },
     {

@@ -6,7 +6,7 @@
 class Box<T> {
     value: T
 
-    constructor(v: T) {
+    init(v: T) {
         this.value = v
     }
 
@@ -18,7 +18,7 @@ class Pair<K, V> {
     key: K
     value: V
 
-    constructor(k: K, v: V) {
+    init(k: K, v: V) {
         this.key = k
         this.value = v
     }

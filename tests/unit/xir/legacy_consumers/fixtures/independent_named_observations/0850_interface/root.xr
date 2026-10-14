@@ -12,7 +12,7 @@ interface Drawable {
 class Circle implements Drawable {
     radius: f64
 
-    constructor(radius: f64) {
+    init(radius: f64) {
         this.radius = radius
     }
 
@@ -42,7 +42,7 @@ class Rectangle implements Shape {
     width: f64
     height: f64
 
-    constructor(w: f64, h: f64) {
+    init(w: f64, h: f64) {
         this.width = w
         this.height = h
     }
@@ -70,7 +70,7 @@ fn test_multi_method_interface() {
 class Square implements Shape {
     side: f64
 
-    constructor(s: f64) {
+    init(s: f64) {
         this.side = s
     }
 
@@ -104,7 +104,7 @@ class Person implements Printable {
     name: string
     age: i64
 
-    constructor(name: string, age: i64) {
+    init(name: string, age: i64) {
         this.name = name
         this.age = age
     }
