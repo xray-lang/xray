@@ -29,6 +29,8 @@ add_test(NAME test_xir_p10_reference_optional_triple_claims COMMAND test_xir_p10
 set_tests_properties(test_xir_p10_reference_optional_triple_claims PROPERTIES TIMEOUT 30 LABELS "unit;xir;p10;reference;accept")
 add_test(NAME test_xir_p10_reference_for_and_ternary COMMAND test_xir_p10_reference --accept for_and_ternary 607)
 set_tests_properties(test_xir_p10_reference_for_and_ternary PROPERTIES TIMEOUT 30 LABELS "unit;xir;p10;reference;accept")
+add_test(NAME test_xir_p10_reference_generic_class_phantom COMMAND test_xir_p10_reference --accept generic_class_phantom 41)
+set_tests_properties(test_xir_p10_reference_generic_class_phantom PROPERTIES TIMEOUT 30 LABELS "unit;xir;p10;reference;accept")
 add_test(NAME test_xir_p10_reference_reject_unused_member COMMAND test_xir_p10_reference --reject reject_unused_member 1 "receiver has no declared interface requirements")
 set_tests_properties(test_xir_p10_reference_reject_unused_member PROPERTIES TIMEOUT 30 LABELS "unit;xir;p10;reference;reject")
 add_test(NAME test_xir_p10_reference_reject_call_witness COMMAND test_xir_p10_reference --reject reject_call_witness 4 "type argument does not prove the declared constraint")
