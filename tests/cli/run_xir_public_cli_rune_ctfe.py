@@ -90,8 +90,8 @@ def main():
             result = invoke(name + '-source-absent', binary, ['run', str(output / (name + '.xr'))], hidden)
             assert (result.returncode, result.stdout, result.stderr) == (0, expected, b''), result
         for name, text, diagnostic in [
-                ('float-unadmitted', 'fn rounded(value:f64)->i64 { return value.round() }\nprint(comptime rounded(1.5))\n',
-                 b'comptime requires an admitted deterministic scalar direct-call closure'),
+                ('float-range', 'fn rounded(value:f64)->i64 { return value.round() }\nprint(comptime rounded(1.0/0.0))\n',
+                 b'comptime value range violation'),
                 ('owning-text-unadmitted', 'fn text(value:rune)->string { return value.toString() }\nprint(comptime text(rune(128512)))\n',
                  b'comptime requires an admitted deterministic scalar direct-call closure')]:
             source = output / (name + '.xr')
@@ -103,7 +103,8 @@ def main():
             scalar_codepoints=len(values), direct_nested_generic_ctfe_calls=len(values)*3, private_cell_cases=len(walks),
             source_poisoned_and_absent=True, VM_C_provider_PATH_hidden=True,
             Windows_absolute_child_denial=process_policy.control, library_generic_templates=False,
-            user_generic_scalar_instantiation=True, user_aggregate_ctfe=False, float_and_owned_text_ctfe=False,
+            user_generic_scalar_instantiation=True, user_aggregate_ctfe=False,
+            float_range_refused=True,numeric_TO_STRING_ctfe=False,
             library_private_var_opened=False, complete_standard_library=False), indent=2) + '\n', encoding='utf-8')
         print('Rune CTFE: imported scalar generic closures, 13 Unicode boundaries and seven private Cell loops PASS')
         return 0

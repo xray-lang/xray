@@ -6297,6 +6297,8 @@ Checked Source 的整数方法准入由 `stdlib/types/i64.xr` 的固定声明身
 
 当前 Checked Source 以固定 f64 声明身份及完整 READ/signature/allocation/failure/ownership 契约准入 `abs`、`toString`、`toI64`、`floor`、`ceil`、`round`、`isNaN`，并生成普通已有 XIR。`abs` 对零返回正零，NaN 结果遵循普通浮点转换/取反的 canonical 规则。`toI64` 向零截断；`floor/ceil` 向负/正无穷取整；`round` 最近取整且半值远离零，使用精确小数差比较而非给输入加减0.5。NaN、Infinity及无法转换为i64的输入沿共同数值转换发出E0422范围panic，不伪造值或 typed Error。除已有 f32 文本化外，这些准入方法当前要求 f64 接收者。`parse/tryParse/toFixed/sqrt/pow` 五项声明仍无 Checked 操作准入，完整浮点方法族未获资格。
 
+接收编译器Float执行接口后，上述非文本化的六项f64方法可在原有界CTFE路径执行：既有整数IEEE内核决定位级结果，每条浮点操作先支付1024 work，不依赖宿主FPU、VM或native执行。数值转换越界保范围拒绝；普通用户模块/闭合泛型可调用这些治理方法。Tuple常量按真实字段逻辑字节接收（Unit为0），当前Source输出帽仍为8字节，不扩大到类/record或任意拥有图；完整资源/全族资格另证。数值TO_STRING及剩余五项方法仍不因Float/字符串执行接口而自动准入。
+
 ### 14.3 `BigInt` 方法
 
 | 方法 | 签名 | 说明 |
