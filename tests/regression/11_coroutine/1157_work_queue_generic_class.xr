@@ -5,7 +5,7 @@ class GenericQueue<T> {
     shards: Array<Channel<T>>
     workers: i64
 
-    constructor(count: i64, capacity: i64) {
+    init(count: i64, capacity: i64) {
         this.workers = count
         this.shards = []
         for (var i = 0; i < count; i++) {

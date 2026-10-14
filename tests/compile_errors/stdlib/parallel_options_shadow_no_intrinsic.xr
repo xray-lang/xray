@@ -3,7 +3,7 @@ import parallel
 class Options {
     workers: i64
 
-    constructor(workers: i64) {
+    init(workers: i64) {
         this.workers = workers
     }
 }

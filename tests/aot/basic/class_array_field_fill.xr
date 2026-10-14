@@ -1,7 +1,7 @@
 class FillBag {
     values: Array<i64>
 
-    constructor() {
+    init() {
         var values: Array<i64> = []
         this.values = values
     }

@@ -3,7 +3,7 @@ class CollectionSnapshot {
     scores: Map<string, i64>
     seen: Set<string>
 
-    constructor(scores: Map<string, i64>, seen: Set<string>) {
+    init(scores: Map<string, i64>, seen: Set<string>) {
         this.scores = scores
         this.seen = seen
     }

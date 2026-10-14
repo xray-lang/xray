@@ -13,7 +13,7 @@ class Key {
     n: i64
     label: string
 
-    constructor(color: Color, n: i64, label: string) {
+    init(color: Color, n: i64, label: string) {
         this.color = color
         this.n = n
         this.label = label

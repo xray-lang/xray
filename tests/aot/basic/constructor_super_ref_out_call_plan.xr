@@ -1,14 +1,14 @@
 class RefCtorBase {
     value: i64 = 0
 
-    constructor(value: ref i64) {
+    init(value: ref i64) {
         value = value + 1
         this.value = value
     }
 }
 
 class RefCtorChild extends RefCtorBase {
-    constructor(value: ref i64) {
+    init(value: ref i64) {
         super(ref value)
     }
 }
@@ -26,13 +26,13 @@ class OutMethodChild extends OutMethodBase {
 }
 
 class OutCtorBase {
-    constructor(value: ref i64) {
+    init(value: ref i64) {
         value = 7
     }
 }
 
 class OutCtorChild extends OutCtorBase {
-    constructor(value: ref i64) {
+    init(value: ref i64) {
         super(ref value)
     }
 }

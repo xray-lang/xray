@@ -1,0 +1,6 @@
+import "./init_types" as declared
+export fn referenceAnswer() -> i64 {
+    const made = declared.Box(41)
+    const plain = declared.Plain{value: 2}
+    return made.value + plain.value + declared.localLiteral()
+}

@@ -6,7 +6,7 @@ class Tree {
     left: Tree?
     right: Tree?
 
-    constructor(left: Tree?, right: Tree?) {
+    init(left: Tree?, right: Tree?) {
         this.left = left
         this.right = right
     }

@@ -1076,7 +1076,7 @@ static XrJsonValue *complete_instance_members_by_name(XaAnalyzer *analyzer,
         }
         for (int i = 0; i < c->method_count; i++) {
             XaSymbol *m = c->methods[i];
-            if (m && m->name && !m->is_private && strcmp(m->name, XR_KEYWORD_CONSTRUCTOR) != 0)
+            if (m && m->name && !m->is_private && strcmp(m->name, XR_INIT_MEMBER_NAME) != 0)
                 append_instance_method(items, analyzer, m, class_name);
         }
     }
@@ -1103,7 +1103,7 @@ static XrJsonValue *complete_instance_members_from_analyzer(XaAnalyzer *analyzer
         XaSymbol *m = members[i];
         if (!m || !m->name || m->is_private)
             continue;
-        if (m->kind == XA_SYM_METHOD && strcmp(m->name, XR_KEYWORD_CONSTRUCTOR) == 0)
+        if (m->kind == XA_SYM_METHOD && strcmp(m->name, XR_INIT_MEMBER_NAME) == 0)
             continue;
         XaSymbolLinks *links = xa_analyzer_get_links(analyzer, m);
         if (m->kind == XA_SYM_METHOD) {

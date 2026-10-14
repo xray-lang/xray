@@ -5,14 +5,14 @@
 
 class Cell<T> {
     value: T
-    constructor(value: T) { this.value = value }
+    init(value: T) { this.value = value }
     map<U>(f: fn(T) -> U) -> Cell<U> { return Cell<U>(f(this.value)) }
     with<U>(other: U) -> string { return "${this.value}|${other}" }
 }
 
 class Counter {
     n: i64
-    constructor(n: i64) { this.n = n }
+    init(n: i64) { this.n = n }
     apply<U>(f: fn(i64) -> U) -> U { return f(this.n) }
 }
 

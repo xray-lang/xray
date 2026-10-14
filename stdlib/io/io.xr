@@ -21,7 +21,7 @@ export final class FileStat {
     isDir: bool
     isSymlink: bool
 
-    constructor(size: i64, mode: i64, mtime: i64, atime: i64, ctime: i64,
+    init(size: i64, mode: i64, mtime: i64, atime: i64, ctime: i64,
                 uid: i64, gid: i64, isFile: bool, isDir: bool, isSymlink: bool) {
         this.size = size
         this.mode = mode
@@ -47,7 +47,7 @@ export final class File {
     private _open: bool
     private _owned: bool
 
-    private constructor(handle: i64, owned: bool) {
+    private init(handle: i64, owned: bool) {
         this._handle = handle
         this._open = handle >= 0
         this._owned = owned
@@ -143,7 +143,7 @@ export final class BufReader {
     private _chunkSize: i64
     private _eof: bool
 
-    private constructor(file: File, chunkSize: i64) {
+    private init(file: File, chunkSize: i64) {
         this._file = file
         this._buffer = Array<u8>(0)
         this._cursor = 0
@@ -201,7 +201,7 @@ export final class LineIterator {
     private _next: string?
     private _done: bool
 
-    constructor(reader: BufReader) {
+    init(reader: BufReader) {
         this._reader = reader
         this._next = null
         this._done = false
@@ -298,7 +298,7 @@ export final class BufWriter {
     private _path: Path
     private _buffer: Array<u8>
 
-    constructor(path: Path, capacity: i64 = 131072) {
+    init(path: Path, capacity: i64 = 131072) {
         this._path = path
         this._buffer = Array<u8>()
         this._buffer.reserve(capacity)

@@ -106,7 +106,7 @@
 
 /* ========== Language Keywords ========== */
 
-#define XR_KEYWORD_CONSTRUCTOR "constructor"
+#define XR_INIT_MEMBER_NAME "init"
 
 /* ========== Builtin Class Names ========== */
 

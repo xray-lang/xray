@@ -1,7 +1,7 @@
 class ByteMapBag {
     values: Map<u8, i32>
 
-    constructor() {
+    init() {
         var values: Map<u8, i32> = #{}
         this.values = values
     }

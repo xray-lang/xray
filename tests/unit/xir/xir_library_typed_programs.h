@@ -36,8 +36,8 @@ static const char library_construction_definition[]=
     "export struct Auto{const text:string=\"owned\";const n:i64=41;}\n"
     "export struct Required{const text:string;const n:i64;}\n"
     "export struct Locked{private text:string=\"secret\";const n:i64=41;}\n"
-    "export struct Explicit{const n:i64;constructor(){this.n=41;}}\n"
-    "export struct PrivateCtor{const n:i64;private constructor(){this.n=41;}}\n"
+    "export struct Explicit{const n:i64;init(){this.n=41;}}\n"
+    "export struct PrivateCtor{const n:i64;private init(){this.n=41;}}\n"
 ;
 static const char library_construction_consumer[]=
     "import \"./construction\" as lib;\n"
@@ -91,12 +91,12 @@ static const char library_member_witness_consumer[]=
 static const char library_carrier_member_definition[]=
     "export struct Envelope<T>{const entries:Array<(T,string?)>;const text:string;first()->T{return this.entries[0].0;}}\n"
     "export fn make<T>(value:T)->Envelope<T>{const text:string?=\"owned\";const item:(T,string?)=(value,text);return Envelope<T>{entries:[item],text:\"owned\"};}\n"
-    "export struct Counter{n:i64;constructor(value:i64){this.n=value;}ref bump(){this.n=this.n+1;}read()->i64{return this.n;}}\n"
+    "export struct Counter{n:i64;init(value:i64){this.n=value;}ref bump(){this.n=this.n+1;}read()->i64{return this.n;}}\n"
     "export struct Dispatch{const invoke:fn(i64)->i64;run(value:i64)->i64{return (this.invoke)(value);}}\n"
     "fn next(value:i64)->i64{return value+1;}\n"
     "export fn increment()->fn(i64)->i64{return next;}\n"
     "export fn apply(f:fn(i64)->i64,value:i64)->i64{return f(value);}\n"
-    "export struct Secret{private const text:string;constructor(text:string){this.text=text;}}\n"
+    "export struct Secret{private const text:string;init(text:string){this.text=text;}}\n"
 ;
 static const char library_carrier_member_consumer[]=
     "import \"./carrier_member\" as lib;\n"
@@ -116,8 +116,8 @@ static const char library_enum_owned_consumer[]=
 ;
 static const char library_class_owned_definition[]=
     "export interface Read<T>{read()->T}\n"
-    "export final class Box<T> implements Read<T>{private value:T;const text:string;constructor(value:T){this.value=value;this.text=\"owned\";}read()->T{return this.value;}set(value:T){this.value=value;}}\n"
-    "export final class Secret{private value:i64;private constructor(value:i64){this.value=value;}static make()->Secret{return Secret(41);}read()->i64{return this.value;}}\n"
+    "export final class Box<T> implements Read<T>{private value:T;const text:string;init(value:T){this.value=value;this.text=\"owned\";}read()->T{return this.value;}set(value:T){this.value=value;}}\n"
+    "export final class Secret{private value:i64;private init(value:i64){this.value=value;}static make()->Secret{return Secret(41);}read()->i64{return this.value;}}\n"
     "export final class Defaulted{value:i64=41;text:string=\"owned\";}\n"
     "export fn make<T>(value:T)->Box<T>{return Box<T>(value);}\n"
     "export fn through<V:Read<i64>>(value:V)->i64{return value.read();}\n"

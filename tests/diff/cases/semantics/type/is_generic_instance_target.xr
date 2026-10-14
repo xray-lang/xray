@@ -4,10 +4,10 @@
 // pinned the old lowering failure.
 class Box<T> {
     value: T
-    constructor(v: T) { this.value = v }
+    init(v: T) { this.value = v }
 }
 
-class Plain { n: i64  constructor() { this.n = 1 } }
+class Plain { n: i64  init() { this.n = 1 } }
 
 fn f(x: Box<i64> | i64) -> bool { return x is Box<i64> }
 

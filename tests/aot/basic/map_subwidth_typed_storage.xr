@@ -20,7 +20,7 @@ print(m.get(255) == null)
 class ByteMapBag {
     values: Map<u8, i32>
 
-    constructor() {
+    init() {
         var values: Map<u8, i32> = #{}
         this.values = values
     }

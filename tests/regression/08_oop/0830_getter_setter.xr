@@ -8,7 +8,7 @@
 class Circle {
     _radius: f64
     
-    constructor(r) {
+    init(r) {
         this._radius = r
     }
     
@@ -45,7 +45,7 @@ fn test_computed_getter() {
 class Temperature {
     _celsius: f64
     
-    constructor(c) {
+    init(c) {
         this._celsius = c
     }
     
@@ -81,7 +81,7 @@ fn test_computed_setter() {
 class Age {
     _value: i64
     
-    constructor() {
+    init() {
         this._value = 0
     }
     
@@ -110,7 +110,7 @@ fn test_validating_setter() {
 class ReadOnly {
     _secret: string
     
-    constructor(s) {
+    init(s) {
         this._secret = s
     }
     
@@ -131,7 +131,7 @@ class Box {
     _width: i64
     _height: i64
     
-    constructor(w, h) {
+    init(w, h) {
         this._width = w
         this._height = h
     }

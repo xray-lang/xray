@@ -4,7 +4,7 @@
 class Vec {
     x: i64
     y: i64
-    constructor(x: i64, y: i64) {
+    init(x: i64, y: i64) {
         this.x = x
         this.y = y
     }

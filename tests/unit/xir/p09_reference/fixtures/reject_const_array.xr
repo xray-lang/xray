@@ -1,0 +1,5 @@
+export fn p09Answer() -> i64 {
+    const values: Array<i64> = [2, 3]
+    values[0] = 9
+    return values[0]
+}

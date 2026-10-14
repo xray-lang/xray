@@ -110,13 +110,13 @@ fn test_forward_to_universal_constraint() {
 class Animal {
     name: string
 
-    constructor(name) {
+    init(name) {
         this.name = name
     }
 }
 
 class Dog extends Animal {
-    constructor(name) {
+    init(name) {
         super(name)
     }
 }
@@ -142,7 +142,7 @@ interface Shape {
 class Square implements Shape {
     side: f64
 
-    constructor(side) {
+    init(side) {
         this.side = side
     }
 
@@ -173,7 +173,7 @@ fn identityC<U: Comparable>(y: U) -> U {
 class Holder<T: Comparable> {
     value: T
 
-    constructor(value) {
+    init(value) {
         this.value = value
     }
 
@@ -192,7 +192,7 @@ fn test_forward_class_type_param() {
 // A method's `<U: C>` reaches the same shared call-site check as a plain fn,
 // so entailment has to hold there too.
 class Forwarder {
-    constructor() {}
+    init() {}
 
     pick<U: Comparable>(y: U) -> U {
         return y

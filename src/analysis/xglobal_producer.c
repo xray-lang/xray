@@ -1047,11 +1047,6 @@ static bool class_field_fill_type_facts(XgClassFieldSummary *row, const XrTypeRe
         return true;
     if (tref_contains_error(type, 0))
         return false;
-    if (type->kind == XR_TREF_CONST) {
-        bool ok = class_field_fill_type_facts(row, type->nchildren > 0 ? type->children[0] : NULL);
-        row->flags |= XG_CLASS_FIELD_CONST;
-        return ok;
-    }
     row->scalar_rep = type->scalar_rep;
     target = class_field_target_type(type);
     if (target && (target->kind == XR_TREF_NAMED || target->kind == XR_TREF_GENERIC) &&
@@ -6286,7 +6281,7 @@ static void body_add_json_codec_shape_test(XgBodyCollect *bc, const AstNode *nod
      * because nested casts share a start position. */
     const XrTypeRef *shape_target = target;
     while (shape_target &&
-           (shape_target->kind == XR_TREF_OPTIONAL || shape_target->kind == XR_TREF_CONST) &&
+           shape_target->kind == XR_TREF_OPTIONAL &&
            shape_target->nchildren == 1 && shape_target->children) {
         shape_target = shape_target->children[0];
     }
@@ -9899,7 +9894,7 @@ static void collect_callsite(XgBodyCollect *bc, const AstNode *call) {
                 : NULL;
         XgMethodSummary *constructor =
             class_summary ? producer_find_class_method_by_name(bc->evidence, class_summary,
-                                                               hash_name32("constructor"), true)
+                                                               hash_name32("init"), true)
                           : NULL;
         uint32_t callee_name_id = hash_name32(callee_name);
         generic_name = callee_name;
@@ -10040,7 +10035,7 @@ static void collect_callsite(XgBodyCollect *bc, const AstNode *call) {
         XgMethodSummary *module_constructor =
             module_class_summary
                 ? producer_find_class_method_by_name(bc->evidence, module_class_summary,
-                                                     hash_name32("constructor"), true)
+                                                     hash_name32("init"), true)
                 : NULL;
         const XaBuiltinReceiverMethodSpec *builtin_receiver_method =
             body_builtin_receiver_method_spec(bc, &callee->as.member_access,
@@ -10348,7 +10343,7 @@ static void collect_super_callsite(XgBodyCollect *bc, const AstNode *call) {
     bc->effect_bits |= XG_BODY_MAY_CALL;
     parent_class = body_parent_class_id(bc);
     is_constructor_call = call->as.super_call.method_name == NULL;
-    method_name = is_constructor_call ? "constructor" : call->as.super_call.method_name;
+    method_name = is_constructor_call ? "init" : call->as.super_call.method_name;
     method_name_id = hash_name32(method_name);
     method = producer_find_method_by_name_in_hierarchy(bc->producer, parent_class, method_name_id,
                                                        is_constructor_call);

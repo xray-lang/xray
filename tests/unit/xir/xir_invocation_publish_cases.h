@@ -22,9 +22,9 @@ static XrXirStatus conditional_invocation_publish(const XrXirCompileContext *con
         const XrXirRootFormula *formula=&effects->contracts[1].formula;
         CHECK(!formula->constant_mask && formula->term_count==1 &&
             formula->terms[0].kind==XR_XIR_ROOT_TERM_CONTEXT_CALL && !formula->terms[0].index);
-        CHECK(formula->terms==effects->invocations->result->functions[1].storage &&
-            !memcmp(formula->terms,effects->invocations->result->functions[1].formula.terms,sizeof(*formula->terms)));
-        EffectInvocationResult *result=effects->invocations->result;
+        CHECK(formula->terms==effects->invocations->final->summary.functions[1].storage &&
+            !memcmp(formula->terms,effects->invocations->final->summary.functions[1].formula.terms,sizeof(*formula->terms)));
+        EffectFinalFunctions *result=(&effects->invocations->final->summary);
         CHECK(effects->result_borrow==result);
         CHECK(effects->formula_terminals==result->witnesses &&
             effects->constant_witnesses==result->witnesses+(size_t)result->count*2 &&
@@ -64,7 +64,7 @@ static XrXirStatus conditional_invocation_publish(const XrXirCompileContext *con
         XrXirRootFormula *published=&effects->contracts[1].formula;
         XrXirRootTerm *term=(XrXirRootTerm *)published->terms;uint32_t kind=term[0].kind;
         term[0].kind=XR_XIR_ROOT_TERM_PARAMETER;EffectInvocationCertificate *certificate=effects->invocations;
-        CHECK(certificate->result->functions[1].formula.terms[0].kind==XR_XIR_ROOT_TERM_PARAMETER);
+        CHECK(certificate->final->summary.functions[1].formula.terms[0].kind==XR_XIR_ROOT_TERM_PARAMETER);
         XrXirRootCauseTrace *refused=NULL;
         CHECK(xr_xir_compile_root_cause_trace_copy(context,effects,1,&refused)==XR_XIR_BAD_STRUCTURE && !refused);
         term[0].kind=kind;
@@ -99,8 +99,8 @@ static XrXirStatus conditional_invocation_template_publish(const XrXirCompileCon
         CHECK(effects->contexts && !effects->refinement && effects->invocations &&
             effects->contexts->forest->invocations && !effects->contexts->dense->uses.invocations);
         const XrXirEffects *summary=&effects->contexts->dense->uses;
-        const EffectInvocationResult *borrowed=effects->contexts->forest->invocations->result;
-        CHECK(effects->result_borrow==effects->invocations->result && summary->result_borrow==borrowed &&
+        const EffectFinalFunctions *borrowed=(&effects->contexts->forest->invocations->final->summary);
+        CHECK(effects->result_borrow==(&effects->invocations->final->summary) && summary->result_borrow==borrowed &&
             summary->formula_terminals==borrowed->witnesses &&
             summary->constant_witnesses==borrowed->witnesses+(size_t)borrowed->count*2);
         for (uint32_t f=0;f<summary->count;++f) {

@@ -13,12 +13,12 @@
 
 class Target {
     tag: i64
-    constructor(tag) { this.tag = tag }
+    init(tag) { this.tag = tag }
 }
 
 class Holder {
     weak t: Target?
-    constructor() { this.t = null }
+    init() { this.t = null }
 }
 
 // W1：顶层写入 weak 槽后读回，必须看到活着的目标——而不是 null。

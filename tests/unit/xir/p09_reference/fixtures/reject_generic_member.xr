@@ -1,0 +1,2 @@
+fn unchecked<T>(value: T) -> i64 { return value.missing() }
+export fn p09Answer() -> i64 { return 0 }

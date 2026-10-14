@@ -13,29 +13,29 @@
  */
 /* Each edge occurs once in its actual target's ordered incoming list. The
  * complete count prevents a missing source clause from becoming permission. */
-static XrXirStatus effect_invocation_coverage_incoming_shape(EffectInvocationOwner *owner) {
-    if (!owner || !owner->consumers || (owner->edge_count && !owner->edges))
+static XrXirStatus effect_invocation_coverage_incoming_shape(EffectInvocationWorkspace *owner) {
+    if (!owner || !owner->consumers || (owner->final.edge_count && !owner->final.edges))
         return XR_XIR_BAD_STRUCTURE;
     uint64_t linked=0;
-    for (uint32_t n=0;n<owner->count;++n) {
+    for (uint32_t n=0;n<owner->final.count;++n) {
         if (!xir_compile_work(owner->work,1)) return XR_XIR_BUDGET;
-        for (uint32_t e=owner->consumers[n];e!=UINT32_MAX;e=owner->edges[e].consumer_next) {
+        for (uint32_t e=owner->consumers[n];e!=UINT32_MAX;e=owner->final.edges[e].consumer_next) {
             if (!xir_compile_work(owner->work,4)) return XR_XIR_BUDGET;
-            if (e>=owner->edge_count || ++linked>owner->edge_count || owner->edges[e].target!=n ||
-                owner->edges[e].caller>=owner->count ||
-                (owner->edges[e].consumer_next!=UINT32_MAX && owner->edges[e].consumer_next>=e))
+            if (e>=owner->final.edge_count || ++linked>owner->final.edge_count || owner->final.edges[e].target!=n ||
+                owner->final.edges[e].caller>=owner->final.count ||
+                (owner->final.edges[e].consumer_next!=UINT32_MAX && owner->final.edges[e].consumer_next>=e))
                 return XR_XIR_BAD_STRUCTURE;
         }
     }
-    return linked==owner->edge_count?XR_XIR_OK:XR_XIR_BAD_STRUCTURE;
+    return linked==owner->final.edge_count?XR_XIR_OK:XR_XIR_BAD_STRUCTURE;
 }
 
 static XrXirStatus effect_invocation_parameter_edge(EffectInvocationFlow *source,
     uint32_t e,uint32_t parameter,uint64_t *maximum,bool *matched,bool *complete) {
-    EffectInvocationOwner *owner=source->owner;const EffectBodyRequest *request=&source->body;
-    if (e>=owner->edge_count) return XR_XIR_BAD_STRUCTURE;
-    EffectInvocationEdge edge=owner->edges[e];
-    if (edge.caller>=owner->count || edge.target>=owner->count) return XR_XIR_BAD_STRUCTURE;
+    EffectInvocationWorkspace *owner=source->owner;const EffectBodyRequest *request=&source->body;
+    if (e>=owner->final.edge_count) return XR_XIR_BAD_STRUCTURE;
+    EffectInvocationEdge edge=owner->final.edges[e];
+    if (edge.caller>=owner->final.count || edge.target>=owner->final.count) return XR_XIR_BAD_STRUCTURE;
     EffectInvocationFlow flow={.owner=owner,.node=edge.caller,.instruction=UINT32_MAX};
     XrXirStatus status=effect_invocation_origins_read(&flow,request);
     EffectInvocationCoverage coverage={0};*matched=false;
@@ -55,18 +55,18 @@ static XrXirStatus effect_invocation_parameter_edge(EffectInvocationFlow *source
 
 /* Declaration roots include an external formal contribution even if a real
  * caller happens to share their key. No incoming list can discharge it. */
-static XrXirStatus effect_invocation_parameter_rank(EffectInvocationOwner *owner,
+static XrXirStatus effect_invocation_parameter_rank(EffectInvocationWorkspace *owner,
     const EffectBodyRequest *request,uint32_t n,uint32_t parameter,uint64_t *output) {
     *output=0;
-    if (!owner->roots || n>=owner->count || owner->nodes[n].body>=request->domain.function_count ||
-        parameter>=owner->nodes[n].parameter_count) return XR_XIR_BAD_STRUCTURE;
-    const EffectInvocationNode *node=&owner->nodes[n];
+    if (!owner->final.roots || n>=owner->final.count || owner->final.nodes[n].body>=request->domain.function_count ||
+        parameter>=owner->final.nodes[n].parameter_count) return XR_XIR_BAD_STRUCTURE;
+    const EffectInvocationNode *node=&owner->final.nodes[n];
     EffectBodyFunctionHead head={0};
     XrXirStatus head_status=effect_body_request_head(request,node->body,&head);
     if (head_status!=XR_XIR_OK) return head_status;
     if (parameter>=head.parameter_count || !head.parameters) return XR_XIR_BAD_STRUCTURE;
     if (!xir_compile_work(owner->work,3)) return XR_XIR_BUDGET;
-    if (owner->roots[node->body]==n || !xr_xir_callable_signature(request->domain.types,
+    if (owner->final.roots[node->body]==n || !xr_xir_callable_signature(request->domain.types,
         head.parameters[parameter])) return XR_XIR_OK;
     EffectInvocationFlow flow={.owner=owner,.node=n,.instruction=UINT32_MAX};
     XrXirStatus status=effect_invocation_origins_read(&flow,request);
@@ -75,9 +75,9 @@ static XrXirStatus effect_invocation_parameter_rank(EffectInvocationOwner *owner
     xr_compile_resources_free(flow.memory);
     if (status!=XR_XIR_OK || !complete) return status;
     uint64_t maximum=0;uint32_t count=0,walked=0;
-    for (uint32_t e=owner->consumers[n];status==XR_XIR_OK && e!=UINT32_MAX;e=owner->edges[e].consumer_next) {
+    for (uint32_t e=owner->consumers[n];status==XR_XIR_OK && e!=UINT32_MAX;e=owner->final.edges[e].consumer_next) {
         if (!xir_compile_work(owner->work,3)) { status=XR_XIR_BUDGET;break; }
-        if (e>=owner->edge_count || ++walked>owner->edge_count || owner->edges[e].target!=n) {
+        if (e>=owner->final.edge_count || ++walked>owner->final.edge_count || owner->final.edges[e].target!=n) {
             status=XR_XIR_BAD_STRUCTURE;break;
         }
         bool matched=false;
@@ -93,18 +93,18 @@ static XrXirStatus effect_invocation_parameter_rank(EffectInvocationOwner *owner
 
 /* Reject impossible stored authority before replaying any source clauses.
  * This is a complete shape/zero check, not a replacement for rank replay. */
-static XrXirStatus effect_invocation_parameter_zero_shape(EffectInvocationOwner *owner,const EffectBodyRequest *request,uint32_t n) {
-    if (!owner || !owner->roots || !request || !request->domain.types ||
-        !owner->nodes || n>=owner->count || owner->nodes[n].body>=request->domain.function_count)
+static XrXirStatus effect_invocation_parameter_zero_shape(EffectInvocationWorkspace *owner,const EffectBodyRequest *request,uint32_t n) {
+    if (!owner || !owner->final.roots || !request || !request->domain.types ||
+        !owner->final.nodes || n>=owner->final.count || owner->final.nodes[n].body>=request->domain.function_count)
         return XR_XIR_BAD_STRUCTURE;
-    const EffectInvocationNode *node=&owner->nodes[n];
+    const EffectInvocationNode *node=&owner->final.nodes[n];
     EffectBodyFunctionHead head={0};
     XrXirStatus status=effect_body_request_head(request,node->body,&head);
     if (status!=XR_XIR_OK) return status;
     const EffectBodyFunctionHead *function=&head;
     if (!xir_compile_work(owner->work,2)) return XR_XIR_BUDGET;
-    uint32_t root=owner->roots[node->body];
-    if (root>=owner->count || owner->nodes[root].body!=node->body) return XR_XIR_BAD_STRUCTURE;
+    uint32_t root=owner->final.roots[node->body];
+    if (root>=owner->final.count || owner->final.nodes[root].body!=node->body) return XR_XIR_BAD_STRUCTURE;
     if (node->parameter_count!=function->parameter_count ||
         (!!function->parameters!=!!node->parameter_count) ||
         (!!node->parameter_coverage!=!!node->parameter_count)) return XR_XIR_BAD_STRUCTURE;
@@ -117,20 +117,20 @@ static XrXirStatus effect_invocation_parameter_zero_shape(EffectInvocationOwner 
     return XR_XIR_OK;
 }
 
-static XrXirStatus effect_invocation_parameter_step_read(EffectInvocationOwner *owner,
+static XrXirStatus effect_invocation_parameter_step_read(EffectInvocationWorkspace *owner,
     const EffectBodyRequest *request,uint32_t n,bool *changed,bool verify,uint64_t maximum) {
-    if (!owner || !request || n>=owner->count || !changed ||
-        owner->nodes[n].body>=request->domain.function_count) return XR_XIR_BAD_STRUCTURE;
+    if (!owner || !request || n>=owner->final.count || !changed ||
+        owner->final.nodes[n].body>=request->domain.function_count) return XR_XIR_BAD_STRUCTURE;
     EffectBodyFunctionHead head={0};
-    XrXirStatus shape=effect_body_request_head(request,owner->nodes[n].body,&head);
+    XrXirStatus shape=effect_body_request_head(request,owner->final.nodes[n].body,&head);
     if (shape!=XR_XIR_OK) return shape;
-    if (owner->nodes[n].parameter_count!=head.parameter_count ||
-        (!!head.parameters!=!!owner->nodes[n].parameter_count) ||
-        (!!owner->nodes[n].parameter_coverage!=!!owner->nodes[n].parameter_count))
+    if (owner->final.nodes[n].parameter_count!=head.parameter_count ||
+        (!!head.parameters!=!!owner->final.nodes[n].parameter_count) ||
+        (!!owner->final.nodes[n].parameter_coverage!=!!owner->final.nodes[n].parameter_count))
         return XR_XIR_BAD_STRUCTURE;
-    for (uint32_t p=0;p<owner->nodes[n].parameter_count;++p) {
+    for (uint32_t p=0;p<owner->final.nodes[n].parameter_count;++p) {
         if (!xir_compile_work(owner->work,2)) return XR_XIR_BUDGET;
-        uint64_t stored=owner->nodes[n].parameter_coverage[p];
+        uint64_t stored=owner->final.nodes[n].parameter_coverage[p];
         if (!verify && stored) continue;
         if (verify && stored>maximum) return XR_XIR_BAD_STRUCTURE;
         uint64_t actual=0;XrXirStatus status=effect_invocation_parameter_rank(owner,request,n,p,&actual);
@@ -138,35 +138,35 @@ static XrXirStatus effect_invocation_parameter_step_read(EffectInvocationOwner *
         if (verify) {
             if (!!stored!=!!actual || (stored && actual>stored)) return XR_XIR_BAD_STRUCTURE;
         } else if (actual) {
-            owner->nodes[n].parameter_coverage[p]=actual;*changed=true;
+            owner->final.nodes[n].parameter_coverage[p]=actual;*changed=true;
         }
     }
     return XR_XIR_OK;
 }
-static XrXirStatus effect_invocation_parameter_step(EffectInvocationOwner *owner,
+static XrXirStatus effect_invocation_parameter_step(EffectInvocationWorkspace *owner,
     uint32_t n,bool *changed,bool verify,uint64_t maximum) {
-    if (!owner || !effect_body_material_shape(owner->material)) return XR_XIR_BAD_STRUCTURE;
-    EffectBodyRequest request=effect_body_owned_request(owner->work,owner->material);
+    if (!owner || !effect_body_material_shape(owner->final.material)) return XR_XIR_BAD_STRUCTURE;
+    EffectBodyRequest request=effect_body_owned_request(owner->work,owner->final.material);
     return effect_invocation_parameter_step_read(owner,&request,n,changed,verify,maximum);
 }
 
 /* Parameter sources flow forward and return sources flow back. Both wake the
  * existing equation queue; no secondary graph or recursive solver is used. */
-static XrXirStatus effect_invocation_coverage_notify(EffectInvocationOwner *owner,uint32_t n) {
+static XrXirStatus effect_invocation_coverage_notify(EffectInvocationWorkspace *owner,uint32_t n) {
     uint32_t walked=0;
-    for (uint32_t e=owner->nodes[n].edge_head;e!=UINT32_MAX;e=owner->edges[e].next) {
+    for (uint32_t e=owner->final.nodes[n].edge_head;e!=UINT32_MAX;e=owner->final.edges[e].next) {
         if (!xir_compile_work(owner->work,2)) return XR_XIR_BUDGET;
-        if (e>=owner->edge_count || ++walked>owner->edge_count || owner->edges[e].caller!=n)
+        if (e>=owner->final.edge_count || ++walked>owner->final.edge_count || owner->final.edges[e].caller!=n)
             return XR_XIR_BAD_STRUCTURE;
-        XrXirStatus status=effect_invocation_enqueue(owner,owner->edges[e].target);
+        XrXirStatus status=effect_invocation_enqueue(owner,owner->final.edges[e].target);
         if (status!=XR_XIR_OK) return status;
     }
     walked=0;
-    for (uint32_t e=owner->consumers[n];e!=UINT32_MAX;e=owner->edges[e].consumer_next) {
+    for (uint32_t e=owner->consumers[n];e!=UINT32_MAX;e=owner->final.edges[e].consumer_next) {
         if (!xir_compile_work(owner->work,2)) return XR_XIR_BUDGET;
-        if (e>=owner->edge_count || ++walked>owner->edge_count || owner->edges[e].target!=n)
+        if (e>=owner->final.edge_count || ++walked>owner->final.edge_count || owner->final.edges[e].target!=n)
             return XR_XIR_BAD_STRUCTURE;
-        XrXirStatus status=effect_invocation_enqueue(owner,owner->edges[e].caller);
+        XrXirStatus status=effect_invocation_enqueue(owner,owner->final.edges[e].caller);
         if (status!=XR_XIR_OK) return status;
     }
     return XR_XIR_OK;

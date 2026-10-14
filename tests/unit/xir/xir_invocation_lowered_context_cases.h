@@ -24,9 +24,9 @@ static XrXirStatus invocation_lowered_context_oracle(const XrXirCompileContext *
             XrXirStatus status=effect_invocation_bounds_mask(context,bounds,f,0,&mask);
             if (status!=XR_XIR_OK) return status;
             uint32_t derived=UINT32_MAX;
-            status=effect_invocation_certificate_node_mask(context,certificate,certificate->equations->roots[f],&derived);
+            status=effect_invocation_certificate_node_mask(context,certificate,certificate->final->roots[f],&derived);
             if (status!=XR_XIR_OK) return status;
-            const XrXirRootFormula *formula=&certificate->result->functions[f].formula;
+            const XrXirRootFormula *formula=&certificate->final->summary.functions[f].formula;
             if (oracle) {
                 CHECK(contract->parameters[0].kind==XR_XIR_EFFECT_PARAMETER_VARIABLE &&
                     contract->parameters[0].uses==XR_XIR_EFFECT_USE_INVOKE);
@@ -92,7 +92,7 @@ static XrXirStatus conditional_invocation_lowered_context(const XrXirCompileCont
     RootParameterBindingFixture fixture;rp_binding_fixture(&fixture,context,mode!=0);
     XrXirArtifact *checked=NULL,*specialized=NULL,*lowered=NULL;
     XrXirEffects effects={0};EffectGraph graph={0};EffectInvocationDeclaredBounds *bounds=NULL;
-    EffectInvocationResult *receiving=NULL;
+    EffectFinalFunctions *receiving=NULL;
     EffectInvocationCertificate *certificate=NULL;
     XrXirDiagnostic diagnostic={0};uint32_t phase=0;uint64_t selected_bodies=0;
     XrXirStatus status=xir_fixture_check(context,&fixture.module,&checked,&diagnostic);
@@ -169,14 +169,14 @@ static XrXirStatus conditional_invocation_lowered_context(const XrXirCompileCont
             if (!(selected_bodies&(UINT64_C(1)<<f))) continue;
             CHECK(certificate->origins[f].function==f);
             const EffectBodyFunction *function=&certificate->body->functions[f];
-            const XrXirRootFormula *formula=&certificate->result->functions[f].formula;
+            const XrXirRootFormula *formula=&certificate->final->summary.functions[f].formula;
             uint32_t original=UINT32_MAX,closed=UINT32_MAX;
             CHECK(function->parameter_count==1 && certificate->parameter_kinds[f][0]==XR_XIR_EFFECT_PARAMETER_VARIABLE);
             CHECK(effect_invocation_bounds_mask(context,certificate->declared,f,0,&original)==XR_XIR_OK);
             const XrXirTypeNode *physical=xr_xir_callable_signature(&certificate->terms.types,function->parameters[0]);
             CHECK(physical && original==(physical->flags&
                 (XR_XIR_CALLABLE_ROOT_REQUIRED|XR_XIR_CALLABLE_ROOT_UNRESOLVED)));
-            CHECK(effect_invocation_certificate_node_mask(context,certificate,certificate->equations->roots[f],&closed)==XR_XIR_OK);
+            CHECK(effect_invocation_certificate_node_mask(context,certificate,certificate->final->roots[f],&closed)==XR_XIR_OK);
             CHECK(closed==original && !formula->constant_mask && formula->term_count==(original?1u:0u));
             if (original) CHECK(original==XR_XIR_CALLABLE_ROOT_UNRESOLVED && formula->terms &&
                 formula->terms[0].kind==XR_XIR_ROOT_TERM_PARAMETER && !formula->terms[0].index);

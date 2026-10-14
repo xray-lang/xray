@@ -19,7 +19,7 @@ class Parent {
     children: Array<Child>
     tag: i64
 
-    constructor(tag) {
+    init(tag) {
         this.children = []
         this.tag = tag
     }
@@ -29,7 +29,7 @@ class Child {
     weak parent: Parent?
     tag: i64
 
-    constructor(tag) {
+    init(tag) {
         this.parent = null
         this.tag = tag
     }

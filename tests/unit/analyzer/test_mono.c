@@ -183,30 +183,20 @@ TEST(mono_mangle_uses_exact_nominal_declaration_identity) {
     xr_compiler_session_delete(session);
 }
 
-TEST(mono_mangle_preserves_const_capability_identity) {
+TEST(mono_mangle_distinguishes_array_and_map_identity) {
     XrTypeRef int_t = {.kind = XR_TREF_SCALAR, .scalar_rep = XR_NATIVE_I64};
     XrTypeRef str_t = {.kind = XR_TREF_STRING};
     XrTypeRef *array_children[] = {&int_t};
-    XrTypeRef array_t = {
-        .kind = XR_TREF_GENERIC, .name = "Array", .nchildren = 1, .children = array_children};
+    XrTypeRef array_t = {.kind = XR_TREF_GENERIC, .name = "Array", .nchildren = 1, .children = array_children};
     XrTypeRef *map_children[] = {&str_t, &int_t};
-    XrTypeRef map_t = {
-        .kind = XR_TREF_GENERIC, .name = "Map", .nchildren = 2, .children = map_children};
-    XrTypeRef *const_array_children[] = {&array_t};
-    XrTypeRef const_array = {
-        .kind = XR_TREF_CONST, .nchildren = 1, .children = const_array_children};
-    XrTypeRef *const_map_children[] = {&map_t};
-    XrTypeRef const_map = {.kind = XR_TREF_CONST, .nchildren = 1, .children = const_map_children};
-
-    XrTypeRef *array_args[] = {&const_array};
-    XrTypeRef *map_args[] = {&const_map};
+    XrTypeRef map_t = {.kind = XR_TREF_GENERIC, .name = "Map", .nchildren = 2, .children = map_children};
+    XrTypeRef *array_args[] = {&array_t}, *map_args[] = {&map_t};
     char *array_name = xr_mono_mangle("hold", array_args, 1);
     char *map_name = xr_mono_mangle("hold", map_args, 1);
-    ASSERT_STR_EQ(array_name, "hold$const_Array_i64");
-    ASSERT_STR_EQ(map_name, "hold$const_Map_str_i64");
+    ASSERT_STR_EQ(array_name, "hold$Array_i64");
+    ASSERT_STR_EQ(map_name, "hold$Map_str_i64");
     ASSERT(strcmp(array_name, map_name) != 0);
-    free(array_name);
-    free(map_name);
+    free(array_name); free(map_name);
 }
 
 TEST(mono_mangle_distinguishes_container_element_types) {
@@ -831,7 +821,7 @@ int main(void) {
     RUN_TEST(mono_mangle_single);
     RUN_TEST(mono_mangle_multi);
     RUN_TEST(mono_mangle_uses_exact_nominal_declaration_identity);
-    RUN_TEST(mono_mangle_preserves_const_capability_identity);
+    RUN_TEST(mono_mangle_distinguishes_array_and_map_identity);
     RUN_TEST(mono_mangle_distinguishes_container_element_types);
     RUN_TEST(mono_mangle_distinguishes_tuple_and_optional_shapes);
     RUN_TEST(monomorphized_stdlib_type_preserves_sealed_capabilities);

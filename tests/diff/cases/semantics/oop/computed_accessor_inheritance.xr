@@ -6,7 +6,7 @@
 class Counter {
     _value: i64
 
-    constructor(initial: i64) {
+    init(initial: i64) {
         this._value = initial
     }
 
@@ -17,7 +17,7 @@ class Counter {
 }
 
 class StepCounter extends Counter {
-    constructor(initial: i64) {
+    init(initial: i64) {
         super(initial)
     }
 }

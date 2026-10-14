@@ -1,6 +1,6 @@
 class Box {
     n: i64
-    constructor() { this.n = 0 }
+    init() { this.n = 0 }
     poke(other: ref Box) {
         other.n = other.n + 1
         print(this.n)

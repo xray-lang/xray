@@ -1,0 +1,7 @@
+export fn p09Answer() -> i64 {
+    var values: Array<i64> = [10, 20]
+    const saved = values
+    values[0] = 7
+    values.push(9)
+    return values[0] + saved[0] * 10 + saved[1] + len(values)
+}

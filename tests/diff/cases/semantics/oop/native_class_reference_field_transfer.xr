@@ -4,7 +4,7 @@ import time
 class Packet {
     payload: Array<u8>
 
-    constructor(payload: Array<u8>) {
+    init(payload: Array<u8>) {
         this.payload = payload
     }
 

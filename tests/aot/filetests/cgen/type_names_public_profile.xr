@@ -1,7 +1,7 @@
 export class PublicBox {
     value: i64
 
-    constructor(value: i64) {
+    init(value: i64) {
         this.value = value
     }
 }
@@ -9,7 +9,7 @@ export class PublicBox {
 class PrivateBox {
     value: i64
 
-    constructor(value: i64) {
+    init(value: i64) {
         this.value = value
     }
 }

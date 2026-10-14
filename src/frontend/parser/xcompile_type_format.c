@@ -27,10 +27,6 @@ static void tref_to_str_impl(XrCompileState *state, const XrTypeRef *t, char *bu
         return;
     }
     switch ((XrTypeRefKind) t->kind) {
-        case XR_TREF_CONST:
-            do { tref_append(state, buf, pos, cap, "const "); if (xr_compile_state_status(state) != XR_COMPILE_RESOURCE_OK) return; } while (0);
-            do { tref_to_str_impl(state, t->nchildren > 0 ? t->children[0] : NULL, buf, pos, cap); if (xr_compile_state_status(state) != XR_COMPILE_RESOURCE_OK) return; } while (0);
-            break;
         case XR_TREF_SCALAR: {
             const char *source_name = xr_scalar_rep_name(t->scalar_rep);
             do { tref_append(state, buf, pos, cap, source_name ? source_name : "<scalar?>"); if (xr_compile_state_status(state) != XR_COMPILE_RESOURCE_OK) return; } while (0);

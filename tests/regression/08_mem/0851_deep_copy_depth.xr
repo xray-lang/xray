@@ -11,7 +11,7 @@ class CopyNode {
     value: i64
     tag: string
 
-    constructor(next: CopyNode?, value: i64, tag: string = "") {
+    init(next: CopyNode?, value: i64, tag: string = "") {
         this.next = next
         this.value = value
         this.tag = tag

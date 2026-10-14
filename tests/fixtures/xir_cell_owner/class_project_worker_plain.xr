@@ -1,6 +1,6 @@
 final class Holder {
     value: i64
-    constructor() { this.value = 40; }
+    init() { this.value = 40; }
     next() -> i64 { this.value += 1; return this.value; }
 }
 fn worker() -> i64 { const storage = Holder(); return storage.next(); }

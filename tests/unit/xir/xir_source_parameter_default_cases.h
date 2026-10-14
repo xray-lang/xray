@@ -78,7 +78,7 @@ static void source_parameter_defaults_execute(XrXirArtifact *owned) {
 static void source_parameter_default_cases(XrXirSourceRequest *request) {
     XrXirArtifact *owned=source_parameter_defaults_check(request,
         "fn free<T>(v:T,cb:fn(T)->T=fn(x:T)->T{return x})->T{return cb(v)}\n"
-        "struct Box<T>{value:T;constructor(value,extra:i64=0){this.value=value};"
+        "struct Box<T>{value:T;init(value,extra:i64=0){this.value=value};"
         "map<U>(v:U,cb:fn(T,U)->U=fn(t:T,u:U)->U{return u})->U{return cb(this.value,v)};"
         "static pass<U>(v:U,cb:fn(U)->U=fn(x:U)->U{return x})->U where T:Sendable,U:Sendable{return cb(v)}}\n"
         "export fn answer()->i64{const box=Box<string>(\"parent\");return Box<string>.pass<i64>(box.map<i64>(free<i64>(41)))}\n");
@@ -91,7 +91,7 @@ static void source_parameter_default_cases(XrXirSourceRequest *request) {
     source_parameter_defaults_execute(owned);
     owned=source_parameter_defaults_check(request,
         "fn value()->i64{Coro.yield();return 41}\n"
-        "final class Box{value:i64;constructor(value:i64=value()){this.value=value}}\n"
+        "final class Box{value:i64;init(value:i64=value()){this.value=value}}\n"
         "export fn answer()->i64{return Box().value}\n");
     xr_xir_compile_artifact_free(owned);
     write_source(request->entry_path,
