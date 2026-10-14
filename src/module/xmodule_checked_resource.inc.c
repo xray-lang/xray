@@ -50,12 +50,32 @@ static void resolve_checked_stdlib(ModuleWork *work, XrModuleResolver *resolver,
     else { xr_compile_resources_free(canonical); xr_compile_resources_free(copy); }
     xr_compile_resources_free(root);
 }
+static void resolve_checked_stdlib_main(ModuleWork *work, XrModuleResolver *resolver,
+    const char *name, XrModuleId *output, bool *matched) {
+    if (!resolver->config.stdlib_path || !descriptor(work,name)) return;
+    char logical[XR_PATH_MAX];
+    if (!module_format_buffer(work,logical,sizeof(logical),"%s/%s.xr",name,name)) return;
+    char *root = NULL;
+    if (!realpath_into(work,resolver->config.stdlib_path,&root)) return;
+    XrModuleIdentityAuthority authority = {XR_MODULE_IDENTITY_STDLIB,name,root};
+    char *canonical = NULL, *copy = NULL;
+    module_status(work,xr_compile_module_identity_from_logical(work->resources,&authority,logical,&canonical));
+    copy = module_dup(work,logical);
+    if (work->status == XR_MODULE_OK)
+        checked_resource_select(work,resolver,&authority,canonical,copy,output,matched);
+    else { xr_compile_resources_free(canonical); xr_compile_resources_free(copy); }
+    xr_compile_resources_free(root);
+}
 static void resolve_checked_resource(ModuleWork *work, XrModuleResolver *resolver, const char *specifier,
     const char *importer, const XrModuleIdentityAuthority *authority, XrModuleId *output, bool *matched) {
     *matched = false;
     if (!resolver->config.catalog) return;
     if (!module_authority(work,authority)) return;
     if (module_prefix(work,specifier,"std/")) { resolve_checked_stdlib(work,resolver,specifier,output,matched); return; }
+    if (!module_find_char(work,specifier,'/') && !module_find_char(work,specifier,'\\')) {
+        resolve_checked_stdlib_main(work,resolver,specifier,output,matched);
+        return;
+    }
     if (!importer || !module_prefix(work,specifier,"./")) return;
     XrOsIoPolicy policy = xr_compile_io_policy(work->resources); char *directory = NULL;
     if (work->status != XR_MODULE_OK || !module_io(work,xr_path_dirname_owned(&policy,importer,&directory))) return;

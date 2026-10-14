@@ -11,4 +11,7 @@ foreach(mode measure faults)
         COMMAND ${XRAY_PYTHON} ${CMAKE_CURRENT_LIST_DIR}/stdlib_resources.py
             $<TARGET_FILE:test_xir_stdlib_resources> ${PROJECT_SOURCE_DIR} ${mode})
     set_tests_properties(test_xir_stdlib_${mode} PROPERTIES TIMEOUT 300 RUN_SERIAL TRUE PROCESSORS 1 LABELS "unit;xir;ownership;stdlib;resources")
+    if(ENABLE_ASAN AND mode STREQUAL "faults")
+        set_tests_properties(test_xir_stdlib_${mode} PROPERTIES COST 200)
+    endif()
 endforeach()
