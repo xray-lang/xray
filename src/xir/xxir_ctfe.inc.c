@@ -46,7 +46,10 @@ static bool ctfe_opcode_work(XrXirOp op, uint64_t *work) {
     case XR_XIR_CELL_NEW: case XR_XIR_CELL_READ: case XR_XIR_CELL_WRITE:
     case XR_XIR_CELL_LOCAL_WRITE: *work = 8; return true;
     case XR_XIR_CONST_STRING: case XR_XIR_CONCAT_STRING: case XR_XIR_STRING_LEN:
-    case XR_XIR_EQ_STRING: case XR_XIR_NE_STRING: *work = 8; return true;
+    case XR_XIR_EQ_STRING: case XR_XIR_NE_STRING:
+    case XR_XIR_LT_STRING: case XR_XIR_LE_STRING: case XR_XIR_GT_STRING: case XR_XIR_GE_STRING:
+    case XR_XIR_STRING_CONTAINS: case XR_XIR_STRING_STARTS_WITH: case XR_XIR_STRING_ENDS_WITH:
+    case XR_XIR_STRING_INDEX_OF: case XR_XIR_STRING_LAST_INDEX_OF: *work = 8; return true;
     case XR_XIR_OWNED_LOCAL_NEW: case XR_XIR_OWNED_LOCAL_READ: case XR_XIR_OWNED_RETAIN:
     case XR_XIR_OWNED_LOCAL_WRITE: *work = 2; return true;
     case XR_XIR_LOCAL_UNINIT: *work = 1; return true;

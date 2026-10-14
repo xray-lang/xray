@@ -1,0 +1,2 @@
+fn answer()->bool { const t="éa"; return t.indexOf("",2)==2 && t.lastIndexOf("")==2 && t.indexOf("a",2)==-1 && len(t)==2 && "".contains("") && "".startsWith("") && "".endsWith("") }
+export fn run()->bool { return comptime answer() }

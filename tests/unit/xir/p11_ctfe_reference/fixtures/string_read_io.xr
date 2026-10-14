@@ -1,0 +1,2 @@
+fn answer()->i64 { if ("abc".contains("z")) { print(1) }; return 42 }
+export fn run()->i64 { return comptime answer() }

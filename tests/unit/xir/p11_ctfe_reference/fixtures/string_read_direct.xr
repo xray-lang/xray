@@ -1,0 +1,4 @@
+fn search(a:string,b:string,start:i64)->i64 { return a.indexOf(b,start) }
+fn last(a:string,b:string)->i64 { return a.lastIndexOf(b) }
+fn order(a:string,b:string)->bool { return a<b }
+export fn run() {}

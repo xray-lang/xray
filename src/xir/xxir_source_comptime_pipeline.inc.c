@@ -21,6 +21,7 @@ static bool source_comptime_failure(SourceContext *ctx,AstNode *node,XrXirCtfeSt
         status==XR_XIR_CTFE_OUT_OF_MEMORY?"comptime allocation failed":
         status==XR_XIR_CTFE_BUDGET?"comptime compiler ledger exhausted":
         status==XR_XIR_CTFE_DIVIDE_BY_ZERO?"comptime division by zero":
+        status==XR_XIR_CTFE_NUMERIC_RANGE?"comptime value range violation":
         "comptime requires an admitted deterministic scalar direct-call closure";
     return source_fail(ctx,node,mapped,message);
 }

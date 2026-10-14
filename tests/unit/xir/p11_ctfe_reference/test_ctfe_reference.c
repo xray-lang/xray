@@ -31,6 +31,14 @@ typedef struct CtfeReferenceCase {
 } CtfeReferenceCase;
 
 static const CtfeReferenceCase reference_cases[] = {
+    {"string_order", XR_XIR_BOOL, 1, XR_XIR_OK, NULL, 0},
+    {"string_methods", XR_XIR_BOOL, 1, XR_XIR_OK, NULL, 0},
+    {"string_search", XR_XIR_I64, 1220, XR_XIR_OK, NULL, 0},
+    {"string_search_empty", XR_XIR_BOOL, 1, XR_XIR_OK, NULL, 0},
+    {"string_read_direct", XR_XIR_UNIT, 0, XR_XIR_OK, NULL, 0},
+    {"string_bounds_negative", XR_XIR_UNIT, 0, XR_XIR_BAD_TYPE, "comptime value range violation", 2},
+    {"string_bounds_end", XR_XIR_UNIT, 0, XR_XIR_BAD_TYPE, "comptime value range violation", 2},
+    {"string_read_io", XR_XIR_UNIT, 0, XR_XIR_BAD_TYPE, "admitted deterministic scalar direct-call closure", 2},
     {"string_export", XR_XIR_STRING, 4, XR_XIR_OK, NULL, 0},
     {"string_empty", XR_XIR_STRING, 0, XR_XIR_OK, NULL, 0},
     {"string_nul", XR_XIR_STRING, 3, XR_XIR_OK, NULL, 0},
@@ -467,6 +475,8 @@ static void reference_string_late_owner(void) {
     fprintf(stderr,"CTFE String remains readable after Source/Artifact/ledger caller death; final drop no allocation physical0\n");
 }
 
+#include "xir_ctfe_string_read_cases.h"
+
 int main(int argc, char **argv) {
     CHECK(argc == 2);
     const CtfeReferenceCase *selected = NULL;
@@ -486,6 +496,7 @@ int main(int argc, char **argv) {
     CHECK(status == selected->status);
     if (status == XR_XIR_OK) {
         if (selected->type==XR_XIR_STRING) reference_string(&context,&source,selected);
+        else if (!strcmp(selected->name, "string_read_direct")) reference_string_read_direct(&context,&source);
         else if (!strcmp(selected->name, "cell_leaf")) reference_cell_leaf(&context,&source);
         else if (!strcmp(selected->name, "rune_direct")) reference_rune_direct(&context,&source);
         else if (!strcmp(selected->name, "unit_direct")) reference_unit_direct(&context,&source);

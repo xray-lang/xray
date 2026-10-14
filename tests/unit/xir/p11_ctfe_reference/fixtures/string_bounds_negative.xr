@@ -1,0 +1,2 @@
+fn answer()->i64 { return "abc".indexOf("a",-1) }
+export fn run()->i64 { return comptime answer() }

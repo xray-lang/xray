@@ -1,0 +1,2 @@
+fn answer()->bool { const t="éa\0bé"; return t.contains("a\0b") && t.startsWith("é") && t.endsWith("é") && !t.contains("z") && !t.startsWith("a") && !t.endsWith("b") }
+export fn run()->bool { return comptime answer() }

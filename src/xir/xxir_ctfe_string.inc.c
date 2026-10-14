@@ -36,14 +36,17 @@ static XrXirCtfeStatus ctfe_result_publish(ScalarRun *run,const XrXirValue *valu
     }
     *output=*value;return XR_XIR_CTFE_OK;
 }
+#include "xxir_ctfe_string_read.inc.c"
+
 static bool ctfe_string_opcode(const ScalarRun *run,const XrXirInstruction *op) {
-    return op->op==XR_XIR_CONST_STRING || op->op==XR_XIR_CONCAT_STRING ||
+    return ctfe_string_read_opcode(op->op) || op->op==XR_XIR_CONST_STRING || op->op==XR_XIR_CONCAT_STRING ||
         op->op==XR_XIR_OWNED_LOCAL_NEW || op->op==XR_XIR_OWNED_LOCAL_READ || op->op==XR_XIR_OWNED_RETAIN ||
         op->op==XR_XIR_STRING_LEN || op->op==XR_XIR_EQ_STRING || op->op==XR_XIR_NE_STRING ||
         (op->op==XR_XIR_EQUAL && xr_xir_operand_type(run->function,op->args[0])==XR_XIR_STRING);
 }
 static XrXirCtfeStatus ctfe_string_step(ScalarRun *run,uint32_t *cursor,CtfeOwnedState *state) {
     const XrXirInstruction *op=&run->function->instructions[*cursor];
+    if (ctfe_string_read_opcode(op->op)) return ctfe_string_read_step(run,cursor);
     uint32_t destination=run->layout->offsets[run->function->parameter_count+*cursor];
     XrXirValue result={0};XrXirValueStatus status=XR_XIR_VALUE_OK;
     if (op->op==XR_XIR_CONST_STRING) {
