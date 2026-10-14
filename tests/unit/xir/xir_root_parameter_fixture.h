@@ -23,6 +23,7 @@ typedef struct RootParameterMark { size_t blocks; size_t bytes; } RootParameterM
 static RootParameterAllocation rp_blocks[8192];
 static size_t rp_live, rp_live_bytes, rp_attempts, rp_fail_at = SIZE_MAX;
 static bool rp_injected;
+static void (*rp_release_observer)(void *memory);
 
 static inline RootParameterMark rp_mark(void) { return (RootParameterMark){rp_live,rp_live_bytes}; }
 static inline void rp_balanced(RootParameterMark mark) {
@@ -43,6 +44,7 @@ static void rp_free(void *memory) {
     size_t at = 0;
     while (at < rp_live && rp_blocks[at].pointer != memory) ++at;
     CHECK(at < rp_live && rp_blocks[at].bytes <= rp_live_bytes);
+    if (rp_release_observer) rp_release_observer(memory);
     rp_live_bytes -= rp_blocks[at].bytes;
     rp_blocks[at] = rp_blocks[--rp_live];
     xr_free(memory);

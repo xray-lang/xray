@@ -115,11 +115,10 @@ static XrXirStatus conditional_invocation_reference_result(const XrXirCompileCon
     if (status==XR_XIR_OK && oracle) {
         const EffectInvocationCertificate *certificate=execution->forest->invocations;
         uint32_t mask=UINT32_MAX;
-        CHECK(!execution->dense->uses.invocations && !certificate->terms.remaining && certificate->equations &&
-            !certificate->equations->work && !certificate->equations->body.read.owner && !certificate->equations->graph);
+        CHECK(!execution->dense->uses.invocations && !certificate->terms.remaining && certificate->final);
         CHECK(effect_invocation_bounds_mask(context,certificate->declared,0,1,&mask)==XR_XIR_OK &&
             mask==XR_XIR_CALLABLE_ROOT_UNRESOLVED);
-        CHECK(effect_invocation_certificate_node_mask(context,certificate,certificate->equations->roots[1],&mask)==XR_XIR_OK && !mask);
+        CHECK(effect_invocation_certificate_node_mask(context,certificate,certificate->final->roots[1],&mask)==XR_XIR_OK && !mask);
     }
     effect_context_owner_free(execution);return status;
 }

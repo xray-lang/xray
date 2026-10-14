@@ -269,11 +269,9 @@ static XrXirStatus effect_context_dense_stable_read(const XrXirCompileContext *c
         dense->base_count!=source->function_count || ordinary->uses.resources!=context->resources ||
         dense->uses.resources!=context->resources || dense->uses.count!=dense->count || !dense->uses.root ||
         !certificate || !effect_body_material_shape(certificate->body) ||
-        certificate->body->resources!=certificate->resources || certificate->resources!=context->resources || !certificate->equations ||
+        certificate->body->resources!=certificate->resources || certificate->resources!=context->resources || !certificate->final ||
         !certificate->result || certificate->result->count!=dense->count ||
         dense->uses.result_borrow!=certificate->result ||
-        certificate->equations->work || certificate->equations->graph ||
-        certificate->equations->effects || certificate->equations->declared ||
         effect_body_count(certificate->body)!=dense->count || !certificate->body->functions ||
         certificate->body->stage!=source->stage || certificate->body->linkage_kind!=source->linkage_kind ||
         certificate->body->domain.types!=&certificate->body->terms.types || !certificate->origins || !certificate->owners ||

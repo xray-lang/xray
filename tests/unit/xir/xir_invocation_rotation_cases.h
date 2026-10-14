@@ -122,7 +122,7 @@ static XrXirStatus invocation_rotation_masks(const XrXirCompileContext *context,
     for (uint32_t f=0;f<5 && status==XR_XIR_OK;++f) {
         uint32_t mask=UINT32_MAX;
         status=effect_invocation_certificate_node_mask(context,certificate,
-            certificate->equations->roots[f],&mask);
+            certificate->final->roots[f],&mask);
         if (status==XR_XIR_OK && oracle) {
             CHECK(mask==expected[f]);
             const XrXirRootFormula *formula=&certificate->result->functions[f].formula;
@@ -149,7 +149,7 @@ static void invocation_rotation_trace_oracle(const EffectInvocationCertificate *
     CHECK(certificate->body->stage==XR_XIR_CHECKED && effect_body_count(certificate->body)==5);
     CHECK(trace && trace->facts.requires_root && !trace->facts.unresolved &&
         trace->counts[0]==7 && !trace->counts[1] && trace->counts[0]>effect_body_count(certificate->body));
-    const EffectInvocationOwner *equations=certificate->equations;
+    const EffectInvocationFinal *equations=certificate->final;
     CHECK(equations && equations->site_count==2 && !equations->binding_count);
     CHECK(equations->sites[0].function==0 && !equations->sites[0].instruction &&
         equations->sites[0].target==2 && equations->sites[1].function==0 &&

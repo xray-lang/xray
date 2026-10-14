@@ -29,6 +29,51 @@ static void invocation_core_storage_free(XrXirEffects *effects) {
 /* Full construction and Artifact checking precede the same-owner equation
  * lifecycle. No pre-existing ROOT formula is solved or lowered by this probe.
  * The certificate remains private and cannot admit a Program or runtime call. */
+static void *invocation_retired_blocks[3];
+static uint32_t invocation_retired_counts[3];
+static void invocation_retired_observe(void *memory) {
+    for (uint32_t i=0;i<3;++i) if (memory==invocation_retired_blocks[i]) ++invocation_retired_counts[i];
+}
+/* Locate the payload only within extents recorded by our real allocator.
+ * No allocation prefix or runtime metadata is guessed or inspected. */
+static void *invocation_retired_block(const void *payload) {
+    if (!payload) return NULL;
+    uintptr_t address=(uintptr_t)payload;
+    for (size_t i=0;i<rp_live;++i) {
+        uintptr_t begin=(uintptr_t)rp_blocks[i].pointer;
+        if (address>=begin && address-begin<rp_blocks[i].bytes) return rp_blocks[i].pointer;
+    }
+    CHECK(false);return NULL;
+}
+static XrXirStatus invocation_retired_seal(const EffectInvocationDriverInput *input,
+    EffectInvocationCertificate **output,EffectInvocationResult **receiving) {
+    EffectInvocationWorkspace *workspace=NULL;
+    XrXirStatus status=effect_invocations_create(input->work,input->body,input->effects,
+        input->graph,input->declared,&workspace);
+    if (status==XR_XIR_OK) status=effect_invocations_solve(workspace);
+    if (status==XR_XIR_OK) status=effect_invocation_stage(workspace,receiving);
+    if (status==XR_XIR_OK) {
+        CHECK(!rp_release_observer);
+        invocation_retired_blocks[0]=invocation_retired_block(workspace);
+        invocation_retired_blocks[1]=invocation_retired_block(workspace->consumers);
+        invocation_retired_blocks[2]=invocation_retired_block(workspace->edge_index);
+        memset(invocation_retired_counts,0,sizeof(invocation_retired_counts));
+        rp_release_observer=invocation_retired_observe;
+        EffectInvocationSealRequest request={&workspace,receiving,input->dense};
+        status=effect_invocation_seal(input->work,&request,output,NULL);
+        rp_release_observer=NULL;
+        if (status==XR_XIR_OK) {
+            CHECK(!workspace && !*receiving && *output && (*output)->final);
+            for (uint32_t i=0;i<3;++i)
+                CHECK(invocation_retired_counts[i]==(invocation_retired_blocks[i]?1u:0u));
+        } else {
+            CHECK(workspace && !*output);
+            for (uint32_t i=0;i<3;++i) CHECK(!invocation_retired_counts[i]);
+        }
+    }
+    effect_invocation_free(workspace);return status;
+}
+
 static XrXirStatus conditional_invocation_core(const XrXirCompileContext *context,uint32_t mode,bool oracle) {
     if (mode>=4) return XR_XIR_BAD_STRUCTURE;
     RootParameterBindingFixture fixture;rp_binding_fixture(&fixture,context,(mode&1)!=0);
@@ -63,7 +108,8 @@ static XrXirStatus conditional_invocation_core(const XrXirCompileContext *contex
         status=effect_invocation_collect(context,module,&effects,&graph,bounds,&owned_input);
         if (status==XR_XIR_OK) status=effect_invocation_current_input_match(context,module,graph.material);
         EffectInvocationDriverInput input={context,&owned_input,&effects,&graph,graph.material->declared,NULL};
-        if (status==XR_XIR_OK) status=effect_invocation_derive(&input,&certificate,NULL,&receiving);
+        if (status==XR_XIR_OK) status=oracle?invocation_retired_seal(&input,&certificate,&receiving):
+            effect_invocation_derive(&input,&certificate,NULL,&receiving);
     }
     if (status!=XR_XIR_OK && oracle) fprintf(stderr,
         "INVOCATION_CORE mode=%u phase=%u status=%u f=%u b=%u i=%u\n",mode,phase,status,
@@ -75,12 +121,22 @@ static XrXirStatus conditional_invocation_core(const XrXirCompileContext *contex
     EffectInvocationCauseTrace *trace=NULL;
     if (status==XR_XIR_OK) {
         uint32_t caller_mask=UINT32_MAX,formal_mask=UINT32_MAX,edge_mask=UINT32_MAX;
-        status=effect_invocation_certificate_node_mask(context,certificate,certificate->equations->roots[0],&caller_mask);
+        status=effect_invocation_certificate_node_mask(context,certificate,certificate->final->roots[0],&caller_mask);
         if (status==XR_XIR_OK) status=effect_invocation_certificate_node_mask(context,certificate,
-            certificate->equations->roots[1],&formal_mask);
+            certificate->final->roots[1],&formal_mask);
         if (status==XR_XIR_OK) status=effect_invocation_certificate_edge_mask(context,certificate,0,2,1,&edge_mask);
         if (status==XR_XIR_OK) status=effect_invocation_certificate_trace(context,certificate,1,&trace);
         if (status==XR_XIR_OK && oracle) {
+            EffectInvocationFinal damaged=*certificate->final;
+            damaged.physical=NULL;EffectInvocationWorkspace refused={0};size_t admission_attempts=rp_attempts;
+            XrCompileResourceStats before=rp_stats(context);
+            CHECK(effect_invocation_read_open(context,NULL,certificate->declared,&damaged,&refused)==XR_XIR_BAD_STRUCTURE &&
+                !refused.work && !refused.consumers && !refused.final.nodes && rp_attempts==admission_attempts &&
+                rp_stats(context).work==before.work);
+            refused.work=context;
+            CHECK(effect_invocation_read_open(context,NULL,certificate->declared,certificate->final,&refused)==XR_XIR_BAD_STRUCTURE &&
+                refused.work==context && !refused.consumers && rp_attempts==admission_attempts &&
+                rp_stats(context).work==before.work);
             CHECK(!caller_mask && formal_mask==XR_XIR_CALLABLE_ROOT_UNRESOLVED && !edge_mask);
             CHECK(certificate->result->functions[1].formula.term_count==1 &&
                 certificate->result->functions[1].formula.terms[0].kind==XR_XIR_ROOT_TERM_PARAMETER &&
@@ -95,12 +151,12 @@ static XrXirStatus conditional_invocation_core(const XrXirCompileContext *contex
             EffectInvocationCauseTrace *occupied_trace=trace;
             CHECK(effect_invocation_certificate_trace(context,certificate,1,&occupied_trace)==XR_XIR_BAD_STRUCTURE &&
                 occupied_trace==trace && rp_attempts==attempts);
-            uint32_t n=certificate->equations->roots[0];
-            certificate->equations->nodes[n].intrinsic_mask|=XR_XIR_CALLABLE_ROOT_UNRESOLVED;
+            uint32_t n=certificate->final->roots[0];
+            certificate->final->nodes[n].intrinsic_mask|=XR_XIR_CALLABLE_ROOT_UNRESOLVED;
             uint32_t untouched=UINT32_C(0x12345678);
             CHECK(effect_invocation_certificate_node_mask(context,certificate,n,&untouched)==XR_XIR_BAD_STRUCTURE &&
                 untouched==UINT32_C(0x12345678));
-            certificate->equations->nodes[n].intrinsic_mask&=~XR_XIR_CALLABLE_ROOT_UNRESOLVED;
+            certificate->final->nodes[n].intrinsic_mask&=~XR_XIR_CALLABLE_ROOT_UNRESOLVED;
             RootParameterMark physical=rp_mark();XrXirCompileContext foreign=rp_owner(rp_caps());
             uint64_t baseline=rp_stats(&foreign).live_bytes;
             CHECK(effect_invocation_certificate_node_mask(&foreign,certificate,n,&untouched)==XR_XIR_BAD_STRUCTURE &&

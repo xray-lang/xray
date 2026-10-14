@@ -13,7 +13,7 @@
  */
 static XrXirStatus effect_invocation_deferred_match(EffectInvocationFlow *flow,
     const EffectInvocationDeferred *record) {
-    EffectInvocationOwner *owner=flow->owner;
+    EffectInvocationWorkspace *owner=flow->owner;
     if (record->node!=flow->node || record->instruction>=flow->function->instruction_count ||
         record->parameter>=flow->basis.parameters || !!record->arguments!=!!record->count)
         return XR_XIR_BAD_STRUCTURE;
@@ -29,7 +29,7 @@ static XrXirStatus effect_invocation_deferred_match(EffectInvocationFlow *flow,
     bool ref=false;XrXirStatus status=effect_invocation_has_ref(flow,signature,&ref);
     if (status!=XR_XIR_OK) return status;
     if (!ref || record->count!=signature->parameter_count) return XR_XIR_BAD_STRUCTURE;
-    uint32_t bit=owner->site_count+record->parameter;
+    uint32_t bit=owner->final.site_count+record->parameter;
     const uint64_t *descriptor=effect_invocation_row(flow,(uint32_t)op->immediate);
     if (!descriptor) return XR_XIR_BAD_STRUCTURE;
     if (!xir_compile_work(owner->work,2)) return XR_XIR_BUDGET;
@@ -50,8 +50,8 @@ static XrXirStatus effect_invocation_deferred_match(EffectInvocationFlow *flow,
  * default and requirement conditions retain their existing opaque obligations. */
 static XrXirStatus effect_invocation_deferred_frontiers(EffectInvocationFlow *flow,
     uint32_t *matched) {
-    EffectInvocationOwner *owner=flow->owner;
-    const EffectInvocationNode *node=&owner->nodes[flow->node];
+    EffectInvocationWorkspace *owner=flow->owner;
+    const EffectInvocationNode *node=&owner->final.nodes[flow->node];
     const uint64_t *local_contexts=effect_invocation_node_row(node,EFFECT_INVOCATION_CONTEXTS,true);
     for (uint32_t i=0;i<flow->function->instruction_count;++i) {
         if (!xir_compile_work(owner->work,3)) return XR_XIR_BUDGET;
@@ -72,18 +72,18 @@ static XrXirStatus effect_invocation_deferred_frontiers(EffectInvocationFlow *fl
         if (!descriptor) return XR_XIR_BAD_STRUCTURE;
         for (uint32_t p=0;p<flow->basis.parameters;++p) {
             if (!xir_compile_work(owner->work,2)) return XR_XIR_BUDGET;
-            uint32_t bit=owner->site_count+p;
+            uint32_t bit=owner->final.site_count+p;
             if (!(descriptor[bit/64]&(UINT64_C(1)<<(bit%64)))) continue;
             uint32_t selected=UINT32_MAX;
-            for (uint32_t d=0;d<owner->deferred_count;++d) {
+            for (uint32_t d=0;d<owner->final.deferred_count;++d) {
                 if (!xir_compile_work(owner->work,3)) return XR_XIR_BUDGET;
-                const EffectInvocationDeferred *record=&owner->deferred_calls[d];
+                const EffectInvocationDeferred *record=&owner->final.deferred_calls[d];
                 if (record->node!=flow->node || record->instruction!=i || record->parameter!=p) continue;
                 if (selected!=UINT32_MAX) return XR_XIR_BAD_STRUCTURE;
                 selected=d;
             }
             if (selected==UINT32_MAX) return XR_XIR_BAD_STRUCTURE;
-            status=effect_invocation_deferred_match(flow,&owner->deferred_calls[selected]);
+            status=effect_invocation_deferred_match(flow,&owner->final.deferred_calls[selected]);
             if (status!=XR_XIR_OK) return status;
             if (*matched==UINT32_MAX) return XR_XIR_BUDGET;
             ++*matched;
@@ -92,10 +92,10 @@ static XrXirStatus effect_invocation_deferred_frontiers(EffectInvocationFlow *fl
     return XR_XIR_OK;
 }
 
-static XrXirStatus effect_invocation_deferred_needed(EffectInvocationOwner *owner,
+static XrXirStatus effect_invocation_deferred_needed(EffectInvocationWorkspace *owner,
     uint32_t n,bool *output) {
-    if (!owner || n>=owner->count || !output) return XR_XIR_BAD_STRUCTURE;
-    const EffectInvocationNode *node=&owner->nodes[n];
+    if (!owner || n>=owner->final.count || !output) return XR_XIR_BAD_STRUCTURE;
+    const EffectInvocationNode *node=&owner->final.nodes[n];
     const uint64_t *contexts=effect_invocation_node_row(node,EFFECT_INVOCATION_CONTEXTS,true);
     EffectBodyFunctionDimensions head={0};XrXirStatus status=effect_invocation_dimensions(owner,node->body,&head);
     if (status!=XR_XIR_OK) return status;
@@ -122,18 +122,18 @@ static XrXirStatus effect_invocation_deferred_needed(EffectInvocationOwner *owne
 /* The local SSA replay uses the same immutable input and common Cell proof.
  * All records, including missing and duplicate frontiers, are consumed before
  * any certificate ownership transfer. A failure leaves every producer owned. */
-static XrXirStatus effect_invocation_deferred_verify(EffectInvocationOwner *owner) {
-    if (!owner || !effect_body_material_shape(owner->material) || !owner->effects || !owner->work || owner->pending ||
-        owner->deferred_count>owner->deferred_capacity ||
-        (owner->deferred_count && !owner->deferred_calls)) return XR_XIR_BAD_STRUCTURE;
-    for (uint32_t d=0;d<owner->deferred_count;++d) {
+static XrXirStatus effect_invocation_deferred_verify(EffectInvocationWorkspace *owner) {
+    if (!owner || !effect_body_material_shape(owner->final.material) || !owner->effects || !owner->work || owner->pending ||
+        owner->final.deferred_count>owner->final.deferred_capacity ||
+        (owner->final.deferred_count && !owner->final.deferred_calls)) return XR_XIR_BAD_STRUCTURE;
+    for (uint32_t d=0;d<owner->final.deferred_count;++d) {
         if (!xir_compile_work(owner->work,2)) return XR_XIR_BUDGET;
-        const EffectInvocationDeferred *record=&owner->deferred_calls[d];
-        if (record->node>=owner->count || !owner->nodes[record->node].local_deferred)
+        const EffectInvocationDeferred *record=&owner->final.deferred_calls[d];
+        if (record->node>=owner->final.count || !owner->final.nodes[record->node].local_deferred)
             return XR_XIR_BAD_STRUCTURE;
     }
     uint32_t matched=0;
-    for (uint32_t n=0;n<owner->count;++n) {
+    for (uint32_t n=0;n<owner->final.count;++n) {
         if (!xir_compile_work(owner->work,1)) return XR_XIR_BUDGET;
         bool needed=false;XrXirStatus status=effect_invocation_deferred_needed(owner,n,&needed);
         if (status!=XR_XIR_OK) return status;
@@ -144,7 +144,7 @@ static XrXirStatus effect_invocation_deferred_verify(EffectInvocationOwner *owne
         xr_compile_resources_free(flow.memory);
         if (status!=XR_XIR_OK) return status;
     }
-    return matched==owner->deferred_count?XR_XIR_OK:XR_XIR_BAD_STRUCTURE;
+    return matched==owner->final.deferred_count?XR_XIR_OK:XR_XIR_BAD_STRUCTURE;
 }
 
 /* Both lifetime adapters compare the actual final vector to the same
@@ -177,11 +177,11 @@ static XrXirStatus effect_invocation_result_match_source(const EffectInvocationT
     return status;
 }
 
-static XrXirStatus effect_invocation_result_match(EffectInvocationOwner *owner,
+static XrXirStatus effect_invocation_result_match(EffectInvocationWorkspace *owner,
     const EffectInvocationResult *result) {
     if (!owner || !xir_compile_context_valid(owner->work) || !owner->effects ||
         !owner->effects->contracts) return XR_XIR_BAD_STRUCTURE;
     if (!xir_compile_work(owner->work,sizeof(EffectInvocationTermSource))) return XR_XIR_BUDGET;
-    const EffectInvocationTermSource source={owner->work,owner,NULL};
+    const EffectInvocationTermSource source={owner->work,&owner->final,NULL,owner->effects};
     return effect_invocation_result_match_source(&source,result);
 }

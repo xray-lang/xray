@@ -24,7 +24,7 @@ static XrXirStatus invocation_lowered_context_oracle(const XrXirCompileContext *
             XrXirStatus status=effect_invocation_bounds_mask(context,bounds,f,0,&mask);
             if (status!=XR_XIR_OK) return status;
             uint32_t derived=UINT32_MAX;
-            status=effect_invocation_certificate_node_mask(context,certificate,certificate->equations->roots[f],&derived);
+            status=effect_invocation_certificate_node_mask(context,certificate,certificate->final->roots[f],&derived);
             if (status!=XR_XIR_OK) return status;
             const XrXirRootFormula *formula=&certificate->result->functions[f].formula;
             if (oracle) {
@@ -176,7 +176,7 @@ static XrXirStatus conditional_invocation_lowered_context(const XrXirCompileCont
             const XrXirTypeNode *physical=xr_xir_callable_signature(&certificate->terms.types,function->parameters[0]);
             CHECK(physical && original==(physical->flags&
                 (XR_XIR_CALLABLE_ROOT_REQUIRED|XR_XIR_CALLABLE_ROOT_UNRESOLVED)));
-            CHECK(effect_invocation_certificate_node_mask(context,certificate,certificate->equations->roots[f],&closed)==XR_XIR_OK);
+            CHECK(effect_invocation_certificate_node_mask(context,certificate,certificate->final->roots[f],&closed)==XR_XIR_OK);
             CHECK(closed==original && !formula->constant_mask && formula->term_count==(original?1u:0u));
             if (original) CHECK(original==XR_XIR_CALLABLE_ROOT_UNRESOLVED && formula->terms &&
                 formula->terms[0].kind==XR_XIR_ROOT_TERM_PARAMETER && !formula->terms[0].index);

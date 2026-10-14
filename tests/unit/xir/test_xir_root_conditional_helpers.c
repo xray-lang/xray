@@ -1657,7 +1657,13 @@ static void conditional_axes(void) {
     }
 }
 
+#include "xir_invocation_final_retirement_cases.h"
+
 int main(int argc, char **argv) {
+    if (argc==2 && !strcmp(argv[1],"--final-retirement")) {
+        invocation_final_retirement_literals();invocation_final_retirement_resources();
+        CHECK(!rp_live && !rp_live_bytes && !rp_release_observer);return 0;
+    }
     if (argc==2 && !strcmp(argv[1],"--invocation-edge-keys")) {
         invocation_edge_literals();invocation_edge_resources();
         CHECK(!rp_live && !rp_live_bytes);return 0;

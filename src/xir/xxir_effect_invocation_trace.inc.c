@@ -61,7 +61,7 @@ static XrXirStatus effect_invocation_trace_walk_selected(const XrXirCompileConte
     if (status!=XR_XIR_OK) return status;
     bool fact=atom!=UINT32_MAX;
     if (!fact) return effect_invocation_trace_finish(work,0,atom,witness,length,selection);
-    const EffectInvocationOwner *equations=certificate->equations;
+    const EffectInvocationFinal *equations=certificate->final;
     uint32_t current=equations->roots[request->function],count=0;
     for (;;) {
         if (!xir_compile_work(work,8)) return XR_XIR_BUDGET;

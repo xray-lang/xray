@@ -281,10 +281,10 @@ static void conditional_compact_public_selection(const XrXirCompileContext *cont
  * without using the new reader as the expected instruction oracle. */
 static void conditional_compact_cause_opcode(const XrXirCompileContext *context,
     EffectInvocationCertificate *certificate) {
-    uint32_t selected=certificate->equations->roots[1],atom=6;
-    CHECK(selected<certificate->equations->count &&
-        certificate->equations->nodes[selected].body==1 &&
-        certificate->equations->nodes[selected].causes[atom].witness.cause==XR_XIR_ROOT_CAUSE_CONTEXT_CALL);
+    uint32_t selected=certificate->final->roots[1],atom=6;
+    CHECK(selected<certificate->final->count &&
+        certificate->final->nodes[selected].body==1 &&
+        certificate->final->nodes[selected].causes[atom].witness.cause==XR_XIR_ROOT_CAUSE_CONTEXT_CALL);
     EffectBodyFunction *function=&certificate->body->functions[1];
     CHECK(function->runs && function->instruction_count==2 && function->run_count &&
         function->runs[0].first==0 && function->runs[0].base.op==XR_XIR_CALL_INDIRECT);
@@ -338,7 +338,7 @@ static void conditional_compact_projection_domains(const XrXirCompileContext *co
         }
     }
     uint32_t selected[4];
-    uint32_t root=certificate->equations->roots[1];EffectInvocationNode *node=&certificate->equations->nodes[root];
+    uint32_t root=certificate->final->roots[1];EffectInvocationNode *node=&certificate->final->nodes[root];
     EffectInvocationCause *cause=&node->causes[6],*local=&effect_invocation_local_causes(node)[6];
     XrXirRootEffectWitness saved=cause->witness,local_saved=local->witness;
     uint32_t stream_first=certificate->body->functions[1].runs[0].first;
@@ -346,7 +346,7 @@ static void conditional_compact_projection_domains(const XrXirCompileContext *co
         if (!damage) cause->witness.slot=0;
         else if (damage==1) local->witness.cause=XR_XIR_ROOT_CAUSE_PARAMETER;
         else if (damage==2) certificate->body->functions[1].runs[0].first=1;
-        else if (damage==3) certificate->equations->roots[1]=certificate->equations->roots[0];
+        else if (damage==3) certificate->final->roots[1]=certificate->final->roots[0];
         CHECK(effect_invocation_projection_domains(context,certificate,1,damage==4?1u:0u,4,selected)==
             XR_XIR_BAD_STRUCTURE);
         /* Private scratch has no failure value. The public request still
@@ -356,7 +356,7 @@ static void conditional_compact_projection_domains(const XrXirCompileContext *co
         CHECK(effect_invocation_public_walk(context,certificate,&request,4,&length)==
             XR_XIR_BAD_STRUCTURE && length==77);
         cause->witness=saved;local->witness=local_saved;
-        certificate->body->functions[1].runs[0].first=stream_first;certificate->equations->roots[1]=root;
+        certificate->body->functions[1].runs[0].first=stream_first;certificate->final->roots[1]=root;
         CHECK(effect_invocation_projection_domains(context,certificate,1,0,4,selected)==XR_XIR_OK &&
             selected[1]==6 && selected[0]==UINT32_MAX && selected[2]==UINT32_MAX &&
             selected[3]==UINT32_MAX);
@@ -409,7 +409,7 @@ static void conditional_compact_dimension_damage(const XrXirCompileContext *cont
  * identity. Only its already-decoded opcode is reused inside this request. */
 static void conditional_compact_edge_reads(const XrXirCompileContext *context,
     EffectInvocationCertificate *certificate) {
-    EffectInvocationOwner *equations=certificate->equations;uint32_t matched=0,chosen=UINT32_MAX;
+    EffectInvocationFinal *equations=certificate->final;uint32_t matched=0,chosen=UINT32_MAX;
     for (uint32_t e=0;e<equations->edge_count;++e) {
         const EffectInvocationEdge *edge=&equations->edges[e];
         uint32_t body=equations->nodes[edge->caller].body;XrXirOp expected=XR_XIR_INVALID;
@@ -671,8 +671,7 @@ static XrXirStatus conditional_compact_owned(const XrXirCompileContext *context,
     if (status==XR_XIR_OK && oracle) conditional_compact_cell_attacks(context,effects,&adapter,&body_read);
     if (status==XR_XIR_OK && oracle) {
         EffectInvocationCertificate *certificate=effects->invocations;
-        CHECK(certificate->equations && !certificate->equations->work && !certificate->equations->body.read.owner &&
-            !certificate->equations->effects && !certificate->equations->graph);
+        CHECK(certificate->final);
         EffectBodyRequest request=effect_body_owned_request(context,certificate->body);
         EffectBodyFunctionHead head={0};XrXirInstruction storage;const XrXirInstruction *op=NULL;
         CHECK(effect_body_request_head(&request,0,&head)==XR_XIR_OK && head.parameter_count==0 &&

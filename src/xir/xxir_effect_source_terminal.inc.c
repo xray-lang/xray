@@ -56,12 +56,12 @@ XR_FUNC XrXirStatus xir_effects_source_retire_generation(const XrXirCompileConte
 
 static XrXirStatus effect_source_equation_shape(const XrXirCompileContext *work,
     const EffectInvocationCertificate *certificate) {
-    const EffectInvocationOwner *owner=certificate->equations;
+    const EffectInvocationFinal *owner=certificate->final;
     const EffectInvocationResult *result=certificate->result;
     uint32_t count=effect_body_count(certificate->body);
-    if (!owner->count || owner->count>owner->capacity || owner->capacity>owner->maximum ||
+    if (!owner->count || owner->count>owner->capacity || (uint64_t)owner->capacity>(uint64_t)work->limits.functions*work->limits.instructions ||
         owner->edge_count>owner->edge_capacity || !!owner->edges!=!!owner->edge_capacity ||
-        owner->edge_index || owner->edge_index_capacity || owner->pending || !owner->nodes ||
+        !owner->nodes ||
         !owner->roots || !owner->root_spaces || !!owner->sites!=!!owner->site_count ||
         owner->deferred_count>owner->deferred_capacity ||
         !!owner->deferred_calls!=!!owner->deferred_capacity ||
@@ -114,7 +114,7 @@ static XrXirStatus effect_source_result_views(const XrXirCompileContext *work,
 
 static XrXirStatus effect_source_atoms(const XrXirCompileContext *work,
     const EffectInvocationCertificate *certificate) {
-    const EffectInvocationOwner *owner=certificate->equations;
+    const EffectInvocationFinal *owner=certificate->final;
     for (uint32_t n=0;n<owner->count;++n) {
         const EffectInvocationNode *node=&owner->nodes[n];
         if (node->root>=effect_body_count(certificate->body) ||
@@ -162,15 +162,11 @@ static XrXirStatus effect_source_certificate(const XrXirCompileContext *work,
     const EffectInvocationCertificate *certificate,const XrXirEffects *summary) {
     if (!certificate || !effect_body_material_shape(certificate->body) ||
         certificate->resources!=work->resources || certificate->body->resources!=work->resources ||
-        !certificate->equations || !certificate->result || !certificate->declared ||
+        !certificate->final || !certificate->result || !certificate->declared ||
         certificate->terms.remaining || certificate->body->terms.remaining ||
-        certificate->equations->work || certificate->equations->effects ||
-        certificate->equations->graph || certificate->equations->declared ||
-        certificate->equations->body.read.owner || certificate->equations->body.read.consume ||
-        certificate->equations->body.owner!=certificate->body ||
-        certificate->equations->material!=certificate->body ||
-        certificate->equations->physical!=certificate->body->physical ||
-        certificate->equations->cells!=certificate->body->cells ||
+        certificate->final->material!=certificate->body ||
+        certificate->final->physical!=certificate->body->physical ||
+        certificate->final->cells!=certificate->body->cells ||
         !summary || summary->count!=effect_body_count(certificate->body) ||
         !summary->contracts || !certificate->origins || !certificate->owners || !certificate->parameter_kinds)
         return XR_XIR_BAD_STRUCTURE;
@@ -179,15 +175,16 @@ static XrXirStatus effect_source_certificate(const XrXirCompileContext *work,
         if (!effect_body_material_shape(body) || body->resources!=work->resources ||
             body->terms.remaining) return XR_XIR_BAD_STRUCTURE;
     }
-    if (!xir_compile_work(work,sizeof(EffectInvocationOwner)+sizeof(EffectGraph)+sizeof(XrXirEffects)+
+    if (!xir_compile_work(work,sizeof(EffectInvocationWorkspace)+sizeof(EffectGraph)+sizeof(XrXirEffects)+
         sizeof(EffectInvocationCertificate)+sizeof(EffectBodyRequest)+5*sizeof(void *))) return XR_XIR_BUDGET;
     XrXirEffects local_summary=*summary;
     EffectGraph graph={.material=certificate->body,.physical=certificate->body->physical};
-    EffectInvocationOwner owner=*certificate->equations;
-    owner.work=work;owner.effects=&local_summary;owner.graph=&graph;owner.declared=certificate->declared;
-    owner.body=effect_body_owned_request(work,certificate->body);
+    EffectInvocationWorkspace owner={0};
+    XrXirStatus opening=effect_invocation_read_open(work,&local_summary,certificate->declared,certificate->final,&owner);
+    if (opening!=XR_XIR_OK) return opening;
+    owner.graph=&graph;
     EffectInvocationCertificate local=*certificate;local.terms.remaining=work;
-    local.equations=&owner;
+    local.final=&owner.final;
     XrXirStatus status=effect_source_equation_shape(work,certificate);
     if (status==XR_XIR_OK) status=effect_source_result_views(work,certificate,summary);
     for (uint32_t f=0;f<summary->count && status==XR_XIR_OK;++f) {
@@ -203,16 +200,16 @@ static XrXirStatus effect_source_certificate(const XrXirCompileContext *work,
                 status=XR_XIR_BAD_STRUCTURE;
         }
     }
-    if (status==XR_XIR_OK) status=effect_body_physical_match(work,owner.physical,owner.material);
+    if (status==XR_XIR_OK) status=effect_body_physical_match(work,owner.final.physical,owner.final.material);
     if (status==XR_XIR_OK) status=effect_invocation_producers_verify_read(&owner,&owner.body);
     if (status==XR_XIR_OK) status=effect_invocation_coverage_verify_read(&owner,&owner.body);
     if (status==XR_XIR_OK) status=effect_invocation_class_verify_read(&owner,&owner.body);
     if (status==XR_XIR_OK) status=effect_invocation_closed(&owner);
     if (status==XR_XIR_OK) status=effect_invocation_deferred_verify(&owner);
-    if (status==XR_XIR_OK) status=effect_invocation_bind_bounds(&local,certificate->declared,owner.physical);
+    if (status==XR_XIR_OK) status=effect_invocation_bind_bounds(&local,certificate->declared,owner.final.physical);
     if (status==XR_XIR_OK) status=effect_source_atoms(work,&local);
     if (status==XR_XIR_OK) status=effect_source_projections(work,&local);
-    return status;
+    effect_invocation_read_close(&owner);return status;
 }
 
 static XrXirStatus effect_source_contexts(const XrXirCompileContext *work,

@@ -114,11 +114,11 @@ static void invocation_storage_bitmap_controls(EffectInvocationFlow *flow) {
         flow->certified[last]&=~bit;CHECK(effect_invocation_flags_match(flow)==XR_XIR_OK);
     }
 }
-static XrXirStatus invocation_storage_rows(EffectInvocationOwner *owner,uint32_t node,uint32_t mode,bool oracle) {
+static XrXirStatus invocation_storage_rows(EffectInvocationWorkspace *owner,uint32_t node,uint32_t mode,bool oracle) {
     EffectInvocationFlow flow={.owner=owner,.node=node,.instruction=UINT32_MAX};
     XrXirStatus status=effect_invocation_origins(&flow);
     if (status==XR_XIR_OK && oracle) {
-        uint32_t body=owner->nodes[node].body,expected=0;
+        uint32_t body=owner->final.nodes[node].body,expected=0;
         for (uint32_t v=0;v<flow.values;++v) {
             XrXirType type=XR_XIR_UNIT;CHECK(effect_invocation_flow_type(&flow,v,&type)==XR_XIR_OK);
             bool callable=xr_xir_callable_signature(flow.body.domain.types,type)!=NULL;
@@ -154,7 +154,7 @@ static XrXirStatus conditional_storage_case(const XrXirCompileContext *context,u
     if (status==XR_XIR_OK) { phase=1;status=xr_xir_compile_artifact_verify(checked,&diagnostic); }
     const XrXirModule *module=checked?xr_xir_compile_artifact_module(checked):NULL;
     XrXirEffects effects={0};EffectGraph graph={0};EffectInvocationDeclaredBounds *bounds=NULL;
-    EffectInvocationOwner *owner=NULL;EffectInvocationResult *solution=NULL;
+    EffectInvocationWorkspace *owner=NULL;EffectInvocationResult *solution=NULL;
     EffectInvocationCertificate *certificate=NULL;
     if (status==XR_XIR_OK) { phase=2;status=invocation_core_storage(context,module,&effects); }
     if (status==XR_XIR_OK) { phase=3;status=effect_graph_build(module,&effects,&graph,(XrXirCompileContext *)context); }
@@ -165,7 +165,7 @@ static XrXirStatus conditional_storage_case(const XrXirCompileContext *context,u
     if (status==XR_XIR_OK && oracle) invocation_storage_rejections(context,module,bounds);
     if (status==XR_XIR_OK) { phase=6;status=effect_invocations_receive(context,module,&effects,&graph,bounds,&owner); }
     if (status==XR_XIR_OK) { phase=7;status=effect_invocations_solve(owner); }
-    for (uint32_t n=0;status==XR_XIR_OK && n<owner->count;++n)
+    for (uint32_t n=0;status==XR_XIR_OK && n<owner->final.count;++n)
         status=invocation_storage_rows(owner,n,mode,oracle);
     if (status==XR_XIR_OK) { phase=8;status=effect_invocation_stage(owner,&solution); }
     EffectInvocationSealRequest request={&owner,&solution,NULL};
@@ -180,7 +180,7 @@ static XrXirStatus conditional_storage_case(const XrXirCompileContext *context,u
     memset(blocks,0xCE,sizeof(blocks));memset(incoming,0xCE,sizeof(incoming));
     if (status==XR_XIR_OK) {
         uint32_t mask=UINT32_MAX;
-        phase=10;status=effect_invocation_certificate_node_mask(context,certificate,certificate->equations->roots[0],&mask);
+        phase=10;status=effect_invocation_certificate_node_mask(context,certificate,certificate->final->roots[0],&mask);
         if (status==XR_XIR_OK && oracle) {
             CHECK(!mask && certificate->declared && certificate->declared->functions[1].values==98);
             const EffectInvocationFunctionBounds *body=&certificate->declared->functions[1];
@@ -194,7 +194,7 @@ static XrXirStatus conditional_storage_case(const XrXirCompileContext *context,u
                     saved==XR_XIR_CALLABLE_ROOT_UNRESOLVED);
             }
             CHECK(!certificate->declared->functions[3].count && !certificate->declared->functions[3].bounds);
-            CHECK(!certificate->equations->body.read.owner && !certificate->equations->effects && !certificate->equations->declared);
+            CHECK((certificate->final->material!=NULL));
         }
     }
     effect_invocation_certificate_free(certificate);return status;

@@ -25,7 +25,7 @@ static XrXirRootEffectWitness effect_invocation_public_witness(
 
 static XrXirStatus effect_invocation_projection_atom(const XrXirCompileContext *work,
     const EffectInvocationCertificate *certificate,uint32_t node_index,uint32_t atom,uint32_t *output) {
-    const EffectInvocationOwner *equations=certificate->equations;
+    const EffectInvocationFinal *equations=certificate->final;
     const EffectInvocationNode *node=&equations->nodes[node_index];
     uint32_t parameters=certificate->body->functions[node->root].parameter_count;
     if (atom>=node->cause_count || !effect_invocation_atom(node,parameters,atom,false))
@@ -94,11 +94,11 @@ static XrXirStatus effect_invocation_projection_domains(const XrXirCompileContex
     const EffectInvocationCertificate *certificate,uint32_t function,uint32_t first,uint32_t width,
     uint32_t *atoms) {
     if (!xir_compile_context_valid(work) || !certificate || !atoms || first || width!=4 ||
-        !effect_body_material_shape(certificate->body) || !certificate->equations ||
+        !effect_body_material_shape(certificate->body) || !certificate->final ||
         !certificate->origins || certificate->resources!=work->resources ||
         certificate->body->resources!=work->resources ||
         function>=effect_body_count(certificate->body)) return XR_XIR_BAD_STRUCTURE;
-    const EffectInvocationOwner *equations=certificate->equations;
+    const EffectInvocationFinal *equations=certificate->final;
     if (!equations->roots || !equations->nodes) return XR_XIR_BAD_STRUCTURE;
     uint32_t selected=equations->roots[function];
     if (selected>=equations->count) return XR_XIR_BAD_STRUCTURE;
@@ -144,10 +144,10 @@ static XrXirStatus effect_invocation_projection_select(const XrXirCompileContext
     const EffectInvocationCertificate *certificate,uint32_t function,uint32_t domain,
     uint32_t *atom_output,XrXirRootEffectWitness *witness_output) {
     if (!certificate || !effect_body_material_shape(certificate->body) ||
-        certificate->body->resources!=certificate->resources || !certificate->equations || !certificate->origins || !atom_output ||
+        certificate->body->resources!=certificate->resources || !certificate->final || !certificate->origins || !atom_output ||
         !witness_output || domain>=4 || function>=effect_body_count(certificate->body))
         return XR_XIR_BAD_STRUCTURE;
-    const EffectInvocationOwner *equations=certificate->equations;
+    const EffectInvocationFinal *equations=certificate->final;
     uint32_t n=equations->roots[function];
     if (n>=equations->count || equations->nodes[n].body!=function) return XR_XIR_BAD_STRUCTURE;
     const EffectInvocationNode *node=&equations->nodes[n];
@@ -185,15 +185,15 @@ static XrXirStatus effect_invocation_selected_witness(const XrXirCompileContext 
     const EffectInvocationCertificate *certificate,uint32_t function,uint32_t atom,
     XrXirRootEffectWitness *output) {
     if (!xir_compile_context_valid(work) || !certificate || !output ||
-        !effect_body_material_shape(certificate->body) || !certificate->equations ||
+        !effect_body_material_shape(certificate->body) || !certificate->final ||
         !certificate->origins || certificate->resources!=work->resources ||
         certificate->body->resources!=work->resources ||
         function>=effect_body_count(certificate->body)) return XR_XIR_BAD_STRUCTURE;
-    if (!certificate->equations->roots || !certificate->equations->nodes)
+    if (!certificate->final->roots || !certificate->final->nodes)
         return XR_XIR_BAD_STRUCTURE;
-    uint32_t selected=certificate->equations->roots[function];
-    if (selected>=certificate->equations->count) return XR_XIR_BAD_STRUCTURE;
-    const EffectInvocationNode *node=&certificate->equations->nodes[selected];
+    uint32_t selected=certificate->final->roots[function];
+    if (selected>=certificate->final->count) return XR_XIR_BAD_STRUCTURE;
+    const EffectInvocationNode *node=&certificate->final->nodes[selected];
     if (node->body!=function || node->root>=effect_body_count(certificate->body) ||
         (atom!=UINT32_MAX && atom>=node->cause_count)) return XR_XIR_BAD_STRUCTURE;
     uint32_t parameters=certificate->body->functions[node->root].parameter_count;

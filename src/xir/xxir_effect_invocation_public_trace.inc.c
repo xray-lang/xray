@@ -23,7 +23,7 @@ static XrXirStatus effect_invocation_public_transform(const XrXirCompileContext 
     uint32_t atom=selection->atom;const XrXirRootEffectWitness *witness=selection->witness;
     uint32_t kind=0,index=0;*symbolic=false;
     if (atom!=UINT32_MAX && atom>=2) {
-        const EffectInvocationOwner *equations=certificate->equations;
+        const EffectInvocationFinal *equations=certificate->final;
         const EffectInvocationNode *node=&equations->nodes[equations->roots[function]];
         uint32_t parameters=certificate->body->functions[node->root].parameter_count;
         if (atom-2<parameters) { kind=XR_XIR_ROOT_TERM_PARAMETER;index=atom-2; }
@@ -83,7 +83,7 @@ static XrXirStatus effect_invocation_public_walk(const XrXirCompileContext *work
     if (count>limit) return XR_XIR_BAD_STRUCTURE;
     uint32_t atom=certificate->projection_atoms[(size_t)request->domain*
         effect_body_count(certificate->body)+request->function];
-    const EffectInvocationOwner *equations=certificate->equations;
+    const EffectInvocationFinal *equations=certificate->final;
     uint32_t current=equations->roots[request->function];
     for (uint32_t at=0;at<count;++at) {
         if (!xir_compile_work(work,8)) return XR_XIR_BUDGET;

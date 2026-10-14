@@ -330,7 +330,7 @@ static void pc_empty_cases(void) {
  * exact owned field before destruction or the nearest positive check. */
 static void pc_local_final_mutations(const XrXirCompileContext *c,
     EffectInvocationCertificate *certificate,const EffectInvocationLocalInput *inputs) {
-    EffectInvocationOwner *equations=certificate->equations;
+    EffectInvocationFinal *equations=certificate->final;
     EffectInvocationNode *node=&equations->nodes[1];EffectInvocationNode saved=*node;
     for (unsigned mode=0;mode<10;++mode) {
         if (!mode) node->intrinsic_mask=XR_XIR_CALLABLE_ROOT_REQUIRED;
@@ -429,7 +429,7 @@ typedef struct PcLocalCallback {
  * absence. Final publication must still derive the initializer independently. */
 static void pc_erase_initializer_root(const EffectInvocationCertificate *certificate,
     EffectInvocationResult *result) {
-    EffectInvocationNode *node=&certificate->equations->nodes[0];
+    EffectInvocationNode *node=&certificate->final->nodes[0];
     node->intrinsic_mask=node->local_mask=0;result->functions[0].formula.constant_mask=0;
     result->facts[0]=(XrXirRootEffects){0};
     for (uint32_t domain=0;domain<4;++domain) {
@@ -606,13 +606,13 @@ static void pc_local_equation_controls(void) {
     CHECK(xir_fixture_check(&c,&fixture.module,&checked,NULL)==XR_XIR_OK);
     CHECK(xr_xir_compile_effects_analyze(checked,&effects)==XR_XIR_OK);pc_empty_golden(effects,0);
     EffectInvocationCertificate *certificate=effects->invocations;EffectInvocationLocalInput *inputs=NULL;
-    CHECK(certificate && certificate->equations && certificate->body->domain.types->count==2 &&
+    CHECK(certificate && certificate->final && certificate->body->domain.types->count==2 &&
         xr_xir_type_is_cell(certificate->body->domain.types,(XrXirType)EE_CELL));
     CHECK(effect_invocation_local_inputs(&c,certificate->body,&inputs)==XR_XIR_OK && inputs);
     CHECK(inputs[0].facts.requires_root && !inputs[0].facts.unresolved &&
         inputs[0].witnesses[0].cause==XR_XIR_ROOT_CAUSE_INITIALIZER &&
         !inputs[1].facts.requires_root && !inputs[2].facts.requires_root && effects->errors[2]==8);
-    CHECK(effect_invocation_local_equations_match(&c,certificate->equations,inputs)==XR_XIR_OK);
+    CHECK(effect_invocation_local_equations_match(&c,certificate->final,inputs)==XR_XIR_OK);
     pc_local_type_controls(&c,certificate->body);
     pc_local_final_mutations(&c,certificate,inputs);
     pc_local_source_fields(&c,certificate->body,xr_xir_compile_artifact_module(checked));
@@ -627,7 +627,7 @@ static void pc_local_equation_controls(void) {
     xr_compile_resources_release(foreign.resources);xr_compile_resources_free(inputs);inputs=NULL;
     xr_xir_compile_artifact_free(checked);checked=NULL;memset(&fixture,0xa5,sizeof(fixture));
     CHECK(effect_invocation_local_inputs(&c,certificate->body,&inputs)==XR_XIR_OK && inputs);
-    CHECK(effect_invocation_local_equations_match(&c,certificate->equations,inputs)==XR_XIR_OK);
+    CHECK(effect_invocation_local_equations_match(&c,certificate->final,inputs)==XR_XIR_OK);
     CHECK(effect_invocation_certificate_result_match(&c,certificate,certificate->result)==XR_XIR_OK);
     CHECK(effect_invocation_public_gate(&c,certificate,effects->count)==XR_XIR_OK);pc_empty_golden(effects,0);
     xr_compile_resources_free(inputs);xr_xir_compile_effects_free(effects);

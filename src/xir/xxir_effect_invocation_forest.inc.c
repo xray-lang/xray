@@ -19,9 +19,7 @@ static XrXirStatus effect_invocation_forest_types(const XrXirCompileContext *wor
     const EffectInvocationCertificate *certificate=contexts->uses.invocations;
     if (!certificate || !effect_body_material_shape(certificate->body) ||
         certificate->body->resources!=certificate->resources || certificate->resources!=work->resources || certificate->terms.remaining ||
-        certificate->body->domain.types!=&certificate->body->terms.types || !certificate->equations ||
-        certificate->equations->work || certificate->equations->effects ||
-        certificate->equations->graph || certificate->equations->declared ||
+        certificate->body->domain.types!=&certificate->body->terms.types || !certificate->final ||
         effect_body_count(certificate->body)!=contexts->count ||
         certificate->terms.types.count!=contexts->terms.types.count) return XR_XIR_BAD_STRUCTURE;
     /* A query-local comparison owns all of its scratch. The complete semantic
@@ -49,8 +47,8 @@ static XrXirStatus effect_invocation_forest_record(const XrXirCompileContext *wo
     if (!xir_compile_work(work,10)) return XR_XIR_BUDGET;
     uint32_t domain=request->domain;
     const uint32_t *selection=request->selection;
-    uint32_t n=certificate->equations->roots[function];
-    const EffectInvocationNode *node=&certificate->equations->nodes[n];
+    uint32_t n=certificate->final->roots[function];
+    const EffectInvocationNode *node=&certificate->final->nodes[n];
     size_t at=(size_t)domain*forest->count+function;
     if (!selection || *selection!=certificate->projection_atoms[at]) return XR_XIR_BAD_STRUCTURE;
     uint32_t atom=*selection;XrXirRootEffectWitness selected_witness;
@@ -68,8 +66,8 @@ static XrXirStatus effect_invocation_forest_record(const XrXirCompileContext *wo
         if (atom>=node->cause_count) return XR_XIR_BAD_STRUCTURE;
         const EffectInvocationCause *cause=&node->causes[atom];
         if (cause->distance && !symbolic) {
-            if (cause->next>=certificate->equations->count) return XR_XIR_BAD_STRUCTURE;
-            next=certificate->equations->nodes[cause->next].body;
+            if (cause->next>=certificate->final->count) return XR_XIR_BAD_STRUCTURE;
+            next=certificate->final->nodes[cause->next].body;
         } else if (!symbolic && cause->witness.callee!=UINT32_MAX) parameter_owner=cause->witness.callee;
         else if (node->root!=node->body && witness.cause==XR_XIR_ROOT_CAUSE_PARAMETER) parameter_owner=node->root;
     }
@@ -141,7 +139,7 @@ static XrXirStatus effect_invocation_forest_match(const XrXirCompileContext *wor
         if (!xir_compile_work(work,8)) { status=XR_XIR_BUDGET;break; }
         if (node->declaration!=origin->function || node->owner!=certificate->owners[f] ||
             node->argument_count!=origin->argument_count || node->parameter_count!=body->parameter_count ||
-            node->constant_mask!=certificate->equations->nodes[certificate->equations->roots[f]].intrinsic_mask ||
+            node->constant_mask!=certificate->final->nodes[certificate->final->roots[f]].intrinsic_mask ||
             forest->facts[f].requires_root!=facts.requires_root ||
             forest->facts[f].unresolved!=facts.unresolved) { status=XR_XIR_BAD_STRUCTURE;break; }
         for (uint32_t a=0;a<node->argument_count && status==XR_XIR_OK;++a)
