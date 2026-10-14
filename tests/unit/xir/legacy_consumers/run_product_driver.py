@@ -149,7 +149,10 @@ def main() -> int:
             suffix = ''
             if case['entry'] == 'function':
                 value = oracle['expected']['return_i64']
-                suffix = f'\nvar observedResult = answer()\nassertEqual(observedResult, {value})\nprint(observedResult)\n'
+                entry = case.get('entry_function', 'answer')
+                if not re.fullmatch(r'[A-Za-z_][A-Za-z0-9_]*', entry):
+                    raise ValueError('function entry must be one source declaration identifier')
+                suffix = f'\nvar observedResult = {entry}()\nassertEqual(observedResult, {value})\nprint(observedResult)\n'
             if not original_context:
                 target.write_text(source+suffix, encoding='utf-8', newline='\n')
             expected = {'exit_code':case.get('expected_exit_code',0),

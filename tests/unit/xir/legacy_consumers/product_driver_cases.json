@@ -17821,6 +17821,854 @@
         "All original exact compiler/native/runtime FI,resource bounds,cancel,lifetime/physical and safety/provider gates remain open.",
         "Helper declaration-only run does not execute or qualify exported bodies/importer capabilities; complete original importer and named duties remain separate."
       ]
+    },
+    {
+      "id": "source_projection_scalar_array_append_preserves_class_identity",
+      "oracle_id": "source_projection_scalar_array_append_preserves_class_identity",
+      "source": "tests/unit/xir/product_consumers/fixtures/class_identity/root.xr",
+      "source_lf_sha256": "d2b1753ee55e9a656c0ad766279d09d5b2d717d246a711804fa1e8f418f93aa6",
+      "entry": "function",
+      "entry_function": "consumerAnswer",
+      "stdout_utf8": "42\n",
+      "stderr_utf8": "",
+      "companions": [],
+      "owners": [
+        "P08",
+        "P09",
+        "P10",
+        "P13"
+      ],
+      "original_source_case": "source_owner_array_append_preserves_class_identity",
+      "source_projection_scope": "Exact original source prefix and fixed result through an explicitly exported adapter; additional legacy assertions stay OPEN until mapped.",
+      "remaining_gates": [
+        "Scalar return and original source prefix only; all original layout/operation/reader/metadata assertions remain OPEN.",
+        "Original complete producer destruction,multiple Instances,suspend/cancel,exact resource limits,complete FI,physical release and native/mixed/provider/full safety qualification remain OPEN.",
+        "Original native harness success exit remains distinct from language return; no claims from parity alone."
+      ]
+    },
+    {
+      "id": "source_projection_scalar_tuple_array_elements",
+      "oracle_id": "source_projection_scalar_tuple_array_elements",
+      "source": "tests/unit/xir/product_consumers/fixtures/tuple_array/root.xr",
+      "source_lf_sha256": "c5b270510a924c1df8bd40c32c928bb8fdf92ada0293fab4582ec848a366853b",
+      "entry": "function",
+      "entry_function": "consumerAnswer",
+      "stdout_utf8": "42\n",
+      "stderr_utf8": "",
+      "companions": [],
+      "owners": [
+        "P09",
+        "P10"
+      ],
+      "original_source_case": "source_owner_tuple_array_elements",
+      "source_projection_scope": "Exact positive source prefix and fixed oracle retained for admission probing; no replacement gates are registered yet.",
+      "remaining_gates": [
+        "Scalar return and original source prefix only; all original layout/operation/reader/metadata assertions remain OPEN.",
+        "Original complete producer destruction,multiple Instances,suspend/cancel,exact resource limits,complete FI,physical release and native/mixed/provider/full safety qualification remain OPEN.",
+        "Original native harness success exit remains distinct from language return; no claims from parity alone."
+      ]
+    },
+    {
+      "id": "source_projection_scalar_static_method_declarations",
+      "oracle_id": "source_projection_scalar_static_method_declarations",
+      "source": "tests/unit/xir/product_consumers/fixtures/static_methods/root.xr",
+      "source_lf_sha256": "f7192f6c9d1a6a6403fe142383c9302520840abaa2ccdaf3e6556959796c5fcd",
+      "entry": "function",
+      "entry_function": "consumerAnswer",
+      "stdout_utf8": "42\n",
+      "stderr_utf8": "",
+      "companions": [],
+      "owners": [
+        "P09",
+        "P10"
+      ],
+      "original_source_case": "source_owner_static_method_declarations",
+      "source_projection_scope": "Exact original source prefix and fixed result through an explicitly exported adapter; additional legacy assertions stay OPEN until mapped.",
+      "remaining_gates": [
+        "Scalar return and original source prefix only; all original layout/operation/reader/metadata assertions remain OPEN.",
+        "Original complete producer destruction,multiple Instances,suspend/cancel,exact resource limits,complete FI,physical release and native/mixed/provider/full safety qualification remain OPEN.",
+        "Original native harness success exit remains distinct from language return; no claims from parity alone."
+      ]
+    },
+    {
+      "id": "source_projection_scalar_repeated_tuple_elements",
+      "oracle_id": "source_projection_scalar_repeated_tuple_elements",
+      "source": "tests/unit/xir/product_consumers/fixtures/tuple_repeated/root.xr",
+      "source_lf_sha256": "65e40cc5680d1142362190583756c4a7a6163587702ea954a3439d3b5a668f26",
+      "entry": "function",
+      "entry_function": "consumerAnswer",
+      "stdout_utf8": "42\n",
+      "stderr_utf8": "",
+      "companions": [],
+      "owners": [
+        "P09",
+        "P10"
+      ],
+      "original_source_case": "source_owner_repeated_tuple_elements",
+      "source_projection_scope": "Exact positive source prefix and fixed oracle retained for admission probing; no replacement gates are registered yet.",
+      "remaining_gates": [
+        "Scalar return and original source prefix only; all original layout/operation/reader/metadata assertions remain OPEN.",
+        "Original complete producer destruction,multiple Instances,suspend/cancel,exact resource limits,complete FI,physical release and native/mixed/provider/full safety qualification remain OPEN.",
+        "Original native harness success exit remains distinct from language return; no claims from parity alone."
+      ]
+    },
+    {
+      "id": "source_projection_scalar_byte_comparison",
+      "oracle_id": "source_projection_scalar_byte_comparison",
+      "source": "tests/unit/xir/product_consumers/fixtures/byte_comparison/root.xr",
+      "source_lf_sha256": "19355cd9955a110342a4984124535756090f5722ad73615b8884d3929640c66d",
+      "entry": "function",
+      "entry_function": "consumerAnswer",
+      "stdout_utf8": "42\n",
+      "stderr_utf8": "",
+      "companions": [],
+      "owners": [
+        "P08",
+        "P09",
+        "P10",
+        "P13"
+      ],
+      "original_source_case": "source_owner_byte_comparison",
+      "source_projection_scope": "Exact positive source prefix and fixed oracle retained for admission probing; no replacement gates are registered yet.",
+      "remaining_gates": [
+        "Scalar return and original source prefix only; all original layout/operation/reader/metadata assertions remain OPEN.",
+        "Original complete producer destruction,multiple Instances,suspend/cancel,exact resource limits,complete FI,physical release and native/mixed/provider/full safety qualification remain OPEN.",
+        "Original native harness success exit remains distinct from language return; no claims from parity alone."
+      ]
+    },
+    {
+      "id": "source_projection_scalar_explicit_bool_conditions_execute",
+      "oracle_id": "source_projection_scalar_explicit_bool_conditions_execute",
+      "source": "tests/unit/xir/product_consumers/fixtures/bool_conditions/root.xr",
+      "source_lf_sha256": "bdc9cb53993fc822e72661dc04beb3c0d274294328e157f8b3d6e6b91755a265",
+      "entry": "function",
+      "entry_function": "consumerAnswer",
+      "stdout_utf8": "42\n",
+      "stderr_utf8": "",
+      "companions": [],
+      "owners": [
+        "P09",
+        "P10"
+      ],
+      "original_source_case": "source_owner_explicit_bool_conditions_execute",
+      "source_projection_scope": "Exact original source prefix and fixed result through an explicitly exported adapter; additional legacy assertions stay OPEN until mapped.",
+      "remaining_gates": [
+        "Scalar return and original source prefix only; all original layout/operation/reader/metadata assertions remain OPEN.",
+        "Original complete producer destruction,multiple Instances,suspend/cancel,exact resource limits,complete FI,physical release and native/mixed/provider/full safety qualification remain OPEN.",
+        "Original native harness success exit remains distinct from language return; no claims from parity alone."
+      ]
+    },
+    {
+      "id": "source_projection_scalar_value_struct_string_copy_preserves_original",
+      "oracle_id": "source_projection_scalar_value_struct_string_copy_preserves_original",
+      "source": "tests/unit/xir/product_consumers/fixtures/struct_string/root.xr",
+      "source_lf_sha256": "0010dd4a64c28880f52bb252d20c0ccbc6bda7fc6d98d203a9b9e273e4277a3a",
+      "entry": "function",
+      "entry_function": "consumerAnswer",
+      "stdout_utf8": "42\n",
+      "stderr_utf8": "",
+      "companions": [],
+      "owners": [
+        "P09",
+        "P10"
+      ],
+      "original_source_case": "source_owner_value_struct_string_copy_preserves_original",
+      "source_projection_scope": "Exact original source prefix and fixed result through an explicitly exported adapter; additional legacy assertions stay OPEN until mapped.",
+      "remaining_gates": [
+        "Scalar return and original source prefix only; all original layout/operation/reader/metadata assertions remain OPEN.",
+        "Original complete producer destruction,multiple Instances,suspend/cancel,exact resource limits,complete FI,physical release and native/mixed/provider/full safety qualification remain OPEN.",
+        "Original native harness success exit remains distinct from language return; no claims from parity alone."
+      ]
+    },
+    {
+      "id": "source_projection_scalar_array_index_reads_and_replaces_elements",
+      "oracle_id": "source_projection_scalar_array_index_reads_and_replaces_elements",
+      "source": "tests/unit/xir/product_consumers/fixtures/array_places/root.xr",
+      "source_lf_sha256": "9f0f1e7373d56953b7b81727c9e418c5ff10b21bca8713edf389f75c18456666",
+      "entry": "function",
+      "entry_function": "consumerAnswer",
+      "stdout_utf8": "42\n",
+      "stderr_utf8": "",
+      "companions": [],
+      "owners": [
+        "P08",
+        "P09",
+        "P10",
+        "P13"
+      ],
+      "original_source_case": "source_owner_array_index_reads_and_replaces_elements",
+      "source_projection_scope": "Exact original source prefix and fixed result through an explicitly exported adapter; additional legacy assertions stay OPEN until mapped.",
+      "remaining_gates": [
+        "Scalar return and original source prefix only; all original layout/operation/reader/metadata assertions remain OPEN.",
+        "Original complete producer destruction,multiple Instances,suspend/cancel,exact resource limits,complete FI,physical release and native/mixed/provider/full safety qualification remain OPEN.",
+        "Original native harness success exit remains distinct from language return; no claims from parity alone."
+      ]
+    },
+    {
+      "id": "source_projection_scalar_narrow_array_elements_precede_allocation",
+      "oracle_id": "source_projection_scalar_narrow_array_elements_precede_allocation",
+      "source": "tests/unit/xir/product_consumers/fixtures/narrow_array/root.xr",
+      "source_lf_sha256": "49ff3b08987fff6bbd1d988497e27fa064642ec1889509fd76d0832728cd3908",
+      "entry": "function",
+      "entry_function": "consumerAnswer",
+      "stdout_utf8": "42\n",
+      "stderr_utf8": "",
+      "companions": [],
+      "owners": [
+        "P08",
+        "P09",
+        "P10",
+        "P13"
+      ],
+      "original_source_case": "source_owner_narrow_array_elements_precede_allocation",
+      "source_projection_scope": "Exact original source prefix and fixed result through an explicitly exported adapter; additional legacy assertions stay OPEN until mapped.",
+      "remaining_gates": [
+        "Scalar return and original source prefix only; all original layout/operation/reader/metadata assertions remain OPEN.",
+        "Original complete producer destruction,multiple Instances,suspend/cancel,exact resource limits,complete FI,physical release and native/mixed/provider/full safety qualification remain OPEN.",
+        "Original native harness success exit remains distinct from language return; no claims from parity alone."
+      ]
+    },
+    {
+      "id": "source_projection_scalar_array_runtime_length",
+      "oracle_id": "source_projection_scalar_array_runtime_length",
+      "source": "tests/unit/xir/product_consumers/fixtures/array_runtime_length/root.xr",
+      "source_lf_sha256": "09e03a8908825d0c6e6766047c396f57f6068577cf79e479bcd2122a716e8bb8",
+      "entry": "function",
+      "entry_function": "consumerAnswer",
+      "stdout_utf8": "42\n",
+      "stderr_utf8": "",
+      "companions": [],
+      "owners": [
+        "P08",
+        "P09",
+        "P10",
+        "P13"
+      ],
+      "original_source_case": "source_owner_array_runtime_length",
+      "source_projection_scope": "Exact original source prefix and fixed result through an explicitly exported adapter; additional legacy assertions stay OPEN until mapped.",
+      "remaining_gates": [
+        "Scalar return and original source prefix only; all original layout/operation/reader/metadata assertions remain OPEN.",
+        "Original complete producer destruction,multiple Instances,suspend/cancel,exact resource limits,complete FI,physical release and native/mixed/provider/full safety qualification remain OPEN.",
+        "Original native harness success exit remains distinct from language return; no claims from parity alone."
+      ]
+    },
+    {
+      "id": "source_projection_scalar_string_slice_scalar_range",
+      "oracle_id": "source_projection_scalar_string_slice_scalar_range",
+      "source": "tests/unit/xir/product_consumers/fixtures/string_slice/root.xr",
+      "source_lf_sha256": "a5359a83e3b1dcce7612addaba5ec0f95ac52ccdc67daccff146284be4b92b66",
+      "entry": "function",
+      "entry_function": "consumerAnswer",
+      "stdout_utf8": "42\n",
+      "stderr_utf8": "",
+      "companions": [],
+      "owners": [
+        "P08",
+        "P09",
+        "P13"
+      ],
+      "original_source_case": "source_owner_string_slice_scalar_range",
+      "source_projection_scope": "Exact positive source prefix and fixed oracle retained for admission probing; no replacement gates are registered yet.",
+      "remaining_gates": [
+        "Scalar return and original source prefix only; all original layout/operation/reader/metadata assertions remain OPEN.",
+        "Original complete producer destruction,multiple Instances,suspend/cancel,exact resource limits,complete FI,physical release and native/mixed/provider/full safety qualification remain OPEN.",
+        "Original native harness success exit remains distinct from language return; no claims from parity alone."
+      ]
+    },
+    {
+      "id": "source_projection_scalar_integer_bitwise_exact_width",
+      "oracle_id": "source_projection_scalar_integer_bitwise_exact_width",
+      "source": "tests/unit/xir/product_consumers/fixtures/integer_width/root.xr",
+      "source_lf_sha256": "95096bcb6b01a457fa0d84c104b025df582e089cf88cf83ef26aca9542c39883",
+      "entry": "function",
+      "entry_function": "consumerAnswer",
+      "stdout_utf8": "42\n",
+      "stderr_utf8": "",
+      "companions": [],
+      "owners": [
+        "P09"
+      ],
+      "original_source_case": "source_owner_integer_bitwise_exact_width",
+      "source_projection_scope": "Exact positive source prefix and fixed oracle retained for admission probing; no replacement gates are registered yet.",
+      "remaining_gates": [
+        "Scalar return and original source prefix only; all original layout/operation/reader/metadata assertions remain OPEN.",
+        "Original complete producer destruction,multiple Instances,suspend/cancel,exact resource limits,complete FI,physical release and native/mixed/provider/full safety qualification remain OPEN.",
+        "Original native harness success exit remains distinct from language return; no claims from parity alone."
+      ]
+    },
+    {
+      "id": "source_projection_scalar_integer_division_and_remainder_preserve_value_rules",
+      "oracle_id": "source_projection_scalar_integer_division_and_remainder_preserve_value_rules",
+      "source": "tests/unit/xir/product_consumers/fixtures/integer_division/root.xr",
+      "source_lf_sha256": "6266d1efbae095eb9988e9a18d5ea51251d9a1ed70b9bb6247df63101328ae73",
+      "entry": "function",
+      "entry_function": "consumerAnswer",
+      "stdout_utf8": "0\n",
+      "stderr_utf8": "",
+      "companions": [],
+      "owners": [
+        "P09"
+      ],
+      "original_source_case": "source_owner_integer_division_and_remainder_preserve_value_rules",
+      "source_projection_scope": "Exact original source prefix and fixed result through an explicitly exported adapter; additional legacy assertions stay OPEN until mapped.",
+      "remaining_gates": [
+        "Scalar return and original source prefix only; all original layout/operation/reader/metadata assertions remain OPEN.",
+        "Original complete producer destruction,multiple Instances,suspend/cancel,exact resource limits,complete FI,physical release and native/mixed/provider/full safety qualification remain OPEN.",
+        "Original native harness success exit remains distinct from language return; no claims from parity alone."
+      ]
+    },
+    {
+      "id": "source_projection_scalar_integer_comparisons_preserve_signedness_and_order",
+      "oracle_id": "source_projection_scalar_integer_comparisons_preserve_signedness_and_order",
+      "source": "tests/unit/xir/product_consumers/fixtures/integer_comparisons/root.xr",
+      "source_lf_sha256": "19e398b2ef4af2e9d874d3e4f60141de6275cc203144042417879452d3f67dac",
+      "entry": "function",
+      "entry_function": "consumerAnswer",
+      "stdout_utf8": "0\n",
+      "stderr_utf8": "",
+      "companions": [],
+      "owners": [
+        "P09"
+      ],
+      "original_source_case": "source_owner_integer_comparisons_preserve_signedness_and_order",
+      "source_projection_scope": "Exact original source prefix and fixed result through an explicitly exported adapter; additional legacy assertions stay OPEN until mapped.",
+      "remaining_gates": [
+        "Scalar return and original source prefix only; all original layout/operation/reader/metadata assertions remain OPEN.",
+        "Original complete producer destruction,multiple Instances,suspend/cancel,exact resource limits,complete FI,physical release and native/mixed/provider/full safety qualification remain OPEN.",
+        "Original native harness success exit remains distinct from language return; no claims from parity alone."
+      ]
+    },
+    {
+      "id": "source_projection_scalar_integer_wrapping_arithmetic_uses_shared_primitives",
+      "oracle_id": "source_projection_scalar_integer_wrapping_arithmetic_uses_shared_primitives",
+      "source": "tests/unit/xir/product_consumers/fixtures/integer_arithmetic/root.xr",
+      "source_lf_sha256": "024d75e808e3daa92e304bbac83d785dd109743597310b1cb95102bec025d004",
+      "entry": "function",
+      "entry_function": "consumerAnswer",
+      "stdout_utf8": "0\n",
+      "stderr_utf8": "",
+      "companions": [],
+      "owners": [
+        "P09"
+      ],
+      "original_source_case": "source_owner_integer_wrapping_arithmetic_uses_shared_primitives",
+      "source_projection_scope": "Exact original source prefix and fixed result through an explicitly exported adapter; additional legacy assertions stay OPEN until mapped.",
+      "remaining_gates": [
+        "Scalar return and original source prefix only; all original layout/operation/reader/metadata assertions remain OPEN.",
+        "Original complete producer destruction,multiple Instances,suspend/cancel,exact resource limits,complete FI,physical release and native/mixed/provider/full safety qualification remain OPEN.",
+        "Original native harness success exit remains distinct from language return; no claims from parity alone."
+      ]
+    },
+    {
+      "id": "source_projection_scalar_exact_integer_constants_and_conversions",
+      "oracle_id": "source_projection_scalar_exact_integer_constants_and_conversions",
+      "source": "tests/unit/xir/product_consumers/fixtures/integer_conversions/root.xr",
+      "source_lf_sha256": "7f9bf4a5d20b3cb7cee5b096ebad9e20181084cb041fc96372d54d1cba9c7f36",
+      "entry": "function",
+      "entry_function": "consumerAnswer",
+      "stdout_utf8": "255\n",
+      "stderr_utf8": "",
+      "companions": [],
+      "owners": [
+        "P09"
+      ],
+      "original_source_case": "source_owner_exact_integer_constants_and_conversions",
+      "source_projection_scope": "Exact original source prefix and fixed result through an explicitly exported adapter; additional legacy assertions stay OPEN until mapped.",
+      "remaining_gates": [
+        "Scalar return and original source prefix only; all original layout/operation/reader/metadata assertions remain OPEN.",
+        "Original complete producer destruction,multiple Instances,suspend/cancel,exact resource limits,complete FI,physical release and native/mixed/provider/full safety qualification remain OPEN.",
+        "Original native harness success exit remains distinct from language return; no claims from parity alone."
+      ]
+    },
+    {
+      "id": "source_projection_scalar_single_module_is_deterministic_and_detached",
+      "oracle_id": "source_projection_scalar_single_module_is_deterministic_and_detached",
+      "source": "tests/unit/xir/product_consumers/fixtures/single_module/root.xr",
+      "source_lf_sha256": "b6399ad088d49af5540f8a64ee0d7df9501b157aef89833a0e84a918e3f74f77",
+      "entry": "function",
+      "entry_function": "consumerAnswer",
+      "stdout_utf8": "42\n",
+      "stderr_utf8": "",
+      "companions": [],
+      "owners": [
+        "P02",
+        "P06",
+        "P07",
+        "P13",
+        "P14",
+        "P17"
+      ],
+      "original_source_case": "source_owner_single_module_is_deterministic_and_detached",
+      "source_projection_scope": "Exact original source prefix and fixed result through an explicitly exported adapter; additional legacy assertions stay OPEN until mapped.",
+      "remaining_gates": [
+        "Scalar return and original source prefix only; all original layout/operation/reader/metadata assertions remain OPEN.",
+        "Original complete producer destruction,multiple Instances,suspend/cancel,exact resource limits,complete FI,physical release and native/mixed/provider/full safety qualification remain OPEN.",
+        "Original native harness success exit remains distinct from language return; no claims from parity alone."
+      ]
+    },
+    {
+      "id": "source_projection_scalar_two_module_graph_is_deterministic",
+      "oracle_id": "source_projection_scalar_two_module_graph_is_deterministic",
+      "source": "tests/unit/xir/product_consumers/fixtures/two_modules/root.xr",
+      "source_lf_sha256": "9d73c0d71becfcd55a188efc84f573fcdb91eb954b67c84a433f0e5f92db7db0",
+      "entry": "function",
+      "entry_function": "consumerAnswer",
+      "stdout_utf8": "42\n",
+      "stderr_utf8": "",
+      "companions": [
+        {
+          "path": "tests/unit/xir/product_consumers/fixtures/two_modules/library.xr",
+          "lf_sha256": "a5de40cec575e4452a43492662ff8c5db9174feb8ed3384f724d914cedb21c94"
+        }
+      ],
+      "owners": [
+        "P02",
+        "P06",
+        "P07",
+        "P13",
+        "P14",
+        "P17"
+      ],
+      "original_source_case": "source_owner_two_module_graph_is_deterministic",
+      "source_projection_scope": "Exact positive source prefix and fixed oracle retained for admission probing; no replacement gates are registered yet.",
+      "remaining_gates": [
+        "Scalar return and original source prefix only; all original layout/operation/reader/metadata assertions remain OPEN.",
+        "Original complete producer destruction,multiple Instances,suspend/cancel,exact resource limits,complete FI,physical release and native/mixed/provider/full safety qualification remain OPEN.",
+        "Original native harness success exit remains distinct from language return; no claims from parity alone."
+      ]
+    },
+    {
+      "id": "source_projection_scalar_cross_module_instance_method_preserves_receiver_across_suspend",
+      "oracle_id": "source_projection_scalar_cross_module_instance_method_preserves_receiver_across_suspend",
+      "source": "tests/unit/xir/product_consumers/fixtures/module_receiver_suspend/root.xr",
+      "source_lf_sha256": "3bb17ffe354b537a024dbf6e4c371df1c80051d72a3db21f20d48fdbeeb5f8bc",
+      "entry": "function",
+      "entry_function": "consumerAnswer",
+      "stdout_utf8": "42\n",
+      "stderr_utf8": "",
+      "companions": [
+        {
+          "path": "tests/unit/xir/product_consumers/fixtures/module_receiver_suspend/library.xr",
+          "lf_sha256": "cde4fc2274c19e4eb8cb2b21cf5364e861e53d385790c6a24da97c107dfa40b5"
+        }
+      ],
+      "owners": [
+        "P02",
+        "P08",
+        "P09",
+        "P10",
+        "P13"
+      ],
+      "original_source_case": "source_owner_cross_module_instance_method_preserves_receiver_across_suspend",
+      "source_projection_scope": "Exact original source prefix and fixed result through an explicitly exported adapter; additional legacy assertions stay OPEN until mapped.",
+      "remaining_gates": [
+        "Scalar return and original source prefix only; all original layout/operation/reader/metadata assertions remain OPEN.",
+        "Original complete producer destruction,multiple Instances,suspend/cancel,exact resource limits,complete FI,physical release and native/mixed/provider/full safety qualification remain OPEN.",
+        "Original native harness success exit remains distinct from language return; no claims from parity alone."
+      ]
+    },
+    {
+      "id": "source_projection_scalar_cross_module_coroutine_call_has_one_program_and_private_executors",
+      "oracle_id": "source_projection_scalar_cross_module_coroutine_call_has_one_program_and_private_executors",
+      "source": "tests/unit/xir/product_consumers/fixtures/cross_module_coroutine/root.xr",
+      "source_lf_sha256": "f09043352aa77c9b481644aac8ea14e41524e5df803bbbf7168a089ca1c6f105",
+      "entry": "function",
+      "entry_function": "consumerAnswer",
+      "stdout_utf8": "7\n",
+      "stderr_utf8": "",
+      "companions": [
+        {
+          "path": "tests/unit/xir/product_consumers/fixtures/cross_module_coroutine/library.xr",
+          "lf_sha256": "58c3b56414f36dfcba1092ac787cf6966874b5a2523c1f79ba3c8e1a6eb667bf"
+        }
+      ],
+      "owners": [
+        "P02",
+        "P08",
+        "P09",
+        "P10",
+        "P13"
+      ],
+      "original_source_case": "source_owner_cross_module_coroutine_call_has_one_program_and_private_executors",
+      "source_projection_scope": "Exact original source prefix and fixed result through an explicitly exported adapter; additional legacy assertions stay OPEN until mapped.",
+      "remaining_gates": [
+        "Scalar return and original source prefix only; all original layout/operation/reader/metadata assertions remain OPEN.",
+        "Original complete producer destruction,multiple Instances,suspend/cancel,exact resource limits,complete FI,physical release and native/mixed/provider/full safety qualification remain OPEN.",
+        "Original native harness success exit remains distinct from language return; no claims from parity alone."
+      ]
+    },
+    {
+      "id": "source_projection_scalar_cross_module_static_method_coroutine_has_one_program_and_private_executors",
+      "oracle_id": "source_projection_scalar_cross_module_static_method_coroutine_has_one_program_and_private_executors",
+      "source": "tests/unit/xir/product_consumers/fixtures/cross_module_static_coroutine/root.xr",
+      "source_lf_sha256": "9580be783d4c99e2d278ad3fc079e80a127ea3f87d866b8f82ffc4652a680af2",
+      "entry": "function",
+      "entry_function": "consumerAnswer",
+      "stdout_utf8": "7\n",
+      "stderr_utf8": "",
+      "companions": [
+        {
+          "path": "tests/unit/xir/product_consumers/fixtures/cross_module_static_coroutine/library.xr",
+          "lf_sha256": "4375fae674a2d0dd0e042a3e09830030ebbb1a13775377117fc928267428ed45"
+        }
+      ],
+      "owners": [
+        "P02",
+        "P08",
+        "P09",
+        "P10",
+        "P13"
+      ],
+      "original_source_case": "source_owner_cross_module_static_method_coroutine_has_one_program_and_private_executors",
+      "source_projection_scope": "Exact original source prefix and fixed result through an explicitly exported adapter; additional legacy assertions stay OPEN until mapped.",
+      "remaining_gates": [
+        "Scalar return and original source prefix only; all original layout/operation/reader/metadata assertions remain OPEN.",
+        "Original complete producer destruction,multiple Instances,suspend/cancel,exact resource limits,complete FI,physical release and native/mixed/provider/full safety qualification remain OPEN.",
+        "Original native harness success exit remains distinct from language return; no claims from parity alone."
+      ]
+    },
+    {
+      "id": "source_projection_scalar_function_parameter_callable_has_one_program_and_private_executors",
+      "oracle_id": "source_projection_scalar_function_parameter_callable_has_one_program_and_private_executors",
+      "source": "tests/unit/xir/product_consumers/fixtures/callables/root.xr",
+      "source_lf_sha256": "4d5b4ca98d30707d5a2d8a6951c94f7c366a34aa19b45e8302df42647b0c8649",
+      "entry": "function",
+      "entry_function": "consumerAnswer",
+      "stdout_utf8": "48\n",
+      "stderr_utf8": "",
+      "companions": [],
+      "owners": [
+        "P02",
+        "P07",
+        "P08",
+        "P10"
+      ],
+      "original_source_case": "source_owner_function_parameter_callable_has_one_program_and_private_executors",
+      "source_projection_scope": "Exact original source prefix and fixed result through an explicitly exported adapter; additional legacy assertions stay OPEN until mapped.",
+      "remaining_gates": [
+        "Scalar return and original source prefix only; all original layout/operation/reader/metadata assertions remain OPEN.",
+        "Original complete producer destruction,multiple Instances,suspend/cancel,exact resource limits,complete FI,physical release and native/mixed/provider/full safety qualification remain OPEN.",
+        "Original native harness success exit remains distinct from language return; no claims from parity alone."
+      ]
+    },
+    {
+      "id": "source_projection_scalar_generic_specializations_are_exact_program_functions",
+      "oracle_id": "source_projection_scalar_generic_specializations_are_exact_program_functions",
+      "source": "tests/unit/xir/product_consumers/fixtures/generics/root.xr",
+      "source_lf_sha256": "3b53d9178c3566fa90912e18bcfd75f0546a98e4e5b274437a050e6ce854c8ec",
+      "entry": "function",
+      "entry_function": "consumerAnswer",
+      "stdout_utf8": "42\n",
+      "stderr_utf8": "",
+      "companions": [],
+      "owners": [
+        "P09",
+        "P10",
+        "P11"
+      ],
+      "original_source_case": "source_owner_generic_specializations_are_exact_program_functions",
+      "source_projection_scope": "Exact original source prefix and fixed result through an explicitly exported adapter; additional legacy assertions stay OPEN until mapped.",
+      "remaining_gates": [
+        "Scalar return and original source prefix only; all original layout/operation/reader/metadata assertions remain OPEN.",
+        "Original complete producer destruction,multiple Instances,suspend/cancel,exact resource limits,complete FI,physical release and native/mixed/provider/full safety qualification remain OPEN.",
+        "Original native harness success exit remains distinct from language return; no claims from parity alone."
+      ]
+    },
+    {
+      "id": "source_projection_scalar_generic_constraint_methods_have_exact_concrete_targets",
+      "oracle_id": "source_projection_scalar_generic_constraint_methods_have_exact_concrete_targets",
+      "source": "tests/unit/xir/product_consumers/fixtures/generic_constraint_methods/root.xr",
+      "source_lf_sha256": "04dd4f7c82e0b7fd1a610363a1ac66cd57f60248a63282c3c7b00341b5ad341a",
+      "entry": "function",
+      "entry_function": "consumerAnswer",
+      "stdout_utf8": "42\n",
+      "stderr_utf8": "",
+      "companions": [
+        {
+          "path": "tests/unit/xir/product_consumers/fixtures/generic_constraint_methods/library.xr",
+          "lf_sha256": "b68c3c77338bd5a57e6ea5a02a809e4ab6eaacc5f803d08af2a829196d1356d0"
+        },
+        {
+          "path": "tests/unit/xir/product_consumers/fixtures/generic_constraint_methods/facade.xr",
+          "lf_sha256": "67ad0a7da1187df90c7783097ca073e4b7aa43804c0761c03b4f24b8f1fc20cd"
+        }
+      ],
+      "owners": [
+        "P09",
+        "P10",
+        "P11"
+      ],
+      "original_source_case": "source_owner_generic_constraint_methods_have_exact_concrete_targets",
+      "source_projection_scope": "Exact positive source prefix and fixed oracle retained for admission probing; no replacement gates are registered yet.",
+      "remaining_gates": [
+        "Scalar return and original source prefix only; all original layout/operation/reader/metadata assertions remain OPEN.",
+        "Original complete producer destruction,multiple Instances,suspend/cancel,exact resource limits,complete FI,physical release and native/mixed/provider/full safety qualification remain OPEN.",
+        "Original native harness success exit remains distinct from language return; no claims from parity alone."
+      ]
+    },
+    {
+      "id": "source_projection_scalar_generic_value_struct_specializations_are_exact_nominal_aggregates",
+      "oracle_id": "source_projection_scalar_generic_value_struct_specializations_are_exact_nominal_aggregates",
+      "source": "tests/unit/xir/product_consumers/fixtures/generic_value_struct/root.xr",
+      "source_lf_sha256": "7294a9ded3d1e555713afc934da5e919f908736ef7205c9669665e6e7d3aeb79",
+      "entry": "function",
+      "entry_function": "consumerAnswer",
+      "stdout_utf8": "42\n",
+      "stderr_utf8": "",
+      "companions": [
+        {
+          "path": "tests/unit/xir/product_consumers/fixtures/generic_value_struct/library.xr",
+          "lf_sha256": "96036b42ffd1073661ae462cc7ccd57d88bccb788ed6b2ac29128978a01b9a75"
+        },
+        {
+          "path": "tests/unit/xir/product_consumers/fixtures/generic_value_struct/facade.xr",
+          "lf_sha256": "cd05da74d8ed285d4d55be89e745ea05a36ec50f26a3422655eaaea81e92d2be"
+        }
+      ],
+      "owners": [
+        "P09",
+        "P10",
+        "P11"
+      ],
+      "original_source_case": "source_owner_generic_value_struct_specializations_are_exact_nominal_aggregates",
+      "source_projection_scope": "Exact positive source prefix and fixed oracle retained for admission probing; no replacement gates are registered yet.",
+      "remaining_gates": [
+        "Scalar return and original source prefix only; all original layout/operation/reader/metadata assertions remain OPEN.",
+        "Original complete producer destruction,multiple Instances,suspend/cancel,exact resource limits,complete FI,physical release and native/mixed/provider/full safety qualification remain OPEN.",
+        "Original native harness success exit remains distinct from language return; no claims from parity alone."
+      ]
+    },
+    {
+      "id": "source_projection_scalar_generic_scalar_class_specializations_are_exact_class_references",
+      "oracle_id": "source_projection_scalar_generic_scalar_class_specializations_are_exact_class_references",
+      "source": "tests/unit/xir/product_consumers/fixtures/generic_scalar_class/root.xr",
+      "source_lf_sha256": "08bbbee65c146f40089099f251d64bba52698722bd334ff6240931e15dd05f15",
+      "entry": "function",
+      "entry_function": "consumerAnswer",
+      "stdout_utf8": "42\n",
+      "stderr_utf8": "",
+      "companions": [
+        {
+          "path": "tests/unit/xir/product_consumers/fixtures/generic_scalar_class/library.xr",
+          "lf_sha256": "b177bec09620dc2175dcd95563605e393b27b1b05293de98c657c165cd57fbda"
+        },
+        {
+          "path": "tests/unit/xir/product_consumers/fixtures/generic_scalar_class/facade.xr",
+          "lf_sha256": "5be13e7587410f933d1ae45ac337fc4743ec2d57142f2fb5091a8cd3c5930e04"
+        }
+      ],
+      "owners": [
+        "P09",
+        "P10",
+        "P11"
+      ],
+      "original_source_case": "source_owner_generic_scalar_class_specializations_are_exact_class_references",
+      "source_projection_scope": "Exact positive source prefix and fixed oracle retained for admission probing; no replacement gates are registered yet.",
+      "remaining_gates": [
+        "Scalar return and original source prefix only; all original layout/operation/reader/metadata assertions remain OPEN.",
+        "Original complete producer destruction,multiple Instances,suspend/cancel,exact resource limits,complete FI,physical release and native/mixed/provider/full safety qualification remain OPEN.",
+        "Original native harness success exit remains distinct from language return; no claims from parity alone."
+      ]
+    },
+    {
+      "id": "source_projection_scalar_folds_constructor_literal_and_reordered_stores",
+      "oracle_id": "source_projection_scalar_folds_constructor_literal_and_reordered_stores",
+      "source": "tests/unit/xir/product_consumers/fixtures/constructor_folding/root.xr",
+      "source_lf_sha256": "afa111d3a9a93f062e7ae7631c75ae8939952405ca18704817d14288aa751155",
+      "entry": "function",
+      "entry_function": "consumerAnswer",
+      "stdout_utf8": "1006\n",
+      "stderr_utf8": "",
+      "companions": [],
+      "owners": [
+        "P09",
+        "P10"
+      ],
+      "original_source_case": "source_owner_folds_constructor_literal_and_reordered_stores",
+      "source_projection_scope": "Exact original structural constructor input plus an exported execution adapter. The added independent runtime oracle is 0+5+10*100+1=1006; the original test contains only structural assertions.",
+      "remaining_gates": [
+        "Scalar return and original source prefix only; all original layout/operation/reader/metadata assertions remain OPEN.",
+        "Original complete producer destruction,multiple Instances,suspend/cancel,exact resource limits,complete FI,physical release and native/mixed/provider/full safety qualification remain OPEN.",
+        "Original native harness success exit remains distinct from language return; no claims from parity alone."
+      ]
+    },
+    {
+      "id": "source_projection_scalar_generic_nested_class_types_are_exact",
+      "oracle_id": "source_projection_scalar_generic_nested_class_types_are_exact",
+      "source": "tests/unit/xir/product_consumers/fixtures/generic_nested_class/root.xr",
+      "source_lf_sha256": "d5dc5a9a3d96b478130665d79d94dc91e1431e483fefcb46c74bee4cdd30dbdd",
+      "entry": "function",
+      "entry_function": "consumerAnswer",
+      "stdout_utf8": "42\n",
+      "stderr_utf8": "",
+      "companions": [
+        {
+          "path": "tests/unit/xir/product_consumers/fixtures/generic_nested_class/library.xr",
+          "lf_sha256": "3b9226278693213a6f0560e472e8362bbdc82cb1883debf263814c93a062b3cb"
+        },
+        {
+          "path": "tests/unit/xir/product_consumers/fixtures/generic_nested_class/facade.xr",
+          "lf_sha256": "3b9226278693213a6f0560e472e8362bbdc82cb1883debf263814c93a062b3cb"
+        }
+      ],
+      "owners": [
+        "P09",
+        "P10",
+        "P11"
+      ],
+      "original_source_case": "source_owner_generic_nested_class_types_are_exact",
+      "source_projection_scope": "Exact positive source prefix and fixed oracle retained for admission probing; no replacement gates are registered yet.",
+      "remaining_gates": [
+        "Scalar return and original source prefix only; all original layout/operation/reader/metadata assertions remain OPEN.",
+        "Original complete producer destruction,multiple Instances,suspend/cancel,exact resource limits,complete FI,physical release and native/mixed/provider/full safety qualification remain OPEN.",
+        "Original native harness success exit remains distinct from language return; no claims from parity alone."
+      ]
+    },
+    {
+      "id": "source_projection_scalar_class_alias_escape_projects_one_share",
+      "oracle_id": "source_projection_scalar_class_alias_escape_projects_one_share",
+      "source": "tests/unit/xir/product_consumers/fixtures/class_alias_escape/root.xr",
+      "source_lf_sha256": "0c463c52705c99194b69cad4baa8c036d164076b90932121d0a6cb263ec7ae67",
+      "entry": "function",
+      "entry_function": "consumerAnswer",
+      "stdout_utf8": "42\n",
+      "stderr_utf8": "",
+      "companions": [],
+      "owners": [
+        "P07",
+        "P08",
+        "P09",
+        "P10"
+      ],
+      "original_source_case": "source_owner_class_alias_escape_projects_one_share",
+      "source_projection_scope": "Exact original source prefix and fixed result through an explicitly exported adapter; additional legacy assertions stay OPEN until mapped.",
+      "remaining_gates": [
+        "Scalar return and original source prefix only; all original layout/operation/reader/metadata assertions remain OPEN.",
+        "Original complete producer destruction,multiple Instances,suspend/cancel,exact resource limits,complete FI,physical release and native/mixed/provider/full safety qualification remain OPEN.",
+        "Original native harness success exit remains distinct from language return; no claims from parity alone."
+      ]
+    },
+    {
+      "id": "source_projection_scalar_class_field_self_assignment_shares_before_exchange",
+      "oracle_id": "source_projection_scalar_class_field_self_assignment_shares_before_exchange",
+      "source": "tests/unit/xir/product_consumers/fixtures/class_field_self_assignment/root.xr",
+      "source_lf_sha256": "4ff90639e31f0f4e4bcc3f7b8bfeff2030ab8b43e9ffbf772f4c9f9d8362c163",
+      "entry": "function",
+      "entry_function": "consumerAnswer",
+      "stdout_utf8": "42\n",
+      "stderr_utf8": "",
+      "companions": [],
+      "owners": [
+        "P07",
+        "P08",
+        "P09",
+        "P10"
+      ],
+      "original_source_case": "source_owner_class_field_self_assignment_shares_before_exchange",
+      "source_projection_scope": "Exact original source prefix and fixed result through an explicitly exported adapter; additional legacy assertions stay OPEN until mapped.",
+      "remaining_gates": [
+        "Scalar return and original source prefix only; all original layout/operation/reader/metadata assertions remain OPEN.",
+        "Original complete producer destruction,multiple Instances,suspend/cancel,exact resource limits,complete FI,physical release and native/mixed/provider/full safety qualification remain OPEN.",
+        "Original native harness success exit remains distinct from language return; no claims from parity alone."
+      ]
+    },
+    {
+      "id": "source_projection_scalar_class_alias_borrows_coalesce_without_share",
+      "oracle_id": "source_projection_scalar_class_alias_borrows_coalesce_without_share",
+      "source": "tests/unit/xir/product_consumers/fixtures/class_alias_borrow/root.xr",
+      "source_lf_sha256": "5acbb595983c012d4efaada681d9c2b5216e89d660c49e19b5c54af38afb05ff",
+      "entry": "function",
+      "entry_function": "consumerAnswer",
+      "stdout_utf8": "42\n",
+      "stderr_utf8": "",
+      "companions": [],
+      "owners": [
+        "P07",
+        "P08",
+        "P09",
+        "P10"
+      ],
+      "original_source_case": "source_owner_class_alias_borrows_coalesce_without_share",
+      "source_projection_scope": "Exact original source prefix and fixed result through an explicitly exported adapter; additional legacy assertions stay OPEN until mapped.",
+      "remaining_gates": [
+        "Scalar return and original source prefix only; all original layout/operation/reader/metadata assertions remain OPEN.",
+        "Original complete producer destruction,multiple Instances,suspend/cancel,exact resource limits,complete FI,physical release and native/mixed/provider/full safety qualification remain OPEN.",
+        "Original native harness success exit remains distinct from language return; no claims from parity alone."
+      ]
+    },
+    {
+      "id": "source_projection_scalar_class_alias_final_transfer_coalesces_to_move",
+      "oracle_id": "source_projection_scalar_class_alias_final_transfer_coalesces_to_move",
+      "source": "tests/unit/xir/product_consumers/fixtures/class_alias_transfer/root.xr",
+      "source_lf_sha256": "0fde0e6281382ab3918c59af86623480cfa8503c2f559498545eb2945a23b1af",
+      "entry": "function",
+      "entry_function": "consumerAnswer",
+      "stdout_utf8": "42\n",
+      "stderr_utf8": "",
+      "companions": [],
+      "owners": [
+        "P07",
+        "P08",
+        "P09",
+        "P10"
+      ],
+      "original_source_case": "source_owner_class_alias_final_transfer_coalesces_to_move",
+      "source_projection_scope": "Exact original source prefix and fixed result through an explicitly exported adapter; additional legacy assertions stay OPEN until mapped.",
+      "remaining_gates": [
+        "Scalar return and original source prefix only; all original layout/operation/reader/metadata assertions remain OPEN.",
+        "Original complete producer destruction,multiple Instances,suspend/cancel,exact resource limits,complete FI,physical release and native/mixed/provider/full safety qualification remain OPEN.",
+        "Original native harness success exit remains distinct from language return; no claims from parity alone."
+      ]
+    },
+    {
+      "id": "source_projection_scalar_function_parameter_suspending_callable_has_one_program",
+      "oracle_id": "source_projection_scalar_function_parameter_suspending_callable_has_one_program",
+      "source": "tests/unit/xir/product_consumers/fixtures/parameter_coroutine/root.xr",
+      "source_lf_sha256": "521442df28da3d3838de58028fa3b479ec533ef843371775585c85c27c18c91d",
+      "entry": "function",
+      "entry_function": "consumerAnswer",
+      "stdout_utf8": "42\n",
+      "stderr_utf8": "",
+      "companions": [],
+      "owners": [
+        "P02",
+        "P08",
+        "P09",
+        "P10",
+        "P13"
+      ],
+      "original_source_case": "source_owner_function_parameter_suspending_callable_has_one_program",
+      "source_projection_scope": "Exact original source prefix and fixed result through an explicitly exported adapter; additional legacy assertions stay OPEN until mapped.",
+      "remaining_gates": [
+        "Scalar return and original source prefix only; all original layout/operation/reader/metadata assertions remain OPEN.",
+        "Original complete producer destruction,multiple Instances,suspend/cancel,exact resource limits,complete FI,physical release and native/mixed/provider/full safety qualification remain OPEN.",
+        "Original native harness success exit remains distinct from language return; no claims from parity alone."
+      ]
+    },
+    {
+      "id": "source_projection_scalar_runs_each_dense_coroutine_state_across_private_executors",
+      "oracle_id": "source_projection_scalar_runs_each_dense_coroutine_state_across_private_executors",
+      "source": "tests/unit/xir/product_consumers/fixtures/multi_safepoint/root.xr",
+      "source_lf_sha256": "896bf5280b1e4e132fac8be41d2851052f3b2f3713ed274e4b60c3575befc6df",
+      "entry": "function",
+      "entry_function": "consumerAnswer",
+      "stdout_utf8": "42\n",
+      "stderr_utf8": "",
+      "companions": [],
+      "owners": [
+        "P02",
+        "P08",
+        "P09",
+        "P10",
+        "P13"
+      ],
+      "original_source_case": "source_owner_runs_each_dense_coroutine_state_across_private_executors",
+      "source_projection_scope": "Exact original source and independent VM/native assertion value 42 through the exported adapter. Original native harness success exit 227 is retained separately and is not a language return value.",
+      "remaining_gates": [
+        "Scalar return and original source prefix only; all original layout/operation/reader/metadata assertions remain OPEN.",
+        "Original complete producer destruction,multiple Instances,suspend/cancel,exact resource limits,complete FI,physical release and native/mixed/provider/full safety qualification remain OPEN.",
+        "Original native harness success exit remains distinct from language return; no claims from parity alone."
+      ]
     }
   ]
 }
