@@ -41,6 +41,9 @@ static void complete_declarations(void) {
         CHECK(!strcmp(declaration->name,expected[index].name));
         CHECK(declaration->member_count==expected[index].members);
         uint64_t needed=expected_admission(declaration);
+        printf("Native %s exhaustive work limits started, independently expected %llu\n",
+            declaration->name,(unsigned long long)needed);
+        fflush(stdout);
         for (uint64_t limit=0;limit<=needed;++limit) {
             Work ledger={limit,0,0};XrNativeDeclarationWork work={&ledger,charge};
             CHECK(xr_native_declaration_admit(&work,declaration)==
@@ -58,6 +61,7 @@ static void complete_declarations(void) {
         CHECK(ledger.used==3+expected_text(declaration->identity)+expected_text(declaration->source_path)+
             expected_text(declaration->name)+expected_text(declaration->parameter_name));
         printf("Native %s independently expected work %llu, every lower limit rejected\n",declaration->name,(unsigned long long)needed);
+        fflush(stdout);
     }
 }
 static void lookup_boundaries(void) {
