@@ -1,7 +1,7 @@
 class Probe {
     count: i64
 
-    constructor() {
+    init() {
         this.count = 0
     }
 

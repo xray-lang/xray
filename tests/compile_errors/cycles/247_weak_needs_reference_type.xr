@@ -2,5 +2,5 @@
 // 地什么都不是——比拒绝它更糟。
 class Counter {
     weak n: i64?
-    constructor() { this.n = null }
+    init() { this.n = null }
 }

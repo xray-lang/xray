@@ -1,0 +1,9 @@
+struct Builder {
+    factory: fn() -> i64
+    init(factory = fn() -> i64 { return 41 }) { this.factory = factory }
+    run() -> i64 { return this.factory() }
+}
+export fn referenceAnswer() -> i64 {
+    const builder = Builder()
+    return builder.run()
+}

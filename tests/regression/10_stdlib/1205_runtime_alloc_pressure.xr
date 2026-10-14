@@ -20,7 +20,7 @@ class ChainNode {
     value: i64
     next: ChainNode?
 
-    constructor(value: i64) {
+    init(value: i64) {
         this.value = value
         this.next = null
     }

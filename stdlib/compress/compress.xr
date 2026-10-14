@@ -212,7 +212,7 @@ class BitWriter {
     bitBuf: i64
     bitCount: i64
 
-    constructor() {
+    init() {
         this.out = Array<u8>()
         this.bitBuf = 0
         this.bitCount = 0
@@ -264,7 +264,7 @@ class Huffman {
     counts: Array<i64>
     symbols: Array<i64>
 
-    constructor(counts: Array<i64>, symbols: Array<i64>) {
+    init(counts: Array<i64>, symbols: Array<i64>) {
         this.counts = counts
         this.symbols = symbols
     }
@@ -578,7 +578,7 @@ class Inflater {
     bitBuf: i64
     bitCount: i64
 
-    constructor(src: Array<u8>) {
+    init(src: Array<u8>) {
         this.src = src
         this.out = Array<u8>()
         this.pos = 0

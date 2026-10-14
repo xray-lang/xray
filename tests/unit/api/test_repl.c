@@ -593,7 +593,7 @@ TEST(repl_class_instantiation_cross_input) {
     const char *cls =
         "class Point {\n"
         "  var x: i64; var y: i64\n"
-        "  constructor(x: i64, y: i64) { this.x = x; this.y = y }\n"
+        "  init(x: i64, y: i64) { this.x = x; this.y = y }\n"
         "}\n";
     XrProto *p1 = eval_repl(xr_compiler_session_current_for_isolate(iso), iso, cls);
     ASSERT_NOT_NULL(p1);

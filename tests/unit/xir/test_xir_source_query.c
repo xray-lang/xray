@@ -658,13 +658,13 @@ static void source_default_argument_facts(XrXirSourceRequest *request) {
     xr_xir_compile_source_result_free(&result); request->context = original;
 }
 static void source_constructor_facts(XrXirSourceRequest *request) {
-    write_source(request->entry_path, "struct C<T>{\n const value:T\n constructor(\n value\n ){this.value=value}\n}\nconst c=C<i64>(7)\n");
+    write_source(request->entry_path, "struct C<T>{\n const value:T\n init(\n value\n ){this.value=value}\n}\nconst c=C<i64>(7)\n");
     XrXirSourceResult result = {0};
     CHECK(xr_xir_compile_source_check(request, &result, NULL, NULL) == XR_XIR_OK);
     const XrXirSourceView *view = xr_xir_compile_source_snapshot_view(result.snapshot);
     const XrXirSourceDeclaration *owner = declaration(view, "C", 0);
     CHECK(owner);
-    const XrXirSourceDeclaration *constructor = declaration(view, "constructor", owner->id);
+    const XrXirSourceDeclaration *constructor = declaration(view, "init", owner->id);
     CHECK(constructor && constructor->kind == XR_XIR_SOURCE_FUNCTION && constructor->parameter_count == 1);
     CHECK(constructor->parameters[0].known && constructor->parameters[0].generic_owner == owner->id);
     const XrXirSourceDeclaration *parameter = declaration(view, "value", constructor->id);

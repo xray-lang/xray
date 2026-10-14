@@ -100,7 +100,7 @@ static bool source_struct_constructor_body(SourceContext *ctx) {
     const XrXirNominalDeclaration *decl = &ctx->nominals.declarations[d];
     SourceName *symbol = ctx->nominal_sources[d];
     ClassDeclNode *source = symbol->node->type == AST_CLASS_DECL ? &symbol->node->as.class_decl : &symbol->node->as.struct_decl;
-    SourceValue *fields = decl->field_count ? source_alloc(ctx, decl->field_count, sizeof(*fields)) : NULL;
+    SourceValue *fields = decl->field_count ? source_recipe_storage(ctx, decl->field_count, sizeof(*fields)) : NULL;
     if (decl->field_count && !fields) return false;
     for (uint32_t f = 0; f < decl->field_count; ++f) {
         AstNode *field = source->fields[f];

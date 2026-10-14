@@ -12,7 +12,7 @@ type Mapper = fn(i64) -> i64
 
 class R {
     handler: Mapper
-    constructor(h: Mapper) { this.handler = h }
+    init(h: Mapper) { this.handler = h }
     runDirect(v: i64) -> i64 { return this.handler(v) }
 }
 

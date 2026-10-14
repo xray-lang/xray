@@ -12,7 +12,7 @@ class Button {
     onClick: fn() -> i64
     clicks: i64
 
-    constructor() {
+    init() {
         this.onClick = fn() -> i64 { return 0 }
         this.clicks = 0
     }

@@ -6,7 +6,7 @@ interface Mutator {
 class Stepper implements Mutator {
     step: i64
 
-    constructor(step: i64) {
+    init(step: i64) {
         this.step = step
     }
 
@@ -22,7 +22,7 @@ class Stepper implements Mutator {
 }
 
 class Doubler implements Mutator {
-    constructor() {}
+    init() {}
 
     bump(value: ref i64) -> i64 {
         value = value * 2

@@ -12,7 +12,7 @@ export final class ByteEnvelope {
     traceId: i64
     payload: Array<u8>
 
-    constructor(
+    init(
         contractId: i64,
         methodId: i64,
         requestId: i64,

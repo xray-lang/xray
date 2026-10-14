@@ -36,7 +36,7 @@ print(by_bool.get(true)! + by_bool.get(false)!)
 class BoolFloatMapBag {
     values: Map<bool, f32>
 
-    constructor() {
+    init() {
         var values: Map<bool, f32> = #{}
         this.values = values
     }
@@ -80,7 +80,7 @@ print(bool_bag.scan(3))
 class FloatMapBag {
     values: Map<f32, f32>
 
-    constructor() {
+    init() {
         var values: Map<f32, f32> = #{}
         this.values = values
     }

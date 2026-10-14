@@ -11,7 +11,7 @@ class Vec2 {
     x: f64
     y: f64
 
-    constructor(x: f64, y: f64) {
+    init(x: f64, y: f64) {
         this.x = x
         this.y = y
     }
@@ -37,7 +37,7 @@ class ModPair {
     a: i64
     b: i64
 
-    constructor(a: i64, b: i64) {
+    init(a: i64, b: i64) {
         this.a = a
         this.b = b
     }

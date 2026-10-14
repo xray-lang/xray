@@ -34,7 +34,7 @@ static bool source_defer(SourceContext *ctx, AstNode *node) {
     ctx->generics[index].constraints = ctx->generics[outer].constraints;
     char *name = source_alloc(ctx, 32, sizeof(*name));
     body->parameters = scan.count ? source_alloc(ctx,scan.count,sizeof(*body->parameters)) : NULL;
-    SourceValue *captures = source_alloc(ctx, scan.count, sizeof(*captures));
+    SourceValue *captures = source_recipe_storage(ctx, scan.count, sizeof(*captures));
     if (!name || (scan.count && !body->parameters) || !captures) return false;
     if (source_format(ctx, name, 32, "$cleanup%u", index) != XR_DIAG_OK)
         return source_fail(ctx, node, XR_XIR_BUDGET, "cleanup name formatting exhausted");

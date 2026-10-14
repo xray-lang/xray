@@ -30,7 +30,7 @@ export class CsvDiagnostic {
     column: i64
     message: string
 
-    constructor(kind: CsvErrorKind, byteOffset: i64, line: i64, record: i64, column: i64,
+    init(kind: CsvErrorKind, byteOffset: i64, line: i64, record: i64, column: i64,
                 message: string) {
         this.kind = kind
         this.byteOffset = byteOffset
@@ -105,7 +105,7 @@ export class CsvDocument {
     headers: Array<string>
     rows: Array<Array<string>>
 
-    constructor() {
+    init() {
         this.headers = []
         this.rows = []
     }
@@ -118,7 +118,7 @@ export class CsvParseReport {
     linebreak: string
     truncated: bool
 
-    constructor(document: CsvDocument, diagnostics: Array<CsvDiagnostic>, delimiter: rune,
+    init(document: CsvDocument, diagnostics: Array<CsvDiagnostic>, delimiter: rune,
                 linebreak: string, truncated: bool) {
         this.document = document
         this.diagnostics = diagnostics
@@ -148,7 +148,7 @@ class _CsvState {
     firstFieldQuoted: bool
     currentFieldBytes: i64
 
-    constructor(delimiter: rune) {
+    init(delimiter: rune) {
         this.document = CsvDocument()
         this.diagnostics = []
         this.delimiter = delimiter

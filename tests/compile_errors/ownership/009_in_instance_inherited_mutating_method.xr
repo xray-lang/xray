@@ -1,7 +1,7 @@
 class CounterBase {
     value: i64
 
-    constructor(v) {
+    init(v) {
         this.value = v
     }
 
@@ -11,7 +11,7 @@ class CounterBase {
 }
 
 class CounterChild extends CounterBase {
-    constructor(v) {
+    init(v) {
         super(v)
     }
 

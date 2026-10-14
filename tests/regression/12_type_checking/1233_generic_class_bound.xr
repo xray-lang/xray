@@ -20,13 +20,13 @@
 
 class Animal {
     name: string
-    constructor(n: string) { this.name = n }
+    init(n: string) { this.name = n }
     species() -> string { return "animal" }
 }
 
 class Dog extends Animal {
     breed: string
-    constructor(n: string, b: string) {
+    init(n: string, b: string) {
         super(n)
         this.breed = b
     }
@@ -34,12 +34,12 @@ class Dog extends Animal {
 }
 
 class Cat extends Animal {
-    constructor(n: string) { super(n) }
+    init(n: string) { super(n) }
     override species() -> string { return "cat" }
 }
 
 class Puppy extends Dog {
-    constructor(n: string) {
+    init(n: string) {
         super(n, "Mixed")
     }
     override species() -> string { return "puppy" }

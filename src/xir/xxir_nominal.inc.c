@@ -47,7 +47,9 @@ static XrXirStatus nominal_variants(uint32_t kind, const XrXirNominalVariant *va
     return kind == XR_XIR_NOMINAL_ENUM && end != fields ? XR_XIR_BAD_STRUCTURE : XR_XIR_OK;
 }
 static bool nominal_flags_valid(uint32_t kind, uint32_t flags) {
-    return kind == XR_XIR_NOMINAL_CLASS ? flags == XR_XIR_NOMINAL_FINAL || flags == 0 : flags == 0;
+    if (kind == XR_XIR_NOMINAL_CLASS) return flags == XR_XIR_NOMINAL_FINAL || flags == 0;
+    if (kind == XR_XIR_NOMINAL_STRUCT) return flags == XR_XIR_NOMINAL_MODULE_LITERAL || flags == 0;
+    return flags == 0;
 }
 static XrXirStatus nominal_field_begin(uint32_t kind, const XrXirNominalVariant *variants,
     uint32_t count, uint32_t field, XrXirCompileContext *b, uint32_t *begin) {

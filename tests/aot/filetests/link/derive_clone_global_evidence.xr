@@ -2,7 +2,7 @@
 class Packet {
     id: i64
 
-    constructor(id: i64) {
+    init(id: i64) {
         this.id = id
     }
 }

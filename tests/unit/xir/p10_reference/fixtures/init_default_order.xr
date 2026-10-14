@@ -1,0 +1,18 @@
+var sequence: i64 = 0
+fn stamp(code: i64) -> i64 { sequence = sequence * 10 + code; return code }
+struct Packet {
+    first: i64 = stamp(3)
+    second: i64 = stamp(4)
+    init(first = stamp(1), second = stamp(2)) {
+        this.first = first
+        this.second = second
+        sequence = sequence * 10 + 5
+    }
+}
+export fn referenceAnswer() -> i64 {
+    const left = Packet()
+    const before = sequence
+    sequence = 0
+    const right = Packet(stamp(6), stamp(7))
+    return before * 100000 + sequence + left.first * 10000000000 + left.second * 1000000000 + right.first * 100000000 + right.second * 10000000
+}

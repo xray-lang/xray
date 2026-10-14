@@ -17,11 +17,11 @@ interface Wrapper {
 }
 
 class Thing {
-    constructor() {}
+    init() {}
 }
 
 class W implements Wrapper {
-    constructor() {}
+    init() {}
 
     wrap<T: Hashable>(x: T) -> string { return "wrapped" }
 }

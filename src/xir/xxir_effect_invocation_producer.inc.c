@@ -12,12 +12,12 @@
 XR_FUNC XrXirStatus xir_effects_producer(const XrXirCompileContext *context,
     const XrXirEffects *effects,uint32_t function,uint32_t instruction,XirEffectProducerView *output) {
     if (!output || !xir_effects_context_matches(context,effects,effects?effects->count:0) ||
-        !effects->invocations || !effects->invocations->equations ||
+        !effects->invocations || !effects->invocations->final ||
         effects->invocations->resources!=context->resources) return XR_XIR_BAD_STRUCTURE;
     const EffectInvocationCertificate *certificate=effects->invocations;
     if (!effect_body_material_shape(certificate->body) ||
         certificate->body->resources!=certificate->resources) return XR_XIR_BAD_STRUCTURE;
-    const EffectInvocationOwner *owner=certificate->equations;
+    const EffectInvocationFinal *owner=certificate->final;
     if (function>=effect_body_count(certificate->body) || function>=effects->count ||
         instruction>=certificate->body->functions[function].instruction_count ||
         (owner->site_count && !owner->sites)) return XR_XIR_BAD_STRUCTURE;

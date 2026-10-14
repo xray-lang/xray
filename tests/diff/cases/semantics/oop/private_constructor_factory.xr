@@ -1,7 +1,7 @@
 class Token {
     private value: i64
 
-    private constructor(v: i64) {
+    private init(v: i64) {
         this.value = v
     }
 

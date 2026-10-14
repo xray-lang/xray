@@ -1,0 +1,44 @@
+class Payload {
+    code: i64
+    init(code) { this.code = code }
+}
+class Box {
+    payload: Payload
+    text: string
+    init(fail: i64) {
+        this.payload = Payload(41)
+        assert(fail != 1, "init-partial-failure")
+        this.text = "construction-" + "owned"
+        assert(fail != 2, "init-owned-failure")
+    }
+}
+export fn referenceAnswer() -> i64 {
+    const box = Box(0)
+    return box.payload.code + len(box.text)
+}
+
+export fn referenceFailure() -> i64 {
+    const box = Box(2)
+    return box.payload.code + len(box.text)
+}
+
+export fn referencePartial() -> i64 {
+    const box = Box(1)
+    return box.payload.code + len(box.text)
+}
+
+struct Packet {
+    payload: Payload
+    text: string
+    init() {
+        this.payload = Payload(41)
+        Coro.yield()
+        this.text = "construction-" + "owned"
+        Coro.yield()
+    }
+}
+
+export fn referenceSuspended() -> i64 {
+    const packet = Packet()
+    return packet.payload.code + len(packet.text)
+}

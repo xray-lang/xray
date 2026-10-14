@@ -123,7 +123,7 @@ static void source_enum_witness_rejections(XrXirSourceRequest *request) {
         "enum E { V V()->i64{return 41} }\n",
         "enum E { V static V()->i64{return 41} }\n",
         "enum E { V f()->i64{return 41} static f()->i64{return 41} }\n",
-        "enum E { V constructor(){} }\n",
+        "enum E { V init(){} }\n",
         "enum E { V ref f()->i64{return 41} }\n",
         "enum E { V move f()->i64{return 41} }\n",
         "enum E { V static f()->E{return this} }\n",

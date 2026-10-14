@@ -1,0 +1,4 @@
+interface Mapper { map<U:Sendable>(value:U)->U }
+struct Adapter implements Mapper { marker:i64; map<V:Sendable>(value:V)->V{return value} }
+fn bind<T:Mapper,U:Sendable>(receiver:T)->fn(U)->U{return receiver.map<U>}
+export fn referenceAnswer()->i64{const saved=bind<Adapter,i64>(Adapter{marker:9});return saved(69)}

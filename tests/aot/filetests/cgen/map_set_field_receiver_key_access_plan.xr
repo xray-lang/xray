@@ -2,7 +2,7 @@ class Registry {
     scores: Map<i64, i64>
     seen: Set<i64>
 
-    constructor(scores: Map<i64, i64>, seen: Set<i64>) {
+    init(scores: Map<i64, i64>, seen: Set<i64>) {
         this.scores = scores
         this.seen = seen
     }

@@ -1,7 +1,7 @@
 class Handle {
     id: i64
 
-    constructor(id: i64) {
+    init(id: i64) {
         this.id = id
     }
 }
@@ -10,7 +10,7 @@ class Handle {
 class Key {
     handle: Handle
 
-    constructor(handle: Handle) {
+    init(handle: Handle) {
         this.handle = handle
     }
 }

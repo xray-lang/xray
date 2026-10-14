@@ -1,7 +1,7 @@
 fn bump(value: ref i64) -> i64 { value += 2; return value; }
 final class Holder {
     values: Array<i64>
-    constructor() { this.values = [40, 90]; }
+    init() { this.values = [40, 90]; }
     adjust() -> i64 {
         const snapshot = this.values;
         bump(ref this.values[0]);

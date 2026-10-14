@@ -16,7 +16,7 @@ export final class RuntimeInfo {
     liveObjects: i64
     finalizerCount: i64
 
-    constructor(liveBytes: i64, liveKB: f64, liveObjects: i64, finalizerCount: i64) {
+    init(liveBytes: i64, liveKB: f64, liveObjects: i64, finalizerCount: i64) {
         this.liveBytes = liveBytes
         this.liveKB = liveKB
         this.liveObjects = liveObjects

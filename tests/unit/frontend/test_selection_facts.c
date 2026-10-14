@@ -286,7 +286,7 @@ TEST(class_field_access_has_selection) {
     AnalysisResult r = analyze("class Point {\n"
                                "    x: i64\n"
                                "    y: i64\n"
-                               "    constructor(x: i64, y: i64) {\n"
+                               "    init(x: i64, y: i64) {\n"
                                "        this.x = x\n"
                                "        this.y = y\n"
                                "    }\n"
@@ -318,7 +318,7 @@ TEST(class_field_access_has_selection) {
 TEST(method_call_has_selection) {
     AnalysisResult r = analyze("class Greeter {\n"
                                "    name: string\n"
-                               "    constructor(n: string) {\n"
+                               "    init(n: string) {\n"
                                "        this.name = n\n"
                                "    }\n"
                                "    greet() -> string {\n"
@@ -394,7 +394,7 @@ TEST(enum_member_has_selection) {
 TEST(selection_table_has_entries_after_analysis) {
     AnalysisResult r = analyze("class Box {\n"
                                "    value: i64\n"
-                               "    constructor(v: i64) {\n"
+                               "    init(v: i64) {\n"
                                "        this.value = v\n"
                                "    }\n"
                                "    get() -> i64 {\n"

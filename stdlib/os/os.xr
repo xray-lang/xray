@@ -14,7 +14,7 @@ export final class ExecResult {
     stdoutTruncated: bool
     stderrTruncated: bool
 
-    constructor(stdout: Array<u8>, stderr: Array<u8>, exitCode: i64,
+    init(stdout: Array<u8>, stderr: Array<u8>, exitCode: i64,
                 stdoutTruncated: bool, stderrTruncated: bool) {
         this.stdout = stdout
         this.stderr = stderr
@@ -28,7 +28,7 @@ final class _CapturedOutput {
     bytes: Array<u8>
     truncated: bool
 
-    constructor(bytes: Array<u8>, truncated: bool) {
+    init(bytes: Array<u8>, truncated: bool) {
         this.bytes = bytes
         this.truncated = truncated
     }

@@ -155,7 +155,7 @@ static bool source_match(SourceContext *ctx, AstNode *node, SourceExpectedType e
     SourceMatchPlan *prepared=plan->match;
     if (!prepared) return source_fail(ctx,node,XR_XIR_BAD_STRUCTURE,"match scrutinee type is not ready");
     uint32_t count=prepared->count;SourceMatchArm *patterns=prepared->arms;bool exhaustive=prepared->exhaustive;
-    SourceValue *inputs=source_alloc(ctx,count*2,sizeof(*inputs)); uint32_t *jumps=source_alloc(ctx,count,sizeof(*jumps));
+    SourceValue *inputs=source_recipe_storage(ctx,count*2,sizeof(*inputs)); uint32_t *jumps=source_recipe_storage(ctx,count,sizeof(*jumps));
     if (!inputs || !jumps) return false;
     SourceFunction *body=&ctx->bodies[ctx->function];
     SourceName *saved=ctx->locals,*scope=ctx->scope; XrXirType result=XR_XIR_UNIT;

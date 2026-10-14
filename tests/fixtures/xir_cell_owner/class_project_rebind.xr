@@ -1,6 +1,6 @@
 final class Holder {
     values: Array<i64>
-    constructor(values: Array<i64>) { this.values = values; }
+    init(values: Array<i64>) { this.values = values; }
 }
 var storage = Holder([40]);
 fn replace() -> i64 { storage = Holder([90]); return 1; }
