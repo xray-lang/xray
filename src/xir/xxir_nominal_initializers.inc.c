@@ -100,7 +100,7 @@ XR_FUNC XrXirStatus xir_construction_verify(
         /* An ordinary definition has one constructor identity at most. An
          * INSTANCE may contain several concrete origins of the same template. */
         bool constructor = false;
-        for (uint32_t f = 0; !instance && row->default_initializer && m->declarations && f < m->function_count; ++f) {
+        for (uint32_t f = 0; !instance && m->declarations && f < m->function_count; ++f) {
             if (!xir_compile_work(context,1)) return XR_XIR_BUDGET;
             const XrXirFunctionIdentity *id = &m->declarations->functions[f];
             if (id->nominal_owner != n+1 || id->method_kind != XR_XIR_CONSTRUCTOR) continue;
@@ -108,6 +108,9 @@ XR_FUNC XrXirStatus xir_construction_verify(
                 return XR_XIR_BAD_STRUCTURE;
             constructor = true;
         }
+        if (!instance && owner->kind == XR_XIR_NOMINAL_STRUCT &&
+            !!(owner->flags & XR_XIR_NOMINAL_MODULE_LITERAL) != (constructor && !row->default_initializer))
+            return XR_XIR_BAD_STRUCTURE;
         for (uint32_t f = 0; f < owner->field_count; ++f) {
             if (!xir_compile_work(context,1)) return XR_XIR_BUDGET;
             const XrXirNominalField *field = &owner->fields[f];

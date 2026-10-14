@@ -17,7 +17,7 @@ chars.push('中')
 class ArrayBag {
     values: Array<i64>
 
-    constructor(items: Array<i64>) {
+    init(items: Array<i64>) {
         this.values = items
     }
 
@@ -119,7 +119,7 @@ class Bag {
     values: Map<u8, i32>
     seen: Set<u16>
 
-    constructor() {
+    init() {
         this.values = #{}
         this.seen = #[]
     }

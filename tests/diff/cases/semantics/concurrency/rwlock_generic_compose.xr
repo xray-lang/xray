@@ -14,7 +14,7 @@ class RwLock<T> {
     _readers: i64
     value: T
 
-    constructor(v: T) {
+    init(v: T) {
         this._entry = Semaphore(1)
         this._gate = Semaphore(1)
         this._rflag = Atomic<bool>(false)

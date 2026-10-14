@@ -1018,7 +1018,7 @@ static const XiFunc *boundary_find_constructor(const XiFunc *parent,
         uint16_t child_index = class_data->child_idx[i];
         if (child_index < parent->nchildren) {
             const XiFunc *child = parent->children[child_index];
-            if (child && child->name && strcmp(child->name, "constructor") == 0)
+            if (child && child->name && strcmp(child->name, "init") == 0)
                 return child;
         }
     }

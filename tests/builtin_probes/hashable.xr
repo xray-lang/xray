@@ -1,6 +1,6 @@
 class Token implements Hashable {
     value: i64
-    constructor(value: i64) { this.value = value }
+    init(value: i64) { this.value = value }
     operator==(other: Token) -> bool { return this.value == other.value }
     hash() -> i64 { return this.value }
 }

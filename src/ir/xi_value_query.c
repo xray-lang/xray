@@ -44,7 +44,7 @@ XR_FUNC bool xi_value_imported_constructor_authority(
         return false;
     bool plain = call->op == XI_CALL && !call->aux && call->aux_int == 0;
     bool member = call->op == XI_CALL_METHOD && call->aux && (call->aux_int & 1) == 0 &&
-                  strcmp((const char *) call->aux, "constructor") == 0;
+                  strcmp((const char *) call->aux, "init") == 0;
     if (!plain && !member)
         return false;
     const XiImportRef *ref = xi_value_import_ref(caller, call->args[0]);

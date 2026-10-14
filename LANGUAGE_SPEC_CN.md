@@ -233,7 +233,6 @@ xray 共 **64 个保留关键字**，按用途分组如下：
 | `type` | 类型别名 |
 | `new` | 保留字；对象构造统一写 `T(...)`（见 §3.14） |
 | `this` `super` | 自我/父类引用 |
-| `constructor` | 构造器 |
 | `static` `private` `protected` | 类/成员修饰符；公开是默认语义，没有 `public` 关键字 |
 | `const` | 不可变字段/绑定修饰符 |
 | `final` | `final class` 禁止继承 |
@@ -280,6 +279,7 @@ xray 共 **64 个保留关键字**，按用途分组如下：
 
 | Token | 出现位置 |
 |--|--|
+| `init` | class/struct 的初始化成员声明；在其它位置仍为普通标识符 |
 | `from` | `select` 的接收分支 (`x from ch`)；也用于命名 import / re-export (`import { x } from "module"`) |
 | `to` | `select` 的发送分支 (`value to ch`) |
 | `default` | 保留，当前未启用 |
@@ -1465,9 +1465,9 @@ Xray 默认只保留最小类型身份层：
 
 ```xray
 class Address { city: string
-    constructor(city: string) { this.city = city } }
+    init(city: string) { this.city = city } }
 class User { address: Address?
-    constructor(address: Address?) { this.address = address } }
+    init(address: Address?) { this.address = address } }
 
 fn show(u: User) {
     var addr = u.address          // 提取为简单绑定
@@ -3219,11 +3219,11 @@ ClassDecl ::= 'final'? 'class' Identifier TypeParams?
               ('extends' Identifier TypeArgs?)?
               ('implements' Identifier TypeArgs? (',' Identifier TypeArgs?)*)?
               '{' ClassMember* '}'
-ClassMember ::= FieldDecl | MethodDecl | ConstructorDecl | StaticBlock
+ClassMember ::= FieldDecl | MethodDecl | InitDecl | StaticBlock
 FieldDecl ::= Modifier* Identifier ':' Type ('=' Expression)?
 MethodDecl ::= Modifier* Identifier '(' ParamList? ')' ReturnType? Block
             |  Modifier* 'operator' OpToken '(' ParamList? ')' ReturnType? Block
-ConstructorDecl ::= 'constructor' '(' ParamList? ')' Block          // 参数类型可省
+InitDecl ::= 'init' '(' ParamList? ')' Block          // 参数类型可省
 Modifier ::= 'private' | 'protected' | 'static' | 'const'
 ```
 
@@ -3243,7 +3243,7 @@ class Animal {
     name: string                       // 字段
     private _age: i64 = 0              // 私有字段，可有默认值
 
-    constructor(name: string) {
+    init(name: string) {
         this.name = name
     }
 
@@ -3265,7 +3265,7 @@ print(Animal.create("Bob").name)
 
 ```xray
 class Dog extends Animal {
-    constructor(name: string) {
+    init(name: string) {
         super(name)                    // **必须**首语句（仅限派生类）
     }
 
@@ -3309,7 +3309,7 @@ class Dog extends Animal {
 class Point {
     x: f64
     y: f64
-    constructor(x: f64, y: f64) {
+    init(x: f64, y: f64) {
         this.x = x
         this.y = y
     }
@@ -3319,14 +3319,14 @@ class Point {
 class Vector2 {
     x: f64
     y: f64
-    constructor(x, y) {         // 等价于显式写 (x: f64, y: f64)
+    init(x, y) {         // 等价于显式写 (x: f64, y: f64)
         this.x = x
         this.y = y
     }
 }
 ```
 
-- 关键字 `constructor`（不是 `init` 也不是与类同名）。
+- `init` 是类型成员位置的上下文关键字；旧 `constructor` 声明拼写拒绝，不保留别名。其它位置的 `init` 仍是普通标识符。
 - 一个类**只有一个构造器**（不支持构造器重载）；要多种创建方式用 `static` 工厂方法。
 - 构造器参数**类型可省**——若参数名与字段同名，从字段类型自动推断；其他情况必须显式声明类型，不得从调用位点倒推定义的类型或能力。
 - 构造器隐式返回 `this`（编译期注入）。
@@ -3334,7 +3334,7 @@ class Vector2 {
 - 字段读取前必须在每条到达路径上完成初始化；整体 `this` 的返回、方法调用或闭包捕获要求所有字段初始化。正常结束和无值 `return` 都返回完整的 `this`，构造器不能显式返回另一个值。失败不发布部分结构体，已执行的外部副作用不回滚。
 - const 字段的声明默认表达式或构造体赋值构成唯一初始化；存在任一路径已初始化时不能再次赋值，循环回边也参与检查。mutable 字段初始化后可继续更新。
 - 构造器的自然结束与无值 `return` 都先执行退出清理，再从已初始化字段组装并发布完整的 `this`。清理对 mutable 字段的合法更新进入最终构造结果；失败不发布结果。普通函数显式返回表达式先取值、再清理的值快照规则不因此改变。
-- 字段字面量与构造器调用分别遵循字段权限和构造器权限；声明显式构造器本身不取消合法的 struct 字段字面量，也不扩大私有字段的构造权限。
+- 有显式 `init` 的 struct 只允许在其声明模块内使用字段字面量；外部经 `Type(...)` 或具名工厂构造。无显式 `init` 的 struct 保留正常字段字面量规则。展开字面量不能绕过此权限，任何形式均不扩大私有字段权限。
 - 派生类构造器必须首行调 `super(...)`。
 - struct 可以**没有**构造器，但省略构造器仍须为每个字段提供合法的默认初值（§5.1、§5.4）。`Point()` 的数值字段可初始化为零；没有显式初值的非 nullable Array 等字段不能因此被零初始化。
 
@@ -3345,7 +3345,7 @@ class Vec2 {
     x: f64
     y: f64
 
-    constructor(x: f64, y: f64) {
+    init(x: f64, y: f64) {
         this.x = x; this.y = y
     }
 
@@ -3422,7 +3422,7 @@ interface Iterable<T> {
 class Rect {
     _w: i64
     _h: i64
-    constructor(w: i64, h: i64) { this._w = w; this._h = h }
+    init(w: i64, h: i64) { this._w = w; this._h = h }
 
     // 只读：只有 getter
     area: i64 { fn() { return this._w * this._h } }
@@ -3460,12 +3460,12 @@ fn main() {
 ```xray
 class Animal {
     name: string
-    constructor(name: string) { this.name = name }
+    init(name: string) { this.name = name }
     speak() -> string { return "..." }
 }
 
 class Dog extends Animal {
-    constructor(name: string) { super(name) }
+    init(name: string) { super(name) }
     override speak() -> string { return "woof" }
 }
 
@@ -3484,7 +3484,7 @@ main()
 class Vec2 {
     x: i64
     y: i64
-    constructor(x: i64, y: i64) { this.x = x; this.y = y }
+    init(x: i64, y: i64) { this.x = x; this.y = y }
     operator+(other: Vec2) -> Vec2 {
         return Vec2(this.x + other.x, this.y + other.y)
     }
@@ -3568,7 +3568,7 @@ var c = Config{host: "localhost"}    // OK
 | 泛型 | ✅ | ✅ |
 | `static` / `private` / `protected` / `const` | ✅ | ✅ |
 | 运算符重载 | ✅ | ✅ |
-| 构造器 | `constructor(...)` | 省略时仍须为每个字段提供合法默认初值；不能将非 nullable Array 零初始化 |
+| 构造器 | `init(...)` | 省略时仍须为每个字段提供合法默认初值；不能将非 nullable Array 零初始化 |
 | 字面量 | 无 | `TypeName{field: value, ...}` |
 
 **适用场景**：
@@ -3623,7 +3623,7 @@ interface Greeter {
 
 class Circle implements Shape {
     radius: f64
-    constructor(r: f64) { this.radius = r }
+    init(r: f64) { this.radius = r }
     area() -> f64 { return 3.14 * this.radius * this.radius }
     perimeter() -> f64 { return 6.28 * this.radius }
 }
@@ -3631,7 +3631,7 @@ class Circle implements Shape {
 // 实现多个接口
 class Logger implements Shape, Greeter {
     radius: f64
-    constructor(r: f64) { this.radius = r }
+    init(r: f64) { this.radius = r }
     area() -> f64 { return 3.14 * this.radius * this.radius }
     perimeter() -> f64 { return 6.28 * this.radius }
     greet(name: string) { print("hello,", name) }
@@ -3683,7 +3683,7 @@ interface SizedCollection<T> extends HasLength {
 class Buffer implements SizedCollection<i64> {
     length: i64                       // 实现属性签名
     private data: Array<i64>
-    constructor(n: i64) {
+    init(n: i64) {
         this.length = n
         this.data = []
     }
@@ -3702,7 +3702,7 @@ interface Shape {
 
 class Circle implements Shape {
     r: f64
-    constructor(r: f64) { this.r = r }
+    init(r: f64) { this.r = r }
     area() -> f64 { return 3.14159 * this.r * this.r }
 }
 
@@ -3780,7 +3780,7 @@ enum NetEvent {
 // 递归 enum 的 payload 必须经 class 节点间接化
 class ExprNode {
     expr: Expr
-    constructor(expr: Expr) { this.expr = expr }
+    init(expr: Expr) { this.expr = expr }
     get() -> Expr { return this.expr }
 }
 
@@ -3959,7 +3959,7 @@ print(Color.fromInt(2).label())     // "Green"
 - 方法语法与类型体内方法一致：`name(...)`、`ref name(...)`、`move name(...)` 或 `static name(...)`；不写 `fn`
 - 方法体内 `this` 的静态类型是 enum 自身（如 `Option<T>`），需要 `match (this)` 才能取出变体 payload
 - 静态方法没有 `this`；调用形式是 `EnumName.method(args...)`
-- **不**支持 `constructor`（变体语法本身就是构造器）
+- **不**支持 `init`（变体语法本身就是构造器）
 - **不**支持继承（`enum E extends ...` 是非法）；如需共享行为，用接口实现（`enum E implements Iface`）或顶层函数
 - 简单枚举（无 payload）也可定义方法，但方法体内 `this` 是该 enum 的值，可用 `==` 直接比较：
   ```xray
@@ -4693,7 +4693,7 @@ class PanicInfo {
     code: i64                   // 错误码
     data: JSON.Value            // 附加数据；无数据时为 JSON null
 
-    constructor(message: string = "", cause: PanicInfo? = null)
+    init(message: string = "", cause: PanicInfo? = null)
     fn toString() -> string
 }
 ```
@@ -4853,7 +4853,7 @@ enum ConnErr { Refused, Timeout }
 // 用一个极简的 "连接" 替身让示例自成一体。
 class Conn {
     alive: bool
-    constructor(alive: bool) { this.alive = alive }
+    init(alive: bool) { this.alive = alive }
     isAlive() -> bool { return this.alive }
     close() { print("closed") }
 }
@@ -5020,7 +5020,7 @@ var b = identity("hello")               // 推断 T=string
 // 泛型类
 class Box<T> {
     value: T
-    constructor(v: T) { this.value = v }
+    init(v: T) { this.value = v }
     get() -> T { return this.value }
 }
 
@@ -5031,7 +5031,7 @@ var b2 = Box<string>("hi")
 class Pair<K, V> {
     key: K
     value: V
-    constructor(k: K, v: V) {
+    init(k: K, v: V) {
         this.key = k; this.value = v
     }
 }
@@ -5098,7 +5098,7 @@ fn pickValue<K: Hashable, V>(k: K, v: V) -> V {
 class Token implements Hashable {
     value: i64
 
-    constructor(value: i64) { this.value = value }
+    init(value: i64) { this.value = value }
 
     // 参数写 Token，不写 Self
     operator==(other: Token) -> bool { return this.value == other.value }
@@ -5934,7 +5934,7 @@ ExportSpec ::= Identifier ('as' Identifier)?
 export fn helper() { return }
 export final class MyClass {
     value: i64
-    constructor() { this.value = 1 }
+    init() { this.value = 1 }
 }
 export const VERSION = "1.0"
 
@@ -6595,7 +6595,7 @@ print(len(empty))           // 0
 
 ### 14.16 `PanicInfo`
 
-内置 `PanicInfo` 类包含 `message`、`stack`、`cause`、`code`、`data` 字段，构造函数 `constructor(message: string = "", cause: PanicInfo? = null)`，以及 `toString()`。
+内置 `PanicInfo` 类包含 `message`、`stack`、`cause`、`code`、`data` 字段，构造函数 `init(message: string = "", cause: PanicInfo? = null)`，以及 `toString()`。
 
 ### 14.17 `Task<T>` 与 enum 值
 
@@ -6929,7 +6929,7 @@ class PanicInfo {
     code: i64                   // 错误码（从 "E0xxx: ..." 前缀自动解析，默认 0）
     data: JSON.Value            // 运行时故障的结构化附加数据；无数据时为 JSON null
 
-    constructor(message: string = "", cause: PanicInfo? = null)
+    init(message: string = "", cause: PanicInfo? = null)
     fn toString() -> string
 }
 ```
@@ -8046,11 +8046,11 @@ ClassDecl ::= AttrList? Visibility? 'final'? 'class' Identifier TypeParams?
               ('extends' NamedType)?
               ('implements' NamedType (',' NamedType)*)?
               '{' ClassMember* '}'
-ClassMember ::= FieldDecl | MethodDecl | ConstructorDecl
+ClassMember ::= FieldDecl | MethodDecl | InitDecl
 FieldDecl ::= Modifier* Identifier ':' Type ('=' Expression)?
 MethodDecl ::= Modifier* Identifier '(' ParamList? ')' ReturnType? Block
             |  Modifier* 'operator' OperatorToken '(' ParamList? ')' ReturnType? Block
-ConstructorDecl ::= 'constructor' '(' ParamList? ')' Block
+InitDecl ::= 'init' '(' ParamList? ')' Block
 
 StructDecl ::= AttrList? Visibility? 'packed'? 'struct' Identifier TypeParams?
                ('implements' NamedType (',' NamedType)*)?
@@ -8101,7 +8101,7 @@ OperatorToken ::= '+' | '-' | '*' | '/' | '%'
 
 ## 附录 B. 关键字索引
 
-以下 **64 个**关键字来自 `src/frontend/lexer/xkeywords.def` 的 52 个通用关键字与 `src/shared/xr_exact_scalar_registry.def` 的 12 个 exact 标量类型名，并按 ASCII 字典序排列。`move`、`ref`、`out`、`linked`、`from`、`to`、`after`、`panic` 是上下文词，不在本表；`parallel` 是标准库模块名。
+以下 **63 个**关键字来自 `src/frontend/lexer/xkeywords.def` 的 51 个通用关键字与 `src/shared/xr_exact_scalar_registry.def` 的 12 个 exact 标量类型名，并按 ASCII 字典序排列。`init`、`move`、`ref`、`out`、`linked`、`from`、`to`、`after`、`panic` 是上下文词，不在本表；`parallel` 是标准库模块名。
 
 | 关键字 | 节 |
 |--|--|
@@ -8113,7 +8113,6 @@ OperatorToken ::= '+' | '-' | '*' | '/' | '%'
 | `class` | §5.3 |
 | `comptime` | §3.2 |
 | `const` | §5.1 |
-| `constructor` | §5.3 |
 | `continue` | §4.6 |
 | `defer` | §4.9 |
 | `else` | §4.2 |

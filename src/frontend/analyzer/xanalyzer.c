@@ -269,7 +269,7 @@ static void register_inheritable_builtin_class(XaAnalyzer *analyzer, const char 
         if (member->is_method) {
             member_links->type = xa_builtin_parse_full_signature(analyzer, member->signature);
             xa_class_info_add_method(info, member_sym);
-            if (strcmp(member->name, "constructor") == 0 && member_links->type &&
+            if (strcmp(member->name, "init") == 0 && member_links->type &&
                 XR_TYPE_IS_FUNCTION(member_links->type)) {
                 info->has_constructor = true;
                 info->constructor_param_count = member_links->type->function.param_count;

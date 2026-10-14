@@ -18,7 +18,7 @@ fn push_n(target: ref Array<i64>, n: i64) {
 
 class Counter {
     hits: Array<i64>
-    constructor() { this.hits = [] }
+    init() { this.hits = [] }
 
     bump(slot: ref Array<i64>) {
         slot.push(1)

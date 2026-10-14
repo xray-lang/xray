@@ -3,7 +3,7 @@ class Point {
     x: i64
     y: i64
 
-    constructor(x, y) {
+    init(x, y) {
         this.x = x
         this.y = y
     }
@@ -24,7 +24,7 @@ class Counter {
     static count = 0
     value: i64
 
-    constructor() {
+    init() {
         Counter.count++
         this.value = Counter.count
     }
@@ -38,7 +38,7 @@ class Counter {
 class Animal {
     name: string
 
-    constructor(name) {
+    init(name) {
         this.name = name
     }
 
@@ -50,7 +50,7 @@ class Animal {
 class Dog extends Animal {
     breed: string
 
-    constructor(name, breed) {
+    init(name, breed) {
         super(name)
         this.breed = breed
     }
@@ -68,7 +68,7 @@ class Dog extends Animal {
 class Circle {
     _radius: f64
 
-    constructor(radius) {
+    init(radius) {
         this._radius = radius
     }
 
@@ -91,7 +91,7 @@ class Vector2 {
     x: f64
     y: f64
 
-    constructor(x, y) {
+    init(x, y) {
         this.x = x
         this.y = y
     }
@@ -127,7 +127,7 @@ class Rectangle implements Shape {
     width: f64
     height: f64
 
-    constructor(width, height) {
+    init(width, height) {
         this.width = width
         this.height = height
     }
@@ -145,7 +145,7 @@ class Rectangle implements Shape {
 class BankAccount {
     private _balance: f64
 
-    constructor(initial) {
+    init(initial) {
         this._balance = initial
     }
 

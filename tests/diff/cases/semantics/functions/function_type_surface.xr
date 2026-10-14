@@ -22,7 +22,7 @@ fn negate(x: i64) -> i64 { return 0 - x }
 
 class Registry {
     handler: Mapper
-    constructor(h: Mapper) { this.handler = h }
+    init(h: Mapper) { this.handler = h }
     run(v: i64) -> i64 { var h = this.handler
                          return h(v) }
 }

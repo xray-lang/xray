@@ -62,7 +62,7 @@ static void inference_source_allocations(void) {
         "fn matched(){return match(true){true->{conditional()},false->nop()}}\n"
         "fn invoke(f:fn()){return f()}\n"
         "export fn answer()->i64{matched();invoke(fn(){return matched()});return count+39}\n");
-    inference_source_allocation_fixture(28,"Dead catch initialization region","enum E { Bad {text:string} }\nfn accept(text:string)->string{return text}\nstruct C { const value:string\n constructor(){try{}catch(E.Bad{text}){this.value=accept(text)};this.value=\"normal\"}}\nconst c=C()\n");
+    inference_source_allocation_fixture(28,"Dead catch initialization region","enum E { Bad {text:string} }\nfn accept(text:string)->string{return text}\nstruct C { const value:string\n init(){try{}catch(E.Bad{text}){this.value=accept(text)};this.value=\"normal\"}}\nconst c=C()\n");
     inference_source_allocation_fixture(29,"Interface inference producer",
         "interface I<A>{map<U:Sendable>(seed:A,value:U)->U}\n"
         "fn forward<A,T:I<A>>(r:T,seed:A)->i64{return r.map(seed,41)}\n");

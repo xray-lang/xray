@@ -540,7 +540,7 @@ final class HpackTable {
     size: i64
     maxSize: i64
 
-    constructor(maxSize: i64 = DEFAULT_HEADER_TABLE_SIZE) {
+    init(maxSize: i64 = DEFAULT_HEADER_TABLE_SIZE) {
         this.names = []
         this.values = []
         this.sizes = []
@@ -602,7 +602,7 @@ export final class HeaderList {
     names: Array<string>
     values: Array<string>
 
-    constructor() {
+    init() {
         this.names = []
         this.values = []
     }
@@ -621,7 +621,7 @@ export final class HeaderList {
 export final class HpackDecoder {
     table: HpackTable
 
-    constructor(maxTableSize: i64 = DEFAULT_HEADER_TABLE_SIZE) {
+    init(maxTableSize: i64 = DEFAULT_HEADER_TABLE_SIZE) {
         this.table = HpackTable(maxTableSize)
     }
 
@@ -726,7 +726,7 @@ final class _NameValue {
     value: string
     pos: i64
 
-    constructor(name: string, value: string, pos: i64) {
+    init(name: string, value: string, pos: i64) {
         this.name = name
         this.value = value
         this.pos = pos
@@ -749,7 +749,7 @@ final class _NameValue {
 export final class HpackEncoder {
     table: HpackTable
 
-    constructor(maxTableSize: i64 = DEFAULT_HEADER_TABLE_SIZE) {
+    init(maxTableSize: i64 = DEFAULT_HEADER_TABLE_SIZE) {
         this.table = HpackTable(maxTableSize)
     }
 
@@ -811,7 +811,7 @@ export final class FrameHeader {
     flags: i64
     streamId: i64
 
-    constructor(length: i64, kind: i64, flags: i64, streamId: i64) {
+    init(length: i64, kind: i64, flags: i64, streamId: i64) {
         this.length = length
         this.kind = kind
         this.flags = flags
@@ -906,7 +906,7 @@ export fn validateFrameHeader(header: FrameHeader) -> i64 {
 export final class Settings {
     values: Array<i64>
 
-    constructor() {
+    init() {
         this.values = [0, DEFAULT_HEADER_TABLE_SIZE, 1, DEFAULT_MAX_CONCURRENT_STREAMS,
                        DEFAULT_INITIAL_WINDOW_SIZE, DEFAULT_MAX_FRAME_SIZE, MAX_WINDOW]
     }
@@ -1064,7 +1064,7 @@ final class Target {
     path: string
     authority: string
 
-    constructor(host: string, port: i64, path: string, authority: string) {
+    init(host: string, port: i64, path: string, authority: string) {
         this.host = host
         this.port = port
         this.path = path
@@ -1214,7 +1214,7 @@ final class Exchange {
     bodyPos: i64
     bodySent: bool
 
-    constructor() {
+    init() {
         this.outbox = Array<u8>()
         this.buf = Array<u8>()
         this.pos = 0

@@ -11,7 +11,7 @@
 class Explodes {
     label: string
 
-    constructor(label) {
+    init(label) {
         this.label = label
     }
 

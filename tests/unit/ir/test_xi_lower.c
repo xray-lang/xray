@@ -1424,14 +1424,14 @@ TEST(class_field_access_lowers_with_global_evidence_id) {
     XiFunc *main_func =
         lower_source_with_global_evidence("class Base {\n"
                                           "    wide: i64\n"
-                                          "    constructor(wide: i64) {\n"
+                                          "    init(wide: i64) {\n"
                                           "        this.wide = wide\n"
                                           "    }\n"
                                           "}\n"
                                           "\n"
                                           "class Child extends Base {\n"
                                           "    flag: bool\n"
-                                          "    constructor(wide: i64, flag: bool) {\n"
+                                          "    init(wide: i64, flag: bool) {\n"
                                           "        super(wide)\n"
                                           "        this.flag = flag\n"
                                           "    }\n"
@@ -1521,7 +1521,7 @@ TEST(class_field_default_initializer_store_lowers_with_global_evidence_id) {
     REQUIRE_CLASS_FIELD_INIT_EVIDENCE(values != NULL,
                                       "Holder.values field evidence should be present");
 
-    XiFunc *ctor = func_tree_find_func_name(main_func, "constructor");
+    XiFunc *ctor = func_tree_find_func_name(main_func, "init");
     REQUIRE_CLASS_FIELD_INIT_EVIDENCE(ctor != NULL, "synthetic constructor should be present");
     uint32_t values_store_id = 0;
     for (uint32_t b = 0; b < ctor->nblocks; b++) {
@@ -1950,7 +1950,7 @@ TEST(json_codec_binding_does_not_fallback_to_source_span) {
 TEST(generic_class_declaration_has_no_runtime_publication) {
     XiFunc *root = lower_source("export class Cell<T> {\n"
                                 "    value: T\n"
-                                "    constructor(value: T) { this.value = value }\n"
+                                "    init(value: T) { this.value = value }\n"
                                 "}\n"
                                 "export fn answer() -> i64 { return 42 }\n");
     TEST_REQUIRE(root && root->module && root->module->nclasses == 1,
@@ -2943,7 +2943,7 @@ TEST(nested_body_identity_binds_method_calls_through_frozen_parent) {
     XiFunc *root =
         lower_source_with_global_evidence("class Counter {\n"
                                           "    value: i64\n"
-                                          "    constructor(value: i64) { this.value = value }\n"
+                                          "    init(value: i64) { this.value = value }\n"
                                           "    read() -> i64 { return this.value }\n"
                                           "}\n"
                                           "fn exerciseNestedBody() -> i64 {\n"
@@ -3120,7 +3120,7 @@ TEST(local_class_cycle_storage_domain) {
     XiFunc *f = lower_source("class Node {\n"
                              "  peer: Node?\n"
                              "  value: i64\n"
-                             "  constructor(value: i64) { this.peer = null; this.value = value }\n"
+                             "  init(value: i64) { this.peer = null; this.value = value }\n"
                              "}\n"
                              "fn localPair() {\n"
                              "  var left = Node(1)\n"
@@ -3780,7 +3780,7 @@ TEST(struct_method_receivers_use_call_bound_places) {
 TEST(class_receiver_modes_are_explicit_without_forging_value_places) {
     XiFunc *f = lower_source("class Counter {\n"
                              "    value: i64\n"
-                             "    constructor() { this.value = 0 }\n"
+                             "    init() { this.value = 0 }\n"
                              "    ref bump() { this.value = this.value + 1 }\n"
                              "    read() -> i64 { return this.value }\n"
                              "}\n"

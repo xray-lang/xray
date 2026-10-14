@@ -21,7 +21,7 @@ class Vector2D {
     x: f64
     y: f64
     
-    constructor(x, y) {
+    init(x, y) {
         this.x = x
         this.y = y
     }
@@ -117,7 +117,7 @@ fn test_property5_chained_operations() {
 class Money {
     amount: i64
     
-    constructor(amount) {
+    init(amount) {
         this.amount = amount
     }
     
@@ -159,7 +159,7 @@ fn test_property5_comparison_operators() {
 class BitSet {
     value: i64
     
-    constructor(v) {
+    init(v) {
         this.value = v
     }
     
@@ -211,7 +211,7 @@ fn test_property5_bitwise_xor() {
 class Matrix {
     data: Array<i64>
     
-    constructor() {
+    init() {
         this.data = [0, 0, 0, 0]
     }
     
@@ -251,7 +251,7 @@ fn test_property5_subscript_set() {
 class Vector3D extends Vector2D {
     z: f64
     
-    constructor(x, y, z) {
+    init(x, y, z) {
         super(x, y)
         this.z = z
     }
@@ -277,7 +277,7 @@ class Point {
     x: i64
     y: i64
     
-    constructor(x, y) {
+    init(x, y) {
         this.x = x
         this.y = y
     }
@@ -400,7 +400,7 @@ class ModVector {
     x: i64
     y: i64
     
-    constructor(x, y) {
+    init(x, y) {
         this.x = x
         this.y = y
     }

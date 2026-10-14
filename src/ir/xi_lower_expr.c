@@ -196,7 +196,7 @@ static struct XrType *xi_lower_class_info_constructor_type(XiLower *l, XrClassIn
     if (!l || !l->analyzer || !class_info)
         return NULL;
     XaSymbol *ctor =
-        class_info ? xa_class_info_lookup_member(class_info, XR_KEYWORD_CONSTRUCTOR) : NULL;
+        class_info ? xa_class_info_lookup_member(class_info, XR_INIT_MEMBER_NAME) : NULL;
     XaSymbolLinks *ctor_links = ctor ? xa_analyzer_get_links(l->analyzer, ctor) : NULL;
     struct XrType *ctor_type = ctor_links ? ctor_links->type : NULL;
     return ctor_type && ctor_type->kind == XR_KIND_FUNCTION ? ctor_type : NULL;
@@ -10484,8 +10484,8 @@ generic_constructor:;
     call->args[0] = cls;
     for (int i = 0; i < n; i++)
         call->args[i + 1] = arg_vals[i];
-    call->aux = (void *) "constructor";
-    call->aux_int = (int64_t) xi_lower_method_symbol(l, "constructor") << 1;
+    call->aux = (void *) "init";
+    call->aux_int = (int64_t) xi_lower_method_symbol(l, "init") << 1;
     /* Same fresh-result fact as the class-binding call path: a user class
      * allocates its instance here.  A builtin class reaches this path too and
      * stays unmarked, since its `call` static method may return an existing
@@ -11680,8 +11680,8 @@ static XiValue *lower_struct_literal(XiLower *l, AstNode *node) {
         if (!call)
             return NULL;
         call->args[0] = cls;
-        call->aux = (void *) "constructor";
-        call->aux_int = (int64_t) xi_lower_method_symbol(l, "constructor") << 1;
+        call->aux = (void *) "init";
+        call->aux_int = (int64_t) xi_lower_method_symbol(l, "init") << 1;
         call->lowering_flags |= XI_LOWERING_FLAG_CONSTRUCTOR_CALL;
         call->flags |= XI_FLAG_SIDE_EFFECT | XI_FLAG_MAY_THROW;
         call->line = (uint32_t) node->line;
@@ -11855,8 +11855,8 @@ static XiValue *lower_null_guard_or_throw(XiLower *l, XiValue *val, struct XrTyp
     }
     exc->args[0] = cls;
     exc->args[1] = msg;
-    exc->aux = (void *) "constructor";
-    exc->aux_int = (int64_t) xi_lower_method_symbol(l, "constructor") << 1;
+    exc->aux = (void *) "init";
+    exc->aux_int = (int64_t) xi_lower_method_symbol(l, "init") << 1;
     exc->lowering_flags |= XI_LOWERING_FLAG_CONSTRUCTOR_CALL;
     exc->flags |= XI_FLAG_SIDE_EFFECT | XI_FLAG_MAY_THROW;
     exc->line = (uint32_t) line;
@@ -12032,7 +12032,7 @@ static XiValue *lower_super_call(XiLower *l, AstNode *node) {
     struct XrType *this_type = var_id >= 0 ? l->vars[var_id].type : l->type_any;
     XiValue *this_val = var_id >= 0 ? xi_lower_braun_read(l, var_id, l->cur_block) : NULL;
 
-    const char *method_name = sc->method_name ? sc->method_name : XR_KEYWORD_CONSTRUCTOR;
+    const char *method_name = sc->method_name ? sc->method_name : XR_INIT_MEMBER_NAME;
     const char *class_name = xr_type_get_class_name(this_type);
     XrClassInfo *class_info = class_name ? xi_lower_lookup_class_info(l, class_name) : NULL;
     XrClassInfo *base_info = class_info ? class_info->base : NULL;

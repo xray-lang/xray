@@ -3,7 +3,7 @@
 class Node {
     v: i64
     next: Node?
-    constructor(v: i64, next: Node?) {
+    init(v: i64, next: Node?) {
         this.v = v
         this.next = next
     }

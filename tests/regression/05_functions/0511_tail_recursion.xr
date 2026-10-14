@@ -197,7 +197,7 @@ fn test_non_tail_regular_call() {
 fn test_method_tail_recursion() {
     class Accumulator {
         total: i64
-        constructor() { this.total = 0 }
+        init() { this.total = 0 }
 
         ref add(n: i64) -> i64 {
             if (n <= 0) { return this.total }
@@ -217,7 +217,7 @@ fn test_method_cross_tail() {
     class Toggler {
         state: bool
         steps: i64
-        constructor() {
+        init() {
             this.state = false
             this.steps = 0
         }
@@ -269,7 +269,7 @@ fn test_static_tail_recursion() {
 fn test_deep_method_tail_recursion() {
     class DeepCounter {
         val: i64
-        constructor() { this.val = 0 }
+        init() { this.val = 0 }
         ref count(n: i64) -> i64 {
             if (n <= 0) { return this.val }
             this.val = this.val + 1

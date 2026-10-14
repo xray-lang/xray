@@ -1,6 +1,6 @@
 final class Holder {
     value: i64
-    constructor(value: i64) { this.value = value; }
+    init(value: i64) { this.value = value; }
 }
 fn whole(value: ref Holder) -> i64 { value = Holder(42); return value.value; }
 export fn run() -> i64 { const object = Holder(40); return whole(ref object); }

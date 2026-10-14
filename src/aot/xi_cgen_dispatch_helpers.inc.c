@@ -7711,7 +7711,7 @@ static const XiFunc *xicgen_lookup_super_method(XiCgenCtx *ctx, const XiFunc *f,
         return NULL;
     /* The parent may live in another module (the derived class extends an
      * imported base), so resolve through the cross-module lookups. */
-    if (method && strcmp(method, "constructor") == 0)
+    if (method && strcmp(method, "init") == 0)
         return cg_lookup_class_ctor_global(ctx, parent_class, method_prefix);
     return cg_lookup_method(ctx, method, parent_class, XG_NO_ID, method_prefix);
 }
@@ -8019,9 +8019,9 @@ static const XiClassData *xicgen_parallel_plan_ctor_result_class(XiCgenCtx *ctx,
         call = cg_resolve_module_member_call(ctx, f, v, (const char *) v->aux);
         if (call.is_class_constructor)
             class_data = call.class_data;
-        if (!class_data && strcmp((const char *) v->aux, "constructor") == 0)
+        if (!class_data && strcmp((const char *) v->aux, "init") == 0)
             class_data = cg_class_native_class_value_data(ctx, f, v->args[0]);
-        if (!class_data && strcmp((const char *) v->aux, "constructor") == 0)
+        if (!class_data && strcmp((const char *) v->aux, "init") == 0)
             class_data = cg_class_data_for_type_name(ctx, v->type);
     }
     return xicgen_class_data_is_parallel_plan(ctx, class_data) ? class_data : NULL;
@@ -10718,7 +10718,7 @@ static const XiFunc *cg_lookup_class_ctor_global(XiCgenCtx *ctx, const char *cla
     return NULL;
 }
 
-/* `new X(args)` lowers to XI_CALL_METHOD with method "constructor" and the class
+/* `new X(args)` lowers to XI_CALL_METHOD with method "init" and the class
  * object (typed `any`) as the receiver, so the receiver-based method dispatch
  * cannot recover the class. Resolve the constructor from the call's result type
  * (always the constructed instance type) and emit it exactly like a bare class
@@ -11248,10 +11248,10 @@ static void xicgen_call_method(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const
         return;
     if (xicgen_emit_stdlib_method(ctx, out, f, v))
         return;
-    if (!is_super && method && strcmp(method, "constructor") == 0 &&
+    if (!is_super && method && strcmp(method, "init") == 0 &&
         xicgen_emit_panicinfo_constructor(ctx, out, v))
         return;
-    if (!is_super && method && strcmp(method, "constructor") == 0 &&
+    if (!is_super && method && strcmp(method, "init") == 0 &&
         xicgen_emit_user_constructor(ctx, out, f, v, prefix))
         return;
     if (is_super)

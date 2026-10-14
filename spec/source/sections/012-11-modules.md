@@ -111,7 +111,7 @@ ExportSpec ::= Identifier ('as' Identifier)?
 export fn helper() { return }
 export final class MyClass {
     value: i64
-    constructor() { this.value = 1 }
+    init() { this.value = 1 }
 }
 export const VERSION = "1.0"
 
@@ -292,7 +292,7 @@ ExportSpec ::= Identifier ('as' Identifier)?
 export fn helper() { return }
 export final class MyClass {
     value: i64
-    constructor() { this.value = 1 }
+    init() { this.value = 1 }
 }
 export const VERSION = "1.0"
 

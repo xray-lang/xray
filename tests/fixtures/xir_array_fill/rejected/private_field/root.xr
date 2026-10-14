@@ -1,1 +1,1 @@
-class C{private values:Array<i64>;constructor(){this.values=[1]}};fn bad(c:C)->Array<i64>{return c.values.fill(7)}
+class C{private values:Array<i64>;init(){this.values=[1]}};fn bad(c:C)->Array<i64>{return c.values.fill(7)}

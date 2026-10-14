@@ -117,7 +117,7 @@ fn test_explicit_type_args_multi_constraint() {
 class CmpPoint implements Comparable {
     x: i64
 
-    constructor(x) {
+    init(x) {
         this.x = x
     }
 

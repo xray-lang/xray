@@ -492,7 +492,7 @@ XR_FUNC void xfmt_emit_class_decl(XrFmtContext *ctx, AstNode *node) {
         else if (!m->is_constructor && m->receiver_mode == XR_PARAM_MOVE)
             xfmt_write_str(ctx, "move ");
         if (m->is_constructor) {
-            xfmt_write_str(ctx, XR_KEYWORD_CONSTRUCTOR);
+            xfmt_write_str(ctx, XR_INIT_MEMBER_NAME);
         } else if (m->is_operator && m->op_type == OPTYPE_LEN) {
             /* `operator len` is stored as `__operator_len` to keep the named
              * operator out of the ordinary member namespace; op_type carries

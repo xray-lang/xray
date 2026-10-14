@@ -3,7 +3,7 @@
 
 class Box<T> {
     value: T
-    constructor(v: T) {
+    init(v: T) {
         this.value = v
     }
 }
@@ -15,7 +15,7 @@ struct Pair<A, B> {
 
 class Wrapper<T> {
     value: T
-    constructor(v: T) {
+    init(v: T) {
         this.value = v
     }
 }

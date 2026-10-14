@@ -225,7 +225,7 @@ export class Cookie {
     sameSite: string
     hostOnly: bool
 
-    constructor(
+    init(
         name: string,
         value: string,
         domain: string,
@@ -272,7 +272,7 @@ export class CookieJar {
     cookies: Array<Cookie>
     maxCookies: i64
 
-    constructor(maxCookies: i64 = 300) {
+    init(maxCookies: i64 = 300) {
         this.cookies = []
         this.maxCookies = maxCookies
     }
@@ -425,7 +425,7 @@ class _FormField {
     filename: string
     contentType: string
 
-    constructor(
+    init(
         kind: string,
         name: string,
         value: string,
@@ -605,7 +605,7 @@ export class RouteMatch<T> {
     value: T
     params: Map<string, string>
 
-    constructor(value: T, params: Map<string, string>) {
+    init(value: T, params: Map<string, string>) {
         this.value = value
         this.params = params
     }
@@ -619,7 +619,7 @@ export class Router<T> {
     private paths: Array<string>
     private values: Array<T>
 
-    constructor() {
+    init() {
         this.methods = []
         this.paths = []
         this.values = []
@@ -669,7 +669,7 @@ class _ServerRouteMatch {
     hasHandler: bool
     params: Map<string, string>
 
-    constructor(
+    init(
         value: JSON.Value,
         params: Map<string, string>,
         handler: fn(HttpRequest) -> HttpResponse,
@@ -689,7 +689,7 @@ class _ServerRouteEntry {
     handler: fn(HttpRequest) -> HttpResponse
     hasHandler: bool
 
-    constructor(
+    init(
         method: string,
         path: string,
         value: JSON.Value,
@@ -717,7 +717,7 @@ fn _serverDefaultHandler(req: HttpRequest) -> HttpResponse {
 class _ServerRouter {
     routes: Array<_ServerRouteEntry>
 
-    constructor() {
+    init() {
         this.routes = []
     }
 
@@ -1077,7 +1077,7 @@ fn _serverListen(router: _ServerRouter, port: i64, running: Atomic<bool>) -> boo
 export class Server {
     private router: _ServerRouter
 
-    constructor() {
+    init() {
         this.router = _ServerRouter()
     }
 
@@ -1106,7 +1106,7 @@ export class MultipartBody {
     body: string
     contentType: string
 
-    constructor(body: string, contentType: string) {
+    init(body: string, contentType: string) {
         this.body = body
         this.contentType = contentType
     }
@@ -1120,7 +1120,7 @@ export class FormData {
     maxTotalSize: i64
     maxFileSize: i64
 
-    constructor(maxTotalSize: i64, maxFileSize: i64) {
+    init(maxTotalSize: i64, maxFileSize: i64) {
         this.boundary = _boundary()
         this.fields = []
         this.totalSize = 0
@@ -1261,7 +1261,7 @@ export enum HttpVersion {
 export class HttpMethod {
     token: string
 
-    constructor(token: string) {
+    init(token: string) {
         var parsed = _requestMethod(token)
         if (parsed == null) { throw HttpError.InvalidMethod { method: token } }
         this.token = parsed!
@@ -1295,7 +1295,7 @@ export class Headers {
     private names: Array<string>
     private values: Array<string>
 
-    constructor() {
+    init() {
         this.names = []
         this.values = []
     }
@@ -1614,7 +1614,7 @@ class _HttpRequestUrl {
     path: string
     isHttps: bool
 
-    constructor(scheme: string, host: string, port: i64, path: string, isHttps: bool) {
+    init(scheme: string, host: string, port: i64, path: string, isHttps: bool) {
         this.scheme = scheme
         this.host = host
         this.port = port
@@ -1634,7 +1634,7 @@ export class HttpRequest {
     contentLength: i64
     params: Map<string, string>
 
-    constructor(
+    init(
         method: HttpMethod,
         path: string,
         query: QueryParams,
@@ -1674,7 +1674,7 @@ export class HttpResponse {
     headers: Headers
     body: Array<u8>
 
-    constructor(
+    init(
         version: HttpVersion,
         status: i64,
         reason: string,
@@ -1911,7 +1911,7 @@ class _HttpResponseBytes {
     head: ResponseHead
     body: Array<u8>
 
-    constructor(head: ResponseHead, body: Array<u8>) {
+    init(head: ResponseHead, body: Array<u8>) {
         this.head = head
         this.body = body
     }
@@ -1970,7 +1970,7 @@ class _ChunkedBytes {
     body: Array<u8>
     endOffset: i64
 
-    constructor(body: Array<u8>, endOffset: i64) {
+    init(body: Array<u8>, endOffset: i64) {
         this.body = body
         this.endOffset = endOffset
     }
@@ -2021,7 +2021,7 @@ class _HttpRequestBytes {
     body: Array<u8>
     consumedBytes: i64
 
-    constructor(head: RequestHead, body: Array<u8>, consumedBytes: i64) {
+    init(head: RequestHead, body: Array<u8>, consumedBytes: i64) {
         this.head = head
         this.body = body
         this.consumedBytes = consumedBytes
@@ -2290,7 +2290,7 @@ export class ResponseHead {
     chunked: bool
     keepAlive: bool
 
-    constructor(
+    init(
         version: string,
         status: i64,
         reason: string,
@@ -2326,7 +2326,7 @@ export class RedirectDecision {
     stripSensitiveHeaders: bool
     dropBody: bool
 
-    constructor(url: string, method: string, stripSensitiveHeaders: bool, dropBody: bool) {
+    init(url: string, method: string, stripSensitiveHeaders: bool, dropBody: bool) {
         this.url = url
         this.method = method
         this.stripSensitiveHeaders = stripSensitiveHeaders
@@ -2340,7 +2340,7 @@ export class ChunkedBody {
     trailers: Headers
     consumedBytes: i64
 
-    constructor(
+    init(
         body: string,
         trailers: Headers,
         consumedBytes: i64
@@ -2370,7 +2370,7 @@ export class RequestHead {
     chunked: bool
     keepAlive: bool
 
-    constructor(
+    init(
         method: string,
         requestTarget: string,
         version: string,
@@ -2406,7 +2406,7 @@ export class RequestMessage {
     trailers: Headers
     consumedBytes: i64
 
-    constructor(
+    init(
         head: RequestHead,
         body: string,
         trailers: Headers,
@@ -2438,7 +2438,7 @@ export class ResponseMessage {
     trailers: Headers
     consumedBytes: i64
 
-    constructor(
+    init(
         head: ResponseHead,
         body: string,
         trailers: Headers,

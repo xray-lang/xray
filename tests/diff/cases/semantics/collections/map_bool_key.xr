@@ -49,7 +49,7 @@ for (k, v in c) { print("cf " + k.toString() + "=" + v.toString()) }
 
 class BoolIntMapBag {
     values: Map<bool, i64>
-    constructor() {
+    init() {
         var values: Map<bool, i64> = #{}
         this.values = values
     }

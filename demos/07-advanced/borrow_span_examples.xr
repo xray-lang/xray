@@ -41,7 +41,7 @@ fn copyForStorage(data: Array<i64>) -> Array<i64> {
 class Holder {
     items: Array<i64>
 
-    constructor() {
+    init() {
         this.items = []
     }
 }

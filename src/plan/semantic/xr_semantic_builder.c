@@ -4892,7 +4892,7 @@ static bool semantic_native_module_scalar_call_exact(const XrSemanticBuildContex
 static bool xi_panic_info_constructor_exact(const XiValue *value) {
     return value && value->op == XI_CALL_METHOD && value->nargs == 2 && value->aux &&
            value->aux_kind == XI_AUX_KIND_NONE &&
-           strcmp((const char *) value->aux, "constructor") == 0;
+           strcmp((const char *) value->aux, "init") == 0;
 }
 
 static bool xi_json_namespace_codec_exact(const XiValue *value) {

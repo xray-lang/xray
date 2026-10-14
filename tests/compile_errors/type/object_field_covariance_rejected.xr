@@ -2,9 +2,9 @@
 // direction would let the wider view store a value the narrower view still
 // promises to hold at its own type, and object shapes are reference values with
 // mutable fields, so both views observe the same storage.
-class Animal { name: string  constructor(n: string) { this.name = n } }
+class Animal { name: string  init(n: string) { this.name = n } }
 class Dog extends Animal {
-    constructor(n: string) { super(n) }
+    init(n: string) { super(n) }
     bark() -> string { return "woof" }
 }
 

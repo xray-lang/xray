@@ -60,7 +60,7 @@ static void source_conditional_cases(XrXirSourceRequest *request, const char *pa
         {"struct C<T>{value:T;checked()->T where Missing:Sendable{return this.value}}\n", false, false},
         {"struct C<T>{value:T;checked()->T where T:Unknown{return this.value}}\n", false, false},
         {"struct C{checked()->i64 where T:Sendable{return 7}}\n", false, false},
-        {"struct C<T>{value:T;constructor(v:T) where T:Sendable{this.value=v}}\n", false, false},
+        {"struct C<T>{value:T;init(v:T) where T:Sendable{this.value=v}}\n", false, false},
         {"fn duplicate<T:Sendable & Sendable>(x:T)->T where T:Sendable{return x}\nprint(duplicate<i64>(7))\n", true, false},
         {"enum Fault{Bad}\nfn duplicate<T:Error & Error>(x:T)->i64 where T:Error{throw x}\n", true, false},
         {"struct C<T:Sendable>{value:T;checked()->T where T:Sendable,T:Sendable{return this.value}}\nprint(C<i64>{value:7}.checked())\n", true, false},

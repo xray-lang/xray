@@ -5,7 +5,7 @@
 class Container<T> {
     items: Array<T>
 
-    constructor() {
+    init() {
         this.items = []
     }
 
@@ -33,7 +33,7 @@ class Util {
 class Box<T> {
     value: T
 
-    constructor(v: T) {
+    init(v: T) {
         this.value = v
     }
 

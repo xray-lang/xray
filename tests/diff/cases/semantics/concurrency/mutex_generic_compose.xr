@@ -13,7 +13,7 @@ class Mutex<T> {
     _sem: Semaphore
     value: T
 
-    constructor(v: T) {
+    init(v: T) {
         this._sem = Semaphore(1)
         this.value = v
     }

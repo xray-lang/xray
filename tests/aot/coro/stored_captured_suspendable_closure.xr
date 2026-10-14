@@ -1,7 +1,7 @@
 class WorkerBox {
     worker: fn() -> i64
 
-    constructor(worker: fn() -> i64) {
+    init(worker: fn() -> i64) {
         this.worker = worker
     }
 

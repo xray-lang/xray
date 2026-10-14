@@ -93,9 +93,9 @@ static void source_class_supported_query_facts(const XrXirSourceResult *result, 
                 }
             }
             CHECK(constructors == 1 && constructor != UINT32_MAX && source_class_case_ops(&module->functions[constructor], XR_XIR_CLASS_NEW) == 1);
-            if (index == 18) CHECK(!defaults && !declaration(view, "constructor", owner->id));
+            if (index == 18) CHECK(!defaults && !declaration(view, "init", owner->id));
             else {
-                CHECK(defaults == 1 && initializer != UINT32_MAX && declaration(view, "constructor", owner->id));
+                CHECK(defaults == 1 && initializer != UINT32_MAX && declaration(view, "init", owner->id));
                 unsigned calls = 0;
                 const XrXirFunction *function = &module->functions[constructor];
                 for (uint32_t i = 0; i < function->instruction_count; ++i)
@@ -122,57 +122,57 @@ static void source_class_supported_query_facts(const XrXirSourceResult *result, 
 }
 static void source_class_definition_cases(XrXirSourceRequest *request) {
     static const struct { const char *source; unsigned status; const char *message; } cases[]={
-    {"struct R{n:i64;text:string}\nfinal class Container<T>{items:Array<T> constructor(v:Array<T>){this.items=v}}\nfn unused(c:Container<R>){}",0,""},
-    {"struct R{n:i64;text:string;tail:i64}\nfinal class C{value:R constructor(value:R){this.value=value} get()->R{return this.value}}",0,""},
-    {"enum E{None,Full{value:i64,text:string}}\nfinal class C{value:E constructor(value:E){this.value=value} get()->E{return this.value}}",0,""},
-    {"struct R{callback:fn()->i64}\nfinal class C{value:R constructor(value:R){this.value=value}}",3,"class field carrier is not implemented"},
-    {"final class Inner{constructor(){}}\nstruct R{value:Inner}\nfinal class C{value:R constructor(value:R){this.value=value}}",0,""},
-    {"final class Box<T>{value:T constructor(v:T){this.value=v} get()->T{return this.value}}",0,""},
-    {"final class Box<T>{value:T constructor(v:T){this.value=v}}\nfn unused<T>(v:T)->Box<T>{return Box<T>(v)}",0,""},
-    {"final class Container<T>{items:Array<T> constructor(v:Array<T>){this.items=v} get()->Array<T>{return this.items}}",0,""},
-    {"final class Box<T>{value:T constructor(v:T){this.value=v} bad()->i64{return this.value.missing()}}",3,"receiver has no declared interface requirements"},
-    {"final class Box<T>{private value:T constructor(v:T){this.value=v}}\nfn unused(b:Box<i64>)->i64{return b.value}",3,"field access is not permitted"},
-    {"final class Box<T>{value:T constructor(v:T){this.value=v}}\nfn unused(b:Box<Array<bool>>){}",0,""},
-    {"struct Pair{value:i64}\nfinal class Box<T>{value:T constructor(v:T){this.value=v}}\nfn unused(b:Box<Pair>){}",0,""},
-    {"final class Box<T>{const value:T constructor(v:T){this.value=v;this.value=v}}",4,"write may overwrite already initialized const storage"},
-    {"final class Box<T>{value:T constructor(v:T){}}",4,"read requires storage initialized on every incoming path"},
-    {"final class Box<T>{value:T constructor(v:T){this.value=v}}\nfn unused(b:Box<Slice<u8>>){}",3,"name does not resolve to an admitted nominal type"},
-    {"final class Box<T>{value:T constructor(v:T){this.value=v}}\nfn unused(b:Box<MutSlice<u8>>){}",3,"name does not resolve to an admitted nominal type"},
-    {"class C {x:i64 constructor(){this.x=1}}",0,""},
-    {"class P {x:i64 constructor(){this.x=1}}\nclass C : P {constructor(){}}",XR_XIR_BAD_STRUCTURE,"module graph build failed"},
+    {"struct R{n:i64;text:string}\nfinal class Container<T>{items:Array<T> init(v:Array<T>){this.items=v}}\nfn unused(c:Container<R>){}",0,""},
+    {"struct R{n:i64;text:string;tail:i64}\nfinal class C{value:R init(value:R){this.value=value} get()->R{return this.value}}",0,""},
+    {"enum E{None,Full{value:i64,text:string}}\nfinal class C{value:E init(value:E){this.value=value} get()->E{return this.value}}",0,""},
+    {"struct R{callback:fn()->i64}\nfinal class C{value:R init(value:R){this.value=value}}",3,"class field carrier is not implemented"},
+    {"final class Inner{init(){}}\nstruct R{value:Inner}\nfinal class C{value:R init(value:R){this.value=value}}",0,""},
+    {"final class Box<T>{value:T init(v:T){this.value=v} get()->T{return this.value}}",0,""},
+    {"final class Box<T>{value:T init(v:T){this.value=v}}\nfn unused<T>(v:T)->Box<T>{return Box<T>(v)}",0,""},
+    {"final class Container<T>{items:Array<T> init(v:Array<T>){this.items=v} get()->Array<T>{return this.items}}",0,""},
+    {"final class Box<T>{value:T init(v:T){this.value=v} bad()->i64{return this.value.missing()}}",3,"receiver has no declared interface requirements"},
+    {"final class Box<T>{private value:T init(v:T){this.value=v}}\nfn unused(b:Box<i64>)->i64{return b.value}",3,"field access is not permitted"},
+    {"final class Box<T>{value:T init(v:T){this.value=v}}\nfn unused(b:Box<Array<bool>>){}",0,""},
+    {"struct Pair{value:i64}\nfinal class Box<T>{value:T init(v:T){this.value=v}}\nfn unused(b:Box<Pair>){}",0,""},
+    {"final class Box<T>{const value:T init(v:T){this.value=v;this.value=v}}",4,"write may overwrite already initialized const storage"},
+    {"final class Box<T>{value:T init(v:T){}}",4,"read requires storage initialized on every incoming path"},
+    {"final class Box<T>{value:T init(v:T){this.value=v}}\nfn unused(b:Box<Slice<u8>>){}",3,"name does not resolve to an admitted nominal type"},
+    {"final class Box<T>{value:T init(v:T){this.value=v}}\nfn unused(b:Box<MutSlice<u8>>){}",3,"name does not resolve to an admitted nominal type"},
+    {"class C {x:i64 init(){this.x=1}}",0,""},
+    {"class P {x:i64 init(){this.x=1}}\nclass C : P {init(){}}",XR_XIR_BAD_STRUCTURE,"module graph build failed"},
     {"final class C{x:i64}",0,""},
-    {"final class C{x:Array<i64> constructor(){this.x=[1]}}",0,""},
-    {"final class C{x:i64=1 constructor(){}}",0,""},
-    {"final class C{x:Array<string> constructor(x:Array<string>){this.x=x} get()->Array<string>{return this.x}}",0,""},
-    {"final class C{x:Array<Array<i64>> constructor(x:Array<Array<i64>>){this.x=x}}",0,""},
-    {"final class C<T>{x:T constructor(x:T){this.x=x}}",0,""},
-    {"final class C{x:Array<i64> constructor(){}}",4,"read requires storage initialized on every incoming path"},
-    {"final class C{const x:Array<i64> constructor(){this.x=[1];this.x=[2]}}",4,"write may overwrite already initialized const storage"},
-    {"final class C{private x:Array<i64> constructor(){this.x=[1]}}\nfn unused(c:C)->Array<i64>{return c.x}",3,"field access is not permitted"},
-    {"final class C{const x:Array<i64> constructor(){this.x=[1]} bad(){this.x=[2]}}",3,"field access is not permitted"},
-    {"final class C{x:Array<i64> constructor(){this.x=[1]} bad(){this.x[0]=2}}",0,""},
-    {"final class C{x:Array<i64> constructor(){this.x=[1]} bad(){this.x.push(2)}}",0,""},
-    {"final class Array<T>{constructor(){}};final class C{x:Array<i64> constructor(x:Array<i64>){this.x=x}}",0,""},
-    {"final class C{private x:i64 constructor(){this.x=1}}\nfn unused(c:C)->i64{return c.x}",3,"field access is not permitted"},
-    {"final class C{const x:i64 constructor(){this.x=1} bad(){this.x=2}}",3,"field access is not permitted"},
-    {"final class C{x:i64 constructor(){}}",4,"read requires storage initialized on every incoming path"},
-    {"final class C{const x:i64 constructor(b:bool){if(b){this.x=1}}}",4,"read requires storage initialized on every incoming path"},
-    {"final class C{const x:i64 constructor(){this.x=1;this.x=2}}",4,"write may overwrite already initialized const storage"},
-    {"final class C{x:i64 constructor(){const n=this.x;this.x=n}}",4,"read requires storage initialized on every incoming path"},
-    {"final class C{x:i64 constructor(){this.x=1;const n=this}}",3,"class this cannot escape before constructor completion"},
-    {"final class C{x:i64 constructor(){this.x=1;const cb=fn()->i64{return this.x}}}",3,"class this cannot be captured during construction"},
-    {"final class C{x:i64 constructor(){this.x=1;defer {this.x=2}}}",3,"class constructor cleanup cannot capture unpublished this"},
-    {"final class C{const x:i64 constructor(b:bool){if(b){this.x=1}else{this.x=2}}}",0,""},
-    {"final class C{x:i64 constructor(){this.x=1} static bad()->i64{return this.x}}",4,"name is not an initialized value"},
-    {"final class C{x:i64 private constructor(){this.x=1}}\nfn bad()->C{return C()}",3,"constructor arity or authority mismatch"},
-    {"final class C<T>{x:i64 constructor(x:i64){this.x=x} get()->i64{return this.x}}\nfn read()->i64{return C<string>(41).get()}",0,""},
-    {"final class C{x:i64 constructor(){this.x=1;Coro.yield()}}",3,"declared no_suspend function may suspend or call an unqualified callable"},
-    {"final class C{constructor(){}}\nfn bad(c:C){c=C()}",3,"assignment requires a mutable binding"},
-    {"final class C{constructor(){}}\nfn missing<T>(value:T)->i64{return value.get()}",3,"receiver has no declared interface requirements"},
-    {"final class C{x:i64 constructor(){this.x=1}}\nfn send<T:Sendable>(x:T){}\nfn bad(){send<C>(C())}",3,"type argument does not prove the declared constraint"},
-    {"final class Array<T>{constructor(){}}\nfn typed(x:Array<i64>){}",0,""},
-    {"final class Array<T>{constructor(){}}\nfn wrong(x:Array<i64>)->i64{return x.len()}",3,"unknown struct field"},
-    {"class P {x:i64 constructor(){this.x=1}}\nclass C extends P {constructor(){}}",XR_XIR_BAD_TYPE,"class execution currently requires a root declaration without inheritance"},
+    {"final class C{x:Array<i64> init(){this.x=[1]}}",0,""},
+    {"final class C{x:i64=1 init(){}}",0,""},
+    {"final class C{x:Array<string> init(x:Array<string>){this.x=x} get()->Array<string>{return this.x}}",0,""},
+    {"final class C{x:Array<Array<i64>> init(x:Array<Array<i64>>){this.x=x}}",0,""},
+    {"final class C<T>{x:T init(x:T){this.x=x}}",0,""},
+    {"final class C{x:Array<i64> init(){}}",4,"read requires storage initialized on every incoming path"},
+    {"final class C{const x:Array<i64> init(){this.x=[1];this.x=[2]}}",4,"write may overwrite already initialized const storage"},
+    {"final class C{private x:Array<i64> init(){this.x=[1]}}\nfn unused(c:C)->Array<i64>{return c.x}",3,"field access is not permitted"},
+    {"final class C{const x:Array<i64> init(){this.x=[1]} bad(){this.x=[2]}}",3,"field access is not permitted"},
+    {"final class C{x:Array<i64> init(){this.x=[1]} bad(){this.x[0]=2}}",0,""},
+    {"final class C{x:Array<i64> init(){this.x=[1]} bad(){this.x.push(2)}}",0,""},
+    {"final class Array<T>{init(){}};final class C{x:Array<i64> init(x:Array<i64>){this.x=x}}",0,""},
+    {"final class C{private x:i64 init(){this.x=1}}\nfn unused(c:C)->i64{return c.x}",3,"field access is not permitted"},
+    {"final class C{const x:i64 init(){this.x=1} bad(){this.x=2}}",3,"field access is not permitted"},
+    {"final class C{x:i64 init(){}}",4,"read requires storage initialized on every incoming path"},
+    {"final class C{const x:i64 init(b:bool){if(b){this.x=1}}}",4,"read requires storage initialized on every incoming path"},
+    {"final class C{const x:i64 init(){this.x=1;this.x=2}}",4,"write may overwrite already initialized const storage"},
+    {"final class C{x:i64 init(){const n=this.x;this.x=n}}",4,"read requires storage initialized on every incoming path"},
+    {"final class C{x:i64 init(){this.x=1;const n=this}}",3,"class this cannot escape before constructor completion"},
+    {"final class C{x:i64 init(){this.x=1;const cb=fn()->i64{return this.x}}}",3,"class this cannot be captured during construction"},
+    {"final class C{x:i64 init(){this.x=1;defer {this.x=2}}}",3,"class constructor cleanup cannot capture unpublished this"},
+    {"final class C{const x:i64 init(b:bool){if(b){this.x=1}else{this.x=2}}}",0,""},
+    {"final class C{x:i64 init(){this.x=1} static bad()->i64{return this.x}}",4,"name is not an initialized value"},
+    {"final class C{x:i64 private init(){this.x=1}}\nfn bad()->C{return C()}",3,"constructor arity or authority mismatch"},
+    {"final class C<T>{x:i64 init(x:i64){this.x=x} get()->i64{return this.x}}\nfn read()->i64{return C<string>(41).get()}",0,""},
+    {"final class C{x:i64 init(){this.x=1;Coro.yield()}}",3,"declared no_suspend function may suspend or call an unqualified callable"},
+    {"final class C{init(){}}\nfn bad(c:C){c=C()}",3,"assignment requires a mutable binding"},
+    {"final class C{init(){}}\nfn missing<T>(value:T)->i64{return value.get()}",3,"receiver has no declared interface requirements"},
+    {"final class C{x:i64 init(){this.x=1}}\nfn send<T:Sendable>(x:T){}\nfn bad(){send<C>(C())}",3,"type argument does not prove the declared constraint"},
+    {"final class Array<T>{init(){}}\nfn typed(x:Array<i64>){}",0,""},
+    {"final class Array<T>{init(){}}\nfn wrong(x:Array<i64>)->i64{return x.len()}",3,"unknown struct field"},
+    {"class P {x:i64 init(){this.x=1}}\nclass C extends P {init(){}}",XR_XIR_BAD_TYPE,"class execution currently requires a root declaration without inheritance"},
     };
     bool matched = true;
     for (uint32_t i=0;i<sizeof(cases)/sizeof(cases[0]);++i) {
@@ -193,7 +193,7 @@ static void source_class_definition_cases(XrXirSourceRequest *request) {
     const char *root=request->authority->physical_root;
     size_t capacity=strlen(root)+32;char *library=malloc(capacity);CHECK(library);
     CHECK(snprintf(library,capacity,"%s/class_private.xr",root)>0);
-    write_source(library,"export final class Hidden{private n:i64 private constructor(){this.n=41} static make()->Hidden{return Hidden()}}\n");
+    write_source(library,"export final class Hidden{private n:i64 private init(){this.n=41} static make()->Hidden{return Hidden()}}\n");
     const char *cross[]={
         "import {Hidden} from \"./class_private\"\nfn unused(x:Hidden)->i64{return x.n}\n",
         "import {Hidden} from \"./class_private\"\nfn unused()->Hidden{return Hidden()}\n"

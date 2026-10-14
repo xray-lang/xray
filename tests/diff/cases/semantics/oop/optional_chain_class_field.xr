@@ -12,7 +12,7 @@
 class Box {
     f: i64 = 0
     label: string = "none"
-    constructor(v: i64, s: string) {
+    init(v: i64, s: string) {
         this.f = v
         this.label = s
     }
@@ -31,7 +31,7 @@ class Derived extends Base {
 class Node {
     value: i64 = 0
     next: Node? = null
-    constructor(v: i64) { this.value = v }
+    init(v: i64) { this.value = v }
 }
 
 fn read_field(b: Box?) -> i64? {

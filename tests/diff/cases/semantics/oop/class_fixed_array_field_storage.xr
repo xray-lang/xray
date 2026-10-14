@@ -2,7 +2,7 @@
 class State {
     lanes: [u64; 8]
 
-    constructor(value: u64) {
+    init(value: u64) {
         this.lanes = [value, value + 1, value + 2, value + 3,
                       value + 4, value + 5, value + 6, value + 7]
     }
