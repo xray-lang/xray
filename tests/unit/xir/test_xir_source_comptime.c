@@ -62,6 +62,10 @@ static const char source_comptime_nullable_text[]=
     "fn same(a:string?,b:string?)->bool { return a==b }\n"
     "fn answer()->i64 { const a:string?=\"ab\"; return (wrap(7)??0)==7 && make()!=null && same(a,a) ? 42 : 0 }\n"
     "export fn run()->i64 { comptime make(); return comptime answer() }\n";
+static const char source_comptime_array_text[]=
+    "fn make()->Array<i8> { var xs:Array<i8>=[1,2]; const old=xs; xs[0]=7; xs.push(3); return xs }\n"
+    "fn answer()->i64 { const xs=make(); return len(xs)==3 && xs[0]==7 && xs[2]==3 ? 42 : 0 }\n"
+    "export fn run()->i64 { comptime make(); return comptime answer() }\n";
 static const char *source_comptime_resource_text=source_comptime_test_text;
 static XrXirStatus source_comptime_test_resource_status(XrCompileResourceStatus status) {
     return status==XR_COMPILE_RESOURCE_OK?XR_XIR_OK:status==XR_COMPILE_RESOURCE_BUDGET?XR_XIR_BUDGET:
@@ -116,7 +120,7 @@ static void source_comptime_test_fold(const XrXirModule *module,int64_t expected
 #include "xir_source_comptime_cases.h"
 #include "xir_source_comptime_resources.h"
 int main(int argc,char **argv) {
-    if (argc==2 && (!strcmp(argv[1],"--resources") || !strcmp(argv[1],"--local-resources") || !strcmp(argv[1],"--unit-resources") || !strcmp(argv[1],"--rune-resources") || !strcmp(argv[1],"--cell-resources") || !strcmp(argv[1],"--string-resources") || !strcmp(argv[1],"--string-read-resources") || !strcmp(argv[1],"--tuple-resources") || !strcmp(argv[1],"--float-resources") || !strcmp(argv[1],"--nullable-resources"))) {
+    if (argc==2 && (!strcmp(argv[1],"--resources") || !strcmp(argv[1],"--local-resources") || !strcmp(argv[1],"--unit-resources") || !strcmp(argv[1],"--rune-resources") || !strcmp(argv[1],"--cell-resources") || !strcmp(argv[1],"--string-resources") || !strcmp(argv[1],"--string-read-resources") || !strcmp(argv[1],"--tuple-resources") || !strcmp(argv[1],"--float-resources") || !strcmp(argv[1],"--nullable-resources") || !strcmp(argv[1],"--array-resources"))) {
         if (!strcmp(argv[1],"--local-resources")) {
             source_comptime_resource_text=source_comptime_local_text;
             fprintf(stderr,"Source comptime scalar locals whole-producer resources\n");
@@ -152,6 +156,10 @@ int main(int argc,char **argv) {
         if (!strcmp(argv[1],"--nullable-resources")) {
             source_comptime_resource_text=source_comptime_nullable_text;
             fprintf(stderr,"Source comptime Nullable/Cell/Tuple/unwrap/independent active recipe whole-producer resources\n");
+        }
+        if (!strcmp(argv[1],"--array-resources")) {
+            source_comptime_resource_text=source_comptime_array_text;
+            fprintf(stderr,"Source comptime Array/Cell/COW/index/push/owning recipe whole-producer resources\n");
         }
         source_comptime_test_resources();return 0;
     }

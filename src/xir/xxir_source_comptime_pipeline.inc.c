@@ -23,6 +23,7 @@ static bool source_comptime_failure(SourceContext *ctx,AstNode *node,XrXirCtfeSt
         status==XR_XIR_CTFE_DIVIDE_BY_ZERO?"comptime division by zero":
         status==XR_XIR_CTFE_NUMERIC_RANGE?"comptime value range violation":
         status==XR_XIR_CTFE_NULL_UNWRAP?"comptime null unwrap":
+        status==XR_XIR_CTFE_BOUNDS?"comptime index out of bounds":
         "comptime requires an admitted deterministic scalar direct-call closure";
     return source_fail(ctx,node,mapped,message);
 }
@@ -77,7 +78,7 @@ static bool source_comptime_evaluate(SourceContext *ctx,const XrXirArtifact *che
         if (evaluated!=XR_XIR_CTFE_OK) { xr_xir_value_drop(&value);source_comptime_failure(ctx,site->syntax,evaluated);break; }
         const XrXirModule *module=xr_xir_compile_artifact_module(lowered);
         const XrXirTypeNode *tuple=xr_xir_tuple_signature(module->types,module->functions[f].result);
-        site->result_arity=tuple?tuple->parameter_count:xr_xir_type_is_nullable(module->types,module->functions[f].result)?1:0;
+        site->result_arity=tuple?tuple->parameter_count:(xr_xir_type_is_nullable(module->types,module->functions[f].result) || xr_xir_type_is_array(module->types,module->functions[f].result))?1:0;
         if (!source_comptime_result_value(ctx,site->syntax,&value,site->result_arity)) {
             xr_xir_value_drop(&value);source_fail(ctx,site->syntax,ctx->diagnostic.status==XR_XIR_OK?XR_XIR_BAD_STRUCTURE:ctx->diagnostic.status,"comptime returned a noncanonical value");break;
         }

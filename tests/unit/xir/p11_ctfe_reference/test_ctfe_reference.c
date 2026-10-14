@@ -31,6 +31,21 @@ typedef struct CtfeReferenceCase {
 } CtfeReferenceCase;
 
 static const CtfeReferenceCase reference_cases[] = {
+    {"array_holder", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"array_deep_gap", XR_XIR_UNIT, 0, XR_XIR_BAD_TYPE, "admitted closed value family", 1},
+    {"array_repeat", XR_XIR_UNIT, 3, XR_XIR_OK, NULL, 0},
+    {"array_reserve", XR_XIR_UNIT, 2, XR_XIR_OK, NULL, 0},
+    {"array_export", XR_XIR_UNIT, 4, XR_XIR_OK, NULL, 0},
+    {"array_empty", XR_XIR_UNIT, 0, XR_XIR_OK, NULL, 0},
+    {"array_nested", XR_XIR_UNIT, 3, XR_XIR_OK, NULL, 0},
+    {"array_string", XR_XIR_UNIT, 4, XR_XIR_OK, NULL, 0},
+    {"array_tuple", XR_XIR_UNIT, 3, XR_XIR_OK, NULL, 0},
+    {"array_nullable", XR_XIR_UNIT, 3, XR_XIR_OK, NULL, 0},
+    {"array_capacity", XR_XIR_UNIT, 0, XR_XIR_OK, NULL, 0},
+    {"array_cell", XR_XIR_UNIT, 2, XR_XIR_OK, NULL, 0},
+    {"array_internal", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"array_bounds", XR_XIR_UNIT, 0, XR_XIR_BAD_TYPE, "comptime index out of bounds", 2},
+    {"array_io", XR_XIR_UNIT, 0, XR_XIR_BAD_TYPE, "admitted deterministic", 2},
     {"nullable_units", XR_XIR_UNIT, 1, XR_XIR_OK, NULL, 0},
     {"nullable_phi", XR_XIR_UNIT, 2, XR_XIR_OK, NULL, 0},
     {"nullable_tuple_field", XR_XIR_UNIT, 2, XR_XIR_OK, NULL, 0},
@@ -517,6 +532,7 @@ static void reference_string_late_owner(void) {
 #include "xir_ctfe_tuple_cases.h"
 #include "xir_ctfe_float_cases.h"
 #include "xir_ctfe_nullable_cases.h"
+#include "xir_ctfe_array_cases.h"
 
 int main(int argc, char **argv) {
     CHECK(argc == 2);
@@ -536,7 +552,8 @@ int main(int argc, char **argv) {
         selected->name, (unsigned)status, diagnostic.line, diagnostic.column, diagnostic.message);
     CHECK(status == selected->status);
     if (status == XR_XIR_OK) {
-        if (!strcmp(selected->name,"nullable_direct")) reference_nullable_direct(&context,&source);
+        if (!strncmp(selected->name,"array_",6) && selected->type==XR_XIR_UNIT) reference_array(&context,&source,selected);
+        else if (!strcmp(selected->name,"nullable_direct")) reference_nullable_direct(&context,&source);
         else if (!strncmp(selected->name,"nullable_",9) && selected->type==XR_XIR_UNIT) reference_nullable(&context,&source,selected);
         else if (!strcmp(selected->name,"float_tuple")) reference_tuple(&context,&source,selected);
         else if (!strncmp(selected->name,"tuple_",6) && selected->type==XR_XIR_UNIT) reference_tuple(&context,&source,selected);
@@ -572,6 +589,7 @@ int main(int argc, char **argv) {
     if (!strcmp(selected->name,"string_export")) reference_string_late_owner();
     if (!strcmp(selected->name,"tuple_export")) reference_tuple_late_owner();
     if (!strcmp(selected->name,"nullable_tuple")) reference_nullable_late_owner();
+    if (!strcmp(selected->name,"array_string")) reference_array_late_owner();
     fprintf(stderr, "CTFE reference %s: status=%u expected=%lld allocated=%llu peak=%llu work=%llu physical=0/0\n",
         selected->name, (unsigned)status, (long long)selected->value,
         (unsigned long long)spent.allocated_bytes, (unsigned long long)spent.peak_bytes,

@@ -49,6 +49,10 @@ static bool ctfe_opcode_work(XrXirOp op, uint64_t *work) {
     case XR_XIR_CELL_LOCAL_WRITE: *work = 8; return true;
     case XR_XIR_NULLABLE_NONE: case XR_XIR_NULLABLE_SOME:
     case XR_XIR_NULLABLE_IS_SOME: case XR_XIR_NULLABLE_UNWRAP:
+    case XR_XIR_ARRAY_NEW: case XR_XIR_ARRAY_REPEAT: case XR_XIR_ARRAY_GET: case XR_XIR_ARRAY_LEN:
+    case XR_XIR_ARRAY_SET: case XR_XIR_ARRAY_PUSH: case XR_XIR_ARRAY_CAPACITY:
+    case XR_XIR_ARRAY_WITH_CAPACITY: case XR_XIR_ARRAY_RESERVE: case XR_XIR_CELL_PLACE:
+    case XR_XIR_PLACE_READ: case XR_XIR_PLACE_WRITE:
     case XR_XIR_TUPLE_NEW: case XR_XIR_TUPLE_FIELD: *work = 8; return true;
     case XR_XIR_CONST_STRING: case XR_XIR_CONCAT_STRING: case XR_XIR_STRING_LEN:
     case XR_XIR_EQ_STRING: case XR_XIR_NE_STRING:
@@ -76,20 +80,19 @@ static bool ctfe_opcode_work(XrXirOp op, uint64_t *work) {
 }
 /* Local writes produce Unit but keep ordinary fallthrough control flow. */
 static bool ctfe_unit_result(XrXirOp op) {
-    return op == XR_XIR_JUMP || op == XR_XIR_BRANCH || op == XR_XIR_RETURN ||
+    return op == XR_XIR_PLACE_WRITE || op == XR_XIR_ARRAY_SET || op == XR_XIR_ARRAY_PUSH || op == XR_XIR_JUMP || op == XR_XIR_BRANCH || op == XR_XIR_RETURN ||
         op == XR_XIR_SCALAR_LOCAL_WRITE || op == XR_XIR_CELL_WRITE || op == XR_XIR_CELL_LOCAL_WRITE || op == XR_XIR_OWNED_LOCAL_WRITE;
 }
 static XrXirCtfeStatus ctfe_admit(const XrXirArtifact *artifact, uint32_t selected) {
     const XrXirModule *module = &artifact->module;
     const XrXirCompileContext *context = &artifact->context;
     const XrXirFunction *body = &module->functions[selected];
-    const XrXirFunctionLayout *layout = &artifact->layouts[selected];
     if (!xir_compile_work(context, 1)) return XR_XIR_CTFE_BUDGET;
     if (!module->declarations || !module->declarations->functions) return XR_XIR_CTFE_NOT_LEAF;
     const XrXirFunctionIdentity *identity = &module->declarations->functions[selected];
     if (identity->cleanup_owner || identity->nominal_owner ||
         (module->generics && (module->generics[selected].parameter_count ||
-        module->generics[selected].argument_count)) || layout->path_count)
+        module->generics[selected].argument_count)) )
         return XR_XIR_CTFE_NOT_LEAF;
     XrXirCtfeStatus admitted=ctfe_body_type_admit(artifact,body->result,false);
     if (admitted!=XR_XIR_CTFE_OK) return admitted==XR_XIR_CTFE_NOT_SUPPORTED?XR_XIR_CTFE_NOT_LEAF:admitted;
@@ -215,6 +218,9 @@ XR_FUNC XrXirCtfeStatus xr_xir_compile_ctfe_leaf(const XrXirCtfeRequest *request
                 status=ctfe_float_step(&run,&state->instruction);
                 if (status!=XR_XIR_CTFE_OK) break;
                 continue;
+            }
+            if (ctfe_array_opcode(body->instructions[state->instruction].op)) {
+                status=ctfe_array_step(&run,state,&owned);if (status!=XR_XIR_CTFE_OK) break;continue;
             }
             if (ctfe_nullable_opcode(&run,&body->instructions[state->instruction])) {
                 status=ctfe_nullable_step(&run,&state->instruction,&owned);

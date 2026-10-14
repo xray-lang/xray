@@ -24,7 +24,7 @@ typedef enum XrXirCtfeStatus {
     XR_XIR_CTFE_BUDGET, XR_XIR_CTFE_OUT_OF_MEMORY, XR_XIR_CTFE_STEP_LIMIT,
     XR_XIR_CTFE_FRAME_LIMIT, XR_XIR_CTFE_OUTPUT_LIMIT,
     XR_XIR_CTFE_DIVIDE_BY_ZERO, XR_XIR_CTFE_NUMERIC_RANGE,
-    XR_XIR_CTFE_DEPTH_LIMIT, XR_XIR_CTFE_NOT_SUPPORTED, XR_XIR_CTFE_NULL_UNWRAP
+    XR_XIR_CTFE_DEPTH_LIMIT, XR_XIR_CTFE_NOT_SUPPORTED, XR_XIR_CTFE_NULL_UNWRAP, XR_XIR_CTFE_BOUNDS
 } XrXirCtfeStatus;
 typedef struct XrXirCtfeLimits { uint64_t steps, frame_bytes, output_bytes; } XrXirCtfeLimits;
 typedef struct XrXirCtfeRequest {
@@ -37,6 +37,13 @@ typedef struct XrXirCtfeRequest {
     uint32_t argument_count;
     XrXirCtfeLimits limits;
 } XrXirCtfeRequest;
+
+/* Dynamic marks a variable Array admission span. Pure arrays are primitive/
+ * String leaves or only Array wrappers, for which Value skips deep admission. */
+typedef struct XrXirCtfeTypeShape { uint64_t work;bool dynamic,pure_arrays; } XrXirCtfeTypeShape;
+/* Metadata cost only: no Value borrow, identity or execution authority. */
+XR_FUNC XrXirCtfeStatus xr_xir_compile_ctfe_type_shape(const XrXirCompileContext *context,
+    const XrXirTypes *types,XrXirType type,XrXirCtfeTypeShape *output);
 
 /* Receive a closed compiler value family from its structurally verified pool.
  * This ledger-owned iterative admission accepts primitive/String/Unit and

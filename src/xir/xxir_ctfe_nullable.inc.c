@@ -54,6 +54,7 @@ static XrXirCtfeStatus ctfe_nullable_step(ScalarRun *run,uint32_t *cursor,CtfeOw
             if (element!=XR_XIR_UNIT) payload=(XrXirValue){(uint32_t)element,0,
                 xr_xir_scalar_load(run->frame,run->layout->offsets[op->args[0]])};
         }
+        status=ctfe_admission_work(run,state,&payload);if (status!=XR_XIR_CTFE_OK) return status;
         value_status=xr_xir_nullable_new(type,op->op==XR_XIR_NULLABLE_SOME?&payload:NULL,&admission,&result);
     } else {
         XrXirValue receiver={(uint32_t)type,0,xr_xir_scalar_load(run->frame,run->layout->offsets[op->args[0]])};

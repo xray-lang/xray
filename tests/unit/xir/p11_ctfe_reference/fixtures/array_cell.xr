@@ -1,0 +1,2 @@
+fn make()->Array<i8> { var xs=Array<i8>.withCapacity(2); xs.push(1); xs.push(2); xs[0]=7; return xs }
+export fn run()->Array<i8> { return comptime make() }

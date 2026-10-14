@@ -1,0 +1,3 @@
+fn first(xs:Array<i8>)->i8 { return xs[0] }
+fn answer()->i64 { var xs:Array<i8>=[1,2]; const old=xs; xs[0]=7; xs.push(3); return first(xs)==7 && old[0]==1 && len(xs)==3 && len(old)==2 ? 42 : 0 }
+export fn run()->i64 { return comptime answer() }

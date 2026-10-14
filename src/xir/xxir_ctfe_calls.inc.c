@@ -33,13 +33,11 @@ static XrXirCtfeStatus ctfe_call_body_admit(const XrXirArtifact *artifact,uint32
     const XrXirModule *module=&artifact->module;
     const XrXirCompileContext *work=&artifact->context;
     const XrXirFunction *body=&module->functions[f];
-    const XrXirFunctionLayout *layout=&artifact->layouts[f];
     if (!xir_compile_work(work,8)) return XR_XIR_CTFE_BUDGET;
     if (!module->declarations || !module->declarations->functions) return XR_XIR_CTFE_NOT_SUPPORTED;
     const XrXirFunctionIdentity *identity=&module->declarations->functions[f];
     if (identity->cleanup_owner || identity->nominal_owner ||
-        (module->generics && (module->generics[f].parameter_count || module->generics[f].argument_count)) ||
-        layout->path_count)
+        (module->generics && (module->generics[f].parameter_count || module->generics[f].argument_count)))
         return XR_XIR_CTFE_NOT_SUPPORTED;
     XrXirCtfeStatus admitted=ctfe_body_type_admit(artifact,body->result,false);
     if (admitted!=XR_XIR_CTFE_OK) return admitted;
@@ -290,6 +288,10 @@ static XrXirCtfeStatus ctfe_call_execute(CtfeCallExecution *execution,XrXirValue
             XrXirCtfeStatus status=ctfe_float_step(run,&frame->state.instruction);
             if (status!=XR_XIR_CTFE_OK) return status;
             continue;
+        }
+        if (ctfe_array_opcode(op->op)) {
+            XrXirCtfeStatus status=ctfe_array_step(run,&frame->state,&execution->owned);
+            if (status!=XR_XIR_CTFE_OK) return status;continue;
         }
         if (ctfe_nullable_opcode(run,op)) {
             XrXirCtfeStatus status=ctfe_nullable_step(run,&frame->state.instruction,&execution->owned);
