@@ -6904,6 +6904,1149 @@
         "Actual independent VM/generated-C/native original entry.",
         "Complete compiler/runtime FI, exact budgets, cancellation, lifetime, physical release and sanitizer/provider matrix."
       ]
+    },
+    {
+      "id": "independent_behavior_ffi_c_export_scalar",
+      "oracle_id": "independent_behavior_ffi_c_export_scalar",
+      "source": "tests/diff/cases/semantics/ffi/c_export_scalar.xr",
+      "source_lf_sha256": "5386dcd8c5ecc5cdfd6211b935631761aa4e5d5801a68852e33390586d63dac3",
+      "entry": "run",
+      "source_context": "original_absolute",
+      "stdout_utf8": "42\n",
+      "stderr_utf8": "",
+      "expected_exit_code": 0,
+      "arguments": [],
+      "stdin_hex": "",
+      "companions": [],
+      "owners": [
+        "P08",
+        "P09",
+        "P10",
+        "P12",
+        "P17"
+      ],
+      "independent_execution_model": "The ordinary source entry adds two i32 values; a C-export ABI consumer is a separate obligation.",
+      "independent_observation_count": 1,
+      "remaining_gates": [
+        "Original complete named bodies and internal scalar assertions are not qualified by run output alone.",
+        "Actual compiler/native/runtime full FI, exact allocated/live/work, cancellation, ownership/borrow/lifetime/physical/safety/provider gates with every original bound.",
+        "No scheduling, separate-object ABI, cycle reclamation, provider or production claim from byte parity."
+      ]
+    },
+    {
+      "id": "independent_behavior_cleanup_defer_block_scope_exits",
+      "oracle_id": "independent_behavior_cleanup_defer_block_scope_exits",
+      "source": "tests/diff/cases/semantics/cleanup/defer_block_scope_exits.xr",
+      "source_lf_sha256": "89affc8a83f28dbd3e43f5806fcf5be2ab3c8f454170a1ee74d68eee2991bf4a",
+      "entry": "run",
+      "source_context": "original_absolute",
+      "stdout_utf8": "plain-start\nplain-body\nplain-defer\nplain-after\nreturn-inner\nreturn-root\nret\n--\nreturn-fall\nreturn-inner\nreturn-after\nreturn-root\nend\n--\nbreak-body 0\nbreak-defer 0\nbreak-now\nbreak-defer 1\nafter-break\ncontinue-body 0\ncontinue-defer 0\ncontinue-now\ncontinue-defer 1\ncontinue-body 2\ncontinue-defer 2\nafter-continue\n--\nvalue-try\nvalue-caught\nvalue-after\nvalue-root\n--\npanic-try\npanic-caught\npanic-after\npanic-root\ndone\n",
+      "stderr_utf8": "",
+      "expected_exit_code": 0,
+      "arguments": [],
+      "stdin_hex": "",
+      "companions": [],
+      "owners": [
+        "P02",
+        "P07",
+        "P08",
+        "P09"
+      ],
+      "independent_execution_model": "Nearest-block LIFO at fallthrough, both return paths, break, continue, enum error and caught panic; unreachable writes are absent.",
+      "independent_observation_count": 37,
+      "remaining_gates": [
+        "Original complete named bodies and internal scalar assertions are not qualified by run output alone.",
+        "Actual compiler/native/runtime full FI, exact allocated/live/work, cancellation, ownership/borrow/lifetime/physical/safety/provider gates with every original bound.",
+        "No scheduling, separate-object ABI, cycle reclamation, provider or production claim from byte parity."
+      ]
+    },
+    {
+      "id": "independent_behavior_cleanup_defer_builtin_method_mix",
+      "oracle_id": "independent_behavior_cleanup_defer_builtin_method_mix",
+      "source": "tests/diff/cases/semantics/cleanup/defer_builtin_method_mix.xr",
+      "source_lf_sha256": "013abd1a8f0609bf6850c4292f39a7a517dcba0fe912a56288c429291d25dbe7",
+      "entry": "run",
+      "source_context": "original_absolute",
+      "stdout_utf8": "body\nblock\ndrop B\nfn free\nbuiltin\ndone\n",
+      "stderr_utf8": "",
+      "expected_exit_code": 0,
+      "arguments": [],
+      "stdin_hex": "",
+      "companions": [],
+      "owners": [
+        "P02",
+        "P07",
+        "P08",
+        "P09"
+      ],
+      "independent_execution_model": "Four registered cleanup actions execute in reverse order after body.",
+      "independent_observation_count": 6,
+      "remaining_gates": [
+        "Original complete named bodies and internal scalar assertions are not qualified by run output alone.",
+        "Actual compiler/native/runtime full FI, exact allocated/live/work, cancellation, ownership/borrow/lifetime/physical/safety/provider gates with every original bound.",
+        "No scheduling, separate-object ABI, cycle reclamation, provider or production claim from byte parity."
+      ]
+    },
+    {
+      "id": "independent_behavior_cleanup_defer_coroutine",
+      "oracle_id": "independent_behavior_cleanup_defer_coroutine",
+      "source": "tests/diff/cases/semantics/cleanup/defer_coroutine.xr",
+      "source_lf_sha256": "16fed0f8c2d4622263bdeea3a30d65bd9aa69400cd2a4c8356e83f9b2e4c47ef",
+      "entry": "run",
+      "source_context": "original_absolute",
+      "stdout_utf8": "task-body 1\ntask-defer 1\n10\ntask-body 2\ntask-defer 2\n20\ndone\n",
+      "stderr_utf8": "",
+      "expected_exit_code": 0,
+      "arguments": [],
+      "stdin_hex": "",
+      "companions": [],
+      "owners": [
+        "P02",
+        "P07",
+        "P08",
+        "P09"
+      ],
+      "independent_execution_model": "Await completes the first task and its cleanup before the second go is issued.",
+      "independent_observation_count": 7,
+      "remaining_gates": [
+        "Original complete named bodies and internal scalar assertions are not qualified by run output alone.",
+        "Actual compiler/native/runtime full FI, exact allocated/live/work, cancellation, ownership/borrow/lifetime/physical/safety/provider gates with every original bound.",
+        "No scheduling, separate-object ABI, cycle reclamation, provider or production claim from byte parity."
+      ]
+    },
+    {
+      "id": "independent_behavior_cleanup_defer_panic_unwind",
+      "oracle_id": "independent_behavior_cleanup_defer_panic_unwind",
+      "source": "tests/diff/cases/semantics/cleanup/defer_panic_unwind.xr",
+      "source_lf_sha256": "8db007087d02cb360037a459cc6d6bea846b37274530e02d835d558e5c0e6f9a",
+      "entry": "run",
+      "source_context": "original_absolute",
+      "stdout_utf8": "boom-defer\nmid-defer-2\nmid-defer-1\ncaught\ntop-defer\ndone\n",
+      "stderr_utf8": "",
+      "expected_exit_code": 0,
+      "arguments": [],
+      "stdin_hex": "",
+      "companions": [],
+      "owners": [
+        "P02",
+        "P07",
+        "P08",
+        "P09"
+      ],
+      "independent_execution_model": "Explicit panic catch unwinds child frames and LIFO cleanup; it is distinct from enum error catch.",
+      "independent_observation_count": 6,
+      "remaining_gates": [
+        "Original complete named bodies and internal scalar assertions are not qualified by run output alone.",
+        "Actual compiler/native/runtime full FI, exact allocated/live/work, cancellation, ownership/borrow/lifetime/physical/safety/provider gates with every original bound.",
+        "No scheduling, separate-object ABI, cycle reclamation, provider or production claim from byte parity."
+      ]
+    },
+    {
+      "id": "independent_behavior_float_fmt_f32_rounding",
+      "oracle_id": "independent_behavior_float_fmt_f32_rounding",
+      "source": "tests/diff/cases/semantics/float_fmt/f32_rounding.xr",
+      "source_lf_sha256": "963dc649c889c70dfdc41f9c845207fdea356009ba4d0bbe207819fe29de313f",
+      "entry": "run",
+      "source_context": "original_absolute",
+      "stdout_utf8": "0.020000001\n0.3\n0.050000004\n0.33333334\n",
+      "stderr_utf8": "",
+      "expected_exit_code": 0,
+      "arguments": [],
+      "stdin_hex": "",
+      "companions": [],
+      "owners": [
+        "P09"
+      ],
+      "independent_execution_model": "Round every binary32 operation independently, then choose a shortest round-trip decimal at binary32 precision.",
+      "independent_observation_count": 4,
+      "remaining_gates": [
+        "Original complete named bodies and internal scalar assertions are not qualified by run output alone.",
+        "Actual compiler/native/runtime full FI, exact allocated/live/work, cancellation, ownership/borrow/lifetime/physical/safety/provider gates with every original bound.",
+        "No scheduling, separate-object ABI, cycle reclamation, provider or production claim from byte parity."
+      ]
+    },
+    {
+      "id": "independent_behavior_float_fmt_finite",
+      "oracle_id": "independent_behavior_float_fmt_finite",
+      "source": "tests/diff/cases/semantics/float_fmt/finite.xr",
+      "source_lf_sha256": "837dffdecb1f52accccd4f46d78446164920a51fb010f0e6603cb963f7f85f71",
+      "entry": "run",
+      "source_context": "original_absolute",
+      "stdout_utf8": "1.5\n-1.5\n0.0\n100.0\n0.1\n3.141592653589793\n0.5\n123456789.0\n0.000125\n-42.75\n",
+      "stderr_utf8": "",
+      "expected_exit_code": 0,
+      "arguments": [],
+      "stdin_hex": "",
+      "companions": [],
+      "owners": [
+        "P09"
+      ],
+      "independent_execution_model": "Binary64 literals and division; finite decimal formatting retains integral .0.",
+      "independent_observation_count": 10,
+      "remaining_gates": [
+        "Original complete named bodies and internal scalar assertions are not qualified by run output alone.",
+        "Actual compiler/native/runtime full FI, exact allocated/live/work, cancellation, ownership/borrow/lifetime/physical/safety/provider gates with every original bound.",
+        "No scheduling, separate-object ABI, cycle reclamation, provider or production claim from byte parity."
+      ]
+    },
+    {
+      "id": "independent_behavior_float_fmt_fma_contraction",
+      "oracle_id": "independent_behavior_float_fmt_fma_contraction",
+      "source": "tests/diff/cases/semantics/float_fmt/fma_contraction.xr",
+      "source_lf_sha256": "ad2d457c2a7dbd136f152f92638609affd2b0f25be03ff59f33af79954440ec0",
+      "entry": "run",
+      "source_context": "original_absolute",
+      "stdout_utf8": "0.14\n-0.09999999999999999\n0.30000000000000004\n20.294999999999998\n15241.5987654321\n12345678.912296297\n",
+      "stderr_utf8": "",
+      "expected_exit_code": 0,
+      "arguments": [],
+      "stdin_hex": "",
+      "companions": [],
+      "owners": [
+        "P09"
+      ],
+      "independent_execution_model": "Each CPython binary64 operation materializes before the next; no fused multiply-add or reassociation is used.",
+      "independent_observation_count": 6,
+      "remaining_gates": [
+        "Original complete named bodies and internal scalar assertions are not qualified by run output alone.",
+        "Actual compiler/native/runtime full FI, exact allocated/live/work, cancellation, ownership/borrow/lifetime/physical/safety/provider gates with every original bound.",
+        "No scheduling, separate-object ABI, cycle reclamation, provider or production claim from byte parity."
+      ]
+    },
+    {
+      "id": "independent_behavior_float_fmt_neg_zero_const_pool",
+      "oracle_id": "independent_behavior_float_fmt_neg_zero_const_pool",
+      "source": "tests/diff/cases/semantics/float_fmt/neg_zero_const_pool.xr",
+      "source_lf_sha256": "23cefd3e4e12fd3b42e84471d6e51f8d75e59480a54121568ec5e2fc94479c76",
+      "entry": "run",
+      "source_context": "original_absolute",
+      "stdout_utf8": "-0.0\n-0.0\n0.0\n-0.0\n",
+      "stderr_utf8": "",
+      "expected_exit_code": 0,
+      "arguments": [],
+      "stdin_hex": "",
+      "companions": [],
+      "owners": [
+        "P09"
+      ],
+      "independent_execution_model": "Independent signed-zero multiplication and literal signs; equal numeric zeros retain distinct formatted signs.",
+      "independent_observation_count": 4,
+      "remaining_gates": [
+        "Original complete named bodies and internal scalar assertions are not qualified by run output alone.",
+        "Actual compiler/native/runtime full FI, exact allocated/live/work, cancellation, ownership/borrow/lifetime/physical/safety/provider gates with every original bound.",
+        "No scheduling, separate-object ABI, cycle reclamation, provider or production claim from byte parity."
+      ]
+    },
+    {
+      "id": "independent_behavior_float_fmt_special_values",
+      "oracle_id": "independent_behavior_float_fmt_special_values",
+      "source": "tests/diff/cases/semantics/float_fmt/special_values.xr",
+      "source_lf_sha256": "56323d90bb66ab80d4ab2e811a13733845443db0869c8f2742619c80c2a7370f",
+      "entry": "run",
+      "source_context": "original_absolute",
+      "stdout_utf8": "-0.0\n0.0\ntrue\n-0.0\n-0.0\ntrue\n0.5\n-0.25\n",
+      "stderr_utf8": "",
+      "expected_exit_code": 0,
+      "arguments": [],
+      "stdin_hex": "",
+      "companions": [],
+      "owners": [
+        "P09"
+      ],
+      "independent_execution_model": "IEEE signed zeros compare equal while output retains their sign; exact powers-of-two division.",
+      "independent_observation_count": 8,
+      "remaining_gates": [
+        "Original complete named bodies and internal scalar assertions are not qualified by run output alone.",
+        "Actual compiler/native/runtime full FI, exact allocated/live/work, cancellation, ownership/borrow/lifetime/physical/safety/provider gates with every original bound.",
+        "No scheduling, separate-object ABI, cycle reclamation, provider or production claim from byte parity."
+      ]
+    },
+    {
+      "id": "independent_behavior_int_wrap_uint64_print_compare",
+      "oracle_id": "independent_behavior_int_wrap_uint64_print_compare",
+      "source": "tests/diff/cases/semantics/int_wrap/uint64_print_compare.xr",
+      "source_lf_sha256": "8de3ed71211654d4980d2f46a4960a14a1229bacc35c897d040dd5a3539751a6",
+      "entry": "run",
+      "source_context": "original_absolute",
+      "stdout_utf8": "9223372036854775808\n18446744073709551615\n9223372036854775808\n9223372036854775808\nconcat:9223372036854775808:18446744073709551615\ntmpl:9223372036854775808:18446744073709551615\ntrue\ntrue\ntrue\ntrue\ntrue\nfalse\ntrue\ntrue\ntrue\ntrue\nbranch-gt\nbranch-le\n",
+      "stderr_utf8": "",
+      "expected_exit_code": 0,
+      "arguments": [],
+      "stdin_hex": "",
+      "companions": [],
+      "owners": [
+        "P09"
+      ],
+      "independent_execution_model": "Full unsigned decimal payload and order, including contextual literal operands and both branch paths.",
+      "independent_observation_count": 18,
+      "remaining_gates": [
+        "Original complete named bodies and internal scalar assertions are not qualified by run output alone.",
+        "Actual compiler/native/runtime full FI, exact allocated/live/work, cancellation, ownership/borrow/lifetime/physical/safety/provider gates with every original bound.",
+        "No scheduling, separate-object ABI, cycle reclamation, provider or production claim from byte parity."
+      ]
+    },
+    {
+      "id": "independent_behavior_modules_xmod_coro",
+      "oracle_id": "independent_behavior_modules_xmod_coro",
+      "source": "tests/diff/cases/semantics/modules/xmod_coro.xr",
+      "source_lf_sha256": "42563439f1b530c7219086050c920bca695bdc992b987ee945c9aa30662d6cbf",
+      "entry": "run",
+      "source_context": "original_absolute",
+      "stdout_utf8": "119\n",
+      "stderr_utf8": "",
+      "expected_exit_code": 0,
+      "arguments": [],
+      "stdin_hex": "",
+      "companions": [
+        {
+          "path": "tests/diff/cases/semantics/modules/_corolib.xr",
+          "lf_sha256": "b659e49fd89c86f4573eecae2d58a4160aa4293c61c18cd8bb6fa323b05ed90b"
+        }
+      ],
+      "owners": [
+        "P02",
+        "P06",
+        "P07",
+        "P09",
+        "P10",
+        "P13",
+        "P17"
+      ],
+      "independent_execution_model": "Two imported square-plus results sum to 119; source output alone does not grant separate-object ABI or scheduling qualification.",
+      "independent_observation_count": 1,
+      "remaining_gates": [
+        "Original complete named bodies and internal scalar assertions are not qualified by run output alone.",
+        "Actual compiler/native/runtime full FI, exact allocated/live/work, cancellation, ownership/borrow/lifetime/physical/safety/provider gates with every original bound.",
+        "No scheduling, separate-object ABI, cycle reclamation, provider or production claim from byte parity."
+      ]
+    },
+    {
+      "id": "independent_behavior_modules_xmod_private_const_defaults",
+      "oracle_id": "independent_behavior_modules_xmod_private_const_defaults",
+      "source": "tests/diff/cases/semantics/modules/xmod_private_const_defaults.xr",
+      "source_lf_sha256": "e968d554ec6b648a089eb79817567b0abc8450445b719da909a819a692fd5405",
+      "entry": "run",
+      "source_context": "original_absolute",
+      "stdout_utf8": "192\n17\n12\n15\n",
+      "stderr_utf8": "",
+      "expected_exit_code": 0,
+      "arguments": [],
+      "stdin_hex": "",
+      "companions": [
+        {
+          "path": "tests/diff/cases/semantics/modules/_private_const_default.xr",
+          "lf_sha256": "b16a75ab4ef1988e4e4fecf4b5d631942cef80279224f7b976c58aca1205eadc"
+        }
+      ],
+      "owners": [
+        "P02",
+        "P06",
+        "P07",
+        "P09",
+        "P10",
+        "P13",
+        "P17"
+      ],
+      "independent_execution_model": "Private default constant resolves in the declaration module; explicit argument and both import spellings retain their values.",
+      "independent_observation_count": 4,
+      "remaining_gates": [
+        "Original complete named bodies and internal scalar assertions are not qualified by run output alone.",
+        "Actual compiler/native/runtime full FI, exact allocated/live/work, cancellation, ownership/borrow/lifetime/physical/safety/provider gates with every original bound.",
+        "No scheduling, separate-object ABI, cycle reclamation, provider or production claim from byte parity."
+      ]
+    },
+    {
+      "id": "independent_behavior_modules_xmod_static",
+      "oracle_id": "independent_behavior_modules_xmod_static",
+      "source": "tests/diff/cases/semantics/modules/xmod_static.xr",
+      "source_lf_sha256": "0ef8393c89c91c368efc622daefe4670d8bf2f3665ad79d0d0a956e71e4d81af",
+      "entry": "run",
+      "source_context": "original_absolute",
+      "stdout_utf8": "1\n25\n9\n",
+      "stderr_utf8": "",
+      "expected_exit_code": 0,
+      "arguments": [],
+      "stdin_hex": "",
+      "companions": [
+        {
+          "path": "tests/diff/cases/semantics/modules/_shapes.xr",
+          "lf_sha256": "558ccd12a574c2f167250660a1e1dbb4138b3469a881bd5e9aa4d9f67c688803"
+        }
+      ],
+      "owners": [
+        "P02",
+        "P06",
+        "P07",
+        "P09",
+        "P10",
+        "P13",
+        "P17"
+      ],
+      "independent_execution_model": "Imported factory and constructor results retain their side fields for the instance method.",
+      "independent_observation_count": 3,
+      "remaining_gates": [
+        "Original complete named bodies and internal scalar assertions are not qualified by run output alone.",
+        "Actual compiler/native/runtime full FI, exact allocated/live/work, cancellation, ownership/borrow/lifetime/physical/safety/provider gates with every original bound.",
+        "No scheduling, separate-object ABI, cycle reclamation, provider or production claim from byte parity."
+      ]
+    },
+    {
+      "id": "independent_behavior_modules_xmod_static_defaults",
+      "oracle_id": "independent_behavior_modules_xmod_static_defaults",
+      "source": "tests/diff/cases/semantics/modules/xmod_static_defaults.xr",
+      "source_lf_sha256": "b9cca2cf6dad50f39d6695b96a2a751ba56d506625d1bcabf05b16ebe369526b",
+      "entry": "run",
+      "source_context": "original_absolute",
+      "stdout_utf8": "named:tail\nnamed:full\n12\nns:tail\n3\ntrue\nfalse\n",
+      "stderr_utf8": "",
+      "expected_exit_code": 0,
+      "arguments": [],
+      "stdin_hex": "",
+      "companions": [
+        {
+          "path": "tests/diff/cases/semantics/modules/_static_defaults.xr",
+          "lf_sha256": "5c5dd3ce4b7391747365687f7d368b53671968e3e0a747a07645f71d8e3c1fc7"
+        }
+      ],
+      "owners": [
+        "P02",
+        "P06",
+        "P07",
+        "P09",
+        "P10",
+        "P13",
+        "P17"
+      ],
+      "independent_execution_model": "String, integer and nullable defaults resolve through selective and namespace imports.",
+      "independent_observation_count": 7,
+      "remaining_gates": [
+        "Original complete named bodies and internal scalar assertions are not qualified by run output alone.",
+        "Actual compiler/native/runtime full FI, exact allocated/live/work, cancellation, ownership/borrow/lifetime/physical/safety/provider gates with every original bound.",
+        "No scheduling, separate-object ABI, cycle reclamation, provider or production claim from byte parity."
+      ]
+    },
+    {
+      "id": "independent_behavior_ownership_auto_borrow_value_struct_return_downgrade",
+      "oracle_id": "independent_behavior_ownership_auto_borrow_value_struct_return_downgrade",
+      "source": "tests/diff/cases/semantics/ownership/auto_borrow_value_struct_return_downgrade.xr",
+      "source_lf_sha256": "5b4718c006cb85e474df11563ad84d5f2268729ed8f6a4995a7cc19012bd413c",
+      "entry": "run",
+      "source_context": "original_absolute",
+      "stdout_utf8": "9\n2\n1\n2\n",
+      "stderr_utf8": "",
+      "expected_exit_code": 0,
+      "arguments": [],
+      "stdin_hex": "",
+      "companions": [],
+      "owners": [
+        "P07",
+        "P08",
+        "P09",
+        "P10"
+      ],
+      "independent_execution_model": "Returned Pair is a logical value copy; changing q.a does not change p.",
+      "independent_observation_count": 4,
+      "remaining_gates": [
+        "Original complete named bodies and internal scalar assertions are not qualified by run output alone.",
+        "Actual compiler/native/runtime full FI, exact allocated/live/work, cancellation, ownership/borrow/lifetime/physical/safety/provider gates with every original bound.",
+        "No scheduling, separate-object ABI, cycle reclamation, provider or production claim from byte parity."
+      ]
+    },
+    {
+      "id": "independent_behavior_ownership_closure_mutable_scalar_direct_call",
+      "oracle_id": "independent_behavior_ownership_closure_mutable_scalar_direct_call",
+      "source": "tests/diff/cases/semantics/ownership/closure_mutable_scalar_direct_call.xr",
+      "source_lf_sha256": "540549e1a0d3862fa2fa1d41aa664c41b247858708cf604df4a53249137ba02f",
+      "entry": "run",
+      "source_context": "original_absolute",
+      "stdout_utf8": "25\n",
+      "stderr_utf8": "",
+      "expected_exit_code": 0,
+      "arguments": [],
+      "stdin_hex": "",
+      "companions": [],
+      "owners": [
+        "P02",
+        "P07",
+        "P08",
+        "P09",
+        "P10"
+      ],
+      "independent_execution_model": "Both closure calls mutate the same captured scalar, producing a=2 and b=5.",
+      "independent_observation_count": 1,
+      "remaining_gates": [
+        "Original complete named bodies and internal scalar assertions are not qualified by run output alone.",
+        "Actual compiler/native/runtime full FI, exact allocated/live/work, cancellation, ownership/borrow/lifetime/physical/safety/provider gates with every original bound.",
+        "No scheduling, separate-object ABI, cycle reclamation, provider or production claim from byte parity."
+      ]
+    },
+    {
+      "id": "independent_behavior_ownership_in_mutator_scalar_from_borrow",
+      "oracle_id": "independent_behavior_ownership_in_mutator_scalar_from_borrow",
+      "source": "tests/diff/cases/semantics/ownership/in_mutator_scalar_from_borrow.xr",
+      "source_lf_sha256": "52ebd0c46d1c7d0601bd69763e632fc33ae85524f01184587bfdc3d1f9acf3c0",
+      "entry": "run",
+      "source_context": "original_absolute",
+      "stdout_utf8": "5\n",
+      "stderr_utf8": "",
+      "expected_exit_code": 0,
+      "arguments": [],
+      "stdin_hex": "",
+      "companions": [],
+      "owners": [
+        "P07",
+        "P08",
+        "P09",
+        "P10"
+      ],
+      "independent_execution_model": "Reading the input Array publishes only its scalar length into the explicit ref output.",
+      "independent_observation_count": 1,
+      "remaining_gates": [
+        "Original complete named bodies and internal scalar assertions are not qualified by run output alone.",
+        "Actual compiler/native/runtime full FI, exact allocated/live/work, cancellation, ownership/borrow/lifetime/physical/safety/provider gates with every original bound.",
+        "No scheduling, separate-object ABI, cycle reclamation, provider or production claim from byte parity."
+      ]
+    },
+    {
+      "id": "independent_behavior_ownership_in_return_scalar_from_borrow",
+      "oracle_id": "independent_behavior_ownership_in_return_scalar_from_borrow",
+      "source": "tests/diff/cases/semantics/ownership/in_return_scalar_from_borrow.xr",
+      "source_lf_sha256": "327956aa9e29d250a11b5725df7e8db56977cb76e4af1b3498e88eaea3387b0a",
+      "entry": "run",
+      "source_context": "original_absolute",
+      "stdout_utf8": "3\n",
+      "stderr_utf8": "",
+      "expected_exit_code": 0,
+      "arguments": [],
+      "stdin_hex": "",
+      "companions": [],
+      "owners": [
+        "P07",
+        "P08",
+        "P09",
+        "P10"
+      ],
+      "independent_execution_model": "Returning a scalar length does not escape an Array view or consume the input value.",
+      "independent_observation_count": 1,
+      "remaining_gates": [
+        "Original complete named bodies and internal scalar assertions are not qualified by run output alone.",
+        "Actual compiler/native/runtime full FI, exact allocated/live/work, cancellation, ownership/borrow/lifetime/physical/safety/provider gates with every original bound.",
+        "No scheduling, separate-object ABI, cycle reclamation, provider or production claim from byte parity."
+      ]
+    },
+    {
+      "id": "independent_behavior_ownership_in_store_scalar_from_borrow",
+      "oracle_id": "independent_behavior_ownership_in_store_scalar_from_borrow",
+      "source": "tests/diff/cases/semantics/ownership/in_store_scalar_from_borrow.xr",
+      "source_lf_sha256": "0cb2dfdaa6e319ee326b11fea905f310405ebf56fc5d58c2c9616a06ae3bd0ed",
+      "entry": "run",
+      "source_context": "original_absolute",
+      "stdout_utf8": "4\n",
+      "stderr_utf8": "",
+      "expected_exit_code": 0,
+      "arguments": [],
+      "stdin_hex": "",
+      "companions": [],
+      "owners": [
+        "P07",
+        "P08",
+        "P09",
+        "P10"
+      ],
+      "independent_execution_model": "The explicit ref Counter receives the input length; no Array alias is stored.",
+      "independent_observation_count": 1,
+      "remaining_gates": [
+        "Original complete named bodies and internal scalar assertions are not qualified by run output alone.",
+        "Actual compiler/native/runtime full FI, exact allocated/live/work, cancellation, ownership/borrow/lifetime/physical/safety/provider gates with every original bound.",
+        "No scheduling, separate-object ABI, cycle reclamation, provider or production claim from byte parity."
+      ]
+    },
+    {
+      "id": "independent_behavior_ownership_loop_ref_array_pop_backedge",
+      "oracle_id": "independent_behavior_ownership_loop_ref_array_pop_backedge",
+      "source": "tests/diff/cases/semantics/ownership/loop_ref_array_pop_backedge.xr",
+      "source_lf_sha256": "10b8d76260315925f3078f0da770c42fd399f08125c47cb87709424bb00da376",
+      "entry": "run",
+      "source_context": "original_absolute",
+      "stdout_utf8": "14\n",
+      "stderr_utf8": "",
+      "expected_exit_code": 0,
+      "arguments": [],
+      "stdin_hex": "",
+      "companions": [],
+      "owners": [
+        "P07",
+        "P08",
+        "P09",
+        "P10"
+      ],
+      "independent_execution_model": "The four-op interpreter pushes twice, pops twice and returns 14; original chain assertion and all loop/backedge bodies remain.",
+      "independent_observation_count": 1,
+      "remaining_gates": [
+        "Original complete named bodies and internal scalar assertions are not qualified by run output alone.",
+        "Actual compiler/native/runtime full FI, exact allocated/live/work, cancellation, ownership/borrow/lifetime/physical/safety/provider gates with every original bound.",
+        "No scheduling, separate-object ABI, cycle reclamation, provider or production claim from byte parity."
+      ]
+    },
+    {
+      "id": "independent_behavior_ownership_shared_binding_boundaries",
+      "oracle_id": "independent_behavior_ownership_shared_binding_boundaries",
+      "source": "tests/diff/cases/semantics/ownership/shared_binding_boundaries.xr",
+      "source_lf_sha256": "0a4cff162782cd92f784c9a2c1e05f9d6a0390fe5a9c6886a9bbc0fe66e1ec21",
+      "entry": "run",
+      "source_context": "original_absolute",
+      "stdout_utf8": "2\n4\n",
+      "stderr_utf8": "",
+      "expected_exit_code": 0,
+      "arguments": [],
+      "stdin_hex": "",
+      "companions": [],
+      "owners": [
+        "P07",
+        "P08",
+        "P09",
+        "P10"
+      ],
+      "independent_execution_model": "Read-only logical values preserve length and indexed scalar at both binding boundaries.",
+      "independent_observation_count": 2,
+      "remaining_gates": [
+        "Original complete named bodies and internal scalar assertions are not qualified by run output alone.",
+        "Actual compiler/native/runtime full FI, exact allocated/live/work, cancellation, ownership/borrow/lifetime/physical/safety/provider gates with every original bound.",
+        "No scheduling, separate-object ABI, cycle reclamation, provider or production claim from byte parity."
+      ]
+    },
+    {
+      "id": "independent_behavior_ownership_stack_closure_cell_capture",
+      "oracle_id": "independent_behavior_ownership_stack_closure_cell_capture",
+      "source": "tests/diff/cases/semantics/ownership/stack_closure_cell_capture.xr",
+      "source_lf_sha256": "91d7014caaeddbd3e937cb1d2afc0664edfb938116e4dc7f62f9351ac24b4445",
+      "entry": "run",
+      "source_context": "original_absolute",
+      "stdout_utf8": "12\n",
+      "stderr_utf8": "",
+      "expected_exit_code": 0,
+      "arguments": [],
+      "stdin_hex": "",
+      "companions": [],
+      "owners": [
+        "P02",
+        "P07",
+        "P08",
+        "P09",
+        "P10"
+      ],
+      "independent_execution_model": "Two nested closures append in source call order to the same captured Array value.",
+      "independent_observation_count": 1,
+      "remaining_gates": [
+        "Original complete named bodies and internal scalar assertions are not qualified by run output alone.",
+        "Actual compiler/native/runtime full FI, exact allocated/live/work, cancellation, ownership/borrow/lifetime/physical/safety/provider gates with every original bound.",
+        "No scheduling, separate-object ABI, cycle reclamation, provider or production claim from byte parity."
+      ]
+    },
+    {
+      "id": "independent_behavior_ownership_value_struct_alias_copy_param",
+      "oracle_id": "independent_behavior_ownership_value_struct_alias_copy_param",
+      "source": "tests/diff/cases/semantics/ownership/value_struct_alias_copy_param.xr",
+      "source_lf_sha256": "036ca3efccfa536a3beeeb73906f2f942d562d643176ca6a8f9609125a78e395",
+      "entry": "run",
+      "source_context": "original_absolute",
+      "stdout_utf8": "13\n1\n",
+      "stderr_utf8": "",
+      "expected_exit_code": 0,
+      "arguments": [],
+      "stdin_hex": "",
+      "companions": [],
+      "owners": [
+        "P07",
+        "P08",
+        "P09",
+        "P10"
+      ],
+      "independent_execution_model": "Parameter and local Pair copies permit local mutation while the original field stays one.",
+      "independent_observation_count": 2,
+      "remaining_gates": [
+        "Original complete named bodies and internal scalar assertions are not qualified by run output alone.",
+        "Actual compiler/native/runtime full FI, exact allocated/live/work, cancellation, ownership/borrow/lifetime/physical/safety/provider gates with every original bound.",
+        "No scheduling, separate-object ABI, cycle reclamation, provider or production claim from byte parity."
+      ]
+    },
+    {
+      "id": "independent_behavior_condition_bool_nullable_explicit",
+      "oracle_id": "independent_behavior_condition_bool_nullable_explicit",
+      "source": "tests/diff/cases/semantics/condition/bool_nullable_explicit.xr",
+      "source_lf_sha256": "558f8578080b6164318a6c0800e56a095e5767a6d6a9c21c228c91f6273c0094",
+      "entry": "run",
+      "source_context": "original_absolute",
+      "stdout_utf8": "yes\nnull-flag\ncoalesced-false\n",
+      "stderr_utf8": "",
+      "expected_exit_code": 0,
+      "arguments": [],
+      "stdin_hex": "",
+      "companions": [],
+      "owners": [
+        "P09",
+        "P10"
+      ],
+      "independent_execution_model": "Some(true), explicit null test and null-coalesced false choose three fixed branch observations.",
+      "independent_observation_count": 3,
+      "remaining_gates": [
+        "Original complete named bodies and internal scalar assertions are not qualified by run output alone.",
+        "Actual compiler/native/runtime full FI, exact allocated/live/work, cancellation, ownership/borrow/lifetime/physical/safety/provider gates with every original bound.",
+        "No scheduling, separate-object ABI, cycle reclamation, provider or production claim from byte parity."
+      ]
+    },
+    {
+      "id": "independent_behavior_exception_assertion_same_t_parity",
+      "oracle_id": "independent_behavior_exception_assertion_same_t_parity",
+      "source": "tests/diff/cases/semantics/exception/assertion_same_t_parity.xr",
+      "source_lf_sha256": "7dde3aa7bbade2bd1e65936d7428f5b9616dcf387b61b17734128cd58659c087",
+      "entry": "run",
+      "source_context": "original_absolute",
+      "stdout_utf8": "assertion-same-t-parity-ok\n",
+      "stderr_utf8": "",
+      "expected_exit_code": 0,
+      "arguments": [],
+      "stdin_hex": "",
+      "companions": [],
+      "owners": [
+        "P02",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P14"
+      ],
+      "independent_execution_model": "Preserve the complete contextual assertion program; this original banner alone leaves its internal scalar observations open.",
+      "independent_observation_count": 1,
+      "remaining_gates": [
+        "Original complete named bodies and internal scalar assertions are not qualified by run output alone.",
+        "Actual compiler/native/runtime full FI, exact allocated/live/work, cancellation, ownership/borrow/lifetime/physical/safety/provider gates with every original bound.",
+        "No scheduling, separate-object ABI, cycle reclamation, provider or production claim from byte parity."
+      ]
+    },
+    {
+      "id": "independent_behavior_exception_catch_panic",
+      "oracle_id": "independent_behavior_exception_catch_panic",
+      "source": "tests/diff/cases/semantics/exception/catch_panic.xr",
+      "source_lf_sha256": "1fb72e6d69ab7db8498fa6e51408c5361a248236dcb7d1358ae944ec6fe92272",
+      "entry": "run",
+      "source_context": "original_absolute",
+      "stdout_utf8": "ok:5\ncaught\nouter-caught\ndone\n",
+      "stderr_utf8": "",
+      "expected_exit_code": 0,
+      "arguments": [],
+      "stdin_hex": "",
+      "companions": [],
+      "owners": [
+        "P07",
+        "P08",
+        "P09"
+      ],
+      "independent_execution_model": "Integer division succeeds for two and the explicit panic channel catches zero divisors, including the nested invocation.",
+      "independent_observation_count": 4,
+      "remaining_gates": [
+        "Original complete named bodies and internal scalar assertions are not qualified by run output alone.",
+        "Actual compiler/native/runtime full FI, exact allocated/live/work, cancellation, ownership/borrow/lifetime/physical/safety/provider gates with every original bound.",
+        "No scheduling, separate-object ABI, cycle reclamation, provider or production claim from byte parity."
+      ]
+    },
+    {
+      "id": "independent_behavior_exception_defer_stack_growth",
+      "oracle_id": "independent_behavior_exception_defer_stack_growth",
+      "source": "tests/diff/cases/semantics/exception/defer_stack_growth.xr",
+      "source_lf_sha256": "97ccbe8b3c81dbfa0e280da38eb1e695f6a9007670162c10eaa97059dc416bb6",
+      "entry": "run",
+      "source_context": "original_absolute",
+      "stdout_utf8": "200\n42\nok\n",
+      "stderr_utf8": "",
+      "expected_exit_code": 0,
+      "arguments": [],
+      "stdin_hex": "",
+      "companions": [],
+      "owners": [
+        "P02",
+        "P07",
+        "P08",
+        "P09",
+        "P10"
+      ],
+      "independent_execution_model": "The complete depth-200 recursive cleanup executes before the function result is printed; no recursion bound is reduced.",
+      "independent_observation_count": 3,
+      "remaining_gates": [
+        "Original complete named bodies and internal scalar assertions are not qualified by run output alone.",
+        "Actual compiler/native/runtime full FI, exact allocated/live/work, cancellation, ownership/borrow/lifetime/physical/safety/provider gates with every original bound.",
+        "No scheduling, separate-object ABI, cycle reclamation, provider or production claim from byte parity."
+      ]
+    },
+    {
+      "id": "independent_behavior_exception_pattern_catch",
+      "oracle_id": "independent_behavior_exception_pattern_catch",
+      "source": "tests/diff/cases/semantics/exception/pattern_catch.xr",
+      "source_lf_sha256": "738365289d6c2507bf5a53ae2c8fde2b7456c9824ec84eb9521b6648772e7a38",
+      "entry": "run",
+      "source_context": "original_absolute",
+      "stdout_utf8": "boom\nother\npayload:7\nok\nany\n",
+      "stderr_utf8": "",
+      "expected_exit_code": 0,
+      "arguments": [],
+      "stdin_hex": "",
+      "companions": [],
+      "owners": [
+        "P02",
+        "P07",
+        "P08",
+        "P09",
+        "P10"
+      ],
+      "independent_execution_model": "Five calls cover two bare variants, payload extraction, normal return and typed enum catch-all.",
+      "independent_observation_count": 5,
+      "remaining_gates": [
+        "Original complete named bodies and internal scalar assertions are not qualified by run output alone.",
+        "Actual compiler/native/runtime full FI, exact allocated/live/work, cancellation, ownership/borrow/lifetime/physical/safety/provider gates with every original bound.",
+        "No scheduling, separate-object ABI, cycle reclamation, provider or production claim from byte parity."
+      ]
+    },
+    {
+      "id": "independent_behavior_collections_array_unshift_shared_core",
+      "oracle_id": "independent_behavior_collections_array_unshift_shared_core",
+      "source": "tests/diff/cases/semantics/collections/array_unshift_shared_core.xr",
+      "source_lf_sha256": "86e6b0a9e289731a025585e4e4da94de155aa662130dfe3f0969cae0a722781d",
+      "entry": "run",
+      "source_context": "original_absolute",
+      "stdout_utf8": "1\n2\n3\n4\ntrue\nfalse\ntrue\nfalse\nleft\nmiddle\nright\n10\n20\n30\n40\n",
+      "stderr_utf8": "",
+      "expected_exit_code": 0,
+      "arguments": [],
+      "stdin_hex": "",
+      "companions": [],
+      "owners": [
+        "P02",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P12",
+        "P13",
+        "P14"
+      ],
+      "independent_execution_model": "Prepending one value preserves complete old sequence order for integer, bool, string and u8 domains.",
+      "independent_observation_count": 15,
+      "remaining_gates": [
+        "Original complete named bodies and internal scalar assertions are not qualified by run output alone.",
+        "Actual compiler/native/runtime full FI, exact allocated/live/work, cancellation, ownership/borrow/lifetime/physical/safety/provider gates with every original bound.",
+        "No scheduling, separate-object ABI, cycle reclamation, provider or production claim from byte parity."
+      ]
+    },
+    {
+      "id": "independent_behavior_collections_byte_array_bool_short_circuit_liveness_shared_core",
+      "oracle_id": "independent_behavior_collections_byte_array_bool_short_circuit_liveness_shared_core",
+      "source": "tests/diff/cases/semantics/collections/byte_array_bool_short_circuit_liveness_shared_core.xr",
+      "source_lf_sha256": "385ef4a4058d3479af0e78159c309d198f041fc568c62e60421a1391bcc169e6",
+      "entry": "run",
+      "source_context": "original_absolute",
+      "stdout_utf8": "unmasked\nmasked\n",
+      "stderr_utf8": "",
+      "expected_exit_code": 0,
+      "arguments": [],
+      "stdin_hex": "",
+      "companions": [],
+      "owners": [
+        "P02",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P12",
+        "P13",
+        "P14",
+        "P17"
+      ],
+      "independent_execution_model": "The second octet has bit128 clear or set, matching the explicit nullable expectation without a mismatch write.",
+      "independent_observation_count": 2,
+      "remaining_gates": [
+        "Original complete named bodies and internal scalar assertions are not qualified by run output alone.",
+        "Actual compiler/native/runtime full FI, exact allocated/live/work, cancellation, ownership/borrow/lifetime/physical/safety/provider gates with every original bound.",
+        "No scheduling, separate-object ABI, cycle reclamation, provider or production claim from byte parity."
+      ]
+    },
+    {
+      "id": "independent_behavior_value_struct_generic_annotation",
+      "oracle_id": "independent_behavior_value_struct_generic_annotation",
+      "source": "tests/diff/cases/semantics/value_struct_generic_annotation.xr",
+      "source_lf_sha256": "96aac80d18c0525e67f1955a07a4563da520c1247ea56fd970c262ea34b7be0b",
+      "entry": "run",
+      "source_context": "original_absolute",
+      "stdout_utf8": "41\n99\n41\n7\n7\n100\n",
+      "stderr_utf8": "",
+      "expected_exit_code": 0,
+      "arguments": [],
+      "stdin_hex": "",
+      "companions": [],
+      "owners": [
+        "P02",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P12",
+        "P13",
+        "P14"
+      ],
+      "independent_execution_model": "Explicit generic values agree through variable, parameter, return and nested field; mutation of h2 does not alter h.",
+      "independent_observation_count": 6,
+      "remaining_gates": [
+        "Original complete named bodies and internal scalar assertions are not qualified by run output alone.",
+        "Actual compiler/native/runtime full FI, exact allocated/live/work, cancellation, ownership/borrow/lifetime/physical/safety/provider gates with every original bound.",
+        "No scheduling, separate-object ABI, cycle reclamation, provider or production claim from byte parity."
+      ]
+    },
+    {
+      "id": "independent_behavior_oop_enum_static_methods",
+      "oracle_id": "independent_behavior_oop_enum_static_methods",
+      "source": "tests/diff/cases/semantics/oop/enum_static_methods.xr",
+      "source_lf_sha256": "0c726f36103f08bfe0bbaeb50c935ec4e6de9cb35190bd02753385448cd306ba",
+      "entry": "run",
+      "source_context": "original_absolute",
+      "stdout_utf8": "Green\nBlue\nGreen\n200\n",
+      "stderr_utf8": "",
+      "expected_exit_code": 0,
+      "arguments": [],
+      "stdin_hex": "",
+      "companions": [],
+      "owners": [
+        "P02",
+        "P06",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P12",
+        "P13",
+        "P14"
+      ],
+      "independent_execution_model": "Named enum identity survives static factory, instance method, forward use and chained call.",
+      "independent_observation_count": 4,
+      "remaining_gates": [
+        "Original complete named bodies and internal scalar assertions are not qualified by run output alone.",
+        "Actual compiler/native/runtime full FI, exact allocated/live/work, cancellation, ownership/borrow/lifetime/physical/safety/provider gates with every original bound.",
+        "No scheduling, separate-object ABI, cycle reclamation, provider or production claim from byte parity."
+      ]
+    },
+    {
+      "id": "independent_behavior_oop_typename_class_instance",
+      "oracle_id": "independent_behavior_oop_typename_class_instance",
+      "source": "tests/diff/cases/semantics/oop/typename_class_instance.xr",
+      "source_lf_sha256": "5e76d61ef12eadbd13638a57a517769249c22ff4261d8250a402383cc1dd3173",
+      "entry": "run",
+      "source_context": "original_absolute",
+      "stdout_utf8": "Point\n",
+      "stderr_utf8": "",
+      "expected_exit_code": 0,
+      "arguments": [],
+      "stdin_hex": "",
+      "companions": [],
+      "owners": [
+        "P02",
+        "P06",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P12",
+        "P13",
+        "P14"
+      ],
+      "independent_execution_model": "The constructed nominal root class keeps its source name; fields and constructor remain checked.",
+      "independent_observation_count": 1,
+      "remaining_gates": [
+        "Original complete named bodies and internal scalar assertions are not qualified by run output alone.",
+        "Actual compiler/native/runtime full FI, exact allocated/live/work, cancellation, ownership/borrow/lifetime/physical/safety/provider gates with every original bound.",
+        "No scheduling, separate-object ABI, cycle reclamation, provider or production claim from byte parity."
+      ]
+    },
+    {
+      "id": "independent_behavior_stdlib_time_query_system_direct",
+      "oracle_id": "independent_behavior_stdlib_time_query_system_direct",
+      "source": "tests/diff/cases/semantics/stdlib/time_query_system_direct.xr",
+      "source_lf_sha256": "d8f410f68560a391fc9e4189cd2c7fc045ac4fa825df15d7bfa975d74ff1287c",
+      "entry": "run",
+      "source_context": "original_absolute",
+      "stdout_utf8": "true\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\n",
+      "stderr_utf8": "",
+      "expected_exit_code": 0,
+      "arguments": [],
+      "stdin_hex": "",
+      "companions": [],
+      "owners": [
+        "P02",
+        "P06",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P12",
+        "P13",
+        "P14",
+        "P17"
+      ],
+      "independent_execution_model": "Current Windows epoch is positive; monotonic counters are nonnegative and reported minute offsets remain within a full day. Exact provider and external-clock qualification remain separate.",
+      "independent_observation_count": 9,
+      "remaining_gates": [
+        "Original complete named bodies and internal scalar assertions are not qualified by run output alone.",
+        "Actual compiler/native/runtime full FI, exact allocated/live/work, cancellation, ownership/borrow/lifetime/physical/safety/provider gates with every original bound.",
+        "No scheduling, separate-object ABI, cycle reclamation, provider or production claim from byte parity."
+      ]
+    },
+    {
+      "id": "independent_behavior_side_effects_arg_order",
+      "oracle_id": "independent_behavior_side_effects_arg_order",
+      "source": "tests/diff/cases/semantics/side_effects/arg_order.xr",
+      "source_lf_sha256": "ee1c3adcc102599a370522d473a4f63eb70b86a4fc500cf957cd745e8ec93855",
+      "entry": "run",
+      "source_context": "original_absolute",
+      "stdout_utf8": "A\nB\nC\n6\nX\nY\n30\n",
+      "stderr_utf8": "",
+      "expected_exit_code": 0,
+      "arguments": [],
+      "stdin_hex": "",
+      "companions": [],
+      "owners": [
+        "P02",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P12",
+        "P13",
+        "P14"
+      ],
+      "independent_execution_model": "Arguments and array literal elements evaluate once from left to right before their enclosing result.",
+      "independent_observation_count": 7,
+      "remaining_gates": [
+        "Original complete named bodies and internal scalar assertions are not qualified by run output alone.",
+        "Actual compiler/native/runtime full FI, exact allocated/live/work, cancellation, ownership/borrow/lifetime/physical/safety/provider gates with every original bound.",
+        "No scheduling, separate-object ABI, cycle reclamation, provider or production claim from byte parity."
+      ]
+    },
+    {
+      "id": "independent_behavior_side_effects_short_circuit",
+      "oracle_id": "independent_behavior_side_effects_short_circuit",
+      "source": "tests/diff/cases/semantics/side_effects/short_circuit.xr",
+      "source_lf_sha256": "d0e784c06269efdbc6f2027b14dbf00a146b51f4cba601d80b97ab89ff9ad276",
+      "entry": "run",
+      "source_context": "original_absolute",
+      "stdout_utf8": "A\nelse1\nC\nthen2\n",
+      "stderr_utf8": "",
+      "expected_exit_code": 0,
+      "arguments": [],
+      "stdin_hex": "",
+      "companions": [],
+      "owners": [
+        "P02",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P12",
+        "P13",
+        "P14"
+      ],
+      "independent_execution_model": "False left-and and true left-or suppress B and D and choose the respective branches.",
+      "independent_observation_count": 4,
+      "remaining_gates": [
+        "Original complete named bodies and internal scalar assertions are not qualified by run output alone.",
+        "Actual compiler/native/runtime full FI, exact allocated/live/work, cancellation, ownership/borrow/lifetime/physical/safety/provider gates with every original bound.",
+        "No scheduling, separate-object ABI, cycle reclamation, provider or production claim from byte parity."
+      ]
+    },
+    {
+      "id": "independent_behavior_coro_cycle_leak_bounded_by_coroutine_heap",
+      "oracle_id": "independent_behavior_coro_cycle_leak_bounded_by_coroutine_heap",
+      "source": "tests/diff/cases/semantics/coro/cycle_leak_bounded_by_coroutine_heap.xr",
+      "source_lf_sha256": "d60d9e3007b4f99a607d8d7fde03872d7ffe9d5fbd8059360f4b7d455d7beb6c",
+      "entry": "run",
+      "source_context": "original_absolute",
+      "stdout_utf8": "30000\n30000\ntrue\n",
+      "stderr_utf8": "",
+      "expected_exit_code": 0,
+      "arguments": [],
+      "stdin_hex": "",
+      "companions": [],
+      "owners": [
+        "P02",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P13",
+        "P14"
+      ],
+      "independent_execution_model": "Two complete 100-round tasks traverse six alternating tags per cycle. Repeated checksum does not prove physical cycle reclamation.",
+      "independent_observation_count": 3,
+      "remaining_gates": [
+        "Original complete named bodies and internal scalar assertions are not qualified by run output alone.",
+        "Actual compiler/native/runtime full FI, exact allocated/live/work, cancellation, ownership/borrow/lifetime/physical/safety/provider gates with every original bound.",
+        "No scheduling, separate-object ABI, cycle reclamation, provider or production claim from byte parity."
+      ]
+    },
+    {
+      "id": "independent_behavior_regression_0398_null_test_owner_edges",
+      "oracle_id": "independent_behavior_regression_0398_null_test_owner_edges",
+      "source": "tests/regression/03_operators/0398_null_test_owner_edges.xr",
+      "source_lf_sha256": "9af34727f47004b6718764417d5541db27d2d0a2271c65e76a2dd84f1f58e89a",
+      "entry": "run",
+      "source_context": "original_absolute",
+      "stdout_utf8": "41\n7\n",
+      "stderr_utf8": "",
+      "expected_exit_code": 0,
+      "arguments": [],
+      "stdin_hex": "",
+      "companions": [],
+      "owners": [
+        "P02",
+        "P07",
+        "P08",
+        "P09",
+        "P10"
+      ],
+      "independent_execution_model": "Absent Optional chooses 41; present seven survives return and output.",
+      "independent_observation_count": 2,
+      "remaining_gates": [
+        "Original complete named bodies and internal scalar assertions are not qualified by run output alone.",
+        "Actual compiler/native/runtime full FI, exact allocated/live/work, cancellation, ownership/borrow/lifetime/physical/safety/provider gates with every original bound.",
+        "No scheduling, separate-object ABI, cycle reclamation, provider or production claim from byte parity."
+      ]
+    },
+    {
+      "id": "independent_behavior_match_adt_enum_nonpayload_variant",
+      "oracle_id": "independent_behavior_match_adt_enum_nonpayload_variant",
+      "source": "tests/diff/cases/match/adt_enum_nonpayload_variant.xr",
+      "source_lf_sha256": "dc2b37c4520d5104037ff9374e6db712ab09993ce36a103f24de45b4da5bdfab",
+      "entry": "run",
+      "source_context": "original_absolute",
+      "stdout_utf8": "circle:3\nsquare:4\npoint\nunknown\n9\n-1\n-2\n-2\ntrue\n",
+      "stderr_utf8": "",
+      "expected_exit_code": 0,
+      "arguments": [],
+      "stdin_hex": "",
+      "companions": [],
+      "owners": [
+        "P02",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P12",
+        "P13",
+        "P14"
+      ],
+      "independent_execution_model": "All four semantic variants, wildcard results and equal bare variant descriptions are observed without guessing any runtime ordinal.",
+      "independent_observation_count": 9,
+      "remaining_gates": [
+        "Original complete named bodies and internal scalar assertions are not qualified by run output alone.",
+        "Actual compiler/native/runtime full FI, exact allocated/live/work, cancellation, ownership/borrow/lifetime/physical/safety/provider gates with every original bound.",
+        "No scheduling, separate-object ABI, cycle reclamation, provider or production claim from byte parity."
+      ]
     }
   ]
 }
