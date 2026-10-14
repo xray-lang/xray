@@ -1,0 +1,4 @@
+var state:i64=7
+fn read()->i64{return state}
+fn worker()->i64{const f=read;return f()}
+export fn run()->i64{return await go worker()}

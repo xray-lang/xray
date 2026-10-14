@@ -1,0 +1,4 @@
+var state:i64=7
+fn left(n:i64)->i64{if (n==0){return state};return right(n-1)}
+fn right(n:i64)->i64{if (n==0){return state};return left(n-1)}
+export fn run()->i64{return await go left(2)}

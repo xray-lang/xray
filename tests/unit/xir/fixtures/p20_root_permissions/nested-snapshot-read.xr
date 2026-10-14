@@ -1,0 +1,5 @@
+var state:i64=7
+fn read()->i64{return state}
+fn pure(value:i64)->i64{return value}
+fn prepare()->i64{return await go pure(read())}
+export fn run()->i64{return await go prepare()}
