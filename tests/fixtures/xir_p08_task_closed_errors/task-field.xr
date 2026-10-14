@@ -1,0 +1,5 @@
+enum Problem { Failed { value:Task<i64> } }
+fn leaf()->i64 { return 42 }
+fn worker()->() { const value=go leaf(); throw Problem.Failed{value:value} }
+export fn handle()->Task<null> { return go worker() }
+export fn main()->i64 { return 7 }
