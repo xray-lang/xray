@@ -161,6 +161,13 @@ static void cm_layout_equal(const XrXirFunctionLayout *left, const XrXirFunction
     }
 }
 
+/* Select observers before sealing; the body, signature and proof stay authentic. */
+#ifndef CM_RESUME_OBSERVER
+#define CM_RESUME_OBSERVER cm_resume
+#endif
+#ifndef CM_RELEASE_OBSERVER
+#define CM_RELEASE_OBSERVER cm_release
+#endif
 static void cm_build(CmFixture *f, bool root_native) {
     CHECK(!cm_observed && !cn_observed);
     cm_observed = f;
@@ -213,8 +220,8 @@ static void cm_build(CmFixture *f, bool root_native) {
             CHECK(selected->parameters[p] == module->functions[i].parameters[p]);
         f->selected[i] = selected;
         f->base.entries[i] = *selected;
-        f->base.entries[i].resume = cm_resume;
-        f->base.entries[i].release = cm_release;
+        f->base.entries[i].resume = CM_RESUME_OBSERVER;
+        f->base.entries[i].release = CM_RELEASE_OBSERVER;
         if (f->providers[i] == CM_NATIVE) {
             f->base.bindings[i] = (CnBinding){i, selected};
             f->base.entries[i].environment = &f->base.bindings[i];
