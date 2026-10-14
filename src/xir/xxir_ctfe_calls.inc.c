@@ -80,8 +80,8 @@ static XrXirCtfeStatus ctfe_call_body_admit(const XrXirArtifact *artifact,uint32
             if (!ctfe_parameter_type(xr_xir_operand_type(body,op->args[0]))) return XR_XIR_CTFE_NOT_SUPPORTED;
         }
         if (op->op==XR_XIR_CONVERT_NUMBER &&
-            (!xr_xir_type_is_integer(op->type) ||
-            !xr_xir_type_is_integer(xr_xir_operand_type(body,op->args[0]))))
+            (!xr_xir_type_is_number(op->type) ||
+            !xr_xir_type_is_number(xr_xir_operand_type(body,op->args[0]))))
             return XR_XIR_CTFE_NOT_SUPPORTED;
     }
     return XR_XIR_CTFE_OK;
@@ -285,6 +285,11 @@ static XrXirCtfeStatus ctfe_call_execute(CtfeCallExecution *execution,XrXirValue
         if (!scalar_compile_work(run,work+1)) return XR_XIR_CTFE_BUDGET;
         XrXirCtfeStatus flow=ctfe_tuple_flow_work(run,op,&execution->owned);
         if (flow!=XR_XIR_CTFE_OK) return flow;
+        if (ctfe_float_opcode(run,op)) {
+            XrXirCtfeStatus status=ctfe_float_step(run,&frame->state.instruction);
+            if (status!=XR_XIR_CTFE_OK) return status;
+            continue;
+        }
         if (ctfe_tuple_opcode(op->op)) {
             XrXirCtfeStatus status=ctfe_tuple_step(run,&frame->state,&execution->owned);
             if (status!=XR_XIR_CTFE_OK) return status;

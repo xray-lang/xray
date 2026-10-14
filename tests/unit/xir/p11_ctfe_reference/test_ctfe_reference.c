@@ -31,6 +31,17 @@ typedef struct CtfeReferenceCase {
 } CtfeReferenceCase;
 
 static const CtfeReferenceCase reference_cases[] = {
+    {"float_tuple", XR_XIR_UNIT, 8, XR_XIR_OK, NULL, 0},
+    {"float_f64", XR_XIR_F64, INT64_C(0x400a000000000000), XR_XIR_OK, NULL, 0},
+    {"float_f32", XR_XIR_F32, INT64_C(0x3fe00000), XR_XIR_OK, NULL, 0},
+    {"float_ieee", XR_XIR_BOOL, 1, XR_XIR_OK, NULL, 0},
+    {"float_convert", XR_XIR_I64, -42, XR_XIR_OK, NULL, 0},
+    {"float_round", XR_XIR_F32, INT64_C(0x4b800000), XR_XIR_OK, NULL, 0},
+    {"float_cell", XR_XIR_F64, INT64_C(0x4022000000000000), XR_XIR_OK, NULL, 0},
+    {"float_zero", XR_XIR_F64, INT64_MIN, XR_XIR_OK, NULL, 0},
+    {"float_range", XR_XIR_UNIT, 0, XR_XIR_BAD_TYPE, "comptime value range violation", 2},
+    {"float_io", XR_XIR_UNIT, 0, XR_XIR_BAD_TYPE, "admitted deterministic", 2},
+    {"float_direct", XR_XIR_UNIT, 0, XR_XIR_OK, NULL, 0},
     {"tuple_generic", XR_XIR_UNIT, 3, XR_XIR_OK, NULL, 0},
     {"tuple_export", XR_XIR_UNIT, 3, XR_XIR_OK, NULL, 0},
     {"tuple_nested", XR_XIR_UNIT, 4, XR_XIR_OK, NULL, 0},
@@ -176,7 +187,7 @@ static void reference_accept(const XrXirCompileContext *context, XrXirSourceResu
         const XrXirInstruction *op = &body->instructions[i];
         CHECK(op->op != XR_XIR_CALL && op->op != XR_XIR_CALL_INDIRECT &&
             op->op != XR_XIR_FUNCTION_REF);
-        if (op->op == (selected->type == XR_XIR_BOOL ? XR_XIR_CONST_BOOL : selected->type == XR_XIR_RUNE ? XR_XIR_CONST_RUNE : XR_XIR_CONST_INT) &&
+        if (op->op == (selected->type == XR_XIR_BOOL ? XR_XIR_CONST_BOOL : selected->type == XR_XIR_RUNE ? XR_XIR_CONST_RUNE : xr_xir_float_bits(selected->type) ? XR_XIR_CONST_FLOAT : XR_XIR_CONST_INT) &&
             op->type == selected->type && op->immediate == selected->value) constant = true;
     }
     CHECK(constant);
@@ -486,6 +497,7 @@ static void reference_string_late_owner(void) {
 
 #include "xir_ctfe_string_read_cases.h"
 #include "xir_ctfe_tuple_cases.h"
+#include "xir_ctfe_float_cases.h"
 
 int main(int argc, char **argv) {
     CHECK(argc == 2);
@@ -505,8 +517,10 @@ int main(int argc, char **argv) {
         selected->name, (unsigned)status, diagnostic.line, diagnostic.column, diagnostic.message);
     CHECK(status == selected->status);
     if (status == XR_XIR_OK) {
-        if (!strncmp(selected->name,"tuple_",6) && selected->type==XR_XIR_UNIT) reference_tuple(&context,&source,selected);
+        if (!strcmp(selected->name,"float_tuple")) reference_tuple(&context,&source,selected);
+        else if (!strncmp(selected->name,"tuple_",6) && selected->type==XR_XIR_UNIT) reference_tuple(&context,&source,selected);
         else if (selected->type==XR_XIR_STRING) reference_string(&context,&source,selected);
+        else if (!strcmp(selected->name, "float_direct")) reference_float_direct(&context,&source);
         else if (!strcmp(selected->name, "string_read_direct")) reference_string_read_direct(&context,&source);
         else if (!strcmp(selected->name, "cell_leaf")) reference_cell_leaf(&context,&source);
         else if (!strcmp(selected->name, "rune_direct")) reference_rune_direct(&context,&source);

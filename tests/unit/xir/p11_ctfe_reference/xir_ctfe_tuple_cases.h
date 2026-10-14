@@ -17,7 +17,10 @@ static void reference_tuple_value(const XrXirValue *value,const CtfeReferenceCas
     CHECK(tuple && tuple->parameter_count==(!strcmp(selected->name,"tuple_export")?3u:2u));
     XrXirValue a={0},b={0},unit={0};CHECK(xr_xir_tuple_get(value,0,&a)==XR_XIR_VALUE_OK);
     CHECK(xr_xir_tuple_get(value,1,&b)==XR_XIR_VALUE_OK);
-    if (!strcmp(selected->name,"tuple_units")) CHECK(!a.type && !a.reserved && !a.payload && !b.type && !b.reserved && !b.payload);
+    if (!strcmp(selected->name,"float_tuple")) {
+        CHECK(a.type==XR_XIR_F32 && !a.reserved && a.payload==INT64_C(0x40600000));
+        CHECK(b.type==XR_XIR_F32 && !b.reserved && b.payload==INT64_C(0x3fe00000));
+    } else if (!strcmp(selected->name,"tuple_units")) CHECK(!a.type && !a.reserved && !a.payload && !b.type && !b.reserved && !b.payload);
     else {
         if (!strcmp(selected->name,"tuple_nested")) {
             XrXirValue number={0};CHECK(xr_xir_tuple_get(&a,0,&number)==XR_XIR_VALUE_OK);

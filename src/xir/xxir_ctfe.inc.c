@@ -17,7 +17,7 @@ static XrXirCtfeStatus ctfe_compile_status(XrXirStatus status) {
     return XR_XIR_CTFE_BAD_ARTIFACT;
 }
 static bool ctfe_scalar_type(XrXirType type) {
-    return type == XR_XIR_BOOL || type == XR_XIR_RUNE || xr_xir_type_is_integer(type);
+    return type == XR_XIR_BOOL || type == XR_XIR_RUNE || xr_xir_type_is_number(type);
 }
 static bool ctfe_parameter_type(XrXirType type) {
     return ctfe_scalar_type(type) || type == XR_XIR_STRING;
@@ -34,12 +34,13 @@ static bool ctfe_result_value(const XrXirValue *value, XrXirType type, const XrX
 
 #include "xxir_ctfe_types.inc.c"
 #include "xxir_ctfe_owned.inc.c"
+#include "xxir_ctfe_float.inc.c"
 
 /* The count describes frame reads/writes in scalar_step; edge transfers charge
  * their actual predecessor scans and copies inside scalar_edge. */
 static bool ctfe_opcode_work(XrXirOp op, uint64_t *work) {
     switch (op) {
-    case XR_XIR_CONST_RUNE: case XR_XIR_CONST_BOOL: case XR_XIR_CONST_INT: *work = 1; return true;
+    case XR_XIR_CONST_FLOAT: case XR_XIR_CONST_RUNE: case XR_XIR_CONST_BOOL: case XR_XIR_CONST_INT: *work = 1; return true;
     case XR_XIR_SCALAR_COPY: case XR_XIR_CONVERT_NUMBER:
     case XR_XIR_RUNE_TO_INTEGER: case XR_XIR_INTEGER_TO_RUNE:
     case XR_XIR_SCALAR_LOCAL_NEW: case XR_XIR_SCALAR_LOCAL_READ:
@@ -55,6 +56,10 @@ static bool ctfe_opcode_work(XrXirOp op, uint64_t *work) {
     case XR_XIR_OWNED_LOCAL_NEW: case XR_XIR_OWNED_LOCAL_READ: case XR_XIR_OWNED_RETAIN:
     case XR_XIR_OWNED_LOCAL_WRITE: *work = 2; return true;
     case XR_XIR_LOCAL_UNINIT: *work = 1; return true;
+    case XR_XIR_NEG_FLOAT: *work = 2; return true;
+    case XR_XIR_EQ_FLOAT: case XR_XIR_NE_FLOAT: case XR_XIR_LT_FLOAT: case XR_XIR_LE_FLOAT:
+    case XR_XIR_GT_FLOAT: case XR_XIR_GE_FLOAT: case XR_XIR_ADD_FLOAT: case XR_XIR_SUB_FLOAT:
+    case XR_XIR_MUL_FLOAT: case XR_XIR_DIV_FLOAT: *work = 3; return true;
     case XR_XIR_EQUAL: *work = 5; return true;
     case XR_XIR_ADD_INT: case XR_XIR_SUB_INT: case XR_XIR_MUL_INT:
     case XR_XIR_DIV_INT: case XR_XIR_REM_INT: case XR_XIR_AND_INT:
@@ -115,8 +120,8 @@ static XrXirCtfeStatus ctfe_admit(const XrXirArtifact *artifact, uint32_t select
             if (!ctfe_parameter_type(xr_xir_operand_type(body, op->args[0]))) return XR_XIR_CTFE_NOT_LEAF;
         }
         if (op->op == XR_XIR_CONVERT_NUMBER &&
-            (!xr_xir_type_is_integer(op->type) ||
-            !xr_xir_type_is_integer(xr_xir_operand_type(body, op->args[0])))) return XR_XIR_CTFE_NOT_LEAF;
+            (!xr_xir_type_is_number(op->type) ||
+            !xr_xir_type_is_number(xr_xir_operand_type(body, op->args[0])))) return XR_XIR_CTFE_NOT_LEAF;
     }
     return XR_XIR_CTFE_OK;
 }
@@ -203,6 +208,11 @@ XR_FUNC XrXirCtfeStatus xr_xir_compile_ctfe_leaf(const XrXirCtfeRequest *request
             if (!scalar_compile_work(&run, work + 1)) { status = XR_XIR_CTFE_BUDGET; break; }
             status=ctfe_tuple_flow_work(&run,&body->instructions[state->instruction],&owned);
             if (status!=XR_XIR_CTFE_OK) break;
+            if (ctfe_float_opcode(&run,&body->instructions[state->instruction])) {
+                status=ctfe_float_step(&run,&state->instruction);
+                if (status!=XR_XIR_CTFE_OK) break;
+                continue;
+            }
             if (ctfe_tuple_opcode(body->instructions[state->instruction].op)) {
                 status=ctfe_tuple_step(&run,state,&owned);
                 if (status!=XR_XIR_CTFE_OK) break;

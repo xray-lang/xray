@@ -24,7 +24,7 @@ static bool source_comptime_result_value(SourceContext *ctx,AstNode *node,
     if (!value) return false;
     if (value->type==XR_XIR_UNIT) return !value->reserved && !value->payload && !arity;
     if (!arity) return (value->type==XR_XIR_STRING || value->type==XR_XIR_BOOL || value->type==XR_XIR_RUNE ||
-        xr_xir_type_is_integer((XrXirType)value->type)) && xr_xir_value_argument(value,NULL,(XrXirType)value->type);
+        xr_xir_type_is_number((XrXirType)value->type)) && xr_xir_value_argument(value,NULL,(XrXirType)value->type);
     if (!source_work_units(ctx,node,(uint64_t)arity*16)) return false;
     const XrXirTypeArena *arena=xr_xir_value_arena(value);
     const XrXirTypeNode *tuple=xr_xir_tuple_signature(xr_xir_compile_type_arena_types(arena),(XrXirType)value->type);
@@ -56,7 +56,9 @@ static bool source_comptime_constant_leaf(SourceContext *ctx,AstNode *node,
         if ((length && !owned) || !source_copy_bytes(ctx,node,owned,bytes,length)) return false;
         return source_string_literal(ctx,node,owned,length,output);
     }
-    XrXirOp op=target==XR_XIR_BOOL?XR_XIR_CONST_BOOL:target==XR_XIR_RUNE?XR_XIR_CONST_RUNE:XR_XIR_CONST_INT;
+    if (xr_xir_float_bits(target) && !xr_xir_float_constant_payload_valid(target,input->payload))
+        return source_fail(ctx,node,XR_XIR_BAD_STRUCTURE,"comptime floating result has no canonical literal encoding");
+    XrXirOp op=target==XR_XIR_BOOL?XR_XIR_CONST_BOOL:target==XR_XIR_RUNE?XR_XIR_CONST_RUNE:xr_xir_float_bits(target)?XR_XIR_CONST_FLOAT:XR_XIR_CONST_INT;
     return source_recipe_record(ctx,(XrXirInstruction){op,target,{0},{0},input->payload,{0}},output);
 }
 static bool source_comptime_constant(SourceContext *ctx,AstNode *node,

@@ -46,7 +46,7 @@ XR_FUNC XrXirCtfeStatus xr_xir_compile_ctfe_type_admit(const XrXirCompileContext
     const XrXirTypes *types, XrXirType type);
 
 /* Borrowed input owners must remain live for this synchronous call. The selected
- * ordinary function must have bool/integer/Rune/String inputs and results or Unit results, with
+ * ordinary function must have bool/integer/Float/Rune/String inputs and results or Unit results, with
  * frame-owned locals and private Cells of admitted value families. Immutable
  * Tuples of these values can be constructed/projected and exported by logical
  * field-byte sum; Unit fields occupy zero output bytes. External Tuple parameters
@@ -55,6 +55,9 @@ XR_FUNC XrXirCtfeStatus xr_xir_compile_ctfe_type_admit(const XrXirCompileContext
  * writes produce Unit without a result slot. Every call repeats full artifact
  * verification on its original compiler ledger; root/effect flags never grant
  * purity. Limits may deny all resources and must not exceed the fixed ceilings.
+ * Float operations use the existing integer-only IEEE kernel and prepay a
+ * fixed-width work reserve on the original ledger. Canonical f32/f64 values
+ * export four/eight target bytes; numeric conversion range errors preserve output.
  * Output must be canonical Unit. Failure preserves it, and consumed compiler
  * allocation/work is never refunded. Output bytes measure target logical storage,
  * not the host carrier size. No source syntax, calls or runtime fallback is implied. */

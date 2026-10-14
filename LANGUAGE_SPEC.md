@@ -7792,6 +7792,14 @@ Tuple export size recursively sums target scalar storage sizes and actual String
 
 Source matches actual type structure across owners for helpers and replay results, without assuming equal local type IDs. Independent receiving uses iterative owning frames to record ordinary field constants and TUPLE_NEW recipes, followed by the complete Checker and query publication. Explicit NUL length, Unit positions, closed generics and original site/owner/expected coverage remain. Field, OOM, budget, construction and publication failures release all temporary results. This admission grants no complete Array/struct/enum, Tuple equality, function-value or cleanup-path qualification.
 
+### 17.47 Bounded CTFE floating bits and target constants
+
+After complete Lowered reverification and entire direct-call closure admission, CTFE permits f32/f64 arguments, results, ordinary locals, private Cells and immutable Tuple fields. CONST_FLOAT, negation, arithmetic, relations and concrete numeric conversions reuse the existing integer-only IEEE bit kernel. They depend on no host FPU, Instance, native or AST fallback. Subnormals, nearest-even rounding, canonical NaN, Infinity and signed zero retain ordinary execution semantics; floating division by zero produces IEEE results. Out-of-range, NaN and infinite floating-to-integer conversions return NUMERIC_RANGE and preserve Unit output.
+
+Each floating operation prepays 1024 work units on the original cumulative compiler ledger before entering a numeric API. This conservative fixed upper bound covers 64-bit decode/pack, normalization, product carry scans and long division; these loops depend only on fixed format widths. Prepayment creates no cloned quota, reset or refund; an unpayable reserve returns BUDGET first. Complete type, identity, CFG, reachable-I/O and original steps/depth/frame/output/allocated/live/work limits remain.
+
+Logical f32 and f64 outputs occupy four and eight target bytes respectively; Tuple fields continue to sum target storage sizes. f32 inputs require zero high bits and canonical NaN encodings; f64 retains ordinary Value admission rules. Independent Source replay rechecks target canonical floating payloads, records ordinary CONST_FLOAT recipes and invokes the complete Checker. External Tuple, arbitrary Array/struct/enum, function-value and cleanup-path qualification is not granted by this admission.
+
 ---
 
 ## 18. Error Codes
