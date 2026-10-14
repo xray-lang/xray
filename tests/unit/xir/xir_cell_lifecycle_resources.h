@@ -395,13 +395,55 @@ static uint64_t cell_runtime_call_boundary(XrXirProgram *program, const uint32_t
     }
     CHECK(false); return 0;
 }
+/* Admission may require unspent headroom beyond actual cumulative charges.
+ * Keep the original cap and find the complete operation's true quota boundary. */
+static uint64_t cell_runtime_work_boundary(XrXirProgram *program, const uint32_t *entries,
+    unsigned mode, unsigned pass, const CellRuntimeCost *baseline) {
+    XrXirInstanceConfig config;
+    CHECK(xr_xir_instance_config_init(&config, sizeof(config)) == XR_XIR_CALL_READY);
+    uint64_t low = baseline->budgets[pass].work;
+    uint64_t high = config.work_limit;
+    CHECK(low > 1 && low <= high && baseline->budgets[pass].work_limit == high);
+    config.work_limit = low;
+    cell_runtime_fault_count = 0;
+    CellRuntimeCost measured = cell_runtime_operation(program, entries, mode, &config, pass, false);
+    CHECK(!measured.hits);
+    if (measured.failure == XR_XIR_CALL_READY) {
+        CHECK(measured.complete && measured.budgets[pass].work == low);
+        return low;
+    }
+    CHECK(measured.failure == XR_XIR_CALL_LIMIT && low < high);
+    unsigned probes = 1;
+    while (high - low > 1) {
+        CHECK(++probes <= 64);
+        config.work_limit = low + (high - low) / 2;
+        cell_runtime_fault_count = 0;
+        measured = cell_runtime_operation(program, entries, mode, &config, pass, false);
+        CHECK(!measured.hits);
+        if (measured.failure == XR_XIR_CALL_LIMIT) {
+            low = config.work_limit;
+            continue;
+        }
+        CHECK(measured.complete && measured.failure == XR_XIR_CALL_READY);
+        for (unsigned owner = 0; owner < 2; ++owner)
+            CHECK(measured.budgets[owner].work == baseline->budgets[owner].work &&
+                measured.budgets[owner].requested_bytes == baseline->budgets[owner].requested_bytes &&
+                measured.budgets[owner].requested_call_bytes == baseline->budgets[owner].requested_call_bytes);
+        high = config.work_limit;
+    }
+    printf("CELL_RUNTIME_WORK_BOUNDARY mode=%u pass=%u charged=%llu exact=%llu probes=%u original_cap=%llu physical=0/0\n",
+        mode, pass, (unsigned long long)baseline->budgets[pass].work,
+        (unsigned long long)high, probes, (unsigned long long)baseline->budgets[pass].work_limit);
+    return high;
+}
 static void cell_runtime_axes(XrXirProgram *program, const uint32_t *entries, unsigned mode,
     const CellRuntimeCost *baseline) {
     /* The first three axes cover cumulative value/call/work. The remaining
      * controls independently enforce the original live value/call/metadata caps. */
     for (unsigned pass=0;pass<2;++pass) for (unsigned axis=0;axis<6;++axis) {
         uint64_t exact = axis == 0 ? baseline->budgets[pass].requested_bytes :
-            axis == 1 ? baseline->budgets[pass].requested_call_bytes : axis == 2 ? baseline->budgets[pass].work :
+            axis == 1 ? baseline->budgets[pass].requested_call_bytes : axis == 2 ?
+                cell_runtime_work_boundary(program,entries,mode,pass,baseline) :
             axis == 3 ? baseline->values[pass].peak_bytes : axis == 4 ?
                 cell_runtime_call_boundary(program,entries,mode,pass,baseline) : baseline->budgets[pass].metadata_peak;
         CHECK(exact > 1);
