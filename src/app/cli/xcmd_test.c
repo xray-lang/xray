@@ -18,8 +18,8 @@
 #include "xcli.h"
 #include "xcli_spec.h"
 #include "xcli_output.h"
-#include "xcli_canonical_source.h"
-#include "xcli_source_paths.h"
+#include "../../api/xsource_compile.h"
+#include "../../api/xsource_paths.h"
 #include "../../base/xmalloc.h"
 #include "../../base/xchecks.h"
 #include "../../execution/xr_xir_host_cli.h"
@@ -430,32 +430,32 @@ static void run_test_file(const char *filepath, const XrTestConfig *config,
     fail_file(result, "source VM does not support this host architecture");
 #else
     char error[TEST_MESSAGE_MAX] = {0};
-    XrCompileResourceLimits limits = xr_cli_compile_default_resource_limits();
+    XrCompileResourceLimits limits = xr_source_compile_default_resource_limits();
     XrCompileResources *resources = NULL;
     if (xr_compile_resources_new(&limits, &resources) != XR_COMPILE_RESOURCE_OK) {
         fail_file(result, "cannot initialize source resources");
         goto done;
     }
     XrXirCompileContext context = {resources, xr_xir_compile_default_limits()};
-    XrCliSourcePaths paths = {0};
-    XrCliSourcePathsDiagnostic path_diagnostic = {0};
+    XrSourcePaths paths = {0};
+    XrSourcePathsDiagnostic path_diagnostic = {0};
     XrXirSourceProduct *product = NULL;
     XrXirProgram *program = NULL;
     XrXirInstance *instance = NULL;
-    XrCliCompileSourceDiagnostic diagnostic = {0};
-    XrCliCompileSourceStatus status =
-        xr_cli_compile_source_paths(resources, filepath, &paths, &path_diagnostic);
-    if (status != XR_CLI_COMPILE_SOURCE_OK) {
+    XrSourceCompileDiagnostic diagnostic = {0};
+    XrSourceCompileStatus status =
+        xr_source_paths(resources, filepath, &paths, &path_diagnostic);
+    if (status != XR_SOURCE_COMPILE_OK) {
         snprintf(error, sizeof(error), "source path lookup failed (stage=%u status=%s)",
-                 (unsigned) path_diagnostic.stage, xr_cli_compile_source_status_name(status));
+                 (unsigned) path_diagnostic.stage, xr_source_compile_status_name(status));
         fail_file(result, error);
         goto release;
     }
-    XrCliCompileSourceRequest request = {&context, paths.entry, paths.stdlib, NULL,
-        xr_cli_compile_default_manifest_limits(), {XR_XIR_ARCH_X86_64, XR_XIR_VALUE_ABI_VERSION}};
-    status = xr_cli_compile_source_build(&request, &product, &diagnostic);
-    if (status != XR_CLI_COMPILE_SOURCE_OK) {
-        xr_cli_compile_source_diagnostic_format(&diagnostic, error, sizeof(error));
+    XrSourceCompileRequest request = {&context, paths.entry, paths.stdlib, NULL,
+        xr_source_compile_default_manifest_limits(), {XR_XIR_ARCH_X86_64, XR_XIR_VALUE_ABI_VERSION}, NULL};
+    status = xr_source_compile_build(&request, &product, &diagnostic);
+    if (status != XR_SOURCE_COMPILE_OK) {
+        xr_source_compile_diagnostic_format(&diagnostic, error, sizeof(error));
         fail_file(result, error);
         goto release;
     }
@@ -508,8 +508,8 @@ release:
         fail_file(result, "execution instance did not retire");
     xr_xir_compile_program_drop(program);
     xr_xir_compile_source_product_free(product);
-    xr_cli_compile_source_diagnostic_free(&diagnostic);
-    xr_cli_compile_source_paths_free(&paths);
+    xr_source_compile_diagnostic_free(&diagnostic);
+    xr_source_paths_free(&paths);
     xr_compile_resources_release(resources);
 done:
 #endif

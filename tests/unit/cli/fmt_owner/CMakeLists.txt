@@ -9,7 +9,7 @@ set(fmt_cli_sources "${FMT_ROOT}/src/app/cli/xcmd_fmt.c"
     "${FMT_ROOT}/src/app/cli/xcli_help.c" "${FMT_ROOT}/src/os/win/fd_win.c"
     "${FMT_ROOT}/src/os/win/time_win.c")
 add_executable(fmt_owner_driver "${CMAKE_CURRENT_LIST_DIR}/fmt_owner_driver.c" ${fmt_cli_sources})
-target_link_libraries(fmt_owner_driver PRIVATE xray_frontend_format xray_cli_source xray_xir_publication)
+target_link_libraries(fmt_owner_driver PRIVATE xray_frontend_format xray_source_compile xray_xir_publication)
 target_include_directories(fmt_owner_driver PRIVATE "${FMT_ROOT}/src" "${FMT_ROOT}/include" "${CMAKE_BINARY_DIR}/generated")
 if(MSVC)
     target_compile_definitions(fmt_owner_driver PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX _CRT_SECURE_NO_WARNINGS)
@@ -51,7 +51,7 @@ add_executable(fmt_owner_faults "${CMAKE_CURRENT_LIST_DIR}/fmt_owner_driver.c" "
 target_compile_definitions(fmt_owner_faults PRIVATE FMT_INJECTED=1 WIN32_LEAN_AND_MEAN NOMINMAX _CRT_SECURE_NO_WARNINGS)
 target_compile_options(fmt_owner_faults PRIVATE /W4 /WX /utf-8)
 target_include_directories(fmt_owner_faults PRIVATE "${FMT_ROOT}/src" "${FMT_ROOT}/include" "${CMAKE_BINARY_DIR}/generated")
-target_link_libraries(fmt_owner_faults PRIVATE xray_frontend_format xray_cli_source xray_xir_publication)
+target_link_libraries(fmt_owner_faults PRIVATE xray_frontend_format xray_source_compile xray_xir_publication)
 
 add_test(NAME fmt_owner_faults COMMAND "${Python3_EXECUTABLE}" -X utf8 "${CMAKE_CURRENT_LIST_DIR}/fmt_owner_faults.py"
     --driver "$<TARGET_FILE:fmt_owner_faults>" --output "${CMAKE_CURRENT_BINARY_DIR}/fmt-owner-faults")

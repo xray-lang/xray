@@ -7,8 +7,8 @@
  * xcmd_check.c - Source and single-file syntax checking with one compiler ledger
  */
 #include "xcli.h"
-#include "xcli_canonical_source.h"
-#include "xcli_source_paths.h"
+#include "../../api/xsource_compile.h"
+#include "../../api/xsource_paths.h"
 #include "../../base/xio_policy.inc.h"
 #include "../../frontend/parser/xparse.h"
 #include "../../os/os_dir.h"
@@ -137,17 +137,17 @@ static void check_syntax(CheckWork *work, const char *path) {
 }
 static void check_semantic(CheckWork *work, const char *path) {
 #if defined(XR_ARCH_X86_64)
-    XrCliSourcePaths paths = {0};
-    XrCliSourcePathsDiagnostic path_diagnostic = {0};
-    XrCliCompileSourceDiagnostic diagnostic = {0};
+    XrSourcePaths paths = {0};
+    XrSourcePathsDiagnostic path_diagnostic = {0};
+    XrSourceCompileDiagnostic diagnostic = {0};
     XrXirSourceProduct *product = NULL;
     XrXirCompileContext context = {work->resources, xr_xir_compile_default_limits()};
-    XrCliCompileSourceStatus status = xr_cli_compile_source_paths(work->resources, path, &paths, &path_diagnostic);
-    if (status == XR_CLI_COMPILE_SOURCE_OK) {
-        XrCliCompileSourceRequest request = {&context, paths.entry, paths.stdlib, NULL,
-            xr_cli_compile_default_manifest_limits(), {XR_XIR_ARCH_X86_64, XR_XIR_VALUE_ABI_VERSION}};
-        status = xr_cli_compile_source_build(&request, &product, &diagnostic);
-        if (status != XR_CLI_COMPILE_SOURCE_OK) {
+    XrSourceCompileStatus status = xr_source_paths(work->resources, path, &paths, &path_diagnostic);
+    if (status == XR_SOURCE_COMPILE_OK) {
+        XrSourceCompileRequest request = {&context, paths.entry, paths.stdlib, NULL,
+            xr_source_compile_default_manifest_limits(), {XR_XIR_ARCH_X86_64, XR_XIR_VALUE_ABI_VERSION}, NULL};
+        status = xr_source_compile_build(&request, &product, &diagnostic);
+        if (status != XR_SOURCE_COMPILE_OK) {
             const XrXirSourceDiagnostic *source = &diagnostic.source.source;
             const XrXirSourceView *view = xr_xir_compile_source_snapshot_view(diagnostic.source.snapshot);
             const char *failed_path = diagnostic.source.source_path;
@@ -155,22 +155,22 @@ static void check_semantic(CheckWork *work, const char *path) {
                 failed_path = view->modules[source->module].path;
             if (failed_path && source->line > 0)
                 fprintf(stderr, "%s:%d:%d: error: %s\n", failed_path, source->line, source->column,
-                    source->message[0] ? source->message : xr_cli_compile_source_status_name(status));
+                    source->message[0] ? source->message : xr_source_compile_status_name(status));
             else
                 fprintf(stderr, "xray check: %s: source build failed (stage=%u status=%s): %s\n",
-                    path, (unsigned)diagnostic.stage, xr_cli_compile_source_status_name(status), source->message);
+                    path, (unsigned)diagnostic.stage, xr_source_compile_status_name(status), source->message);
         }
     } else {
         fprintf(stderr, "xray check: %s: path lookup failed (stage=%u status=%s io=%u)\n", path,
-            (unsigned)path_diagnostic.stage, xr_cli_compile_source_status_name(status), (unsigned)path_diagnostic.io_status);
+            (unsigned)path_diagnostic.stage, xr_source_compile_status_name(status), (unsigned)path_diagnostic.io_status);
     }
     xr_xir_compile_source_product_free(product);
-    xr_cli_compile_source_diagnostic_free(&diagnostic);
-    xr_cli_compile_source_paths_free(&paths);
-    if (status != XR_CLI_COMPILE_SOURCE_OK) {
-        bool internal = status == XR_CLI_COMPILE_SOURCE_OUT_OF_MEMORY || status == XR_CLI_COMPILE_SOURCE_BAD_ARGUMENT;
+    xr_source_compile_diagnostic_free(&diagnostic);
+    xr_source_paths_free(&paths);
+    if (status != XR_SOURCE_COMPILE_OK) {
+        bool internal = status == XR_SOURCE_COMPILE_OUT_OF_MEMORY || status == XR_SOURCE_COMPILE_BAD_ARGUMENT;
         check_failure(work, internal ? XR_CLI_EXIT_INTERNAL : XR_CLI_EXIT_FAIL,
-            internal || status == XR_CLI_COMPILE_SOURCE_BUDGET);
+            internal || status == XR_SOURCE_COMPILE_BUDGET);
     }
 #else
     fprintf(stderr, "xray check: %s: unsupported Source target architecture\n", path);
@@ -245,7 +245,7 @@ XR_FUNC int cmd_check(const XrCliInvocation *inv) {
     work.syntax_only = xr_cli_opt_bool(&inv->options, "syntax-only");
     work.verbose = xr_cli_opt_bool(&inv->options, "verbose");
     work.quiet = xr_cli_opt_bool(&inv->options, "quiet");
-    XrCompileResourceLimits limits = xr_cli_compile_default_resource_limits();
+    XrCompileResourceLimits limits = xr_source_compile_default_resource_limits();
     XrCompileResourceStatus status = xr_compile_resources_new(&limits, &work.resources);
     if (status != XR_COMPILE_RESOURCE_OK) {
         fprintf(stderr, "xray check: cannot initialize compiler resources\n");
