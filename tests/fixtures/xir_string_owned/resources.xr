@@ -1,0 +1,7 @@
+export fn copied(value:string)->string { return value.toString() }
+export fn repeated(value:string,count:i64)->string { return value.repeat(count) }
+export fn contains(value:string,search:string)->bool { return value.contains(search) }
+export fn starts(value:string,search:string)->bool { return value.startsWith(search) }
+export fn ends(value:string,search:string)->bool { return value.endsWith(search) }
+export fn index(value:string,search:string)->i64 { return value.indexOf(search) }
+export fn last(value:string,search:string)->i64 { return value.lastIndexOf(search) }

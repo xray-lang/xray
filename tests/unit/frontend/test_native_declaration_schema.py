@@ -192,11 +192,11 @@ class NativeDeclarations(unittest.TestCase):
         for member in members:
             self.assertTrue(rows[member.line - 1][member.column - 1:].startswith(member.name))
         admitted = [m for m in members if m.operation != 'NONE']
-        self.assertEqual({m.name for m in admitted}, {'contains', 'startsWith', 'endsWith', 'indexOf', 'lastIndexOf'})
+        self.assertEqual({m.name for m in admitted}, {'contains', 'startsWith', 'endsWith', 'indexOf', 'lastIndexOf', 'toString', 'repeat'})
         for member in admitted:
-            self.assertEqual(schema.simple_term(member.result, ''), 'I64' if member.name in {'indexOf', 'lastIndexOf'} else 'BOOL')
-            self.assertEqual(member.allocation, 'no_heap')
-            self.assertEqual(member.failures, 'bounds,limit' if member.name == 'indexOf' else 'limit' if member.name == 'lastIndexOf' else 'none')
+            self.assertEqual(schema.simple_term(member.result, ''), 'I64' if member.name in {'indexOf', 'lastIndexOf'} else 'STRING' if member.name in {'toString','repeat'} else 'BOOL')
+            self.assertEqual(member.allocation, 'may_heap' if member.name=='repeat' else 'no_heap')
+            self.assertEqual(member.failures, {'indexOf':'bounds,limit','lastIndexOf':'limit','toString':'retain','repeat':'allocation,retain,limit'}.get(member.name,'none'))
         self.assertNotIn('xr_native_def_string[]', embed.render(ROOT / 'stdlib/types'))
         for before, after in [('struct string', 'class string'), ('id=2', 'id=1'),
                               ('struct string {', 'struct string<T> {'),
@@ -209,7 +209,10 @@ class NativeDeclarations(unittest.TestCase):
                               ('start?: i64', 'start: i64'), ('start?: i64', 'start?: string'),
                               ('indexOf(search: string', 'indexOf(search?: string'),
                               ('lastIndexOf(search: string', 'lastIndexOf(search?: string'),
-                              ('failures=bounds,limit', 'failures=none')]:
+                              ('failures=bounds,limit', 'failures=none'),
+                              ('repeat(count: i64)', 'repeat(count: u64)'),
+                              ('toString() -> string', 'ref toString() -> string'),
+                              ('STRING_REPEAT allocation=may_heap', 'STRING_REPEAT allocation=no_heap')]:
             with self.subTest(before=before), self.assertRaises(ValueError):
                 schema.parse_source(source.replace(before, after), self.prelude)
 

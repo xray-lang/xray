@@ -63,6 +63,9 @@ static bool source_string_call(SourceContext *ctx, AstNode *node, SourceValue re
     const XrNativeTypeDeclaration *native = xr_native_declaration_by_id(XR_NATIVE_DECLARATION_STRING);
     const XrNativeMemberDeclaration *member = source_native_member(ctx,native,call->callee->as.member_access.name);
     if (!source_work(ctx, node)) return false;
+    if (member && (member->operation==XR_NATIVE_OPERATION_STRING_TO_STRING ||
+        member->operation==XR_NATIVE_OPERATION_STRING_REPEAT))
+        return source_string_owned_call(ctx,node,receiver,member,value);
     if (!member || !member->is_public || member->is_static || !member->parameter_count ||
         member->parameters[0].type != XR_NATIVE_TERM_STRING || member->receiver != XR_NATIVE_RECEIVER_READ)
         return source_fail(ctx, node, XR_XIR_BAD_TYPE, "string member has no admitted value-operation contract");

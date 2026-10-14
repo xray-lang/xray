@@ -512,8 +512,9 @@ static void load_native_value_declaration(uint32_t id, XrTypeId type, XaBuiltinM
                 XA_ALLOCATION_CONTRACT_NO_HEAP : XA_ALLOCATION_CONTRACT_MAY_HEAP;
             /* Bounds and resource failures use the panic channel, not typed errors. */
             member->effect_contract.kind = XA_EFFECT_CONTRACT_NOTHROW;
-            /* Scalar ownership carries no fresh-object provenance. */
+            /* Scalars and retained string identities carry no fresh-object provenance. */
             member->return_ownership = source->ownership == XR_NATIVE_RESULT_OWNERSHIP_OWNED &&
+                source->operation != XR_NATIVE_OPERATION_STRING_TO_STRING &&
                 source->result != XR_NATIVE_TERM_BOOL && source->result != XR_NATIVE_TERM_I64 &&
                 source->result != XR_NATIVE_TERM_F64 && source->result != XR_NATIVE_TERM_NULLABLE_I64 &&
                 source->result != XR_NATIVE_TERM_U32 &&

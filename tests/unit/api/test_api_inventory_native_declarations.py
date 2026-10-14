@@ -131,10 +131,10 @@ class NativeDeclarationInventoryTest(unittest.TestCase):
             self.assertEqual(entry["column"], member.column)
             self.assertEqual(entry["source"], "stdlib/types/string.xr")
             self.assertEqual(entry["operation"], member.operation)
-            self.assertEqual(entry["xir_admitted"], member.name in {"contains", "startsWith", "endsWith", "indexOf", "lastIndexOf"})
+            self.assertEqual(entry["xir_admitted"], member.name in {"contains", "startsWith", "endsWith", "indexOf", "lastIndexOf", "toString", "repeat"})
             if entry["xir_admitted"]:
-                self.assertEqual(entry["allocation"], "no_heap")
-                self.assertEqual(entry["failures"], ["bounds", "limit"] if member.name == "indexOf" else ["limit"] if member.name == "lastIndexOf" else [])
+                self.assertEqual(entry["allocation"], "may_heap" if member.name=="repeat" else "no_heap")
+                self.assertEqual(entry["failures"], {"indexOf":["bounds","limit"],"lastIndexOf":["limit"],"toString":["retain"],"repeat":["allocation","retain","limit"]}.get(member.name,[]))
                 self.assertEqual(entry["ownership"], "owned")
         with self.assertRaises(ValueError):
             inventory.collect_native_declaration(ROOT, path,

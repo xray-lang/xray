@@ -1068,6 +1068,8 @@ static bool source_array_recipe_call(SourceContext *ctx, AstNode *node, SourceAr
     const SourceValue *evaluated, SourceValue *value);
 #include "xxir_source_array.inc.c"
 #include "xxir_source_tuple.inc.c"
+static bool source_string_owned_call(SourceContext *ctx,AstNode *node,SourceValue receiver,
+    const XrNativeMemberDeclaration *member,SourceValue *value);
 #include "xxir_source_string.inc.c"
 static bool source_literal_append(SourceContext *ctx, AstNode *node, const char *bytes,
     size_t length, uint32_t *literal);
@@ -2839,6 +2841,7 @@ static bool source_closure(SourceContext *ctx, AstNode *node, SourceExpectedType
     return source_type_arguments(ctx, node, types, count, &op) && source_recipe_group(ctx, op, captures, scan.count, value);
 }
 #include "xxir_source_array_recipes.inc.c"
+#include "xxir_source_string_owned.inc.c"
 #include "xxir_source_core_panics.inc.c"
 #include "xxir_source_comptime_expression.inc.c"
 static bool build_bodies(SourceContext *ctx) {
