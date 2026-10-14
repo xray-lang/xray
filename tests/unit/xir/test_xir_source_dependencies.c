@@ -6,7 +6,7 @@
  *
  * test_xir_source_dependencies.c - Real Source dependency owners and separately frozen resource probes
  */
-#include "app/cli/xcli_canonical_source.h"
+#include "api/xsource_compile.h"
 #include "app/cli/xcli_dependency_output.h"
 #include "module/xlockfile.h"
 #include <stdlib.h>
@@ -15,44 +15,44 @@
 #define CHECK(c) do { if (!(c)) { fprintf(stderr,"%d: %s\n",__LINE__,#c); exit(1); } } while (0)
 #include "xir_source_compile_owner.h"
 
-static XrCliCompileSourceStatus raw_status(XrXirStatus status) {
-    if (status == XR_XIR_OK) return XR_CLI_COMPILE_SOURCE_OK;
-    if (status == XR_XIR_BUDGET) return XR_CLI_COMPILE_SOURCE_BUDGET;
-    if (status == XR_XIR_OUT_OF_MEMORY) return XR_CLI_COMPILE_SOURCE_OUT_OF_MEMORY;
-    return XR_CLI_COMPILE_SOURCE_REJECTED;
+static XrSourceCompileStatus raw_status(XrXirStatus status) {
+    if (status == XR_XIR_OK) return XR_SOURCE_COMPILE_OK;
+    if (status == XR_XIR_BUDGET) return XR_SOURCE_COMPILE_BUDGET;
+    if (status == XR_XIR_OUT_OF_MEMORY) return XR_SOURCE_COMPILE_OUT_OF_MEMORY;
+    return XR_SOURCE_COMPILE_REJECTED;
 }
-static XrCliCompileSourceStatus io_status(XrOsIoStatus status) {
-    if (status == XR_OS_IO_OK) return XR_CLI_COMPILE_SOURCE_OK;
-    if (status == XR_OS_IO_BUDGET) return XR_CLI_COMPILE_SOURCE_BUDGET;
-    if (status == XR_OS_IO_OUT_OF_MEMORY) return XR_CLI_COMPILE_SOURCE_OUT_OF_MEMORY;
-    return XR_CLI_COMPILE_SOURCE_REJECTED;
+static XrSourceCompileStatus io_status(XrOsIoStatus status) {
+    if (status == XR_OS_IO_OK) return XR_SOURCE_COMPILE_OK;
+    if (status == XR_OS_IO_BUDGET) return XR_SOURCE_COMPILE_BUDGET;
+    if (status == XR_OS_IO_OUT_OF_MEMORY) return XR_SOURCE_COMPILE_OUT_OF_MEMORY;
+    return XR_SOURCE_COMPILE_REJECTED;
 }
-static XrCliCompileSourceStatus build(const XrXirCompileContext *context, char **argv,
+static XrSourceCompileStatus build(const XrXirCompileContext *context, char **argv,
     XrXirSourceProduct **output) {
     if (!strcmp(argv[5],"catalog")) {
-        XrCliCompileSourceRequest request={context,argv[2],argv[3],NULL,
-            xr_cli_compile_default_manifest_limits(),{XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION}};
-        XrCliCompileSourceDiagnostic diagnostic={0};
-        XrCliCompileSourceStatus status=xr_cli_compile_source_build(&request,output,&diagnostic);
-        if (status != XR_CLI_COMPILE_SOURCE_OK) fprintf(stderr,"build status=%u stage=%u\n",status,diagnostic.stage);
-        xr_cli_compile_source_diagnostic_free(&diagnostic);
+        XrSourceCompileRequest request={context,argv[2],argv[3],NULL,
+            xr_source_compile_default_manifest_limits(),{XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION}, NULL};
+        XrSourceCompileDiagnostic diagnostic={0};
+        XrSourceCompileStatus status=xr_source_compile_build(&request,output,&diagnostic);
+        if (status != XR_SOURCE_COMPILE_OK) fprintf(stderr,"build status=%u stage=%u\n",status,diagnostic.stage);
+        xr_source_compile_diagnostic_free(&diagnostic);
         return status;
     }
     XrCompilerSession *session=NULL; XrLockfile *lock=NULL;
     XrCompilerSessionStatus ss=xr_compile_session_new(context->resources,&session);
-    XrCliCompileSourceStatus status=ss==XR_COMPILER_SESSION_OK ? XR_CLI_COMPILE_SOURCE_OK :
-        ss==XR_COMPILER_SESSION_BUDGET ? XR_CLI_COMPILE_SOURCE_BUDGET : XR_CLI_COMPILE_SOURCE_OUT_OF_MEMORY;
+    XrSourceCompileStatus status=ss==XR_COMPILER_SESSION_OK ? XR_SOURCE_COMPILE_OK :
+        ss==XR_COMPILER_SESSION_BUDGET ? XR_SOURCE_COMPILE_BUDGET : XR_SOURCE_COMPILE_OUT_OF_MEMORY;
     XrOsIoPolicy policy=xr_compile_io_policy(context->resources);
-    if (status==XR_CLI_COMPILE_SOURCE_OK && strcmp(argv[4],"-")) {
+    if (status==XR_SOURCE_COMPILE_OK && strcmp(argv[4],"-")) {
         status=io_status(xr_lockfile_new_owned(&policy,&lock));
-        if (status==XR_CLI_COMPILE_SOURCE_OK)
+        if (status==XR_SOURCE_COMPILE_OK)
             status=io_status(xr_lockfile_add_package_owned(lock,"fixture/math","1.0.0","",argv[4]));
     }
     XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_PROJECT,"fixture",argv[1]};
     XrXirSourceProductRequest request={{session,argv[2],&authority,context,argv[3],lock,XR_XIR_PROGRAM,NULL},
         {XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION}};
     XrXirSourceProductDiagnostic diagnostic={0};
-    if (status==XR_CLI_COMPILE_SOURCE_OK)
+    if (status==XR_SOURCE_COMPILE_OK)
         status=raw_status(xr_xir_compile_source_product_build(&request,output,&diagnostic));
     xr_xir_compile_source_product_diagnostic_free(&diagnostic);
     xr_lockfile_free_owned(lock); xr_compile_session_free(session);
@@ -85,14 +85,14 @@ int main(int argc,char **argv) {
     source_fixture_compile_fail_at=!strcmp(argv[8],"none") ? SIZE_MAX : (size_t)strtoull(argv[8],NULL,10);
     XrCompileResources *resources=NULL;
     XrCompileResourceStatus rs=xr_compile_resources_new(&caps,&resources);
-    XrCliCompileSourceStatus status=rs==XR_COMPILE_RESOURCE_OK ? XR_CLI_COMPILE_SOURCE_OK :
-        rs==XR_COMPILE_RESOURCE_BUDGET ? XR_CLI_COMPILE_SOURCE_BUDGET : XR_CLI_COMPILE_SOURCE_OUT_OF_MEMORY;
+    XrSourceCompileStatus status=rs==XR_COMPILE_RESOURCE_OK ? XR_SOURCE_COMPILE_OK :
+        rs==XR_COMPILE_RESOURCE_BUDGET ? XR_SOURCE_COMPILE_BUDGET : XR_SOURCE_COMPILE_OUT_OF_MEMORY;
     XrXirCompileContext context={resources,xr_xir_compile_default_limits()};
     XrXirSourceProduct *product=NULL;
-    if (status==XR_CLI_COMPILE_SOURCE_OK) status=build(&context,argv,&product);
+    if (status==XR_SOURCE_COMPILE_OK) status=build(&context,argv,&product);
     CHECK((unsigned)status==expected);
-    if (status!=XR_CLI_COMPILE_SOURCE_OK) CHECK(!product);
-    if (source_fixture_compile_fail_at!=SIZE_MAX) CHECK(source_fixture_compile_injected && status==XR_CLI_COMPILE_SOURCE_OUT_OF_MEMORY);
+    if (status!=XR_SOURCE_COMPILE_OK) CHECK(!product);
+    if (source_fixture_compile_fail_at!=SIZE_MAX) CHECK(source_fixture_compile_injected && status==XR_SOURCE_COMPILE_OUT_OF_MEMORY);
     source_fixture_compile_fail_at=SIZE_MAX;
     XrCompileResourceStats stats={0};
     if (resources) CHECK(xr_compile_resources_stats(resources,&stats)==XR_COMPILE_RESOURCE_OK);
@@ -100,9 +100,9 @@ int main(int argc,char **argv) {
         source_fixture_compile_attempts,(unsigned long long)stats.allocated_bytes,(unsigned long long)stats.peak_bytes,
         (unsigned long long)stats.work,(unsigned long long)stats.live_bytes,status,(unsigned)source_fixture_compile_injected);
     if (argc==13) {
-        CHECK(status==XR_CLI_COMPILE_SOURCE_OK); xr_xir_compile_source_product_free(product);product=NULL;
+        CHECK(status==XR_SOURCE_COMPILE_OK); xr_xir_compile_source_product_free(product);product=NULL;
         status=build(&context,argv,&product);CHECK((unsigned)status==(unsigned)strtoul(argv[12],NULL,10));
-        if (status!=XR_CLI_COMPILE_SOURCE_OK) CHECK(!product);
+        if (status!=XR_SOURCE_COMPILE_OK) CHECK(!product);
         printf("RETRY status=%u\n",status);
     }
     xr_compile_resources_release(resources);
