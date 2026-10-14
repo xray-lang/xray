@@ -1,0 +1,5 @@
+fn point(c:rune)->i64 { return i64(c) }
+fn convert(n:i64)->rune { return rune(n) }
+fn same(a:rune,b:rune)->bool { return a==b }
+fn literal()->rune { return 'A' }
+export fn run()->rune { return comptime literal() }

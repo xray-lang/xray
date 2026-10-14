@@ -19,6 +19,7 @@
 #include "base/xsha256.h"
 #include "xir/xxir_ctfe.h"
 #include "xir/xxir_vm.h"
+#include "xir/xxir_scalar_core.h"
 
 typedef struct CtfeReferenceCase {
     const char *name;
@@ -30,6 +31,12 @@ typedef struct CtfeReferenceCase {
 } CtfeReferenceCase;
 
 static const CtfeReferenceCase reference_cases[] = {
+    {"rune_literal", XR_XIR_RUNE, 65, XR_XIR_OK, NULL, 0},
+    {"rune_nested", XR_XIR_RUNE, 128512, XR_XIR_OK, NULL, 0},
+    {"rune_equal", XR_XIR_BOOL, 1, XR_XIR_OK, NULL, 0},
+    {"rune_direct", XR_XIR_UNIT, 0, XR_XIR_OK, NULL, 0},
+    {"rune_surrogate", XR_XIR_UNIT, 0, XR_XIR_BAD_TYPE, NULL, 1},
+    {"rune_overflow", XR_XIR_UNIT, 0, XR_XIR_BAD_TYPE, NULL, 1},
     {"factorial", XR_XIR_I64, 720, XR_XIR_OK, NULL, 0},
     {"unit_empty", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
     {"unit_statements", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
@@ -139,7 +146,7 @@ static void reference_accept(const XrXirCompileContext *context, XrXirSourceResu
         const XrXirInstruction *op = &body->instructions[i];
         CHECK(op->op != XR_XIR_CALL && op->op != XR_XIR_CALL_INDIRECT &&
             op->op != XR_XIR_FUNCTION_REF);
-        if (op->op == (selected->type == XR_XIR_BOOL ? XR_XIR_CONST_BOOL : XR_XIR_CONST_INT) &&
+        if (op->op == (selected->type == XR_XIR_BOOL ? XR_XIR_CONST_BOOL : selected->type == XR_XIR_RUNE ? XR_XIR_CONST_RUNE : XR_XIR_CONST_INT) &&
             op->type == selected->type && op->immediate == selected->value) constant = true;
     }
     CHECK(constant);
@@ -260,6 +267,75 @@ static void reference_unit_direct(const XrXirCompileContext *context, XrXirSourc
     fprintf(stderr,"CTFE canonical Unit leaf/call output bytes=0; exact1/minus0 and depth1/minus0; child Unit keeps parent argument41/result42; occupied fees unchanged\n");
 }
 
+static uint32_t reference_named(const XrXirModule *module,const char *name) {
+    uint32_t result=UINT32_MAX;size_t length=strlen(name);
+    for (uint32_t f=0;f<module->function_count;++f)
+        if (module->functions[f].name_length==length && !memcmp(module->functions[f].name,name,length)) {
+            CHECK(result==UINT32_MAX);result=f;
+        }
+    CHECK(result!=UINT32_MAX);return result;
+}
+static void reference_rune_direct(const XrXirCompileContext *context,XrXirSourceResult *source) {
+    uint8_t identity[32]={0};XrXirArtifact *lowered=reference_lower(context,source,identity);
+    const XrXirModule *module=xr_xir_compile_artifact_module(lowered);
+    uint32_t point=reference_named(module,"point"),convert=reference_named(module,"convert");
+    uint32_t same=reference_named(module,"same"),literal=reference_named(module,"literal");
+    XrXirValue args[2]={{XR_XIR_RUNE,0,0},{XR_XIR_RUNE,0,0}},output={0};
+    XrXirCtfeRequest request={.artifact=lowered,.function=literal,
+        .target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION},
+        .limits={XR_XIR_CTFE_MAX_STEPS,XR_XIR_CTFE_MAX_FRAME_BYTES,4}};
+    memcpy(request.checked_identity,identity,sizeof(identity));
+    CHECK(xr_xir_compile_ctfe_leaf(&request,&output)==XR_XIR_CTFE_OK);
+    CHECK(output.type==XR_XIR_RUNE && !output.reserved && output.payload==65);output=(XrXirValue){0};
+    request.limits.output_bytes=3;
+    CHECK(xr_xir_compile_ctfe_leaf(&request,&output)==XR_XIR_CTFE_OUTPUT_LIMIT && !output.type && !output.payload);
+    request.limits.output_bytes=8;request.arguments=args;request.argument_count=1;
+    static const int64_t good[]={0,65,0xd7ff,0xe000,0x1f600,0x10ffff};
+    static const int64_t bad[]={-1,0xd800,0xdfff,0x110000,INT64_MAX};
+    for (size_t i=0;i<sizeof(good)/sizeof(good[0]);++i) for (unsigned c=0;c<2;++c) {
+        request.function=c?convert:point;args[0]=(XrXirValue){c?XR_XIR_I64:XR_XIR_RUNE,0,good[i]};
+        XrXirCtfeCallRequest calls={request,1};
+        CHECK(xr_xir_compile_ctfe_leaf(&request,&output)==XR_XIR_CTFE_OK);
+        CHECK(output.type==(uint32_t)(c?XR_XIR_RUNE:XR_XIR_I64) && !output.reserved && output.payload==good[i]);output=(XrXirValue){0};
+        CHECK(xr_xir_compile_ctfe_calls(&calls,&output)==XR_XIR_CTFE_OK);
+        CHECK(output.type==(uint32_t)(c?XR_XIR_RUNE:XR_XIR_I64) && !output.reserved && output.payload==good[i]);output=(XrXirValue){0};
+    }
+    for (size_t i=0;i<sizeof(bad)/sizeof(bad[0]);++i) for (unsigned c=0;c<2;++c) {
+        request.function=c?convert:point;args[0]=(XrXirValue){c?XR_XIR_I64:XR_XIR_RUNE,0,bad[i]};
+        XrXirCtfeStatus expected=c?XR_XIR_CTFE_NUMERIC_RANGE:XR_XIR_CTFE_BAD_ARGUMENT;
+        XrXirCtfeCallRequest calls={request,1};
+        CHECK(xr_xir_compile_ctfe_leaf(&request,&output)==expected);
+        CHECK(!output.type && !output.reserved && !output.payload);
+        CHECK(xr_xir_compile_ctfe_calls(&calls,&output)==expected);
+        CHECK(!output.type && !output.reserved && !output.payload);
+        bool unchanged=true;
+        CHECK(xir_scalar_core_equal(XR_XIR_RUNE,bad[i],65,&unchanged)==XR_XIR_RUN_BAD_ARGUMENT && unchanged);
+    }
+    request.function=same;request.argument_count=2;args[0]=(XrXirValue){XR_XIR_RUNE,0,65};
+    for (unsigned different=0;different<2;++different) {
+        args[1]=(XrXirValue){XR_XIR_RUNE,0,65+different};bool equal=false;
+        CHECK(xir_scalar_core_equal(XR_XIR_RUNE,65,args[1].payload,&equal)==XR_XIR_RUN_OK && equal==!different);
+        CHECK(xr_xir_compile_ctfe_leaf(&request,&output)==XR_XIR_CTFE_OK);
+        CHECK(output.type==XR_XIR_BOOL && !output.reserved && output.payload==!different);output=(XrXirValue){0};
+    }
+    request.function=literal;request.arguments=NULL;request.argument_count=0;
+    size_t start=source_fixture_compile_attempts;
+    CHECK(xr_xir_compile_ctfe_leaf(&request,&output)==XR_XIR_CTFE_OK);output=(XrXirValue){0};
+    size_t sites=source_fixture_compile_attempts-start;CHECK(sites>0);
+    XrCompileResourceStats baseline=reference_stats(context);
+    for (size_t f=0;f<sites;++f) {
+        source_fixture_compile_injected=false;source_fixture_compile_fail_at=source_fixture_compile_attempts+f;
+        CHECK(xr_xir_compile_ctfe_leaf(&request,&output)==XR_XIR_CTFE_OUT_OF_MEMORY);
+        CHECK(source_fixture_compile_injected && !output.type && !output.reserved && !output.payload);
+        CHECK(reference_stats(context).live_bytes==baseline.live_bytes);
+        source_fixture_compile_fail_at=SIZE_MAX;
+        CHECK(xr_xir_compile_ctfe_leaf(&request,&output)==XR_XIR_CTFE_OK);
+        CHECK(output.type==XR_XIR_RUNE && !output.reserved && output.payload==65);output=(XrXirValue){0};
+    }
+    xr_xir_compile_artifact_free(lowered);
+    fprintf(stderr,"CTFE Rune canonical boundary/conversion/equality leaf and calls; output4/minus3; evaluator FI=%zu same-owner retry; physical0 after last owner\n",sites);
+}
+
 int main(int argc, char **argv) {
     CHECK(argc == 2);
     const CtfeReferenceCase *selected = NULL;
@@ -278,7 +354,8 @@ int main(int argc, char **argv) {
         selected->name, (unsigned)status, diagnostic.line, diagnostic.column, diagnostic.message);
     CHECK(status == selected->status);
     if (status == XR_XIR_OK) {
-        if (!strcmp(selected->name, "unit_direct")) reference_unit_direct(&context,&source);
+        if (!strcmp(selected->name, "rune_direct")) reference_rune_direct(&context,&source);
+        else if (!strcmp(selected->name, "unit_direct")) reference_unit_direct(&context,&source);
         else if (!strcmp(selected->name, "leaf_locals")) reference_leaf_locals(&context, &source);
         else if (!strcmp(selected->name, "mutual_depth_direct")) reference_direct_depth(&context, &source);
         else reference_accept(&context, &source, selected);

@@ -17,7 +17,7 @@ static XrXirCtfeStatus ctfe_compile_status(XrXirStatus status) {
     return XR_XIR_CTFE_BAD_ARTIFACT;
 }
 static bool ctfe_scalar_type(XrXirType type) {
-    return type == XR_XIR_BOOL || xr_xir_type_is_integer(type);
+    return type == XR_XIR_BOOL || type == XR_XIR_RUNE || xr_xir_type_is_integer(type);
 }
 static bool ctfe_result_type(XrXirType type) {
     return type == XR_XIR_UNIT || ctfe_scalar_type(type);
@@ -32,8 +32,9 @@ static bool ctfe_result_value(const XrXirValue *value, XrXirType type) {
  * their actual predecessor scans and copies inside scalar_edge. */
 static bool ctfe_opcode_work(XrXirOp op, uint64_t *work) {
     switch (op) {
-    case XR_XIR_CONST_BOOL: case XR_XIR_CONST_INT: *work = 1; return true;
+    case XR_XIR_CONST_RUNE: case XR_XIR_CONST_BOOL: case XR_XIR_CONST_INT: *work = 1; return true;
     case XR_XIR_SCALAR_COPY: case XR_XIR_CONVERT_NUMBER:
+    case XR_XIR_RUNE_TO_INTEGER: case XR_XIR_INTEGER_TO_RUNE:
     case XR_XIR_SCALAR_LOCAL_NEW: case XR_XIR_SCALAR_LOCAL_READ:
     case XR_XIR_SCALAR_LOCAL_WRITE: *work = 2; return true;
     case XR_XIR_EQUAL: *work = 5; return true;
@@ -169,6 +170,7 @@ XR_FUNC XrXirCtfeStatus xr_xir_compile_ctfe_leaf(const XrXirCtfeRequest *request
             }
             if (action.kind == XIR_SCALAR_RETURN) {
                 if (!scalar_compile_work(&run, sizeof(action.value))) { status = XR_XIR_CTFE_BUDGET; break; }
+                if (!ctfe_result_value(&action.value, body->result)) { status = XR_XIR_CTFE_BAD_ARTIFACT; break; }
                 *output = action.value; break;
             }
             if (action.kind != XIR_SCALAR_CONTINUE) { status = XR_XIR_CTFE_BAD_ARTIFACT; break; }

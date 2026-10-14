@@ -40,7 +40,7 @@ static void source_comptime_restore(SourceContext *ctx,const SourceComptimeScope
     ctx->returned=scope->returned;
 }
 static bool source_comptime_result_type(XrXirType type) {
-    return type==XR_XIR_UNIT || type==XR_XIR_BOOL || xr_xir_type_is_integer(type);
+    return type==XR_XIR_UNIT || type==XR_XIR_BOOL || type==XR_XIR_RUNE || xr_xir_type_is_integer(type);
 }
 static bool source_comptime_result_value(const XrXirValue *value) {
     return value && (value->type==XR_XIR_UNIT ? (!value->reserved && !value->payload) :
@@ -66,7 +66,7 @@ static bool source_comptime_body(SourceContext *ctx,AstNode *child,SourceExpecte
     if (expected.present && !source_comptime_result_type(expected.type)) expected=(SourceExpectedType){0};
     if (!unit_block && !source_plan_expression(ctx,child,expected,&value)) return false;
     if (!source_comptime_result_type(value.type))
-        return source_fail(ctx,child,XR_XIR_BAD_TYPE,"comptime result must be a bool, integer or Unit in this execution domain");
+        return source_fail(ctx,child,XR_XIR_BAD_TYPE,"comptime result must be a bool, integer, Rune or Unit in this execution domain");
     if (!source_work_units(ctx,child,sizeof(value.type)+sizeof(ctx->returned))) return false;
     ctx->functions[ctx->function].result=value.type;
     if (!source_recipe_record(ctx,(XrXirInstruction){XR_XIR_RETURN,XR_XIR_UNIT,{value.id,0},{0},0,{0}},NULL)) return false;
@@ -134,6 +134,7 @@ static bool source_comptime_expression(SourceContext *ctx,AstNode *node,SourceEx
     if (!source_work_units(ctx,node,sizeof(site->value)+sizeof(ctx->comptime_matched))) return false;
     site->value=matched->value;++ctx->comptime_matched;
     if (site->value.type==XR_XIR_UNIT) { *value=(SourceValue){0,XR_XIR_UNIT};return true; }
-    XrXirOp op=site->value.type==XR_XIR_BOOL?XR_XIR_CONST_BOOL:XR_XIR_CONST_INT;
+    XrXirOp op=site->value.type==XR_XIR_BOOL?XR_XIR_CONST_BOOL:
+        site->value.type==XR_XIR_RUNE?XR_XIR_CONST_RUNE:XR_XIR_CONST_INT;
     return source_recipe_record(ctx,(XrXirInstruction){op,(XrXirType)site->value.type,{0},{0},site->value.payload,{0}},value);
 }

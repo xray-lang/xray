@@ -20,3 +20,7 @@ set_tests_properties(test_xir_source_comptime_locals_resources PROPERTIES
 add_test(NAME test_xir_source_comptime_unit_resources COMMAND test_xir_source_comptime --unit-resources)
 set_tests_properties(test_xir_source_comptime_unit_resources PROPERTIES
     LABELS "unit;xir;source;ctfe;ownership;compiler-fault;resources" TIMEOUT 600 RUN_SERIAL TRUE)
+
+add_test(NAME test_xir_source_comptime_rune_resources COMMAND test_xir_source_comptime --rune-resources)
+set_tests_properties(test_xir_source_comptime_rune_resources PROPERTIES
+    LABELS "unit;xir;source;ctfe;ownership;compiler-fault;resources;rune" TIMEOUT 600 RUN_SERIAL TRUE)

@@ -39,7 +39,7 @@ typedef struct XrXirCtfeRequest {
 } XrXirCtfeRequest;
 
 /* Borrowed input owners must remain live for this synchronous call. The selected
- * ordinary function must have bool/integer inputs, scalar or Unit results and
+ * ordinary function must have bool/integer/Rune inputs, scalar or Unit results and
  * frame-owned scalar local storage in a bounded admitted opcode graph. Local
  * writes produce Unit without a result slot. Every call repeats full artifact
  * verification on its original compiler ledger; root/effect flags never grant

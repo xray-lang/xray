@@ -544,6 +544,12 @@ CTFE要求实际普通函数声明身份。结构合法但没有declarations/fun
 
 Source的Unit comptime结果经同一有限CTFE管线接收，再独立重放为普通Unit表达式，保留站点匹配、覆盖和规范结果验证。空块或末尾为普通语句的块产生Unit，拥有型局部状态继续依赖实际值域接点；comptime块不授予从外围函数非局部return的许可。I/O、非终结循环及不可接收的实际操作仍分别按闭包准入或预算规则拒绝，失败输出和原编译账本保持。
 
+### 17.42 有界CTFE的Rune值与普通Source常量
+
+Rune与bool/integer共同进入实际标量参数、返回、局部存储和直接调用闭包准入。CONST_RUNE、INTEGER_TO_RUNE、RUNE_TO_INTEGER使用已有共同执行核；Rune相等比较验证两边完整Unicode标量后比较码点，不把Rune解释为整数类型或宿主字符。合法范围为0..0x10ffff，排除0xd800..0xdfff；非法Rune输入拒绝为BAD_ARGUMENT，整数转Rune越界拒绝为NUMERIC_RANGE，失败保留规范Unit输出。CONVERT_NUMBER仍只准入整数之间转换，不由Rune开放浮点。
+
+导出大小由规范目标layout确定，Rune为4字节，output_bytes=3拒绝；不使用宿主载体sizeof或UTF-8长度决定预算。Source通过实际Checked/特化复验/Lowered计算后，在独立完整重放中写入普通CONST_RUNE recipe，保持完整站点、类型、规范值和覆盖验证。嵌套comptime和普通Rune调用不绕过闭包准入；原steps/depth/frame/output上限、同一累计编译账本、真实物理OOM和最后owner释放责任不变。本族不授予managed聚合、字符串、未知函数值或运行期fallback资格。
+
 <!-- /xr-spec:cn -->
 
 <!-- xr-spec:en -->
@@ -1198,5 +1204,11 @@ CTFE requires actual ordinary function declaration identity. Structurally valid 
 Ordinary Unit-result functions without value parameters can enter actual CTFE closure admission. Their Unit RETURN preserves zero type/reserved/payload and has zero target logical output size. A Unit return has no SSA storage slot, so a child return must not write that slot; the caller retains scalar parameters and other live values. Unit is not admitted as an ordinary value argument, and receiving still repeats actual type and complete Lowered identity checks.
 
 Source receives Unit comptime results through the same bounded CTFE pipeline and independently replays ordinary Unit expressions, preserving site matching, coverage and canonical result verification. Empty blocks and blocks ending in ordinary statements produce Unit; owned local state continues to require the actual value-domain interface. A comptime block grants no nonlocal return from its enclosing function. I/O, nonterminating loops and unsupported actual operations retain closure or budget rejection, with failure outputs and the original compiler ledger preserved.
+
+### 17.42 Bounded CTFE Rune values and ordinary Source constants
+
+Rune joins bool/integer admission for actual scalar parameters, results, locals and direct-call closures. CONST_RUNE, INTEGER_TO_RUNE and RUNE_TO_INTEGER use the existing shared execution kernel. Rune equality validates both complete Unicode scalars and compares code points; it does not interpret Rune as an integer type or host character. Valid payloads are 0..0x10ffff excluding 0xd800..0xdfff. Invalid Rune arguments reject with BAD_ARGUMENT; out-of-range integer conversions reject with NUMERIC_RANGE, preserving canonical Unit output. CONVERT_NUMBER continues to admit only integer-to-integer conversion and grants no floating admission.
+
+Canonical target layout determines exported size: Rune occupies four bytes and output_bytes=3 rejects. Host carrier sizeof and UTF-8 length do not determine that budget. After actual Checked/specialization reverification/Lowered execution, Source independently replays an ordinary CONST_RUNE recipe with complete site, type, canonical-value and coverage checks. Nested comptime and ordinary Rune calls retain full closure admission. Existing steps/depth/frame/output ceilings, the sole cumulative compiler ledger, physical OOM and final-owner cleanup obligations remain. This family grants no managed aggregate, string, unknown function-value or runtime-fallback qualification.
 
 <!-- /xr-spec:en -->

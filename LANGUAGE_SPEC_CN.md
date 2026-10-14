@@ -7585,6 +7585,12 @@ CTFE要求实际普通函数声明身份。结构合法但没有declarations/fun
 
 Source的Unit comptime结果经同一有限CTFE管线接收，再独立重放为普通Unit表达式，保留站点匹配、覆盖和规范结果验证。空块或末尾为普通语句的块产生Unit，拥有型局部状态继续依赖实际值域接点；comptime块不授予从外围函数非局部return的许可。I/O、非终结循环及不可接收的实际操作仍分别按闭包准入或预算规则拒绝，失败输出和原编译账本保持。
 
+### 17.42 有界CTFE的Rune值与普通Source常量
+
+Rune与bool/integer共同进入实际标量参数、返回、局部存储和直接调用闭包准入。CONST_RUNE、INTEGER_TO_RUNE、RUNE_TO_INTEGER使用已有共同执行核；Rune相等比较验证两边完整Unicode标量后比较码点，不把Rune解释为整数类型或宿主字符。合法范围为0..0x10ffff，排除0xd800..0xdfff；非法Rune输入拒绝为BAD_ARGUMENT，整数转Rune越界拒绝为NUMERIC_RANGE，失败保留规范Unit输出。CONVERT_NUMBER仍只准入整数之间转换，不由Rune开放浮点。
+
+导出大小由规范目标layout确定，Rune为4字节，output_bytes=3拒绝；不使用宿主载体sizeof或UTF-8长度决定预算。Source通过实际Checked/特化复验/Lowered计算后，在独立完整重放中写入普通CONST_RUNE recipe，保持完整站点、类型、规范值和覆盖验证。嵌套comptime和普通Rune调用不绕过闭包准入；原steps/depth/frame/output上限、同一累计编译账本、真实物理OOM和最后owner释放责任不变。本族不授予managed聚合、字符串、未知函数值或运行期fallback资格。
+
 ---
 
 ## 18. 错误码 (Error Codes)

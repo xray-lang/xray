@@ -7748,6 +7748,12 @@ Ordinary Unit-result functions without value parameters can enter actual CTFE cl
 
 Source receives Unit comptime results through the same bounded CTFE pipeline and independently replays ordinary Unit expressions, preserving site matching, coverage and canonical result verification. Empty blocks and blocks ending in ordinary statements produce Unit; owned local state continues to require the actual value-domain interface. A comptime block grants no nonlocal return from its enclosing function. I/O, nonterminating loops and unsupported actual operations retain closure or budget rejection, with failure outputs and the original compiler ledger preserved.
 
+### 17.42 Bounded CTFE Rune values and ordinary Source constants
+
+Rune joins bool/integer admission for actual scalar parameters, results, locals and direct-call closures. CONST_RUNE, INTEGER_TO_RUNE and RUNE_TO_INTEGER use the existing shared execution kernel. Rune equality validates both complete Unicode scalars and compares code points; it does not interpret Rune as an integer type or host character. Valid payloads are 0..0x10ffff excluding 0xd800..0xdfff. Invalid Rune arguments reject with BAD_ARGUMENT; out-of-range integer conversions reject with NUMERIC_RANGE, preserving canonical Unit output. CONVERT_NUMBER continues to admit only integer-to-integer conversion and grants no floating admission.
+
+Canonical target layout determines exported size: Rune occupies four bytes and output_bytes=3 rejects. Host carrier sizeof and UTF-8 length do not determine that budget. After actual Checked/specialization reverification/Lowered execution, Source independently replays an ordinary CONST_RUNE recipe with complete site, type, canonical-value and coverage checks. Nested comptime and ordinary Rune calls retain full closure admission. Existing steps/depth/frame/output ceilings, the sole cumulative compiler ledger, physical OOM and final-owner cleanup obligations remain. This family grants no managed aggregate, string, unknown function-value or runtime-fallback qualification.
+
 ---
 
 ## 18. Error Codes
