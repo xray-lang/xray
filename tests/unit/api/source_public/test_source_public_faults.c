@@ -28,8 +28,10 @@ static XrSourceStatus drive(unsigned mode,XrSourceCompiler **compiler,XrSourcePr
     XrSourceStatus status=xray_source_compiler_new(&options,compiler);if(status!=XR_SOURCE_OK)return status;
     const char *source=mode==0?"print(42)\n":mode==1?"assert(false, \"a\\0中z\")\n":
         mode==2?"fn worker() -> i64 { return 42 }\nfn main() -> i64 { return await go worker() }\nprint(main())\n":
-        "fn worker()->f32 { Coro.yield(); return 1.5 }\n"
-        "fn calculate()->f32 { const task:Task<f32> = go worker(); const first=await task; print(first); return await task }\nprint(calculate())\n";
+        mode==3?"fn worker()->f32 { Coro.yield(); return 1.5 }\n"
+        "fn calculate()->f32 { const task:Task<f32> = go worker(); const first=await task; print(first); return await task }\nprint(calculate())\n":
+        "fn worker()->Array<i64> { Coro.yield(); return [10,20] }\n"
+        "fn calculate() { const task:Task<Array<i64>> = go worker(); var first=await task; first[0]=99; assert(first[0]==99); const next=await task; assert(next[0]==10); print(next[1]) }\ncalculate()\n";
     XrSourceText text={NULL,"public-faults",source,strlen(source)};
     status=xray_source_compile_text(*compiler,&text,program,diagnostic);if(status!=XR_SOURCE_OK)return status;
     xray_source_compiler_free(*compiler);*compiler=NULL;
@@ -73,7 +75,9 @@ static void allocation_faults(unsigned begin,unsigned end) {
     }
 }
 int main(int argc,char **argv) {
-    CHECK(argc==1 || (argc==2 && !strcmp(argv[1],"--scalar-task")));
-    if(argc==1)allocation_faults(0,3);else allocation_faults(3,4);
+    CHECK(argc==1 || (argc==2 && (!strcmp(argv[1],"--scalar-task") || !strcmp(argv[1],"--constructed-task"))));
+    if(argc==1)allocation_faults(0,3);
+    else if(!strcmp(argv[1],"--scalar-task"))allocation_faults(3,4);
+    else allocation_faults(4,5);
     return 0;
 }
