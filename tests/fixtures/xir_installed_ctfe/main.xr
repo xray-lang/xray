@@ -1,0 +1,11 @@
+import {sdk_ctfe_trunc,sdk_ctfe_floor,sdk_ctfe_ceil,sdk_ctfe_round,sdk_ctfe_first} from "./state"
+import {sdk_ctfe_constants,sdk_ctfe_nested,sdk_ctfe_second} from "./worker"
+print(comptime sdk_ctfe_trunc(-2.5),comptime sdk_ctfe_floor(-2.5),comptime sdk_ctfe_ceil(-2.5),comptime sdk_ctfe_round(-2.5))
+const (sdk_ctfe_a,sdk_ctfe_b,sdk_ctfe_c,sdk_ctfe_d)=comptime sdk_ctfe_constants()
+print(sdk_ctfe_a,sdk_ctfe_b,sdk_ctfe_c,sdk_ctfe_d,(sdk_ctfe_a as i64)+(sdk_ctfe_b as i64)*10+(sdk_ctfe_c as i64)*100+(sdk_ctfe_d as i64)*1000)
+const sdk_ctfe_tuple=comptime sdk_ctfe_nested()
+print(sdk_ctfe_tuple.0.0,sdk_ctfe_tuple.1)
+const sdk_ctfe_scope_a=comptime sdk_ctfe_first<i8>(7)
+const sdk_ctfe_scope_b=comptime sdk_ctfe_second<i8>(9)
+print(sdk_ctfe_scope_a.0,sdk_ctfe_scope_a.1)
+print(sdk_ctfe_scope_b.0,sdk_ctfe_scope_b.1)

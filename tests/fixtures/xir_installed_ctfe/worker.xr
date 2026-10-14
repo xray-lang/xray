@@ -1,0 +1,8 @@
+fn sdk_ctfe_label()->string { return "B\0中" }
+export fn sdk_ctfe_second<T>(value:T)->(T,string) { return (value,sdk_ctfe_label()) }
+export fn sdk_ctfe_constants()->(i16,i16,i16,i16) { return (2,3,5,7) }
+export fn sdk_ctfe_nested()->((i8,()),string) {
+    var value:((i8,()),string)=((1,()),"x")
+    value=((7,()),"é😀\0")
+    return value
+}

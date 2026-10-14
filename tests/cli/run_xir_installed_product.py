@@ -130,12 +130,18 @@ def main():
         state = program/'state.xr'
         state.write_text(state.read_text(encoding='utf-8')+'\n'+
                          (generic_fixture/'types.xr').read_text(encoding='utf-8'), encoding='utf-8')
+        ctfe_fixture = root/'tests/fixtures/xir_installed_ctfe'
+        for name in ('state', 'worker'):
+            path = program/(name+'.xr')
+            path.write_text(path.read_text(encoding='utf-8')+'\n'+
+                            (ctfe_fixture/(name+'.xr')).read_text(encoding='utf-8'), encoding='utf-8')
         source = program/'main.xr'
         source.write_text(source.read_text(encoding='utf-8') +
             '\nimport time as Clock\nconst initial=Clock.nanos()\nClock.sleep(1)\n'
             'print(Clock.nanos()-initial>=1000000)\n' +
             (root/'tests/fixtures/xir_installed_library_methods/main.xr').read_text(encoding='utf-8')+
-            '\n'+(generic_fixture/'main.xr').read_text(encoding='utf-8'), encoding='utf-8')
+            '\n'+(generic_fixture/'main.xr').read_text(encoding='utf-8')+
+            '\n'+(ctfe_fixture/'main.xr').read_text(encoding='utf-8'), encoding='utf-8')
         relocated = output/'relocated'
         assert prefixes['full'].resolve().is_relative_to(output) and relocated.resolve().is_relative_to(output)
         prefixes['full'].rename(relocated)
@@ -146,7 +152,9 @@ def main():
             b'2.5 -2 -3 -2 -3 false -2.5 true false 65 A\n'
             b'A\0B A\0BA\0B true true true 2 5\n')
         generic_stdout = b'A\0\xe4\xb8\xad\xf0\x9f\x98\x80' b'0\n7 2 11 99\n'
-        expected_stdout, expected_stderr = b'A\0B41 42 42 true true 1.5\ntrue\n'+library_stdout+generic_stdout, b'E\0R'
+        ctfe_stdout = (b'-2 -3 -2 -3\n2 3 5 7 7532\n7 \xc3\xa9\xf0\x9f\x98\x80\0\n'
+                       b'7 A\0\xc3\xa9\n9 B\0\xe4\xb8\xad\n')
+        expected_stdout, expected_stderr = b'A\0B41 42 42 true true 1.5\ntrue\n'+library_stdout+generic_stdout+ctfe_stdout, b'E\0R'
         for name, prefix in (('core', prefixes['core']), ('relocated', relocated)):
             binary = prefix/'bin/xray.exe'
             version, errors = run(name+'-version', [binary, '--version', '--json'])

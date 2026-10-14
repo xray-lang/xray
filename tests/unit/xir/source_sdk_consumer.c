@@ -156,6 +156,43 @@ static void generic_initializers(const char *stdlib) {
     int64_t code = -1; CHECK(xray_source_result_i64(result, &code) == XR_SOURCE_OK && code == 0);
     xray_source_result_free(result);
 }
+static void compiler_constants(const char *stdlib) {
+    char first[] =
+        "fn trunc(value:f64)->i64{return value.toI64()}\n"
+        "fn down(value:f64)->i64{return value.floor()}\n"
+        "fn up(value:f64)->i64{return value.ceil()}\n"
+        "fn round(value:f64)->i64{return value.round()}\n"
+        "fn constants()->(i16,i16,i16,i16){return (2,3,5,7)}\n"
+        "fn nested()->((i8,()),string){var value:((i8,()),string)=((1,()),\"x\");"
+        "value=((7,()),\"\xc3\xa9\xf0\x9f\x98\x80\\0\");return value}\n"
+        "fn label()->string{return \"A\\0\xc3\xa9\"}\n"
+        "fn echo<T>(value:T)->(T,string){return (value,label())}\n"
+        "print(comptime trunc(-2.5),comptime down(-2.5),comptime up(-2.5),comptime round(-2.5))\n"
+        "const (a,b,c,d)=comptime constants();print(a,b,c,d,(a as i64)+(b as i64)*10+(c as i64)*100+(d as i64)*1000)\n"
+        "const tuple=comptime nested();print(tuple.0.0,tuple.1)\n"
+        "const pair=comptime echo<i8>(7);print(pair.0,pair.1)\n";
+    char second[] = "fn label()->string{return \"B\\0\xe4\xb8\xad\"}\n"
+        "fn echo<T>(value:T)->(T,string){return (value,label())}\n"
+        "const pair=comptime echo<i8>(9);print(pair.0,pair.1)\n";
+    const char expected_first[] = "-2 -3 -2 -3\n2 3 5 7 7532\n7 \xc3\xa9\xf0\x9f\x98\x80\0\n7 A\0\xc3\xa9\n";
+    const char expected_second[] = "9 B\0\xe4\xb8\xad\n";
+    const char *expected[] = {expected_first,expected_second};
+    const size_t lengths[] = {sizeof(expected_first)-1,sizeof(expected_second)-1};
+    XrSourceCompiler *compiler = compiler_new(stdlib);
+    XrSourceProgram *programs[] = {compile(compiler, first),NULL};
+    programs[1] = compile(compiler, second); xray_source_compiler_free(compiler);
+    for (size_t i=0;i<2;++i) {
+        Output out = {0}; XrSourceCallOptions options;
+        CHECK(xray_source_call_options_init(&options, sizeof(options)) == XR_SOURCE_OK);
+        options.write = capture; options.context = &out;
+        XrSourceResult *result = NULL;
+        CHECK(xray_source_execute(programs[i], &options, &result, NULL) == XR_SOURCE_OK && result);
+        xray_source_program_free(programs[i]); XrSourceEvent event;
+        CHECK(xray_source_result_event(result, &event) == XR_SOURCE_OK && event.state == XR_SOURCE_RUN_RETURNED);
+        CHECK(out.length == lengths[i] && !memcmp(out.bytes, expected[i], lengths[i]));
+        xray_source_result_free(result);
+    }
+}
 static void typed_tasks(const char *stdlib) {
     char source[] =
         "fn w_i8()->i8{return -128}\nfn w_i16()->i16{return -32768}\n"
@@ -233,6 +270,6 @@ static void timer_waits(const char *stdlib) {
     CHECK(out.length == 3 && !memcmp(out.bytes, "43\n", 3)); xray_source_result_free(result);
 }
 int main(int argc, char **argv) {
-    CHECK(argc == 2); checked_program(argv[1]); detached_cancellation(argv[1]); owned_panic(argv[1]); typed_tasks(argv[1]); timer_waits(argv[1]); library_methods(argv[1]); generic_initializers(argv[1]);
+    CHECK(argc == 2); checked_program(argv[1]); detached_cancellation(argv[1]); owned_panic(argv[1]); typed_tasks(argv[1]); timer_waits(argv[1]); library_methods(argv[1]); generic_initializers(argv[1]); compiler_constants(argv[1]);
     puts("Installed public Source SDK: Checked io/time, detached cancellation and owned panic PASS"); return 0;
 }

@@ -1,0 +1,6 @@
+fn sdk_ctfe_label()->string { return "A\0é" }
+export fn sdk_ctfe_first<T>(value:T)->(T,string) { return (value,sdk_ctfe_label()) }
+export fn sdk_ctfe_trunc(value:f64)->i64 { return value.toI64() }
+export fn sdk_ctfe_floor(value:f64)->i64 { return value.floor() }
+export fn sdk_ctfe_ceil(value:f64)->i64 { return value.ceil() }
+export fn sdk_ctfe_round(value:f64)->i64 { return value.round() }
