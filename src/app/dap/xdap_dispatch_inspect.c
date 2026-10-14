@@ -23,7 +23,21 @@ static bool inspect_position(XdapJsonWriter *w,uint32_t function,uint32_t instru
 }
 static XrXirStatus inspect_threads(XdapAdapter *s,const XdapRequest *r) {
     XdapJsonWriter body=xdap_json_writer(s->resources,s->config.message_limit);
-    if (s->launch && s->configured && !s->terminal) XDAP_TEXT(&body,"{\"threads\":[{\"id\":1,\"name\":\"Current VM root\"}]}");
+    if (s->snapshot) {
+        uint64_t ids[64]={0};uint32_t count=0;XDAP_TEXT(&body,"{\"threads\":[");
+        for (uint32_t i=0;i<s->depth;++i) {
+            XrXirVmDebugFrameInfo info={0};XrXirValue name={0};
+            if (xr_xir_vm_debug_snapshot_frame(s->snapshot,i,&info,&name)!=XR_XIR_VALUE_OK) { body.status=XR_XIR_BUDGET;break; }
+            xr_xir_value_drop(&name);bool duplicate=false;
+            for (uint32_t j=0;j<count;++j) if (ids[j]==info.thread) duplicate=true;
+            if (duplicate) continue;
+            ids[count++]=info.thread;if (count>1) XDAP_TEXT(&body,",");XDAP_TEXT(&body,"{\"id\":");
+            xdap_json_unsigned(&body,info.thread);XDAP_TEXT(&body,",\"name\":");
+            char label[64];int length=snprintf(label,sizeof(label),"%s %llu",info.thread==1 ? "Root" : "Activation",(unsigned long long)info.thread);
+            xdap_json_quote(&body,label,(size_t)length);XDAP_TEXT(&body,"}");
+        }
+        XDAP_TEXT(&body,"]}");
+    } else if (s->launch && s->configured && !s->terminal) XDAP_TEXT(&body,"{\"threads\":[{\"id\":1,\"name\":\"Root\"}]}");
     else XDAP_TEXT(&body,"{\"threads\":[]}");
     return inspect_finish(s,r,&body);
 }
@@ -32,29 +46,38 @@ static XrXirStatus inspect_stack(XdapAdapter *s,const XdapRequest *r) {
     if (status==XR_XIR_OK) status=xdap_dispatch_number(r,"startFrame",0,&start);
     if (status==XR_XIR_OK) status=xdap_dispatch_number(r,"levels",0,&levels);
     if (status!=XR_XIR_OK) return status;
-    if (thread!=1 || !s->snapshot) return xdap_dispatch_response(s,r,false,NULL,"notStopped");
+    if (!thread || !s->snapshot) return xdap_dispatch_response(s,r,false,NULL,"notStopped");
     XdapJsonWriter body=xdap_json_writer(s->resources,s->config.message_limit);XDAP_TEXT(&body,"{\"stackFrames\":[");
-    uint32_t shown=0;
+    uint32_t shown=0,total=0;
     for (uint32_t i=0;i<s->depth;++i) {
-        if (i<start || (levels && shown>=levels)) continue;
         XrXirVmDebugFrameInfo info={0};XrXirValue name={0};
         XrXirValueStatus observed=xr_xir_vm_debug_snapshot_frame(s->snapshot,i,&info,&name);
         if (observed!=XR_XIR_VALUE_OK) { body.status=observed==XR_XIR_VALUE_LIMIT ? XR_XIR_BUDGET : XR_XIR_BAD_STRUCTURE;break; }
+        if (info.thread!=thread) { xr_xir_value_drop(&name);continue; }
+        if (total++<start || (levels && shown>=levels)) { xr_xir_value_drop(&name);continue; }
         const char *text=NULL;size_t length=0;
         if (!xr_xir_string_view(&name,&text,&length)) body.status=XR_XIR_BAD_STRUCTURE;
         if (shown++) XDAP_TEXT(&body,",");XDAP_TEXT(&body,"{\"id\":");xdap_json_unsigned(&body,s->frames[i].handle);
         XDAP_TEXT(&body,",\"name\":");xdap_json_quote(&body,text,length);
-        XDAP_TEXT(&body,",\"line\":0,\"column\":0,\"instructionPointerReference\":");
-        inspect_position(&body,info.function,info.instruction);XDAP_TEXT(&body,"}");xr_xir_value_drop(&name);
+        XDAP_TEXT(&body,",\"line\":0,\"column\":0");
+        if (info.code==XR_XIR_VM_DEBUG_VM && info.instruction!=UINT32_MAX) {
+            XDAP_TEXT(&body,",\"instructionPointerReference\":");inspect_position(&body,info.function,info.instruction);
+        } else XDAP_TEXT(&body,",\"presentationHint\":\"subtle\"");
+        XDAP_TEXT(&body,"}");xr_xir_value_drop(&name);
     }
-    XDAP_TEXT(&body,"],\"totalFrames\":");xdap_json_unsigned(&body,s->depth);XDAP_TEXT(&body,"}");
+    if (!total && body.status==XR_XIR_OK) { xdap_json_writer_free(&body);return xdap_dispatch_response(s,r,false,NULL,"Unknown stopped thread"); }
+    XDAP_TEXT(&body,"],\"totalFrames\":");xdap_json_unsigned(&body,total);XDAP_TEXT(&body,"}");
     return inspect_finish(s,r,&body);
 }
 static XrXirStatus inspect_scopes(XdapAdapter *s,const XdapRequest *r) {
     uint64_t handle=0;XrXirStatus status=xdap_dispatch_number(r,"frameId",0,&handle);if (status!=XR_XIR_OK) return status;
     uint32_t frame=inspect_frame(s,handle,false);
     if (!s->snapshot || frame==UINT32_MAX) return xdap_dispatch_response(s,r,false,NULL,"Invalid or retired frame");
+    XrXirVmDebugFrameInfo info={0};XrXirValue name={0};
+    if (xr_xir_vm_debug_snapshot_frame(s->snapshot,frame,&info,&name)!=XR_XIR_VALUE_OK) return XR_XIR_BUDGET;
+    xr_xir_value_drop(&name);
     XdapJsonWriter body=xdap_json_writer(s->resources,s->config.message_limit);
+    if (!info.value_count) { XDAP_TEXT(&body,"{\"scopes\":[]}");return inspect_finish(s,r,&body); }
     XDAP_TEXT(&body,"{\"scopes\":[{\"name\":\"VM values\",\"presentationHint\":\"registers\",\"variablesReference\":");
     xdap_json_unsigned(&body,s->frames[frame].scope);XDAP_TEXT(&body,",\"expensive\":false}]}");
     return inspect_finish(s,r,&body);

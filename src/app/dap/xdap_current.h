@@ -43,6 +43,9 @@ XR_FUNC XrXirValueStatus xdap_current_breakpoints_replace(XdapCurrent *,
 XR_FUNC XrXirValueStatus xdap_current_snapshot(XdapCurrent *session,
     XrXirVmDebugSnapshot **output);
 XR_FUNC XrXirCallStatus xdap_current_cancel(XdapCurrent *session);
+/* Stop and drain the whole target, including child activations. The ordinary
+ * Instance stop owns cleanup and its exact failure status is preserved. */
+XR_FUNC XrXirCallStatus xdap_current_stop(XdapCurrent *session);
 /* Consumes the session unless the actual Instance reports BUSY. */
 XR_FUNC XrXirCallStatus xdap_current_free(XdapCurrent *session);
 XR_FUNC void xdap_current_result_drop(XdapCurrentResult *result);

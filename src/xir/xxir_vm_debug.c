@@ -12,6 +12,7 @@
 #include "xxir_types.h"
 #include "xxir_scalar_core.h"
 #include "xxir_instance_value.h"
+#include "xxir_vm_debug_calls_internal.h"
 #include <stdatomic.h>
 #include <string.h>
 
@@ -36,6 +37,7 @@ struct XrXirVmDebugSnapshot {
     uint64_t identity;
     _Atomic uint32_t references;
     uint32_t count;
+    uint64_t stopped_thread;
     XrXirDomain *domain;
     SnapshotFrame *frames;
 };
@@ -47,12 +49,12 @@ struct XrXirVmDebug {
     const XrXirArtifact *artifact;
     XrXirProgram *program;
     XrXirInstance *target;
-    const XrXirCall *activation;
+    XirDebugCalls calls;
     DebugFrame *frames;
     DebugBreakpoint breakpoints[32];
-    uint64_t next_id, epoch, skip_id;
+    uint64_t epoch, skip_id, step_thread;
     uint32_t skip_instruction, step_depth;
-    bool skip_once, disabled;
+    bool skip_once, disabled, faulted;
     _Atomic unsigned mode;
     _Atomic bool paused;
     XrXirVmDebugSnapshot *snapshot;
@@ -76,7 +78,7 @@ static void *debug_allocate(XrXirDomain *domain, uint64_t bytes, XrXirValueStatu
 }
 XR_FUNC XrXirValueStatus xr_xir_vm_debug_new(XrXirDomain *domain, uint32_t capacity,
     XrXirVmDebug **output) {
-    if (!output || *output || !capacity || !xr_xir_domain_current(domain))
+    if (!output || *output || !capacity || capacity==UINT32_MAX || !xr_xir_domain_current(domain))
         return XR_XIR_VALUE_BAD_ARGUMENT;
     if (!xr_xir_domain_retain(domain)) return XR_XIR_VALUE_REFCOUNT_LIMIT;
     XrXirValueStatus status;
@@ -91,6 +93,11 @@ XR_FUNC XrXirValueStatus xr_xir_vm_debug_new(XrXirDomain *domain, uint32_t capac
         debug_deallocate(domain, debug, sizeof(*debug));
         xr_xir_domain_drop(domain);
         return status;
+    }
+    status=xir_debug_calls_new(&debug->calls,domain,capacity+1);
+    if (status!=XR_XIR_VALUE_OK) {
+        debug_deallocate(domain,debug->frames,(uint64_t)capacity*sizeof(*debug->frames));
+        debug_deallocate(domain,debug,sizeof(*debug));xr_xir_domain_drop(domain);return status;
     }
     atomic_init(&debug->mode, XR_XIR_VM_DEBUG_CONTINUE);
     atomic_init(&debug->paused, false);
@@ -135,6 +142,7 @@ XR_FUNC void xr_xir_vm_debug_drop(XrXirVmDebug *debug) {
     XR_CHECK(!debug->count && !debug->artifact, "VM debug owner still bound");
     clear_snapshot(debug);
     XrXirDomain *domain = debug->domain;
+    xir_debug_calls_free(&debug->calls);
     debug_deallocate(domain, debug->frames,
         (uint64_t)debug->capacity * sizeof(*debug->frames));
     debug_deallocate(domain, debug, sizeof(*debug));
@@ -143,6 +151,7 @@ XR_FUNC void xr_xir_vm_debug_drop(XrXirVmDebug *debug) {
 XR_FUNC bool xir_vm_debug_bind(XrXirVmDebug *debug, const XrXirArtifact *artifact) {
     if (!debug_valid(debug) || debug->disabled || debug->artifact || debug->count || !artifact) return false;
     debug->artifact = artifact;
+    debug->calls.functions=xr_xir_compile_artifact_module(artifact)->function_count;
     return true;
 }
 XR_FUNC void xir_vm_debug_program(XrXirVmDebug *debug, XrXirProgram *program) {
@@ -154,7 +163,7 @@ XR_FUNC XrXirCallStatus xr_xir_vm_debug_instance_new(XrXirVmDebug *debug,
     if (!debug_valid(debug) || !program || debug->program != program || debug->target ||
         debug->disabled || !output || *output) return XR_XIR_CALL_BAD_ARGUMENT;
     XrXirCallStatus status = xr_xir_instance_new(program, config, output);
-    if (status == XR_XIR_CALL_READY) debug->target = *output;
+    if (status == XR_XIR_CALL_READY) { debug->target = *output;debug->calls.target=*output; }
     return status;
 }
 XR_FUNC void xir_vm_debug_unbind(XrXirVmDebug *debug) {
@@ -212,7 +221,18 @@ XR_FUNC uint64_t xr_xir_vm_debug_epoch(const XrXirVmDebug *debug) {
 XR_FUNC void xr_xir_vm_debug_disable(XrXirVmDebug *debug) {
     if (!debug_valid(debug)) return;
     debug->disabled = true;
+    debug->calls.disabled=true;
     clear_snapshot(debug);
+}
+XR_FUNC XrXirValueStatus xr_xir_vm_debug_observation_status(XrXirVmDebug *debug,bool terminal) {
+    if (!debug_valid(debug)) return XR_XIR_VALUE_BAD_ARGUMENT;
+    if (debug->disabled) return XR_XIR_VALUE_OK;
+    XrXirValueStatus status=xir_debug_calls_pay(&debug->calls);
+    return debug->faulted || !terminal ? XR_XIR_VALUE_OK : status;
+}
+XR_FUNC void xir_vm_debug_faulted(XrXirVmDebug *debug,const XrXirCallView *view) {
+    if (!view || view->instance!=debug->target || !xr_xir_call_admission(view)) return;
+    debug->faulted=true;debug->calls.disabled=true;clear_snapshot(debug);
 }
 XR_FUNC XrXirValueStatus xr_xir_vm_debug_continue(XrXirVmDebug *debug,
     uint64_t epoch, XrXirVmDebugMode mode) {
@@ -220,10 +240,12 @@ XR_FUNC XrXirValueStatus xr_xir_vm_debug_continue(XrXirVmDebug *debug,
         (unsigned)mode > XR_XIR_VM_DEBUG_STEP_OUT || mode == XR_XIR_VM_DEBUG_PAUSE ||
         !epoch || epoch != debug->epoch) return XR_XIR_VALUE_BAD_ARGUMENT;
     if (!xr_xir_domain_work(debug->domain, 1)) return XR_XIR_VALUE_LIMIT;
-    debug->skip_id = debug->frames[debug->count - 1].id;
-    debug->skip_instruction = debug->frames[debug->count - 1].point.instruction;
+    const XrXirVmDebugFrameInfo *current=&debug->snapshot->frames[0].info;
+    const XirDebugCallFrame *call=xir_debug_calls_id(&debug->calls,current->id);
+    if (!call) return XR_XIR_VALUE_BAD_ARGUMENT;
+    debug->skip_id=current->id;debug->skip_instruction=current->instruction;
     debug->skip_once = true;
-    debug->step_depth = debug->count;
+    debug->step_depth=call->event.depth;debug->step_thread=call->thread;
     atomic_store_explicit(&debug->mode, (unsigned)mode, memory_order_release);
     clear_snapshot(debug);
     return XR_XIR_VALUE_OK;
@@ -237,10 +259,15 @@ static XrXirValueStatus register_frame(XrXirVmDebug *debug, const XirVmDebugPoin
     DebugFrame **output) {
     XirVmDebugPoint stored = *point;
     stored.view = NULL;
+    const XirDebugCallFrame *call=xir_debug_calls_current(&debug->calls);
+    if (!call || call->event.code!=XR_XIR_CALL_CODE_VM || call->event.entry!=point->binding->function)
+        return XR_XIR_VALUE_BAD_ARGUMENT;
     DebugFrame *frame = find_frame(debug, point->state);
-    if (frame) { frame->point = stored; *output = frame; return XR_XIR_VALUE_OK; }
-    if (debug->count >= debug->capacity || debug->next_id == UINT64_MAX ||
-        (debug->activation && debug->activation != point->view->activation)) return XR_XIR_VALUE_LIMIT;
+    if (frame) {
+        if (frame->id!=call->id) return XR_XIR_VALUE_BAD_ARGUMENT;
+        frame->point = stored; *output = frame; return XR_XIR_VALUE_OK;
+    }
+    if (debug->count >= debug->capacity) return XR_XIR_VALUE_LIMIT;
     XrXirValueStatus status;
     unsigned char *known = debug_allocate(debug->domain, point->layout->slot_count, &status);
     if (!known) return status;
@@ -252,8 +279,7 @@ static XrXirValueStatus register_frame(XrXirVmDebug *debug, const XirVmDebugPoin
     }
     memset(known, 1, function->parameter_count);
     frame = &debug->frames[debug->count++];
-    *frame = (DebugFrame){stored, ++debug->next_id, known};
-    debug->activation = point->view->activation;
+    *frame = (DebugFrame){stored, call->id, known};
     *output = frame;
     return XR_XIR_VALUE_OK;
 }
@@ -261,11 +287,7 @@ static XrXirValueStatus copy_frame_values(XrXirVmDebug *debug, const DebugFrame 
     XrXirCallView *view, SnapshotFrame *frame) {
     const XrXirModule *module = xr_xir_compile_artifact_module(live->point.binding->artifact);
     const XrXirFunction *function = &module->functions[live->point.binding->function];
-    frame->info = (XrXirVmDebugFrameInfo){live->id, debug->epoch + 1,
-        live->point.binding->function, live->point.instruction, live->point.layout->slot_count};
-    XrXirValueStatus status = xr_xir_string_new(debug->domain,
-        function->name ? function->name : "", function->name_length, &frame->name);
-    if (status != XR_XIR_VALUE_OK) return status;
+    XrXirValueStatus status;
     uint32_t count = frame->info.value_count;
     frame->values = debug_allocate(debug->domain, (uint64_t)count * sizeof(*frame->values), &status);
     if (!frame->values) return status;
@@ -303,9 +325,40 @@ static XrXirValueStatus copy_frame_values(XrXirVmDebug *debug, const DebugFrame 
     }
     return XR_XIR_VALUE_OK;
 }
+static const DebugFrame *find_id(const XrXirVmDebug *debug,uint64_t id) {
+    for (uint32_t i=0;i<debug->count;++i) if (debug->frames[i].id==id) return &debug->frames[i];
+    return NULL;
+}
+static bool snapshot_contains(const XrXirVmDebugSnapshot *snapshot,uint32_t count,uint64_t id) {
+    for (uint32_t i=0;i<count;++i) if (snapshot->frames[i].info.id==id) return true;
+    return false;
+}
+static XrXirValueStatus capture_frame(XrXirVmDebug *debug,const XirDebugCallFrame *call,
+    XrXirCallView *view,XrXirVmDebugSnapshot *snapshot,uint32_t index) {
+    SnapshotFrame *frame=&snapshot->frames[index];
+    const XrXirModule *module=xr_xir_compile_artifact_module(debug->artifact);
+    const XrXirFunction *function=&module->functions[call->event.entry];
+    const DebugFrame *live=call->event.code==XR_XIR_CALL_CODE_VM ? find_id(debug,call->id) : NULL;
+    bool values=live && call->thread==snapshot->stopped_thread;
+    frame->info=(XrXirVmDebugFrameInfo){.id=call->id,.epoch=debug->epoch+1,.function=call->event.entry,
+        .instruction=live ? live->point.instruction : UINT32_MAX,
+        .value_count=values ? live->point.layout->slot_count : 0,.thread=call->thread,
+        .code=call->event.code==XR_XIR_CALL_CODE_VM ? XR_XIR_VM_DEBUG_VM :
+            call->event.code==XR_XIR_CALL_CODE_NATIVE ? XR_XIR_VM_DEBUG_NATIVE : XR_XIR_VM_DEBUG_PENDING};
+    XrXirValueStatus status=xr_xir_string_new(debug->domain,function->name ? function->name : "",function->name_length,&frame->name);
+    if (status!=XR_XIR_VALUE_OK || !values) return status;
+    if (!xr_xir_domain_work(debug->domain,frame->info.value_count)) return XR_XIR_VALUE_LIMIT;
+    return copy_frame_values(debug,live,view,frame);
+}
 static XrXirValueStatus capture(XrXirVmDebug *debug, XrXirCallView *view) {
     if (debug->epoch == UINT64_MAX) return XR_XIR_VALUE_LIMIT;
-    if (!xr_xir_domain_work(debug->domain, (uint64_t)debug->count + 1)) return XR_XIR_VALUE_LIMIT;
+    const XirDebugCallFrame *current=xir_debug_calls_current(&debug->calls);
+    if (!current) return XR_XIR_VALUE_BAD_ARGUMENT;
+    uint32_t count=0;
+    for (uint32_t i=0;i<debug->calls.capacity;++i)
+        if (debug->calls.frames[i].active && debug->calls.frames[i].event.entry<debug->calls.functions) ++count;
+    if (!count || count>debug->capacity) return XR_XIR_VALUE_LIMIT;
+    if (!xr_xir_domain_work(debug->domain,(uint64_t)count*debug->calls.capacity*4+debug->calls.capacity+1)) return XR_XIR_VALUE_LIMIT;
     if (!xr_xir_domain_retain(debug->domain)) return XR_XIR_VALUE_REFCOUNT_LIMIT;
     XrXirValueStatus status;
     XrXirVmDebugSnapshot *snapshot = debug_allocate(debug->domain, sizeof(*snapshot), &status);
@@ -313,17 +366,26 @@ static XrXirValueStatus capture(XrXirVmDebug *debug, XrXirCallView *view) {
     snapshot->identity = snapshot_identity;
     atomic_init(&snapshot->references, 1);
     snapshot->domain = debug->domain;
-    snapshot->count = debug->count;
+    snapshot->count=count;snapshot->stopped_thread=current->thread;
     snapshot->frames = debug_allocate(debug->domain,
         (uint64_t)snapshot->count * sizeof(*snapshot->frames), &status);
     if (!snapshot->frames) goto fail;
-    for (uint32_t i = 0; i < snapshot->count; ++i) {
-        const DebugFrame *live = &debug->frames[debug->count - 1 - i];
-        if (!xr_xir_domain_work(debug->domain, live->point.layout->slot_count)) {
-            status = XR_XIR_VALUE_LIMIT; goto fail;
+    uint32_t at=0;
+    for (const XirDebugCallFrame *call=current;call;call=xir_debug_calls_parent(&debug->calls,call)) {
+        if (call->event.entry==debug->calls.functions) continue;
+        if (at==snapshot->count || snapshot_contains(snapshot,at,call->id)) { status=XR_XIR_VALUE_BAD_ARGUMENT;goto fail; }
+        status=capture_frame(debug,call,view,snapshot,at++);if (status!=XR_XIR_VALUE_OK) goto fail;
+    }
+    while (at<snapshot->count) {
+        const XirDebugCallFrame *selected=NULL;
+        for (uint32_t i=0;i<debug->calls.capacity;++i) {
+            const XirDebugCallFrame *call=&debug->calls.frames[i];
+            if (!call->active || call->event.entry==debug->calls.functions || snapshot_contains(snapshot,at,call->id)) continue;
+            if (!selected || call->thread<selected->thread ||
+                (call->thread==selected->thread && call->event.depth>selected->event.depth)) selected=call;
         }
-        status = copy_frame_values(debug, live, view, &snapshot->frames[i]);
-        if (status != XR_XIR_VALUE_OK) goto fail;
+        if (!selected) { status=XR_XIR_VALUE_BAD_ARGUMENT;goto fail; }
+        status=capture_frame(debug,selected,view,snapshot,at++);if (status!=XR_XIR_VALUE_OK) goto fail;
     }
     debug->snapshot = snapshot;
     ++debug->epoch;
@@ -339,10 +401,12 @@ XR_FUNC XrXirValueStatus xir_vm_debug_before(XrXirVmDebug *debug,
     *stopped = false;
     if (!debug_valid(debug) || debug->artifact != point->binding->artifact)
         return XR_XIR_VALUE_BAD_ARGUMENT;
-    if (debug->disabled) return XR_XIR_VALUE_OK;
+    if (debug->disabled || debug->faulted) return XR_XIR_VALUE_OK;
     if (point->view->instance != debug->target) return XR_XIR_VALUE_BAD_ARGUMENT;
     if (xr_xir_call_execution_status(point->view) != XR_XIR_CALL_READY ||
         xr_xir_call_cleanup_active(point->view->activation)) return XR_XIR_VALUE_OK;
+    XrXirValueStatus bound=xir_debug_calls_bind(&debug->calls,point->view);
+    if (bound!=XR_XIR_VALUE_OK) return bound;
     if (xr_xir_vm_debug_paused(debug)) { *stopped = true; return XR_XIR_VALUE_OK; }
     if (!xr_xir_domain_work(debug->domain, (uint64_t)debug->count * 2 + 33))
         return XR_XIR_VALUE_LIMIT;
@@ -355,9 +419,11 @@ XR_FUNC XrXirValueStatus xir_vm_debug_before(XrXirVmDebug *debug,
         return XR_XIR_VALUE_OK;
     }
     unsigned mode = atomic_load_explicit(&debug->mode, memory_order_acquire);
-    bool stop = mode == XR_XIR_VM_DEBUG_PAUSE || mode == XR_XIR_VM_DEBUG_STEP_IN ||
-        (mode == XR_XIR_VM_DEBUG_STEP_OVER && debug->count <= debug->step_depth) ||
-        (mode == XR_XIR_VM_DEBUG_STEP_OUT && debug->count < debug->step_depth);
+    const XirDebugCallFrame *call=xir_debug_calls_current(&debug->calls);
+    bool same=call->thread==debug->step_thread;
+    bool stop = mode == XR_XIR_VM_DEBUG_PAUSE || (same && (mode == XR_XIR_VM_DEBUG_STEP_IN ||
+        (mode == XR_XIR_VM_DEBUG_STEP_OVER && call->event.depth <= debug->step_depth) ||
+        (mode == XR_XIR_VM_DEBUG_STEP_OUT && call->event.depth < debug->step_depth)));
     for (unsigned i = 0; i < 32 && !stop; ++i)
         stop = debug->breakpoints[i].enabled &&
             debug->breakpoints[i].function == point->binding->function &&
@@ -400,11 +466,11 @@ XR_FUNC void xir_vm_debug_release(XrXirVmDebug *debug, void *state) {
     DebugFrame *frame = find_frame(debug, state);
     if (!frame) return;
     uint32_t at = (uint32_t)(frame - debug->frames);
-    XR_CHECK(at + 1 == debug->count, "debug VM frames released out of order");
     debug_deallocate(debug->domain, frame->known, frame->point.layout->slot_count);
-    memset(frame, 0, sizeof(*frame));
+    memmove(frame,frame+1,(size_t)(debug->count-at-1)*sizeof(*frame));
     --debug->count;
-    if (!debug->count) { clear_snapshot(debug); debug->activation = NULL; }
+    memset(&debug->frames[debug->count],0,sizeof(*frame));
+    if (!debug->count) clear_snapshot(debug);
 }
 XR_FUNC XrXirValueStatus xr_xir_vm_debug_snapshot(XrXirVmDebug *debug,
     XrXirVmDebugSnapshot **output) {
@@ -417,6 +483,9 @@ XR_FUNC XrXirValueStatus xr_xir_vm_debug_snapshot(XrXirVmDebug *debug,
 }
 XR_FUNC uint32_t xr_xir_vm_debug_snapshot_depth(const XrXirVmDebugSnapshot *snapshot) {
     return snapshot_valid(snapshot) ? snapshot->count : 0;
+}
+XR_FUNC uint64_t xr_xir_vm_debug_snapshot_stopped_thread(const XrXirVmDebugSnapshot *snapshot) {
+    return snapshot_valid(snapshot) ? snapshot->stopped_thread : 0;
 }
 XR_FUNC XrXirValueStatus xr_xir_vm_debug_snapshot_frame(const XrXirVmDebugSnapshot *snapshot,
     uint32_t index, XrXirVmDebugFrameInfo *output, XrXirValue *name) {

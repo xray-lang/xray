@@ -17,15 +17,18 @@ typedef enum XrXirVmDebugMode {
     XR_XIR_VM_DEBUG_STEP_IN, XR_XIR_VM_DEBUG_STEP_OVER, XR_XIR_VM_DEBUG_STEP_OUT
 } XrXirVmDebugMode;
 typedef struct XrXirVmDebugLocation { uint32_t function, instruction; } XrXirVmDebugLocation;
+typedef enum XrXirVmDebugCode { XR_XIR_VM_DEBUG_PENDING,XR_XIR_VM_DEBUG_NATIVE,XR_XIR_VM_DEBUG_VM } XrXirVmDebugCode;
 
 typedef struct XrXirVmDebugFrameInfo {
     uint64_t id, epoch;
     uint32_t function, instruction, value_count;
+    uint64_t thread;
+    XrXirVmDebugCode code;
 } XrXirVmDebugFrameInfo;
 
 /* Metadata uses this current Domain throughout the observer's lifetime.
- * Capacity is an explicit VM-frame bound, not a native-stack guarantee. One
- * observer admits one live activation at a time. State operations and queries
+ * Capacity bounds all observed user frames across activations. Native frames
+ * carry authenticated metadata only. State operations and queries
  * run on its sole control/drive owner between polls; only request_pause may
  * be called concurrently. Owned snapshot references are atomic. */
 XR_FUNC XrXirValueStatus xr_xir_vm_debug_new(XrXirDomain *domain, uint32_t capacity,
@@ -35,6 +38,12 @@ XR_FUNC void xr_xir_vm_debug_drop(XrXirVmDebug *debug);
  * and retains the observer. Failure preserves artifact and output. */
 XR_FUNC XrXirStatus xr_xir_compile_vm_debug_program_take(XrXirArtifact **artifact,
     XrXirVmDebug *debug, XrXirProgram **output);
+/* Select genuine native entries from the exact same closed proof. A nonzero
+ * mask byte selects native; zero selects observed VM. Native callbacks and
+ * environments remain intact. Success moves artifact and native->code; failure
+ * preserves both inputs and output. At least one entry of each kind is required. */
+XR_FUNC XrXirStatus xr_xir_compile_vm_debug_mixed_program_take(XrXirArtifact **,
+    XrXirProgramSpec *native,const unsigned char *mask,uint32_t count,XrXirVmDebug *,XrXirProgram **);
 /* Construct only the Instance of this observer's authenticated Program.
  * One target is bound; foreign Programs and a second target are rejected. */
 XR_FUNC XrXirCallStatus xr_xir_vm_debug_instance_new(XrXirVmDebug *debug,
@@ -58,12 +67,16 @@ XR_FUNC void xr_xir_vm_debug_disable(XrXirVmDebug *debug);
 /* A current epoch is required; stale requests preserve the stopped state. */
 XR_FUNC XrXirValueStatus xr_xir_vm_debug_continue(XrXirVmDebug *debug,
     uint64_t epoch, XrXirVmDebugMode mode);
+/* Pay passive Call notification work outside the producer callback. A disabled
+ * observer does no further observation work and cannot interrupt cleanup. */
+XR_FUNC XrXirValueStatus xr_xir_vm_debug_observation_status(XrXirVmDebug *,bool terminal);
 /* Returns an independent owned snapshot. It survives resume, cancellation,
  * Program disposal and observer disposal. No frame pointer is exposed. */
 XR_FUNC XrXirValueStatus xr_xir_vm_debug_snapshot(XrXirVmDebug *debug,
     XrXirVmDebugSnapshot **output);
 XR_FUNC void xr_xir_vm_debug_snapshot_drop(XrXirVmDebugSnapshot *snapshot);
 XR_FUNC uint32_t xr_xir_vm_debug_snapshot_depth(const XrXirVmDebugSnapshot *snapshot);
+XR_FUNC uint64_t xr_xir_vm_debug_snapshot_stopped_thread(const XrXirVmDebugSnapshot *);
 XR_FUNC XrXirValueStatus xr_xir_vm_debug_snapshot_frame(const XrXirVmDebugSnapshot *snapshot,
     uint32_t index, XrXirVmDebugFrameInfo *output, XrXirValue *name);
 /* Copies only a materialized, currently admitted typed value. Uninitialized,

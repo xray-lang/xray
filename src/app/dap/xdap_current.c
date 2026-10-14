@@ -58,9 +58,15 @@ XR_FUNC XrXirValueStatus xdap_current_poll(XdapCurrent *session, uint64_t quantu
     }
     XrXirInstanceResult result = {0};
     for (uint64_t i = 0; i < quantum; ++i) {
+        XrXirValueStatus observed=xr_xir_vm_debug_observation_status(session->debug,false);
+        if (observed!=XR_XIR_VALUE_OK) return observed;
         session->driving = true;
         result = xr_xir_instance_poll_bounded(session->instance, 1);
         session->driving = false;
+        observed=xr_xir_vm_debug_observation_status(session->debug,result.outcome.status==XR_XIR_CALL_RETURNED);
+        /* The target's admitted failure and cleanup remain authoritative. */
+        if (observed!=XR_XIR_VALUE_OK && (result.outcome.status==XR_XIR_CALL_READY ||
+            result.outcome.status==XR_XIR_CALL_RETURNED)) return observed;
         if (xr_xir_vm_debug_paused(session->debug)) {
             *output = (XdapCurrentResult){.state=XDAP_CURRENT_STOPPED,
                 .debug_epoch=xr_xir_vm_debug_epoch(session->debug), .instance_epoch=result.epoch};
@@ -129,5 +135,13 @@ XR_FUNC XrXirCallStatus xdap_current_free(XdapCurrent *session) {
     XrXirDomain *metadata = session->metadata;
     xr_xir_domain_metadata_deallocate(metadata, session, sizeof(*session));
     xr_xir_domain_drop(metadata);
+    return status;
+}
+XR_FUNC XrXirCallStatus xdap_current_stop(XdapCurrent *session) {
+    if (!session) return XR_XIR_CALL_BAD_ARGUMENT;
+    if (session->driving) return XR_XIR_CALL_BUSY;
+    xr_xir_vm_debug_disable(session->debug);session->driving=true;
+    XrXirCallStatus status=xr_xir_instance_stop(session->instance);session->driving=false;
+    if (status!=XR_XIR_CALL_BUSY) session->ended=true;
     return status;
 }

@@ -27,4 +27,5 @@ XR_FUNC void xir_vm_debug_after(XrXirVmDebug *debug, const XirVmDebugPoint *poin
     XrXirActionKind action);
 XR_FUNC XrXirValueStatus xir_vm_debug_inbox(XrXirVmDebug *debug, void *state, uint32_t offset);
 XR_FUNC void xir_vm_debug_release(XrXirVmDebug *debug, void *state);
+XR_FUNC void xir_vm_debug_faulted(XrXirVmDebug *,const XrXirCallView *);
 #endif // XXIR_VM_DEBUG_INTERNAL_H

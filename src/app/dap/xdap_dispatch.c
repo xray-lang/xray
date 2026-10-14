@@ -217,7 +217,9 @@ static XrXirStatus dispatch_start(XdapAdapter *s,const XdapRequest *r) {
 static XrXirStatus dispatch_control(XdapAdapter *s,const XdapRequest *r,const char *command) {
     uint64_t thread=0;XrXirStatus status=xdap_dispatch_number(r,"threadId",0,&thread);
     if (status!=XR_XIR_OK) return status;
-    if (!s->launch || !s->configured || thread!=1 || s->terminal)
+    uint64_t stopped=s->snapshot ? xr_xir_vm_debug_snapshot_stopped_thread(s->snapshot) : 1;
+    if (!s->launch || !s->configured || !thread || s->terminal ||
+        (!strcmp(command,"pause") ? thread!=1 : thread!=stopped))
         return xdap_dispatch_response(s,r,false,NULL,"No active thread");
     if (!strcmp(command,"pause")) {
         if (!s->running) return xdap_dispatch_response(s,r,false,NULL,"Thread is already stopped");
@@ -243,10 +245,11 @@ static XrXirStatus dispatch_control(XdapAdapter *s,const XdapRequest *r,const ch
 }
 static XrXirStatus dispatch_terminate(XdapAdapter *s,const XdapRequest *r,bool disconnect) {
     if (s->launch && !s->terminal) {
-        XrXirCallStatus cancelled=xdap_current_cancel(s->launch->control);
-        if (cancelled!=XR_XIR_CALL_CANCEL_REQUESTED && cancelled!=XR_XIR_CALL_BAD_STATE)
-            return xdap_dispatch_response(s,r,false,NULL,"Cancellation rejected");
+        XrXirCallStatus cancelled=xdap_current_stop(s->launch->control);
+        if (cancelled==XR_XIR_CALL_BUSY) return xdap_dispatch_response(s,r,false,NULL,"Target is busy");
         xdap_dispatch_clear_stop(s);s->running=true;s->wait_wake=0;
+        if (cancelled!=XR_XIR_CALL_READY && cancelled!=XR_XIR_CALL_CANCELLED)
+            return xdap_dispatch_response(s,r,false,NULL,"Target cleanup failed");
     }
     XrXirStatus status=xdap_dispatch_response(s,r,true,NULL,NULL);
     if (disconnect && status==XR_XIR_OK) s->closed=true;
@@ -317,7 +320,8 @@ XR_FUNC XrXirStatus xdap_adapter_step(XdapAdapter *s,uint64_t quantum) {
         s->stop_epoch=result.debug_epoch;s->running=false;
         XdapJsonWriter body=xdap_json_writer(s->resources,s->config.message_limit);
         XDAP_TEXT(&body,"{\"reason\":");const char *reason=s->stop_reason ? s->stop_reason : "breakpoint";
-        xdap_json_quote(&body,reason,strlen(reason));XDAP_TEXT(&body,",\"threadId\":1,\"allThreadsStopped\":true}");
+        xdap_json_quote(&body,reason,strlen(reason));XDAP_TEXT(&body,",\"threadId\":");
+        xdap_json_unsigned(&body,xr_xir_vm_debug_snapshot_stopped_thread(s->snapshot));XDAP_TEXT(&body,",\"allThreadsStopped\":true}");
         status=xdap_dispatch_event(s,"stopped",&body);xdap_json_writer_free(&body);
     } else if (result.state==XDAP_CURRENT_WAITING) {
         status=dispatch_wait_begin(s,&result);

@@ -84,6 +84,18 @@ add_test(NAME test_dap_dispatch_resources COMMAND test_dap_dispatch_faults --res
 set_tests_properties(test_dap_dispatch_faults PROPERTIES TIMEOUT 120 LABELS "dap;json;source;ownership")
 set_tests_properties(test_dap_dispatch_resources PROPERTIES TIMEOUT 1800 COST 180 LABELS "dap;json;source;resources;fault-injection;ownership")
 
+add_executable(test_dap_mixed test_mixed.c "${CMAKE_BINARY_DIR}/generated/child_callable_native.c")
+target_link_libraries(test_dap_mixed PRIVATE xray_dap_current)
+if(MSVC)
+    target_compile_options(test_dap_mixed PRIVATE /W4 /WX /utf-8)
+else()
+    target_compile_options(test_dap_mixed PRIVATE -Wall -Wextra -Werror)
+endif()
+add_test(NAME test_dap_mixed COMMAND test_dap_mixed)
+add_test(NAME test_dap_mixed_resources COMMAND test_dap_mixed --resources)
+set_tests_properties(test_dap_mixed_resources PROPERTIES TIMEOUT 1800 COST 120 LABELS "dap;mixed;resources;fault-injection;ownership;generated-c")
+set_tests_properties(test_dap_mixed PROPERTIES TIMEOUT 120 LABELS "dap;mixed;task;execution;ownership;generated-c")
+
 if(XR_BUILD_DAP)
     add_test(NAME dap_current_stdio COMMAND ${XRAY_PYTHON} ${CMAKE_CURRENT_SOURCE_DIR}/test_stdio.py
         --xray $<TARGET_FILE:xray> --fixture ${CMAKE_CURRENT_SOURCE_DIR}/wire_fixture.xr)
