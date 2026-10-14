@@ -202,9 +202,9 @@ static XrXirStatus effect_invocation_publish(const XrXirCompileContext *work,
 static XrXirStatus effect_invocation_effect_edge_mask(const XrXirCompileContext *work,
     const XrXirEffects *effects,uint32_t caller,uint32_t instruction,uint32_t target,uint32_t *output);
 static XrXirStatus effect_invocation_public_gate(const XrXirCompileContext *work,
-    const EffectInvocationCertificate *certificate,uint32_t limit);
+    const EffectInvocationCertificate *certificate);
 static XrXirStatus effect_invocation_public_trace(const XrXirCompileContext *work,
-    const EffectInvocationCertificate *certificate,uint32_t limit,uint32_t function,
+    const EffectInvocationCertificate *certificate,uint32_t function,
     const XrXirRootEffects *facts,XrXirRootCauseTrace **output);
 #include "xxir_effect_parameters.inc.c"
 
@@ -814,7 +814,7 @@ static XrXirStatus effect_infer(const XrXirCompileContext *compile_context,
         status=effect_context_owner_project(remaining,module,effects,effects->contexts);
     if (status == XR_XIR_OK) status = effect_errors_analyze(effects, &graph, remaining);
     if (status == XR_XIR_OK && !effects->contexts)
-        status=effect_invocation_public_gate(remaining,effects->invocations,effects->count);
+        status=effect_invocation_public_gate(remaining,effects->invocations);
     if (status == XR_XIR_OK) status = effect_entry_roots_seal(module,effects,remaining);
     effect_graph_free(&graph);
     if (status != XR_XIR_OK) { xr_xir_compile_effects_free(effects); return status; }

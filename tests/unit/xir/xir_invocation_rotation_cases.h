@@ -241,8 +241,17 @@ static XrXirStatus conditional_invocation_rotation(const XrXirCompileContext *co
     if (status==XR_XIR_OK && oracle) {
         CHECK(run.checked_count==5);invocation_rotation_trace_oracle(certificate,trace);
         uint32_t count=0;
-        (void)xr_xir_root_cause_trace_steps(public_trace,false,&count);
-        CHECK(count<=run.public_forest_count && xr_xir_root_cause_trace_facts(public_trace));
+        const XrXirRootCauseStep *steps=xr_xir_root_cause_trace_steps(public_trace,false,&count);
+        static const uint32_t bodies[7]={0,1,1,1,1,1,3};
+        static const uint32_t instructions[7]={2,1,1,1,1,0,0};
+        CHECK(count==7 && count>run.checked_count && steps &&
+            xr_xir_root_cause_trace_facts(public_trace)->requires_root &&
+            !xr_xir_root_cause_trace_facts(public_trace)->unresolved);
+        for (uint32_t k=0;k<7;++k) CHECK(steps[k].function==bodies[k] &&
+            steps[k].instruction==instructions[k] && steps[k].distance==6-k &&
+            steps[k].callee==(k==6?UINT32_MAX:bodies[k+1]) &&
+            steps[k].slot==(k==6?0u:UINT32_MAX) &&
+            steps[k].cause==(k==6?XR_XIR_ROOT_CAUSE_MUTABLE_SLOT:XR_XIR_ROOT_CAUSE_CALL));
     }
     if (oracle) {
         uint32_t root_count=0,unknown_count=0;

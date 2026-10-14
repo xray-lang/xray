@@ -11,3 +11,9 @@ add_test(NAME test_xir_effect_final_read_allocation_bounds
 set_tests_properties(test_xir_effect_final_read_allocation_bounds PROPERTIES
     LABELS "unit;xir;root-effects;ownership;metadata;final-read"
     TIMEOUT 120 RUN_SERIAL TRUE PROCESSORS 1)
+
+add_test(NAME test_xir_effect_final_recursive_trace
+    COMMAND test_xir_effect_final_read --rotation)
+set_tests_properties(test_xir_effect_final_recursive_trace PROPERTIES
+    LABELS "unit;xir;root-effects;ownership;metadata;final-read;recursion"
+    TIMEOUT 120 RUN_SERIAL TRUE PROCESSORS 1)
