@@ -5825,6 +5825,8 @@ xray 用类型系统在编译期消除数据竞争。准确的表述是 §16.9.5
 
 当前新 XIR 执行核的 Error 载荷能力包含以既有标量或 string 为叶子的 Array 字段及嵌套 Array。运行时检查封闭枚举的全部变体字段，Array 类型边逐一消耗同一累计 work，并继续按真实 arena、Domain 和值图准入；不因容器形式跳过 Sendable 或所有权证明。类型链循环、未封闭类型、Cell、callable 和 class 不获该能力；其它合法 Sendable 载荷族仍需各自接通执行能力。此扩展不改变普通 root 故障与 Task 值错误的区分。
 
+当前可执行 Task 结果族包含 Unit、bool、rune、既有全部整数/浮点类型及 string。这些类型已通过同一 Checked Sendable 证明；执行能力准入不替代 worker 的 root 效果、实参和值准入。await 与粘滞终态副本保留准确类型及规范标量位表示；终态 Task 在 Instance 和执行代码租约释放后仍持有拥有式结果。复制失败保全空输出和粘滞终态，沿同一累计预算收费，不退款。构造类型结果族及完整 Task 参数族须各自实施并取得资格，本能力不隐式开放它们。
+
 runtime capability 只从 executable entry、manifest C export 等最终 artifact roots 传播。不可达的 `go` / `await` / Channel helper 不会迫使产物链接 scheduler、timer、netpoll 或 hosted runtime。
 
 Hosted target 按 verified entry plan 选择 NONE / SINGLE / MULTI scheduler。Freestanding target 若可达代码只需要 core，则保持零 coroutine runtime；若需要 task、frame、submit、park/wake、timer、interrupt completion 或 executor pump，target manifest 必须提供版本化 provider ABI 及所需 hooks，缺失能力在生成或链接前硬失败。provider 是 target/build 契约，不引入 `async main`、`static main` 或 freestanding 专用源语言关键字。
