@@ -4449,6 +4449,7 @@ include(xir/program_root_permissions.cmake)
 include(xir/callable70_checked_vectors.cmake)
 
 include(xir/root_identity_vm_compiler_resources.cmake)
+include(xir/instance_generations.cmake)
 
 include(xir/owned_string_source_resources.cmake)
 
