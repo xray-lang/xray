@@ -1,0 +1,8 @@
+export fn p09Answer() -> i64 {
+    var text = "射线"
+    const saved = text
+    text += "!"
+    text += text
+    if (saved == "射线" && text == "射线!射线!") { return len(text) * 10 + len(saved) }
+    return 0
+}

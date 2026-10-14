@@ -7339,6 +7339,8 @@ Checked与Program、值和调用边界使用§17.6的现行版本，不接受先
 
 函数值可以保存一组有序的按值捕获。FUNCTION_REF 的操作数范围是捕获值；目标函数的参数前缀逐项匹配捕获类型，剩余参数和返回匹配公开函数签名。显式泛型替换、值角色、支配、可见性和初始化限制全部在 Checked 验证，特化后复验；捕获不授予额外调用权限。
 
+已闭合的按值叶 Function 捕获须验证其真实 Program producer、目标、声明类型及完整 captures，不能仅凭 NONE 广告或地址取得准入。运行期以原 FUNCTION_REF 捕获操作数的已拥有声明上界验证捕获前缀，并与封存执行节点的完整实参行逐字相符。无环境的具体叶函数不继承外层 closure 的无关环境列；symbolic 或有环境的 producer 保留完整关系并继续普通精确验证。其它 constructed 捕获、Function 跨 GO 的 Sendable、NO_SUSPEND、私有可见性及资源责任不因这一有限能力解除。
+
 捕获环境在构造时取得每个值的逻辑副本，失败不发布部分函数值；复制函数值共享不可变环境。string 保持值语义，Atomic 保持同步身份，函数捕获保留原有执行准入。环境不得保存调用方帧指针。最后一个函数引用释放全部捕获及代码租约；嵌套环境清理不得随捕获深度递归消耗宿主栈，也不得为清理再次分配。
 
 间接调用仍发布同一可恢复 CALL action，携带借用的函数值；唯一帧驱动器把环境前缀和显式实参复制到新帧。在新帧完成拥有前，调用方帧继续保活环境；挂起、抛出、取消和返回沿用统一清理。宿主函数调用入口同样保留捕获和实参，再释放前次结果。实例 stop/free 撤销执行准入，但外逃环境和值仍可读取、复制和释放。
@@ -7533,15 +7535,17 @@ Checked22/57、Value16和Program26保持各自实际合同；输出接口迁移�
 
 准入验收须含private generic helper、两个库binder0/function0、反转输入顺序及改变接收ordinal、显式/推断/转发、新用户类型、未使用坏定义和private外部调用拒绝，销毁producer后的VM/独立packet/真native及双Instance与owned结果。保留原library/string/output门及全部新真实OOM、三轴exact/minus1、取消、物理释放和适用安全。此有限族不宣称完整库状态/依赖、native缓存配对、安装分发或全产品完成。
 
-### 17.37 同源 Checked/native 缓存首族
+### 17.37 Checked 标准库出版与普通执行
 
-本节冻结Task317缓存首族，实施与资格PENDING。真实stdlib io/output的writeStdout/writeStderr仍由唯一Checked→特化复验→Lowered及完整可恢复C emitter生成；Library不能伪造entry来Lower。首个可信代码来源为同源构建认证的静态image registry，constructor只取其登记回调，不接受任意callback＋自报摘要/verified位。Program descriptor对应不证明机器码行为；可信构建/链接边界必须真实记录。Checked组件/native目标组件/生成C各有独立长度与摘要，不能把C文本当目标文件；配对semantic_build_id域分隔、长度框定并包含canonical target-neutral Checked集合、语义版本和完整依赖，与用户Program proof.identity分离。
+标准库只提供一份 Checked XIR 语义输入，包含声明、泛型定义、私有实现闭包、模块初始化、效果和所有权事实。当前出版族为 io/output，不代表其余标准库族已获资格。库模板是经过验证的输入，不是可执行 Program 授权。Catalog 在调用方累计资源账本下验证完整 Checked body、规范模块身份和依赖；字节摘要不能代替语义复验。Catalog 深拥有物理根，输入和 Source 生产者销毁后仍有效。缺失或畸形的 advertised 输入拒绝，不回退到 Source。
 
-条目键包含认证module/declaration、有序完整类型实参/约束/implementation/witness/callback/效果与私有闭包、参数mode/结果/visibility/cleanup、body和layout。首两叶无泛型/见证/捕获时明确count0，不是通配。代码变体另含实际target/OS/object format/endianness/pointer/calling convention/CRT/provider/profile/优化、各ABI/完整runtime布局及同源SDK身份；现XrXirTarget两字段不足。命中从完整复验的接收Lowered及原Checked重建不依赖库旧ordinal的leaf投影，扫描所有索引来源；首族禁止CALL/INVOKE/GO、闭包/cleanup及module/slot/literal/constructed pool绝对依赖，stream1/2不作callee。不存在条目可MISS；宣称匹配却有任何组件/合同/registry损坏须前执行拒绝，不能静默降级。
+Checked producer 只进行 Source 检查与 Checked 编码，不依赖 CGen、native 编译、object 清单或 runtime SDK；构建 producer 可执行文件本身仍需要支持的宿主 C 工具链。嵌入的不可变 Checked 字节和独立组件 manifest 不包含机器码回调。CLI、LSP、VM、AOT 独立于 native 代码取得同一 Catalog 输入。VM 对可达实例特化、复验、Lower 后按普通不可变 Program seal 接收，不查找或替换标准库函数为 cached native entries，执行期不需要 C 编译器。AOT 将库与用户 XIR 共同交给普通 C backend 编译。
 
-同一VM封存worker先准备原Lowered全表，再仅替换实际MATCH，MISS继续该Lowered；保强制Checked来源、canonical layout、GO权限及原Program seal。opaque cache深拥有清单/Checked/entry并真实retain代码owner；aggregate VmProgramOwner持artifact/bindings/cache引用，seal仅成功转移，失败保原输入并释放临时引用。producer/cache原引用先死后仍可运行，最后Program/Instance/escaped Function租约恰好释放一次；静态代码明确进程存储且没有伪造unload。动态DLL须另行真实认证/符号/unload闭包。AOT只Checked，VM miss无C工具链要求；封存后不追加普通实例。
+删除标准库 native registry、matching factory、cache lease、配对 build identity、object/C 镜像及缓存专用 seal API；不保留兼容 flag、空缓存或第二执行路径。普通 native 函数、双向 VM/native mixed、共同 Value/Call/Program/Instance、可恢复 ABI、CGen、必要平台 host 和独立验证的 runtime SDK 保留。SDK 的实际 target/profile/ABI 及生成 native 代码准入仍有各自拒绝边界。
 
-固定独立输出为stdout out\0中七字节、stderr err!四字节及空，覆盖双Instance/四provider模式/三向量、no-cache/both-hit/one-miss、身份重排/同名拒错配、各字段独立破坏前拒、真实code lease与producer死亡、所有新增OOM/三轴exact-minus1/取消/双物理释放。W1–W4、strict C11、MSVC与Clang ASan/UBSan和原库/output责任不减少。一般非叶重定位、泛型cache完整键、默认构建/安装双产物、公开source-free run/build及最后旧链删除仍OPEN；本首族不替代这些完成条件。
+Core 只安装 Checked 组件及精确 module/length/digest manifest。SDK 组件独立验证 target、ABI、Source 和 archive manifest；SDK-only 安装不要求标准库配对。组件及规范相对路径在出版前拒绝畸形输入；验证失败保全已有 manifest。真实 Core/SDK/full 安装、搬移、无源码 VM/AOT、用户新泛型类型及缺失/损坏组件需要独立测试。完整标准库交付与删除当前已支持族的缓存是不同完成责任。
+
+保留独立输出预期：stdout 为 out\0 后接 U+4E2D 的七个字节，stderr 为 err! 四个字节及空输入；保留两 Instance、四种 provider 结果、导入 leaf 与用户 wrapper、同名用户声明、producer death、escaped Function/result 寿命和物理释放。只退役 cache match/lease/object-pair 断言。每个实际 preparation、bind/seal 分配故障，资源三轴 exact/minus1、不补账本的 retry、失败保全 take 和零分配 cleanup 仍由普通路径覆盖。W1–W4、可移植 C11、适用 provider/sanitizer 门及既有 generic/library/output 责任全部保留。
 
 ### 17.38 共同根执行流事实与原因查询
 
@@ -7559,7 +7563,7 @@ GO消费者从同一summary的已闭合root事实取得权限，不再逐槽或�
 
 FUNCTION_REF构造不执行body，但其广告上界必须覆盖目标的同owner真实body事实；未使用的ref同样验真。每个真实interface implementation body也必须满足原requirement上界，不能靠接收上下文授予承诺。共同Checker在完整结构/类型/约束/访问验证后使用同一execution图验root上界及GO义务。ordinary refs的精准producer后继使用不可发布的owned prepared owner，精确绑定已验证Module及拥有式INFERRED/FIXED value-flow；固定显式fn边界不能被猜目标精化，未知依赖保守UNKNOWN。有限worklist闭合并重新普通复验前，prepared状态不构成Checked或NONE证明；没有skip_go、unchecked公共入口或第二产品管线。Source recipe/AST死亡后不能借用其指针。
 
-这一flags语义采用唯一Checked semantic70，schema25的既有u32字段形状不变；公开Value22/Call28/Program29字段和布局不变。旧semantic69及旧0/1callable拒绝，不双读。SDK source fingerprint、同源stdlib Checked/native cache和消费者向量必须按真实资格更新。这里只冻结closed上界基础；Source精准refs、sealed Program真实entry上界准入、实际child indirect执行、有限参数公式、完整library types映射、用户完整原因链与library状态保护分别仍须实现验证。
+这一flags语义采用唯一Checked semantic70，schema25的既有u32字段形状不变；公开Value22/Call28/Program29字段和布局不变。旧semantic69及旧0/1callable拒绝，不双读。SDK source fingerprint、独立stdlib Checked组件和消费者向量必须按真实资格更新。这里只冻结closed上界基础；Source精准refs、sealed Program真实entry上界准入、实际child indirect执行、有限参数公式、完整library types映射、用户完整原因链与library状态保护分别仍须实现验证。
 
 普通引用准备与闭合：Source 在 region recipes 释放前拥有式记录 INFERRED/FIXED 值流身份。普通 direct ref 与 closure 在既有 Effects owner 上按真实目标闭合；显式 callable 参数、注解、结果及转换上下文保持固定上界。暂态 UNKNOWN 相等不能消除边界：私有 COPY 保留身份，闭合后有差异时转为唯一 FUNCTION_WEAKEN。私有结构/SSA/约束/可见性准备不产生 Checked，闭合后共同完整 Checker 对源与独立拥有式副本执行全部效果及权限义务，只发布该副本。
 
