@@ -1,0 +1,165 @@
+// Retain every original body and observe scalar results, including nested lexical scopes.
+// 0200_var_const.xr
+// 作者：xingleixu@gmail.com
+// 测试：变量声明 var 和 const
+// ===== var 基础 =====
+@test
+fn test_var_declaration() {
+    var x = 10
+    var p19Observed0 = x
+    assertEqual(p19Observed0, 10)
+    print(p19Observed0)
+}
+
+@test
+fn test_var_reassign() {
+    var x = 10
+    print(x)
+    x = 20
+    var p19Observed2 = x
+    assertEqual(p19Observed2, 20)
+    print(p19Observed2)
+}
+
+@test
+fn test_var_multiple() {
+    var a = 1
+    var b = 2
+    var c = 3
+    var p19Observed3 = a + b + c
+    assertEqual(p19Observed3, 6)
+    print(p19Observed3)
+}
+
+@test
+fn test_var_different_types() {
+    var i = 42
+    var f = 3.14
+    var s = "hello"
+    var b = true
+    var n: i64? = null
+    var p19Observed4 = i
+    assertEqual(p19Observed4, 42)
+    print(p19Observed4)
+    var p19Observed5 = f
+    assertEqual(p19Observed5, 3.14)
+    print(p19Observed5)
+    var p19Observed6 = s
+    assertEqual(p19Observed6, "hello")
+    print(p19Observed6)
+    var p19Observed7 = b
+    assertEqual(p19Observed7, true)
+    print(p19Observed7)
+    assertEqual(n, null)
+    print((n) == null)
+}
+
+// ===== const 基础 =====
+@test
+fn test_const_declaration() {
+    const PI = 3.14159
+    var p19Observed9 = PI
+    assertEqual(p19Observed9, 3.14159)
+    print(p19Observed9)
+}
+
+@test
+fn test_const_string() {
+    const NAME = "xray"
+    var p19Observed10 = NAME
+    assertEqual(p19Observed10, "xray")
+    print(p19Observed10)
+}
+
+@test
+fn test_const_expression() {
+    const BASE = 10
+    const MULTIPLIED = BASE * 2
+    var p19Observed11 = MULTIPLIED
+    assertEqual(p19Observed11, 20)
+    print(p19Observed11)
+}
+
+@test
+fn test_const_destructure() {
+    const (a, b) = (1, 2)
+    print(a)
+    print(b)
+    var p19Observed14 = a + b
+    assertEqual(p19Observed14, 3)
+    print(p19Observed14)
+}
+
+// ===== 初始化 =====
+@test
+fn test_expression_init() {
+    var x = 5 + 3
+    var p19Observed15 = x
+    assertEqual(p19Observed15, 8)
+    print(p19Observed15)
+    var y = x * 2
+    var p19Observed16 = y
+    assertEqual(p19Observed16, 16)
+    print(p19Observed16)
+}
+
+@test
+fn test_function_call_init() {
+    fn getValue() -> i64 {
+        return 42
+    }
+    var x = getValue()
+    var p19Observed17 = x
+    assertEqual(p19Observed17, 42)
+    print(p19Observed17)
+}
+
+// ===== 类型注解 =====
+@test
+fn test_type_annotation_int() {
+    var x: i64 = 100
+    var p19Observed18 = x
+    assertEqual(p19Observed18, 100)
+    print(p19Observed18)
+}
+
+@test
+fn test_type_annotation_float() {
+    var f: f64 = 2.5
+    var p19Observed19 = f
+    assertEqual(p19Observed19, 2.5)
+    print(p19Observed19)
+}
+
+@test
+fn test_type_annotation_string() {
+    var s: string = "typed"
+    var p19Observed20 = s
+    assertEqual(p19Observed20, "typed")
+    print(p19Observed20)
+}
+
+// ===== 边界条件 =====
+@test
+fn test_same_name_different_scope() {
+    var x = 10
+{
+        var x = 20
+        var p19Observed21 = x
+        assertEqual(p19Observed21, 20)
+        print(p19Observed21)
+    }
+    var p19Observed22 = x
+    assertEqual(p19Observed22, 10)
+    print(p19Observed22)
+}
+
+@test
+fn test_reassign_different_type() {
+    var x = 10
+    x = 20
+    // 同类型
+    var p19Observed23 = x
+    assertEqual(p19Observed23, 20)
+    print(p19Observed23)
+}

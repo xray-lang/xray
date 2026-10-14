@@ -8376,6 +8376,2023 @@
       "remaining_gates": [
         "Full contextual Equal/type authority and actual compiler/native/runtime FI, exact resources, cancellation, lifetime/physical/sanitizer/provider obligations."
       ]
+    },
+    {
+      "id": "regression_core_review_0200_var_const_complete_observed",
+      "oracle_id": "regression_core_review_0200_var_const",
+      "source": "tests/unit/xir/legacy_consumers/fixtures/independent_named_observations/0200_var_const/root.xr",
+      "source_lf_sha256": "8ea437ef94f5f6ab5ca0b4fc930dac0939f58c012865d37d08468df710dd4271",
+      "entry": "test",
+      "stdout_utf8": "10\n10\n20\n6\n42\n3.14\nhello\ntrue\ntrue\n3.14159\nxray\n20\n1\n2\n3\n8\n16\n42\n100\n2.5\ntyped\n20\n10\n20\n",
+      "stderr_utf8": "",
+      "companions": [],
+      "owners": [
+        "P09",
+        "P10"
+      ],
+      "independent_observations": {
+        "original_case": "tests/regression/02_variables/0200_var_const.xr",
+        "selected_complete_source": "tests/unit/xir/legacy_consumers/fixtures/early_core_ports/0200_var_const/root.xr",
+        "selected_source_lf_sha256": "1c6e139002c3a184a36a02267c0a8ceeceee1ddca990331e4bb68907f4d998e6",
+        "method": "All original named bodies, lexical blocks and control-flow bounds retained. Each original scalar computation is evaluated once. Extra initial/destructured/shadowed values follow the complete frozen model. Absent values use an explicit public ==null predicate, not a guessed representation.",
+        "values": [
+          {
+            "test": "test_var_declaration",
+            "expression": "x",
+            "expected": 10,
+            "projection": null,
+            "original_line": 8
+          },
+          {
+            "test": "test_var_reassign",
+            "expression": "x",
+            "expected": 10,
+            "projection": null,
+            "original_line": 14
+          },
+          {
+            "test": "test_var_reassign",
+            "expression": "x",
+            "expected": 20,
+            "projection": null,
+            "original_line": 16
+          },
+          {
+            "test": "test_var_multiple",
+            "expression": "a + b + c",
+            "expected": 6,
+            "projection": null,
+            "original_line": 24
+          },
+          {
+            "test": "test_var_different_types",
+            "expression": "i",
+            "expected": 42,
+            "projection": null,
+            "original_line": 34
+          },
+          {
+            "test": "test_var_different_types",
+            "expression": "f",
+            "expected": 3.14,
+            "projection": null,
+            "original_line": 35
+          },
+          {
+            "test": "test_var_different_types",
+            "expression": "s",
+            "expected": "hello",
+            "projection": null,
+            "original_line": 36
+          },
+          {
+            "test": "test_var_different_types",
+            "expression": "b",
+            "expected": true,
+            "projection": null,
+            "original_line": 37
+          },
+          {
+            "test": "test_var_different_types",
+            "expression": "n",
+            "expected": null,
+            "projection": "is_null",
+            "original_line": 38
+          },
+          {
+            "test": "test_const_declaration",
+            "expression": "PI",
+            "expected": 3.14159,
+            "projection": null,
+            "original_line": 45
+          },
+          {
+            "test": "test_const_string",
+            "expression": "NAME",
+            "expected": "xray",
+            "projection": null,
+            "original_line": 51
+          },
+          {
+            "test": "test_const_expression",
+            "expression": "MULTIPLIED",
+            "expected": 20,
+            "projection": null,
+            "original_line": 58
+          },
+          {
+            "test": "test_const_destructure",
+            "expression": "a",
+            "expected": 1,
+            "projection": null,
+            "original_line": 64
+          },
+          {
+            "test": "test_const_destructure",
+            "expression": "b",
+            "expected": 2,
+            "projection": null,
+            "original_line": 65
+          },
+          {
+            "test": "test_const_destructure",
+            "expression": "a + b",
+            "expected": 3,
+            "projection": null,
+            "original_line": 66
+          },
+          {
+            "test": "test_expression_init",
+            "expression": "x",
+            "expected": 8,
+            "projection": null,
+            "original_line": 73
+          },
+          {
+            "test": "test_expression_init",
+            "expression": "y",
+            "expected": 16,
+            "projection": null,
+            "original_line": 75
+          },
+          {
+            "test": "test_function_call_init",
+            "expression": "x",
+            "expected": 42,
+            "projection": null,
+            "original_line": 84
+          },
+          {
+            "test": "test_type_annotation_int",
+            "expression": "x",
+            "expected": 100,
+            "projection": null,
+            "original_line": 91
+          },
+          {
+            "test": "test_type_annotation_float",
+            "expression": "f",
+            "expected": 2.5,
+            "projection": null,
+            "original_line": 97
+          },
+          {
+            "test": "test_type_annotation_string",
+            "expression": "s",
+            "expected": "typed",
+            "projection": null,
+            "original_line": 103
+          },
+          {
+            "test": "test_same_name_different_scope",
+            "expression": "x",
+            "expected": 20,
+            "projection": null,
+            "original_line": 112
+          },
+          {
+            "test": "test_same_name_different_scope",
+            "expression": "x",
+            "expected": 10,
+            "projection": null,
+            "original_line": 114
+          },
+          {
+            "test": "test_reassign_different_type",
+            "expression": "x",
+            "expected": 20,
+            "projection": null,
+            "original_line": 122
+          }
+        ]
+      },
+      "remaining_gates": [
+        "Whole original body discovery and independent VM/generated-C/native observations.",
+        "Exact original compiler/native/runtime FI, budgets, lifetime/borrow/cancellation/physical and full sanitizer/provider obligations."
+      ]
+    },
+    {
+      "id": "regression_core_review_0210_scope_complete_observed",
+      "oracle_id": "regression_core_review_0210_scope",
+      "source": "tests/unit/xir/legacy_consumers/fixtures/independent_named_observations/0210_scope/root.xr",
+      "source_lf_sha256": "a96b535973432191c7a2a51d24e4e275776ecae44054e53054879407ba033100",
+      "entry": "test",
+      "stdout_utf8": "1\n2\n1\n6\n3\n1\n20\n30\n20\n10\ni64\n10\nhello\n10\ni64\n10\n200\n100\n10\n20\n3\n6\n10\n20\n15\n",
+      "stderr_utf8": "",
+      "companions": [],
+      "owners": [
+        "P09",
+        "P10"
+      ],
+      "independent_observations": {
+        "original_case": "tests/regression/02_variables/0210_scope.xr",
+        "selected_complete_source": "tests/regression/02_variables/0210_scope.xr",
+        "selected_source_lf_sha256": "0e5cab7c8753c708414e37f248b5e7c4c22e3b4c5c750a86e305b97078c20b4f",
+        "method": "All original named bodies, lexical blocks and control-flow bounds retained. Each original scalar computation is evaluated once. Extra initial/destructured/shadowed values follow the complete frozen model. Absent values use an explicit public ==null predicate, not a guessed representation.",
+        "values": [
+          {
+            "test": "test_block_scope_basic",
+            "expression": "x",
+            "expected": 1,
+            "projection": null,
+            "original_line": 10
+          },
+          {
+            "test": "test_block_scope_basic",
+            "expression": "y",
+            "expected": 2,
+            "projection": null,
+            "original_line": 12
+          },
+          {
+            "test": "test_block_scope_basic",
+            "expression": "x",
+            "expected": 1,
+            "projection": null,
+            "original_line": 14
+          },
+          {
+            "test": "test_nested_blocks",
+            "expression": "a + b + c",
+            "expected": 6,
+            "projection": null,
+            "original_line": 24
+          },
+          {
+            "test": "test_nested_blocks",
+            "expression": "a + b",
+            "expected": 3,
+            "projection": null,
+            "original_line": 26
+          },
+          {
+            "test": "test_nested_blocks",
+            "expression": "a",
+            "expected": 1,
+            "projection": null,
+            "original_line": 28
+          },
+          {
+            "test": "test_shadow_same_scope_different_block",
+            "expression": "x",
+            "expected": 20,
+            "projection": null,
+            "original_line": 38
+          },
+          {
+            "test": "test_shadow_same_scope_different_block",
+            "expression": "x",
+            "expected": 30,
+            "projection": null,
+            "original_line": 42
+          },
+          {
+            "test": "test_shadow_same_scope_different_block",
+            "expression": "x",
+            "expected": 20,
+            "projection": null,
+            "original_line": 44
+          },
+          {
+            "test": "test_shadow_same_scope_different_block",
+            "expression": "x",
+            "expected": 10,
+            "projection": null,
+            "original_line": 46
+          },
+          {
+            "test": "test_shadow_same_scope_different_block",
+            "expression": "typeName(x)",
+            "expected": "i64",
+            "projection": null,
+            "original_line": 47
+          },
+          {
+            "test": "test_shadow_same_scope_different_block",
+            "expression": "string(x)",
+            "expected": "10",
+            "projection": null,
+            "original_line": 48
+          },
+          {
+            "test": "test_shadow_with_different_type",
+            "expression": "x",
+            "expected": "hello",
+            "projection": null,
+            "original_line": 58
+          },
+          {
+            "test": "test_shadow_with_different_type",
+            "expression": "x",
+            "expected": 10,
+            "projection": null,
+            "original_line": 60
+          },
+          {
+            "test": "test_shadow_with_different_type",
+            "expression": "typeName(x)",
+            "expected": "i64",
+            "projection": null,
+            "original_line": 61
+          },
+          {
+            "test": "test_shadow_with_different_type",
+            "expression": "string(x)",
+            "expected": "10",
+            "projection": null,
+            "original_line": 62
+          },
+          {
+            "test": "test_function_scope",
+            "expression": "inner()",
+            "expected": 200,
+            "projection": null,
+            "original_line": 73
+          },
+          {
+            "test": "test_function_scope",
+            "expression": "x",
+            "expected": 100,
+            "projection": null,
+            "original_line": 74
+          },
+          {
+            "test": "test_closure_captures_outer",
+            "expression": "inner()",
+            "expected": 10,
+            "projection": null,
+            "original_line": 83
+          },
+          {
+            "test": "test_closure_modifies_outer",
+            "expression": "x",
+            "expected": 20,
+            "projection": null,
+            "original_line": 93
+          },
+          {
+            "test": "test_for_loop_scope",
+            "expression": "sum",
+            "expected": 3,
+            "projection": null,
+            "original_line": 103
+          },
+          {
+            "test": "test_while_loop_scope",
+            "expression": "sum",
+            "expected": 6,
+            "projection": null,
+            "original_line": 115
+          },
+          {
+            "test": "test_if_scope",
+            "expression": "result",
+            "expected": 10,
+            "projection": null,
+            "original_line": 126
+          },
+          {
+            "test": "test_if_else_scope",
+            "expression": "result",
+            "expected": 20,
+            "projection": null,
+            "original_line": 140
+          },
+          {
+            "test": "test_deeply_nested",
+            "expression": "a + b + c + d + e",
+            "expected": 15,
+            "projection": null,
+            "original_line": 155
+          }
+        ]
+      },
+      "remaining_gates": [
+        "Whole original body discovery and independent VM/generated-C/native observations.",
+        "Exact original compiler/native/runtime FI, budgets, lifetime/borrow/cancellation/physical and full sanitizer/provider obligations."
+      ]
+    },
+    {
+      "id": "regression_core_review_0006_as_numeric_cast_complete_observed",
+      "oracle_id": "regression_core_review_0006_as_numeric_cast",
+      "source": "tests/unit/xir/legacy_consumers/fixtures/independent_named_observations/0006_as_numeric_cast/root.xr",
+      "source_lf_sha256": "c02f29d238bc73a7d445eafddfd5fdc861ed20e31a4ab052bd3906cd49799226",
+      "entry": "test",
+      "stdout_utf8": "3\n3\n-2\n0\n42.0\n0.0\n123\n3.14\ntrue\nfalse\n",
+      "stderr_utf8": "",
+      "companions": [],
+      "owners": [
+        "P09",
+        "P10"
+      ],
+      "independent_observations": {
+        "original_case": "tests/regression/03_operators/0006_as_numeric_cast.xr",
+        "selected_complete_source": "tests/unit/xir/legacy_consumers/fixtures/early_core_ports/0006_as_numeric_cast/root.xr",
+        "selected_source_lf_sha256": "7fb9cf789c09b8939e25c5893e4f7c7e5dab4e68ad302c3bb5ea217eae1cb198",
+        "method": "All original named bodies, lexical blocks and control-flow bounds retained. Each original scalar computation is evaluated once. Extra initial/destructured/shadowed values follow the complete frozen model. Absent values use an explicit public ==null predicate, not a guessed representation.",
+        "values": [
+          {
+            "test": "test_float_as_int_truncation",
+            "expression": "3.14 as i64",
+            "expected": 3,
+            "projection": null,
+            "original_line": 5
+          },
+          {
+            "test": "test_float_as_int_truncation",
+            "expression": "3.99 as i64",
+            "expected": 3,
+            "projection": null,
+            "original_line": 6
+          },
+          {
+            "test": "test_float_as_int_truncation",
+            "expression": "-2.7 as i64",
+            "expected": -2,
+            "projection": null,
+            "original_line": 7
+          },
+          {
+            "test": "test_float_as_int_truncation",
+            "expression": "0.0 as i64",
+            "expected": 0,
+            "projection": null,
+            "original_line": 8
+          },
+          {
+            "test": "test_int_as_float",
+            "expression": "42 as f64",
+            "expected": 42.0,
+            "projection": null,
+            "original_line": 13
+          },
+          {
+            "test": "test_int_as_float",
+            "expression": "0 as f64",
+            "expected": 0.0,
+            "projection": null,
+            "original_line": 14
+          },
+          {
+            "test": "test_as_string",
+            "expression": "string(123)",
+            "expected": "123",
+            "projection": null,
+            "original_line": 19
+          },
+          {
+            "test": "test_as_string",
+            "expression": "string(3.14)",
+            "expected": "3.14",
+            "projection": null,
+            "original_line": 20
+          },
+          {
+            "test": "test_as_bool",
+            "expression": "1 != 0",
+            "expected": true,
+            "projection": null,
+            "original_line": 25
+          },
+          {
+            "test": "test_as_bool",
+            "expression": "0 != 0",
+            "expected": false,
+            "projection": null,
+            "original_line": 26
+          }
+        ]
+      },
+      "remaining_gates": [
+        "Whole original body discovery and independent VM/generated-C/native observations.",
+        "Exact original compiler/native/runtime FI, budgets, lifetime/borrow/cancellation/physical and full sanitizer/provider obligations."
+      ]
+    },
+    {
+      "id": "regression_core_review_0300_arithmetic_complete_observed",
+      "oracle_id": "regression_core_review_0300_arithmetic",
+      "source": "tests/unit/xir/legacy_consumers/fixtures/independent_named_observations/0300_arithmetic/root.xr",
+      "source_lf_sha256": "022f5b7293690e9dc0e93667ac4833e6bc4a58b46dab69615f7cb57e310ea0b9",
+      "entry": "test",
+      "stdout_utf8": "3\n0\n0\n-8\n4.0\n0.0\n0.0\n2.5\n3.5\n2\n0\n-2\n-2\n3.0\n0.0\n2.5\n3.5\n12\n0\n-12\n12\n10.0\n0.25\n5.0\n5.0\n5\n3\n-3\n2.5\n0.5\n2.5\n2.5\n1\n0\n3\n-1\n1\n0\n-5\n5\n-5\n5\n5\n0\n0\n5\n5\n5\n5\n6\n5\n24\n14\n20\n8\n8\n",
+      "stderr_utf8": "",
+      "companions": [],
+      "owners": [
+        "P09",
+        "P10"
+      ],
+      "independent_observations": {
+        "original_case": "tests/regression/03_operators/0300_arithmetic.xr",
+        "selected_complete_source": "tests/regression/03_operators/0300_arithmetic.xr",
+        "selected_source_lf_sha256": "7353d9d590e36c8d2d8bc55c439a415619f61633b844584bbb09ecfff5d0901d",
+        "method": "All original named bodies, lexical blocks and control-flow bounds retained. Each original scalar computation is evaluated once. Extra initial/destructured/shadowed values follow the complete frozen model. Absent values use an explicit public ==null predicate, not a guessed representation.",
+        "values": [
+          {
+            "test": "test_add_integers",
+            "expression": "1 + 2",
+            "expected": 3,
+            "projection": null,
+            "original_line": 9
+          },
+          {
+            "test": "test_add_integers",
+            "expression": "0 + 0",
+            "expected": 0,
+            "projection": null,
+            "original_line": 10
+          },
+          {
+            "test": "test_add_integers",
+            "expression": "-1 + 1",
+            "expected": 0,
+            "projection": null,
+            "original_line": 11
+          },
+          {
+            "test": "test_add_integers",
+            "expression": "-5 + -3",
+            "expected": -8,
+            "projection": null,
+            "original_line": 12
+          },
+          {
+            "test": "test_add_floats",
+            "expression": "1.5 + 2.5",
+            "expected": 4.0,
+            "projection": null,
+            "original_line": 17
+          },
+          {
+            "test": "test_add_floats",
+            "expression": "0.0 + 0.0",
+            "expected": 0.0,
+            "projection": null,
+            "original_line": 18
+          },
+          {
+            "test": "test_add_floats",
+            "expression": "-1.5 + 1.5",
+            "expected": 0.0,
+            "projection": null,
+            "original_line": 19
+          },
+          {
+            "test": "test_add_mixed",
+            "expression": "(1 as f64) + 1.5",
+            "expected": 2.5,
+            "projection": null,
+            "original_line": 24
+          },
+          {
+            "test": "test_add_mixed",
+            "expression": "2.5 + (1 as f64)",
+            "expected": 3.5,
+            "projection": null,
+            "original_line": 25
+          },
+          {
+            "test": "test_sub_integers",
+            "expression": "5 - 3",
+            "expected": 2,
+            "projection": null,
+            "original_line": 32
+          },
+          {
+            "test": "test_sub_integers",
+            "expression": "0 - 0",
+            "expected": 0,
+            "projection": null,
+            "original_line": 33
+          },
+          {
+            "test": "test_sub_integers",
+            "expression": "3 - 5",
+            "expected": -2,
+            "projection": null,
+            "original_line": 34
+          },
+          {
+            "test": "test_sub_integers",
+            "expression": "-5 - -3",
+            "expected": -2,
+            "projection": null,
+            "original_line": 35
+          },
+          {
+            "test": "test_sub_floats",
+            "expression": "5.5 - 2.5",
+            "expected": 3.0,
+            "projection": null,
+            "original_line": 40
+          },
+          {
+            "test": "test_sub_floats",
+            "expression": "1.0 - 1.0",
+            "expected": 0.0,
+            "projection": null,
+            "original_line": 41
+          },
+          {
+            "test": "test_sub_mixed",
+            "expression": "(5 as f64) - 2.5",
+            "expected": 2.5,
+            "projection": null,
+            "original_line": 46
+          },
+          {
+            "test": "test_sub_mixed",
+            "expression": "5.5 - (2 as f64)",
+            "expected": 3.5,
+            "projection": null,
+            "original_line": 47
+          },
+          {
+            "test": "test_mul_integers",
+            "expression": "3 * 4",
+            "expected": 12,
+            "projection": null,
+            "original_line": 54
+          },
+          {
+            "test": "test_mul_integers",
+            "expression": "0 * 100",
+            "expected": 0,
+            "projection": null,
+            "original_line": 55
+          },
+          {
+            "test": "test_mul_integers",
+            "expression": "-3 * 4",
+            "expected": -12,
+            "projection": null,
+            "original_line": 56
+          },
+          {
+            "test": "test_mul_integers",
+            "expression": "-3 * -4",
+            "expected": 12,
+            "projection": null,
+            "original_line": 57
+          },
+          {
+            "test": "test_mul_floats",
+            "expression": "2.5 * 4.0",
+            "expected": 10.0,
+            "projection": null,
+            "original_line": 62
+          },
+          {
+            "test": "test_mul_floats",
+            "expression": "0.5 * 0.5",
+            "expected": 0.25,
+            "projection": null,
+            "original_line": 63
+          },
+          {
+            "test": "test_mul_mixed",
+            "expression": "(2 as f64) * 2.5",
+            "expected": 5.0,
+            "projection": null,
+            "original_line": 68
+          },
+          {
+            "test": "test_mul_mixed",
+            "expression": "2.5 * (2 as f64)",
+            "expected": 5.0,
+            "projection": null,
+            "original_line": 69
+          },
+          {
+            "test": "test_div_integers",
+            "expression": "10 / 2",
+            "expected": 5,
+            "projection": null,
+            "original_line": 76
+          },
+          {
+            "test": "test_div_integers",
+            "expression": "7 / 2",
+            "expected": 3,
+            "projection": null,
+            "original_line": 77
+          },
+          {
+            "test": "test_div_integers",
+            "expression": "-10 / 3",
+            "expected": -3,
+            "projection": null,
+            "original_line": 78
+          },
+          {
+            "test": "test_div_floats",
+            "expression": "10.0 / 4.0",
+            "expected": 2.5,
+            "projection": null,
+            "original_line": 83
+          },
+          {
+            "test": "test_div_floats",
+            "expression": "1.0 / 2.0",
+            "expected": 0.5,
+            "projection": null,
+            "original_line": 84
+          },
+          {
+            "test": "test_div_mixed",
+            "expression": "(5 as f64) / 2.0",
+            "expected": 2.5,
+            "projection": null,
+            "original_line": 89
+          },
+          {
+            "test": "test_div_mixed",
+            "expression": "5.0 / (2 as f64)",
+            "expected": 2.5,
+            "projection": null,
+            "original_line": 90
+          },
+          {
+            "test": "test_mod_positive",
+            "expression": "10 % 3",
+            "expected": 1,
+            "projection": null,
+            "original_line": 97
+          },
+          {
+            "test": "test_mod_positive",
+            "expression": "15 % 5",
+            "expected": 0,
+            "projection": null,
+            "original_line": 98
+          },
+          {
+            "test": "test_mod_positive",
+            "expression": "7 % 4",
+            "expected": 3,
+            "projection": null,
+            "original_line": 99
+          },
+          {
+            "test": "test_mod_negative",
+            "expression": "-10 % 3",
+            "expected": -1,
+            "projection": null,
+            "original_line": 104
+          },
+          {
+            "test": "test_mod_negative",
+            "expression": "10 % -3",
+            "expected": 1,
+            "projection": null,
+            "original_line": 105
+          },
+          {
+            "test": "test_mod_zero_dividend",
+            "expression": "0 % 5",
+            "expected": 0,
+            "projection": null,
+            "original_line": 110
+          },
+          {
+            "test": "test_unary_minus",
+            "expression": "-5",
+            "expected": -5,
+            "projection": null,
+            "original_line": 117
+          },
+          {
+            "test": "test_unary_minus",
+            "expression": "-(-5)",
+            "expected": 5,
+            "projection": null,
+            "original_line": 118
+          },
+          {
+            "test": "test_unary_minus",
+            "expression": "-(3 + 2)",
+            "expected": -5,
+            "projection": null,
+            "original_line": 119
+          },
+          {
+            "test": "test_with_zero",
+            "expression": "0 + 5",
+            "expected": 5,
+            "projection": null,
+            "original_line": 128
+          },
+          {
+            "test": "test_with_zero",
+            "expression": "5 - 0",
+            "expected": 5,
+            "projection": null,
+            "original_line": 129
+          },
+          {
+            "test": "test_with_zero",
+            "expression": "0 * 100",
+            "expected": 0,
+            "projection": null,
+            "original_line": 130
+          },
+          {
+            "test": "test_with_zero",
+            "expression": "0 / 100",
+            "expected": 0,
+            "projection": null,
+            "original_line": 131
+          },
+          {
+            "test": "test_identity",
+            "expression": "5 + 0",
+            "expected": 5,
+            "projection": null,
+            "original_line": 136
+          },
+          {
+            "test": "test_identity",
+            "expression": "5 - 0",
+            "expected": 5,
+            "projection": null,
+            "original_line": 137
+          },
+          {
+            "test": "test_identity",
+            "expression": "5 * 1",
+            "expected": 5,
+            "projection": null,
+            "original_line": 138
+          },
+          {
+            "test": "test_identity",
+            "expression": "5 / 1",
+            "expected": 5,
+            "projection": null,
+            "original_line": 139
+          },
+          {
+            "test": "test_chained",
+            "expression": "1 + 2 + 3",
+            "expected": 6,
+            "projection": null,
+            "original_line": 144
+          },
+          {
+            "test": "test_chained",
+            "expression": "10 - 3 - 2",
+            "expected": 5,
+            "projection": null,
+            "original_line": 145
+          },
+          {
+            "test": "test_chained",
+            "expression": "2 * 3 * 4",
+            "expected": 24,
+            "projection": null,
+            "original_line": 146
+          },
+          {
+            "test": "test_precedence",
+            "expression": "2 + 3 * 4",
+            "expected": 14,
+            "projection": null,
+            "original_line": 153
+          },
+          {
+            "test": "test_precedence",
+            "expression": "(2 + 3) * 4",
+            "expected": 20,
+            "projection": null,
+            "original_line": 154
+          },
+          {
+            "test": "test_precedence",
+            "expression": "10 - 4 / 2",
+            "expected": 8,
+            "projection": null,
+            "original_line": 155
+          },
+          {
+            "test": "test_precedence",
+            "expression": "10 / 2 + 3",
+            "expected": 8,
+            "projection": null,
+            "original_line": 156
+          }
+        ]
+      },
+      "remaining_gates": [
+        "Whole original body discovery and independent VM/generated-C/native observations.",
+        "Exact original compiler/native/runtime FI, budgets, lifetime/borrow/cancellation/physical and full sanitizer/provider obligations."
+      ]
+    },
+    {
+      "id": "regression_core_review_0302_unsigned_to_string_complete_observed",
+      "oracle_id": "regression_core_review_0302_unsigned_to_string",
+      "source": "tests/unit/xir/legacy_consumers/fixtures/independent_named_observations/0302_unsigned_to_string/root.xr",
+      "source_lf_sha256": "7f080feff15fc9fcefe1a63650d366299d6fa4597508b811691c5eddd40efb1b",
+      "entry": "test",
+      "stdout_utf8": "18446744073709551615\n18446744073709551615\nx=18446744073709551615\n9223372036854775808\n9223372036854775807\n-1\n42\n1.5\n",
+      "stderr_utf8": "",
+      "companions": [],
+      "owners": [
+        "P09",
+        "P10"
+      ],
+      "independent_observations": {
+        "original_case": "tests/regression/03_operators/0302_unsigned_to_string.xr",
+        "selected_complete_source": "tests/regression/03_operators/0302_unsigned_to_string.xr",
+        "selected_source_lf_sha256": "c2de0c1c31e50e8bd0b4bbfad258c1f1c5c413771a43bf6bc270af67374a16cd",
+        "method": "All original named bodies, lexical blocks and control-flow bounds retained. Each original scalar computation is evaluated once. Extra initial/destructured/shadowed values follow the complete frozen model. Absent values use an explicit public ==null predicate, not a guessed representation.",
+        "values": [
+          {
+            "test": "test_unsigned_to_string_matches_conversion",
+            "expression": "big.toString()",
+            "expected": "18446744073709551615",
+            "projection": null,
+            "original_line": 14
+          },
+          {
+            "test": "test_unsigned_to_string_matches_conversion",
+            "expression": "big.toString()",
+            "expected": "18446744073709551615",
+            "projection": null,
+            "original_line": 15
+          },
+          {
+            "test": "test_unsigned_to_string_matches_conversion",
+            "expression": "\"x=\" + big.toString()",
+            "expected": "x=18446744073709551615",
+            "projection": null,
+            "original_line": 16
+          },
+          {
+            "test": "test_unsigned_to_string_at_high_bit_boundary",
+            "expression": "half.toString()",
+            "expected": "9223372036854775808",
+            "projection": null,
+            "original_line": 23
+          },
+          {
+            "test": "test_unsigned_to_string_at_high_bit_boundary",
+            "expression": "below.toString()",
+            "expected": "9223372036854775807",
+            "projection": null,
+            "original_line": 27
+          },
+          {
+            "test": "test_signed_and_float_to_string_unchanged",
+            "expression": "negative.toString()",
+            "expected": "-1",
+            "projection": null,
+            "original_line": 34
+          },
+          {
+            "test": "test_signed_and_float_to_string_unchanged",
+            "expression": "small.toString()",
+            "expected": "42",
+            "projection": null,
+            "original_line": 37
+          },
+          {
+            "test": "test_signed_and_float_to_string_unchanged",
+            "expression": "scalar.toString()",
+            "expected": "1.5",
+            "projection": null,
+            "original_line": 40
+          }
+        ]
+      },
+      "remaining_gates": [
+        "Whole original body discovery and independent VM/generated-C/native observations.",
+        "Exact original compiler/native/runtime FI, budgets, lifetime/borrow/cancellation/physical and full sanitizer/provider obligations."
+      ]
+    },
+    {
+      "id": "regression_core_review_0320_logical_complete_observed",
+      "oracle_id": "regression_core_review_0320_logical",
+      "source": "tests/unit/xir/legacy_consumers/fixtures/independent_named_observations/0320_logical/root.xr",
+      "source_lf_sha256": "1c4c60208a29da993c51a1f1d1ff6f4ad7a54fed4009f0ec634991258613c573",
+      "entry": "test",
+      "stdout_utf8": "true\nfalse\nfalse\nfalse\ntrue\nfalse\nfalse\nfalse\ntrue\nfalse\nfalse\ntrue\ntrue\ntrue\nfalse\ntrue\nfalse\ntrue\nfalse\ntrue\nfalse\nfalse\ntrue\ntrue\nfalse\nfalse\ntrue\ntrue\nfalse\nfalse\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\nfalse\nfalse\nfalse\ntrue\nfalse\ntrue\ntrue\ntrue\ntrue\ntrue\nfalse\ntrue\nfalse\n",
+      "stderr_utf8": "",
+      "companions": [],
+      "owners": [
+        "P09",
+        "P10"
+      ],
+      "independent_observations": {
+        "original_case": "tests/regression/03_operators/0320_logical.xr",
+        "selected_complete_source": "tests/regression/03_operators/0320_logical.xr",
+        "selected_source_lf_sha256": "dc05e8de44f67d09ee3a1a2163934a65b94d3a4ddf1e4a368f7f7c34b1c604e9",
+        "method": "All original named bodies, lexical blocks and control-flow bounds retained. Each original scalar computation is evaluated once. Extra initial/destructured/shadowed values follow the complete frozen model. Absent values use an explicit public ==null predicate, not a guessed representation.",
+        "values": [
+          {
+            "test": "test_and_truth_table",
+            "expression": "true && true",
+            "expected": true,
+            "projection": null,
+            "original_line": 9
+          },
+          {
+            "test": "test_and_truth_table",
+            "expression": "true && false",
+            "expected": false,
+            "projection": null,
+            "original_line": 10
+          },
+          {
+            "test": "test_and_truth_table",
+            "expression": "false && true",
+            "expected": false,
+            "projection": null,
+            "original_line": 11
+          },
+          {
+            "test": "test_and_truth_table",
+            "expression": "false && false",
+            "expected": false,
+            "projection": null,
+            "original_line": 12
+          },
+          {
+            "test": "test_and_with_expressions",
+            "expression": "(5 > 3) && (2 < 4)",
+            "expected": true,
+            "projection": null,
+            "original_line": 17
+          },
+          {
+            "test": "test_and_with_expressions",
+            "expression": "(5 > 3) && (2 > 4)",
+            "expected": false,
+            "projection": null,
+            "original_line": 18
+          },
+          {
+            "test": "test_and_short_circuit",
+            "expression": "result",
+            "expected": false,
+            "projection": null,
+            "original_line": 31
+          },
+          {
+            "test": "test_and_short_circuit",
+            "expression": "called",
+            "expected": false,
+            "projection": null,
+            "original_line": 32
+          },
+          {
+            "test": "test_and_chain",
+            "expression": "true && true && true",
+            "expected": true,
+            "projection": null,
+            "original_line": 37
+          },
+          {
+            "test": "test_and_chain",
+            "expression": "true && true && false",
+            "expected": false,
+            "projection": null,
+            "original_line": 38
+          },
+          {
+            "test": "test_and_chain",
+            "expression": "true && false && true",
+            "expected": false,
+            "projection": null,
+            "original_line": 39
+          },
+          {
+            "test": "test_or_truth_table",
+            "expression": "true || true",
+            "expected": true,
+            "projection": null,
+            "original_line": 46
+          },
+          {
+            "test": "test_or_truth_table",
+            "expression": "true || false",
+            "expected": true,
+            "projection": null,
+            "original_line": 47
+          },
+          {
+            "test": "test_or_truth_table",
+            "expression": "false || true",
+            "expected": true,
+            "projection": null,
+            "original_line": 48
+          },
+          {
+            "test": "test_or_truth_table",
+            "expression": "false || false",
+            "expected": false,
+            "projection": null,
+            "original_line": 49
+          },
+          {
+            "test": "test_or_with_expressions",
+            "expression": "(5 > 10) || (2 < 4)",
+            "expected": true,
+            "projection": null,
+            "original_line": 54
+          },
+          {
+            "test": "test_or_with_expressions",
+            "expression": "(5 > 10) || (2 > 4)",
+            "expected": false,
+            "projection": null,
+            "original_line": 55
+          },
+          {
+            "test": "test_or_short_circuit",
+            "expression": "result",
+            "expected": true,
+            "projection": null,
+            "original_line": 68
+          },
+          {
+            "test": "test_or_short_circuit",
+            "expression": "called",
+            "expected": false,
+            "projection": null,
+            "original_line": 69
+          },
+          {
+            "test": "test_or_chain",
+            "expression": "false || false || true",
+            "expected": true,
+            "projection": null,
+            "original_line": 74
+          },
+          {
+            "test": "test_or_chain",
+            "expression": "false || false || false",
+            "expected": false,
+            "projection": null,
+            "original_line": 75
+          },
+          {
+            "test": "test_not_basic",
+            "expression": "!true",
+            "expected": false,
+            "projection": null,
+            "original_line": 82
+          },
+          {
+            "test": "test_not_basic",
+            "expression": "!false",
+            "expected": true,
+            "projection": null,
+            "original_line": 83
+          },
+          {
+            "test": "test_not_double",
+            "expression": "!!true",
+            "expected": true,
+            "projection": null,
+            "original_line": 88
+          },
+          {
+            "test": "test_not_double",
+            "expression": "!!false",
+            "expected": false,
+            "projection": null,
+            "original_line": 89
+          },
+          {
+            "test": "test_not_expression",
+            "expression": "!(5 > 3)",
+            "expected": false,
+            "projection": null,
+            "original_line": 94
+          },
+          {
+            "test": "test_not_expression",
+            "expression": "!(5 < 3)",
+            "expected": true,
+            "projection": null,
+            "original_line": 95
+          },
+          {
+            "test": "test_not_explicit",
+            "expression": "!(0 != 0)",
+            "expected": true,
+            "projection": null,
+            "original_line": 101
+          },
+          {
+            "test": "test_not_explicit",
+            "expression": "!(1 != 0)",
+            "expected": false,
+            "projection": null,
+            "original_line": 102
+          },
+          {
+            "test": "test_not_explicit",
+            "expression": "!(len(\"\") == 0)",
+            "expected": false,
+            "projection": null,
+            "original_line": 103
+          },
+          {
+            "test": "test_not_explicit",
+            "expression": "!(len(\"hi\") == 0)",
+            "expected": true,
+            "projection": null,
+            "original_line": 104
+          },
+          {
+            "test": "test_not_explicit",
+            "expression": "!(n != null)",
+            "expected": true,
+            "projection": null,
+            "original_line": 106
+          },
+          {
+            "test": "test_and_or_combined",
+            "expression": "true && true || false",
+            "expected": true,
+            "projection": null,
+            "original_line": 113
+          },
+          {
+            "test": "test_and_or_combined",
+            "expression": "false || true && true",
+            "expected": true,
+            "projection": null,
+            "original_line": 114
+          },
+          {
+            "test": "test_and_or_combined",
+            "expression": "(true || false) && true",
+            "expected": true,
+            "projection": null,
+            "original_line": 115
+          },
+          {
+            "test": "test_not_and",
+            "expression": "!(true && false)",
+            "expected": true,
+            "projection": null,
+            "original_line": 120
+          },
+          {
+            "test": "test_not_and",
+            "expression": "!true && false",
+            "expected": false,
+            "projection": null,
+            "original_line": 121
+          },
+          {
+            "test": "test_not_or",
+            "expression": "!(true || false)",
+            "expected": false,
+            "projection": null,
+            "original_line": 126
+          },
+          {
+            "test": "test_not_or",
+            "expression": "!true || false",
+            "expected": false,
+            "projection": null,
+            "original_line": 127
+          },
+          {
+            "test": "test_not_or",
+            "expression": "!false || true",
+            "expected": true,
+            "projection": null,
+            "original_line": 128
+          },
+          {
+            "test": "test_precedence_not_highest",
+            "expression": "!true && true",
+            "expected": false,
+            "projection": null,
+            "original_line": 136
+          },
+          {
+            "test": "test_precedence_not_highest",
+            "expression": "!false && true",
+            "expected": true,
+            "projection": null,
+            "original_line": 137
+          },
+          {
+            "test": "test_precedence_and_before_or",
+            "expression": "true || false && false",
+            "expected": true,
+            "projection": null,
+            "original_line": 143
+          },
+          {
+            "test": "test_precedence_and_before_or",
+            "expression": "false || true && true",
+            "expected": true,
+            "projection": null,
+            "original_line": 144
+          },
+          {
+            "test": "test_with_nullable_presence",
+            "expression": "(a != null) || (b != null)",
+            "expected": true,
+            "projection": null,
+            "original_line": 154
+          },
+          {
+            "test": "test_with_nullable_presence",
+            "expression": "(b != null) || (a != null)",
+            "expected": true,
+            "projection": null,
+            "original_line": 155
+          },
+          {
+            "test": "test_with_nullable_presence",
+            "expression": "(a != null) && (b != null)",
+            "expected": false,
+            "projection": null,
+            "original_line": 156
+          },
+          {
+            "test": "test_complex_condition",
+            "expression": "x > 0 && y > 0 && x < y",
+            "expected": true,
+            "projection": null,
+            "original_line": 163
+          },
+          {
+            "test": "test_complex_condition",
+            "expression": "x < 0 || y < 0 || x > y",
+            "expected": false,
+            "projection": null,
+            "original_line": 164
+          }
+        ]
+      },
+      "remaining_gates": [
+        "Whole original body discovery and independent VM/generated-C/native observations.",
+        "Exact original compiler/native/runtime FI, budgets, lifetime/borrow/cancellation/physical and full sanitizer/provider obligations."
+      ]
+    },
+    {
+      "id": "regression_core_review_0365_precedence_complete_observed",
+      "oracle_id": "regression_core_review_0365_precedence",
+      "source": "tests/unit/xir/legacy_consumers/fixtures/independent_named_observations/0365_precedence/root.xr",
+      "source_lf_sha256": "9cd4be801a9e42fe9d71aa329de00a07753f0e0c73aaea2f6b0d3c26407f648f",
+      "entry": "test",
+      "stdout_utf8": "14\n4\n7\n22\n20\n14\ntrue\nfalse\ntrue\ntrue\nfalse\ntrue\ntrue\ntrue\ntrue\n14\n5\n5\n5\nfalse\ntrue\ntrue\n12\n13\n15\n10\n2\npositive\nzero\n5\n",
+      "stderr_utf8": "",
+      "companions": [],
+      "owners": [
+        "P09",
+        "P10"
+      ],
+      "independent_observations": {
+        "original_case": "tests/regression/03_operators/0365_precedence.xr",
+        "selected_complete_source": "tests/regression/03_operators/0365_precedence.xr",
+        "selected_source_lf_sha256": "d617ea9571e96b5731f8cc9677e72f9324def0b35695294ffa8f2872539c6cfb",
+        "method": "All original named bodies, lexical blocks and control-flow bounds retained. Each original scalar computation is evaluated once. Extra initial/destructured/shadowed values follow the complete frozen model. Absent values use an explicit public ==null predicate, not a guessed representation.",
+        "values": [
+          {
+            "test": "test_mul_before_add",
+            "expression": "2 + 3 * 4",
+            "expected": 14,
+            "projection": null,
+            "original_line": 9
+          },
+          {
+            "test": "test_mul_before_add",
+            "expression": "10 - 2 * 3",
+            "expected": 4,
+            "projection": null,
+            "original_line": 10
+          },
+          {
+            "test": "test_div_before_sub",
+            "expression": "10 - 6 / 2",
+            "expected": 7,
+            "projection": null,
+            "original_line": 15
+          },
+          {
+            "test": "test_div_before_sub",
+            "expression": "20 + 8 / 4",
+            "expected": 22,
+            "projection": null,
+            "original_line": 16
+          },
+          {
+            "test": "test_parentheses_override",
+            "expression": "(2 + 3) * 4",
+            "expected": 20,
+            "projection": null,
+            "original_line": 21
+          },
+          {
+            "test": "test_parentheses_override",
+            "expression": "2 * (3 + 4)",
+            "expected": 14,
+            "projection": null,
+            "original_line": 22
+          },
+          {
+            "test": "test_comparison_before_and",
+            "expression": "1 < 2 && 3 < 4",
+            "expected": true,
+            "projection": null,
+            "original_line": 29
+          },
+          {
+            "test": "test_comparison_before_and",
+            "expression": "1 > 2 && 3 < 4",
+            "expected": false,
+            "projection": null,
+            "original_line": 30
+          },
+          {
+            "test": "test_and_before_or",
+            "expression": "true || false && false",
+            "expected": true,
+            "projection": null,
+            "original_line": 35
+          },
+          {
+            "test": "test_and_before_or",
+            "expression": "false || true && true",
+            "expected": true,
+            "projection": null,
+            "original_line": 36
+          },
+          {
+            "test": "test_and_before_or",
+            "expression": "false || false && true",
+            "expected": false,
+            "projection": null,
+            "original_line": 37
+          },
+          {
+            "test": "test_arithmetic_then_compare",
+            "expression": "2 + 3 < 10",
+            "expected": true,
+            "projection": null,
+            "original_line": 44
+          },
+          {
+            "test": "test_arithmetic_then_compare",
+            "expression": "2 * 5 == 10",
+            "expected": true,
+            "projection": null,
+            "original_line": 45
+          },
+          {
+            "test": "test_arithmetic_then_compare",
+            "expression": "10 - 3 >= 7",
+            "expected": true,
+            "projection": null,
+            "original_line": 46
+          },
+          {
+            "test": "test_shift_before_comparison",
+            "expression": "result < 16",
+            "expected": true,
+            "projection": null,
+            "original_line": 56
+          },
+          {
+            "test": "test_bitwise_and_before_or",
+            "expression": "0b1100 | 0b1010 & 0b0110",
+            "expected": 14,
+            "projection": null,
+            "original_line": 62
+          },
+          {
+            "test": "test_unary_minus",
+            "expression": "-5 + 10",
+            "expected": 5,
+            "projection": null,
+            "original_line": 69
+          },
+          {
+            "test": "test_unary_minus",
+            "expression": "10 + -5",
+            "expected": 5,
+            "projection": null,
+            "original_line": 70
+          },
+          {
+            "test": "test_unary_minus",
+            "expression": "-(-5)",
+            "expected": 5,
+            "projection": null,
+            "original_line": 71
+          },
+          {
+            "test": "test_logical_not",
+            "expression": "!true",
+            "expected": false,
+            "projection": null,
+            "original_line": 76
+          },
+          {
+            "test": "test_logical_not",
+            "expression": "!false",
+            "expected": true,
+            "projection": null,
+            "original_line": 77
+          },
+          {
+            "test": "test_logical_not",
+            "expression": "!!true",
+            "expected": true,
+            "projection": null,
+            "original_line": 78
+          },
+          {
+            "test": "test_complex_expression",
+            "expression": "a + b * c - a",
+            "expected": 12,
+            "projection": null,
+            "original_line": 89
+          },
+          {
+            "test": "test_nested_parentheses",
+            "expression": "((1 + 2) * 3) + 4",
+            "expected": 13,
+            "projection": null,
+            "original_line": 94
+          },
+          {
+            "test": "test_nested_parentheses",
+            "expression": "(1 + (2 * (3 + 4)))",
+            "expected": 15,
+            "projection": null,
+            "original_line": 95
+          },
+          {
+            "test": "test_ternary_with_arithmetic",
+            "expression": "result",
+            "expected": 10,
+            "projection": null,
+            "original_line": 104
+          },
+          {
+            "test": "test_ternary_false_branch",
+            "expression": "result",
+            "expected": 2,
+            "projection": null,
+            "original_line": 111
+          },
+          {
+            "test": "test_nested_ternary",
+            "expression": "result",
+            "expected": "positive",
+            "projection": null,
+            "original_line": 118
+          },
+          {
+            "test": "test_ternary_zero",
+            "expression": "result",
+            "expected": "zero",
+            "projection": null,
+            "original_line": 125
+          },
+          {
+            "test": "test_assignment_lowest",
+            "expression": "x",
+            "expected": 5,
+            "projection": null,
+            "original_line": 134
+          }
+        ]
+      },
+      "remaining_gates": [
+        "Whole original body discovery and independent VM/generated-C/native observations.",
+        "Exact original compiler/native/runtime FI, budgets, lifetime/borrow/cancellation/physical and full sanitizer/provider obligations."
+      ]
+    },
+    {
+      "id": "regression_core_review_0400_if_complete_observed",
+      "oracle_id": "regression_core_review_0400_if",
+      "source": "tests/unit/xir/legacy_consumers/fixtures/independent_named_observations/0400_if/root.xr",
+      "source_lf_sha256": "9fd4942b0eea4de309c82b20e1ff71ab88c31a623458bfeabb0b3c7217c3a111",
+      "entry": "test",
+      "stdout_utf8": "1\n0\n1\nyes\nno\nsmall\none\ntwo\nother\nC\nx>0, y>5\n6\nyes\nno\nabsent\npresent\ntrue\ntrue\n1\n10\n2\n",
+      "stderr_utf8": "",
+      "companions": [],
+      "owners": [
+        "P09",
+        "P10"
+      ],
+      "independent_observations": {
+        "original_case": "tests/regression/04_control_flow/0400_if.xr",
+        "selected_complete_source": "tests/regression/04_control_flow/0400_if.xr",
+        "selected_source_lf_sha256": "7ff8f926efab34ee7241270af6a5fb8a7f87d941a3dcb7487a23e9e4cf0b7c49",
+        "method": "All original named bodies, lexical blocks and control-flow bounds retained. Each original scalar computation is evaluated once. Extra initial/destructured/shadowed values follow the complete frozen model. Absent values use an explicit public ==null predicate, not a guessed representation.",
+        "values": [
+          {
+            "test": "test_if_true",
+            "expression": "result",
+            "expected": 1,
+            "projection": null,
+            "original_line": 13
+          },
+          {
+            "test": "test_if_false",
+            "expression": "result",
+            "expected": 0,
+            "projection": null,
+            "original_line": 22
+          },
+          {
+            "test": "test_if_expression",
+            "expression": "result",
+            "expected": 1,
+            "projection": null,
+            "original_line": 32
+          },
+          {
+            "test": "test_if_else_true",
+            "expression": "result",
+            "expected": "yes",
+            "projection": null,
+            "original_line": 45
+          },
+          {
+            "test": "test_if_else_false",
+            "expression": "result",
+            "expected": "no",
+            "projection": null,
+            "original_line": 56
+          },
+          {
+            "test": "test_if_else_expression",
+            "expression": "result",
+            "expected": "small",
+            "projection": null,
+            "original_line": 68
+          },
+          {
+            "test": "test_elseif_first",
+            "expression": "result",
+            "expected": "one",
+            "projection": null,
+            "original_line": 84
+          },
+          {
+            "test": "test_elseif_second",
+            "expression": "result",
+            "expected": "two",
+            "projection": null,
+            "original_line": 98
+          },
+          {
+            "test": "test_elseif_else",
+            "expression": "result",
+            "expected": "other",
+            "projection": null,
+            "original_line": 112
+          },
+          {
+            "test": "test_multiple_elseif",
+            "expression": "grade",
+            "expected": "C",
+            "projection": null,
+            "original_line": 130
+          },
+          {
+            "test": "test_nested_if",
+            "expression": "result",
+            "expected": "x>0, y>5",
+            "projection": null,
+            "original_line": 150
+          },
+          {
+            "test": "test_deep_nested",
+            "expression": "result",
+            "expected": 6,
+            "projection": null,
+            "original_line": 167
+          },
+          {
+            "test": "test_explicit_bool_condition",
+            "expression": "result",
+            "expected": "yes",
+            "projection": null,
+            "original_line": 176
+          },
+          {
+            "test": "test_explicit_bool_condition",
+            "expression": "result",
+            "expected": "no",
+            "projection": null,
+            "original_line": 178
+          },
+          {
+            "test": "test_nullable_presence_condition",
+            "expression": "result",
+            "expected": "absent",
+            "projection": null,
+            "original_line": 186
+          },
+          {
+            "test": "test_nullable_presence_condition",
+            "expression": "result",
+            "expected": "present",
+            "projection": null,
+            "original_line": 189
+          },
+          {
+            "test": "test_and_condition",
+            "expression": "result",
+            "expected": true,
+            "projection": null,
+            "original_line": 202
+          },
+          {
+            "test": "test_or_condition",
+            "expression": "result",
+            "expected": true,
+            "projection": null,
+            "original_line": 213
+          },
+          {
+            "test": "test_not_condition",
+            "expression": "result",
+            "expected": 1,
+            "projection": null,
+            "original_line": 223
+          },
+          {
+            "test": "test_empty_if_body",
+            "expression": "x",
+            "expected": 10,
+            "projection": null,
+            "original_line": 234
+          },
+          {
+            "test": "test_if_only_once",
+            "expression": "count",
+            "expected": 2,
+            "projection": null,
+            "original_line": 248
+          }
+        ]
+      },
+      "remaining_gates": [
+        "Whole original body discovery and independent VM/generated-C/native observations.",
+        "Exact original compiler/native/runtime FI, budgets, lifetime/borrow/cancellation/physical and full sanitizer/provider obligations."
+      ]
+    },
+    {
+      "id": "regression_core_review_0460_early_return_complete_observed",
+      "oracle_id": "regression_core_review_0460_early_return",
+      "source": "tests/unit/xir/legacy_consumers/fixtures/independent_named_observations/0460_early_return/root.xr",
+      "source_lf_sha256": "c59973010d6bbde5811cbf989f3b353c3f649cfd1ec5de759c4e9cf81d8dfa23",
+      "entry": "test",
+      "stdout_utf8": "3\n-1\n5\ntrue\nnegative\nzero\nsmall\nmedium\nlarge\ntrue\n0\n3\n2\n-1\nfalse\ntrue\n",
+      "stderr_utf8": "",
+      "companions": [],
+      "owners": [
+        "P09",
+        "P10"
+      ],
+      "independent_observations": {
+        "original_case": "tests/regression/04_control_flow/0460_early_return.xr",
+        "selected_complete_source": "tests/regression/04_control_flow/0460_early_return.xr",
+        "selected_source_lf_sha256": "2ff89069a0b0f3032050fecac36a335bb847cb82a462698c1cdf2bfbc0129172",
+        "method": "All original named bodies, lexical blocks and control-flow bounds retained. Each original scalar computation is evaluated once. Extra initial/destructured/shadowed values follow the complete frozen model. Absent values use an explicit public ==null predicate, not a guessed representation.",
+        "values": [
+          {
+            "test": "test_early_return",
+            "expression": "findPositive([-1, -2, 3, 4])",
+            "expected": 3,
+            "projection": null,
+            "original_line": 18
+          },
+          {
+            "test": "test_early_return",
+            "expression": "findPositive([-1, -2, -3])",
+            "expected": -1,
+            "projection": null,
+            "original_line": 19
+          },
+          {
+            "test": "test_guard_clause",
+            "expression": "divide(10, 2)",
+            "expected": 5,
+            "projection": null,
+            "original_line": 31
+          },
+          {
+            "test": "test_guard_clause",
+            "expression": "divide(10, 0)",
+            "expected": null,
+            "projection": "is_null",
+            "original_line": 32
+          },
+          {
+            "test": "test_multiple_guards",
+            "expression": "classify(-5)",
+            "expected": "negative",
+            "projection": null,
+            "original_line": 47
+          },
+          {
+            "test": "test_multiple_guards",
+            "expression": "classify(0)",
+            "expected": "zero",
+            "projection": null,
+            "original_line": 48
+          },
+          {
+            "test": "test_multiple_guards",
+            "expression": "classify(5)",
+            "expected": "small",
+            "projection": null,
+            "original_line": 49
+          },
+          {
+            "test": "test_multiple_guards",
+            "expression": "classify(50)",
+            "expected": "medium",
+            "projection": null,
+            "original_line": 50
+          },
+          {
+            "test": "test_multiple_guards",
+            "expression": "classify(500)",
+            "expected": "large",
+            "projection": null,
+            "original_line": 51
+          },
+          {
+            "test": "test_nested_return",
+            "expression": "result != null",
+            "expected": true,
+            "projection": null,
+            "original_line": 70
+          },
+          {
+            "test": "test_nested_return",
+            "expression": "result![0]",
+            "expected": 0,
+            "projection": null,
+            "original_line": 71
+          },
+          {
+            "test": "test_nested_return",
+            "expression": "result![1]",
+            "expected": 3,
+            "projection": null,
+            "original_line": 72
+          },
+          {
+            "test": "test_recursive_return",
+            "expression": "binarySearch(arr, 5, 0, len(arr) - 1)",
+            "expected": 2,
+            "projection": null,
+            "original_line": 94
+          },
+          {
+            "test": "test_recursive_return",
+            "expression": "binarySearch(arr, 4, 0, len(arr) - 1)",
+            "expected": -1,
+            "projection": null,
+            "original_line": 95
+          },
+          {
+            "test": "test_void_return",
+            "expression": "executed",
+            "expected": false,
+            "projection": null,
+            "original_line": 112
+          },
+          {
+            "test": "test_void_return",
+            "expression": "executed",
+            "expected": true,
+            "projection": null,
+            "original_line": 115
+          }
+        ]
+      },
+      "remaining_gates": [
+        "Whole original body discovery and independent VM/generated-C/native observations.",
+        "Exact original compiler/native/runtime FI, budgets, lifetime/borrow/cancellation/physical and full sanitizer/provider obligations."
+      ]
+    },
+    {
+      "id": "regression_core_review_1603_narrowing_joins_complete_observed",
+      "oracle_id": "regression_core_review_1603_narrowing_joins",
+      "source": "tests/unit/xir/legacy_consumers/fixtures/independent_named_observations/1603_narrowing_joins/root.xr",
+      "source_lf_sha256": "664c4ce22abd34596e5bee96ee35781362430a0462e665e9cf873bda2b3d0988",
+      "entry": "test",
+      "stdout_utf8": "3\nfallback\n3\n4\n-1\n2\n-2\n3\n8\n9\n4\ntrue\n",
+      "stderr_utf8": "",
+      "companions": [],
+      "owners": [
+        "P09",
+        "P10"
+      ],
+      "independent_observations": {
+        "original_case": "tests/regression/16_narrowing/1603_narrowing_joins.xr",
+        "selected_complete_source": "tests/regression/16_narrowing/1603_narrowing_joins.xr",
+        "selected_source_lf_sha256": "7f1fbbdfbae37da308f1cdc38016af4e5fefdd09a96030546f996abf2333f9c9",
+        "method": "All original named bodies, lexical blocks and control-flow bounds retained. Each original scalar computation is evaluated once. Extra initial/destructured/shadowed values follow the complete frozen model. Absent values use an explicit public ==null predicate, not a guessed representation.",
+        "values": [
+          {
+            "test": "test_n9_join_of_two_assigned_paths",
+            "expression": "len(a)",
+            "expected": 3,
+            "projection": null,
+            "original_line": 18
+          },
+          {
+            "test": "test_n9_join_keeps_null_when_one_path_may_be_null",
+            "expression": "a ?? \"fallback\"",
+            "expected": "fallback",
+            "projection": null,
+            "original_line": 28
+          },
+          {
+            "test": "test_n9_unreachable_path_is_absorbed",
+            "expression": "len(a)",
+            "expected": 3,
+            "projection": null,
+            "original_line": 39
+          },
+          {
+            "test": "test_n9_nested_joins",
+            "expression": "n9_pick(true, \"abcd\", null)",
+            "expected": 4,
+            "projection": null,
+            "original_line": 53
+          },
+          {
+            "test": "test_n9_nested_joins",
+            "expression": "n9_pick(true, null, \"abcd\")",
+            "expected": -1,
+            "projection": null,
+            "original_line": 54
+          },
+          {
+            "test": "test_n9_nested_joins",
+            "expression": "n9_pick(false, null, \"ab\")",
+            "expected": 2,
+            "projection": null,
+            "original_line": 55
+          },
+          {
+            "test": "test_n9_nested_joins",
+            "expression": "n9_pick(false, \"ab\", null)",
+            "expected": -2,
+            "projection": null,
+            "original_line": 56
+          },
+          {
+            "test": "test_n10_narrowing_holds_each_iteration",
+            "expression": "rounds",
+            "expected": 3,
+            "projection": null,
+            "original_line": 71
+          },
+          {
+            "test": "test_n10_reassignment_in_body_rejoins",
+            "expression": "total",
+            "expected": 8,
+            "projection": null,
+            "original_line": 86
+          },
+          {
+            "test": "test_n10_narrowing_before_loop_survives_read_only_body",
+            "expression": "total",
+            "expected": 9,
+            "projection": null,
+            "original_line": 100
+          },
+          {
+            "test": "test_n10_narrowing_before_while_survives_read_only_body",
+            "expression": "seen",
+            "expected": 4,
+            "projection": null,
+            "original_line": 114
+          },
+          {
+            "test": "test_n10_condition_false_fact_after_loop",
+            "expression": "cur",
+            "expected": null,
+            "projection": "is_null",
+            "original_line": 124
+          }
+        ]
+      },
+      "remaining_gates": [
+        "Whole original body discovery and independent VM/generated-C/native observations.",
+        "Exact original compiler/native/runtime FI, budgets, lifetime/borrow/cancellation/physical and full sanitizer/provider obligations."
+      ]
     }
   ]
 }

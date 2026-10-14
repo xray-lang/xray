@@ -1,0 +1,148 @@
+// Retain every original body and observe scalar results, including nested lexical scopes.
+// 0460_early_return.xr
+// 作者：xingleixu@gmail.com
+// 测试：提前返回
+
+// ===== 函数提前返回 =====
+
+@test
+fn test_early_return() {
+    fn findPositive(arr: Array<i64>) -> i64 {
+        for (x in arr) {
+            if (x > 0) {
+                return x
+            }
+        }
+        return -1
+    }
+    
+    var p19Observed0 = findPositive([-1, -2, 3, 4])
+    assertEqual(p19Observed0, 3)
+    print(p19Observed0)
+    var p19Observed1 = findPositive([-1, -2, -3])
+    assertEqual(p19Observed1, -1)
+    print(p19Observed1)
+}
+
+@test
+fn test_guard_clause() {
+    fn divide(a: i64, b: i64) -> i64? {
+        if (b == 0) {
+            return null
+        }
+        return a / b
+    }
+    
+    var p19Observed2 = divide(10, 2)
+    assertEqual(p19Observed2, 5)
+    print(p19Observed2)
+    assertEqual(divide(10, 0), null)
+    print((divide(10, 0)) == null)
+}
+
+// ===== 多条件提前返回 =====
+
+@test
+fn test_multiple_guards() {
+    fn classify(n: i64) -> string {
+        if (n < 0) { return "negative" }
+        if (n == 0) { return "zero" }
+        if (n < 10) { return "small" }
+        if (n < 100) { return "medium" }
+        return "large"
+    }
+    
+    var p19Observed4 = classify(-5)
+    assertEqual(p19Observed4, "negative")
+    print(p19Observed4)
+    var p19Observed5 = classify(0)
+    assertEqual(p19Observed5, "zero")
+    print(p19Observed5)
+    var p19Observed6 = classify(5)
+    assertEqual(p19Observed6, "small")
+    print(p19Observed6)
+    var p19Observed7 = classify(50)
+    assertEqual(p19Observed7, "medium")
+    print(p19Observed7)
+    var p19Observed8 = classify(500)
+    assertEqual(p19Observed8, "large")
+    print(p19Observed8)
+}
+
+// ===== 嵌套循环提前返回 =====
+
+@test
+fn test_nested_return() {
+    fn findPair(arr: Array<i64>, target: i64) -> Array<i64>? {
+        for (i in 0..len(arr)) {
+            for (j in (i + 1)..len(arr)) {
+                if (arr[i] + arr[j] == target) {
+                    return [i, j]
+                }
+            }
+        }
+        return null
+    }
+    
+    var result = findPair([1, 2, 3, 4], 5)
+    var p19Observed9 = result != null
+    assertEqual(p19Observed9, true)
+    print(p19Observed9)
+    var p19Observed10 = result![0]
+    assertEqual(p19Observed10, 0)
+    print(p19Observed10)
+    var p19Observed11 = result![1]
+    assertEqual(p19Observed11, 3)
+    print(p19Observed11)
+}
+
+// ===== 递归提前返回 =====
+
+@test
+fn test_recursive_return() {
+    fn binarySearch(arr: Array<i64>, target: i64, low: i64, high: i64) -> i64 {
+        if (low > high) {
+            return -1
+        }
+        var mid = (low + high) / 2
+        if (arr[mid] == target) {
+            return mid
+        }
+        if (arr[mid] < target) {
+            return binarySearch(arr, target, mid + 1, high)
+        }
+        return binarySearch(arr, target, low, mid - 1)
+    }
+    
+    var arr = [1, 3, 5, 7, 9]
+    var p19Observed12 = binarySearch(arr, 5, 0, len(arr) - 1)
+    assertEqual(p19Observed12, 2)
+    print(p19Observed12)
+    var p19Observed13 = binarySearch(arr, 4, 0, len(arr) - 1)
+    assertEqual(p19Observed13, -1)
+    print(p19Observed13)
+}
+
+// ===== 空返回 =====
+
+@test
+fn test_void_return() {
+    var executed = false
+    
+    fn process(flag: bool) {
+        if (!flag) {
+            return
+        }
+        executed = true
+    }
+    
+    process(false)
+    var p19Observed14 = executed
+    assertEqual(p19Observed14, false)
+    print(p19Observed14)
+    
+    process(true)
+    var p19Observed15 = executed
+    assertEqual(p19Observed15, true)
+    print(p19Observed15)
+}

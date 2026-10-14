@@ -1,0 +1,271 @@
+// Retain every original body and observe scalar results, including nested lexical scopes.
+// 0300_arithmetic.xr
+// 作者：xingleixu@gmail.com
+// 测试：算术运算符
+
+// ===== 加法 =====
+
+@test
+fn test_add_integers() {
+    var p19Observed0 = 1 + 2
+    assertEqual(p19Observed0, 3)
+    print(p19Observed0)
+    var p19Observed1 = 0 + 0
+    assertEqual(p19Observed1, 0)
+    print(p19Observed1)
+    var p19Observed2 = -1 + 1
+    assertEqual(p19Observed2, 0)
+    print(p19Observed2)
+    var p19Observed3 = -5 + -3
+    assertEqual(p19Observed3, -8)
+    print(p19Observed3)
+}
+
+@test
+fn test_add_floats() {
+    var p19Observed4 = 1.5 + 2.5
+    assertEqual(p19Observed4, 4.0)
+    print(p19Observed4)
+    var p19Observed5 = 0.0 + 0.0
+    assertEqual(p19Observed5, 0.0)
+    print(p19Observed5)
+    var p19Observed6 = -1.5 + 1.5
+    assertEqual(p19Observed6, 0.0)
+    print(p19Observed6)
+}
+
+@test
+fn test_add_mixed() {
+    var p19Observed7 = (1 as f64) + 1.5
+    assertEqual(p19Observed7, 2.5)
+    print(p19Observed7)
+    var p19Observed8 = 2.5 + (1 as f64)
+    assertEqual(p19Observed8, 3.5)
+    print(p19Observed8)
+}
+
+// ===== 减法 =====
+
+@test
+fn test_sub_integers() {
+    var p19Observed9 = 5 - 3
+    assertEqual(p19Observed9, 2)
+    print(p19Observed9)
+    var p19Observed10 = 0 - 0
+    assertEqual(p19Observed10, 0)
+    print(p19Observed10)
+    var p19Observed11 = 3 - 5
+    assertEqual(p19Observed11, -2)
+    print(p19Observed11)
+    var p19Observed12 = -5 - -3
+    assertEqual(p19Observed12, -2)
+    print(p19Observed12)
+}
+
+@test
+fn test_sub_floats() {
+    var p19Observed13 = 5.5 - 2.5
+    assertEqual(p19Observed13, 3.0)
+    print(p19Observed13)
+    var p19Observed14 = 1.0 - 1.0
+    assertEqual(p19Observed14, 0.0)
+    print(p19Observed14)
+}
+
+@test
+fn test_sub_mixed() {
+    var p19Observed15 = (5 as f64) - 2.5
+    assertEqual(p19Observed15, 2.5)
+    print(p19Observed15)
+    var p19Observed16 = 5.5 - (2 as f64)
+    assertEqual(p19Observed16, 3.5)
+    print(p19Observed16)
+}
+
+// ===== 乘法 =====
+
+@test
+fn test_mul_integers() {
+    var p19Observed17 = 3 * 4
+    assertEqual(p19Observed17, 12)
+    print(p19Observed17)
+    var p19Observed18 = 0 * 100
+    assertEqual(p19Observed18, 0)
+    print(p19Observed18)
+    var p19Observed19 = -3 * 4
+    assertEqual(p19Observed19, -12)
+    print(p19Observed19)
+    var p19Observed20 = -3 * -4
+    assertEqual(p19Observed20, 12)
+    print(p19Observed20)
+}
+
+@test
+fn test_mul_floats() {
+    var p19Observed21 = 2.5 * 4.0
+    assertEqual(p19Observed21, 10.0)
+    print(p19Observed21)
+    var p19Observed22 = 0.5 * 0.5
+    assertEqual(p19Observed22, 0.25)
+    print(p19Observed22)
+}
+
+@test
+fn test_mul_mixed() {
+    var p19Observed23 = (2 as f64) * 2.5
+    assertEqual(p19Observed23, 5.0)
+    print(p19Observed23)
+    var p19Observed24 = 2.5 * (2 as f64)
+    assertEqual(p19Observed24, 5.0)
+    print(p19Observed24)
+}
+
+// ===== 除法 =====
+
+@test
+fn test_div_integers() {
+    var p19Observed25 = 10 / 2
+    assertEqual(p19Observed25, 5)
+    print(p19Observed25)
+    var p19Observed26 = 7 / 2
+    assertEqual(p19Observed26, 3)
+    print(p19Observed26)
+    var p19Observed27 = -10 / 3
+    assertEqual(p19Observed27, -3)
+    print(p19Observed27)
+}
+
+@test
+fn test_div_floats() {
+    var p19Observed28 = 10.0 / 4.0
+    assertEqual(p19Observed28, 2.5)
+    print(p19Observed28)
+    var p19Observed29 = 1.0 / 2.0
+    assertEqual(p19Observed29, 0.5)
+    print(p19Observed29)
+}
+
+@test
+fn test_div_mixed() {
+    var p19Observed30 = (5 as f64) / 2.0
+    assertEqual(p19Observed30, 2.5)
+    print(p19Observed30)
+    var p19Observed31 = 5.0 / (2 as f64)
+    assertEqual(p19Observed31, 2.5)
+    print(p19Observed31)
+}
+
+// ===== 取模 =====
+
+@test
+fn test_mod_positive() {
+    var p19Observed32 = 10 % 3
+    assertEqual(p19Observed32, 1)
+    print(p19Observed32)
+    var p19Observed33 = 15 % 5
+    assertEqual(p19Observed33, 0)
+    print(p19Observed33)
+    var p19Observed34 = 7 % 4
+    assertEqual(p19Observed34, 3)
+    print(p19Observed34)
+}
+
+@test
+fn test_mod_negative() {
+    var p19Observed35 = -10 % 3
+    assertEqual(p19Observed35, -1)
+    print(p19Observed35)
+    var p19Observed36 = 10 % -3
+    assertEqual(p19Observed36, 1)
+    print(p19Observed36)
+}
+
+@test
+fn test_mod_zero_dividend() {
+    var p19Observed37 = 0 % 5
+    assertEqual(p19Observed37, 0)
+    print(p19Observed37)
+}
+
+// ===== 一元运算 =====
+
+@test
+fn test_unary_minus() {
+    var p19Observed38 = -5
+    assertEqual(p19Observed38, -5)
+    print(p19Observed38)
+    var p19Observed39 = -(-5)
+    assertEqual(p19Observed39, 5)
+    print(p19Observed39)
+    var p19Observed40 = -(3 + 2)
+    assertEqual(p19Observed40, -5)
+    print(p19Observed40)
+}
+
+// 注意：xray 不支持一元正运算符 +x
+
+// ===== 边界条件 =====
+
+@test
+fn test_with_zero() {
+    var p19Observed41 = 0 + 5
+    assertEqual(p19Observed41, 5)
+    print(p19Observed41)
+    var p19Observed42 = 5 - 0
+    assertEqual(p19Observed42, 5)
+    print(p19Observed42)
+    var p19Observed43 = 0 * 100
+    assertEqual(p19Observed43, 0)
+    print(p19Observed43)
+    var p19Observed44 = 0 / 100
+    assertEqual(p19Observed44, 0)
+    print(p19Observed44)
+}
+
+@test
+fn test_identity() {
+    var p19Observed45 = 5 + 0
+    assertEqual(p19Observed45, 5)
+    print(p19Observed45)
+    var p19Observed46 = 5 - 0
+    assertEqual(p19Observed46, 5)
+    print(p19Observed46)
+    var p19Observed47 = 5 * 1
+    assertEqual(p19Observed47, 5)
+    print(p19Observed47)
+    var p19Observed48 = 5 / 1
+    assertEqual(p19Observed48, 5)
+    print(p19Observed48)
+}
+
+@test
+fn test_chained() {
+    var p19Observed49 = 1 + 2 + 3
+    assertEqual(p19Observed49, 6)
+    print(p19Observed49)
+    var p19Observed50 = 10 - 3 - 2
+    assertEqual(p19Observed50, 5)
+    print(p19Observed50)
+    var p19Observed51 = 2 * 3 * 4
+    assertEqual(p19Observed51, 24)
+    print(p19Observed51)
+}
+
+// ===== 优先级 =====
+
+@test
+fn test_precedence() {
+    var p19Observed52 = 2 + 3 * 4
+    assertEqual(p19Observed52, 14)
+    print(p19Observed52)
+    var p19Observed53 = (2 + 3) * 4
+    assertEqual(p19Observed53, 20)
+    print(p19Observed53)
+    var p19Observed54 = 10 - 4 / 2
+    assertEqual(p19Observed54, 8)
+    print(p19Observed54)
+    var p19Observed55 = 10 / 2 + 3
+    assertEqual(p19Observed55, 8)
+    print(p19Observed55)
+}
+

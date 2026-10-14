@@ -13,6 +13,7 @@ import time
 
 import independent_scalar_models
 import independent_behavior_models
+import independent_observation_format
 
 HERE = Path(__file__).resolve().parent
 ROOT = HERE.parents[3]
@@ -37,7 +38,8 @@ def main() -> int:
     manifest = json.loads(manifest_bytes)
     oracle_bytes = (HERE/'oracles.json').read_bytes()
     model_paths = [HERE/name for name in ('independent_scalar_models.py', 'independent_scalar_bindings.json',
-                                         'independent_behavior_models.py', 'independent_behavior_bindings.json')]
+                                         'independent_behavior_models.py', 'independent_behavior_bindings.json',
+                                         'independent_observation_format.py')]
     model_digests = {path.name:sha(path.read_bytes()) for path in model_paths}
     oracles = {row['id']:row for row in json.loads(oracle_bytes)['cases']}
     for row in (independent_scalar_models.expected_rows() + independent_behavior_models.expected_rows()
@@ -65,6 +67,7 @@ def main() -> int:
             'independent_scalar_bindings_sha256':model_digests['independent_scalar_bindings.json'],
             'independent_behavior_model_sha256':model_digests['independent_behavior_models.py'],
             'independent_behavior_bindings_sha256':model_digests['independent_behavior_bindings.json'],
+            'independent_observation_format_sha256':model_digests['independent_observation_format.py'],
             'evidence_directory':str(output),
             'cases':results, 'commands':records,
             'full_fi_lifetime_physical_sanitizer':'NOT_RUN', 'production_release':False,
@@ -176,8 +179,8 @@ def main() -> int:
                     actual = [z['expected'] for z in observations['values'] if z['test']==name]
                     if actual != values[name]['values']:
                         raise ValueError('observed values differ from the frozen independent model')
-                expected_bytes = ''.join((str(z['expected']).lower() if type(z['expected'])==bool
-                                         else str(z['expected']))+'\n' for z in observations['values']).encode('utf-8')
+                expected_bytes = ''.join(independent_observation_format.render(z)+'\n'
+                                         for z in observations['values']).encode('utf-8')
                 if expected_bytes.hex() != expected['stdout_hex']:
                     raise ValueError('independent observation bytes changed')
                 row['independent_observations'] = observations

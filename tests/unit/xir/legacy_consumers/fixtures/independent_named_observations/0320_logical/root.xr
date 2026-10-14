@@ -1,0 +1,264 @@
+// Retain every original body and observe scalar results, including nested lexical scopes.
+// 0320_logical.xr
+// 作者：xingleixu@gmail.com
+// 测试：逻辑运算符
+
+// ===== AND (&&) =====
+
+@test
+fn test_and_truth_table() {
+    var p19Observed0 = true && true
+    assertEqual(p19Observed0, true)
+    print(p19Observed0)
+    var p19Observed1 = true && false
+    assertEqual(p19Observed1, false)
+    print(p19Observed1)
+    var p19Observed2 = false && true
+    assertEqual(p19Observed2, false)
+    print(p19Observed2)
+    var p19Observed3 = false && false
+    assertEqual(p19Observed3, false)
+    print(p19Observed3)
+}
+
+@test
+fn test_and_with_expressions() {
+    var p19Observed4 = (5 > 3) && (2 < 4)
+    assertEqual(p19Observed4, true)
+    print(p19Observed4)
+    var p19Observed5 = (5 > 3) && (2 > 4)
+    assertEqual(p19Observed5, false)
+    print(p19Observed5)
+}
+
+@test
+fn test_and_short_circuit() {
+    var called = false
+    fn sideEffect() -> bool {
+        called = true
+        return true
+    }
+    
+    // false && ... 不会执行右侧
+    var result = false && sideEffect()
+    var p19Observed6 = result
+    assertEqual(p19Observed6, false)
+    print(p19Observed6)
+    var p19Observed7 = called
+    assertEqual(p19Observed7, false)
+    print(p19Observed7)
+}
+
+@test
+fn test_and_chain() {
+    var p19Observed8 = true && true && true
+    assertEqual(p19Observed8, true)
+    print(p19Observed8)
+    var p19Observed9 = true && true && false
+    assertEqual(p19Observed9, false)
+    print(p19Observed9)
+    var p19Observed10 = true && false && true
+    assertEqual(p19Observed10, false)
+    print(p19Observed10)
+}
+
+// ===== OR (||) =====
+
+@test
+fn test_or_truth_table() {
+    var p19Observed11 = true || true
+    assertEqual(p19Observed11, true)
+    print(p19Observed11)
+    var p19Observed12 = true || false
+    assertEqual(p19Observed12, true)
+    print(p19Observed12)
+    var p19Observed13 = false || true
+    assertEqual(p19Observed13, true)
+    print(p19Observed13)
+    var p19Observed14 = false || false
+    assertEqual(p19Observed14, false)
+    print(p19Observed14)
+}
+
+@test
+fn test_or_with_expressions() {
+    var p19Observed15 = (5 > 10) || (2 < 4)
+    assertEqual(p19Observed15, true)
+    print(p19Observed15)
+    var p19Observed16 = (5 > 10) || (2 > 4)
+    assertEqual(p19Observed16, false)
+    print(p19Observed16)
+}
+
+@test
+fn test_or_short_circuit() {
+    var called = false
+    fn sideEffect() -> bool {
+        called = true
+        return true
+    }
+    
+    // true || ... 不会执行右侧
+    var result = true || sideEffect()
+    var p19Observed17 = result
+    assertEqual(p19Observed17, true)
+    print(p19Observed17)
+    var p19Observed18 = called
+    assertEqual(p19Observed18, false)
+    print(p19Observed18)
+}
+
+@test
+fn test_or_chain() {
+    var p19Observed19 = false || false || true
+    assertEqual(p19Observed19, true)
+    print(p19Observed19)
+    var p19Observed20 = false || false || false
+    assertEqual(p19Observed20, false)
+    print(p19Observed20)
+}
+
+// ===== NOT (!) =====
+
+@test
+fn test_not_basic() {
+    var p19Observed21 = !true
+    assertEqual(p19Observed21, false)
+    print(p19Observed21)
+    var p19Observed22 = !false
+    assertEqual(p19Observed22, true)
+    print(p19Observed22)
+}
+
+@test
+fn test_not_double() {
+    var p19Observed23 = !!true
+    assertEqual(p19Observed23, true)
+    print(p19Observed23)
+    var p19Observed24 = !!false
+    assertEqual(p19Observed24, false)
+    print(p19Observed24)
+}
+
+@test
+fn test_not_expression() {
+    var p19Observed25 = !(5 > 3)
+    assertEqual(p19Observed25, false)
+    print(p19Observed25)
+    var p19Observed26 = !(5 < 3)
+    assertEqual(p19Observed26, true)
+    print(p19Observed26)
+}
+
+@test
+fn test_not_explicit() {
+    // ! requires an explicit bool operand (no truthy/falsy)
+    var p19Observed27 = !(0 != 0)
+    assertEqual(p19Observed27, true)
+    print(p19Observed27)
+    var p19Observed28 = !(1 != 0)
+    assertEqual(p19Observed28, false)
+    print(p19Observed28)
+    var p19Observed29 = !(len("") == 0)
+    assertEqual(p19Observed29, false)
+    print(p19Observed29)
+    var p19Observed30 = !(len("hi") == 0)
+    assertEqual(p19Observed30, true)
+    print(p19Observed30)
+    var n: i64? = null
+    var p19Observed31 = !(n != null)
+    assertEqual(p19Observed31, true)
+    print(p19Observed31)
+}
+
+// ===== 组合 =====
+
+@test
+fn test_and_or_combined() {
+    var p19Observed32 = true && true || false
+    assertEqual(p19Observed32, true)
+    print(p19Observed32)
+    var p19Observed33 = false || true && true
+    assertEqual(p19Observed33, true)
+    print(p19Observed33)
+    var p19Observed34 = (true || false) && true
+    assertEqual(p19Observed34, true)
+    print(p19Observed34)
+}
+
+@test
+fn test_not_and() {
+    var p19Observed35 = !(true && false)
+    assertEqual(p19Observed35, true)
+    print(p19Observed35)
+    var p19Observed36 = !true && false
+    assertEqual(p19Observed36, false)
+    print(p19Observed36)
+}
+
+@test
+fn test_not_or() {
+    var p19Observed37 = !(true || false)
+    assertEqual(p19Observed37, false)
+    print(p19Observed37)
+    var p19Observed38 = !true || false
+    assertEqual(p19Observed38, false)
+    print(p19Observed38)
+    var p19Observed39 = !false || true
+    assertEqual(p19Observed39, true)
+    print(p19Observed39)
+}
+
+// ===== 优先级 =====
+
+@test
+fn test_precedence_not_highest() {
+    // ! 优先级最高
+    var p19Observed40 = !true && true
+    assertEqual(p19Observed40, false)
+    print(p19Observed40)
+    var p19Observed41 = !false && true
+    assertEqual(p19Observed41, true)
+    print(p19Observed41)
+}
+
+@test
+fn test_precedence_and_before_or() {
+    // && 优先级高于 ||
+    var p19Observed42 = true || false && false
+    assertEqual(p19Observed42, true)   // true || (false && false)
+    print(p19Observed42)
+    var p19Observed43 = false || true && true
+    assertEqual(p19Observed43, true)    // false || (true && true)
+    print(p19Observed43)
+}
+
+// ===== 边界条件 =====
+
+@test
+fn test_with_nullable_presence() {
+    // Logical operators require bool operands; use explicit presence checks
+    var a: string? = null
+    var b: string? = "value"
+    var p19Observed44 = (a != null) || (b != null)
+    assertEqual(p19Observed44, true)
+    print(p19Observed44)
+    var p19Observed45 = (b != null) || (a != null)
+    assertEqual(p19Observed45, true)
+    print(p19Observed45)
+    var p19Observed46 = (a != null) && (b != null)
+    assertEqual(p19Observed46, false)
+    print(p19Observed46)
+}
+
+@test
+fn test_complex_condition() {
+    var x = 5
+    var y = 10
+    var p19Observed47 = x > 0 && y > 0 && x < y
+    assertEqual(p19Observed47, true)
+    print(p19Observed47)
+    var p19Observed48 = x < 0 || y < 0 || x > y
+    assertEqual(p19Observed48, false)
+    print(p19Observed48)
+}
