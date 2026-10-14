@@ -48,6 +48,15 @@ static void types_open(TypeFixture *fixture,const char *text,bool at_return) {
     if (status!=XR_XIR_OK) fprintf(stderr,"type source status=%u stage=%u: %s\n",status,
         diagnostic.source.stage,diagnostic.source.source.message);
     CHECK(status==XR_XIR_OK && fixture->launch);xr_source_compile_diagnostic_free(&diagnostic);
+    if (text && strstr(text,"Atomic<i64>")) {
+        const XrXirSourceView *view=xr_xir_compile_source_product_view(fixture->launch->source);
+        CHECK(view && view->complete && view->module_count>fixture->launch->module_count);
+        for (uint32_t m=0;m<fixture->launch->module_count;++m) {
+            const XdapCodeModule *module=&fixture->launch->modules[m];bool found=false;
+            for (uint32_t q=0;q<view->module_count;++q) if (!strcmp(module->identity,view->modules[q].identity)) found=true;
+            CHECK(found);
+        }
+    }
     XdapFunctionSelection selection={.name="leaf",.length=4};XrXirVmDebugRule rules[32];uint32_t count=0;
     CHECK(xdap_launch_function_rules(fixture->launch,&selection,rules,32,&count)==XR_XIR_OK && count);
     if (at_return) for (uint32_t i=0;i<count;++i) {

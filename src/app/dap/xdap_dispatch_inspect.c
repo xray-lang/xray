@@ -22,6 +22,18 @@ static bool inspect_position(XdapJsonWriter *w,uint32_t function,uint32_t instru
     char position[64];int count=snprintf(position,sizeof(position),"f%u:i%u",function,instruction);
     return count>0 && xdap_json_quote(w,position,(size_t)count);
 }
+static bool inspect_source(XdapAdapter *s,XdapJsonWriter *body,uint32_t function) {
+    if (!s->launch || function>=s->launch->function_count) { body->status=XR_XIR_BAD_STRUCTURE;return false; }
+    uint32_t index=s->launch->functions[function].module;
+    if (index>=s->launch->module_count) { body->status=XR_XIR_BAD_STRUCTURE;return false; }
+    const XdapCodeModule *module=&s->launch->modules[index];
+    if (!module->path || !module->path_length) return true;
+    if (module->name_offset>module->path_length) { body->status=XR_XIR_BAD_STRUCTURE;return false; }
+    XDAP_TEXT(body,",\"source\":{\"name\":");
+    xdap_json_quote(body,module->path+module->name_offset,module->path_length-module->name_offset);
+    XDAP_TEXT(body,",\"path\":");xdap_json_quote(body,module->path,module->path_length);XDAP_TEXT(body,"}");
+    return body->status==XR_XIR_OK;
+}
 static XrXirStatus inspect_threads(XdapAdapter *s,const XdapRequest *r) {
     XdapJsonWriter body=xdap_json_writer(s->resources,s->config.message_limit);
     if (s->snapshot) {
@@ -61,6 +73,7 @@ static XrXirStatus inspect_stack(XdapAdapter *s,const XdapRequest *r) {
         if (shown++) XDAP_TEXT(&body,",");XDAP_TEXT(&body,"{\"id\":");xdap_json_unsigned(&body,s->frames[i].handle);
         XDAP_TEXT(&body,",\"name\":");xdap_json_quote(&body,text,length);
         XDAP_TEXT(&body,",\"line\":0,\"column\":0");
+        if (!inspect_source(s,&body,info.function)) { xr_xir_value_drop(&name);break; }
         if (info.code==XR_XIR_VM_DEBUG_VM && info.instruction!=UINT32_MAX) {
             XDAP_TEXT(&body,",\"instructionPointerReference\":");inspect_position(&body,info.function,info.instruction);
         } else XDAP_TEXT(&body,",\"presentationHint\":\"subtle\"");

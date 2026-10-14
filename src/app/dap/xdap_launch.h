@@ -12,16 +12,23 @@
 #include "../../api/xsource_compiler.h"
 typedef struct XdapCodeFunction {
     char *name,*source_name;
-    uint32_t first, instructions, parameters, values,origin;
+    uint32_t first, instructions, parameters, values,origin,module;
 } XdapCodeFunction;
+
+typedef struct XdapCodeModule {
+    char *identity,*path;
+    size_t identity_length,path_length,name_offset;
+    XrFingerprint fingerprint;
+} XdapCodeModule;
 typedef struct XdapLaunch {
     XrCompileResources *resources;
     XrXirSourceProduct *source;
     char *absolute_file;
     XdapCurrent *control;
     XdapCodeFunction *functions;
+    XdapCodeModule *modules;
     XrXirInstruction *instructions;
-    uint32_t entry, function_count, instruction_count;
+    uint32_t entry, function_count, instruction_count,module_count;
 } XdapLaunch;
 typedef struct XdapLaunchRequest {
     XrSourceCompiler *compiler;

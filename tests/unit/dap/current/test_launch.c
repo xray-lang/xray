@@ -89,6 +89,16 @@ int main(int argc,char **argv) {
     if (status!=XR_XIR_OK) fprintf(stderr,"launch=%u source=%u stage=%u: %s\n",status,diagnostic.status,
         diagnostic.source.stage,diagnostic.source.source.message);
     CHECK(status==XR_XIR_OK && launch);
+    CHECK(launch->module_count);
+    const XrXirSourceView *view=xr_xir_compile_source_product_view(launch->source);
+    CHECK(view && view->complete && view->module_count==launch->module_count);
+    for (uint32_t m=0;m<launch->module_count;++m) {
+        bool found=false;const XdapCodeModule *module=&launch->modules[m];CHECK(module->identity && !module->path);
+        for (uint32_t q=0;q<view->module_count;++q) if (!strcmp(module->identity,view->modules[q].identity)) {
+            CHECK(module->identity!=view->modules[q].identity && !memcmp(&module->fingerprint,&view->modules[q].fingerprint,sizeof(module->fingerprint)));found=true;
+        }
+        CHECK(found);
+    }
     uint32_t leaf=UINT32_MAX,at=UINT32_MAX,string=UINT32_MAX;
     for (uint32_t i=0;i<launch->function_count;++i) if (!strcmp(launch->functions[i].name,"leaf")) leaf=i;
     CHECK(leaf!=UINT32_MAX);

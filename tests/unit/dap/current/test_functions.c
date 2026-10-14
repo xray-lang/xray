@@ -15,6 +15,9 @@ static void functions_origins(XdapAdapter *adapter) {
         if (strcmp(function->source_name,"record")) continue;
         if (origin==UINT32_MAX) origin=function->origin;
         CHECK(function->origin==origin);++instances;
+        CHECK(function->module<adapter->launch->module_count);
+        const char *path=adapter->launch->modules[function->module].path;
+        CHECK(path && strstr(path,"functions_fixture.xr"));
         if (strcmp(function->name,function->source_name)) renamed=true;
     }
     CHECK(instances>=3 && renamed);

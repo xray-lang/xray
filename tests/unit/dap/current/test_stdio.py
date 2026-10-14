@@ -127,6 +127,8 @@ assert client.send('configurationDone')['success']
 client.event('stopped')
 frames=client.send('stackTrace',{'threadId':1})['body']['stackFrames']
 assert len(frames)==2 and frames[0]['name']=='leaf' and frames[0]['line']==0
+assert all(frame['column']==0 and frame['source']['name']==args.fixture.name and
+           Path(frame['source']['path']).resolve()==args.fixture.resolve() for frame in frames)
 scope=client.send('scopes',{'frameId':frames[0]['id']})['body']['scopes'][0]['variablesReference']
 values=client.send('variables',{'variablesReference':scope})['body']['variables']
 assert values[0]['value']=='20'

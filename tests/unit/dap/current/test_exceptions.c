@@ -212,6 +212,13 @@ static void exception_erased_case(bool resources) {
     const char *names[]={"Hidden.Bad","<private exception>"},*types[]={"Hidden","<private type>"};
     XrXirVmDebugSnapshot *escaped=NULL;XrXirValue concrete={0};
     for (uint32_t i=0;i<2;++i) {
+        request(adapter,"{\"seq\":15,\"type\":\"request\",\"command\":\"stackTrace\",\"arguments\":{\"threadId\":1}}");
+        XrJsonValue *stack=last_response("stackTrace",true),*frames=xjson_get_array(xjson_get_object(stack,"body"),"stackFrames");
+        XrJsonValue *frame=xjson_array_get(frames,0),*source=xjson_get_object(frame,"source");
+        const char *file=i ? "type_private_main.xr" : "type_private_lib.xr";
+        CHECK(!strcmp(xjson_get_string(source,"name"),file) && strstr(xjson_get_string(source,"path"),file));
+        CHECK(xjson_get_int(frame,"line")==0 && xjson_get_int(frame,"column")==0);
+        xjson_free(stack);
         request(adapter,"{\"seq\":5,\"type\":\"request\",\"command\":\"exceptionInfo\",\"arguments\":{\"threadId\":1}}");
         XrJsonValue *reply=last_response("exceptionInfo",true),*body=xjson_get_object(reply,"body");
         CHECK(!strcmp(xjson_get_string(body,"exceptionId"),names[i]));
