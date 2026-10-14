@@ -40,7 +40,7 @@ typedef struct XrXirCtfeRequest {
 
 /* Borrowed input owners must remain live for this synchronous call. The selected
  * ordinary function must have only bool/integer inputs and results, scalar local
- * storage and an acyclic admitted opcode graph. Local writes produce Unit. Every call repeats full artifact
+ * storage and a bounded admitted opcode graph. Local writes produce Unit. Every call repeats full artifact
  * verification on its original compiler ledger; root/effect flags never grant
  * purity. Limits may deny all resources and must not exceed the fixed ceilings.
  * Output must be canonical Unit. Failure preserves it, and consumed compiler

@@ -48,9 +48,10 @@ static XrXirCtfeStatus ctfe_admit(const XrXirArtifact *artifact, uint32_t select
     const XrXirModule *module = &artifact->module;
     const XrXirCompileContext *context = &artifact->context;
     const XrXirFunction *body = &module->functions[selected];
-    const XrXirFunctionIdentity *identity = &module->declarations->functions[selected];
     const XrXirFunctionLayout *layout = &artifact->layouts[selected];
     if (!xir_compile_work(context, 1)) return XR_XIR_CTFE_BUDGET;
+    if (!module->declarations || !module->declarations->functions) return XR_XIR_CTFE_NOT_LEAF;
+    const XrXirFunctionIdentity *identity = &module->declarations->functions[selected];
     if (identity->cleanup_owner || identity->nominal_owner ||
         (module->generics && (module->generics[selected].parameter_count ||
         module->generics[selected].argument_count)) || !ctfe_scalar_type(body->result) ||
@@ -68,12 +69,6 @@ static XrXirCtfeStatus ctfe_admit(const XrXirArtifact *artifact, uint32_t select
         if (!xir_compile_work(context, 1)) return XR_XIR_CTFE_BUDGET;
         const XrXirBlock *block = &body->blocks[b];
         if (block->panic || block->frontier) return XR_XIR_CTFE_NOT_LEAF;
-        const XrXirInstruction *last = &body->instructions[block->first + block->count - 1];
-        uint32_t edges = last->op == XR_XIR_BRANCH ? 2 : last->op == XR_XIR_JUMP ? 1 : 0;
-        for (uint32_t e = 0; e < edges; ++e) {
-            if (!xir_compile_work(context, 1)) return XR_XIR_CTFE_BUDGET;
-            if (last->targets[e] <= b) return XR_XIR_CTFE_NOT_LEAF;
-        }
     }
     for (uint32_t i = 0; i < body->instruction_count; ++i) {
         if (!xir_compile_work(context, 1)) return XR_XIR_CTFE_BUDGET;

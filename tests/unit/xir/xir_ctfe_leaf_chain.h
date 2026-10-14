@@ -25,6 +25,9 @@ static const char *const ctfe_chain_names[CTFE_CHAIN_PHASE_COUNT] = {
     "write2", "read2", "verify2", "specialize", "closed verify", "closed write",
     "closed hash", "lower", "Lowered verify", "CTFE", "cleanup"
 };
+static const char *ctfe_chain_name(CtfeChainPhase phase) {
+    return ctfe_resource_phi && phase==CTFE_CHAIN_SOURCE?"Built":ctfe_chain_names[phase];
+}
 typedef struct CtfeChainTrace {
     size_t allocations[CTFE_CHAIN_PHASE_COUNT], start;
     uint32_t visited;
@@ -33,7 +36,7 @@ typedef struct CtfeChainTrace {
 } CtfeChainTrace;
 static void ctfe_chain_mark(CtfeChainTrace *trace, CtfeChainPhase phase) {
     CHECK((unsigned)phase < CTFE_CHAIN_PHASE_COUNT);
-    source_fixture_compile_phase = ctfe_chain_names[phase];
+    source_fixture_compile_phase = ctfe_chain_name(phase);
     if (!trace) return;
     if (trace->active) trace->allocations[trace->phase] += source_fixture_compile_attempts - trace->start;
     trace->phase = phase; trace->start = source_fixture_compile_attempts;

@@ -7573,6 +7573,12 @@ Source 的 &&/|| 在该局部存储上保留短路语义，经原 Checked→特�
 
 本节不准入普通 var 生成的拥有型 Cell、owned/path 操作、聚合/字符串导出、未知函数值或 native/Instance 执行；它们需要各自实际类型、生命周期与费用接口及独立资格，不从栈内标量存储外推。
 
+### 17.40 CTFE有界CFG回边与声明身份接收
+
+leaf CTFE接受经过完整Lowered复验的标量CFG回边；PHI在共同scalar edge核中按前驱选择并行复制。整个执行共享原steps/watchdog和编译账本：回边不重置或退还费用，非终结循环在有限steps耗尽时拒绝并保全规范Unit输出。实际Phi前驱、target、offset和签名仍由完整复验检查，执行器不按block ordinal推断可终结性。
+
+CTFE要求实际普通函数声明身份。结构合法但没有declarations/functions表的Lowered不能授予执行资格；leaf/direct-call入口分别拒绝为NOT_LEAF/NOT_SUPPORTED，并保留输出和已消费费用。Module initializer、nominal/cleanup owner、实际不支持的操作及可达I/O仍逐项拒绝，root或effect标志不授予确定性。leaf保持无CALL边界，有限调用使用独立全闭包接收入口。
+
 ---
 
 ## 18. 错误码 (Error Codes)

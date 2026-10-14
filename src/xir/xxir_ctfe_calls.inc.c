@@ -32,9 +32,10 @@ static XrXirCtfeStatus ctfe_call_body_admit(const XrXirArtifact *artifact,uint32
     const XrXirModule *module=&artifact->module;
     const XrXirCompileContext *work=&artifact->context;
     const XrXirFunction *body=&module->functions[f];
-    const XrXirFunctionIdentity *identity=&module->declarations->functions[f];
     const XrXirFunctionLayout *layout=&artifact->layouts[f];
     if (!xir_compile_work(work,8)) return XR_XIR_CTFE_BUDGET;
+    if (!module->declarations || !module->declarations->functions) return XR_XIR_CTFE_NOT_SUPPORTED;
+    const XrXirFunctionIdentity *identity=&module->declarations->functions[f];
     if (identity->cleanup_owner || identity->nominal_owner ||
         (module->generics && (module->generics[f].parameter_count || module->generics[f].argument_count)) ||
         !ctfe_scalar_type(body->result) || layout->owned_count || layout->path_count)
