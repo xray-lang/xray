@@ -5925,10 +5925,10 @@ if(XRAY_BUNDLE_ZIG)
     endif()
 endif()
 
-# Publish the static pair only after installed components and any present SDK match.
-configure_file("${CMAKE_SOURCE_DIR}/cmake/VerifyInstalledXirStdlibPair.cmake.in"
-    "${_XRAY_INSTALL_METADATA_DIR}/VerifyInstalledXirStdlibPair.cmake" @ONLY)
-install(SCRIPT "${_XRAY_INSTALL_METADATA_DIR}/VerifyInstalledXirStdlibPair.cmake" ALL_COMPONENTS)
+# Publish Checked library components and verify any independently installed SDK.
+configure_file("${CMAKE_SOURCE_DIR}/cmake/VerifyInstalledXirComponents.cmake.in"
+    "${_XRAY_INSTALL_METADATA_DIR}/VerifyInstalledXirComponents.cmake" @ONLY)
+install(SCRIPT "${_XRAY_INSTALL_METADATA_DIR}/VerifyInstalledXirComponents.cmake" ALL_COMPONENTS)
 
 # Run after component payload rules.  ALL_COMPONENTS also gives a Core-only or
 # SDK-only staging install an exact manifest of what is actually present.

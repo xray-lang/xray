@@ -5,7 +5,7 @@ import sys
 import tempfile
 
 executable, source = map(pathlib.Path, sys.argv[1:])
-with tempfile.TemporaryDirectory(prefix='xir-cache-consumer-') as temporary:
+with tempfile.TemporaryDirectory(prefix='xir-library-consumer-') as temporary:
     root = pathlib.Path(temporary).resolve()
     # This deliberately shifts library ordinals and adds a homonymous user declaration.
     text = (source/'tests/fixtures/xir_stdlib_output/root.xr').read_text(encoding='utf-8')

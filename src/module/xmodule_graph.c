@@ -305,9 +305,12 @@ static XrModuleKind authority_kind(const XrModuleIdentityAuthority *authority) {
 }
 static XrModuleStatus graph_result(ModuleWork *work, XrModuleGraph *graph, char **error) {
     if (work->status != XR_MODULE_OK) {
+        if (work->status != XR_MODULE_BUDGET && work->status != XR_MODULE_OUT_OF_MEMORY) {
+            XrModuleStatus published = module_error(graph->resources,error,
+                work->status == XR_MODULE_NOT_FOUND ? "module not found" : "module graph build failed");
+            if (published != XR_MODULE_OK) work->status = published;
+        }
         graph_failure(graph,work->status);
-        if (work->status != XR_MODULE_BUDGET && work->status != XR_MODULE_OUT_OF_MEMORY)
-            module_error(graph->resources,error,work->status == XR_MODULE_NOT_FOUND ? "module not found" : "module graph build failed");
     }
     return work->status;
 }
