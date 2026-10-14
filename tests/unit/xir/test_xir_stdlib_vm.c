@@ -31,10 +31,8 @@ static XrXirOutputStatus stdlib_write(void *context, XrXirOutputStream stream,
 }
 static XrXirArtifact *stdlib_program(const XrXirCompileContext *context,
     const char *root, const char *entry, uint32_t ids[6]) {
-    XrXirLibraryInput input = {xir_stdlib_output_checked,xir_stdlib_output_checked_length,{0}, (XrXirLibraryModuleInput[]){{{XR_MODULE_IDENTITY_STDLIB,"io",root},"io/output.xr"}},1};
-    memcpy(input.sha256,xir_stdlib_output_checked_sha256,32);
     XrXirLibraryCatalog *catalog = NULL;
-    CHECK(xr_xir_compile_library_catalog_new_v2(context,&input,1,&catalog) == XR_XIR_OK);
+    CHECK(xir_stdlib_library_catalog_new(context,root,&catalog) == XR_XIR_OK);
     XrCompilerSession *session = NULL; CHECK(xr_compile_session_new(context->resources,&session) == XR_COMPILER_SESSION_OK);
     XrModuleIdentityAuthority authority = {XR_MODULE_IDENTITY_SCRIPT,NULL,root};
     XrXirSourceRequest request = {session,entry,&authority,context,root,NULL,XR_XIR_PROGRAM,catalog};

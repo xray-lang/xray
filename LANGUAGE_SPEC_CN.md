@@ -7537,7 +7537,7 @@ Checked22/57、Value16和Program26保持各自实际合同；输出接口迁移�
 
 ### 17.37 Checked 标准库出版与普通执行
 
-标准库只提供一份 Checked XIR 语义输入，包含声明、泛型定义、私有实现闭包、模块初始化、效果和所有权事实。当前出版族为 io/output，不代表其余标准库族已获资格。库模板是经过验证的输入，不是可执行 Program 授权。Catalog 在调用方累计资源账本下验证完整 Checked body、规范模块身份和依赖；字节摘要不能代替语义复验。Catalog 深拥有物理根，输入和 Source 生产者销毁后仍有效。缺失或畸形的 advertised 输入拒绝，不回退到 Source。
+标准库只提供一份 Checked XIR 语义输入，包含声明、泛型定义、私有实现闭包、模块初始化、效果和所有权事实。当前出版族为 io/output 与 time，不代表其余标准库族已获资格。库模板是经过验证的输入，不是可执行 Program 授权。Catalog 在调用方累计资源账本下验证完整 Checked body、规范模块身份和依赖；字节摘要不能代替语义复验。Catalog 深拥有物理根，输入和 Source 生产者销毁后仍有效。缺失或畸形的 advertised 输入拒绝，不回退到 Source。
 
 Checked producer 只进行 Source 检查与 Checked 编码，不依赖 CGen、native 编译、object 清单或 runtime SDK；构建 producer 可执行文件本身仍需要支持的宿主 C 工具链。嵌入的不可变 Checked 字节和独立组件 manifest 不包含机器码回调。CLI、LSP、VM、AOT 独立于 native 代码取得同一 Catalog 输入。VM 对可达实例特化、复验、Lower 后按普通不可变 Program seal 接收，不查找或替换标准库函数为 cached native entries，执行期不需要 C 编译器。AOT 将库与用户 XIR 共同交给普通 C backend 编译。
 
@@ -7546,6 +7546,10 @@ Checked producer 只进行 Source 检查与 Checked 编码，不依赖 CGen、na
 Core 只安装 Checked 组件及精确 module/length/digest manifest。SDK 组件独立验证 target、ABI、Source 和 archive manifest；SDK-only 安装不要求标准库配对。组件及规范相对路径在出版前拒绝畸形输入；验证失败保全已有 manifest。真实 Core/SDK/full 安装、搬移、无源码 VM/AOT、用户新泛型类型及缺失/损坏组件需要独立测试。完整标准库交付与删除当前已支持族的缓存是不同完成责任。
 
 保留独立输出预期：stdout 为 out\0 后接 U+4E2D 的七个字节，stderr 为 err! 四个字节及空输入；保留两 Instance、四种 provider 结果、导入 leaf 与用户 wrapper、同名用户声明、producer death、escaped Function/result 寿命和物理释放。只退役 cache match/lease/object-pair 断言。每个实际 preparation、bind/seal 分配故障，资源三轴 exact/minus1、不补账本的 retry、失败保全 take 和零分配 cleanup 仍由普通路径覆盖。W1–W4、可移植 C11、适用 provider/sanitizer 门及既有 generic/library/output 责任全部保留。
+
+当前出版保存io/output的私有路由函数，以及time的三项私有缩放常量、全部八项公开函数和真实initializer。CLOCK_NANOS、UTC_OFFSET_AT与TIMER_AFTER_MS沿普通已验证操作导入，保留时钟种类、计时器悬挂效果和模块槽重定位；不引入本机回调缓存。bare `import time`先按精确authority及logical path选Catalog，源文件损坏或不存在不改变该闭包。源码私有var禁令与322 P1–P3完整退出要求不变。codegen的优化屏障身份尚未由此发布。
+
+Checked安装清单唯一采用schema2：每个components条目含role、path、module_identity、length、sha256。各条目的身份和相对路径唯一，旧schema1、空清单、非canonical身份、重复条目、缺文件及错误摘要拒绝；清单最后原子发布。多组件构造共享累计资源账本，临时数组与已接收产物在失败时释放，既有输出保全。
 
 ### 17.38 共同根执行流事实与原因查询
 
