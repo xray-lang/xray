@@ -84,16 +84,18 @@ static void ri_child_authority(XrXirCallView *view, RiWitness *w, unsigned funct
     else ++w->child_cleanup_denials;
 }
 static void ri_root_authority(XrXirCallView *view, RiWitness *w, unsigned function) {
-    XrXirValue counter = {0};
-    CHECK(xr_xir_instance_slot_read(view, 0, &counter) == XR_XIR_CALL_READY);
+    XrXirValue cell = {0}, counter = {0};
+    CHECK(xr_xir_instance_slot_read(view, 0, &cell) == XR_XIR_CALL_READY);
+    CHECK(cell.type == RI_CELL_TYPE && !cell.reserved);
+    CHECK(xr_xir_instance_cell_read(view, &cell, &counter) == XR_XIR_CALL_READY);
     CHECK(counter.type == XR_XIR_I64 && !counter.reserved);
-    CHECK(xr_xir_instance_slot_write(view, 0, &counter, false) == XR_XIR_CALL_READY);
+    CHECK(xr_xir_instance_cell_write(view, &cell, &counter) == XR_XIR_CALL_READY);
     if (function == RI_ROOT_EXIT) {
         ++w->root_cleanup_reads; w->root_cleanup_slot = counter.payload;
     }
-    xr_xir_value_drop(&counter);
+    xr_xir_value_drop(&counter); xr_xir_value_drop(&cell);
     if (function == RI_ROOT && !w->function.type) {
-        CHECK(xr_xir_instance_function(view, (XrXirType)RI_FUNCTION_TYPE, RI_READ,
+        CHECK(xr_xir_instance_function_at(view, RI_ROOT_REFERENCE,
             NULL, 0, &w->function) == XR_XIR_CALL_READY);
     }
     if (w->function.type) {

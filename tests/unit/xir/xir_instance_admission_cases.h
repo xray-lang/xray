@@ -83,7 +83,8 @@ static void admission_replacement_budget_case(void) {
     XrXirInstance *instance = NULL;
     XrXirValue function = {0};
     admission_case_setup(&releases, &program, &instance, &function);
-    uint64_t epoch = instance->epoch, original_limit = instance->config.poll_limit;
+    uint64_t epoch = instance->epoch, original_limit = instance->domain->budget.work_limit;
+    const uint64_t charged_before = instance->domain->budget.work;
     XrXirCall *previous_call = instance->call;
     uint32_t requested = instance->requested;
     size_t baseline = live;
@@ -91,7 +92,8 @@ static void admission_replacement_budget_case(void) {
     XrXirCallAccounting before[2] = {instance->accounting[0], instance->accounting[1]};
     /* One function admission costs one value plus its capture-prefix/signature
      * scan. The replacement has no work left for its own boundary validation. */
-    instance->config.poll_limit = 3;
+    CHECK(charged_before<=original_limit-3);
+    instance->domain->budget.work_limit = charged_before+3;
     XrXirValueAdmission admission = instance_candidate_admission(instance);
     CHECK(xr_xir_value_admit(&function, (XrXirType) function.type, &admission) == XR_XIR_VALUE_OK);
     CHECK(!admission.work);
@@ -100,7 +102,8 @@ static void admission_replacement_budget_case(void) {
     CHECK(xr_xir_instance_state(instance) == XR_XIR_INSTANCE_READY && live == baseline);
     CHECK(atomic_load(&object_pointer(&function)->references) == references);
     CHECK(!memcmp(before, instance->accounting, sizeof(before)));
-    instance->config.poll_limit = original_limit;
+    CHECK(instance->domain->budget.work>=charged_before);
+    instance->domain->budget.work_limit = original_limit;
     /* Argument capture and the candidate's copied table succeed; its first
      * physical frame segment allocation then fails. The completed call stays. */
     size_t failed_segment = allocation_calls + 2;
