@@ -69,6 +69,8 @@ def observations() -> dict[str, tuple[list, str]]:
         'ownership/value_struct_alias_copy_param': ([(1 + 10) + 2, 1], 'Parameter and local Pair copies permit local mutation while the original field stays one.'),
         'condition/bool_nullable_explicit': (['yes', 'null-flag', 'coalesced-false'], 'Some(true), explicit null test and null-coalesced false choose three fixed branch observations.'),
         'exception/assertion_same_t_parity': (['assertion-same-t-parity-ok'], 'Preserve the complete contextual assertion program; this original banner alone leaves its internal scalar observations open.'),
+        'observed/assertion_same_t_parity': (['assertion-same-t-parity-ok', 1 * 10 + 2, 1, 7, True, 7],
+                                           'Keep the original source byte-for-byte, then observe actual/expected single-evaluation order, anchored call count, u8 payload, absent Optional and i64 value.'),
         'exception/catch_panic': (['ok:5', 'caught', 'outer-caught', 'done'], 'Integer division succeeds for two and the explicit panic channel catches zero divisors, including the nested invocation.'),
         'exception/defer_stack_growth': ([200, 42, 'ok'], 'The complete depth-200 recursive cleanup executes before the function result is printed; no recursion bound is reduced.'),
         'exception/pattern_catch': (['boom', 'other', 'payload:7', 'ok', 'any'], 'Five calls cover two bare variants, payload extraction, normal return and typed enum catch-all.'),

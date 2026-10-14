@@ -40,7 +40,8 @@
     "side_effects/short_circuit": "tests/diff/cases/semantics/side_effects/short_circuit.xr",
     "coro/cycle_leak_bounded_by_coroutine_heap": "tests/diff/cases/semantics/coro/cycle_leak_bounded_by_coroutine_heap.xr",
     "regression/0398_null_test_owner_edges": "tests/regression/03_operators/0398_null_test_owner_edges.xr",
-    "match/adt_enum_nonpayload_variant": "tests/diff/cases/match/adt_enum_nonpayload_variant.xr"
+    "match/adt_enum_nonpayload_variant": "tests/diff/cases/match/adt_enum_nonpayload_variant.xr",
+    "observed/assertion_same_t_parity": "tests/unit/xir/legacy_consumers/fixtures/independent_run_observations/assertion_same_t_parity/root.xr"
   },
   "inputs": [
     {
@@ -254,6 +255,10 @@
     {
       "path": "tests/regression/11_coroutine/modules/big_stack.xr",
       "lf_sha256": "defeaa1c1f02cdca57347ac809a6bf430a492c769f3105553b13dfb2721046c2"
+    },
+    {
+      "path": "tests/unit/xir/legacy_consumers/fixtures/independent_run_observations/assertion_same_t_parity/root.xr",
+      "lf_sha256": "02f589f6454b9a486e8c3a78c1e2429b3c67b7eb43dddeb87f9b284850f4b99d"
     }
   ],
   "scope": "Whole original run-entry byte observations only. Original helper definitions, named test entries, complete FI/resources/physical/provider qualification remain separate.",

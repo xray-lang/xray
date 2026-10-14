@@ -8348,6 +8348,34 @@
         "Real complete named discovery and independent VM/native observations.",
         "Complete per-consumer runtime/compiler/native FI, exact resources, cancellation, ownership/lifetime/physical and sanitizer/provider matrix."
       ]
+    },
+    {
+      "id": "independent_behavior_observed_assertion_same_t_parity",
+      "oracle_id": "independent_behavior_observed_assertion_same_t_parity",
+      "source": "tests/unit/xir/legacy_consumers/fixtures/independent_run_observations/assertion_same_t_parity/root.xr",
+      "source_lf_sha256": "02f589f6454b9a486e8c3a78c1e2429b3c67b7eb43dddeb87f9b284850f4b99d",
+      "entry": "run",
+      "stdout_utf8": "assertion-same-t-parity-ok\n12\n1\n7\ntrue\n7\n",
+      "stderr_utf8": "",
+      "companions": [],
+      "owners": [
+        "P02",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P14"
+      ],
+      "preserved_original_run": {
+        "source": "tests/diff/cases/semantics/exception/assertion_same_t_parity.xr",
+        "source_lf_sha256": "7dde3aa7bbade2bd1e65936d7428f5b9616dcf387b61b17734128cd58659c087",
+        "observation_suffix": "\nprint(evaluationOrder)\nprint(anchoredCount)\nprint(octet)\nprint(nullableNull == null)\nprint(value)\n"
+      },
+      "independent_execution_model": "Keep the original source byte-for-byte, then observe actual/expected single-evaluation order, anchored call count, u8 payload, absent Optional and i64 value.",
+      "independent_observation_count": 6,
+      "remaining_gates": [
+        "Full contextual Equal/type authority and actual compiler/native/runtime FI, exact resources, cancellation, lifetime/physical/sanitizer/provider obligations."
+      ]
     }
   ]
 }

@@ -113,6 +113,12 @@ def main() -> int:
             source_bytes = original.read_bytes()
             if sha(source_bytes.replace(b'\r\n',b'\n')) != case['source_lf_sha256']:
                 raise ValueError('preserved source changed: '+case['source'])
+            preserved_run = case.get('preserved_original_run')
+            if preserved_run:
+                original_bytes = (ROOT/preserved_run['source']).read_bytes().replace(b'\r\n',b'\n')
+                if (sha(original_bytes) != preserved_run['source_lf_sha256']
+                        or source_bytes.replace(b'\r\n',b'\n') != original_bytes + preserved_run['observation_suffix'].encode('utf-8')):
+                    raise ValueError('the full original run body or observation suffix changed')
             closure = evidence/'source'
             target = closure/case['source']
             target.parent.mkdir(parents=True, exist_ok=True)
@@ -157,6 +163,8 @@ def main() -> int:
                    'remaining_gates':case['remaining_gates']}
             if oracle.get('model'):
                 row['independent_arithmetic_model'] = oracle['model']
+            if preserved_run:
+                row['preserved_original_run'] = preserved_run
             if case.get('independent_observations'):
                 observations = case['independent_observations']
                 observed_source = ROOT/observations['selected_complete_source']
