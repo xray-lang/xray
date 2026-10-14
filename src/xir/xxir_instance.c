@@ -21,6 +21,7 @@
 #include "xxir_class_origin_internal.h"
 #include "xxir_cell_provenance_internal.h"
 #include "xxir_task_internal.h"
+#include "xxir_task_result_internal.h"
 #include "xxir_struct.h"
 #include "xxir_output.h"
 #include "xxir_panic.h"
@@ -89,12 +90,19 @@ static XrXirInstance *instance_current(XrXirInstance *instance) {
     XrXirInstance *root = instance_root(instance);
     return root && root->active_generation ? root->active_generation : root;
 }
+/* Candidate generations share their owner's Call budget. Notifications must
+ * exclude mutation of every generation before a function gate is revoked. */
+static bool instance_observing(const XrXirInstance *instance) {
+    const XrXirInstance *root = instance && instance->owner ? instance->owner : instance;
+    return instance && (instance->observing || instance->budget.notifying ||
+                        root->observing || root->budget.notifying);
+}
 static XrXirCallBudget *instance_budget(XrXirInstance *instance) {
     return &instance_root(instance)->budget;
 }
 static bool instance_busy(const XrXirInstance *instance) {
     const XrXirInstance *root = instance && instance->owner ? instance->owner : instance;
-    return instance && (instance->driving || instance->observing || root->driving || root->observing);
+    return instance && (instance->driving || root->driving || instance_observing(instance));
 }
 static void instance_driving(XrXirInstance *instance, bool driving) {
     instance->driving = driving;
@@ -145,7 +153,7 @@ static XrXirCallStatus value_call_status(XrXirValueStatus status) {
     return XR_XIR_CALL_BAD_STATE;
 }
 static bool instance_cleanup_grant(const XrXirInstance *instance) {
-    return instance->driving && !instance->observing && xr_xir_task_executor_cleanup_active(instance->executor);
+    return instance->driving && !instance_observing(instance) && xr_xir_task_executor_cleanup_active(instance->executor);
 }
 /* The sealed body's facts cannot be replaced by the carrier's advertised bound,
  * a Sendable proof, or eligibility for one particular execution role. */
@@ -295,7 +303,7 @@ XR_FUNC bool xr_xir_instance_initialization_publication_missing(
     XrXirInstance *instance = admission->context;
     if (!instance || instance_root(instance) != view->instance || !instance_owner_current(instance) ||
         admission->domain != instance->domain || admission->arena != instance->program->arena ||
-        !instance->driving || instance->observing || instance->stopping ||
+        !instance->driving || instance_observing(instance) || instance->stopping ||
         instance->state != XR_XIR_INSTANCE_INITIALIZING || view->activation != instance->call ||
         view->phase != XR_XIR_CALL_NORMAL || view->scope_exit || !view->state) return false;
     bool child = false;
@@ -695,7 +703,7 @@ XrXirCallStatus xr_xir_instance_stop(XrXirInstance *instance) {
     if (!instance_owner_current(instance)) return XR_XIR_CALL_BAD_ARGUMENT;
     if (!instance) return XR_XIR_CALL_BAD_ARGUMENT;
     XrXirInstance *root = instance_root(instance);
-    if (root->observing) return XR_XIR_CALL_BUSY;
+    if (instance_observing(instance)) return XR_XIR_CALL_BUSY;
     root->stopping = true;
     if (root->function_gate) root->function_gate->instance = NULL;
     for (XrXirInstance *state = root->generation_next; state; state = state->generation_next) {
@@ -730,6 +738,7 @@ XrXirCallStatus xr_xir_instance_stop(XrXirInstance *instance) {
 static XrXirCallStatus instance_free_state(XrXirInstance *instance) {
     if (!instance_owner_current(instance)) return XR_XIR_CALL_BAD_ARGUMENT;
     if (!instance) return XR_XIR_CALL_READY;
+    if (instance_busy(instance)) return XR_XIR_CALL_BUSY;
     instance->driving = true;
     instance->stopping = true;
     if (instance->function_gate) instance->function_gate->instance = NULL;
@@ -773,7 +782,7 @@ static XrXirInstance *view_instance(XrXirCallView *view) {
     XrXirInstance *instance = instance_current(view->instance);
     if (!instance_owner_current(instance)) return NULL;
     bool child = false;
-    if (!instance->driving || instance->observing || (instance->stopping && !instance_cleanup_grant(instance)) ||
+    if (!instance->driving || instance_observing(instance) || (instance->stopping && !instance_cleanup_grant(instance)) ||
         !xr_xir_task_executor_view_member(instance->executor, view, &child) ||
         (!child && view->activation != instance->call) ||
         xr_xir_call_current_entry(view->activation) >= instance->program->entry_count) return NULL;
@@ -803,7 +812,7 @@ static XrXirCallStatus instance_call_entry_check(XrXirCallView *view, uint32_t e
     if (!instance || instance_root(instance) != view->instance || admission->arena != instance->program->arena ||
         admission->domain != instance->domain) return XR_XIR_CALL_BAD_STATE;
     bool child = false;
-    if (!instance->driving || instance->observing ||
+    if (!instance->driving || instance_observing(instance) ||
         (instance->stopping && !instance_cleanup_grant(instance)) ||
         !xr_xir_task_executor_view_member(instance->executor, view, &child) ||
         (!child && view->activation != instance->call)) return XR_XIR_CALL_BAD_STATE;
@@ -1422,7 +1431,7 @@ XR_FUNC XrXirCallStatus xr_xir_task_go(XrXirCallView *view, XrXirType task_type,
     if (!task || task->kind != XR_XIR_TYPE_TASK || task->element != target->result)
         return XR_XIR_CALL_BAD_ARGUMENT;
     XrXirType result = task->element;
-    if (result != XR_XIR_UNIT && result != XR_XIR_BOOL && result != XR_XIR_I64 && result != XR_XIR_STRING)
+    if (!xr_xir_task_scalar_result_supported(result))
         return XR_XIR_CALL_UNSUPPORTED;
     for (uint32_t p = 0; p < count; ++p) {
         if (!xr_xir_task_parameter_supported(program->types, target->parameters[p]))
