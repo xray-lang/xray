@@ -140,15 +140,20 @@ static void sg_run(uint32_t blocks,unsigned kind,unsigned order,uint32_t width) 
 static void sg_rejection(void) {
     SgFixture fixture;SgGraph graph;sg_graph(&graph,6,0);sg_fixture(&fixture,&graph,0,2);
     XrXirCompileContext context=pc_owner(pc_caps());uint64_t baseline=pc_stats(&context).live_bytes;
+    CHECK(sg_whole(&context,&fixture,1,2)==XR_XIR_OK);
     uint32_t target=fixture.instructions[2].targets[0];fixture.instructions[2].targets[0]=UINT32_MAX;
     XrXirArtifact *checked=NULL;XrXirDiagnostic diagnostic={0};
     CHECK(xir_fixture_check(&context,&fixture.base.module,&checked,&diagnostic)==XR_XIR_BAD_STRUCTURE && !checked);
+    CHECK(diagnostic.status==XR_XIR_BAD_STRUCTURE && diagnostic.function==1 &&
+        diagnostic.block==0 && diagnostic.instruction==2);
     fixture.instructions[2].targets[0]=target;
     CHECK(sg_whole(&context,&fixture,1,2)==XR_XIR_OK);
     fixture.instructions[0].type=XR_XIR_I64;diagnostic=(XrXirDiagnostic){0};
     CHECK(xir_fixture_check(&context,&fixture.base.module,&checked,&diagnostic)==XR_XIR_BAD_TYPE && !checked);
+    CHECK(diagnostic.status==XR_XIR_BAD_TYPE && diagnostic.function==1 &&
+        diagnostic.block==0 && diagnostic.instruction==0);
     sg_fixture(&fixture,&graph,0,2);CHECK(sg_whole(&context,&fixture,1,2)==XR_XIR_OK);
-    pc_release(&context,baseline);puts("precise target/type rejection and same-owner recovery PASS");
+    pc_release(&context,baseline);puts("target/type rejection f1/b0/i2 and f1/b0/i0, same-owner recovery PASS");
 }
 static void sg_singleton(void) {
     for(unsigned cycle=0;cycle<2;++cycle) {
