@@ -60,8 +60,7 @@ Type ::= UnionType
 UnionType ::= IntersectionType ('|' IntersectionType)*
 IntersectionType ::= NullableType
 NullableType ::= PrimaryType '?'?
-PrimaryType ::= ConstType | FFIPointerType | CFunctionType | NamedType | FunctionType | TupleType | ObjectType
-ConstType ::= 'const' PrimaryType
+PrimaryType ::= FFIPointerType | CFunctionType | NamedType | FunctionType | TupleType | ObjectType
 FFIPointerType ::= ('Ptr' | 'MutPtr') '<' Type '>'
 CFunctionType ::= 'CFn' '<' FunctionType '>'
 NamedType   ::= QualifiedIdent TypeArgs?
@@ -295,11 +294,11 @@ ClassDecl ::= AttrList? Visibility? 'final'? 'class' Identifier TypeParams?
               ('extends' NamedType)?
               ('implements' NamedType (',' NamedType)*)?
               '{' ClassMember* '}'
-ClassMember ::= FieldDecl | MethodDecl | ConstructorDecl
+ClassMember ::= FieldDecl | MethodDecl | InitDecl
 FieldDecl ::= Modifier* Identifier ':' Type ('=' Expression)?
 MethodDecl ::= Modifier* Identifier '(' ParamList? ')' ReturnType? Block
             |  Modifier* 'operator' OperatorToken '(' ParamList? ')' ReturnType? Block
-ConstructorDecl ::= 'constructor' '(' ParamList? ')' Block
+InitDecl ::= 'init' '(' ParamList? ')' Block
 
 StructDecl ::= AttrList? Visibility? 'packed'? 'struct' Identifier TypeParams?
                ('implements' NamedType (',' NamedType)*)?
@@ -404,8 +403,7 @@ Type ::= UnionType
 UnionType ::= IntersectionType ('|' IntersectionType)*
 IntersectionType ::= NullableType
 NullableType ::= PrimaryType '?'?
-PrimaryType ::= ConstType | FFIPointerType | CFunctionType | NamedType | FunctionType | TupleType | ObjectType
-ConstType ::= 'const' PrimaryType
+PrimaryType ::= FFIPointerType | CFunctionType | NamedType | FunctionType | TupleType | ObjectType
 FFIPointerType ::= ('Ptr' | 'MutPtr') '<' Type '>'
 CFunctionType ::= 'CFn' '<' FunctionType '>'
 NamedType   ::= QualifiedIdent TypeArgs?
@@ -640,11 +638,11 @@ ClassDecl ::= AttrList? Visibility? 'final'? 'class' Identifier TypeParams?
               ('extends' NamedType)?
               ('implements' NamedType (',' NamedType)*)?
               '{' ClassMember* '}'
-ClassMember ::= FieldDecl | MethodDecl | ConstructorDecl
+ClassMember ::= FieldDecl | MethodDecl | InitDecl
 FieldDecl ::= Modifier* Identifier ':' Type ('=' Expression)?
 MethodDecl ::= Modifier* Identifier '(' ParamList? ')' ReturnType? Block
             |  Modifier* 'operator' OperatorToken '(' ParamList? ')' ReturnType? Block
-ConstructorDecl ::= 'constructor' '(' ParamList? ')' Block
+InitDecl ::= 'init' '(' ParamList? ')' Block
 
 StructDecl ::= AttrList? Visibility? 'packed'? 'struct' Identifier TypeParams?
                ('implements' NamedType (',' NamedType)*)?

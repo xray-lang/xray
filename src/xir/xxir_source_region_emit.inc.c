@@ -240,6 +240,7 @@ static bool source_region_emit(SourceContext *ctx,XrXirFunction *output,bool sea
         }
         body->expressions=NULL;body->expression_count=0;
         body->recipes=NULL;body->blocks=NULL;body->capacity=0;body->block_capacity=0;
+        body->operands=NULL;body->operand_count=0;body->operand_capacity=0;
     }
     ok=true;goto done;
 invalid:

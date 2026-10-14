@@ -27,7 +27,7 @@ interface Summing {
 }
 
 class Summer implements Summing {
-    constructor() {}
+    init() {}
 
     // The original bug report's exact shape.
     total<T: Iterable<i64>>(xs: T) -> i64 {
@@ -61,7 +61,7 @@ class Summer implements Summing {
 // preserve the method's own parameter U and its bound.
 class Box<T> {
     value: T
-    constructor(v: T) { this.value = v }
+    init(v: T) { this.value = v }
 
     get() -> T { return this.value }
 

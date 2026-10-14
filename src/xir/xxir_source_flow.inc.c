@@ -128,7 +128,7 @@ static uint64_t source_epoch(SourceContext *ctx,const SourceEpoch *epochs,const 
 }
 static bool source_epoch_advance(SourceContext *ctx,SourceName *binding) {
     if (ctx->next_epoch==UINT64_MAX) return source_fail(ctx,NULL,XR_XIR_BUDGET,"mutation identity exhausted");
-    SourceEpoch *epoch=source_alloc(ctx,1,sizeof(*epoch));if (!epoch) return false;
+    SourceEpoch *epoch=source_planning_storage(ctx,1,sizeof(*epoch));if (!epoch) return false;
     *epoch=(SourceEpoch){ctx->epochs,binding,++ctx->next_epoch};ctx->epochs=epoch;return true;
 }
 static bool source_epochs_join(SourceContext *ctx,SourceEpoch *first,SourceEpoch *second) {
@@ -152,7 +152,7 @@ static uint32_t source_fact_depth(SourceContext *ctx,const SourceName *binding) 
     return 0;
 }
 static bool source_fact_push(SourceContext *ctx,SourceName *binding,uint32_t prefix) {
-    SourceFact *fact=source_alloc(ctx,1,sizeof(*fact));
+    SourceFact *fact=source_planning_storage(ctx,1,sizeof(*fact));
     if (!fact) return false;
     if (!prefix && !source_epoch_advance(ctx,binding)) return false;
     uint64_t epoch=source_epoch(ctx,ctx->epochs,binding);
@@ -189,7 +189,7 @@ static bool source_fact_collect(SourceContext *ctx,SourceFactSet *set,const Sour
     if (set->count==set->capacity) {
         uint32_t capacity=set->capacity?set->capacity*2:4;
         if (capacity<set->capacity) return source_fail(ctx,read->syntax,XR_XIR_BUDGET,"nullable fact set exhausted");
-        SourceFactEvidence *entries=source_alloc(ctx,capacity,sizeof(*entries));
+        SourceFactEvidence *entries=source_planning_storage(ctx,capacity,sizeof(*entries));
         if (!entries || !source_copy_bytes(ctx,NULL,entries,set->entries,set->count*sizeof(*entries))) return false;
         set->entries=entries;set->capacity=capacity;
     }
@@ -239,7 +239,7 @@ static bool source_facts_apply(SourceContext *ctx,const SourceFactSet *set) {
 /* A condition's outcome retains the last valid read on that exact path.
  * The ordinary continuation joins those paths separately. */
 static bool source_condition_capture(SourceContext *ctx,SourceExpressionPlan *plan) {
-    SourceConditionFlow *flow=source_alloc(ctx,1,sizeof(*flow));
+    SourceConditionFlow *flow=source_planning_storage(ctx,1,sizeof(*flow));
     if (!flow) return false;
     SourceFact *facts=ctx->facts;SourceEpoch *epochs=ctx->epochs;
     for (unsigned direction=0;direction<2;++direction) {
@@ -290,7 +290,7 @@ static bool source_condition_combine(SourceContext *ctx,AstNode *node,SourceCond
     SourceConditionFlow *right,SourceConditionFlow **output) {
     if (!left || (node->type!=AST_UNARY_NOT && !right))
         return source_fail(ctx,node,XR_XIR_BAD_STRUCTURE,"logical operand has no condition flow");
-    SourceConditionFlow *flow=source_alloc(ctx,1,sizeof(*flow));if (!flow) return false;
+    SourceConditionFlow *flow=source_planning_storage(ctx,1,sizeof(*flow));if (!flow) return false;
     if (node->type==AST_UNARY_NOT) {
         flow->facts[0]=left->facts[1];flow->epochs[0]=left->epochs[1];
         flow->facts[1]=left->facts[0];flow->epochs[1]=left->epochs[0];

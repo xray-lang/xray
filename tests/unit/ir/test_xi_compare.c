@@ -2024,7 +2024,7 @@ TEST(cmp_class_basic) {
         .source = "class Point {\n"
                   "    x: i64\n"
                   "    y: i64\n"
-                  "    constructor(x: i64, y: i64) {\n"
+                  "    init(x: i64, y: i64) {\n"
                   "        this.x = x\n"
                   "        this.y = y\n"
                   "    }\n"
@@ -2046,7 +2046,7 @@ TEST(cmp_class_method) {
     run_compare((CompareSpec) {
         .source = "class Box {\n"
                   "    value: i64\n"
-                  "    constructor(v) {\n"
+                  "    init(v) {\n"
                   "        this.value = v\n"
                   "    }\n"
                   "}\n"
@@ -2084,13 +2084,13 @@ TEST(cmp_class_inherit) {
     run_compare((CompareSpec) {
         .source = "class Animal {\n"
                   "    name: string\n"
-                  "    constructor(name: string) {\n"
+                  "    init(name: string) {\n"
                   "        this.name = name\n"
                   "    }\n"
                   "}\n"
                   "class Dog extends Animal {\n"
                   "    breed: string\n"
-                  "    constructor(name: string, breed: string) {\n"
+                  "    init(name: string, breed: string) {\n"
                   "        super(name)\n"
                   "        this.breed = breed\n"
                   "    }\n"
@@ -2108,9 +2108,9 @@ TEST(cmp_class_inherit) {
 
 TEST(cmp_super_multiple_levels) {
     run_compare((CompareSpec) {
-        .source = "class Root {\n root: i64\n constructor(x: i64) { this.root = x }\n}\n"
-                  "class Middle extends Root {\n middle: i64\n constructor(x: i64, y: i64) { super(x); this.middle = y }\n}\n"
-                  "class Leaf extends Middle {\n leaf: i64\n constructor(x: i64, y: i64, z: i64) { super(x, y); this.leaf = z }\n}\n"
+        .source = "class Root {\n root: i64\n init(x: i64) { this.root = x }\n}\n"
+                  "class Middle extends Root {\n middle: i64\n init(x: i64, y: i64) { super(x); this.middle = y }\n}\n"
+                  "class Leaf extends Middle {\n leaf: i64\n init(x: i64, y: i64, z: i64) { super(x, y); this.leaf = z }\n}\n"
                   "var l = Leaf(7, 9, 11)\nprint(l.root)\nprint(l.middle)\nprint(l.leaf)",
         .label = "three constructor frames preserve independent receiver owners",
         .expect_xi_success = true, .min_similarity = 0.1,
@@ -2119,8 +2119,8 @@ TEST(cmp_super_multiple_levels) {
 }
 TEST(cmp_super_ordinary_method) {
     run_compare((CompareSpec) {
-        .source = "class Parent {\n constructor() {}\n read() -> i64 { return 7 }\n}\n"
-                  "class Child extends Parent {\n constructor() { super() }\n override read() -> i64 { return super.read() + 1 }\n}\n"
+        .source = "class Parent {\n init() {}\n read() -> i64 { return 7 }\n}\n"
+                  "class Child extends Parent {\n init() { super() }\n override read() -> i64 { return super.read() + 1 }\n}\n"
                   "var c = Child()\nprint(c.read())\nprint(c.read())",
         .label = "ordinary parent method retains its borrowed receiver contract",
         .expect_xi_success = true, .min_similarity = 0.1,
@@ -2129,8 +2129,8 @@ TEST(cmp_super_ordinary_method) {
 }
 TEST(cmp_super_constructor_error) {
     run_compare((CompareSpec) {
-        .source = "enum ParentError { Failed }\nclass Parent {\n constructor() { throw ParentError.Failed }\n}\n"
-                  "class Child extends Parent {\n constructor() { super() }\n}\n"
+        .source = "enum ParentError { Failed }\nclass Parent {\n init() { throw ParentError.Failed }\n}\n"
+                  "class Child extends Parent {\n init() { super() }\n}\n"
                   "try { var c = Child(); print(\"unreachable\") } catch (e) { print(\"caught\") }",
         .label = "parent constructor failure unwinds its acquired owner",
         .expect_xi_success = true, .min_similarity = 0.1,
@@ -2151,8 +2151,8 @@ static XrMethod *owner_method(XrClass *cls, bool constructor) {
 
 TEST(cmp_super_owner_physical) {
     const char *source =
-        "class OwnerParent {\n constructor() {}\n read() -> i64 { return 7 }\n}\n"
-        "class OwnerChild extends OwnerParent {\n constructor() { super() }\n"
+        "class OwnerParent {\n init() {}\n read() -> i64 { return 7 }\n}\n"
+        "class OwnerChild extends OwnerParent {\n init() { super() }\n"
         " override read() -> i64 { return super.read() + 1 }\n}\n";
     XrProto *p = compile_wrapper(source);
     REQUIRE(p != NULL, "Source receiver-owner fixture compile failed");

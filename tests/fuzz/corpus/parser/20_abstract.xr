@@ -4,7 +4,7 @@ abstract class Shape {
     x: f64
     y: f64
 
-    constructor(x: f64, y: f64) {
+    init(x: f64, y: f64) {
         this.x = x
         this.y = y
     }
@@ -27,7 +27,7 @@ abstract class Shape {
 class Circle extends Shape {
     radius: f64
 
-    constructor(x: f64, y: f64, radius: f64) {
+    init(x: f64, y: f64, radius: f64) {
         super(x, y)
         this.radius = radius
     }
@@ -51,7 +51,7 @@ class Rectangle extends Shape {
     width: f64
     height: f64
 
-    constructor(x: f64, y: f64, width: f64, height: f64) {
+    init(x: f64, y: f64, width: f64, height: f64) {
         super(x, y)
         this.width = width
         this.height = height
@@ -75,7 +75,7 @@ class Triangle extends Shape {
     b: f64
     c: f64
 
-    constructor(x: f64, y: f64, a: f64, b: f64, c: f64) {
+    init(x: f64, y: f64, a: f64, b: f64, c: f64) {
         super(x, y)
         this.a = a
         this.b = b

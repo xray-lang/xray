@@ -5,7 +5,7 @@ import runtime
 
 class Node {
     value: i64
-    constructor(value) { this.value = value }
+    init(value) { this.value = value }
 }
 
 fn makeNode(value: i64) -> Node {

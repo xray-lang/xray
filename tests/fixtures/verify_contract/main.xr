@@ -45,7 +45,7 @@ print(callPrivateWide(41 as u64))
 // everything it builds, so `no_reference_cycles` is provable here.
 export class AcyclicLeaf {
     v: i64
-    constructor(v) { this.v = v }
+    init(v) { this.v = v }
 }
 
 // The same contract must NOT be granted here: `next` closes a self-edge in the
@@ -54,7 +54,7 @@ export class AcyclicLeaf {
 export class CyclicNode {
     next: CyclicNode?
     v: i64
-    constructor(v) { this.next = null; this.v = v }
+    init(v) { this.next = null; this.v = v }
 }
 
 // Annotating the back-edge `weak` takes this class out of the L0 candidate set,
@@ -63,11 +63,11 @@ export class CyclicNode {
 export class WeakBrokenNode {
     weak parent: WeakBrokenNode?
     v: i64
-    constructor(v) { this.parent = null; this.v = v }
+    init(v) { this.parent = null; this.v = v }
 }
 
 
 export class MapEdgeNode {
     peers: Map<string, MapEdgeNode>
-    constructor() { this.peers = #{} }
+    init() { this.peers = #{} }
 }

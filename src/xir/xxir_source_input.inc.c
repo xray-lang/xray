@@ -9,12 +9,14 @@
  * KEY CONCEPT:
  *   Input selection precedes the same checked construction and owned publication.
  */
+typedef struct SourceInputCapture { AstNode *ast; uint32_t module; } SourceInputCapture;
 typedef struct SourceInput {
     bool supplied;
     XrXirSourceText text;
     const XrModuleOverlayInput *overlays;
     size_t overlay_count;
     bool prelude_factory;
+    SourceInputCapture *capture;
 } SourceInput;
 static XrXirStatus source_check_input(const XrXirSourceRequest *request, SourceInput input,
     XrXirSourceResult *output, XrXirSourceDiagnostic *diagnostic, char **failure_path) {
@@ -115,10 +117,16 @@ done:
         *failure_path = module->source_path;
         module->source_path = NULL;
     }
+    if (ctx.diagnostic.status == XR_XIR_OK && input.capture) {
+        input.capture->module = (uint32_t)ctx.graph->entry_index;
+        input.capture->ast = ctx.graph->specs[ctx.graph->entry_index].ast;
+        ctx.graph->specs[ctx.graph->entry_index].ast = NULL;
+    }
     xr_compile_resources_free(error);
     for (SourceManifest *manifest = ctx.manifests; manifest; manifest = manifest->next)
         xr_compile_declaration_manifest_free(manifest->declarations);
     xr_xir_compile_construction_free(ctx.construction);
+    source_vector_retired_free(&ctx);
     while (ctx.memory) { SourceMemory *next = ctx.memory->next; xr_compile_resources_free(ctx.memory); ctx.memory = next; }
     xr_compile_module_graph_free(ctx.graph); xr_compile_module_resolver_free(resolver);
     if (ctx.diagnostic.status == XR_XIR_OK) *output = result;
@@ -134,14 +142,14 @@ XrXirStatus xr_xir_compile_source_check(const XrXirSourceRequest *request,
 XrXirStatus xr_xir_compile_source_check_text(const XrXirSourceRequest *request,
     const XrXirSourceText *text,
     XrXirSourceResult *output, XrXirSourceDiagnostic *diagnostic, char **failure_path) {
-    SourceInput input = {true, text ? *text : (XrXirSourceText){0}, NULL, 0, false};
+    SourceInput input = {true, text ? *text : (XrXirSourceText){0}, NULL, 0, false, NULL};
     return source_check_input(request, input, output, diagnostic, failure_path);
 }
 
 XrXirStatus xr_xir_compile_source_check_overlay(const XrXirSourceRequest *request,
     const XrModuleOverlayInput *overlays, size_t count, XrXirSourceResult *output,
     XrXirSourceDiagnostic *diagnostic, char **failure_path) {
-    SourceInput input = {false, {0}, overlays, count, false};
+    SourceInput input = {false, {0}, overlays, count, false, NULL};
     return source_check_input(request, input, output, diagnostic, failure_path);
 }
 
@@ -176,7 +184,7 @@ XR_FUNC XrXirStatus xr_xir_compile_prelude_library(const XrXirCompileContext *co
         }
         ++length;
     }
-    SourceInput input={true,{XIR_PRELUDE_LOGICAL,xir_prelude_source.text,length},NULL,0,true};
+    SourceInput input={true,{XIR_PRELUDE_LOGICAL,xir_prelude_source.text,length},NULL,0,true,NULL};
     XrXirSourceResult result={0};
     XrXirStatus status=source_check_input(&request,input,&result,diagnostic,NULL);
     if (status==XR_XIR_OK) {

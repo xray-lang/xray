@@ -8,7 +8,7 @@ class Point {
     x: i64
     y: i64
 
-    constructor(x, y) {
+    init(x, y) {
         this.x = x
         this.y = y
     }
@@ -36,7 +36,7 @@ fn test_class_method() {
 class Counter {
     count: i64
 
-    constructor() {
+    init() {
         this.count = 0
     }
 
@@ -86,7 +86,7 @@ fn test_multiple_instances() {
 class Builder {
     value: string
 
-    constructor() {
+    init() {
         this.value = ""
     }
 
@@ -113,7 +113,7 @@ class Config {
     name: string
     enabled: bool
 
-    constructor() {
+    init() {
         this.name = "default"
         this.enabled = true
     }
@@ -132,7 +132,7 @@ class Person {
     name: string
     age: i64
 
-    constructor(name, age) {
+    init(name, age) {
         this.name = name
         this.age = age
     }

@@ -176,12 +176,12 @@ static const XrNativeMemberDeclaration xr_native_string_members[] = {
     {15, "startsWith", "(search: string) -> bool", "bool", 30, 5, XR_NATIVE_RECEIVER_READ, false, true, false, true, XR_NATIVE_OPERATION_STRING_STARTS_WITH, XR_NATIVE_ALLOCATION_NO_HEAP, "none", XR_NATIVE_RESULT_OWNERSHIP_OWNED, xr_native_string_parameters_14, 1, XR_NATIVE_TERM_BOOL},
     {16, "endsWith", "(search: string) -> bool", "bool", 32, 5, XR_NATIVE_RECEIVER_READ, false, true, false, true, XR_NATIVE_OPERATION_STRING_ENDS_WITH, XR_NATIVE_ALLOCATION_NO_HEAP, "none", XR_NATIVE_RESULT_OWNERSHIP_OWNED, xr_native_string_parameters_15, 1, XR_NATIVE_TERM_BOOL},
     {17, "copyBytes", "() -> Array<u8>", "Array < u8 >", 34, 5, XR_NATIVE_RECEIVER_READ, false, true, false, true, XR_NATIVE_OPERATION_NONE, XR_NATIVE_ALLOCATION_UNKNOWN, "", XR_NATIVE_RESULT_OWNERSHIP_UNKNOWN, NULL, 0, XR_NATIVE_TERM_UNADMITTED},
-    {18, "bytes", "() -> const Slice<u8>", "const Slice < u8 >", 37, 5, XR_NATIVE_RECEIVER_READ, false, true, true, true, XR_NATIVE_OPERATION_NONE, XR_NATIVE_ALLOCATION_UNKNOWN, "", XR_NATIVE_RESULT_OWNERSHIP_UNKNOWN, NULL, 0, XR_NATIVE_TERM_UNADMITTED},
+    {18, "bytes", "() -> Slice<u8>", "Slice < u8 >", 37, 5, XR_NATIVE_RECEIVER_READ, false, true, true, true, XR_NATIVE_OPERATION_NONE, XR_NATIVE_ALLOCATION_UNKNOWN, "", XR_NATIVE_RESULT_OWNERSHIP_UNKNOWN, NULL, 0, XR_NATIVE_TERM_UNADMITTED},
     {19, "runes", "() -> Iterator<rune>", "Iterator < rune >", 38, 5, XR_NATIVE_RECEIVER_READ, false, true, false, true, XR_NATIVE_OPERATION_NONE, XR_NATIVE_ALLOCATION_UNKNOWN, "", XR_NATIVE_RESULT_OWNERSHIP_UNKNOWN, NULL, 0, XR_NATIVE_TERM_UNADMITTED},
 };
 static const XrNativeTypeDeclaration xr_native_string = {
     2, XR_NATIVE_DECLARATION_VALUE, "string", "", 0,
-    "stdlib/types/string.xr", "xray-native:prelude/string", {{237, 33, 160, 176, 120, 113, 137, 62, 255, 212, 13, 9, 179, 86, 191, 105, 193, 62, 2, 123, 79, 147, 3, 232, 122, 27, 37, 107, 226, 155, 125, 210}},
+    "stdlib/types/string.xr", "xray-native:prelude/string", {{149, 48, 125, 46, 101, 47, 22, 76, 70, 176, 40, 234, 217, 198, 19, 143, 133, 234, 120, 62, 228, 33, 67, 228, 182, 216, 198, 13, 137, 214, 7, 215}},
     9, 8, xr_native_string_members, 19
 };
 

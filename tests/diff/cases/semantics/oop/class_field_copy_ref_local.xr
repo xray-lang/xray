@@ -7,7 +7,7 @@ fn increment(value: ref i64) {
 class DigestState {
     value: i64
 
-    constructor(value: i64) {
+    init(value: i64) {
         this.value = value
     }
 

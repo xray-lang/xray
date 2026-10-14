@@ -5,7 +5,7 @@
 // its native-class instance alive through the await.
 class Conn {
     id: i64
-    constructor(id: i64) { this.id = id }
+    init(id: i64) { this.id = id }
     close() { print("close conn " + string(this.id)) }
 }
 

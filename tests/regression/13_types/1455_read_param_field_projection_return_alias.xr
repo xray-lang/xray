@@ -1,7 +1,7 @@
 class Holder {
     items: Array<i64>
 
-    constructor() {
+    init() {
         this.items = [1, 2]
     }
 }

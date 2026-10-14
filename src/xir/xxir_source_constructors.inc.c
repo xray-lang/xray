@@ -71,7 +71,7 @@ static bool source_constructor_value(SourceContext *ctx, AstNode *node, SourceVa
     XrXirType type = visible_name(ctx, "this")->type;
     const XrXirTypeNode *nominal = xr_xir_type_node(&ctx->types, type);
     uint32_t count = nominal->nominal.field_count;
-    SourceValue *fields = count ? source_alloc(ctx, count, sizeof(*fields)) : NULL;
+    SourceValue *fields = count ? source_recipe_storage(ctx, count, sizeof(*fields)) : NULL;
     if (count && !fields) return false;
     for (uint32_t f = 0; f < count; ++f)
         if (!source_constructor_read(ctx, node, f, &fields[f])) return false;
@@ -118,17 +118,19 @@ static bool source_constructor_declare(SourceContext *ctx, SourceName *owner, As
         method->param_count < 0 || method->param_count > 65536 || (method->is_private && method->is_protected))
         return source_fail(ctx, node, XR_XIR_BAD_TYPE, "constructor declaration contract is not admitted");
     uint32_t index = (*next)++; ctx->function = index; ctx->nominal_constructors[owner->index] = index;
+    XrXirNominalDeclaration *declaration = (XrXirNominalDeclaration *)&ctx->nominals.declarations[owner->index];
+    if (declaration->kind == XR_XIR_NOMINAL_STRUCT) declaration->flags |= XR_XIR_NOMINAL_MODULE_LITERAL;
     SourceFunction *body = &ctx->bodies[index]; body->node = node; body->module = owner->module;
     if (!source_nominal_function_scope(ctx,index,owner)) return false;
-    SourceName symbol = {0}; symbol.name = "constructor"; symbol.node = node;
+    SourceName symbol = {0}; symbol.name = "init"; symbol.node = node;
     if (!source_query_declare(ctx, &symbol, XR_XIR_SOURCE_FUNCTION, owner->declaration,
-        source_query_range(ctx, node, "constructor"))) return false;
+        source_query_range(ctx, node, "init"))) return false;
     body->declaration = symbol.declaration;
     if (!source_query_syntax_role(ctx, symbol.declaration, XR_XIR_SOURCE_SYNTAX_METHOD, 0)) return false;
     uint32_t count = (uint32_t)method->param_count;
     body->parameters = count ? source_alloc(ctx, count, sizeof(*body->parameters)) : NULL;
     if (count && !body->parameters) return false;
-    ctx->functions[index] = (XrXirFunction) {"constructor", 11, body->parameters, count, owner->type, NULL, 0, NULL, 0, NULL, 0};
+    ctx->functions[index] = (XrXirFunction) {"init", 4, body->parameters, count, owner->type, NULL, 0, NULL, 0, NULL, 0};
     const XrXirNominalDeclaration *decl = &ctx->nominals.declarations[owner->index];
     for (uint32_t p = 0; p < count; ++p) {
         XrParamNode *param = method->params[p];
@@ -178,7 +180,7 @@ static bool source_constructor_invoke(SourceContext *ctx, AstNode *node,
         called.declaration = ctx->bodies[index].declaration;
     if (!source_query_reference(ctx, call->reference, binding, &called, XR_XIR_SOURCE_CALL)) return false;
     SourceSubstitution substitution = {nominal->nominal.arguments, nominal->nominal.argument_count};
-    SourceValue *arguments = function->parameter_count ? source_alloc(ctx, function->parameter_count, sizeof(*arguments)) : NULL;
+    SourceValue *arguments = function->parameter_count ? source_recipe_storage(ctx, function->parameter_count, sizeof(*arguments)) : NULL;
     if (function->parameter_count && !arguments) return false;
     for (uint32_t p = 0; p < call->count; ++p) {
         XrXirType expected;

@@ -3,7 +3,7 @@
 // LIFO across backends without hidden closure capture.
 class Box {
     tag: string
-    constructor(tag: string) { this.tag = tag }
+    init(tag: string) { this.tag = tag }
     drop() { print("drop " + this.tag) }
 }
 

@@ -28,7 +28,7 @@ export final class Regex {
     flags: i64
     prog: Array<i64>
 
-    constructor(pattern: string, flags: string = "") {
+    init(pattern: string, flags: string = "") {
         this.pattern = pattern
         this.flags = rxParseFlags(flags)
         this.prog = Array<i64>()
@@ -41,7 +41,7 @@ export final class RegexMatch {
     text: string
     groups: Array<string>
 
-    constructor(start: i64, end: i64, text: string, groups: Array<string>) {
+    init(start: i64, end: i64, text: string, groups: Array<string>) {
         this.start = start
         this.end = end
         this.text = text

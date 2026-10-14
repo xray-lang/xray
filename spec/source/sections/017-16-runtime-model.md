@@ -173,7 +173,7 @@ class PanicInfo {
     code: i64                   // 错误码（从 "E0xxx: ..." 前缀自动解析，默认 0）
     data: JSON.Value            // 运行时故障的结构化附加数据；无数据时为 JSON null
 
-    constructor(message: string = "", cause: PanicInfo? = null)
+    init(message: string = "", cause: PanicInfo? = null)
     fn toString() -> string
 }
 ```
@@ -460,7 +460,7 @@ class PanicInfo {
     code: i64                   // error code (auto-parsed from "E0xxx: ..." prefix; default 0)
     data: JSON.Value            // structured data for a runtime fault; JSON null when absent
 
-    constructor(message: string = "", cause: PanicInfo? = null)
+    init(message: string = "", cause: PanicInfo? = null)
     fn toString() -> string
 }
 ```

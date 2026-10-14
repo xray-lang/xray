@@ -2,7 +2,7 @@ var trace:i64=0
 fn layer<T>(v:T)->T?{return v}
 fn none<T>()->T?{return null}
 class Box { value:i64
-    constructor(value:i64){this.value=value} }
+    init(value:i64){this.value=value} }
 export fn main()->i64{return 41}
 export fn current()->i64{return trace}
 export fn factory(mode:i64)->i64??{
@@ -86,7 +86,7 @@ export fn capturedDefault(mode:i64)->string?{
 
 fn twice<T>(value:T)->T??{return layer<T?>(layer<T>(value))}
 struct Record{value:i64
-    constructor(value:i64){this.value=value} }
+    init(value:i64){this.value=value} }
 enum Flag{V}
 export fn callableProbe()->i64{
     const captured=7

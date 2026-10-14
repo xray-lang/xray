@@ -5,7 +5,7 @@
 // propagation through a namespace import (`ns.Box<T>(...)`).
 export class Box<T> {
     value: T
-    constructor(v: T) {
+    init(v: T) {
         this.value = v
     }
     get() -> T {

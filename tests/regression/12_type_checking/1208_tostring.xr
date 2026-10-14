@@ -5,12 +5,12 @@
 fn myFunc() -> i64 { return 1 }
 class Dog {
     name: string
-    constructor(name) { this.name = name }
+    init(name) { this.name = name }
 }
 class Point {
     x: i64 = 0
     y: i64 = 0
-    constructor(x, y) { this.x = x; this.y = y }
+    init(x, y) { this.x = x; this.y = y }
     toString() -> string { return "(" + string(this.x) + ", " + string(this.y) + ")" }
 }
 enum Color { Red, Green, Blue }

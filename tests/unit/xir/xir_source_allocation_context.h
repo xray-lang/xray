@@ -81,6 +81,7 @@ static bool allocation_private_context(SourceContext *context,XrCompileResourceL
     return status==XR_COMPILE_RESOURCE_OK;
 }
 static void allocation_private_close(SourceContext *context) {
+    source_vector_retired_free(context);
     while(context->memory){SourceMemory *next=context->memory->next;
         xr_compile_resources_free(context->memory);context->memory=next;}
     allocation_context_close(&context->compile);

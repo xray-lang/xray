@@ -148,7 +148,7 @@ static bool source_enum_construct(SourceContext *ctx, AstNode *node, SourceEnumS
     int count = provided ? provided->count : 0;
     if (count < 0 || (uint32_t)count != variant.field_count || (!variant.field_count && provided))
         return source_fail(ctx, node, XR_XIR_BAD_TYPE, "enum variant requires exactly its declared named payload");
-    SourceValue *fields = count ? source_alloc(ctx,(uint32_t)count,sizeof(*fields)) : NULL;
+    SourceValue *fields = count ? source_recipe_storage(ctx,(uint32_t)count,sizeof(*fields)) : NULL;
     bool *seen = count ? source_alloc(ctx,(uint32_t)count,sizeof(*seen)) : NULL;
     if (count && (!fields || !seen)) return false;
     const XrXirNominalType *instance = &xr_xir_type_node(&ctx->types,selected->type)->nominal;

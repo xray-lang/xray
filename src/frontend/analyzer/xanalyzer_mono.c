@@ -73,8 +73,6 @@ static const char *mono_type_display_name(XrTypeRef *t) {
         case XR_TREF_NAMED:
         case XR_TREF_GENERIC:
             return t->name ? t->name : "object";
-        case XR_TREF_CONST:
-            return "const";
         case XR_TREF_FUNCTION:
             return "function";
         case XR_TREF_OPTIONAL:
@@ -109,8 +107,6 @@ const char *xr_mono_type_tag(XrTypeRef *t) {
         case XR_TREF_NAMED:
         case XR_TREF_GENERIC:
             return t->name ? t->name : "obj";
-        case XR_TREF_CONST:
-            return "const";
         case XR_TREF_FUNCTION:
             return "fn";
         case XR_TREF_OPTIONAL:
@@ -125,7 +121,6 @@ const char *xr_mono_type_tag(XrTypeRef *t) {
 /* Kinds whose identity lives in their children rather than in their own tag. */
 static bool mono_tag_needs_children(uint8_t kind) {
     switch ((XrTypeRefKind) kind) {
-        case XR_TREF_CONST:
         case XR_TREF_GENERIC:
         case XR_TREF_OPTIONAL:
         case XR_TREF_TUPLE:
@@ -193,13 +188,6 @@ static void mono_qualified_type_tag(XrTypeRef *t, char *buf, size_t cap) {
         snprintf(buf, cap, "unknown");
         return;
     }
-    if (t->kind == XR_TREF_CONST) {
-        char inner[192];
-        mono_qualified_type_tag(t->children && t->nchildren > 0 ? t->children[0] : NULL, inner,
-                                sizeof(inner));
-        snprintf(buf, cap, "const_%s", inner);
-        return;
-    }
     if (t->kind == XR_TREF_OPTIONAL) {
         char inner[192];
         mono_qualified_type_tag(t->children && t->nchildren > 0 ? t->children[0] : NULL, inner,
@@ -244,8 +232,7 @@ char *xr_mono_mangle(const char *name, XrTypeRef **type_args, int count) {
     /* Every type argument whose identity lives in its children needs a
      * recursive tag. A head-only tag collapses distinct instances into one, and
      * the second call site is then rewritten to a clone whose parameter types
-     * belong to the first: "const" would merge const Array<int> with
-     * const Map<K,V>, "Array" would merge Array<int> with Array<string>, and
+     * belong to the first: "Array" would merge Array<int> with Array<string>, and
      * "unknown"/"opt" would merge every tuple and every optional. Scalars carry
      * their whole identity in the tag itself and keep the flat form.
      *

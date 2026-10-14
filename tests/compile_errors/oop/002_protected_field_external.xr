@@ -1,6 +1,6 @@
 class Account {
     protected owner: string
-    constructor() { this.owner = "x" }
+    init() { this.owner = "x" }
 }
 var a = Account()
 print(a.owner)

@@ -88,7 +88,7 @@ static const KwExpect kKnownKeywords[] = {
     {"class", TK_CLASS},
     {"comptime", TK_COMPTIME},
     {"const", TK_CONST},
-    {"constructor", TK_CONSTRUCTOR},
+    {"constructor", TK_NAME},
     {"continue", TK_CONTINUE},
     {"defer", TK_DEFER},
     {"else", TK_ELSE},

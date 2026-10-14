@@ -9,7 +9,7 @@ fn main() {
             })
     }
     var readonlyBuffer = mem.allocZeroed(1)
-    var readonly: const Slice<u8> = readonlyBuffer.asBytes()
+    var readonly: Slice<u8> = readonlyBuffer.asBytes()
     readonly[0] = 9
     print("unreachable")
 }

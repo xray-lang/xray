@@ -1333,7 +1333,6 @@ static const char *token_names[] = {
     [TK_NEW] = "new",
     [TK_THIS] = "this",
     [TK_SUPER] = "super",
-    [TK_CONSTRUCTOR] = "constructor",
     [TK_STATIC] = "static",
     [TK_PRIVATE] = "private",
     [TK_PROTECTED] = "protected",

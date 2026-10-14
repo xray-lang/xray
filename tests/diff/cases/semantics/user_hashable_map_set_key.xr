@@ -11,7 +11,7 @@
 class Key implements Hashable {
     a: i64
     b: string
-    constructor(a: i64, b: string) {
+    init(a: i64, b: string) {
         this.a = a
         this.b = b
     }

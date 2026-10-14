@@ -170,7 +170,7 @@ static bool source_array_literal(SourceContext *ctx, AstNode *node, SourceExpect
     if (expected.present) element.type = xr_xir_array_element(&ctx->types,expected.type);
     if (!literal->count && !element.present)
         return source_fail(ctx, node, XR_XIR_BAD_TYPE, "empty Array literal needs an element context");
-    SourceValue *elements = literal->count ? source_alloc(ctx, (size_t) literal->count, sizeof(*elements)) : NULL;
+    SourceValue *elements = literal->count ? source_recipe_storage(ctx, (size_t) literal->count, sizeof(*elements)) : NULL;
     if (literal->count && !elements) return false;
     for (int i = 0; i < literal->count; ++i) {
         if (!source_plan_expression(ctx, literal->elements[i], element, &elements[i])) return false;

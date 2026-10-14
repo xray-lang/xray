@@ -1,7 +1,7 @@
 class Collector {
     total: i64
 
-    constructor() {
+    init() {
         this.total = 0
     }
 

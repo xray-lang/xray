@@ -363,7 +363,7 @@ print(len(empty))           // 0
 
 ### 14.16 `PanicInfo`
 
-内置 `PanicInfo` 类包含 `message`、`stack`、`cause`、`code`、`data` 字段，构造函数 `constructor(message: string = "", cause: PanicInfo? = null)`，以及 `toString()`。
+内置 `PanicInfo` 类包含 `message`、`stack`、`cause`、`code`、`data` 字段，构造函数 `init(message: string = "", cause: PanicInfo? = null)`，以及 `toString()`。
 
 ### 14.17 `Task<T>` 与 enum 值
 
@@ -752,7 +752,7 @@ The `datetime` module provides factory functions through `import datetime`: `now
 
 ### 14.16 `PanicInfo`
 
-The built-in `PanicInfo` class has fields `message`, `stack`, `cause`, `code`, `data`, the constructor `constructor(message: string = "", cause: PanicInfo? = null)`, and `toString()`.
+The built-in `PanicInfo` class has fields `message`, `stack`, `cause`, `code`, `data`, the constructor `init(message: string = "", cause: PanicInfo? = null)`, and `toString()`.
 
 ### 14.17 `Task<T>` and Enum Values
 

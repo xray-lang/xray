@@ -810,7 +810,7 @@ XR_FUNC XrDispatchAction vm_invoke_class(XrVMRuntime *isolate, XrVMContext *vm_c
     XrSymbolTable *_st = (XrSymbolTable *) isolate->core_rt->symbol_table;
     const char *method_name_chars = xr_symbol_get_name_in_table(_st, method_symbol);
 
-    if (strcmp(method_name_chars, XR_KEYWORD_CONSTRUCTOR) == 0) {
+    if (strcmp(method_name_chars, XR_INIT_MEMBER_NAME) == 0) {
         XrObjectInstance *inst = xr_instance_new(isolate, cls);
         XrValue inst_val = xr_value_from_instance(inst);
 

@@ -2,7 +2,7 @@
 class InspectOnly {
     value: i64
 
-    constructor(value: i64) {
+    init(value: i64) {
         this.value = value
     }
 }
@@ -11,7 +11,7 @@ class InspectOnly {
 class JsonOnly {
     value: i64
 
-    constructor(value: i64) {
+    init(value: i64) {
         this.value = value
     }
 }

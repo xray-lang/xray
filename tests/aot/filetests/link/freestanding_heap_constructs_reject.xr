@@ -39,7 +39,7 @@ fn xray_string_concat_reject() -> i64 {
 class HeapBacked {
     value: i64
 
-    constructor(value: i64) {
+    init(value: i64) {
         this.value = value
     }
 }

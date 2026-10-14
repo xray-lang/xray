@@ -1,0 +1,26 @@
+final class Box<T> {
+    value: T
+    init(value) { this.value = value }
+    get() -> T { return this.value }
+}
+struct Pair<T> {
+    left: T
+    right: T
+    init(left, right) {
+        this.left = left
+        this.right = right
+    }
+}
+struct Bundle<T> {
+    items: Array<T>
+    init(items = []) { this.items = items }
+}
+export fn referenceAnswer() -> i64 {
+    const box = Box<i64>(41)
+    const pair = Pair<i64>(1, box.get())
+    const text = Box<string>("ok")
+    const empty = Bundle<i64>()
+    const words = Bundle<string>(["a", "b"])
+    const numbers = Box<Array<i64>>([1, 2])
+    return pair.left + pair.right + len(text.get()) + len(empty.items) + len(words.items) + len(numbers.get())
+}

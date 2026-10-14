@@ -2,7 +2,7 @@ class Counter {
     value: i64
     step: i64
 
-    constructor(init: i64, step: i64) {
+    init(init: i64, step: i64) {
         this.value = init
         this.step = step
     }

@@ -6,7 +6,7 @@ class Leaf {
     value: i64
     tag: string?
 
-    constructor(value: i64, tag: string?) {
+    init(value: i64, tag: string?) {
         this.value = value
         this.tag = tag
     }
@@ -20,7 +20,7 @@ class Branch {
     leaf: Leaf
     maybeLeaf: Leaf?
 
-    constructor(leaf: Leaf, maybeLeaf: Leaf?) {
+    init(leaf: Leaf, maybeLeaf: Leaf?) {
         this.leaf = leaf
         this.maybeLeaf = maybeLeaf
     }

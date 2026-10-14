@@ -3,13 +3,13 @@
 // because only the alias side was checked for address exposure, so the
 // callee's write through `&pos` was observed through the earlier copy.
 
-fn readByte(input: const Slice<u8>, pos: ref i64) -> i64 {
+fn readByte(input: Slice<u8>, pos: ref i64) -> i64 {
     var value = input[pos] as i64
     pos += 1
     return value
 }
 
-fn decodeAt(input: const Slice<u8>, start: i64) -> i64 {
+fn decodeAt(input: Slice<u8>, start: i64) -> i64 {
     var pos = start
     var savedOffset = pos
     var value = readByte(input, ref pos)
