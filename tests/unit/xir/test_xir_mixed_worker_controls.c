@@ -134,4 +134,6 @@ static int worker_control_main(int argc, char **argv) {
     while (backend < 4 && strcmp(argv[2], worker_backends[backend])) ++backend;
     CHECK(oracle && backend < 4); worker_control_execute(oracle, backend); return 0;
 }
+#ifndef XR_WORKER_CONTROL_RESOURCE_MAIN
 int main(int argc, char **argv) { return worker_control_main(argc, argv); }
+#endif
