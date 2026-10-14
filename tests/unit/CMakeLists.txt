@@ -4419,6 +4419,9 @@ target_link_libraries(test_xir_array_capacity_core PRIVATE xray_xir_scalar)
 include("${CMAKE_CURRENT_LIST_DIR}/xir/p09_reserve_cow.cmake")
 include("${CMAKE_CURRENT_LIST_DIR}/xir/p09_compile_domain.cmake")
 include("${CMAKE_CURRENT_LIST_DIR}/xir/p09_return_copy.cmake")
+include("${CMAKE_CURRENT_LIST_DIR}/xir/p09_string_append_probe.cmake")
+include("${CMAKE_CURRENT_LIST_DIR}/xir/p09_string_append_performance.cmake")
+include("${CMAKE_CURRENT_LIST_DIR}/xir/p09_string_mutation.cmake")
 add_executable(test_xir_array_capacity_checked xir/test_xir_array_capacity_checked.c)
 target_link_libraries(test_xir_array_capacity_checked PRIVATE xray_xir)
 foreach(capacity_core_target test_xir_array_capacity_core test_xir_array_capacity_checked)
@@ -4560,3 +4563,5 @@ include("${CMAKE_CURRENT_LIST_DIR}/xir/cfg_storage.cmake")
 
 
 include("${CMAKE_CURRENT_LIST_DIR}/xir/instance_domain_fuel.cmake")
+
+include(${CMAKE_CURRENT_LIST_DIR}/xir/p09_string_place.cmake)

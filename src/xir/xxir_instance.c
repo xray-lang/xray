@@ -1274,6 +1274,32 @@ XrXirCallStatus xr_xir_instance_cell_write(XrXirCallView *view, const XrXirValue
     XrXirCallStatus status = instance_cell_access(view, instance, cell);
     return status == XR_XIR_CALL_READY ? value_call_status(xr_xir_call_cell_write(view, cell, value)) : status;
 }
+XR_FUNC XrXirCallStatus xr_xir_instance_cell_string_append(XrXirCallView *view,
+    const XrXirValue *cell, const XrXirValue *suffix) {
+    if (!instance_view_current(view)) return XR_XIR_CALL_BAD_ARGUMENT;
+    XrXirInstance *instance = view_instance(view);
+    if (!instance || !cell || !suffix) return XR_XIR_CALL_BAD_STATE;
+    XrXirCallStatus status = instance_cell_access(view, instance, cell);
+    if (status != XR_XIR_CALL_READY) return status;
+    XrXirValuePlace place = {0};
+    XrXirValueStatus admitted = xr_xir_call_cell_place(view, cell, &place);
+    if (admitted != XR_XIR_VALUE_OK) return value_call_status(admitted);
+    return value_call_status(xr_xir_string_place_append(&place, suffix, xr_xir_call_admission(view)));
+}
+XR_FUNC XrXirCallStatus xr_xir_instance_cell_string_append_scalar(XrXirCallView *view,
+    const XrXirValue *cell, const XrXirValue *scalar) {
+    if (!instance_view_current(view)) return XR_XIR_CALL_BAD_ARGUMENT;
+    XrXirInstance *instance = view_instance(view);
+    if (!instance || !cell || !scalar) return XR_XIR_CALL_BAD_STATE;
+    XrXirCallStatus status = instance_cell_access(view, instance, cell);
+    if (status != XR_XIR_CALL_READY) return status;
+    XrXirValuePlace place = {0};
+    XrXirValueStatus admitted = xr_xir_call_cell_place(view, cell, &place);
+    if (admitted != XR_XIR_VALUE_OK) return value_call_status(admitted);
+    char buffer[XR_XIR_SCALAR_TEXT_BYTES]; const char *bytes = NULL; size_t length = 0;
+    if (!xr_xir_scalar_text(scalar, buffer, &bytes, &length)) return XR_XIR_CALL_BAD_ARGUMENT;
+    return value_call_status(xr_xir_string_place_append_utf8(&place, bytes, length, xr_xir_call_admission(view)));
+}
 XrXirAction xr_xir_instance_panic_land(XrXirCallView *view, void *frame, XrXirAction action,
     uint32_t destination, uint32_t handler_pc, uint32_t *pc) {
     if (!instance_view_current(view)) return (XrXirAction){.kind = XR_XIR_ACTION_FAULT, .value = {XR_XIR_I64,0,XR_XIR_CALL_BAD_ARGUMENT}};

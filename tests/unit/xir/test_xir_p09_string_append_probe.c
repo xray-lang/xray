@@ -49,6 +49,11 @@ static bool probe_string_copy(const void *destination, const void *source, size_
 static void append_probe_run(XrXirProgram *program, uint32_t entry, uint64_t count) {
     XrXirInstanceConfig config; XrXirInstance *instance = NULL;
     CHECK(xr_xir_instance_config_init(&config, sizeof(config)) == XR_XIR_CALL_READY);
+#ifdef XR_P09_APPEND_PERFORMANCE_POLICY
+    /* This separate benchmark covers a known finite loop. Original default
+     * and resource gates retain their original policy and all byte/work caps. */
+    config.poll_limit = count * UINT64_C(64) + UINT64_C(4096);
+#endif
     CHECK(xr_xir_instance_new(program, &config, &instance) == XR_XIR_CALL_READY);
     runtime_attempts = 0; probe_copy_bytes = 0; probe_string_copy_bytes = 0; probe_domain = instance->domain;
     clock_t started = clock();
@@ -58,6 +63,12 @@ static void append_probe_run(XrXirProgram *program, uint32_t entry, uint64_t cou
     const double seconds = (double)(clock() - started) / CLOCKS_PER_SEC;
     const XrXirDomainStats storage = xr_xir_domain_stats(instance->domain);
     const XrXirDomainBudgetStats budget = xr_xir_domain_budget_stats(instance->domain);
+#ifdef XR_P09_APPEND_PERFORMANCE_POLICY
+    CHECK(status == XR_XIR_CALL_RETURNED);
+    CHECK(probe_string_copy_bytes <= count * 2 + 64 && runtime_attempts <= 64);
+    CHECK(storage.peak_bytes <= count * 2 + 4096 && budget.requested_bytes <= count * 4 + 4096);
+    CHECK(budget.work <= count * 64 + 4096);
+#endif
     XrXirValue result = {0};
     if (status == XR_XIR_CALL_RETURNED) {
         CHECK(xr_xir_instance_take_result(instance, &result) == status &&
@@ -87,7 +98,10 @@ static void append_probe_run(XrXirProgram *program, uint32_t entry, uint64_t cou
     CHECK(!runtime_live && !runtime_bytes);
     puts("append probe actual runtime physical=0/0; complete=false is not a performance PASS");
 }
-int main(int argc, char **argv) {
+#ifndef XR_P09_APPEND_PROBE_ENTRY
+#define XR_P09_APPEND_PROBE_ENTRY main
+#endif
+int XR_P09_APPEND_PROBE_ENTRY(int argc, char **argv) {
     CHECK(argc == 2); char *end = NULL;
     uint64_t count = (uint64_t)strtoull(argv[1], &end, 10);
     CHECK(end && !*end && count && count <= 1000000);

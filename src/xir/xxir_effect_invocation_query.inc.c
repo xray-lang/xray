@@ -246,7 +246,7 @@ static XrXirStatus effect_invocation_certificate_cause(const XrXirCompileContext
                 XrXirStatus status=effect_body_instruction_get(&read,function,witness.instruction,&decoded);
                 if (status!=XR_XIR_OK) return status;
                 XrXirOp op=decoded.op;
-                return (op==XR_XIR_CELL_READ || op==XR_XIR_CELL_WRITE || op==XR_XIR_CELL_LOCAL_WRITE ||
+                return (op==XR_XIR_CELL_READ || op==XR_XIR_CELL_WRITE || op==XR_XIR_CELL_STRING_APPEND || op==XR_XIR_CELL_LOCAL_WRITE ||
                     op==XR_XIR_PLACE_READ || op==XR_XIR_PLACE_WRITE || op==XR_XIR_CELL_PROJECT) &&
                     witness.slot==decoded.args[0]?XR_XIR_OK:XR_XIR_BAD_STRUCTURE;
             }
@@ -259,7 +259,7 @@ static XrXirStatus effect_invocation_certificate_cause(const XrXirCompileContext
                     (op==XR_XIR_CALL_INDIRECT || op==XR_XIR_INVOKE_INDIRECT)?XR_XIR_OK:XR_XIR_BAD_STRUCTURE;
             if (atom>=2+parameters && atom-2-parameters<parameters)
                 return witness.cause==XR_XIR_ROOT_CAUSE_CELL_PARAMETER && witness.slot==atom-2-parameters &&
-                    (op==XR_XIR_CELL_READ || op==XR_XIR_CELL_WRITE || op==XR_XIR_CELL_LOCAL_WRITE ||
+                    (op==XR_XIR_CELL_READ || op==XR_XIR_CELL_WRITE || op==XR_XIR_CELL_STRING_APPEND || op==XR_XIR_CELL_LOCAL_WRITE ||
                     op==XR_XIR_PLACE_READ || op==XR_XIR_PLACE_WRITE || op==XR_XIR_CELL_PROJECT)?XR_XIR_OK:XR_XIR_BAD_STRUCTURE;
             if (atom==(uint64_t)parameters*2+2)
                 return witness.cause==XR_XIR_ROOT_CAUSE_CONTEXT_CALL && witness.slot==UINT32_MAX &&
