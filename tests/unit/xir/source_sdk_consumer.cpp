@@ -11,7 +11,9 @@
 #include <cstdlib>
 #include <cstring>
 #define CHECK(c) do { if (!(c)) { std::fprintf(stderr, "%d: %s\n", __LINE__, #c); std::exit(1); } } while (0)
-static_assert(sizeof(XrSourceCompilerOptions) == 40 && sizeof(XrSourceCallOptions) == 80, "public C ABI");
+static_assert(XRAY_SOURCE_API_VERSION == 2, "Source API version");
+static_assert(sizeof(XrSourceCompilerOptions) == 48 && sizeof(XrSourceCallOptions) == 80, "public C ABI");
+static_assert(sizeof(XrSourceWait) == 40 && offsetof(XrSourceWait, ticket) == 32, "public wait ABI");
 struct Output { char bytes[32]{}; size_t size{}; };
 static XrSourceWriteStatus capture(void *context, XrSourceOutputStream stream, const char *bytes, size_t length) {
     auto *out = static_cast<Output *>(context);

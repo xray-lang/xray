@@ -10,13 +10,22 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <threads.h>
+#include <time.h>
 #define CHECK(c) do { if (!(c)) { fprintf(stderr, "%d: %s\n", __LINE__, #c); exit(1); } } while (0)
-_Static_assert(sizeof(XrSourceCompilerOptions) == 40, "compiler options ABI");
+_Static_assert(XRAY_SOURCE_API_VERSION == 2, "Source API version");
+_Static_assert(sizeof(XrSourceCompilerOptions) == 48, "compiler options ABI");
+_Static_assert(offsetof(XrSourceCompilerOptions, wait_size) == 8, "wait size ABI");
+_Static_assert(offsetof(XrSourceCompilerOptions, allocated_bytes) == 16, "compiler limits ABI");
+_Static_assert(offsetof(XrSourceCompilerOptions, stdlib_path) == 40, "stdlib path ABI");
 _Static_assert(sizeof(XrSourceText) == 32, "text ABI");
 _Static_assert(sizeof(XrSourceDiagnosticInfo) == 32, "diagnostic ABI");
 _Static_assert(sizeof(XrSourceEvent) == 24, "event ABI");
 _Static_assert(sizeof(XrSourceCallOptions) == 80, "call options ABI");
-_Static_assert(sizeof(XrSourceWait) == 16, "wait ABI");
+_Static_assert(sizeof(XrSourceWait) == 40, "wait ABI");
+_Static_assert(offsetof(XrSourceWait, subject) == 16, "wait subject ABI");
+_Static_assert(offsetof(XrSourceWait, generation) == 24, "wait generation ABI");
+_Static_assert(offsetof(XrSourceWait, ticket) == 32, "wait ticket ABI");
 _Static_assert(offsetof(XrSourceCallOptions, write) == 64, "callback ABI");
 typedef struct Output { char bytes[256]; size_t length; } Output;
 static XrSourceWriteStatus capture(void *context, XrSourceOutputStream stream, const char *bytes, size_t length) {
@@ -27,6 +36,7 @@ static XrSourceWriteStatus capture(void *context, XrSourceOutputStream stream, c
 static XrSourceCompiler *compiler_new(const char *stdlib) {
     XrSourceCompilerOptions options;
     CHECK(xray_source_compiler_options_init(&options, sizeof(options)) == XR_SOURCE_OK);
+    CHECK(options.api_version == 2 && options.struct_size == 48 && options.wait_size == 40);
     options.stdlib_path = stdlib; options.allocated_bytes = UINT64_C(64) << 20;
     options.live_bytes = UINT64_C(8) << 20; options.work = UINT64_C(128000000);
     XrSourceCompiler *compiler = NULL;
@@ -123,7 +133,46 @@ static void typed_tasks(const char *stdlib) {
     CHECK(out.length == sizeof(expected) - 1 && !memcmp(out.bytes, expected, sizeof(expected) - 1));
     xray_source_result_free(result);
 }
+static XrSourceEvent poll_state(XrSourceCall *call) {
+    XrSourceEvent event = {0};
+    for (size_t steps = 0; steps < 4096; ++steps) {
+        CHECK(xray_source_call_poll(call, 8, &event) == XR_SOURCE_OK);
+        if (event.state != XR_SOURCE_RUN_READY) return event;
+    }
+    CHECK(false); return event;
+}
+static void timer_waits(const char *stdlib) {
+    XrSourceCompiler *compiler = compiler_new(stdlib);
+    char source[] = "import time\nfn worker()->i64{time.sleep(3);return 43}\n"
+        "fn main()->i64{return await go worker()}\nprint(main())\n";
+    XrSourceProgram *program = compile(compiler, source); xray_source_compiler_free(compiler);
+    Output out = {0}; XrSourceCallOptions options;
+    CHECK(xray_source_call_options_init(&options, sizeof(options)) == XR_SOURCE_OK);
+    options.write = capture; options.context = &out;
+    XrSourceCall *call = NULL; CHECK(xray_source_call_begin(program, &options, &call) == XR_SOURCE_OK);
+    xray_source_program_free(program);
+    XrSourceEvent event = poll_state(call);
+    CHECK(event.state == XR_SOURCE_RUN_SUSPENDED && event.epoch && event.wake && !out.length);
+    XrSourceWait wait = {XR_SOURCE_WAIT_TASK, 91, &event, 92, 93};
+    unsigned char unchanged[sizeof(wait)]; memcpy(unchanged, &wait, sizeof(wait));
+    CHECK(xray_source_call_wait_request(call, event.epoch, event.wake, &wait, 16) == XR_SOURCE_BAD_ARGUMENT);
+    CHECK(!memcmp(unchanged, &wait, sizeof(wait)));
+    CHECK(xray_source_call_wait_request(call, event.epoch + 1, event.wake, &wait, sizeof(wait)) == XR_SOURCE_BAD_STATE);
+    CHECK(!memcmp(unchanged, &wait, sizeof(wait)));
+    CHECK(xray_source_call_wait_request(call, event.epoch, event.wake, &wait, sizeof(wait)) == XR_SOURCE_OK);
+    CHECK(wait.kind == XR_SOURCE_WAIT_TIMER && wait.after_ms == 3 && !wait.subject && !wait.generation && !wait.ticket);
+    CHECK(xray_source_call_resume(call, event.epoch, event.wake + 1) == XR_SOURCE_BAD_STATE);
+    struct timespec delay = {0, 3000000}, remaining;
+    int slept;
+    do { slept = thrd_sleep(&delay, &remaining); CHECK(slept == 0 || slept == -1); if (slept == -1) delay = remaining; } while (slept == -1);
+    CHECK(xray_source_call_resume(call, event.epoch, event.wake) == XR_SOURCE_OK);
+    CHECK(xray_source_call_wait_request(call, event.epoch, event.wake, &wait, sizeof(wait)) == XR_SOURCE_BAD_STATE);
+    CHECK(poll_state(call).state == XR_SOURCE_RUN_RETURNED);
+    XrSourceResult *result = NULL; CHECK(xray_source_call_take(call, &result) == XR_SOURCE_OK && result);
+    CHECK(xray_source_call_drop(&call, &event) == XR_SOURCE_OK && !call);
+    CHECK(out.length == 3 && !memcmp(out.bytes, "43\n", 3)); xray_source_result_free(result);
+}
 int main(int argc, char **argv) {
-    CHECK(argc == 2); checked_program(argv[1]); detached_cancellation(argv[1]); owned_panic(argv[1]); typed_tasks(argv[1]);
+    CHECK(argc == 2); checked_program(argv[1]); detached_cancellation(argv[1]); owned_panic(argv[1]); typed_tasks(argv[1]); timer_waits(argv[1]);
     puts("Installed public Source SDK: Checked io/time, detached cancellation and owned panic PASS"); return 0;
 }

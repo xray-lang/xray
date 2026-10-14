@@ -40,7 +40,7 @@ def main():
     assert not original.exists() and not (moved/'bin/xray.exe').exists()
     source = moved/'lib/xray/source-sdk'
     manifest = json.loads((source/'source_sdk_manifest.json').read_text(encoding='utf-8'))
-    assert manifest['api_version'] == 1 and manifest['crt'] == 'MD' and manifest['sanitizers'] == 0
+    assert manifest['api_version'] == 2 and manifest['crt'] == 'MD' and manifest['sanitizers'] == 0
     assert len(manifest['archives']) == 15
     for row in manifest['files']:
         data = (source/row['path']).read_bytes()
