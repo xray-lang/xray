@@ -116,7 +116,7 @@ static void typed_tasks(const char *stdlib) {
     XrSourceCompiler *compiler = compiler_new(stdlib);
     XrSourceProgram *program = compile(compiler, source); xray_source_compiler_free(compiler);
     XrSourceCallOptions options; CHECK(xray_source_call_options_init(&options, sizeof(options)) == XR_SOURCE_OK);
-    Output out = {{0}, 0}; options.write = capture; options.write_context = &out;
+    Output out = {{0}, 0}; options.write = capture; options.context = &out;
     XrSourceResult *result = NULL; CHECK(xray_source_execute(program, &options, &result, NULL) == XR_SOURCE_OK);
     xray_source_program_free(program); XrSourceEvent event;
     CHECK(xray_source_result_event(result, &event) == XR_SOURCE_OK && event.state == XR_SOURCE_RUN_RETURNED);
