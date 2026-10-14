@@ -1,0 +1,5 @@
+export fn p09Answer() -> i64 {
+    var values: Array<i64> = [2, 3]
+    values.push("wrong")
+    return len(values)
+}
