@@ -14,9 +14,12 @@
 
 #include "../../base/xjson.h"
 #include "xlsp_types.h"
+#include "../../xir/xxir.h"
 
 typedef struct XrLspServer XrLspServer;
 typedef struct XrLspDocument XrLspDocument;
+typedef struct XlspSourceRequest XlspSourceRequest;
+XR_FUNC XrXirStatus xlsp_navigation_capture(XrLspServer *,XrJsonValue *,unsigned,XlspSourceRequest **);
 
 // Go to definition
 XR_FUNC XrJsonValue *xlsp_analyze_definition(XrLspServer *server, XrLspDocument *doc,

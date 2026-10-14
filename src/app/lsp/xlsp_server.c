@@ -10,6 +10,8 @@
 
 #include "xlsp_server.h"
 #include "xlsp_source_workspace.h"
+#include "xlsp_source_request.h"
+#include "xlsp_navigation.h"
 #include "xlsp_source_syntax.h"
 #include <limits.h>
 #include "../../api/xsource_compile.h"
@@ -268,6 +270,11 @@ void xlsp_server_free(XrLspServer *server) {
     if (!server)
         return;
 
+    server->exit_received=true;
+    if(server->async) {
+        xlsp_async_cancel_all(server->async);xlsp_async_free(server->async);server->async=NULL;
+    }
+
     xlsp_source_workspace_free(server->source_workspace);
     server->source_workspace = NULL;
 
@@ -417,11 +424,13 @@ done:
     xr_compile_resources_free(documents);return status;
 }
 static void document_commit_owner(XrLspDocument *doc,XlspSourceOpen *fresh) {
+    ++doc->server->source_revision;
     XlspSourceOpen *old_open=doc->source_open;XlspSourceBuffer *old_buffer=doc->source_buffer;
     XlspSyntaxSnapshot *old_syntax=doc->syntax_snapshot;char *old_uri=doc->uri,*old_text=doc->content;
     uint32_t *old_lines=doc->line_offsets;
     doc->source_open=fresh;doc->uri=(char *)xlsp_source_open_uri(fresh);
     doc->source_buffer=xlsp_source_open_take_buffer(fresh);doc->syntax_snapshot=xlsp_source_open_take_syntax(fresh);
+    doc->ast=(AstNode *)xlsp_source_syntax_ast(doc->syntax_snapshot);
     doc->content=(char *)xlsp_source_buffer_text(doc->source_buffer);doc->length=xlsp_source_buffer_length(doc->source_buffer);
     doc->version=xlsp_source_buffer_version(doc->source_buffer);
     doc->line_offsets=(uint32_t *)xlsp_source_buffer_lines(doc->source_buffer,&doc->line_count);
@@ -437,7 +446,7 @@ static void document_commit_owner(XrLspDocument *doc,XlspSourceOpen *fresh) {
 }
 XrLspDocument *xlsp_document_open(XrLspServer *server,const XlspSourceDocument *input) {
     if(!server||!server->doc_table||!input||!input->uri||!input->text||
-        input->uri_length==SIZE_MAX)return NULL;
+        input->uri_length==SIZE_MAX||server->source_revision==UINT64_MAX)return NULL;
     XrCompileResourceLimits limits=xr_source_compile_default_resource_limits();
     XrCompileResources *resources=NULL;XlspSourceOpen *fresh=NULL;XrLspDocument *doc=NULL;
     XlspDocumentInsertion insertion={0};
@@ -459,6 +468,7 @@ done:
 }
 XrXirStatus xlsp_document_apply_changes(XrLspDocument *doc,const XrJsonValue *changes,int version) {
     if(!doc||!doc->server||!doc->content||!doc->uri)return XR_XIR_BAD_STRUCTURE;
+    if(doc->server->source_revision==UINT64_MAX)return XR_XIR_BUDGET;
     XrCompileResourceLimits limits=xr_source_compile_default_resource_limits();
     XrCompileResources *resources=NULL;XlspSourceBuffer *buffer=NULL;XlspSourceOpen *fresh=NULL;
     XrCompileResourceStatus created=xr_compile_resources_new(&limits,&resources);
@@ -476,6 +486,7 @@ done:
 }
 
 void xlsp_document_close(XrLspServer *server, const char *uri) {
+    if(server->source_revision!=UINT64_MAX)++server->source_revision;
     lsp_log("Closed document: %s", uri);
     xlsp_document_store_remove(server->doc_table, uri);
     xlsp_source_workspace_free(server->source_workspace);server->source_workspace=NULL;
@@ -818,35 +829,37 @@ void xlsp_send_request(XrLspServer *server, const char *method, XrJsonValue *par
 // Add a pending request to track (ring buffer: O(1) insert).
 // Takes ownership of *id (moves it into the slot). `method` is a static
 // string from the dispatch table and is stored by reference.
-static void pending_request_add(XrLspServer *server, XlspRequestId id, const char *method) {
+static bool pending_request_add(XrLspServer *server, XlspRequestId id, const char *method) {
     XlspPendingRequests *pending = &server->pending_requests;
 
-    // Write at head position (overwrites oldest if full). If we're
-    // about to overwrite a still-live slot that holds an owned string
-    // id, release it first so we don't leak.
-    int slot = pending->head;
-    if (pending->count == MAX_PENDING_REQUESTS) {
-        xlsp_request_id_free(&pending->requests[slot].id);
-    }
+    // Never replace a live request: its completion still owns the same ID.
+    if(pending->count==MAX_PENDING_REQUESTS)return false;
+    for(int i=0;i<MAX_PENDING_REQUESTS;++i)
+        if(xlsp_request_id_equals(&pending->requests[i].id,&id))return false;
+    int slot=pending->head;
+    while(pending->requests[slot].id.kind!=XLSP_ID_NONE)slot=(slot+1)%MAX_PENDING_REQUESTS;
     pending->requests[slot].id = id;
     pending->requests[slot].method = method;
     pending->requests[slot].cancelled = false;
     pending->requests[slot].start_time = get_monotonic_ms();
+    pending->requests[slot].source_task_id=0;
 
-    pending->head = (pending->head + 1) % MAX_PENDING_REQUESTS;
+    pending->head = (slot + 1) % MAX_PENDING_REQUESTS;
     if (pending->count < MAX_PENDING_REQUESTS) {
         pending->count++;
     }
+    return true;
 }
 
 // Remove a pending request (when completed).
 static void pending_request_remove(XrLspServer *server, const XlspRequestId *id) {
     XlspPendingRequests *pending = &server->pending_requests;
-    for (int i = 0; i < pending->count; i++) {
+    for (int i = 0; i < MAX_PENDING_REQUESTS; i++) {
         if (xlsp_request_id_equals(&pending->requests[i].id, id)) {
             xlsp_request_id_free(&pending->requests[i].id);
             pending->requests[i].method = NULL;
             pending->requests[i].cancelled = false;
+            pending->requests[i].source_task_id=0;--pending->count;
             break;
         }
     }
@@ -855,7 +868,7 @@ static void pending_request_remove(XrLspServer *server, const XlspRequestId *id)
 // Check if a request was cancelled.
 static bool pending_request_is_cancelled(XrLspServer *server, const XlspRequestId *id) {
     XlspPendingRequests *pending = &server->pending_requests;
-    for (int i = 0; i < pending->count; i++) {
+    for (int i = 0; i < MAX_PENDING_REQUESTS; i++) {
         if (xlsp_request_id_equals(&pending->requests[i].id, id)) {
             return pending->requests[i].cancelled;
         }
@@ -864,17 +877,17 @@ static bool pending_request_is_cancelled(XrLspServer *server, const XlspRequestI
 }
 
 // Mark a request as cancelled (also cancels associated background tasks).
-// The async subsystem still keys tasks by int64_t request id — string
-// ids cannot be propagated there without a wider refactor, so for now
-// we only cancel async tasks for numeric ids. VS Code always uses
-// numeric ids so this covers 100% of today's real traffic.
+// Source tasks are keyed by their task identity, preserving both string and
+// numeric protocol IDs without narrowing either into the worker's int64 key.
 static bool pending_request_cancel(XrLspServer *server, const XlspRequestId *id) {
     XlspPendingRequests *pending = &server->pending_requests;
-    bool found = false;
+    bool found = false,source=false;
 
-    for (int i = 0; i < pending->count; i++) {
+    for (int i = 0; i < MAX_PENDING_REQUESTS; i++) {
         if (xlsp_request_id_equals(&pending->requests[i].id, id)) {
             pending->requests[i].cancelled = true;
+            source=pending->requests[i].source_task_id!=0;
+            if(source&&server->async)xlsp_async_cancel_task(server->async,pending->requests[i].source_task_id);
             lsp_log("Request %s (%s) marked as cancelled", xlsp_request_id_debug(id),
                     pending->requests[i].method ? pending->requests[i].method : "unknown");
             found = true;
@@ -882,7 +895,7 @@ static bool pending_request_cancel(XrLspServer *server, const XlspRequestId *id)
         }
     }
 
-    if (server->async && id && id->kind == XLSP_ID_NUMBER) {
+    if (!source && server->async && id && id->kind == XLSP_ID_NUMBER) {
         int async_cancelled = xlsp_async_cancel_request(server->async, (int64_t) id->as.number);
         if (async_cancelled > 0) {
             lsp_log("Cancelled %d background tasks for request %s", async_cancelled,
@@ -913,6 +926,69 @@ static void handle_cancel_request(XrLspServer *server, XrJsonValue *params) {
 
 // LSP error codes
 #define LSP_ERROR_REQUEST_CANCELLED -32800
+
+typedef struct XlspSourceTask {
+    XrLspServer *server;
+    XlspRequestId id;
+    XlspSourceRequest *request;
+    XrLspTask *task;
+    XlspSourceRequestResult result;
+    uint64_t revision;
+} XlspSourceTask;
+static void source_task_execute(void *data) {
+    XlspSourceTask *source=data;
+    XrXirStatus status=xlsp_source_request_run(source->request,&source->task->cancel_requested,&source->result);
+    if(status!=XR_XIR_OK){source->result.status=status;source->result.stage=1;}
+    source->task->result=source;
+}
+static void source_task_complete(void *data,void *result) {
+    XlspSourceTask *source=data;XrLspServer *server=source->server;
+    if(!server->exit_received&&!server->shutdown_received) {
+        if(!result||source->result.cancelled||pending_request_is_cancelled(server,&source->id))
+            send_error(server,&source->id,LSP_ERROR_REQUEST_CANCELLED,"Request cancelled");
+        else if(server->source_revision!=source->revision)
+            send_error(server,&source->id,-32801,"Document state changed during Source query");
+        else if(source->result.status!=XR_XIR_OK) {
+            char message[128];snprintf(message,sizeof(message),"Source query failed (stage=%u status=%u)",
+                source->result.stage,(unsigned)source->result.status);
+            send_error(server,&source->id,-32603,message);
+        } else {
+            XrJsonValue *json=source->result.json;source->result.json=NULL;send_response(server,&source->id,json);
+        }
+    }
+    pending_request_remove(server,&source->id);
+    xjson_free(source->result.json);xlsp_source_request_free(source->request);
+    xlsp_request_id_free(&source->id);xr_free(source);
+}
+static int source_request_mode(const char *method) {
+    if(!strcmp(method,"textDocument/definition"))return 0;
+    if(!strcmp(method,"textDocument/references"))return 1;
+    if(!strcmp(method,"textDocument/documentHighlight"))return 2;
+    if(!strcmp(method,"textDocument/hover"))return 3;
+    return -1;
+}
+static bool source_request_submit(XrLspServer *server,const XlspRequestId *id,XrJsonValue *params,unsigned mode) {
+    if(!server->async){send_error(server,id,-32603,"Source worker unavailable");return false;}
+    if(server->source_revision==UINT64_MAX){send_error(server,id,-32603,"Source revision exhausted");return false;}
+    XlspSourceTask *source=xr_calloc(1,sizeof(*source));
+    if(!source){send_error(server,id,-32603,"Source request allocation failed");return false;}
+    source->server=server;source->revision=server->source_revision;source->id=xlsp_request_id_clone(id);
+    if(id->kind==XLSP_ID_STRING&&!source->id.as.string)goto failed;
+    if(xlsp_navigation_capture(server,params,mode,&source->request)!=XR_XIR_OK)goto failed;
+    source->task=xlsp_task_new(source_task_execute,source_task_complete,source,XLSP_TASK_NORMAL);
+    if(!source->task)goto failed;
+    uint64_t task_id=xlsp_async_submit(server->async,source->task);
+    if(!task_id){xlsp_task_free(source->task);goto failed;}
+    for(int i=0;i<MAX_PENDING_REQUESTS;++i) {
+        XlspPendingRequest *pending=&server->pending_requests.requests[i];
+        if(xlsp_request_id_equals(&pending->id,id)){pending->source_task_id=task_id;return true;}
+    }
+    // The admission slot was reserved on this same dispatch thread.
+    XR_CHECK(false,"Source request must retain its pending slot");return true;
+failed:
+    xlsp_source_request_free(source->request);xlsp_request_id_free(&source->id);xr_free(source);
+    send_error(server,id,-32603,"Source request admission failed");return false;
+}
 
 // Publish diagnostics for a document
 void xlsp_publish_diagnostics(XrLspServer *server, XrLspDocument *doc) {
@@ -1300,13 +1376,24 @@ static void handle_message(XrLspServer *server, XrJsonValue *msg) {
     // a cloned copy here so we can still identify the slot when the
     // call returns.
     XlspRequestId id_for_slot = {.kind = XLSP_ID_NONE, .as.number = 0};
+    const LspMethodEntry *entry = find_method(server, method);
     if (is_request) {
         id_for_slot = xlsp_request_id_clone(&id);
-        pending_request_add(server, id_for_slot, method);
+        if((id.kind==XLSP_ID_STRING&&!id_for_slot.as.string)||!pending_request_add(server,id_for_slot,entry?entry->method:"unknown")) {
+            xlsp_request_id_free(&id_for_slot);send_error(server,&id,-32600,"Duplicate request ID or pending capacity exhausted");
+            xlsp_request_id_free(&id);return;
+        }
     }
 
+    if(entry&&entry->request_handler&&is_request) {
+        int mode=source_request_mode(method);
+        if(mode>=0) {
+            server->source_failure.stage=server->source_failure.status=0;
+            if(!source_request_submit(server,&id,params,(unsigned)mode))pending_request_remove(server,&id);
+            xlsp_request_id_free(&id);return;
+        }
+    }
     // O(1) method lookup
-    const LspMethodEntry *entry = find_method(server, method);
     if (entry) {
         if (entry->request_handler) {
             server->formatting_failure.stage = server->formatting_failure.status = 0;
@@ -1425,7 +1512,6 @@ int xlsp_server_run(XrLspServer *server) {
         }
 
         bool stdin_ready = false;
-        bool async_ready = false;
         bool index_ready = false;
 
         // Determine which sources are ready
@@ -1439,7 +1525,6 @@ int xlsp_server_run(XrLspServer *server) {
                     stdin_ready = true;
                     break;
                 case 1:
-                    async_ready = true;
                     break;
                 case 2:
                     index_ready = true;
@@ -1448,7 +1533,7 @@ int xlsp_server_run(XrLspServer *server) {
         }
 
         // Process async task completions
-        if (async_ready && server->async) {
+        if (server->async) {
             int completed = xlsp_async_poll(server->async);
             if (completed > 0) {
                 lsp_log("Processed %d background tasks", completed);

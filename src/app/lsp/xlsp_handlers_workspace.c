@@ -43,6 +43,9 @@ void xlsp_handle_ws_did_change_watched_files(XrLspServer *server, XrJsonValue *p
         if (!uri)
             continue;
 
+        if(type>=FILE_CHANGE_CREATED&&type<=FILE_CHANGE_DELETED&&server->source_revision!=UINT64_MAX)
+            ++server->source_revision;
+
         lsp_log("File change: %s (type=%d)", uri, type);
 
         // Get document if it's open

@@ -2,6 +2,7 @@
 #include "xlsp_navigation.h"
 #include "xlsp_server.h"
 #include "xlsp_source_workspace.h"
+#include "xlsp_source_request.h"
 #include "../../api/xsource_compile.h"
 #include <string.h>
 #include <stdio.h>
@@ -15,6 +16,46 @@ static XrXirStatus navigation_length(XrCompileResources *r,const char *text,size
         if(n==SIZE_MAX-1)return XR_XIR_BUDGET;
         ++n;
     }
+}
+XR_FUNC XrXirStatus xlsp_navigation_capture(XrLspServer *server,XrJsonValue *params,unsigned mode,XlspSourceRequest **out) {
+    if(!server||!out||*out||mode>3)return XR_XIR_BAD_STRUCTURE;
+    server->source_failure.stage=8;server->source_failure.status=XR_XIR_BAD_STRUCTURE;
+    XrJsonValue *document=xjson_get_object(params,"textDocument"),*position=xjson_get_object(params,"position");
+    XrJsonValue *uri=xjson_get(document,"uri"),*line=xjson_get(position,"line"),*column=xjson_get(position,"character");
+    if(!uri||uri->type!=XR_JSON_STRING||!uri->as.string||memchr(uri->as.string,0,uri->string_len)||
+        !line||line->type!=XR_JSON_NUMBER||!line->is_integer||line->as.integer<0||line->as.integer>INT32_MAX||
+        !column||column->type!=XR_JSON_NUMBER||!column->is_integer||column->as.integer<0||column->as.integer>INT32_MAX)return XR_XIR_BAD_STRUCTURE;
+    bool include=false;
+    if(mode==1){XrJsonValue *c=xjson_get_object(params,"context"),*v=xjson_get(c,"includeDeclaration");
+        if(!v||v->type!=XR_JSON_BOOL)return XR_XIR_BAD_STRUCTURE;include=v->as.boolean;}
+    XrLspDocument *selected=xlsp_document_get(server,uri->as.string);XrLspDocTable *table=server->doc_table;
+    if(!selected||!table||table->doc_count<=0||table->bucket_count<=0||!table->buckets)return XR_XIR_BAD_STRUCTURE;
+    XrCompileResourceLimits limits=xr_source_compile_default_resource_limits();XrCompileResources *resources=NULL;
+    XlspSourceDocument *documents=NULL;size_t count=(size_t)table->doc_count,used=0,entry=SIZE_MAX;
+    XrCompileResourceStatus created=xr_compile_resources_new(&limits,&resources);
+    XrXirStatus status=created==XR_COMPILE_RESOURCE_OK?XR_XIR_OK:created==XR_COMPILE_RESOURCE_BUDGET?XR_XIR_BUDGET:XR_XIR_OUT_OF_MEMORY;
+    if(status!=XR_XIR_OK)goto done;
+    if(count>SIZE_MAX/sizeof(*documents)){status=XR_XIR_BUDGET;goto done;}
+    created=xr_compile_resources_calloc(resources,count,sizeof(*documents),(void **)&documents);
+    if(created!=XR_COMPILE_RESOURCE_OK){status=created==XR_COMPILE_RESOURCE_BUDGET?XR_XIR_BUDGET:XR_XIR_OUT_OF_MEMORY;goto done;}
+    for(int i=0;i<table->bucket_count;++i) {
+        if(xr_compile_resources_work(resources,1)!=XR_COMPILE_RESOURCE_OK){status=XR_XIR_BUDGET;goto done;}
+        for(XrLspDocBucket *bucket=table->buckets[i];bucket;bucket=bucket->next) {
+            XrLspDocument *doc=bucket->doc;size_t length=0;
+            if(used==count||!doc||!doc->uri||!doc->content){status=XR_XIR_BAD_STRUCTURE;goto done;}
+            status=navigation_length(resources,doc->uri,&length);if(status!=XR_XIR_OK)goto done;
+            if(doc==selected)entry=used;
+            documents[used++]=(XlspSourceDocument){doc->uri,doc->content,length,doc->length,doc->version};
+        }
+    }
+    if(used!=count||entry==SIZE_MAX){status=XR_XIR_BAD_STRUCTURE;goto done;}
+    XrXirCompileContext context={resources,xr_xir_compile_default_limits()};
+    XlspSourceRequestInput input={&context,documents,count,entry,{(uint32_t)line->as.integer,(uint32_t)column->as.integer},mode,include};
+    status=xlsp_source_request_new(&input,out);
+done:
+    xr_compile_resources_free(documents);xr_compile_resources_release(resources);
+    server->source_failure.status=(unsigned)status;if(status==XR_XIR_OK)server->source_failure.stage=0;
+    return status;
 }
 /* A request is synchronous with document notifications on the dispatch thread.
  * Always construct the current inputs; the previous committed owner is never

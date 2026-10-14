@@ -129,6 +129,7 @@ typedef struct XlspPendingRequest {
     const char *method;   // Method name (static, for logging)
     bool cancelled;       // Whether this request was cancelled
     uint64_t start_time;  // Start time (monotonic ms)
+    uint64_t source_task_id;
 } XlspPendingRequest;
 
 // Pending requests tracker (ring buffer)
@@ -208,6 +209,7 @@ struct XrLspServer {
     /* Last successfully published modern query transaction. It owns every
      * producer and immutable version; requests never consult an old AST. */
     struct XlspSourceWorkspace *source_workspace;
+    uint64_t source_revision;
     struct { unsigned stage, status; } source_failure;
 
     // Workspace-level static analyzer (unified index for all cross-file features)
