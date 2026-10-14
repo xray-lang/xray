@@ -24,7 +24,7 @@
       ],
       "rationale": "Array construction, element places and typed failure retain exact value/class identity and cleanup obligations.",
       "legacy_path": "tests/unit/program/test_xr_program_source_build.c",
-      "body_lf_sha256": "df13fef04310a02d4f6d1e25fc2da6513d7aa3abda65e5002afa4ac83e76cc35",
+      "body_lf_sha256": "392da78f596b53b2deb4246f40ad37bcbb5609a85a5bc4d5209cb319c884ab22",
       "original_native_harness_expectation": {
         "id": "array_append_class_identity",
         "expected_exit": 42,
@@ -40,8 +40,8 @@
       },
       "existing_projection": {
         "fixture": "tests/unit/xir/product_consumers/fixtures/class_identity/root.xr",
-        "sha256": "cfd8d10d0016f8c0cb44f7a8f3dfcff74979cb0e9dda1ca04f5112fec281aace",
-        "original_prefix_sha256": "b94624ef455386b578870e986c84bedd687c24f4fc455d64fb8f6ade05d2a832",
+        "sha256": "d2b1753ee55e9a656c0ad766279d09d5b2d717d246a711804fa1e8f418f93aa6",
+        "original_prefix_sha256": "57b59c1bd6714d04e8de6d36128e273238005d5c7637d63d45d42ea7a31d7219",
         "entry_adapter": "export fn consumerAnswer() -> i64 { return answer() }\n",
         "entry": "consumerAnswer",
         "expected_i64": 42,
@@ -2551,7 +2551,7 @@
       ],
       "rationale": "Cross-module methods, function parameters and every safepoint preserve suspension/resumption, receiver/parameter storage and cancellation obligations.",
       "legacy_path": "tests/unit/program/test_xr_program_source_build.c",
-      "body_lf_sha256": "cb3b350ac67ee9aa7964cf9b758b37b5b040613b16ea52c3ff469a1b272fba3d",
+      "body_lf_sha256": "1ebb94f14989576f3fc2061c8aa92ee1d6a32a2ff935e926bbdef70ec45197a5",
       "original_native_harness_expectation": {
         "id": "cross_module_instance_method_coroutine",
         "expected_exit": 42,
@@ -2577,8 +2577,8 @@
         "scope": "Exact original source prefix and fixed result through an explicitly exported adapter; additional legacy assertions stay OPEN until mapped.",
         "additional_files": {
           "library.xr": {
-            "bytes": 185,
-            "sha256": "bb41f3d3d610b67ce6445475deb031967b10a0b069ef00b1c923599b3d6a6c87"
+            "bytes": 178,
+            "sha256": "cde4fc2274c19e4eb8cb2b21cf5364e861e53d385790c6a24da97c107dfa40b5"
           }
         }
       },
@@ -2787,7 +2787,7 @@
       ],
       "rationale": "User-type specializations, concrete witness targets and namespace identity remain exact; depth/instance limits retain typed failure and empty output obligations.",
       "legacy_path": "tests/unit/program/test_xr_program_source_build.c",
-      "body_lf_sha256": "ee42f0f1a0708cd1e089722268e458c1d26303e63232246ae9b029552af63881",
+      "body_lf_sha256": "88224304b4a6d9d381e668910711b2e932f2d4a4cfdf8c5732734596a1409c23",
       "original_native_harness_expectation": {
         "id": "generic_constraint_method",
         "expected_exit": 42,
@@ -2813,8 +2813,8 @@
         "scope": "Exact positive source prefix and fixed oracle retained for admission probing; no replacement gates are registered yet.",
         "additional_files": {
           "library.xr": {
-            "bytes": 877,
-            "sha256": "b7f8a8f1587133a250e355a51e3e49861a5d0083d44b19fec6bb2d5a85fff726"
+            "bytes": 870,
+            "sha256": "b68c3c77338bd5a57e6ea5a02a809e4ab6eaacc5f803d08af2a829196d1356d0"
           },
           "facade.xr": {
             "bytes": 136,
@@ -2897,7 +2897,7 @@
       ],
       "rationale": "User-type specializations, concrete witness targets and namespace identity remain exact; depth/instance limits retain typed failure and empty output obligations.",
       "legacy_path": "tests/unit/program/test_xr_program_source_build.c",
-      "body_lf_sha256": "983fe1e3329142a2ea183bdf72793cb0b64d2b417e21a45b1b46342c61d93a62",
+      "body_lf_sha256": "b37a01ebe52df48f8a30a08426ef3c047d40bb2e7dbc8b694b788960ad1cf1b1",
       "original_native_harness_expectation": {
         "id": "generic_scalar_class",
         "expected_exit": 42,
@@ -2917,20 +2917,20 @@
       },
       "existing_projection": {
         "fixture": "tests/unit/xir/product_consumers/fixtures/generic_scalar_class/root.xr",
-        "sha256": "ff5223a13033b1db8483424b750b06f050ff661beb1dd3f4913ead753e731775",
-        "original_prefix_sha256": "0ab6636c9ee4fe84e6b332eb825deda04c58aea88b49cc863050edaa96a30eda",
+        "sha256": "08bbbee65c146f40089099f251d64bba52698722bd334ff6240931e15dd05f15",
+        "original_prefix_sha256": "c4c4c7daf4fdd7f85be195e10aa30457e14d187f0739d31257cbc555018a9e61",
         "entry_adapter": "export fn consumerAnswer() -> i64 { return answer() }\n",
         "entry": "consumerAnswer",
         "expected_i64": 42,
         "scope": "Exact positive source prefix and fixed oracle retained for admission probing; no replacement gates are registered yet.",
         "additional_files": {
           "library.xr": {
-            "bytes": 117,
-            "sha256": "fbc0efcb2185571c72c773ddb03941b0dde09dd2c6b48a16a350dab2121f7f99"
+            "bytes": 110,
+            "sha256": "b177bec09620dc2175dcd95563605e393b27b1b05293de98c657c165cd57fbda"
           },
           "facade.xr": {
-            "bytes": 162,
-            "sha256": "199b4e48a96a10c8ba95c11f6032d68508e5760cc3cbbbcc8b40c6b59f66e57e"
+            "bytes": 155,
+            "sha256": "5be13e7587410f933d1ae45ac337fc4743ec2d57142f2fb5091a8cd3c5930e04"
           }
         },
         "probe_target": "test_source_product_probe"
@@ -2952,12 +2952,12 @@
       ],
       "rationale": "Static declarations, constructors and recursive nominal graph identities require their original structural obligations, not an invented scalar-only replacement.",
       "legacy_path": "tests/unit/program/test_xr_program_source_build.c",
-      "body_lf_sha256": "94ac28da956a960ff8b7a09eb6eb9f6802df8405c8b9a7c31a2d6f010ed5c4e7",
+      "body_lf_sha256": "09c2bd8ae1e4e939b5436d547e25e9a71bef57bef07f1b8fd79bcfa07b2c57ca",
       "original_native_harness_expectation": null,
       "existing_projection": {
         "fixture": "tests/unit/xir/product_consumers/fixtures/constructor_folding/root.xr",
-        "sha256": "bd0860a1bed34d55530c87913ff78e25bc5c78fb6fefcc4a3cf6926d8ede4a62",
-        "original_prefix_sha256": "ef188be7c2d6fcc341f180cf5a880985718a82fa2d6eb08080c886df5c1be59f",
+        "sha256": "afa111d3a9a93f062e7ae7631c75ae8939952405ca18704817d14288aa751155",
+        "original_prefix_sha256": "e8631b0ed23743370b0343b97ec5de68c507159edd6c4e156a1588988c83b63d",
         "entry_adapter": "export fn consumerAnswer() -> i64 { return answer() }\n",
         "entry": "consumerAnswer",
         "expected_i64": 1006,
@@ -2982,7 +2982,7 @@
       ],
       "rationale": "User-type specializations, concrete witness targets and namespace identity remain exact; depth/instance limits retain typed failure and empty output obligations.",
       "legacy_path": "tests/unit/program/test_xr_program_source_build.c",
-      "body_lf_sha256": "e7f695fe94570458fdc2f183c8b5e46e76c05a4b66c60fb0be5467b22336336c",
+      "body_lf_sha256": "0edd0400338a209612fd0adda79e1606d24f4f5be1dbe77549fa7516737d8ba9",
       "original_native_harness_expectation": {
         "id": "generic_nested_class",
         "expected_exit": 42,
@@ -2998,20 +2998,20 @@
       },
       "existing_projection": {
         "fixture": "tests/unit/xir/product_consumers/fixtures/generic_nested_class/root.xr",
-        "sha256": "d3e9d0571d73d98c8eef95495f23b6c99cd47fc8abeed9c74a800987755ecf52",
-        "original_prefix_sha256": "0da9eb3871bfd72195d7ed1d0e6e5a7e42beb3f80043a92b1c007590262698e0",
+        "sha256": "d5dc5a9a3d96b478130665d79d94dc91e1431e483fefcb46c74bee4cdd30dbdd",
+        "original_prefix_sha256": "f6da07a2687ae1193f713675989123572a5b5acd0febf056969367979780d2e6",
         "entry_adapter": "export fn consumerAnswer() -> i64 { return answer() }\n",
         "entry": "consumerAnswer",
         "expected_i64": 42,
         "scope": "Exact positive source prefix and fixed oracle retained for admission probing; no replacement gates are registered yet.",
         "additional_files": {
           "library.xr": {
-            "bytes": 171,
-            "sha256": "44f09ebd4d1b905b8dc0fb5276f73aa8235288d9e72db9988098a487aafccd07"
+            "bytes": 157,
+            "sha256": "3b9226278693213a6f0560e472e8362bbdc82cb1883debf263814c93a062b3cb"
           },
           "facade.xr": {
-            "bytes": 171,
-            "sha256": "44f09ebd4d1b905b8dc0fb5276f73aa8235288d9e72db9988098a487aafccd07"
+            "bytes": 157,
+            "sha256": "3b9226278693213a6f0560e472e8362bbdc82cb1883debf263814c93a062b3cb"
           }
         },
         "probe_target": "test_source_product_probe"
@@ -3033,12 +3033,12 @@
       ],
       "rationale": "Static declarations, constructors and recursive nominal graph identities require their original structural obligations, not an invented scalar-only replacement.",
       "legacy_path": "tests/unit/program/test_xr_program_source_build.c",
-      "body_lf_sha256": "022917b1d6ae038b8c5e0cfcffd919a44ed48a3e4e583624bd184921ea84652e",
+      "body_lf_sha256": "b881f8853ae1fc56e00d8af004bc48aa8bf28e348e1808c247497b9f5b1c10e4",
       "original_native_harness_expectation": null,
       "existing_projection": {
         "fixture": "tests/unit/xir/product_consumers/fixtures/recursive_class_graph/root.xr",
-        "sha256": "5e9a8a837ce70107ec0c11d3e8df70f921a9645ad621ef63abc7bcb21c32d130",
-        "original_prefix_sha256": "5e9a8a837ce70107ec0c11d3e8df70f921a9645ad621ef63abc7bcb21c32d130",
+        "sha256": "78917e1d05b085af23e5ba2c9fbec2298ff7ffcd794108ef442bc9ad75c41775",
+        "original_prefix_sha256": "78917e1d05b085af23e5ba2c9fbec2298ff7ffcd794108ef442bc9ad75c41775",
         "expected_classes": 1,
         "scope": "Exact original structural-only input, without a callable adapter or invented runtime result. Checked and Lowered descriptor readers preserve the original one/two nullable class cycles after producers die."
       },
@@ -3059,12 +3059,12 @@
       ],
       "rationale": "Static declarations, constructors and recursive nominal graph identities require their original structural obligations, not an invented scalar-only replacement.",
       "legacy_path": "tests/unit/program/test_xr_program_source_build.c",
-      "body_lf_sha256": "9f4f082ede634b82bbc526687a6e199f1be3d4a9d4dea394b988ab4c5070808f",
+      "body_lf_sha256": "9c8051cc23c3848f55f7ac1e20a6f93012efaa82c82d9429d4e6cad4b663a35a",
       "original_native_harness_expectation": null,
       "existing_projection": {
         "fixture": "tests/unit/xir/product_consumers/fixtures/mutual_class_graph/root.xr",
-        "sha256": "22af5393ab99e5d5e5d8c10eba7071ccbd8338307809d38d53c674a106957e93",
-        "original_prefix_sha256": "22af5393ab99e5d5e5d8c10eba7071ccbd8338307809d38d53c674a106957e93",
+        "sha256": "761a1828a0c26f4963302c1f27bf4b623dca1016f12c7a8f9647f4d3d828945d",
+        "original_prefix_sha256": "761a1828a0c26f4963302c1f27bf4b623dca1016f12c7a8f9647f4d3d828945d",
         "expected_classes": 2,
         "scope": "Exact original structural-only input, without a callable adapter or invented runtime result. Checked and Lowered descriptor readers preserve the original one/two nullable class cycles after producers die."
       },
@@ -3085,18 +3085,18 @@
       ],
       "rationale": "Static declarations, constructors and recursive nominal graph identities require their original structural obligations, not an invented scalar-only replacement.",
       "legacy_path": "tests/unit/program/test_xr_program_source_build.c",
-      "body_lf_sha256": "a65970b48714cdc17dc794b01493bed2a9da711d92859efee756ad89467b0fb8",
+      "body_lf_sha256": "6b81c669c858ccd277eb489130d9a0ccab17cef87bfbcef421294c1d9ab5f060",
       "original_native_harness_expectation": null,
       "existing_projection": {
         "fixture": "tests/unit/xir/product_consumers/fixtures/deep_class_graph/root.xr",
-        "sha256": "0acd3ed675dd6ecdc3bb8a6a862126e24737760d62e163e3081941a31784cad1",
-        "original_prefix_sha256": "0acd3ed675dd6ecdc3bb8a6a862126e24737760d62e163e3081941a31784cad1",
+        "sha256": "b94d5387006d85d34d48473fdf8031afb08170d747890859f8e780ae7ca894d3",
+        "original_prefix_sha256": "b94d5387006d85d34d48473fdf8031afb08170d747890859f8e780ae7ca894d3",
         "expected_classes": 80,
         "scope": "Exact original descending C79-to-C0 structural-only input, without an adapter or invented runtime result. All eighty owned class identities, seventy-nine Nullable edges and one terminal i64 field are inspected after producers die; eighty classes do not prove unbounded depth.",
         "original_source_constructor": {
-          "bytes": 5937,
-          "sha256": "0acd3ed675dd6ecdc3bb8a6a862126e24737760d62e163e3081941a31784cad1",
-          "constructor_lf_sha256": "ddda906cdbea2304a78887456677c04ad6c157b3aa50dea22a1fce20982a5b34",
+          "bytes": 5377,
+          "sha256": "b94d5387006d85d34d48473fdf8031afb08170d747890859f8e780ae7ca894d3",
+          "constructor_lf_sha256": "49b4192bdef2dd1923dbc0b8bbe88cafeb972f4a86fa6aeaf0dffc2caee21c9f",
           "classes": 80,
           "nullable_links": 79,
           "terminal_i64_fields": 1,
@@ -3205,7 +3205,7 @@
       ],
       "rationale": "Class alias share/borrow/transfer and suspended ref/existential roots preserve the declared ownership and liveness assertions.",
       "legacy_path": "tests/unit/program/test_xr_program_source_build.c",
-      "body_lf_sha256": "ac1c4e8abfaa33664a7ccb70b5b470688b3c8e1ffff082eb9bb5b275058187f3",
+      "body_lf_sha256": "f957f060a2c0417f96701f6adca53864d6dfb7dacbff03ed6760a5d0eb506f7a",
       "original_native_harness_expectation": {
         "id": "class_alias_escape",
         "expected_exit": 42,
@@ -3221,8 +3221,8 @@
       },
       "existing_projection": {
         "fixture": "tests/unit/xir/product_consumers/fixtures/class_alias_escape/root.xr",
-        "sha256": "54bbca567d79c1fb30ef7809d4c3fa889d6e96a8c904dfe227f94ed60aebcc57",
-        "original_prefix_sha256": "2b6f5d470dc865e6c7966c7421d0bc450a37a242a3fc64d3f1a47a4b72cb0569",
+        "sha256": "0c463c52705c99194b69cad4baa8c036d164076b90932121d0a6cb263ec7ae67",
+        "original_prefix_sha256": "c9277ad09ae75aba58ab4b393d047948258767ad9d2646cf9ae1cc4c5b212f57",
         "entry_adapter": "export fn consumerAnswer() -> i64 { return answer() }\n",
         "entry": "consumerAnswer",
         "expected_i64": 42,
@@ -3248,7 +3248,7 @@
       ],
       "rationale": "Class alias share/borrow/transfer and suspended ref/existential roots preserve the declared ownership and liveness assertions.",
       "legacy_path": "tests/unit/program/test_xr_program_source_build.c",
-      "body_lf_sha256": "6441319d71fa1c0abeede3b5d5b8fa72960386c63435ab402cce433b956a64b0",
+      "body_lf_sha256": "504a79aeeef443ef2ad83c6ed04b05a42ea747c69c2698028c60575e34905627",
       "original_native_harness_expectation": {
         "id": "class_field_self_assignment",
         "expected_exit": 42,
@@ -3264,8 +3264,8 @@
       },
       "existing_projection": {
         "fixture": "tests/unit/xir/product_consumers/fixtures/class_field_self_assignment/root.xr",
-        "sha256": "3073b990a3c383d03a98cab1e26f8d671e6a247f3d45e8c5bda004f284eac6aa",
-        "original_prefix_sha256": "bbbe864d45bd3a03c958a68cd2c05493c0311d746c2fd72d7d0da61f46aeaa8c",
+        "sha256": "4ff90639e31f0f4e4bcc3f7b8bfeff2030ab8b43e9ffbf772f4c9f9d8362c163",
+        "original_prefix_sha256": "6713b7bcc337055dabf11ee662319175ba2a06558ebf4e9df62d5b238b4bed55",
         "entry_adapter": "export fn consumerAnswer() -> i64 { return answer() }\n",
         "entry": "consumerAnswer",
         "expected_i64": 42,
@@ -3291,7 +3291,7 @@
       ],
       "rationale": "Class alias share/borrow/transfer and suspended ref/existential roots preserve the declared ownership and liveness assertions.",
       "legacy_path": "tests/unit/program/test_xr_program_source_build.c",
-      "body_lf_sha256": "ce5d4af761403bfd1e714e79bb439ffb10c3d66e4321ba70414e5fd1d651556d",
+      "body_lf_sha256": "564b63b819a7b784272ef56de2ce85010ee2502d53e134f080343b433698576a",
       "original_native_harness_expectation": {
         "id": "class_alias_borrow",
         "expected_exit": 42,
@@ -3307,8 +3307,8 @@
       },
       "existing_projection": {
         "fixture": "tests/unit/xir/product_consumers/fixtures/class_alias_borrow/root.xr",
-        "sha256": "8d48f5a353f491869c55422447c1b0f243c7b2dab3e2701f4b91fe2a13bbe514",
-        "original_prefix_sha256": "f186dab919dda2f76fe70e4ce2293acb91c4a2d0d19367b6f66fbcbdd8ce2e02",
+        "sha256": "5acbb595983c012d4efaada681d9c2b5216e89d660c49e19b5c54af38afb05ff",
+        "original_prefix_sha256": "c05e6219091decb2162c36f2d7df68cd83876420b314ab13a83ca313a2abb3e7",
         "entry_adapter": "export fn consumerAnswer() -> i64 { return answer() }\n",
         "entry": "consumerAnswer",
         "expected_i64": 42,
@@ -3334,7 +3334,7 @@
       ],
       "rationale": "Class alias share/borrow/transfer and suspended ref/existential roots preserve the declared ownership and liveness assertions.",
       "legacy_path": "tests/unit/program/test_xr_program_source_build.c",
-      "body_lf_sha256": "6c98c8beaf8d474c36d43203b99563e02b802518943bf49f63187b82c285fb3e",
+      "body_lf_sha256": "470d418cfd7255ee26bb5237831c2e1ed7d8716d540b014a1d9ca308bdf3f380",
       "original_native_harness_expectation": {
         "id": "class_alias_transfer",
         "expected_exit": 42,
@@ -3350,8 +3350,8 @@
       },
       "existing_projection": {
         "fixture": "tests/unit/xir/product_consumers/fixtures/class_alias_transfer/root.xr",
-        "sha256": "a115d26f0d793c37d1e141b9a9c719de8238a346905143e39e9b6c4c052de39b",
-        "original_prefix_sha256": "634ec4336a122a983205e392a59ae07704d82da9990d0de1b019c5c665e55186",
+        "sha256": "0fde0e6281382ab3918c59af86623480cfa8503c2f559498545eb2945a23b1af",
+        "original_prefix_sha256": "e4fd4da40ae434489f2817c48eef0cdcb7472092c7162b32ca939908b1d04cfb",
         "entry_adapter": "export fn consumerAnswer() -> i64 { return answer() }\n",
         "entry": "consumerAnswer",
         "expected_i64": 42,
@@ -4225,7 +4225,7 @@
       ],
       "rationale": "User-type specializations, concrete witness targets and namespace identity remain exact; depth/instance limits retain typed failure and empty output obligations.",
       "legacy_path": "tests/unit/program/test_xr_program_source_build.c",
-      "body_lf_sha256": "055740b8b54e55ccc9c61714b9fabba4010389d93fcbe651741bb9192b3ac484",
+      "body_lf_sha256": "fb5fb3b89191262d4e49d076e7d42e9c6b19e7e59ee147c4b314f8d8c6eb94fe",
       "original_native_harness_expectation": null,
       "existing_projection": null,
       "new_entry_status": "PENDING_FIXED_PRODUCT_DELIVERY",
@@ -5052,7 +5052,7 @@
     },
     {
       "path": "tests/unit/program/xr_program_output_cleanup_checks.inc.c",
-      "lf_sha256": "1df958bdd5f9e49d9174e49b0873877aad9fa038ecb4d1809f5f5d44600eba30",
+      "lf_sha256": "ebadb183d1e599ba09b8ec99583671f4d7ba5eef4b4e277d822df15eda24d1a3",
       "primary_family": "defer-cleanup-resource-lifetime",
       "producer_packages": [
         "P07",
@@ -5440,5 +5440,568 @@
     "All 108 source cases have an explicit primary family and producer owners; every runtime/new-entry result remains OPEN.",
     "Other-file owners preserve 26 complete files and 160 indexed function bodies, including seven zero-function helper files.",
     "Whole-file routing for other consumers is not a claim that every assertion has migrated. P01/P20 files remain read-only."
+  ],
+  "reviewed_source_epochs": [
+    {
+      "fixed_input": "d5965cf74aefb2125c5b5d43377effcef7f80279",
+      "prior_product_head": "dc6c4b1df2f227d16b4f7ffc18b00e3914375152",
+      "source_case_changes": [
+        {
+          "case_id": "source_owner_array_append_preserves_class_identity",
+          "prior_body_lf_sha256": "df13fef04310a02d4f6d1e25fc2da6513d7aa3abda65e5002afa4ac83e76cc35",
+          "prior_projection": {
+            "fixture": "tests/unit/xir/product_consumers/fixtures/class_identity/root.xr",
+            "sha256": "cfd8d10d0016f8c0cb44f7a8f3dfcff74979cb0e9dda1ca04f5112fec281aace",
+            "original_prefix_sha256": "b94624ef455386b578870e986c84bedd687c24f4fc455d64fb8f6ade05d2a832",
+            "entry_adapter": "export fn consumerAnswer() -> i64 { return answer() }\n",
+            "entry": "consumerAnswer",
+            "expected_i64": 42,
+            "scope": "Exact original source prefix and fixed result through an explicitly exported adapter; additional legacy assertions stay OPEN until mapped."
+          },
+          "current_body_lf_sha256": "392da78f596b53b2deb4246f40ad37bcbb5609a85a5bc4d5209cb319c884ab22",
+          "current_projection": {
+            "fixture": "tests/unit/xir/product_consumers/fixtures/class_identity/root.xr",
+            "sha256": "d2b1753ee55e9a656c0ad766279d09d5b2d717d246a711804fa1e8f418f93aa6",
+            "original_prefix_sha256": "57b59c1bd6714d04e8de6d36128e273238005d5c7637d63d45d42ea7a31d7219",
+            "entry_adapter": "export fn consumerAnswer() -> i64 { return answer() }\n",
+            "entry": "consumerAnswer",
+            "expected_i64": 42,
+            "scope": "Exact original source prefix and fixed result through an explicitly exported adapter; additional legacy assertions stay OPEN until mapped."
+          }
+        },
+        {
+          "case_id": "source_owner_cross_module_instance_method_preserves_receiver_across_suspend",
+          "prior_body_lf_sha256": "cb3b350ac67ee9aa7964cf9b758b37b5b040613b16ea52c3ff469a1b272fba3d",
+          "prior_projection": {
+            "fixture": "tests/unit/xir/product_consumers/fixtures/module_receiver_suspend/root.xr",
+            "sha256": "3bb17ffe354b537a024dbf6e4c371df1c80051d72a3db21f20d48fdbeeb5f8bc",
+            "original_prefix_sha256": "5765d2986533f38100664640b32772722b00c0f32db226ec3f8267d19c687b43",
+            "entry_adapter": "export fn consumerAnswer() -> i64 { return answer() }\n",
+            "entry": "consumerAnswer",
+            "expected_i64": 42,
+            "scope": "Exact original source prefix and fixed result through an explicitly exported adapter; additional legacy assertions stay OPEN until mapped.",
+            "additional_files": {
+              "library.xr": {
+                "bytes": 185,
+                "sha256": "bb41f3d3d610b67ce6445475deb031967b10a0b069ef00b1c923599b3d6a6c87"
+              }
+            }
+          },
+          "current_body_lf_sha256": "1ebb94f14989576f3fc2061c8aa92ee1d6a32a2ff935e926bbdef70ec45197a5",
+          "current_projection": {
+            "fixture": "tests/unit/xir/product_consumers/fixtures/module_receiver_suspend/root.xr",
+            "sha256": "3bb17ffe354b537a024dbf6e4c371df1c80051d72a3db21f20d48fdbeeb5f8bc",
+            "original_prefix_sha256": "5765d2986533f38100664640b32772722b00c0f32db226ec3f8267d19c687b43",
+            "entry_adapter": "export fn consumerAnswer() -> i64 { return answer() }\n",
+            "entry": "consumerAnswer",
+            "expected_i64": 42,
+            "scope": "Exact original source prefix and fixed result through an explicitly exported adapter; additional legacy assertions stay OPEN until mapped.",
+            "additional_files": {
+              "library.xr": {
+                "bytes": 178,
+                "sha256": "cde4fc2274c19e4eb8cb2b21cf5364e861e53d385790c6a24da97c107dfa40b5"
+              }
+            }
+          }
+        },
+        {
+          "case_id": "source_owner_generic_constraint_methods_have_exact_concrete_targets",
+          "prior_body_lf_sha256": "ee42f0f1a0708cd1e089722268e458c1d26303e63232246ae9b029552af63881",
+          "prior_projection": {
+            "fixture": "tests/unit/xir/product_consumers/fixtures/generic_constraint_methods/root.xr",
+            "sha256": "04dd4f7c82e0b7fd1a610363a1ac66cd57f60248a63282c3c7b00341b5ad341a",
+            "original_prefix_sha256": "c29e7b72b153a21a5e88be8e23937d4b2b04ede0e694d10c51f63ea20a83610f",
+            "entry_adapter": "export fn consumerAnswer() -> i64 { return answer() }\n",
+            "entry": "consumerAnswer",
+            "expected_i64": 42,
+            "scope": "Exact positive source prefix and fixed oracle retained for admission probing; no replacement gates are registered yet.",
+            "additional_files": {
+              "library.xr": {
+                "bytes": 877,
+                "sha256": "b7f8a8f1587133a250e355a51e3e49861a5d0083d44b19fec6bb2d5a85fff726"
+              },
+              "facade.xr": {
+                "bytes": 136,
+                "sha256": "67ad0a7da1187df90c7783097ca073e4b7aa43804c0761c03b4f24b8f1fc20cd"
+              }
+            },
+            "probe_target": "test_source_product_probe"
+          },
+          "current_body_lf_sha256": "88224304b4a6d9d381e668910711b2e932f2d4a4cfdf8c5732734596a1409c23",
+          "current_projection": {
+            "fixture": "tests/unit/xir/product_consumers/fixtures/generic_constraint_methods/root.xr",
+            "sha256": "04dd4f7c82e0b7fd1a610363a1ac66cd57f60248a63282c3c7b00341b5ad341a",
+            "original_prefix_sha256": "c29e7b72b153a21a5e88be8e23937d4b2b04ede0e694d10c51f63ea20a83610f",
+            "entry_adapter": "export fn consumerAnswer() -> i64 { return answer() }\n",
+            "entry": "consumerAnswer",
+            "expected_i64": 42,
+            "scope": "Exact positive source prefix and fixed oracle retained for admission probing; no replacement gates are registered yet.",
+            "additional_files": {
+              "library.xr": {
+                "bytes": 870,
+                "sha256": "b68c3c77338bd5a57e6ea5a02a809e4ab6eaacc5f803d08af2a829196d1356d0"
+              },
+              "facade.xr": {
+                "bytes": 136,
+                "sha256": "67ad0a7da1187df90c7783097ca073e4b7aa43804c0761c03b4f24b8f1fc20cd"
+              }
+            },
+            "probe_target": "test_source_product_probe"
+          }
+        },
+        {
+          "case_id": "source_owner_generic_scalar_class_specializations_are_exact_class_references",
+          "prior_body_lf_sha256": "983fe1e3329142a2ea183bdf72793cb0b64d2b417e21a45b1b46342c61d93a62",
+          "prior_projection": {
+            "fixture": "tests/unit/xir/product_consumers/fixtures/generic_scalar_class/root.xr",
+            "sha256": "ff5223a13033b1db8483424b750b06f050ff661beb1dd3f4913ead753e731775",
+            "original_prefix_sha256": "0ab6636c9ee4fe84e6b332eb825deda04c58aea88b49cc863050edaa96a30eda",
+            "entry_adapter": "export fn consumerAnswer() -> i64 { return answer() }\n",
+            "entry": "consumerAnswer",
+            "expected_i64": 42,
+            "scope": "Exact positive source prefix and fixed oracle retained for admission probing; no replacement gates are registered yet.",
+            "additional_files": {
+              "library.xr": {
+                "bytes": 117,
+                "sha256": "fbc0efcb2185571c72c773ddb03941b0dde09dd2c6b48a16a350dab2121f7f99"
+              },
+              "facade.xr": {
+                "bytes": 162,
+                "sha256": "199b4e48a96a10c8ba95c11f6032d68508e5760cc3cbbbcc8b40c6b59f66e57e"
+              }
+            },
+            "probe_target": "test_source_product_probe"
+          },
+          "current_body_lf_sha256": "b37a01ebe52df48f8a30a08426ef3c047d40bb2e7dbc8b694b788960ad1cf1b1",
+          "current_projection": {
+            "fixture": "tests/unit/xir/product_consumers/fixtures/generic_scalar_class/root.xr",
+            "sha256": "08bbbee65c146f40089099f251d64bba52698722bd334ff6240931e15dd05f15",
+            "original_prefix_sha256": "c4c4c7daf4fdd7f85be195e10aa30457e14d187f0739d31257cbc555018a9e61",
+            "entry_adapter": "export fn consumerAnswer() -> i64 { return answer() }\n",
+            "entry": "consumerAnswer",
+            "expected_i64": 42,
+            "scope": "Exact positive source prefix and fixed oracle retained for admission probing; no replacement gates are registered yet.",
+            "additional_files": {
+              "library.xr": {
+                "bytes": 110,
+                "sha256": "b177bec09620dc2175dcd95563605e393b27b1b05293de98c657c165cd57fbda"
+              },
+              "facade.xr": {
+                "bytes": 155,
+                "sha256": "5be13e7587410f933d1ae45ac337fc4743ec2d57142f2fb5091a8cd3c5930e04"
+              }
+            },
+            "probe_target": "test_source_product_probe"
+          }
+        },
+        {
+          "case_id": "source_owner_folds_constructor_literal_and_reordered_stores",
+          "prior_body_lf_sha256": "94ac28da956a960ff8b7a09eb6eb9f6802df8405c8b9a7c31a2d6f010ed5c4e7",
+          "prior_projection": {
+            "fixture": "tests/unit/xir/product_consumers/fixtures/constructor_folding/root.xr",
+            "sha256": "bd0860a1bed34d55530c87913ff78e25bc5c78fb6fefcc4a3cf6926d8ede4a62",
+            "original_prefix_sha256": "ef188be7c2d6fcc341f180cf5a880985718a82fa2d6eb08080c886df5c1be59f",
+            "entry_adapter": "export fn consumerAnswer() -> i64 { return answer() }\n",
+            "entry": "consumerAnswer",
+            "expected_i64": 1006,
+            "scope": "Exact original structural constructor input plus an exported execution adapter. The added independent runtime oracle is 0+5+10*100+1=1006; the original test contains only structural assertions."
+          },
+          "current_body_lf_sha256": "09c2bd8ae1e4e939b5436d547e25e9a71bef57bef07f1b8fd79bcfa07b2c57ca",
+          "current_projection": {
+            "fixture": "tests/unit/xir/product_consumers/fixtures/constructor_folding/root.xr",
+            "sha256": "afa111d3a9a93f062e7ae7631c75ae8939952405ca18704817d14288aa751155",
+            "original_prefix_sha256": "e8631b0ed23743370b0343b97ec5de68c507159edd6c4e156a1588988c83b63d",
+            "entry_adapter": "export fn consumerAnswer() -> i64 { return answer() }\n",
+            "entry": "consumerAnswer",
+            "expected_i64": 1006,
+            "scope": "Exact original structural constructor input plus an exported execution adapter. The added independent runtime oracle is 0+5+10*100+1=1006; the original test contains only structural assertions."
+          }
+        },
+        {
+          "case_id": "source_owner_generic_nested_class_types_are_exact",
+          "prior_body_lf_sha256": "e7f695fe94570458fdc2f183c8b5e46e76c05a4b66c60fb0be5467b22336336c",
+          "prior_projection": {
+            "fixture": "tests/unit/xir/product_consumers/fixtures/generic_nested_class/root.xr",
+            "sha256": "d3e9d0571d73d98c8eef95495f23b6c99cd47fc8abeed9c74a800987755ecf52",
+            "original_prefix_sha256": "0da9eb3871bfd72195d7ed1d0e6e5a7e42beb3f80043a92b1c007590262698e0",
+            "entry_adapter": "export fn consumerAnswer() -> i64 { return answer() }\n",
+            "entry": "consumerAnswer",
+            "expected_i64": 42,
+            "scope": "Exact positive source prefix and fixed oracle retained for admission probing; no replacement gates are registered yet.",
+            "additional_files": {
+              "library.xr": {
+                "bytes": 171,
+                "sha256": "44f09ebd4d1b905b8dc0fb5276f73aa8235288d9e72db9988098a487aafccd07"
+              },
+              "facade.xr": {
+                "bytes": 171,
+                "sha256": "44f09ebd4d1b905b8dc0fb5276f73aa8235288d9e72db9988098a487aafccd07"
+              }
+            },
+            "probe_target": "test_source_product_probe"
+          },
+          "current_body_lf_sha256": "0edd0400338a209612fd0adda79e1606d24f4f5be1dbe77549fa7516737d8ba9",
+          "current_projection": {
+            "fixture": "tests/unit/xir/product_consumers/fixtures/generic_nested_class/root.xr",
+            "sha256": "d5dc5a9a3d96b478130665d79d94dc91e1431e483fefcb46c74bee4cdd30dbdd",
+            "original_prefix_sha256": "f6da07a2687ae1193f713675989123572a5b5acd0febf056969367979780d2e6",
+            "entry_adapter": "export fn consumerAnswer() -> i64 { return answer() }\n",
+            "entry": "consumerAnswer",
+            "expected_i64": 42,
+            "scope": "Exact positive source prefix and fixed oracle retained for admission probing; no replacement gates are registered yet.",
+            "additional_files": {
+              "library.xr": {
+                "bytes": 157,
+                "sha256": "3b9226278693213a6f0560e472e8362bbdc82cb1883debf263814c93a062b3cb"
+              },
+              "facade.xr": {
+                "bytes": 157,
+                "sha256": "3b9226278693213a6f0560e472e8362bbdc82cb1883debf263814c93a062b3cb"
+              }
+            },
+            "probe_target": "test_source_product_probe"
+          }
+        },
+        {
+          "case_id": "source_owner_recursive_class_type_reservation_is_cycle_safe",
+          "prior_body_lf_sha256": "022917b1d6ae038b8c5e0cfcffd919a44ed48a3e4e583624bd184921ea84652e",
+          "prior_projection": {
+            "fixture": "tests/unit/xir/product_consumers/fixtures/recursive_class_graph/root.xr",
+            "sha256": "5e9a8a837ce70107ec0c11d3e8df70f921a9645ad621ef63abc7bcb21c32d130",
+            "original_prefix_sha256": "5e9a8a837ce70107ec0c11d3e8df70f921a9645ad621ef63abc7bcb21c32d130",
+            "expected_classes": 1,
+            "scope": "Exact original structural-only input, without a callable adapter or invented runtime result. Checked and Lowered descriptor readers preserve the original one/two nullable class cycles after producers die."
+          },
+          "current_body_lf_sha256": "b881f8853ae1fc56e00d8af004bc48aa8bf28e348e1808c247497b9f5b1c10e4",
+          "current_projection": {
+            "fixture": "tests/unit/xir/product_consumers/fixtures/recursive_class_graph/root.xr",
+            "sha256": "78917e1d05b085af23e5ba2c9fbec2298ff7ffcd794108ef442bc9ad75c41775",
+            "original_prefix_sha256": "78917e1d05b085af23e5ba2c9fbec2298ff7ffcd794108ef442bc9ad75c41775",
+            "expected_classes": 1,
+            "scope": "Exact original structural-only input, without a callable adapter or invented runtime result. Checked and Lowered descriptor readers preserve the original one/two nullable class cycles after producers die."
+          }
+        },
+        {
+          "case_id": "source_owner_mutual_class_type_reservation_is_cycle_safe",
+          "prior_body_lf_sha256": "9f4f082ede634b82bbc526687a6e199f1be3d4a9d4dea394b988ab4c5070808f",
+          "prior_projection": {
+            "fixture": "tests/unit/xir/product_consumers/fixtures/mutual_class_graph/root.xr",
+            "sha256": "22af5393ab99e5d5e5d8c10eba7071ccbd8338307809d38d53c674a106957e93",
+            "original_prefix_sha256": "22af5393ab99e5d5e5d8c10eba7071ccbd8338307809d38d53c674a106957e93",
+            "expected_classes": 2,
+            "scope": "Exact original structural-only input, without a callable adapter or invented runtime result. Checked and Lowered descriptor readers preserve the original one/two nullable class cycles after producers die."
+          },
+          "current_body_lf_sha256": "9c8051cc23c3848f55f7ac1e20a6f93012efaa82c82d9429d4e6cad4b663a35a",
+          "current_projection": {
+            "fixture": "tests/unit/xir/product_consumers/fixtures/mutual_class_graph/root.xr",
+            "sha256": "761a1828a0c26f4963302c1f27bf4b623dca1016f12c7a8f9647f4d3d828945d",
+            "original_prefix_sha256": "761a1828a0c26f4963302c1f27bf4b623dca1016f12c7a8f9647f4d3d828945d",
+            "expected_classes": 2,
+            "scope": "Exact original structural-only input, without a callable adapter or invented runtime result. Checked and Lowered descriptor readers preserve the original one/two nullable class cycles after producers die."
+          }
+        },
+        {
+          "case_id": "source_owner_deep_class_chain_has_no_nominal_recursion_limit",
+          "prior_body_lf_sha256": "a65970b48714cdc17dc794b01493bed2a9da711d92859efee756ad89467b0fb8",
+          "prior_projection": {
+            "fixture": "tests/unit/xir/product_consumers/fixtures/deep_class_graph/root.xr",
+            "sha256": "0acd3ed675dd6ecdc3bb8a6a862126e24737760d62e163e3081941a31784cad1",
+            "original_prefix_sha256": "0acd3ed675dd6ecdc3bb8a6a862126e24737760d62e163e3081941a31784cad1",
+            "expected_classes": 80,
+            "scope": "Exact original descending C79-to-C0 structural-only input, without an adapter or invented runtime result. All eighty owned class identities, seventy-nine Nullable edges and one terminal i64 field are inspected after producers die; eighty classes do not prove unbounded depth.",
+            "original_source_constructor": {
+              "bytes": 5937,
+              "sha256": "0acd3ed675dd6ecdc3bb8a6a862126e24737760d62e163e3081941a31784cad1",
+              "constructor_lf_sha256": "ddda906cdbea2304a78887456677c04ad6c157b3aa50dea22a1fce20982a5b34",
+              "classes": 80,
+              "nullable_links": 79,
+              "terminal_i64_fields": 1,
+              "declaration_order": [
+                79,
+                78,
+                77,
+                76,
+                75,
+                74,
+                73,
+                72,
+                71,
+                70,
+                69,
+                68,
+                67,
+                66,
+                65,
+                64,
+                63,
+                62,
+                61,
+                60,
+                59,
+                58,
+                57,
+                56,
+                55,
+                54,
+                53,
+                52,
+                51,
+                50,
+                49,
+                48,
+                47,
+                46,
+                45,
+                44,
+                43,
+                42,
+                41,
+                40,
+                39,
+                38,
+                37,
+                36,
+                35,
+                34,
+                33,
+                32,
+                31,
+                30,
+                29,
+                28,
+                27,
+                26,
+                25,
+                24,
+                23,
+                22,
+                21,
+                20,
+                19,
+                18,
+                17,
+                16,
+                15,
+                14,
+                13,
+                12,
+                11,
+                10,
+                9,
+                8,
+                7,
+                6,
+                5,
+                4,
+                3,
+                2,
+                1,
+                0
+              ],
+              "original_buffer_capacity": 32768
+            }
+          },
+          "current_body_lf_sha256": "6b81c669c858ccd277eb489130d9a0ccab17cef87bfbcef421294c1d9ab5f060",
+          "current_projection": {
+            "fixture": "tests/unit/xir/product_consumers/fixtures/deep_class_graph/root.xr",
+            "sha256": "b94d5387006d85d34d48473fdf8031afb08170d747890859f8e780ae7ca894d3",
+            "original_prefix_sha256": "b94d5387006d85d34d48473fdf8031afb08170d747890859f8e780ae7ca894d3",
+            "expected_classes": 80,
+            "scope": "Exact original descending C79-to-C0 structural-only input, without an adapter or invented runtime result. All eighty owned class identities, seventy-nine Nullable edges and one terminal i64 field are inspected after producers die; eighty classes do not prove unbounded depth.",
+            "original_source_constructor": {
+              "bytes": 5377,
+              "sha256": "b94d5387006d85d34d48473fdf8031afb08170d747890859f8e780ae7ca894d3",
+              "constructor_lf_sha256": "49b4192bdef2dd1923dbc0b8bbe88cafeb972f4a86fa6aeaf0dffc2caee21c9f",
+              "classes": 80,
+              "nullable_links": 79,
+              "terminal_i64_fields": 1,
+              "declaration_order": [
+                79,
+                78,
+                77,
+                76,
+                75,
+                74,
+                73,
+                72,
+                71,
+                70,
+                69,
+                68,
+                67,
+                66,
+                65,
+                64,
+                63,
+                62,
+                61,
+                60,
+                59,
+                58,
+                57,
+                56,
+                55,
+                54,
+                53,
+                52,
+                51,
+                50,
+                49,
+                48,
+                47,
+                46,
+                45,
+                44,
+                43,
+                42,
+                41,
+                40,
+                39,
+                38,
+                37,
+                36,
+                35,
+                34,
+                33,
+                32,
+                31,
+                30,
+                29,
+                28,
+                27,
+                26,
+                25,
+                24,
+                23,
+                22,
+                21,
+                20,
+                19,
+                18,
+                17,
+                16,
+                15,
+                14,
+                13,
+                12,
+                11,
+                10,
+                9,
+                8,
+                7,
+                6,
+                5,
+                4,
+                3,
+                2,
+                1,
+                0
+              ],
+              "original_buffer_capacity": 32768
+            }
+          }
+        },
+        {
+          "case_id": "source_owner_class_alias_escape_projects_one_share",
+          "prior_body_lf_sha256": "ac1c4e8abfaa33664a7ccb70b5b470688b3c8e1ffff082eb9bb5b275058187f3",
+          "prior_projection": {
+            "fixture": "tests/unit/xir/product_consumers/fixtures/class_alias_escape/root.xr",
+            "sha256": "54bbca567d79c1fb30ef7809d4c3fa889d6e96a8c904dfe227f94ed60aebcc57",
+            "original_prefix_sha256": "2b6f5d470dc865e6c7966c7421d0bc450a37a242a3fc64d3f1a47a4b72cb0569",
+            "entry_adapter": "export fn consumerAnswer() -> i64 { return answer() }\n",
+            "entry": "consumerAnswer",
+            "expected_i64": 42,
+            "scope": "Exact original source prefix and fixed result through an explicitly exported adapter; additional legacy assertions stay OPEN until mapped."
+          },
+          "current_body_lf_sha256": "f957f060a2c0417f96701f6adca53864d6dfb7dacbff03ed6760a5d0eb506f7a",
+          "current_projection": {
+            "fixture": "tests/unit/xir/product_consumers/fixtures/class_alias_escape/root.xr",
+            "sha256": "0c463c52705c99194b69cad4baa8c036d164076b90932121d0a6cb263ec7ae67",
+            "original_prefix_sha256": "c9277ad09ae75aba58ab4b393d047948258767ad9d2646cf9ae1cc4c5b212f57",
+            "entry_adapter": "export fn consumerAnswer() -> i64 { return answer() }\n",
+            "entry": "consumerAnswer",
+            "expected_i64": 42,
+            "scope": "Exact original source prefix and fixed result through an explicitly exported adapter; additional legacy assertions stay OPEN until mapped."
+          }
+        },
+        {
+          "case_id": "source_owner_class_field_self_assignment_shares_before_exchange",
+          "prior_body_lf_sha256": "6441319d71fa1c0abeede3b5d5b8fa72960386c63435ab402cce433b956a64b0",
+          "prior_projection": {
+            "fixture": "tests/unit/xir/product_consumers/fixtures/class_field_self_assignment/root.xr",
+            "sha256": "3073b990a3c383d03a98cab1e26f8d671e6a247f3d45e8c5bda004f284eac6aa",
+            "original_prefix_sha256": "bbbe864d45bd3a03c958a68cd2c05493c0311d746c2fd72d7d0da61f46aeaa8c",
+            "entry_adapter": "export fn consumerAnswer() -> i64 { return answer() }\n",
+            "entry": "consumerAnswer",
+            "expected_i64": 42,
+            "scope": "Exact original source prefix and fixed result through an explicitly exported adapter; additional legacy assertions stay OPEN until mapped."
+          },
+          "current_body_lf_sha256": "504a79aeeef443ef2ad83c6ed04b05a42ea747c69c2698028c60575e34905627",
+          "current_projection": {
+            "fixture": "tests/unit/xir/product_consumers/fixtures/class_field_self_assignment/root.xr",
+            "sha256": "4ff90639e31f0f4e4bcc3f7b8bfeff2030ab8b43e9ffbf772f4c9f9d8362c163",
+            "original_prefix_sha256": "6713b7bcc337055dabf11ee662319175ba2a06558ebf4e9df62d5b238b4bed55",
+            "entry_adapter": "export fn consumerAnswer() -> i64 { return answer() }\n",
+            "entry": "consumerAnswer",
+            "expected_i64": 42,
+            "scope": "Exact original source prefix and fixed result through an explicitly exported adapter; additional legacy assertions stay OPEN until mapped."
+          }
+        },
+        {
+          "case_id": "source_owner_class_alias_borrows_coalesce_without_share",
+          "prior_body_lf_sha256": "ce5d4af761403bfd1e714e79bb439ffb10c3d66e4321ba70414e5fd1d651556d",
+          "prior_projection": {
+            "fixture": "tests/unit/xir/product_consumers/fixtures/class_alias_borrow/root.xr",
+            "sha256": "8d48f5a353f491869c55422447c1b0f243c7b2dab3e2701f4b91fe2a13bbe514",
+            "original_prefix_sha256": "f186dab919dda2f76fe70e4ce2293acb91c4a2d0d19367b6f66fbcbdd8ce2e02",
+            "entry_adapter": "export fn consumerAnswer() -> i64 { return answer() }\n",
+            "entry": "consumerAnswer",
+            "expected_i64": 42,
+            "scope": "Exact original source prefix and fixed result through an explicitly exported adapter; additional legacy assertions stay OPEN until mapped."
+          },
+          "current_body_lf_sha256": "564b63b819a7b784272ef56de2ce85010ee2502d53e134f080343b433698576a",
+          "current_projection": {
+            "fixture": "tests/unit/xir/product_consumers/fixtures/class_alias_borrow/root.xr",
+            "sha256": "5acbb595983c012d4efaada681d9c2b5216e89d660c49e19b5c54af38afb05ff",
+            "original_prefix_sha256": "c05e6219091decb2162c36f2d7df68cd83876420b314ab13a83ca313a2abb3e7",
+            "entry_adapter": "export fn consumerAnswer() -> i64 { return answer() }\n",
+            "entry": "consumerAnswer",
+            "expected_i64": 42,
+            "scope": "Exact original source prefix and fixed result through an explicitly exported adapter; additional legacy assertions stay OPEN until mapped."
+          }
+        },
+        {
+          "case_id": "source_owner_class_alias_final_transfer_coalesces_to_move",
+          "prior_body_lf_sha256": "6c98c8beaf8d474c36d43203b99563e02b802518943bf49f63187b82c285fb3e",
+          "prior_projection": {
+            "fixture": "tests/unit/xir/product_consumers/fixtures/class_alias_transfer/root.xr",
+            "sha256": "a115d26f0d793c37d1e141b9a9c719de8238a346905143e39e9b6c4c052de39b",
+            "original_prefix_sha256": "634ec4336a122a983205e392a59ae07704d82da9990d0de1b019c5c665e55186",
+            "entry_adapter": "export fn consumerAnswer() -> i64 { return answer() }\n",
+            "entry": "consumerAnswer",
+            "expected_i64": 42,
+            "scope": "Exact original source prefix and fixed result through an explicitly exported adapter; additional legacy assertions stay OPEN until mapped."
+          },
+          "current_body_lf_sha256": "470d418cfd7255ee26bb5237831c2e1ed7d8716d540b014a1d9ca308bdf3f380",
+          "current_projection": {
+            "fixture": "tests/unit/xir/product_consumers/fixtures/class_alias_transfer/root.xr",
+            "sha256": "0fde0e6281382ab3918c59af86623480cfa8503c2f559498545eb2945a23b1af",
+            "original_prefix_sha256": "e4fd4da40ae434489f2817c48eef0cdcb7472092c7162b32ca939908b1d04cfb",
+            "entry_adapter": "export fn consumerAnswer() -> i64 { return answer() }\n",
+            "entry": "consumerAnswer",
+            "expected_i64": 42,
+            "scope": "Exact original source prefix and fixed result through an explicitly exported adapter; additional legacy assertions stay OPEN until mapped."
+          }
+        },
+        {
+          "case_id": "source_owner_reports_exact_monomorphization_depth_budget",
+          "prior_body_lf_sha256": "055740b8b54e55ccc9c61714b9fabba4010389d93fcbe651741bb9192b3ac484",
+          "prior_projection": null,
+          "current_body_lf_sha256": "fb5fb3b89191262d4e49d076e7d42e9c6b19e7e59ee147c4b314f8d8c6eb94fe",
+          "current_projection": null
+        }
+      ],
+      "native_harness_and_projection_values_unchanged": true
+    }
   ]
 }

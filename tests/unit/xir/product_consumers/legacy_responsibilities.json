@@ -10,7 +10,7 @@
       "name": "source_owner_array_append_preserves_class_identity",
       "legacy_path": "tests/unit/program/test_xr_program_source_build.c",
       "legacy_line": 4064,
-      "body_lf_sha256": "df13fef04310a02d4f6d1e25fc2da6513d7aa3abda65e5002afa4ac83e76cc35",
+      "body_lf_sha256": "392da78f596b53b2deb4246f40ad37bcbb5609a85a5bc4d5209cb319c884ab22",
       "assertion_sites": 3,
       "loop_sites": 0,
       "status": "OPEN",
@@ -31,14 +31,14 @@
       },
       "static_input_literals": {
         "source": {
-          "bytes": 221,
-          "sha256": "b94624ef455386b578870e986c84bedd687c24f4fc455d64fb8f6ade05d2a832"
+          "bytes": 214,
+          "sha256": "57b59c1bd6714d04e8de6d36128e273238005d5c7637d63d45d42ea7a31d7219"
         }
       },
       "initial_projection": {
         "fixture": "tests/unit/xir/product_consumers/fixtures/class_identity/root.xr",
-        "sha256": "cfd8d10d0016f8c0cb44f7a8f3dfcff74979cb0e9dda1ca04f5112fec281aace",
-        "original_prefix_sha256": "b94624ef455386b578870e986c84bedd687c24f4fc455d64fb8f6ade05d2a832",
+        "sha256": "d2b1753ee55e9a656c0ad766279d09d5b2d717d246a711804fa1e8f418f93aa6",
+        "original_prefix_sha256": "57b59c1bd6714d04e8de6d36128e273238005d5c7637d63d45d42ea7a31d7219",
         "entry_adapter": "export fn consumerAnswer() -> i64 { return answer() }\n",
         "entry": "consumerAnswer",
         "expected_i64": 42,
@@ -3068,7 +3068,7 @@
       "name": "source_owner_cross_module_instance_method_preserves_receiver_across_suspend",
       "legacy_path": "tests/unit/program/test_xr_program_source_build.c",
       "legacy_line": 1907,
-      "body_lf_sha256": "cb3b350ac67ee9aa7964cf9b758b37b5b040613b16ea52c3ff469a1b272fba3d",
+      "body_lf_sha256": "1ebb94f14989576f3fc2061c8aa92ee1d6a32a2ff935e926bbdef70ec45197a5",
       "assertion_sites": 23,
       "loop_sites": 4,
       "status": "OPEN",
@@ -3091,8 +3091,8 @@
       },
       "static_input_literals": {
         "library_source": {
-          "bytes": 185,
-          "sha256": "bb41f3d3d610b67ce6445475deb031967b10a0b069ef00b1c923599b3d6a6c87"
+          "bytes": 178,
+          "sha256": "cde4fc2274c19e4eb8cb2b21cf5364e861e53d385790c6a24da97c107dfa40b5"
         },
         "entry_source": {
           "bytes": 109,
@@ -3109,8 +3109,8 @@
         "scope": "Exact original source prefix and fixed result through an explicitly exported adapter; additional legacy assertions stay OPEN until mapped.",
         "additional_files": {
           "library.xr": {
-            "bytes": 185,
-            "sha256": "bb41f3d3d610b67ce6445475deb031967b10a0b069ef00b1c923599b3d6a6c87"
+            "bytes": 178,
+            "sha256": "cde4fc2274c19e4eb8cb2b21cf5364e861e53d385790c6a24da97c107dfa40b5"
           }
         }
       },
@@ -3760,7 +3760,7 @@
       "name": "source_owner_generic_constraint_methods_have_exact_concrete_targets",
       "legacy_path": "tests/unit/program/test_xr_program_source_build.c",
       "legacy_line": 2269,
-      "body_lf_sha256": "ee42f0f1a0708cd1e089722268e458c1d26303e63232246ae9b029552af63881",
+      "body_lf_sha256": "88224304b4a6d9d381e668910711b2e932f2d4a4cfdf8c5732734596a1409c23",
       "assertion_sites": 172,
       "loop_sites": 18,
       "status": "OPEN",
@@ -3783,8 +3783,8 @@
       },
       "static_input_literals": {
         "library_source": {
-          "bytes": 877,
-          "sha256": "b7f8a8f1587133a250e355a51e3e49861a5d0083d44b19fec6bb2d5a85fff726"
+          "bytes": 870,
+          "sha256": "b68c3c77338bd5a57e6ea5a02a809e4ab6eaacc5f803d08af2a829196d1356d0"
         },
         "facade_source": {
           "bytes": 136,
@@ -3853,8 +3853,8 @@
         "scope": "Exact positive source prefix and fixed oracle retained for admission probing; no replacement gates are registered yet.",
         "additional_files": {
           "library.xr": {
-            "bytes": 877,
-            "sha256": "b7f8a8f1587133a250e355a51e3e49861a5d0083d44b19fec6bb2d5a85fff726"
+            "bytes": 870,
+            "sha256": "b68c3c77338bd5a57e6ea5a02a809e4ab6eaacc5f803d08af2a829196d1356d0"
           },
           "facade.xr": {
             "bytes": 136,
@@ -3930,7 +3930,7 @@
       "name": "source_owner_generic_scalar_class_specializations_are_exact_class_references",
       "legacy_path": "tests/unit/program/test_xr_program_source_build.c",
       "legacy_line": 3248,
-      "body_lf_sha256": "983fe1e3329142a2ea183bdf72793cb0b64d2b417e21a45b1b46342c61d93a62",
+      "body_lf_sha256": "b37a01ebe52df48f8a30a08426ef3c047d40bb2e7dbc8b694b788960ad1cf1b1",
       "assertion_sites": 48,
       "loop_sites": 8,
       "status": "OPEN",
@@ -3955,34 +3955,34 @@
       },
       "static_input_literals": {
         "library_source": {
-          "bytes": 117,
-          "sha256": "fbc0efcb2185571c72c773ddb03941b0dde09dd2c6b48a16a350dab2121f7f99"
+          "bytes": 110,
+          "sha256": "b177bec09620dc2175dcd95563605e393b27b1b05293de98c657c165cd57fbda"
         },
         "facade_source": {
-          "bytes": 162,
-          "sha256": "199b4e48a96a10c8ba95c11f6032d68508e5760cc3cbbbcc8b40c6b59f66e57e"
+          "bytes": 155,
+          "sha256": "5be13e7587410f933d1ae45ac337fc4743ec2d57142f2fb5091a8cd3c5930e04"
         },
         "entry_source": {
-          "bytes": 507,
-          "sha256": "0ab6636c9ee4fe84e6b332eb825deda04c58aea88b49cc863050edaa96a30eda"
+          "bytes": 500,
+          "sha256": "c4c4c7daf4fdd7f85be195e10aa30457e14d187f0739d31257cbc555018a9e61"
         }
       },
       "initial_projection": {
         "fixture": "tests/unit/xir/product_consumers/fixtures/generic_scalar_class/root.xr",
-        "sha256": "ff5223a13033b1db8483424b750b06f050ff661beb1dd3f4913ead753e731775",
-        "original_prefix_sha256": "0ab6636c9ee4fe84e6b332eb825deda04c58aea88b49cc863050edaa96a30eda",
+        "sha256": "08bbbee65c146f40089099f251d64bba52698722bd334ff6240931e15dd05f15",
+        "original_prefix_sha256": "c4c4c7daf4fdd7f85be195e10aa30457e14d187f0739d31257cbc555018a9e61",
         "entry_adapter": "export fn consumerAnswer() -> i64 { return answer() }\n",
         "entry": "consumerAnswer",
         "expected_i64": 42,
         "scope": "Exact positive source prefix and fixed oracle retained for admission probing; no replacement gates are registered yet.",
         "additional_files": {
           "library.xr": {
-            "bytes": 117,
-            "sha256": "fbc0efcb2185571c72c773ddb03941b0dde09dd2c6b48a16a350dab2121f7f99"
+            "bytes": 110,
+            "sha256": "b177bec09620dc2175dcd95563605e393b27b1b05293de98c657c165cd57fbda"
           },
           "facade.xr": {
-            "bytes": 162,
-            "sha256": "199b4e48a96a10c8ba95c11f6032d68508e5760cc3cbbbcc8b40c6b59f66e57e"
+            "bytes": 155,
+            "sha256": "5be13e7587410f933d1ae45ac337fc4743ec2d57142f2fb5091a8cd3c5930e04"
           }
         },
         "probe_target": "test_source_product_probe"
@@ -3993,7 +3993,7 @@
       "name": "source_owner_folds_constructor_literal_and_reordered_stores",
       "legacy_path": "tests/unit/program/test_xr_program_source_build.c",
       "legacy_line": 3461,
-      "body_lf_sha256": "94ac28da956a960ff8b7a09eb6eb9f6802df8405c8b9a7c31a2d6f010ed5c4e7",
+      "body_lf_sha256": "09c2bd8ae1e4e939b5436d547e25e9a71bef57bef07f1b8fd79bcfa07b2c57ca",
       "assertion_sites": 12,
       "loop_sites": 6,
       "status": "OPEN",
@@ -4002,14 +4002,14 @@
       "original_fixture": null,
       "static_input_literals": {
         "source": {
-          "bytes": 399,
-          "sha256": "ef188be7c2d6fcc341f180cf5a880985718a82fa2d6eb08080c886df5c1be59f"
+          "bytes": 378,
+          "sha256": "e8631b0ed23743370b0343b97ec5de68c507159edd6c4e156a1588988c83b63d"
         }
       },
       "initial_projection": {
         "fixture": "tests/unit/xir/product_consumers/fixtures/constructor_folding/root.xr",
-        "sha256": "bd0860a1bed34d55530c87913ff78e25bc5c78fb6fefcc4a3cf6926d8ede4a62",
-        "original_prefix_sha256": "ef188be7c2d6fcc341f180cf5a880985718a82fa2d6eb08080c886df5c1be59f",
+        "sha256": "afa111d3a9a93f062e7ae7631c75ae8939952405ca18704817d14288aa751155",
+        "original_prefix_sha256": "e8631b0ed23743370b0343b97ec5de68c507159edd6c4e156a1588988c83b63d",
         "entry_adapter": "export fn consumerAnswer() -> i64 { return answer() }\n",
         "entry": "consumerAnswer",
         "expected_i64": 1006,
@@ -4098,7 +4098,7 @@
       "name": "source_owner_generic_nested_class_types_are_exact",
       "legacy_path": "tests/unit/program/test_xr_program_source_build.c",
       "legacy_line": 3551,
-      "body_lf_sha256": "e7f695fe94570458fdc2f183c8b5e46e76c05a4b66c60fb0be5467b22336336c",
+      "body_lf_sha256": "0edd0400338a209612fd0adda79e1606d24f4f5be1dbe77549fa7516737d8ba9",
       "assertion_sites": 27,
       "loop_sites": 9,
       "status": "OPEN",
@@ -4119,42 +4119,42 @@
       },
       "static_input_literals": {
         "direct_managed_struct_source": {
-          "bytes": 194,
-          "sha256": "5612783f1d6a45f02bb902c4e8dc7fe17e38d4113d36c433d76fc0d8ff0cf280"
+          "bytes": 187,
+          "sha256": "a435a394197d1c149cf15ceab185c9a6493ae862492510520fd1e91b9d65a81b"
         },
         "nested_managed_struct_source": {
-          "bytes": 195,
-          "sha256": "03dd40453d92355a2e172430a6a7d348e5eaa76613cc1b1e2e764a37ebc061f2"
+          "bytes": 188,
+          "sha256": "fb44b3431b83fd0581167313186862552ca8524b9f2500612a3d21cb72034df2"
         },
         "library_source": {
-          "bytes": 171,
-          "sha256": "44f09ebd4d1b905b8dc0fb5276f73aa8235288d9e72db9988098a487aafccd07"
+          "bytes": 157,
+          "sha256": "3b9226278693213a6f0560e472e8362bbdc82cb1883debf263814c93a062b3cb"
         },
         "facade_source": {
-          "bytes": 171,
-          "sha256": "44f09ebd4d1b905b8dc0fb5276f73aa8235288d9e72db9988098a487aafccd07"
+          "bytes": 157,
+          "sha256": "3b9226278693213a6f0560e472e8362bbdc82cb1883debf263814c93a062b3cb"
         },
         "entry_source": {
-          "bytes": 568,
-          "sha256": "0da9eb3871bfd72195d7ed1d0e6e5a7e42beb3f80043a92b1c007590262698e0"
+          "bytes": 554,
+          "sha256": "f6da07a2687ae1193f713675989123572a5b5acd0febf056969367979780d2e6"
         }
       },
       "initial_projection": {
         "fixture": "tests/unit/xir/product_consumers/fixtures/generic_nested_class/root.xr",
-        "sha256": "d3e9d0571d73d98c8eef95495f23b6c99cd47fc8abeed9c74a800987755ecf52",
-        "original_prefix_sha256": "0da9eb3871bfd72195d7ed1d0e6e5a7e42beb3f80043a92b1c007590262698e0",
+        "sha256": "d5dc5a9a3d96b478130665d79d94dc91e1431e483fefcb46c74bee4cdd30dbdd",
+        "original_prefix_sha256": "f6da07a2687ae1193f713675989123572a5b5acd0febf056969367979780d2e6",
         "entry_adapter": "export fn consumerAnswer() -> i64 { return answer() }\n",
         "entry": "consumerAnswer",
         "expected_i64": 42,
         "scope": "Exact positive source prefix and fixed oracle retained for admission probing; no replacement gates are registered yet.",
         "additional_files": {
           "library.xr": {
-            "bytes": 171,
-            "sha256": "44f09ebd4d1b905b8dc0fb5276f73aa8235288d9e72db9988098a487aafccd07"
+            "bytes": 157,
+            "sha256": "3b9226278693213a6f0560e472e8362bbdc82cb1883debf263814c93a062b3cb"
           },
           "facade.xr": {
-            "bytes": 171,
-            "sha256": "44f09ebd4d1b905b8dc0fb5276f73aa8235288d9e72db9988098a487aafccd07"
+            "bytes": 157,
+            "sha256": "3b9226278693213a6f0560e472e8362bbdc82cb1883debf263814c93a062b3cb"
           }
         },
         "probe_target": "test_source_product_probe"
@@ -4165,7 +4165,7 @@
       "name": "source_owner_recursive_class_type_reservation_is_cycle_safe",
       "legacy_path": "tests/unit/program/test_xr_program_source_build.c",
       "legacy_line": 4356,
-      "body_lf_sha256": "022917b1d6ae038b8c5e0cfcffd919a44ed48a3e4e583624bd184921ea84652e",
+      "body_lf_sha256": "b881f8853ae1fc56e00d8af004bc48aa8bf28e348e1808c247497b9f5b1c10e4",
       "assertion_sites": 14,
       "loop_sites": 1,
       "status": "OPEN",
@@ -4174,14 +4174,14 @@
       "original_fixture": null,
       "static_input_literals": {
         "source": {
-          "bytes": 122,
-          "sha256": "5e9a8a837ce70107ec0c11d3e8df70f921a9645ad621ef63abc7bcb21c32d130"
+          "bytes": 115,
+          "sha256": "78917e1d05b085af23e5ba2c9fbec2298ff7ffcd794108ef442bc9ad75c41775"
         }
       },
       "initial_projection": {
         "fixture": "tests/unit/xir/product_consumers/fixtures/recursive_class_graph/root.xr",
-        "sha256": "5e9a8a837ce70107ec0c11d3e8df70f921a9645ad621ef63abc7bcb21c32d130",
-        "original_prefix_sha256": "5e9a8a837ce70107ec0c11d3e8df70f921a9645ad621ef63abc7bcb21c32d130",
+        "sha256": "78917e1d05b085af23e5ba2c9fbec2298ff7ffcd794108ef442bc9ad75c41775",
+        "original_prefix_sha256": "78917e1d05b085af23e5ba2c9fbec2298ff7ffcd794108ef442bc9ad75c41775",
         "expected_classes": 1,
         "scope": "Exact original structural-only input, without a callable adapter or invented runtime result. Checked and Lowered descriptor readers preserve the original one/two nullable class cycles after producers die."
       },
@@ -4219,7 +4219,7 @@
       "name": "source_owner_mutual_class_type_reservation_is_cycle_safe",
       "legacy_path": "tests/unit/program/test_xr_program_source_build.c",
       "legacy_line": 4402,
-      "body_lf_sha256": "9f4f082ede634b82bbc526687a6e199f1be3d4a9d4dea394b988ab4c5070808f",
+      "body_lf_sha256": "9c8051cc23c3848f55f7ac1e20a6f93012efaa82c82d9429d4e6cad4b663a35a",
       "assertion_sites": 12,
       "loop_sites": 2,
       "status": "OPEN",
@@ -4228,14 +4228,14 @@
       "original_fixture": null,
       "static_input_literals": {
         "source": {
-          "bytes": 206,
-          "sha256": "22af5393ab99e5d5e5d8c10eba7071ccbd8338307809d38d53c674a106957e93"
+          "bytes": 192,
+          "sha256": "761a1828a0c26f4963302c1f27bf4b623dca1016f12c7a8f9647f4d3d828945d"
         }
       },
       "initial_projection": {
         "fixture": "tests/unit/xir/product_consumers/fixtures/mutual_class_graph/root.xr",
-        "sha256": "22af5393ab99e5d5e5d8c10eba7071ccbd8338307809d38d53c674a106957e93",
-        "original_prefix_sha256": "22af5393ab99e5d5e5d8c10eba7071ccbd8338307809d38d53c674a106957e93",
+        "sha256": "761a1828a0c26f4963302c1f27bf4b623dca1016f12c7a8f9647f4d3d828945d",
+        "original_prefix_sha256": "761a1828a0c26f4963302c1f27bf4b623dca1016f12c7a8f9647f4d3d828945d",
         "expected_classes": 2,
         "scope": "Exact original structural-only input, without a callable adapter or invented runtime result. Checked and Lowered descriptor readers preserve the original one/two nullable class cycles after producers die."
       },
@@ -4273,7 +4273,7 @@
       "name": "source_owner_deep_class_chain_has_no_nominal_recursion_limit",
       "legacy_path": "tests/unit/program/test_xr_program_source_build.c",
       "legacy_line": 4452,
-      "body_lf_sha256": "a65970b48714cdc17dc794b01493bed2a9da711d92859efee756ad89467b0fb8",
+      "body_lf_sha256": "6b81c669c858ccd277eb489130d9a0ccab17cef87bfbcef421294c1d9ab5f060",
       "assertion_sites": 9,
       "loop_sites": 2,
       "status": "OPEN",
@@ -4283,14 +4283,14 @@
       "static_input_literals": {},
       "initial_projection": {
         "fixture": "tests/unit/xir/product_consumers/fixtures/deep_class_graph/root.xr",
-        "sha256": "0acd3ed675dd6ecdc3bb8a6a862126e24737760d62e163e3081941a31784cad1",
-        "original_prefix_sha256": "0acd3ed675dd6ecdc3bb8a6a862126e24737760d62e163e3081941a31784cad1",
+        "sha256": "b94d5387006d85d34d48473fdf8031afb08170d747890859f8e780ae7ca894d3",
+        "original_prefix_sha256": "b94d5387006d85d34d48473fdf8031afb08170d747890859f8e780ae7ca894d3",
         "expected_classes": 80,
         "scope": "Exact original descending C79-to-C0 structural-only input, without an adapter or invented runtime result. All eighty owned class identities, seventy-nine Nullable edges and one terminal i64 field are inspected after producers die; eighty classes do not prove unbounded depth.",
         "original_source_constructor": {
-          "bytes": 5937,
-          "sha256": "0acd3ed675dd6ecdc3bb8a6a862126e24737760d62e163e3081941a31784cad1",
-          "constructor_lf_sha256": "ddda906cdbea2304a78887456677c04ad6c157b3aa50dea22a1fce20982a5b34",
+          "bytes": 5377,
+          "sha256": "b94d5387006d85d34d48473fdf8031afb08170d747890859f8e780ae7ca894d3",
+          "constructor_lf_sha256": "49b4192bdef2dd1923dbc0b8bbe88cafeb972f4a86fa6aeaf0dffc2caee21c9f",
           "classes": 80,
           "nullable_links": 79,
           "terminal_i64_fields": 1,
@@ -4418,7 +4418,7 @@
       "name": "source_owner_class_alias_escape_projects_one_share",
       "legacy_path": "tests/unit/program/test_xr_program_source_build.c",
       "legacy_line": 4503,
-      "body_lf_sha256": "ac1c4e8abfaa33664a7ccb70b5b470688b3c8e1ffff082eb9bb5b275058187f3",
+      "body_lf_sha256": "f957f060a2c0417f96701f6adca53864d6dfb7dacbff03ed6760a5d0eb506f7a",
       "assertion_sites": 33,
       "loop_sites": 5,
       "status": "OPEN",
@@ -4439,14 +4439,14 @@
       },
       "static_input_literals": {
         "source": {
-          "bytes": 354,
-          "sha256": "2b6f5d470dc865e6c7966c7421d0bc450a37a242a3fc64d3f1a47a4b72cb0569"
+          "bytes": 340,
+          "sha256": "c9277ad09ae75aba58ab4b393d047948258767ad9d2646cf9ae1cc4c5b212f57"
         }
       },
       "initial_projection": {
         "fixture": "tests/unit/xir/product_consumers/fixtures/class_alias_escape/root.xr",
-        "sha256": "54bbca567d79c1fb30ef7809d4c3fa889d6e96a8c904dfe227f94ed60aebcc57",
-        "original_prefix_sha256": "2b6f5d470dc865e6c7966c7421d0bc450a37a242a3fc64d3f1a47a4b72cb0569",
+        "sha256": "0c463c52705c99194b69cad4baa8c036d164076b90932121d0a6cb263ec7ae67",
+        "original_prefix_sha256": "c9277ad09ae75aba58ab4b393d047948258767ad9d2646cf9ae1cc4c5b212f57",
         "entry_adapter": "export fn consumerAnswer() -> i64 { return answer() }\n",
         "entry": "consumerAnswer",
         "expected_i64": 42,
@@ -4547,7 +4547,7 @@
       "name": "source_owner_class_field_self_assignment_shares_before_exchange",
       "legacy_path": "tests/unit/program/test_xr_program_source_build.c",
       "legacy_line": 4626,
-      "body_lf_sha256": "6441319d71fa1c0abeede3b5d5b8fa72960386c63435ab402cce433b956a64b0",
+      "body_lf_sha256": "504a79aeeef443ef2ad83c6ed04b05a42ea747c69c2698028c60575e34905627",
       "assertion_sites": 34,
       "loop_sites": 5,
       "status": "OPEN",
@@ -4568,14 +4568,14 @@
       },
       "static_input_literals": {
         "source": {
-          "bytes": 271,
-          "sha256": "bbbe864d45bd3a03c958a68cd2c05493c0311d746c2fd72d7d0da61f46aeaa8c"
+          "bytes": 257,
+          "sha256": "6713b7bcc337055dabf11ee662319175ba2a06558ebf4e9df62d5b238b4bed55"
         }
       },
       "initial_projection": {
         "fixture": "tests/unit/xir/product_consumers/fixtures/class_field_self_assignment/root.xr",
-        "sha256": "3073b990a3c383d03a98cab1e26f8d671e6a247f3d45e8c5bda004f284eac6aa",
-        "original_prefix_sha256": "bbbe864d45bd3a03c958a68cd2c05493c0311d746c2fd72d7d0da61f46aeaa8c",
+        "sha256": "4ff90639e31f0f4e4bcc3f7b8bfeff2030ab8b43e9ffbf772f4c9f9d8362c163",
+        "original_prefix_sha256": "6713b7bcc337055dabf11ee662319175ba2a06558ebf4e9df62d5b238b4bed55",
         "entry_adapter": "export fn consumerAnswer() -> i64 { return answer() }\n",
         "entry": "consumerAnswer",
         "expected_i64": 42,
@@ -4674,7 +4674,7 @@
       "name": "source_owner_class_alias_borrows_coalesce_without_share",
       "legacy_path": "tests/unit/program/test_xr_program_source_build.c",
       "legacy_line": 4735,
-      "body_lf_sha256": "ce5d4af761403bfd1e714e79bb439ffb10c3d66e4321ba70414e5fd1d651556d",
+      "body_lf_sha256": "564b63b819a7b784272ef56de2ce85010ee2502d53e134f080343b433698576a",
       "assertion_sites": 9,
       "loop_sites": 0,
       "status": "OPEN",
@@ -4695,14 +4695,14 @@
       },
       "static_input_literals": {
         "source": {
-          "bytes": 179,
-          "sha256": "f186dab919dda2f76fe70e4ce2293acb91c4a2d0d19367b6f66fbcbdd8ce2e02"
+          "bytes": 172,
+          "sha256": "c05e6219091decb2162c36f2d7df68cd83876420b314ab13a83ca313a2abb3e7"
         }
       },
       "initial_projection": {
         "fixture": "tests/unit/xir/product_consumers/fixtures/class_alias_borrow/root.xr",
-        "sha256": "8d48f5a353f491869c55422447c1b0f243c7b2dab3e2701f4b91fe2a13bbe514",
-        "original_prefix_sha256": "f186dab919dda2f76fe70e4ce2293acb91c4a2d0d19367b6f66fbcbdd8ce2e02",
+        "sha256": "5acbb595983c012d4efaada681d9c2b5216e89d660c49e19b5c54af38afb05ff",
+        "original_prefix_sha256": "c05e6219091decb2162c36f2d7df68cd83876420b314ab13a83ca313a2abb3e7",
         "entry_adapter": "export fn consumerAnswer() -> i64 { return answer() }\n",
         "entry": "consumerAnswer",
         "expected_i64": 42,
@@ -4795,7 +4795,7 @@
       "name": "source_owner_class_alias_final_transfer_coalesces_to_move",
       "legacy_path": "tests/unit/program/test_xr_program_source_build.c",
       "legacy_line": 4772,
-      "body_lf_sha256": "6c98c8beaf8d474c36d43203b99563e02b802518943bf49f63187b82c285fb3e",
+      "body_lf_sha256": "470d418cfd7255ee26bb5237831c2e1ed7d8716d540b014a1d9ca308bdf3f380",
       "assertion_sites": 8,
       "loop_sites": 0,
       "status": "OPEN",
@@ -4816,14 +4816,14 @@
       },
       "static_input_literals": {
         "source": {
-          "bytes": 279,
-          "sha256": "634ec4336a122a983205e392a59ae07704d82da9990d0de1b019c5c665e55186"
+          "bytes": 265,
+          "sha256": "e4fd4da40ae434489f2817c48eef0cdcb7472092c7162b32ca939908b1d04cfb"
         }
       },
       "initial_projection": {
         "fixture": "tests/unit/xir/product_consumers/fixtures/class_alias_transfer/root.xr",
-        "sha256": "a115d26f0d793c37d1e141b9a9c719de8238a346905143e39e9b6c4c052de39b",
-        "original_prefix_sha256": "634ec4336a122a983205e392a59ae07704d82da9990d0de1b019c5c665e55186",
+        "sha256": "0fde0e6281382ab3918c59af86623480cfa8503c2f559498545eb2945a23b1af",
+        "original_prefix_sha256": "e4fd4da40ae434489f2817c48eef0cdcb7472092c7162b32ca939908b1d04cfb",
         "entry_adapter": "export fn consumerAnswer() -> i64 { return answer() }\n",
         "entry": "consumerAnswer",
         "expected_i64": 42,
@@ -6015,7 +6015,7 @@
       "name": "source_owner_reports_exact_monomorphization_depth_budget",
       "legacy_path": "tests/unit/program/test_xr_program_source_build.c",
       "legacy_line": 8759,
-      "body_lf_sha256": "055740b8b54e55ccc9c61714b9fabba4010389d93fcbe651741bb9192b3ac484",
+      "body_lf_sha256": "fb5fb3b89191262d4e49d076e7d42e9c6b19e7e59ee147c4b314f8d8c6eb94fe",
       "assertion_sites": 8,
       "loop_sites": 0,
       "status": "OPEN",
@@ -6024,8 +6024,8 @@
       "original_fixture": null,
       "static_input_literals": {
         "source": {
-          "bytes": 473,
-          "sha256": "1c2cdfc3aa38242ae740429489431511bf0803a53ff5339742e3a99703c1765f"
+          "bytes": 452,
+          "sha256": "d1bade7372ef6aab58310ec709ae3f84a408c4f02b2adc8fa6fc8fda7bc77235"
         }
       }
     },
@@ -7473,7 +7473,7 @@
       "whole_file_responsibility": "OPEN"
     },
     "tests/unit/program/xr_program_output_cleanup_checks.inc.c": {
-      "lf_sha256": "1df958bdd5f9e49d9174e49b0873877aad9fa038ecb4d1809f5f5d44600eba30",
+      "lf_sha256": "ebadb183d1e599ba09b8ec99583671f4d7ba5eef4b4e277d822df15eda24d1a3",
       "functions": [],
       "whole_file_responsibility": "OPEN"
     },
@@ -8217,9 +8217,9 @@
     "tests/unit/aot/xr_program_allocation_fixture_writer.c": "5c52a451119319e4464039afcf85d05bc3587ccda2d9708fb7f58e5e129eef80",
     "tests/unit/aot/xr_program_coroutine_graph_fixture_writer.c": "7599cd3a85be6c8eb09d37807872199ead57807d5ec48ff394f12aa95fe2ab48",
     "tests/unit/aot/xr_typed_provider_native_writer.c": "3288b646b0d96db962cb04845d97fccdaf9ea773e8760a1a37df48721198dfc5",
-    "tests/unit/ir/test_xi_pipeline.c": "8d393b84e537225f8da8b5e59b87f28ca85d784d1bc7545138856441a7a31352",
-    "tests/unit/ir/test_xr_program_imported_callable.c": "dd877e3261806d2c218f085692114ca7538b247716531cdfb406dce9eb198361",
-    "tests/unit/program/test_xr_program_source_build.c": "0418b77da68445daf0da7b26e2916719274737afa4d2f9e3870c70e467eeded8"
+    "tests/unit/ir/test_xi_pipeline.c": "0003c6f30c6e97897d2eed1f578df10edcb1832ed107a2ed5ed8a984b607722c",
+    "tests/unit/ir/test_xr_program_imported_callable.c": "62903979b25d02b371391e422cc4830c374fde4ee0096a70bfaacb90ec0e94e5",
+    "tests/unit/program/test_xr_program_source_build.c": "b66639b4cf3f7c20d5b36919d7f0f366a18e28eac41b2f15c458b1189ff63ec3"
   },
   "shared_emission_owner_policy": "Read only: shared with active IR/provider consumers outside this lane.",
   "completion": "OPEN; generated census and partial projections are not replacement qualification."

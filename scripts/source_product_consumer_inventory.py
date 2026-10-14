@@ -155,7 +155,7 @@ def multi_safepoint_oracle(body: str, literals: dict[str, bytes], fixture: dict)
 def constructor_oracle(body: str, literals: dict[str, bytes]) -> int:
     """Add an independent executable consequence to the original structural proof."""
     source = literals["source"]
-    required = [b"constructor() { this.value = 0 }", b"this.b = true", b"this.a = x",
+    required = [b"init() { this.value = 0 }", b"this.b = true", b"this.a = x",
         b"this.second = x", b"this.first = y",
         b"return c.value + p.a + s.first * 100 + s.second"]
     if not all(text in source for text in required):
