@@ -16,6 +16,7 @@
 
 #include "xxir_vm.h"
 #include "xxir_internal.h"
+#include "xxir_program_internal.h"
 #include "xxir_tuple.h"
 #include "xxir_atomic.h"
 #include "xxir_task.h"
@@ -910,6 +911,32 @@ static void vm_program_release(void *pointer) {
     xr_compile_resources_free(owner->bindings);
     xr_compile_resources_free(owner);
 }
+/* Dispatch identity checks wiring, never execution authority. Complete body,
+ * descriptor and layout correspondence still consume the independently proved input. */
+static XrXirStatus vm_program_match(const XrXirCompileContext *context,
+    const XrXirArtifact *artifact, const VmProgramOwner *owner, const XrXirProgram *program) {
+    XrXirStatus status=xr_xir_compile_program_body_match(context,program->permissions,artifact);
+    if (status!=XR_XIR_OK) return status;
+    const XrXirModule *module=xr_xir_compile_artifact_module(artifact);
+    if (!owner->bindings || program->entry_count!=module->function_count) return XR_XIR_BAD_STRUCTURE;
+    for (uint32_t f=0;f<program->entry_count;++f) {
+        if (!xir_compile_work(context,1)) return XR_XIR_BUDGET;
+        const XrXirCallEntry *entry=&program->entries[f];
+        const XrXirVmBinding *binding=&owner->bindings[f];
+        const XrXirFunctionLayout *layout=xr_xir_compile_artifact_layout(artifact,f);
+        uint64_t bytes=sizeof(VmState)+(uint64_t)layout->frame_bytes+
+            (uint64_t)layout->outgoing_count*sizeof(XrXirValue)+
+            (uint64_t)layout->path_count*sizeof(XrXirValuePathStep);
+        if (bytes>UINT32_MAX || entry->abi_version!=XR_XIR_CALL_ABI_VERSION ||
+            entry->state_bytes!=bytes || entry->resume!=vm_resume || entry->release!=vm_release ||
+            entry->environment!=binding || binding->artifact!=artifact || binding->function!=f ||
+            (entry->parameter_count && !entry->parameters)) return XR_XIR_BAD_STRUCTURE;
+    }
+    XrXirProgramSpec spec={XR_XIR_PROGRAM_ABI_VERSION,program->permissions->target,
+        program->entries,program->entry_count,program->declarations,{0},program->types,{0}};
+    return xr_xir_compile_program_match(context,&spec,program->permissions->layouts,artifact);
+}
+
 XR_FUNC XrXirStatus xr_xir_compile_vm_program_take(XrXirArtifact **artifact,
     XrXirProgram **output) {
     if (!output || *output || !artifact) return XR_XIR_BAD_STRUCTURE;
@@ -917,6 +944,9 @@ XR_FUNC XrXirStatus xr_xir_compile_vm_program_take(XrXirArtifact **artifact,
     if (!module || module->stage != XR_XIR_LOWERED) return XR_XIR_BAD_STAGE;
     if (!module->declarations) return XR_XIR_BAD_STRUCTURE;
     const XrXirCompileContext *context = xr_xir_compile_artifact_context(*artifact);
+    XrXirArtifact *original=*artifact;
+    const XrXirCheckedPacket packet=original->checked_packet;
+    XrXirProgram *program=NULL;
     XrXirStatus status = xr_xir_compile_artifact_verify(*artifact, NULL);
     if (status != XR_XIR_OK) return status;
     VmProgramOwner *owner = xir_compile_calloc(context, 1, sizeof(*owner), &status);
@@ -931,12 +961,22 @@ XR_FUNC XrXirStatus xr_xir_compile_vm_program_take(XrXirArtifact **artifact,
     XrXirProgramSpec spec = {XR_XIR_PROGRAM_ABI_VERSION, *xr_xir_compile_artifact_target(*artifact),
         entries, module->function_count, module->declarations, {owner, vm_program_release}, module->types,
         xr_xir_compile_program_proof(*artifact)};
-    status = xr_xir_compile_program_seal(context, &spec, output);
-    if (status == XR_XIR_OK) { owner->artifact = *artifact; *artifact = NULL; }
+    status = xr_xir_compile_program_seal(context, &spec, &program);
 finish:
     xr_compile_resources_free(entries);
-    if (status != XR_XIR_OK) vm_program_release(owner);
-    return status;
+    if (status==XR_XIR_OK && (*output || *artifact!=original)) status=XR_XIR_BAD_STRUCTURE;
+    if (status==XR_XIR_OK && ((*artifact)->checked_packet.bytes!=packet.bytes ||
+        (*artifact)->checked_packet.length!=packet.length)) status=XR_XIR_BAD_STRUCTURE;
+    /* No allocating or releasing operation follows successful correspondence.
+     * The original artifact remains caller-owned on every failed preparation. */
+    if (status==XR_XIR_OK) status=vm_program_match(context,*artifact,owner,program);
+    if (status!=XR_XIR_OK) {
+        if (program) xr_xir_compile_program_drop(program);
+        else vm_program_release(owner);
+        return status;
+    }
+    owner->artifact=*artifact;*artifact=NULL;*output=program;
+    return XR_XIR_OK;
 }
 XR_FUNC XrXirRunStatus xr_xir_compile_vm_run(const XrXirArtifact *artifact, uint32_t function,
                            XrXirRunContext *context, const XrXirValue *arguments,

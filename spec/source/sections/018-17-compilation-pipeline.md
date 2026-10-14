@@ -760,6 +760,16 @@ This subset (including §17.11 marker templates) does not qualify full member co
 effects, diagnostic provenance, package linking, Checked library publication, installer
 publication or complete source-free standard-library distribution.
 
+Program publication compares the current descriptors and their owned copies
+against independently checked canonical types, declarations, signatures and
+physical layouts after all preparation allocator callbacks have finished. VM
+ownership transfer additionally compares the actual executable body and binding
+wiring to that same input. These final comparisons allocate and release no
+storage. A content digest only detects packet drift; it grants no semantic
+permission. Failure leaves the caller's artifact and code lease unconsumed and
+publishes no Program. This boundary does not authenticate arbitrary native
+callback behavior or replace the remaining owned Final transition.
+
 ### 17.11 Definition Checking and Checked Generic Specialization
 
 Ordinary type parameters admit copyable, storable values, excluding unit, views
