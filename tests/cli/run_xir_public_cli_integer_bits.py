@@ -5,6 +5,7 @@ import hashlib
 import json
 import os
 from pathlib import Path
+from xir_no_child_process import NoChildProcess
 import subprocess
 import tempfile
 
@@ -44,6 +45,7 @@ def main():
         output = Path(temporary.name)
     records = []
     try:
+        process_policy = NoChildProcess(root, output)
         stdlib = output / 'stdlib'
         (stdlib / 'types').mkdir(parents=True)
         declaration = stdlib / 'types/i64.xr'
@@ -81,11 +83,14 @@ def main():
         cases.append(('comptime-word', ctfe, bytes(folded)))
 
         def invoke(name, executable, arguments, environment):
-            result = subprocess.run([str(executable), *arguments], cwd=root, env=environment,
-                                    capture_output=True, timeout=60)
+            argv=[str(executable),*arguments]
+            restricted=environment is hidden and (not arguments or arguments[0]=='run')
+            result=(process_policy.run(name,argv,environment) if restricted else
+                    subprocess.run(argv,cwd=root,env=environment,capture_output=True,timeout=60))
             (output / (name + '.stdout')).write_bytes(result.stdout)
             (output / (name + '.stderr')).write_bytes(result.stderr)
             records.append(dict(name=name, argv=[str(executable), *arguments], exit_code=result.returncode,
+                                CLI_child_processes_denied=process_policy.supported and restricted,
                                 stdout_sha256=hashlib.sha256(result.stdout).hexdigest(),
                                 stderr_sha256=hashlib.sha256(result.stderr).hexdigest()))
             (output / 'commands.json').write_text(json.dumps(records, indent=2) + '\n', encoding='utf-8')
@@ -137,7 +142,8 @@ def main():
         (output / 'summary.json').write_text(json.dumps(dict(status='INTEGER_BITS_ORACLE_PASS', commands=len(records),
             pairs=len(pairs), methods=6, ctfe_cases=len(ctfe_pairs), ctfe_calls=len(ctfe_pairs)*len(methods),
             all_bit_positions=True, negative_endpoint_counts=True,
-            source_absent_and_poisoned=True, VM_C_provider_PATH_hidden=True, complete_standard_library=False),
+            source_absent_and_poisoned=True, VM_C_provider_PATH_hidden=True,
+            Windows_absolute_child_denial=process_policy.control, complete_standard_library=False),
             indent=2) + '\n', encoding='utf-8')
         print(f'Integer bit recipes: {len(pairs)} independent word/count pairs, CTFE and original 3 tests PASS')
         return 0

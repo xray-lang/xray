@@ -5,6 +5,7 @@ import hashlib
 import json
 import os
 from pathlib import Path
+from xir_no_child_process import NoChildProcess
 import subprocess
 import tempfile
 
@@ -27,6 +28,7 @@ def main():
         output = Path(temporary.name)
     records = []
     try:
+        process_policy = NoChildProcess(root, output)
         stdlib = output / 'stdlib'
         (stdlib / 'types').mkdir(parents=True)
         poisoned = stdlib / 'types/rune.xr'
@@ -58,11 +60,13 @@ def main():
         cases = [('direct-nested-generic', direct, bytes(answer)), ('private-cells', cells, bytes(cell_answer))]
 
         def invoke(name, executable, arguments, environment):
-            result = subprocess.run([str(executable), *arguments], cwd=root, env=environment,
-                                    capture_output=True, timeout=60)
+            argv=[str(executable),*arguments]
+            result=(process_policy.run(name,argv,environment) if environment is hidden else
+                    subprocess.run(argv,cwd=root,env=environment,capture_output=True,timeout=60))
             (output / (name + '.stdout')).write_bytes(result.stdout)
             (output / (name + '.stderr')).write_bytes(result.stderr)
             records.append(dict(name=name, argv=[str(executable), *arguments], exit_code=result.returncode,
+                CLI_child_processes_denied=process_policy.supported and environment is hidden,
                 stdout_sha256=hashlib.sha256(result.stdout).hexdigest(), stderr_sha256=hashlib.sha256(result.stderr).hexdigest()))
             (output / 'commands.json').write_text(json.dumps(records, indent=2) + '\n', encoding='utf-8')
             return result
@@ -97,7 +101,8 @@ def main():
             assert diagnostic in result.stderr, result
         (output / 'summary.json').write_text(json.dumps(dict(status='RUNE_CTFE_IMPORT_PASS', commands=len(records),
             scalar_codepoints=len(values), direct_nested_generic_ctfe_calls=len(values)*3, private_cell_cases=len(walks),
-            source_poisoned_and_absent=True, VM_C_provider_PATH_hidden=True, library_generic_templates=False,
+            source_poisoned_and_absent=True, VM_C_provider_PATH_hidden=True,
+            Windows_absolute_child_denial=process_policy.control, library_generic_templates=False,
             user_generic_scalar_instantiation=True, user_aggregate_ctfe=False, float_and_owned_text_ctfe=False,
             library_private_var_opened=False, complete_standard_library=False), indent=2) + '\n', encoding='utf-8')
         print('Rune CTFE: imported scalar generic closures, 13 Unicode boundaries and seven private Cell loops PASS')

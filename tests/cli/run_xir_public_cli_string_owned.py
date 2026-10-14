@@ -2,6 +2,7 @@
 from __future__ import annotations
 import argparse,hashlib,json,os,subprocess,tempfile
 from pathlib import Path
+from xir_no_child_process import NoChildProcess
 
 def main():
     parser=argparse.ArgumentParser(description=__doc__)
@@ -14,6 +15,7 @@ def main():
         temporary=tempfile.TemporaryDirectory(prefix='string-owned-',dir=binary.parent);output=Path(temporary.name)
     records=[]
     try:
+        process_policy=NoChildProcess(root,output)
         stdlib=output/'stdlib';(stdlib/'types').mkdir(parents=True)
         poison=stdlib/'types/string.xr';poison.write_text('invalid string declaration source\n',encoding='utf-8')
         env=dict(os.environ,XRAY_STDLIB_PATH=str(stdlib),NO_COLOR='1');hidden=dict(env,PATH=str(output/'no-C-provider'))
@@ -36,9 +38,12 @@ def main():
         expected.extend(b'X 1\nababab\n')
         case=output/'words.xr';case.write_text(source,encoding='utf-8')
         def invoke(name,executable,arguments,environment):
-            result=subprocess.run([str(executable),*arguments],cwd=root,env=environment,capture_output=True,timeout=60)
+            argv=[str(executable),*arguments]
+            result=(process_policy.run(name,argv,environment) if environment is hidden else
+                    subprocess.run(argv,cwd=root,env=environment,capture_output=True,timeout=60))
             (output/(name+'.stdout')).write_bytes(result.stdout);(output/(name+'.stderr')).write_bytes(result.stderr)
             records.append(dict(name=name,argv=[str(executable),*arguments],exit_code=result.returncode,
+                CLI_child_processes_denied=process_policy.supported and environment is hidden,
                 stdout_sha256=hashlib.sha256(result.stdout).hexdigest(),stderr_sha256=hashlib.sha256(result.stderr).hexdigest()))
             (output/'commands.json').write_text(json.dumps(records,indent=2)+'\n',encoding='utf-8');return result
         result=invoke('words-vm',binary,['run',str(case)],hidden)
@@ -60,6 +65,7 @@ def main():
         (output/'summary.json').write_text(json.dumps(dict(status='STRING_OWNED_ORACLE_PASS',commands=len(records),
             word_count_pairs=len(pairs),UTF8_non_BMP_and_NUL=True,empty_max_count=True,negative_count_empty=True,
             power_two_lengths=[2048,4095,4096,4097],source_poisoned_and_absent=True,VM_C_provider_PATH_hidden=True,
+            Windows_absolute_child_denial=process_policy.control,
             receiver_snapshot_before_count_effects=True,count_evaluated_once=True,
             CTFE_owning_text=False,complete_string_family=False,complete_standard_library=False),indent=2)+'\n',encoding='utf-8')
         print('Owned string recipes: 64 independent UTF-8/count pairs, empty max, power-two boundaries and native PASS')
