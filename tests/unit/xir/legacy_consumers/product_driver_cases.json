@@ -14136,6 +14136,199 @@
         "Complete actual discovery and independent VM/C/native legal outcomes.",
         "Negative borrow/exclusivity and original compiler/native/runtime FI, exact resource/lifetime/cancel/physical and sanitizer/provider matrix."
       ]
+    },
+    {
+      "id": "natural_original_1102_go_await_named",
+      "oracle_id": "natural_original_1102_go_await_named",
+      "source": "tests/regression/11_coroutine/1102_go_await.xr",
+      "source_lf_sha256": "698f7bd99153a34b7276a3868e1bfd2d7b3467c7992b78b533db234aec166833",
+      "entry": "test",
+      "stdout_utf8": "30\n30\n60\ndone\n30\n30\n60\ndone\n",
+      "stderr_utf8": "",
+      "companions": [],
+      "owners": [
+        "P02",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P13",
+        "P14"
+      ],
+      "natural_complete_named_output": {
+        "original_case": "tests/regression/11_coroutine/1102_go_await.xr",
+        "required_names": [
+          "test_go_await"
+        ],
+        "module_initialization_stdout_utf8": "30\n30\n60\ndone\n",
+        "whole_source_preserved": true
+      },
+      "remaining_gates": [
+        "Whole actual discovery and independent VM/C/native natural bytes, including original root calls.",
+        "Original go/await scheduling, physical release, compiler/native/runtime FI, exact budgets/lifetime/cancel/safety/provider matrix remain open.",
+        "Project label does not prove actual project-mode detection; Array<byte> comment is historical while the actual primitive is u8."
+      ]
+    },
+    {
+      "id": "natural_original_1103_defer_named",
+      "oracle_id": "natural_original_1103_defer_named",
+      "source": "tests/regression/11_coroutine/1103_defer.xr",
+      "source_lf_sha256": "fab6decda9de845a4647ffeeb003067a96435a86b6b33adb69b534ff3f20f7cc",
+      "entry": "test",
+      "stdout_utf8": "start\nwork done\ncleanup 3\ncleanup 2\ncleanup 1\nend\nstart\nwork done\ncleanup 3\ncleanup 2\ncleanup 1\n",
+      "stderr_utf8": "",
+      "companions": [],
+      "owners": [
+        "P02",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P13",
+        "P14"
+      ],
+      "natural_complete_named_output": {
+        "original_case": "tests/regression/11_coroutine/1103_defer.xr",
+        "required_names": [
+          "test_defer"
+        ],
+        "module_initialization_stdout_utf8": "start\nwork done\ncleanup 3\ncleanup 2\ncleanup 1\nend\n",
+        "whole_source_preserved": true
+      },
+      "remaining_gates": [
+        "Whole actual discovery and independent VM/C/native natural bytes, including original root calls.",
+        "Original go/await scheduling, physical release, compiler/native/runtime FI, exact budgets/lifetime/cancel/safety/provider matrix remain open.",
+        "Project label does not prove actual project-mode detection; Array<byte> comment is historical while the actual primitive is u8."
+      ]
+    },
+    {
+      "id": "natural_original_1105_defer_args_named",
+      "oracle_id": "natural_original_1105_defer_args_named",
+      "source": "tests/regression/11_coroutine/1105_defer_args.xr",
+      "source_lf_sha256": "e99b48c3d05b6b619bdd3923c2defab6d03771395f0e50e64f427e5fbc4351a5",
+      "entry": "test",
+      "stdout_utf8": "start\nwork done\nresult\n42\ncleanup 2\ncleanup 1\nend\nstart\nwork done\nresult\n42\ncleanup 2\ncleanup 1\n",
+      "stderr_utf8": "",
+      "companions": [],
+      "owners": [
+        "P02",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P13",
+        "P14"
+      ],
+      "natural_complete_named_output": {
+        "original_case": "tests/regression/11_coroutine/1105_defer_args.xr",
+        "required_names": [
+          "test_defer_args"
+        ],
+        "module_initialization_stdout_utf8": "start\nwork done\nresult\n42\ncleanup 2\ncleanup 1\nend\n",
+        "whole_source_preserved": true
+      },
+      "remaining_gates": [
+        "Whole actual discovery and independent VM/C/native natural bytes, including original root calls.",
+        "Original go/await scheduling, physical release, compiler/native/runtime FI, exact budgets/lifetime/cancel/safety/provider matrix remain open.",
+        "Project label does not prove actual project-mode detection; Array<byte> comment is historical while the actual primitive is u8."
+      ]
+    },
+    {
+      "id": "natural_original_1121_defer_block_named",
+      "oracle_id": "natural_original_1121_defer_block_named",
+      "source": "tests/regression/11_coroutine/1121_defer_block.xr",
+      "source_lf_sha256": "e741cca3363be3b5583fe4584621233621d1ccc75b5bed683406a23109b645e5",
+      "entry": "test",
+      "stdout_utf8": "=== defer 块语法测试 ===\n开始\n结束\ndefer 块\n=== 多个 defer 块 ===\n执行中\n结束\ndefer 2\ndefer 1\n=== defer 混合测试 ===\n执行\ndefer 块 A\ncleanup 函数\n开始\n结束\ndefer 块\n执行中\n结束\ndefer 2\ndefer 1\n执行\ndefer 块 A\ncleanup 函数\n",
+      "stderr_utf8": "",
+      "companions": [],
+      "owners": [
+        "P02",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P13",
+        "P14"
+      ],
+      "natural_complete_named_output": {
+        "original_case": "tests/regression/11_coroutine/1121_defer_block.xr",
+        "required_names": [
+          "test_simple",
+          "test_multi",
+          "test_mixed"
+        ],
+        "module_initialization_stdout_utf8": "=== defer 块语法测试 ===\n开始\n结束\ndefer 块\n=== 多个 defer 块 ===\n执行中\n结束\ndefer 2\ndefer 1\n=== defer 混合测试 ===\n执行\ndefer 块 A\ncleanup 函数\n",
+        "whole_source_preserved": true
+      },
+      "remaining_gates": [
+        "Whole actual discovery and independent VM/C/native natural bytes, including original root calls.",
+        "Original go/await scheduling, physical release, compiler/native/runtime FI, exact budgets/lifetime/cancel/safety/provider matrix remain open.",
+        "Project label does not prove actual project-mode detection; Array<byte> comment is historical while the actual primitive is u8."
+      ]
+    },
+    {
+      "id": "natural_original_1400_byte_array_basic_named",
+      "oracle_id": "natural_original_1400_byte_array_basic_named",
+      "source": "tests/regression/14_typed_array/1400_byte_array_basic.xr",
+      "source_lf_sha256": "1c12efc309f1d390ce60972a292ee6d58a2d6c8f7871a821f399768006c1ed8d",
+      "entry": "test",
+      "stdout_utf8": "0\n5\n0\n255\n255\n255\n5\n65\n66\n67\n3\n88\n89\n90\nArray<byte> basic tests passed!\n",
+      "stderr_utf8": "",
+      "companions": [],
+      "owners": [
+        "P09",
+        "P10"
+      ],
+      "natural_complete_named_output": {
+        "original_case": "tests/regression/14_typed_array/1400_byte_array_basic.xr",
+        "required_names": [
+          "test_byte_array_basic"
+        ],
+        "module_initialization_stdout_utf8": "",
+        "whole_source_preserved": true
+      },
+      "remaining_gates": [
+        "Whole actual discovery and independent VM/C/native natural bytes, including original root calls.",
+        "Original go/await scheduling, physical release, compiler/native/runtime FI, exact budgets/lifetime/cancel/safety/provider matrix remain open.",
+        "Project label does not prove actual project-mode detection; Array<byte> comment is historical while the actual primitive is u8."
+      ]
+    },
+    {
+      "id": "natural_original_1500_project_mode_detect_named",
+      "oracle_id": "natural_original_1500_project_mode_detect_named",
+      "source": "tests/regression/15_project/1500_project_mode_detect.xr",
+      "source_lf_sha256": "9367536e8acdbcc2cf05b4c6dc6e0af296fea6039fc73af557ab9b8e85a19987",
+      "entry": "test",
+      "stdout_utf8": "Project mode test\nHello from project!\n",
+      "stderr_utf8": "",
+      "companions": [],
+      "owners": [
+        "P02",
+        "P06",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P12",
+        "P13",
+        "P14",
+        "P17",
+        "P18"
+      ],
+      "natural_complete_named_output": {
+        "original_case": "tests/regression/15_project/1500_project_mode_detect.xr",
+        "required_names": [
+          "test_project_mode_detect"
+        ],
+        "module_initialization_stdout_utf8": "",
+        "whole_source_preserved": true
+      },
+      "remaining_gates": [
+        "Whole actual discovery and independent VM/C/native natural bytes, including original root calls.",
+        "Original go/await scheduling, physical release, compiler/native/runtime FI, exact budgets/lifetime/cancel/safety/provider matrix remain open.",
+        "Project label does not prove actual project-mode detection; Array<byte> comment is historical while the actual primitive is u8."
+      ]
     }
   ]
 }

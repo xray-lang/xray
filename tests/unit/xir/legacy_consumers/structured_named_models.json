@@ -100,6 +100,30 @@
     {
       "path": "tests/regression/13_types/1435_param_mode_place_kind_authorization.xr",
       "lf_sha256": "241a1881869848cd90b5773274464db088bc70401a113044ccb99a887119e585"
+    },
+    {
+      "path": "tests/regression/11_coroutine/1102_go_await.xr",
+      "lf_sha256": "698f7bd99153a34b7276a3868e1bfd2d7b3467c7992b78b533db234aec166833"
+    },
+    {
+      "path": "tests/regression/11_coroutine/1103_defer.xr",
+      "lf_sha256": "fab6decda9de845a4647ffeeb003067a96435a86b6b33adb69b534ff3f20f7cc"
+    },
+    {
+      "path": "tests/regression/11_coroutine/1105_defer_args.xr",
+      "lf_sha256": "e99b48c3d05b6b619bdd3923c2defab6d03771395f0e50e64f427e5fbc4351a5"
+    },
+    {
+      "path": "tests/regression/11_coroutine/1121_defer_block.xr",
+      "lf_sha256": "e741cca3363be3b5583fe4584621233621d1ccc75b5bed683406a23109b645e5"
+    },
+    {
+      "path": "tests/regression/14_typed_array/1400_byte_array_basic.xr",
+      "lf_sha256": "1c12efc309f1d390ce60972a292ee6d58a2d6c8f7871a821f399768006c1ed8d"
+    },
+    {
+      "path": "tests/regression/15_project/1500_project_mode_detect.xr",
+      "lf_sha256": "9367536e8acdbcc2cf05b4c6dc6e0af296fea6039fc73af557ab9b8e85a19987"
     }
   ],
   "cases": [
@@ -753,6 +777,172 @@
         }
       },
       "model_scope": "Original legal place/read/ref boundaries and true ref/out identifiers; scalar outcomes do not qualify all illegal overlap paths or full borrow/resource safety."
+    },
+    {
+      "id": "natural_original_1102_go_await_named",
+      "expected": {
+        "exit_code": 0,
+        "stdout_utf8": "30\n30\n60\ndone\n30\n30\n60\ndone\n",
+        "stderr_utf8": "",
+        "required_test_names": [
+          "test_go_await"
+        ],
+        "per_test_observations": {
+          "test_go_await": {
+            "values": [
+              30,
+              30,
+              60,
+              "done"
+            ]
+          }
+        },
+        "module_initialization_stdout_utf8": "30\n30\n60\ndone\n"
+      },
+      "model": "Independent source arithmetic and LIFO normal trace; complete natural output and original initialization, no output-derived golden."
+    },
+    {
+      "id": "natural_original_1103_defer_named",
+      "expected": {
+        "exit_code": 0,
+        "stdout_utf8": "start\nwork done\ncleanup 3\ncleanup 2\ncleanup 1\nend\nstart\nwork done\ncleanup 3\ncleanup 2\ncleanup 1\n",
+        "stderr_utf8": "",
+        "required_test_names": [
+          "test_defer"
+        ],
+        "per_test_observations": {
+          "test_defer": {
+            "values": [
+              "start",
+              "work done",
+              "cleanup 3",
+              "cleanup 2",
+              "cleanup 1"
+            ]
+          }
+        },
+        "module_initialization_stdout_utf8": "start\nwork done\ncleanup 3\ncleanup 2\ncleanup 1\nend\n"
+      },
+      "model": "Independent source arithmetic and LIFO normal trace; complete natural output and original initialization, no output-derived golden."
+    },
+    {
+      "id": "natural_original_1105_defer_args_named",
+      "expected": {
+        "exit_code": 0,
+        "stdout_utf8": "start\nwork done\nresult\n42\ncleanup 2\ncleanup 1\nend\nstart\nwork done\nresult\n42\ncleanup 2\ncleanup 1\n",
+        "stderr_utf8": "",
+        "required_test_names": [
+          "test_defer_args"
+        ],
+        "per_test_observations": {
+          "test_defer_args": {
+            "values": [
+              "start",
+              "work done",
+              "result",
+              42,
+              "cleanup 2",
+              "cleanup 1"
+            ]
+          }
+        },
+        "module_initialization_stdout_utf8": "start\nwork done\nresult\n42\ncleanup 2\ncleanup 1\nend\n"
+      },
+      "model": "Independent source arithmetic and LIFO normal trace; complete natural output and original initialization, no output-derived golden."
+    },
+    {
+      "id": "natural_original_1121_defer_block_named",
+      "expected": {
+        "exit_code": 0,
+        "stdout_utf8": "=== defer 块语法测试 ===\n开始\n结束\ndefer 块\n=== 多个 defer 块 ===\n执行中\n结束\ndefer 2\ndefer 1\n=== defer 混合测试 ===\n执行\ndefer 块 A\ncleanup 函数\n开始\n结束\ndefer 块\n执行中\n结束\ndefer 2\ndefer 1\n执行\ndefer 块 A\ncleanup 函数\n",
+        "stderr_utf8": "",
+        "required_test_names": [
+          "test_simple",
+          "test_multi",
+          "test_mixed"
+        ],
+        "per_test_observations": {
+          "test_simple": {
+            "values": [
+              "开始",
+              "结束",
+              "defer 块"
+            ]
+          },
+          "test_multi": {
+            "values": [
+              "执行中",
+              "结束",
+              "defer 2",
+              "defer 1"
+            ]
+          },
+          "test_mixed": {
+            "values": [
+              "执行",
+              "defer 块 A",
+              "cleanup 函数"
+            ]
+          }
+        },
+        "module_initialization_stdout_utf8": "=== defer 块语法测试 ===\n开始\n结束\ndefer 块\n=== 多个 defer 块 ===\n执行中\n结束\ndefer 2\ndefer 1\n=== defer 混合测试 ===\n执行\ndefer 块 A\ncleanup 函数\n"
+      },
+      "model": "Independent source arithmetic and LIFO normal trace; complete natural output and original initialization, no output-derived golden."
+    },
+    {
+      "id": "natural_original_1400_byte_array_basic_named",
+      "expected": {
+        "exit_code": 0,
+        "stdout_utf8": "0\n5\n0\n255\n255\n255\n5\n65\n66\n67\n3\n88\n89\n90\nArray<byte> basic tests passed!\n",
+        "stderr_utf8": "",
+        "required_test_names": [
+          "test_byte_array_basic"
+        ],
+        "per_test_observations": {
+          "test_byte_array_basic": {
+            "values": [
+              0,
+              5,
+              0,
+              255,
+              255,
+              255,
+              5,
+              65,
+              66,
+              67,
+              3,
+              88,
+              89,
+              90,
+              "Array<byte> basic tests passed!"
+            ]
+          }
+        },
+        "module_initialization_stdout_utf8": ""
+      },
+      "model": "Independent source arithmetic and LIFO normal trace; complete natural output and original initialization, no output-derived golden."
+    },
+    {
+      "id": "natural_original_1500_project_mode_detect_named",
+      "expected": {
+        "exit_code": 0,
+        "stdout_utf8": "Project mode test\nHello from project!\n",
+        "stderr_utf8": "",
+        "required_test_names": [
+          "test_project_mode_detect"
+        ],
+        "per_test_observations": {
+          "test_project_mode_detect": {
+            "values": [
+              "Project mode test",
+              "Hello from project!"
+            ]
+          }
+        },
+        "module_initialization_stdout_utf8": ""
+      },
+      "model": "Independent source arithmetic and LIFO normal trace; complete natural output and original initialization, no output-derived golden."
     }
   ],
   "independence": "Expected constants come from the original frozen assertions and mathematical method bodies, never current Xray output."
