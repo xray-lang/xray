@@ -1,3 +1,7 @@
 // Typed host output. A result reports provider acceptance, not filesystem flush.
-export fn writeStdout(data: string) -> bool { return __writeStdout(data) }
-export fn writeStderr(data: string) -> bool { return __writeStderr(data) }
+fn write(data: string, stderr: bool) -> bool {
+    if (stderr) { return __writeStderr(data) }
+    return __writeStdout(data)
+}
+export fn writeStdout(data: string) -> bool { return write(data, false) }
+export fn writeStderr(data: string) -> bool { return write(data, true) }
