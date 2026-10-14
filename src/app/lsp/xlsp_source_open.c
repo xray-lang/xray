@@ -136,20 +136,11 @@ static XrXirStatus open_add_diagnostic(XrJsonValue *array,XrLspPosition start,Xr
 }
 XrXirStatus xlsp_source_open_diagnostics_json(const XlspSourceOpen *o,const XlspSourceBuffer *buffer,const XlspSyntaxSnapshot *syntax,XrJsonValue **out) {
     if(!o||!buffer||!syntax||!out||*out)return XR_XIR_BAD_STRUCTURE;
+    if(xlsp_source_syntax_diagnostics(syntax))return xlsp_source_syntax_diagnostics_json(syntax,out);
     XrJsonValue *array=xjson_new_array();if(!array)return XR_XIR_OUT_OF_MEMORY;
     XrXirStatus status=XR_XIR_OK;
     const char *text=xlsp_source_buffer_text(buffer);size_t length=xlsp_source_buffer_length(buffer);
-    const XlspSyntaxDiagnostic *d=xlsp_source_syntax_diagnostics(syntax);
-    if(d) {
-        for(;d;d=d->next) {
-            if(xr_compile_resources_work(o->resources,sizeof(*d))!=XR_COMPILE_RESOURCE_OK){status=XR_XIR_BUDGET;goto done;}
-            XrLspPosition first={0},last={0};
-            status=xlsp_source_position(o->resources,text,length,d->line,d->column,&first);
-            if(status==XR_XIR_OK)status=xlsp_source_position(o->resources,text,length,d->end_line,d->end_column,&last);
-            if(status==XR_XIR_OK)status=open_add_diagnostic(array,first,last,d->message);
-            if(status!=XR_XIR_OK)goto done;
-        }
-    } else if(o->query_status!=XR_XIR_OK) {
+    if(o->query_status!=XR_XIR_OK) {
         if(!o->failure.present||!o->diagnostic_resolved||o->failure.diagnostic.line<=0||o->failure.diagnostic.column<=0) {
             status=XR_XIR_UNRESOLVED;goto done;
         }

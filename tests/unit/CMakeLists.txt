@@ -3814,6 +3814,7 @@ if(XR_BUILD_LSP)
         ${CMAKE_SOURCE_DIR}/src/app/lsp/xlsp_source_query.c
         ${CMAKE_SOURCE_DIR}/src/app/lsp/xlsp_source_navigation.c
         ${CMAKE_SOURCE_DIR}/src/app/lsp/xlsp_source_workspace.c
+        ${CMAKE_SOURCE_DIR}/src/app/lsp/xlsp_source_request.c
         ${CMAKE_SOURCE_DIR}/src/app/lsp/xlsp_source_syntax.c
         ${CMAKE_SOURCE_DIR}/src/app/lsp/xlsp_source_buffer.c
         ${CMAKE_SOURCE_DIR}/src/app/lsp/xlsp_source_open.c
@@ -4512,6 +4513,22 @@ if(WIN32)
     add_test(NAME test_lsp_source_diagnostic_routing COMMAND ${XRAY_PYTHON} -X utf8
         ${CMAKE_CURRENT_SOURCE_DIR}/xir/test_lsp_source_open.py $<TARGET_FILE:test_lsp_source_open> ${PROJECT_SOURCE_DIR}/stdlib --diagnostic-routing-faults)
     set_tests_properties(test_lsp_source_diagnostic_routing PROPERTIES TIMEOUT 300 COST 40 RUN_SERIAL TRUE LABELS "unit;lsp;ownership;metadata;allocation")
+    add_test(NAME test_lsp_source_request COMMAND ${XRAY_PYTHON} -X utf8
+        ${CMAKE_CURRENT_SOURCE_DIR}/xir/test_lsp_source_open.py $<TARGET_FILE:test_lsp_source_open> ${PROJECT_SOURCE_DIR}/stdlib --source-request-faults)
+    set_tests_properties(test_lsp_source_request PROPERTIES TIMEOUT 300 COST 80 RUN_SERIAL TRUE LABELS "unit;lsp;ownership;metadata;allocation")
+    add_executable(test_lsp_async_owner xir/test_lsp_async_owner.c)
+    target_include_directories(test_lsp_async_owner PRIVATE ${XRAY_COMMON_INCLUDES})
+    target_compile_options(test_lsp_async_owner PRIVATE /W4 /WX /utf-8)
+    add_test(NAME test_lsp_async_owner COMMAND test_lsp_async_owner)
+    set_tests_properties(test_lsp_async_owner PROPERTIES TIMEOUT 30 LABELS "unit;lsp;ownership;allocation")
+    add_executable(test_lsp_source_worker xir/test_lsp_source_worker.c
+        ${PROJECT_SOURCE_DIR}/src/app/lsp/xlsp_async.c ${PROJECT_SOURCE_DIR}/src/os/win/thread_win.c)
+    target_link_libraries(test_lsp_source_worker PRIVATE xray_lsp_document_open bcrypt)
+    target_include_directories(test_lsp_source_worker PRIVATE ${XRAY_COMMON_INCLUDES})
+    target_compile_options(test_lsp_source_worker PRIVATE /W4 /WX /utf-8)
+    add_test(NAME test_lsp_source_worker COMMAND ${XRAY_PYTHON} -X utf8
+        ${CMAKE_CURRENT_SOURCE_DIR}/xir/test_lsp_source_open.py $<TARGET_FILE:test_lsp_source_worker> ${PROJECT_SOURCE_DIR}/stdlib --source-request)
+    set_tests_properties(test_lsp_source_worker PROPERTIES TIMEOUT 30 LABELS "unit;lsp;ownership;metadata")
 endif()
 
 include("${CMAKE_CURRENT_SOURCE_DIR}/xir/source_dependencies.cmake")

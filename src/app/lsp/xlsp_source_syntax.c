@@ -102,6 +102,39 @@ static XrXirStatus syntax_push(const XlspSyntaxSnapshot *s,const AstNode ***stac
     }
     (*stack)[(*count)++]=node;return XR_XIR_OK;
 }
+static XrJsonValue *syntax_position_json(XrLspPosition position) {
+    XrJsonValue *out=xjson_new_object();if(!out)return NULL;
+    if(!syntax_member(out,"line",xjson_new_number(position.line))||
+        !syntax_member(out,"character",xjson_new_number(position.character))){xjson_free(out);return NULL;}
+    return out;
+}
+XR_FUNC XrXirStatus xlsp_source_syntax_diagnostics_json(const XlspSyntaxSnapshot *s,XrJsonValue **out) {
+    if(!s||!out||*out)return XR_XIR_BAD_STRUCTURE;
+    XrJsonValue *array=xjson_new_array();if(!array)return XR_XIR_OUT_OF_MEMORY;
+    XrXirStatus status=XR_XIR_OK;XrCompileResources *resources=xr_compile_state_resources(s->state);
+    for(const XlspSyntaxDiagnostic *d=s->diagnostics;d;d=d->next) {
+        status=syntax_work(s,sizeof(*d));if(status!=XR_XIR_OK)break;
+        XrLspPosition start={0},end={0};
+        status=xlsp_source_position(resources,s->text,s->length,d->line,d->column,&start);
+        if(status==XR_XIR_OK)status=xlsp_source_position(resources,s->text,s->length,d->end_line,d->end_column,&end);
+        if(status!=XR_XIR_OK)break;
+        XrJsonValue *diag=xjson_new_object(),*range=xjson_new_object();
+        if(!diag||!range){xjson_free(diag);xjson_free(range);status=XR_XIR_OUT_OF_MEMORY;break;}
+        if(!syntax_member(range,"start",syntax_position_json(start))||!syntax_member(range,"end",syntax_position_json(end))) {
+            xjson_free(range);xjson_free(diag);status=XR_XIR_OUT_OF_MEMORY;break;
+        }
+        if(!syntax_member(diag,"range",range)||!syntax_member(diag,"severity",xjson_new_number(1))||
+            !syntax_member(diag,"source",xjson_new_string("xray"))||!syntax_member(diag,"message",xjson_new_string(d->message))) {
+            xjson_free(diag);status=XR_XIR_OUT_OF_MEMORY;break;
+        }
+        int count=array->as.array.count;
+        if(count==array->as.array.capacity&&array->as.array.capacity>INT_MAX/2){xjson_free(diag);status=XR_XIR_BUDGET;break;}
+        xjson_array_push(array,diag);
+        if(array->as.array.count!=count+1){xjson_free(diag);status=XR_XIR_OUT_OF_MEMORY;break;}
+    }
+    if(status==XR_XIR_OK){*out=array;array=NULL;}
+    xjson_free(array);return status;
+}
 XrXirStatus xlsp_source_syntax_folding_json(const XlspSyntaxSnapshot *s,XrJsonValue **out) {
     if(!s||!out||*out)return XR_XIR_BAD_STRUCTURE;
     const AstNode **stack=NULL;size_t count=0,capacity=0;XrJsonValue *result=xjson_new_array();

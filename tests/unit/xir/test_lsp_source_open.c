@@ -93,10 +93,21 @@ static void open_json_cases(const char *root_uri,const char *lib_uri) {
     }
 }
 #include "lsp_open_diagnostic_routing.h"
+#include "lsp_source_request_cases.h"
+#ifdef XR_LSP_SOURCE_WORKER_CASES
+#include "lsp_source_async_cases.h"
+#endif
 static int open_run(int argc,char **argv) {
     (void)sdk_fixture_malloc;(void)sdk_fixture_free;(void)sdk_ledger;(void)sdk_unlimited;
     CHECK(argc==3||argc==4);XrCompileResourceLimits limits=xr_source_compile_default_resource_limits();
     if(argc==4) {
+        if(!strcmp(argv[3],"--source-request")||!strcmp(argv[3],"--source-request-faults")) {
+            source_request_cases(argv[1],argv[2],!strcmp(argv[3],"--source-request-faults"));
+#ifdef XR_LSP_SOURCE_WORKER_CASES
+            source_async_cases(argv[1],argv[2]);
+#endif
+            return 0;
+        }
         bool faults=!strcmp(argv[3],"--diagnostic-routing-faults");
         CHECK(faults||!strcmp(argv[3],"--diagnostic-routing"));
         routing_run(argv[1],argv[2],faults);return 0;

@@ -19,6 +19,7 @@ XR_FUNC const AstNode *xlsp_source_syntax_ast(const XlspSyntaxSnapshot *);
 XR_FUNC const XlspSyntaxDiagnostic *xlsp_source_syntax_diagnostics(const XlspSyntaxSnapshot *);
 XR_FUNC XrParseStatus xlsp_source_syntax_status(const XlspSyntaxSnapshot *);
 XR_FUNC XrXirStatus xlsp_source_syntax_folding_json(const XlspSyntaxSnapshot *,XrJsonValue **);
+XR_FUNC XrXirStatus xlsp_source_syntax_diagnostics_json(const XlspSyntaxSnapshot *,XrJsonValue **);
 /* Owned outline is a syntactic projection, independent of semantic success.
  * Name/span facts come exclusively from this modern parser owner. Output and
  * every name survive syntax/Session/input death. Parent UINT32_MAX means root. */
