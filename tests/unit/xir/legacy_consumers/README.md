@@ -229,3 +229,14 @@ from the supplementary reverse program, using owned UTF-8 text and logical
 Array result independence. Sort/Compare, capacity, Set and multi-point optional
 chain/query/imported-definition replacements remain abstract. Full named
 preparation never proves actual execution, physical release or product readiness.
+
+Actual product consumers are registered when XRAY_LEGACY_PRODUCT_BINARY names
+a freshly built public CLI. run_product_driver.py invokes public test discovery,
+VM run, canonical C projection and public native build, then runs the native
+image against the independent original bytes. Each selected positive case
+remains a failure when unavailable; no expected-failure conversion or skipped
+body grants success. The manifest retains whole inputs, imported companions,
+owner packages and full remaining FI/lifetime/safety duties. Native adapters
+invoke every original named body in declaration order; they do not qualify
+CLI test hooks or replace the public VM test-discovery check. Each invocation
+saves distinct raw evidence, so rerunning never overwrites first failures.
