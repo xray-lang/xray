@@ -109,7 +109,9 @@ def main():
                  for path in published.rglob('*') if path.is_file()}
         assert after == publication_before
         attacks.append('producer-'+case+'-publication-preserved')
-    for index, relative in enumerate(['source_sdk_manifest.json', 'include/xray_source.h', *manifest['archives']]):
+    members = ['source_sdk_manifest.json', *[row['path'] for row in manifest['files']]]
+    assert len(members) == len(set(members))
+    for index, relative in enumerate(members):
         member = source/relative
         before = member.read_bytes()
         try:
