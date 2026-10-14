@@ -86,12 +86,11 @@ static void fault_cleanup_execute(unsigned mode) {
         fault_cleanup_trace(&outputs[i], mode, 1);
         CHECK(!instance->executor->cleanup_incomplete && !xr_xir_call_cleanup_incomplete(instance->call));
         XrXirValue sentinel = {XR_XIR_I64, 0, 99};
-        CHECK(xr_xir_instance_take_result(instance, &sentinel) ==
-            (mode == TASK_FAULT_CALL ? XR_XIR_CALL_BAD_ARGUMENT : XR_XIR_CALL_OUTPUT_ERROR));
+        /* A completed executor fault precedes result transfer and preserves occupied output. */
+        CHECK(xr_xir_instance_take_result(instance, &sentinel) == XR_XIR_CALL_OUTPUT_ERROR);
         CHECK(sentinel.type == XR_XIR_I64 && sentinel.payload == 99);
         XrXirValue empty = {0};
-        CHECK(xr_xir_instance_take_result(instance, &empty) ==
-            (mode == TASK_FAULT_CALL ? XR_XIR_CALL_BAD_STATE : XR_XIR_CALL_OUTPUT_ERROR));
+        CHECK(xr_xir_instance_take_result(instance, &empty) == XR_XIR_CALL_OUTPUT_ERROR);
         CHECK(!empty.type && !empty.reserved && !empty.payload);
         uint64_t epoch = instance->epoch;
         XrXirDomainBudgetStats before = xr_xir_domain_budget_stats(instance->domain);

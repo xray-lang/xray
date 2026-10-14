@@ -16,6 +16,7 @@
 
 #include "xxir_vm.h"
 #include "xxir_vm_debug_internal.h"
+#include "xxir_call_observer_internal.h"
 #include "xxir_internal.h"
 #include "xxir_tuple.h"
 #include "xxir_atomic.h"
@@ -746,6 +747,7 @@ static XrXirRunStatus scalar_step(ScalarRun *run, VmState *state, XrXirAction *a
 
 static XrXirAction vm_resume_observed(XrXirCallView *view, const XrXirVmBinding *binding,
     XrXirVmDebug *debug) {
+    if (xr_xir_call_observer_vm(view) != XR_XIR_CALL_READY) return xr_xir_call_fault(XR_XIR_RUN_BAD_ARTIFACT);
     const XrXirModule *module = xr_xir_compile_artifact_module(binding->artifact);
     const XrXirFunction *function = &module->functions[binding->function];
     const XrXirFunctionLayout *layout = xr_xir_compile_artifact_layout(binding->artifact, binding->function);

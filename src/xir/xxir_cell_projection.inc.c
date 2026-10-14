@@ -19,7 +19,7 @@ static bool cell_projection_allocation_bytes(size_t count, size_t *bytes) {
 static bool cell_projection_valid(const XirCell *cell) {
     size_t bytes = 0;
     if (!cell || !cell->initialized || !cell->projection_count || cell->module_storage ||
-        cell->borrow_top || cell->module_owner || cell->module_slot != UINT32_MAX ||
+        cell->borrow_top || cell->prepared_loan || cell->module_owner || cell->module_slot != UINT32_MAX ||
         !cell_authority_valid(&cell->projection_authority) ||
         !cell_projection_allocation_bytes(cell->projection_count, &bytes) ||
         cell->allocation_bytes != bytes ||
@@ -106,6 +106,7 @@ static XrXirValueStatus cell_project_operation(XrXirType type,
     if (!projection) return status;
     projection->value = (XrXirValue){0};
     projection->borrow_top = NULL;
+    projection->prepared_loan = NULL;
     projection->module_owner = NULL;
     projection->module_slot = UINT32_MAX;
     projection->initialized = false;

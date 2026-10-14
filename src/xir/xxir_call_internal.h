@@ -14,12 +14,17 @@
 #include "xxir_call.h"
 #include "xxir_cell_owner_internal.h"
 #include "xxir_effect_contract_internal.h"
+typedef struct XrXirCallObserver XrXirCallObserver;
 typedef struct XrXirCallBudget {
     uint64_t byte_limit, requested_limit, requested_bytes, live_bytes, peak_bytes, allocations, frees;
     uint64_t resume_limit, resumes;
     uint64_t transitions, release_tickets, released_frames;
     XrXirDomain *work_domain;
     bool exhausted;
+    XrXirCall *observed_calls;
+    const XrXirCallObserver *observer;
+    const void *observer_instance;
+    bool notifying;
 } XrXirCallBudget;
 typedef enum XrXirCellParameterRole {
     XR_XIR_CELL_ROLE_UNKNOWN, XR_XIR_CELL_ROLE_OWNED_CAPTURE,

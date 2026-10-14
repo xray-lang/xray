@@ -156,6 +156,67 @@ static void capacity_core_rejections(void) {
     CHECK(xr_xir_array_capacity(&array, &f.admission, &capacity) == XR_XIR_VALUE_LIMIT && capacity == 71);
     xr_xir_value_drop(&out); xr_xir_value_drop(&array); capacity_core_free(&f);
 }
+static void capacity_core_no_growth(void) {
+    CapacityCore f = capacity_core_new(65536, 65536, 65536);
+    XrXirValue source = {0}, copy = {0};
+    const XrXirValue values[] = {{XR_XIR_I64, 0, 1}, {XR_XIR_I64, 0, 2}};
+    CHECK(xr_xir_array_new((XrXirType)256, values, 2, &f.admission, &source) == XR_XIR_VALUE_OK);
+    int64_t capacity = capacity_core_capacity(&f, &source);
+    XrXirDomainStats before = xr_xir_domain_stats(f.domain);
+    XrXirDomainBudgetStats charged = xr_xir_domain_budget_stats(f.domain);
+    size_t allocations = calls; fail_at = calls;
+    CHECK(xr_xir_array_reserve(&source, capacity, &f.admission, &copy) == XR_XIR_VALUE_OK);
+    fail_at = SIZE_MAX;
+    CHECK(copy.payload == source.payload && calls == allocations);
+    CHECK(xr_xir_domain_stats(f.domain).live_bytes == before.live_bytes);
+    CHECK(xr_xir_domain_budget_stats(f.domain).requested_bytes == charged.requested_bytes);
+    XrXirValuePlace place = {(XrXirType)256, &copy.payload};
+    XrXirValue nine = {XR_XIR_I64, 0, 9}; XrXirFaultDetail fault = {0};
+    allocations = calls; fail_at = calls;
+    CHECK(xr_xir_array_set(&place, 0, &nine, &f.admission, &fault) == XR_XIR_VALUE_OOM);
+    fail_at = SIZE_MAX;
+    CHECK(copy.payload == source.payload && calls > allocations);
+    const int64_t original[] = {1, 2}, changed[] = {9, 2};
+    capacity_core_i64(&f, &source, original, 2); capacity_core_i64(&f, &copy, original, 2);
+    CHECK(xr_xir_array_set(&place, 0, &nine, &f.admission, &fault) == XR_XIR_VALUE_OK);
+    capacity_core_i64(&f, &source, original, 2); capacity_core_i64(&f, &copy, changed, 2);
+    CHECK(capacity_core_capacity(&f, &copy) == capacity);
+    xr_xir_value_drop(&copy);
+    f.admission.domain = f.reading;
+    CHECK(xr_xir_array_reserve(&source, 0, &f.admission, &copy) == XR_XIR_VALUE_OK);
+    CHECK(copy.payload != source.payload && object_pointer(&copy)->domain == f.reading);
+    capacity_core_i64(&f, &copy, original, 2);
+    xr_xir_value_drop(&copy); f.admission.domain = f.domain;
+    uint64_t repeated_allocations = xr_xir_domain_stats(f.domain).allocations;
+    uint64_t repeated_requests = xr_xir_domain_budget_stats(f.domain).requested_bytes;
+    for (unsigned i = 0; i < 12000; ++i) {
+        CHECK(xr_xir_array_reserve(&source, 0, &f.admission, &copy) == XR_XIR_VALUE_OK);
+        CHECK(copy.payload == source.payload); xr_xir_value_drop(&copy);
+    }
+    CHECK(xr_xir_domain_stats(f.domain).allocations == repeated_allocations);
+    CHECK(xr_xir_domain_budget_stats(f.domain).requested_bytes == repeated_requests);
+    xr_xir_value_drop(&source); capacity_core_free(&f);
+}
+static void capacity_core_no_growth_admission(void) {
+    for (unsigned mode = 0; mode < 3; ++mode) {
+        CapacityCore f = capacity_core_new(65536, 65536, 65536);
+        XrXirValue source = {0}, copy = {0}, text = {0};
+        CHECK(xr_xir_string_new(f.domain, "owned", 5, &text) == XR_XIR_VALUE_OK);
+        CHECK(xr_xir_array_new((XrXirType)257, &text, 1, &f.admission, &source) == XR_XIR_VALUE_OK);
+        XirObject *root = object_pointer(&source), *element = object_pointer(&text);
+        uint32_t root_refs = atomic_load(&root->references), element_refs = atomic_load(&element->references);
+        size_t allocations = calls;
+        if (mode == 1) f.admission.work = 0;
+        if (mode == 2) atomic_store(&root->references, UINT32_MAX);
+        XrXirValueStatus status = xr_xir_array_reserve(&source, 0, &f.admission, &copy);
+        CHECK(status == (mode == 1 ? XR_XIR_VALUE_LIMIT : mode == 2 ? XR_XIR_VALUE_REFCOUNT_LIMIT : XR_XIR_VALUE_OK));
+        CHECK(calls == allocations && atomic_load(&element->references) == element_refs);
+        if (!mode) { CHECK(copy.payload == source.payload); xr_xir_value_drop(&copy); }
+        else CHECK(!copy.type && !copy.reserved && !copy.payload);
+        if (mode == 2) atomic_store(&root->references, root_refs);
+        xr_xir_value_drop(&source); xr_xir_value_drop(&text); capacity_core_free(&f);
+    }
+}
 static size_t capacity_core_fault(unsigned mode, size_t offset) {
     CapacityCore f = capacity_core_new(65536, 65536, 65536);
     XrXirValue source = {0}, text = {0}, alias = {0}, out = {0};
@@ -165,7 +226,10 @@ static size_t capacity_core_fault(unsigned mode, size_t offset) {
     CHECK(xr_xir_value_copy(&source, &alias) == XR_XIR_VALUE_OK);
     XirObject *identity = object_pointer(&source); int64_t old_capacity = capacity_core_capacity(&f, &source);
     uint32_t references = atomic_load(&object_pointer(&text)->references);
-    size_t start = calls, physical = live; uint64_t bytes = xr_xir_domain_stats(f.domain).live_bytes;
+    if (mode == 3) f.admission.domain = f.reading;
+    size_t start = calls, physical = live;
+    uint64_t bytes = xr_xir_domain_stats(f.domain).live_bytes;
+    uint64_t reader_bytes = xr_xir_domain_stats(f.reading).live_bytes;
     fail_at = offset == SIZE_MAX ? SIZE_MAX : start + offset;
     XrXirValueStatus status = mode == 0 ?
         xr_xir_array_with_capacity((XrXirType)257, 31, &f.admission, &out) :
@@ -175,6 +239,7 @@ static size_t capacity_core_fault(unsigned mode, size_t offset) {
     else {
         CHECK(status == XR_XIR_VALUE_OOM && !out.type && !out.reserved && !out.payload);
         CHECK(live == physical && xr_xir_domain_stats(f.domain).live_bytes == bytes);
+        CHECK(xr_xir_domain_stats(f.reading).live_bytes == reader_bytes);
         CHECK(atomic_load(&object_pointer(&text)->references) == references);
     }
     CHECK(object_pointer(&source) == identity && capacity_core_capacity(&f, &source) == old_capacity);
@@ -233,14 +298,19 @@ static void capacity_core_ledgers(void) {
         xr_xir_value_drop(&out); capacity_core_free(&f);
     }
 }
-int main(void) {
+int main(int argc, char **argv) {
     fail_at = SIZE_MAX;
+    capacity_core_no_growth(); capacity_core_no_growth_admission();
+    if (argc == 2 && !strcmp(argv[1], "--cow")) return 0;
+    CHECK(argc == 1);
     capacity_core_owners(); capacity_core_nested(); capacity_core_empty_element(); capacity_core_rejections();
-    for (unsigned mode = 0; mode < 3; ++mode) {
-        size_t count = capacity_core_fault(mode, SIZE_MAX); CHECK(count > 0);
+    for (unsigned mode = 0; mode < 4; ++mode) {
+        size_t count = capacity_core_fault(mode, SIZE_MAX);
+        CHECK(mode == 2 ? count == 0 : count > 0);
+        printf("capacity allocation mode%u sites=%zu\n", mode, count);
         for (size_t site = 0; site < count; ++site) (void)capacity_core_fault(mode, site);
     }
-    capacity_core_retain_failure(); capacity_core_ledgers(); CHECK(original_value_allocation_main() == 0);
+    capacity_core_retain_failure(); capacity_core_ledgers(); CHECK(original_value_allocation_main(1, argv) == 0);
     puts("Array capacity owned/cross-domain/nested/zero-sized/all-OOM/retain/exact-minus1/charged-retry physical0 PASS");
     return 0;
 }
