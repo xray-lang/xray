@@ -25,6 +25,7 @@ struct XdapAdapter {
     XdapValueRef values[128];
     uint32_t value_count;
     char *function_breakpoints[32];
+    XrXirVmDebugRule function_rules[32];
     uint32_t function_breakpoint_count;
     uint32_t depth, next_handle, seq;
     uint64_t stop_epoch;

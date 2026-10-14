@@ -17,6 +17,16 @@ typedef enum XrXirVmDebugMode {
     XR_XIR_VM_DEBUG_STEP_IN, XR_XIR_VM_DEBUG_STEP_OVER, XR_XIR_VM_DEBUG_STEP_OUT
 } XrXirVmDebugMode;
 typedef struct XrXirVmDebugLocation { uint32_t function, instruction; } XrXirVmDebugLocation;
+typedef enum XrXirVmDebugHitKind {
+    XR_XIR_VM_DEBUG_HIT_ALWAYS,XR_XIR_VM_DEBUG_HIT_EQUAL,XR_XIR_VM_DEBUG_HIT_GREATER,
+    XR_XIR_VM_DEBUG_HIT_GREATER_EQUAL,XR_XIR_VM_DEBUG_HIT_LESS,XR_XIR_VM_DEBUG_HIT_LESS_EQUAL,
+    XR_XIR_VM_DEBUG_HIT_MULTIPLE
+} XrXirVmDebugHitKind;
+typedef struct XrXirVmDebugRule {
+    XrXirVmDebugLocation location;
+    XrXirVmDebugHitKind hit_kind;
+    uint64_t hit_value;
+} XrXirVmDebugRule;
 typedef enum XrXirVmDebugCode { XR_XIR_VM_DEBUG_PENDING,XR_XIR_VM_DEBUG_NATIVE,XR_XIR_VM_DEBUG_VM } XrXirVmDebugCode;
 
 typedef struct XrXirVmDebugFrameInfo {
@@ -56,6 +66,10 @@ XR_FUNC XrXirValueStatus xr_xir_vm_debug_breakpoint(XrXirVmDebug *debug,
  * location and charging work. Failure preserves the previous set. */
 XR_FUNC XrXirValueStatus xr_xir_vm_debug_breakpoints_replace(XrXirVmDebug *,
     const XrXirVmDebugLocation *, uint32_t count);
+/* Replace the entire rule set after verification; successful replacement resets
+ * encounter counts. Counts cover actual VM visits across the bound target and
+ * never count a stopped PC again on resume. Overflow fails without wrapping. */
+XR_FUNC XrXirValueStatus xr_xir_vm_debug_rules_replace(XrXirVmDebug *,const XrXirVmDebugRule *,uint32_t count);
 /* Stop before an observed VM language throw. This does not predict whether
  * ordinary Call propagation will find a handler and does not intercept faults. */
 XR_FUNC XrXirValueStatus xr_xir_vm_debug_break_on_throw(XrXirVmDebug *, bool enabled);

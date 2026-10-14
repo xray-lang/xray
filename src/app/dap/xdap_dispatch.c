@@ -138,7 +138,7 @@ static XrXirStatus dispatch_initialize(XdapAdapter *s,const XdapRequest *r) {
     XdapJsonWriter body=xdap_json_writer(s->resources,s->config.message_limit);
     XDAP_TEXT(&body,"{\"supportsConfigurationDoneRequest\":true,\"supportsFunctionBreakpoints\":true,"
         "\"supportsTerminateRequest\":true,\"supportsRestartRequest\":true,\"supportsSteppingGranularity\":true,\"supportsDisassembleRequest\":true,"
-        "\"supportsValueFormattingOptions\":false,\"supportsExceptionInfoRequest\":true,"
+        "\"supportsValueFormattingOptions\":false,\"supportsExceptionInfoRequest\":true,\"supportsHitConditionalBreakpoints\":true,"
         "\"exceptionBreakpointFilters\":[{\"filter\":\"all\",\"label\":\"Language throws in observed VM\",\"default\":false}]}");
     XrXirStatus status=xdap_dispatch_response(s,r,true,&body,NULL);xdap_json_writer_free(&body);
     if (status==XR_XIR_OK) { s->initialized=true;status=xdap_dispatch_event(s,"initialized",NULL); }
@@ -199,7 +199,7 @@ static XrXirStatus dispatch_restart(XdapAdapter *s,const XdapRequest *r) {
         xr_source_compile_diagnostic_free(&diagnostic);return xdap_dispatch_response(s,r,false,NULL,message);
     }
     xr_source_compile_diagnostic_free(&diagnostic);
-    XrXirVmDebugLocation locations[32]={{0}};uint32_t count=0;
+    XrXirVmDebugRule rules[32]={{0}};uint32_t count=0;
     for (uint32_t i=0;i<s->function_breakpoint_count;++i) {
         uint32_t found=UINT32_MAX,matches=0;
         for (uint32_t f=0;f<candidate->function_count;++f) {
@@ -209,9 +209,9 @@ static XrXirStatus dispatch_restart(XdapAdapter *s,const XdapRequest *r) {
             }
             if (!strcmp(candidate->functions[f].name,s->function_breakpoints[i])) { found=f;++matches; }
         }
-        if (matches==1) locations[count++]=(XrXirVmDebugLocation){found,0};
+        if (matches==1) { rules[count]=s->function_rules[i];rules[count++].location=(XrXirVmDebugLocation){found,0}; }
     }
-    if (xdap_current_breakpoints_replace(candidate->control,locations,count)!=XR_XIR_VALUE_OK) {
+    if (xdap_current_rules_replace(candidate->control,rules,count)!=XR_XIR_VALUE_OK) {
         xdap_launch_free(candidate);return xdap_dispatch_response(s,r,false,NULL,"Restart breakpoint admission failed");
     }
     if (xdap_current_break_on_throw(candidate->control,s->break_throw)!=XR_XIR_VALUE_OK) {

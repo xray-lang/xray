@@ -25,6 +25,8 @@ typedef struct DebugFrame {
 typedef struct DebugBreakpoint {
     uint32_t function, instruction;
     bool enabled;
+    XrXirVmDebugHitKind hit_kind;
+    uint64_t hit_value,hits;
 } DebugBreakpoint;
 typedef struct SnapshotFrame {
     XrXirVmDebugFrameInfo info;
@@ -189,13 +191,14 @@ XR_FUNC XrXirValueStatus xr_xir_vm_debug_breakpoint(XrXirVmDebug *debug,
         DebugBreakpoint *bp = &debug->breakpoints[i];
         if (bp->enabled && bp->function == function && bp->instruction == instruction) {
             bp->enabled = enabled;
+            if (enabled) { bp->hit_kind=XR_XIR_VM_DEBUG_HIT_ALWAYS;bp->hit_value=bp->hits=0; }
             return XR_XIR_VALUE_OK;
         }
         if (!bp->enabled && !empty) empty = bp;
     }
     if (!enabled) return XR_XIR_VALUE_OK;
     if (!empty) return XR_XIR_VALUE_LIMIT;
-    *empty = (DebugBreakpoint){function, instruction, true};
+    *empty = (DebugBreakpoint){.function=function,.instruction=instruction,.enabled=true};
     return XR_XIR_VALUE_OK;
 }
 XR_FUNC XrXirValueStatus xr_xir_vm_debug_breakpoints_replace(XrXirVmDebug *debug,
@@ -208,9 +211,37 @@ XR_FUNC XrXirValueStatus xr_xir_vm_debug_breakpoints_replace(XrXirVmDebug *debug
     for (uint32_t i=0;i<count;++i) {
         if (locations[i].function>=module->function_count || locations[i].instruction>=
             module->functions[locations[i].function].instruction_count) return XR_XIR_VALUE_BAD_ARGUMENT;
-        fresh[i]=(DebugBreakpoint){locations[i].function,locations[i].instruction,true};
+        fresh[i]=(DebugBreakpoint){.function=locations[i].function,.instruction=locations[i].instruction,.enabled=true};
     }
     memcpy(debug->breakpoints,fresh,sizeof(fresh));return XR_XIR_VALUE_OK;
+}
+XR_FUNC XrXirValueStatus xr_xir_vm_debug_rules_replace(XrXirVmDebug *debug,const XrXirVmDebugRule *rules,uint32_t count) {
+    if (!debug_valid(debug) || !debug->artifact || count>32 || (!rules && count) || debug->disabled ||
+        (debug->count && !xr_xir_vm_debug_paused(debug))) return XR_XIR_VALUE_BAD_ARGUMENT;
+    const XrXirModule *module=xr_xir_compile_artifact_module(debug->artifact);DebugBreakpoint fresh[32]={{0}};
+    if (!xr_xir_domain_work(debug->domain,(uint64_t)count+32)) return XR_XIR_VALUE_LIMIT;
+    for (uint32_t i=0;i<count;++i) {
+        const XrXirVmDebugRule *rule=&rules[i];
+        if (rule->location.function>=module->function_count || rule->location.instruction>=module->functions[rule->location.function].instruction_count ||
+            (unsigned)rule->hit_kind>XR_XIR_VM_DEBUG_HIT_MULTIPLE ||
+            (rule->hit_kind==XR_XIR_VM_DEBUG_HIT_ALWAYS && rule->hit_value) ||
+            (rule->hit_kind==XR_XIR_VM_DEBUG_HIT_MULTIPLE && !rule->hit_value)) return XR_XIR_VALUE_BAD_ARGUMENT;
+        fresh[i]=(DebugBreakpoint){.function=rule->location.function,.instruction=rule->location.instruction,.enabled=true,
+            .hit_kind=rule->hit_kind,.hit_value=rule->hit_value};
+    }
+    memcpy(debug->breakpoints,fresh,sizeof(fresh));return XR_XIR_VALUE_OK;
+}
+static bool hit_matches(const DebugBreakpoint *rule) {
+    switch (rule->hit_kind) {
+    case XR_XIR_VM_DEBUG_HIT_ALWAYS:return true;
+    case XR_XIR_VM_DEBUG_HIT_EQUAL:return rule->hits==rule->hit_value;
+    case XR_XIR_VM_DEBUG_HIT_GREATER:return rule->hits>rule->hit_value;
+    case XR_XIR_VM_DEBUG_HIT_GREATER_EQUAL:return rule->hits>=rule->hit_value;
+    case XR_XIR_VM_DEBUG_HIT_LESS:return rule->hits<rule->hit_value;
+    case XR_XIR_VM_DEBUG_HIT_LESS_EQUAL:return rule->hits<=rule->hit_value;
+    case XR_XIR_VM_DEBUG_HIT_MULTIPLE:return rule->hits%rule->hit_value==0;
+    default:XR_CHECK(false,"invalid admitted VM breakpoint rule");return false;
+    }
 }
 XR_FUNC XrXirValueStatus xr_xir_vm_debug_break_on_throw(XrXirVmDebug *debug, bool enabled) {
     if (!debug_valid(debug) || !debug->artifact || debug->disabled ||
@@ -446,10 +477,12 @@ XR_FUNC XrXirValueStatus xir_vm_debug_before(XrXirVmDebug *debug,
     bool stop = throwing || mode == XR_XIR_VM_DEBUG_PAUSE || (same && (mode == XR_XIR_VM_DEBUG_STEP_IN ||
         (mode == XR_XIR_VM_DEBUG_STEP_OVER && call->event.depth <= debug->step_depth) ||
         (mode == XR_XIR_VM_DEBUG_STEP_OUT && call->event.depth < debug->step_depth)));
-    for (unsigned i = 0; i < 32 && !stop; ++i)
-        stop = debug->breakpoints[i].enabled &&
-            debug->breakpoints[i].function == point->binding->function &&
-            debug->breakpoints[i].instruction == point->instruction;
+    for (unsigned i = 0; i < 32; ++i) {
+        DebugBreakpoint *rule=&debug->breakpoints[i];
+        if (!rule->enabled || rule->function!=point->binding->function || rule->instruction!=point->instruction) continue;
+        if (rule->hits==UINT64_MAX) return XR_XIR_VALUE_LIMIT;
+        ++rule->hits;if (hit_matches(rule)) stop=true;
+    }
     if (!stop) return XR_XIR_VALUE_OK;
     status = capture(debug, point->view,throwing ? op : NULL);
     if (status == XR_XIR_VALUE_OK) *stopped = true;

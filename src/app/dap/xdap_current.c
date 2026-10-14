@@ -119,6 +119,10 @@ XR_FUNC XrXirValueStatus xdap_current_break_on_throw(XdapCurrent *session,bool e
     return session && !session->driving && !session->ended ?
         xr_xir_vm_debug_break_on_throw(session->debug,enabled) : XR_XIR_VALUE_BAD_ARGUMENT;
 }
+XR_FUNC XrXirValueStatus xdap_current_rules_replace(XdapCurrent *session,const XrXirVmDebugRule *rules,uint32_t count) {
+    return session && !session->driving && !session->ended ?
+        xr_xir_vm_debug_rules_replace(session->debug,rules,count) : XR_XIR_VALUE_BAD_ARGUMENT;
+}
 XR_FUNC XrXirCallStatus xdap_current_cancel(XdapCurrent *session) {
     if (!session) return XR_XIR_CALL_BAD_ARGUMENT;
     if (session->driving) return XR_XIR_CALL_BUSY;
