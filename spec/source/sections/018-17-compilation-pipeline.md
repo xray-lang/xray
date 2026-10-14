@@ -554,6 +554,14 @@ Rune与bool/integer共同进入实际标量参数、返回、局部存储和直�
 
 导出大小由规范目标layout确定，Rune为4字节，output_bytes=3拒绝；不使用宿主载体sizeof或UTF-8长度决定预算。Source通过实际Checked/特化复验/Lowered计算后，在独立完整重放中写入普通CONST_RUNE recipe，保持完整站点、类型、规范值和覆盖验证。嵌套comptime和普通Rune调用不绕过闭包准入；原steps/depth/frame/output上限、同一累计编译账本、真实物理OOM和最后owner释放责任不变。本族不授予managed聚合、字符串、未知函数值或运行期fallback资格。
 
+### 17.43 原编译账本上的私有Cell执行与Unit尾赋值
+
+CTFE在整个实际调用闭包准入后，允许函数帧内的Cell<Unit/bool/integer/Rune>。普通var的CELL_NEW/READ/WRITE、懒构造CELL_LOCAL_WRITE和LOCAL_UNINIT使用既有真实Value操作；类型元数据独立复制进编译TypeArena，值存储经原XrCompileResources支持的Domain分配。所有分配、复制、遍历与Domain work保持同一累计账本和真实物理FI；局部接收fuel只限制一次标量检查，不复制、重置或返还编译预算。无Cell操作的原标量入口不创建该Domain/arena。
+
+实际owned offsets在正常返回、子帧返回、步数/预算/OOM/算术失败中全部释放。帧建立预付其清理offset扫描费用；清理不依赖剩余执行预算，也不分配。每次Cell访问验证同一私有Domain，参数仍限bool/integer/Rune，导出仍限规范Unit/bool/integer/Rune结果，不接收外部Cell、ref借用、模块状态或任意拥有值。类型、前驱/PHI、target、身份、签名、可达I/O、depth/steps/activation bytes及原输出上限继续全量复验，不从root/effect标志授予纯度，不调用Instance/native/fallback。
+
+Unit块的最后赋值可带普通表达式的内部编号，但helper的Unit RETURN必须使用零编号，不构造Unit SSA槽或传递该编号。Source仍完整独立重放、核对站点与规范值并重新Checker接收；私有Cell执行只导出实际标量/Unit结果。本族不授予Cell/聚合/字符串导出、函数值、清理函数或挂起资格。
+
 <!-- /xr-spec:cn -->
 
 <!-- xr-spec:en -->
@@ -1218,5 +1226,13 @@ Source receives Unit comptime results through the same bounded CTFE pipeline and
 Rune joins bool/integer admission for actual scalar parameters, results, locals and direct-call closures. CONST_RUNE, INTEGER_TO_RUNE and RUNE_TO_INTEGER use the existing shared execution kernel. Rune equality validates both complete Unicode scalars and compares code points; it does not interpret Rune as an integer type or host character. Valid payloads are 0..0x10ffff excluding 0xd800..0xdfff. Invalid Rune arguments reject with BAD_ARGUMENT; out-of-range integer conversions reject with NUMERIC_RANGE, preserving canonical Unit output. CONVERT_NUMBER continues to admit only integer-to-integer conversion and grants no floating admission.
 
 Canonical target layout determines exported size: Rune occupies four bytes and output_bytes=3 rejects. Host carrier sizeof and UTF-8 length do not determine that budget. After actual Checked/specialization reverification/Lowered execution, Source independently replays an ordinary CONST_RUNE recipe with complete site, type, canonical-value and coverage checks. Nested comptime and ordinary Rune calls retain full closure admission. Existing steps/depth/frame/output ceilings, the sole cumulative compiler ledger, physical OOM and final-owner cleanup obligations remain. This family grants no managed aggregate, string, unknown function-value or runtime-fallback qualification.
+
+### 17.43 Private Cell execution on the compiler ledger and Unit tail assignment
+
+After admitting the entire actual call closure, CTFE allows frame-private Cell<Unit/bool/integer/Rune>. Ordinary var CELL_NEW/READ/WRITE, lazy CELL_LOCAL_WRITE and LOCAL_UNINIT use authentic existing Value operations. Type metadata is independently copied into a compiler TypeArena; value storage uses the original XrCompileResources-backed Domain. Allocation, copy, traversal and Domain work retain one cumulative ledger and physical FI. Local receiving fuel bounds one scalar check; it neither clones, resets nor refunds the compiler budget. Scalar entries without Cell operations create no such Domain/arena.
+
+Actual owned offsets are released on normal and child returns and on step, budget, OOM or arithmetic failure. Frame setup prepays its cleanup offset scans; release needs no remaining execution budget and allocates nothing. Each Cell access checks the same private Domain. Parameters and exports remain limited to canonical Unit/bool/integer/Rune results and ordinary scalar arguments; external Cells, ref loans, module state and arbitrary owned values are not admitted. Full type, predecessor/PHI, target, identity, signature, reachable-I/O, depth/steps/activation-byte and original output checks remain. Root/effect flags grant no purity, and no Instance/native/fallback runs.
+
+A Unit block's tail assignment may carry an ordinary expression's internal ID, but its helper Unit RETURN must use zero, creating no Unit SSA slot or forwarding that ID. Source independently replays the complete input, matches sites and canonical results and receives it through the ordinary Checker. Private Cell execution exports only actual scalar/Unit results. This family grants no Cell/aggregate/string export, function-value, cleanup-function or suspension qualification.
 
 <!-- /xr-spec:en -->

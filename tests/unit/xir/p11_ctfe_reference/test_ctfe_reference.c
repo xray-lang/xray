@@ -31,6 +31,13 @@ typedef struct CtfeReferenceCase {
 } CtfeReferenceCase;
 
 static const CtfeReferenceCase reference_cases[] = {
+    {"cell_rune", XR_XIR_RUNE, 128512, XR_XIR_OK, NULL, 0},
+    {"cell_loop", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"cell_recursion", XR_XIR_I64, 720, XR_XIR_OK, NULL, 0},
+    {"cell_unit", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"cell_infinite", XR_XIR_UNIT, 0, XR_XIR_BUDGET, NULL, 2},
+    {"cell_io", XR_XIR_UNIT, 0, XR_XIR_BAD_TYPE, "admitted deterministic scalar direct-call closure", 2},
+    {"cell_leaf", XR_XIR_UNIT, 0, XR_XIR_OK, NULL, 0},
     {"rune_literal", XR_XIR_RUNE, 65, XR_XIR_OK, NULL, 0},
     {"rune_nested", XR_XIR_RUNE, 128512, XR_XIR_OK, NULL, 0},
     {"rune_equal", XR_XIR_BOOL, 1, XR_XIR_OK, NULL, 0},
@@ -336,6 +343,52 @@ static void reference_rune_direct(const XrXirCompileContext *context,XrXirSource
     fprintf(stderr,"CTFE Rune canonical boundary/conversion/equality leaf and calls; output4/minus3; evaluator FI=%zu same-owner retry; physical0 after last owner\n",sites);
 }
 
+static void reference_cell_leaf(const XrXirCompileContext *context,XrXirSourceResult *source) {
+    uint8_t identity[32]={0};XrXirArtifact *lowered=reference_lower(context,source,identity);
+    const XrXirModule *module=xr_xir_compile_artifact_module(lowered);
+    uint32_t flag=reference_named(module,"flag"),divide=reference_named(module,"divide");
+    const XrXirFunction *body=&module->functions[flag];unsigned operations=0;
+    for (uint32_t i=0;i<body->instruction_count;++i) {
+        XrXirOp op=body->instructions[i].op;
+        if (op==XR_XIR_CELL_NEW || op==XR_XIR_CELL_LOCAL_WRITE) operations|=1;
+        if (op==XR_XIR_CELL_READ) operations|=2;
+        if (op==XR_XIR_CELL_WRITE || op==XR_XIR_CELL_LOCAL_WRITE) operations|=4;
+    }
+    CHECK(operations==7);
+    XrXirValue argument={XR_XIR_BOOL,0,1},output={0};
+    XrXirCtfeRequest request={.artifact=lowered,.function=flag,
+        .target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION},.arguments=&argument,.argument_count=1,
+        .limits={XR_XIR_CTFE_MAX_STEPS,XR_XIR_CTFE_MAX_FRAME_BYTES,1}};
+    memcpy(request.checked_identity,identity,sizeof(identity));
+    XrCompileResourceStats baseline=reference_stats(context);
+    size_t start=source_fixture_compile_attempts;
+    CHECK(xr_xir_compile_ctfe_leaf(&request,&output)==XR_XIR_CTFE_OK);
+    CHECK(output.type==XR_XIR_BOOL && !output.reserved && !output.payload);output=(XrXirValue){0};
+    size_t sites=source_fixture_compile_attempts-start;CHECK(sites>0);
+    CHECK(reference_stats(context).live_bytes==baseline.live_bytes);
+    for (size_t f=0;f<sites;++f) {
+        source_fixture_compile_injected=false;source_fixture_compile_fail_at=source_fixture_compile_attempts+f;
+        CHECK(xr_xir_compile_ctfe_leaf(&request,&output)==XR_XIR_CTFE_OUT_OF_MEMORY);
+        CHECK(source_fixture_compile_injected && !output.type && !output.reserved && !output.payload);
+        CHECK(reference_stats(context).live_bytes==baseline.live_bytes);
+        source_fixture_compile_fail_at=SIZE_MAX;
+        CHECK(xr_xir_compile_ctfe_leaf(&request,&output)==XR_XIR_CTFE_OK);
+        CHECK(output.type==XR_XIR_BOOL && !output.reserved && !output.payload);output=(XrXirValue){0};
+    }
+    request.limits.steps=1;
+    CHECK(xr_xir_compile_ctfe_leaf(&request,&output)==XR_XIR_CTFE_STEP_LIMIT);
+    CHECK(!output.type && !output.reserved && !output.payload && reference_stats(context).live_bytes==baseline.live_bytes);
+    request.limits.steps=XR_XIR_CTFE_MAX_STEPS;request.function=divide;request.limits.output_bytes=8;
+    argument=(XrXirValue){XR_XIR_I64,0,0};
+    CHECK(xr_xir_compile_ctfe_leaf(&request,&output)==XR_XIR_CTFE_DIVIDE_BY_ZERO);
+    CHECK(!output.type && !output.reserved && !output.payload && reference_stats(context).live_bytes==baseline.live_bytes);
+    argument.payload=2;
+    CHECK(xr_xir_compile_ctfe_leaf(&request,&output)==XR_XIR_CTFE_OK);
+    CHECK(output.type==XR_XIR_I64 && !output.reserved && !output.payload);output=(XrXirValue){0};
+    xr_xir_compile_artifact_free(lowered);
+    fprintf(stderr,"CTFE real Cell leaf NEW/READ/WRITE; evaluator FI=%zu same-owner retry; step/division failure clears owned frame; physical0 after last owner\n",sites);
+}
+
 int main(int argc, char **argv) {
     CHECK(argc == 2);
     const CtfeReferenceCase *selected = NULL;
@@ -354,7 +407,8 @@ int main(int argc, char **argv) {
         selected->name, (unsigned)status, diagnostic.line, diagnostic.column, diagnostic.message);
     CHECK(status == selected->status);
     if (status == XR_XIR_OK) {
-        if (!strcmp(selected->name, "rune_direct")) reference_rune_direct(&context,&source);
+        if (!strcmp(selected->name, "cell_leaf")) reference_cell_leaf(&context,&source);
+        else if (!strcmp(selected->name, "rune_direct")) reference_rune_direct(&context,&source);
         else if (!strcmp(selected->name, "unit_direct")) reference_unit_direct(&context,&source);
         else if (!strcmp(selected->name, "leaf_locals")) reference_leaf_locals(&context, &source);
         else if (!strcmp(selected->name, "mutual_depth_direct")) reference_direct_depth(&context, &source);

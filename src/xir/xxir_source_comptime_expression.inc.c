@@ -69,7 +69,7 @@ static bool source_comptime_body(SourceContext *ctx,AstNode *child,SourceExpecte
         return source_fail(ctx,child,XR_XIR_BAD_TYPE,"comptime result must be a bool, integer, Rune or Unit in this execution domain");
     if (!source_work_units(ctx,child,sizeof(value.type)+sizeof(ctx->returned))) return false;
     ctx->functions[ctx->function].result=value.type;
-    if (!source_recipe_record(ctx,(XrXirInstruction){XR_XIR_RETURN,XR_XIR_UNIT,{value.id,0},{0},0,{0}},NULL)) return false;
+    if (!source_recipe_record(ctx,(XrXirInstruction){XR_XIR_RETURN,XR_XIR_UNIT,{value.type==XR_XIR_UNIT?0:value.id,0},{0},0,{0}},NULL)) return false;
     ctx->returned=true;return finish_body(ctx);
 }
 static bool source_comptime_thunk(SourceContext *ctx,AstNode *node,SourceExpectedType expected,uint32_t *output) {

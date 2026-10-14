@@ -129,8 +129,9 @@ static void ctfe_semantics(void) {
         XR_XIR_CTFE_DIVIDE_BY_ZERO, XR_XIR_UNIT, 0);
     division[0].payload = INT64_MIN; division[1].payload = -1;
     ctfe_expect(&fixture, ctfe_request(&fixture, "quotient", division, 2), XR_XIR_CTFE_OK, XR_XIR_I64, INT64_MIN);
-    const char *rejected[] = {"caller", "mutable", "owned", "io"};
-    for (uint32_t r = 0; r < 4; ++r) ctfe_expect(&fixture, ctfe_request(&fixture, rejected[r], NULL,
+    ctfe_expect(&fixture, ctfe_request(&fixture, "mutable", NULL, 0), XR_XIR_CTFE_OK, XR_XIR_I64, 2);
+    const char *rejected[] = {"caller", "owned", "io"};
+    for (uint32_t r = 0; r < 3; ++r) ctfe_expect(&fixture, ctfe_request(&fixture, rejected[r], NULL,
         0), XR_XIR_CTFE_NOT_LEAF, XR_XIR_UNIT, 0);
     XrXirCtfeRequest request = ctfe_request(&fixture, "answer", NULL, 0);
     XrXirValue occupied = {XR_XIR_I64,77,99}, original = occupied;

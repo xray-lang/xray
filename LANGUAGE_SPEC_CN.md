@@ -7595,6 +7595,14 @@ Rune与bool/integer共同进入实际标量参数、返回、局部存储和直�
 
 导出大小由规范目标layout确定，Rune为4字节，output_bytes=3拒绝；不使用宿主载体sizeof或UTF-8长度决定预算。Source通过实际Checked/特化复验/Lowered计算后，在独立完整重放中写入普通CONST_RUNE recipe，保持完整站点、类型、规范值和覆盖验证。嵌套comptime和普通Rune调用不绕过闭包准入；原steps/depth/frame/output上限、同一累计编译账本、真实物理OOM和最后owner释放责任不变。本族不授予managed聚合、字符串、未知函数值或运行期fallback资格。
 
+### 17.43 原编译账本上的私有Cell执行与Unit尾赋值
+
+CTFE在整个实际调用闭包准入后，允许函数帧内的Cell<Unit/bool/integer/Rune>。普通var的CELL_NEW/READ/WRITE、懒构造CELL_LOCAL_WRITE和LOCAL_UNINIT使用既有真实Value操作；类型元数据独立复制进编译TypeArena，值存储经原XrCompileResources支持的Domain分配。所有分配、复制、遍历与Domain work保持同一累计账本和真实物理FI；局部接收fuel只限制一次标量检查，不复制、重置或返还编译预算。无Cell操作的原标量入口不创建该Domain/arena。
+
+实际owned offsets在正常返回、子帧返回、步数/预算/OOM/算术失败中全部释放。帧建立预付其清理offset扫描费用；清理不依赖剩余执行预算，也不分配。每次Cell访问验证同一私有Domain，参数仍限bool/integer/Rune，导出仍限规范Unit/bool/integer/Rune结果，不接收外部Cell、ref借用、模块状态或任意拥有值。类型、前驱/PHI、target、身份、签名、可达I/O、depth/steps/activation bytes及原输出上限继续全量复验，不从root/effect标志授予纯度，不调用Instance/native/fallback。
+
+Unit块的最后赋值可带普通表达式的内部编号，但helper的Unit RETURN必须使用零编号，不构造Unit SSA槽或传递该编号。Source仍完整独立重放、核对站点与规范值并重新Checker接收；私有Cell执行只导出实际标量/Unit结果。本族不授予Cell/聚合/字符串导出、函数值、清理函数或挂起资格。
+
 ---
 
 ## 18. 错误码 (Error Codes)

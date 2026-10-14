@@ -28,6 +28,9 @@ static bool ctfe_result_value(const XrXirValue *value, XrXirType type) {
         (!value->type && !value->reserved && !value->payload) :
         xr_xir_value_argument(value, NULL, type));
 }
+
+#include "xxir_ctfe_owned.inc.c"
+
 /* The count describes frame reads/writes in scalar_step; edge transfers charge
  * their actual predecessor scans and copies inside scalar_edge. */
 static bool ctfe_opcode_work(XrXirOp op, uint64_t *work) {
@@ -37,6 +40,9 @@ static bool ctfe_opcode_work(XrXirOp op, uint64_t *work) {
     case XR_XIR_RUNE_TO_INTEGER: case XR_XIR_INTEGER_TO_RUNE:
     case XR_XIR_SCALAR_LOCAL_NEW: case XR_XIR_SCALAR_LOCAL_READ:
     case XR_XIR_SCALAR_LOCAL_WRITE: *work = 2; return true;
+    case XR_XIR_CELL_NEW: case XR_XIR_CELL_READ: case XR_XIR_CELL_WRITE:
+    case XR_XIR_CELL_LOCAL_WRITE: *work = 8; return true;
+    case XR_XIR_LOCAL_UNINIT: *work = 1; return true;
     case XR_XIR_EQUAL: *work = 5; return true;
     case XR_XIR_ADD_INT: case XR_XIR_SUB_INT: case XR_XIR_MUL_INT:
     case XR_XIR_DIV_INT: case XR_XIR_REM_INT: case XR_XIR_AND_INT:
@@ -52,7 +58,7 @@ static bool ctfe_opcode_work(XrXirOp op, uint64_t *work) {
 /* Local writes produce Unit but keep ordinary fallthrough control flow. */
 static bool ctfe_unit_result(XrXirOp op) {
     return op == XR_XIR_JUMP || op == XR_XIR_BRANCH || op == XR_XIR_RETURN ||
-        op == XR_XIR_SCALAR_LOCAL_WRITE;
+        op == XR_XIR_SCALAR_LOCAL_WRITE || op == XR_XIR_CELL_WRITE || op == XR_XIR_CELL_LOCAL_WRITE;
 }
 static XrXirCtfeStatus ctfe_admit(const XrXirArtifact *artifact, uint32_t selected) {
     const XrXirModule *module = &artifact->module;
@@ -65,7 +71,7 @@ static XrXirCtfeStatus ctfe_admit(const XrXirArtifact *artifact, uint32_t select
     if (identity->cleanup_owner || identity->nominal_owner ||
         (module->generics && (module->generics[selected].parameter_count ||
         module->generics[selected].argument_count)) || !ctfe_result_type(body->result) ||
-        layout->owned_count || layout->outgoing_count || layout->path_count)
+        layout->outgoing_count || layout->path_count)
         return XR_XIR_CTFE_NOT_LEAF;
     for (uint32_t m = 0; m < module->declarations->module_count; ++m) {
         if (!xir_compile_work(context, 1)) return XR_XIR_CTFE_BUDGET;
@@ -84,8 +90,9 @@ static XrXirCtfeStatus ctfe_admit(const XrXirArtifact *artifact, uint32_t select
         if (!xir_compile_work(context, 1)) return XR_XIR_CTFE_BUDGET;
         const XrXirInstruction *op = &body->instructions[i]; uint64_t work;
         if (!ctfe_opcode_work(op->op, &work)) return XR_XIR_CTFE_NOT_LEAF;
-        bool unit = ctfe_unit_result(op->op);
-        if ((!unit && !ctfe_scalar_type(op->type)) || (unit && op->type != XR_XIR_UNIT))
+        bool unit = ctfe_unit_result(op->op) || (op->op == XR_XIR_CELL_READ && op->type == XR_XIR_UNIT);
+        if (!ctfe_storage_instruction(module, body, op) || (unit && op->type != XR_XIR_UNIT) ||
+            (!unit && op->type == XR_XIR_UNIT))
             return XR_XIR_CTFE_NOT_LEAF;
         if (op->op == XR_XIR_EQUAL) {
             if (!xir_compile_work(context, 2)) return XR_XIR_CTFE_BUDGET;
@@ -138,17 +145,23 @@ XR_FUNC XrXirCtfeStatus xr_xir_compile_ctfe_leaf(const XrXirCtfeRequest *request
      * physical interpreter bookkeeping, never target type or ABI selection. */
     size_t activation_bytes = sizeof(VmState) + layout->frame_bytes;
     if (activation_bytes > request->limits.frame_bytes) return XR_XIR_CTFE_FRAME_LIMIT;
+    CtfeOwnedState owned = {0};
+    status = ctfe_owned_new(artifact, layout->owned_count != 0, &owned);
+    if (status != XR_XIR_CTFE_OK) return status;
+    if (!xir_compile_work(&artifact->context, (uint64_t)layout->owned_count * 2)) {
+        ctfe_owned_free(&owned); return XR_XIR_CTFE_BUDGET;
+    }
     void *activation = NULL;
     status = ctfe_compile_status(xir_compile_resource_status(xr_compile_resources_calloc(
         artifact->context.resources, 1, activation_bytes, &activation)));
-    if (status != XR_XIR_CTFE_OK) return status;
+    if (status != XR_XIR_CTFE_OK) { ctfe_owned_free(&owned); return status; }
     VmState *state = activation; void *frame = state + 1;
     for (uint32_t p = 0; p < body->parameter_count; ++p) {
         if (!xir_compile_work(&artifact->context, 1)) { status = XR_XIR_CTFE_BUDGET; goto done; }
         xr_xir_scalar_store(frame, layout->offsets[p], request->arguments[p].payload);
     }
     {
-        ScalarRun run = {&artifact->module, body, layout, frame, NULL, artifact->context.resources};
+        ScalarRun run = {&artifact->module, body, layout, frame, owned.arena, artifact->context.resources};
         uint64_t remaining = request->limits.steps;
         for (;;) {
             /* Every watchdog observation consumes work, including exhaustion. */
@@ -161,6 +174,11 @@ XR_FUNC XrXirCtfeStatus xr_xir_compile_ctfe_leaf(const XrXirCtfeRequest *request
                 status = XR_XIR_CTFE_NOT_LEAF; break;
             }
             if (!scalar_compile_work(&run, work + 1)) { status = XR_XIR_CTFE_BUDGET; break; }
+            if (ctfe_cell_opcode(body->instructions[state->instruction].op)) {
+                status = ctfe_cell_step(&run, &state->instruction, &owned);
+                if (status != XR_XIR_CTFE_OK) break;
+                continue;
+            }
             XirScalarCoreAction action; XrXirRunStatus ran = xir_scalar_core_step(&run, &state->instruction, &action);
             if (ran != XR_XIR_RUN_OK) {
                 status = ran == XR_XIR_RUN_STEP_LIMIT ? XR_XIR_CTFE_BUDGET :
@@ -177,7 +195,11 @@ XR_FUNC XrXirCtfeStatus xr_xir_compile_ctfe_leaf(const XrXirCtfeRequest *request
         }
     }
 done:
-    xr_compile_resources_free(activation);
+    {
+        ScalarRun cleanup = {&artifact->module, body, layout, frame, owned.arena, artifact->context.resources};
+        ctfe_owned_frame_clear(&cleanup);
+    }
+    xr_compile_resources_free(activation);ctfe_owned_free(&owned);
     return status;
 }
 
