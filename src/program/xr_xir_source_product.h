@@ -83,6 +83,11 @@ XR_FUNC void xr_xir_compile_source_product_diagnostic_free(XrXirSourceProductDia
  * plain value and receives the result; no storage is allocated or published. */
 XR_FUNC XrXirStatus xr_xir_compile_source_product_public_admit(
     const XrXirSourceProduct *product, XrXirSourceDiagnostic *diagnostic);
+/* Applies the identical public state policy to an actual owned Lowered image.
+ * The image supplies its real context and declaration authority. No caller
+ * flags, names or query facts can grant admission. */
+XR_FUNC XrXirStatus xr_xir_compile_source_lowered_public_admit(
+    const XrXirArtifact *lowered, XrXirSourceDiagnostic *diagnostic);
 /* Borrowed immutable facts and packets remain valid after VM code transfer. */
 XR_FUNC const XrXirSourceProductFacts *xr_xir_compile_source_product_facts(const XrXirSourceProduct *product);
 /* The borrowed context is the owner's actual ledger, including after VM take. */
