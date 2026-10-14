@@ -1,0 +1,10 @@
+export fn make()->string{
+    var text="ab"
+    text+="\0Ω"
+    return text
+}
+export fn check()->i64{
+    const text=make()
+    assert(len(text)==4)
+    return 40
+}

@@ -14,7 +14,7 @@
 #include "xir_construction_fixture.h"
 #include "xir_array_metadata_fixture.h"
 
-_Static_assert(XR_XIR_CHECKED_SCHEMA == 28 && XR_XIR_CHECKED_CONTRACT == 73,
+_Static_assert(XR_XIR_CHECKED_SCHEMA == 28 && XR_XIR_CHECKED_CONTRACT == 74,
     "array checked wire identity");
 
 static void array_checked_const_slot(XrXirCheckedPacket *packet, size_t entry, size_t slot) {
