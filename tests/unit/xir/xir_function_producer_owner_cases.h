@@ -203,8 +203,10 @@ static XrXirStatus producer_runtime_seal(ProducerRuntimeWitness *witness,XrXirPr
     xr_xir_compile_artifact_free(checked);memset(&fixture,0,sizeof(fixture));native_fixture_owner_free(&owner);
     return status;
 }
-static XrXirCallStatus producer_runtime_take(XrXirInstance *instance,XrXirValue *output) {
+static XrXirCallStatus producer_runtime_take(XrXirInstance *instance,XrXirValue *output,
+    XrXirCallStatus *released_expected) {
     XrXirCallStatus status=xr_xir_instance_poll_bounded(instance,UINT64_MAX).outcome.status;
+    if(status==XR_XIR_CALL_OOM || status==XR_XIR_CALL_LIMIT) *released_expected=status;
     if (status==XR_XIR_CALL_RETURNED) {
         CHECK(xr_xir_instance_take_result(instance,output)==XR_XIR_CALL_RETURNED);return XR_XIR_CALL_READY;
     }
@@ -218,11 +220,12 @@ static bool function_producer_owner_run(void) {
     XrXirInstanceConfig config;CHECK(xr_xir_instance_config_init(&config,sizeof(config))==XR_XIR_CALL_READY);
     XrXirInstance *instance=NULL,*other=NULL;XrXirValue first={0},second={0},closure={0},copy={0},result={0};
     XrXirCallStatus status=xr_xir_instance_new(program,&config,&instance);bool success=false;
+    XrXirCallStatus released_expected=XR_XIR_CALL_READY;
     if (status==XR_XIR_CALL_READY) status=xr_xir_instance_new(program,&config,&other);
     if (status==XR_XIR_CALL_READY) status=xr_xir_instance_start(instance,make,NULL,0);
-    if (status==XR_XIR_CALL_READY) status=producer_runtime_take(instance,&first);
+    if (status==XR_XIR_CALL_READY) status=producer_runtime_take(instance,&first,&released_expected);
     if (status==XR_XIR_CALL_READY) status=xr_xir_instance_start(instance,make,NULL,0);
-    if (status==XR_XIR_CALL_READY) status=producer_runtime_take(instance,&second);
+    if (status==XR_XIR_CALL_READY) status=producer_runtime_take(instance,&second,&released_expected);
     if (status==XR_XIR_CALL_READY) {
         const XirFunctionProducer *a=xr_xir_function_producer(&first),*b=xr_xir_function_producer(&second);
         CHECK(a && b && a->owner==program->permissions->effects && a->site==b->site &&
@@ -230,12 +233,12 @@ static bool function_producer_owner_run(void) {
         CHECK(xr_xir_instance_start_function(other,&first,NULL,0)==XR_XIR_CALL_BAD_ARGUMENT);
         status=xr_xir_instance_start(instance,nested,&first,1);
     }
-    if (status==XR_XIR_CALL_READY) status=producer_runtime_take(instance,&closure);
+    if (status==XR_XIR_CALL_READY) status=producer_runtime_take(instance,&closure,&released_expected);
     if (status==XR_XIR_CALL_READY) status=xr_xir_instance_start_function(instance,&closure,NULL,0);
-    if (status==XR_XIR_CALL_READY) status=producer_runtime_take(instance,&result);
+    if (status==XR_XIR_CALL_READY) status=producer_runtime_take(instance,&result,&released_expected);
     if (status==XR_XIR_CALL_READY) { CHECK(result.type==XR_XIR_I64 && result.payload==42);success=true; }
     else CHECK(status==XR_XIR_CALL_OOM || status==XR_XIR_CALL_LIMIT);
-    CHECK(xr_xir_instance_free(instance)==XR_XIR_CALL_READY);
+    CHECK(xr_xir_instance_free(instance)==released_expected);
     CHECK(xr_xir_instance_free(other)==XR_XIR_CALL_READY);xr_xir_compile_program_drop(program);
     if (closure.type) {
         CHECK(!witness.releases && xr_xir_value_copy(&closure,&copy)==XR_XIR_VALUE_OK);

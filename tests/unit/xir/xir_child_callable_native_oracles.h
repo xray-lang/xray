@@ -11,6 +11,7 @@
  */
 #ifndef XIR_CHILD_CALLABLE_NATIVE_ORACLES_H
 #define XIR_CHILD_CALLABLE_NATIVE_ORACLES_H
+#include "xir_child_callable_capture_auth.h"
 
 enum { CN_INIT, CN_ENTRY, CN_ROOT, CN_CHILD, CN_PURE, CN_RELAY, CN_ROOT_LEAF,
     CN_UNKNOWN, CN_MIXED, CN_FACTORY, CN_FUNCTIONS, CN_INSTANCES = 2 };
@@ -153,6 +154,7 @@ static XrXirAction cn_resume(XrXirCallView *view) {
         if (function == CN_CHILD) cn_child_probes(view, w);
     }
     XrXirAction action = binding->original->resume(view);
+    if(function==CN_CHILD&&action.kind==XR_XIR_ACTION_CALL)child_capture_auth_probes(view,&action);
     if (function == CN_ROOT && action.kind == XR_XIR_ACTION_AWAIT_TASK) ++w->await_actions;
     return action;
 }
@@ -202,6 +204,13 @@ static void cn_build(CnFixture *f) {
     XrXirProgramSpec spec = child_callable_native_program;
     spec.entries = f->entries;
     spec.code = (XrXirCodeLease){f, cn_code_drop};
+    XrXirProgramSpec retired=spec;retired.abi_version=29;
+    size_t attempts=runtime_attempts;XrXirProgram *refused=NULL;
+    CHECK(xr_xir_compile_program_seal(f->context,&retired,&refused)==XR_XIR_BAD_LAYOUT);
+    CHECK(!refused&&runtime_attempts==attempts&&!f->code_releases);
+    for(uint32_t i=0;i<CN_FUNCTIONS;++i)
+        CHECK(spec.declarations->functions[i].test_role==XR_XIR_TEST_ROLE_NONE&&
+            !spec.declarations->functions[i].test_timeout_seconds);
     CHECK(xr_xir_compile_program_seal(f->context, &spec, &f->program) == XR_XIR_OK);
     const XrXirProgramPermissions *permissions = f->program->permissions;
     CHECK(permissions && permissions->function_count == CN_FUNCTIONS);

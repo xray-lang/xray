@@ -99,13 +99,18 @@ static void conditional_collector_controls(const XrXirArtifact *artifact,XrXirEf
     CHECK(xr_xir_compile_structure_verify_v2(context,&invalid.module,invalid.construction,NULL)==XR_XIR_OK);
     size_t hidden_blocks=source_program_compile_live,hidden_bytes=source_program_compile_bytes;
     uint64_t hidden_live=library_compile_stats(context).live_bytes;attempts=source_program_compile_attempts;
-    CHECK(xr_xir_compile_artifact_verify_owned_effects(&invalid,&output,NULL)==XR_XIR_BAD_TYPE && !output);
+    /* Retained Source facts reject changed input before another owner exists. */
+    CHECK(xr_xir_compile_artifact_verify_owned_effects(&invalid,&output,NULL)==XR_XIR_BAD_STRUCTURE && !output);
+    CHECK(source_program_compile_attempts==attempts && source_program_compile_live==hidden_blocks &&
+        source_program_compile_bytes==hidden_bytes && library_compile_stats(context).live_bytes==hidden_live);
+    /* Independent complete derivation still rejects the semantic contradiction. */
+    CHECK(xr_xir_compile_verify_owned_effects_v2(context,&invalid.module,invalid.construction,&output,NULL)==XR_XIR_BAD_TYPE && !output);
     CHECK(source_program_compile_attempts>attempts && source_program_compile_live==hidden_blocks && source_program_compile_bytes==hidden_bytes);
     CHECK(library_compile_stats(context).live_bytes==hidden_live);
     xr_compile_resources_free(contracts);invalid=*artifact;
     invalid.target.architecture=XR_XIR_ARCH_X86_64;
     attempts=source_program_compile_attempts;
-    /* Complete checking creates the hidden owner before layout rejects it. */
+    /* Retained Source checking releases temporary reads before layout refusal. */
     CHECK(xr_xir_compile_artifact_verify_owned_effects(&invalid,&output,NULL)==XR_XIR_BAD_LAYOUT && !output);
     CHECK(source_program_compile_attempts>attempts && source_program_compile_live==blocks && source_program_compile_bytes==bytes);
     CHECK(library_compile_stats(context).live_bytes==before.live_bytes && sentinel==occupied);

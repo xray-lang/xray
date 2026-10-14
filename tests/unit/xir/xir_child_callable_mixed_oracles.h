@@ -112,6 +112,7 @@ static XrXirAction cm_resume(XrXirCallView *view) {
     }
     const void *environment = view->environment;
     XrXirAction action = f->selected[function]->resume(view);
+    if(function==CN_CHILD&&action.kind==XR_XIR_ACTION_CALL)child_capture_auth_probes(view,&action);
     CHECK(view->environment == environment && xr_xir_call_admission(view));
     if (function == CN_ROOT && action.kind == XR_XIR_ACTION_AWAIT_TASK) {
         CHECK(++w->await_actions == 1 && ++m->awaits[provider] == 1);

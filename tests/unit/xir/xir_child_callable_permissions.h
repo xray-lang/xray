@@ -234,6 +234,13 @@ static void cp_build(CpFixture *f) {
     }
     const XrXirProgramSpec spec = {XR_XIR_PROGRAM_ABI_VERSION, target, entries, XRCP_FUNCTIONS,
         module->declarations, {f, cp_code_drop}, module->types, xr_xir_compile_program_proof(f->lowered)};
+    XrXirProgramSpec retired=spec;retired.abi_version=29;
+    size_t attempts=runtime_attempts;XrXirProgram *refused=NULL;
+    CHECK(xr_xir_compile_program_seal(f->context,&retired,&refused)==XR_XIR_BAD_LAYOUT);
+    CHECK(!refused&&runtime_attempts==attempts&&!f->code_releases);
+    for(uint32_t i=0;i<XRCP_FUNCTIONS;++i)
+        CHECK(module->declarations->functions[i].test_role==XR_XIR_TEST_ROLE_NONE&&
+            !module->declarations->functions[i].test_timeout_seconds);
     CHECK(xr_xir_compile_program_seal(f->context, &spec, &f->program) == XR_XIR_OK);
     CHECK(!f->program->permissions->entries[XRCP_PURE].requires_root && !f->program->permissions->entries[XRCP_PURE].unresolved);
     CHECK(!f->program->permissions->entries[XRCP_RELAY].requires_root && !f->program->permissions->entries[XRCP_RELAY].unresolved);
