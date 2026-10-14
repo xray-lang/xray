@@ -7,6 +7,7 @@ import os
 import subprocess
 import tempfile
 from pathlib import Path
+from xir_no_child_process import NoChildProcess
 
 
 def wrapped(value: int, bits: int = 64, signed: bool = True) -> int:
@@ -32,6 +33,7 @@ def main() -> int:
         output = Path(temporary.name)
     records = []
     try:
+        process_policy = NoChildProcess(root, output)
         stdlib = output / 'stdlib'
         (stdlib / 'types').mkdir(parents=True)
         (stdlib / 'types/i64.xr').write_text('invalid source must not provide numeric declarations\n', encoding='utf-8')
@@ -79,10 +81,14 @@ def main() -> int:
             b'-9223372036854775808 -128\n'))
 
         def invoke(name, executable, arguments, environment):
-            result = subprocess.run([str(executable),*arguments],cwd=root,env=environment,capture_output=True,timeout=60)
+            argv=[str(executable),*arguments]
+            restricted=environment is hidden and (not arguments or arguments[0]=='run')
+            result=(process_policy.run(name,argv,environment) if restricted else
+                    subprocess.run(argv,cwd=root,env=environment,capture_output=True,timeout=60))
             (output/(name+'.stdout')).write_bytes(result.stdout)
             (output/(name+'.stderr')).write_bytes(result.stderr)
             records.append(dict(name=name,argv=[str(executable),*arguments],exit_code=result.returncode,
+                CLI_child_processes_denied=process_policy.supported and restricted,
                 stdout_sha256=hashlib.sha256(result.stdout).hexdigest(),stderr_sha256=hashlib.sha256(result.stderr).hexdigest()))
             (output/'commands.json').write_text(json.dumps(records,indent=2)+'\n',encoding='utf-8')
             return result
@@ -126,7 +132,8 @@ def main() -> int:
             assert len(actual['cases'])==count and all(row['status']=='passed' for row in actual['cases']),actual
         (output/'summary.json').write_text(json.dumps(dict(status='INTEGER_DEFINITION_VM_NATIVE_ORACLE_PASS',
             commands=len(records),mathematical_pairs=len(pairs),widths=8,source_absent_and_poisoned=True,
-            VM_C_provider_PATH_hidden=True,complete_standard_library=False),indent=2)+'\n',encoding='utf-8')
+            VM_C_provider_PATH_hidden=True,Windows_absolute_child_denial=process_policy.control,
+            complete_standard_library=False),indent=2)+'\n',encoding='utf-8')
         print('Integer definitions: 18 recipes, exact mathematical oracle, 8 widths, no-source VM/native and rejections PASS')
         return 0
     finally:
