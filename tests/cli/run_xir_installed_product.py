@@ -11,6 +11,7 @@ import tempfile
 import time
 from pathlib import Path
 from run_xir_public_cli_product import process_times
+from xir_no_child_process import NoChildProcess
 
 
 def sha(path):
@@ -29,6 +30,7 @@ def main():
     if not temporary:
         output.mkdir(parents=True, exist_ok=False)
     commands = []
+    process_policy = NoChildProcess(output, output)
     environment = dict(os.environ, NO_COLOR='1', PYTHONDONTWRITEBYTECODE='1')
     environment.pop('XRAY_STDLIB_PATH', None)
     environment['PATH'] = os.pathsep.join(part for part in environment['PATH'].split(os.pathsep)
@@ -39,19 +41,41 @@ def main():
     sdk_expected = build/'xir-runtime-sdk/sdk_manifest.json'
     verifier = root/'scripts/verify_installed_xir_components.py'
 
-    def run(label, argv, success=True, env=None):
+    def run(label, argv, success=True, env=None, restricted=False):
         begun = time.perf_counter()
-        process = subprocess.Popen([str(x) for x in argv], cwd=output,
-                                   env=env or environment, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        restricted = restricted and process_policy.supported
+        if restricted:
+            before = process_policy.accounting()
+            assert before['active'] == 1, before
+            process_policy.limits(True)
         try:
-            stdout, stderr = process.communicate(timeout=120)
-        except subprocess.TimeoutExpired:
-            process.kill()
-            process.communicate()
-            raise
+            process = subprocess.Popen([str(x) for x in argv], cwd=output,
+                                       env=env or environment, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            try:
+                stdout, stderr = process.communicate(timeout=120)
+            except subprocess.TimeoutExpired:
+                process.kill()
+                process.communicate()
+                raise
+        finally:
+            if restricted:
+                try:
+                    deadline = time.monotonic() + 1
+                    after = process_policy.accounting()
+                    while after['active'] != 1 and time.monotonic() < deadline:
+                        time.sleep(0.01)
+                        after = process_policy.accounting()
+                    assert after['active'] == 1, after
+                    process_policy.observations.append({'name': label, 'argv': [str(x) for x in argv],
+                        'job_process_limit': 2, 'CLI_descendants_allowed': 0, 'before': before, 'after': after})
+                    (output/'no-child-processes.json').write_text(
+                        json.dumps(process_policy.observations, indent=2)+'\n', encoding='utf-8')
+                finally:
+                    process_policy.limits(False)
         (output/(label+'.stdout')).write_bytes(stdout)
         (output/(label+'.stderr')).write_bytes(stderr)
         commands.append({'label': label, 'argv': [str(x) for x in argv], 'pid': process.pid,
+                         'CLI_child_processes_denied': restricted,
                          'exit_code': process.returncode, 'seconds': time.perf_counter()-begun,
                          'stdout_sha256': hashlib.sha256(stdout).hexdigest(),
                          'stderr_sha256': hashlib.sha256(stderr).hexdigest(), **process_times(process)})
@@ -140,10 +164,10 @@ def main():
                     time_source.write_bytes(b'invalid time source; Checked input must own the clock closure\n')
                     for path in type_sources:
                         path.write_bytes(b'invalid native type source must not grant library operations\n')
-                out, err = run(name+'-'+scenario+'-vm', [binary, 'run', source])
+                out, err = run(name+'-'+scenario+'-vm', [binary, 'run', source], restricted=True)
                 assert (out, err) == (expected_stdout, expected_stderr)
                 generated = output/(name+'-'+scenario+'.c')
-                out, err = run(name+'-'+scenario+'-emit', [binary, 'build', '--c-only', source, '-o', generated])
+                out, err = run(name+'-'+scenario+'-emit', [binary, 'build', '--c-only', source, '-o', generated], restricted=True)
                 assert not err and b'({' not in generated.read_bytes()
                 native = output/(name+'-'+scenario+'.exe')
                 if name == 'core':
@@ -152,7 +176,7 @@ def main():
                     assert native.read_bytes() == b'existing executable publication'
                 else:
                     run(name+'-'+scenario+'-native-build', [binary, 'build', source, '-o', native])
-                    out, err = run(name+'-'+scenario+'-native-run', [native])
+                    out, err = run(name+'-'+scenario+'-native-run', [native], restricted=True)
                     assert (out, err) == (expected_stdout, expected_stderr)
                 assert (prefix/checked_relative/'stdlib-manifest.json').read_bytes() == publication
             output_source.write_bytes(original)
@@ -234,6 +258,9 @@ def main():
         verify('verify-valid-final', checked, sdk)
         summary = {'status': 'INSTALLED_CORE_SDK_RELOCATION_PUBLIC_LITERAL_AND_REJECTION_PASS',
                    'inventories': inventories, 'attacks': attacks, 'commands': len(commands),
+                   'Windows_absolute_child_denial': process_policy.control,
+                   'descendant_restricted_runs': sum(row['name'] != 'absolute-child-denial-control'
+                                                     for row in process_policy.observations),
                    'native_provider': 'ordinary MSVC with san0 MD SDK', 'production_release': False}
         (output/'summary.json').write_text(json.dumps(summary, indent=2)+'\n', encoding='utf-8')
         print(json.dumps(summary))
