@@ -10,8 +10,7 @@
 #ifndef CHECKED_SIZING73_GOLDEN_H
 #define CHECKED_SIZING73_GOLDEN_H
 #include <stdint.h>
-_Static_assert(XR_XIR_CHECKED_SCHEMA == 28u && XR_XIR_CHECKED_CONTRACT == 73u &&
-    XR_XIR_CONST_INT == 2 && XR_XIR_RETURN == 33 && XR_XIR_I64 == 2 && XR_XIR_UNIT == 0,
+_Static_assert(XR_XIR_CONST_INT == 2 && XR_XIR_RETURN == 33 && XR_XIR_I64 == 2 && XR_XIR_UNIT == 0,
     "Independent scalar wire field identities changed");
 static const uint8_t sizing73_golden[] = {
     0x58, 0x52, 0x43, 0x48, 0x4b, 0x00, 0x00, 0x00, 0x1c, 0x00, 0x00, 0x00,

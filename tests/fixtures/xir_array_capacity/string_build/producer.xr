@@ -1,0 +1,46 @@
+export fn short(count:i64,piece:string)->string{
+    var text=""
+    var i=0
+    while(i<count){text+=piece;i+=1}
+    return text
+}
+export fn digits(count:i64,piece:string)->string{
+    var text=""
+    var i=0
+    var digit=0
+    while(i<count){text+="${digit}";digit=(digit+1)%10;i+=1}
+    return text
+}
+export fn join(count:i64,piece:string)->string{
+    var parts=Array<string>.withCapacity(count)
+    var i=0
+    while(i<count){parts.push(piece);i+=1}
+    return parts.join("")
+}
+export fn snapshot(count:i64,piece:string)->(string,string){
+    var text=""
+    var i=0
+    while(i<count){text+=piece;i+=1}
+    const old=text
+    var later=0
+    while(later<64){text+=piece;later+=1}
+    return (old,text)
+}
+export fn scalars(count:i64,piece:string)->string{
+    var text=""
+    var integer=-17
+    text+="${integer}"
+    text+="|"
+    var truth=true
+    text+="${truth}"
+    text+="|"
+    var letter='Ω'
+    text+="${letter}"
+    text+="|"
+    var fraction:f64=1.5
+    text+="${fraction}"
+    text+="|"
+    var unsigned:u64=18446744073709551615
+    text+="${unsigned}"
+    return text
+}
