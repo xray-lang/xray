@@ -144,9 +144,26 @@ static XrXirStatus dispatch_initialize(XdapAdapter *s,const XdapRequest *r) {
     if (status==XR_XIR_OK) { s->initialized=true;status=xdap_dispatch_event(s,"initialized",NULL); }
     return status;
 }
-static XrXirStatus dispatch_launch(XdapAdapter *s,const XdapRequest *r) {
-    if (!s->initialized || s->launch) return xdap_dispatch_response(s,r,false,NULL,"Launch is not valid in this state");
-    uint32_t file=0,stop=0;XrXirStatus status=xdap_dispatch_argument(r,"program",&file);
+static XrXirStatus dispatch_source_options(const XdapRequest *r,bool *supported) {
+    *supported=false;uint32_t args=0,cwd=0,env=0,process=0;
+    XrXirStatus status=xdap_dispatch_argument(r,"args",&args);
+    if (status==XR_XIR_OK) status=xdap_dispatch_argument(r,"cwd",&cwd);
+    if (status==XR_XIR_OK) status=xdap_dispatch_argument(r,"env",&env);
+    if (status==XR_XIR_OK) status=xdap_dispatch_argument(r,"processId",&process);
+    if (status!=XR_XIR_OK) return status;
+    /* These host settings require an admitted provider, not process-global
+     * changes or a silently ignored request. Empty settings use the host defaults. */
+    *supported=!process && (!args || (r->document.nodes[args].kind==XDAP_JSON_ARRAY && !r->document.nodes[args].count)) &&
+        (!cwd || (r->document.nodes[cwd].kind==XDAP_JSON_STRING && !r->document.nodes[cwd].length)) &&
+        (!env || (r->document.nodes[env].kind==XDAP_JSON_OBJECT && !r->document.nodes[env].count));
+    return XR_XIR_OK;
+}
+static XrXirStatus dispatch_source(XdapAdapter *s,const XdapRequest *r) {
+    if (!s->initialized || s->launch) return xdap_dispatch_response(s,r,false,NULL,"Source target is not valid in this state");
+    bool supported=false;XrXirStatus status=dispatch_source_options(r,&supported);
+    if (status!=XR_XIR_OK) return status;
+    if (!supported) return xdap_dispatch_response(s,r,false,NULL,"Nonempty args/cwd/env and processId are unsupported");
+    uint32_t file=0,stop=0;status=xdap_dispatch_argument(r,"program",&file);
     if (status!=XR_XIR_OK) return status;
     if (!file || r->document.nodes[file].kind!=XDAP_JSON_STRING || !r->document.nodes[file].length)
         return xdap_dispatch_response(s,r,false,NULL,"An absolute program path is required");
@@ -270,7 +287,7 @@ XR_FUNC XrXirStatus xdap_adapter_request(XdapAdapter *s,const char *bytes,size_t
     if (status!=XR_XIR_OK) goto done;
     const char *command=r.document.nodes[r.command].text;
     if (!strcmp(command,"initialize")) status=dispatch_initialize(s,&r);
-    else if (!strcmp(command,"launch")) status=dispatch_launch(s,&r);
+    else if (!strcmp(command,"launch") || !strcmp(command,"attach")) status=dispatch_source(s,&r);
     else if (!strcmp(command,"configurationDone")) status=dispatch_start(s,&r);
     else if (!strcmp(command,"restart")) status=dispatch_restart(s,&r);
     else if (!strcmp(command,"setExceptionBreakpoints") || !strcmp(command,"exceptionInfo"))

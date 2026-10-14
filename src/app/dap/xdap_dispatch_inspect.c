@@ -300,7 +300,6 @@ XR_FUNC XrXirStatus xdap_dispatch_inspect(XdapAdapter *s,const XdapRequest *r,co
     if (!strcmp(command,"setBreakpoints")) return xdap_dispatch_response(s,r,false,NULL,"Owned source instruction mapping is not yet available");
     if (!strcmp(command,"evaluate") || !strcmp(command,"setVariable"))
         return xdap_dispatch_response(s,r,false,NULL,"Paused lexical expression admission is not yet available");
-    if (!strcmp(command,"attach")) return xdap_dispatch_response(s,r,false,NULL,"Authenticated target attachment is not yet available");
     if (!strcmp(command,"restart")) return xdap_dispatch_response(s,r,false,NULL,"Restart construction is not yet available");
     if (!strcmp(command,"disassemble")) return inspect_disassemble(s,r);
     return xdap_dispatch_response(s,r,false,NULL,"Unknown request");

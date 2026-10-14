@@ -11,6 +11,7 @@ import time
 parser=argparse.ArgumentParser()
 parser.add_argument('--xray',type=Path,required=True)
 parser.add_argument('--fixture',type=Path,required=True)
+parser.add_argument('--start-request',choices=('launch','attach'),default='launch')
 args=parser.parse_args()
 
 def wire(message):
@@ -84,7 +85,7 @@ class Client:
 client=Client()
 assert client.send('initialize',{'supportsVariableType':True,'supportsVariablePaging':True},fragment=True)['success']
 client.event('initialized')
-assert client.send('launch',{'program':str(args.fixture.resolve()).replace('\\','/')})['success']
+assert client.send(args.start_request,{'program':str(args.fixture.resolve()).replace('\\','/')})['success']
 assert client.send('setFunctionBreakpoints',{'breakpoints':[{'name':'leaf'}]})['body']['breakpoints'][0]['verified']
 assert client.send('configurationDone')['success']
 client.event('stopped')
@@ -106,7 +107,7 @@ client.event('exited');client.event('terminated')
 assert client.send('scopes',{'frameId':frames[0]['id']})['success'] is False
 assert client.send('disconnect')['success']
 client.close()
-print('Real CLI/stdio Source launch, fragmented framing, stop/inspect/output/disconnect: PASS')
+print(f'Real CLI/stdio Source {args.start_request}, fragmented framing, stop/inspect/output/disconnect: PASS')
 
 client=Client()
 client.process.stdin.write(wire({'seq':1,'type':'request','command':'initialize'}));client.process.stdin.flush();client.process.stdin.close()
