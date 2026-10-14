@@ -8,11 +8,9 @@
  * xmcp_tools_schema.c - JSON Schema builders for every tool in TOOL_TABLE
  *
  * KEY CONCEPT:
- *   Each builder returns a JSON Schema object describing one tool's input
- *   or output contract.  Results are cached in a function-local static so
- *   tools/list and tools/call can read the same DOM repeatedly without
- *   rebuilding it; callers that hand the schema to a JSON-RPC response
- *   must xmcp_json_clone() before transferring ownership.
+ *   Each builder returns an owned JSON Schema describing one tool's input
+ *   or output contract. Validation releases its schema; tools/list transfers
+ *   it into the response. No process cache retains a request's allocations.
  */
 
 #include "xmcp_json.h"
@@ -47,19 +45,9 @@ static void schema_prop_set_string_enum(XrJsonValue *prop, const char *const *va
     xmcp_json_set(prop, "enum", allowed);
 }
 
-static XrJsonValue *schema_cache[12];
-#ifdef XR_TEST_MCP_JSON_FAULTS
-XR_FUNC void xmcp_test_schema_clear(void) {
-    for (size_t i = 0; i < 12; ++i) { xjson_free(schema_cache[i]); schema_cache[i] = NULL; }
-}
-#endif
-
 /* ---- Schema builders --------------------------------------------------- */
 
 XR_FUNC XrJsonValue *xmcp_schema_analyze(void) {
-    XrJsonValue *cached = schema_cache[0];
-    if (cached)
-        return cached;
     XrJsonValue *s = xjson_new_object();
     XMCP_JSON_STRING(s, "type", "object");
     XrJsonValue *p = xjson_new_object();
@@ -73,14 +61,10 @@ XR_FUNC XrJsonValue *xmcp_schema_analyze(void) {
     XrJsonValue *r = xjson_new_array();
     xmcp_json_push(r, xjson_new_string("code"));
     xmcp_json_set(s, "required", r);
-    cached = xmcp_json_finish(s); schema_cache[0] = cached;
-    return cached;
+    return xmcp_json_finish(s);
 }
 
 XR_FUNC XrJsonValue *xmcp_schema_analyze_output(void) {
-    XrJsonValue *cached = schema_cache[1];
-    if (cached)
-        return cached;
     XrJsonValue *s = xjson_new_object();
     XMCP_JSON_STRING(s, "type", "object");
     XrJsonValue *p = xjson_new_object();
@@ -90,14 +74,10 @@ XR_FUNC XrJsonValue *xmcp_schema_analyze_output(void) {
     schema_add_prop(p, "truncated", "boolean", "True when diagnostics hit the result limit");
     schema_add_prop(p, "diagnostics", "array", "Structured diagnostics");
     xmcp_json_set(s, "properties", p);
-    cached = xmcp_json_finish(s); schema_cache[1] = cached;
-    return cached;
+    return xmcp_json_finish(s);
 }
 
 XR_FUNC XrJsonValue *xmcp_schema_format(void) {
-    XrJsonValue *cached = schema_cache[2];
-    if (cached)
-        return cached;
     XrJsonValue *s = xjson_new_object();
     XMCP_JSON_STRING(s, "type", "object");
     XrJsonValue *p = xjson_new_object();
@@ -110,14 +90,10 @@ XR_FUNC XrJsonValue *xmcp_schema_format(void) {
     XrJsonValue *r = xjson_new_array();
     xmcp_json_push(r, xjson_new_string("code"));
     xmcp_json_set(s, "required", r);
-    cached = xmcp_json_finish(s); schema_cache[2] = cached;
-    return cached;
+    return xmcp_json_finish(s);
 }
 
 XR_FUNC XrJsonValue *xmcp_schema_format_output(void) {
-    XrJsonValue *cached = schema_cache[3];
-    if (cached)
-        return cached;
     XrJsonValue *s = xjson_new_object();
     XMCP_JSON_STRING(s, "type", "object");
     XrJsonValue *p = xjson_new_object();
@@ -130,14 +106,10 @@ XR_FUNC XrJsonValue *xmcp_schema_format_output(void) {
     schema_add_prop(p, "truncated", "boolean", "True when diagnostics hit the result limit");
     schema_add_prop(p, "diagnostics", "array", "Structured parser diagnostics");
     xmcp_json_set(s, "properties", p);
-    cached = xmcp_json_finish(s); schema_cache[3] = cached;
-    return cached;
+    return xmcp_json_finish(s);
 }
 
 XR_FUNC XrJsonValue *xmcp_schema_run(void) {
-    XrJsonValue *cached = schema_cache[4];
-    if (cached)
-        return cached;
     XrJsonValue *s = xjson_new_object();
     XMCP_JSON_STRING(s, "type", "object");
     XrJsonValue *p = xjson_new_object();
@@ -156,14 +128,10 @@ XR_FUNC XrJsonValue *xmcp_schema_run(void) {
     xmcp_json_push(r, xjson_new_string("code"));
     xmcp_json_push(r, xjson_new_string("moduleId"));
     xmcp_json_set(s, "required", r);
-    cached = xmcp_json_finish(s); schema_cache[4] = cached;
-    return cached;
+    return xmcp_json_finish(s);
 }
 
 XR_FUNC XrJsonValue *xmcp_schema_run_output(void) {
-    XrJsonValue *cached = schema_cache[5];
-    if (cached)
-        return cached;
     XrJsonValue *s = xjson_new_object();
     XMCP_JSON_STRING(s, "type", "object");
     XrJsonValue *p = xjson_new_object();
@@ -187,14 +155,10 @@ XR_FUNC XrJsonValue *xmcp_schema_run_output(void) {
     xmcp_json_push(r, xjson_new_string("truncated"));
     xmcp_json_push(r, xjson_new_string("outputBytes"));
     xmcp_json_set(s, "required", r);
-    cached = xmcp_json_finish(s); schema_cache[5] = cached;
-    return cached;
+    return xmcp_json_finish(s);
 }
 
 XR_FUNC XrJsonValue *xmcp_schema_syntax(void) {
-    XrJsonValue *cached = schema_cache[6];
-    if (cached)
-        return cached;
     XrJsonValue *s = xjson_new_object();
     XMCP_JSON_STRING(s, "type", "object");
     XrJsonValue *p = xjson_new_object();
@@ -204,14 +168,10 @@ XR_FUNC XrJsonValue *xmcp_schema_syntax(void) {
     XrJsonValue *r = xjson_new_array();
     xmcp_json_push(r, xjson_new_string("topic"));
     xmcp_json_set(s, "required", r);
-    cached = xmcp_json_finish(s); schema_cache[6] = cached;
-    return cached;
+    return xmcp_json_finish(s);
 }
 
 XR_FUNC XrJsonValue *xmcp_schema_syntax_output(void) {
-    XrJsonValue *cached = schema_cache[7];
-    if (cached)
-        return cached;
     XrJsonValue *s = xjson_new_object();
     XMCP_JSON_STRING(s, "type", "object");
     XrJsonValue *p = xjson_new_object();
@@ -219,14 +179,10 @@ XR_FUNC XrJsonValue *xmcp_schema_syntax_output(void) {
     schema_add_prop(p, "found", "boolean", "True when the topic was found");
     schema_add_prop(p, "content", "string", "Syntax reference content");
     xmcp_json_set(s, "properties", p);
-    cached = xmcp_json_finish(s); schema_cache[7] = cached;
-    return cached;
+    return xmcp_json_finish(s);
 }
 
 XR_FUNC XrJsonValue *xmcp_schema_stdlib(void) {
-    XrJsonValue *cached = schema_cache[8];
-    if (cached)
-        return cached;
     XrJsonValue *s = xjson_new_object();
     XMCP_JSON_STRING(s, "type", "object");
     XrJsonValue *p = xjson_new_object();
@@ -237,14 +193,10 @@ XR_FUNC XrJsonValue *xmcp_schema_stdlib(void) {
     XrJsonValue *r = xjson_new_array();
     xmcp_json_push(r, xjson_new_string("query"));
     xmcp_json_set(s, "required", r);
-    cached = xmcp_json_finish(s); schema_cache[8] = cached;
-    return cached;
+    return xmcp_json_finish(s);
 }
 
 XR_FUNC XrJsonValue *xmcp_schema_stdlib_output(void) {
-    XrJsonValue *cached = schema_cache[9];
-    if (cached)
-        return cached;
     XrJsonValue *s = xjson_new_object();
     XMCP_JSON_STRING(s, "type", "object");
     XrJsonValue *p = xjson_new_object();
@@ -255,14 +207,10 @@ XR_FUNC XrJsonValue *xmcp_schema_stdlib_output(void) {
     schema_add_prop(p, "content", "string", "Formatted stdlib search result");
     schema_add_prop(p, "matches", "array", "Ranked matches with module, summary, and score");
     xmcp_json_set(s, "properties", p);
-    cached = xmcp_json_finish(s); schema_cache[9] = cached;
-    return cached;
+    return xmcp_json_finish(s);
 }
 
 XR_FUNC XrJsonValue *xmcp_schema_definition(void) {
-    XrJsonValue *cached = schema_cache[10];
-    if (cached)
-        return cached;
     XrJsonValue *s = xjson_new_object();
     XMCP_JSON_STRING(s, "type", "object");
     XrJsonValue *p = xjson_new_object();
@@ -274,14 +222,10 @@ XR_FUNC XrJsonValue *xmcp_schema_definition(void) {
     XrJsonValue *r = xjson_new_array();
     xmcp_json_push(r, xjson_new_string("symbol"));
     xmcp_json_set(s, "required", r);
-    cached = xmcp_json_finish(s); schema_cache[10] = cached;
-    return cached;
+    return xmcp_json_finish(s);
 }
 
 XR_FUNC XrJsonValue *xmcp_schema_definition_output(void) {
-    XrJsonValue *cached = schema_cache[11];
-    if (cached)
-        return cached;
     XrJsonValue *s = xjson_new_object();
     XMCP_JSON_STRING(s, "type", "object");
     XrJsonValue *p = xjson_new_object();
@@ -290,6 +234,5 @@ XR_FUNC XrJsonValue *xmcp_schema_definition_output(void) {
     schema_add_prop(p, "found", "boolean", "True when a definition was found");
     schema_add_prop(p, "content", "string", "Definition content or not-found message");
     xmcp_json_set(s, "properties", p);
-    cached = xmcp_json_finish(s); schema_cache[11] = cached;
-    return cached;
+    return xmcp_json_finish(s);
 }

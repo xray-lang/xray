@@ -142,7 +142,8 @@ static bool xmcp_schema_enum_contains(XrJsonValue *allowed, XrJsonValue *value) 
         return false;
     for (int i = 0; i < xjson_array_len(allowed); i++) {
         XrJsonValue *item = xjson_array_get(allowed, i);
-        if (xjson_is_string(item) && strcmp(item->as.string, value->as.string) == 0)
+        if (xjson_is_string(item) && item->string_len == value->string_len &&
+            !memcmp(item->as.string, value->as.string, value->string_len))
             return true;
     }
     return false;
@@ -167,20 +168,8 @@ static void xmcp_format_string_enum(XrJsonValue *allowed, char *buf, size_t cap)
 
 /* Validate `arguments` against `tool->build_schema()`. Populates `error` with
  * `XMCP_ERR_INVALID_PARAMS` on failure. Returns true when arguments pass. */
-static bool xmcp_validate_tool_arguments(const XmcpToolDef *tool, XrJsonValue *arguments,
-                                         XmcpRpcError *error) {
-    XR_DCHECK(tool != NULL, "xmcp_validate_tool_arguments: NULL tool");
-    XR_DCHECK(arguments != NULL, "xmcp_validate_tool_arguments: NULL arguments");
-    XR_DCHECK(error != NULL, "xmcp_validate_tool_arguments: NULL error");
-
-    XrJsonValue *schema = tool->build_schema ? tool->build_schema() : NULL;
-    if (!schema && tool->build_schema) {
-        error->code = XMCP_ERR_INTERNAL;
-        snprintf(error->message, sizeof(error->message), "tools/call: failed to build complete schema");
-        return false;
-    }
-    if (!schema) return true;
-
+static bool xmcp_arguments_match_schema(const XmcpToolDef *tool, XrJsonValue *arguments,
+    XrJsonValue *schema, XmcpRpcError *error) {
     XrJsonValue *required = xjson_get_array(schema, "required");
     for (int i = 0; i < xjson_array_len(required); i++) {
         XrJsonValue *item = xjson_array_get(required, i);
@@ -248,6 +237,20 @@ static bool xmcp_validate_tool_arguments(const XmcpToolDef *tool, XrJsonValue *a
     return true;
 }
 
+static bool xmcp_validate_tool_arguments(const XmcpToolDef *tool, XrJsonValue *arguments,
+    XmcpRpcError *error) {
+    if (!tool->build_schema) return true;
+    XrJsonValue *schema = tool->build_schema();
+    if (!schema) {
+        error->code = XMCP_ERR_INTERNAL;
+        snprintf(error->message, sizeof(error->message), "tools/call: failed to build complete schema");
+        return false;
+    }
+    bool valid = xmcp_arguments_match_schema(tool, arguments, schema, error);
+    xjson_free(schema);
+    return valid;
+}
+
 /* --------------------------------------------------------------------------
  * tools/list handler (table-driven)
  * -------------------------------------------------------------------------- */
@@ -268,9 +271,9 @@ static XrJsonValue *xmcp_tool_to_json(const XmcpToolDef *tool) {
     XrJsonValue *t = xjson_new_object();
     XMCP_JSON_STRING(t, "name", tool->name);
     XMCP_JSON_STRING(t, "description", tool->description);
-    xmcp_json_set(t, "inputSchema", xmcp_json_clone(tool->build_schema()));
+    xmcp_json_set(t, "inputSchema", tool->build_schema());
     if (tool->build_output_schema)
-        xmcp_json_set(t, "outputSchema", xmcp_json_clone(tool->build_output_schema()));
+        xmcp_json_set(t, "outputSchema", tool->build_output_schema());
 
     XrJsonValue *ann = xjson_new_object();
     XMCP_JSON_STRING(ann, "title", tool->title);
@@ -313,8 +316,9 @@ XR_FUNC XrJsonValue *xmcp_handle_tools_call(XmcpServer *server, XrJsonValue *par
         return NULL;
     }
 
-    const char *name = xjson_get_string(params, "name");
-    if (!name || name[0] == '\0') {
+    XrJsonValue *name_value = xjson_get(params, "name");
+    const char *name = xjson_is_string(name_value) ? name_value->as.string : NULL;
+    if (!name || !name_value->string_len || memchr(name, 0, name_value->string_len)) {
         error->code = XMCP_ERR_INVALID_PARAMS;
         snprintf(error->message, sizeof(error->message), "tools/call: 'name' is required");
         return NULL;

@@ -24,7 +24,6 @@ get_target_property(_mcp_fault_links xray_mcp LINK_LIBRARIES)
 add_library(xray_mcp_faults STATIC ${_mcp_fault_sources})
 target_link_libraries(xray_mcp_faults PUBLIC ${_mcp_fault_links})
 target_include_directories(xray_mcp_faults PUBLIC ${CMAKE_SOURCE_DIR}/src)
-target_compile_definitions(xray_mcp_faults PRIVATE XR_TEST_MCP_JSON_FAULTS=1)
 if(MSVC)
     target_compile_options(xray_mcp_faults PRIVATE /W4 /WX /utf-8
         /FI${CMAKE_CURRENT_LIST_DIR}/mcp_json_allocations.h)

@@ -55,7 +55,6 @@ void mcp_fault_free(void *pointer) {
 char *mcp_fault_strdup(const char *text) {
     size_t size=strlen(text)+1;char *p=mcp_fault_malloc(size);if(p)memcpy(p,text,size);return p;
 }
-XR_FUNC void xmcp_test_schema_clear(void);
 static XrJsonValue *parameters(unsigned kind) {
     XrJsonValue *p=xjson_new_object();CHECK(p);
     if(kind==2 || kind==3 || kind==4 || kind==5 || kind==6) {
@@ -95,7 +94,7 @@ static void complete_case(unsigned kind) {
             CHECK(!result || xjson_get_bool(result,"isError"));
             if(result)CHECK(xjson_get_int_or(xjson_get_object(result,"structuredContent"),"sourceStatus",-1)==XR_XIR_OUT_OF_MEMORY);
         }
-        fail_at=SIZE_MAX;xjson_free(result);xjson_free(p);xmcp_server_free(server);xmcp_test_schema_clear();
+        fail_at=SIZE_MAX;xjson_free(result);xjson_free(p);xmcp_server_free(server);
         CHECK(!live && !physical_bytes);
         xmcp_json_begin();
     }

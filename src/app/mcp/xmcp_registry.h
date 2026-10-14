@@ -35,6 +35,7 @@ typedef struct XmcpCallContext {
 
 typedef XrJsonValue *(*XmcpToolHandler)(XmcpServer *server, const XmcpCallContext *ctx,
                                         XrJsonValue *args);
+/* Schema builders return owned values, or NULL without publishing a partial schema. */
 typedef XrJsonValue *(*XmcpSchemaBuilder)(void);
 
 typedef struct XmcpToolDef {
