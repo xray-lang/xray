@@ -6970,7 +6970,7 @@
       "id": "independent_behavior_cleanup_defer_builtin_method_mix",
       "oracle_id": "independent_behavior_cleanup_defer_builtin_method_mix",
       "source": "tests/diff/cases/semantics/cleanup/defer_builtin_method_mix.xr",
-      "source_lf_sha256": "013abd1a8f0609bf6850c4292f39a7a517dcba0fe912a56288c429291d25dbe7",
+      "source_lf_sha256": "4d87a4787a1bae61349640f415471778e5a5524b55fd15bf4693c112e206c507",
       "entry": "run",
       "source_context": "original_absolute",
       "stdout_utf8": "body\nblock\ndrop B\nfn free\nbuiltin\ndone\n",
@@ -7276,7 +7276,7 @@
       "companions": [
         {
           "path": "tests/diff/cases/semantics/modules/_shapes.xr",
-          "lf_sha256": "558ccd12a574c2f167250660a1e1dbb4138b3469a881bd5e9aa4d9f67c688803"
+          "lf_sha256": "bb6f89feaa9b0f3c1556e2a98dcc0ae38d346d2b156eb8081e265b7557c1279d"
         }
       ],
       "owners": [
@@ -7444,7 +7444,7 @@
       "id": "independent_behavior_ownership_in_store_scalar_from_borrow",
       "oracle_id": "independent_behavior_ownership_in_store_scalar_from_borrow",
       "source": "tests/diff/cases/semantics/ownership/in_store_scalar_from_borrow.xr",
-      "source_lf_sha256": "0cb2dfdaa6e319ee326b11fea905f310405ebf56fc5d58c2c9616a06ae3bd0ed",
+      "source_lf_sha256": "3a1580924b504e69654316eeed7a8bcf5db5730b9d91726bcabfbc1fb8c35657",
       "entry": "run",
       "source_context": "original_absolute",
       "stdout_utf8": "4\n",
@@ -7842,7 +7842,7 @@
       "id": "independent_behavior_oop_typename_class_instance",
       "oracle_id": "independent_behavior_oop_typename_class_instance",
       "source": "tests/diff/cases/semantics/oop/typename_class_instance.xr",
-      "source_lf_sha256": "5e76d61ef12eadbd13638a57a517769249c22ff4261d8250a402383cc1dd3173",
+      "source_lf_sha256": "7c303bd7350e86a2545111172fcda6b1410cbda9fd2e0cb3ea4afac378b4ad5e",
       "entry": "run",
       "source_context": "original_absolute",
       "stdout_utf8": "Point\n",
@@ -7969,7 +7969,7 @@
       "id": "independent_behavior_coro_cycle_leak_bounded_by_coroutine_heap",
       "oracle_id": "independent_behavior_coro_cycle_leak_bounded_by_coroutine_heap",
       "source": "tests/diff/cases/semantics/coro/cycle_leak_bounded_by_coroutine_heap.xr",
-      "source_lf_sha256": "d60d9e3007b4f99a607d8d7fde03872d7ffe9d5fbd8059360f4b7d455d7beb6c",
+      "source_lf_sha256": "0bac8c4696f3034ee5394bcf0d4a72adfaa102ab8d58c1d6a425fd7c6e49e75f",
       "entry": "run",
       "source_context": "original_absolute",
       "stdout_utf8": "30000\n30000\ntrue\n",
@@ -13130,7 +13130,7 @@
       "independent_observations": {
         "original_case": "tests/regression/12_type_checking/1221_generic_class_basic.xr",
         "selected_complete_source": "tests/regression/12_type_checking/1221_generic_class_basic.xr",
-        "selected_source_lf_sha256": "4858cacc68a4999c9ffc7fb8c0ac1d0e7d91918d3f3200bd8370a78826f818ff",
+        "selected_source_lf_sha256": "7e7019d25b6df1be427168fd6f3ccc274c75a5ab87127a64fe20f86c507a3fe2",
         "method": "All original generic/interface declarations, constructors, nested values, explicit type annotations, calls and every named body remain. Each actual scalar is captured once at its original assertion boundary and compared with frozen literal results.",
         "values": [
           {
@@ -13255,7 +13255,7 @@
       "independent_observations": {
         "original_case": "tests/regression/12_type_checking/1227_mono_class_e2e.xr",
         "selected_complete_source": "tests/regression/12_type_checking/1227_mono_class_e2e.xr",
-        "selected_source_lf_sha256": "31dbf8139f48415297d9ce7e7abced1ccfac3c1b43c29c12f11a2ca469fdedf1",
+        "selected_source_lf_sha256": "8c17ba25011a2bc2e480e346b842387c0ffc45534e9357da6593ba8d4eded2dc",
         "method": "All original generic/interface declarations, constructors, nested values, explicit type annotations, calls and every named body remain. Each actual scalar is captured once at its original assertion boundary and compared with frozen literal results.",
         "values": [
           {
@@ -13383,7 +13383,7 @@
       "independent_observations": {
         "original_case": "tests/regression/08_oop/0850_interface.xr",
         "selected_complete_source": "tests/regression/08_oop/0850_interface.xr",
-        "selected_source_lf_sha256": "d75c4e320edd5f86edeab16beef2602b690b11b17b3e1b6d78bac6742690131d",
+        "selected_source_lf_sha256": "7d973cefb80b885ef8021f3b976b34e4dbcf6cc3c4f65ce41bebd69e58784098",
         "method": "All original generic/interface declarations, constructors, nested values, explicit type annotations, calls and every named body remain. Each actual scalar is captured once at its original assertion boundary and compared with frozen literal results.",
         "values": [
           {
@@ -13567,7 +13567,7 @@
       "independent_observations": {
         "original_case": "tests/regression/12_type_checking/1220_generics.xr",
         "selected_complete_source": "tests/regression/12_type_checking/1220_generics.xr",
-        "selected_source_lf_sha256": "47b46576b44975e8c38182829587c763687b8aceb46a8e6d7fc91f3813547c4d",
+        "selected_source_lf_sha256": "cff7f87c6a8943d314ceb6c127aa2b0276ffd29b925155da298ec86d2c7d9ebb",
         "method": "Retain every original tuple/generic/callable body and all top-level initialization. Capture each scalar at its original assertion position; guarded float quotient uses exact2.5, not only in-range true. Module-level original body invocation remains before actual named invocation.",
         "values": [
           {
@@ -13782,7 +13782,7 @@
       "independent_observations": {
         "original_case": "tests/regression/13_types/0401_generic_instance_breadth.xr",
         "selected_complete_source": "tests/regression/13_types/0401_generic_instance_breadth.xr",
-        "selected_source_lf_sha256": "4fe6fd9447e113805516b8a484d26d58b0af3045339cef02bb338f1a54110cef",
+        "selected_source_lf_sha256": "fa1ab7f6c8ec90a1839875d368dae928bcc792ac887a6919b2c33f5811dfedae",
         "method": "Retain every original tuple/generic/callable body and all top-level initialization. Capture each scalar at its original assertion position; guarded float quotient uses exact2.5, not only in-range true. Module-level original body invocation remains before actual named invocation.",
         "values": [
           {
@@ -13877,7 +13877,7 @@
       "independent_observations": {
         "original_case": "tests/regression/08_oop/0915_ref_exclusivity_legal_boundaries.xr",
         "selected_complete_source": "tests/regression/08_oop/0915_ref_exclusivity_legal_boundaries.xr",
-        "selected_source_lf_sha256": "12f715d25b67c900baba0669440d783c96d0e9e42ca150086e93bf13c11704f0",
+        "selected_source_lf_sha256": "0392681ab01448f08b7f80f33f8bdf624f002ba6bbe5cdf0dfc42d435a49c8aa",
         "method": "All original legal calls, lexical identifiers, ref places, pre-call read order and complete mapped Array read-value target remain. Actual expressions run once at their original assertion point.",
         "values": [
           {

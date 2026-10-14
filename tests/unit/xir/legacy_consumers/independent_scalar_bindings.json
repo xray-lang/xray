@@ -23,7 +23,7 @@
     },
     {
       "path": "spec/source/sections/003-2-type-system.md",
-      "lf_sha256": "f4e970b0cc728c19f65a4d1b2a13cd0e572431dcac3f6f20cd06d23046ebea8a"
+      "lf_sha256": "916835c38312eccdada94aff018d22d79f3c15ed998048754759764c53fc8620"
     },
     {
       "path": "spec/source/sections/004-3-expressions.md",
@@ -31,5 +31,18 @@
     }
   ],
   "semantic_basis": "Same-sign mixed integer operands use the wider operand type; operations wrap there before any return widening. Explicit casts truncate modulo the target width. Unsigned right shifts zero extend.",
-  "original_comments": "The two historical mix comments in narrow_arith_wrap describe the earlier widening rule. Preserve original source, apply the current frozen arithmetic definition, and report this transition explicitly."
+  "original_comments": "The two historical mix comments in narrow_arith_wrap describe the earlier widening rule. Preserve original source, apply the current frozen arithmetic definition, and report this transition explicitly.",
+  "reviewed_input_epochs": [
+    {
+      "fixed_input": "d5965cf74aefb2125c5b5d43377effcef7f80279",
+      "prior_product_head": "dc6c4b1df2f227d16b4f7ffc18b00e3914375152",
+      "inputs": [
+        {
+          "path": "spec/source/sections/003-2-type-system.md",
+          "prior_lf_sha256": "f4e970b0cc728c19f65a4d1b2a13cd0e572431dcac3f6f20cd06d23046ebea8a"
+        }
+      ],
+      "semantic_review": "See P19 fixed-input handoff; expected values unchanged."
+    }
+  ]
 }

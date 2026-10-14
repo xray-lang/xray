@@ -55,7 +55,7 @@
     },
     {
       "path": "tests/diff/cases/semantics/cleanup/defer_builtin_method_mix.xr",
-      "lf_sha256": "013abd1a8f0609bf6850c4292f39a7a517dcba0fe912a56288c429291d25dbe7"
+      "lf_sha256": "4d87a4787a1bae61349640f415471778e5a5524b55fd15bf4693c112e206c507"
     },
     {
       "path": "tests/diff/cases/semantics/cleanup/defer_coroutine.xr",
@@ -123,7 +123,7 @@
     },
     {
       "path": "tests/diff/cases/semantics/ownership/in_store_scalar_from_borrow.xr",
-      "lf_sha256": "0cb2dfdaa6e319ee326b11fea905f310405ebf56fc5d58c2c9616a06ae3bd0ed"
+      "lf_sha256": "3a1580924b504e69654316eeed7a8bcf5db5730b9d91726bcabfbc1fb8c35657"
     },
     {
       "path": "tests/diff/cases/semantics/ownership/loop_ref_array_pop_backedge.xr",
@@ -179,7 +179,7 @@
     },
     {
       "path": "tests/diff/cases/semantics/oop/typename_class_instance.xr",
-      "lf_sha256": "5e76d61ef12eadbd13638a57a517769249c22ff4261d8250a402383cc1dd3173"
+      "lf_sha256": "7c303bd7350e86a2545111172fcda6b1410cbda9fd2e0cb3ea4afac378b4ad5e"
     },
     {
       "path": "tests/diff/cases/semantics/stdlib/time_query_system_direct.xr",
@@ -195,7 +195,7 @@
     },
     {
       "path": "tests/diff/cases/semantics/coro/cycle_leak_bounded_by_coroutine_heap.xr",
-      "lf_sha256": "d60d9e3007b4f99a607d8d7fde03872d7ffe9d5fbd8059360f4b7d455d7beb6c"
+      "lf_sha256": "0bac8c4696f3034ee5394bcf0d4a72adfaa102ab8d58c1d6a425fd7c6e49e75f"
     },
     {
       "path": "tests/regression/03_operators/0398_null_test_owner_edges.xr",
@@ -215,7 +215,7 @@
     },
     {
       "path": "tests/diff/cases/semantics/modules/_shapes.xr",
-      "lf_sha256": "558ccd12a574c2f167250660a1e1dbb4138b3469a881bd5e9aa4d9f67c688803"
+      "lf_sha256": "bb6f89feaa9b0f3c1556e2a98dcc0ae38d346d2b156eb8081e265b7557c1279d"
     },
     {
       "path": "tests/diff/cases/semantics/modules/_static_defaults.xr",
@@ -223,7 +223,7 @@
     },
     {
       "path": "spec/source/sections/003-2-type-system.md",
-      "lf_sha256": "f4e970b0cc728c19f65a4d1b2a13cd0e572431dcac3f6f20cd06d23046ebea8a"
+      "lf_sha256": "916835c38312eccdada94aff018d22d79f3c15ed998048754759764c53fc8620"
     },
     {
       "path": "spec/source/sections/004-3-expressions.md",
@@ -231,11 +231,11 @@
     },
     {
       "path": "spec/source/sections/006-5-declarations.md",
-      "lf_sha256": "56fa3d36bc0c5ee38b7c52dafbe26d7b8b0a45a6909c14a8626a9bba515cc4a7"
+      "lf_sha256": "4b07469dd5109d4c6d0b99896e72c735e60e1821f716352ffd0e4da4e75d563b"
     },
     {
       "path": "spec/source/sections/009-8-error-handling.md",
-      "lf_sha256": "569cafb786430df363674f97f6073e908d76b4a3484f3fb26239b0895342507e"
+      "lf_sha256": "3679ded015ad0222df39070b598fe26c8099247f9e410305a3f1527b9e63161b"
     },
     {
       "path": "spec/source/sections/011-10-concurrency-and-coroutines.md",
@@ -243,7 +243,7 @@
     },
     {
       "path": "spec/source/sections/018-17-compilation-pipeline.md",
-      "lf_sha256": "e7e24ccd33afa46f68a9daa9368e5d947194c1044a447527dcda173b0ab28b23"
+      "lf_sha256": "05a13a6f6989ccd5a43db3de2a85c94ed70226f6a01d055cd2cedd48b969972d"
     },
     {
       "path": "tests/regression/11_coroutine/1149_module_call_stack_grow.xr",
@@ -276,5 +276,50 @@
   ],
   "scope": "Whole original run-entry byte observations only. Original helper definitions, named test entries, complete FI/resources/physical/provider qualification remain separate.",
   "precision_rule": "Float operations round at the common operand precision; f32 multiplication is rounded before addition. The original f32_rounding comment about narrowing only on store is historical.",
-  "independence": "No captured Xray output is read to calculate these expectations."
+  "independence": "No captured Xray output is read to calculate these expectations.",
+  "reviewed_input_epochs": [
+    {
+      "fixed_input": "d5965cf74aefb2125c5b5d43377effcef7f80279",
+      "prior_product_head": "dc6c4b1df2f227d16b4f7ffc18b00e3914375152",
+      "inputs": [
+        {
+          "path": "tests/diff/cases/semantics/cleanup/defer_builtin_method_mix.xr",
+          "prior_lf_sha256": "013abd1a8f0609bf6850c4292f39a7a517dcba0fe912a56288c429291d25dbe7"
+        },
+        {
+          "path": "tests/diff/cases/semantics/ownership/in_store_scalar_from_borrow.xr",
+          "prior_lf_sha256": "0cb2dfdaa6e319ee326b11fea905f310405ebf56fc5d58c2c9616a06ae3bd0ed"
+        },
+        {
+          "path": "tests/diff/cases/semantics/oop/typename_class_instance.xr",
+          "prior_lf_sha256": "5e76d61ef12eadbd13638a57a517769249c22ff4261d8250a402383cc1dd3173"
+        },
+        {
+          "path": "tests/diff/cases/semantics/coro/cycle_leak_bounded_by_coroutine_heap.xr",
+          "prior_lf_sha256": "d60d9e3007b4f99a607d8d7fde03872d7ffe9d5fbd8059360f4b7d455d7beb6c"
+        },
+        {
+          "path": "tests/diff/cases/semantics/modules/_shapes.xr",
+          "prior_lf_sha256": "558ccd12a574c2f167250660a1e1dbb4138b3469a881bd5e9aa4d9f67c688803"
+        },
+        {
+          "path": "spec/source/sections/003-2-type-system.md",
+          "prior_lf_sha256": "f4e970b0cc728c19f65a4d1b2a13cd0e572431dcac3f6f20cd06d23046ebea8a"
+        },
+        {
+          "path": "spec/source/sections/006-5-declarations.md",
+          "prior_lf_sha256": "56fa3d36bc0c5ee38b7c52dafbe26d7b8b0a45a6909c14a8626a9bba515cc4a7"
+        },
+        {
+          "path": "spec/source/sections/009-8-error-handling.md",
+          "prior_lf_sha256": "569cafb786430df363674f97f6073e908d76b4a3484f3fb26239b0895342507e"
+        },
+        {
+          "path": "spec/source/sections/018-17-compilation-pipeline.md",
+          "prior_lf_sha256": "e7e24ccd33afa46f68a9daa9368e5d947194c1044a447527dcda173b0ab28b23"
+        }
+      ],
+      "semantic_review": "See P19 fixed-input handoff; expected values unchanged."
+    }
+  ]
 }

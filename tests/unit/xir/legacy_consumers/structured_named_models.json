@@ -27,11 +27,11 @@
     },
     {
       "path": "spec/source/sections/003-2-type-system.md",
-      "lf_sha256": "f4e970b0cc728c19f65a4d1b2a13cd0e572431dcac3f6f20cd06d23046ebea8a"
+      "lf_sha256": "916835c38312eccdada94aff018d22d79f3c15ed998048754759764c53fc8620"
     },
     {
       "path": "spec/source/sections/006-5-declarations.md",
-      "lf_sha256": "56fa3d36bc0c5ee38b7c52dafbe26d7b8b0a45a6909c14a8626a9bba515cc4a7"
+      "lf_sha256": "4b07469dd5109d4c6d0b99896e72c735e60e1821f716352ffd0e4da4e75d563b"
     },
     {
       "path": "tests/regression/08_oop/0907_struct_multi_interface.xr",
@@ -43,15 +43,15 @@
     },
     {
       "path": "tests/regression/12_type_checking/1221_generic_class_basic.xr",
-      "lf_sha256": "4858cacc68a4999c9ffc7fb8c0ac1d0e7d91918d3f3200bd8370a78826f818ff"
+      "lf_sha256": "7e7019d25b6df1be427168fd6f3ccc274c75a5ab87127a64fe20f86c507a3fe2"
     },
     {
       "path": "tests/regression/12_type_checking/1227_mono_class_e2e.xr",
-      "lf_sha256": "31dbf8139f48415297d9ce7e7abced1ccfac3c1b43c29c12f11a2ca469fdedf1"
+      "lf_sha256": "8c17ba25011a2bc2e480e346b842387c0ffc45534e9357da6593ba8d4eded2dc"
     },
     {
       "path": "tests/regression/08_oop/0850_interface.xr",
-      "lf_sha256": "d75c4e320edd5f86edeab16beef2602b690b11b17b3e1b6d78bac6742690131d"
+      "lf_sha256": "7d973cefb80b885ef8021f3b976b34e4dbcf6cc3c4f65ce41bebd69e58784098"
     },
     {
       "path": "tests/regression/12_type_checking/1210_multi_return.xr",
@@ -59,7 +59,7 @@
     },
     {
       "path": "tests/regression/12_type_checking/1220_generics.xr",
-      "lf_sha256": "47b46576b44975e8c38182829587c763687b8aceb46a8e6d7fc91f3813547c4d"
+      "lf_sha256": "cff7f87c6a8943d314ceb6c127aa2b0276ffd29b925155da298ec86d2c7d9ebb"
     },
     {
       "path": "tests/regression/13_types/1320_tuple_basic.xr",
@@ -67,7 +67,7 @@
     },
     {
       "path": "tests/regression/13_types/0401_generic_instance_breadth.xr",
-      "lf_sha256": "4fe6fd9447e113805516b8a484d26d58b0af3045339cef02bb338f1a54110cef"
+      "lf_sha256": "fa1ab7f6c8ec90a1839875d368dae928bcc792ac887a6919b2c33f5811dfedae"
     },
     {
       "path": "tests/regression/09_advanced/0960_error_set_not_in_type.xr",
@@ -75,7 +75,7 @@
     },
     {
       "path": "tests/regression/08_oop/0915_ref_exclusivity_legal_boundaries.xr",
-      "lf_sha256": "12f715d25b67c900baba0669440d783c96d0e9e42ca150086e93bf13c11704f0"
+      "lf_sha256": "0392681ab01448f08b7f80f33f8bdf624f002ba6bbe5cdf0dfc42d435a49c8aa"
     },
     {
       "path": "tests/regression/13_types/1408_ref_identifier_call_argument_not_marker.xr",
@@ -127,7 +127,7 @@
     },
     {
       "path": "tests/regression/10_stdlib/modules/generic_box_lib.xr",
-      "lf_sha256": "3dcea9718fe82a5ff5564117eba7aed71c2a86eb008a8b8deef6124b684b99a1"
+      "lf_sha256": "dd7ae82e4c0ee77593c3df2f7d71020a73e3b16f1367edee632c24def8d289c2"
     },
     {
       "path": "tests/regression/10_stdlib/1039_cross_module_generic_annotation.xr",
@@ -1690,5 +1690,50 @@
       "model_scope": "Original frozen mathematical wide-i64 values and real integer zero-divisor panic classification. Original assertPanics is preserved; an explicitly additional pure probe reads actual PanicInfo message predicates without guessing an ordinal."
     }
   ],
-  "independence": "Expected constants come from the original frozen assertions and mathematical method bodies, never current Xray output."
+  "independence": "Expected constants come from the original frozen assertions and mathematical method bodies, never current Xray output.",
+  "reviewed_input_epochs": [
+    {
+      "fixed_input": "d5965cf74aefb2125c5b5d43377effcef7f80279",
+      "prior_product_head": "dc6c4b1df2f227d16b4f7ffc18b00e3914375152",
+      "inputs": [
+        {
+          "path": "spec/source/sections/003-2-type-system.md",
+          "prior_lf_sha256": "f4e970b0cc728c19f65a4d1b2a13cd0e572431dcac3f6f20cd06d23046ebea8a"
+        },
+        {
+          "path": "spec/source/sections/006-5-declarations.md",
+          "prior_lf_sha256": "56fa3d36bc0c5ee38b7c52dafbe26d7b8b0a45a6909c14a8626a9bba515cc4a7"
+        },
+        {
+          "path": "tests/regression/12_type_checking/1221_generic_class_basic.xr",
+          "prior_lf_sha256": "4858cacc68a4999c9ffc7fb8c0ac1d0e7d91918d3f3200bd8370a78826f818ff"
+        },
+        {
+          "path": "tests/regression/12_type_checking/1227_mono_class_e2e.xr",
+          "prior_lf_sha256": "31dbf8139f48415297d9ce7e7abced1ccfac3c1b43c29c12f11a2ca469fdedf1"
+        },
+        {
+          "path": "tests/regression/08_oop/0850_interface.xr",
+          "prior_lf_sha256": "d75c4e320edd5f86edeab16beef2602b690b11b17b3e1b6d78bac6742690131d"
+        },
+        {
+          "path": "tests/regression/12_type_checking/1220_generics.xr",
+          "prior_lf_sha256": "47b46576b44975e8c38182829587c763687b8aceb46a8e6d7fc91f3813547c4d"
+        },
+        {
+          "path": "tests/regression/13_types/0401_generic_instance_breadth.xr",
+          "prior_lf_sha256": "4fe6fd9447e113805516b8a484d26d58b0af3045339cef02bb338f1a54110cef"
+        },
+        {
+          "path": "tests/regression/08_oop/0915_ref_exclusivity_legal_boundaries.xr",
+          "prior_lf_sha256": "12f715d25b67c900baba0669440d783c96d0e9e42ca150086e93bf13c11704f0"
+        },
+        {
+          "path": "tests/regression/10_stdlib/modules/generic_box_lib.xr",
+          "prior_lf_sha256": "3dcea9718fe82a5ff5564117eba7aed71c2a86eb008a8b8deef6124b684b99a1"
+        }
+      ],
+      "semantic_review": "See P19 fixed-input handoff; expected values unchanged."
+    }
+  ]
 }
