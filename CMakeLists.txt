@@ -1374,6 +1374,7 @@ list(REMOVE_ITEM AOT_SRC
 file(GLOB API_SRC CONFIGURE_DEPENDS "src/api/*.c")
 # Source compilation has one production owner shared by API and application consumers.
 list(REMOVE_ITEM API_SRC
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/api/xsource_api.c"
     "${CMAKE_CURRENT_SOURCE_DIR}/src/api/xsource_compiler.c"
     "${CMAKE_CURRENT_SOURCE_DIR}/src/api/xsource_compile.c"
     "${CMAKE_CURRENT_SOURCE_DIR}/src/api/xsource_paths.c"
