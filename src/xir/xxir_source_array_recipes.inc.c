@@ -463,7 +463,7 @@ static bool source_array_concat_call(SourceContext *ctx, AstNode *node,
     if (!xr_xir_type_is_array(&ctx->types, receiver.type))
         return source_fail(ctx, node, XR_XIR_BAD_TYPE, "Array concat receiver is not an Array");
     const uint32_t count = (uint32_t)call->arg_count + 1;
-    SourceValue *arrays = source_alloc(ctx, count, sizeof(*arrays));
+    SourceValue *arrays = source_recipe_storage(ctx, count, sizeof(*arrays));
     if (!arrays) return false;
     arrays[0] = receiver;
     for (uint32_t i = 1; i < count; ++i) {

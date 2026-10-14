@@ -204,6 +204,7 @@ typedef struct SourceContext {
     uint32_t remaining_blocks, remaining_instructions;
     XrXirSourceDiagnostic diagnostic;
     SourceMemory *memory;
+    SourceMemory *retired_vectors;
     XrXirConstruction *construction;
     SourceLibraryUnit *library_units;
     SourceRootQuery *root_queries;
@@ -341,7 +342,26 @@ static void source_release_private(void *pointer) {
     if (memory->next) memory->next->previous=memory->previous;
     xr_compile_resources_free(memory);
 }
-static void *source_recipe_storage(SourceContext *ctx, uint32_t count, size_t size) {
+/* Superseded private vectors survive active construction frames. Sealed bodies
+ * and later query refinements retain record identities in the current vectors. */
+static void source_vector_retire(SourceContext *ctx, const void *pointer) {
+    if (!pointer) return;
+    SourceMemory *memory=(SourceMemory *)pointer-1;
+    *memory->previous=memory->next;
+    if (memory->next) memory->next->previous=memory->previous;
+    memory->next=ctx->retired_vectors;memory->previous=&ctx->retired_vectors;
+    if (ctx->retired_vectors) ctx->retired_vectors->previous=&memory->next;
+    ctx->retired_vectors=memory;
+}
+static void source_vector_retired_free(SourceContext *ctx) {
+    while (ctx->retired_vectors) source_release_private(ctx->retired_vectors+1);
+}
+static void *source_planning_storage(SourceContext *ctx, size_t count, size_t size) {
+    void *memory=source_alloc(ctx,count,size);
+    if (memory) source_vector_retire(ctx,memory);
+    return memory;
+}
+static void *source_recipe_storage(SourceContext *ctx, size_t count, size_t size) {
     if (count>(SIZE_MAX-sizeof(SourceRecipeStorage))/size) {
         source_fail(ctx,NULL,XR_XIR_BUDGET,"source region storage exhausted"); return NULL;
     }
@@ -461,11 +481,13 @@ static void *source_query_append(SourceContext *ctx, const void *array, uint32_t
         void *grown = source_alloc(ctx, next, size);
         if (!grown) return NULL;
         if (!source_copy_bytes(ctx, NULL, grown, array, (size_t) *count * size)) return NULL;
+        source_vector_retire(ctx,array);
         array = grown; *capacity = next;
     }
     ++*count;
     return (void *) array;
 }
+#include "xxir_source_storage_seal.inc.c"
 static XrXirSourceRange source_query_range(SourceContext *ctx, AstNode *node, const char *name) {
     XrXirSourceRange range = {ctx->module, 0, 0, 0, 0};
     if (!node) return range;
@@ -878,7 +900,7 @@ static bool source_recipe_group(SourceContext *ctx, XrXirInstruction op, const S
     uint32_t needed = body->operand_count + count;
     if (needed > body->operand_capacity) {
         uint32_t capacity = needed <= UINT32_MAX / 2 ? needed * 2 : needed;
-        uint32_t *operands = source_alloc(ctx, capacity, sizeof(*operands));
+        uint32_t *operands = source_recipe_storage(ctx, capacity, sizeof(*operands));
         if (!operands) return false;
         if (!source_copy_bytes(ctx, NULL, operands, body->operands, body->operand_count * sizeof(*operands))) return false;
         body->operands = operands; body->operand_capacity = capacity;
@@ -988,6 +1010,7 @@ static bool source_type_arguments(SourceContext *ctx, AstNode *node, const XrXir
         XrXirType *table = source_alloc(ctx, capacity, sizeof(*table));
         if (!table) return false;
         if (!source_copy_bytes(ctx, node, table, caller->arguments, caller->argument_count * sizeof(*table))) return false;
+        source_vector_retire(ctx,caller->arguments);
         caller->arguments = table; body->type_capacity = capacity;
     }
     op->type_arguments[0] = count ? caller->argument_count : 0; op->type_arguments[1] = count;
@@ -1094,6 +1117,7 @@ static bool source_literal_append(SourceContext *ctx, AstNode *node, const char 
         if (!literals) return false;
         if (!source_work_units(ctx, node, (uint64_t)ctx->literal_count * sizeof(*literals))) return false;
         if (!source_copy_bytes(ctx, NULL, literals, ctx->literals, ctx->literal_count * sizeof(*literals))) return false;
+        source_vector_retire(ctx,ctx->literals);
         ctx->literals = literals; ctx->literal_capacity = capacity;
     }
     uint32_t id = ctx->literal_count;
@@ -1308,7 +1332,7 @@ static bool source_call(SourceContext *ctx, AstNode *node, SourceExpectedType re
         return source_fail(ctx, node, XR_XIR_BAD_TYPE, "primitive does not admit explicit type arguments");
     XrXirInstruction op = {0};
     uint32_t argument_count = (uint32_t)call->arg_count;
-    SourceValue *args = argument_count ? source_alloc(ctx, argument_count, sizeof(*args)) : NULL;
+    SourceValue *args = argument_count ? source_recipe_storage(ctx, argument_count, sizeof(*args)) : NULL;
     if (argument_count && !args) return false;
     bool *references = NULL;
     for (int i = 0; i < call->arg_count; ++i) {
@@ -2708,7 +2732,7 @@ static bool source_closure_self(SourceContext *ctx, AstNode *node, const SourceC
         if (p->source->construction)
             return source_fail(ctx, node, XR_XIR_BAD_TYPE, "recursive nested function cannot capture a constructor value");
     }
-    SourceValue *captures = scan->count ? source_alloc(ctx, scan->count, sizeof(*captures)) : NULL;
+    SourceValue *captures = scan->count ? source_recipe_storage(ctx, scan->count, sizeof(*captures)) : NULL;
     uint32_t count = ctx->generics[index].parameter_count;
     XrXirType *types = count ? source_alloc(ctx, count, sizeof(*types)) : NULL;
     SourceName *symbol = source_alloc(ctx, 1, sizeof(*symbol));
@@ -2764,7 +2788,7 @@ static bool source_closure(SourceContext *ctx, AstNode *node, SourceExpectedType
     uint32_t parameter_count = scan.count + (uint32_t)decl->param_count;
     body->parameters = parameter_count ? source_alloc(ctx,parameter_count,sizeof(*body->parameters)) : NULL;
     XrXirCallableParameter *parameters = decl->param_count ? source_alloc(ctx, (uint32_t) decl->param_count, sizeof(*parameters)) : NULL;
-    SourceValue *captures = source_alloc(ctx, scan.count, sizeof(*captures));
+    SourceValue *captures = source_recipe_storage(ctx, scan.count, sizeof(*captures));
     if (!name || (parameter_count && !body->parameters) || (decl->param_count && !parameters) || !captures) return false;
     if (source_format(ctx, name, 32, "$closure%u", index) != XR_DIAG_OK)
         return source_fail(ctx, node, XR_XIR_BUDGET, "closure name formatting exhausted");

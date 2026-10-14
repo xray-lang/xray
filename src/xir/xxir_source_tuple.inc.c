@@ -33,7 +33,7 @@ static bool source_tuple_literal(SourceContext *ctx,AstNode *node,SourceExpected
     if (expected.present && (!context || context->parameter_count!=count))
         return source_fail(ctx,node,XR_XIR_BAD_TYPE,"Tuple literal requires an exact ordered arity context");
     XrXirCallableParameter *fields=source_alloc(ctx,count,sizeof(*fields));
-    SourceValue *payloads=source_alloc(ctx,count,sizeof(*payloads));
+    SourceValue *payloads=source_recipe_storage(ctx,count,sizeof(*payloads));
     if (!fields || !payloads) return false;
     /* Child evaluation can grow the type pool. Keep its field context owned. */
     if (context && !source_copy_bytes(ctx,node,fields,context->parameters,count*sizeof(*fields))) return false;

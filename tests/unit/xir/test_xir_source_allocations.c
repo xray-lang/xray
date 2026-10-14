@@ -583,6 +583,12 @@ static void allocation_effect_observer_control(void) {
     puts("Fixed 96-row diagnostic pages retain 113 callers and exact accepted/rejected fees; physical0");
 }
 int main(int argc,char **argv) {
+    if (argc==2 && !strcmp(argv[1],"--private-storage-control")) {
+        source_call_storage_cases();source_region_output_cases();source_plan_context_cases();
+        source_plan_conversion_budget_cases();
+        CHECK(!source_fixture_compile_live && !source_fixture_compile_bytes);
+        puts("Source private storage: original call/region/context/conversion controls and physical0 passed");return 0;
+    }
     if (argc==2 && !strcmp(argv[1],"--effect-observer-control")) {
         allocation_effect_observer_control();return 0;
     }

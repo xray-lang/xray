@@ -303,7 +303,7 @@ static bool source_struct_construct(SourceContext *ctx, AstNode *node, AstNode *
     uint32_t count = decl->field_count;
     if ((uint32_t) field_count > count)
         return source_fail(ctx, node, XR_XIR_BAD_TYPE, "struct literal has too many fields");
-    SourceValue *fields = count ? source_alloc(ctx, count, sizeof(*fields)) : NULL;
+    SourceValue *fields = count ? source_recipe_storage(ctx, count, sizeof(*fields)) : NULL;
     bool *seen = count ? source_alloc(ctx, count, sizeof(*seen)) : NULL;
     if (count && (!fields || !seen)) return false;
     for (uint32_t f = 0; f < (uint32_t) field_count; ++f) {
