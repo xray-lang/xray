@@ -92,6 +92,26 @@ def observations() -> dict[str, tuple[list, str]]:
     models['match/adt_enum_nonpayload_variant'] = (
         ['circle:3', 'square:4', 'point', 'unknown', 9, -1, -2, -2, True],
         'All four semantic variants, wildcard results and equal bare variant descriptions are observed without guessing any runtime ordinal.')
+    loop_cleanup = []
+    for i in range(4):
+        loop_cleanup.extend(['iter ' + str(i), 'blk ' + str(i)])
+    loop_cleanup.append('loop-block-end')
+    for i in range(3):
+        loop_cleanup.extend(['call-iter ' + str(i), 'call ' + str(i)])
+    loop_cleanup.extend(['loop-call-end', 'done'])
+    models['cleanup/defer_loop_scope'] = (
+        loop_cleanup,
+        'Each complete original loop iteration owns its nearest block cleanup. '
+        'The current iteration prints before its deferred block or call, before the next iteration begins.')
+    for helper in ('animals', 'borrowed_arg_lib', 'corolib', 'genbox', 'nested_class_field_lib',
+                   'opts_a', 'opts_b', 'private_const_default', 'same_name_method_a',
+                   'same_name_method_b', 'shapes', 'static_defaults',
+                   'value_struct_return_release_lib', 'array_fill_ref_lib'):
+        models['helper/' + helper] = (
+            [],
+            'The complete original module only declares helpers; its standalone run has no calls or output. '
+            'The sole module-level DEFAULT_LIMIT in its helper is the pure literal192. '
+            'No exported helper body, importer, inheritance, generic, coroutine, borrow or resource qualification is granted.')
     return models
 
 

@@ -42,7 +42,22 @@
     "regression/0398_null_test_owner_edges": "tests/regression/03_operators/0398_null_test_owner_edges.xr",
     "match/adt_enum_nonpayload_variant": "tests/diff/cases/match/adt_enum_nonpayload_variant.xr",
     "observed/assertion_same_t_parity": "tests/unit/xir/legacy_consumers/fixtures/independent_run_observations/assertion_same_t_parity/root.xr",
-    "exception/match_non_exhaustive_panic_shape": "tests/diff/cases/semantics/exception/match_non_exhaustive_panic_shape.xr"
+    "exception/match_non_exhaustive_panic_shape": "tests/diff/cases/semantics/exception/match_non_exhaustive_panic_shape.xr",
+    "cleanup/defer_loop_scope": "tests/diff/cases/semantics/cleanup/defer_loop_scope.xr",
+    "helper/animals": "tests/diff/cases/semantics/modules/_animals.xr",
+    "helper/borrowed_arg_lib": "tests/diff/cases/semantics/modules/_borrowed_arg_lib.xr",
+    "helper/corolib": "tests/diff/cases/semantics/modules/_corolib.xr",
+    "helper/genbox": "tests/diff/cases/semantics/modules/_genbox.xr",
+    "helper/nested_class_field_lib": "tests/diff/cases/semantics/modules/_nested_class_field_lib.xr",
+    "helper/opts_a": "tests/diff/cases/semantics/modules/_opts_a.xr",
+    "helper/opts_b": "tests/diff/cases/semantics/modules/_opts_b.xr",
+    "helper/private_const_default": "tests/diff/cases/semantics/modules/_private_const_default.xr",
+    "helper/same_name_method_a": "tests/diff/cases/semantics/modules/_same_name_method_a.xr",
+    "helper/same_name_method_b": "tests/diff/cases/semantics/modules/_same_name_method_b.xr",
+    "helper/shapes": "tests/diff/cases/semantics/modules/_shapes.xr",
+    "helper/static_defaults": "tests/diff/cases/semantics/modules/_static_defaults.xr",
+    "helper/value_struct_return_release_lib": "tests/diff/cases/semantics/modules/_value_struct_return_release_lib.xr",
+    "helper/array_fill_ref_lib": "tests/diff/cases/semantics/collections/_array_fill_ref_lib.xr"
   },
   "inputs": [
     {
@@ -272,6 +287,50 @@
     {
       "path": "spec/source/sections/019-18-error-codes.md",
       "lf_sha256": "2c4416085d5d38f37fb0e434d863cba1ff5d5758d44efb29402fa5158282d9ad"
+    },
+    {
+      "path": "tests/diff/cases/semantics/cleanup/defer_loop_scope.xr",
+      "lf_sha256": "fb9ada7ff862a7e87457fad3543e05d79ca999238e7e3a01ca3f6e1488b36af3"
+    },
+    {
+      "path": "tests/diff/cases/semantics/modules/_animals.xr",
+      "lf_sha256": "74fcfe2315b57f4c32c163f72741fcf9206900aea49c7bad1320bcd4d6e24c96"
+    },
+    {
+      "path": "tests/diff/cases/semantics/modules/_borrowed_arg_lib.xr",
+      "lf_sha256": "45ac2aa9664bf5d894a40e8d24e98bf0c8a0df5dd4b271d4b9b9f24952767cbf"
+    },
+    {
+      "path": "tests/diff/cases/semantics/modules/_genbox.xr",
+      "lf_sha256": "a920b9d261d1187ce75f4bf9ea719086906a9475bb28c9d1d316f08178d937fa"
+    },
+    {
+      "path": "tests/diff/cases/semantics/modules/_nested_class_field_lib.xr",
+      "lf_sha256": "e7945dde250091942b288e58e4ec0f1ba36abcf2fd16bc66bb4107028fa0662b"
+    },
+    {
+      "path": "tests/diff/cases/semantics/modules/_opts_a.xr",
+      "lf_sha256": "156a51d75d0c717ae02c55f74c610a5dcee05bb4348ab79b2d5d2613f5132fcc"
+    },
+    {
+      "path": "tests/diff/cases/semantics/modules/_opts_b.xr",
+      "lf_sha256": "f3a1e8b9f1c31627ecd08a2173e47d5cb2d82ee4963b94f8b2dc338b30f11230"
+    },
+    {
+      "path": "tests/diff/cases/semantics/modules/_same_name_method_a.xr",
+      "lf_sha256": "0d3f0f38b2c6d04b89312c462496b3933fce6a7fe72a0a0a55040730f272572c"
+    },
+    {
+      "path": "tests/diff/cases/semantics/modules/_same_name_method_b.xr",
+      "lf_sha256": "3cb02b75792715e9a7f6b25d26010f6309db1ab624d84c78335ed42f1a4a52ec"
+    },
+    {
+      "path": "tests/diff/cases/semantics/modules/_value_struct_return_release_lib.xr",
+      "lf_sha256": "dd38cc00938ea85c8506ba7e546dbd307d2753d18347928ef8bb873392ef055b"
+    },
+    {
+      "path": "tests/diff/cases/semantics/collections/_array_fill_ref_lib.xr",
+      "lf_sha256": "dba3bf1ee43bedfa5478ef7fac827ca7e52be0c3d840b2985d58d3ef197f1de0"
     }
   ],
   "scope": "Whole original run-entry byte observations only. Original helper definitions, named test entries, complete FI/resources/physical/provider qualification remain separate.",
