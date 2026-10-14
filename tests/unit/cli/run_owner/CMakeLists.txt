@@ -8,15 +8,19 @@ set(CMAKE_C_STANDARD 11)
 set(CMAKE_C_STANDARD_REQUIRED ON)
 set(CMAKE_C_EXTENSIONS OFF)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
+if(NOT DEFINED CMAKE_MSVC_RUNTIME_LIBRARY)
+    set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
+endif()
 foreach(directory RUN_SOURCE_BUILD)
     if(NOT IS_ABSOLUTE "${${directory}}")
         message(FATAL_ERROR "Set ${directory} to the actual fresh build directory")
     endif()
 endforeach()
-set(run_libraries "${RUN_SOURCE_BUILD}/xray_source_compile.lib"
+set(run_libraries "${RUN_SOURCE_BUILD}/xray_source_api.lib"
+    "${RUN_SOURCE_BUILD}/xray_source_compile.lib"
     "${RUN_SOURCE_BUILD}/src/execution/xray_xir_runtime_host.lib"
     "${RUN_SOURCE_BUILD}/src/base/xray_compile_resources.lib")
-foreach(name xray_xir_source_product xray_xir_source xray_xir_vm xray_xir_cgen xray_xir xray_compiler_parser xray_xir_scalar xray_xir_admission xray_xir_declarations xray_xir_stdlib_catalog)
+foreach(name xray_xir_source_product xray_xir_source xray_xir_vm xray_xir_cgen xray_xir xray_compiler_parser xray_xir_scalar xray_xir_ctfe xray_xir_admission xray_xir_declarations xray_xir_stdlib_catalog)
     list(APPEND run_libraries "${RUN_SOURCE_BUILD}/src/xir/${name}.lib")
 endforeach()
 foreach(library IN LISTS run_libraries)

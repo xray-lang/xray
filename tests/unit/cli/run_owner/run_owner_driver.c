@@ -22,6 +22,7 @@ XR_FUNC int cmd_run(const XrCliInvocation *inv);
 #include "xir/xxir_format.c"
 #include "execution/xr_xir_host_execution.c"
 #include "execution/xr_xir_host_cli.c"
+#include "api/xsource_api.c"
 static size_t phase_allocations[5];
 static unsigned resource_calls;
 static bool budget_failure;
@@ -45,9 +46,9 @@ static XrSourceCompileStatus observed_source(const XrSourceCompileRequest *reque
     CHECK(request->manifest_limits.input_bytes==1048576 && request->manifest_limits.depth==64);
     return xr_source_compile_build(request,output,diagnostic);
 }
-static XrXirStatus observed_take(XrXirSourceProduct *product,XrXirProgram **output) {
+static XrSourceStatus observed_take(XrXirSourceProduct **product,XrSourceProgram **output) {
     phase_allocations[3]=runtime_attempts;
-    return xr_xir_compile_source_product_vm_take(product,output);
+    return xr_source_program_take_product(product,output);
 }
 static int observed_program(XrXirProgram *program,uint32_t entry) {
     phase_allocations[4]=runtime_attempts;
@@ -56,13 +57,13 @@ static int observed_program(XrXirProgram *program,uint32_t entry) {
 #define xr_compile_resources_new observed_resources
 #define xr_source_paths observed_paths
 #define xr_source_compile_build observed_source
-#define xr_xir_compile_source_product_vm_take observed_take
+#define xr_source_program_take_product observed_take
 #define xr_xir_host_program_main observed_program
 #include "app/cli/xcmd_run.c"
 #undef xr_compile_resources_new
 #undef xr_source_paths
 #undef xr_source_compile_build
-#undef xr_xir_compile_source_product_vm_take
+#undef xr_source_program_take_product
 #undef xr_xir_host_program_main
 
 static void verify_boundaries(const XrCliInvocation *inv) {
