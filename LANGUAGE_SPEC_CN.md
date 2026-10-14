@@ -7655,6 +7655,28 @@ Source以实际类型结构跨owner匹配helper及重放结果，而非假定局
 
 f32和f64逻辑输出分别占四和八个目标字节，Tuple字段继续累加目标存储大小。f32输入必须没有高位且NaN编码规范；f64沿用普通Value接收规则。Source在独立重放中再次校验目标规范浮点payload，记录普通CONST_FLOAT配方并交完整Checker。外部Tuple、任意Array/struct/enum、函数值和cleanup路径资格仍未由此授予。
 
+### 17.48 编译域内Nullable活跃分支与有界常量接收
+
+完整Lowered重验和整个可达直接调用闭包接收后，Nullable可以包装已准入的基本值、String、不可变Tuple及合法嵌套Nullable。类型ID仍只属于实际不可变pool；迭代类型族接收拒绝环、非法element和带Cell/函数/资源权限的字段。NULLABLE_NONE/SOME、IS_SOME和UNWRAP调用真实Value操作，在原compiler Domain构造、观察或取得独立payload引用。内部参数/子返回、owned局部/并行PHI、Tuple字段和私有Cell<Nullable>保持完整拥有寿命。解包None返回独立NULL_UNWRAP状态，Source报告带位置的编译错误，失败保全Unit输出并释放所有帧。
+
+逻辑导出从唯一TypeArena storage layout取得判别字节数，加上Some活跃payload的递归逻辑大小；None没有payload费用，不计算inactive存储、对齐填充、指针或owner头。当前canonical Nullable tag为一字节：None<i64>占一字节、Some<i8>占两字节，Some<i64>需九字节并触发原output8上限。迭代导出scratch继续计入原frame额度及resize时新旧块峰值；目标标量大小、String UTF-8长度和Unit Tuple字段零字节规则不变。
+
+完整有限类型形状在每次Value接收前预付原ledger，活跃分支不能借None免掉型别准入。Nullable相等仅接既有共同Value相等支持的Nullable链及基本/String叶；规范NaN、有符号零和完整NUL字节沿用同一个语义owner。固定数值work和活跃String扫描跨度在比较前支付原累计ledger，溢出或无力支付先返回BUDGET。没有另建语义解释器、配额、退款或Instance/native回退。
+
+Source独立重放按真实跨owner类型结构匹配，持有真实分支和字段owner，迭代记录普通NULLABLE_NONE/SOME与payload常量/TUPLE_NEW配方，再交完整Checker和查询发布。原站点/owner/expected覆盖以及每个失败前缀释放保持。外部Nullable/其他复合参数仍需有界跨arena完整快照接收；当前明确拒绝。Array/struct/enum、函数值和cleanup完整资格不由本族授予，原所有预算与正式安全门继续生效。
+
+### 17.49 有界编译Array、私有根修改与capacity接收
+
+完整Lowered和整个实际直接调用闭包重验后，CTFE接真实ARRAY_NEW/REPEAT/GET/LEN、CAPACITY/WITH_CAPACITY/RESERVE、SET/PUSH及私有Array Cell的CELL_PLACE/PLACE_READ/WRITE。类型族接收允许基本/String叶、纯Array链、接收跨度静态可界定的Tuple/Nullable元素及合法外层Tuple/Nullable包装。编译域内参数、子返回、Cell、owned局部与PHI仍用原Value/TypeArena/Domain，不运行Instance/native或AST fallback。root/effect不证明确定性。只有真实当前私有Cell根的同步place可修改；module根、外部Cell/ref和未接通的field/index投影继续拒绝。
+
+类型形状只报告费用和可变接收跨度，不是Value/执行授权。所有元数据、向量、复制、扫描、扩容和清理预付都进入原累计ledger。Array浅层长度可在有界header观察后取得；普通接收跨度按长度乘完整静态元素形状的保守上界在调用Value之前支付，检查加乘溢出。Tuple/Nullable包装中的可变Array跨度用迭代拥有访问定位并提前付清，不依靠宿主递归。scratch计入剩余原frame额度，导出stack与Value接收scratch的同时峰值一并计算。未付清先BUDGET；原预算、步数、深度和失败不退款规则不变。
+
+现有array_get会先接收整个Array。若某元素又包含自身需遍历可变Array内容的接收边界，如Array<Array<Tuple<...>>>或Array<Array<i8?>>，调用前无法借现有API有界取得内部长度。该具体族当前fail closed，需Value owner提供在每次访问前付费的浅层子观察/完整接收接口；不改成另一Value表示、不先无预算扫描、不将该接口缺口描述为整个Array目标完成。纯Array<Array<i8>>无需这种深接收，可以执行。任意Array相等、其他Array方法与完整路径仍未由本节授予。
+
+Array逻辑导出递归累加活跃元素的目标标量、String字节、Nullable判别和Tuple字段大小；空数组零字节，不计capacity、指针、owner头或inactive存储。实际capacity仍是普通语言可观察值，独立Source重放以WITH_CAPACITY、私有Cell、逐元素PUSH和CELL_READ配方精确保留它，不能把Array重新建成具有不同capacity的普通字面量。所有临时owner失败前缀均释放；导出类型、元素及账本在Source/Artifact/调用者死亡后仍有效，最后drop无分配且只退live。
+
+真实COW修改保留旧快照。负长度/capacity返回NUMERIC_RANGE，索引越界返回追加的compiler-only BOUNDS状态；Source给带位置的编译错误。失败保全Unit输出及借用值。外部复合快照、有嵌套可变接收的元素、nominal/函数值/cleanup和正式共享/完整安全资格继续按原目标实施，不能从此有限开发资格推断完成。
+
 ---
 
 ## 18. 错误码 (Error Codes)

@@ -1,0 +1,2 @@
+fn make()->i8? { var x:i8?=null; x=7; return x }
+export fn run()->i8? { return comptime make() }

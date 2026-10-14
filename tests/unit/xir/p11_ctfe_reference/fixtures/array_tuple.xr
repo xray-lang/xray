@@ -1,0 +1,1 @@
+export fn run()->Array<(i8,string)> { return comptime [(7,"ab")] }
