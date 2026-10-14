@@ -24,6 +24,8 @@ else()
 endif()
 add_test(NAME source_public_faults COMMAND test_source_public_faults)
 set_tests_properties(source_public_faults PROPERTIES TIMEOUT 600 RUN_SERIAL TRUE COST 100 LABELS "unit;api;source;ownership;compiler-faults;runtime-faults")
+add_test(NAME source_public_task_scalar_faults COMMAND test_source_public_faults --scalar-task)
+set_tests_properties(source_public_task_scalar_faults PROPERTIES TIMEOUT 600 RUN_SERIAL TRUE COST 100 LABELS "unit;api;source;ownership;compiler-faults;runtime-faults")
 
 add_executable(test_source_program_transfer "${CMAKE_CURRENT_LIST_DIR}/source_public/test_source_transfer.c")
 target_link_libraries(test_source_program_transfer PRIVATE xray_source_api)

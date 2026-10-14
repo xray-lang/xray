@@ -139,6 +139,48 @@ static void task_timer_protocol(void) {
     xray_source_program_free(synchronous);CHECK(out.size==3 && !memcmp(out.data,"42\n",3));
     CHECK(xray_source_result_event(result,&event)==XR_SOURCE_OK && event.state==XR_SOURCE_RUN_RETURNED);xray_source_result_free(result);
 }
+static void task_scalar_protocol(void) {
+    static const struct {const char *type,*literal,*bytes;size_t length;} cases[]={
+        {"i8","-128","-128\n",sizeof("-128\n")-1},
+        {"i16","-32768","-32768\n",sizeof("-32768\n")-1},
+        {"i32","-2147483648","-2147483648\n",sizeof("-2147483648\n")-1},
+        {"u8","255","255\n",sizeof("255\n")-1},
+        {"u16","65535","65535\n",sizeof("65535\n")-1},
+        {"u32","4294967295","4294967295\n",sizeof("4294967295\n")-1},
+        {"u64","18446744073709551615","18446744073709551615\n",sizeof("18446744073709551615\n")-1},
+        {"f32","1.5","1.5\n",sizeof("1.5\n")-1},
+        {"f64","1.5","1.5\n",sizeof("1.5\n")-1},
+        {"rune","'x'","x\n",sizeof("x\n")-1},
+        {"i64","-42","-42\n",sizeof("-42\n")-1},
+        {"bool","true","true\n",sizeof("true\n")-1},
+        {"string","\"a\\0中z\"","a\0中z\n",sizeof("a\0中z\n")-1},
+        {NULL,NULL,"17\n",sizeof("17\n")-1}
+    };
+    for(size_t i=0;i<sizeof(cases)/sizeof(cases[0]);++i) {
+        char source[1024];unsigned outputs=cases[i].type?2u:1u;
+        int length=cases[i].type?snprintf(source,sizeof(source),
+            "fn worker()->%s { Coro.yield(); return %s }\n"
+            "fn calculate()->%s { const task:Task<%s> = go worker(); const first=await task; print(first); return await task }\n"
+            "print(calculate())\n",cases[i].type,cases[i].literal,cases[i].type,cases[i].type):
+            snprintf(source,sizeof(source),"fn worker() { Coro.yield() }\n"
+                "fn calculate() { const task:Task<null> = go worker(); await task; await task; print(17) }\ncalculate()\n");
+        CHECK(length>0 && (size_t)length<sizeof(source));
+        XrSourceCompiler *compiler=compiler_new();XrSourceProgram *program=compile(compiler,source);
+        memset(source,'!',sizeof(source));xray_source_compiler_free(compiler);
+        Bytes out={0};XrSourceCallOptions options=options_for(&out);XrSourceCall *call=NULL;
+        CHECK(xray_source_call_begin(program,&options,&call)==XR_SOURCE_OK);xray_source_program_free(program);
+        CHECK(drain_waiting(call).state==XR_SOURCE_RUN_RETURNED);
+        XrSourceResult *result=NULL;CHECK(xray_source_call_take(call,&result)==XR_SOURCE_OK);
+        CHECK(xray_source_call_drop(&call,NULL)==XR_SOURCE_OK);
+        CHECK(out.size==outputs*cases[i].length && out.stream==XR_SOURCE_STDOUT);
+        for(unsigned copy=0;copy<outputs;++copy)
+            CHECK(!memcmp(out.data+copy*cases[i].length,cases[i].bytes,cases[i].length));
+        int64_t value=-1;CHECK(xray_source_result_i64(result,&value)==XR_SOURCE_OK && value==0);
+        xray_source_result_free(result);
+    }
+    puts("public-only primitive Task14, repeated await, exact numeric/NUL/UTF8 bytes and producer death PASS");
+}
+
 typedef struct Reentry {XrSourceCall *call;unsigned callbacks;} Reentry;
 static XrSourceWriteStatus reentrant_write(void *context,XrSourceOutputStream stream,const char *bytes,size_t size) {
     Reentry *guard=context;CHECK(stream==XR_SOURCE_STDOUT && size==3 && !memcmp(bytes,"42\n",3));
@@ -169,4 +211,4 @@ static void located_diagnostic(void) {
     CHECK(xray_source_diagnostic_info(diagnostic,&info)==XR_SOURCE_OK && info.line==1 && info.column==13);
     CHECK(info.path && strstr(info.path,"unsaved-public.xr") && strstr(info.message,"initialized value"));xray_source_diagnostic_free(diagnostic);
 }
-int main(void) {compiler_layout_guards();detached_call();escaped_panic();cancellation_and_budget();timer_protocol();task_timer_protocol();reentry();located_diagnostic();puts("public header compiler/Program/Call/result ownership, exact waits and byte semantics PASS");return 0;}
+int main(void) {compiler_layout_guards();detached_call();escaped_panic();cancellation_and_budget();timer_protocol();task_timer_protocol();task_scalar_protocol();reentry();located_diagnostic();puts("public header compiler/Program/Call/result ownership, exact waits and byte semantics PASS");return 0;}
