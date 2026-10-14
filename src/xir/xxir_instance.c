@@ -569,6 +569,15 @@ XrXirCallStatus xr_xir_instance_stop(XrXirInstance *instance) {
         do { status = xr_xir_task_executor_poll_root(instance->executor, 256).status; }
         while (status == XR_XIR_CALL_READY);
     }
+    if (!driving && instance->call && instance->state == XR_XIR_INSTANCE_INITIALIZING &&
+        xr_xir_task_executor_root_idle(instance->executor)) {
+        XrXirCallResult result = xr_xir_task_executor_poll_root(instance->executor, 1);
+        if (result.status != XR_XIR_CALL_READY && result.status != XR_XIR_CALL_SUSPENDED) {
+            /* Drain publishes the same sticky initialization outcome as an ordinary poll. */
+            fail_initialization(instance, result);
+            status = instance->failure.status;
+        }
+    }
     instance->driving = driving;
     return status == XR_XIR_CALL_CANCELLED || status == XR_XIR_CALL_CANCEL_REQUESTED ? XR_XIR_CALL_READY : status;
 }

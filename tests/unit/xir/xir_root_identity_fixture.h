@@ -22,13 +22,14 @@ enum {
     RI_FUNCTIONS, RI_INSTANCES = 2
 };
 enum { RI_TASK_TYPE = 256, RI_FUNCTION_TYPE, RI_CELL_TYPE };
+enum { RI_ROOT_REFERENCE = 1 };
 
 typedef struct RiGraph {
     XrXirTypeNode nodes[3];
     XrXirTypes types;
     XrXirType parameter;
-    XrXirInstruction root[14], child[7], init[5], root_exit[7], child_exit[3], read[2], entry[2];
-    XrXirBlock root_blocks[4], child_blocks[2], init_block, root_exit_block, child_exit_block, scalar_block;
+    XrXirInstruction root[16], child[7], init[6], root_exit[8], child_exit[3], read[3], entry[2];
+    XrXirBlock root_blocks[4], child_blocks[2], init_block, root_exit_block, child_exit_block, read_block, scalar_block;
     uint32_t root_operands[2], root_exit_operand, child_exit_operand;
     XrXirFunction functions[RI_FUNCTIONS];
     XrXirFunctionIdentity identities[RI_FUNCTIONS];
@@ -76,32 +77,35 @@ static void ri_graph(RiGraph *g, bool fail_initialization) {
     g->nodes[2] = (XrXirTypeNode){.kind = XR_XIR_TYPE_CELL, .element = XR_XIR_I64};
     g->types = (XrXirTypes){g->nodes, 3, NULL, NULL};
     g->root[0] = (XrXirInstruction){.op = XR_XIR_CLEANUP_REGISTER, .targets = {1}, .immediate = RI_ROOT_EXIT};
-    g->root[1] = (XrXirInstruction){.op = XR_XIR_SLOT_LOAD, .type = XR_XIR_I64};
-    g->root[2] = (XrXirInstruction){.op = XR_XIR_CONST_INT, .type = XR_XIR_I64, .immediate = 1};
-    g->root[3] = (XrXirInstruction){.op = XR_XIR_ADD_INT, .type = XR_XIR_I64, .args = {1, 2}};
-    g->root[4] = (XrXirInstruction){.op = XR_XIR_SLOT_STORE, .args = {3}};
-    g->root[5] = (XrXirInstruction){.op = XR_XIR_SLOT_LOAD, .type = XR_XIR_I64, .immediate = 1};
-    g->root[6] = (XrXirInstruction){.op = XR_XIR_GO, .type = (XrXirType)RI_TASK_TYPE,
+    g->root[RI_ROOT_REFERENCE] = (XrXirInstruction){.op = XR_XIR_FUNCTION_REF,
+        .type = (XrXirType)RI_FUNCTION_TYPE, .immediate = RI_READ};
+    g->root[2] = (XrXirInstruction){.op = XR_XIR_SLOT_LOAD, .type = (XrXirType)RI_CELL_TYPE};
+    g->root[3] = (XrXirInstruction){.op = XR_XIR_CELL_READ, .type = XR_XIR_I64, .args = {2}};
+    g->root[4] = (XrXirInstruction){.op = XR_XIR_CONST_INT, .type = XR_XIR_I64, .immediate = 1};
+    g->root[5] = (XrXirInstruction){.op = XR_XIR_ADD_INT, .type = XR_XIR_I64, .args = {3, 4}};
+    g->root[6] = (XrXirInstruction){.op = XR_XIR_CELL_WRITE, .args = {2, 5}};
+    g->root[7] = (XrXirInstruction){.op = XR_XIR_SLOT_LOAD, .type = XR_XIR_I64, .immediate = 1};
+    g->root[8] = (XrXirInstruction){.op = XR_XIR_GO, .type = (XrXirType)RI_TASK_TYPE,
         .args = {0, 1}, .immediate = RI_CHILD};
-    g->root[7] = (XrXirInstruction){.op = XR_XIR_TASK_AWAIT, .args = {6}, .targets = {2, 3}};
-    g->root[8] = (XrXirInstruction){.op = XR_XIR_INVOKE_RESULT, .type = XR_XIR_I64, .immediate = 7};
-    g->root[9] = (XrXirInstruction){.op = XR_XIR_PRINT, .args = {1, 1}};
-    g->root[10] = (XrXirInstruction){.op = XR_XIR_SUSPEND};
-    g->root[11] = (XrXirInstruction){.op = XR_XIR_RETURN, .args = {8}};
-    g->root[12] = (XrXirInstruction){.op = XR_XIR_INVOKE_ERROR, .type = XR_XIR_ERROR, .immediate = 7};
-    g->root[13] = (XrXirInstruction){.op = XR_XIR_THROW, .args = {12}};
+    g->root[9] = (XrXirInstruction){.op = XR_XIR_TASK_AWAIT, .args = {8}, .targets = {2, 3}};
+    g->root[10] = (XrXirInstruction){.op = XR_XIR_INVOKE_RESULT, .type = XR_XIR_I64, .immediate = 9};
+    g->root[11] = (XrXirInstruction){.op = XR_XIR_PRINT, .args = {1, 1}};
+    g->root[12] = (XrXirInstruction){.op = XR_XIR_SUSPEND};
+    g->root[13] = (XrXirInstruction){.op = XR_XIR_RETURN, .args = {10}};
+    g->root[14] = (XrXirInstruction){.op = XR_XIR_INVOKE_ERROR, .type = XR_XIR_ERROR, .immediate = 9};
+    g->root[15] = (XrXirInstruction){.op = XR_XIR_THROW, .args = {14}};
     g->root_blocks[0] = (XrXirBlock){.count = 1};
-    g->root_blocks[1] = (XrXirBlock){.first = 1, .count = 7, .frontier = 1};
-    g->root_blocks[2] = (XrXirBlock){.first = 8, .count = 4, .frontier = 1};
-    g->root_blocks[3] = (XrXirBlock){.first = 12, .count = 2, .frontier = 1};
-    g->root_operands[0] = 5; g->root_operands[1] = 8;
+    g->root_blocks[1] = (XrXirBlock){.first = 1, .count = 9, .frontier = 1};
+    g->root_blocks[2] = (XrXirBlock){.first = 10, .count = 4, .frontier = 1};
+    g->root_blocks[3] = (XrXirBlock){.first = 14, .count = 2, .frontier = 1};
+    g->root_operands[0] = 7; g->root_operands[1] = 10;
     g->functions[RI_ROOT] = (XrXirFunction){.name = "root", .name_length = 4, .result = XR_XIR_I64,
-        .blocks = g->root_blocks, .block_count = 4, .instructions = g->root, .instruction_count = 14,
+        .blocks = g->root_blocks, .block_count = 4, .instructions = g->root, .instruction_count = 16,
         .operands = g->root_operands, .operand_count = 2};
     g->child[0] = (XrXirInstruction){.op = XR_XIR_CLEANUP_REGISTER, .targets = {1}, .immediate = RI_CHILD_EXIT};
     g->child[1] = (XrXirInstruction){.op = XR_XIR_SUSPEND};
-    g->child[2] = (XrXirInstruction){.op = XR_XIR_LOCAL_NEW, .type = XR_XIR_I64, .args = {0}};
-    g->child[3] = (XrXirInstruction){.op = XR_XIR_LOCAL_READ, .type = XR_XIR_I64, .args = {3}};
+    g->child[2] = (XrXirInstruction){.op = XR_XIR_CELL_NEW, .type = (XrXirType)RI_CELL_TYPE, .args = {0}};
+    g->child[3] = (XrXirInstruction){.op = XR_XIR_CELL_READ, .type = XR_XIR_I64, .args = {3}};
     g->child[4] = (XrXirInstruction){.op = XR_XIR_CONST_INT, .type = XR_XIR_I64, .immediate = 2};
     g->child[5] = (XrXirInstruction){.op = XR_XIR_MUL_INT, .type = XR_XIR_I64, .args = {4, 5}};
     g->child[6] = (XrXirInstruction){.op = XR_XIR_RETURN, .args = {6}};
@@ -111,24 +115,26 @@ static void ri_graph(RiGraph *g, bool fail_initialization) {
         .parameters = &g->parameter, .parameter_count = 1, .result = XR_XIR_I64,
         .blocks = g->child_blocks, .block_count = 2, .instructions = g->child, .instruction_count = 7};
     g->init[0] = (XrXirInstruction){.op = XR_XIR_CONST_INT, .type = XR_XIR_I64};
-    g->init[1] = (XrXirInstruction){.op = XR_XIR_SLOT_INIT, .args = {0}};
-    g->init[2] = (XrXirInstruction){.op = XR_XIR_CONST_INT, .type = XR_XIR_I64, .immediate = 21};
-    g->init[3] = (XrXirInstruction){.op = XR_XIR_SLOT_INIT, .args = {2}, .immediate = 1};
-    g->init[4] = (XrXirInstruction){.op = fail_initialization ? XR_XIR_MATCH_FAIL : XR_XIR_RETURN};
-    g->init_block = (XrXirBlock){.count = 5};
+    g->init[1] = (XrXirInstruction){.op = XR_XIR_CELL_NEW, .type = (XrXirType)RI_CELL_TYPE, .args = {0}};
+    g->init[2] = (XrXirInstruction){.op = XR_XIR_SLOT_INIT, .args = {1}};
+    g->init[3] = (XrXirInstruction){.op = XR_XIR_CONST_INT, .type = XR_XIR_I64, .immediate = 21};
+    g->init[4] = (XrXirInstruction){.op = XR_XIR_SLOT_INIT, .args = {3}, .immediate = 1};
+    g->init[5] = (XrXirInstruction){.op = fail_initialization ? XR_XIR_MATCH_FAIL : XR_XIR_RETURN};
+    g->init_block = (XrXirBlock){.count = 6};
     g->functions[RI_INIT] = (XrXirFunction){.name = "init", .name_length = 4,
-        .blocks = &g->init_block, .block_count = 1, .instructions = g->init, .instruction_count = 5};
-    g->root_exit[0] = (XrXirInstruction){.op = XR_XIR_SLOT_LOAD, .type = XR_XIR_I64};
-    g->root_exit[1] = (XrXirInstruction){.op = XR_XIR_CONST_INT, .type = XR_XIR_I64, .immediate = 10};
-    g->root_exit[2] = (XrXirInstruction){.op = XR_XIR_ADD_INT, .type = XR_XIR_I64, .args = {0, 1}};
-    g->root_exit[3] = (XrXirInstruction){.op = XR_XIR_SLOT_STORE, .args = {2}};
-    g->root_exit[4] = (XrXirInstruction){.op = XR_XIR_CONST_INT, .type = XR_XIR_I64, .immediate = 5};
-    g->root_exit[5] = (XrXirInstruction){.op = XR_XIR_PRINT, .args = {0, 1}};
-    g->root_exit[6] = (XrXirInstruction){.op = XR_XIR_RETURN};
-    g->root_exit_operand = 4;
-    g->root_exit_block = (XrXirBlock){.count = 7};
+        .blocks = &g->init_block, .block_count = 1, .instructions = g->init, .instruction_count = 6};
+    g->root_exit[0] = (XrXirInstruction){.op = XR_XIR_SLOT_LOAD, .type = (XrXirType)RI_CELL_TYPE};
+    g->root_exit[1] = (XrXirInstruction){.op = XR_XIR_CELL_READ, .type = XR_XIR_I64, .args = {0}};
+    g->root_exit[2] = (XrXirInstruction){.op = XR_XIR_CONST_INT, .type = XR_XIR_I64, .immediate = 10};
+    g->root_exit[3] = (XrXirInstruction){.op = XR_XIR_ADD_INT, .type = XR_XIR_I64, .args = {1, 2}};
+    g->root_exit[4] = (XrXirInstruction){.op = XR_XIR_CELL_WRITE, .args = {0, 3}};
+    g->root_exit[5] = (XrXirInstruction){.op = XR_XIR_CONST_INT, .type = XR_XIR_I64, .immediate = 5};
+    g->root_exit[6] = (XrXirInstruction){.op = XR_XIR_PRINT, .args = {0, 1}};
+    g->root_exit[7] = (XrXirInstruction){.op = XR_XIR_RETURN};
+    g->root_exit_operand = 5;
+    g->root_exit_block = (XrXirBlock){.count = 8};
     g->functions[RI_ROOT_EXIT] = (XrXirFunction){.name = "root_exit", .name_length = 9,
-        .blocks = &g->root_exit_block, .block_count = 1, .instructions = g->root_exit, .instruction_count = 7,
+        .blocks = &g->root_exit_block, .block_count = 1, .instructions = g->root_exit, .instruction_count = 8,
         .operands = &g->root_exit_operand, .operand_count = 1};
     g->child_exit[0] = (XrXirInstruction){.op = XR_XIR_CONST_INT, .type = XR_XIR_I64, .immediate = 6};
     g->child_exit[1] = (XrXirInstruction){.op = XR_XIR_PRINT, .args = {0, 1}};
@@ -137,20 +143,22 @@ static void ri_graph(RiGraph *g, bool fail_initialization) {
     g->functions[RI_CHILD_EXIT] = (XrXirFunction){.name = "child_exit", .name_length = 10,
         .blocks = &g->child_exit_block, .block_count = 1, .instructions = g->child_exit, .instruction_count = 3,
         .operands = &g->child_exit_operand, .operand_count = 1};
-    g->read[0] = (XrXirInstruction){.op = XR_XIR_SLOT_LOAD, .type = XR_XIR_I64};
-    g->read[1] = (XrXirInstruction){.op = XR_XIR_RETURN, .args = {0}};
+    g->read[0] = (XrXirInstruction){.op = XR_XIR_SLOT_LOAD, .type = (XrXirType)RI_CELL_TYPE};
+    g->read[1] = (XrXirInstruction){.op = XR_XIR_CELL_READ, .type = XR_XIR_I64, .args = {0}};
+    g->read[2] = (XrXirInstruction){.op = XR_XIR_RETURN, .args = {1}};
     g->entry[0] = (XrXirInstruction){.op = XR_XIR_CONST_INT, .type = XR_XIR_I64};
     g->entry[1] = (XrXirInstruction){.op = XR_XIR_RETURN, .args = {0}};
     g->scalar_block = (XrXirBlock){.count = 2};
+    g->read_block = (XrXirBlock){.count = 3};
     g->functions[RI_READ] = (XrXirFunction){.name = "read", .name_length = 4, .result = XR_XIR_I64,
-        .blocks = &g->scalar_block, .block_count = 1, .instructions = g->read, .instruction_count = 2};
+        .blocks = &g->read_block, .block_count = 1, .instructions = g->read, .instruction_count = 3};
     g->functions[RI_ENTRY] = (XrXirFunction){.name = "main", .name_length = 4, .result = XR_XIR_I64,
         .blocks = &g->scalar_block, .block_count = 1, .instructions = g->entry, .instruction_count = 2};
     g->identities[RI_ROOT].exported = 1; g->identities[RI_READ].exported = 1;
     g->identities[RI_ROOT_EXIT].cleanup_owner = RI_ROOT + 1;
     g->identities[RI_CHILD_EXIT].cleanup_owner = RI_CHILD + 1;
     g->source = (XrXirSourceModule){"identity", 8, NULL, 0, RI_INIT};
-    g->slots[0] = (XrXirSlot){0, XR_XIR_I64, 1};
+    g->slots[0] = (XrXirSlot){0, (XrXirType)RI_CELL_TYPE, 1};
     g->slots[1] = (XrXirSlot){0, XR_XIR_I64, 0};
     g->declarations = (XrXirDeclarations){.modules = &g->source, .module_count = 1,
         .functions = g->identities, .slots = g->slots, .slot_count = 2, .entry_function = RI_ENTRY};

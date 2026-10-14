@@ -82,9 +82,13 @@ static void rn_failure_order(const XrXirModule *module) {
     }
     CHECK(assertions == 1);
     fprintf(stderr, "ROOT_NATIVE_CORE module=%u slots=0 assertParameters=BOOL/STRING result=UNIT\n", core);
-    CHECK(declarations->slot_count == 2 && declarations->slots[0].type == XR_XIR_STRING &&
-        declarations->slots[1].type == XR_XIR_I64 && declarations->slots[0].mutable &&
-        declarations->slots[1].mutable && declarations->slots[0].module == declarations->root_module &&
+    CHECK(declarations->slot_count == 2);
+    const XrXirTypeNode *owned = xr_xir_type_node(module->types, declarations->slots[0].type);
+    const XrXirTypeNode *failed = xr_xir_type_node(module->types, declarations->slots[1].type);
+    CHECK(owned && owned->kind == XR_XIR_TYPE_CELL && owned->element == XR_XIR_STRING &&
+        failed && failed->kind == XR_XIR_TYPE_CELL && failed->element == XR_XIR_I64 &&
+        declarations->slots[0].mutable && declarations->slots[1].mutable &&
+        declarations->slots[0].module == declarations->root_module &&
         declarations->slots[1].module == declarations->root_module);
     const XrXirFunction *initializer = &module->functions[declarations->modules[declarations->root_module].initializer];
     uint32_t published = UINT32_MAX, called = UINT32_MAX;
@@ -166,7 +170,11 @@ static void rn_emit_fixture(const XrXirCompileContext *context, unsigned fixture
     CHECK(xr_xir_compile_emit_c(lowered, prefix, 4194304, &source) == XR_XIR_OK);
     CHECK(source.text && source.length && !source.text[source.length] && !strstr(source.text, "({"));
     CHECK(strstr(source.text, "xr_xir_instance_slot_read(") || fixture == 3);
-    if (fixture == 0) CHECK(strstr(source.text, "xr_xir_instance_function("));
+    if (fixture == 0) {
+        /* A function binding carries its actual instruction producer. */
+        CHECK(strstr(source.text, "xr_xir_instance_function_at(view, "));
+        CHECK(!strstr(source.text, "xr_xir_instance_function("));
+    }
     xr_xir_compile_artifact_free(lowered);
     FILE *file = fopen(path, "wb");
     CHECK(file && fwrite(source.text, 1, source.length, file) == source.length && !fclose(file));

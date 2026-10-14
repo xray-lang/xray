@@ -336,7 +336,15 @@ static void failed_initialization(void) {
         Trace log = {0}; XrXirInstance *instance = new_instance(program, &log);
         CHECK(xr_xir_instance_start(instance, 3, NULL, 0) == XR_XIR_CALL_READY);
         XrXirInstanceResult result = xr_xir_instance_poll_bounded(instance, UINT64_MAX);
-        if (mode == 1) CHECK(xr_xir_instance_stop(instance) == XR_XIR_CALL_READY);
+        if (mode == 1) {
+            CHECK(xr_xir_instance_stop(instance) == XR_XIR_CALL_READY);
+            XrXirCallResult stopped = {0};
+            CHECK(xr_xir_instance_copy_failure(instance, &stopped) == XR_XIR_CALL_CANCELLED);
+            CHECK(stopped.status == XR_XIR_CALL_CANCELLED && xr_xir_call_result_valid(&stopped));
+            xr_xir_call_result_drop(&stopped);
+            CHECK(xr_xir_instance_start(instance, 3, NULL, 0) == XR_XIR_CALL_CANCELLED);
+            CHECK(log.count == 3 && log.events[2] == 30);
+        }
         if (mode == 2) CHECK(xr_xir_instance_resume(instance, result.epoch, result.outcome.wake) == XR_XIR_CALL_READY);
         result = xr_xir_instance_poll_bounded(instance, UINT64_MAX);
         XrXirCallStatus expected = mode == 1 ? XR_XIR_CALL_CANCELLED : mode == 2 ? XR_XIR_CALL_THROWN :
