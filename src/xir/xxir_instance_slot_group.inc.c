@@ -21,8 +21,7 @@ XR_FUNC XrXirCallStatus xr_xir_instance_slot_group_init(XrXirCallView *view,uint
     /* Validation + table initialization + prepare + transfer + mark + trace + worst-case cleanup are
      * prepaid. Commit and cleanup never discover an exhausted work budget. */
     uint64_t reserve=(uint64_t)count*7;
-    if(reserve>admission->work)return XR_XIR_CALL_LIMIT;
-    admission->work-=reserve;
+    if(!instance_cell_work(view,reserve))return XR_XIR_CALL_LIMIT;
     uint32_t payload=0;
     for(uint32_t i=0;i<count;++i) {
         const XrXirSlot *slot=&d->slots[first+i];
