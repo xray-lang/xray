@@ -58,11 +58,13 @@ typedef struct Fixture {
     XrCompileResources *resources;
     XrXirProgram *program;
     uint32_t entry;
+    XrCompileResourceStats initial;
 } Fixture;
 static Fixture build(const char *entry_path, const char *stdlib) {
     XrCompileResourceLimits limits = {UINT64_MAX, UINT64_MAX, UINT64_MAX};
     Fixture fixture = {0};
     CHECK(xr_compile_resources_new(&limits, &fixture.resources) == XR_COMPILE_RESOURCE_OK);
+    CHECK(xr_compile_resources_stats(fixture.resources, &fixture.initial) == XR_COMPILE_RESOURCE_OK);
     XrXirCompileContext context = {fixture.resources, xr_xir_compile_default_limits()};
     XrSourceCompileRequest request = {&context, entry_path, stdlib, NULL,
         xr_source_compile_default_manifest_limits(), {XR_XIR_ARCH_X86_64, XR_XIR_VALUE_ABI_VERSION}, NULL};
@@ -107,7 +109,9 @@ static void finish(Fixture *fixture, XrXirInstance *instance, XrXirCallStatus ex
     CHECK(released == expected);
     xr_xir_compile_program_drop(fixture->program);
     XrCompileResourceStats stats;
-    CHECK(xr_compile_resources_stats(fixture->resources, &stats) == XR_COMPILE_RESOURCE_OK && !stats.live_bytes);
+    CHECK(xr_compile_resources_stats(fixture->resources, &stats) == XR_COMPILE_RESOURCE_OK);
+    CHECK(stats.live_bytes == fixture->initial.live_bytes && stats.allocated_bytes > fixture->initial.allocated_bytes &&
+        stats.work > fixture->initial.work);
     xr_compile_resources_release(fixture->resources);
 }
 
