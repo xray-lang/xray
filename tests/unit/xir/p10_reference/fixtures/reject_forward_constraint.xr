@@ -1,0 +1,2 @@
+fn required<T:Sendable>(value:T)->T{return value}
+fn unused<U>(value:U)->U{return required<U>(value)}
