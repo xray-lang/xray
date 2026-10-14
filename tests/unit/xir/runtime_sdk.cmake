@@ -50,6 +50,11 @@ if(WIN32)
     find_program(XIR_SDK_MSVC NAMES cl)
     find_program(XIR_SDK_CLANG NAMES clang)
     find_program(XIR_SDK_ZIG NAMES zig)
+    include("${CMAKE_CURRENT_LIST_DIR}/sdk_consumer_admission.cmake")
+    if(XIR_SDK_MSVC)
+        xir_register_sdk_consumer_admission("${XRAY_PYTHON}" "$<TARGET_FILE:test_xir_sdk_lease>"
+            "${CMAKE_BINARY_DIR}/xir-runtime-sdk" "${XIR_SDK_MSVC}" "${XIR_SDK_LINKER}")
+    endif()
     foreach(provider msvc clang zig)
         string(TOUPPER ${provider} upper)
         if(XIR_SDK_${upper})
@@ -61,6 +66,15 @@ if(WIN32)
                 --compiler ${XIR_SDK_${upper}} --linker ${XIR_SDK_LINKER} --provider ${provider})
             set_tests_properties(test_xir_runtime_sdk_${provider}_native
                 PROPERTIES LABELS "unit;xir;execution;ownership;sdk;abi;generated-c;portability"
+                RUN_SERIAL TRUE TIMEOUT 300 COST 30)
+            add_test(NAME test_xir_runtime_sdk_${provider}_host
+                COMMAND ${XRAY_PYTHON} -B ${CMAKE_CURRENT_LIST_DIR}/sdk_source_host_consumers.py
+                    --lease $<TARGET_FILE:test_xir_sdk_lease> --generator $<TARGET_FILE:test_xir_host_call_source>
+                    --bundle ${CMAKE_BINARY_DIR}/xir-runtime-sdk --compiler ${XIR_SDK_${upper}}
+                    --linker ${XIR_SDK_LINKER} --provider ${provider}
+                    --output ${CMAKE_CURRENT_BINARY_DIR}/sdk-source-host-evidence)
+            set_tests_properties(test_xir_runtime_sdk_${provider}_host PROPERTIES
+                LABELS "unit;xir;execution;ownership;sdk;abi;generated-c;portability;host"
                 RUN_SERIAL TRUE TIMEOUT 300 COST 30)
         endif()
     endforeach()

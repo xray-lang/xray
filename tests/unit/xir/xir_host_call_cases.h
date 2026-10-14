@@ -117,10 +117,11 @@ static void host_faults(XrXirProgram *program, const uint32_t entries[3], unsign
         runtime_fail_at = SIZE_MAX;
         /* An accepted activation preserves its first OOM through host teardown. */
         XrXirCallStatus expected_drop = call && status == XR_XIR_CALL_OOM ? XR_XIR_CALL_OOM : XR_XIR_CALL_READY;
+        size_t drop_attempts = runtime_attempts;
         XrXirCallStatus dropped = xr_xir_host_call_drop(call);
         if (dropped != expected_drop) fprintf(stderr, "host mode=%u OOM=%zu/%zu drop=%u expected=%u\n",
             mode, point, sites, dropped, expected_drop);
-        CHECK(dropped == expected_drop);
+        CHECK(dropped == expected_drop && runtime_attempts == drop_attempts);
         xr_xir_call_result_drop(&owned);
         CHECK(runtime_live == live && runtime_bytes == bytes);
     }

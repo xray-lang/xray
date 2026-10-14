@@ -107,7 +107,9 @@ def main():
             '\nimport time as Clock\nconst initial=Clock.nanos()\nClock.sleep(1)\n'
             'print(Clock.nanos()-initial>=1000000)\n', encoding='utf-8')
         relocated = output/'relocated'
-        shutil.copytree(prefixes['full'], relocated)
+        assert prefixes['full'].resolve().is_relative_to(output) and relocated.resolve().is_relative_to(output)
+        prefixes['full'].rename(relocated)
+        assert not prefixes['full'].exists()
         expected_stdout, expected_stderr = b'A\0B41 42 42 true true 1.5\ntrue\n', b'E\0R'
         for name, prefix in (('core', prefixes['core']), ('relocated', relocated)):
             binary = prefix/'bin/xray.exe'
@@ -199,9 +201,13 @@ def main():
             assert publication.read_bytes() == old
             publication.write_bytes(expected.read_bytes())
             attacks.append('manifest-'+case)
-        for case, path in (('sdk-manifest', sdk/'sdk_manifest.json'),
-                           ('sdk-source-file', sdk/json.loads(sdk_expected.read_bytes())['files'][0]['path']),
-                           ('sdk-archive', sdk/next(r['path'] for r in json.loads(sdk_expected.read_bytes())['files'] if r['kind'] == 5))):
+        sdk_files = json.loads(sdk_expected.read_bytes())['files']
+        sdk_attacks = [('sdk-manifest', sdk/'sdk_manifest.json'),
+            ('sdk-host-header', sdk/'src/execution/xr_xir_host_execution.h')]
+        sdk_attacks += [('sdk-archive-'+Path(row['path']).stem, sdk/row['path'])
+                        for row in sdk_files if row['kind'] == 5]
+        assert len(sdk_attacks) == 7
+        for case, path in sdk_attacks:
             rejected('missing-'+case, path)
             data = bytearray(path.read_bytes())
             data[0] ^= 1
