@@ -53,8 +53,8 @@ static void panic_failures(XrXirProgram *program, uint32_t entry) {
         unsigned calls = 0; config.output = (XrXirOutputProvider) {XR_XIR_CALL_ABI_VERSION, 0, panic_output, &calls};
         XrXirCallStatus status = xr_xir_instance_new(program, &config, &instance);
         if (status == XR_XIR_CALL_READY) status = xr_xir_instance_start(instance, entry, NULL, 0);
-        unsigned suspensions = 0;
-        if (status == XR_XIR_CALL_READY) status = panic_poll(instance, &suspensions).status;
+        unsigned suspensions = 0; bool polled = status == XR_XIR_CALL_READY;
+        if (polled) status = panic_poll(instance, &suspensions).status;
         if (!site) {
             if (status != XR_XIR_CALL_RETURNED)
                 fprintf(stderr, "panic baseline entry=%u status=%u\n", entry, status);
@@ -66,7 +66,17 @@ static void panic_failures(XrXirProgram *program, uint32_t entry) {
             CHECK(runtime_attempts > runtime_fail_at && status == XR_XIR_CALL_OOM);
         }
         runtime_fail_at = SIZE_MAX;
-        if (instance) CHECK(xr_xir_instance_free(instance) == XR_XIR_CALL_READY);
+        if (instance) {
+            bool driven_oom = polled && status == XR_XIR_CALL_OOM;
+            CHECK(!driven_oom || site);
+            XrXirCallStatus expected_release = driven_oom ? XR_XIR_CALL_OOM : XR_XIR_CALL_READY;
+            XrXirCallStatus released = xr_xir_instance_free(instance);
+            if (released != expected_release)
+                fprintf(stderr, "panic cleanup entry=%u site=%zu/%zu attempts=%zu polled=%u prior=%u released=%u expected=%u\n",
+                    entry, site, sites, runtime_attempts, (unsigned)polled, (unsigned)status,
+                    (unsigned)released, (unsigned)expected_release);
+            CHECK(released == expected_release);
+        }
         CHECK(runtime_live == live && runtime_bytes == bytes);
     }
     printf("Panic runtime entry %u: %zu allocation failure sites released\n", entry, sites);
