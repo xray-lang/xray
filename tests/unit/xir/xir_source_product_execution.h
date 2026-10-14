@@ -29,12 +29,15 @@ static ProbeRun probe_once(XrXirProgram *program,uint32_t entry,const char *expe
     XrXirInstanceConfig config; CHECK(xr_xir_instance_config_init(&config, sizeof(config)) == XR_XIR_CALL_READY);config.poll_limit=polls;
     config.output=(XrXirOutputProvider) {XR_XIR_CALL_ABI_VERSION, 0, probe_render, &output};
     runtime_attempts=0;runtime_fail_at=fail_at;XrXirInstance *instance=NULL;
+    XrXirCallStatus release_expected=XR_XIR_CALL_READY;
     XrXirCallStatus status=xr_xir_instance_new(program,&config,&instance);
     if (status==XR_XIR_CALL_READY) {
         status=xr_xir_instance_start(instance,entry,NULL,0);
         if (status==XR_XIR_CALL_READY) {
             if (mode==2) CHECK(xr_xir_instance_stop(instance)==XR_XIR_CALL_READY);
             XrXirInstanceResult polled=xr_xir_instance_poll_bounded(instance, UINT64_MAX);status=polled.outcome.status;
+            if(status!=XR_XIR_CALL_RETURNED&&status!=XR_XIR_CALL_CANCELLED)
+                release_expected=status;
             CHECK(xr_xir_call_result_valid(&polled.outcome));
             if (status==XR_XIR_CALL_RETURNED) {
                 XrXirValue value={0};CHECK(xr_xir_instance_take_result(instance,&value)==status);
@@ -50,7 +53,11 @@ static ProbeRun probe_once(XrXirProgram *program,uint32_t entry,const char *expe
         }
     }
     ProbeRun result={runtime_attempts,status,output.render_oom};runtime_fail_at=SIZE_MAX;
-    CHECK(xr_xir_instance_free(instance)==XR_XIR_CALL_READY);
+    size_t release_attempts=runtime_attempts;
+    XrXirCallStatus released=xr_xir_instance_free(instance);
+    if(released!=release_expected)fprintf(stderr,"Source execution status=%u release=%u expected=%u fault=%zu polls=%llu\n",
+        (unsigned)status,(unsigned)released,(unsigned)release_expected,fail_at,(unsigned long long)polls);
+    CHECK(released==release_expected && runtime_attempts==release_attempts);
     CHECK(runtime_live==live && runtime_bytes==bytes);
     size_t length=strlen(expected);CHECK(output.length==0 || output.length==length);
     CHECK(!memcmp(output.bytes,expected,output.length));

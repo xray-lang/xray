@@ -1,0 +1,11 @@
+struct Parcel { label: string; codes: Array<i64> }
+export fn p09Answer() -> i64 {
+    var original = Parcel{label: "old", codes: [3, 5]}
+    var changed = original
+    changed.label = "fresh"
+    changed.codes[0] = 11
+    if (original.label == "old" && changed.label == "fresh") {
+        return original.codes[0] * 100 + changed.codes[0] * 10 + original.codes[1]
+    }
+    return 0
+}

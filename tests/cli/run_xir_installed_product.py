@@ -1,4 +1,4 @@
-"""Exercise real component installs, relocation and fail-closed pair publication."""
+"""Exercise real component installs, relocation and fail-closed Checked publication."""
 from __future__ import annotations
 import argparse
 import hashlib
@@ -22,7 +22,6 @@ def main():
     parser.add_argument('--root', type=Path, required=True)
     parser.add_argument('--build', type=Path, required=True)
     parser.add_argument('--output', type=Path)
-    parser.add_argument('--other-object', type=Path)
     args = parser.parse_args()
     root, build = args.root.resolve(), args.build.resolve()
     temporary = tempfile.TemporaryDirectory(prefix='xir-installed-product-') if not args.output else None
@@ -34,11 +33,11 @@ def main():
     environment.pop('XRAY_STDLIB_PATH', None)
     environment['PATH'] = os.pathsep.join(part for part in environment['PATH'].split(os.pathsep)
                                         if not (Path(part)/'clang_rt.asan_dynamic-x86_64.dll').is_file())
-    pair_relative = Path('lib/xray/stdlib-xir/io/output')
+    checked_relative = Path('lib/xray/stdlib-xir/io/output')
     sdk_relative = Path('lib/xray/xir-runtime-sdk')
-    expected = build/'src/xir/generated/native-cache/registry-manifest.json'
+    expected = build/'src/xir/generated/stdlib-checked/stdlib-manifest.json'
     sdk_expected = build/'xir-runtime-sdk/sdk_manifest.json'
-    verifier = root/'scripts/verify_installed_xir_stdlib_pair.py'
+    verifier = root/'scripts/verify_installed_xir_components.py'
 
     def run(label, argv, success=True, env=None):
         begun = time.perf_counter()
@@ -60,8 +59,8 @@ def main():
         assert (process.returncode == 0) == success, (label, process.returncode, stderr)
         return stdout, stderr
 
-    def verify(label, pair, sdk, trusted=expected, publish=False, success=True, sdk_only=False):
-        argv = [sys.executable, '-B', verifier, '--directory', pair, '--expected', trusted,
+    def verify(label, checked, sdk, trusted=expected, publish=False, success=True, sdk_only=False):
+        argv = [sys.executable, '-B', verifier, '--directory', checked, '--expected', trusted,
                 '--sdk-root', sdk, '--expected-sdk', sdk_expected]
         if publish:
             argv.append('--publish')
@@ -72,6 +71,7 @@ def main():
     def inventory(prefix):
         manifest = json.loads((prefix/'share/xray/install/payload-manifest.json').read_bytes())
         rows = manifest['files']
+        assert not any(Path(row['path']).name in ('io-output.native', 'io-output.c', 'pair.json', 'registry-manifest.json') for row in rows)
         actual = {p.relative_to(prefix).as_posix() for p in prefix.rglob('*') if p.is_file()}
         assert actual == {r['path'] for r in rows} | {'share/xray/install/payload-manifest.json'}
         for row in rows:
@@ -93,13 +93,13 @@ def main():
             run('install-'+name, argv)
         inventories = {name: inventory(prefix) for name, prefix in prefixes.items()}
         assert not (prefixes['core']/sdk_relative).exists()
-        assert not (prefixes['sdk']/pair_relative).exists()
+        assert not (prefixes['sdk']/checked_relative).exists()
         assert inventories['core']['components'] == ['core']
         assert inventories['sdk']['components'] == ['sdk']
         assert inventories['full']['components'] == ['core', 'sdk']
         for name in ('core', 'full'):
-            verify('verify-'+name, prefixes[name]/pair_relative, prefixes[name]/sdk_relative)
-        verify('verify-sdk-only', prefixes['sdk']/pair_relative, prefixes['sdk']/sdk_relative, sdk_only=True)
+            verify('verify-'+name, prefixes[name]/checked_relative, prefixes[name]/sdk_relative)
+        verify('verify-sdk-only', prefixes['sdk']/checked_relative, prefixes['sdk']/sdk_relative, sdk_only=True)
         program = output/'program'
         shutil.copytree(root/'tests/fixtures/xir_cli_product', program)
         source = program/'main.xr'
@@ -110,7 +110,7 @@ def main():
             binary = prefix/'bin/xray.exe'
             version, errors = run(name+'-version', [binary, '--version', '--json'])
             assert not errors and json.loads(version)['product'] == 'xray-lang'
-            publication = (prefix/pair_relative/'registry-manifest.json').read_bytes()
+            publication = (prefix/checked_relative/'stdlib-manifest.json').read_bytes()
             output_source = prefix/'lib/xray/stdlib/io/output.xr'
             original = output_source.read_bytes()
             for scenario in ('source-absent', 'source-poisoned'):
@@ -132,62 +132,57 @@ def main():
                     run(name+'-'+scenario+'-native-build', [binary, 'build', source, '-o', native])
                     out, err = run(name+'-'+scenario+'-native-run', [native])
                     assert (out, err) == (expected_stdout, expected_stderr)
-                assert (prefix/pair_relative/'registry-manifest.json').read_bytes() == publication
+                assert (prefix/checked_relative/'stdlib-manifest.json').read_bytes() == publication
             output_source.write_bytes(original)
             sentinel = output/(name+'-preserved.exe')
             sentinel.write_bytes(b'existing executable publication')
             invalid_env = dict(environment, XRAY_STDLIB_PATH=str(output/'missing-stdlib'))
             run(name+'-invalid-root', [binary, 'build', source, '-o', sentinel], False, invalid_env)
             assert sentinel.read_bytes() == b'existing executable publication'
-        pair = relocated/pair_relative
+        checked = relocated/checked_relative
         sdk = relocated/sdk_relative
         old = b'previous publication must survive every failed verification\n'
         attacks = []
 
         def rejected(label, path, data=None, trusted=expected):
             original = path.read_bytes()
-            publication = pair/'registry-manifest.json'
+            publication = checked/'stdlib-manifest.json'
             publication.write_bytes(old)
             try:
                 if data is None:
                     path.unlink()
                 else:
                     path.write_bytes(data)
-                verify(label, pair, sdk, trusted, publish=True, success=False)
+                verify(label, checked, sdk, trusted, publish=True, success=False)
                 assert publication.read_bytes() == old
                 attacks.append(label)
             finally:
                 path.write_bytes(original)
                 publication.write_bytes(expected.read_bytes())
 
-        for name in ('io-output.chk', 'io-output.native', 'io-output.c'):
-            path = pair/name
+        for name in ('io-output.chk',):
+            path = checked/name
             rejected('missing-'+name, path)
             data = bytearray(path.read_bytes())
             data[0] ^= 1
             rejected('corrupt-'+name, path, data)
-        if args.other_object:
-            assert args.other_object.read_bytes() != (pair/'io-output.native').read_bytes()
-            rejected('provider-object-swap', pair/'io-output.native', args.other_object.read_bytes())
         trusted = output/'invalid-trusted-record.json'
         cases = ('old-schema', 'unknown-schema', 'unknown-field', 'role', 'escape',
-                 'layout', 'semantic', 'sdk-source', 'binding', 'variant')
+                 'module-identity', 'digest', 'length')
         for case in cases:
             record = json.loads(expected.read_bytes())
-            if case == 'old-schema': record['schema'] = 1
+            if case == 'old-schema': record['schema'] = 2
             elif case == 'unknown-schema': record['schema'] = 3
             elif case == 'unknown-field': record['unknown'] = 1
             elif case == 'role': record['components'][0]['role'] = 'source'
             elif case == 'escape': record['components'][0]['path'] = '../io-output.chk'
-            elif case == 'layout': record['runtime_layout'] = '0'*64
-            elif case == 'semantic': record['semantic_id'] = '0'*64
-            elif case == 'sdk-source': record['sdk_identity'] = '0'*64
-            elif case == 'binding': record['binding_digest'] = '0'*64
-            elif case == 'variant': record['variant'] += '|untrusted=1'
+            elif case == 'module-identity': record['module_identity'] = 'untrusted'
+            elif case == 'digest': record['components'][0]['sha256'] = '0'*64
+            elif case == 'length': record['components'][0]['length'] += 1
             trusted.write_text(json.dumps(record), encoding='utf-8')
-            publication = pair/'registry-manifest.json'
+            publication = checked/'stdlib-manifest.json'
             publication.write_bytes(old)
-            verify('manifest-'+case, pair, sdk, trusted, publish=True, success=False)
+            verify('manifest-'+case, checked, sdk, trusted, publish=True, success=False)
             assert publication.read_bytes() == old
             publication.write_bytes(expected.read_bytes())
             attacks.append('manifest-'+case)
@@ -198,11 +193,11 @@ def main():
             data = bytearray(path.read_bytes())
             data[0] ^= 1
             rejected('corrupt-'+case, path, data)
-        (pair/'registry-manifest.json').write_bytes(old)
-        verify('untrusted-installed-publication', pair, sdk, success=False)
-        assert (pair/'registry-manifest.json').read_bytes() == old
-        verify('publish-valid-final', pair, sdk, publish=True)
-        verify('verify-valid-final', pair, sdk)
+        (checked/'stdlib-manifest.json').write_bytes(old)
+        verify('untrusted-installed-publication', checked, sdk, success=False)
+        assert (checked/'stdlib-manifest.json').read_bytes() == old
+        verify('publish-valid-final', checked, sdk, publish=True)
+        verify('verify-valid-final', checked, sdk)
         summary = {'status': 'INSTALLED_CORE_SDK_RELOCATION_PUBLIC_LITERAL_AND_REJECTION_PASS',
                    'inventories': inventories, 'attacks': attacks, 'commands': len(commands),
                    'native_provider': 'ordinary MSVC with san0 MD SDK', 'production_release': False}
