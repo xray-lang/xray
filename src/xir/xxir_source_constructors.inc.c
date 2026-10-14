@@ -42,11 +42,16 @@ static bool source_constructor_receiver(SourceContext *ctx, AstNode *node) {
     return symbol && symbol->construction;
 }
 static bool source_constructor_storage_type(SourceContext *ctx, XrXirType receiver, uint32_t field, XrXirType *type) {
-    const XrXirTypeNode *nominal = xr_xir_type_node(&ctx->types, receiver);
-    *type = nominal->nominal.fields[field];
-    if (ctx->bodies[ctx->function].constructor_shared &&
-        (ctx->nominals.declarations[nominal->nominal.declaration].fields[field].flags & XR_XIR_FIELD_MUTABLE))
-        return source_cell_type(ctx, *type, type);
+    XrXirTypeDescription description={0};
+    XrXirFieldDescription member={0};
+    XrXirStatus status=xr_xir_compile_type_description(&ctx->compile,&ctx->types,receiver,&description);
+    if (status==XR_XIR_OK) status=xr_xir_compile_description_field(&ctx->compile,&description,field,&member);
+    if (status==XR_XIR_OK && !member.resolved) status=XR_XIR_BAD_STRUCTURE;
+    if (status!=XR_XIR_OK) return source_fail(ctx,NULL,status,status==XR_XIR_BUDGET ?
+        "constructor field budget exhausted" : "constructor field type is invalid");
+    *type=member.type;
+    if (ctx->bodies[ctx->function].constructor_shared && (member.flags & XR_XIR_FIELD_MUTABLE))
+        return source_cell_type(ctx,*type,type);
     return true;
 }
 static bool source_constructor_storage(SourceContext *ctx, AstNode *node, uint32_t field, SourceValue *value) {

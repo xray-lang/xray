@@ -10,7 +10,7 @@
  *   Tag-only selection never reads payloads or grants construction authority.
  */
 static bool source_enum_text_literal(SourceContext *ctx, AstNode *node,
-    const XrXirEnumDescription *description, uint32_t variant, bool qualified, SourceValue *value) {
+    const XrXirTypeDescription *description, uint32_t variant, bool qualified, SourceValue *value) {
     const XrXirLiteral *name = &description->variants[variant].name;
     uint64_t length = name->length;
     if (qualified) length += (uint64_t)description->name.length + 1;
@@ -30,11 +30,14 @@ static bool source_enum_text_literal(SourceContext *ctx, AstNode *node,
 }
 static bool source_enum_text(SourceContext *ctx, AstNode *node, SourceValue receiver,
     bool qualified, SourceValue *value) {
-    XrXirEnumDescription description = {0};
-    XrXirStatus status = xr_xir_compile_enum_description(&ctx->compile, &ctx->types,
+    XrXirTypeDescription description = {0};
+    XrXirStatus status = xr_xir_compile_type_description(&ctx->compile, &ctx->types,
         receiver.type, &description);
+    if (status == XR_XIR_OK && (description.kind != XR_XIR_TYPE_NOMINAL ||
+        description.nominal_kind != XR_XIR_NOMINAL_ENUM)) status = XR_XIR_BAD_TYPE;
     if (status != XR_XIR_OK)
-        return source_fail(ctx, node, status, "enum identity requires an admitted canonical enum description");
+        return source_fail(ctx, node, status, status == XR_XIR_BUDGET ?
+            "enum identity budget exhausted" : "enum identity requires a declared enum type");
     uint32_t owner = description.declaration;
     uint32_t count = description.variant_count;
     uint32_t member = ctx->nominal_variants[owner][count + (qualified ? 2 : 1)];
