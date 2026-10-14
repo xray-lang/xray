@@ -1,7 +1,7 @@
 class Person {
     age: i64
 
-    constructor() {
+    init() {
         this.age = 0
     }
 

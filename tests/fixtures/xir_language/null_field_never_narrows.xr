@@ -1,6 +1,6 @@
 class Box {
     item: Box?
-    constructor(item: Box?) { this.item = item }
+    init(item: Box?) { this.item = item }
 }
 fn f(b: Box) -> Box? {
     if (b.item != null) {

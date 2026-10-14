@@ -1,0 +1,19 @@
+struct Box {
+    const value: i64
+    init(value) { this.value = value }
+}
+class Counter {
+    value: i64
+    init(value) { this.value = value }
+    bump() -> i64 { this.value += 1; return this.value }
+}
+export fn referenceAnswer() -> i64 {
+    const box = Box(11)
+    const counter = Counter(20)
+    var source = [5, 6]
+    const snapshot = source
+    source[0] = 40
+    var current = snapshot
+    current[0] = 9
+    return box.value + counter.bump() + snapshot[0] * 100 + len(snapshot) * 10 + current[0]
+}

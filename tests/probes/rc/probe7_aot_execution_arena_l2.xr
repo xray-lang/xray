@@ -17,7 +17,7 @@ class ArenaCycleNode {
     peer: ArenaCycleNode?
     value: i64
 
-    constructor(value) {
+    init(value) {
         this.peer = null
         this.value = value
     }

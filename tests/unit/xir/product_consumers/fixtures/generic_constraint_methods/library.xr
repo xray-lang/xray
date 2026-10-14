@@ -13,7 +13,7 @@ export fn genericRead<T: ReadCounter>(counter: T) -> i64 {
 }
 export class GenericReader {
   bias: i64
-  constructor(bias: i64) { this.bias = bias }
+  init(bias: i64) { this.bias = bias }
   genericRead<T: ReadCounter>(counter: T) -> i64 {
     return this.bias + counter.current()
   }

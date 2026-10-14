@@ -44,7 +44,7 @@ XR_FUNC bool xr_xir_cell_unborrowed(const XrXirValue *cell);
 XR_FUNC bool xr_xir_cell_is_projection(const XrXirValue *cell);
 XR_FUNC const XrXirValue *xr_xir_cell_canonical_root(const XrXirValue *cell);
 /* Only the immediate live parent authority may authorize a nested loan. */
-/* Output is zero. Prepare owns a Class reservation until abort or commit;
+/* Output is zero. Prepare owns the root's exclusive reservation until abort or commit;
  * the caller pins the actual scope and prepays all terminal record work. */
 XR_FUNC XrXirValueStatus xr_xir_cell_loan_prepare(const XrXirValue *cell,
     const XrXirCellAuthority *parent, XrXirCellLoan *output);

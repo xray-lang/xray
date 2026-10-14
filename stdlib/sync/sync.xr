@@ -9,7 +9,7 @@ import time
 class _SpinLock {
     private _held: Atomic<bool>
 
-    constructor() { this._held = Atomic<bool>(false) }
+    init() { this._held = Atomic<bool>(false) }
 
     lock() {
         while (true) {
@@ -27,7 +27,7 @@ export class Semaphore {
     private _available: Atomic<i64>
     private _closed: Atomic<bool>
 
-    constructor(permits: i64) {
+    init(permits: i64) {
         this._available = Atomic<i64>(permits > 0 ? permits : 0)
         this._closed = Atomic<bool>(false)
     }
@@ -66,7 +66,7 @@ export class CountdownLatch {
     private _remaining: Atomic<i64>
     private _closed: Atomic<bool>
 
-    constructor(count: i64) {
+    init(count: i64) {
         this._remaining = Atomic<i64>(count > 0 ? count : 0)
         this._closed = Atomic<bool>(false)
     }
@@ -111,7 +111,7 @@ export class EventCount {
     private _epoch: Atomic<i64>
     private _closed: Atomic<bool>
 
-    constructor(epoch: i64) {
+    init(epoch: i64) {
         this._epoch = Atomic<i64>(epoch)
         this._closed = Atomic<bool>(false)
     }
@@ -138,7 +138,7 @@ export class WorkQueue<T> {
     private _shards: i64
     private _closed: Atomic<bool>
 
-    constructor(shards: i64 = 1, capacity: i64 = 256) {
+    init(shards: i64 = 1, capacity: i64 = 256) {
         this._lock = _SpinLock()
         this._items = Array.withCapacity(capacity > 0 ? capacity : 1)
         this._shards = shards > 0 ? shards : 1
@@ -196,7 +196,7 @@ export class ResultGroup {
     private _pending: Atomic<i64>
     private _closed: Atomic<bool>
 
-    constructor(batchSize: i64 = 1) {
+    init(batchSize: i64 = 1) {
         this._lock = _SpinLock()
         this._batchSize = batchSize > 0 ? batchSize : 1
         this._sum = 0
@@ -283,7 +283,7 @@ export class Mutex<T> {
     _sem: Semaphore
     value: T
 
-    constructor(v: T) {
+    init(v: T) {
         this._sem = Semaphore(1)
         this.value = v
     }
@@ -321,7 +321,7 @@ export class RwLock<T> {
     _readers: i64
     value: T
 
-    constructor(v: T) {
+    init(v: T) {
         this._entry = Semaphore(1)
         this._gate = Semaphore(1)
         this._rflag = Atomic<bool>(false)
@@ -376,7 +376,7 @@ export class Once {
     _sem: Semaphore
     _done: bool
 
-    constructor() {
+    init() {
         this._sem = Semaphore(1)
         this._done = false
     }
@@ -395,7 +395,7 @@ export class Once {
 export class Barrier {
     _latch: CountdownLatch
 
-    constructor(parties: i64) {
+    init(parties: i64) {
         this._latch = CountdownLatch(parties)
     }
 
@@ -417,7 +417,7 @@ export class Condvar {
     _waiters: i64
     _sem: Semaphore
 
-    constructor() {
+    init() {
         this._mutex = Semaphore(1)
         this._wlock = Atomic<bool>(false)
         this._waiters = 0

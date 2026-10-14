@@ -236,7 +236,7 @@ export class Logger {
     jsonContext: string
     textContext: string
 
-    constructor(
+    init(
         level: LogLevel = LogLevel.Info,
         format: LogFormat = LogFormat.Text,
         output: Path? = null,

@@ -25,7 +25,7 @@ static XrXirArtifact *default_gap_checked(const char *root,const char *path) {
         "fn text()->string{return \"default\"+\"-owned\"}\n"
         "fn take(value:string=text())->string{return value}\n"
         "fn delayed()->i64{Coro.yield();return 41}\n"
-        "final class Box{value:i64;constructor(value:i64=delayed()){this.value=value}}\n"
+        "final class Box{value:i64;init(value:i64=delayed()){this.value=value}}\n"
         "export fn order()->i64{return receiver().read(step(2))}\n"
         "export fn retained()->string{return take()}\n"
         "export fn construct()->i64{return Box().value}\n";

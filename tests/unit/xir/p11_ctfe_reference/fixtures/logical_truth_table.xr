@@ -1,0 +1,4 @@
+fn both(a:bool,b:bool)->bool { return a && b }
+fn either(a:bool,b:bool)->bool { return a || b }
+fn table()->i64 { return (both(false,false)?1:0)+(both(false,true)?2:0)+(both(true,false)?4:0)+(both(true,true)?8:0)+(either(false,false)?16:0)+(either(false,true)?32:0)+(either(true,false)?64:0)+(either(true,true)?128:0) }
+export fn run()->i64 { return comptime table() }

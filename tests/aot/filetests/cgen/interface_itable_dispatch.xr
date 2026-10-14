@@ -3,7 +3,7 @@ interface Shape {
 }
 
 class A implements Shape {
-    constructor() {
+    init() {
     }
 
     area() -> i64 {
@@ -12,7 +12,7 @@ class A implements Shape {
 }
 
 class B implements Shape {
-    constructor() {
+    init() {
     }
 
     area() -> i64 {
@@ -21,7 +21,7 @@ class B implements Shape {
 }
 
 class C implements Shape {
-    constructor() {
+    init() {
     }
 
     area() -> i64 {
@@ -30,7 +30,7 @@ class C implements Shape {
 }
 
 class D implements Shape {
-    constructor() {
+    init() {
     }
 
     area() -> i64 {
@@ -39,7 +39,7 @@ class D implements Shape {
 }
 
 class E implements Shape {
-    constructor() {
+    init() {
     }
 
     area() -> i64 {

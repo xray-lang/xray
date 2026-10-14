@@ -2,7 +2,7 @@
 class Pair {
     a: i64
     b: i64
-    constructor(a: i64, b: i64) {
+    init(a: i64, b: i64) {
         this.a = a
         this.b = b
     }

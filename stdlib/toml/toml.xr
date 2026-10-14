@@ -13,7 +13,7 @@ const TOML_MAX_DEPTH = 256
 export class TomlDateTime {
     raw: string
 
-    constructor(raw: string) {
+    init(raw: string) {
         this.raw = raw
     }
 
@@ -36,7 +36,7 @@ export class TomlFloat {
     value: f64
     text: string
 
-    constructor(value: f64, text: string = "") {
+    init(value: f64, text: string = "") {
         this.value = value
         if (len(text) > 0) {
             this.text = text
@@ -59,7 +59,7 @@ fn _tomlArrayLength(values: Array<TomlValue>) -> i64 {
 export class TomlArray {
     values: Array<TomlValue>
 
-    constructor() {
+    init() {
         this.values = []
     }
 
@@ -80,7 +80,7 @@ export class TomlArray {
 export class TomlTable {
     values: Map<string, TomlValue>
 
-    constructor() {
+    init() {
         this.values = #{}
     }
 
@@ -111,7 +111,7 @@ export class TomlValue {
     arrayValue: TomlArray?
     tableValue: TomlTable?
 
-    constructor(kind: string) {
+    init(kind: string) {
         this.kind = kind
         this.boolValue = false
         this.intValue = 0
@@ -237,7 +237,7 @@ export class TomlDiagnostic {
     column: i64
     message: string
 
-    constructor(kind: TomlErrorKind, line: i64, column: i64, message: string) {
+    init(kind: TomlErrorKind, line: i64, column: i64, message: string) {
         this.kind = kind
         this.line = line
         this.column = column
@@ -251,7 +251,7 @@ export class TomlParseReport {
     lines: i64
     keys: i64
 
-    constructor(data: TomlValue, errors: Array<TomlDiagnostic>, lines: i64, keys: i64) {
+    init(data: TomlValue, errors: Array<TomlDiagnostic>, lines: i64, keys: i64) {
         this.data = data
         this.errors = errors
         this.lines = lines
@@ -333,7 +333,7 @@ class TomlParser {
     definedTables: Map<string, bool>
     keyCount: i64
 
-    constructor(data: string) {
+    init(data: string) {
         this.data = data
         this.pos = 0
         this.line = 1

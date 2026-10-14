@@ -28,7 +28,7 @@ static void panics_execution(const char *directory,const char *path,const char *
     const char *source=
         "struct S{value:string}\n"
         "enum E{Bad{message:string}}\n"
-        "final class C{value:string constructor(value:string){this.value=value}}\n"
+        "final class C{value:string init(value:string){this.value=value}}\n"
         "export fn arrayNormal()->i64{try{assertPanics(fn()->Array<string>{return [\"owned\",\"array\"]})}catch panic(p){return p.code};return -1}\n"
         "export fn structNormal()->i64{try{assertPanics(fn()->S{return S{value:\"owned\"}})}catch panic(p){return p.code};return -1}\n"
         "export fn enumNormal()->i64{try{assertPanics(fn()->E{return E.Bad{message:\"owned\"}})}catch panic(p){return p.code};return -1}\n"

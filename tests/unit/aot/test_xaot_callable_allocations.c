@@ -85,10 +85,10 @@ static void clear_callable_output(XaotBundle *bundle) {
 }
 
 static void test_imported_constructor_binding(void) {
-    XiFunc constructor = {.name = "constructor"};
+    XiFunc constructor = {.name = "init"};
     XiFunc *children[] = {&constructor};
     XiFunc library_root = {.children = children, .nchildren = 1};
-    XiClassMethod method = {.name = "constructor", .is_constructor = true};
+    XiClassMethod method = {.name = "init", .is_constructor = true};
     uint16_t child_index = 0;
     XiClassData cls = {.class_name = "Storage", .methods = &method,
                        .child_idx = &child_index, .nmethod = 1, .ninst = 1};

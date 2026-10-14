@@ -1614,7 +1614,7 @@ static const XiFunc *cg_find_constructor(const XiFunc *parent, const XiClassData
                 uint16_t idx = cd->child_idx[ci];
                 if (idx < parent->nchildren) {
                     const XiFunc *child = parent->children[idx];
-                    if (child && child->name && strcmp(child->name, "constructor") == 0)
+                    if (child && child->name && strcmp(child->name, "init") == 0)
                         return child;
                 }
             }
@@ -10009,7 +10009,7 @@ static bool cg_panicinfo_constructor_token_is_elided(const XiFunc *f, const XiVa
                     continue;
                 const char *method = user->aux ? (const char *) user->aux : NULL;
                 if (ai != 0 || (user->op != XI_CALL_METHOD && user->op != XI_CALL_METHOD_DIRECT) ||
-                    !method || strcmp(method, "constructor") != 0)
+                    !method || strcmp(method, "init") != 0)
                     return false;
                 seen_use = true;
             }
@@ -15347,7 +15347,7 @@ static bool cg_func_reach_mark_value_edges(XiCgenCtx *ctx, const XiFunc *owner, 
             CgStaticFunctionCall module_call = cg_resolve_module_member_call(ctx, owner, v, method);
             changed |= cg_func_reach_mark_edge(ctx, module_call.func);
         }
-        if (method && strcmp(method, "constructor") == 0) {
+        if (method && strcmp(method, "init") == 0) {
             const char *class_name = v->type ? xr_type_get_class_name(v->type) : NULL;
             if (class_name)
                 changed |= cg_func_reach_mark_edge(

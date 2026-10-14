@@ -15,7 +15,7 @@ export class XmlName {
     prefix: string
     local: string
 
-    constructor(prefix: string, local: string) {
+    init(prefix: string, local: string) {
         this.prefix = prefix
         this.local = local
     }
@@ -32,7 +32,7 @@ export class XmlAttribute {
     name: XmlName
     value: string
 
-    constructor(name: XmlName, value: string) {
+    init(name: XmlName, value: string) {
         this.name = name
         this.value = value
     }
@@ -161,7 +161,7 @@ export class XmlDiagnostic {
     column: i64
     message: string
 
-    constructor(kind: XmlErrorKind, line: i64, column: i64, message: string) {
+    init(kind: XmlErrorKind, line: i64, column: i64, message: string) {
         this.kind = kind
         this.line = line
         this.column = column
@@ -206,7 +206,7 @@ export class XmlParseReport {
     doc: XmlNode?
     diagnostics: Array<XmlDiagnostic>
 
-    constructor(doc: XmlNode?, diagnostics: Array<XmlDiagnostic>) {
+    init(doc: XmlNode?, diagnostics: Array<XmlDiagnostic>) {
         this.doc = doc
         this.diagnostics = diagnostics
     }
@@ -489,7 +489,7 @@ class XmlParser {
     root: XmlNode?
     hasRoot: bool
 
-    constructor(data: string, options: XmlOptions) {
+    init(data: string, options: XmlOptions) {
         this.data = data
         this.pos = 0
         this.line = 1

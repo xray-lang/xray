@@ -56,13 +56,13 @@ export enum NetError {
 export final class NetConn {
     private _storage: __NetConnStorage
 
-    constructor(storage: __NetConnStorage) { this._storage = storage }
+    init(storage: __NetConnStorage) { this._storage = storage }
 }
 
 export final class NetListener {
     private _storage: __NetListenerStorage
 
-    constructor(storage: __NetListenerStorage) { this._storage = storage }
+    init(storage: __NetListenerStorage) { this._storage = storage }
 }
 
 fn _classify(code: i64) -> NetError {
@@ -80,7 +80,7 @@ fn _classify(code: i64) -> NetError {
 export final class IpAddress {
     value: string
 
-    constructor(value: string) { this.value = value }
+    init(value: string) { this.value = value }
 
     toString() -> string { return this.value }
 }
@@ -89,7 +89,7 @@ export final class Endpoint {
     host: string
     port: i64
 
-    constructor(host: string, port: i64) {
+    init(host: string, port: i64) {
         this.host = host
         this.port = port
     }
@@ -100,7 +100,7 @@ export final class DialOptions {
     tls: bool
     alpnProtocols: Array<string>?
 
-    constructor(timeoutMs: i64 = _DEFAULT_TIMEOUT_MS, tls: bool = false,
+    init(timeoutMs: i64 = _DEFAULT_TIMEOUT_MS, tls: bool = false,
                 alpnProtocols: Array<string>? = null) {
         this.timeoutMs = timeoutMs
         this.tls = tls
@@ -119,7 +119,7 @@ export final class UdpFrom {
     host: string
     port: i64
 
-    constructor(n: i64, host: string, port: i64) {
+    init(n: i64, host: string, port: i64) {
         this.n = n
         this.host = host
         this.port = port
@@ -202,7 +202,7 @@ export fn upgradeTLS(conn: NetConn, hostname: string, timeoutMs: i64 = _DEFAULT_
 export fn hasTLS() -> bool { return __hasTLS() }
 
 fn _containsZeroByte(value: string) -> bool {
-    var bytes: const Slice<u8> = value.bytes()
+    var bytes: Slice<u8> = value.bytes()
     for (var i = 0; i < len(bytes); i++) {
         if (bytes[i] == 0) { return true }
     }
@@ -214,7 +214,7 @@ fn _encodeAlpnProtocols(protocols: Array<string>?) -> Array<u8> {
     if (protocols == null) { return wire }
     var values = protocols!
     for (var i = 0; i < len(values); i++) {
-        var bytes: const Slice<u8> = values[i].bytes()
+        var bytes: Slice<u8> = values[i].bytes()
         if (len(bytes) == 0 || len(bytes) > _MAX_ALPN_PROTOCOL_BYTES ||
             len(wire) + len(bytes) + 1 > _MAX_ALPN_WIRE_BYTES) {
             throw NetError.Invalid
@@ -231,7 +231,7 @@ fn _encodeAlpnProtocols(protocols: Array<string>?) -> Array<u8> {
 export final class TlsClientContext {
     private _storage: __TlsContextStorage
 
-    private constructor(storage: __TlsContextStorage) { this._storage = storage }
+    private init(storage: __TlsContextStorage) { this._storage = storage }
 
     static create(caFile: string = "", certFile: string = "", keyFile: string = "",
                   verifyPeer: bool = true,
@@ -258,7 +258,7 @@ export final class TlsClientContext {
 export final class TlsServerContext {
     private _storage: __TlsContextStorage
 
-    private constructor(storage: __TlsContextStorage) { this._storage = storage }
+    private init(storage: __TlsContextStorage) { this._storage = storage }
 
     static create(certFile: string, keyFile: string, caFile: string = "",
                   requireClientCertificate: bool = false,

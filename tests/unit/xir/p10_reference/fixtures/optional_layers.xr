@@ -1,0 +1,4 @@
+fn layer<T>(value:T)->T?{return value}
+fn none<T>()->T?{return null}
+fn classify(value:i64??)->i64{if(value==null){return 0};if(value==null){return 1};return 2}
+export fn referenceAnswer()->i64{return classify(none<i64?>())*100+classify(layer<i64?>(none<i64>()))*10+classify(layer<i64?>(layer<i64>(7)))}

@@ -9,13 +9,13 @@
 
 class Holder {
     handler: fn() -> i64
-    constructor() { this.handler = fn() -> i64 { return 0 } }
+    init() { this.handler = fn() -> i64 { return 0 } }
 }
 
 class Owner {
     holder: Holder
     value: i64
-    constructor() { this.holder = Holder(); this.value = 0 }
+    init() { this.holder = Holder(); this.value = 0 }
     ref bump() -> i64 { this.value = this.value + 1; return this.value }
 }
 

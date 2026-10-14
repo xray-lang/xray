@@ -131,7 +131,10 @@ static XrXirCallStatus carrier_run(uint32_t mode) {
             CHECK(xr_xir_call_result_copy(&result, &witness.held) == XR_XIR_VALUE_OK);
             expect_bytes(&witness.held.panic.message, expected_bytes, sizeof(expected_bytes));
         }
-        CHECK(xr_xir_call_free(call) == XR_XIR_CALL_READY);
+        size_t release_attempts=runtime_attempts;
+        XrXirCallStatus released=xr_xir_call_free(call);
+        CHECK(released==XR_XIR_CALL_READY);
+        CHECK(runtime_attempts==release_attempts);
         CHECK(!accounting.live_bytes && !accounting.depth && accounting.allocations == accounting.frees);
         if (status == XR_XIR_CALL_RETURNED) CHECK(witness.releases == (mode == 2 ? 3u : 2u));
     }

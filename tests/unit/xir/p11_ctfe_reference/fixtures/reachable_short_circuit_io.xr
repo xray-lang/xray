@@ -1,0 +1,3 @@
+fn io()->bool { print(1); return true }
+fn guarded(flag:bool)->bool { return flag && io() }
+export fn run()->bool { return comptime guarded(false) }

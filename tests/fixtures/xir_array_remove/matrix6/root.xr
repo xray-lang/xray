@@ -1,7 +1,7 @@
 import "./producer" as producer
 struct Array<T>{
     value:T
-    constructor(value:T){this.value=value}
+    init(value:T){this.value=value}
     pop()->T{return this.value}
     shift()->T{return this.value}
 }

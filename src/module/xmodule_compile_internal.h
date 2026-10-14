@@ -142,10 +142,13 @@ static inline char *module_format(ModuleWork *work, const char *format, ...) {
     if (work->status != XR_MODULE_OK) { xr_compile_resources_free(out); out = NULL; }
     return out;
 }
-/* Diagnostics are optional and cannot replace an earlier typed cause. */
-static inline void module_error(XrCompileResources *resources, char **out, const char *text) {
-    if (!out || !resources) return;
+/* Requested owned diagnostics are fallible publication, never best effort.
+ * Resource failure preserves the output and cannot be recovered as syntax. */
+static inline XrModuleStatus module_error(XrCompileResources *resources, char **out, const char *text) {
+    if (!out) return XR_MODULE_OK;
+    if (!resources || *out) return XR_MODULE_INVALID;
     ModuleWork work = {resources,XR_MODULE_OK}; char *message = module_dup(&work,text);
     if (message) *out = message;
+    return work.status;
 }
 #endif

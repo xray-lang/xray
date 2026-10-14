@@ -6,7 +6,7 @@ class User {
     name: string
     age: i64
 
-    constructor(name: string, age: i64) {
+    init(name: string, age: i64) {
         print("constructor-ran")
         this.name = name
         this.age = age
@@ -19,7 +19,7 @@ class Envelope {
     tags: Array<string>
     scores: Map<string, i64>
 
-    constructor(user: User, tags: Array<string>, scores: Map<string, i64>) {
+    init(user: User, tags: Array<string>, scores: Map<string, i64>) {
         print("envelope-constructor-ran")
         this.user = user
         this.tags = tags
@@ -49,7 +49,7 @@ class Packet {
     state: WireState
     note: string?
 
-    constructor(state: WireState, note: string?) {
+    init(state: WireState, note: string?) {
         print("packet-constructor-ran")
         this.state = state
         this.note = note

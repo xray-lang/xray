@@ -1,0 +1,2 @@
+fn done(n:i64)->bool { return n==0 || done(n-1) }
+export fn run()->i64 { return (comptime done(6)) ? 42 : 0 }

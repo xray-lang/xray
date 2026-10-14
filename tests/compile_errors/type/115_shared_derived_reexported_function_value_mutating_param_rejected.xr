@@ -2,7 +2,7 @@ import { overwrite } from "../../fixtures/shared_mutation_reexport"
 
 fn main() {
     const bytes = Array<u8>(4, 0)
-    var view: const Slice<u8> = bytes[:]
+    var view: Slice<u8> = bytes[:]
     const f = overwrite
     f(ref view)
 }

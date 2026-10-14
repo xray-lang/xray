@@ -995,7 +995,7 @@ TEST(imported_static_method_resolves_after_dependency_emission) {
         "}\n"
         "export class Counter {\n"
         "  private _count: Atomic<i64>\n"
-        "  constructor(start: i64) { this._count = Atomic<i64>(start) }\n"
+        "  init(start: i64) { this._count = Atomic<i64>(start) }\n"
         "  value() -> i64 { return this._count.load() }\n"
         "}\n";
     /* Each call sits in the module initializer: unlike a named function it

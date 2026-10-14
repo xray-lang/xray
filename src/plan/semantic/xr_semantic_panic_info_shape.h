@@ -91,7 +91,7 @@ xr_semantic_panic_info_constructor_is_exact(const XrSemanticPlan *plan,
         (operation->semantic_immediate & 1) != 0 || operation->operand_count != 2 ||
         operation->operand_begin + 1u >= operand_count || operation->metadata_count != 1 ||
         operation->metadata_begin >= metadata_count ||
-        strcmp(metadata[operation->metadata_begin], "constructor") != 0 ||
+        strcmp(metadata[operation->metadata_begin], "init") != 0 ||
         operation->auxiliary_kind != XI_AUX_KIND_NONE ||
         operation->constant != XR_SEMANTIC_INDEX_NONE ||
         operation->callable_function != XR_SEMANTIC_INDEX_NONE ||

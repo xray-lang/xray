@@ -244,7 +244,7 @@ XR_FUNC void xi_emit_struct_new(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
         /* R[base+1] = receiver (class), invoke stores result in R[base] */
         emit_inst(ctx, CREATE_ABC(OP_MOVE, (XiEmitReg) (base + 1), recv, 0));
 
-        int sym = add_symbol(ctx, "constructor");
+        int sym = add_symbol(ctx, "init");
         if (ctx->status != XI_EMIT_OK)
             return;
         uint16_t sym_arg = 0;
@@ -1850,7 +1850,7 @@ static void emit_class_create_impl(EmitCtx *ctx, XiValue *v, XiClassData *cdata,
                 continue;
             desc->instance_methods[mi].name = xr_strdup(m->name);
             desc->instance_methods[mi].param_count = m->param_count;
-            if (m->is_constructor || strcmp(m->name, "constructor") == 0 ||
+            if (m->is_constructor || strcmp(m->name, "init") == 0 ||
                 strcmp(m->name, "init") == 0)
                 desc->instance_methods[mi].flags |= XMETHOD_FLAG_CONSTRUCTOR;
             if (m->is_private)
@@ -1869,7 +1869,7 @@ static void emit_class_create_impl(EmitCtx *ctx, XiValue *v, XiClassData *cdata,
             mi++;
         }
         if (mi < cdata->ninst) {
-            desc->instance_methods[mi].name = xr_strdup("constructor");
+            desc->instance_methods[mi].name = xr_strdup("init");
             desc->instance_methods[mi].param_count = 0;
             desc->instance_methods[mi].flags |= XMETHOD_FLAG_CONSTRUCTOR;
             XR_DCHECK(cdata->child_idx != NULL, "child_idx must be set");

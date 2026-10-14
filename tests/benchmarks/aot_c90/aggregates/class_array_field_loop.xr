@@ -1,7 +1,7 @@
 class IntBag {
     values: Array<i64>
 
-    constructor(values: Array<i64>) {
+    init(values: Array<i64>) {
         this.values = values
     }
 

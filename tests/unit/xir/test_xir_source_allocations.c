@@ -74,36 +74,60 @@ static XrXirStatus allocation_transition_verify(const XrXirCompileContext *conte
 #undef xr_xir_compile_verify_effects_v2
 #undef xr_xir_compile_effects_refine_verified
 typedef struct AllocationEffectWork {
+    const char *function;
     uint64_t work, calls, rejected;
 } AllocationEffectWork;
-static AllocationEffectWork allocation_effect_work_totals;
+static AllocationEffectWork allocation_effect_work_items[96];
+static size_t allocation_effect_work_count;
+static AllocationEffectWork allocation_effect_observed, allocation_effect_reported;
+static void allocation_effect_add(uint64_t *total,uint64_t amount) {
+    CHECK(amount<=UINT64_MAX-*total);*total+=amount;
+}
+/* Diagnostic pages have a fixed bound. Emit every charged row before reusing
+ * its slot; observations never limit the compiler's actual function inventory. */
+static void allocation_effect_work_report(void) {
+    for (size_t i=0;i<allocation_effect_work_count;++i) {
+        const AllocationEffectWork *item=&allocation_effect_work_items[i];
+        fprintf(stderr,"Source effects work function=%s calls=%llu admitted=%llu rejected=%llu\n",
+            item->function,(unsigned long long)item->calls,
+            (unsigned long long)item->work,(unsigned long long)item->rejected);
+        allocation_effect_add(&allocation_effect_reported.calls,item->calls);
+        allocation_effect_add(&allocation_effect_reported.work,item->work);
+        allocation_effect_add(&allocation_effect_reported.rejected,item->rejected);
+    }
+    memset(allocation_effect_work_items,0,sizeof(allocation_effect_work_items));
+    allocation_effect_work_count=0;
+}
 static bool allocation_effect_work(const XrXirCompileContext *context,
                                    uint64_t fee, const char *function) {
     bool accepted = xir_compile_work(context, fee);
     if (!allocation_transition_observed) return accepted;
-    AllocationEffectWork *totals = &allocation_effect_work_totals;
-    CHECK(totals->calls != UINT64_MAX);
-    ++totals->calls;
+    size_t index = 0;
+    while (index < allocation_effect_work_count &&
+           strcmp(allocation_effect_work_items[index].function, function)) ++index;
+    if (index==sizeof(allocation_effect_work_items)/sizeof(allocation_effect_work_items[0])) {
+        allocation_effect_work_report();index=0;
+    }
+    if (index == allocation_effect_work_count) {
+        allocation_effect_work_items[index].function = function;
+        ++allocation_effect_work_count;
+    }
+    AllocationEffectWork *item = &allocation_effect_work_items[index];
+    allocation_effect_add(&item->calls,1);
+    allocation_effect_add(&allocation_effect_observed.calls,1);
     if (accepted) {
-        CHECK(fee <= UINT64_MAX - totals->work);
-        totals->work += fee;
+        CHECK(fee <= UINT64_MAX - item->work);
+        item->work += fee;
+        allocation_effect_add(&allocation_effect_observed.work,fee);
     } else {
-        CHECK(fee <= UINT64_MAX - totals->rejected);
-        totals->rejected += fee;
-        fprintf(stderr, "Source effects rejected function=%s fee=%llu\n",
-            function, (unsigned long long)fee);
+        CHECK(fee <= UINT64_MAX - item->rejected);
+        item->rejected += fee;
+        allocation_effect_add(&allocation_effect_observed.rejected,fee);
     }
     return accepted;
 }
-static void allocation_effect_work_report(void) {
-    const AllocationEffectWork *totals = &allocation_effect_work_totals;
-    fprintf(stderr, "Source effects work calls=%llu admitted=%llu rejected=%llu\n",
-        (unsigned long long)totals->calls, (unsigned long long)totals->work,
-        (unsigned long long)totals->rejected);
-}
 /* Compile the canonical effects implementation and forward every real debit.
- * Aggregate observations allocate no bytes, alter no charge, and impose no
- * separate limit on the number of compiler functions taking part. */
+ * The bounded observations allocate no ledger bytes and alter no work charge. */
 #define xir_compile_work(context, fee) allocation_effect_work((context), (fee), __func__)
 #include "xir/xxir_effects.c"
 #undef xir_compile_work
@@ -136,10 +160,18 @@ static XrXirStatus allocation_refinement_check(const XrXirCompileContext *contex
     bool prior = allocation_transition_observed;
     allocation_transition_observed = built->function_count > 300 && source_fixture_compile_fail_at == SIZE_MAX;
     if (allocation_transition_observed) {
-        allocation_effect_work_totals = (AllocationEffectWork){0};
+        memset(allocation_effect_work_items, 0, sizeof(allocation_effect_work_items));
+        allocation_effect_work_count = 0;
+        allocation_effect_observed=(AllocationEffectWork){0};
+        allocation_effect_reported=(AllocationEffectWork){0};
     }
     XrXirStatus status = xr_xir_compile_check_refined_v2(context, built, construction, &observed, output, diagnostic);
-    if (allocation_transition_observed) allocation_effect_work_report();
+    if (allocation_transition_observed) {
+        allocation_effect_work_report();
+        CHECK(allocation_effect_observed.calls==allocation_effect_reported.calls &&
+            allocation_effect_observed.work==allocation_effect_reported.work &&
+            allocation_effect_observed.rejected==allocation_effect_reported.rejected);
+    }
     allocation_transition_observed = prior;
     CHECK(xr_compile_resources_stats(context->resources, &after) == XR_COMPILE_RESOURCE_OK);
     if (status == XR_XIR_BUDGET && source_fixture_compile_fail_at == SIZE_MAX)
@@ -524,7 +556,36 @@ static void source_root_allocations(void) {
     resolver_fault = 0;allocation_case_end(0);}
     printf("Root complete compiler failures and resolver6: PASS; physical=0/0\n");
 }
+static void allocation_effect_observer_control(void) {
+    XrCompileResources *resources=NULL;
+    const XrCompileResourceLimits limits={UINT64_C(64)*1024*1024,UINT64_C(8)*1024*1024,UINT64_C(128000000)};
+    CHECK(xr_compile_resources_new(&limits,&resources)==XR_COMPILE_RESOURCE_OK);
+    XrXirCompileContext context={resources,xr_xir_compile_default_limits()};
+    XrCompileResourceStats before={0},after={0};
+    CHECK(xr_compile_resources_stats(resources,&before)==XR_COMPILE_RESOURCE_OK);
+    allocation_transition_observed=true;
+    char names[113][32];uint64_t admitted=0;
+    for (unsigned i=0;i<113;++i) {
+        int count=snprintf(names[i],sizeof(names[i]),"observed-caller-%u",i);
+        CHECK(count>0 && (size_t)count<sizeof(names[i]));
+        CHECK(allocation_effect_work(&context,i+1,names[i]));admitted+=i+1;
+    }
+    CHECK(!allocation_effect_work(&context,limits.work+1,names[0]));
+    allocation_effect_work_report();allocation_transition_observed=false;
+    CHECK(!allocation_effect_work_count && allocation_effect_observed.calls==114 &&
+        allocation_effect_observed.work==admitted && allocation_effect_observed.rejected==limits.work+1);
+    CHECK(allocation_effect_reported.calls==114 && allocation_effect_reported.work==admitted &&
+        allocation_effect_reported.rejected==limits.work+1);
+    CHECK(xr_compile_resources_stats(resources,&after)==XR_COMPILE_RESOURCE_OK);
+    CHECK(after.work-before.work==admitted && after.allocated_bytes==before.allocated_bytes);
+    xr_compile_resources_release(resources);
+    CHECK(!source_fixture_compile_live && !source_fixture_compile_bytes);
+    puts("Fixed 96-row diagnostic pages retain 113 callers and exact accepted/rejected fees; physical0");
+}
 int main(int argc,char **argv) {
+    if (argc==2 && !strcmp(argv[1],"--effect-observer-control")) {
+        allocation_effect_observer_control();return 0;
+    }
     allocation_dispatch(argc,argv);(void)source_fixture_lower;
     CHECK(setvbuf(stdout,NULL,_IONBF,0)==0);
     if(allocation_mode!=2){allocation_case_begin(0);query_coalloc_boundaries();allocation_case_end(0);}

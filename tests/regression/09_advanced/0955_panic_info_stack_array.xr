@@ -80,7 +80,7 @@ fn test_panic_stack_frames_are_strings() {
 @test
 fn test_subclass_exception_stack_is_array() {
     class MyErr extends PanicInfo {
-        constructor(m: string) { super(m) }
+        init(m: string) { super(m) }
     }
     var e = MyErr("hi")
     assertEqual(typeName(e.stack), "Array")

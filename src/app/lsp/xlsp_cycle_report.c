@@ -420,7 +420,7 @@ static const char *field_type_name(AstNode *field) {
     for (int depth = 0; ref && depth < 8; depth++) {
         if (ref->name)
             return ref->name;
-        if ((ref->kind == XR_TREF_OPTIONAL || ref->kind == XR_TREF_CONST) && ref->children &&
+        if (ref->kind == XR_TREF_OPTIONAL && ref->children &&
             ref->nchildren > 0)
             ref = ref->children[0];
         else

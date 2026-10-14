@@ -5,7 +5,7 @@ fn receiver()->Receiver{step(1);return Receiver{value:41}}
 fn text()->string{return "default"+"-owned"}
 fn take(value:string=text())->string{return value}
 fn delayed()->i64{Coro.yield();return 41}
-final class Box{value:i64;constructor(value:i64=delayed()){this.value=value}}
+final class Box{value:i64;init(value:i64=delayed()){this.value=value}}
 export fn order()->i64{return receiver().read(step(2))}
 export fn retained()->string{return take()}
 export fn construct()->i64{return Box().value}

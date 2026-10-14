@@ -223,7 +223,7 @@ TEST(diagnostics_closure_cycle_reaches_lsp) {
     const char *code = "class Button {\n"
                        "    onClick: fn() -> i64\n"
                        "    clicks: i64\n"
-                       "    constructor() {\n"
+                       "    init() {\n"
                        "        this.onClick = fn() -> i64 { return 0 }\n"
                        "        this.clicks = 0\n"
                        "    }\n"

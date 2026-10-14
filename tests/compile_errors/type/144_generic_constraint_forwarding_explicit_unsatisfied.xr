@@ -11,7 +11,7 @@ interface Shape {
 class Animal {
     name: string
 
-    constructor(name) {
+    init(name) {
         this.name = name
     }
 }

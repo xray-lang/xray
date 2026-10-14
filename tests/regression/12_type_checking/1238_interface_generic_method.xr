@@ -26,7 +26,7 @@ interface Wrapper {
 }
 
 class Tagger implements Wrapper {
-    constructor() {}
+    init() {}
 
     wrap<T: Hashable>(x: T) -> string { return "wrapped:" + this.label() }
 
@@ -39,7 +39,7 @@ interface Pairer {
 }
 
 class P implements Pairer {
-    constructor() {}
+    init() {}
 
     pair<K: Hashable, V>(k: K, v: V) -> string { return "paired" }
 }
@@ -50,7 +50,7 @@ interface Summing {
 }
 
 class Sum implements Summing {
-    constructor() {}
+    init() {}
 
     total<T: Iterable<i64>>(xs: T) -> i64 {
         var n = 0

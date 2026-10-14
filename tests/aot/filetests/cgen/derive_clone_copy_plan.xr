@@ -2,7 +2,7 @@
 class Child {
     value: i64
 
-    constructor(value: i64) {
+    init(value: i64) {
         this.value = value
     }
 }
@@ -12,7 +12,7 @@ class Snapshot {
     values: Array<i64>
     child: Child
 
-    constructor(values: Array<i64>, child: Child) {
+    init(values: Array<i64>, child: Child) {
         this.values = values
         this.child = child
     }

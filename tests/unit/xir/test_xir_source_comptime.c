@@ -25,6 +25,12 @@ static const char source_comptime_test_text[]=
     "fn leaf(x:i64)->i64 { return x+1 }\n"
     "fn middle(x:i64)->i64 { return leaf(x)+1 }\n"
     "export fn run()->i64 { return comptime middle(40) }\n";
+static const char source_comptime_local_text[]=
+    "fn positive(x:i64)->bool { return x>0 }\n"
+    "fn admitted(x:i64)->bool { return positive(x) && (x==6 || x==7) }\n"
+    "fn answer()->i64 { return admitted(6) ? 42 : 0 }\n"
+    "export fn run()->i64 { return comptime answer() }\n";
+static const char *source_comptime_resource_text=source_comptime_test_text;
 static XrXirStatus source_comptime_test_resource_status(XrCompileResourceStatus status) {
     return status==XR_COMPILE_RESOURCE_OK?XR_XIR_OK:status==XR_COMPILE_RESOURCE_BUDGET?XR_XIR_BUDGET:
         status==XR_COMPILE_RESOURCE_OUT_OF_MEMORY?XR_XIR_OUT_OF_MEMORY:XR_XIR_BAD_STRUCTURE;
@@ -78,7 +84,13 @@ static void source_comptime_test_fold(const XrXirModule *module,int64_t expected
 #include "xir_source_comptime_cases.h"
 #include "xir_source_comptime_resources.h"
 int main(int argc,char **argv) {
-    if (argc==2 && !strcmp(argv[1],"--resources")) { source_comptime_test_resources();return 0; }
+    if (argc==2 && (!strcmp(argv[1],"--resources") || !strcmp(argv[1],"--local-resources"))) {
+        if (!strcmp(argv[1],"--local-resources")) {
+            source_comptime_resource_text=source_comptime_local_text;
+            fprintf(stderr,"Source comptime scalar locals whole-producer resources\n");
+        }
+        source_comptime_test_resources();return 0;
+    }
     CHECK(argc==1);source_comptime_test_semantics();source_comptime_test_rejections();
     CHECK(!source_fixture_compile_live && !source_fixture_compile_bytes);
     fprintf(stderr,"Source comptime genuine scalar/direct closure, two constructions and producer death passed\n");return 0;

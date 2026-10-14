@@ -15,7 +15,11 @@
 #include "xir_native_metadata_fixture.h"
 #include "xir/xxir_instance_value.h"
 
-typedef struct ArrayAccessWitness { uint32_t mode, reads, cleanups; } ArrayAccessWitness;
+typedef struct ArrayAccessWitness {
+    uint32_t mode, reads, cleanups;
+    bool measuring;
+    uint64_t work_limit, prefix_work;
+} ArrayAccessWitness;
 typedef struct ArrayAccessFrame { XrXirValue value, cell, module_cell; uint32_t phase; } ArrayAccessFrame;
 static XrXirValueReceiver array_slot_receiver(uint32_t slot) {
     return (XrXirValueReceiver) {XR_XIR_ROOT_SLOT, (XrXirType) 256, {0}, NULL, slot};
@@ -163,6 +167,12 @@ static XrXirAction array_access_budget(XrXirCallView *view) {
         CHECK(xr_xir_instance_array_new(view,(XrXirType)256,NULL,0,&frame->value) == XR_XIR_CALL_READY);
         frame->phase = 1;
     }
+    if(witness->measuring) {
+        uint64_t remaining=xr_xir_call_admission(view)->work;
+        CHECK(remaining<=witness->work_limit);
+        witness->prefix_work=witness->work_limit-remaining;
+        return action(XR_XIR_ACTION_RETURN,(XrXirValue){XR_XIR_I64,0,0});
+    }
     XrXirValueReceiver receiver = {XR_XIR_ROOT_VALUE,(XrXirType)256,frame->value,NULL,0};
     bool path_mode = witness->mode >= 3;
     XrXirValuePath root_path = {NULL,0};
@@ -193,7 +203,7 @@ static XrXirAction array_access_budget(XrXirCallView *view) {
 static void array_instance_cases(void) {
     uint32_t completed[4] = {0};
     for (uint32_t mode = 0; mode < 5; ++mode) {
-        ArrayAccessWitness witness = {mode,0,0};
+        ArrayAccessWitness witness = {.mode=mode};
         XrXirTypeNode nodes[] = {
             {XR_XIR_TYPE_ARRAY,XR_XIR_I64,NULL,0,XR_XIR_UNIT,0,0, {0}},
             {XR_XIR_TYPE_CELL,(XrXirType)256,NULL,0,XR_XIR_UNIT,0,0, {0}},
@@ -222,6 +232,22 @@ static void array_instance_cases(void) {
         xr_xir_compile_artifact_free(proof); proof = NULL; native_fixture_owner_free(&compiler);
         XrXirInstanceConfig config; CHECK(xr_xir_instance_config_init(&config, sizeof(config)) == XR_XIR_CALL_READY);
         if (mode) config.poll_limit = 64;
+        if(mode) {
+            /* Initialization and Array construction share the real work ledger.
+             * Preserve the original read ranges with an independently measured
+             * prefix and a finite suffix; neither suspension nor helpers refill it. */
+            witness.measuring=true;witness.work_limit=config.work_limit;
+            XrXirInstance *probe=NULL;
+            CHECK(xr_xir_instance_new(program,&config,&probe)==XR_XIR_CALL_READY);
+            CHECK(xr_xir_instance_start(probe,1,NULL,0)==XR_XIR_CALL_READY);
+            XrXirInstanceResult measured=xr_xir_instance_poll_bounded(probe,UINT64_MAX);
+            CHECK(measured.outcome.status==XR_XIR_CALL_RETURNED && measured.outcome.value.type==XR_XIR_I64 &&
+                !measured.outcome.value.payload && !witness.reads);
+            CHECK(xr_xir_instance_free(probe)==XR_XIR_CALL_READY && witness.cleanups==2);
+            CHECK(witness.prefix_work<=config.work_limit && config.work_limit-witness.prefix_work>=48);
+            config.work_limit=witness.prefix_work+48;
+            witness.measuring=false;witness.cleanups=0;
+        }
         CHECK(xr_xir_instance_new(program,&config,&instance) == XR_XIR_CALL_READY);
         xr_xir_compile_program_drop(program);
         CHECK(xr_xir_instance_start(instance,1,NULL,0) == XR_XIR_CALL_READY);

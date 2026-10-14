@@ -27,7 +27,7 @@ static XrXirStatus conditional_invocation_producer(const XrXirCompileContext *co
             !memcmp(&untouched,&frozen,sizeof(frozen)));
         CHECK(xir_effects_producer(context,effects,UINT32_MAX,instruction,&untouched)==XR_XIR_BAD_STRUCTURE &&
             !memcmp(&untouched,&frozen,sizeof(frozen)));
-        EffectInvocationSite *site=&effects->invocations->equations->sites[real.site];
+        EffectInvocationSite *site=&effects->invocations->final->sites[real.site];
         uint32_t target=site->target;site->target=1;
         CHECK(xir_effects_producer(context,effects,0,instruction,&untouched)==XR_XIR_BAD_STRUCTURE &&
             !memcmp(&untouched,&frozen,sizeof(frozen)));

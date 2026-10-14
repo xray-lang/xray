@@ -26,7 +26,7 @@ const YAML_MAX_DEPTH = 256
 export class YamlAnchor {
     name: string
 
-    constructor(name: string) {
+    init(name: string) {
         this.name = name
     }
 }
@@ -35,7 +35,7 @@ export class YamlTag {
     handle: string
     suffix: string
 
-    constructor(handle: string, suffix: string) {
+    init(handle: string, suffix: string) {
         this.handle = handle
         this.suffix = suffix
     }
@@ -47,7 +47,7 @@ export class YamlMapping {
     keys: Array<string>
     values: Array<YamlValue>
 
-    constructor() {
+    init() {
         this.keys = []
         this.values = []
     }
@@ -87,7 +87,7 @@ export class YamlTagged {
     tag: YamlTag
     value: YamlValue
 
-    constructor(tag: YamlTag, value: YamlValue) {
+    init(tag: YamlTag, value: YamlValue) {
         this.tag = tag
         this.value = value
     }
@@ -121,7 +121,7 @@ export class YamlDiagnostic {
     column: i64
     message: string
 
-    constructor(kind: YamlErrorKind, line: i64, column: i64, message: string) {
+    init(kind: YamlErrorKind, line: i64, column: i64, message: string) {
         this.kind = kind
         this.line = line
         this.column = column
@@ -139,7 +139,7 @@ export class YamlParseReport {
     diagnostics: Array<YamlDiagnostic>
     anchors: i64
 
-    constructor(data: YamlValue, diagnostics: Array<YamlDiagnostic>, anchors: i64) {
+    init(data: YamlValue, diagnostics: Array<YamlDiagnostic>, anchors: i64) {
         this.data = data
         this.diagnostics = diagnostics
         this.anchors = anchors
@@ -639,7 +639,7 @@ class YamlFlowParser {
     pos: i64
     errors: Array<YamlDiagnostic>
 
-    constructor(src: string, errors: Array<YamlDiagnostic>) {
+    init(src: string, errors: Array<YamlDiagnostic>) {
         this.src = src
         this.pos = 0
         this.errors = errors
@@ -801,7 +801,7 @@ class YamlParser {
     anchors: YamlMapping
     root: YamlValue
 
-    constructor(data: string) {
+    init(data: string) {
         this.lines = _lines(data)
         this.index = 0
         this.errors = []

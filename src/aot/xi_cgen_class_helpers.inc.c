@@ -103,7 +103,7 @@ static bool cg_class_field_cache_func_is_constructor(const XiFunc *f) {
         return false;
     const char *name = strrchr(f->name, '.');
     name = name ? name + 1 : f->name;
-    return strcmp(name, "constructor") == 0;
+    return strcmp(name, "init") == 0;
 }
 
 static const CgMethodEntry *cg_class_field_cache_method_entry(const XiCgenCtx *ctx,

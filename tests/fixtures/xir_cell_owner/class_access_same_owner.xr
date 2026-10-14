@@ -5,7 +5,7 @@ fn inner(left: ref i64, right: ref i64) -> i64 {
 final class Holder {
     left: i64
     right: i64
-    constructor() { this.left = 40; this.right = 90; }
+    init() { this.left = 40; this.right = 90; }
 }
 export fn run() -> i64 { const value = Holder(); return inner(ref value.left, ref value.right); }
 export fn cellCounter() -> i64 { return count; }

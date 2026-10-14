@@ -14,7 +14,7 @@ class Scene {
     root: Drawable
     sprites: Array<Drawable>
 
-    constructor(root: Drawable, sprites: Array<Drawable>) {
+    init(root: Drawable, sprites: Array<Drawable>) {
         this.root = root
         this.sprites = sprites
     }
