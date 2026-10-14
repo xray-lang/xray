@@ -39,7 +39,8 @@ XR_FUNC XrXirCallStatus xr_xir_host_call_wait_request(const XrXirHostCall *call,
 XR_FUNC XrXirCallStatus xr_xir_host_call_request_cancel(XrXirHostCall *call);
 /* Takes a terminal result once. Copy failure preserves both owner and output. */
 XR_FUNC XrXirCallStatus xr_xir_host_call_take(XrXirHostCall *call, XrXirCallResult *output);
-/* Consumes the owner except on BUSY, reporting cleanup failure. NULL is a no-op. */
+/* Consumes the owner except on BUSY, reporting cached initialization, aborted execution or cleanup failure.
+ * NULL is a no-op. */
 XR_FUNC XrXirCallStatus xr_xir_host_call_drop(XrXirHostCall *call);
 /* Admission or cleanup failure preserves output. A published result owns values. A timer
  * suspension waits on the monotonic clock until its full duration has elapsed; a failed

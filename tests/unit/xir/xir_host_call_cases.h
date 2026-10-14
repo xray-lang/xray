@@ -115,7 +115,10 @@ static void host_faults(XrXirProgram *program, const uint32_t entries[3], unsign
             CHECK(status == XR_XIR_CALL_OOM && runtime_attempts > runtime_fail_at);
         }
         runtime_fail_at = SIZE_MAX;
-        CHECK(xr_xir_host_call_drop(call) == XR_XIR_CALL_READY);
+        XrXirCallStatus expected_drop = call && status == XR_XIR_CALL_OOM ?
+            XR_XIR_CALL_OOM : XR_XIR_CALL_READY;
+        size_t drop_attempts = runtime_attempts;
+        CHECK(xr_xir_host_call_drop(call) == expected_drop && runtime_attempts == drop_attempts);
         xr_xir_call_result_drop(&owned);
         CHECK(runtime_live == live && runtime_bytes == bytes);
     }
