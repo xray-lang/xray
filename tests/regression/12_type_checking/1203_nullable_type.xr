@@ -58,7 +58,7 @@ fn test_optional_chain_basic() {
     class Person {
         name: string
 
-        constructor(name: string) {
+        init(name: string) {
             this.name = name
         }
     }
@@ -117,14 +117,14 @@ fn test_nested_nullable() {
     class Address {
         city: string
 
-        constructor(city: string) {
+        init(city: string) {
             this.city = city
         }
     }
     class Person {
         address: Address?
 
-        constructor() {
+        init() {
             this.address = null
         }
     }

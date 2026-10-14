@@ -4,7 +4,7 @@
 // basename starts with '_'.
 export class Widget {
     v: i64
-    constructor(x: i64) {
+    init(x: i64) {
         this.v = x
     }
     kind() -> i64 {

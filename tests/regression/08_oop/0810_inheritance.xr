@@ -8,7 +8,7 @@
 class Animal {
     name: string
 
-    constructor(name) {
+    init(name) {
         this.name = name
     }
 
@@ -17,7 +17,7 @@ class Animal {
 }
 
 class Dog extends Animal {
-    constructor(name) {
+    init(name) {
         super(name)
     }
 
@@ -35,7 +35,7 @@ fn test_basic_inheritance() {
 // ===== 方法重写 =====
 
 class Cat extends Animal {
-    constructor(name) {
+    init(name) {
         super(name)
     }
 
@@ -54,7 +54,7 @@ fn test_method_override() {
 class Vehicle {
     brand: string
 
-    constructor(brand) {
+    init(brand) {
         this.brand = brand
     }
 
@@ -71,7 +71,7 @@ class Vehicle {
 class Car extends Vehicle {
     model: string
 
-    constructor(brand, model) {
+    init(brand, model) {
         super(brand)
         this.model = model
     }
@@ -105,7 +105,7 @@ fn test_polymorphism() {
 class Base {
     value: i64
 
-    constructor(v) {
+    init(v) {
         this.value = v
     }
 
@@ -116,7 +116,7 @@ class Base {
 class Derived extends Base {
     extra: i64
 
-    constructor(v, e) {
+    init(v, e) {
         super(v)
         this.extra = e
     }
@@ -140,7 +140,7 @@ class Person {
     name: string
     age: i64
 
-    constructor(name: string, age: i64) {
+    init(name: string, age: i64) {
         this.name = name
         this.age = age
     }
@@ -152,7 +152,7 @@ class Person {
 class Student extends Person {
     grade: i64
 
-    constructor(name: string, age: i64, grade: i64) {
+    init(name: string, age: i64, grade: i64) {
         super(name, age)
         this.grade = grade
     }
@@ -181,7 +181,7 @@ fn test_method_override_with_parent_fields() {
 // ===== super.method() 调用父类方法 =====
 
 class Bird extends Animal {
-    constructor(name) {
+    init(name) {
         super(name)
     }
 

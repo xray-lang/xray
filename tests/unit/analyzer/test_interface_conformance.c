@@ -108,7 +108,7 @@ static void test_class_implements_all_methods_no_error(void) {
                       "}\n"
                       "class Item implements Stringable2 {\n"
                       "    name: string\n"
-                      "    constructor(n: string) { this.name = n }\n"
+                      "    init(n: string) { this.name = n }\n"
                       "    toLabel() -> string { return this.name }\n"
                       "}\n";
     int total = 0;
@@ -181,7 +181,7 @@ static void test_class_missing_method_reports_error(void) {
                       "}\n"
                       "class Bot implements Greeter {\n"
                       "    label: string\n"
-                      "    constructor(l: string) { this.label = l }\n"
+                      "    init(l: string) { this.label = l }\n"
                       "    greet() -> string { return this.label }\n"
                       "}\n";
     int total = 0;
@@ -195,7 +195,7 @@ static void test_class_missing_property_reports_error(void) {
                       "}\n"
                       "class Buf implements Sized {\n"
                       "    payload: i64\n"
-                      "    constructor(p: i64) { this.payload = p }\n"
+                      "    init(p: i64) { this.payload = p }\n"
                       "}\n";
     int total = 0;
     int n = count_diagnostics(src, XR_ERR_ANALYZE_INTERFACE_NOT_IMPLEMENTED, &total);
@@ -208,7 +208,7 @@ static void test_class_property_as_getter_accepted(void) {
                       "}\n"
                       "class Buf2 implements Sized2 {\n"
                       "    internal: i64\n"
-                      "    constructor(p: i64) { this.internal = p }\n"
+                      "    init(p: i64) { this.internal = p }\n"
                       "    size: i64 {\n"
                       "        fn() { return this.internal }\n"
                       "    }\n"
@@ -224,7 +224,7 @@ static void test_unknown_interface_is_not_audited(void) {
     // every method, otherwise unrelated typos would explode here.
     const char *src = "class Bare implements Phantom {\n"
                       "    name: string\n"
-                      "    constructor(n: string) { this.name = n }\n"
+                      "    init(n: string) { this.name = n }\n"
                       "}\n";
     int total = 0;
     int n = count_diagnostics(src, XR_ERR_ANALYZE_INTERFACE_NOT_IMPLEMENTED, &total);
@@ -237,7 +237,7 @@ static void test_user_interface_constraint_accepts_implementor(void) {
                       "}\n"
                       "class Circle implements Shape {\n"
                       "    r: i64\n"
-                      "    constructor(r: i64) { this.r = r }\n"
+                      "    init(r: i64) { this.r = r }\n"
                       "    area() -> i64 { return this.r * this.r }\n"
                       "}\n"
                       "fn score<T: Shape>(shape: T) -> i64 {\n"
@@ -257,7 +257,7 @@ static void test_user_interface_constraint_accepts_same_interface_object(void) {
                       "}\n"
                       "class Circle implements Shape {\n"
                       "    r: i64\n"
-                      "    constructor(r: i64) { this.r = r }\n"
+                      "    init(r: i64) { this.r = r }\n"
                       "    area() -> i64 { return this.r * this.r }\n"
                       "}\n"
                       "fn score<T: Shape>(shape: T) -> i64 {\n"
@@ -278,7 +278,7 @@ static void test_user_interface_constraint_rejects_non_implementor(void) {
                       "}\n"
                       "class Circle {\n"
                       "    r: i64\n"
-                      "    constructor(r: i64) { this.r = r }\n"
+                      "    init(r: i64) { this.r = r }\n"
                       "    area() -> i64 { return this.r * this.r }\n"
                       "}\n"
                       "fn score<T: Shape>(shape: T) -> i64 {\n"

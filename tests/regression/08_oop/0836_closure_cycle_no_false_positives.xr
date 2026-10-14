@@ -12,11 +12,11 @@
 class Button {
     onClick: fn() -> i64
     clicks: i64
-    constructor() { this.onClick = fn() -> i64 { return 0 }; this.clicks = 0 }
+    init() { this.onClick = fn() -> i64 { return 0 }; this.clicks = 0 }
     ref render() -> i64 { this.clicks = this.clicks + 1; return this.clicks }
 }
 class Holder { handler: fn() -> i64
-    constructor() { this.handler = fn() -> i64 { return 0 } } }
+    init() { this.handler = fn() -> i64 { return 0 } } }
 
 // 1. 闭包不捕获任何外层名
 fn no_capture() { var b = Button(); b.onClick = fn() -> i64 { return 0 } }

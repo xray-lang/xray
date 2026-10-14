@@ -7,7 +7,7 @@
 class Account {
     private balance: i64
 
-    constructor(initial: i64) {
+    init(initial: i64) {
         this.balance = initial
     }
 
@@ -53,7 +53,7 @@ class User {
     private email: string
     name: string
 
-    constructor(name: string, email: string, password: string) {
+    init(name: string, email: string, password: string) {
         this.name = name
         this.email = email
         this.password = password
@@ -79,7 +79,7 @@ fn test_multiple_private_fields() {
 class BankAccount {
     private balance: i64
 
-    constructor(initial: i64) {
+    init(initial: i64) {
         this.balance = initial
     }
 
@@ -93,7 +93,7 @@ class BankAccount {
 class SavingsAccount extends BankAccount {
     interestRate: f64
 
-    constructor(initial: i64, rate: f64) {
+    init(initial: i64, rate: f64) {
         super(initial)
         this.interestRate = rate
     }

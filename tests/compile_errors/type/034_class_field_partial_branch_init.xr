@@ -5,7 +5,7 @@
 class User {
     name: string
 
-    constructor(flag: bool) {
+    init(flag: bool) {
         if (flag) {
             this.name = "ready"
         }

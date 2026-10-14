@@ -233,7 +233,6 @@ xray 共 **64 个保留关键字**，按用途分组如下：
 | `type` | 类型别名 |
 | `new` | 保留字；对象构造统一写 `T(...)`（见 §3.14） |
 | `this` `super` | 自我/父类引用 |
-| `constructor` | 构造器 |
 | `static` `private` `protected` | 类/成员修饰符；公开是默认语义，没有 `public` 关键字 |
 | `const` | 不可变字段/绑定修饰符 |
 | `final` | `final class` 禁止继承 |
@@ -280,6 +279,7 @@ xray 共 **64 个保留关键字**，按用途分组如下：
 
 | Token | 出现位置 |
 |--|--|
+| `init` | class/struct 的初始化成员声明；在其它位置仍为普通标识符 |
 | `from` | `select` 的接收分支 (`x from ch`)；也用于命名 import / re-export (`import { x } from "module"`) |
 | `to` | `select` 的发送分支 (`value to ch`) |
 | `default` | 保留，当前未启用 |
@@ -941,7 +941,7 @@ fn first(packet: Packet) -> u8 {
 
 切片使用显式目标视图类型。`array[start:end]` 或 `fixedArray[start:end]` 可形成共享视图；形成 `MutSlice<T>` 还要求 owner 是独占可写 place，并在视图产生前完成必要的 COW 分离。字符串字节视图 `str.bytes()` 是 `Slice<u8>`，不能用于修改字符串。
 
-`len(view)` 读取长度，`view[i]` 读取元素；只有 `MutSlice<T>` 允许 `view[i] = value`，写入对应 owner 的逻辑值。视图不提供成员方法或 `.length`。从 `const` owner 派生的视图只能只读；不得用尚未冻结的 type-position `const T` 重新定义可写视图。
+`len(view)` 读取长度，`view[i]` 读取元素；只有 `MutSlice<T>` 允许 `view[i] = value`，写入对应 owner 的逻辑值。视图不提供成员方法或 `.length`。从 `const` owner 派生的视图只能只读；类型位置不接受 `const T`；只读视图使用 `Slice<T>`，可写视图使用 `MutSlice<T>`。
 
 owner 必须是可证明存活的具名局部 place、参数或 receiver 字段路径，不能借用临时值。嵌套投影保护所属根及必要路径。class 字段借用须保活对象并动态检查独占；只有局部无冲突证明才可省去动态检查。
 
@@ -1465,9 +1465,9 @@ Xray 默认只保留最小类型身份层：
 
 ```xray
 class Address { city: string
-    constructor(city: string) { this.city = city } }
+    init(city: string) { this.city = city } }
 class User { address: Address?
-    constructor(address: Address?) { this.address = address } }
+    init(address: Address?) { this.address = address } }
 
 fn show(u: User) {
     var addr = u.address          // 提取为简单绑定
@@ -1619,7 +1619,7 @@ print(len(a))               // 4
 
 不可复制资源的消费转移持有权和最终析构责任，调用是否消费由声明的参数或 receiver 模式决定。对这类转移，`move x` 是可选的显式标记；源绑定成功消费后不可再用，未被所有路径重新初始化的循环再次消费也必须拒绝。只读与 `ref` 借用不消费持有权。被拒绝的操作不能把有效源状态错误地标为已消费。
 
-可复制类型（包括 Array）不能声明 `move` 参数或 receiver。可复制值是否另行允许独立的 `move x` 表达式、普通值 `copy(array)` 是否保留公开拼写，以及 type-position `const T` 的身份和转换，均不在本已冻结子集内，须在准入前单独确定。这些待定表面不阻塞普通 Array 复制；不得继承旧唯一根、堆逃逸终态或整个图深冻结规则作为默认答案。
+可复制类型（包括 Array）不能声明 `move` 参数或 receiver。通用 type-position `const T` 已删除，不产生类型身份或转换。可复制值是否另行允许独立的 `move x` 表达式、普通值 `copy(array)` 是否保留公开拼写，仍须在准入前单独确定。这些待定表面不阻塞普通 Array 复制；不得继承旧唯一根、堆逃逸终态或整个图深冻结规则作为默认答案。
 
 #### 2.14.6 struct 字段的复制与初始化
 
@@ -2830,7 +2830,7 @@ print(snapshot[0])          // 1
 print(len(snapshot))        // 3
 ```
 
-本节冻结绑定与值语义部分的只读权限，不裁决 type-position `const T` 的独立类型身份、转换及全部可用位置；该表面不在本已冻结子集内，须在准入前另行确定，不能沿用旧的整个图深冻结规则。普通值 `copy(array)` 的公开拼写和可复制值的独立 `move` 表达式同样不作为上述绑定规则的前置条件，见 §2.14.5。
+`const` 只修饰绑定或字段。通用类型形式 `const T` 已删除：参数、返回类型、类型别名、字段类型、函数类型、元组、union 和泛型实参中的旧拼写均为语法错误，不产生类型身份、隐式转换或兼容别名。只读权限沿值语义部分传播，并在 class 或同步身份边界停止；不能沿用旧的整个图深冻结规则。普通值 `copy(array)` 的公开拼写和可复制值的独立 `move` 表达式同样不作为上述绑定规则的前置条件，见 §2.14.5。
 
 这些是语言合同；完整声明族的当前新 XIR 实现资格见 §17，不因本节示例而宣称实现完成。跨执行共享还须满足 §10 的类型与边界合同。
 
@@ -3219,11 +3219,11 @@ ClassDecl ::= 'final'? 'class' Identifier TypeParams?
               ('extends' Identifier TypeArgs?)?
               ('implements' Identifier TypeArgs? (',' Identifier TypeArgs?)*)?
               '{' ClassMember* '}'
-ClassMember ::= FieldDecl | MethodDecl | ConstructorDecl | StaticBlock
+ClassMember ::= FieldDecl | MethodDecl | InitDecl | StaticBlock
 FieldDecl ::= Modifier* Identifier ':' Type ('=' Expression)?
 MethodDecl ::= Modifier* Identifier '(' ParamList? ')' ReturnType? Block
             |  Modifier* 'operator' OpToken '(' ParamList? ')' ReturnType? Block
-ConstructorDecl ::= 'constructor' '(' ParamList? ')' Block          // 参数类型可省
+InitDecl ::= 'init' '(' ParamList? ')' Block          // 参数类型可省
 Modifier ::= 'private' | 'protected' | 'static' | 'const'
 ```
 
@@ -3243,7 +3243,7 @@ class Animal {
     name: string                       // 字段
     private _age: i64 = 0              // 私有字段，可有默认值
 
-    constructor(name: string) {
+    init(name: string) {
         this.name = name
     }
 
@@ -3265,7 +3265,7 @@ print(Animal.create("Bob").name)
 
 ```xray
 class Dog extends Animal {
-    constructor(name: string) {
+    init(name: string) {
         super(name)                    // **必须**首语句（仅限派生类）
     }
 
@@ -3309,7 +3309,7 @@ class Dog extends Animal {
 class Point {
     x: f64
     y: f64
-    constructor(x: f64, y: f64) {
+    init(x: f64, y: f64) {
         this.x = x
         this.y = y
     }
@@ -3319,14 +3319,14 @@ class Point {
 class Vector2 {
     x: f64
     y: f64
-    constructor(x, y) {         // 等价于显式写 (x: f64, y: f64)
+    init(x, y) {         // 等价于显式写 (x: f64, y: f64)
         this.x = x
         this.y = y
     }
 }
 ```
 
-- 关键字 `constructor`（不是 `init` 也不是与类同名）。
+- `init` 是类型成员位置的上下文关键字；旧 `constructor` 声明拼写拒绝，不保留别名。其它位置的 `init` 仍是普通标识符。
 - 一个类**只有一个构造器**（不支持构造器重载）；要多种创建方式用 `static` 工厂方法。
 - 构造器参数**类型可省**——若参数名与字段同名，从字段类型自动推断；其他情况必须显式声明类型，不得从调用位点倒推定义的类型或能力。
 - 构造器隐式返回 `this`（编译期注入）。
@@ -3334,7 +3334,7 @@ class Vector2 {
 - 字段读取前必须在每条到达路径上完成初始化；整体 `this` 的返回、方法调用或闭包捕获要求所有字段初始化。正常结束和无值 `return` 都返回完整的 `this`，构造器不能显式返回另一个值。失败不发布部分结构体，已执行的外部副作用不回滚。
 - const 字段的声明默认表达式或构造体赋值构成唯一初始化；存在任一路径已初始化时不能再次赋值，循环回边也参与检查。mutable 字段初始化后可继续更新。
 - 构造器的自然结束与无值 `return` 都先执行退出清理，再从已初始化字段组装并发布完整的 `this`。清理对 mutable 字段的合法更新进入最终构造结果；失败不发布结果。普通函数显式返回表达式先取值、再清理的值快照规则不因此改变。
-- 字段字面量与构造器调用分别遵循字段权限和构造器权限；声明显式构造器本身不取消合法的 struct 字段字面量，也不扩大私有字段的构造权限。
+- 有显式 `init` 的 struct 只允许在其声明模块内使用字段字面量；外部经 `Type(...)` 或具名工厂构造。无显式 `init` 的 struct 保留正常字段字面量规则。展开字面量不能绕过此权限，任何形式均不扩大私有字段权限。
 - 派生类构造器必须首行调 `super(...)`。
 - struct 可以**没有**构造器，但省略构造器仍须为每个字段提供合法的默认初值（§5.1、§5.4）。`Point()` 的数值字段可初始化为零；没有显式初值的非 nullable Array 等字段不能因此被零初始化。
 
@@ -3345,7 +3345,7 @@ class Vec2 {
     x: f64
     y: f64
 
-    constructor(x: f64, y: f64) {
+    init(x: f64, y: f64) {
         this.x = x; this.y = y
     }
 
@@ -3422,7 +3422,7 @@ interface Iterable<T> {
 class Rect {
     _w: i64
     _h: i64
-    constructor(w: i64, h: i64) { this._w = w; this._h = h }
+    init(w: i64, h: i64) { this._w = w; this._h = h }
 
     // 只读：只有 getter
     area: i64 { fn() { return this._w * this._h } }
@@ -3460,12 +3460,12 @@ fn main() {
 ```xray
 class Animal {
     name: string
-    constructor(name: string) { this.name = name }
+    init(name: string) { this.name = name }
     speak() -> string { return "..." }
 }
 
 class Dog extends Animal {
-    constructor(name: string) { super(name) }
+    init(name: string) { super(name) }
     override speak() -> string { return "woof" }
 }
 
@@ -3484,7 +3484,7 @@ main()
 class Vec2 {
     x: i64
     y: i64
-    constructor(x: i64, y: i64) { this.x = x; this.y = y }
+    init(x: i64, y: i64) { this.x = x; this.y = y }
     operator+(other: Vec2) -> Vec2 {
         return Vec2(this.x + other.x, this.y + other.y)
     }
@@ -3568,7 +3568,7 @@ var c = Config{host: "localhost"}    // OK
 | 泛型 | ✅ | ✅ |
 | `static` / `private` / `protected` / `const` | ✅ | ✅ |
 | 运算符重载 | ✅ | ✅ |
-| 构造器 | `constructor(...)` | 省略时仍须为每个字段提供合法默认初值；不能将非 nullable Array 零初始化 |
+| 构造器 | `init(...)` | 省略时仍须为每个字段提供合法默认初值；不能将非 nullable Array 零初始化 |
 | 字面量 | 无 | `TypeName{field: value, ...}` |
 
 **适用场景**：
@@ -3623,7 +3623,7 @@ interface Greeter {
 
 class Circle implements Shape {
     radius: f64
-    constructor(r: f64) { this.radius = r }
+    init(r: f64) { this.radius = r }
     area() -> f64 { return 3.14 * this.radius * this.radius }
     perimeter() -> f64 { return 6.28 * this.radius }
 }
@@ -3631,7 +3631,7 @@ class Circle implements Shape {
 // 实现多个接口
 class Logger implements Shape, Greeter {
     radius: f64
-    constructor(r: f64) { this.radius = r }
+    init(r: f64) { this.radius = r }
     area() -> f64 { return 3.14 * this.radius * this.radius }
     perimeter() -> f64 { return 6.28 * this.radius }
     greet(name: string) { print("hello,", name) }
@@ -3683,7 +3683,7 @@ interface SizedCollection<T> extends HasLength {
 class Buffer implements SizedCollection<i64> {
     length: i64                       // 实现属性签名
     private data: Array<i64>
-    constructor(n: i64) {
+    init(n: i64) {
         this.length = n
         this.data = []
     }
@@ -3702,7 +3702,7 @@ interface Shape {
 
 class Circle implements Shape {
     r: f64
-    constructor(r: f64) { this.r = r }
+    init(r: f64) { this.r = r }
     area() -> f64 { return 3.14159 * this.r * this.r }
 }
 
@@ -3780,7 +3780,7 @@ enum NetEvent {
 // 递归 enum 的 payload 必须经 class 节点间接化
 class ExprNode {
     expr: Expr
-    constructor(expr: Expr) { this.expr = expr }
+    init(expr: Expr) { this.expr = expr }
     get() -> Expr { return this.expr }
 }
 
@@ -3959,7 +3959,7 @@ print(Color.fromInt(2).label())     // "Green"
 - 方法语法与类型体内方法一致：`name(...)`、`ref name(...)`、`move name(...)` 或 `static name(...)`；不写 `fn`
 - 方法体内 `this` 的静态类型是 enum 自身（如 `Option<T>`），需要 `match (this)` 才能取出变体 payload
 - 静态方法没有 `this`；调用形式是 `EnumName.method(args...)`
-- **不**支持 `constructor`（变体语法本身就是构造器）
+- **不**支持 `init`（变体语法本身就是构造器）
 - **不**支持继承（`enum E extends ...` 是非法）；如需共享行为，用接口实现（`enum E implements Iface`）或顶层函数
 - 简单枚举（无 payload）也可定义方法，但方法体内 `this` 是该 enum 的值，可用 `==` 直接比较：
   ```xray
@@ -4693,7 +4693,7 @@ class PanicInfo {
     code: i64                   // 错误码
     data: JSON.Value            // 附加数据；无数据时为 JSON null
 
-    constructor(message: string = "", cause: PanicInfo? = null)
+    init(message: string = "", cause: PanicInfo? = null)
     fn toString() -> string
 }
 ```
@@ -4853,7 +4853,7 @@ enum ConnErr { Refused, Timeout }
 // 用一个极简的 "连接" 替身让示例自成一体。
 class Conn {
     alive: bool
-    constructor(alive: bool) { this.alive = alive }
+    init(alive: bool) { this.alive = alive }
     isAlive() -> bool { return this.alive }
     close() { print("closed") }
 }
@@ -5020,7 +5020,7 @@ var b = identity("hello")               // 推断 T=string
 // 泛型类
 class Box<T> {
     value: T
-    constructor(v: T) { this.value = v }
+    init(v: T) { this.value = v }
     get() -> T { return this.value }
 }
 
@@ -5031,7 +5031,7 @@ var b2 = Box<string>("hi")
 class Pair<K, V> {
     key: K
     value: V
-    constructor(k: K, v: V) {
+    init(k: K, v: V) {
         this.key = k; this.value = v
     }
 }
@@ -5098,7 +5098,7 @@ fn pickValue<K: Hashable, V>(k: K, v: V) -> V {
 class Token implements Hashable {
     value: i64
 
-    constructor(value: i64) { this.value = value }
+    init(value: i64) { this.value = value }
 
     // 参数写 Token，不写 Self
     operator==(other: Token) -> bool { return this.value == other.value }
@@ -5934,7 +5934,7 @@ ExportSpec ::= Identifier ('as' Identifier)?
 export fn helper() { return }
 export final class MyClass {
     value: i64
-    constructor() { this.value = 1 }
+    init() { this.value = 1 }
 }
 export const VERSION = "1.0"
 
@@ -6595,7 +6595,7 @@ print(len(empty))           // 0
 
 ### 14.16 `PanicInfo`
 
-内置 `PanicInfo` 类包含 `message`、`stack`、`cause`、`code`、`data` 字段，构造函数 `constructor(message: string = "", cause: PanicInfo? = null)`，以及 `toString()`。
+内置 `PanicInfo` 类包含 `message`、`stack`、`cause`、`code`、`data` 字段，构造函数 `init(message: string = "", cause: PanicInfo? = null)`，以及 `toString()`。
 
 ### 14.17 `Task<T>` 与 enum 值
 
@@ -6929,7 +6929,7 @@ class PanicInfo {
     code: i64                   // 错误码（从 "E0xxx: ..." 前缀自动解析，默认 0）
     data: JSON.Value            // 运行时故障的结构化附加数据；无数据时为 JSON null
 
-    constructor(message: string = "", cause: PanicInfo? = null)
+    init(message: string = "", cause: PanicInfo? = null)
     fn toString() -> string
 }
 ```
@@ -7569,6 +7569,14 @@ FUNCTION_REF构造不执行body，但其广告上界必须覆盖目标的同owne
 
 COPY/PHI/local Cell、闭合 capture、Nullable 包装、只读 Tuple/Array 构造和投影同步身份。PHI 和同元素 Array 的外层 callable 输入按唯一弱化规则归一化，根两事实分别求闭合。固定复合的嵌套身份不能协变；无法表达嵌套弱化的共享、元素变更或 Nullable 分支合流保守保留上界或拒绝，有限高阶依赖及容器别名流后继仍未完成。NO_SUSPEND、GO 借用形状、错误和 Sendable 义务独立保留。准备、闭合及查询复制共用原有限资源账本，不增加 wire 字段、schema、semantic 或公开 ABI。这一实现候选仍须鲜编和两配置资源、安全资格；runtime 许可与 VM/native 执行资格未由此取得。
 
+### 17.39 有界 CTFE 的标量局部存储与短路
+
+编译期执行以完整复验的 Lowered 为输入；bool/integer 普通函数的整个可达直接调用闭包先准入，再执行。SCALAR_LOCAL_NEW、SCALAR_LOCAL_READ 和 SCALAR_LOCAL_WRITE 使用与 VM 相同的 scalar step 和目标帧偏移；写操作产生 Unit 并继续顺序执行，不是控制流终结。读/写按实际帧访问收费，原 steps、全栈 depth/frame bytes、output bytes 和编译作业累计账本保持；callee 不重置预算，失败不退款并保全规范 Unit 输出。
+
+Source 的 &&/|| 在该局部存储上保留短路语义，经原 Checked→特化复验→Lowered CTFE 求值，再独立重放完整 Source 并检查普通常量 recipe。未执行的纯算术错误分支可以跳过；未执行分支中可达 I/O 仍使整个闭包不准入。根权限或 effect=NONE 不授予确定性。
+
+本节不准入普通 var 生成的拥有型 Cell、owned/path 操作、聚合/字符串导出、未知函数值或 native/Instance 执行；它们需要各自实际类型、生命周期与费用接口及独立资格，不从栈内标量存储外推。
+
 ---
 
 ## 18. 错误码 (Error Codes)
@@ -7803,8 +7811,7 @@ Type ::= UnionType
 UnionType ::= IntersectionType ('|' IntersectionType)*
 IntersectionType ::= NullableType
 NullableType ::= PrimaryType '?'?
-PrimaryType ::= ConstType | FFIPointerType | CFunctionType | NamedType | FunctionType | TupleType | ObjectType
-ConstType ::= 'const' PrimaryType
+PrimaryType ::= FFIPointerType | CFunctionType | NamedType | FunctionType | TupleType | ObjectType
 FFIPointerType ::= ('Ptr' | 'MutPtr') '<' Type '>'
 CFunctionType ::= 'CFn' '<' FunctionType '>'
 NamedType   ::= QualifiedIdent TypeArgs?
@@ -8038,11 +8045,11 @@ ClassDecl ::= AttrList? Visibility? 'final'? 'class' Identifier TypeParams?
               ('extends' NamedType)?
               ('implements' NamedType (',' NamedType)*)?
               '{' ClassMember* '}'
-ClassMember ::= FieldDecl | MethodDecl | ConstructorDecl
+ClassMember ::= FieldDecl | MethodDecl | InitDecl
 FieldDecl ::= Modifier* Identifier ':' Type ('=' Expression)?
 MethodDecl ::= Modifier* Identifier '(' ParamList? ')' ReturnType? Block
             |  Modifier* 'operator' OperatorToken '(' ParamList? ')' ReturnType? Block
-ConstructorDecl ::= 'constructor' '(' ParamList? ')' Block
+InitDecl ::= 'init' '(' ParamList? ')' Block
 
 StructDecl ::= AttrList? Visibility? 'packed'? 'struct' Identifier TypeParams?
                ('implements' NamedType (',' NamedType)*)?
@@ -8093,7 +8100,7 @@ OperatorToken ::= '+' | '-' | '*' | '/' | '%'
 
 ## 附录 B. 关键字索引
 
-以下 **64 个**关键字来自 `src/frontend/lexer/xkeywords.def` 的 52 个通用关键字与 `src/shared/xr_exact_scalar_registry.def` 的 12 个 exact 标量类型名，并按 ASCII 字典序排列。`move`、`ref`、`out`、`linked`、`from`、`to`、`after`、`panic` 是上下文词，不在本表；`parallel` 是标准库模块名。
+以下 **63 个**关键字来自 `src/frontend/lexer/xkeywords.def` 的 51 个通用关键字与 `src/shared/xr_exact_scalar_registry.def` 的 12 个 exact 标量类型名，并按 ASCII 字典序排列。`init`、`move`、`ref`、`out`、`linked`、`from`、`to`、`after`、`panic` 是上下文词，不在本表；`parallel` 是标准库模块名。
 
 | 关键字 | 节 |
 |--|--|
@@ -8105,7 +8112,6 @@ OperatorToken ::= '+' | '-' | '*' | '/' | '%'
 | `class` | §5.3 |
 | `comptime` | §3.2 |
 | `const` | §5.1 |
-| `constructor` | §5.3 |
 | `continue` | §4.6 |
 | `defer` | §4.9 |
 | `else` | §4.2 |

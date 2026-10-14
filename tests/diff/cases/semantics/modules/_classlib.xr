@@ -3,7 +3,7 @@
 // the importer constructs instances and calls methods defined here.
 export class Counter {
     value: i64
-    constructor(start: i64) {
+    init(start: i64) {
         this.value = start
     }
     ref bump(n: i64) -> i64 {

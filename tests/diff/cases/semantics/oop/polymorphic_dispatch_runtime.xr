@@ -5,15 +5,15 @@
 // （本用例带 .expected 绝对断言，防止 VM/AOT "一致错" 再次隐形。）
 class Animal {
     name: string
-    constructor(n: string) { this.name = n }
+    init(n: string) { this.name = n }
     speak() -> string { return "generic" }
 }
 class Dog extends Animal {
-    constructor(n: string) { super(n) }
+    init(n: string) { super(n) }
     override speak() -> string { return "bark" }
 }
 class Cat extends Animal {
-    constructor(n: string) { super(n) }
+    init(n: string) { super(n) }
     override speak() -> string { return "meow" }
 }
 

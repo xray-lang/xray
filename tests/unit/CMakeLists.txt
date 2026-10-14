@@ -43,6 +43,7 @@ include(${CMAKE_CURRENT_SOURCE_DIR}/incremental/cache_compile_resources.cmake)
 include(${CMAKE_CURRENT_SOURCE_DIR}/module/package_compile_resources.cmake)
 add_subdirectory(base/hashmap_owner)
 add_subdirectory(xir/compile_owner)
+add_subdirectory(xir/p09_reference)
 add_subdirectory(xir/bounded_call)
 add_subdirectory(shared/native_admission)
 add_subdirectory(shared/core_intrinsic_owner)
@@ -679,6 +680,7 @@ add_executable(test_xir_source_mixed xir/test_xir_source_mixed.c ${XIR_SOURCE_GE
 target_link_libraries(test_xir_source_mixed PRIVATE xray_xir_source xray_xir_vm)
 target_compile_definitions(test_xir_source_mixed PRIVATE XR_SOURCE_FIXTURES="${CMAKE_SOURCE_DIR}/tests/fixtures/xir_source")
 include(${CMAKE_CURRENT_SOURCE_DIR}/xir/enum_identity.cmake)
+include(${CMAKE_CURRENT_SOURCE_DIR}/xir/enum_description.cmake)
 include(${CMAKE_CURRENT_SOURCE_DIR}/xir/class_identity.cmake)
 include(${CMAKE_CURRENT_SOURCE_DIR}/xir/class_inline.cmake)
 include(${CMAKE_CURRENT_SOURCE_DIR}/xir/library.cmake)
@@ -4419,6 +4421,7 @@ include(xir/task_array_admission.cmake)
 add_executable(test_xir_array_capacity_core xir/test_xir_array_capacity_core.c)
 target_include_directories(test_xir_array_capacity_core PRIVATE "${CMAKE_SOURCE_DIR}/src")
 target_link_libraries(test_xir_array_capacity_core PRIVATE xray_xir_scalar)
+include("${CMAKE_CURRENT_LIST_DIR}/xir/p09_reserve_cow.cmake")
 add_executable(test_xir_array_capacity_checked xir/test_xir_array_capacity_checked.c)
 target_link_libraries(test_xir_array_capacity_checked PRIVATE xray_xir)
 foreach(capacity_core_target test_xir_array_capacity_core test_xir_array_capacity_checked)
@@ -4537,6 +4540,7 @@ add_test(NAME test_xir_cell_provenance COMMAND test_xir_cell_provenance)
 set_tests_properties(test_xir_cell_provenance PROPERTIES LABELS "xir;ownership" TIMEOUT 120)
 
 include("${CMAKE_CURRENT_LIST_DIR}/xir/root_conditional.cmake")
+include("${CMAKE_CURRENT_LIST_DIR}/xir/effect_final_retirement.cmake")
 
 include(xir/cell_owner_source.cmake)
 
@@ -4561,3 +4565,6 @@ include("${CMAKE_CURRENT_LIST_DIR}/xir/cfg_storage.cmake")
 
 
 include("${CMAKE_CURRENT_LIST_DIR}/xir/instance_domain_fuel.cmake")
+
+add_subdirectory(xir/p10_reference)
+add_subdirectory(xir/p11_ctfe_reference)

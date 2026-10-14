@@ -19,11 +19,11 @@ interface Greeter {
 }
 
 class Nope {
-    constructor() {}
+    init() {}
 }
 
 class Caller {
-    constructor() {}
+    init() {}
 
     tag<T: Greeter>(g: T) -> string { return "tagged" }
 }

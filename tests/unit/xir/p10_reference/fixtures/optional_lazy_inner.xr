@@ -1,0 +1,6 @@
+fn layer<T>(value:T)->T?{return value}
+fn none<T>()->T?{return null}
+var trace=0
+fn factory()->i64??{trace=trace+1;return layer<i64?>(none<i64>())}
+fn fallback()->i64?{trace=trace+100;return layer<i64>(9)}
+export fn referenceAnswer()->i64{trace=0;const chosen=factory()??fallback();return trace*100+(chosen??-1)}

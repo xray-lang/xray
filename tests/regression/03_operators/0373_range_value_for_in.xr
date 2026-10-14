@@ -90,7 +90,7 @@ fn test_range_parameter() {
 class Window {
     span: Range
 
-    constructor(span: Range) {
+    init(span: Range) {
         this.span = span
     }
 }

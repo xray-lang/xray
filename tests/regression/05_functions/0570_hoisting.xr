@@ -42,7 +42,7 @@ fn createDog(name: string) -> Dog {
 
 class Dog {
     name: string
-    constructor(name: string) {
+    init(name: string) {
         this.name = name
     }
 }

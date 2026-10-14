@@ -29,7 +29,7 @@ class WithCtor {
     kept: i64 = 10
     taken: i64 = 20
 
-    constructor() {
+    init() {
         this.taken = 99
     }
 }

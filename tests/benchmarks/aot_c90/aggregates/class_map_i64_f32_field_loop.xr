@@ -1,7 +1,7 @@
 class IntFloatMapBag {
     values: Map<i64, f32>
 
-    constructor() {
+    init() {
         var values: Map<i64, f32> = #{}
         this.values = values
     }

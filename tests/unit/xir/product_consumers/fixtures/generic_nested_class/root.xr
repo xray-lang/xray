@@ -2,11 +2,11 @@ import { Leaf as DirectLeaf, Box as DirectBox } from "./library"
 import { Leaf as FacadeLeaf, Box as FacadeBox } from "./facade"
 class Leaf {
   value: i64
-  constructor(value: i64) { this.value = value }
+  init(value: i64) { this.value = value }
 }
 class Box<T> {
   value: T
-  constructor(value: move T) { this.value = value }
+  init(value: move T) { this.value = value }
 }
 fn answer() -> i64 {
   var directLeaf = DirectLeaf(19)

@@ -17,7 +17,7 @@ interface Container<T> {
 class IntBox implements Container<i64> {
     value: i64
 
-    constructor(v: i64) {
+    init(v: i64) {
         this.value = v
     }
 
@@ -52,7 +52,7 @@ class StringIntEntry implements KVDescriptor<string, i64> {
     k: string
     v: i64
 
-    constructor(k: string, v: i64) {
+    init(k: string, v: i64) {
         this.k = k
         this.v = v
     }
@@ -87,7 +87,7 @@ interface HasLength {
 class PropertyBuffer implements HasLength {
     size: i64
 
-    constructor(s: i64) {
+    init(s: i64) {
         this.size = s
     }
 
@@ -113,7 +113,7 @@ class Item implements Identifiable {
     item_id: i64
     item_name: string
 
-    constructor(id: i64, name: string) {
+    init(id: i64, name: string) {
         this.item_id = id
         this.item_name = name
     }

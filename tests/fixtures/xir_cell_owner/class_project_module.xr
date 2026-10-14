@@ -1,7 +1,7 @@
 fn bump(value: ref i64) -> i64 { value += 1; return value; }
 final class Holder {
     private value: i64
-    constructor(value: i64) { this.value = value; }
+    init(value: i64) { this.value = value; }
     next() -> i64 { return bump(ref this.value); }
     read() -> i64 { return this.value; }
 }

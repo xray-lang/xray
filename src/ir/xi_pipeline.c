@@ -391,7 +391,7 @@ static int xi_pipeline_coro_imported_constructor_suspendability(const XiFunc *cu
         return -1;
     bool call_form = call->op == XI_CALL && xi_value_is_constructor_call(call);
     bool member_form = call->op == XI_CALL_METHOD && call->aux && (call->aux_int & 1) == 0 &&
-                       strcmp((const char *) call->aux, "constructor") == 0;
+                       strcmp((const char *) call->aux, "init") == 0;
     if (!call_form && !member_form)
         return -1;
     const XiImportRef *ref = xi_value_import_ref(current, call->args[0]);
@@ -505,7 +505,7 @@ static int xi_pipeline_coro_dependency_method_suspendability(const XiPipelineCor
     /* `Namespace.Class(args)` lowers to the constructor member called on the
      * class value; it is the same constructor the selective-import form
      * reaches through its export binding. */
-    if (static_method && strcmp((const char *) call->aux, "constructor") == 0)
+    if (static_method && strcmp((const char *) call->aux, "init") == 0)
         return xi_pipeline_coro_plan_constructor_suspendability(plan, class_data, source_class,
                                                                 call->nargs);
     uint16_t member = UINT16_MAX;

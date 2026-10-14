@@ -8,7 +8,7 @@ class Simple {
     c = "hello"
     d = true
 
-    constructor() {
+    init() {
         // 字段已自动初始化
     }
 }
@@ -17,7 +17,7 @@ class Complex {
     _arr: Array<i64> = []
     _config: Map<string, i64> = #{"debug": 0, "port": 8080}
 
-    constructor() {
+    init() {
         // 字段已自动初始化
     }
 
@@ -42,7 +42,7 @@ class Override {
     _name = "default"
     _count = 0
 
-    constructor(name, count) {
+    init(name, count) {
         this._name = name
         this._count = count
     }
@@ -58,7 +58,7 @@ class Override {
 class Counter {
     _items: Array<string> = []
 
-    constructor() {}
+    init() {}
 
     ref add(item: string) {
         this._items.push(item)

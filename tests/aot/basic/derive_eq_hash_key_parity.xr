@@ -3,7 +3,7 @@ class Key {
     id: i64
     name: string
 
-    constructor(id: i64, name: string) {
+    init(id: i64, name: string) {
         this.id = id
         this.name = name
     }

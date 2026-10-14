@@ -3,7 +3,7 @@
 // dispatch: the importer calls static factory methods defined here.
 export class Shape {
     side: i64
-    constructor(s: i64) {
+    init(s: i64) {
         this.side = s
     }
     static unit() -> Shape {

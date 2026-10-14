@@ -8,7 +8,7 @@ class Animal {
     name: string
     sound: string
 
-    constructor(name: string, sound: string) {
+    init(name: string, sound: string) {
         this.name = name
         this.sound = sound
     }
@@ -29,7 +29,7 @@ print(cat.speak())
 class Dog extends Animal {
     breed: string
 
-    constructor(name: string, breed: string) {
+    init(name: string, breed: string) {
         super(name, "woof")
         this.breed = breed
     }
@@ -51,7 +51,7 @@ print(dog.fetch("ball"))
 class Counter {
     private count: i64
 
-    constructor() { this.count = 0 }
+    init() { this.count = 0 }
 
     ref increment() { this.count = this.count + 1 }
     getCount() -> i64 { return this.count }

@@ -151,7 +151,7 @@ void xr_stringbuilder_register_class(XrVMRuntime *X) {
     if (!b)
         return;
     xr_class_builder_set_native_body(b, xr_stringbuilder_native_body_desc());
-    xr_class_builder_add_static_method(b, "constructor", xr_builtin_stringbuilder_new, 0, 0);
+    xr_class_builder_add_static_method(b, "init", xr_builtin_stringbuilder_new, 0, 0);
     xr_class_builder_add_method(b, "append", xr_builtin_stringbuilder_append, 1, 0);
     xr_class_builder_add_method(b, "toString", xr_builtin_stringbuilder_toString, 0, 0);
     xr_class_builder_add_method(b, "clear", xr_builtin_stringbuilder_clear, 0, 0);

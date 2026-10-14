@@ -27,29 +27,29 @@ interface Greeter {
 }
 
 class En implements Greeter {
-    constructor() {}
+    init() {}
     greet() -> string { return "hello" }
 }
 
 class Fr implements Greeter {
-    constructor() {}
+    init() {}
     greet() -> string { return "bonjour" }
 }
 
 class Animal {
     name: string
-    constructor(n: string) { this.name = n }
+    init(n: string) { this.name = n }
 }
 
 class Dog extends Animal {
-    constructor(n: string) { super(n) }
+    init(n: string) { super(n) }
 }
 
 // ===== Hashable bound on a method's own type param =====
 // Pre-fix this whole class failed to compile: K looked unconstrained, so
 // `Map<K, int>` in the signature tripped the Hashable key check.
 class Counter {
-    constructor() {}
+    init() {}
 
     sumValues<K: Hashable>(m: Map<K, i64>) -> i64 {
         var total = 0
@@ -79,7 +79,7 @@ fn test_hashable_bound_on_static_method() {
 
 // ===== Interface bound on a method's own type param =====
 class Caller {
-    constructor() {}
+    init() {}
 
     callIt<T: Greeter>(g: T) -> string { return g.greet() }
 
@@ -106,7 +106,7 @@ fn test_interface_bound_static_method() {
 
 // ===== Class upper bound on a method's own type param =====
 class Kennel {
-    constructor() {}
+    init() {}
 
     nameOf<T: Animal>(a: T) -> string { return a.name }
 }
@@ -120,7 +120,7 @@ fn test_class_upper_bound_accepts_subclass() {
 
 // ===== Multi-constraint intersection on a method =====
 class Passer {
-    constructor() {}
+    init() {}
 
     passThrough<T: Comparable & Hashable>(x: T) -> T { return x }
 
@@ -146,7 +146,7 @@ fn test_method_mixed_constrained_and_unconstrained() {
 // Monomorphizing Box<T> must preserve the method-local param U and its bound.
 class Box<T> {
     value: T
-    constructor(v: T) { this.value = v }
+    init(v: T) { this.value = v }
 
     get() -> T { return this.value }
 

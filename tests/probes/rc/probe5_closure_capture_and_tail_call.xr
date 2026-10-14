@@ -35,7 +35,7 @@ import runtime
 class Node {
     n: i64
 
-    constructor(n) {
+    init(n) {
         this.n = n
     }
 

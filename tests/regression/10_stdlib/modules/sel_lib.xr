@@ -12,7 +12,7 @@ export class Box {
     width: i64
     height: i64
 
-    constructor(w: i64, h: i64) {
+    init(w: i64, h: i64) {
         this.width = w
         this.height = h
     }

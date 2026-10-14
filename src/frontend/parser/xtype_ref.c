@@ -176,23 +176,6 @@ XR_FUNC XrTypeRef *xr_tref_generic(struct XrCompilerSession *session, const char
     return t;
 }
 
-XR_FUNC XrTypeRef *xr_tref_const(struct XrCompilerSession *session, XrTypeRef *inner) {
-    if (xr_compile_session_resource_status(session) != XR_COMPILE_RESOURCE_OK) return NULL;
-    XR_DCHECK(inner != NULL, "xr_tref_const: NULL inner");
-    if (inner->kind == XR_TREF_CONST)
-        return inner;
-    XrTypeRef *t = tref_alloc(session);
-    if (xr_compile_session_resource_status(session) != XR_COMPILE_RESOURCE_OK) return NULL;
-    t->kind = XR_TREF_CONST;
-    t->nchildren = 1;
-    do {
-        t->children = (XrTypeRef **) ast_alloc_array(session, sizeof(XrTypeRef *), 1);
-        if (xr_compile_session_resource_status(session) != XR_COMPILE_RESOURCE_OK) return NULL;
-    } while (0);
-    if (!ast_work(session, sizeof(*t->children))) return NULL;
-    t->children[0] = inner;
-    return t;
-}
 
 XR_FUNC XrTypeRef *xr_tref_optional(struct XrCompilerSession *session, XrTypeRef *inner) {
     if (xr_compile_session_resource_status(session) != XR_COMPILE_RESOURCE_OK) return NULL;

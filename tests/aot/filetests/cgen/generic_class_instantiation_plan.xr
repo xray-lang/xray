@@ -1,7 +1,7 @@
 class Box<T> {
     value: T
 
-    constructor(value: T) {
+    init(value: T) {
         this.value = value
     }
 

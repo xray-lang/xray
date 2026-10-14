@@ -714,7 +714,7 @@ static XrSemanticPlan *build_native_direct_fresh_result_semantic(bool nullable) 
 
 static XrSemanticPlan *build_native_storage_constructor_semantic(void) {
     XiFunc *root = xi_func_new("native_storage_constructor_root", &stub_unit);
-    XiFunc *constructor = xi_func_new("constructor", &stub_unit);
+    XiFunc *constructor = xi_func_new("init", &stub_unit);
     XiBlock *root_entry = root ? xi_block_new(root) : NULL;
     XiBlock *constructor_entry = constructor ? xi_block_new(constructor) : NULL;
     REQUIRE(root != NULL && constructor != NULL && root_entry != NULL && constructor_entry != NULL);
@@ -764,7 +764,7 @@ static XrSemanticPlan *build_native_storage_constructor_semantic(void) {
     const char *field_names[1] = {"_storage"};
     XrType *field_types[1] = {&stub_net_storage};
     uint32_t field_node_ids[1] = {907};
-    XiClassMethod methods[1] = {{.name = "constructor", .is_constructor = true}};
+    XiClassMethod methods[1] = {{.name = "init", .is_constructor = true}};
     uint16_t child_indices[1] = {0};
     XiClassData source_class = {
         .class_info = &stub_net_conn_class_info,

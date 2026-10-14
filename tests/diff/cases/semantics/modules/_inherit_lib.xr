@@ -2,13 +2,13 @@
 // see inherited fields and overridden methods without redeclaring anything.
 export class Base {
     b: i64
-    constructor() { this.b = 1 }
+    init() { this.b = 1 }
     tag() -> string { return "base" }
 }
 
 export class Sub extends Base {
     s: i64
-    constructor() { super(); this.s = 2 }
+    init() { super(); this.s = 2 }
     override tag() -> string { return "sub" }
     own() -> i64 { return this.s }
 }

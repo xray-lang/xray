@@ -1,7 +1,7 @@
 class Bag {
     value: i64
 
-    constructor(value: i64) {
+    init(value: i64) {
         this.value = value
     }
 

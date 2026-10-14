@@ -19,7 +19,7 @@
 final class Counter {
     n: i64
 
-    constructor(n: i64) {
+    init(n: i64) {
         this.n = n
     }
 

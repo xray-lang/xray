@@ -184,7 +184,7 @@ static void assert_output_initializer_failure(bool panic, XrSourceFixtureId fixt
         "enum InitFailure { Rejected { code: i64 } }\n"
         "class Cell {\n"
         "  value: string\n"
-        "  constructor(value: string) { this.value = value }\n"
+        "  init(value: string) { this.value = value }\n"
         "}\n"
         "var state = Cell(\"ready\")\n"
         "fn initialize(ok: bool) -> i64 {\n"
