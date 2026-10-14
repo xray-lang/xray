@@ -1,104 +1,64 @@
 /*
  * xray - Lightweight typed scripting with native concurrency
  * https://www.xray-lang.org
- *
  * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
  * Licensed under the MIT License
  *
- * xcmd_dap.c - DAP debug server subcommand
- *
- * Usage:
- *   xray dap                    # stdio transport (for IDE extension)
- *   xray dap --port <port>      # TCP server on port (for remote debugging)
- *   xray dap --port 0           # TCP server on random port
+ * xcmd_dap.c - Current DAP stdio entry on the canonical Source compiler
  */
-
-#ifdef XR_HAS_DAP
-
 #include "xcli.h"
-#include "xcli_spec.h"
-#include "xcli_fs.h"
-#include "../../base/xchecks.h"
-#include "../../os/os_fd.h"
-#include "../dap/xdap_controller.h"
-#include "../dap/xdap_transport.h"
-#include "../dap/xdap_protocol.h"
-#include "../dap/xdap_native.h"
-#include <stdbool.h>
+#include "../dap/xdap_dispatch.h"
+#include "../dap/xdap_stdio.h"
+#include "../../api/xsource_paths.h"
+#include "../../xir/xxir_value_internal.h"
 #include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-
-XR_FUNC int cmd_dap(const XrCliInvocation *inv) {
-    XR_DCHECK(inv != NULL, "inv is NULL");
-
-    /* Native mode: hand off to the lldb-dap bridge. The bridge debugs a
-     * native AOT binary (xray build --native -g) at the source level via
-     * the toolchain debugger; the in-process interpreter controller below
-     * is not involved. Currently stdio-only. */
-    if (xr_cli_opt_bool(&inv->options, "native")) {
-        if (xr_cli_opt_present(&inv->options, "port")) {
-            xr_cli_error("dap", "--native currently supports stdio only (omit --port)");
-            return XR_CLI_EXIT_FAIL;
-        }
-        const char *self_exe = inv->ctx ? inv->ctx->program : NULL;
-        const char *debugger = xr_cli_opt_string(&inv->options, "debugger", NULL);
-        int rc = xdap_native_run(xr_stdin_fd(), xr_stdout_fd(), self_exe, debugger);
-        return (rc != 0) ? XR_CLI_EXIT_FAIL : XR_CLI_EXIT_OK;
-    }
-
-    int tcp_port = -1; /* -1 means use stdio */
-    bool port_set = xr_cli_opt_present(&inv->options, "port");
-
-    if (port_set) {
-        tcp_port = xr_cli_opt_int(&inv->options, "port", -1);
-    }
-
-    /* Env var fallback: XRAY_DAP_PORT only kicks in when --port was not
-     * passed. Same tiered precedence as XRAY_LSP_LOG. */
-    if (!port_set) {
-        const char *env_port = getenv("XRAY_DAP_PORT");
-        if (env_port && env_port[0] != '\0') {
-            int env_tcp_port;
-            if (!xr_cli_parse_port(env_port, &env_tcp_port)) {
-                xr_cli_error("dap", "invalid XRAY_DAP_PORT='%s'", env_port);
-                return XR_CLI_EXIT_FAIL;
-            }
-            tcp_port = env_tcp_port;
+static int dap_loop(XdapAdapter *adapter,XdapStdio *io) {
+    while (!xdap_adapter_closed(adapter)) {
+        char *message=NULL;size_t length=0;bool eof=false;
+        XrXirStatus status=xdap_stdio_read(io,&message,&length,&eof);
+        if (status!=XR_XIR_OK) { xr_compile_resources_free(message);return 1; }
+        if (message) {
+            status=xdap_adapter_request(adapter,message,length);xr_compile_resources_free(message);
+            if (status!=XR_XIR_OK) return 1;
+        } else if (eof) return 0;
+        if (xdap_adapter_running(adapter)) {
+            if (xdap_adapter_step(adapter,32)!=XR_XIR_OK) return 1;
+        } else if (!message && !xdap_adapter_closed(adapter)) {
+            if (xdap_stdio_wait(io,10)!=XR_XIR_OK) return 1;
         }
     }
-
-    /* Create transport */
-    XdapTransport *transport;
-
-    if (tcp_port >= 0) {
-        transport = xdap_transport_tcp_server(tcp_port);
-        if (!transport) {
-            xr_cli_error("dap", "failed to create TCP transport on port %d", tcp_port);
-            return XR_CLI_EXIT_INTERNAL;
-        }
-    } else {
-        transport = xdap_transport_stdio();
-        if (!transport) {
-            xr_cli_error("dap", "failed to create stdio transport");
-            return XR_CLI_EXIT_INTERNAL;
-        }
-    }
-
-    /* Create controller */
-    XdapController *ctrl = xdap_controller_new(transport);
-    if (!ctrl) {
-        xr_cli_error("dap", "failed to create DAP controller");
-        xdap_transport_free(transport);
-        return XR_CLI_EXIT_INTERNAL;
-    }
-
-    /* Run main loop */
-    int result = xdap_run(ctrl);
-
-    xdap_controller_free(ctrl);
-
-    return (result != 0) ? XR_CLI_EXIT_FAIL : XR_CLI_EXIT_OK;
+    return 0;
 }
-
-#endif  // XR_HAS_DAP
+XR_FUNC int cmd_dap(const XrCliInvocation *inv) {
+    (void)inv;
+#ifndef XR_ARCH_X86_64
+    fputs("DAP: this host has no supported XIR execution target\n",stderr);return XR_CLI_EXIT_FAIL;
+#endif
+    XrCompileResources *resources=NULL;XrCompileResourceLimits limits=xr_source_compile_default_resource_limits();
+    if (xr_compile_resources_new(&limits,&resources)!=XR_COMPILE_RESOURCE_OK) return XR_CLI_EXIT_INTERNAL;
+    XrSourceCompiler *compiler=NULL;XrSourceCompileDiagnostic diagnostic={0};
+    XrStdlibPath stdlib={0};XrSourcePathsDiagnostic path_diagnostic={0};
+    XrXirDomain *domain=NULL;XdapAdapter *adapter=NULL;XdapStdio *io=NULL;
+    int result=XR_CLI_EXIT_INTERNAL;
+    if (xr_source_stdlib_path(resources,&stdlib,&path_diagnostic)!=XR_SOURCE_COMPILE_OK) goto done;
+    XrSourceCompilerConfig compiler_config={{resources,xr_xir_compile_default_limits()},
+        {XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION},stdlib.path,xr_source_compile_default_manifest_limits()};
+    if (xr_source_compiler_new(&compiler_config,&compiler,&diagnostic)!=XR_SOURCE_COMPILE_OK) goto done;
+    XrXirDomainBudgetControls budget={1048576,1048576,128000000,1048576,1048576};
+    if (xr_xir_domain_new_budgeted(1048576,&budget,&domain)!=XR_XIR_VALUE_OK) goto done;
+    if (xdap_stdio_new(resources,1048576,&io)!=XR_XIR_OK) goto done;
+    XdapAdapterConfig config={.observer_metadata=domain,.write=xdap_stdio_write,.context=io,.message_limit=1048576};
+    if (xr_xir_instance_config_init(&config.instance,sizeof(config.instance))!=XR_XIR_CALL_READY) goto done;
+    config.instance.metadata_limit=config.instance.value_limit=config.instance.call_limit=1048576;
+    config.instance.requested_value_limit=config.instance.requested_call_limit=1048576;
+    config.instance.work_limit=128000000;config.instance.poll_limit=10000;config.instance.depth_limit=64;
+    if (xdap_adapter_new(&compiler,&config,&adapter)!=XR_XIR_OK) goto done;
+    result=dap_loop(adapter,io) ? XR_CLI_EXIT_FAIL : XR_CLI_EXIT_OK;
+done:
+    if (xdap_adapter_free(adapter)!=XR_XIR_CALL_READY) result=XR_CLI_EXIT_FAIL;
+    xr_source_compiler_free(compiler);xr_source_compile_diagnostic_free(&diagnostic);
+    xdap_stdio_free(io);xr_xir_domain_drop(domain);xr_source_stdlib_path_free(&stdlib);
+    xr_compile_resources_release(resources);
+    if (result!=XR_CLI_EXIT_OK) fputs("DAP: protocol, source admission, resource or cleanup failure\n",stderr);
+    return result;
+}

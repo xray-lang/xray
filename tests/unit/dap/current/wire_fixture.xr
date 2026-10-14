@@ -1,0 +1,7 @@
+fn leaf(value:i64)->string {
+    var observed=value*2
+    const text="owned\0value"
+    observed=observed+1
+    return text
+}
+print(leaf(20))

@@ -1,0 +1,120 @@
+/*
+ * xray - Lightweight typed scripting with native concurrency
+ * https://www.xray-lang.org
+ * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
+ * Licensed under the MIT License
+ *
+ * xdap_launch.c - Owned source admission and immutable debug code display
+ */
+#include "xdap_launch.h"
+#include "../../xir/xxir_internal.h"
+#include "../../xir/xxir_value_internal.h"
+#include <string.h>
+static XrXirStatus launch_source_status(XrSourceCompileStatus status) {
+    switch (status) {
+    case XR_SOURCE_COMPILE_OK:return XR_XIR_OK;
+    case XR_SOURCE_COMPILE_BUDGET:case XR_SOURCE_COMPILE_LIMIT:return XR_XIR_BUDGET;
+    case XR_SOURCE_COMPILE_OUT_OF_MEMORY:return XR_XIR_OUT_OF_MEMORY;
+    case XR_SOURCE_COMPILE_UNSUPPORTED:return XR_XIR_UNSUPPORTED;
+    default:return XR_XIR_BAD_STRUCTURE;
+    }
+}
+static XrXirStatus launch_value_status(XrXirValueStatus status) {
+    return status==XR_XIR_VALUE_OK ? XR_XIR_OK : status==XR_XIR_VALUE_OOM ? XR_XIR_OUT_OF_MEMORY :
+        status==XR_XIR_VALUE_LIMIT || status==XR_XIR_VALUE_REFCOUNT_LIMIT ? XR_XIR_BUDGET : XR_XIR_BAD_STRUCTURE;
+}
+static XrXirStatus launch_allocation(XrCompileResourceStatus status) {
+    return status==XR_COMPILE_RESOURCE_OK ? XR_XIR_OK :
+        status==XR_COMPILE_RESOURCE_OUT_OF_MEMORY ? XR_XIR_OUT_OF_MEMORY :
+        status==XR_COMPILE_RESOURCE_BUDGET ? XR_XIR_BUDGET : XR_XIR_BAD_STRUCTURE;
+}
+XR_FUNC XrXirCallStatus xdap_launch_free(XdapLaunch *launch) {
+    if (!launch) return XR_XIR_CALL_READY;
+    XrXirCallStatus status=xdap_current_free(launch->control);
+    if (status==XR_XIR_CALL_BUSY) return status;
+    xr_xir_compile_source_product_free(launch->source);
+    if (launch->functions) for (uint32_t i=0;i<launch->function_count;++i)
+        xr_compile_resources_free(launch->functions[i].name);
+    xr_compile_resources_free(launch->functions);xr_compile_resources_free(launch->instructions);
+    xr_compile_resources_free(launch->absolute_file);
+    xr_compile_resources_free(launch);return status;
+}
+static XrXirStatus launch_code(XdapLaunch *launch,const XrXirModule *module) {
+    XrCompileResources *resources=launch->resources;
+    uint64_t instructions=0;
+    for (uint32_t i=0;i<module->function_count;++i) {
+        if (xr_compile_resources_work(resources,1)!=XR_COMPILE_RESOURCE_OK) return XR_XIR_BUDGET;
+        instructions+=module->functions[i].instruction_count;
+        if (instructions>UINT32_MAX) return XR_XIR_BUDGET;
+    }
+    launch->function_count=module->function_count;launch->instruction_count=(uint32_t)instructions;
+    XrXirStatus status=launch_allocation(xr_compile_resources_calloc(resources,module->function_count,
+        sizeof(*launch->functions),(void **)&launch->functions));
+    if (status!=XR_XIR_OK) return status;
+    if (instructions>SIZE_MAX/sizeof(*launch->instructions)) return XR_XIR_BUDGET;
+    status=launch_allocation(xr_compile_resources_alloc(resources,(size_t)instructions*sizeof(*launch->instructions),
+        (void **)&launch->instructions));
+    if (status!=XR_XIR_OK) return status;
+    uint32_t first=0;
+    for (uint32_t i=0;i<module->function_count;++i) {
+        const XrXirFunction *source=&module->functions[i];XdapCodeFunction *target=&launch->functions[i];
+        target->first=first;target->instructions=source->instruction_count;target->parameters=source->parameter_count;
+        target->values=source->parameter_count+source->instruction_count;
+        status=launch_allocation(xr_compile_resources_alloc(resources,(size_t)source->name_length+1,(void **)&target->name));
+        if (status!=XR_XIR_OK) return status;
+        uint64_t bytes=(uint64_t)source->instruction_count*sizeof(*launch->instructions);
+        if (xr_compile_resources_work(resources,bytes+source->name_length)!=XR_COMPILE_RESOURCE_OK) return XR_XIR_BUDGET;
+        if (source->name_length) memcpy(target->name,source->name,source->name_length);
+        target->name[source->name_length]=0;
+        memcpy(launch->instructions+first,source->instructions,(size_t)bytes);first+=source->instruction_count;
+    }
+    return XR_XIR_OK;
+}
+XR_FUNC XrXirStatus xdap_launch_build(const XdapLaunchRequest *request,XdapLaunch **output,
+    XrSourceCompileDiagnostic *diagnostic) {
+    if (!request || !request->compiler || !output || *output || !diagnostic ||
+        (!!request->absolute_file == !!request->text) || !xr_xir_domain_current(request->observer_metadata))
+        return XR_XIR_BAD_STRUCTURE;
+    const XrXirCompileContext *context=xr_source_compiler_context(request->compiler);
+    if (!context) return XR_XIR_BAD_STRUCTURE;
+    XdapLaunch *launch=NULL;XrXirArtifact *lowered=NULL;XrXirVmDebug *debug=NULL;XrXirProgram *program=NULL;
+    XrXirStatus status=launch_allocation(xr_compile_resources_calloc(context->resources,1,sizeof(*launch),(void **)&launch));
+    if (status!=XR_XIR_OK) return status;
+    launch->resources=context->resources;
+    if (request->absolute_file) {
+        size_t length=0;
+        while (request->absolute_file[length]) {
+            if (xr_compile_resources_work(context->resources,1)!=XR_COMPILE_RESOURCE_OK) { status=XR_XIR_BUDGET;goto done; }
+            ++length;
+        }
+        status=launch_allocation(xr_compile_resources_alloc(context->resources,length+1,(void **)&launch->absolute_file));
+        if (status!=XR_XIR_OK) goto done;
+        if (xr_compile_resources_work(context->resources,length+1)!=XR_COMPILE_RESOURCE_OK) { status=XR_XIR_BUDGET;goto done; }
+        memcpy(launch->absolute_file,request->absolute_file,length+1);
+    }
+    status=launch_source_status(request->text ?
+        xr_source_compiler_build_text(request->compiler,request->text,&launch->source,diagnostic) :
+        xr_source_compiler_build_file(request->compiler,request->absolute_file,&launch->source,diagnostic));
+    if (status!=XR_XIR_OK) goto done;
+    status=xr_xir_compile_source_product_public_admit(launch->source,&diagnostic->source.source);
+    if (status!=XR_XIR_OK) goto done;
+    const XrXirSourceProductFacts *facts=xr_xir_compile_source_product_facts(launch->source);
+    XrXirSourceProductPacketView packet={0};
+    status=xr_xir_compile_source_product_packet(launch->source,XR_XIR_SOURCE_PRODUCT_CLOSED,&packet);
+    if (status!=XR_XIR_OK) goto done;
+    status=xr_xir_compile_checked_read_lower(context,packet.bytes,packet.length,&facts->target,&lowered,&diagnostic->source.xir);
+    if (status!=XR_XIR_OK) goto done;
+    const XrXirModule *module=xr_xir_compile_artifact_module(lowered);
+    if (module->function_count!=facts->function_count || module->declarations->entry_function!=facts->entry ||
+        module->declarations->module_count!=facts->module_count) { status=XR_XIR_BAD_STRUCTURE;goto done; }
+    launch->entry=facts->entry;
+    status=launch_code(launch,module);if (status!=XR_XIR_OK) goto done;
+    status=launch_value_status(xr_xir_vm_debug_new(request->observer_metadata,request->instance.depth_limit,&debug));
+    if (status!=XR_XIR_OK) goto done;
+    status=xr_xir_compile_vm_debug_program_take(&lowered,debug,&program);if (status!=XR_XIR_OK) goto done;
+    status=launch_value_status(xdap_current_new(request->observer_metadata,&debug,program,&request->instance,&launch->control));
+    if (status==XR_XIR_OK) { *output=launch;launch=NULL; }
+done:
+    xr_xir_compile_program_drop(program);xr_xir_vm_debug_drop(debug);xr_xir_compile_artifact_free(lowered);
+    xdap_launch_free(launch);return status;
+}

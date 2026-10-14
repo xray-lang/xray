@@ -129,6 +129,11 @@ static const XrCliOptionSpec deps_options[] = {
     {"list", 'l', XR_CLI_VALUE_NONE, false, false, NULL, "Simple list format"},
     XR_CLI_OPT_END};
 
+#ifdef XR_HAS_DAP
+static const XrCliOptionSpec dap_options[] = {
+    {"stdio",0,XR_CLI_VALUE_NONE,false,false,NULL,"Serve current DAP on stdin/stdout"},
+    XR_CLI_OPT_END};
+#endif
 static const XrCliOptionSpec empty_options[] = {XR_CLI_OPT_END};
 
 static const XrCliOptionSpec info_options[] = {
@@ -161,6 +166,9 @@ static XrCliCommandSpec cli_commands[] = {
     {"test", "Run tests", NULL, test_options, 0, -1, false, false, NULL, NULL, 0},
     {"check", "Syntax check", NULL, check_options, 0, -1, false, false, NULL, NULL, 0},
     {"fmt", "Format source code", NULL, fmt_options, 0, -1, false, false, NULL, NULL, 0},
+#ifdef XR_HAS_DAP
+    {"dap","Debug current source programs over stdio",NULL,dap_options,0,0,false,false,NULL,NULL,0},
+#endif
     /* Artifact commands */
     {"build", "Compile to a native binary", NULL, build_options, 1, 1, false, false, NULL, NULL, 0},
 

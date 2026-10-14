@@ -139,7 +139,10 @@ static uint64_t assert_frame(XrXirVmDebugSnapshot *snapshot,uint32_t at,uint32_t
 }
 static void breakpoint_and_escape(void) {
     Fixture fixture;fixture_new(&fixture);
-    CHECK(xdap_current_breakpoint(fixture.session,fixture.leaf,fixture.return_at,true)==XR_XIR_VALUE_OK);
+    XrXirVmDebugLocation installed={fixture.leaf,fixture.return_at};
+    CHECK(xdap_current_breakpoints_replace(fixture.session,&installed,1)==XR_XIR_VALUE_OK);
+    XrXirVmDebugLocation rejected[2]={{fixture.leaf,0},{UINT32_MAX,0}};
+    CHECK(xdap_current_breakpoints_replace(fixture.session,rejected,2)==XR_XIR_VALUE_BAD_ARGUMENT);
     start(&fixture);
     XdapCurrentResult result=poll_fixture(&fixture);
     CHECK(result.state==XDAP_CURRENT_STOPPED && result.debug_epoch);

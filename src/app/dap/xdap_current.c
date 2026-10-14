@@ -89,6 +89,11 @@ XR_FUNC XrXirValueStatus xdap_current_breakpoint(XdapCurrent *session,
     return session && !session->driving && !session->ended ? xr_xir_vm_debug_breakpoint(session->debug, function, instruction, enabled) :
         XR_XIR_VALUE_BAD_ARGUMENT;
 }
+XR_FUNC XrXirValueStatus xdap_current_breakpoints_replace(XdapCurrent *session,
+    const XrXirVmDebugLocation *locations,uint32_t count) {
+    return session && !session->driving && !session->ended ?
+        xr_xir_vm_debug_breakpoints_replace(session->debug,locations,count) : XR_XIR_VALUE_BAD_ARGUMENT;
+}
 XR_FUNC XrXirValueStatus xdap_current_snapshot(XdapCurrent *session,
     XrXirVmDebugSnapshot **output) {
     return session && !session->driving ? xr_xir_vm_debug_snapshot(session->debug, output) : XR_XIR_VALUE_BAD_ARGUMENT;

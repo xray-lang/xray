@@ -33,6 +33,8 @@ XR_FUNC XrXirValueStatus xdap_current_continue(XdapCurrent *session, uint64_t ep
 XR_FUNC void xdap_current_pause(XdapCurrent *session);
 XR_FUNC XrXirValueStatus xdap_current_breakpoint(XdapCurrent *session,
     uint32_t function, uint32_t instruction, bool enabled);
+XR_FUNC XrXirValueStatus xdap_current_breakpoints_replace(XdapCurrent *,
+    const XrXirVmDebugLocation *,uint32_t count);
 XR_FUNC XrXirValueStatus xdap_current_snapshot(XdapCurrent *session,
     XrXirVmDebugSnapshot **output);
 XR_FUNC XrXirCallStatus xdap_current_cancel(XdapCurrent *session);

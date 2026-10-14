@@ -186,6 +186,20 @@ XR_FUNC XrXirValueStatus xr_xir_vm_debug_breakpoint(XrXirVmDebug *debug,
     *empty = (DebugBreakpoint){function, instruction, true};
     return XR_XIR_VALUE_OK;
 }
+XR_FUNC XrXirValueStatus xr_xir_vm_debug_breakpoints_replace(XrXirVmDebug *debug,
+    const XrXirVmDebugLocation *locations, uint32_t count) {
+    if (!debug_valid(debug) || !debug->artifact || count>32 || (!locations && count) ||
+        (debug->count && !xr_xir_vm_debug_paused(debug))) return XR_XIR_VALUE_BAD_ARGUMENT;
+    const XrXirModule *module=xr_xir_compile_artifact_module(debug->artifact);
+    DebugBreakpoint fresh[32]={{0}};
+    if (!xr_xir_domain_work(debug->domain,(uint64_t)count+32)) return XR_XIR_VALUE_LIMIT;
+    for (uint32_t i=0;i<count;++i) {
+        if (locations[i].function>=module->function_count || locations[i].instruction>=
+            module->functions[locations[i].function].instruction_count) return XR_XIR_VALUE_BAD_ARGUMENT;
+        fresh[i]=(DebugBreakpoint){locations[i].function,locations[i].instruction,true};
+    }
+    memcpy(debug->breakpoints,fresh,sizeof(fresh));return XR_XIR_VALUE_OK;
+}
 XR_FUNC void xr_xir_vm_debug_request_pause(XrXirVmDebug *debug) {
     if (debug_valid(debug)) atomic_store_explicit(&debug->mode, XR_XIR_VM_DEBUG_PAUSE, memory_order_release);
 }

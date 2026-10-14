@@ -16,6 +16,8 @@ typedef enum XrXirVmDebugMode {
     XR_XIR_VM_DEBUG_CONTINUE, XR_XIR_VM_DEBUG_PAUSE,
     XR_XIR_VM_DEBUG_STEP_IN, XR_XIR_VM_DEBUG_STEP_OVER, XR_XIR_VM_DEBUG_STEP_OUT
 } XrXirVmDebugMode;
+typedef struct XrXirVmDebugLocation { uint32_t function, instruction; } XrXirVmDebugLocation;
+
 typedef struct XrXirVmDebugFrameInfo {
     uint64_t id, epoch;
     uint32_t function, instruction, value_count;
@@ -41,6 +43,10 @@ XR_FUNC XrXirCallStatus xr_xir_vm_debug_instance_new(XrXirVmDebug *debug,
  * lines. Changes require a stopped observer or no live execution frames. */
 XR_FUNC XrXirValueStatus xr_xir_vm_debug_breakpoint(XrXirVmDebug *debug,
     uint32_t function, uint32_t instruction, bool enabled);
+/* Atomically replaces the bounded breakpoint set after validating every
+ * location and charging work. Failure preserves the previous set. */
+XR_FUNC XrXirValueStatus xr_xir_vm_debug_breakpoints_replace(XrXirVmDebug *,
+    const XrXirVmDebugLocation *, uint32_t count);
 /* Pause requests may arrive from the control thread. The sole execution driver
  * polls one quantum at a time and stops polling while paused. No language
  * suspension or wake token is fabricated for a debugger stop. */
