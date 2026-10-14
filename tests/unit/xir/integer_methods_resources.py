@@ -6,7 +6,7 @@ import tempfile
 
 executable, source = map(Path, sys.argv[1:3])
 mode = sys.argv[3]
-assert mode in ('measure','faults','profile')
+assert mode in ('measure','faults','profile','binding-measure')
 with tempfile.TemporaryDirectory(prefix='xir-integer-resources-') as temporary:
     root = Path(temporary).resolve()
     entry = root/'root.xr'

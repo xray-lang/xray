@@ -25,6 +25,22 @@ foreach(mode IN ITEMS measure faults)
     endif()
 endforeach()
 
+foreach(mode IN ITEMS measure faults)
+    if(mode STREQUAL "measure")
+        set(integer_binding_mode binding-measure)
+    else()
+        set(integer_binding_mode faults)
+    endif()
+    add_test(NAME test_xir_integer_binding_${mode}
+        COMMAND ${XRAY_PYTHON} ${PROJECT_SOURCE_DIR}/tests/unit/xir/integer_methods_resources.py
+            $<TARGET_FILE:test_xir_stdlib_resources> ${PROJECT_SOURCE_DIR} ${integer_binding_mode})
+    set_tests_properties(test_xir_integer_binding_${mode} PROPERTIES
+        TIMEOUT 300 RUN_SERIAL TRUE PROCESSORS 1 LABELS "unit;xir;ownership;stdlib;resources;integer")
+    if(ENABLE_ASAN AND mode STREQUAL "faults")
+        set_tests_properties(test_xir_integer_binding_${mode} PROPERTIES COST 200)
+    endif()
+endforeach()
+
 add_executable(test_xir_integer_methods_vm ${CMAKE_CURRENT_LIST_DIR}/test_xir_integer_methods_vm.c)
 target_include_directories(test_xir_integer_methods_vm PRIVATE ${XRAY_COMMON_INCLUDES})
 target_link_libraries(test_xir_integer_methods_vm PRIVATE xray_xir_stdlib_catalog xray_xir_vm)
