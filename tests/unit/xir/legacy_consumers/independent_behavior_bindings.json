@@ -41,7 +41,8 @@
     "coro/cycle_leak_bounded_by_coroutine_heap": "tests/diff/cases/semantics/coro/cycle_leak_bounded_by_coroutine_heap.xr",
     "regression/0398_null_test_owner_edges": "tests/regression/03_operators/0398_null_test_owner_edges.xr",
     "match/adt_enum_nonpayload_variant": "tests/diff/cases/match/adt_enum_nonpayload_variant.xr",
-    "observed/assertion_same_t_parity": "tests/unit/xir/legacy_consumers/fixtures/independent_run_observations/assertion_same_t_parity/root.xr"
+    "observed/assertion_same_t_parity": "tests/unit/xir/legacy_consumers/fixtures/independent_run_observations/assertion_same_t_parity/root.xr",
+    "exception/match_non_exhaustive_panic_shape": "tests/diff/cases/semantics/exception/match_non_exhaustive_panic_shape.xr"
   },
   "inputs": [
     {
@@ -259,6 +260,18 @@
     {
       "path": "tests/unit/xir/legacy_consumers/fixtures/independent_run_observations/assertion_same_t_parity/root.xr",
       "lf_sha256": "02f589f6454b9a486e8c3a78c1e2429b3c67b7eb43dddeb87f9b284850f4b99d"
+    },
+    {
+      "path": "tests/diff/cases/semantics/exception/match_non_exhaustive_panic_shape.xr",
+      "lf_sha256": "0e93d68b25438ba3b6cb1857900c916ed46de2821b583a3acbc2c7b8f50fd4ed"
+    },
+    {
+      "path": "src/xir/xxir_panic_value.inc.c",
+      "lf_sha256": "dcfe14a864c000c8bd4efa809c5b55204868e40e46156fe384a88133c3b9db02"
+    },
+    {
+      "path": "spec/source/sections/019-18-error-codes.md",
+      "lf_sha256": "2c4416085d5d38f37fb0e434d863cba1ff5d5758d44efb29402fa5158282d9ad"
     }
   ],
   "scope": "Whole original run-entry byte observations only. Original helper definitions, named test entries, complete FI/resources/physical/provider qualification remain separate.",

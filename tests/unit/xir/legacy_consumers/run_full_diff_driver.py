@@ -12,6 +12,9 @@ import sys
 import tempfile
 import time
 
+import independent_behavior_models
+import independent_scalar_models
+
 HERE = Path(__file__).resolve().parent
 ROOT = HERE.parents[3]
 sys.path.insert(0,str(ROOT/'tests/lib'))
@@ -58,11 +61,29 @@ def main() -> int:
     image_sha = sha(binary.read_bytes())
     environment = dict(os.environ,XRAY_STDLIB_PATH=str(ROOT/'stdlib'),NO_COLOR='1')
     expected_by_source = {}
+    model_names = ('independent_behavior_models.py', 'independent_behavior_bindings.json',
+                   'independent_scalar_models.py', 'independent_scalar_bindings.json')
+    model_hashes = {name:sha((HERE/name).read_bytes()) for name in model_names}
     for r in json.loads((HERE/'oracles.json').read_text(encoding='utf-8'))['cases']:
         if 'stdout_utf8' in r['expected'] and 'exit_code' in r['expected']:
             for i in r['inputs']:
                 if i['path'].startswith(('tests/diff/','tests/regression/')):
                     expected_by_source.setdefault(i['path'],r)
+    # These models derive complete original run traces. Named-body adapters
+    # are intentionally absent because the original run route does not call them.
+    original_sources = {row['case_id'] for row in rows}
+    independent_original_sources = []
+    for model in independent_behavior_models.expected_rows() + independent_scalar_models.expected_rows():
+        source = model['source']
+        if source not in original_sources:
+            continue
+        previous = expected_by_source.get(source)
+        if previous:
+            keys = ('exit_code', 'stdout_utf8', 'stderr_utf8')
+            if any(previous['expected'].get(key, '') != model['expected'][key] for key in keys):
+                raise ValueError('independent original run models disagree: ' + source)
+        expected_by_source[source] = model
+        independent_original_sources.append(source)
 
     def run(row: dict) -> dict:
         source = ROOT/row['case_id']
@@ -136,11 +157,15 @@ def main() -> int:
         for result in pool.map(run,rows):
             records.append(result)
             summary={'version':version,'binary_sha256':image_sha,'manifest_sha256':sha(manifest_bytes),
+                     'independent_model_sha256':model_hashes,
+                     'independent_original_sources':independent_original_sources,
                      'required_inputs':len(rows),'completed_inputs':len(records),'results':records,
                      'parity_is_qualification':False,'production_release':False}
             (output/'result.json').write_text(json.dumps(summary,ensure_ascii=False,indent=2)+'\n',encoding='utf-8')
             if len(records)%25==0:print(f'{len(records)}/{len(rows)} original differential inputs recorded',flush=True)
     if sha(binary.read_bytes())!=image_sha:raise ValueError('public image changed during full original execution')
+    if any(sha((HERE/name).read_bytes()) != digest for name,digest in model_hashes.items()):
+        raise ValueError('independent original run model changed during execution')
     print('Evidence: '+str(output),flush=True)
     return 0 if all(r['status']=='PASS_INDEPENDENT_RUN_BYTE_SCOPE' and 'named_body_obligations' not in r for r in records) else 1
 

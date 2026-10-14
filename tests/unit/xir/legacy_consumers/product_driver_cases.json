@@ -15623,6 +15623,31 @@
         "No boxing/instruction/optimization/native-width claim from numeric results or old comments.",
         "All original full FI/resources/borrow/lifetime/cancel/physical/Final/B0/sanitizer/provider gates remain open."
       ]
+    },
+    {
+      "id": "independent_behavior_exception_match_non_exhaustive_panic_shape",
+      "oracle_id": "independent_behavior_exception_match_non_exhaustive_panic_shape",
+      "source": "tests/diff/cases/semantics/exception/match_non_exhaustive_panic_shape.xr",
+      "source_lf_sha256": "0e93d68b25438ba3b6cb1857900c916ed46de2821b583a3acbc2c7b8f50fd4ed",
+      "entry": "run",
+      "source_context": "original_absolute",
+      "stdout_utf8": "non-exhaustive match\n442\n",
+      "stderr_utf8": "",
+      "expected_exit_code": 0,
+      "arguments": [],
+      "stdin_hex": "",
+      "companions": [],
+      "owners": [
+        "P07",
+        "P08",
+        "P09"
+      ],
+      "independent_execution_model": "Value two has no matching arm. The original panic catch prints the canonical match-failure message and public E0442 code; it never prints a successful result.",
+      "independent_observation_count": 2,
+      "remaining_gates": [
+        "Original panic channel/message/public E0442 only; no private ordinal or exhaustive-match compiler qualification.",
+        "All original complete compiler/native/runtime FI,exact budgets,cancel,lifetime/physical and sanitizer/provider gates remain open."
+      ]
     }
   ]
 }

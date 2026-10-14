@@ -72,6 +72,7 @@ def observations() -> dict[str, tuple[list, str]]:
         'observed/assertion_same_t_parity': (['assertion-same-t-parity-ok', 1 * 10 + 2, 1, 7, True, 7],
                                            'Keep the original source byte-for-byte, then observe actual/expected single-evaluation order, anchored call count, u8 payload, absent Optional and i64 value.'),
         'exception/catch_panic': (['ok:5', 'caught', 'outer-caught', 'done'], 'Integer division succeeds for two and the explicit panic channel catches zero divisors, including the nested invocation.'),
+        'exception/match_non_exhaustive_panic_shape': (['non-exhaustive match', 442], 'Value two has no matching arm. The original panic catch prints the canonical match-failure message and public E0442 code; it never prints a successful result.'),
         'exception/defer_stack_growth': ([200, 42, 'ok'], 'The complete depth-200 recursive cleanup executes before the function result is printed; no recursion bound is reduced.'),
         'exception/pattern_catch': (['boom', 'other', 'payload:7', 'ok', 'any'], 'Five calls cover two bare variants, payload extraction, normal return and typed enum catch-all.'),
         'collections/array_unshift_shared_core': ([1, 2, 3, 4, True, False, True, False, 'left', 'middle', 'right', 10, 20, 30, 40], 'Prepending one value preserves complete old sequence order for integer, bool, string and u8 domains.'),
