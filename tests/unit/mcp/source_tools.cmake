@@ -51,3 +51,8 @@ target_link_libraries(test_mcp_knowledge_faults PRIVATE xray_mcp_faults)
 add_test(NAME test_mcp_knowledge_faults COMMAND test_mcp_knowledge_faults)
 set_tests_properties(test_mcp_knowledge_faults PROPERTIES
     LABELS "unit;mcp;faults;ownership;knowledge" TIMEOUT 120 COST 2 RUN_SERIAL TRUE)
+
+add_test(NAME test_mcp_task_wait COMMAND test_mcp_run_tools --task-wait)
+set_tests_properties(test_mcp_task_wait PROPERTIES
+    LABELS "unit;mcp;execution;task;lifetime" TIMEOUT 60
+    ENVIRONMENT "XRAY_STDLIB_PATH=${CMAKE_SOURCE_DIR}/stdlib")

@@ -47,6 +47,21 @@ static void expect_output(const char *code, const char *output, size_t length, i
     size_t size = 0; char *json = xjson_stringify(result, &size); CHECK(json && size);
     xr_free(json); xjson_free(result);
 }
+static void task_wait_cases(void) {
+    const char task_timer[] = "import time\nfn worker()->i64 { time.sleep(5); return 42 }\n"
+        "fn main()->i64 { return await go worker() }\nprint(main())\n";
+    expect_output(task_timer, "42\n", 3, 0, false);
+    const char task_timeout[] = "import time\nfn worker()->i64 { time.sleep(2000); return 42 }\n"
+        "fn main()->i64 { return await go worker() }\nprint(main())\n";
+    XrJsonValue *task_result=run(task_timeout,sizeof(task_timeout)-1,50,0);
+    XrJsonValue *task_value=xjson_get_object(task_result,"structuredContent");
+    CHECK(xjson_get_bool(task_result,"isError") && xjson_get_bool(task_value,"timedOut"));
+    CHECK(xjson_get_int_or(task_value,"runtimeStatus",-1)==XR_XIR_CALL_CANCELLED);
+    CHECK(xjson_get_int_or(task_value,"outputBytes",-1)==0);
+    xjson_free(task_result);
+    expect_output("print(42)\n", "42\n", 3, 0, false);
+    puts("MCP Task timer normal/cancelled terminal ownership and recovery PASS");
+}
 static void normal_cases(void) {
     expect_output("print(\"hello\")\n", "hello\n", 6, 0, false);
     expect_output("print(\"A\\0B\")\n", "A\0B\n", 4, 0, false);
@@ -174,6 +189,7 @@ static void axes(void) {
 }
 int main(int argc, char **argv) {
     xr_test_suppress_dialogs();
+    if (argc == 2 && !strcmp(argv[1], "--task-wait")) { task_wait_cases(); return 0; }
     if (argc == 2 && !strcmp(argv[1], "--resources")) { tool_faults(); same_ledger_faults(); axes(); return 0; }
     CHECK(argc == 1); normal_cases(); return 0;
 }
