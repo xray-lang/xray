@@ -12,6 +12,7 @@
  */
 
 #include "xxir_program_internal.h"
+#include "../base/xsha256.h"
 #include "xxir_compile_memory.h"
 #include "xxir_atomic.h"
 #include "../base/xchecks.h"
@@ -136,6 +137,8 @@ XR_FUNC XrXirStatus xr_xir_compile_program_seal(const XrXirCompileContext *conte
     if (!output || *output || !xir_compile_context_valid(context)) return XR_XIR_BAD_STRUCTURE;
     XrXirStatus status = program_shape(context, spec);
     if (status != XR_XIR_OK) return status;
+    const XrXirCodeLease code = spec->code;
+    const XrXirProgramProof proof = spec->proof;
     XrXirProgramPermissions *permissions = NULL;
     status = xr_xir_compile_program_proof_verify(context, spec, &spec->proof, &permissions);
     if (status != XR_XIR_OK) return status;
@@ -173,7 +176,28 @@ XR_FUNC XrXirStatus xr_xir_compile_program_seal(const XrXirCompileContext *conte
         if (!xir_compile_work(context, 1)) { status = XR_XIR_BUDGET; goto failed; }
         ++program->module_slots[program->declarations->slots[i].module];
     }
-    program->code = spec->code;
+    XrXirProgramSpec owned={XR_XIR_PROGRAM_ABI_VERSION,permissions->target,
+        program->entries,program->entry_count,program->declarations,{0},program->types,{0}};
+    /* Every preparation callback has finished. The independently checked
+     * canonical fields also prove the copied descriptors' structural shape. */
+    if (*output || spec->code.owner!=code.owner || spec->code.release!=code.release ||
+        spec->proof.bytes!=proof.bytes || spec->proof.length!=proof.length ||
+        spec->proof.identity!=proof.identity || spec->proof.layouts!=proof.layouts) {
+        status=XR_XIR_BAD_STRUCTURE;goto failed;
+    }
+    status=xr_xir_compile_program_descriptor_match(context,spec,permissions);
+    if (status==XR_XIR_OK) status=xr_xir_compile_program_descriptor_match(context,&owned,permissions);
+    if (status==XR_XIR_OK) {
+        if (proof.length>UINT64_MAX-32 || !xir_compile_work(context,proof.length+32)) status=XR_XIR_BUDGET;
+        else {
+            uint8_t digest[32];
+            xr_sha256(proof.bytes,proof.length,digest);
+            if (memcmp(digest,permissions->packet_identity,32) || memcmp(proof.identity,digest,32))
+                status=XR_XIR_BAD_STRUCTURE;
+        }
+    }
+    if (status!=XR_XIR_OK) goto failed;
+    program->code = code;
     *output = program;
     return XR_XIR_OK;
 failed:

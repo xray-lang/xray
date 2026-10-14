@@ -38,6 +38,9 @@ typedef struct XrXirProgramPermissions {
     uint8_t *cell_roles;
     uint32_t root_parameter_count, reference_count;
     struct XrXirEffects *effects;
+    XrXirFunctionLayout *layouts;
+    XrXirTarget target;
+    uint8_t packet_identity[32];
 } XrXirProgramPermissions;
 /* This consumes the complete Effects certificate before the enclosing owner.
  * Its destruction is shared by failed sealing and final Program retirement. */
@@ -61,8 +64,16 @@ struct XrXirProgram {
  * Backend-specific callback state storage is not a canonical frame layout. */
 XR_FUNC XrXirStatus xr_xir_compile_program_match(const XrXirCompileContext *context,
     const XrXirProgramSpec *spec, const XrXirFunctionLayout *layouts, const XrXirArtifact *lowered);
+/* The current Lowered body and layouts must correspond to the independently
+ * checked input. Wire identity detects drift; it grants no semantic permission. */
+XR_FUNC XrXirStatus xr_xir_compile_program_body_match(const XrXirCompileContext *context,
+    const XrXirProgramPermissions *permissions, const XrXirArtifact *lowered);
+/* Compare the current descriptor against the same independently checked input.
+ * No allocator or cleanup callback runs during this final comparison. */
+XR_FUNC XrXirStatus xr_xir_compile_program_descriptor_match(const XrXirCompileContext *context,
+    const XrXirProgramSpec *spec, const XrXirProgramPermissions *permissions);
 /* Decode, lowering and comparison consume the same owner. Successful
- * verification retains neither the packet nor temporary artifacts. */
+ * verification transfers only required layout metadata, not temporary artifacts. */
 XR_FUNC XrXirStatus xr_xir_compile_program_proof_verify(const XrXirCompileContext *context,
     const XrXirProgramSpec *spec, const XrXirProgramProof *proof, XrXirProgramPermissions **permissions);
 XR_FUNC bool xr_xir_compile_program_retain(XrXirProgram *program);
