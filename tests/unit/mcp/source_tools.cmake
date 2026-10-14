@@ -56,3 +56,9 @@ add_test(NAME test_mcp_task_wait COMMAND test_mcp_run_tools --task-wait)
 set_tests_properties(test_mcp_task_wait PROPERTIES
     LABELS "unit;mcp;execution;task;lifetime" TIMEOUT 60
     ENVIRONMENT "XRAY_STDLIB_PATH=${CMAKE_SOURCE_DIR}/stdlib")
+
+include("${CMAKE_CURRENT_LIST_DIR}/runtime_owner.cmake")
+add_test(NAME test_mcp_task_constructed COMMAND test_mcp_run_tools --constructed-tasks)
+set_tests_properties(test_mcp_task_constructed PROPERTIES
+    LABELS "unit;mcp;execution;task" TIMEOUT 60
+    ENVIRONMENT "XRAY_STDLIB_PATH=${CMAKE_SOURCE_DIR}/stdlib")

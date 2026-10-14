@@ -1,4 +1,4 @@
-# MCP consumes the single Source/Program/HostCall pipeline without a legacy isolate.
+# MCP consumes the single Source/Program/Instance pipeline without a legacy isolate.
 include_guard(GLOBAL)
 add_library(xray_mcp STATIC
     ${CMAKE_CURRENT_LIST_DIR}/xmcp_server.c

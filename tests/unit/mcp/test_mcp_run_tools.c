@@ -62,6 +62,22 @@ static void task_wait_cases(void) {
     expect_output("print(42)\n", "42\n", 3, 0, false);
     puts("MCP Task timer normal/cancelled terminal ownership and recovery PASS");
 }
+static void constructed_task_cases(void) {
+    expect_output("fn worker()->Array<i64> { Coro.yield(); return [10,20] }\n"
+        "fn main()->i64 { const task=go worker(); var first=await task; first[0]=99; const second=await task; return second[0] }\n"
+        "print(main())\n", "10\n", 3, 0, false);
+    expect_output("fn worker()->Array<Array<string>> { Coro.yield(); return [[\"owned\"]] }\n"
+        "fn main()->string { const task=go worker(); var first=await task; first[0][0]=\"changed\"; const second=await task; return second[0][0] }\n"
+        "print(main())\n", "owned\n", 6, 0, false);
+    expect_output("fn worker()->(i64,string) { Coro.yield(); return (42,\"owned\") }\n"
+        "fn main()->i64 { const task=go worker(); const first=await task; const second=await task; return second.0 }\n"
+        "print(main())\n", "42\n", 3, 0, false);
+    expect_output("fn leaf()->i64 { Coro.yield(); return 42 }\n"
+        "fn worker()->Task<i64> { Coro.yield(); return go leaf() }\n"
+        "fn main()->i64 { const outer=go worker(); const inner=await outer; return await inner }\n"
+        "print(main())\n", "42\n", 3, 0, false);
+    puts("MCP constructed Task array copy isolation, nested strings, tuple and nested Task PASS");
+}
 static void normal_cases(void) {
     expect_output("print(\"hello\")\n", "hello\n", 6, 0, false);
     expect_output("print(\"A\\0B\")\n", "A\0B\n", 4, 0, false);
@@ -190,6 +206,7 @@ static void axes(void) {
 int main(int argc, char **argv) {
     xr_test_suppress_dialogs();
     if (argc == 2 && !strcmp(argv[1], "--task-wait")) { task_wait_cases(); return 0; }
+    if (argc == 2 && !strcmp(argv[1], "--constructed-tasks")) { constructed_task_cases(); return 0; }
     if (argc == 2 && !strcmp(argv[1], "--resources")) { tool_faults(); same_ledger_faults(); axes(); return 0; }
     CHECK(argc == 1); normal_cases(); return 0;
 }
