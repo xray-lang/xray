@@ -7,7 +7,7 @@
  * check_owner_driver.c - Real command owner and typed input boundary
  */
 #include "app/cli/xcli.h"
-#include "app/cli/xcli_canonical_source.h"
+#include "api/xsource_compile.h"
 #include "base/xwindows_utf8.h"
 #include "base/xmalloc.h"
 #include <stdio.h>
@@ -46,18 +46,18 @@ static void observed_release(XrCompileResources *owner) {
     CHECK(xr_compile_resources_stats(owner,&last_stats)==XR_COMPILE_RESOURCE_OK);
     xr_compile_resources_release(owner);
 }
-static XrCliCompileSourceStatus observed_source(const XrCliCompileSourceRequest *request,
-    XrXirSourceProduct **output,XrCliCompileSourceDiagnostic *diagnostic) {
+static XrSourceCompileStatus observed_source(const XrSourceCompileRequest *request,
+    XrXirSourceProduct **output,XrSourceCompileDiagnostic *diagnostic) {
     ++source_calls;CHECK(request->context->resources==original);phases[1]=attempts;
-    return xr_cli_compile_source_build(request,output,diagnostic);
+    return xr_source_compile_build(request,output,diagnostic);
 }
 #define xr_compile_resources_new observed_new
 #define xr_compile_resources_release observed_release
-#define xr_cli_compile_source_build observed_source
+#define xr_source_compile_build observed_source
 #include "app/cli/xcmd_check.c"
 #undef xr_compile_resources_new
 #undef xr_compile_resources_release
-#undef xr_cli_compile_source_build
+#undef xr_source_compile_build
 static int checked_call(const XrCliInvocation *inv) {
     resource_calls=source_calls=0;attempts=0;original=NULL;
     DWORD handles_before=0,handles_after=0;
@@ -87,15 +87,15 @@ static void verify_boundaries(XrCliInvocation *inv) {
     inv->positionals=twice;inv->positional_count=2;
     CHECK(checked_call(inv)==0);
     CHECK(last_stats.work>single.work && last_stats.allocated_bytes>single.allocated_bytes);
-    overridden=xr_cli_compile_default_resource_limits();overridden.work=single.work;
+    overridden=xr_source_compile_default_resource_limits();overridden.work=single.work;
     CHECK(checked_call(inv)==1);
     inv->positionals=saved;inv->positional_count=1;
     CHECK(checked_call(inv)==0);
     overridden.work=single.work-1;CHECK(checked_call(inv)==1);
-    overridden=xr_cli_compile_default_resource_limits();
+    overridden=xr_source_compile_default_resource_limits();
     overridden.allocated_bytes=single.allocated_bytes;CHECK(checked_call(inv)==0);
     --overridden.allocated_bytes;CHECK(checked_call(inv)==1);
-    overridden=xr_cli_compile_default_resource_limits();
+    overridden=xr_source_compile_default_resource_limits();
     overridden.live_bytes=single.peak_bytes;CHECK(checked_call(inv)==0);
     --overridden.live_bytes;CHECK(checked_call(inv)==1);
     overridden=(XrCompileResourceLimits){0};

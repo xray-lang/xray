@@ -31,9 +31,8 @@ typedef struct TextWorld {
     XrModuleIdentityAuthority authority;
     XrXirSourceProductRequest request;
 } TextWorld;
-static void world_open(TextWorld *w, uint64_t work) {
+static void world_open_limits(TextWorld *w, XrCompileResourceLimits limits) {
     memset(w, 0, sizeof(*w));
-    XrCompileResourceLimits limits = {UINT64_C(64) << 20, UINT64_C(8) << 20, work};
     CHECK(xr_compile_resources_new(&limits, &w->resources) == XR_COMPILE_RESOURCE_OK);
     CHECK(xr_compile_session_new(w->resources, &w->session) == XR_COMPILER_SESSION_OK);
     w->context = (XrXirCompileContext){w->resources, xr_xir_compile_default_limits()};
@@ -42,6 +41,9 @@ static void world_open(TextWorld *w, uint64_t work) {
     w->request = (XrXirSourceProductRequest){{w->session, NULL, &w->authority,
         &w->context, NULL, NULL, XR_XIR_PROGRAM, NULL},
         {XR_XIR_ARCH_X86_64, XR_XIR_VALUE_ABI_VERSION}};
+}
+static void world_open(TextWorld *w, uint64_t work) {
+    world_open_limits(w, (XrCompileResourceLimits){UINT64_C(64) << 20, UINT64_C(8) << 20, work});
 }
 static void world_close(TextWorld *w) {
     xr_compile_session_free(w->session);
@@ -109,6 +111,73 @@ static void rejects_and_diagnostics(void) {
     xr_xir_compile_source_product_diagnostic_free(&diagnostic); world_close(&w);
     CHECK(!runtime_live && !runtime_bytes);
 }
+static XrXirStatus build_constant(TextWorld *w, XrXirSourceProduct **out) {
+    const char source[] = "const n:i64 = 42\n";
+    XrXirSourceText text = {NULL, source, sizeof(source)-1};
+    return xr_xir_compile_source_product_build_text(&w->request, &text, out, NULL);
+}
+static void exact_resources_and_retry(void) {
+    TextWorld w; world_open(&w, UINT64_C(128000000));
+    XrXirSourceProduct *product = NULL;
+    CHECK(build_constant(&w, &product) == XR_XIR_OK);
+    XrCompileResourceStats required;
+    CHECK(xr_compile_resources_stats(w.resources, &required) == XR_COMPILE_RESOURCE_OK);
+    xr_xir_compile_source_product_free(product); world_close(&w);
+    CHECK(!runtime_live && !runtime_bytes);
+    for (unsigned axis = 0; axis < 3; ++axis) for (int delta = -1; delta <= 1; ++delta) {
+        XrCompileResourceLimits limits = {required.allocated_bytes, required.peak_bytes, required.work};
+        uint64_t *bound = axis == 0 ? &limits.allocated_bytes : axis == 1 ? &limits.live_bytes : &limits.work;
+        CHECK(*bound > 1 && *bound < UINT64_MAX);
+        *bound = (uint64_t)((int64_t)*bound + delta);
+        world_open_limits(&w, limits); product = NULL;
+        CHECK(build_constant(&w, &product) == (delta < 0 ? XR_XIR_BUDGET : XR_XIR_OK));
+        if (delta < 0) CHECK(!product);
+        xr_xir_compile_source_product_free(product); world_close(&w);
+        CHECK(!runtime_live && !runtime_bytes);
+    }
+    world_open_limits(&w, (XrCompileResourceLimits){required.allocated_bytes, required.peak_bytes, required.work});
+    product = NULL; CHECK(build_constant(&w, &product) == XR_XIR_OK);
+    XrCompileResourceStats before, after;
+    CHECK(xr_compile_resources_stats(w.resources, &before) == XR_COMPILE_RESOURCE_OK);
+    xr_xir_compile_source_product_free(product); product = NULL;
+    CHECK(xr_compile_resources_stats(w.resources, &after) == XR_COMPILE_RESOURCE_OK);
+    CHECK(after.live_bytes < before.live_bytes && after.allocated_bytes == before.allocated_bytes && after.work == before.work);
+    CHECK(build_constant(&w, &product) == XR_XIR_BUDGET && !product);
+    CHECK(build_constant(&w, &product) == XR_XIR_BUDGET && !product);
+    world_close(&w); CHECK(!runtime_live && !runtime_bytes);
+    puts("three resource axes exact/minus1/plus1 and cumulative retry without refund PASS");
+}
+static void rooted_text_authority(void) {
+    TextWorld w; world_open(&w, UINT64_C(128000000));
+    w.authority = (XrModuleIdentityAuthority){XR_MODULE_IDENTITY_SCRIPT, NULL, XR_TEXT_FIXTURE_ROOT};
+    w.request.source.entry_path = XR_TEXT_FIXTURE_ROOT "/unsaved.xr";
+    const char source[] = "import \"./sibling\" as sibling\nprint(sibling.answer())\n";
+    XrXirSourceText text = {"unsaved.xr", source, sizeof(source)-1};
+    XrXirSourceProduct *product = NULL;
+    XrXirSourceProductDiagnostic diagnostic = {0};
+    XrXirStatus built = xr_xir_compile_source_product_build_text(&w.request, &text, &product, &diagnostic);
+    if (built != XR_XIR_OK) fprintf(stderr, "rooted status=%d stage=%u path=%s message=%s\n", built, (unsigned)diagnostic.stage, diagnostic.source_path ? diagnostic.source_path : "", diagnostic.source.message);
+    CHECK(built == XR_XIR_OK);
+    xr_xir_compile_source_product_diagnostic_free(&diagnostic);
+    CHECK(xr_xir_compile_source_product_public_admit(product, NULL) == XR_XIR_OK);
+    const XrXirSourceProductFacts *facts = xr_xir_compile_source_product_facts(product);
+    CHECK(facts && facts->module_count == 2);
+    const XrXirSourceView *view = xr_xir_compile_source_product_view(product);
+    bool found = false;
+    for (uint32_t i = 0; i < view->module_count; ++i)
+        if (view->modules[i].path && !strcmp(view->modules[i].path, w.request.source.entry_path)) found = true;
+    CHECK(found);
+    XrXirSourceProduct *occupied = product;
+    CHECK(xr_xir_compile_source_product_build_text(&w.request, &text, &product, NULL) == XR_XIR_BAD_STRUCTURE);
+    CHECK(product == occupied);
+    text.logical_path = "other.xr";
+    XrXirSourceProduct *rejected = NULL;
+    CHECK(xr_xir_compile_source_product_build_text(&w.request, &text, &rejected, NULL) == XR_XIR_BAD_STRUCTURE && !rejected);
+    world_close(&w);
+    CHECK(xr_xir_compile_source_product_verify(product, 1048576, NULL) == XR_XIR_OK);
+    xr_xir_compile_source_product_free(product);
+    CHECK(!runtime_live && !runtime_bytes);
+}
 static void complete_compiler_failures(void) {
     size_t count = 0;
     for (size_t point = 0; !point || point <= count; ++point) {
@@ -138,7 +207,6 @@ static void complete_compiler_failures(void) {
 }
 int main(int argc, char **argv) {
     if (argc == 2 && !strcmp(argv[1], "--compiler-faults")) complete_compiler_failures();
-    else { CHECK(argc == 1); text_owned_execution(); rejects_and_diagnostics(); }
+    else { CHECK(argc == 1); text_owned_execution(); rejects_and_diagnostics(); exact_resources_and_retry(); rooted_text_authority(); }
     puts("owned explicit source product PASS"); return 0;
 }
-
