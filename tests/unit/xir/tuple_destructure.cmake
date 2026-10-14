@@ -67,6 +67,8 @@ else()
 endif()
 add_test(NAME test_xir_tuple_slot_group_checked COMMAND test_xir_tuple_slot_group_checked)
 set_tests_properties(test_xir_tuple_slot_group_checked PROPERTIES LABELS "unit;xir;tuple;checked;ownership;publication;fault-injection;resource" TIMEOUT 180)
+add_test(NAME test_xir_tuple_slot_group_checked_normal COMMAND test_xir_tuple_slot_group_checked --normal)
+set_tests_properties(test_xir_tuple_slot_group_checked_normal PROPERTIES LABELS "unit;xir;tuple;checked;ownership;publication" TIMEOUT 120)
 add_executable(test_xir_tuple_destructure_rejections xir/test_xir_tuple_destructure_rejections.c)
 target_link_libraries(test_xir_tuple_destructure_rejections PRIVATE xray_xir_source_product)
 target_compile_definitions(test_xir_tuple_destructure_rejections PRIVATE
