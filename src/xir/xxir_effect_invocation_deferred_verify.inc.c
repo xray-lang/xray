@@ -150,7 +150,7 @@ static XrXirStatus effect_invocation_deferred_verify(EffectInvocationWorkspace *
 /* Both lifetime adapters compare the actual final vector to the same
  * complete canonical enumeration. No expected formula or term copy is made. */
 static XrXirStatus effect_invocation_result_match_source(const EffectInvocationTermSource *source,
-    const EffectInvocationResult *result) {
+    const EffectFinalFunctions *result) {
     if (!source || !source->equations || !xir_compile_context_valid(source->work) ||
         !effect_body_material_shape(source->equations->material) || !source->equations->roots ||
         !source->equations->nodes || !result ||
@@ -159,7 +159,7 @@ static XrXirStatus effect_invocation_result_match_source(const EffectInvocationT
         !result->functions) return XR_XIR_BAD_STRUCTURE;
     uint64_t total=0;XrXirStatus status=XR_XIR_OK;
     for (uint32_t f=0;f<result->count && status==XR_XIR_OK;++f) {
-        const EffectInvocationResultFunction *record=&result->functions[f];
+        const EffectFinalFunction *record=&result->functions[f];
         const XrXirRootFormula *formula=&record->formula;
         if (!xir_compile_work(source->work,6)) { status=XR_XIR_BUDGET;break; }
         if (source->equations->roots[f]>=source->equations->count || formula->term_count!=record->capacity ||
@@ -178,7 +178,7 @@ static XrXirStatus effect_invocation_result_match_source(const EffectInvocationT
 }
 
 static XrXirStatus effect_invocation_result_match(EffectInvocationWorkspace *owner,
-    const EffectInvocationResult *result) {
+    const EffectFinalFunctions *result) {
     if (!owner || !xir_compile_context_valid(owner->work) || !owner->effects ||
         !owner->effects->contracts) return XR_XIR_BAD_STRUCTURE;
     if (!xir_compile_work(owner->work,sizeof(EffectInvocationTermSource))) return XR_XIR_BUDGET;

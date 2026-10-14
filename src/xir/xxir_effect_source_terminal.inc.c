@@ -57,7 +57,7 @@ XR_FUNC XrXirStatus xir_effects_source_retire_generation(const XrXirCompileConte
 static XrXirStatus effect_source_equation_shape(const XrXirCompileContext *work,
     const EffectInvocationCertificate *certificate) {
     const EffectInvocationFinal *owner=certificate->final;
-    const EffectInvocationResult *result=certificate->result;
+    const EffectFinalFunctions *result=(&certificate->final->summary);
     uint32_t count=effect_body_count(certificate->body);
     if (!owner->count || owner->count>owner->capacity || (uint64_t)owner->capacity>(uint64_t)work->limits.functions*work->limits.instructions ||
         owner->edge_count>owner->edge_capacity || !!owner->edges!=!!owner->edge_capacity ||
@@ -66,7 +66,7 @@ static XrXirStatus effect_source_equation_shape(const XrXirCompileContext *work,
         owner->deferred_count>owner->deferred_capacity ||
         !!owner->deferred_calls!=!!owner->deferred_capacity ||
         result->resources!=work->resources || result->count!=count || result->capacity!=count ||
-        !result->functions || !result->facts || !result->witnesses || !certificate->projection_atoms ||
+        !result->functions || !result->facts || !result->witnesses ||
         certificate->declarations!=certificate->body->declarations ||
         certificate->generics!=certificate->body->generics ||
         certificate->defaults.count!=certificate->body->defaults.count ||
@@ -96,14 +96,14 @@ static XrXirStatus effect_source_equation_shape(const XrXirCompileContext *work,
  * independently enumerated from the closed current equations below. */
 static XrXirStatus effect_source_result_views(const XrXirCompileContext *work,
     const EffectInvocationCertificate *certificate,const XrXirEffects *summary) {
-    const EffectInvocationResult *result=certificate->result;
+    const EffectFinalFunctions *result=(&certificate->final->summary);
     if (summary->result_borrow!=result || summary->formula_terminals!=result->witnesses ||
         summary->constant_witnesses!=result->witnesses+(size_t)result->count*2)
         return XR_XIR_BAD_STRUCTURE;
     for (uint32_t f=0;f<result->count;++f) {
         if (!xir_compile_work(work,5)) return XR_XIR_BUDGET;
         const XrXirRootFormula *actual=&summary->contracts[f].formula;
-        const EffectInvocationResultFunction *record=&result->functions[f];
+        const EffectFinalFunction *record=&result->functions[f];
         if (actual->constant_mask!=record->formula.constant_mask ||
             actual->term_count!=record->formula.term_count || actual->terms!=record->storage ||
             record->formula.terms!=record->storage || record->capacity!=actual->term_count)
@@ -141,17 +141,11 @@ static XrXirStatus effect_source_atoms(const XrXirCompileContext *work,
 static XrXirStatus effect_source_projections(const XrXirCompileContext *work,
     const EffectInvocationCertificate *certificate) {
     uint32_t count=effect_body_count(certificate->body);
-    const EffectInvocationResult *result=certificate->result;
+    const EffectFinalFunctions *result=(&certificate->final->summary);
     /* This same independent receiving core checks all canonical terms,
      * selected atoms, current causes and final transformed witnesses. */
     XrXirStatus status=effect_invocation_publication_match(work,certificate,result);
     if (status!=XR_XIR_OK) return status;
-    for (uint32_t f=0;f<count;++f) for (uint32_t d=2;d<4;++d) {
-        if (!xir_compile_work(work,3)) return XR_XIR_BUDGET;
-        uint32_t bit=(d&1)?XR_XIR_CALLABLE_ROOT_UNRESOLVED:XR_XIR_CALLABLE_ROOT_REQUIRED;
-        if ((certificate->projection_atoms[(size_t)d*count+f]!=UINT32_MAX)!=
-            !!(result->functions[f].formula.constant_mask&bit)) return XR_XIR_BAD_STRUCTURE;
-    }
     return effect_invocation_public_gate(work,certificate,count);
 }
 
@@ -162,7 +156,7 @@ static XrXirStatus effect_source_certificate(const XrXirCompileContext *work,
     const EffectInvocationCertificate *certificate,const XrXirEffects *summary) {
     if (!certificate || !effect_body_material_shape(certificate->body) ||
         certificate->resources!=work->resources || certificate->body->resources!=work->resources ||
-        !certificate->final || !certificate->result || !certificate->declared ||
+        !certificate->final || !certificate->final || !certificate->declared ||
         certificate->terms.remaining || certificate->body->terms.remaining ||
         certificate->final->material!=certificate->body ||
         certificate->final->physical!=certificate->body->physical ||
@@ -251,7 +245,7 @@ static XrXirStatus effect_source_publication_match(const XrXirCompileContext *wo
         if (!xir_compile_work(work,4)) return XR_XIR_BUDGET;
         if (origin->function!=f || origin->argument_count || origin->arguments ||
             certificate->owners[f]!=parent) return XR_XIR_BAD_STRUCTURE;
-        const EffectInvocationResult *result=certificate->result;
+        const EffectFinalFunctions *result=(&certificate->final->summary);
         const XrXirRootFormula *a=&effects->contracts[f].formula,*b=&result->functions[f].formula;
         if (!xir_compile_work(work,4)) return XR_XIR_BUDGET;
         if (a->constant_mask!=b->constant_mask || a->term_count!=b->term_count ||

@@ -102,9 +102,24 @@ typedef struct EffectInvocationSite {
     uint32_t function,instruction,target,captures,binding;
 } EffectInvocationSite;
 
+typedef struct EffectFinalFunction {
+    XrXirRootFormula formula;
+    XrXirRootTerm *storage;
+    uint32_t capacity;
+} EffectFinalFunction;
+
+struct EffectFinalFunctions {
+    XrCompileResources *resources;
+    uint32_t count,capacity,term_count;
+    EffectFinalFunction *functions;
+    XrXirRootEffects *facts;
+    XrXirRootEffectWitness *witnesses;
+};
+
 /* The complete semantic inventory survives construction without a solver,
  * queue, compile callback, mutable receiver or edge lookup workspace. */
 typedef struct EffectInvocationFinal {
+    EffectFinalFunctions summary;
     EffectPhysicalDomain *physical;
     EffectBodyMaterial *material;
     const XrXirCellProvenance *cells;
@@ -127,7 +142,7 @@ typedef struct EffectInvocationWorkspace {
     EffectGraph *graph;
     const EffectInvocationDeclaredBounds *declared;
     EffectBodyRequest body;
-    EffectInvocationResult *prepared_result;
+    EffectFinalFunctions *prepared_result;
     uint32_t *edge_index;
     size_t edge_index_capacity;
     uint32_t *consumers;
@@ -186,7 +201,8 @@ static XrXirStatus effect_invocation_shape(const EffectInvocationWorkspace *owne
     return effect_body_request_shape(&request,function,instruction,output);
 }
 
-static void effect_invocation_result_free(EffectInvocationResult *result);
+static void effect_invocation_result_clear(EffectFinalFunctions *result);
+static void effect_invocation_result_free(EffectFinalFunctions *result);
 static bool effect_invocation_witness_equal(const XrXirRootEffectWitness *a,
     const XrXirRootEffectWitness *b);
 

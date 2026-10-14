@@ -83,7 +83,7 @@ static inline XrXirStatus effect_invocations_receive(const XrXirCompileContext *
  * a completely sealed computation; publication belongs to the common caller. */
 static inline XrXirStatus effect_invocation_derive(const EffectInvocationDriverInput *input,
     EffectInvocationCertificate **output,const EffectInvocationProjectionSink *sink,
-    EffectInvocationResult **receiving) {
+    EffectFinalFunctions **receiving) {
     if (!input || !output || *output || !receiving || *receiving || !xir_compile_context_valid(input->work) || !input->body ||
         !effect_invocation_projection_sink_matches(input->work,sink,input->body->domain.function_count))
         return XR_XIR_BAD_STRUCTURE;

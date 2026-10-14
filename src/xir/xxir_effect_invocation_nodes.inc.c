@@ -100,6 +100,7 @@ static XrXirStatus effect_invocation_basis(const EffectInvocationWorkspace *owne
 
 static void effect_invocation_final_clear(EffectInvocationFinal *final) {
     if (!final) return;
+    effect_invocation_result_clear(&final->summary);
     for (uint32_t n=0;n<final->count;++n) {
         xr_compile_resources_free(final->nodes[n].causes);
         xr_compile_resources_free(final->nodes[n].producers);

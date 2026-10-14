@@ -50,7 +50,7 @@ static XrXirStatus effect_invocation_trace_walk_selected(const XrXirCompileConte
     if (!certificate || !effect_body_material_shape(certificate->body) ||
         certificate->body->resources!=certificate->resources || certificate->resources!=work->resources || !request || !length ||
         request->domain>=4 || request->function>=effect_body_count(certificate->body) ||
-        !certificate->projection_atoms || !certificate->result)
+        !certificate->final)
         return XR_XIR_BAD_STRUCTURE;
     uint32_t atom=UINT32_MAX;XrXirRootEffectWitness witness={0};
     XrXirStatus status=effect_invocation_projection_select(work,certificate,request->function,request->domain,

@@ -49,8 +49,6 @@ static XrXirStatus effect_invocation_forest_record(const XrXirCompileContext *wo
     const uint32_t *selection=request->selection;
     uint32_t n=certificate->final->roots[function];
     const EffectInvocationNode *node=&certificate->final->nodes[n];
-    size_t at=(size_t)domain*forest->count+function;
-    if (!selection || *selection!=certificate->projection_atoms[at]) return XR_XIR_BAD_STRUCTURE;
     uint32_t atom=*selection;XrXirRootEffectWitness selected_witness;
     XrXirStatus status=effect_invocation_selected_witness(work,certificate,function,atom,&selected_witness);
     if (status!=XR_XIR_OK) return status;

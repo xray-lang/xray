@@ -305,7 +305,7 @@ XR_FUNC XrXirStatus xir_effects_execution_edge(const XrXirEffects *effects,
     const EffectInvocationCertificate *certificate=effects->invocations;
     const EffectInvocationFinal *owner=certificate->final;
     if (!effect_body_material_shape(certificate->body) ||
-        certificate->body->resources!=certificate->resources || !owner || (!certificate->projection_atoms || !certificate->result) ||
+        certificate->body->resources!=certificate->resources || !owner || (!certificate->final) ||
         (owner->count && !owner->nodes) || (owner->edge_count && !owner->edges) ||
         (owner->site_count && !owner->sites) ||
         (effect_body_count(certificate->body) && !certificate->body->functions) ||

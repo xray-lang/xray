@@ -233,10 +233,10 @@ static void conditional_compact_null_body(const XrXirCompileContext *context,XrX
  * still replay the complete selected equation and reject independent damage. */
 static void conditional_compact_public_selection(const XrXirCompileContext *context,
     EffectInvocationCertificate *certificate) {
-    CHECK(certificate->result->functions[1].formula.constant_mask==0 &&
-        certificate->result->functions[1].formula.term_count==1 &&
-        certificate->result->functions[1].formula.terms[0].kind==XR_XIR_ROOT_TERM_CONTEXT_CALL &&
-        certificate->result->functions[1].formula.terms[0].index==0);
+    CHECK(certificate->final->summary.functions[1].formula.constant_mask==0 &&
+        certificate->final->summary.functions[1].formula.term_count==1 &&
+        certificate->final->summary.functions[1].formula.terms[0].kind==XR_XIR_ROOT_TERM_CONTEXT_CALL &&
+        certificate->final->summary.functions[1].formula.terms[0].index==0);
     for (uint32_t f=0;f<2;++f) for (uint32_t d=0;d<4;++d) {
         EffectInvocationTraceRequest request={.function=f,.domain=d};uint32_t length=77;
         CHECK(effect_invocation_public_walk(context,certificate,&request,4,&length)==XR_XIR_OK &&
@@ -249,15 +249,17 @@ static void conditional_compact_public_selection(const XrXirCompileContext *cont
     CHECK(effect_invocation_trace_walk_selected(context,certificate,&request,&length,&selected)==XR_XIR_OK &&
         length==1 && selected.atom==6 && selected.witness.cause==XR_XIR_ROOT_CAUSE_CONTEXT_CALL &&
         selected.witness.instruction==0 && selected.witness.distance==0);
-    uint32_t at=certificate->result->count+1,atom=certificate->projection_atoms[at];
-    XrXirRootEffectWitness witness=certificate->result->witnesses[at];
-    bool fact=certificate->result->facts[1].unresolved;
-    XrXirRootTerm *term=(XrXirRootTerm *)certificate->result->functions[1].formula.terms;
+    uint32_t at=certificate->final->summary.count+1,atom=selected.atom;
+    EffectInvocationNode *entry=&certificate->final->nodes[certificate->final->roots[1]];
+    EffectInvocationCause saved=entry->causes[atom];
+    XrXirRootEffectWitness witness=certificate->final->summary.witnesses[at];
+    bool fact=certificate->final->summary.facts[1].unresolved;
+    XrXirRootTerm *term=(XrXirRootTerm *)certificate->final->summary.functions[1].formula.terms;
     uint32_t index=term[0].index;
     for (uint32_t damage=0;damage<4;++damage) {
-        if (!damage) certificate->projection_atoms[at]=UINT32_MAX;
-        else if (damage==1) certificate->result->witnesses[at].distance^=1;
-        else if (damage==2) certificate->result->facts[1].unresolved=false;
+        if (!damage) entry->causes[atom].witness.cause=XR_XIR_ROOT_CAUSE_NONE;
+        else if (damage==1) certificate->final->summary.witnesses[at].distance^=1;
+        else if (damage==2) certificate->final->summary.facts[1].unresolved=false;
         else term[0].index=1;
         length=77;
         CHECK(effect_invocation_public_walk(context,certificate,&request,4,&length)==XR_XIR_BAD_STRUCTURE && length==77);
@@ -267,8 +269,8 @@ static void conditional_compact_public_selection(const XrXirCompileContext *cont
                 XR_XIR_BAD_STRUCTURE && length==77 && selected.atom==sentinel.atom &&
                 effect_invocation_witness_equal(&selected.witness,&sentinel.witness));
         }
-        certificate->projection_atoms[at]=atom;certificate->result->witnesses[at]=witness;
-        certificate->result->facts[1].unresolved=fact;term[0].index=index;
+        entry->causes[atom]=saved;certificate->final->summary.witnesses[at]=witness;
+        certificate->final->summary.facts[1].unresolved=fact;term[0].index=index;
         length=77;
         CHECK(effect_invocation_public_walk(context,certificate,&request,4,&length)==XR_XIR_OK && length==1);
     }

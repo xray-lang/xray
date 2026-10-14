@@ -65,7 +65,7 @@ XR_FUNC XrXirStatus xir_effects_class_access(const XrXirEffects *effects,
     const EffectInvocationCertificate *certificate=effects->invocations;
     const EffectInvocationFinal *owner=certificate->final;
     if (!effect_body_material_shape(certificate->body) || !owner || certificate->resources!=effects->resources ||
-        certificate->body->resources!=certificate->resources || (!certificate->projection_atoms || !certificate->result) ||
+        certificate->body->resources!=certificate->resources || (!certificate->final) ||
         request->caller>=effect_body_count(certificate->body) ||
         !xr_xir_type_is_class(certificate->body->domain.types,request->root_type))
         return XR_XIR_BAD_STRUCTURE;

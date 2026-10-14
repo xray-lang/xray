@@ -243,8 +243,8 @@ static XrXirStatus invocation_returned_lowered_snapshot(const XrXirCompileContex
             (actual->operand_count && actual->operands==source->operands)) status=XR_XIR_BAD_STRUCTURE;
     }
     const EffectInvocationFinal *equations=certificate->final;
-    if (status==XR_XIR_OK && (!equations || equations->material!=certificate->body || !certificate->result ||
-        certificate->result->count!=module->function_count || !certificate->declared ||
+    if (status==XR_XIR_OK && (!equations || equations->material!=certificate->body || !certificate->final ||
+        certificate->final->summary.count!=module->function_count || !certificate->declared ||
         certificate->declared->resources!=context->resources)) status=XR_XIR_BAD_STRUCTURE;
     return status;
 }
@@ -322,7 +322,7 @@ static XrXirStatus conditional_invocation_returned(const XrXirCompileContext *co
     if (status==XR_XIR_OK) { phase=2;status=xr_xir_compile_effects_analyze(checked,&published); }
     const XrXirModule *module=checked?xr_xir_compile_artifact_module(checked):NULL;
     XrXirEffects effects={0};EffectGraph graph={0};EffectInvocationDeclaredBounds *bounds=NULL;
-    EffectInvocationWorkspace *owner=NULL;EffectInvocationResult *solution=NULL;
+    EffectInvocationWorkspace *owner=NULL;EffectFinalFunctions *solution=NULL;
     EffectInvocationCertificate *certificate=NULL;
     if (status==XR_XIR_OK) { phase=3;status=invocation_core_storage(context,module,&effects); }
     if (status==XR_XIR_OK) status=effect_graph_build(module,&effects,&graph,(XrXirCompileContext *)context);

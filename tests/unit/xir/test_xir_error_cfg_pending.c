@@ -357,17 +357,17 @@ static void pc_local_final_mutations(const XrXirCompileContext *c,
     CHECK(physical->count);uint32_t count=physical->count;--physical->count;
     CHECK(effect_body_physical_match(c,certificate->body->physical,certificate->body)==XR_XIR_BAD_STRUCTURE);
     physical->count=count;
-    EffectInvocationResultFunction *function=&certificate->result->functions[0];
+    EffectFinalFunction *function=&certificate->final->summary.functions[0];
     XrXirRootFormula formula=function->formula;function->formula.constant_mask=0;
-    CHECK(effect_invocation_local_result_match(c,equations,inputs,certificate->result)==XR_XIR_BAD_STRUCTURE);
+    CHECK(effect_invocation_local_result_match(c,equations,inputs,(&certificate->final->summary))==XR_XIR_BAD_STRUCTURE);
     function->formula=formula;
     /* Removing the entire initializer result remains invalid even if all
      * mutable receiving rows are made mutually consistent after a callback. */
     EffectInvocationNode init=equations->nodes[0];equations->nodes[0].intrinsic_mask=0;
     equations->nodes[0].local_mask=0;function->formula.constant_mask=0;
-    CHECK(effect_invocation_certificate_result_match(c,certificate,certificate->result)==XR_XIR_BAD_STRUCTURE);
+    CHECK(effect_invocation_certificate_result_match(c,certificate,(&certificate->final->summary))==XR_XIR_BAD_STRUCTURE);
     equations->nodes[0]=init;function->formula=formula;
-    CHECK(effect_invocation_certificate_result_match(c,certificate,certificate->result)==XR_XIR_OK);
+    CHECK(effect_invocation_certificate_result_match(c,certificate,(&certificate->final->summary))==XR_XIR_OK);
 }
 
 static void pc_local_source_fields(const XrXirCompileContext *c,
@@ -421,20 +421,20 @@ static void pc_local_transfer_positive(void) {
 }
 
 typedef struct PcLocalCallback {
-    EffectInvocationResult *receiving;
+    EffectFinalFunctions *receiving;
     uint32_t calls;
 } PcLocalCallback;
 
 /* The last genuine projection callback forges a consistent receiving ROOT
  * absence. Final publication must still derive the initializer independently. */
 static void pc_erase_initializer_root(const EffectInvocationCertificate *certificate,
-    EffectInvocationResult *result) {
+    EffectFinalFunctions *result) {
     EffectInvocationNode *node=&certificate->final->nodes[0];
     node->intrinsic_mask=node->local_mask=0;result->functions[0].formula.constant_mask=0;
     result->facts[0]=(XrXirRootEffects){0};
     for (uint32_t domain=0;domain<4;++domain) {
         size_t at=(size_t)domain*result->count;
-        certificate->projection_atoms[at]=UINT32_MAX;result->witnesses[at]=(XrXirRootEffectWitness){0};
+        result->witnesses[at]=(XrXirRootEffectWitness){0};
     }
     for (uint32_t cause=0;cause<6;++cause)
         node->causes[cause]=(EffectInvocationCause){.next=UINT32_MAX,.edge=UINT32_MAX,.distance=UINT32_MAX};
@@ -442,7 +442,7 @@ static void pc_erase_initializer_root(const EffectInvocationCertificate *certifi
 
 static XrXirStatus pc_local_callback_write(const XrXirCompileContext *work,
     const EffectInvocationCertificate *certificate,uint32_t function,
-    const uint32_t *selected,EffectInvocationResult *result,void *receiver) {
+    const uint32_t *selected,EffectFinalFunctions *result,void *receiver) {
     PcLocalCallback *probe=receiver;
     XrXirStatus status=effect_invocation_publication_write(work,certificate,function,selected,
         result,&probe->receiving);
@@ -477,14 +477,14 @@ static void pc_local_callback_boundary(void) {
 static EffectInvocationCertificate *pc_release_target;
 static unsigned pc_release_poison_calls;
 static void pc_local_release_poison(void *memory,size_t bytes) {
-    size_t expected=(size_t)pc_release_target->result->count*sizeof(EffectInvocationLocalInput);
+    size_t expected=(size_t)(&pc_release_target->final->summary)->count*sizeof(EffectInvocationLocalInput);
     if (bytes!=sizeof(CompileAllocation)+expected) return;
     const EffectInvocationLocalInput *inputs=(const void *)((CompileAllocation *)memory+1);
     CHECK(inputs[0].facts.requires_root &&
         inputs[0].witnesses[0].cause==XR_XIR_ROOT_CAUSE_INITIALIZER);
     pc_free_hook=NULL;
     ++pc_release_poison_calls;
-    pc_erase_initializer_root(pc_release_target,pc_release_target->result);
+    pc_erase_initializer_root(pc_release_target,(&pc_release_target->final->summary));
 }
 
 /* The initializer's genuine Input remains unchanged. A real allocator free
@@ -501,11 +501,11 @@ static void pc_local_release_boundary(void) {
     EffectBodyRequest body=effect_body_owned_request(&c,graph.material);
     EffectInvocationDriverInput input={&c,&body,effects,&graph,graph.material->declared,NULL};
     EffectInvocationCertificate *certificate=NULL,*old=effects->invocations;
-    EffectInvocationResult *receiving=NULL;
+    EffectFinalFunctions *receiving=NULL;
     CHECK(effect_invocation_derive(&input,&certificate,NULL,&receiving)==XR_XIR_OK &&
         certificate && !receiving && !graph.physical_owned);
     CHECK(effect_invocation_current_input_match(&c,source,certificate->body)==XR_XIR_OK);
-    CHECK(effect_invocation_publication_match(&c,certificate,certificate->result)==XR_XIR_OK);
+    CHECK(effect_invocation_publication_match(&c,certificate,(&certificate->final->summary))==XR_XIR_OK);
     pc_release_target=certificate;pc_release_poison_calls=0;pc_free_hook=pc_local_release_poison;
     XrXirStatus status=effect_invocation_publication_commit(&c,effects,&certificate);
     pc_free_hook=NULL;pc_release_target=NULL;
@@ -628,7 +628,7 @@ static void pc_local_equation_controls(void) {
     xr_xir_compile_artifact_free(checked);checked=NULL;memset(&fixture,0xa5,sizeof(fixture));
     CHECK(effect_invocation_local_inputs(&c,certificate->body,&inputs)==XR_XIR_OK && inputs);
     CHECK(effect_invocation_local_equations_match(&c,certificate->final,inputs)==XR_XIR_OK);
-    CHECK(effect_invocation_certificate_result_match(&c,certificate,certificate->result)==XR_XIR_OK);
+    CHECK(effect_invocation_certificate_result_match(&c,certificate,(&certificate->final->summary))==XR_XIR_OK);
     CHECK(effect_invocation_public_gate(&c,certificate,effects->count)==XR_XIR_OK);pc_empty_golden(effects,0);
     xr_compile_resources_free(inputs);xr_xir_compile_effects_free(effects);
     pc_local_formal_preflight(&c);pc_release(&c,baseline);

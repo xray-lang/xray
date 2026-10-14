@@ -794,7 +794,7 @@ static XrXirStatus effect_invocation_local_equations_match(const XrXirCompileCon
 
 static XrXirStatus effect_invocation_local_result_new(const XrXirCompileContext *work,
     const EffectInvocationWorkspace *owner,const EffectInvocationLocalInput *inputs,
-    EffectInvocationResult **output);
+    EffectFinalFunctions **output);
 
 /* Private creation runs inside the existing formula owner after full source,
  * body, domain, physical-role and construction verification. The structural

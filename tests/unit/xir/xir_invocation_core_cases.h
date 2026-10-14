@@ -46,7 +46,7 @@ static void *invocation_retired_block(const void *payload) {
     CHECK(false);return NULL;
 }
 static XrXirStatus invocation_retired_seal(const EffectInvocationDriverInput *input,
-    EffectInvocationCertificate **output,EffectInvocationResult **receiving) {
+    EffectInvocationCertificate **output,EffectFinalFunctions **receiving) {
     EffectInvocationWorkspace *workspace=NULL;
     XrXirStatus status=effect_invocations_create(input->work,input->body,input->effects,
         input->graph,input->declared,&workspace);
@@ -74,6 +74,44 @@ static XrXirStatus invocation_retired_seal(const EffectInvocationDriverInput *in
     effect_invocation_free(workspace);return status;
 }
 
+/* The full high-order input remains unchanged. Erasing every receiving copy
+ * and the stored local seed must not erase the real initializer declaration. */
+static void invocation_final_initializer_erasure(const XrXirCompileContext *work,
+    EffectInvocationCertificate *certificate) {
+    const uint32_t function=3;
+    EffectFinalFunctions *summary=&certificate->final->summary;
+    EffectInvocationNode *node=&certificate->final->nodes[certificate->final->roots[function]];
+    CHECK(node->cause_count==3 && summary->facts[function].requires_root);
+    uint32_t intrinsic=node->intrinsic_mask,local=node->local_mask;
+    EffectInvocationCause causes[6];memcpy(causes,node->causes,sizeof(causes));
+    XrXirRootEffects facts=summary->facts[function],seed=certificate->body->local_roots[function];
+    uint32_t constant=summary->functions[function].formula.constant_mask;
+    XrXirRootEffectWitness witnesses[4],local_witnesses[2];
+    for (uint32_t d=0;d<4;++d) {
+        size_t at=(size_t)d*summary->count+function;witnesses[d]=summary->witnesses[at];
+        summary->witnesses[at]=(XrXirRootEffectWitness){0};
+    }
+    for (uint32_t d=0;d<2;++d) {
+        size_t at=(size_t)d*summary->count+function;local_witnesses[d]=certificate->body->local_witnesses[at];
+        certificate->body->local_witnesses[at]=(XrXirRootEffectWitness){0};
+    }
+    node->intrinsic_mask=node->local_mask=0;
+    for (uint32_t a=0;a<6;++a) node->causes[a]=(EffectInvocationCause){
+        .next=UINT32_MAX,.edge=UINT32_MAX,.distance=UINT32_MAX};
+    summary->facts[function]=(XrXirRootEffects){0};summary->functions[function].formula.constant_mask=0;
+    certificate->body->local_roots[function]=(XrXirRootEffects){0};
+    XrXirStatus status=effect_invocation_publication_match(work,certificate,summary);
+    fprintf(stderr,"general Input initializer erasure status%u declaration%u\n",status,
+        certificate->body->declarations->modules[0].initializer);
+    CHECK(status==XR_XIR_BAD_STRUCTURE);
+    node->intrinsic_mask=intrinsic;node->local_mask=local;memcpy(node->causes,causes,sizeof(causes));
+    summary->facts[function]=facts;summary->functions[function].formula.constant_mask=constant;
+    certificate->body->local_roots[function]=seed;
+    for (uint32_t d=0;d<4;++d) summary->witnesses[(size_t)d*summary->count+function]=witnesses[d];
+    for (uint32_t d=0;d<2;++d) certificate->body->local_witnesses[(size_t)d*summary->count+function]=local_witnesses[d];
+    CHECK(effect_invocation_publication_match(work,certificate,summary)==XR_XIR_OK);
+}
+
 static XrXirStatus conditional_invocation_core(const XrXirCompileContext *context,uint32_t mode,bool oracle) {
     if (mode>=4) return XR_XIR_BAD_STRUCTURE;
     RootParameterBindingFixture fixture;rp_binding_fixture(&fixture,context,(mode&1)!=0);
@@ -95,7 +133,7 @@ static XrXirStatus conditional_invocation_core(const XrXirCompileContext *contex
     if (status==XR_XIR_OK) { phase=1;status=xr_xir_compile_artifact_verify(checked,&diagnostic); }
     const XrXirModule *module=checked?xr_xir_compile_artifact_module(checked):NULL;
     XrXirEffects effects={0};EffectGraph graph={0};EffectInvocationDeclaredBounds *bounds=NULL;
-    EffectInvocationResult *receiving=NULL;
+    EffectFinalFunctions *receiving=NULL;
     EffectInvocationCertificate *certificate=NULL;
     if (status==XR_XIR_OK) { phase=2;status=invocation_core_storage(context,module,&effects); }
     if (status==XR_XIR_OK) { phase=3;status=effect_graph_build(module,&effects,&graph,(XrXirCompileContext *)context); }
@@ -127,6 +165,7 @@ static XrXirStatus conditional_invocation_core(const XrXirCompileContext *contex
         if (status==XR_XIR_OK) status=effect_invocation_certificate_edge_mask(context,certificate,0,2,1,&edge_mask);
         if (status==XR_XIR_OK) status=effect_invocation_certificate_trace(context,certificate,1,&trace);
         if (status==XR_XIR_OK && oracle) {
+            invocation_final_initializer_erasure(context,certificate);
             EffectInvocationFinal damaged=*certificate->final;
             damaged.physical=NULL;EffectInvocationWorkspace refused={0};size_t admission_attempts=rp_attempts;
             XrCompileResourceStats before=rp_stats(context);
@@ -138,9 +177,9 @@ static XrXirStatus conditional_invocation_core(const XrXirCompileContext *contex
                 refused.work==context && !refused.consumers && rp_attempts==admission_attempts &&
                 rp_stats(context).work==before.work);
             CHECK(!caller_mask && formal_mask==XR_XIR_CALLABLE_ROOT_UNRESOLVED && !edge_mask);
-            CHECK(certificate->result->functions[1].formula.term_count==1 &&
-                certificate->result->functions[1].formula.terms[0].kind==XR_XIR_ROOT_TERM_PARAMETER &&
-                certificate->result->functions[1].formula.terms[0].index==0);
+            CHECK(certificate->final->summary.functions[1].formula.term_count==1 &&
+                certificate->final->summary.functions[1].formula.terms[0].kind==XR_XIR_ROOT_TERM_PARAMETER &&
+                certificate->final->summary.functions[1].formula.terms[0].index==0);
             CHECK(trace && !trace->counts[0] && trace->counts[1]==1 &&
                 trace->steps[0].function==1 && trace->steps[0].witness.cause==XR_XIR_ROOT_CAUSE_PARAMETER &&
                 !trace->steps[0].witness.distance && trace->steps[0].witness.slot==0);
