@@ -15,6 +15,7 @@
 #define XLSP_SERVER_H
 
 #include "xlsp_transport.h"
+#include "xlsp_protocol_message.h"
 #include "../../base/xjson.h"
 #include "xlsp_types.h"
 #include "xlsp_source_buffer.h"
@@ -104,24 +105,6 @@ typedef struct XrLspIndexPool XrLspIndexPool;
 
 // Maximum pending requests to track (for cancellation support)
 #define MAX_PENDING_REQUESTS 64
-
-// JSON-RPC 2.0 request id. The spec allows either a number OR a string
-// (null is reserved and we treat it as "notification"). Existing LSP
-// clients like VS Code always use integers, but correctness-wise we
-// MUST echo back the exact shape the client sent us.
-typedef enum {
-    XLSP_ID_NONE = 0,  // Notification (no id field / id == null)
-    XLSP_ID_NUMBER,    // Integer or real id
-    XLSP_ID_STRING,    // String id (owned, xr_free on clear)
-} XlspRequestIdKind;
-
-typedef struct XlspRequestId {
-    XlspRequestIdKind kind;
-    union {
-        double number;
-        char *string;  // xr_strdup'd when kind == XLSP_ID_STRING
-    } as;
-} XlspRequestId;
 
 // Pending request entry (for $/cancelRequest support)
 typedef struct XlspPendingRequest {
@@ -289,7 +272,7 @@ struct XrLspServer {
     XlspPendingRequests pending_requests;
 
     // Counter for server-initiated request IDs
-    int64_t next_request_id;
+    int32_t next_request_id;
 
     // Progress reporting token (for workspace indexing)
     char *index_progress_token;

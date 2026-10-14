@@ -262,10 +262,6 @@ XrLspServer *xlsp_server_new(void) {
     return server;
 }
 
-// Forward decl — definition lives alongside the rest of the request-id
-// helpers further down the file.
-static void xlsp_request_id_free(XlspRequestId *id);
-
 void xlsp_server_free(XrLspServer *server) {
     if (!server)
         return;
@@ -651,175 +647,45 @@ XrLspPosition xlsp_offset_to_position(XrLspDocument *doc, uint32_t offset) {
 }
 
 // ---------------------------------------------------------------------------
-// Request id (JSON-RPC 2.0: number | string)
-// ---------------------------------------------------------------------------
-
-// Parse the "id" field of an incoming message. Returns a value-typed
-// XlspRequestId whose string variant (if any) is xr_strdup'd and must be
-// released via xlsp_request_id_free. A missing / null id yields kind
-// XLSP_ID_NONE, which the caller uses to distinguish notifications.
-static XlspRequestId parse_request_id(XrJsonValue *msg) {
-    XlspRequestId id = {.kind = XLSP_ID_NONE, .as.number = 0};
-    XrJsonValue *v = xjson_get(msg, "id");
-    if (!v)
-        return id;
-    if (v->type == XR_JSON_NUMBER) {
-        id.kind = XLSP_ID_NUMBER;
-        id.as.number = v->is_integer ? (double) v->as.integer : v->as.number;
-    } else if (v->type == XR_JSON_STRING) {
-        id.kind = XLSP_ID_STRING;
-        id.as.string = xr_strdup(v->as.string ? v->as.string : "");
-        if (!id.as.string) {
-            // OOM — downgrade to NONE so the caller treats it as a
-            // notification. The client will probably time out, but we
-            // never crash or fabricate a wrong id.
-            id.kind = XLSP_ID_NONE;
-        }
-    }
-    // XR_JSON_NULL, bool, array, object → treated as NONE. Per spec null
-    // id is reserved; clients should not use it. Logging would be noisy.
-    return id;
-}
-
-static void xlsp_request_id_free(XlspRequestId *id) {
-    if (!id)
-        return;
-    if (id->kind == XLSP_ID_STRING) {
-        xr_free(id->as.string);
-        id->as.string = NULL;
-    }
-    id->kind = XLSP_ID_NONE;
-}
-
-static XlspRequestId xlsp_request_id_clone(const XlspRequestId *src) {
-    XlspRequestId dst = {.kind = XLSP_ID_NONE, .as.number = 0};
-    if (!src)
-        return dst;
-    dst.kind = src->kind;
-    if (src->kind == XLSP_ID_NUMBER) {
-        dst.as.number = src->as.number;
-    } else if (src->kind == XLSP_ID_STRING) {
-        dst.as.string = xr_strdup(src->as.string ? src->as.string : "");
-        if (!dst.as.string)
-            dst.kind = XLSP_ID_NONE;
-    }
-    return dst;
-}
-
-static bool xlsp_request_id_equals(const XlspRequestId *a, const XlspRequestId *b) {
-    if (!a || !b)
-        return false;
-    if (a->kind != b->kind)
-        return false;
-    switch (a->kind) {
-        case XLSP_ID_NUMBER:
-            return a->as.number == b->as.number;
-        case XLSP_ID_STRING:
-            return a->as.string && b->as.string && strcmp(a->as.string, b->as.string) == 0;
-        case XLSP_ID_NONE:
-            return true;  // both notifications (rare)
-    }
-    return false;
-}
-
-// Build the JSON id value for a response / request. Returns a JSON
-// value (null for XLSP_ID_NONE — used only for error responses that
-// have to be emitted before we could parse the id).
-static XrJsonValue *xlsp_request_id_to_json(const XlspRequestId *id) {
-    if (!id || id->kind == XLSP_ID_NONE)
-        return xjson_new_null();
-    if (id->kind == XLSP_ID_NUMBER)
-        return xjson_new_number(id->as.number);
-    return xjson_new_string(id->as.string ? id->as.string : "");
-}
-
-// Short debug label, used for log messages only. Returns a pointer into
-// a static buffer (single-threaded caller assumed: lsp_log is only ever
-// called from the main loop or a thread that already holds tls_server).
-static const char *xlsp_request_id_debug(const XlspRequestId *id) {
-    static _Thread_local char buf[64];
-    if (!id || id->kind == XLSP_ID_NONE)
-        return "<notif>";
-    if (id->kind == XLSP_ID_NUMBER) {
-        snprintf(buf, sizeof(buf), "%.0f", id->as.number);
-    } else {
-        snprintf(buf, sizeof(buf), "\"%s\"", id->as.string ? id->as.string : "");
-    }
-    return buf;
-}
-
-// ---------------------------------------------------------------------------
 // Response / error emitters
 // ---------------------------------------------------------------------------
 
-// Send a JSON-RPC response echoing back the client's id exactly.
-static void send_response(XrLspServer *server, const XlspRequestId *id, XrJsonValue *result) {
-    XrJsonValue *resp = xjson_new_object();
-    xjson_object_set(resp, "jsonrpc", xjson_new_string("2.0"));
-    xjson_object_set(resp, "id", xlsp_request_id_to_json(id));
-    xjson_object_set(resp, "result", result ? result : xjson_new_null());
-
-    size_t len;
-    char *json = xjson_stringify(resp, &len);
-    xlsp_transport_write(server->transport, json, len);
-
-    xr_free(json);
-    xjson_free(resp);
+static void send_protocol_message(XrLspServer *server,XrJsonValue *message) {
+    size_t length=0;char *json=message?xjson_stringify(message,&length):NULL;
+    if(json){xlsp_transport_write(server->transport,json,length);if(!xlsp_transport_is_connected(server->transport))server->exit_received=true;}
+    else {lsp_log("Protocol response allocation failed; closing connection");server->exit_received=true;}
+    xr_free(json);xjson_free(message);
 }
-
-// Send a JSON-RPC error response, mirroring the client's id shape.
-static void send_error(XrLspServer *server, const XlspRequestId *id, int code,
-                       const char *message) {
-    XrJsonValue *resp = xjson_new_object();
-    xjson_object_set(resp, "jsonrpc", xjson_new_string("2.0"));
-    xjson_object_set(resp, "id", xlsp_request_id_to_json(id));
-
-    XrJsonValue *error = xjson_new_object();
-    xjson_object_set(error, "code", xjson_new_number(code));
-    xjson_object_set(error, "message", xjson_new_string(message));
-    xjson_object_set(resp, "error", error);
-
-    size_t len;
-    char *json = xjson_stringify(resp, &len);
-    xlsp_transport_write(server->transport, json, len);
-
-    xr_free(json);
-    xjson_free(resp);
+static void send_response(XrLspServer *server,const XlspRequestId *id,XrJsonValue *result) {
+    XrJsonValue *message=NULL;
+    XlspProtocolStatus status=xlsp_protocol_response(id,&result,&message);
+    xjson_free(result);
+    if(status!=XLSP_PROTOCOL_OK){server->exit_received=true;lsp_log("Response preparation failed: %u",(unsigned)status);return;}
+    send_protocol_message(server,message);
+}
+static void send_error(XrLspServer *server,const XlspRequestId *id,int code,const char *description) {
+    XrJsonValue *message=NULL;XlspProtocolStatus status=xlsp_protocol_error(id,code,description,&message);
+    if(status!=XLSP_PROTOCOL_OK){server->exit_received=true;lsp_log("Error preparation failed: %u",(unsigned)status);return;}
+    send_protocol_message(server,message);
 }
 
 // Send a notification
 void xlsp_send_notification(XrLspServer *server, const char *method, XrJsonValue *params) {
-    XrJsonValue *notif = xjson_new_object();
-    xjson_object_set(notif, "jsonrpc", xjson_new_string("2.0"));
-    xjson_object_set(notif, "method", xjson_new_string(method));
-    if (params) {
-        xjson_object_set(notif, "params", params);
-    }
-
-    size_t len;
-    char *json = xjson_stringify(notif, &len);
-    xlsp_transport_write(server->transport, json, len);
-
-    xr_free(json);
-    xjson_free(notif);
+    if(!server){xjson_free(params);return;}
+    XrJsonValue *message=NULL;XlspProtocolStatus status=xlsp_protocol_call(NULL,method,&params,&message);
+    xjson_free(params);
+    if(status!=XLSP_PROTOCOL_OK){server->exit_received=true;lsp_log("Notification preparation failed: %u",(unsigned)status);return;}
+    send_protocol_message(server,message);
 }
 
 // Send a server-initiated request (fire-and-forget, response ignored)
 void xlsp_send_request(XrLspServer *server, const char *method, XrJsonValue *params) {
-    XrJsonValue *req = xjson_new_object();
-    xjson_object_set(req, "jsonrpc", xjson_new_string("2.0"));
-    xjson_object_set(req, "id", xjson_new_number(++server->next_request_id));
-    xjson_object_set(req, "method", xjson_new_string(method));
-    if (params) {
-        xjson_object_set(req, "params", params);
-    }
-
-    size_t len;
-    char *json = xjson_stringify(req, &len);
-    xlsp_transport_write(server->transport, json, len);
-
-    xr_free(json);
-    xjson_free(req);
+    if(!server||server->next_request_id==INT32_MAX){xjson_free(params);if(server)server->exit_received=true;return;}
+    XlspRequestId id={.kind=XLSP_ID_NUMBER,.as.number=server->next_request_id+1};
+    XrJsonValue *message=NULL;XlspProtocolStatus status=xlsp_protocol_call(&id,method,&params,&message);
+    xjson_free(params);
+    if(status!=XLSP_PROTOCOL_OK){server->exit_received=true;lsp_log("Server request preparation failed: %u",(unsigned)status);return;}
+    server->next_request_id=id.as.number;send_protocol_message(server,message);
 }
 
 // ============================================================================
@@ -833,7 +699,7 @@ static bool pending_request_add(XrLspServer *server, XlspRequestId id, const cha
     XlspPendingRequests *pending = &server->pending_requests;
 
     // Never replace a live request: its completion still owns the same ID.
-    if(pending->count==MAX_PENDING_REQUESTS)return false;
+    if(!xlsp_request_id_valid(&id)||pending->count<0||pending->count>=MAX_PENDING_REQUESTS)return false;
     for(int i=0;i<MAX_PENDING_REQUESTS;++i)
         if(xlsp_request_id_equals(&pending->requests[i].id,&id))return false;
     int slot=pending->head;
@@ -916,9 +782,9 @@ static void handle_cancel_request(XrLspServer *server, XrJsonValue *params) {
 
     // params itself carries the id to cancel, same number-or-string
     // shape as an original request's id.
-    XlspRequestId target = parse_request_id(params);
-    if (target.kind == XLSP_ID_NONE)
-        return;
+    XlspRequestId target={0};
+    XlspProtocolStatus parsed=xlsp_request_id_parse(params,&target);
+    if(parsed!=XLSP_PROTOCOL_OK||!xlsp_request_id_valid(&target)){xlsp_request_id_free(&target);return;}
 
     pending_request_cancel(server, &target);
     xlsp_request_id_free(&target);
@@ -947,7 +813,7 @@ static void source_task_complete(void *data,void *result) {
         if(!result||source->result.cancelled||pending_request_is_cancelled(server,&source->id))
             send_error(server,&source->id,LSP_ERROR_REQUEST_CANCELLED,"Request cancelled");
         else if(server->source_revision!=source->revision)
-            send_error(server,&source->id,-32801,"Document state changed during Source query");
+            send_error(server,&source->id,-32803,"Document state changed during Source query");
         else if(source->result.status!=XR_XIR_OK) {
             char message[128];snprintf(message,sizeof(message),"Source query failed (stage=%u status=%u)",
                 source->result.stage,(unsigned)source->result.status);
@@ -972,8 +838,8 @@ static bool source_request_submit(XrLspServer *server,const XlspRequestId *id,Xr
     if(server->source_revision==UINT64_MAX){send_error(server,id,-32603,"Source revision exhausted");return false;}
     XlspSourceTask *source=xr_calloc(1,sizeof(*source));
     if(!source){send_error(server,id,-32603,"Source request allocation failed");return false;}
-    source->server=server;source->revision=server->source_revision;source->id=xlsp_request_id_clone(id);
-    if(id->kind==XLSP_ID_STRING&&!source->id.as.string)goto failed;
+    source->server=server;source->revision=server->source_revision;
+    if(xlsp_request_id_clone(id,&source->id)!=XLSP_PROTOCOL_OK)goto failed;
     if(xlsp_navigation_capture(server,params,mode,&source->request)!=XR_XIR_OK)goto failed;
     source->task=xlsp_task_new(source_task_execute,source_task_complete,source,XLSP_TASK_NORMAL);
     if(!source->task)goto failed;
@@ -1317,13 +1183,27 @@ static const LspMethodEntry *find_method(XrLspServer *server, const char *method
 // both `id` shapes, echo them back verbatim in responses, and use them
 // as the cancellation key.
 static void handle_message(XrLspServer *server, XrJsonValue *msg) {
+    // Server-originated progress requests do not retain a reply consumer.
+    // A reply must not be reinterpreted as a malformed client request.
+    if(!xjson_get(msg,"method")&&(xjson_get(msg,"result")||xjson_get(msg,"error")))return;
     init_method_table(server);
 
     const char *method = xjson_get_string(msg, "method");
     XrJsonValue *params = xjson_get(msg, "params");
 
-    XlspRequestId id = parse_request_id(msg);
-    bool is_request = (id.kind != XLSP_ID_NONE);
+    XlspRequestId id={0};XlspProtocolStatus parsed_id=xlsp_request_id_parse(msg,&id);
+    if(parsed_id!=XLSP_PROTOCOL_OK) {
+        send_error(server,NULL,parsed_id==XLSP_PROTOCOL_OUT_OF_MEMORY?-32603:-32600,"Request id admission failed");
+        if(parsed_id==XLSP_PROTOCOL_OUT_OF_MEMORY)server->exit_received=true;
+        return;
+    }
+    bool is_request=xlsp_request_id_valid(&id);
+    XrJsonValue *rpc=xjson_get(msg,"jsonrpc"),*method_value=xjson_get(msg,"method");
+    if(!rpc||rpc->type!=XR_JSON_STRING||rpc->string_len!=3||memcmp(rpc->as.string,"2.0",3)||
+       !method_value||method_value->type!=XR_JSON_STRING||!method_value->as.string||
+       memchr(method_value->as.string,0,method_value->string_len)||!xr_utf8_validate(method_value->as.string,method_value->string_len)) {
+        send_error(server,is_request?&id:NULL,-32600,"Invalid Request");xlsp_request_id_free(&id);return;
+    }
 
     if (!method) {
         if (is_request) {
@@ -1335,7 +1215,8 @@ static void handle_message(XrLspServer *server, XrJsonValue *msg) {
 
     // Handle $/cancelRequest specially (it's a notification)
     if (strcmp(method, "$/cancelRequest") == 0) {
-        handle_cancel_request(server, params);
+        if(is_request)send_error(server,&id,-32600,"Cancellation must be a notification");
+        else handle_cancel_request(server, params);
         xlsp_request_id_free(&id);
         return;
     }
@@ -1356,6 +1237,7 @@ static void handle_message(XrLspServer *server, XrJsonValue *msg) {
 
     // Handle window/workDoneProgress/cancel (cancellation from progress UI)
     if (strcmp(method, "window/workDoneProgress/cancel") == 0) {
+        if(is_request){send_error(server,&id,-32600,"Progress cancellation must be a notification");xlsp_request_id_free(&id);return;}
         // Mark indexing as cancelled if token matches
         if (params) {
             const char *token = xjson_get_string(params, "token");
@@ -1377,9 +1259,15 @@ static void handle_message(XrLspServer *server, XrJsonValue *msg) {
     // call returns.
     XlspRequestId id_for_slot = {.kind = XLSP_ID_NONE, .as.number = 0};
     const LspMethodEntry *entry = find_method(server, method);
+    if(entry&&((entry->request_handler&&!is_request)||(entry->notification_handler&&is_request))) {
+        if(is_request)send_error(server,&id,-32600,"Method requires a notification");
+        xlsp_request_id_free(&id);return;
+    }
     if (is_request) {
-        id_for_slot = xlsp_request_id_clone(&id);
-        if((id.kind==XLSP_ID_STRING&&!id_for_slot.as.string)||!pending_request_add(server,id_for_slot,entry?entry->method:"unknown")) {
+        if(xlsp_request_id_clone(&id,&id_for_slot)!=XLSP_PROTOCOL_OK) {
+            send_error(server,&id,-32603,"Request id allocation failed");xlsp_request_id_free(&id);return;
+        }
+        if(!pending_request_add(server,id_for_slot,entry?entry->method:"unknown")) {
             xlsp_request_id_free(&id_for_slot);send_error(server,&id,-32600,"Duplicate request ID or pending capacity exhausted");
             xlsp_request_id_free(&id);return;
         }
@@ -1565,6 +1453,7 @@ int xlsp_server_run(XrLspServer *server) {
                     if (msg) {
                         handle_message(server, msg);
                         xjson_free(msg);
+                        if(server->exit_received)break;
                     } else {
                         lsp_log("Failed to parse JSON message");
                     }

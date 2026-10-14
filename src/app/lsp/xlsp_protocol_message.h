@@ -33,4 +33,7 @@ XR_FUNC const char *xlsp_request_id_debug(const XlspRequestId *);
  * A missing result becomes JSON null. NONE is allowed only for error ids. */
 XR_FUNC XlspProtocolStatus xlsp_protocol_response(const XlspRequestId *,XrJsonValue **,XrJsonValue **);
 XR_FUNC XlspProtocolStatus xlsp_protocol_error(const XlspRequestId *,int32_t,const char *,XrJsonValue **);
+/* An empty id creates a notification; otherwise it must be valid. Params are
+ * an optional object/array and transfer only with the complete call envelope. */
+XR_FUNC XlspProtocolStatus xlsp_protocol_call(const XlspRequestId *,const char *,XrJsonValue **,XrJsonValue **);
 #endif // XLSP_PROTOCOL_MESSAGE_H

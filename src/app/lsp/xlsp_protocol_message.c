@@ -112,3 +112,16 @@ XR_FUNC XlspProtocolStatus xlsp_protocol_error(const XlspRequestId *id,int32_t c
     if(!message_put(object,"error",error)){xjson_free(object);return XLSP_PROTOCOL_OUT_OF_MEMORY;}
     *out=object;return XLSP_PROTOCOL_OK;
 }
+XR_FUNC XlspProtocolStatus xlsp_protocol_call(const XlspRequestId *id,const char *method,XrJsonValue **params,XrJsonValue **out) {
+    if(!method||!*method||!xr_utf8_validate(method,strlen(method))||!params||!out||*out||params==out||
+       (id&&!id_empty(id)&&!xlsp_request_id_valid(id))||
+       (*params&&(*params)->type!=XR_JSON_OBJECT&&(*params)->type!=XR_JSON_ARRAY))return XLSP_PROTOCOL_BAD_ARGUMENT;
+    XrJsonValue *object=xjson_new_object();if(!object)return XLSP_PROTOCOL_OUT_OF_MEMORY;
+    if(!message_put(object,"jsonrpc",xjson_new_string("2.0"))||
+       ((id&&!id_empty(id))&&!message_put(object,"id",xlsp_request_id_to_json(id)))||
+       !message_put(object,"method",xjson_new_string(method))||
+       (*params&&!message_take(object,"params",params))) {
+        xjson_free(object);return XLSP_PROTOCOL_OUT_OF_MEMORY;
+    }
+    *out=object;return XLSP_PROTOCOL_OK;
+}

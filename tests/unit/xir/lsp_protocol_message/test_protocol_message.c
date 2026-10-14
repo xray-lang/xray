@@ -109,8 +109,47 @@ static void response_cases(bool error) {
     CHECK(strstr(encoded,"a\\u0000b"));lsp_json_free(encoded);xjson_free(out);CHECK(!lsp_json_live&&!lsp_json_bytes);
     printf("LSP exact id/error=%u, atomic real JSON FI=%zu, detached final-key failure, producer death, physical=0/0\n",(unsigned)error,sites);
 }
+static void call_facts(XrJsonValue *value,bool request) {
+    CHECK(value&&value->type==XR_JSON_OBJECT&&value->as.object.count==(request?4:3));
+    CHECK(!strcmp(xjson_get_string(value,"jsonrpc"),"2.0")&&!strcmp(xjson_get_string(value,"method"),"$/progress"));
+    CHECK(!xjson_get(value,"result")&&!xjson_get(value,"error"));
+    XrJsonValue *id=xjson_get(value,"id");
+    if(request)CHECK(id&&id->type==XR_JSON_STRING&&id->string_len==sizeof(identity_bytes)&&!memcmp(id->as.string,identity_bytes,sizeof(identity_bytes)));
+    else CHECK(!id);
+    CHECK(!strcmp(xjson_get_string(xjson_get_object(value,"params"),"value"),"retained result"));
+}
+static void call_cases(bool request) {
+    XlspRequestId id=identity();size_t sites=0;
+    for(size_t probe=0;probe<=sites;++probe) {
+        XrJsonValue *params=response_result(),*saved=params,*out=NULL;size_t live=lsp_json_live,bytes=lsp_json_bytes;
+        lsp_json_calls=0;lsp_json_fail=probe?probe-1:SIZE_MAX;lsp_json_injected=false;
+        XlspProtocolStatus status=xlsp_protocol_call(request?&id:NULL,"$/progress",&params,&out);
+        if(!probe){CHECK(status==XLSP_PROTOCOL_OK&&out&&!params);sites=lsp_json_calls;CHECK(sites);call_facts(out,request);}
+        else {
+            CHECK(status==XLSP_PROTOCOL_OUT_OF_MEMORY&&lsp_json_injected&&!out&&params==saved&&live==lsp_json_live&&bytes==lsp_json_bytes);
+            CHECK(!strcmp(xjson_get_string(params,"value"),"retained result"));
+        }
+        lsp_json_fail=SIZE_MAX;lsp_json_injected=false;xjson_free(out);xjson_free(params);CHECK(!lsp_json_live&&!lsp_json_bytes);
+    }
+    XrJsonValue *params=response_result(),*out=xjson_new_null(),*occupied=out;size_t before=lsp_json_calls;
+    CHECK(xlsp_protocol_call(request?&id:NULL,"$/progress",&params,&out)==XLSP_PROTOCOL_BAD_ARGUMENT&&out==occupied&&before==lsp_json_calls);
+    xjson_free(out);out=NULL;
+    CHECK(xlsp_protocol_call(request?&id:NULL,"$/progress",&params,&out)==XLSP_PROTOCOL_OK&&!params);
+    memset(id.as.string,'?',id.string_length);xlsp_request_id_free(&id);call_facts(out,request);xjson_free(out);out=NULL;
+    params=xjson_new_number(7);XrJsonValue *saved=params;before=lsp_json_calls;
+    CHECK(xlsp_protocol_call(NULL,"$/progress",&params,&out)==XLSP_PROTOCOL_BAD_ARGUMENT&&params==saved&&!out&&before==lsp_json_calls);
+    xjson_free(params);params=NULL;
+    CHECK(xlsp_protocol_call(NULL,"",&params,&out)==XLSP_PROTOCOL_BAD_ARGUMENT&&!out);
+    CHECK(xlsp_protocol_call(NULL,"\xc0\xaf",&params,&out)==XLSP_PROTOCOL_BAD_ARGUMENT&&!out);
+    CHECK(xlsp_protocol_call(NULL,"$/progress",&params,&out)==XLSP_PROTOCOL_OK&&out->as.object.count==2&&!xjson_get(out,"params")&&!xjson_get(out,"id"));
+    xjson_free(out);out=NULL;params=xjson_new_array();
+    CHECK(xlsp_protocol_call(NULL,"$/progress",&params,&out)==XLSP_PROTOCOL_OK&&!params&&xjson_get(out,"params")->type==XR_JSON_ARRAY);
+    xjson_free(out);CHECK(!id_live&&!id_bytes&&!lsp_json_live&&!lsp_json_bytes);
+    printf("LSP outgoing request=%u, atomic real JSON FI=%zu, params retained on failure, producer death, physical=0/0\n",(unsigned)request,sites);
+}
 int main(void) {
     identity_cases();response_cases(false);response_cases(true);
+    call_cases(false);call_cases(true);
     XlspRequestId number={.kind=XLSP_ID_NUMBER,.as.number=0};XrJsonValue *result=NULL,*out=NULL;
     CHECK(xlsp_protocol_response(&number,&result,&out)==XLSP_PROTOCOL_OK&&xjson_get(out,"result")->type==XR_JSON_NULL);xjson_free(out);out=NULL;
     CHECK(xlsp_protocol_error(NULL,-32600,"Invalid Request",&out)==XLSP_PROTOCOL_OK&&xjson_get(out,"id")->type==XR_JSON_NULL);xjson_free(out);
