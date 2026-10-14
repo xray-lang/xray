@@ -13,8 +13,8 @@
 
 #include "xcli.h"
 #include "xcli_spec.h"
-#include "xcli_canonical_source.h"
-#include "xcli_source_paths.h"
+#include "../../api/xsource_compile.h"
+#include "../../api/xsource_paths.h"
 #include "../../base/xmalloc.h"
 #include "../../base/xchecks.h"
 #include <stdio.h>
@@ -38,35 +38,35 @@ XR_FUNC int cmd_deps(const XrCliInvocation *inv) {
     else if (xr_cli_opt_present(&inv->options, "shell"))
         format = OUTPUT_SHELL;
 
-    XrCompileResourceLimits limits = xr_cli_compile_default_resource_limits();
+    XrCompileResourceLimits limits = xr_source_compile_default_resource_limits();
     XrCompileResources *resources = NULL;
     if (xr_compile_resources_new(&limits, &resources) != XR_COMPILE_RESOURCE_OK) {
         xr_cli_error("deps", "cannot initialize compiler resources");
         return XR_CLI_EXIT_INTERNAL;
     }
     XrXirCompileContext context = {resources, xr_xir_compile_default_limits()};
-    XrCliSourcePaths paths = {0}; XrCliSourcePathsDiagnostic path_diagnostic = {0};
-    XrCliCompileSourceDiagnostic diagnostic = {0}; XrXirSourceProduct *product = NULL;
-    XrCliCompileSourceStatus status = xr_cli_compile_source_paths(resources, input_file,
+    XrSourcePaths paths = {0}; XrSourcePathsDiagnostic path_diagnostic = {0};
+    XrSourceCompileDiagnostic diagnostic = {0}; XrXirSourceProduct *product = NULL;
+    XrSourceCompileStatus status = xr_source_paths(resources, input_file,
         &paths, &path_diagnostic);
-    if (status == XR_CLI_COMPILE_SOURCE_OK) {
-        XrCliCompileSourceRequest request = {&context, paths.entry, paths.stdlib, NULL,
-            xr_cli_compile_default_manifest_limits(), {XR_XIR_ARCH_X86_64, XR_XIR_VALUE_ABI_VERSION}};
-        status = xr_cli_compile_source_build(&request, &product, &diagnostic);
+    if (status == XR_SOURCE_COMPILE_OK) {
+        XrSourceCompileRequest request = {&context, paths.entry, paths.stdlib, NULL,
+            xr_source_compile_default_manifest_limits(), {XR_XIR_ARCH_X86_64, XR_XIR_VALUE_ABI_VERSION}, NULL};
+        status = xr_source_compile_build(&request, &product, &diagnostic);
     }
-    if (status != XR_CLI_COMPILE_SOURCE_OK) {
+    if (status != XR_SOURCE_COMPILE_OK) {
         char text[1024] = {0};
-        if (diagnostic.status != XR_CLI_COMPILE_SOURCE_OK) {
-            (void)xr_cli_compile_source_diagnostic_format(&diagnostic, text, sizeof(text));
+        if (diagnostic.status != XR_SOURCE_COMPILE_OK) {
+            (void)xr_source_compile_diagnostic_format(&diagnostic, text, sizeof(text));
             xr_cli_error("deps", "%s", text);
         } else xr_cli_error("deps", "source path lookup failed: %s",
-            xr_cli_compile_source_status_name(status));
+            xr_source_compile_status_name(status));
     }
-    xr_cli_compile_source_paths_free(&paths);
-    xr_cli_compile_source_diagnostic_free(&diagnostic);
+    xr_source_paths_free(&paths);
+    xr_source_compile_diagnostic_free(&diagnostic);
     xr_compile_resources_release(resources);
     const XrXirSourceDependencies *bundle = xr_xir_compile_source_product_dependencies(product);
-    if (status != XR_CLI_COMPILE_SOURCE_OK || !bundle) {
+    if (status != XR_SOURCE_COMPILE_OK || !bundle) {
         xr_cli_error("deps", "dependency analysis failed for '%s'", input_file);
         xr_xir_compile_source_product_free(product);
         return XR_CLI_EXIT_FAIL;

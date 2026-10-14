@@ -1,6 +1,6 @@
 /* Copyright (c) 2026 Xinglei Xu. MIT License. */
 #include "app/lsp/xlsp_source_open.h"
-#include "app/cli/xcli_canonical_source.h"
+#include "api/xsource_compile.h"
 #include "base/xwindows_utf8.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -67,7 +67,7 @@ done:
 }
 static void open_json_cases(const char *root_uri,const char *lib_uri) {
     for(unsigned mode=1;mode<=2;++mode) {
-        XrCompileResourceLimits limits=xr_cli_compile_default_resource_limits();XrCompileResources *resources=sdk_ledger(&limits);
+        XrCompileResourceLimits limits=xr_source_compile_default_resource_limits();XrCompileResources *resources=sdk_ledger(&limits);
         XrXirCompileContext context={resources,xr_xir_compile_default_limits()};
         const char *text=mode==1?open_bad_syntax:open_bad_type;
         XlspSourceDocument inputs[2]={{root_uri,text,strlen(root_uri),strlen(text),1},{lib_uri,open_library,strlen(lib_uri),sizeof(open_library)-1,7}};
@@ -95,7 +95,7 @@ static void open_json_cases(const char *root_uri,const char *lib_uri) {
 #include "lsp_open_diagnostic_routing.h"
 static int open_run(int argc,char **argv) {
     (void)sdk_fixture_malloc;(void)sdk_fixture_free;(void)sdk_ledger;(void)sdk_unlimited;
-    CHECK(argc==3||argc==4);XrCompileResourceLimits limits=xr_cli_compile_default_resource_limits();
+    CHECK(argc==3||argc==4);XrCompileResourceLimits limits=xr_source_compile_default_resource_limits();
     if(argc==4) {
         bool faults=!strcmp(argv[3],"--diagnostic-routing-faults");
         CHECK(faults||!strcmp(argv[3],"--diagnostic-routing"));

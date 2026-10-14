@@ -56,7 +56,7 @@ done:
     xjson_free(params);CHECK(!lsp_json_live&&!lsp_json_bytes);return status;
 }
 static void routing_json_cases(const char *root_uri,const char *lib_uri) {
-    XrCompileResourceLimits limits=xr_cli_compile_default_resource_limits();
+    XrCompileResourceLimits limits=xr_source_compile_default_resource_limits();
     XrCompileResources *resources=sdk_ledger(&limits);XrXirCompileContext context={resources,xr_xir_compile_default_limits()};
     XlspSourceDocument inputs[2]={{root_uri,open_root,strlen(root_uri),sizeof(open_root)-1,1},
         {lib_uri,routing_bad_type,strlen(lib_uri),sizeof(routing_bad_type)-1,7}};
@@ -81,7 +81,7 @@ static void routing_json_cases(const char *root_uri,const char *lib_uri) {
     printf("LSP routed diagnostic actual JSON sites=%zu, occupied/producer death, physical=0/0\n",sites);
 }
 static void routing_run(const char *root_uri,const char *lib_uri,bool faults) {
-    XrCompileResourceLimits limits=xr_cli_compile_default_resource_limits();
+    XrCompileResourceLimits limits=xr_source_compile_default_resource_limits();
     for(unsigned mode=0;mode<4;++mode) {
         XrXirStatus expected=mode==3?XR_XIR_UNRESOLVED:XR_XIR_OK;
         size_t sites=0;XrCompileResourceStats stats={0};

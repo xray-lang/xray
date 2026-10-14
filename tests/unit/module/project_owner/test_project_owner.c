@@ -6,7 +6,7 @@
  */
 #include "../../xir/xir_construction_fixture.h"
 #include "module/xproject.h"
-#include "app/cli/xcli_graph_authority.h"
+#include "api/xsource_authority.h"
 #include "app/cli/xcli_fs.h"
 #include "xir/xxir_library_catalog.h"
 #include "runtime/value/xstruct_layout.h"
@@ -103,12 +103,12 @@ static XrManifestStatus pipeline(XrCompileResources *owner, bool validate) {
         if(status==XR_MANIFEST_OK&&validate)CHECK(symbol&&strcmp(symbol->native_name,"owner_answer")==0);
     }
     if(status==XR_MANIFEST_OK) {
-        XrXirCompileContext context={owner,xr_xir_compile_default_limits()};XrCliGraphAuthority *graph=NULL;
-        status=xr_cli_compile_graph_authority_open(&context,entry_path,NULL,&parse_limits,&graph,&diagnostic);
-        if(status==XR_MANIFEST_OK&&validate)CHECK(xr_cli_compile_graph_authority_project(graph)&&
-            xr_cli_compile_graph_authority_entry(graph)->kind==XR_MODULE_IDENTITY_PROJECT&&
-            xr_lockfile_uses_policy(xr_cli_compile_graph_authority_lockfile(graph),&policy));
-        xr_cli_compile_graph_authority_close(graph);
+        XrXirCompileContext context={owner,xr_xir_compile_default_limits()};XrSourceAuthority *graph=NULL;
+        status=xr_source_authority_open(&context,entry_path,NULL,&parse_limits,&graph,&diagnostic);
+        if(status==XR_MANIFEST_OK&&validate)CHECK(xr_source_authority_project(graph)&&
+            xr_source_authority_entry(graph)->kind==XR_MODULE_IDENTITY_PROJECT&&
+            xr_lockfile_uses_policy(xr_source_authority_lockfile(graph),&policy));
+        xr_source_authority_close(graph);
     }
     xr_project_free_owned(project);
     if(status==XR_MANIFEST_OK&&validate) {
@@ -228,13 +228,13 @@ static void ownership_rejections(void) {
     CHECK(xr_compile_resources_new(&unlimited,&two)==XR_COMPILE_RESOURCE_OK);
     XrXirCompileContext a={one,xr_xir_compile_default_limits()},b={two,xr_xir_compile_default_limits()};XrXirLibraryCatalog *catalog=NULL;
     catalog=real_catalog(&a);
-    XrCliGraphAuthority *authority=NULL;before=attempts;
-    CHECK(xr_cli_compile_graph_authority_open(&b,entry_path,catalog,&parse_limits,&authority,NULL)==XR_MANIFEST_BAD_ARGUMENT&&!authority&&before==attempts);
-    CHECK(xr_cli_compile_graph_authority_open(&a,entry_path,catalog,&parse_limits,&authority,NULL)==XR_MANIFEST_OK);
-    CHECK(xr_cli_compile_graph_authority_catalog(authority)==catalog&&xr_cli_compile_graph_authority_context(authority)->resources==one);
+    XrSourceAuthority *authority=NULL;before=attempts;
+    CHECK(xr_source_authority_open(&b,entry_path,catalog,&parse_limits,&authority,NULL)==XR_MANIFEST_BAD_ARGUMENT&&!authority&&before==attempts);
+    CHECK(xr_source_authority_open(&a,entry_path,catalog,&parse_limits,&authority,NULL)==XR_MANIFEST_OK);
+    CHECK(xr_source_authority_catalog(authority)==catalog&&xr_source_authority_context(authority)->resources==one);
     xr_compile_resources_release(one);xr_compile_resources_release(two);
-    CHECK(xr_cli_compile_graph_authority_entry(authority)->kind==XR_MODULE_IDENTITY_PROJECT);
-    xr_cli_compile_graph_authority_close(authority);xr_xir_compile_library_catalog_free(catalog);CHECK(!physical_live&&!block_count);
+    CHECK(xr_source_authority_entry(authority)->kind==XR_MODULE_IDENTITY_PROJECT);
+    xr_source_authority_close(authority);xr_xir_compile_library_catalog_free(catalog);CHECK(!physical_live&&!block_count);
     puts("foreign DOM/callback table/Catalog and producer release lifetime PASS");
 }
 static const char *const rejected[] = {
@@ -389,17 +389,17 @@ static void unc_gates(const XrOsIoPolicy *policy,const XrXirCompileContext *cont
     if(attributes==INVALID_FILE_ATTRIBUTES) {
         printf("UNC administrative share NOT_RUN: Win32 error %lu\n",(unsigned long)GetLastError());return;
     }
-    XrProject *project=NULL;XrCliGraphAuthority *authority=NULL;
+    XrProject *project=NULL;XrSourceAuthority *authority=NULL;
     CHECK(xr_project_load_owned(policy,root,&parse_limits,&project,NULL)==XR_MANIFEST_OK&&project->native_plan);
     CHECK(xr_project_uses_policy(project,policy));xr_project_free_owned(project);
     CHECK(snprintf(entry,sizeof(entry),"%s\\sub\\inner.xr",root)>0);
-    CHECK(xr_cli_compile_graph_authority_open(context,entry,NULL,&parse_limits,&authority,NULL)==XR_MANIFEST_OK);
-    CHECK(xr_cli_compile_graph_authority_entry(authority)->kind==XR_MODULE_IDENTITY_PROJECT);
-    xr_cli_compile_graph_authority_close(authority);
+    CHECK(xr_source_authority_open(context,entry,NULL,&parse_limits,&authority,NULL)==XR_MANIFEST_OK);
+    CHECK(xr_source_authority_entry(authority)->kind==XR_MODULE_IDENTITY_PROJECT);
+    xr_source_authority_close(authority);
     CHECK(snprintf(share,sizeof(share),"\\\\localhost\\%c$\\",root_path[0])>0);
     CHECK(snprintf(manifest,sizeof(manifest),"%sxray.toml",share)>0);
     attributes=GetFileAttributesA(manifest);char *found=NULL;
-    XrOsIoStatus status=xr_cli_find_project_root_owned(policy,share,&found);
+    XrOsIoStatus status=xr_source_find_project_root(policy,share,&found);
     CHECK(status==(attributes==INVALID_FILE_ATTRIBUTES?XR_OS_IO_NOT_FOUND:XR_OS_IO_OK));
     if(found)policy->free(policy->context,found);
     puts("actual UNC project/native/GraphAuthority and share-root traversal PASS");
@@ -407,29 +407,29 @@ static void unc_gates(const XrOsIoPolicy *policy,const XrXirCompileContext *cont
 static void path_and_schema_gates(const char *script_path) {
     reset(SIZE_MAX);XrCompileResources *owner=NULL;CHECK(xr_compile_resources_new(&unlimited,&owner)==XR_COMPILE_RESOURCE_OK);
     XrOsIoPolicy policy=xr_compile_io_policy(owner);XrXirCompileContext context={owner,xr_xir_compile_default_limits()};
-    XrCliGraphAuthority *graph=NULL;XrProject *project=NULL;char *found=NULL;char path[4096];
-    CHECK(xr_cli_compile_graph_authority_open(&context,"relative.xr",NULL,&parse_limits,&graph,NULL)==XR_MANIFEST_BAD_ARGUMENT&&!graph);
-    CHECK(xr_cli_compile_graph_authority_open(&context,"/drive-relative.xr",NULL,&parse_limits,&graph,NULL)==XR_MANIFEST_BAD_ARGUMENT&&!graph);
+    XrSourceAuthority *graph=NULL;XrProject *project=NULL;char *found=NULL;char path[4096];
+    CHECK(xr_source_authority_open(&context,"relative.xr",NULL,&parse_limits,&graph,NULL)==XR_MANIFEST_BAD_ARGUMENT&&!graph);
+    CHECK(xr_source_authority_open(&context,"/drive-relative.xr",NULL,&parse_limits,&graph,NULL)==XR_MANIFEST_BAD_ARGUMENT&&!graph);
     CHECK(xr_project_load_owned(&policy,"/drive-relative",&parse_limits,&project,NULL)==XR_MANIFEST_BAD_ARGUMENT&&!project);
-    CHECK(xr_cli_find_project_root_owned(&policy,".",&found)==XR_OS_IO_BAD_ARGUMENT&&!found);
+    CHECK(xr_source_find_project_root(&policy,".",&found)==XR_OS_IO_BAD_ARGUMENT&&!found);
     char drive[]={root_path[0],':','\\',0},root_manifest[]={root_path[0],':','\\','x','r','a','y','.','t','o','m','l',0};
-    DWORD attr=GetFileAttributesA(root_manifest);XrOsIoStatus drive_status=xr_cli_find_project_root_owned(&policy,drive,&found);
+    DWORD attr=GetFileAttributesA(root_manifest);XrOsIoStatus drive_status=xr_source_find_project_root(&policy,drive,&found);
     CHECK(drive_status==(attr==INVALID_FILE_ATTRIBUTES?XR_OS_IO_NOT_FOUND:XR_OS_IO_OK));
     if(found){CHECK(!strcmp(found,drive));xr_compile_resources_free(found);found=NULL;}
-    CHECK(xr_cli_find_project_root_owned(&policy,entry_path,&found)==XR_OS_IO_BAD_ARGUMENT&&!found);
+    CHECK(xr_source_find_project_root(&policy,entry_path,&found)==XR_OS_IO_BAD_ARGUMENT&&!found);
     snprintf(path,sizeof(path),"%s\\absent.xr",root_path);
-    CHECK(xr_cli_compile_graph_authority_open(&context,path,NULL,&parse_limits,&graph,NULL)==XR_MANIFEST_NOT_FOUND&&!graph);
-    CHECK(xr_cli_compile_graph_authority_open(&context,script_path,NULL,&parse_limits,&graph,NULL)==XR_MANIFEST_OK);
-    CHECK(!xr_cli_compile_graph_authority_project(graph)&&xr_cli_compile_graph_authority_entry(graph)->kind==XR_MODULE_IDENTITY_SCRIPT);
-    xr_cli_compile_graph_authority_close(graph);graph=NULL;
+    CHECK(xr_source_authority_open(&context,path,NULL,&parse_limits,&graph,NULL)==XR_MANIFEST_NOT_FOUND&&!graph);
+    CHECK(xr_source_authority_open(&context,script_path,NULL,&parse_limits,&graph,NULL)==XR_MANIFEST_OK);
+    CHECK(!xr_source_authority_project(graph)&&xr_source_authority_entry(graph)->kind==XR_MODULE_IDENTITY_SCRIPT);
+    xr_source_authority_close(graph);graph=NULL;
     snprintf(path,sizeof(path),"%s\\bad\\main.xr",root_path);
-    CHECK(xr_cli_compile_graph_authority_open(&context,path,NULL,&parse_limits,&graph,NULL)==XR_MANIFEST_INVALID&&!graph);
+    CHECK(xr_source_authority_open(&context,path,NULL,&parse_limits,&graph,NULL)==XR_MANIFEST_INVALID&&!graph);
     snprintf(path,sizeof(path),"%s\\package",root_path);
     CHECK(xr_project_load_owned(&policy,path,&parse_limits,&project,NULL)==XR_MANIFEST_OK);
     char package_entry[4096];CHECK(snprintf(package_entry,sizeof(package_entry),"%s\\main.xr",path)>0);
-    CHECK(xr_cli_compile_graph_authority_open(&context,package_entry,NULL,&parse_limits,&graph,NULL)==XR_MANIFEST_OK);
-    CHECK(xr_cli_compile_graph_authority_entry(graph)->kind==XR_MODULE_IDENTITY_PACKAGE&&!xr_cli_compile_graph_authority_lockfile(graph));
-    xr_cli_compile_graph_authority_close(graph);graph=NULL;
+    CHECK(xr_source_authority_open(&context,package_entry,NULL,&parse_limits,&graph,NULL)==XR_MANIFEST_OK);
+    CHECK(xr_source_authority_entry(graph)->kind==XR_MODULE_IDENTITY_PACKAGE&&!xr_source_authority_lockfile(graph));
+    xr_source_authority_close(graph);graph=NULL;
     XrProjectAuthority *authority=NULL;CHECK(xr_project_authority_build_owned(project,&authority,NULL)==XR_MANIFEST_OK);
     CHECK(strcmp(xr_project_authority_view(authority)->namespace_id,"owner/package@1.2.3")==0);
     xr_project_authority_free_owned(authority);xr_project_free_owned(project);project=NULL;authority=NULL;
