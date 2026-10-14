@@ -49,6 +49,8 @@ typedef struct ErrorFlow {
     EffectTerms *terms;
     uint64_t *states, *work, *edge, *snapshot, *escaping;
     uint8_t *reachable;
+    uint32_t *queue,front,back,pending;
+    bool scheduling;
     uint32_t *roots, *cells, *slots, *active;
     ErrorCellType *cell_types;
     const EffectBodyMaterial *cell_material;
@@ -62,6 +64,7 @@ typedef struct ErrorFlow {
     uint32_t invocation,summary_count;
     bool changed, summary_changed, restart;
 } ErrorFlow;
+#include "xxir_effect_error_cfg.inc.c"
 static XrXirStatus error_invocation_contexts_new(ErrorFlow *flow,ErrorInvocationContexts **output);
 static void error_invocation_contexts_free(ErrorInvocationContexts *contexts);
 static XrXirStatus error_invocation_functions(ErrorFlow *flow);
@@ -691,7 +694,10 @@ static XrXirStatus error_edge(ErrorFlow *flow, uint32_t from, uint32_t to,
         changed = true;
     }
     if (changed) {
-        flow->reachable[to] |= ERROR_BLOCK_PENDING;
+        if (flow->scheduling) {
+            XrXirStatus queued=error_cfg_enqueue(flow,to);
+            if (queued!=XR_XIR_OK) return queued;
+        } else flow->reachable[to] |= ERROR_BLOCK_PENDING;
         flow->changed = true;
     }
     return XR_XIR_OK;
@@ -813,6 +819,7 @@ static void error_storage_free(ErrorFlow *flow) {
     flow->cell_function=flow->cell_type_count=0;
     flow->zero = NULL; flow->cell_count = flow->active_count = 0;
     flow->reachable = NULL; flow->escaping = NULL;
+    flow->queue=NULL;flow->front=flow->back=flow->pending=0;flow->scheduling=false;
 }
 static XrXirStatus error_storage_prepare(ErrorFlow *flow, size_t bytes) {
     if (!bytes) return XR_XIR_BAD_STRUCTURE;
@@ -829,6 +836,7 @@ static XrXirStatus error_storage_prepare(ErrorFlow *flow, size_t bytes) {
     return XR_XIR_OK;
 }
 static XrXirStatus error_function(ErrorFlow *flow, uint32_t f) {
+    flow->scheduling=false;flow->front=flow->back=flow->pending=0;
     flow->function_index=f;
     XrXirStatus head_status=effect_body_request_head(&flow->body,f,&flow->head);
     if (head_status!=XR_XIR_OK) return head_status;
@@ -841,7 +849,8 @@ static XrXirStatus error_function(ErrorFlow *flow, uint32_t f) {
         return XR_XIR_BAD_STRUCTURE;
     flow->values = flow->function->parameter_count + flow->function->instruction_count;
     uint64_t words = flow->effects->words, rows = (uint64_t)flow->function->block_count + 3;
-    uint64_t minimum_extra = (uint64_t)flow->values * 2 * sizeof(uint32_t) + flow->function->block_count;
+    uint64_t minimum_extra = (uint64_t)flow->values * 2 * sizeof(uint32_t) +
+        (uint64_t)flow->function->block_count * (1+sizeof(uint32_t));
     /* At least one writable words row and a separate zero vector are required
      * even when no SSA value can carry error facts. Reject resource-impossible
      * metadata before reading it, without charging a fictitious allocation. */
@@ -890,6 +899,11 @@ static XrXirStatus error_function(ErrorFlow *flow, uint32_t f) {
     if (extra > SIZE_MAX - zero_bytes ||
         stride > (SIZE_MAX - zero_bytes - extra) / sizeof(uint64_t) / rows) { status = XR_XIR_BUDGET;goto membership_done; }
     uint64_t bytes = stride * rows * sizeof(uint64_t) + zero_bytes + extra;
+    if (bytes>SIZE_MAX-3) { status=XR_XIR_BUDGET;goto membership_done; }
+    uint64_t queue_offset=(bytes+3)&~UINT64_C(3);
+    uint64_t queue_bytes=(uint64_t)flow->function->block_count*sizeof(uint32_t);
+    if (queue_bytes>SIZE_MAX-queue_offset) { status=XR_XIR_BUDGET;goto membership_done; }
+    bytes=queue_offset+queue_bytes;
     if (!xir_compile_work(flow->remaining, stride * rows + words + flow->values + flow->function->block_count))
         { status = XR_XIR_BUDGET;goto membership_done; }
     flow->stride = (size_t)stride;
@@ -907,6 +921,7 @@ static XrXirStatus error_function(ErrorFlow *flow, uint32_t f) {
             flow->cell_types=(ErrorCellType *)(flow->cells+flow->cell_count);
         }
         flow->reachable = (uint8_t *)(flow->cells + flow->cell_count)+(size_t)cell_bytes;
+        flow->queue=(uint32_t *)(flow->storage+(size_t)queue_offset);
         /* Charge the temporary byte scan and all map, inverse and Cell writes. */
         if (!xir_compile_work(flow->remaining, (uint64_t)flow->values * 2 + flow->active_count + flow->cell_count))
             { status = XR_XIR_BUDGET;goto membership_done; }
@@ -939,7 +954,7 @@ static XrXirStatus error_function(ErrorFlow *flow, uint32_t f) {
         flow->escaping = flow->effects->errors + (size_t)summary * flow->effects->words;
         status = error_roots(flow,membership,sources);
         xr_compile_resources_free(heap_membership);heap_membership = NULL;
-        flow->reachable[0] = ERROR_BLOCK_REACHABLE | ERROR_BLOCK_PENDING;
+        flow->reachable[0] = ERROR_BLOCK_REACHABLE;
         for (uint32_t p = 0; p < flow->function->parameter_count && status == XR_XIR_OK; ++p) {
             if (!xir_compile_work(flow->remaining, flow->effects->atom_count + 1)) status = XR_XIR_BUDGET;
             else {
@@ -947,17 +962,7 @@ static XrXirStatus error_function(ErrorFlow *flow, uint32_t f) {
                 if (set) error_type(flow, flow->function->parameters[p], set);
             }
         }
-        do {
-            flow->changed = false;
-            for (uint32_t b = 0; b < flow->function->block_count && status == XR_XIR_OK && !flow->restart; ++b) {
-                if (!xir_compile_work(flow->remaining, 1)) status = XR_XIR_BUDGET;
-                else if (flow->reachable[b] & ERROR_BLOCK_PENDING) {
-                    /* Clear before transfer so self/back edges can schedule it again. */
-                    flow->reachable[b] &= (uint8_t)~ERROR_BLOCK_PENDING;
-                    status = error_block(flow, b,zero_copy);
-                }
-            }
-        } while (status == XR_XIR_OK && flow->changed && !flow->restart);
+        if (status==XR_XIR_OK) status=error_cfg_solve(flow,zero_copy);
     }
 membership_done:
     xr_compile_resources_free(heap_membership);

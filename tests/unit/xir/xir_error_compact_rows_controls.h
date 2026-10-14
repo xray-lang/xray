@@ -84,7 +84,7 @@ static void pc_compact_bulk(void) {
     CHECK(error_function(&flow,1)==XR_XIR_OK && e.errors[1]==4);
     CHECK(pc_stats(&c).work-before<UINT64_C(25000));
     CHECK(flow.values==545 && flow.active_count==1 && flow.active[0]==512);
-    CHECK(flow.stride==1 && e.words==1 && flow.storage_capacity==4684);
+    CHECK(flow.stride==1 && e.words==1 && flow.storage_capacity==pc_cfg_storage_extent(4684,EE_BLOCKS));
     CHECK(flow.zero[0]==0 && flow.zero!=flow.work && flow.zero!=flow.snapshot);
     for (uint32_t v=0;v<545;++v) {
         CHECK(flow.slots[v]==(v==512 ? 0u : UINT32_MAX));
@@ -106,7 +106,7 @@ static void pc_compact_zero_private(void) {
         pc_private_begin(&c,&f,&e,&terms,&flow);e.errors[2]=8;
         CHECK(error_function(&flow,1)==XR_XIR_OK && e.errors[1]==8);
         CHECK(!flow.active_count && flow.stride==1 && e.words==1 && flow.zero[0]==0);
-        CHECK(flow.storage_capacity==(branch ? 99u : 57u));
+        CHECK(flow.storage_capacity==pc_cfg_storage_extent(branch ? 99u : 57u,f.functions[1].block_count));
         CHECK(flow.zero!=flow.snapshot && flow.zero!=flow.work && flow.snapshot[0]==8);
         CHECK(flow.work[0]==0 && flow.states[0]==0);
         for (uint32_t b=0;b<f.functions[1].block_count;++b) CHECK(flow.reachable[b]==1);
@@ -127,7 +127,7 @@ static void pc_compact_two_words(void) {
         pc_private_begin(&c,&f,&e,&terms,&flow);
         CHECK(error_function(&flow,1)==XR_XIR_OK && e.atom_count==70 && e.words==2);
         CHECK(e.errors[2]==0 && e.errors[3]==1 && flow.active_count==1 && flow.active[0]==512);
-        CHECK(flow.stride==2 && flow.storage_capacity==4972);
+        CHECK(flow.stride==2 && flow.storage_capacity==pc_cfg_storage_extent(4972,EE_BLOCKS));
         CHECK(flow.zero[0]==0 && flow.zero[1]==0 && error_read(&flow,flow.work,0)==flow.zero);
         uint64_t *dest=flow.states+(size_t)30*flow.stride;
         memset(dest,0,2*sizeof(uint64_t));flow.reachable[30]=0;flow.changed=false;
@@ -151,20 +151,20 @@ static void pc_compact_reuse(void) {
     XrXirCompileContext c=pc_owner(pc_caps());uint64_t baseline=pc_stats(&c).live_bytes;
     XrXirEffects e={0};EffectTerms terms={0};ErrorFlow flow={0};flow.remaining=&c;
     pc_private_begin(&c,&f,&e,&terms,&flow);
-    CHECK(error_function(&flow,1)==XR_XIR_OK && flow.storage_capacity==4972);
+    CHECK(error_function(&flow,1)==XR_XIR_OK && flow.storage_capacity==pc_cfg_storage_extent(4972,EE_BLOCKS));
     uint8_t *storage=flow.storage;size_t allocations=attempts;
     pc_compact_zero_fixture(&f,false);pc_compact_variants(&f,variants,names);
     CHECK(xir_fixture_verify(&c, &f.module, NULL)==XR_XIR_OK);
-    allocations=attempts;memset(storage,0xff,4972);e.errors[2]=e.errors[3]=0;e.errors[4]=8;e.errors[5]=0;
+    allocations=attempts;memset(storage,0xff,flow.storage_capacity);e.errors[2]=e.errors[3]=0;e.errors[4]=8;e.errors[5]=0;
     CHECK(error_function(&flow,1)==XR_XIR_OK && e.errors[2]==8 && e.errors[3]==0);
-    CHECK(flow.storage==storage && flow.storage_capacity==4972 && !flow.active_count && flow.stride==2);
+    CHECK(flow.storage==storage && flow.storage_capacity==pc_cfg_storage_extent(4972,EE_BLOCKS) && !flow.active_count && flow.stride==2);
     CHECK(flow.zero[0]==0 && flow.zero[1]==0 && flow.snapshot[0]==8 && flow.snapshot[1]==0);
     CHECK(attempts==allocations && !error_value(&flow,flow.work,0));
     pc_compact_wide_fixture(&f,variants,names);
     CHECK(xir_fixture_verify(&c, &f.module, NULL)==XR_XIR_OK);
-    allocations=attempts;memset(storage,0xff,4972);e.errors[2]=e.errors[3]=0;
+    allocations=attempts;memset(storage,0xff,flow.storage_capacity);e.errors[2]=e.errors[3]=0;
     CHECK(error_function(&flow,1)==XR_XIR_OK && e.errors[2]==0 && e.errors[3]==1);
-    CHECK(flow.storage==storage && flow.storage_capacity==4972 && flow.active_count==1 && flow.slots[512]==0);
+    CHECK(flow.storage==storage && flow.storage_capacity==pc_cfg_storage_extent(4972,EE_BLOCKS) && flow.active_count==1 && flow.slots[512]==0);
     CHECK(flow.zero[0]==0 && flow.zero[1]==0 && attempts==allocations);
     pc_private_free(&flow,&terms,&e);pc_release(&c,baseline);
 }
