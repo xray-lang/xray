@@ -355,6 +355,8 @@ static XrXirValueStatus copy_frame_values(XrXirVmDebug *debug, const DebugFrame 
     XrXirValueAdmission *admission = xr_xir_call_admission(view);
     if (!admission) return XR_XIR_VALUE_BAD_ARGUMENT;
     for (uint32_t i = 0; i < count; ++i) if (live->known[i]) {
+        /* Verified layouts assign no value storage to root/place operands. */
+        if (live->point.layout->offsets[i] == UINT32_MAX) continue;
         XrXirType type = xr_xir_operand_type(function, i);
         if (type == XR_XIR_UNIT) continue;
         XrXirValue value = {(uint32_t)type, 0,
@@ -544,7 +546,7 @@ XR_FUNC void xir_vm_debug_after(XrXirVmDebug *debug, const XirVmDebugPoint *poin
     if (point->instruction >= function->instruction_count) return;
     const XrXirInstruction *op = &function->instructions[point->instruction];
     uint32_t id = function->parameter_count + point->instruction;
-    if (op->op == XR_XIR_LOCAL_UNINIT) frame->known[id] = 0;
+    if (point->layout->offsets[id] == UINT32_MAX || op->op == XR_XIR_LOCAL_UNINIT) frame->known[id] = 0;
     else if (action == XR_XIR_ACTION_CALL || action == XR_XIR_ACTION_AWAIT_TASK)
         frame->known[id] = 0;
     else if (action != XR_XIR_ACTION_FAULT && op->type != XR_XIR_UNIT && op->op != XR_XIR_LOCAL_UNINIT)
