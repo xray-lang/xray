@@ -9,6 +9,10 @@ def render(observation: dict) -> str:
         if value is not None:
             raise ValueError('null presence projection requires a frozen absent value')
         return 'true'
+    if projection == 'optional_payload':
+        if value is None:
+            raise ValueError('payload observation requires a frozen present value')
+        projection = None
     if projection is not None:
         raise ValueError('unknown semantic observation projection')
     if type(value) is bool:

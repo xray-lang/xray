@@ -35,7 +35,7 @@ fn test_guard_clause() {
     
     var p19Observed2 = divide(10, 2)
     assertEqual(p19Observed2, 5)
-    print(p19Observed2)
+    print(p19Observed2!)
     assertEqual(divide(10, 0), null)
     print((divide(10, 0)) == null)
 }

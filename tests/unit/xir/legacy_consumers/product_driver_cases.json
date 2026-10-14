@@ -10150,7 +10150,7 @@
       "id": "regression_core_review_0460_early_return_complete_observed",
       "oracle_id": "regression_core_review_0460_early_return",
       "source": "tests/unit/xir/legacy_consumers/fixtures/independent_named_observations/0460_early_return/root.xr",
-      "source_lf_sha256": "c59973010d6bbde5811cbf989f3b353c3f649cfd1ec5de759c4e9cf81d8dfa23",
+      "source_lf_sha256": "a323a79023dee0e98239c66c00ca53c84e6f5e12a38777d098e50c91102faca4",
       "entry": "test",
       "stdout_utf8": "3\n-1\n5\ntrue\nnegative\nzero\nsmall\nmedium\nlarge\ntrue\n0\n3\n2\n-1\nfalse\ntrue\n",
       "stderr_utf8": "",
@@ -10183,7 +10183,7 @@
             "test": "test_guard_clause",
             "expression": "divide(10, 2)",
             "expected": 5,
-            "projection": null,
+            "projection": "optional_payload",
             "original_line": 31
           },
           {
