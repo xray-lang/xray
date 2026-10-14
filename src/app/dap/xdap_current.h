@@ -1,0 +1,42 @@
+/*
+ * xray - Lightweight typed scripting with native concurrency
+ * https://www.xray-lang.org
+ * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
+ * Licensed under the MIT License
+ *
+ * xdap_current.h - Current Program/Instance debug control
+ */
+#ifndef XDAP_CURRENT_H
+#define XDAP_CURRENT_H
+#include "../../xir/xxir_vm_debug.h"
+typedef struct XdapCurrent XdapCurrent;
+typedef enum XdapCurrentState {
+    XDAP_CURRENT_RUNNING, XDAP_CURRENT_STOPPED, XDAP_CURRENT_WAITING, XDAP_CURRENT_ENDED
+} XdapCurrentState;
+typedef struct XdapCurrentResult {
+    XdapCurrentState state;
+    uint64_t debug_epoch, instance_epoch;
+    XrXirCallResult outcome;
+} XdapCurrentResult;
+/* Success takes the observer and constructs its authenticated target Instance.
+ * The caller keeps its Program reference. Failure preserves debug and output. */
+XR_FUNC XrXirValueStatus xdap_current_new(XrXirDomain *metadata,
+    XrXirVmDebug **debug, XrXirProgram *program, const XrXirInstanceConfig *config, XdapCurrent **output);
+XR_FUNC XrXirCallStatus xdap_current_start(XdapCurrent *session, uint32_t entry,
+    const XrXirValue *arguments, uint32_t count);
+/* Every actual VM transition uses the existing one-quantum driver. A stopped
+ * observer causes no further polls or target work until explicit continue. */
+XR_FUNC XrXirValueStatus xdap_current_poll(XdapCurrent *session, uint64_t quantum,
+    XdapCurrentResult *output);
+XR_FUNC XrXirValueStatus xdap_current_continue(XdapCurrent *session, uint64_t epoch,
+    XrXirVmDebugMode mode);
+XR_FUNC void xdap_current_pause(XdapCurrent *session);
+XR_FUNC XrXirValueStatus xdap_current_breakpoint(XdapCurrent *session,
+    uint32_t function, uint32_t instruction, bool enabled);
+XR_FUNC XrXirValueStatus xdap_current_snapshot(XdapCurrent *session,
+    XrXirVmDebugSnapshot **output);
+XR_FUNC XrXirCallStatus xdap_current_cancel(XdapCurrent *session);
+/* Consumes the session unless the actual Instance reports BUSY. */
+XR_FUNC XrXirCallStatus xdap_current_free(XdapCurrent *session);
+XR_FUNC void xdap_current_result_drop(XdapCurrentResult *result);
+#endif // XDAP_CURRENT_H

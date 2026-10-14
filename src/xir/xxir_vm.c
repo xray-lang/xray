@@ -15,6 +15,7 @@
  */
 
 #include "xxir_vm.h"
+#include "xxir_vm_debug_internal.h"
 #include "xxir_internal.h"
 #include "xxir_tuple.h"
 #include "xxir_atomic.h"
@@ -743,8 +744,8 @@ static XrXirRunStatus scalar_step(ScalarRun *run, VmState *state, XrXirAction *a
     return XR_XIR_RUN_OK;
 }
 
-static XrXirAction vm_resume(XrXirCallView *view) {
-    const XrXirVmBinding *binding = view->environment;
+static XrXirAction vm_resume_observed(XrXirCallView *view, const XrXirVmBinding *binding,
+    XrXirVmDebug *debug) {
     const XrXirModule *module = xr_xir_compile_artifact_module(binding->artifact);
     const XrXirFunction *function = &module->functions[binding->function];
     const XrXirFunctionLayout *layout = xr_xir_compile_artifact_layout(binding->artifact, binding->function);
@@ -810,6 +811,20 @@ static XrXirAction vm_resume(XrXirCallView *view) {
         } else if (state->destination != UINT32_MAX)
             xr_xir_scalar_store(run.frame, state->destination, inbox.payload);
         }
+        if (debug && xir_vm_debug_inbox(debug, state, state->destination) != XR_XIR_VALUE_OK)
+            return (XrXirAction){.kind=XR_XIR_ACTION_FAULT,
+                .value={XR_XIR_I64,0,XR_XIR_CALL_LIMIT}};
+    }
+    XirVmDebugPoint point = {binding, layout, state, run.frame, view, state->instruction};
+    if (debug) {
+        bool stopped = false;
+        XrXirValueStatus observed = xir_vm_debug_before(debug, &point, &stopped);
+        if (observed != XR_XIR_VALUE_OK)
+            return (XrXirAction){XR_XIR_ACTION_FAULT,0,NULL,0,
+                {XR_XIR_I64,0,observed == XR_XIR_VALUE_OOM ? XR_XIR_CALL_OOM :
+                    observed == XR_XIR_VALUE_BAD_ARGUMENT ? XR_XIR_CALL_BAD_ARGUMENT :
+                    observed == XR_XIR_VALUE_UNSUPPORTED ? XR_XIR_CALL_UNSUPPORTED : XR_XIR_CALL_LIMIT},{0},0};
+        if (stopped) return (XrXirAction){.kind=XR_XIR_ACTION_CONTINUE};
     }
     uint32_t at = state->instruction;
     XrXirAction action;
@@ -817,6 +832,7 @@ static XrXirAction vm_resume(XrXirCallView *view) {
     if (status != XR_XIR_RUN_OK)
         action = xr_xir_call_numeric_fault(status, at < function->instruction_count &&
             function->instructions[at].op == XR_XIR_REM_INT);
+    if (debug) xir_vm_debug_after(debug, &point, action.kind);
     if (action.kind == XR_XIR_ACTION_FAULT && at < function->instruction_count) {
         uint32_t handler = function->blocks[vm_block(function, at)].panic;
         if (handler) return vm_panic_land(&run, state, handler, action);
@@ -824,14 +840,34 @@ static XrXirAction vm_resume(XrXirCallView *view) {
     return action;
 }
 
-static void vm_release(XrXirCallView *view, XrXirCallStatus reason) {
-    (void) reason;
-    const XrXirVmBinding *binding = view->environment;
+static void vm_release_bound(XrXirCallView *view, const XrXirVmBinding *binding) {
     const XrXirFunctionLayout *layout = xr_xir_compile_artifact_layout(binding->artifact, binding->function);
     VmState *state = view->state;
     xr_xir_atomic_progress_clear(&state->atomic);
     for (uint32_t i = layout->owned_count; i > 0; --i)
         xr_xir_owned_slot_clear(state + 1, layout->owned_offsets[i - 1]);
+}
+
+static XrXirAction vm_resume(XrXirCallView *view) {
+    return vm_resume_observed(view, view->environment, NULL);
+}
+static void vm_release(XrXirCallView *view, XrXirCallStatus reason) {
+    (void) reason;
+    vm_release_bound(view, view->environment);
+}
+typedef struct DebugVmBinding {
+    XrXirVmBinding base;
+    XrXirVmDebug *debug;
+} DebugVmBinding;
+static XrXirAction debug_vm_resume(XrXirCallView *view) {
+    const DebugVmBinding *binding = view->environment;
+    return vm_resume_observed(view, &binding->base, binding->debug);
+}
+static void debug_vm_release(XrXirCallView *view, XrXirCallStatus reason) {
+    (void) reason;
+    const DebugVmBinding *binding = view->environment;
+    xir_vm_debug_release(binding->debug, view->state);
+    vm_release_bound(view, &binding->base);
 }
 
 static XrXirStatus bind_verified(const XrXirArtifact *artifact, uint32_t function,
@@ -938,6 +974,62 @@ finish:
     if (status != XR_XIR_OK) vm_program_release(owner);
     return status;
 }
+typedef struct DebugVmProgramOwner {
+    XrXirArtifact *artifact;
+    DebugVmBinding *bindings;
+    XrXirVmDebug *debug;
+    bool bound;
+} DebugVmProgramOwner;
+static void debug_vm_program_release(void *pointer) {
+    DebugVmProgramOwner *owner = pointer;
+    if (owner->bound) xir_vm_debug_unbind(owner->debug);
+    xr_xir_compile_artifact_free(owner->artifact);
+    xr_compile_resources_free(owner->bindings);
+    xr_xir_vm_debug_drop(owner->debug);
+    xr_compile_resources_free(owner);
+}
+XR_FUNC XrXirStatus xr_xir_compile_vm_debug_program_take(XrXirArtifact **artifact,
+    XrXirVmDebug *debug, XrXirProgram **output) {
+    if (!output || *output || !artifact || !debug) return XR_XIR_BAD_STRUCTURE;
+    const XrXirModule *module = xr_xir_compile_artifact_module(*artifact);
+    if (!module || module->stage != XR_XIR_LOWERED) return XR_XIR_BAD_STAGE;
+    if (!module->declarations) return XR_XIR_BAD_STRUCTURE;
+    const XrXirCompileContext *context = xr_xir_compile_artifact_context(*artifact);
+    XrXirStatus status = xr_xir_compile_artifact_verify(*artifact, NULL);
+    if (status != XR_XIR_OK) return status;
+    DebugVmProgramOwner *owner = xir_compile_calloc(context, 1, sizeof(*owner), &status);
+    if (!owner) return status;
+    if (!xir_vm_debug_retain(debug)) { xr_compile_resources_free(owner); return XR_XIR_BAD_STRUCTURE; }
+    owner->debug = debug;
+    owner->bindings = xir_compile_calloc(context, module->function_count, sizeof(*owner->bindings), &status);
+    XrXirCallEntry *entries = NULL;
+    if (!owner->bindings) goto finish;
+    entries = xir_compile_calloc(context, module->function_count, sizeof(*entries), &status);
+    if (status != XR_XIR_OK) goto finish;
+    for (uint32_t i = 0; i < module->function_count; ++i) {
+        status = bind_verified(*artifact, i, &owner->bindings[i].base, &entries[i]);
+        if (status != XR_XIR_OK) goto finish;
+        owner->bindings[i].debug = debug;
+        entries[i].environment = &owner->bindings[i];
+        entries[i].resume = debug_vm_resume;
+        entries[i].release = debug_vm_release;
+    }
+    if (!xir_vm_debug_bind(debug, *artifact)) { status = XR_XIR_BAD_STRUCTURE; goto finish; }
+    owner->bound = true;
+    XrXirProgramSpec spec = {XR_XIR_PROGRAM_ABI_VERSION, *xr_xir_compile_artifact_target(*artifact),
+        entries, module->function_count, module->declarations, {owner, debug_vm_program_release}, module->types,
+        xr_xir_compile_program_proof(*artifact)};
+    status = xr_xir_compile_program_seal(context, &spec, output);
+    if (status == XR_XIR_OK) {
+        owner->artifact = *artifact; *artifact = NULL;
+        xir_vm_debug_program(debug, *output);
+    }
+finish:
+    xr_compile_resources_free(entries);
+    if (status != XR_XIR_OK) debug_vm_program_release(owner);
+    return status;
+}
+
 XR_FUNC XrXirRunStatus xr_xir_compile_vm_run(const XrXirArtifact *artifact, uint32_t function,
                            XrXirRunContext *context, const XrXirValue *arguments,
                            uint32_t argument_count, XrXirValue *result) {

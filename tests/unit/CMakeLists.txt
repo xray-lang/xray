@@ -3888,6 +3888,7 @@ endif()
 # ============================================================================
 
 if(XR_BUILD_DAP)
+    add_subdirectory(dap/current)
     add_executable(test_dap_server
         dap/test_dap_server.c
         ${CMAKE_SOURCE_DIR}/src/base/xjson.c
