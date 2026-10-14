@@ -1,0 +1,5 @@
+struct Box {
+    value: i64
+    init(value = this.value) { this.value = value }
+}
+export fn referenceAnswer() -> i64 { return Box().value }

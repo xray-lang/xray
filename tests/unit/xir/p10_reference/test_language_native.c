@@ -16,6 +16,8 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <limits.h>
+#include <errno.h>
 #define CHECK(c) do { if (!(c)) { fprintf(stderr, "%d: %s\n", __LINE__, #c); exit(1); } } while (0)
 #include "../xir_source_fixture_owner.h"
 XR_DATA const XrXirProgramSpec language_reference_program;
@@ -24,7 +26,7 @@ static bool answer_function(const XrXirFunction *function) {
     return function->name_length == 15 && !memcmp(function->name, "referenceAnswer", 15);
 }
 
-static void native_pair(XrXirProgram *program, uint32_t entry, int64_t expected) {
+static void native_pair(XrXirProgram *program, uint32_t entry, int64_t expected, unsigned suspensions) {
     XrXirInstance *instances[2] = {NULL, NULL}; XrXirValue results[2] = {{0}, {0}};
     XrXirInstanceConfig config;
     CHECK(xr_xir_instance_config_init(&config, sizeof(config)) == XR_XIR_CALL_READY);
@@ -33,7 +35,15 @@ static void native_pair(XrXirProgram *program, uint32_t entry, int64_t expected)
         CHECK(xr_xir_instance_start(instances[i], entry, NULL, 0) == XR_XIR_CALL_READY);
     }
     for (uint32_t i = 0; i < 2; ++i) {
-        XrXirCallResult result = xr_xir_instance_poll_bounded(instances[i], UINT64_MAX).outcome;
+        unsigned resumed=0;
+        XrXirInstanceResult observed=xr_xir_instance_poll_bounded(instances[i],UINT64_MAX);
+        while (observed.outcome.status==XR_XIR_CALL_SUSPENDED) {
+            CHECK(resumed++<suspensions);
+            CHECK(xr_xir_instance_resume(instances[i],observed.epoch,observed.outcome.wake)==XR_XIR_CALL_READY);
+            observed=xr_xir_instance_poll_bounded(instances[i],UINT64_MAX);
+        }
+        CHECK(resumed==suspensions);
+        XrXirCallResult result=observed.outcome;
         if (result.status != XR_XIR_CALL_RETURNED) fprintf(stderr, "instance=%u status=%u\n", i, (unsigned)result.status);
         CHECK(result.status == XR_XIR_CALL_RETURNED);
         CHECK(xr_xir_instance_take_result(instances[i], &results[i]) == XR_XIR_CALL_RETURNED);
@@ -46,7 +56,7 @@ static void native_pair(XrXirProgram *program, uint32_t entry, int64_t expected)
     }
 }
 
-static void execute_profile(int64_t expected, bool direction) {
+static void execute_profile(int64_t expected, bool direction, unsigned suspensions) {
     SourceFixtureOwner owner = {0}; source_fixture_owner_new(&owner);
     XrXirProgramSpec spec = language_reference_program;
     XrXirArtifact *checked = NULL, *lowered = NULL;
@@ -90,17 +100,23 @@ static void execute_profile(int64_t expected, bool direction) {
     xr_xir_compile_artifact_free(checked);
     XrXirProgram *program = NULL;
     CHECK(xr_xir_compile_program_seal(&owner.context, &spec, &program) == XR_XIR_OK);
-    native_pair(program, answer, expected);
+    native_pair(program, answer, expected,suspensions);
     xr_xir_compile_artifact_free(lowered);
     xr_compile_resources_free(bindings); xr_compile_resources_free(entries);
     source_fixture_owner_free(&owner);
 }
 
 int main(int argc, char **argv) {
-    CHECK(argc == 2); char *end = NULL; int64_t expected = (int64_t)strtoll(argv[1], &end, 10);
+    CHECK(argc==2 || argc==3);char *end=NULL;int64_t expected=(int64_t)strtoll(argv[1],&end,10);
     CHECK(end && end != argv[1] && !*end);
-    execute_profile(expected, false);
-    if (XR_LANGUAGE_MIXED) execute_profile(expected, true);
+    unsigned suspensions=0;
+    if (argc==3) {
+        char *tail=NULL;errno=0;unsigned long count=strtoul(argv[2],&tail,10);
+        CHECK(*argv[2]>='0' && *argv[2]<='9' && tail!=argv[2] && !*tail && !errno && count<=UINT_MAX);
+        suspensions=(unsigned)count;
+    }
+    execute_profile(expected,false,suspensions);
+    if (XR_LANGUAGE_MIXED) execute_profile(expected,true,suspensions);
     printf("generated source independent result=%lld; mixed=%u\n", (long long)expected, (unsigned)XR_LANGUAGE_MIXED);
     return 0;
 }

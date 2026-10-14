@@ -22,6 +22,8 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <limits.h>
+#include <errno.h>
 #define CHECK(c) do { if (!(c)) { fprintf(stderr, "%d: %s\n", __LINE__, #c); exit(1); } } while (0)
 #include "../xir_source_fixture_owner.h"
 
@@ -63,7 +65,7 @@ static void initialization_authority(SourceFixtureOwner *owner, const XrXirArtif
     CHECK(original->declarations[box].flags == XR_XIR_NOMINAL_MODULE_LITERAL && !original->declarations[plain].flags);
 }
 
-static void execute_answer(XrXirProgram *program, uint32_t entry, int64_t expected) {
+static void execute_answer(XrXirProgram *program, uint32_t entry, int64_t expected, unsigned suspensions) {
     XrXirInstance *instances[2] = {NULL, NULL}; XrXirValue results[2] = {{0}, {0}};
     XrXirInstanceConfig config;
     CHECK(xr_xir_instance_config_init(&config, sizeof(config)) == XR_XIR_CALL_READY);
@@ -72,7 +74,15 @@ static void execute_answer(XrXirProgram *program, uint32_t entry, int64_t expect
         CHECK(xr_xir_instance_start(instances[i], entry, NULL, 0) == XR_XIR_CALL_READY);
     }
     for (uint32_t i = 0; i < 2; ++i) {
-        XrXirCallResult outcome = xr_xir_instance_poll_bounded(instances[i], UINT64_MAX).outcome;
+        unsigned resumed=0;
+        XrXirInstanceResult observed=xr_xir_instance_poll_bounded(instances[i],UINT64_MAX);
+        while (observed.outcome.status==XR_XIR_CALL_SUSPENDED) {
+            CHECK(resumed++<suspensions);
+            CHECK(xr_xir_instance_resume(instances[i],observed.epoch,observed.outcome.wake)==XR_XIR_CALL_READY);
+            observed=xr_xir_instance_poll_bounded(instances[i],UINT64_MAX);
+        }
+        CHECK(resumed==suspensions);
+        XrXirCallResult outcome=observed.outcome;
         if (outcome.status != XR_XIR_CALL_RETURNED) fprintf(stderr, "instance=%u outcome=%u\n", i, (unsigned)outcome.status);
         CHECK(outcome.status == XR_XIR_CALL_RETURNED);
         CHECK(xr_xir_instance_take_result(instances[i], &results[i]) == XR_XIR_CALL_RETURNED);
@@ -86,7 +96,7 @@ static void execute_answer(XrXirProgram *program, uint32_t entry, int64_t expect
     }
 }
 
-static void accept_packet(SourceFixtureOwner *owner, XrXirSourceResult *source, XrCompilerSession *session, int64_t expected, const char *output) {
+static void accept_packet(SourceFixtureOwner *owner, XrXirSourceResult *source, XrCompilerSession *session, int64_t expected, const char *output, unsigned suspensions) {
     XrXirCheckedPacket packet = {0};
     CHECK(xr_xir_compile_checked_write(source->checked, &packet, NULL) == XR_XIR_OK);
     /* No source arena, AST or session may supply the reconstructed consumer. */
@@ -111,12 +121,21 @@ static void accept_packet(SourceFixtureOwner *owner, XrXirSourceResult *source, 
     }
     uint32_t entry = answer_entry(lowered); XrXirProgram *program = NULL;
     CHECK(xr_xir_compile_vm_program_take(&lowered, &program) == XR_XIR_OK && !lowered);
-    execute_answer(program, entry, expected);
+    execute_answer(program, entry, expected, suspensions);
 }
 
 int main(int argc, char **argv) {
-    CHECK((argc == 4 && !strcmp(argv[1], "--accept")) ||
-          (argc == 5 && (!strcmp(argv[1], "--reject") || !strcmp(argv[1], "--reject-structure") || !strcmp(argv[1], "--emit"))));
+    CHECK(((argc==4 || argc==5) && !strcmp(argv[1],"--accept")) ||
+          (argc==5 && (!strcmp(argv[1],"--reject") || !strcmp(argv[1],"--reject-structure") || !strcmp(argv[1],"--reject-value"))) ||
+          ((argc==5 || argc==6) && !strcmp(argv[1],"--emit")));
+    unsigned suspensions=0;
+    const char *suspend_arg=!strcmp(argv[1],"--accept") && argc==5 ? argv[4] :
+        !strcmp(argv[1],"--emit") && argc==6 ? argv[5] : NULL;
+    if (suspend_arg) {
+        char *tail=NULL;errno=0;unsigned long count=strtoul(suspend_arg,&tail,10);
+        CHECK(*suspend_arg>='0' && *suspend_arg<='9' && tail!=suspend_arg && !*tail && !errno && count<=UINT_MAX);
+        suspensions=(unsigned)count;
+    }
     char path[1024]; int length = snprintf(path, sizeof(path), "%s/%s.xr", XR_LANGUAGE_FIXTURES, argv[2]);
     CHECK(length > 0 && (size_t)length < sizeof(path));
     SourceFixtureOwner owner = {0}; source_fixture_owner_new(&owner);
@@ -130,15 +149,17 @@ int main(int argc, char **argv) {
         diagnostic.module, diagnostic.line, diagnostic.column, diagnostic.message);
     char *end = NULL; int64_t expected = (int64_t)strtoll(argv[3], &end, 10);
     CHECK(end && end != argv[3] && !*end);
-    if (!strcmp(argv[1], "--reject") || !strcmp(argv[1], "--reject-structure")) {
-        CHECK(status == (!strcmp(argv[1], "--reject") ? XR_XIR_BAD_TYPE : XR_XIR_BAD_STRUCTURE) && diagnostic.status == status);
+    if (!strcmp(argv[1], "--reject") || !strcmp(argv[1], "--reject-structure") || !strcmp(argv[1],"--reject-value")) {
+        XrXirStatus expected_status=!strcmp(argv[1],"--reject") ? XR_XIR_BAD_TYPE :
+            !strcmp(argv[1],"--reject-value") ? XR_XIR_BAD_VALUE : XR_XIR_BAD_STRUCTURE;
+        CHECK(status==expected_status && diagnostic.status==status);
         CHECK(diagnostic.line == expected && strstr(diagnostic.message, argv[4]));
         CHECK(!result.checked && !result.snapshot);
         xr_xir_compile_source_result_free(&result); xr_compile_session_free(session);
     } else {
         CHECK(status == XR_XIR_OK && result.checked && result.snapshot);
         if (!strcmp(argv[2], "init_module_authority")) initialization_authority(&owner, result.checked);
-        accept_packet(&owner, &result, session, expected, !strcmp(argv[1], "--emit") ? argv[4] : NULL);
+        accept_packet(&owner, &result, session, expected, !strcmp(argv[1], "--emit") ? argv[4] : NULL,suspensions);
     }
     source_fixture_owner_free(&owner);
     printf("%s independent expectation passed; compiler ledger restored\n", argv[2]); return 0;
