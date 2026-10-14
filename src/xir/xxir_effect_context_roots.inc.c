@@ -32,7 +32,7 @@ static XrXirStatus effect_ordinary_op_match(const EffectOrdinaryContexts *contex
             if (actual.immediate<0 || (uint64_t)actual.immediate>=contexts->count) return XR_XIR_BAD_STRUCTURE;
             bool equal=false;
             status=effect_ordinary_environment_same(terms,&contexts->nodes[actual.immediate],
-                resolved.target,resolved.arguments,resolved.argument_count,&equal);
+                &resolved,&equal);
             if (status!=XR_XIR_OK) return status;
             if (!equal) return XR_XIR_BAD_STRUCTURE;
             expected.immediate=actual.immediate;

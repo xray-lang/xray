@@ -20,6 +20,7 @@
 #include "xir_library_compile_owner.h"
 #include "xir_specialize_provenance_take_cases.h"
 #include "xir_specialize_instance_index_cases.h"
+#include "xir_specialize_key_order_cases.h"
 
 /* keep/nested are the actual wide Source's failing generic definitions,
  * without its unrelated modules. Neither UNKNOWN nor a private bottom grants
@@ -236,6 +237,9 @@ static XrXirStatus source_generic_definition_operation(const XrXirCompileContext
 
 int main(int argc,char **argv) {
     if(generic_fault_dispatch(argc,argv))return 0;
+    if (argc==2 && !strcmp(argv[1],"--spec-key-controls")) {
+        spec_key_source_controls();library_compile_observer_free();return 0;
+    }
     if (argc==2 && !strcmp(argv[1],"--spec-index")) {
         spec_index_source_scales();library_compile_observer_free();return 0;
     }
