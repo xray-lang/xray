@@ -19,6 +19,15 @@ static XrXirCtfeStatus ctfe_compile_status(XrXirStatus status) {
 static bool ctfe_scalar_type(XrXirType type) {
     return type == XR_XIR_BOOL || xr_xir_type_is_integer(type);
 }
+static bool ctfe_result_type(XrXirType type) {
+    return type == XR_XIR_UNIT || ctfe_scalar_type(type);
+}
+/* Unit is a result with no scalar slot, never a value argument. */
+static bool ctfe_result_value(const XrXirValue *value, XrXirType type) {
+    return value && (type == XR_XIR_UNIT ?
+        (!value->type && !value->reserved && !value->payload) :
+        xr_xir_value_argument(value, NULL, type));
+}
 /* The count describes frame reads/writes in scalar_step; edge transfers charge
  * their actual predecessor scans and copies inside scalar_edge. */
 static bool ctfe_opcode_work(XrXirOp op, uint64_t *work) {
@@ -54,7 +63,7 @@ static XrXirCtfeStatus ctfe_admit(const XrXirArtifact *artifact, uint32_t select
     const XrXirFunctionIdentity *identity = &module->declarations->functions[selected];
     if (identity->cleanup_owner || identity->nominal_owner ||
         (module->generics && (module->generics[selected].parameter_count ||
-        module->generics[selected].argument_count)) || !ctfe_scalar_type(body->result) ||
+        module->generics[selected].argument_count)) || !ctfe_result_type(body->result) ||
         layout->owned_count || layout->outgoing_count || layout->path_count)
         return XR_XIR_CTFE_NOT_LEAF;
     for (uint32_t m = 0; m < module->declarations->module_count; ++m) {

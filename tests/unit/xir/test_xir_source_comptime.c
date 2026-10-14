@@ -30,6 +30,10 @@ static const char source_comptime_local_text[]=
     "fn admitted(x:i64)->bool { return positive(x) && (x==6 || x==7) }\n"
     "fn answer()->i64 { return admitted(6) ? 42 : 0 }\n"
     "export fn run()->i64 { return comptime answer() }\n";
+static const char source_comptime_unit_text[]=
+    "fn noop() {}\n"
+    "fn answer()->i64 { noop(); return 42 }\n"
+    "export fn run()->i64 { comptime {}; comptime { const x=6; const y=7 }; comptime noop(); return comptime answer() }\n";
 static const char *source_comptime_resource_text=source_comptime_test_text;
 static XrXirStatus source_comptime_test_resource_status(XrCompileResourceStatus status) {
     return status==XR_COMPILE_RESOURCE_OK?XR_XIR_OK:status==XR_COMPILE_RESOURCE_BUDGET?XR_XIR_BUDGET:
@@ -84,10 +88,14 @@ static void source_comptime_test_fold(const XrXirModule *module,int64_t expected
 #include "xir_source_comptime_cases.h"
 #include "xir_source_comptime_resources.h"
 int main(int argc,char **argv) {
-    if (argc==2 && (!strcmp(argv[1],"--resources") || !strcmp(argv[1],"--local-resources"))) {
+    if (argc==2 && (!strcmp(argv[1],"--resources") || !strcmp(argv[1],"--local-resources") || !strcmp(argv[1],"--unit-resources"))) {
         if (!strcmp(argv[1],"--local-resources")) {
             source_comptime_resource_text=source_comptime_local_text;
             fprintf(stderr,"Source comptime scalar locals whole-producer resources\n");
+        }
+        if (!strcmp(argv[1],"--unit-resources")) {
+            source_comptime_resource_text=source_comptime_unit_text;
+            fprintf(stderr,"Source comptime Unit/ordinary scalar result whole-producer resources\n");
         }
         source_comptime_test_resources();return 0;
     }

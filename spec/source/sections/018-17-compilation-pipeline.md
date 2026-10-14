@@ -538,6 +538,12 @@ leaf CTFE接受经过完整Lowered复验的标量CFG回边；PHI在共同scalar 
 
 CTFE要求实际普通函数声明身份。结构合法但没有declarations/functions表的Lowered不能授予执行资格；leaf/direct-call入口分别拒绝为NOT_LEAF/NOT_SUPPORTED，并保留输出和已消费费用。Module initializer、nominal/cleanup owner、实际不支持的操作及可达I/O仍逐项拒绝，root或effect标志不授予确定性。leaf保持无CALL边界，有限调用使用独立全闭包接收入口。
 
+### 17.41 CTFE的规范Unit返回与普通Source重放
+
+没有值参数的普通Unit结果函数可进入CTFE的实际闭包准入；其Unit RETURN保留零type/reserved/payload，目标逻辑输出大小为零。Unit返回没有SSA存储槽，子调用返回不得向该槽写入；调用者的标量参数与已活跃值保持。Unit不作为普通值参数开放，入口仍按实际类型和完整Lowered身份复验。
+
+Source的Unit comptime结果经同一有限CTFE管线接收，再独立重放为普通Unit表达式，保留站点匹配、覆盖和规范结果验证。空块或末尾为普通语句的块产生Unit，拥有型局部状态继续依赖实际值域接点；comptime块不授予从外围函数非局部return的许可。I/O、非终结循环及不可接收的实际操作仍分别按闭包准入或预算规则拒绝，失败输出和原编译账本保持。
+
 <!-- /xr-spec:cn -->
 
 <!-- xr-spec:en -->
@@ -1186,5 +1192,11 @@ This section does not admit owned Cells produced by ordinary var, owned/path ope
 Leaf CTFE accepts scalar CFG backedges after full Lowered reverification. PHI values select the actual predecessor and copy in parallel through the shared scalar edge kernel. Execution shares the original steps/watchdog and compiler ledger: a backedge neither resets nor refunds charges, and a nonterminating loop rejects at its finite step limit while preserving canonical Unit output. Full receiving still checks PHI predecessors, targets, offsets and signatures; block ordinals do not prove termination.
 
 CTFE requires actual ordinary function declaration identity. Structurally valid Lowered input without a declarations/functions table grants no execution qualification; leaf and direct-call entries reject with NOT_LEAF and NOT_SUPPORTED respectively, preserving output and spent charges. Module initializers, nominal/cleanup owners, unsupported actual operations and reachable I/O retain individual rejection; root or effect flags grant no determinism. Leaf retains its no-CALL boundary; finite calls use the separate complete-closure receiving entry.
+
+### 17.41 Canonical CTFE Unit returns and ordinary Source replay
+
+Ordinary Unit-result functions without value parameters can enter actual CTFE closure admission. Their Unit RETURN preserves zero type/reserved/payload and has zero target logical output size. A Unit return has no SSA storage slot, so a child return must not write that slot; the caller retains scalar parameters and other live values. Unit is not admitted as an ordinary value argument, and receiving still repeats actual type and complete Lowered identity checks.
+
+Source receives Unit comptime results through the same bounded CTFE pipeline and independently replays ordinary Unit expressions, preserving site matching, coverage and canonical result verification. Empty blocks and blocks ending in ordinary statements produce Unit; owned local state continues to require the actual value-domain interface. A comptime block grants no nonlocal return from its enclosing function. I/O, nonterminating loops and unsupported actual operations retain closure or budget rejection, with failure outputs and the original compiler ledger preserved.
 
 <!-- /xr-spec:en -->

@@ -31,6 +31,14 @@ typedef struct CtfeReferenceCase {
 
 static const CtfeReferenceCase reference_cases[] = {
     {"factorial", XR_XIR_I64, 720, XR_XIR_OK, NULL, 0},
+    {"unit_empty", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"unit_statements", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"unit_direct", XR_XIR_UNIT, 0, XR_XIR_OK, NULL, 0},
+    {"unit_io", XR_XIR_UNIT, 0, XR_XIR_BAD_TYPE, "admitted deterministic scalar direct-call closure", 2},
+    {"unit_infinite", XR_XIR_UNIT, 0, XR_XIR_BUDGET, NULL, 2},
+    {"unit_closure", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"unit_recipe", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"unit_nested", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
     {"short_circuit", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
     {"logical_truth_table", XR_XIR_I64, 232, XR_XIR_OK, NULL, 0},
     {"logical_skip_division", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
@@ -208,6 +216,50 @@ static void reference_leaf_locals(const XrXirCompileContext *context, XrXirSourc
     fprintf(stderr, "CTFE actual scalar local NEW/READ/WRITE leaf truth table passed\n");
 }
 
+static void reference_unit_direct(const XrXirCompileContext *context, XrXirSourceResult *source) {
+    uint8_t identity[32]={0};XrXirArtifact *lowered=reference_lower(context,source,identity);
+    const XrXirModule *module=xr_xir_compile_artifact_module(lowered);
+    uint32_t noop=UINT32_MAX,leaf=UINT32_MAX;
+    for (uint32_t f=0;f<module->function_count;++f) {
+        const XrXirFunction *body=&module->functions[f];
+        if (body->name_length==4 && !memcmp(body->name,"noop",4)) { CHECK(noop==UINT32_MAX);noop=f; }
+        if (body->name_length==4 && !memcmp(body->name,"leaf",4)) { CHECK(leaf==UINT32_MAX);leaf=f; }
+    }
+    CHECK(noop!=UINT32_MAX && leaf!=UINT32_MAX);
+    CHECK(module->functions[noop].result==XR_XIR_UNIT && module->functions[noop].instruction_count==1);
+    XrXirCtfeRequest request={.artifact=lowered,.function=noop,
+        .target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION},
+        .limits={1,XR_XIR_CTFE_MAX_FRAME_BYTES,0}};
+    memcpy(request.checked_identity,identity,sizeof(identity));
+    XrXirValue output={0};
+    CHECK(xr_xir_compile_ctfe_leaf(&request,&output)==XR_XIR_CTFE_OK);
+    CHECK(!output.type && !output.reserved && !output.payload);
+    request.limits.steps=0;
+    CHECK(xr_xir_compile_ctfe_leaf(&request,&output)==XR_XIR_CTFE_STEP_LIMIT);
+    CHECK(!output.type && !output.reserved && !output.payload);
+    request.limits.steps=1;
+    XrXirCtfeCallRequest calls={request,1};
+    CHECK(xr_xir_compile_ctfe_calls(&calls,&output)==XR_XIR_CTFE_OK);
+    CHECK(!output.type && !output.reserved && !output.payload);
+    calls.call_depth=0;
+    CHECK(xr_xir_compile_ctfe_calls(&calls,&output)==XR_XIR_CTFE_DEPTH_LIMIT);
+    CHECK(!output.type && !output.reserved && !output.payload);
+    XrXirValue argument={XR_XIR_I64,0,41};calls.evaluation.function=leaf;
+    calls.evaluation.arguments=&argument;calls.evaluation.argument_count=1;
+    calls.evaluation.limits=(XrXirCtfeLimits){XR_XIR_CTFE_MAX_STEPS,XR_XIR_CTFE_MAX_FRAME_BYTES,8};calls.call_depth=2;
+    CHECK(xr_xir_compile_ctfe_calls(&calls,&output)==XR_XIR_CTFE_OK);
+    CHECK(output.type==XR_XIR_I64 && !output.reserved && output.payload==42 && argument.payload==41);
+    XrXirValue occupied={XR_XIR_UNIT,77,99},saved=occupied;
+    XrCompileResourceStats before={0},after={0};
+    CHECK(xr_compile_resources_stats(context->resources,&before)==XR_COMPILE_RESOURCE_OK);
+    CHECK(xr_xir_compile_ctfe_leaf(&request,&occupied)==XR_XIR_CTFE_BAD_ARGUMENT);
+    CHECK(!memcmp(&occupied,&saved,sizeof(saved)));
+    CHECK(xr_compile_resources_stats(context->resources,&after)==XR_COMPILE_RESOURCE_OK);
+    CHECK(!memcmp(&before,&after,sizeof(before)));
+    xr_xir_compile_artifact_free(lowered);
+    fprintf(stderr,"CTFE canonical Unit leaf/call output bytes=0; exact1/minus0 and depth1/minus0; child Unit keeps parent argument41/result42; occupied fees unchanged\n");
+}
+
 int main(int argc, char **argv) {
     CHECK(argc == 2);
     const CtfeReferenceCase *selected = NULL;
@@ -226,7 +278,8 @@ int main(int argc, char **argv) {
         selected->name, (unsigned)status, diagnostic.line, diagnostic.column, diagnostic.message);
     CHECK(status == selected->status);
     if (status == XR_XIR_OK) {
-        if (!strcmp(selected->name, "leaf_locals")) reference_leaf_locals(&context, &source);
+        if (!strcmp(selected->name, "unit_direct")) reference_unit_direct(&context,&source);
+        else if (!strcmp(selected->name, "leaf_locals")) reference_leaf_locals(&context, &source);
         else if (!strcmp(selected->name, "mutual_depth_direct")) reference_direct_depth(&context, &source);
         else reference_accept(&context, &source, selected);
     }

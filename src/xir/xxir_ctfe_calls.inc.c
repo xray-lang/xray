@@ -38,7 +38,7 @@ static XrXirCtfeStatus ctfe_call_body_admit(const XrXirArtifact *artifact,uint32
     const XrXirFunctionIdentity *identity=&module->declarations->functions[f];
     if (identity->cleanup_owner || identity->nominal_owner ||
         (module->generics && (module->generics[f].parameter_count || module->generics[f].argument_count)) ||
-        !ctfe_scalar_type(body->result) || layout->owned_count || layout->path_count)
+        !ctfe_result_type(body->result) || layout->owned_count || layout->path_count)
         return XR_XIR_CTFE_NOT_SUPPORTED;
     for (uint32_t m=0;m<module->declarations->module_count;++m) {
         if (!xir_compile_work(work,1)) return XR_XIR_CTFE_BUDGET;
@@ -55,7 +55,7 @@ static XrXirCtfeStatus ctfe_call_body_admit(const XrXirArtifact *artifact,uint32
     for (uint32_t i=0;i<body->instruction_count;++i) {
         if (!xir_compile_work(work,3)) return XR_XIR_CTFE_BUDGET;
         const XrXirInstruction *op=&body->instructions[i];uint64_t ignored=0;
-        bool unit=ctfe_unit_result(op->op);
+        bool unit=ctfe_unit_result(op->op) || (op->op==XR_XIR_CALL && op->type==XR_XIR_UNIT);
         if ((!unit && !ctfe_scalar_type(op->type)) || (unit && op->type!=XR_XIR_UNIT))
             return XR_XIR_CTFE_NOT_SUPPORTED;
         if (op->op==XR_XIR_CALL) {
@@ -214,7 +214,7 @@ static XrXirCtfeStatus ctfe_call_return(CtfeCallExecution *execution,
     CtfeCallFrame *frame=execution->top;
     const XrXirArtifact *artifact=execution->artifact;
     const XrXirFunction *body=&artifact->module.functions[frame->function];
-    if (!xr_xir_value_argument(value,NULL,body->result)) return XR_XIR_CTFE_BAD_ARTIFACT;
+    if (!ctfe_result_value(value,body->result)) return XR_XIR_CTFE_BAD_ARTIFACT;
     if (!frame->parent) {
         if (!xir_compile_work(&artifact->context,sizeof(*output))) return XR_XIR_CTFE_BUDGET;
         *output=*value;return XR_XIR_CTFE_OK;
@@ -228,7 +228,8 @@ static XrXirCtfeStatus ctfe_call_return(CtfeCallExecution *execution,
     if (!xir_compile_work(&artifact->context,sizeof(execution->top)+sizeof(execution->depth)+
         sizeof(execution->live_bytes)+1))
         return XR_XIR_CTFE_BUDGET;
-    xr_xir_scalar_store(parent+1,layout->offsets[frame->return_value],value->payload);
+    if (value->type!=XR_XIR_UNIT)
+        xr_xir_scalar_store(parent+1,layout->offsets[frame->return_value],value->payload);
     execution->top=parent;--execution->depth;execution->live_bytes-=frame->bytes;
     xr_compile_resources_free(frame);return XR_XIR_CTFE_OK;
 }
