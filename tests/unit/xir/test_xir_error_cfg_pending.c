@@ -344,8 +344,8 @@ static void pc_local_final_mutations(const XrXirCompileContext *c,
         if (!mode) node->intrinsic_mask=XR_XIR_CALLABLE_ROOT_REQUIRED;
         if (mode==1) node->local_mask=XR_XIR_CALLABLE_ROOT_UNRESOLVED;
         if (mode==2) ++node->instruction_count;
-        if (mode==3) node->expanded=false;
-        if (mode==4) node->queued=true;
+        if (mode==3) node->parameter_count=1;
+        if (mode==4) --node->cause_count;
         if (mode==5) node->return_coverage=1;
         if (mode==6) node->class_return_mask=EFFECT_CLASS_ROOT;
         if (mode==7) node->edge_head=0;

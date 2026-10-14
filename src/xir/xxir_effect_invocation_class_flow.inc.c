@@ -124,6 +124,12 @@ static XrXirStatus effect_invocation_class_call(EffectInvocationFlow *flow,
         XrXirStatus head_status=effect_invocation_flow_head(flow,(uint32_t)op->immediate,&target_head);
         if (head_status!=XR_XIR_OK) return head_status;
         const EffectBodyFunctionHead *target=&target_head;
+        /* A concrete use can still name an open result-only template. Its
+         * absent execution edge does not prove a complete pure Class source. */
+        if (!xir_compile_work(owner->work,1)) return XR_XIR_BUDGET;
+        if (xr_xir_type_span(flow->body.domain.types,target->result)) {
+            sources->mask=EFFECT_CLASS_KNOWN|EFFECT_CLASS_UNKNOWN;return XR_XIR_OK;
+        }
         for (uint32_t p=0;p<target->parameter_count;++p) {
             if (!xir_compile_work(owner->work,1)) return XR_XIR_BUDGET;
             if (xr_xir_type_span(flow->body.domain.types,target->parameters[p])) {

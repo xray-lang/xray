@@ -1,0 +1,6 @@
+fn layer<T>(value:T)->T?{return value}
+fn none<T>()->T?{return null}
+fn factory()->i64??{return layer<i64?>(none<i64>())}
+fn innerAbsent(value:i64?)->bool{return value==null}
+fn outerAbsent(value:i64??)->bool{return value==null}
+export fn referenceAnswer()->i64{const plain=factory()??null;const outer:i64??=factory()??null;return (innerAbsent(plain)?100:0)+(outerAbsent(outer)?10:0)+2}
