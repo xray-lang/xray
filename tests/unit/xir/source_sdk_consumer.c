@@ -139,7 +139,7 @@ static XrSourceEvent poll_state(XrSourceCall *call) {
         CHECK(xray_source_call_poll(call, 8, &event) == XR_SOURCE_OK);
         if (event.state != XR_SOURCE_RUN_READY) return event;
     }
-    CHECK(false); return event;
+    CHECK(0); return event;
 }
 static void timer_waits(const char *stdlib) {
     XrSourceCompiler *compiler = compiler_new(stdlib);
