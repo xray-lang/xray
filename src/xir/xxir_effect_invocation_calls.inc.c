@@ -602,7 +602,7 @@ static XrXirStatus effect_invocation_instruction_decoded(EffectInvocationFlow *f
         return effect_invocation_indirect(flow,instruction,op,changed);
     case XR_XIR_FUNCTION_REF:
         return effect_invocation_latent(flow,instruction,op);
-    case XR_XIR_CELL_READ: case XR_XIR_CELL_WRITE: case XR_XIR_CELL_LOCAL_WRITE:
+    case XR_XIR_CELL_READ: case XR_XIR_CELL_WRITE: case XR_XIR_CELL_STRING_APPEND: case XR_XIR_CELL_LOCAL_WRITE:
     case XR_XIR_PLACE_READ: case XR_XIR_PLACE_WRITE: case XR_XIR_CELL_PROJECT: {
         if (!owner->final.cells && (op->op==XR_XIR_PLACE_READ || op->op==XR_XIR_PLACE_WRITE))
             return XR_XIR_OK;

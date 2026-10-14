@@ -2047,6 +2047,9 @@ static bool statement(SourceContext *ctx, AstNode *node, bool top) {
     case AST_DESTRUCTURE_DECL: return source_destructure_binding(ctx,node,top);
     case AST_EXPR_STMT: {
         SourceValue value; AstNode *expr=node->as.expr_stmt;
+        bool appended = false;
+        if (!source_string_append_statement(ctx, expr, &appended)) return false;
+        if (appended) return true;
         if (expr->type!=AST_MATCH_EXPR) return expression(ctx,expr,&value);
         SourceExpressionPlan *plan=source_plan_collect(ctx,expr,(SourceExpectedType){false,XR_XIR_UNIT, false, false});
         if (!plan) return false;

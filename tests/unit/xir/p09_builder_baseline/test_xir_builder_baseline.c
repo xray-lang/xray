@@ -101,8 +101,9 @@ int main(int argc, char **argv) {
     if (argc < 2 || argc > 3) return 2;
     const char *scenario = argv[1];
     bool digits = !strcmp(scenario, "digits"), chunks = !strcmp(scenario, "chunks");
-    bool reserve = !strcmp(scenario, "reserve"), snapshot = !strcmp(scenario, "snapshot");
-    if (!digits && !chunks && !reserve && !snapshot && strcmp(scenario, "short")) return 2;
+    bool reserve = !strcmp(scenario, "reserve"), join = !strcmp(scenario, "join");
+    bool snapshot = !strcmp(scenario, "snapshot");
+    if (!digits && !chunks && !reserve && !join && !snapshot && strcmp(scenario, "short")) return 2;
     if (argc == 3) {
         char *end = NULL; unsigned long long parsed = strtoull(argv[2], &end, 10);
         if (!end || *end || parsed > SIZE_MAX) return 2;
@@ -111,13 +112,13 @@ int main(int argc, char **argv) {
     void *arena = xrt_execution_arena_new();
     if (!arena) { puts("baseline arena OOM"); return 3; }
     void *previous = xrt_execution_arena_enter(arena);
-    size_t piece_length = chunks ? 16384 : 1;
+    size_t piece_length = chunks ? 16384 : join ? 1000 : 1;
     XrValue piece = xrt_str_alloc(piece_length);
     memset(xr_str_buf(piece), 'x', piece_length);
     XrValue builder = xrt_strbuf_new(), old = {0};
-    size_t count = chunks ? 64 : snapshot ? 4096 : 1000000;
+    size_t count = chunks ? 64 : join ? 1000 : snapshot ? 4096 : 1000000;
     clock_t cpu_start = clock(); double wall_start = wall_seconds();
-    if (reserve) xrt_strbuf_reserve_extra_exact(builder, (int64_t)count);
+    if (reserve || join) xrt_strbuf_reserve_extra_exact(builder, (int64_t)(count * piece_length));
     for (size_t i = 0; i < count; ++i)
         xrt_strbuf_append(builder, digits ? XR_FROM_INT(i % 10) : piece);
     if (snapshot) {
