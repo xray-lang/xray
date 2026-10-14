@@ -453,6 +453,186 @@
       ],
       "migration_basis": "Complete original empty/append scalar order/saved snapshot/reset/reuse/three iterations/two owned return calls retained with current immutable string concatenation and formatting; no builder alias. Physical allocation/release is separate and unqualified.",
       "retained_original_source": "tests/unit/xir/legacy_consumers/fixtures/string_builder_snapshot/original.xr"
+    },
+    {
+      "id": "regression_core_review_0100_int_basic",
+      "oracle_id": "regression_core_review_0100_int_basic",
+      "source": "tests/unit/xir/legacy_consumers/fixtures/early_core_ports/0100_int_basic/root.xr",
+      "source_lf_sha256": "6c5d7cb1f8d7992ba9d4ffebe2baaba830e992dc8067afb6f654b35c24a2cbd8",
+      "entry": "test",
+      "stdout_utf8": "",
+      "companions": [],
+      "owners": [
+        "P09",
+        "P10"
+      ],
+      "remaining_gates": [
+        "Fresh actual test entry/discovery must execute every original mapped named body and independently observe these values; no build/banner/equal-wrong-values qualification.",
+        "Actual canonical Equal/type-query/numeric/formatter/Optional/Range/source/context interfaces and full driver registration remain OPEN; no guessed ordinal, Null sentinel, mixed-domain coercion or compatibility surface.",
+        "Fresh actual VM/native plus full affected FI/resource/lifetime/borrow/cancel/physical/safety/generated-C/provider/platform gates remain required; retain all200/260/300 loops and P20 bidirectional mixed responsibilities."
+      ]
+    },
+    {
+      "id": "regression_core_review_0101_int_boundary",
+      "oracle_id": "regression_core_review_0101_int_boundary",
+      "source": "tests/regression/01_literals/0101_int_boundary.xr",
+      "source_lf_sha256": "d6442fcb75cb593ab12b23fd132792ba8e37efb2473a7b339c2205b2755d9332",
+      "entry": "test",
+      "stdout_utf8": "",
+      "companions": [],
+      "owners": [
+        "P09",
+        "P10"
+      ],
+      "remaining_gates": [
+        "Fresh actual test entry/discovery must execute every original mapped named body and independently observe these values; no build/banner/equal-wrong-values qualification.",
+        "Actual canonical Equal/type-query/numeric/formatter/Optional/Range/source/context interfaces and full driver registration remain OPEN; no guessed ordinal, Null sentinel, mixed-domain coercion or compatibility surface.",
+        "Fresh actual VM/native plus full affected FI/resource/lifetime/borrow/cancel/physical/safety/generated-C/provider/platform gates remain required; retain all200/260/300 loops and P20 bidirectional mixed responsibilities."
+      ]
+    },
+    {
+      "id": "regression_core_review_0110_float_basic",
+      "oracle_id": "regression_core_review_0110_float_basic",
+      "source": "tests/unit/xir/legacy_consumers/fixtures/early_core_ports/0110_float_basic/root.xr",
+      "source_lf_sha256": "5c8beb4d38aa3f9daa01ae34172aa1153ab43e81ac9bb88338dd2fdc83a67fb7",
+      "entry": "test",
+      "stdout_utf8": "",
+      "companions": [],
+      "owners": [
+        "P09",
+        "P10"
+      ],
+      "remaining_gates": [
+        "Fresh actual test entry/discovery must execute every original mapped named body and independently observe these values; no build/banner/equal-wrong-values qualification.",
+        "Actual canonical Equal/type-query/numeric/formatter/Optional/Range/source/context interfaces and full driver registration remain OPEN; no guessed ordinal, Null sentinel, mixed-domain coercion or compatibility surface.",
+        "Fresh actual VM/native plus full affected FI/resource/lifetime/borrow/cancel/physical/safety/generated-C/provider/platform gates remain required; retain all200/260/300 loops and P20 bidirectional mixed responsibilities."
+      ]
+    },
+    {
+      "id": "regression_core_review_0130_bool_null",
+      "oracle_id": "regression_core_review_0130_bool_null",
+      "source": "tests/unit/xir/legacy_consumers/fixtures/early_core_ports/0130_bool_null/root.xr",
+      "source_lf_sha256": "3ed80fc75b4e1b2ca99e6797c42a85c3d10eb8d2689a4fd9e9eccb19436e9981",
+      "entry": "test",
+      "stdout_utf8": "",
+      "companions": [],
+      "owners": [
+        "P09",
+        "P10"
+      ],
+      "remaining_gates": [
+        "Fresh actual test entry/discovery must execute every original mapped named body and independently observe these values; no build/banner/equal-wrong-values qualification.",
+        "Actual canonical Equal/type-query/numeric/formatter/Optional/Range/source/context interfaces and full driver registration remain OPEN; no guessed ordinal, Null sentinel, mixed-domain coercion or compatibility surface.",
+        "Fresh actual VM/native plus full affected FI/resource/lifetime/borrow/cancel/physical/safety/generated-C/provider/platform gates remain required; retain all200/260/300 loops and P20 bidirectional mixed responsibilities."
+      ]
+    },
+    {
+      "id": "regression_core_review_0300_arithmetic",
+      "oracle_id": "regression_core_review_0300_arithmetic",
+      "source": "tests/regression/03_operators/0300_arithmetic.xr",
+      "source_lf_sha256": "7353d9d590e36c8d2d8bc55c439a415619f61633b844584bbb09ecfff5d0901d",
+      "entry": "test",
+      "stdout_utf8": "",
+      "companions": [],
+      "owners": [
+        "P09",
+        "P10"
+      ],
+      "remaining_gates": [
+        "Fresh actual test entry/discovery must execute every original mapped named body and independently observe these values; no build/banner/equal-wrong-values qualification.",
+        "Actual canonical Equal/type-query/numeric/formatter/Optional/Range/source/context interfaces and full driver registration remain OPEN; no guessed ordinal, Null sentinel, mixed-domain coercion or compatibility surface.",
+        "Fresh actual VM/native plus full affected FI/resource/lifetime/borrow/cancel/physical/safety/generated-C/provider/platform gates remain required; retain all200/260/300 loops and P20 bidirectional mixed responsibilities."
+      ]
+    },
+    {
+      "id": "regression_core_review_0301_int64_overflow",
+      "oracle_id": "regression_core_review_0301_int64_overflow",
+      "source": "tests/regression/03_operators/0301_int64_overflow.xr",
+      "source_lf_sha256": "d32bc1f289b0d315cf26bb3a45409e48a64390fb3e3cb210b562785b7e7082a9",
+      "entry": "test",
+      "stdout_utf8": "",
+      "companions": [],
+      "owners": [
+        "P09",
+        "P10"
+      ],
+      "remaining_gates": [
+        "Fresh actual test entry/discovery must execute every original mapped named body and independently observe these values; no build/banner/equal-wrong-values qualification.",
+        "Actual canonical Equal/type-query/numeric/formatter/Optional/Range/source/context interfaces and full driver registration remain OPEN; no guessed ordinal, Null sentinel, mixed-domain coercion or compatibility surface.",
+        "Fresh actual VM/native plus full affected FI/resource/lifetime/borrow/cancel/physical/safety/generated-C/provider/platform gates remain required; retain all200/260/300 loops and P20 bidirectional mixed responsibilities."
+      ]
+    },
+    {
+      "id": "regression_core_review_0304_fixed_width_wrapping",
+      "oracle_id": "regression_core_review_0304_fixed_width_wrapping",
+      "source": "tests/regression/03_operators/0304_fixed_width_wrapping.xr",
+      "source_lf_sha256": "fcd7bf7fd8e7df15178a13afeb4e5874eb69e3e8a7519ade575f36d09ca74dab",
+      "entry": "test",
+      "stdout_utf8": "=== fixed-width wrapping tests completed ===\n",
+      "companions": [],
+      "owners": [
+        "P09",
+        "P10"
+      ],
+      "remaining_gates": [
+        "Fresh actual test entry/discovery must execute every original mapped named body and independently observe these values; no build/banner/equal-wrong-values qualification.",
+        "Actual canonical Equal/type-query/numeric/formatter/Optional/Range/source/context interfaces and full driver registration remain OPEN; no guessed ordinal, Null sentinel, mixed-domain coercion or compatibility surface.",
+        "Fresh actual VM/native plus full affected FI/resource/lifetime/borrow/cancel/physical/safety/generated-C/provider/platform gates remain required; retain all200/260/300 loops and P20 bidirectional mixed responsibilities."
+      ]
+    },
+    {
+      "id": "regression_core_review_0310_comparison",
+      "oracle_id": "regression_core_review_0310_comparison",
+      "source": "tests/unit/xir/legacy_consumers/fixtures/early_core_ports/0310_comparison/root.xr",
+      "source_lf_sha256": "2c8f750406f47d516a3840f344071281ae67d5ce4047d28e5ed7a6c1a2acb3e3",
+      "entry": "test",
+      "stdout_utf8": "",
+      "companions": [],
+      "owners": [
+        "P09",
+        "P10"
+      ],
+      "remaining_gates": [
+        "Fresh actual test entry/discovery must execute every original mapped named body and independently observe these values; no build/banner/equal-wrong-values qualification.",
+        "Actual canonical Equal/type-query/numeric/formatter/Optional/Range/source/context interfaces and full driver registration remain OPEN; no guessed ordinal, Null sentinel, mixed-domain coercion or compatibility surface.",
+        "Fresh actual VM/native plus full affected FI/resource/lifetime/borrow/cancel/physical/safety/generated-C/provider/platform gates remain required; retain all200/260/300 loops and P20 bidirectional mixed responsibilities."
+      ]
+    },
+    {
+      "id": "regression_core_review_0330_bitwise",
+      "oracle_id": "regression_core_review_0330_bitwise",
+      "source": "tests/regression/03_operators/0330_bitwise.xr",
+      "source_lf_sha256": "da44d6ca2b7171a77bb1ce1fadc8499a6dee0bcdc07dfc57838808232ef8c93a",
+      "entry": "test",
+      "stdout_utf8": "",
+      "companions": [],
+      "owners": [
+        "P09",
+        "P10"
+      ],
+      "remaining_gates": [
+        "Fresh actual test entry/discovery must execute every original mapped named body and independently observe these values; no build/banner/equal-wrong-values qualification.",
+        "Actual canonical Equal/type-query/numeric/formatter/Optional/Range/source/context interfaces and full driver registration remain OPEN; no guessed ordinal, Null sentinel, mixed-domain coercion or compatibility surface.",
+        "Fresh actual VM/native plus full affected FI/resource/lifetime/borrow/cancel/physical/safety/generated-C/provider/platform gates remain required; retain all200/260/300 loops and P20 bidirectional mixed responsibilities."
+      ]
+    },
+    {
+      "id": "regression_core_review_0331_shift_mod64",
+      "oracle_id": "regression_core_review_0331_shift_mod64",
+      "source": "tests/regression/03_operators/0331_shift_mod64.xr",
+      "source_lf_sha256": "f4c33f70dcfa3f25a9f36f0fa9aa68152cd1496049f9e27f330c196c98bb7555",
+      "entry": "test",
+      "stdout_utf8": "",
+      "companions": [],
+      "owners": [
+        "P09",
+        "P10"
+      ],
+      "remaining_gates": [
+        "Fresh actual test entry/discovery must execute every original mapped named body and independently observe these values; no build/banner/equal-wrong-values qualification.",
+        "Actual canonical Equal/type-query/numeric/formatter/Optional/Range/source/context interfaces and full driver registration remain OPEN; no guessed ordinal, Null sentinel, mixed-domain coercion or compatibility surface.",
+        "Fresh actual VM/native plus full affected FI/resource/lifetime/borrow/cancel/physical/safety/generated-C/provider/platform gates remain required; retain all200/260/300 loops and P20 bidirectional mixed responsibilities."
+      ]
     }
   ]
 }
