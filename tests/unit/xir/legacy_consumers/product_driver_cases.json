@@ -10961,6 +10961,325 @@
         "Complete actual body discovery and independent VM/C/native traces.",
         "Full exact original FI/resources/lifetime/cancellation/physical/safety/provider qualification remains open."
       ]
+    },
+    {
+      "id": "regression_core_review_0410_while_complete_observed",
+      "oracle_id": "regression_core_review_0410_while",
+      "source": "tests/unit/xir/legacy_consumers/fixtures/independent_named_observations/0410_while/root.xr",
+      "source_lf_sha256": "65f5164c1557b58b20162ad7224d883bb3165ba3627fd8c97a505381fc986490",
+      "entry": "test",
+      "stdout_utf8": "10\n5\n15\n0\n0\n1\n10\n5\n15\n25\n4\n1\n3\n5\n7\n4\n9\n9\n5\n5\ntrue\n3\n15\n",
+      "stderr_utf8": "",
+      "companions": [],
+      "owners": [
+        "P09",
+        "P10"
+      ],
+      "independent_observations": {
+        "original_case": "tests/regression/04_control_flow/0410_while.xr",
+        "selected_complete_source": "tests/regression/04_control_flow/0410_while.xr",
+        "selected_source_lf_sha256": "c72faed8f017e67460675714e3ede1a2b281dfd8ecda1cf2e136cd87ccbae3c9",
+        "method": "Original loop bodies, bounds, break/continue/backedges and assertions remain unchanged. Pure final locals and each collected element are observed through public len/index operations.",
+        "values": [
+          {
+            "test": "test_while_count_up",
+            "expression": "sum",
+            "expected": 10,
+            "projection": null
+          },
+          {
+            "test": "test_while_count_up",
+            "expression": "i",
+            "expected": 5,
+            "projection": null
+          },
+          {
+            "test": "test_while_count_down",
+            "expression": "sum",
+            "expected": 15,
+            "projection": null
+          },
+          {
+            "test": "test_while_count_down",
+            "expression": "i",
+            "expected": 0,
+            "projection": null
+          },
+          {
+            "test": "test_while_never_run",
+            "expression": "count",
+            "expected": 0,
+            "projection": null
+          },
+          {
+            "test": "test_while_once",
+            "expression": "count",
+            "expected": 1,
+            "projection": null
+          },
+          {
+            "test": "test_while_condition_becomes_false",
+            "expression": "i",
+            "expected": 10,
+            "projection": null
+          },
+          {
+            "test": "test_while_break",
+            "expression": "i",
+            "expected": 5,
+            "projection": null
+          },
+          {
+            "test": "test_while_break_early",
+            "expression": "sum",
+            "expected": 15,
+            "projection": null
+          },
+          {
+            "test": "test_while_continue",
+            "expression": "sum",
+            "expected": 25,
+            "projection": null
+          },
+          {
+            "test": "test_while_continue_and_break",
+            "expression": "result",
+            "expected": [
+              1,
+              3,
+              5,
+              7
+            ],
+            "projection": "array_elements"
+          },
+          {
+            "test": "test_while_continue_and_break",
+            "expression": "len(result)",
+            "expected": 4,
+            "projection": null
+          },
+          {
+            "test": "test_while_nested",
+            "expression": "total",
+            "expected": 9,
+            "projection": null
+          },
+          {
+            "test": "test_while_nested_break",
+            "expression": "count",
+            "expected": 9,
+            "projection": null
+          },
+          {
+            "test": "test_while_and_condition",
+            "expression": "count",
+            "expected": 5,
+            "projection": null
+          },
+          {
+            "test": "test_while_or_condition",
+            "expression": "count",
+            "expected": 5,
+            "projection": null
+          },
+          {
+            "test": "test_while_find",
+            "expression": "found",
+            "expected": true,
+            "projection": null
+          },
+          {
+            "test": "test_while_find",
+            "expression": "i",
+            "expected": 3,
+            "projection": null
+          },
+          {
+            "test": "test_while_accumulate",
+            "expression": "sum",
+            "expected": 15,
+            "projection": null
+          }
+        ]
+      },
+      "remaining_gates": [
+        "Actual whole body discovery and independent VM/C/native semantic observations.",
+        "Original exact FI/resources/lifetime/cancellation/physical and sanitizer/provider qualification remains open."
+      ]
+    },
+    {
+      "id": "regression_core_review_0420_for_complete_observed",
+      "oracle_id": "regression_core_review_0420_for",
+      "source": "tests/unit/xir/legacy_consumers/fixtures/independent_named_observations/0420_for/root.xr",
+      "source_lf_sha256": "b61d3d4cfc52255358d1740dba19fb6bc81095049c3b612308c7076471303c5f",
+      "entry": "test",
+      "stdout_utf8": "10\n15\n15\n20\n4\n0\n3\n6\n9\n4\n0\n1\n4\n15\n25\n4\n1\n2\n3\n4\n4\n9\n36\n15\n103\n5\n0\n1\n4\n9\n16\n5\n0\n16\n18\n",
+      "stderr_utf8": "",
+      "companions": [],
+      "owners": [
+        "P09",
+        "P10"
+      ],
+      "independent_observations": {
+        "original_case": "tests/regression/04_control_flow/0420_for.xr",
+        "selected_complete_source": "tests/regression/04_control_flow/0420_for.xr",
+        "selected_source_lf_sha256": "b3c5b109120e1ad6ea8d63967eaab4a8e727b30018bda6ead0983b199f74cffc",
+        "method": "Original loop bodies, bounds, break/continue/backedges and assertions remain unchanged. Pure final locals and each collected element are observed through public len/index operations.",
+        "values": [
+          {
+            "test": "test_for_count_up",
+            "expression": "sum",
+            "expected": 10,
+            "projection": null
+          },
+          {
+            "test": "test_for_count_down",
+            "expression": "sum",
+            "expected": 15,
+            "projection": null
+          },
+          {
+            "test": "test_for_start_from_one",
+            "expression": "sum",
+            "expected": 15,
+            "projection": null
+          },
+          {
+            "test": "test_for_step_two",
+            "expression": "sum",
+            "expected": 20,
+            "projection": null
+          },
+          {
+            "test": "test_for_step_three",
+            "expression": "result",
+            "expected": [
+              0,
+              3,
+              6,
+              9
+            ],
+            "projection": "array_elements"
+          },
+          {
+            "test": "test_for_step_three",
+            "expression": "len(result)",
+            "expected": 4,
+            "projection": null
+          },
+          {
+            "test": "test_for_never_run",
+            "expression": "count",
+            "expected": 0,
+            "projection": null
+          },
+          {
+            "test": "test_for_once",
+            "expression": "count",
+            "expected": 1,
+            "projection": null
+          },
+          {
+            "test": "test_for_break",
+            "expression": "last",
+            "expected": 4,
+            "projection": null
+          },
+          {
+            "test": "test_for_break_early",
+            "expression": "sum",
+            "expected": 15,
+            "projection": null
+          },
+          {
+            "test": "test_for_continue",
+            "expression": "sum",
+            "expected": 25,
+            "projection": null
+          },
+          {
+            "test": "test_for_continue_first",
+            "expression": "result",
+            "expected": [
+              1,
+              2,
+              3,
+              4
+            ],
+            "projection": "array_elements"
+          },
+          {
+            "test": "test_for_continue_first",
+            "expression": "len(result)",
+            "expected": 4,
+            "projection": null
+          },
+          {
+            "test": "test_for_nested",
+            "expression": "total",
+            "expected": 9,
+            "projection": null
+          },
+          {
+            "test": "test_for_multiplication_table",
+            "expression": "sum",
+            "expected": 36,
+            "projection": null
+          },
+          {
+            "test": "test_for_nested_break",
+            "expression": "count",
+            "expected": 15,
+            "projection": null
+          },
+          {
+            "test": "test_for_outer_variable",
+            "expression": "x",
+            "expected": 103,
+            "projection": null
+          },
+          {
+            "test": "test_for_collect",
+            "expression": "result",
+            "expected": [
+              0,
+              1,
+              4,
+              9,
+              16
+            ],
+            "projection": "array_elements"
+          },
+          {
+            "test": "test_for_collect",
+            "expression": "len(result)",
+            "expected": 5,
+            "projection": null
+          },
+          {
+            "test": "test_for_collect",
+            "expression": "result[0]",
+            "expected": 0,
+            "projection": null
+          },
+          {
+            "test": "test_for_collect",
+            "expression": "result[4]",
+            "expected": 16,
+            "projection": null
+          },
+          {
+            "test": "test_for_expression_init",
+            "expression": "sum",
+            "expected": 18,
+            "projection": null
+          }
+        ]
+      },
+      "remaining_gates": [
+        "Actual whole body discovery and independent VM/C/native semantic observations.",
+        "Original exact FI/resources/lifetime/cancellation/physical and sanitizer/provider qualification remains open."
+      ]
     }
   ]
 }
