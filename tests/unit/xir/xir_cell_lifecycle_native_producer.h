@@ -54,7 +54,9 @@ static void cell_life_emit(unsigned fixture, CellLifeEmission *output) {
     CHECK(!runtime_live && !runtime_bytes && !runtime_owned);
 }
 static int cell_life_write_c(char **argv) {
-    CHECK(sizeof(cell_life_fixtures)/sizeof(cell_life_fixtures[0]) == 4);
+    _Static_assert(sizeof(cell_life_fixtures)/sizeof(cell_life_fixtures[0]) == 4,
+        "the complete Source lifecycle matrix has four fixtures");
+    _Static_assert(CELL_LIFE_ENTRIES == 6, "generated lifecycle entry tables preserve all six exports");
     for (unsigned i = 2; i < 7; ++i) {
         CHECK(argv[i][0]);
         for (unsigned prior = 2; prior < i; ++prior) CHECK(strcmp(argv[i], argv[prior]));
