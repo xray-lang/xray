@@ -1,0 +1,2 @@
+fn answer()->i8 { const xs:Array<i8>=[1]; return xs[-1] }
+export fn run()->i8 { return comptime answer() }

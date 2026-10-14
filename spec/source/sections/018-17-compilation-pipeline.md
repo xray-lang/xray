@@ -536,6 +536,88 @@ Source 的 &&/|| 在该局部存储上保留短路语义，经原 Checked→特�
 
 本节不准入普通 var 生成的拥有型 Cell、owned/path 操作、聚合/字符串导出、未知函数值或 native/Instance 执行；它们需要各自实际类型、生命周期与费用接口及独立资格，不从栈内标量存储外推。
 
+### 17.40 CTFE有界CFG回边与声明身份接收
+
+leaf CTFE接受经过完整Lowered复验的标量CFG回边；PHI在共同scalar edge核中按前驱选择并行复制。整个执行共享原steps/watchdog和编译账本：回边不重置或退还费用，非终结循环在有限steps耗尽时拒绝并保全规范Unit输出。实际Phi前驱、target、offset和签名仍由完整复验检查，执行器不按block ordinal推断可终结性。
+
+CTFE要求实际普通函数声明身份。结构合法但没有declarations/functions表的Lowered不能授予执行资格；leaf/direct-call入口分别拒绝为NOT_LEAF/NOT_SUPPORTED，并保留输出和已消费费用。Module initializer、nominal/cleanup owner、实际不支持的操作及可达I/O仍逐项拒绝，root或effect标志不授予确定性。leaf保持无CALL边界，有限调用使用独立全闭包接收入口。
+
+### 17.41 CTFE的规范Unit返回与普通Source重放
+
+没有值参数的普通Unit结果函数可进入CTFE的实际闭包准入；其Unit RETURN保留零type/reserved/payload，目标逻辑输出大小为零。Unit返回没有SSA存储槽，子调用返回不得向该槽写入；调用者的标量参数与已活跃值保持。Unit不作为普通值参数开放，入口仍按实际类型和完整Lowered身份复验。
+
+Source的Unit comptime结果经同一有限CTFE管线接收，再独立重放为普通Unit表达式，保留站点匹配、覆盖和规范结果验证。空块或末尾为普通语句的块产生Unit，拥有型局部状态继续依赖实际值域接点；comptime块不授予从外围函数非局部return的许可。I/O、非终结循环及不可接收的实际操作仍分别按闭包准入或预算规则拒绝，失败输出和原编译账本保持。
+
+### 17.42 有界CTFE的Rune值与普通Source常量
+
+Rune与bool/integer共同进入实际标量参数、返回、局部存储和直接调用闭包准入。CONST_RUNE、INTEGER_TO_RUNE、RUNE_TO_INTEGER使用已有共同执行核；Rune相等比较验证两边完整Unicode标量后比较码点，不把Rune解释为整数类型或宿主字符。合法范围为0..0x10ffff，排除0xd800..0xdfff；非法Rune输入拒绝为BAD_ARGUMENT，整数转Rune越界拒绝为NUMERIC_RANGE，失败保留规范Unit输出。CONVERT_NUMBER仍只准入整数之间转换，不由Rune开放浮点。
+
+导出大小由规范目标layout确定，Rune为4字节，output_bytes=3拒绝；不使用宿主载体sizeof或UTF-8长度决定预算。Source通过实际Checked/特化复验/Lowered计算后，在独立完整重放中写入普通CONST_RUNE recipe，保持完整站点、类型、规范值和覆盖验证。嵌套comptime和普通Rune调用不绕过闭包准入；原steps/depth/frame/output上限、同一累计编译账本、真实物理OOM和最后owner释放责任不变。本族不授予managed聚合、字符串、未知函数值或运行期fallback资格。
+
+### 17.43 原编译账本上的私有Cell执行与Unit尾赋值
+
+CTFE在整个实际调用闭包准入后，允许函数帧内的Cell<Unit/bool/integer/Rune>。普通var的CELL_NEW/READ/WRITE、懒构造CELL_LOCAL_WRITE和LOCAL_UNINIT使用既有真实Value操作；类型元数据独立复制进编译TypeArena，值存储经原XrCompileResources支持的Domain分配。所有分配、复制、遍历与Domain work保持同一累计账本和真实物理FI；局部接收fuel只限制一次标量检查，不复制、重置或返还编译预算。无Cell操作的原标量入口不创建该Domain/arena。
+
+实际owned offsets在正常返回、子帧返回、步数/预算/OOM/算术失败中全部释放。帧建立预付其清理offset扫描费用；清理不依赖剩余执行预算，也不分配。每次Cell访问验证同一私有Domain，参数仍限bool/integer/Rune，导出仍限规范Unit/bool/integer/Rune结果，不接收外部Cell、ref借用、模块状态或任意拥有值。类型、前驱/PHI、target、身份、签名、可达I/O、depth/steps/activation bytes及原输出上限继续全量复验，不从root/effect标志授予纯度，不调用Instance/native/fallback。
+
+Unit块的最后赋值可带普通表达式的内部编号，但helper的Unit RETURN必须使用零编号，不构造Unit SSA槽或传递该编号。Source仍完整独立重放、核对站点与规范值并重新Checker接收；私有Cell执行只导出实际标量/Unit结果。本族不授予Cell/聚合/字符串导出、函数值、清理函数或挂起资格。
+
+### 17.44 CTFE字符串拥有型导出与独立Source接收
+
+String参数、结果及Cell<String>使用实际Value/TypeArena和原compiler Domain。外部字符串参数先按完整UTF-8字节复制为本编译账本上的独立快照；内部调用通过真实owned slot retain/copy/move，正常、子返回和所有失败释放全部slot。常量、拼接、拥有型局部复制、字符数len与相等比较使用既有Value语义，扫描/复制/比较span在执行前付原累计work，Domain分配/resize也接同ledger。不调用Instance/native/AST fallback，不因root或effect授纯度。
+
+String输出大小是实际UTF-8字节数，不是宿主指针、carrier sizeof或字符数；空串在output_bytes=0可导出，超过原8字节请求上限拒绝OUTPUT_LIMIT，失败输出保持Unit。发布前取得独立拥有引用，帧/Artifact/Source/ledger调用者死亡不使结果悬空；最后drop不分配、不退累计费用，仅退live。
+
+Source每个原站点及重放站点分别持有真实结果；独立重放把完整字节复制到自己的普通literal/CONST_STRING recipe，再经完整Checker/query发布。内嵌NUL按长度保存，未知/重复/多余/类型错配站点仍拒绝。所有部分结果与第二次构造/费用/发布失败的结果均释放。目标/profile与原steps/depth/frame/output及编译三轴保持，未开放任意聚合/函数值/资源句柄导出。
+
+### 17.45 有界CTFE的String比较和只读搜索
+
+CTFE准入完整Lowered函数闭包中的String字节序比较（<、<=、>、>=）、contains、startsWith、endsWith、indexOf和lastIndexOf，调用既有Value操作确定语义，不引入native、Instance或AST求值路线。indexOf的start与两种索引结果都以Unicode标量计数，String长度也以标量计数；比较使用完整UTF-8字节序，嵌入NUL不截断。空模式、未找到的-1及start等于标量长度保持普通运行期规则；负start或超过标量长度返回NUMERIC_RANGE，Source给出value range violation诊断并保全输出。
+
+可变扫描在调用Value操作前从原累计compiler ledger预付保守上界：字节比较跨度、每个候选字节的模式比较和循环责任、实际搜索算法需要的skip表初始化及模式访问、索引换算的UTF-8扫描均计入。所有加乘检查溢出；无法支付或溢出拒绝BUDGET，不开展无界宿主搜索。空模式与已判定的范围错误无需扫描。该预付不是新额度，不退款、不重置原128M work及64MiB allocated/8MiB live限制。
+
+输入仍先复制到compiler Domain快照，异常、OOM、step或work拒绝释放全部帧拥有槽并保全调用者String。Source继续独立两次构造、普通常量recipe、完整Checker和查询发布；即使搜索条件使I/O分支不执行，实际可达闭包中的I/O仍拒绝。本族不授予任意聚合、函数值、资源或清理路径准入。
+
+### 17.46 编译域内的不可变Tuple与独立常量接收
+
+CTFE接收已经完整复验的类型池与普通函数闭包，迭代准入由Unit、bool、integer、Rune、String及这些类型组成的不可变Tuple。类型ID只在实际owner的描述池中有意义；循环描述、未闭合类型和含函数值/Cell/资源权限的字段拒绝，不从root或effect标志取得确定性。TUPLE_NEW按完整有序字段向量构造真实Value，Unit字段保留位置而无SSA槽；TUPLE_FIELD、内部Tuple参数/子返回、owned局部/并行PHI及私有Cell<Tuple>保持真实拥有引用和同compiler Domain。外部Tuple参数仍需有界跨arena接收接口，当前失败关闭拒绝。
+
+类型描述DFS、摘要与所有实际元数据分配进入原ledger。嵌套接收费用按完整展开的类型形状预付，重复字段位置逐次计数，数据共享不退费；加乘溢出或无力支付拒绝BUDGET。构造参数向量按完整arity占真实activation字节，遍历scratch使用原剩余frame额度并计入resize新旧块同时存活的峰值。steps65536、depth128、frame65536、output8及原64MiB allocated/8MiB live/128M work保持，不重置或退款。
+
+Tuple导出大小是按字段顺序递归相加的目标标量存储大小与String实际UTF-8字节，Unit贡献0；不计host指针、拥有头、type ID、carrier sizeof或填充。超原请求上限保全Unit输出。发布先取得独立拥有引用，类型arena、嵌套Tuple和String字段在Source/Artifact/ledger调用者死亡后仍有效；最后drop不分配，仅退live。
+
+Source以实际类型结构跨owner匹配helper及重放结果，而非假定局部type ID相同。独立接收以迭代拥有帧保存字段引用，将每个字段写成普通常量和TUPLE_NEW recipe，并完整Checker/查询发布。NUL完整长度、Unit字段位置、闭合泛型和原站点/owner/expected覆盖保持；字段失败、OOM、预算、构造与发布失败均释放全部临时结果。当前准入不授予任意Array/struct/enum、Tuple相等、函数值或cleanup路径完整资格。
+
+### 17.47 有界CTFE浮点位运算与目标常量
+
+完整Lowered重验与整个直接调用闭包接收后，CTFE允许f32/f64参数、结果、普通局部、私有Cell与不可变Tuple字段。CONST_FLOAT、负号、加减乘除、比较及具体数值转换复用现有仅整数实现的IEEE位运算，不依赖宿主FPU、Instance、native或AST回退。次正规数、最近偶数舍入、规范NaN、无穷和有符号零沿用普通执行语义；浮点除零产生IEEE结果。浮点转整数越界、NaN和无穷返回NUMERIC_RANGE，失败保持Unit输出。
+
+每条浮点操作在进入数值API前向原累计compiler ledger预付1024单位work。此保守固定上界覆盖64位格式的解码/打包、归一化、乘积进位扫描和长除法；这些循环只受固定格式位宽限制。预付不复制、重置或退还配额；未付清则先返回BUDGET。完整类型、身份、CFG、可达I/O及原steps/depth/frame/output/allocated/live/work上限继续生效。
+
+f32和f64逻辑输出分别占四和八个目标字节，Tuple字段继续累加目标存储大小。f32输入必须没有高位且NaN编码规范；f64沿用普通Value接收规则。Source在独立重放中再次校验目标规范浮点payload，记录普通CONST_FLOAT配方并交完整Checker。外部Tuple、任意Array/struct/enum、函数值和cleanup路径资格仍未由此授予。
+
+### 17.48 编译域内Nullable活跃分支与有界常量接收
+
+完整Lowered重验和整个可达直接调用闭包接收后，Nullable可以包装已准入的基本值、String、不可变Tuple及合法嵌套Nullable。类型ID仍只属于实际不可变pool；迭代类型族接收拒绝环、非法element和带Cell/函数/资源权限的字段。NULLABLE_NONE/SOME、IS_SOME和UNWRAP调用真实Value操作，在原compiler Domain构造、观察或取得独立payload引用。内部参数/子返回、owned局部/并行PHI、Tuple字段和私有Cell<Nullable>保持完整拥有寿命。解包None返回独立NULL_UNWRAP状态，Source报告带位置的编译错误，失败保全Unit输出并释放所有帧。
+
+逻辑导出从唯一TypeArena storage layout取得判别字节数，加上Some活跃payload的递归逻辑大小；None没有payload费用，不计算inactive存储、对齐填充、指针或owner头。当前canonical Nullable tag为一字节：None<i64>占一字节、Some<i8>占两字节，Some<i64>需九字节并触发原output8上限。迭代导出scratch继续计入原frame额度及resize时新旧块峰值；目标标量大小、String UTF-8长度和Unit Tuple字段零字节规则不变。
+
+完整有限类型形状在每次Value接收前预付原ledger，活跃分支不能借None免掉型别准入。Nullable相等仅接既有共同Value相等支持的Nullable链及基本/String叶；规范NaN、有符号零和完整NUL字节沿用同一个语义owner。固定数值work和活跃String扫描跨度在比较前支付原累计ledger，溢出或无力支付先返回BUDGET。没有另建语义解释器、配额、退款或Instance/native回退。
+
+Source独立重放按真实跨owner类型结构匹配，持有真实分支和字段owner，迭代记录普通NULLABLE_NONE/SOME与payload常量/TUPLE_NEW配方，再交完整Checker和查询发布。原站点/owner/expected覆盖以及每个失败前缀释放保持。外部Nullable/其他复合参数仍需有界跨arena完整快照接收；当前明确拒绝。Array/struct/enum、函数值和cleanup完整资格不由本族授予，原所有预算与正式安全门继续生效。
+
+### 17.49 有界编译Array、私有根修改与capacity接收
+
+完整Lowered和整个实际直接调用闭包重验后，CTFE接真实ARRAY_NEW/REPEAT/GET/LEN、CAPACITY/WITH_CAPACITY/RESERVE、SET/PUSH及私有Array Cell的CELL_PLACE/PLACE_READ/WRITE。类型族接收允许基本/String叶、纯Array链、接收跨度静态可界定的Tuple/Nullable元素及合法外层Tuple/Nullable包装。编译域内参数、子返回、Cell、owned局部与PHI仍用原Value/TypeArena/Domain，不运行Instance/native或AST fallback。root/effect不证明确定性。只有真实当前私有Cell根的同步place可修改；module根、外部Cell/ref和未接通的field/index投影继续拒绝。
+
+类型形状只报告费用和可变接收跨度，不是Value/执行授权。所有元数据、向量、复制、扫描、扩容和清理预付都进入原累计ledger。Array浅层长度可在有界header观察后取得；普通接收跨度按长度乘完整静态元素形状的保守上界在调用Value之前支付，检查加乘溢出。Tuple/Nullable包装中的可变Array跨度用迭代拥有访问定位并提前付清，不依靠宿主递归。scratch计入剩余原frame额度，导出stack与Value接收scratch的同时峰值一并计算。未付清先BUDGET；原预算、步数、深度和失败不退款规则不变。
+
+现有array_get会先接收整个Array。若某元素又包含自身需遍历可变Array内容的接收边界，如Array<Array<Tuple<...>>>或Array<Array<i8?>>，调用前无法借现有API有界取得内部长度。该具体族当前fail closed，需Value owner提供在每次访问前付费的浅层子观察/完整接收接口；不改成另一Value表示、不先无预算扫描、不将该接口缺口描述为整个Array目标完成。纯Array<Array<i8>>无需这种深接收，可以执行。任意Array相等、其他Array方法与完整路径仍未由本节授予。
+
+Array逻辑导出递归累加活跃元素的目标标量、String字节、Nullable判别和Tuple字段大小；空数组零字节，不计capacity、指针、owner头或inactive存储。实际capacity仍是普通语言可观察值，独立Source重放以WITH_CAPACITY、私有Cell、逐元素PUSH和CELL_READ配方精确保留它，不能把Array重新建成具有不同capacity的普通字面量。所有临时owner失败前缀均释放；导出类型、元素及账本在Source/Artifact/调用者死亡后仍有效，最后drop无分配且只退live。
+
+真实COW修改保留旧快照。负长度/capacity返回NUMERIC_RANGE，索引越界返回追加的compiler-only BOUNDS状态；Source给带位置的编译错误。失败保全Unit输出及借用值。外部复合快照、有嵌套可变接收的元素、nominal/函数值/cleanup和正式共享/完整安全资格继续按原目标实施，不能从此有限开发资格推断完成。
+
 <!-- /xr-spec:cn -->
 
 <!-- xr-spec:en -->
@@ -1182,5 +1264,87 @@ Compiler execution receives completely reverified Lowered input. It admits the e
 Source &&/|| preserve short-circuit semantics through this storage, the ordinary Checked→specialization reverification→Lowered CTFE pipeline, and an independent complete Source replay that checks ordinary constant recipes. An unexecuted pure arithmetic error may be skipped; reachable I/O in an unexecuted branch still rejects the entire closure. Root authority or effect=NONE grants no determinism.
 
 This section does not admit owned Cells produced by ordinary var, owned/path operations, aggregate/string exports, unknown function values or native/Instance execution. Each requires authentic type, lifetime and charging interfaces plus independent qualification; stack scalar storage does not establish those capabilities.
+
+### 17.40 Bounded CTFE CFG backedges and declaration identity receiving
+
+Leaf CTFE accepts scalar CFG backedges after full Lowered reverification. PHI values select the actual predecessor and copy in parallel through the shared scalar edge kernel. Execution shares the original steps/watchdog and compiler ledger: a backedge neither resets nor refunds charges, and a nonterminating loop rejects at its finite step limit while preserving canonical Unit output. Full receiving still checks PHI predecessors, targets, offsets and signatures; block ordinals do not prove termination.
+
+CTFE requires actual ordinary function declaration identity. Structurally valid Lowered input without a declarations/functions table grants no execution qualification; leaf and direct-call entries reject with NOT_LEAF and NOT_SUPPORTED respectively, preserving output and spent charges. Module initializers, nominal/cleanup owners, unsupported actual operations and reachable I/O retain individual rejection; root or effect flags grant no determinism. Leaf retains its no-CALL boundary; finite calls use the separate complete-closure receiving entry.
+
+### 17.41 Canonical CTFE Unit returns and ordinary Source replay
+
+Ordinary Unit-result functions without value parameters can enter actual CTFE closure admission. Their Unit RETURN preserves zero type/reserved/payload and has zero target logical output size. A Unit return has no SSA storage slot, so a child return must not write that slot; the caller retains scalar parameters and other live values. Unit is not admitted as an ordinary value argument, and receiving still repeats actual type and complete Lowered identity checks.
+
+Source receives Unit comptime results through the same bounded CTFE pipeline and independently replays ordinary Unit expressions, preserving site matching, coverage and canonical result verification. Empty blocks and blocks ending in ordinary statements produce Unit; owned local state continues to require the actual value-domain interface. A comptime block grants no nonlocal return from its enclosing function. I/O, nonterminating loops and unsupported actual operations retain closure or budget rejection, with failure outputs and the original compiler ledger preserved.
+
+### 17.42 Bounded CTFE Rune values and ordinary Source constants
+
+Rune joins bool/integer admission for actual scalar parameters, results, locals and direct-call closures. CONST_RUNE, INTEGER_TO_RUNE and RUNE_TO_INTEGER use the existing shared execution kernel. Rune equality validates both complete Unicode scalars and compares code points; it does not interpret Rune as an integer type or host character. Valid payloads are 0..0x10ffff excluding 0xd800..0xdfff. Invalid Rune arguments reject with BAD_ARGUMENT; out-of-range integer conversions reject with NUMERIC_RANGE, preserving canonical Unit output. CONVERT_NUMBER continues to admit only integer-to-integer conversion and grants no floating admission.
+
+Canonical target layout determines exported size: Rune occupies four bytes and output_bytes=3 rejects. Host carrier sizeof and UTF-8 length do not determine that budget. After actual Checked/specialization reverification/Lowered execution, Source independently replays an ordinary CONST_RUNE recipe with complete site, type, canonical-value and coverage checks. Nested comptime and ordinary Rune calls retain full closure admission. Existing steps/depth/frame/output ceilings, the sole cumulative compiler ledger, physical OOM and final-owner cleanup obligations remain. This family grants no managed aggregate, string, unknown function-value or runtime-fallback qualification.
+
+### 17.43 Private Cell execution on the compiler ledger and Unit tail assignment
+
+After admitting the entire actual call closure, CTFE allows frame-private Cell<Unit/bool/integer/Rune>. Ordinary var CELL_NEW/READ/WRITE, lazy CELL_LOCAL_WRITE and LOCAL_UNINIT use authentic existing Value operations. Type metadata is independently copied into a compiler TypeArena; value storage uses the original XrCompileResources-backed Domain. Allocation, copy, traversal and Domain work retain one cumulative ledger and physical FI. Local receiving fuel bounds one scalar check; it neither clones, resets nor refunds the compiler budget. Scalar entries without Cell operations create no such Domain/arena.
+
+Actual owned offsets are released on normal and child returns and on step, budget, OOM or arithmetic failure. Frame setup prepays its cleanup offset scans; release needs no remaining execution budget and allocates nothing. Each Cell access checks the same private Domain. Parameters and exports remain limited to canonical Unit/bool/integer/Rune results and ordinary scalar arguments; external Cells, ref loans, module state and arbitrary owned values are not admitted. Full type, predecessor/PHI, target, identity, signature, reachable-I/O, depth/steps/activation-byte and original output checks remain. Root/effect flags grant no purity, and no Instance/native/fallback runs.
+
+A Unit block's tail assignment may carry an ordinary expression's internal ID, but its helper Unit RETURN must use zero, creating no Unit SSA slot or forwarding that ID. Source independently replays the complete input, matches sites and canonical results and receives it through the ordinary Checker. Private Cell execution exports only actual scalar/Unit results. This family grants no Cell/aggregate/string export, function-value, cleanup-function or suspension qualification.
+
+### 17.44 Owning CTFE String exports and independent Source receiving
+
+String parameters, results and Cell<String> use authentic Value/TypeArena storage and the original compiler Domain. External String arguments first become independent full-UTF-8 snapshots on this compiler ledger. Internal calls use owned-slot retain/copy/move; normal, child and all failed exits release every slot. Constants, concatenation, owned local copies, rune-count length and equality retain existing Value semantics. Scanning/copy/comparison spans pay original cumulative work before execution, and Domain allocation/resize uses the same ledger. No Instance/native/AST fallback runs; root/effect flags grant no purity.
+
+String output size is its actual UTF-8 byte count, not a host pointer, carrier sizeof or rune count. Empty strings can export with output_bytes=0; exceeding the original eight-byte request ceiling rejects with OUTPUT_LIMIT and preserves Unit output. Publication first obtains an independent owned reference. Frame/Artifact/Source/ledger-caller death cannot dangle the result; final drop allocates nothing, refunds no cumulative fees and only decreases live bytes.
+
+Each original and replay Source site holds its own real result. Independent replay copies complete bytes into its ordinary literal/CONST_STRING recipe before complete Checker/query publication. Embedded NUL retains explicit length; unknown/duplicate/extra/type-mismatched sites still reject. Every partial result and second-construction/charging/publication failure releases its owners. Target/profile and original steps/depth/frame/output and compiler three-axis bounds remain; arbitrary aggregate/function-value/resource-handle exports are not granted.
+
+### 17.45 Bounded CTFE String comparison and readonly search
+
+CTFE admits String byte-order comparisons (<, <=, >, >=), contains, startsWith, endsWith, indexOf and lastIndexOf in the complete Lowered function closure. Existing Value operations determine semantics; no native, Instance or AST evaluation path is introduced. The indexOf start and both search results count Unicode scalars, as does String length. Comparison uses complete UTF-8 byte order and embedded NUL retains its explicit length. Empty patterns, missing-result -1 and start equal to scalar length retain ordinary runtime rules. A negative or excessive start returns NUMERIC_RANGE; Source reports a value range violation and preserves output.
+
+Variable scans prepay a conservative upper bound on the original cumulative compiler ledger before calling Value operations: comparison byte spans, each candidate byte's pattern comparison and loop bookkeeping, the search algorithm's skip-table initialization and pattern visits, and UTF-8 index-conversion scans. Every sum and product checks overflow. Unpayable or overflowing work rejects BUDGET before an unbounded host search. Empty patterns and established range errors require no scan. This prepayment creates no quota, refund or reset of the original 128M work, 64MiB allocated and 8MiB live limits.
+
+Inputs still become compiler Domain snapshots. Arithmetic-range, OOM, step and work failures release all frame owners and preserve caller Strings. Source retains two independent constructions, ordinary constant recipes, complete Checker and query publication. Reachable I/O still rejects even when a search condition leaves its branch unexecuted. This family grants no arbitrary aggregate, function-value, resource or cleanup-path admission.
+
+### 17.46 Immutable compiler Tuples and independent constant receiving
+
+CTFE receives completely reverified type pools and ordinary function closures. Iterative admission accepts Unit, bool, integer, Rune, String and immutable Tuples of these families. A type ID has meaning only in its actual owning descriptor pool. Cyclic descriptors, open types and fields carrying function, Cell or resource authority reject; root/effect flags grant no determinism. TUPLE_NEW constructs authentic Values from the complete ordered field vector. Unit fields retain their position without an SSA slot. TUPLE_FIELD, internal Tuple arguments/child returns, owned locals/parallel PHI and private Cell<Tuple> preserve real owned references on the same compiler Domain. External Tuple arguments still require bounded cross-arena receiving and currently reject fail closed.
+
+Descriptor DFS, summaries and every metadata allocation use the original ledger. Nested receiving prepays the complete expanded type shape; repeated field positions count each occurrence and data sharing refunds nothing. Overflow or unpayable work rejects BUDGET. Constructor argument vectors use complete arity in actual activation bytes. Traversal scratch uses the remaining original frame quota, including simultaneous old/new blocks during resize. Original steps65536, depth128, frame65536, output8, allocated64MiB, live8MiB and work128M remain without reset or refund.
+
+Tuple export size recursively sums target scalar storage sizes and actual String UTF-8 bytes in field order. Unit contributes zero; host pointers, ownership headers, type IDs, carrier sizeof and padding do not count. Exceeding the original request ceiling preserves Unit output. Publication first obtains independent ownership. The type arena, nested Tuples and String fields remain live after Source/Artifact/ledger-caller death. Final drop allocates nothing and refunds only live bytes.
+
+Source matches actual type structure across owners for helpers and replay results, without assuming equal local type IDs. Independent receiving uses iterative owning frames to record ordinary field constants and TUPLE_NEW recipes, followed by the complete Checker and query publication. Explicit NUL length, Unit positions, closed generics and original site/owner/expected coverage remain. Field, OOM, budget, construction and publication failures release all temporary results. This admission grants no complete Array/struct/enum, Tuple equality, function-value or cleanup-path qualification.
+
+### 17.47 Bounded CTFE floating bits and target constants
+
+After complete Lowered reverification and entire direct-call closure admission, CTFE permits f32/f64 arguments, results, ordinary locals, private Cells and immutable Tuple fields. CONST_FLOAT, negation, arithmetic, relations and concrete numeric conversions reuse the existing integer-only IEEE bit kernel. They depend on no host FPU, Instance, native or AST fallback. Subnormals, nearest-even rounding, canonical NaN, Infinity and signed zero retain ordinary execution semantics; floating division by zero produces IEEE results. Out-of-range, NaN and infinite floating-to-integer conversions return NUMERIC_RANGE and preserve Unit output.
+
+Each floating operation prepays 1024 work units on the original cumulative compiler ledger before entering a numeric API. This conservative fixed upper bound covers 64-bit decode/pack, normalization, product carry scans and long division; these loops depend only on fixed format widths. Prepayment creates no cloned quota, reset or refund; an unpayable reserve returns BUDGET first. Complete type, identity, CFG, reachable-I/O and original steps/depth/frame/output/allocated/live/work limits remain.
+
+Logical f32 and f64 outputs occupy four and eight target bytes respectively; Tuple fields continue to sum target storage sizes. f32 inputs require zero high bits and canonical NaN encodings; f64 retains ordinary Value admission rules. Independent Source replay rechecks target canonical floating payloads, records ordinary CONST_FLOAT recipes and invokes the complete Checker. External Tuple, arbitrary Array/struct/enum, function-value and cleanup-path qualification is not granted by this admission.
+
+### 17.48 Compiler-owned Nullable variants and bounded constant receiving
+
+After complete Lowered reverification and entire reachable direct-call closure admission, Nullable wraps admitted primitive values, String, immutable Tuples and legal nested Nullable values. Type IDs still belong only to their actual immutable pool. Iterative family admission rejects cycles, illegal elements and Cell/function/resource authority. NULLABLE_NONE/SOME, IS_SOME and UNWRAP use authentic Value operations on the original compiler Domain to construct, observe or independently retain the active payload. Internal arguments/child returns, owned locals/parallel PHI, Tuple fields and private Cell<Nullable> preserve ownership. Unwrapping None returns the distinct NULL_UNWRAP status; Source reports a positioned compile error, preserving Unit output and releasing every frame.
+
+Logical export obtains discriminant bytes from the sole TypeArena storage layout and adds the recursively measured active Some payload. None has no payload cost. Inactive storage, alignment padding, pointers and ownership headers do not count. The current canonical Nullable tag occupies one byte: None<i64> uses one byte, Some<i8> two, while Some<i64> requires nine and exceeds the original output8 ceiling. Iterative export scratch retains the original frame quota and simultaneous old/new resize peak. Target scalar sizes, String UTF-8 lengths and zero-byte Unit Tuple fields remain unchanged.
+
+The complete finite type shape prepays original ledger work before each Value receiving operation; None does not evade type admission. Nullable equality admits only the Nullable chains and primitive/String leaves supported by the existing common Value equality owner. NaN, signed zero and complete NUL bytes retain that sole semantics. Fixed numeric work and active String scan spans pay the original cumulative ledger before comparison; overflow or an unpayable reserve returns BUDGET first. No second semantics interpreter, quota, refund or Instance/native fallback exists.
+
+Independent Source replay matches authentic type structure across owners, retains actual variant and field owners, and iteratively records ordinary NULLABLE_NONE/SOME and payload constant/TUPLE_NEW recipes before complete Checker and query publication. Original site/owner/expected coverage and every failed-prefix release remain. External Nullable and other composite arguments still require bounded cross-arena complete snapshot receiving and currently reject explicitly. Array/struct/enum, function-value and complete cleanup qualification are not granted by this family; original budgets and mandatory safety gates remain.
+
+### 17.49 Bounded compiler Arrays, private mutation and capacity receiving
+
+After complete Lowered and entire actual direct-call closure reverification, CTFE uses authentic ARRAY_NEW/REPEAT/GET/LEN, CAPACITY/WITH_CAPACITY/RESERVE, SET/PUSH and private Array Cell CELL_PLACE/PLACE_READ/WRITE operations. Family admission accepts primitive/String leaves, pure Array chains, Tuple/Nullable elements with statically bounded receiving spans and legal outer Tuple/Nullable wrappers. Internal arguments, child returns, Cells, owned locals and PHI retain the original Value/TypeArena/Domain. No Instance/native or AST fallback runs, and root/effect flags prove no determinism. Only synchronous places from actual current private Cell roots may mutate; module roots, external Cell/ref and unsupported field/index projections reject.
+
+Type shapes report costs and variable admission spans, never Value or execution authority. Metadata, vectors, copy, scans, growth and cleanup prepayment use the original cumulative ledger. Bounded shallow header observation obtains Array length; length times the complete static element shape prepays a conservative receiving bound before calling Value, with overflow checks. Iterative owning observation locates variable Array spans inside Tuple/Nullable wrappers without host recursion. Scratch consumes the remaining original frame quota, including simultaneous export-stack and Value-admission scratch peaks. Unpayable work returns BUDGET first; original budgets, steps, depth and nonrefundable charges remain.
+
+Existing array_get admits the entire Array first. If an element contains another boundary requiring variable Array-content admission, such as Array<Array<Tuple<...>>> or Array<Array<i8?>>, current APIs cannot obtain its internal length through bounded observation before that call. This specific family currently fails closed pending Value-owner observation/receiving that charges before each access. No second Value representation or unpaid preliminary scan is introduced, and this interface gap does not mean the complete Array objective is achieved. Pure Array<Array<i8>> needs no such deep receiving and can execute. Arbitrary Array equality, other Array methods and complete paths are not granted here.
+
+Logical export recursively sums active elements' target scalars, String bytes, Nullable discriminants and Tuple fields. Empty Arrays use zero bytes; capacity, pointers, ownership headers and inactive storage do not count. Actual capacity remains observable ordinary semantics. Independent Source replay preserves it through WITH_CAPACITY, private Cell, element PUSH and CELL_READ recipes, rather than rebuilding a literal with different capacity. Every failed prefix releases temporary owners. Exported types, elements and ledger remain valid after Source/Artifact/caller death; final drop allocates nothing and refunds only live bytes.
+
+Authentic COW writes preserve prior snapshots. Negative length/capacity returns NUMERIC_RANGE; bounds errors return the appended compiler-only BOUNDS status. Source reports positioned compile errors, preserving Unit output and borrowed values. Foreign composite snapshots, elements with nested variable receiving, nominal/function/cleanup and mandatory shared/full safety qualifications remain part of the original objective; this limited development qualification proves no completion.
 
 <!-- /xr-spec:en -->

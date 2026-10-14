@@ -1,0 +1,2 @@
+fn answer()->i64 { var i=0; var total=0; while (i<6) { total=total+7; i=i+1 }; return total }
+export fn run()->i64 { return comptime answer() }

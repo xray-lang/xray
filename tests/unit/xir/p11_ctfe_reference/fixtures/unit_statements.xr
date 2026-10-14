@@ -1,0 +1,1 @@
+export fn run()->i64 { comptime { const x=6; const y=7 }; return 42 }

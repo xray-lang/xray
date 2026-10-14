@@ -1,0 +1,2 @@
+fn choose(flag:bool)->i8? { const a:i8?=7; const b:i8?=null; return flag?a:b }
+export fn run()->i8? { return comptime choose(true) }

@@ -1,0 +1,1 @@
+export fn run()->string? { return comptime { const x:string?="a\0b"; x } }

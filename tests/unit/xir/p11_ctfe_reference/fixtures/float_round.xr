@@ -1,0 +1,2 @@
+fn narrow(x:f64)->f32 { return x as f32 }
+export fn run()->f32 { return comptime narrow(16777217.0) }

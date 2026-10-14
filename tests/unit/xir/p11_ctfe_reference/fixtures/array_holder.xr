@@ -1,0 +1,2 @@
+fn answer()->i64 { const a:Array<(i8,string)>=[(7,"ab")]; const h:(Array<(i8,string)>,())=(a,()); const x:Array<(i8,string)>?=h.0; return x![0].0==7 && x![0].1=="ab" ? 42 : 0 }
+export fn run()->i64 { return comptime answer() }
