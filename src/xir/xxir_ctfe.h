@@ -39,8 +39,10 @@ typedef struct XrXirCtfeRequest {
 } XrXirCtfeRequest;
 
 /* Borrowed input owners must remain live for this synchronous call. The selected
- * ordinary function must have only bool/integer inputs and results, scalar local
- * storage and an acyclic admitted opcode graph. Local writes produce Unit. Every call repeats full artifact
+ * ordinary function must have bool/integer/Rune inputs, scalar or Unit results and
+ * frame-owned scalar locals and private Cell<Unit/bool/integer/Rune> storage
+ * in a bounded admitted opcode graph. Local
+ * writes produce Unit without a result slot. Every call repeats full artifact
  * verification on its original compiler ledger; root/effect flags never grant
  * purity. Limits may deny all resources and must not exceed the fixed ceilings.
  * Output must be canonical Unit. Failure preserves it, and consumed compiler
@@ -48,13 +50,14 @@ typedef struct XrXirCtfeRequest {
  * not the host carrier size. No source syntax, calls or runtime fallback is implied. */
 XR_FUNC XrXirCtfeStatus xr_xir_compile_ctfe_leaf(const XrXirCtfeRequest *request,
     XrXirValue *output);
-/* Direct calls execute only a fully checked scalar reachable closure, including
- * frame-owned scalar locals using the common numeric/CFG kernel. Depth
+/* Direct calls execute only a fully checked scalar/Unit reachable closure, including
+ * frame-owned scalar locals and private primitive Cells on the compiler ledger.
+ * Numeric/CFG execution uses the common kernel. Depth
  * and live activation bytes bound the whole stack; steps/work are never reset
  * on a callee or refunded on return. Admission includes unused reachable body
  * operations and does not derive determinism from any ROOT/effect flags.
  * Borrowed inputs stay live during this synchronous call. All failures preserve
- * canonical Unit output. Source comptime syntax and managed values are separate
+ * canonical Unit output. Owned exports and non-private managed values are separate
  * boundaries; this entry never invokes Instance, native code or a fallback. */
 typedef struct XrXirCtfeCallRequest {
     XrXirCtfeRequest evaluation;

@@ -42,7 +42,7 @@ static inline bool xir_scalar_core_opcode(XrXirOp op) {
     }
 }
 /* Generic runtime equality keeps its own arena/domain admission. Only its
- * canonical bool/integer leaf operation shares this numeric implementation. */
+ * canonical bool/integer/Rune leaf operation shares this numeric implementation. */
 XR_FUNC XrXirRunStatus xir_scalar_core_equal(XrXirType type,int64_t left,int64_t right,bool *output);
 XR_FUNC XrXirRunStatus xir_scalar_core_edge(XirScalarCoreRun *run,uint32_t instruction,uint32_t target);
 XR_FUNC XrXirRunStatus xir_scalar_core_step(XirScalarCoreRun *run,uint32_t *instruction,XirScalarCoreAction *action);

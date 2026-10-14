@@ -8,7 +8,7 @@
  *
  * KEY CONCEPT:
  *   A provisional call is real Built code. Only a later independently checked
- *   scalar result can replace it through the ordinary Source recipe writer.
+ *   scalar or Unit result can replace it through the ordinary Source recipe writer.
  */
 struct SourceComptimeSite {
     SourceComptimeSite *next;
@@ -39,28 +39,37 @@ static void source_comptime_restore(SourceContext *ctx,const SourceComptimeScope
     ctx->effect_argument=scope->argument;ctx->loop=scope->loop;ctx->type_scope=scope->types;
     ctx->returned=scope->returned;
 }
-static bool source_comptime_scalar(XrXirType type) {
-    return type==XR_XIR_BOOL || xr_xir_type_is_integer(type);
+static bool source_comptime_result_type(XrXirType type) {
+    return type==XR_XIR_UNIT || type==XR_XIR_BOOL || type==XR_XIR_RUNE || xr_xir_type_is_integer(type);
+}
+static bool source_comptime_result_value(const XrXirValue *value) {
+    return value && (value->type==XR_XIR_UNIT ? (!value->reserved && !value->payload) :
+        source_comptime_result_type((XrXirType)value->type) &&
+        xr_xir_value_argument(value,NULL,(XrXirType)value->type));
 }
 static bool source_comptime_body(SourceContext *ctx,AstNode *child,SourceExpectedType expected) {
     SourceValue value={0};
     if (!child) return source_fail(ctx,NULL,XR_XIR_BAD_STRUCTURE,"comptime has no expression");
+    bool unit_block=false;
     if (child->type==AST_BLOCK) {
         if (!source_block_functions(ctx,child)) return false;
         ++ctx->bodies[ctx->function].lexical_depth;
         int count=child->as.block.count;
-        for (int s=0;s<count-1;++s) if (!statement(ctx,child->as.block.statements[s],false)) return false;
-        if (!count || child->as.block.statements[count-1]->type!=AST_EXPR_STMT || ctx->returned)
-            return source_fail(ctx,child,XR_XIR_BAD_TYPE,"scalar comptime block requires an observed trailing expression");
-        child=child->as.block.statements[count-1]->as.expr_stmt;
+        bool tail=count && child->as.block.statements[count-1]->type==AST_EXPR_STMT;
+        int statements=tail?count-1:count;
+        for (int s=0;s<statements;++s) if (!statement(ctx,child->as.block.statements[s],false)) return false;
+        if (ctx->returned)
+            return source_fail(ctx,child,XR_XIR_BAD_TYPE,"comptime block cannot return from its enclosing function");
+        if (tail) child=child->as.block.statements[count-1]->as.expr_stmt;
+        else { value=(SourceValue){0,XR_XIR_UNIT};unit_block=true; }
     }
-    if (expected.present && !source_comptime_scalar(expected.type)) expected=(SourceExpectedType){0};
-    if (!source_plan_expression(ctx,child,expected,&value)) return false;
-    if (!source_comptime_scalar(value.type))
-        return source_fail(ctx,child,XR_XIR_BAD_TYPE,"comptime result must be a bool or integer in this execution domain");
+    if (expected.present && !source_comptime_result_type(expected.type)) expected=(SourceExpectedType){0};
+    if (!unit_block && !source_plan_expression(ctx,child,expected,&value)) return false;
+    if (!source_comptime_result_type(value.type))
+        return source_fail(ctx,child,XR_XIR_BAD_TYPE,"comptime result must be a bool, integer, Rune or Unit in this execution domain");
     if (!source_work_units(ctx,child,sizeof(value.type)+sizeof(ctx->returned))) return false;
     ctx->functions[ctx->function].result=value.type;
-    if (!source_recipe_record(ctx,(XrXirInstruction){XR_XIR_RETURN,XR_XIR_UNIT,{value.id,0},{0},0,{0}},NULL)) return false;
+    if (!source_recipe_record(ctx,(XrXirInstruction){XR_XIR_RETURN,XR_XIR_UNIT,{value.type==XR_XIR_UNIT?0:value.id,0},{0},0,{0}},NULL)) return false;
     ctx->returned=true;return finish_body(ctx);
 }
 static bool source_comptime_thunk(SourceContext *ctx,AstNode *node,SourceExpectedType expected,uint32_t *output) {
@@ -119,11 +128,13 @@ static bool source_comptime_expression(SourceContext *ctx,AstNode *node,SourceEx
         }
     }
     if (!matched || matched->value.type!=(uint32_t)ctx->functions[helper].result ||
-        !source_comptime_scalar((XrXirType)matched->value.type) ||
-        !xr_xir_value_argument(&matched->value,NULL,(XrXirType)matched->value.type))
+        !source_comptime_result_type((XrXirType)matched->value.type) ||
+        !source_comptime_result_value(&matched->value))
         return source_fail(ctx,node,XR_XIR_BAD_STRUCTURE,"comptime occurrence or canonical result changed");
     if (!source_work_units(ctx,node,sizeof(site->value)+sizeof(ctx->comptime_matched))) return false;
     site->value=matched->value;++ctx->comptime_matched;
-    XrXirOp op=site->value.type==XR_XIR_BOOL?XR_XIR_CONST_BOOL:XR_XIR_CONST_INT;
+    if (site->value.type==XR_XIR_UNIT) { *value=(SourceValue){0,XR_XIR_UNIT};return true; }
+    XrXirOp op=site->value.type==XR_XIR_BOOL?XR_XIR_CONST_BOOL:
+        site->value.type==XR_XIR_RUNE?XR_XIR_CONST_RUNE:XR_XIR_CONST_INT;
     return source_recipe_record(ctx,(XrXirInstruction){op,(XrXirType)site->value.type,{0},{0},site->value.payload,{0}},value);
 }

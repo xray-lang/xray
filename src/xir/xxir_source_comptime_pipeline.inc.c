@@ -54,7 +54,7 @@ static bool source_comptime_evaluate(SourceContext *ctx,const XrXirArtifact *che
         if (!source_work_units(ctx,NULL,packet.length)) status=XR_XIR_BUDGET;
         else xr_sha256(packet.bytes,packet.length,identity);
     }
-    /* Only fixed-width canonical bool/integer operations are supported. The
+    /* Only canonical Unit and fixed-width bool/integer/Rune operations are supported. The
      * actual supported layout profile is explicit, never inferred from host
      * sizeof; no reflection, floating or foreign-profile result is implied. */
     const XrXirTarget target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};
@@ -73,7 +73,7 @@ static bool source_comptime_evaluate(SourceContext *ctx,const XrXirArtifact *che
         memcpy(request.evaluation.checked_identity,identity,sizeof(identity));
         XrXirValue value={0};XrXirCtfeStatus evaluated=xr_xir_compile_ctfe_calls(&request,&value);
         if (evaluated!=XR_XIR_CTFE_OK) { source_comptime_failure(ctx,site->syntax,evaluated);break; }
-        if (!source_comptime_scalar((XrXirType)value.type) || !xr_xir_value_argument(&value,NULL,(XrXirType)value.type)) {
+        if (!source_comptime_result_type((XrXirType)value.type) || !source_comptime_result_value(&value)) {
             source_fail(ctx,site->syntax,XR_XIR_BAD_STRUCTURE,"comptime returned a noncanonical scalar");break;
         }
         if (!source_work_units(ctx,site->syntax,sizeof(value)+1)) break;
