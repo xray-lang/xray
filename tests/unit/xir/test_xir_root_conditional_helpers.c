@@ -1702,6 +1702,10 @@ static void conditional_ordinary_environment_keys(void) {
 }
 
 int main(int argc, char **argv) {
+    if (argc==2 && !strcmp(argv[1],"--final-retirement-literals")) {
+        invocation_final_retirement_literals();
+        CHECK(!rp_live && !rp_live_bytes && !rp_release_observer);return 0;
+    }
     if (argc==2 && !strcmp(argv[1],"--ordinary-environment-keys")) {
         conditional_ordinary_environment_keys();CHECK(!rp_live && !rp_live_bytes);return 0;
     }

@@ -57,6 +57,9 @@ static XrXirStatus invocation_retired_seal(const EffectInvocationDriverInput *in
         invocation_retired_blocks[0]=invocation_retired_block(workspace);
         invocation_retired_blocks[1]=invocation_retired_block(workspace->consumers);
         invocation_retired_blocks[2]=invocation_retired_block(workspace->edge_index);
+        CHECK(workspace->states && invocation_retired_block(workspace->states)==invocation_retired_blocks[1]);
+        for (uint32_t n=0;n<workspace->final.count;++n)
+            CHECK(workspace->states[n].expanded && !workspace->states[n].queued);
         memset(invocation_retired_counts,0,sizeof(invocation_retired_counts));
         rp_release_observer=invocation_retired_observe;
         EffectInvocationSealRequest request={&workspace,receiving,input->dense};

@@ -319,12 +319,13 @@ static XrXirStatus effect_invocation_coverage_return(EffectInvocationWorkspace *
 /* Target discovery has already reached closure. Positive coverage uses the
  * same owned graph queue and cannot add nodes, edges, ROOT bits or permissions. */
 static XrXirStatus effect_invocation_coverage_solve(EffectInvocationWorkspace *owner) {
-    if (!owner || owner->pending || !owner->graph || !owner->work) return XR_XIR_BAD_STRUCTURE;
+    if (!owner || owner->pending || !owner->graph || !owner->work || !owner->states)
+        return XR_XIR_BAD_STRUCTURE;
     if (!owner->producer_enabled) return XR_XIR_OK;
     XrXirStatus shape=effect_invocation_coverage_incoming_shape(owner);
     if (shape!=XR_XIR_OK) return shape;
     for (uint32_t n=0;n<owner->final.count;++n) {
-        if (owner->final.nodes[n].return_coverage || owner->final.nodes[n].queued ||
+        if (owner->final.nodes[n].return_coverage || owner->states[n].queued ||
             (!!owner->final.nodes[n].parameter_coverage!=!!owner->final.nodes[n].parameter_count))
             return XR_XIR_BAD_STRUCTURE;
         for (uint32_t p=0;p<owner->final.nodes[n].parameter_count;++p) {
@@ -337,9 +338,9 @@ static XrXirStatus effect_invocation_coverage_solve(EffectInvocationWorkspace *o
     while (owner->pending) {
         if (!xir_compile_work(owner->work,3)) return XR_XIR_BUDGET;
         uint32_t n=owner->graph->queue[owner->front];
-        if (n>=owner->final.count || !owner->final.nodes[n].queued) return XR_XIR_BAD_STRUCTURE;
+        if (n>=owner->final.count || !owner->states[n].queued) return XR_XIR_BAD_STRUCTURE;
         owner->front=owner->front+1==owner->final.capacity?0:owner->front+1;
-        --owner->pending;owner->final.nodes[n].queued=false;
+        --owner->pending;owner->states[n].queued=false;
         bool changed=false;XrXirStatus status=effect_invocation_parameter_step(owner,n,&changed,false,0);
         uint64_t rank=0;
         if (status==XR_XIR_OK && !owner->final.nodes[n].return_coverage)
@@ -367,7 +368,7 @@ static XrXirStatus effect_invocation_coverage_verify_read(EffectInvocationWorksp
             if (!xir_compile_work(owner->work,2)) return XR_XIR_BUDGET;
             XrXirStatus zero=effect_invocation_parameter_zero_shape(owner,request,n);
             if (zero!=XR_XIR_OK) return zero;
-            if (owner->final.nodes[n].return_coverage || owner->final.nodes[n].queued) return XR_XIR_BAD_STRUCTURE;
+            if (owner->final.nodes[n].return_coverage) return XR_XIR_BAD_STRUCTURE;
         }
         return XR_XIR_OK;
     }
@@ -390,7 +391,7 @@ static XrXirStatus effect_invocation_coverage_verify_read(EffectInvocationWorksp
     for (uint32_t n=0;n<owner->final.count;++n) {
         if (!xir_compile_work(owner->work,2)) return XR_XIR_BUDGET;
         uint64_t stored=owner->final.nodes[n].return_coverage;
-        if (stored>maximum || owner->final.nodes[n].queued) return XR_XIR_BAD_STRUCTURE;
+        if (stored>maximum) return XR_XIR_BAD_STRUCTURE;
         bool changed=false;XrXirStatus status=effect_invocation_parameter_step_read(owner,request,n,&changed,true,maximum);
         uint64_t actual=0;
         if (status==XR_XIR_OK) status=effect_invocation_coverage_return_read(owner,request,n,&actual);

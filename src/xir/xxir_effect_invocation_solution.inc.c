@@ -42,7 +42,8 @@ static XrXirStatus effect_invocation_closed(EffectInvocationWorkspace *owner) {
     XrXirStatus status=XR_XIR_OK;uint64_t linked=0;
     for (uint32_t n=0;n<owner->final.count && status==XR_XIR_OK;++n) {
         const EffectInvocationNode *node=&owner->final.nodes[n];
-        if (!node->expanded || node->queued || node->body>=owner->body.domain.function_count) {
+        if (node->body>=owner->body.domain.function_count ||
+            (owner->states && (!owner->states[n].expanded || owner->states[n].queued))) {
             status=XR_XIR_BAD_STRUCTURE;break;
         }
         EffectInvocationBasis basis={0};status=effect_invocation_basis(owner,node->root,&basis);
@@ -192,7 +193,7 @@ static XrXirStatus effect_invocation_result_terms(const EffectInvocationTermSour
     if (!source->equations->root_spaces || node->root!=source->equations->root_spaces[function] ||
         node->body!=function || node->parameter_count!=body->parameter_count)
         return XR_XIR_BAD_STRUCTURE;
-    if (node->root>=effect_body_count(source->equations->material) || !node->expanded || node->queued)
+    if (node->root>=effect_body_count(source->equations->material))
         return XR_XIR_BAD_STRUCTURE;
     uint32_t root_parameters=source->equations->material->functions[node->root].parameter_count;
     if (!xir_compile_work(source->work,9)) return XR_XIR_BUDGET;
@@ -389,7 +390,8 @@ static XrXirStatus effect_invocation_stage(EffectInvocationWorkspace *owner,
             if (!xir_compile_work(owner->work,8)) return XR_XIR_BUDGET;
             const EffectInvocationNode *node=&owner->final.nodes[f];
             if (owner->final.roots[f]!=f || node->body!=f || node->root || node->parameter_count ||
-                !node->expanded || node->queued || !effect_invocation_node_shape(node,0,
+                !owner->states || !owner->states[f].expanded || owner->states[f].queued ||
+                !effect_invocation_node_shape(node,0,
                     owner->final.material->functions[f].instruction_count)) return XR_XIR_BAD_STRUCTURE;
         }
         if (!xir_compile_work(owner->work,2*sizeof(void *))) return XR_XIR_BUDGET;

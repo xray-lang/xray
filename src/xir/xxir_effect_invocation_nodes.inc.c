@@ -131,6 +131,9 @@ static void effect_invocation_free(EffectInvocationWorkspace *owner) {
 /* The formula graph's queue is shared by every invocation equation. All
  * live entries retain source order during growth; no second queue solves ROOT. */
 static XrXirStatus effect_invocation_capacity(EffectInvocationWorkspace *owner) {
+    if (!owner || !owner->graph || !owner->work ||
+        (owner->final.count && (!owner->final.nodes || !owner->consumers || !owner->states)))
+        return XR_XIR_BAD_STRUCTURE;
     if (owner->final.count<owner->final.capacity) return XR_XIR_OK;
     if (owner->final.count>=owner->maximum) return XR_XIR_BUDGET;
     uint32_t capacity=owner->final.capacity ? owner->final.capacity : 8;
@@ -138,23 +141,26 @@ static XrXirStatus effect_invocation_capacity(EffectInvocationWorkspace *owner) 
     else if (owner->final.capacity) capacity=capacity>owner->maximum/2 ?
         owner->maximum : capacity*2;
     uint64_t node_bytes=(uint64_t)capacity*sizeof(*owner->final.nodes);
-    uint64_t index_bytes=(uint64_t)capacity*sizeof(*owner->consumers);
+    uint64_t index_bytes=(uint64_t)capacity*(sizeof(*owner->consumers)+sizeof(*owner->states));
     if (capacity<=owner->final.count || node_bytes>SIZE_MAX ||
         index_bytes>SIZE_MAX) return XR_XIR_BUDGET;
     XrXirStatus status=XR_XIR_OK;
     /* Each admitted slot receives a complete value in intern. Unused capacity
      * has no initialized node and is never visited by lookup or destruction. */
     EffectInvocationNode *nodes=xir_compile_alloc(owner->work,(size_t)node_bytes,&status);
+    /* One scratch allocation owns both the reverse index and its state tail.
+     * Only the base is freed; neither view is transferred into Final. */
     uint32_t *consumers=status==XR_XIR_OK ?
-        xir_compile_alloc(owner->work,(size_t)capacity*sizeof(*consumers),&status) : NULL;
+        xir_compile_alloc(owner->work,(size_t)index_bytes,&status) : NULL;
+    EffectInvocationState *states=consumers ? (EffectInvocationState *)(consumers+capacity) : NULL;
     uint32_t *queue=status==XR_XIR_OK ?
         xir_compile_alloc(owner->work,(size_t)capacity*sizeof(*queue),&status) : NULL;
     if (!nodes || !consumers || !queue) {
         xr_compile_resources_free(nodes);xr_compile_resources_free(consumers);
         xr_compile_resources_free(queue);return status;
     }
-    uint64_t work=(uint64_t)owner->final.count*(sizeof(*nodes)+sizeof(*consumers))+
-        (uint64_t)owner->pending*sizeof(*queue)+capacity;
+    uint64_t work=(uint64_t)owner->final.count*(sizeof(*nodes)+sizeof(*consumers)+sizeof(*states))+
+        (uint64_t)owner->pending*sizeof(*queue)+(uint64_t)capacity*3;
     if (!xir_compile_work(owner->work,work)) {
         xr_compile_resources_free(nodes);xr_compile_resources_free(consumers);
         xr_compile_resources_free(queue);return XR_XIR_BUDGET;
@@ -162,8 +168,11 @@ static XrXirStatus effect_invocation_capacity(EffectInvocationWorkspace *owner) 
     if (owner->final.count) {
         memcpy(nodes,owner->final.nodes,(size_t)owner->final.count*sizeof(*nodes));
         memcpy(consumers,owner->consumers,(size_t)owner->final.count*sizeof(*consumers));
+        memcpy(states,owner->states,(size_t)owner->final.count*sizeof(*states));
     }
-    for (uint32_t n=owner->final.count;n<capacity;++n) consumers[n]=UINT32_MAX;
+    for (uint32_t n=owner->final.count;n<capacity;++n) {
+        consumers[n]=UINT32_MAX;states[n]=(EffectInvocationState){0};
+    }
     for (uint32_t q=0;q<owner->pending;++q) {
         uint64_t at=(uint64_t)owner->front+q;
         if (at>=owner->final.capacity) at-=owner->final.capacity;
@@ -171,21 +180,21 @@ static XrXirStatus effect_invocation_capacity(EffectInvocationWorkspace *owner) 
     }
     xr_compile_resources_free(owner->final.nodes);xr_compile_resources_free(owner->consumers);
     xr_compile_resources_free(owner->graph->queue);
-    owner->final.nodes=nodes;owner->consumers=consumers;owner->graph->queue=queue;
+    owner->final.nodes=nodes;owner->consumers=consumers;owner->states=states;owner->graph->queue=queue;
     owner->final.capacity=capacity;owner->front=0;
     owner->back=owner->pending==capacity ? 0 : owner->pending;
     return XR_XIR_OK;
 }
 
 static XrXirStatus effect_invocation_enqueue(EffectInvocationWorkspace *owner,uint32_t node) {
-    if (node>=owner->final.count) return XR_XIR_BAD_STRUCTURE;
+    if (node>=owner->final.count || !owner->states) return XR_XIR_BAD_STRUCTURE;
     if (!xir_compile_work(owner->work,1)) return XR_XIR_BUDGET;
-    if (owner->final.nodes[node].queued) return XR_XIR_OK;
+    if (owner->states[node].queued) return XR_XIR_OK;
     if (owner->pending>=owner->final.capacity) return XR_XIR_BAD_STRUCTURE;
     if (!xir_compile_work(owner->work,3)) return XR_XIR_BUDGET;
     owner->graph->queue[owner->back]=node;
     owner->back=owner->back+1==owner->final.capacity ? 0 : owner->back+1;
-    ++owner->pending;owner->final.nodes[node].queued=true;return XR_XIR_OK;
+    ++owner->pending;owner->states[node].queued=true;return XR_XIR_OK;
 }
 
 /* Neither a producer pointer nor a numeric target alone is a key. Exact
