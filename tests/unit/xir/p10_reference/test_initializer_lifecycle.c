@@ -166,6 +166,7 @@ static void lifecycle_case(XrXirProgram *program,const InitializerEntries *entri
     CHECK(instance_compile_live==compiler_blocks && instance_compile_bytes==compiler_bytes);
     printf("constructor lifecycle mode=%u: exact class retirements, both physical baselines restored\n",mode);
 }
+#include "initializer_runtime_resources.h"
 #if XR_INIT_NATIVE
 static bool initializer_root(uint32_t function,const InitializerEntries *entries) {
     return function==entries->answer || function==entries->failure || function==entries->suspended || function==entries->partial;
@@ -207,19 +208,27 @@ static void native_profile(bool direction) {
     }
     xr_xir_compile_artifact_free(checked);XrXirProgram *program=NULL;
     CHECK(xr_xir_compile_program_seal(&owner.context,&spec,&program)==XR_XIR_OK);
-    for (unsigned mode=0;mode<6;++mode) lifecycle_case(program,&entries,mode);
+    initializer_profile_cases(program,&entries);
     xr_xir_compile_program_drop(program);xr_xir_compile_artifact_free(lowered);
     xr_compile_resources_free(bindings);xr_compile_resources_free(calls);source_fixture_owner_free(&owner);
     instance_compile_report();CHECK(!runtime_live && !runtime_bytes);
 }
 #endif
-int main(void) {
+int main(int argc,char **argv) {
+    CHECK(argc==1 || argc==2);
+    if (argc==2) {
+        if (!strcmp(argv[1],"--resource-baseline")) initializer_resource_mode=1;
+        else if (!strcmp(argv[1],"--runtime-fi")) initializer_resource_mode=2;
+        else if (!strcmp(argv[1],"--runtime-axes")) initializer_resource_mode=3;
+        else if (!strcmp(argv[1],"--focused-fault")) initializer_resource_mode=4;
+        else {CHECK(!strcmp(argv[1],"--focused-value-limit"));initializer_resource_mode=5;}
+    }
 #if XR_INIT_NATIVE
     native_profile(false);if (XR_INIT_MIXED) native_profile(true);
 #else
     SourceFixtureOwner owner={0};source_fixture_owner_new(&owner);InitializerEntries entries={0};
     XrXirProgram *program=compile_fixture(&owner,&entries);
-    for (unsigned mode=0;mode<6;++mode) lifecycle_case(program,&entries,mode);
+    initializer_profile_cases(program,&entries);
     xr_xir_compile_program_drop(program);source_fixture_owner_free(&owner);instance_compile_report();
     CHECK(!runtime_live && !runtime_bytes);
 #endif
