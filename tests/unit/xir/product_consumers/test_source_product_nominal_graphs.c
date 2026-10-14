@@ -120,6 +120,7 @@ static NominalRun graph_build(const SourceProductNominalFixture *fixture,
     instance_compile_fail_at = failure;
     instance_compile_injected = false;
     NominalRun run = {XR_XIR_OUT_OF_MEMORY, {0}, 0};
+    const char *operation = "resources";
     XrXirCompileContext context = {0};
     XrCompileResourceStats baseline = {0};
     context.limits = xr_xir_compile_default_limits();
@@ -135,6 +136,7 @@ static NominalRun graph_build(const SourceProductNominalFixture *fixture,
         goto release;
     }
     CHECK(xr_compile_resources_stats(context.resources, &baseline) == XR_COMPILE_RESOURCE_OK);
+    operation = "session";
     XrCompilerSessionStatus ss = xr_compile_session_new(context.resources, &session);
     if (ss != XR_COMPILER_SESSION_OK) {
         run.status = ss == XR_COMPILER_SESSION_OUT_OF_MEMORY ? XR_XIR_OUT_OF_MEMORY : XR_XIR_BUDGET;
@@ -144,6 +146,7 @@ static NominalRun graph_build(const SourceProductNominalFixture *fixture,
     XrXirSourceProductRequest request = {
         {session, fixture->file, &authority, &context, NULL, NULL, XR_XIR_PROGRAM, NULL},
         {XR_XIR_ARCH_X86_64, XR_XIR_VALUE_ABI_VERSION}};
+    operation = "source-product";
     run.status = xr_xir_compile_source_product_build(&request, &product, &diagnostic);
     if (run.status != XR_XIR_OK) {
         CHECK(!product);
@@ -153,13 +156,17 @@ static NominalRun graph_build(const SourceProductNominalFixture *fixture,
         goto release;
     }
     XrXirSourceProductPacketView packet = {0};
+    operation = "closed-packet";
     run.status = xr_xir_compile_source_product_packet(product, XR_XIR_SOURCE_PRODUCT_CLOSED, &packet);
     if (run.status != XR_XIR_OK) goto release;
+    operation = "checked-read";
     run.status = xr_xir_compile_checked_read(&context, packet.bytes, packet.length, &checked, NULL);
     if (run.status != XR_XIR_OK) goto release;
+    operation = "checked-write";
     run.status = xr_xir_compile_checked_write(checked, &rewrite, NULL);
     if (run.status != XR_XIR_OK) goto release;
     CHECK(rewrite.length == packet.length && !memcmp(rewrite.bytes, packet.bytes, packet.length));
+    operation = "source-c-emit";
     run.status = xr_xir_compile_source_product_emit(product, "nominal_graph", UINT64_C(16777216), &original);
     if (run.status != XR_XIR_OK) goto release;
     xr_xir_compile_source_product_free(product);
@@ -167,12 +174,15 @@ static NominalRun graph_build(const SourceProductNominalFixture *fixture,
     xr_compile_session_free(session);
     session = NULL;
     graph_shape(xr_xir_compile_artifact_module(checked), fixture->classes);
+    operation = "detached-checked-verify";
     run.status = xr_xir_compile_artifact_verify(checked, NULL);
     if (run.status != XR_XIR_OK) goto release;
     XrXirTarget target = {XR_XIR_ARCH_X86_64, XR_XIR_VALUE_ABI_VERSION};
+    operation = "detached-lower";
     run.status = xr_xir_compile_lower(checked, &target, &lowered, NULL);
     if (run.status != XR_XIR_OK) goto release;
     graph_shape(xr_xir_compile_artifact_module(lowered), fixture->classes);
+    operation = "detached-c-emit";
     run.status = xr_xir_compile_emit_c(lowered, "nominal_graph", UINT64_C(16777216), &regenerated);
     if (run.status != XR_XIR_OK) goto release;
     CHECK(original.length == regenerated.length && !memcmp(original.text, regenerated.text, original.length));
@@ -195,6 +205,13 @@ release:
         xr_compile_resources_release(context.resources);
     }
     run.attempts = instance_compile_attempts;
+    if (failure == SIZE_MAX && run.status != XR_XIR_OK)
+        fprintf(stderr, "nominal baseline case=%s operation=%s status=%u classes=%u "
+            "allocated=%llu peak=%llu work=%llu limits=%llu/%llu/%llu compiler-sites=%zu\n",
+            fixture->name, operation, (unsigned)run.status, fixture->classes,
+            (unsigned long long)run.stats.allocated_bytes, (unsigned long long)run.stats.peak_bytes,
+            (unsigned long long)run.stats.work, (unsigned long long)limits.allocated_bytes,
+            (unsigned long long)limits.live_bytes, (unsigned long long)limits.work, run.attempts);
     instance_compile_fail_at = SIZE_MAX;
     instance_compile_zero();
     return run;
