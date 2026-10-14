@@ -50,6 +50,8 @@ def main() -> int:
             raise ValueError('independent scalar oracle identity collides with a preserved oracle')
         oracles[row['id']] = row
     cases = manifest['cases']
+    if any(row['entry'] not in ('run', 'function', 'test') for row in cases):
+        raise ValueError('consumer entry must name an existing run/function/test route')
     if args.case:
         if len(args.case) != len(set(args.case)) or set(args.case)-{row['id'] for row in cases}:
             raise ValueError('case selection must name distinct preserved manifest entries')
