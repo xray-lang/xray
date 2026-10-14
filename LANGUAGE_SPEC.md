@@ -7830,6 +7830,16 @@ An iterative owning pair walk charges before each header/type/child access. Shal
 
 The prepayment stack consumes the original remaining frame limit, including old/new resize blocks and simultaneous getter-admission scratch. It releases every stack and temporary reference before common comparison, whose Value scratch remains independently bounded. Physical OOM and work/step/frame failure preserve Unit output, original borrowed values and spent charges, while releasing all temporary/frame owners. This common path atomically replaces the old Nullable-specific equality branch. Source retains two constructions, independent ordinary BOOL constants and complete Checker/query publication. Original budgets, safety gates and the precise Value observation gap for deeper variable receiving remain; development qualification is not complete P11.
 
+### 17.51 Bounded receiving and mutation of private Array index paths
+
+After complete Lowered and entire reachable closure admission, CTFE supports INDEX_PLACE chains rooted in authentic private Cells. Each projection carries a type and an already evaluated index; each read or write resolves the current root again, retaining no interior address across operations. The chain must terminate at an admitted Cell in the current compiler Domain. Field, module/object roots, foreign Cells and projected Cell authority gain no admission. Complete family restrictions remain, including explicit refusal of deeper variable Arrays that lack bounded receiving interfaces.
+
+Path counting and construction, every type/header observation, complete getter receiving spans, final public path receiving and the capacity bytes of every possibly copied ancestor prepay the original cumulative ledger before access. Push additionally prepays possible leaf growth. Overflow or unpayable work returns BUDGET first. Path steps consume the original remaining frame quota; observation and final Value scratch receive only the balance after those steps. All temporary observation owners are dropped before common mutation to avoid manufacturing sharing. Sole Value path read/write/push operations determine ordinary semantics, COW and publication; CTFE introduces no second mutation algorithm.
+
+Nested set/push, PLACE_READ/WRITE and the ordinary reserve read/construct/writeback recipe follow this path. Existing ordinary Array method recipes can compose admitted operations, including contains/indexOf, String join, clear/reverse/unshift/pop/shift/resize/fill/concat/entries; each still requires actual opcode, type and whole closure admission. This grants neither function-value callbacks nor unimplemented numeric formatting operations. Source retains independent ordinary constant replay. Exported path results still count active logical bytes under the original output ceiling.
+
+Existing snapshots retain ordinary COW semantics. Physical OOM, bounds and work/step/frame/output failure preserve empty output and release every frame and temporary owner without refunding cumulative charges. After Source/Artifact and ledger caller death, the last owned result retains authentic type/Domain lifetimes and final drop allocates nothing. Path development qualification does not replace complete P11, public sanitizer, provider or other original gates.
+
 ---
 
 ## 18. Error Codes

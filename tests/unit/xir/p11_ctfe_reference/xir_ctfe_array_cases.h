@@ -39,7 +39,7 @@ static void reference_array_value(const XrXirValue *value,const CtfeReferenceCas
         if (!strcmp(selected->name,"array_nested")) {
             XrXirValueAdmission child=admission;int64_t count=0;CHECK(xr_xir_array_len(&element,&child,&count)==XR_XIR_VALUE_OK && count==(i?1:2));
             for (int64_t j=0;j<count;++j) { XrXirValue number={0};CHECK(xr_xir_array_get(&element,j,&child,&number,&fault)==XR_XIR_VALUE_OK);CHECK(number.type==XR_XIR_I8 && number.payload==(i?3:j+1)); }
-        } else if (!strcmp(selected->name,"array_string")) {
+        } else if (!strcmp(selected->name,"array_string") || !strcmp(selected->name,"array_path_string_direct")) {
             const char *bytes=NULL;size_t size=0;CHECK(xr_xir_string_view(&element,&bytes,&size));
             CHECK(size==(i?1u:3u) && !memcmp(bytes,i?"z":"a\0b",size));
         } else if (!strcmp(selected->name,"array_tuple")) {
@@ -50,7 +50,8 @@ static void reference_array_value(const XrXirValue *value,const CtfeReferenceCas
         } else if (!strcmp(selected->name,"array_nullable")) {
             bool some=false;const XrXirValue *payload=NULL;CHECK(xr_xir_nullable_view(&element,&some,&payload));
             CHECK(some==(i!=0));if (some) CHECK(payload && payload->type==XR_XIR_I8 && payload->payload==7);
-        } else CHECK(element.type==XR_XIR_I8 && element.payload==(!strcmp(selected->name,"array_repeat")?7:!strcmp(selected->name,"array_cell")?(i?2:7):i+1));
+        } else CHECK(element.type==XR_XIR_I8 && element.payload==(!strcmp(selected->name,"array_repeat")?7:
+            (!strcmp(selected->name,"array_cell") || !strcmp(selected->name,"array_path_export") || !strcmp(selected->name,"array_path_direct"))?(i?2:7):i+1));
         xr_xir_value_drop(&element);
     }
 }
@@ -60,7 +61,8 @@ static void reference_array(const XrXirCompileContext *context,XrXirSourceResult
     const XrXirFunction *body=&module->functions[reference_run_function(module)];bool recipe=false;
     for (uint32_t i=0;i<body->instruction_count;++i) {
         CHECK(body->instructions[i].op!=XR_XIR_CALL && body->instructions[i].op!=XR_XIR_CALL_INDIRECT);
-        if (body->instructions[i].op==XR_XIR_ARRAY_WITH_CAPACITY) recipe=true;
+        if (body->instructions[i].op==XR_XIR_ARRAY_WITH_CAPACITY ||
+            (strstr(selected->name,"_direct") && body->instructions[i].op==XR_XIR_INDEX_PLACE)) recipe=true;
     }
     CHECK(recipe);uint8_t identity[32]={0};XrXirArtifact *lowered=reference_lower(context,source,identity);
     XrXirDomain *reader=NULL;CHECK(xr_xir_compile_domain_new(context->resources,UINT64_MAX,&reader)==XR_XIR_VALUE_OK);
@@ -86,13 +88,44 @@ static void reference_array(const XrXirCompileContext *context,XrXirSourceResult
     CHECK(reference_stats(context).live_bytes==baseline.live_bytes);request.limits.frame_bytes=XR_XIR_CTFE_MAX_FRAME_BYTES;
     XrXirCtfeCallRequest calls={request,XR_XIR_CTFE_MAX_CALL_DEPTH};
     CHECK(xr_xir_compile_ctfe_calls(&calls,&output)==XR_XIR_CTFE_OK);
+    if (strstr(selected->name,"array_path_") && strstr(selected->name,"_direct")) {
+        reference_array_value(&output,selected,reader);xr_xir_value_drop(&output);
+        first=source_fixture_compile_attempts;CHECK(xr_xir_compile_ctfe_calls(&calls,&output)==XR_XIR_CTFE_OK);
+        size_t call_sites=source_fixture_compile_attempts-first;xr_xir_value_drop(&output);CHECK(call_sites>0);
+        for (size_t fault=0;fault<call_sites;++fault) {
+            source_fixture_compile_injected=false;source_fixture_compile_fail_at=source_fixture_compile_attempts+fault;
+            CHECK(xr_xir_compile_ctfe_calls(&calls,&output)==XR_XIR_CTFE_OUT_OF_MEMORY);
+            CHECK(source_fixture_compile_injected && !output.type && !output.reserved && !output.payload);
+            CHECK(reference_stats(context).live_bytes==baseline.live_bytes);source_fixture_compile_fail_at=SIZE_MAX;
+            CHECK(xr_xir_compile_ctfe_calls(&calls,&output)==XR_XIR_CTFE_OK);
+            reference_array_value(&output,selected,reader);xr_xir_value_drop(&output);
+        }
+        uint32_t mutation=UINT32_MAX;
+        const XrXirFunction *direct=&xr_xir_compile_artifact_module(lowered)->functions[request.function];
+        for (uint32_t i=0;i<direct->instruction_count;++i)
+            if (direct->instructions[i].op==XR_XIR_ARRAY_SET || direct->instructions[i].op==XR_XIR_ARRAY_PUSH) mutation=i;
+        CHECK(mutation!=UINT32_MAX);request.limits.steps=(uint64_t)mutation+1;calls.evaluation=request;
+        CHECK(xr_xir_compile_ctfe_leaf(&request,&output)==XR_XIR_CTFE_STEP_LIMIT && !output.type && !output.payload);
+        CHECK(xr_xir_compile_ctfe_calls(&calls,&output)==XR_XIR_CTFE_STEP_LIMIT && !output.type && !output.payload);
+        CHECK(reference_stats(context).live_bytes==baseline.live_bytes);
+        request.limits.steps=XR_XIR_CTFE_MAX_STEPS;calls.evaluation=request;
+        if (!strcmp(selected->name,"array_path_string_direct")) {
+            request.function=reference_named(xr_xir_compile_artifact_module(lowered),"fail");calls.evaluation=request;
+            CHECK(xr_xir_compile_ctfe_leaf(&request,&output)==XR_XIR_CTFE_BOUNDS && !output.type && !output.payload);
+            CHECK(xr_xir_compile_ctfe_calls(&calls,&output)==XR_XIR_CTFE_BOUNDS && !output.type && !output.payload);
+            CHECK(reference_stats(context).live_bytes==baseline.live_bytes);
+            request.function=reference_run_function(xr_xir_compile_artifact_module(lowered));calls.evaluation=request;
+        }
+        CHECK(xr_xir_compile_ctfe_calls(&calls,&output)==XR_XIR_CTFE_OK);
+        fprintf(stderr,"CTFE private index path: calls FI=%zu complete same-owner retry/live baseline; post-mutation step failure both entries\n",call_sites);
+    }
     xr_xir_compile_artifact_free(lowered);reference_array_value(&output,selected,reader);xr_xir_value_drop(&output);xr_xir_domain_drop(reader);
     fprintf(stderr,"CTFE Array logical bytes=%lld; evaluator FI=%zu exact same-owner retry/live baseline; independent elements/capacity recipes; output/step/Artifact death physical0\n",(long long)selected->value,sites);
 }
-static void reference_array_late_owner(void) {
+static void reference_array_late_owner(const char *name) {
     XrXirCompileContext context={0};CHECK(xr_compile_resources_new(&reference_limits,&context.resources)==XR_COMPILE_RESOURCE_OK);
     context.limits=xr_xir_compile_default_limits();XrXirSourceResult source={0};XrXirSourceDiagnostic diagnostic={0};
-    CHECK(reference_source(&context,"array_string",&source,&diagnostic)==XR_XIR_OK);
+    CHECK(reference_source(&context,name,&source,&diagnostic)==XR_XIR_OK);
     uint8_t identity[32]={0};XrXirArtifact *lowered=reference_lower(&context,&source,identity);
     XrXirCtfeCallRequest request={.evaluation={.artifact=lowered,.function=reference_run_function(xr_xir_compile_artifact_module(lowered)),
         .target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION},.limits={XR_XIR_CTFE_MAX_STEPS,XR_XIR_CTFE_MAX_FRAME_BYTES,4}},.call_depth=XR_XIR_CTFE_MAX_CALL_DEPTH};

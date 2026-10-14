@@ -1,0 +1,2 @@
+export fn run()->Array<string> { var xs:Array<Array<string>>=[["x"]]; const old=xs; xs[0][0]="a\0b"; xs[0].push("z"); return xs[0] }
+fn fail()->Array<string> { var xs:Array<Array<string>>=[["keep"]]; const old=xs; xs[1][0]="bad"; return old[0] }

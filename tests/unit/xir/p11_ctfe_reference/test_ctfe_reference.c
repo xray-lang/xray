@@ -31,6 +31,27 @@ typedef struct CtfeReferenceCase {
 } CtfeReferenceCase;
 
 static const CtfeReferenceCase reference_cases[] = {
+    {"array_methods_fill_range", XR_XIR_BOOL, 1, XR_XIR_OK, NULL, 0},
+    {"array_methods_fill_invalid", XR_XIR_UNIT, 0, XR_XIR_BAD_TYPE, "comptime value range violation", 2},
+    {"array_methods_empty", XR_XIR_BOOL, 1, XR_XIR_OK, NULL, 0},
+    {"array_path_work", XR_XIR_UNIT, 0, XR_XIR_BUDGET, NULL, 2},
+    {"array_methods_query", XR_XIR_BOOL, 1, XR_XIR_OK, NULL, 0},
+    {"array_methods_join", XR_XIR_STRING, 5, XR_XIR_OK, NULL, 0},
+    {"array_methods_reorder", XR_XIR_BOOL, 1, XR_XIR_OK, NULL, 0},
+    {"array_methods_extract", XR_XIR_BOOL, 1, XR_XIR_OK, NULL, 0},
+    {"array_methods_clear", XR_XIR_BOOL, 1, XR_XIR_OK, NULL, 0},
+    {"array_methods_fill", XR_XIR_BOOL, 1, XR_XIR_OK, NULL, 0},
+    {"array_methods_resize", XR_XIR_BOOL, 1, XR_XIR_OK, NULL, 0},
+    {"array_methods_concat", XR_XIR_BOOL, 1, XR_XIR_OK, NULL, 0},
+    {"array_path_string_direct", XR_XIR_UNIT, 4, XR_XIR_OK, NULL, 0},
+    {"array_path_set", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"array_path_push", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"array_path_reserve", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"array_path_cow", XR_XIR_BOOL, 1, XR_XIR_OK, NULL, 0},
+    {"array_path_bounds", XR_XIR_UNIT, 0, XR_XIR_BAD_TYPE, "comptime index out of bounds", 2},
+    {"array_path_io", XR_XIR_UNIT, 0, XR_XIR_BAD_TYPE, "admitted deterministic", 2},
+    {"array_path_export", XR_XIR_UNIT, 2, XR_XIR_OK, NULL, 0},
+    {"array_path_direct", XR_XIR_UNIT, 2, XR_XIR_OK, NULL, 0},
     {"equal_array_work", XR_XIR_UNIT, 0, XR_XIR_BUDGET, NULL, 2},
     {"equal_array_int", XR_XIR_BOOL, 1, XR_XIR_OK, NULL, 0},
     {"equal_array_float", XR_XIR_BOOL, 1, XR_XIR_OK, NULL, 0},
@@ -466,7 +487,7 @@ static void reference_cell_leaf(const XrXirCompileContext *context,XrXirSourceRe
 
 static void reference_string(const XrXirCompileContext *context,XrXirSourceResult *source,
     const CtfeReferenceCase *selected) {
-    const char *expected=!strcmp(selected->name,"string_nul")?"a\0b":
+    const char *expected=!strcmp(selected->name,"array_methods_join")?"a\0b|z":!strcmp(selected->name,"string_nul")?"a\0b":
         !strcmp(selected->name,"string_empty")?"":"abcd";
     size_t length=(size_t)selected->value;
     const XrXirModule *module=xr_xir_compile_artifact_module(source->checked);
@@ -593,6 +614,10 @@ int main(int argc, char **argv) {
         fprintf(stderr,"CTFE %s String comparison scan paid original ledger: work=%llu/128000000; failure releases every owner\n",
             !strcmp(selected->name,"nullable_work")?"Nullable":"Array",(unsigned long long)spent.work);
     }
+    if (!strcmp(selected->name,"array_path_work")) {
+        CHECK(spent.work>=reference_limits.work-UINT64_C(65536));
+        fprintf(stderr,"CTFE private path ancestor copy paid original ledger: work=%llu/128000000; unpayable capacity65536; physical0\n",(unsigned long long)spent.work);
+    }
     CHECK(spent.allocated_bytes <= reference_limits.allocated_bytes &&
         spent.peak_bytes <= reference_limits.live_bytes && spent.work <= reference_limits.work);
     xr_compile_resources_release(context.resources);
@@ -600,7 +625,7 @@ int main(int argc, char **argv) {
     if (!strcmp(selected->name,"string_export")) reference_string_late_owner();
     if (!strcmp(selected->name,"tuple_export")) reference_tuple_late_owner();
     if (!strcmp(selected->name,"nullable_tuple")) reference_nullable_late_owner();
-    if (!strcmp(selected->name,"array_string")) reference_array_late_owner();
+    if (!strcmp(selected->name,"array_string") || !strcmp(selected->name,"array_path_string_direct")) reference_array_late_owner(selected->name);
     fprintf(stderr, "CTFE reference %s: status=%u expected=%lld allocated=%llu peak=%llu work=%llu physical=0/0\n",
         selected->name, (unsigned)status, (long long)selected->value,
         (unsigned long long)spent.allocated_bytes, (unsigned long long)spent.peak_bytes,

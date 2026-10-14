@@ -1,0 +1,2 @@
+fn fail()->i64 { var xs:Array<Array<i8>>=[[1]]; xs[0][0]=7; print("forbidden"); return 42 }
+export fn run()->i64 { return comptime fail() }

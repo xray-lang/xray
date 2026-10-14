@@ -1,0 +1,2 @@
+fn answer()->string { const xs:Array<string>=["a\0b","z"]; return xs.join("|") }
+export fn run()->string { return comptime answer() }
