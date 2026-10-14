@@ -39,6 +39,9 @@ typedef struct WorkerControlCode {
 static WorkerControlCode *worker_control_code;
 static unsigned worker_code_releases;
 static const char *worker_backends[] = {"0", "1", "vm", "native"};
+#ifndef XR_WORKER_CONTROL_ACTION_OBSERVER
+#define XR_WORKER_CONTROL_ACTION_OBSERVER(view, action) ((void)0)
+#endif
 static XrXirAction worker_control_resume(XrXirCallView *view) {
     WorkerControlCode *code = worker_control_code;
     uint32_t entry = xr_xir_call_current_entry(view->activation);
@@ -46,7 +49,9 @@ static XrXirAction worker_control_resume(XrXirCallView *view) {
     if (entry == code->root) ++code->root_dispatches;
     if (code->workers[entry]) ++code->worker_dispatches;
     if (code->native[entry]) ++code->native_dispatches; else ++code->vm_dispatches;
-    return code->delegates[entry](view);
+    XrXirAction action = code->delegates[entry](view);
+    XR_WORKER_CONTROL_ACTION_OBSERVER(view, &action);
+    return action;
 }
 static void worker_control_free(void *pointer) {
     WorkerControlCode *code = pointer; CHECK(code == worker_control_code); worker_control_code = NULL;
