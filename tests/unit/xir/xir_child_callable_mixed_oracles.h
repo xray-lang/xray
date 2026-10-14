@@ -112,6 +112,7 @@ static XrXirAction cm_resume(XrXirCallView *view) {
     }
     const void *environment = view->environment;
     XrXirAction action = f->selected[function]->resume(view);
+    if(function==CN_CHILD&&action.kind==XR_XIR_ACTION_CALL)child_capture_auth_probes(view,&action);
     CHECK(view->environment == environment && xr_xir_call_admission(view));
     if (function == CN_ROOT && action.kind == XR_XIR_ACTION_AWAIT_TASK) {
         CHECK(++w->await_actions == 1 && ++m->awaits[provider] == 1);
@@ -187,7 +188,7 @@ static void cm_build(CmFixture *f, bool root_native) {
     const XrXirModule *module = xr_xir_compile_artifact_module(f->lowered);
     CHECK(module && module->stage == XR_XIR_LOWERED && module->function_count == CN_FUNCTIONS);
     CHECK(module->declarations && module->declarations->entry_function == CN_ENTRY);
-    CHECK(module->types && module->types->count == 5);
+    CHECK(module->types && module->types->count == 6);
     const uint32_t advertised[4] = {2u, 4u, 8u, 12u};
     for (unsigned i = 0; i < 4; ++i) {
         CHECK(module->types->nodes[i + 1].kind == XR_XIR_TYPE_CALLABLE);
