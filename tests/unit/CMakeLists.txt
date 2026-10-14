@@ -318,6 +318,7 @@ else()
 endif()
 add_test(NAME test_xir_allocations COMMAND test_xir_allocations)
 set_tests_properties(test_xir_allocations PROPERTIES LABELS "unit;xir;memory;ownership")
+include(${CMAKE_CURRENT_SOURCE_DIR}/xir/allocation_feedback.cmake)
 
 add_executable(test_xir_execution xir/test_xir_execution.c)
 add_executable(test_xir_locals xir/test_xir_locals.c)
@@ -400,7 +401,7 @@ set_tests_properties(test_xir_cell_owner_values PROPERTIES LABELS "unit;xir;owne
 include("${CMAKE_CURRENT_LIST_DIR}/xir/object_storage_prefix.cmake")
 add_executable(test_xir_values xir/test_xir_values.c)
 target_link_libraries(test_xir_values PRIVATE xray_xir_scalar)
-add_executable(test_xir_instances xir/test_xir_instances.c)
+add_executable(test_xir_instances xir/test_xir_instances.c xir/xir_instance_retirement_probe.c)
 target_link_libraries(test_xir_instances PRIVATE xray_xir_scalar xray_xir)
 add_executable(test_xir_emit_program xir/test_xir_emit_program.c)
 target_link_libraries(test_xir_emit_program PRIVATE xray_xir_cgen)
@@ -4458,6 +4459,7 @@ include(xir/program_root_permissions.cmake)
 include(xir/callable70_checked_vectors.cmake)
 
 include(xir/root_identity_vm_compiler_resources.cmake)
+include(xir/instance_generations.cmake)
 
 include(xir/owned_string_source_resources.cmake)
 
