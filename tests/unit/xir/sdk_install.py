@@ -34,13 +34,25 @@ def main():
         expected_manifest+=os.linesep+configuration.as_posix()
         expected_files.update(source_installed/name for name in members)
         expected_files.add(configuration)
+    payload_path=prefix/'share/xray/install/payload-manifest.json'
+    expected_files.add(payload_path)
     prefix.mkdir(parents=True,exist_ok=False)
     try:
         result=subprocess.run(['cmake','--install',str(build),'--prefix',prefix.as_posix(),
                                '--component','XraySDK'],capture_output=True,timeout=120)
         assert not result.returncode,(result.stdout+result.stderr).decode('utf-8',errors='replace')
         assert (build/'install_manifest_XraySDK.txt').read_bytes()==expected_manifest.encode('utf-8')
-        assert {path for path in prefix.rglob('*') if path.is_file()}==expected_files
+        actual_files={path for path in prefix.rglob('*') if path.is_file()}
+        assert actual_files==expected_files,(actual_files-expected_files,expected_files-actual_files)
+        payload=json.loads(payload_path.read_text(encoding='utf-8'))
+        assert payload['schema']==2 and payload['product']=='xray-lang' and payload['components']==['sdk']
+        assert [row['path'] for row in payload['files']]==sorted(path.relative_to(prefix).as_posix()
+            for path in expected_files-{payload_path})
+        for row in payload['files']:
+            assert set(row)=={'path','component','size','sha256','mode'} and row['component']=='sdk' and row['mode']=='0644'
+            path=prefix/row['path'];assert not path.is_symlink()
+            data=path.read_bytes()
+            assert len(data)==row['size'] and hashlib.sha256(data).hexdigest()==row['sha256']
         assert (installed/'sdk_manifest.json').read_bytes()==(original/'sdk_manifest.json').read_bytes()
         paths={row['path'] for row in manifest['files']}|{'sdk_manifest.json'}
         assert {path.relative_to(installed).as_posix() for path in installed.rglob('*') if path.is_file()}==paths
