@@ -89,7 +89,7 @@ def main():
                 ('float-unadmitted', 'fn rounded(value:f64)->i64 { return value.round() }\nprint(comptime rounded(1.5))\n',
                  b'comptime requires an admitted deterministic scalar direct-call closure'),
                 ('owning-text-unadmitted', 'fn text(value:rune)->string { return value.toString() }\nprint(comptime text(rune(128512)))\n',
-                 b'comptime result must be a bool, integer, Rune or Unit in this execution domain')]:
+                 b'comptime requires an admitted deterministic scalar direct-call closure')]:
             source = output / (name + '.xr')
             source.write_text(text, encoding='utf-8')
             result = invoke(name, binary, ['run', str(source)], hidden)
