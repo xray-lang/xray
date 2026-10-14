@@ -1,7 +1,7 @@
 class ScratchByteArray {
     out: Array<u8>
 
-    constructor() {
+    init() {
         this.out = Array.withCapacity(4)
     }
 

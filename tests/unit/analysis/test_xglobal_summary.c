@@ -10115,7 +10115,7 @@ TEST(global_evidence_producer_resolves_method_callsite_receivers) {
 TEST(global_evidence_producer_resolves_namespace_class_constructor_and_local_methods) {
     setup_parser_session();
     const char *http_source = "export class Server {\n"
-                              "    constructor() {}\n"
+                              "    init() {}\n"
                               "    route(path: string) -> bool { return true }\n"
                               "}\n";
     const char *entry_source = "import http\n"
@@ -10171,7 +10171,7 @@ TEST(global_evidence_producer_resolves_namespace_class_constructor_and_local_met
     ASSERT_NOT_NULL(route);
     ASSERT_EQ_UINT(constructor->kind, XG_CALL_METHOD);
     ASSERT_EQ_UINT(constructor->receiver_static_class_id, ev.classes[0].class_id);
-    ASSERT_EQ_UINT(constructor->method_name_id, xg_name_id("constructor"));
+    ASSERT_EQ_UINT(constructor->method_name_id, xg_name_id("init"));
     ASSERT_TRUE(constructor->method_id != XG_NO_ID);
     ASSERT_EQ_UINT(route->kind, XG_CALL_METHOD);
     ASSERT_EQ_UINT(route->receiver_static_class_id, ev.classes[0].class_id);
@@ -10282,12 +10282,12 @@ TEST(global_evidence_producer_resolves_super_constructor_callsite) {
     setup_parser_session();
     const char *source = "class Shape {\n"
                          "    kind: i64\n"
-                         "    constructor(kind: i64) { this.kind = kind }\n"
+                         "    init(kind: i64) { this.kind = kind }\n"
                          "}\n"
                          "class Rect extends Shape {\n"
                          "    w: i64\n"
                          "    h: i64\n"
-                         "    constructor(w: i64, h: i64) {\n"
+                         "    init(w: i64, h: i64) {\n"
                          "        super(1)\n"
                          "        this.w = w\n"
                          "        this.h = h\n"
@@ -10319,7 +10319,7 @@ TEST(global_evidence_producer_resolves_super_constructor_callsite) {
     XgClassId shape_id = XG_NO_ID;
     XgMethodId shape_ctor_id = XG_NO_ID;
     uint32_t shape_ctor_sig = 0;
-    uint32_t constructor_name_id = xg_name_id("constructor");
+    uint32_t constructor_name_id = xg_name_id("init");
     for (uint32_t i = 0; i < ev.nclasses; i++) {
         if (ev.classes[i].name_id == xg_name_id("Shape"))
             shape_id = ev.classes[i].class_id;
@@ -10382,7 +10382,7 @@ TEST(global_evidence_producer_resolves_module_init_constructor_callsite) {
     setup_parser_session();
     const char *source = "class Router {\n"
                          "    value: i64\n"
-                         "    constructor() { this.value = 1 }\n"
+                         "    init() { this.value = 1 }\n"
                          "}\n"
                          "var router = Router()\n";
     AstNode *ast = xr_parse(g_session, source);
@@ -10407,7 +10407,7 @@ TEST(global_evidence_producer_resolves_module_init_constructor_callsite) {
     const XgBodySummary *module_init = NULL;
     XgClassId router_class_id = XG_NO_ID;
     XgMethodId router_ctor_id = XG_NO_ID;
-    uint32_t constructor_name_id = xg_name_id("constructor");
+    uint32_t constructor_name_id = xg_name_id("init");
     for (uint32_t i = 0; i < ev.nbodies; i++) {
         if (ev.bodies[i].kind == XG_BODY_MODULE_INIT) {
             module_init = &ev.bodies[i];
@@ -10614,7 +10614,7 @@ TEST(global_evidence_producer_marks_body_escape_bits) {
     setup_parser_session();
     const char *source = "class Box {\n"
                          "    value: i64\n"
-                         "    constructor() { this.value = 0 }\n"
+                         "    init() { this.value = 0 }\n"
                          "    set(v: i64) { this.value = v }\n"
                          "}\n"
                          "fn touch(items: Array<i64>) -> i64 {\n"
@@ -11344,7 +11344,7 @@ TEST(global_evidence_producer_records_interface_object_storage_uses) {
                          "class Scene {\n"
                          "    root: Drawable\n"
                          "    sprites: Array<Drawable>\n"
-                         "    constructor(root: Drawable, sprites: Array<Drawable>) {\n"
+                         "    init(root: Drawable, sprites: Array<Drawable>) {\n"
                          "        this.root = root\n"
                          "        this.sprites = sprites\n"
                          "    }\n"
@@ -12464,7 +12464,7 @@ TEST(global_evidence_producer_records_derived_eq_hash_plan) {
                          "class Key {\n"
                          "    id: i64\n"
                          "    name: string\n"
-                         "    constructor(id: i64, name: string) {\n"
+                         "    init(id: i64, name: string) {\n"
                          "        this.id = id\n"
                          "        this.name = name\n"
                          "    }\n"
@@ -13394,7 +13394,7 @@ TEST(global_evidence_producer_records_user_hashable_direct_call_plan) {
     const char *source =
         "class Token implements Hashable {\n"
         "    value: i64\n"
-        "    constructor(value: i64) { this.value = value }\n"
+        "    init(value: i64) { this.value = value }\n"
         "    operator==(other: Token) -> bool { return this.value == other.value }\n"
         "    hash() -> i64 { return this.value }\n"
         "}\n"
@@ -14303,7 +14303,7 @@ TEST(global_evidence_producer_propagates_object_shape_through_field_and_containe
     const char *source = "type User = { name: string, age: i64 }\n"
                          "class Holder {\n"
                          "    user: User\n"
-                         "    constructor(user: User) {\n"
+                         "    init(user: User) {\n"
                          "        this.user = user\n"
                          "    }\n"
                          "    readField() -> i64 {\n"
@@ -15750,13 +15750,13 @@ TEST(global_evidence_producer_ignores_user_member_names_for_runtime_capabilities
 TEST(global_evidence_composes_source_class_receiver_effects) {
     setup_parser_session();
     const char *source = "class CountdownLatch {\n"
-                         "    constructor(parties: i64) {}\n"
+                         "    init(parties: i64) {}\n"
                          "    done() {}\n"
                          "    wait() -> bool { Coro.yield(); return true }\n"
                          "}\n"
                          "class Barrier {\n"
                          "    _latch: CountdownLatch\n"
-                         "    constructor(parties: i64) {\n"
+                         "    init(parties: i64) {\n"
                          "        this._latch = CountdownLatch(parties)\n"
                          "    }\n"
                          "    wait() -> bool {\n"

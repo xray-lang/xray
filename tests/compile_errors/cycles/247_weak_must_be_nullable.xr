@@ -2,5 +2,5 @@
 // 非可空的 weak 字段是类型系统别处抓不到的谎言。
 class Node {
     weak peer: Node
-    constructor() {}
+    init() {}
 }

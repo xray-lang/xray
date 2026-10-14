@@ -13,7 +13,7 @@ fn range_total(r: Range) -> i64 {
 class Window {
     span: Range
 
-    constructor(span: Range) {
+    init(span: Range) {
         this.span = span
     }
 }

@@ -5703,7 +5703,7 @@ static const XiFunc *cg_class_native_resolve_method_call(XiCgenCtx *ctx, const X
         }
         if (!parent_class)
             return NULL;
-        return method && strcmp(method, "constructor") == 0
+        return method && strcmp(method, "init") == 0
                    ? cg_lookup_class_ctor(ctx, parent_class)
                    : cg_lookup_method(ctx, method, parent_class, XG_NO_ID, out_prefix);
     }

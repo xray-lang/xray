@@ -101,6 +101,9 @@ static void source_plan_conversion_budget_cases(void) {
     SourceValue values[]={{0,XR_XIR_I64},{1,XR_XIR_I64}};
     SourceCallConversions request={SOURCE_CALL_REQUIREMENT,{0},NULL,parameters,values,2,0};
     SourceContext ctx={0};CHECK(allocation_private_context(&ctx,allocation_limits()));
+    XrXirFunction binding_function={0};binding_function.parameter_count=2;
+    SourceFunction binding_body={0};
+    ctx.functions=&binding_function;ctx.bodies=&binding_body;ctx.function_count=1;
     size_t start=source_fixture_compile_attempts;
     CHECK(source_call_conversions(&ctx,NULL,&request));
     XrCompileResourceStats fees={0};CHECK(xr_compile_resources_stats(ctx.compile.resources,&fees)==XR_COMPILE_RESOURCE_OK);
@@ -114,6 +117,7 @@ static void source_plan_conversion_budget_cases(void) {
         if(role==2)caps.allocated_bytes=sizeof(XrCompileResources)+sizeof(CompileAllocation)+scratch-1;
         if(role==3)caps.work=2;
         ctx=(SourceContext){0};CHECK(allocation_private_context(&ctx,caps));
+        ctx.functions=&binding_function;ctx.bodies=&binding_body;ctx.function_count=1;
         start=source_fixture_compile_attempts;source_fixture_compile_fail_at=role==0?start:SIZE_MAX;
         source_fixture_compile_injected=false;
         CHECK(!source_call_conversions(&ctx,NULL,&request));

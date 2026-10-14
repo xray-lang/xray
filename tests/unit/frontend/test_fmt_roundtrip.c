@@ -833,20 +833,20 @@ TEST(parameter_modes_roundtrip) {
 TEST(borrow_origin_sets_roundtrip) {
     setup();
     const char *src =
-        "type Selector = fn(left: Slice<u8>, right: Slice<u8>) -> const Slice<u8> "
+        "type Selector = fn(left: Slice<u8>, right: Slice<u8>) -> Slice<u8> "
         "from right | left | right\n"
-        "fn choose(left: Slice<u8>, right: Slice<u8>) -> const Slice<u8> "
+        "fn choose(left: Slice<u8>, right: Slice<u8>) -> Slice<u8> "
         "from right | left | right { return left }\n"
         "class ViewOwner {\n"
-        "    view(data: Slice<u8>) -> const Slice<u8> from this | data { return data }\n"
+        "    view(data: Slice<u8>) -> Slice<u8> from this | data { return data }\n"
         "}\n"
         "interface ViewSource {\n"
-        "    view(data: Slice<u8>) -> const Slice<u8> from data | this\n"
+        "    view(data: Slice<u8>) -> Slice<u8> from data | this\n"
         "}\n";
     char *fmt1 = parse_and_format(src, "<test>");
     ASSERT_NOT_NULL(fmt1);
     ASSERT_TRUE(contains(fmt1,
-                         "fn(left: Slice<u8>, right: Slice<u8>) -> const Slice<u8> from right | "
+                         "fn(left: Slice<u8>, right: Slice<u8>) -> Slice<u8> from right | "
                          "left | right"));
     ASSERT_TRUE(contains(fmt1, "from this | data"));
     ASSERT_TRUE(contains(fmt1, "from data | this"));

@@ -17,12 +17,12 @@ enum UnwindErr {
 
 class Node {
     v: i64
-    constructor(v) { this.v = v }
+    init(v) { this.v = v }
 }
 
 class Holder {
     n: Node?
-    constructor() { this.n = null }
+    init() { this.n = null }
 }
 
 // ② 被存入字段：所有权移交给容器，drop 落点必须让位

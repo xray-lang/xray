@@ -1,0 +1,6 @@
+fn defaultValue() -> i64 { Coro.yield(); return 41 }
+class Box {
+    value: i64
+    init(value = defaultValue()) { this.value = value }
+}
+export fn referenceAnswer() -> i64 { return Box().value }

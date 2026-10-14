@@ -5,7 +5,7 @@ interface ReadCounter {
 class RefCounter implements ReadCounter {
     value: i64
 
-    constructor(value: i64) {
+    init(value: i64) {
         this.value = value
     }
 

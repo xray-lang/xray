@@ -57,9 +57,11 @@ static void invocation_class_cell_fixture(InvocationClassCellFixture *f,uint32_t
 static void conditional_class_cell_controls(const XrXirCompileContext *context,
     XrXirEffects *effects,uint32_t place,uint32_t project,uint32_t mode) {
     EffectInvocationCertificate *certificate=effects->invocations;
-    EffectInvocationOwner replay=*certificate->equations;
+    EffectInvocationWorkspace replay={0};
+    XrXirStatus opening=effect_invocation_read_open(context,effects,certificate->declared,certificate->final,&replay);
+    CHECK(opening==XR_XIR_OK);
     replay.work=context;replay.effects=effects;replay.declared=certificate->declared;
-    EffectInvocationFlow flow={.owner=&replay,.node=replay.roots[3]};
+    EffectInvocationFlow flow={.owner=&replay,.node=replay.final.roots[3]};
     EffectBodyRequest body=effect_body_owned_request(context,certificate->body);
     CHECK(effect_invocation_origins_read(&flow,&body)==XR_XIR_OK);
     XrXirCellOriginView legacy={0},actual={0};
@@ -73,15 +75,15 @@ static void conditional_class_cell_controls(const XrXirCompileContext *context,
     XrXirInstruction storage={0};const XrXirInstruction *op=NULL;
     CHECK(effect_invocation_flow_instruction(&flow,place,&storage,&op)==XR_XIR_OK);
     uint32_t at=0;CHECK(op->op==XR_XIR_OBJECT_PLACE &&
-        effect_invocation_class_find(context,&replay.nodes[flow.node],op->args[0],&at)==XR_XIR_OK);
-    EffectInvocationClassFact *fact=&replay.nodes[flow.node].classes[at],saved=*fact;
+        effect_invocation_class_find(context,&replay.final.nodes[flow.node],op->args[0],&at)==XR_XIR_OK);
+    EffectInvocationClassFact *fact=&replay.final.nodes[flow.node].classes[at],saved=*fact;
     fact->mask=0;fact->rank=0;actual=(XrXirCellOriginView){0};
     CHECK(effect_invocation_class_cell_view(&flow,project,&actual)==XR_XIR_UNRESOLVED &&
         !actual.intrinsic_mask && !actual.dependencies && !actual.parameter_count);*fact=saved;
     fact->mask=1;fact->rank=0;actual=(XrXirCellOriginView){0};
     CHECK(effect_invocation_class_cell_view(&flow,project,&actual)==XR_XIR_BAD_STRUCTURE);*fact=saved;
     CHECK(effect_invocation_class_terminals_match(&flow)==XR_XIR_OK);
-    EffectInvocationNode *node=&replay.nodes[flow.node];
+    EffectInvocationNode *node=&replay.final.nodes[flow.node];
     uint32_t local_mask=node->local_mask,intrinsic_mask=node->intrinsic_mask;
     if (mode<3) {
         EffectInvocationCause *local=&effect_invocation_local_causes(node)[0];
@@ -98,7 +100,7 @@ static void conditional_class_cell_controls(const XrXirCompileContext *context,
     }
     node->local_mask=local_mask;node->intrinsic_mask=intrinsic_mask;
     CHECK(effect_invocation_class_terminals_match(&flow)==XR_XIR_OK);
-    xr_compile_resources_free(flow.memory);
+    xr_compile_resources_free(flow.memory);effect_invocation_read_close(&replay);
 }
 
 static XrXirStatus conditional_class_cell_case(const XrXirCompileContext *context,

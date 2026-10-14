@@ -1,7 +1,7 @@
 class IntMapBag {
     values: Map<i64, i64>
 
-    constructor() {
+    init() {
         var values: Map<i64, i64> = #{}
         this.values = values
     }

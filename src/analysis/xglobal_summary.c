@@ -1286,7 +1286,7 @@ XR_FUNC const char *xg_map_shape_source_name(uint8_t source) {
         case XG_MAP_SHAPE_SRC_LITERAL:
             return "literal";
         case XG_MAP_SHAPE_SRC_CONSTRUCTOR:
-            return "constructor";
+            return "init";
         case XG_MAP_SHAPE_SRC_FROM_ARRAY:
             return "from_array";
         case XG_MAP_SHAPE_SRC_STATIC:

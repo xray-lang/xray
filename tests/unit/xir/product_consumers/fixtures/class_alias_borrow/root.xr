@@ -1,6 +1,6 @@
 class Cell {
   value: i64
-  constructor(value: i64) { this.value = value }
+  init(value: i64) { this.value = value }
 }
 fn answer() -> i64 {
   var cell = Cell(1)

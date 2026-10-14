@@ -8,7 +8,7 @@
 class CustomRangeIter {
     val: i64
     max: i64
-    constructor(start: i64, end: i64) {
+    init(start: i64, end: i64) {
         this.val = start
         this.max = end
     }
@@ -23,7 +23,7 @@ class CustomRangeIter {
 class CustomRange {
     start: i64
     end: i64
-    constructor(s: i64, e: i64) { this.start = s; this.end = e }
+    init(s: i64, e: i64) { this.start = s; this.end = e }
     iterator() -> CustomRangeIter { return CustomRangeIter(this.start, this.end) }
 }
 
@@ -50,7 +50,7 @@ fn test_triple_nested_for_in() {
 
 class Accumulator {
     total: i64
-    constructor() { this.total = 0 }
+    init() { this.total = 0 }
     ref add(n: i64) { this.total = this.total + n }    get() -> i64 { return this.total }
 }
 
@@ -110,7 +110,7 @@ class StepIter {
     val: i64
     max: i64
     step: i64
-    constructor(s: i64, e: i64, st: i64) { this.val = s; this.max = e; this.step = st }
+    init(s: i64, e: i64, st: i64) { this.val = s; this.max = e; this.step = st }
     hasNext() -> bool {
         if (this.step > 0) { return this.val < this.max }
         return this.val > this.max
@@ -126,7 +126,7 @@ class StepRange {
     s: i64
     e: i64
     st: i64
-    constructor(s: i64, e: i64, st: i64) { this.s = s; this.e = e; this.st = st }
+    init(s: i64, e: i64, st: i64) { this.s = s; this.e = e; this.st = st }
     iterator() -> StepIter { return StepIter(this.s, this.e, this.st) }
 }
 
@@ -232,7 +232,7 @@ class FlattenIter {
     outer: Array<Array<i64>>
     outerIdx: i64
     innerIdx: i64
-    constructor(data: Array<Array<i64>>) {
+    init(data: Array<Array<i64>>) {
         this.outer = data
         this.outerIdx = 0
         this.innerIdx = 0
@@ -256,7 +256,7 @@ class FlattenIter {
 
 class FlattenIterable {
     data: Array<Array<i64>>
-    constructor(d: Array<Array<i64>>) { this.data = d }
+    init(d: Array<Array<i64>>) { this.data = d }
     iterator() -> FlattenIter { return FlattenIter(this.data) }
 }
 
@@ -296,7 +296,7 @@ class FilteredRangeIter {
     val: i64
     max: i64
     divisor: i64
-    constructor(s: i64, e: i64, d: i64) {
+    init(s: i64, e: i64, d: i64) {
         this.val = s
         this.max = e
         this.divisor = d
@@ -320,7 +320,7 @@ class FilteredRange {
     s: i64
     e: i64
     d: i64
-    constructor(s: i64, e: i64, d: i64) { this.s = s; this.e = e; this.d = d }
+    init(s: i64, e: i64, d: i64) { this.s = s; this.e = e; this.d = d }
     iterator() -> FilteredRangeIter { return FilteredRangeIter(this.s, this.e, this.d) }
 }
 

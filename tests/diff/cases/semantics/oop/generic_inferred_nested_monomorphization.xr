@@ -10,14 +10,14 @@
 
 class Box<T> {
     v: T
-    constructor(v: T) { this.v = v }
+    init(v: T) { this.v = v }
     get() -> T { return this.v }
 }
 
 class Pair<A, B> {
     a: A
     b: B
-    constructor(a: A, b: B) { this.a = a; this.b = b }
+    init(a: A, b: B) { this.a = a; this.b = b }
 }
 
 fn wrap<T>(x: T) -> Box<T> {
@@ -26,7 +26,7 @@ fn wrap<T>(x: T) -> Box<T> {
 
 class Container<T> {
     item: T
-    constructor(item: T) { this.item = item }
+    init(item: T) { this.item = item }
     boxed() -> Box<T> { return Box(this.item) }
     paired(other: T) -> Pair<T, T> { return Pair(this.item, other) }
 }

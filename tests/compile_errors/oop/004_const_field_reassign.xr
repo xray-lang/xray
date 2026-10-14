@@ -1,6 +1,6 @@
 class Counter {
     const id: i64
-    constructor() { this.id = 1 }
+    init() { this.id = 1 }
     ref bump() { this.id = 2 }
 }
 var c = Counter()

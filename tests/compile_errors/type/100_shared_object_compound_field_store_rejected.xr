@@ -1,7 +1,7 @@
 class Counter {
     value: i64
 
-    constructor(v: i64) {
+    init(v: i64) {
         this.value = v
     }
 }

@@ -524,7 +524,7 @@ void xr_array_register_native_type(XrVMRuntime *isolate) {
         {NULL, NULL, 0},
     };
     static const XrNativeMethod array_statics[] = {
-        {"constructor", xr_builtin_array_construct, 0},
+        {"init", xr_builtin_array_construct, 0},
         {"from", xr_builtin_array_from, 1},
         {"range", xr_builtin_array_range, 2},
         {"withCapacity", xr_builtin_array_with_capacity, 1},

@@ -1,6 +1,6 @@
 final class Holder {
     value: i64
-    constructor(value: i64) { this.value = value; }
+    init(value: i64) { this.value = value; }
     replace() -> i64 { return whole(ref this); }
 }
 fn whole(value: ref Holder) -> i64 { value = Holder(42); return value.value; }

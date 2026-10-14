@@ -2,7 +2,7 @@ import "./library" as direct
 import "./facade" as facade
 class Box<T> {
   value: T
-  constructor(value: T) { this.value = value }
+  init(value: T) { this.value = value }
   get() -> T { return this.value }
 }
 fn answer() -> i64 {

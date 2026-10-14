@@ -4935,7 +4935,7 @@ static void validate_method_override_graph(XaAnalyzer *analyzer, XrClassInfo *in
         XaSymbol *method = info->methods[i];
         if (!method || !method->name)
             continue;
-        if (strcmp(method->name, "constructor") == 0)
+        if (strcmp(method->name, "init") == 0)
             continue;
         XaSymbol *parent_field = find_parent_field_by_name(info, method->name);
         if (parent_field)

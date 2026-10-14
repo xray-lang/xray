@@ -740,7 +740,7 @@ print(catchEmpty(),catchDirect(),catchCall(false),catchCall(true),catchRethrow()
 
 struct CatchConstruct {
     const value:string
-    constructor(flag:bool) {
+    init(flag:bool) {
         try {} catch(e) { if(flag){this.value="unused"}else{this.value="also-unused"} }
         this.value="constructed"
     }

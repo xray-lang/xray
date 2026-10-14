@@ -7,7 +7,7 @@ final class Config {
     name: string
     value: i64
 
-    constructor(name, value) {
+    init(name, value) {
         this.name = name
         this.value = value
     }
@@ -60,7 +60,7 @@ fn test_final_method_normal_override() {
 class Animal {
     name: string
 
-    constructor(name) {
+    init(name) {
         this.name = name
     }
 
@@ -70,7 +70,7 @@ class Animal {
 }
 
 final class Cat extends Animal {
-    constructor(name) {
+    init(name) {
         super(name)
     }
 
@@ -110,7 +110,7 @@ class Settings {
     const maxRetries: i64 = 3
     timeout: i64 = 1000
 
-    constructor() {
+    init() {
     }
 }
 

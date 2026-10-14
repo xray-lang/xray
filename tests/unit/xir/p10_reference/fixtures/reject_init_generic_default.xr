@@ -1,0 +1,5 @@
+final class Box<T> {
+    value: T
+    init(value = 41) { this.value = value }
+}
+export fn referenceAnswer() -> i64 { return Box<i64>().value }

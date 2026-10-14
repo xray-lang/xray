@@ -16,7 +16,7 @@
 // tests/regression/12_type_checking/1237_for_in_method_type_param.xr.
 
 class Summer {
-    constructor() {}
+    init() {}
 
     total<T>(xs: T) -> i64 {
         var n = 0

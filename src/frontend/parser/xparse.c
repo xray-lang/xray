@@ -127,7 +127,6 @@ static ParseRule rules[] = {
     [TK_NEW] = {xr_parse_new_expression, NULL, PREC_NONE},
     [TK_THIS] = {xr_parse_this_expression, NULL, PREC_NONE},
     [TK_SUPER] = {xr_parse_super_expression, NULL, PREC_NONE},
-    [TK_CONSTRUCTOR] = {NULL, NULL, PREC_NONE},
     [TK_STATIC] = {NULL, NULL, PREC_NONE},
     [TK_PRIVATE] = {NULL, NULL, PREC_NONE},
     [TK_MATCH] = {xr_parse_match_expr, NULL, PREC_NONE},  // match expression

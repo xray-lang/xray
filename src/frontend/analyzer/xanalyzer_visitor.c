@@ -5771,7 +5771,7 @@ XrType *xa_visit_infer_expr(XaInferContext *ctx, AstNode *node) {
                     } else {
                         xa_check_constructor_visibility(ctx, node, cl->class_info->base);
                         XaSymbol *ctor = xa_class_info_lookup_member(cl->class_info->base,
-                                                                     XR_KEYWORD_CONSTRUCTOR);
+                                                                     XR_INIT_MEMBER_NAME);
                         XaSymbolLinks *ctor_links =
                             ctor ? xa_analyzer_get_links(ctx->analyzer, ctor) : NULL;
                         XrType *ctor_type = ctor_links ? ctor_links->type : NULL;

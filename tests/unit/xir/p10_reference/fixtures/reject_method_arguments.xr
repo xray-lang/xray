@@ -1,0 +1,2 @@
+interface Mapper { map<U>(value:U)->U }
+fn unused<T:Mapper>(receiver:T)->fn(i64)->i64{return receiver.map}

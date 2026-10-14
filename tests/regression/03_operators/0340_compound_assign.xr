@@ -56,7 +56,7 @@ fn test_member_mod_assign_ignores_same_named_const() {
     class Counter {
         value: i64
 
-        constructor() {
+        init() {
             this.value = 17
         }
 

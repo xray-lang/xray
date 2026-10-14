@@ -8,16 +8,16 @@
  * Complete physical membership is copied into each genuine equation key.
  * These storage facts do not authorize a Class projection or erase UNKNOWN.
  */
-static XrXirStatus effect_invocation_class_storage(EffectInvocationOwner *owner,
+static XrXirStatus effect_invocation_class_storage(EffectInvocationWorkspace *owner,
     uint32_t body,EffectInvocationClassFact **output,uint32_t *count) {
     if (!output || *output || !count || *count || body>=owner->body.domain.function_count ||
-        !owner->physical || owner->physical->resources!=owner->work->resources ||
-        owner->physical->count!=owner->body.domain.function_count)
+        !owner->final.physical || owner->final.physical->resources!=owner->work->resources ||
+        owner->final.physical->count!=owner->body.domain.function_count)
         return XR_XIR_BAD_STRUCTURE;
     EffectBodyFunctionDimensions head={0};XrXirStatus status=effect_invocation_dimensions(owner,body,&head);
     if (status!=XR_XIR_OK) return status;
     const EffectBodyFunctionDimensions *function=&head;
-    const EffectPhysicalFunction *physical=&owner->physical->functions[body];
+    const EffectPhysicalFunction *physical=&owner->final.physical->functions[body];
     if (physical->values!=(uint64_t)function->parameter_count+function->instruction_count ||
         physical->classes>physical->values || physical->count>physical->capacity ||
         (physical->count && !physical->records)) return XR_XIR_BAD_STRUCTURE;
@@ -62,29 +62,29 @@ static XrXirStatus effect_invocation_class_find(const XrXirCompileContext *work,
 
 /* The true full graph bounds a descending certificate. Growing the existing
  * owner updates this bound; an unrooted cycle cannot certify itself at rank0. */
-static XrXirStatus effect_invocation_class_rank_limit_count(EffectInvocationOwner *owner,
+static XrXirStatus effect_invocation_class_rank_limit_count(EffectInvocationWorkspace *owner,
     uint32_t functions,uint64_t *output) {
-    if (!output || !owner->physical || owner->physical->count!=functions)
+    if (!output || !owner->final.physical || owner->final.physical->count!=functions)
         return XR_XIR_BAD_STRUCTURE;
     uint64_t maximum=0;
-    for (uint32_t n=0;n<owner->count;++n) {
+    for (uint32_t n=0;n<owner->final.count;++n) {
         if (!xir_compile_work(owner->work,3)) return XR_XIR_BUDGET;
-        const EffectInvocationNode *node=&owner->nodes[n];
-        if (node->body>=owner->physical->count ||
-            node->class_count!=owner->physical->functions[node->body].classes ||
+        const EffectInvocationNode *node=&owner->final.nodes[n];
+        if (node->body>=owner->final.physical->count ||
+            node->class_count!=owner->final.physical->functions[node->body].classes ||
             (uint64_t)node->class_count+1>UINT64_MAX-maximum) return XR_XIR_BAD_STRUCTURE;
         maximum+=(uint64_t)node->class_count+1;
     }
     *output=maximum;return XR_XIR_OK;
 }
 
-static XrXirStatus effect_invocation_class_rank_limit(EffectInvocationOwner *owner,
+static XrXirStatus effect_invocation_class_rank_limit(EffectInvocationWorkspace *owner,
     uint64_t *output) {
-    if (!owner || !effect_body_material_shape(owner->material)) return XR_XIR_BAD_STRUCTURE;
+    if (!owner || !effect_body_material_shape(owner->final.material)) return XR_XIR_BAD_STRUCTURE;
     return effect_invocation_class_rank_limit_count(owner,owner->body.domain.function_count,output);
 }
 
-static XrXirStatus effect_invocation_class_fact_join(EffectInvocationOwner *owner,
+static XrXirStatus effect_invocation_class_fact_join(EffectInvocationWorkspace *owner,
     EffectInvocationClassFact *destination,uint32_t mask,uint64_t rank,
     uint64_t maximum,bool *changed) {
     if (!destination || !changed || (mask&~EFFECT_CLASS_VALID) || rank>maximum ||

@@ -20,7 +20,7 @@ print(counts.get(false) == null)
 class BoolKeyMapBag {
     values: Map<bool, i64>
 
-    constructor() {
+    init() {
         var values: Map<bool, i64> = #{}
         this.values = values
     }

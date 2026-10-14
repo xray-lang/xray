@@ -1,0 +1,13 @@
+var trace: i64 = 0
+struct Result {
+    value: i64
+    init(value) {
+        this.value = value
+        defer { this.value += 1; trace = trace * 10 + 2 }
+        defer { this.value *= 2; trace = trace * 10 + 1 }
+    }
+}
+export fn referenceAnswer() -> i64 {
+    const result = Result(20)
+    return result.value * 100 + trace
+}

@@ -15,7 +15,7 @@ fn mapInt(xs: Array<i64>, f: fn(i64) -> i64) -> Array<i64> {
 
 class Cell<T> {
     value: T
-    constructor(v: T) { this.value = v }
+    init(v: T) { this.value = v }
     map<U>(f: fn(T) -> U) -> U { return f(this.value) }
     ref update(f: fn(T) -> T) -> T { this.value = f(this.value); return this.value }
 }

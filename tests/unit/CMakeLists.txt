@@ -637,6 +637,8 @@ set_tests_properties(test_xir_source_text PROPERTIES LABELS "unit;xir;ownership;
 target_link_libraries(test_xir_source_generics PRIVATE xray_xir_source xray_frontend_format)
 target_link_libraries(test_xir_source_admission PRIVATE xray_xir_source)
 add_executable(test_xir_source_allocations xir/test_xir_source_allocations.c)
+add_test(NAME test_xir_source_effect_observer COMMAND test_xir_source_allocations --effect-observer-control)
+set_tests_properties(test_xir_source_effect_observer PROPERTIES TIMEOUT 30 LABELS "unit;xir;ownership;diagnostic;budget")
 target_link_libraries(test_xir_source_allocations PRIVATE xray_xir_source xray_xir xray_xir_scalar)
 target_compile_definitions(test_xir_source_allocations PRIVATE XR_SOURCE_FIXTURES="${CMAKE_SOURCE_DIR}/tests/fixtures/xir_source")
 target_compile_definitions(test_xir_source_allocations PRIVATE XR_CLASS_ARRAY_FIXTURES="${CMAKE_SOURCE_DIR}/tests/fixtures/xir_class_array")
@@ -679,6 +681,7 @@ add_executable(test_xir_source_mixed xir/test_xir_source_mixed.c ${XIR_SOURCE_GE
 target_link_libraries(test_xir_source_mixed PRIVATE xray_xir_source xray_xir_vm)
 target_compile_definitions(test_xir_source_mixed PRIVATE XR_SOURCE_FIXTURES="${CMAKE_SOURCE_DIR}/tests/fixtures/xir_source")
 include(${CMAKE_CURRENT_SOURCE_DIR}/xir/enum_identity.cmake)
+include(${CMAKE_CURRENT_SOURCE_DIR}/xir/enum_description.cmake)
 include(${CMAKE_CURRENT_SOURCE_DIR}/xir/class_identity.cmake)
 include(${CMAKE_CURRENT_SOURCE_DIR}/xir/class_inline.cmake)
 include(${CMAKE_CURRENT_SOURCE_DIR}/xir/library.cmake)
@@ -4462,6 +4465,7 @@ include(xir/program_root_permissions.cmake)
 include(xir/callable70_checked_vectors.cmake)
 
 include(xir/root_identity_vm_compiler_resources.cmake)
+include(xir/instance_generations.cmake)
 
 include(xir/owned_string_source_resources.cmake)
 
@@ -4539,6 +4543,7 @@ add_test(NAME test_xir_cell_provenance COMMAND test_xir_cell_provenance)
 set_tests_properties(test_xir_cell_provenance PROPERTIES LABELS "xir;ownership" TIMEOUT 120)
 
 include("${CMAKE_CURRENT_LIST_DIR}/xir/root_conditional.cmake")
+include("${CMAKE_CURRENT_LIST_DIR}/xir/effect_final_retirement.cmake")
 
 include(xir/cell_owner_source.cmake)
 
@@ -4564,3 +4569,5 @@ include("${CMAKE_CURRENT_LIST_DIR}/xir/cfg_storage.cmake")
 
 include("${CMAKE_CURRENT_LIST_DIR}/xir/instance_domain_fuel.cmake")
 include(${CMAKE_CURRENT_SOURCE_DIR}/xir/stdlib_families.cmake)
+add_subdirectory(xir/p10_reference)
+add_subdirectory(xir/p11_ctfe_reference)

@@ -6,7 +6,7 @@
 // objects themselves are reclaimed.
 class Resource {
     name: string
-    constructor(name: string) {
+    init(name: string) {
         this.name = name
         print("open " + this.name)
     }

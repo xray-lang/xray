@@ -14,6 +14,6 @@ class PanicInfo {
     cause: PanicInfo?
     code: i64
     data: JSON.Value
-    constructor(message: string = "", cause: PanicInfo? = null)
+    init(message: string = "", cause: PanicInfo? = null)
     toString() -> string
 }

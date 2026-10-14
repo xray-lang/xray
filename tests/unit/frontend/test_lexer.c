@@ -129,7 +129,7 @@ TEST(lexer_keywords) {
 TEST(lexer_class_keywords) {
     assert_token(scan_single("class"), TK_CLASS, "class");
     assert_token(scan_single("extends"), TK_EXTENDS, "extends");
-    assert_token(scan_single("constructor"), TK_CONSTRUCTOR, "constructor");
+    assert_token(scan_single("constructor"), TK_NAME, "constructor");
     assert_token(scan_single("this"), TK_THIS, "this");
     assert_token(scan_single("new"), TK_NEW, "new");
     assert_token(scan_single("static"), TK_STATIC, "static");
@@ -595,7 +595,7 @@ TEST(lexer_keyword_table_completeness) {
         {"catch", TK_CATCH},
         {"class", TK_CLASS},
         {"const", TK_CONST},
-        {"constructor", TK_CONSTRUCTOR},
+        {"constructor", TK_NAME},
         {"continue", TK_CONTINUE},
         {"defer", TK_DEFER},
         {"else", TK_ELSE},

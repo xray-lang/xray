@@ -1730,8 +1730,8 @@ static void lower_match_no_match_throw(XiLower *l, int line) {
         return;
     exc->args[0] = cls;
     exc->args[1] = msg;
-    exc->aux = (void *) "constructor";
-    exc->aux_int = (int64_t) xi_lower_method_symbol(l, "constructor") << 1;
+    exc->aux = (void *) "init";
+    exc->aux_int = (int64_t) xi_lower_method_symbol(l, "init") << 1;
     exc->lowering_flags |= XI_LOWERING_FLAG_CONSTRUCTOR_CALL;
     exc->flags |= XI_FLAG_SIDE_EFFECT | XI_FLAG_MAY_THROW;
     exc->line = (uint32_t) line;
@@ -3953,10 +3953,10 @@ static void lower_return(XiLower *l, AstNode *node) {
         if (is_direct_call && xi_lower_cleanup_has_active_site(l))
             is_direct_call = false;
         /* A `T(args)` construction lowers to an XI_CALL_METHOD whose aux is
-         * "constructor". Constructors must materialize and return the new
+         * "init". Constructors must materialize and return the new
          * object, so they are never tail calls (and AOT has no TAIL_CALL). */
         bool is_constructor_call = val && val->op == XI_CALL_METHOD && val->aux &&
-                                   strcmp((const char *) val->aux, "constructor") == 0;
+                                   strcmp((const char *) val->aux, "init") == 0;
         if (is_direct_call && !is_constructor_call && val && val->op == XI_CALL_METHOD) {
             val->flags |= XI_FLAG_TAIL;
         } else if (is_direct_call && val && val->op == XI_CALL &&

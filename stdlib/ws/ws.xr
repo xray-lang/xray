@@ -30,7 +30,7 @@ export class ParsedFrame {
     payload: Array<u8>
     consumedBytes: i64
 
-    constructor(
+    init(
         fin: bool,
         rsv1: bool,
         opcode: i64,
@@ -53,7 +53,7 @@ export class WsUrl {
     port: i64
     path: string
 
-    constructor(secure: bool, host: string, port: i64, path: string) {
+    init(secure: bool, host: string, port: i64, path: string) {
         this.secure = secure
         this.host = host
         this.port = port
@@ -65,7 +65,7 @@ export class ClosePayload {
     code: i64
     reason: string
 
-    constructor(code: i64, reason: string) {
+    init(code: i64, reason: string) {
         this.code = code
         this.reason = reason
     }
@@ -76,7 +76,7 @@ export class ParsedUpgradeResponse {
     protocol: string?
     deflate: bool
 
-    constructor(statusCode: i64, protocol: string? = null, deflate: bool = false) {
+    init(statusCode: i64, protocol: string? = null, deflate: bool = false) {
         this.statusCode = statusCode
         this.protocol = protocol
         this.deflate = deflate
@@ -90,7 +90,7 @@ export class ParsedUpgradeRequest {
     deflate: bool
     origin: string?
 
-    constructor(
+    init(
         requestTarget: string,
         secKey: string,
         protocol: string? = null,
@@ -811,7 +811,7 @@ export final class WsConnectOptions {
     pongTimeoutMs: i64
     maxMessageSize: i64
 
-    constructor(
+    init(
         timeoutMs: i64 = 30000,
         pingIntervalMs: i64 = 0,
         pongTimeoutMs: i64 = 0,
@@ -833,7 +833,7 @@ export final class WsMessage {
     binary: bool
     error: string?
 
-    constructor(data: Array<u8>? = null, binary: bool = false, error: string? = null) {
+    init(data: Array<u8>? = null, binary: bool = false, error: string? = null) {
         this.data = data
         this.binary = binary
         this.error = error
@@ -902,7 +902,7 @@ export final class WsConn {
     url: string
     error: string?
 
-    constructor(
+    init(
         conn: NetConn?,
         isServer: bool,
         url: string,
@@ -1145,7 +1145,7 @@ final class _WsServeCtx {
     handler: fn(ref WsConn)
     maxMessage: i64
 
-    constructor(handler: fn(ref WsConn), maxMessage: i64) {
+    init(handler: fn(ref WsConn), maxMessage: i64) {
         this.handler = handler
         this.maxMessage = maxMessage
     }

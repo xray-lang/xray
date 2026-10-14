@@ -207,7 +207,7 @@ fn test_nested_generic_uses_runtime_protocol() {
 class Bag<T: Iterable<i64>> {
     items: T
 
-    constructor(items: T) {
+    init(items: T) {
         this.items = items
     }
 
@@ -233,7 +233,7 @@ class StepIter {
     current: i64
     end: i64
 
-    constructor(start: i64, end: i64) {
+    init(start: i64, end: i64) {
         this.current = start
         this.end = end
     }
@@ -253,7 +253,7 @@ class Steps {
     start: i64
     end: i64
 
-    constructor(start: i64, end: i64) {
+    init(start: i64, end: i64) {
         this.start = start
         this.end = end
     }

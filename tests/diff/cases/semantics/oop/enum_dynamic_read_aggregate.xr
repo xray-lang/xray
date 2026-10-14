@@ -18,7 +18,7 @@ enum Node {
 class Tree {
     root: Node
     kids: Array<Node>
-    constructor(root: Node) {
+    init(root: Node) {
         this.root = root
         this.kids = []
     }

@@ -1,0 +1,6 @@
+export struct Box {
+    value: i64
+    init(value) { this.value = value }
+}
+export struct Plain { value: i64 }
+export fn localLiteral() -> i64 { return Box{value: 7}.value }

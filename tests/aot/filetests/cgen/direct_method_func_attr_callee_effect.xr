@@ -1,5 +1,5 @@
 class Echo {
-    constructor() {
+    init() {
     }
 
     idText(text: string) -> string {
