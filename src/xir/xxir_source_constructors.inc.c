@@ -66,7 +66,7 @@ static bool source_constructor_value(SourceContext *ctx, AstNode *node, SourceVa
     XrXirType type = visible_name(ctx, "this")->type;
     const XrXirTypeNode *nominal = xr_xir_type_node(&ctx->types, type);
     uint32_t count = nominal->nominal.field_count;
-    SourceValue *fields = count ? source_alloc(ctx, count, sizeof(*fields)) : NULL;
+    SourceValue *fields = count ? source_recipe_storage(ctx, count, sizeof(*fields)) : NULL;
     if (count && !fields) return false;
     for (uint32_t f = 0; f < count; ++f)
         if (!source_constructor_read(ctx, node, f, &fields[f])) return false;
@@ -175,7 +175,7 @@ static bool source_constructor_invoke(SourceContext *ctx, AstNode *node,
         called.declaration = ctx->bodies[index].declaration;
     if (!source_query_reference(ctx, call->reference, binding, &called, XR_XIR_SOURCE_CALL)) return false;
     SourceSubstitution substitution = {nominal->nominal.arguments, nominal->nominal.argument_count};
-    SourceValue *arguments = function->parameter_count ? source_alloc(ctx, function->parameter_count, sizeof(*arguments)) : NULL;
+    SourceValue *arguments = function->parameter_count ? source_recipe_storage(ctx, function->parameter_count, sizeof(*arguments)) : NULL;
     if (function->parameter_count && !arguments) return false;
     for (uint32_t p = 0; p < call->count; ++p) {
         XrXirType expected;

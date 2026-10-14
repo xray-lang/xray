@@ -635,6 +635,8 @@ target_link_libraries(test_xir_source_generics PRIVATE xray_xir_source xray_fron
 target_link_libraries(test_xir_source_admission PRIVATE xray_xir_source)
 add_executable(test_xir_source_allocations xir/test_xir_source_allocations.c)
 add_test(NAME test_xir_source_effect_observer COMMAND test_xir_source_allocations --effect-observer-control)
+add_test(NAME test_xir_source_private_storage COMMAND test_xir_source_allocations --private-storage-control)
+set_tests_properties(test_xir_source_private_storage PROPERTIES TIMEOUT 30 LABELS "unit;xir;source;ownership;budget;storage")
 set_tests_properties(test_xir_source_effect_observer PROPERTIES TIMEOUT 30 LABELS "unit;xir;ownership;diagnostic;budget")
 target_link_libraries(test_xir_source_allocations PRIVATE xray_xir_source xray_xir xray_xir_scalar)
 target_compile_definitions(test_xir_source_allocations PRIVATE XR_SOURCE_FIXTURES="${CMAKE_SOURCE_DIR}/tests/fixtures/xir_source")
