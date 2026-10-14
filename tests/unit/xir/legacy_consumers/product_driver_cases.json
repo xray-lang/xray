@@ -14329,6 +14329,253 @@
         "Original go/await scheduling, physical release, compiler/native/runtime FI, exact budgets/lifetime/cancel/safety/provider matrix remain open.",
         "Project label does not prove actual project-mode detection; Array<byte> comment is historical while the actual primitive is u8."
       ]
+    },
+    {
+      "id": "structured_original_1039_cross_module_generic_annotation_observed",
+      "oracle_id": "structured_original_1039_cross_module_generic_annotation_observed",
+      "source": "tests/unit/xir/legacy_consumers/fixtures/independent_named_observations/1039_cross_module_generic_annotation/root.xr",
+      "source_lf_sha256": "c112d6548a15361f7809de2ee23130bed678d00ff981a97c33cc7647fc9a46cd",
+      "entry": "test",
+      "stdout_utf8": "3\n4\n5\n8\n12\nv6\n",
+      "stderr_utf8": "",
+      "companions": [
+        {
+          "path": "tests/unit/xir/legacy_consumers/fixtures/independent_named_observations/1039_cross_module_generic_annotation/modules/generic_box_lib.xr",
+          "lf_sha256": "3dcea9718fe82a5ff5564117eba7aed71c2a86eb008a8b8deef6124b684b99a1"
+        }
+      ],
+      "owners": [
+        "P02",
+        "P06",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P12",
+        "P13",
+        "P14",
+        "P17"
+      ],
+      "independent_observations": {
+        "original_case": "tests/regression/10_stdlib/1039_cross_module_generic_annotation.xr",
+        "selected_complete_source": "tests/regression/10_stdlib/1039_cross_module_generic_annotation.xr",
+        "selected_source_lf_sha256": "e19ba4d961ac609c5a741b36e42ade50402a797213dd69f62cdc0230b0545902",
+        "method": "Preserve every original selective import, source-module definition, full helper, generic instance/annotation/call and named body. Capture scalar result once at each original assertion boundary.",
+        "values": [
+          {
+            "test": "annotation_names_a_foreign_instantiation",
+            "expression": "get(Box<i64>(3))",
+            "expected": 3,
+            "projection": null
+          },
+          {
+            "test": "annotation_names_a_foreign_instantiation",
+            "expression": "get(rebox(4))",
+            "expected": 4,
+            "projection": null
+          },
+          {
+            "test": "annotation_names_a_foreign_instantiation",
+            "expression": "get(boxOf(5))",
+            "expected": 5,
+            "projection": null
+          },
+          {
+            "test": "annotation_names_a_foreign_instantiation",
+            "expression": "boxOf(8).get()",
+            "expected": 8,
+            "projection": null
+          },
+          {
+            "test": "generic_method_of_a_foreign_instantiation",
+            "expression": "b.lock<i64>(fn(v: i64) -> i64 { return v * 2 })",
+            "expected": 12,
+            "projection": null
+          },
+          {
+            "test": "generic_method_of_a_foreign_instantiation",
+            "expression": "b.lock<string>(fn(v: i64) -> string { return \"v${v}\" })",
+            "expected": "v6",
+            "projection": null
+          }
+        ]
+      },
+      "remaining_gates": [
+        "Actual complete discovery and independent VM/C/native declared-module/user declaration results.",
+        "Full generic definition checks, SIMD hardware/provider authority and original full FI/resources/lifetime/cancel/physical/safety matrices remain open."
+      ]
+    },
+    {
+      "id": "structured_original_1040_selective_import_generic_return_observed",
+      "oracle_id": "structured_original_1040_selective_import_generic_return_observed",
+      "source": "tests/unit/xir/legacy_consumers/fixtures/independent_named_observations/1040_selective_import_generic_return/root.xr",
+      "source_lf_sha256": "32e34e35beedece6d7b34e23441453d4d5f5ee6e8a64ca74417613bcc008c0d0",
+      "entry": "test",
+      "stdout_utf8": "6\n6\n8\n",
+      "stderr_utf8": "",
+      "companions": [
+        {
+          "path": "tests/unit/xir/legacy_consumers/fixtures/independent_named_observations/1040_selective_import_generic_return/modules/generic_box_lib.xr",
+          "lf_sha256": "3dcea9718fe82a5ff5564117eba7aed71c2a86eb008a8b8deef6124b684b99a1"
+        }
+      ],
+      "owners": [
+        "P02",
+        "P06",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P12",
+        "P13",
+        "P14",
+        "P17"
+      ],
+      "independent_observations": {
+        "original_case": "tests/regression/10_stdlib/1040_selective_import_generic_return.xr",
+        "selected_complete_source": "tests/regression/10_stdlib/1040_selective_import_generic_return.xr",
+        "selected_source_lf_sha256": "64353528c19f8639de443d721917da3ff4b833e82387b6ac4073abf1d3313209",
+        "method": "Preserve every original selective import, source-module definition, full helper, generic instance/annotation/call and named body. Capture scalar result once at each original assertion boundary.",
+        "values": [
+          {
+            "test": "selective_import_of_an_export_returning_an_instantiation",
+            "expression": "b.get()",
+            "expected": 6,
+            "projection": null
+          },
+          {
+            "test": "selective_import_of_an_export_returning_an_instantiation",
+            "expression": "b.value",
+            "expected": 6,
+            "projection": null
+          },
+          {
+            "test": "result_flows_into_a_generic_method_of_the_instantiation",
+            "expression": "boxOf(7).lock<i64>(fn(v: i64) -> i64 { return v + 1 })",
+            "expected": 8,
+            "projection": null
+          }
+        ]
+      },
+      "remaining_gates": [
+        "Actual complete discovery and independent VM/C/native declared-module/user declaration results.",
+        "Full generic definition checks, SIMD hardware/provider authority and original full FI/resources/lifetime/cancel/physical/safety matrices remain open."
+      ]
+    },
+    {
+      "id": "structured_original_1041_imported_instance_field_substitution_observed",
+      "oracle_id": "structured_original_1041_imported_instance_field_substitution_observed",
+      "source": "tests/unit/xir/legacy_consumers/fixtures/independent_named_observations/1041_imported_instance_field_substitution/root.xr",
+      "source_lf_sha256": "1847dd14efc6405e5f404b7c77fb74a1078c2015ed59ac28e6aacf3d007a2957",
+      "entry": "test",
+      "stdout_utf8": "6\n6\n7\n8\n3\nthree\n",
+      "stderr_utf8": "",
+      "companions": [
+        {
+          "path": "tests/unit/xir/legacy_consumers/fixtures/independent_named_observations/1041_imported_instance_field_substitution/modules/generic_box_lib.xr",
+          "lf_sha256": "3dcea9718fe82a5ff5564117eba7aed71c2a86eb008a8b8deef6124b684b99a1"
+        }
+      ],
+      "owners": [
+        "P02",
+        "P06",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P12",
+        "P13",
+        "P14",
+        "P17"
+      ],
+      "independent_observations": {
+        "original_case": "tests/regression/10_stdlib/1041_imported_instance_field_substitution.xr",
+        "selected_complete_source": "tests/regression/10_stdlib/1041_imported_instance_field_substitution.xr",
+        "selected_source_lf_sha256": "0ae4fc9d2f468dda55cdbd092d1a8b8ec656e42361ec5e138a4da07cdcd3f432",
+        "method": "Preserve every original selective import, source-module definition, full helper, generic instance/annotation/call and named body. Capture scalar result once at each original assertion boundary.",
+        "values": [
+          {
+            "test": "field_of_an_instance_whose_class_is_not_imported",
+            "expression": "b.value",
+            "expected": 6,
+            "projection": null
+          },
+          {
+            "test": "field_of_an_instance_whose_class_is_not_imported",
+            "expression": "b.get()",
+            "expected": 6,
+            "projection": null
+          },
+          {
+            "test": "field_read_flows_into_an_inferred_binding",
+            "expression": "v",
+            "expected": 7,
+            "projection": null
+          },
+          {
+            "test": "field_read_flows_into_an_inferred_binding",
+            "expression": "v + 1",
+            "expected": 8,
+            "projection": null
+          },
+          {
+            "test": "two_type_parameters_substitute_positionally",
+            "expression": "p.first",
+            "expected": 3,
+            "projection": null
+          },
+          {
+            "test": "two_type_parameters_substitute_positionally",
+            "expression": "p.second",
+            "expected": "three",
+            "projection": null
+          }
+        ]
+      },
+      "remaining_gates": [
+        "Actual complete discovery and independent VM/C/native declared-module/user declaration results.",
+        "Full generic definition checks, SIMD hardware/provider authority and original full FI/resources/lifetime/cancel/physical/safety matrices remain open."
+      ]
+    },
+    {
+      "id": "structured_original_1060_simd_intrinsic_same_name_observed",
+      "oracle_id": "structured_original_1060_simd_intrinsic_same_name_observed",
+      "source": "tests/unit/xir/legacy_consumers/fixtures/independent_named_observations/1060_simd_intrinsic_same_name/root.xr",
+      "source_lf_sha256": "bf0cca960fec73f6f2bb286cd4ed3ea207350f1fd651b652545e83610b71a903",
+      "entry": "test",
+      "stdout_utf8": "5\n",
+      "stderr_utf8": "",
+      "companions": [],
+      "owners": [
+        "P02",
+        "P06",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P12",
+        "P13",
+        "P14",
+        "P17"
+      ],
+      "independent_observations": {
+        "original_case": "tests/regression/10_stdlib/1060_simd_intrinsic_same_name.xr",
+        "selected_complete_source": "tests/regression/10_stdlib/1060_simd_intrinsic_same_name.xr",
+        "selected_source_lf_sha256": "09d6b6da979d2a5a7e395af7d7cca4cee689c9ffaa0be407a67352fa58882a9f",
+        "method": "Preserve every original selective import, source-module definition, full helper, generic instance/annotation/call and named body. Capture scalar result once at each original assertion boundary.",
+        "values": [
+          {
+            "test": "test_user_simd_names_are_not_intrinsics",
+            "expression": "result",
+            "expected": 5,
+            "projection": null
+          }
+        ]
+      },
+      "remaining_gates": [
+        "Actual complete discovery and independent VM/C/native declared-module/user declaration results.",
+        "Full generic definition checks, SIMD hardware/provider authority and original full FI/resources/lifetime/cancel/physical/safety matrices remain open."
+      ]
     }
   ]
 }

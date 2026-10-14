@@ -1,0 +1,39 @@
+// Preserve the original declared-module type authority and full imported/user-named bodies; observe each actual scalar call once.
+// The type arguments of an instance are substituted into its member types
+// from the instance's own declaration, not from whatever the reading module
+// happens to have bound under the class's display name. This module imports
+// only the functions, so `Box` and `Pair` are bound to no local name here,
+// and a field read must still see the concrete element type.
+
+import { boxOf, pairOf } from "./modules/generic_box_lib"
+
+@test fn field_of_an_instance_whose_class_is_not_imported() {
+    var b = boxOf(6)
+    var p19ImportedValue0 = b.value
+    assertEqual(p19ImportedValue0, 6)
+    print(p19ImportedValue0)
+    var p19ImportedValue1 = b.get()
+    assertEqual(p19ImportedValue1, 6)
+    print(p19ImportedValue1)
+}
+
+@test fn field_read_flows_into_an_inferred_binding() {
+    var b = boxOf(7)
+    var v = b.value
+    var p19ImportedValue2 = v
+    assertEqual(p19ImportedValue2, 7)
+    print(p19ImportedValue2)
+    var p19ImportedValue3 = v + 1
+    assertEqual(p19ImportedValue3, 8)
+    print(p19ImportedValue3)
+}
+
+@test fn two_type_parameters_substitute_positionally() {
+    var p = pairOf(3, "three")
+    var p19ImportedValue4 = p.first
+    assertEqual(p19ImportedValue4, 3)
+    print(p19ImportedValue4)
+    var p19ImportedValue5 = p.second
+    assertEqual(p19ImportedValue5, "three")
+    print(p19ImportedValue5)
+}

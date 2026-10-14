@@ -124,6 +124,26 @@
     {
       "path": "tests/regression/15_project/1500_project_mode_detect.xr",
       "lf_sha256": "9367536e8acdbcc2cf05b4c6dc6e0af296fea6039fc73af557ab9b8e85a19987"
+    },
+    {
+      "path": "tests/regression/10_stdlib/modules/generic_box_lib.xr",
+      "lf_sha256": "3dcea9718fe82a5ff5564117eba7aed71c2a86eb008a8b8deef6124b684b99a1"
+    },
+    {
+      "path": "tests/regression/10_stdlib/1039_cross_module_generic_annotation.xr",
+      "lf_sha256": "e19ba4d961ac609c5a741b36e42ade50402a797213dd69f62cdc0230b0545902"
+    },
+    {
+      "path": "tests/regression/10_stdlib/1040_selective_import_generic_return.xr",
+      "lf_sha256": "64353528c19f8639de443d721917da3ff4b833e82387b6ac4073abf1d3313209"
+    },
+    {
+      "path": "tests/regression/10_stdlib/1041_imported_instance_field_substitution.xr",
+      "lf_sha256": "0ae4fc9d2f468dda55cdbd092d1a8b8ec656e42361ec5e138a4da07cdcd3f432"
+    },
+    {
+      "path": "tests/regression/10_stdlib/1060_simd_intrinsic_same_name.xr",
+      "lf_sha256": "09d6b6da979d2a5a7e395af7d7cca4cee689c9ffaa0be407a67352fa58882a9f"
     }
   ],
   "cases": [
@@ -943,6 +963,106 @@
         "module_initialization_stdout_utf8": ""
       },
       "model": "Independent source arithmetic and LIFO normal trace; complete natural output and original initialization, no output-derived golden."
+    },
+    {
+      "id": "structured_original_1039_cross_module_generic_annotation_observed",
+      "expected": {
+        "exit_code": 0,
+        "required_test_names": [
+          "annotation_names_a_foreign_instantiation",
+          "generic_method_of_a_foreign_instantiation"
+        ],
+        "per_test_observations": {
+          "annotation_names_a_foreign_instantiation": {
+            "values": [
+              3,
+              4,
+              5,
+              8
+            ]
+          },
+          "generic_method_of_a_foreign_instantiation": {
+            "values": [
+              12,
+              "v6"
+            ]
+          }
+        }
+      },
+      "model_scope": "Original declared-module generic field/call/return and user U32x4 method semantics; value5 must be addition2+3, not a guessed builtin XOR1."
+    },
+    {
+      "id": "structured_original_1040_selective_import_generic_return_observed",
+      "expected": {
+        "exit_code": 0,
+        "required_test_names": [
+          "selective_import_of_an_export_returning_an_instantiation",
+          "result_flows_into_a_generic_method_of_the_instantiation"
+        ],
+        "per_test_observations": {
+          "selective_import_of_an_export_returning_an_instantiation": {
+            "values": [
+              6,
+              6
+            ]
+          },
+          "result_flows_into_a_generic_method_of_the_instantiation": {
+            "values": [
+              8
+            ]
+          }
+        }
+      },
+      "model_scope": "Original declared-module generic field/call/return and user U32x4 method semantics; value5 must be addition2+3, not a guessed builtin XOR1."
+    },
+    {
+      "id": "structured_original_1041_imported_instance_field_substitution_observed",
+      "expected": {
+        "exit_code": 0,
+        "required_test_names": [
+          "field_of_an_instance_whose_class_is_not_imported",
+          "field_read_flows_into_an_inferred_binding",
+          "two_type_parameters_substitute_positionally"
+        ],
+        "per_test_observations": {
+          "field_of_an_instance_whose_class_is_not_imported": {
+            "values": [
+              6,
+              6
+            ]
+          },
+          "field_read_flows_into_an_inferred_binding": {
+            "values": [
+              7,
+              8
+            ]
+          },
+          "two_type_parameters_substitute_positionally": {
+            "values": [
+              3,
+              "three"
+            ]
+          }
+        }
+      },
+      "model_scope": "Original declared-module generic field/call/return and user U32x4 method semantics; value5 must be addition2+3, not a guessed builtin XOR1."
+    },
+    {
+      "id": "structured_original_1060_simd_intrinsic_same_name_observed",
+      "expected": {
+        "exit_code": 0,
+        "required_test_names": [
+          "test_user_simd_names_are_not_intrinsics"
+        ],
+        "per_test_observations": {
+          "test_user_simd_names_are_not_intrinsics": {
+            "values": [
+              5
+            ]
+          }
+        }
+      },
+      "model_scope": "Original declared-module generic field/call/return and user U32x4 method semantics; value5 must be addition2+3, not a guessed builtin XOR1."
     }
   ],
   "independence": "Expected constants come from the original frozen assertions and mathematical method bodies, never current Xray output."
