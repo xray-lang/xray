@@ -907,16 +907,27 @@ static XrXirStatus effect_invocation_read_open(const XrXirCompileContext *work,
             xr_xir_type_is_class(final->material->domain.types,final->material->functions[f].result);
     }
     if (!read->producer_enabled) return XR_XIR_OK;
-    if ((uint64_t)final->count*sizeof(*read->consumers)>SIZE_MAX) return XR_XIR_BUDGET;
+    uint32_t count=read->final.count,edges=read->final.edge_count;
+    if ((uint64_t)count*sizeof(*read->consumers)>SIZE_MAX) return XR_XIR_BUDGET;
     XrXirStatus status=XR_XIR_OK;
-    read->consumers=xir_compile_alloc(work,(size_t)final->count*sizeof(*read->consumers),&status);
+    read->consumers=xir_compile_alloc(work,(size_t)count*sizeof(*read->consumers),&status);
     if (!read->consumers) return status;
-    if (!xir_compile_work(work,(uint64_t)final->count*sizeof(*read->consumers))) status=XR_XIR_BUDGET;
-    if (status==XR_XIR_OK) for (uint32_t n=0;n<final->count;++n) read->consumers[n]=UINT32_MAX;
-    for (uint32_t e=0;e<final->edge_count && status==XR_XIR_OK;++e) {
+    /* Allocation invokes the caller's allocator. Validate its current geometry
+     * before using the extent paid and allocated by this receiving request. */
+    if (!xir_compile_work(work,10)) status=XR_XIR_BUDGET;
+    else if (final->count!=count || final->edge_count!=edges ||
+        final->capacity!=read->final.capacity || final->edge_capacity!=read->final.edge_capacity ||
+        final->nodes!=read->final.nodes || final->edges!=read->final.edges ||
+        final->material!=read->final.material || final->physical!=read->final.physical ||
+        final->roots!=read->final.roots || final->root_spaces!=read->final.root_spaces)
+        status=XR_XIR_BAD_STRUCTURE;
+    if (status==XR_XIR_OK && !xir_compile_work(work,(uint64_t)count*sizeof(*read->consumers)))
+        status=XR_XIR_BUDGET;
+    if (status==XR_XIR_OK) for (uint32_t n=0;n<count;++n) read->consumers[n]=UINT32_MAX;
+    for (uint32_t e=0;e<edges && status==XR_XIR_OK;++e) {
         if (!xir_compile_work(work,5)) { status=XR_XIR_BUDGET;break; }
-        const EffectInvocationEdge *edge=&final->edges[e];
-        if (edge->caller>=final->count || edge->target>=final->count ||
+        const EffectInvocationEdge *edge=&read->final.edges[e];
+        if (edge->caller>=count || edge->target>=count ||
             edge->consumer_next!=read->consumers[edge->target]) { status=XR_XIR_BAD_STRUCTURE;break; }
         read->consumers[edge->target]=e;
     }
