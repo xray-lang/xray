@@ -15403,7 +15403,7 @@
       "id": "structured_original_0302_int64_native_observed",
       "oracle_id": "structured_original_0302_int64_native_observed",
       "source": "tests/unit/xir/legacy_consumers/fixtures/independent_named_observations/0302_int64_native/root.xr",
-      "source_lf_sha256": "9f1be2a95ffa11e6c3bf2d6cede6a63b21a23c8ed925a251dc8dbb0952ed8d73",
+      "source_lf_sha256": "dc5a85c30514d40ce72a7208ee90de8a9347fe78b67e225c1414fd4810b029f3",
       "entry": "test",
       "stdout_utf8": "300\n-100\n1000000000000\n33\n1\n-42\n140737488355328\n140737488355327\n1000000000000000000\n1000000000\n-140737488355329\n-140737488355328\n140737488355328\ntrue\ntrue\ntrue\nPANIC\ntrue\nPANIC\ntrue\n3840\n65520\n61680\n140737488355328\n1\n4611686018427387904\n1\n140737488356327\n140737488355327\n1000000000000000000\n1000000000\ni64\nf64\n",
       "stderr_utf8": "",

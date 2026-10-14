@@ -13,7 +13,7 @@ fn test_int64_add() {
     var a: i64 = 100
     var b: i64 = 200
     var p19WideValue0 = a + b
-    assertEqual(p19WideValue0300)
+    assertEqual(p19WideValue0, 300)
     print(p19WideValue0)
 }
 
@@ -22,7 +22,7 @@ fn test_int64_sub() {
     var a: i64 = 100
     var b: i64 = 200
     var p19WideValue1 = a - b
-    assertEqual(p19WideValue1-100)
+    assertEqual(p19WideValue1, -100)
     print(p19WideValue1)
 }
 
@@ -31,7 +31,7 @@ fn test_int64_mul() {
     var a: i64 = 1000000
     var b: i64 = 1000000
     var p19WideValue2 = a * b
-    assertEqual(p19WideValue21000000000000)
+    assertEqual(p19WideValue2, 1000000000000)
     print(p19WideValue2)
 }
 
@@ -40,7 +40,7 @@ fn test_int64_div() {
     var a: i64 = 100
     var b: i64 = 3
     var p19WideValue3 = a / b
-    assertEqual(p19WideValue333)
+    assertEqual(p19WideValue3, 33)
     print(p19WideValue3)
 }
 
@@ -49,7 +49,7 @@ fn test_int64_mod() {
     var a: i64 = 100
     var b: i64 = 3
     var p19WideValue4 = a % b
-    assertEqual(p19WideValue41)
+    assertEqual(p19WideValue4, 1)
     print(p19WideValue4)
 }
 
@@ -57,7 +57,7 @@ fn test_int64_mod() {
 fn test_int64_neg() {
     var a: i64 = 42
     var p19WideValue5 = -a
-    assertEqual(p19WideValue5-42)
+    assertEqual(p19WideValue5, -42)
     print(p19WideValue5)
 }
 
@@ -71,7 +71,7 @@ fn test_int64_beyond_48bit_add() {
     // Both sides are I64 — should use OP_EQ_I64, no boxing
     print(result)
     var p19WideValue7 = result - b
-    assertEqual(p19WideValue7a)
+    assertEqual(p19WideValue7, a)
     print(p19WideValue7)
 }
 
@@ -83,7 +83,7 @@ fn test_int64_large_multiply_verify() {
     // Both sides are I64 — should use OP_EQ_I64
     print(result)
     var p19WideValue9 = result / a
-    assertEqual(p19WideValue9b)
+    assertEqual(p19WideValue9, b)
     print(p19WideValue9)
 }
 
@@ -94,7 +94,7 @@ fn test_int64_negative_large() {
     var result: i64 = a + b
     print(result)
     var p19WideValue11 = result + 1
-    assertEqual(p19WideValue11a)
+    assertEqual(p19WideValue11, a)
     print(p19WideValue11)
 }
 
@@ -109,7 +109,7 @@ fn test_int64_large_literal_equality() {
     // b = 140737488355328 (>48-bit), assertEqual second arg is I64 expr
     var expected: i64 = 140737488355328
     var p19WideValue12 = b
-    assertEqual(p19WideValue12expected)
+    assertEqual(p19WideValue12, expected)
     print(p19WideValue12)
 }
 
@@ -192,13 +192,13 @@ fn test_int64_bitwise() {
     var a: i64 = 0xFF00
     var b: i64 = 0x0FF0
     var p19WideValue20 = a & b
-    assertEqual(p19WideValue200x0F00)
+    assertEqual(p19WideValue20, 0x0F00)
     print(p19WideValue20)
     var p19WideValue21 = a | b
-    assertEqual(p19WideValue210xFFF0)
+    assertEqual(p19WideValue21, 0xFFF0)
     print(p19WideValue21)
     var p19WideValue22 = a ^ b
-    assertEqual(p19WideValue220xF0F0)
+    assertEqual(p19WideValue22, 0xF0F0)
     print(p19WideValue22)
 }
 
@@ -211,7 +211,7 @@ fn test_int64_shift_large() {
     // 2^47 = 140737488355328, verify via shift back
     print(r47)
     var p19WideValue24 = r47 >> 47
-    assertEqual(p19WideValue241)
+    assertEqual(p19WideValue24, 1)
     print(p19WideValue24)
 }
 
@@ -221,7 +221,7 @@ fn test_int64_shift_62() {
     var r62: i64 = a << 62
     print(r62)
     var p19WideValue26 = r62 >> 62
-    assertEqual(p19WideValue261)
+    assertEqual(p19WideValue26, 1)
     print(p19WideValue26)
 }
 
@@ -233,7 +233,7 @@ fn test_int64_compound_add_large() {
     x += 1000
     print(x)
     var p19WideValue28 = x - 1000
-    assertEqual(p19WideValue28140737488355327)
+    assertEqual(p19WideValue28, 140737488355327)
     print(p19WideValue28)
 }
 
@@ -243,7 +243,7 @@ fn test_int64_compound_mul_large() {
     x *= 1000000000
     print(x)
     var p19WideValue30 = x / 1000000000
-    assertEqual(p19WideValue301000000000)
+    assertEqual(p19WideValue30, 1000000000)
     print(p19WideValue30)
 }
 
@@ -253,7 +253,7 @@ fn test_int64_compound_mul_large() {
 fn test_typeof_int64() {
     var a: i64 = 42
     var p19WideValue31 = typeName(a)
-    assertEqual(p19WideValue31"i64")
+    assertEqual(p19WideValue31, "i64")
     print(p19WideValue31)
 }
 
@@ -261,6 +261,6 @@ fn test_typeof_int64() {
 fn test_typeof_float64() {
     var a: f64 = 3.14
     var p19WideValue32 = typeName(a)
-    assertEqual(p19WideValue32"f64")
+    assertEqual(p19WideValue32, "f64")
     print(p19WideValue32)
 }
