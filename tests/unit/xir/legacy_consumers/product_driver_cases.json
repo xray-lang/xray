@@ -13847,6 +13847,295 @@
         "Generic physical instance count and full definition/constraint proof remain separate from40 equal return values.",
         "All original exact FI/resources/lifetime/borrow/cancel/physical and sanitizer/provider qualification."
       ]
+    },
+    {
+      "id": "structured_original_0915_ref_exclusivity_legal_boundaries_observed",
+      "oracle_id": "structured_original_0915_ref_exclusivity_legal_boundaries_observed",
+      "source": "tests/unit/xir/legacy_consumers/fixtures/independent_named_observations/0915_ref_exclusivity_legal_boundaries/root.xr",
+      "source_lf_sha256": "20affe4f85b9dcd5e679effb790a84bc6731aaad2d558dc6cc6855b8dac94ca0",
+      "entry": "test",
+      "stdout_utf8": "3\n2\n1\n",
+      "stderr_utf8": "",
+      "companions": [],
+      "owners": [
+        "P07",
+        "P09",
+        "P10",
+        "P14"
+      ],
+      "independent_observations": {
+        "original_case": "tests/regression/08_oop/0915_ref_exclusivity_legal_boundaries.xr",
+        "selected_complete_source": "tests/regression/08_oop/0915_ref_exclusivity_legal_boundaries.xr",
+        "selected_source_lf_sha256": "12f715d25b67c900baba0669440d783c96d0e9e42ca150086e93bf13c11704f0",
+        "method": "All original legal calls, lexical identifiers, ref places, pre-call read order and complete mapped Array read-value target remain. Actual expressions run once at their original assertion point.",
+        "values": [
+          {
+            "test": "test_nested_read_before_call_is_legal",
+            "expression": "len(a)",
+            "expected": 3,
+            "projection": null
+          },
+          {
+            "test": "test_nested_read_before_call_is_legal",
+            "expression": "a[2]",
+            "expected": 2,
+            "projection": null
+          },
+          {
+            "test": "test_ref_to_receiver_subplace_is_legal",
+            "expression": "len(c.hits)",
+            "expected": 1,
+            "projection": null
+          }
+        ]
+      },
+      "remaining_gates": [
+        "Complete actual discovery and independent VM/C/native legal outcomes.",
+        "Negative borrow/exclusivity and original compiler/native/runtime FI, exact resource/lifetime/cancel/physical and sanitizer/provider matrix."
+      ]
+    },
+    {
+      "id": "structured_original_1408_ref_identifier_call_argument_not_marker_observed",
+      "oracle_id": "structured_original_1408_ref_identifier_call_argument_not_marker_observed",
+      "source": "tests/unit/xir/legacy_consumers/fixtures/independent_named_observations/1408_ref_identifier_call_argument_not_marker/root.xr",
+      "source_lf_sha256": "9ade17b2b9eef0fbbaecea02de7bfcccc90cd4f35837fe82dd9408eba4478608",
+      "entry": "test",
+      "stdout_utf8": "42\n",
+      "stderr_utf8": "",
+      "companions": [],
+      "owners": [
+        "P02",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P11",
+        "P12",
+        "P13",
+        "P14"
+      ],
+      "independent_observations": {
+        "original_case": "tests/regression/13_types/1408_ref_identifier_call_argument_not_marker.xr",
+        "selected_complete_source": "tests/regression/13_types/1408_ref_identifier_call_argument_not_marker.xr",
+        "selected_source_lf_sha256": "072294ec14f2a42b8199d8a60a551de040c1c596c1369add2933cf790222f353",
+        "method": "All original legal calls, lexical identifiers, ref places, pre-call read order and complete mapped Array read-value target remain. Actual expressions run once at their original assertion point.",
+        "values": [
+          {
+            "test": "test_ref_identifier_call_argument_not_marker",
+            "expression": "ref_identifier_expression(41)",
+            "expected": 42,
+            "projection": null
+          }
+        ]
+      },
+      "remaining_gates": [
+        "Complete actual discovery and independent VM/C/native legal outcomes.",
+        "Negative borrow/exclusivity and original compiler/native/runtime FI, exact resource/lifetime/cancel/physical and sanitizer/provider matrix."
+      ]
+    },
+    {
+      "id": "structured_original_1421_out_identifier_call_argument_not_marker_observed",
+      "oracle_id": "structured_original_1421_out_identifier_call_argument_not_marker_observed",
+      "source": "tests/unit/xir/legacy_consumers/fixtures/independent_named_observations/1421_out_identifier_call_argument_not_marker/root.xr",
+      "source_lf_sha256": "443c220202cdc4295cbe07726431adb058398087d196577e9429f2effc7fd1fd",
+      "entry": "test",
+      "stdout_utf8": "42\n43\n",
+      "stderr_utf8": "",
+      "companions": [],
+      "owners": [
+        "P02",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P11",
+        "P12",
+        "P13",
+        "P14"
+      ],
+      "independent_observations": {
+        "original_case": "tests/regression/13_types/1421_out_identifier_call_argument_not_marker.xr",
+        "selected_complete_source": "tests/regression/13_types/1421_out_identifier_call_argument_not_marker.xr",
+        "selected_source_lf_sha256": "7f344c1c947974a48db3202e92283c0bdcf2296741f2bddaa14ca5b1a316766d",
+        "method": "All original legal calls, lexical identifiers, ref places, pre-call read order and complete mapped Array read-value target remain. Actual expressions run once at their original assertion point.",
+        "values": [
+          {
+            "test": "test_out_identifier_call_argument_not_marker",
+            "expression": "plus_one(out)",
+            "expected": 42,
+            "projection": null
+          },
+          {
+            "test": "test_out_identifier_call_argument_not_marker",
+            "expression": "plus_one(out + 1)",
+            "expected": 43,
+            "projection": null
+          }
+        ]
+      },
+      "remaining_gates": [
+        "Complete actual discovery and independent VM/C/native legal outcomes.",
+        "Negative borrow/exclusivity and original compiler/native/runtime FI, exact resource/lifetime/cancel/physical and sanitizer/provider matrix."
+      ]
+    },
+    {
+      "id": "structured_original_1432_param_mode_in_in_alias_allowed_observed",
+      "oracle_id": "structured_original_1432_param_mode_in_in_alias_allowed_observed",
+      "source": "tests/unit/xir/legacy_consumers/fixtures/independent_named_observations/1432_param_mode_in_in_alias_allowed/root.xr",
+      "source_lf_sha256": "7eec59aca037afc585eb53cf1f5d6d53e0aeee62513d65adff4071c72dd89a0b",
+      "entry": "test",
+      "stdout_utf8": "42\n",
+      "stderr_utf8": "",
+      "companions": [],
+      "owners": [
+        "P02",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P11",
+        "P12",
+        "P13",
+        "P14"
+      ],
+      "independent_observations": {
+        "original_case": "tests/regression/13_types/1432_param_mode_in_in_alias_allowed.xr",
+        "selected_complete_source": "tests/regression/13_types/1432_param_mode_in_in_alias_allowed.xr",
+        "selected_source_lf_sha256": "2ba3b3b01dcc859c59b2e07d742d4c525656942eacd982e4cf842d0c058e52c6",
+        "method": "All original legal calls, lexical identifiers, ref places, pre-call read order and complete mapped Array read-value target remain. Actual expressions run once at their original assertion point.",
+        "values": [
+          {
+            "test": "test_in_in_same_root_alias_allowed",
+            "expression": "sum_twice(value, value)",
+            "expected": 42,
+            "projection": null
+          }
+        ]
+      },
+      "remaining_gates": [
+        "Complete actual discovery and independent VM/C/native legal outcomes.",
+        "Negative borrow/exclusivity and original compiler/native/runtime FI, exact resource/lifetime/cancel/physical and sanitizer/provider matrix."
+      ]
+    },
+    {
+      "id": "structured_original_1433_param_mode_move_source_action_observed",
+      "oracle_id": "structured_original_1433_param_mode_move_source_action_observed",
+      "source": "tests/unit/xir/legacy_consumers/fixtures/independent_named_observations/1433_param_mode_move_source_action/root.xr",
+      "source_lf_sha256": "8584ff1763194352e8d866d631690908f902270da88ea9908d221fd6070accfd",
+      "entry": "test",
+      "stdout_utf8": "2\n2\n3\n3\n4\n",
+      "stderr_utf8": "",
+      "companions": [],
+      "owners": [
+        "P02",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P11",
+        "P12",
+        "P13",
+        "P14"
+      ],
+      "independent_observations": {
+        "original_case": "tests/regression/13_types/1433_param_mode_move_source_action.xr",
+        "selected_complete_source": "tests/unit/xir/legacy_consumers/fixtures/copyable_array_parameter_is_read_value/root.xr",
+        "selected_source_lf_sha256": "07b08129494f6a775fb02a64d7c2ed921fc8f4c0cdcc853caa3933a7438d2165",
+        "method": "All original legal calls, lexical identifiers, ref places, pre-call read order and complete mapped Array read-value target remain. Actual expressions run once at their original assertion point.",
+        "values": [
+          {
+            "test": "test_read_formal_preserves_values_and_accepts_fresh_owners",
+            "expression": "take(xs)",
+            "expected": 2,
+            "projection": null
+          },
+          {
+            "test": "test_read_formal_preserves_values_and_accepts_fresh_owners",
+            "expression": "len(xs)",
+            "expected": 2,
+            "projection": null
+          },
+          {
+            "test": "test_read_formal_preserves_values_and_accepts_fresh_owners",
+            "expression": "take(ys)",
+            "expected": 3,
+            "projection": null
+          },
+          {
+            "test": "test_read_formal_preserves_values_and_accepts_fresh_owners",
+            "expression": "len(ys)",
+            "expected": 3,
+            "projection": null
+          },
+          {
+            "test": "test_read_formal_preserves_values_and_accepts_fresh_owners",
+            "expression": "take(Array<i64>(4, 1))",
+            "expected": 4,
+            "projection": null
+          }
+        ]
+      },
+      "remaining_gates": [
+        "Complete actual discovery and independent VM/C/native legal outcomes.",
+        "Negative borrow/exclusivity and original compiler/native/runtime FI, exact resource/lifetime/cancel/physical and sanitizer/provider matrix."
+      ]
+    },
+    {
+      "id": "structured_original_1435_param_mode_place_kind_authorization_observed",
+      "oracle_id": "structured_original_1435_param_mode_place_kind_authorization_observed",
+      "source": "tests/unit/xir/legacy_consumers/fixtures/independent_named_observations/1435_param_mode_place_kind_authorization/root.xr",
+      "source_lf_sha256": "d6e43bfd5f81cdcfba68109708405b5970b4e708ff959036dd2b25d9f3bbf13f",
+      "entry": "test",
+      "stdout_utf8": "2\n7\n7\n0\n",
+      "stderr_utf8": "",
+      "companions": [],
+      "owners": [
+        "P02",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P11",
+        "P12",
+        "P13",
+        "P14"
+      ],
+      "independent_observations": {
+        "original_case": "tests/regression/13_types/1435_param_mode_place_kind_authorization.xr",
+        "selected_complete_source": "tests/regression/13_types/1435_param_mode_place_kind_authorization.xr",
+        "selected_source_lf_sha256": "241a1881869848cd90b5773274464db088bc70401a113044ccb99a887119e585",
+        "method": "All original legal calls, lexical identifiers, ref places, pre-call read order and complete mapped Array read-value target remain. Actual expressions run once at their original assertion point.",
+        "values": [
+          {
+            "test": "test_writable_places_accept_ref",
+            "expression": "bump(ref value)",
+            "expected": 2,
+            "projection": null
+          },
+          {
+            "test": "test_writable_places_accept_ref",
+            "expression": "fill(ref slot)",
+            "expected": 7,
+            "projection": null
+          },
+          {
+            "test": "test_writable_places_accept_ref",
+            "expression": "slot",
+            "expected": 7,
+            "projection": null
+          },
+          {
+            "test": "test_writable_places_accept_ref",
+            "expression": "observe(ref values)",
+            "expected": 0,
+            "projection": null
+          }
+        ]
+      },
+      "remaining_gates": [
+        "Complete actual discovery and independent VM/C/native legal outcomes.",
+        "Negative borrow/exclusivity and original compiler/native/runtime FI, exact resource/lifetime/cancel/physical and sanitizer/provider matrix."
+      ]
     }
   ]
 }

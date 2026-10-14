@@ -1,0 +1,27 @@
+// Retain all original calls and place kinds; capture actual scalar results once after their original argument evaluation.
+fn take(data: Array<i64>) -> i64 {
+    return len(data)
+}
+
+@test
+fn test_read_formal_preserves_values_and_accepts_fresh_owners() {
+    var xs = Array<i64>(2, 1)
+    var p19PlaceValue0 = take(xs)
+    assertEqual(p19PlaceValue0, 2)
+    print(p19PlaceValue0)
+    var p19PlaceValue1 = len(xs)
+    assertEqual(p19PlaceValue1, 2)
+    print(p19PlaceValue1)
+
+    var ys = Array<i64>(3, 1)
+    var p19PlaceValue2 = take(ys)
+    assertEqual(p19PlaceValue2, 3)
+    print(p19PlaceValue2)
+    var p19PlaceValue3 = len(ys)
+    assertEqual(p19PlaceValue3, 3)
+    print(p19PlaceValue3)
+
+    var p19PlaceValue4 = take(Array<i64>(4, 1))
+    assertEqual(p19PlaceValue4, 4)
+    print(p19PlaceValue4)
+}

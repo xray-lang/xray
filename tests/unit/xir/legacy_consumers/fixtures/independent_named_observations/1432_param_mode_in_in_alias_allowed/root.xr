@@ -1,0 +1,12 @@
+// Retain all original calls and place kinds; capture actual scalar results once after their original argument evaluation.
+fn sum_twice(left: i64, right: i64) -> i64 {
+    return left + right
+}
+
+@test
+fn test_in_in_same_root_alias_allowed() {
+    var value = 21
+    var p19PlaceValue0 = sum_twice(value, value)
+    assertEqual(p19PlaceValue0, 42)
+    print(p19PlaceValue0)
+}

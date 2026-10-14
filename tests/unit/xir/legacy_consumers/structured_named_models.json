@@ -72,6 +72,34 @@
     {
       "path": "tests/regression/09_advanced/0960_error_set_not_in_type.xr",
       "lf_sha256": "398446e4ef6e0ee61d1bd8394d73cf666560c0933325be91006b1caef18d003f"
+    },
+    {
+      "path": "tests/regression/08_oop/0915_ref_exclusivity_legal_boundaries.xr",
+      "lf_sha256": "12f715d25b67c900baba0669440d783c96d0e9e42ca150086e93bf13c11704f0"
+    },
+    {
+      "path": "tests/regression/13_types/1408_ref_identifier_call_argument_not_marker.xr",
+      "lf_sha256": "072294ec14f2a42b8199d8a60a551de040c1c596c1369add2933cf790222f353"
+    },
+    {
+      "path": "tests/regression/13_types/1421_out_identifier_call_argument_not_marker.xr",
+      "lf_sha256": "7f344c1c947974a48db3202e92283c0bdcf2296741f2bddaa14ca5b1a316766d"
+    },
+    {
+      "path": "tests/regression/13_types/1432_param_mode_in_in_alias_allowed.xr",
+      "lf_sha256": "2ba3b3b01dcc859c59b2e07d742d4c525656942eacd982e4cf842d0c058e52c6"
+    },
+    {
+      "path": "tests/regression/13_types/1433_param_mode_move_source_action.xr",
+      "lf_sha256": "04bfd3cbed2cff51e3d30a093b3713028c1be7af0578df7de53507e73f23a87e"
+    },
+    {
+      "path": "tests/unit/xir/legacy_consumers/fixtures/copyable_array_parameter_is_read_value/root.xr",
+      "lf_sha256": "07b08129494f6a775fb02a64d7c2ed921fc8f4c0cdcc853caa3933a7438d2165"
+    },
+    {
+      "path": "tests/regression/13_types/1435_param_mode_place_kind_authorization.xr",
+      "lf_sha256": "241a1881869848cd90b5773274464db088bc70401a113044ccb99a887119e585"
     }
   ],
   "cases": [
@@ -608,6 +636,123 @@
         "module_initialization_stdout_utf8": "2\n11\n12\n6\n"
       },
       "model_scope": "Original tuple scalar components, complete40 distinct generic source calls and matching higher-order signatures; module initialization remains and is independently observed, not double-counted as another named body."
+    },
+    {
+      "id": "structured_original_0915_ref_exclusivity_legal_boundaries_observed",
+      "expected": {
+        "exit_code": 0,
+        "required_test_names": [
+          "test_nested_read_before_call_is_legal",
+          "test_ref_to_receiver_subplace_is_legal"
+        ],
+        "per_test_observations": {
+          "test_nested_read_before_call_is_legal": {
+            "values": [
+              3,
+              2
+            ]
+          },
+          "test_ref_to_receiver_subplace_is_legal": {
+            "values": [
+              1
+            ]
+          }
+        }
+      },
+      "model_scope": "Original legal place/read/ref boundaries and true ref/out identifiers; scalar outcomes do not qualify all illegal overlap paths or full borrow/resource safety."
+    },
+    {
+      "id": "structured_original_1408_ref_identifier_call_argument_not_marker_observed",
+      "expected": {
+        "exit_code": 0,
+        "required_test_names": [
+          "test_ref_identifier_call_argument_not_marker"
+        ],
+        "per_test_observations": {
+          "test_ref_identifier_call_argument_not_marker": {
+            "values": [
+              42
+            ]
+          }
+        }
+      },
+      "model_scope": "Original legal place/read/ref boundaries and true ref/out identifiers; scalar outcomes do not qualify all illegal overlap paths or full borrow/resource safety."
+    },
+    {
+      "id": "structured_original_1421_out_identifier_call_argument_not_marker_observed",
+      "expected": {
+        "exit_code": 0,
+        "required_test_names": [
+          "test_out_identifier_call_argument_not_marker"
+        ],
+        "per_test_observations": {
+          "test_out_identifier_call_argument_not_marker": {
+            "values": [
+              42,
+              43
+            ]
+          }
+        }
+      },
+      "model_scope": "Original legal place/read/ref boundaries and true ref/out identifiers; scalar outcomes do not qualify all illegal overlap paths or full borrow/resource safety."
+    },
+    {
+      "id": "structured_original_1432_param_mode_in_in_alias_allowed_observed",
+      "expected": {
+        "exit_code": 0,
+        "required_test_names": [
+          "test_in_in_same_root_alias_allowed"
+        ],
+        "per_test_observations": {
+          "test_in_in_same_root_alias_allowed": {
+            "values": [
+              42
+            ]
+          }
+        }
+      },
+      "model_scope": "Original legal place/read/ref boundaries and true ref/out identifiers; scalar outcomes do not qualify all illegal overlap paths or full borrow/resource safety."
+    },
+    {
+      "id": "structured_original_1433_param_mode_move_source_action_observed",
+      "expected": {
+        "exit_code": 0,
+        "required_test_names": [
+          "test_read_formal_preserves_values_and_accepts_fresh_owners"
+        ],
+        "per_test_observations": {
+          "test_read_formal_preserves_values_and_accepts_fresh_owners": {
+            "values": [
+              2,
+              2,
+              3,
+              3,
+              4
+            ]
+          }
+        }
+      },
+      "model_scope": "Original legal place/read/ref boundaries and true ref/out identifiers; scalar outcomes do not qualify all illegal overlap paths or full borrow/resource safety."
+    },
+    {
+      "id": "structured_original_1435_param_mode_place_kind_authorization_observed",
+      "expected": {
+        "exit_code": 0,
+        "required_test_names": [
+          "test_writable_places_accept_ref"
+        ],
+        "per_test_observations": {
+          "test_writable_places_accept_ref": {
+            "values": [
+              2,
+              7,
+              7,
+              0
+            ]
+          }
+        }
+      },
+      "model_scope": "Original legal place/read/ref boundaries and true ref/out identifiers; scalar outcomes do not qualify all illegal overlap paths or full borrow/resource safety."
     }
   ],
   "independence": "Expected constants come from the original frozen assertions and mathematical method bodies, never current Xray output."
