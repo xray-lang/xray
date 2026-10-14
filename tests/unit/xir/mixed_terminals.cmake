@@ -20,6 +20,15 @@ foreach(terminal_target IN ITEMS test_xir_mixed_terminal_producer test_xir_mixed
         target_compile_options(${terminal_target} PRIVATE -Wall -Wextra -Werror)
     endif()
 endforeach()
+foreach(terminal_owner_backend IN ITEMS 0 1 vm native)
+    foreach(terminal_owner_mode IN ITEMS axes fi)
+        add_test(NAME test_xir_mixed_terminal_owner_${terminal_owner_backend}_${terminal_owner_mode}
+            COMMAND test_xir_mixed_terminals ${terminal_owner_backend} ${terminal_owner_mode})
+        set_tests_properties(test_xir_mixed_terminal_owner_${terminal_owner_backend}_${terminal_owner_mode} PROPERTIES
+            TIMEOUT 120 RUN_SERIAL TRUE COST 1
+            LABELS "unit;xir;mixed;execution;ownership;instance;generated-c;lifecycle;${terminal_owner_mode}")
+    endforeach()
+endforeach()
 foreach(root_native IN ITEMS 0 1)
     add_test(NAME test_xir_mixed_terminals_${root_native} COMMAND test_xir_mixed_terminals ${root_native})
     set_tests_properties(test_xir_mixed_terminals_${root_native} PROPERTIES

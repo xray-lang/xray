@@ -219,13 +219,19 @@ static void terminal_crossed_pair(XrXirInstance *instances[2], TerminalTrace tra
         }
     }
 }
+#include "xir_mixed_terminal_faults.h"
 int main(int argc, char **argv) {
-    CHECK(argc == 2);
+    CHECK(argc == 2 || argc == 3);
     unsigned selected = 0;
     while (selected < 4 && strcmp(argv[1], terminal_backend_names[selected])) ++selected;
     CHECK(selected < 4);
     const TerminalBackend backend = (TerminalBackend)selected;
     CHECK(!runtime_live && !runtime_bytes);
+    if (argc == 3) {
+        CHECK(!strcmp(argv[2], "fi") || !strcmp(argv[2], "axes"));
+        terminal_fault_cases(backend, !strcmp(argv[2], "fi"));
+        return 0;
+    }
     XrXirProgram *program = terminal_program(backend);
     XrXirInstance *instances[8] = {0}; TerminalTrace traces[8] = {0};
     XrXirCallResult retained[3] = {{0}};
