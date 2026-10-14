@@ -25,6 +25,8 @@ static XrCompileResourceStats description_stats(XrXirCompileContext *context) {
 }
 static void description_expect(const XrXirEnumDescription *view, const XrXirNominalType *instance) {
     CHECK(view->declaration == 0 && view->instance == instance && view->variant_count == 3);
+    CHECK(instance->argument_count == 0 && !instance->arguments &&
+        instance->field_count == 2 && instance->fields[0] == XR_XIR_I64 && instance->fields[1] == XR_XIR_STRING);
     CHECK(view->module.length == 5 && !memcmp(view->module.bytes,"alpha",5));
     CHECK(view->name.length == 6 && !memcmp(view->name.bytes,"Choice",6));
     CHECK(view->variants[0].name.length == 4 && !memcmp(view->variants[0].name.bytes,"None",4));
@@ -68,10 +70,13 @@ static void description_authority(XrXirCompileContext *context, XrXirTypes *type
 }
 int main(void) {
     EnumMetadataFixture fixture; enum_metadata_fixture(&fixture);
-    XrXirTypeNode node = {.kind=XR_XIR_TYPE_NOMINAL,.nominal={0}};
+    XrXirType fields[] = {XR_XIR_I64,XR_XIR_STRING};
+    XrXirTypeNode node = {.kind=XR_XIR_TYPE_NOMINAL,
+        .nominal={.declaration=0,.fields=fields,.field_count=2}};
     XrXirTypes types = {&node,1,&fixture.table,NULL};
     XrXirCompileContext context = description_context(128000000);
     uint64_t baseline_live = description_stats(&context).live_bytes;
+    CHECK(xr_xir_compile_types_structure_verify(&context,&types) == XR_XIR_OK);
     XrXirEnumDescription view = {0};
     CHECK(xr_xir_compile_enum_description(&context,&types,(XrXirType)256,&view) == XR_XIR_OK);
     description_expect(&view,&node.nominal); CHECK(view.definition == &fixture.declaration);
@@ -89,6 +94,7 @@ int main(void) {
     XrXirNominalTable *projected = NULL;
     CHECK(xr_xir_compile_nominal_project(&context,&fixture.table,&projected) == XR_XIR_OK);
     memset(&fixture,0xcc,sizeof(fixture)); types.nominals = projected;
+    CHECK(xr_xir_compile_types_structure_verify(&context,&types) == XR_XIR_OK);
     CHECK(xr_xir_compile_enum_description(&context,&types,(XrXirType)256,&view) == XR_XIR_OK);
     description_expect(&view,&node.nominal); CHECK(!view.definition);
     xr_xir_compile_nominal_free(projected);
