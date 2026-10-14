@@ -1,3 +1,4 @@
+include("${CMAKE_CURRENT_LIST_DIR}/source_sdk.cmake")
 if(WIN32)
     add_executable(test_xir_host_execution ${CMAKE_CURRENT_SOURCE_DIR}/xir/test_xir_host_execution.c
         ${XIR_ASSERT_PANICS_C} ${XIR_ASSERT_PANICS_MATRIX_C})

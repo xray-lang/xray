@@ -1,0 +1,92 @@
+/*
+ * xray - Lightweight typed scripting with native concurrency
+ * https://www.xray-lang.org
+ * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
+ * Licensed under the MIT License
+ *
+ * source_sdk_consumer.c - Installed public API ownership and Checked consumers
+ */
+#include "xray_source.h"
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#define CHECK(c) do { if (!(c)) { fprintf(stderr, "%d: %s\n", __LINE__, #c); exit(1); } } while (0)
+_Static_assert(sizeof(XrSourceCompilerOptions) == 40, "compiler options ABI");
+_Static_assert(sizeof(XrSourceText) == 32, "text ABI");
+_Static_assert(sizeof(XrSourceDiagnosticInfo) == 32, "diagnostic ABI");
+_Static_assert(sizeof(XrSourceEvent) == 24, "event ABI");
+_Static_assert(sizeof(XrSourceCallOptions) == 80, "call options ABI");
+_Static_assert(sizeof(XrSourceWait) == 16, "wait ABI");
+_Static_assert(offsetof(XrSourceCallOptions, write) == 64, "callback ABI");
+typedef struct Output { char bytes[256]; size_t length; } Output;
+static XrSourceWriteStatus capture(void *context, XrSourceOutputStream stream, const char *bytes, size_t length) {
+    Output *out = context;
+    CHECK(stream == XR_SOURCE_STDOUT && length <= sizeof(out->bytes) - out->length);
+    memcpy(out->bytes + out->length, bytes, length); out->length += length; return XR_SOURCE_WRITE_OK;
+}
+static XrSourceCompiler *compiler_new(const char *stdlib) {
+    XrSourceCompilerOptions options;
+    CHECK(xray_source_compiler_options_init(&options, sizeof(options)) == XR_SOURCE_OK);
+    options.stdlib_path = stdlib; options.allocated_bytes = UINT64_C(64) << 20;
+    options.live_bytes = UINT64_C(8) << 20; options.work = UINT64_C(128000000);
+    XrSourceCompiler *compiler = NULL;
+    CHECK(xray_source_compiler_new(&options, &compiler) == XR_SOURCE_OK && compiler); return compiler;
+}
+static XrSourceProgram *compile(XrSourceCompiler *compiler, char *bytes) {
+    XrSourceText text = {NULL, "installed-embedding", bytes, strlen(bytes)};
+    XrSourceProgram *program = NULL; XrSourceDiagnostic *diagnostic = NULL;
+    XrSourceStatus status = xray_source_compile_text(compiler, &text, &program, &diagnostic);
+    if (diagnostic) { XrSourceDiagnosticInfo info; CHECK(xray_source_diagnostic_info(diagnostic, &info) == XR_SOURCE_OK); fprintf(stderr, "%s\n", info.message); }
+    CHECK(status == XR_SOURCE_OK && program && !diagnostic); memset(bytes, '!', strlen(bytes)); return program;
+}
+static void checked_program(const char *stdlib) {
+    XrSourceCompiler *compiler = compiler_new(stdlib);
+    char source[] = "import time as Clock\nimport \"std/io/output\" as Output\n"
+        "Output.writeStdout(\"A\\0B\")\nconst begin=Clock.nanos()\nClock.sleep(1)\n"
+        "print(Clock.nanos()-begin>=1000000)\n";
+    XrSourceProgram *program = compile(compiler, source); xray_source_compiler_free(compiler);
+    Output out = {0}; XrSourceCallOptions options;
+    CHECK(xray_source_call_options_init(&options, sizeof(options)) == XR_SOURCE_OK);
+    options.write = capture; options.context = &out;
+    XrSourceResult *result = NULL; XrSourceEvent failure = {0};
+    CHECK(xray_source_execute(program, &options, &result, &failure) == XR_SOURCE_OK && result);
+    xray_source_program_free(program); XrSourceEvent event;
+    CHECK(xray_source_result_event(result, &event) == XR_SOURCE_OK && event.state == XR_SOURCE_RUN_RETURNED);
+    int64_t value = -1; CHECK(xray_source_result_i64(result, &value) == XR_SOURCE_OK && value == 0);
+    CHECK(out.length == 8 && !memcmp(out.bytes, "A\0Btrue\n", 8)); xray_source_result_free(result);
+}
+static void detached_cancellation(const char *stdlib) {
+    XrSourceCompiler *compiler = compiler_new(stdlib);
+    char source[] = "var n:i64=0\nwhile(true){ n+=1 }\n";
+    XrSourceProgram *program = compile(compiler, source); xray_source_compiler_free(compiler);
+    XrSourceCallOptions options; CHECK(xray_source_call_options_init(&options, sizeof(options)) == XR_SOURCE_OK);
+    XrSourceCall *call = NULL; CHECK(xray_source_call_begin(program, &options, &call) == XR_SOURCE_OK);
+    xray_source_program_free(program); XrSourceEvent event = {0};
+    CHECK(xray_source_call_poll(call, 1, &event) == XR_SOURCE_OK && event.state == XR_SOURCE_RUN_READY);
+    CHECK(xray_source_call_cancel(call) == XR_SOURCE_OK);
+    for (size_t steps = 0; event.state == XR_SOURCE_RUN_READY; ++steps) {
+        CHECK(steps < 4096 && xray_source_call_poll(call, 8, &event) == XR_SOURCE_OK);
+    }
+    CHECK(event.state == XR_SOURCE_RUN_CANCELLED); XrSourceResult *result = NULL;
+    CHECK(xray_source_call_take(call, &result) == XR_SOURCE_OK && result);
+    XrSourceResult *duplicate = NULL;
+    CHECK(xray_source_call_take(call, &duplicate) == XR_SOURCE_BAD_STATE && !duplicate);
+    CHECK(xray_source_call_drop(&call, &event) == XR_SOURCE_OK && !call);
+    CHECK(xray_source_result_event(result, &event) == XR_SOURCE_OK && event.state == XR_SOURCE_RUN_CANCELLED);
+    xray_source_result_free(result);
+}
+static void owned_panic(const char *stdlib) {
+    XrSourceCompiler *compiler = compiler_new(stdlib); char source[] = "assert(false,\"p\\0中z\")\n";
+    XrSourceProgram *program = compile(compiler, source); xray_source_compiler_free(compiler);
+    XrSourceCallOptions options; CHECK(xray_source_call_options_init(&options, sizeof(options)) == XR_SOURCE_OK);
+    XrSourceResult *result = NULL; CHECK(xray_source_execute(program, &options, &result, NULL) == XR_SOURCE_OK);
+    xray_source_program_free(program); XrSourceEvent event;
+    CHECK(xray_source_result_event(result, &event) == XR_SOURCE_OK && event.state == XR_SOURCE_RUN_PANICKED);
+    const char *bytes = NULL; size_t length = 0;
+    CHECK(xray_source_result_bytes(result, &bytes, &length) == XR_SOURCE_OK);
+    CHECK(length == 6 && !memcmp(bytes, "p\0\xe4\xb8\xad" "z", 6)); xray_source_result_free(result);
+}
+int main(int argc, char **argv) {
+    CHECK(argc == 2); checked_program(argv[1]); detached_cancellation(argv[1]); owned_panic(argv[1]);
+    puts("Installed public Source SDK: Checked io/time, detached cancellation and owned panic PASS"); return 0;
+}
