@@ -7782,6 +7782,16 @@ Variable scans prepay a conservative upper bound on the original cumulative comp
 
 Inputs still become compiler Domain snapshots. Arithmetic-range, OOM, step and work failures release all frame owners and preserve caller Strings. Source retains two independent constructions, ordinary constant recipes, complete Checker and query publication. Reachable I/O still rejects even when a search condition leaves its branch unexecuted. This family grants no arbitrary aggregate, function-value, resource or cleanup-path admission.
 
+### 17.46 Immutable compiler Tuples and independent constant receiving
+
+CTFE receives completely reverified type pools and ordinary function closures. Iterative admission accepts Unit, bool, integer, Rune, String and immutable Tuples of these families. A type ID has meaning only in its actual owning descriptor pool. Cyclic descriptors, open types and fields carrying function, Cell or resource authority reject; root/effect flags grant no determinism. TUPLE_NEW constructs authentic Values from the complete ordered field vector. Unit fields retain their position without an SSA slot. TUPLE_FIELD, internal Tuple arguments/child returns, owned locals/parallel PHI and private Cell<Tuple> preserve real owned references on the same compiler Domain. External Tuple arguments still require bounded cross-arena receiving and currently reject fail closed.
+
+Descriptor DFS, summaries and every metadata allocation use the original ledger. Nested receiving prepays the complete expanded type shape; repeated field positions count each occurrence and data sharing refunds nothing. Overflow or unpayable work rejects BUDGET. Constructor argument vectors use complete arity in actual activation bytes. Traversal scratch uses the remaining original frame quota, including simultaneous old/new blocks during resize. Original steps65536, depth128, frame65536, output8, allocated64MiB, live8MiB and work128M remain without reset or refund.
+
+Tuple export size recursively sums target scalar storage sizes and actual String UTF-8 bytes in field order. Unit contributes zero; host pointers, ownership headers, type IDs, carrier sizeof and padding do not count. Exceeding the original request ceiling preserves Unit output. Publication first obtains independent ownership. The type arena, nested Tuples and String fields remain live after Source/Artifact/ledger-caller death. Final drop allocates nothing and refunds only live bytes.
+
+Source matches actual type structure across owners for helpers and replay results, without assuming equal local type IDs. Independent receiving uses iterative owning frames to record ordinary field constants and TUPLE_NEW recipes, followed by the complete Checker and query publication. Explicit NUL length, Unit positions, closed generics and original site/owner/expected coverage remain. Field, OOM, budget, construction and publication failures release all temporary results. This admission grants no complete Array/struct/enum, Tuple equality, function-value or cleanup-path qualification.
+
 ---
 
 ## 18. Error Codes

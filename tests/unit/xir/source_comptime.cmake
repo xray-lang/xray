@@ -35,4 +35,8 @@ set_tests_properties(test_xir_source_comptime_string_resources PROPERTIES
 
 add_test(NAME test_xir_source_comptime_string_read_resources COMMAND test_xir_source_comptime --string-read-resources)
 set_tests_properties(test_xir_source_comptime_string_read_resources PROPERTIES
-    LABELS "unit;xir;source;ctfe;ownership;compiler-fault;resources;string" TIMEOUT 600 RUN_SERIAL TRUE)
+    LABELS "unit;xir;source;ctfe;ownership;compiler-fault;resources;string" TIMEOUT 600 RUN_SERIAL TRUE COST 166)
+
+add_test(NAME test_xir_source_comptime_tuple_resources COMMAND test_xir_source_comptime --tuple-resources)
+set_tests_properties(test_xir_source_comptime_tuple_resources PROPERTIES
+    LABELS "unit;xir;source;ctfe;ownership;compiler-fault;resources;tuple" TIMEOUT 600 RUN_SERIAL TRUE)

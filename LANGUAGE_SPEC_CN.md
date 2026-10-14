@@ -7619,6 +7619,16 @@ CTFE准入完整Lowered函数闭包中的String字节序比较（<、<=、>、>=
 
 输入仍先复制到compiler Domain快照，异常、OOM、step或work拒绝释放全部帧拥有槽并保全调用者String。Source继续独立两次构造、普通常量recipe、完整Checker和查询发布；即使搜索条件使I/O分支不执行，实际可达闭包中的I/O仍拒绝。本族不授予任意聚合、函数值、资源或清理路径准入。
 
+### 17.46 编译域内的不可变Tuple与独立常量接收
+
+CTFE接收已经完整复验的类型池与普通函数闭包，迭代准入由Unit、bool、integer、Rune、String及这些类型组成的不可变Tuple。类型ID只在实际owner的描述池中有意义；循环描述、未闭合类型和含函数值/Cell/资源权限的字段拒绝，不从root或effect标志取得确定性。TUPLE_NEW按完整有序字段向量构造真实Value，Unit字段保留位置而无SSA槽；TUPLE_FIELD、内部Tuple参数/子返回、owned局部/并行PHI及私有Cell<Tuple>保持真实拥有引用和同compiler Domain。外部Tuple参数仍需有界跨arena接收接口，当前失败关闭拒绝。
+
+类型描述DFS、摘要与所有实际元数据分配进入原ledger。嵌套接收费用按完整展开的类型形状预付，重复字段位置逐次计数，数据共享不退费；加乘溢出或无力支付拒绝BUDGET。构造参数向量按完整arity占真实activation字节，遍历scratch使用原剩余frame额度并计入resize新旧块同时存活的峰值。steps65536、depth128、frame65536、output8及原64MiB allocated/8MiB live/128M work保持，不重置或退款。
+
+Tuple导出大小是按字段顺序递归相加的目标标量存储大小与String实际UTF-8字节，Unit贡献0；不计host指针、拥有头、type ID、carrier sizeof或填充。超原请求上限保全Unit输出。发布先取得独立拥有引用，类型arena、嵌套Tuple和String字段在Source/Artifact/ledger调用者死亡后仍有效；最后drop不分配，仅退live。
+
+Source以实际类型结构跨owner匹配helper及重放结果，而非假定局部type ID相同。独立接收以迭代拥有帧保存字段引用，将每个字段写成普通常量和TUPLE_NEW recipe，并完整Checker/查询发布。NUL完整长度、Unit字段位置、闭合泛型和原站点/owner/expected覆盖保持；字段失败、OOM、预算、构造与发布失败均释放全部临时结果。当前准入不授予任意Array/struct/enum、Tuple相等、函数值或cleanup路径完整资格。
+
 ---
 
 ## 18. 错误码 (Error Codes)
