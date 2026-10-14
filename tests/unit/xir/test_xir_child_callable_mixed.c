@@ -26,7 +26,7 @@ XR_DATA const XrXirCallEntry child_callable_native_entries[];
 #include "xir_child_callable_mixed_oracles.h"
 
 int main(int argc, char **argv) {
-    _Static_assert(XR_XIR_CHECKED_CONTRACT == 70u, "current callable semantic contract");
+    _Static_assert(XR_XIR_CHECKED_CONTRACT == 73u, "current callable semantic contract");
     CHECK(argc == 2);
     bool root_native = !strcmp(argv[1], "native-vm");
     CHECK(root_native || !strcmp(argv[1], "vm-native"));

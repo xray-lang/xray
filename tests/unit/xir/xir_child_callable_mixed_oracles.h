@@ -187,7 +187,10 @@ static void cm_build(CmFixture *f, bool root_native) {
     const XrXirModule *module = xr_xir_compile_artifact_module(f->lowered);
     CHECK(module && module->stage == XR_XIR_LOWERED && module->function_count == CN_FUNCTIONS);
     CHECK(module->declarations && module->declarations->entry_function == CN_ENTRY);
-    CHECK(module->types && module->types->count == 5);
+    CHECK(module->types && module->types->count == 6);
+    CHECK(module->types->nodes[5].kind == XR_XIR_TYPE_CELL && module->types->nodes[5].element == XR_XIR_I64);
+    CHECK(module->declarations->slot_count == 1 && module->declarations->slots[0].mutable == 1 &&
+        module->declarations->slots[0].type == (XrXirType)CN_CELL);
     const uint32_t advertised[4] = {2u, 4u, 8u, 12u};
     for (unsigned i = 0; i < 4; ++i) {
         CHECK(module->types->nodes[i + 1].kind == XR_XIR_TYPE_CALLABLE);
