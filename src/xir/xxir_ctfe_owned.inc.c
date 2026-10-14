@@ -89,4 +89,3 @@ static XrXirCtfeStatus ctfe_cell_step(ScalarRun *run,uint32_t *cursor,CtfeOwnedS
         xr_xir_scalar_store(run->frame,run->layout->offsets[destination],result.payload);
     xr_xir_value_drop(&result);++*cursor;return XR_XIR_CTFE_OK;
 }
-
