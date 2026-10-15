@@ -144,14 +144,13 @@ static XrXirStatus effect_ordinary_function(EffectOrdinaryContexts *contexts,
 }
 
 static XrXirStatus effect_ordinary_environment_same(EffectTerms *terms,
-    const EffectOrdinaryNode *node, uint32_t declaration, const XrXirType *arguments,
-    uint32_t count, bool *equal) {
-    *equal=node->declaration==declaration && node->argument_count==count;
+    const EffectOrdinaryNode *node,const EffectContextResolved *target,bool *equal) {
+    *equal=node->declaration==target->target && node->argument_count==target->argument_count;
     XrXirTypeMatchScratch *scratch=effect_terms_type_scratch(terms);
     XrXirStatus status=XR_XIR_OK;
-    for (uint32_t a=0;*equal && a<count && status==XR_XIR_OK;++a) {
+    for (uint32_t a=0;*equal && a<target->argument_count && status==XR_XIR_OK;++a) {
         status=xr_xir_compile_type_substitution_matches_between_scratch(terms->remaining,
-            &terms->types,&terms->types,NULL,0,node->arguments[a],arguments[a],scratch);
+            &terms->types,&target->terms.types,NULL,0,node->arguments[a],target->arguments[a],scratch);
         if (status==XR_XIR_BAD_TYPE) { *equal=false;status=XR_XIR_OK; }
     }
     return status;
@@ -167,10 +166,22 @@ static XrXirStatus effect_ordinary_intern(EffectOrdinaryContexts *contexts,
         owner=caller;
     }
     if (!target->argument_count) { *output=target->target;return XR_XIR_OK; }
+    /* Lookup compares the actual input pool before taking another environment
+     * copy. Only a genuinely new key owns imported argument storage. */
+    XrXirStatus status=XR_XIR_OK;
+    for (uint32_t n=contexts->base_count;n<contexts->count;++n) {
+        if (!xir_compile_work(contexts->terms.remaining,2)) return XR_XIR_BUDGET;
+        EffectOrdinaryNode node=contexts->nodes[n];
+        if (node.owner!=owner) continue;
+        bool equal=false;
+        status=effect_ordinary_environment_same(&contexts->terms,&node,target,&equal);
+        if (status!=XR_XIR_OK) return status;
+        if (equal) { *output=n;return XR_XIR_OK; }
+    }
     const XrXirType *cache=NULL;
     bool local=contexts->terms.types.nodes==target->terms.types.nodes &&
         contexts->terms.types.count==target->terms.types.count;
-    XrXirStatus status=local ? XR_XIR_OK : effect_terms_import(&contexts->terms,&target->terms.types,&cache);
+    status=local ? XR_XIR_OK : effect_terms_import(&contexts->terms,&target->terms.types,&cache);
     if (status!=XR_XIR_OK) return status;
     XrXirType *arguments=effect_terms_alloc(&contexts->terms,target->argument_count,sizeof(*arguments));
     if (!arguments) return contexts->terms.status;
@@ -181,16 +192,6 @@ static XrXirStatus effect_ordinary_intern(EffectOrdinaryContexts *contexts,
         } else status=effect_terms_import_child(&contexts->terms,cache,target->terms.types.count,
             target->arguments[a],&arguments[a]);
         if (status!=XR_XIR_OK) return status;
-    }
-    for (uint32_t n=contexts->base_count;n<contexts->count;++n) {
-        if (!xir_compile_work(contexts->terms.remaining,2)) return XR_XIR_BUDGET;
-        EffectOrdinaryNode node=contexts->nodes[n];
-        if (node.owner!=owner) continue;
-        bool equal=false;
-        status=effect_ordinary_environment_same(&contexts->terms,&node,target->target,arguments,
-            target->argument_count,&equal);
-        if (status!=XR_XIR_OK) return status;
-        if (equal) { *output=n;return XR_XIR_OK; }
     }
     if (contexts->count==UINT32_MAX) return XR_XIR_BUDGET;
     status=effect_ordinary_capacity(contexts,contexts->count+1);

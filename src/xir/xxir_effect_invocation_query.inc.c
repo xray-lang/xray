@@ -307,7 +307,7 @@ static XrXirStatus effect_invocation_certificate_node_mask(const XrXirCompileCon
     const EffectInvocationFinal *equations=certificate->final;
     const EffectInvocationNode *node=&equations->nodes[selected];
     if (node->root>=effect_body_count(certificate->body) || node->body>=effect_body_count(certificate->body) ||
-        !node->expanded || node->queued || node->cause_count!=(uint64_t)
+        node->cause_count!=(uint64_t)
             certificate->body->functions[node->root].parameter_count*2+3)
         return XR_XIR_BAD_STRUCTURE;
     uint32_t parameters=certificate->body->functions[node->root].parameter_count;
@@ -409,7 +409,7 @@ XR_FUNC XrXirStatus xir_effects_class_value(const XrXirCompileContext *context,
         selected>=owner->count || !owner->nodes) return XR_XIR_BAD_STRUCTURE;
     const EffectInvocationNode *node=&owner->nodes[selected];
     const EffectBodyFunction *body=&certificate->body->functions[function];
-    if (node->body!=function || !node->expanded || node->queued ||
+    if (node->body!=function ||
         value>=(uint64_t)body->parameter_count+body->instruction_count) return XR_XIR_BAD_STRUCTURE;
     EffectBodyRead read=effect_body_compile_read(context);XrXirType type;
     XrXirStatus status=effect_body_operand_type(&read,body,value,&type);

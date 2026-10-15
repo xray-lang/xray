@@ -298,6 +298,8 @@ else()
 endif()
 add_test(NAME test_xir_interfaces COMMAND test_xir_interfaces)
 set_tests_properties(test_xir_interfaces PROPERTIES LABELS "unit;xir;metadata;ownership")
+add_test(NAME test_xir_interface_callable_admission COMMAND test_xir_interfaces --callable-admission)
+set_tests_properties(test_xir_interface_callable_admission PROPERTIES LABELS "unit;xir;metadata;ownership" TIMEOUT 30)
 target_link_libraries(test_xir_stages PRIVATE xray_xir)
 if(MSVC)
     target_compile_options(test_xir_stages PRIVATE /W4 /WX)
@@ -4542,6 +4544,7 @@ set_tests_properties(test_xir_cell_provenance PROPERTIES LABELS "xir;ownership" 
 
 include("${CMAKE_CURRENT_LIST_DIR}/xir/root_conditional.cmake")
 include("${CMAKE_CURRENT_LIST_DIR}/xir/effect_final_retirement.cmake")
+include("${CMAKE_CURRENT_LIST_DIR}/xir/effect_ordinary_environment.cmake")
 
 include(xir/cell_owner_source.cmake)
 
@@ -4569,3 +4572,4 @@ include("${CMAKE_CURRENT_LIST_DIR}/xir/instance_domain_fuel.cmake")
 
 add_subdirectory(xir/p10_reference)
 add_subdirectory(xir/p11_ctfe_reference)
+include("${CMAKE_CURRENT_LIST_DIR}/xir/specialize_key_controls.cmake")
