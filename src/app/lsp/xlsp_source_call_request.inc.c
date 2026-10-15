@@ -30,7 +30,7 @@ static bool call_check_item(CallWork *w,const XrJsonValue *item) {
 }
 static bool call_request_select(CallWork *w) {
     const XrJsonValue *object=NULL,*uri=NULL,*position=NULL,*data=NULL,*initializer=NULL;XrLspPosition at={0};bool module=false;
-    const XlspSourceCallRequest *request=w->request;
+    const XlspSourceHierarchyRequest *request=w->request;
     if(!call_field(w,request->params,request->mode?"item":"textDocument",&object)||!call_field(w,object,"uri",&uri))return false;
     const XlspSourceDocument *d=&request->documents[request->entry];if(!call_json_text(w,uri,d->uri,d->uri_length))return false;
     if(!request->mode){if(!call_field(w,request->params,"position",&position)||!call_protocol_position(w,position,&at))return false;}
@@ -39,7 +39,7 @@ static bool call_request_select(CallWork *w) {
         if(initializer->type!=XR_JSON_BOOL)return call_fail(w,XR_XIR_BAD_STRUCTURE);module=initializer->as.boolean;}
     if(!call_cursor(w,at)||!call_pick(w,at,module))return false;return !request->mode||call_check_item(w,object);
 }
-XR_FUNC XrXirStatus xlsp_source_call_hierarchy_json(const XlspSourceCallRequest *request,XrJsonValue **out) {
+XR_FUNC XrXirStatus xlsp_source_call_hierarchy_json(const XlspSourceHierarchyRequest *request,XrJsonValue **out) {
     if(!request||!request->context||!request->context->resources||!request->documents||!request->known_versions||
         !request->count||request->entry>=request->count||request->mode>2||!request->params||!out||*out)return XR_XIR_BAD_STRUCTURE;
     CallWork w={0};w.request=request;w.resources=request->context->resources;w.status=XR_XIR_OK;XrJsonValue *result=NULL;

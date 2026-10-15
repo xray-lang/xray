@@ -4,10 +4,11 @@
  * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
  * Licensed under the MIT License
  *
- * xlsp_call_handlers.c - Capture real workspace input for Source call hierarchy
+ * xlsp_hierarchy_handlers.c - Capture real workspace input for Source hierarchies
  */
 #include "xlsp_call_hierarchy.h"
 #include "xlsp_source_call_hierarchy.h"
+#include "xlsp_source_type_hierarchy.h"
 #include "xlsp_source_scope.h"
 #include <string.h>
 static XrXirStatus call_capture_resource(XrCompileResourceStatus s) {
@@ -33,8 +34,8 @@ static XrXirStatus call_capture_documents(XrLspServer *server,XrCompileResources
             (*out)[(*count)++]=(XlspSourceDocument){doc->uri,doc->content,length,doc->length,doc->version};}}
     return s!=XR_XIR_OK?s:*count==capacity?XR_XIR_OK:XR_XIR_BAD_STRUCTURE;
 }
-static XrJsonValue *call_handle(XrLspServer *server,XrJsonValue *params,unsigned mode) {
-    if(!server)return NULL;server->source_failure.stage=24;server->source_failure.status=XR_XIR_BAD_STRUCTURE;
+static XrJsonValue *hierarchy_handle(XrLspServer *server,XrJsonValue *params,unsigned mode,bool types) {
+    if(!server)return NULL;server->source_failure.stage=types?25:24;server->source_failure.status=XR_XIR_BAD_STRUCTURE;
     XrJsonValue *object=xjson_get_object(params,mode?"item":"textDocument"),*uri=xjson_get(object,"uri");
     if(!uri||uri->type!=XR_JSON_STRING||!uri->as.string||memchr(uri->as.string,0,uri->string_len)||server->shutdown_received)return NULL;
     if(server->workspace_folder_count<0||server->workspace_folder_count>MAX_WORKSPACE_FOLDERS)return NULL;
@@ -51,14 +52,17 @@ static XrJsonValue *call_handle(XrLspServer *server,XrJsonValue *params,unsigned
     XlspSourceScopeOptions options={&context,documents,count,roots,root_count,UINT32_C(50)*1024*1024,&server->config};
     status=xlsp_source_scope_capture(&options,&scope);if(status!=XR_XIR_OK)goto done;
     status=xlsp_source_scope_find(scope,uri->as.string,uri->string_len,&entry);if(status!=XR_XIR_OK)goto done;
-    XlspSourceCallRequest request={&context,xlsp_source_scope_documents(scope),xlsp_source_scope_known_versions(scope),xlsp_source_scope_count(scope),entry,params,revision,mode};
-    status=xlsp_source_call_hierarchy_json(&request,&result);
+    XlspSourceHierarchyRequest request={&context,xlsp_source_scope_documents(scope),xlsp_source_scope_known_versions(scope),xlsp_source_scope_count(scope),entry,params,revision,mode};
+    status=types?xlsp_source_type_hierarchy_json(&request,&result):xlsp_source_call_hierarchy_json(&request,&result);
     if(status==XR_XIR_OK&&(server->shutdown_received||server->source_revision!=revision||
         (server->doc_table?server->doc_table->generation:0)!=generation)){xjson_free(result);result=NULL;status=XR_XIR_UNRESOLVED;}
 done:
     xlsp_source_scope_free(scope);xr_compile_resources_free(documents);xr_compile_resources_release(r);
     server->source_failure.status=(unsigned)status;if(status==XR_XIR_OK)server->source_failure.stage=0;return result;
 }
-XR_FUNC XrJsonValue *xlsp_handle_prepare_call_hierarchy(XrLspServer *server,XrJsonValue *params){return call_handle(server,params,0);}
-XR_FUNC XrJsonValue *xlsp_handle_call_hierarchy_incoming(XrLspServer *server,XrJsonValue *params){return call_handle(server,params,1);}
-XR_FUNC XrJsonValue *xlsp_handle_call_hierarchy_outgoing(XrLspServer *server,XrJsonValue *params){return call_handle(server,params,2);}
+XR_FUNC XrJsonValue *xlsp_handle_prepare_call_hierarchy(XrLspServer *server,XrJsonValue *params){return hierarchy_handle(server,params,0,false);}
+XR_FUNC XrJsonValue *xlsp_handle_call_hierarchy_incoming(XrLspServer *server,XrJsonValue *params){return hierarchy_handle(server,params,1,false);}
+XR_FUNC XrJsonValue *xlsp_handle_call_hierarchy_outgoing(XrLspServer *server,XrJsonValue *params){return hierarchy_handle(server,params,2,false);}
+XR_FUNC XrJsonValue *xlsp_handle_prepare_type_hierarchy(XrLspServer *server,XrJsonValue *params){return hierarchy_handle(server,params,0,true);}
+XR_FUNC XrJsonValue *xlsp_handle_type_hierarchy_supertypes(XrLspServer *server,XrJsonValue *params){return hierarchy_handle(server,params,1,true);}
+XR_FUNC XrJsonValue *xlsp_handle_type_hierarchy_subtypes(XrLspServer *server,XrJsonValue *params){return hierarchy_handle(server,params,2,true);}

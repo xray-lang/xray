@@ -19,7 +19,7 @@ typedef struct CallSymbol {
 } CallSymbol;
 typedef struct CallEdge {CallSymbol other;XrLspRange *sites;size_t count,capacity;} CallEdge;
 typedef struct CallWork {
-    const XlspSourceCallRequest *request;
+    const XlspSourceHierarchyRequest *request;
     XrCompileResources *resources;
     XlspSourceBindings *bindings;
     CallSymbol selected;

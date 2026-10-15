@@ -22,7 +22,7 @@
 static const XlspSourceDocument docs[]={{"file:///z.xr","",12,0,0},{"file:///m.xr","",12,0,0},{"file:///a.xr","",12,0,0}};
 static bool once(uint64_t work,uint64_t *setup,uint64_t *total) {
     XrCompileResourceLimits limits=sdk_unlimited;limits.work=work;XrCompileResources *r=sdk_ledger(&limits);
-    XrXirCompileContext context={r,xr_xir_compile_default_limits()};XlspSourceCallRequest request={&context,docs,NULL,3,0,NULL,0,0};
+    XrXirCompileContext context={r,xr_xir_compile_default_limits()};XlspSourceHierarchyRequest request={&context,docs,NULL,3,0,NULL,0,0};
     CallWork w={0};w.resources=r;w.request=&request;w.status=XR_XIR_OK;w.count=w.capacity=3;
     CHECK(xr_compile_resources_calloc(r,3,sizeof(*w.edges),(void **)&w.edges)==XR_COMPILE_RESOURCE_OK);
     XrLspRange *original[3]={0};
