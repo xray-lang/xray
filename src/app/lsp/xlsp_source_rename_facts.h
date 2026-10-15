@@ -43,7 +43,7 @@ static XrXirStatus rename_fact_range(RenameWork *w,const XlspSourceBindings *que
     }
     XrLspRange result={0};status=xlsp_source_position(w->resources,d->text,d->length,range.line,range.column,&result.start);
     if(status==XR_XIR_OK)status=xlsp_source_position(w->resources,d->text,d->length,range.end_line,range.end_column,&result.end);
-    if(status==XR_XIR_OK)*out=(RenameEdit){document,result};return status;
+    if(status==XR_XIR_OK)*out=(RenameEdit){.document=document,.range=result};return status;
 }
 static XrXirStatus rename_symbol(RenameWork *w,const XlspSourceBindings *queries,const XlspSourceDocument *documents,
     size_t root,uint32_t id,RenameSymbol *out) {
@@ -80,6 +80,14 @@ static XrXirStatus rename_choose(RenameWork *w,const XlspSourceBindings *queries
     if(chosen->name){bool same=false;status=rename_symbol_same(w,*chosen,symbol,&same);if(status!=XR_XIR_OK)return status;if(!same)return XR_XIR_UNSUPPORTED;}
     else *chosen=symbol;return XR_XIR_OK;
 }
+static XrXirStatus rename_pattern_edit(RenameWork *w,const XrXirSourceView *view,const XrXirSourceSyntaxView *syntax,
+    XrXirSourceRange span,uint32_t selected,RenameEdit *edit) {
+    XlspSourcePatternBinding pattern={0};XrXirStatus status=xlsp_source_pattern_binding(w->resources,view,syntax,span,&pattern);
+    if(status!=XR_XIR_OK||!pattern.binding)return status;
+    if(selected==pattern.binding){edit->preserved=view->declarations[pattern.field-1].name;edit->prefix=true;}
+    else if(selected==pattern.field){edit->preserved=view->declarations[pattern.binding-1].name;edit->prefix=false;}
+    return XR_XIR_OK;
+}
 static XrXirStatus rename_symbol_at(RenameWork *w,const XlspSourceBindings *queries,const XlspSourceDocument *documents,
     const XlspSourceRenameInput *input,RenameSymbol *out) {
     RenameSymbol chosen={0};
@@ -91,7 +99,11 @@ static XrXirStatus rename_symbol_at(RenameWork *w,const XlspSourceBindings *quer
             size_t document=0;status=rename_text_document(w,queries,view,span.module,&document);if(status==XR_XIR_UNRESOLVED)continue;if(status!=XR_XIR_OK)return status;if(document!=input->entry)continue;
             if(span.line<=0||span.column<=0)continue;
             RenameEdit occurrence={0};status=rename_fact_range(w,queries,documents,view,(RenameSpelling){span,NULL},&occurrence);if(status!=XR_XIR_OK)return status;
-            if(rename_contains(occurrence.range,input->position)){status=rename_choose(w,queries,documents,root,i+1,&chosen);if(status!=XR_XIR_OK)return status;}
+            if(rename_contains(occurrence.range,input->position)) {
+                XlspSourcePatternBinding pattern={0};status=xlsp_source_pattern_binding(w->resources,view,syntax,span,&pattern);if(status!=XR_XIR_OK)return status;
+                if(pattern.binding==i+1)continue;
+                status=rename_choose(w,queries,documents,root,i+1,&chosen);if(status!=XR_XIR_OK)return status;
+            }
         }
         for(uint32_t i=0;i<view->reference_count;++i) {
             XrXirStatus status=rename_work(w,sizeof(XrXirSourceReference));if(status!=XR_XIR_OK)return status;XrXirSourceRange span=syntax->references[i];if(rename_absent(span))continue;
@@ -100,7 +112,11 @@ static XrXirStatus rename_symbol_at(RenameWork *w,const XlspSourceBindings *quer
             RenameEdit occurrence={0};status=rename_fact_range(w,queries,documents,view,(RenameSpelling){span,NULL},&occurrence);if(status!=XR_XIR_OK)return status;
             /* Preserve the direct declaration. A callable's navigation target
              * is not the identity of the variable or import that names it. */
-            if(rename_contains(occurrence.range,input->position)){status=rename_choose(w,queries,documents,root,id,&chosen);if(status!=XR_XIR_OK)return status;}
+            if(rename_contains(occurrence.range,input->position)) {
+                XlspSourcePatternBinding pattern={0};status=xlsp_source_pattern_binding(w->resources,view,syntax,span,&pattern);if(status!=XR_XIR_OK)return status;
+                if(pattern.binding==id)continue;
+                status=rename_choose(w,queries,documents,root,id,&chosen);if(status!=XR_XIR_OK)return status;
+            }
         }
     }
     if(!chosen.name)return XR_XIR_UNRESOLVED;*out=chosen;return XR_XIR_OK;
@@ -126,11 +142,13 @@ static XrXirStatus rename_collect(RenameWork *w,const XlspSourceBindings *querie
             size_t document=0;status=rename_text_document(w,queries,view,d->range.module,&document);if(status==XR_XIR_UNRESOLVED)continue;if(status!=XR_XIR_OK)return status;if(document!=selected->declared.document)continue;
             RenameSymbol symbol={0};status=rename_symbol(w,queries,documents,root,i+1,&symbol);if(status!=XR_XIR_OK)return status;
             status=rename_symbol_same(w,symbol,*selected,&same);if(status!=XR_XIR_OK)return status;if(!same)continue;
+            status=rename_pattern_edit(w,view,syntax,syntax->declarations[i].name,d->id,&symbol.declared);if(status!=XR_XIR_OK)return status;
             status=rename_edit_append(w,symbol.declared,items,count,&capacity);if(status!=XR_XIR_OK)return status;
             for(uint32_t j=0;j<view->reference_count;++j) {
                 status=rename_work(w,sizeof(XrXirSourceReference));if(status!=XR_XIR_OK)return status;if(rename_reference_id(view,&view->references[j])!=d->id)continue;
                 XrXirSourceRange span=syntax->references[j];if(rename_absent(span)){if(!rename_absent(view->references[j].range))return XR_XIR_UNSUPPORTED;continue;}
                 RenameEdit occurrence={0};status=rename_fact_range(w,queries,documents,view,(RenameSpelling){span,d->name},&occurrence);if(status!=XR_XIR_OK)return status;
+                status=rename_pattern_edit(w,view,syntax,span,d->id,&occurrence);if(status!=XR_XIR_OK)return status;
                 status=rename_edit_append(w,occurrence,items,count,&capacity);if(status!=XR_XIR_OK)return status;
             }
         }

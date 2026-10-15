@@ -13,6 +13,7 @@
  */
 #include "xlsp_source_rename.h"
 #include "xlsp_source_bindings.h"
+#include "xlsp_source_pattern_facts.h"
 #include "../../frontend/lexer/xlex.h"
 #include "../../toolchain/xcompiler_arena_backing.h"
 #include "../../toolchain/xcompiler_session.h"
@@ -21,7 +22,14 @@
 #include <limits.h>
 #include <string.h>
 
-typedef struct RenameEdit {size_t document;XrLspRange range;} RenameEdit;
+typedef struct RenameEdit {
+    size_t document;XrLspRange range;
+    const char *preserved;
+    bool prefix;
+    char *replacement;
+    size_t replacement_length;
+    uint32_t replacement_width,name_offset;
+} RenameEdit;
 typedef struct RenameSymbol {RenameEdit declared;XrXirSourceDeclarationKind kind;const char *identity,*name;size_t identity_length,name_length;} RenameSymbol;
 typedef struct RenameWork {
     XrCompileResources *resources;
@@ -59,6 +67,7 @@ static XrXirStatus rename_equal(RenameWork *w,const char *a,size_t na,const char
     if(status==XR_XIR_OK)*out=!memcmp(a,b,na);return status;
 }
 static void rename_release_sources(RenameWork *w) {
+    for(size_t i=0;i<w->edit_count;++i)w->edits[i].preserved=NULL;
     xlsp_source_bindings_free(w->original);w->original=NULL;xlsp_source_bindings_free(w->candidate);w->candidate=NULL;
     if(w->buffers||w->candidates)for(size_t i=0;i<w->count;++i) {
         if(w->buffers){xlsp_source_buffer_free(w->buffers[i]);w->buffers[i]=NULL;}
@@ -71,6 +80,7 @@ static void rename_free(RenameWork *w) {
     xr_compile_resources_free(w->buffers);xr_compile_resources_free(w->candidates);
     xr_compile_resources_free(w->documents);xr_compile_resources_free(w->candidate_documents);
     xr_compile_resources_free(w->known_versions);
+    for(size_t i=0;i<w->edit_count;++i)xr_compile_resources_free(w->edits[i].replacement);
     xr_compile_resources_free(w->edits);xr_compile_resources_free(w->old_name);xr_compile_resources_free(w->new_name);
 }
 static XrXirStatus rename_capture(RenameWork *w,const XlspSourceDocument *documents,size_t count) {
@@ -138,6 +148,25 @@ static int rename_order(RenameEdit a,RenameEdit b) {
     if(a.range.start.character!=b.range.start.character)return a.range.start.character>b.range.start.character?-1:1;return 0;
 }
 #include "xlsp_source_rename_facts.h"
+static XrXirStatus rename_replacements(RenameWork *w) {
+    for(size_t i=0;i<w->edit_count;++i) {
+        RenameEdit *edit=&w->edits[i];if(!edit->preserved)continue;
+        size_t kept=0;XrXirStatus status=rename_fact_length(w,edit->preserved,&kept);if(status!=XR_XIR_OK)return status;
+        if(w->new_length>SIZE_MAX-3||kept>SIZE_MAX-w->new_length-3)return XR_XIR_BUDGET;
+        size_t length=w->new_length+2+kept;
+        uint32_t width=edit->range.end.character-edit->range.start.character;
+        if(w->new_width>INT32_MAX-2||width>INT32_MAX-w->new_width-2)return XR_XIR_BUDGET;
+        status=rename_resource(xr_compile_resources_alloc(w->resources,length+1,(void **)&edit->replacement));if(status!=XR_XIR_OK)return status;
+        status=rename_work(w,length+1);if(status!=XR_XIR_OK)return status;
+        const char *first=edit->prefix?edit->preserved:w->new_name,*last=edit->prefix?w->new_name:edit->preserved;
+        size_t first_length=edit->prefix?kept:w->new_length,last_length=edit->prefix?w->new_length:kept;
+        memcpy(edit->replacement,first,first_length);memcpy(edit->replacement+first_length,": ",2);
+        memcpy(edit->replacement+first_length+2,last,last_length);edit->replacement[length]=0;
+        edit->replacement_length=length;edit->replacement_width=w->new_width+2+width;
+        edit->name_offset=edit->prefix?width+2:0;edit->preserved=NULL;
+    }
+    return XR_XIR_OK;
+}
 static bool rename_member(XrJsonValue *object,const char *key,XrJsonValue *child) {
     if(!child)return false;int before=object->as.object.count;xjson_object_set_new(object,key,child);
     if(object->as.object.count==before){xjson_free(child);return false;}if(object->as.object.count!=before+1)return false;
@@ -159,10 +188,12 @@ static XrJsonValue *rename_json_edits(RenameWork *w,size_t document,const char *
     for(size_t i=0;i<w->edit_count;++i) {
         w->json_status=rename_work(w,sizeof(RenameEdit));if(w->json_status!=XR_XIR_OK)goto failed;
         if(w->edits[i].document!=document)continue;
-        w->json_status=rename_work(w,w->new_length+1);if(w->json_status!=XR_XIR_OK)goto failed;
+        const RenameEdit *item=&w->edits[i];const char *replacement=item->replacement?item->replacement:w->new_name;
+        size_t length=item->replacement?item->replacement_length:w->new_length;
+        w->json_status=rename_work(w,length+1);if(w->json_status!=XR_XIR_OK)goto failed;
         XrJsonValue *edit=xjson_new_object();if(!edit)goto failed;
         if(!rename_member(edit,"range",rename_json_range(w->edits[i].range))||
-           !rename_member(edit,key,xjson_new_string_n(w->new_name,w->new_length))){xjson_free(edit);goto failed;}
+           !rename_member(edit,key,xjson_new_string_n(replacement,length))){xjson_free(edit);goto failed;}
         if(!rename_push(array,edit))goto failed;
     }
     return array;
@@ -185,18 +216,20 @@ static XrXirStatus rename_apply(RenameWork *w) {
     return XR_XIR_OK;
 }
 static XrXirStatus rename_mapped(RenameWork *w,RenameEdit edit,XrLspRange *out) {
-    int64_t column=edit.range.start.character;
+    int64_t column=(int64_t)edit.range.start.character+edit.name_offset;
     for(size_t i=0;i<w->edit_count;++i) {
         XrXirStatus status=rename_work(w,sizeof(RenameEdit));if(status!=XR_XIR_OK)return status;RenameEdit before=w->edits[i];
         if(before.document!=edit.document||before.range.start.line!=edit.range.start.line||before.range.end.character>edit.range.start.character)continue;
-        column+=(int64_t)w->new_width-(before.range.end.character-before.range.start.character);
+        uint32_t width=before.replacement?before.replacement_width:w->new_width;
+        column+=(int64_t)width-(before.range.end.character-before.range.start.character);
         if(column<0||column>INT32_MAX)return XR_XIR_BUDGET;
     }
     if(column>INT32_MAX-w->new_width)return XR_XIR_BUDGET;
     *out=(XrLspRange){{edit.range.start.line,(uint32_t)column},{edit.range.start.line,(uint32_t)column+w->new_width}};return XR_XIR_OK;
 }
 static XrXirStatus rename_check(RenameWork *w,const XrXirCompileContext *context) {
-    XrXirStatus status=rename_apply(w);if(status!=XR_XIR_OK)return status;
+    XrXirStatus status=rename_replacements(w);if(status!=XR_XIR_OK)return status;
+    status=rename_apply(w);if(status!=XR_XIR_OK)return status;
     status=xlsp_source_bindings_build(context,w->candidate_documents,w->count,&w->candidate);if(status!=XR_XIR_OK)return status;
     RenameEdit declared=w->edits[w->definition];XrLspRange expected={0};status=rename_mapped(w,declared,&expected);if(status!=XR_XIR_OK)return status;
     XlspSourceRenameInput selection={declared.document,expected.start,NULL,0,true,NULL};RenameSymbol symbol={0};

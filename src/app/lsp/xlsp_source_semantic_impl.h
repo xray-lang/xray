@@ -3,6 +3,7 @@
 #include "../../toolchain/xcompiler_arena_backing.h"
 #include "../../toolchain/xcompiler_session.h"
 #include "../../xir/xxir_interface.h"
+#include "xlsp_source_pattern_facts.h"
 struct XlspSourceTokens {XrCompileResources *resources;XlspSourceToken *items;size_t count,capacity;};
 void xlsp_source_tokens_free(XlspSourceTokens *tokens) {
     if(tokens){xr_compile_resources_free(tokens->items);xr_compile_resources_free(tokens);}
@@ -210,6 +211,8 @@ XrXirStatus xlsp_source_semantic_tokens(const XlspSourceSnapshot *s,const char *
         const XrXirSourceDeclarationSyntax *fact=&syntax->declarations[i];
         if(fact->role==XR_XIR_SOURCE_SYNTAX_NONE||fact->role==XR_XIR_SOURCE_SYNTAX_CLOSURE||fact->role==XR_XIR_SOURCE_SYNTAX_RECEIVER)continue;
         if(fact->role==XR_XIR_SOURCE_SYNTAX_UNRESOLVED){status=XR_XIR_UNSUPPORTED;break;}
+        XlspSourcePatternBinding pattern={0};status=xlsp_source_pattern_binding(s->resources,view,syntax,fact->name,&pattern);if(status!=XR_XIR_OK)break;
+        if(pattern.binding==decl->id)continue;
         uint32_t target=decl->id;status=lsp_target(s,view,&target);if(status!=XR_XIR_OK)break;
         uint32_t kind=0,mods=0;status=semantic_kind(s,view,&view->declarations[target-1],&kind,&mods);if(status!=XR_XIR_OK)break;
         mods|=1;if(kind==12||kind==13||kind==2||kind==3||kind==4||kind==5)mods|=2;
@@ -220,6 +223,8 @@ XrXirStatus xlsp_source_semantic_tokens(const XlspSourceSnapshot *s,const char *
         status=lsp_text_has_module(s,text,ref->range.module,&matches);if(status!=XR_XIR_OK)break;if(!matches)continue;
         XrXirSourceRange selection=syntax->references[i];
         if(!selection.line&&!selection.column&&!selection.end_line&&!selection.end_column)continue;
+        XlspSourcePatternBinding pattern={0};status=xlsp_source_pattern_binding(s->resources,view,syntax,selection,&pattern);if(status!=XR_XIR_OK)break;
+        if(pattern.binding==ref->declaration)continue;
         uint32_t target=ref->target?ref->target:ref->declaration;status=lsp_target(s,view,&target);if(status!=XR_XIR_OK)break;
         uint32_t kind=0,mods=0;status=semantic_kind(s,view,&view->declarations[target-1],&kind,&mods);if(status!=XR_XIR_OK)break;
         if(view->declarations[target-1].kind==XR_XIR_SOURCE_INTRINSIC&&
@@ -230,7 +235,9 @@ XrXirStatus xlsp_source_semantic_tokens(const XlspSourceSnapshot *s,const char *
         status=semantic_range(s,text,selection,kind,mods,tokens);
     }
     for(uint32_t i=0;i<syntax->marker_count&&status==XR_XIR_OK;++i) {
-        const XrXirSourceMarker *marker=&syntax->markers[i];bool matches=false;
+        const XrXirSourceMarker *marker=&syntax->markers[i];
+        if(marker->role==XR_XIR_SOURCE_MARKER_PATTERN_FIELD_BINDING)continue;
+        bool matches=false;
         status=lsp_text_has_module(s,text,marker->range.module,&matches);if(status!=XR_XIR_OK)break;if(!matches)continue;
         status=semantic_range(s,text,marker->range,16,0,tokens);
     }
