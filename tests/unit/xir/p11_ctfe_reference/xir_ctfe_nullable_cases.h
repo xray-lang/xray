@@ -35,7 +35,8 @@ static void reference_nullable_value(const XrXirValue *value,const CtfeReference
             XrXirValue unit={0};CHECK(xr_xir_tuple_get(payload,i,&unit)==XR_XIR_VALUE_OK);
             CHECK(!unit.type && !unit.reserved && !unit.payload);
         }
-    } else CHECK(payload->type==XR_XIR_I8 && !payload->reserved && payload->payload==7);
+    } else if (!strcmp(selected->name,"nullable_oversize")) CHECK(payload->type==XR_XIR_I64 && !payload->reserved && payload->payload==42);
+    else CHECK(payload->type==XR_XIR_I8 && !payload->reserved && payload->payload==7);
 }
 static void reference_nullable_type_policy(const XrXirCompileContext *context) {
     XrXirType first=(XrXirType)XR_XIR_CONSTRUCTED_TYPE_BASE,second=(XrXirType)(XR_XIR_CONSTRUCTED_TYPE_BASE+1),third=(XrXirType)(XR_XIR_CONSTRUCTED_TYPE_BASE+2);

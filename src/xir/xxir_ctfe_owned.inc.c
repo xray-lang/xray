@@ -45,6 +45,7 @@ typedef struct CtfeOwnedState {
 static XrXirValueStatus ctfe_function_admit(void *context,const XrXirFunctionBinding *binding,XrXirType type,uint64_t *work);
 static XrXirCtfeStatus ctfe_function_binding(CtfeOwnedState *state,const XrXirValue *value,const XrXirFunctionBinding **output);
 static XrXirCtfeStatus ctfe_projection_access_work(ScalarRun *run,CtfeOwnedState *state,const XrXirValue *value,bool mutate);
+static XrXirCtfeStatus ctfe_projection_incoming_work(ScalarRun *run,CtfeOwnedState *state,const XrXirValue *cell,const XrXirValue *value);
 static XrXirCtfeStatus ctfe_projection_step(ScalarRun *run,VmState *vm,CtfeOwnedState *state);
 static XrXirValueAdmission ctfe_value_admission(CtfeOwnedState *state) {
     return (XrXirValueAdmission){.arena=state->arena,.domain=state->domain,.function=ctfe_function_admit,
@@ -156,7 +157,8 @@ static XrXirCtfeStatus ctfe_cell_step(ScalarRun *run,uint32_t *cursor,CtfeOwnedS
     }
     XrXirValue forbidden=state->forbidden_cell;
     if (!create && op->op!=XR_XIR_CELL_READ) state->forbidden_cell=cell;
-    XrXirCtfeStatus paid=op->op==XR_XIR_CELL_READ?XR_XIR_CTFE_OK:ctfe_admission_work(run,state,&value);
+    XrXirCtfeStatus paid=op->op==XR_XIR_CELL_READ?XR_XIR_CTFE_OK:projected?
+        ctfe_projection_incoming_work(run,state,&cell,&value):ctfe_admission_work(run,state,&value);
     state->forbidden_cell=forbidden;
     if (op->op!=XR_XIR_CELL_READ && paid!=XR_XIR_CTFE_OK) return paid;
     /* Scalar admission has no child traversal. This local bound is not a

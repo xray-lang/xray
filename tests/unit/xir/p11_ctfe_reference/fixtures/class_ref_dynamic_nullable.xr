@@ -1,0 +1,5 @@
+class Box{items:Array<(i64,i64)>?;constructor(items:Array<(i64,i64)>?){this.items=items}}
+fn change(xs:ref Array<(i64,i64)>?){xs=[(20,20),(1,1)]}
+fn middle(xs:ref Array<(i64,i64)>?){change(ref xs);const ys=xs!;xs=[ys[0],ys[1],(0,0)]}
+fn answer()->i64{const b=Box(null);middle(ref b.items);const xs=b.items!;return len(xs)==3 ? xs[0].0+xs[0].1+xs[1].0+xs[1].1 : 0}
+export fn run()->i64{return comptime answer()}

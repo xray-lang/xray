@@ -1,0 +1,3 @@
+class Box{items:Array<(string,i64)>;constructor(items:Array<(string,i64)>){this.items=items}}
+fn change(xs:ref Array<(string,i64)>)->string{xs.push(("ab",42));defer{xs[1]=("changed",0)};return xs[1].0}
+export fn run()->string{const b=Box([("old",0)]);return change(ref b.items)}
