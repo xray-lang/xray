@@ -6302,7 +6302,7 @@ Checked Source 的整数方法准入由 `stdlib/types/i64.xr` 的固定声明身
 
 当前 Checked Source 以固定 f64 声明身份及完整 READ/signature/allocation/failure/ownership 契约准入 `abs`、`toString`、`toI64`、`floor`、`ceil`、`round`、`isNaN`，并生成普通已有 XIR。`abs` 对零返回正零，NaN 结果遵循普通浮点转换/取反的 canonical 规则。`toI64` 向零截断；`floor/ceil` 向负/正无穷取整；`round` 最近取整且半值远离零，使用精确小数差比较而非给输入加减0.5。NaN、Infinity及无法转换为i64的输入沿共同数值转换发出E0422范围panic，不伪造值或 typed Error。除已有 f32 文本化外，这些准入方法当前要求 f64 接收者。`parse/tryParse/toFixed/sqrt/pow` 五项声明仍无 Checked 操作准入，完整浮点方法族未获资格。
 
-接收编译器Float执行接口后，上述非文本化的六项f64方法可在原有界CTFE路径执行：既有整数IEEE内核决定位级结果，每条浮点操作先支付1024 work，不依赖宿主FPU、VM或native执行。数值转换越界保范围拒绝；普通用户模块/闭合泛型可调用这些治理方法。Tuple常量按真实字段逻辑字节接收（Unit为0），当前Source输出帽仍为8字节，不扩大到类/record或任意拥有图；完整资源/全族资格另证。接收共同标量文本接口后，bool、所有整数宽度、Rune及f32/f64的TO_STRING也可在同一有界CTFE账本执行；唯一既有标量文本内核决定位串和最短往返文本，预付完整formatter work/frame上界，真实String复制仍收费。超过8字节的内部文本可比较，但导出仍拒绝。当前Array join已改为CELL_STRING_APPEND路径，该opcode尚未准入CTFE，String74组合中的join正例仍拒绝，不能用标量文本成功替代其完整资格；剩余未治理的方法、未知native、I/O及String追加opcode不因此准入。
+接收编译器Float执行接口后，上述非文本化的六项f64方法可在原有界CTFE路径执行：既有整数IEEE内核决定位级结果，每条浮点操作先支付1024 work，不依赖宿主FPU、VM或native执行。数值转换越界保范围拒绝；普通用户模块/闭合泛型可调用这些治理方法。Tuple常量按真实字段逻辑字节接收（Unit为0），当前Source使用§17.61的版本化8MiB逻辑输出上限；Class身份仍不可导出，完整资源/全族资格另证。接收共同标量文本接口后，bool、所有整数宽度、Rune及f32/f64的TO_STRING也可在同一有界CTFE账本执行；唯一既有标量文本内核决定位串和最短往返文本，预付完整formatter work/frame上界，真实String复制仍收费。String导出按所选的逻辑限额检查；直接求值请求选择8字节时仍拒绝更长结果。当前Array join已改为CELL_STRING_APPEND路径，该opcode尚未准入CTFE，String74组合中的join正例仍拒绝，不能用标量文本成功替代其完整资格；剩余未治理的方法、未知native、I/O及String追加opcode不因此准入。
 
 ### 14.3 `BigInt` 方法
 
