@@ -104,9 +104,9 @@ XR_FUNC XrXirValueStatus xr_xir_class_get(const XrXirValue *receiver, uint32_t f
     if (!admission_domain_current(admission)) return XR_XIR_VALUE_BAD_ARGUMENT;
     XrXirValueAdmission local={0};
     XrXirValueStatus status=storage_admission_begin(receiver,admission,&local);
-    if (status != XR_XIR_VALUE_OK) return status;
+    if (status!=XR_XIR_VALUE_OK) return status;
     xr_xir_value_graph_begin();
-    XrXirValueStatus graph_outcome = xr_xir_class_get_graph_operation(receiver, field, &local, output);
+    XrXirValueStatus graph_outcome = xr_xir_class_get_graph_operation(receiver,field,&local,output);
     xr_xir_value_graph_end();
     return storage_admission_end(admission,&local,graph_outcome);
 }
@@ -155,9 +155,12 @@ XR_FUNC XrXirValueStatus xr_xir_class_set(const XrXirValue *receiver, uint32_t f
     if (!admission_domain_current(admission)) return XR_XIR_VALUE_BAD_ARGUMENT;
     XrXirValueAdmission local={0};
     XrXirValueStatus status=storage_admission_begin(receiver,admission,&local);
-    if (status != XR_XIR_VALUE_OK) return status;
+    if (status!=XR_XIR_VALUE_OK) return status;
+    if (!owned_carrier_type((XrXirType)receiver->type) ||
+        !admission_owner(&local,object_pointer(receiver)->arena,object_pointer(receiver)->domain))
+        return XR_XIR_VALUE_BAD_ARGUMENT;
     xr_xir_value_graph_begin();
-    XrXirValueStatus graph_outcome = xr_xir_class_set_graph_operation(receiver, field, replacement, &local);
+    XrXirValueStatus graph_outcome = xr_xir_class_set_graph_operation(receiver,field,replacement,&local);
     xr_xir_value_graph_end();
     return storage_admission_end(admission,&local,graph_outcome);
 }
