@@ -42,12 +42,14 @@ struct XrXirDomain {
     unsigned char identity[8];
     _Atomic(uint32_t) references;
     atomic_bool locked;
+    /* The graph lock serializes these flags. Sharing the small header slot
+     * avoids another aligned storage slot without weakening synchronization. */
+    bool closed:1, close_started:1, close_pending:1, close_processing:1, graph_invalid:1;
     uint64_t limit;
     XrXirDomainStats stats;
     XrXirDomainBudgetStats budget;
     XirObject *objects;
     struct XrXirDomain *closed_previous, *closed_next;
-    bool closed, close_started, close_pending, close_processing, graph_invalid;
     XrXirClassObservation *observation;
     XrCompileResources *compile_resources;
 };
