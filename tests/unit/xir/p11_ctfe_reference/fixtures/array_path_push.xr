@@ -1,0 +1,2 @@
+fn answer()->i64 { var xs:Array<Array<string>>=[["a\0b"]]; xs[0].push("z"); return len(xs[0])==2 && xs[0][0]=="a\0b" && xs[0][1]=="z" ? 42 : 0 }
+export fn run()->i64 { return comptime answer() }

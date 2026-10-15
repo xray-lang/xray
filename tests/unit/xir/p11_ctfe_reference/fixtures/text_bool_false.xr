@@ -1,0 +1,2 @@
+fn answer()->string { const a:Array<bool>=[false]; return a.join("") }
+export fn run()->string { return comptime answer() }

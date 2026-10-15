@@ -37,13 +37,13 @@ static bool ctfe_storage_instruction(const XrXirModule *module,const XrXirFuncti
     if (op->op==XR_XIR_CELL_READ || op->op==XR_XIR_CELL_WRITE || op->op==XR_XIR_CELL_LOCAL_WRITE)
         return ctfe_cell_type(module->types,xr_xir_operand_type(body,op->args[0]));
     if (ctfe_scalar_type(op->type) || op->type==XR_XIR_UNIT) return true;
-    if (ctfe_composite_node(module->types,op->type)) return op->op==XR_XIR_TUPLE_NEW ||
+    if (ctfe_composite_node(module->types,op->type)) return op->op==XR_XIR_STRUCT_NEW || op->op==XR_XIR_STRUCT_GET || op->op==XR_XIR_ENUM_NEW || op->op==XR_XIR_ENUM_GET || op->op==XR_XIR_TUPLE_NEW ||
         op->op==XR_XIR_NULLABLE_NONE || op->op==XR_XIR_NULLABLE_SOME || op->op==XR_XIR_NULLABLE_UNWRAP || op->op==XR_XIR_ARRAY_NEW || op->op==XR_XIR_ARRAY_REPEAT ||
-        op->op==XR_XIR_ARRAY_WITH_CAPACITY || op->op==XR_XIR_ARRAY_RESERVE || op->op==XR_XIR_ARRAY_GET || op->op==XR_XIR_CELL_PLACE || op->op==XR_XIR_PLACE_READ ||
+        op->op==XR_XIR_ARRAY_WITH_CAPACITY || op->op==XR_XIR_ARRAY_RESERVE || op->op==XR_XIR_ARRAY_GET || op->op==XR_XIR_CELL_PLACE || op->op==XR_XIR_INDEX_PLACE || op->op==XR_XIR_FIELD_PLACE || op->op==XR_XIR_PLACE_READ ||
         op->op==XR_XIR_TUPLE_FIELD || op->op==XR_XIR_CALL || op->op==XR_XIR_PHI || op->op==XR_XIR_LOCAL_UNINIT ||
         op->op==XR_XIR_OWNED_LOCAL_NEW || op->op==XR_XIR_OWNED_LOCAL_READ || op->op==XR_XIR_OWNED_RETAIN;
-    if (op->type==XR_XIR_STRING) return op->op==XR_XIR_CONST_STRING || op->op==XR_XIR_CONCAT_STRING ||
-        op->op==XR_XIR_CALL || op->op==XR_XIR_TUPLE_FIELD || op->op==XR_XIR_NULLABLE_UNWRAP || op->op==XR_XIR_ARRAY_GET || op->op==XR_XIR_PHI || op->op==XR_XIR_LOCAL_UNINIT ||
+    if (op->type==XR_XIR_STRING) return op->op==XR_XIR_STRUCT_GET || op->op==XR_XIR_ENUM_GET || op->op==XR_XIR_CELL_PLACE || op->op==XR_XIR_FIELD_PLACE || op->op==XR_XIR_CONST_STRING || op->op==XR_XIR_CONCAT_STRING || op->op==XR_XIR_TO_STRING ||
+        op->op==XR_XIR_CALL || op->op==XR_XIR_TUPLE_FIELD || op->op==XR_XIR_NULLABLE_UNWRAP || op->op==XR_XIR_ARRAY_GET || op->op==XR_XIR_INDEX_PLACE || op->op==XR_XIR_PLACE_READ || op->op==XR_XIR_PHI || op->op==XR_XIR_LOCAL_UNINIT ||
         op->op==XR_XIR_OWNED_LOCAL_NEW || op->op==XR_XIR_OWNED_LOCAL_READ || op->op==XR_XIR_OWNED_RETAIN;
     return (op->op==XR_XIR_CELL_NEW || op->op==XR_XIR_LOCAL_UNINIT || op->op==XR_XIR_PHI) &&
         ctfe_cell_type(module->types,op->type);
@@ -117,7 +117,10 @@ static XrXirCtfeStatus ctfe_cell_step(ScalarRun *run,uint32_t *cursor,CtfeOwnedS
 }
 
 #include "xxir_ctfe_string.inc.c"
+static const XrXirNominalVariant *ctfe_enum_variant_info(const XrXirTypes *types,const XrXirTypeNode *node,uint32_t variant);
 #include "xxir_ctfe_tuple.inc.c"
 #include "xxir_ctfe_nullable.inc.c"
+#include "xxir_ctfe_nominal.inc.c"
 #include "xxir_ctfe_array.inc.c"
+#include "xxir_ctfe_path.inc.c"
 #include "xxir_ctfe_equal.inc.c"

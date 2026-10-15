@@ -77,9 +77,14 @@ static bool source_comptime_evaluate(SourceContext *ctx,const XrXirArtifact *che
         XrXirValue value={0};XrXirCtfeStatus evaluated=xr_xir_compile_ctfe_calls(&request,&value);
         if (evaluated!=XR_XIR_CTFE_OK) { xr_xir_value_drop(&value);source_comptime_failure(ctx,site->syntax,evaluated);break; }
         const XrXirModule *module=xr_xir_compile_artifact_module(lowered);
+        XrXirCtfeTypeShape shape={0};XrXirCtfeStatus shaped=xr_xir_compile_ctfe_type_shape(&ctx->compile,module->types,module->functions[f].result,&shape);
+        if (shaped!=XR_XIR_CTFE_OK) { xr_xir_value_drop(&value);source_comptime_failure(ctx,site->syntax,shaped);break; }
+        if (!source_work_units(ctx,site->syntax,sizeof(site->result_work))) { xr_xir_value_drop(&value);break; }
+        site->result_work=shape.work;
         const XrXirTypeNode *tuple=xr_xir_tuple_signature(module->types,module->functions[f].result);
-        site->result_arity=tuple?tuple->parameter_count:(xr_xir_type_is_nullable(module->types,module->functions[f].result) || xr_xir_type_is_array(module->types,module->functions[f].result))?1:0;
-        if (!source_comptime_result_value(ctx,site->syntax,&value,site->result_arity)) {
+        site->result_arity=tuple?tuple->parameter_count:(xr_xir_type_is_nullable(module->types,module->functions[f].result) || xr_xir_type_is_array(module->types,module->functions[f].result) ||
+            xr_xir_type_is_struct(module->types,module->functions[f].result) || xr_xir_type_is_enum(module->types,module->functions[f].result))?1:0;
+        if (!source_comptime_result_value(ctx,site->syntax,&value,site->result_arity,site->result_work)) {
             xr_xir_value_drop(&value);source_fail(ctx,site->syntax,ctx->diagnostic.status==XR_XIR_OK?XR_XIR_BAD_STRUCTURE:ctx->diagnostic.status,"comptime returned a noncanonical value");break;
         }
         if (!source_work_units(ctx,site->syntax,sizeof(value)+1)) { xr_xir_value_drop(&value);break; }

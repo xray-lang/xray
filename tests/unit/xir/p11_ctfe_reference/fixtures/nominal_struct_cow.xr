@@ -1,0 +1,3 @@
+struct Box { value:i8; text:string }
+fn answer()->bool { var b=Box{value:1,text:"old"}; const old=b; b.value=7; b.text="new"; return old.value==1 && old.text=="old" && b.value==7 && b.text=="new" }
+export fn run()->bool { return comptime answer() }

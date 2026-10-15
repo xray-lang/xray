@@ -1,0 +1,2 @@
+fn answer()->bool { var xs:Array<Array<string>>=[["a\0b"]]; const old=xs; xs[0].clear(); return len(xs[0])==0 && old[0][0]=="a\0b" }
+export fn run()->bool { return comptime answer() }

@@ -1,0 +1,3 @@
+class Box { value:i8; constructor(value:i8){this.value=value} }
+fn answer()->bool { const b=Box(7); return b.value==7 }
+export fn run()->bool { return comptime answer() }

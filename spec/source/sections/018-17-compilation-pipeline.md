@@ -626,6 +626,36 @@ Array逻辑导出递归累加活跃元素的目标标量、String字节、Nullab
 
 预付stack使用原剩余frame限额，包括resize新旧块和getter接收scratch同时峰值；共同比较开始前释放该stack和所有临时引用，再独立约束共同Value scratch。任一物理OOM、work/step/frame失败都保全Unit输出、原借用值及累计收费，释放全部临时/帧owner。Nullable旧专用相等分支由此共同路径原子替换；Source仍两次构造、独立普通BOOL常量与完整Checker/query发布。原全部预算、安全门和更深变量接收的具体Value观察接口缺口继续生效，开发资格不等于完整P11。
 
+### 17.51 私有Array索引路径的有界接收与写入
+
+CTFE在完整Lowered及整个可达闭包准入后支持以真实私有Cell为根的INDEX_PLACE链。每个投影只保存类型和已计算索引；执行读写时重新解析当前根，不持有跨操作内部地址。索引链必须回到已准入、当前compiler Domain内的Cell；字段、模块/对象根、外部Cell及投影Cell权限不会因此获得准入。完整类型族限制不变，尚无有界接收接口的更深变量Array仍明确拒绝。
+
+路径计数与构造、每次类型/头观察、完整getter接收跨度、最终公共路径接收以及可能复制的每个祖先capacity字节，均在实际访问前预付原累计账本。push还预付叶Array可能增长的容量。溢出或无法预付先返回BUDGET。路径步骤本身占用原frame剩余额度；观察和最终Value操作的scratch只可使用扣除路径后的余额。所有临时观察owner在共同写入前释放，避免人为制造共享；唯一Value path read/write/push决定普通语义、COW及发布，不能另造CTFE写入算法。
+
+嵌套set/push、PLACE_READ/WRITE及普通reserve读/构造/写回配方沿这条路径执行。现有普通Array方法配方可继续组合已准入操作，包括contains/indexOf、String join、clear/reverse/unshift/pop/shift/resize/fill/concat/entries；各自仍须通过实际opcode、类型和完整闭包检查。此处不授予函数值回调或未接通的数值格式化操作。Source保留独立普通常量重放；路径结果导出仍按活跃逻辑字节与原output帽。
+
+已有快照保持普通COW语义。任一物理OOM、越界或work/step/frame/output错误保全空输出并释放全部帧与临时owner，累计费用不退款。Source/Artifact及ledger调用者死亡后，最后拥有结果仍保留真实类型/Domain寿命，最终drop无分配。路径开发资格不替代完整P11、公共sanitizer、provider和其他原门。
+
+### 17.52 共同标量文本与原账本的格式化费用
+
+TO_STRING在完整Lowered及整个可达闭包准入后支持bool、整数、Rune和f32/f64。唯一`xr_xir_scalar_text`产生普通十进制整数、true/false、完整Rune UTF-8和最短往返浮点文本；CTFE不使用Instance输出或另一套转换器。浮点仍沿仅整数的共同IEEE格式化，正负零、subnormal、NaN/inf和指数记法不依赖宿主FPU或locale。NUL按长度传递。普通Array数值/bool/Rune join配方由相同TO_STRING接通；该准入不授予I/O、身份或外部状态权限。
+
+每次格式化前先支付有界元数据观察，随后预付原累计账本的算法费用和原frame中的固定工作区。整数/bool/Rune使用256 work、512 frame字节；浮点零及非有限值使用1024 work、512 frame字节。有限非零浮点以正常数的无偏二进制指数、或subnormal最低可能指数的绝对值d，预付131072+(d+2)×2048 work和16384 frame字节，覆盖至多17位/每位9次减法、全部bigint复制和正规化；费用判定只观察位宽/指数，不决定文本语义。共同decimal workspace的sizeof≤1024由编译断言保持，扩大它必须重新证明费用和frame上界。剩余frame不足或无法预付先失败；不得先进入格式化再检查预算。String构造的真实复制、分配和所有权继续计入原Domain/ledger。
+
+逻辑输出仍按完整UTF-8字节数遵守原output8；内部较长文本可用于比较，不能把内部长度误当导出权限。独立Source重放普通String/Bool常量并经过完整Checker/query。物理OOM、work/step/frame/output拒绝保全空输出与借用参数，费用不退款，释放全部帧/临时owner。真正格式化得到的最后String在Source/Artifact/ledger调用者死亡后保持有效，最终drop无分配。其余nominal、函数值/cleanup、foreign接收及正式完整安全资格仍按原P11责任推进。
+
+### 17.53 声明绑定的结构体、活动枚举与私有字段路径
+
+CTFE在唯一完整Lowered及整个可达闭包准入之后执行已关闭的普通struct/enum。类型族逐字段检查、拒绝循环及class/身份或未准入native类型；声明owner只允许普通struct/enum，不代替函数体、效果或权限检查。STRUCT_NEW/GET、ENUM_NEW/TAG/GET使用唯一Value构造、接收和拥有slot；普通方法与泛型特化仍经过既有Source/Checker和闭包准入。枚举仅观察实际活动variant，不执行失活payload。
+
+FIELD_PLACE与INDEX_PLACE可以组合，但根必须是本次compiler Domain内真实私有Cell。STRUCT_SET和普通字段/Array写入、push沿同一Value path实现。每次观察及完整接收前预付原累计ledger费用，可能复制的struct字段向量和Array祖先capacity一并预付。路径、显式遍历栈和同时存在的接收scratch共享剩余frame；观察owner在共同变更前释放，保留正常COW和单次发布。类型形状只用于计费，不是另一种Value表示或权限证明。
+
+拥有结果按活动字段递归计算目标标量与String字节、Array元素、Nullable标签和enum真实storage标签字节；空struct为0，单variant空enum可为0，多variant空分支仍计实际标签。padding、capacity、拥有头和指针不计输出。拥有结果不得先调用不适用的独立nominal storage布局查询再按指针大小放行；唯一TypeArena storage及逻辑遍历决定导出，原output8不变。
+
+Source从同一不可变输入图独立重建普通STRUCT_NEW/ENUM_NEW配方；跨池接收核完整声明顺序/identity、字段权限/名称、variant范围、native指纹和关闭字段类型，不能只比较局部type ID。元数据和字节比较在访问前计入原账本，最终完整Checker及query继续决定权限与发布。没有外部nominal参数或class准入；缺少有界观察接口的struct动态child和更深Array接收仍明确拒绝，不能无预算预扫描。private拥有结果的独立配方权限与Unit字段Source前置尚需完整资格，不据内部方法成功宣称覆盖。
+
+物理OOM及work/step/frame/output拒绝保全空输出和借用输入，全部临时/帧owner释放，费用不退款。真正struct/enum结果在Source、Artifact和ledger调用者死亡后仍有效，最后drop不分配。该范围开发证据不替代函数值/cleanup、foreign接收、P12以及原全部共享/provider/正式安全门，完整P11目标保持开放。
+
 <!-- /xr-spec:cn -->
 
 <!-- xr-spec:en -->
@@ -1362,5 +1392,35 @@ After complete Lowered, actual family and entire reachable closure admission, XR
 An iterative owning pair walk charges before each header/type/child access. Shallow Array lengths and active Nullable variants bound later spans. Each authentic Array getter prepays its entire receiving span; complete String comparison bytes and fixed-width work for every floating leaf pay the original cumulative ledger before common comparison. Bounds are conservative; overflow or unpayable work returns BUDGET first, with no reset or refund. Length and None branches require no unused-payload scans. Actual comparison still calls the same Value semantics, without an unbounded host walker, Instance/native execution or AST fallback.
 
 The prepayment stack consumes the original remaining frame limit, including old/new resize blocks and simultaneous getter-admission scratch. It releases every stack and temporary reference before common comparison, whose Value scratch remains independently bounded. Physical OOM and work/step/frame failure preserve Unit output, original borrowed values and spent charges, while releasing all temporary/frame owners. This common path atomically replaces the old Nullable-specific equality branch. Source retains two constructions, independent ordinary BOOL constants and complete Checker/query publication. Original budgets, safety gates and the precise Value observation gap for deeper variable receiving remain; development qualification is not complete P11.
+
+### 17.51 Bounded receiving and mutation of private Array index paths
+
+After complete Lowered and entire reachable closure admission, CTFE supports INDEX_PLACE chains rooted in authentic private Cells. Each projection carries a type and an already evaluated index; each read or write resolves the current root again, retaining no interior address across operations. The chain must terminate at an admitted Cell in the current compiler Domain. Field, module/object roots, foreign Cells and projected Cell authority gain no admission. Complete family restrictions remain, including explicit refusal of deeper variable Arrays that lack bounded receiving interfaces.
+
+Path counting and construction, every type/header observation, complete getter receiving spans, final public path receiving and the capacity bytes of every possibly copied ancestor prepay the original cumulative ledger before access. Push additionally prepays possible leaf growth. Overflow or unpayable work returns BUDGET first. Path steps consume the original remaining frame quota; observation and final Value scratch receive only the balance after those steps. All temporary observation owners are dropped before common mutation to avoid manufacturing sharing. Sole Value path read/write/push operations determine ordinary semantics, COW and publication; CTFE introduces no second mutation algorithm.
+
+Nested set/push, PLACE_READ/WRITE and the ordinary reserve read/construct/writeback recipe follow this path. Existing ordinary Array method recipes can compose admitted operations, including contains/indexOf, String join, clear/reverse/unshift/pop/shift/resize/fill/concat/entries; each still requires actual opcode, type and whole closure admission. This grants neither function-value callbacks nor unimplemented numeric formatting operations. Source retains independent ordinary constant replay. Exported path results still count active logical bytes under the original output ceiling.
+
+Existing snapshots retain ordinary COW semantics. Physical OOM, bounds and work/step/frame/output failure preserve empty output and release every frame and temporary owner without refunding cumulative charges. After Source/Artifact and ledger caller death, the last owned result retains authentic type/Domain lifetimes and final drop allocates nothing. Path development qualification does not replace complete P11, public sanitizer, provider or other original gates.
+
+### 17.52 Common scalar text and original-ledger formatting work
+
+After complete Lowered and entire reachable closure admission, TO_STRING supports bool, integers, Rune and f32/f64. Sole xr_xir_scalar_text produces ordinary decimal integers, true/false, complete Rune UTF-8 and shortest round-trip floating text. CTFE invokes neither Instance output nor another converter. Floating text retains the common integer-only IEEE formatter; signed zeros, subnormals, NaN/inf and exponent notation depend on neither the host FPU nor locale. NUL retains explicit lengths. Ordinary numeric/bool/Rune Array join recipes use this same TO_STRING admission, granting no I/O, identity or external-state authority.
+
+Before each formatter call, bounded metadata observation and algorithm work pay the original cumulative ledger and fixed workspace consumes remaining frame. Integer/bool/Rune reserve 256 work and 512 frame bytes; floating zero/nonfinite values reserve 1024 work and 512 frame bytes. For finite nonzero floats, d is the magnitude of the normal unbiased binary exponent or the lowest possible subnormal exponent. A reserve of 131072+(d+2)*2048 work and 16384 frame bytes covers at most 17 digits/9 subtractions per digit, complete bigint copies and normalization. Cost selection reads width/exponent only and determines no text semantics. A compile assertion bounds the common decimal workspace sizeof to 1024; growing it requires reproving work and frame limits. Insufficient frame or unpayable work fails before entering formatting. Authentic String copies, allocations and owners remain on the original Domain/ledger.
+
+Logical export still counts complete UTF-8 bytes under the original output8 ceiling. Longer internal text may participate in comparisons without gaining export permission. Source independently replays ordinary String/Bool constants through complete Checker/query publication. Physical OOM and work/step/frame/output refusal preserve empty output and borrowed arguments, retain spent charges and release every frame/temporary owner. An actual formatted last String remains valid after Source/Artifact/ledger caller death and final drop allocates nothing. Nominal, function-value/cleanup, foreign receiving and complete mandatory safety qualification remain original P11 responsibilities.
+
+### 17.53 Declaration-bound structs, active enums and private field paths
+
+After sole complete Lowered and entire reachable closure admission, CTFE executes closed ordinary structs/enums. Iterative type-family admission examines all fields and rejects cycles, classes, identity-bearing or unadmitted native types. A struct/enum declaration owner replaces neither body/effect admission nor permission checks. STRUCT_NEW/GET and ENUM_NEW/TAG/GET use sole Value construction, receiving and owned slots. Ordinary methods and generic specialization retain existing Source/Checker and closure admission. Enums observe only the actual active variant, never inactive payloads.
+
+FIELD_PLACE and INDEX_PLACE may compose only beneath an authentic private Cell in this compiler Domain. STRUCT_SET and ordinary field/Array writes and pushes use the same Value path implementation. Before observation and complete receiving, work prepays the original cumulative ledger, including possibly copied struct field vectors and Array ancestor capacities. Paths, explicit traversal stacks and simultaneous receiving scratch share remaining frame. Observation owners drop before common mutation, preserving normal COW and single publication. Type shapes provide costs, never another Value representation or authority proof.
+
+Owned export recursively counts active target scalars and String bytes, Array elements, Nullable tags and the actual enum storage tag bytes. Empty structs use zero; single-variant empty enums may use zero, while an empty branch of a multi-variant enum still counts its actual tag. Padding, capacity, ownership headers and pointers do not count. An owned result must not first query an inapplicable standalone nominal storage layout and then accept pointer-sized output. Sole TypeArena storage and logical traversal determine export under the unchanged output8 limit.
+
+Source independently rebuilds ordinary STRUCT_NEW/ENUM_NEW recipes from the same immutable input graph. Cross-pool receiving checks complete declaration order/identity, field permissions/names, variant ranges, native fingerprints and closed field types, never local type IDs alone. Metadata and byte comparisons prepay the original ledger; final complete Checker/query retain permission and publication authority. External nominal arguments and classes remain unadmitted. Struct dynamic children and deeper Array receiving that lack bounded observation fail closed without unpaid preliminary scans. Private owned recipe authority and Unit-field Source prerequisites still need complete qualification; successful internal methods do not establish that coverage.
+
+Physical OOM and work/step/frame/output refusal preserve empty output and borrowed inputs, release every temporary/frame owner and retain spent charges. Actual struct/enum results survive Source, Artifact and ledger caller death, and final drop allocates nothing. Scoped development evidence replaces neither function-value/cleanup, foreign receiving, P12 nor original shared/provider/mandatory safety gates; the complete P11 objective remains open.
 
 <!-- /xr-spec:en -->

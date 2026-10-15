@@ -1,0 +1,2 @@
+fn answer()->string { var text=""; const a:Array<f64>=[3.5]; text=a.join(""); return text }
+export fn run()->string { return comptime answer() }

@@ -1,0 +1,3 @@
+struct Box { xs:Array<i8> }
+fn answer()->i64 { var b=Box{xs:Array<i8>(65536,1)}; var i=0; while(i<2000) { b.xs[0]=7; i=i+1 }; return 42 }
+export fn run()->i64 { return comptime answer() }
