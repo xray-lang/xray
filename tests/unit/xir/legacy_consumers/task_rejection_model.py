@@ -36,7 +36,7 @@ _INPUTS = {'spec/source/sections/003-2-type-system.md': 'b53fe65114ebc6cfe5d480e
  'tests/unit/xir/legacy_consumers/source_rejection_owner/source_rejection_owner.c': '0907f4f5fa054bd0e0b139d1962558018ad3dc7ce822b923a951f3571123f367',
  'tests/unit/xir/legacy_consumers/test_owned_process_tree.py': '65ac2e9ed33bc8542ac84dfd466b94e8c37425e04834b8ad5e691d6055145272',
  'tests/unit/xir/legacy_consumers/test_source_rejection_fault_review.py': '63f63ce2294f9088e33b845e2f9f19d2e801baec81464465bddcdaafbec4d977',
- 'tests/unit/xir/legacy_consumers/test_source_rejection_model.py': '8cc5a5810131c70881a16a969a59a6aa2060eaeaf563f57f00a77bd5b5fbdcbb',
+ 'tests/unit/xir/legacy_consumers/test_source_rejection_model.py': '440722be5661c4f394092032715a7c4008dcc40a1c4accaa193cdcfe3faa62b3',
  'tests/unit/xir/xir_instance_compile_observer.h': 'd1c48e7330b30d7d9ea6044e5fea086c7d5181b92a77915aa6b90903a68b695d'}
 _REQUIRED_INPUTS = ('spec/source/sections/003-2-type-system.md',
  'spec/source/sections/015-14-built-in-type-methods.md',
