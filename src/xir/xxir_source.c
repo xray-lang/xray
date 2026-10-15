@@ -262,7 +262,7 @@ typedef struct SourceContext {
     uint32_t atomic_module, atomic_declaration, atomic_members[10];
     uint32_t task_module, task_declaration;
     uint32_t query_module_capacity, array_module, array_declaration, array_members[XR_NATIVE_OPERATION_COUNT], length_declaration;
-    uint32_t string_module, string_declaration, string_members[5];
+    uint32_t string_module, string_declaration, string_members[5], type_info_declaration;
 } SourceContext;
 
 static XrXirModule source_module_view(SourceContext *ctx, XrXirDeclarations *declarations) {
@@ -1164,6 +1164,7 @@ static bool source_function_call(SourceContext *ctx,AstNode *node,SourceName *bi
         source_recipe_group(ctx,call_op,prepared.values,prepared.count,value);
 }
 #include "xxir_source_task_call.inc.c"
+#include "xxir_source_type_info.inc.c"
 static bool source_call(SourceContext *ctx, AstNode *node, SourceExpectedType result_context, SourceValue *value) {
     CallExprNode *call = &node->as.call_expr;
     if (call->arg_count < 0 || call->arg_count > 65536 || call->type_arg_count < 0 ||
@@ -1195,6 +1196,8 @@ static bool source_call(SourceContext *ctx, AstNode *node, SourceExpectedType re
             }
             if (intrinsic && intrinsic->id == XR_CORE_BUILTIN_LEN)
                 return source_length(ctx, node, intrinsic, value);
+            if (intrinsic && intrinsic->id == XR_CORE_BUILTIN_TYPE_INFO)
+                return source_type_info(ctx, node, intrinsic, value);
             if (source_text_same(ctx, NULL, name, "PanicInfo"))
                 return source_fail(ctx, node, XR_XIR_BAD_TYPE, "PanicInfo construction requires class support");
             if (source_text_same(ctx, NULL, name, "rune") || source_text_same(ctx, NULL, name, "i64"))

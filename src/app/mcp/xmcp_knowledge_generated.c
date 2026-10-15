@@ -8868,6 +8868,28 @@ XR_DATADEF const XmcpGeneratedTopic xmcp_generated_topics[] = {
             "",
     },
     {
+        .id = "type_info",
+        .title = "Static TypeInfo",
+        .aliases_csv = "typeInfo,static_reflection,type_description,\xe7\xb1\xbb\xe5\x9e\x8b\xe6\x8f\x8f\xe8\xbf\xb0",
+        .body =
+            "[Language reference](#1765-\xe6\x8b\xa5\xe6\x9c\x89\xe5\xbc\x8f\xe9\x9d\x99\xe6\x80\x81\xe7\xb1\xbb\xe5\x9e\x8b\xe6\x8f\x8f\xe8\xbf\xb0\xe4\xb8\x8e\xe6\x99\xae\xe9\x80\x9a\xe6\x95\xb0\xe6\x8d\xae)\n"
+            "\n"
+            "## Static TypeInfo\n"
+            "\n"
+            "Closed static type facts are ordinary owning Tuple/Array/String data; descriptions grant no member operation or construction authority.\n"
+            "\n"
+            "### Ordinary static facts\n"
+            "```xray\n"
+            "export fn run()->i64 {\n"
+            "    return comptime {\n"
+            "        const info=typeInfo<Array<i64>>()\n"
+            "        info.1[info.0].0\n"
+            "    }\n"
+            "}\n"
+            "```\n"
+            "",
+    },
+    {
         .id = "types",
         .title = "Types",
         .aliases_csv = "i64,f64,string,bool,nullable,type,tuple,unit,union,Option",
@@ -9072,7 +9094,7 @@ XR_DATADEF const XmcpGeneratedTopic xmcp_generated_topics[] = {
             "",
     },
 };
-XR_DATADEF const int xmcp_generated_topic_count = 20;
+XR_DATADEF const int xmcp_generated_topic_count = 21;
 
 XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
     {

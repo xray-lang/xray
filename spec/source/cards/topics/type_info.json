@@ -1,0 +1,10 @@
+{
+  "id": "type_info",
+  "title": "Static TypeInfo",
+  "spec_anchor": "#1765-拥有式静态类型描述与普通数据",
+  "aliases": ["typeInfo", "static_reflection", "type_description", "类型描述"],
+  "lead": "Closed static type facts are ordinary owning Tuple/Array/String data; descriptions grant no member operation or construction authority.",
+  "sections": [
+    {"heading": "Ordinary static facts", "fences": ["type-info-static-array"]}
+  ]
+}

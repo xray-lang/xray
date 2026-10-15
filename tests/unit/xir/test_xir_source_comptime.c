@@ -176,7 +176,9 @@ static void source_comptime_test_fold(const XrXirModule *module,int64_t expected
 }
 #include "xir_source_comptime_cases.h"
 #include "xir_source_comptime_resources.h"
+#include "xir_source_type_info_cases.h"
 int main(int argc,char **argv) {
+    if (argc==2 && !strcmp(argv[1],"--type-info")) { source_type_info_semantics();return 0; }
     if (argc==2 && !strcmp(argv[1],"--output")) {
         source_comptime_test_answer(source_comptime_output_text,XR_XIR_I64,42);
         fprintf(stderr,"Source original Fibonacci10/pair16 output policy2 independent recipes complete Checked/query normal physical0\n");return 0;

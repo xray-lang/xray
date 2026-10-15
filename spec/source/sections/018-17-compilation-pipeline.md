@@ -772,6 +772,32 @@ compiler-private Source请求提供可选XrXirSourceComptimeLimits.output_bytes�
 
 该接点实现内部共同接收与操作约束，不表示语言层TypeInfo、普通生成器、JSON或其他消费者已经接线。生成输入仍从Built进入17.63的普通完整第二检查；所有原编译预算、物理OOM、独立owner及完整FI/安全/provider门保留。
 
+### 17.65 拥有式静态类型描述与普通数据
+
+未被普通声明遮蔽的`typeInfo<T>()`对应core intrinsic身份7，要求一个显式闭合静态类型和零值参数。它在Source中通过唯一canonical类型/字段描述服务物化普通Tuple、Array和String recipes；不增加运行期反射指令、Value种类或evaluator。开放类型参数和畸形实参拒绝，普通同名函数仍按词法绑定调用。闭合泛型字段使用已有Source类型替换，不能按具体成员补未声明的泛型约束。
+
+返回值是`(root,nodes,fields,arguments,parameters,variants)`六元Tuple，后五项为普通Array。root为0，类型边是本图的i64编号，不是跨pool的XIR类型ID。相同canonical类型只登记一次；递归class身份图使用回边，非法递归值布局仍按普通类型规则拒绝。仅包含可达事实，不返回宿主地址或物理路径。
+
+| 行 | 有序字段 |
+|---|---|
+| fields | `(string name,i64 type,i64 flags,i64 ordinal)` |
+| parameters | `(i64 type,i64 mode)` |
+| variants | `(string name,i64 fieldBegin,i64 fieldCount)` |
+| nodes | `(i64 kind,i64 builtin,string module,string name,i64 nominalKind,i64 flags,i64 fieldBegin,i64 fieldCount,i64 argumentBegin,i64 argumentCount,i64 element,i64 parameterBegin,i64 parameterCount,i64 result,i64 variantBegin,i64 variantCount)` |
+
+各begin/count引用唯一对应平面表的精确区间；变体使用同一fields表。element/result缺省为-1；kind取唯一类型服务的类别，0表示builtin，此时builtin槽为其稳定标识，构造类型该槽为-1。字段ordinal保留声明中的原序，过滤字段不重编号。定义模块可描述私有字段；其他模块只得到普通可见字段及其可达类型。module是可重定位的逻辑声明身份。flags、参数mode和可见描述均不授予读取、写入、调用或构造权限。
+
+```xray @id=type-info-static-array
+export fn run()->i64 {
+    return comptime {
+        const info=typeInfo<Array<i64>>()
+        info.1[info.0].0
+    }
+}
+```
+
+该例结果为Array类别2。普通函数可用结构相同的Tuple别名接收完整事实，普通无源码Checked库及其私有helper可以处理之后定义的用户类型。完整TypeInfo也可作为comptime结果，经独立Source重放成为普通拥有式数据，前驱销毁后由正常Program/Instance读取。所有访问、替换、图遍历、物化和接收仍收费到原ledger，服从17.61每请求结果限额及其余原预算。描述不等于生成：Source显式授权、生成声明启动、普通JSON/Regex等完整消费者与全部FI/安全门仍独立承担，不因这些数据或生成器既有Checked状态取得免检资格。
+
 <!-- /xr-spec:cn -->
 
 <!-- xr-spec:en -->
@@ -1654,5 +1680,31 @@ Actual field operations use the current canonical instance, not only a declarati
 Specialized bindings retain original Source row/root/policy, using authentic Source provenance to verify ordered type substitution and every origin byte. They cannot lose a binding or carry replacement runtime policies. Lowered remaps the current target; CGen and Program independently compare complete bindings and origins. Checked wire29/semantic74 traverses actual function binding, implementation policy and complete policy/generated-origin data; old28/73 packets reject. The added function index and owned declaration table require Program ABI31; Value ABI24 and Call ABI29 are unchanged. SDK identity includes459 independently observed layout facts. Version labels never substitute complete receiving.
 
 This boundary implements internal common receiving and operation constraints. It does not claim Source TypeInfo, ordinary generators, JSON or other consumers are wired. Generated inputs still enter the ordinary complete second check from Built under17.63. All original compiler budgets, physical OOM, independent owners and complete FI/safety/provider gates remain.
+
+### 17.65 Owning static type descriptions as ordinary data
+
+An unshadowed `typeInfo<T>()` names core intrinsic7 and requires one explicit closed static type with zero value arguments. Source materializes ordinary Tuple, Array and String recipes through the sole canonical type/field description service. It adds no runtime reflection opcode, Value kind or evaluator. Open parameters and malformed arguments reject; ordinary same-name functions retain lexical binding. Closed generic fields use existing Source substitution, never an undeclared generic member capability.
+
+The result is `(root,nodes,fields,arguments,parameters,variants)`, a six-field Tuple whose final five fields are ordinary Arrays. Root is0; i64 type edges are local graph indices rather than cross-pool XIR type IDs. Each canonical type occurs once. Recursive class identity graphs use back-edges; invalid recursive value layouts still reject under ordinary type rules. Only reachable facts appear, without host addresses or physical paths.
+
+| Row | Ordered fields |
+|---|---|
+| fields | `(string name,i64 type,i64 flags,i64 ordinal)` |
+| parameters | `(i64 type,i64 mode)` |
+| variants | `(string name,i64 fieldBegin,i64 fieldCount)` |
+| nodes | `(i64 kind,i64 builtin,string module,string name,i64 nominalKind,i64 flags,i64 fieldBegin,i64 fieldCount,i64 argumentBegin,i64 argumentCount,i64 element,i64 parameterBegin,i64 parameterCount,i64 result,i64 variantBegin,i64 variantCount)` |
+
+Each begin/count names an exact span in its sole flat table; variants share the fields table. Absent element/result is-1. Kind follows the canonical service, with0 for a builtin whose stable ID occupies the builtin slot; constructed types use-1 there. Field ordinals retain declaration order across visibility filtering. A defining module may describe its private fields; other modules receive only ordinarily visible fields and their reachable types. Module is a relocatable logical declaration identity. Flags, parameter modes and visible descriptions grant no read, write, call or construction authority.
+
+```xray @id=type-info-static-array
+export fn run()->i64 {
+    return comptime {
+        const info=typeInfo<Array<i64>>()
+        info.1[info.0].0
+    }
+}
+```
+
+This returns Array kind2. Ordinary functions may receive complete facts through structurally identical Tuple aliases; a source-free Checked library and its private helper can process subsequently defined user types. A complete TypeInfo may also become a comptime result, replayed through independent Source construction as ordinary owned data and read by a normal Program/Instance after precursor death. Access, substitution, graph traversal, materialization and receiving charge the original ledger, including17.61 request-specific output ceilings and every other original budget. Facts do not constitute generation: Source authorization and generated-declaration startup, complete JSON/Regex consumers and full FI/safety qualification remain separate obligations. Neither these data nor a generator's prior Checked state grants a checking exemption.
 
 <!-- /xr-spec:en -->

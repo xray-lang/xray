@@ -28,3 +28,6 @@ XR_CORE_INTRINSIC(PRINT, 5, "print", OUTPUT, DIRECT_ONLY, VARIADIC_VALUES, 0, UI
                   OUTPUT_MAY_PANIC, NONE, NONE, PRINT_GROUP, OUTPUT_ALL, "grouped output")
 XR_CORE_INTRINSIC(LEN, 6, "len", LENGTH, DIRECT_ONLY, LENGTHABLE_VALUE, 1, 1, I64,
                   READS_VALUE, NONE, NONE, LENGTH, LENGTH_ALL, "value length query")
+/* Static description produces ordinary owned data and no operation rights. */
+XR_CORE_INTRINSIC(TYPE_INFO, 7, "typeInfo", TYPE_DESCRIPTION, DIRECT_ONLY, CLOSED_TYPE, 0, 0, TYPE_INFO,
+                  READS_TYPE, NONE, NONE, TYPE_INFO, STATIC_ALL, "static type description")

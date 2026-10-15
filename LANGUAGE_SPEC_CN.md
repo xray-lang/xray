@@ -7813,6 +7813,32 @@ compiler-private Source请求提供可选XrXirSourceComptimeLimits.output_bytes�
 
 该接点实现内部共同接收与操作约束，不表示语言层TypeInfo、普通生成器、JSON或其他消费者已经接线。生成输入仍从Built进入17.63的普通完整第二检查；所有原编译预算、物理OOM、独立owner及完整FI/安全/provider门保留。
 
+### 17.65 拥有式静态类型描述与普通数据
+
+未被普通声明遮蔽的`typeInfo<T>()`对应core intrinsic身份7，要求一个显式闭合静态类型和零值参数。它在Source中通过唯一canonical类型/字段描述服务物化普通Tuple、Array和String recipes；不增加运行期反射指令、Value种类或evaluator。开放类型参数和畸形实参拒绝，普通同名函数仍按词法绑定调用。闭合泛型字段使用已有Source类型替换，不能按具体成员补未声明的泛型约束。
+
+返回值是`(root,nodes,fields,arguments,parameters,variants)`六元Tuple，后五项为普通Array。root为0，类型边是本图的i64编号，不是跨pool的XIR类型ID。相同canonical类型只登记一次；递归class身份图使用回边，非法递归值布局仍按普通类型规则拒绝。仅包含可达事实，不返回宿主地址或物理路径。
+
+| 行 | 有序字段 |
+|---|---|
+| fields | `(string name,i64 type,i64 flags,i64 ordinal)` |
+| parameters | `(i64 type,i64 mode)` |
+| variants | `(string name,i64 fieldBegin,i64 fieldCount)` |
+| nodes | `(i64 kind,i64 builtin,string module,string name,i64 nominalKind,i64 flags,i64 fieldBegin,i64 fieldCount,i64 argumentBegin,i64 argumentCount,i64 element,i64 parameterBegin,i64 parameterCount,i64 result,i64 variantBegin,i64 variantCount)` |
+
+各begin/count引用唯一对应平面表的精确区间；变体使用同一fields表。element/result缺省为-1；kind取唯一类型服务的类别，0表示builtin，此时builtin槽为其稳定标识，构造类型该槽为-1。字段ordinal保留声明中的原序，过滤字段不重编号。定义模块可描述私有字段；其他模块只得到普通可见字段及其可达类型。module是可重定位的逻辑声明身份。flags、参数mode和可见描述均不授予读取、写入、调用或构造权限。
+
+```xray
+export fn run()->i64 {
+    return comptime {
+        const info=typeInfo<Array<i64>>()
+        info.1[info.0].0
+    }
+}
+```
+
+该例结果为Array类别2。普通函数可用结构相同的Tuple别名接收完整事实，普通无源码Checked库及其私有helper可以处理之后定义的用户类型。完整TypeInfo也可作为comptime结果，经独立Source重放成为普通拥有式数据，前驱销毁后由正常Program/Instance读取。所有访问、替换、图遍历、物化和接收仍收费到原ledger，服从17.61每请求结果限额及其余原预算。描述不等于生成：Source显式授权、生成声明启动、普通JSON/Regex等完整消费者与全部FI/安全门仍独立承担，不因这些数据或生成器既有Checked状态取得免检资格。
+
 ---
 
 ## 18. 错误码 (Error Codes)

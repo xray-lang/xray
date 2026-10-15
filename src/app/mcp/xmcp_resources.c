@@ -50,7 +50,7 @@ static const XmcpResourceTemplateDef TEMPLATES[] = {
      "Topics: variables, types, functions, control_flow, class, struct, "
      "interface, enum, generics, collections, string, channel, coroutine, "
      "concurrency_rules, modules, testing, operators, builtin_functions, result, "
-     "narrowing.",
+     "narrowing, type_info.",
      "text/markdown"},
     {"xray://stdlib/{module}", "Xray Stdlib Module",
      "Detailed information about a specific standard library module.", "text/markdown"},

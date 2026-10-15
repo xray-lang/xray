@@ -123,7 +123,8 @@ const XrCoreIntrinsicDesc *xr_core_intrinsic_by_source_name(const char *name, si
 }
 
 static bool descriptor_contract_is_valid(const XrCoreIntrinsicDesc *desc) {
-    if (!desc || desc->result_shape != (desc->id == XR_CORE_BUILTIN_LEN ?
+    if (!desc || desc->result_shape != (desc->id == XR_CORE_BUILTIN_TYPE_INFO ?
+            XR_CORE_INTRINSIC_RESULT_SHAPE_TYPE_INFO : desc->id == XR_CORE_BUILTIN_LEN ?
             XR_CORE_INTRINSIC_RESULT_SHAPE_I64 : XR_CORE_INTRINSIC_RESULT_SHAPE_UNIT))
         return false;
     switch (desc->semantic_op) {
@@ -186,6 +187,15 @@ static bool descriptor_contract_is_valid(const XrCoreIntrinsicDesc *desc) {
                    desc->flow_rule == XR_CORE_INTRINSIC_FLOW_NONE &&
                    desc->expected_failure_channel == XR_CORE_INTRINSIC_FAILURE_CHANNEL_NONE &&
                    desc->target_applicability == XR_CORE_INTRINSIC_TARGET_LENGTH_ALL;
+        case XR_CORE_INTRINSIC_SEMANTIC_OP_TYPE_INFO:
+            return desc->id == XR_CORE_BUILTIN_TYPE_INFO && strcmp(desc->source_name,"typeInfo") == 0 &&
+                   desc->category == XR_CORE_INTRINSIC_CATEGORY_TYPE_DESCRIPTION &&
+                   desc->parameter_shape == XR_CORE_INTRINSIC_PARAMETER_SHAPE_CLOSED_TYPE &&
+                   desc->min_arity == 0 && desc->max_arity == 0 &&
+                   desc->effect == XR_CORE_INTRINSIC_EFFECT_READS_TYPE &&
+                   desc->flow_rule == XR_CORE_INTRINSIC_FLOW_NONE &&
+                   desc->expected_failure_channel == XR_CORE_INTRINSIC_FAILURE_CHANNEL_NONE &&
+                   desc->target_applicability == XR_CORE_INTRINSIC_TARGET_STATIC_ALL;
         default:
             return false;
     }

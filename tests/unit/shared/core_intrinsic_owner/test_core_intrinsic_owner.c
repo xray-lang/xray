@@ -88,16 +88,17 @@ static void fixed_read_counts(void) {
     check_case("assertPanics", 12, XR_CORE_BUILTIN_ASSERT_PANICS, 13 + 14 + 14 + 25);
     check_case("print", 5, XR_CORE_BUILTIN_PRINT, 4 * 2 + 11);
     check_case("len", 3, XR_CORE_BUILTIN_LEN, 5 * 2 + 7);
-    check_case("", 0, XR_CORE_BUILTIN_NONE, 6);
-    check_case("x", 1, XR_CORE_BUILTIN_NONE, 6 * 2);
-    check_case("asser", 5, XR_CORE_BUILTIN_NONE, 4 * 11 + 2 * 2);
-    check_case("assertP", 7, XR_CORE_BUILTIN_NONE, 13 + 14 + 14 + 15 + 4);
-    check_case("assert\0", 7, XR_CORE_BUILTIN_NONE, 13 + 3 * 14 + 4);
-    check_case("assertPanicsX", 13, XR_CORE_BUILTIN_NONE, 13 + 14 + 14 + 25 + 4);
+    check_case("typeInfo", 8, XR_CORE_BUILTIN_TYPE_INFO, 6 * 2 + 17);
+    check_case("", 0, XR_CORE_BUILTIN_NONE, 7);
+    check_case("x", 1, XR_CORE_BUILTIN_NONE, 7 * 2);
+    check_case("asser", 5, XR_CORE_BUILTIN_NONE, 4 * 11 + 3 * 2);
+    check_case("assertP", 7, XR_CORE_BUILTIN_NONE, 13 + 14 + 14 + 15 + 6);
+    check_case("assert\0", 7, XR_CORE_BUILTIN_NONE, 13 + 3 * 14 + 6);
+    check_case("assertPanicsX", 13, XR_CORE_BUILTIN_NONE, 13 + 14 + 14 + 25 + 6);
     char long_name[4096];
     memset(long_name, 'x', sizeof(long_name));
     memcpy(long_name, "assertPanics", 12);
-    check_case(long_name, sizeof(long_name), XR_CORE_BUILTIN_NONE, 70);
+    check_case(long_name, sizeof(long_name), XR_CORE_BUILTIN_NONE, 72);
 }
 
 static void generated_registry(void) {
@@ -113,7 +114,7 @@ static void generated_registry(void) {
             strlen(row->source_name), &output) == XR_CORE_INTRINSIC_QUERY_OK);
         CHECK(output == row && xr_core_intrinsic_by_id(row->id) == row);
     }
-    CHECK(work.calls == 13 + 36 + 52 + 66 + 19 + 17);
+    CHECK(work.calls == 13 + 36 + 52 + 66 + 19 + 17 + 29);
     CHECK(xr_core_intrinsic_at(xr_core_intrinsic_count()) == NULL);
     CHECK(xr_core_intrinsic_by_source_name(NULL, SIZE_MAX) == NULL);
     xr_compile_resources_release(work.resources);
@@ -167,9 +168,9 @@ static void guarded_input(void) {
     check_case(name, 12, XR_CORE_BUILTIN_ASSERT_PANICS, 66);
     /* No candidate is longer than twelve bytes, so a huge input length does
      * not authorize reading an input terminator or scanning the unused tail. */
-    check_case(name, SIZE_MAX, XR_CORE_BUILTIN_NONE, 70);
+    check_case(name, SIZE_MAX, XR_CORE_BUILTIN_NONE, 72);
     const char *inaccessible = (const char *)pages + page_size;
-    check_case(inaccessible, 0, XR_CORE_BUILTIN_NONE, 6);
+    check_case(inaccessible, 0, XR_CORE_BUILTIN_NONE, 7);
     for (uint64_t available = 0; available <= 1; available++) {
         QueryWork work = new_work(available);
         const XrCoreIntrinsicDesc *output = &sentinel;

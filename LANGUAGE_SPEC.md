@@ -7976,6 +7976,32 @@ Specialized bindings retain original Source row/root/policy, using authentic Sou
 
 This boundary implements internal common receiving and operation constraints. It does not claim Source TypeInfo, ordinary generators, JSON or other consumers are wired. Generated inputs still enter the ordinary complete second check from Built under17.63. All original compiler budgets, physical OOM, independent owners and complete FI/safety/provider gates remain.
 
+### 17.65 Owning static type descriptions as ordinary data
+
+An unshadowed `typeInfo<T>()` names core intrinsic7 and requires one explicit closed static type with zero value arguments. Source materializes ordinary Tuple, Array and String recipes through the sole canonical type/field description service. It adds no runtime reflection opcode, Value kind or evaluator. Open parameters and malformed arguments reject; ordinary same-name functions retain lexical binding. Closed generic fields use existing Source substitution, never an undeclared generic member capability.
+
+The result is `(root,nodes,fields,arguments,parameters,variants)`, a six-field Tuple whose final five fields are ordinary Arrays. Root is0; i64 type edges are local graph indices rather than cross-pool XIR type IDs. Each canonical type occurs once. Recursive class identity graphs use back-edges; invalid recursive value layouts still reject under ordinary type rules. Only reachable facts appear, without host addresses or physical paths.
+
+| Row | Ordered fields |
+|---|---|
+| fields | `(string name,i64 type,i64 flags,i64 ordinal)` |
+| parameters | `(i64 type,i64 mode)` |
+| variants | `(string name,i64 fieldBegin,i64 fieldCount)` |
+| nodes | `(i64 kind,i64 builtin,string module,string name,i64 nominalKind,i64 flags,i64 fieldBegin,i64 fieldCount,i64 argumentBegin,i64 argumentCount,i64 element,i64 parameterBegin,i64 parameterCount,i64 result,i64 variantBegin,i64 variantCount)` |
+
+Each begin/count names an exact span in its sole flat table; variants share the fields table. Absent element/result is-1. Kind follows the canonical service, with0 for a builtin whose stable ID occupies the builtin slot; constructed types use-1 there. Field ordinals retain declaration order across visibility filtering. A defining module may describe its private fields; other modules receive only ordinarily visible fields and their reachable types. Module is a relocatable logical declaration identity. Flags, parameter modes and visible descriptions grant no read, write, call or construction authority.
+
+```xray
+export fn run()->i64 {
+    return comptime {
+        const info=typeInfo<Array<i64>>()
+        info.1[info.0].0
+    }
+}
+```
+
+This returns Array kind2. Ordinary functions may receive complete facts through structurally identical Tuple aliases; a source-free Checked library and its private helper can process subsequently defined user types. A complete TypeInfo may also become a comptime result, replayed through independent Source construction as ordinary owned data and read by a normal Program/Instance after precursor death. Access, substitution, graph traversal, materialization and receiving charge the original ledger, including17.61 request-specific output ceilings and every other original budget. Facts do not constitute generation: Source authorization and generated-declaration startup, complete JSON/Regex consumers and full FI/safety qualification remain separate obligations. Neither these data nor a generator's prior Checked state grants a checking exemption.
+
 ---
 
 ## 18. Error Codes
