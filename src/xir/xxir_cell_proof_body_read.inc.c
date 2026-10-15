@@ -48,12 +48,12 @@ static XrXirStatus cell_proof_raw_shape(const XrXirCompileContext *context,const
 }
 static XrXirCellProofBodyRead cell_proof_raw_body(const XrXirCompileContext *context,const XrXirModule *module) {
     return (XrXirCellProofBodyRead){xir_metadata_domain_from_module(module),context->resources,module,
-        cell_proof_raw_head,cell_proof_raw_instruction,cell_proof_raw_type,cell_proof_raw_shape,NULL,NULL,NULL};
+        cell_proof_raw_head,cell_proof_raw_instruction,cell_proof_raw_type,cell_proof_raw_shape,NULL,NULL,NULL,NULL};
 }
 static bool cell_proof_body_valid(const XrXirCompileContext *context,const XrXirCellProofBodyRead *body) {
     return xir_compile_context_valid(context) && body && body->resources==context->resources && body->owner &&
         body->head && body->instruction && body->type && body->shape &&
-        (!!body->range==!!body->range_row) &&
+        (!!body->range==!!body->range_row) && (!!body->range==!!body->range_shape) &&
         (!body->domain.types || !body->domain.types->count || body->domain.types->nodes);
 }
 static bool cell_proof_head(CellProofBuild *build,uint32_t f,XrXirCellProofBodyHead *output) {
@@ -117,6 +117,26 @@ static const XrXirInstruction *cell_proof_run_operation(CellProofBuild *build,co
         cell_proof_error(build,f,i,XR_XIR_BAD_STRUCTURE);return NULL;
     }
     return storage;
+}
+
+/* A shape contains only actual fields read from this complete owned run. */
+static bool cell_proof_run_shape(CellProofBuild *build,const XrXirCellProofRunCursor *cursor,
+    const XrXirCellProofRun *run,uint32_t i,XrXirCellProofInstructionShape *output) {
+    uint32_t f=cursor?cursor->function:UINT32_MAX;
+    if (build->status!=XR_XIR_OK) return false;
+    if (!cursor || !run || !output || i<run->first || i-run->first>=run->count ||
+        cursor->next!=run->first+run->count || !build->body->range_shape)
+        return cell_proof_error(build,f,i,XR_XIR_BAD_STRUCTURE);
+    if (!cell_proof_work(build,sizeof(*output))) return false;
+    if (i==run->first) {
+        *output=(XrXirCellProofInstructionShape){run->operation.op,run->operation.type};return true;
+    }
+    XrXirCellProofInstructionShape shape;
+    XrXirStatus status=build->body->range_shape(build->context,build->body,cursor,run->first,i,&shape);
+    if (status!=XR_XIR_OK) return cell_proof_error(build,f,i,status);
+    if (shape.op<=XR_XIR_INVALID || shape.op>=XR_XIR_OP_COUNT)
+        return cell_proof_error(build,f,i,XR_XIR_BAD_STRUCTURE);
+    *output=shape;return true;
 }
 
 static bool cell_proof_shape(CellProofBuild *build,uint32_t f,uint32_t i,

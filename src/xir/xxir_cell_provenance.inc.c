@@ -231,9 +231,9 @@ static bool cell_proof_inventory_storage(CellProofBuild *build,uint64_t values) 
                 if (!cell_proof_inventory_store(build,f,head.parameter_count+run.first,run.count,run.operation.type))
                     return false;
             } else for (uint32_t i=run.first;i-run.first<run.count;++i) {
-                XrXirInstruction operation;const XrXirInstruction *op=
-                    cell_proof_run_operation(build,&cursor,&run,i,&operation);
-                if (!op || !cell_proof_inventory_store(build,f,head.parameter_count+i,1,op->type)) return false;
+                XrXirCellProofInstructionShape shape;
+                if (!cell_proof_run_shape(build,&cursor,&run,i,&shape) ||
+                    !cell_proof_inventory_store(build,f,head.parameter_count+i,1,shape.type)) return false;
             }
         }
     }
@@ -258,13 +258,13 @@ static bool cell_proof_inventory_run(CellProofBuild *build,const XrXirCellProofR
         }
         return true;
     }
-    /* Complete range rows carry the actual canonical type word. A second
+    /* Current range shapes carry the actual canonical type word. A second
      * random lookup would decode that same physical word again. */
     for (uint32_t i=run->first;i-run->first<run->count;++i) {
         if (!cell_proof_work(build,3)) return false;
-        XrXirInstruction operation;const XrXirInstruction *op=cell_proof_run_operation(build,cursor,run,i,&operation);
-        if (!op) return false;
-        if (!cell_proof_inventory_instruction(build,f,i,op->type,op->op,tracked)) return false;
+        XrXirCellProofInstructionShape shape;
+        if (!cell_proof_run_shape(build,cursor,run,i,&shape)) return false;
+        if (!cell_proof_inventory_instruction(build,f,i,shape.type,shape.op,tracked)) return false;
     }
     return true;
 }
@@ -337,10 +337,12 @@ static bool cell_proof_inventory(CellProofBuild *build) {
 }
 
 
+static bool cell_proof_role_opcode(XrXirOp op) {
+    return op==XR_XIR_FUNCTION_REF || op==XR_XIR_CALL || op==XR_XIR_INVOKE || op==XR_XIR_CLEANUP_REGISTER;
+}
 static bool cell_proof_role_row(CellProofBuild *build,uint32_t f,uint32_t i,const XrXirInstruction *op) {
     XrXirCellProvenance *proof=build->proof;const XirMetadataDomain *module=&build->body->domain;
-    if (op->op!=XR_XIR_FUNCTION_REF && op->op!=XR_XIR_CALL &&
-        op->op!=XR_XIR_INVOKE && op->op!=XR_XIR_CLEANUP_REGISTER) return true;
+    if (!cell_proof_role_opcode(op->op)) return true;
     uint32_t target = (uint32_t)op->immediate;
     if (target >= module->function_count) return cell_proof_error(build,f,i,XR_XIR_BAD_STRUCTURE);
     CellProofFunction *callee = &proof->functions[target];
@@ -379,8 +381,7 @@ static bool cell_proof_roles_range(CellProofBuild *build,uint32_t f,
     if (!build->body->range || run->varying&UINT32_C(1)) return true;
     if (!cell_proof_work(build,6)) return false;
     const XrXirInstruction *op=&run->operation;
-    if (op->op!=XR_XIR_FUNCTION_REF && op->op!=XR_XIR_CALL &&
-        op->op!=XR_XIR_INVOKE && op->op!=XR_XIR_CLEANUP_REGISTER) {*handled=true;return true;}
+    if (!cell_proof_role_opcode(op->op)) {*handled=true;return true;}
     if (op->op==XR_XIR_FUNCTION_REF || run->varying&UINT32_C(200) || op->args[1]) return true;
     if (!cell_proof_role_row(build,f,run->first,op)) return false;
     *handled=true;return true;
@@ -410,6 +411,11 @@ static bool cell_proof_roles(CellProofBuild *build) {
             if (handled) continue;
             for (uint32_t i=run.first;i-run.first<run.count;++i) {
                 if (!cell_proof_work(build,1)) return false;
+                if (run.varying&UINT32_C(1)) {
+                    XrXirCellProofInstructionShape shape;
+                    if (!cell_proof_run_shape(build,&cursor,&run,i,&shape)) return false;
+                    if (!cell_proof_role_opcode(shape.op)) continue;
+                }
                 XrXirInstruction operation;const XrXirInstruction *op=
                     cell_proof_run_operation(build,&cursor,&run,i,&operation);
                 if (!op || !cell_proof_role_row(build,f,i,op)) return false;

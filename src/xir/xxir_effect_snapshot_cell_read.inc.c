@@ -120,6 +120,9 @@ static XrXirStatus effect_cell_body_span(const XrXirCompileContext *work,const v
 /* Only this complete owned adapter can expose a canonical range. Callback
  * identity selects layout and rejects mixed requests; it grants no authority.
  * Every run decodes all ten first-row words through the sole physical reader. */
+static XrXirStatus effect_cell_body_range_shape(const XrXirCompileContext *work,
+    const XrXirCellProofBodyRead *read,const XrXirCellProofRunCursor *cursor,
+    uint32_t first,uint32_t i,XrXirCellProofInstructionShape *output);
 static XrXirStatus effect_cell_body_range_row(const XrXirCompileContext *work,
     const XrXirCellProofBodyRead *read,const XrXirCellProofRunCursor *cursor,
     uint32_t first,uint32_t i,XrXirInstruction *output);
@@ -128,7 +131,8 @@ static XrXirStatus effect_cell_body_range(const XrXirCompileContext *work,
     if (!xir_compile_context_valid(work) || !read || !cursor || !output || read->resources!=work->resources ||
         read->head!=effect_cell_body_head || read->instruction!=effect_cell_body_instruction ||
         read->type!=effect_cell_body_type || read->shape!=effect_cell_body_shape ||
-        read->range!=effect_cell_body_range || read->range_row!=effect_cell_body_range_row)
+        read->range!=effect_cell_body_range || read->range_row!=effect_cell_body_range_row ||
+        read->range_shape!=effect_cell_body_range_shape)
         return XR_XIR_BAD_STRUCTURE;
     const EffectCellBodyAdapter *adapter=read->owner;
     if (!effect_cell_body_adapter_valid(work,adapter) ||
@@ -159,13 +163,14 @@ static XrXirStatus effect_cell_body_range(const XrXirCompileContext *work,
 
 /* The completed range cursor is a location hint, not a retained decoded row.
  * Current owner, domain, run, neighbor and EOF checks precede every full decode. */
-static XrXirStatus effect_cell_body_range_row(const XrXirCompileContext *work,
+static XrXirStatus effect_cell_body_range_ref(const XrXirCompileContext *work,
     const XrXirCellProofBodyRead *read,const XrXirCellProofRunCursor *cursor,
-    uint32_t first,uint32_t i,XrXirInstruction *output) {
+    uint32_t first,uint32_t i,const EffectBodyRun **output) {
     if (!xir_compile_context_valid(work) || !read || !cursor || !output || read->resources!=work->resources ||
         read->head!=effect_cell_body_head || read->instruction!=effect_cell_body_instruction ||
         read->type!=effect_cell_body_type || read->shape!=effect_cell_body_shape ||
-        read->range!=effect_cell_body_range || read->range_row!=effect_cell_body_range_row)
+        read->range!=effect_cell_body_range || read->range_row!=effect_cell_body_range_row ||
+        read->range_shape!=effect_cell_body_range_shape)
         return XR_XIR_BAD_STRUCTURE;
     const EffectCellBodyAdapter *adapter=read->owner;
     if (!effect_cell_body_adapter_valid(work,adapter) ||
@@ -188,7 +193,34 @@ static XrXirStatus effect_cell_body_range_row(const XrXirCompileContext *work,
     if (status!=XR_XIR_OK) return status;
     if (ref->first!=first || ref->count!=cursor->next-first || position.run!=cursor->run-1)
         return XR_XIR_BAD_STRUCTURE;
+    *output=ref;return XR_XIR_OK;
+}
+
+static XrXirStatus effect_cell_body_range_row(const XrXirCompileContext *work,
+    const XrXirCellProofBodyRead *read,const XrXirCellProofRunCursor *cursor,
+    uint32_t first,uint32_t i,XrXirInstruction *output) {
+    if (!output) return XR_XIR_BAD_STRUCTURE;
+    const EffectBodyRun *ref;
+    XrXirStatus status=effect_cell_body_range_ref(work,read,cursor,first,i,&ref);
+    if (status!=XR_XIR_OK) return status;
+    const EffectCellBodyAdapter *adapter=read->owner;
     return effect_body_instruction_ref_value(&adapter->request.read,ref,i,output);
+}
+static XrXirStatus effect_cell_body_range_shape(const XrXirCompileContext *work,
+    const XrXirCellProofBodyRead *read,const XrXirCellProofRunCursor *cursor,
+    uint32_t first,uint32_t i,XrXirCellProofInstructionShape *output) {
+    if (!output) return XR_XIR_BAD_STRUCTURE;
+    const EffectBodyRun *ref;
+    XrXirStatus status=effect_cell_body_range_ref(work,read,cursor,first,i,&ref);
+    if (status!=XR_XIR_OK) return status;
+    const EffectCellBodyAdapter *adapter=read->owner;uint32_t opcode,type;
+    status=effect_body_run_word(&adapter->request.read,ref,i,0,&opcode);
+    if (status!=XR_XIR_OK) return status;
+    status=effect_body_run_word(&adapter->request.read,ref,i,1,&type);
+    if (status!=XR_XIR_OK) return status;
+    if (opcode<=XR_XIR_INVALID || opcode>=XR_XIR_OP_COUNT) return XR_XIR_BAD_STRUCTURE;
+    if (!xir_compile_work(work,sizeof(*output))) return XR_XIR_BUDGET;
+    *output=(XrXirCellProofInstructionShape){(XrXirOp)opcode,(XrXirType)type};return XR_XIR_OK;
 }
 
 static XrXirStatus effect_cell_body_bind(const XrXirCompileContext *work,
@@ -203,7 +235,8 @@ static XrXirStatus effect_cell_body_bind(const XrXirCompileContext *work,
         effect_cell_body_head,effect_cell_body_instruction,effect_cell_body_type,effect_cell_body_shape,
         request->head==effect_body_owned_head?effect_cell_body_span:NULL,
         request->head==effect_body_owned_head?effect_cell_body_range:NULL,
-        request->head==effect_body_owned_head?effect_cell_body_range_row:NULL};return XR_XIR_OK;
+        request->head==effect_body_owned_head?effect_cell_body_range_row:NULL,
+        request->head==effect_body_owned_head?effect_cell_body_range_shape:NULL};return XR_XIR_OK;
 }
 /* Getter identity selects only the genuine storage layout. It supplies no
  * permission fact; full admission and independent source matching remain
