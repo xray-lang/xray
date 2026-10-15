@@ -6297,7 +6297,7 @@ Checked Source 的整数方法准入由 `stdlib/types/i64.xr` 的固定声明身
 
 当前 Checked Source 以固定 f64 声明身份及完整 READ/signature/allocation/failure/ownership 契约准入 `abs`、`toString`、`toI64`、`floor`、`ceil`、`round`、`isNaN`，并生成普通已有 XIR。`abs` 对零返回正零，NaN 结果遵循普通浮点转换/取反的 canonical 规则。`toI64` 向零截断；`floor/ceil` 向负/正无穷取整；`round` 最近取整且半值远离零，使用精确小数差比较而非给输入加减0.5。NaN、Infinity及无法转换为i64的输入沿共同数值转换发出E0422范围panic，不伪造值或 typed Error。除已有 f32 文本化外，这些准入方法当前要求 f64 接收者。`parse/tryParse/toFixed/sqrt/pow` 五项声明仍无 Checked 操作准入，完整浮点方法族未获资格。
 
-接收编译器Float执行接口后，上述非文本化的六项f64方法可在原有界CTFE路径执行：既有整数IEEE内核决定位级结果，每条浮点操作先支付1024 work，不依赖宿主FPU、VM或native执行。数值转换越界保范围拒绝；普通用户模块/闭合泛型可调用这些治理方法。Tuple常量按真实字段逻辑字节接收（Unit为0），当前Source输出帽仍为8字节，不扩大到类/record或任意拥有图；完整资源/全族资格另证。数值TO_STRING及剩余五项方法仍不因Float/字符串执行接口而自动准入。
+接收编译器Float执行接口后，上述非文本化的六项f64方法可在原有界CTFE路径执行：既有整数IEEE内核决定位级结果，每条浮点操作先支付1024 work，不依赖宿主FPU、VM或native执行。数值转换越界保范围拒绝；普通用户模块/闭合泛型可调用这些治理方法。Tuple常量按真实字段逻辑字节接收（Unit为0），当前Source输出帽仍为8字节，不扩大到类/record或任意拥有图；完整资源/全族资格另证。接收共同标量文本接口后，bool、所有整数宽度、Rune及f32/f64的TO_STRING也可在同一有界CTFE账本执行；唯一既有标量文本内核决定位串和最短往返文本，预付完整formatter work/frame上界，真实String复制仍收费。超过8字节的内部文本可比较，但导出仍拒绝。当前Array join已改为CELL_STRING_APPEND路径，该opcode尚未准入CTFE，String74组合中的join正例仍拒绝，不能用标量文本成功替代其完整资格；剩余未治理的方法、未知native、I/O及String追加opcode不因此准入。
 
 ### 14.3 `BigInt` 方法
 
@@ -6356,7 +6356,7 @@ bool 文本方法由其固定治理声明准入，返回独立拥有的 string�
 
 Checked Source 的 `toString()` 与 `repeat(count:i64)` 由固定 string 声明身份、完整 READ 签名及操作契约准入。`toString` 通过普通 COPY 返回独立持有的同一字符串值，不分配，但保留可能失败。`repeat` 对非正次数返回空串，按完整 UTF-8 字节重复，保留非 BMP 与内嵌 NUL；接收者在次数实参之前各求值一次并保持值快照。它用已有 Cell、位运算及 CONCAT 生成至多64轮的普通XIR倍增循环；空接收者立即退出，不对最大次数做线性遍历，也不在最高有效位之后做多余倍增。分配、持有、字节/工作限制沿共同失败路径，不发明替代值。当前共七项string方法具有治理准入，其余声明、视图/迭代器和拥有型CTFE仍未获完整资格。
 
-接收编译Domain与String执行接口后，String参数/结果、COPY、CONCAT、私有String Cell和上述七方法可由同一有界CTFE路径执行，源消费者把拥有结果复制为独立字面值。Unicode/NUL搜索和比较支付原compiler ledger的保守工作上界，保留范围/资源错误、步数/深度/输出帽，不借VM/Instance或native执行冒充CTFE。这是当前开发准入，完整资源/全库资格仍须另证；f64与rune数值文本化的TO_STRING操作不因String拥有准入而自动开放。
+接收编译Domain与String执行接口后，String参数/结果、COPY、CONCAT、私有String Cell和上述七方法可由同一有界CTFE路径执行，源消费者把拥有结果复制为独立字面值。Unicode/NUL搜索和比较支付原compiler ledger的保守工作上界，保留范围/资源错误、步数/深度/输出帽，不借VM/Instance或native执行冒充CTFE。共同标量文本准入另有完整formatter预付与拥有结果接收，不从String类型或操作名推断权限。这些是当前开发准入，完整资源/全库资格仍须另证。
 
 普通 String `+=` 的受认证 root 追加路径保留已保存值的 COW 快照、完整 Unicode/NUL 字节、自追加和原有限 Domain 的失败清理。只有足以证明 RHS 不会重绑定接收者的语句才使用 `CELL_STRING_APPEND`；调用、getter 以及用作表达式的复合赋值保留原先读旧值、完成 RHS 后写回的求值顺序。单标量模板可直接追加其 i64/u64、bool、rune 或浮点文本，不先创建临时 String；这不授予额外类型、成员或 root 权限。该操作使用 semantic74，旧 semantic73 包拒绝，不保留双路径协议；它当前仍不属于已准入 CTFE opcode，也不意味着库私有 var、完整 StringBuilder 替代性能或全字符串族已获资格。
 
