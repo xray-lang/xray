@@ -9,6 +9,7 @@
 #define main small_runs_retained_original_main
 #include "test_xir_root_conditional_helpers.c"
 #undef main
+#include "xir_primitive_root_run_cases.h"
 
 static void small_runs_reject(const EffectBodyRead *read,const EffectBodyFunction *function,uint32_t damaged) {
     for (uint32_t i=0;i<function->instruction_count;++i) {
@@ -100,6 +101,10 @@ static void small_runs_case(uint32_t runs) {
 
 int main(void) {
     for (uint32_t runs=1;runs<=5;++runs) small_runs_case(runs);
+    for (uint32_t mode=0;mode<2;++mode) {
+        primitive_root_case(mode,false);primitive_root_case(mode,true);
+    }
     puts("DIRECTORY_ROWS owned runs1..5, every endpoint/interior/neighbor, EOF and failed outputs, physical0 PASS");
+    puts("PRIMITIVE_ROOT owned ranges, real slots and initializer, unknown/varying opcode, all columns, EOF and physical0 PASS");
     return 0;
 }
