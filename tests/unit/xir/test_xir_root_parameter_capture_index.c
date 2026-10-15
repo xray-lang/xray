@@ -112,7 +112,8 @@ static XrXirStatus capture_index_order(const XrXirCompileContext *c, const XrXir
 
 static void capture_index_facts(const XrXirEffects *effects, bool contracts) {
     for (uint32_t f=0;f<7;++f) {
-        const XrXirRootEffects *root=xr_xir_effects_root(effects,f);
+        XrXirEffectFacts root_read=xr_xir_effects_read(effects,f);
+        const XrXirRootEffects *root=(root_read.status==XR_XIR_OK?&root_read.root:NULL);
         CHECK(root && root->requires_root==(f>=5) && root->unresolved==(f>=1 && f<=3));
         if (!contracts) continue;
         const XrXirFunctionEffectContract *contract=xir_effects_contract(effects,f);CHECK(contract);

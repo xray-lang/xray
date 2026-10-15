@@ -180,7 +180,8 @@ static void rci_shape(const XrXirArtifact *artifact, const RootCaptureCase *prob
     CHECK(proof);
     XrXirEffects *effects=NULL;
     CHECK(xr_xir_compile_effects_analyze(artifact,&effects)==XR_XIR_OK && effects);
-    const XrXirRootEffects *facts=xr_xir_effects_root(effects,factory);
+    XrXirEffectFacts facts_read=xr_xir_effects_read(effects,factory);
+    const XrXirRootEffects *facts=(facts_read.status==XR_XIR_OK?&facts_read.root:NULL);
     CHECK(facts && facts->requires_root==(probe->invoke && !!(probe->closure_flags&4)) &&
         facts->unresolved==(probe->invoke && !!(probe->closure_flags&8)));
     xr_xir_compile_effects_free(effects);

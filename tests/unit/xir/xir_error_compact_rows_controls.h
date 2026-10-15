@@ -81,10 +81,10 @@ static void pc_compact_bulk(void) {
     XrXirCompileContext c=pc_owner(pc_caps());uint64_t baseline=pc_stats(&c).live_bytes;
     XrXirEffects e={0};EffectTerms terms={0};ErrorFlow flow={0};flow.remaining=&c;
     pc_private_begin(&c,&f,&e,&terms,&flow);uint64_t before=pc_stats(&c).work;
-    CHECK(error_function(&flow,1)==XR_XIR_OK && e.errors[1]==4);
+    CHECK(error_function(&flow,1)==XR_XIR_OK && e.outcomes_work.errors[1]==4);
     CHECK(pc_stats(&c).work-before<UINT64_C(25000));
     CHECK(flow.values==545 && flow.active_count==1 && flow.active[0]==512);
-    CHECK(flow.stride==1 && e.words==1 && flow.storage_capacity==4684);
+    CHECK(flow.stride==1 && e.outcomes_work.words==1 && flow.storage_capacity==4684);
     CHECK(flow.zero[0]==0 && flow.zero!=flow.work && flow.zero!=flow.snapshot);
     for (uint32_t v=0;v<545;++v) {
         CHECK(flow.slots[v]==(v==512 ? 0u : UINT32_MAX));
@@ -103,9 +103,9 @@ static void pc_compact_zero_private(void) {
         EdgeFixture f;pc_compact_zero_fixture(&f,branch!=0);
         XrXirCompileContext c=pc_owner(pc_caps());uint64_t baseline=pc_stats(&c).live_bytes;
         XrXirEffects e={0};EffectTerms terms={0};ErrorFlow flow={0};flow.remaining=&c;
-        pc_private_begin(&c,&f,&e,&terms,&flow);e.errors[2]=8;
-        CHECK(error_function(&flow,1)==XR_XIR_OK && e.errors[1]==8);
-        CHECK(!flow.active_count && flow.stride==1 && e.words==1 && flow.zero[0]==0);
+        pc_private_begin(&c,&f,&e,&terms,&flow);e.outcomes_work.errors[2]=8;
+        CHECK(error_function(&flow,1)==XR_XIR_OK && e.outcomes_work.errors[1]==8);
+        CHECK(!flow.active_count && flow.stride==1 && e.outcomes_work.words==1 && flow.zero[0]==0);
         CHECK(flow.storage_capacity==(branch ? 99u : 57u));
         CHECK(flow.zero!=flow.snapshot && flow.zero!=flow.work && flow.snapshot[0]==8);
         CHECK(flow.work[0]==0 && flow.states[0]==0);
@@ -125,8 +125,8 @@ static void pc_compact_two_words(void) {
         uint64_t baseline=pc_stats(&c).live_bytes;
         XrXirEffects e={0};EffectTerms terms={0};ErrorFlow flow={0};flow.remaining=&c;
         pc_private_begin(&c,&f,&e,&terms,&flow);
-        CHECK(error_function(&flow,1)==XR_XIR_OK && e.atom_count==70 && e.words==2);
-        CHECK(e.errors[2]==0 && e.errors[3]==1 && flow.active_count==1 && flow.active[0]==512);
+        CHECK(error_function(&flow,1)==XR_XIR_OK && e.outcomes_work.atom_count==70 && e.outcomes_work.words==2);
+        CHECK(e.outcomes_work.errors[2]==0 && e.outcomes_work.errors[3]==1 && flow.active_count==1 && flow.active[0]==512);
         CHECK(flow.stride==2 && flow.storage_capacity==4972);
         CHECK(flow.zero[0]==0 && flow.zero[1]==0 && error_read(&flow,flow.work,0)==flow.zero);
         uint64_t *dest=flow.states+(size_t)30*flow.stride;
@@ -155,15 +155,15 @@ static void pc_compact_reuse(void) {
     uint8_t *storage=flow.storage;size_t allocations=attempts;
     pc_compact_zero_fixture(&f,false);pc_compact_variants(&f,variants,names);
     CHECK(xir_fixture_verify(&c, &f.module, NULL)==XR_XIR_OK);
-    allocations=attempts;memset(storage,0xff,4972);e.errors[2]=e.errors[3]=0;e.errors[4]=8;e.errors[5]=0;
-    CHECK(error_function(&flow,1)==XR_XIR_OK && e.errors[2]==8 && e.errors[3]==0);
+    allocations=attempts;memset(storage,0xff,4972);e.outcomes_work.errors[2]=e.outcomes_work.errors[3]=0;e.outcomes_work.errors[4]=8;e.outcomes_work.errors[5]=0;
+    CHECK(error_function(&flow,1)==XR_XIR_OK && e.outcomes_work.errors[2]==8 && e.outcomes_work.errors[3]==0);
     CHECK(flow.storage==storage && flow.storage_capacity==4972 && !flow.active_count && flow.stride==2);
     CHECK(flow.zero[0]==0 && flow.zero[1]==0 && flow.snapshot[0]==8 && flow.snapshot[1]==0);
     CHECK(attempts==allocations && !error_value(&flow,flow.work,0));
     pc_compact_wide_fixture(&f,variants,names);
     CHECK(xir_fixture_verify(&c, &f.module, NULL)==XR_XIR_OK);
-    allocations=attempts;memset(storage,0xff,4972);e.errors[2]=e.errors[3]=0;
-    CHECK(error_function(&flow,1)==XR_XIR_OK && e.errors[2]==0 && e.errors[3]==1);
+    allocations=attempts;memset(storage,0xff,4972);e.outcomes_work.errors[2]=e.outcomes_work.errors[3]=0;
+    CHECK(error_function(&flow,1)==XR_XIR_OK && e.outcomes_work.errors[2]==0 && e.outcomes_work.errors[3]==1);
     CHECK(flow.storage==storage && flow.storage_capacity==4972 && flow.active_count==1 && flow.slots[512]==0);
     CHECK(flow.zero[0]==0 && flow.zero[1]==0 && attempts==allocations);
     pc_private_free(&flow,&terms,&e);pc_release(&c,baseline);
@@ -176,7 +176,7 @@ static void pc_compact_root_membership(void) {
     XrXirCompileContext c=pc_owner(pc_caps());uint64_t baseline=pc_stats(&c).live_bytes;
     XrXirEffects e={0};EffectTerms terms={0};ErrorFlow flow={0};flow.remaining=&c;
     pc_private_begin(&c,&f,&e,&terms,&flow);
-    CHECK(error_function(&flow,1)==XR_XIR_OK && e.errors[1]==4);
+    CHECK(error_function(&flow,1)==XR_XIR_OK && e.outcomes_work.errors[1]==4);
     CHECK(flow.roots[0]==0 && flow.roots[1]==0 && flow.roots[2]==0);
     uint8_t *storage=flow.storage;uint64_t kernel_live=pc_stats(&c).live_bytes;
     f.subject[1]=(XrXirInstruction){.op=XR_XIR_CONST_INT,.type=XR_XIR_I64,.immediate=1};
@@ -185,25 +185,25 @@ static void pc_compact_root_membership(void) {
     CHECK(verified_live==kernel_live);
     CHECK(error_function(&flow,1)==XR_XIR_OK && flow.storage==storage && attempts==allocations &&
         pc_stats(&c).live_bytes==verified_live);
-    CHECK(flow.roots[0]==0 && flow.roots[1]==1 && flow.roots[2]==1 && e.errors[1]==4);
+    CHECK(flow.roots[0]==0 && flow.roots[1]==1 && flow.roots[2]==1 && e.outcomes_work.errors[1]==4);
     XrXirInstruction saved=f.subject[0];f.subject[0].op=XR_XIR_INVALID;
-    uint64_t live_before=pc_stats(&c).live_bytes,bits=e.errors[1];
+    uint64_t live_before=pc_stats(&c).live_bytes,bits=e.outcomes_work.errors[1];
     CHECK(error_function(&flow,1)==XR_XIR_BAD_STRUCTURE);
-    CHECK(e.errors[1]==bits && pc_stats(&c).live_bytes==live_before && attempts==allocations);
+    CHECK(e.outcomes_work.errors[1]==bits && pc_stats(&c).live_bytes==live_before && attempts==allocations);
     f.subject[0]=saved;
     CHECK(xir_fixture_verify(&c,&f.module,NULL)==XR_XIR_OK);
     allocations=attempts;verified_live=pc_stats(&c).live_bytes;
     CHECK(verified_live==live_before);
-    CHECK(error_function(&flow,1)==XR_XIR_OK && flow.roots[2]==1 && e.errors[1]==4 &&
+    CHECK(error_function(&flow,1)==XR_XIR_OK && flow.roots[2]==1 && e.outcomes_work.errors[1]==4 &&
         flow.storage==storage && attempts==allocations && pc_stats(&c).live_bytes==verified_live);
     f.subject[2].args[0]=UINT32_MAX;
-    CHECK(error_function(&flow,1)==XR_XIR_BAD_STRUCTURE && e.errors[1]==bits);
+    CHECK(error_function(&flow,1)==XR_XIR_BAD_STRUCTURE && e.outcomes_work.errors[1]==bits);
     CHECK(pc_stats(&c).live_bytes==live_before && attempts==allocations);
     f.subject[2].args[0]=1;
     CHECK(xir_fixture_verify(&c,&f.module,NULL)==XR_XIR_OK);
     allocations=attempts;verified_live=pc_stats(&c).live_bytes;
     CHECK(verified_live==live_before);
-    CHECK(error_function(&flow,1)==XR_XIR_OK && flow.roots[2]==1 && e.errors[1]==4 &&
+    CHECK(error_function(&flow,1)==XR_XIR_OK && flow.roots[2]==1 && e.outcomes_work.errors[1]==4 &&
         flow.storage==storage && attempts==allocations && pc_stats(&c).live_bytes==verified_live);
     pc_private_free(&flow,&terms,&e);pc_release(&c,baseline);
 }
@@ -212,7 +212,7 @@ static void pc_compact_mixed_membership(void) {
     XrXirCompileContext c=pc_owner(pc_caps());uint64_t baseline=pc_stats(&c).live_bytes;
     XrXirEffects e={0};EffectTerms terms={0};ErrorFlow flow={0};flow.remaining=&c;
     pc_private_begin(&c,&f,&e,&terms,&flow);
-    CHECK(error_function(&flow,1)==XR_XIR_OK && e.errors[1]==4);
+    CHECK(error_function(&flow,1)==XR_XIR_OK && e.outcomes_work.errors[1]==4);
     CHECK(flow.cell_count==3 && flow.cells[0]==0 && flow.cells[1]==3 && flow.cells[2]==4);
     CHECK(flow.roots[0]==0 && flow.roots[3]==3 && flow.roots[4]==3 && flow.roots[5]==5);
     CHECK(error_read(&flow,flow.work,5)[0]==4 && !xr_xir_effects_error_unknown(&e,1));
@@ -237,7 +237,7 @@ static void pc_compact_forward_roots(void) {
         uint64_t baseline=pc_stats(&c).live_bytes;
         XrXirEffects e={0};EffectTerms terms={0};ErrorFlow flow={0};flow.remaining=&c;
         pc_private_begin(&c,&f,&e,&terms,&flow);
-        CHECK(error_function(&flow,1)==XR_XIR_OK && !e.errors[1] && flow.roots[1]==3);
+        CHECK(error_function(&flow,1)==XR_XIR_OK && !e.outcomes_work.errors[1] && flow.roots[1]==3);
         if (mode==2) {
             f.subject[3]=(XrXirInstruction){.op=XR_XIR_COPY,.type=XR_XIR_I64,.args={1}};
             CHECK(xir_fixture_verify(&c,&f.module,NULL)==XR_XIR_BAD_DOMINANCE);
@@ -256,7 +256,7 @@ static void pc_compact_forward_roots(void) {
         size_t calls_before=attempts;
         CHECK(error_roots(&flow,membership,sources)==(mode ? XR_XIR_BUDGET : XR_XIR_OK));
         CHECK(pc_stats(&c).work-work_before==left && pc_stats(&c).live_bytes==live_before);
-        CHECK(attempts==calls_before && !e.errors[1] && flow.roots[0]==0);
+        CHECK(attempts==calls_before && !e.outcomes_work.errors[1] && flow.roots[0]==0);
         if (mode==2) CHECK(flow.roots[1]==UINT32_MAX && flow.roots[2]==UINT32_MAX);
         else {
             CHECK(flow.roots[1]==3 && flow.roots[2]==2 && flow.roots[3]==3);
@@ -285,12 +285,12 @@ static void pc_compact_large_membership(void) {
         XrXirStatus status=error_function(&flow,1);size_t actual=attempts-before;fail_at=SIZE_MAX;
         if (!pass) {
             CHECK(status==XR_XIR_OK);sites=actual;CHECK(sites>0 && sites<16);
-            CHECK(!flow.active_count && !flow.cell_count && !e.errors[1]);
+            CHECK(!flow.active_count && !flow.cell_count && !e.outcomes_work.errors[1]);
             for (uint32_t v=0;v<1025;++v) CHECK(flow.roots[v]==v && flow.slots[v]==UINT32_MAX);
         } else {
             CHECK(injected && actual>=pass && status==XR_XIR_OUT_OF_MEMORY);
-            CHECK(!flow.storage && !e.errors[1] && pc_stats(&c).live_bytes==prepared);
-            CHECK(error_function(&flow,1)==XR_XIR_OK && !e.errors[1]);
+            CHECK(!flow.storage && !e.outcomes_work.errors[1] && pc_stats(&c).live_bytes==prepared);
+            CHECK(error_function(&flow,1)==XR_XIR_OK && !e.outcomes_work.errors[1]);
             for (uint32_t v=0;v<1025;++v) CHECK(flow.roots[v]==v && flow.slots[v]==UINT32_MAX);
         }
         pc_private_free(&flow,&terms,&e);pc_release(&c,baseline);
@@ -306,15 +306,15 @@ static XrXirStatus pc_compact_whole(const XrXirCompileContext *c,unsigned mode) 
     if (status==XR_XIR_OK) status=xr_xir_compile_effects_analyze(checked,&e);
     else CHECK(!checked);
     if (status==XR_XIR_OK) {
-        CHECK(e && e->count==3 && e->functions[1].throws==XR_XIR_EFFECT_MAY);
+        CHECK(e && e->count==3 && effect_final_outcomes(e)->functions[1].throws==XR_XIR_EFFECT_MAY);
         CHECK(!xr_xir_effects_error_unknown(e,1) && !xr_xir_effects_error_unidentified(e,1));
         if (mode==1) {
-            CHECK(e->words==2 && e->atom_count==70 && e->errors[2]==0 && e->errors[3]==1);
-            CHECK(e->errors[4]==8 && e->errors[5]==0 && xr_xir_effects_error(e,1,(XrXirType)EE_ENUM,62));
-        } else CHECK(e->words==1 && e->atom_count==2 && e->errors[1]==8 && e->errors[2]==8);
+            CHECK(effect_final_outcomes(e)->words==2 && effect_final_outcomes(e)->atom_count==70 && effect_final_outcomes(e)->errors[2]==0 && effect_final_outcomes(e)->errors[3]==1);
+            CHECK(effect_final_outcomes(e)->errors[4]==8 && effect_final_outcomes(e)->errors[5]==0 && xr_xir_effects_error(e,1,(XrXirType)EE_ENUM,62));
+        } else CHECK(effect_final_outcomes(e)->words==1 && effect_final_outcomes(e)->atom_count==2 && effect_final_outcomes(e)->errors[1]==8 && effect_final_outcomes(e)->errors[2]==8);
         for (uint32_t i=0;i<3;++i) {
-            CHECK(e->root[i].requires_root==(i==0) && !e->root[i].unresolved && e->task_errors[i]==XR_XIR_OK);
-            CHECK(e->functions[i].suspend==XR_XIR_EFFECT_NONE);
+            CHECK(effect_roots_read(e)->root[i].requires_root==(i==0) && !effect_roots_read(e)->root[i].unresolved && effect_final_outcomes(e)->task_errors[i]==XR_XIR_OK);
+            CHECK(effect_final_outcomes(e)->functions[i].suspend==XR_XIR_EFFECT_NONE);
         }
     } else CHECK(!e);
     xr_xir_compile_effects_free(e);xr_xir_compile_artifact_free(checked);return status;

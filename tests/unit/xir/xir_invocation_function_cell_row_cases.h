@@ -69,10 +69,10 @@ static XrXirStatus conditional_invocation_function_cell_row(const XrXirCompileCo
     if (status==XR_XIR_OK) status=xir_effects_execution_edge(effects,&indirect,&child);
     if (status==XR_XIR_OK && oracle) {
         const EffectInvocationCertificate *certificate=effects->invocations;
-        const EffectInvocationOwner *owner=certificate->equations;
+        const EffectInvocationFinal *owner=certificate->final;
         CHECK(producer.capture_count==1 && selected.owner==effects && selected.target==3 &&
-            child.parent==selected.node && child.target==2 && !effects->root[0].requires_root &&
-            !effects->root[0].unresolved && certificate->declared->functions[3].count &&
+            child.parent==selected.node && child.target==2 && !effect_roots_read(effects)->root[0].requires_root &&
+            !effect_roots_read(effects)->root[0].unresolved && certificate->declared->functions[3].count &&
             certificate->declared->functions[3].bounds[0].value==0 &&
             !certificate->declared->functions[3].bounds[0].mask);
         if (!mode) CHECK(xr_xir_cell_provenance_role(effects->cells,2,0)==XR_XIR_CELL_PROOF_OWNED_CAPTURE);

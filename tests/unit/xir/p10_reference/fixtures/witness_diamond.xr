@@ -1,0 +1,7 @@
+interface Base { measure()->i64 }
+interface Left extends Base {}
+interface Right extends Base {}
+interface Both extends Left,Right {}
+struct Meter implements Both { value:i64; measure()->i64{return this.value} }
+fn read<T:Both>(value:T)->i64{return value.measure()}
+export fn referenceAnswer()->i64{return read<Meter>(Meter{value:53})}

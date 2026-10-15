@@ -71,20 +71,20 @@ static void invocation_deferred_fixture(InvocationDeferredFixture *f,uint32_t mo
 }
 
 static void invocation_deferred_rejections(const XrXirCompileContext *context,
-    EffectInvocationOwner **owner,EffectInvocationResult **solution) {
-    EffectInvocationOwner *original=*owner;EffectInvocationResult *staged=*solution;
-    CHECK(original->deferred_count==1 && original->deferred_capacity>=2);
-    EffectInvocationDeferred *record=&original->deferred_calls[0];
+    EffectInvocationWorkspace **owner,EffectFinalFunctions **solution) {
+    EffectInvocationWorkspace *original=*owner;EffectFinalFunctions *staged=*solution;
+    CHECK(original->final.deferred_count==1 && original->final.deferred_capacity>=2);
+    EffectInvocationDeferred *record=&original->final.deferred_calls[0];
     EffectInvocationBasis basis={0};
-    CHECK(effect_invocation_basis(original,original->nodes[record->node].root,&basis)==XR_XIR_OK);
+    CHECK(effect_invocation_basis(&original->read,original->final.nodes[record->node].root,&basis)==XR_XIR_OK);
     CHECK(record->parameter==0 && record->instruction==0 && record->count==1 && basis.parameters==2);
     CHECK(!record->arguments[0] && record->arguments[basis.fn_words]==UINT64_C(18));
     bool deferred_needed=false;
-    CHECK(effect_invocation_deferred_needed(original,record->node,&deferred_needed)==XR_XIR_OK && deferred_needed);
-    uint32_t body_index=original->nodes[record->node].body;
+    CHECK(effect_invocation_deferred_needed(&original->read,record->node,&deferred_needed)==XR_XIR_OK && deferred_needed);
+    uint32_t body_index=original->final.nodes[record->node].body;
     XrXirInstruction call_storage;const XrXirInstruction *call=NULL;
-    CHECK(effect_invocation_operation(original,body_index,record->instruction,&call_storage,&call)==XR_XIR_OK);
-    EffectBodyRequest body_read=effect_invocation_body(original);XrXirType callable_type=XR_XIR_UNIT;
+    CHECK(effect_invocation_operation(&original->read,body_index,record->instruction,&call_storage,&call)==XR_XIR_OK);
+    EffectBodyRequest body_read=effect_invocation_body(&original->read);XrXirType callable_type=XR_XIR_UNIT;
     CHECK(effect_body_request_type(&body_read,body_index,(uint32_t)call->immediate,&callable_type)==XR_XIR_OK);
     const XrXirTypeNode *deferred_signature=xr_xir_callable_signature(body_read.domain.types,callable_type);
     CHECK(deferred_signature && deferred_signature->parameter_count==1 &&
@@ -92,25 +92,25 @@ static void invocation_deferred_rejections(const XrXirCompileContext *context,
         xr_xir_type_is_cell(body_read.domain.types,deferred_signature->parameters[0].type));
     XrXirCallableParameter *deferred_parameters=(XrXirCallableParameter *)deferred_signature->parameters;
     XrXirType deferred_type=deferred_parameters[0].type;deferred_parameters[0].type=XR_XIR_I64;
-    CHECK(effect_invocation_deferred_needed(original,record->node,&deferred_needed)==XR_XIR_BAD_TYPE &&
+    CHECK(effect_invocation_deferred_needed(&original->read,record->node,&deferred_needed)==XR_XIR_BAD_TYPE &&
         deferred_needed && *owner==original && *solution==staged);
     deferred_parameters[0].type=deferred_type;deferred_needed=false;
-    CHECK(effect_invocation_deferred_needed(original,record->node,&deferred_needed)==XR_XIR_OK && deferred_needed);
+    CHECK(effect_invocation_deferred_needed(&original->read,record->node,&deferred_needed)==XR_XIR_OK && deferred_needed);
     EffectInvocationSealRequest request={owner,solution,NULL};EffectInvocationCertificate *out=NULL;
     uint64_t actual=record->arguments[basis.fn_words];
     record->arguments[basis.fn_words]|=UINT64_C(1)<<basis.parameters;
     CHECK(effect_invocation_seal(context,&request,&out,NULL)==XR_XIR_BAD_STRUCTURE && !out &&
         *owner==original && *solution==staged && original->effects &&
-        effect_body_request_owned_matches(context,&original->body,original->material));
+        effect_body_request_owned_matches(context,&original->read.body,original->final.material));
     record->arguments[basis.fn_words]=actual;
-    original->deferred_count=0;
+    original->final.deferred_count=0;
     CHECK(effect_invocation_seal(context,&request,&out,NULL)==XR_XIR_BAD_STRUCTURE && !out &&
         *owner==original && *solution==staged);
-    original->deferred_count=1;
-    original->deferred_calls[1]=*record;original->deferred_count=2;
+    original->final.deferred_count=1;
+    original->final.deferred_calls[1]=*record;original->final.deferred_count=2;
     CHECK(effect_invocation_seal(context,&request,&out,NULL)==XR_XIR_BAD_STRUCTURE && !out &&
         *owner==original && *solution==staged);
-    original->deferred_count=1;
+    original->final.deferred_count=1;
     record->parameter=1;
     CHECK(effect_invocation_seal(context,&request,&out,NULL)==XR_XIR_BAD_STRUCTURE && !out &&
         *owner==original && *solution==staged);
@@ -137,7 +137,7 @@ static XrXirStatus conditional_invocation_deferred(const XrXirCompileContext *co
     if (status==XR_XIR_OK) { phase=1;status=xr_xir_compile_artifact_verify(checked,&diagnostic); }
     const XrXirModule *module=checked?xr_xir_compile_artifact_module(checked):NULL;
     XrXirEffects effects={0};EffectGraph graph={0};EffectInvocationDeclaredBounds *bounds=NULL;
-    EffectInvocationOwner *owner=NULL;EffectInvocationResult *solution=NULL;
+    EffectInvocationWorkspace *owner=NULL;EffectFinalFunctions *solution=NULL;
     EffectInvocationCertificate *certificate=NULL;
     if (status==XR_XIR_OK) { phase=2;status=invocation_core_storage(context,module,&effects); }
     if (status==XR_XIR_OK) { phase=3;status=effect_graph_build(module,&effects,&graph,(XrXirCompileContext *)context); }
@@ -161,19 +161,18 @@ static XrXirStatus conditional_invocation_deferred(const XrXirCompileContext *co
     EffectInvocationCauseTrace *trace=NULL;
     if (status==XR_XIR_OK) {
         uint32_t caller=UINT32_MAX,formal=UINT32_MAX;
-        status=effect_invocation_certificate_node_mask(context,certificate,certificate->equations->roots[0],&caller);
+        status=effect_invocation_certificate_node_mask(context,certificate,certificate->final->roots[0],&caller);
         if (status==XR_XIR_OK) status=effect_invocation_certificate_node_mask(context,certificate,
-            certificate->equations->roots[1],&formal);
+            certificate->final->roots[1],&formal);
         if (status==XR_XIR_OK) status=effect_invocation_certificate_trace(context,certificate,1,&trace);
         if (status==XR_XIR_OK && oracle) {
             CHECK(caller==(mode?XR_XIR_CALLABLE_ROOT_REQUIRED:0) && formal==XR_XIR_CALLABLE_ROOT_UNRESOLVED);
-            const XrXirRootFormula *formula=&certificate->result->functions[1].formula;
+            const XrXirRootFormula *formula=&certificate->final->summary.functions[1].formula;
             CHECK(!formula->constant_mask && formula->term_count==1 &&
                 formula->terms[0].kind==XR_XIR_ROOT_TERM_CONTEXT_CALL && !formula->terms[0].index);
-            CHECK(certificate->equations->deferred_count==1 &&
-                certificate->equations->deferred_calls[0].arguments[1]==UINT64_C(18));
-            CHECK(!certificate->equations->work && !certificate->equations->body.read.owner &&
-                !certificate->equations->effects && !certificate->equations->graph && !certificate->equations->declared);
+            CHECK(certificate->final->deferred_count==1 &&
+                certificate->final->deferred_calls[0].arguments[1]==UINT64_C(18));
+            CHECK((certificate->final->material!=NULL));
             CHECK(trace && !trace->counts[0] && trace->counts[1]==1 &&
                 trace->steps[0].witness.cause==XR_XIR_ROOT_CAUSE_CONTEXT_CALL &&
                 !trace->steps[0].witness.instruction && !trace->steps[0].witness.distance);

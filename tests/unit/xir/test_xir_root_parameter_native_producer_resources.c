@@ -125,7 +125,8 @@ static XrXirStatus h1c_action(H1Compiler *c, unsigned p, const XrCompileResource
         c->fixture.run = h1n_export(m); XrXirEffects *effects = NULL;
         status = xr_xir_compile_effects_analyze(c->closed, &effects);
         if (status == XR_XIR_OK) {
-            const XrXirRootEffects *f = xr_xir_effects_root(effects, c->fixture.run);
+            XrXirEffectFacts f_read=xr_xir_effects_read(effects, c->fixture.run);
+            const XrXirRootEffects *f=(f_read.status==XR_XIR_OK?&f_read.root:NULL);
             CHECK(f && f->requires_root == c->oracle->root && f->unresolved == c->oracle->unresolved);
         } else CHECK(!effects);
         xr_xir_compile_effects_free(effects); break;
