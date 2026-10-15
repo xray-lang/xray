@@ -159,7 +159,7 @@ static void source_enum_witness_rejections(XrXirSourceRequest *request) {
     const XrXirStatus statuses[] = {
         XR_XIR_BAD_TYPE, XR_XIR_BAD_TYPE, XR_XIR_BAD_TYPE, XR_XIR_BAD_TYPE,
         XR_XIR_BAD_TYPE, XR_XIR_BAD_TYPE, XR_XIR_BAD_TYPE, XR_XIR_BAD_STRUCTURE,
-        XR_XIR_BAD_STRUCTURE, XR_XIR_OK, XR_XIR_BAD_TYPE, XR_XIR_BAD_VALUE,
+        XR_XIR_BAD_TYPE, XR_XIR_OK, XR_XIR_BAD_TYPE, XR_XIR_BAD_VALUE,
         XR_XIR_BAD_TYPE, XR_XIR_BAD_TYPE, XR_XIR_BAD_TYPE, XR_XIR_BAD_TYPE,
         XR_XIR_BAD_TYPE, XR_XIR_BAD_TYPE, XR_XIR_BAD_TYPE
     };
@@ -168,7 +168,7 @@ static void source_enum_witness_rejections(XrXirSourceRequest *request) {
         "method conflicts with enum builtin member", "variant conflicts with enum type metadata member",
         "method conflicts with enum builtin member", "enum method conflicts with variant",
         "enum method conflicts with variant", "duplicate or empty declaration name",
-        "module graph build failed", "", "method declaration contract is not admitted",
+        "enum variants provide construction", "", "method declaration contract is not admitted",
         "name is not an initialized value", "member receiver is not a nominal value",
         "explicit implementation is missing a method",
         "interface implementation requires a read instance method with matching own parameters",
